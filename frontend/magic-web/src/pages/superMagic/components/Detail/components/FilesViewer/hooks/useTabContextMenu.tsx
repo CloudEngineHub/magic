@@ -163,15 +163,19 @@ export function useTabContextMenu({ tabs, actions, getFileContext }: UseTabConte
 				: []
 
 		return [
-			{
-				key: "refresh",
-				label: t("fileViewer.tabs.refresh"),
-				icon: <RefreshCw size={16} />,
-				onClick: () => {
-					actions.refreshTab(tabId)
-					hideContextMenu()
-				},
-			},
+			...(tab?.type !== "file_manager"
+				? [
+						{
+							key: "refresh",
+							label: t("fileViewer.tabs.refresh"),
+							icon: <RefreshCw size={16} />,
+							onClick: () => {
+								actions.refreshTab(tabId)
+								hideContextMenu()
+							},
+						},
+					]
+				: []),
 			...websiteCommonItems,
 			...(fileContext?.canLocate && actions.locateFile
 				? [

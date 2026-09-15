@@ -67,23 +67,31 @@ export function ProjectsPanel({
 			document.activeElement instanceof HTMLElement ? document.activeElement : null
 	wasOpenRef.current = !!open
 	return (
-		<Dialog open={open}>
+		<Dialog
+			open={open}
+			onOpenChange={(nextOpen) => {
+				if (!nextOpen) onClose()
+			}}
+		>
 			{open && (
 				<DialogContent
 					showCloseButton={false}
 					windowOptions={windowOptions}
 					className={cn(
 						"flex flex-col gap-0 rounded-xl p-0",
-						windowOptions ? "overflow-visible" : "overflow-hidden",
+						// 复用普通 Dialog 的入场缩放，窗口拖动和尺寸更新仍保持立即跟手。
+						windowOptions
+							? "overflow-visible data-[state=open]:zoom-in-95 motion-reduce:data-[state=open]:animate-none"
+							: "overflow-hidden",
 						!windowOptions &&
 							"h-[min(680px,calc(100dvh_-_32px))] !w-[min(960px,calc(100vw_-_32px))] !max-w-none",
 					)}
 					onInteractOutside={(event) => event.preventDefault()}
-					onEscapeKeyDown={onClose}
 					onCloseAutoFocus={(event) => {
 						event.preventDefault()
 						const target = returnFocusRef.current
-						if (target?.isConnected && !target.closest("[inert]")) target.focus()
+						if (target?.isConnected && !target.closest("[inert]"))
+							target.focus({ preventScroll: true })
 					}}
 					data-testid="shared-workspace-dialog"
 				>
@@ -132,7 +140,7 @@ export function ProjectsPanel({
 							<button
 								type="button"
 								aria-label={t("button.close", { ns: "interface" })}
-								className="flex cursor-pointer items-center justify-center rounded-[6px] p-1.5 hover:bg-fill active:bg-fill-secondary"
+								className="flex cursor-pointer items-center justify-center rounded-[6px] p-1.5 outline-none hover:bg-fill focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring active:bg-fill-secondary"
 								data-testid="shared-workspace-dialog-close-button"
 								onClick={(e) => {
 									e.stopPropagation()
@@ -195,6 +203,7 @@ interface ProjectsPanelListProps<T extends ProjectListItem> {
 	viewMode: ViewMode
 	toolbar: ReactNode
 	itemProps: Omit<ComponentProps<typeof ProjectItem<T>>, "project" | "index" | "viewMode">
+	renderItem?: (props: ComponentProps<typeof ProjectItem<T>>) => ReactNode
 	tabType?: CollaborationProjectType
 	error?: ReactNode
 	footer?: ReactNode
@@ -209,6 +218,7 @@ export function ProjectsPanelList<T extends ProjectListItem>({
 	viewMode,
 	toolbar,
 	itemProps,
+	renderItem,
 	tabType,
 	error,
 	footer,
@@ -297,14 +307,25 @@ export function ProjectsPanelList<T extends ProjectListItem>({
 								)}
 								data-project-name={item.project_name || t("project.unnamedProject")}
 							>
-								<ProjectItem<T>
-									{...itemProps}
-									project={item}
-									index={index}
-									viewMode={viewMode}
-									variant="compact"
-									collaborationType={tabType}
-								/>
+								{renderItem ? (
+									renderItem({
+										...itemProps,
+										project: item,
+										index,
+										viewMode,
+										variant: "compact",
+										collaborationType: tabType,
+									})
+								) : (
+									<ProjectItem<T>
+										{...itemProps}
+										project={item}
+										index={index}
+										viewMode={viewMode}
+										variant="compact"
+										collaborationType={tabType}
+									/>
+								)}
 							</div>
 						))}
 					</div>

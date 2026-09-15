@@ -1,4 +1,5 @@
 import { useEffect, useRef } from "react"
+import { useUserFileMentionSync } from "../../UserSpace/hooks/useUserFileMentionSync"
 import { useTranslation } from "react-i18next"
 import type { Editor, JSONContent } from "@/infrastructure/editors/tiptap/react"
 import { useMemoizedFn } from "ahooks"
@@ -157,6 +158,7 @@ function useMessageEditorPubSub({
 	projectId,
 	topicId,
 }: UseMessageEditorPubSubParams) {
+	useUserFileMentionSync(editor)
 	const { t } = useTranslation("super")
 	const activeEditorRef = useLatestActiveEditor(editor)
 	const preparedScreenshotMentionsRef = useRef(

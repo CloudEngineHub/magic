@@ -1,11 +1,18 @@
-import { useEffect, useRef, useState, type KeyboardEvent, type MouseEvent } from "react"
-import { ChevronRight, CirclePlus, Ellipsis, Home, Search } from "lucide-react"
+import {
+	useCallback,
+	useEffect,
+	useRef,
+	useState,
+	type KeyboardEvent,
+	type MouseEvent,
+} from "react"
+import { ChevronRight, CirclePlus, Ellipsis, Home, Search, AppWindow } from "lucide-react"
 import { observer } from "mobx-react-lite"
 import { useTranslation } from "react-i18next"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/shadcn-ui/popover"
 import { Button } from "@/components/shadcn-ui/button"
 import { Input } from "@/components/shadcn-ui/input"
-import { ScrollArea } from "@/components/shadcn-ui/scroll-area"
+import { useVirtualProjectList } from "./hooks/useVirtualProjectList"
 import { cn } from "@/utils/cn"
 import projectStore from "@/pages/superMagic/stores/core/project"
 import workspaceStore from "@/pages/superMagic/stores/core/workspace"
@@ -32,6 +39,8 @@ export interface CollapsedWorkspaceMenuWorkspaceItemProps {
 	openProjectMenuId: string | null
 	onProjectMenuChange: (workspaceId: string | null) => void
 	onRequestCloseAll: () => void
+	onOpenManager: () => void
+	onBusyChange: (workspaceId: string, busy: boolean) => void
 	keepPopoverOpen?: boolean
 }
 
@@ -43,6 +52,8 @@ const CollapsedWorkspaceMenuWorkspaceItem = observer(function CollapsedWorkspace
 	onProjectMenuChange,
 	onRequestCloseAll,
 	keepPopoverOpen = false,
+	onOpenManager,
+	onBusyChange,
 }: CollapsedWorkspaceMenuWorkspaceItemProps) {
 	const { t } = useTranslation(["super"])
 	const workspaceIdSegment = toTestIdSegment(workspace.id)
@@ -67,11 +78,11 @@ const CollapsedWorkspaceMenuWorkspaceItem = observer(function CollapsedWorkspace
 	const [isSubmittingProject, setIsSubmittingProject] = useState(false)
 	const [isWorkspaceHovered, setIsWorkspaceHovered] = useState(false)
 	const projectMenuContentRef = useRef<HTMLDivElement>(null)
-	const projectScrollRef = useRef<HTMLDivElement>(null)
 	const suppressWorkspaceItemClickRef = useRef(false)
 
 	const {
 		projectModals,
+		isProjectModalOpen,
 		handleMoveProject,
 		handleTransferProject,
 		handleDeleteProjectConfirm,
@@ -109,23 +120,41 @@ const CollapsedWorkspaceMenuWorkspaceItem = observer(function CollapsedWorkspace
 		})()
 	}, [isProjectMenuOpen, workspace.id])
 
+	const page = projectStore.workspacePages.get(workspace.id)
+	const loading = projectStore.isLoadingWorkspace(workspace.id)
+	const loadMore = useCallback(() => {
+		void projectStore.loadMoreProjectsForWorkspace(workspace.id)
+	}, [workspace.id])
+	const unnamedProjectLabel = t("super:project.unnamedProject")
+	const normalizedProjectSearchKeyword = projectSearchKeyword.trim().toLowerCase()
+	const hasProjectSearchKeyword = normalizedProjectSearchKeyword.length > 0
+	const filteredProjects = hasProjectSearchKeyword
+		? projects.filter((project) =>
+				(project.project_name || unnamedProjectLabel)
+					.toLowerCase()
+					.includes(normalizedProjectSearchKeyword),
+			)
+		: projects
+
+	const list = useVirtualProjectList({
+		scrollKey: `collapsed-workspace-projects:${workspace.id}:${normalizedProjectSearchKeyword}`,
+		projects: filteredProjects,
+		rowHeight: 36,
+		enabled: isProjectMenuOpen,
+		hasMore: page?.hasMore,
+		loading: loading || page?.loadingMore,
+		error: page?.error,
+		onLoadMore: loadMore,
+	})
+
+	const busy = isCreatingProject || list.hasActiveInteraction || isProjectModalOpen
 	useEffect(() => {
-		const scrollElement = projectScrollRef.current?.querySelector(
-			"[data-slot='scroll-area-viewport']",
-		) as HTMLElement
-
-		if (!scrollElement) return
-
-		const handleScroll = (e: Event) => {
-			e.stopPropagation()
-		}
-
-		scrollElement.addEventListener("scroll", handleScroll)
-		return () => scrollElement.removeEventListener("scroll", handleScroll)
-	}, [])
+		onBusyChange(workspace.id, busy)
+	}, [workspace.id, busy, onBusyChange])
+	useEffect(() => () => onBusyChange(workspace.id, false), [workspace.id, onBusyChange])
 
 	function handleProjectMenuChange(open: boolean) {
-		if (!open && keepPopoverOpen) return
+		if (!open && (keepPopoverOpen || busy)) return
 		if (!open) {
 			handleCancelCreateProject()
 			setProjectSearchKeyword("")
@@ -187,17 +216,6 @@ const CollapsedWorkspaceMenuWorkspaceItem = observer(function CollapsedWorkspace
 		}, 0)
 	}
 
-	const unnamedProjectLabel = t("super:project.unnamedProject")
-	const normalizedProjectSearchKeyword = projectSearchKeyword.trim().toLowerCase()
-	const hasProjectSearchKeyword = normalizedProjectSearchKeyword.length > 0
-	const filteredProjects = hasProjectSearchKeyword
-		? projects.filter((project) =>
-				(project.project_name || unnamedProjectLabel)
-					.toLowerCase()
-					.includes(normalizedProjectSearchKeyword),
-			)
-		: projects
-
 	function handleProjectSearchKeyDown(event: KeyboardEvent<HTMLInputElement>) {
 		event.stopPropagation()
 		if (event.key !== "Escape") return
@@ -207,28 +225,40 @@ const CollapsedWorkspaceMenuWorkspaceItem = observer(function CollapsedWorkspace
 	}
 
 	const renderProjectList = () =>
-		filteredProjects.map((project) => (
-			<CollapsedWorkspaceProjectRow
-				key={project.id}
-				project={project}
-				workspaceId={workspace.id}
-				isSelected={selectedProject?.id === project.id}
-				projectMenuContentRef={projectMenuContentRef}
-				onOpenInNewWindow={openProjectInNewTab}
-				onPinProject={handleTogglePinProject}
-				onCopyCollaborationLink={handleCopyCollaborationLink}
-				onTransferProject={handleTransferProject}
-				onMoveProject={handleMoveProject}
-				onAddCollaborators={onAddCollaborators}
-				onCancelWorkspaceShortcut={handleCancelWorkspaceShortcutByProject}
-				onDeleteProject={handleDeleteProjectConfirm}
-				onRenameProject={handleRenameProject}
-				onSelectProject={(targetProject) => {
-					onProjectClick(targetProject.id, workspace.id)
-					onProjectMenuChange(null)
-				}}
-			/>
-		))
+		list.rows.map((row) => {
+			const project = filteredProjects[row.index]
+			return (
+				<div
+					key={project.id}
+					data-index={row.index}
+					data-virtual-project-id={project.id}
+					ref={list.virtualizer.measureElement}
+					className="absolute left-0 top-0 w-full pb-1"
+					style={{ transform: `translateY(${row.start}px)` }}
+				>
+					<CollapsedWorkspaceProjectRow
+						onInteractionChange={list.onInteractionChange}
+						project={project}
+						workspaceId={workspace.id}
+						isSelected={selectedProject?.id === project.id}
+						projectMenuContentRef={projectMenuContentRef}
+						onOpenInNewWindow={openProjectInNewTab}
+						onPinProject={handleTogglePinProject}
+						onCopyCollaborationLink={handleCopyCollaborationLink}
+						onTransferProject={handleTransferProject}
+						onMoveProject={handleMoveProject}
+						onAddCollaborators={onAddCollaborators}
+						onCancelWorkspaceShortcut={handleCancelWorkspaceShortcutByProject}
+						onDeleteProject={handleDeleteProjectConfirm}
+						onRenameProject={handleRenameProject}
+						onSelectProject={(targetProject) => {
+							onProjectClick(targetProject.id, workspace.id)
+							onProjectMenuChange(null)
+						}}
+					/>
+				</div>
+			)
+		})
 
 	return (
 		<>
@@ -340,13 +370,14 @@ const CollapsedWorkspaceMenuWorkspaceItem = observer(function CollapsedWorkspace
 							</Button>
 						</span>
 					</PopoverTrigger>
+					{/* 右侧居中并自动避让屏幕边缘；底部留白减少浏览器链接提示对末行的遮挡。 */}
 					<PopoverContent
 						ref={projectMenuContentRef}
 						side="right"
-						align="start"
-						className="w-[240px] p-1 shadow-xs"
+						align="center"
+						collisionPadding={{ top: 12, right: 12, bottom: 32, left: 12 }}
+						className="flex max-h-[min(70dvh,640px,var(--radix-popover-content-available-height))] w-[240px] flex-col p-1 shadow-xs [&>:not([data-project-scroll-container])]:shrink-0"
 						sideOffset={8}
-						alignOffset={-4}
 						data-testid={projectPopoverTestId}
 						onEscapeKeyDown={(e) => {
 							if (isCreatingProject || projectSearchKeyword) {
@@ -361,6 +392,18 @@ const CollapsedWorkspaceMenuWorkspaceItem = observer(function CollapsedWorkspace
 							>
 								{projectPanelTitle}
 							</span>
+							<Button
+								type="button"
+								variant="ghost"
+								size="icon-sm"
+								title={t("projectNavigation.openManager")}
+								aria-label={t("projectNavigation.openWorkspaceManager", {
+									name: workspaceDisplayName,
+								})}
+								onClick={onOpenManager}
+							>
+								<AppWindow size={16} />
+							</Button>
 						</div>
 						<Button
 							asChild
@@ -443,33 +486,33 @@ const CollapsedWorkspaceMenuWorkspaceItem = observer(function CollapsedWorkspace
 								/>
 							</div>
 						)}
-						{filteredProjects.length > 0 ? (
-							filteredProjects.length > 8 ? (
-								<ScrollArea
-									ref={projectScrollRef}
-									className="h-[300px] w-full [&_[data-slot='scroll-area-scrollbar']]:-mr-1 [&_[data-slot='scroll-area-viewport']>div]:!block [&_[data-slot='scroll-area-viewport']>div]:pr-2"
-								>
-									<div
-										className="mr-1 w-full space-y-1"
-										data-collapsed-sidebar-dnd-drop-type="project-list"
-										data-collapsed-sidebar-dnd-workspace-id={workspace.id}
-									>
-										{renderProjectList()}
-									</div>
-								</ScrollArea>
-							) : (
-								<div
-									className="space-y-1"
-									data-collapsed-sidebar-dnd-drop-type="project-list"
-									data-collapsed-sidebar-dnd-workspace-id={workspace.id}
-								>
-									{renderProjectList()}
-								</div>
-							)
-						) : (
+						{/* 少量项目按内容收短；窗口不足时只压缩列表，保留标题及操作区高度。 */}
+						<div
+							ref={list.scrollRef}
+							className="min-h-0 w-full overflow-y-auto overscroll-contain"
+							style={{ height: list.virtualizer.getTotalSize() }}
+							data-project-scroll-container
+							onFocusCapture={list.onFocusCapture}
+							onBlurCapture={list.onBlurCapture}
+						>
+							<div
+								className="relative w-full"
+								style={{ height: list.virtualizer.getTotalSize() }}
+								data-collapsed-sidebar-dnd-drop-type="project-list"
+								data-collapsed-sidebar-dnd-workspace-id={workspace.id}
+							>
+								{renderProjectList()}
+							</div>
+						</div>
+						{(loading || page?.loadingMore) && (
+							<div className="px-2 py-1 text-xs text-muted-foreground">
+								{t("projectNavigation.loading")}
+							</div>
+						)}
+						{!loading && !page?.error && filteredProjects.length === 0 && (
 							<div
 								className={cn(
-									"px-2 text-sm leading-none text-[#a3a3a3]",
+									"px-2 text-sm text-muted-foreground",
 									hasProjectSearchKeyword ? "py-3" : "py-1",
 								)}
 								data-testid={
@@ -487,6 +530,18 @@ const CollapsedWorkspaceMenuWorkspaceItem = observer(function CollapsedWorkspace
 									? t("super:project.noMatchingProjects")
 									: t("super:project.noProjects")}
 							</div>
+						)}
+						{(page?.error || page?.hasMore) && (
+							<button
+								type="button"
+								className="shrink-0 px-2 py-1 text-left text-xs text-muted-foreground"
+								disabled={loading || page.loadingMore}
+								onClick={loadMore}
+							>
+								{page.error
+									? t("projectNavigation.retry")
+									: t("projectNavigation.loadMore")}
+							</button>
 						)}
 					</PopoverContent>
 				</Popover>

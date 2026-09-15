@@ -692,6 +692,7 @@ class SuperMagicService {
 		}
 
 		// 2. 乐观状态更新
+		this.project.recordProjectVisit(project)
 		projectStore.setSelectedProject(project)
 
 		// 如果工作区已在缓存中，立即更新
@@ -941,6 +942,7 @@ class SuperMagicService {
 	}
 
 	resetState = (navigateToHome: boolean = true) => {
+		this.project.resetVisit()
 		projectStore.reset()
 		this.topicStore.reset()
 		workspaceStore.reset()
@@ -1009,6 +1011,7 @@ class SuperMagicService {
 
 		// 如果项目不存在，则直接返回
 		if (project) {
+			this.project.recordProjectVisit(project)
 			projectStore.setSelectedProject(project)
 			// 校验工作区
 			const _isOwner = isOwner(project.user_role)
@@ -1151,6 +1154,7 @@ class SuperMagicService {
 		}
 
 		if (projectId && project && project.id === projectId) {
+			this.project.recordProjectVisit(project)
 			const current = projectStore.selectedProject
 			if (!isEqual(current, project)) {
 				projectStore.setSelectedProject(project)
@@ -1374,6 +1378,7 @@ class SuperMagicService {
 			})
 
 			if (result) {
+				this.project.recordProjectVisit(result.project)
 				projectStore.setSelectedProject(result.project)
 				projectStore.loadProjectsForWorkspace(workspaceId, true)
 				topicStore.setSelectedTopic(result.topic)

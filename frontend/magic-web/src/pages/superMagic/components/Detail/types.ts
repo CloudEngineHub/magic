@@ -198,3 +198,15 @@ export interface FileTreeNode {
 	type: "file" | "directory"
 	error: string | null
 }
+
+/** 文本预览复用原 UI；外部会话独占内容、草稿与修订基准，保存失败必须 reject。 */
+export interface TextFileSession {
+	content: string
+	draft: string
+	loading: boolean
+	loadError: boolean
+	saving: boolean
+	setDraft: (content: string) => void
+	refresh: () => Promise<void>
+	save: () => Promise<void>
+}

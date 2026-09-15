@@ -1,3 +1,5 @@
+import { userStore } from "@/models/user"
+import recentProjectsStore from "../stores/core/recentProjects"
 import { SuperMagicApi } from "@/apis"
 import { clipboard } from "@/utils/clipboard-helpers"
 import { runInAction } from "mobx"
@@ -69,6 +71,38 @@ export interface MoveProjectParams {
 type RequestKey = string
 
 class ProjectService {
+	private visitKey: string | null = null
+	private visitGeneration = 0
+
+	resetVisit() {
+		this.visitKey = null
+		this.visitGeneration++
+	}
+
+	/** 每次进入只记录一次；话题切换、后台详情刷新及预取不会制造新访问。 */
+	recordProjectVisit(project: ProjectListItem) {
+		const userId = userStore.user.userInfo?.user_id
+		const organizationCode = userStore.user.organizationCode
+		if (!userId || !organizationCode) return
+		const key = JSON.stringify([userId, organizationCode, project.id])
+		if (this.visitKey === key && projectStore.selectedProject?.id === project.id) return
+		this.visitKey = key
+		const generation = this.visitGeneration
+		void SuperMagicApi.recordProjectVisit(project.id)
+			.then((result) => {
+				if (
+					generation !== this.visitGeneration ||
+					userId !== userStore.user.userInfo?.user_id ||
+					organizationCode !== userStore.user.organizationCode
+				)
+					return
+				recentProjectsStore.recordVisit(project, result.last_active_at)
+			})
+			.catch(() => {
+				// 导航可正常完成；失败不提升最近顺序，同次进入也不反复上报。
+			})
+	}
+
 	// Request deduplication: track ongoing requests
 	private pendingRequests = new Map<RequestKey, Promise<unknown>>()
 
@@ -113,7 +147,7 @@ class ProjectService {
 			return projectStore.selectedProject
 		}
 
-		return null
+		return recentProjectsStore.items.find((project) => project.id === projectId) ?? null
 	}
 
 	/**
@@ -311,6 +345,8 @@ class ProjectService {
 				projectStore.updateProject(previousProject)
 			}
 			throw error
+		} finally {
+			recentProjectsStore.invalidate()
 		}
 	}
 
@@ -368,6 +404,8 @@ class ProjectService {
 			} catch (error) {
 				console.log("创建项目失败，失败原因：", error)
 				return null
+			} finally {
+				recentProjectsStore.invalidate()
 			}
 		})
 	}
@@ -442,6 +480,8 @@ class ProjectService {
 				console.log("重命名项目失败，失败原因：", error)
 				this.rollbackSnapshot(operationId)
 				throw error
+			} finally {
+				recentProjectsStore.invalidate()
 			}
 		})
 	}
@@ -467,6 +507,8 @@ class ProjectService {
 				// Rollback optimistic update
 				this.rollbackSnapshot(operationId)
 				throw error
+			} finally {
+				recentProjectsStore.invalidate()
 			}
 		})
 	}
@@ -579,6 +621,8 @@ class ProjectService {
 				}
 				this.rollbackSnapshot(operationId)
 				throw error
+			} finally {
+				recentProjectsStore.invalidate()
 			}
 		})
 	}
@@ -726,6 +770,8 @@ class ProjectService {
 				projectStore.loadProjectsForWorkspace(targetWorkspaceId, true, true),
 			])
 			throw error
+		} finally {
+			recentProjectsStore.invalidate()
 		}
 	}
 
@@ -766,6 +812,8 @@ class ProjectService {
 				console.error("取消工作区快捷方式失败，失败原因：", error)
 				this.rollbackSnapshot(operationId)
 				throw error
+			} finally {
+				recentProjectsStore.invalidate()
 			}
 		})
 	}
@@ -900,6 +948,8 @@ class ProjectService {
 				}
 				console.error("固定项目失败，失败原因：", error)
 				throw error
+			} finally {
+				recentProjectsStore.invalidate()
 			}
 		})
 	}

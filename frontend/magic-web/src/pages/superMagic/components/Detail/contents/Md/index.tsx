@@ -1,3 +1,5 @@
+import type { TextFileSession } from "../../types"
+import DetailEmpty from "../../components/DetailEmpty"
 import { getTemporaryDownloadUrl } from "@/pages/superMagic/utils/api"
 import { memo, useEffect, useMemo, useRef, useState } from "react"
 import { createPortal } from "react-dom"
@@ -40,6 +42,9 @@ import { documentExportService } from "@/pages/superMagic/services/documentExpor
 import { isLargeMarkdownContent } from "./components/EditorBody/largeMarkdown"
 
 interface TextEditorProps {
+	textFileSession?: TextFileSession
+	resolveRelativeFile?: (href: string) => Promise<AttachmentItem | undefined>
+	resolveImageUrl?: (href: string) => Promise<string>
 	data?: any
 	attachments?: AttachmentFile[]
 	attachmentList?: AttachmentFile[]
@@ -143,6 +148,9 @@ const MdExportAction = memo(function MdExportAction({
 
 export default memo(function TextEditor(props: TextEditorProps) {
 	const {
+		textFileSession,
+		resolveRelativeFile,
+		resolveImageUrl,
 		data: displayData,
 		attachments,
 		attachmentList,
@@ -191,7 +199,7 @@ export default memo(function TextEditor(props: TextEditorProps) {
 
 	const {
 		fileData,
-		loading,
+		loading: fileLoading,
 		fileVersion,
 		changeFileVersion,
 		fileVersionsList,
@@ -200,6 +208,7 @@ export default memo(function TextEditor(props: TextEditorProps) {
 		isNewestVersion,
 		isDeleted,
 	} = useFileData({
+		enabled: !textFileSession,
 		file_id: displayData?.file_id || "",
 		updatedAt,
 		isEditing: isEditMode,
@@ -209,7 +218,10 @@ export default memo(function TextEditor(props: TextEditorProps) {
 		disabledUrlCache: isPlaybackMode,
 	})
 
-	const [editContent, setEditContent] = useState<string>("")
+	const [localEditContent, setLocalEditContent] = useState<string>("")
+	const editContent = textFileSession?.draft ?? localEditContent
+	const setEditContent = textFileSession?.setDraft ?? setLocalEditContent
+	const loading = textFileSession?.loading ?? fileLoading
 	const [originalContent, setOriginalContent] = useState<string>("")
 	const [savedContent, setSavedContent] = useState<string>("")
 	const [isExportingPdf, setIsExportingPdf] = useState(false)
@@ -220,7 +232,8 @@ export default memo(function TextEditor(props: TextEditorProps) {
 	const shouldUsePhoneFrame = !documentFlowFullscreen && internalViewMode === "phone"
 
 	// 计算当前的内容源 - savedContent 优先于 fileData 和 displayData?.content
-	const currentContent = savedContent || displayData?.content || fileData || ""
+	const currentContent =
+		textFileSession?.content ?? (savedContent || displayData?.content || fileData || "")
 	const isLargeMarkdown = useMemo(() => isLargeMarkdownContent(currentContent), [currentContent])
 	const wasEditingLargeMarkdownRef = useRef(false)
 
@@ -245,6 +258,7 @@ export default memo(function TextEditor(props: TextEditorProps) {
 
 	// 初始化编辑内容和原始内容
 	useEffect(() => {
+		if (textFileSession) return
 		if (isEditMode) {
 			// 如果 currentContent 有值，需要确保 editContent 和 originalContent 都被正确初始化
 			if (currentContent) {
@@ -256,7 +270,7 @@ export default memo(function TextEditor(props: TextEditorProps) {
 					return prevOriginal
 				})
 				// 然后更新 editContent
-				setEditContent((prevEditContent) => {
+				setLocalEditContent((prevEditContent) => {
 					// 如果 editContent 为空，使用 currentContent 初始化
 					if (!prevEditContent) {
 						return currentContent
@@ -271,7 +285,7 @@ export default memo(function TextEditor(props: TextEditorProps) {
 				})
 			} else {
 				// currentContent 为空时，确保 editContent 至少是空字符串
-				setEditContent((prevEditContent) => {
+				setLocalEditContent((prevEditContent) => {
 					if (!prevEditContent) {
 						return ""
 					}
@@ -281,7 +295,7 @@ export default memo(function TextEditor(props: TextEditorProps) {
 		} else {
 			// 非编辑模式下，同步更新内容
 			if (currentContent) {
-				setEditContent(currentContent)
+				setLocalEditContent(currentContent)
 				setOriginalContent(currentContent)
 			}
 		}
@@ -318,6 +332,7 @@ export default memo(function TextEditor(props: TextEditorProps) {
 
 	// Use the image URL resolver hook
 	const { imageUrlMap, setImageUrlMap, urlResolver } = useImageUrlResolver({
+		resolveUrl: resolveImageUrl,
 		attachments,
 		relativeFilePath,
 	})
@@ -406,6 +421,7 @@ export default memo(function TextEditor(props: TextEditorProps) {
 
 	// Process markdown images to resolve URLs
 	useEffect(() => {
+		let cancelled = false
 		const processImages = async () => {
 			setIsLoading(true)
 			setImageUrlMap(new Map())
@@ -414,6 +430,16 @@ export default memo(function TextEditor(props: TextEditorProps) {
 			const imagePaths = extractImagePaths(currentContent)
 
 			if (imagePaths.length === 0) {
+				setProcessedContent(escapeDangerousInvisibleHtmlTags(currentContent))
+				setIsLoading(false)
+				return
+			}
+
+			if (resolveImageUrl) {
+				await Promise.all(
+					imagePaths.filter((path) => !isExternalUrl(path)).map(urlResolver),
+				)
+				if (cancelled) return
 				setProcessedContent(escapeDangerousInvisibleHtmlTags(currentContent))
 				setIsLoading(false)
 				return
@@ -487,16 +513,20 @@ export default memo(function TextEditor(props: TextEditorProps) {
 			}
 		}
 		processImages()
+		return () => {
+			cancelled = true
+		}
 		// eslint-disable-next-line react-hooks/exhaustive-deps
 	}, [currentContent, relativeFilePath])
 
 	const handleEdit = useMemoizedFn(() => {
 		setIsEditMode?.(true)
 		// 进入编辑模式时，使用当前的内容作为编辑内容
-		setEditContent(currentContent)
+		if (!textFileSession) setEditContent(currentContent)
 	})
 
 	const handleSave = useMemoizedFn(async () => {
+		if (textFileSession) return textFileSession.save()
 		try {
 			if (originalContent === editContent) {
 				return
@@ -523,6 +553,11 @@ export default memo(function TextEditor(props: TextEditorProps) {
 	})
 
 	const handleSaveAndExit = useMemoizedFn(async () => {
+		if (textFileSession) {
+			await textFileSession.save()
+			setIsEditMode?.(false)
+			return
+		}
 		try {
 			if (originalContent === editContent) {
 				setIsEditMode?.(false)
@@ -751,6 +786,7 @@ export default memo(function TextEditor(props: TextEditorProps) {
 				zone: "primary" as const,
 				render: () => (
 					<AIOptimization
+						file={textFileSession ? displayData : undefined}
 						attachmentList={attachmentList as AttachmentItem[]}
 						file_id={displayData?.file_id}
 						showButtonText
@@ -766,23 +802,46 @@ export default memo(function TextEditor(props: TextEditorProps) {
 				render: () => (
 					<FileEditButtons
 						isEditMode={isEditMode}
-						isSaving={false}
+						isSaving={textFileSession?.saving ?? false}
+						interactionDisabled={Boolean(
+							textFileSession &&
+							(loading || textFileSession.loadError || !isTabActive),
+						)}
 						showButtonText
 						onEdit={handleEdit}
-						onSave={handleSave}
-						onSaveAndExit={handleSaveAndExit}
+						onSave={
+							textFileSession ? () => handleSave().catch(() => undefined) : handleSave
+						}
+						onSaveAndExit={
+							textFileSession
+								? () => handleSaveAndExit().catch(() => undefined)
+								: handleSaveAndExit
+						}
 						onCancel={handleCancel}
 					/>
 				),
 			})
 		}
 
-		if (customActions.length === 0) {
+		if (customActions.length === 0 && !textFileSession) {
 			return undefined
 		}
 
-		return { customActions }
+		return {
+			customActions,
+			overrides: textFileSession
+				? {
+						refresh: {
+							onClick: textFileSession.refresh,
+							disabled: loading || textFileSession.saving || isEditMode,
+						},
+					}
+				: undefined,
+		}
 	}, [
+		textFileSession,
+		loading,
+		isTabActive,
 		allowEdit,
 		attachmentList,
 		displayData?.file_id,
@@ -841,7 +900,12 @@ export default memo(function TextEditor(props: TextEditorProps) {
 						actionConfig={headerActionConfig}
 					/>
 				)}
-				{loading ? (
+				{textFileSession?.loadError ? (
+					<DetailEmpty
+						title={t("common.fileNotFoundOrLoadFailed")}
+						onRetry={textFileSession.refresh}
+					/>
+				) : loading ? (
 					documentFlowFullscreen ? (
 						<div className="min-h-dvh" />
 					) : (
@@ -899,6 +963,7 @@ export default memo(function TextEditor(props: TextEditorProps) {
 								urlResolver={urlResolver}
 								attachments={attachments}
 								onOpenFile={openFileTab}
+								resolveRelativeFile={resolveRelativeFile}
 								placeholder={t("fileViewer.placeholder.content")}
 								resolveImagesFolderParentId={resolveImagesFolderParentId}
 								suppressLoadingIndicator={documentFlowFullscreen}

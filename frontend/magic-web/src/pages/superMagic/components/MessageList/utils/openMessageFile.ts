@@ -1,7 +1,35 @@
 import pubsub, { PubSubEvents } from "@/utils/pubsub"
+import type { FileReference } from "@/apis/modules/superMagic"
 
 interface OpenMessageFileOptions {
 	locateInTree?: boolean
+}
+
+/** 用户资源单独预览，文本保存统一使用用户文件的修订号契约。 */
+export function openUserFileReference(
+	reference: Extract<FileReference, { space_type: "user" }>,
+): void {
+	if (reference.is_directory) return
+	openMessageFile(
+		{
+			...reference,
+			file_reference: reference,
+			relative_file_path: "~/" + reference.space_relative_path,
+			display_config: {
+				previewPolicy: {
+					standalone: true,
+					editingPresence: false,
+					allowShare: false,
+					allowVersionHistory: false,
+					syncWithAttachments: false,
+					persistTab: false,
+					restoreAsActive: false,
+					fileScope: "user",
+				},
+			},
+		},
+		{ locateInTree: false },
+	)
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

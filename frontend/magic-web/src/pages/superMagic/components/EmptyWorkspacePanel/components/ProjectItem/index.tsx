@@ -1,5 +1,6 @@
 import IconWorkspaceProjectFolder from "@/enhance/tabler/icons-react/icons/IconWorkspaceProjectFolder"
 import { cn } from "@/utils/cn"
+import dayjs from "@/infrastructure/vendors/dayjs"
 import { useHover, useMemoizedFn } from "ahooks"
 import { useMemo, useRef } from "react"
 import useProjectRename from "@/pages/superMagic/hooks/useProjectRename"
@@ -36,6 +37,7 @@ interface ProjectItemProps<T extends ProjectListItem | CollaborationProjectListI
 	index?: number
 	viewMode?: ViewMode
 	variant?: "default" | "compact"
+	titleLayout?: "default" | "recent"
 	sortType?: SortType
 	inCollaborationPanel?: boolean
 	collaborationType?: CollaborationProjectType
@@ -51,6 +53,8 @@ interface ProjectItemProps<T extends ProjectListItem | CollaborationProjectListI
 	onAddWorkspaceShortcut?: (project: T) => void
 	onShortcutNavigateToWorkspace?: (project: T) => void
 	onMouseEnter?: () => void
+	locationName?: string
+	relativeActiveTime?: boolean
 }
 
 // View mode enum
@@ -70,6 +74,7 @@ function ProjectItem<T extends ProjectListItem | CollaborationProjectListItem>({
 	index,
 	viewMode = ViewMode.GRID,
 	variant = "default",
+	titleLayout = "default",
 	sortType = SortType.PROJECT_UPDATE_TIME,
 	inCollaborationPanel = false,
 	collaborationType,
@@ -85,14 +90,17 @@ function ProjectItem<T extends ProjectListItem | CollaborationProjectListItem>({
 	onCancelWorkspaceShortcut,
 	onShortcutNavigateToWorkspace,
 	onMouseEnter,
+	locationName,
+	relativeActiveTime = false,
 }: ProjectItemProps<T>) {
 	const ref = useRef<HTMLDivElement>(null)
 	const isHover = useHover(ref)
-	const { t } = useTranslation("super")
+	const { t, i18n } = useTranslation("super")
 
 	const isListMode = viewMode === ViewMode.LIST
 	const isCompact = variant === "compact"
 	const isCompactList = isCompact && isListMode
+	const isRecentLayout = isCompact && titleLayout === "recent"
 
 	// Use custom hook for rename functionality
 	const {
@@ -131,6 +139,19 @@ function ProjectItem<T extends ProjectListItem | CollaborationProjectListItem>({
 
 	/** 是否是工作区快捷项目 */
 	const isWorkspaceShortcutProjectStatus = isWorkspaceShortcutProject(item)
+	// 最近项目按活动时间交错排列，标记跟随标题；普通工作区保留左侧置顶标记。
+	const projectTags = (
+		<>
+			{item.is_pinned && <PinnedTag className="" showText={false} />}
+			{!inCollaborationPanel && (
+				<CollaborationProjectTag
+					visible={isCollaborationProject(item)}
+					project={item}
+					showText={false}
+				/>
+			)}
+		</>
+	)
 
 	const showCollaborators =
 		(isCompact || !isListMode) && isCollaborationProjectStatus && inCollaborationPanel
@@ -169,7 +190,13 @@ function ProjectItem<T extends ProjectListItem | CollaborationProjectListItem>({
 	const time = useMemo(() => {
 		switch (sortType) {
 			case SortType.MY_LAST_ACTIVE_TIME: {
-				const value = item.last_active_at?.replaceAll("-", "/")
+				let value = item.last_active_at?.replaceAll("-", "/")
+				if (relativeActiveTime) {
+					const activeTime = item.last_active_at ? dayjs(item.last_active_at) : null
+					const locale = i18n.language.toLowerCase().startsWith("zh") ? "zh-cn" : "en"
+					// 最近项目统一显示相对时间；实例语言避免首行沿用其它组件的全局语言。
+					value = activeTime?.isValid() ? activeTime.locale(locale).fromNow() : undefined
+				}
 				return {
 					value: value || t("common.noActiveTime"),
 					label: value
@@ -187,7 +214,15 @@ function ProjectItem<T extends ProjectListItem | CollaborationProjectListItem>({
 				return { value, label: t("common.lastUpdatedAt", { time: value }) }
 			}
 		}
-	}, [item.updated_at, item.created_at, item.last_active_at, sortType, t])
+	}, [
+		item.updated_at,
+		item.created_at,
+		item.last_active_at,
+		sortType,
+		relativeActiveTime,
+		i18n.language,
+		t,
+	])
 
 	return (
 		<>
@@ -223,6 +258,7 @@ function ProjectItem<T extends ProjectListItem | CollaborationProjectListItem>({
 							isCompact && !isListMode && "min-h-[88px]",
 							isCompactList &&
 								"min-h-12 grid-cols-[16px_minmax(0,1fr)_auto] rounded-none border-0 border-b bg-transparent [@container_(min-width:800px)]:[grid-template-columns:var(--project-list-columns)]",
+							isRecentLayout && "items-start",
 						)}
 						onClick={() => onClick(item)}
 						onMouseEnter={onMouseEnter}
@@ -239,6 +275,7 @@ function ProjectItem<T extends ProjectListItem | CollaborationProjectListItem>({
 							className={cn(
 								"project-item-icon relative flex flex-1 items-center justify-center rounded px-2 py-2",
 								isCompact && "col-start-1 row-start-1 size-4 flex-none p-0",
+								isRecentLayout && "h-5 self-start",
 							)}
 							data-testid="project-item-icon"
 						>
@@ -256,65 +293,88 @@ function ProjectItem<T extends ProjectListItem | CollaborationProjectListItem>({
 							)}
 							data-testid="project-item-content"
 						>
-							{/* 编辑时，只允许编辑非工作区快捷项目 */}
-							{isEditing && !isWorkspaceShortcutProjectStatus && onRenameProject ? (
-								<Input
-									autoFocus
-									className={cn(
-										"h-5",
-										isCompactList && "col-start-2 row-start-1",
-									)}
-									onClick={(e) => e.stopPropagation()}
-									value={editingProjectName}
-									onChange={handleProjectNameChange}
-									onKeyDown={handleProjectNameKeyDown}
-									onBlur={handleProjectNameBlur}
-									data-testid="project-item-rename-input"
-								/>
-							) : (
-								<FlexBox
-									align="center"
-									gap={4}
-									className={cn(
-										"min-w-0",
-										isCompactList && "col-start-2 row-start-1",
-									)}
-									data-testid="project-item-title-wrapper"
-								>
-									{item.is_pinned && <PinnedTag className="" showText={false} />}
-									{!inCollaborationPanel && (
-										<CollaborationProjectTag
-											visible={isCollaborationProject(item)}
-											project={item}
-											showText={false}
-										/>
-									)}
-									<SmartTooltip
+							<div
+								className={cn(
+									"contents",
+									isRecentLayout &&
+										"col-start-2 row-start-1 flex min-w-0 flex-col gap-0.5",
+								)}
+							>
+								{/* 编辑时，只允许编辑非工作区快捷项目 */}
+								{isEditing &&
+								!isWorkspaceShortcutProjectStatus &&
+								onRenameProject ? (
+									<Input
+										autoFocus
 										className={cn(
-											"project-item-title min-w-0 flex-1 rounded text-sm font-semibold leading-5 text-foreground",
-											!onRenameProject && "hover:bg-transparent",
-											isListMode && "cursor-pointer",
-											!isListMode && "cursor-text",
-											isCompact && "cursor-pointer text-[13px] font-medium",
+											"h-5",
+											isCompactList && "col-start-2 row-start-1",
 										)}
-										onClick={
-											isListMode || isCompact ? undefined : handleNameClick
-										}
-										data-testid="project-item-title"
-										data-editable={
-											!isListMode && !isCompact && !!onRenameProject
-										}
+										onClick={(e) => e.stopPropagation()}
+										value={editingProjectName}
+										onChange={handleProjectNameChange}
+										onKeyDown={handleProjectNameKeyDown}
+										onBlur={handleProjectNameBlur}
+										data-testid="project-item-rename-input"
+									/>
+								) : (
+									<FlexBox
+										align="center"
+										gap={isRecentLayout ? 6 : 4}
+										className={cn(
+											"min-w-0",
+											isRecentLayout && "min-h-5",
+											isCompactList && "col-start-2 row-start-1",
+										)}
+										data-testid="project-item-title-wrapper"
 									>
-										{item.project_name || t("project.unnamedProject")}
+										{!isRecentLayout && projectTags}
+										<SmartTooltip
+											className={cn(
+												"project-item-title min-w-0 flex-1 rounded text-sm font-semibold leading-5 text-foreground",
+												!onRenameProject && "hover:bg-transparent",
+												isListMode && "cursor-pointer",
+												!isListMode && "cursor-text",
+												isCompact &&
+													"cursor-pointer text-[13px] font-medium",
+												isRecentLayout && "flex-initial",
+											)}
+											onClick={
+												isListMode || isCompact
+													? undefined
+													: handleNameClick
+											}
+											data-testid="project-item-title"
+											data-editable={
+												!isListMode && !isCompact && !!onRenameProject
+											}
+										>
+											{item.project_name || t("project.unnamedProject")}
+											{locationName && !isRecentLayout && (
+												<span className="block truncate text-xs font-normal text-muted-foreground">
+													{locationName}
+												</span>
+											)}
+										</SmartTooltip>
+										{isRecentLayout && projectTags}
+									</FlexBox>
+								)}
+								{isRecentLayout && locationName && (
+									<SmartTooltip
+										className="min-w-0 text-xs font-normal leading-4 text-muted-foreground"
+										data-testid="project-item-location"
+									>
+										{locationName}
 									</SmartTooltip>
-								</FlexBox>
-							)}
+								)}
+							</div>
 							<SmartTooltip
 								className={cn(
 									"project-item-updated-at text-[10px] font-normal leading-[13px] text-muted-foreground",
 									isCompact && "truncate text-xs leading-4",
 									isCompactList &&
 										"col-start-2 row-start-2 [@container_(min-width:800px)]:col-start-[time] [@container_(min-width:800px)]:row-start-1",
+									isRecentLayout && isCompactList && "leading-5",
 								)}
 								data-testid="project-item-time"
 								data-sort-type={sortType}
@@ -328,6 +388,7 @@ function ProjectItem<T extends ProjectListItem | CollaborationProjectListItem>({
 								isCompactList
 									? "col-start-3 row-span-2 row-start-1 flex items-center justify-end gap-2 [@container_(min-width:800px)]:col-start-[actions] [@container_(min-width:800px)]:row-span-1"
 									: "contents",
+								isRecentLayout && "self-start",
 							)}
 						>
 							{isCompactList && showCollaborators && copyLinkButton}
@@ -340,6 +401,7 @@ function ProjectItem<T extends ProjectListItem | CollaborationProjectListItem>({
 										"right-2 top-2 border-none bg-muted text-foreground",
 									isCompact &&
 										"static col-start-3 row-start-1 rounded-md border-none bg-transparent text-muted-foreground hover:bg-accent hover:text-foreground",
+									isRecentLayout && "h-5 self-start",
 								)}
 								style={{
 									opacity: (isCompact || isHover || open) && !isEditing ? 1 : 0,

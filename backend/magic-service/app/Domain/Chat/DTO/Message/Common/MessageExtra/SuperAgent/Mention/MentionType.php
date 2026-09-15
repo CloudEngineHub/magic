@@ -11,6 +11,8 @@ enum MentionType: string
 {
     case PROJECT_DIRECTORY = 'project_directory';
     case PROJECT_FILE = 'project_file';
+    case USER_FILE = 'user_file';
+    case USER_DIRECTORY = 'user_directory';
     case MEMORY_DIRECTORY = 'memory_directory';
     case MEMORY_FILE = 'memory_file';
 

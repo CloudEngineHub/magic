@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react"
 import { useMemoizedFn } from "ahooks"
 import { observer } from "mobx-react-lite"
-import { Layers, Users, PanelsTopLeft } from "lucide-react"
+import { Layers, Users, AppWindow, Clock3 } from "lucide-react"
 import { useTranslation } from "react-i18next"
 import { SuperMagicApi } from "@/apis"
 import { Button } from "@/components/shadcn-ui/button"
@@ -19,11 +19,12 @@ import { CollaborationProjectsContent } from "./CollaborationProjectsPanel"
 interface WorkspaceProjectsPanelProps {
 	open: boolean
 	initialSource: ProjectBrowserSource
+	initialAction?: "create-project"
 	onClose: () => void
 }
 
 export type ProjectBrowserSource =
-	{ type: "workspace"; workspace: Workspace } | { type: "collaboration" }
+	{ type: "workspace"; workspace: Workspace } | { type: "collaboration" } | { type: "recent" }
 const WORKSPACE_PAGE_SIZE = 20
 const DEFAULT_WINDOW_WIDTH_RATIO = 0.85
 
@@ -40,11 +41,17 @@ function getInitialWorkspaces(source: ProjectBrowserSource): Workspace[] {
 	)
 }
 
-function WorkspaceProjectsPanel({ open, initialSource, onClose }: WorkspaceProjectsPanelProps) {
+function WorkspaceProjectsPanel({
+	open,
+	initialSource,
+	initialAction,
+	onClose,
+}: WorkspaceProjectsPanelProps) {
 	const { t } = useTranslation("super")
 	const { userInfo } = useUserInfo()
 	const { searchValue, onSearchValueChange, setSearchValue } = useSearchValue()
 	const [source, setSource] = useState<ProjectBrowserSource>(initialSource)
+	const [createPending, setCreatePending] = useState(initialAction === "create-project")
 	const [workspaces, setWorkspaces] = useState<Workspace[]>(() =>
 		getInitialWorkspaces(initialSource),
 	)
@@ -102,6 +109,7 @@ function WorkspaceProjectsPanel({ open, initialSource, onClose }: WorkspaceProje
 
 	const resetSource = useMemoizedFn(() => {
 		setSource(initialSource)
+		setCreatePending(initialAction === "create-project")
 		setSearchValue("")
 		setWorkspaces(getInitialWorkspaces(initialSource))
 	})
@@ -121,7 +129,7 @@ function WorkspaceProjectsPanel({ open, initialSource, onClose }: WorkspaceProje
 	const selectSource = (next: ProjectBrowserSource) => {
 		if (
 			next.type === source.type &&
-			(next.type === "collaboration" ||
+			(next.type !== "workspace" ||
 				(source.type === "workspace" && next.workspace.id === source.workspace.id))
 		)
 			return
@@ -137,17 +145,21 @@ function WorkspaceProjectsPanel({ open, initialSource, onClose }: WorkspaceProje
 	const locationName =
 		source.type === "workspace"
 			? source.workspace.name || t("workspace.unnamedWorkspace")
-			: t("workspace.collaborationProjectsTitle")
+			: source.type === "recent"
+				? t("projectNavigation.recent")
+				: t("workspace.collaborationProjectsTitle")
 
 	return (
 		<ProjectsPanel
 			open={open}
 			title={t("sidebarPanels.projectManager")}
-			titleIcon={<PanelsTopLeft size={16} />}
+			titleIcon={<AppWindow size={16} />}
 			location={
 				<>
 					{source.type === "workspace" ? (
 						<Layers size={16} className="text-muted-foreground" />
+					) : source.type === "recent" ? (
+						<Clock3 size={16} className="text-muted-foreground" />
 					) : (
 						<Users size={16} className="text-muted-foreground" />
 					)}
@@ -187,6 +199,21 @@ function WorkspaceProjectsPanel({ open, initialSource, onClose }: WorkspaceProje
 						{t("sidebarPanels.browseWorkspaces")}
 					</div>
 					<div className="min-h-0 flex-1 overflow-y-auto">
+						<div className="mb-2 border-b border-border pb-2">
+							<button
+								type="button"
+								aria-current={source.type === "recent" ? true : undefined}
+								className={cn(
+									"flex min-h-9 w-full items-center gap-2 rounded-md px-2 py-2 text-left text-sm text-foreground outline-none hover:bg-accent focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring",
+									source.type === "recent" &&
+										"bg-accent font-medium text-accent-foreground",
+								)}
+								onClick={() => selectSource({ type: "recent" })}
+							>
+								<Clock3 size={16} className="shrink-0" />
+								<span className="truncate">{t("projectNavigation.recent")}</span>
+							</button>
+						</div>
 						{workspaces.map((item) => (
 							<button
 								type="button"
@@ -197,7 +224,7 @@ function WorkspaceProjectsPanel({ open, initialSource, onClose }: WorkspaceProje
 										: undefined
 								}
 								className={cn(
-									"mb-0.5 flex min-h-9 w-full items-center gap-2 rounded-md px-2 py-2 text-left text-sm text-foreground hover:bg-accent",
+									"mb-0.5 flex min-h-9 w-full items-center gap-2 rounded-md px-2 py-2 text-left text-sm text-foreground outline-none hover:bg-accent focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring",
 									source.type === "workspace" &&
 										source.workspace.id === item.id &&
 										"bg-accent font-medium text-accent-foreground ring-1 ring-inset ring-border",
@@ -242,7 +269,7 @@ function WorkspaceProjectsPanel({ open, initialSource, onClose }: WorkspaceProje
 								type="button"
 								aria-current={source.type === "collaboration" ? true : undefined}
 								className={cn(
-									"flex min-h-9 w-full items-center gap-2 rounded-md px-2 py-2 text-left text-sm text-foreground hover:bg-accent",
+									"flex min-h-9 w-full items-center gap-2 rounded-md px-2 py-2 text-left text-sm text-foreground outline-none hover:bg-accent focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring",
 									source.type === "collaboration" &&
 										"bg-accent font-medium text-accent-foreground",
 								)}
@@ -261,14 +288,20 @@ function WorkspaceProjectsPanel({ open, initialSource, onClose }: WorkspaceProje
 				</nav>
 			}
 		>
-			{source.type === "workspace" ? (
+			{createPending && source.type !== "workspace" ? (
+				<div className="flex min-h-0 flex-1 items-center justify-center p-4 text-sm text-muted-foreground">
+					{t("projectNavigation.selectWorkspaceToCreate")}
+				</div>
+			) : source.type !== "collaboration" ? (
 				<WorkspaceProjectsContent
-					key={source.workspace.id}
+					key={source.type === "workspace" ? source.workspace.id : "recent"}
 					open={open}
-					workspace={source.workspace}
+					workspace={source.type === "workspace" ? source.workspace : undefined}
 					searchValue={searchValue}
 					onClearSearch={() => setSearchValue("")}
 					onClose={close}
+					initialCreating={createPending}
+					onCancelCreating={() => setCreatePending(false)}
 				/>
 			) : (
 				<CollaborationProjectsContent

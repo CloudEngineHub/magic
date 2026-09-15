@@ -2,6 +2,7 @@
 import os
 import re
 from pathlib import Path
+from urllib.parse import quote
 from typing import TYPE_CHECKING, Any, Dict, List, Optional
 
 from app.path_manager import PathManager
@@ -50,6 +51,8 @@ def _file_category(file_path: str) -> str:
 def _is_temporary_workspace_path(file_path: str) -> bool:
     """判断文件路径是否位于 PathManager 定义的工作区临时目录下。"""
     path = Path(file_path)
+    if file_path == "~" or file_path.startswith("~/"):
+        path = path.expanduser()
     if not path.is_absolute():
         path = PathManager.get_workspace_dir() / path
 
@@ -65,7 +68,7 @@ def _is_temporary_workspace_path(file_path: str) -> bool:
 def _workspace_relative_path(file_path: str) -> Optional[str]:
     """将安全的工作区路径转换为 canonical 相对路径。"""
     raw_path = file_path.strip()
-    if not raw_path:
+    if not raw_path or raw_path.startswith("~"):
         return None
 
     normalized_input = raw_path.replace("\\", "/")
@@ -122,6 +125,8 @@ def _referenced_project_absolute_path(file_path: str) -> Optional[str]:
         not part or part in {".", ".."} for part in relative_path.parts
     ):
         return None
+    if not re.fullmatch(r"[1-9][0-9]*", relative_path.parts[0]):
+        return None
     return normalized_path.as_posix()
 
 
@@ -137,7 +142,21 @@ def _encode_markdown_path(path: str) -> Optional[str]:
     return "/".join(segment.translate(replacements) for segment in path.split("/"))
 
 
-def _canonical_file_link(file_path: str, file_name: str) -> Optional[str]:
+def _canonical_file_link(file_path: str, file_name: str, *, is_directory: bool = False) -> Optional[str]:
+    if file_path.startswith("~"):
+        if not file_path.startswith("~/"):
+            return None
+        relative_user_path = file_path[2:].rstrip("/")
+        if (
+            not relative_user_path
+            or any(part in {"", ".", ".."} for part in relative_user_path.split("/"))
+            or any(ord(char) < 0x20 or ord(char) == 0x7F for char in relative_user_path)
+        ):
+            return None
+        label = _markdown_label(file_name or Path(relative_user_path).name)
+        destination = "~/" + quote(relative_user_path, safe="/")
+        return f"[{label}]({destination}{'/' if is_directory else ''})"
+
     relative_path = _workspace_relative_path(file_path)
     if relative_path:
         destination = f"./{relative_path}"
@@ -152,6 +171,8 @@ def _canonical_file_link(file_path: str, file_name: str) -> Optional[str]:
     encoded_path = _encode_markdown_path(destination)
     if not encoded_path:
         return None
+    if is_directory:
+        encoded_path += "/"
 
     label = _markdown_label(file_name or fallback_name)
     if " " in encoded_path:
@@ -171,6 +192,8 @@ class FileHandler(BaseMentionHandler):
 
     async def get_tip(self, mention: Dict[str, Any], agent_context: Optional["AgentContext"] = None) -> str:
         file_path = mention.get("file_path", "") or ""
+        if mention.get("type") == "user_file" or file_path.startswith("~/"):
+            return "Read and understand the referenced file or directory before proceeding"
         _, project_type = await find_parent_canvas_project(file_path)
         if project_type and project_type in _PROJECT_TYPE_TIPS:
             return _PROJECT_TYPE_TIPS[project_type]
@@ -252,7 +275,10 @@ class FileHandler(BaseMentionHandler):
                 f"{index}. File reference (not a valid workspace-relative link): {readable_reference}"
             ]
 
-        project_path, project_type = await find_parent_canvas_project(file_path)
+        if mention.get("type") == "user_file" or file_path.startswith("~/"):
+            project_path, project_type = None, None
+        else:
+            project_path, project_type = await find_parent_canvas_project(file_path)
         if project_path and project_type:
             project_label = _PROJECT_TYPE_LABELS.get(project_type, project_type)
             category = _file_category(file_path)

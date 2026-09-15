@@ -23,6 +23,7 @@ import { DraftData, FileData } from "../types"
 import { keyBy } from "lodash-es"
 import { JSONContent } from "@/infrastructure/editors/tiptap/core"
 import { SaveUploadFileToProjectResponse } from "../../../utils/api"
+import { isValidProjectReferenceId } from "../../../utils/markdownFileReference"
 
 /**
  * Extract file extension from filename
@@ -371,13 +372,19 @@ export function getProjectReferenceSourceId(attrs: TiptapMentionAttributes): str
 export function isPendingProjectReferenceMention(attrs: TiptapMentionAttributes): boolean {
 	if (attrs.type === MentionItemType.PROJECT_FILE) {
 		const data = attrs.data as ProjectFileMentionData | undefined
-		return Boolean(data?.pending_project_copy && data.source_project_id && data.source_file_id)
+		return Boolean(
+			data?.pending_project_copy &&
+			isValidProjectReferenceId(data.source_project_id) &&
+			isValidProjectReferenceId(data.source_file_id),
+		)
 	}
 
 	if (attrs.type === MentionItemType.FOLDER) {
 		const data = attrs.data as DirectoryMentionData | undefined
 		return Boolean(
-			data?.pending_project_copy && data.source_project_id && data.source_directory_id,
+			data?.pending_project_copy &&
+			isValidProjectReferenceId(data.source_project_id) &&
+			isValidProjectReferenceId(data.source_directory_id),
 		)
 	}
 
@@ -390,11 +397,17 @@ export function markProjectReferenceMentionForCopy(
 	attrs: TiptapMentionAttributes,
 	sourceProjectId?: string,
 ): TiptapMentionAttributes | null {
-	if (!sourceProjectId) return null
+	if (!isValidProjectReferenceId(sourceProjectId)) return null
 
 	if (attrs.type === MentionItemType.PROJECT_FILE) {
 		const data = attrs.data as ProjectFileMentionData | undefined
 		if (!data?.file_id) return null
+		if (
+			data.project_id === "0" ||
+			(data.source_project_id !== undefined &&
+				!isValidProjectReferenceId(data.source_project_id))
+		)
+			return null
 
 		return {
 			...attrs,
@@ -410,6 +423,12 @@ export function markProjectReferenceMentionForCopy(
 	if (attrs.type === MentionItemType.FOLDER) {
 		const data = attrs.data as DirectoryMentionData | undefined
 		if (!data?.directory_id) return null
+		if (
+			data.project_id === "0" ||
+			(data.source_project_id !== undefined &&
+				!isValidProjectReferenceId(data.source_project_id))
+		)
+			return null
 
 		return {
 			...attrs,
@@ -556,6 +575,8 @@ export const isAllowedMention = (
 	// Unknown types are accepted only by the trusted SDK/draft restore path, not by normal panel input.
 	if (!Object.values(MentionItemType).includes(attrs.type as MentionItemType)) return false
 	if (
+		attrs.type === MentionItemType.USER_FILE ||
+		attrs.type === MentionItemType.USER_DIRECTORY ||
 		attrs.type === MentionItemType.MEMORY_FILE ||
 		attrs.type === MentionItemType.MEMORY_DIRECTORY
 	) {

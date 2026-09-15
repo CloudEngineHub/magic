@@ -15,6 +15,7 @@ import {
 import { useMessageListContext } from "@/pages/superMagic/components/MessageList/context"
 import { normalizeInlineStyle } from "../normalizeInlineStyle"
 import { FileReference, getFileExtensionFromPath } from "./FileReference"
+import { UserFileReference } from "./UserFileReference"
 import { IconExternalLink } from "@tabler/icons-react"
 import { MentionItemType } from "@/components/business/MentionPanel/types"
 import type { TiptapMentionAttributes } from "@/components/business/MentionPanel/tiptap-plugin"
@@ -127,6 +128,16 @@ export const MarkdownLink = observer((props: MarkdownLinkProps) => {
 			fileId: String(resolvedFileInfo.file_id),
 			fileData,
 		})
+	}
+
+	if (fileTarget?.scope === "user") {
+		return (
+			<UserFileReference
+				selector={{ space_type: "user", space_relative_path: fileTarget.relativePath }}
+				label={children}
+				href={normalizedHref}
+			/>
+		)
 	}
 
 	if (resolvedFileInfo) {

@@ -16,7 +16,6 @@ import type { PresetFileType } from "./constant"
 import type { TopicFileRowDecorationResolver } from "./topic-file-row-decoration.types"
 import { useIsMobile } from "@/hooks/useIsMobile"
 import { useDownloadVisibility } from "@/pages/superMagic/hooks/useDownloadVisibility"
-import type { CrossProjectOperationSuccessResult } from "./hooks/useCrossProjectFileOperation"
 import magicToast from "@/components/base/MagicToaster/utils"
 import pubsub, { PubSubEvents } from "@/utils/pubsub"
 import {
@@ -28,6 +27,7 @@ import type { SlidesTemplateItem } from "@/pages/superMagic/components/MainInput
 import { SaveSlidesTemplateDialog, type SaveSlidesTemplateTarget } from "./components"
 import { buildConvertToSlidesTemplatePayload } from "@/pages/superMagic/utils/slidesTemplateActions"
 import type { TopicFilesSpaceConfig } from "./file-space"
+import type { CrossProjectOperationSuccessResult } from "./hooks/useCrossProjectFileOperation"
 
 export { PRESET_FILE_TYPES, type PresetFileType } from "./constant"
 export type {
@@ -76,6 +76,8 @@ export interface TopicFilesButtonProps {
 	onSaveSlidesTemplate?: (item: AttachmentItem) => void | Promise<void>
 	onConvertToSlidesTemplate?: (item: AttachmentItem) => void
 	headerTrailingAction?: ReactNode
+	/** 仅在已连接 Detail 的项目侧栏提供管理器入口。 */
+	showFileManager?: boolean
 	/** 文件树所属空间及其能力配置。 */
 	spaceConfig?: TopicFilesSpaceConfig
 	/** 判断节点是否允许参与移动和多选等变更操作。 */
@@ -126,6 +128,7 @@ const TopicFilesButton = forwardRef<TopicFilesButtonRef, TopicFilesButtonProps>(
 			onSaveSlidesTemplate,
 			onConvertToSlidesTemplate,
 			headerTrailingAction,
+			showFileManager = false,
 			spaceConfig,
 			isItemSelectable,
 			operationRoot,
@@ -283,6 +286,18 @@ const TopicFilesButton = forwardRef<TopicFilesButtonRef, TopicFilesButtonProps>(
 					onSaveSlidesTemplate={handleSaveSlidesTemplate}
 					onConvertToSlidesTemplate={handleConvertToSlidesTemplate}
 					headerTrailingAction={headerTrailingAction}
+					onOpenFileManager={
+						showFileManager &&
+						projectId &&
+						!spaceConfig?.scope &&
+						onFileClick &&
+						!shareCode
+							? () =>
+									onFileClick({
+										file_manager: { spaceType: "project", projectId },
+									})
+							: undefined
+					}
 					spaceConfig={spaceConfig}
 					isItemSelectable={isItemSelectable}
 					operationRoot={operationRoot}

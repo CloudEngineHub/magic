@@ -34,6 +34,9 @@ import {
 import { getFileType } from "@/pages/superMagic/utils/handleFIle"
 import { getCanvasMarkerMentionImagePath } from "@/components/business/MentionPanel/utils/canvasMarkerMention"
 import type { ProjectFilesStore } from "@/stores/projectFiles"
+import { needsFileReferenceNormalization } from "@/components/business/MentionPanel/utils/fileReferenceMention"
+import { UserFileReference } from "@/pages/superMagic/components/MessageList/components/Text/components/Markdown/parser/UserFileReference"
+import { createUserFileHref } from "@/pages/superMagic/utils/markdownFileReference"
 import { ProjectDirectoryMentionIcon } from "@/pages/superMagic/components/MessageEditor/components/MentionNodes/folder/ProjectDirectoryMentionIcon"
 import {
 	FileReference,
@@ -305,6 +308,23 @@ function InlineDefaultMention(props: InlineMentionProps) {
 }
 
 function InlineMention(props: InlineMentionProps) {
+	if (needsFileReferenceNormalization(props.data)) {
+		const data = props.data.data as Record<string, unknown> | undefined
+		const id = String(data?.file_id || data?.directory_id || "")
+		const path = String(data?.file_path || data?.directory_path || "")
+		return (
+			<UserFileReference
+				selector={{ file_id: id }}
+				mentionAttrs={props.data}
+				label={String(data?.file_name || data?.directory_name || "")}
+				href={
+					path.startsWith("~/")
+						? createUserFileHref(path, Boolean(data?.directory_id)) || undefined
+						: undefined
+				}
+			/>
+		)
+	}
 	if (props.data.type === MentionItemType.DESIGN_MARKER) {
 		return <InlineMarkerMention {...props} />
 	}

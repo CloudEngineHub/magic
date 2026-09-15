@@ -1,4 +1,4 @@
-import { useRef, useState, type MouseEvent } from "react"
+import { useEffect, useRef, useState, type MouseEvent } from "react"
 import { observer } from "mobx-react-lite"
 import { Ellipsis } from "lucide-react"
 import { cn } from "@/utils/cn"
@@ -32,6 +32,7 @@ function ProjectItem({
 	onCancelWorkspaceShortcut,
 	onDeleteProject,
 	onRenameProject,
+	onInteractionChange,
 }: ProjectItemProps) {
 	const { t } = useTranslation("super")
 	const isSelected = projectStore.selectedProject?.id === project.id
@@ -40,6 +41,7 @@ function ProjectItem({
 	const showCollaborationTag = isWorkspaceShortcut || isCollaborationProjectStatus
 	const [isHovered, setIsHovered] = useState(false)
 	const [isMenuOpen, setIsMenuOpen] = useState(false)
+	const [isRenamePending, setIsRenamePending] = useState(false)
 	const suppressItemClickRef = useRef(false)
 
 	const canRename = canManageProject(project.user_role) && !!onRenameProject
@@ -54,6 +56,14 @@ function ProjectItem({
 		item: project,
 		onRenameProject: canRename ? onRenameProject : undefined,
 	})
+
+	useEffect(() => {
+		onInteractionChange?.(project.id, isMenuOpen || isEditing || isRenamePending)
+	}, [project.id, isMenuOpen, isEditing, isRenamePending, onInteractionChange])
+	useEffect(
+		() => () => onInteractionChange?.(project.id, false),
+		[project.id, onInteractionChange],
+	)
 
 	const blockItemClickTemporarily = () => {
 		suppressItemClickRef.current = true
@@ -97,18 +107,18 @@ function ProjectItem({
 
 	const handleRenameStart = () => {
 		if (!canRename) return
+		setIsRenamePending(true)
 		setTimeout(() => {
 			setIsEditing(true)
+			setIsRenamePending(false)
 		}, 200)
 	}
 
 	if (isEditing && canRename) {
 		return (
-			<div
-				className="w-full px-2 py-0.5"
-				data-testid={`sidebar-project-rename-${project.id}`}
-			>
+			<div className="w-full pr-2" data-testid={`sidebar-project-rename-${project.id}`}>
 				<SidebarCreateInput
+					inputClassName="px-2"
 					value={editingProjectName}
 					onValueChange={(v) =>
 						handleProjectNameChange({
@@ -200,7 +210,7 @@ function ProjectItem({
 						size="md"
 						isActive={isSelected}
 						className={cn(
-							"relative h-7 px-2",
+							"relative h-8 translate-x-0 px-2 font-normal",
 							isSelected && "bg-[#f5f5f5] dark:bg-[#262626]",
 						)}
 					>
@@ -219,19 +229,9 @@ function ProjectItem({
 						>
 							<div className="flex w-full min-w-0 items-center">
 								<div className="flex min-w-0 flex-1 items-center gap-1.5">
-									<NavigationStatusIcon
-										itemType="project"
-										status={project.project_status}
-										showDefaultIcon={false}
-										className={
-											isSelected
-												? "text-sidebar-accent-foreground"
-												: "text-sidebar-foreground"
-										}
-									/>
 									<span
 										className={cn(
-											"min-w-0 max-w-full shrink truncate text-left text-sm leading-5",
+											"min-w-0 max-w-full shrink truncate text-left text-[13px] leading-5",
 											isSelected
 												? "text-sidebar-accent-foreground"
 												: "text-sidebar-foreground",
@@ -239,12 +239,21 @@ function ProjectItem({
 									>
 										{project.project_name || t("project.unnamedProject")}
 									</span>
-									{project.is_pinned && <PinnedTag />}
+									{/* 普通项目直接显示名称；运行状态放在名称后，状态变化不移动文字起点。 */}
+									<NavigationStatusIcon
+										itemType="project"
+										status={project.project_status}
+										showDefaultIcon={false}
+									/>
+									{project.is_pinned && (
+										<PinnedTag className="h-3 w-3 border-0 bg-transparent p-0" />
+									)}
 									{showCollaborationTag && (
 										<CollaborationProjectTag
 											visible={showCollaborationTag}
 											project={project}
 											showText={false}
+											className="h-3 w-3 border-0 bg-transparent p-0"
 										/>
 									)}
 								</div>

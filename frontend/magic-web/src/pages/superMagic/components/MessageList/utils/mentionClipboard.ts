@@ -14,6 +14,8 @@ import {
 import {
 	createCanonicalWorkspaceHref,
 	createReferencedProjectHref,
+	createUserFileHref,
+	isValidProjectReferenceId,
 	escapeHtmlText,
 	escapeMarkdownLinkLabel,
 	normalizeWorkspacePathForComparison,
@@ -72,6 +74,10 @@ function isPendingUpload(attrs: TiptapMentionAttributes): boolean {
 
 function isWorkspaceFileMention(attrs: TiptapMentionAttributes): boolean {
 	return (
+		attrs.type === MentionItemType.USER_FILE ||
+		attrs.type === MentionItemType.USER_DIRECTORY ||
+		attrs.type === MentionItemType.MEMORY_FILE ||
+		attrs.type === MentionItemType.MEMORY_DIRECTORY ||
 		attrs.type === MentionItemType.FOLDER ||
 		attrs.type === MentionItemType.PROJECT_FILE ||
 		attrs.type === MentionItemType.UPLOAD_FILE
@@ -86,7 +92,7 @@ function getReferencedProjectId(
 
 	const data = attrs.data as ProjectFileMentionData
 	const sourceProjectId = String(data.source_project_id || data.project_id || "").trim()
-	if (!sourceProjectId) return null
+	if (!isValidProjectReferenceId(sourceProjectId)) return null
 	if (currentProjectId && sourceProjectId === String(currentProjectId)) return null
 	if (!currentProjectId && !data.source_project_id) return null
 	return sourceProjectId
@@ -243,11 +249,32 @@ export function getMentionClipboardRepresentation(
 		return null
 	}
 	const resolvedAttrs = resolveMentionForClipboard(attrs, workspaceFiles, currentProjectId)
+	if (
+		resolvedAttrs.type === MentionItemType.PROJECT_FILE ||
+		resolvedAttrs.type === MentionItemType.FOLDER
+	) {
+		const data = resolvedAttrs.data as ProjectFileMentionData | DirectoryMentionData
+		if (data.project_id === "0" || data.source_project_id === "0") return null
+	}
 	let path = ""
 	let label = ""
 	let referencedProjectId: string | null = null
+	const userDirectory =
+		resolvedAttrs.type === MentionItemType.USER_DIRECTORY ||
+		resolvedAttrs.type === MentionItemType.MEMORY_DIRECTORY
+	const userFile =
+		resolvedAttrs.type === MentionItemType.USER_FILE ||
+		resolvedAttrs.type === MentionItemType.MEMORY_FILE
 
-	if (resolvedAttrs.type === MentionItemType.FOLDER) {
+	if (userDirectory) {
+		const data = resolvedAttrs.data as { directory_path: string; directory_name: string }
+		path = data.directory_path
+		label = data.directory_name
+	} else if (userFile) {
+		const data = resolvedAttrs.data as { file_path: string; file_name: string }
+		path = data.file_path
+		label = data.file_name
+	} else if (resolvedAttrs.type === MentionItemType.FOLDER) {
 		const data = resolvedAttrs.data as DirectoryMentionData
 		path = data.directory_path
 		label = data.directory_name?.trim() || ""
@@ -263,9 +290,14 @@ export function getMentionClipboardRepresentation(
 		return null
 	}
 
-	const href = referencedProjectId
-		? createReferencedProjectHref(referencedProjectId, path)
-		: createCanonicalWorkspaceHref(path)
+	const href =
+		userFile || userDirectory
+			? path.startsWith("~/")
+				? createUserFileHref(path, userDirectory)
+				: null
+			: referencedProjectId
+				? createReferencedProjectHref(referencedProjectId, path)
+				: createCanonicalWorkspaceHref(path)
 	if (!href || !label) return null
 	const markdownDestination = href.includes(" ") ? `<${href}>` : href
 

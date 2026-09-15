@@ -1,3 +1,4 @@
+import type { FileReference } from "@/apis/modules/superMagic"
 import { env } from "@/utils/env"
 import type { AttachmentItem } from "@/pages/superMagic/components/TopicFilesButton/hooks"
 
@@ -6,6 +7,7 @@ const MAGIC_ROOT_PREFIX = ".magic/"
 const DEFAULT_REFERENCED_PROJECT_MOUNT_BASE_PATH = "/mnt/agfs/magicfs/referenced-projects"
 
 export type MarkdownFileTarget =
+	| { scope: "user"; relativePath: string }
 	| { scope: "workspace"; relativePath: string }
 	| { scope: "referenced-project"; projectId: string; relativePath: string }
 
@@ -33,6 +35,19 @@ function hasControlCharacters(value: string): boolean {
 		if (code < 32 || code === 127) return true
 	}
 	return false
+}
+
+export function isValidProjectReferenceId(projectId: unknown): projectId is string {
+	return typeof projectId === "string" && /^[1-9][0-9]*$/.test(projectId)
+}
+
+/** 用户路径保持 POSIX 文件名原样，不进行工作区前缀裁剪或再次解码。 */
+export function normalizeUserRelativePath(path: string): string | null {
+	if (!path || path.startsWith("/") || hasControlCharacters(path)) return null
+	const normalized = path.replace(/\/+$/, "")
+	if (normalized.split("/").some((segment) => !segment || segment === "." || segment === ".."))
+		return null
+	return normalized
 }
 
 function normalizeWorkspacePathSegments(path: string): string | null {
@@ -111,6 +126,14 @@ export function classifyMarkdownFileHref(
 		explicitFileReference: false,
 	}
 	const rawHref = href.trim()
+	const invalidFile: MarkdownFileHrefClassification = {
+		target: null,
+		explicitFileReference: true,
+	}
+	const invalidResult =
+		rawHref.startsWith("~") || rawHref.startsWith(getReferencedProjectMountBasePath() + "/")
+			? invalidFile
+			: notFile
 	if (
 		!rawHref ||
 		/^[a-z][a-z\d+.-]*:/i.test(rawHref) ||
@@ -119,14 +142,28 @@ export function classifyMarkdownFileHref(
 		rawHref.includes("?") ||
 		hasControlCharacters(rawHref)
 	)
-		return notFile
+		return invalidResult
 
 	const decodedHref = decodeURIComponentOnce(rawHref)
-	if (decodedHref === null || hasControlCharacters(decodedHref)) return notFile
+	if (decodedHref === null || hasControlCharacters(decodedHref)) return invalidResult
+	if (
+		decodedHref.startsWith(getReferencedProjectMountBasePath() + "/") &&
+		!rawHref.startsWith("/")
+	)
+		return invalidFile
+
+	if (rawHref.startsWith("~") || decodedHref.startsWith("~")) {
+		// 只有字面 ~/ 能选择用户根；编码分隔符不能改变所属空间。
+		if (!rawHref.startsWith("~/") || /%2f/i.test(rawHref)) return invalidFile
+		const relativePath = normalizeUserRelativePath(decodedHref.slice(2))
+		return relativePath
+			? { target: { scope: "user", relativePath }, explicitFileReference: true }
+			: invalidFile
+	}
 
 	if (rawHref.startsWith("/")) {
 		// 绝对地址只接受 Agent 已有挂载；项目 ID 不能被编码的分隔符重新切分。
-		if (rawHref.includes("\\") || /%(?:2f|5c)/i.test(rawHref)) return notFile
+		if (rawHref.includes("\\") || /%(?:2f|5c)/i.test(rawHref)) return invalidResult
 		const mountPrefix = getReferencedProjectMountBasePath() + "/"
 		if (!decodedHref.startsWith(mountPrefix)) {
 			const relativePath = options.allowWorkspaceRoot
@@ -138,11 +175,11 @@ export function classifyMarkdownFileHref(
 		}
 		const mountedPath = decodedHref.slice(mountPrefix.length)
 		const separatorIndex = mountedPath.indexOf("/")
-		if (separatorIndex <= 0) return notFile
+		if (separatorIndex <= 0) return invalidFile
 		const projectId = mountedPath.slice(0, separatorIndex)
-		if (projectId === "." || projectId === "..") return notFile
+		if (!isValidProjectReferenceId(projectId)) return invalidFile
 		const relativePath = normalizeWorkspacePathSegments(mountedPath.slice(separatorIndex + 1))
-		if (!relativePath) return notFile
+		if (!relativePath) return invalidFile
 		return {
 			target: { scope: "referenced-project", projectId, relativePath },
 			explicitFileReference: true,
@@ -213,17 +250,28 @@ export function createCanonicalWorkspaceHref(path: string): string | null {
 	return `./${normalizedPath.split("/").map(encodePathSegment).join("/")}`
 }
 
+export function createUserFileHref(path: string, isDirectory = false): string | null {
+	const normalized = normalizeUserRelativePath(path.startsWith("~/") ? path.slice(2) : path)
+	if (!normalized) return null
+	// 反斜杠按文件名编码，避免 Markdown 将其当作转义符；不改变 POSIX 路径。
+	const encoded = normalized
+		.split("/")
+		.map((segment) =>
+			encodeURIComponent(segment).replace(
+				/[!'()*]/g,
+				(char) => `%${char.charCodeAt(0).toString(16).toUpperCase()}`,
+			),
+		)
+		.join("/")
+	return `~/${encoded}${isDirectory ? "/" : ""}`
+}
+
 export function createReferencedProjectHref(
 	projectId: string,
 	relativePath: string,
 ): string | null {
 	const normalizedProjectId = projectId.trim()
-	if (
-		!normalizedProjectId ||
-		normalizedProjectId === "." ||
-		normalizedProjectId === ".." ||
-		/[\\/\0]/.test(normalizedProjectId)
-	) {
+	if (!isValidProjectReferenceId(normalizedProjectId)) {
 		return null
 	}
 
@@ -302,4 +350,45 @@ export function findLegacyAttachmentByPath(
 	return decodedPath && decodedPath !== path
 		? findAttachmentByPath(attachments, decodedPath)
 		: undefined
+}
+
+/** 显示路径保留原文件名，不编码 URL，也不改写 canonical 相对路径。 */
+export function getFileDisplayPath(file: {
+	file_reference?: FileReference
+	space_type?: FileReference["space_type"]
+	relative_file_path?: string
+	file_name?: string
+}): string {
+	const reference = file.file_reference
+	const path = reference?.space_relative_path ?? file.relative_file_path
+	if (reference?.space_type === "user" || (!reference && file.space_type === "user"))
+		return path !== undefined ? "~/" + path : (file.file_name ?? "")
+	return path || file.file_name || ""
+}
+
+/** 用户 Markdown 的普通链接相对于正文所在目录；只有字面 ~/ 选择用户根。 */
+export function resolveUserFileHref(href: string, documentPath: string): string | null {
+	if (href.startsWith("~/")) {
+		const target = parseMarkdownFileHref(href)
+		return target?.scope === "user" ? target.relativePath : null
+	}
+	if (
+		!href ||
+		href.startsWith("/") ||
+		href.startsWith("~") ||
+		/^[a-z][a-z\d+.-]*:/i.test(href) ||
+		/[?#]/.test(href)
+	)
+		return null
+	const decoded = decodeURIComponentOnce(href)
+	if (decoded === null || hasControlCharacters(decoded)) return null
+	const segments = documentPath.split("/").slice(0, -1)
+	for (const segment of decoded.split("/")) {
+		if (!segment || segment === ".") continue
+		if (segment === "..") {
+			if (!segments.length) return null
+			segments.pop()
+		} else segments.push(segment)
+	}
+	return normalizeUserRelativePath(segments.join("/"))
 }

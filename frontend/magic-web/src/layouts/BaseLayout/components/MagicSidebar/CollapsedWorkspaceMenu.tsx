@@ -1,6 +1,6 @@
-import { Suspense, lazy, useEffect, useRef, useState } from "react"
+import { useCallback, useEffect, useRef, useState, type ReactNode } from "react"
 import { useRequest } from "ahooks"
-import { Box, CirclePlus, Loader2, PanelsTopLeft, UsersRound } from "lucide-react"
+import { CirclePlus, Loader2, UsersRound } from "lucide-react"
 import { observer } from "mobx-react-lite"
 import { useTranslation } from "react-i18next"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/shadcn-ui/popover"
@@ -17,22 +17,43 @@ import { SidebarMenuButton } from "@/components/shadcn-ui/sidebar"
 import { useCollapsedWorkspaceDnd } from "./useCollapsedWorkspaceDnd"
 import { useProjectPinBoundaryConfirmation } from "./WorkspaceList/ProjectPinBoundaryConfirmDialog"
 
-const WorkspaceProjectsPanel = lazy(
-	() => import("@/pages/superMagic/components/WorkspacesMenu/components/WorkspaceProjectsPanel"),
-)
-
 const WORKSPACE_PAGE_SIZE = 20
 
-const CollapsedWorkspaceMenu = observer(function CollapsedWorkspaceMenu() {
+interface CollapsedWorkspaceMenuProps {
+	open: boolean
+	onOpenChange: (open: boolean) => void
+	onOpenManager: (source?: ProjectBrowserSource) => void
+	onBusyChange: (busy: boolean) => void
+	icon: ReactNode
+}
+
+const CollapsedWorkspaceMenu = observer(function CollapsedWorkspaceMenu({
+	open: isOpen,
+	onOpenChange: setIsOpen,
+	onOpenManager,
+	onBusyChange,
+	icon,
+}: CollapsedWorkspaceMenuProps) {
 	const { t } = useTranslation()
-	const [isOpen, setIsOpen] = useState(false)
 	const [isCreatingWorkspace, setIsCreatingWorkspace] = useState(false)
 	const [workspaceName, setWorkspaceName] = useState("")
 	const [isSubmittingWorkspace, setIsSubmittingWorkspace] = useState(false)
 	const [openProjectMenuId, setOpenProjectMenuId] = useState<string | null>(null)
-	const [projectBrowserSource, setProjectBrowserSource] = useState<ProjectBrowserSource | null>(
-		null,
-	)
+	const [busyWorkspaceIds, setBusyWorkspaceIds] = useState<Set<string>>(new Set())
+	const handleProjectBusyChange = useCallback((workspaceId: string, busy: boolean) => {
+		setBusyWorkspaceIds((previous) => {
+			if (previous.has(workspaceId) === busy) return previous
+			const next = new Set(previous)
+			if (busy) next.add(workspaceId)
+			else next.delete(workspaceId)
+			return next
+		})
+	}, [])
+	const handleProjectMenuChange = (workspaceId: string | null) => {
+		if (busyWorkspaceIds.size > 0 && workspaceId !== openProjectMenuId) return
+		setOpenProjectMenuId(workspaceId)
+	}
+
 	const [workspacePage, setWorkspacePage] = useState(1)
 	const [hasMoreWorkspaces, setHasMoreWorkspaces] = useState(true)
 	const workspaceScrollRef = useRef<HTMLDivElement>(null)
@@ -46,7 +67,7 @@ const CollapsedWorkspaceMenu = observer(function CollapsedWorkspaceMenu() {
 		workspaces,
 		enabled: isOpen,
 		openProjectMenuId,
-		onProjectMenuChange: setOpenProjectMenuId,
+		onProjectMenuChange: handleProjectMenuChange,
 		requestPinBoundaryConfirmation: requestConfirmation,
 	})
 
@@ -65,18 +86,18 @@ const CollapsedWorkspaceMenu = observer(function CollapsedWorkspaceMenu() {
 	}
 
 	function openProjectManager(source?: ProjectBrowserSource) {
-		const workspace =
-			selectedWorkspace?.workspace_type === "default"
-				? selectedWorkspace
-				: workspaces.find((item) => item.workspace_type === "default")
+		if (isConfirmationOpen || isCreatingWorkspace || busyWorkspaceIds.size > 0) return
 		handleCloseAllPopovers()
-		setProjectBrowserSource(
-			source ??
-				(!isShareWorkspaceActive && workspace
-					? { type: "workspace", workspace }
-					: { type: "collaboration" }),
-		)
+		onOpenManager(source)
 	}
+
+	useEffect(() => {
+		onBusyChange(isConfirmationOpen || isCreatingWorkspace || busyWorkspaceIds.size > 0)
+	}, [isConfirmationOpen, isCreatingWorkspace, busyWorkspaceIds, onBusyChange])
+	useEffect(() => () => onBusyChange(false), [onBusyChange])
+	useEffect(() => {
+		if (!isOpen) setOpenProjectMenuId(null)
+	}, [isOpen])
 
 	const { run: fetchWorkspacePage, loading: isLoadingMoreWorkspaces } = useRequest(
 		(page: number, append: boolean) =>
@@ -104,7 +125,7 @@ const CollapsedWorkspaceMenu = observer(function CollapsedWorkspaceMenu() {
 		if (!scrollElement) return
 
 		const handleScroll = () => {
-			if (openProjectMenuId) {
+			if (openProjectMenuId && busyWorkspaceIds.size === 0) {
 				setOpenProjectMenuId(null)
 			}
 			if (
@@ -120,6 +141,8 @@ const CollapsedWorkspaceMenu = observer(function CollapsedWorkspaceMenu() {
 		scrollElement.addEventListener("scroll", handleScroll)
 		return () => scrollElement.removeEventListener("scroll", handleScroll)
 	}, [
+		isOpen,
+		busyWorkspaceIds,
 		fetchWorkspacePage,
 		hasMoreWorkspaces,
 		isLoadingMoreWorkspaces,
@@ -169,16 +192,18 @@ const CollapsedWorkspaceMenu = observer(function CollapsedWorkspaceMenu() {
 					isActive={isActive}
 					onProjectClick={handleProjectClick}
 					openProjectMenuId={openProjectMenuId}
-					onProjectMenuChange={setOpenProjectMenuId}
+					onProjectMenuChange={handleProjectMenuChange}
+					onBusyChange={handleProjectBusyChange}
 					onRequestCloseAll={handleCloseAllPopovers}
 					keepPopoverOpen={isConfirmationOpen}
+					onOpenManager={() => openProjectManager({ type: "workspace", workspace })}
 				/>
 			)
 		})
 
 	return (
 		<div
-			className="flex shrink-0 flex-col items-center p-2"
+			className="flex shrink-0 flex-col items-center"
 			data-testid="sidebar-collapsed-workspace-menu"
 		>
 			{confirmationDialog}
@@ -186,7 +211,11 @@ const CollapsedWorkspaceMenu = observer(function CollapsedWorkspaceMenu() {
 				<Popover
 					open={isOpen}
 					onOpenChange={(open) => {
-						if (!open && isConfirmationOpen) return
+						if (
+							!open &&
+							(isConfirmationOpen || isCreatingWorkspace || busyWorkspaceIds.size > 0)
+						)
+							return
 						handleWorkspacePopoverOpenChange(open)
 					}}
 					modal={false}
@@ -194,11 +223,12 @@ const CollapsedWorkspaceMenu = observer(function CollapsedWorkspaceMenu() {
 					<PopoverTrigger asChild>
 						<span>
 							<SidebarMenuButton
-								tooltip={t("sidebar:workspace.title")}
+								tooltip={t("super:projectNavigation.workspaces")}
+								aria-label={t("super:projectNavigation.workspaces")}
 								data-testid="sidebar-collapsed-workspace-menu-button"
 								className="text-sidebar-foreground"
 							>
-								<Box className="h-4 w-4 shrink-0" />
+								{icon}
 							</SidebarMenuButton>
 						</span>
 					</PopoverTrigger>
@@ -298,42 +328,9 @@ const CollapsedWorkspaceMenu = observer(function CollapsedWorkspaceMenu() {
 								</span>
 							</Button>
 						</div>
-						<div className="mt-1 shrink-0 border-t border-sidebar-border pt-1">
-							<Button
-								variant="ghost"
-								size="sm"
-								className="h-[54px] w-full justify-start px-2 font-normal"
-								data-testid="sidebar-collapsed-project-manager"
-								onClick={() => openProjectManager()}
-							>
-								<div className="flex min-w-0 items-center gap-2">
-									<div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-[10px] bg-[#171717] dark:bg-[#e5e5e5]">
-										<PanelsTopLeft className="h-4 w-4 text-white dark:text-[#171717]" />
-									</div>
-									<div className="min-w-0 text-left">
-										<div className="truncate text-sm leading-5 text-sidebar-foreground">
-											{t("super:sidebarPanels.projectManager")}
-										</div>
-										<div className="mt-1 truncate text-xs leading-4 text-[#737373] dark:text-[#a3a3a3]">
-											{t("super:sidebarPanels.projectManagerDescription")}
-										</div>
-									</div>
-								</div>
-							</Button>
-						</div>
 					</PopoverContent>
 				</Popover>
 			</div>
-
-			{projectBrowserSource && (
-				<Suspense fallback={null}>
-					<WorkspaceProjectsPanel
-						open
-						initialSource={projectBrowserSource}
-						onClose={() => setProjectBrowserSource(null)}
-					/>
-				</Suspense>
-			)}
 		</div>
 	)
 })

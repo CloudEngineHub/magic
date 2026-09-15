@@ -1,3 +1,5 @@
+import type { FileReference } from "@/apis/modules/superMagic"
+
 // 附件来源
 export enum AttachmentSource {
 	DEFAULT = 0,
@@ -13,6 +15,10 @@ export enum AttachmentSource {
 
 // 共享的附件项类型定义
 export interface AttachmentItem {
+	/** 按需目录的读取状态；未加载不能视为空目录，项目完整附件树无需提供。 */
+	directoryLoadState?: "unloaded" | "loading" | "loaded" | "error"
+	file_reference?: FileReference
+	space_type?: FileReference["space_type"]
 	file_id?: string
 	file_name?: string
 	filename?: string

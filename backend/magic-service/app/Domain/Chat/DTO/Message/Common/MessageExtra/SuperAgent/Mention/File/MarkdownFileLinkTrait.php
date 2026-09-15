@@ -11,13 +11,18 @@ trait MarkdownFileLinkTrait
 {
     private function formatMarkdownFileReference(FileData $data): string
     {
-        $filePath = $data->getFilePath();
-        $fileName = trim((string) ($data->getFileName() ?? ''));
+        return $this->formatMarkdownPathReference($data->getFilePath(), $data->getFileName());
+    }
+
+    private function formatMarkdownPathReference(?string $filePath, ?string $name, bool $isDirectory = false): string
+    {
+        $fileName = trim((string) $name);
         if ($filePath === null || $filePath === '') {
             return $fileName;
         }
 
-        $normalizedPath = str_replace('\\', '/', trim($filePath));
+        $isUserPath = str_starts_with($filePath, '~/');
+        $normalizedPath = $isUserPath ? substr($filePath, 2) : str_replace('\\', '/', trim($filePath));
         if ($normalizedPath === '' || str_contains($normalizedPath, "\0") || preg_match('/[\x00-\x1F\x7F]/', $normalizedPath)) {
             return $fileName;
         }
@@ -37,7 +42,7 @@ trait MarkdownFileLinkTrait
         }
 
         $encodedPath = implode('/', array_map(
-            static fn (string $segment): string => strtr($segment, [
+            static fn (string $segment): string => $isUserPath ? rawurlencode($segment) : strtr($segment, [
                 '%' => '%25',
                 '#' => '%23',
                 '?' => '%3F',
@@ -51,7 +56,7 @@ trait MarkdownFileLinkTrait
         $label = trim($label);
         $label = str_replace(['\\', '[', ']'], ['\\\\', '\[', '\]'], $label);
 
-        $destination = './' . $encodedPath;
+        $destination = ($isUserPath ? '~/' : './') . $encodedPath . ($isDirectory ? '/' : '');
         return str_contains($destination, ' ')
             ? sprintf('[%s](<%s>)', $label, $destination)
             : sprintf('[%s](%s)', $label, $destination);

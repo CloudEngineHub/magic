@@ -8,6 +8,7 @@ import {
 	type MentionNodeViewRendererProps,
 } from "@/components/business/MentionPanel/tiptap-plugin/types"
 import type { DirectoryMentionData } from "@/components/business/MentionPanel/types"
+import { MentionItemType } from "@/components/business/MentionPanel/types"
 import { useIsMobile } from "@/hooks/useIsMobile"
 import { cn } from "@/utils/cn"
 import type { AttachmentItem } from "@/pages/superMagic/components/TopicFilesButton/hooks"
@@ -73,7 +74,14 @@ function FolderMentionNodeView({
 						size={16}
 					/>
 				</span>
-				<span className="relative z-10 min-w-0 truncate" title={displayName}>
+				<span
+					className="relative z-10 min-w-0 truncate"
+					title={
+						attrs.type === MentionItemType.USER_DIRECTORY
+							? data.directory_path
+							: displayName
+					}
+				>
 					{displayName}
 				</span>
 				{isMobile && (

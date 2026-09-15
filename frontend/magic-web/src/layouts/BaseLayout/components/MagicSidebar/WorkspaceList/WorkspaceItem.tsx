@@ -20,7 +20,17 @@ import { getWorkspaceRouteUrl } from "@/pages/superMagic/utils/route"
 import NavigationStatusIcon from "@/pages/superMagic/components/NavigationStatusIcon"
 import { shouldIgnoreSelectionAfterWorkspaceRename } from "@/pages/superMagic/utils/workspaceRenameSelectionGuard"
 
-function WorkspaceItem({ workspace, className, searchProjects, dndDisabled }: WorkspaceItemProps) {
+function WorkspaceItem({
+	active,
+	workspace,
+	className,
+	searchProjects,
+	dndDisabled,
+	scrollRef,
+	maxProjectHeight,
+	onOpenManager,
+	onBusyChange,
+}: WorkspaceItemProps) {
 	const { t } = useTranslation(["super"])
 	const workspaceIdSegment = toTestIdSegment(workspace.id)
 	const workspaceNameTestId = `sidebar-workspace-item-name-${workspaceIdSegment}`
@@ -29,25 +39,27 @@ function WorkspaceItem({ workspace, className, searchProjects, dndDisabled }: Wo
 
 	const [isHovered, setIsHovered] = useState(false)
 	const [isMenuOpen, setIsMenuOpen] = useState(false)
+	const [projectsBusy, setProjectsBusy] = useState(false)
 	const suppressItemClickRef = useRef(false)
 	const isExpanded =
 		searchProjects !== undefined || sidebarStore.expandedWorkspaces.has(workspace.id)
 	const projects = searchProjects ?? projectStore.getProjectsByWorkspace(workspace.id)
 	const isLoading = searchProjects === undefined && projectStore.isLoadingWorkspace(workspace.id)
 	const isActive = workspaceStore.selectedWorkspace?.id === workspace.id
-	const { openDeleteModal, renderDeleteModal } = useWorkspaceDelete({
+	const { openDeleteModal, renderDeleteModal, deleteModalOpen } = useWorkspaceDelete({
 		getDeleteSuccessMessage: () => t("workspace.deleteWorkspaceSuccess"),
 		getFallbackWorkspaceName: () => workspace.name || t("workspace.unnamedWorkspace"),
 	})
 
-	const { openRenameModal, renderRenameModal } = useWorkspaceRename()
+	const { openRenameModal, renderRenameModal, renameDialogOpen } = useWorkspaceRename()
 
-	const { menuProps, nodes } = useWorkspaceActionMenu({
+	const { menuProps, nodes, isModalOpen } = useWorkspaceActionMenu({
 		workspace,
 		onDelete: openDeleteModal,
 		onRename: (workspaceId) => openRenameModal(workspaceId, workspace),
 		onMenuClose: () => setIsMenuOpen(false),
 		onTransferStart: () => setIsHovered(false),
+		onOpenManager,
 	})
 
 	const { isCreatingProject, handleCreateProject, handleCancelCreate, handleProjectCreated } =
@@ -55,8 +67,42 @@ function WorkspaceItem({ workspace, className, searchProjects, dndDisabled }: Wo
 			workspaceId: workspace.id,
 			isExpanded,
 		})
+	useEffect(() => {
+		onBusyChange?.(
+			workspace.id,
+			isMenuOpen ||
+				projectsBusy ||
+				isCreatingProject ||
+				deleteModalOpen ||
+				renameDialogOpen ||
+				isModalOpen,
+		)
+	}, [
+		workspace.id,
+		isMenuOpen,
+		projectsBusy,
+		isCreatingProject,
+		deleteModalOpen,
+		renameDialogOpen,
+		isModalOpen,
+		onBusyChange,
+	])
+	useEffect(() => () => onBusyChange?.(workspace.id, false), [workspace.id, onBusyChange])
 
 	const workspaceHeaderRef = useRef<HTMLDivElement>(null)
+	const locateOnExpandRef = useRef(false)
+	useLayoutEffect(() => {
+		const header = workspaceHeaderRef.current
+		const viewport = scrollRef.current
+		if (!isExpanded || !locateOnExpandRef.current || !header || !viewport) return
+		locateOnExpandRef.current = false
+		const item = header.closest<HTMLElement>("[data-sidebar-workspace-root]")
+		if (!item) return
+		viewport.scrollTop +=
+			item.getBoundingClientRect().top -
+			viewport.getBoundingClientRect().top -
+			parseFloat(getComputedStyle(item).scrollMarginTop)
+	}, [isExpanded, scrollRef])
 	const collapseScrollAnchorRef = useRef<{
 		scrollContainer: HTMLElement
 		anchorTop: number
@@ -78,13 +124,14 @@ function WorkspaceItem({ workspace, className, searchProjects, dndDisabled }: Wo
 	 */
 	useEffect(() => {
 		if (
+			active &&
 			searchProjects === undefined &&
 			isExpanded &&
 			!projectStore.hasLoadedWorkspace(workspace.id)
 		) {
 			projectStore.loadProjectsForWorkspace(workspace.id)
 		}
-	}, [isExpanded, searchProjects, workspace.id])
+	}, [active, isExpanded, searchProjects, workspace.id])
 
 	function shouldHandleAnchorClick(event: MouseEvent<HTMLAnchorElement>) {
 		return (
@@ -124,9 +171,7 @@ function WorkspaceItem({ workspace, className, searchProjects, dndDisabled }: Wo
 		e.preventDefault()
 		e.stopPropagation()
 		if (isExpanded && workspaceHeaderRef.current) {
-			const scrollContainer = workspaceHeaderRef.current.closest<HTMLElement>(
-				"[data-testid='sidebar-content-root']",
-			)
+			const scrollContainer = scrollRef.current
 			if (scrollContainer) {
 				collapseScrollAnchorRef.current = {
 					scrollContainer,
@@ -134,6 +179,7 @@ function WorkspaceItem({ workspace, className, searchProjects, dndDisabled }: Wo
 				}
 			}
 		}
+		locateOnExpandRef.current = !isExpanded
 		sidebarStore.toggleWorkspaceExpanded(workspace.id)
 	}
 
@@ -153,6 +199,7 @@ function WorkspaceItem({ workspace, className, searchProjects, dndDisabled }: Wo
 			data-sidebar-drop-type="workspace"
 			data-sidebar-drop-workspace-id={workspace.id}
 			data-sidebar-workspace-root="true"
+			data-workspace-expanded={isExpanded}
 			className={cn(
 				"relative flex w-full max-w-full shrink-0 flex-col items-center",
 				// Selecting a workspace scrolls this item to the top. Reserve the sticky
@@ -190,6 +237,7 @@ function WorkspaceItem({ workspace, className, searchProjects, dndDisabled }: Wo
 					<MagicDropdown
 						menu={{ items: menuProps.items }}
 						trigger={["contextMenu"]}
+						onOpenChange={setIsMenuOpen}
 						placement={menuProps.placement}
 						rootClassName="w-full"
 					>
@@ -197,7 +245,7 @@ function WorkspaceItem({ workspace, className, searchProjects, dndDisabled }: Wo
 							asChild
 							size="default"
 							isActive={isActive}
-							className="h-8 gap-2 px-2 text-sidebar-foreground"
+							className="group/workspace-row relative h-8 gap-2 px-2 font-normal leading-5 text-sidebar-foreground data-[active=true]:font-normal"
 							onMouseEnter={() => setIsHovered(true)}
 							onMouseLeave={() => setIsHovered(false)}
 						>
@@ -209,11 +257,12 @@ function WorkspaceItem({ workspace, className, searchProjects, dndDisabled }: Wo
 								className="text-current no-underline [-webkit-tap-highlight-color:transparent]"
 							>
 								<div
-									className="flex items-center justify-center rounded-xl hover:bg-sidebar-accent "
+									className="flex size-4 shrink-0 items-center justify-center rounded-xl text-muted-foreground hover:bg-sidebar-accent"
 									onClick={handleToggle}
 									data-testid={workspaceToggleTestId}
 								>
 									<ChevronRight
+										strokeWidth={1.5}
 										className={cn(
 											"h-4 w-4 shrink-0 transition-transform",
 											isExpanded && "rotate-90",
@@ -223,9 +272,10 @@ function WorkspaceItem({ workspace, className, searchProjects, dndDisabled }: Wo
 								<NavigationStatusIcon
 									itemType="workspace"
 									status={workspace.workspace_status}
+									className="text-muted-foreground [&_.lucide]:stroke-[1.5]"
 								/>
 								<span
-									className="min-w-0 flex-1 truncate text-left text-sm leading-5"
+									className="min-w-0 flex-1 truncate text-left text-[13px] font-normal leading-5"
 									data-testid={workspaceNameTestId}
 								>
 									{workspace.name || t("super:workspace.unnamedWorkspace")}
@@ -236,52 +286,57 @@ function WorkspaceItem({ workspace, className, searchProjects, dndDisabled }: Wo
 										data-testid={workspaceLoadingTestId}
 									/>
 								)}
-								{/* Keep action controls mounted; no-hover makes them visible on iPad desktop touch input. */}
 								<div
 									className={cn(
-										"flex h-4 w-4 shrink-0 cursor-pointer items-center justify-center rounded-full text-sidebar-foreground transition-opacity [-webkit-tap-highlight-color:transparent] hover:bg-sidebar-accent",
+										"absolute inset-y-0 right-2 flex items-center gap-2 bg-gradient-to-l from-sidebar from-70% to-transparent pl-4 transition-opacity group-focus-within/workspace-row:pointer-events-auto group-focus-within/workspace-row:opacity-100 no-hover:pointer-events-auto no-hover:opacity-100",
 										isHovered || isMenuOpen
 											? "opacity-100"
-											: "pointer-events-none opacity-0 [@media(hover:hover)_and_(pointer:fine)]:w-0 [@media(hover:hover)_and_(pointer:fine)]:overflow-hidden",
-										"no-hover:pointer-events-auto no-hover:opacity-100",
+											: "pointer-events-none opacity-0",
 									)}
-									onClick={handleCreateProjectClick}
-									onPointerDown={(e) => {
-										e.stopPropagation()
-									}}
-									onMouseDown={(e) => {
-										e.stopPropagation()
-									}}
-									data-testid="workspace-item-create-project"
 								>
-									<Plus className="h-4 w-4" />
-								</div>
-								<MagicDropdown
-									menu={{ items: menuProps.items }}
-									trigger={["click"]}
-									placement={menuProps.placement}
-									onOpenChange={setIsMenuOpen}
-								>
+									{/* Keep action controls mounted; no-hover makes them visible on iPad desktop touch input. */}
 									<div
 										className={cn(
 											"flex h-4 w-4 shrink-0 cursor-pointer items-center justify-center rounded-full text-sidebar-foreground transition-opacity [-webkit-tap-highlight-color:transparent] hover:bg-sidebar-accent",
-											isHovered || isMenuOpen
-												? "opacity-100"
-												: "pointer-events-none opacity-0 [@media(hover:hover)_and_(pointer:fine)]:w-0 [@media(hover:hover)_and_(pointer:fine)]:overflow-hidden",
+
 											"no-hover:pointer-events-auto no-hover:opacity-100",
 										)}
-										onClick={handleMoreClick}
+										onClick={handleCreateProjectClick}
 										onPointerDown={(e) => {
 											e.stopPropagation()
 										}}
 										onMouseDown={(e) => {
 											e.stopPropagation()
 										}}
-										data-testid="workspace-item-more"
+										data-testid="workspace-item-create-project"
 									>
-										<EllipsisIcon className="h-4 w-4" />
+										<Plus className="h-4 w-4" />
 									</div>
-								</MagicDropdown>
+									<MagicDropdown
+										menu={{ items: menuProps.items }}
+										trigger={["click"]}
+										placement={menuProps.placement}
+										onOpenChange={setIsMenuOpen}
+									>
+										<div
+											className={cn(
+												"flex h-4 w-4 shrink-0 cursor-pointer items-center justify-center rounded-full text-sidebar-foreground transition-opacity [-webkit-tap-highlight-color:transparent] hover:bg-sidebar-accent",
+
+												"no-hover:pointer-events-auto no-hover:opacity-100",
+											)}
+											onClick={handleMoreClick}
+											onPointerDown={(e) => {
+												e.stopPropagation()
+											}}
+											onMouseDown={(e) => {
+												e.stopPropagation()
+											}}
+											data-testid="workspace-item-more"
+										>
+											<EllipsisIcon className="h-4 w-4" />
+										</div>
+									</MagicDropdown>
+								</div>
 							</a>
 						</SidebarMenuButton>
 					</MagicDropdown>
@@ -289,11 +344,15 @@ function WorkspaceItem({ workspace, className, searchProjects, dndDisabled }: Wo
 
 				{isExpanded && (
 					<ProjectList
+						isSearchResult={searchProjects !== undefined}
+						active={active}
 						workspace={workspace}
+						maxProjectHeight={maxProjectHeight}
 						projects={projects}
 						workspaceId={workspace.id}
 						isLoading={isLoading}
 						isCreatingProject={isCreatingProject}
+						onBusyChange={setProjectsBusy}
 						dndDisabled={dndDisabled}
 						onCancelCreate={handleCancelCreate}
 						onProjectCreated={handleProjectCreated}

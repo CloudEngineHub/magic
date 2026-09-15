@@ -10,6 +10,7 @@ import type { CodeViewerExtensionContext } from "../../contents/Code"
 import { isDesignMagicProjectFile } from "../../contents/Design/utils/isDesignMagicProjectFile"
 
 // Lazy load all content components
+const UserTextPreview = lazy(() => import("../../../UserSpace/UserTextPreview"))
 const Empty = lazy(() => import("../DetailEmpty"))
 const Browser = lazy(() => import("../../contents/Browser"))
 const CodeViewer = lazy(() => import("../../contents/Code"))
@@ -62,6 +63,13 @@ function ContentRenderer({ type, data, commonProps }: ContentRendererProps) {
 	commonProps = {
 		...commonProps,
 		showFileHeader,
+	}
+
+	if (data?.space_type === "user" || data?.file_reference?.space_type === "user") {
+		if ([DetailType.Md, DetailType.Text, DetailType.Code].includes(type)) {
+			return <UserTextPreview data={data} {...commonProps} />
+		}
+		commonProps = { ...commonProps, allowEdit: false }
 	}
 
 	switch (type) {
