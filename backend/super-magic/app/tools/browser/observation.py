@@ -144,6 +144,8 @@ class BrowserFindVisualParams(BaseToolParams):
 
 
 class _BrowserVisualToolBase(BrowserToolBase[P], Generic[P]):
+    """浏览器视觉工具基类，复用截图发布、视觉推理及并发任务清理。"""
+
     async def _execute_visual_query(
         self,
         tool_context: ToolContext,
