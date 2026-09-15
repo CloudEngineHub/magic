@@ -45,5 +45,41 @@
 	"uploadLogo": "Upload",
 	"uploadPngTip": "It is recommended to upload PNG logos, and the size should not exceed 2 M",
 	"uploadSizeLimit": "File size cannot exceed 2 M",
-	"uploadSvgTip": "It is recommended to upload SVG logos, and the size should not exceed 2 M"
+	"uploadSvgTip": "It is recommended to upload SVG logos, and the size should not exceed 2 M",
+	"watermarkContent": "Watermark Content",
+	"watermarkContentDescription": "Select the information shown in the watermark.",
+	"watermarkContentRequired": "Select at least one watermark field",
+	"watermarkDefaultTip": "Watermarks are off by default. Enable them when required for visitor identification and incident tracing.",
+	"watermarkDisabledLabel": "Off",
+	"watermarkEnabled": "Enable Watermark",
+	"watermarkEnabledDescription": "When enabled, an identity watermark is shown while organization members access the platform.",
+	"watermarkEnabledLabel": "On",
+	"watermarkFields": {
+		"department": "Department",
+		"email": "Email",
+		"employee_no": "Employee ID",
+		"phone": "Phone Number",
+		"real_name": "Employee Name",
+		"visit_time": "Access Time"
+	},
+	"watermarkIntensity": "Watermark Intensity",
+	"watermarkIntensityDescription": "A stronger watermark makes identity information easier to recognize.",
+	"watermarkIntensityOptions": {
+		"light": "Light",
+		"standard": "Standard",
+		"strong": "Strong"
+	},
+	"watermarkPreview": "Watermark Preview",
+	"watermarkPreviewFallback": "Alex Chen · 2021034291 · 2026-09-09 14:30",
+	"watermarkPreviewSamples": {
+		"department": "Engineering",
+		"email": "alex@example.com",
+		"employee_no": "2021034291",
+		"phone": "138****8888",
+		"real_name": "Alex Chen",
+		"visit_time": "2026-09-09 14:30"
+	},
+	"watermarkPreviewTip": "This is a sample preview. The actual watermark uses the current visitor's information.",
+	"watermarkSettings": "Watermark Settings",
+	"watermarkSettingsDescription": "Configure the identity watermark shown when organization members access the platform."
 }

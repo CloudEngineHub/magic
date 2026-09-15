@@ -4,8 +4,31 @@ export const enum SupportLocales {
 	enUS = "en_US",
 }
 
+/** 组织水印中可展示的用户信息字段。 */
+export type PlatformWatermarkField =
+	| "real_name"
+	| "employee_no"
+	| "visit_time"
+	| "department"
+	| "phone"
+	| "email"
+
+/** 组织水印的深浅档位。 */
+export type PlatformWatermarkIntensity = "light" | "standard" | "strong"
+
 /** 平台信息 */
 export namespace PlatformInfo {
+	/** 组织水印配置 */
+	export interface WatermarkConfig {
+		id: string
+		enabled: boolean
+		fields: PlatformWatermarkField[]
+		depth: PlatformWatermarkIntensity
+	}
+
+	/** 更新组织水印配置的请求体 */
+	export type WatermarkUpdateParams = Omit<WatermarkConfig, "id">
+
 	/** 页脚备案信息 */
 	export interface FooterFiling {
 		enabled: boolean
@@ -30,6 +53,7 @@ export namespace PlatformInfo {
 		title_i18n: Record<SupportLocales, string>
 		keywords_i18n: Record<SupportLocales, string>
 		description_i18n: Record<SupportLocales, string>
+		watermark?: WatermarkConfig
 		agent_role_name_i18n?: Record<SupportLocales, string>
 		agent_role_description_i18n?: Record<SupportLocales, string>
 		footer?: Footer
@@ -46,6 +70,7 @@ export namespace PlatformInfo {
 		title_i18n: Record<SupportLocales, string>
 		keywords_i18n: Record<SupportLocales, string>
 		description_i18n: Record<SupportLocales, string>
+		watermark?: WatermarkUpdateParams
 		agent_role_name_i18n?: Record<SupportLocales, string>
 		agent_role_description_i18n?: Record<SupportLocales, string>
 		footer?: Footer
