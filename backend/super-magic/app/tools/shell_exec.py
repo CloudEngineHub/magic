@@ -22,7 +22,7 @@ from app.tools.shell_exec_utils.tool_detail_marker import (
 )
 from app.tools.snippet_environment import SnippetEnvironment
 from app.tools.workspace_tool import WorkspaceTool
-from app.utils.process_executor import ProcessExecutor, truncate_output_for_llm
+from app.utils.process_executor import ProcessExecutor, truncate_output_for_display
 
 logger = get_logger(__name__)
 
@@ -296,7 +296,7 @@ Background mode rules (allow_background=True):
         content = json.dumps({
             "status": status_val,
             "task_id": bg.task_id,
-            "current_output": truncate_output_for_llm(bg.current_output),
+            "current_output": bg.current_output,
         }, ensure_ascii=False)
 
         result = TerminalToolResult(command=command, content=content, ok=True)
@@ -304,7 +304,7 @@ Background mode rules (allow_background=True):
         result.extra_info = {
             "command": command,
             "cwd": cwd,
-            "stdout": truncate_output_for_llm(bg.current_output),
+            "stdout": truncate_output_for_display(bg.current_output),
             "stderr": "",
             "exit_code": 0,
         }

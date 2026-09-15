@@ -16,7 +16,7 @@ from app.i18n import i18n
 from app.core.entity.message.server_message import DisplayType, TerminalContent, ToolDetail
 from app.core.entity.tool.tool_result_types import TerminalToolResult
 from app.tools.core import BaseTool, BaseToolParams, tool
-from app.utils.process_executor import truncate_output_for_llm
+from app.utils.process_executor import truncate_output_for_display
 from app.tools.shell_exec_utils.bg_errors import (
     err_invalid_pattern,
     err_kill_on_finished_task,
@@ -166,7 +166,7 @@ Rules for shell_await:
             if params.kill:
                 if task.status != TaskStatus.RUNNING:
                     content = err_kill_on_finished_task(params.task_id, task.status.value)
-                    output = truncate_output_for_llm(await manager._store.read_full(params.task_id))
+                    output = await manager._store.read_full(params.task_id)
                     payload = json.dumps({
                         "task_id": params.task_id,
                         "status": task.status.value,
@@ -179,7 +179,7 @@ Rules for shell_await:
                     return result
 
                 await manager.kill_task(params.task_id)
-                output = truncate_output_for_llm(await manager._store.read_full(params.task_id))
+                output = await manager._store.read_full(params.task_id)
                 payload = json.dumps({
                     "task_id": params.task_id,
                     "status": "killed",
@@ -242,7 +242,7 @@ Rules for shell_await:
                 "task_id": params.task_id,
                 "status": reason,
                 "exit_code": exit_code,
-                "output": truncate_output_for_llm(output),
+                "output": output,
             }, ensure_ascii=False)
             result = TerminalToolResult(command="shell_await", content=payload, ok=True)
             result.set_exit_code(exit_code if exit_code is not None else 0)
@@ -350,5 +350,7 @@ Rules for shell_await:
             cmd_label = f"shell_await --kill task_id={task_id}" if task_id else "shell_await --kill"
         else:
             cmd_label = f"shell_await task_id={task_id}" if task_id else "shell_await(sleep)"
+        # 只裁剪终端展示副本，完整 result.content 仍交给全局文件化处理。
+        output = truncate_output_for_display(output)
         terminal_content = TerminalContent(command=cmd_label, output=output, exit_code=exit_code)
         return ToolDetail(type=DisplayType.TERMINAL, data=terminal_content)

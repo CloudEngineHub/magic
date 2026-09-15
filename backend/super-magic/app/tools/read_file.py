@@ -16,6 +16,7 @@ from app.core.entity.message.server_message import (DisplayType, FileContent,
                                                     ToolDetail)
 from app.tools.abstract_file_tool import AbstractFileTool
 from app.tools.core import BaseToolParams, tool
+from app.tools.core.base_tool import ToolResultContentMode
 from app.tools.utils.display_content_utils import truncate_content_for_display
 from app.tools.workspace_tool import WorkspaceTool
 from app.utils.async_file_utils import async_exists, async_is_dir, async_read_text
@@ -277,7 +278,8 @@ Starting line number to read (0-indexed), supports negative numbers to count fro
 Number of lines or pages to read, default 200 lines, set to -1 to read entire file""")
 
 
-@tool()
+# 文件正文已有动态预算与原文件续读协议，避免被全局默认额度再次文件化。
+@tool(result_content_mode=ToolResultContentMode.SELF_MANAGED)
 class ReadFile(AbstractFileTool[ReadFileParams], WorkspaceTool[ReadFileParams]):
     """<!--zh
     读取文件内容

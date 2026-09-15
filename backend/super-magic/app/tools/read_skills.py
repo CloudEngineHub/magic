@@ -15,6 +15,7 @@ from app.core.skill_manager import find_skill
 from app.core.skill_utils.skill_sources import get_personal_skills_dir
 from app.i18n import i18n
 from app.tools.core import AutoMount, BaseTool, BaseToolParams, tool
+from app.tools.core.base_tool import ToolResultContentMode
 from app.tools.read_skills_hooks import (
     SkillLoadedHookContext,
     notify_skill_loaded,
@@ -50,7 +51,8 @@ Whether to check for skill version updates. Defaults to true. If the user has ex
         return value
 
 
-@tool(auto_mount=AutoMount.SKILLS)
+# hook 在返回前执行，必须交付完整指令；此豁免不代表已有安全预算。
+@tool(auto_mount=AutoMount.SKILLS, result_content_mode=ToolResultContentMode.INSTRUCTION)
 class ReadSkills(BaseTool[ReadSkillsParams]):
     """<!--zh
     批量读取可用 skills 的完整内容工具
