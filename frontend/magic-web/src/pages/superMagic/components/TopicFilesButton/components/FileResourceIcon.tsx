@@ -11,6 +11,8 @@ import {
 	MessageSquare,
 } from "lucide-react"
 import MagicFileIcon from "@/components/base/MagicFileIcon"
+import { useInRouterContext } from "react-router"
+import { UnknownFileIcon } from "./UnknownFileIcon"
 import DingTalkIcon from "@/components/base/MagicFileIcon/assets/dingtalk-logo.svg"
 import LarkIcon from "@/components/base/MagicFileIcon/assets/feishu-logo.svg"
 import IconSuperTeamshare from "@/enhance/tabler/icons-react/icons/IconSuperTeamshare"
@@ -58,6 +60,7 @@ export function FileResourceIcon({
 	folderClassName,
 	folderTestId,
 }: FileResourceIconProps) {
+	const hasRouterContext = useInRouterContext()
 	const { item, isDirectory, magicVariant, userKind, skillKind, type, customChildren } =
 		presentation
 	if (skillKind === "library" && !item.display_config?.type)
@@ -129,5 +132,17 @@ export function FileResourceIcon({
 				data-testid={folderTestId}
 			/>
 		)
-	return <MagicFileIcon type={type} size={size} className={className} />
+	return (
+		<MagicFileIcon
+			type={type}
+			size={size}
+			className={className}
+			fallbackIcon={
+				// 静态导出没有路由作用域；页面中继续使用已缓存的文件内容分类，不额外下载。
+				hasRouterContext ? (
+					<UnknownFileIcon file={item} size={size} className={className} />
+				) : undefined
+			}
+		/>
+	)
 }

@@ -1351,6 +1351,7 @@
 			}
 		},
 		"backToLatest": "Back to Latest",
+		"binaryFilePreviewUnavailable": "This is a binary file and cannot be previewed.",
 		"clickToJumpPage": "Click to jump to page",
 		"closeEditingFileContent": "This file is currently being edited. Closing will exit edit mode. Continue?",
 		"closeEditingFilePrompt": "Editing \"{{fileName}}\"",
@@ -2338,6 +2339,10 @@
 				"scroll": "Long Scroll"
 			}
 		},
+		"unknownFileEncodingUnavailable": "This file could not be read using a supported text encoding.",
+		"unknownFileLoadFailed": "The file could not be loaded. Please try again.",
+		"unknownFileLoading": "Reading file…",
+		"unknownFileTooLarge": "The file exceeds {{size}} MiB and cannot be previewed.",
 		"unsavedChangesWarning": "You have unsaved changes. Are you sure you want to leave?"
 	},
 	"draftBox": {

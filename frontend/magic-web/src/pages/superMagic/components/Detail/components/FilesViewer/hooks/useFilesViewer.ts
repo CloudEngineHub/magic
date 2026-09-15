@@ -1036,6 +1036,7 @@ export function useFilesViewer(props: FilesViewerProps) {
 				return {
 					type: DetailType.NotSupport,
 					data: {
+						is_directory: true,
 						file_name: fileName,
 						file_id: file.file_id,
 						file_extension: file.file_extension,
@@ -1057,6 +1058,10 @@ export function useFilesViewer(props: FilesViewerProps) {
 				return {
 					type: DetailType.NotSupport,
 					data: {
+						is_directory: false,
+						updated_at: file.updated_at,
+						resource_version: file.resource_version,
+						version: file.version,
 						file_name: fileName,
 						file_id: file.file_id,
 						file_extension: file.file_extension,

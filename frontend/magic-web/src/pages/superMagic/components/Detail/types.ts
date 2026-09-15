@@ -1,3 +1,9 @@
+/** 已验证完整内容的只读供数入口，不承担草稿或保存职责。 */
+export interface TextReadOnlyPreview {
+	content: string
+	refresh: () => Promise<void>
+}
+
 /** 详情类型 */
 export enum DetailType {
 	Terminal = "terminal",

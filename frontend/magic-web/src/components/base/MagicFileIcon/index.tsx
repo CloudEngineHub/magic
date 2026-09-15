@@ -3,6 +3,7 @@ import { createStyles, cx } from "antd-style"
 import type React from "react"
 import { memo, useEffect, useState } from "react"
 import FileTypeIcon from "../FileTypeIcon"
+import otherIcon from "./assets/other.svg"
 
 const iconModules = import.meta.glob<string>("./assets/*.svg", { import: "default" })
 const iconCache: Record<string, string> = {}
@@ -160,6 +161,8 @@ interface MagicFileIconProps {
 	style?: React.CSSProperties
 	/** 例如 custom 文件夹 icon 解析后的临时 URL；加载失败时回退内置类型图标 */
 	remoteIconUrl?: string
+	/** 仅未知扩展名使用；文件内容分类由业务调用方提供，不在基础图标中读取文件。 */
+	fallbackIcon?: React.ReactNode
 }
 
 const useStyles = createStyles(() => ({
@@ -182,6 +185,7 @@ export default memo(function MagicFileIcon({
 	className,
 	style,
 	remoteIconUrl,
+	fallbackIcon,
 }: MagicFileIconProps) {
 	const { styles } = useStyles()
 
@@ -222,6 +226,19 @@ export default memo(function MagicFileIcon({
 					className={styles.image}
 					onError={() => setRemoteFailed(true)}
 				/>
+			</div>
+		)
+	}
+
+	if (getIconName(normalizeExtension(type)) === "other") {
+		return fallbackIcon ? (
+			<>{fallbackIcon}</>
+		) : (
+			<div
+				className={cx(styles.fileIcon, className)}
+				style={{ width: size, height: size, ...style }}
+			>
+				<img src={otherIcon} draggable={false} alt={type} className={styles.image} />
 			</div>
 		)
 	}

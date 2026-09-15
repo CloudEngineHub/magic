@@ -1,3 +1,4 @@
+import type { ReactNode } from "react"
 import MagicFileIcon from "@/components/base/MagicFileIcon"
 import fileAgentIcon from "../assets/file-md-agent.svg"
 import fileBootstrapIcon from "../assets/file-md-bootstrap.svg"
@@ -39,6 +40,7 @@ interface TopicFileIconProps {
 	size?: number
 	className?: string
 	dataTestId?: string
+	fallbackIcon?: ReactNode
 }
 
 const MAGIC_ICON_SRC_MAP: Record<TopicFileMagicVariant, string> = {
@@ -78,6 +80,7 @@ export function TopicFileIcon({
 	size,
 	className,
 	dataTestId,
+	fallbackIcon,
 }: TopicFileIconProps) {
 	const resolvedMagicVariant = magicVariant || (isMagicFolder ? "magic-root" : undefined)
 	const resolvedClassName =
@@ -101,7 +104,12 @@ export function TopicFileIcon({
 	if (!isDirectory)
 		return (
 			<span data-testid={dataTestId}>
-				<MagicFileIcon type={fileExtension} size={size ?? 24} className={className} />
+				<MagicFileIcon
+					type={fileExtension}
+					size={size ?? 24}
+					className={className}
+					fallbackIcon={fallbackIcon}
+				/>
 			</span>
 		)
 	const iconSrc = getFolderIconSrc(hasChildren)
