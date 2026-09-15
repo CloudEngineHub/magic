@@ -29,7 +29,7 @@ import CreateWorkspaceInput from "./CreateWorkspaceInput"
 import { cn } from "@/utils/cn"
 import { toTestIdSegment } from "@/utils/testid"
 import { SidebarMenu } from "@/components/shadcn-ui/sidebar"
-import { SCROLL_HINT_HEIGHT } from "@/components/shadcn-ui/scroll-area"
+import { SCROLL_HINT_HEIGHTS } from "@/components/shadcn-ui/scroll-area"
 import { useWorkspaceListDnd } from "./useWorkspaceListDnd"
 import { useProjectPinBoundaryConfirmation } from "./ProjectPinBoundaryConfirmDialog"
 
@@ -169,7 +169,10 @@ function WorkspaceList({
 			)
 			const availableHeight = Math.max(
 				0,
-				scrollArea.clientHeight - SCROLL_HINT_HEIGHT * 2 - stickyHeight,
+				scrollArea.clientHeight -
+					SCROLL_HINT_HEIGHTS.top -
+					SCROLL_HINT_HEIGHTS.bottom -
+					stickyHeight,
 			)
 			const headers = items.map((item) =>
 				item.querySelector<HTMLElement>("[data-sidebar-workspace-header]"),

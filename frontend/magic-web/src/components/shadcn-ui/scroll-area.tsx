@@ -6,7 +6,8 @@ import { useReducedMotion } from "framer-motion"
 
 import { cn } from "@/utils/cn"
 
-export const SCROLL_HINT_HEIGHT = 18
+// 顶部提示紧接固定导航，采用较薄轨道；底部保留原有点击空间。
+export const SCROLL_HINT_HEIGHTS = { top: 12, bottom: 18 } as const
 
 type ScrollAreaViewportProps = Omit<
 	React.ComponentProps<typeof ScrollAreaPrimitive.Viewport>,
@@ -155,6 +156,8 @@ const ScrollArea = React.forwardRef<
 			const anchor = pendingScrollRef.current
 			pendingScrollRef.current = null
 			if (!showHints || !viewport || !anchor) return
+			// 从底部向上翻页时，下方箭头出现不改变内容起点；重写 scrollTop 会打断原生平滑滚动。
+			if (edges.top && !anchor.atBottom && viewport.offsetTop === anchor.topInset) return
 			// 顶部轨道只在上方有内容时占位；显隐时保持内容位置，到边界则完整露出首／末行。
 			viewport.scrollTop = !edges.top
 				? 0
@@ -182,7 +185,7 @@ const ScrollArea = React.forwardRef<
 				style={{
 					...style,
 					...(showHints && {
-						gridTemplateRows: `${edges.top ? SCROLL_HINT_HEIGHT : 0}px minmax(0, 1fr) ${edges.bottom ? SCROLL_HINT_HEIGHT : 0}px`,
+						gridTemplateRows: `${edges.top ? SCROLL_HINT_HEIGHTS.top : 0}px minmax(0, 1fr) ${edges.bottom ? SCROLL_HINT_HEIGHTS.bottom : 0}px`,
 					}),
 				}}
 				{...props}
@@ -222,7 +225,12 @@ const ScrollArea = React.forwardRef<
 									direction < 0 ? scrollHints.upLabel : scrollHints.downLabel
 								}
 								onClick={() => scrollPage(direction)}
-								style={{ height: SCROLL_HINT_HEIGHT }}
+								style={{
+									height:
+										direction < 0
+											? SCROLL_HINT_HEIGHTS.top
+											: SCROLL_HINT_HEIGHTS.bottom,
+								}}
 								className={cn(
 									"z-10 flex w-6 items-center justify-center justify-self-center rounded-sm text-muted-foreground opacity-[0.65] outline-none transition-opacity hover:opacity-100 focus-visible:ring-1 focus-visible:ring-ring motion-reduce:transition-none",
 									direction < 0 ? "row-start-1" : "row-start-3",
@@ -236,7 +244,11 @@ const ScrollArea = React.forwardRef<
 					<>
 						<div
 							aria-hidden
-							style={showHints && edges.top ? { top: SCROLL_HINT_HEIGHT } : undefined}
+							style={
+								showHints && edges.top
+									? { top: SCROLL_HINT_HEIGHTS.top }
+									: undefined
+							}
 							className={cn(
 								"pointer-events-none absolute inset-x-2 top-0 z-10 h-1 bg-gradient-to-b from-black/[0.04] to-transparent dark:from-black/[0.14]",
 								showHints &&
@@ -248,7 +260,7 @@ const ScrollArea = React.forwardRef<
 							aria-hidden
 							style={
 								showHints && edges.bottom
-									? { bottom: SCROLL_HINT_HEIGHT }
+									? { bottom: SCROLL_HINT_HEIGHTS.bottom }
 									: undefined
 							}
 							className={cn(
