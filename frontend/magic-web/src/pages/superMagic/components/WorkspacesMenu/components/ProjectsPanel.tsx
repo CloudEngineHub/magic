@@ -79,7 +79,10 @@ export function ProjectsPanel({
 					windowOptions={windowOptions}
 					className={cn(
 						"flex flex-col gap-0 rounded-xl p-0",
-						windowOptions ? "overflow-visible" : "overflow-hidden",
+						// 复用普通 Dialog 的入场缩放，窗口拖动和尺寸更新仍保持立即跟手。
+						windowOptions
+							? "overflow-visible data-[state=open]:zoom-in-95 motion-reduce:data-[state=open]:animate-none"
+							: "overflow-hidden",
 						!windowOptions &&
 							"h-[min(680px,calc(100dvh_-_32px))] !w-[min(960px,calc(100vw_-_32px))] !max-w-none",
 					)}
