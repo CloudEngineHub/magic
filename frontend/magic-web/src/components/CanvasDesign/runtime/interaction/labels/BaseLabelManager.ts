@@ -2,7 +2,34 @@ import Konva from "konva"
 import { ElementTypeEnum, type LayerElement } from "../../document/types"
 import type { Canvas } from "../../core/Canvas"
 import type { CanvasEvent, CanvasEventMap } from "../../core/EventEmitter"
+import type { Rect } from "../../shared/ids"
 import { getViewportCanvasRect } from "../../shared/placement/elementUtils"
+
+const LABEL_VIEWPORT_QUERY_PADDING_RATIO = 0.5
+
+interface VisibleLabelQueryCache {
+	coverageRect: Rect
+	candidateIds: string[]
+	candidateRevision: number
+}
+
+function expandRect(rect: Rect, padding: number): Rect {
+	return {
+		x: rect.x - padding,
+		y: rect.y - padding,
+		width: rect.width + padding * 2,
+		height: rect.height + padding * 2,
+	}
+}
+
+function containsRect(outer: Rect, inner: Rect): boolean {
+	return (
+		inner.x >= outer.x &&
+		inner.y >= outer.y &&
+		inner.x + inner.width <= outer.x + outer.width &&
+		inner.y + inner.height <= outer.y + outer.height
+	)
+}
 
 /**
  * 标签配置
@@ -46,39 +73,63 @@ export interface BaseLabelManagerConfig {
 
 class LabelCandidateIndex {
 	private typeBuckets = new Map<string, Set<string>>()
+	private elementTypesById = new Map<string, string>()
 	private queryCache = new Map<string, ReadonlySet<string>>()
 	private dirty = true
+	private revision = 0
 
 	constructor(private readonly canvas: Canvas) {}
 
 	public markDirty(): void {
+		if (this.dirty) return
 		this.dirty = true
 		this.queryCache.clear()
+		this.revision += 1
 	}
 
 	public syncElement(elementId: string): void {
 		if (this.dirty) return
-		this.removeElement(elementId)
 		const element = this.canvas.elementManager.getElementInstance(elementId)
 		const elementType = element?.getData().type
-		if (!elementType) return
+		const previousElementType = this.elementTypesById.get(elementId)
+		if (previousElementType === elementType) return
+
+		if (previousElementType) {
+			const previousBucket = this.typeBuckets.get(previousElementType)
+			previousBucket?.delete(elementId)
+			if (previousBucket?.size === 0) {
+				this.typeBuckets.delete(previousElementType)
+			}
+			this.elementTypesById.delete(elementId)
+		}
+		if (!elementType) {
+			this.queryCache.clear()
+			this.revision += 1
+			return
+		}
 		let bucket = this.typeBuckets.get(elementType)
 		if (!bucket) {
 			bucket = new Set()
 			this.typeBuckets.set(elementType, bucket)
 		}
 		bucket.add(elementId)
+		this.elementTypesById.set(elementId, elementType)
 		this.queryCache.clear()
+		this.revision += 1
 	}
 
 	public removeElement(elementId: string): void {
-		let removed = false
-		for (const bucket of this.typeBuckets.values()) {
-			removed = bucket.delete(elementId) || removed
+		if (this.dirty) return
+		const elementType = this.elementTypesById.get(elementId)
+		if (!elementType) return
+		const bucket = this.typeBuckets.get(elementType)
+		bucket?.delete(elementId)
+		if (bucket?.size === 0) {
+			this.typeBuckets.delete(elementType)
 		}
-		if (removed) {
-			this.queryCache.clear()
-		}
+		this.elementTypesById.delete(elementId)
+		this.queryCache.clear()
+		this.revision += 1
 	}
 
 	public getCandidateIds(elementTypes: Set<string>): ReadonlySet<string> {
@@ -98,9 +149,15 @@ class LabelCandidateIndex {
 		return result
 	}
 
+	public getRevision(): number {
+		this.rebuildIfNeeded()
+		return this.revision
+	}
+
 	private rebuildIfNeeded(): void {
 		if (!this.dirty) return
 		this.typeBuckets.clear()
+		this.elementTypesById.clear()
 		this.queryCache.clear()
 		for (const elementId of this.canvas.elementManager.getAllElementIds()) {
 			const element = this.canvas.elementManager.getElementInstance(elementId)
@@ -112,8 +169,10 @@ class LabelCandidateIndex {
 				this.typeBuckets.set(elementType, bucket)
 			}
 			bucket.add(elementId)
+			this.elementTypesById.set(elementId, elementType)
 		}
 		this.dirty = false
+		this.revision += 1
 	}
 
 	private getElementTypesCacheKey(elementTypes: Set<string>): string {
@@ -140,6 +199,9 @@ export abstract class BaseLabelManager {
 	// 追踪上一次 hover 的元素 ID
 	protected lastHoveredElementId: string | null = null
 	private visibleLabelSyncRafId: number | null = null
+	private visibleLabelQueryCache: VisibleLabelQueryCache | null = null
+	private lastSyncedViewportScale: number | null = null
+	private labelZIndexes = new Map<string, number>()
 	private labelCandidateIndex: LabelCandidateIndex
 	private eventUnsubscribers: Array<() => void> = []
 	private destroyed = false
@@ -227,6 +289,7 @@ export abstract class BaseLabelManager {
 
 	private markLabelCandidatesDirty(): void {
 		this.labelCandidateIndex.markDirty()
+		this.visibleLabelQueryCache = null
 	}
 
 	private syncLabelCandidateForElement(elementId: string): void {
@@ -290,16 +353,12 @@ export abstract class BaseLabelManager {
 		this.listen("element:updated", (event) => {
 			this.syncLabelCandidateForElement(event.data.elementId)
 			this.createOrUpdateLabel(event.data.elementId)
-			// zIndex 可能已改变，需要重新排序所有标签
-			this.reorderAllLabels()
 		})
 
 		// 监听元素重新渲染（位置、尺寸变化等）
 		this.listen("element:rerendered", (event) => {
 			this.syncLabelCandidateForElement(event.data.elementId)
 			this.createOrUpdateLabel(event.data.elementId)
-			// zIndex 可能已改变，需要重新排序所有标签
-			this.reorderAllLabels()
 		})
 
 		// 监听选择变化
@@ -369,27 +428,33 @@ export abstract class BaseLabelManager {
 		})
 
 		// 监听裁剪模式进入/退出事件，更新标签可见性
-		this.listen("crop:enter", () => {
+		this.listen("crop:enter", ({ data }) => {
+			this.createOrUpdateLabel(data.elementId)
 			this.updateAllLabelsVisibility()
 		})
 
-		this.listen("crop:exit", () => {
+		this.listen("crop:exit", ({ data }) => {
+			this.createOrUpdateLabel(data.elementId)
 			this.updateAllLabelsVisibility()
 		})
 
-		this.listen("extend:enter", () => {
+		this.listen("extend:enter", ({ data }) => {
+			this.createOrUpdateLabel(data.elementId)
 			this.updateAllLabelsVisibility()
 		})
 
-		this.listen("extend:exit", () => {
+		this.listen("extend:exit", ({ data }) => {
+			this.createOrUpdateLabel(data.elementId)
 			this.updateAllLabelsVisibility()
 		})
 
-		this.listen("eraser:enter", () => {
+		this.listen("eraser:enter", ({ data }) => {
+			this.createOrUpdateLabel(data.elementId)
 			this.updateAllLabelsVisibility()
 		})
 
-		this.listen("eraser:exit", () => {
+		this.listen("eraser:exit", ({ data }) => {
+			this.createOrUpdateLabel(data.elementId)
 			this.updateAllLabelsVisibility()
 		})
 	}
@@ -399,7 +464,12 @@ export abstract class BaseLabelManager {
 	 */
 	protected createOrUpdateLabel(
 		elementId: string,
-		options?: { skipReorder?: boolean; skipNotify?: boolean; skipBatchDraw?: boolean },
+		options?: {
+			skipReorder?: boolean
+			skipNotify?: boolean
+			skipBatchDraw?: boolean
+			forceCreate?: boolean
+		},
 	): boolean {
 		const element = this.canvas.elementManager.getElementInstance(elementId)
 		if (!element) {
@@ -413,6 +483,15 @@ export abstract class BaseLabelManager {
 			return false
 		}
 
+		let labelGroup = this.labelMap.get(elementId)
+		if (
+			!labelGroup &&
+			!options?.forceCreate &&
+			this.calculateBaseVisibility(elementId, element) !== true
+		) {
+			return false
+		}
+
 		const node = element.getNode()
 		if (!node) {
 			this.removeLabel(elementId)
@@ -420,20 +499,23 @@ export abstract class BaseLabelManager {
 		}
 
 		// 获取或创建标签
-		let labelGroup = this.labelMap.get(elementId)
 		const createdLabel = !labelGroup
+		const previousZIndex = this.labelZIndexes.get(elementId)
+		const currentZIndex = element.getData().zIndex ?? 0
 		if (!labelGroup) {
 			labelGroup = this.createLabel(elementId)
 			this.labelMap.set(elementId, labelGroup)
 			this.canvas.overlayLayer.add(labelGroup)
-			// 新创建的标签需要设置正确的层级顺序
-			if (!options?.skipReorder) {
-				this.reorderAllLabels()
-			}
 		}
+		this.labelZIndexes.set(elementId, currentZIndex)
 
-		// 更新标签内容
-		this.updateLabelText(labelGroup, this.getLabelText(elementId))
+		// 新标签或 zIndex 实际变化时才重新排序。
+		if (
+			!options?.skipReorder &&
+			(createdLabel || (previousZIndex !== undefined && previousZIndex !== currentZIndex))
+		) {
+			this.reorderAllLabels(options?.skipBatchDraw || !labelGroup.visible())
+		}
 
 		// 更新标签位置（内部会调用 updateLabelVisibility）
 		this.updateLabelPosition(elementId, options?.skipBatchDraw)
@@ -476,11 +558,11 @@ export abstract class BaseLabelManager {
 	/**
 	 * 更新标签文本
 	 */
-	protected updateLabelText(labelGroup: Konva.Group, text: string): void {
+	protected updateLabelText(labelGroup: Konva.Group, text: string): boolean {
 		const textNode = labelGroup.findOne("Text") as Konva.Text
-		if (textNode) {
-			textNode.text(text)
-		}
+		if (!textNode || textNode.text() === text) return false
+		textNode.text(text)
+		return true
 	}
 
 	/**
@@ -509,25 +591,28 @@ export abstract class BaseLabelManager {
 	 * @param elementId - 元素 ID
 	 * @param skipBatchDraw - 是否跳过 batchDraw（用于批量更新时统一调用）
 	 */
-	protected updateLabelPosition(elementId: string, skipBatchDraw = false): void {
+	protected updateLabelPosition(elementId: string, skipBatchDraw = false): boolean {
 		const labelGroup = this.labelMap.get(elementId)
 		if (!labelGroup) {
-			return
+			return false
 		}
 
 		const element = this.canvas.elementManager.getElementInstance(elementId)
 		if (!element) {
-			return
+			return false
 		}
 
 		// 更新标签文本（因为 transform 时文本内容可能变化，如尺寸标签）
 		const newLabelText = this.getLabelText(elementId)
-		this.updateLabelText(labelGroup, newLabelText)
+		let layoutChanged = this.updateLabelText(labelGroup, newLabelText)
 
 		// 使用元素的 getBoundingRect 方法获取边界矩形
 		const boundingRect = element.getBoundingRect()
 		if (!boundingRect) {
-			return
+			if (layoutChanged && labelGroup.visible() && !skipBatchDraw) {
+				this.requestOverlayDraw("label-layout")
+			}
+			return layoutChanged && labelGroup.visible()
 		}
 
 		// 获取 viewport 缩放
@@ -537,12 +622,15 @@ export abstract class BaseLabelManager {
 		const inverseScale = 1 / viewportScale
 
 		// 应用反向缩放
-		labelGroup.scale({ x: inverseScale, y: inverseScale })
+		if (labelGroup.scaleX() !== inverseScale || labelGroup.scaleY() !== inverseScale) {
+			labelGroup.scale({ x: inverseScale, y: inverseScale })
+			layoutChanged = true
+		}
 
 		// 获取文本节点以计算标签尺寸
 		const textNode = labelGroup.findOne("Text") as Konva.Text
 		if (!textNode) {
-			return
+			return false
 		}
 
 		const labelSize = {
@@ -553,10 +641,18 @@ export abstract class BaseLabelManager {
 		// 调用子类实现的位置计算方法
 		const position = this.calculateLabelPosition(boundingRect, labelSize, inverseScale)
 
-		labelGroup.position(position)
+		if (labelGroup.x() !== position.x || labelGroup.y() !== position.y) {
+			labelGroup.position(position)
+			layoutChanged = true
+		}
 
 		// 位置更新后，立即更新可见性（因为位置变化可能影响可见性判断）
-		this.updateLabelVisibility(elementId, skipBatchDraw)
+		const visibilityChanged = this.updateLabelVisibility(elementId, true)
+		const requiresDraw = visibilityChanged || (layoutChanged && labelGroup.visible())
+		if (requiresDraw && !skipBatchDraw) {
+			this.requestOverlayDraw("label-layout")
+		}
+		return requiresDraw
 	}
 
 	/**
@@ -645,52 +741,65 @@ export abstract class BaseLabelManager {
 	 * @param elementId - 元素 ID
 	 * @param skipBatchDraw - 是否跳过 batchDraw（用于批量更新时统一调用）
 	 */
-	protected updateLabelVisibility(elementId: string, skipBatchDraw = false): void {
+	protected updateLabelVisibility(elementId: string, skipBatchDraw = false): boolean {
 		const labelGroup = this.labelMap.get(elementId)
 		if (!labelGroup) {
-			return
+			return false
 		}
 
 		const element = this.canvas.elementManager.getElementInstance(elementId)
 
 		// 计算基础可见性
 		const baseVisibility = this.calculateBaseVisibility(elementId, element)
+		const wasVisible = labelGroup.visible()
 
-		// 如果元素不存在，隐藏标签
-		if (baseVisibility === null) {
-			labelGroup.visible(false)
-			if (!skipBatchDraw) {
+		if (!this.shouldRetainLabel(elementId, element, baseVisibility)) {
+			this.removeLabel(elementId)
+			if (wasVisible && !skipBatchDraw) {
 				this.requestOverlayDraw("label-visibility")
 			}
-			return
+			return wasVisible
 		}
 
-		// 如果基础可见性为 false，直接隐藏
-		if (!baseVisibility) {
-			labelGroup.visible(false)
-			if (!skipBatchDraw) {
-				this.requestOverlayDraw("label-visibility")
-			}
-			return
+		let shouldShow = false
+		if (baseVisibility) {
+			// 计算自定义可见性（子类可以重写以添加特殊逻辑）
+			const customVisibility = this.calculateCustomVisibility(
+				elementId,
+				element,
+				labelGroup,
+				baseVisibility,
+			)
+			shouldShow = customVisibility !== null ? customVisibility : baseVisibility
 		}
 
-		// 计算自定义可见性（子类可以重写以添加特殊逻辑）
-		const customVisibility = this.calculateCustomVisibility(
-			elementId,
-			element,
-			labelGroup,
-			baseVisibility,
-		)
-
-		// 如果自定义可见性不为 null，使用自定义可见性；否则使用基础可见性
-		const shouldShow = customVisibility !== null ? customVisibility : baseVisibility
-
+		if (labelGroup.visible() === shouldShow) return false
 		labelGroup.visible(shouldShow)
 
 		// 触发重绘（批量更新时跳过，由调用方统一调用）
 		if (!skipBatchDraw) {
 			this.requestOverlayDraw("label-visibility")
 		}
+		return true
+	}
+
+	/**
+	 * 交互型标签只在 hover/选中期间保留，避免浏览大量媒体后积累隐藏 Konva 节点。
+	 * 子类可为编辑态标签覆盖此规则。
+	 */
+	protected shouldRetainLabel(
+		elementId: string,
+		element: ReturnType<typeof this.canvas.elementManager.getElementInstance>,
+		baseVisibility: boolean | null,
+	): boolean {
+		if (!element || baseVisibility === null) return false
+		if (this.visibilityConfig.alwaysVisibleTypes.has(element.getData().type)) return true
+		return baseVisibility || this.shouldRetainHiddenLabel(elementId)
+	}
+
+	protected shouldRetainHiddenLabel(elementId: string): boolean {
+		void elementId
+		return false
 	}
 
 	/**
@@ -791,109 +900,101 @@ export abstract class BaseLabelManager {
 	 * 更新所有标签的可见性
 	 */
 	protected updateAllLabelsVisibility(): void {
+		let visibilityChanged = false
 		for (const elementId of this.labelMap.keys()) {
-			this.updateLabelVisibility(elementId, true)
+			visibilityChanged = this.updateLabelVisibility(elementId, true) || visibilityChanged
 		}
-		// 批量更新后统一调用一次 batchDraw
-		this.requestOverlayDraw("all-labels-visibility")
-	}
-
-	/**
-	 * 更新所有标签（位置和可见性）
-	 * updateLabelPosition 内部已调用 updateLabelVisibility，无需二次遍历
-	 */
-	protected updateAllLabels(): void {
-		for (const elementId of this.labelMap.keys()) {
-			this.updateLabelPosition(elementId, true)
+		if (visibilityChanged) {
+			this.requestOverlayDraw("all-labels-visibility")
 		}
-
-		// 通知其他 LabelManager 同步可见性（如 SizeLabel 需根据 NameLabel 重叠情况决定显隐）
-		// 批量更新模式，跳过 batchDraw，由最后统一调用
-		for (const elementId of this.labelMap.keys()) {
-			this.notifyOtherManagersUpdateVisibility(elementId, true)
-		}
-
-		// 批量更新后统一调用一次 batchDraw
-		this.requestOverlayDraw("all-labels")
 	}
 
 	private getVisibleLabelCandidateIds(): string[] {
 		const viewportRect = getViewportCanvasRect(this.canvas)
-		const padding = Math.max(viewportRect.width, viewportRect.height) * 0.25
+		const candidateRevision = this.labelCandidateIndex.getRevision()
+		const cached = this.visibleLabelQueryCache
+		if (
+			cached &&
+			cached.candidateRevision === candidateRevision &&
+			containsRect(cached.coverageRect, viewportRect)
+		) {
+			return cached.candidateIds
+		}
+
+		const padding =
+			Math.max(viewportRect.width, viewportRect.height) * LABEL_VIEWPORT_QUERY_PADDING_RATIO
+		const coverageRect = expandRect(viewportRect, padding)
 		const elementIds = this.getLabelCandidateElementIds()
-		return this.canvas.geometryCacheManager.queryElementIdsByExpandedRect(
-			viewportRect,
-			padding,
-			{ elementIds, debugSource: "labels:visible" },
-		)
+		const candidateIds =
+			elementIds.size === 0
+				? []
+				: this.canvas.geometryCacheManager.queryElementIdsByExpandedRect(
+						viewportRect,
+						padding,
+						{ elementIds, debugSource: "labels:always-visible" },
+					)
+		this.visibleLabelQueryCache = { coverageRect, candidateIds, candidateRevision }
+		return candidateIds
 	}
 
 	private getLabelCandidateElementIds(): ReadonlySet<string> {
-		return this.labelCandidateIndex.getCandidateIds(this.visibilityConfig.elementTypes)
+		return this.labelCandidateIndex.getCandidateIds(this.visibilityConfig.alwaysVisibleTypes)
 	}
 
 	private updateExistingLabels(skipBatchDraw = true): boolean {
 		const elementIds = Array.from(this.labelMap.keys())
+		let requiresDraw = false
 
 		for (const elementId of elementIds) {
-			this.updateLabelPosition(elementId, skipBatchDraw)
+			requiresDraw = this.updateLabelPosition(elementId, skipBatchDraw) || requiresDraw
 		}
 
 		for (const elementId of elementIds) {
-			this.notifyOtherManagersUpdateVisibility(elementId, skipBatchDraw)
+			requiresDraw =
+				this.notifyOtherManagersUpdateVisibility(elementId, skipBatchDraw) || requiresDraw
 		}
 
-		return elementIds.length > 0
+		return requiresDraw
 	}
 
 	private syncVisibleLabels(reason: string): void {
 		const candidateIds = this.getVisibleLabelCandidateIds()
-		let touched = false
-		const isViewportScale = reason === "viewport-scale"
-		const isViewportPan = reason === "viewport-pan"
 		let createdLabel = false
-		let updatedExistingLabels = false
-		const existingLabelIds = new Set(this.labelMap.keys())
+		let requiresDraw = false
+		const currentViewportScale = this.canvas.stage.scaleX()
+		const shouldUpdateExistingLabels =
+			this.lastSyncedViewportScale === null ||
+			this.lastSyncedViewportScale !== currentViewportScale ||
+			reason === "document-restored" ||
+			reason === "locale"
 
-		if (isViewportScale) {
-			updatedExistingLabels = this.updateExistingLabels(true)
+		if (shouldUpdateExistingLabels) {
+			requiresDraw = this.updateExistingLabels(true)
 		}
 
 		for (const elementId of candidateIds) {
-			if (!this.shouldShowLabel(elementId)) continue
-			if ((isViewportScale || isViewportPan) && existingLabelIds.has(elementId)) {
-				continue
-			}
-			const hadLabel = this.labelMap.has(elementId)
-			this.createOrUpdateLabel(elementId, {
+			if (this.labelMap.has(elementId)) continue
+			const created = this.createOrUpdateLabel(elementId, {
 				skipReorder: true,
 				skipNotify: true,
 				skipBatchDraw: true,
 			})
-			if (!hadLabel && this.labelMap.has(elementId)) {
+			if (created) {
 				createdLabel = true
+				requiresDraw = this.labelMap.get(elementId)?.visible() === true || requiresDraw
 			}
-			touched = true
 		}
 
-		if (isViewportScale || isViewportPan) {
-			if (createdLabel) {
-				this.reorderAllLabels()
-			}
-			if (touched || updatedExistingLabels) {
-				this.requestOverlayDraw(`visible-labels:${reason}`)
-			}
-			return
+		const forceReorder = reason === "document-restored"
+		if (createdLabel || forceReorder) {
+			this.reorderAllLabels(true)
+			requiresDraw = this.labelMap.size > 0 || requiresDraw
 		}
 
-		if (!touched) {
-			this.updateAllLabels()
-			return
+		if (requiresDraw) {
+			this.requestOverlayDraw(`visible-labels:${reason}`)
 		}
-
-		this.reorderAllLabels()
-		this.updateAllLabels()
-		this.requestOverlayDraw(`visible-labels:${reason}`)
+		this.lastSyncedViewportScale = currentViewportScale
 	}
 
 	private pruneMissingLabels(): void {
@@ -909,12 +1010,15 @@ export abstract class BaseLabelManager {
 	 * @param elementId - 元素 ID
 	 * @param skipBatchDraw - 是否跳过 batchDraw（用于批量更新时统一调用）
 	 */
-	private notifyOtherManagersUpdateVisibility(elementId: string, skipBatchDraw = false): void {
+	private notifyOtherManagersUpdateVisibility(elementId: string, skipBatchDraw = false): boolean {
+		let visibilityChanged = false
 		for (const manager of BaseLabelManager.labelManagers) {
 			if (manager !== this && manager.labelMap.has(elementId)) {
-				manager.updateLabelVisibility(elementId, skipBatchDraw)
+				visibilityChanged =
+					manager.updateLabelVisibility(elementId, skipBatchDraw) || visibilityChanged
 			}
 		}
+		return visibilityChanged
 	}
 
 	/**
@@ -925,6 +1029,7 @@ export abstract class BaseLabelManager {
 		if (labelGroup) {
 			labelGroup.destroy()
 			this.labelMap.delete(elementId)
+			this.labelZIndexes.delete(elementId)
 		}
 	}
 
@@ -947,7 +1052,7 @@ export abstract class BaseLabelManager {
 	 * 重新排列所有标签的层级顺序
 	 * 根据元素的 zIndex 来调整标签在 labelLayer 中的顺序
 	 */
-	protected reorderAllLabels(): void {
+	protected reorderAllLabels(skipBatchDraw = false): void {
 		// 获取所有有标签的元素，并按 zIndex 升序排序（zIndex 小的在底层）
 		const elementIdsWithLabels = Array.from(this.labelMap.keys())
 		const sortedElementIds = elementIdsWithLabels
@@ -970,7 +1075,9 @@ export abstract class BaseLabelManager {
 			}
 		}
 
-		this.requestOverlayDraw("label-z-order")
+		if (!skipBatchDraw) {
+			this.requestOverlayDraw("label-z-order")
+		}
 	}
 
 	/**
@@ -985,8 +1092,6 @@ export abstract class BaseLabelManager {
 	 */
 	public refreshAfterLocaleChange(): void {
 		this.syncVisibleLabels("locale")
-		this.updateAllLabels()
-		this.reorderAllLabels()
 	}
 
 	/**
@@ -1013,6 +1118,9 @@ export abstract class BaseLabelManager {
 			labelGroup.destroy()
 		}
 		this.labelMap.clear()
+		this.labelZIndexes.clear()
+		this.visibleLabelQueryCache = null
+		this.lastSyncedViewportScale = null
 
 		// 清理追踪的 hover 元素
 		this.lastHoveredElementId = null

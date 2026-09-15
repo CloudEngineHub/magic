@@ -93,7 +93,7 @@ export class NameLabelManager extends BaseLabelManager {
 		fontFamily: string
 		color: string
 	} | null {
-		this.createOrUpdateLabel(elementId)
+		this.createOrUpdateLabel(elementId, { forceCreate: true })
 
 		const labelGroup = this.labelMap.get(elementId)
 		if (!labelGroup) {
@@ -126,6 +126,10 @@ export class NameLabelManager extends BaseLabelManager {
 	protected getLabelText(elementId: string): string {
 		const element = this.canvas.elementManager.getElementInstance(elementId)
 		return element?.getNameLabelText() || ""
+	}
+
+	protected override shouldRetainHiddenLabel(elementId: string): boolean {
+		return this.renamingElementId === elementId
 	}
 
 	/**
