@@ -147,6 +147,12 @@ class AssetDomainService
         $this->agreements->markAccepted($dataIsolation);
     }
 
+    /** 查询当前数据隔离范围是否已签署素材协议。 */
+    public function hasSignedAgreement(AssetDataIsolation $dataIsolation): bool
+    {
+        return $this->agreements->hasAccepted($dataIsolation);
+    }
+
     /**
      * 创建不归属于任何用户的公共素材，并同步到第三方。
      * 公共素材不设置用户标识，仍会先保存本地记录，再创建第三方凭证并执行合规校验。

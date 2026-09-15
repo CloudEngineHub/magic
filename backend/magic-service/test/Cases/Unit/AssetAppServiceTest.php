@@ -724,6 +724,39 @@ final class AssetAppServiceTest extends TestCase
         self::assertTrue($asset->getStatus()->isEnabled());
     }
 
+    public function testPublicAssetUpdateResolvesPrivateFileUrl(): void
+    {
+        $asset = new AssetEntity([
+            'id' => 21,
+            'organization_code' => 'official-org',
+            'user_id' => null,
+            'file_key' => 'official-org/private/image.png',
+            'status' => 0,
+        ]);
+        $authorization = $this->realAssetDataIsolation('official-org', 'admin-1', true);
+        $domainService = $this->createMock(AssetDomainService::class);
+        $domainService->method('findPublic')->willReturn($asset);
+        $domainService->method('updatePublic')->willReturn($asset);
+
+        $repository = $this->createMock(ResourceVisibilityRepositoryInterface::class);
+        $repository->expects(self::once())->method('deleteByResourceAndPrincipals')->willReturn(1);
+        $service = new class($domainService, $this->visibilityDomainService($repository)) extends AdminAssetAppService {
+            public function getPrivateFileLinks(string $organizationCode, array $fileLinks): array
+            {
+                return [
+                    'official-org/private/image.png' => new FileLink(
+                        'official-org/private/image.png',
+                        'https://example.test/official-org/private/image.png',
+                        3600,
+                    ),
+                ];
+            }
+        };
+
+        $updated = $service->updatePublicAsset($authorization, 21, new UpdateAssetRequestDTO());
+        self::assertSame('https://example.test/official-org/private/image.png', $updated?->getFileUrl());
+    }
+
     /**
      * 记录仓储收到的查询条件，用于断言列表范围与授权资产主键。
      */

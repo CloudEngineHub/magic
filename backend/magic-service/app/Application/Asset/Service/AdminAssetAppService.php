@@ -84,6 +84,8 @@ class AdminAssetAppService extends AbstractAssetAppService
         );
         if ($updated !== null) {
             $this->syncPublicVisibility($dataIsolation, $updated);
+            // 更新响应需要返回最新的私有文件链接。
+            $this->resolveAssetFileUrls([$updated]);
         }
         return $updated;
     }

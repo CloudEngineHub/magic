@@ -13,10 +13,15 @@ Router::addGroup('/api/v1/assets', static function (): void {
     Router::post('', [AssetApi::class, 'create']);
     Router::post('/library', [AssetApi::class, 'saveToLibrary']);
     Router::get('', [AssetApi::class, 'list']);
+    Router::post('/queries', [AssetApi::class, 'list']);
     Router::get('/{assetId:\d+}', [AssetApi::class, 'detail']);
     Router::delete('/{assetId:\d+}', [AssetApi::class, 'delete']);
 }, ['middleware' => [RequestContextMiddleware::class, UserAuthMiddleware::class]]);
 
 Router::post('/api/v1/asset-agreements', [AssetApi::class, 'signAgreement'], [
+    'middleware' => [RequestContextMiddleware::class, UserAuthMiddleware::class],
+]);
+
+Router::get('/api/v1/asset-agreements', [AssetApi::class, 'agreementStatus'], [
     'middleware' => [RequestContextMiddleware::class, UserAuthMiddleware::class],
 ]);

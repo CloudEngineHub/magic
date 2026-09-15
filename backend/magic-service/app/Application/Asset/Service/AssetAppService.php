@@ -81,6 +81,14 @@ class AssetAppService extends AbstractAssetAppService
         );
     }
 
+    /** 返回当前用户在当前组织的素材协议签署状态。 */
+    public function hasSignedAgreement(Authenticatable|BaseDataIsolation $authorization): bool
+    {
+        return $this->assetDomainService->hasSignedAgreement(
+            $this->createAssetDataIsolation($authorization),
+        );
+    }
+
     public function findPersonalAssetByContentHash(string $userId, string $contentHash): ?AssetEntity
     {
         return $this->assetDomainService->findPersonalAssetByContentHash($userId, $contentHash);

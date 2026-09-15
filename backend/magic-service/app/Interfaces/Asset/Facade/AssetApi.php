@@ -46,6 +46,12 @@ class AssetApi extends AbstractApi
         return [];
     }
 
+    /** 查询当前用户在当前组织是否已签署素材协议。 */
+    public function agreementStatus(): array
+    {
+        return ['signed' => $this->assetAppService->hasSignedAgreement($this->getAuthorization())];
+    }
+
     /**
      * 保存到「我的素材库」：不做第三方合规同步，直接落库并登记可见范围。
      */

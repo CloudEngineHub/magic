@@ -29,15 +29,27 @@ final class AssetRequestDTOTest extends TestCase
         $dto = new CreateAssetRequestDTO([
             'asset_kind' => 'ASSET',
             'file_key' => 'images/example.png',
-            'name_i18n' => [],
+            'name' => '',
         ]);
 
         self::assertSame('ASSET', $dto->getAssetKind());
         self::assertSame('images/example.png', $dto->getFileKey());
-        self::assertSame([], $dto->getNameI18n());
+        self::assertSame(['default' => ''], $dto->getNameI18n());
         self::assertSame('GENERAL', $dto->getAssetBusinessType());
         self::assertFalse(method_exists($dto, 'toEntity'));
         self::assertFalse(method_exists($dto, 'toProviderAssetEntity'));
+    }
+
+    public function testCreatePersonalAssetDTOMapsPlainTextFieldsToDefaultLocale(): void
+    {
+        $dto = new CreateAssetRequestDTO([
+            'name' => '',
+            'description' => null,
+            'file_key' => 'images/example.png',
+        ]);
+
+        self::assertSame(['default' => ''], $dto->getNameI18n());
+        self::assertSame(['default' => null], $dto->getDescriptionI18n());
     }
 
     /**

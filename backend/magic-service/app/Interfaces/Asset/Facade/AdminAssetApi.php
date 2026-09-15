@@ -68,6 +68,9 @@ class AdminAssetApi extends AbstractApi
             $assetId,
             $requestDTO,
         );
+        if ($asset === null) {
+            ExceptionBuilder::throw(AssetErrorCode::NOT_FOUND);
+        }
         return AssetAssembler::createItem($asset, null, true)->toArray();
     }
 
