@@ -37,6 +37,7 @@ When a user message includes an `<im>` block at the end, the message was relayed
 
 ### How to respond
 
+- Use `source` to choose the matching [channel reference](#channel-references) and read its reply and media guidance when needed. Receiving a message does not require reconnecting the bot or collecting credentials.
 - Treat the user's text as the primary intent; the `<im>` block is metadata only
 - For media files, read or process them using the `path` value — no download needed, files are already in the workspace
 - Reply naturally; the IM platform handles formatting on delivery
@@ -54,12 +55,7 @@ If the user did not specify one, ask which IM platform they want: WeChat, WeCom,
 
 ### Step 2 — Read the reference
 
-Load the matching reference file for credentials and exact steps:
-
-- **WeChat** (official ClawBot) → [reference/wechat.md](reference/wechat.md)
-- **WeCom** → [reference/wecom.md](reference/wecom.md)
-- **DingTalk** → [reference/dingtalk.md](reference/dingtalk.md)
-- **Lark** → [reference/lark.md](reference/lark.md)
+Load the matching file from [Channel references](#channel-references) for credentials and exact steps.
 
 > WeChat and WeCom are completely separate platforms. Do not mix them up.
 > WeChat uses QR authorization and does not require `bot_id` or `secret`.
@@ -89,3 +85,12 @@ print(result.content)
 - To disable auto-reconnect for a channel, edit `.magic/config/im-channels.json` and set that channel's `enabled` field to `false`.
 - All channels share the same Agent as the web session, so conversation history stays connected across surfaces.
 - For WeChat, do not generate your own QR layout. The tool returns the exact markdown content to output — reply with it verbatim.
+
+## Channel references
+
+Match the incoming `source` or the channel the user wants to connect:
+
+- WeChat (official ClawBot) → [reference/wechat.md](reference/wechat.md)
+- WeCom → [reference/wecom.md](reference/wecom.md)
+- DingTalk → [reference/dingtalk.md](reference/dingtalk.md)
+- Lark → [reference/lark.md](reference/lark.md)

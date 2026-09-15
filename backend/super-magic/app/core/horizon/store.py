@@ -229,6 +229,7 @@ def _encode_state(state: HorizonState) -> dict:
         "user_context_auto_fetch_attempted": state.user_context_auto_fetch_attempted,
         "agent_identity": state.agent_identity.model_dump(mode="json") if state.agent_identity else None,
         "loaded_skills": state.loaded_skills,
+        "suggested_skill_names": state.suggested_skill_names,
         "pending_notifications": [_notif_to_dict(n) for n in state.pending_notifications],
         "pending_resumptions": [_resumption_to_dict(r) for r in state.pending_resumptions],
         "browser_pages": {
@@ -282,6 +283,7 @@ def _decode_state(data: dict) -> HorizonState:
         "pending_resumptions",
         "browser_pages",
         "loaded_skills",
+        "suggested_skill_names",
         "image_model",
         "video_model",
         "manual_context_windows",
@@ -312,6 +314,7 @@ def _decode_state(data: dict) -> HorizonState:
     if data.get("agent_identity") is not None:
         state.agent_identity = AgentIdentityState.model_validate(data["agent_identity"])
     state.loaded_skills = data.get("loaded_skills", [])
+    state.suggested_skill_names = data.get("suggested_skill_names", [])
     state.pending_notifications = [
         _notif_from_dict(notification)
         for notification in data.get("pending_notifications", [])

@@ -6,7 +6,7 @@
 import asyncio
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import TYPE_CHECKING, Optional
+from typing import TYPE_CHECKING, Literal, Optional, overload
 
 from agentlang.agent.models import AgentRunRequest
 from agentlang.chat_history.session_config import SessionConfig
@@ -15,6 +15,7 @@ from app.core.models.agent_runtime import AgentLifetime, AgentTarget
 from app.core.models.agent_session import AgentSessionRef
 from app.core.models.media_model import ImageModelSpec, VideoModelSpec
 from app.core.models.model_selection_policy import ModelSelectionInput, ModelSelectionPolicy
+from app.magic.compact_result import CompactResult
 from app.path_manager import PathManager
 from app.tools.subagent_runtime_models import SubagentSessionState, SubagentStatus, utc_now
 from app.tools.subagent_runtime_store import SubagentRuntimeStore
@@ -141,16 +142,32 @@ async def run_isolated_agent(
 
 async def run_compaction_agent(
     request: IsolatedAgentRunRequest,
-) -> Optional[str]:
+) -> CompactResult | None:
     """运行后台压缩 Agent，捕获 compact_chat_history 结果并禁止再次压缩。"""
     return await _run_isolated_agent(request, capture_compact_history_result=True)
+
+
+@overload
+async def _run_isolated_agent(
+    request: IsolatedAgentRunRequest,
+    *,
+    capture_compact_history_result: Literal[False],
+) -> str | None: ...
+
+
+@overload
+async def _run_isolated_agent(
+    request: IsolatedAgentRunRequest,
+    *,
+    capture_compact_history_result: Literal[True],
+) -> CompactResult | None: ...
 
 
 async def _run_isolated_agent(
     request: IsolatedAgentRunRequest,
     *,
     capture_compact_history_result: bool,
-) -> Optional[str]:
+) -> str | CompactResult | None:
     """
     运行一个隔离 sub-agent，等待完成并返回结果。
     不依赖 ToolContext，可直接由内部服务调用。
@@ -160,7 +177,7 @@ async def _run_isolated_agent(
     不继承任何运行时父 context。
 
     普通和后台压缩入口共用本实现。压缩入口会捕获 compact_chat_history
-    的 summary，并禁止已接近阈值的 fork Agent 再次触发压缩。
+    的摘要与 Skill 建议，并禁止已接近阈值的 fork Agent 再次触发压缩。
 
     启动顺序很重要：
 
@@ -253,6 +270,12 @@ async def _run_isolated_agent(
             agent.close()
         raise
 
+    if capture_compact_history_result:
+        # 会话记录继续保存摘要文本；结构化结果只在本次压缩调用中返回。
+        # 即使工具曾产生结果，后续失败或取消也不能把该结果当成成功压缩。
+        if state.status != SubagentStatus.DONE or state.interrupt_requested:
+            return None
+        return agent.get_captured_compact_result()
     return state.last_result
 
 
@@ -340,15 +363,15 @@ async def _run_subagent_task(
     try:
         result = await agent.run(AgentRunRequest(query=prompt))
         if capture_compact_history_result:
-            captured_summary = agent.get_captured_compact_summary()
-            if captured_summary:
+            captured_result = agent.get_captured_compact_result()
+            if captured_result is not None:
                 state.status = SubagentStatus.DONE
-                state.last_result = captured_summary
+                state.last_result = captured_result.summary
                 state.last_error = None
             else:
                 state.status = SubagentStatus.ERROR
                 state.last_result = ""
-                state.last_error = "compact_chat_history was not called with a valid summary"
+                state.last_error = "compact_chat_history did not produce a valid compaction result"
         else:
             state.status = SubagentStatus.DONE
             state.last_result = result or ""

@@ -59,6 +59,7 @@ import html
 import re
 import time
 import uuid
+from collections.abc import Sequence
 from datetime import date, datetime, timezone
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Optional, Set, Tuple, Union
@@ -99,6 +100,7 @@ from app.core.horizon.store import HorizonStore
 from app.core.entity.user_context import UserContextSnapshot
 from app.core.horizon.profile_context import build_agent_identity, render_agent_identity, render_user_context
 from app.core.process_runtime import PROCESS_STARTED_AT_NS
+from app.core.skill_utils.suggestions import SKILL_SUGGESTION_NOTIFICATION_SOURCE, SkillSuggestion
 from app.utils.file_utils import calculate_file_hash, get_fresh_file_stat
 
 logger = get_logger(__name__)
@@ -714,7 +716,8 @@ class AgentHorizon:
         - file_records：清空，强制重新读取才能编辑
         - image_model / video_model：清空，确保新上下文重新获得模型信息
         - _is_first_injection：重置为 True，下次 build_context_update 输出完整 initial_context
-        - pending_notifications：保留，下次 build_context_update 仍会投递到新上下文
+        - pending_notifications：保留其它通知；旧 Skill 建议由压缩模型的新选择替代
+        - suggested_skill_names：清空，新上下文可以接收新的建议
         - workspace_files/language：保留（首次注入时重新全量输出给新上下文）
         - process_started_at_ns：保留（进程代次独立于上下文窗口）
         - session 内存计数器：归零
@@ -723,6 +726,12 @@ class AgentHorizon:
         self._state.file_records.clear()
         # 新窗口没有见过目录成员；下次从当前项目根重新生成首次发现信息。
         self._state.memory_directory = None
+        self._state.suggested_skill_names.clear()
+        self._state.pending_notifications = [
+            notification
+            for notification in self._state.pending_notifications
+            if notification.source != SKILL_SUGGESTION_NOTIFICATION_SOURCE
+        ]
         self._state.image_model = ImageModelState()
         self._state.video_model = VideoModelState()
         self._context_used = 0
@@ -1043,6 +1052,68 @@ class AgentHorizon:
             content=content,
         )
         self._state.pending_notifications.append(notif)
+
+    async def suggest_skills(
+        self,
+        suggestions: Sequence[SkillSuggestion],
+        *,
+        source: str,
+    ) -> None:
+        """将调用方选出的可用 Skill 建议入队；不推断任务相关性，也不自动读取。
+
+        例：渠道与压缩恢复都建议同一个 Skill，本上下文只提醒一次；模型没有读取也不重试。
+        压缩或 /new 重置记录，重启和 fork 则沿用当前上下文的记录。
+        """
+        if not suggestions or self._agent_context is None:
+            return
+
+        from app.core.skill_utils.manager import find_skill
+
+        await self._ensure_loaded()
+        excluded = {
+            name.strip().casefold()
+            for name in self._agent_context.get_excluded_skills()
+        }
+        already_suggested = {name.casefold() for name in self._state.suggested_skill_names}
+        available: dict[str, SkillSuggestion] = {}
+        for suggestion in suggestions:
+            requested_key = suggestion.name.casefold()
+            if requested_key in excluded or requested_key in already_suggested or requested_key in available:
+                continue
+            try:
+                skill = await find_skill(suggestion.name, agent_name=self._agent_context.agent_name)
+            except Exception as error:
+                logger.warning(
+                    "[AgentHorizon] Skill 建议解析失败: source=%s skill=%s error=%s",
+                    source, suggestion.name, error,
+                )
+                continue
+            if skill is None:
+                continue
+            name = skill.name.strip()
+            key = name.casefold()
+            if not name or key in excluded or key in available:
+                continue
+            available[key] = SkillSuggestion(name=name, reason=suggestion.reason)
+
+        # 查找文件会让出事件循环；全部查找完成后再读最新记录，入队和登记之间不 await。
+        # 不用 loaded_skills 或 file_records 推断完整阅读，已预加载的内容由模型自行跳过。
+        suggested = {name.casefold() for name in self._state.suggested_skill_names}
+        pending = [item for key, item in available.items() if key not in suggested]
+        if not pending:
+            return
+        lines = ["Suggested skills:"]
+        lines.extend(f"- {html.escape(item.name)}: {html.escape(item.reason)}" for item in pending)
+        lines.append(
+            "Read any skill you still need with read_skills. Skip skills that are already "
+            "available in this context or are not relevant to the remaining work."
+        )
+        self.push_notification(SKILL_SUGGESTION_NOTIFICATION_SOURCE, "\n".join(lines))
+        self._state.suggested_skill_names.extend(item.name for item in pending)
+        logger.debug(
+            "[AgentHorizon] Skill 建议已入队: source=%s skills=%s",
+            source, [item.name for item in pending],
+        )
 
     def push_user_message(
         self,

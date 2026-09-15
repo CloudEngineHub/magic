@@ -330,10 +330,13 @@ Suggestions:
 
     async def execute(
         self,
-        tool_context: ToolContext,
+        tool_context: ToolContext | None,
         params: ReadFileParams,
         raw_mode: bool = False,
         max_tokens: int | None = None,
+        *,
+        allow_fuzzy_match: bool = True,
+        use_context_budget: bool = True,
     ) -> ToolResult:
         """
         执行文件读取操作
@@ -348,7 +351,11 @@ Suggestions:
         Returns:
             ToolResult: 包含文件内容或错误信息
         """
-        return await self.execute_purely(params, tool_context, raw_mode, max_tokens=max_tokens)
+        return await self.execute_purely(
+            params, tool_context, raw_mode,
+            max_tokens=max_tokens, allow_fuzzy_match=allow_fuzzy_match,
+            use_context_budget=use_context_budget,
+        )
 
     async def execute_purely(
         self,
@@ -356,6 +363,9 @@ Suggestions:
         tool_context: Optional[ToolContext] = None,
         raw_mode: bool = False,
         max_tokens: int | None = None,
+        *,
+        allow_fuzzy_match: bool = True,
+        use_context_budget: bool = True,
     ) -> ToolResult:
         """
         执行文件读取操作，专注于读取可读文件
@@ -372,9 +382,13 @@ Suggestions:
         """
         try:
             # 使用父类方法获取安全的文件路径（包含模糊匹配）
-            resolved = self.resolve_path_fuzzy(params.file_path)
-            file_path = resolved.path
-            fuzzy_warning = resolved.warning
+            if allow_fuzzy_match:
+                resolved = self.resolve_path_fuzzy(params.file_path)
+                file_path = resolved.path
+                fuzzy_warning = resolved.warning
+            else:
+                file_path = self.resolve_path(params.file_path)
+                fuzzy_warning = None
             # 检查文件是否存在
             if not await async_exists(file_path):
                 if tool_context:
@@ -435,7 +449,10 @@ Suggestions:
             运行时自动读取可指定更小的正文额度；普通工具调用继续使用原动态上限。
             这是内部参数，不扩展模型 schema，也不改变行范围、版本校验或截断算法。
             """
-            dynamic_max_tokens = _compute_max_tokens(tool_context)
+            if max_tokens is not None and max_tokens <= 0:
+                raise ValueError("max_tokens must be positive")
+            # Skill 按独立预算读取原文；自动规则文件和普通读取仍受上下文动态预算约束。
+            dynamic_max_tokens = _compute_max_tokens(tool_context) if use_context_budget or max_tokens is None else max_tokens
             # 外部只可收紧这次读取额度，不能突破 ReadFile 依据上下文算出的原有上限。
             max_tokens = min(dynamic_max_tokens, max_tokens) if max_tokens is not None else dynamic_max_tokens
             context_remaining = _get_context_remaining(tool_context)
@@ -491,13 +508,13 @@ Suggestions:
 
             # 添加文件元信息 - 使用 original_file_name 作为用户看到的文件名，read_path 用于内部信息
             shown_chars = len(content)
-            truncation_status = "（已截断）" if content_truncated else ""
+            truncation_status = " (truncated)" if content_truncated else ""
 
             # 构建元信息
-            meta_info = f"# 文件: {original_file_name}\n\n"
+            meta_info = f"# File: {original_file_name}\n\n"
 
             # 元信息中不再显示Token数，避免大模型混淆（Token数对大模型无意义）
-            meta_info += f"**文件信息**: 总字符数: {total_chars}，本次读取字符数: {shown_chars}{truncation_status}\n\n---\n\n"
+            meta_info += f"File information: {total_chars} total characters, {shown_chars} characters read{truncation_status}\n\n---\n\n"
             raw_content = content # 存储未加 meta_info 的原始内容
 
             # 准备不带行号的版本
@@ -529,7 +546,7 @@ Suggestions:
             # 如果是完整读取（没有截断，且从头读取整个文件），添加完整性提示
             is_complete_read = not content_truncated and params.offset == 0 and (params.limit is None or params.limit <= 0)
             if is_complete_read:
-                content_with_meta += "\n\n---\n\n**[文件已完整读取]**"
+                content_with_meta += "\n\n---\n\n[File fully read]"
 
             # 如果有模糊匹配警告，添加到内容最后面
             if fuzzy_warning:

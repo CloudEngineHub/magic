@@ -17,6 +17,7 @@ class HorizonInjectionPoint(StrEnum):
     BEFORE_LLM_NATIVE_VISUAL = "before_llm_native_visual"
     AFTER_USER_TOOL_CALL_CANCEL = "after_user_tool_call_cancel"
     BEFORE_CONTINUATION_LLM = "before_continuation_llm"
+    BEFORE_LLM_PRELOADED_SKILLS = "before_llm_preloaded_skills"
 
 
 @dataclass(frozen=True)
@@ -76,6 +77,10 @@ class FileContextRecord:
     truncated: bool                     # 是否因 token 限制被截断
     metadata: dict = field(default_factory=dict)
     # 留档字段：不参与主链路判断，但保留用于排查
+    # 设计取舍：Horizon 用整文件快照比较变化，不维护模型逐行已读状态。
+    # 例如只读第 100～150 行，小文件仍可保存全文；范围不影响快照、Diff 或编辑校验。
+    # 精细追踪需要贯穿读取、截断、写入和恢复，维护成本高于收益，因此不做范围合并、
+    # 已读覆盖率或部分读取状态机。接入新工具时复用此边界，不把它扩展成前置改造。
     read_at: str = ""                   # ISO 8601 datetime
     read_ranges: list[tuple[int, int]] = field(default_factory=list)  # 当时读取的行号区间
 
@@ -319,6 +324,8 @@ class HorizonState:
     pending_resumptions: list[PendingResumption] = field(default_factory=list)
     browser_pages: dict[str, BrowserPageObservation] = field(default_factory=dict)
     loaded_skills: list[str] = field(default_factory=list)
+    # 记录本上下文已入队的建议，不表示已经阅读；模型忽略后也不重复提醒。fork 随上下文继承。
+    suggested_skill_names: list[str] = field(default_factory=list)
     image_model: ImageModelState = field(default_factory=ImageModelState)
     video_model: VideoModelState = field(default_factory=VideoModelState)
     manual_context_windows: dict[str, ManualContextWindowState] = field(default_factory=dict)

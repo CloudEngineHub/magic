@@ -212,7 +212,16 @@ Notes:
 
 Strongly recommended to use this tool for batch reading multiple reference files at once, rather than calling tools multiple times individually, which will greatly improve task efficiency"""
 
-    async def execute(self, tool_context: ToolContext, params: ReadFilesParams) -> ToolResult:
+    async def execute(
+        self,
+        tool_context: ToolContext | None,
+        params: ReadFilesParams,
+        *,
+        max_tokens: int | None = None,
+        allow_fuzzy_match: bool = True,
+        apply_batch_limit: bool = True,
+        use_context_budget: bool = True,
+    ) -> ToolResult:
         """
         执行批量文件读取操作
 
@@ -224,7 +233,8 @@ Strongly recommended to use this tool for batch reading multiple reference files
             ToolResult: 包含批量文件内容或错误信息
         """
         if not params.operations:
-            tool_context.set_metadata("error_type", "read_file.failed")
+            if tool_context is not None:
+                tool_context.set_metadata("error_type", "read_file.failed")
             return ToolResult.error(i18n.translate("read_file.failed", category="tool.messages"))
 
         results = []
@@ -247,7 +257,11 @@ Strongly recommended to use this tool for batch reading multiple reference files
 
                 # 调用 ReadFile 工具读取单个文件
                 # 使用 raw_mode=True 获取纯粹的结构化数据，截断提示由read_files统一管理
-                result = await read_file_tool.execute(tool_context, file_params, raw_mode=True)
+                result = await read_file_tool.execute(
+                    tool_context, file_params, raw_mode=True,
+                    max_tokens=max_tokens, allow_fuzzy_match=allow_fuzzy_match,
+                    use_context_budget=use_context_budget,
+                )
 
                 if result.ok:
                     # 直接使用content（已经不包含截断提示了）
@@ -314,7 +328,8 @@ Strongly recommended to use this tool for batch reading multiple reference files
         available_tokens = max(0, batch_max - 500)
 
         # 如果内容token数超出限制，进行截断
-        if total_content_tokens > available_tokens:
+        # Skill 已有独立的单项预算，内部组合时不再套用普通文件的批量收缩。
+        if apply_batch_limit and total_content_tokens > available_tokens:
             has_truncation = True
             logger.info(f"内容总token数({total_content_tokens})超出限制({available_tokens})，进行截断")
             results = self._truncate_contents(results, available_tokens)
@@ -322,17 +337,17 @@ Strongly recommended to use this tool for batch reading multiple reference files
         # 生成摘要信息
         total_files = len(params.operations)
         success_count = total_files - read_failure_count
-        truncation_info = "，内容已截断" if has_truncation else ""
+        truncation_info = "; some content was truncated" if has_truncation else ""
 
         # 如果有失败文件，添加提示信息
         failure_hint = ""
         if read_failure_count > 0:
-            failure_hint = "。请检查失败文件的具体错误信息，可能需要修正文件名或路径"
+            failure_hint = ". Check each failed file's error; its name or path may need correction."
 
-        summary = i18n.translate("read_file.summary", category="tool.messages", total=total_files,
-                                         success=success_count,
-                                         failed=read_failure_count,
-                                         truncation=truncation_info) + failure_hint
+        summary = (
+            f"Read {total_files} files: {success_count} succeeded, {read_failure_count} failed"
+            f"{truncation_info}{failure_hint}"
+        )
 
         # 格式化最终结果
         formatted_result = self._format_results(results, summary, has_truncation)
@@ -352,6 +367,8 @@ Strongly recommended to use this tool for batch reading multiple reference files
                         "is_success": item.is_success,
                         "error_type": item.error_type,
                         "read_range": item.read_range,
+                        "was_truncated": item.was_truncated,
+                        "truncation_info": item.truncation_info,
                     }
                     for item in results
                 ],
@@ -468,7 +485,7 @@ Strongly recommended to use this tool for batch reading multiple reference files
         formatted_parts = []
 
         # 添加摘要信息
-        formatted_parts.append(f"# 读取文件结果\n\n{summary}\n")
+        formatted_parts.append(f"# File read results\n\n{summary}\n")
 
         if has_truncation:
             formatted_parts.append("> [Some file content was truncated. See end of output for how to continue reading.]\n")
@@ -495,7 +512,7 @@ Strongly recommended to use this tool for batch reading multiple reference files
             else:
                 # 对失败的文件只输出错误信息，不在每个文件下重复 Skill Hint
                 if result.error_message:
-                    formatted_parts.append(f"## 文件: {result.file_path}\n\n**读取失败**: {result.error_message}\n")
+                    formatted_parts.append(f"## File: {result.file_path}\n\nRead failed: {result.error_message}\n")
                     # 标记：只有相对路径且路径段里包含 reference 时，才认为像 skill reference 路径
                     if (
                         result.error_type == "read_file.error_file_not_exist"
@@ -504,8 +521,7 @@ Strongly recommended to use this tool for batch reading multiple reference files
                     ):
                         has_skill_reference_path_not_found = True
                 else:
-                    error_detail = i18n.translate("read_file.error_detail", category="tool.messages")
-                    formatted_parts.append(f"## 文件: {result.file_path}\n\n{error_detail}\n")
+                    formatted_parts.append(f"## File: {result.file_path}\n\nThe file could not be read.\n")
 
         # Skill 相对路径 Hint：整批只输出一次，位于所有文件内容之后
         if has_skill_reference_path_not_found:
