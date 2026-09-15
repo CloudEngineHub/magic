@@ -365,7 +365,9 @@ export const useStyles = createStyles(({ token }) => ({
 		alignItems: "center",
 		flexWrap: "nowrap",
 		gap: 4,
-		maxWidth: "100%",
+		// 固有宽度在显隐前后保持一致，测量时无需临时修改排版。
+		width: "max-content",
+		maxWidth: "none",
 		flexShrink: 0,
 		marginLeft: "auto",
 		marginRight: "4px",

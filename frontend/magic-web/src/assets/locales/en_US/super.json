@@ -6795,6 +6795,7 @@
 					"Identity describes its role; it does not replace skills, tools or account permissions."
 				],
 				"scope": "This assistant",
+				"shortLabel": "Identity",
 				"usage": "This file introduces the assistant’s name, role and responsibilities."
 			},
 			"initialSetup": {
@@ -6826,6 +6827,7 @@
 					"Initial preparation is separate from daily rules and does not mean all external tools are connected."
 				],
 				"scope": "This assistant",
+				"shortLabel": "Setup",
 				"usage": "This file guides the assistant through matters to confirm when first used."
 			},
 			"memoryFile": {
@@ -7019,6 +7021,7 @@
 					"Tool descriptions do not install programs, connect accounts or grant permissions."
 				],
 				"scope": "This assistant",
+				"shortLabel": "Tools",
 				"usage": "This file keeps instructions and environment information the assistant needs when using tools."
 			}
 		},
@@ -7852,6 +7855,7 @@
 						"Assets support content creation and processing; they do not all need to be read as prompt text."
 					],
 					"scope": "Inside a skill",
+					"shortLabel": "Assets",
 					"usage": "This folder contains images, data and other material used to create an output."
 				},
 				"entry": {
@@ -8052,6 +8056,7 @@
 						"Evaluation files do not prove that an evaluation ran or passed."
 					],
 					"scope": "Inside a skill",
+					"shortLabel": "Evals",
 					"usage": "This folder holds tasks and material for checking how well a skill works."
 				},
 				"examples": {
@@ -8083,6 +8088,7 @@
 						"An example teaches the method; it does not mean the current task has been completed."
 					],
 					"scope": "Inside a skill",
+					"shortLabel": "Examples",
 					"usage": "Examples show how to ask for work, what inputs to supply and what a result might look like."
 				},
 				"library": {
@@ -8204,6 +8210,7 @@
 						"The actual text determines the conditions."
 					],
 					"scope": "Inside a skill",
+					"shortLabel": "License",
 					"usage": "This document states how the author permits the skill and related content to be used, modified or distributed."
 				},
 				"publishConfig": {
@@ -8266,6 +8273,7 @@
 						"README helps people use the skill; SKILL."
 					],
 					"scope": "Inside a skill",
+					"shortLabel": "Readme",
 					"usage": "This introduction helps people understand a skill’s purpose, required material and starting steps."
 				},
 				"references": {
@@ -8333,6 +8341,7 @@
 						"SKILL.md explains when to read each file."
 					],
 					"scope": "Inside a skill · Read when relevant",
+					"shortLabel": "References",
 					"usage": "This folder holds instructions for infrequent, specialist or more specific skill scenarios. AI follows pointers in SKILL.md to read them when the current task calls for them.\nThis is progressive loading: learn the main method first, then read the relevant detail when it is needed."
 				},
 				"scripts": {
@@ -8364,6 +8373,7 @@
 						"Programs perform operations; on-demand guidance provides knowledge to read."
 					],
 					"scope": "Inside a skill",
+					"shortLabel": "Scripts",
 					"usage": "This folder contains programs AI can run for concrete operations such as calculations and batch file processing."
 				},
 				"skill": {
@@ -9602,6 +9612,7 @@
 					"The program, its connection settings and account authorization serve different purposes."
 				],
 				"scope": "Personal space · Personal records and settings",
+				"shortLabel": "Tools",
 				"usage": "Command-line tools perform operations through text commands that AI can run for you."
 			},
 			"coreMemory": {
@@ -9710,6 +9721,7 @@
 					"Check later records before acting on an old decision that may have changed."
 				],
 				"scope": "Personal space · Personal records and settings",
+				"shortLabel": "Event",
 				"usage": "This record describes what happened in an event, discussion or decision."
 			},
 			"index": {
@@ -9741,6 +9753,7 @@
 					"The index provides directions; detailed facts remain in the referenced records."
 				],
 				"scope": "Personal space · Personal records and settings",
+				"shortLabel": "Index",
 				"usage": "This file lists records, briefly describes their subjects and points to further reading."
 			},
 			"lark": {
@@ -9845,6 +9858,7 @@
 					"Organizing records by month does not mean a monthly report has been generated."
 				],
 				"scope": "Personal space · Personal records and settings",
+				"shortLabel": "Month",
 				"usage": "This folder groups dated records for a particular month."
 			},
 			"notes": {
@@ -9895,6 +9909,7 @@
 					"You do not need to copy every conversation into notes."
 				],
 				"scope": "Personal space · Personal records and settings",
+				"shortLabel": "Notes",
 				"usage": "This directory organizes memory notes, connecting concise highlights with detailed records."
 			},
 			"references": {
@@ -9937,6 +9952,7 @@
 					"These are detailed memory records, separate from a skill’s on-demand guidance."
 				],
 				"scope": "Personal space · Personal records and settings",
+				"shortLabel": "References",
 				"usage": "This folder organizes detailed background and explanations by topic."
 			},
 			"settings": {
@@ -9999,6 +10015,7 @@
 					"Update the corresponding record when things change so several notes do not contradict each other."
 				],
 				"scope": "Personal space · Personal records and settings",
+				"shortLabel": "Topic",
 				"usage": "This note describes one topic so future work can understand its background."
 			},
 			"teamshare": {
@@ -10061,6 +10078,7 @@
 					"Dated records describe what happened at the time."
 				],
 				"scope": "Personal space · Personal records and settings",
+				"shortLabel": "History",
 				"usage": "This folder keeps important events and decisions by date."
 			},
 			"tools": {
@@ -10133,6 +10151,7 @@
 					"Separate ideas from confirmed decisions."
 				],
 				"scope": "Personal space · Personal records and settings",
+				"shortLabel": "Conversations",
 				"usage": "This folder retains background, decisions and follow-up context from discussions."
 			},
 			"year": {
@@ -10171,6 +10190,7 @@
 					"A year is a way to find records; it does not mean every month has an entry."
 				],
 				"scope": "Personal space · Personal records and settings",
+				"shortLabel": "Year",
 				"usage": "This folder groups dated records for a particular year."
 			}
 		},

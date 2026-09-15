@@ -761,7 +761,7 @@ function MobileProjectDetailFilesView({
 						</div>
 					</button>
 					{/* 用途按钮与打开、选择按钮并列，避免触屏查看说明时触发文件操作。 */}
-					<div data-file-tag className="shrink-0 empty:hidden">
+					<div data-file-tag className="w-max max-w-none shrink-0 empty:hidden">
 						<ProjectFileTag
 							item={item}
 							skillKind={skillFiles.kinds.get(key)}
@@ -837,7 +837,7 @@ function MobileProjectDetailFilesView({
 						</div>
 					</button>
 					{/* 用途按钮与打开、选择按钮并列，避免触屏查看说明时触发文件操作。 */}
-					<div data-file-tag className="shrink-0 empty:hidden">
+					<div data-file-tag className="w-max max-w-none shrink-0 empty:hidden">
 						<ProjectFileTag
 							item={item}
 							skillKind={skillFiles.kinds.get(key)}

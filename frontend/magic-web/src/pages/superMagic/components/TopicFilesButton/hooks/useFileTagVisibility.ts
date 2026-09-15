@@ -2,7 +2,7 @@ import { useEffect, type RefObject } from "react"
 
 /**
  * 文件名与完整标签都放得下才显示标签。每个列表只观察容器及已挂载行，虚拟树不扫描未渲染数据。
- * 先将标签移出布局再测量，避免上次显隐改变可用宽度后产生反复跳动；隐藏标签同时退出键盘焦点。
+ * 测量时不改变排版，避免列表高度临时缩小导致底部滚动位置上移；隐藏标签同时退出键盘焦点。
  */
 export function useFileTagVisibility(containerRef: RefObject<HTMLElement>) {
 	useEffect(() => {
@@ -18,10 +18,6 @@ export function useFileTagVisibility(containerRef: RefObject<HTMLElement>) {
 				const region = row.querySelector<HTMLElement>("[data-file-name-container]")
 				const name = row.querySelector<HTMLElement>("[data-file-name]")
 				if (!tag || !region || !name) return []
-				tag.style.position = "absolute"
-				tag.style.visibility = "hidden"
-				tag.style.width = "max-content"
-				tag.style.maxWidth = "none"
 				return [{ row, tag, region, name }]
 			})
 			const visibility = entries.map(({ row, tag, region, name }) => {
@@ -32,16 +28,29 @@ export function useFileTagVisibility(containerRef: RefObject<HTMLElement>) {
 					range.selectNodeContents(textNodes.currentNode)
 					textWidth += range.getBoundingClientRect().width
 				}
-				const available =
-					region.getBoundingClientRect().right - name.getBoundingClientRect().left
 				const gap = Number.parseFloat(getComputedStyle(row).columnGap) || 0
-				return textWidth + tag.getBoundingClientRect().width + gap <= available
+				const tagStyle = getComputedStyle(tag)
+				const tagSpace =
+					tag.getBoundingClientRect().width +
+					gap +
+					(Number.parseFloat(tagStyle.marginLeft) || 0) +
+					(Number.parseFloat(tagStyle.marginRight) || 0)
+				// 显示时加回标签占用的空间，隐藏时名称容器已得到这部分空间，不能重复加回。
+				// 两种状态使用同一可用宽度，既不反复切换，也不计入移动端右侧选择按钮的空间。
+				const available =
+					region.getBoundingClientRect().right -
+					name.getBoundingClientRect().left +
+					(tagStyle.position === "absolute" || tagStyle.display === "none" ? 0 : tagSpace)
+				return textWidth + tagSpace <= available
 			})
+			// 全部读取结束后只写入变化的状态；帮助浮窗引起的重复测量不应改动文件行。
 			entries.forEach(({ tag }, index) => {
 				const visible = visibility[index]
-				tag.style.position = visible ? "" : "absolute"
-				tag.style.visibility = visible ? "" : "hidden"
-				tag.inert = !visible
+				const position = visible ? "" : "absolute"
+				const visibilityValue = visible ? "" : "hidden"
+				if (tag.style.position !== position) tag.style.position = position
+				if (tag.style.visibility !== visibilityValue) tag.style.visibility = visibilityValue
+				if (tag.inert !== !visible) tag.inert = !visible
 			})
 		}
 		const schedule = () => {
