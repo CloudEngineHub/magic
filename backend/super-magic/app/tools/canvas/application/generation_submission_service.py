@@ -132,6 +132,7 @@ class GenerationSubmissionService:
                     request_field: ContentMetadataService.build_public_generation_request(
                         parameters,
                         work_item.submission_item.element_type,
+                        project_path=project_path,
                     ),
                 }
                 if work_item.submission_item.element_type == "video":
@@ -282,6 +283,7 @@ class GenerationSubmissionService:
                     **dict(submission.request_metadata or {}),
                 },
                 submission_item.element_type,
+                project_path=project_path,
             )
             detail_update: dict[str, Any] = {
                 **detail,

@@ -117,7 +117,7 @@ class ContentService:
                     metadata,
                     element.element_id,
                     content.content_id,
-                    CanvasApplicationOperations.new_content_detail(element.element_id, command.to_metadata()),
+                    CanvasApplicationOperations.new_content_detail(element.element_id, command.to_metadata(), project_path),
                 )
             return AddContentsResult(results), metadata
 

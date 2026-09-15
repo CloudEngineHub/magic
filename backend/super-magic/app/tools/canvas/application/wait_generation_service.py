@@ -225,6 +225,7 @@ class WaitGenerationService:
                         detail_update[request_key] = ContentMetadataService.build_public_generation_request(
                             parameters,
                             record.element_type,
+                            project_path=project_path,
                         )
             CanvasApplicationOperations.set_content_detail(metadata, record.element_id, record.content_id, detail_update)
             return None, metadata

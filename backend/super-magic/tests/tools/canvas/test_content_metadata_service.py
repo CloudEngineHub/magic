@@ -34,6 +34,22 @@ def test_build_public_video_request_uses_nested_reference_images():
     assert "reference_image_paths" not in request
 
 
+def test_build_public_video_request_strips_project_prefix_from_reference_images():
+    """公共 Canvas 请求应把工作区项目路径归一化为项目相对 URI。"""
+    request = ContentMetadataService.build_public_generation_request(
+        {
+            "prompt": "让产品动起来 [image1]",
+            "reference_images": ["深圳景点图片/images/product.webp"],
+        },
+        "video",
+        project_path="深圳景点图片",
+    )
+
+    assert request["inputs"]["reference_images"] == [
+        {"uri": "./images/product.webp"},
+    ]
+
+
 def test_build_public_video_request_accepts_legacy_reference_image_paths():
     """旧版路径字段仍可生成符合新协议的公共请求。"""
     request = ContentMetadataService.build_public_generation_request(

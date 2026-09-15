@@ -149,6 +149,7 @@ class RetryContentService:
                     parameters,
                     idempotency_key,
                     element_type=element.element_type,
+                    project_path=project_path,
                 )
                 if isinstance(content.fields, VideoContentFields):
                     retry_parameters = retry_detail.get("generationParameters")
