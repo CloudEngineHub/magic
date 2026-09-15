@@ -52,22 +52,33 @@ export const useStyles = createStyles(({ css, token, isDarkMode }) => {
 		`,
 
 		toolbar: css`
+			/* 仅终端采用常规操作尺寸；共享标题栏的其它消费者保留原默认值。 */
+			--detail-action-font-size: 14px;
+			--detail-action-line-height: 20px;
+			--detail-action-height: 32px;
+			--detail-action-gap: 6px;
 			display: flex;
 			align-items: center;
 			flex-shrink: 0;
-			min-height: 44px;
-			padding: 0 10px 0 16px;
+			min-height: 52px;
+			padding: 10px 16px;
 			border-bottom: 1px solid ${token.colorBorderSecondary};
 			background-color: ${token.colorBgContainer};
 			user-select: none;
+			font-weight: 400;
 			-webkit-user-select: none;
+
+			@media (pointer: coarse) {
+				--detail-action-height: 44px;
+			}
 		`,
 
 		title: css`
 			display: inline-flex;
 			align-items: center;
 			gap: 8px;
-			font-size: 13px;
+			font-size: 16px;
+			line-height: 24px;
 			font-weight: 500;
 			cursor: default;
 		`,

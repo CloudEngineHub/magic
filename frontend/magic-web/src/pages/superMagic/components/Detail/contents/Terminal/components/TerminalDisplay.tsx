@@ -38,7 +38,7 @@ function TerminalDisplay({
 	)
 
 	return (
-		<div className={cx(styles.terminalDisplay, className)}>
+		<div className={cx(styles.terminalDisplay, showControls && styles.detailView, className)}>
 			{showControls && (
 				<TerminalCommand
 					key={recordKey}
@@ -53,7 +53,14 @@ function TerminalDisplay({
 				recordKey={recordKey}
 				showControls={showControls}
 			/>
-			<div className={cx(styles.footer, hasError && styles.error)} role="status">
+			<div
+				className={cx(
+					styles.footer,
+					showControls && styles.detailFooter,
+					hasError && styles.error,
+				)}
+				role="status"
+			>
 				{hasExitCode && (
 					<>
 						{/* Exit code 根据结果显示不同颜色 */}
@@ -68,7 +75,9 @@ function TerminalDisplay({
 								? t("terminal.returnedWithError")
 								: t("terminal.returnedNormally")}
 						</span>
-						<span className={styles.exitCode}>
+						<span
+							className={cx(styles.exitCode, showControls && styles.detailExitCode)}
+						>
 							{t("terminal.exitCode")}
 							<span className={styles.exitCodeValue} data-terminal-exit-code>
 								{exitCode}

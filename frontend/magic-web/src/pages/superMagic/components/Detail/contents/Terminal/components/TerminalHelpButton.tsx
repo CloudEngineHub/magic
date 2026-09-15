@@ -3,15 +3,13 @@ import { BookOpen } from "lucide-react"
 import { useTranslation } from "react-i18next"
 import { Button } from "@/components/shadcn-ui/button"
 import { ContextHelp } from "@/components/shadcn-composed/context-help"
-import { useIsMobile } from "@/hooks/useIsMobile"
 
 const TerminalHelpBrowser = lazy(() => import("./TerminalHelpBrowser"))
 const TerminalHelpArticle = lazy(() => import("./TerminalHelpArticle"))
 
 /** 入口沿用共享帮助的弹窗、焦点恢复和加载边界，阅读正文只在打开时加载。 */
-export function TerminalHelpButton() {
+export function TerminalHelpButton({ showText }: { showText: boolean }) {
 	const { t } = useTranslation("super")
-	const isMobile = useIsMobile()
 	return (
 		<ContextHelp
 			mode="dialog"
@@ -23,9 +21,14 @@ export function TerminalHelpButton() {
 			}}
 			renderDialog={(props) => <TerminalHelpBrowser {...props} />}
 		>
-			<Button variant="ghost" size="sm" aria-label={t("terminal.guide")}>
+			<Button
+				variant="ghost"
+				size="sm"
+				className="h-8 gap-1.5 px-2 text-sm font-normal leading-5 [@media(pointer:coarse)]:min-h-11 [@media(pointer:coarse)]:min-w-11"
+				aria-label={t("terminal.guide")}
+			>
 				<BookOpen size={16} aria-hidden />
-				{!isMobile && t("terminal.guide")}
+				{showText && t("terminal.guide")}
 			</Button>
 		</ContextHelp>
 	)

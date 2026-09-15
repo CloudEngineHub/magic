@@ -27,9 +27,10 @@ export function TerminalOutputToolbar({
 }: TerminalOutputToolbarProps) {
 	const { t } = useTranslation("super")
 	return (
-		<div className="flex shrink-0 flex-wrap items-center gap-2 border-t border-border py-2 pl-[18px] pr-2.5 text-xs">
-			<span className="shrink-0 text-muted-foreground">{t("terminal.output")}</span>
-			<div className="flex min-w-[180px] flex-[1_1_190px] items-center gap-1">
+		<div className="flex shrink-0 flex-wrap items-center gap-x-3 gap-y-2 border-t border-border px-4 py-2.5 text-sm font-normal text-foreground">
+			<span className="shrink-0 font-medium">{t("terminal.output")}</span>
+			{/* 宽屏保留紧凑的搜索组；窄详情容器自然换行，不靠缩小文字容纳操作。 */}
+			<div className="ml-auto flex min-w-0 max-w-full flex-[0_1_368px] items-center gap-1">
 				<Search size={16} aria-hidden className="shrink-0 text-muted-foreground" />
 				<Input
 					value={query}
@@ -43,11 +44,11 @@ export function TerminalOutputToolbar({
 					type="search"
 					placeholder={t("terminal.searchOutput")}
 					aria-label={t("terminal.searchOutput")}
-					className="h-7 min-w-[80px] flex-1 px-2 py-1 text-xs md:text-xs"
+					className="h-8 min-w-[80px] max-w-[280px] flex-1 px-2.5 py-1.5 text-sm md:text-sm [@media(pointer:coarse)]:h-11 [@media(pointer:coarse)]:text-base"
 				/>
 				{query && (
 					<span
-						className="shrink-0 whitespace-nowrap text-muted-foreground"
+						className="shrink-0 whitespace-nowrap text-xs text-muted-foreground"
 						role="status"
 					>
 						{count
@@ -60,7 +61,7 @@ export function TerminalOutputToolbar({
 						<Button
 							variant="ghost"
 							size="icon-sm"
-							className="size-6"
+							className="size-8 shrink-0 [@media(pointer:coarse)]:size-11"
 							aria-label={t("terminal.previousMatch")}
 							disabled={!count}
 							onClick={() => onFind(-1)}
@@ -75,7 +76,7 @@ export function TerminalOutputToolbar({
 						<Button
 							variant="ghost"
 							size="icon-sm"
-							className="size-6"
+							className="size-8 shrink-0 [@media(pointer:coarse)]:size-11"
 							aria-label={t("terminal.nextMatch")}
 							disabled={!count}
 							onClick={() => onFind(1)}
@@ -86,11 +87,11 @@ export function TerminalOutputToolbar({
 					<TooltipContent>{t("terminal.nextMatch")}</TooltipContent>
 				</Tooltip>
 			</div>
-			<div className="flex shrink-0 items-center gap-1">
+			<div className="flex min-w-0 flex-wrap items-center gap-1">
 				<Button
 					variant="ghost"
 					size="sm"
-					className="h-7 gap-1 px-1.5 text-xs font-normal aria-pressed:bg-muted aria-pressed:text-blue-600 dark:aria-pressed:text-blue-400"
+					className="h-8 gap-1.5 px-2 text-sm font-normal aria-pressed:bg-muted aria-pressed:text-blue-600 dark:aria-pressed:text-blue-400 [@media(pointer:coarse)]:min-h-11"
 					aria-pressed={wrap}
 					onClick={onWrapChange}
 				>
@@ -100,7 +101,7 @@ export function TerminalOutputToolbar({
 				<Button
 					variant="ghost"
 					size="sm"
-					className="h-7 gap-1 px-1.5 text-xs font-normal"
+					className="h-8 gap-1.5 px-2 text-sm font-normal [@media(pointer:coarse)]:min-h-11"
 					onClick={onScrollToEnd}
 				>
 					<ArrowDownToLine size={16} aria-hidden />

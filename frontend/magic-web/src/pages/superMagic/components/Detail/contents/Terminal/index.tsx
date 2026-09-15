@@ -10,7 +10,7 @@ import TerminalDisplay from "./components/TerminalDisplay"
 import { TerminalHelpButton } from "./components/TerminalHelpButton"
 import { ActionButton } from "../../components/CommonHeader/components"
 import magicToast from "@/components/base/MagicToaster/utils"
-import { useIsMobile } from "@/hooks/useIsMobile"
+import type { ActionContext } from "../../components/CommonHeaderV2/types"
 
 interface TerminalProps {
 	data: DetailTerminalData
@@ -74,7 +74,6 @@ export default memo(function Terminal(props: TerminalProps) {
 	const { t } = useTranslation("super")
 
 	const { command, output, exit_code } = data
-	const isMobile = useIsMobile()
 
 	// 处理复制功能
 	const handleTerminalCopy = useCallback(async () => {
@@ -109,27 +108,29 @@ export default memo(function Terminal(props: TerminalProps) {
 				{
 					key: "terminal-guide",
 					zone: "secondary" as const,
-					render: () => <TerminalHelpButton />,
+					render: ({ showButtonText, isMobile }: ActionContext) => (
+						<TerminalHelpButton showText={showButtonText && !isMobile} />
+					),
 				},
 				{
 					key: "terminal-copy",
 					zone: "secondary" as const,
-					render: () => (
+					render: ({ showButtonText, isMobile }: ActionContext) => (
 						<Flex gap="small" align="center">
 							<ActionButton
 								icon={<Copy size={16} />}
 								size={16}
 								onClick={handleTerminalCopy}
 								title={t("fileViewer.copy")}
-								text={!isMobile ? t("fileViewer.copy") : undefined}
-								showText={!isMobile}
+								text={t("fileViewer.copy")}
+								showText={showButtonText && !isMobile}
 							/>
 						</Flex>
 					),
 				},
 			],
 		}),
-		[handleTerminalCopy, isMobile, styles.title, styles.readOnly, t],
+		[handleTerminalCopy, styles.title, styles.readOnly, t],
 	)
 
 	return (

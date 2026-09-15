@@ -1,10 +1,11 @@
 import { useEffect, useId, useRef, useState } from "react"
-import { ChevronDown, ChevronsDown, ChevronsUp, Copy } from "lucide-react"
+import { ChevronsDown, ChevronsUp, Copy } from "lucide-react"
 import { useTranslation } from "react-i18next"
 import { Button } from "@/components/shadcn-ui/button"
 import { clipboard } from "@/utils/clipboard-helpers"
 import magicToast from "@/components/base/MagicToaster/utils"
 import { cn } from "@/utils/cn"
+import SmartTooltip from "@/components/other/SmartTooltip"
 
 interface TerminalCommandProps {
 	command: string
@@ -16,19 +17,26 @@ export function TerminalCommand({ command, action, remark }: TerminalCommandProp
 	const { t } = useTranslation("super")
 	const contentId = useId()
 	const commandRef = useRef<HTMLPreElement>(null)
+	const remarkRef = useRef<HTMLButtonElement>(null)
 	const [expanded, setExpanded] = useState(false)
 	const [overflows, setOverflows] = useState(false)
+	const [remarkOverflows, setRemarkOverflows] = useState(false)
 	useEffect(() => {
 		const element = commandRef.current
-		if (!element) return
+		const remarkElement = remarkRef.current
+		if (!element && !remarkElement) return
 		const measure = () => {
-			if (!expanded) setOverflows(element.scrollHeight > element.clientHeight + 1)
+			if (element && !expanded) setOverflows(element.scrollHeight > element.clientHeight + 1)
+			if (remarkElement)
+				setRemarkOverflows(remarkElement.scrollWidth > remarkElement.clientWidth)
 		}
 		measure()
+		// 复用尺寸观察：命令按高度展开，说明只在被截断时提供键盘与点击入口。
 		const observer = new ResizeObserver(measure)
-		observer.observe(element)
+		if (element) observer.observe(element)
+		if (remarkElement) observer.observe(remarkElement)
 		return () => observer.disconnect()
-	}, [command, expanded])
+	}, [command, expanded, remark])
 
 	async function copyCommand() {
 		try {
@@ -42,36 +50,38 @@ export function TerminalCommand({ command, action, remark }: TerminalCommandProp
 	return (
 		<>
 			{remark && remark !== command && (
-				<details className="group shrink-0 border-b border-border px-[18px] py-2">
-					<summary className="flex cursor-pointer list-none items-center gap-2 text-xs [&::-webkit-details-marker]:hidden">
-						<span className="shrink-0 text-muted-foreground">
-							{action || t("terminal.operation")}
-						</span>
-						<span className="min-w-0 flex-1 truncate">{remark}</span>
-						<ChevronDown
-							size={16}
-							aria-hidden
-							className="shrink-0 -rotate-90 text-muted-foreground group-open:rotate-0"
-						/>
-					</summary>
-					{/* 只展开工具实际返回的说明；不从脚本名猜用途，也不重新生成一段模型解释。 */}
-					<p className="mb-0 mt-2 whitespace-pre-wrap break-words text-xs leading-6 text-muted-foreground">
-						{remark}
-					</p>
-				</details>
+				<div className="flex min-w-0 shrink-0 items-center gap-3 border-b border-border px-4 py-3 text-sm leading-[22px] text-foreground">
+					<span className="shrink-0 font-medium">
+						{action || t("terminal.operation")}
+					</span>
+					{/* 保留工具实际返回的说明；不推断用途，不重复展开同一段文字。 */}
+					<SmartTooltip
+						className="min-w-0 flex-1 leading-[22px]"
+						content={remark}
+						forceShowTooltip={remarkOverflows}
+						trigger={["hover", "focus", "click"]}
+						sideOffset={4}
+					>
+						<button
+							ref={remarkRef}
+							type="button"
+							disabled={!remarkOverflows}
+							className="block w-full truncate rounded-sm bg-transparent p-0 text-left font-normal text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring disabled:cursor-text [@media(pointer:coarse)]:enabled:min-h-11"
+						>
+							{remark}
+						</button>
+					</SmartTooltip>
+				</div>
 			)}
 			{command && (
-				<section
-					className="shrink-0 px-[18px] pb-3 pt-2"
-					aria-label={t("terminal.command")}
-				>
-					<div className="flex items-center justify-between gap-2 text-xs text-muted-foreground">
-						<span>{t("terminal.actualCommand")}</span>
-						<div className="flex items-center gap-1">
+				<section className="shrink-0 px-4 pb-4 pt-3" aria-label={t("terminal.command")}>
+					<div className="flex flex-wrap items-center justify-between gap-2 text-sm text-foreground">
+						<span className="font-medium">{t("terminal.actualCommand")}</span>
+						<div className="ml-auto flex min-w-0 flex-wrap items-center justify-end gap-1">
 							<Button
 								variant="ghost"
 								size="sm"
-								className="h-7 gap-1 px-1.5 text-xs font-normal"
+								className="h-8 gap-1.5 px-2 text-sm font-normal [@media(pointer:coarse)]:min-h-11"
 								onClick={copyCommand}
 							>
 								<Copy size={16} aria-hidden />
@@ -81,7 +91,7 @@ export function TerminalCommand({ command, action, remark }: TerminalCommandProp
 								<Button
 									variant="ghost"
 									size="sm"
-									className="h-7 gap-1 px-1.5 text-xs font-normal"
+									className="h-8 gap-1.5 px-2 text-sm font-normal [@media(pointer:coarse)]:min-h-11"
 									aria-expanded={expanded}
 									aria-controls={contentId}
 									onClick={() => setExpanded((value) => !value)}
@@ -98,7 +108,7 @@ export function TerminalCommand({ command, action, remark }: TerminalCommandProp
 							)}
 						</div>
 					</div>
-					<div className="mt-1 flex min-w-0 gap-2 rounded-lg border border-border bg-muted/40 px-3 py-2 font-mono text-sm leading-[1.65]">
+					<div className="mt-1 flex min-w-0 gap-2 rounded-lg border border-border bg-muted/40 px-3 py-2 font-mono text-sm leading-[22px]">
 						<span
 							className="select-none text-green-700 dark:text-green-400"
 							aria-hidden
@@ -109,10 +119,10 @@ export function TerminalCommand({ command, action, remark }: TerminalCommandProp
 							ref={commandRef}
 							id={contentId}
 							className={cn(
-								"m-0 min-w-0 flex-1 whitespace-pre-wrap break-all font-mono text-sm leading-[1.65] text-blue-600 dark:text-blue-400",
+								"m-0 min-w-0 flex-1 whitespace-pre-wrap break-all font-mono text-sm leading-[22px] text-blue-600 dark:text-blue-400",
 								expanded
-									? "max-h-[16.5em] overflow-auto"
-									: "max-h-[4.95em] overflow-hidden",
+									? "max-h-[220px] overflow-auto"
+									: "max-h-[66px] overflow-hidden",
 							)}
 						>
 							{command}

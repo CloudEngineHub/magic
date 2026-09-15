@@ -85,6 +85,16 @@ export const useStyles = createStyles(({ css, token, isDarkMode }) => {
 			box-sizing: border-box;
 			background-color: ${isDarkMode ? "#1C2027" : "#F7F8FA"};
 		`,
+		detailView: css`
+			/* 详情正文采用主文字色；ANSI 显式颜色仍由原有 decoration 保留。 */
+			& .monaco-editor .view-lines .mtk1 {
+				color: ${token.colorText};
+			}
+			& .monaco-editor .line-numbers {
+				color: ${token.colorTextSecondary};
+				font-size: 12px;
+			}
+		`,
 		outputEditor: css`
 			width: 100%;
 			height: 100%;
@@ -129,6 +139,17 @@ export const useStyles = createStyles(({ css, token, isDarkMode }) => {
 			& svg {
 				color: ${token.colorSuccess};
 			}
+		`,
+		detailFooter: css`
+			min-height: 44px;
+			padding: 10px 16px;
+			font-size: 14px;
+			line-height: 22px;
+			font-weight: 400;
+			color: ${token.colorText};
+		`,
+		detailExitCode: css`
+			color: ${token.colorText};
 		`,
 		exitCode: css`
 			display: inline-flex;
