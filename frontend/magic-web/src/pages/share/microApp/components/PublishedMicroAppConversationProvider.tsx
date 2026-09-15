@@ -75,7 +75,7 @@ const PublishedMicroAppConversationSurface = observer(
 		const loadRuntimeProject = useCallback(
 			async (project: Pick<MicroAppRuntimeProject, "id">, isCurrent: () => boolean) => {
 				await conversation.loadProjectContext(project.id, { isCurrent })
-				if (!isCurrent()) return false
+				if (!isCurrent()) return null
 				const loadedProject = conversation.selectedProject
 				if (!loadedProject) throw new Error("Runtime project could not be loaded")
 				projectFilesStore.setSelectedProject(loadedProject)
@@ -87,20 +87,20 @@ const PublishedMicroAppConversationSurface = observer(
 						// to read share resource files instead of this runtime project.
 						enableErrorMessagePrompt: false,
 					})
-					if (!isCurrent()) return false
+					if (!isCurrent()) return null
 					projectFilesStore.setWorkspaceFileTree(attachmentResult.tree, {
 						list: attachmentResult.list,
 						source: "published-micro-app-runtime",
 					})
 				} catch (error) {
-					if (!isCurrent()) return false
+					if (!isCurrent()) return null
 					// File loading should not hide an otherwise valid runtime conversation.
 					console.error("Failed to load published micro-app attachments:", error)
 					projectFilesStore.setWorkspaceFileTree([])
 				}
 				setRuntimeProject(loadedProject)
 				setRuntimeProjectState("ready")
-				return true
+				return loadedProject
 			},
 			[conversation, projectFilesStore],
 		)
@@ -144,9 +144,10 @@ const PublishedMicroAppConversationSurface = observer(
 			const promise = (async () => {
 				const result = await SuperMagicApi.ensureMicroAppRuntimeProject(appId)
 				if (!isCurrent()) throw new Error(RUNTIME_PROJECT_LOAD_SUPERSEDED)
-				await loadRuntimeProject(result.project, isCurrent)
-				if (!isCurrent()) throw new Error(RUNTIME_PROJECT_LOAD_SUPERSEDED)
-				return { selectedProject: result.project, topicStore: conversation.topicStore }
+				const loadedProject = await loadRuntimeProject(result.project, isCurrent)
+				if (!isCurrent() || !loadedProject) throw new Error(RUNTIME_PROJECT_LOAD_SUPERSEDED)
+				// Return the hydrated project, not the ensure API stub.
+				return { selectedProject: loadedProject, topicStore: conversation.topicStore }
 			})()
 			ensurePromiseRef.current = promise
 			ensurePromiseAppIdRef.current = appId
@@ -169,6 +170,7 @@ const PublishedMicroAppConversationSurface = observer(
 				<TopicDesktopPanels
 					containerClassName="h-full w-full overflow-hidden"
 					detailPanelClassName="h-full w-full"
+					detailResizeHandleClassName="border-l border-border"
 					isDetailPanelFullscreen={false}
 					sidebar={null}
 					detailPanel={children}
@@ -179,8 +181,6 @@ const PublishedMicroAppConversationSurface = observer(
 					initialConversationPanelCollapsed
 					persistConversationPanelState={false}
 					conversationResizeHandleGripVariant="dots"
-					conversationResizeHandleClassName="border-l border-border !bg-sidebar"
-					keepConversationResizeHandleVisibleWhenCollapsed
 					historyOverlayScope="container"
 					historyLayout={{
 						isOpen: isTopicHistoryPanelOpen,
@@ -216,24 +216,16 @@ const PublishedMicroAppConversationSurface = observer(
 						<aside
 							className={cn(
 								"flex h-full min-h-0 flex-col",
-								isConversationPanelCollapsed
-									? "border-l border-border bg-sidebar"
-									: "bg-background",
+								isConversationPanelCollapsed ? "bg-sidebar" : "bg-background",
 							)}
 							data-testid="published-micro-app-conversation-panel"
 						>
 							{!isConversationPanelCollapsed ? (
 								<div
-									className="flex h-10 shrink-0 items-center justify-between border-b border-border px-3"
+									className="flex h-11 shrink-0 items-center justify-between border-b border-border px-3"
 									data-testid="published-micro-app-conversation-header"
 								>
-									<span className="min-w-0 text-sm font-medium">
-										{t("microAppPage.conversation.title")}
-									</span>
-									<div className="flex items-center gap-1">
-										<PublishedMicroAppAttachmentPopover
-											attachments={projectFilesStore.workspaceFileTree}
-										/>
+									<div className="flex min-w-0 items-center gap-1">
 										<button
 											type="button"
 											className="rounded-md p-1.5 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
@@ -242,6 +234,14 @@ const PublishedMicroAppConversationSurface = observer(
 										>
 											<PanelRightClose size={16} />
 										</button>
+										<span className="min-w-0 text-sm font-medium">
+											{t("microAppPage.conversation.title")}
+										</span>
+									</div>
+									<div className="flex items-center gap-1">
+										<PublishedMicroAppAttachmentPopover
+											attachments={projectFilesStore.workspaceFileTree}
+										/>
 									</div>
 								</div>
 							) : null}

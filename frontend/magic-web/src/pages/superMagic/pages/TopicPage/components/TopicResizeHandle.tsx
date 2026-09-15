@@ -12,7 +12,6 @@ interface TopicResizeHandleProps {
 	className?: string
 	disabled?: boolean
 	gripVariant?: "default" | "dots"
-	visibleWhenDisabled?: boolean
 	onResizeStart: (clientX: number) => void
 	style?: CSSProperties
 }
@@ -22,7 +21,6 @@ function TopicResizeHandle({
 	className,
 	disabled = false,
 	gripVariant = "default",
-	visibleWhenDisabled = false,
 	onResizeStart,
 	style,
 }: TopicResizeHandleProps) {
@@ -68,7 +66,7 @@ function TopicResizeHandle({
 					"data-[panel-group-direction=vertical]:!h-2 data-[panel-group-direction=vertical]:!w-full",
 					"data-[panel-group-direction=vertical]:before:bg-gradient-to-r",
 					disabled && "pointer-events-none",
-					disabled && !visibleWhenDisabled && "opacity-0",
+					disabled && "opacity-0",
 					className,
 				)}
 				data-testid="handle-mouse-down"

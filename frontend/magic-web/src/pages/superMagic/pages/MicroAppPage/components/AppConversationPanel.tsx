@@ -354,7 +354,7 @@ function AppConversationPanel({
 			emptyHero={<AppConversationEmptyState variant="hero" className="w-full" />}
 			emptyCompact={<AppConversationEmptyState variant="compact" />}
 			editor={
-				<div className="flex h-full min-h-0 w-full flex-none flex-col items-stretch gap-2 self-stretch">
+				<div className="flex h-full min-h-0 w-full flex-none flex-col items-stretch gap-2 self-stretch pt-3">
 					{/* The shared editor owns the bordered surface; this wrapper only aligns controls. */}
 					<div className="flex w-full shrink-0 items-center gap-4 overflow-hidden">
 						<ModeToggle
@@ -385,7 +385,7 @@ function AppConversationPanel({
 			currentTopicStatus={selectedTopic?.task_status}
 			handleSendMsg={handleSendMsg}
 			isMessagesLoading={isMessagesInitialLoading}
-			className="rounded-none bg-sidebar px-2 pb-2"
+			className="rounded-none bg-sidebar pb-2 pr-2"
 		/>
 	)
 }

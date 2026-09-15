@@ -70,23 +70,4 @@ describe("TopicResizeHandle", () => {
 			"opacity-0",
 		)
 	})
-
-	it("keeps the requested divider colors while disabled", () => {
-		render(
-			<TopicResizeHandle
-				disabled
-				visibleWhenDisabled
-				className="border-l border-border !bg-sidebar"
-				onResizeStart={vi.fn()}
-			/>,
-		)
-
-		expect(screen.getByTestId("handle-mouse-down")).toHaveClass(
-			"pointer-events-none",
-			"border-l",
-			"border-border",
-			"!bg-sidebar",
-		)
-		expect(screen.getByTestId("handle-mouse-down")).not.toHaveClass("opacity-0")
-	})
 })

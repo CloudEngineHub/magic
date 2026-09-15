@@ -21,19 +21,10 @@ vi.mock("../../hooks/useTopicDesktopPanelMotion", () => ({
 }))
 
 vi.mock("../TopicResizeHandle", () => ({
-	default: ({
-		className,
-		gripVariant,
-		visibleWhenDisabled,
-	}: {
-		className?: string
-		gripVariant?: string
-		visibleWhenDisabled?: boolean
-	}) => (
+	default: ({ className, gripVariant }: { className?: string; gripVariant?: string }) => (
 		<div
 			className={className}
 			data-grip-variant={gripVariant}
-			data-visible-when-disabled={visibleWhenDisabled ? "true" : undefined}
 			data-testid="mock-topic-resize-handle"
 		/>
 	),
@@ -167,9 +158,13 @@ describe("TopicDesktopPanels", () => {
 			showProjectSidebar: false,
 			conversationResizeHandleGripVariant: "dots",
 			conversationResizeHandleClassName: "border-l border-border !bg-sidebar",
-			keepConversationResizeHandleVisibleWhenCollapsed: true,
+			detailResizeHandleClassName: "border-l border-border",
 		})
 
+		expect(screen.getByTestId("topic-detail-resize-handle-slot")).toHaveClass(
+			"border-l",
+			"border-border",
+		)
 		expect(screen.getByTestId("mock-topic-resize-handle")).toHaveClass(
 			"border-l",
 			"border-border",
@@ -178,10 +173,6 @@ describe("TopicDesktopPanels", () => {
 		expect(screen.getByTestId("mock-topic-resize-handle")).toHaveAttribute(
 			"data-grip-variant",
 			"dots",
-		)
-		expect(screen.getByTestId("mock-topic-resize-handle")).toHaveAttribute(
-			"data-visible-when-disabled",
-			"true",
 		)
 	})
 

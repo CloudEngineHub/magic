@@ -4,6 +4,7 @@ import { SuperMagicApi } from "@/apis"
 import { loadProjectAttachments } from "@/pages/superMagic/services/projectAttachmentsLoader"
 import { FileAccessProvider } from "@/pages/superMagic/fileAccess/FileAccessProvider"
 import { createShareFileAccess } from "@/pages/superMagic/fileAccess/fileAccessContext"
+import { useHostConversation } from "@/pages/superMagic/contexts/HostConversationContext"
 import PublishedMicroAppConversationProvider from "../PublishedMicroAppConversationProvider"
 
 interface TestLayoutProps extends Record<string, unknown> {
@@ -68,6 +69,12 @@ vi.mock("@/pages/superMagic/components/MessageHeader", () => ({
 
 vi.mock("../PublishedMicroAppAttachmentPopover", () => ({
 	default: () => <button data-testid="published-micro-app-attachments-button" />,
+}))
+
+vi.mock("@/models/user", () => ({
+	userStore: {
+		user: { authorization: "test-token" },
+	},
 }))
 
 vi.mock("@/apis", () => ({
@@ -151,9 +158,11 @@ describe("PublishedMicroAppConversationProvider", () => {
 			expect(screen.getByTestId("published-micro-app-attachments-button")).toBeVisible()
 		})
 		expect(screen.getByTestId("published-micro-app-conversation-panel")).toHaveClass(
+			"bg-sidebar",
+		)
+		expect(screen.getByTestId("published-micro-app-conversation-panel")).not.toHaveClass(
 			"border-l",
 			"border-border",
-			"bg-sidebar",
 		)
 		expect(loadProjectAttachments).toHaveBeenCalledWith({
 			projectId: "runtime-project-1",
@@ -167,8 +176,7 @@ describe("PublishedMicroAppConversationProvider", () => {
 				initialConversationPanelCollapsed: true,
 				persistConversationPanelState: false,
 				conversationResizeHandleGripVariant: "dots",
-				conversationResizeHandleClassName: "border-l border-border !bg-sidebar",
-				keepConversationResizeHandleVisibleWhenCollapsed: true,
+				detailResizeHandleClassName: "border-l border-border",
 				historyOverlayScope: "container",
 				shouldShowDetailPanel: true,
 				isReadOnly: false,
@@ -203,6 +211,14 @@ describe("PublishedMicroAppConversationProvider", () => {
 				"published-micro-app-attachments-button",
 			),
 		).toBeVisible()
+		const header = within(expandedPanelRender.container).getByTestId(
+			"published-micro-app-conversation-header",
+		)
+		expect(
+			within(header).getByRole("button", {
+				name: "microAppPage.conversation.collapse",
+			}),
+		).toBeVisible()
 		expect(layoutMocks.messagePanelProps).toEqual(
 			expect.objectContaining({
 				hideConversationPanelToggle: true,
@@ -227,6 +243,49 @@ describe("PublishedMicroAppConversationProvider", () => {
 		const { unmount } = render(historyPanel)
 		expect(screen.getByTestId("message-header-topic-history-panel")).toBeInTheDocument()
 		unmount()
+	})
+
+	it("returns the hydrated project from ensureConversation", async () => {
+		const hydratedProject = {
+			id: "runtime-project-1",
+			project_status: "active",
+			project_name: "Runtime",
+		}
+		vi.mocked(SuperMagicApi.ensureMicroAppRuntimeProject).mockResolvedValue({
+			project: { id: hydratedProject.id },
+			is_existing: false,
+		} as never)
+		vi.mocked(SuperMagicApi.getProjectDetail).mockResolvedValue(hydratedProject as never)
+		vi.mocked(SuperMagicApi.getTopicsByProjectId).mockResolvedValue({ list: [] } as never)
+
+		let ensured: { selectedProject: unknown } | null | undefined
+		function EnsureButton() {
+			const { ensureConversation } = useHostConversation()
+			return (
+				<button
+					type="button"
+					data-testid="ensure-conversation"
+					onClick={async () => {
+						ensured = await ensureConversation?.()
+					}}
+				/>
+			)
+		}
+
+		render(
+			<PublishedMicroAppConversationProvider appId="app-1">
+				<EnsureButton />
+			</PublishedMicroAppConversationProvider>,
+		)
+		await waitFor(() => {
+			expect(SuperMagicApi.getMicroAppRuntimeProject).toHaveBeenCalled()
+		})
+
+		fireEvent.click(screen.getByTestId("ensure-conversation"))
+		await waitFor(() => {
+			expect(ensured?.selectedProject).toEqual(hydratedProject)
+		})
+		expect(ensured?.selectedProject).not.toEqual({ id: hydratedProject.id })
 	})
 
 	it("does not render a stale runtime project after switching apps", async () => {

@@ -41,7 +41,6 @@ interface TopicDesktopPanelsProps {
 	initialConversationPanelCollapsed?: boolean
 	conversationResizeHandleClassName?: string
 	conversationResizeHandleGripVariant?: "default" | "dots"
-	keepConversationResizeHandleVisibleWhenCollapsed?: boolean
 	/** Keep overlays inside an embedding page instead of anchoring them to the viewport. */
 	historyOverlayScope?: "viewport" | "container"
 	historyLayout?: TopicDesktopPanelsHistoryLayout
@@ -55,6 +54,7 @@ interface TopicDesktopPanelsProps {
 		isHistoryPanelOpen: boolean
 		onToggleHistoryPanel?: () => void
 	}) => ReactNode
+	detailResizeHandleClassName?: string
 }
 
 function TopicDesktopPanels({
@@ -72,11 +72,11 @@ function TopicDesktopPanels({
 	initialConversationPanelCollapsed = false,
 	conversationResizeHandleClassName,
 	conversationResizeHandleGripVariant = "default",
-	keepConversationResizeHandleVisibleWhenCollapsed = false,
 	historyOverlayScope = "viewport",
 	historyLayout,
 	shouldShowDetailPanel,
 	renderMessagePanel,
+	detailResizeHandleClassName,
 }: TopicDesktopPanelsProps) {
 	const topicHistoryCloseButtonRef = useRef<HTMLButtonElement>(null)
 	const isTopicHistoryPanelOpen = historyLayout?.isOpen ?? false
@@ -216,7 +216,7 @@ function TopicDesktopPanels({
 
 		return (
 			<div
-				className={cn("flex h-full min-h-0 shrink-0 pl-2", isDrawer && "z-20")}
+				className={cn("flex h-full min-h-0 shrink-0", isDrawer && "z-20")}
 				style={{ width: TOPIC_HISTORY_PANEL_WIDTH }}
 			>
 				<section
@@ -303,7 +303,7 @@ function TopicDesktopPanels({
 				)}
 
 				<div
-					className="relative flex h-full min-w-0 flex-1 overflow-hidden"
+					className="relative flex h-full min-w-0 flex-1 overflow-hidden bg-sidebar"
 					data-testid="topic-desktop-main-content"
 				>
 					{(isReadOnly || shouldShowDetailPanel || keepDetailMountedWhenHidden) && (
@@ -361,7 +361,10 @@ function TopicDesktopPanels({
 					{!isReadOnly && shouldShowDetailPanel && (
 						<div
 							data-testid="topic-detail-resize-handle-slot"
-							className="relative z-20 shrink-0 overflow-visible"
+							className={cn(
+								"relative z-20 shrink-0 overflow-visible",
+								detailResizeHandleClassName,
+							)}
 							style={{
 								width: targetRightHandleWidth,
 								minWidth: targetRightHandleWidth,
@@ -372,15 +375,13 @@ function TopicDesktopPanels({
 							<TopicResizeHandle
 								disabled={isConversationPanelCollapsed || !shouldShowDetailPanel}
 								gripVariant={conversationResizeHandleGripVariant}
-								visibleWhenDisabled={
-									keepConversationResizeHandleVisibleWhenCollapsed
-								}
 								onResizeStart={(clientX) => {
 									startDragMessagePanel(clientX)
 								}}
 								className={cn(
 									"h-full w-full shrink-0",
-									conversationResizeHandleClassName,
+									!isConversationPanelCollapsed &&
+										conversationResizeHandleClassName,
 									!isDraggingMessagePanel && "transition-opacity duration-150",
 									(isConversationPanelCollapsed || !shouldShowDetailPanel) &&
 										"pointer-events-none",
