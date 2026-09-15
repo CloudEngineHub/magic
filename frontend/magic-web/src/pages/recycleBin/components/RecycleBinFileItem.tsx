@@ -14,7 +14,7 @@ import {
 } from "@/components/shadcn-ui/dropdown-menu"
 import { cn } from "@/utils/cn"
 import type { RecycleBinItem, RestoreTarget } from "./recycle-bin-domain"
-import { parseRecycleBinTime } from "./recycle-bin-file-view"
+import { getRecycleBinRelativePath, parseRecycleBinTime } from "./recycle-bin-file-view"
 
 interface Props {
 	item: RecycleBinItem
@@ -44,9 +44,7 @@ export const RecycleBinFileItem = memo(function RecycleBinFileItem({
 	const folder = item.fileKind === "folder"
 	const fileType = folder ? "folder" : item.title.split(".").slice(1).pop()
 	const parentPath =
-		item.originalPath === "/"
-			? t("recycleBin.project.root")
-			: item.originalPath || t("recycleBin.project.unknownLocation")
+		getRecycleBinRelativePath(item.originalPath) ?? t("recycleBin.project.unknownLocation")
 	const checkbox = (
 		<Checkbox
 			checked={selected}

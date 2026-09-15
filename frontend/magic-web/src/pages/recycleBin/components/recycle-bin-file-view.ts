@@ -2,7 +2,7 @@ import dayjs from "@/infrastructure/vendors/dayjs"
 import type { RecycleBinItem } from "./recycle-bin-domain"
 
 export type RecycleBinFileView = "list" | "grid" | "location"
-export type RecycleBinSearchPeriod = "recent" | "hour" | "custom"
+export type RecycleBinSearchPeriod = "recent" | "custom" | number
 export interface RecycleBinTimeRange {
 	start: string
 	end: string
@@ -16,6 +16,11 @@ export interface RecycleBinFileGroup {
 }
 
 const TIME_ZONE = "Asia/Shanghai"
+
+/** 只转换展示文本；空字符串表示顶层，null 表示缺少快照，不改变分组和恢复使用的原路径。 */
+export function getRecycleBinRelativePath(path?: string | null): string | null {
+	return path?.replace(/^\/+/, "") ?? null
+}
 
 /** 回收站写入和查询按服务既有时区切日，避免用户本地时区改变同一记录的分组。 */
 export function parseRecycleBinTime(value: string) {

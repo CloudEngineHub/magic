@@ -23,6 +23,7 @@ use Hyperf\Snowflake\Concern\Snowflake;
  * @property string $deleted_by 删除人ID(与业务表 user_id 一致，VARCHAR 128)
  * @property null|Carbon $deleted_at 删除时间
  * @property int $retain_days 有效期(天)
+ * @property bool $is_hidden 是否隐藏；不改变过期和物理清理时间
  * @property null|Carbon $removed_at 从回收站删除/清空时间
  * @property null|string $removed_by 从回收站删除/清空操作人ID
  * @property null|Carbon $purged_at 物理清理完成时间
@@ -52,6 +53,7 @@ class RecycleBinModel extends AbstractModel
         'deleted_by',
         'deleted_at',
         'retain_days',
+        'is_hidden',
         'removed_at',
         'removed_by',
         'purged_at',
@@ -71,6 +73,7 @@ class RecycleBinModel extends AbstractModel
         'owner_id' => 'string',
         'deleted_by' => 'string',
         'retain_days' => 'integer',
+        'is_hidden' => 'boolean',
         'removed_at' => 'datetime',
         'removed_by' => 'string',
         'purged_at' => 'datetime',

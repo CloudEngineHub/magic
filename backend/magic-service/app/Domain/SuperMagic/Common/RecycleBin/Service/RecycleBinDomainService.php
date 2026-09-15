@@ -65,7 +65,8 @@ class RecycleBinDomainService
         string $deletedBy,
         ?int $parentId = null,
         ?array $extraData = null,
-        int $retainDays = 30
+        int $retainDays = 30,
+        bool $isHidden = false
     ): RecycleBinEntity {
         $entity = new RecycleBinEntity();
         $entity->setResourceType($resourceType)
@@ -75,6 +76,7 @@ class RecycleBinDomainService
             ->setDeletedBy($deletedBy)
             ->setDeletedAt(date('Y-m-d H:i:s'))
             ->setRetainDays($retainDays)
+            ->setIsHidden($isHidden)
             ->setParentId($parentId)
             ->setExtraData($extraData);
 

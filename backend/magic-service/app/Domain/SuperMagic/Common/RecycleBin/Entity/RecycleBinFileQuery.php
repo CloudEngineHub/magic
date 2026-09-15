@@ -15,9 +15,9 @@ use JsonException;
 /** 项目文件查询的范围与翻页边界；不承担目录分类或文件内容读取。 */
 final class RecycleBinFileQuery
 {
-    public const MAX_SEARCH_HOURS = 24;
+    public const MAX_SEARCH_HOURS = 360;
 
-    public const MAX_SEARCH_RESULTS = 500;
+    public const MAX_SEARCH_RESULTS = 1000;
 
     public readonly int $projectId;
 

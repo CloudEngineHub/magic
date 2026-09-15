@@ -60,6 +60,11 @@ export function useRecycleBinSearch({
 	const epoch = useRef(0)
 	const cursor = useRef<string | null>(null)
 	const mounted = useRef(true)
+	const rangeHours = range
+		? parseRecycleBinTime(range.end).diff(parseRecycleBinTime(range.start), "hour", true)
+		: NaN
+	const invalidRange =
+		!limits || !Number.isFinite(rangeHours) || rangeHours <= 0 || rangeHours > limits.max_hours
 
 	const cancelRequest = useMemoizedFn(() => {
 		epoch.current += 1
@@ -148,9 +153,7 @@ export function useRecycleBinSearch({
 		const queryRange =
 			period === "custom"
 				? range
-				: createRecycleBinTimeRange(
-						period === "hour" ? Math.min(1, limits.max_hours) : limits.max_hours,
-					)
+				: createRecycleBinTimeRange(period === "recent" ? limits.max_hours : period)
 		resetResult()
 		if (!queryRange?.start || !queryRange.end) {
 			setStatus("invalid")
@@ -218,14 +221,15 @@ export function useRecycleBinSearch({
 		}
 	})
 	const changePeriod = useMemoizedFn((next: RecycleBinSearchPeriod) => {
+		if (
+			typeof next === "number" &&
+			(!limits || !Number.isFinite(next) || next <= 0 || next > limits.max_hours)
+		)
+			return
 		resetResult()
 		setPeriod(next)
 		if (next !== "custom" && limits)
-			setRange(
-				createRecycleBinTimeRange(
-					next === "hour" ? Math.min(1, limits.max_hours) : limits.max_hours,
-				),
-			)
+			setRange(createRecycleBinTimeRange(next === "recent" ? limits.max_hours : next))
 	})
 	const changeRange = useMemoizedFn((next: RecycleBinTimeRange) => {
 		resetResult()
@@ -258,6 +262,7 @@ export function useRecycleBinSearch({
 		setTotal(null)
 		setLimits(null)
 		setRange(null)
+		setPeriod("recent")
 		void refreshTotal()
 		return () => countController.current?.abort()
 	}, [projectId, refreshTotal])
@@ -273,6 +278,7 @@ export function useRecycleBinSearch({
 		total,
 		limits,
 		range,
+		invalidRange,
 		period,
 		status,
 		bounded,

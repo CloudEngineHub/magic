@@ -440,6 +440,8 @@ class RecycleBinRepository extends AbstractRepository implements RecycleBinRepos
     protected function applyVisibleToUserScope(Builder $query, string $userId): Builder
     {
         $table = $this->model->getTable();
+        // 按 ID 恢复、删除和预览也遵守隐藏标记；系统清理不使用这个用户可见作用域。
+        $query->where($table . '.is_hidden', false);
         $query->leftJoin('magic_super_agent_project_members as pm', function ($join) use ($table, $userId): void {
             $join->on($table . '.parent_id', '=', 'pm.project_id')
                 ->where('pm.target_type', '=', 'User')
@@ -474,6 +476,7 @@ class RecycleBinRepository extends AbstractRepository implements RecycleBinRepos
             ->setDeletedBy((string) $model->deleted_by)
             ->setDeletedAt($model->deleted_at?->format('Y-m-d H:i:s') ?? '')
             ->setRetainDays($model->retain_days)
+            ->setIsHidden($model->is_hidden)
             ->setRemovedAt($model->removed_at?->format('Y-m-d H:i:s'))
             ->setRemovedBy($model->removed_by)
             ->setPurgedAt($model->purged_at?->format('Y-m-d H:i:s'))
@@ -491,7 +494,8 @@ class RecycleBinRepository extends AbstractRepository implements RecycleBinRepos
         $query = $this->model::query()
             ->toBase()
             ->whereNull($table . '.removed_at')
-            ->where($table . '.owner_id', $userId);
+            ->where($table . '.owner_id', $userId)
+            ->where($table . '.is_hidden', false);
 
         if ($resourceType !== null) {
             $query->where($table . '.resource_type', $resourceType);
@@ -519,7 +523,8 @@ class RecycleBinRepository extends AbstractRepository implements RecycleBinRepos
             })
             ->where('rb.resource_type', RecycleBinResourceType::File->value)
             ->whereNull('rb.removed_at')
-            ->where('rb.owner_id', '<>', $userId);
+            ->where('rb.owner_id', '<>', $userId)
+            ->where('rb.is_hidden', false);
 
         if ($projectId !== null) {
             $query->where('rb.parent_id', $projectId);
@@ -534,7 +539,8 @@ class RecycleBinRepository extends AbstractRepository implements RecycleBinRepos
         $query = $this->model::query()
             ->where('resource_type', $type->value)
             ->whereNull('removed_at')
-            ->where('owner_id', $userId);
+            ->where('owner_id', $userId)
+            ->where('is_hidden', false);
 
         $this->applyKeywordFilter($query, 'resource_name', $keyword);
 
@@ -554,7 +560,8 @@ class RecycleBinRepository extends AbstractRepository implements RecycleBinRepos
             })
             ->where('rb.resource_type', RecycleBinResourceType::File->value)
             ->whereNull('rb.removed_at')
-            ->where('rb.owner_id', '<>', $userId);
+            ->where('rb.owner_id', '<>', $userId)
+            ->where('rb.is_hidden', false);
 
         $this->applyKeywordFilter($query, 'rb.resource_name', $keyword);
 

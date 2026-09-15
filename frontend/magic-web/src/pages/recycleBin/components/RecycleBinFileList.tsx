@@ -16,6 +16,7 @@ import type { RecycleBinListProps } from "./RecycleBinList"
 import type { RecycleBinItem } from "./recycle-bin-domain"
 import { RecycleBinFileItem } from "./RecycleBinFileItem"
 import {
+	getRecycleBinRelativePath,
 	parseRecycleBinTime,
 	type RecycleBinFileGroup,
 	type RecycleBinFileView,
@@ -92,7 +93,9 @@ export function RecycleBinFileList({
 	else if (query.status === "limit")
 		message = t("recycleBin.project.tooMany", { count: query.limits?.max_results })
 	else if (query.status === "invalid")
-		message = t("recycleBin.project.invalidRange", { hours: query.limits?.max_hours })
+		message = t("recycleBin.project.invalidRange", {
+			days: (query.limits?.max_hours ?? 0) / 24,
+		})
 	else if (query.status === "error") message = t("recycleBin.error.loadFailed")
 	else if (query.bounded && (query.status === "idle" || query.status === "cancelled"))
 		message = t("recycleBin.project.readyToSearch")
@@ -172,8 +175,10 @@ export function RecycleBinFileList({
 														placement="top"
 													>
 														{row.group.location === "/"
-															? t("recycleBin.project.root")
-															: (row.group.location ??
+															? t("recycleBin.project.topLevelFiles")
+															: (getRecycleBinRelativePath(
+																	row.group.location,
+																) ??
 																t(
 																	"recycleBin.project.unknownLocation",
 																))}
@@ -268,8 +273,8 @@ export function RecycleBinFileList({
 								</dt>
 								<dd className="break-all">
 									{detail.originalPath === "/"
-										? t("recycleBin.project.root")
-										: (detail.originalPath ??
+										? t("recycleBin.project.topLevelFiles")
+										: (getRecycleBinRelativePath(detail.originalPath) ??
 											t("recycleBin.project.unknownLocation"))}
 								</dd>
 							</div>
