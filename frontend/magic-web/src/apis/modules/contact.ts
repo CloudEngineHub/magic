@@ -5,6 +5,7 @@ import type { CommonResponse, PaginationResponse } from "@/types/request"
 import type { GroupConversationDetail } from "@/types/chat/conversation"
 
 import type { ServiceHttpClient, RequestConfig } from "@/infrastructure/network/http/clients"
+import { A } from "@/pages/chatNew/components/ChatMessageList/components/MessageFactory/components/Markdown/EnhanceMarkdown/components/A";
 
 export const generateContactApi = (fetch: ServiceHttpClient) => ({
 	/**
@@ -216,11 +217,12 @@ export const generateContactApi = (fetch: ServiceHttpClient) => ({
 			"/api/v1/contact/accounts/me/users",
 			{
 				enableRequestUnion: true,
-				headers: organization_code
-					? {
-							"Organization-Code": organization_code,
-						}
-					: undefined,
+				headers: (h) => {
+					if (organization_code) {
+						h.set("Organization-Code", organization_code)
+					}
+					return h
+				},
 				...options,
 			},
 		)
