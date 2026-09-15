@@ -7,6 +7,7 @@ declare(strict_types=1);
 
 namespace App\Application\SuperMagic\Common\Share\Service;
 
+use App\Application\Permission\Service\FunctionPermissionAppService;
 use App\Application\SuperMagic\Common\Share\Factory\ShareableResourceFactory;
 use App\Application\SuperMagic\File\Service\FileManagementAppService;
 use App\Application\SuperMagic\File\Service\TaskFileAuthorizationService;
@@ -131,7 +132,7 @@ class ResourceShareAppService extends AbstractShareAppService
         private readonly TaskFileRepositoryInterface $taskFileRepository,
         private readonly ShareUrlBuilder $shareUrlBuilder,
         private readonly RequestInterface $request,
-        private readonly ShareMethodPermissionService $shareMethodPermissionService
+        private readonly FunctionPermissionAppService $functionPermissionAppService
     ) {
         $this->logger = $loggerFactory->get(get_class($this));
     }
@@ -152,7 +153,7 @@ class ResourceShareAppService extends AbstractShareAppService
         // 验证资源类型
         $resourceType = ResourceType::from($dto->resourceType);
         if ($resourceType === ResourceType::Project) {
-            $this->shareMethodPermissionService->assertAllowed($userAuthorization, $resourceKind ?? 'project', $dto->shareType);
+            $this->assertAllowed($userAuthorization, $resourceKind ?? 'project', $dto->shareType);
         }
 
         // 统一查询一次已存在的分享（如果存在），避免重复查询
@@ -442,6 +443,29 @@ class ResourceShareAppService extends AbstractShareAppService
         }
 
         return $shareDto;
+    }
+
+    private function assertAllowed(
+        MagicUserAuthorization $userAuthorization,
+        string $resourceKind,
+        int $shareType
+    ): void {
+        $prefix = $resourceKind === 'micro_app' ? 'micro_app' : 'project';
+        $shareFunctionCode = match ($shareType) {
+            ShareAccessType::TeamShare->value => $prefix . '.share_team',
+            ShareAccessType::Internet->value => $prefix . '.share_public',
+            ShareAccessType::PasswordProtected->value => $prefix . '.share_password',
+            default => null,
+        };
+
+        if ($shareFunctionCode !== null
+            && ! $this->functionPermissionAppService->checkPermission($userAuthorization, $shareFunctionCode)) {
+            ExceptionBuilder::throw(
+                ShareErrorCode::SHARE_METHOD_NOT_ALLOWED,
+                'share.share_method_not_allowed',
+                ['shareType' => (string) $shareType]
+            );
+        }
     }
 
     /**
