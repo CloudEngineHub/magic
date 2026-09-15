@@ -5,6 +5,17 @@ import copy
 from dataclasses import dataclass, field
 from enum import StrEnum
 from typing import Optional
+from app.core.entity.user_context import UserContextSnapshot
+from app.core.horizon.profile_context import AgentIdentityState
+
+
+class HorizonInjectionPoint(StrEnum):
+    UNKNOWN = "unknown"
+    BEFORE_FIRST_LLM = "before_first_llm"
+    AFTER_TOOL_RESULT = "after_tool_result"
+    AFTER_MAIN_AGENT_RUN = "after_main_agent_run"
+    BEFORE_LLM_NATIVE_VISUAL = "before_llm_native_visual"
+    AFTER_USER_TOOL_CALL_CANCEL = "after_user_tool_call_cancel"
 
 
 @dataclass
@@ -226,6 +237,10 @@ class ContextUsage:
 class HorizonState:
     """AgentHorizon 的持久化状态。"""
     agent_id: str
+    user_context: UserContextSnapshot | None = None
+    user_context_baseline: UserContextSnapshot | None = None
+    user_context_auto_fetch_attempted: bool = False
+    agent_identity: AgentIdentityState | None = None
     file_records: dict[str, FileContextRecord] = field(default_factory=dict)     # abs_path -> record
     pending_notifications: list[PendingNotification] = field(default_factory=list)
     pending_resumptions: list[PendingResumption] = field(default_factory=list)

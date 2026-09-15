@@ -246,6 +246,8 @@ class AgentDispatcher(Base):
         # 保存初始化消息到文件
         from app.utils.init_client_message_util import InitClientMessageUtil
         await InitClientMessageUtil.save_init_client_message(init_message)
+        from app.service.user_context_service import UserContextService
+        UserContextService.apply_init_config(self.agent_context, init_message)
 
         self.agent_context.set_super_magic_product_context(init_message.super_magic_product_context)
 
@@ -746,6 +748,10 @@ class AgentDispatcher(Base):
         try:
             target = self._build_agent_target(message.agent_mode, agent_code)
             agent = await self.switch_agent(target)
+            profile = message.agent.profile if message.agent is not None else None
+            self.agent_context.set_user_facing_agent_name(
+                target, (profile.user_facing_name or "") if profile is not None else "",
+            )
         except asyncio.CancelledError:
             self.agent_context.set_agent_profile(previous_profile)
             raise

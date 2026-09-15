@@ -3383,6 +3383,10 @@
         "zh_CN": "无法获取用户信息",
         "en_US": "Failed to get user info"
     },
+    "get_user_info.detail_error": {
+        "zh_CN": "本次未能获取当前用户的最新资料。请稍后重试；之前显示的资料和积分可能已经变化。",
+        "en_US": "The current user's latest profile could not be retrieved. Please try again later; previously shown profile and points may have changed."
+    },
     "unknown.message": {
         "zh_CN": "未知",
         "en_US": "Unknown"

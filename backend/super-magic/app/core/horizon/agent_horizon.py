@@ -2,6 +2,52 @@
 
 替换全局单例 FileTimestampManager，并统一编排注入给 LLM 的动态上下文：
 当前时间、文件变化 Diff、系统通知等，未来可扩展更多上下文类型。
+
+
+首次信息与后续变化分开处理。 新会话开始时，先把已知的环境、模型、工作区、身份和用户资料等初始信息提供一次。以后开始新的 Loop，不重复整套初始信息。对话压缩后，需要恢复的初始信息再提供一次；用户资料从已保存的查询结果恢复，不重新访问账户接口。
+
+下表描述完成首次展示后的正常处理。表中的「检查」都在代码执行到相应位置时进行，没有额外的定时后台监听。
+
+| 告诉模型什么 | 什么时候检查或查询 | 什么情况下写入上下文 | 会重复写多少次 |
+|---|---|---|---|
+| 当前时间 | 每次 Loop 开始时，以及每批工具执行结束后 | 每次都写入当时的时间 | 一个 Loop 内可以多次；Loop 结束刷新账户时不再单独写时间 |
+| 运行环境是否重启 | 每次 Loop 开始时，以及每批工具执行结束后 | 发现当前 Python 进程与之前不同 | 没重启就不重复写；检测到重启时写入变化 |
+| 当前工作区、项目和话题 | 每次 Loop 开始时，以及每批工具执行结束后 | 当前业务位置与上次提供的信息不同 | 未变化不写；一个 Loop 内若多次切换，可以多次写 |
+| 正在使用的文本模型 | 每次 Loop 开始时，以及每批工具执行结束后 | 现有模型变化标记表明需要更新 | 没变化不重复写 |
+| 可用的图像、视频模型及其用法 | 每次 Loop 开始时，以及每批工具执行结束后 | 图像或视频模型发生变化，且已有有效能力信息 | 只更新发生变化的部分 |
+| 工作区文件列表 | 每次 Loop 开始时，以及每批工具执行结束后 | 文件或目录路径增加、删除 | 没有路径变化不写；不把文件内容修改当作路径变化 |
+| 已追踪文件的内容变化 | 每次 Loop 开始时，以及每批工具执行结束后 | 检测到相对已知内容的变化 | 没变化不写；多次检测到新的变化时可以多次写 |
+| 已观察的浏览器页面变化 | 每次 Loop 开始时，以及每批工具执行结束后 | 已观察页面发生有效地址跳转或关闭 | 无相关变化不写；仅标题或地址锚点变化不单独通知 |
+| 用户当前页面的信息 | 每次 Loop 开始时，以及每批工具执行结束后 | 前端提供的页面资料新增、改变或明确清空 | 没变化不重复写 |
+| 已登录的本地 CLI 信息 | 每次 Loop 开始时，以及每批工具执行结束后 | 已收到的 CLI 状态变为新的非空内容 | 没变化不写；当前变空时没有单独的清空通知 |
+| 用户希望使用的语言 | 每次 Loop 开始时，以及每批工具执行结束后 | 语言偏好改变 | 不改变就不重复写 |
+| 对话已占用多少上下文 | 每次 Loop 开始时，以及每批工具执行结束后 | 首次有有效用量，或用量变化达到既有阈值 | 未达到阈值不写；达到后可以再次写，不按工具数量机械重复 |
+| 系统通知 | 每次 Loop 开始时，以及每批工具执行结束后 | 有尚未处理的新通知 | 同一通知按现有规则处理后不重复；新通知可以继续写 |
+| 本次恢复运行要继续处理的事项 | 每次 Loop 开始时，以及每批工具执行结束后 | 有明确分配给本次运行、尚未完成注入的恢复事项 | 仅处理本次运行的事项；按现有写入确认和恢复规则处理 |
+| Claw 启动时还没读完哪些必读文件 | 每次 Loop 开始时，以及每批工具执行结束后 | 仍有必读文件未读完 | 未读完时重复提醒；读完即停止 |
+| Agent 自己是谁、以什么角色工作 | 每次 Loop 开始时，以及每批工具执行结束后 | 身份、主／子角色、管理对象或对外名称改变 | 首次提供后，无变化就不重复写 |
+| 用户基本资料 | 会话首次查询；以后每个主 Agent Loop 正常结束时查询一次 | 姓名、联系方式、组织等资料与上次写入的结果不同 | 任务执行中不自动写变化；结束时无变化写 0 次，有变化写 1 次 |
+| 当前套餐（有商业实现时） | 与用户资料共用同一次查询 | 套餐名称、有效期、范围或查询状态改变 | 任务执行中不自动写变化；结束时最多写入一次变化 |
+| 当前可见积分（有商业实现时） | 与用户资料共用同一次查询 | 可见余额、范围或查询状态改变 | 任务执行中不自动写变化；结束时最多写入一次变化 |
+
+套餐、积分和基本资料虽然分三行说明，实际通过同一个用户接口取得；若三项都变化，合并为一次用户资料更新。这里只说明自动处理，Agent 主动调用查询工具仍可立即取得最新结果。
+
+次数示例：同一会话中的第二个 Loop，执行了四批工具，期间没有压缩。 假设五个既有环境检查位置都正常执行：Loop 开始一次，四批工具结束后各一次。
+
+| 内容 | 这个 Loop 检查或查询几次 | 这个 Loop 实际写几次 |
+|---|---|---|
+| 当前时间 | 读取 5 次 | 写入 5 次当前时间 |
+| 文件内容变化 | 检查 5 次 | 五次都没有新变化则写 0 次；只有一次检测到新变化则写 1 次 |
+| Agent 身份 | 检查 5 次 | 身份未变化，写 0 次 |
+| 用户资料、套餐、积分 | 整个主 Loop 正常结束后合并查询 1 次 | 无变化写 0 次；有变化合并写 1 次 |
+
+第一个 Loop 开始时还会首次查询并提供完整资料；压缩后从已有安全快照恢复，不重新查询。
+
+监听或查询、生成文本、写入历史、模型读取是不同动作。用户资料与工作区快照一样，
+在构建内容通过预算检查后，由 Horizon 内部更新本次采用的 baseline，再返回字符串。
+工具序列未完整或内容超限时保留基准；Loop 结束的变化由下一次模型请求读取，不重写已完成回复。
+特殊工具原有的跳过注入规则不变；结束刷新不处理待入库用户消息、通知或恢复事项。
+上下文用量继续使用原有 5／3／1 个百分点阈值；文件、浏览器和时间保护保持原实现。
 """
 from __future__ import annotations
 
@@ -30,6 +76,7 @@ from app.core.horizon.models import (
     BrowserPageObservation,
     ContextUsage,
     FileContextRecord,
+    HorizonInjectionPoint,
     HorizonState,
     ImageModelState,
     ManualContextWindowState,
@@ -45,6 +92,8 @@ from app.core.horizon.models import (
     VideoModelState,
 )
 from app.core.horizon.store import HorizonStore
+from app.core.entity.user_context import UserContextSnapshot
+from app.core.horizon.profile_context import build_agent_identity, render_agent_identity, render_user_context
 from app.core.process_runtime import PROCESS_STARTED_AT_NS
 from app.utils.file_utils import calculate_file_hash, get_fresh_file_stat
 
@@ -663,6 +712,8 @@ class AgentHorizon:
         self._state.context_usage_baseline_used = 0
         self._state.context_usage_baseline_total = 0
         self._state.context_usage_baseline_used_pct = 0
+        self._state.user_context_baseline = None
+        self._state.agent_identity = None
 
         # magiclaw：重算固定文件集合和 BOOTSTRAP 状态，清空已读记录，强制重新进入必读流程
         # file_records 已被清空，所以无法从中恢复已读状态，这里必须走完整重置
@@ -1347,7 +1398,7 @@ class AgentHorizon:
     # 核心：构建注入给 LLM 的动态上下文
     # ─────────────────────────────────────────────────────────────────────────
 
-    def _log_oversized_context_update(self, content: str, injection_point: str) -> None:
+    def _log_oversized_context_update(self, content: str, injection_point: HorizonInjectionPoint) -> None:
         file_count, largest_file_path, largest_file_len = _largest_xml_block(content, "file", "path")
         notification_count, largest_notification_source, largest_notification_len = _largest_xml_block(
             content, "notification", "source"
@@ -1374,9 +1425,65 @@ class AgentHorizon:
             f"largest_notification_len={largest_notification_len:,}"
         )
 
-    async def build_context_update(self, injection_point: str = "unknown") -> str:
+    async def prepare_user_context_subject(self, user_id: str, organization_code: str) -> None:
+        await self._ensure_loaded()
+        auth = self._agent_context.get_user_context_auth() if self._agent_context else None
+        expected_subject = (auth.user_id, auth.organization_code) if auth else ("", "")
+        if (user_id, organization_code) != expected_subject:
+            return
+        current = self._state.user_context
+        if current is not None and (current.user_id != user_id or current.organization_code != organization_code):
+            self._state.user_context = None
+            self._state.user_context_baseline = None
+            self._state.user_context_auto_fetch_attempted = False
+            await self._save()
+
+    async def get_user_context_snapshot(self) -> UserContextSnapshot | None:
+        await self._ensure_loaded()
+        return self._state.user_context
+
+    async def has_attempted_user_context_fetch(self) -> bool:
+        await self._ensure_loaded()
+        return self._state.user_context_auto_fetch_attempted
+
+    async def mark_user_context_fetch_attempted(self) -> None:
+        await self._ensure_loaded()
+        self._state.user_context_auto_fetch_attempted = True
+        await self._save()
+
+    async def set_user_context(self, snapshot: UserContextSnapshot) -> None:
+        """缓存当前安全资料；比较基准由构建上下文时更新。"""
+        await self._ensure_loaded()
+        auth = self._agent_context.get_user_context_auth() if self._agent_context else None
+        if auth is not None:
+            if snapshot.user_id != auth.user_id or snapshot.organization_code != auth.organization_code:
+                return
+        elif snapshot.user_id or snapshot.organization_code:
+            return
+        # 调用方只能存入默认安全副本；完整手机号即使已获工具授权也不写入 Horizon。
+        from app.service.user_context_service import UserContextService
+        if snapshot.context is not None:
+            snapshot = snapshot.model_copy(update={"context": UserContextService.for_model(snapshot.context)})
+        self._state.user_context = snapshot
+        await self._save()
+
+    async def inherit_user_context(self, parent: "AgentHorizon") -> None:
+        await self._ensure_loaded()
+        inherited = await parent.get_user_context_snapshot()
+        auth = self._agent_context.get_user_context_auth() if self._agent_context else None
+        if self._state.user_context is None and inherited is not None and auth is not None and (
+            inherited.user_id == auth.user_id and inherited.organization_code == auth.organization_code
+        ):
+            self._state.user_context = inherited
+            self._state.user_context_auto_fetch_attempted = await parent.has_attempted_user_context_fetch()
+            await self._save()
+
+    async def build_context_update(
+        self,
+        injection_point: HorizonInjectionPoint = HorizonInjectionPoint.UNKNOWN,
+    ) -> str:
         """
-        编排所有动态上下文，返回完整的 <system_injected_context> XML 文本，每次调用均输出。
+        编排动态上下文并返回字符串。Loop 结束只返回用户变化；无变化时返回空字符串。
 
         首次注入（_is_first_injection=True）时包含 <initial_context> 全量块：
           当前时间、运行环境、LLM 模型、图片模型、workspace_files、user_preferred_language
@@ -1396,6 +1503,26 @@ class AgentHorizon:
         超过安全上限时丢弃原始内容，返回轻量状态消息，并保留当前 baseline。
         """
         await self._ensure_loaded()
+
+        user_snapshot = self._state.user_context
+        # Loop 内仅恢复尚未提供的完整资料；手动查询产生的新值统一留到 Loop 结束。
+        include_user = (
+            injection_point == HorizonInjectionPoint.AFTER_MAIN_AGENT_RUN
+            or self._state.user_context_baseline is None
+            or injection_point == HorizonInjectionPoint.BEFORE_FIRST_LLM
+        )
+        user_block = render_user_context(user_snapshot, self._state.user_context_baseline) if include_user else ""
+        if injection_point == HorizonInjectionPoint.AFTER_MAIN_AGENT_RUN:
+            if user_snapshot is None or not user_block:
+                return ""
+            content = "\n".join(("<system_injected_context>", user_block, "</system_injected_context>"))
+            if len(content) > HORIZON_CONTEXT_MAX_CHARS:
+                self._log_oversized_context_update(content, injection_point)
+                return HORIZON_CONTEXT_OVERSIZED_NOTICE
+            # 结束路径同样在预算检查后更新本次资料基准，不消费其他监控数据。
+            self._state.user_context_baseline = user_snapshot
+            await self._save()
+            return content
 
         # 并发计算所有被追踪文件的当前 hash 和 mtime
         current_hashes: dict[str, tuple[str, int]] = {}
@@ -1478,6 +1605,11 @@ class AgentHorizon:
         injected_context_usage_used_pct = 0
 
         parts = ["<system_injected_context>"]
+        identity = build_agent_identity(self._agent_context) if self._agent_context else None
+        if identity is not None and identity != self._state.agent_identity:
+            parts.append(render_agent_identity(identity))
+        if user_block:
+            parts.append(user_block)
         was_first_injection = self._is_first_injection
         llm_model_change_injected = False
         media_model_change_injected = False
@@ -1695,6 +1827,20 @@ class AgentHorizon:
 
         # 注入完成后，把 current staging 提交成新的持久化 baseline。
         persistence_changed = False
+        current_user_context = self._state.user_context
+        if (
+            user_block
+            and user_snapshot is not None
+            and current_user_context is not None
+            and current_user_context.user_id == user_snapshot.user_id
+            and current_user_context.organization_code == user_snapshot.organization_code
+        ):
+            # 采用本次正文对应的版本，不能把构建期间取得的新资料一起标为已提供。
+            self._state.user_context_baseline = user_snapshot
+            persistence_changed = True
+        if identity != self._state.agent_identity:
+            self._state.agent_identity = identity
+            persistence_changed = True
         if self._state.last_injected_date != today_date:
             self._state.last_injected_date = today_date
             persistence_changed = True

@@ -217,6 +217,8 @@ async def _run_isolated_agent(
             parent_context=request.parent_context,
             models=request.models,
         )
+        if request.parent_context is not None:
+            await new_context.horizon.inherit_user_context(request.parent_context.horizon)
         if capture_compact_history_result:
             agent.enable_compact_history_capture()
 
@@ -278,6 +280,7 @@ def _inherit_parent_context(
     child.set_subagent_depth(depth)
     child.set_subagent_parent_agent_name(parent.agent_name)
     child.set_subagent_parent_agent_id(parent.get_agent_id())
+    child.set_user_context_request_config(parent.get_user_context_host(), parent.get_user_context_auth())
     # 不继承 streams、task_id、streaming_sinks，保持子 Agent 事件完全隔离
 
 

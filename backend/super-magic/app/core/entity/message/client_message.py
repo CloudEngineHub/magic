@@ -329,6 +329,7 @@ class InitAgentProfile(BaseModel):
     description: Optional[str] = None
     role: Optional[str] = None
     template_code: Optional[str] = None
+    user_facing_name: Optional[str] = None
 
 
 class InitAgentConfig(BaseModel):
