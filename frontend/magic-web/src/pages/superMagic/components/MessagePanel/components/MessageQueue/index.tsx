@@ -11,7 +11,7 @@ import {
 } from "@tabler/icons-react"
 import { cn } from "@/utils/cn"
 import { Button } from "@/components/shadcn-ui/button"
-import SmartTooltip from "@/components/other/SmartTooltip"
+import MagicTooltip from "@/components/base/MagicTooltip"
 import { QueuedMessage } from "../../hooks/useMessageQueue"
 import CollapsibleText from "./components/CollapsibleText"
 import MobileMessageQueue from "./MobileMessageQueue"
@@ -166,60 +166,67 @@ function MessageQueue({
 										</Button>
 									) : (
 										<>
-											<SmartTooltip
-												content={t("messageQueue.removeFromQueue")}
-												forceShowTooltip
-												className={cn(
-													actionButtonBase,
-													message.isDeletingLoading &&
-														"cursor-not-allowed opacity-60",
-												)}
-												onClick={() => {
-													if (!message.isDeletingLoading)
-														onRemoveMessage(message.id)
-												}}
-												data-testid="on-remove-message"
-											>
-												{message.isDeletingLoading ? (
-													<Spin size="small" />
-												) : (
-													<Trash size={14} />
-												)}
-											</SmartTooltip>
-											<SmartTooltip
-												content={t("messageQueue.editMessage")}
-												forceShowTooltip
-												className={cn(
-													actionButtonBase,
-													isDisabled && "cursor-not-allowed opacity-40",
-												)}
-												onClick={() => {
-													if (!isDisabled) onStartEdit(message.id)
-												}}
-												data-testid="on-start-edit"
-											>
-												<IconEdit size={14} />
-											</SmartTooltip>
-											<SmartTooltip
-												content={t("messageQueue.submitNow")}
-												forceShowTooltip
-												className={cn(
-													actionButtonBase,
-													message.isSendingLoading &&
-														"cursor-not-allowed opacity-60",
-												)}
-												onClick={() => {
-													if (!message.isSendingLoading)
-														onSendMessage(message.id)
-												}}
-												data-testid="on-send-message"
-											>
-												{message.isSendingLoading ? (
-													<IconArrowUpDashed size={14} />
-												) : (
-													<CircleArrowUp size={14} />
-												)}
-											</SmartTooltip>
+											<MagicTooltip title={t("messageQueue.removeFromQueue")}>
+												<button
+													type="button"
+													aria-label={t("messageQueue.removeFromQueue")}
+													className={cn(
+														actionButtonBase,
+														message.isDeletingLoading &&
+															"cursor-not-allowed opacity-60",
+													)}
+													onClick={() => {
+														if (!message.isDeletingLoading)
+															onRemoveMessage(message.id)
+													}}
+													data-testid="on-remove-message"
+												>
+													{message.isDeletingLoading ? (
+														<Spin size="small" />
+													) : (
+														<Trash size={14} />
+													)}
+												</button>
+											</MagicTooltip>
+											<MagicTooltip title={t("messageQueue.editMessage")}>
+												<button
+													type="button"
+													aria-label={t("messageQueue.editMessage")}
+													className={cn(
+														actionButtonBase,
+														isDisabled &&
+															"cursor-not-allowed opacity-40",
+													)}
+													onClick={() => {
+														if (!isDisabled) onStartEdit(message.id)
+													}}
+													data-testid="on-start-edit"
+												>
+													<IconEdit size={14} />
+												</button>
+											</MagicTooltip>
+											<MagicTooltip title={t("messageQueue.submitNow")}>
+												<button
+													type="button"
+													aria-label={t("messageQueue.submitNow")}
+													className={cn(
+														actionButtonBase,
+														message.isSendingLoading &&
+															"cursor-not-allowed opacity-60",
+													)}
+													onClick={() => {
+														if (!message.isSendingLoading)
+															onSendMessage(message.id)
+													}}
+													data-testid="on-send-message"
+												>
+													{message.isSendingLoading ? (
+														<IconArrowUpDashed size={14} />
+													) : (
+														<CircleArrowUp size={14} />
+													)}
+												</button>
+											</MagicTooltip>
 										</>
 									)}
 								</div>

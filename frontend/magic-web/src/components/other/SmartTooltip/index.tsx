@@ -1,4 +1,4 @@
-import { memo, ReactNode, useEffect, useRef, useState } from "react"
+import { memo, ReactNode, useCallback, useEffect, useRef, useState } from "react"
 import { Tooltip, TooltipTrigger, TooltipContent } from "@/components/shadcn-ui/tooltip"
 import { cn } from "@/utils/cn"
 
@@ -9,6 +9,8 @@ interface SmartTooltipProps {
 	className?: string
 	style?: React.CSSProperties
 	placement?: "top" | "bottom" | "left" | "right"
+	align?: "start" | "center" | "end"
+	disabled?: boolean
 	maxWidth?: number | string
 	/**
 	 * Line limit: 1 = single-line ellipsis (default); >1 = line clamp;
@@ -22,6 +24,8 @@ interface SmartTooltipProps {
 	trigger?: ActionType[]
 	onOpenChange?: (open: boolean) => void
 	onClick?: (e: React.MouseEvent<HTMLElement>) => void
+	onPointerEnter?: React.PointerEventHandler<HTMLElement>
+	onFocus?: React.FocusEventHandler<HTMLElement>
 	onDoubleClick?: (e: React.MouseEvent<HTMLElement>) => void
 	sideOffset?: number
 	elementType?: "div" | "span"
@@ -36,6 +40,8 @@ const SmartTooltip = memo(function SmartTooltip({
 	className,
 	style,
 	placement = "top",
+	align = "center",
+	disabled = false,
 	maxWidth,
 	maxLines = 1,
 	content,
@@ -46,7 +52,9 @@ const SmartTooltip = memo(function SmartTooltip({
 	onOpenChange,
 	onClick,
 	onDoubleClick,
-	sideOffset = 0,
+	onPointerEnter,
+	onFocus,
+	sideOffset = 4,
 	elementType = "div",
 	...props
 }: SmartTooltipProps) {
@@ -56,55 +64,54 @@ const SmartTooltip = memo(function SmartTooltip({
 
 	// Convert trigger array to open state management for shadcn/ui
 	const [open, setOpen] = useState(false)
-	const shouldUseControlled = trigger.includes("click")
+	const canOpenRef = useRef(false)
 	const effectiveShowTooltip = forceShowTooltip || showTooltip
 
-	useEffect(() => {
-		const checkOverflow = () => {
-			if (!textRef.current) return
+	const checkOverflow = useCallback(() => {
+		if (!textRef.current) return false
 
-			const element = textRef.current
-			let isOverflowing = false
-			const nextTooltipTextContent = element.textContent?.trim() ?? ""
-			const descendantOverflow = Array.from(element.querySelectorAll<HTMLElement>("*")).some(
-				(descendant) => {
-					const computedStyle = window.getComputedStyle(descendant)
-					const clipsVertically = ["hidden", "clip", "scroll", "auto"].includes(
-						computedStyle.overflowY,
-					)
-					const clipsHorizontally = ["hidden", "clip", "scroll", "auto"].includes(
-						computedStyle.overflowX,
-					)
+		const element = textRef.current
+		let isOverflowing = false
+		const nextTooltipTextContent = element.textContent?.trim() ?? ""
+		const descendantOverflow = Array.from(element.querySelectorAll<HTMLElement>("*")).some(
+			(descendant) => {
+				const computedStyle = window.getComputedStyle(descendant)
+				const clipsVertically = ["hidden", "clip", "scroll", "auto"].includes(
+					computedStyle.overflowY,
+				)
+				const clipsHorizontally = ["hidden", "clip", "scroll", "auto"].includes(
+					computedStyle.overflowX,
+				)
 
-					return (
-						(clipsVertically && descendant.scrollHeight > descendant.clientHeight) ||
-						(clipsHorizontally && descendant.scrollWidth > descendant.clientWidth)
-					)
-				},
-			)
+				return (
+					(clipsVertically && descendant.scrollHeight > descendant.clientHeight) ||
+					(clipsHorizontally && descendant.scrollWidth > descendant.clientWidth)
+				)
+			},
+		)
 
-			if (maxLines > 1) {
-				// Multi-line clamp: hidden lines increase scrollHeight
-				isOverflowing = element.scrollHeight > element.clientHeight || descendantOverflow
-			} else if (maxLines === 0) {
-				// Wrapped text: overflow when height or width is constrained
-				isOverflowing =
-					element.scrollHeight > element.clientHeight ||
-					element.scrollWidth > element.clientWidth ||
-					descendantOverflow
-			} else {
-				// Single-line: compare scrollWidth and clientWidth
-				isOverflowing = element.scrollWidth > element.clientWidth || descendantOverflow
-			}
-
-			setTooltipTextContent((previousContent) =>
-				previousContent === nextTooltipTextContent
-					? previousContent
-					: nextTooltipTextContent,
-			)
-			setShowTooltip(isOverflowing)
+		if (maxLines > 1) {
+			// Multi-line clamp: hidden lines increase scrollHeight
+			isOverflowing = element.scrollHeight > element.clientHeight || descendantOverflow
+		} else if (maxLines === 0) {
+			// Wrapped text: overflow when height or width is constrained
+			isOverflowing =
+				element.scrollHeight > element.clientHeight ||
+				element.scrollWidth > element.clientWidth ||
+				descendantOverflow
+		} else {
+			// Single-line: compare scrollWidth and clientWidth
+			isOverflowing = element.scrollWidth > element.clientWidth || descendantOverflow
 		}
 
+		setTooltipTextContent((previousContent) =>
+			previousContent === nextTooltipTextContent ? previousContent : nextTooltipTextContent,
+		)
+		setShowTooltip(isOverflowing)
+		return isOverflowing
+	}, [maxLines])
+
+	useEffect(() => {
 		// Delayed detection to ensure DOM rendering is complete
 		const timer = setTimeout(checkOverflow, 100)
 
@@ -115,17 +122,41 @@ const SmartTooltip = memo(function SmartTooltip({
 			clearTimeout(timer)
 			window.removeEventListener("resize", checkOverflow)
 		}
-	}, [children, maxLines])
+	}, [children, checkOverflow])
+
+	useEffect(() => {
+		if (disabled) {
+			canOpenRef.current = false
+			if (open) {
+				setOpen(false)
+				onOpenChange?.(false)
+			}
+		}
+	}, [disabled, open, onOpenChange])
 
 	const handleOpenChange = (nextOpen: boolean) => {
-		if (shouldUseControlled) {
-			setOpen(nextOpen)
-		}
-		onOpenChange?.(nextOpen)
+		const nextVisible =
+			nextOpen && !disabled && canOpenRef.current && (forceShowTooltip || checkOverflow())
+		setOpen(nextVisible)
+		onOpenChange?.(nextVisible)
+	}
+
+	// 使用当前文字区域的尺寸；菜单或拖拽使旧悬停失效，恢复后等待新的进入／聚焦。
+	const handlePointerEnter: React.PointerEventHandler<HTMLElement> = (event) => {
+		onPointerEnter?.(event)
+		if (event.defaultPrevented) return
+		checkOverflow()
+		canOpenRef.current = !disabled
+	}
+	const handleFocus: React.FocusEventHandler<HTMLElement> = (event) => {
+		onFocus?.(event)
+		if (event.defaultPrevented) return
+		checkOverflow()
+		canOpenRef.current = !disabled
 	}
 
 	const handleTriggerClick = (e: React.MouseEvent<HTMLElement>) => {
-		if (trigger.includes("click") && effectiveShowTooltip) {
+		if (trigger.includes("click") && effectiveShowTooltip && !disabled) {
 			setOpen(!open)
 		}
 		onClick?.(e)
@@ -153,6 +184,8 @@ const SmartTooltip = memo(function SmartTooltip({
 		style: { ...textStyle, ...style },
 		onClick: handleTriggerClick,
 		onDoubleClick,
+		onPointerEnter: handlePointerEnter,
+		onFocus: handleFocus,
 		...props,
 	}
 	// Avoid inheriting trigger layout styles into the tooltip body.
@@ -163,10 +196,7 @@ const SmartTooltip = memo(function SmartTooltip({
 	})
 
 	return (
-		<Tooltip
-			open={shouldUseControlled ? (effectiveShowTooltip ? open : false) : undefined}
-			onOpenChange={handleOpenChange}
-		>
+		<Tooltip open={open && effectiveShowTooltip && !disabled} onOpenChange={handleOpenChange}>
 			<TooltipTrigger asChild>
 				{elementType === "div" ? (
 					<div ref={textRef as React.RefObject<HTMLDivElement>} {...sharedProps}>
@@ -187,6 +217,7 @@ const SmartTooltip = memo(function SmartTooltip({
 					style={tooltipContentStyle}
 					sideOffset={sideOffset}
 					side={placement}
+					align={align}
 				>
 					{tooltipBodyContent}
 				</TooltipContent>
