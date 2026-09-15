@@ -181,6 +181,7 @@ interface ContainerRootCache {
 interface ViewportElementQueryResult {
 	rootElementIds: Set<string>
 	renderActiveRootIds: Set<string>
+	activeViewportScaleLayoutElementIds: Set<string>
 	visibleConsumerIds: Set<string>
 	nearConsumerIds: Set<string>
 	visibleImageIds: Set<string>
@@ -1298,9 +1299,9 @@ export class CanvasVisibilityManager {
 		if (!this.canvas.geometryCacheManager.containsRect(this.lastQueryCoverRect, viewportRect)) {
 			return false
 		}
-		// The cover rect is also the render-active window used before far nodes are culled.
-		// A viewport contained by it cannot expose a culled root; crossing the boundary forces
-		// the full query below, which restores newly active roots before they are drawn.
+		// The cover rect is also the render-active and viewport-layout window from the last full
+		// query. A viewport contained by it cannot expose a culled root or a previously inactive
+		// layout element on screen; crossing the boundary forces a full query before either is used.
 		if (!force) {
 			return true
 		}
@@ -1422,6 +1423,9 @@ export class CanvasVisibilityManager {
 		}
 		this.registeredMediaElementIds.forEach((elementId) => queryElementIds.add(elementId))
 		this.consumerVisibilityListeners.forEach((_, elementId) => queryElementIds.add(elementId))
+		for (const elementId of this.canvas.runtimeScheduler.getViewportScaleLayoutElementIds()) {
+			queryElementIds.add(elementId)
+		}
 
 		// Query the geometry index once per coverage tier, then partition by media type. This
 		// avoids rebuilding and scanning separate candidate sets for every media registry.
@@ -1436,6 +1440,7 @@ export class CanvasVisibilityManager {
 			{ elementIds: queryElementIds },
 		)
 		const renderActiveRootIds = new Set<string>()
+		const activeViewportScaleLayoutElementIds = new Set<string>()
 		const visibleConsumerIds = new Set<string>()
 		const nearConsumerIds = new Set<string>()
 		const visibleImageIds = new Set<string>()
@@ -1453,6 +1458,9 @@ export class CanvasVisibilityManager {
 		})
 		activeElementIds.forEach((elementId) => {
 			if (rootElementIds.has(elementId)) renderActiveRootIds.add(elementId)
+			if (this.canvas.runtimeScheduler.hasViewportScaleLayoutElement(elementId)) {
+				activeViewportScaleLayoutElementIds.add(elementId)
+			}
 			if (
 				this.consumerVisibilityListeners.has(elementId) &&
 				!visibleConsumerIds.has(elementId)
@@ -1473,6 +1481,7 @@ export class CanvasVisibilityManager {
 		return {
 			rootElementIds,
 			renderActiveRootIds,
+			activeViewportScaleLayoutElementIds,
 			visibleConsumerIds,
 			nearConsumerIds,
 			visibleImageIds,
@@ -1523,7 +1532,8 @@ export class CanvasVisibilityManager {
 			(this.registeredImages.size === 0 &&
 				this.registeredVideos.size === 0 &&
 				this.registeredAudios.size === 0 &&
-				this.consumerVisibilityListeners.size === 0)
+				this.consumerVisibilityListeners.size === 0 &&
+				this.canvas.runtimeScheduler.getViewportScaleLayoutElementCount() === 0)
 		) {
 			return
 		}
@@ -1567,6 +1577,7 @@ export class CanvasVisibilityManager {
 		const {
 			rootElementIds,
 			renderActiveRootIds,
+			activeViewportScaleLayoutElementIds,
 			visibleConsumerIds,
 			nearConsumerIds,
 			visibleImageIds: visibleIds,
@@ -1576,6 +1587,9 @@ export class CanvasVisibilityManager {
 			visibleAudioIds,
 			nearAudioIds,
 		} = this.queryViewportElementIds(viewportRect, nearPadding, needsRenderVisibilitySync)
+		this.canvas.runtimeScheduler.replaceActiveViewportScaleLayoutElementIds(
+			activeViewportScaleLayoutElementIds,
+		)
 		this.applyConsumerVisibilityStates(visibleConsumerIds, nearConsumerIds)
 
 		const viewportCenter = getRectCenter(viewportRect)

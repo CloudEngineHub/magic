@@ -4,8 +4,10 @@ import { VideoElement } from "../VideoElement"
 
 function createEventEmitterMock() {
 	const handlers = new Map<string, Array<() => void>>()
+	const viewportLayouts = new Map<string, Array<() => void>>()
 	return {
 		handlers,
+		viewportLayouts,
 		eventEmitter: {
 			on: vi.fn((eventType: string, handler: () => void) => {
 				const currentHandlers = handlers.get(eventType) ?? []
@@ -17,6 +19,19 @@ function createEventEmitterMock() {
 					eventType,
 					(handlers.get(eventType) ?? []).filter((current) => current !== handler),
 				)
+			}),
+		},
+		runtimeScheduler: {
+			registerViewportScaleLayout: vi.fn((elementId: string, handler: () => void) => {
+				viewportLayouts.set(elementId, [...(viewportLayouts.get(elementId) ?? []), handler])
+				return () => {
+					viewportLayouts.set(
+						elementId,
+						(viewportLayouts.get(elementId) ?? []).filter(
+							(current) => current !== handler,
+						),
+					)
+				}
 			}),
 		},
 	}
@@ -48,13 +63,16 @@ describe("VideoElement viewport layout", () => {
 			stage.add(layer)
 			const group = new Konva.Group({ width: 320, height: 180 })
 			layer.add(group)
-			const { eventEmitter, handlers } = createEventEmitterMock()
+			const { eventEmitter, runtimeScheduler, viewportLayouts } = createEventEmitterMock()
 			const updatePlaceholderContentLayout = vi.fn()
 			const updatePlayerLayout = vi.fn()
 			const updatePlayerViewportScaleLayout = vi.fn()
 			const element = Object.create(VideoElement.prototype) as unknown as {
-				data: { width: number; height: number }
-				canvas: { eventEmitter: typeof eventEmitter }
+				data: { id: string; width: number; height: number }
+				canvas: {
+					eventEmitter: typeof eventEmitter
+					runtimeScheduler: typeof runtimeScheduler
+				}
 				renderer: {
 					updatePlaceholderContentLayout: typeof updatePlaceholderContentLayout
 					updatePlayerLayout: typeof updatePlayerLayout
@@ -64,8 +82,8 @@ describe("VideoElement viewport layout", () => {
 				removeContentUpdateListener: () => void
 			}
 			Object.assign(element, {
-				data: { width: 320, height: 180 },
-				canvas: { eventEmitter },
+				data: { id: "video-1", width: 320, height: 180 },
+				canvas: { eventEmitter, runtimeScheduler },
 				renderer: {
 					updatePlaceholderContentLayout,
 					updatePlayerLayout,
@@ -75,7 +93,7 @@ describe("VideoElement viewport layout", () => {
 
 			element.setupContentUpdateListener(group)
 			const layerDrawSpy = vi.spyOn(layer, "batchDraw")
-			handlers.get("viewport:scale")?.[0]?.()
+			viewportLayouts.get("video-1")?.[0]?.()
 
 			expect(updatePlaceholderContentLayout).toHaveBeenCalledWith(group, 320, 180)
 			expect(updatePlayerViewportScaleLayout).toHaveBeenCalledWith(group)

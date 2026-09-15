@@ -31,7 +31,7 @@ export class BorderDecorator {
 	private borderRect?: Konva.Rect
 	private borderAnimation?: Konva.Animation
 	private borderUpdateHandler?: () => void
-	private viewportScaleHandler?: () => void
+	private viewportScaleUnsubscribe?: () => void
 	private backgroundNode?: Konva.Image
 	private currentBackgroundType?: "selected" | "unselected"
 	private backgroundSwitchRequestId = 0
@@ -293,12 +293,11 @@ export class BorderDecorator {
 		this.borderUpdateHandler = () => {
 			this.update()
 		}
-		this.viewportScaleHandler = () => {
-			this.updateStrokeWidth()
-		}
-
-		// 监听 viewport 缩放事件
-		this.config.canvas.eventEmitter.on("viewport:scale", this.viewportScaleHandler)
+		this.viewportScaleUnsubscribe =
+			this.config.canvas.runtimeScheduler.registerViewportScaleLayout(
+				this.config.elementId,
+				() => this.updateStrokeWidth(),
+			)
 		// 监听选中/取消选中事件
 		this.config.canvas.eventEmitter.on("element:select", this.borderUpdateHandler)
 		this.config.canvas.eventEmitter.on("element:deselect", this.borderUpdateHandler)
@@ -364,10 +363,8 @@ export class BorderDecorator {
 	 */
 	public destroy(): void {
 		// 移除事件监听
-		if (this.viewportScaleHandler) {
-			this.config.canvas.eventEmitter.off("viewport:scale", this.viewportScaleHandler)
-			this.viewportScaleHandler = undefined
-		}
+		this.viewportScaleUnsubscribe?.()
+		this.viewportScaleUnsubscribe = undefined
 		if (this.borderUpdateHandler) {
 			this.config.canvas.eventEmitter.off("element:select", this.borderUpdateHandler)
 			this.config.canvas.eventEmitter.off("element:deselect", this.borderUpdateHandler)

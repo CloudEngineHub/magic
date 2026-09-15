@@ -93,6 +93,7 @@ export class VideoElement extends BaseElement<VideoElementData> {
 	private isResourceErrorState = false
 	private isGenerationErrorState = false
 	private contentViewportScaleHandler?: () => void
+	private contentViewportScaleUnsubscribe?: () => void
 	private contentTransformHandler?: () => void
 	private contentLayoutGroup?: Konva.Group
 	private contentPreviewUnsubscribe?: () => void
@@ -1427,14 +1428,17 @@ export class VideoElement extends BaseElement<VideoElementData> {
 		}
 
 		// 缩放帧由 ViewportController 统一绘制；元素 transform 仍需主动请求重绘。
-		this.canvas.eventEmitter.on("viewport:scale", this.contentViewportScaleHandler)
+		this.contentViewportScaleUnsubscribe =
+			this.canvas.runtimeScheduler.registerViewportScaleLayout(
+				this.data.id,
+				this.contentViewportScaleHandler,
+			)
 		group.on("transform", this.contentTransformHandler)
 	}
 
 	private removeContentUpdateListener(): void {
-		if (this.contentViewportScaleHandler) {
-			this.canvas.eventEmitter.off("viewport:scale", this.contentViewportScaleHandler)
-		}
+		this.contentViewportScaleUnsubscribe?.()
+		this.contentViewportScaleUnsubscribe = undefined
 
 		if (this.contentLayoutGroup && this.contentTransformHandler) {
 			this.contentLayoutGroup.off("transform", this.contentTransformHandler)

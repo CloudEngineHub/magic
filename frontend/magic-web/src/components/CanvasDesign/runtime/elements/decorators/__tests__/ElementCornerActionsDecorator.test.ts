@@ -5,9 +5,11 @@ import { COLORS, IMAGE_CONFIG } from "../../image/ImageElement.config"
 
 function createEventEmitterMock() {
 	const handlers = new Map<string, Array<(event: { data?: unknown }) => void>>()
+	const viewportScaleLayouts = new Set<() => void>()
 
 	return {
 		handlers,
+		viewportScaleLayouts,
 		eventEmitter: {
 			on: vi.fn((eventType: string, handler: (event: { data?: unknown }) => void) => {
 				const currentHandlers = handlers.get(eventType) ?? []
@@ -27,6 +29,12 @@ function createEventEmitterMock() {
 				handlers.set(eventType, nextHandlers ?? [])
 			}),
 			emit: vi.fn(),
+		},
+		runtimeScheduler: {
+			registerViewportScaleLayout: vi.fn((_elementId: string, handler: () => void) => {
+				viewportScaleLayouts.add(handler)
+				return () => viewportScaleLayouts.delete(handler)
+			}),
 		},
 	}
 }
@@ -58,7 +66,8 @@ function createCanvasMock(
 		connectionDragging?: boolean
 	} = {},
 ) {
-	const { handlers, eventEmitter } = createEventEmitterMock()
+	const { handlers, eventEmitter, runtimeScheduler, viewportScaleLayouts } =
+		createEventEmitterMock()
 	let hoveredElementId = options.hoveredElementId ?? null
 	let selected = options.selected ?? false
 	let selectionCount = options.selectionCount ?? (selected ? 1 : 0)
@@ -80,6 +89,7 @@ function createCanvasMock(
 				},
 			},
 			eventEmitter,
+			runtimeScheduler,
 			hoverManager: {
 				getHoveredElementId: vi.fn(() => hoveredElementId),
 			},
@@ -96,6 +106,7 @@ function createCanvasMock(
 			},
 		},
 		handlers,
+		viewportScaleLayouts,
 		setHoveredElementId: (nextElementId: string | null) => {
 			hoveredElementId = nextElementId
 		},
@@ -183,12 +194,13 @@ describe("ElementCornerActionsDecorator", () => {
 		stage.destroy()
 	})
 
-	it("skips hidden actions and does not request a per-element draw during viewport scaling", () => {
+	it("subscribes to viewport scaling only while actions are visible", () => {
 		const previousAutoDrawEnabled = Konva.autoDrawEnabled
 		Konva.autoDrawEnabled = false
 		try {
 			const { group, stage } = createStageGroup()
-			const { canvas, handlers, setHoveredElementId } = createCanvasMock()
+			const { canvas, handlers, viewportScaleLayouts, setHoveredElementId } =
+				createCanvasMock()
 			const decorator = createDecorator(group, canvas)
 
 			decorator.create()
@@ -196,22 +208,28 @@ describe("ElementCornerActionsDecorator", () => {
 			const actionScaleSpy = vi.spyOn(action as Konva.Group, "scale")
 			const layerDrawSpy = vi.spyOn(group.getLayer() as Konva.Layer, "batchDraw")
 
+			expect(viewportScaleLayouts.size).toBe(0)
 			stage.scale({ x: 2, y: 2 })
-			handlers.get("viewport:scale")?.[0]?.({ data: { scale: 2 } })
+			Array.from(viewportScaleLayouts)[0]?.()
 			expect(actionScaleSpy).not.toHaveBeenCalled()
 			expect(layerDrawSpy).not.toHaveBeenCalled()
 
 			setHoveredElementId("image-1")
 			handlers.get("element:hover")?.[0]?.({ data: { elementId: "image-1" } })
+			expect(viewportScaleLayouts.size).toBe(1)
 			expect(action?.scaleX()).toBe(0.5)
 
 			actionScaleSpy.mockClear()
 			layerDrawSpy.mockClear()
 			stage.scale({ x: 4, y: 4 })
-			handlers.get("viewport:scale")?.[0]?.({ data: { scale: 4 } })
+			Array.from(viewportScaleLayouts)[0]?.()
 			expect(actionScaleSpy).toHaveBeenCalledTimes(1)
 			expect(action?.scaleX()).toBe(0.25)
 			expect(layerDrawSpy).not.toHaveBeenCalled()
+
+			setHoveredElementId(null)
+			handlers.get("element:hover")?.[0]?.({ data: { elementId: null } })
+			expect(viewportScaleLayouts.size).toBe(0)
 
 			decorator.destroy()
 			stage.destroy()

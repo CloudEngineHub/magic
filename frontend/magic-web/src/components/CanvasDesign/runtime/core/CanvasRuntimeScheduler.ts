@@ -1,4 +1,4 @@
-import type Konva from "konva"
+import Konva from "konva"
 import type { Canvas } from "./Canvas"
 
 export type CanvasLayerName = "stage" | "content" | "selection" | "controls" | "markers" | "overlay"
@@ -20,6 +20,17 @@ export interface CanvasRuntimeSchedulerLayerSnapshot {
 	lastReasons: string[]
 }
 
+export interface CanvasRuntimeSchedulerViewportScaleLayoutSnapshot {
+	registeredElementCount: number
+	registeredCallbackCount: number
+	activeElementCount: number
+	dispatchCount: number
+	totalCallbackCount: number
+	activationCallbackCount: number
+	lastVisitedElementCount: number
+	lastCallbackCount: number
+}
+
 export interface CanvasRuntimeSchedulerSnapshot {
 	destroyed: boolean
 	pendingDrawCount: number
@@ -34,6 +45,7 @@ export interface CanvasRuntimeSchedulerSnapshot {
 	lastFlushSkippedLayers: CanvasLayerName[]
 	drawReasonCounts: Record<string, number>
 	layers: Record<CanvasLayerName, CanvasRuntimeSchedulerLayerSnapshot>
+	viewportScaleLayouts: CanvasRuntimeSchedulerViewportScaleLayoutSnapshot
 }
 
 interface PendingLayerDraw {
@@ -50,6 +62,13 @@ interface LayerStats {
 	coalescedCount: number
 	skippedByStageDrawCount: number
 	lastReasons: string[]
+}
+
+type ViewportScaleLayoutCallback = () => void
+
+interface ViewportScaleLayoutEntry {
+	callbacks: Set<ViewportScaleLayoutCallback>
+	snapshot?: ViewportScaleLayoutCallback[]
 }
 
 const LAYER_NAMES: CanvasLayerName[] = [
@@ -147,6 +166,9 @@ export class CanvasRuntimeScheduler {
 	private readonly pendingDraws = new Map<CanvasLayerName, PendingLayerDraw>()
 	private readonly layerStats = createLayerStats()
 	private readonly drawReasonCounts = new Map<string, number>()
+	private readonly viewportScaleLayouts = new Map<string, ViewportScaleLayoutEntry>()
+	private activeViewportScaleLayoutElementIds: Set<string> | null = null
+	private viewportScaleUnsubscribe?: () => void
 	private flushCount = 0
 	private drawRequestCount = 0
 	private drawnCount = 0
@@ -156,9 +178,101 @@ export class CanvasRuntimeScheduler {
 	private lastFlushDurationMs = 0
 	private lastFlushDrawnLayers: CanvasLayerName[] = []
 	private lastFlushSkippedLayers: CanvasLayerName[] = []
+	private viewportScaleLayoutCallbackCount = 0
+	private viewportScaleLayoutDispatchCount = 0
+	private viewportScaleLayoutTotalCallbackCount = 0
+	private viewportScaleLayoutActivationCallbackCount = 0
+	private lastViewportScaleLayoutVisitedElementCount = 0
+	private lastViewportScaleLayoutCallbackCount = 0
 
 	constructor(options: { canvas: Canvas }) {
 		this.canvas = options.canvas
+		this.viewportScaleUnsubscribe = this.canvas.eventEmitter.on(
+			"viewport:scale",
+			this.flushViewportScaleLayouts,
+		)
+	}
+
+	/**
+	 * Register viewport-scale work by element so visibility queries can keep far elements out of
+	 * the hot dispatch path. One Canvas-level event listener replaces O(element count) listeners.
+	 */
+	public registerViewportScaleLayout(
+		elementId: string,
+		callback: ViewportScaleLayoutCallback,
+	): () => void {
+		if (this.destroyed) return () => undefined
+
+		let entry = this.viewportScaleLayouts.get(elementId)
+		if (!entry) {
+			entry = { callbacks: new Set() }
+			this.viewportScaleLayouts.set(elementId, entry)
+		}
+		if (!entry.callbacks.has(callback)) {
+			entry.callbacks.add(callback)
+			entry.snapshot = undefined
+			this.viewportScaleLayoutCallbackCount += 1
+		}
+		if (
+			this.activeViewportScaleLayoutElementIds !== null &&
+			!this.activeViewportScaleLayoutElementIds.has(elementId)
+		) {
+			// Registration can happen after the last visibility pass. Keep the element active until
+			// that manager publishes the next spatial result so a newly rendered control stays correct.
+			this.activeViewportScaleLayoutElementIds.add(elementId)
+		}
+
+		return () => {
+			const current = this.viewportScaleLayouts.get(elementId)
+			if (!current?.callbacks.delete(callback)) return
+			current.snapshot = undefined
+			this.viewportScaleLayoutCallbackCount -= 1
+			if (current.callbacks.size === 0) {
+				this.viewportScaleLayouts.delete(elementId)
+				// The active set is long lived between visibility queries. Remove empty entries here so
+				// element teardown cannot leave stale IDs in dispatch counts or future membership checks.
+				this.activeViewportScaleLayoutElementIds?.delete(elementId)
+			}
+		}
+	}
+
+	public getViewportScaleLayoutElementIds(): IterableIterator<string> {
+		return this.viewportScaleLayouts.keys()
+	}
+
+	public hasViewportScaleLayoutElement(elementId: string): boolean {
+		return this.viewportScaleLayouts.has(elementId)
+	}
+
+	public getViewportScaleLayoutElementCount(): number {
+		return this.viewportScaleLayouts.size
+	}
+
+	/**
+	 * VisibilityManager transfers this set after its near-viewport query. Layouts
+	 * that become active are synchronized once because they may have skipped intervening scales.
+	 */
+	public replaceActiveViewportScaleLayoutElementIds(elementIds: Set<string>): void {
+		if (this.destroyed) return
+		const previousElementIds = this.activeViewportScaleLayoutElementIds
+		this.activeViewportScaleLayoutElementIds = elementIds
+		if (previousElementIds === null) return
+
+		let callbackCount = 0
+		this.runWithKonvaAutoDrawDisabled(() => {
+			elementIds.forEach((elementId) => {
+				if (previousElementIds.has(elementId)) return
+				callbackCount += this.invokeViewportScaleLayoutEntry(elementId)
+			})
+		})
+		if (callbackCount === 0) return
+
+		this.viewportScaleLayoutActivationCallbackCount += callbackCount
+		this.requestLayerDraw("content", {
+			source: "CanvasRuntimeScheduler",
+			reason: "viewport-layout-activate",
+			priority: "normal",
+		})
 	}
 
 	public requestLayerDraw(layerName: CanvasLayerName, request: CanvasLayerDrawRequest): void {
@@ -243,6 +357,34 @@ export class CanvasRuntimeScheduler {
 		this.lastFlushSkippedLayers = skippedLayers
 	}
 
+	private readonly flushViewportScaleLayouts = (): void => {
+		if (this.destroyed || this.viewportScaleLayouts.size === 0) return
+
+		let visitedElementCount = 0
+		let callbackCount = 0
+		this.runWithKonvaAutoDrawDisabled(() => {
+			const activeElementIds = this.activeViewportScaleLayoutElementIds
+			if (activeElementIds) {
+				activeElementIds.forEach((elementId) => {
+					if (!this.viewportScaleLayouts.has(elementId)) return
+					visitedElementCount += 1
+					callbackCount += this.invokeViewportScaleLayoutEntry(elementId)
+				})
+				return
+			}
+
+			this.viewportScaleLayouts.forEach((_entry, elementId) => {
+				visitedElementCount += 1
+				callbackCount += this.invokeViewportScaleLayoutEntry(elementId)
+			})
+		})
+
+		this.viewportScaleLayoutDispatchCount += 1
+		this.viewportScaleLayoutTotalCallbackCount += callbackCount
+		this.lastViewportScaleLayoutVisitedElementCount = visitedElementCount
+		this.lastViewportScaleLayoutCallbackCount = callbackCount
+	}
+
 	public getSnapshot(): CanvasRuntimeSchedulerSnapshot {
 		return {
 			destroyed: this.destroyed,
@@ -258,16 +400,59 @@ export class CanvasRuntimeScheduler {
 			lastFlushSkippedLayers: [...this.lastFlushSkippedLayers],
 			drawReasonCounts: Object.fromEntries(this.drawReasonCounts),
 			layers: createLayerSnapshot(this.layerStats, this.pendingDraws),
+			viewportScaleLayouts: {
+				registeredElementCount: this.viewportScaleLayouts.size,
+				registeredCallbackCount: this.viewportScaleLayoutCallbackCount,
+				activeElementCount:
+					this.activeViewportScaleLayoutElementIds?.size ??
+					this.viewportScaleLayouts.size,
+				dispatchCount: this.viewportScaleLayoutDispatchCount,
+				totalCallbackCount: this.viewportScaleLayoutTotalCallbackCount,
+				activationCallbackCount: this.viewportScaleLayoutActivationCallbackCount,
+				lastVisitedElementCount: this.lastViewportScaleLayoutVisitedElementCount,
+				lastCallbackCount: this.lastViewportScaleLayoutCallbackCount,
+			},
 		}
 	}
 
 	public destroy(): void {
 		this.destroyed = true
+		this.viewportScaleUnsubscribe?.()
+		this.viewportScaleUnsubscribe = undefined
 		if (this.frameHandle !== null) {
 			getRafScheduler().cancel(this.frameHandle)
 			this.frameHandle = null
 		}
 		this.pendingDraws.clear()
+		this.viewportScaleLayouts.clear()
+		this.activeViewportScaleLayoutElementIds = null
+		this.viewportScaleLayoutCallbackCount = 0
+	}
+
+	private invokeViewportScaleLayoutEntry(elementId: string): number {
+		const entry = this.viewportScaleLayouts.get(elementId)
+		if (!entry || entry.callbacks.size === 0) return 0
+
+		const callbacks = entry.snapshot ?? Array.from(entry.callbacks)
+		entry.snapshot = callbacks
+		callbacks.forEach((callback) => {
+			try {
+				callback()
+			} catch (error) {
+				console.error(`Error in viewport scale layout for element "${elementId}":`, error)
+			}
+		})
+		return callbacks.length
+	}
+
+	private runWithKonvaAutoDrawDisabled(callback: () => void): void {
+		const previousAutoDrawEnabled = Konva.autoDrawEnabled
+		Konva.autoDrawEnabled = false
+		try {
+			callback()
+		} finally {
+			Konva.autoDrawEnabled = previousAutoDrawEnabled
+		}
 	}
 
 	private scheduleFlush(): void {

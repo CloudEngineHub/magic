@@ -130,6 +130,7 @@ export class ImageElement extends BaseElement<ImageElementData> {
 	private isErrorState: boolean = false
 	private contentGroup?: Konva.Group
 	private contentUpdateHandler?: () => void
+	private contentViewportScaleUnsubscribe?: () => void
 	private contentPreviewUnsubscribe?: () => void
 	private effectiveContentId?: string
 	private effectiveContentSrc?: string
@@ -2796,8 +2797,11 @@ export class ImageElement extends BaseElement<ImageElementData> {
 			this.updateContentScale()
 		}
 
-		// 监听 viewport 缩放事件
-		this.canvas.eventEmitter.on("viewport:scale", this.contentUpdateHandler)
+		this.contentViewportScaleUnsubscribe =
+			this.canvas.runtimeScheduler.registerViewportScaleLayout(
+				this.data.id,
+				this.contentUpdateHandler,
+			)
 
 		// 监听 Group 的 transform 事件
 		group.on("transform", this.contentUpdateHandler)
@@ -2807,9 +2811,8 @@ export class ImageElement extends BaseElement<ImageElementData> {
 	 * 移除内容更新事件监听
 	 */
 	private removeContentUpdateListener(): void {
-		if (this.contentUpdateHandler) {
-			this.canvas.eventEmitter.off("viewport:scale", this.contentUpdateHandler)
-		}
+		this.contentViewportScaleUnsubscribe?.()
+		this.contentViewportScaleUnsubscribe = undefined
 
 		if (this.node instanceof Konva.Group && this.contentUpdateHandler) {
 			this.node.off("transform", this.contentUpdateHandler)

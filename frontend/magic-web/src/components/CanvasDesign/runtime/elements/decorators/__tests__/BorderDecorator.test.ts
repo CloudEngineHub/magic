@@ -5,8 +5,10 @@ import { DECORATOR_CONFIG } from "../DecoratorConfig"
 
 function createEventEmitterMock() {
 	const handlers = new Map<string, Array<() => void>>()
+	const viewportLayouts = new Map<string, Array<() => void>>()
 	return {
 		handlers,
+		viewportLayouts,
 		eventEmitter: {
 			on: vi.fn((eventType: string, handler: () => void) => {
 				const currentHandlers = handlers.get(eventType) ?? []
@@ -18,6 +20,19 @@ function createEventEmitterMock() {
 					eventType,
 					(handlers.get(eventType) ?? []).filter((current) => current !== handler),
 				)
+			}),
+		},
+		runtimeScheduler: {
+			registerViewportScaleLayout: vi.fn((elementId: string, handler: () => void) => {
+				viewportLayouts.set(elementId, [...(viewportLayouts.get(elementId) ?? []), handler])
+				return () => {
+					viewportLayouts.set(
+						elementId,
+						(viewportLayouts.get(elementId) ?? []).filter(
+							(current) => current !== handler,
+						),
+					)
+				}
 			}),
 		},
 	}
@@ -49,12 +64,17 @@ describe("BorderDecorator", () => {
 			stage.add(layer)
 			const group = new Konva.Group({ width: 120, height: 80, scaleX: 0.5, scaleY: 0.5 })
 			layer.add(group)
-			const { eventEmitter, handlers } = createEventEmitterMock()
+			const { eventEmitter, handlers, runtimeScheduler, viewportLayouts } =
+				createEventEmitterMock()
 			const isSelected = vi.fn(() => false)
 			const decorator = new BorderDecorator(group, 120, 80, {
 				isAnimated: false,
 				elementId: "image-1",
-				canvas: { eventEmitter, selectionManager: { isSelected } } as never,
+				canvas: {
+					eventEmitter,
+					runtimeScheduler,
+					selectionManager: { isSelected },
+				} as never,
 			})
 
 			decorator.create()
@@ -63,7 +83,7 @@ describe("BorderDecorator", () => {
 			isSelected.mockClear()
 
 			stage.scale({ x: 2, y: 2 })
-			handlers.get("viewport:scale")?.[0]?.()
+			viewportLayouts.get("image-1")?.[0]?.()
 
 			expect(border?.strokeWidth()).toBeCloseTo(DECORATOR_CONFIG.BORDER_WIDTH)
 			expect(isSelected).not.toHaveBeenCalled()
@@ -76,6 +96,7 @@ describe("BorderDecorator", () => {
 
 			const groupOffSpy = vi.spyOn(group, "off")
 			decorator.destroy()
+			expect(viewportLayouts.get("image-1")).toHaveLength(0)
 			expect(groupOffSpy).toHaveBeenCalledWith("transform", expect.any(Function))
 			stage.destroy()
 		} finally {

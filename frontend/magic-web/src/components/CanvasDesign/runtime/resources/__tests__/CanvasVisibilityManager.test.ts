@@ -233,6 +233,11 @@ function createConstructedManager(requestPreviewLoad = vi.fn()) {
 		},
 		imagePresentationScheduler,
 		runtimeScheduler: {
+			getViewportScaleLayoutElementIds: vi.fn(() => new Set<string>().values()),
+			hasViewportScaleLayoutElement: vi.fn(() => false),
+			getViewportScaleLayoutElementCount: vi.fn(() => 0),
+			replaceActiveViewportScaleLayoutElementIds: vi.fn(),
+			requestLayerDraw: vi.fn(),
 			getSnapshot: vi.fn(() => ({
 				drawRequestCount: 0,
 				flushCount: 0,
@@ -1774,7 +1779,7 @@ describe("CanvasVisibilityManager content layer hit graph suppression", () => {
 describe("CanvasVisibilityManager skipped pan visible refresh", () => {
 	type ViewportRect = { x: number; y: number; width: number; height: number }
 
-	it("reuses the covered viewport after far roots have been culled", () => {
+	it("reuses the cover while culled roots and inactive layouts remain outside the viewport", () => {
 		const manager = Object.create(CanvasVisibilityManager.prototype) as unknown as {
 			canvas: {
 				geometryCacheManager: {
@@ -1848,6 +1853,7 @@ describe("CanvasVisibilityManager skipped pan visible refresh", () => {
 							"image-visible",
 							"video-visible",
 							"audio-visible",
+							"layout-visible",
 						]
 					: [
 							"root-visible",
@@ -1860,6 +1866,8 @@ describe("CanvasVisibilityManager skipped pan visible refresh", () => {
 							"video-near",
 							"audio-visible",
 							"audio-near",
+							"layout-visible",
+							"layout-near",
 						]
 			},
 		)
@@ -1869,6 +1877,10 @@ describe("CanvasVisibilityManager skipped pan visible refresh", () => {
 				elementManager: { getAllElements: () => Array<{ id: string }> }
 				geometryCacheManager: {
 					queryElementIdsByExpandedRect: typeof queryElementIdsByExpandedRect
+				}
+				runtimeScheduler: {
+					getViewportScaleLayoutElementIds: () => IterableIterator<string>
+					hasViewportScaleLayoutElement: (elementId: string) => boolean
 				}
 			}
 			registeredImages: Map<string, { elementId: string; path: string }>
@@ -1882,11 +1894,17 @@ describe("CanvasVisibilityManager skipped pan visible refresh", () => {
 				includeRenderRoots: boolean,
 			) => Record<string, Set<string>>
 		}
+		const viewportLayoutElementIds = new Set(["layout-visible", "layout-near"])
 		manager.canvas = {
 			elementManager: {
 				getAllElements,
 			},
 			geometryCacheManager: { queryElementIdsByExpandedRect },
+			runtimeScheduler: {
+				getViewportScaleLayoutElementIds: () => viewportLayoutElementIds.values(),
+				hasViewportScaleLayoutElement: (elementId) =>
+					viewportLayoutElementIds.has(elementId),
+			},
 		}
 		manager.registeredImages = new Map([
 			["image-visible", { elementId: "image-visible", path: "visible.png" }],
@@ -1932,6 +1950,9 @@ describe("CanvasVisibilityManager skipped pan visible refresh", () => {
 			queryElementIdsByExpandedRect.mock.calls[1]?.[2]?.elementIds,
 		)
 		expect(result.renderActiveRootIds).toEqual(new Set(["root-visible", "root-near"]))
+		expect(result.activeViewportScaleLayoutElementIds).toEqual(
+			new Set(["layout-visible", "layout-near"]),
+		)
 		expect(result.visibleConsumerIds).toEqual(new Set(["consumer-visible"]))
 		expect(result.nearConsumerIds).toEqual(new Set(["consumer-near"]))
 		expect(result.visibleImageIds).toEqual(new Set(["image-visible"]))

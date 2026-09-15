@@ -21,7 +21,7 @@ interface MediaMainVersionTagDecoratorConfig {
 /** 媒体主版本标识：仅展示当前内容是否为主版本，不提供版本操作。 */
 export class MediaMainVersionTagDecorator {
 	private tag?: Konva.Group
-	private viewportHandler?: () => void
+	private viewportLayoutUnsubscribe?: () => void
 	private transformHandler?: () => void
 	private permissionChangedHandler?: () => void
 
@@ -91,10 +91,8 @@ export class MediaMainVersionTagDecorator {
 
 	public destroy(): void {
 		this.destroyTag()
-		if (this.viewportHandler) {
-			this.config.canvas.eventEmitter.off("viewport:scale", this.viewportHandler)
-			this.viewportHandler = undefined
-		}
+		this.viewportLayoutUnsubscribe?.()
+		this.viewportLayoutUnsubscribe = undefined
 		if (this.transformHandler) {
 			this.elementGroup.off("transform", this.transformHandler)
 			this.transformHandler = undefined
@@ -151,10 +149,13 @@ export class MediaMainVersionTagDecorator {
 	}
 
 	private setupListeners(): void {
-		if (!this.viewportHandler) {
+		if (!this.viewportLayoutUnsubscribe) {
 			// ViewportController 已为缩放帧请求整 Stage 绘制，这里只同步布局属性。
-			this.viewportHandler = () => this.updateLayout({ requestDraw: false })
-			this.config.canvas.eventEmitter.on("viewport:scale", this.viewportHandler)
+			this.viewportLayoutUnsubscribe =
+				this.config.canvas.runtimeScheduler.registerViewportScaleLayout(
+					this.config.data.id,
+					() => this.updateLayout({ requestDraw: false }),
+				)
 		}
 		if (!this.transformHandler) {
 			this.transformHandler = () => this.updateLayout()
