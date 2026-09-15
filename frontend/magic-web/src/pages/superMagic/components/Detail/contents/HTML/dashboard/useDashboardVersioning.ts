@@ -213,7 +213,6 @@ export function useDashboardVersioning({
 		dashboardDataJsFile?.file_id,
 		dashboardDataJsFile?.updated_at,
 		fileApi,
-		fileAccess,
 		fileAccessContentKey,
 		isDashboardHistoryDriven,
 		isSharePreview,
