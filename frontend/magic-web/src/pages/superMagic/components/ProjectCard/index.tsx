@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react"
-import { ChevronDown, Ellipsis, Layers, PanelLeftClose } from "lucide-react"
+import { Check, ChevronDown, Ellipsis, Layers, PanelLeftClose, X } from "lucide-react"
 import { useTranslation } from "react-i18next"
 import { cn } from "@/utils/cn"
 import type { ProjectCardProps, SeparatorProps } from "./types"
@@ -15,6 +15,7 @@ import ProjectActionsDropdown from "../ProjectActionsDropdown"
 import useProjectItemActionProps from "../EmptyWorkspacePanel/hooks/useProjectItemActionProps"
 import useProjectRename from "../../hooks/useProjectRename"
 import { Input } from "@/components/shadcn-ui/input"
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/shadcn-ui/tooltip"
 import { openProjectInNewTab } from "../../utils/project"
 import type { CollaborationProjectListItem, ProjectListItem } from "../../pages/Workspace/types"
 
@@ -134,7 +135,27 @@ function ProjectCard({
 			data-testid="project-card"
 		>
 			{/* Project Selector Section */}
-			<div className="flex w-full shrink-0 flex-col gap-0.5 px-3 pb-2 pt-2.5">
+			<div
+				className="flex w-full shrink-0 flex-col gap-0.5 px-3 pb-2 pt-2.5"
+				onBlur={(event) => {
+					if (!isEditing) return
+					// Tab 移到保存／取消按钮仍在编辑区内，离开整个区域才沿用失焦保存。
+					if (
+						event.relatedTarget instanceof HTMLElement &&
+						event.relatedTarget.hasAttribute("data-project-rename-control") &&
+						event.currentTarget.contains(event.relatedTarget)
+					)
+						return
+					void finishRename()
+				}}
+				onKeyDown={(event) => {
+					if (isEditing && event.key === "Escape" && !event.nativeEvent.isComposing) {
+						event.preventDefault()
+						event.stopPropagation()
+						void finishRename(true)
+					}
+				}}
+			>
 				{/* 两行共用 16px 图标列和 6px 间距；工作区入口不再单独缩进。 */}
 				<div className="flex h-7 min-w-0 items-center gap-1.5">
 					{isEditing ? (
@@ -144,7 +165,6 @@ function ProjectCard({
 							value={editingProjectName}
 							onChange={handleProjectNameChange}
 							onFocus={(event) => event.currentTarget.select()}
-							onBlur={() => void finishRename()}
 							onKeyDown={(event) => {
 								if (event.nativeEvent.isComposing) return
 								if (event.key === "Enter" || event.key === "Escape") {
@@ -155,6 +175,7 @@ function ProjectCard({
 							}}
 							aria-label={t("project.unnamedProject")}
 							data-testid="project-card-rename-input"
+							data-project-rename-control
 						/>
 					) : (
 						<>
@@ -184,6 +205,8 @@ function ProjectCard({
 							variant="ghost"
 							size="icon"
 							className="ml-auto h-7 w-7 shrink-0 text-muted-foreground"
+							// 编辑时 Tab 先到保存／取消；收起入口仍可点击，离开编辑区时保存。
+							tabIndex={isEditing ? -1 : undefined}
 							onClick={onCollapse}
 							aria-label={t("sidebarPanels.collapseFiles")}
 							title={t("sidebarPanels.collapseFiles")}
@@ -195,9 +218,42 @@ function ProjectCard({
 				</div>
 				<div className="flex h-7 min-w-0 items-center gap-1.5">
 					{isEditing ? (
-						<span className="text-xs text-muted-foreground">
-							{t("sidebarPanels.renameHint")}
-						</span>
+						<>
+							<Tooltip>
+								<TooltipTrigger asChild>
+									<Button
+										type="button"
+										variant="ghost"
+										className="h-[26px] gap-1 px-1.5 text-xs"
+										onPointerDown={(event) => event.preventDefault()}
+										onClick={() => void finishRename()}
+										data-testid="project-card-rename-save"
+										data-project-rename-control
+									>
+										<Check size={16} />
+										{t("common.save")}
+									</Button>
+								</TooltipTrigger>
+								<TooltipContent>{t("sidebarPanels.renameSave")}</TooltipContent>
+							</Tooltip>
+							<Tooltip>
+								<TooltipTrigger asChild>
+									<Button
+										type="button"
+										variant="ghost"
+										className="h-[26px] gap-1 px-1.5 text-xs text-muted-foreground"
+										onPointerDown={(event) => event.preventDefault()}
+										onClick={() => void finishRename(true)}
+										data-testid="project-card-rename-cancel"
+										data-project-rename-control
+									>
+										<X size={16} />
+										{t("common.cancel")}
+									</Button>
+								</TooltipTrigger>
+								<TooltipContent>{t("sidebarPanels.renameCancel")}</TooltipContent>
+							</Tooltip>
+						</>
 					) : (
 						<>
 							<button

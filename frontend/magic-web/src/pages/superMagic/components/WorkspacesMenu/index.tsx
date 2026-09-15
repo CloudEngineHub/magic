@@ -16,12 +16,12 @@ import { useWorkspaceActionMenu } from "../../hooks/useWorkspaceActionMenu"
 import workspaceStore from "../../stores/core/workspace"
 import SuperMagicService from "../../services"
 import { Workspace } from "../../pages/Workspace/types"
-import { preloadCreateWorkspaceModal, preloadCollaborationProjectsPanel } from "./preload"
+import { preloadCreateWorkspaceModal, preloadWorkspaceProjectsPanel } from "./preload"
 import { cn } from "@/utils/cn"
 import { useCreateWorkspace } from "../CreateWorkspaceModal/useCreateWorkspace"
 import { useWorkspaceDelete } from "./useWorkspaceDelete"
 
-const CollaborationProjectsPanel = lazy(() => import("./components/CollaborationProjectsPanel"))
+const WorkspaceProjectsPanel = lazy(() => import("./components/WorkspaceProjectsPanel"))
 
 interface WorkspaceActionButtonsProps {
 	workspace: Workspace
@@ -147,7 +147,7 @@ function WorkspacesMenu() {
 
 			// Preload modals when dropdown opens
 			preloadCreateWorkspaceModal()
-			preloadCollaborationProjectsPanel()
+			preloadWorkspaceProjectsPanel()
 
 			SuperMagicService.workspace
 				.fetchWorkspaces({
@@ -399,18 +399,10 @@ function WorkspacesMenu() {
 
 			{shareProjectsPanelOpen && (
 				<Suspense fallback={null}>
-					<CollaborationProjectsPanel
+					<WorkspaceProjectsPanel
 						open={shareProjectsPanelOpen}
+						initialSource={{ type: "collaboration" }}
 						onClose={() => setShareProjectsPanelOpen(false)}
-						onCollaborationProjectClick={(project) =>
-							SuperMagicService.switchProjectInDesktop(project)
-						}
-						workspaces={workspaces}
-						selectedWorkspace={selectedWorkspace}
-						fetchProjects={(params) => SuperMagicService.project.fetchProjects(params)}
-						fetchWorkspaces={(params) =>
-							SuperMagicService.workspace.fetchWorkspaces(params)
-						}
 					/>
 				</Suspense>
 			)}

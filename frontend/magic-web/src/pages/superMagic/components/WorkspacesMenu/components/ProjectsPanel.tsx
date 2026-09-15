@@ -1,6 +1,13 @@
-import { useRef, type ChangeEventHandler, type ComponentProps, type ReactNode } from "react"
+import {
+	useRef,
+	type ChangeEventHandler,
+	type ComponentProps,
+	type CSSProperties,
+	type ReactNode,
+} from "react"
 import { useTranslation } from "react-i18next"
 import { IconSearch, IconX } from "@tabler/icons-react"
+import type { DialogWindowOptions } from "@/hooks/use-dialog-window"
 import {
 	Dialog,
 	DialogContent,
@@ -12,11 +19,14 @@ import MagicIcon from "@/components/base/MagicIcon"
 import MagicSpin from "@/components/base/MagicSpin"
 import MagicEmpty from "@/components/base/MagicEmpty"
 import { cn } from "@/utils/cn"
-import type { ProjectListItem } from "@/pages/superMagic/pages/Workspace/types"
-import ProjectItem, { ViewMode } from "../../EmptyWorkspacePanel/components/ProjectItem"
+import {
+	CollaborationProjectType,
+	type ProjectListItem,
+} from "@/pages/superMagic/pages/Workspace/types"
+import ProjectItem, { SortType, ViewMode } from "../../EmptyWorkspacePanel/components/ProjectItem"
 
 const contentClassName = cn(
-	"h-[min(55vh,520px)] overflow-y-auto overflow-x-hidden bg-muted/20 p-3",
+	"min-h-0 flex-1 overflow-y-auto overflow-x-hidden bg-muted/20 p-3",
 	"[&::-webkit-scrollbar]:w-[6px]",
 	"[&::-webkit-scrollbar-thumb]:rounded-[4px] [&::-webkit-scrollbar-thumb]:bg-border",
 	"[&::-webkit-scrollbar-track]:bg-transparent",
@@ -25,6 +35,9 @@ const contentClassName = cn(
 interface ProjectsPanelProps {
 	open?: boolean
 	title: string
+	titleIcon?: ReactNode
+	location?: ReactNode
+	windowOptions?: DialogWindowOptions
 	description?: string
 	searchValue: string
 	onSearchValueChange: ChangeEventHandler<HTMLInputElement>
@@ -36,6 +49,9 @@ interface ProjectsPanelProps {
 export function ProjectsPanel({
 	open,
 	title,
+	titleIcon,
+	location,
+	windowOptions,
 	description,
 	searchValue,
 	onSearchValueChange,
@@ -55,7 +71,13 @@ export function ProjectsPanel({
 			{open && (
 				<DialogContent
 					showCloseButton={false}
-					className="!w-[min(960px,calc(100vw_-_32px))] !max-w-none gap-0 overflow-hidden p-0"
+					windowOptions={windowOptions}
+					className={cn(
+						"flex flex-col gap-0 rounded-xl p-0",
+						windowOptions ? "overflow-visible" : "overflow-hidden",
+						!windowOptions &&
+							"h-[min(680px,calc(100dvh_-_32px))] !w-[min(960px,calc(100vw_-_32px))] !max-w-none",
+					)}
 					onInteractOutside={(event) => event.preventDefault()}
 					onEscapeKeyDown={onClose}
 					onCloseAutoFocus={(event) => {
@@ -71,12 +93,25 @@ export function ProjectsPanel({
 					</DialogDescription>
 					{/* Dialog header */}
 					<div
-						className="flex items-center justify-between gap-3 border-b border-border px-5 py-4"
+						className={cn(
+							"flex min-h-[52px] shrink-0 items-center justify-between gap-2 border-b border-border px-4 py-2.5",
+							windowOptions?.draggable &&
+								"cursor-grab touch-none select-none active:cursor-grabbing",
+						)}
+						data-dialog-drag-handle
 						data-testid="shared-workspace-dialog-header"
 					>
-						<div className="flex min-w-0 flex-col gap-1">
+						{titleIcon && (
 							<div
-								className="overflow-hidden text-ellipsis whitespace-nowrap text-base font-semibold leading-[22px] text-foreground/80"
+								className="flex size-4 shrink-0 items-center justify-center text-muted-foreground"
+								aria-hidden="true"
+							>
+								{titleIcon}
+							</div>
+						)}
+						<div className="flex min-w-0 flex-1 flex-col gap-1">
+							<div
+								className="overflow-hidden text-ellipsis whitespace-nowrap text-sm font-medium leading-5 text-foreground"
 								data-testid="shared-workspace-dialog-title"
 							>
 								{title}
@@ -109,10 +144,16 @@ export function ProjectsPanel({
 						</div>
 					</div>
 
-					<div className="flex min-h-0 min-w-0">
+					{/* 高度从窗口逐层传到滚动区；缩放时标题、搜索和工具栏仍保持可见。 */}
+					<div className="flex min-h-0 min-w-0 flex-1 overflow-hidden rounded-b-xl">
 						{sidebar}
-						<div className="min-w-0 flex-1">
-							<div className="border-b border-border px-4 py-3">
+						<div className="flex min-h-0 min-w-0 flex-1 flex-col">
+							{location && (
+								<div className="flex shrink-0 items-center gap-2 px-4 pt-3 text-sm font-medium [&_svg]:shrink-0">
+									{location}
+								</div>
+							)}
+							<div className="shrink-0 border-b border-border px-4 py-3">
 								<div
 									className="relative"
 									data-testid="shared-workspace-dialog-search"
@@ -133,6 +174,15 @@ export function ProjectsPanel({
 							{children}
 						</div>
 					</div>
+					{windowOptions?.resizable && (
+						<span
+							aria-hidden="true"
+							className="pointer-events-none absolute bottom-1 right-1 size-3 text-muted-foreground/60"
+						>
+							<span className="absolute bottom-1 right-0 h-px w-3 -rotate-45 bg-current" />
+							<span className="absolute bottom-0.5 right-0 h-px w-1.5 -rotate-45 bg-current" />
+						</span>
+					)}
 				</DialogContent>
 			)}
 		</Dialog>
@@ -145,7 +195,7 @@ interface ProjectsPanelListProps<T extends ProjectListItem> {
 	viewMode: ViewMode
 	toolbar: ReactNode
 	itemProps: Omit<ComponentProps<typeof ProjectItem<T>>, "project" | "index" | "viewMode">
-	tabType?: string
+	tabType?: CollaborationProjectType
 	error?: ReactNode
 	footer?: ReactNode
 	emptyContent?: ReactNode
@@ -167,11 +217,37 @@ export function ProjectsPanelList<T extends ProjectListItem>({
 	total,
 }: ProjectsPanelListProps<T>) {
 	const { t } = useTranslation("super")
+	const isList = viewMode === ViewMode.LIST
+	const isShared = !!itemProps.inCollaborationPanel
+	const showCreator = isShared && tabType === CollaborationProjectType.Received
+	// 表头与条目共用列宽；800px 可容纳最完整的人员列和至少 120px 名称，窄容器改为多行。
+	const listStyle: CSSProperties & { "--project-list-columns": string } = {
+		"--project-list-columns": showCreator
+			? "16px minmax(120px,1fr) [creator] 144px [members] 128px [time] 176px [actions] 32px"
+			: isShared
+				? "16px minmax(120px,1fr) [members] 128px [time] 176px [actions] 128px"
+				: "16px minmax(120px,1fr) [time] 176px [actions] 32px",
+	}
+	const timeHeading =
+		itemProps.sortType === SortType.MY_LAST_ACTIVE_TIME
+			? t("sidebarPanels.lastActiveTime")
+			: itemProps.sortType === SortType.PROJECT_CREATE_TIME
+				? t("sidebarPanels.createdTime")
+				: t("sidebarPanels.updatedTime")
 	return (
-		<MagicSpin section spinning={loading}>
-			<div data-testid="shared-workspace-dialog-project-list" data-tab-type={tabType}>
+		<MagicSpin
+			section
+			spinning={loading}
+			className="flex min-h-0 flex-1 flex-col"
+			innerClassName="flex min-h-0 flex-1 flex-col"
+		>
+			<div
+				className="flex min-h-0 flex-1 flex-col"
+				data-testid="shared-workspace-dialog-project-list"
+				data-tab-type={tabType}
+			>
 				{/* Control bar */}
-				<div className="border-b border-border px-4 py-3">
+				<div className="shrink-0 border-b border-border px-4 py-3">
 					<div className="flex min-w-0 flex-wrap items-center justify-between gap-2.5">
 						<div className="shrink-0 text-sm font-semibold leading-5 text-foreground/80 opacity-80">
 							{t("workspace.projects")} · {total ?? projects.length}
@@ -182,14 +258,26 @@ export function ProjectsPanelList<T extends ProjectListItem>({
 					</div>
 				</div>
 				{/* Project list */}
-				<div className={contentClassName}>
+				<div
+					className={cn(contentClassName, isList && "[container-type:inline-size]")}
+					style={isList ? listStyle : undefined}
+				>
 					{error}
+					{isList && projects.length > 0 && (
+						<div className="hidden items-center gap-x-3 border-b border-border px-3 py-2 text-xs text-muted-foreground [grid-template-columns:var(--project-list-columns)] [@container_(min-width:800px)]:grid">
+							<span className="col-span-2">{t("sidebarPanels.projectName")}</span>
+							{showCreator && <span>{t("collaborators.creator")}</span>}
+							{isShared && <span>{t("collaborators.collaborator")}</span>}
+							<span>{timeHeading}</span>
+							<span className="sr-only">{t("common.moreActions")}</span>
+						</div>
+					)}
 					<div
 						className={cn(
-							"grid gap-2",
+							"grid",
 							viewMode === ViewMode.LIST
 								? "grid-cols-1"
-								: "[grid-template-columns:repeat(auto-fill,minmax(min(100%,240px),1fr))]",
+								: "gap-2 [grid-template-columns:repeat(auto-fill,minmax(min(100%,240px),1fr))]",
 						)}
 						data-testid="shared-workspace-dialog-project-list-layout"
 						data-view-mode={viewMode}
@@ -203,7 +291,9 @@ export function ProjectsPanelList<T extends ProjectListItem>({
 								aria-current={selectedProjectId === item.id ? true : undefined}
 								className={cn(
 									selectedProjectId === item.id &&
-										"rounded-lg [&_[data-testid=project-item]]:border-primary [&_[data-testid=project-item]]:bg-primary/5",
+										(isList
+											? "[&_[data-testid=project-item]]:bg-primary/5"
+											: "rounded-lg [&_[data-testid=project-item]]:border-primary [&_[data-testid=project-item]]:bg-primary/5"),
 								)}
 								data-project-name={item.project_name || t("project.unnamedProject")}
 							>
@@ -213,6 +303,7 @@ export function ProjectsPanelList<T extends ProjectListItem>({
 									index={index}
 									viewMode={viewMode}
 									variant="compact"
+									collaborationType={tabType}
 								/>
 							</div>
 						))}

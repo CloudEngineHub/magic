@@ -16,7 +16,6 @@ import {
 } from "@/components/shadcn-ui/sidebar"
 import workspaceStore from "@/pages/superMagic/stores/core/workspace"
 import { isCollaborationWorkspace } from "@/pages/superMagic/constants"
-import SuperMagicService from "@/pages/superMagic/services"
 import AppsSubMenu from "./AppsSubMenu"
 import ChatsSubMenu from "./ChatsSubMenu"
 import useNavigate from "@/routes/hooks/useNavigate"
@@ -31,9 +30,8 @@ import { useNavigateToSuperHome } from "./hooks/useNavigateToSuperHome"
 import { isMagicApp } from "@/utils/devices"
 import { openAudioRecordingsInMagicApp } from "@/layouts/BaseLayout/utils/magicAppNavigation"
 
-const CollaborationProjectsPanel = lazy(
-	() =>
-		import("@/pages/superMagic/components/WorkspacesMenu/components/CollaborationProjectsPanel"),
+const WorkspaceProjectsPanel = lazy(
+	() => import("@/pages/superMagic/components/WorkspacesMenu/components/WorkspaceProjectsPanel"),
 )
 
 function SidebarContent({ collapsed }: SidebarContentProps) {
@@ -42,7 +40,6 @@ function SidebarContent({ collapsed }: SidebarContentProps) {
 	const clawBrandValues = getClawBrandTranslationValues()
 	const [shareProjectsPanelOpen, setShareProjectsPanelOpen] = useState(false)
 	const location = useLocation()
-	const workspaces = workspaceStore.workspaces
 	const selectedWorkspace = workspaceStore.selectedWorkspace
 	const isShareWorkspaceActive = isCollaborationWorkspace(selectedWorkspace)
 	const navigate = useNavigate()
@@ -201,18 +198,10 @@ function SidebarContent({ collapsed }: SidebarContentProps) {
 
 			{shareProjectsPanelOpen && (
 				<Suspense fallback={null}>
-					<CollaborationProjectsPanel
+					<WorkspaceProjectsPanel
 						open={shareProjectsPanelOpen}
+						initialSource={{ type: "collaboration" }}
 						onClose={() => setShareProjectsPanelOpen(false)}
-						onCollaborationProjectClick={(project) =>
-							SuperMagicService.switchProjectInDesktop(project)
-						}
-						workspaces={workspaces}
-						selectedWorkspace={selectedWorkspace}
-						fetchProjects={(params) => SuperMagicService.project.fetchProjects(params)}
-						fetchWorkspaces={(params) =>
-							SuperMagicService.workspace.fetchWorkspaces(params)
-						}
 					/>
 				</Suspense>
 			)}
