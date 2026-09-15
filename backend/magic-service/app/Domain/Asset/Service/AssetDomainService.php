@@ -25,7 +25,6 @@ use App\Infrastructure\Core\ValueObject\Page;
 use App\Infrastructure\ExternalAPI\Assets\VolcengineArkAssetProvider;
 use Hyperf\Coroutine\Coroutine;
 use Psr\Log\LoggerInterface;
-use Psr\Log\NullLogger;
 use Throwable;
 
 /**
