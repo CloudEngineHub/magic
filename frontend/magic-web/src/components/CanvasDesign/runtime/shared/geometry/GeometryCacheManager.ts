@@ -2,6 +2,10 @@ import type { Canvas } from "../../core/Canvas"
 import type { LayerElement } from "../../document/types"
 import type { Rect } from "../ids"
 
+interface GeometrySpatialQueryOptions {
+	elementIds?: Iterable<string>
+}
+
 function cloneRect(rect: Rect | null): Rect | null {
 	if (!rect) return null
 	return { ...rect }
@@ -140,10 +144,14 @@ export class GeometryCacheManager {
 	public queryElementIdsByExpandedRect(
 		rect: Rect,
 		padding: number,
-		options?: { elementIds?: Iterable<string> },
+		options?: GeometrySpatialQueryOptions,
 	): string[] {
 		const queryRect = expandRect(rect, padding)
-		const allowedIds = options?.elementIds ? new Set(options.elementIds) : null
+		const candidateElementIds = options?.elementIds
+		const existingSetFilter = candidateElementIds instanceof Set ? candidateElementIds : null
+		const allowedIds: ReadonlySet<string> | null = candidateElementIds
+			? (existingSetFilter ?? new Set(candidateElementIds))
+			: null
 		const estimatedCellCount = this.getCellCountForRect(queryRect)
 
 		if (allowedIds && this.shouldDirectScanAllowedIds(allowedIds, estimatedCellCount)) {
@@ -254,19 +262,23 @@ export class GeometryCacheManager {
 		this.spatialIndex.clear()
 		this.elementSpatialCells.clear()
 
-		for (const elementId of this.canvas.elementManager.getAllElementIds()) {
+		const elementIds = this.canvas.elementManager.getAllElementIds()
+		for (const elementId of elementIds) {
 			this.addElementToSpatialIndex(elementId)
 		}
 
 		this.spatialIndexDirty = false
 	}
 
-	private shouldDirectScanAllowedIds(allowedIds: Set<string>, cellCount: number): boolean {
+	private shouldDirectScanAllowedIds(
+		allowedIds: ReadonlySet<string>,
+		cellCount: number,
+	): boolean {
 		if (allowedIds.size === 0) return true
 		return cellCount > allowedIds.size * DIRECT_SCAN_CELL_TO_ALLOWED_RATIO
 	}
 
-	private queryAllowedIdsByRect(allowedIds: Set<string>, queryRect: Rect): string[] {
+	private queryAllowedIdsByRect(allowedIds: ReadonlySet<string>, queryRect: Rect): string[] {
 		const result: string[] = []
 		allowedIds.forEach((elementId) => {
 			if (!this.canvas.elementManager.isElementVisibleInDataTree(elementId)) return

@@ -39,24 +39,32 @@ export class CanvasRenderVisibilityController {
 	}
 
 	public sync(options: CanvasRenderVisibilitySyncOptions): CanvasRenderVisibilitySyncResult {
-		const activeElementIds = new Set(options.activeElementIds)
-		const allElementIds = Array.from(options.allElementIds)
+		const activeElementIds: ReadonlySet<string> =
+			options.activeElementIds instanceof Set
+				? options.activeElementIds
+				: new Set(options.activeElementIds)
 		let hiddenCount = 0
 		let restoredCount = 0
 
-		activeElementIds.forEach((elementId) => {
-			if (this.restoreElement(elementId)) {
-				restoredCount += 1
-			}
-		})
+		// Until the first far-node drain there is nothing to restore. Avoid walking every active
+		// root on normal viewport refreshes, which is the common path for a newly opened canvas.
+		if (this.culledElements.size > 0) {
+			activeElementIds.forEach((elementId) => {
+				if (this.restoreElement(elementId)) {
+					restoredCount += 1
+				}
+			})
+		}
 
 		if (options.allowCullFar) {
-			allElementIds.forEach((elementId) => {
-				if (activeElementIds.has(elementId)) return
+			// Full document enumeration is only needed by the delayed far-node drain. Viewport
+			// movement still restores active nodes, but must not enumerate every root on each frame.
+			for (const elementId of options.allElementIds) {
+				if (activeElementIds.has(elementId)) continue
 				if (this.hideElement(elementId)) {
 					hiddenCount += 1
 				}
-			})
+			}
 		}
 
 		if (hiddenCount > 0 || restoredCount > 0) {

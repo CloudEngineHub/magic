@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest"
+import { describe, expect, it, vi } from "vitest"
 import { GeometryCacheManager } from "../../shared/geometry/GeometryCacheManager"
 
 function createManager(
@@ -82,6 +82,26 @@ describe("GeometryCacheManager", () => {
 		)
 
 		expect(ids).toEqual(["allowed"])
+	})
+
+	it("reuses a candidate Set without copying it before an indexed query", () => {
+		const manager = createManager(
+			new Map([
+				["allowed", { x: 0, y: 0, width: 100, height: 100 }],
+				["excluded", { x: 20, y: 20, width: 100, height: 100 }],
+			]),
+		)
+		const allowedIds = new Set(["allowed"])
+		const iteratorSpy = vi.spyOn(allowedIds, Symbol.iterator)
+
+		const ids = manager.queryElementIdsByExpandedRect(
+			{ x: 0, y: 0, width: 200, height: 200 },
+			0,
+			{ elementIds: allowedIds },
+		)
+
+		expect(ids).toEqual(["allowed"])
+		expect(iteratorSpy).not.toHaveBeenCalled()
 	})
 
 	it("directly scans candidate ids when a huge query would enumerate too many cells", () => {

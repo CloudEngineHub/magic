@@ -49,7 +49,9 @@ export function useSharedMediaResourceScope(): string {
 					userInfo?.user_id,
 				]
 			},
-			() => setScope(getSharedMediaResourceScope()),
+			() => {
+				setScope(getSharedMediaResourceScope())
+			},
 			{
 				fireImmediately: true,
 			},

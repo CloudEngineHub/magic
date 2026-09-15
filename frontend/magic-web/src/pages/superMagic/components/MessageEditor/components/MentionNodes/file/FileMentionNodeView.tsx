@@ -43,7 +43,10 @@ function FileMentionNodeView({ attrs, deleteNode, selected }: MentionNodeViewRen
 		: undefined
 	const fileName = liveFile?.name || getMentionDisplayName(mention)
 	const file = liveFile?.file || uploadData?.file || null
-	const mediaSource = useMentionMediaSource({ data: mention, uploadFile: file })
+	const mediaSource = useMentionMediaSource({
+		data: mention,
+		uploadFile: file,
+	})
 	const { mediaType } = mediaSource
 	const status = liveFile?.status ?? uploadData?.upload_status
 	const progress = toDisplayUploadProgress(liveFile?.progress ?? uploadData?.upload_progress) ?? 0
