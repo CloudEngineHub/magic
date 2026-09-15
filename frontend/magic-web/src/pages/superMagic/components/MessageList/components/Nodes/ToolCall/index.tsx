@@ -10,7 +10,7 @@ import pubsub, { PubSubEvents } from "@/utils/pubsub"
 import { filterClickableMessageWithoutRevoked } from "@/pages/superMagic/utils/handleMessage"
 import { getToolDesignProjectInfo } from "@/pages/superMagic/components/Detail/contents/Design/utils/toolDesignProjectInfo"
 import {
-	resolveToolFileId,
+	getToolCardInteractionTarget,
 	selectSourceFileFromTool,
 	selectToolDetail,
 } from "../toolDetailSelection"
@@ -41,57 +41,41 @@ function ToolCall(props: NodeProps) {
 		data?: Record<string, unknown>
 		[key: string]: unknown
 	}) => {
-		switch (tool?.name) {
-			// 旧(保留,用于兼容旧消息)
-			case "create_design_project":
-			case "create_canvas_element":
-			case "update_canvas_element":
-			case "batch_create_canvas_elements":
-			case "batch_update_canvas_elements":
-			case "reorder_canvas_elements":
-			case "query_canvas_overview":
-			case "query_canvas_element":
-			case "generate_images_to_canvas":
-			case "search_images_to_canvas":
-			case "generate_videos_to_canvas":
-			case "query_video_generation":
-			case "create_canvas": // 新
-			case "generate_canvas_images": // 新
-			case "generate_canvas_videos": // 新
-				const { designProjectId, designProject, elements } = getToolDesignProjectInfo(tool)
-				if (!designProjectId) return
-				pubsub.publish(PubSubEvents.Open_File_Tab, {
-					...designProject,
-					fileId: designProjectId,
-				})
-				if (elements.length > 0 && designProjectId) {
-					// 延迟等待tab打开
-					setTimeout(() => {
-						pubsub.publish(PubSubEvents.Super_Magic_Focus_Canvas_Element, {
-							canvasDesignId: designProjectId,
-							elementIds: elements.map((item) => item.id),
-							selectElement: [elements[0].id],
-							animated: false,
-							padding: {
-								top: "25%",
-								right: "25%",
-								bottom: "25%",
-								left: "25%",
-							},
-						})
-					}, 200)
-				}
-				return
-			default:
-				break
+		const target = getToolCardInteractionTarget(tool?.name, detail)
+		if (target.type === "disabled") return
+
+		if (target.type === "design") {
+			const { designProjectId, designProject, elements } = getToolDesignProjectInfo(tool)
+			if (!designProjectId) return
+			pubsub.publish(PubSubEvents.Open_File_Tab, {
+				...designProject,
+				fileId: designProjectId,
+			})
+			if (elements.length > 0) {
+				// 延迟等待tab打开
+				setTimeout(() => {
+					pubsub.publish(PubSubEvents.Super_Magic_Focus_Canvas_Element, {
+						canvasDesignId: designProjectId,
+						elementIds: elements.map((item) => item.id),
+						selectElement: [elements[0].id],
+						animated: false,
+						padding: {
+							top: "25%",
+							right: "25%",
+							bottom: "25%",
+							left: "25%",
+						},
+					})
+				}, 200)
+			}
+			return
 		}
 		// Prefer file navigation when the id exists in attachments; otherwise open playback.
-		const fileId = resolveToolFileId(detail?.data)
 		if (
-			fileId &&
+			target.type === "file" &&
 			selectSourceFileFromTool({
 				detail,
-				fileId,
+				fileId: target.fileId,
 				onSelectDetail,
 			})
 		) {
@@ -104,7 +88,6 @@ function ToolCall(props: NodeProps) {
 	const onProxyClick = () => {
 		const toolInfo = pick(tool, ["name", "url", "action", "remark", "id"])
 		const newDetail = { ...tool?.detail, ...toolInfo }
-		console.log("往上传递数据", newDetail, toolInfo, node)
 		if (!filterClickableMessageWithoutRevoked(node, props?.node) || isEmpty(tool?.detail)) {
 			return
 		}
