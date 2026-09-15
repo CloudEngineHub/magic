@@ -48,6 +48,9 @@ import { SuperMagicApiErrorCode } from "@/pages/superMagic/constants/apiErrorCod
 import { requestProjectAttachmentsFullRefresh } from "@/pages/superMagic/services/attachmentsTopicSync"
 import { documentExportService } from "@/pages/superMagic/services/documentExport"
 import { isLargeMarkdownContent } from "./components/EditorBody/largeMarkdown"
+import { useDevicePreview } from "../../components/DevicePreview/useDevicePreview"
+import { DevicePreviewToolbar } from "../../components/DevicePreview/DevicePreviewToolbar"
+import { DevicePreviewViewport } from "../../components/DevicePreview/DevicePreviewViewport"
 
 interface TextEditorProps {
 	textFileSession?: TextFileSession
@@ -239,6 +242,12 @@ export default memo(function TextEditor(props: TextEditorProps) {
 	const [internalViewMode, setInternalViewMode] = useState<"code" | "desktop" | "phone">(viewMode)
 	// The phone frame has fixed dimensions and its own clipping; pure shares need page scrolling.
 	const shouldUsePhoneFrame = !documentFlowFullscreen && internalViewMode === "phone"
+	const devicePreview = useDevicePreview(
+		String(selectedProject?.id || ""),
+		String(displayData?.file_id || ""),
+	)
+	const devicePreviewEnabled =
+		shouldUsePhoneFrame && !isMobile && showFileHeader && !isPlaybackMode
 
 	// 计算当前的内容源 - savedContent 优先于 fileData 和 displayData?.content
 	const currentContent =
@@ -977,6 +986,12 @@ export default memo(function TextEditor(props: TextEditorProps) {
 						extraMoreMenuItems={aiEditMenuItems}
 					/>
 				)}
+				{devicePreviewEnabled && (
+					<DevicePreviewToolbar
+						{...devicePreview}
+						active={isTabActive && !loading && !isDeleted}
+					/>
+				)}
 				{textFileSession?.loadError ? (
 					<DetailEmpty
 						title={t("common.fileNotFoundOrLoadFailed")}
@@ -999,62 +1014,72 @@ export default memo(function TextEditor(props: TextEditorProps) {
 								? "min-h-dvh flex-1 overflow-visible transition-[background-color_0.4s_cubic-bezier(0.4,0,0.2,1)]"
 								: "min-h-0 flex-1 transition-[background-color_0.4s_cubic-bezier(0.4,0,0.2,1)]",
 							!documentFlowFullscreen &&
-								(internalViewMode === "code" ? "overflow-hidden" : "overflow-auto"),
+								(internalViewMode === "code" || devicePreviewEnabled
+									? "overflow-hidden"
+									: "overflow-auto"),
 							shouldUsePhoneFrame &&
+								!devicePreviewEnabled &&
 								"flex w-full items-center justify-center bg-muted",
 						)}
 					>
-						<div
-							className={cn(
-								documentFlowFullscreen
-									? "m-auto min-h-dvh w-full flex-none overflow-visible transition-[width_0.4s_cubic-bezier(0.4,0,0.2,1),border-radius_0.4s_cubic-bezier(0.4,0,0.2,1),background-color_0.4s_cubic-bezier(0.4,0,0.2,1),box-shadow_0.4s_cubic-bezier(0.4,0,0.2,1)]"
-									: "m-auto h-full min-h-0 w-full flex-none transition-[width_0.4s_cubic-bezier(0.4,0,0.2,1),border-radius_0.4s_cubic-bezier(0.4,0,0.2,1),background-color_0.4s_cubic-bezier(0.4,0,0.2,1),box-shadow_0.4s_cubic-bezier(0.4,0,0.2,1)]",
-								!documentFlowFullscreen &&
-									internalViewMode === "code" &&
-									"overflow-hidden",
-								shouldUsePhoneFrame &&
-									"!my-5 h-[calc(100%-40px)] w-[416px] flex-none overflow-hidden rounded-lg border border-border bg-background shadow-[0_4px_14px_0_rgba(0,0,0,0.1),0_0_1px_0_rgba(0,0,0,0.3)]",
-							)}
+						<DevicePreviewViewport
+							{...devicePreview}
+							active={isTabActive}
+							enabled={devicePreviewEnabled}
 						>
-							<EditorBody
-								selectionRootRef={markdownSelection.selectionRootRef}
-								enableSourceLocation={
-									!!allowEdit &&
-									!isMobile &&
-									!isEditMode &&
-									internalViewMode !== "code"
-								}
-								isLoading={isLoading}
-								viewMode={internalViewMode as "code" | "markdown"}
-								language={language}
-								content={currentContent}
-								processedContent={processedContent}
+							<div
 								className={cn(
 									documentFlowFullscreen
-										? "min-h-dvh flex-1 overflow-visible bg-background text-base"
-										: "h-full min-h-0 flex-1 bg-background text-base [&::-webkit-scrollbar-thumb]:rounded [&::-webkit-scrollbar-thumb]:bg-black/15 dark:[&::-webkit-scrollbar-thumb]:bg-white/20 [&::-webkit-scrollbar-track]:bg-transparent [&::-webkit-scrollbar]:w-1.5",
+										? "m-auto min-h-dvh w-full flex-none overflow-visible transition-[width_0.4s_cubic-bezier(0.4,0,0.2,1),border-radius_0.4s_cubic-bezier(0.4,0,0.2,1),background-color_0.4s_cubic-bezier(0.4,0,0.2,1),box-shadow_0.4s_cubic-bezier(0.4,0,0.2,1)]"
+										: "m-auto h-full min-h-0 w-full flex-none transition-[width_0.4s_cubic-bezier(0.4,0,0.2,1),border-radius_0.4s_cubic-bezier(0.4,0,0.2,1),background-color_0.4s_cubic-bezier(0.4,0,0.2,1),box-shadow_0.4s_cubic-bezier(0.4,0,0.2,1)]",
 									!documentFlowFullscreen &&
-										(internalViewMode === "code"
-											? "overflow-hidden"
-											: "overflow-auto whitespace-pre-wrap"),
-									internalViewMode === "code" && "[&_>_pre]:!bg-background",
+										internalViewMode === "code" &&
+										"overflow-hidden",
+									shouldUsePhoneFrame &&
+										!devicePreviewEnabled &&
+										"!my-5 h-[calc(100%-40px)] w-[416px] flex-none overflow-hidden rounded-lg border border-border bg-background shadow-[0_4px_14px_0_rgba(0,0,0,0.1),0_0_1px_0_rgba(0,0,0,0.3)]",
 								)}
-								isEditMode={isEditMode}
-								editContent={editContent}
-								setEditContent={setEditContent}
-								selectedProject={selectedProject}
-								currentDocumentPath={relativeFilePath}
-								urlResolver={urlResolver}
-								attachments={attachments}
-								onOpenFile={openFileTab}
-								resolveRelativeFile={resolveRelativeFile}
-								placeholder={t("fileViewer.placeholder.content")}
-								resolveImagesFolderParentId={resolveImagesFolderParentId}
-								suppressLoadingIndicator={documentFlowFullscreen}
-								documentFlowFullscreen={documentFlowFullscreen}
-								isTabActive={isTabActive}
-							/>
-						</div>
+							>
+								<EditorBody
+									selectionRootRef={markdownSelection.selectionRootRef}
+									enableSourceLocation={
+										!!allowEdit &&
+										!isMobile &&
+										!isEditMode &&
+										internalViewMode !== "code"
+									}
+									isLoading={isLoading}
+									viewMode={internalViewMode as "code" | "markdown"}
+									language={language}
+									content={currentContent}
+									processedContent={processedContent}
+									className={cn(
+										documentFlowFullscreen
+											? "min-h-dvh flex-1 overflow-visible bg-background text-base"
+											: "h-full min-h-0 flex-1 bg-background text-base [&::-webkit-scrollbar-thumb]:rounded [&::-webkit-scrollbar-thumb]:bg-black/15 dark:[&::-webkit-scrollbar-thumb]:bg-white/20 [&::-webkit-scrollbar-track]:bg-transparent [&::-webkit-scrollbar]:w-1.5",
+										!documentFlowFullscreen &&
+											(internalViewMode === "code"
+												? "overflow-hidden"
+												: "overflow-auto whitespace-pre-wrap"),
+										internalViewMode === "code" && "[&_>_pre]:!bg-background",
+									)}
+									isEditMode={isEditMode}
+									editContent={editContent}
+									setEditContent={setEditContent}
+									selectedProject={selectedProject}
+									currentDocumentPath={relativeFilePath}
+									urlResolver={urlResolver}
+									attachments={attachments}
+									onOpenFile={openFileTab}
+									resolveRelativeFile={resolveRelativeFile}
+									placeholder={t("fileViewer.placeholder.content")}
+									resolveImagesFolderParentId={resolveImagesFolderParentId}
+									suppressLoadingIndicator={documentFlowFullscreen}
+									documentFlowFullscreen={documentFlowFullscreen}
+									isTabActive={isTabActive}
+								/>
+							</div>
+						</DevicePreviewViewport>
 					</div>
 				)}
 				{/* 底部 */}

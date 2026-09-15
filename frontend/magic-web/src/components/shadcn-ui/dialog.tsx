@@ -76,6 +76,7 @@ type DialogContentProps = React.ComponentPropsWithoutRef<typeof DialogPrimitive.
 	overlayClassName?: string
 	overlayStyle?: React.CSSProperties
 	windowOptions?: DialogWindowOptions
+	container?: React.ComponentProps<typeof DialogPrimitive.Portal>["container"]
 }
 
 const DialogContent = React.forwardRef<
@@ -91,6 +92,7 @@ const DialogContent = React.forwardRef<
 		closeButtonTestId,
 		style,
 		windowOptions,
+		container,
 		onPointerDown,
 		onPointerMove,
 		onPointerUp,
@@ -109,7 +111,7 @@ const DialogContent = React.forwardRef<
 	const windowInteraction = useDialogWindow(windowOptions)
 
 	return (
-		<DialogPortal data-slot="dialog-portal">
+		<DialogPortal data-slot="dialog-portal" container={container}>
 			<DialogOverlay className={overlayClassName} style={{ ...overlayStyle, zIndex }} />
 			<DialogPrimitive.Content
 				ref={ref}

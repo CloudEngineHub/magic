@@ -28,6 +28,9 @@ import {
 } from "./utils"
 import { useDeepCompareEffect, useMemoizedFn, useUpdateEffect } from "ahooks"
 import CommonHeaderV2 from "../../components/CommonHeaderV2"
+import { useDevicePreview } from "../../components/DevicePreview/useDevicePreview"
+import { DevicePreviewToolbar } from "../../components/DevicePreview/DevicePreviewToolbar"
+import { DevicePreviewViewport } from "../../components/DevicePreview/DevicePreviewViewport"
 import { Flex, Tour } from "antd"
 import { shadow } from "@/utils/shadow"
 import CodeEditor from "@/components/base/CodeEditor"
@@ -285,6 +288,13 @@ export default memo(function HTML(props: HTMLProps) {
 	const isImmersiveLayout = !showFileHeader && !showFooter
 	// The simulated phone frame has a fixed height and cannot be used for page-level scrolling.
 	const shouldUsePhonePreviewFrame = !documentFlowFullscreen && viewMode === "phone"
+	const devicePreview = useDevicePreview(
+		String(runtimeProjectId || ""),
+		String(displayData?.file_id || ""),
+	)
+	const devicePreviewEnabled =
+		shouldUsePhonePreviewFrame && !isMobile && showFileHeader && !isPlaybackMode && !isInPPTMode
+	const [deviceContentScaled, setDeviceContentScaled] = useState(false)
 	// 通过 previewPolicy 声明能力，详情页消费配置
 	const previewPolicy = displayData?.display_config?.previewPolicy
 	const isReadonlyPreview = previewPolicy?.readonly === true
@@ -1577,6 +1587,13 @@ export default memo(function HTML(props: HTMLProps) {
 			data-edit-mode={isEditMode ? "true" : "false"}
 		>
 			{showFileHeader && <CommonHeaderV2 {...headerContext} />}
+			{devicePreviewEnabled && (
+				<DevicePreviewToolbar
+					{...devicePreview}
+					active={htmlTestIdsEnabled && !activeHistory.loading && !htmlIsDeleted}
+					contentScaled={!isDataAnalysis && deviceContentScaled}
+				/>
+			)}
 			{activeHistory.loading ? (
 				documentFlowFullscreen ? (
 					<div className="min-h-dvh" />
@@ -1612,7 +1629,8 @@ export default memo(function HTML(props: HTMLProps) {
 				<div
 					data-testid={htmlTestIdsEnabled ? "html-preview-container" : undefined}
 					className={cx(styles.previewContainerBase, {
-						[styles.phoneModeContainer]: shouldUsePhonePreviewFrame,
+						[styles.phoneModeContainer]:
+							shouldUsePhonePreviewFrame && !devicePreviewEnabled,
 						[styles.immersivePreviewContainer]: isImmersiveLayout,
 						[styles.documentFlowPreviewContainer]: documentFlowFullscreen,
 					})}
@@ -1620,39 +1638,52 @@ export default memo(function HTML(props: HTMLProps) {
 					<div
 						data-testid={htmlTestIdsEnabled ? "html-preview-content" : undefined}
 						className={cx(styles.previewInnerBase, styles.htmlBody, "relative", {
-							[styles.phoneModeInner]: shouldUsePhonePreviewFrame,
+							[styles.phoneModeInner]:
+								shouldUsePhonePreviewFrame && !devicePreviewEnabled,
 							[styles.immersivePreviewInner]: isImmersiveLayout,
 							[styles.documentFlowHtmlBody]: documentFlowFullscreen,
 							[styles.documentFlowPreviewInner]: documentFlowFullscreen,
 						})}
 					>
 						{isDataAnalysis ? (
-							<DashboardIsolatedHTMLRenderer
-								key={`dashboard-html-${dashboardDataJsFile?.file_id || "none"}-${activeHistory.previewRevision}`}
-								content={processedContent}
-								className={className}
-								isEditMode={isEditMode || false}
-								dashboardRenderMode={
-									viewMode === "phone"
-										? "mobile"
-										: viewMode === "desktop"
-											? "desktop"
-											: "auto"
-								}
-								onSaveReady={onSaveReady as (triggerSave: () => void) => void}
-								attachments={attachments}
-								attachmentList={attachmentList}
-								currentFileId={displayData?.file_id}
-								currentFileName={data?.file_name}
-								projectId={runtimeProjectId}
-								topicId={selectedProject?.current_topic_id}
-							/>
+							<DevicePreviewViewport
+								{...devicePreview}
+								active={htmlTestIdsEnabled}
+								enabled={devicePreviewEnabled}
+							>
+								<DashboardIsolatedHTMLRenderer
+									key={`dashboard-html-${dashboardDataJsFile?.file_id || "none"}-${activeHistory.previewRevision}`}
+									content={processedContent}
+									className={className}
+									isEditMode={isEditMode || false}
+									dashboardRenderMode={
+										viewMode === "phone"
+											? "mobile"
+											: viewMode === "desktop"
+												? "desktop"
+												: "auto"
+									}
+									onSaveReady={onSaveReady as (triggerSave: () => void) => void}
+									attachments={attachments}
+									attachmentList={attachmentList}
+									currentFileId={displayData?.file_id}
+									currentFileName={data?.file_name}
+									projectId={runtimeProjectId}
+									topicId={selectedProject?.current_topic_id}
+								/>
+							</DevicePreviewViewport>
 						) : htmlIsDeleted ? (
 							<Deleted data={displayData} showHeader={false} />
 						) : (
 							<>
 								<IsolatedHTMLRenderer
 									ref={htmlRendererRef}
+									devicePreview={{
+										...devicePreview,
+										active: htmlTestIdsEnabled,
+										enabled: devicePreviewEnabled,
+									}}
+									onDeviceContentScaledChange={setDeviceContentScaled}
 									key={`html-${renderKey}`}
 									content={processedContent}
 									rawSourceCode={data?.content}
