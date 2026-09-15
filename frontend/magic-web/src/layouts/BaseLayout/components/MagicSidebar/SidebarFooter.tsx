@@ -12,7 +12,13 @@ function SidebarFooter({ collapsed, onBusyChange }: SidebarFooterProps) {
 			)}
 		>
 			<ActionButtons collapsed={collapsed} />
-			<div role="separator" className="my-1 w-full border-t border-sidebar-border/60" />
+			<div
+				role="separator"
+				className={cn(
+					"my-1 border-t border-sidebar-border/60",
+					collapsed ? "w-full" : "mx-2 self-stretch",
+				)}
+			/>
 			<UserInfoCard collapsed={collapsed} onOpenChange={onBusyChange} />
 		</div>
 	)

@@ -1,75 +1,44 @@
-import { useLayoutEffect, useRef, useState } from "react"
-import { Box, Clock3 } from "lucide-react"
+import { AppWindow, Box, Clock3 } from "lucide-react"
 import { observer } from "mobx-react-lite"
 import { useTranslation } from "react-i18next"
 import { SidebarMenu, SidebarMenuButton, SidebarMenuItem } from "@/components/shadcn-ui/sidebar"
+import { Button } from "@/components/shadcn-ui/button"
+import MagicTooltip from "@/components/base/MagicTooltip"
 import { sidebarStore } from "@/stores/layout/SidebarStore"
 
-/** 分类始终保留一个选中项；宽度不足时只缩短名称，不改变选择或侧栏字号。 */
-function ProjectNavigationTabs({ disabled }: { disabled: boolean }) {
+/** 分类始终保留一个选中项；固定短名称为右侧管理器预留空间，完整名称仍用于无障碍说明。 */
+function ProjectNavigationTabs({
+	disabled,
+	onOpenManager,
+}: {
+	disabled: boolean
+	onOpenManager: () => void
+}) {
 	const { t } = useTranslation("super")
-	const rootRef = useRef<HTMLDivElement>(null)
-	const [compact, setCompact] = useState(false)
 	const recent = t("projectNavigation.recent")
 	const workspaces = t("projectNavigation.workspaces")
-	useLayoutEffect(() => {
-		const root = rootRef.current
-		if (!root) return
-		const buttons = Array.from(root.querySelectorAll<HTMLButtonElement>("button"))
-		const labels = Array.from(root.querySelectorAll<HTMLElement>("[data-full-label]"))
-		const measure = () => {
-			if (!root.clientWidth) return
-			setCompact(
-				buttons.some((button, index) => {
-					const style = getComputedStyle(button)
-					const icon = button.querySelector("svg")
-					const required =
-						labels[index].offsetWidth +
-						(icon?.getBoundingClientRect().width ?? 0) +
-						parseFloat(style.columnGap) +
-						parseFloat(style.paddingLeft) +
-						parseFloat(style.paddingRight)
-					return required > button.clientWidth
-				}),
-			)
-		}
-		measure()
-		const observer = new ResizeObserver(measure)
-		buttons.forEach((button) => observer.observe(button))
-		labels.forEach((label) => observer.observe(label))
-		return () => observer.disconnect()
-	}, [recent, workspaces])
 	return (
 		<div
-			ref={rootRef}
-			className="sticky top-0 z-30 bg-sidebar"
+			className="sticky top-0 z-30 flex items-center gap-1 bg-sidebar"
 			data-sidebar-navigation-header="tabs"
 		>
 			<SidebarMenu
 				role="group"
 				aria-label={t("sidebarPanels.projectManager")}
-				className="flex-row gap-1 rounded-lg bg-muted p-0.5"
+				className="min-w-0 flex-1 flex-row gap-1 rounded-lg bg-muted p-0.5"
 			>
 				<SidebarMenuItem className="min-w-0 flex-1">
 					<SidebarMenuButton
 						aria-label={recent}
 						aria-pressed={sidebarStore.recentProjectsExpanded}
 						isActive={sidebarStore.recentProjectsExpanded}
-						tooltip={{ children: recent, hidden: !compact, side: "top" }}
 						disabled={disabled}
 						onClick={() => sidebarStore.selectNavigationSection("recent")}
-						className="relative h-7 justify-center text-sm font-normal text-muted-foreground focus-visible:bg-sidebar-accent focus-visible:text-sidebar-accent-foreground focus-visible:ring-0 data-[active=true]:bg-background data-[active=true]:font-medium data-[active=true]:text-foreground data-[active=true]:shadow-sm data-[active=true]:ring-1 data-[active=true]:ring-border"
+						className="relative h-7 justify-center gap-1 px-1 text-sm font-normal text-muted-foreground focus-visible:bg-sidebar-accent focus-visible:text-sidebar-accent-foreground focus-visible:ring-0 data-[active=true]:bg-background data-[active=true]:font-medium data-[active=true]:text-foreground data-[active=true]:shadow-sm data-[active=true]:ring-1 data-[active=true]:ring-border"
 						data-testid="sidebar-recent-projects-toggle"
 					>
 						<Clock3 size={16} />
-						<span>{compact ? t("projectNavigation.recentShort") : recent}</span>
-						<span
-							data-full-label
-							aria-hidden
-							className="pointer-events-none invisible absolute w-max whitespace-nowrap"
-						>
-							{recent}
-						</span>
+						<span>{t("projectNavigation.recentShort")}</span>
 					</SidebarMenuButton>
 				</SidebarMenuItem>
 				<SidebarMenuItem className="min-w-0 flex-1">
@@ -77,24 +46,34 @@ function ProjectNavigationTabs({ disabled }: { disabled: boolean }) {
 						aria-label={workspaces}
 						aria-pressed={sidebarStore.workspacesExpanded}
 						isActive={sidebarStore.workspacesExpanded}
-						tooltip={{ children: workspaces, hidden: !compact, side: "top" }}
 						disabled={disabled}
 						onClick={() => sidebarStore.selectNavigationSection("workspaces")}
-						className="relative h-7 justify-center text-sm font-normal text-muted-foreground focus-visible:bg-sidebar-accent focus-visible:text-sidebar-accent-foreground focus-visible:ring-0 data-[active=true]:bg-background data-[active=true]:font-medium data-[active=true]:text-foreground data-[active=true]:shadow-sm data-[active=true]:ring-1 data-[active=true]:ring-border"
+						className="relative h-7 justify-center gap-1 px-1 text-sm font-normal text-muted-foreground focus-visible:bg-sidebar-accent focus-visible:text-sidebar-accent-foreground focus-visible:ring-0 data-[active=true]:bg-background data-[active=true]:font-medium data-[active=true]:text-foreground data-[active=true]:shadow-sm data-[active=true]:ring-1 data-[active=true]:ring-border"
 						data-testid="sidebar-workspaces-toggle"
 					>
 						<Box size={16} />
-						<span>{compact ? t("projectNavigation.workspacesShort") : workspaces}</span>
-						<span
-							data-full-label
-							aria-hidden
-							className="pointer-events-none invisible absolute w-max whitespace-nowrap"
-						>
-							{workspaces}
-						</span>
+						<span>{t("projectNavigation.workspacesShort")}</span>
 					</SidebarMenuButton>
 				</SidebarMenuItem>
 			</SidebarMenu>
+			<MagicTooltip
+				title={t("sidebarPanels.projectManager")}
+				placement="top"
+				disabled={disabled}
+			>
+				<Button
+					type="button"
+					variant="ghost"
+					size="icon-sm"
+					aria-label={t("sidebarPanels.projectManager")}
+					disabled={disabled}
+					onClick={onOpenManager}
+					data-testid="sidebar-project-manager"
+					className="shrink-0 text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground focus-visible:bg-sidebar-accent focus-visible:text-sidebar-accent-foreground focus-visible:ring-0"
+				>
+					<AppWindow size={16} />
+				</Button>
+			</MagicTooltip>
 		</div>
 	)
 }

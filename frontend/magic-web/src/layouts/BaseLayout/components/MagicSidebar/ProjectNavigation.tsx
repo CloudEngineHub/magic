@@ -16,7 +16,6 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/shadcn-ui/
 import { Button } from "@/components/shadcn-ui/button"
 import { ScrollArea } from "@/components/shadcn-ui/scroll-area"
 import { SidebarMenu, SidebarMenuButton, SidebarMenuItem } from "@/components/shadcn-ui/sidebar"
-import { SidebarRow } from "@/pages/superMagic/components/SidebarSection"
 import type { ProjectBrowserSource } from "@/pages/superMagic/components/WorkspacesMenu/components/WorkspaceProjectsPanel"
 import workspaceStore from "@/pages/superMagic/stores/core/workspace"
 import { isCollaborationWorkspace } from "@/pages/superMagic/constants"
@@ -238,7 +237,10 @@ function ProjectNavigation({
 						</SidebarMenu>
 					) : (
 						<>
-							<ProjectNavigationTabs disabled={workspaceBusy || recentBusy} />
+							<ProjectNavigationTabs
+								disabled={workspaceBusy || recentBusy}
+								onOpenManager={() => openManager()}
+							/>
 							<div
 								hidden={!recentExpanded}
 								className={recentExpanded ? "flex flex-col" : "hidden"}
@@ -281,23 +283,6 @@ function ProjectNavigation({
 					)}
 				</div>
 			</ScrollArea>
-			{!collapsed && (
-				<div
-					className="shrink-0 border-y border-sidebar-border/60 px-2 py-1"
-					data-testid="sidebar-project-manager-dock"
-				>
-					<SidebarRow
-						label={t("sidebarPanels.projectManager")}
-						labelVariant="navigation"
-						leading={managerIcon}
-						disabled={workspaceBusy || recentBusy}
-						hideChevron
-						onClick={() => openManager()}
-						testId="sidebar-project-manager"
-						className="h-8 shrink-0 px-2"
-					/>
-				</div>
-			)}
 			{source && (
 				<Suspense fallback={null}>
 					<WorkspaceProjectsPanel
