@@ -22,6 +22,8 @@ import {
 } from "./recycle-bin-domain"
 
 interface RecycleBinModalsProps {
+	projectFileMode?: boolean
+	isActionPending?: boolean
 	requireDeleteConfirmation?: boolean
 	items: RecycleBinItem[]
 	restoreTarget: RestoreTarget | null
@@ -60,6 +62,8 @@ interface RecycleBinModalsProps {
 }
 
 export function RecycleBinModals({
+	projectFileMode = false,
+	isActionPending = false,
 	requireDeleteConfirmation = false,
 	items,
 	restoreTarget,
@@ -92,14 +96,28 @@ export function RecycleBinModals({
 		deleteTarget?.kind === "item"
 			? [deleteTarget.item]
 			: items.filter((item) => deleteTarget?.itemIds.includes(item.id))
+	const restoreItems =
+		restoreTarget?.kind === "item"
+			? [restoreTarget.item]
+			: items.filter((item) => restoreTarget?.itemIds.includes(item.id))
+	const folderNotice =
+		projectFileMode && restoreItems.some((item) => item.fileKind === "folder")
+			? t("recycleBin.project.folderOnly")
+			: ""
 	return (
 		<>
 			<RestoreModal
 				open={restoreTarget !== null}
 				onOpenChange={onRestoreOpenChange}
 				title={getRestoreModalTitle(restoreTarget, t)}
-				statusMessage={getRestoreStatusMessage(restoreCheckResult, restoreTarget, t, items)}
+				statusMessage={[
+					getRestoreStatusMessage(restoreCheckResult, restoreTarget, t, items),
+					folderNotice,
+				]
+					.filter(Boolean)
+					.join("\n")}
 				confirmDisabled={
+					(projectFileMode && isActionPending) ||
 					restoreCheckResult?.status === "invalid" ||
 					restoreCheckResult?.status === "error"
 				}
@@ -116,9 +134,18 @@ export function RecycleBinModals({
 				open={deleteTarget !== null}
 				onOpenChange={onDeleteOpenChange}
 				title={getDeleteModalTitle(deleteTarget, t)}
-				description={getDeleteModalDescription(deleteTarget, t, (cat) =>
-					getCategoryLabel(cat, t),
-				)}
+				description={[
+					projectFileMode
+						? t("recycleBin.project.deleteDescription", { count: deleteItems.length })
+						: getDeleteModalDescription(deleteTarget, t, (cat) =>
+								getCategoryLabel(cat, t),
+							),
+					projectFileMode && deleteItems.some((item) => item.fileKind === "folder")
+						? t("recycleBin.project.folderOnly")
+						: "",
+				]
+					.filter(Boolean)
+					.join("\n")}
 				onConfirm={onConfirmDelete}
 				confirmLoading={isPermanentDeleteLoading}
 			/>

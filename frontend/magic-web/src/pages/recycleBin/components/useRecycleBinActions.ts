@@ -221,11 +221,14 @@ export function useRecycleBinActions({
 		resourceType: ResourceType
 	} | null>(null)
 
-	const { runAsync: checkRecycleBinParent } = useRequest(RecycleBinApi.checkRecycleBinParent, {
-		manual: true,
-	})
+	const { runAsync: checkRecycleBinParent, loading: isCheckingRestore } = useRequest(
+		RecycleBinApi.checkRecycleBinParent,
+		{
+			manual: true,
+		},
+	)
 
-	const { runAsync: restoreRecycleBinResources } = useRequest(
+	const { runAsync: restoreRecycleBinResources, loading: isRestoring } = useRequest(
 		RecycleBinApi.restoreRecycleBinResources,
 		{
 			manual: true,
@@ -947,6 +950,11 @@ export function useRecycleBinActions({
 
 	return {
 		restoreTarget,
+		isActionPending:
+			isCheckingRestore ||
+			isRestoring ||
+			isPermanentDeleteLoading ||
+			isResolvingAllNameConflicts,
 		restoreCheckResult,
 		pendingNameConflictRestore: currentPendingNameConflict
 			? {

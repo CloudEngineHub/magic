@@ -19,6 +19,9 @@ import {
 } from "./recycle-bin-domain"
 import { useRecycleBinActions } from "./useRecycleBinActions"
 import { useRecycleBinSelection } from "./useRecycleBinSelection"
+import { useRecycleBinSearch } from "./useRecycleBinSearch"
+import { RecycleBinSearchForm } from "./RecycleBinSearchForm"
+import { buildRecycleBinGroups, type RecycleBinFileView } from "./recycle-bin-file-view"
 
 const RECYCLE_BIN_PAGE_SIZE = 50
 export function RecycleBinContent({
@@ -26,11 +29,36 @@ export function RecycleBinContent({
 	onTabCountChange,
 	onMutationComplete,
 	requireDeleteConfirmation = false,
+	projectId,
 }: RecycleBinContentProps) {
 	const { t } = useTranslation("super")
 	const getTabLabel = useRecycleBinTabLabel("pc")
 	const [searchValue, setSearchValue] = useState("")
-	const [items, setItems] = useState<RecycleBinItem[]>([])
+	const [globalItems, setGlobalItems] = useState<RecycleBinItem[]>([])
+	const [fileView, setFileView] = useState<RecycleBinFileView>("list")
+	const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set())
+	const isProject = projectId !== undefined
+	const projectQuery = useRecycleBinSearch({ projectId, keyword: searchValue, view: fileView })
+	const items = isProject ? projectQuery.items : globalItems
+	const setItems = isProject ? projectQuery.setItems : setGlobalItems
+	const groups = useMemo(
+		() => (isProject ? buildRecycleBinGroups(items, fileView) : []),
+		[items, isProject, fileView],
+	)
+	const shownItems = useMemo(
+		() =>
+			isProject && fileView === "location"
+				? groups
+						.filter((group) => expandedGroups.has(group.key))
+						.flatMap((group) => group.items)
+				: items,
+		[isProject, fileView, groups, expandedGroups, items],
+	)
+	const expandFirstGroup = useMemoizedFn(() => {
+		if (isProject && fileView === "location")
+			setExpandedGroups(new Set(groups.slice(0, 1).map((group) => group.key)))
+	})
+	useEffect(expandFirstGroup, [projectQuery.resultVersion, expandFirstGroup])
 	const [hasError, setHasError] = useState(false)
 	const [total, setTotal] = useState(0)
 	const [currentPage, setCurrentPage] = useState(1)
@@ -50,7 +78,7 @@ export function RecycleBinContent({
 	}, [activeTabId, trimmedSearchValue])
 
 	const refreshTabCounts = useMemoizedFn(async () => {
-		if (!onTabCountChange) return
+		if (isProject || !onTabCountChange) return
 		const data = await RecycleBinApi.getRecycleBinCounts({
 			keyword: queryParams.keyword,
 		})
@@ -72,7 +100,7 @@ export function RecycleBinContent({
 		},
 		onSuccess: (data) => {
 			const nextItems = data.list.map((item) => mapRecycleBinItemFromDomain(item, t))
-			setItems(nextItems)
+			setGlobalItems(nextItems)
 			setTotal(data.total ?? nextItems.length)
 			setCurrentPage(1)
 			refreshTabCounts().catch((error) => console.error(error))
@@ -83,8 +111,8 @@ export function RecycleBinContent({
 	})
 
 	useEffect(() => {
-		run(queryParams)
-	}, [queryParams, run])
+		if (!isProject) run(queryParams)
+	}, [queryParams, run, isProject])
 
 	useEffect(() => {
 		refreshTabCounts().catch((error) => console.error(error))
@@ -100,7 +128,7 @@ export function RecycleBinContent({
 				page: nextPage,
 			})
 			const nextItems = data.list.map((item) => mapRecycleBinItemFromDomain(item, t))
-			setItems((prev) => {
+			setGlobalItems((prev) => {
 				const existingIds = new Set(prev.map((item) => item.id))
 				const mergedItems = [
 					...prev,
@@ -118,8 +146,10 @@ export function RecycleBinContent({
 	})
 
 	const selection = useRecycleBinSelection({
-		items,
+		items: shownItems,
 		activeTabId,
+		autoSelectLoaded: !isProject,
+		resetKey: isProject ? projectQuery.scopeKey : undefined,
 	})
 	const actions = useRecycleBinActions({
 		onMutationComplete,
@@ -128,18 +158,62 @@ export function RecycleBinContent({
 		selectedIds: selection.selectedIds,
 		hasMixedSelectionTypes: selection.hasMixedSelectionTypes,
 		onRefresh: () => {
+			if (isProject) {
+				selection.clearSelection()
+				projectQuery.refresh()
+				return
+			}
 			run(queryParams)
 			refreshTabCounts().catch((error) => console.error(error))
 		},
 	})
+	const busy = Boolean(
+		actions.restoreTarget ||
+		actions.deleteTarget ||
+		actions.pendingNameConflictRestore ||
+		actions.isActionPending,
+	)
+	const projectActionsDisabled = busy || projectQuery.status !== "ready"
 
 	const hasItems = selection.visibleItems.length > 0
 	const shouldShowEmpty = !loading && !hasError && !hasItems
-	const title = activeTab ? getTabLabel(activeTab.id, activeTab.count) : ""
+	const title = isProject
+		? projectQuery.total === null
+			? ""
+			: t("recycleBin.project.total", { count: projectQuery.total })
+		: activeTab
+			? getTabLabel(activeTab.id, activeTab.count)
+			: ""
 
 	return (
-		<div className="flex min-w-0 flex-1 flex-col gap-3.5" data-testid="recycle-bin-content">
+		<div
+			className="flex min-h-0 min-w-0 flex-1 flex-col gap-3.5"
+			data-testid="recycle-bin-content"
+		>
 			<RecycleBinToolbar
+				fileView={isProject ? fileView : undefined}
+				onFileViewChange={(next) => {
+					if (next === "location" || fileView === "location") selection.clearSelection()
+					setFileView(next)
+				}}
+				onSearchSubmit={() => void projectQuery.runSearch()}
+				searchDisabled={isProject && (busy || !projectQuery.limits)}
+				actionsDisabled={isProject && projectActionsDisabled}
+				selectedCount={selection.selectedIds.length}
+				queryForm={
+					isProject && (
+						<RecycleBinSearchForm
+							query={projectQuery}
+							byLocation={fileView === "location"}
+							disabled={busy}
+							onExit={() => {
+								setSearchValue("")
+								setFileView("list")
+								selection.clearSelection()
+							}}
+						/>
+					)
+				}
 				title={title}
 				searchValue={searchValue}
 				hasSelection={selection.hasSelection}
@@ -151,11 +225,31 @@ export function RecycleBinContent({
 				onDeleteSelection={actions.handleDeleteSelected}
 				onSearchChange={setSearchValue}
 				onSearchReset={() => setSearchValue("")}
-				t={t}
 			/>
 
-			<div className="flex flex-1 flex-col overflow-hidden rounded-[10px] border border-border bg-card">
+			<div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-[10px] border border-border bg-card">
 				<RecycleBinList
+					project={
+						isProject
+							? {
+									view: fileView,
+									groups,
+									expanded: expandedGroups,
+									query: projectQuery,
+									disabled: projectActionsDisabled,
+									scopeMissing: !projectId,
+									onToggleGroup: (key) => {
+										selection.clearSelection()
+										setExpandedGroups((previous) => {
+											const next = new Set(previous)
+											if (next.has(key)) next.delete(key)
+											else next.add(key)
+											return next
+										})
+									},
+								}
+							: undefined
+					}
 					items={selection.visibleItems}
 					selectedIds={selection.selectedIds}
 					loading={loading}
@@ -173,6 +267,8 @@ export function RecycleBinContent({
 			</div>
 
 			<RecycleBinModals
+				projectFileMode={isProject}
+				isActionPending={actions.isActionPending}
 				requireDeleteConfirmation={requireDeleteConfirmation}
 				items={items}
 				restoreTarget={actions.restoreTarget}
@@ -206,6 +302,8 @@ export function RecycleBinContent({
 }
 
 interface RecycleBinContentProps {
+	/** undefined 保留全局入口；项目入口缺失 ID 时传空串并阻止全局回退。 */
+	projectId?: string
 	onMutationComplete?: () => void
 	requireDeleteConfirmation?: boolean
 	activeTab: RecycleBinTab | undefined

@@ -12,6 +12,7 @@ import {
 } from "@/components/shadcn-ui/dropdown-menu"
 import { Separator } from "@/components/shadcn-ui/separator"
 import { Spinner } from "@/components/shadcn-ui/spinner"
+import { RecycleBinFileList, type RecycleBinFileListOptions } from "./RecycleBinFileList"
 import {
 	getCategoryLabel,
 	getDisplayTitle,
@@ -19,7 +20,8 @@ import {
 	type RestoreTarget,
 } from "./recycle-bin-domain"
 
-interface RecycleBinListProps {
+export interface RecycleBinListProps {
+	project?: RecycleBinFileListOptions
 	items: RecycleBinItem[]
 	selectedIds: string[]
 	loading: boolean
@@ -35,21 +37,23 @@ interface RecycleBinListProps {
 	t: TFunction
 }
 
-export function RecycleBinList({
-	items,
-	selectedIds,
-	loading,
-	loadingMore,
-	hasMore,
-	hasError,
-	shouldShowEmpty,
-	onLoadMore,
-	onToggleItem,
-	onRetry,
-	onOpenRestore,
-	onOpenDelete,
-	t,
-}: RecycleBinListProps) {
+export function RecycleBinList(props: RecycleBinListProps) {
+	const {
+		items,
+		selectedIds,
+		loading,
+		loadingMore,
+		hasMore,
+		hasError,
+		shouldShowEmpty,
+		onLoadMore,
+		onToggleItem,
+		onRetry,
+		onOpenRestore,
+		onOpenDelete,
+		t,
+	} = props
+	if (props.project) return <RecycleBinFileList {...props} project={props.project} />
 	if (loading && items.length === 0) {
 		return (
 			<div

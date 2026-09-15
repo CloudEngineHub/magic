@@ -1,8 +1,10 @@
-import type { TFunction } from "i18next"
-import { RotateCcw, Search, Trash2 } from "lucide-react"
+import { useId, type ReactNode } from "react"
+import { useTranslation } from "react-i18next"
+import { FolderSearch, LayoutGrid, List, RotateCcw, Search, Trash2 } from "lucide-react"
 import { Button } from "@/components/shadcn-ui/button"
 import { Checkbox } from "@/components/shadcn-ui/checkbox"
 import { InputGroup, InputGroupAddon, InputGroupInput } from "@/components/shadcn-ui/input-group"
+import type { RecycleBinFileView } from "./recycle-bin-file-view"
 
 interface RecycleBinToolbarProps {
 	title: string
@@ -16,7 +18,13 @@ interface RecycleBinToolbarProps {
 	onDeleteSelection: () => void
 	onSearchChange: (value: string) => void
 	onSearchReset: () => void
-	t: TFunction
+	fileView?: RecycleBinFileView
+	onFileViewChange?: (view: RecycleBinFileView) => void
+	onSearchSubmit?: () => void
+	queryForm?: ReactNode
+	searchDisabled?: boolean
+	actionsDisabled?: boolean
+	selectedCount?: number
 }
 
 export function RecycleBinToolbar({
@@ -31,8 +39,129 @@ export function RecycleBinToolbar({
 	onDeleteSelection,
 	onSearchChange,
 	onSearchReset,
-	t,
+	fileView,
+	onFileViewChange,
+	onSearchSubmit,
+	queryForm,
+	searchDisabled = false,
+	actionsDisabled = false,
+	selectedCount = 0,
 }: RecycleBinToolbarProps) {
+	const { t } = useTranslation("super")
+	const selectionId = useId()
+	if (fileView) {
+		return (
+			<>
+				<div className="flex flex-wrap items-center justify-between gap-3">
+					<div
+						className="flex flex-wrap gap-1 rounded-lg bg-muted p-1"
+						role="group"
+						aria-label={t("recycleBin.project.views")}
+					>
+						{[
+							{
+								id: "list" as const,
+								label: t("recycleBin.project.list"),
+								Icon: List,
+							},
+							{
+								id: "grid" as const,
+								label: t("recycleBin.project.grid"),
+								Icon: LayoutGrid,
+							},
+							{
+								id: "location" as const,
+								label: t("recycleBin.project.location"),
+								Icon: FolderSearch,
+							},
+						].map(({ id, label, Icon }) => (
+							<Button
+								key={id}
+								type="button"
+								size="sm"
+								variant={fileView === id ? "secondary" : "ghost"}
+								aria-pressed={fileView === id}
+								disabled={searchDisabled}
+								onClick={() => onFileViewChange?.(id)}
+							>
+								<Icon size={16} />
+								{label}
+							</Button>
+						))}
+					</div>
+					<InputGroup className="h-9 w-full sm:w-56">
+						<InputGroupAddon>
+							<Search size={16} />
+						</InputGroupAddon>
+						<InputGroupInput
+							type="search"
+							value={searchValue}
+							disabled={searchDisabled}
+							aria-label={t("recycleBin.project.namePlaceholder")}
+							placeholder={t("recycleBin.project.namePlaceholder")}
+							onChange={(event) => onSearchChange(event.target.value)}
+							onKeyDown={(event) => {
+								if (event.key === "Enter" && !event.nativeEvent.isComposing) {
+									event.preventDefault()
+									onSearchSubmit?.()
+								}
+							}}
+						/>
+					</InputGroup>
+				</div>
+				{queryForm}
+				<div className="flex flex-wrap items-center justify-between gap-3 border-t border-border pt-3">
+					<div className="flex flex-wrap items-center gap-2 text-xs">
+						<Checkbox
+							id={selectionId}
+							checked={
+								isAllSelected ? true : isPartiallySelected ? "indeterminate" : false
+							}
+							disabled={actionsDisabled}
+							onCheckedChange={(checked) => onToggleSelectAll(checked === true)}
+						/>
+						<label htmlFor={selectionId}>{t("recycleBin.project.selectShown")}</label>
+						<span className="text-muted-foreground">
+							{hasSelection
+								? t("recycleBin.project.selected", { count: selectedCount })
+								: title}
+						</span>
+					</div>
+					<div className="flex flex-wrap items-center gap-2">
+						{hasSelection && (
+							<Button
+								variant="ghost"
+								size="sm"
+								onClick={onCancelSelection}
+								disabled={actionsDisabled}
+							>
+								{t("recycleBin.bulkActions.cancelSelection")}
+							</Button>
+						)}
+						<Button
+							variant="outline"
+							size="sm"
+							disabled={!hasSelection || actionsDisabled}
+							onClick={onRestoreSelection}
+						>
+							<RotateCcw size={16} />
+							{t("recycleBin.bulkActions.restore")}
+						</Button>
+						<Button
+							variant="outline"
+							size="sm"
+							className="text-destructive"
+							disabled={!hasSelection || actionsDisabled}
+							onClick={onDeleteSelection}
+						>
+							<Trash2 size={16} />
+							{t("recycleBin.bulkActions.permanentDelete")}
+						</Button>
+					</div>
+				</div>
+			</>
+		)
+	}
 	return (
 		<>
 			<div className="flex w-full items-stretch gap-3.5 rounded-[10px] bg-card px-3 py-2">

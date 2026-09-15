@@ -369,7 +369,9 @@ export function FileManager(props: FileManagerProps) {
 			{recycle && props.isActive && (
 				<div className="flex min-h-0 flex-1 flex-col gap-3 overflow-hidden p-4">
 					<p className="text-xs text-muted-foreground">
-						{t("fileManager.recycle.scope")}
+						{props.spaceConfig?.scope
+							? t("fileManager.recycle.scope")
+							: t("recycleBin.project.scope")}
 					</p>
 					<Suspense
 						fallback={
@@ -380,6 +382,11 @@ export function FileManager(props: FileManagerProps) {
 					>
 						<RecycleBinContent
 							key={props.identityKey}
+							projectId={
+								props.spaceConfig?.scope
+									? undefined
+									: props.projectId || props.selectedProject?.id || ""
+							}
 							activeTab={{ id: "files", count: recycleCount }}
 							requireDeleteConfirmation
 							onMutationComplete={props.onRefresh}

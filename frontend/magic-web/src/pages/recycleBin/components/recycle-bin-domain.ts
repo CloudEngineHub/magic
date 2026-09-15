@@ -33,6 +33,8 @@ export interface RecycleBinItem {
 	path: string
 	deletedOn: string
 	remainingDays: number
+	originalPath?: string | null
+	deletedByName?: string
 }
 
 export interface ItemTarget {
@@ -191,7 +193,20 @@ export function mapRecycleBinItem(item: RecycleBinListItemDto, t: TFunction): Re
 		path,
 		deletedOn: item.deleted_at ?? "",
 		remainingDays: item.remaining_days ?? 0,
+		originalPath: getOriginalFileParentPath(item),
+		deletedByName: item.deleted_by_user?.nickname || item.deleted_by_name,
 	}
+}
+
+/** 删除快照用于本次查询的展示分类；缺少快照时不能用活跃目录树猜测旧位置。 */
+function getOriginalFileParentPath(item: RecycleBinListItemDto): string | null {
+	const filePath = item.extra_data?.relative_file_path?.trim()
+	if (filePath && filePath !== "/" && filePath.startsWith("/")) {
+		const normalizedPath = filePath.replace(/\/+$/, "")
+		return normalizedPath.slice(0, normalizedPath.lastIndexOf("/")) || "/"
+	}
+	const parent = item.extra_data?.original_parent_id
+	return parent === null || parent === 0 || parent === "0" ? "/" : null
 }
 
 export function getCategoryByResourceType(resourceType?: ResourceType): RecycleBinItem["category"] {
