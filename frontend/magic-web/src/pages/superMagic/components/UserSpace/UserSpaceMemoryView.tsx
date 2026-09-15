@@ -21,8 +21,11 @@ import { useFileManagerConfirmation } from "../TopicFilesButton/hooks/useFileMan
 import { FileManagerConfirmationDialog } from "../TopicFilesButton/components/FileManager/FileManagerConfirmationDialog"
 import { buildAttachmentIndex } from "../TopicFilesButton/utils/attachmentIndex"
 import UserSpaceFilesView from "./UserSpaceFilesView"
+import type { FileManagerProps } from "../TopicFilesButton/components/FileManager/types"
 
 interface MemoryGroupProps {
+	initialManagerState?: FileManagerProps["initialState"]
+	onManagerStateChange?: FileManagerProps["onStateChange"]
 	manager?: boolean
 	active?: boolean
 	projectId?: string | null
@@ -52,6 +55,8 @@ export const MemoryGroup = observer(function MemoryGroup({
 	compact = true,
 	onBrowseDirectory,
 	scrollElementRef,
+	initialManagerState,
+	onManagerStateChange,
 }: MemoryGroupProps & { labelVariant?: "section" | "item" }) {
 	const { t } = useTranslation("super")
 	const [expanded, setExpanded] = useState(defaultExpanded)
@@ -67,7 +72,10 @@ export const MemoryGroup = observer(function MemoryGroup({
 		(file: MagicFSFile | null) => setRootSnapshot({ identity, file }),
 		[identity],
 	)
-	const [directoryId, setDirectoryId] = useState<string>()
+	const initialLocation = useRef({ identity, projectId, state: initialManagerState })
+	const [directoryId, setDirectoryId] = useState<string | undefined>(
+		initialManagerState?.directoryId || undefined,
+	)
 	const [loading, setLoading] = useState(true)
 	const [error, setError] = useState(false)
 	const [creating, setCreating] = useState(false)
@@ -84,9 +92,14 @@ export const MemoryGroup = observer(function MemoryGroup({
 	})
 	useEffect(() => {
 		setRoot(null)
-		setDirectoryId(undefined)
+		setDirectoryId(
+			initialLocation.current.identity === identity &&
+				initialLocation.current.projectId === projectId
+				? initialLocation.current.state?.directoryId || undefined
+				: undefined,
+		)
 		setLoading(true)
-	}, [identity, scopePath, setRoot])
+	}, [identity, scopePath, projectId, setRoot])
 	useEffect(() => {
 		if (!visited || !active) return
 		let cancelled = false
@@ -214,6 +227,8 @@ export const MemoryGroup = observer(function MemoryGroup({
 			<div className="flex min-h-0 min-w-0 flex-1 flex-col">
 				{root && !error ? (
 					<UserSpaceFilesView
+						initialState={initialManagerState}
+						onStateChange={onManagerStateChange}
 						rootId={root.id}
 						rootName={projectName || title}
 						resolveParent={destination}

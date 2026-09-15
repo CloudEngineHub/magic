@@ -145,6 +145,8 @@ const FilesViewer = memo(
 				enterPreviewFullscreen,
 				exitPreviewFullscreen,
 				getCheckBeforeClose,
+				getFileManagerState,
+				updateFileManagerState,
 			} = useFilesViewer(props)
 
 			// 使用缓存 Hook
@@ -585,6 +587,8 @@ const FilesViewer = memo(
 						isActive,
 						node: (
 							<TabCache
+								getFileManagerState={getFileManagerState}
+								onFileManagerStateChange={updateFileManagerState}
 								managerProps={{
 									attachments: (props.attachments ?? []) as AttachmentItem[],
 									selectedProject: props.selectedProject,
@@ -592,6 +596,7 @@ const FilesViewer = memo(
 									allowEdit: props.allowEdit,
 									allowDownload: props.allowDownload,
 									loading: isAwaitingProjectAttachments,
+									attachmentLoadState: props.attachmentLoadState,
 									onFileClick: openFileTab,
 								}}
 								key={tab.id}

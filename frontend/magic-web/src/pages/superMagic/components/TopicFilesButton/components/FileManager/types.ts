@@ -3,10 +3,12 @@ import type { AttachmentItem } from "../../hooks/types"
 import type { FileHelpContext } from "../../utils/magic-system-folder"
 import type { TopicFilesSpaceConfig } from "../../file-space"
 import type { ProjectListItem, Topic } from "../../../../pages/Workspace/types"
+import type { FileManagerLocationSnapshot } from "@/models/config/repositories/SuperProjectStateTypes"
+import type { FileManagerStateChangeOptions } from "../../../Detail/components/FilesViewer/types"
 
-export type FileManagerView = "grid" | "list"
-export type FileManagerSort = "name" | "size" | "type" | "modified" | "created" | "source" | "path"
-export type FileManagerSortDirection = "ascending" | "descending"
+export type FileManagerView = FileManagerLocationSnapshot["view"]
+export type FileManagerSort = FileManagerLocationSnapshot["sort"]
+export type FileManagerSortDirection = FileManagerLocationSnapshot["sortDirection"]
 export type FileManagerCommand =
 	| "open"
 	| "rename"
@@ -39,6 +41,7 @@ export interface FileManagerLocationState {
 	focusedId: string | null
 	anchorId: string | null
 	scrollTop: number
+	scrollLeft: number
 	query: string
 }
 
@@ -57,6 +60,13 @@ export interface FileManagerProps {
 	rootId: string
 	rootName: string
 	initialDirectoryId?: string
+	initialState?: FileManagerLocationSnapshot
+	onStateChange?: (
+		state: FileManagerLocationSnapshot,
+		options?: FileManagerStateChangeOptions,
+	) => void
+	/** 只有所属范围完整加载成功，才能判断保存的目录已失效。 */
+	dataReady?: boolean
 	attachments: AttachmentItem[]
 	context: FileHelpContext
 	isActive: boolean

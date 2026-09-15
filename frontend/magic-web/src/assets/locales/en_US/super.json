@@ -2470,6 +2470,7 @@
 			"scope": "Deleted files you can access across projects and personal space. This list is not limited to the current project.",
 			"title": "File trash"
 		},
+		"restoredDirectoryUnavailable": "The previous folder is unavailable. Opened the nearest available folder.",
 		"selectionHint": "Click to select, double-click to open",
 		"sort": "Sort",
 		"sortModified": "By modified date",

@@ -5,6 +5,9 @@ import type { ProjectListItem, Topic } from "../../../pages/Workspace/types"
 import type { AttachmentItem } from "../hooks/types"
 import { FileManager } from "./FileManager/FileManager"
 import { requestProjectAttachmentsFullRefresh } from "../../../services/attachmentsTopicSync"
+import type { AttachmentLoadState } from "@/stores/projectFiles/types"
+import type { ProjectFileManagerSnapshot } from "@/models/config/repositories/SuperProjectStateTypes"
+import type { FileManagerStateChangeOptions } from "../../Detail/components/FilesViewer/types"
 
 export interface ProjectFileManagerProps {
 	projectId: string
@@ -15,6 +18,12 @@ export interface ProjectFileManagerProps {
 	allowEdit?: boolean
 	allowDownload?: boolean
 	loading?: boolean
+	attachmentLoadState?: AttachmentLoadState
+	initialState?: ProjectFileManagerSnapshot
+	onStateChange?: (
+		state: ProjectFileManagerSnapshot,
+		options: FileManagerStateChangeOptions,
+	) => void
 	isActive?: boolean
 	onFileClick: (file: AttachmentItem) => void
 }
@@ -33,6 +42,21 @@ export default observer(function ProjectFileManager({
 		<FileManager
 			key={scopeKey}
 			{...props}
+			initialState={props.initialState?.location}
+			onStateChange={(location, options = {}) =>
+				props.onStateChange?.(
+					{ spaceType: "project", identityKey, projectId: props.projectId, location },
+					options,
+				)
+			}
+			dataReady={
+				props.attachmentLoadState?.projectId === props.projectId &&
+				props.attachmentLoadState.status === "ready"
+			}
+			error={
+				props.attachmentLoadState?.projectId === props.projectId &&
+				props.attachmentLoadState.status === "error"
+			}
 			scopeKey={scopeKey}
 			identityKey={identityKey}
 			rootId=""

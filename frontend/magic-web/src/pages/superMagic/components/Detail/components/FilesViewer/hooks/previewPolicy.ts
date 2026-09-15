@@ -158,6 +158,7 @@ export function resolvePersistableTabs(tabs: TabItem[]) {
 	return tabs.filter(
 		(tab) =>
 			tab.fileData.space_type !== "user" &&
+			tab.fileManager?.spaceType !== "user" &&
 			tab.fileData.display_config?.previewPolicy?.persistTab !== false,
 	)
 }

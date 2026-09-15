@@ -17,8 +17,12 @@ import { getUserResourceKind } from "./userSpaceFilePresentation"
 import { toUserAttachment } from "./services/userSpaceFileService"
 import { useUserSpaceFileActions } from "./hooks/useUserSpaceFileActions"
 import { SidebarExpandableItem, type SidebarSectionOptions } from "../SidebarSection"
+import type { FileManagerProps } from "../TopicFilesButton/components/FileManager/types"
+import { useUserFileManagerDirectory } from "./hooks/useUserFileManagerDirectory"
 
 export interface UserSpaceFilesViewProps {
+	initialState?: FileManagerProps["initialState"]
+	onStateChange?: FileManagerProps["onStateChange"]
 	hidePlaces?: boolean
 	defaultView?: "list" | "grid"
 	defaultWritePath?: string
@@ -56,6 +60,8 @@ export default observer(function UserSpaceFilesView({
 	contentBefore,
 	active = true,
 	scrollElementRef,
+	initialState,
+	onStateChange,
 }: UserSpaceFilesViewProps) {
 	const { t } = useTranslation("super")
 	const identity = userFilesStore.currentIdentityKey
@@ -66,8 +72,15 @@ export default observer(function UserSpaceFilesView({
 	const rootState = userFilesStore.getDirectory()
 	const path = parentId ? userFilesStore.getPath(parentId) : []
 	const items = parentId ? userFilesStore.getTree(parentId) : []
+	const restoredDirectory = useUserFileManagerDirectory({
+		enabled: active && !compact,
+		directoryId,
+		rootId: scopeRootId,
+		initialState,
+		onDirectoryChange,
+	})
 	useEffect(() => {
-		if (!active) return
+		if (!active || !compact) return
 		void userFilesStore
 			.getRoot()
 			.then((root) => {
@@ -100,6 +113,7 @@ export default observer(function UserSpaceFilesView({
 		topicId,
 	})
 	const refresh = async () => {
+		if (!compact) restoredDirectory.retry()
 		const root = await userFilesStore.getRoot()
 		if (identity !== userFilesStore.currentIdentityKey) return
 		await userFilesStore.loadTree(parentId ?? root.id, true)
@@ -205,6 +219,9 @@ export default observer(function UserSpaceFilesView({
 		)
 	const content = (
 		<FileManager
+			initialState={initialState}
+			onStateChange={onStateChange}
+			dataReady={restoredDirectory.ready}
 			hidePlaces={hidePlaces}
 			defaultView={defaultView}
 			defaultWritePath={defaultWritePath}
@@ -218,7 +235,7 @@ export default observer(function UserSpaceFilesView({
 			context={{ kind: "user" }}
 			isActive={active}
 			loading={state.loading || !state.loaded}
-			error={Boolean(state.error || rootState.error)}
+			error={Boolean(state.error || rootState.error || restoredDirectory.error)}
 			onRefresh={() => void refresh().catch(() => undefined)}
 			onOpen={(item) => onFileClick?.(item)}
 			onDirectoryChange={onDirectoryChange}

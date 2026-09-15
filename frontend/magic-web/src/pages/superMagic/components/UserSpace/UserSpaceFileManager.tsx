@@ -1,7 +1,13 @@
-import { useEffect, useState } from "react"
+import { useEffect, useRef, useState } from "react"
+import { useMemoizedFn } from "ahooks"
 import { useTranslation } from "react-i18next"
 import { Button } from "@/components/shadcn-ui/button"
-import type { FileManagerContext } from "../Detail/components/FilesViewer/types"
+import type {
+	FileManagerContext,
+	FileManagerStateChangeOptions,
+} from "../Detail/components/FilesViewer/types"
+import type { UserFileManagerSnapshot } from "@/models/config/repositories/SuperProjectStateTypes"
+import { getFileReferenceIdentityKey } from "../../services/userFileReferenceResolver"
 import type { AttachmentItem } from "../TopicFilesButton/hooks/types"
 import UserSpaceFilesView from "./UserSpaceFilesView"
 import UserSpaceMemoryManager from "./UserSpaceMemoryManager"
@@ -13,6 +19,8 @@ export default function UserSpaceFileManager({
 	projectName,
 	topicId,
 	isActive = true,
+	initialState,
+	onStateChange,
 }: {
 	context: Extract<FileManagerContext, { spaceType: "user" }>
 	onFileClick: (file: AttachmentItem) => void
@@ -20,14 +28,43 @@ export default function UserSpaceFileManager({
 	projectName?: string
 	topicId?: string
 	isActive?: boolean
+	initialState?: UserFileManagerSnapshot
+	onStateChange: (state: UserFileManagerSnapshot, options: FileManagerStateChangeOptions) => void
 }) {
 	const { t } = useTranslation("super")
 	const [view, setView] = useState(context.view)
-	const [directoryId, setDirectoryId] = useState(context.directoryId)
+	const saved = useRef<UserFileManagerSnapshot>(
+		initialState
+			? { ...initialState, view: context.view }
+			: {
+					spaceType: "user",
+					identityKey: getFileReferenceIdentityKey() ?? "",
+					view: context.view,
+				},
+	)
+	const [directoryId, setDirectoryId] = useState(
+		context.directoryId ?? (saved.current.filesLocation?.directoryId || undefined),
+	)
+	const previousContext = useRef(context)
+	const updateState = useMemoizedFn(
+		(patch: Partial<UserFileManagerSnapshot>, options: FileManagerStateChangeOptions = {}) => {
+			saved.current = { ...saved.current, ...patch }
+			onStateChange(saved.current, options)
+		},
+	)
+	const changeView = (next: UserFileManagerSnapshot["view"]) => {
+		setView(next)
+		updateState({ view: next }, { userInteraction: true })
+	}
 	useEffect(() => {
+		if (previousContext.current === context) return
+		previousContext.current = context
 		setView(context.view)
-		setDirectoryId(context.directoryId)
-	}, [context])
+		setDirectoryId(
+			context.directoryId ?? (saved.current.filesLocation?.directoryId || undefined),
+		)
+		updateState({ view: context.view })
+	}, [context, updateState])
 	return (
 		<div className="flex h-full min-h-0 flex-col bg-background">
 			<div
@@ -40,7 +77,7 @@ export default function UserSpaceFileManager({
 					aria-selected={view === "files"}
 					variant={view === "files" ? "secondary" : "ghost"}
 					size="sm"
-					onClick={() => setView("files")}
+					onClick={() => changeView("files")}
 				>
 					{t("userSpace.allFiles")}
 				</Button>
@@ -49,13 +86,15 @@ export default function UserSpaceFileManager({
 					aria-selected={view === "memory"}
 					variant={view === "memory" ? "secondary" : "ghost"}
 					size="sm"
-					onClick={() => setView("memory")}
+					onClick={() => changeView("memory")}
 				>
 					{t("userSpace.memory")}
 				</Button>
 			</div>
 			{view === "memory" ? (
 				<UserSpaceMemoryManager
+					initialState={saved.current.memory}
+					onStateChange={(memory, options) => updateState({ memory }, options)}
 					active={isActive}
 					projectId={projectId}
 					projectName={projectName}
@@ -64,6 +103,10 @@ export default function UserSpaceFileManager({
 				/>
 			) : (
 				<UserSpaceFilesView
+					initialState={saved.current.filesLocation}
+					onStateChange={(filesLocation, options) =>
+						updateState({ filesLocation }, options)
+					}
 					compact={false}
 					active={isActive}
 					directoryId={directoryId}

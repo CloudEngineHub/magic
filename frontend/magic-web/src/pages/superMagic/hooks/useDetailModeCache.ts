@@ -38,14 +38,7 @@ export function useDetailModeCache({
 
 			try {
 				// 获取当前的文件状态，保持现有的 tabs 不变
-				const currentState = await projectStateRepository.getProjectState(
-					organizationCode,
-					selectedProjectId,
-				)
-
 				const fileState = {
-					tabs: currentState?.fileState?.tabs || [],
-					activeTabId: currentState?.fileState?.activeTabId,
 					detailState: {
 						autoDetail: auto,
 						userDetail: user,
