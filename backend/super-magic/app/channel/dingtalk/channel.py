@@ -5,6 +5,7 @@ DingTalkChannel — 单例，管理钉钉 Stream 模式连接和消息分发。
 """
 import asyncio
 import uuid
+from collections.abc import Mapping
 from typing import Optional
 
 from dingtalk_stream import (
@@ -29,6 +30,26 @@ from app.core.keepalive_registry import KeepaliveRegistry
 from app.utils.time_utils import now_ms
 
 logger = get_logger(__name__)
+
+_SENSITIVE_PAYLOAD_KEYS = frozenset(
+    {"downloadCode", "access_token", "accessToken", "client_secret", "clientSecret", "sessionWebhook"}
+)
+
+
+def _sanitize_chat_record(value: object, depth: int = 0) -> object:
+    """保留转发消息结构用于排查，避免把凭证和超长正文写入日志。"""
+    if depth > 6:
+        return "<max-depth>"
+    if isinstance(value, Mapping):
+        return {
+            str(key): "<redacted>" if str(key) in _SENSITIVE_PAYLOAD_KEYS else _sanitize_chat_record(item, depth + 1)
+            for key, item in value.items()
+        }
+    if isinstance(value, list):
+        return [_sanitize_chat_record(item, depth + 1) for item in value[:50]]
+    if isinstance(value, str) and len(value) > 500:
+        return f"{value[:500]}...<truncated>"
+    return value
 
 
 class DingTalkChannel(BaseChannel):
@@ -247,6 +268,8 @@ class DingTalkChannel(BaseChannel):
             f"fields={sorted(payload)}, "
             f"content_fields={sorted(content) if isinstance(content, dict) else []}"
         )
+        if payload.get("msgtype") == "chatRecord" and isinstance(content, dict):
+            logger.info("[DingTalkChannel] chatRecord payload: %r", _sanitize_chat_record(content))
         from app.channel.dingtalk.media import prepare_dingtalk_message
         prepared = await prepare_dingtalk_message(payload, self._client)
         content = prepared.text
