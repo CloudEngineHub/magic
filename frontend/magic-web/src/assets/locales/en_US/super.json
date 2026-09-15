@@ -1368,7 +1368,6 @@
 		"goToFirstPage": "Go to first page",
 		"joinEditFailed": "Failed to join editing",
 		"pleaseDownloadToView": "Please download the file to view content",
-		"refreshSlides": "Refresh",
 		"saveAndClose": "Save and Close",
 		"selfMedia": {
 			"analysis": {
@@ -4605,6 +4604,7 @@
 		"exportSelected": "Export Selected",
 		"exportSpecificPages": "Specific Pages",
 		"fileNotFound": "File Not Found",
+		"fitToWindow": "Fit to window",
 		"fullscreen": "Fullscreen",
 		"initializing": "Initializing...",
 		"loadError": "Load Failed",
@@ -4615,6 +4615,8 @@
 		"pageNumber": "Page {{page}}",
 		"pleaseSelectSlides": "Please select at least one slide",
 		"refreshCurrentSlide": "Refresh",
+		"reloadAllSlides": "Reload all",
+		"reloadCurrentSlide": "Reload current",
 		"saveAndNavigate": "Save",
 		"saveChanges": "Save Changes",
 		"saveWithServerUpdate": "A new server version has been detected. Saving will overwrite the latest server version. Continue?",
@@ -4656,7 +4658,8 @@
 			"useHistoryVersion": "Use History Version",
 			"useLatestVersion": "Use Latest Version"
 		},
-		"viewServerUpdate": "View Update"
+		"viewServerUpdate": "View Update",
+		"zoomSettings": "Zoom settings"
 	},
 	"project": {
 		"addCollaborators": "Add Collaborators",

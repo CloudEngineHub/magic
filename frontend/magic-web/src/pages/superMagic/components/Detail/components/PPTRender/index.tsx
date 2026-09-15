@@ -58,6 +58,7 @@ import type { MenuProps } from "antd"
 import type { PPTSlideStructureAdapter } from "./types"
 import { getPPTLiveRenderCacheSize } from "./PPTSidebar/utils/devicePerformance"
 import EditToolbar from "../EditToolbar"
+import { runGuardedAction } from "../../utils/actionGuard"
 import type { OptionItem } from "@/pages/superMagic/components/MainInputContainer/panels/types"
 import {
 	buildSlidesTemplateReplacementPayload,
@@ -545,6 +546,13 @@ const PPTRenderInner = observer(function PPTRenderInner({
 	const presentedToolbarModel = scopedPresentedKey
 		? toolbarModels.get(scopedPresentedKey)
 		: undefined
+	// 上下两个当前页刷新入口共用版本恢复、更新提示和刷新状态；预备页切换中不能刷新旧页。
+	const handleRefreshCurrentSlide = useMemoizedFn(() => {
+		const toolbar = presentedToolbarModel?.props
+		if (pendingKey || !toolbar?.showRefresh || !toolbar.onRefresh || toolbar.isRefreshing)
+			return
+		void runGuardedAction(toolbar.beforeAction, toolbar.onRefresh)
+	})
 	// Slide template projects manage their own template manifest and should not
 	// expose the regular PPT template replacement flow.
 	const isSlidesTemplateProject = Boolean(slideStructureAdapter)
@@ -1059,6 +1067,14 @@ const PPTRenderInner = observer(function PPTRenderInner({
 										onNextSlide={() => changeSlide("next")}
 										onGoToFirstSlide={goToFirstSlide}
 										onRefreshSlides={handleRefreshAllSlides}
+										onRefreshCurrentSlide={
+											!pendingKey && presentedToolbarModel?.props.showRefresh
+												? handleRefreshCurrentSlide
+												: undefined
+										}
+										isRefreshingCurrentSlide={Boolean(
+											presentedToolbarModel?.props.isRefreshing,
+										)}
 										onJumpToPage={handleJumpToPage}
 										onToggleFullscreen={togglePresentationFullscreen}
 										onReplaceTemplate={
@@ -1067,9 +1083,10 @@ const PPTRenderInner = observer(function PPTRenderInner({
 												: undefined
 										}
 										scaleRatio={activeSlideScaleRatio}
+										isAutoScale={manualScale === null}
+										portalContainer={containerRef.current}
 										onScaleChange={handleManualScaleChange}
 										onResetScale={() => handleManualScaleChange(null)}
-										t={t}
 									/>
 								)}
 						</div>
