@@ -553,6 +553,7 @@ class ThirdPartyAuthService {
 					magicOrganizationMap,
 					access_token,
 					deployCode,
+					options,
 				)
 			
 			// 设置组织

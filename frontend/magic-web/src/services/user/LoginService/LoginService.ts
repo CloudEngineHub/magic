@@ -329,6 +329,7 @@ export class LoginService {
 		magicOrganizationMap: Record<string, User.MagicOrganization>,
 		_accessToken: string,
 		_deployCode?: string,
+		options?: Pick<RequestConfig, "skipAppInitWait">,
 	): Promise<{
 		organizations: Array<User.UserOrganization>
 		organizationCode: string
