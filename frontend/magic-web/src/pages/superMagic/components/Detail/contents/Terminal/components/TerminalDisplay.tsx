@@ -37,18 +37,19 @@ function TerminalDisplay({
 		[command, output, showControls],
 	)
 
+	// 同级命令区与输出区必须使用不同 key，切换记录时才能完整卸载旧内容。
 	return (
 		<div className={cx(styles.terminalDisplay, showControls && styles.detailView, className)}>
 			{showControls && (
 				<TerminalCommand
-					key={recordKey}
+					key={`command:${recordKey}`}
 					command={command}
 					action={action}
 					remark={remark}
 				/>
 			)}
 			<TerminalOutput
-				key={recordKey}
+				key={`output:${recordKey}`}
 				content={content}
 				recordKey={recordKey}
 				showControls={showControls}
