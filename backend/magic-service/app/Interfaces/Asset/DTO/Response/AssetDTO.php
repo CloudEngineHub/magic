@@ -1,0 +1,115 @@
+<?php
+
+declare(strict_types=1);
+/**
+ * Copyright (c) The Magic , Distributed under the software license
+ */
+
+namespace App\Interfaces\Asset\DTO\Response;
+
+use App\Infrastructure\Core\AbstractDTO;
+
+class AssetDTO extends AbstractDTO
+{
+    /**
+     * 雪花 ID 一律以字符串返回。
+     *
+     * 主键是 19 位数字（如 958097509326077953），超过 JavaScript Number 的 53 位安全整数范围，
+     * 直接给数字会在前端被静默截断成另一个值（958097509326077950），拿到它再回传就是别的素材。
+     */
+    public ?string $assetId = null;
+
+    public string $assetKind = '';
+
+    public ?string $assetBusinessType = null;
+
+    public ?string $assetMediaType = null;
+
+    public ?string $parentId = null;
+
+    public string $name = '';
+
+    public string $description = '';
+
+    public ?string $fileUrl = null;
+
+    public function getAssetId(): ?string
+    {
+        return $this->assetId;
+    }
+
+    public function setAssetId(null|int|string $assetId): void
+    {
+        $this->assetId = $assetId === null ? null : (string) $assetId;
+    }
+
+    public function getAssetKind(): string
+    {
+        return $this->assetKind;
+    }
+
+    public function setAssetKind(string $assetKind): void
+    {
+        $this->assetKind = $assetKind;
+    }
+
+    public function getAssetBusinessType(): ?string
+    {
+        return $this->assetBusinessType;
+    }
+
+    public function setAssetBusinessType(?string $assetBusinessType): void
+    {
+        $this->assetBusinessType = $assetBusinessType;
+    }
+
+    public function getAssetMediaType(): ?string
+    {
+        return $this->assetMediaType;
+    }
+
+    public function setAssetMediaType(?string $assetMediaType): void
+    {
+        $this->assetMediaType = $assetMediaType;
+    }
+
+    public function getParentId(): ?string
+    {
+        return $this->parentId;
+    }
+
+    public function setParentId(null|int|string $parentId): void
+    {
+        $this->parentId = $parentId === null ? null : (string) $parentId;
+    }
+
+    public function getName(): string
+    {
+        return $this->name;
+    }
+
+    public function setName(string $name): void
+    {
+        $this->name = $name;
+    }
+
+    public function getDescription(): string
+    {
+        return $this->description;
+    }
+
+    public function setDescription(string $description): void
+    {
+        $this->description = $description;
+    }
+
+    public function getFileUrl(): ?string
+    {
+        return $this->fileUrl;
+    }
+
+    public function setFileUrl(?string $fileUrl): void
+    {
+        $this->fileUrl = $fileUrl;
+    }
+}

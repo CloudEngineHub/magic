@@ -8,9 +8,11 @@ use App\Infrastructure\Util\Middleware\RequestContextMiddleware;
 use App\Interfaces\Admin\Facade\Agent\AdminAgentApi;
 use App\Interfaces\Admin\Facade\Agent\AgentGlobalSettingsApi;
 use App\Interfaces\Admin\Facade\AppMenu\AppMenuAdminApi;
+use App\Interfaces\Asset\Facade\AdminAssetApi;
 use App\Interfaces\Audit\Facade\AdminOperationLogApi;
 use App\Interfaces\Contact\Facade\Admin\PlatformUserApi;
 use App\Interfaces\Kernel\Facade\PlatformSettingsApi;
+use App\Interfaces\Middleware\Auth\UserAuthMiddleware;
 use App\Interfaces\OrganizationEnvironment\Facade\Admin\OrganizationApi;
 use App\Interfaces\Permission\Facade\FunctionPermissionAdminApi;
 use App\Interfaces\Permission\Facade\ModelAccessRoleApi;
@@ -195,6 +197,14 @@ Router::addGroup('/api/v1/admin', static function () {
         Router::put('/{id:\d+}/sort', [AdminSlidesTemplateApi::class, 'updateSort']);
         Router::delete('/{id:\d+}', [AdminSlidesTemplateApi::class, 'delete']);
     }, ['middleware' => [RequestContextMiddleware::class]]);
+
+    // 资产库管理：创建、查询、更新和删除公开资产。
+    Router::addGroup('/assets', static function (): void {
+        Router::post('', [AdminAssetApi::class, 'create']);
+        Router::get('', [AdminAssetApi::class, 'list']);
+        Router::patch('/{assetId:\d+}', [AdminAssetApi::class, 'update']);
+        Router::delete('/{assetId:\d+}', [AdminAssetApi::class, 'delete']);
+    }, ['middleware' => [RequestContextMiddleware::class, UserAuthMiddleware::class]]);
 });
 
 // 平台设置（管理端）

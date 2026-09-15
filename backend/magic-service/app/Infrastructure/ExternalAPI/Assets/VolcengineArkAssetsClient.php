@@ -1,0 +1,242 @@
+<?php
+
+declare(strict_types=1);
+/**
+ * Copyright (c) The Magic , Distributed under the software license
+ */
+
+namespace App\Infrastructure\ExternalAPI\Assets;
+
+use DateTimeImmutable;
+use GuzzleHttp\Client;
+use Hyperf\Guzzle\ClientFactory;
+use InvalidArgumentException;
+use Psr\Log\LoggerInterface;
+use RuntimeException;
+use Throwable;
+use Volcengine\Common\Utils;
+
+/**
+ * 火山方舟 Ark Assets 接口客户端，仅用于第三方联调，不写入本地素材业务表。
+ *
+ * 客户端只负责签名与请求，不感知配置来源：凭证由容器从 AI 能力「火山方舟素材服务」读取后注入。
+ */
+class VolcengineArkAssetsClient
+{
+    private const array SUPPORTED_ACTIONS = [
+        'CreateAssetGroup', 'CreateAsset', 'GetAsset', 'ListAssets',
+        'GetAssetGroup', 'ListAssetGroups', 'UpdateAsset', 'UpdateAssetGroup',
+        'DeleteAsset', 'DeleteAssetGroup',
+    ];
+
+    private const int REQUEST_TIMEOUT_SECONDS = 30;
+
+    /**
+     * @param array<string, mixed> $config 素材服务配置，由容器装配时传入（见 config/autoload/dependencies.php）
+     */
+    public function __construct(
+        private readonly ClientFactory $clientFactory,
+        private LoggerInterface $logger,
+        private readonly array $config = [],
+    ) {
+    }
+
+    /**
+     * @param array<string, mixed> $payload @return array<string, mixed>
+     */
+    public function request(string $action, array $payload): array
+    {
+        return $this->execute($action, $payload, true);
+    }
+
+    /**
+     * 允许业务失败的请求：HTTP 4xx/5xx 不抛异常，返回原始响应体，由调用方按
+     * ResponseMetadata.Error.Code 自行判断。仅供删除类幂等操作使用——已不存在的资源在
+     * 火山侧同样返回 4xx，补偿链路必须能区分「已删干净」与「真的删失败」。
+     *
+     * @param array<string, mixed> $payload
+     * @return array<string, mixed>
+     */
+    public function requestAllowingBusinessFailure(string $action, array $payload): array
+    {
+        return $this->execute($action, $payload, false);
+    }
+
+    /**
+     * @param array<string, mixed> $payload @return array{url: string, headers: array<string, string>, body: string}
+     */
+    public function buildRequest(string $action, array $payload, ?DateTimeImmutable $date = null): array
+    {
+        $this->validateConfig();
+        if (! in_array($action, self::SUPPORTED_ACTIONS, true)) {
+            throw new InvalidArgumentException('当前素材操作暂不支持，请联系管理员');
+        }
+        $config = $this->config;
+        $endpoint = rtrim((string) ($config['endpoint'] ?? 'https://open.volcengineapi.com'), '/');
+        $parts = parse_url($endpoint);
+        $host = (string) ($parts['host'] ?? 'open.volcengineapi.com');
+        if (isset($parts['port'])) {
+            $host .= ':' . $parts['port'];
+        }
+        // 与火山 SDK 的 BuildRequestInterceptor 保持一致，使用默认 JSON 编码参与签名。
+        $body = json_encode($payload, JSON_THROW_ON_ERROR);
+        // 使用火山 SDK 官方 signv4 实现，确保 content-type 等官方要求的请求头参与签名。
+        $query = ['Action' => $action, 'Version' => (string) ($config['version'] ?? '2024-01-01')];
+        $queryString = http_build_query($query, '', '&', PHP_QUERY_RFC3986);
+        $signedHeaders = Utils::signv4(
+            (string) $config['access_key'],
+            (string) $config['secret_key'],
+            (string) ($config['region'] ?? 'cn-beijing'),
+            (string) ($config['service'] ?? 'ark'),
+            $body,
+            $queryString,
+            'POST',
+            '/',
+            ['Content-Type' => 'application/json', 'Host' => $host],
+        );
+        return [
+            'url' => $endpoint . '/?' . $queryString,
+            'headers' => array_map(static fn ($value): string => is_array($value) ? implode(',', $value) : (string) $value, $signedHeaders),
+            'body' => $body,
+        ];
+    }
+
+    /**
+     * @param array<string, mixed> $payload
+     */
+    public function createAssetGroup(array $payload): array
+    {
+        return $this->request('CreateAssetGroup', $payload);
+    }
+
+    /**
+     * @param array<string, mixed> $payload
+     */
+    public function createAsset(array $payload): array
+    {
+        return $this->request('CreateAsset', $payload);
+    }
+
+    /**
+     * @param array<string, mixed> $payload
+     */
+    public function getAsset(array $payload): array
+    {
+        return $this->request('GetAsset', $payload);
+    }
+
+    /**
+     * @param array<string, mixed> $payload
+     */
+    public function listAssets(array $payload): array
+    {
+        return $this->request('ListAssets', $payload);
+    }
+
+    /**
+     * @param array<string, mixed> $payload
+     */
+    public function getAssetGroup(array $payload): array
+    {
+        return $this->request('GetAssetGroup', $payload);
+    }
+
+    /**
+     * @param array<string, mixed> $payload
+     */
+    public function listAssetGroups(array $payload): array
+    {
+        return $this->request('ListAssetGroups', $payload);
+    }
+
+    /**
+     * @param array<string, mixed> $payload
+     */
+    public function deleteAsset(array $payload): array
+    {
+        return $this->request('DeleteAsset', $payload);
+    }
+
+    /**
+     * @param array<string, mixed> $payload
+     */
+    public function deleteAssetGroup(array $payload): array
+    {
+        return $this->request('DeleteAssetGroup', $payload);
+    }
+
+    /**
+     * @param array<string, mixed> $payload @return array<string, mixed>
+     */
+    private function execute(string $action, array $payload, bool $throwOnBusinessError): array
+    {
+        // 先打日志再构建请求：buildRequest 会做配置校验和签名，任何一步失败都必须留下可排查的记录。
+        $this->logger->info('开始调用火山方舟 Assets 接口', [
+            'action' => $action,
+            'payload_keys' => array_keys($payload),
+        ]);
+        $request = [];
+        try {
+            $request = $this->buildRequest($action, $payload);
+            $response = $this->createClient()->post($request['url'], [
+                'headers' => $request['headers'],
+                // 使用 body 确保签名使用的字节与实际发送内容一致。
+                'body' => $request['body'],
+                'http_errors' => false,
+            ]);
+            $rawBody = (string) $response->getBody();
+            $decoded = json_decode($rawBody, true, 512, JSON_THROW_ON_ERROR);
+            if (! is_array($decoded)) {
+                throw new RuntimeException('素材服务返回内容异常，请稍后重试');
+            }
+            $this->logger->info('火山方舟 Assets 接口调用完成', [
+                'action' => $action,
+                'http_status' => $response->getStatusCode(),
+                'response' => $rawBody,
+            ]);
+            if ($response->getStatusCode() >= 400 && $throwOnBusinessError) {
+                throw new RuntimeException('素材服务暂时不可用，请稍后重试');
+            }
+            return $decoded;
+        } catch (Throwable $exception) {
+            $this->logger->error('火山方舟 Assets 接口调用失败', [
+                'action' => $action,
+                'exception' => $exception::class,
+                'error' => $exception->getMessage(),
+            ]);
+            // 输出可复核的签名元数据，但不输出 AK、SK 或完整 Authorization。
+            $this->logger->error('火山方舟 Assets 签名元数据', [
+                'action' => $action,
+                'url' => $request['url'] ?? '',
+                'x_date' => $request['headers']['X-Date'] ?? '',
+                'signed_headers' => $this->extractSignedHeaders($request['headers']['Authorization'] ?? ''),
+                'body_sha256' => $request['headers']['X-Content-Sha256'] ?? '',
+            ]);
+            throw $exception;
+        }
+    }
+
+    private function validateConfig(): void
+    {
+        $config = $this->config;
+        if (trim((string) ($config['access_key'] ?? '')) === '') {
+            throw new InvalidArgumentException('素材服务配置不完整，请联系管理员');
+        }
+        if (trim((string) ($config['secret_key'] ?? '')) === '') {
+            throw new InvalidArgumentException('素材服务配置不完整，请联系管理员');
+        }
+    }
+
+    private function createClient(): Client
+    {
+        return $this->clientFactory->create(['timeout' => self::REQUEST_TIMEOUT_SECONDS]);
+    }
+
+    private function extractSignedHeaders(string $authorization): string
+    {
+        if (preg_match('/SignedHeaders=([^,]+)/', $authorization, $matches) === 1) {
+            return $matches[1];
+        }
+        return '';
+    }
+}

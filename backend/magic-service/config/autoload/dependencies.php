@@ -55,6 +55,12 @@ use App\Domain\Agent\Repository\Persistence\AgentVersionRepository;
 use App\Domain\Agent\Repository\Persistence\MagicBotThirdPlatformChatRepository;
 use App\Domain\AppMenu\Repository\Facade\AppMenuRepositoryInterface;
 use App\Domain\AppMenu\Repository\Persistence\AppMenuRepository;
+use App\Domain\Asset\Repository\Facade\AssetAgreementRepositoryInterface;
+use App\Domain\Asset\Repository\Facade\AssetProviderAssetRepositoryInterface;
+use App\Domain\Asset\Repository\Facade\AssetRepositoryInterface;
+use App\Domain\Asset\Repository\Persistence\AssetAgreementRepository;
+use App\Domain\Asset\Repository\Persistence\AssetProviderAssetRepository;
+use App\Domain\Asset\Repository\Persistence\AssetRepository;
 use App\Domain\Audit\Contract\PermissionLabelProviderInterface;
 use App\Domain\Audit\Contract\PermissionLabelServiceInterface;
 use App\Domain\Audit\ModelCall\Repository\Facade\AuditLogRepositoryInterface;
@@ -501,6 +507,9 @@ $dependencies = [
     RoleRepositoryInterface::class => RoleRepository::class,
     OrganizationAdminRepositoryInterface::class => OrganizationAdminRepository::class,
     ResourceVisibilityRepositoryInterface::class => ResourceVisibilityRepository::class,
+    AssetRepositoryInterface::class => AssetRepository::class,
+    AssetProviderAssetRepositoryInterface::class => AssetProviderAssetRepository::class,
+    AssetAgreementRepositoryInterface::class => AssetAgreementRepository::class,
 
     // audit (操作日志)
     AdminOperationLogRepositoryInterface::class => AdminOperationLogRepository::class,

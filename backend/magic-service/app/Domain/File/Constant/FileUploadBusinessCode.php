@@ -12,6 +12,7 @@ use App\Infrastructure\Util\IdGenerator\IdGenerator;
 enum FileUploadBusinessCode: string
 {
     case SKILL = 'skill';
+    case ASSET = 'asset';
 
     public function getDir(): string
     {
