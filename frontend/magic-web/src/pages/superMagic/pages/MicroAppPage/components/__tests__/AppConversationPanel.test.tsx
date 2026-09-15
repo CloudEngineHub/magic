@@ -357,13 +357,16 @@ describe("AppConversationPanel", () => {
 
 		const editorLayout = screen.getByTestId("web-micro-app-editor").parentElement
 		expect(editorLayout).toHaveClass("items-stretch")
-		expect(editorLayout).not.toHaveClass(
+		for (const className of [
+			"items-start",
 			"rounded-2xl",
 			"border",
 			"border-border",
 			"bg-sidebar",
 			"p-2",
-		)
+		]) {
+			expect(editorLayout).not.toHaveClass(className)
+		}
 	})
 
 	it("provides the project attachment store to the message list", () => {
