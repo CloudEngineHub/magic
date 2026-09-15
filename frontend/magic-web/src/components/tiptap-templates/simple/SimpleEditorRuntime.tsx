@@ -89,6 +89,7 @@ export const SimpleEditor = React.forwardRef<SimpleEditorRef, SimpleEditorProps>
 		isEditable = true,
 		isMobile = false,
 		documentFlow = false,
+		onFrontmatterSourceMap,
 	},
 	ref,
 ) {
@@ -103,9 +104,25 @@ export const SimpleEditor = React.forwardRef<SimpleEditorRef, SimpleEditorProps>
 	const { t } = useTranslation("tiptap")
 	const { prefersColorScheme } = useTheme()
 	const isDark = prefersColorScheme === "dark"
+	const preprocessContent = React.useCallback(
+		(value: string) => {
+			let ranges: Parameters<NonNullable<SimpleEditorProps["onFrontmatterSourceMap"]>>[0] = []
+			const processed = preprocessMarkdownFrontmatter(
+				value,
+				onFrontmatterSourceMap
+					? (nextRanges) => {
+							ranges = nextRanges
+						}
+					: undefined,
+			)
+			onFrontmatterSourceMap?.(ranges, processed)
+			return processed
+		},
+		[onFrontmatterSourceMap],
+	)
 	const processedContent = React.useMemo(
-		() => (typeof content === "string" ? preprocessMarkdownFrontmatter(content) : content),
-		[content],
+		() => (typeof content === "string" ? preprocessContent(content) : content),
+		[content, preprocessContent],
 	)
 
 	// Enhanced slash config with internationalization
@@ -325,11 +342,11 @@ export const SimpleEditor = React.forwardRef<SimpleEditorRef, SimpleEditorProps>
 			editor,
 			setContent: (content: string) => {
 				runActiveEditor(editor, (activeEditor) => {
-					activeEditor.commands.setContent(preprocessMarkdownFrontmatter(content))
+					activeEditor.commands.setContent(preprocessContent(content))
 				})
 			},
 		}),
-		[editor],
+		[editor, preprocessContent],
 	)
 
 	// Ensure cursor visibility when typing (side effect hook, return value not used)

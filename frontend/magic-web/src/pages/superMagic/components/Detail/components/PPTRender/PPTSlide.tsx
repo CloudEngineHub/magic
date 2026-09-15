@@ -838,13 +838,14 @@ const PPTSlide = observer(function PPTSlide({
 		projectId,
 	])
 
-	const handleAIEdit = useMemoizedFn(() => {
+	// 菜单退出确认可能改变状态；保留点击时的开关意图，避免确认退出后又重新开启。
+	const handleAIEdit = useCallback(() => {
 		if (isAppendPicking) {
 			rendererRef.current?.stopInspector()
 		} else {
 			rendererRef.current?.startInspectorAppend()
 		}
-	})
+	}, [isAppendPicking])
 	const handleQuickSelect = useMemoizedFn(() => {
 		if (isQuickSelecting) {
 			void rendererRef.current?.requestInspectorExit?.()
@@ -1104,7 +1105,12 @@ const PPTSlide = observer(function PPTSlide({
 				aria-hidden={!effectiveIsPresented}
 				data-interactive={String(isInteractive)}
 			>
-				{!onToolbarModelChange && toolbarModel && <EditToolbar {...toolbarModel.props} />}
+				{!onToolbarModelChange && toolbarModel && (
+					<EditToolbar
+						{...toolbarModel.props}
+						getPopupContainer={() => slideWrapperRef.current}
+					/>
+				)}
 
 				{renderMainContent()}
 			</div>

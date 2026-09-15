@@ -19,8 +19,8 @@
 	},
 	"html": {
 		"aiOptimization": {
-			"description": "I've already prepared a few one-click optimization options for you. Just choose any one, and I'll generate the corresponding command for you in the chatbox.",
-			"title": "✨ Need some help to quickly optimize this file?"
+			"description": "Open More to edit multiple selections, check facts, translate content, or correct data. Choosing an action adds its instructions to the chat.",
+			"title": "More AI editing actions"
 		},
 		"export": {
 			"description": "Effortlessly use your results anywhere. Choose to download the source file or directly export to common PDF and PPTX formats, ready for presentation, sharing, or archiving without any manual conversion.",

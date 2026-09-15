@@ -891,6 +891,7 @@ const PPTRenderInner = observer(function PPTRenderInner({
 									<EditToolbar
 										key={liveRenderScopeKey}
 										{...presentedToolbarModel.props}
+										getPopupContainer={() => containerRef.current}
 										interactionDisabled={Boolean(pendingKey)}
 										testIdsEnabled={isTabActive !== false}
 									/>

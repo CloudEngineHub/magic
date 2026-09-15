@@ -11,7 +11,7 @@ interface UseGuideTourProps {
 }
 
 const HTMLGuideTourElementId = {
-	AIOptimizationButton: "tour-ai-optimization-button",
+	MoreButton: "tour-html-more-button",
 	HTMLFileEditButton: "tour-html-file-edit-button",
 	HTMLFileDownloadButton: "tour-html-file-download-button",
 }
@@ -32,7 +32,7 @@ const useHTMLGuideTour = ({ isMobile }: UseGuideTourProps) => {
 	const [guideTourSteps, setGuideTourSteps] = useState<TourProps["steps"]>([])
 
 	const [htmlGuideTourElementReady, setHtmlGuideTourElementReady] = useState({
-		[HTMLGuideTourElementId.AIOptimizationButton]: false,
+		[HTMLGuideTourElementId.MoreButton]: false,
 		[HTMLGuideTourElementId.HTMLFileEditButton]: false,
 	})
 	const [htmlGuideTourCount, setHtmlGuideTourCount] = useState(0)
@@ -59,9 +59,7 @@ const useHTMLGuideTour = ({ isMobile }: UseGuideTourProps) => {
 				{
 					title: t("html.aiOptimization.title"),
 					description: t("html.aiOptimization.description"),
-					target:
-						document.getElementById(HTMLGuideTourElementId.AIOptimizationButton) ||
-						null,
+					target: document.getElementById(HTMLGuideTourElementId.MoreButton) || null,
 				},
 				{
 					title: t("html.manualEdit.title"),

@@ -1,4 +1,6 @@
 import type { AttachmentItem } from "../../../../../TopicFilesButton/hooks/types"
+import { createMarkdownSourceLocation } from "./extensions/markdown-source-location"
+import type { SourceReplacement } from "./source-location"
 import { memo, useEffect, useMemo, useRef } from "react"
 import { useMemoizedFn } from "ahooks"
 import MagicSpin from "@/components/base/MagicSpin"
@@ -26,6 +28,8 @@ import LargeMarkdownPreview from "./components/LargeMarkdownPreview"
 import { isLargeMarkdownContent } from "./largeMarkdown"
 
 interface EditorBodyProps {
+	selectionRootRef?: React.Ref<HTMLDivElement>
+	enableSourceLocation?: boolean
 	isLoading: boolean
 	/** Keeps pure-share loading in the page-level overlay instead of rendering a second spinner. */
 	suppressLoadingIndicator?: boolean
@@ -66,6 +70,8 @@ interface EditorBodyProps {
 }
 
 function EditorBody({
+	selectionRootRef,
+	enableSourceLocation = false,
 	isLoading,
 	suppressLoadingIndicator = false,
 	documentFlowFullscreen = false,
@@ -195,6 +201,17 @@ function EditorBody({
 	const isLargeMarkdown = useMemo(() => isLargeMarkdownContent(content), [content])
 	const shouldUseCodeSourceEditor = viewMode === "code" || (isLargeMarkdown && isEditMode)
 
+	const parseSourceRef = useRef({ content: "", replacements: [] as SourceReplacement[] })
+	const handleFrontmatterSourceMap = useMemoizedFn(
+		(replacements: SourceReplacement[], content: string) => {
+			parseSourceRef.current = { content, replacements }
+		},
+	)
+	const sourceLocationExtension = useMemo(
+		() => createMarkdownSourceLocation(() => parseSourceRef.current),
+		[],
+	)
+
 	// Combine all extensions
 	const allExtensions = [
 		...projectImageExtensions,
@@ -203,6 +220,7 @@ function EditorBody({
 		SafeHtmlSpan,
 		SafeHtmlTextBlockStyles,
 		SafeVideo,
+		...(enableSourceLocation && !isEditMode ? [sourceLocationExtension] : []),
 	]
 
 	// 创建内部的 editorRef（如果外部没有传入）
@@ -251,7 +269,11 @@ function EditorBody({
 				className,
 			}}
 		>
-			<div className={className} data-testid={dataTestId}>
+			<div
+				ref={selectionRootRef}
+				className={`${enableSourceLocation ? "relative " : ""}${className}`}
+				data-testid={dataTestId}
+			>
 				{isLoading ? (
 					suppressLoadingIndicator ? (
 						<div className="min-h-dvh" />
@@ -278,6 +300,7 @@ function EditorBody({
 					/>
 				) : isLargeMarkdown ? (
 					<LargeMarkdownPreview
+						enableSourceLocation={enableSourceLocation}
 						content={processedContent || content}
 						documentFlow={documentFlowFullscreen}
 						isTabActive={isTabActive}
@@ -287,6 +310,12 @@ function EditorBody({
 					/>
 				) : (
 					<SimpleEditor
+						key={`${!!isEditMode}-${enableSourceLocation}`}
+						onFrontmatterSourceMap={
+							enableSourceLocation && !isEditMode
+								? handleFrontmatterSourceMap
+								: undefined
+						}
 						ref={actualEditorRef}
 						content={
 							isEditMode ? (editContent ?? content) : processedContent || content

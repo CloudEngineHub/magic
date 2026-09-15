@@ -5,6 +5,7 @@
 
 import MarkdownIt from "markdown-it"
 import DOMPurify from "dompurify"
+import type { SourceReplacement } from "./components/EditorBody/source-location"
 
 // Export shared utilities from image-url-resolver
 export {
@@ -774,20 +775,32 @@ function mergeSourceRanges(ranges: SourceRange[]): SourceRange[] {
 function applySourceReplacements(
 	markdown: string,
 	replacements: Array<{ range: SourceRange; replacement: string }>,
+	onReplacements?: (ranges: SourceReplacement[]) => void,
 ): string {
 	const sortedReplacements = [...replacements].sort(
 		(left, right) => left.range.start - right.range.start,
 	)
 	const parts: string[] = []
 	let sourceCursor = 0
+	let outputCursor = 0
+	const ranges: SourceReplacement[] = []
 
 	for (const { range, replacement } of sortedReplacements) {
 		if (range.start < sourceCursor) continue
+		outputCursor += range.start - sourceCursor
+		ranges.push({
+			sourceStart: range.start,
+			sourceEnd: range.end,
+			start: outputCursor,
+			end: outputCursor + replacement.length,
+		})
+		outputCursor += replacement.length
 		parts.push(markdown.slice(sourceCursor, range.start), replacement)
 		sourceCursor = range.end
 	}
 
 	parts.push(markdown.slice(sourceCursor))
+	onReplacements?.(ranges)
 	return parts.join("")
 }
 
@@ -801,16 +814,31 @@ function applySourceReplacements(
  * pass below preserves the product behavior of showing rejected fragments as
  * literal code instead of silently dropping them.
  */
-export function escapeDangerousInvisibleHtmlTags(markdown: string): string {
+export function escapeDangerousInvisibleHtmlTags(
+	markdown: string,
+	onReplacements?: (ranges: SourceReplacement[]) => void,
+): string {
+	onReplacements?.([])
+	const escapeDocument = () =>
+		applySourceReplacements(
+			markdown,
+			[
+				{
+					range: { start: 0, end: markdown.length },
+					replacement: `<pre><code>${escapeHtml(markdown)}</code></pre>`,
+				},
+			],
+			onReplacements,
+		)
 	if (!markdown) return markdown
 	if (markdown.length > MAX_PROBE_MARKDOWN_LENGTH) {
-		return `<pre><code>${escapeHtml(markdown)}</code></pre>`
+		return escapeDocument()
 	}
 
 	const tokens = markdownParser.parse(markdown, {}) as MarkdownToken[]
 	const rawHtmlWorkload = collectRawHtmlWorkload(tokens)
 	if (!rawHtmlWorkload) {
-		return `<pre><code>${escapeHtml(markdown)}</code></pre>`
+		return escapeDocument()
 	}
 
 	const riskCache = new Map<string, boolean>()
@@ -826,7 +854,7 @@ export function escapeDangerousInvisibleHtmlTags(markdown: string): string {
 		riskCache,
 	)
 	if (locatedInlineRanges === null) {
-		return `<pre><code>${escapeHtml(markdown)}</code></pre>`
+		return escapeDocument()
 	}
 
 	const inlineRanges = createInlineCodeRanges(locatedInlineRanges, riskCache)
@@ -837,7 +865,7 @@ export function escapeDangerousInvisibleHtmlTags(markdown: string): string {
 		})
 	}
 
-	return applySourceReplacements(markdown, replacements)
+	return applySourceReplacements(markdown, replacements, onReplacements)
 }
 
 /**

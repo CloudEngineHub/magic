@@ -39,7 +39,7 @@ import MagicSpin from "@/components/base/MagicSpin"
 import DashboardIsolatedHTMLRenderer from "./dashboard/DashboardIsolatedHTMLRenderer"
 import { inlineDashboardDataJs } from "./dashboard/resourceVersioning"
 import { useDashboardVersioning } from "./dashboard/useDashboardVersioning"
-import AIEditButton from "@/pages/superMagic/components/Detail/components/EditToolbar/AIEditButton"
+import { useAIEditMenuItems } from "@/pages/superMagic/components/Detail/components/EditToolbar/useAIEditMenuItems"
 import FileEditButtons from "@/pages/superMagic/components/Detail/components/EditToolbar/FileEditButtons"
 import ActionButton from "@/pages/superMagic/components/Detail/components/CommonHeader/components/ActionButton"
 import { ProjectListItem, Topic } from "@/pages/superMagic/pages/Workspace/types"
@@ -514,13 +514,14 @@ export default memo(function HTML(props: HTMLProps) {
 	const htmlTestIdsEnabled = isTabActive ?? (!activeFileId || activeFileId === fileId)
 	const [isAppendPicking, setIsAppendPicking] = useState(false)
 	const [isQuickSelecting, setIsQuickSelecting] = useState(false)
-	const handleAIEdit = useMemoizedFn(() => {
+	// 菜单退出确认可能改变状态；保留点击时的开关意图，避免确认退出后又重新开启。
+	const handleAIEdit = useCallback(() => {
 		if (isAppendPicking) {
 			htmlRendererRef.current?.stopInspector()
 		} else {
 			htmlRendererRef.current?.startInspectorAppend()
 		}
-	})
+	}, [isAppendPicking])
 	const handleQuickSelection = useMemoizedFn(async () => {
 		if (isQuickSelecting) {
 			await htmlRendererRef.current?.requestInspectorExit?.()
@@ -1322,10 +1323,19 @@ export default memo(function HTML(props: HTMLProps) {
 		if (showAIOptimizationButton) {
 			pubsub.publish(
 				PubSubEvents.GuideTourHTMLElementReady,
-				HTMLGuideTourElementId.AIOptimizationButton,
+				HTMLGuideTourElementId.MoreButton,
 			)
 		}
 	}, [showFileEditButton, showAIOptimizationButton])
+
+	const aiEditMenuItems = useAIEditMenuItems({
+		attachmentList,
+		fileId: displayData?.file_id,
+		enabled: Boolean(showAIOptimizationButton && htmlTestIdsEnabled),
+		maxItems: 3,
+		onPrimaryAction: handleAIEdit,
+		isPrimaryActive: isAppendPicking,
+	})
 
 	const headerActionConfig = useMemo<HeaderActionConfig>(
 		() => ({
@@ -1335,7 +1345,8 @@ export default memo(function HTML(props: HTMLProps) {
 			customActions: [
 				{
 					key: "html-server-update",
-					zone: "primary",
+					zone: "secondary",
+					before: "refresh",
 					visible: () => Boolean(isEditMode && hasServerUpdate),
 					render: (context) => (
 						<Button
@@ -1356,9 +1367,10 @@ export default memo(function HTML(props: HTMLProps) {
 				},
 				{
 					key: "html-toolbar-actions",
-					zone: "primary",
+					zone: "secondary",
+					before: "refresh",
 					visible: () => Boolean(showAIOptimizationButton || showFileEditButton),
-					render: () => (
+					render: (context) => (
 						<div
 							className="flex items-center gap-1"
 							data-testid={
@@ -1371,6 +1383,7 @@ export default memo(function HTML(props: HTMLProps) {
 									size="sm"
 									onClick={() => void handleQuickSelection()}
 									aria-pressed={isQuickSelecting}
+									aria-label={quickSelectionLabel}
 									title={quickSelectionTitle}
 									className="h-6 gap-1.5 rounded-[8px] px-3 py-0 text-xs font-normal text-foreground shadow-xs"
 									data-testid={
@@ -1381,9 +1394,15 @@ export default memo(function HTML(props: HTMLProps) {
 										size={16}
 										className={isQuickSelecting ? "text-primary" : undefined}
 									/>
-									<span className={isQuickSelecting ? "text-primary" : undefined}>
-										{quickSelectionLabel}
-									</span>
+									{context.showButtonText && (
+										<span
+											className={
+												isQuickSelecting ? "text-primary" : undefined
+											}
+										>
+											{quickSelectionLabel}
+										</span>
+									)}
 								</Button>
 							)}
 							{showFileEditButton && (
@@ -1391,7 +1410,7 @@ export default memo(function HTML(props: HTMLProps) {
 									testIdPrefix={htmlTestIdsEnabled ? "html-editor" : undefined}
 									isEditMode={isEditMode}
 									isSaving={false}
-									showButtonText
+									showButtonText={context.showButtonText}
 									editLabel={t("common.edit")}
 									onEdit={handleEdit}
 									beforeAction={() =>
@@ -1401,17 +1420,6 @@ export default memo(function HTML(props: HTMLProps) {
 									onSave={handleSave}
 									onSaveAndExit={handleSaveAndExit}
 									onCancel={handleCancel}
-								/>
-							)}
-							{showAIOptimizationButton && !isEditMode && (
-								<AIEditButton
-									testIdPrefix={htmlTestIdsEnabled ? "html-editor" : undefined}
-									showButtonText
-									maxItems={3}
-									onPrimaryAction={handleAIEdit}
-									isPrimaryActive={isAppendPicking}
-									attachmentList={attachmentList}
-									fileId={displayData?.file_id}
 								/>
 							)}
 						</div>
@@ -1535,8 +1543,10 @@ export default memo(function HTML(props: HTMLProps) {
 		attachments,
 		actionConfig: headerActionConfig,
 		onCompareVersion: handleCompareVersion,
-		extraMoreMenuItems:
-			!isDataAnalysis && !isCodeViewMode
+		moreButtonId: htmlTestIdsEnabled ? HTMLGuideTourElementId.MoreButton : undefined,
+		extraMoreMenuItems: [
+			...(aiEditMenuItems ?? []),
+			...(!isDataAnalysis && !isCodeViewMode
 				? [
 						{
 							key: "dev-console-toggle",
@@ -1553,7 +1563,8 @@ export default memo(function HTML(props: HTMLProps) {
 							onClick: handleDevConsoleToggle,
 						},
 					]
-				: [],
+				: []),
+		],
 	}
 
 	return (

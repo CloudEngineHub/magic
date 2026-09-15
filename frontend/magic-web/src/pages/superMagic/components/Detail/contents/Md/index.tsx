@@ -1,5 +1,10 @@
 import type { TextFileSession } from "../../types"
 import DetailEmpty from "../../components/DetailEmpty"
+import type {
+	MarkdownSourceSnapshot,
+	SourceReplacement,
+} from "./components/EditorBody/source-location"
+import { useMarkdownSelection } from "./hooks/useMarkdownSelection"
 import { getTemporaryDownloadUrl } from "@/pages/superMagic/utils/api"
 import { memo, useEffect, useMemo, useRef, useState } from "react"
 import { createPortal } from "react-dom"
@@ -11,7 +16,10 @@ import { useTranslation } from "react-i18next"
 import { getLanguage } from "@/pages/superMagic/utils/handleFIle"
 import EditorBody from "./components/EditorBody"
 import MagicSpin from "@/components/base/MagicSpin"
-import AIOptimization from "@/pages/superMagic/components/Detail/components/AIOptimization"
+import { useAIEditMenuItems } from "@/pages/superMagic/components/Detail/components/EditToolbar/useAIEditMenuItems"
+import ConditionalTooltip from "../../components/EditToolbar/ConditionalTooltip"
+import { Button } from "@/components/shadcn-ui/button"
+import { Crosshair } from "lucide-react"
 import FileEditButtons from "@/pages/superMagic/components/Detail/components/EditToolbar/FileEditButtons"
 import CommonFooter from "../../components/CommonFooter"
 import { useIsMobile } from "@/hooks/useIsMobile"
@@ -185,6 +193,7 @@ export default memo(function TextEditor(props: TextEditorProps) {
 		isTabActive = true,
 		allowDownload,
 		mdToolbarContainer,
+		topicId,
 	} = props
 	const { t } = useTranslation("super")
 	const isMobile = useIsMobile()
@@ -313,7 +322,8 @@ export default memo(function TextEditor(props: TextEditorProps) {
 		}
 	}, [displayData, fileData])
 
-	const [processedContent, setProcessedContent] = useState<string>(data?.content || "")
+	const [sourceSnapshot, setSourceSnapshot] = useState<MarkdownSourceSnapshot | null>(null)
+	const processedContent = sourceSnapshot?.content ?? ""
 	const [isLoading, setIsLoading] = useState<boolean>(true)
 	// Get language for syntax highlighting
 	const language = useMemo(() => {
@@ -421,7 +431,14 @@ export default memo(function TextEditor(props: TextEditorProps) {
 
 	// Process markdown images to resolve URLs
 	useEffect(() => {
-		let cancelled = false
+		let disposed = false
+		const processContent = () => {
+			let replacements: SourceReplacement[] = []
+			const content = escapeDangerousInvisibleHtmlTags(currentContent, (ranges) => {
+				replacements = ranges
+			})
+			setSourceSnapshot({ source: currentContent, content, replacements })
+		}
 		const processImages = async () => {
 			setIsLoading(true)
 			setImageUrlMap(new Map())
@@ -430,7 +447,7 @@ export default memo(function TextEditor(props: TextEditorProps) {
 			const imagePaths = extractImagePaths(currentContent)
 
 			if (imagePaths.length === 0) {
-				setProcessedContent(escapeDangerousInvisibleHtmlTags(currentContent))
+				processContent()
 				setIsLoading(false)
 				return
 			}
@@ -439,8 +456,8 @@ export default memo(function TextEditor(props: TextEditorProps) {
 				await Promise.all(
 					imagePaths.filter((path) => !isExternalUrl(path)).map(urlResolver),
 				)
-				if (cancelled) return
-				setProcessedContent(escapeDangerousInvisibleHtmlTags(currentContent))
+				if (disposed) return
+				processContent()
 				setIsLoading(false)
 				return
 			}
@@ -494,32 +511,36 @@ export default memo(function TextEditor(props: TextEditorProps) {
 							},
 						})) || []
 
+					if (disposed) return
+
 					// Build image URL map using utility function
 					const resolvedMap = buildImageUrlMapEntries(downloadUrls, fileIdToPaths)
 
 					setImageUrlMap(resolvedMap)
-					setProcessedContent(escapeDangerousInvisibleHtmlTags(currentContent))
+					processContent()
 					setIsLoading(false)
 				} catch (error) {
+					if (disposed) return
 					console.error("Error fetching download URLs:", error)
-					setProcessedContent(escapeDangerousInvisibleHtmlTags(currentContent))
+					processContent()
 					setImageUrlMap(new Map())
 					setIsLoading(false)
 				}
 			} else {
-				setProcessedContent(escapeDangerousInvisibleHtmlTags(currentContent))
+				processContent()
 				setImageUrlMap(new Map())
 				setIsLoading(false)
 			}
 		}
 		processImages()
 		return () => {
-			cancelled = true
+			disposed = true
 		}
 		// eslint-disable-next-line react-hooks/exhaustive-deps
 	}, [currentContent, relativeFilePath])
 
 	const handleEdit = useMemoizedFn(() => {
+		markdownSelection.stop()
 		setIsEditMode?.(true)
 		// 进入编辑模式时，使用当前的内容作为编辑内容
 		if (!textFileSession) setEditContent(currentContent)
@@ -759,6 +780,33 @@ export default memo(function TextEditor(props: TextEditorProps) {
 			.catch(() => magicToast.error(t("playbackControl.copyMarkdownFailed")))
 	})
 
+	const markdownSelection = useMarkdownSelection({
+		file: displayData,
+		enabled:
+			!!allowEdit &&
+			!isMobile &&
+			!isEditMode &&
+			isNewestVersion &&
+			isTabActive &&
+			!loading &&
+			!isLoading &&
+			internalViewMode !== "code" &&
+			!shouldHideByPermission,
+		snapshot: sourceSnapshot?.source === currentContent ? sourceSnapshot : null,
+		fileId: displayData?.file_id,
+		fileName: displayData?.file_name || displayData?.title,
+		filePath: relativeFilePath,
+		topicId,
+		projectId: selectedProject?.id,
+	})
+
+	const aiEditMenuItems = useAIEditMenuItems({
+		file: textFileSession ? displayData : undefined,
+		attachmentList: attachmentList as AttachmentItem[],
+		fileId: displayData?.file_id,
+		enabled: !!allowEdit && !isMobile && !isEditMode && isNewestVersion && isTabActive,
+	})
+
 	const headerActionConfig = useMemo(() => {
 		const customActions: NonNullable<HeaderActionConfig["customActions"]> = []
 
@@ -780,26 +828,49 @@ export default memo(function TextEditor(props: TextEditorProps) {
 			})
 		}
 
-		if (allowEdit && !isMobile && displayData?.file_id && !isEditMode && isNewestVersion) {
+		if (
+			allowEdit &&
+			!isMobile &&
+			!isEditMode &&
+			isNewestVersion &&
+			internalViewMode !== "code"
+		) {
+			const label = t(
+				markdownSelection.active
+					? "topicFiles.exitSelectElement"
+					: "topicFiles.selectElement",
+			)
 			customActions.push({
-				key: "md-ai-optimize",
-				zone: "primary" as const,
-				render: () => (
-					<AIOptimization
-						file={textFileSession ? displayData : undefined}
-						attachmentList={attachmentList as AttachmentItem[]}
-						file_id={displayData?.file_id}
-						showButtonText
-					/>
+				key: "md-select",
+				zone: "secondary",
+				before: "refresh",
+				render: (context) => (
+					<ConditionalTooltip showText={context.showButtonText} title={label}>
+						<Button
+							variant="outline"
+							size="sm"
+							onClick={markdownSelection.toggle}
+							disabled={!markdownSelection.canSelect}
+							aria-pressed={markdownSelection.active}
+							aria-label={label}
+							className={cn(
+								"h-6 gap-1.5 rounded-[8px] px-3 py-0 text-xs font-normal shadow-xs",
+								markdownSelection.active && "text-primary",
+							)}
+						>
+							<Crosshair size={16} />
+							{context.showButtonText && <span>{label}</span>}
+						</Button>
+					</ConditionalTooltip>
 				),
 			})
 		}
-
 		if (setIsEditMode && allowEdit && !isMobile && displayData?.file_id && isNewestVersion) {
 			customActions.push({
 				key: "md-edit-buttons",
-				zone: "primary" as const,
-				render: () => (
+				zone: "secondary" as const,
+				before: "refresh" as const,
+				render: (context) => (
 					<FileEditButtons
 						isEditMode={isEditMode}
 						isSaving={textFileSession?.saving ?? false}
@@ -807,7 +878,7 @@ export default memo(function TextEditor(props: TextEditorProps) {
 							textFileSession &&
 							(loading || textFileSession.loadError || !isTabActive),
 						)}
-						showButtonText
+						showButtonText={context.showButtonText}
 						onEdit={handleEdit}
 						onSave={
 							textFileSession ? () => handleSave().catch(() => undefined) : handleSave
@@ -843,6 +914,11 @@ export default memo(function TextEditor(props: TextEditorProps) {
 		loading,
 		isTabActive,
 		allowEdit,
+		markdownSelection.active,
+		markdownSelection.canSelect,
+		markdownSelection.toggle,
+		internalViewMode,
+		t,
 		attachmentList,
 		displayData?.file_id,
 		handleExportImage,
@@ -898,6 +974,7 @@ export default memo(function TextEditor(props: TextEditorProps) {
 						allowEdit={allowEdit}
 						attachments={attachments as AttachmentItem[] | undefined}
 						actionConfig={headerActionConfig}
+						extraMoreMenuItems={aiEditMenuItems}
 					/>
 				)}
 				{textFileSession?.loadError ? (
@@ -940,6 +1017,13 @@ export default memo(function TextEditor(props: TextEditorProps) {
 							)}
 						>
 							<EditorBody
+								selectionRootRef={markdownSelection.selectionRootRef}
+								enableSourceLocation={
+									!!allowEdit &&
+									!isMobile &&
+									!isEditMode &&
+									internalViewMode !== "code"
+								}
 								isLoading={isLoading}
 								viewMode={internalViewMode as "code" | "markdown"}
 								language={language}

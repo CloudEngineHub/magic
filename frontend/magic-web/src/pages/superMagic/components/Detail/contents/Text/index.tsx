@@ -8,7 +8,7 @@ import { Input } from "antd"
 import { useState, useEffect, useRef, useMemo } from "react"
 import { useMemoizedFn } from "ahooks"
 import { shadow } from "@/utils/shadow"
-import AIOptimization from "@/pages/superMagic/components/Detail/components/AIOptimization"
+import { useAIEditMenuItems } from "@/pages/superMagic/components/Detail/components/EditToolbar/useAIEditMenuItems"
 import { useIsMobile } from "@/hooks/useIsMobile"
 import CommonFooter from "../../components/CommonFooter"
 import Deleted from "../../components/Deleted"
@@ -235,6 +235,19 @@ export default function Text(props: any) {
 		showExportPdf: false,
 	})
 
+	const aiEditMenuItems = useAIEditMenuItems({
+		file: textFileSession ? data : undefined,
+		attachmentList,
+		fileId: data?.file_id,
+		enabled:
+			!readOnlyPreview &&
+			!!allowEdit &&
+			!isMobile &&
+			!isEditMode &&
+			isNewestVersion &&
+			isTabActive,
+	})
+
 	const headerActionConfig = useMemo<HeaderActionConfig>(
 		() => ({
 			overrides: readOnlyPreview
@@ -256,29 +269,9 @@ export default function Text(props: any) {
 					render: () => ExportDropdownButton,
 				},
 				{
-					key: "text-ai-optimization",
-					zone: "primary",
-					visible: () =>
-						Boolean(
-							!readOnlyPreview &&
-							allowEdit &&
-							!isMobile &&
-							data?.file_id &&
-							!isEditMode &&
-							isNewestVersion,
-						),
-					render: (context) => (
-						<AIOptimization
-							file={textFileSession ? data : undefined}
-							attachmentList={attachmentList}
-							file_id={data?.file_id}
-							showButtonText={context.showButtonText}
-						/>
-					),
-				},
-				{
 					key: "text-edit-actions",
-					zone: "primary",
+					zone: "secondary",
+					before: "refresh",
 					visible: () =>
 						Boolean(
 							!readOnlyPreview &&
@@ -358,6 +351,7 @@ export default function Text(props: any) {
 		quitEditMode,
 		allowEdit,
 		actionConfig: headerActionConfig,
+		extraMoreMenuItems: aiEditMenuItems,
 		attachments,
 		renderMode: headerRenderMode,
 	}

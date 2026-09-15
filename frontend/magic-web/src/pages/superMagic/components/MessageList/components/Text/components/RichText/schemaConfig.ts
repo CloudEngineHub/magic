@@ -9,6 +9,7 @@ import { SuperPlaceholderExtension } from "@/pages/superMagic/components/Message
 import { getDisplayText } from "@/pages/superMagic/components/MessageEditor/extensions/super-placeholder/utils"
 import { MentionItemType } from "@/components/business/MentionPanel/types"
 import { INSPECTOR_DETAIL_TYPE } from "@/pages/superMagic/components/MessageEditor/extensions/inspector-detail/const"
+import type { MarkdownSelectionSource } from "@/pages/superMagic/components/MessageEditor/extensions/inspector-detail/types"
 
 function safeParseJsonAttr(value: string | null) {
 	if (!value) return null
@@ -33,6 +34,8 @@ interface SuperPlaceholderSchemaAttrs extends Record<string, unknown> {
 }
 
 interface InspectorDetailSchemaAttrs extends Record<string, unknown> {
+	sourceType?: "html" | "markdown"
+	markdownSource?: MarkdownSelectionSource | null
 	title?: string
 	selector?: string
 	tagName?: string
@@ -225,6 +228,8 @@ export default {
 			atom: true,
 			selectable: true,
 			attrs: {
+				sourceType: { default: "html" },
+				markdownSource: { default: null },
 				title: { default: "" },
 				selector: { default: "" },
 				tagName: { default: "" },
@@ -245,6 +250,11 @@ export default {
 				{
 					tag: `[data-type="${INSPECTOR_DETAIL_TYPE}"]`,
 					getAttrs: (dom: HTMLElement) => ({
+						sourceType:
+							dom.getAttribute("data-source-type") === "markdown"
+								? "markdown"
+								: "html",
+						markdownSource: safeParseJsonAttr(dom.getAttribute("data-markdown-source")),
 						title: dom.getAttribute("data-title") || "",
 						selector: dom.getAttribute("data-selector") || "",
 						tagName: dom.getAttribute("data-tag-name") || "",
@@ -275,6 +285,10 @@ export default {
 					"span",
 					{
 						"data-type": INSPECTOR_DETAIL_TYPE,
+						"data-source-type": node.attrs.sourceType,
+						"data-markdown-source": node.attrs.markdownSource
+							? JSON.stringify(node.attrs.markdownSource)
+							: undefined,
 						"data-title": node.attrs.title,
 						"data-selector": node.attrs.selector,
 						"data-tag-name": node.attrs.tagName,
