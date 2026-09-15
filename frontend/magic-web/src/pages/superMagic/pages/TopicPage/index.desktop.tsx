@@ -16,7 +16,6 @@ import { filterClickableMessageWithoutRevoked } from "../../utils/handleMessage"
 import { useDetailModeCache } from "../../hooks/useDetailModeCache"
 import { useAttachmentsPolling } from "../../hooks/useAttachmentsPolling"
 import { useProjectAttachmentsChangeRealtime } from "../../hooks/useProjectAttachmentsChangeRealtime"
-import { useAutoOpenFile } from "../../hooks/useAutoOpenFile"
 import { useDeferUntilFileTabsCacheLoaded } from "../../hooks/useDeferUntilFileTabsCacheLoaded"
 import { useRefreshTopicDetailOnTaskComplete } from "../../hooks/useRefreshTopicDetailOnTaskComplete"
 import { AttachmentDataProcessor } from "../../utils/attachmentDataProcessor"
@@ -246,9 +245,6 @@ function TopicPage({ pageVariant = "default" }: TopicPageDesktopProps) {
 		isEnabled: !isReadOnly && !isSingleTopicChat,
 	})
 
-	const activeFileIdRef = useRef<string | null>(activeFileId)
-	activeFileIdRef.current = activeFileId
-
 	// 使用详情模式缓存 hook
 	useDetailModeCache({
 		selectedProjectId: selectedProject?.id,
@@ -257,12 +253,6 @@ function TopicPage({ pageVariant = "default" }: TopicPageDesktopProps) {
 		setAutoDetail,
 		setUserDetail: setUserSelectDetail,
 	})
-
-	const {
-		checkAndOpenFileByMessages,
-		checkAndOpenFileByTopicChanged,
-		reset: resetAutoOpenFile,
-	} = useAutoOpenFile()
 
 	useRefreshTopicDetailOnTaskComplete({
 		selectedTopic,
@@ -274,7 +264,6 @@ function TopicPage({ pageVariant = "default" }: TopicPageDesktopProps) {
 		setAutoDetail(null)
 		setUserSelectDetail(null)
 		clearActiveDetailTabType()
-		resetAutoOpenFile()
 	}, [selectedProject?.id])
 
 	useSlidesTemplateNavigation({
@@ -479,16 +468,10 @@ function TopicPage({ pageVariant = "default" }: TopicPageDesktopProps) {
 	const { messages, showLoading } = useTopicConversationLoading({
 		selectedTopic,
 		hideLoadingWhenBufferHasContent: true,
-		onTopicMessagesChange: ({
-			isLoading,
-			lastMessageNode,
-			selectedTopic: currentTopic,
-			topicMessages,
-		}) => {
+		onTopicMessagesChange: ({ isLoading, selectedTopic: currentTopic, topicMessages }) => {
 			setIsShowLoadingInit(true)
 
-			// 记录任务状态是否发生变化（用于判断是否为新消息导致的任务完成）
-			const hasStatusChanged = lastMessageNode?.status !== currentTopicStatus
+			// 消息附件不自动打开；文件标签沿用缓存恢复和用户选择，包括空状态。
 			const readProgressPayload = resolveReadProgressPayloadFromMessages(topicMessages)
 			const targetTopicId = currentTopic?.id || selectedTopic?.id
 
@@ -513,24 +496,6 @@ function TopicPage({ pageVariant = "default" }: TopicPageDesktopProps) {
 					latestMessageDetail: lastDetailMessageNode?.tool?.detail,
 					isLoading,
 					tool: lastDetailMessageNode?.tool,
-				})
-
-				scheduleWhenTabsCacheReady(() => {
-					checkAndOpenFileByMessages({
-						lastMessageNode,
-						lastDetailMessageNode,
-						lastDetailMessage: lastDetailMessage?.app_message_id
-							? {
-									...lastDetailMessage,
-									app_message_id: lastDetailMessage.app_message_id,
-								}
-							: undefined,
-						hasStatusChanged,
-						activeFileId,
-						getActiveFileId: () => activeFileIdRef.current,
-						workspaceFileTree: attachments,
-						workspaceFilesList: attachmentList,
-					})
 				})
 			}
 
@@ -593,16 +558,7 @@ function TopicPage({ pageVariant = "default" }: TopicPageDesktopProps) {
 					})
 				})
 		}
-
-		scheduleWhenTabsCacheReady(() => {
-			checkAndOpenFileByTopicChanged({
-				activeFileId,
-				getActiveFileId: () => activeFileIdRef.current,
-				workspaceFileTree: attachments,
-				workspaceFilesList: attachmentList,
-			})
-		})
-	}, [selectedTopic?.id, isSelectedTopicMessagesReady, attachments, attachmentList])
+	}, [selectedTopic?.id, isSelectedTopicMessagesReady])
 
 	const updateAttachments = useDebounceFn(
 		(selectedProject: any, callback?: () => void) => {
