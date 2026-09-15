@@ -1,6 +1,9 @@
-import { useEffect, useMemo, useRef, type ReactNode, type RefObject } from "react"
+import { useEffect, useLayoutEffect, useMemo, useRef, type ReactNode, type RefObject } from "react"
 import { createPortal } from "react-dom"
 import { observer } from "mobx-react-lite"
+import { useTranslation } from "react-i18next"
+import { Tooltip } from "antd"
+import { PanelLeftOpen } from "lucide-react"
 import { cn } from "@/utils/cn"
 import { TOPIC_HISTORY_PANEL_WIDTH } from "../../../constants/resizablePanel"
 import TopicResizeHandle from "./TopicResizeHandle"
@@ -40,6 +43,8 @@ interface TopicDesktopPanelsProps {
 	persistConversationPanelState?: boolean
 	historyLayout?: TopicDesktopPanelsHistoryLayout
 	shouldShowDetailPanel: boolean
+	isDetailPanelCollapsed?: boolean
+	onExpandDetailPanel?: () => void
 	renderMessagePanel: (params: {
 		isConversationPanelCollapsed: boolean
 		isDraggingPanel: boolean
@@ -65,8 +70,18 @@ function TopicDesktopPanels({
 	persistConversationPanelState = true,
 	historyLayout,
 	shouldShowDetailPanel,
+	isDetailPanelCollapsed = false,
+	onExpandDetailPanel,
 	renderMessagePanel,
 }: TopicDesktopPanelsProps) {
+	const { t } = useTranslation("super")
+	const detailPanelSlotRef = useRef<HTMLDivElement>(null)
+	const expandDetailButtonRef = useRef<HTMLButtonElement>(null)
+	const previousDetailCollapsedRef = useRef(false)
+	const lastDetailWidthRef = useRef(0)
+	const showCollapsedDetailPanel =
+		!isReadOnly && isDetailPanelCollapsed && Boolean(onExpandDetailPanel)
+	const wasDetailCollapsed = previousDetailCollapsedRef.current
 	const topicHistoryCloseButtonRef = useRef<HTMLButtonElement>(null)
 	const isTopicHistoryPanelOpen = historyLayout?.isOpen ?? false
 	const onCloseTopicHistoryPanel = historyLayout?.onClose
@@ -94,6 +109,8 @@ function TopicDesktopPanels({
 	// Preserve the stored project width while removing both its visual slot and resize affordance.
 	const projectSiderWidthPx = showProjectSidebar ? storedProjectSiderWidthPx : 0
 	const shouldShowProjectResizeHandle = showProjectSidebar && showProjectResizeHandle
+	// 展开入口沿用现有收起栏宽度，先扣除占位，再让原布局分配预览与对话空间。
+	const collapsedDetailWidth = showCollapsedDetailPanel ? collapsedMessagePanelWidthPx : 0
 	const {
 		panelResizeTransition,
 		messageTransform,
@@ -110,7 +127,7 @@ function TopicDesktopPanels({
 		isTopicHistoryPanelOpen,
 		showProjectResizeHandle: shouldShowProjectResizeHandle,
 		shouldShowDetailPanel,
-		containerWidthPx,
+		containerWidthPx: Math.max(0, containerWidthPx - collapsedDetailWidth),
 		projectSiderWidthPx,
 		messagePanelWidthPx,
 		collapsedMessagePanelWidthPx,
@@ -118,9 +135,36 @@ function TopicDesktopPanels({
 		isDraggingProjectSider,
 		isDraggingMessagePanel,
 		ensureExpandedWhenDetailVisible: autoExpandConversationWhenDetailVisible
-			? ensureExpandedWhenDetailVisible
+			? (visible) => {
+					// 从主动收起恢复时保留原对话栏偏好，不重新执行首次打开的布局选择。
+					if (!wasDetailCollapsed) ensureExpandedWhenDetailVisible(visible)
+				}
 			: () => undefined,
 	})
+
+	useLayoutEffect(() => {
+		if (shouldShowDetailPanel && targetDetailPanelWidth > 0) {
+			lastDetailWidthRef.current = targetDetailPanelWidth
+		}
+		// 保持挂载的隐藏内容也必须退出键盘导航；body 预览 Portal 由 FilesViewer 隐藏。
+		detailPanelSlotRef.current?.toggleAttribute("inert", showCollapsedDetailPanel)
+		if (showCollapsedDetailPanel) {
+			expandDetailButtonRef.current?.focus({ preventScroll: true })
+		} else if (wasDetailCollapsed && shouldShowDetailPanel) {
+			detailPanelSlotRef.current
+				?.querySelector<HTMLButtonElement>("[data-files-viewer-collapse-preview]")
+				?.focus({ preventScroll: true })
+		}
+	}, [
+		showCollapsedDetailPanel,
+		shouldShowDetailPanel,
+		targetDetailPanelWidth,
+		wasDetailCollapsed,
+	])
+
+	useEffect(() => {
+		previousDetailCollapsedRef.current = showCollapsedDetailPanel
+	}, [showCollapsedDetailPanel])
 	const visibleConversationPanelCollapsed = shouldShowDetailPanel
 		? isConversationPanelCollapsed
 		: false
@@ -257,6 +301,7 @@ function TopicDesktopPanels({
 				>
 					{(isReadOnly || shouldShowDetailPanel || keepDetailMountedWhenHidden) && (
 						<div
+							ref={detailPanelSlotRef}
 							data-testid="topic-detail-panel-slot"
 							className={cn(
 								"relative h-full min-w-0 overflow-hidden",
@@ -291,9 +336,16 @@ function TopicDesktopPanels({
 								)}
 								style={{
 									...(!isDetailPanelFullscreen && {
-										width: "100%",
+										// 收起和展开动画只裁剪外层，避免内部宽度归零重置阅读位置。
+										width:
+											onExpandDetailPanel && !isReadOnly
+												? shouldShowDetailPanel
+													? targetDetailPanelWidth
+													: lastDetailWidthRef.current
+												: "100%",
 										minWidth: 0,
-										maxWidth: "100%",
+										maxWidth:
+											onExpandDetailPanel && !isReadOnly ? undefined : "100%",
 									}),
 									transform: isDetailPanelFullscreen
 										? "none"
@@ -304,6 +356,31 @@ function TopicDesktopPanels({
 							>
 								{detailPanel}
 							</div>
+						</div>
+					)}
+
+					{showCollapsedDetailPanel && (
+						<div
+							className="flex h-full shrink-0 justify-center rounded-lg border border-border bg-background pt-2"
+							style={{ width: collapsedDetailWidth }}
+							data-testid="collapsed-detail-panel"
+						>
+							<Tooltip
+								title={t("fileViewer.tabs.expandPreview")}
+								placement="right"
+								trigger={["hover", "focus"]}
+							>
+								<button
+									ref={expandDetailButtonRef}
+									type="button"
+									className="flex size-7 items-center justify-center rounded-md hover:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+									aria-label={t("fileViewer.tabs.expandPreview")}
+									aria-expanded={false}
+									onClick={onExpandDetailPanel}
+								>
+									<PanelLeftOpen size={16} />
+								</button>
+							</Tooltip>
 						</div>
 					)}
 

@@ -45,6 +45,10 @@ interface DetailProps {
 	previewSessionKey?: number
 	/** Hides the preview surface while preserving cached tabs and renderer state. */
 	onPreviewDismiss?: () => void
+	onPreviewCollapse?: () => void
+	onPreviewOpen?: () => void
+	isPreviewCollapsed?: boolean
+	canLocateFile?: boolean
 	/** Controls whether project-level preview tabs survive a page remount. */
 	persistFileTabs?: boolean
 	// Topic name for share scenario
@@ -120,6 +124,10 @@ const Detail = forwardRef<DetailRef, DetailProps>((props, ref) => {
 		previewMode,
 		previewSessionKey,
 		onPreviewDismiss,
+		onPreviewCollapse,
+		onPreviewOpen,
+		isPreviewCollapsed,
+		canLocateFile,
 		persistFileTabs,
 		topicName,
 		projectId,
@@ -233,6 +241,10 @@ const Detail = forwardRef<DetailRef, DetailProps>((props, ref) => {
 				previewMode={previewMode}
 				previewSessionKey={previewSessionKey}
 				onPreviewDismiss={onPreviewDismiss}
+				onPreviewCollapse={onPreviewCollapse}
+				onPreviewOpen={onPreviewOpen}
+				isPreviewCollapsed={isPreviewCollapsed}
+				canLocateFile={canLocateFile}
 				persistFileTabs={persistFileTabs}
 				openFileTab={openNewTab}
 				activeFileId={activeFileId}
