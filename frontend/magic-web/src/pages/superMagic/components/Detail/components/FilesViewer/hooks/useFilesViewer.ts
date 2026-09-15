@@ -493,6 +493,7 @@ export function useFilesViewer(props: FilesViewerProps) {
 
 		// 独立预览有自己的文件空间，不能用当前项目中同 ID 的文件覆盖它。
 		const standalone =
+			tab.fileData.space_type === "user" ||
 			isStandalonePreviewFile(tab.fileData) ||
 			Boolean(tab.fileData.display_config?.previewPolicy?.fileScope)
 		const indexedFile = standalone ? undefined : fileById.get(String(tab.fileData.file_id))
@@ -571,6 +572,7 @@ export function useFilesViewer(props: FilesViewerProps) {
 				activeTab?.type === "file_manager" ? activeTab.returnTabId : activeTab?.id,
 			)
 			if (managerContext.spaceType === "user") manager.userIdentityKey = userIdentityKey
+			onPreviewOpen?.()
 			updatePlaybackTab({ active: false })
 			deactivateAllKnowledgeBaseTabs()
 			dispatchTabs({ type: TabActionType.ADD_TAB, payload: { tab: manager } })
