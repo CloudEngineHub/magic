@@ -65,6 +65,9 @@ overrides:
   marked: 15.0.12
 
 patchedDependencies:
+  '@radix-ui/react-context-menu@2.3.7':
+    hash: 32e831d366bbe6e4d63ad205763cf0f3012ac72b731448e33309e3b8596963c9
+    path: patches/@radix-ui__react-context-menu@2.3.7.patch
   pptxgenjs:
     hash: 7248d5ba47748c8fd73ce32aa90a0456c6636f6e387aee6823e45f1dc7ab8228
     path: patches/pptxgenjs.patch
@@ -216,7 +219,7 @@ importers:
         version: 1.1.20(@types/react-dom@18.3.7(@types/react@18.3.23))(@types/react@18.3.23)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
       '@radix-ui/react-context-menu':
         specifier: ^2.2.16
-        version: 2.3.7(@types/react-dom@18.3.7(@types/react@18.3.23))(@types/react@18.3.23)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
+        version: 2.3.7(patch_hash=32e831d366bbe6e4d63ad205763cf0f3012ac72b731448e33309e3b8596963c9)(@types/react-dom@18.3.7(@types/react@18.3.23))(@types/react@18.3.23)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
       '@radix-ui/react-dialog':
         specifier: ^1.1.15
         version: 1.1.23(@types/react-dom@18.3.7(@types/react@18.3.23))(@types/react@18.3.23)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
@@ -19133,7 +19136,7 @@ snapshots:
     optionalDependencies:
       '@types/react': 18.3.23
 
-  '@radix-ui/react-context-menu@2.3.7(@types/react-dom@18.3.7(@types/react@18.3.23))(@types/react@18.3.23)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)':
+  '@radix-ui/react-context-menu@2.3.7(patch_hash=32e831d366bbe6e4d63ad205763cf0f3012ac72b731448e33309e3b8596963c9)(@types/react-dom@18.3.7(@types/react@18.3.23))(@types/react@18.3.23)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)':
     dependencies:
       '@radix-ui/primitive': 1.1.7
       '@radix-ui/react-context': 1.2.2(@types/react@18.3.23)(react@18.3.1)
@@ -31454,7 +31457,7 @@ snapshots:
       '@radix-ui/react-collection': 1.1.15(@types/react-dom@18.3.7(@types/react@18.3.23))(@types/react@18.3.23)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
       '@radix-ui/react-compose-refs': 1.1.5(@types/react@18.3.23)(react@18.3.1)
       '@radix-ui/react-context': 1.2.2(@types/react@18.3.23)(react@18.3.1)
-      '@radix-ui/react-context-menu': 2.3.7(@types/react-dom@18.3.7(@types/react@18.3.23))(@types/react@18.3.23)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
+      '@radix-ui/react-context-menu': 2.3.7(patch_hash=32e831d366bbe6e4d63ad205763cf0f3012ac72b731448e33309e3b8596963c9)(@types/react-dom@18.3.7(@types/react@18.3.23))(@types/react@18.3.23)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
       '@radix-ui/react-dialog': 1.1.23(@types/react-dom@18.3.7(@types/react@18.3.23))(@types/react@18.3.23)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
       '@radix-ui/react-direction': 1.1.4(@types/react@18.3.23)(react@18.3.1)
       '@radix-ui/react-dismissable-layer': 1.1.19(@types/react-dom@18.3.7(@types/react@18.3.23))(@types/react@18.3.23)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)

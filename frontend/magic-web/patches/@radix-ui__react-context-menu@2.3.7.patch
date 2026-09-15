@@ -1,0 +1,62 @@
+diff --git a/dist/index.js b/dist/index.js
+index d784fa30474e5c865695916be3fba9ef10d1b429..e4946737f6f35bcecb944e3f59dadcad208a10d5 100644
+--- a/dist/index.js
++++ b/dist/index.js
+@@ -124,11 +124,14 @@ var ContextMenuTrigger = /* @__PURE__ */ React.forwardRef(
+     const { __scopeContextMenu, disabled = false, ...triggerProps } = props;
+     const context = useContextMenuContext(TRIGGER_NAME, __scopeContextMenu);
+     const menuScope = useMenuScope(__scopeContextMenu);
+-    const [point, setPoint] = React.useState({ x: 0, y: 0 });
++    const pointRef = React.useRef({ x: 0, y: 0 });
++    const [point, setPoint] = React.useState(pointRef.current);
++    // Keep existing anchors current before Popper's effect replaces them.
++    // Retain state to re-anchor when right-clicking again while already open.
+     const virtualRef = React.useMemo(
+       () => ({
+         current: {
+-          getBoundingClientRect: /* @__PURE__ */ __name(() => DOMRect.fromRect({ width: 0, height: 0, ...point }), "getBoundingClientRect")
++          getBoundingClientRect: /* @__PURE__ */ __name(() => DOMRect.fromRect({ width: 0, height: 0, ...pointRef.current }), "getBoundingClientRect")
+         }
+       }),
+       [point]
+@@ -140,7 +143,8 @@ var ContextMenuTrigger = /* @__PURE__ */ React.forwardRef(
+     );
+     const handleOpen = /* @__PURE__ */ __name((event) => {
+       context.hasInteractedRef.current = true;
+-      setPoint({ x: event.clientX, y: event.clientY });
++      pointRef.current = { x: event.clientX, y: event.clientY };
++      setPoint(pointRef.current);
+       context.onOpenChange(true);
+     }, "handleOpen");
+     React.useEffect(() => clearLongPress, [clearLongPress]);
+diff --git a/dist/index.mjs b/dist/index.mjs
+index 0f5f61b9ce193ee558bc126aee9a0e92fbf6b37b..afd2c0c336d3af6e86d9683bc0a7fca690fd9bdf 100644
+--- a/dist/index.mjs
++++ b/dist/index.mjs
+@@ -58,11 +58,14 @@ var ContextMenuTrigger = /* @__PURE__ */ React.forwardRef(
+     const { __scopeContextMenu, disabled = false, ...triggerProps } = props;
+     const context = useContextMenuContext(TRIGGER_NAME, __scopeContextMenu);
+     const menuScope = useMenuScope(__scopeContextMenu);
+-    const [point, setPoint] = React.useState({ x: 0, y: 0 });
++    const pointRef = React.useRef({ x: 0, y: 0 });
++    const [point, setPoint] = React.useState(pointRef.current);
++    // Keep existing anchors current before Popper's effect replaces them.
++    // Retain state to re-anchor when right-clicking again while already open.
+     const virtualRef = React.useMemo(
+       () => ({
+         current: {
+-          getBoundingClientRect: /* @__PURE__ */ __name(() => DOMRect.fromRect({ width: 0, height: 0, ...point }), "getBoundingClientRect")
++          getBoundingClientRect: /* @__PURE__ */ __name(() => DOMRect.fromRect({ width: 0, height: 0, ...pointRef.current }), "getBoundingClientRect")
+         }
+       }),
+       [point]
+@@ -74,7 +77,8 @@ var ContextMenuTrigger = /* @__PURE__ */ React.forwardRef(
+     );
+     const handleOpen = /* @__PURE__ */ __name((event) => {
+       context.hasInteractedRef.current = true;
+-      setPoint({ x: event.clientX, y: event.clientY });
++      pointRef.current = { x: event.clientX, y: event.clientY };
++      setPoint(pointRef.current);
+       context.onOpenChange(true);
+     }, "handleOpen");
+     React.useEffect(() => clearLongPress, [clearLongPress]);

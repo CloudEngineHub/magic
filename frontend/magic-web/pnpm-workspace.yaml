@@ -77,5 +77,6 @@ overrides:
   marked: 15.0.12
 
 patchedDependencies:
+  "@radix-ui/react-context-menu@2.3.7": patches/@radix-ui__react-context-menu@2.3.7.patch
   pptxgenjs: patches/pptxgenjs.patch
   tiptap-markdown: patches/tiptap-markdown.patch
