@@ -367,8 +367,37 @@ class WebSearch(BaseTool[WebSearchParams]):
             }
 
         # 处理成功情况
-        # 需求名称用于模型关联结果，不作为用户搜索内容；真实查询由搜索详情展示。
+        # 消息卡片靠真实查询词区分搜索批次；内部 name 只用于关联结果，详情另行展示完整查询。
+        queries: list[str] = []
+        search_queries = result.extra_info.get('search_queries')
+        if isinstance(search_queries, dict):
+            queries = [
+                query.strip()
+                for query in search_queries.values()
+                if isinstance(query, str) and query.strip()
+            ]
+
+        if not queries and arguments:
+            requirements = arguments.get('requirements')
+            if isinstance(requirements, list):
+                for requirement in requirements:
+                    if not isinstance(requirement, dict):
+                        continue
+                    query = requirement.get('query')
+                    if isinstance(query, str) and query.strip():
+                        queries.append(query.strip())
+
+        if len(queries) == 1:
+            remark = i18n.translate("web_search.requirement", category="tool.messages", requirement=queries[0])
+        elif queries:
+            query_summary = ', '.join(queries[:3])
+            if len(queries) > 3:
+                query_summary += i18n.translate("web_search.more_items", category="tool.messages")
+            remark = i18n.translate("web_search.requirements", category="tool.messages", requirements=query_summary)
+        else:
+            remark = i18n.translate("web_search.completed", category="tool.messages")
+
         return {
             "action": i18n.translate("web_search", category="tool.actions"),
-            "remark": i18n.translate("web_search.completed", category="tool.messages")
+            "remark": remark
         }
