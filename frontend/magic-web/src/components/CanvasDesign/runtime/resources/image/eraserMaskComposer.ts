@@ -2,18 +2,16 @@ import type { CropConfig } from "../../document/types"
 import type { EraserStroke } from "../../interaction/eraser/EraserRenderer"
 import { generateUUID } from "../../shared/ids"
 import { getNormalizedImageProcessCrop } from "./imageCropUtils"
-import { resolveEraserMaskColors } from "./eraserMaskMode"
 
 interface CreateEraserMaskFileParams {
 	element: { width?: number; height?: number; crop?: CropConfig }
 	strokes: EraserStroke[]
 	naturalWidth: number
 	naturalHeight: number
-	eraseOutside: boolean
 }
 
 export async function createEraserMaskFile(params: CreateEraserMaskFileParams): Promise<File> {
-	const { element, strokes, naturalWidth, naturalHeight, eraseOutside } = params
+	const { element, strokes, naturalWidth, naturalHeight } = params
 	const sourceCrop = getNormalizedImageProcessCrop({
 		crop: element.crop,
 		sourceDimensions: {
@@ -37,12 +35,11 @@ export async function createEraserMaskFile(params: CreateEraserMaskFileParams): 
 		throw new Error("获取橡皮结果画布失败")
 	}
 
-	const maskColors = resolveEraserMaskColors(eraseOutside)
-	outputContext.fillStyle = maskColors.background
+	outputContext.fillStyle = "#000"
 	outputContext.fillRect(0, 0, outputCanvas.width, outputCanvas.height)
 	outputContext.save()
 	outputContext.scale(sourceCrop.width / elementWidth, sourceCrop.height / elementHeight)
-	outputContext.strokeStyle = maskColors.stroke
+	outputContext.strokeStyle = "#fff"
 	outputContext.lineCap = "round"
 	outputContext.lineJoin = "round"
 

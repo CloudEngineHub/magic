@@ -30,7 +30,6 @@ export interface SubmitImageWorkerEraseRequest {
 	sourceDimensions?: SubmitImageSourceDimensions
 	ossSrc?: string
 	strokes: FlattenedEraserStrokes
-	eraseOutside: boolean
 }
 
 export interface SubmitImageWorkerExtendRequest {

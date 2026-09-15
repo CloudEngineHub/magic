@@ -122,8 +122,6 @@
 			"title": "Crop"
 		},
 		"imageEraser": {
-			"invertErase": "Invert erase",
-			"invertEraseDescription": "Keep the painted area and erase everything outside it",
 			"tip": "Paint areas to erase",
 			"title": "Eraser"
 		},

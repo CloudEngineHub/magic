@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useId, useMemo, useState } from "react"
+import { useCallback, useEffect, useMemo, useState } from "react"
 import { Redo2, Undo2 } from "lucide-react"
 import {
 	getEraserRadiusDefault,
@@ -29,7 +29,6 @@ import useElementPositionEffect from "../../../app/hooks/layout/useElementPositi
 import { useCanvasEvent } from "../../../app/hooks/canvas"
 import { useFloatingComponent } from "../../../app/hooks/layout/useFloatingComponent"
 import { Button } from "../../primitives/shadcn/button"
-import { Checkbox } from "../../primitives/shadcn/checkbox"
 import { Slider } from "../../primitives/shadcn/slider"
 import styles from "./index.module.css"
 
@@ -48,10 +47,7 @@ export default function ImageEraserPanelRender() {
 	)
 	const [canUndo, setCanUndo] = useState(() => canvas?.eraserManager.canUndo() ?? false)
 	const [canRedo, setCanRedo] = useState(() => canvas?.eraserManager.canRedo() ?? false)
-	const [eraseOutside, setEraseOutside] = useState(false)
 	const [isSubmitting, setIsSubmitting] = useState(false)
-	const invertCheckboxId = useId()
-	const invertDescriptionId = `${invertCheckboxId}-description`
 
 	const radiusRange = useMemo(() => {
 		return canvas?.eraserManager.getRadiusRange() ?? { min: MIN_RADIUS, max: MAX_RADIUS }
@@ -238,7 +234,6 @@ export default function ImageEraserPanelRender() {
 				},
 				sourceDimensions,
 				strokes: flattenEraserStrokes(strokes),
-				eraseOutside,
 			})
 			const maskFile = workerResult
 				? new File([workerResult.blob], `${generateUUID()}.png`, {
@@ -270,7 +265,6 @@ export default function ImageEraserPanelRender() {
 							strokes,
 							naturalWidth: sourceDimensions.width,
 							naturalHeight: sourceDimensions.height,
-							eraseOutside,
 						})
 					})()
 
@@ -339,7 +333,6 @@ export default function ImageEraserPanelRender() {
 		erasingElementId,
 		erasingImageElement,
 		erasingImageElementInstance,
-		eraseOutside,
 		isSubmitting,
 		t,
 	])
@@ -384,26 +377,6 @@ export default function ImageEraserPanelRender() {
 					disabled={isSubmitting}
 					onValueChange={handleRadiusChange}
 				/>
-			</div>
-			<div className={styles.invertSection}>
-				<div className={styles.invertCheckboxRow} data-disabled={isSubmitting}>
-					<Checkbox
-						id={invertCheckboxId}
-						checked={eraseOutside}
-						disabled={isSubmitting}
-						aria-describedby={invertDescriptionId}
-						onCheckedChange={(checked) => setEraseOutside(checked === true)}
-					/>
-					<label htmlFor={invertCheckboxId}>
-						{t("elementTools.imageEraser.invertErase", "反向擦除")}
-					</label>
-				</div>
-				<p id={invertDescriptionId} className={styles.invertDescription}>
-					{t(
-						"elementTools.imageEraser.invertEraseDescription",
-						"勾选后保留涂抹区域，擦除未涂抹区域",
-					)}
-				</p>
 			</div>
 			<div className={styles.buttons}>
 				<Button
