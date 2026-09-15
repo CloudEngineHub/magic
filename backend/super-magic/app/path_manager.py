@@ -107,6 +107,9 @@ class PathManager(BasePathManager):
     _bg_shell_dir_name: ClassVar[str] = "bg_shell"
     _bg_shell_dir: ClassVar[Optional[Path]] = None
 
+    # 通用沙箱任务状态目录：project_root/.runtime/sandbox_tasks（按需创建）
+    _runtime_sandbox_tasks_dir_name: ClassVar[str] = "sandbox_tasks"
+
     # ── workspace（project_root/.workspace）下 ────────────────────────────────
 
     # ASR 任务状态目录：.workspace/.asr_states（按需创建）
@@ -132,6 +135,7 @@ class PathManager(BasePathManager):
     # 工具详情长文本：.topic/tool_detail/content（按需创建）
     _tool_detail_dir_name: ClassVar[str] = "tool_detail"
     _tool_detail_content_dir_name: ClassVar[str] = "content"
+
     @classmethod
     def _ensure_app_initialization(cls) -> None:
         """确保应用层PathManager已初始化"""
@@ -647,6 +651,12 @@ class PathManager(BasePathManager):
     def get_bg_shell_log_file(cls, task_id: str) -> Path:
         """获取指定后台任务的日志文件路径（project_root/.runtime/bg_shell/{task_id}.log）"""
         return cls.get_bg_shell_dir() / f"{task_id}.log"
+
+    @classmethod
+    def get_sandbox_tasks_dir(cls) -> Path:
+        """获取通用沙箱任务状态目录（project_root/.runtime/sandbox_tasks，按需创建）。"""
+        cls._ensure_app_initialization()
+        return cls.get_runtime_dir() / cls._runtime_sandbox_tasks_dir_name
 
     @classmethod
     def get_wechat_im_uploads_dir(cls) -> Path:
