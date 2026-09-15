@@ -22,7 +22,7 @@ from agentlang.agent.base import BaseAgent
 from agentlang.agent.loader import AgentLoader
 from agentlang.agent.models import AgentRunRequest
 from agentlang.agent.state import AgentState
-from app.core.horizon.models import HorizonContextUpdate, HorizonInjectionPoint
+from app.core.horizon.models import HorizonInjectionPoint
 from app.service.user_context_service import UserContextService
 from agentlang.chat_history import AssistantMessage, CompactionConfig, SystemMessage, ToolCall
 from agentlang.chat_history.chat_history import ChatHistory
@@ -993,13 +993,12 @@ class Agent(BaseAgent):
                     log_context="注入点1",
                 )
                 if ctx_update:
-                    await self.chat_history.append_user_message(ctx_update.content, show_in_ui=False, source="horizon")
+                    await self.chat_history.append_user_message(ctx_update, show_in_ui=False, source="horizon")
                     resumption_injected = bool(resumption_id)
                     if resumption_id:
                         # 上下文已经送进 Agent 后立即消费事项，不等待最终回答，
                         # 避免工具失败或模型中断造成重复自动恢复。
                         await self.agent_context.horizon.complete_resumption(resumption_id)
-                    await self.agent_context.horizon.commit_user_context_injection(ctx_update.user_context_snapshot)
                     logger.debug("[AgentHorizon] 已注入 user query 后 system_injected_context")
             else:
                 logger.warning("[AgentHorizon] 注入点1 跳过：历史末尾存在未完成的 tool call 序列，避免消息序列错误")
@@ -1383,8 +1382,7 @@ class Agent(BaseAgent):
                             log_context="tool result 后",
                         )
                         if ctx_update:
-                            await self.chat_history.append_user_message(ctx_update.content, show_in_ui=False, source="horizon")
-                            await self.agent_context.horizon.commit_user_context_injection(ctx_update.user_context_snapshot)
+                            await self.chat_history.append_user_message(ctx_update, show_in_ui=False, source="horizon")
                             logger.debug("[AgentHorizon] 已注入 tool result 后 system_injected_context")
                 except Exception as _horizon_err:
                     logger.warning(f"[AgentHorizon] tool result 后注入失败: {_horizon_err}")
@@ -2749,7 +2747,7 @@ Since your subsequent output will be merged with pre-interruption content and di
         )
         if has_native_visual_notification:
             native_visual_context = await self._build_horizon_context_update_safely(
-                injection_point="before_llm_native_visual",
+                injection_point=HorizonInjectionPoint.BEFORE_LLM_NATIVE_VISUAL,
                 log_context="原生视觉请求前注入",
             )
             if native_visual_context:
@@ -2939,9 +2937,8 @@ Since your subsequent output will be merged with pre-interruption content and di
             update = await self._build_horizon_context_update_safely(
                 HorizonInjectionPoint.AFTER_MAIN_AGENT_RUN, "主 Loop 结束",
             )
-            if update is not None and update.content:
-                await self.chat_history.append_user_message(update.content, show_in_ui=False, source="horizon")
-                await self.agent_context.horizon.commit_user_context_injection(update.user_context_snapshot)
+            if update:
+                await self.chat_history.append_user_message(update, show_in_ui=False, source="horizon")
         except Exception as error:
             # 资料失败不改写已经完成的回答；CancelledError 保持向上传播。
             logger.warning(f"User context end-of-run refresh failed: {type(error).__name__}")
@@ -2950,7 +2947,7 @@ Since your subsequent output will be merged with pre-interruption content and di
         self,
         injection_point: HorizonInjectionPoint,
         log_context: str,
-    ) -> HorizonContextUpdate | None:
+    ) -> str | None:
         """构建 Horizon 注入内容，模型配置错误时静默跳过。"""
         try:
             if injection_point == HorizonInjectionPoint.AFTER_MAIN_AGENT_RUN:

@@ -43,9 +43,9 @@
 
 第一个 Loop 开始时还会首次查询并提供完整资料；压缩后从已有安全快照恢复，不重新查询。
 
-监听或查询、生成文本、写入历史、模型读取是不同动作。用户块只有在 append 成功后
-确认 baseline；Loop 结束时写入的变化由下一次模型请求读取，不重写已完成回复。
-工具序列未完整、超限或写入失败时不确认用户块。下一合法边界补发，不额外查询。
+监听或查询、生成文本、写入历史、模型读取是不同动作。用户资料与工作区快照一样，
+在构建内容通过预算检查后，由 Horizon 内部更新本次采用的 baseline，再返回字符串。
+工具序列未完整或内容超限时保留基准；Loop 结束的变化由下一次模型请求读取，不重写已完成回复。
 特殊工具原有的跳过注入规则不变；结束刷新不处理待入库用户消息、通知或恢复事项。
 上下文用量继续使用原有 5／3／1 个百分点阈值；文件、浏览器和时间保护保持原实现。
 """
@@ -73,11 +73,10 @@ from agentlang.chat_history.chat_history_models import UserMessage
 from agentlang.logger import get_logger
 from app.core.horizon.diff_builder import detect_file_changes
 from app.core.horizon.models import (
-    HorizonContextUpdate,
-    HorizonInjectionPoint,
     BrowserPageObservation,
     ContextUsage,
     FileContextRecord,
+    HorizonInjectionPoint,
     HorizonState,
     ImageModelState,
     ManualContextWindowState,
@@ -1399,7 +1398,7 @@ class AgentHorizon:
     # 核心：构建注入给 LLM 的动态上下文
     # ─────────────────────────────────────────────────────────────────────────
 
-    def _log_oversized_context_update(self, content: str, injection_point: str) -> None:
+    def _log_oversized_context_update(self, content: str, injection_point: HorizonInjectionPoint) -> None:
         file_count, largest_file_path, largest_file_len = _largest_xml_block(content, "file", "path")
         notification_count, largest_notification_source, largest_notification_len = _largest_xml_block(
             content, "notification", "source"
@@ -1453,6 +1452,7 @@ class AgentHorizon:
         await self._save()
 
     async def set_user_context(self, snapshot: UserContextSnapshot) -> None:
+        """缓存当前安全资料；比较基准由构建上下文时更新。"""
         await self._ensure_loaded()
         auth = self._agent_context.get_user_context_auth() if self._agent_context else None
         if auth is not None:
@@ -1467,17 +1467,6 @@ class AgentHorizon:
         self._state.user_context = snapshot
         await self._save()
 
-    async def commit_user_context_injection(self, snapshot: UserContextSnapshot | None) -> None:
-        if snapshot is None:
-            return
-        current = self._state.user_context
-        if current is not None and (
-            current.user_id == snapshot.user_id and current.organization_code == snapshot.organization_code
-        ):
-            # 确认刚才实际写入的版本，不能把 await 期间的新 current 一并标为已提供。
-            self._state.user_context_baseline = snapshot
-            await self._save()
-
     async def inherit_user_context(self, parent: "AgentHorizon") -> None:
         await self._ensure_loaded()
         inherited = await parent.get_user_context_snapshot()
@@ -1491,10 +1480,10 @@ class AgentHorizon:
 
     async def build_context_update(
         self,
-        injection_point: HorizonInjectionPoint = HorizonInjectionPoint.BEFORE_FIRST_LLM,
-    ) -> HorizonContextUpdate:
+        injection_point: HorizonInjectionPoint = HorizonInjectionPoint.UNKNOWN,
+    ) -> str:
         """
-        编排动态上下文。Loop 结束只返回用户变化；无变化时 content 为空。
+        编排动态上下文并返回字符串。Loop 结束只返回用户变化；无变化时返回空字符串。
 
         首次注入（_is_first_injection=True）时包含 <initial_context> 全量块：
           当前时间、运行环境、LLM 模型、图片模型、workspace_files、user_preferred_language
@@ -1524,13 +1513,16 @@ class AgentHorizon:
         )
         user_block = render_user_context(user_snapshot, self._state.user_context_baseline) if include_user else ""
         if injection_point == HorizonInjectionPoint.AFTER_MAIN_AGENT_RUN:
-            if not user_block:
-                return HorizonContextUpdate("")
+            if user_snapshot is None or not user_block:
+                return ""
             content = "\n".join(("<system_injected_context>", user_block, "</system_injected_context>"))
             if len(content) > HORIZON_CONTEXT_MAX_CHARS:
                 self._log_oversized_context_update(content, injection_point)
-                return HorizonContextUpdate(HORIZON_CONTEXT_OVERSIZED_NOTICE)
-            return HorizonContextUpdate(content, user_snapshot)
+                return HORIZON_CONTEXT_OVERSIZED_NOTICE
+            # 结束路径同样在预算检查后更新本次资料基准，不消费其他监控数据。
+            self._state.user_context_baseline = user_snapshot
+            await self._save()
+            return content
 
         # 并发计算所有被追踪文件的当前 hash 和 mtime
         current_hashes: dict[str, tuple[str, int]] = {}
@@ -1818,7 +1810,7 @@ class AgentHorizon:
 
         if len(context_update) > HORIZON_CONTEXT_MAX_CHARS:
             self._log_oversized_context_update(context_update, injection_point)
-            return HorizonContextUpdate(HORIZON_CONTEXT_OVERSIZED_NOTICE)
+            return HORIZON_CONTEXT_OVERSIZED_NOTICE
 
         # 只有确认本轮上下文会进入 ChatHistory，才推进运行时标志和持久化 baseline。
         if was_first_injection:
@@ -1835,6 +1827,17 @@ class AgentHorizon:
 
         # 注入完成后，把 current staging 提交成新的持久化 baseline。
         persistence_changed = False
+        current_user_context = self._state.user_context
+        if (
+            user_block
+            and user_snapshot is not None
+            and current_user_context is not None
+            and current_user_context.user_id == user_snapshot.user_id
+            and current_user_context.organization_code == user_snapshot.organization_code
+        ):
+            # 采用本次正文对应的版本，不能把构建期间取得的新资料一起标为已提供。
+            self._state.user_context_baseline = user_snapshot
+            persistence_changed = True
         if identity != self._state.agent_identity:
             self._state.agent_identity = identity
             persistence_changed = True
@@ -1899,4 +1902,4 @@ class AgentHorizon:
         if state_changed:
             await self._save()
 
-        return HorizonContextUpdate(context_update, user_snapshot if user_block else None)
+        return context_update

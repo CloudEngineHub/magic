@@ -10,15 +10,12 @@ from app.core.horizon.profile_context import AgentIdentityState
 
 
 class HorizonInjectionPoint(StrEnum):
+    UNKNOWN = "unknown"
     BEFORE_FIRST_LLM = "before_first_llm"
     AFTER_TOOL_RESULT = "after_tool_result"
     AFTER_MAIN_AGENT_RUN = "after_main_agent_run"
-
-
-@dataclass(frozen=True)
-class HorizonContextUpdate:
-    content: str
-    user_context_snapshot: UserContextSnapshot | None = None
+    BEFORE_LLM_NATIVE_VISUAL = "before_llm_native_visual"
+    AFTER_USER_TOOL_CALL_CANCEL = "after_user_tool_call_cancel"
 
 
 @dataclass

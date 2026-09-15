@@ -17,6 +17,7 @@ from agentlang.logger import get_logger
 from agentlang.tools.tool_result import ToolResult
 
 from app.core.context.agent_context import AgentContext
+from app.core.horizon.models import HorizonInjectionPoint
 from app.tools.core.tool_call_event_manager import ToolCallEventManager
 from app.utils.async_file_utils import (
     async_exists,
@@ -228,11 +229,11 @@ class UserToolCallService:
 
         try:
             ctx_update = await pending.agent_context.horizon.build_context_update(
-                injection_point="after_user_tool_call_cancel"
+                injection_point=HorizonInjectionPoint.AFTER_USER_TOOL_CALL_CANCEL
             )
-            if ctx_update is not None and ctx_update.content:
+            if ctx_update:
                 await chat_history.append_user_message(
-                    ctx_update.content,
+                    ctx_update,
                     show_in_ui=False,
                     source="horizon",
                 )
