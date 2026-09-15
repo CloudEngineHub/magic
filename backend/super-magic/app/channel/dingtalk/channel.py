@@ -269,7 +269,7 @@ class DingTalkChannel(BaseChannel):
             f"content_fields={sorted(content) if isinstance(content, dict) else []}"
         )
         if payload.get("msgtype") == "chatRecord" and isinstance(content, dict):
-            logger.info("[DingTalkChannel] chatRecord payload: %r", _sanitize_chat_record(content))
+            logger.info(f"[DingTalkChannel] chatRecord payload: {_sanitize_chat_record(content)!r}")
         from app.channel.dingtalk.media import prepare_dingtalk_message
         prepared = await prepare_dingtalk_message(payload, self._client)
         content = prepared.text
