@@ -49,6 +49,7 @@ import { MagicDropdown, MagicTooltip } from "@/components/base"
 import MagicModal from "@/components/base/MagicModal"
 import { Button } from "@/components/shadcn-ui/button"
 import { cn } from "@/utils/cn"
+import { findPPTSlideIndex } from "./utils/slideNavigation"
 import { PPTProvider } from "./contexts/PPTContext"
 import { useContainerShowButtonText } from "@/hooks/useContainerShowButtonText"
 import type { MenuProps } from "antd"
@@ -389,6 +390,24 @@ const PPTRenderInner = observer(function PPTRenderInner({
 		store,
 		isAnySlideEditing,
 		slideStructureAdapter,
+	})
+
+	const handleOpenNewTab = useMemoizedFn((fileId: string, path: string) => {
+		const currentSlide =
+			store.slides.find((slide) => store.getFileIdByPath(slide.path) === fileId) ||
+			store.slides[store.activeIndex]
+		const targetIndex = currentSlide
+			? findPPTSlideIndex(store.slides, currentSlide.path, path)
+			: -1
+
+		if (targetIndex >= 0) {
+			void checkBeforeNavigate("jump", targetIndex).then((canNavigate) => {
+				if (canNavigate) store.setActiveIndex(targetIndex)
+			})
+			return
+		}
+
+		openNewTab?.(fileId, path)
 	})
 
 	// 导航函数（上一张/下一张/跳转）
@@ -951,12 +970,7 @@ const PPTRenderInner = observer(function PPTRenderInner({
 											fileId={slideFileId}
 											projectId={resolvedProjectId}
 											filePathMapping={filePathMapping}
-											openNewTab={
-												openNewTab ||
-												(() => {
-													// 空操作回退
-												})
-											}
+											openNewTab={handleOpenNewTab}
 											htmlRelativeFolderPath={slideHtmlRelativeFolderPath}
 											selectedProject={selectedProject}
 											attachmentList={attachmentList}
