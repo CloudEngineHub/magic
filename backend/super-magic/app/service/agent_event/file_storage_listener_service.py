@@ -548,14 +548,13 @@ class FileStorageListenerService:
                 else:
                     logger.info("聊天历史归档上传成功，已清理 .topic/chat_history")
             else:
-                logger.warning("聊天历史归档上传失败，保留 .topic/chat_history 作为恢复源")
+                logger.warning("本轮聊天历史归档未上传；未清理已有 .topic/chat_history，本轮未更新该副本")
 
             # 每轮只上传本轮 checkpoint 归档与 manifest（不再整目录打包全量上传）
             await FileStorageListenerService._sync_checkpoints_archive(topic_id, storage_service)
 
             # Save and upload the final manifest
             # await FileStorageListenerService._save_and_upload_project_archive_info(project_archive_info, agent_context)
-            logger.info("聊天历史和checkpoints上传完成")
 
         except Exception as e:
             logger.error(f"分离式打包和上传过程中发生错误: {e}")

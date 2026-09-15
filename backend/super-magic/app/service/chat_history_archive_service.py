@@ -1,4 +1,4 @@
-"""本地完整会话发布与聊天历史上传；活动 Agent 始终在本地读写。"""
+"""复制已结束会话，打包并上传聊天历史。"""
 
 from __future__ import annotations
 
@@ -9,7 +9,6 @@ import uuid
 import zipfile
 from collections.abc import AsyncIterator, Awaitable
 from contextlib import asynccontextmanager
-from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -27,7 +26,6 @@ from app.utils.async_file_utils import (
     async_rename,
     async_rmtree,
     async_scandir,
-    async_stat,
 )
 from app.utils.runtime_storage import ensure_runtime_directory
 
@@ -38,19 +36,6 @@ logger = get_logger(__name__)
 _OPERATION_NAME = re.compile(r"[0-9a-f]{32}")
 
 
-@dataclass(frozen=True, slots=True)
-class _FileSignature:
-    inode: int
-    size: int
-    modified_at_ns: int
-
-
-@dataclass(frozen=True, slots=True)
-class _ArchiveInventory:
-    files: dict[Path, _FileSignature]
-    directories: frozenset[Path]
-
-
 class ChatHistoryArchiveService:
     """两个调用方共享上传顺序，避免较早生成的包最后覆盖较新的包。"""
 
@@ -59,7 +44,7 @@ class ChatHistoryArchiveService:
     _cleanup_tasks: set[asyncio.Task[None]] = set()
 
     async def publish_completed_session(self, session: AgentSessionRef) -> bool:
-        """完整发布同一会话的本地副本；不依赖凭证和上传是否启用。"""
+        """将完整终态会话复制到配置的子 Agent 目录；不依赖上传凭证。"""
         from app.service.chat_history_cleanup_service import ChatHistoryCleanupService
 
         async with self._lock:
@@ -69,7 +54,9 @@ class ChatHistoryArchiveService:
                     raise ValueError("Completed-session source must be inside local runtime storage")
                 await self._require_completed_session(session)
                 target = PathManager.get_subagent_chat_history_dir(session.target.agent_name, session.agent_id)
-                await self._require_local_history_directory(target)
+                for path in (target.parent, target):
+                    if await async_is_symlink(path):
+                        raise ValueError(f"Session archive destination must not be a symbolic link: {path}")
                 cleaner = ChatHistoryCleanupService()
                 # 锁顺序固定为归档锁 → 清理锁；清理器不能反向调用归档。
                 async with cleaner._lock:
@@ -84,12 +71,9 @@ class ChatHistoryArchiveService:
                                 await cleaner._run_locked()
                                 return True
                         staged = operation_dir / "session"
-                        before = await self._inventory(source)
                         await self._run_archive_io(
                             self._copy_session(source, staged), operation_dir
                         )
-                        if before != await self._inventory(source):
-                            raise OSError("Completed-session files changed while copying")
                         await self._require_completed_session(
                             AgentSessionRef(session.target, session.agent_id, staged)
                         )
@@ -102,7 +86,7 @@ class ChatHistoryArchiveService:
                 return False
 
     async def upload(self, *, topic_id: str, storage_service: AbstractStorage) -> bool:
-        """打包当前本地历史并上传，返回远端上传结果，不负责 checkpoint。"""
+        """打包配置目录中的聊天历史并上传，返回上传结果，不负责 checkpoint。"""
         from app.infrastructure.storage.base import BaseFileProcessor
         from app.service.chat_history_cleanup_service import ChatHistoryCleanupService
         from app.utils.init_client_message_util import InitClientMessageUtil
@@ -120,7 +104,6 @@ class ChatHistoryArchiveService:
                     except Exception:
                         pass
                 source = PathManager.get_chat_history_dir()
-                await self._require_local_history_directory(source)
                 if not await async_exists(source) or not await async_scandir(source):
                     logger.info("聊天历史目录为空或不存在，跳过处理")
                     return False
@@ -129,13 +112,10 @@ class ChatHistoryArchiveService:
                     cleaner = ChatHistoryCleanupService()
                     async with cleaner._lock:
                         await cleaner._run_locked()
-                        before = await self._inventory(source)
                         await self._run_archive_io(
-                            asyncio.to_thread(self._write_archive, source, before, archive_path),
+                            self._write_archive(source, archive_path),
                             operation_dir,
                         )
-                        if before != await self._inventory(source):
-                            raise OSError("Chat-history files changed while archiving; preserving remote archive")
                         await async_chmod(archive_path, 0o600)
                     # 上传使用已封闭的本地包。网络等待期间释放清理锁，但仍保持上传顺序。
                     configured_path = InitClientMessageUtil.get_chat_history_dir()
@@ -174,18 +154,6 @@ class ChatHistoryArchiveService:
             raise ValueError("Session has no matching terminal state")
         await async_read_json(root / f"{name}.json")
 
-    @staticmethod
-    async def _require_local_history_directory(path: Path) -> None:
-        root = PathManager.get_project_root().absolute()
-        target = path.absolute()
-        if not target.is_relative_to(root):
-            raise ValueError("Chat history must stay in the local project directory")
-        current = root
-        for part in target.relative_to(root).parts:
-            current /= part
-            if part == ".topic" or await async_is_symlink(current):
-                raise ValueError(f"Active chat history must not use a network or symbolic-link path: {current}")
-
     @classmethod
     async def _copy_session(cls, source: Path, target: Path) -> None:
         """只复制实际生成的文件，拒绝跟随软链接，源会话保留用于排查。"""
@@ -217,10 +185,11 @@ class ChatHistoryArchiveService:
                 await async_rename(previous, target)
             raise
 
-    @classmethod
-    async def _inventory(cls, source: Path) -> _ArchiveInventory:
-        files: dict[Path, _FileSignature] = {}
-        directories: set[Path] = set()
+    @staticmethod
+    async def _write_archive(source: Path, archive_path: Path) -> None:
+        """遍历一次源目录，再在线程中压缩；保存实际读取的内容，不冻结活动会话。"""
+        files: list[Path] = []
+        directories: list[Path] = []
         excluded = get_chat_history_excluded_dir_names()
 
         async def collect(directory: Path) -> None:
@@ -229,30 +198,28 @@ class ChatHistoryArchiveService:
                 relative = path.relative_to(source)
                 if entry.is_dir(follow_symlinks=False):
                     if entry.name not in excluded:
-                        directories.add(relative)
+                        directories.append(relative)
                         await collect(path)
                 elif entry.is_file(follow_symlinks=False):
-                    stat = await async_stat(path)
-                    files[relative] = _FileSignature(stat.st_ino, stat.st_size, stat.st_mtime_ns)
+                    files.append(relative)
                 else:
                     raise ValueError(f"Unsupported chat-history archive entry: {path}")
 
         await collect(source)
-        return _ArchiveInventory(files, frozenset(directories))
 
-    @staticmethod
-    def _write_archive(source: Path, inventory: _ArchiveInventory, archive_path: Path) -> None:
-        """同步压缩库的文件 I/O 在线程中完成，不读取任何 Agent 运行态。"""
-        with zipfile.ZipFile(archive_path, "w", zipfile.ZIP_DEFLATED) as archive:
-            for relative in sorted(inventory.directories):
-                archive.writestr(relative.as_posix() + "/", "")
-            for relative in sorted(inventory.files):
-                archive.write(source / relative, relative.as_posix())
-        with zipfile.ZipFile(archive_path) as archive:
-            for relative in inventory.files:
-                if relative.suffix == ".json":
-                    # 文件写入者不共享清理锁；半写 JSON 不能覆盖上一份可恢复的远端包。
-                    json.loads(archive.read(relative.as_posix()))
+        def compress() -> None:
+            with zipfile.ZipFile(archive_path, "w", zipfile.ZIP_DEFLATED) as archive:
+                for relative in sorted(directories):
+                    archive.writestr(relative.as_posix() + "/", "")
+                for relative in sorted(files):
+                    archive.write(source / relative, relative.as_posix())
+            with zipfile.ZipFile(archive_path) as archive:
+                for relative in files:
+                    if relative.suffix == ".json":
+                        # 文件写入者不共享清理锁；半写 JSON 不能覆盖上一份可恢复的远端包。
+                        json.loads(archive.read(relative.as_posix()))
+
+        await asyncio.to_thread(compress)
 
     @classmethod
     @asynccontextmanager
