@@ -15,7 +15,7 @@ $accountUsersOrganizationWhitelist = array_values(array_unique(array_filter(
 )));
 
 return [
-    // Restrict /api/v1/contact/accounts/me/users to accounts belonging to these organizations.
+    // In APP_ENV=saas-pre, restrict account access to these organizations.
     // An empty list keeps the endpoint behavior unchanged.
     'account_users_organization_whitelist' => $accountUsersOrganizationWhitelist,
 ];

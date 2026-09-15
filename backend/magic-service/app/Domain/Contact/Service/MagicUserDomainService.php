@@ -549,18 +549,14 @@ class MagicUserDomainService extends AbstractContactDomainService
      *
      * @param string $authorization Authorization token
      * @param null|string $organizationCode Optional organization code to filter users
-     * @param bool $enforceOrganizationWhitelist Whether to enforce the account organization allowlist
      * @return array<UserDetailDTO> List of user details
      * @throws Throwable
      */
-    public function getUsersDetailByAccountFromAuthorization(
-        string $authorization,
-        ?string $organizationCode = null,
-        bool $enforceOrganizationWhitelist = false
-    ): array {
+    public function getUsersDetailByAccountFromAuthorization(string $authorization, ?string $organizationCode = null): array
+    {
         $magicId = $this->getAccountMagicIdByAuthorization($authorization);
 
-        if ($enforceOrganizationWhitelist) {
+        if (app_env() === 'saas-pre') {
             $this->assertAccountUsersOrganizationAllowed($magicId);
         }
 
