@@ -119,7 +119,8 @@ export function useTokenRefreshPolling({
 	}, [data])
 
 	useEffect(() => {
-		// 初始立即刷新一次
+		// Start the heartbeat interval; the refresh clock is seeded when share
+		// data first becomes available (see effect above).
 		startPolling()
 		return () => {
 			refreshSequenceRef.current += 1
