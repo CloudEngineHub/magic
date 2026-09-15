@@ -241,11 +241,6 @@ export function useFilesViewer(props: FilesViewerProps) {
 	const [fullscreenFileId, setFullscreenFileId] = useState<string | null>(null)
 	const activePreviewModeRef = useRef(previewMode)
 
-	// 拖拽相关状态
-	const [draggedTab, setDraggedTab] = useState<TabItem | null>(null)
-	const [dragOverIndex, setDragOverIndex] = useState<number | null>(null)
-	const [dragDirection, setDragDirection] = useState<"left" | "right" | null>(null)
-
 	// 计算当前是否有激活的文件tab
 	const hasActiveFileTab = useMemo(() => tabs.some((tab) => tab.active), [tabs])
 	const viewerProjectId = selectedProject?.id || projectId || ""
@@ -938,62 +933,14 @@ export function useFilesViewer(props: FilesViewerProps) {
 		}
 	})
 
-	// 拖拽处理函数
-	const handleTabDragStart = useMemoizedFn((e: React.DragEvent, tab: TabItem) => {
-		setDraggedTab(tab)
-		e.dataTransfer.effectAllowed = "copyMove"
-		e.dataTransfer.setData("text/plain", tab.id)
-	})
-
-	const handleTabDragEnd = useMemoizedFn((e: React.DragEvent) => {
-		setDraggedTab(null)
-		setDragOverIndex(null)
-		setDragDirection(null)
-	})
-
-	const handleTabDragOver = useMemoizedFn((e: React.DragEvent, index: number) => {
-		e.preventDefault()
-		e.dataTransfer.dropEffect = "move"
-		setDragOverIndex(index)
-
-		// 计算拖拽方向
-		if (draggedTab) {
-			const dragIndex = tabs.findIndex((tab) => tab.id === draggedTab.id)
-			if (dragIndex !== -1) {
-				// 如果有playbackTab，需要调整索引（因为UI中的index包含了playbackTab）
-				const adjustedIndex = playbackTab ? index - 1 : index
-				const adjustedDragIndex = dragIndex
-				// 如果拖拽到前面，显示左边框；拖拽到后面，显示右边框
-				setDragDirection(adjustedIndex < adjustedDragIndex ? "left" : "right")
-			}
-		}
-	})
-
-	const handleTabDrop = useMemoizedFn((e: React.DragEvent, dropIndex: number) => {
-		e.preventDefault()
-
-		if (!draggedTab) return
-
-		const dragIndex = tabs.findIndex((tab) => tab.id === draggedTab.id)
-		if (dragIndex === -1) return
-
-		// 如果有playbackTab，需要调整dropIndex（因为UI中的index包含了playbackTab）
-		const adjustedDropIndex = playbackTab ? dropIndex - 1 : dropIndex
-
-		if (dragIndex === adjustedDropIndex) return
-
-		// 执行拖拽排序
+	// 视觉预览由 useTabDrag 管理；释放后按最新 ID 解析索引，只提交一次正式顺序。
+	const reorderTabs = useMemoizedFn((sourceId: string, targetId: string) => {
+		const fromIndex = tabs.findIndex((tab) => tab.id === sourceId)
+		const toIndex = tabs.findIndex((tab) => tab.id === targetId)
 		dispatchTabs({
 			type: TabActionType.REORDER_TABS,
-			payload: {
-				fromIndex: dragIndex,
-				toIndex: adjustedDropIndex,
-			},
+			payload: { fromIndex, toIndex },
 		})
-
-		setDraggedTab(null)
-		setDragOverIndex(null)
-		setDragDirection(null)
 	})
 
 	// Generate file detail for rendering
@@ -1983,13 +1930,7 @@ export function useFilesViewer(props: FilesViewerProps) {
 		isKnowledgeBaseTab,
 
 		// 拖拽相关函数
-		handleTabDragStart,
-		handleTabDragEnd,
-		handleTabDragOver,
-		handleTabDrop,
-		draggedTab,
-		dragOverIndex,
-		dragDirection,
+		reorderTabs,
 
 		handleRefresh,
 
