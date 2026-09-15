@@ -1,4 +1,5 @@
 import type { FileHelpContext } from "@/pages/superMagic/components/TopicFilesButton/utils/magic-system-folder"
+import type { AttachmentLoadState } from "@/stores/projectFiles/types"
 import { memo, useRef, useImperativeHandle, forwardRef } from "react"
 import FilesViewer, { type FilesViewerRef } from "./components/FilesViewer"
 import type { ActiveDetailTabType } from "./components/FilesViewer/types"
@@ -15,6 +16,7 @@ import type { MagicWidget } from "@magic-web/widget-sdk"
 // Define the Detail component props interface
 interface DetailProps {
 	fileHelpContext?: FileHelpContext
+	attachmentLoadState?: AttachmentLoadState
 	disPlayDetail: any
 	setUserSelectDetail?: (detail: any) => void
 	userSelectDetail?: any
@@ -218,6 +220,7 @@ const Detail = forwardRef<DetailRef, DetailProps>((props, ref) => {
 		>
 			<FilesViewer
 				fileHelpContext={props.fileHelpContext}
+				attachmentLoadState={props.attachmentLoadState}
 				ref={filesViewerRef}
 				attachments={attachments}
 				attachmentList={attachmentList}

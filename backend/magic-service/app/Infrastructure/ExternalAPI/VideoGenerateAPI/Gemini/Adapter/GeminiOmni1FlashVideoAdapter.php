@@ -80,6 +80,7 @@ final class GeminiOmni1FlashVideoAdapter implements VideoGenerationConnectivityT
         $model = $this->capabilityProvider->resolveProviderModelName($modelVersion, $modelId);
         $request = $operation->getRawRequest();
         $inputs = $request['inputs'] ?? [];
+
         if (! is_array($inputs)) {
             throw new InvalidArgumentException('Gemini inputs must be an array.');
         }
@@ -106,16 +107,25 @@ final class GeminiOmni1FlashVideoAdapter implements VideoGenerationConnectivityT
         $operation->setAcceptedParams($acceptedParams);
         $operation->setIgnoredParams($ignored);
 
+        $task = match ($mode) {
+            VideoInputMode::Standard->value => 'text_to_video',
+            VideoInputMode::KeyframeGuided->value => 'image_to_video',
+            VideoInputMode::VideoEdit->value => 'edit',
+            default => 'reference_to_video',
+        };
+        if ($mode == VideoInputMode::OmniReference->value && empty($inputs)) {
+            $task = 'text_to_video';
+        }
+
         return [
             'model' => $model,
             'input' => $parts,
             'background' => array_key_exists('background', $request) ? (bool) $request['background'] : true,
-            'generation_config' => ['video_config' => ['task' => match ($mode) {
-                VideoInputMode::Standard->value => 'text_to_video',
-                VideoInputMode::KeyframeGuided->value => 'image_to_video',
-                VideoInputMode::VideoEdit->value => 'edit',
-                default => 'reference_to_video',
-            }]],
+            'generation_config' => [
+                'video_config' => [
+                    'task' => $task,
+                ],
+            ],
             'response_format' => $responseFormat,
         ];
     }
@@ -346,11 +356,13 @@ final class GeminiOmni1FlashVideoAdapter implements VideoGenerationConnectivityT
         $responseFormat = [
             'type' => 'video',
             'delivery' => 'uri',
-            'aspect_ratio' => $aspectRatio,
             'resolution' => $resolution,
         ];
         if ($includeDuration) {
             $responseFormat['duration'] = $duration . 's';
+        }
+        if ($includeDuration) {
+            $responseFormat['aspect_ratio'] = $aspectRatio;
         }
 
         return $responseFormat;

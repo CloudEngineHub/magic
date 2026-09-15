@@ -679,7 +679,8 @@ readonly class VideoQueueDomainService
             unset($generation['negative_prompt']);
         }
         $audioConfig = is_array($configGeneration['generate_audio'] ?? null) ? $configGeneration['generate_audio'] : null;
-        if ($audioConfig === null && ! ($configGeneration['supports_generate_audio'] ?? false)) {
+        $audioSupportDeclared = array_key_exists('supports_generate_audio', $configGeneration);
+        if ($audioConfig === null && $audioSupportDeclared && ! (bool) $configGeneration['supports_generate_audio']) {
             unset($generation['generate_audio']);
         }
         $webSearchConfig = is_array($configGeneration['web_search'] ?? null) ? $configGeneration['web_search'] : null;

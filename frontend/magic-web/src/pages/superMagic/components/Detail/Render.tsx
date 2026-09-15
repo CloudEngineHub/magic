@@ -768,6 +768,7 @@ export default function Render(props: any) {
 	// Common props object for passing to content components
 	const commonProps = {
 		type,
+		attachmentLoadState: props.attachmentLoadState,
 		attachments,
 		setUserSelectDetail,
 		currentIndex,

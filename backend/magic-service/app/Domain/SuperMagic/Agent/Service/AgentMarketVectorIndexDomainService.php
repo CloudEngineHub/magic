@@ -8,7 +8,6 @@ declare(strict_types=1);
 namespace App\Domain\SuperMagic\Agent\Service;
 
 use App\Domain\ModelGateway\Entity\ValueObject\SourceId;
-use App\Domain\Provider\Entity\ValueObject\AiAbilityCode;
 use App\Domain\SuperMagic\Agent\Entity\AgentCategoryEntity;
 use App\Domain\SuperMagic\Agent\Entity\AgentMarketEntity;
 use App\Domain\SuperMagic\Agent\Entity\ValueObject\AgentCategoryRelationType;
@@ -18,7 +17,7 @@ use App\Domain\SuperMagic\Agent\Entity\ValueObject\SuperMagicAgentDataIsolation;
 use App\Domain\SuperMagic\Agent\Repository\Facade\AgentCategoryRelationRepositoryInterface;
 use App\Domain\SuperMagic\Agent\Repository\Facade\AgentCategoryRepositoryInterface;
 use App\Domain\SuperMagic\Agent\Repository\Facade\AgentMarketRepositoryInterface;
-use App\Infrastructure\Core\Embeddings\EmbeddingGenerator\EmbeddingGenerator;
+use App\Infrastructure\Core\Embeddings\EmbeddingDimensionPolicy;
 use App\Infrastructure\Core\Embeddings\EmbeddingGenerator\EmbeddingGeneratorInterface;
 use App\Infrastructure\Core\Embeddings\VectorStores\VectorStoreInterface;
 use App\Infrastructure\Core\ValueObject\Page;
@@ -32,6 +31,9 @@ use Throwable;
 final class AgentMarketVectorIndexDomainService
 {
     private const VECTOR_INDEX_INITIALIZED_KEY = 'vector_index:initialized:agent_market';
+
+    /** 日志与异常中的业务标识。 */
+    private const BUSINESS = 'Agent market';
 
     private ?bool $availabilityCache = null;
 
@@ -98,12 +100,12 @@ final class AgentMarketVectorIndexDomainService
         $payload = $this->buildPayload($market, $semanticText);
         $collection = $this->vectorStore->getCollection($collectionName);
         if ($collection !== null && ! $forceReEmbedding) {
-            $embeddingModel = $this->embeddingGenerator->getDefaultModel(
-                SuperMagicAgentDataIsolation::create($market->getOrganizationCode() ?? '', $operatorId),
-            );
-            if ($collection->vectorSize !== $embeddingModel->getVectorSize()) {
-                throw new RuntimeException('Agent market embedding dimension does not match the vector collection');
-            }
+            $expectedSize = EmbeddingDimensionPolicy::isEnabled()
+                ? EmbeddingDimensionPolicy::fixedSize()
+                : $this->embeddingGenerator->getDefaultModel(
+                    SuperMagicAgentDataIsolation::create($market->getOrganizationCode() ?? '', $operatorId),
+                )->getVectorSize();
+            EmbeddingDimensionPolicy::assertCollectionSize(self::BUSINESS, $collection->vectorSize, $expectedSize);
         }
         $existingPoint = $this->vectorStore->getPoint($collectionName, $pointId);
 
@@ -114,7 +116,11 @@ final class AgentMarketVectorIndexDomainService
         }
 
         $embedding = $this->generateEmbedding($market, $semanticText, $operatorId);
-        $this->ensureCollection($collectionName, count($embedding), $forceReEmbedding);
+        $this->ensureCollection(
+            $collectionName,
+            EmbeddingDimensionPolicy::resolveCollectionSize(self::BUSINESS, count($embedding)),
+            $forceReEmbedding,
+        );
 
         $this->vectorStore->storePoint($collectionName, $pointId, $embedding, $payload);
         $this->availabilityCache = true;
@@ -224,7 +230,7 @@ final class AgentMarketVectorIndexDomainService
 
     public function isVectorSearchEnabled(): bool
     {
-        return EmbeddingGenerator::isEnabled(AiAbilityCode::KnowledgeBaseEmbeddingModel);
+        return EmbeddingDimensionPolicy::isEnabled();
     }
 
     /** Return whether the first complete Agent Market reconciliation succeeded. */
@@ -383,7 +389,7 @@ final class AgentMarketVectorIndexDomainService
         $collection = $this->vectorStore->getCollection($collectionName);
         if ($collection !== null && $collection->vectorSize !== $vectorSize) {
             if (! $forceReEmbedding) {
-                throw new RuntimeException('Agent market embedding dimension does not match the vector collection');
+                EmbeddingDimensionPolicy::assertCollectionSize(self::BUSINESS, $collection->vectorSize, $vectorSize);
             }
 
             // A model change can change the vector dimension. Recreate the collection
