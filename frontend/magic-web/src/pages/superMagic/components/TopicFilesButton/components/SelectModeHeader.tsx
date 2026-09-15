@@ -5,7 +5,7 @@ import { useTranslation } from "react-i18next"
 import { Button } from "@/components/shadcn-ui/button"
 import { Checkbox } from "@/components/shadcn-ui/checkbox"
 import { cn } from "@/utils/cn"
-import HeaderTrailingAction, { FileManagerAction } from "./HeaderTrailingAction"
+import HeaderTrailingAction from "./HeaderTrailingAction"
 import { SidebarSectionToggle, type SidebarSectionOptions } from "../../SidebarSection"
 import { useFileHeaderOverflow } from "../hooks/useFileHeaderOverflow"
 
@@ -16,7 +16,6 @@ interface SelectModeHeaderProps {
 	onDeselectAll: () => void
 	onCancel: () => void
 	headerTrailingAction?: ReactNode
-	onOpenFileManager?: () => void
 	section?: SidebarSectionOptions
 	className?: string
 }
@@ -28,12 +27,11 @@ function SelectModeHeader({
 	onDeselectAll,
 	onCancel,
 	headerTrailingAction,
-	onOpenFileManager,
 	section,
 	className,
 }: SelectModeHeaderProps) {
 	const { t } = useTranslation("super")
-	const { rowRef, labelRef, actionsRef, overflow } = useFileHeaderOverflow()
+	const { rowRef, labelRef, actionsRef } = useFileHeaderOverflow()
 
 	const isAllSelected = selectedCount === totalCount && totalCount > 0
 	const isIndeterminate = selectedCount > 0 && selectedCount < totalCount
@@ -86,9 +84,6 @@ function SelectModeHeader({
 				{headerTrailingAction ? (
 					<HeaderTrailingAction>{headerTrailingAction}</HeaderTrailingAction>
 				) : null}
-				{onOpenFileManager && (
-					<FileManagerAction onClick={onOpenFileManager} overflow={overflow} />
-				)}
 			</div>
 			{section && (
 				<SidebarSectionToggle

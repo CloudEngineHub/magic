@@ -6,7 +6,7 @@ import type { FileHelpContext } from "@/pages/superMagic/components/TopicFilesBu
 import type { AttachmentItem } from "@/pages/superMagic/components/TopicFilesButton/hooks/types"
 import { memo } from "react"
 import type { FileItem, TabItem } from "../types"
-import { Globe2, FolderTree } from "lucide-react"
+import { Globe2, PanelsTopLeft } from "lucide-react"
 import { isWebsiteTab } from "../utils/websiteTabs"
 
 interface FileTabMagicIconProps {
@@ -34,7 +34,7 @@ export const FileTabMagicIcon = memo(function FileTabMagicIcon({
 			: undefined,
 	})
 	if (isPlayback) return <MagicFileIcon type="replay" size={size} className={className} />
-	if (tab.type === "file_manager") return <FolderTree size={size} className={className} />
+	if (tab.type === "file_manager") return <PanelsTopLeft size={size} className={className} />
 	if (isWebsiteTab(tab)) return <Globe2 size={size} className={className} />
 	return <FileResourceIcon presentation={presentation} size={size} className={className} />
 })

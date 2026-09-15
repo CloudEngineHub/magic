@@ -36,10 +36,7 @@ interface SelectPathSubmitPayload {
 }
 
 type ConflictType =
-	| "parent_missing"
-	| "name_conflict"
-	| "project_missing"
-	| "duplicate_restore_target"
+	"parent_missing" | "name_conflict" | "project_missing" | "duplicate_restore_target"
 
 type ConflictResolution = {
 	parent_missing?: "restore_to_root"
@@ -79,6 +76,7 @@ function parseRestoreCheckResponse(data: {
 	items_with_conflict?: Array<{
 		resource_id: string
 		resource_name?: string
+		space_type?: "user" | "project"
 		conflict?: {
 			type?: string
 		}
@@ -151,6 +149,13 @@ function parseRestoreCheckResponse(data: {
 	const noConflictResourceIds =
 		oldNoNeedMove.length > 0 ? toResourceIds(oldNoNeedMove) : toResourceIds(noConflict)
 	directResourceIds.push(...noConflictResourceIds)
+	const rootSpaceTypes = Array.from(
+		new Set(
+			withConflict
+				.filter((item) => item.conflict?.type === "parent_missing")
+				.map((item) => item.space_type ?? "project"),
+		),
+	)
 	const uniqueDirectResourceIds = Array.from(new Set(directResourceIds))
 	const uniqueMustSkipResourceIds = Array.from(new Set(mustSkipResourceIds))
 
@@ -170,6 +175,7 @@ function parseRestoreCheckResponse(data: {
 		conflictResolutions,
 		pendingNameConflictItems,
 		mustSkipResourceIds: uniqueMustSkipResourceIds,
+		rootSpaceTypes,
 		skippedNameConflictCount: pendingNameConflictItems.length,
 		skippedNameConflictNames,
 		skippedNameConflictResourceIds: pendingNameConflictResourceIds,
@@ -181,6 +187,7 @@ function parseRestoreCheckResponse(data: {
 }
 
 interface UseRecycleBinActionsParams {
+	onMutationComplete?: () => void
 	items: RecycleBinItem[]
 	setItems: React.Dispatch<React.SetStateAction<RecycleBinItem[]>>
 	selectedIds: string[]
@@ -194,6 +201,7 @@ export function useRecycleBinActions({
 	selectedIds,
 	hasMixedSelectionTypes,
 	onRefresh,
+	onMutationComplete,
 }: UseRecycleBinActionsParams) {
 	const { t } = useTranslation("super")
 	const [restoreTarget, setRestoreTarget] = useState<RestoreTarget | null>(null)
@@ -213,11 +221,14 @@ export function useRecycleBinActions({
 		resourceType: ResourceType
 	} | null>(null)
 
-	const { runAsync: checkRecycleBinParent } = useRequest(RecycleBinApi.checkRecycleBinParent, {
-		manual: true,
-	})
+	const { runAsync: checkRecycleBinParent, loading: isCheckingRestore } = useRequest(
+		RecycleBinApi.checkRecycleBinParent,
+		{
+			manual: true,
+		},
+	)
 
-	const { runAsync: restoreRecycleBinResources } = useRequest(
+	const { runAsync: restoreRecycleBinResources, loading: isRestoring } = useRequest(
 		RecycleBinApi.restoreRecycleBinResources,
 		{
 			manual: true,
@@ -325,6 +336,7 @@ export function useRecycleBinActions({
 					count,
 				}),
 			)
+		onMutationComplete?.()
 		refreshSidebarAfterRestore()
 		onRefresh()
 	}
@@ -699,6 +711,7 @@ export function useRecycleBinActions({
 				magicToast.error(t("operationFailed"))
 			}
 			if (successIdStrings.length > 0) {
+				onMutationComplete?.()
 				magicToast.success(
 					t("recycleBin.deleteSuccess.content", { count: successIdStrings.length }),
 				)
@@ -859,6 +872,7 @@ export function useRecycleBinActions({
 				projectMissingCount,
 				projectMissingFileNames,
 				duplicateRestoreTargetCount,
+				rootSpaceTypes,
 			} = parseRestoreCheckResponse(data)
 
 			if (
@@ -896,6 +910,7 @@ export function useRecycleBinActions({
 				projectMissingCount,
 				projectMissingFileNames,
 				duplicateRestoreTargetCount,
+				rootSpaceTypes,
 				shouldBlockRestore: false,
 				status: "success",
 			})
@@ -935,6 +950,11 @@ export function useRecycleBinActions({
 
 	return {
 		restoreTarget,
+		isActionPending:
+			isCheckingRestore ||
+			isRestoring ||
+			isPermanentDeleteLoading ||
+			isResolvingAllNameConflicts,
 		restoreCheckResult,
 		pendingNameConflictRestore: currentPendingNameConflict
 			? {

@@ -64,9 +64,10 @@ class RecycleBinRestoreDomainService
         array $resourceIds,
         RecycleBinResourceType $resourceType,
         string $userId,
-        array $conflictResolutions = []
+        array $conflictResolutions = [],
+        string $organizationCode = '',
     ): array {
-        $entities = $this->recycleBinRepository->findLatestByResourceIds($resourceIds, $resourceType, $userId);
+        $entities = $this->recycleBinRepository->findLatestByResourceIds($resourceIds, $resourceType, $userId, $organizationCode);
         $entities = $this->sortRecycleBinEntitiesByDeletedAtDesc($entities);
 
         if (empty($entities)) {
@@ -88,7 +89,7 @@ class RecycleBinRestoreDomainService
 
         foreach ($entities as $entity) {
             try {
-                $this->restoreSingle($entity, $userId, $conflictResolutions);
+                $this->restoreSingle($entity, $userId, $conflictResolutions, $organizationCode);
                 $succeeded[] = $entity;
             } catch (Throwable $e) {
                 $this->logger->error('Failed to restore resource', [
@@ -114,7 +115,7 @@ class RecycleBinRestoreDomainService
      *
      * @return array{items_with_conflict: RestorePreviewItemDTO[], items_no_conflict: RestorePreviewItemDTO[]}
      */
-    public function previewFileConflicts(array $resourceIds, string $userId): array
+    public function previewFileConflicts(array $resourceIds, string $userId, string $organizationCode = ''): array
     {
         $itemsWithConflict = [];
         $itemsNoConflict = [];
@@ -126,7 +127,8 @@ class RecycleBinRestoreDomainService
         $entities = $this->recycleBinRepository->findLatestByResourceIds(
             $resourceIds,
             RecycleBinResourceType::File,
-            $userId
+            $userId,
+            $organizationCode,
         );
         $entities = $this->sortRecycleBinEntitiesByDeletedAtDesc($entities);
         $batchContext = $this->buildFileBatchContext($entities);
@@ -149,11 +151,12 @@ class RecycleBinRestoreDomainService
                 continue;
             }
 
-            if (! $this->projectExistsAndNotDeleted($file->getProjectId(), $projectExistsCache)) {
+            if ($file->isProjectFile() && ! $this->projectExistsAndNotDeleted($file->getProjectId(), $projectExistsCache)) {
                 $itemsWithConflict[] = new RestorePreviewItemDTO(
                     resourceId: (string) $fileId,
                     resourceName: $file->getFileName(),
                     isDirectory: $file->getIsDirectory(),
+                    spaceType: $file->getSpaceType(),
                     conflict: new RestoreConflictDTO(
                         type: RestoreConflictType::ProjectMissing,
                     ),
@@ -173,6 +176,7 @@ class RecycleBinRestoreDomainService
                         resourceId: (string) $fileId,
                         resourceName: $file->getFileName(),
                         isDirectory: $file->getIsDirectory(),
+                        spaceType: $file->getSpaceType(),
                         conflict: new RestoreConflictDTO(
                             type: RestoreConflictType::ParentMissing,
                             originalParentId: $parentId,
@@ -189,6 +193,7 @@ class RecycleBinRestoreDomainService
                     resourceId: (string) $fileId,
                     resourceName: $file->getFileName(),
                     isDirectory: $file->getIsDirectory(),
+                    spaceType: $file->getSpaceType(),
                     conflict: new RestoreConflictDTO(
                         type: RestoreConflictType::DuplicateRestoreTarget,
                     ),
@@ -209,6 +214,7 @@ class RecycleBinRestoreDomainService
                     resourceId: (string) $fileId,
                     resourceName: $file->getFileName(),
                     isDirectory: $file->getIsDirectory(),
+                    spaceType: $file->getSpaceType(),
                     conflict: new RestoreConflictDTO(
                         type: RestoreConflictType::NameConflict,
                         existingFileId: $existing->getFileId(),
@@ -222,6 +228,7 @@ class RecycleBinRestoreDomainService
                 resourceId: (string) $fileId,
                 resourceName: $file->getFileName(),
                 isDirectory: $file->getIsDirectory(),
+                spaceType: $file->getSpaceType(),
             );
         }
 
@@ -337,7 +344,7 @@ class RecycleBinRestoreDomainService
                 continue;
             }
 
-            if (! $this->projectExistsAndNotDeleted($file->getProjectId(), $projectExistsCache)) {
+            if ($file->isProjectFile() && ! $this->projectExistsAndNotDeleted($file->getProjectId(), $projectExistsCache)) {
                 $failed[] = [
                     'entity' => $entity,
                     'error' => trans('recycle_bin.restore.file_project_missing'),
@@ -470,7 +477,7 @@ class RecycleBinRestoreDomainService
 
         $parentResolution = RestoreConflictResolution::tryFrom($resolution['parent_missing'] ?? '');
         if ($parentResolution === RestoreConflictResolution::RestoreToRoot) {
-            $root = $this->taskFileRepository->findRootDirectoryByProjectId($file->getProjectId());
+            $root = $this->findFileSpaceRoot($file);
             if ($root === null) {
                 throw new RuntimeException(trans('recycle_bin.restore.file_restore_to_root_failed'));
             }
@@ -576,7 +583,8 @@ class RecycleBinRestoreDomainService
     private function restoreSingle(
         RecycleBinEntity $entity,
         string $userId,
-        array $conflictResolutions = []
+        array $conflictResolutions = [],
+        string $organizationCode = '',
     ): void {
         $resourceType = $entity->getResourceType();
 
@@ -584,7 +592,7 @@ class RecycleBinRestoreDomainService
             RecycleBinResourceType::Workspace => $this->restoreWorkspace($entity, $userId),
             RecycleBinResourceType::Project => $this->restoreProject($entity, $userId),
             RecycleBinResourceType::Topic => $this->restoreTopic($entity, $userId),
-            RecycleBinResourceType::File => $this->restoreFile($entity, $userId, $conflictResolutions),
+            RecycleBinResourceType::File => $this->restoreFile($entity, $userId, $conflictResolutions, $organizationCode),
             RecycleBinResourceType::MicroApp => $this->restoreMicroApp($entity, $userId),
             default => throw new RuntimeException(
                 trans('recycle_bin.restore.unsupported_resource_type', ['type' => $resourceType->value])
@@ -753,12 +761,13 @@ class RecycleBinRestoreDomainService
     private function restoreFile(
         RecycleBinEntity $entity,
         string $userId,
-        array $conflictResolutions = []
+        array $conflictResolutions = [],
+        string $organizationCode = '',
     ): void {
         $fileId = (int) $entity->getResourceId();
         $resolution = $conflictResolutions[(string) $fileId] ?? [];
 
-        Db::transaction(function () use ($fileId, $entity, $userId, $resolution) {
+        Db::transaction(function () use ($fileId, $entity, $userId, $resolution, $organizationCode) {
             // 1. Validate recycle bin record state
             if ($entity->getRemovedAt() !== null || $entity->getPurgedAt() !== null) {
                 throw new RuntimeException(trans('recycle_bin.restore.file_removed_cannot_restore'));
@@ -770,8 +779,13 @@ class RecycleBinRestoreDomainService
                 throw new RuntimeException(trans('recycle_bin.restore.file_not_found_or_permanently_deleted'));
             }
 
-            if (! $this->projectRepository->existsAndNotDeleted($file->getProjectId())) {
+            if ($file->isProjectFile() && ! $this->projectRepository->existsAndNotDeleted($file->getProjectId())) {
                 throw new RuntimeException(trans('recycle_bin.restore.file_project_missing'));
+            }
+
+            if (! $file->isProjectFile()
+                && ($file->getSpaceType() !== 'user' || $file->getUserId() !== $userId || $file->getOrganizationCode() !== $organizationCode)) {
+                throw new RuntimeException(trans('file.permission_denied'));
             }
 
             // 3. Already restored — just clean up recycle bin record
@@ -781,7 +795,7 @@ class RecycleBinRestoreDomainService
             }
 
             // 4. Resolve target parent (use file.parent_id directly, no extra_data)
-            $targetParentId = $this->resolveTargetParentId($file->getParentId(), $file->getProjectId(), $resolution);
+            $targetParentId = $this->resolveTargetParentId($file, $resolution);
 
             // 5. Check name conflict at resolved target location
             $existing = $this->taskFileRepository->getByProjectParentAndName(
@@ -845,15 +859,17 @@ class RecycleBinRestoreDomainService
      * @param array<string, string> $resolution
      * @throws RuntimeException when parent is missing and no valid resolution is given
      */
-    private function resolveTargetParentId(?int $parentId, int $projectId, array $resolution): ?int
+    private function resolveTargetParentId(TaskFileEntity $file, array $resolution): ?int
     {
+        $parentId = $file->getParentId();
         // Root-level file — no parent check needed
         if ($parentId === null || $parentId <= 0) {
             return null;
         }
 
         $parent = $this->taskFileRepository->getByIdWithTrash($parentId);
-        $parentMissing = $parent === null || $parent->getDeletedAt() !== null || ! $parent->getIsDirectory();
+        $parentMissing = $parent === null || $parent->getDeletedAt() !== null || ! $parent->getIsDirectory()
+            || (! $file->isProjectFile() && ($parent->getSpaceType() !== 'user' || $parent->getUserId() !== $file->getUserId() || $parent->getOrganizationCode() !== $file->getOrganizationCode()));
 
         if (! $parentMissing) {
             return $parentId;
@@ -863,7 +879,7 @@ class RecycleBinRestoreDomainService
         $parentResolution = RestoreConflictResolution::tryFrom($resolution['parent_missing'] ?? '');
 
         if ($parentResolution === RestoreConflictResolution::RestoreToRoot) {
-            $root = $this->taskFileRepository->findRootDirectoryByProjectId($projectId);
+            $root = $this->findFileSpaceRoot($file);
             if ($root === null) {
                 throw new RuntimeException(trans('recycle_bin.restore.file_restore_to_root_failed'));
             }
@@ -871,5 +887,12 @@ class RecycleBinRestoreDomainService
         }
 
         throw new RuntimeException(trans('recycle_bin.restore.file_parent_missing'));
+    }
+
+    private function findFileSpaceRoot(TaskFileEntity $file): ?TaskFileEntity
+    {
+        return $file->isProjectFile()
+            ? $this->taskFileRepository->findRootDirectoryByProjectId($file->getProjectId())
+            : $this->taskFileRepository->findUserSpaceRootDirectory($file->getUserId(), $file->getOrganizationCode());
     }
 }

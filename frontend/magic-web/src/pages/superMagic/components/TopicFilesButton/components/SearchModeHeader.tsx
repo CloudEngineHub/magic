@@ -5,7 +5,7 @@ import { Search, X } from "lucide-react"
 import { InputGroup, InputGroupAddon, InputGroupInput } from "@/components/shadcn-ui/input-group"
 import { Button } from "@/components/shadcn-ui/button"
 import { cn } from "@/utils/cn"
-import HeaderTrailingAction, { FileManagerAction } from "./HeaderTrailingAction"
+import HeaderTrailingAction from "./HeaderTrailingAction"
 import { SidebarSectionToggle, type SidebarSectionOptions } from "../../SidebarSection"
 import { useFileHeaderOverflow } from "../hooks/useFileHeaderOverflow"
 
@@ -16,7 +16,6 @@ interface SearchModeHeaderProps {
 	onSearchCommit?: (value: string) => void
 	onClose: () => void
 	headerTrailingAction?: ReactNode
-	onOpenFileManager?: () => void
 	section?: SidebarSectionOptions
 	className?: string
 }
@@ -28,12 +27,11 @@ function SearchModeHeader({
 	onSearchCommit,
 	onClose,
 	headerTrailingAction,
-	onOpenFileManager,
 	section,
 	className,
 }: SearchModeHeaderProps) {
 	const { t } = useTranslation("super")
-	const { rowRef, labelRef, actionsRef, overflow } = useFileHeaderOverflow()
+	const { rowRef, labelRef, actionsRef } = useFileHeaderOverflow()
 	const [localValue, setLocalValue] = useState(searchValue)
 	const isComposingRef = useRef(false)
 
@@ -108,9 +106,6 @@ function SearchModeHeader({
 				{headerTrailingAction ? (
 					<HeaderTrailingAction>{headerTrailingAction}</HeaderTrailingAction>
 				) : null}
-				{onOpenFileManager && (
-					<FileManagerAction onClick={onOpenFileManager} overflow={overflow} />
-				)}
 			</div>
 			{section && (
 				<SidebarSectionToggle

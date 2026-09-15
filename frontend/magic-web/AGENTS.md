@@ -87,6 +87,7 @@ Guidance for autonomous or semi-autonomous coding agents contributing to the Mag
   - Never convert existing antd-style components to Tailwind unless explicitly requested
 - **Data/Store Changes**: Modify MobX/Zustand stores cautiously, update dependent selectors, and add tests or storybook notes if behaviour shifts.
 - **Super Magic File-System Performance**: Before touching Super Magic attachments, file trees, file preview tabs, PPT rendering, or folder upload, read `docs/file-dependency-development-pitfalls.md` and `docs/file-system-optimization-summary.md`. Treat 10k files as the baseline: do not `JSON.stringify`, deep-clone, deep-compare, or log full `attachments` / `attachmentList` / `renderProps` in render paths; use `loadProjectAttachments`, `attachmentIndex` / `treeIndex`, primitive cache keys, abortable requests, and explicit MobX annotations for large input configs.
+- **Network file operations**: Copy/cut only records clipboard intent. Actual copy/move writes must use the shared scope confirmation after preparation; show preparation in a centered modal with cancellation. Cancelling preparation is not rollback of already submitted writes. Reuse the existing file menus, upload queues, conflict handling, and operation lifecycle.
 - **Docs & Configuration**: Keep documentation bilingual when user-facing, and update related config or example snippets.
 - **Bug Fixes**: Reproduce, add a failing test when practical, fix, and confirm the test passes.
 

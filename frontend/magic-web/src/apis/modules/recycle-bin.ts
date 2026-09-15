@@ -23,10 +23,12 @@ export namespace RecycleBin {
 		remaining_days?: number
 		parent_id: string
 		extra_data?: {
+			space_type?: "user" | "project"
 			workspace_name?: string
 			project_name?: string
 			relative_file_path?: string
 			is_directory?: boolean
+			original_parent_id?: string | number | null
 			parent_info?: {
 				workspace_id?: number
 				workspace_name?: string
@@ -46,6 +48,30 @@ export namespace RecycleBin {
 
 	export interface CountsParams {
 		keyword?: string
+		project_id?: string
+	}
+
+	export interface ProjectListParams {
+		project_id: string
+		resource_type: 4
+		include_total: false
+		keyword?: string
+		deleted_from?: string
+		deleted_to?: string
+		cursor?: string
+		page_size: number
+	}
+
+	export interface SearchLimits {
+		max_hours: number
+		max_results: number
+	}
+
+	export interface ProjectListResult {
+		list: ListItem[]
+		has_more: boolean
+		next_cursor: string | null
+		search_limits: SearchLimits
 	}
 
 	export interface CountItem {
@@ -62,6 +88,7 @@ export namespace RecycleBin {
 		resource_name: string
 		parent_id: string | null
 		is_directory?: boolean
+		space_type?: "user" | "project"
 		conflict?: {
 			type?: "parent_missing" | "name_conflict" | string
 			existing_file_id?: string
@@ -112,15 +139,23 @@ export namespace RecycleBin {
 }
 
 export const generateRecycleBinApi = (fetch: ServiceHttpClient) => ({
+	getProjectRecycleBinList(params: RecycleBin.ProjectListParams, signal?: AbortSignal) {
+		return fetch.get<RecycleBin.ProjectListResult>("/api/v1/recycle-bin/list", {
+			params: { ...params },
+			signal,
+			enableErrorMessagePrompt: false,
+		})
+	},
 	getRecycleBinList(params: RecycleBin.ListParams) {
 		return fetch.get<{ total: number; list: RecycleBin.ListItem[] }>(
 			"/api/v1/recycle-bin/list",
 			{ params: { ...params } },
 		)
 	},
-	getRecycleBinCounts(params?: RecycleBin.CountsParams) {
+	getRecycleBinCounts(params?: RecycleBin.CountsParams, signal?: AbortSignal) {
 		return fetch.get<RecycleBin.CountItem[]>("/api/v1/recycle-bin/counts", {
 			params: { ...params },
+			...(signal ? { signal, enableErrorMessagePrompt: false } : {}),
 		})
 	},
 	checkRecycleBinParent(params: RecycleBin.CheckParams) {

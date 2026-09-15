@@ -181,6 +181,7 @@ export function toUserAttachment(file: MagicFSFile, path: string): AttachmentIte
 		parent_id: file.parent_id,
 		is_directory: file.is_directory,
 		file_size: file.size,
+		created_at: file.created_at,
 		updated_at: file.updated_at,
 		relative_file_path: path,
 		space_type: "user",

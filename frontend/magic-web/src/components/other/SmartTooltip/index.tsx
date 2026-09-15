@@ -5,6 +5,9 @@ import { cn } from "@/utils/cn"
 type ActionType = "click" | "hover" | "focus" | "contextMenu"
 
 interface SmartTooltipProps {
+	/** Name-only hints never capture clicks and remeasure the actual text box. */
+	fileName?: boolean
+	getPopupContainer?: () => HTMLElement | null
 	children?: ReactNode
 	className?: string
 	style?: React.CSSProperties
@@ -37,6 +40,8 @@ interface SmartTooltipProps {
  */
 const SmartTooltip = memo(function SmartTooltip({
 	children = "",
+	fileName = false,
+	getPopupContainer,
 	className,
 	style,
 	placement = "top",
@@ -115,6 +120,11 @@ const SmartTooltip = memo(function SmartTooltip({
 		// Delayed detection to ensure DOM rendering is complete
 		const timer = setTimeout(checkOverflow, 100)
 
+		if (fileName) {
+			setOpen(false)
+			checkOverflow()
+		}
+
 		// Listen for window resize
 		window.addEventListener("resize", checkOverflow)
 
@@ -122,7 +132,17 @@ const SmartTooltip = memo(function SmartTooltip({
 			clearTimeout(timer)
 			window.removeEventListener("resize", checkOverflow)
 		}
-	}, [children, checkOverflow])
+	}, [children, fileName, checkOverflow])
+
+	// 只在名称提示打开时观察尺寸；虚拟列表里的其它文件不安装持续尺寸监听。
+	useEffect(() => {
+		if (!fileName || !open || !textRef.current) return
+		const observer = new ResizeObserver(() => {
+			if (!checkOverflow()) setOpen(false)
+		})
+		observer.observe(textRef.current)
+		return () => observer.disconnect()
+	}, [fileName, open, checkOverflow])
 
 	useEffect(() => {
 		if (disabled) {
@@ -186,6 +206,20 @@ const SmartTooltip = memo(function SmartTooltip({
 		onDoubleClick,
 		onPointerEnter: handlePointerEnter,
 		onFocus: handleFocus,
+		...(fileName && {
+			onPointerDown: () => {
+				canOpenRef.current = false
+				setOpen(false)
+			},
+			onDragStart: () => {
+				canOpenRef.current = false
+				setOpen(false)
+			},
+			onPointerLeave: () => {
+				canOpenRef.current = false
+				setOpen(false)
+			},
+		}),
 		...props,
 	}
 	// Avoid inheriting trigger layout styles into the tooltip body.
@@ -196,7 +230,12 @@ const SmartTooltip = memo(function SmartTooltip({
 	})
 
 	return (
-		<Tooltip open={open && effectiveShowTooltip && !disabled} onOpenChange={handleOpenChange}>
+		<Tooltip
+			delayDuration={fileName ? 400 : undefined}
+			disableHoverableContent={fileName || undefined}
+			open={open && effectiveShowTooltip && !disabled}
+			onOpenChange={handleOpenChange}
+		>
 			<TooltipTrigger asChild>
 				{elementType === "div" ? (
 					<div ref={textRef as React.RefObject<HTMLDivElement>} {...sharedProps}>
@@ -213,8 +252,14 @@ const SmartTooltip = memo(function SmartTooltip({
 					className={cn(
 						"z-tooltip max-w-[min(20rem,var(--radix-tooltip-content-available-width,100vw))] whitespace-normal text-wrap break-words",
 						tooltipContentClassName,
+						fileName && "pointer-events-none",
 					)}
-					style={tooltipContentStyle}
+					container={getPopupContainer?.() ?? undefined}
+					style={
+						fileName
+							? { ...tooltipContentStyle, pointerEvents: "none" }
+							: tooltipContentStyle
+					}
 					sideOffset={sideOffset}
 					side={placement}
 					align={align}

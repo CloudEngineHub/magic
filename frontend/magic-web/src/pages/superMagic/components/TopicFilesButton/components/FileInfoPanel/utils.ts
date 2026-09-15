@@ -144,7 +144,7 @@ function countFilesByExtension(item: AttachmentItem, extensions: Set<string>): n
 	return count
 }
 
-function sourceLabelKey(source?: AttachmentSource): string {
+export function sourceLabelKey(source?: AttachmentSource): string {
 	switch (source) {
 		case AttachmentSource.HOME:
 		case AttachmentSource.PROJECT_DIRECTORY:

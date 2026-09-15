@@ -1,5 +1,5 @@
 import { useState, useMemo, useRef } from "react"
-import type { AttachmentItem } from "./types"
+import type { AttachmentItem, ConfirmFileOperation } from "./types"
 import { MenuProps } from "antd"
 import { collectFileIds } from "../utils/collectFileIds"
 import { collectSelectedItemIds } from "../utils/collectSelectedItemIds"
@@ -49,6 +49,7 @@ import type { FileScope } from "@/apis/modules/fileScope"
 const DELETE_BATCH_SIZE = 500
 
 interface UseBatchDownloadOptions {
+	confirmOperation?: ConfirmFileOperation
 	fileScope?: FileScope
 	onDownloadSelected?: (items: AttachmentItem[]) => Promise<void>
 	resolveDeleteItems?: (items: AttachmentItem[]) => Promise<AttachmentItem[]>
@@ -185,6 +186,10 @@ export function useBatchDownload(options: UseBatchDownloadOptions) {
 
 	// PC端批量删除（使用 Modal 确认）
 	const handlePCBatchDeleteWithConfirm = async () => {
+		if (options.confirmOperation) {
+			await deleteWithConfirm(collectSelectedFiles(selectedItems, filteredFiles, getItemId))
+			return
+		}
 		const containsFolders = hasSelectedFolders()
 		const touchesMagicFolder = hasMagicSystemFolderInDeletionSelection(
 			filteredFiles,
@@ -210,20 +215,26 @@ export function useBatchDownload(options: UseBatchDownloadOptions) {
 		})
 	}
 
-	const deleteItems = async (items: AttachmentItem[], keys?: Set<string>) => {
+	const deleteItems = async (
+		items: AttachmentItem[],
+		keys?: Set<string>,
+		confirmedIds?: string[],
+	) => {
 		if (deletingRef.current) return
 		const isCurrent = options.isCurrent ?? (() => true)
 		if (!isCurrent()) return
-		const ids = [
-			...new Set(
-				collectFileIds({
-					items,
-					selectedItems: keys,
-					getItemId,
-					includeFolderIds: true,
-				}),
-			),
-		].reverse()
+		const ids =
+			confirmedIds ??
+			[
+				...new Set(
+					collectFileIds({
+						items,
+						selectedItems: keys,
+						getItemId,
+						includeFolderIds: true,
+					}),
+				),
+			].reverse()
 		if (!ids.length) return
 		deletingRef.current = true
 		setBatchLoading(true)
@@ -236,7 +247,7 @@ export function useBatchDownload(options: UseBatchDownloadOptions) {
 				try {
 					const result = await SuperMagicApi.deleteFiles({
 						file_ids: batch,
-						project_id: projectId,
+						project_id: options.fileScope === "user" ? "0" : projectId,
 					})
 					if (!isCurrent()) return
 					const returnedIds = new Set(result.file_ids.map(String))
@@ -289,8 +300,11 @@ export function useBatchDownload(options: UseBatchDownloadOptions) {
 		await deleteItems(items)
 	}
 
+	const preparingDelete = useRef(false)
 	const deleteWithConfirm = async (selected: AttachmentItem[]) => {
-		if (!selected.length || deletingRef.current) return
+		if (!selected.length || deletingRef.current || preparingDelete.current) return
+		preparingDelete.current = true
+		if (options.confirmOperation) setBatchLoading(true)
 		const isCurrent = options.isCurrent ?? (() => true)
 		try {
 			const items = options.resolveDeleteItems
@@ -315,6 +329,39 @@ export function useBatchDownload(options: UseBatchDownloadOptions) {
 						})
 			if (!isCurrent()) return
 			const impact = risk && getCanvasProjectOperationImpact(risk)
+			if (options.confirmOperation) {
+				// 确认看到的 ID 就是执行集合；目录在等待期间变化不能扩大这次删除范围。
+				const confirmedIds = [...new Set(ids)].reverse()
+				const warning = [
+					t(contentKey, { count: selected.length }),
+					risk?.shouldWarn
+						? t(
+								impact === "open-failure"
+									? "topicFiles.contextMenu.deleteCanvasOpenFailureRiskContent"
+									: impact === "content-loss"
+										? "topicFiles.contextMenu.deleteCanvasContentLossRiskContent"
+										: "topicFiles.contextMenu.deleteCanvasMixedRiskContent",
+							)
+						: "",
+					t("fileManager.confirmation.deleteWarning"),
+				]
+					.filter(Boolean)
+					.join(" ")
+				if (
+					await options.confirmOperation({
+						operation: "delete",
+						fileIds: confirmedIds,
+						sourceAttachments: items,
+						selectedIds: selected.flatMap((item) =>
+							item.file_id ? [item.file_id] : [],
+						),
+						warning,
+					})
+				) {
+					if (isCurrent()) await deleteItems(items, undefined, confirmedIds)
+				}
+				return
+			}
 			MagicModal.confirm({
 				title: t("topicFiles.contextMenu.deleteTip"),
 				content: risk?.shouldWarn
@@ -334,6 +381,9 @@ export function useBatchDownload(options: UseBatchDownloadOptions) {
 		} catch (error) {
 			if (error instanceof DOMException && error.name === "AbortError") return
 			if (isCurrent()) magicToast.error(t("topicFiles.error.deleteFileFailed"))
+		} finally {
+			preparingDelete.current = false
+			if (options.confirmOperation) setBatchLoading(false)
 		}
 	}
 
@@ -766,7 +816,7 @@ export function useBatchDownload(options: UseBatchDownloadOptions) {
 				]
 			: []),
 		// 批量复制（仅在允许编辑时显示）
-		...(((isInProject && allowEdit) || allowCopyTo) && !hideCopyTo
+		...(((isInProject && allowEdit) || allowCopyTo) && allowCopy && !hideCopyTo
 			? [
 					{
 						key: "copy",
