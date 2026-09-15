@@ -16,12 +16,14 @@ export type { SystemFileHelpKind } from "../utils/magic-system-folder"
 
 export interface FileHelpPresentation {
 	label: string
+	shortLabel?: string
 	help: HelpDefinition
 	articleId?: FileHelpArticleId
 	sourceKey?: string
 	fileLocation?: { path: string; context: FileHelpContext["kind"] }
 }
 export interface FileHelpDetail extends Omit<HelpArticleProps, "visual"> {
+	shortLabel?: string
 	preview?: string[]
 	scope?: string
 	exampleRoot?: string
@@ -89,6 +91,8 @@ export function createFileHelpPresentation(
 ): FileHelpPresentation {
 	return {
 		label,
+		// 短名只用于行内标签，帮助标题和文章导航仍保留完整名称。
+		shortLabel: detail.shortLabel,
 		articleId,
 		fileLocation: presentation
 			? { path: presentation.path, context: presentation.context.kind }

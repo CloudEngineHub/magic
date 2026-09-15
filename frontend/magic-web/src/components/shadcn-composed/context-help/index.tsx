@@ -31,6 +31,9 @@ import type { ContextHelpProps, HelpDialogProps } from "./types"
 
 export type { ContextHelpProps, HelpDefinition, HelpDialogProps } from "./types"
 
+// 帮助入口已有悬停反馈，稍作停留再打开卡片以过滤快速经过；点击和键盘聚焦不等待。
+const HELP_PREVIEW_OPEN_DELAY = 500
+
 /** 同一个入口负责简介和完整说明；业务只提供内容，不复制浮层状态与焦点逻辑。 */
 export function ContextHelp({ help, mode, children, renderDialog }: ContextHelpProps) {
 	const { t } = useTranslation("interface")
@@ -60,6 +63,7 @@ export function ContextHelp({ help, mode, children, renderDialog }: ContextHelpP
 	})
 	const hover = useHover(context, {
 		enabled: previewEnabled,
+		delay: { open: HELP_PREVIEW_OPEN_DELAY },
 		mouseOnly: true,
 		move: false,
 		handleClose: safePolygon(),

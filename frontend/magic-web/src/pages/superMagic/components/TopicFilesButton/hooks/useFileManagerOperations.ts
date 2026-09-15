@@ -352,11 +352,10 @@ export function useFileManagerOperations({
 		else move.openBatchMoveByFileIds(ids)
 	}
 	const copyTo = (ids: string[]) => {
+		const directoryId = directory?.file_id ?? props.rootId
+		if (directoryId === null) return
 		if (spaceConfig?.directorySource)
-			copy.openBatchCopyByFileIds(
-				ids,
-				spaceConfig.directorySource.getPath(directory?.file_id ?? props.rootId),
-			)
+			copy.openBatchCopyByFileIds(ids, spaceConfig.directorySource.getPath(directoryId))
 		else crossProject.openCopyModal(ids, index.getParentItemsById(ids[0]))
 	}
 	const isMutable = (file: AttachmentItem) =>
@@ -614,6 +613,7 @@ export function useFileManagerOperations({
 		// 选择器提交后会立即清空状态；检查及重试始终使用提交时的文件集合。
 		const ids = [...move.selectorConfig.pendingMoveFileIds]
 		const targetId = data.path.at(-1)?.file_id ?? props.rootId
+		if (targetId === null) return Promise.resolve()
 		return runPreparedTransfer(
 			{ ids, targetId, path: data.path, mode: "move" },
 			async (preparation) => {

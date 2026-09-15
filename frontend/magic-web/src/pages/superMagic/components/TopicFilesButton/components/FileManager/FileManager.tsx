@@ -65,11 +65,17 @@ export function FileManager(props: FileManagerProps) {
 		[props.attachments],
 	)
 	const directory =
-		location.directoryId === props.rootId ? undefined : index.getItemById(location.directoryId)
+		location.directoryId === null || location.directoryId === props.rootId
+			? undefined
+			: index.getItemById(location.directoryId)
 	const query = useDeferredValue(
 		location.query.trim().toLocaleLowerCase(i18n.language.replaceAll("_", "-")),
 	)
-	const missing = location.directoryId !== props.rootId && !directory && !props.loading
+	const missing =
+		location.directoryId !== null &&
+		location.directoryId !== props.rootId &&
+		!directory &&
+		!props.loading
 	const error = Boolean(props.error || missing || directory?.directoryLoadState === "error")
 	const loading = Boolean(
 		props.loading ||
@@ -137,9 +143,11 @@ export function FileManager(props: FileManagerProps) {
 	])
 	const currentChildren = useMemo(() => {
 		const children =
-			location.directoryId === props.rootId
-				? sorted.roots
-				: (sorted.children.get(location.directoryId) ?? [])
+			location.directoryId === null
+				? []
+				: location.directoryId === props.rootId
+					? sorted.roots
+					: (sorted.children.get(location.directoryId) ?? [])
 		return query
 			? children.filter((item) =>
 					resolveFilePresentation(item, {
@@ -272,7 +280,10 @@ export function FileManager(props: FileManagerProps) {
 	const path = useMemo(
 		() => [
 			{ id: props.rootId, name: props.rootName },
-			...(directory ? [...index.getParentItemsById(location.directoryId), directory] : [])
+			...(directory && location.directoryId !== null
+				? [...index.getParentItemsById(location.directoryId), directory]
+				: []
+			)
 				.filter((file) => file.file_id && file.file_id !== props.rootId)
 				.map((file) => ({
 					id: file.file_id ?? "",
@@ -337,7 +348,7 @@ export function FileManager(props: FileManagerProps) {
 	const getPopupContainer = () => container.current
 	const onDirectoryChange = props.onDirectoryChange
 	useEffect(() => {
-		onDirectoryChange?.(location.directoryId)
+		if (location.directoryId !== null) onDirectoryChange?.(location.directoryId)
 	}, [location.directoryId, onDirectoryChange])
 	return (
 		<div
@@ -398,7 +409,7 @@ export function FileManager(props: FileManagerProps) {
 				</div>
 			)}
 			<div className={cn("flex min-h-0 flex-1", recycle && "hidden")}>
-				{!props.hidePlaces && (
+				{!props.hidePlaces && props.rootId !== null && location.directoryId !== null && (
 					<FileManagerPlaces
 						rootId={props.rootId}
 						rootName={props.rootName}
@@ -433,10 +444,10 @@ export function FileManager(props: FileManagerProps) {
 						path={path}
 						canBack={navigation.canBack}
 						canForward={navigation.canForward}
-						canUp={Boolean(parentId !== undefined)}
+						canUp={parentId != null}
 						back={navigation.back}
 						forward={navigation.forward}
-						up={() => parentId !== undefined && navigation.navigate(parentId)}
+						up={() => parentId != null && navigation.navigate(parentId)}
 						onNavigate={navigation.navigate}
 						query={location.query}
 						onQuery={(value) =>
@@ -473,7 +484,7 @@ export function FileManager(props: FileManagerProps) {
 						onOpen={onOpen}
 						onBack={navigation.back}
 						onForward={navigation.forward}
-						onUp={() => parentId !== undefined && navigation.navigate(parentId)}
+						onUp={() => parentId != null && navigation.navigate(parentId)}
 						isActive={activeProps.isActive && !operations.busy}
 						loading={loading}
 						error={error}

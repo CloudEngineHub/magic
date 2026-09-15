@@ -26,7 +26,7 @@ export function useFileManagerCommands({
 }: {
 	props: FileManagerProps
 	index: AttachmentIndex
-	directoryId: string
+	directoryId: string | null
 	selectedIds: Set<string>
 	operations: ReturnType<typeof useFileManagerOperations>
 	ready: boolean
@@ -52,6 +52,7 @@ export function useFileManagerCommands({
 		(fileIds: string[], targetId: string, mode: "move" | "copy") => {
 			if (
 				!writable ||
+				props.rootId === null ||
 				!fileIds.length ||
 				!(mode === "copy" ? operations.capabilities.copy : operations.capabilities.move)
 			)
@@ -74,7 +75,7 @@ export function useFileManagerCommands({
 	)
 	const transfer = useMemoizedFn((fileIds: string[], targetId: string, mode: "move" | "copy") => {
 		const normalized = getFileManagerTransferIds(fileIds, index)
-		if (!canTransfer(normalized, targetId, mode)) return
+		if (props.rootId === null || !canTransfer(normalized, targetId, mode)) return
 		const changed = getFileManagerChangedIds(normalized, index, props.rootId, targetId, mode)
 		if (!changed.length) return
 		void operations
@@ -103,6 +104,7 @@ export function useFileManagerCommands({
 			case "paste":
 			case "pasteMove":
 				return Boolean(
+					directoryId !== null &&
 					clipboard &&
 					clipboard.scopeKey === props.scopeKey &&
 					canTransfer(
@@ -176,7 +178,7 @@ export function useFileManagerCommands({
 				break
 			case "paste":
 			case "pasteMove":
-				if (clipboard)
+				if (clipboard && directoryId !== null)
 					transfer(
 						clipboard.fileIds,
 						directoryId,

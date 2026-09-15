@@ -34,7 +34,7 @@ export interface FileManagerActions {
 }
 
 export interface FileManagerLocationState {
-	directoryId: string
+	directoryId: string | null
 	selectedIds: Set<string>
 	focusedId: string | null
 	anchorId: string | null
@@ -43,7 +43,7 @@ export interface FileManagerLocationState {
 }
 
 export interface FileManagerPathItem {
-	id: string
+	id: string | null
 	name: string
 }
 
@@ -54,7 +54,8 @@ export interface FileManagerProps {
 	/** 包含用户、组织与空间；身份变化时由入口以此 key 重新创建管理器。 */
 	scopeKey: string
 	identityKey: string
-	rootId: string
+	/** 已知范围尚未创建目录时为 null；提交写入后由原目录回调准备真实 ID。 */
+	rootId: string | null
 	rootName: string
 	initialDirectoryId?: string
 	attachments: AttachmentItem[]

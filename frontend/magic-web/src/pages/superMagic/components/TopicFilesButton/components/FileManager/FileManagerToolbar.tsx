@@ -106,7 +106,7 @@ export function FileManagerToolbar(props: Props) {
 					className="flex min-w-0 flex-1 items-center overflow-x-auto"
 				>
 					{props.path.map((part, index) => (
-						<div key={part.id} className="flex min-w-0 shrink-0 items-center">
+						<div key={part.id ?? "root"} className="flex min-w-0 shrink-0 items-center">
 							{index > 0 && (
 								<ChevronRight
 									size={16}
@@ -127,8 +127,9 @@ export function FileManagerToolbar(props: Props) {
 									aria-current={
 										index === props.path.length - 1 ? "page" : undefined
 									}
-									onClick={() => props.onNavigate(part.id)}
-									data-manager-target={part.id}
+									disabled={part.id === null}
+									onClick={() => part.id !== null && props.onNavigate(part.id)}
+									data-manager-target={part.id ?? undefined}
 								>
 									{part.name}
 								</Button>

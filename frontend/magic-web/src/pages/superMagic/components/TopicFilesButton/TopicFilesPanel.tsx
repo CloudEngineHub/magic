@@ -106,6 +106,8 @@ interface TopicFilesPanelProps {
 	onOpenFileManager?: () => void
 	section?: SidebarSectionOptions
 	contentBefore?: ReactNode
+	/** 宿主已有空状态或错误说明时，隐藏默认空文件提示，仍保留文件树与工具栏。 */
+	showEmptyState?: boolean
 	/** 文件树所属空间及其能力配置。 */
 	spaceConfig?: TopicFilesSpaceConfig
 	/** 判断节点是否允许参与移动和多选等变更操作。 */
@@ -174,6 +176,7 @@ const TopicFilesPanel = forwardRef<TopicFilesPanelRef, TopicFilesPanelProps>(
 			section,
 			headerLayout = "inline",
 			contentBefore,
+			showEmptyState = true,
 			spaceConfig,
 			isItemSelectable,
 			operationRoot,
@@ -745,6 +748,7 @@ const TopicFilesPanel = forwardRef<TopicFilesPanelRef, TopicFilesPanelProps>(
 				isItemSelectable={isItemSelectable}
 				operationRoot={operationRoot}
 				fitContent={fitContent}
+				showEmptyState={showEmptyState}
 				scrollElementRef={scrollElementRef}
 			/>
 		)

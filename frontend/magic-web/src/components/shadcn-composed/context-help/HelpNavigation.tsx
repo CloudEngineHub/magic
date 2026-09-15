@@ -142,7 +142,7 @@ export function HelpNavigation({
 						{group.label}
 					</Button>
 				</CollapsibleTrigger>
-				<CollapsibleContent className="mb-3 space-y-1">
+				<CollapsibleContent className="mb-3 space-y-1 pl-5">
 					{group.items.map(renderItem)}
 				</CollapsibleContent>
 			</Collapsible>

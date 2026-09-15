@@ -97,9 +97,10 @@ export function useFileManagerNames(
 		file.virtualFiles[0]?.parentPath ||
 		folder.virtualFolders[0]?.parentPath ||
 		directory?.relative_file_path
-	const rootPath = props.spaceConfig?.directorySource
-		?.getPath(props.rootId)
-		.at(-1)?.relative_file_path
+	const rootPath =
+		props.rootId === null
+			? undefined
+			: props.spaceConfig?.directorySource?.getPath(props.rootId).at(-1)?.relative_file_path
 	const parentPath =
 		props.defaultWritePath && (!requestedPath || requestedPath === rootPath)
 			? props.defaultWritePath

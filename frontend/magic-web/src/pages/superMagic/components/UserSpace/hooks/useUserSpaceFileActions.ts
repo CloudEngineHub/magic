@@ -44,10 +44,11 @@ export function useUserSpaceFileActions(options: {
 		)
 	const isSelectable = (file: AttachmentItem) =>
 		Boolean(file.file_id) &&
-		!isFixedUserMemoryEntry(
-			file.file_reference?.space_relative_path ?? file.relative_file_path ?? "",
-			Boolean(file.is_directory),
-		)
+		(!file.is_directory ||
+			!isFixedUserMemoryEntry(
+				file.file_reference?.space_relative_path ?? file.relative_file_path ?? "",
+				true,
+			))
 	const refresh = (parents: Array<string | undefined>) => {
 		if (!isCurrent()) return
 		userFilesStore.notifyMutation()
