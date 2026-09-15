@@ -19,6 +19,9 @@ import { toTestIdSegment } from "@/utils/testid"
 import { getWorkspaceRouteUrl } from "@/pages/superMagic/utils/route"
 import NavigationStatusIcon from "@/pages/superMagic/components/NavigationStatusIcon"
 import { shouldIgnoreSelectionAfterWorkspaceRename } from "@/pages/superMagic/utils/workspaceRenameSelectionGuard"
+import { baseHistory } from "@/routes/history"
+import { routesMatch } from "@/routes/history/helpers"
+import { RouteName } from "@/routes/constants"
 
 function WorkspaceItem({
 	active,
@@ -160,6 +163,12 @@ function WorkspaceItem({
 			event.stopPropagation()
 			return
 		}
+		const routeName = routesMatch(baseHistory.location.pathname)?.route.name
+		// 首页联动右侧工作区；其他页面只浏览树，不清空当前项目、话题或切换页面。
+		if (routeName !== RouteName.Super && routeName !== RouteName.SuperWorkspaceState) {
+			handleToggle(event)
+			return
+		}
 		event.preventDefault()
 		event.stopPropagation()
 		superMagicService.switchWorkspace(workspace)
@@ -167,7 +176,7 @@ function WorkspaceItem({
 		sidebarStore.setWorkspaceExpanded(workspace.id, true)
 	}
 
-	function handleToggle(e: React.MouseEvent<HTMLDivElement>) {
+	function handleToggle(e: MouseEvent<HTMLElement>) {
 		e.preventDefault()
 		e.stopPropagation()
 		if (isExpanded && workspaceHeaderRef.current) {

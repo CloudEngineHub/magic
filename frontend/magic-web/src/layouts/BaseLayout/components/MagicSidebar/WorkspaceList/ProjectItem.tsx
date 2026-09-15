@@ -19,6 +19,7 @@ import { preloadProjectPage } from "@/pages/superMagic/pages/ProjectPage/utils"
 import { preloadTopicPage } from "@/pages/superMagic/pages/TopicPage/utils"
 import NavigationStatusIcon from "@/pages/superMagic/components/NavigationStatusIcon"
 import { canDragSidebarProject } from "../projectDndUtils"
+import { Button } from "@/components/shadcn-ui/button"
 
 function ProjectItem({
 	project,
@@ -84,12 +85,7 @@ function ProjectItem({
 
 	function handleClick(event: MouseEvent<HTMLAnchorElement>) {
 		if (isMenuOpen || suppressItemClickRef.current || isEditing) {
-			event.stopPropagation()
-			return
-		}
-
-		const target = event.target as HTMLElement
-		if (target.closest("[data-project-more-trigger='true']")) {
+			event.preventDefault()
 			event.stopPropagation()
 			return
 		}
@@ -185,7 +181,16 @@ function ProjectItem({
 		>
 			{({ open, triggerContextMenu }) => (
 				<div
-					className="w-full"
+					className={cn(
+						"group/project-row flex h-8 w-full min-w-0 items-center rounded-md focus-within:bg-sidebar-accent hover:bg-sidebar-accent",
+						isSelected && "bg-[#f5f5f5] dark:bg-[#262626]",
+						open && "bg-sidebar-accent",
+					)}
+					onMouseEnter={() => {
+						setIsHovered(true)
+						handlePreloadPage()
+					}}
+					onMouseLeave={() => setIsHovered(false)}
 					draggable={canDrag}
 					data-sidebar-dnd-source={canDrag ? "project" : undefined}
 					data-sidebar-dnd-workspace-id={canDrag ? project.workspace_id : undefined}
@@ -209,23 +214,15 @@ function ProjectItem({
 						asChild
 						size="md"
 						isActive={isSelected}
-						className={cn(
-							"relative h-8 translate-x-0 px-2 font-normal",
-							isSelected && "bg-[#f5f5f5] dark:bg-[#262626]",
-						)}
+						className="relative h-8 min-w-0 flex-1 translate-x-0 px-2 font-normal"
 					>
 						<a
 							href={getWorkspaceProjectRouteUrl(project.workspace_id, project.id)}
 							onClick={handleClick}
 							draggable={false}
 							data-testid={`sidebar-project-item-${project.id}`}
-							onMouseEnter={() => {
-								setIsHovered(true)
-								handlePreloadPage()
-							}}
 							onFocus={handlePreloadPage}
-							onMouseLeave={() => setIsHovered(false)}
-							className="w-full min-w-0 text-left text-current no-underline [-webkit-tap-highlight-color:transparent]"
+							className="min-w-0 text-left text-current no-underline [-webkit-tap-highlight-color:transparent]"
 						>
 							<div className="flex w-full min-w-0 items-center">
 								<div className="flex min-w-0 flex-1 items-center gap-1.5">
@@ -257,32 +254,47 @@ function ProjectItem({
 										/>
 									)}
 								</div>
-								{/* Only reserve space for the menu trigger while it is visible. */}
-								<div
-									data-project-more-trigger="true"
-									className={cn(
-										"flex h-4 shrink-0 cursor-pointer items-center justify-center overflow-hidden rounded-full text-sidebar-foreground transition-[margin,width,opacity] [-webkit-tap-highlight-color:transparent] hover:bg-sidebar-accent",
-										isHovered || open
-											? "ml-1 w-4 opacity-100"
-											: "pointer-events-none ml-0 w-0 opacity-0",
-										"no-hover:pointer-events-auto no-hover:ml-1 no-hover:w-4 no-hover:opacity-100",
-									)}
-									onClick={(e) => {
-										blockItemClickTemporarily()
-										e.preventDefault()
-										e.stopPropagation()
-										triggerContextMenu(e)
-									}}
-									onMouseDown={(e) => {
-										blockItemClickTemporarily()
-										e.stopPropagation()
-									}}
-								>
-									<Ellipsis className="h-4 w-4" />
-								</div>
 							</div>
 						</a>
 					</SidebarMenuSubButton>
+					{/* 固定 32px 操作区独立于项目链接；只隐藏图标，周围留白仍由菜单按钮响应。 */}
+					<Button
+						type="button"
+						variant="ghost"
+						size="icon-sm"
+						aria-label={t("common.moreActions")}
+						aria-haspopup="menu"
+						aria-expanded={open}
+						data-state={open ? "open" : "closed"}
+						data-project-more-trigger="true"
+						draggable={false}
+						className={cn(
+							"relative size-8 shrink-0 bg-transparent p-0 text-sidebar-foreground before:absolute before:inset-0.5 before:rounded-md before:transition-colors",
+							"hover:bg-transparent hover:before:bg-sidebar-foreground/10 focus-visible:ring-0 focus-visible:before:bg-sidebar-foreground/10 active:before:bg-sidebar-foreground/15 dark:hover:bg-transparent",
+							"data-[state=open]:before:bg-sidebar-foreground/10",
+						)}
+						onClick={(e) => {
+							blockItemClickTemporarily()
+							e.preventDefault()
+							e.stopPropagation()
+							triggerContextMenu(e)
+						}}
+						onPointerDown={(e) => {
+							blockItemClickTemporarily()
+							e.stopPropagation()
+						}}
+						onMouseDown={(e) => {
+							blockItemClickTemporarily()
+							e.stopPropagation()
+						}}
+					>
+						<Ellipsis
+							className={cn(
+								"relative h-4 w-4 transition-opacity group-focus-within/project-row:opacity-100 no-hover:opacity-100",
+								isHovered || open ? "opacity-100" : "opacity-0",
+							)}
+						/>
+					</Button>
 				</div>
 			)}
 		</ProjectActionsDropdown>

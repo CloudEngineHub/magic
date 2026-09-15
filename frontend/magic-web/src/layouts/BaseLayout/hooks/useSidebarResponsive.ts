@@ -50,7 +50,11 @@ function getMinSidebarSizePercent(viewWidth: number): number {
 		getNarrowViewportMinSidebarWidthPx(viewWidth),
 		viewWidth,
 	)
-	return Math.max(sidebarStore.MIN_WIDTH_PERCENT, narrowViewportMinSidebarPercent)
+	// 极宽窗口的百分比下限可能超过像素上限，先保证分栏的 min 不大于 max。
+	return Math.min(
+		sidebarStore.getMaxWidthPercent(viewWidth),
+		Math.max(sidebarStore.MIN_WIDTH_PERCENT, narrowViewportMinSidebarPercent),
+	)
 }
 
 interface UseSidebarResponsiveParams {
@@ -139,7 +143,7 @@ function useSidebarResponsive({
 			sizePercent = Math.max(
 				sidebarStore.collapsedSizePercent,
 				Math.min(
-					sidebarStore.MAX_WIDTH_PERCENT,
+					sidebarStore.getMaxWidthPercent(window.innerWidth),
 					convertPxToPercentByViewWidth(drag.rawWidthPx, window.innerWidth),
 				),
 			)
@@ -170,7 +174,7 @@ function useSidebarResponsive({
 		)
 		return Math.max(
 			minSidebarPercent,
-			Math.min(maxSidebarPercent, sidebarStore.MAX_WIDTH_PERCENT, desiredPercent),
+			Math.min(maxSidebarPercent, sidebarStore.getMaxWidthPercent(viewWidth), desiredPercent),
 		)
 	}, [])
 
@@ -283,7 +287,7 @@ function useSidebarResponsive({
 						const sizePercent = Math.max(
 							minSidebarSizePercent,
 							Math.min(
-								sidebarStore.MAX_WIDTH_PERCENT,
+								sidebarStore.getMaxWidthPercent(window.innerWidth),
 								convertPxToPercentByViewWidth(
 									completedDrag.rawWidthPx,
 									window.innerWidth,

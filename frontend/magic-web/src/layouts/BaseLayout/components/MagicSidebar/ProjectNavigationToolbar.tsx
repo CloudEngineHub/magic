@@ -49,8 +49,11 @@ export default function ProjectNavigationToolbar({
 			{isSearchMode ? (
 				<div className="flex h-9 items-center gap-1 px-2 duration-200 animate-in fade-in">
 					<InputGroup className="h-7 flex-1 rounded-md bg-sidebar duration-300 animate-in fade-in slide-in-from-left-4 [&:has([data-slot=input-group-control]:focus-visible)]:border-sidebar-border [&:has([data-slot=input-group-control]:focus-visible)]:ring-0">
-						<InputGroupAddon align="inline-start">
-							<Search size={16} strokeWidth={1.5} />
+						<InputGroupAddon
+							align="inline-start"
+							className="text-sidebar-foreground/70"
+						>
+							<Search size={16} />
 						</InputGroupAddon>
 						<InputGroupInput
 							className="h-6"
@@ -73,25 +76,25 @@ export default function ProjectNavigationToolbar({
 						type="button"
 						variant="ghost"
 						size="icon-sm"
-						className="size-6 text-muted-foreground duration-300 animate-in fade-in focus-visible:ring-1"
+						className="size-6 text-sidebar-foreground/80 duration-300 animate-in fade-in focus-visible:ring-1"
 						onClick={handleSearchClose}
 						disabled={disabled}
 						aria-label={t("common.cancel")}
 						data-testid="sidebar-workspace-list-search-close"
 					>
-						<X className="size-4" strokeWidth={1.5} />
+						<X className="size-4" />
 					</Button>
 				</div>
 			) : (
 				<div className="flex h-8 shrink-0 items-center justify-between gap-2 px-2">
-					<span className="min-w-0 flex-1 truncate text-[11px] leading-4 text-muted-foreground">
+					<span className="min-w-0 flex-1 truncate text-xs leading-4 text-sidebar-foreground/70">
 						{recent
 							? t("super:projectNavigation.recentScope")
 							: t("super:projectNavigation.workspaceScope")}
 					</span>
 					<div
 						className={cn(
-							"flex items-center gap-0.5 text-muted-foreground",
+							"flex items-center gap-0.5 text-sidebar-foreground/80",
 							"group-data-[collapsible=icon]:hidden",
 							isSearchMode && "hidden",
 						)}
@@ -105,7 +108,7 @@ export default function ProjectNavigationToolbar({
 							className="outline-hidden relative flex size-6 shrink-0 items-center justify-center rounded-md p-0 ring-sidebar-ring transition-transform hover:bg-sidebar-accent hover:text-sidebar-accent-foreground focus-visible:bg-sidebar-accent focus-visible:ring-1 [&>svg]:size-4"
 							onClick={handleSearchOpen}
 						>
-							<Search className="h-4 w-4" strokeWidth={1.5} />
+							<Search className="h-4 w-4" />
 						</button>
 						{isInitialWorkspaceListLoading && (
 							<Loader2
@@ -125,10 +128,7 @@ export default function ProjectNavigationToolbar({
 							)}
 							onClick={() => void handleRefresh()}
 						>
-							<RefreshCw
-								className={cn("h-4 w-4", isRefreshing && "animate-spin")}
-								strokeWidth={1.5}
-							/>
+							<RefreshCw className={cn("h-4 w-4", isRefreshing && "animate-spin")} />
 						</button>
 						<button
 							type="button"
@@ -145,7 +145,7 @@ export default function ProjectNavigationToolbar({
 							)}
 							onClick={handleStartCreateWorkspace}
 						>
-							<Plus className="h-4 w-4" strokeWidth={1.5} />
+							<Plus className="h-4 w-4" />
 						</button>
 					</div>
 				</div>

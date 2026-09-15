@@ -179,7 +179,7 @@ const BaseLayoutPc = observer(() => {
 									? 0
 									: sidebarStore.collapsed || overlayMode
 										? sidebarStore.collapsedSizePercent
-										: sidebarStore.MAX_WIDTH_PERCENT
+										: sidebarStore.getMaxWidthPercent(sidebarStore.windowWidth)
 							}
 							minSize={
 								!showAppSidebar
