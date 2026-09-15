@@ -21,6 +21,10 @@ vi.mock("@/apis", () => ({
 	},
 }))
 
+vi.mock("@/pages/superMagic/services/projectAttachmentsLoader", () => ({
+	loadProjectAttachments: vi.fn().mockResolvedValue({ tree: [], list: [] }),
+}))
+
 describe("PublishedMicroAppConversationProvider", () => {
 	beforeEach(() => {
 		vi.mocked(SuperMagicApi.getMicroAppRuntimeProject).mockReset()

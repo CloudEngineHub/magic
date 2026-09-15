@@ -59,6 +59,7 @@ interface AppConversationPanelProps {
 	projectFilesStore: ProjectFilesStore
 	onTerminalTopicStatusChange?: () => void
 	onSelectDetail?: (detail: unknown) => void
+	hideConversationPanelToggle?: boolean
 }
 
 function AppConversationPanel({
@@ -75,6 +76,7 @@ function AppConversationPanel({
 	projectFilesStore,
 	onTerminalTopicStatusChange,
 	onSelectDetail,
+	hideConversationPanelToggle = false,
 }: AppConversationPanelProps) {
 	const { conversation } = useAppStore()
 	const selectedTopic = topicStore.selectedTopic
@@ -202,6 +204,7 @@ function AppConversationPanel({
 			setSelectedTopic: topicStore.setSelectedTopic,
 			mentionPanelStore,
 			projectFilesStore,
+			attachments: projectFilesStore.workspaceFileTree,
 			topicModelStore,
 			layoutConfig: DEFAULT_LAYOUT_CONFIG,
 			showLoading,
@@ -273,6 +276,7 @@ function AppConversationPanel({
 		}
 	}, [projectFilesStore, topicStore.setSelectedTopic])
 
+	// Keep the composer inset symmetric inside the narrow conversation rail.
 	return (
 		<ConversationPanelScaffold
 			scope="app-conversation-panel"
@@ -284,6 +288,7 @@ function AppConversationPanel({
 					onToggleConversationPanel={onToggleConversationPanel}
 					onExpandConversationPanel={onExpandConversationPanel}
 					detailPanelVisible={detailPanelVisible}
+					hideConversationPanelToggle={hideConversationPanelToggle}
 					selectedProject={selectedProject}
 					topicStore={topicStore}
 					topicActions={topicActions}
@@ -316,7 +321,7 @@ function AppConversationPanel({
 			currentTopicStatus={selectedTopic?.task_status}
 			handleSendMsg={handleSendMsg}
 			isMessagesLoading={isMessagesInitialLoading}
-			className="rounded-none bg-sidebar pb-2 pr-2"
+			className="rounded-none bg-sidebar px-2 pb-2"
 		/>
 	)
 }

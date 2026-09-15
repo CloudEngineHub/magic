@@ -64,6 +64,8 @@ interface MessageHeaderProps {
 	isConversationPanelCollapsed?: boolean
 	onToggleConversationPanel?: () => void
 	onExpandConversationPanel?: () => void
+	/** Some shells render the panel toggle in an outer header. */
+	hideConversationPanelToggle?: boolean
 	/** Closes the layout history panel only when the user is collapsing the conversation pane. */
 	onCloseHistoryPanelWhenCollapsing?: () => void
 	detailPanelVisible?: boolean
@@ -334,6 +336,7 @@ function MessageHeader({
 	isConversationPanelCollapsed = false,
 	onToggleConversationPanel,
 	onExpandConversationPanel,
+	hideConversationPanelToggle = false,
 	onCloseHistoryPanelWhenCollapsing,
 	detailPanelVisible = true,
 	selectedProject,
@@ -611,7 +614,7 @@ function MessageHeader({
 					</div>
 				) : (
 					<>
-						{detailPanelVisible && (
+						{detailPanelVisible && !hideConversationPanelToggle && (
 							<MagicTooltip title={t("messageHeader.collapseConversationPanel")}>
 								<span>
 									<Button

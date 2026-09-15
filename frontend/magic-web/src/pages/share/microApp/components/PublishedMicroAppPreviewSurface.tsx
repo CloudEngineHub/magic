@@ -1,3 +1,4 @@
+import { useMemo } from "react"
 import { FileCode2, Loader2 } from "lucide-react"
 import { useTranslation } from "react-i18next"
 import { ErrorDisplay, PasswordVerification, ShareEmptyState } from "@/pages/share/components"
@@ -82,14 +83,17 @@ function PublishedMicroAppPreviewSurface({
 		defaultEntryFile,
 	} = preview
 
-	const fileAccess =
-		shareMeta.temporaryToken && shareMeta.projectId
-			? createShareFileAccess({
-					token: shareMeta.temporaryToken,
-					projectId: shareMeta.projectId,
-					topicId: shareMeta.topicId || "",
-				})
-			: null
+	const fileAccess = useMemo(
+		() =>
+			shareMeta.temporaryToken && shareMeta.projectId
+				? createShareFileAccess({
+						token: shareMeta.temporaryToken,
+						projectId: shareMeta.projectId,
+						topicId: shareMeta.topicId || "",
+					})
+				: null,
+		[shareMeta.projectId, shareMeta.temporaryToken, shareMeta.topicId],
+	)
 
 	if (emptyStateInfo) {
 		return (

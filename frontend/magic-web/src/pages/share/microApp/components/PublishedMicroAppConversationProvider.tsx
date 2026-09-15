@@ -13,6 +13,10 @@ import { cn } from "@/utils/cn"
 import type { ProjectListItem } from "@/pages/superMagic/pages/Workspace/types"
 import { HostConversationProvider } from "@/pages/superMagic/contexts/HostConversationContext"
 import { userStore } from "@/models/user"
+import { loadProjectAttachments } from "@/pages/superMagic/services/projectAttachmentsLoader"
+import { useFileAccess } from "@/pages/superMagic/fileAccess/FileAccessProvider"
+
+import PublishedMicroAppAttachmentPopover from "./PublishedMicroAppAttachmentPopover"
 
 const RUNTIME_PROJECT_LOAD_SUPERSEDED = "Runtime project load superseded"
 
@@ -35,6 +39,7 @@ const PublishedMicroAppConversationSurface = observer(
 		const { t } = useTranslation("super")
 		const appStore = useAppStore()
 		const { conversation } = appStore
+		const fileAccess = useFileAccess()
 		const [runtimeProject, setRuntimeProject] = useState<ProjectListItem | null>(null)
 		const [runtimeProjectState, setRuntimeProjectState] = useState<
 			"loading" | "absent" | "ready"
@@ -59,11 +64,28 @@ const PublishedMicroAppConversationSurface = observer(
 				const loadedProject = conversation.selectedProject
 				if (!loadedProject) throw new Error("Runtime project could not be loaded")
 				projectFilesStore.setSelectedProject(loadedProject)
+				try {
+					const attachmentResult = await loadProjectAttachments({
+						projectId: loadedProject.id,
+						access: fileAccess,
+						enableErrorMessagePrompt: false,
+					})
+					if (!isCurrent()) return false
+					projectFilesStore.setWorkspaceFileTree(attachmentResult.tree, {
+						list: attachmentResult.list,
+						source: "published-micro-app-runtime",
+					})
+				} catch (error) {
+					if (!isCurrent()) return false
+					// File loading should not hide an otherwise valid runtime conversation.
+					console.error("Failed to load published micro-app attachments:", error)
+					projectFilesStore.setWorkspaceFileTree([])
+				}
 				setRuntimeProject(loadedProject)
 				setRuntimeProjectState("ready")
 				return true
 			},
-			[conversation, projectFilesStore],
+			[conversation, fileAccess, projectFilesStore],
 		)
 
 		useEffect(() => {
@@ -135,22 +157,28 @@ const PublishedMicroAppConversationSurface = observer(
 							data-testid="published-micro-app-conversation-panel"
 						>
 							<div className="flex h-10 shrink-0 items-center justify-between border-b border-border px-3">
-								<span className="text-sm font-medium">
+								<span className="min-w-0 text-sm font-medium">
 									{t("microAppPage.conversation.title")}
 								</span>
-								<button
-									type="button"
-									className="rounded-md p-1.5 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
-									onClick={() => setIsOpen(false)}
-									aria-label={t("microAppPage.conversation.collapse")}
-								>
-									<PanelRightClose size={16} />
-								</button>
+								<div className="flex items-center gap-1">
+									<PublishedMicroAppAttachmentPopover
+										attachments={projectFilesStore.workspaceFileTree}
+									/>
+									<button
+										type="button"
+										className="rounded-md p-1.5 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+										onClick={() => setIsOpen(false)}
+										aria-label={t("microAppPage.conversation.collapse")}
+									>
+										<PanelRightClose size={16} />
+									</button>
+								</div>
 							</div>
 							<div className="min-h-0 flex-1">
 								<AppConversationPanel
 									selectedProject={runtimeProject}
 									topicStore={conversation.topicStore}
+									hideConversationPanelToggle
 									mentionPanelStore={mentionPanelStore}
 									projectFilesStore={projectFilesStore}
 									detailPanelVisible
