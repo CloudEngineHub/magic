@@ -292,7 +292,7 @@ async def test_start_rollback_pulls_range_and_syncs_manifest_on_success():
         metadata_manager=SimpleNamespace(
             get_previous_checkpoint_in_checkpoint_manifest=AsyncMock(return_value="cp2"),
             get_current_checkpoint=AsyncMock(return_value="cp5"),
-            set_rollback_in_progress=AsyncMock(return_value=True),
+            set_activity=AsyncMock(return_value=True),
             get_checkpoints_between_in_checkpoint_manifest=AsyncMock(
                 return_value=("backward", ["cp3", "cp4", "cp5"])
             ),
@@ -316,7 +316,7 @@ async def test_start_rollback_pulls_range_and_syncs_manifest_on_success():
     mock_sync.sync_manifest_and_evicted.assert_awaited_once()
     # executor 不感知远端，只接收解析后的实际回滚目标
     service.rollback_executor.start_rollback.assert_awaited_once_with("cp2")
-    service.checkpoint_service.metadata_manager.set_rollback_in_progress.assert_awaited()
+    service.checkpoint_service.metadata_manager.set_activity.assert_awaited()
 
 
 @pytest.mark.asyncio
@@ -327,7 +327,7 @@ async def test_start_rollback_does_not_sync_manifest_on_failure():
         metadata_manager=SimpleNamespace(
             get_previous_checkpoint_in_checkpoint_manifest=AsyncMock(return_value="cp2"),
             get_current_checkpoint=AsyncMock(return_value="cp5"),
-            set_rollback_in_progress=AsyncMock(return_value=True),
+            set_activity=AsyncMock(return_value=True),
             get_checkpoints_between_in_checkpoint_manifest=AsyncMock(
                 return_value=("backward", ["cp3", "cp4", "cp5"])
             ),
