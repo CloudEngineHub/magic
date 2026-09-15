@@ -57,25 +57,23 @@ Treat the current working directory as the employee workspace root. All paths be
 
 ## Agent Synchronization Payload
 
-The generated file must first obtain an object-storage key recognized by magic-service through the current Agent workspace's file synchronization/upload mechanism. Then use the Agent update tool to submit the employee metadata and logo in a single request:
+Pass the local Logo path (e.g. `.magic/avatars/agent-logo.png` or `.magic/avatars/agent-logo.jpg`) as `icon_file_key` when calling the `update_agent` tool:
 
 ```json
 {
-  "code": "<agent_code>",
-  "name_i18n": {"default": "<name>"},
-  "role_i18n": {"default": "<role>"},
-  "description_i18n": {"default": "<description>"},
-  "icon": {"type": "Image", "value": "<logo_file_key>"},
-  "icon_type": 2
+  "name_i18n": {"zh_CN": "<name>"},
+  "role_i18n": {"zh_CN": ["<role>"]},
+  "description_i18n": {"zh_CN": "<description>"},
+  "icon_file_key": ".magic/avatars/agent-logo.png"
 }
 ```
 
-Language fields should retain the actual language used in `IDENTITY.md`; do not generate additional translation fields solely for synchronization. `icon.value` must be the object-storage key that magic-service can read after upload. It must not be a local path or raw image data. If logo synchronization fails, the text fields may be submitted on their own, and the failure must not block employee creation.
+The `update_agent` tool will automatically upload the local file to public object storage via STS credentials and configure the appropriate `icon` (`type: "Image"`) and `icon_type: 2` on magic-service. If logo synchronization fails, retry with text fields only, and the failure must not block employee creation.
 
 ## Acceptance Criteria
 
 - `.magic/avatars/agent-logo.png`, or an equivalent JPG, has been generated and is square.
-- The Agent update tool receives the current employee's `code`, `name_i18n`, `role_i18n`, and `description_i18n`.
-- When the logo is uploaded successfully, the update payload includes `icon` and `icon_type: 2`.
+- The `update_agent` tool is called with `icon_file_key` pointing to the local image path.
+- `get_agent_info()` confirms that `icon` has been resolved to a public URL starting with `http://` or `https://` with `icon_type: 2`.
 - If logo generation or upload fails, the text metadata is still synchronized and the reason for failure is reported to the user.
 - An existing user-provided logo is not overwritten by the automatically generated logo.

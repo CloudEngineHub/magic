@@ -55,14 +55,12 @@ class UpdateAgentParams(BaseToolParams):
     icon_file_key: Optional[str] = Field(
         default=None,
         description=(
-            "<!--zh: Logo 图片路径（工作区相对路径）或公共对象存储 file_key。"
-            "推荐做法：先用 generate_images 生成图片，再将返回的工作区相对路径（如 'avatars/logo.png'）传入此字段；"
-            "工具会自动将本地图片上传到公共对象存储并解析为公共 file_key。"
-            "禁止传入不含路径分隔符的裸文件名（如 'logo.jpg'），否则会报错。-->"
-            "Logo image: pass the workspace-relative path returned by generate_images "
-            "(e.g. 'avatars/logo.png'). The tool automatically uploads the local file "
-            "to public object storage and resolves it to the public file_key. Do NOT pass a bare filename without a "
-            "path separator (e.g. 'logo.jpg') — use generate_images first."
+            "<!--zh: Logo 图片文件路径（如 '.magic/avatars/agent-logo.png' 或 '.magic/avatars/agent-logo.jpg'）或公共对象存储 file_key。"
+            "推荐做法：先使用 generate_images 在 .magic/avatars 目录生成图片，再将生成的本地路径直接传入此字段；"
+            "update_agent 工具会自动将本地图片上传到公共对象存储并绑定为员工头像。-->"
+            "Logo image: pass the local workspace path where generate_images saved the logo "
+            "(e.g. '.magic/avatars/agent-logo.png' or '.magic/avatars/agent-logo.jpg') or a public object storage file_key. "
+            "The tool automatically uploads the local file to public object storage and sets it as the employee logo."
         ),
     )
 
@@ -150,43 +148,85 @@ class UpdateAgent(BaseTool[UpdateAgentParams]):
     @staticmethod
     async def _resolve_icon_key(icon_file_key: str) -> Optional[str]:
         """将工作区相对/绝对路径上传为公共对象存储 file_key；若已是 key/url 则直接返回。"""
+        from pathlib import Path
         from app.utils.public_storage_uploader import upload_file_to_public_storage
 
         workspace_dir = PathManager.get_workspace_dir()
+        magic_dir = PathManager.get_magic_dir()
 
-        # 1. 尝试工作区相对路径
-        candidate = workspace_dir / icon_file_key.lstrip("/")
-        if await async_exists(str(candidate)):
-            try:
-                public_key = await upload_file_to_public_storage(candidate)
-                logger.info(f"本地头像文件上传公共存储成功: {candidate} -> {public_key}")
-                return public_key
-            except Exception as e:
-                logger.error(f"上传本地头像到公共存储失败: {candidate} ({e})")
-                return None
+        clean_path = icon_file_key.strip().lstrip("/")
+
+        # 1. 尝试工作区相对路径与常见变体（如 .magic/avatars、avatars、拼写容错等）
+        path_obj = Path(clean_path)
+        candidates = [
+            workspace_dir / clean_path,
+            magic_dir / clean_path,
+            magic_dir / "avatars" / path_obj.name,
+            workspace_dir / "avatars" / path_obj.name,
+            workspace_dir / path_obj.name,
+        ]
+        if ".magics" in clean_path:
+            fixed_clean_path = clean_path.replace(".magics", ".magic")
+            candidates.insert(0, workspace_dir / fixed_clean_path)
+            candidates.insert(1, magic_dir / fixed_clean_path.replace(".magic/", "").lstrip("/"))
+
+        seen_paths = set()
+        for candidate in candidates:
+            cand_str = str(candidate)
+            if cand_str in seen_paths:
+                continue
+            seen_paths.add(cand_str)
+            if await async_exists(cand_str) and candidate.is_file():
+                try:
+                    public_key = await upload_file_to_public_storage(candidate)
+                    logger.info(f"本地头像文件上传公共存储成功: {candidate} -> {public_key}")
+                    return public_key
+                except Exception as e:
+                    logger.error(f"上传本地头像到公共存储失败: {candidate} ({e})")
+                    return None
 
         # 2. 尝试绝对路径
         if icon_file_key.startswith("/") and await async_exists(icon_file_key):
-            try:
-                public_key = await upload_file_to_public_storage(icon_file_key)
-                logger.info(f"本地头像绝对路径上传公共存储成功: {icon_file_key} -> {public_key}")
-                return public_key
-            except Exception as e:
-                logger.error(f"上传本地头像到公共存储失败: {icon_file_key} ({e})")
-                return None
+            abs_path = Path(icon_file_key)
+            if abs_path.is_file():
+                try:
+                    public_key = await upload_file_to_public_storage(icon_file_key)
+                    logger.info(f"本地头像绝对路径上传公共存储成功: {icon_file_key} -> {public_key}")
+                    return public_key
+                except Exception as e:
+                    logger.error(f"上传本地头像到公共存储失败: {icon_file_key} ({e})")
+                    return None
 
         # 3. HTTP / HTTPS URL 直接使用
         if icon_file_key.startswith("http://") or icon_file_key.startswith("https://"):
             logger.info(f"icon_file_key 视为直接 URL: {icon_file_key}")
             return icon_file_key
 
-        # 4. 含路径分隔符且非本地文件，视为已是对象存储 key（向后兼容）
+        # 4. 判断是否为本地文件路径特征（若具有本地路径特征但本地文件不存在，报错拦截，禁止误判为远程 key）
+        image_extensions = (".png", ".jpg", ".jpeg", ".webp", ".svg", ".gif", ".bmp", ".ico")
+        is_likely_local_path = (
+            icon_file_key.startswith(".")
+            or "/" in icon_file_key
+            or any(icon_file_key.lower().endswith(ext) for ext in image_extensions)
+        )
+        if is_likely_local_path:
+            # 只有具有本地路径前缀（. / avatars / .magic）或图片扩展名且本地不存在时，确认为丢失的本地文件
+            if (
+                icon_file_key.startswith(".")
+                or icon_file_key.startswith("avatars/")
+                or icon_file_key.startswith(".magic/")
+                or any(icon_file_key.lower().endswith(ext) for ext in image_extensions)
+            ):
+                logger.error(f"本地头像文件未找到，无法上传: '{icon_file_key}'")
+                return None
+
+        # 5. 其他已是对象存储 key 的情况（向后兼容已有合法 key，如 DT001/...）
         if "/" in icon_file_key:
-            logger.info(f"icon_file_key 视为对象存储 key（直接使用）: {icon_file_key}")
+            logger.info(f"icon_file_key 视为已有对象存储 key: {icon_file_key}")
             return icon_file_key
 
-        # 5. 裸文件名（无路径分隔符），无法确定来源
-        logger.error(f"icon_file_key '{icon_file_key}' 是裸文件名，既不是工作区路径也不是 file_key")
+        # 6. 裸文件名且非本地文件，无法确定来源
+        logger.error(f"icon_file_key '{icon_file_key}' 无法解析为有效的文件路径或对象存储 key")
         return None
 
     @staticmethod
