@@ -5,6 +5,7 @@ import type { HandleRenameProjectParams } from "@/pages/superMagic/hooks/useProj
 type ProjectItemActionHandler = (project: ProjectListItem) => void | Promise<void>
 
 export interface WorkspaceItemProps {
+	onBusyChange?: (id: string, busy: boolean) => void
 	active: boolean
 	scrollRef: RefObject<HTMLDivElement>
 	maxProjectHeight?: number
@@ -17,6 +18,7 @@ export interface WorkspaceItemProps {
 }
 
 export interface ProjectListProps {
+	onBusyChange?: (busy: boolean) => void
 	isSearchResult?: boolean
 	active: boolean
 	workspace: Workspace

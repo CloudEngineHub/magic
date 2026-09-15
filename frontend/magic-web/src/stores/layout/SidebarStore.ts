@@ -36,6 +36,8 @@ export class SidebarStore {
 	// 栏目偏好属于账号和组织；展开一个会收起另一个，收起当前栏目则两个都收起，窄栏浮层不改写偏好。
 	expandedNavigationSection: "recent" | "workspaces" | "none" = "workspaces"
 	navigationAppsHeight: number | null = null
+	secondaryAppsHeight: number | null = null
+	lastExpandedAppsHeight: number | null = null
 
 	get recentProjectsExpanded() {
 		return this.expandedNavigationSection === "recent"
@@ -56,6 +58,8 @@ export class SidebarStore {
 		this.navigationScrollPositions.clear()
 		this.expandedNavigationSection = "workspaces"
 		this.navigationAppsHeight = null
+		this.secondaryAppsHeight = null
+		this.lastExpandedAppsHeight = null
 		if (!identity) return
 		try {
 			const saved: unknown = JSON.parse(
@@ -76,6 +80,20 @@ export class SidebarStore {
 				saved.appsHeight > 0
 			)
 				this.navigationAppsHeight = saved.appsHeight
+			if (
+				"secondaryAppsHeight" in saved &&
+				typeof saved.secondaryAppsHeight === "number" &&
+				Number.isFinite(saved.secondaryAppsHeight) &&
+				saved.secondaryAppsHeight >= 0
+			)
+				this.secondaryAppsHeight = saved.secondaryAppsHeight
+			if (
+				"lastExpandedAppsHeight" in saved &&
+				typeof saved.lastExpandedAppsHeight === "number" &&
+				Number.isFinite(saved.lastExpandedAppsHeight) &&
+				saved.lastExpandedAppsHeight > 0
+			)
+				this.lastExpandedAppsHeight = saved.lastExpandedAppsHeight
 		} catch {
 			/* 无效或不可用的存储采用缺省布局。 */
 		}
@@ -87,9 +105,29 @@ export class SidebarStore {
 		this.saveNavigationPreferences()
 	}
 
-	setNavigationAppsHeight(height: number) {
-		this.navigationAppsHeight = height
+	setSecondaryAppsHeight(height: number) {
+		if (!Number.isFinite(height) || height < 0) return
+		this.secondaryAppsHeight = height
+		if (height > 0) this.lastExpandedAppsHeight = height
+		this.navigationAppsHeight = null
 		this.saveNavigationPreferences()
+	}
+
+	collapseSecondaryApps(previousHeight: number) {
+		if (Number.isFinite(previousHeight) && previousHeight > 0)
+			this.lastExpandedAppsHeight = previousHeight
+		this.setSecondaryAppsHeight(0)
+	}
+
+	/** 原偏好包含首页；拆出固定首页后只转换一次，零高度保留用户的主动收起选择。 */
+	initializeSecondaryAppsHeight(homeHeight: number) {
+		if (
+			this.secondaryAppsHeight === null &&
+			this.navigationAppsHeight !== null &&
+			Number.isFinite(homeHeight) &&
+			homeHeight > 0
+		)
+			this.setSecondaryAppsHeight(Math.max(0, this.navigationAppsHeight - homeHeight))
 	}
 
 	private saveNavigationPreferences() {
@@ -99,7 +137,9 @@ export class SidebarStore {
 				`sidebar-navigation:${this.navigationIdentity}`,
 				JSON.stringify({
 					expandedSection: this.expandedNavigationSection,
-					appsHeight: this.navigationAppsHeight,
+					appsHeight: this.navigationAppsHeight ?? undefined,
+					secondaryAppsHeight: this.secondaryAppsHeight,
+					lastExpandedAppsHeight: this.lastExpandedAppsHeight,
 				}),
 			)
 		} catch {

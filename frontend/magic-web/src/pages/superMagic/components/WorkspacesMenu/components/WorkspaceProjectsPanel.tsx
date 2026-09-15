@@ -19,6 +19,7 @@ import { CollaborationProjectsContent } from "./CollaborationProjectsPanel"
 interface WorkspaceProjectsPanelProps {
 	open: boolean
 	initialSource: ProjectBrowserSource
+	initialAction?: "create-project"
 	onClose: () => void
 }
 
@@ -40,11 +41,17 @@ function getInitialWorkspaces(source: ProjectBrowserSource): Workspace[] {
 	)
 }
 
-function WorkspaceProjectsPanel({ open, initialSource, onClose }: WorkspaceProjectsPanelProps) {
+function WorkspaceProjectsPanel({
+	open,
+	initialSource,
+	initialAction,
+	onClose,
+}: WorkspaceProjectsPanelProps) {
 	const { t } = useTranslation("super")
 	const { userInfo } = useUserInfo()
 	const { searchValue, onSearchValueChange, setSearchValue } = useSearchValue()
 	const [source, setSource] = useState<ProjectBrowserSource>(initialSource)
+	const [createPending, setCreatePending] = useState(initialAction === "create-project")
 	const [workspaces, setWorkspaces] = useState<Workspace[]>(() =>
 		getInitialWorkspaces(initialSource),
 	)
@@ -102,6 +109,7 @@ function WorkspaceProjectsPanel({ open, initialSource, onClose }: WorkspaceProje
 
 	const resetSource = useMemoizedFn(() => {
 		setSource(initialSource)
+		setCreatePending(initialAction === "create-project")
 		setSearchValue("")
 		setWorkspaces(getInitialWorkspaces(initialSource))
 	})
@@ -280,7 +288,11 @@ function WorkspaceProjectsPanel({ open, initialSource, onClose }: WorkspaceProje
 				</nav>
 			}
 		>
-			{source.type !== "collaboration" ? (
+			{createPending && source.type !== "workspace" ? (
+				<div className="flex min-h-0 flex-1 items-center justify-center p-4 text-sm text-muted-foreground">
+					{t("projectNavigation.selectWorkspaceToCreate")}
+				</div>
+			) : source.type !== "collaboration" ? (
 				<WorkspaceProjectsContent
 					key={source.type === "workspace" ? source.workspace.id : "recent"}
 					open={open}
@@ -288,6 +300,8 @@ function WorkspaceProjectsPanel({ open, initialSource, onClose }: WorkspaceProje
 					searchValue={searchValue}
 					onClearSearch={() => setSearchValue("")}
 					onClose={close}
+					initialCreating={createPending}
+					onCancelCreating={() => setCreatePending(false)}
 				/>
 			) : (
 				<CollaborationProjectsContent

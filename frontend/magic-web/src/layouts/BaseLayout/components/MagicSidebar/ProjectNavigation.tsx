@@ -7,7 +7,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/shadcn-ui/
 import { Button } from "@/components/shadcn-ui/button"
 import { ScrollArea } from "@/components/shadcn-ui/scroll-area"
 import { SidebarMenu, SidebarMenuButton, SidebarMenuItem } from "@/components/shadcn-ui/sidebar"
-import { SidebarExpandableItem, SidebarRow } from "@/pages/superMagic/components/SidebarSection"
+import { SidebarRow } from "@/pages/superMagic/components/SidebarSection"
 import type { ProjectBrowserSource } from "@/pages/superMagic/components/WorkspacesMenu/components/WorkspaceProjectsPanel"
 import workspaceStore from "@/pages/superMagic/stores/core/workspace"
 import { isCollaborationWorkspace } from "@/pages/superMagic/constants"
@@ -16,19 +16,29 @@ import { userStore } from "@/models/user"
 import { WorkspaceList } from "./WorkspaceList"
 import CollapsedWorkspaceMenu from "./CollapsedWorkspaceMenu"
 import RecentProjects from "./RecentProjects"
+import ProjectNavigationTabs from "./ProjectNavigationTabs"
 
 const WorkspaceProjectsPanel = lazy(
 	() => import("@/pages/superMagic/components/WorkspacesMenu/components/WorkspaceProjectsPanel"),
 )
 
 /** 同一 owner 管理宽窄导航及窗口来源，临时弹层不参与栏目偏好持久化。 */
-function ProjectNavigation({ collapsed }: { collapsed: boolean }) {
+function ProjectNavigation({
+	collapsed,
+	onBusyChange,
+	onSelect,
+}: {
+	collapsed: boolean
+	onBusyChange?: (busy: boolean) => void
+	onSelect?: () => void
+}) {
 	const { t } = useTranslation("super")
 	const [source, setSource] = useState<ProjectBrowserSource | null>(null)
 	const [popover, setPopover] = useState<"recent" | "workspaces" | null>(null)
 	const [workspaceBusy, setWorkspaceBusy] = useState(false)
 	const [recentBusy, setRecentBusy] = useState(false)
 	const [recentVisited, setRecentVisited] = useState(false)
+	const [createProject, setCreateProject] = useState(false)
 	const userId = userStore.user.userInfo?.user_id
 	const organizationCode = userStore.user.organizationCode
 	const selectedWorkspace = workspaceStore.selectedWorkspace
@@ -49,14 +59,27 @@ function ProjectNavigation({ collapsed }: { collapsed: boolean }) {
 	useEffect(() => {
 		if (recentExpanded) setRecentVisited(true)
 	}, [recentExpanded])
+	useEffect(() => {
+		onBusyChange?.(workspaceBusy || recentBusy || source !== null || popover !== null)
+	}, [workspaceBusy, recentBusy, source, popover, onBusyChange])
+	useEffect(() => () => onBusyChange?.(false), [onBusyChange])
 	const closePopover = useCallback(() => setPopover(null), [])
-	const openManager = (next?: ProjectBrowserSource) => {
-		if (workspaceBusy || recentBusy) return
+	const openManager = (next?: ProjectBrowserSource, creating = false) => {
 		setPopover(null)
+		setCreateProject(creating)
 		setSource(next ?? { type: "recent" })
 	}
+	const handleCreateProject = () =>
+		openManager(
+			selectedWorkspace?.id &&
+				selectedWorkspace.workspace_type === "default" &&
+				!isCollaborationWorkspace(selectedWorkspace)
+				? { type: "workspace", workspace: selectedWorkspace }
+				: { type: "recent" },
+			true,
+		)
 	return (
-		<div className="flex h-full min-h-0 flex-1 flex-col">
+		<div className="flex h-full min-h-0 flex-1 flex-col" data-sidebar-project-navigation>
 			<div className={collapsed ? "min-h-0 flex-1" : "flex min-h-0 flex-1 flex-col px-2"}>
 				{collapsed ? (
 					<ScrollArea
@@ -65,7 +88,7 @@ function ProjectNavigation({ collapsed }: { collapsed: boolean }) {
 						hideScrollbar
 						scrollShadows
 					>
-						<SidebarMenu className="p-2">
+						<SidebarMenu className="p-2" data-sidebar-layout-content="navigation">
 							<SidebarMenuItem>
 								<Popover
 									open={popover === "recent"}
@@ -145,34 +168,24 @@ function ProjectNavigation({ collapsed }: { collapsed: boolean }) {
 					</ScrollArea>
 				) : (
 					<>
-						<SidebarExpandableItem
-							label={t("projectNavigation.recent")}
-							leading={recentIcon}
-							isExpanded={sidebarStore.recentProjectsExpanded}
-							onClick={() => sidebarStore.toggleNavigationSection("recent")}
-							testId="sidebar-recent-projects"
-							fill
-							className={sidebarStore.recentProjectsExpanded ? "flex-1" : "shrink-0"}
-							header={
-								<SidebarRow
-									label={t("projectNavigation.recent")}
-									labelVariant="navigation"
-									labelClassName="font-medium"
-									menuHover
-									leading={recentIcon}
-									isExpanded={sidebarStore.recentProjectsExpanded}
-									onClick={() => sidebarStore.toggleNavigationSection("recent")}
-									testId="sidebar-recent-projects-toggle"
-									className="h-8 shrink-0 px-2"
-								/>
-							}
+						<ProjectNavigationTabs disabled={workspaceBusy || recentBusy} />
+						<div
+							hidden={!recentExpanded}
+							className={recentExpanded ? "flex min-h-0 flex-1 flex-col" : "hidden"}
 						>
 							{(recentVisited || sidebarStore.recentProjectsExpanded) && (
-								<RecentProjects active={sidebarStore.recentProjectsExpanded} />
+								<RecentProjects
+									key={JSON.stringify([userId, organizationCode])}
+									active={recentExpanded}
+									onBusyChange={setRecentBusy}
+									onSelect={onSelect}
+									onCreate={handleCreateProject}
+								/>
 							)}
-						</SidebarExpandableItem>
+						</div>
 						<WorkspaceList
-							icon={workspaceIcon}
+							key={JSON.stringify([userId, organizationCode])}
+							onBusyChange={setWorkspaceBusy}
 							onOpenManager={(workspace) =>
 								openManager({ type: "workspace", workspace })
 							}
@@ -180,6 +193,7 @@ function ProjectNavigation({ collapsed }: { collapsed: boolean }) {
 								<SidebarMenuItem>
 									<SidebarMenuButton
 										isActive={isCollaborationWorkspace(selectedWorkspace)}
+										disabled={workspaceBusy || recentBusy}
 										className="mb-1 text-[13px] font-normal leading-5 data-[active=true]:font-normal"
 										onClick={() => openManager({ type: "collaboration" })}
 										data-testid="sidebar-content-share-workspace-button"
@@ -197,11 +211,13 @@ function ProjectNavigation({ collapsed }: { collapsed: boolean }) {
 				<div
 					className="shrink-0 border-y border-sidebar-border/60 px-2 py-1"
 					data-testid="sidebar-project-manager-dock"
+					data-sidebar-navigation-header
 				>
 					<SidebarRow
 						label={t("sidebarPanels.projectManager")}
 						labelVariant="navigation"
 						leading={managerIcon}
+						disabled={workspaceBusy || recentBusy}
 						hideChevron
 						onClick={() => openManager()}
 						testId="sidebar-project-manager"
@@ -214,6 +230,7 @@ function ProjectNavigation({ collapsed }: { collapsed: boolean }) {
 					<WorkspaceProjectsPanel
 						open
 						initialSource={source}
+						initialAction={createProject ? "create-project" : undefined}
 						onClose={() => setSource(null)}
 					/>
 				</Suspense>

@@ -16,6 +16,7 @@ interface UseWorkspaceActionMenuParams {
 }
 
 interface UseWorkspaceActionMenuReturn {
+	isModalOpen: boolean
 	menuItems: MenuProps["items"]
 	menuProps: {
 		items: MenuProps["items"]
@@ -99,6 +100,7 @@ export function useWorkspaceActionMenu({
 	}, [workspace, onDelete, onRename, onMenuClose, onOpenManager, t])
 
 	return {
+		isModalOpen: false,
 		menuItems,
 		menuProps: {
 			items: menuItems,

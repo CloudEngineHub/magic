@@ -29,6 +29,7 @@ function WorkspaceItem({
 	scrollRef,
 	maxProjectHeight,
 	onOpenManager,
+	onBusyChange,
 }: WorkspaceItemProps) {
 	const { t } = useTranslation(["super"])
 	const workspaceIdSegment = toTestIdSegment(workspace.id)
@@ -38,20 +39,21 @@ function WorkspaceItem({
 
 	const [isHovered, setIsHovered] = useState(false)
 	const [isMenuOpen, setIsMenuOpen] = useState(false)
+	const [projectsBusy, setProjectsBusy] = useState(false)
 	const suppressItemClickRef = useRef(false)
 	const isExpanded =
 		searchProjects !== undefined || sidebarStore.expandedWorkspaces.has(workspace.id)
 	const projects = searchProjects ?? projectStore.getProjectsByWorkspace(workspace.id)
 	const isLoading = searchProjects === undefined && projectStore.isLoadingWorkspace(workspace.id)
 	const isActive = workspaceStore.selectedWorkspace?.id === workspace.id
-	const { openDeleteModal, renderDeleteModal } = useWorkspaceDelete({
+	const { openDeleteModal, renderDeleteModal, deleteModalOpen } = useWorkspaceDelete({
 		getDeleteSuccessMessage: () => t("workspace.deleteWorkspaceSuccess"),
 		getFallbackWorkspaceName: () => t("workspace.unnamedWorkspace"),
 	})
 
-	const { openRenameModal, renderRenameModal } = useWorkspaceRename()
+	const { openRenameModal, renderRenameModal, renameDialogOpen } = useWorkspaceRename()
 
-	const { menuProps, nodes } = useWorkspaceActionMenu({
+	const { menuProps, nodes, isModalOpen } = useWorkspaceActionMenu({
 		workspace,
 		onDelete: openDeleteModal,
 		onRename: openRenameModal,
@@ -65,6 +67,27 @@ function WorkspaceItem({
 			workspaceId: workspace.id,
 			isExpanded,
 		})
+	useEffect(() => {
+		onBusyChange?.(
+			workspace.id,
+			isMenuOpen ||
+				projectsBusy ||
+				isCreatingProject ||
+				deleteModalOpen ||
+				renameDialogOpen ||
+				isModalOpen,
+		)
+	}, [
+		workspace.id,
+		isMenuOpen,
+		projectsBusy,
+		isCreatingProject,
+		deleteModalOpen,
+		renameDialogOpen,
+		isModalOpen,
+		onBusyChange,
+	])
+	useEffect(() => () => onBusyChange?.(workspace.id, false), [workspace.id, onBusyChange])
 
 	const workspaceHeaderRef = useRef<HTMLDivElement>(null)
 	const locateOnExpandRef = useRef(false)
@@ -212,6 +235,7 @@ function WorkspaceItem({
 					<MagicDropdown
 						menu={{ items: menuProps.items }}
 						trigger={["contextMenu"]}
+						onOpenChange={setIsMenuOpen}
 						placement={menuProps.placement}
 						rootClassName="w-full"
 					>
@@ -324,6 +348,7 @@ function WorkspaceItem({
 						workspaceId={workspace.id}
 						isLoading={isLoading}
 						isCreatingProject={isCreatingProject}
+						onBusyChange={setProjectsBusy}
 						dndDisabled={dndDisabled}
 						onCancelCreate={handleCancelCreate}
 						onProjectCreated={handleProjectCreated}

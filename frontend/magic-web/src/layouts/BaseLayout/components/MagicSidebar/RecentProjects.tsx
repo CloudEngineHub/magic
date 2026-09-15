@@ -15,6 +15,9 @@ import { cn } from "@/utils/cn"
 import { ScrollArea } from "@/components/shadcn-ui/scroll-area"
 import { useVirtualProjectList } from "./hooks/useVirtualProjectList"
 import CollapsedWorkspaceProjectRow from "./CollapsedWorkspaceProjectRow"
+import ProjectNavigationToolbar from "./ProjectNavigationToolbar"
+import { useRecentProjectSearch } from "./hooks/useRecentProjectSearch"
+import { sidebarStore } from "@/stores/layout/SidebarStore"
 
 const RecentProjectRow = observer(function RecentProjectRow({
 	project,
@@ -85,8 +88,8 @@ const RecentProjectRow = observer(function RecentProjectRow({
 					</div>
 				}
 				onInteractionChange={onRowInteractionChange}
-				onSelectProject={(item) => {
-					void superMagicService.switchProjectInDesktop(item)
+				onSelectProject={async (item) => {
+					await superMagicService.switchProjectInDesktop(item)
 					onSelect?.()
 				}}
 				onOpenInNewWindow={openProjectInNewTab}
@@ -109,13 +112,24 @@ function RecentProjects({
 	fitContent = false,
 	onSelect,
 	onBusyChange,
+	onCreate,
 }: {
 	active: boolean
 	fitContent?: boolean
 	onSelect?: () => void
 	onBusyChange?: (busy: boolean) => void
+	onCreate?: () => void
 }) {
 	const { t } = useTranslation("super")
+	const [searchMode, setSearchMode] = useState(false)
+	const [searchValue, setSearchValue] = useState("")
+	const [keyword, setKeyword] = useState("")
+	const [busyIds, setBusyIds] = useState<Set<string>>(new Set())
+	const searching = Boolean(keyword.trim())
+	const search = useRecentProjectSearch(keyword, active, busyIds.size > 0)
+	const defaultScrollTop = useRef(
+		sidebarStore.navigationScrollPositions.get("recent-projects") ?? 0,
+	)
 	const [referenceNow, setReferenceNow] = useState(() => Date.now())
 	useEffect(() => {
 		if (!active) return
@@ -146,26 +160,32 @@ function RecentProjects({
 		observer.observe(content)
 		return () => observer.disconnect()
 	}, [active, fitContent])
-	const { items, stale, loading, error, hasMore } = recentProjectsStore
+	const { items, stale, error, hasMore } = searching ? search : recentProjectsStore
+	const loading = searching ? search.loading || search.pending : recentProjectsStore.loading
+	const loadMore = searching ? search.loadMore : recentProjectsStore.loadMore
 	const list = useVirtualProjectList({
 		projects: items,
 		rowHeight: 44,
-		loadEnabled: active,
-		scrollKey: "recent-projects",
+		loadEnabled: active && busyIds.size === 0,
+		scrollKey: searching ? "recent-project-search" : "recent-projects",
 		hasMore,
 		loading,
 		error,
-		onLoadMore: recentProjectsStore.loadMore,
+		onLoadMore: loadMore,
 	})
 	useLayoutEffect(() => {
-		if (active && !recentProjectsStore.stale) recentProjectsStore.invalidate()
-	}, [active])
+		if (list.scrollRef.current)
+			list.scrollRef.current.scrollTop = searching ? 0 : defaultScrollTop.current
+	}, [keyword, searching, list.scrollRef])
+	useLayoutEffect(() => {
+		if (active && !searching && !recentProjectsStore.stale) recentProjectsStore.invalidate()
+	}, [active, searching])
 
 	useEffect(() => {
-		if (active && stale && !loading && !error) void recentProjectsStore.loadMore()
-	}, [active, stale, loading, error])
+		if (active && !searching && stale && !loading && !error && busyIds.size === 0)
+			void recentProjectsStore.loadMore()
+	}, [active, searching, stale, loading, error, busyIds.size])
 	useEffect(() => () => onBusyChange?.(false), [onBusyChange])
-	const [busyIds, setBusyIds] = useState<Set<string>>(new Set())
 	useEffect(() => {
 		onBusyChange?.(busyIds.size > 0)
 	}, [busyIds, onBusyChange])
@@ -184,71 +204,112 @@ function RecentProjects({
 		[setListInteraction],
 	)
 	return (
-		<ScrollArea
-			viewportRef={list.scrollRef}
-			className={cn(
-				"min-h-0 overflow-hidden [&>[data-slot=scroll-area-scrollbar]]:w-1.5 [&>[data-slot=scroll-area-scrollbar]]:border-l-0",
-				fitContent ? "shrink" : "flex-1",
+		<>
+			{onCreate && (
+				<ProjectNavigationToolbar
+					recent
+					disabled={busyIds.size > 0}
+					isSearchMode={searchMode}
+					searchValue={searchValue}
+					isInitialWorkspaceListLoading={loading && items.length === 0}
+					isRefreshing={loading}
+					onSearchValueChange={setSearchValue}
+					searchWorkspaces={setKeyword}
+					handleSearchOpen={() => setSearchMode(true)}
+					handleSearchClose={() => {
+						setSearchMode(false)
+						setSearchValue("")
+						setKeyword("")
+					}}
+					handleRefresh={async () => {
+						if (searching) search.refresh()
+						else {
+							recentProjectsStore.invalidate()
+							await recentProjectsStore.loadMore()
+						}
+					}}
+					handleStartCreateWorkspace={onCreate}
+				/>
 			)}
-			style={fitContent ? { height: contentHeight } : undefined}
-			viewportClassName="overscroll-contain [&>div]:!block"
-			onFocusCapture={list.onFocusCapture}
-			onBlurCapture={list.onBlurCapture}
-			data-testid="sidebar-recent-projects-list"
-		>
-			<div ref={contentRef} className={cn(fitContent && "min-h-[76px] px-1")}>
+			<ScrollArea
+				viewportRef={list.scrollRef}
+				className={cn(
+					"min-h-0 overflow-hidden [&>[data-slot=scroll-area-scrollbar]]:w-1.5 [&>[data-slot=scroll-area-scrollbar]]:border-l-0",
+					fitContent ? "shrink" : "flex-1",
+					!fitContent && "bg-muted/20",
+				)}
+				style={fitContent ? { height: contentHeight } : undefined}
+				viewportClassName="overscroll-contain [&>div]:!block"
+				viewportProps={{
+					onScroll: (event) => {
+						if (!searching) defaultScrollTop.current = event.currentTarget.scrollTop
+					},
+				}}
+				onFocusCapture={list.onFocusCapture}
+				onBlurCapture={list.onBlurCapture}
+				data-testid="sidebar-recent-projects-list"
+			>
 				<div
-					className="relative w-full"
-					style={{ height: list.virtualizer.getTotalSize() }}
+					ref={contentRef}
+					className={cn(fitContent && "min-h-[76px] px-1")}
+					data-sidebar-layout-content="navigation"
+					data-sidebar-has-more={hasMore || stale}
 				>
-					{list.rows.map((row) => (
-						<div
-							key={row.key}
-							ref={list.virtualizer.measureElement}
-							data-index={row.index}
-							data-virtual-project-id={items[row.index].id}
-							className="absolute left-0 top-0 w-full pb-1 pl-3"
-							style={{ transform: `translateY(${row.start}px)` }}
-						>
-							<RecentProjectRow
-								project={items[row.index]}
-								referenceNow={referenceNow}
-								onSelect={onSelect}
-								onInteractionChange={onInteractionChange}
-							/>
+					<div
+						className="relative w-full"
+						style={{ height: list.virtualizer.getTotalSize() }}
+					>
+						{list.rows.map((row) => (
+							<div
+								key={row.key}
+								ref={list.virtualizer.measureElement}
+								data-index={row.index}
+								data-virtual-project-id={items[row.index].id}
+								className="absolute left-0 top-0 w-full pb-1 pl-3"
+								style={{ transform: `translateY(${row.start}px)` }}
+							>
+								<RecentProjectRow
+									project={items[row.index]}
+									referenceNow={referenceNow}
+									onSelect={onSelect}
+									onInteractionChange={onInteractionChange}
+								/>
+							</div>
+						))}
+					</div>
+					{loading && (
+						<div className="p-2 text-xs text-muted-foreground">
+							{t("projectNavigation.loading")}
 						</div>
-					))}
+					)}
+					{!loading && !error && !stale && items.length === 0 && (
+						<div className="p-2 text-xs text-muted-foreground">
+							{searching
+								? t("sidebarPanels.noMatchingProjects")
+								: t("projectNavigation.emptyRecent")}
+						</div>
+					)}
+					{error && (
+						<button
+							type="button"
+							className="w-full p-2 text-left text-xs text-muted-foreground"
+							onClick={loadMore}
+						>
+							{t("projectNavigation.retry")}
+						</button>
+					)}
+					{!loading && !error && hasMore && items.length > 0 && (
+						<button
+							type="button"
+							className="w-full p-2 text-left text-xs text-muted-foreground"
+							onClick={loadMore}
+						>
+							{t("projectNavigation.loadMore")}
+						</button>
+					)}
 				</div>
-				{loading && (
-					<div className="p-2 text-xs text-muted-foreground">
-						{t("projectNavigation.loading")}
-					</div>
-				)}
-				{!loading && !error && !stale && items.length === 0 && (
-					<div className="p-2 text-xs text-muted-foreground">
-						{t("projectNavigation.emptyRecent")}
-					</div>
-				)}
-				{error && (
-					<button
-						type="button"
-						className="w-full p-2 text-left text-xs text-muted-foreground"
-						onClick={recentProjectsStore.loadMore}
-					>
-						{t("projectNavigation.retry")}
-					</button>
-				)}
-				{!loading && !error && hasMore && items.length > 0 && (
-					<button
-						type="button"
-						className="w-full p-2 text-left text-xs text-muted-foreground"
-						onClick={recentProjectsStore.loadMore}
-					>
-						{t("projectNavigation.loadMore")}
-					</button>
-				)}
-			</div>
-		</ScrollArea>
+			</ScrollArea>
+		</>
 	)
 }
 

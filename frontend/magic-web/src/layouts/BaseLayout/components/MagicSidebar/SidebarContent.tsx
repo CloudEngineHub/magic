@@ -1,4 +1,4 @@
-import { type MouseEvent } from "react"
+import { useEffect, useState, type MouseEvent } from "react"
 import { useLocation } from "react-router"
 import { ChevronRight, Home, LayoutGrid, MessageCircle } from "lucide-react"
 import { useTranslation } from "react-i18next"
@@ -27,7 +27,7 @@ import { useNavigateToSuperHome } from "./hooks/useNavigateToSuperHome"
 import { isMagicApp } from "@/utils/devices"
 import { openAudioRecordingsInMagicApp } from "@/layouts/BaseLayout/utils/magicAppNavigation"
 
-function SidebarContent({ collapsed }: SidebarContentProps) {
+function SidebarContent({ collapsed, onBusyChange, onSelect }: SidebarContentProps) {
 	const { t } = useTranslation(["sidebar", "super"])
 	useResourceStatusPolling()
 	const clawBrandValues = getClawBrandTranslationValues()
@@ -35,6 +35,15 @@ function SidebarContent({ collapsed }: SidebarContentProps) {
 	const navigate = useNavigate()
 	const sidebarMarketMenuItems = useSidebarMarketMenuItems()
 	const { superRouteUrl, handleNavigateToSuperHome } = useNavigateToSuperHome()
+	const [projectBusy, setProjectBusy] = useState(false)
+	const [appsOpen, setAppsOpen] = useState(false)
+	const [chatsOpen, setChatsOpen] = useState(false)
+	const [resizing, setResizing] = useState(false)
+	const busy = projectBusy || appsOpen || chatsOpen
+	useEffect(() => {
+		onBusyChange?.(busy || resizing)
+	}, [busy, resizing, onBusyChange])
+	useEffect(() => () => onBusyChange?.(false), [onBusyChange])
 	function shouldHandleAnchorClick(event: MouseEvent<HTMLAnchorElement>) {
 		return (
 			event.button === 0 &&
@@ -62,34 +71,38 @@ function SidebarContent({ collapsed }: SidebarContentProps) {
 	return (
 		<SidebarContentLayout
 			collapsed={collapsed}
+			busy={busy}
+			onDraggingChange={setResizing}
+			home={
+				<SidebarMenuItem key={RouteName.Super}>
+					<SidebarMenuButton
+						asChild
+						tooltip={collapsed ? t("sidebar:home.title") : undefined}
+						data-testid="sidebar-content-home-button"
+						className="text-sidebar-foreground"
+					>
+						<a
+							href={superRouteUrl}
+							onClick={handleNavigateToSuperHome}
+							className="text-current no-underline"
+						>
+							<Home className="h-4 w-4 shrink-0" />
+							<span className="flex-1 overflow-hidden text-ellipsis whitespace-nowrap text-left text-sm leading-5">
+								{t("sidebar:home.title")}
+							</span>
+						</a>
+					</SidebarMenuButton>
+				</SidebarMenuItem>
+			}
 			apps={
 				<SidebarGroup
-					className="w-full shrink-0 px-2 pb-1 pt-2"
+					className="w-full shrink-0 px-2 pb-1 pt-0"
 					data-testid="sidebar-content-apps-group"
 				>
 					<SidebarGroupContent>
 						<SidebarMenu>
-							<SidebarMenuItem key={RouteName.Super}>
-								<SidebarMenuButton
-									asChild
-									tooltip={collapsed ? t("sidebar:home.title") : undefined}
-									data-testid="sidebar-content-home-button"
-									className="text-sidebar-foreground"
-								>
-									<a
-										href={superRouteUrl}
-										onClick={handleNavigateToSuperHome}
-										className="text-current no-underline"
-									>
-										<Home className="h-4 w-4 shrink-0" />
-										<span className="flex-1 overflow-hidden text-ellipsis whitespace-nowrap text-left text-sm leading-5">
-											{t("sidebar:home.title")}
-										</span>
-									</a>
-								</SidebarMenuButton>
-							</SidebarMenuItem>
 							<SidebarMenuItem>
-								<ChatsSubMenu>
+								<ChatsSubMenu onOpenChange={setChatsOpen}>
 									<SidebarMenuButton
 										tooltip={collapsed ? t("sidebar:chats.title") : undefined}
 										data-testid="sidebar-content-chats-button"
@@ -122,7 +135,7 @@ function SidebarContent({ collapsed }: SidebarContentProps) {
 								)
 							})}
 							<SidebarMenuItem>
-								<AppsSubMenu>
+								<AppsSubMenu onOpenChange={setAppsOpen}>
 									<SidebarMenuButton
 										tooltip={collapsed ? t("appsMenu.apps") : undefined}
 										data-testid="sidebar-content-apps-button"
@@ -144,7 +157,11 @@ function SidebarContent({ collapsed }: SidebarContentProps) {
 				</SidebarGroup>
 			}
 		>
-			<ProjectNavigation collapsed={collapsed} />
+			<ProjectNavigation
+				collapsed={collapsed}
+				onBusyChange={setProjectBusy}
+				onSelect={onSelect}
+			/>
 
 			{/* <SidebarGroup className="w-full px-2 py-0">
 				<SidebarGroupContent>

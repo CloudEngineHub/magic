@@ -17,9 +17,10 @@ const UserMenus = lazy(() => import("../../UserMenus"))
 
 interface UserInfoCardProps {
 	collapsed: boolean
+	onOpenChange?: (open: boolean) => void
 }
 
-function UserInfoCard({ collapsed }: UserInfoCardProps) {
+function UserInfoCard({ collapsed, onOpenChange }: UserInfoCardProps) {
 	const { t } = useTranslation("sidebar")
 	const { userInfo } = userStore.user
 
@@ -31,7 +32,7 @@ function UserInfoCard({ collapsed }: UserInfoCardProps) {
 			>
 				<DropdownLazyLoadWrapper
 					component={UserMenus}
-					componentProps={{ placement: "right", initialOpen: true }}
+					componentProps={{ placement: "right", initialOpen: true, onOpenChange }}
 					onPreload={preloadUserMenus}
 				>
 					<div className="w-full cursor-pointer">
@@ -58,7 +59,7 @@ function UserInfoCard({ collapsed }: UserInfoCardProps) {
 		>
 			<DropdownLazyLoadWrapper
 				component={UserMenus}
-				componentProps={{ placement: "right", initialOpen: true }}
+				componentProps={{ placement: "right", initialOpen: true, onOpenChange }}
 				onPreload={preloadUserMenus}
 			>
 				<div

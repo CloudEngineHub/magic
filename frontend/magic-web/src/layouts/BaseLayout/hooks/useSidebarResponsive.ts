@@ -57,19 +57,34 @@ interface UseSidebarResponsiveParams {
 	sidebarPanelRef: RefObject<ImperativePanelHandle>
 	initialWidth: number
 	enabled?: boolean
+	projectPage?: boolean
+	busy?: boolean
 }
 
 function useSidebarResponsive({
 	sidebarPanelRef,
 	initialWidth,
 	enabled = true,
+	projectPage = false,
+	busy = false,
 }: UseSidebarResponsiveParams) {
 	const collapsed = sidebarStore.collapsed
+	const busyRef = useRef(busy)
+	busyRef.current = busy
 	const isUserResizingRef = useRef(false)
 	const hasPendingUserResizeRef = useRef(false)
 	const keyboardResizeTimerRef = useRef<number>()
 	const expandedSidebarWidthPxRef = useRef(convertPercentToPx(initialWidth))
 	const expandedSidebarSizePercentRef = useRef(initialWidth)
+	const overlayMode =
+		enabled &&
+		projectPage &&
+		sidebarStore.windowWidth <=
+			sidebarStore.getAutoCollapseThresholdPx(
+				sidebarStore.windowWidth,
+				expandedSidebarWidthPxRef.current,
+			) &&
+		(collapsed || !busy)
 	const pendingLayoutSizeRef = useRef<number>()
 	const prevWindowWidthRef = useRef(window.innerWidth)
 	const [minSidebarSizePercent, setMinSidebarSizePercent] = useState(() =>
@@ -105,13 +120,17 @@ function useSidebarResponsive({
 	const resizeDrag = useSidebarResizeDrag({
 		sidebarPanelRef,
 		minSizePercent: minSidebarSizePercent,
-		enabled,
+		enabled: enabled && !overlayMode,
 		collapsed,
 		getExpandedWidthPx,
 		onExpand: handleDragExpand,
 		onCancel: restoreCancelledDrag,
 	})
 	const { handleDragging: handleResizeDragging, dragRef } = resizeDrag
+	useLayoutEffect(() => {
+		// 进入窄项目页只收起常驻栏；浮层仍由用户主动打开，首页和宽屏保留原拖动逻辑。
+		if (overlayMode && !collapsed && !busy) sidebarStore.setCollapsed(true)
+	}, [overlayMode, collapsed, busy])
 
 	useLayoutEffect(() => {
 		let sizePercent = pendingLayoutSizeRef.current
@@ -164,7 +183,8 @@ function useSidebarResponsive({
 			)
 			if (viewWidth <= autoCollapseThreshold) {
 				// Only auto-collapse when the window is shrinking, not when expanding
-				if (isShrinking && !sidebarStore.collapsed) sidebarStore.setCollapsed(true)
+				if (isShrinking && !busyRef.current && !sidebarStore.collapsed)
+					sidebarStore.setCollapsed(true)
 				return
 			}
 			if (sidebarStore.collapsed || !sidebarPanelRef.current) return
@@ -311,6 +331,7 @@ function useSidebarResponsive({
 	)
 
 	return {
+		overlayMode,
 		resizeDrag,
 		isUserResizingRef,
 		getExpandedSidebarSizePercent,

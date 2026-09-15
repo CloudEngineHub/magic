@@ -1,4 +1,4 @@
-import { useCallback, useRef } from "react"
+import { useCallback, useEffect, useRef } from "react"
 import { ScrollArea } from "@/components/shadcn-ui/scroll-area"
 import projectStore from "@/pages/superMagic/stores/core/project"
 import { useVirtualProjectList } from "../hooks/useVirtualProjectList"
@@ -23,9 +23,11 @@ function ProjectList({
 	onProjectCreated,
 	dndDisabled,
 	maxProjectHeight,
+	onBusyChange,
 }: ProjectListProps) {
 	const { t } = useTranslation(["super", "sidebar"])
 	const {
+		isProjectModalOpen,
 		projectModals,
 		handleMoveProject,
 		handleTransferProject,
@@ -52,6 +54,7 @@ function ProjectList({
 		onInteractionChange,
 		onFocusCapture,
 		onBlurCapture,
+		hasActiveInteraction,
 	} = useVirtualProjectList({
 		loadEnabled: active,
 		listRef,
@@ -64,6 +67,10 @@ function ProjectList({
 		error: page?.error,
 		onLoadMore: loadMore,
 	})
+	useEffect(() => {
+		onBusyChange?.(hasActiveInteraction || isProjectModalOpen || Boolean(isCreatingProject))
+	}, [hasActiveInteraction, isProjectModalOpen, isCreatingProject, onBusyChange])
+	useEffect(() => () => onBusyChange?.(false), [onBusyChange])
 
 	return (
 		<>
@@ -86,6 +93,8 @@ function ProjectList({
 					data-sidebar-drop-workspace-id={workspaceId}
 					data-sidebar-drop-empty={projects.length === 0 ? "true" : undefined}
 					data-testid={`sidebar-project-list-${workspaceId}`}
+					data-sidebar-layout-content="projects"
+					data-sidebar-has-more={page?.hasMore || isLoading}
 				>
 					{isCreatingProject && onCancelCreate && onProjectCreated && (
 						<div className="w-full duration-150 animate-in fade-in slide-in-from-top-2">

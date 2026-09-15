@@ -29,6 +29,8 @@ import { useLocation } from "react-router-dom"
 import { useMagicWidgetConfig } from "@/providers/MagicWidgetProvider"
 import { resolveMagicWidgetCrewLayout } from "@/providers/MagicWidgetProvider/config"
 import { useTranslation } from "react-i18next"
+import { routesMatch } from "@/routes/history/helpers"
+import { RouteName } from "@/routes/constants"
 
 const isElectron = magic?.env?.isElectron?.()
 
@@ -50,7 +52,13 @@ const BaseLayoutPc = observer(() => {
 	useMetaSet()
 	const { Content } = useKeepAlive()
 	const sidebarPanelRef = useRef<ImperativePanelHandle>(null)
-	const { search } = useLocation()
+	const { search, pathname } = useLocation()
+	const [sidebarBusy, setSidebarBusy] = useState(false)
+	const routeName = routesMatch(pathname)?.route.name
+	const projectPage =
+		routeName === RouteName.SuperWorkspaceProjectState ||
+		routeName === RouteName.SuperWorkspaceProjectTopicState ||
+		routeName === RouteName.SuperChatProjectState
 	const { config: widgetConfig, embedContext } = useMagicWidgetConfig()
 	const widgetLayout = resolveMagicWidgetCrewLayout({
 		configuredLayout: embedContext ? widgetConfig.layout : undefined,
@@ -65,6 +73,7 @@ const BaseLayoutPc = observer(() => {
 	const [initialWidth] = useState(() => sidebarStore.width)
 
 	const {
+		overlayMode,
 		resizeDrag,
 		isUserResizingRef,
 		handleSidebarDragging,
@@ -76,6 +85,8 @@ const BaseLayoutPc = observer(() => {
 		sidebarPanelRef,
 		initialWidth,
 		enabled: showAppSidebar,
+		projectPage: projectPage && !embedContext,
+		busy: sidebarBusy,
 	})
 
 	// Handle smooth sidebar animation and restore the responsive expanded width.
@@ -159,21 +170,21 @@ const BaseLayoutPc = observer(() => {
 							defaultSize={
 								!showAppSidebar
 									? 0
-									: sidebarStore.collapsed
+									: sidebarStore.collapsed || overlayMode
 										? sidebarStore.collapsedSizePercent
 										: initialWidth
 							}
 							maxSize={
 								!showAppSidebar
 									? 0
-									: sidebarStore.collapsed
+									: sidebarStore.collapsed || overlayMode
 										? sidebarStore.collapsedSizePercent
 										: sidebarStore.MAX_WIDTH_PERCENT
 							}
 							minSize={
 								!showAppSidebar
 									? 0
-									: sidebarStore.collapsed || resizeDrag.expanding
+									: sidebarStore.collapsed || overlayMode || resizeDrag.expanding
 										? sidebarStore.collapsedSizePercent
 										: minSidebarSizePercent
 							}
@@ -194,7 +205,11 @@ const BaseLayoutPc = observer(() => {
 								}
 								aria-hidden={!showAppSidebar}
 							>
-								<MagicSidebar />
+								<MagicSidebar
+									overlayMode={overlayMode}
+									visible={showAppSidebar}
+									onBusyChange={setSidebarBusy}
+								/>
 							</div>
 						</ResizablePanel>
 					)}
@@ -205,7 +220,7 @@ const BaseLayoutPc = observer(() => {
 				<Observer>
 					{() => (
 						<ResizableHandle
-							disabled={!showAppSidebar || resizeDrag.cancelled}
+							disabled={!showAppSidebar || overlayMode || resizeDrag.cancelled}
 							aria-label={t("sidebarPanels.resizeSidebar")}
 							data-dragging={resizeDrag.dragging}
 							onDragging={handleSidebarDraggingChange}
@@ -215,7 +230,7 @@ const BaseLayoutPc = observer(() => {
 								resizeGlowClassName,
 								resizeDrag.dragging && "before:opacity-100",
 								resizeDrag.dragging && "z-20",
-								!showAppSidebar
+								!showAppSidebar || overlayMode
 									? "pointer-events-none opacity-0"
 									: "opacity-100 hover:bg-primary/30",
 							)}

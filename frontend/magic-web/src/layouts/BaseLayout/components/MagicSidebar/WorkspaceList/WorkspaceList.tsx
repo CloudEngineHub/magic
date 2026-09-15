@@ -1,5 +1,4 @@
-import WorkspaceListHeader from "./WorkspaceListHeader"
-import { SidebarExpandableItem } from "@/pages/superMagic/components/SidebarSection"
+import ProjectNavigationToolbar from "../ProjectNavigationToolbar"
 import {
 	useCallback,
 	useEffect,
@@ -36,12 +35,12 @@ import { useProjectPinBoundaryConfirmation } from "./ProjectPinBoundaryConfirmDi
 const SEARCH_PAGE_SIZE = 20
 
 interface WorkspaceListProps {
-	icon: ReactNode
+	onBusyChange?: (busy: boolean) => void
 	beforeItems?: ReactNode
 	onOpenManager: (workspace: Workspace) => void
 }
 
-function WorkspaceList({ beforeItems, onOpenManager, icon }: WorkspaceListProps) {
+function WorkspaceList({ beforeItems, onOpenManager, onBusyChange }: WorkspaceListProps) {
 	const { t } = useTranslation()
 	const isExpanded = sidebarStore.workspacesExpanded
 	const scrollRef = useRef<HTMLDivElement>(null)
@@ -49,6 +48,20 @@ function WorkspaceList({ beforeItems, onOpenManager, icon }: WorkspaceListProps)
 	const [isCreatingWorkspace, setIsCreatingWorkspace] = useState(false)
 	const [isRefreshing, setIsRefreshing] = useState(false)
 	const [isSearchMode, setIsSearchMode] = useState(false)
+	const [busyWorkspaces, setBusyWorkspaces] = useState<Set<string>>(new Set())
+	const onWorkspaceBusyChange = useCallback((id: string, busy: boolean) => {
+		setBusyWorkspaces((previous) => {
+			if (previous.has(id) === busy) return previous
+			const next = new Set(previous)
+			if (busy) next.add(id)
+			else next.delete(id)
+			return next
+		})
+	}, [])
+	useEffect(() => {
+		onBusyChange?.(isCreatingWorkspace || busyWorkspaces.size > 0)
+	}, [isCreatingWorkspace, busyWorkspaces, onBusyChange])
+	useEffect(() => () => onBusyChange?.(false), [onBusyChange])
 	const [searchState, updateSearchState] = useImmer({
 		value: "",
 		workspaces: [] as Workspace[],
@@ -491,138 +504,128 @@ function WorkspaceList({ beforeItems, onOpenManager, icon }: WorkspaceListProps)
 			onDragLeave={handleDragLeave}
 			onDrop={handleDrop}
 			onDragEnd={handleDragEnd}
-			className={cn(
-				"relative mt-1 flex min-h-0 flex-col border-t border-sidebar-border/60 pt-1",
-				isExpanded ? "flex-1" : "shrink-0",
-			)}
+			className={cn("relative min-h-0 flex-1 flex-col", isExpanded ? "flex" : "hidden")}
+			hidden={!isExpanded}
 		>
 			{confirmationDialog}
-			<SidebarExpandableItem
-				label={t("super:projectNavigation.workspaces")}
-				onClick={() => sidebarStore.toggleNavigationSection("workspaces")}
-				isExpanded={isExpanded}
-				fill
-				className="min-h-0 flex-1"
-				testId="sidebar-workspaces"
-				header={
-					<WorkspaceListHeader
-						icon={icon}
-						isExpanded={isExpanded}
-						isSearchMode={isSearchMode}
-						searchValue={searchState.value}
-						isInitialWorkspaceListLoading={isInitialWorkspaceListLoading}
-						isRefreshing={isRefreshing}
-						onToggle={() => sidebarStore.toggleNavigationSection("workspaces")}
-						onSearchValueChange={(value) =>
-							updateSearchState((draft) => {
-								draft.value = value
-							})
-						}
-						searchWorkspaces={searchWorkspaces}
-						handleSearchOpen={handleSearchOpen}
-						handleSearchClose={handleSearchClose}
-						handleRefresh={handleRefresh}
-						handleStartCreateWorkspace={handleStartCreateWorkspace}
-					/>
+			<ProjectNavigationToolbar
+				disabled={isCreatingWorkspace || busyWorkspaces.size > 0}
+				isSearchMode={isSearchMode}
+				searchValue={searchState.value}
+				isInitialWorkspaceListLoading={isInitialWorkspaceListLoading}
+				isRefreshing={isRefreshing}
+				onSearchValueChange={(value) =>
+					updateSearchState((draft) => {
+						draft.value = value
+					})
 				}
+				searchWorkspaces={searchWorkspaces}
+				handleSearchOpen={handleSearchOpen}
+				handleSearchClose={handleSearchClose}
+				handleRefresh={handleRefresh}
+				handleStartCreateWorkspace={handleStartCreateWorkspace}
+			/>
+			<ScrollArea
+				ref={scrollAreaRef}
+				viewportRef={scrollRef}
+				scrollHints={{
+					variant: "arrows",
+					upLabel: t("super:projectNavigation.scrollUp"),
+					downLabel: t("super:projectNavigation.scrollDown"),
+				}}
+				hideScrollbar
+				className="mt-1 min-h-0 flex-1 overflow-hidden bg-muted/20"
+				viewportClassName="overscroll-contain [--workspace-list-sticky-top:0px] [&>div]:!block"
+				viewportProps={{
+					"data-workspaces-scroll-container": true,
+					onScroll: (event) => {
+						if (!isSearchMode)
+							sidebarStore.navigationScrollPositions.set(
+								"workspaces",
+								event.currentTarget.scrollTop,
+							)
+					},
+				}}
 			>
-				<ScrollArea
-					ref={scrollAreaRef}
-					viewportRef={scrollRef}
-					scrollHints={{
-						variant: "arrows",
-						upLabel: t("super:projectNavigation.scrollUp"),
-						downLabel: t("super:projectNavigation.scrollDown"),
-					}}
-					hideScrollbar
-					className="mt-1 min-h-0 flex-1 overflow-hidden"
-					viewportClassName="overscroll-contain [--workspace-list-sticky-top:0px] [&>div]:!block"
-					viewportProps={{
-						"data-workspaces-scroll-container": true,
-						onScroll: (event) => {
-							if (!isSearchMode)
-								sidebarStore.navigationScrollPositions.set(
-									"workspaces",
-									event.currentTarget.scrollTop,
-								)
-						},
-					}}
-				>
-					<SidebarMenu>
-						<div className="w-full">
-							{beforeItems}
-							<div ref={workspaceListRef}>
-								{isCreatingWorkspace && (
-									<div className="w-full duration-150 animate-in fade-in slide-in-from-top-2">
-										<CreateWorkspaceInput
-											onCancel={handleCancelCreateWorkspace}
-											onCreated={handleWorkspaceCreated}
-										/>
-									</div>
-								)}
-								{displayedWorkspaces.map((workspace, index) => (
-									<WorkspaceItem
-										active={isExpanded}
-										key={workspace.id}
-										workspace={workspace}
-										scrollRef={scrollRef}
-										maxProjectHeight={projectHeights[workspace.id]}
-										onOpenManager={() => onOpenManager(workspace)}
-										dndDisabled={isSearchMode}
-										searchProjects={
-											isSearchMode && projectsByWorkspaceId.has(workspace.id)
-												? projectsByWorkspaceId.get(workspace.id)
-												: undefined
-										}
-										className={cn(
-											"mb-1",
-											index === displayedWorkspaces.length - 1 && "mb-0",
-										)}
+				<SidebarMenu>
+					<div
+						className="w-full"
+						data-sidebar-layout-content="navigation"
+						data-sidebar-has-more={
+							isSearchMode
+								? searchState.hasMoreWorkspaces || searchState.hasMoreProjects
+								: hasMoreWorkspaces
+						}
+					>
+						{beforeItems}
+						<div ref={workspaceListRef}>
+							{isCreatingWorkspace && (
+								<div className="w-full duration-150 animate-in fade-in slide-in-from-top-2">
+									<CreateWorkspaceInput
+										onCancel={handleCancelCreateWorkspace}
+										onCreated={handleWorkspaceCreated}
 									/>
-								))}
-								{isSearchLoading && (
-									<div className="flex h-8 items-center justify-center text-xs text-muted-foreground">
-										<Loader2 className="size-4 animate-spin" />
-									</div>
-								)}
-								{!isSearchMode && isLoadingMoreWorkspaces && (
-									<div className="flex h-8 items-center justify-center text-xs text-muted-foreground">
-										<Loader2 className="size-4 animate-spin" />
-									</div>
-								)}
-								{isSearchMode && searchState.failed && (
-									<button
-										type="button"
-										className="w-full p-2 text-left text-xs text-muted-foreground"
-										onClick={() => {
-											isSearchPendingRef.current = true
-											runSearch({
-												keyword: searchState.value,
-												page:
-													searchState.projects.length ||
-													searchState.workspaces.length
-														? searchState.page + 1
-														: 1,
-												append: Boolean(
-													searchState.projects.length ||
-													searchState.workspaces.length,
-												),
-											})
-										}}
-									>
-										{t("super:projectNavigation.retry")}
-									</button>
-								)}
-								<div
-									ref={loadMoreSentinelRef}
-									className="h-px"
-									aria-hidden="true"
+								</div>
+							)}
+							{displayedWorkspaces.map((workspace, index) => (
+								<WorkspaceItem
+									active={isExpanded}
+									key={workspace.id}
+									workspace={workspace}
+									scrollRef={scrollRef}
+									maxProjectHeight={projectHeights[workspace.id]}
+									onOpenManager={() => onOpenManager(workspace)}
+									onBusyChange={onWorkspaceBusyChange}
+									dndDisabled={isSearchMode}
+									searchProjects={
+										isSearchMode && projectsByWorkspaceId.has(workspace.id)
+											? projectsByWorkspaceId.get(workspace.id)
+											: undefined
+									}
+									className={cn(
+										"mb-1",
+										index === displayedWorkspaces.length - 1 && "mb-0",
+									)}
 								/>
-							</div>
+							))}
+							{isSearchLoading && (
+								<div className="flex h-8 items-center justify-center text-xs text-muted-foreground">
+									<Loader2 className="size-4 animate-spin" />
+								</div>
+							)}
+							{!isSearchMode && isLoadingMoreWorkspaces && (
+								<div className="flex h-8 items-center justify-center text-xs text-muted-foreground">
+									<Loader2 className="size-4 animate-spin" />
+								</div>
+							)}
+							{isSearchMode && searchState.failed && (
+								<button
+									type="button"
+									className="w-full p-2 text-left text-xs text-muted-foreground"
+									onClick={() => {
+										isSearchPendingRef.current = true
+										runSearch({
+											keyword: searchState.value,
+											page:
+												searchState.projects.length ||
+												searchState.workspaces.length
+													? searchState.page + 1
+													: 1,
+											append: Boolean(
+												searchState.projects.length ||
+												searchState.workspaces.length,
+											),
+										})
+									}}
+								>
+									{t("super:projectNavigation.retry")}
+								</button>
+							)}
+							<div ref={loadMoreSentinelRef} className="h-px" aria-hidden="true" />
 						</div>
-					</SidebarMenu>
-				</ScrollArea>
-			</SidebarExpandableItem>
+					</div>
+				</SidebarMenu>
+			</ScrollArea>
 			<svg
 				ref={dropIndicatorRef}
 				aria-hidden="true"

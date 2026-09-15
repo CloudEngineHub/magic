@@ -2,7 +2,7 @@ import { cn } from "@/utils/cn"
 import type { SidebarFooterProps } from "./types"
 import { ActionButtons, UserInfoCard } from "./components"
 
-function SidebarFooter({ collapsed }: SidebarFooterProps) {
+function SidebarFooter({ collapsed, onBusyChange }: SidebarFooterProps) {
 	return (
 		<div
 			data-testid="sidebar-footer-root"
@@ -13,7 +13,7 @@ function SidebarFooter({ collapsed }: SidebarFooterProps) {
 		>
 			<ActionButtons collapsed={collapsed} />
 			<div role="separator" className="my-1 w-full border-t border-sidebar-border/60" />
-			<UserInfoCard collapsed={collapsed} />
+			<UserInfoCard collapsed={collapsed} onOpenChange={onBusyChange} />
 		</div>
 	)
 }

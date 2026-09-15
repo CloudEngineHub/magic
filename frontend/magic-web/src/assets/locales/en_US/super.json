@@ -4616,18 +4616,27 @@
 		"swipeUnpin": "Unpin"
 	},
 	"projectNavigation": {
+		"collapseApps": "Collapse apps",
 		"emptyRecent": "No recently used projects",
+		"expandApps": "Expand apps",
 		"loadMore": "Load more",
 		"loading": "Loading…",
 		"openManager": "Open project manager",
 		"openRecentManager": "Open recent projects in project manager",
 		"openWorkspaceManager": "Open project manager for {{name}}",
 		"recent": "Recent projects",
+		"recentScope": "Recently visited",
+		"recentShort": "Recent",
 		"resizeSections": "Resize navigation and project sections",
 		"retry": "Could not load. Click to retry",
 		"scrollDown": "Scroll down",
 		"scrollUp": "Scroll up",
-		"workspaces": "Workspaces"
+		"searchRecent": "Search recent projects",
+		"selectWorkspaceToCreate": "Select a workspace on the left for your new project",
+		"sidebarTitle": "Navigation",
+		"workspaceScope": "Workspaces and projects",
+		"workspaces": "Workspaces",
+		"workspacesShort": "Spaces"
 	},
 	"projectShare": {
 		"advancedSettings": "Advanced settings",

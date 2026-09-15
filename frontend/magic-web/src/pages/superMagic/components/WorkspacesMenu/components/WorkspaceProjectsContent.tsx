@@ -24,6 +24,8 @@ interface WorkspaceProjectsContentProps {
 	/** 不指定目录时浏览跨工作区最近项目；查询状态仍由本窗口独立持有。 */
 	workspace?: Workspace
 	onClose: () => void
+	initialCreating?: boolean
+	onCancelCreating?: () => void
 }
 
 const PAGE_SIZE = 100
@@ -34,6 +36,8 @@ export default function WorkspaceProjectsContent({
 	open,
 	workspace,
 	onClose,
+	initialCreating = false,
+	onCancelCreating,
 }: WorkspaceProjectsContentProps) {
 	const { t } = useTranslation("super")
 	const workspaceId = workspace?.id
@@ -51,7 +55,7 @@ export default function WorkspaceProjectsContent({
 	const [page, setPage] = useState(1)
 	const failedPageRef = useRef(1)
 	const [total, setTotal] = useState<number>()
-	const [creating, setCreating] = useState(false)
+	const [creating, setCreating] = useState(initialCreating)
 	const requestId = useRef(0)
 	const isOpenRef = useRef(open)
 	const actions = useProjectItemActionProps({ selectedWorkspace: workspace ?? null })
@@ -172,7 +176,10 @@ export default function WorkspaceProjectsContent({
 							(creating ? (
 								<CreateProjectInput
 									workspaceId={workspace.id}
-									onCancel={() => setCreating(false)}
+									onCancel={() => {
+										setCreating(false)
+										onCancelCreating?.()
+									}}
 									onCreated={close}
 								/>
 							) : (
