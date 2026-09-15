@@ -1059,6 +1059,7 @@ const PPTRenderInner = observer(function PPTRenderInner({
 							{/* 控制栏 - 在编辑模式和全屏模式下隐藏 */}
 							{!isAnySlideEditing &&
 								!isPresentationFullscreen &&
+								presentedToolbarModel?.props.viewMode !== "code" &&
 								store.isReady &&
 								hasSlides && (
 									<PPTControlBar
