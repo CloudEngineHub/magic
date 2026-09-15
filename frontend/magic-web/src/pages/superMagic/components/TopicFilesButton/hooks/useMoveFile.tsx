@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect, useRef } from "react"
+import { startTransition, useState, useCallback, useEffect, useRef } from "react"
 import { useMemoizedFn } from "ahooks"
 import magicToast from "@/components/base/MagicToaster/utils"
 import { useTranslation } from "react-i18next"
@@ -19,6 +19,7 @@ import { useFolderConflictHandler } from "./useFolderConflictHandler"
 import { getAttachmentPathByLookupKey, type AttachmentIndex } from "../utils/attachmentIndex"
 import { collectSelectedItemIds } from "../utils/collectSelectedItemIds"
 import {
+	canSkipCanvasProjectOperationRiskForMove,
 	detectCanvasProjectOperationRisk,
 	getCanvasProjectOperationImpact,
 	type CanvasProjectOperationRisk,
@@ -92,7 +93,7 @@ export function useMoveFile(options: UseMoveFileOptions = {}) {
 	const [disabledFolderIds, setDisabledFolderIds] = useState<string[]>([])
 	// 移动进度状态
 	const [moveProgress, setMoveProgress] = useState(0)
-	const [isMoving, setIsMovingFn] = useState(false)
+	const [isMoving, setIsMoving] = useState(false)
 	const movePollingTimerRef = useRef<ReturnType<typeof setInterval> | null>(null)
 	const moveWatchdogTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 	const activeMoveTaskIdRef = useRef(0)
@@ -104,11 +105,6 @@ export function useMoveFile(options: UseMoveFileOptions = {}) {
 	const [successCount, setSuccessCount] = useState(0)
 	const directoryMoveRef = useRef<AbortController | null>(null)
 	const previousSourceIdentity = useRef(options.directorySource?.identityKey)
-
-	const setIsMoving = (moving: boolean) => {
-		console.trace(moving)
-		setIsMovingFn(moving)
-	}
 
 	const clearMoveTimers = useCallback(() => {
 		if (movePollingTimerRef.current) {
@@ -138,8 +134,10 @@ export function useMoveFile(options: UseMoveFileOptions = {}) {
 		activeMoveTaskIdRef.current += 1
 		const taskId = activeMoveTaskIdRef.current
 
-		setIsMoving(true)
-		setMoveProgress(0)
+		startTransition(() => {
+			setIsMoving(true)
+			setMoveProgress(0)
+		})
 
 		moveWatchdogTimerRef.current = setTimeout(() => {
 			if (activeMoveTaskIdRef.current !== taskId) return
@@ -466,27 +464,32 @@ export function useMoveFile(options: UseMoveFileOptions = {}) {
 
 			preparation?.signal.throwIfAborted()
 			let effectiveFileIds = fileIds
-			try {
-				const { dependencyTransferFileIds } = await resolveSingleDocumentStaticDependencies(
-					{
+			const skipCanvasGuard = canSkipCanvasProjectOperationRiskForMove(
+				fileIds,
+				attachmentIndex,
+			)
+
+			if (!skipCanvasGuard) {
+				try {
+					const { dependencyTransferFileIds } =
+						await resolveSingleDocumentStaticDependencies({
+							fileIds,
+							attachments,
+							attachmentIndex,
+							signal: preparation?.signal,
+						})
+					effectiveFileIds = mergeStaticDependencyFileIds(
 						fileIds,
-						attachments,
-						attachmentIndex,
-						signal: preparation?.signal,
-					},
-				)
-				effectiveFileIds = mergeStaticDependencyFileIds(
-					fileIds,
-					dependencyTransferFileIds,
-					true,
-				)
-			} catch (error) {
-				preparation?.signal.throwIfAborted()
-				// Keep the legacy move usable if the optional browser-side dependency read fails.
-				console.error(
-					"Failed to resolve document static dependencies before moving:",
-					error,
-				)
+						dependencyTransferFileIds,
+						true,
+					)
+				} catch (error) {
+					preparation?.signal.throwIfAborted()
+					console.error(
+						"Failed to resolve document static dependencies before moving:",
+						error,
+					)
+				}
 			}
 
 			preparation?.signal.throwIfAborted()
@@ -505,11 +508,12 @@ export function useMoveFile(options: UseMoveFileOptions = {}) {
 				(fileId) => !keepBothFileIds.includes(fileId),
 			)
 			let repairPlan: CanvasProjectPathRepairResult | null = null
-			if (sameProjectMove) {
+			if (sameProjectMove && !skipCanvasGuard) {
 				const canvasRisk =
 					pathOperationFileIds.length > 0
 						? await detectCanvasProjectOperationRisk({
 								attachments,
+								attachmentIndex,
 								fileIds: pathOperationFileIds,
 								operation: "move",
 							})
@@ -697,6 +701,7 @@ export function useMoveFile(options: UseMoveFileOptions = {}) {
 				)
 				if (!fileIds.length) return
 			}
+
 			const resolvedTargetPath =
 				targetPath ??
 				(attachmentIndex
@@ -749,6 +754,10 @@ export function useMoveFile(options: UseMoveFileOptions = {}) {
 							sourceAttachments,
 							targetAttachments,
 							resolvedTargetPath,
+							{
+								sourceIndex: sharedSourceIndex,
+								targetIndex: sharedTargetIndex,
+							},
 						)
 					: new Map()
 

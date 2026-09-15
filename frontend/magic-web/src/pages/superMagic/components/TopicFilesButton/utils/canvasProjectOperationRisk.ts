@@ -3,6 +3,7 @@ import {
 	ELEMENT_DETAILS_FILENAME,
 	ELEMENT_DETAILS_USER_FILENAME,
 } from "../../Detail/contents/Design/utils/elementDetailsStore"
+import type { AttachmentIndex } from "./attachmentIndex"
 
 export type CanvasProjectOperationType = "delete" | "move" | "rename"
 
@@ -17,6 +18,7 @@ export interface CanvasProjectOperationRisk {
 
 export interface DetectCanvasProjectOperationRiskOptions {
 	attachments: AttachmentItem[]
+	attachmentIndex?: AttachmentIndex
 	fileIds?: string[]
 	items?: AttachmentItem[]
 	operation: CanvasProjectOperationType
@@ -210,15 +212,44 @@ function isCanvasResourcePath(relativePath: string): boolean {
 	return CANVAS_RESOURCE_DIRS.has(firstSegment)
 }
 
+export function canSkipCanvasProjectOperationRiskForMove(
+	fileIds: string[],
+	attachmentIndex?: AttachmentIndex,
+): boolean {
+	if (!fileIds.length) return true
+
+	return fileIds.every((fileId) => {
+		const item = attachmentIndex?.getItemById(fileId)
+		if (!item) return false
+		if (item.is_directory) return false
+
+		const name = getItemName(item).toLowerCase()
+		if (name === MAGIC_PROJECT_FILE_NAME.toLowerCase()) return false
+		if (ELEMENT_DETAILS_FILE_NAMES.has(name)) return false
+		if (item.display_config?.type) return false
+
+		return true
+	})
+}
+
 export async function detectCanvasProjectOperationRisk({
 	attachments,
+	attachmentIndex,
 	fileIds,
 	items,
 }: DetectCanvasProjectOperationRiskOptions): Promise<CanvasProjectOperationRisk> {
-	const fileItems = flattenAttachments(attachments)
+	const fileItems = attachmentIndex
+		? Array.from(attachmentIndex.entriesById.values(), (entry) => entry.item)
+		: flattenAttachments(attachments)
+
 	const selectedItems = [
 		...(items || []),
-		...(fileIds || []).map((fileId) => findItemByLookupKey(fileItems, fileId)).filter(Boolean),
+		...(fileIds || [])
+			.map(
+				(fileId) =>
+					attachmentIndex?.getItemById(fileId) || findItemByLookupKey(fileItems, fileId),
+			)
+			.filter(Boolean),
 	] as AttachmentItem[]
 
 	if (selectedItems.length === 0) {
