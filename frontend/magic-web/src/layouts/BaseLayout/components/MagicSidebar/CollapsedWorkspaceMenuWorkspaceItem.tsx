@@ -1,9 +1,10 @@
-import { useEffect, useRef, useState, type MouseEvent } from "react"
-import { ChevronRight, CirclePlus, Ellipsis, Home } from "lucide-react"
+import { useEffect, useRef, useState, type KeyboardEvent, type MouseEvent } from "react"
+import { ChevronRight, CirclePlus, Ellipsis, Home, Search } from "lucide-react"
 import { observer } from "mobx-react-lite"
 import { useTranslation } from "react-i18next"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/shadcn-ui/popover"
 import { Button } from "@/components/shadcn-ui/button"
+import { Input } from "@/components/shadcn-ui/input"
 import { ScrollArea } from "@/components/shadcn-ui/scroll-area"
 import { cn } from "@/utils/cn"
 import projectStore from "@/pages/superMagic/stores/core/project"
@@ -54,12 +55,15 @@ const CollapsedWorkspaceMenuWorkspaceItem = observer(function CollapsedWorkspace
 	const addProjectTestId = `sidebar-collapsed-workspace-add-project-${workspaceIdSegment}`
 	const createProjectInputTestId = `sidebar-collapsed-workspace-create-project-input-${workspaceIdSegment}`
 	const projectEmptyTestId = `sidebar-collapsed-workspace-project-empty-${workspaceIdSegment}`
+	const projectSearchInputTestId = `sidebar-collapsed-workspace-project-search-input-${workspaceIdSegment}`
+	const projectSearchEmptyTestId = `sidebar-collapsed-workspace-project-search-empty-${workspaceIdSegment}`
 	const isProjectMenuOpen = openProjectMenuId === workspace.id
 	const projects = projectStore.getProjectsByWorkspace(workspace.id)
 	const selectedProject = projectStore.selectedProject
 	const isWorkspaceHomeSelected = isActive && !selectedProject?.id
 	const [isCreatingProject, setIsCreatingProject] = useState(false)
 	const [projectName, setProjectName] = useState("")
+	const [projectSearchKeyword, setProjectSearchKeyword] = useState("")
 	const [isSubmittingProject, setIsSubmittingProject] = useState(false)
 	const [isWorkspaceHovered, setIsWorkspaceHovered] = useState(false)
 	const projectMenuContentRef = useRef<HTMLDivElement>(null)
@@ -124,6 +128,7 @@ const CollapsedWorkspaceMenuWorkspaceItem = observer(function CollapsedWorkspace
 		if (!open && keepPopoverOpen) return
 		if (!open) {
 			handleCancelCreateProject()
+			setProjectSearchKeyword("")
 		}
 		onProjectMenuChange(open ? workspace.id : null)
 	}
@@ -182,8 +187,27 @@ const CollapsedWorkspaceMenuWorkspaceItem = observer(function CollapsedWorkspace
 		}, 0)
 	}
 
+	const unnamedProjectLabel = t("super:project.unnamedProject")
+	const normalizedProjectSearchKeyword = projectSearchKeyword.trim().toLowerCase()
+	const hasProjectSearchKeyword = normalizedProjectSearchKeyword.length > 0
+	const filteredProjects = hasProjectSearchKeyword
+		? projects.filter((project) =>
+				(project.project_name || unnamedProjectLabel)
+					.toLowerCase()
+					.includes(normalizedProjectSearchKeyword),
+			)
+		: projects
+
+	function handleProjectSearchKeyDown(event: KeyboardEvent<HTMLInputElement>) {
+		event.stopPropagation()
+		if (event.key !== "Escape") return
+		if (!projectSearchKeyword) return
+		event.preventDefault()
+		setProjectSearchKeyword("")
+	}
+
 	const renderProjectList = () =>
-		projects.map((project) => (
+		filteredProjects.map((project) => (
 			<CollapsedWorkspaceProjectRow
 				key={project.id}
 				project={project}
@@ -325,7 +349,7 @@ const CollapsedWorkspaceMenuWorkspaceItem = observer(function CollapsedWorkspace
 						alignOffset={-4}
 						data-testid={projectPopoverTestId}
 						onEscapeKeyDown={(e) => {
-							if (isCreatingProject) {
+							if (isCreatingProject || projectSearchKeyword) {
 								e.preventDefault()
 							}
 						}}
@@ -388,6 +412,19 @@ const CollapsedWorkspaceMenuWorkspaceItem = observer(function CollapsedWorkspace
 							</span>
 						</button>
 						<div className="my-1 h-px w-full bg-border" />
+						<div className="relative mb-1 w-full">
+							<Search className="pointer-events-none absolute left-2 top-1/2 size-3.5 -translate-y-1/2 text-muted-foreground" />
+							<Input
+								value={projectSearchKeyword}
+								onChange={(event) => setProjectSearchKeyword(event.target.value)}
+								onKeyDown={handleProjectSearchKeyDown}
+								placeholder={t("super:project.searchProject")}
+								aria-label={t("super:project.searchProject")}
+								autoComplete="off"
+								className="h-8 w-full pl-7 text-sm"
+								data-testid={projectSearchInputTestId}
+							/>
+						</div>
 						{isCreatingProject && (
 							<div className="mb-1">
 								<SidebarCreateInput
@@ -406,8 +443,8 @@ const CollapsedWorkspaceMenuWorkspaceItem = observer(function CollapsedWorkspace
 								/>
 							</div>
 						)}
-						{projects.length > 0 ? (
-							projects.length > 8 ? (
+						{filteredProjects.length > 0 ? (
+							filteredProjects.length > 8 ? (
 								<ScrollArea
 									ref={projectScrollRef}
 									className="h-[300px] w-full [&_[data-slot='scroll-area-scrollbar']]:-mr-1 [&_[data-slot='scroll-area-viewport']>div]:!block [&_[data-slot='scroll-area-viewport']>div]:pr-2"
@@ -431,13 +468,24 @@ const CollapsedWorkspaceMenuWorkspaceItem = observer(function CollapsedWorkspace
 							)
 						) : (
 							<div
-								className="px-2 py-1 text-sm leading-none text-[#a3a3a3]"
-								data-testid={projectEmptyTestId}
+								className={cn(
+									"px-2 text-sm leading-none text-[#a3a3a3]",
+									hasProjectSearchKeyword ? "py-3" : "py-1",
+								)}
+								data-testid={
+									hasProjectSearchKeyword
+										? projectSearchEmptyTestId
+										: projectEmptyTestId
+								}
 								data-collapsed-sidebar-dnd-drop-type="project-list"
 								data-collapsed-sidebar-dnd-workspace-id={workspace.id}
-								data-collapsed-sidebar-dnd-drop-empty="true"
+								data-collapsed-sidebar-dnd-drop-empty={
+									hasProjectSearchKeyword ? undefined : "true"
+								}
 							>
-								{t("super:project.noProjects")}
+								{hasProjectSearchKeyword
+									? t("super:project.noMatchingProjects")
+									: t("super:project.noProjects")}
 							</div>
 						)}
 					</PopoverContent>
