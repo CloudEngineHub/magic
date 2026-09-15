@@ -230,8 +230,12 @@ class UserToolCallService:
             ctx_update = await pending.agent_context.horizon.build_context_update(
                 injection_point="after_user_tool_call_cancel"
             )
-            if ctx_update:
-                await chat_history.append_user_message(ctx_update, show_in_ui=False, source="horizon")
+            if ctx_update is not None and ctx_update.content:
+                await chat_history.append_user_message(
+                    ctx_update.content,
+                    show_in_ui=False,
+                    source="horizon",
+                )
         except Exception as e:
             logger.warning(f"[AgentHorizon] horizon injection after user_tool_call cancel failed: {e}")
 
