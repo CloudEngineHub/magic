@@ -1,4 +1,4 @@
-import type { ReactNode, CSSProperties } from "react"
+import type { ReactNode, CSSProperties, RefObject } from "react"
 import type { MagicWidget } from "@magic-web/widget-sdk"
 import type {
 	DownloadImageMode,
@@ -12,6 +12,12 @@ import type { FileScope } from "@/apis/modules/fileScope"
 import type { HtmlNavigationRequest } from "../../contents/HTML/utils/html-navigation"
 
 // Base interfaces
+export interface FileSidebarControl {
+	isCollapsed: boolean
+	onToggle: () => void
+	triggerRef: RefObject<HTMLButtonElement>
+}
+
 export interface BaseComponentProps {
 	className?: string
 	style?: CSSProperties
@@ -178,6 +184,7 @@ export interface FilesViewerProps extends BaseComponentProps {
 	/** 明确打开预览时恢复显示，附件同步和缓存恢复不触发。 */
 	onPreviewOpen?: () => void
 	isPreviewCollapsed?: boolean
+	fileSidebarControl?: FileSidebarControl
 	/** 宿主文件树能够承接项目文件定位时才提供入口。 */
 	canLocateFile?: boolean
 	/** Controls whether project-level preview tabs are restored and persisted across mounts. */

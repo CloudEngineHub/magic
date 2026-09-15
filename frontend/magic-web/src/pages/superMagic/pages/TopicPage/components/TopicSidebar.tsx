@@ -18,6 +18,8 @@ import ShareModal from "../../../components/Share/Modal"
 import { ShareMode, ShareType } from "../../../components/Share/types"
 
 interface TopicSidebarProps {
+	onCollapse?: () => void
+	isCollapsed?: boolean
 	selectedProject: ProjectListItem | null
 	selectedWorkspace: Workspace | null
 	selectedTopic: Topic | null
@@ -31,6 +33,8 @@ interface TopicSidebarProps {
 
 function TopicSidebar({
 	selectedProject,
+	onCollapse,
+	isCollapsed = false,
 	selectedWorkspace,
 	selectedTopic,
 	isReadOnly,
@@ -156,6 +160,8 @@ function TopicSidebar({
 				/>
 			) : hideProjectCard ? null : (
 				<ProjectCardContainer
+					onCollapse={onCollapse}
+					isPanelVisible={!isCollapsed}
 					selectedProject={selectedProject}
 					selectedWorkspace={selectedWorkspace}
 				/>

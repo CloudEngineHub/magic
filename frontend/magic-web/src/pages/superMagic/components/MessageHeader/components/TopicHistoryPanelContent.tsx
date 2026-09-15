@@ -9,6 +9,7 @@ import {
 	Loader2,
 	MessageCirclePlus,
 	Pencil,
+	PanelRightClose,
 	Pin,
 	PinOff,
 	RefreshCw,
@@ -51,6 +52,8 @@ import type { SuperAgentTopicStatusItem } from "@/apis/modules/superMagic"
 import { isNoHoverCoarsePointer } from "@/utils/devices"
 
 export interface TopicHistoryPanelContentProps {
+	onCollapse?: () => void
+	isPanelVisible?: boolean
 	topics: Topic[]
 	projectId: string
 	selectedTopicId?: string
@@ -115,6 +118,8 @@ function TopicHistoryPanelContentInner({
 	hideDeleteTopicButton = false,
 	panelClassName,
 	onClose,
+	onCollapse,
+	isPanelVisible = true,
 	closeButtonRef,
 	searchInputRef,
 }: TopicHistoryPanelContentProps) {
@@ -133,6 +138,13 @@ function TopicHistoryPanelContentInner({
 		`topic-history-panel-${Math.random().toString(36).slice(2)}`,
 	)
 
+	useEffect(() => {
+		if (isPanelVisible) return
+		setOpenMenuTopicId(null)
+		setOpenContextMenuTopicId(null)
+		setHoveredTopicId(null)
+	}, [isPanelVisible])
+
 	const editInputRef = useRef<HTMLInputElement>(null)
 
 	const {
@@ -143,6 +155,7 @@ function TopicHistoryPanelContentInner({
 		reload: reloadTopics,
 		reset: resetTopics,
 	} = usePaginatedTopics({
+		enabled: isPanelVisible,
 		projectId,
 		selectedTopicId,
 		storeTopics: topics,
@@ -226,7 +239,7 @@ function TopicHistoryPanelContentInner({
 	}, [displayTopics])
 
 	useEffect(() => {
-		if (!projectId) return
+		if (!projectId || !isPanelVisible) return
 
 		const pollerId = topicStatusPollerIdRef.current
 		statusPollingService.startTopicStatusPolling({
@@ -250,7 +263,7 @@ function TopicHistoryPanelContentInner({
 		return () => {
 			statusPollingService.stopTopicStatusPolling(pollerId)
 		}
-	}, [projectId])
+	}, [projectId, isPanelVisible])
 
 	function getTopicWithStatusPatch(topic: Topic): Topic {
 		const patch = topicStatusPatches[topic.id]
@@ -819,11 +832,19 @@ function TopicHistoryPanelContentInner({
 						variant="ghost"
 						size="icon"
 						className="size-7 shrink-0 rounded-md"
-						onClick={() => onClose()}
-						aria-label={t("button.close", { ns: "interface" })}
+						onClick={onCollapse || onClose}
+						aria-label={
+							onCollapse
+								? t("sidebarPanels.collapseHistory")
+								: t("button.close", { ns: "interface" })
+						}
 						data-testid="message-header-history-close-button"
 					>
-						<X className="size-4" />
+						{onCollapse ? (
+							<PanelRightClose className="size-4" />
+						) : (
+							<X className="size-4" />
+						)}
 					</Button>
 				) : null}
 			</div>
@@ -852,7 +873,11 @@ function TopicHistoryPanelContentInner({
 								onClick={() => {
 									setSearchKeyword("")
 								}}
-								aria-label={t("button.close", { ns: "interface" })}
+								aria-label={
+									onCollapse
+										? t("sidebarPanels.collapseHistory")
+										: t("button.close", { ns: "interface" })
+								}
 								data-testid="message-header-history-search-clear"
 							>
 								<X className="size-3.5" />
