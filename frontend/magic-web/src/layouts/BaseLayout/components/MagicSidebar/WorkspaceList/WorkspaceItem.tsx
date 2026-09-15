@@ -37,7 +37,7 @@ function WorkspaceItem({ workspace, className, searchProjects, dndDisabled }: Wo
 	const isActive = workspaceStore.selectedWorkspace?.id === workspace.id
 	const { openDeleteModal, renderDeleteModal } = useWorkspaceDelete({
 		getDeleteSuccessMessage: () => t("workspace.deleteWorkspaceSuccess"),
-		getFallbackWorkspaceName: () => t("workspace.unnamedWorkspace"),
+		getFallbackWorkspaceName: () => workspace.name || t("workspace.unnamedWorkspace"),
 	})
 
 	const { openRenameModal, renderRenameModal } = useWorkspaceRename()
@@ -45,7 +45,7 @@ function WorkspaceItem({ workspace, className, searchProjects, dndDisabled }: Wo
 	const { menuProps, nodes } = useWorkspaceActionMenu({
 		workspace,
 		onDelete: openDeleteModal,
-		onRename: openRenameModal,
+		onRename: (workspaceId) => openRenameModal(workspaceId, workspace),
 		onMenuClose: () => setIsMenuOpen(false),
 		onTransferStart: () => setIsHovered(false),
 	})
