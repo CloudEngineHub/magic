@@ -136,9 +136,15 @@ function SidebarContentLayout({
 						maxSize={(maximum / available) * 100}
 						defaultSize={0}
 						onResize={(percent) => setExpanded(percent > 0)}
+						// 与分栏库保持相同的独立属性；移除 flex 简写会清掉未重新写入的 flexBasis，额外撑出内容高度。
 						style={
 							!size
-								? { flex: "0 1 auto", height: unmeasuredChoice ? "auto" : 0 }
+								? {
+										flexGrow: 0,
+										flexShrink: 1,
+										flexBasis: "auto",
+										height: unmeasuredChoice ? "auto" : 0,
+									}
 								: undefined
 						}
 					>

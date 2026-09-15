@@ -5,7 +5,7 @@ import { useTranslation } from "react-i18next"
 import { SidebarMenu, SidebarMenuButton, SidebarMenuItem } from "@/components/shadcn-ui/sidebar"
 import { sidebarStore } from "@/stores/layout/SidebarStore"
 
-/** 分类仍可全部收起；只缩短放不下的名称，不改变栏目状态或侧栏字号。 */
+/** 分类始终保留一个选中项；宽度不足时只缩短名称，不改变选择或侧栏字号。 */
 function ProjectNavigationTabs({ disabled }: { disabled: boolean }) {
 	const { t } = useTranslation("super")
 	const rootRef = useRef<HTMLDivElement>(null)
@@ -53,7 +53,7 @@ function ProjectNavigationTabs({ disabled }: { disabled: boolean }) {
 						isActive={sidebarStore.recentProjectsExpanded}
 						tooltip={{ children: recent, hidden: !compact, side: "top" }}
 						disabled={disabled}
-						onClick={() => sidebarStore.toggleNavigationSection("recent")}
+						onClick={() => sidebarStore.selectNavigationSection("recent")}
 						className="relative h-8 justify-center text-sm font-normal focus-visible:bg-sidebar-accent focus-visible:text-sidebar-accent-foreground focus-visible:ring-0 data-[active=true]:font-normal"
 						data-testid="sidebar-recent-projects-toggle"
 					>
@@ -75,7 +75,7 @@ function ProjectNavigationTabs({ disabled }: { disabled: boolean }) {
 						isActive={sidebarStore.workspacesExpanded}
 						tooltip={{ children: workspaces, hidden: !compact, side: "top" }}
 						disabled={disabled}
-						onClick={() => sidebarStore.toggleNavigationSection("workspaces")}
+						onClick={() => sidebarStore.selectNavigationSection("workspaces")}
 						className="relative h-8 justify-center text-sm font-normal focus-visible:bg-sidebar-accent focus-visible:text-sidebar-accent-foreground focus-visible:ring-0 data-[active=true]:font-normal"
 						data-testid="sidebar-workspaces-toggle"
 					>

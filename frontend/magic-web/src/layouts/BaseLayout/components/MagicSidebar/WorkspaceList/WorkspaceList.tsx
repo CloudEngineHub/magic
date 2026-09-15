@@ -214,7 +214,7 @@ function WorkspaceList({ beforeItems, onOpenManager, onBusyChange }: WorkspaceLi
 	}, [isSearchMode])
 
 	function handleStartCreateWorkspace() {
-		if (!sidebarStore.workspacesExpanded) sidebarStore.toggleNavigationSection("workspaces")
+		sidebarStore.selectNavigationSection("workspaces")
 		setIsCreatingWorkspace(true)
 	}
 
@@ -418,7 +418,7 @@ function WorkspaceList({ beforeItems, onOpenManager, onBusyChange }: WorkspaceLi
 	}, [displayedWorkspaces.length, loadNextPage, isExpanded])
 
 	const handleSearchOpen = useCallback(() => {
-		if (!sidebarStore.workspacesExpanded) sidebarStore.toggleNavigationSection("workspaces")
+		sidebarStore.selectNavigationSection("workspaces")
 		updateSearchState((draft) => {
 			draft.workspaces = toJS(workspaces)
 			draft.projects = []
