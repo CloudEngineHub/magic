@@ -40,6 +40,7 @@ vi.mock("@/utils/pubsub", () => ({
 	},
 	PubSubEvents: {
 		Send_Message_by_Content: "send-message-by-content",
+		Expand_Topic_Conversation_Panel: "expand-topic-conversation-panel",
 	},
 }))
 
@@ -94,6 +95,7 @@ vi.mock("@/pages/superMagic/components/MessageEditor/services/uploadMentionServi
 describe("useIframeAgentActions", () => {
 	beforeEach(() => {
 		vi.clearAllMocks()
+		mocks.publish.mockReset()
 		mocks.createTopic.mockResolvedValue({ id: "topic-1" })
 		mocks.getTopicDetail.mockImplementation(async ({ id }: { id: string }) => ({
 			id,
@@ -163,6 +165,12 @@ describe("useIframeAgentActions", () => {
 		await act(async () => {
 			await result.current.sendMessage({ message: "查询库存" })
 		})
+
+		expect(mocks.publish).toHaveBeenCalledWith("expand-topic-conversation-panel")
+		expect(mocks.publish).toHaveBeenCalledTimes(1)
+		expect(mocks.publish.mock.invocationCallOrder[0]).toBeLessThan(
+			mocks.dispatchMessage.mock.invocationCallOrder[0],
+		)
 
 		const processedContent = mocks.processMessageMentions.mock.calls[0]?.[0] as any
 		expect(processedContent.content[0].content[0]).toEqual({
@@ -505,7 +513,10 @@ describe("useIframeAgentActions", () => {
 				}),
 			}),
 		)
-		expect(mocks.publish).not.toHaveBeenCalled()
+		expect(mocks.publish).toHaveBeenCalledWith("expand-topic-conversation-panel")
+		expect(mocks.publish.mock.invocationCallOrder[0]).toBeLessThan(
+			mocks.createTopic.mock.invocationCallOrder[0],
+		)
 		expect(mocks.setSelectedTopic).not.toHaveBeenCalled()
 	})
 

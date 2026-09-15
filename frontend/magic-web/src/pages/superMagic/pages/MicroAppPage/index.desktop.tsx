@@ -17,6 +17,7 @@ import {
 	useTopicHistoryLayoutState,
 } from "@/pages/superMagic/pages/TopicPage/hooks/useTopicHistoryLayoutState"
 import { cn } from "@/utils/cn"
+import pubsub, { PubSubEvents } from "@/utils/pubsub"
 import PreviewDetailPopup, {
 	type PreviewDetail,
 	type PreviewDetailPopupRef,
@@ -204,6 +205,14 @@ function MicroAppPageInner({
 
 	// 折叠仅用于当前详情页的临时布局，重新进入微应用时始终展示对话上下文。
 	const [isMessagePanelCollapsed, setIsMessagePanelCollapsed] = useState(false)
+	// 此页面不使用 TopicDesktopPanels，需要自行响应 iframe 消息的展开通知。
+	useEffect(() => {
+		const expandMessagePanel = () => setIsMessagePanelCollapsed(false)
+		pubsub.subscribe(PubSubEvents.Expand_Topic_Conversation_Panel, expandMessagePanel)
+		return () => {
+			pubsub.unsubscribe(PubSubEvents.Expand_Topic_Conversation_Panel, expandMessagePanel)
+		}
+	}, [])
 	// 数据表格需要更宽的工作区；只恢复系统自动收起的状态，不覆盖用户手动操作。
 	const messagePanelCollapsedBeforeDatabaseRef = useRef(false)
 	const databaseAutoCollapsedRef = useRef(false)

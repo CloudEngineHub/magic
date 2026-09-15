@@ -1,10 +1,11 @@
 import { Children, forwardRef, useEffect, useImperativeHandle, type ReactNode } from "react"
-import { fireEvent, render, screen } from "@testing-library/react"
+import { act, fireEvent, render, screen } from "@testing-library/react"
 import { beforeEach, describe, expect, it, vi } from "vitest"
 
 import type { AttachmentItem } from "@/pages/superMagic/components/TopicFilesButton/hooks"
 import MicroAppPageDesktop from "../index.desktop"
 import { registerMicroAppDesktopWorkspaceCases } from "./index.desktop.workspace-cases"
+import pubsub, { PubSubEvents } from "@/utils/pubsub"
 
 const detailMocks = vi.hoisted(() => ({
 	openFileTab: vi.fn(),
@@ -494,6 +495,22 @@ describe("MicroAppPageDesktop", () => {
 
 		render(<MicroAppPageDesktop />)
 
+		expect(screen.getByTestId("desktop-conversation-panel")).toBeInTheDocument()
+		expect(screen.queryByTestId("micro-app-conversation-rail")).not.toBeInTheDocument()
+	})
+
+	it("expands a collapsed conversation panel when a micro-app sends a message", async () => {
+		render(<MicroAppPageDesktop />)
+		await screen.findByTestId("desktop-entry-preview")
+
+		const conversationPanelProps = conversationPanelMocks.render.mock.calls.at(-1)?.[0] as {
+			onToggleConversationPanel: () => void
+		}
+		act(() => conversationPanelProps.onToggleConversationPanel())
+		expect(screen.queryByTestId("desktop-conversation-panel")).not.toBeInTheDocument()
+		expect(screen.getByTestId("micro-app-conversation-rail")).toBeInTheDocument()
+
+		act(() => pubsub.publish(PubSubEvents.Expand_Topic_Conversation_Panel))
 		expect(screen.getByTestId("desktop-conversation-panel")).toBeInTheDocument()
 		expect(screen.queryByTestId("micro-app-conversation-rail")).not.toBeInTheDocument()
 	})

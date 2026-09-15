@@ -6,6 +6,7 @@
  */
 
 import { useMemoizedFn } from "ahooks"
+import pubsub, { PubSubEvents } from "@/utils/pubsub"
 import {
 	AgentType,
 	type ProjectListItem,
@@ -60,6 +61,12 @@ export function useIframeAgentActions(
 		if (!selectedProject) throw new Error("No project selected")
 		if (!topicStore) throw new Error("No topic store")
 		return { selectedProject, topicStore }
+	})
+	const notifyMicroAppMessageStarted = useMemoizedFn((project?: ProjectListItem | null) => {
+		// 微应用发起对话时先展示消息面板；开发预览可能尚未注入发布身份。
+		if (microAppContext?.microAppId || project?.project_mode === TopicMode.MicroApp) {
+			pubsub.publish(PubSubEvents.Expand_Topic_Conversation_Panel)
+		}
 	})
 	/**
 	 * 将 message 参数转换为 tiptap jsonContent。
@@ -153,6 +160,7 @@ export function useIframeAgentActions(
 	const sendMessage = useMemoizedFn(
 		async (params: { message: string | TiptapJSONContent; model?: string }): Promise<void> => {
 			const conversation = await ensureHostConversation()
+			notifyMicroAppMessageStarted(conversation.selectedProject)
 			const activeProjectId = conversation.selectedProject.id
 			const activeTopicStore = conversation.topicStore
 
@@ -197,6 +205,7 @@ export function useIframeAgentActions(
 				await sendMessage({ message: params.message, model: params.model })
 				return { topicId: currentTopic.id }
 			}
+			notifyMicroAppMessageStarted(activeProject)
 
 			const requestedAgentId = params.agentId
 
