@@ -1,23 +1,14 @@
-import { useState } from "react"
+import { useState, type RefObject } from "react"
 import { useTranslation } from "react-i18next"
-import { Spin } from "antd"
-import { CircleArrowUp, Trash } from "lucide-react"
-import {
-	IconHourglassEmpty,
-	IconArrowUpDashed,
-	IconChevronUp,
-	IconChevronDown,
-	IconEdit,
-} from "@tabler/icons-react"
+import { IconChevronUp, IconChevronDown } from "@tabler/icons-react"
 import { cn } from "@/utils/cn"
-import { Button } from "@/components/shadcn-ui/button"
-import MagicTooltip from "@/components/base/MagicTooltip"
-import { QueuedMessage } from "../../hooks/useMessageQueue"
-import CollapsibleText from "./components/CollapsibleText"
+import type { MessageEditorRef } from "../../../MessageEditor/types"
+import type { QueuedMessage } from "../../hooks/useMessageQueue"
 import MobileMessageQueue from "./MobileMessageQueue"
-import { trimQueueContent } from "./utils"
+import MessageQueueItems from "./MessageQueueItems"
 
 export interface MessageQueueProps {
+	editorRef?: RefObject<MessageEditorRef | null>
 	queue: QueuedMessage[]
 	queueStats: {
 		total: number
@@ -25,32 +16,27 @@ export interface MessageQueueProps {
 		processing: number
 		failed: number
 	}
-	editingQueueItem: QueuedMessage | null
 	onRemoveMessage: (messageId: string) => void
 	onSendMessage: (messageId: string) => void
 	onStartEdit: (messageId: string) => void
-	onCancelEdit: () => void
+	onWithdraw: (messageId: string) => void
+	onMove: (messageId: string, beforeId: string | null, afterId: string | null) => Promise<void>
+	isOperationPending?: boolean
 	className?: string
 	variant?: "default" | "mobile"
 }
-
-const actionButtonBase = cn(
-	"inline-flex size-4 shrink-0 cursor-pointer items-center justify-center rounded-sm text-foreground/80 transition-colors",
-	"hover:bg-fill hover:text-foreground",
-	"active:scale-95",
-	"focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring",
-	"disabled:pointer-events-none disabled:opacity-50",
-)
 
 /** Route queue rendering to the mobile prototype card only when callers opt in. */
 function MessageQueue({
 	queue,
 	queueStats,
-	editingQueueItem,
 	onRemoveMessage,
 	onSendMessage,
 	onStartEdit,
-	onCancelEdit,
+	onWithdraw,
+	onMove,
+	editorRef,
+	isOperationPending,
 	className,
 	variant = "default",
 }: MessageQueueProps) {
@@ -66,11 +52,13 @@ function MessageQueue({
 			<MobileMessageQueue
 				queue={queue}
 				queueStats={queueStats}
-				editingQueueItem={editingQueueItem}
 				onRemoveMessage={onRemoveMessage}
 				onSendMessage={onSendMessage}
 				onStartEdit={onStartEdit}
-				onCancelEdit={onCancelEdit}
+				onWithdraw={onWithdraw}
+				onMove={onMove}
+				editorRef={editorRef}
+				isOperationPending={isOperationPending}
 				className={className}
 				variant={variant}
 			/>
@@ -109,130 +97,17 @@ function MessageQueue({
 			{/* Queue content */}
 			{isExpanded && (
 				<div className="scrollbar-y-thin flex max-h-[200px] flex-col gap-2.5 overflow-y-auto overflow-x-hidden px-2.5 pb-2.5">
-					{queue.map((message) => {
-						const isEditing = editingQueueItem?.id === message.id
-						const isDisabled =
-							message.isDeletingLoading ||
-							message.isSendingLoading ||
-							message.isEditingLoading
-
-						return (
-							<div
-								key={message.id}
-								className={cn(
-									"flex items-start justify-between gap-3 rounded-[4px] [&_p]:m-0",
-									isEditing &&
-										"relative items-center pl-2 before:absolute before:bottom-0 before:left-0 before:top-0 before:w-[3px] before:rounded-[1.5px] before:bg-orange-500 before:content-[''] dark:before:bg-orange-400",
-								)}
-							>
-								<div
-									className={cn(
-										"flex min-w-0 flex-1 items-start gap-1",
-										isEditing && "items-center",
-									)}
-								>
-									{isEditing && (
-										<div className="flex shrink-0 self-start rounded-[4px] bg-orange-50 px-1 py-0.5 text-[10px] font-medium leading-[13px] text-orange-500 dark:bg-orange-500/20 dark:text-orange-400">
-											{t("messageQueue.editing")}
-										</div>
-									)}
-									<div className="flex min-w-0 flex-1 items-start gap-1">
-										<div className="flex size-4 shrink-0 items-start justify-center text-foreground/35">
-											<IconHourglassEmpty size={16} />
-										</div>
-										<div
-											className={cn(
-												"w-fit min-w-0 max-w-full break-words text-xs font-normal leading-4 text-foreground/80",
-												"[&>div]:leading-[1.4] [&_p]:!text-xs [&_p]:!leading-4 [&_p]:!text-foreground/80",
-												"[&_.magic-mention]:!text-[10px]",
-											)}
-										>
-											<CollapsibleText
-												content={trimQueueContent(message.content)}
-												maxLines={1}
-											/>
-										</div>
-									</div>
-								</div>
-								<div className="flex shrink-0 items-start gap-1">
-									{isEditing ? (
-										<Button
-											variant="secondary"
-											size="sm"
-											className="h-auto shrink-0 px-1 py-0.5 text-[10px] font-normal"
-											onClick={onCancelEdit}
-										>
-											{t("messageQueue.exitEdit")}
-										</Button>
-									) : (
-										<>
-											<MagicTooltip title={t("messageQueue.removeFromQueue")}>
-												<button
-													type="button"
-													aria-label={t("messageQueue.removeFromQueue")}
-													className={cn(
-														actionButtonBase,
-														message.isDeletingLoading &&
-															"cursor-not-allowed opacity-60",
-													)}
-													onClick={() => {
-														if (!message.isDeletingLoading)
-															onRemoveMessage(message.id)
-													}}
-													data-testid="on-remove-message"
-												>
-													{message.isDeletingLoading ? (
-														<Spin size="small" />
-													) : (
-														<Trash size={14} />
-													)}
-												</button>
-											</MagicTooltip>
-											<MagicTooltip title={t("messageQueue.editMessage")}>
-												<button
-													type="button"
-													aria-label={t("messageQueue.editMessage")}
-													className={cn(
-														actionButtonBase,
-														isDisabled &&
-															"cursor-not-allowed opacity-40",
-													)}
-													onClick={() => {
-														if (!isDisabled) onStartEdit(message.id)
-													}}
-													data-testid="on-start-edit"
-												>
-													<IconEdit size={14} />
-												</button>
-											</MagicTooltip>
-											<MagicTooltip title={t("messageQueue.submitNow")}>
-												<button
-													type="button"
-													aria-label={t("messageQueue.submitNow")}
-													className={cn(
-														actionButtonBase,
-														message.isSendingLoading &&
-															"cursor-not-allowed opacity-60",
-													)}
-													onClick={() => {
-														if (!message.isSendingLoading)
-															onSendMessage(message.id)
-													}}
-													data-testid="on-send-message"
-												>
-													{message.isSendingLoading ? (
-														<IconArrowUpDashed size={14} />
-													) : (
-														<CircleArrowUp size={14} />
-													)}
-												</button>
-											</MagicTooltip>
-										</>
-									)}
-								</div>
-							</div>
-						)
-					})}
+					<MessageQueueItems
+						queue={queue}
+						onRemoveMessage={onRemoveMessage}
+						onSendMessage={onSendMessage}
+						onStartEdit={onStartEdit}
+						onWithdraw={onWithdraw}
+						onMove={onMove}
+						editorRef={editorRef}
+						isOperationPending={isOperationPending}
+						variant="default"
+					/>
 				</div>
 			)}
 		</div>

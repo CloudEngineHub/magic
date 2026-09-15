@@ -1,3 +1,4 @@
+import QueueDraftNotice from "@/pages/superMagic/components/MessagePanel/components/MessageQueue/QueueDraftNotice"
 import { EditorContent } from "@/infrastructure/editors/tiptap/react"
 import { ArrowUp, Check, Loader2, Plus, Square, X } from "lucide-react"
 import { useDebounceFn } from "ahooks"
@@ -504,7 +505,7 @@ function MobileComposerComponent({
 		) : null
 
 	const composerInnerContent = (
-		<div className="relative">
+		<div className="relative" data-queue-editor-surface>
 			<div
 				className={cn(
 					shouldShowVoiceRecordingUi &&
@@ -516,6 +517,9 @@ function MobileComposerComponent({
 					files={files}
 					onRemove={logic.handleRemoveUploadedFile}
 				/>
+				<div className="px-4 [&:empty]:hidden">
+					<QueueDraftNotice context={editorContext.queueContext} />
+				</div>
 
 				<div
 					className="px-4 pb-1.5 pt-3"

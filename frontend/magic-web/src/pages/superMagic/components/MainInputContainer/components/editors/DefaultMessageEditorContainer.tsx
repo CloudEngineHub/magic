@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState, type RefObject } from "react"
+import { useEffect, useMemo, useRef, useState, type RefObject, type MutableRefObject } from "react"
 import type { JSONContent } from "@/infrastructure/editors/tiptap/core"
 import { useMemoizedFn } from "ahooks"
 import { useTranslation } from "react-i18next"
@@ -30,7 +30,7 @@ import { useOptionalSceneStateStore } from "../../stores"
 import { cn } from "@/utils/cn"
 import { generateTextFromJSONContent } from "@/pages/superMagic/components/MessageEditor/utils"
 import { TaskStatus } from "@/pages/superMagic/pages/Workspace/types"
-import { transformInspectorContent } from "@/pages/superMagic/components/MessageEditor/extensions/inspector-detail"
+import QueueDraftNotice from "../../../MessagePanel/components/MessageQueue/QueueDraftNotice"
 import { buildQueueMessageInput } from "./messageParams"
 import { resolveAgentSelection } from "@/services/superMagic/DefaultAgentSelectionService"
 import { useConversationInputLayout } from "../../../ConversationInputResize/context"
@@ -166,37 +166,30 @@ export default function DefaultMessageEditorContainer(props: DefaultMessageEdito
 		return () => clearTimeout(timer)
 	}, [editorContext?.selectedModel, tiptapEditorRef])
 
-	const prevEditingQueueItemRef = useRef(queueContext?.editingQueueItem ?? null)
-
+	const bindEditorRef = useMemoizedFn((editor: MessageEditorRef | null) => {
+		;(tiptapEditorRef as MutableRefObject<MessageEditorRef | null>).current = editor
+		if (queueContext?.editorRef)
+			(queueContext.editorRef as MutableRefObject<MessageEditorRef | null>).current = editor
+		if (editorContext?.editorRef)
+			(editorContext.editorRef as MutableRefObject<MessageEditorRef | null>).current = editor
+	})
+	const appliedDraftModeRef = useRef<string>()
 	useEffect(() => {
-		const currentEditingItem = queueContext?.editingQueueItem ?? null
-		const prevEditingItem = prevEditingQueueItemRef.current
-		const currentEditingId = currentEditingItem?.id
-		const prevEditingId = prevEditingItem?.id
-
-		if (currentEditingItem && tiptapEditorRef.current) {
-			if (!prevEditingId || currentEditingId !== prevEditingId) {
-				setTimeout(() => {
-					tiptapEditorRef.current?.setContent?.(
-						transformInspectorContent(currentEditingItem.content),
-					)
-					const ed = tiptapEditorRef.current?.editor
-					if (ed && !ed.isDestroyed) {
-						try {
-							ed.commands.focus()
-						} catch {
-							// view may not be mounted yet
-						}
-					}
-				}, 100)
-			}
-		} else if (!currentEditingItem && prevEditingItem && tiptapEditorRef.current) {
-			tiptapEditorRef.current?.clearContent()
-			setFocused(false)
+		const metadata = queueContext?.queueDraft?.queueDraft
+		if (!metadata) {
+			appliedDraftModeRef.current = undefined
+			return
 		}
+		if (appliedDraftModeRef.current === metadata.clientSyncId) return
+		appliedDraftModeRef.current = metadata.clientSyncId
+		if (metadata.topicMode)
+			(editorContext?.recoverTopicMode ?? editorContext?.setTopicMode)?.(metadata.topicMode)
+	}, [queueContext?.queueDraft, editorContext?.recoverTopicMode, editorContext?.setTopicMode])
 
-		prevEditingQueueItemRef.current = currentEditingItem
-	}, [queueContext?.editingQueueItem, tiptapEditorRef, setFocused])
+	const handleEditorReady = useMemoizedFn(() => {
+		queueContext?.onEditorReady()
+		editorContext?.onReady?.()
+	})
 
 	const handleSend = useMemoizedFn(async (params: HandleSendParams): Promise<boolean> => {
 		let hasStartedSend = false
@@ -224,14 +217,6 @@ export default function DefaultMessageEditorContainer(props: DefaultMessageEdito
 					? extra
 					: undefined,
 		}
-		if (queueContext?.editingQueueItem) {
-			if (!params.queueId || params.queueId === queueContext.editingQueueItem.id) {
-				queueContext.finishEditQueueItem(nextValue, params.mentionItems)
-				tiptapEditorRef.current?.clearContentAfterSend()
-				setFocused(false)
-				return true
-			}
-		}
 
 		// isPreparingSendRef 用于拦截弱网下的并发请求创建话题接口：
 		// isSending 基于 useState，赋值异步，无法在创建话题接口响应回来之前生效；
@@ -253,6 +238,24 @@ export default function DefaultMessageEditorContainer(props: DefaultMessageEdito
 			? { ...defaultParams, ...customParamsPatch }
 			: defaultParams
 		const finalParams: HandleSendParams = mergedParams
+
+		if (queueContext && tiptapEditorRef.current?.getQueueDraft()) {
+			isPreparingSendRef.current = true
+			setIsSending(true)
+			try {
+				const shouldClear = await queueContext.finishEditQueueItem(
+					buildQueueMessageInput(finalParams, params.value),
+				)
+				if (shouldClear) {
+					tiptapEditorRef.current?.clearContentAfterSend()
+					setFocused(false)
+				}
+				return shouldClear
+			} finally {
+				isPreparingSendRef.current = false
+				setIsSending(false)
+			}
+		}
 
 		const shouldQueue = showLoading && !isWaitingForUser && !params.isFromQueue && queueContext
 
@@ -457,57 +460,60 @@ export default function DefaultMessageEditorContainer(props: DefaultMessageEdito
 	)
 
 	return (
-		<>
-			<MessageEditor
-				ref={tiptapEditorRef}
-				{...editorStyleProps}
-				placeholder={placeholder}
-				promptCarousel={editorContext?.promptCarousel}
-				onSend={handleSend}
-				isTaskRunning={effectiveIsTaskRunning}
-				onInterrupt={editorContext?.handleInterrupt}
-				stopEventLoading={editorContext?.stopEventLoading}
-				selectedTopic={selectedTopic}
-				selectedProject={selectedProject}
-				selectedWorkspace={selectedWorkspace}
-				draftKey={draftKey}
-				topicMode={effectiveTopicMode}
-				modelTopicMode={editorContext?.modelTopicMode}
-				size={editorContext?.size ?? "default"}
-				modules={editorContext?.modules}
-				isSending={isSending}
-				sendButtonLoading={isHomePreparingSend}
-				onFocus={handleFocus}
-				onBlur={handleBlur}
-				onReady={editorContext?.onReady}
-				onFileClick={editorContext?.onFileClick}
-				onEnsureProject={handleEnsureProject}
-				attachments={editorContext?.attachments}
-				projectFilesStore={editorContext?.projectFilesStore}
-				topicModelStore={editorContext?.topicModelStore}
-				isEditingQueueItem={!!queueContext?.editingQueueItem}
-				onCreateTopic={() =>
-					createTopicForMessageContext({
-						selectedProject,
-						selectedTopic,
-						selectedWorkspace,
-						setSelectedProject: editorContext?.setSelectedProject,
-						setSelectedTopic: editorContext?.setSelectedTopic,
-						setSelectedWorkspace: editorContext?.setSelectedWorkspace,
-						topicStore: editorContext?.topicStore,
-					})
-				}
-				showLoading={showLoading}
-				editorModeSwitch={editorContext?.editorModeSwitch}
-				modelSwitch={editorContext?.modelSwitch}
-				mentionPanelStore={mentionPanelStore}
-				isAllowedMention={editorContext?.isAllowedMention}
-				layoutConfig={editorContext?.layoutConfig}
-				enableMessageSendByContent={editorContext?.enableMessageSendByContent ?? false}
-				skipInitialDraftRestore={editorContext?.skipInitialDraftRestore}
-			/>
+		<div className={cn("flex min-h-0 flex-col gap-1", shouldFillHeight && "h-full")}>
+			<div className={cn("min-h-0", shouldFillHeight && "flex-1")}>
+				<MessageEditor
+					ref={bindEditorRef}
+					headerContent={<QueueDraftNotice context={queueContext} />}
+					{...editorStyleProps}
+					placeholder={placeholder}
+					promptCarousel={editorContext?.promptCarousel}
+					onSend={handleSend}
+					isTaskRunning={effectiveIsTaskRunning}
+					onInterrupt={editorContext?.handleInterrupt}
+					stopEventLoading={editorContext?.stopEventLoading}
+					selectedTopic={selectedTopic}
+					selectedProject={selectedProject}
+					selectedWorkspace={selectedWorkspace}
+					draftKey={draftKey}
+					topicMode={effectiveTopicMode}
+					modelTopicMode={editorContext?.modelTopicMode}
+					size={editorContext?.size ?? "default"}
+					modules={editorContext?.modules}
+					isSending={isSending}
+					sendButtonLoading={isHomePreparingSend}
+					onFocus={handleFocus}
+					onBlur={handleBlur}
+					onReady={handleEditorReady}
+					onFileClick={editorContext?.onFileClick}
+					onEnsureProject={handleEnsureProject}
+					attachments={editorContext?.attachments}
+					projectFilesStore={editorContext?.projectFilesStore}
+					topicModelStore={editorContext?.topicModelStore}
+					isEditingQueueItem={!!queueContext?.editingQueueItem}
+					onCreateTopic={() =>
+						createTopicForMessageContext({
+							selectedProject,
+							selectedTopic,
+							selectedWorkspace,
+							setSelectedProject: editorContext?.setSelectedProject,
+							setSelectedTopic: editorContext?.setSelectedTopic,
+							setSelectedWorkspace: editorContext?.setSelectedWorkspace,
+							topicStore: editorContext?.topicStore,
+						})
+					}
+					showLoading={showLoading}
+					editorModeSwitch={editorContext?.editorModeSwitch}
+					modelSwitch={editorContext?.modelSwitch}
+					mentionPanelStore={mentionPanelStore}
+					isAllowedMention={editorContext?.isAllowedMention}
+					layoutConfig={editorContext?.layoutConfig}
+					enableMessageSendByContent={editorContext?.enableMessageSendByContent ?? false}
+					skipInitialDraftRestore={editorContext?.skipInitialDraftRestore}
+				/>
+			</div>
 			{editorContext?.showTopicExamplesPortal ? topicExamplesPortalNode : null}
-		</>
+		</div>
 	)
 }
 

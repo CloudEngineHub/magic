@@ -310,27 +310,21 @@ const ClawMobileConversationPanel = observer(
 						<div className="mb-2">
 							<MessageQueue
 								queue={messageQueue.queue}
+								editorRef={messageQueue.editorRef}
 								queueStats={messageQueue.queueStats}
-								editingQueueItem={messageQueue.editingQueueItem}
 								onRemoveMessage={messageQueue.removeFromQueue}
 								onSendMessage={messageQueue.sendQueuedMessage}
 								onStartEdit={messageQueue.startEditQueueItem}
-								onCancelEdit={messageQueue.cancelEditQueueItem}
+								onWithdraw={messageQueue.withdrawQueueItem}
+								onMove={messageQueue.moveQueueItem}
+								isOperationPending={messageQueue.isQueueOperationPending}
 								variant="mobile"
 							/>
 						</div>
 					) : null
 
 				return { messageQueueNode }
-			}, [
-				messageQueue.queue,
-				messageQueue.queueStats,
-				messageQueue.editingQueueItem,
-				messageQueue.removeFromQueue,
-				messageQueue.sendQueuedMessage,
-				messageQueue.startEditQueueItem,
-				messageQueue.cancelEditQueueItem,
-			])
+			}, [messageQueue])
 
 			const editorContext = useMemo<SceneEditorContext>(() => {
 				return {
@@ -364,11 +358,8 @@ const ClawMobileConversationPanel = observer(
 						})
 						return mergedParams
 					},
-					queueContext: {
-						editingQueueItem: messageQueue.editingQueueItem,
-						addToQueue: messageQueue.addToQueue,
-						finishEditQueueItem: messageQueue.finishEditQueueItem,
-					},
+					editorRef: messageQueue.editorRef,
+					queueContext: messageQueue,
 				}
 			}, [
 				clawCode,
@@ -387,9 +378,7 @@ const ClawMobileConversationPanel = observer(
 				store.workspaceStore.setSelectedWorkspace,
 				topicModelStore,
 				topicStore,
-				messageQueue.editingQueueItem,
-				messageQueue.addToQueue,
-				messageQueue.finishEditQueueItem,
+				messageQueue,
 			])
 
 			const messageListProviderValue = useClawPlaygroundMessageListContextValue({

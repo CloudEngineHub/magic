@@ -2,6 +2,7 @@ import React, { useEffect, useState } from "react"
 import { IconX, IconClock, IconTrash, IconInbox } from "@tabler/icons-react"
 import { useTranslation } from "react-i18next"
 import type { DraftData } from "../../types"
+import magicToast from "@/components/base/MagicToaster/utils"
 import MagicModal from "@/components/base/MagicModal"
 import { useDeepCompareEffect } from "ahooks"
 import { formatTime } from "@/utils/string"
@@ -84,9 +85,12 @@ function DraftBoxComponent({
 		})
 	}
 
-	const handleUseDraft = (draft: DraftData) => {
-		draftStore.useDraft(draft)
-		setVisible(false)
+	const handleUseDraft = async (draft: DraftData) => {
+		try {
+			if (await draftStore.useDraft(draft)) setVisible(false)
+		} catch {
+			magicToast.error(t("messageQueue.draftSaveFailed"))
+		}
 	}
 
 	useEffect(() => {

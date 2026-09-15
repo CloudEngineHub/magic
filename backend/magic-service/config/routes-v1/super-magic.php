@@ -274,6 +274,8 @@ Router::addGroup(
             Router::post('', [MessageApi::class, 'createMessageQueue']);
             // 修改消息队列
             Router::put('/{id}', [MessageApi::class, 'updateMessageQueue']);
+            Router::post('/{id}/restore', [MessageApi::class, 'restoreMessageQueue']);
+            Router::patch('/{id}/position', [MessageApi::class, 'moveMessageQueue']);
             // 删除消息队列
             Router::delete('/{id}', [MessageApi::class, 'deleteMessageQueue']);
             // 查询消息队列
