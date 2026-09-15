@@ -11,6 +11,8 @@ Checkpoint 远端同步
 """
 
 import asyncio
+import io
+import json
 import os
 import tempfile
 import zipfile
@@ -18,7 +20,7 @@ import shutil
 from pathlib import Path
 from typing import List, Optional
 
-from app.core.entity.checkpoint import VirtualCheckpoint
+from app.core.entity.checkpoint import CheckpointActivity, VirtualCheckpoint
 from app.infrastructure.checkpoint.metadata_manager import CheckpointMetadataManager
 from app.infrastructure.checkpoint.storage import KNOWN_SPACES, CheckpointStorage
 from app.infrastructure.storage.base import BaseFileProcessor
@@ -131,6 +133,11 @@ class CheckpointRemoteSync:
         远端 manifest 只在所有引用的归档都确认上传后才发布，因此恢复后可以直接
         用它初始化本地同步状态（哪些归档已在远端），避免重启后第一轮把已有的
         归档误判为未上传。
+
+        恢复时把 activity 置为 restore：从 manifest 落地到首个新 checkpoint
+        创建之间的初始化写入（如 CLI 状态探测）可能命中上一会话的旧 checkpoint，
+        restore 让 agfs 侧 hook 跳过这段窗口的记账；首个新 checkpoint 登记时
+        update_checkpoint_manifest 会把 activity 清回 idle。
         """
         key = self.manifest_key()
         try:
@@ -138,6 +145,10 @@ class CheckpointRemoteSync:
                 logger.info(f"远端 checkpoint manifest 不存在: {key}")
                 return False
             stream = await self.storage_service.download(key=key, options=None)
+            manifest_data = json.loads(stream.read())
+            if isinstance(manifest_data, dict):
+                manifest_data["activity"] = CheckpointActivity.RESTORE.value
+                stream = io.BytesIO(json.dumps(manifest_data, ensure_ascii=False).encode("utf-8"))
             manifest_file = self.storage.get_checkpoint_manifest_file_path()
             await async_write_bytes(manifest_file, stream.read())
             await self._seed_sync_state_from_manifest()
