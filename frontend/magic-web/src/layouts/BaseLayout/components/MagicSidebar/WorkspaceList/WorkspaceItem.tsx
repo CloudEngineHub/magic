@@ -262,6 +262,7 @@ function WorkspaceItem({
 									data-testid={workspaceToggleTestId}
 								>
 									<ChevronRight
+										strokeWidth={1.5}
 										className={cn(
 											"h-4 w-4 shrink-0 transition-transform",
 											isExpanded && "rotate-90",
@@ -271,9 +272,10 @@ function WorkspaceItem({
 								<NavigationStatusIcon
 									itemType="workspace"
 									status={workspace.workspace_status}
+									className="text-muted-foreground [&_.lucide]:stroke-[1.5]"
 								/>
 								<span
-									className="min-w-0 flex-1 truncate text-left text-[13px] font-medium leading-5"
+									className="min-w-0 flex-1 truncate text-left text-[13px] font-normal leading-5"
 									data-testid={workspaceNameTestId}
 								>
 									{workspace.name || t("super:workspace.unnamedWorkspace")}

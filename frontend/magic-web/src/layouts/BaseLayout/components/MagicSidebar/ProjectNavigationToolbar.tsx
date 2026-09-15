@@ -47,10 +47,10 @@ export default function ProjectNavigationToolbar({
 			}
 		>
 			{isSearchMode ? (
-				<div className="flex h-9 items-center gap-1 px-2 pr-3 duration-200 animate-in fade-in">
+				<div className="flex h-9 items-center gap-1 px-2 duration-200 animate-in fade-in">
 					<InputGroup className="h-7 flex-1 rounded-md bg-sidebar duration-300 animate-in fade-in slide-in-from-left-4 [&:has([data-slot=input-group-control]:focus-visible)]:border-sidebar-border [&:has([data-slot=input-group-control]:focus-visible)]:ring-0">
 						<InputGroupAddon align="inline-start">
-							<Search size={16} />
+							<Search size={16} strokeWidth={1.5} />
 						</InputGroupAddon>
 						<InputGroupInput
 							className="h-6"
@@ -71,19 +71,20 @@ export default function ProjectNavigationToolbar({
 					</InputGroup>
 					<Button
 						type="button"
+						variant="ghost"
 						size="icon-sm"
-						className="size-7 border bg-white text-foreground duration-300 animate-in fade-in hover:bg-accent"
+						className="size-6 text-muted-foreground duration-300 animate-in fade-in focus-visible:ring-1"
 						onClick={handleSearchClose}
 						disabled={disabled}
 						aria-label={t("common.cancel")}
 						data-testid="sidebar-workspace-list-search-close"
 					>
-						<X className="size-4" />
+						<X className="size-4" strokeWidth={1.5} />
 					</Button>
 				</div>
 			) : (
 				<div className="flex h-8 shrink-0 items-center justify-between gap-2 px-2">
-					<span className="min-w-0 flex-1 truncate text-xs text-muted-foreground">
+					<span className="min-w-0 flex-1 truncate text-[11px] leading-4 text-muted-foreground">
 						{recent
 							? t("super:projectNavigation.recentScope")
 							: t("super:projectNavigation.workspaceScope")}
@@ -101,10 +102,10 @@ export default function ProjectNavigationToolbar({
 							aria-label={searchLabel}
 							disabled={disabled}
 							data-testid="sidebar-workspace-list-search"
-							className="outline-hidden relative flex h-5 w-5 shrink-0 items-center justify-center rounded-md p-0 ring-sidebar-ring transition-transform hover:bg-sidebar-accent hover:text-sidebar-accent-foreground focus-visible:ring-2 [&>svg]:size-4"
+							className="outline-hidden relative flex size-6 shrink-0 items-center justify-center rounded-md p-0 ring-sidebar-ring transition-transform hover:bg-sidebar-accent hover:text-sidebar-accent-foreground focus-visible:bg-sidebar-accent focus-visible:ring-1 [&>svg]:size-4"
 							onClick={handleSearchOpen}
 						>
-							<Search className="h-4 w-4" />
+							<Search className="h-4 w-4" strokeWidth={1.5} />
 						</button>
 						{isInitialWorkspaceListLoading && (
 							<Loader2
@@ -119,12 +120,15 @@ export default function ProjectNavigationToolbar({
 							data-testid="sidebar-workspace-list-refresh"
 							disabled={disabled || isRefreshing}
 							className={cn(
-								"outline-hidden relative flex h-5 w-5 shrink-0 items-center justify-center rounded-md p-0 ring-sidebar-ring transition-transform hover:bg-sidebar-accent hover:text-sidebar-accent-foreground focus-visible:ring-2 [&>svg]:size-4",
+								"outline-hidden relative flex size-6 shrink-0 items-center justify-center rounded-md p-0 ring-sidebar-ring transition-transform hover:bg-sidebar-accent hover:text-sidebar-accent-foreground focus-visible:bg-sidebar-accent focus-visible:ring-1 [&>svg]:size-4",
 								"after:absolute after:-inset-2 md:after:hidden",
 							)}
 							onClick={() => void handleRefresh()}
 						>
-							<RefreshCw className={cn("h-4 w-4", isRefreshing && "animate-spin")} />
+							<RefreshCw
+								className={cn("h-4 w-4", isRefreshing && "animate-spin")}
+								strokeWidth={1.5}
+							/>
 						</button>
 						<button
 							type="button"
@@ -136,12 +140,12 @@ export default function ProjectNavigationToolbar({
 							disabled={disabled}
 							data-testid="sidebar-workspace-list-add"
 							className={cn(
-								"outline-hidden relative flex h-5 w-5 shrink-0 items-center justify-center rounded-md p-0 ring-sidebar-ring transition-transform hover:bg-sidebar-accent hover:text-sidebar-accent-foreground focus-visible:ring-2 [&>svg]:size-4",
+								"outline-hidden relative flex size-6 shrink-0 items-center justify-center rounded-md p-0 ring-sidebar-ring transition-transform hover:bg-sidebar-accent hover:text-sidebar-accent-foreground focus-visible:bg-sidebar-accent focus-visible:ring-1 [&>svg]:size-4",
 								"after:absolute after:-inset-2 md:after:hidden",
 							)}
 							onClick={handleStartCreateWorkspace}
 						>
-							<Plus className="h-4 w-4" />
+							<Plus className="h-4 w-4" strokeWidth={1.5} />
 						</button>
 					</div>
 				</div>

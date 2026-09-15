@@ -34,9 +34,9 @@ function CreateWorkspaceInput({ onCancel, onCreated }: CreateWorkspaceInputProps
 			onValueChange={setWorkspaceName}
 			onSubmit={handleSubmit}
 			onCancel={onCancel}
-			placeholder={t("super:workspace.createWorkspaceTip")}
+			placeholder={t("super:workspace.workspaceName")}
 			disabled={isCreating}
-			containerClassName="mb-1 pl-12 pr-2"
+			containerClassName="mb-1 px-2"
 			containerTestId="sidebar-create-workspace-input"
 			inputTestId="sidebar-create-workspace-name-input"
 			submitButtonTestId="sidebar-create-workspace-submit-button"

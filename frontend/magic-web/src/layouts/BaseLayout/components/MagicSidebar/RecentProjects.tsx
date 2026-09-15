@@ -75,7 +75,7 @@ const RecentProjectRow = observer(function RecentProjectRow({
 						) : (
 							<SmartTooltip
 								elementType="span"
-								className="min-w-0 flex-1 text-xs leading-4"
+								className="min-w-0 flex-1 text-[11px] leading-4"
 							>
 								{locationName}
 							</SmartTooltip>
@@ -182,7 +182,8 @@ function RecentProjects({
 		listRef: externalScrollRef ? listRef : undefined,
 		enabled: active,
 		projects: items,
-		rowHeight: 44,
+		// 两行信息使用 48px 点击区域，加上 4px 行间距，与实际虚拟行高度一致。
+		rowHeight: 52,
 		loadEnabled: active && busyIds.size === 0,
 		scrollKey: searching ? "recent-project-search" : "recent-projects",
 		hasMore,
@@ -252,7 +253,7 @@ function RecentProjects({
 						ref={list.virtualizer.measureElement}
 						data-index={row.index}
 						data-virtual-project-id={items[row.index].id}
-						className="absolute left-0 top-0 w-full pb-1 pl-3"
+						className="absolute left-0 top-0 w-full pb-1"
 						style={{ transform: `translateY(${row.start - list.scrollMargin}px)` }}
 					>
 						<RecentProjectRow

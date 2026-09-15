@@ -188,7 +188,7 @@ function CollapsedWorkspaceProjectRow({
 	) => (
 		<div
 			className={cn(
-				description ? "h-10 w-full rounded-md" : "h-8 w-full rounded-md",
+				description ? "h-12 w-full rounded-md" : "h-8 w-full rounded-md",
 				isSelected && "bg-sidebar-accent",
 			)}
 			draggable={canDrag}
@@ -206,7 +206,7 @@ function CollapsedWorkspaceProjectRow({
 				href={getWorkspaceProjectRouteUrl(workspaceId, project.id)}
 				draggable={false}
 				data-testid={`sidebar-collapsed-project-row-${project.id}`}
-				className="relative inline-flex h-full w-full items-center justify-start gap-0 rounded-md px-2 text-[13px] font-normal leading-[18px] text-current no-underline outline-none [-webkit-tap-highlight-color:transparent] hover:bg-sidebar-accent focus-visible:outline-none"
+				className="relative inline-flex h-full w-full items-center justify-start gap-0 rounded-md px-2 text-[13px] font-normal leading-[18px] text-current no-underline outline-none [-webkit-tap-highlight-color:transparent] hover:bg-sidebar-accent focus-visible:bg-sidebar-accent focus-visible:outline-none"
 				onMouseEnter={() => setIsHovered(true)}
 				onMouseLeave={() => setIsHovered(false)}
 				onClick={(event) => {
@@ -224,18 +224,6 @@ function CollapsedWorkspaceProjectRow({
 					onSelectProject(project)
 				}}
 			>
-				{/* 文件夹与运行状态共用固定宽度，切换状态时不移动项目名称。 */}
-				<span className="mr-2 flex size-4 shrink-0 items-center justify-center">
-					<NavigationStatusIcon
-						itemType="project"
-						status={project.project_status}
-						className={cn(
-							isSelected
-								? "text-sidebar-accent-foreground"
-								: "text-sidebar-foreground",
-						)}
-					/>
-				</span>
 				<div className="min-w-0 flex-1">
 					<div className="flex min-w-0 flex-1 items-center gap-1.5">
 						<span
@@ -257,6 +245,12 @@ function CollapsedWorkspaceProjectRow({
 								</SmartTooltip>
 							)}
 						</span>
+						{/* 状态只在运行时显示在名称后，普通项目不再占用一列文件夹图标。 */}
+						<NavigationStatusIcon
+							itemType="project"
+							status={project.project_status}
+							showDefaultIcon={false}
+						/>
 						{project.is_pinned && (
 							<PinnedTag className="h-3 w-3 border-0 bg-transparent p-0" />
 						)}
@@ -270,7 +264,7 @@ function CollapsedWorkspaceProjectRow({
 						)}
 					</div>
 					{description && (
-						<div className="min-w-0 text-xs leading-4 text-muted-foreground">
+						<div className="mt-0.5 min-w-0 text-[11px] leading-4 text-muted-foreground">
 							{description}
 						</div>
 					)}

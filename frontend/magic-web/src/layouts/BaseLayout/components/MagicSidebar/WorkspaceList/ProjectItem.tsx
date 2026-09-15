@@ -116,7 +116,7 @@ function ProjectItem({
 
 	if (isEditing && canRename) {
 		return (
-			<div className="w-full pl-6 pr-2" data-testid={`sidebar-project-rename-${project.id}`}>
+			<div className="w-full pr-2" data-testid={`sidebar-project-rename-${project.id}`}>
 				<SidebarCreateInput
 					inputClassName="px-2"
 					value={editingProjectName}
@@ -228,19 +228,7 @@ function ProjectItem({
 							className="w-full min-w-0 text-left text-current no-underline [-webkit-tap-highlight-color:transparent]"
 						>
 							<div className="flex w-full min-w-0 items-center">
-								<div className="flex min-w-0 flex-1 items-center gap-2">
-									{/* 状态位始终保留；开始或结束运行只换图标，不移动项目名称。 */}
-									<span className="flex size-4 shrink-0 items-center justify-center">
-										<NavigationStatusIcon
-											itemType="project"
-											status={project.project_status}
-											className={
-												isSelected
-													? "text-sidebar-accent-foreground"
-													: "text-sidebar-foreground"
-											}
-										/>
-									</span>
+								<div className="flex min-w-0 flex-1 items-center gap-1.5">
 									<span
 										className={cn(
 											"min-w-0 max-w-full shrink truncate text-left text-[13px] leading-5",
@@ -251,6 +239,12 @@ function ProjectItem({
 									>
 										{project.project_name || t("project.unnamedProject")}
 									</span>
+									{/* 普通项目直接显示名称；运行状态放在名称后，状态变化不移动文字起点。 */}
+									<NavigationStatusIcon
+										itemType="project"
+										status={project.project_status}
+										showDefaultIcon={false}
+									/>
 									{project.is_pinned && (
 										<PinnedTag className="h-3 w-3 border-0 bg-transparent p-0" />
 									)}

@@ -273,7 +273,11 @@ function ProjectNavigation({
 											onClick={() => openManager({ type: "collaboration" })}
 											data-testid="sidebar-content-share-workspace-button"
 										>
-											<UsersRound size={16} className="ml-6" />
+											<UsersRound
+												size={16}
+												strokeWidth={1.5}
+												className="ml-6 text-muted-foreground"
+											/>
 											<span>{t("workspace.shareWorkspaceName")}</span>
 										</SidebarMenuButton>
 									</SidebarMenuItem>
