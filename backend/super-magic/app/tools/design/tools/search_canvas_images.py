@@ -27,7 +27,7 @@ from app.tools.design.tools.base_generate_canvas_elements import (
     TaskPlaceholderInfo,
 )
 from app.tools.download_from_url import DownloadFromUrl, DownloadFromUrlParams
-from app.tools.image_search import ImageSearch, ImageSearchParams
+from app.tools.image_search import ImageSearch, ImageSearchParams, ImageSearchRequirement
 from app.utils.async_file_utils import async_mkdir, async_unlink
 
 logger = get_logger(__name__)
@@ -119,10 +119,10 @@ class SearchCanvasImagesParams(BaseToolParams):
         description="""<!--zh: 设计项目的相对路径。-->
 Relative path to the design project.""",
     )
-    topic_id: str = Field(
+    search_group_name: str = Field(
         ...,
-        description="""<!--zh: 搜索主题标识符，用于同一主题下去重。对同一主题使用相同的 topic_id，避免不同搜索词返回重复图片。-->
-Search topic identifier for deduplication. Use the same topic_id for the same search theme to avoid duplicate images across multiple calls.""",
+        description="""<!--zh: 自行为这组相关搜索起一个简短名称，如 product-report-images。同组后续搜索复用完全相同的名称；独立搜索使用新名称。组内图片共享去重记录。名称由你创建，不要查询或填写平台话题 ID。-->
+Choose a short name for this group of related searches, such as 'product-report-images'. Reuse the exact name for follow-up searches in the same group; choose a new name for a separate group. Images are deduplicated within each group. Create the name yourself; do not look up or use the platform conversation ID.""",
     )
     tasks: List[SearchTaskSpec] = Field(
         ...,
@@ -166,15 +166,25 @@ class SearchCanvasImages(BaseGenerateCanvasElements[SearchCanvasImagesParams]):
 
             workspace_path = self._get_runtime_workspace_dir(tool_context)
             logger.info(
-                f"开始搜索图片并添加到画布: topic_id={params.topic_id}, "
+                f"开始搜索图片并添加到画布: search_group_name={params.search_group_name}, "
                 f"tasks={len(params.tasks)}, project={params.project_path}"
             )
 
-            # 1. 将 tasks 转为 requirements_xml，调用 image_search（仅搜索，不下载）
+            # 1. 直接传入搜索需求；仅搜索模式不做视觉分析，由画布处理下载。
             search_result = await self._search_tool.execute_purely(
                 ImageSearchParams(
-                    topic_id=params.topic_id,
-                    requirements_xml=self._build_requirements_xml(params.tasks),
+                    search_group_name=params.search_group_name,
+                    requirements=[
+                        ImageSearchRequirement(
+                            name=task.name,
+                            query=task.query,
+                            visual_understanding_prompt="",
+                            requirement_explanation=task.requirement_explanation,
+                            expected_aspect_ratio=task.expected_aspect_ratio,
+                            count=task.count,
+                        )
+                        for task in params.tasks
+                    ],
                 ),
                 search_only=True,
             )
@@ -335,23 +345,6 @@ class SearchCanvasImages(BaseGenerateCanvasElements[SearchCanvasImagesParams]):
     # ------------------------------------------------------------------
     # 搜索与下载
     # ------------------------------------------------------------------
-
-    @staticmethod
-    def _build_requirements_xml(tasks: List[SearchTaskSpec]) -> str:
-        """将 tasks 列表转为 image_search 所需的 requirements_xml 格式"""
-        parts = ["<requirements>"]
-        for task in tasks:
-            parts.append("  <requirement>")
-            parts.append(f"    <name>{task.name}</name>")
-            parts.append(f"    <query>{task.query}</query>")
-            if task.requirement_explanation:
-                parts.append(f"    <requirement_explanation>{task.requirement_explanation}</requirement_explanation>")
-            if task.expected_aspect_ratio:
-                parts.append(f"    <expected_aspect_ratio>{task.expected_aspect_ratio}</expected_aspect_ratio>")
-            parts.append(f"    <count>{task.count}</count>")
-            parts.append("  </requirement>")
-        parts.append("</requirements>")
-        return "\n".join(parts)
 
     def _extract_image_urls(self, search_result: ToolResult) -> List[Dict[str, Any]]:
         """从搜索结果提取图片 URL 信息"""
