@@ -33,6 +33,7 @@ function createLayoutState(overrides?: Partial<ReturnType<typeof createLayoutSta
 		projectSiderWidthPx: 320,
 		messagePanelWidthPx: 420,
 		collapsedMessagePanelWidthPx: 24,
+		isProjectSiderCollapsed: false,
 		isConversationPanelCollapsed: false,
 		isDraggingProjectSider: false,
 		isDraggingMessagePanel: false,
@@ -147,6 +148,40 @@ describe("TopicDesktopPanels", () => {
 				showProjectResizeHandle: false,
 			}),
 		)
+	})
+
+	it("项目侧栏收起且无文件预览时显示全局导航分割线", () => {
+		layoutState = createLayoutState({ isProjectSiderCollapsed: true })
+
+		renderComponent({
+			shouldShowDetailPanel: false,
+			historyLayout: undefined,
+		})
+
+		expect(screen.getByTestId("collapsed-project-sidebar-divider")).toHaveClass(
+			"absolute",
+			"inset-y-0",
+			"left-0",
+			"w-px",
+			"bg-border",
+		)
+	})
+
+	it("项目侧栏展开时不显示全局导航分割线", () => {
+		renderComponent({
+			shouldShowDetailPanel: false,
+			historyLayout: undefined,
+		})
+
+		expect(screen.queryByTestId("collapsed-project-sidebar-divider")).not.toBeInTheDocument()
+	})
+
+	it("文件预览展开时不显示全局导航分割线", () => {
+		layoutState = createLayoutState({ isProjectSiderCollapsed: true })
+
+		renderComponent({ historyLayout: undefined })
+
+		expect(screen.queryByTestId("collapsed-project-sidebar-divider")).not.toBeInTheDocument()
 	})
 
 	it("switchable layout can disable automatic conversation expansion", () => {

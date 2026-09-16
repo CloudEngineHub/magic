@@ -159,6 +159,8 @@ function TopicDesktopPanels({
 		: 0
 	const shouldShowProjectResizeHandle =
 		showProjectSidebar && showProjectResizeHandle && !isProjectSiderCollapsed
+	const showCollapsedProjectDivider =
+		showProjectSidebar && isProjectSiderCollapsed && !shouldShowDetailPanel
 	const sidebarTransition =
 		reducedMotion || isDraggingProjectSider || isDraggingHistoryPanel
 			? "none"
@@ -408,7 +410,15 @@ function TopicDesktopPanels({
 			className={containerClassName}
 			data-testid="main-workspace-container"
 		>
-			<div className="flex h-full w-full min-w-0">
+			<div className="relative flex h-full w-full min-w-0">
+				{/* With both inner panes absent, preserve the boundary between global navigation and chat. */}
+				{showCollapsedProjectDivider && (
+					<div
+						className="pointer-events-none absolute inset-y-0 left-0 z-20 w-px bg-border"
+						data-testid="collapsed-project-sidebar-divider"
+						aria-hidden="true"
+					/>
+				)}
 				{showProjectSidebar ? (
 					<div
 						className="shrink-0"
