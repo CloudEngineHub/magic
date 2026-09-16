@@ -199,7 +199,7 @@ final class Wan30VideoAdapterTest extends TestCase
         self::assertSame([
             ['type' => 'reference_video', 'url' => 'https://example.com/source.mp4'],
         ], $payload['input']['media']);
-        self::assertSame(5, $payload['parameters']['duration']);
+        self::assertSame(-1, $payload['parameters']['duration']);
     }
 
     public function testBuildsVideoEditPayloadWithBase64ReferenceVideo(): void
