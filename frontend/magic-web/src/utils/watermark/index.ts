@@ -93,6 +93,20 @@ const WATERMARK_DEPTH_CONFIG: Record<PlatformWatermarkConfig["depth"], Watermark
 	},
 }
 
+/** Global platform watermark layout, kept separate from the legacy user ID watermark. */
+const PLATFORM_WATERMARK_LAYOUT_CONFIG = {
+	desktop: {
+		fontSize: 16,
+		gapX: 52,
+		gapY: 120,
+	},
+	mobile: {
+		fontSize: 13,
+		gapX: 26,
+		gapY: 52,
+	},
+} as const
+
 /** 窄屏（≤ {@link WATERMARK_MOBILE_MAX_WIDTH}）挂载时合并的间距/字号，挂载时判定一次，不监听 resize。 */
 export const WATERMARK_MOBILE_CONFIG = {
 	gapX: 30,
@@ -1042,7 +1056,12 @@ export function syncUserWatermark(userInfo: User.UserInfo | null) {
 		container: document.body,
 		text,
 		config: usesPlatformWatermark
-			? WATERMARK_DEPTH_CONFIG[platformWatermarkConfig?.depth ?? "light"]
+			? {
+					...WATERMARK_DEPTH_CONFIG[platformWatermarkConfig?.depth ?? "light"],
+					...(isMobileWatermarkViewport()
+						? PLATFORM_WATERMARK_LAYOUT_CONFIG.mobile
+						: PLATFORM_WATERMARK_LAYOUT_CONFIG.desktop),
+				}
 			: WATERMARK_CONFIG,
 	})
 }
