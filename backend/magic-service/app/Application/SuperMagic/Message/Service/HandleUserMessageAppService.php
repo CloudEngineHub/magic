@@ -54,6 +54,7 @@ use App\Infrastructure\Core\Exception\BusinessException;
 use App\Infrastructure\Core\Exception\EventExceptionBuilder;
 use App\Infrastructure\Core\Exception\ExceptionBuilder;
 use App\Infrastructure\SuperMagic\ExternalAPI\SandboxOS\Exception\SandboxOperationException;
+use App\Infrastructure\SuperMagic\ExternalAPI\SandboxOS\Exception\UserToolCallNotFoundException;
 use App\Infrastructure\SuperMagic\ExternalAPI\SandboxOS\Gateway\Constant\SandboxStatus;
 use App\Infrastructure\SuperMagic\Utils\TaskTerminationUtil;
 use App\Infrastructure\Util\IdGenerator\IdGenerator;
@@ -381,13 +382,25 @@ class HandleUserMessageAppService extends AbstractAppService
         UserMessageDTO $userMessageDTO,
         UserToolCallMessage $userToolCallMessage,
     ): void {
-        $this->topicTaskAppService->handleUserToolCallReply(
-            dataIsolation: $dataIsolation,
-            chatTopicId: $userMessageDTO->getChatTopicId(),
-            name: $userToolCallMessage->getName(),
-            toolCallId: $userToolCallMessage->getToolCallId(),
-            detail: $userToolCallMessage->getDetail() ?? [],
-        );
+        try {
+            $this->topicTaskAppService->handleUserToolCallReply(
+                dataIsolation: $dataIsolation,
+                chatTopicId: $userMessageDTO->getChatTopicId(),
+                name: $userToolCallMessage->getName(),
+                toolCallId: $userToolCallMessage->getToolCallId(),
+                detail: $userToolCallMessage->getDetail() ?? [],
+            );
+        } catch (UserToolCallNotFoundException $e) {
+            // 问题已被超时消费或重复提交：任务本身仍由沙箱侧超时恢复流程正常推进，
+            // 只提醒用户回答未送达，不作为任务错误处理。
+            $this->logger->warning('User tool call question expired or already consumed, answer dropped', [
+                'chat_topic_id' => $userMessageDTO->getChatTopicId(),
+                'tool_call_id' => $userToolCallMessage->getToolCallId(),
+                'name' => $userToolCallMessage->getName(),
+                'reason' => $e->getMessage(),
+            ]);
+            EventExceptionBuilder::throw(EventErrorCode::EVENT_USER_TOOL_CALL_EXPIRED, trans('super_magic.task.question_expired'));
+        }
     }
 
     /**
