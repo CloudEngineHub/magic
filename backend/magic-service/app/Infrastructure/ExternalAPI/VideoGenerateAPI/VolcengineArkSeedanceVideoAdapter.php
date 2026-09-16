@@ -10,6 +10,8 @@ namespace App\Infrastructure\ExternalAPI\VideoGenerateAPI;
 use App\Domain\ModelGateway\Contract\VideoGenerationConnectivityTestableInterface;
 use App\Domain\ModelGateway\Entity\ValueObject\QueueExecutorConfig;
 use App\Domain\ModelGateway\Entity\ValueObject\VideoGenerationConfig;
+use App\Domain\ModelGateway\Entity\ValueObject\VideoInputMode;
+use App\Domain\ModelGateway\Entity\ValueObject\VideoInputModeDefinition;
 use App\Domain\ModelGateway\Entity\VideoQueueOperationEntity;
 use App\ErrorCode\VideoGenerateErrorCode;
 use App\Infrastructure\ExternalAPI\VideoGenerateAPI\Prompt\AtStylePromptReferenceFormatter;
@@ -26,6 +28,14 @@ readonly class VolcengineArkSeedanceVideoAdapter implements VideoGenerationConne
 
     // 这是当前接入侧采用的保守默认值，不表示官方永远固定只会默认到 720p。
     private const string DEFAULT_RESOLUTION = '720p';
+
+    // 视频编辑任务：输出时长与宽高比都跟随待编辑视频，因此 duration 固定 -1、ratio 固定 adaptive。
+    private const int EDIT_DURATION = -1;
+
+    private const string EDIT_ASPECT_RATIO = 'adaptive';
+
+    // Seedance 2.5 起支持显式声明子任务类型，可把参数校验提前到提交阶段。
+    private const string EDIT_TASK_TYPE = 'edit';
 
     /**
      * 当前按方舟 Seedance 文档支持范围声明，后续如果官方扩容需要同步这里。
@@ -171,6 +181,24 @@ readonly class VolcengineArkSeedanceVideoAdapter implements VideoGenerationConne
                     'supported_fields' => ['frames'],
                     'frame_roles' => ['start', 'end'],
                 ],
+                // 视频编辑：至少一个参考视频，可搭配参考图片；时长与比例跟随待编辑视频，不暴露给前端。
+                VideoInputMode::VideoEdit->value => array_merge(
+                    VideoInputModeDefinition::videoEdit(
+                        description: $this->translateInputMode('video_edit'),
+                        supportedFields: ['reference_images', 'reference_videos'],
+                        maxCount: $referenceLimits['images'] + $referenceLimits['videos'],
+                        variants: [[
+                            'code' => 'image_and_video',
+                            'description' => $this->translateInputMode('video_edit'),
+                            'limits' => [
+                                'reference_images' => ['min' => 0, 'max' => $referenceLimits['images']],
+                                'reference_videos' => ['min' => 1, 'max' => $referenceLimits['videos']],
+                                'reference_audios' => ['min' => 0, 'max' => $referenceLimits['audios']],
+                            ],
+                        ]],
+                    )->toArray(),
+                    ['generation_constraints' => ['durations' => [], 'aspect_ratios' => []]],
+                ),
             ],
         ]);
     }
@@ -195,6 +223,7 @@ readonly class VolcengineArkSeedanceVideoAdapter implements VideoGenerationConne
         ]];
         $acceptedParams = ['prompt', 'task'];
         $ignoredParams = [];
+        $isVideoEdit = $this->normalizeInputMode($request['input_mode'] ?? null) === VideoInputMode::VideoEdit->value;
 
         $startFrameUri = $this->extractFrameUri($frames, ['start', 'first']);
         if ($startFrameUri !== null) {
@@ -288,6 +317,11 @@ readonly class VolcengineArkSeedanceVideoAdapter implements VideoGenerationConne
             'content' => $content,
         ];
 
+        if ($isVideoEdit && $this->isSeedanceTwoPointFiveModel($modelVersion, $modelId)) {
+            // 只有 2.5 支持显式声明子任务类型；2.0 系列由模型按素材与提示词自行判定。
+            $payload['omni_reference_task_type'] = self::EDIT_TASK_TYPE;
+        }
+
         $payload['resolution'] = $this->resolveResolution(
             $generation,
             $acceptedParams,
@@ -363,6 +397,19 @@ readonly class VolcengineArkSeedanceVideoAdapter implements VideoGenerationConne
             $acceptedParams[] = 'generation.watermark';
         }
 
+        // 视频编辑任务：时长与宽高比必须跟随待编辑视频，这里统一替换为固定值，
+        // 并把调用方传入的对应参数记为未生效，避免同时出现在 accepted 列表里。
+        if ($isVideoEdit) {
+            $payload['duration'] = self::EDIT_DURATION;
+            $payload['ratio'] = self::EDIT_ASPECT_RATIO;
+            $acceptedParams = array_diff($acceptedParams, ['generation.duration_seconds', 'generation.aspect_ratio']);
+            foreach (['duration_seconds', 'aspect_ratio'] as $field) {
+                if (array_key_exists($field, $generation)) {
+                    $ignoredParams[] = 'generation.' . $field;
+                }
+            }
+        }
+
         foreach (array_keys($generation) as $field) {
             if (in_array($field, [
                 'aspect_ratio',
@@ -383,7 +430,7 @@ readonly class VolcengineArkSeedanceVideoAdapter implements VideoGenerationConne
         }
 
         foreach (array_keys($request) as $field) {
-            if (in_array($field, ['model_id', 'task', 'prompt', 'inputs', 'generation', 'callbacks', 'execution'], true)) {
+            if (in_array($field, ['model_id', 'task', 'input_mode', 'prompt', 'inputs', 'generation', 'callbacks', 'execution'], true)) {
                 continue;
             }
 
@@ -525,6 +572,16 @@ readonly class VolcengineArkSeedanceVideoAdapter implements VideoGenerationConne
     private function buildPrompt(array $request): string
     {
         return (new AtStylePromptReferenceFormatter())->format(trim((string) ($request['prompt'] ?? '')));
+    }
+
+    /**
+     * 领域层已完成 input_mode 校验，这里只做缺省归一化，未传时按普通生成处理。
+     */
+    private function normalizeInputMode(mixed $mode): string
+    {
+        $mode = is_string($mode) ? strtolower(trim($mode)) : '';
+
+        return $mode === '' ? VideoInputMode::OmniReference->value : $mode;
     }
 
     /**
