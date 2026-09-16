@@ -60,24 +60,26 @@ function ProjectNavigationTabs({
 					/>
 				</div>
 			</fieldset>
-			<MagicTooltip
-				title={t("sidebarPanels.projectManager")}
-				placement="top"
-				disabled={disabled}
-			>
-				<Button
-					type="button"
-					variant="ghost"
-					size="icon-sm"
-					aria-label={t("sidebarPanels.projectManager")}
+			<div className="m-2 mb-0 shrink-0">
+				<MagicTooltip
+					title={t("sidebarPanels.projectManager")}
+					placement="top"
 					disabled={disabled}
-					onClick={onOpenManager}
-					data-testid="sidebar-project-manager"
-					className="size-6 shrink-0 text-sidebar-foreground/80 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground focus-visible:bg-sidebar-accent focus-visible:text-sidebar-accent-foreground focus-visible:ring-1"
 				>
-					<AppWindow size={16} />
-				</Button>
-			</MagicTooltip>
+					<Button
+						type="button"
+						variant="ghost"
+						size="icon-sm"
+						aria-label={t("sidebarPanels.projectManager")}
+						disabled={disabled}
+						onClick={onOpenManager}
+						data-testid="sidebar-project-manager"
+						className="!size-[34px] !rounded-[10px] !bg-white text-sidebar-foreground/80 hover:!bg-white hover:text-sidebar-accent-foreground focus-visible:bg-sidebar-accent focus-visible:text-sidebar-accent-foreground focus-visible:ring-1"
+					>
+						<AppWindow size={16} />
+					</Button>
+				</MagicTooltip>
+			</div>
 		</div>
 	)
 }

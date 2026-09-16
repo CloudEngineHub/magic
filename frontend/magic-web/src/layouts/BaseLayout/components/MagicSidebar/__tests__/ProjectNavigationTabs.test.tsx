@@ -84,7 +84,8 @@ describe("ProjectNavigationTabs", () => {
 	})
 
 	it("复用文件侧栏 SmoothTabs 样式并保留栏目切换事件", () => {
-		render(<ProjectNavigationTabs disabled={false} onOpenManager={vi.fn()} />)
+		const onOpenManager = vi.fn()
+		render(<ProjectNavigationTabs disabled={false} onOpenManager={onOpenManager} />)
 
 		const tabs = screen.getByTestId("sidebar-navigation-tabs")
 		expect(tabs).toHaveAttribute("data-value", "workspaces")
@@ -100,5 +101,10 @@ describe("ProjectNavigationTabs", () => {
 
 		fireEvent.click(screen.getByTestId("sidebar-workspaces-toggle"))
 		expect(selectNavigationSection).toHaveBeenCalledWith("workspaces")
+
+		const managerButton = screen.getByTestId("sidebar-project-manager")
+		expect(managerButton).toHaveClass("!size-[34px]", "!rounded-[10px]", "!bg-white")
+		fireEvent.click(managerButton)
+		expect(onOpenManager).toHaveBeenCalledTimes(1)
 	})
 })
