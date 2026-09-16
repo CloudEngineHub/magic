@@ -30,7 +30,10 @@ export default function MicroAppPreviewWorkspace({
 	onOpenFile,
 }: MicroAppPreviewWorkspaceProps) {
 	return (
-		<PublishedMicroAppConversationProvider appId={appId}>
+		<PublishedMicroAppConversationProvider
+			appId={appId}
+			appName={selectedProject?.project_name}
+		>
 			<div
 				className="flex h-full min-h-0 min-w-0 flex-1 overflow-hidden bg-background"
 				data-testid="micro-app-runtime-preview-workspace"

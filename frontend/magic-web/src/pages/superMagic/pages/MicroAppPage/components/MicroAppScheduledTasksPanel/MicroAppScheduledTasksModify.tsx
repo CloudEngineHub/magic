@@ -38,6 +38,12 @@ import {
 } from "@/components/business/AccountSetting/pages/ScheduledTasks/utils"
 import type { MicroAppScheduledTasksModifyProps } from "./types"
 import { applyMicroAppScheduledTaskContext } from "./utils"
+import {
+	isAgentSelectionAvailable,
+	resolveAgentSelection,
+	resolveDefaultAgentSelection,
+} from "@/services/superMagic/DefaultAgentSelectionService"
+import superMagicModeService from "@/services/superMagic/SuperMagicModeService"
 
 const formClassName = cn(
 	"[&_.magic-form-item]:mb-4",
@@ -117,9 +123,21 @@ export function MicroAppScheduledTasksModify({
 	const [form] = Form.useForm<ScheduledTask.UpdateTask>()
 	const [loading, setLoading] = useState(Boolean(initialValues))
 	const [promptRequired, setPromptRequired] = useState(false)
-	// 微应用员工可能不在员工列表中：编辑器使用 default 模型目录，运行协议仍固定为 micro-app。
-	const modelTopicMode = TopicMode.Default
-	const runtimeTopicMode = TopicMode.MicroApp
+	// Runtime tasks may use any employee; development tasks retain their fixed micro-app employee.
+	const allowSelectAgent = Boolean(context.microAppId)
+	const [agentSelection, setAgentSelection] = useState(() => {
+		const saved = initialValues?.message_content?.extra?.super_agent
+		return saved?.topic_pattern
+			? resolveAgentSelection(saved.topic_pattern, saved.agent_code)
+			: resolveDefaultAgentSelection()
+	})
+	const modelTopicMode = allowSelectAgent
+		? (agentSelection.modeIdentifier as TopicMode)
+		: TopicMode.Default
+	const runtimeTopicMode = allowSelectAgent ? agentSelection.topicPattern : TopicMode.MicroApp
+	const handleAgentChange = useMemoizedFn((nextMode: TopicMode) => {
+		setAgentSelection(resolveAgentSelection(nextMode))
+	})
 	const [selectedTopic, setSelectedTopic] = useState<Topic | null>(null)
 	const [modalStores] = useState(() => {
 		const projectFilesStore = new ProjectFilesStore()
@@ -173,6 +191,14 @@ export function MicroAppScheduledTasksModify({
 
 	const onOk = useMemoizedFn(async () => {
 		try {
+			if (
+				allowSelectAgent &&
+				superMagicModeService.modeList.length > 0 &&
+				!isAgentSelectionAvailable(agentSelection.modeIdentifier, agentSelection.agentCode)
+			) {
+				magicToast.error(t("accountPanel.timedTasks.agentUnavailable"))
+				return
+			}
 			const values = await form.validateFields()
 			if (!context.workspaceId || !context.projectId) {
 				magicToast.error(t("accountPanel.timedTasks.workspace"))
@@ -213,8 +239,11 @@ export function MicroAppScheduledTasksModify({
 									mentions: tiptapEditorRef.current?.mentionItems,
 									input_mode: "plan",
 									chat_mode: "normal",
-									// Ignore legacy values so editing an old task repairs its mode on save.
 									topic_pattern: runtimeTopicMode,
+									...(allowSelectAgent &&
+										agentSelection.agentCode && {
+											agent_code: agentSelection.agentCode,
+										}),
 									model: tiptapEditorRef.current?.selectedModel,
 									...(imageModel && { image_model: imageModel }),
 									...(videoModel && { video_model: videoModel }),
@@ -350,6 +379,10 @@ export function MicroAppScheduledTasksModify({
 							selectedProject={selectedProject}
 							selectedWorkspace={selectedWorkspace}
 							topicMode={modelTopicMode}
+							agentCode={allowSelectAgent ? agentSelection.agentCode : undefined}
+							setTopicMode={allowSelectAgent ? handleAgentChange : undefined}
+							showModeToggle={allowSelectAgent || undefined}
+							allowChangeMode={allowSelectAgent}
 							projectFilesStore={modalStores.projectFilesStore}
 							mentionPanelStore={modalStores.mentionPanelStore}
 							enableAiCompletion
@@ -359,14 +392,18 @@ export function MicroAppScheduledTasksModify({
 						/>
 					</Form.Item>
 
-					<ReadonlyContextItem
-						label={tSuper("scheduleTask.projectScope")}
-						value={context.projectName || context.projectId}
-					/>
-					<ReadonlyContextItem
-						label={tSuper("scheduleTask.agentScope")}
-						value={tSuper("scheduleTask.microAppAgent")}
-					/>
+					{!allowSelectAgent && (
+						<>
+							<ReadonlyContextItem
+								label={tSuper("scheduleTask.projectScope")}
+								value={context.projectName || context.projectId}
+							/>
+							<ReadonlyContextItem
+								label={tSuper("scheduleTask.agentScope")}
+								value={tSuper("scheduleTask.microAppAgent")}
+							/>
+						</>
+					)}
 
 					<ProjectTopicItem
 						mode="topic"
@@ -423,13 +460,19 @@ export function MicroAppScheduledTasksModify({
 					</div>
 					<div className="flex gap-2.5">
 						<Button
+							type="button"
 							variant="outline"
 							onClick={onCancel}
 							data-testid="micro-app-scheduled-task-cancel"
 						>
 							{t("accountPanel.timedTasks.cancel")}
 						</Button>
-						<Button onClick={onOk} data-testid="micro-app-scheduled-task-submit">
+						{/* onOk validates explicitly; native submit would invalidate that pending validation. */}
+						<Button
+							type="button"
+							onClick={onOk}
+							data-testid="micro-app-scheduled-task-submit"
+						>
 							{mode === "create"
 								? t("accountPanel.timedTasks.create")
 								: t("accountPanel.timedTasks.save")}

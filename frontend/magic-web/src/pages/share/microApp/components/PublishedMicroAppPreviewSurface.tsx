@@ -169,6 +169,7 @@ function PublishedMicroAppPreviewSurface({
 					fileAccess ? (
 						<PublishedMicroAppConversationProvider
 							appId={appId}
+							appName={displayAppName}
 							enabled={testIdPrefix === "micro-app-share"}
 						>
 							<div

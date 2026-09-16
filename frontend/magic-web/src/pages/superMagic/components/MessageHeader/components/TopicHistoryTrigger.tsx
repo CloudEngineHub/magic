@@ -13,7 +13,8 @@ export interface TopicHistoryTriggerProps {
 	triggerRef?: RefObject<HTMLButtonElement>
 }
 
-const headerIconButtonClassName = "!size-6 !min-h-6 !min-w-6 !rounded-md !p-0"
+const headerIconButtonClassName =
+	"!size-[var(--conversation-header-button-size,24px)] !min-h-6 !min-w-6 !rounded-md !p-0"
 
 export function TopicHistoryTrigger({
 	mode,

@@ -1,4 +1,6 @@
-import { fireEvent, render, screen, waitFor, within } from "@testing-library/react"
+import { useState } from "react"
+import { userStore } from "@/models/user"
+import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react"
 import { beforeEach, describe, expect, it, vi } from "vitest"
 import { SuperMagicApi } from "@/apis"
 import { loadProjectAttachments } from "@/pages/superMagic/services/projectAttachmentsLoader"
@@ -19,6 +21,8 @@ interface TestLayoutProps extends Record<string, unknown> {
 const layoutMocks = vi.hoisted(() => ({
 	props: null as TestLayoutProps | null,
 	messagePanelProps: null as Record<string, unknown> | null,
+	tasksProps: null as Record<string, unknown> | null,
+	expand: () => {},
 }))
 
 vi.mock("react-i18next", () => ({
@@ -34,6 +38,7 @@ vi.mock("@/pages/superMagic/pages/MicroAppPage/components/AppConversationPanel",
 				data-testid="app-conversation-panel"
 				data-file-access={JSON.stringify(useFileAccess())}
 			>
+				<input aria-label="draft" />
 				{props.trailingActions as React.ReactNode}
 			</div>
 		)
@@ -41,18 +46,20 @@ vi.mock("@/pages/superMagic/pages/MicroAppPage/components/AppConversationPanel",
 }))
 
 vi.mock("@/pages/superMagic/pages/TopicPage/components/TopicDesktopPanels", () => ({
-	default: (props: TestLayoutProps) => {
+	default: function MockTopicDesktopPanels(props: TestLayoutProps) {
+		const [collapsed, setCollapsed] = useState(true)
 		layoutMocks.props = props
+		layoutMocks.expand = () => setCollapsed(false)
 		return (
 			<div data-testid="topic-desktop-panels">
 				{props.detailPanel as React.ReactNode}
 				{props.isReadOnly
 					? null
 					: props.renderMessagePanel({
-							isConversationPanelCollapsed: true,
+							isConversationPanelCollapsed: collapsed,
 							isDraggingPanel: false,
-							onToggleConversationPanel: vi.fn(),
-							onExpandConversationPanel: vi.fn(),
+							onToggleConversationPanel: () => setCollapsed((value) => !value),
+							onExpandConversationPanel: () => setCollapsed(false),
 							historyTriggerMode: "layout",
 							isHistoryPanelOpen: false,
 							onToggleHistoryPanel: vi.fn(),
@@ -70,9 +77,20 @@ vi.mock("@/pages/superMagic/components/MessageHeader", () => ({
 	MessageHeaderTopicHistoryPanel: () => <div data-testid="message-header-topic-history-panel" />,
 }))
 
-vi.mock("../PublishedMicroAppAttachmentPopover", () => ({
-	default: () => <button data-testid="published-micro-app-attachments-button" />,
-}))
+vi.mock(
+	"@/pages/superMagic/pages/MicroAppPage/components/MicroAppScheduledTasksPanel/MicroAppScheduledTasksPanel",
+	() => ({
+		default: function MockScheduledTasksPanel(props: Record<string, unknown>) {
+			layoutMocks.tasksProps = props
+			return (
+				<div
+					data-testid="runtime-tasks"
+					data-file-access={JSON.stringify(useFileAccess())}
+				/>
+			)
+		},
+	}),
+)
 
 vi.mock("@/models/user", () => ({
 	userStore: {
@@ -95,6 +113,8 @@ vi.mock("@/pages/superMagic/services/projectAttachmentsLoader", () => ({
 
 describe("PublishedMicroAppConversationProvider", () => {
 	beforeEach(() => {
+		userStore.user.authorization = "test-token"
+		layoutMocks.tasksProps = null
 		layoutMocks.props = null
 		layoutMocks.messagePanelProps = null
 		vi.mocked(loadProjectAttachments).mockClear()
@@ -125,7 +145,7 @@ describe("PublishedMicroAppConversationProvider", () => {
 
 		expect(screen.getByTestId("preview-child")).toBeInTheDocument()
 		expect(screen.getByTestId("topic-desktop-panels")).toBeInTheDocument()
-		expect(layoutMocks.props?.isReadOnly).toBe(true)
+		expect(layoutMocks.props?.isReadOnly).toBe(false)
 		await waitFor(() => {
 			expect(SuperMagicApi.getMicroAppRuntimeProject).toHaveBeenCalledWith("app-1", {
 				enableErrorMessagePrompt: false,
@@ -169,7 +189,8 @@ describe("PublishedMicroAppConversationProvider", () => {
 		)
 		expect(
 			JSON.parse(
-				screen.getByTestId("app-conversation-panel").getAttribute("data-file-access")!,
+				screen.getByTestId("app-conversation-panel").getAttribute("data-file-access") ??
+					"null",
 			),
 		).toEqual({ kind: "session", projectId: "runtime-project-1", topicId: "" })
 		expect(loadProjectAttachments).toHaveBeenCalledWith({
@@ -182,6 +203,7 @@ describe("PublishedMicroAppConversationProvider", () => {
 				showProjectSidebar: false,
 				showProjectResizeHandle: false,
 				initialConversationPanelCollapsed: true,
+				collapsedConversationPanelWidth: 48,
 				persistConversationPanelState: false,
 				conversationResizeHandleGripVariant: "dots",
 				detailResizeHandleClassName: "border-l border-border",
@@ -251,6 +273,130 @@ describe("PublishedMicroAppConversationProvider", () => {
 		const { unmount } = render(historyPanel)
 		expect(screen.getByTestId("message-header-topic-history-panel")).toBeInTheDocument()
 		unmount()
+	})
+
+	it("switches tasks, files and conversation in the same area and keeps the draft", async () => {
+		vi.mocked(SuperMagicApi.getMicroAppRuntimeProject).mockResolvedValue({
+			exists: true,
+			project: { id: "runtime-project" },
+		} as never)
+		vi.mocked(SuperMagicApi.getProjectDetail).mockResolvedValue({
+			id: "runtime-project",
+			workspace_id: "runtime-workspace",
+			project_name: "Runtime",
+		} as never)
+		vi.mocked(SuperMagicApi.getTopicsByProjectId).mockResolvedValue({ list: [] } as never)
+		render(
+			<PublishedMicroAppConversationProvider appId="app-1" appName="My app">
+				<div />
+			</PublishedMicroAppConversationProvider>,
+		)
+		await waitFor(() =>
+			expect(layoutMocks.messagePanelProps?.selectedProject).toMatchObject({
+				id: "runtime-project",
+			}),
+		)
+		fireEvent.change(screen.getByLabelText("draft"), { target: { value: "Unsent message" } })
+		fireEvent.click(screen.getByTestId("published-micro-app-tasks-button"))
+		expect(await screen.findByTestId("runtime-tasks")).toBeVisible()
+		expect(layoutMocks.tasksProps).toMatchObject({
+			selectProjectId: "runtime-project",
+			selectWorkspaceId: "runtime-workspace",
+			microAppId: "app-1",
+			microAppName: "My app",
+			compact: true,
+		})
+		expect(
+			JSON.parse(
+				screen.getByTestId("runtime-tasks").getAttribute("data-file-access") ?? "null",
+			),
+		).toMatchObject({ kind: "session", projectId: "runtime-project" })
+		expect(screen.getByLabelText("draft")).not.toBeVisible()
+		fireEvent.click(screen.getByTestId("published-micro-app-attachments-button"))
+		expect(screen.getByTestId("published-micro-app-attachments-panel")).toBeVisible()
+		expect(screen.queryByTestId("runtime-tasks")).not.toBeInTheDocument()
+		fireEvent.click(screen.getByTestId("published-micro-app-conversation-button"))
+		expect(screen.getByLabelText("draft")).toBeVisible()
+		expect(screen.getByLabelText("draft")).toHaveValue("Unsent message")
+		expect(SuperMagicApi.ensureMicroAppRuntimeProject).not.toHaveBeenCalled()
+	})
+
+	it.each(["tasks", "attachments"])(
+		"returns from collapsed %s to conversation through history",
+		async (panel) => {
+			vi.mocked(SuperMagicApi.getMicroAppRuntimeProject).mockResolvedValue({
+				exists: true,
+				project: { id: "runtime-project" },
+			} as never)
+			vi.mocked(SuperMagicApi.getProjectDetail).mockResolvedValue({
+				id: "runtime-project",
+				workspace_id: "workspace",
+			} as never)
+			vi.mocked(SuperMagicApi.getTopicsByProjectId).mockResolvedValue({ list: [] } as never)
+			render(
+				<PublishedMicroAppConversationProvider appId="app-1">
+					<div />
+				</PublishedMicroAppConversationProvider>,
+			)
+			await waitFor(() =>
+				expect(layoutMocks.messagePanelProps?.selectedProject).toMatchObject({
+					id: "runtime-project",
+				}),
+			)
+			fireEvent.click(screen.getByTestId(`published-micro-app-${panel}-button`))
+			expect(screen.getByLabelText("draft")).not.toBeVisible()
+			fireEvent.click(
+				screen.getByRole("button", { name: "microAppPage.conversation.collapse" }),
+			)
+			const historyPanel = layoutMocks.props?.historyLayout.renderPanel({
+				isConversationPanelCollapsed: true,
+				onExpandConversationPanel: layoutMocks.expand,
+				onClose: vi.fn(),
+			}) as React.ReactElement<{ onExpandConversationPanel: () => void }>
+			act(() => {
+				historyPanel.props.onExpandConversationPanel()
+			})
+			expect(screen.getByLabelText("draft")).toBeVisible()
+		},
+	)
+
+	it("creates the runtime project from the tasks entry and allows retry after failure", async () => {
+		vi.mocked(SuperMagicApi.ensureMicroAppRuntimeProject)
+			.mockRejectedValueOnce(new Error("failed"))
+			.mockResolvedValueOnce({ project: { id: "runtime-new" } } as never)
+		vi.mocked(SuperMagicApi.getProjectDetail).mockResolvedValue({
+			id: "runtime-new",
+			workspace_id: "runtime-workspace",
+		} as never)
+		vi.mocked(SuperMagicApi.getTopicsByProjectId).mockResolvedValue({ list: [] } as never)
+		render(
+			<PublishedMicroAppConversationProvider appId="app-1">
+				<div />
+			</PublishedMicroAppConversationProvider>,
+		)
+		await act(() => Promise.resolve())
+		fireEvent.click(screen.getByTestId("published-micro-app-tasks-button"))
+		expect(await screen.findByRole("alert")).toHaveTextContent(
+			"microAppPage.conversation.loadFailed",
+		)
+		expect(screen.queryByTestId("runtime-tasks")).not.toBeInTheDocument()
+		fireEvent.click(screen.getByRole("button", { name: "common.retry" }))
+		expect(await screen.findByTestId("runtime-tasks")).toBeVisible()
+		expect(SuperMagicApi.ensureMicroAppRuntimeProject).toHaveBeenCalledTimes(2)
+		expect(SuperMagicApi.ensureMicroAppRuntimeProject).toHaveBeenLastCalledWith("app-1")
+		expect(layoutMocks.tasksProps?.selectProjectId).toBe("runtime-new")
+	})
+
+	it("keeps runtime controls hidden for unauthenticated visitors", async () => {
+		userStore.user.authorization = ""
+		render(
+			<PublishedMicroAppConversationProvider appId="app-1">
+				<div />
+			</PublishedMicroAppConversationProvider>,
+		)
+		await act(() => Promise.resolve())
+		expect(screen.queryByTestId("published-micro-app-tasks-button")).not.toBeInTheDocument()
+		expect(SuperMagicApi.ensureMicroAppRuntimeProject).not.toHaveBeenCalled()
 	})
 
 	it("returns the hydrated project from ensureConversation", async () => {
@@ -330,9 +476,12 @@ describe("PublishedMicroAppConversationProvider", () => {
 		)
 
 		appA.resolve({ exists: true, project: { id: "project-a" } })
-		await new Promise((resolve) => setTimeout(resolve, 0))
+		await act(async () => {
+			await new Promise((resolve) => setTimeout(resolve, 0))
+		})
 		expect(SuperMagicApi.getProjectDetail).not.toHaveBeenCalled()
-		expect(layoutMocks.props?.isReadOnly).toBe(true)
+		expect(layoutMocks.messagePanelProps?.selectedProject).toBeNull()
+		expect(layoutMocks.props?.isReadOnly).toBe(false)
 	})
 })
 

@@ -59,6 +59,8 @@ interface TopicDesktopPanelsProps {
 	autoExpandConversationWhenDetailVisible?: boolean
 	persistConversationPanelState?: boolean
 	initialConversationPanelCollapsed?: boolean
+	/** Embedding pages can reserve horizontal padding around the collapsed navigation. */
+	collapsedConversationPanelWidth?: number
 	conversationResizeHandleClassName?: string
 	conversationResizeHandleGripVariant?: "default" | "dots"
 	/** Keep overlays inside an embedding page instead of anchoring them to the viewport. */
@@ -95,6 +97,7 @@ function TopicDesktopPanels({
 	autoExpandConversationWhenDetailVisible = true,
 	persistConversationPanelState = true,
 	initialConversationPanelCollapsed = false,
+	collapsedConversationPanelWidth,
 	conversationResizeHandleClassName,
 	conversationResizeHandleGripVariant = "default",
 	historyOverlayScope = "viewport",
@@ -142,7 +145,7 @@ function TopicDesktopPanels({
 		containerWidthPx,
 		projectSiderWidthPx: storedProjectSiderWidthPx,
 		messagePanelWidthPx,
-		collapsedMessagePanelWidthPx,
+		collapsedMessagePanelWidthPx: defaultCollapsedMessagePanelWidthPx,
 		isConversationPanelCollapsed,
 		isDraggingProjectSider,
 		isDraggingMessagePanel,
@@ -163,6 +166,8 @@ function TopicDesktopPanels({
 			historyResize?.onWidthCommit(result.width)
 		},
 	})
+	const collapsedMessagePanelWidthPx =
+		collapsedConversationPanelWidth ?? defaultCollapsedMessagePanelWidthPx
 	// Preserve the stored project width while removing both its visual slot and resize affordance.
 	const projectSiderWidthPx = showProjectSidebar
 		? isProjectSiderCollapsed

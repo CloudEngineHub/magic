@@ -13,6 +13,7 @@ import { useRef } from "react"
 import { useTranslation } from "react-i18next"
 
 import { Button } from "@/components/shadcn-ui/button"
+import { ScrollArea } from "@/components/shadcn-ui/scroll-area"
 import MagicIcon from "@/components/base/MagicIcon"
 import { ScheduledTask } from "@/types/scheduledTask"
 import { useScheduleTaskWithModal } from "@/components/business/AccountSetting/pages/ScheduledTasks/hooks/useScheduleTask"
@@ -28,6 +29,9 @@ interface MicroAppScheduledTasksPanelProps {
 	workspaceName?: string
 	projectName?: string
 	className?: string
+	microAppId?: string
+	microAppName?: string
+	compact?: boolean
 }
 
 export default function MicroAppScheduledTasksPanel({
@@ -37,6 +41,9 @@ export default function MicroAppScheduledTasksPanel({
 	workspaceName,
 	projectName,
 	className,
+	microAppId,
+	microAppName,
+	compact = false,
 }: MicroAppScheduledTasksPanelProps) {
 	const { t } = useTranslation("super")
 	const taskListRef = useRef<HTMLDivElement>(null)
@@ -47,6 +54,8 @@ export default function MicroAppScheduledTasksPanel({
 		workspaceName,
 		projectName,
 		topicId: selectTopicId,
+		microAppId,
+		microAppName,
 	})
 	const {
 		tasks,
@@ -177,15 +186,23 @@ export default function MicroAppScheduledTasksPanel({
 
 	return (
 		<div className={"flex h-full flex-col bg-muted/20 " + (className || "")}>
-			<header className="flex h-[72px] shrink-0 items-center justify-between border-b border-border px-8">
-				<div className="flex min-w-0 flex-col gap-1">
-					<h2 className="truncate text-lg font-semibold leading-6 text-foreground">
-						{t("scheduleTask.title")}
-					</h2>
-					<p className="text-sm leading-5 text-muted-foreground">
-						{t("scheduleTask.workspaceDescription")}
-					</p>
-				</div>
+			<header
+				className={
+					compact
+						? "flex shrink-0 justify-end border-b border-border p-3"
+						: "flex h-[72px] shrink-0 items-center justify-between border-b border-border px-8"
+				}
+			>
+				{!compact && (
+					<div className="flex min-w-0 flex-col gap-1">
+						<h2 className="truncate text-lg font-semibold leading-6 text-foreground">
+							{t("scheduleTask.title")}
+						</h2>
+						<p className="text-sm leading-5 text-muted-foreground">
+							{t("scheduleTask.workspaceDescription")}
+						</p>
+					</div>
+				)}
 				<Button
 					size="sm"
 					onClick={handleCreateTask}
@@ -197,50 +214,55 @@ export default function MicroAppScheduledTasksPanel({
 				</Button>
 			</header>
 
-			<div
-				ref={taskListRef}
-				onScroll={handleScroll}
-				className="flex h-[calc(100%-72px)] flex-1 flex-col items-center gap-4 overflow-y-auto overflow-x-hidden px-8 py-6"
-				data-testid="micro-app-scheduled-tasks-list"
+			<ScrollArea
+				viewportRef={taskListRef}
+				viewportProps={{
+					onScroll: handleScroll,
+					"data-testid": "micro-app-scheduled-tasks-list",
+				}}
+				className="min-h-0 flex-1"
+				viewportClassName={compact ? "p-3" : "px-8 py-6"}
 			>
-				{!contextReady ? (
-					<div
-						className="flex h-full w-full max-w-5xl items-center justify-center rounded-xl border border-dashed border-border bg-background/60 p-8 text-center text-sm text-muted-foreground"
-						data-testid="micro-app-scheduled-tasks-context-loading"
-					>
-						{t("scheduleTask.contextLoading")}
-					</div>
-				) : tasks.length > 0 ? (
-					tasks.map((task) => (
-						<MicroAppScheduledTaskItem
-							key={task.id}
-							data={task}
-							onClick={() => onTaskEdit(task)}
-							onSwitchChange={(enabled) => onStatusChange(task, enabled)}
-							{...delegateProps}
-						/>
-					))
-				) : (
-					<div className="flex h-full w-full max-w-5xl flex-col items-center justify-center rounded-xl border border-dashed border-border bg-background/60 p-8 text-center">
-						<div className="flex size-12 items-center justify-center rounded-xl bg-primary/10 text-primary">
-							<IconCalendarEvent size={24} stroke={1.8} />
-						</div>
-						<h3 className="mt-4 text-lg font-medium leading-7 text-foreground">
-							{t("scheduleTask.emptyTitle")}
-						</h3>
-						<p className="mt-2 text-sm leading-5 text-muted-foreground">
-							{t("scheduleTask.emptyDescription")}
-						</p>
-						<Button
-							onClick={handleCreateTask}
-							className="mt-6"
-							disabled={!contextReady}
+				<div className="flex min-h-full flex-col items-center gap-4">
+					{!contextReady || (loading && !tasks.length) ? (
+						<div
+							className="flex h-full w-full max-w-5xl items-center justify-center rounded-xl border border-dashed border-border bg-background/60 p-8 text-center text-sm text-muted-foreground"
+							data-testid="micro-app-scheduled-tasks-context-loading"
 						>
-							{t("scheduleTask.createTask")}
-						</Button>
-					</div>
-				)}
-			</div>
+							{t("scheduleTask.contextLoading")}
+						</div>
+					) : tasks.length > 0 ? (
+						tasks.map((task) => (
+							<MicroAppScheduledTaskItem
+								key={task.id}
+								data={task}
+								onClick={() => onTaskEdit(task)}
+								onSwitchChange={(enabled) => onStatusChange(task, enabled)}
+								{...delegateProps}
+							/>
+						))
+					) : (
+						<div className="flex h-full w-full max-w-5xl flex-col items-center justify-center rounded-xl border border-dashed border-border bg-background/60 p-8 text-center">
+							<div className="flex size-12 items-center justify-center rounded-xl bg-primary/10 text-primary">
+								<IconCalendarEvent size={24} stroke={1.8} />
+							</div>
+							<h3 className="mt-4 text-lg font-medium leading-7 text-foreground">
+								{t("scheduleTask.emptyTitle")}
+							</h3>
+							<p className="mt-2 text-sm leading-5 text-muted-foreground">
+								{t("scheduleTask.emptyDescription")}
+							</p>
+							<Button
+								onClick={handleCreateTask}
+								className="mt-6"
+								disabled={!contextReady}
+							>
+								{t("scheduleTask.createTask")}
+							</Button>
+						</div>
+					)}
+				</div>
+			</ScrollArea>
 			{content}
 			{dropdownContent}
 		</div>

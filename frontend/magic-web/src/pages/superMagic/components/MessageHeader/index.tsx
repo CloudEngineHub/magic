@@ -114,7 +114,8 @@ interface MessageHeaderTopicHistoryPanelProps {
 	closeButtonRef?: RefObject<HTMLButtonElement | null>
 }
 
-const headerIconButtonClassName = "!size-6 !min-h-6 !min-w-6 !rounded-md !p-0"
+const headerIconButtonClassName =
+	"!size-[var(--conversation-header-button-size,24px)] !min-h-6 !min-w-6 !rounded-md !p-0"
 const renameInputClassName =
 	"h-6 min-w-0 flex-1 rounded-lg border-border bg-background px-3 text-sm leading-5 text-foreground placeholder:text-muted-foreground"
 
@@ -569,13 +570,14 @@ function MessageHeader({
 						"grid grid-cols-[theme(spacing.6)_minmax(0,1fr)_theme(spacing.6)]",
 					// 预览可见时与 44px 文件标签栏等高，保证两侧按钮的中心线一致。
 					detailPanelVisible && !isConversationPanelCollapsed && "h-11",
-					isConversationPanelCollapsed && "h-full flex-col px-0 py-1.5",
+					isConversationPanelCollapsed &&
+						"h-full flex-col px-0 py-[var(--conversation-header-padding,6px)]",
 				)}
 				data-testid="message-header-container"
 			>
 				{isConversationPanelCollapsed ? (
 					<div
-						className="flex w-full flex-col items-center gap-4"
+						className="flex w-full flex-col items-center gap-[var(--conversation-header-gap,16px)]"
 						data-testid="message-header-collapsed-topic-group"
 					>
 						{detailPanelVisible && (

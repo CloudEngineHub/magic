@@ -153,6 +153,18 @@ describe("TopicDesktopPanels", () => {
 		)
 	})
 
+	it("uses an embedding page's collapsed width without changing the default", () => {
+		const view = renderComponent({ collapsedConversationPanelWidth: 48 })
+		expect(mockUseTopicDesktopPanelMotion).toHaveBeenLastCalledWith(
+			expect.objectContaining({ collapsedMessagePanelWidthPx: 48 }),
+		)
+		view.unmount()
+		renderComponent()
+		expect(mockUseTopicDesktopPanelMotion).toHaveBeenLastCalledWith(
+			expect.objectContaining({ collapsedMessagePanelWidthPx: 24 }),
+		)
+	})
+
 	it("forwards the embedded conversation resize-handle appearance", () => {
 		renderComponent({
 			showProjectSidebar: false,
