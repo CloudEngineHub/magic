@@ -7,6 +7,23 @@ describe("PPTNotesPreferenceStore", () => {
 	beforeEach(() => localStorage.clear())
 	afterEach(() => vi.restoreAllMocks())
 
+	it("restores the resized height without changing visibility", () => {
+		const store = new PPTNotesPreferenceStore()
+		expect(store.height).toBe(144)
+		store.setHeight(240)
+		const restored = new PPTNotesPreferenceStore()
+		expect(restored.height).toBe(240)
+		expect(restored.visible).toBe(false)
+	})
+
+	it.each(["NaN", "Infinity", "-10", "0", "99", "invalid"])(
+		"ignores invalid stored height %s",
+		(value) => {
+			localStorage.setItem("supermagic-ppt-notes-height", value)
+			expect(new PPTNotesPreferenceStore().height).toBe(144)
+		},
+	)
+
 	it("defaults to collapsed and restores both choices after reload", () => {
 		const store = new PPTNotesPreferenceStore()
 		expect(store.visible).toBe(false)
@@ -45,5 +62,7 @@ describe("PPTNotesPreferenceStore", () => {
 		const store = new PPTNotesPreferenceStore()
 		expect(() => store.toggle()).not.toThrow()
 		expect(store.visible).toBe(true)
+		expect(() => store.setHeight(220)).not.toThrow()
+		expect(store.height).toBe(220)
 	})
 })
