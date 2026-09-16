@@ -1,4 +1,5 @@
-import { lazy, memo, useLayoutEffect, useMemo, useRef, type ReactNode } from "react"
+import type { FileSidebarControl } from "../../../components/Detail/components/FilesViewer/types"
+import { lazy, memo, useLayoutEffect, useMemo, useRef, type ReactNode, type RefObject } from "react"
 import { JSONContent } from "@/infrastructure/editors/tiptap/core"
 import { useMemoizedFn } from "ahooks"
 import { observer } from "mobx-react-lite"
@@ -78,8 +79,7 @@ function resolveRetrySendParams(
 ): HandleSendParams {
 	// Failed retry must go through the first-layer send entry, so we restore rich_text extra back to editor send params.
 	const superAgent = retryPayload.options?.extra?.super_agent as
-		| RetrySendSuperAgentExtra
-		| undefined
+		RetrySendSuperAgentExtra | undefined
 
 	return {
 		value: retryPayload.content,
@@ -116,6 +116,8 @@ interface TopicMessagePanelProps {
 	historyTriggerMode?: "dropdown" | "layout"
 	isHistoryPanelOpen?: boolean
 	onToggleHistoryPanel?: () => void
+	historyTriggerRef?: RefObject<HTMLButtonElement>
+	fileSidebarControl?: FileSidebarControl
 	/** Injected by singleTopicChat variant for conversation-level overflow actions. */
 	trailingActions?: ReactNode
 	/** Optional scoped stores used by recording detail; normal project pages keep global defaults. */
@@ -127,6 +129,8 @@ interface TopicMessagePanelProps {
 }
 
 function TopicMessagePanel({
+	historyTriggerRef,
+	fileSidebarControl,
 	selectedProject,
 	selectedWorkspace,
 	selectedTopic,
@@ -384,6 +388,13 @@ function TopicMessagePanel({
 			)}
 		>
 			<MessageHeader
+				historyTriggerRef={historyTriggerRef}
+				fileSidebarControl={fileSidebarControl}
+				alignWithContent={
+					Boolean(fileSidebarControl) &&
+					!detailPanelVisible &&
+					!isConversationPanelCollapsed
+				}
 				isConversationPanelCollapsed={isConversationPanelCollapsed}
 				onToggleConversationPanel={onToggleConversationPanel}
 				onExpandConversationPanel={onExpandConversationPanel}

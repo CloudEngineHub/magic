@@ -1,3 +1,4 @@
+import type { AttachmentLoadState } from "@/stores/projectFiles/types"
 import { makeAutoObservable, reaction, runInAction } from "mobx"
 import {
 	SlideLoaderService,
@@ -25,11 +26,20 @@ import { PPTViewStateManager } from "./PPTViewStateManager"
 import { PPTScreenshotManager } from "./PPTScreenshotManager"
 import { PPTActiveIndexCacheManager } from "./PPTActiveIndexCacheManager"
 import type { AttachmentItem } from "../../../../TopicFilesButton/hooks"
+import type {
+	PPTThumbnailCacheContext,
+	PPTThumbnailCacheMode,
+	PPTThumbnailCacheScope,
+} from "../services/PPTThumbnailCache"
 
 /**
  * Configuration for PPTStore
  */
 export interface PPTStoreConfig {
+	/** 已授权预览的稳定身份；匿名或归属不完整时不使用持久缓存。 */
+	thumbnailCacheScope?: PPTThumbnailCacheScope
+	attachmentLoadState?: AttachmentLoadState
+	projectId?: string
 	attachments?: any[]
 	attachmentList?: any[]
 	mainFileId?: string
@@ -554,7 +564,7 @@ export class PPTStore {
 	private async waitForCurrentActiveSlideToSettle(
 		generation: number,
 		configUpdateVersion: number | undefined,
-	): Promise<void> {
+	): Promise<boolean> {
 		while (this.isInitializationCurrent(generation, configUpdateVersion)) {
 			const activeIndex = this.activeIndex
 			const activeSlide = this.slides[activeIndex]
@@ -563,11 +573,17 @@ export class PPTStore {
 				activeSlide.loadingState === "loaded" ||
 				activeSlide.loadingState === "error"
 			) {
-				return
+				return true
 			}
 
-			await this.ensureSlideContent(activeIndex, "active")
+			const loaded = await this.ensureSlideContent(activeIndex, "active")
+			// 缺少附件时会立即返回未完成；同一页不能连续重试，否则微任务会阻塞绘制和附件回调。
+			// 保留初始化状态，由后续 updateConfig 继续；等待期间切页则跟随新的活动页。
+			if (!loaded && this.activeIndex === activeIndex) {
+				return this.slides[activeIndex]?.loadingState === "error"
+			}
 		}
+		return false
 	}
 
 	private async settlePendingInitialization(configUpdateVersion: number): Promise<void> {
@@ -582,7 +598,11 @@ export class PPTStore {
 		// A newer same-deck config update adopts readiness from the stale initializer. Wait for the
 		// current active page to settle so the loading overlay cannot remain stuck or close too early.
 		if (this.config.autoLoadAndGenerate !== false) {
-			await this.waitForCurrentActiveSlideToSettle(generation, configUpdateVersion)
+			const settled = await this.waitForCurrentActiveSlideToSettle(
+				generation,
+				configUpdateVersion,
+			)
+			if (!settled) return
 		}
 
 		if (
@@ -920,10 +940,11 @@ export class PPTStore {
 				this.slideManager.setActiveIndex(initialActiveIndex)
 
 				if (this.config.autoLoadAndGenerate !== false) {
-					await this.waitForCurrentActiveSlideToSettle(
+					const settled = await this.waitForCurrentActiveSlideToSettle(
 						generation,
 						options.configUpdateVersion,
 					)
+					if (!settled) return
 				}
 				if (!this.isInitializationCurrent(generation, options.configUpdateVersion)) return
 
@@ -1067,6 +1088,36 @@ export class PPTStore {
 			fileId: this.getSlideFileId(slide),
 		}
 
+		const attachmentLoadState = this.config.attachmentLoadState
+		if (
+			!target.fileId &&
+			!slide.url &&
+			!this.pathMappingService.getUrlByPath(slide.path) &&
+			attachmentLoadState &&
+			attachmentLoadState.projectId ===
+				(this.config.projectId || this.config.selectedProjectId)
+		) {
+			// 首批可能只有 PPT 配置，页文件尚未到达；等待附件不占用内容下载队列。
+			if (attachmentLoadState.status === "idle" || attachmentLoadState.status === "loading") {
+				runInAction(() => {
+					slide.loadingState = "loading"
+					slide.loadingError = undefined
+				})
+			} else {
+				this.markSlideLoadError(
+					target,
+					new Error(
+						attachmentLoadState.status === "ready"
+							? "Slide file not found"
+							: "Failed to load project files",
+					),
+					{ generation },
+				)
+			}
+			if (previousDemandIndex !== null) this.resumeContentDemand(previousDemandIndex)
+			return false
+		}
+
 		const loadPromise = this.contentScheduler.schedule(key, priority, async (signal) => {
 			const options = { signal, generation }
 			if (!this.isContentLoadCurrent(options)) return false
@@ -1184,6 +1235,7 @@ export class PPTStore {
 				slide.loadingState = "idle"
 				slide.rawContent = undefined
 				slide.content = undefined
+				slide.resourceVersionSignature = null
 				slide.loadingError = undefined
 			})
 		})
@@ -1361,7 +1413,9 @@ export class PPTStore {
 							const currentIndex = this.findSlideIndexByLoadTarget(target)
 							if (currentIndex !== -1 && this.slides[currentIndex]) {
 								this.slides[currentIndex].rawContent = content
-								this.slides[currentIndex].content = processedContent
+								this.slides[currentIndex].content = processedContent.content
+								this.slides[currentIndex].resourceVersionSignature =
+									processedContent.resourceVersionSignature
 								this.slides[currentIndex].loadingState = "loaded"
 								this.slides[currentIndex].lastLoadedAt = Date.now()
 							}
@@ -1563,7 +1617,9 @@ export class PPTStore {
 				}
 
 				this.slides[currentIndex].rawContent = rawContent
-				this.slides[currentIndex].content = processedContent
+				this.slides[currentIndex].content = processedContent.content
+				this.slides[currentIndex].resourceVersionSignature =
+					processedContent.resourceVersionSignature
 				this.slides[currentIndex].loadingState = "loaded"
 				this.slides[currentIndex].lastLoadedAt = Date.now()
 			})
@@ -1574,7 +1630,7 @@ export class PPTStore {
 				slideIndex: this.findSlideIndexByLoadTarget(target),
 			})
 
-			return processedContent
+			return processedContent.content
 		} catch (error) {
 			if (this.isAbortError(error) || !this.isContentLoadCurrent(options)) {
 				this.logger.debug("幻灯片内容加载已取消，丢弃结果", {
@@ -1605,7 +1661,10 @@ export class PPTStore {
 	 * 通过 file_id 刷新幻灯片内容
 	 * 从服务器获取最新 URL 并重新加载内容
 	 */
-	async refreshSlideByFileId(fileId: string): Promise<void> {
+	async refreshSlideByFileId(
+		fileId: string,
+		cacheMode: PPTThumbnailCacheMode = "use",
+	): Promise<void> {
 		const generation = this.contentGeneration
 		this.logger.logOperationStart("refreshSlideByFileId", {
 			metadata: { fileId },
@@ -1685,7 +1744,12 @@ export class PPTStore {
 			)
 			const refreshedSlide = this.slides[refreshedSlideIndex]
 			if (this.config.autoLoadAndGenerate !== false && refreshedSlide?.content) {
-				await this.generateSlideScreenshot(refreshedSlideIndex, refreshedSlide.content)
+				await this.generateSlideScreenshot(
+					refreshedSlideIndex,
+					refreshedSlide.content,
+					"required",
+					cacheMode,
+				)
 			}
 
 			this.logger.logOperationSuccess("refreshSlideByFileId", {
@@ -1750,7 +1814,7 @@ export class PPTStore {
 				slideIndex: index,
 			})
 
-			return processedContent
+			return processedContent.content
 		} catch (error) {
 			if (this.isAbortError(error) || !this.isContentLoadCurrent({ generation, signal })) {
 				return ""
@@ -1800,7 +1864,13 @@ export class PPTStore {
 		}
 		// Always claim active priority, even when content is cached, so rapid navigation can safely
 		// demote/cancel the previous active request before the fullscreen window is refilled.
-		void this.ensureSlideContent(activeIndex, "active")
+		const generation = this.contentGeneration
+		const configUpdateVersion = this.configUpdateVersion
+		void this.ensureSlideContent(activeIndex, "active").then(() => {
+			// 等待附件期间切到可用页，也要结束初始化；复用现有判断，旧请求不能结束新 PPT 的加载。
+			if (!this.isInitializationCurrent(generation, configUpdateVersion)) return
+			return this.settlePendingInitialization(configUpdateVersion)
+		})
 
 		fullscreenDemands.forEach(({ index, priority }) => {
 			void this.ensureSlideContent(index, priority)
@@ -1989,11 +2059,12 @@ export class PPTStore {
 		// Save both raw and processed content
 		this.slideManager.updateSlideItem(index, {
 			rawContent: content,
-			content: processedContent,
+			content: processedContent.content,
+			resourceVersionSignature: processedContent.resourceVersionSignature,
 			loadingState: "loaded",
 			lastLoadedAt: Date.now(),
 		})
-		return processedContent
+		return processedContent.content
 	}
 
 	/** Update inert HTML metadata without reprocessing or remounting the slide iframe. */
@@ -2115,6 +2186,7 @@ export class PPTStore {
 		index: number,
 		targetContent?: string,
 		requestKind: SlideScreenshotRequestKind = "required",
+		cacheMode: PPTThumbnailCacheMode = "use",
 	): Promise<void> {
 		if (this.disposed) return
 		const slide = this.slides[index]
@@ -2131,18 +2203,49 @@ export class PPTStore {
 						this.getSlideStableKey(candidate, candidateIndex) === generationKey,
 				),
 			requestKind,
+			this.getThumbnailCacheContext(slide, targetContent),
+			cacheMode,
 		)
 	}
 
 	async generateAllScreenshots(): Promise<void> {
 		if (this.disposed) return
-		await this.screenshotManager.generateAllScreenshots(this.slides, (slide, originalIndex) => {
-			const generationKey = this.getSlideStableKey(slide, originalIndex)
-			return this.slides.find(
-				(candidate, candidateIndex) =>
-					this.getSlideStableKey(candidate, candidateIndex) === generationKey,
-			)
-		})
+		await this.screenshotManager.generateAllScreenshots(
+			this.slides,
+			(slide, originalIndex) => {
+				const generationKey = this.getSlideStableKey(slide, originalIndex)
+				return this.slides.find(
+					(candidate, candidateIndex) =>
+						this.getSlideStableKey(candidate, candidateIndex) === generationKey,
+				)
+			},
+			(slide) => this.getThumbnailCacheContext(slide),
+		)
+	}
+
+	private getThumbnailCacheContext(
+		slide: SlideItem,
+		targetContent?: string,
+	): PPTThumbnailCacheContext | undefined {
+		const scope = this.config.thumbnailCacheScope
+		if (
+			!scope ||
+			scope.mainFileId !== this.config.mainFileId ||
+			!slide.rawContent ||
+			typeof slide.resourceVersionSignature !== "string" ||
+			(targetContent && targetContent !== slide.content)
+		)
+			return undefined
+		const fileId = this.getSlideFileId(slide)
+		const path = this.pathMappingService.getFullRelativePath(slide.path)
+		if (!fileId && !path) return undefined
+		return {
+			scope,
+			slideIdentity: fileId ? `file:${fileId}` : `path:${path}`,
+			path: path || slide.path,
+			rawContent: slide.rawContent,
+			resourceVersionSignature: slide.resourceVersionSignature,
+		}
 	}
 
 	/**
@@ -2343,7 +2446,12 @@ export class PPTStore {
 		configUpdateVersion: number,
 	): Promise<void> {
 		if (!this.isConfigUpdateCurrent(configUpdateVersion)) return
-		if (!config.displayConfig && !config.attachmentList && !mainFileChanged) {
+		if (
+			!config.displayConfig &&
+			!config.attachmentList &&
+			!mainFileChanged &&
+			!hasOwnConfigField(config, "attachmentLoadState")
+		) {
 			return
 		}
 
@@ -2519,8 +2627,6 @@ export class PPTStore {
 			.filter((slide) => !slide.fileId || !slide.url)
 
 		let recoveredCount = 0
-		const recoveredIndices: number[] = []
-		const recoveredDemandKeys = new Map<number, string>()
 
 		if (pendingSlides.length > 0) {
 			const fileIdsToFetch: string[] = []
@@ -2556,31 +2662,29 @@ export class PPTStore {
 						if (!target || target.path !== pending.path) return
 						target.url = recoveredUrl
 						this.pathMappingService.setPathUrlMapping(pending.path, recoveredUrl)
-						recoveredIndices.push(targetIndex)
-						recoveredDemandKeys.set(targetIndex, pending.demandKey)
+						recoveredCount++
 					})
 				})
-
-				recoveredCount += recoveredIndices.length
 			}
 		}
 
 		if (this.isConfigUpdateCurrent(configUpdateVersion)) {
-			this.resumeRecoveredSlideDemand(recoveredIndices, recoveredDemandKeys)
+			// 最终批次可能没有新增页文件；已有可见需求也要重新判断缺失或加载失败。
+			this.resumePendingSlideDemand(pendingSlides)
 			this.scheduleActiveSlide()
 		}
 
 		return recoveredCount
 	}
 
-	private resumeRecoveredSlideDemand(
-		recoveredIndices: number[],
-		previousDemandKeys: Map<number, string>,
+	private resumePendingSlideDemand(
+		pendingSlides: Array<{ path: string; fileId?: string; demandKey: string }>,
 	): void {
-		recoveredIndices.forEach((index) => {
+		pendingSlides.forEach((pending) => {
+			const index = this.findSlideIndexByLoadTarget(pending)
 			const slide = this.slides[index]
 			if (!slide) return
-			const previousKey = previousDemandKeys.get(index)
+			const previousKey = pending.demandKey
 			const nextKey = this.getSlideStableKey(slide, index)
 			const candidateKeys = [previousKey, nextKey, slide.path, slide.id]
 			const wasVisible = candidateKeys.some(

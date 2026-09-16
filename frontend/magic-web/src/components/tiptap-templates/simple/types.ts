@@ -1,3 +1,4 @@
+import type { FrontmatterSourceReplacement } from "@/components/tiptap-node/frontmatter-node/frontmatter-node-utils"
 import type {
 	Content,
 	EditorEvents,
@@ -9,6 +10,8 @@ import type { SlashDropdownMenuProps } from "@/components/tiptap-ui-primitive/Sl
 
 export interface SimpleEditorProps {
 	content?: Content
+	/** Preview-only position mapping; does not update the editor document. */
+	onFrontmatterSourceMap?: (ranges: FrontmatterSourceReplacement[], content: string) => void
 	characterCountConfig?: Partial<CharacterCountOptions>
 	onUpdate?: (update: EditorEvents["update"]) => void
 	onContentChange?: (content: string) => void

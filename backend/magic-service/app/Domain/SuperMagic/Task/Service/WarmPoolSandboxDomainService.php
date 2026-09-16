@@ -279,8 +279,10 @@ class WarmPoolSandboxDomainService
         string $userSpaceRootFileId,
         string $topicSpaceRootFileId = '',
         array $labels = [],
-        ?string $topicId = null
+        ?string $topicId = null,
+        ?array &$sandboxImages = null
     ): ?string {
+        $sandboxImages = null;
         // Per-call user identity for mountWarmPoolSandbox — that call
         // reaches into a user-bound pod (agfs /api/v1/mount) so the
         // pod's in-pod middleware expects User-Authorization.
@@ -344,6 +346,7 @@ class WarmPoolSandboxDomainService
             return null;
         }
 
+        $sandboxImages = $mountResult->getSandboxImages();
         $this->logger->info('[WarmPoolSandbox] Mount succeeded, fast path completed', [
             'sandbox_id' => $sandboxId,
         ]);

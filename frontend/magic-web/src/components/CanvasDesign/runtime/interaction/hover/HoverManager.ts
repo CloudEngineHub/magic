@@ -14,6 +14,8 @@ import {
  * 3. 发出 hover 事件
  */
 export class HoverManager {
+	private static readonly VIEWPORT_HOVER_SETTLE_DELAY_MS = 160
+
 	private canvas: Canvas
 
 	// Hover 状态
@@ -24,6 +26,10 @@ export class HoverManager {
 	private hoverRafId: number | null = null
 	private eventUnsubscribers: Array<() => void> = []
 	private isViewportGestureActive = false
+	private isViewportMotionActive = false
+	private isStagePointerInside = true
+	private skipNextSynchronousPanRefresh = false
+	private viewportHoverRefreshTimerId: ReturnType<typeof setTimeout> | null = null
 
 	// Hover 边框样式配置（静态属性，供其他类使用）
 	public static readonly HOVER_STROKE = "#3B82F6"
@@ -79,26 +85,41 @@ export class HoverManager {
 			}),
 		)
 
-		// 监听视口缩放事件，鼠标未移动时也要重新命中当前指针下的元素
+		// 连续缩放时暂停 hover，等视口静止后只重新命中一次当前指针下的元素。
 		this.eventUnsubscribers.push(
 			this.canvas.eventEmitter.on("viewport:scale", () => {
 				if (this.isViewportGestureActive) {
-					this.clearHover()
+					this.suspendHoverForViewportMotion()
+					this.markViewportScaleRefreshHandled()
 					return
 				}
-				this.refreshHoverAtCurrentPointer()
-				this.updateHoverStrokeWidth()
+				this.deferHoverRefreshUntilViewportSettles()
+				this.markViewportScaleRefreshHandled()
 			}),
 		)
 
-		// 监听视口平移事件，鼠标未移动时也要重新命中当前指针下的元素
+		// 连续平移时暂停 hover，避免每帧命中测试及其下游节点、动画和绘制更新。
 		this.eventUnsubscribers.push(
 			this.canvas.eventEmitter.on("viewport:pan", () => {
-				if (this.isViewportGestureActive) {
-					this.clearHover()
+				// A zoom update applies its final scale and position before synchronously emitting
+				// scale followed by pan. The scale handler already scheduled the settled refresh.
+				if (this.skipNextSynchronousPanRefresh) {
+					this.skipNextSynchronousPanRefresh = false
 					return
 				}
-				this.refreshHoverAtCurrentPointer()
+				if (this.isViewportGestureActive) {
+					this.suspendHoverForViewportMotion()
+					return
+				}
+				this.deferHoverRefreshUntilViewportSettles()
+			}),
+		)
+
+		this.eventUnsubscribers.push(
+			this.canvas.eventEmitter.on("viewport:changed", ({ data }) => {
+				if (data.phase === "end") {
+					this.resumeHoverAfterViewportSettles()
+				}
 			}),
 		)
 
@@ -106,9 +127,10 @@ export class HoverManager {
 			this.canvas.eventEmitter.on("viewport:gesture", ({ data }) => {
 				this.isViewportGestureActive = data.active
 				if (data.active) {
-					this.pendingHoverTarget = null
-					this.cancelHoverFlush()
-					this.clearHover()
+					this.suspendHoverForViewportMotion()
+					this.cancelDeferredViewportHoverRefresh()
+				} else {
+					this.resumeHoverAfterViewportSettles()
 				}
 			}),
 		)
@@ -144,10 +166,52 @@ export class HoverManager {
 		)
 	}
 
+	private markViewportScaleRefreshHandled(): void {
+		this.skipNextSynchronousPanRefresh = true
+		queueMicrotask(() => {
+			this.skipNextSynchronousPanRefresh = false
+		})
+	}
+
+	private suspendHoverForViewportMotion(): void {
+		this.isViewportMotionActive = true
+		this.pendingHoverTarget = null
+		this.cancelHoverFlush()
+		this.clearHover()
+	}
+
+	private deferHoverRefreshUntilViewportSettles(): void {
+		this.suspendHoverForViewportMotion()
+		this.cancelDeferredViewportHoverRefresh()
+		if (!this.isStagePointerInside) {
+			this.isViewportMotionActive = false
+			return
+		}
+
+		this.viewportHoverRefreshTimerId = setTimeout(() => {
+			this.viewportHoverRefreshTimerId = null
+			this.resumeHoverAfterViewportSettles()
+		}, HoverManager.VIEWPORT_HOVER_SETTLE_DELAY_MS)
+	}
+
+	private resumeHoverAfterViewportSettles(): void {
+		this.cancelDeferredViewportHoverRefresh()
+		this.isViewportMotionActive = false
+		if (this.isViewportGestureActive || !this.isStagePointerInside) return
+		this.refreshHoverAtCurrentPointer()
+	}
+
+	private cancelDeferredViewportHoverRefresh(): void {
+		if (this.viewportHoverRefreshTimerId === null) return
+		clearTimeout(this.viewportHoverRefreshTimerId)
+		this.viewportHoverRefreshTimerId = null
+	}
+
 	/**
 	 * 处理鼠标移动事件
 	 */
 	private handleMouseMove = (e: Konva.KonvaEventObject<MouseEvent>): void => {
+		this.isStagePointerInside = true
 		if (this.shouldSuppressHover()) {
 			this.pendingHoverTarget = null
 			this.cancelHoverFlush()
@@ -271,6 +335,9 @@ export class HoverManager {
 	 * 处理鼠标离开 stage 事件
 	 */
 	private handleMouseLeave = (): void => {
+		this.isStagePointerInside = false
+		this.isViewportMotionActive = false
+		this.cancelDeferredViewportHoverRefresh()
 		this.pendingHoverTarget = null
 		this.cancelHoverFlush()
 		this.clearHover()
@@ -348,40 +415,6 @@ export class HoverManager {
 		this.hoverNode = hoverNode
 		this.hoverNodeIsDefault = isDefaultHoverNode
 		this.setHoveredElementId(elementId)
-	}
-
-	/**
-	 * 更新 hover 效果（当缩放改变时调用）
-	 */
-	private updateHoverStrokeWidth(): void {
-		if (!this.hoverNode || !this.hoveredElementId) return
-
-		// 尝试使用 Element 的自定义更新方法
-		const element = this.canvas.elementManager.getElementInstance(this.hoveredElementId)
-		if (element && typeof element.updateHoverEffect === "function") {
-			element.updateHoverEffect(this.hoverNode, this.canvas.stage)
-			// 确保使用正确的 strokeWidth（覆盖自定义方法可能使用的错误值）
-			this.applyHoverStrokeWidth(this.hoverNode)
-		} else {
-			// 默认更新描边宽度
-			this.applyHoverStrokeWidth(this.hoverNode)
-		}
-
-		this.requestControlsDraw("hover-stroke")
-	}
-
-	/**
-	 * 递归应用 hover 边框宽度到节点及其子节点
-	 */
-	private applyHoverStrokeWidth(node: Konva.Node): void {
-		if (node instanceof Konva.Shape) {
-			node.strokeWidth(HoverManager.HOVER_STROKE_WIDTH / this.canvas.stage.scaleX())
-		} else if (node instanceof Konva.Group) {
-			// 递归更新 Group 中的所有子节点
-			node.children.forEach((child) => {
-				this.applyHoverStrokeWidth(child)
-			})
-		}
 	}
 
 	/**
@@ -574,6 +607,7 @@ export class HoverManager {
 	private shouldSuppressHover(): boolean {
 		return (
 			this.isViewportGestureActive ||
+			this.isViewportMotionActive ||
 			this.isExtendModeActive() ||
 			this.isConnectionDragActive()
 		)
@@ -605,6 +639,7 @@ export class HoverManager {
 	 */
 	public destroy(): void {
 		this.cancelHoverFlush()
+		this.cancelDeferredViewportHoverRefresh()
 
 		// 清除 hover 状态
 		this.clearHover()

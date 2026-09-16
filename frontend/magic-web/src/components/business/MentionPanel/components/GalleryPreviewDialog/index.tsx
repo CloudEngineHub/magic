@@ -46,7 +46,7 @@ function getProjectImagePreviewUrl(
 
 export default function GalleryPreviewDialog(props: GalleryPreviewDialogProps) {
 	const { item, items, onItemChange } = props
-	const filePreviewById = useMentionItemRenderContextValue()
+	const { filePreviewById = {} } = useMentionItemRenderContextValue()
 	const previewableItems = useMemo(
 		() => items.filter((candidate) => getProjectImagePreviewUrl(candidate, filePreviewById)),
 		[items, filePreviewById],

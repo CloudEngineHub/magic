@@ -1,3 +1,4 @@
+import type { RequestConfig } from "@/infrastructure/network/http/clients"
 import type { ThirdPartyLoginStrategy } from "../../types"
 import { loadWecomSDK } from "@/infrastructure/external-sdk/wecom"
 
@@ -14,7 +15,7 @@ export const WecomStrategy: ThirdPartyLoginStrategy = {
 	 */
 	getAuthCode: (
 		deployCode?: string,
-		options?: Pick<import("@/apis/core/HttpClient").RequestConfig, "skipAppInitWait">,
+		options?: Pick<RequestConfig, "skipAppInitWait">,
 	): Promise<string> => {
 		void deployCode
 		void options

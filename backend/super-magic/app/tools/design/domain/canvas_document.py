@@ -46,10 +46,9 @@ class CanvasElementV3:
         return self._number_property("height")
 
     @property
-    def zIndex(self) -> Optional[int]:  # noqa: N802
+    def zIndex(self) -> Optional[float]:  # noqa: N802
         """返回 Element 的图层值。"""
-        value = self.properties.get("zIndex")
-        return value if isinstance(value, int) and not isinstance(value, bool) else None
+        return self._number_property("zIndex")
 
     @property
     def absolute_x(self) -> Optional[float]:

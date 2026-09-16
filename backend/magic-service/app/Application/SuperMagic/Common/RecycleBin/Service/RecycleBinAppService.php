@@ -77,7 +77,8 @@ class RecycleBinAppService extends AbstractAppService
             keyword: $requestDTO->getKeyword(),
             order: $requestDTO->getOrder(),
             page: $requestDTO->getPage(),
-            pageSize: $requestDTO->getPageSize()
+            pageSize: $requestDTO->getPageSize(),
+            fileQuery: $requestDTO->getFileQuery()
         );
 
         $deletedByIds = array_unique(array_map(
@@ -98,7 +99,7 @@ class RecycleBinAppService extends AbstractAppService
             'user_id' => $userId,
             'resource_type' => $requestDTO->getResourceType(),
             'keyword' => $requestDTO->getKeyword(),
-            'total' => $result['total'],
+            'total' => $result['total'] ?? null,
         ]);
 
         return RecycleBinListResponseDTO::fromResult($result);
@@ -116,7 +117,8 @@ class RecycleBinAppService extends AbstractAppService
 
         $countsByType = $this->recycleBinDomainService->getCountsByType(
             $userId,
-            $requestDTO->getKeyword()
+            $requestDTO->getKeyword(),
+            $requestDTO->getProjectId()
         );
 
         $this->logger->info('查询回收站类型数量', [

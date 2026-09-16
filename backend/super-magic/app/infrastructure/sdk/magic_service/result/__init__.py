@@ -8,6 +8,7 @@ Result classes for Magic Service API responses.
 
 from .ai_ability_runtime_config_result import AiAbilityRuntimeConfigItem, AiAbilityRuntimeConfigResult
 from .agent_details_result import AgentDetailsResult, Tool
+from .get_user_info_result import GetUserInfoResult
 from .message_schedule_result import MessageScheduleResult
 from .oauth2_callback_relay_result import OAuth2CallbackRelayResult
 from .mcp_authorization_credential_result import MCPAuthorizationCredentialResult
@@ -31,6 +32,7 @@ from .magicbase_row_result import (
 )
 
 __all__ = [  # noqa: RUF022 - 保留既有导出顺序
+    'GetUserInfoResult',
     'AiAbilityRuntimeConfigResult',
     'AiAbilityRuntimeConfigItem',
     'AgentDetailsResult',

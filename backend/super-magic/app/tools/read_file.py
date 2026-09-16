@@ -16,6 +16,7 @@ from app.core.entity.message.server_message import (DisplayType, FileContent,
                                                     ToolDetail)
 from app.tools.abstract_file_tool import AbstractFileTool
 from app.tools.core import BaseToolParams, tool
+from app.tools.core.base_tool import ToolResultContentMode
 from app.tools.utils.display_content_utils import truncate_content_for_display
 from app.tools.workspace_tool import WorkspaceTool
 from app.utils.async_file_utils import async_exists, async_is_dir, async_read_text
@@ -251,9 +252,21 @@ def _build_truncation_message(info: TruncationInfo, file_path: str) -> str:
 
 @dataclass
 class TextReadResult:
-    """文本读取结果，包含带行号和不带行号的两个版本"""
+    r"""
+    文本读取结果，包含带行号和不带行号的两个版本
+
+    with_line_numbers 给模型定位；without_line_numbers 给详情展示；source_content 给内部版本比对。
+    例：文件最后有换行，展示可以按行重组，但内部不能因此把同一源文本误判成另一版本。
+    完整读取磁盘文本 "alpha\nbeta"（最后没有换行）时，三个字段实际为：
+      with_line_numbers    = "1\talpha\n2\tbeta\n"
+      without_line_numbers = "alpha\nbeta\n"
+      source_content       = "alpha\nbeta"
+    展示按行补齐换行，source_content 保留本次读到的文本；范围读取时它为 None，
+    结果被截断时 extra_info 也将它置为 None，避免将局部内容当作完整文件快照。
+    """
     with_line_numbers: str  # 带行号的内容版本（用于AI展示）
     without_line_numbers: str  # 不带行号的原始内容版本（用于工具详情）
+    source_content: str | None = None  # 全文读取时的真实源文本，保留末尾换行供内部 diff 使用
 
 
 class ReadFileParams(BaseToolParams):
@@ -265,7 +278,8 @@ Starting line number to read (0-indexed), supports negative numbers to count fro
 Number of lines or pages to read, default 200 lines, set to -1 to read entire file""")
 
 
-@tool()
+# 文件正文已有动态预算与原文件续读协议，避免被全局默认额度再次文件化。
+@tool(result_content_mode=ToolResultContentMode.SELF_MANAGED)
 class ReadFile(AbstractFileTool[ReadFileParams], WorkspaceTool[ReadFileParams]):
     """<!--zh
     读取文件内容
@@ -316,9 +330,13 @@ Suggestions:
 
     async def execute(
         self,
-        tool_context: ToolContext,
+        tool_context: ToolContext | None,
         params: ReadFileParams,
-        raw_mode: bool = False
+        raw_mode: bool = False,
+        max_tokens: int | None = None,
+        *,
+        allow_fuzzy_match: bool = True,
+        use_context_budget: bool = True,
     ) -> ToolResult:
         """
         执行文件读取操作
@@ -333,13 +351,21 @@ Suggestions:
         Returns:
             ToolResult: 包含文件内容或错误信息
         """
-        return await self.execute_purely(params, tool_context, raw_mode)
+        return await self.execute_purely(
+            params, tool_context, raw_mode,
+            max_tokens=max_tokens, allow_fuzzy_match=allow_fuzzy_match,
+            use_context_budget=use_context_budget,
+        )
 
     async def execute_purely(
         self,
         params: ReadFileParams,
         tool_context: Optional[ToolContext] = None,
-        raw_mode: bool = False
+        raw_mode: bool = False,
+        max_tokens: int | None = None,
+        *,
+        allow_fuzzy_match: bool = True,
+        use_context_budget: bool = True,
     ) -> ToolResult:
         """
         执行文件读取操作，专注于读取可读文件
@@ -356,9 +382,13 @@ Suggestions:
         """
         try:
             # 使用父类方法获取安全的文件路径（包含模糊匹配）
-            resolved = self.resolve_path_fuzzy(params.file_path)
-            file_path = resolved.path
-            fuzzy_warning = resolved.warning
+            if allow_fuzzy_match:
+                resolved = self.resolve_path_fuzzy(params.file_path)
+                file_path = resolved.path
+                fuzzy_warning = resolved.warning
+            else:
+                file_path = self.resolve_path(params.file_path)
+                fuzzy_warning = None
             # 检查文件是否存在
             if not await async_exists(file_path):
                 if tool_context:
@@ -414,8 +444,17 @@ Suggestions:
             content = text_result.with_line_numbers
             # --- 内容读取逻辑结束 ---
 
-            # 根据当前上下文剩余量动态决定本次读取上限
-            max_tokens = _compute_max_tokens(tool_context)
+            """
+            根据当前上下文剩余量动态决定本次读取上限
+            运行时自动读取可指定更小的正文额度；普通工具调用继续使用原动态上限。
+            这是内部参数，不扩展模型 schema，也不改变行范围、版本校验或截断算法。
+            """
+            if max_tokens is not None and max_tokens <= 0:
+                raise ValueError("max_tokens must be positive")
+            # Skill 按独立预算读取原文；自动规则文件和普通读取仍受上下文动态预算约束。
+            dynamic_max_tokens = _compute_max_tokens(tool_context) if use_context_budget or max_tokens is None else max_tokens
+            # 外部只可收紧这次读取额度，不能突破 ReadFile 依据上下文算出的原有上限。
+            max_tokens = min(dynamic_max_tokens, max_tokens) if max_tokens is not None else dynamic_max_tokens
             context_remaining = _get_context_remaining(tool_context)
 
             # 计算token数量并处理截断
@@ -469,13 +508,13 @@ Suggestions:
 
             # 添加文件元信息 - 使用 original_file_name 作为用户看到的文件名，read_path 用于内部信息
             shown_chars = len(content)
-            truncation_status = "（已截断）" if content_truncated else ""
+            truncation_status = " (truncated)" if content_truncated else ""
 
             # 构建元信息
-            meta_info = f"# 文件: {original_file_name}\n\n"
+            meta_info = f"# File: {original_file_name}\n\n"
 
             # 元信息中不再显示Token数，避免大模型混淆（Token数对大模型无意义）
-            meta_info += f"**文件信息**: 总字符数: {total_chars}，本次读取字符数: {shown_chars}{truncation_status}\n\n---\n\n"
+            meta_info += f"File information: {total_chars} total characters, {shown_chars} characters read{truncation_status}\n\n---\n\n"
             raw_content = content # 存储未加 meta_info 的原始内容
 
             # 准备不带行号的版本
@@ -486,8 +525,10 @@ Suggestions:
                 raw_content_without_line_numbers = text_result.without_line_numbers
 
             extra_info = {
+                # source_content 仅供 Python 内部确认全文版本；范围读取或截断时不声称拿到了全文。
                 "raw_content": raw_content,
                 "raw_content_without_line_numbers": raw_content_without_line_numbers,
+                "source_content": text_result.source_content if not content_truncated else None,
                 "original_file_path": str(file_path),
                 "read_path": str(read_path),
                 "read_method": read_method,  # 标识读取方式：统一为 text(纯文本)
@@ -505,7 +546,7 @@ Suggestions:
             # 如果是完整读取（没有截断，且从头读取整个文件），添加完整性提示
             is_complete_read = not content_truncated and params.offset == 0 and (params.limit is None or params.limit <= 0)
             if is_complete_read:
-                content_with_meta += "\n\n---\n\n**[文件已完整读取]**"
+                content_with_meta += "\n\n---\n\n[File fully read]"
 
             # 如果有模糊匹配警告，添加到内容最后面
             if fuzzy_warning:
@@ -564,7 +605,8 @@ Suggestions:
 
         return TextReadResult(
             with_line_numbers="".join(lines_with_numbers),
-            without_line_numbers="".join(lines_without_numbers)
+            without_line_numbers="".join(lines_without_numbers),
+            source_content=content,
         )
 
     async def _read_text_file_with_range(self, file_path: Path, offset: int, limit: int) -> TextReadResult:

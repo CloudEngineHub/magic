@@ -66,13 +66,14 @@ const GalleryItem = memo(function GalleryItem(props: GalleryItemProps) {
 		enablePreview,
 	} = props
 	const renderer = useMentionItemRenderer(item.type)
-	const filePreviewById = useMentionItemRenderContextValue()
+	const { filePreviewById = {}, filePresentationOptions } = useMentionItemRenderContextValue()
 	const rendererContext = {
 		item,
 		t,
 		isSearch,
 		platform: "desktop" as const,
 		filePreviewById,
+		filePresentationOptions,
 	}
 	const { isImage, previewUrl } = getProjectImagePreview(item, filePreviewById)
 	const isFolderLike = isFolderLikeItem(item)

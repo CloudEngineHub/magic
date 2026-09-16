@@ -17,7 +17,7 @@ class CanvasMainFileSanitizer:
             for content in element.contents:
                 fields = content.fields
                 if isinstance(fields, GeneratedMediaContentFields):
-                    fields.clear_generation_request()
+                    fields.clear_sidecar_fields()
         return sanitized
 
     def synchronize_sidecar(self, project: CanvasProject, sidecar: dict) -> dict:
@@ -30,18 +30,20 @@ class CanvasMainFileSanitizer:
                 if not managed:
                     continue
                 detail = ContentMetadataService.get(updated, element.element_id, content.content_id)
-                request_field = fields.generated_request_field if isinstance(fields, GeneratedMediaContentFields) else None
-                if not request_field or not detail.get(request_field):
-                    detail.update(managed)
-                    ContentMetadataService.set(updated, element.element_id, content.content_id, detail)
+                detail.update(managed)
+                ContentMetadataService.set(updated, element.element_id, content.content_id, detail)
         return updated
 
     @staticmethod
     def _managed_fields(fields) -> dict[str, object]:
         """提取不应进入主文件的生成请求字段。"""
-        if isinstance(fields, GeneratedMediaContentFields) and fields.status == "completed":
+        if isinstance(fields, GeneratedMediaContentFields):
+            managed: dict[str, object] = {}
             request_field = fields.generated_request_field
             request = fields.to_dict().get(request_field) if request_field else None
-            if isinstance(request, dict):
-                return {request_field: request}
+            if fields.status == "completed" and isinstance(request, dict):
+                managed[request_field] = request
+            if fields.visual_understanding is not None:
+                managed["visualUnderstanding"] = fields.visual_understanding
+            return managed
         return {}

@@ -92,9 +92,9 @@ def add_init_script_detail(result: ToolResult, arguments: Mapping[str, object]) 
                 error=user_error(result),
             )
         ]
-    page_id = string(result.data.get("page_id")) or string(arguments.get("page_id"))
-    if page_id:
-        lines.append(field("browser.detail.label.page_id", escape_markdown(page_id)))
+    tab_id = string(result.data.get("tab_id")) or string(arguments.get("tab_id"))
+    if tab_id:
+        lines.append(field("browser.detail.label.page_id", escape_markdown(tab_id)))
     script = script_text(arguments, "source")
     script_detail = script[:MAX_SCRIPT_DETAIL_CHARS].rstrip()
     script_sections = [

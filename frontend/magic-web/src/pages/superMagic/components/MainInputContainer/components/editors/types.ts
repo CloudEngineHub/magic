@@ -11,6 +11,8 @@ import type { AttachmentItem } from "@/pages/superMagic/components/TopicFilesBut
 import type { MessageEditorRef } from "@/pages/superMagic/components/MessageEditor/MessageEditor"
 import type {
 	DraftKey,
+	QueueMessageInput,
+	QueueDraftSnapshot,
 	EditorPromptCarouselConfig,
 	ModelItem,
 	MessageEditorLayoutConfig,
@@ -29,21 +31,18 @@ import type { TopicMode } from "@/pages/superMagic/pages/Workspace/TopicMode"
 import type { QueuedMessage } from "@/pages/superMagic/components/MessagePanel/hooks/useMessageQueue"
 import { TopicStore } from "@/pages/superMagic/stores/core/topic"
 
-export interface QueueMessageInput {
-	content: JSONContent
-	mentionItems: MentionListItem[]
-	dynamicParams?: Record<string, unknown>
-	selectedModel?: ModelItem | null
-	selectedImageModel?: ModelItem | null
-	selectedVideoModel?: ModelItem | null
-	topicMode?: TopicMode
-	agentCode?: string | null
-}
+export type { QueueMessageInput } from "@/pages/superMagic/components/MessageEditor/types"
 
 export interface SceneEditorQueueContext {
+	editorRef: RefObject<MessageEditorRef | null>
 	editingQueueItem: QueuedMessage | null
 	addToQueue: (params: QueueMessageInput) => Promise<string | undefined>
-	finishEditQueueItem: (value: JSONContent | undefined, mentionItems: MentionListItem[]) => void
+	finishEditQueueItem: (params: QueueMessageInput) => Promise<boolean>
+	queueDraft: QueueDraftSnapshot | null
+	cancelEditQueueItem: () => Promise<void>
+	onEditorReady: () => void
+	retryQueueDraftRemoval: () => Promise<void>
+	isQueueOperationPending: boolean
 }
 
 export interface SceneEditorContext {

@@ -9,6 +9,7 @@ namespace HyperfTest\Cases\Domain\SuperMagic\File\Service;
 
 use App\Domain\File\Repository\Persistence\Facade\CloudFileRepositoryInterface;
 use App\Domain\SuperMagic\File\Entity\TaskFileEntity;
+use App\Domain\SuperMagic\File\Entity\ValueObject\FileSpaceType;
 use App\Domain\SuperMagic\File\Repository\Facade\TaskFileRepositoryInterface;
 use App\Domain\SuperMagic\File\Repository\Facade\TaskFileVersionRepositoryInterface;
 use App\Domain\SuperMagic\File\Service\TaskFileVersionDomainService;
@@ -44,6 +45,40 @@ class TaskFileVersionDomainServiceTest extends TestCase
 
         $this->assertNotNull($versionEntity);
         $this->assertSame('DT001/open/project_100/runtime/topic_456/789/version/1', $versionEntity->getFileKey());
+        $this->assertSame(1, $versionEntity->getVersion());
+    }
+
+    public function testUserFileVersionKeyAppendsVersionSuffix(): void
+    {
+        // 用户空间文件（如 .magic/ 下的记忆文件）同样创建版本副本：
+        // 版本键统一为原 file_key + /version/{version}。
+        $cloudFileRepository = $this->createMock(CloudFileRepositoryInterface::class);
+        $cloudFileRepository->expects($this->once())
+            ->method('copyObjectByCredential')
+            ->with(
+                '/',
+                'DT001',
+                'DT001/open/user_usi_123/workspace/789',
+                'DT001/open/user_usi_123/workspace/789/version/1',
+                StorageBucketType::SandBox,
+                ['metadata_directive' => 'COPY']
+            );
+
+        $fileEntity = new TaskFileEntity();
+        $fileEntity->setFileId(789);
+        $fileEntity->setFileName('MEMORY.md');
+        $fileEntity->setOrganizationCode('DT001');
+        $fileEntity->setFileKey('DT001/open/user_usi_123/workspace/789');
+        $fileEntity->setIsDirectory(false);
+        $fileEntity->setSpaceType(FileSpaceType::USER->value);
+
+        $this->assertTrue($fileEntity->shouldCreateVersionCopy());
+
+        $versionEntity = $this->service($cloudFileRepository)
+            ->createFileVersion('DT001', $fileEntity);
+
+        $this->assertNotNull($versionEntity);
+        $this->assertSame('DT001/open/user_usi_123/workspace/789/version/1', $versionEntity->getFileKey());
         $this->assertSame(1, $versionEntity->getVersion());
     }
 

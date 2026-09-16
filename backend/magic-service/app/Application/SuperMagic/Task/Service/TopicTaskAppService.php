@@ -1946,7 +1946,7 @@ class TopicTaskAppService extends AbstractAppService
             $topicEntity->getId(),
             $requestDTO->getMessageContent(),
             $chatMessageType
-        );
+        )->message;
 
         $this->eventDispatcher->dispatch(
             new MessageQueueCreatedEvent(

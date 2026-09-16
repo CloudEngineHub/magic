@@ -118,13 +118,28 @@ class TopicPersistenceManager:
             return False
 
     def restore_topic_chat_history(self, target_dir: Path) -> None:
-        """Replace a local chat-history directory with the topic source atomically."""
+        """Replace a local chat-history directory with the topic source."""
         self._replace_directory(self.chat_history_dir, Path(target_dir))
 
     @staticmethod
-    def replace_directory(source_dir: Path, target_dir: Path) -> None:
-        """Replace a target directory with a staged source directory."""
-        TopicPersistenceManager._replace_directory(Path(source_dir), Path(target_dir))
+    def clear_directory(target_dir: Path) -> None:
+        """Remove a target directory's contents in place, keeping the directory itself.
+
+        运行期聊天历史目录在沙箱内是指向 localfs 挂载的 symlink
+        （/app/.chat_history -> /mnt/agfs/localfs/chat_history），恢复
+        不能再用「备份 + rename 整目录替换」的原子替换（staging 在容器
+        overlay 上、目标是 FUSE，跨设备 rename 会得到 EXDEV），而是解析
+        symlink 后原地清空再拷入。恢复是幂等的全量替换，中途失败的半份
+        状态会在下次启动被同样的恢复流程覆盖。
+        """
+        target_dir = Path(target_dir)
+        resolved = target_dir.resolve() if target_dir.is_symlink() else target_dir
+        resolved.mkdir(parents=True, exist_ok=True)
+        for entry in resolved.iterdir():
+            if entry.is_dir() and not entry.is_symlink():
+                shutil.rmtree(entry)
+            else:
+                entry.unlink()
 
     def clear_topic_chat_history(self) -> None:
         """Remove topic chat-history contents while retaining the directory itself."""
@@ -139,12 +154,17 @@ class TopicPersistenceManager:
 
     @staticmethod
     def _replace_directory(source_dir: Path, target_dir: Path) -> None:
-        """Copy through staging and replace the target without merging stale files."""
+        """Stage the source in the container-local FS, then clear-and-copy it
+        into the target without merging stale files.
+
+        目标可能是 FUSE 挂载（运行期聊天历史在 localfs 空间内），跨设备
+        rename 不可用（EXDEV），因此恢复统一走「先清空目标、再逐项拷入」。
+        """
         source_dir = Path(source_dir)
         target_dir = Path(target_dir)
         target_dir.parent.mkdir(parents=True, exist_ok=True)
         with tempfile.TemporaryDirectory(
-            prefix=".chat-history-restore-", dir=target_dir.parent
+            prefix=".chat-history-restore-"
         ) as temp_dir:
             staged_dir = Path(temp_dir) / target_dir.name
             shutil.copytree(
@@ -152,19 +172,8 @@ class TopicPersistenceManager:
                 staged_dir,
                 ignore=shutil.ignore_patterns(".git"),
             )
-            backup_dir = target_dir.with_name(f".{target_dir.name}.restore-backup")
-            if backup_dir.exists():
-                shutil.rmtree(backup_dir)
-            if target_dir.exists():
-                target_dir.rename(backup_dir)
-            try:
-                staged_dir.rename(target_dir)
-            except Exception:
-                if backup_dir.exists() and not target_dir.exists():
-                    backup_dir.rename(target_dir)
-                raise
-            if backup_dir.exists():
-                shutil.rmtree(backup_dir)
+            TopicPersistenceManager.clear_directory(target_dir)
+            shutil.copytree(staged_dir, target_dir.resolve() if target_dir.is_symlink() else target_dir, dirs_exist_ok=True)
 
     def is_healthy(self, topic_id: Optional[str]) -> bool:
         """Return true when the sandbox-provided topic directories are available."""

@@ -7,6 +7,7 @@ declare(strict_types=1);
 
 namespace App\Domain\SuperMagic\Agent\Service;
 
+use App\Domain\Kernel\Service\AbstractVectorIndexDomainService;
 use App\Domain\ModelGateway\Entity\ValueObject\SourceId;
 use App\Domain\SuperMagic\Agent\Entity\AgentCategoryEntity;
 use App\Domain\SuperMagic\Agent\Entity\AgentMarketEntity;
@@ -17,58 +18,26 @@ use App\Domain\SuperMagic\Agent\Entity\ValueObject\SuperMagicAgentDataIsolation;
 use App\Domain\SuperMagic\Agent\Repository\Facade\AgentCategoryRelationRepositoryInterface;
 use App\Domain\SuperMagic\Agent\Repository\Facade\AgentCategoryRepositoryInterface;
 use App\Domain\SuperMagic\Agent\Repository\Facade\AgentMarketRepositoryInterface;
-use App\Infrastructure\Core\Embeddings\EmbeddingDimensionPolicy;
 use App\Infrastructure\Core\Embeddings\EmbeddingGenerator\EmbeddingGeneratorInterface;
 use App\Infrastructure\Core\Embeddings\VectorStores\VectorStoreInterface;
 use App\Infrastructure\Core\ValueObject\Page;
-use GuzzleHttp\Exception\ClientException;
 use Hyperf\Logger\LoggerFactory;
 use Hyperf\Redis\Redis;
-use Psr\Log\LoggerInterface;
 use RuntimeException;
 use Throwable;
 
-final class AgentMarketVectorIndexDomainService
+final class AgentMarketVectorIndexDomainService extends AbstractVectorIndexDomainService
 {
-    private const VECTOR_INDEX_INITIALIZED_KEY = 'vector_index:initialized:agent_market';
-
-    /** 日志与异常中的业务标识。 */
-    private const BUSINESS = 'Agent market';
-
-    private ?bool $availabilityCache = null;
-
-    private int $availabilityCacheExpiresAt = 0;
-
-    private LoggerInterface $logger;
-
     public function __construct(
         private readonly AgentMarketRepositoryInterface $agentMarketRepository,
         private readonly AgentCategoryRelationRepositoryInterface $categoryRelationRepository,
         private readonly AgentCategoryRepositoryInterface $categoryRepository,
-        private readonly VectorStoreInterface $vectorStore,
-        private readonly EmbeddingGeneratorInterface $embeddingGenerator,
-        private readonly Redis $redis,
+        VectorStoreInterface $vectorStore,
+        EmbeddingGeneratorInterface $embeddingGenerator,
+        Redis $redis,
         LoggerFactory $loggerFactory,
     ) {
-        $this->logger = $loggerFactory->get('vector-index-sync');
-    }
-
-    public function isAvailable(): bool
-    {
-        $now = time();
-        if ($this->availabilityCache !== null && $this->availabilityCacheExpiresAt > $now) {
-            return $this->availabilityCache;
-        }
-
-        try {
-            $available = $this->vectorStore->getCollection($this->collectionName()) !== null;
-        } catch (Throwable) {
-            $available = false;
-        }
-
-        $this->availabilityCache = $available;
-        $this->availabilityCacheExpiresAt = $now + max(0, (int) config('vector_index.availability_cache_seconds', 60));
-        return $available;
+        parent::__construct($vectorStore, $embeddingGenerator, $redis, $loggerFactory);
     }
 
     /** Synchronize one market point from the authoritative database state. */
@@ -98,29 +67,27 @@ final class AgentMarketVectorIndexDomainService
         $collectionName = $this->collectionName();
         $pointId = (string) $market->getId();
         $payload = $this->buildPayload($market, $semanticText);
-        $collection = $this->vectorStore->getCollection($collectionName);
-        if ($collection !== null && ! $forceReEmbedding) {
-            $expectedSize = EmbeddingDimensionPolicy::isEnabled()
-                ? EmbeddingDimensionPolicy::fixedSize()
-                : $this->embeddingGenerator->getDefaultModel(
-                    SuperMagicAgentDataIsolation::create($market->getOrganizationCode() ?? '', $operatorId),
-                )->getVectorSize();
-            EmbeddingDimensionPolicy::assertCollectionSize(self::BUSINESS, $collection->vectorSize, $expectedSize);
-        }
         $existingPoint = $this->vectorStore->getPoint($collectionName, $pointId);
 
         if ($existingPoint !== null && ! $forceReEmbedding && ($existingPoint->payload['semantic_text'] ?? null) === $semanticText) {
+            $this->logger->info('Agent market vector payload update without re-embedding', [
+                'resource_id' => $resourceId,
+                'reason' => 'semantic_text_unchanged',
+            ]);
             $this->vectorStore->updatePayload($collectionName, $pointId, $payload);
             $this->availabilityCache = true;
             return;
         }
 
-        $embedding = $this->generateEmbedding($market, $semanticText, $operatorId);
-        $this->ensureCollection(
-            $collectionName,
-            EmbeddingDimensionPolicy::resolveCollectionSize(self::BUSINESS, count($embedding)),
-            $forceReEmbedding,
+        $embedding = $this->generateEmbedding(
+            $market,
+            $semanticText,
+            $operatorId,
+            $existingPoint === null
+                ? 'point_not_found'
+                : ($forceReEmbedding ? 'force_re_embedding' : 'semantic_text_changed'),
         );
+        $this->ensureCollection($collectionName, $embedding, $forceReEmbedding);
 
         $this->vectorStore->storePoint($collectionName, $pointId, $embedding, $payload);
         $this->availabilityCache = true;
@@ -198,6 +165,8 @@ final class AgentMarketVectorIndexDomainService
             return [];
         }
 
+        $this->assertEmbeddingDimension($this->collectionName(), $embedding);
+
         $pageSize = $page->getPageNum();
         $points = $this->vectorStore->searchPoints(
             $this->collectionName(),
@@ -228,27 +197,6 @@ final class AgentMarketVectorIndexDomainService
         )));
     }
 
-    public function isVectorSearchEnabled(): bool
-    {
-        return EmbeddingDimensionPolicy::isEnabled();
-    }
-
-    /** Return whether the first complete Agent Market reconciliation succeeded. */
-    public function isVectorSearchReady(): bool
-    {
-        if (! $this->isVectorSearchEnabled()) {
-            return false;
-        }
-
-        return (bool) $this->redis->exists(self::VECTOR_INDEX_INITIALIZED_KEY);
-    }
-
-    /** Mark the Agent Market index as initialized after a successful full reconciliation. */
-    public function markVectorIndexInitialized(): void
-    {
-        $this->redis->set(self::VECTOR_INDEX_INITIALIZED_KEY, (string) time());
-    }
-
     /** Return valid market IDs in ascending keyset pages for full reconciliation. */
     public function findVectorIndexIds(string $afterId = '0', int $limit = 100): array
     {
@@ -270,6 +218,21 @@ final class AgentMarketVectorIndexDomainService
         } catch (Throwable) {
             return null;
         }
+    }
+
+    protected function collectionName(): string
+    {
+        return (string) config('vector_index.resources.agent_market.collection', 'agent_markets');
+    }
+
+    protected function businessLabel(): string
+    {
+        return 'Agent market';
+    }
+
+    protected function initializedKey(): string
+    {
+        return 'vector_index:initialized:agent_market';
     }
 
     /** @return array<int, AgentCategoryEntity> */
@@ -310,8 +273,14 @@ final class AgentMarketVectorIndexDomainService
         ];
     }
 
-    private function generateEmbedding(AgentMarketEntity $market, string $semanticText, string $operatorId): array
+    private function generateEmbedding(AgentMarketEntity $market, string $semanticText, string $operatorId, string $reason): array
     {
+        $this->logger->info('Agent market embedding generation started', [
+            'resource_id' => (string) $market->getId(),
+            'reason' => $reason,
+            'forced' => $reason === 'force_re_embedding',
+            'text_length' => mb_strlen($semanticText),
+        ]);
         $embedding = $this->embeddingGenerator->embedText(
             $this->embeddingGenerator->getDefaultModel(
                 SuperMagicAgentDataIsolation::create($market->getOrganizationCode() ?? '', $operatorId),
@@ -329,16 +298,12 @@ final class AgentMarketVectorIndexDomainService
         if ($embedding === []) {
             throw new RuntimeException('Agent market embedding is empty');
         }
+        $this->logger->info('Agent market embedding generation completed', [
+            'resource_id' => (string) $market->getId(),
+            'vector_size' => count($embedding),
+        ]);
 
         return $embedding;
-    }
-
-    private function removePoint(string $resourceId): void
-    {
-        $collectionName = $this->collectionName();
-        if ($this->vectorStore->getCollection($collectionName) !== null) {
-            $this->vectorStore->removePoint($collectionName, $resourceId);
-        }
     }
 
     private function buildFilter(AgentMarketQuery $query): array
@@ -375,52 +340,5 @@ final class AgentMarketVectorIndexDomainService
         }
         $must[] = ['should' => $should, 'min_should' => 1];
         return ['must' => $must];
-    }
-
-    private function isCollectionAlreadyExists(ClientException $exception): bool
-    {
-        $response = $exception->getResponse();
-        return $response->getStatusCode() === 409
-            && str_contains(strtolower((string) $response->getBody()), 'already exists');
-    }
-
-    private function ensureCollection(string $collectionName, int $vectorSize, bool $forceReEmbedding): void
-    {
-        $collection = $this->vectorStore->getCollection($collectionName);
-        if ($collection !== null && $collection->vectorSize !== $vectorSize) {
-            if (! $forceReEmbedding) {
-                EmbeddingDimensionPolicy::assertCollectionSize(self::BUSINESS, $collection->vectorSize, $vectorSize);
-            }
-
-            // A model change can change the vector dimension. Recreate the collection
-            // once, then let the queued forced batches rebuild all market points.
-            $this->vectorStore->removeCollection($collectionName);
-            $this->availabilityCache = false;
-            $collection = null;
-        }
-
-        if ($collection !== null) {
-            return;
-        }
-
-        try {
-            $this->vectorStore->createCollection($collectionName, $vectorSize);
-        } catch (ClientException $exception) {
-            if (! $this->isCollectionAlreadyExists($exception)) {
-                throw $exception;
-            }
-        }
-    }
-
-    private function collectionName(): string
-    {
-        return (string) config('vector_index.resources.agent_market.collection', 'agent_markets');
-    }
-
-    private function normalizeKeyword(?string $keyword): string
-    {
-        $keyword = trim((string) $keyword);
-        $keyword = preg_replace('/\s+/u', ' ', $keyword) ?? $keyword;
-        return mb_strtolower($keyword, 'UTF-8');
     }
 }

@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState, useCallback } from "react"
 import { useMemoizedFn } from "ahooks"
 import type { OnFetchIntercepted } from "../utils/fetchInterceptor"
 import type { DependencyEntry } from "../components/DevConsole/types"
-import { logger as Logger } from "@/utils/log"
+import { logger as Logger } from "@/infrastructure/logger"
 import { measureManualPerfOperation } from "@/utils/manualPerfLogger"
 
 const logger = Logger.createLogger("useFetchInterceptionCache")

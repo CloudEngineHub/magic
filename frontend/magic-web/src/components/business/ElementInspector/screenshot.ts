@@ -1,5 +1,5 @@
 import { snapdom, type SnapdomPlugin } from "@zumer/snapdom"
-import { logger as Logger } from "@/utils/log"
+import { logger as Logger } from "@/infrastructure/logger"
 import { INSPECTOR_MSG, type InspectedElementRect } from "./types"
 
 export const htmlScreenshotLogger = Logger.createLogger("HtmlScreenshot")

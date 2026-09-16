@@ -788,7 +788,11 @@ class FileManagementAppService extends AbstractAppService
             }
 
             // MagicFS 在指定作用域内校验并删除文件，返回删除前实体供事件使用。
-            $fileEntities = $this->magicFSFileDomainService->deleteFiles($fileIds, false, $projectId);
+            $fileEntities = $this->magicFSFileDomainService->deleteFiles(
+                $fileIds,
+                false,
+                $projectId,
+            );
 
             $this->logger->info(sprintf(
                 'Successfully batch deleted files: Project ID: %s, File count: %d',

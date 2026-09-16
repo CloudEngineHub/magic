@@ -4,6 +4,8 @@ export interface PPTControlBarProps {
 	isTransitioning: boolean
 	isMobile: boolean
 	isFullscreen: boolean
+	isRefreshingCurrentSlide: boolean
+	onRefreshCurrentSlide?: () => void
 	onPrevSlide: () => void
 	onNextSlide: () => void
 	onGoToFirstSlide: () => void
@@ -12,8 +14,9 @@ export interface PPTControlBarProps {
 	onToggleFullscreen: () => void
 	onReplaceTemplate?: () => void
 	scaleRatio: number
+	isAutoScale: boolean
+	portalContainer: HTMLElement | null
 	onScaleChange: (scale: number) => void
 	onResetScale: () => void
-	t: (key: string) => string
 	className?: string
 }

@@ -55,6 +55,10 @@ function createCanvasMock(
 			isTransformInteractionActive: vi.fn(() => false),
 			isTransforming: vi.fn(() => false),
 		},
+		runtimeScheduler: {
+			requestLayerDraw: vi.fn(),
+			registerViewportScaleLayout: vi.fn(() => vi.fn()),
+		},
 		permissionManager: {
 			can: vi.fn(() => true),
 			canUseSelectionToolAffordance: vi.fn(() => true),
@@ -481,7 +485,10 @@ describe("StoryboardElement", () => {
 					isFullSize: true,
 				})),
 			},
-			runtimeScheduler: { requestLayerDraw },
+			runtimeScheduler: {
+				requestLayerDraw,
+				registerViewportScaleLayout: vi.fn(() => vi.fn()),
+			},
 		})
 
 		const element = new StoryboardElement(

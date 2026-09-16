@@ -25,6 +25,7 @@ from app.service.cron.migration import apply_migrations, resolve_legacy_agent_mo
 from app.service.cron.models import CronJob, CronRunResult
 from app.service.cron.schema import CURRENT_PAYLOAD_VERSION
 from app.service.cron.store import persist_payload_fields, write_result_file
+from app.service.cron.utils import format_job_label, format_log_duration
 
 logger = get_logger(__name__)
 
@@ -244,9 +245,9 @@ async def execute_agent_turn(job: CronJob) -> CronRunResult:
             if context_source is None:
                 raise ValueError(f"cron job [{job.id}] fork has no context source")
             context_snapshot = await AgentContextSnapshotService().capture(context_source)
-        logger.info(
-            f"cron job [{job.id}] starting "
-            f"(agent={target.agent_name}, provider={target.provider_type.value})"
+        logger.debug(
+            f"定时任务{format_job_label(job)}：执行上下文已准备好，"
+            f"使用 Agent {target.agent_name}（{target.provider_type.value}），会话 ID：{agent_id}。"
         )
         run_request = IsolatedAgentRunRequest(
             target=target,
@@ -268,20 +269,16 @@ async def execute_agent_turn(job: CronJob) -> CronRunResult:
         result = raw or ""
     except asyncio.TimeoutError:
         status, error = "error", f"timeout after {timeout}s"
-        logger.warning(f"cron job [{job.id}] timed out after {timeout}s")
+        limit = f"本次配置的执行上限为 {format_log_duration(timeout)}" if timeout else "本次未设置任务级超时上限"
+        logger.warning(f"定时任务{format_job_label(job)}：执行过程中发生超时；{limit}。")
     except asyncio.CancelledError:
         status, error = "error", "cancelled"
-        logger.warning(f"cron job [{job.id}] was cancelled")
         raise
     except Exception as e:
         status, error = "error", str(e)
-        logger.exception(f"cron job [{job.id}] failed")
+        logger.exception(f"定时任务{format_job_label(job)}：执行异常。原因：{type(e).__name__}: {e}")
 
     duration_ms = _now_ms() - start_ms
-    if status == "ok":
-        logger.info(f"cron job [{job.id}] completed in {duration_ms}ms")
-    else:
-        logger.warning(f"cron job [{job.id}] finished with status={status} error={error!r} duration={duration_ms}ms")
 
     run_result = CronRunResult(
         status=status,
@@ -296,7 +293,7 @@ async def execute_agent_turn(job: CronJob) -> CronRunResult:
     try:
         result_file = await write_result_file(job, run_result)
     except Exception as e:
-        logger.error(f"cron: failed to write result file for [{job.id}]: {e}")
+        logger.error(f"定时任务{format_job_label(job)}：结果文件保存失败。原因：{type(e).__name__}: {e}")
 
     if job.payload.notify_user:
         try:
@@ -305,6 +302,6 @@ async def execute_agent_turn(job: CronJob) -> CronRunResult:
             await append_notification(job, run_result, result_file or Path())
             asyncio.create_task(try_notify_main_agent(), name=f"cron-notify-{job.id}")
         except Exception as e:
-            logger.error(f"cron: failed to handle notification for [{job.id}]: {e}")
+            logger.error(f"定时任务{format_job_label(job)}：结果通知准备失败。原因：{type(e).__name__}: {e}")
 
     return run_result

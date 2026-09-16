@@ -24,6 +24,7 @@ import { useIsMobile } from "@/hooks/useIsMobile"
 interface MessageEditorViewProps {
 	className?: string
 	containerClassName?: string
+	headerContent?: ReactNode
 	size: MessageEditorSize
 	tiptapEditor: Editor | null
 	domRef: RefObject<HTMLDivElement>
@@ -53,6 +54,7 @@ interface MessageEditorViewProps {
 function MessageEditorView({
 	className,
 	containerClassName,
+	headerContent,
 	size,
 	tiptapEditor,
 	domRef,
@@ -96,22 +98,24 @@ function MessageEditorView({
 					onDrop={dragEvents.onDrop}
 					onPasteCapture={onPaste}
 					data-testid="super-message-editor-container"
+					data-queue-editor-surface
 				>
 					<FlexBox
 						vertical
 						className={cn(messageEditorInnerVariants({ size }))}
 						data-testid="super-message-editor-inner"
 					>
-						{(topBarLeftContent || topBarRightContent) && (
+						{(topBarLeftContent || topBarRightContent || headerContent) && (
 							<div
-								className="relative [&:empty]:hidden"
+								className="flex shrink-0 items-center gap-2 [&:empty]:hidden"
 								data-testid="super-message-editor-header"
 							>
-								{topBarLeftContent}
+								<div className="shrink-0 [&:empty]:hidden">{topBarLeftContent}</div>
+								<div className="min-w-0 flex-1 [&:empty]:hidden">
+									{headerContent}
+								</div>
 								{topBarRightContent && (
-									<div className="absolute right-0 top-0">
-										{topBarRightContent}
-									</div>
+									<div className="ml-auto shrink-0">{topBarRightContent}</div>
 								)}
 							</div>
 						)}

@@ -15,6 +15,7 @@ import {
 } from "../../../../../types"
 import { workspaceFilesRendererEntries } from "../../workspace-files/renderer"
 import {
+	CANVAS_SELECTION_PENDING_MENTION_LIMIT,
 	collectCanvasElementMentionItems,
 	getCanvasElementMentionItemId,
 	MentionPanelCanvasElementsStore,
@@ -516,5 +517,50 @@ describe("MentionPanelCanvasElementsStore", () => {
 			src: "./images/hero.png",
 		})
 		expect(items[2]?.sourcePreview).toMatchObject({ mediaType: "audio" })
+	})
+
+	it("silently stops collecting after maxItems unique files", () => {
+		const selectedDocument = {
+			elements: Array.from({ length: 25 }, (_, index) =>
+				contentElement(
+					{
+						id: `image-${index}`,
+						type: ElementTypeEnum.Image,
+						zIndex: 25 - index,
+					},
+					`content-${index}`,
+					{ src: `./images/file-${index}.png` },
+				),
+			),
+		} as unknown as CanvasDocument
+
+		const resolveCalls: string[] = []
+		const items = collectCanvasElementMentionItems({
+			document: selectedDocument,
+			selectedElementIds: selectedDocument.elements.map((element) => element.id),
+			designProjectId: "design-id",
+			maxItems: 20,
+			resolveFileBySrc: (src) => {
+				resolveCalls.push(src)
+				const index = src.match(/file-(\d+)/)?.[1]
+				if (index == null) return null
+				return {
+					file_id: `file-${index}`,
+					file_name: `file-${index}.png`,
+					file_extension: "png",
+					relative_file_path: `/design/images/file-${index}.png`,
+				}
+			},
+		})
+
+		expect(items).toHaveLength(20)
+		expect(resolveCalls).toHaveLength(20)
+		expect(
+			items.map((item) =>
+				item.type === MentionItemType.PROJECT_FILE
+					? (item.data as ProjectFileMentionData).file_id
+					: undefined,
+			),
+		).toEqual(Array.from({ length: 20 }, (_, index) => `file-${index}`))
 	})
 })

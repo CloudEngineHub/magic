@@ -95,6 +95,10 @@ Default requirements (follow when no explicit requirements):
    - Google Fonts: https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@400;500;700&display=swap (必选)
    - Echarts: https://cdnjs.cloudflare.com/ajax/libs/echarts/5.6.0/echarts.min.js (必要时使用)
 - 网页底部必须加入 <script src="slide-bridge.js"></script> 脚本，用于页面间通信
+- PPT 页间跳转：需要跳转到同一 PPT 的另一页时，必须使用相对于当前幻灯片 HTML 文件所在目录的相对路径作为 `<a href>`，例如当前页为 `slides/slide-1.html` 时使用 `<a href="slide-2.html">查看第二页</a>`；目标文件必须存在于 `magic.project.js` 的 `slides` 数组中。跨目录时使用 `../`，不要写绝对本地路径。
+- 不要使用页码、页面标题或自定义路由作为页间地址，例如 `#2`、`#第二页` 或 `/slide/2`；页面重排后仍应通过实际文件路径定位目标页。
+- 当前 PPT 内的页间链接保持普通 `<a>` 标签，不要自行实现 `window.parent.postMessage`、iframe 操作或自定义导航协议，PPT 运行时会统一处理。
+- 指向其他项目、普通 HTML 文件或外部网站的链接继续使用正常相对路径或完整 URL。
 -->
 Slide Technical Specifications:
 - This section applies only to full presentation projects generated through create_slide_project/create_slide. It does not apply to template source created by slide-template-maker. Template source follows slide-template-maker's output contract and must not be forced to include TailwindCSS, FontAwesome, Google Fonts, or slide-bridge.js.
@@ -107,6 +111,10 @@ Slide Technical Specifications:
    - Google Fonts: https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@400;500;700&display=swap (required)
    - Echarts: https://cdnjs.cloudflare.com/ajax/libs/echarts/5.6.0/echarts.min.js (use when necessary)
 - Must include <script src="slide-bridge.js"></script> at bottom of page for inter-page communication
+- Inter-slide navigation: use a normal `<a href>` with a path relative to the current slide HTML file's directory. For example, when the current page is `slides/slide-1.html`, use `<a href="slide-2.html">View slide 2</a>`. The target file MUST exist in `magic.project.js`'s `slides` array; use `../` when crossing directories and never use an absolute local path.
+- Do not use slide numbers, display titles, hashes, or custom routes such as `#2`, `#Slide 2`, or `/slide/2`; file paths must remain valid after reordering.
+- Do not add custom `postMessage`, iframe manipulation, or navigation protocol for same-deck links; the PPT runtime handles ordinary links specially.
+- Links to another project, an ordinary HTML file, or an external website remain normal relative paths or full URLs.
 </core_specifications>
 
 <pptx_rules>

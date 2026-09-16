@@ -15,7 +15,7 @@ import {
 } from "../utils/mention"
 import { runActiveEditor } from "@/utils/tiptapEditorLifecycle"
 import { INSPECTOR_DETAIL_TYPE } from "../extensions/inspector-detail/const"
-import type { StructuredErrorInput } from "@/utils/log/errorReport"
+import type { StructuredErrorInput } from "@/infrastructure/logger"
 
 interface LoggerLike {
 	error: (input: StructuredErrorInput) => void

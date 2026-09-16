@@ -847,13 +847,14 @@ const PPTSlide = observer(function PPTSlide({
 		projectId,
 	])
 
-	const handleAIEdit = useMemoizedFn(() => {
+	// 菜单退出确认可能改变状态；保留点击时的开关意图，避免确认退出后又重新开启。
+	const handleAIEdit = useCallback(() => {
 		if (isAppendPicking) {
 			rendererRef.current?.stopInspector()
 		} else {
 			rendererRef.current?.startInspectorAppend()
 		}
-	})
+	}, [isAppendPicking])
 	const handleQuickSelect = useMemoizedFn(() => {
 		if (isQuickSelecting) {
 			void rendererRef.current?.requestInspectorExit?.()
@@ -861,6 +862,16 @@ const PPTSlide = observer(function PPTSlide({
 			rendererRef.current?.startInspectorQuickSelect?.()
 		}
 	})
+	const handleViewModeChange = useMemoizedFn(
+		(mode: NonNullable<EditToolbarProps["viewMode"]>) => {
+			// 工具栏已通过选取退出确认；源码会卸载渲染器，在此同步清除本页激活态。
+			if (mode === "code") {
+				setIsAppendPicking(false)
+				setIsQuickSelecting(false)
+			}
+			setViewMode(mode)
+		},
+	)
 	const resolvedToolbarOwnerKey = toolbarOwnerKey || `${fileId || "missing-file"}:${index}`
 	const toolbarModel = useMemo<PPTSlideToolbarModel | null>(() => {
 		if (!showEditToolbar) return null
@@ -889,7 +900,7 @@ const PPTSlide = observer(function PPTSlide({
 				hasServerUpdate,
 				onViewServerUpdate: handleViewServerUpdate,
 				viewMode,
-				onViewModeChange: setViewMode,
+				onViewModeChange: handleViewModeChange,
 				showVersionHistory: allowEdit,
 				fileVersion,
 				fileVersionsList,
@@ -930,6 +941,7 @@ const PPTSlide = observer(function PPTSlide({
 		handleAIEdit,
 		handleQuickSelect,
 		handleVersionChange,
+		handleViewModeChange,
 		handleViewServerUpdate,
 		hasServerUpdate,
 		isAppendPicking,
@@ -1113,7 +1125,12 @@ const PPTSlide = observer(function PPTSlide({
 				aria-hidden={!effectiveIsPresented}
 				data-interactive={String(isInteractive)}
 			>
-				{!onToolbarModelChange && toolbarModel && <EditToolbar {...toolbarModel.props} />}
+				{!onToolbarModelChange && toolbarModel && (
+					<EditToolbar
+						{...toolbarModel.props}
+						getPopupContainer={() => slideWrapperRef.current}
+					/>
+				)}
 
 				{renderMainContent()}
 			</div>

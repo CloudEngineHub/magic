@@ -69,7 +69,7 @@ export class ElementCornerActionsDecorator {
 	private actionLabels = new Map<string, Konva.Text>()
 	private actionHitTargets = new Map<string, Konva.Rect>()
 	private actionVisualGroups = new Map<string, Konva.Group>()
-	private viewportScaleHandler?: () => void
+	private viewportScaleUnsubscribe?: () => void
 	private elementTransformHandler?: () => void
 	private hoverChangeHandler?: (event: { data: { elementId: string | null } }) => void
 	private selectHandler?: () => void
@@ -87,6 +87,7 @@ export class ElementCornerActionsDecorator {
 	}
 
 	public create(): void {
+		this.removeViewportScaleListener()
 		this.destroyButtonNodes()
 		if (this.config.actions.length === 0) return
 
@@ -115,7 +116,6 @@ export class ElementCornerActionsDecorator {
 		this.group.add(rootGroup)
 		rootGroup.moveToTop()
 		this.updateButtonScale()
-		this.setupViewportScaleListener()
 		this.setupElementTransformListener()
 		this.setupHoverBehavior()
 		this.syncHoverStateFromCanvas()
@@ -424,7 +424,7 @@ export class ElementCornerActionsDecorator {
 		return touch ? { clientX: touch.clientX, clientY: touch.clientY } : {}
 	}
 
-	public updateButtonScale(): void {
+	public updateButtonScale(options?: { refreshActions?: boolean }): void {
 		if (!this.rootGroup) return
 
 		const stage = this.group.getStage()
@@ -449,7 +449,7 @@ export class ElementCornerActionsDecorator {
 
 		const placementOffsets = new Map<ElementCornerActionPlacement, number>()
 		this.config.actions.forEach((action) => {
-			this.refreshAction(action)
+			if (options?.refreshActions !== false) this.refreshAction(action)
 			const actionGroup = this.actionGroups.get(action.key)
 			if (!actionGroup || !actionGroup.visible()) return
 			const scaledButtonWidth = actionGroup.width() * inverseScaleX
@@ -516,19 +516,21 @@ export class ElementCornerActionsDecorator {
 	}
 
 	private setupViewportScaleListener(): void {
-		if (this.viewportScaleHandler) return
-		this.viewportScaleHandler = () => {
-			this.syncHoverStateFromCanvas()
-			this.updateButtonScale()
-			this.rootGroup?.getLayer()?.batchDraw()
+		if (this.viewportScaleUnsubscribe) return
+		const viewportScaleHandler = () => {
+			if (!this.rootGroup) return
+			this.updateButtonScale({ refreshActions: false })
 		}
-		this.config.canvas.eventEmitter.on("viewport:scale", this.viewportScaleHandler)
+		this.viewportScaleUnsubscribe =
+			this.config.canvas.runtimeScheduler.registerViewportScaleLayout(
+				this.config.elementId,
+				viewportScaleHandler,
+			)
 	}
 
 	private removeViewportScaleListener(): void {
-		if (!this.viewportScaleHandler) return
-		this.config.canvas.eventEmitter.off("viewport:scale", this.viewportScaleHandler)
-		this.viewportScaleHandler = undefined
+		this.viewportScaleUnsubscribe?.()
+		this.viewportScaleUnsubscribe = undefined
 	}
 
 	private setupElementTransformListener(): void {
@@ -709,6 +711,8 @@ export class ElementCornerActionsDecorator {
 		}
 		this.isHovering = true
 		if (!this.rootGroup) return
+		// 画布上同时只会有极少量可见角落控件，隐藏时不保留逐元素缩放监听。
+		this.setupViewportScaleListener()
 		this.rootGroup.visible(true)
 		this.rootGroup.moveToTop()
 		this.updateButtonScale()
@@ -717,6 +721,7 @@ export class ElementCornerActionsDecorator {
 
 	public hide(): void {
 		this.isHovering = false
+		this.removeViewportScaleListener()
 		if (!this.rootGroup) return
 		this.rootGroup.visible(false)
 		this.group.getLayer()?.batchDraw()

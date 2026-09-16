@@ -13,6 +13,7 @@ import { useCanvas } from "../../../../app/providers/CanvasProvider"
 import { useCanvasModeUI } from "../../../../app/providers/CanvasUIProvider"
 import { useCanvasDesignI18n } from "../../../../app/providers/I18nProvider"
 import { useHostUiLocale } from "../../../../app/providers/HostUiLocaleProvider"
+import { useMagic } from "../../../../app/providers/MagicProvider"
 import type { ImageElement } from "../../../../runtime/document/types"
 import type {
 	ReferenceResourceFileInfo,
@@ -76,8 +77,11 @@ import type {
 	CompleteImagePromptRequest,
 	GenerateImageRequest,
 } from "../../../../public/magic-types"
+import type { ResolveCanvasResourceReference } from "../../../../public/resource-reference"
+import type { Canvas } from "../../../../runtime/core/Canvas"
 import {
 	areCanvasResourceReferencesSame,
+	getCanvasResourceAvailability,
 	getCanvasResourceFileName,
 } from "../../../../runtime/shared/path/canvasResourcePath"
 import { CanvasDesignClipboard } from "../../../../runtime/resources/clipboard/CanvasDesignClipboard"
@@ -117,6 +121,18 @@ interface ImageEditorSurfaceProps {
 	isMediaResourcePreviewOpen?: boolean
 }
 
+/** 只有权威 resolver 确认删除的引用阻塞提交；上传 pending 窗口内保持可恢复。 */
+export function hasDeletedReference(
+	paths: string[],
+	canvas: Pick<Canvas, "canvasFileUploadManager"> | null | undefined,
+	resolveResourceReference?: ResolveCanvasResourceReference,
+): boolean {
+	return paths.some((path) => {
+		if (canvas?.canvasFileUploadManager.isPendingResourcePath(path)) return false
+		return getCanvasResourceAvailability(path, resolveResourceReference) === "deleted"
+	})
+}
+
 export default function ImageEditorSurface(props: ImageEditorSurfaceProps) {
 	const {
 		imageElement,
@@ -139,6 +155,7 @@ export default function ImageEditorSurface(props: ImageEditorSurfaceProps) {
 		isMediaResourcePreviewOpen = false,
 	} = props
 	const { canvas } = useCanvas()
+	const { methods } = useMagic()
 	const { setEditingElementId } = useCanvasModeUI()
 
 	useEffect(() => {
@@ -146,6 +163,7 @@ export default function ImageEditorSurface(props: ImageEditorSurfaceProps) {
 		return () => setEditingElementId(null)
 	}, [imageElement.id, setEditingElementId])
 	const resolveResourceReference =
+		methods?.resolveResourceReference ??
 		canvas?.magicConfigManager.config?.methods?.resolveResourceReference
 	const enrichClipboardMentionAttrs = useCallback(
 		(attrs: Parameters<typeof enrichCanvasMentionForClipboard>[0]) =>
@@ -193,6 +211,7 @@ export default function ImageEditorSurface(props: ImageEditorSurfaceProps) {
 	const [hasScrollbar, setHasScrollbar] = useState(false)
 	const [hoveredMentionPath, setHoveredMentionPath] = useState<string | null>(null)
 	const [sourceListContainer, setSourceListContainer] = useState<HTMLDivElement | null>(null)
+	const [, forceResourceStateRefresh] = useState(0)
 	const {
 		prompt,
 		handlers,
@@ -240,11 +259,6 @@ export default function ImageEditorSurface(props: ImageEditorSurfaceProps) {
 			),
 		[promptPlaceholderTokenConfig],
 	)
-	const canSendPrompt = Boolean(
-		!config.isUploading &&
-		!editorRef.current?.hasPendingUploadMentions?.() &&
-		composePromptWithLinkedText(linkedEditorInputs.textPrompt, prompt).trim(),
-	)
 	const linkedActiveImagePaths = useMemo(
 		() =>
 			linkedEditorInputs.activeMediaReferences
@@ -260,6 +274,28 @@ export default function ImageEditorSurface(props: ImageEditorSurfaceProps) {
 				linkedActiveImagePaths,
 			),
 		[currentReferenceFiles, linkedActiveImagePaths, resolveResourceReference],
+	)
+	useEffect(() => {
+		if (!canvas) return
+		return canvas.eventEmitter.on("upload:resource-pending-change", ({ data }) => {
+			const affectsReference = data.paths.some((path) =>
+				effectiveCurrentReferenceFiles.some((referencePath) =>
+					areCanvasResourceReferencesSame(referencePath, path, resolveResourceReference),
+				),
+			)
+			if (!affectsReference) return
+			forceResourceStateRefresh((revision) => revision + 1)
+		})
+	}, [canvas, effectiveCurrentReferenceFiles, resolveResourceReference])
+	const containsDeletedReference = hasDeletedReference(
+		effectiveCurrentReferenceFiles,
+		canvas,
+		resolveResourceReference,
+	)
+	const canSendPrompt = Boolean(
+		!config.isUploading &&
+		!editorRef.current?.hasPendingUploadMentions?.() &&
+		composePromptWithLinkedText(linkedEditorInputs.textPrompt, prompt).trim(),
 	)
 	const promptOptimizationPlaceholderPaths = useMemo(
 		() => ({ image: effectiveCurrentReferenceFiles }),
@@ -767,7 +803,12 @@ export default function ImageEditorSurface(props: ImageEditorSurfaceProps) {
 						<Button
 							className={styles.sendButton}
 							onClick={handleSend}
-							disabled={isSending || !canSendPrompt || !config.selectedModelId}
+							disabled={
+								isSending ||
+								!canSendPrompt ||
+								!config.selectedModelId ||
+								containsDeletedReference
+							}
 							aria-busy={isSending}
 						>
 							{isSending ? (

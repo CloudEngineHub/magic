@@ -17,7 +17,7 @@ class ReindexVectorIndexRequestDTO extends AbstractRequestDTO
     /**
      * 是否强制重新生成向量。
      *
-     * 开启后，当向量集合维度与目标维度不一致时会删除集合并按目标维度重建，随后全量重灌数据；
+     * 开启后，当向量集合维度与模型实际输出维度不一致时会删除集合并按实际维度重建，随后全量重灌数据；
      * 关闭时遇到维度不一致直接抛错，不会改动集合。
      */
     public bool $forceReEmbedding = false;

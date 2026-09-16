@@ -1,4 +1,7 @@
+import type { RefObject } from "react"
+import type { FileSidebarControl } from "../../components/Detail/components/FilesViewer/types"
 import pubsub, { PubSubEvents } from "@/utils/pubsub"
+import { runInAction } from "mobx"
 import { useDeepCompareEffect, useDebounceFn, useUpdateEffect, useMemoizedFn } from "ahooks"
 import { isEmpty } from "lodash-es"
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
@@ -13,7 +16,6 @@ import { filterClickableMessageWithoutRevoked } from "../../utils/handleMessage"
 import { useDetailModeCache } from "../../hooks/useDetailModeCache"
 import { useAttachmentsPolling } from "../../hooks/useAttachmentsPolling"
 import { useProjectAttachmentsChangeRealtime } from "../../hooks/useProjectAttachmentsChangeRealtime"
-import { useAutoOpenFile } from "../../hooks/useAutoOpenFile"
 import { useDeferUntilFileTabsCacheLoaded } from "../../hooks/useDeferUntilFileTabsCacheLoaded"
 import { useRefreshTopicDetailOnTaskComplete } from "../../hooks/useRefreshTopicDetailOnTaskComplete"
 import { AttachmentDataProcessor } from "../../utils/attachmentDataProcessor"
@@ -203,6 +205,9 @@ function TopicPage({ pageVariant = "default" }: TopicPageDesktopProps) {
 
 	const {
 		shouldShowDetailPanel,
+		isDetailPanelCollapsed,
+		collapseDetailPanel,
+		expandDetailPanel,
 		handleFileClickWithPanel,
 		topicFilesPropsWithPanel,
 		handleActiveDetailTabChange,
@@ -229,14 +234,16 @@ function TopicPage({ pageVariant = "default" }: TopicPageDesktopProps) {
 		clearUserSelectDetail,
 	})
 
-	const { isTopicHistoryPanelOpen, closeTopicHistoryPanel, toggleTopicHistoryPanel } =
-		useTopicHistoryLayoutState({
-			storageKey: TOPIC_HISTORY_PANEL_OPEN_STORAGE_KEYS.topicPage,
-			isEnabled: !isReadOnly && !isSingleTopicChat,
-		})
-
-	const activeFileIdRef = useRef<string | null>(activeFileId)
-	activeFileIdRef.current = activeFileId
+	const {
+		isTopicHistoryPanelOpen,
+		closeTopicHistoryPanel,
+		toggleTopicHistoryPanel,
+		topicHistoryWidth,
+		commitTopicHistoryWidth,
+	} = useTopicHistoryLayoutState({
+		storageKey: TOPIC_HISTORY_PANEL_OPEN_STORAGE_KEYS.topicPage,
+		isEnabled: !isReadOnly && !isSingleTopicChat,
+	})
 
 	// 使用详情模式缓存 hook
 	useDetailModeCache({
@@ -246,12 +253,6 @@ function TopicPage({ pageVariant = "default" }: TopicPageDesktopProps) {
 		setAutoDetail,
 		setUserDetail: setUserSelectDetail,
 	})
-
-	const {
-		checkAndOpenFileByMessages,
-		checkAndOpenFileByTopicChanged,
-		reset: resetAutoOpenFile,
-	} = useAutoOpenFile()
 
 	useRefreshTopicDetailOnTaskComplete({
 		selectedTopic,
@@ -263,7 +264,6 @@ function TopicPage({ pageVariant = "default" }: TopicPageDesktopProps) {
 		setAutoDetail(null)
 		setUserSelectDetail(null)
 		clearActiveDetailTabType()
-		resetAutoOpenFile()
 	}, [selectedProject?.id])
 
 	useSlidesTemplateNavigation({
@@ -468,16 +468,10 @@ function TopicPage({ pageVariant = "default" }: TopicPageDesktopProps) {
 	const { messages, showLoading } = useTopicConversationLoading({
 		selectedTopic,
 		hideLoadingWhenBufferHasContent: true,
-		onTopicMessagesChange: ({
-			isLoading,
-			lastMessageNode,
-			selectedTopic: currentTopic,
-			topicMessages,
-		}) => {
+		onTopicMessagesChange: ({ isLoading, selectedTopic: currentTopic, topicMessages }) => {
 			setIsShowLoadingInit(true)
 
-			// 记录任务状态是否发生变化（用于判断是否为新消息导致的任务完成）
-			const hasStatusChanged = lastMessageNode?.status !== currentTopicStatus
+			// 消息附件不自动打开；文件标签沿用缓存恢复和用户选择，包括空状态。
 			const readProgressPayload = resolveReadProgressPayloadFromMessages(topicMessages)
 			const targetTopicId = currentTopic?.id || selectedTopic?.id
 
@@ -502,24 +496,6 @@ function TopicPage({ pageVariant = "default" }: TopicPageDesktopProps) {
 					latestMessageDetail: lastDetailMessageNode?.tool?.detail,
 					isLoading,
 					tool: lastDetailMessageNode?.tool,
-				})
-
-				scheduleWhenTabsCacheReady(() => {
-					checkAndOpenFileByMessages({
-						lastMessageNode,
-						lastDetailMessageNode,
-						lastDetailMessage: lastDetailMessage?.app_message_id
-							? {
-									...lastDetailMessage,
-									app_message_id: lastDetailMessage.app_message_id,
-								}
-							: undefined,
-						hasStatusChanged,
-						activeFileId,
-						getActiveFileId: () => activeFileIdRef.current,
-						workspaceFileTree: attachments,
-						workspaceFilesList: attachmentList,
-					})
 				})
 			}
 
@@ -582,16 +558,7 @@ function TopicPage({ pageVariant = "default" }: TopicPageDesktopProps) {
 					})
 				})
 		}
-
-		scheduleWhenTabsCacheReady(() => {
-			checkAndOpenFileByTopicChanged({
-				activeFileId,
-				getActiveFileId: () => activeFileIdRef.current,
-				workspaceFileTree: attachments,
-				workspaceFilesList: attachmentList,
-			})
-		})
-	}, [selectedTopic?.id, isSelectedTopicMessagesReady, attachments, attachmentList])
+	}, [selectedTopic?.id, isSelectedTopicMessagesReady])
 
 	const updateAttachments = useDebounceFn(
 		(selectedProject: any, callback?: () => void) => {
@@ -608,6 +575,7 @@ function TopicPage({ pageVariant = "default" }: TopicPageDesktopProps) {
 			let didCommitFinalSnapshot = false
 
 			try {
+				projectFilesStore.setAttachmentLoadStatus(projectId, "loading")
 				pubsub.publish(PubSubEvents.Update_Attachments_Loading, true)
 				withAttachmentsRefreshWaitersResolved(
 					projectId,
@@ -629,13 +597,22 @@ function TopicPage({ pageVariant = "default" }: TopicPageDesktopProps) {
 												{ tree, list },
 												{ preserveList: true },
 											)
-										projectFilesStore.setWorkspaceFileTree(processedData.tree, {
-											list: processedData.list,
-											source: `TopicPage.batch.${phase}`,
+										runInAction(() => {
+											projectFilesStore.setWorkspaceFileTree(
+												processedData.tree,
+												{
+													list: processedData.list,
+													source: `TopicPage.batch.${phase}`,
+												},
+											)
+											if (isFinal) {
+												didCommitFinalSnapshot = true
+												projectFilesStore.setAttachmentLoadStatus(
+													projectId,
+													"ready",
+												)
+											}
 										})
-										if (isFinal) {
-											didCommitFinalSnapshot = true
-										}
 									}
 								: undefined,
 						}),
@@ -648,12 +625,15 @@ function TopicPage({ pageVariant = "default" }: TopicPageDesktopProps) {
 								)
 								return
 							}
-							if (!didCommitFinalSnapshot) {
-								projectFilesStore.setWorkspaceFileTree(res.tree, {
-									list: res.list,
-									source: "TopicPage.load_result",
-								})
-							}
+							runInAction(() => {
+								if (!didCommitFinalSnapshot) {
+									projectFilesStore.setWorkspaceFileTree(res.tree, {
+										list: res.list,
+										source: "TopicPage.load_result",
+									})
+								}
+								projectFilesStore.setAttachmentLoadStatus(projectId, "ready")
+							})
 							GlobalMentionPanelStore.finishLoadAttachmentsPromise(projectId)
 						})
 						.catch((error: unknown) => {
@@ -666,7 +646,8 @@ function TopicPage({ pageVariant = "default" }: TopicPageDesktopProps) {
 								return
 							}
 							console.error("Failed to fetch attachments:", error)
-							projectFilesStore.setWorkspaceFileTree([])
+							// 读取失败不能证明文件被删除，保留已交付快照供当前预览继续使用。
+							projectFilesStore.setAttachmentLoadStatus(projectId, "error")
 						})
 						.finally(() => {
 							request.release()
@@ -678,8 +659,10 @@ function TopicPage({ pageVariant = "default" }: TopicPageDesktopProps) {
 				)
 			} catch (error) {
 				if (isAbortError(error)) return
+				if (!request.isCurrent()) return
 				console.error("Failed to fetch attachments:", error)
-				projectFilesStore.setWorkspaceFileTree([])
+				// 读取失败不能证明文件被删除，保留已交付快照供当前预览继续使用。
+				projectFilesStore.setAttachmentLoadStatus(projectId, "error")
 				resolveAttachmentsRefreshWaitersForProject(projectId)
 				callback?.()
 			}
@@ -776,6 +759,8 @@ function TopicPage({ pageVariant = "default" }: TopicPageDesktopProps) {
 			historyTriggerMode,
 			isHistoryPanelOpen,
 			onToggleHistoryPanel,
+			fileSidebarControl,
+			historyTriggerRef,
 		}: {
 			isConversationPanelCollapsed: boolean
 			isDraggingPanel: boolean
@@ -784,8 +769,12 @@ function TopicPage({ pageVariant = "default" }: TopicPageDesktopProps) {
 			historyTriggerMode: "dropdown" | "layout"
 			isHistoryPanelOpen: boolean
 			onToggleHistoryPanel?: () => void
+			fileSidebarControl?: FileSidebarControl
+			historyTriggerRef: RefObject<HTMLButtonElement>
 		}) => (
 			<TopicMessagePanel
+				fileSidebarControl={fileSidebarControl}
+				historyTriggerRef={historyTriggerRef}
 				selectedProject={selectedProject}
 				selectedTopic={selectedTopic}
 				messages={messages as any}
@@ -818,8 +807,11 @@ function TopicPage({ pageVariant = "default" }: TopicPageDesktopProps) {
 			containerClassName={styles.container}
 			detailPanelClassName={styles.detailPanel}
 			isDetailPanelFullscreen={isDetailPanelFullscreen}
-			sidebar={
+			enableProjectCollapse={!isReadOnly && !hideProjectCard}
+			sidebar={({ onCollapse, isCollapsed }) => (
 				<TopicSidebar
+					onCollapse={onCollapse}
+					isCollapsed={isCollapsed}
 					selectedProject={selectedProject}
 					selectedWorkspace={selectedWorkspace}
 					selectedTopic={selectedTopic}
@@ -828,9 +820,11 @@ function TopicPage({ pageVariant = "default" }: TopicPageDesktopProps) {
 					hideProjectCard={hideProjectCard}
 					siderVariant={isSingleTopicChat ? "chat" : "default"}
 				/>
-			}
-			detailPanel={
+			)}
+			detailPanel={(fileSidebarControl) => (
 				<Detail
+					fileSidebarControl={fileSidebarControl}
+					attachmentLoadState={projectFilesStore.attachmentLoadState}
 					ref={detailRef}
 					disPlayDetail={disPlayDetail}
 					userSelectDetail={userSelectDetail}
@@ -848,10 +842,14 @@ function TopicPage({ pageVariant = "default" }: TopicPageDesktopProps) {
 					activeFileId={activeFileId}
 					onActiveFileChange={setActiveFileId}
 					onActiveTabChange={handleActiveDetailTabChange}
+					onPreviewCollapse={isReadOnly ? undefined : collapseDetailPanel}
+					onPreviewOpen={expandDetailPanel}
+					isPreviewCollapsed={isDetailPanelCollapsed}
+					canLocateFile={!isReadOnly}
 					onFullscreenChange={setIsDetailPanelFullscreen}
 					onFileTabsCacheLoaded={onFileTabsCacheLoaded}
 				/>
-			}
+			)}
 			isReadOnly={isReadOnly}
 			keepDetailMountedWhenHidden
 			historyLayout={
@@ -859,6 +857,14 @@ function TopicPage({ pageVariant = "default" }: TopicPageDesktopProps) {
 					? undefined
 					: {
 							isOpen: isTopicHistoryPanelOpen,
+							resize:
+								!isReadOnly && !hideProjectCard
+									? {
+											width: topicHistoryWidth,
+											onWidthCommit: commitTopicHistoryWidth,
+											projectId: selectedProject?.id || "",
+										}
+									: undefined,
 							onClose: closeTopicHistoryPanel,
 							onToggle: toggleTopicHistoryPanel,
 							renderPanel: ({
@@ -866,8 +872,12 @@ function TopicPage({ pageVariant = "default" }: TopicPageDesktopProps) {
 								onExpandConversationPanel,
 								onClose,
 								closeButtonRef,
+								onCollapse,
+								isPanelVisible,
 							}) => (
 								<MessageHeaderTopicHistoryPanel
+									onCollapse={onCollapse}
+									isPanelVisible={isPanelVisible}
 									selectedProject={selectedProject}
 									topicStore={topicStore}
 									topicActions={topicActions}
@@ -880,6 +890,8 @@ function TopicPage({ pageVariant = "default" }: TopicPageDesktopProps) {
 						}
 			}
 			shouldShowDetailPanel={shouldShowDetailPanel}
+			isDetailPanelCollapsed={isDetailPanelCollapsed}
+			onExpandDetailPanel={expandDetailPanel}
 			renderMessagePanel={renderMessagePanel}
 		/>
 	)

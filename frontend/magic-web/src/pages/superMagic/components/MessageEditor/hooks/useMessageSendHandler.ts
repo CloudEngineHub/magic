@@ -43,6 +43,7 @@ export default function useMessageSendHandler({
 	isMountedRef,
 }: UseMessageSendHandlerParams) {
 	return useMemoizedFn(async () => {
+		if (store.draftStore.isDraftSwitching) return
 		if (voiceInputRef.current?.isRecording) voiceInputRef.current.stopRecording()
 		// Sending is also an explicit confirmation path when the editor never received focus.
 		promoteCanvasPendingMentions?.()
@@ -79,18 +80,6 @@ export default function useMessageSendHandler({
 							}),
 							projectFilesStore.workspaceFilesList,
 						),
-						{
-							title: t("stylePanel.inspector.agentPromptTitle"),
-							selector: t("stylePanel.inspector.selector"),
-							size: t("stylePanel.inspector.size"),
-							computedStyles: t("stylePanel.inspector.computedStyles"),
-							textContent: t("stylePanel.inspector.textContent"),
-							elementAttributes: t("stylePanel.inspector.elementAttributes"),
-							resource: t("stylePanel.inspector.resource"),
-							domContext: t("stylePanel.inspector.domContext"),
-							elementHtml: t("stylePanel.inspector.elementHtml"),
-							selectorMatchCount: t("stylePanel.inspector.selectorMatchCount"),
-						},
 					)
 				: undefined
 		} catch (error: unknown) {
@@ -111,10 +100,11 @@ export default function useMessageSendHandler({
 		}
 
 		onSendStart?.()
-		store.draftStore.startSendingGuard()
+		const isQueueDraft = Boolean(store.draftStore.queueDraft)
+		if (!isQueueDraft) store.draftStore.startSendingGuard()
 		const mentionItems = collectMentionItemsFromEditor()
 
-		onSend?.({
+		const sendResult = onSend?.({
 			value: content,
 			topicMode,
 			mentionItems,
@@ -122,6 +112,12 @@ export default function useMessageSendHandler({
 			selectedImageModel: store.topicModelStore.selectedImageModel,
 			selectedVideoModel,
 		})
+
+		if (isQueueDraft) {
+			// 队列草稿由协调流程确认入队后再清理，失败或超时继续保留。
+			await sendResult
+			return
+		}
 
 		store.draftStore.createSentDraft({
 			value: store.editorStore.value,

@@ -70,11 +70,7 @@ function GeneralInputContainer({ scenes, editorContext, editorNodes }: GeneralIn
 									shouldFillHeight && "h-full min-h-0",
 								)}
 							>
-								<div
-									className={cn(
-										shouldFillHeight && "min-h-0 flex-1 [&>div]:h-full",
-									)}
-								>
+								<div className={cn(shouldFillHeight && "min-h-0 flex-1")}>
 									<DefaultMessageEditorContainer
 										editorContext={editorContext}
 										editorNodes={editorNodes}

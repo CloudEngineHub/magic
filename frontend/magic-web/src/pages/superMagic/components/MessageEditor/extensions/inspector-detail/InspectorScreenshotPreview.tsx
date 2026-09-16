@@ -118,6 +118,9 @@ export function InspectorScreenshotPreview({ mention, trigger }: InspectorScreen
 		</span>
 	)
 
+	// 详情里已直接展示图片；只有标签触发器需要额外的悬浮预览。
+	if (!trigger) return previewTrigger
+
 	return (
 		<MediaPreviewTooltip
 			mediaType="image"

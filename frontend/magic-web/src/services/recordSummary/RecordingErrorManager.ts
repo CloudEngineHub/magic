@@ -3,7 +3,7 @@
  * 录音纪要错误管理器
  */
 
-import { logger as Logger } from "@/utils/log"
+import { logger as Logger } from "@/infrastructure/logger"
 
 const logger = Logger.createLogger("RecordingErrorManager", {
 	enableConfig: { console: false },

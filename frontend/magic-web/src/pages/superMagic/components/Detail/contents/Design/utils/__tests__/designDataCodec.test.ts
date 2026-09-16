@@ -92,6 +92,41 @@ describe("designDataCodec", () => {
 		validateV3CanvasDocument(result.canvas)
 	})
 
+	it("preserves video generation runtime metadata during V2 to V3 migration", () => {
+		const videoGenerationResultMeta = {
+			runtime: {
+				started_at: "2026-09-14 14:00:14",
+				finished_at: "2026-09-14 14:12:11",
+				elapsed_seconds: 717,
+			},
+		}
+		const result = upgradeDesignDataToV3({
+			type: "design",
+			name: "legacy-video",
+			version: "2.0.0",
+			canvas: {
+				elements: [
+					{
+						id: "video-1",
+						type: ElementTypeEnum.Video,
+						videoGenerationResultMeta,
+					},
+				],
+			},
+		})
+
+		expect(result.canvas?.elements?.[0]).toMatchObject({
+			activeContentId: "video-1-content-1",
+			mainContentId: "video-1-content-1",
+			contents: [
+				{
+					contentId: "video-1-content-1",
+					videoGenerationResultMeta,
+				},
+			],
+		})
+	})
+
 	it("drops visual understanding from non-media legacy and Content data", () => {
 		const result = upgradeDesignDataToV3({
 			type: "design",

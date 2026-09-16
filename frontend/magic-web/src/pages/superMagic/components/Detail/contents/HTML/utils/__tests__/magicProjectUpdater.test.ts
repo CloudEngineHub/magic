@@ -20,7 +20,7 @@ vi.mock("@/pages/superMagic/utils/api", () => ({
 	getFileContentById: mockState.getFileContentById,
 }))
 
-vi.mock("@/utils/log", () => ({
+vi.mock("@/infrastructure/logger", () => ({
 	logger: {
 		createLogger: () => ({
 			info: vi.fn(),

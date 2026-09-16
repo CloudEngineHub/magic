@@ -22,170 +22,128 @@ if _tools_package_was_stubbed:
     tools_package.__path__ = [str(Path(__file__).resolve().parents[2] / "app" / "tools")]
     sys.modules["app.tools"] = tools_package
 
-maintenance_module = import_module(
-    "app.service.memory.runtime.extraction.memory_maintenance_prompt"
-)
-prompts_module = import_module(
-    "app.service.memory.runtime.extraction.memory_extraction_prompts"
-)
-AutoReadFileCandidate = import_module("app.service.auto_read_file_service").AutoReadFileCandidate
-AutoReadLoadPolicy = import_module("app.service.auto_read_file_service").AutoReadLoadPolicy
-AutoReadRuleId = import_module("app.service.auto_read_file_service").AutoReadRuleId
+maintenance_module = import_module("app.service.memory.runtime.extraction.memory_maintenance_prompt")
+provider_module = import_module("app.service.memory.runtime.extraction.memory_extraction_prompt_provider")
+budget_module = import_module("app.service.memory.policies.memory_file_budget")
+scope_module = import_module("app.service.memory.policies.memory_scope")
 MemoryMaintenancePromptBuilder = maintenance_module.MemoryMaintenancePromptBuilder
-MemoryExtractionPromptProvider = import_module(
-    "app.service.memory.runtime.extraction.memory_extraction_prompt_provider"
-).MemoryExtractionPromptProvider
-AgentProviderType = import_module("app.core.models.agent_runtime").AgentProviderType
-AgentTarget = import_module("app.core.models.agent_runtime").AgentTarget
-MemoryExtractionPromptName = prompts_module.MemoryExtractionPromptName
-get_memory_extraction_prompt = prompts_module.get_memory_extraction_prompt
+MemoryExtractionPromptProvider = provider_module.MemoryExtractionPromptProvider
+MemoryFileTokenUsage = budget_module.MemoryFileTokenUsage
+MemoryFileReadStatus = budget_module.MemoryFileReadStatus
+MemoryMdBudget = budget_module.MemoryMdBudget
+MemoryScope = scope_module.MemoryScope
+MemoryScopeKind = scope_module.MemoryScopeKind
 
 if _tools_package_was_stubbed:
     sys.modules.pop("app.tools", None)
 if _storage_package_was_stubbed:
     sys.modules.pop("app.infrastructure.storage", None)
 
-
-def _candidate(path: Path, rule_id: AutoReadRuleId) -> AutoReadFileCandidate:
-    """构造一个已通过路径安全检查的记忆文件候选。"""
-    scope = {
-        AutoReadRuleId.GLOBAL_MEMORY: "user-global",
-        AutoReadRuleId.PROJECT_MEMORY: "user-project:test",
-    }[rule_id]
-    return AutoReadFileCandidate(
-        rule_id=rule_id,
-        load_policy=AutoReadLoadPolicy.ALWAYS,
-        absolute_path=path,
-        display_path=str(path),
-        scope=scope,
-        priority=20,
-    )
+"""
+旧模板枚举和占位符渲染入口已随政策迁入 Skill 删除；对应三个模板接口用例不再适用。
+保留并适配原有的预算、缺失文件容错、动态事实、中文注释和主提示词职责检查，不增加场景。
+"""
 
 
 @pytest.mark.asyncio
 async def test_memory_maintenance_prompt_only_lists_files_at_or_over_limit(monkeypatch, tmp_path):
-    """只有达到 32KB 的文件才进入动态整理提示。"""
-    global_path = tmp_path / "global" / "MEMORY.md"
-    project_path = tmp_path / "project" / "MEMORY.md"
-    candidates = (
-        _candidate(global_path, AutoReadRuleId.GLOBAL_MEMORY),
-        _candidate(project_path, AutoReadRuleId.PROJECT_MEMORY),
+    """用量按文件分别展示，只有严格超过 Token 最大值才标记超限。"""
+    scopes = (
+        MemoryScope(MemoryScopeKind.GLOBAL, tmp_path / "global"),
+        MemoryScope(MemoryScopeKind.PROJECT, tmp_path / "project"),
     )
+    monkeypatch.setattr(maintenance_module, "resolve_memory_scopes", lambda _context: scopes)
 
-    async def fake_candidates(_context):
-        return candidates
+    async def fake_inspect(path: Path, _event: object) -> MemoryFileTokenUsage:
+        tokens = 16001 if path == scopes[0].memory_file else 16000
+        return MemoryFileTokenUsage(path, MemoryFileReadStatus.OK, tokens, size_bytes=tokens * 3)
 
-    async def fake_stat(path):
-        return SimpleNamespace(st_size=32 * 1024 if path == global_path else 31 * 1024)
-
-    monkeypatch.setattr(
-        maintenance_module.AutoReadFileService,
-        "resolve_memory_file_candidates",
-        fake_candidates,
-    )
-    monkeypatch.setattr(maintenance_module, "async_stat", fake_stat)
-
-    prompt = await MemoryMaintenancePromptBuilder().build(SimpleNamespace())
-
-    assert str(global_path) in prompt
-    assert "scope: user-global" in prompt
-    assert "current size: 32.0 KiB" in prompt
-    assert "suggested target: <= 24 KiB" in prompt
-    assert str(project_path) not in prompt
-    assert "notes/" in prompt
-    assert "Every notes filename must be short" in prompt
-    assert "random IDs" in prompt
+    monkeypatch.setattr(maintenance_module, "inspect_memory_file", fake_inspect)
+    builder = MemoryMaintenancePromptBuilder()
+    usages = await builder.inspect(SimpleNamespace(get_interruption_event=lambda: None))
+    prompt = builder.render_usage(usages, MemoryMdBudget(10000, 16000))
+    assert str(scopes[0].memory_file) in prompt
+    assert str(scopes[1].memory_file) in prompt
+    assert prompt.count("over maximum: yes") == 1
+    assert prompt.count("over maximum: no") == 1
+    assert "target 10,000; maximum 16,000" in prompt
 
 
 @pytest.mark.asyncio
 async def test_memory_maintenance_prompt_skips_missing_files(monkeypatch, tmp_path):
-    """单个文件 stat 失败时不阻断 AfterRun，也不生成错误提醒。"""
-    path = tmp_path / "global" / "MEMORY.md"
-
-    async def fake_candidates(_context):
-        return (_candidate(path, AutoReadRuleId.GLOBAL_MEMORY),)
-
-    async def fake_stat(_path):
-        raise FileNotFoundError(path)
-
-    monkeypatch.setattr(
-        maintenance_module.AutoReadFileService,
-        "resolve_memory_file_candidates",
-        fake_candidates,
-    )
-    monkeypatch.setattr(maintenance_module, "async_stat", fake_stat)
-
-    assert await MemoryMaintenancePromptBuilder().build(SimpleNamespace()) == ""
+    """缺失主文件不阻断 after-run，也不被误报为已计数的空文件。"""
+    scope = MemoryScope(MemoryScopeKind.GLOBAL, tmp_path / "global")
+    monkeypatch.setattr(maintenance_module, "resolve_memory_scopes", lambda _context: (scope,))
+    builder = MemoryMaintenancePromptBuilder()
+    usages = await builder.inspect(SimpleNamespace(get_interruption_event=lambda: None))
+    assert usages[0].status == MemoryFileReadStatus.MISSING
+    assert usages[0].estimated_tokens is None
+    assert "no file currently exists" in builder.render_usage(usages, MemoryMdBudget(10000, 16000))
 
 
 @pytest.mark.asyncio
-async def test_prompt_provider_appends_dynamic_maintenance_prompt():
-    """提示词提供器把动态整理段落追加到对应的静态 AfterRun 提示词。"""
-    builder = SimpleNamespace(build=AsyncMock(return_value="\n<dynamic-maintenance />"))
-    provider = MemoryExtractionPromptProvider(builder)
-    target = AgentTarget(AgentProviderType.BUILTIN, "magic")
+async def test_prompt_provider_appends_dynamic_maintenance_prompt(monkeypatch):
+    """真实 Skill reference 与动态用量共同进入后台请求，不恢复 Python 政策模板。"""
+    from agentlang.chat_history.chat_history import ChatHistoryForkData
+    from agentlang.skills.loader import SkillLoader
+    from app.core.horizon.models import HorizonState
+    from app.core.skill_utils.prompt import SkillSources
+    from app.core.models.agent_runtime import AgentProviderType, AgentTarget
+    from app.core.models.agent_session import AgentSessionRef
+    from app.service.agent_context_snapshot_service import AgentContextSnapshot
 
-    prompt = await provider.load(target, agent_context=SimpleNamespace())
-
-    assert prompt.endswith("\n<dynamic-maintenance />")
-    builder.build.assert_awaited_once()
-
-
-def test_memory_extraction_prompt_method_supports_placeholders():
-    """公开方法可以使用映射参数和关键字占位符渲染内置模板。"""
-    result = get_memory_extraction_prompt(
-        MemoryExtractionPromptName.MEMORY_MAINTENANCE,
-        {"memory_files": "- /tmp/global/MEMORY.md (16.0 KiB; limit 16 KiB)"},
+    root = Path(__file__).resolve().parents[2]
+    skill = await SkillLoader().load_from_file(root / "agents/skills/memory/SKILL.md")
+    monkeypatch.setattr(provider_module.PathManager, "get_compiled_agent_file", lambda _name: root / "agents/magic.agent")
+    monkeypatch.setattr(provider_module, "resolve_skills_metadata", AsyncMock(return_value=SkillSources([skill], [])))
+    monkeypatch.setattr(provider_module, "get_memory_md_budget", lambda: MemoryMdBudget(10000, 16000))
+    monkeypatch.setattr(provider_module, "build_memory_runtime_context", lambda _context: "Runtime scope facts")
+    builder = SimpleNamespace(inspect=AsyncMock(return_value=()), render_usage=lambda *_args: "Dynamic usage facts")
+    context = SimpleNamespace(
+        is_magiclaw=lambda: False,
+        get_personal_preferences=lambda: SimpleNamespace(long_term_memory_enabled=True),
+        has_skill=lambda name: name == "memory",
+        shared_context=SimpleNamespace(get_field=lambda _key: "UTC"),
     )
-
-    assert "Files requiring maintenance (scope, path, current size, and suggested target):" in result
-    assert "/tmp/global/MEMORY.md" in result
-    assert "<!--zh" not in result
-
-
-def test_memory_extraction_prompt_method_supports_keyword_placeholders():
-    """公开方法支持关键字占位符。"""
-    result = get_memory_extraction_prompt(
-        MemoryExtractionPromptName.MEMORY_MAINTENANCE,
-        {"prefix": "memory"},
-        memory_files="- maintenance",
+    """
+    与生产调用传同一种快照：provider 从 source 取得 Agent 配置，从 Horizon 取得来源话题。
+    这里没有话题信息是合法状态，不能靠缺字段的桩迫使生产代码猜 ID 或增加宽松访问。
+    """
+    snapshot = AgentContextSnapshot(
+        source=AgentSessionRef(
+            target=AgentTarget(AgentProviderType.BUILTIN, "magic"),
+            agent_id="source",
+            chat_history_dir=root / ".chat_history",
+        ),
+        chat_history=ChatHistoryForkData(messages=(), session_document={}),
+        horizon_state=HorizonState(agent_id="source"),
     )
-
-    assert "- maintenance" in result
-
-
-def test_memory_extraction_prompt_renderer_reports_missing_placeholder():
-    """内置模板缺少占位符时返回可定位的参数错误。"""
-    with pytest.raises(ValueError, match="缺少占位符"):
-        get_memory_extraction_prompt(
-            MemoryExtractionPromptName.MEMORY_MAINTENANCE,
-        )
+    prompt = await MemoryExtractionPromptProvider(builder).load(snapshot, agent_context=context)
+    assert "after-run.md" in prompt
+    assert "Dynamic usage facts" in prompt
+    assert "Runtime scope facts" in prompt
+    builder.inspect.assert_awaited_once_with(context)
 
 
-def test_memory_extraction_prompt_source_keeps_developer_annotations():
-    """模板源码保留中文开发注释，便于维护提示词时阅读。"""
-    source = (
-        Path(__file__).resolve().parents[2]
-        / "app"
-        / "service"
-        / "memory"
-        / "runtime"
-        / "extraction"
-        / "memory_extraction_prompts.py"
-    ).read_text(encoding="utf-8")
+@pytest.mark.asyncio
+async def test_memory_extraction_prompt_source_keeps_developer_annotations():
+    """运行时路径说明保留完整中文开发注释，正式 Skill 使用英文。"""
+    from app.utils.async_file_utils import async_read_text
 
+    root = Path(__file__).resolve().parents[2]
+    source = await async_read_text(root / "agents/prompts/file_memory_instructions.prompt")
     assert "<!--zh" in source
 
 
-def test_memory_prompt_keeps_storage_and_retrieval_only():
-    """主提示词保留目录和读取说明，不再承载完整写入规则。"""
-    prompt_path = (
-        Path(__file__).resolve().parents[2] / "agents" / "prompts" / "file_memory_instructions.prompt"
-    )
-    content = prompt_path.read_text(encoding="utf-8")
+@pytest.mark.asyncio
+async def test_memory_prompt_keeps_storage_and_retrieval_only():
+    """主提示词只提供作用域与读取事实，完整维护规则由预加载 Skill 承担。"""
+    from app.utils.async_file_utils import async_read_text
 
-    assert "### Storage" in content
-    assert "### When to read memory" in content
+    root = Path(__file__).resolve().parents[2]
+    content = await async_read_text(root / "agents/prompts/file_memory_instructions.prompt")
+    assert "Runtime locations for file-based persistent memory" in content
+    assert "latest memory notification" in content
     assert "notes/" in content
     assert len(content.encode("utf-8")) < 8 * 1024
     assert content.count("<!--zh") == 1

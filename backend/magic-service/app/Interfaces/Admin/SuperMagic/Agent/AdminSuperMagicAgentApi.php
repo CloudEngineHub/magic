@@ -57,7 +57,7 @@ class AdminSuperMagicAgentApi extends AbstractSuperMagicApi
     /**
      * Reconcile all Agent Market vector points.
      *
-     * 可选参数 force_re_embedding：为 true 时，若向量集合维度与目标维度不一致，会删除集合并按目标维度重建后全量重灌。
+     * 可选参数 force_re_embedding：为 true 时，若向量集合维度与模型实际输出维度不一致，会删除集合并按实际维度重建后全量重灌。
      */
     #[CheckPermission([MagicResourceEnum::PLATFORM_AGENT_MARKET], MagicOperationEnum::EDIT)]
     public function reindexMarketVectors(): array

@@ -16,6 +16,10 @@ import {
 import { decodeHTMLEntities } from "../utils/full-content"
 import { getHtmlSandboxRuntimeUrl } from "../utils/html-sandbox-runtime-url"
 import {
+	getDevicePreviewScrollbarsScript,
+	syncDevicePreviewScrollbars,
+} from "../utils/device-preview-scrollbars"
+import {
 	buildHtmlVirtualStorageNamespace,
 	createVirtualStorageContext,
 	getVirtualStorageBridgeScript,
@@ -32,6 +36,7 @@ interface IsolatedHTMLRendererProps {
 	isEditMode?: boolean
 	/** 预览模式：头部切到手机框时传 mobile，桌面预览传 desktop；不传则不向子页同步（保持 auto） */
 	dashboardRenderMode?: DashboardIframeRenderMode
+	devicePreviewEnabled?: boolean
 	onSaveReady?: (triggerSave: () => void) => void
 	// 添加必要的props来获取文件信息
 	attachments?: FileItem[]
@@ -68,6 +73,7 @@ function IsolatedHTMLRenderer({
 	className,
 	isEditMode,
 	dashboardRenderMode,
+	devicePreviewEnabled = false,
 	onSaveReady,
 	attachments,
 	attachmentList,
@@ -129,6 +135,10 @@ function IsolatedHTMLRenderer({
 		script.setAttribute("data-injected", "magic-virtual-storage")
 		script.textContent = getVirtualStorageBridgeScript(virtualStorageContext)
 		doc.head.insertBefore(script, doc.head.firstChild)
+		const devicePreviewScript = doc.createElement("script")
+		devicePreviewScript.setAttribute("data-injected", "magic-device-preview")
+		devicePreviewScript.textContent = getDevicePreviewScrollbarsScript(window.location.origin)
+		doc.head.appendChild(devicePreviewScript)
 
 		return `<!DOCTYPE html>\n${doc.documentElement.outerHTML}`
 	}, [contentTrim, virtualStorageContext])
@@ -266,6 +276,17 @@ function IsolatedHTMLRenderer({
 	useEffect(() => {
 		const callback = (event: MessageEvent) => {
 			if (event.source !== iframeRef.current?.contentWindow) return
+			if (
+				event.data?.type === "contentLoaded" &&
+				event.origin === (externalRenderSiteOrigin || window.location.origin)
+			) {
+				syncDevicePreviewScrollbars(
+					iframeRef.current,
+					externalRenderSiteOrigin || window.location.origin,
+					devicePreviewEnabled,
+				)
+				return
+			}
 			if (event.data?.type === "iframeReady") {
 				setIframeLoaded(true)
 				return
@@ -287,7 +308,16 @@ function IsolatedHTMLRenderer({
 		return () => {
 			window.removeEventListener("message", callback)
 		}
-	}, [externalRenderSiteOrigin])
+	}, [externalRenderSiteOrigin, devicePreviewEnabled])
+
+	// 只同步原生条的显示，不能让设备模式变化触发 dashboardContent 重建。
+	useEffect(() => {
+		syncDevicePreviewScrollbars(
+			iframeRef.current,
+			externalRenderSiteOrigin || window.location.origin,
+			devicePreviewEnabled,
+		)
+	}, [devicePreviewEnabled, externalRenderSiteOrigin])
 
 	// 发送消息给子容器，编辑状态变更后
 	useEffect(() => {

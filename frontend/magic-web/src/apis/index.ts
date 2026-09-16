@@ -1,5 +1,5 @@
 import { generateContactApi } from "./modules/contact"
-import magicClient from "./clients/magic"
+import { defaultMagicClient as magicClient } from "@/infrastructure/network/http"
 import chatWebSocketClient from "./clients/chatWebSocket"
 import { generateUserApi } from "./modules/user"
 import { generateCommonApi } from "./modules/common"

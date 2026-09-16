@@ -105,7 +105,7 @@ class AdminSlidesTemplateApi extends AbstractApi
     /**
      * 重建幻灯片模板向量索引.
      *
-     * 可选参数 force_re_embedding：为 true 时，若向量集合维度与目标维度不一致，会删除集合并按目标维度重建后全量重灌。
+     * 可选参数 force_re_embedding：为 true 时，若向量集合维度与模型实际输出维度不一致，会删除集合并按实际维度重建后全量重灌。
      */
     #[CheckPermission([MagicResourceEnum::PLATFORM_SLIDES_TEMPLATE], MagicOperationEnum::EDIT)]
     public function reindexVectorIndex(ReindexVectorIndexRequest $request): array

@@ -14,20 +14,17 @@ import type {
 	ImageSource,
 	LoadedResource,
 } from "../resources/image/ImageResourceManager"
-import type { LoadedVideoResource } from "../resources/video/VideoResourceManager"
+import type {
+	LoadedVideoResource,
+	VideoPosterSource,
+} from "../resources/video/VideoResourceManager"
 import type { ResourceLoadFailureReason } from "../resources/media-common/resourceLoadFailure"
 import type { ConnectionOrigin } from "../shared/connectionOrigin"
 import type { GenerationElementToolId } from "../element-tools/model/ElementToolTypes"
 import type { CanvasAccessContext } from "../../public/props"
 
 export type ViewportChangeSource =
-	| "wheel"
-	| "gesture"
-	| "minimap"
-	| "programmatic"
-	| "resize"
-	| "restore"
-	| "unknown"
+	"wheel" | "gesture" | "minimap" | "programmatic" | "resize" | "restore" | "unknown"
 
 export type ViewportChangePhase = "start" | "move" | "end"
 
@@ -256,6 +253,12 @@ export interface CanvasEventMap {
 		reason: string
 	} // 图片 decoded/native 资源即将释放；元素必须同步断开 Konva.Image 持有的 image 引用
 	"resource:video:refreshed": { path: string; resource: LoadedVideoResource } // 视频资源替换后刷新完成事件
+	/** 视频 poster 即将被原地释放；消费者必须先解除 Konva.Image 对 source 的引用。 */
+	"resource:video:will-release": {
+		path?: string
+		poster: VideoPosterSource
+		reason: string
+	}
 	"resource:video:load-failed": {
 		path: string
 		reason?: ResourceLoadFailureReason
@@ -460,6 +463,8 @@ type EventListener<T extends CanvasEvent = CanvasEvent> = (event: T) => void
  */
 export class EventEmitter<EventMap extends Record<keyof EventMap, unknown> = CanvasEventMap> {
 	private listeners: Map<keyof EventMap, Set<EventListener<CanvasEvent>>> = new Map()
+	/** 订阅集合未变化时复用派发快照，避免高频 viewport 事件逐帧复制全部监听器。 */
+	private listenerSnapshots: Map<keyof EventMap, EventListener<CanvasEvent>[]> = new Map()
 
 	/** 记录已触发过的事件及其数据，用于支持"订阅时如果已触发则立即执行"的功能 */
 	private emittedEvents: Map<keyof EventMap, CanvasEvent> = new Map()
@@ -488,6 +493,7 @@ export class EventEmitter<EventMap extends Record<keyof EventMap, unknown> = Can
 		const listeners = this.listeners.get(eventType)
 		if (listeners) {
 			listeners.add(listener as EventListener<CanvasEvent>)
+			this.listenerSnapshots.delete(eventType)
 		}
 
 		// 如果特定事件已经触发过，立即执行回调
@@ -507,6 +513,7 @@ export class EventEmitter<EventMap extends Record<keyof EventMap, unknown> = Can
 		return () => {
 			if (listeners) {
 				listeners.delete(listener as EventListener<CanvasEvent>)
+				this.listenerSnapshots.delete(eventType)
 				if (listeners.size === 0) {
 					this.listeners.delete(eventType)
 				}
@@ -564,12 +571,14 @@ export class EventEmitter<EventMap extends Record<keyof EventMap, unknown> = Can
 
 		if (listener) {
 			listeners.delete(listener as EventListener<CanvasEvent>)
+			this.listenerSnapshots.delete(eventType)
 			if (listeners.size === 0) {
 				this.listeners.delete(eventType)
 			}
 		} else {
 			// 如果没有指定 listener，则移除该事件的所有监听器
 			this.listeners.delete(eventType)
+			this.listenerSnapshots.delete(eventType)
 		}
 	}
 
@@ -588,8 +597,12 @@ export class EventEmitter<EventMap extends Record<keyof EventMap, unknown> = Can
 		const listeners = this.listeners.get(eventType)
 		if (!listeners || listeners.size === 0) return
 
-		// 复制监听器列表，避免在执行过程中被修改
-		const listenersCopy = Array.from(listeners)
+		// 快照保证派发过程中增删监听器不会改变当前轮；订阅未变化时可跨帧复用。
+		let listenersCopy = this.listenerSnapshots.get(eventType)
+		if (!listenersCopy) {
+			listenersCopy = Array.from(listeners)
+			this.listenerSnapshots.set(eventType, listenersCopy)
+		}
 
 		listenersCopy.forEach((listener) => {
 			try {
@@ -614,6 +627,7 @@ export class EventEmitter<EventMap extends Record<keyof EventMap, unknown> = Can
 	 */
 	public removeAllListeners(): void {
 		this.listeners.clear()
+		this.listenerSnapshots.clear()
 		this.emittedEvents.clear()
 	}
 

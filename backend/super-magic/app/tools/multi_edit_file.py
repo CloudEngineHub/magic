@@ -11,12 +11,12 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional
 from pydantic import BaseModel, Field
 
-import aiofiles
 from agentlang.context.tool_context import ToolContext
 from agentlang.tools.tool_result import ToolResult
 from agentlang.logger import get_logger
 from agentlang.utils.syntax_checker import SyntaxChecker
-from app.core.entity.message.server_message import DisplayType, FileContent, ToolDetail
+from app.core.entity.message.server_message import DisplayType, ToolDetail
+from app.core.horizon.agent_horizon import VALIDATION_ERROR_NOT_READ
 from app.tools.abstract_file_tool import AbstractFileTool
 from app.tools.core import BaseToolParams, tool
 from app.tools.workspace_tool import WorkspaceTool
@@ -24,7 +24,10 @@ from app.utils.line_number_handler import LineNumberHandler
 from app.utils.diff_generator import DiffGenerator
 from app.utils.punctuation_matcher import PunctuationMatcher
 from app.service.html_app_memory_service import is_html_app_memory_path
-from app.utils.async_file_utils import async_exists
+from app.utils.async_file_utils import async_exists, async_write_text
+from app.tools.utils.file_change_stats import (
+    FileChangeMetrics, FileTextSnapshot, format_file_change_metrics, measure_text, read_text_snapshot,
+)
 
 logger = get_logger(__name__)
 
@@ -94,12 +97,17 @@ STRONGLY PREFERRED when you need to make multiple edits to the same file.
 This tool is more efficient than calling edit_file multiple times.
 
 Workflow for multiple edits:
-1. Read the file ONCE to identify all locations that need editing
+1. Obtain the exact content needed for all edits; do not repeat a read when a file observation and sufficient context already exist
 2. Plan all edits together (old_string and new_string for each)
 3. Call this tool ONCE with all edits in the edits array
 4. DO NOT read the file again between edits - this is the whole point of this tool
 
 Each edit's requirements are the same as the edit_file tool, please refer to the edit_file tool's hints.
+The file must have a recorded observation from read_file/read_files, grep_search, or a recognized
+single-file shell view. User-provided snippets do not create a record; partial reads do not restrict
+edit locations. If the version changed, every applied edit must request and match exactly one
+replacement in its sequential step. Otherwise follow the error's reading guidance. Read surrounding
+content when needed for your decision; skipped no-ops do not count as replacements.
 
 IMPORTANT: Copy text exactly as it appears in the file, including punctuation style.
 When copying from read_file output, copy only the actual file content after the line-number prefix.
@@ -132,14 +140,15 @@ Never include the line number + tab in any old_string or new_string.
                           "Use write_file to create new files."
                 )
 
-            # Verify file hasn't been modified externally
-            is_valid, error_message = await self.get_horizon(tool_context).validate_file_not_modified(file_path)
-            if not is_valid:
+            # 内部读取只服务本次匹配，不能替代编辑前必须已有的观察记录。
+            horizon = self.get_horizon(tool_context)
+            if not await horizon.is_file_tracked(file_path):
                 tool_context.set_metadata("error_type", "edit_file.error_file_modified")
-                return ToolResult.error(error_message)
+                return ToolResult.error(VALIDATION_ERROR_NOT_READ)
 
             # Read original content
-            original_content = await self._read_file(file_path)
+            original_snapshot = await self._read_file(file_path)
+            original_content = original_snapshot.content
 
 
 
@@ -259,11 +268,15 @@ Never include the line number + tab in any old_string or new_string.
                     edit.expected_replacements
                 )
 
-                # Track applied edit
+                """
+                Track applied edit
+                每项替换报告字符变化；整份文件的字节大小在全部编辑完成后统一统计。
+                例：「中文」替换为 abcd，字符数增加 2，但 UTF-8 字节减少 2；此处只报告前者。
+                """
                 applied_edits.append({
                     'index': i + 1,
                     'replacements': edit.expected_replacements,
-                    'size_change': len(working_content) - len(before_edit)
+                    'character_change': len(working_content) - len(before_edit)
                 })
 
             # Check if any changes were made
@@ -272,11 +285,23 @@ Never include the line number + tab in any old_string or new_string.
                 msg = "No changes made. All edits were no-ops or skipped."
                 if ai_warnings:
                     msg += "\n\n" + "\n\n".join(ai_warnings)
+                msg += "\n" + format_file_change_metrics(
+                    FileChangeMetrics(original_snapshot.metrics, original_snapshot.metrics),
+                )
                 return ToolResult(content=msg)
+
+            # applied_edits 只含实际执行项，且上面已确认实际次数等于请求次数。
+            # 每项均唯一才允许版本变化；任一多次替换仍要求原版本未变。
+            is_valid, error_message = await horizon.validate_file_not_modified(
+                file_path, allow_changed=all(edit['replacements'] == 1 for edit in applied_edits),
+            )
+            if not is_valid:
+                tool_context.set_metadata("error_type", "edit_file.error_file_modified")
+                return ToolResult.error(error_message)
 
             # Write the final result with file versioning (triggers events and updates timestamp)
             async with self._file_versioning_context(tool_context, file_path):
-                await self._write_file(file_path, working_content)
+                working_content = await self._write_file(file_path, working_content)
 
             # Syntax check
             syntax_result = await SyntaxChecker.check_syntax(str(file_path), working_content)
@@ -285,12 +310,17 @@ Never include the line number + tab in any old_string or new_string.
                 errors_str = "\n".join(syntax_result.errors)
                 ai_warnings.append(f"WARNING: Syntax errors detected in the modified file:\n{errors_str}")
 
-            # Generate summary diff for LLM (ToolResult content)
-            summary_diff = DiffGenerator.generate_summary_diff(
-                original_content,
-                working_content,
-                str(file_path.name)
+            """
+            Calculate stats
+            所有替换完成后统一比较 original_content 与最终 working_content。
+            不把每步中间版本重复计为最终变化，也不为摘要和用量反馈分别再比较全文。
+            """
+            stats = DiffGenerator.calculate_change_stats(
+                original_content, working_content, old_size=original_snapshot.metrics.byte_count,
             )
+
+            # Generate summary diff for LLM (ToolResult content)
+            summary_diff = DiffGenerator.generate_summary_diff(str(file_path.name), stats)
 
             # Generate full diff for user display (get_tool_detail)
             full_diff = DiffGenerator.generate_unified_diff(
@@ -298,9 +328,6 @@ Never include the line number + tab in any old_string or new_string.
                 working_content,
                 str(file_path.name)
             )
-
-            # Calculate stats
-            stats = DiffGenerator.calculate_change_stats(original_content, working_content)
 
             # Format output
             absolute_path = file_path.resolve()
@@ -310,9 +337,9 @@ Never include the line number + tab in any old_string or new_string.
             # Summary of each edit
             for edit_info in applied_edits:
                 output += f"  Edit {edit_info['index']}: {edit_info['replacements']} replacement(s)"
-                if edit_info['size_change'] != 0:
-                    sign = '+' if edit_info['size_change'] > 0 else ''
-                    output += f" ({sign}{edit_info['size_change']} bytes)"
+                if edit_info['character_change'] != 0:
+                    sign = '+' if edit_info['character_change'] > 0 else ''
+                    output += f" ({sign}{edit_info['character_change']} characters)"
                 output += "\n"
 
             output += "\n"
@@ -334,6 +361,12 @@ Never include the line number + tab in any old_string or new_string.
             if summary_diff:
                 output += "\n--- Change Summary ---\n"
                 output += summary_diff
+
+            # 原摘要继续提供全部行数／字节事实；计数只追加 Token，不替代原有信息。
+            output += "\n" + format_file_change_metrics(
+                FileChangeMetrics(original_snapshot.metrics, measure_text(working_content, stats['new_size'])),
+                include_bytes=False,
+            )
 
             # Add AI warnings if any
             if ai_warnings:
@@ -487,18 +520,17 @@ Never include the line number + tab in any old_string or new_string.
 
         return {'valid': True}
 
-    async def _read_file(self, file_path: Path) -> str:
+    async def _read_file(self, file_path: Path) -> FileTextSnapshot:
         """Read file content"""
-        async with aiofiles.open(file_path, "r", encoding="utf-8", errors="replace") as f:
-            return await f.read()
+        return await read_text_snapshot(file_path)
 
-    async def _write_file(self, file_path: Path, content: str) -> None:
+    async def _write_file(self, file_path: Path, content: str) -> str:
         """Write file content"""
         if content and not content.endswith('\n'):
             content += '\n'
 
-        async with aiofiles.open(file_path, "w", encoding="utf-8") as f:
-            await f.write(content)
+        await async_write_text(file_path, content)
+        return content
 
     async def get_tool_detail(self, tool_context: ToolContext, result: ToolResult, arguments: Dict[str, Any] = None) -> Optional[ToolDetail]:
         """Get tool details for display - shows the diff of all changes"""
@@ -528,7 +560,8 @@ Never include the line number + tab in any old_string or new_string.
 
         return ToolDetail(
             type=DisplayType.MD,  # Use Markdown display type
-            data=FileContent(
+            data=await self._build_file_content(
+                file_path=file_path,
                 file_name=f"{file_name}.diff",
                 content=markdown_content
             )

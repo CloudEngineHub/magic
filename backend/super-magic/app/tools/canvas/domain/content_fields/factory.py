@@ -37,6 +37,7 @@ class ContentFieldsFactory:
                 src=cls._optional_string(data, "src"),
                 status=cls._optional_status(data, "status"),
                 stored_error_message=cls._optional_string(data, "errorMessage"),
+                visual_understanding=cls._optional_object(data, "visualUnderstanding"),
                 generate_image_request=cls._optional_object(data, request_field or ""),
                 image_generation_task_meta=cls._optional_object(data, "imageGenerationTaskMeta"),
                 crop=cls._optional_object(data, "crop"),
@@ -47,7 +48,9 @@ class ContentFieldsFactory:
                 src=cls._optional_string(data, "src"),
                 status=cls._optional_status(data, "status"),
                 stored_error_message=cls._optional_string(data, "errorMessage"),
+                visual_understanding=cls._optional_object(data, "visualUnderstanding"),
                 generate_video_request=cls._optional_object(data, request_field or ""),
+                video_editor_draft=cls._optional_object(data, "videoEditorDraft"),
                 video_generation_result_meta=cls._optional_object(data, "videoGenerationResultMeta"),
             )
         if element_type == "audio":

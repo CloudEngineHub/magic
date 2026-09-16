@@ -7,8 +7,12 @@ from dataclasses import dataclass, field
 
 from app.tools.canvas.domain.errors import CanvasDomainError
 from app.tools.canvas.domain.models.canvas_connection import CanvasConnection
-from app.tools.canvas.domain.models.canvas_element import CanvasElement
-from app.tools.canvas.domain.types import JsonObject
+from app.tools.canvas.domain.models.canvas_element import (
+    CanvasElement,
+    collect_opaque_element_ids,
+    merge_indexed_opaque,
+)
+from app.tools.canvas.domain.types import JsonObject, JsonValue
 
 
 @dataclass
@@ -18,6 +22,10 @@ class CanvasDocument:
     elements: list[CanvasElement] = field(default_factory=list)
     connections: list[CanvasConnection] = field(default_factory=list)
     extra_data: JsonObject = field(default_factory=dict)
+    # 未支持或解码失败的根节点，跳过结构化解析，保存时按原位置写回。
+    opaque_elements: list[tuple[int, JsonValue]] = field(default_factory=list)
+    # 解码失败或端点无法校验的连线，跳过结构化解析，保存时按原位置写回。
+    opaque_connections: list[tuple[int, JsonValue]] = field(default_factory=list)
 
     def clone(self) -> "CanvasDocument":
         """返回当前文档的深拷贝。"""
@@ -25,6 +33,8 @@ class CanvasDocument:
             elements=[element.clone() for element in self.elements],
             connections=deepcopy(self.connections),
             extra_data=deepcopy(self.extra_data),
+            opaque_elements=deepcopy(self.opaque_elements),
+            opaque_connections=deepcopy(self.opaque_connections),
         )
 
     def iter_elements(self) -> list[CanvasElement]:
@@ -125,9 +135,22 @@ class CanvasDocument:
         """转换为主协议 Canvas 字典。"""
         return {
             **deepcopy(self.extra_data),
-            "elements": [element.to_dict() for element in self.elements],
-            "connections": [connection.to_dict() for connection in self.connections],
+            "elements": merge_indexed_opaque(
+                [element.to_dict() for element in self.elements],
+                self.opaque_elements,
+            ),
+            "connections": merge_indexed_opaque(
+                [connection.to_dict() for connection in self.connections],
+                self.opaque_connections,
+            ),
         }
+
+    def opaque_element_ids(self) -> set[str]:
+        """返回跳过解析的节点 id，包含嵌套 children。"""
+        ids = collect_opaque_element_ids(self.opaque_elements)
+        for element in self.iter_elements():
+            ids.update(collect_opaque_element_ids(element.opaque_children))
+        return ids
 
     def validate(self) -> None:
         """校验 Element、Content、Connection 的领域不变量。"""
@@ -154,7 +177,8 @@ class CanvasDocument:
 
         connection_ids: set[str] = set()
         connection_pairs: set[tuple[str, str]] = set()
-        known_ids = element_ids
+        # 连线可能指向前端新增、后端跳过解析的节点，这些 id 仍视为存在。
+        known_ids = element_ids | self.opaque_element_ids()
         for connection in self.connections:
             if not connection.connection_id or connection.connection_id in connection_ids:
                 raise CanvasDomainError("INVALID_CONNECTION", "Connection IDs must be unique and non-empty.")

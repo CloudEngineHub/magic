@@ -3,7 +3,7 @@ import { RefObject, useEffect } from "react"
 import { TopicMode } from "../pages/Workspace/TopicMode"
 import { MessageEditorRef } from "../components/MessageEditor/MessageEditor"
 import superMagicModeService from "@/services/superMagic/SuperMagicModeService"
-import { logger as Logger } from "@/utils/log"
+import { logger as Logger } from "@/infrastructure/logger"
 
 const OFFICIAL_PROMPTS_PAYLOAD_STORAGE_KEY = "officialPromptsPayload"
 

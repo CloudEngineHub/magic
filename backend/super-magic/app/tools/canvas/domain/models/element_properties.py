@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import math
 from dataclasses import dataclass
 
 from app.tools.canvas.domain.models.interaction_config import InteractionConfig
@@ -21,7 +22,7 @@ class ElementProperties:
     height: float | None = None
     scale_x: float | None = None
     scale_y: float | None = None
-    z_index: int | None = None
+    z_index: float | None = None
     interaction_config: InteractionConfig | None = None
 
     @classmethod
@@ -39,7 +40,7 @@ class ElementProperties:
             height=_number(data.get("height")),
             scale_x=_number(data.get("scaleX")),
             scale_y=_number(data.get("scaleY")),
-            z_index=_integer(data.get("zIndex")),
+            z_index=_finite_number(data.get("zIndex")),
             interaction_config=InteractionConfig.from_dict(interaction) if isinstance(interaction, dict) else None,
         )
 
@@ -67,6 +68,7 @@ def _number(value: object) -> float | None:
     return float(value) if isinstance(value, (int, float)) and not isinstance(value, bool) else None
 
 
-def _integer(value: object) -> int | None:
-    """把 JSON 数字收窄为整数值，并排除布尔值。"""
-    return int(value) if isinstance(value, (int, float)) and not isinstance(value, bool) else None
+def _finite_number(value: object) -> float | None:
+    """保留有限 JSON 数值的小数语义，并排除布尔值。"""
+    number = _number(value)
+    return number if number is not None and math.isfinite(number) else None

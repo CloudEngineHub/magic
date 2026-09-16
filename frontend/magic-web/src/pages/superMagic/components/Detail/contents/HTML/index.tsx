@@ -28,6 +28,9 @@ import {
 } from "./utils"
 import { useDeepCompareEffect, useMemoizedFn, useUpdateEffect } from "ahooks"
 import CommonHeaderV2 from "../../components/CommonHeaderV2"
+import { useDevicePreview } from "../../components/DevicePreview/useDevicePreview"
+import { DevicePreviewToolbar } from "../../components/DevicePreview/DevicePreviewToolbar"
+import { DevicePreviewViewport } from "../../components/DevicePreview/DevicePreviewViewport"
 import { Flex, Tour } from "antd"
 import { shadow } from "@/utils/shadow"
 import CodeEditor from "@/components/base/CodeEditor"
@@ -39,7 +42,7 @@ import MagicSpin from "@/components/base/MagicSpin"
 import DashboardIsolatedHTMLRenderer from "./dashboard/DashboardIsolatedHTMLRenderer"
 import { inlineDashboardDataJs } from "./dashboard/resourceVersioning"
 import { useDashboardVersioning } from "./dashboard/useDashboardVersioning"
-import AIEditButton from "@/pages/superMagic/components/Detail/components/EditToolbar/AIEditButton"
+import { useAIEditMenuItems } from "@/pages/superMagic/components/Detail/components/EditToolbar/useAIEditMenuItems"
 import FileEditButtons from "@/pages/superMagic/components/Detail/components/EditToolbar/FileEditButtons"
 import ActionButton from "@/pages/superMagic/components/Detail/components/CommonHeader/components/ActionButton"
 import { ProjectListItem, Topic } from "@/pages/superMagic/pages/Workspace/types"
@@ -66,7 +69,7 @@ import { useTranslation } from "react-i18next"
 import { AlertTriangle, Crosshair, ShieldCheck, Terminal } from "lucide-react"
 import { Button } from "@/components/shadcn-ui/button"
 import { env } from "@/utils/env"
-import { logger as Logger } from "@/utils/log"
+import { logger as Logger } from "@/infrastructure/logger"
 import magicToast from "@/components/base/MagicToaster/utils"
 import { type ImageExportFormat } from "@magic-web/html2image"
 import { resolvePptScaleContentDimensions } from "./utils/slide-dimensions"
@@ -285,6 +288,13 @@ export default memo(function HTML(props: HTMLProps) {
 	const isImmersiveLayout = !showFileHeader && !showFooter
 	// The simulated phone frame has a fixed height and cannot be used for page-level scrolling.
 	const shouldUsePhonePreviewFrame = !documentFlowFullscreen && viewMode === "phone"
+	const devicePreview = useDevicePreview(
+		String(runtimeProjectId || ""),
+		String(displayData?.file_id || ""),
+	)
+	const devicePreviewEnabled =
+		shouldUsePhonePreviewFrame && !isMobile && showFileHeader && !isPlaybackMode && !isInPPTMode
+	const [deviceContentScaled, setDeviceContentScaled] = useState(false)
 	// 通过 previewPolicy 声明能力，详情页消费配置
 	const previewPolicy = displayData?.display_config?.previewPolicy
 	const isReadonlyPreview = previewPolicy?.readonly === true
@@ -514,13 +524,14 @@ export default memo(function HTML(props: HTMLProps) {
 	const htmlTestIdsEnabled = isTabActive ?? (!activeFileId || activeFileId === fileId)
 	const [isAppendPicking, setIsAppendPicking] = useState(false)
 	const [isQuickSelecting, setIsQuickSelecting] = useState(false)
-	const handleAIEdit = useMemoizedFn(() => {
+	// 菜单退出确认可能改变状态；保留点击时的开关意图，避免确认退出后又重新开启。
+	const handleAIEdit = useCallback(() => {
 		if (isAppendPicking) {
 			htmlRendererRef.current?.stopInspector()
 		} else {
 			htmlRendererRef.current?.startInspectorAppend()
 		}
-	})
+	}, [isAppendPicking])
 	const handleQuickSelection = useMemoizedFn(async () => {
 		if (isQuickSelecting) {
 			await htmlRendererRef.current?.requestInspectorExit?.()
@@ -1322,10 +1333,19 @@ export default memo(function HTML(props: HTMLProps) {
 		if (showAIOptimizationButton) {
 			pubsub.publish(
 				PubSubEvents.GuideTourHTMLElementReady,
-				HTMLGuideTourElementId.AIOptimizationButton,
+				HTMLGuideTourElementId.MoreButton,
 			)
 		}
 	}, [showFileEditButton, showAIOptimizationButton])
+
+	const aiEditMenuItems = useAIEditMenuItems({
+		attachmentList,
+		fileId: displayData?.file_id,
+		enabled: Boolean(showAIOptimizationButton && htmlTestIdsEnabled),
+		maxItems: 3,
+		onPrimaryAction: handleAIEdit,
+		isPrimaryActive: isAppendPicking,
+	})
 
 	const headerActionConfig = useMemo<HeaderActionConfig>(
 		() => ({
@@ -1335,7 +1355,8 @@ export default memo(function HTML(props: HTMLProps) {
 			customActions: [
 				{
 					key: "html-server-update",
-					zone: "primary",
+					zone: "secondary",
+					before: "refresh",
 					visible: () => Boolean(isEditMode && hasServerUpdate),
 					render: (context) => (
 						<Button
@@ -1356,9 +1377,10 @@ export default memo(function HTML(props: HTMLProps) {
 				},
 				{
 					key: "html-toolbar-actions",
-					zone: "primary",
+					zone: "secondary",
+					before: "refresh",
 					visible: () => Boolean(showAIOptimizationButton || showFileEditButton),
-					render: () => (
+					render: (context) => (
 						<div
 							className="flex items-center gap-1"
 							data-testid={
@@ -1371,6 +1393,7 @@ export default memo(function HTML(props: HTMLProps) {
 									size="sm"
 									onClick={() => void handleQuickSelection()}
 									aria-pressed={isQuickSelecting}
+									aria-label={quickSelectionLabel}
 									title={quickSelectionTitle}
 									className="h-6 gap-1.5 rounded-[8px] px-3 py-0 text-xs font-normal text-foreground shadow-xs"
 									data-testid={
@@ -1381,9 +1404,15 @@ export default memo(function HTML(props: HTMLProps) {
 										size={16}
 										className={isQuickSelecting ? "text-primary" : undefined}
 									/>
-									<span className={isQuickSelecting ? "text-primary" : undefined}>
-										{quickSelectionLabel}
-									</span>
+									{context.showButtonText && (
+										<span
+											className={
+												isQuickSelecting ? "text-primary" : undefined
+											}
+										>
+											{quickSelectionLabel}
+										</span>
+									)}
 								</Button>
 							)}
 							{showFileEditButton && (
@@ -1391,7 +1420,7 @@ export default memo(function HTML(props: HTMLProps) {
 									testIdPrefix={htmlTestIdsEnabled ? "html-editor" : undefined}
 									isEditMode={isEditMode}
 									isSaving={false}
-									showButtonText
+									showButtonText={context.showButtonText}
 									editLabel={t("common.edit")}
 									onEdit={handleEdit}
 									beforeAction={() =>
@@ -1401,17 +1430,6 @@ export default memo(function HTML(props: HTMLProps) {
 									onSave={handleSave}
 									onSaveAndExit={handleSaveAndExit}
 									onCancel={handleCancel}
-								/>
-							)}
-							{showAIOptimizationButton && !isEditMode && (
-								<AIEditButton
-									testIdPrefix={htmlTestIdsEnabled ? "html-editor" : undefined}
-									showButtonText
-									maxItems={3}
-									onPrimaryAction={handleAIEdit}
-									isPrimaryActive={isAppendPicking}
-									attachmentList={attachmentList}
-									fileId={displayData?.file_id}
 								/>
 							)}
 						</div>
@@ -1535,8 +1553,10 @@ export default memo(function HTML(props: HTMLProps) {
 		attachments,
 		actionConfig: headerActionConfig,
 		onCompareVersion: handleCompareVersion,
-		extraMoreMenuItems:
-			!isDataAnalysis && !isCodeViewMode
+		moreButtonId: htmlTestIdsEnabled ? HTMLGuideTourElementId.MoreButton : undefined,
+		extraMoreMenuItems: [
+			...(aiEditMenuItems ?? []),
+			...(!isDataAnalysis && !isCodeViewMode
 				? [
 						{
 							key: "dev-console-toggle",
@@ -1553,7 +1573,8 @@ export default memo(function HTML(props: HTMLProps) {
 							onClick: handleDevConsoleToggle,
 						},
 					]
-				: [],
+				: []),
+		],
 	}
 
 	return (
@@ -1566,6 +1587,13 @@ export default memo(function HTML(props: HTMLProps) {
 			data-edit-mode={isEditMode ? "true" : "false"}
 		>
 			{showFileHeader && <CommonHeaderV2 {...headerContext} />}
+			{devicePreviewEnabled && (
+				<DevicePreviewToolbar
+					{...devicePreview}
+					active={htmlTestIdsEnabled && !activeHistory.loading && !htmlIsDeleted}
+					contentScaled={!isDataAnalysis && deviceContentScaled}
+				/>
+			)}
 			{activeHistory.loading ? (
 				documentFlowFullscreen ? (
 					<div className="min-h-dvh" />
@@ -1601,7 +1629,8 @@ export default memo(function HTML(props: HTMLProps) {
 				<div
 					data-testid={htmlTestIdsEnabled ? "html-preview-container" : undefined}
 					className={cx(styles.previewContainerBase, {
-						[styles.phoneModeContainer]: shouldUsePhonePreviewFrame,
+						[styles.phoneModeContainer]:
+							shouldUsePhonePreviewFrame && !devicePreviewEnabled,
 						[styles.immersivePreviewContainer]: isImmersiveLayout,
 						[styles.documentFlowPreviewContainer]: documentFlowFullscreen,
 					})}
@@ -1609,39 +1638,53 @@ export default memo(function HTML(props: HTMLProps) {
 					<div
 						data-testid={htmlTestIdsEnabled ? "html-preview-content" : undefined}
 						className={cx(styles.previewInnerBase, styles.htmlBody, "relative", {
-							[styles.phoneModeInner]: shouldUsePhonePreviewFrame,
+							[styles.phoneModeInner]:
+								shouldUsePhonePreviewFrame && !devicePreviewEnabled,
 							[styles.immersivePreviewInner]: isImmersiveLayout,
 							[styles.documentFlowHtmlBody]: documentFlowFullscreen,
 							[styles.documentFlowPreviewInner]: documentFlowFullscreen,
 						})}
 					>
 						{isDataAnalysis ? (
-							<DashboardIsolatedHTMLRenderer
-								key={`dashboard-html-${dashboardDataJsFile?.file_id || "none"}-${activeHistory.previewRevision}`}
-								content={processedContent}
-								className={className}
-								isEditMode={isEditMode || false}
-								dashboardRenderMode={
-									viewMode === "phone"
-										? "mobile"
-										: viewMode === "desktop"
-											? "desktop"
-											: "auto"
-								}
-								onSaveReady={onSaveReady as (triggerSave: () => void) => void}
-								attachments={attachments}
-								attachmentList={attachmentList}
-								currentFileId={displayData?.file_id}
-								currentFileName={data?.file_name}
-								projectId={runtimeProjectId}
-								topicId={selectedProject?.current_topic_id}
-							/>
+							<DevicePreviewViewport
+								{...devicePreview}
+								active={htmlTestIdsEnabled}
+								enabled={devicePreviewEnabled}
+							>
+								<DashboardIsolatedHTMLRenderer
+									devicePreviewEnabled={devicePreviewEnabled}
+									key={`dashboard-html-${dashboardDataJsFile?.file_id || "none"}-${activeHistory.previewRevision}`}
+									content={processedContent}
+									className={className}
+									isEditMode={isEditMode || false}
+									dashboardRenderMode={
+										viewMode === "phone"
+											? "mobile"
+											: viewMode === "desktop"
+												? "desktop"
+												: "auto"
+									}
+									onSaveReady={onSaveReady as (triggerSave: () => void) => void}
+									attachments={attachments}
+									attachmentList={attachmentList}
+									currentFileId={displayData?.file_id}
+									currentFileName={data?.file_name}
+									projectId={runtimeProjectId}
+									topicId={selectedProject?.current_topic_id}
+								/>
+							</DevicePreviewViewport>
 						) : htmlIsDeleted ? (
 							<Deleted data={displayData} showHeader={false} />
 						) : (
 							<>
 								<IsolatedHTMLRenderer
 									ref={htmlRendererRef}
+									devicePreview={{
+										...devicePreview,
+										active: htmlTestIdsEnabled,
+										enabled: devicePreviewEnabled,
+									}}
+									onDeviceContentScaledChange={setDeviceContentScaled}
 									key={`html-${renderKey}`}
 									content={processedContent}
 									rawSourceCode={data?.content}

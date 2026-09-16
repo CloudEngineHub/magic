@@ -23,6 +23,7 @@ use Dtyq\SuperMagic\Application\SuperAgent\Event\Publish\FileBatchMovePublisher;
 use Dtyq\SuperMagic\Domain\FileCollection\Service\FileCollectionDomainService;
 use Dtyq\SuperMagic\Domain\MagicFS\Service\MagicFSFileDomainService;
 use Dtyq\SuperMagic\Domain\MagicFS\Service\UpsertProjectFileNodeDTO;
+use Dtyq\SuperMagic\Domain\RecycleBin\Service\UserFileRecycleBinDomainService;
 use Dtyq\SuperMagic\Domain\Share\Constant\ResourceType;
 use Dtyq\SuperMagic\Domain\Share\Entity\ResourceShareEntity;
 use Dtyq\SuperMagic\Domain\Share\Service\ResourceShareDomainService;
@@ -34,6 +35,7 @@ use Dtyq\SuperMagic\Domain\SuperAgent\Entity\ValueObject\MemberRole;
 use Dtyq\SuperMagic\Domain\SuperAgent\Entity\ValueObject\StorageType;
 use Dtyq\SuperMagic\Domain\SuperAgent\Entity\ValueObject\TaskFileSource;
 use Dtyq\SuperMagic\Domain\SuperAgent\Event\AttachmentsProcessedEvent;
+use Dtyq\SuperMagic\Domain\SuperAgent\Event\DeleteEventSource;
 use Dtyq\SuperMagic\Domain\SuperAgent\Event\DirectoryDeletedEvent;
 use Dtyq\SuperMagic\Domain\SuperAgent\Event\FileBatchCopyEvent;
 use Dtyq\SuperMagic\Domain\SuperAgent\Event\FileBatchMoveEvent;
@@ -101,6 +103,8 @@ class FileManagementAppService extends AbstractAppService
         private readonly FileCollectionDomainService $fileCollectionDomainService,
         private readonly MagicFSFileDomainService $magicFSFileDomainService,
         private readonly FileDomainService $fileDomainService,
+        private readonly UserFileCopyAppService $userFileCopyAppService,
+        private readonly UserFileRecycleBinDomainService $userFileRecycleBinDomainService,
         LoggerFactory $loggerFactory
     ) {
         $this->logger = $loggerFactory->get(get_class($this));
@@ -653,6 +657,9 @@ class FileManagementAppService extends AbstractAppService
             //    For directories, descendants are intentionally left intact: this endpoint
             //    is a single-node deletion and does not propagate to children.
             $this->magicFSFileDomainService->deleteFile((string) $fileId);
+            if (! $fileEntity->isProjectFile()) {
+                $this->userFileRecycleBinDomainService->recordFiles([$fileEntity], $userAuthorization->getId(), DeleteEventSource::User);
+            }
 
             if ($fileEntity->isProjectFile()) {
                 // 4. Dispatch the matching event so notification / asset subscribers can react.
@@ -707,6 +714,9 @@ class FileManagementAppService extends AbstractAppService
 
             // 3. 调用 MagicFS 删除目录
             $this->magicFSFileDomainService->deleteFile((string) $fileId);
+            if (! $fileEntity->isProjectFile()) {
+                $this->userFileRecycleBinDomainService->recordFiles([$fileEntity], $userAuthorization->getId(), DeleteEventSource::User);
+            }
 
             if ($fileEntity->isProjectFile()) {
                 // Dispatch directory deleted event
@@ -777,6 +787,9 @@ class FileManagementAppService extends AbstractAppService
 
             // MagicFS 在指定作用域内校验并删除文件，返回删除前实体供事件使用。
             $fileEntities = $this->magicFSFileDomainService->deleteFiles($fileIds, false, $projectId);
+            if ($projectId === 0) {
+                $this->userFileRecycleBinDomainService->recordFiles($fileEntities, $userAuthorization->getId(), DeleteEventSource::User);
+            }
 
             $this->logger->info(sprintf(
                 'Successfully batch deleted files: Project ID: %s, File count: %d',
@@ -1094,6 +1107,10 @@ class FileManagementAppService extends AbstractAppService
         try {
             // 1. Get source file entity
             $fileEntity = $this->taskFileDomainService->getUserFileEntityNoUser($fileId);
+
+            if (! $fileEntity->isProjectFile()) {
+                return $this->userFileCopyAppService->copy($userAuthorization, [$fileId], $targetParentId, $targetProjectId, $keepBothFileIds);
+            }
 
             // 2. Get source project and verify permission
             $sourceProject = $this->getAccessibleProjectWithEditor(
@@ -1662,6 +1679,13 @@ class FileManagementAppService extends AbstractAppService
         $targetProject = null;
 
         try {
+            if ((int) $requestDTO->getProjectId() === 0) {
+                if ($requestDTO->getPreFileId() !== '' || $requestDTO->shouldPreserveParentPath()) {
+                    ExceptionBuilder::throw(SuperAgentErrorCode::FILE_PERMISSION_DENIED, 'file.permission_denied');
+                }
+                $sourceIds = array_values(array_unique(array_map('intval', $requestDTO->getFileIds())));
+                return $this->userFileCopyAppService->copy($userAuthorization, $sourceIds, (int) $requestDTO->getTargetParentId(), $requestDTO->getTargetProjectId() === '' ? null : (int) $requestDTO->getTargetProjectId(), $requestDTO->getKeepBothFileIds());
+            }
             // 1. Get source project and verify permission
             $sourceProject = $this->getAccessibleProjectWithEditor(
                 (int) $requestDTO->getProjectId(),

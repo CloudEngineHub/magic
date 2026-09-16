@@ -12,6 +12,7 @@ use App\Domain\SuperMagic\Project\Entity\ValueObject\MemberRole;
 use App\Domain\SuperMagic\Project\Entity\ValueObject\MemberStatus;
 use App\Domain\SuperMagic\Project\Entity\ValueObject\MemberType;
 use App\Domain\SuperMagic\Project\Entity\ValueObject\ProjectMode;
+use App\Domain\SuperMagic\Project\Entity\ValueObject\ProjectSortMode;
 use App\Domain\SuperMagic\Project\Repository\Facade\ProjectMemberRepositoryInterface;
 use App\Domain\SuperMagic\Project\Repository\Model\ProjectMemberModel;
 use App\Infrastructure\Util\IdGenerator\IdGenerator;
@@ -479,7 +480,8 @@ class ProjectMemberRepository implements ProjectMemberRepositoryInterface
         string $sortField = 'last_active_at',
         string $sortDirection = 'desc',
         ?array $organizationCodes = null,
-        bool $showHidden = false
+        bool $showHidden = false,
+        ?ProjectSortMode $sortMode = null
     ): array {
         $query = $this->buildParticipatedProjectsQuery($userId);
         $this->applyParticipatedMemberFilters($query, $userId);
@@ -543,7 +545,7 @@ class ProjectMemberRepository implements ProjectMemberRepositoryInterface
         // 去重
         $query->distinct();
 
-        if (! $showCollaboration) {
+        if ($sortMode === ProjectSortMode::Recent || ($sortMode === null && ! $showCollaboration)) {
             // Recent-use mode ignores pin/manual ordering.
             $query->orderByDesc('last_active_at')
                 ->orderByDesc('p.created_at')
