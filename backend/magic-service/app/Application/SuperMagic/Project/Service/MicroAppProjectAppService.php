@@ -473,9 +473,17 @@ class MicroAppProjectAppService extends AbstractAppService
             self::MENTION_SOURCE_FETCH_LIMIT,
             true
         );
-        // The mention panel only lists projects owned by or collaborated on
-        // by the current user; share-only visibility is excluded.
-        $merged = $this->filterMentionListRows($accessible['list'] ?? []);
+        $published = $this->paginateShareAccessiblePublishedApps(
+            $authorization,
+            $requestDTO->getKeyword(),
+            1,
+            PHP_INT_MAX,
+            teamOnly: true,
+        );
+        $merged = $this->filterMentionListRows(array_merge(
+            $accessible['list'] ?? [],
+            $published['list'],
+        ));
         $page = $requestDTO->getPage();
         $pageSize = $requestDTO->getPageSize();
 
@@ -630,7 +638,8 @@ class MicroAppProjectAppService extends AbstractAppService
         MagicUserAuthorization $authorization,
         string $keyword,
         int $page,
-        int $pageSize
+        int $pageSize,
+        bool $teamOnly = false,
     ): array {
         $rows = [];
         foreach ($this->collectShareAccessiblePublishedApps(
@@ -638,6 +647,7 @@ class MicroAppProjectAppService extends AbstractAppService
             $authorization->getId(),
             $keyword,
             true,
+            $teamOnly,
         ) as $accessibleApp) {
             $record = $accessibleApp['record'];
             $project = $accessibleApp['project'];
@@ -671,6 +681,7 @@ class MicroAppProjectAppService extends AbstractAppService
         string $userId,
         string $keyword,
         bool $excludePasswordProtected = false,
+        bool $teamOnly = false,
     ): array {
         $records = $this->microAppRepository->findPublishedByOrganization($organizationCode);
         $projectIds = array_values(array_unique(array_map(
@@ -721,6 +732,14 @@ class MicroAppProjectAppService extends AbstractAppService
                 continue;
             }
             if ($excludePasswordProtected && $shareEntity->getShareType() === ShareAccessType::PasswordProtected->value) {
+                continue;
+            }
+            if ($teamOnly && ! PublishedMicroAppFileAccessService::supportsShare(
+                $candidate['record'],
+                $candidate['project'],
+                $shareEntity,
+                $organizationCode,
+            )) {
                 continue;
             }
             if (! $this->canAccessShare($shareEntity, $userId, $organizationCode)) {

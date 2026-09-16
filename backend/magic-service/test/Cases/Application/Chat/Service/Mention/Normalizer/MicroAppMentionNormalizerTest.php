@@ -8,6 +8,7 @@ declare(strict_types=1);
 namespace HyperfTest\Cases\Application\Chat\Service\Mention\Normalizer;
 
 use App\Application\Chat\Service\Mention\Normalizer\MicroAppMentionNormalizer;
+use App\Application\SuperMagic\Project\Service\PublishedMicroAppFileAccessService;
 use App\Application\SuperMagic\Project\Service\PublishedMicroAppResolver;
 use App\Application\SuperMagic\Task\Service\ReferencedProjectAccessKind;
 use App\Application\SuperMagic\Task\Service\ReferencedProjectCollaborationAccess;
@@ -121,6 +122,33 @@ class MicroAppMentionNormalizerTest extends TestCase
         self::assertSame($item, $normalizer->normalize($item, $this->createDataIsolation()));
     }
 
+    public function testOrganizationPublicationEnrichesWithoutMembership(): void
+    {
+        $normalizer = $this->createNormalizer(
+            shareEntity: (new ResourceShareEntity())->setShareType(ShareAccessType::TeamShare->value),
+            canReadPublished: true,
+        );
+        $result = $normalizer->normalize([
+            'type' => 'micro_app', 'app_id' => '3001',
+            'project_id' => '9999', 'access_kind' => 'collaboration',
+        ], $this->createDataIsolation());
+        self::assertSame('4001', $result['project_id']);
+        self::assertSame(ReferencedProjectAccessKind::PublishedShare->value, $result['access_kind']);
+    }
+
+    public function testDeniedReferenceRemovesForgedAccessFields(): void
+    {
+        $normalizer = $this->createNormalizer(
+            shareEntity: (new ResourceShareEntity())->setShareType(ShareAccessType::Internet->value),
+        );
+        $result = $normalizer->normalize([
+            'type' => 'micro_app', 'app_id' => '3001',
+            'project_id' => '9999', 'access_kind' => 'published_share',
+        ], $this->createDataIsolation());
+        self::assertArrayNotHasKey('project_id', $result);
+        self::assertArrayNotHasKey('access_kind', $result);
+    }
+
     private function createDataIsolation(): BaseDataIsolation
     {
         $dataIsolation = $this->createMock(BaseDataIsolation::class);
@@ -134,6 +162,7 @@ class MicroAppMentionNormalizerTest extends TestCase
         ResourceShareEntity $shareEntity,
         string $projectName = '',
         bool $canAccessProject = false,
+        bool $canReadPublished = false,
     ): MicroAppMentionNormalizer {
         $record = (new MicroAppEntity())
             ->setId(3001)
@@ -151,10 +180,14 @@ class MicroAppMentionNormalizerTest extends TestCase
         $loggerFactory = $this->createMock(LoggerFactory::class);
         $loggerFactory->method('get')->willReturn($this->createMock(LoggerInterface::class));
 
+        $publishedAccess = $this->createMock(PublishedMicroAppFileAccessService::class);
+        $publishedAccess->method('canAccessProject')->willReturn($canReadPublished);
+
         return new MicroAppMentionNormalizer(
             $loggerFactory,
             $resolver,
             $collaborationAccess,
+            $publishedAccess,
         );
     }
 }

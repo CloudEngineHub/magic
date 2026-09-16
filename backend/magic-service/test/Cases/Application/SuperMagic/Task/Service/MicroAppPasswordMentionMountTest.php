@@ -8,6 +8,7 @@ declare(strict_types=1);
 namespace HyperfTest\Cases\Application\SuperMagic\Task\Service;
 
 use App\Application\Chat\Service\Mention\Normalizer\MicroAppMentionNormalizer;
+use App\Application\SuperMagic\Project\Service\PublishedMicroAppFileAccessService;
 use App\Application\SuperMagic\Project\Service\PublishedMicroAppResolver;
 use App\Application\SuperMagic\Task\Service\ReferencedProjectAccessKind;
 use App\Application\SuperMagic\Task\Service\ReferencedProjectCollaborationAccess;
@@ -19,6 +20,7 @@ use App\Infrastructure\Core\DataIsolation\BaseDataIsolation;
 use Hyperf\Logger\LoggerFactory;
 use PHPUnit\Framework\TestCase;
 use Psr\Log\LoggerInterface;
+use RuntimeException;
 
 /**
  * Real UI payload: frontend @micro_app only sends app_id / app_name.
@@ -41,6 +43,7 @@ class MicroAppPasswordMentionMountTest extends TestCase
     public function testPasswordNonMemberMentionWithoutProjectIdIsNotMounted(): void
     {
         $mentions = $this->normalizePasswordMention(canAccessProject: false);
+        $this->expectException(RuntimeException::class);
         $mounts = (new ReferencedProjectMountPlanner())->plan($mentions, 1001);
 
         self::assertSame([], $mounts);
@@ -66,7 +69,7 @@ class MicroAppPasswordMentionMountTest extends TestCase
         $loggerFactory = $this->createMock(LoggerFactory::class);
         $loggerFactory->method('get')->willReturn($this->createMock(LoggerInterface::class));
 
-        $normalizer = new MicroAppMentionNormalizer($loggerFactory, $resolver, $collaborationAccess);
+        $normalizer = new MicroAppMentionNormalizer($loggerFactory, $resolver, $collaborationAccess, $this->createMock(PublishedMicroAppFileAccessService::class));
         $dataIsolation = $this->createMock(BaseDataIsolation::class);
         $dataIsolation->method('getCurrentUserId')->willReturn('user-1');
         $dataIsolation->method('getCurrentOrganizationCode')->willReturn('org-1');

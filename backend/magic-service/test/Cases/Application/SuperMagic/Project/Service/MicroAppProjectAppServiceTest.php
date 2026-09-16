@@ -16,20 +16,22 @@ use App\Application\SuperMagic\Project\Service\MicroAppProjectResponseFormatter;
 use App\Application\SuperMagic\Project\Service\MicroAppShareConfig;
 use App\Application\SuperMagic\Project\Service\ProjectAppService;
 use App\Application\SuperMagic\Project\Service\PublishedMicroAppResolver;
+use App\Domain\Contact\Entity\ValueObject\DataIsolation;
 use App\Domain\Contact\Repository\Facade\MagicDepartmentUserRepositoryInterface;
 use App\Domain\Contact\Service\MagicDepartmentUserDomainService;
 use App\Domain\Provider\Service\ModelFilter\PackageFilterInterface;
 use App\Domain\SuperMagic\Common\Share\Constant\ShareAccessType;
 use App\Domain\SuperMagic\Common\Share\Entity\ResourceShareEntity;
 use App\Domain\SuperMagic\Common\Share\Service\ResourceShareDomainService;
+use App\Domain\SuperMagic\File\Repository\Facade\TaskFileRepositoryInterface;
 use App\Domain\SuperMagic\Project\Entity\MicroAppEntity;
 use App\Domain\SuperMagic\Project\Entity\ProjectEntity;
 use App\Domain\SuperMagic\Project\Entity\ValueObject\MemberRole;
 use App\Domain\SuperMagic\Project\Entity\ValueObject\MicroAppListScope;
 use App\Domain\SuperMagic\Project\Entity\ValueObject\ProjectMode;
 use App\Domain\SuperMagic\Project\Repository\Facade\MicroAppRepositoryInterface;
+use App\Domain\SuperMagic\Project\Repository\Facade\MicroAppVisitRepositoryInterface;
 use App\Domain\SuperMagic\Project\Repository\Facade\ProjectRepositoryInterface;
-use App\Domain\SuperMagic\File\Repository\Facade\TaskFileRepositoryInterface;
 use App\Domain\SuperMagic\Project\Service\ProjectDomainService;
 use App\Domain\SuperMagic\Project\Service\ProjectMemberDomainService;
 use App\Domain\SuperMagic\Workspace\Repository\Facade\WorkspaceRepositoryInterface;
@@ -52,6 +54,7 @@ use Hyperf\Validation\Contract\ValidatorFactoryInterface;
 use PHPUnit\Framework\TestCase;
 use Psr\Container\ContainerInterface;
 use Psr\EventDispatcher\EventDispatcherInterface;
+use Qbhy\HyperfAuth\Authenticatable;
 use ReflectionProperty;
 use RuntimeException;
 
@@ -407,7 +410,7 @@ class MicroAppProjectAppServiceTest extends TestCase
             ->willReturn([]);
         $responseFormatter->method('coverUrlMapKey')
             ->willReturnCallback(
-                static fn(array $row, string $coverKey): string => (string) ($row['organization_code'] ?? '') . ':' . $coverKey
+                static fn (array $row, string $coverKey): string => (string) ($row['organization_code'] ?? '') . ':' . $coverKey
             );
 
         $service = $this->createService(
@@ -598,7 +601,7 @@ class MicroAppProjectAppServiceTest extends TestCase
             ->willReturn(['org-1:cover-accessible' => 'https://cdn.example.com/cover.png']);
         $responseFormatter->method('coverUrlMapKey')
             ->willReturnCallback(
-                static fn(array $row, string $coverKey): string => (string) ($row['organization_code'] ?? '') . ':' . $coverKey
+                static fn (array $row, string $coverKey): string => (string) ($row['organization_code'] ?? '') . ':' . $coverKey
             );
 
         $service = $this->createService(
@@ -686,7 +689,7 @@ class MicroAppProjectAppServiceTest extends TestCase
             ],
         ];
         $microAppRepository = $this->createMock(MicroAppRepositoryInterface::class);
-        $microAppRepository->expects(self::never())->method('findPublishedByOrganization');
+        $microAppRepository->expects(self::once())->method('findPublishedByOrganization')->with('org-1')->willReturn([]);
         $microAppRepository->expects(self::once())
             ->method('paginateAccessible')
             ->with(
@@ -701,10 +704,10 @@ class MicroAppProjectAppServiceTest extends TestCase
             )
             ->willReturn(['total' => 3, 'list' => $ownedRows]);
         $projectRepository = $this->createMock(ProjectRepositoryInterface::class);
-        $projectRepository->expects(self::never())->method('findByIds');
+        $projectRepository->expects(self::once())->method('findByIds')->with([])->willReturn([]);
 
         $shareDomainService = $this->createMock(ResourceShareDomainService::class);
-        $shareDomainService->expects(self::never())->method('getSharesByResourceIds');
+        $shareDomainService->expects(self::once())->method('getSharesByResourceIds')->with([])->willReturn([]);
 
         $projectMemberDomainService = $this->createMock(ProjectMemberDomainService::class);
         $projectMemberDomainService->expects(self::once())
@@ -740,7 +743,7 @@ class MicroAppProjectAppServiceTest extends TestCase
             ->willReturn(['org-1:cover-accessible' => 'https://cdn.example.com/cover.png']);
         $responseFormatter->method('coverUrlMapKey')
             ->willReturnCallback(
-                static fn(array $row, string $coverKey): string => (string) ($row['organization_code'] ?? '') . ':' . $coverKey
+                static fn (array $row, string $coverKey): string => (string) ($row['organization_code'] ?? '') . ':' . $coverKey
             );
 
         $service = $this->createService(
@@ -792,6 +795,55 @@ class MicroAppProjectAppServiceTest extends TestCase
         );
     }
 
+    public function testMentionListAddsOnlyAuthorizedOrganizationPublicationsWithoutRoles(): void
+    {
+        $authorization = (new MagicUserAuthorization())->setId('user-1')->setOrganizationCode('org-1');
+        $request = $this->createMock(RequestContext::class);
+        $request->method('getUserAuthorization')->willReturn($authorization);
+        $records = $projects = $shares = [];
+        foreach ([ShareAccessType::TeamShare, ShareAccessType::Internet, ShareAccessType::PasswordProtected, ShareAccessType::TeamShare] as $index => $type) {
+            $id = 3001 + $index;
+            $records[] = (new MicroAppEntity())->setId($id)->setProjectId($id)
+                ->setOrganizationCode('org-1')->setResourceId('resource-' . $id)
+                ->setPublishStatus('published')->setCreatorId('user-2');
+            $projects[] = (new ProjectEntity())->setId($id)->setUserId('user-2')
+                ->setUserOrganizationCode('org-1')->setProjectMode(ProjectMode::MICRO_APP->value)
+                ->setProjectName('App ' . $id)->setUpdatedAt('2026-09-16 10:00:00');
+            $shares[] = (new ResourceShareEntity())->setResourceId('resource-' . $id)
+                ->setProjectId((string) $id)->setResourceType(12)->setShareProject(true)
+                ->setOrganizationCode('org-1')->setIsEnabled(true)->setShareType($type->value)
+                ->setShareCode('share-' . $id);
+        }
+        $apps = $this->createMock(MicroAppRepositoryInterface::class);
+        $apps->method('paginateAccessible')->willReturn(['total' => 0, 'list' => []]);
+        $apps->method('findPublishedByOrganization')->with('org-1')->willReturn($records);
+        $projectRepository = $this->createMock(ProjectRepositoryInterface::class);
+        $projectRepository->method('findByIds')->willReturn($projects);
+        $shareDomain = $this->createMock(ResourceShareDomainService::class);
+        $shareDomain->method('getSharesByResourceIds')->willReturn($shares);
+        $resolver = $this->createMock(PublishedMicroAppResolver::class);
+        $shareDomain->expects(self::exactly(2))->method('validateShareAccess')
+            ->willReturnCallback(static function (ResourceShareEntity $share): void {
+                if ($share->getShareCode() !== 'share-3001') {
+                    throw new RuntimeException('Share access denied');
+                }
+            });
+        $service = $this->createService(
+            $apps,
+            $projectRepository,
+            $this->createMock(ResourceShareAppService::class),
+            $shareDomain,
+            $this->createMock(ShareUrlBuilder::class),
+            $this->createMock(MicroAppProjectResponseFormatter::class),
+            publishedResolver: $resolver,
+        );
+        $result = $service->mentionList($request, new PublishedMicroAppListRequestDTO());
+        self::assertSame(1, $result['total']);
+        self::assertSame('3001', $result['list'][0]['app_id']);
+        self::assertNull($result['list'][0]['user_role']);
+        self::assertFalse($result['list'][0]['can_delete']);
+    }
+
     private function setDatabaseContainer(): void
     {
         $connection = $this->createMock(ConnectionInterface::class);
@@ -810,7 +862,8 @@ class MicroAppProjectAppServiceTest extends TestCase
             public function __construct(
                 private readonly ConnectionResolverInterface $resolver,
                 private readonly ValidatorFactoryInterface $validatorFactory,
-            ) {}
+            ) {
+            }
 
             public function get(string $id): mixed
             {
@@ -899,7 +952,9 @@ class MicroAppProjectAppServiceTest extends TestCase
                             return $keys === 'error_message';
                         }
 
-                        public function set(string $key, mixed $value): void {}
+                        public function set(string $key, mixed $value): void
+                        {
+                        }
                     },
                     TranslatorInterface::class => new class implements TranslatorInterface {
                         public function trans(string $key, array $replace = [], ?string $locale = null): string
@@ -959,7 +1014,7 @@ class MicroAppProjectAppServiceTest extends TestCase
             ? TestableDeniedCollaborationMicroAppProjectAppService::class
             : TestableMicroAppProjectAppService::class;
 
-        return new $class(
+        $service = new $class(
             $microAppRepository,
             $projectRepository,
             $this->createMock(WorkspaceRepositoryInterface::class),
@@ -977,14 +1032,23 @@ class MicroAppProjectAppServiceTest extends TestCase
             $publishedResolver ?? $this->createMock(PublishedMicroAppResolver::class),
             $responseFormatter,
             new MicroAppShareConfig(),
-            $this->createMock(\App\Domain\SuperMagic\Project\Repository\Facade\MicroAppVisitRepositoryInterface::class),
+            $this->createMock(MicroAppVisitRepositoryInterface::class),
             $this->createMock(TaskFileRepositoryInterface::class),
         );
+        if ($service instanceof TestableMicroAppProjectAppService) {
+            $identity = $this->createMock(DataIsolation::class);
+            $identity->method('getCurrentUserId')->willReturn('user-1');
+            $identity->method('getCurrentOrganizationCode')->willReturn('org-1');
+            $service->testDataIsolation = $identity;
+        }
+        return $service;
     }
 }
 
 final class TestableMicroAppProjectAppService extends MicroAppProjectAppService
 {
+    public DataIsolation $testDataIsolation;
+
     public function getAccessibleProject(
         int $projectId,
         string $userId,
@@ -1000,6 +1064,11 @@ final class TestableMicroAppProjectAppService extends MicroAppProjectAppService
         string $organizationCode,
     ): ProjectEntity {
         return new ProjectEntity();
+    }
+
+    protected function createDataIsolation(Authenticatable $authorization): DataIsolation
+    {
+        return $this->testDataIsolation;
     }
 }
 

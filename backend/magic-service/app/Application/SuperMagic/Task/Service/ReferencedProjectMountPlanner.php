@@ -8,6 +8,7 @@ declare(strict_types=1);
 namespace App\Application\SuperMagic\Task\Service;
 
 use App\Domain\Chat\DTO\Message\Common\MessageExtra\SuperAgent\Mention\MentionType;
+use RuntimeException;
 
 /**
  * Extract unique cross-project mount targets from mentions that differ
@@ -37,6 +38,9 @@ final class ReferencedProjectMountPlanner
                 continue;
             }
 
+            if (($mention['type'] ?? '') === MentionType::MICRO_APP->value) {
+                $this->assertResolvedMicroApp($mention);
+            }
             $mount = $this->toMount($mention, $currentProjectId);
             if ($mount === null) {
                 continue;
@@ -91,18 +95,29 @@ final class ReferencedProjectMountPlanner
     private function resolveAccessKind(string $type, array $mention): ?ReferencedProjectAccessKind
     {
         if ($type === MentionType::MICRO_APP->value) {
-            // Only mentions validated as project collaboration are mountable.
-            if (($mention['access_kind'] ?? '') === ReferencedProjectAccessKind::Collaboration->value) {
-                return ReferencedProjectAccessKind::Collaboration;
-            }
-
-            return null;
+            return ReferencedProjectAccessKind::tryFrom((string) ($mention['access_kind'] ?? ''));
         }
         if (in_array($type, self::COLLABORATION_TYPES, true)) {
             return ReferencedProjectAccessKind::Collaboration;
         }
 
         return null;
+    }
+
+    private function assertResolvedMicroApp(array $mention): void
+    {
+        foreach (['app_id', 'project_id'] as $key) {
+            $value = $mention[$key] ?? null;
+            if ((! is_int($value) && ! is_string($value))
+                || ! preg_match('/^[1-9][0-9]*$/D', (string) $value)
+                || (string) (int) $value !== (string) $value) {
+                throw new RuntimeException('Cannot reference micro-app: access unavailable');
+            }
+        }
+        if (! is_string($mention['access_kind'] ?? null)
+            || ReferencedProjectAccessKind::tryFrom($mention['access_kind']) === null) {
+            throw new RuntimeException('Cannot reference micro-app: access unavailable');
+        }
     }
 
     private function shouldReplace(ReferencedProjectMount $existing, ReferencedProjectMount $candidate): bool

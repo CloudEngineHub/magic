@@ -8,6 +8,7 @@ declare(strict_types=1);
 namespace App\Application\SuperMagic\File\Service;
 
 use App\Application\SuperMagic\Common\Service\AbstractAppService;
+use App\Application\SuperMagic\Project\Service\PublishedMicroAppFileAccessService;
 use App\Domain\SuperMagic\File\Entity\TaskFileEntity;
 use App\Domain\SuperMagic\File\Entity\ValueObject\FileSpaceType;
 use App\Domain\SuperMagic\File\Event\DirectoryDeletedEvent;
@@ -48,7 +49,8 @@ class MagicFSFileAppService extends AbstractAppService
         protected TopicDomainService $topicDomainService,
         protected FileTreeBuilder $fileTreeBuilder,
         protected EventDispatcherInterface $eventDispatcher,
-        LoggerFactory $loggerFactory
+        LoggerFactory $loggerFactory,
+        protected PublishedMicroAppFileAccessService $publishedMicroAppFileAccessService,
     ) {
         $this->logger = $loggerFactory->get(get_class($this));
     }
@@ -66,6 +68,7 @@ class MagicFSFileAppService extends AbstractAppService
             $requestDTO->parent_id,
             $parentEntity->getSpaceType()
         );
+        $this->assertFileEntitiesAccessible($fileEntities, $authorization, MemberRole::VIEWER);
 
         // 转换为 DTO
         $responseDTO = new ListFilesResponseDTO();
@@ -119,9 +122,16 @@ class MagicFSFileAppService extends AbstractAppService
             ExceptionBuilder::throw(SuperAgentErrorCode::PROJECT_ACCESS_DENIED);
         }
 
-        $this->assertProjectAccessible($projectIdInt, $authorization, MemberRole::VIEWER);
+        if (! $this->publishedMicroAppFileAccessService->canAccessProject(
+            $projectIdInt,
+            $authorization->getId(),
+            $authorization->getOrganizationCode()
+        )) {
+            $this->assertProjectAccessible($projectIdInt, $authorization, MemberRole::VIEWER);
+        }
 
         $rootFileId = $this->magicFSFileDomainService->getProjectRootFileId($projectIdInt);
+        $this->assertFileAccessible((string) $rootFileId, $authorization, MemberRole::VIEWER);
 
         return [
             'project_id' => (string) $projectIdInt,
@@ -317,6 +327,7 @@ class MagicFSFileAppService extends AbstractAppService
         // 2. 获取根文件和子节点列表
         $rootFile = $treeData['root'];
         $children = $treeData['children'];
+        $this->assertFileEntitiesAccessible([$rootFile, ...$children], $authorization, MemberRole::VIEWER);
 
         // 3. 规范化子节点列表，构建树结构
         $entityMap = [];
@@ -402,12 +413,7 @@ class MagicFSFileAppService extends AbstractAppService
     protected function assertFileAccessible(string $fileId, MagicUserAuthorization $authorization, MemberRole $requiredRole): TaskFileEntity
     {
         $fileEntity = $this->magicFSFileDomainService->getFileById($fileId);
-        $this->assertMountableSpaceFile($fileEntity);
-        if ($fileEntity->getProjectId() <= 0) {
-            $this->assertUserSpaceFileAccessible($fileEntity, $authorization);
-            return $fileEntity;
-        }
-        $this->assertProjectAccessible($fileEntity->getProjectId(), $authorization, $requiredRole);
+        $this->assertFileEntitiesAccessible([$fileEntity], $authorization, $requiredRole);
         return $fileEntity;
     }
 
@@ -424,10 +430,23 @@ class MagicFSFileAppService extends AbstractAppService
             return;
         }
 
+        $files = [];
+        foreach (array_unique($fileIds) as $fileId) {
+            $files[] = $this->magicFSFileDomainService->getFileById((string) $fileId);
+        }
+        $this->assertFileEntitiesAccessible($files, $authorization, $requiredRole);
+    }
+
+    /** @param TaskFileEntity[] $files */
+    protected function assertFileEntitiesAccessible(array $files, MagicUserAuthorization $authorization, MemberRole $requiredRole): void
+    {
         $checkedProjects = [];
         $checkedUserScopes = [];
-        foreach (array_unique($fileIds) as $fileId) {
-            $fileEntity = $this->magicFSFileDomainService->getFileById((string) $fileId);
+        $publishedContext = ['files' => []];
+        foreach ($files as $file) {
+            $publishedContext['files'][$file->getFileId()] = $file;
+        }
+        foreach ($files as $fileEntity) {
             $this->assertMountableSpaceFile($fileEntity);
             $projectId = $fileEntity->getProjectId();
             if ($projectId <= 0) {
@@ -440,6 +459,17 @@ class MagicFSFileAppService extends AbstractAppService
                 continue;
             }
             if (isset($checkedProjects[$projectId])) {
+                continue;
+            }
+            // A published grant applies to this project-space file only; never
+            // cache it as collaboration access to topic/internal sibling files.
+            if ($requiredRole === MemberRole::VIEWER
+                && $this->publishedMicroAppFileAccessService->canAccessFile(
+                    $fileEntity,
+                    $authorization->getId(),
+                    $authorization->getOrganizationCode(),
+                    $publishedContext
+                )) {
                 continue;
             }
             $this->assertProjectAccessible($projectId, $authorization, $requiredRole);
@@ -461,14 +491,7 @@ class MagicFSFileAppService extends AbstractAppService
             ExceptionBuilder::throw(SuperAgentErrorCode::PROJECT_ACCESS_DENIED);
         }
 
-        $parentEntity = $this->magicFSFileDomainService->getFileById($parentId);
-        $this->assertMountableSpaceFile($parentEntity);
-        if ($parentEntity->getProjectId() <= 0) {
-            $this->assertUserSpaceFileAccessible($parentEntity, $authorization);
-            return $parentEntity;
-        }
-        $this->assertProjectAccessible($parentEntity->getProjectId(), $authorization, $requiredRole);
-        return $parentEntity;
+        return $this->assertFileAccessible($parentId, $authorization, $requiredRole);
     }
 
     /**

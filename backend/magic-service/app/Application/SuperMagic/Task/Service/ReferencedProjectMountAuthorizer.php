@@ -7,6 +7,7 @@ declare(strict_types=1);
 
 namespace App\Application\SuperMagic\Task\Service;
 
+use App\Application\SuperMagic\Project\Service\PublishedMicroAppFileAccessService;
 use App\Application\SuperMagic\Project\Service\PublishedMicroAppResolver;
 use App\Domain\Contact\Entity\ValueObject\DataIsolation;
 use App\Domain\SuperMagic\Common\Share\Constant\ShareAccessType;
@@ -20,7 +21,9 @@ class ReferencedProjectMountAuthorizer
 {
     public function __construct(
         private readonly PublishedMicroAppResolver $publishedMicroAppResolver,
-    ) {}
+        private readonly PublishedMicroAppFileAccessService $publishedFileAccess,
+    ) {
+    }
 
     public function assertPublishedShareAccessible(
         ReferencedProjectMount $mount,
@@ -45,8 +48,8 @@ class ReferencedProjectMountAuthorizer
             ExceptionBuilder::throw(ShareErrorCode::PASSWORD_REQUIRED);
         }
 
-        $canAccess = $this->publishedMicroAppResolver->canAccessShare(
-            $shareEntity,
+        $canAccess = $this->publishedFileAccess->canAccessProject(
+            $record->getProjectId(),
             (string) $dataIsolation->getCurrentUserId(),
             $dataIsolation->getCurrentOrganizationCode(),
         );

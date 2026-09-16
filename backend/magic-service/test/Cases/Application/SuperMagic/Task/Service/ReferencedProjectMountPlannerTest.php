@@ -10,16 +10,18 @@ namespace HyperfTest\Cases\Application\SuperMagic\Task\Service;
 use App\Application\SuperMagic\Task\Service\ReferencedProjectAccessKind;
 use App\Application\SuperMagic\Task\Service\ReferencedProjectMountPlanner;
 use PHPUnit\Framework\TestCase;
+use RuntimeException;
 
 /**
  * @internal
  */
 class ReferencedProjectMountPlannerTest extends TestCase
 {
-    public function testPlanSkipsMicroAppWithoutCollaborationAccess(): void
+    public function testPlanRejectsUnresolvedMicroApp(): void
     {
         $planner = new ReferencedProjectMountPlanner();
 
+        $this->expectException(RuntimeException::class);
         $mounts = $planner->plan([
             [
                 'type' => 'micro_app',
@@ -55,7 +57,7 @@ class ReferencedProjectMountPlannerTest extends TestCase
         $planner = new ReferencedProjectMountPlanner();
 
         $mounts = $planner->plan([
-            ['type' => 'micro_app', 'app_id' => '3001', 'project_id' => '1001'],
+            ['type' => 'micro_app', 'app_id' => '3001', 'project_id' => '1001', 'access_kind' => 'collaboration'],
             ['type' => 'project', 'project_id' => ''],
             ['type' => 'project_file'],
         ], 1001);
@@ -68,7 +70,7 @@ class ReferencedProjectMountPlannerTest extends TestCase
         $planner = new ReferencedProjectMountPlanner();
 
         $mounts = $planner->plan([
-            ['type' => 'micro_app', 'app_id' => '3001', 'project_id' => '4001'],
+            ['type' => 'micro_app', 'app_id' => '3001', 'project_id' => '4001', 'access_kind' => 'published_share'],
             ['type' => 'project', 'project_id' => '4001'],
         ], 1001);
 
@@ -82,6 +84,7 @@ class ReferencedProjectMountPlannerTest extends TestCase
     {
         $planner = new ReferencedProjectMountPlanner();
 
+        $this->expectException(RuntimeException::class);
         $mounts = $planner->plan([
             ['type' => 'micro_app', 'project_id' => '4001'],
         ], 1001);
@@ -113,7 +116,7 @@ class ReferencedProjectMountPlannerTest extends TestCase
     {
         $planner = new ReferencedProjectMountPlanner();
         foreach ([[], true, 0, -1, 1.5, '04001', ' 4001 ', '../4001', '9223372036854775808'] as $projectId) {
-            foreach (['project', 'micro_app', 'project_file', 'project_directory'] as $type) {
+            foreach (['project', 'project_file', 'project_directory'] as $type) {
                 self::assertSame([], $planner->plan([[
                     'type' => $type,
                     'project_id' => $projectId,
@@ -127,5 +130,15 @@ class ReferencedProjectMountPlannerTest extends TestCase
             ['type' => 'memory_file', 'project_id' => 4001],
             ['type' => 'memory_directory', 'project_id' => 4001],
         ], 1001));
+    }
+
+    public function testPlanMapsOrganizationPublishedShare(): void
+    {
+        $mounts = (new ReferencedProjectMountPlanner())->plan([[
+            'type' => 'micro_app', 'app_id' => '3001', 'project_id' => '4001',
+            'access_kind' => ReferencedProjectAccessKind::PublishedShare->value,
+        ]], 1001);
+        self::assertCount(1, $mounts);
+        self::assertSame(ReferencedProjectAccessKind::PublishedShare, $mounts[0]->accessKind);
     }
 }

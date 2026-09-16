@@ -16,9 +16,8 @@ use App\Application\SuperMagic\Message\DTO\TaskMessageDTO;
 use App\Application\SuperMagic\Message\DTO\UserMessageDTO;
 use App\Application\SuperMagic\Task\DTO\InterruptClientNotification;
 use App\Application\SuperMagic\Task\Service\AgentAppService;
-use App\Application\SuperMagic\Task\Service\ReferencedProjectMount;
-use App\Application\SuperMagic\Task\Service\ReferencedProjectMountGuard;
 use App\Application\SuperMagic\Task\Service\ReferencedProjectMountPlanner;
+use App\Application\SuperMagic\Task\Service\ReferencedProjectMountService;
 use App\Application\SuperMagic\Task\Service\TaskContextMentionsResolver;
 use App\Application\SuperMagic\Task\Service\TopicTaskAppService;
 use App\Application\SuperMagic\Topic\Service\TopicAgentConfigResolver;
@@ -68,7 +67,6 @@ use Hyperf\Odin\Message\Role;
 use Hyperf\Redis\Redis;
 use Hyperf\Server\Exception\ServerException;
 use Psr\Log\LoggerInterface;
-use RuntimeException;
 use Throwable;
 
 use function event_dispatch;
@@ -97,7 +95,7 @@ class HandleUserMessageAppService extends AbstractAppService
         private readonly ProjectMcpConfigService $projectMcpConfigService,
         private readonly SuperMagicAgentAccessAppService $superMagicAgentAccessAppService,
         private readonly ReferencedProjectMountPlanner $referencedProjectMountPlanner,
-        private readonly ReferencedProjectMountGuard $referencedProjectMountGuard,
+        private readonly ReferencedProjectMountService $referencedProjectMountService,
         private readonly Redis $redis,
         LoggerFactory $loggerFactory
     ) {
@@ -636,16 +634,13 @@ class HandleUserMessageAppService extends AbstractAppService
         // 挂载引用项目（全有或全无——任一失败则中止）
         $mentions = Json::decode($taskContext->getTask()->getMentions() ?: '[]') ?: [];
         $crossProjectMounts = $this->referencedProjectMountPlanner->plan($mentions, $projectEntity->getId());
-        if ($crossProjectMounts !== []) {
-            $this->mountReferencedProjectsWithAccessControl(
-                $dataIsolation,
-                $sandboxId,
-                $crossProjectMounts
-            );
-        }
-
-        // 发送消息到 agent
-        $this->agentAppService->sendChatMessage($dataIsolation, $taskContext);
+        $this->referencedProjectMountService->prepareAndSend(
+            $dataIsolation,
+            $sandboxId,
+            $crossProjectMounts,
+            fn (): bool => TaskTerminationUtil::isTaskTerminated($this->redis, $this->logger, $taskId),
+            fn () => $this->agentAppService->sendChatMessage($dataIsolation, $taskContext),
+        );
 
         return $sandboxId;
     }
@@ -934,51 +929,5 @@ class HandleUserMessageAppService extends AbstractAppService
         }
 
         return '';
-    }
-
-    /**
-     * Mount referenced projects with access control — all-or-nothing.
-     *
-     * Phase 1: validate whether the current user can access ALL target projects.
-     * Phase 2: delegate to Domain layer to mount every validated project.
-     *
-     * A single denied access or mount failure aborts the entire operation.
-     * Collaboration denials become a RuntimeException, which is caught by
-     * handleChatMessage() to notify the user and prevent the message from
-     * reaching the agent. Published-share denials keep their BusinessException.
-     * Password-protected @micro_app mentions are planned as collaboration.
-     *
-     * @param list<ReferencedProjectMount> $mounts
-     * @throws RuntimeException
-     */
-    private function mountReferencedProjectsWithAccessControl(
-        DataIsolation $dataIsolation,
-        string $sandboxId,
-        array $mounts
-    ): void {
-        // Phase 1: validate access for all target projects
-        $this->referencedProjectMountGuard->assertAllAccessible(
-            $mounts,
-            $dataIsolation,
-            fn(int $projectId) => $this->getAccessibleProject(
-                $projectId,
-                $dataIsolation->getCurrentUserId(),
-                $dataIsolation->getCurrentOrganizationCode()
-            )
-        );
-
-        // Phase 2: mount validated projects
-        $projectIds = [];
-        $projectRootFileIds = [];
-        foreach ($mounts as $mount) {
-            $projectIds[] = $mount->projectId;
-            $projectRootFileIds[(int) $mount->projectId] = (string) $this->taskFileDomainService->getProjectRootFileId((int) $mount->projectId);
-        }
-        $this->agentDomainService->mountReferencedProjects(
-            $dataIsolation,
-            $sandboxId,
-            $projectIds,
-            $projectRootFileIds
-        );
     }
 }

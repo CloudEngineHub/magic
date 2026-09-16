@@ -7,6 +7,7 @@ declare(strict_types=1);
 
 namespace HyperfTest\Cases\Application\SuperMagic\Task\Service;
 
+use App\Application\SuperMagic\Project\Service\PublishedMicroAppFileAccessService;
 use App\Application\SuperMagic\Project\Service\PublishedMicroAppResolver;
 use App\Application\SuperMagic\Task\Service\ReferencedProjectAccessKind;
 use App\Application\SuperMagic\Task\Service\ReferencedProjectMount;
@@ -62,7 +63,9 @@ class ReferencedProjectMountAuthorizerTest extends TestCase
                             return $keys === 'error_message';
                         }
 
-                        public function set(string $key, mixed $value): void {}
+                        public function set(string $key, mixed $value): void
+                        {
+                        }
                     },
                     TranslatorInterface::class => new class implements TranslatorInterface {
                         public function trans(string $key, array $replace = [], ?string $locale = null): string
@@ -212,7 +215,9 @@ class ReferencedProjectMountAuthorizerTest extends TestCase
         $resolver->method('findPublished')->willReturn($published);
         $resolver->method('canAccessShare')->willReturn($canAccessShare);
 
-        return new ReferencedProjectMountAuthorizer($resolver);
+        $publishedAccess = $this->createMock(PublishedMicroAppFileAccessService::class);
+        $publishedAccess->method('canAccessProject')->willReturn($canAccessShare);
+        return new ReferencedProjectMountAuthorizer($resolver, $publishedAccess);
     }
 
     private function microAppMount(string $projectId = '4001', ?string $appId = '3001'): ReferencedProjectMount

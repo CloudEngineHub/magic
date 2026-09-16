@@ -8,6 +8,7 @@ declare(strict_types=1);
 namespace App\Application\Chat\Service\Mention\Normalizer;
 
 use App\Application\Chat\Service\Mention\AbstractMentionNormalizer;
+use App\Application\SuperMagic\Project\Service\PublishedMicroAppFileAccessService;
 use App\Application\SuperMagic\Project\Service\PublishedMicroAppResolver;
 use App\Application\SuperMagic\Task\Service\ReferencedProjectAccessKind;
 use App\Application\SuperMagic\Task\Service\ReferencedProjectCollaborationAccess;
@@ -18,7 +19,7 @@ use Hyperf\Logger\LoggerFactory;
 /**
  * @micro_app mention 规范化：补全 app_name / project_id。
  *
- * 仅项目创建者/协作者可补全，供 Planner 走协作挂载。
+ * 创建者/协作者走协作权限；组织内发布接收者走独立只读权限。
  * 前端 @微应用 只传 app_id / app_name，project_id 必须在这里补。
  */
 class MicroAppMentionNormalizer extends AbstractMentionNormalizer
@@ -27,17 +28,28 @@ class MicroAppMentionNormalizer extends AbstractMentionNormalizer
         LoggerFactory $loggerFactory,
         private readonly PublishedMicroAppResolver $publishedMicroAppResolver,
         private readonly ReferencedProjectCollaborationAccess $collaborationAccess,
+        private readonly PublishedMicroAppFileAccessService $publishedFileAccess,
     ) {
         parent::__construct($loggerFactory);
     }
 
+    public function normalize(array $item, BaseDataIsolation $dataIsolation): array
+    {
+        // These fields are server-derived. A failed lookup must not retain client hints.
+        unset($item['project_id'], $item['access_kind']);
+        return parent::normalize($item, $dataIsolation);
+    }
+
     protected function enrich(array $item, BaseDataIsolation $dataIsolation): array
     {
-        $appId = (int) ($item['app_id'] ?? ($item['id'] ?? 0));
-        if ($appId <= 0) {
+        $rawAppId = $item['app_id'] ?? ($item['id'] ?? null);
+        if ((! is_int($rawAppId) && ! is_string($rawAppId))
+            || ! preg_match('/^[1-9][0-9]*$/D', (string) $rawAppId)
+            || (string) (int) $rawAppId !== (string) $rawAppId) {
             return [];
         }
 
+        $appId = (int) $rawAppId;
         $publishedMicroApp = $this->publishedMicroAppResolver->findPublished($appId);
         if ($publishedMicroApp === null) {
             return [];
@@ -47,13 +59,17 @@ class MicroAppMentionNormalizer extends AbstractMentionNormalizer
         $userId = $dataIsolation->getCurrentUserId();
         $organizationCode = $dataIsolation->getCurrentOrganizationCode();
 
+        $accessKind = ReferencedProjectAccessKind::Collaboration;
         if (! $this->collaborationAccess->canAccess($record->getProjectId(), $userId, $organizationCode)) {
-            return [];
+            if (! $this->publishedFileAccess->canAccessProject($record->getProjectId(), $userId, $organizationCode)) {
+                return [];
+            }
+            $accessKind = ReferencedProjectAccessKind::PublishedShare;
         }
 
         return [
             ...$this->enrichedFields($record, $appId, $item),
-            'access_kind' => ReferencedProjectAccessKind::Collaboration->value,
+            'access_kind' => $accessKind->value,
         ];
     }
 
