@@ -33,7 +33,7 @@ export default function PPTNotesMarkdown({
 	return (
 		<div
 			data-testid="ppt-speaker-notes-content"
-			className="mx-3 mb-3 min-h-0 flex-1 overflow-hidden rounded-lg bg-muted/40 text-[13px] leading-6 text-foreground focus-within:ring-1 focus-within:ring-ring/40"
+			className="relative mx-3 mb-3 min-h-0 flex-1 overflow-hidden rounded-lg bg-muted/40 text-[13px] leading-6 text-foreground focus-within:ring-1 focus-within:ring-ring/40"
 			onKeyDown={(event) => {
 				// Notes own the arrow keys and save shortcut; do not navigate the slide behind them.
 				event.stopPropagation()
@@ -50,6 +50,12 @@ export default function PPTNotesMarkdown({
 				if (!panel.contains(event.relatedTarget)) onSave()
 			}}
 		>
+			{/* Keep empty guidance visible even in read-only mode, without intercepting editing. */}
+			{!value.trim() && (
+				<div className="pointer-events-none absolute inset-x-3 top-2 z-10 text-muted-foreground">
+					{readOnly ? t("ppt.speakerNotes.empty") : t("ppt.speakerNotes.placeholder")}
+				</div>
+			)}
 			<SimpleEditor
 				ref={editorRef}
 				content={value}
@@ -62,7 +68,7 @@ export default function PPTNotesMarkdown({
 				}
 				onContentChange={onChange}
 				onSave={onSave}
-				className="!bg-transparent [&_.tiptap.ProseMirror.simple-editor]:!px-3 [&_.tiptap.ProseMirror.simple-editor]:!py-2 [&_.tiptap.ProseMirror.simple-editor]:!text-[13px] [&_.tiptap.ProseMirror.simple-editor]:!leading-6"
+				className="!bg-transparent [&_.is-editor-empty]:before:!content-none [&_.tiptap.ProseMirror.simple-editor]:!px-3 [&_.tiptap.ProseMirror.simple-editor]:!py-2 [&_.tiptap.ProseMirror.simple-editor]:!text-[13px] [&_.tiptap.ProseMirror.simple-editor]:!leading-6"
 			/>
 		</div>
 	)

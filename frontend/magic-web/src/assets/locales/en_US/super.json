@@ -4673,7 +4673,7 @@
 			"generatePrompt": "Generate speaker notes for this slide that I can use during the presentation.",
 			"generatePromptSuffix": "Use Markdown for the speaker notes (paragraphs, lists, and emphasis as needed). Write the result into the existing data-magic-slide-notes area using its current storage format. Do not change the slide’s visual content.",
 			"pageTitle": "Slide {{page}} · Notes",
-			"placeholder": "Write what you want to say during this slide…",
+			"placeholder": "Click here to add what you want to say on this slide, or choose “Write script” to get a first draft from AI.",
 			"polish": "Polish",
 			"polishPrompt": "Polish this slide’s existing speaker notes for natural spoken delivery. Preserve their meaning, facts, and figures.",
 			"resize": "Resize notes panel",
