@@ -461,6 +461,7 @@ export default function DefaultMessageEditorContainer(props: DefaultMessageEdito
 
 	return (
 		<div className={cn("flex min-h-0 flex-col gap-1", shouldFillHeight && "h-full")}>
+			<QueueDraftNotice context={queueContext} variant="warning" />
 			<div className={cn("min-h-0", shouldFillHeight && "flex-1")}>
 				<MessageEditor
 					ref={bindEditorRef}

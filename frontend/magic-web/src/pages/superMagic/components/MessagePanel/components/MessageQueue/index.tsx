@@ -6,6 +6,9 @@ import type { MessageEditorRef } from "../../../MessageEditor/types"
 import type { QueuedMessage } from "../../hooks/useMessageQueue"
 import MobileMessageQueue from "./MobileMessageQueue"
 import MessageQueueItems from "./MessageQueueItems"
+import ConversationInputResizeHandle from "../../../ConversationInputResize/ConversationInputResizeHandle"
+import { useConversationInputLayout } from "../../../ConversationInputResize/context"
+import { useMessageQueueHeight } from "./useMessageQueueHeight"
 
 export interface MessageQueueProps {
 	editorRef?: RefObject<MessageEditorRef | null>
@@ -42,6 +45,16 @@ function MessageQueue({
 }: MessageQueueProps) {
 	const { t } = useTranslation("super")
 	const [isExpanded, setIsExpanded] = useState(true)
+	const inputLayout = useConversationInputLayout()
+	const canResize =
+		variant !== "mobile" &&
+		queue.length > 0 &&
+		isExpanded &&
+		inputLayout?.queueListMaxHeight !== undefined
+	const queueHeight = useMessageQueueHeight({
+		enabled: canResize,
+		maxListHeight: inputLayout?.queueListMaxHeight,
+	})
 
 	if (queue.length === 0) {
 		return null
@@ -70,7 +83,21 @@ function MessageQueue({
 	}
 
 	return (
-		<div className={cn("self-stretch overflow-hidden rounded-xl bg-card/80", className)}>
+		<div className={cn("relative self-stretch rounded-xl bg-card/80", className)}>
+			{canResize && (
+				<ConversationInputResizeHandle
+					label={t("messageQueue.resizeQueueHeight")}
+					positionClassName="-top-1.5"
+					value={queueHeight.height}
+					min={queueHeight.minHeight}
+					max={queueHeight.maxHeight}
+					onResizeStart={queueHeight.startResize}
+					onResize={queueHeight.resize}
+					onResizeEnd={queueHeight.finishResize}
+					onResizeStateChange={queueHeight.onResizeStateChange}
+					onDoubleClick={queueHeight.restoreAutoHeight}
+				/>
+			)}
 			{/* Queue header */}
 			<div className="flex items-center justify-between gap-2.5 p-2.5">
 				<div className="flex flex-1 items-center gap-2.5">
@@ -96,18 +123,25 @@ function MessageQueue({
 
 			{/* Queue content */}
 			{isExpanded && (
-				<div className="scrollbar-y-thin flex max-h-[200px] flex-col gap-2.5 overflow-y-auto overflow-x-hidden px-2.5 pb-2.5">
-					<MessageQueueItems
-						queue={queue}
-						onRemoveMessage={onRemoveMessage}
-						onSendMessage={onSendMessage}
-						onStartEdit={onStartEdit}
-						onWithdraw={onWithdraw}
-						onMove={onMove}
-						editorRef={editorRef}
-						isOperationPending={isOperationPending}
-						variant="default"
-					/>
+				<div
+					ref={queueHeight.viewportRef}
+					data-message-queue-viewport
+					className="scrollbar-y-thin overflow-y-auto overflow-x-hidden rounded-b-xl px-2.5 pb-2.5"
+					style={{ maxHeight: queueHeight.height }}
+				>
+					<div ref={queueHeight.contentRef} className="flex flex-col gap-2.5">
+						<MessageQueueItems
+							queue={queue}
+							onRemoveMessage={onRemoveMessage}
+							onSendMessage={onSendMessage}
+							onStartEdit={onStartEdit}
+							onWithdraw={onWithdraw}
+							onMove={onMove}
+							editorRef={editorRef}
+							isOperationPending={isOperationPending}
+							variant="default"
+						/>
+					</div>
 				</div>
 			)}
 		</div>

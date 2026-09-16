@@ -21,7 +21,6 @@ import recordSummaryStore from "@/stores/recordingSummary"
 import { transformMentions } from "../../MessageEditor/utils/mention"
 import magicToast from "@/components/base/MagicToaster/utils"
 import MagicModal from "@/components/base/MagicModal"
-import { Button } from "@/components/shadcn-ui/button"
 import { normalizeQueuePreviewText } from "../components/MessageQueue/utils"
 import localstorage from "@/utils/localstorage"
 import { platformKey } from "@/utils/storage"
@@ -965,24 +964,8 @@ function useMessageQueue({
 			if (closed) return
 			modal.update({
 				content: content(error),
-				footer: createElement(
-					"div",
-					{ className: "flex w-full justify-end gap-2" },
-					createElement(
-						Button,
-						{ variant: "outline", disabled: pending, onClick: close },
-						t("messageQueue.switchDraftCancel"),
-					),
-					createElement(
-						Button,
-						{
-							variant: "destructive",
-							disabled: pending,
-							onClick: () => void confirm(),
-						},
-						t("messageQueue.deleteConfirm"),
-					),
-				),
+				cancelButtonProps: { disabled: pending, onClick: close },
+				okButtonProps: { disabled: pending, onClick: () => void confirm() },
 			})
 		}
 		const confirm = async () => {
@@ -1023,7 +1006,7 @@ function useMessageQueue({
 				if (operationScope === currentScopeRef.current) await fetchQueueList()
 			}
 		}
-		// 自定义 footer 只在业务成功后关闭；沿用共享弹窗，不改变其它删除入口的行为。
+		// 复用完整按钮区的间距与圆角；确认点击由业务控制，删除失败时保留弹窗供重试。
 		const modal = MagicModal.confirm({
 			title: t("messageQueue.deleteTitle"),
 			content: content(),
@@ -1034,7 +1017,8 @@ function useMessageQueue({
 				closed = true
 				deleteConfirmationRef.current = null
 			},
-			footer: null,
+			okText: t("messageQueue.deleteConfirm"),
+			cancelText: t("messageQueue.switchDraftCancel"),
 		})
 		deleteConfirmationRef.current = { destroy: close }
 		update()

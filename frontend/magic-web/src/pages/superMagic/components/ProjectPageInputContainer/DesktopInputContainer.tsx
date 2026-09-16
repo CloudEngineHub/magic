@@ -1,4 +1,5 @@
 import { GuideTourElementId } from "../LazyGuideTour"
+import type { ReactNode } from "react"
 import { ScenePanelVariant } from "../MainInputContainer/components/LazyScenePanel/types"
 import CurrentSceneBadge from "../MainInputContainer/components/SelectedSkillBadge"
 import { SCENE_INPUT_IDS, INPUT_CONTAINER_MIN_HEIGHT } from "../MainInputContainer/constants"
@@ -27,6 +28,7 @@ interface DesktopInputContainerProps {
 	containerRef?: React.RefObject<HTMLDivElement>
 	className?: string
 	fillHeight?: boolean
+	inputResizeHandle?: ReactNode
 	classNames?: {
 		container?: string
 		editorWrapper?: string
@@ -47,6 +49,7 @@ function DesktopInputContainer({
 	containerRef,
 	className,
 	fillHeight = false,
+	inputResizeHandle,
 	classNames,
 	editorSize,
 	isFocused,
@@ -91,11 +94,12 @@ function DesktopInputContainer({
 					</div>
 					<div
 						className={cn(
-							"w-full",
+							"relative w-full",
 							fillHeight && "min-h-0 flex-1",
 							classNames?.editorWrapper,
 						)}
 					>
+						{inputResizeHandle}
 						<div
 							className={cn(
 								"z-[2] flex flex-col gap-2 overflow-hidden border border-transparent",
@@ -137,52 +141,57 @@ function DesktopInputContainer({
 					{editorNodes?.taskDataNode}
 					{editorNodes?.messageQueueNode}
 				</div>
+				{/* 把手归属于头像及编辑区，始终位于队列之后，且不占正文高度。 */}
 				{shouldShowHeaderControls ? (
-					<div className="flex w-full items-center gap-4 overflow-hidden">
-						{shouldShowModeToggle ? (
-							<ModeToggle
-								size={editorSize}
-								topicMode={editorContext.topicMode}
-								agentCode={
-									editorContext.agentCode ??
-									editorContext.selectedTopic?.agent_code
-								}
-								allowChangeMode={
-									editorContext.allowChangeMode ??
-									((editorContext.messagesLength ?? 0) > 0 ? false : true)
-								}
-								useChatTerminology={editorContext.useChatTerminology}
-								onModeChange={editorContext.setTopicMode}
-							/>
-						) : null}
-						{shouldShowModeToggle && shouldShowSceneControls ? (
-							<div className="h-[60%] w-[1px] bg-border"></div>
-						) : null}
-						{shouldShowSceneControls ? (
-							<>
-								{shouldShowCurrentSceneBadge && currentScene ? (
-									<CurrentSceneBadge
-										scene={currentScene}
-										variant="outlineButton"
-										onClose={() => sceneStateStore.setCurrentScene(null)}
-									/>
-								) : (
-									<div
-										id={SCENE_INPUT_IDS.SCENES_SWITCHER}
-										className="min-w-0 flex-1"
-									></div>
-								)}
-							</>
-						) : null}
+					<div className="relative w-full shrink-0">
+						{inputResizeHandle}
+						<div className="flex w-full items-center gap-4 overflow-hidden">
+							{shouldShowModeToggle ? (
+								<ModeToggle
+									size={editorSize}
+									topicMode={editorContext.topicMode}
+									agentCode={
+										editorContext.agentCode ??
+										editorContext.selectedTopic?.agent_code
+									}
+									allowChangeMode={
+										editorContext.allowChangeMode ??
+										((editorContext.messagesLength ?? 0) > 0 ? false : true)
+									}
+									useChatTerminology={editorContext.useChatTerminology}
+									onModeChange={editorContext.setTopicMode}
+								/>
+							) : null}
+							{shouldShowModeToggle && shouldShowSceneControls ? (
+								<div className="h-[60%] w-[1px] bg-border"></div>
+							) : null}
+							{shouldShowSceneControls ? (
+								<>
+									{shouldShowCurrentSceneBadge && currentScene ? (
+										<CurrentSceneBadge
+											scene={currentScene}
+											variant="outlineButton"
+											onClose={() => sceneStateStore.setCurrentScene(null)}
+										/>
+									) : (
+										<div
+											id={SCENE_INPUT_IDS.SCENES_SWITCHER}
+											className="min-w-0 flex-1"
+										></div>
+									)}
+								</>
+							) : null}
+						</div>
 					</div>
 				) : null}
 				<div
 					className={cn(
-						"w-full",
+						"relative w-full",
 						fillHeight && "min-h-0 flex-1",
 						classNames?.editorWrapper,
 					)}
 				>
+					{!shouldShowHeaderControls && inputResizeHandle}
 					<div
 						className={cn(
 							"z-[2] flex flex-col gap-2 overflow-hidden border border-transparent",

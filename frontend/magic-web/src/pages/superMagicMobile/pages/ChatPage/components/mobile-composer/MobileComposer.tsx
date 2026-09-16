@@ -518,7 +518,7 @@ function MobileComposerComponent({
 					onRemove={logic.handleRemoveUploadedFile}
 				/>
 				<div className="px-4 [&:empty]:hidden">
-					<QueueDraftNotice context={editorContext.queueContext} />
+					<QueueDraftNotice context={editorContext.queueContext} variant="warning" />
 				</div>
 
 				<div
@@ -538,7 +538,7 @@ function MobileComposerComponent({
 				</div>
 
 				<div className="flex items-center justify-between gap-2 pb-2 pl-1.5 pr-2">
-					<div className="flex items-center">
+					<div className="flex min-w-0 items-center">
 						<Button
 							type="button"
 							variant="ghost"
@@ -561,9 +561,10 @@ function MobileComposerComponent({
 								{logic.selectedPluginCount}
 							</span>
 						)}
+						<QueueDraftNotice context={editorContext.queueContext} compact />
 					</div>
 
-					<div className="flex items-center gap-1">
+					<div className="flex shrink-0 items-center gap-1">
 						{editorModeSwitchNode}
 						{logic.voiceInputEnabled && voiceInputNode}
 

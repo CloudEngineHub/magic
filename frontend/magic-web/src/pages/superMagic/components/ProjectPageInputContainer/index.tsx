@@ -330,6 +330,7 @@ const ProjectPageInputContainerComponent: React.FC<ProjectPageInputContainerProp
 			containerRef={effectiveContainerRef}
 			className={className}
 			fillHeight={shouldFillHeight}
+			inputResizeHandle={inputLayout?.inputResizeHandle}
 			classNames={classNames}
 			editorSize={editorSize}
 			isFocused={isFocused}
