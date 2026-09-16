@@ -34,7 +34,7 @@ export default function SlidesTemplateSelectionDialog({
 						<p className="text-sm text-muted-foreground">{description}</p>
 					) : null}
 				</DialogHeader>
-				<div className="min-h-0 flex-1 overflow-hidden px-6 py-4">{children}</div>
+				<div className="min-h-0 flex-1 overflow-hidden">{children}</div>
 				{footer ? (
 					<DialogFooter className="shrink-0 border-t px-6 py-4 sm:items-center">
 						{footer}
