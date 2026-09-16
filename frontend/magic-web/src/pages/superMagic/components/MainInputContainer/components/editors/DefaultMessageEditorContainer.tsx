@@ -239,7 +239,11 @@ export default function DefaultMessageEditorContainer(props: DefaultMessageEdito
 			: defaultParams
 		const finalParams: HandleSendParams = mergedParams
 
-		if (queueContext && tiptapEditorRef.current?.getQueueDraft()) {
+		if (
+			params.shouldClearEditorAfterSend !== false &&
+			queueContext &&
+			tiptapEditorRef.current?.getQueueDraft()
+		) {
 			isPreparingSendRef.current = true
 			setIsSending(true)
 			try {
@@ -260,14 +264,15 @@ export default function DefaultMessageEditorContainer(props: DefaultMessageEdito
 		const shouldQueue = showLoading && !isWaitingForUser && !params.isFromQueue && queueContext
 
 		if (shouldQueue) {
-			// Clear editor immediately to prevent duplicate queue entries on rapid Enter presses.
-			tiptapEditorRef.current?.clearContentAfterSend()
+			// Programmatic requests have their own content and must preserve the current draft.
+			const shouldClearDraft = params.shouldClearEditorAfterSend !== false
+			if (shouldClearDraft) tiptapEditorRef.current?.clearContentAfterSend()
 			const queueId = await queueContext.addToQueue(
 				buildQueueMessageInput(finalParams, params.value),
 			)
 			if (!queueId) {
 				// Queue add failed — restore editor content so the user can retry
-				if (finalParams.value ?? params.value) {
+				if (shouldClearDraft && (finalParams.value ?? params.value)) {
 					tiptapEditorRef.current?.setContent?.(finalParams.value ?? params.value)
 				}
 				if (params.throwOnError) throw new Error(ERR_QUEUE_ADD_FAILED)

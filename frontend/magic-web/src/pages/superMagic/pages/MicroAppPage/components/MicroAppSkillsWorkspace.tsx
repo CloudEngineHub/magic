@@ -1,6 +1,6 @@
 import { useFileApi } from "@/pages/superMagic/fileAccess/fileApi"
-import { useEffect, useState } from "react"
-import { BookOpen, FileText, Loader2, Pencil, Save, X } from "lucide-react"
+import { useEffect, useRef, useState } from "react"
+import { BookOpen, FileText, Loader2, Pencil, Plus, MessageSquarePlus, Save, X } from "lucide-react"
 import { useTranslation } from "react-i18next"
 
 import type { AttachmentItem } from "@/pages/superMagic/components/TopicFilesButton/hooks"
@@ -12,6 +12,10 @@ import EditorBody from "@/pages/superMagic/components/Detail/contents/Md/compone
 import { SuperMagicApi } from "@/apis"
 import magicToast from "@/components/base/MagicToaster/utils"
 
+import MicroAppSkillCreateDialog from "./MicroAppSkillCreateDialog"
+import { useMicroAppSkillActions } from "./useMicroAppSkillActions"
+import { ScrollArea } from "@/components/shadcn-ui/scroll-area"
+
 interface MicroAppSkillsWorkspaceProps {
 	attachmentList: AttachmentItem[]
 	canEdit?: boolean
@@ -22,6 +26,9 @@ export default function MicroAppSkillsWorkspace({
 	canEdit = false,
 }: MicroAppSkillsWorkspaceProps) {
 	const fileApi = useFileApi()
+	const actions = useMicroAppSkillActions(attachmentList, canEdit)
+	const [createOpen, setCreateOpen] = useState(false)
+	const createTriggerRef = useRef<HTMLButtonElement | null>(null)
 	const { t, i18n } = useTranslation("super")
 	const [skills, setSkills] = useState<ProjectSkill[]>([])
 	const [selectedSkillId, setSelectedSkillId] = useState<string>()
@@ -97,6 +104,19 @@ export default function MicroAppSkillsWorkspace({
 		}
 	}
 
+	const createButton = actions.enabled ? (
+		<Button
+			size="sm"
+			onClick={(event) => {
+				createTriggerRef.current = event.currentTarget
+				setCreateOpen(true)
+			}}
+		>
+			<Plus className="size-4" aria-hidden />
+			{t("microAppPage.skills.create")}
+		</Button>
+	) : null
+
 	return (
 		<div
 			className="flex h-full min-h-0 flex-col bg-background"
@@ -111,14 +131,27 @@ export default function MicroAppSkillsWorkspace({
 						{t("microAppPage.skills.workspaceSubtitle")}
 					</p>
 				</div>
+				<div className="ml-auto pl-4">{createButton}</div>
 			</header>
+			{actions.enabled ? (
+				<MicroAppSkillCreateDialog
+					open={createOpen}
+					onOpenChange={setCreateOpen}
+					onCreate={actions.createSkill}
+					onCloseAutoFocus={() => createTriggerRef.current?.focus()}
+				/>
+			) : null}
 
 			<div className="flex min-h-0 flex-1">
 				<aside
 					className="flex w-[280px] shrink-0 flex-col overflow-hidden border-r border-border bg-muted/10"
 					aria-label={t("microAppPage.skills.title")}
 				>
-					<div className="flex min-h-0 flex-1 flex-col overflow-y-auto p-2">
+					{/* Let the empty state fill the Radix content wrapper so its action stays centered. */}
+					<ScrollArea
+						className="min-h-0 flex-1"
+						viewportClassName="h-full [&>div]:!flex [&>div]:min-h-full [&>div]:flex-col p-2"
+					>
 						{loading ? (
 							<div className="flex min-h-32 items-center justify-center gap-2 text-sm text-muted-foreground">
 								<Loader2 className="size-4 animate-spin" aria-hidden />
@@ -135,10 +168,21 @@ export default function MicroAppSkillsWorkspace({
 									return (
 										<Button
 											key={skill.id}
+											draggable={
+												actions.enabled &&
+												Boolean(actions.getFolder(skill.directory))
+											}
+											onDragStart={(event) =>
+												actions.startDrag(event, skill.directory)
+											}
+											onDragEnd={actions.endDrag}
 											type="button"
 											variant="ghost"
 											className={cn(
 												"h-auto w-full justify-start gap-2.5 rounded-lg px-3 py-2.5 text-left",
+												actions.enabled &&
+													actions.getFolder(skill.directory) &&
+													"cursor-grab active:cursor-grabbing",
 												selected &&
 													"bg-secondary text-secondary-foreground",
 											)}
@@ -175,11 +219,12 @@ export default function MicroAppSkillsWorkspace({
 								})}
 							</div>
 						) : (
-							<div className="flex min-h-32 items-center justify-center px-4 text-center text-sm text-muted-foreground">
+							<div className="flex min-h-32 flex-1 flex-col items-center justify-center gap-3 px-4 text-center text-sm text-muted-foreground">
 								{t("microAppPage.skills.empty")}
+								{createButton}
 							</div>
 						)}
-					</div>
+					</ScrollArea>
 				</aside>
 
 				<section className="min-h-0 min-w-0 flex-1 overflow-hidden" aria-live="polite">
@@ -201,6 +246,19 @@ export default function MicroAppSkillsWorkspace({
 									) : null}
 								</div>
 								<div className="flex shrink-0 items-center gap-2">
+									{actions.enabled ? (
+										<Button
+											variant="outline"
+											size="sm"
+											disabled={!actions.getFolder(selectedSkill.directory)}
+											onClick={() =>
+												actions.addToConversation(selectedSkill.directory)
+											}
+										>
+											<MessageSquarePlus className="size-4" aria-hidden />
+											{t("microAppPage.skills.addToConversation")}
+										</Button>
+									) : null}
 									{editing ? (
 										<>
 											<Button
