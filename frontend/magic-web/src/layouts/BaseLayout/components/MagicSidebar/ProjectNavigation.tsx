@@ -16,6 +16,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/shadcn-ui/
 import { Button } from "@/components/shadcn-ui/button"
 import { ScrollArea } from "@/components/shadcn-ui/scroll-area"
 import { SidebarMenu, SidebarMenuButton, SidebarMenuItem } from "@/components/shadcn-ui/sidebar"
+import MagicTooltip from "@/components/base/MagicTooltip"
 import type { ProjectBrowserSource } from "@/pages/superMagic/components/WorkspacesMenu/components/WorkspaceProjectsPanel"
 import workspaceStore from "@/pages/superMagic/stores/core/workspace"
 import { isCollaborationWorkspace } from "@/pages/superMagic/constants"
@@ -225,15 +226,22 @@ function ProjectNavigation({
 								/>
 							</SidebarMenuItem>
 							<SidebarMenuItem>
-								<SidebarMenuButton
-									tooltip={t("sidebarPanels.projectManager")}
-									aria-label={t("sidebarPanels.projectManager")}
-									disabled={workspaceBusy || recentBusy}
-									onClick={() => openManager()}
-									data-testid="sidebar-project-manager-icon"
+								{/* SidebarMenuButton does not forward ref; anchor MagicTooltip on a DOM node. */}
+								<MagicTooltip
+									title={t("sidebarPanels.projectManager")}
+									placement="right"
 								>
-									{managerIcon}
-								</SidebarMenuButton>
+									<span>
+										<SidebarMenuButton
+											aria-label={t("sidebarPanels.projectManager")}
+											disabled={workspaceBusy || recentBusy}
+											onClick={() => openManager()}
+											data-testid="sidebar-project-manager-icon"
+										>
+											{managerIcon}
+										</SidebarMenuButton>
+									</span>
+								</MagicTooltip>
 							</SidebarMenuItem>
 						</SidebarMenu>
 					) : (
