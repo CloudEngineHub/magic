@@ -5,6 +5,7 @@ import mimetypes
 from collections.abc import Callable
 from datetime import datetime, timezone
 from email.message import Message
+from html.parser import HTMLParser
 from pathlib import Path
 from urllib.parse import quote
 
@@ -19,11 +20,73 @@ from app.channel.base.media import (
     read_response_bytes,
 )
 from app.channel.base.models import ChannelMediaContext, ChannelMediaType
+from app.channel.lark.aggregation import LarkInboundBatch
 
 logger = get_logger(__name__)
 
 _STRUCTURE_MAX_DEPTH = 6
 _STRUCTURE_MAX_NODES = 64
+
+
+class _ForwardNoteParser(HTMLParser):
+    """只接受连续根级 p 元素，避免把普通用户文本当 HTML 清洗。"""
+
+    def __init__(self) -> None:
+        super().__init__(convert_charrefs=True)
+        self.paragraphs: list[str] = []
+        self.valid = True
+        self._inside_paragraph = False
+        self._current: list[str] = []
+
+    def handle_starttag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
+        if tag.lower() != "p" or self._inside_paragraph:
+            self.valid = False
+            return
+        self._inside_paragraph = True
+        self._current = []
+
+    def handle_endtag(self, tag: str) -> None:
+        if tag.lower() != "p" or not self._inside_paragraph:
+            self.valid = False
+            return
+        self.paragraphs.append("".join(self._current).strip())
+        self._inside_paragraph = False
+        self._current = []
+
+    def handle_startendtag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
+        self.valid = False
+
+    def handle_data(self, data: str) -> None:
+        if self._inside_paragraph:
+            self._current.append(data)
+        elif data.strip():
+            self.valid = False
+
+    def handle_comment(self, data: str) -> None:
+        self.valid = False
+
+    def handle_decl(self, decl: str) -> None:
+        self.valid = False
+
+    def unknown_decl(self, data: str) -> None:
+        self.valid = False
+
+    def handle_pi(self, data: str) -> None:
+        self.valid = False
+
+    @property
+    def complete(self) -> bool:
+        return self.valid and not self._inside_paragraph and bool(self.paragraphs)
+
+
+def normalize_lark_forward_note(text: str) -> str:
+    """将飞书转发备注的完整 p 包装转换为纯文本；其它输入保持原样。"""
+    parser = _ForwardNoteParser()
+    parser.feed(text)
+    parser.close()
+    if not parser.complete:
+        return text.strip()
+    return "\n".join(parser.paragraphs).strip()
 
 
 def _lark_content_structure(kind: str, content: dict) -> dict:
@@ -479,3 +542,25 @@ async def prepare_lark_message(kind: str, content: dict, message_id: str, app_id
         else:
             pieces.append("[Unsupported Lark message type. Please resend as text or a supported attachment.]")
         return await prepare_media_message("lark", "\n".join(pieces).strip(), sources)
+
+
+async def prepare_lark_batch(
+    batch: LarkInboundBatch,
+    app_id: str,
+    app_secret: str,
+) -> PreparedMediaMessage:
+    """准备一个逻辑 Lark 消息；只有已配对的转发备注才去除 p 包装。"""
+    canonical = batch.canonical_event
+    prepared = await prepare_lark_message(
+        canonical.message_type,
+        canonical.content,
+        canonical.message_id,
+        app_id,
+        app_secret,
+    )
+    if batch.merge_forward is None or batch.note is None:
+        return prepared
+
+    note = normalize_lark_forward_note(str(batch.note.content.get("text") or ""))
+    text = "\n\n".join(part for part in (note, prepared.text) if part)
+    return PreparedMediaMessage(text=text, media=prepared.media)
