@@ -1,10 +1,12 @@
 import { AppWindow, Box, Clock3 } from "lucide-react"
 import { observer } from "mobx-react-lite"
 import { useTranslation } from "react-i18next"
-import { SidebarMenu, SidebarMenuButton, SidebarMenuItem } from "@/components/shadcn-ui/sidebar"
 import { Button } from "@/components/shadcn-ui/button"
+import { SmoothTabs, type Tab } from "@/components/shadcn-ui/smooth-tabs"
 import MagicTooltip from "@/components/base/MagicTooltip"
 import { sidebarStore } from "@/stores/layout/SidebarStore"
+
+type NavigationSection = "recent" | "workspaces"
 
 /** 分类始终保留一个选中项；固定短名称为右侧管理器预留空间，完整名称仍用于无障碍说明。 */
 function ProjectNavigationTabs({
@@ -17,45 +19,47 @@ function ProjectNavigationTabs({
 	const { t } = useTranslation("super")
 	const recent = t("projectNavigation.recent")
 	const workspaces = t("projectNavigation.workspaces")
+	const tabs: Tab<NavigationSection>[] = [
+		{
+			value: "recent",
+			label: t("projectNavigation.recentShort"),
+			icon: <Clock3 size={16} />,
+			tooltip: recent,
+			testId: "sidebar-recent-projects-toggle",
+		},
+		{
+			value: "workspaces",
+			label: t("projectNavigation.workspacesShort"),
+			icon: <Box size={16} />,
+			tooltip: workspaces,
+			testId: "sidebar-workspaces-toggle",
+		},
+	]
 	return (
 		<div
-			className="sticky top-0 z-30 flex h-8 items-center gap-2 bg-sidebar px-2"
+			className="sticky top-0 z-30 flex items-center gap-2 bg-sidebar px-2"
 			data-sidebar-navigation-header="tabs"
 		>
-			<SidebarMenu
+			{/* Native fieldset disabling preserves the existing busy-state behavior for both tab buttons. */}
+			<fieldset
+				disabled={disabled}
 				role="group"
 				aria-label={t("sidebarPanels.projectManager")}
-				className="min-w-0 flex-1 flex-row gap-0.5 rounded-lg bg-sidebar-foreground/[0.06] p-0.5"
+				className="m-0 min-w-0 flex-1 border-0 p-0"
 			>
-				<SidebarMenuItem className="min-w-0 flex-1">
-					<SidebarMenuButton
-						aria-label={recent}
-						aria-pressed={sidebarStore.recentProjectsExpanded}
-						isActive={sidebarStore.recentProjectsExpanded}
-						disabled={disabled}
-						onClick={() => sidebarStore.selectNavigationSection("recent")}
-						className="relative h-7 justify-center gap-1.5 px-2 text-[13px] font-normal text-sidebar-foreground/80 focus-visible:bg-sidebar-accent focus-visible:text-sidebar-accent-foreground focus-visible:ring-1 data-[active=true]:bg-background data-[active=true]:font-normal data-[active=true]:text-sidebar-foreground data-[active=true]:shadow-sm dark:data-[active=true]:bg-sidebar-foreground/[0.13]"
-						data-testid="sidebar-recent-projects-toggle"
-					>
-						<Clock3 size={16} />
-						<span>{t("projectNavigation.recentShort")}</span>
-					</SidebarMenuButton>
-				</SidebarMenuItem>
-				<SidebarMenuItem className="min-w-0 flex-1">
-					<SidebarMenuButton
-						aria-label={workspaces}
-						aria-pressed={sidebarStore.workspacesExpanded}
-						isActive={sidebarStore.workspacesExpanded}
-						disabled={disabled}
-						onClick={() => sidebarStore.selectNavigationSection("workspaces")}
-						className="relative h-7 justify-center gap-1.5 px-2 text-[13px] font-normal text-sidebar-foreground/80 focus-visible:bg-sidebar-accent focus-visible:text-sidebar-accent-foreground focus-visible:ring-1 data-[active=true]:bg-background data-[active=true]:font-normal data-[active=true]:text-sidebar-foreground data-[active=true]:shadow-sm dark:data-[active=true]:bg-sidebar-foreground/[0.13]"
-						data-testid="sidebar-workspaces-toggle"
-					>
-						<Box size={16} />
-						<span>{t("projectNavigation.workspacesShort")}</span>
-					</SidebarMenuButton>
-				</SidebarMenuItem>
-			</SidebarMenu>
+				<div className="m-2 mb-0 flex-shrink-0">
+					<SmoothTabs
+						tabs={tabs}
+						value={sidebarStore.expandedNavigationSection}
+						onChange={sidebarStore.selectNavigationSection}
+						variant="background"
+						className="h-auto w-full bg-muted p-[3px]"
+						buttonClassName="h-[28px] py-0 text-[13px] font-normal"
+						indicatorClassName="inset-y-[3px] h-[28px]"
+						data-testid="sidebar-navigation-tabs"
+					/>
+				</div>
+			</fieldset>
 			<MagicTooltip
 				title={t("sidebarPanels.projectManager")}
 				placement="top"
