@@ -103,7 +103,7 @@ describe("ProjectNavigationTabs", () => {
 		expect(selectNavigationSection).toHaveBeenCalledWith("workspaces")
 
 		const managerButton = screen.getByTestId("sidebar-project-manager")
-		expect(managerButton).toHaveClass("!size-[34px]", "!rounded-[10px]", "!bg-white")
+		expect(managerButton).toHaveClass("!size-[34px]", "!rounded-[10px]", "!bg-muted")
 		fireEvent.click(managerButton)
 		expect(onOpenManager).toHaveBeenCalledTimes(1)
 	})

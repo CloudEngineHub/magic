@@ -47,7 +47,7 @@ function ProjectNavigationTabs({
 				aria-label={t("sidebarPanels.projectManager")}
 				className="m-0 min-w-0 flex-1 border-0 p-0"
 			>
-				<div className="m-2 mb-0 flex-shrink-0">
+				<div className="flex-shrink-0">
 					<SmoothTabs
 						tabs={tabs}
 						value={sidebarStore.expandedNavigationSection}
@@ -60,7 +60,7 @@ function ProjectNavigationTabs({
 					/>
 				</div>
 			</fieldset>
-			<div className="m-2 mb-0 shrink-0">
+			<div className="shrink-0">
 				<MagicTooltip
 					title={t("sidebarPanels.projectManager")}
 					placement="top"
@@ -74,7 +74,7 @@ function ProjectNavigationTabs({
 						disabled={disabled}
 						onClick={onOpenManager}
 						data-testid="sidebar-project-manager"
-						className="!size-[34px] !rounded-[10px] !bg-white text-sidebar-foreground/80 hover:!bg-white hover:text-sidebar-accent-foreground focus-visible:bg-sidebar-accent focus-visible:text-sidebar-accent-foreground focus-visible:ring-1"
+						className="!size-[34px] !rounded-[10px] !bg-muted text-sidebar-foreground/80 hover:!bg-muted hover:text-sidebar-accent-foreground focus-visible:bg-sidebar-accent focus-visible:text-sidebar-accent-foreground focus-visible:ring-1"
 					>
 						<AppWindow size={16} />
 					</Button>
