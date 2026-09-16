@@ -17,6 +17,9 @@ return [
     'file_required' => 'Please upload an asset file first',
     'group_not_empty' => 'This asset group still contains assets. Remove or delete them before deleting the group',
     'delete_denied' => 'Only assets you created can be deleted; assets shared with the team cannot be removed',
+    'tag_not_found' => 'Asset tag not found',
+    'tag_structure_invalid' => 'Invalid asset tag hierarchy',
+    'tag_not_allowed' => 'You are not allowed to operate on this asset tag',
     'validation' => [
         'scope_in' => 'Invalid query scope. Please choose personal, team shared, official public, or all',
         'asset_kind_in' => 'Asset type must be asset or asset group',

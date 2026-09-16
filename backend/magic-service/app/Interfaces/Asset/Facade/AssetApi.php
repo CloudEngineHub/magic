@@ -13,6 +13,8 @@ use App\Infrastructure\Core\AbstractApi;
 use App\Infrastructure\Core\Exception\ExceptionBuilder;
 use App\Infrastructure\Core\ValueObject\Page;
 use App\Interfaces\Asset\Assembler\AssetAssembler;
+use App\Interfaces\Asset\Assembler\AssetOwnerAssembler;
+use App\Interfaces\Asset\Assembler\AssetTagAssembler;
 use App\Interfaces\Asset\DTO\Request\CreateAssetRequestDTO;
 use App\Interfaces\Asset\DTO\Request\QueryAssetRequestDTO;
 use App\Interfaces\Asset\DTO\Request\SaveAssetToLibraryRequestDTO;
@@ -104,27 +106,21 @@ class AssetApi extends AbstractApi
 
     public function tags(): array
     {
-        return array_map(static function ($tag): array {
-            return [
-                'id' => (string) $tag->getId(), 'parentId' => (string) $tag->getParentId(),
-                'nodeType' => $tag->getNodeType(), 'name' => (string) ($tag->getNameI18n()['default'] ?? ''),
-                'ownerUid' => $tag->getOwnerUid(), 'isOfficial' => $tag->getOwnerUid() === null,
-            ];
-        }, $this->assetAppService->listTags($this->getAuthorization()));
+        return AssetTagAssembler::toList($this->assetAppService->listTags($this->getAuthorization()));
     }
 
     public function createTag(): array
     {
         $request = SaveAssetTagRequestDTO::fromRequest($this->request);
         $tag = $this->assetAppService->saveTag($this->getAuthorization(), $request->getName(), $request->getNodeType(), $request->getParentId());
-        return ['id' => (string) $tag->getId(), 'name' => $request->getName(), 'parentId' => (string) $tag->getParentId(), 'nodeType' => $tag->getNodeType()];
+        return AssetTagAssembler::toItem($tag);
     }
 
     public function updateTag(int|string $tagId): array
     {
         $request = SaveAssetTagRequestDTO::fromRequest($this->request);
         $tag = $this->assetAppService->updateTag($this->getAuthorization(), $tagId, $request->getName(), $request->getNodeType(), $request->getParentId());
-        return ['id' => (string) $tag->getId(), 'name' => $request->getName(), 'parentId' => (string) $tag->getParentId(), 'nodeType' => $tag->getNodeType()];
+        return AssetTagAssembler::toItem($tag);
     }
 
     public function deleteTag(int|string $tagId): array
@@ -142,7 +138,7 @@ class AssetApi extends AbstractApi
 
     public function owners(): array
     {
-        return $this->assetAppService->listOwners($this->getAuthorization(), (string) $this->request->query('keyword', ''));
+        return AssetOwnerAssembler::toList($this->assetAppService->listOwners($this->getAuthorization(), (string) $this->request->query('keyword', '')));
     }
 
     public function transferOwner(): array

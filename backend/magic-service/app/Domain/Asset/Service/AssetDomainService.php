@@ -24,6 +24,7 @@ use App\Infrastructure\Core\Exception\ExceptionBuilder;
 use App\Infrastructure\Core\ValueObject\Page;
 use App\Infrastructure\ExternalAPI\VolcengineArk\Assets\VolcengineArkAssetProvider;
 use Hyperf\Coroutine\Coroutine;
+use Hyperf\DbConnection\Db;
 use Psr\Log\LoggerInterface;
 use Throwable;
 
@@ -63,6 +64,7 @@ class AssetDomainService
         private readonly AssetAgreementRepositoryInterface $agreements,
         private readonly LoggerInterface $logger,
         private readonly AiAbilityDomainService $abilityDomainService,
+        private readonly AssetSearchTextBuilder $searchTextBuilder,
     ) {
         $this->provider = new VolcengineArkAssetProvider($this->logger, $this->abilityDomainService->getProviderConfig(AiAbilityCode::VolcengineArkAssets));
     }
@@ -177,6 +179,26 @@ class AssetDomainService
             ExceptionBuilder::throw(AssetErrorCode::DELETE_DENIED);
         }
         return $this->deleteAssetWithProvider($dataIsolation, $existing);
+    }
+
+    /** @param array<int, int|string> $assetIds @return AssetEntity[] */
+    public function transferOwner(AssetDataIsolation $dataIsolation, array $assetIds, string $ownerUid): array
+    {
+        $assets = [];
+        foreach (array_values(array_unique(array_map('strval', $assetIds))) as $assetId) {
+            $asset = $this->assets->findById($dataIsolation, $assetId);
+            if ($asset === null || ($asset->getOwnerUid() ?: $asset->getUserId()) !== $dataIsolation->getCurrentUserId()) {
+                ExceptionBuilder::throw(AssetErrorCode::DELETE_DENIED);
+            }
+            $asset->setOwnerUid($ownerUid);
+            $assets[] = $asset;
+        }
+        Db::transaction(function () use ($dataIsolation, $assets): void {
+            foreach ($assets as $asset) {
+                $this->assets->update($dataIsolation, $asset);
+            }
+        });
+        return $assets;
     }
 
     /**
@@ -435,10 +457,7 @@ class AssetDomainService
             $asset->setOwnerUid($asset->getUserId());
         }
         if ($asset->getSearchText() === null || trim($asset->getSearchText()) === '') {
-            $asset->setSearchText(trim(implode(' ', array_filter([
-                $asset->getI18nName('default'),
-                $asset->getI18nDescription('default'),
-            ], static fn (mixed $value): bool => is_string($value) && trim($value) !== ''))));
+            $asset->setSearchText($this->searchTextBuilder->build($asset));
         }
         $asset->setSyncStatus($syncStatus ?? ($asset->getAssetKind()->isGroup() ? AssetSyncStatus::SYNCED : AssetSyncStatus::PENDING));
         $saved = $this->assets->save($dataIsolation, $asset);

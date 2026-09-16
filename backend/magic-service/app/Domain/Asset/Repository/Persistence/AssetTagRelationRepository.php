@@ -5,13 +5,14 @@ declare(strict_types=1);
 namespace App\Domain\Asset\Repository\Persistence;
 
 use App\Domain\Asset\Entity\AssetDataIsolation;
+use App\Domain\Asset\Repository\Facade\AssetTagRelationRepositoryInterface;
 use App\Domain\Asset\Repository\Persistence\Model\AssetTagRelationModel;
 use App\Infrastructure\Util\IdGenerator\IdGenerator;
 
 /** 素材与标签的多对多关系；替换标签时先删后插，避免遗留关联。 */
-class AssetTagRelationRepository
+class AssetTagRelationRepository implements AssetTagRelationRepositoryInterface
 {
-    public function sync(AssetDataIsolation $dataIsolation, int|string $assetId, array $tagIds, ?string $createdUid = null): void
+    public function syncAssetTags(AssetDataIsolation $dataIsolation, int|string $assetId, array $tagIds, string $createdUid): void
     {
         $this->deleteByAssetId($dataIsolation, $assetId);
         $tagIds = array_values(array_unique(array_filter(array_map('intval', $tagIds), static fn (int $id): bool => $id > 0)));

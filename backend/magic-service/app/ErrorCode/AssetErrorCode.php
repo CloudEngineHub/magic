@@ -47,4 +47,13 @@ enum AssetErrorCode: int
 
     #[ErrorMessage('asset.delete_denied')]
     case DELETE_DENIED = 48012;
+
+    #[ErrorMessage('asset.tag_not_found')]
+    case TAG_NOT_FOUND = 48013;
+
+    #[ErrorMessage('asset.tag_structure_invalid')]
+    case TAG_STRUCTURE_INVALID = 48014;
+
+    #[ErrorMessage('asset.tag_not_allowed')]
+    case TAG_NOT_ALLOWED = 48015;
 }

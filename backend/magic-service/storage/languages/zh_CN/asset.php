@@ -17,6 +17,9 @@ return [
     'file_required' => '请先上传素材文件',
     'group_not_empty' => '素材组内还有素材，请先移出或删除后再删除素材组',
     'delete_denied' => '只能删除本人创建的素材，团队分享的素材不支持删除',
+    'tag_not_found' => '标签不存在',
+    'tag_structure_invalid' => '标签层级结构不合法',
+    'tag_not_allowed' => '无权操作该标签',
     'validation' => [
         'scope_in' => '查询范围不正确，请选择个人、团队分享、官方公开或全部',
         'asset_kind_in' => '素材类型只能选择素材或素材组',

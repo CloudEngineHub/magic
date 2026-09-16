@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Domain\Asset\Entity;
 
+use App\Domain\Asset\Entity\ValueObject\AssetTagNodeType;
 use App\Infrastructure\Core\AbstractEntity;
 
 /** 素材标签组/标签。官方标签 owner_uid 为空，自定义标签归属当前用户。 */
@@ -28,6 +29,8 @@ class AssetTagEntity extends AbstractEntity
     public function setParentId(int|string|null $value): self { $this->parentId = max(0, (int) ($value ?? 0)); return $this; }
     public function getNodeType(): string { return $this->nodeType; }
     public function setNodeType(string $value): self { $this->nodeType = $value; return $this; }
+    public function isGroup(): bool { return $this->nodeType === AssetTagNodeType::Group->value; }
+    public function isTag(): bool { return $this->nodeType === AssetTagNodeType::Tag->value; }
     public function getNameI18n(): array { return $this->nameI18n; }
     public function setNameI18n(array $value): self { $this->nameI18n = $value; return $this; }
     public function getStatus(): int { return $this->status; }

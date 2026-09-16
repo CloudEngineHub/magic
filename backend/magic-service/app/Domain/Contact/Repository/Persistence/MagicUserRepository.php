@@ -366,6 +366,25 @@ readonly class MagicUserRepository implements MagicUserRepositoryInterface
         return Db::select($query->toSql(), $query->getBindings());
     }
 
+    public function queryByOrganization(string $organizationCode, ?string $keyword = null, int $limit = 100): array
+    {
+        $query = $this->userModel::query()
+            ->where('organization_code', $organizationCode)
+            ->where('status', AccountStatus::Normal->value)
+            ->limit($limit);
+        if ($keyword !== null && trim($keyword) !== '') {
+            $keyword = trim($keyword);
+            $query->where(static function ($query) use ($keyword): void {
+                $query->where('nickname', 'like', '%' . $keyword . '%')
+                    ->orWhere('user_id', 'like', '%' . $keyword . '%');
+            });
+        }
+        return array_map(
+            static fn (UserModel $model): MagicUserEntity => ContactUserFactory::createByModel($model),
+            $query->orderBy('nickname')->get()->all(),
+        );
+    }
+
     public function searchByNickNameInMagic(string $nickName): array
     {
         if (empty($nickName)) {
