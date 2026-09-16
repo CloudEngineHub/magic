@@ -12,7 +12,7 @@ import useStyles from "../Workspace/style"
 import { JSONContent } from "@/infrastructure/editors/tiptap/core"
 import GlobalMentionPanelStore from "@/components/business/MentionPanel/builtin-store"
 import projectFilesStore from "@/stores/projectFiles"
-import { filterClickableMessageWithoutRevoked } from "../../utils/handleMessage"
+import { filterPanelMessageWithoutRevoked } from "../../utils/handleMessage"
 import { useDetailModeCache } from "../../hooks/useDetailModeCache"
 import { useAttachmentsPolling } from "../../hooks/useAttachmentsPolling"
 import { useProjectAttachmentsChangeRealtime } from "../../hooks/useProjectAttachmentsChangeRealtime"
@@ -477,7 +477,7 @@ function TopicPage({ pageVariant = "default" }: TopicPageDesktopProps) {
 
 			const lastDetailMessage = topicMessages.findLast((message) => {
 				const node = superMagicStore.getMessageNode(message?.super_message_id)
-				return filterClickableMessageWithoutRevoked(node, message)
+				return filterPanelMessageWithoutRevoked(node, message)
 			})
 
 			const lastDetailMessageNode = superMagicStore.getMessageNode(
@@ -491,7 +491,7 @@ function TopicPage({ pageVariant = "default" }: TopicPageDesktopProps) {
 						}
 				  }
 				| undefined
-			if (filterClickableMessageWithoutRevoked(lastDetailMessageNode, lastDetailMessage)) {
+			if (filterPanelMessageWithoutRevoked(lastDetailMessageNode, lastDetailMessage)) {
 				updateDetail({
 					latestMessageDetail: lastDetailMessageNode?.tool?.detail,
 					isLoading,

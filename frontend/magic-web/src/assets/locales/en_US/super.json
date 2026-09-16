@@ -4513,6 +4513,15 @@
 		"uploadImageCountLimit": "It supports adding up to 10 JPG or PNG images.",
 		"uploadImageSizeLimit": "The file size should be less than 2MB."
 	},
+	"operationResult": {
+		"directory": "Folder",
+		"file": "File",
+		"interrupted": "Operation interrupted",
+		"running": "Processing",
+		"summary": "{{success}} succeeded · {{error}} failed",
+		"title": "Operation results",
+		"unavailable": "Operation results are unavailable"
+	},
 	"personalPet": {
 		"collapse": "Collapse pet",
 		"contextMenu": {

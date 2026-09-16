@@ -25,7 +25,7 @@ export function handleToolCallInteraction({
 	}
 
 	const target = getToolCardInteractionTarget(toolData.name, toolData.detail)
-	if (target.type === "disabled") return
+	if (target.type === "disabled" || target.type === "inline") return
 
 	if (target.type === "design") {
 		const { designProjectId, designProject, elements } = getToolDesignProjectInfo(toolData)

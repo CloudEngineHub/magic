@@ -4,6 +4,8 @@ import KnowledgeSearchTool from "./tools/KnowledgeSearch"
 import WriteFileTool from "./tools/WriteFile"
 import { MCPTool } from "./tools/MCP"
 import type { ToolCallRendererProps } from "./types"
+import { isInlineToolDetail } from "@/pages/superMagic/utils/toolDetailDisplay"
+import OperationResult from "../../shared/OperationResult"
 
 const AskUserToolCall = lazy(() => import("./tools/AskUser"))
 const MicroAppPlanToolCall = lazy(() => import("./tools/MicroAppPlan"))
@@ -20,6 +22,18 @@ export function ToolCallRenderer({
 	onMouseEnter,
 	onMouseLeave,
 }: ToolCallRendererProps) {
+	if (isInlineToolDetail(toolData.detail)) {
+		return (
+			<OperationResult
+				toolData={toolData}
+				loading={loading}
+				className={classNames}
+				onMouseEnter={onMouseEnter}
+				onMouseLeave={onMouseLeave}
+			/>
+		)
+	}
+
 	// MCP uses tool.name for the wrapper protocol while function.name identifies the MCP method.
 	if (toolCall.tool?.name === "mcp_tool_call") {
 		return (

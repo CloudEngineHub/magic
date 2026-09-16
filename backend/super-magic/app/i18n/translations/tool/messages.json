@@ -3533,9 +3533,53 @@
         "zh_CN": "未知",
         "en_US": "Unknown"
     },
-    "delete_file.error": {
-        "zh_CN": "删除文件 {{file_path}} 时出错",
-        "en_US": "Error deleting file {{file_path}}"
+    "delete_file.deleted": {
+        "zh_CN": "已删除",
+        "en_US": "Deleted"
+    },
+    "delete_file.not_deleted": {
+        "zh_CN": "未删除",
+        "en_US": "Not deleted"
+    },
+    "delete_file.single_result": {
+        "zh_CN": "{{file_name}} · {{status}}",
+        "en_US": "{{file_name}} · {{status}}"
+    },
+    "delete_file.deleted_count": {
+        "zh_CN": "{{count}} 项已删除",
+        "en_US": "{{count}} items deleted"
+    },
+    "delete_file.failed_count": {
+        "zh_CN": "{{count}} 项未删除",
+        "en_US": "{{count}} items not deleted"
+    },
+    "delete_file.partial_result": {
+        "zh_CN": "{{deleted}} 项已删除 · {{failed}} 项未删除",
+        "en_US": "{{deleted}} items deleted · {{failed}} not deleted"
+    },
+    "delete_file.detail_title": {
+        "zh_CN": "删除结果",
+        "en_US": "Deletion results"
+    },
+    "delete_file.detail_unavailable": {
+        "zh_CN": "未能获取完整的删除结果，请检查文件当前状态。",
+        "en_US": "Complete deletion results are unavailable. Please check the current file state."
+    },
+    "delete_file.reason_not_found": {
+        "zh_CN": "文件或文件夹不存在",
+        "en_US": "The file or folder does not exist"
+    },
+    "delete_file.reason_permission_denied": {
+        "zh_CN": "没有访问权限",
+        "en_US": "Access denied"
+    },
+    "delete_file.reason_invalid_path": {
+        "zh_CN": "路径无效",
+        "en_US": "Invalid path"
+    },
+    "delete_file.reason_failed": {
+        "zh_CN": "删除未完成，请检查文件状态后重试。",
+        "en_US": "Deletion did not complete. Check the file state before retrying."
     },
     "video.project_config_create_failed": {
         "zh_CN": "配置文件创建失败，将尝试解决...",
