@@ -49,7 +49,7 @@ class AssetTagDomainService
     public function update(AssetDataIsolation $dataIsolation, int|string $id, string $name, AssetTagNodeType $nodeType, int $parentId): AssetTagEntity
     {
         $entity = $this->findOwned($dataIsolation, $id);
-        if ($entity->getNodeType() !== $nodeType->value) {
+        if ($entity->getNodeType() !== $nodeType) {
             ExceptionBuilder::throw(AssetErrorCode::TAG_STRUCTURE_INVALID);
         }
         $this->assertStructure($dataIsolation, $nodeType, $parentId, $id);
@@ -62,7 +62,7 @@ class AssetTagDomainService
     public function delete(AssetDataIsolation $dataIsolation, int|string $id): void
     {
         $entity = $this->findOwned($dataIsolation, $id);
-        if ($entity->getNodeType() === AssetTagNodeType::Group->value && $this->tags->hasChildren($dataIsolation, $id)) {
+        if ($entity->isGroup() && $this->tags->hasChildren($dataIsolation, $id)) {
             ExceptionBuilder::throw(AssetErrorCode::GROUP_NOT_EMPTY);
         }
         $assetIds = $this->relations->findAssetIdsByTagId($dataIsolation, $id);
@@ -130,7 +130,7 @@ class AssetTagDomainService
             return;
         }
         $parent = $this->tags->findById($dataIsolation, $parentId);
-        if ($parent === null || $parent->getNodeType() !== AssetTagNodeType::Group->value || ($ignoreId !== null && (string) $parent->getId() === (string) $ignoreId)) {
+        if ($parent === null || ! $parent->isGroup() || ($ignoreId !== null && (string) $parent->getId() === (string) $ignoreId)) {
             ExceptionBuilder::throw(AssetErrorCode::TAG_STRUCTURE_INVALID);
         }
         if ($parent->getOwnerUid() !== null && $parent->getOwnerUid() !== $dataIsolation->getCurrentUserId()) {
@@ -144,7 +144,7 @@ class AssetTagDomainService
         $result = [];
         foreach (array_values(array_unique(array_filter(array_map('intval', $tagIds), static fn (int $id): bool => $id > 0))) as $tagId) {
             $tag = $this->tags->findById($dataIsolation, $tagId);
-            if ($tag === null || $tag->getNodeType() !== AssetTagNodeType::Tag->value || ($tag->getOwnerUid() !== null && $tag->getOwnerUid() !== $dataIsolation->getCurrentUserId())) {
+            if ($tag === null || ! $tag->isTag() || ($tag->getOwnerUid() !== null && $tag->getOwnerUid() !== $dataIsolation->getCurrentUserId())) {
                 ExceptionBuilder::throw(AssetErrorCode::TAG_NOT_ALLOWED);
             }
             $result[] = $tag;

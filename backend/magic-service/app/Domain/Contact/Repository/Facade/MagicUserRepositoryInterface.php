@@ -86,8 +86,6 @@ interface MagicUserRepositoryInterface
 
     public function searchByNickName(string $nickName, string $organizationCode): array;
 
-    /** @return MagicUserEntity[] */
-    public function queryByOrganization(string $organizationCode, ?string $keyword = null, int $limit = 100): array;
 
     public function searchByNickNameInMagic(string $nickName): array;
 

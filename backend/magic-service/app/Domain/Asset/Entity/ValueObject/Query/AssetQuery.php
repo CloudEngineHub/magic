@@ -28,7 +28,8 @@ class AssetQuery
 
     private ?bool $isVerified = null;
 
-    private ?string $ownerUid = null;
+    /** @var string[] */
+    private array $ownerUids = [];
 
     /** @var array<string> */
     private array $tagIds = [];
@@ -47,6 +48,9 @@ class AssetQuery
      * @var array<string>
      */
     private array $sharedAssetIds = [];
+
+    /** @var array<string> */
+    private array $accessibleAssetIds = [];
 
     public function getKeyword(): ?string
     {
@@ -119,14 +123,14 @@ class AssetQuery
         $this->isVerified = $isVerified;
     }
 
-    public function getOwnerUid(): ?string
+    public function getOwnerUids(): array
     {
-        return $this->ownerUid;
+        return $this->ownerUids;
     }
 
-    public function setOwnerUid(?string $ownerUid): void
+    public function setOwnerUids(array $ownerUids): void
     {
-        $this->ownerUid = $ownerUid;
+        $this->ownerUids = array_values(array_unique(array_filter(array_map('strval', $ownerUids), static fn (string $id): bool => trim($id) !== '')));
     }
 
     public function getTagIds(): array
@@ -173,5 +177,17 @@ class AssetQuery
     public function setSharedAssetIds(array $sharedAssetIds): void
     {
         $this->sharedAssetIds = array_values($sharedAssetIds);
+    }
+
+    /** @return array<string> */
+    public function getAccessibleAssetIds(): array
+    {
+        return $this->accessibleAssetIds;
+    }
+
+    /** @param array<string> $accessibleAssetIds */
+    public function setAccessibleAssetIds(array $accessibleAssetIds): void
+    {
+        $this->accessibleAssetIds = array_values(array_unique(array_map('strval', $accessibleAssetIds)));
     }
 }

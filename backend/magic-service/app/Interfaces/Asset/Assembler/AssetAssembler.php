@@ -8,6 +8,7 @@ declare(strict_types=1);
 namespace App\Interfaces\Asset\Assembler;
 
 use App\Domain\Asset\Entity\AssetEntity;
+use App\Domain\Asset\Entity\AssetTagEntity;
 use App\Domain\Asset\Entity\ValueObject\AssetComplianceStatus;
 use App\Domain\Asset\Repository\Persistence\Model\AssetModel;
 use App\Infrastructure\Core\ValueObject\Page;
@@ -21,6 +22,31 @@ use Dtyq\CloudFile\Kernel\Struct\FileLink;
 
 class AssetAssembler
 {
+    public static function createTagList(array $tags): array
+    {
+        return array_map(static fn (AssetTagEntity $tag): array => self::createTagItem($tag), $tags);
+    }
+
+    public static function createTagItem(AssetTagEntity $tag): array
+    {
+        return [
+            'id' => (string) $tag->getId(),
+            'parentId' => (string) $tag->getParentId(),
+            'nodeType' => $tag->getNodeType()->value,
+            'name' => (string) ($tag->getNameI18n()['default'] ?? ''),
+            'ownerUid' => $tag->getOwnerUid(),
+            'isOfficial' => $tag->getOwnerUid() === null,
+        ];
+    }
+
+    public static function createOwnerList(array $owners): array
+    {
+        return array_map(static fn (array $owner): array => [
+            'id' => (string) ($owner['id'] ?? ''),
+            'name' => (string) ($owner['name'] ?? ''),
+        ], $owners);
+    }
+
     public static function createItem(AssetEntity|AssetModel $asset, ?FileLink $fileLink = null, bool $admin = false): AdminAssetDTO|AssetDTO
     {
         $entity = $asset instanceof AssetEntity ? $asset : new AssetEntity($asset->toArray());

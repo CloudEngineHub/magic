@@ -9,7 +9,20 @@ use App\Infrastructure\Core\AbstractModel;
 class AssetTagRelationModel extends AbstractModel
 {
     protected ?string $table = 'magic_asset_tag_relations';
+
     public $timestamps = true;
-    protected array $fillable = ['id', 'organization_code', 'asset_id', 'tag_id', 'created_uid'];
-    protected array $casts = ['id' => 'integer', 'asset_id' => 'integer', 'tag_id' => 'integer'];
+
+    protected array $fillable = [
+        'id',
+        'organization_code',
+        'asset_id',
+        'tag_id',
+        'created_uid',
+    ];
+
+    protected array $casts = [
+        'id' => 'integer',
+        'asset_id' => 'integer',
+        'tag_id' => 'integer',
+    ];
 }

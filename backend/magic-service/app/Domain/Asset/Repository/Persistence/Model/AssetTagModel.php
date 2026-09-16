@@ -12,6 +12,31 @@ class AssetTagModel extends AbstractModel
     use SoftDeletes;
 
     protected ?string $table = 'magic_asset_tags';
-    protected array $fillable = ['id', 'organization_code', 'parent_id', 'node_type', 'name_i18n', 'status', 'sort', 'owner_uid', 'created_uid', 'updated_uid'];
-    protected array $casts = ['id' => 'integer', 'parent_id' => 'integer', 'name_i18n' => 'array', 'status' => 'integer', 'sort' => 'integer', 'owner_uid' => 'string', 'created_uid' => 'string', 'updated_uid' => 'string', 'created_at' => 'datetime', 'updated_at' => 'datetime', 'deleted_at' => 'datetime'];
+
+    protected array $fillable = [
+        'id',
+        'organization_code',
+        'parent_id',
+        'node_type',
+        'name_i18n',
+        'status',
+        'sort',
+        'owner_uid',
+        'created_uid',
+        'updated_uid',
+    ];
+
+    protected array $casts = [
+        'id' => 'integer',
+        'parent_id' => 'integer',
+        'name_i18n' => 'array',
+        'status' => 'integer',
+        'sort' => 'integer',
+        'owner_uid' => 'string',
+        'created_uid' => 'string',
+        'updated_uid' => 'string',
+        'created_at' => 'datetime',
+        'updated_at' => 'datetime',
+        'deleted_at' => 'datetime',
+    ];
 }

@@ -15,11 +15,13 @@ use App\Domain\Asset\Entity\ValueObject\AssetScope;
 use App\Domain\Asset\Entity\ValueObject\AssetTagNodeType;
 use App\Domain\Asset\Entity\ValueObject\AssetVisibility;
 use App\Domain\Asset\Entity\ValueObject\Query\AssetQuery;
+use App\Domain\Asset\Repository\Facade\AssetRepositoryInterface;
 use App\Domain\Asset\Service\AssetDomainService;
 use App\Domain\Asset\Service\AssetTagDomainService;
-use App\Domain\Permission\Service\ResourceVisibilityDomainService;
+use App\Domain\Contact\Repository\Facade\MagicUserRepositoryInterface;
 use App\Domain\Permission\Entity\ValueObject\ResourceVisibility\PrincipalType;
 use App\Domain\Permission\Entity\ValueObject\ResourceVisibility\ResourceType;
+use App\Domain\Permission\Service\ResourceVisibilityDomainService;
 use App\ErrorCode\AssetErrorCode;
 use App\Infrastructure\Core\DataIsolation\BaseDataIsolation;
 use App\Infrastructure\Core\Exception\ExceptionBuilder;
@@ -27,9 +29,8 @@ use App\Infrastructure\Core\ValueObject\Page;
 use App\Interfaces\Asset\DTO\Request\CreateAssetRequestDTO;
 use App\Interfaces\Asset\DTO\Request\QueryAssetRequestDTO;
 use App\Interfaces\Asset\DTO\Request\SaveAssetToLibraryRequestDTO;
-use Qbhy\HyperfAuth\Authenticatable;
-use App\Domain\Contact\Repository\Facade\MagicUserRepositoryInterface;
 use Hyperf\DbConnection\Db;
+use Qbhy\HyperfAuth\Authenticatable;
 
 class AssetAppService extends AbstractAssetAppService
 {
@@ -38,6 +39,7 @@ class AssetAppService extends AbstractAssetAppService
         ResourceVisibilityDomainService $resourceVisibilityDomainService,
         private readonly ProjectFileMaterializer $projectFileMaterializer,
         private readonly AssetTagDomainService $assetTagDomainService,
+        private readonly AssetRepositoryInterface $assetRepository,
         private readonly MagicUserRepositoryInterface $userRepository,
     ) {
         parent::__construct($resourceVisibilityDomainService);
@@ -214,7 +216,14 @@ class AssetAppService extends AbstractAssetAppService
         $query = new AssetQuery();
         $scope = $requestDTO->getScope();
         $query->setScope($scope);
-        $query->setSharedAssetIds($scope->includesSharedAssets() ? $this->sharedAssetIds($dataIsolation) : []);
+        $sharedAssetIds = $scope->includesSharedAssets() ? $this->sharedAssetIds($dataIsolation) : [];
+        $query->setSharedAssetIds($sharedAssetIds);
+        if ($scope === AssetScope::ALL) {
+            $query->setAccessibleAssetIds(array_merge(
+                $sharedAssetIds,
+                $this->assetRepository->findIdsByOwnerUid($dataIsolation, $dataIsolation->getCurrentUserId()),
+            ));
+        }
         $query->setAssetKind($requestDTO->getAssetKind());
         $query->setParentId($requestDTO->getParentId());
         $query->setAssetBusinessType($requestDTO->getAssetBusinessType());
@@ -222,7 +231,7 @@ class AssetAppService extends AbstractAssetAppService
         $query->setKeyword($requestDTO->getKeyword());
         $query->setStatus($requestDTO->getStatus() ?? 1);
         $query->setIsVerified($requestDTO->getIsVerified());
-        $query->setOwnerUid($requestDTO->getOwnerUid());
+        $query->setOwnerUids($requestDTO->getOwnerUids());
         $query->setTagIds($requestDTO->getTagIds());
         $query->setTagMatch($requestDTO->getTagMatch());
         return $query;
@@ -263,13 +272,28 @@ class AssetAppService extends AbstractAssetAppService
         $this->assetTagDomainService->syncAssetTags($isolation, $asset, $tagIds);
     }
 
-    public function listOwners(Authenticatable|BaseDataIsolation $authorization, ?string $keyword = null): array
+    public function listOwners(Authenticatable|BaseDataIsolation $authorization): array
     {
         $isolation = $this->createAssetDataIsolation($authorization);
-        return array_values(array_filter(array_map(
-            static fn ($user): array => ['id' => $user->getUserId(), 'name' => $user->getNickname()],
-            $this->userRepository->queryByOrganization($isolation->getCurrentOrganizationCode(), $keyword),
-        ), static fn (array $user): bool => $user['id'] !== $isolation->getCurrentUserId()));
+        $assetIds = $this->sharedAssetIds($isolation);
+        if ($assetIds === []) {
+            return [];
+        }
+        $ownerUids = array_values(array_diff(
+            $this->assetRepository->findOwnerUidsByIds($isolation, $assetIds),
+            [$isolation->getCurrentUserId()],
+        ));
+        if ($ownerUids === []) {
+            return [];
+        }
+        $users = $this->userRepository->getUserByIdsAndOrganizations(
+            $ownerUids,
+            [$isolation->getCurrentOrganizationCode()],
+        );
+        return array_map(static fn ($user): array => [
+            'id' => $user->getUserId(),
+            'name' => $user->getNickname(),
+        ], $users);
     }
 
     public function transferOwner(Authenticatable|BaseDataIsolation $authorization, array $assetIds, string $ownerUid): array
@@ -312,11 +336,15 @@ class AssetAppService extends AbstractAssetAppService
         $ownerIds = [];
         foreach ($assets as $asset) {
             $ownerId = $asset->getOwnerUid() ?: $asset->getUserId();
-            if ($ownerId !== null) { $ownerIds[] = $ownerId; }
+            if ($ownerId !== null) {
+                $ownerIds[] = $ownerId;
+            }
             $asset->setSource($ownerId === $isolation->getCurrentUserId() ? 'PERSONAL' : (in_array($scope, ['TEAM', 'ALL'], true) ? 'TEAM' : 'PUBLIC'));
             $asset->setTags(array_map(static fn ($tag): array => [
-                'id' => (string) $tag->getId(), 'name' => (string) ($tag->getNameI18n()['default'] ?? ''),
-                'parentId' => (string) $tag->getParentId(), 'nodeType' => $tag->getNodeType(),
+                'id' => (string) $tag->getId(),
+                'name' => (string) ($tag->getNameI18n()['default'] ?? ''),
+                'parentId' => (string) $tag->getParentId(),
+                'nodeType' => $tag->getNodeType()->value,
                 'isOfficial' => $tag->getOwnerUid() === null,
             ], $this->assetTagDomainService->findAssetTags($isolation, (string) $asset->getId())));
         }

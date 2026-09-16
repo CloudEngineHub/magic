@@ -32,7 +32,8 @@ class QueryAssetRequestDTO extends AbstractRequestDTO
 
     public ?bool $isVerified = null;
 
-    public ?string $ownerUid = null;
+    /** @var string[] */
+    public array $ownerUids = [];
 
     /** @var array<int, int|string> */
     public array $tagIds = [];
@@ -89,9 +90,9 @@ class QueryAssetRequestDTO extends AbstractRequestDTO
         return $this->isVerified;
     }
 
-    public function getOwnerUid(): ?string
+    public function getOwnerUids(): array
     {
-        return $this->ownerUid;
+        return $this->ownerUids;
     }
 
     public function getTagIds(): array
@@ -154,9 +155,10 @@ class QueryAssetRequestDTO extends AbstractRequestDTO
         $this->isVerified = $value === null || $value === '' ? null : filter_var($value, FILTER_VALIDATE_BOOLEAN, FILTER_NULL_ON_FAILURE);
     }
 
-    public function setOwnerUid(mixed $value): void
+    public function setOwnerUids(mixed $value): void
     {
-        $this->ownerUid = $value === null || $value === '' ? null : (string) $value;
+        $values = is_string($value) ? explode(',', $value) : (array) $value;
+        $this->ownerUids = array_values(array_unique(array_filter(array_map('strval', $values), static fn (string $id): bool => trim($id) !== '')));
     }
 
     public function setTagIds(mixed $value): void
@@ -186,7 +188,8 @@ class QueryAssetRequestDTO extends AbstractRequestDTO
             'page_size' => 'nullable|integer|min:1|max:200',
             'status' => 'nullable|integer|in:0,1',
             'is_verified' => 'nullable|boolean',
-            'owner_uid' => 'nullable|string|max:64',
+            'owner_uids' => 'nullable|array',
+            'owner_uids.*' => 'string|max:64',
             'tag_ids' => 'nullable',
             'tag_match' => 'nullable|string|in:any,all',
         ];

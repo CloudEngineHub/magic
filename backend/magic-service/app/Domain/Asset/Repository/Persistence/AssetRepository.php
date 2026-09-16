@@ -85,14 +85,8 @@ class AssetRepository implements AssetRepositoryInterface
         if ($query->isVerified() === true) {
             $builder->where('sync_status', AssetSyncStatus::SYNCED->value);
         }
-        if ($query->getOwnerUid() !== null) {
-            $ownerUid = $query->getOwnerUid();
-            $builder->where(static function (Builder $builder) use ($ownerUid): void {
-                $builder->where('owner_uid', $ownerUid)
-                    ->orWhere(static function (Builder $builder) use ($ownerUid): void {
-                        $builder->whereNull('owner_uid')->where('user_id', $ownerUid);
-                    });
-            });
+        if ($query->getOwnerUids() !== []) {
+            $builder->whereIn('owner_uid', $query->getOwnerUids());
         }
         if ($query->getTagIds() !== []) {
             $relationTable = 'magic_asset_tag_relations';
@@ -131,6 +125,31 @@ class AssetRepository implements AssetRepositoryInterface
             ->where('id', $id);
         $model = $builder->first();
         return $model === null ? null : new AssetEntity($model->toArray());
+    }
+
+    public function findOwnerUidsByIds(AssetDataIsolation $dataIsolation, array $assetIds): array
+    {
+        if ($assetIds === []) {
+            return [];
+        }
+        return $this->assetModel::query()
+            ->whereIn('organization_code', $dataIsolation->getOrganizationCodes())
+            ->whereIn('id', $assetIds)
+            ->whereNotNull('owner_uid')
+            ->distinct()
+            ->pluck('owner_uid')
+            ->map(static fn ($uid): string => (string) $uid)
+            ->all();
+    }
+
+    public function findIdsByOwnerUid(AssetDataIsolation $dataIsolation, string $ownerUid): array
+    {
+        return $this->assetModel::query()
+            ->whereIn('organization_code', $dataIsolation->getOrganizationCodes())
+            ->where('owner_uid', $ownerUid)
+            ->pluck('id')
+            ->map(static fn ($id): string => (string) $id)
+            ->all();
     }
 
     /**
@@ -212,7 +231,7 @@ class AssetRepository implements AssetRepositoryInterface
 
     /**
      * 按查询范围过滤：
-     * - 个人：自己创建的（user_id 归属）；
+     * - 个人：当前归属人是自己；
      * - 团队分享：别人通过可见范围授权给我/我部门的（本人创建的在「个人」里，不重复出现）；
      * - 公开：官方资产（user_id 为空）；
      * - 全部：个人与团队分享的并集（官方公开仍走 PUBLIC 入口，不混进「全部」）。
@@ -232,32 +251,14 @@ class AssetRepository implements AssetRepositoryInterface
                 $builder->whereNull('user_id');
                 return;
             case AssetScope::PERSONAL:
-                $builder->where(static function (Builder $builder) use ($currentUserId): void {
-                    $builder->where('owner_uid', $currentUserId)
-                        ->orWhere(static function (Builder $builder) use ($currentUserId): void {
-                            $builder->whereNull('owner_uid')->where('user_id', $currentUserId);
-                        });
-                });
+                $builder->where('owner_uid', $currentUserId);
                 return;
             case AssetScope::TEAM:
-                $builder->where(static function (Builder $builder) use ($currentUserId): void {
-                    $builder->where('owner_uid', '!=', $currentUserId)
-                        ->orWhere(static function (Builder $builder) use ($currentUserId): void {
-                            $builder->whereNull('owner_uid')->where('user_id', '!=', $currentUserId);
-                        });
-                })
+                $builder->where('owner_uid', '!=', $currentUserId)
                     ->whereIn('id', $sharedAssetIds);
                 return;
             case AssetScope::ALL:
-                $builder->where(static function (Builder $builder) use ($currentUserId, $sharedAssetIds): void {
-                    $builder->where('owner_uid', $currentUserId)
-                        ->orWhere(static function (Builder $builder) use ($currentUserId): void {
-                            $builder->whereNull('owner_uid')->where('user_id', $currentUserId);
-                        });
-                    if ($sharedAssetIds !== []) {
-                        $builder->orWhereIn('id', $sharedAssetIds);
-                    }
-                });
+                $builder->whereIn('id', $query->getAccessibleAssetIds());
                 return;
         }
     }

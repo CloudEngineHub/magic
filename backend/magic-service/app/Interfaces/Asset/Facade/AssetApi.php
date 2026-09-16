@@ -13,8 +13,6 @@ use App\Infrastructure\Core\AbstractApi;
 use App\Infrastructure\Core\Exception\ExceptionBuilder;
 use App\Infrastructure\Core\ValueObject\Page;
 use App\Interfaces\Asset\Assembler\AssetAssembler;
-use App\Interfaces\Asset\Assembler\AssetOwnerAssembler;
-use App\Interfaces\Asset\Assembler\AssetTagAssembler;
 use App\Interfaces\Asset\DTO\Request\CreateAssetRequestDTO;
 use App\Interfaces\Asset\DTO\Request\QueryAssetRequestDTO;
 use App\Interfaces\Asset\DTO\Request\SaveAssetToLibraryRequestDTO;
@@ -106,21 +104,21 @@ class AssetApi extends AbstractApi
 
     public function tags(): array
     {
-        return AssetTagAssembler::toList($this->assetAppService->listTags($this->getAuthorization()));
+        return AssetAssembler::createTagList($this->assetAppService->listTags($this->getAuthorization()));
     }
 
     public function createTag(): array
     {
         $request = SaveAssetTagRequestDTO::fromRequest($this->request);
         $tag = $this->assetAppService->saveTag($this->getAuthorization(), $request->getName(), $request->getNodeType(), $request->getParentId());
-        return AssetTagAssembler::toItem($tag);
+        return AssetAssembler::createTagItem($tag);
     }
 
     public function updateTag(int|string $tagId): array
     {
         $request = SaveAssetTagRequestDTO::fromRequest($this->request);
         $tag = $this->assetAppService->updateTag($this->getAuthorization(), $tagId, $request->getName(), $request->getNodeType(), $request->getParentId());
-        return AssetTagAssembler::toItem($tag);
+        return AssetAssembler::createTagItem($tag);
     }
 
     public function deleteTag(int|string $tagId): array
@@ -138,7 +136,7 @@ class AssetApi extends AbstractApi
 
     public function owners(): array
     {
-        return AssetOwnerAssembler::toList($this->assetAppService->listOwners($this->getAuthorization(), (string) $this->request->query('keyword', '')));
+        return AssetAssembler::createOwnerList($this->assetAppService->listOwners($this->getAuthorization()));
     }
 
     public function transferOwner(): array
