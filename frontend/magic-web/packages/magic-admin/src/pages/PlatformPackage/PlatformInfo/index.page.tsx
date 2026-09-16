@@ -61,7 +61,8 @@ const InfoManagementPage = () => {
 	// 	[PlatformLogoType.FAVICON]: "",
 	// })
 
-	const hasEditRight = useRights(PERMISSION_KEY_MAP.INFO_MANAGEMENT_EDIT)
+	// Platform information is a separate permission from maintenance settings.
+	const hasEditRight = useRights(PERMISSION_KEY_MAP.PLATFORM_INFO_MANAGEMENT_EDIT)
 
 	const [form] = Form.useForm()
 

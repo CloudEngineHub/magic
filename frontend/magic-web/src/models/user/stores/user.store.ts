@@ -6,7 +6,7 @@ import type { Admin } from "@/types/admin"
 import type { LongMemory } from "@/types/longMemory"
 import { isUnlimitedSubscription } from "../utils/subscription"
 import { hasMagicAdminPermission, hasTeamshareAdminIdentification } from "../utils/adminAccess"
-import { syncUserWatermark } from "@/utils/watermark"
+import { setWatermarkOrganizationType, syncUserWatermark } from "@/utils/watermark"
 
 export class UserStore {
 	authorization: string | null = localStorage.getItem(platformKey("store:authentication"))
@@ -203,6 +203,7 @@ export class UserStore {
 	setIsPersonalOrganization = (isPersonalOrganization: boolean) => {
 		if (isBoolean(isPersonalOrganization)) {
 			this.isPersonalOrganization = isPersonalOrganization
+			setWatermarkOrganizationType(isPersonalOrganization)
 		}
 	}
 

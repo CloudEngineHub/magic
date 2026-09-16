@@ -974,6 +974,23 @@ const watermarkService = new WatermarkService()
 let currentUserWatermarkRenderKey = ""
 let currentUserWatermarkInfo: User.UserInfo | null = null
 let platformWatermarkConfig: PlatformWatermarkConfig | undefined
+let currentIsPersonalOrganization = false
+
+export type UserWatermarkMode = "platform" | "legacy" | "disabled"
+
+/** Resolve the active policy without coupling organization rules to DOM rendering. */
+export function resolveUserWatermarkMode({
+	isPersonalOrganization,
+	platformConfig,
+	isLegacyEnabled,
+}: {
+	isPersonalOrganization: boolean
+	platformConfig?: PlatformWatermarkConfig
+	isLegacyEnabled: boolean
+}): UserWatermarkMode {
+	if (!isPersonalOrganization && platformConfig?.enabled === true) return "platform"
+	return isLegacyEnabled ? "legacy" : "disabled"
+}
 
 /** Update the platform watermark policy received from the public platform settings response. */
 export function setPlatformWatermarkConfig(config?: PlatformWatermarkConfig) {
@@ -981,17 +998,33 @@ export function setPlatformWatermarkConfig(config?: PlatformWatermarkConfig) {
 	if (currentUserWatermarkInfo) syncUserWatermark(currentUserWatermarkInfo)
 }
 
+/**
+ * Keep the runtime watermark policy aligned with the active organization.
+ * Personal organizations intentionally ignore the organization-level policy.
+ */
+export function setWatermarkOrganizationType(isPersonalOrganization: boolean) {
+	currentIsPersonalOrganization = isPersonalOrganization
+	if (currentUserWatermarkInfo) syncUserWatermark(currentUserWatermarkInfo)
+}
+
 export function syncUserWatermark(userInfo: User.UserInfo | null) {
 	currentUserWatermarkInfo = userInfo
 	if (typeof document === "undefined" || !document.body) return
 
-	const usesPlatformWatermark = platformWatermarkConfig?.enabled === true
-	if (!userInfo || (!usesPlatformWatermark && !isWatermarkEnabled())) {
+	// Organization watermarks are only meaningful for shared organizations.
+	// Personal organizations retain the legacy environment-controlled user ID watermark.
+	const watermarkMode = resolveUserWatermarkMode({
+		isPersonalOrganization: currentIsPersonalOrganization,
+		platformConfig: platformWatermarkConfig,
+		isLegacyEnabled: isWatermarkEnabled(),
+	})
+	if (!userInfo || watermarkMode === "disabled") {
 		currentUserWatermarkRenderKey = ""
 		watermarkService.destroy()
 		return
 	}
 
+	const usesPlatformWatermark = watermarkMode === "platform"
 	const text = usesPlatformWatermark
 		? getPlatformWatermarkText(userInfo, platformWatermarkConfig)
 		: getUserWatermarkText(userInfo)
@@ -1015,7 +1048,7 @@ export function syncUserWatermark(userInfo: User.UserInfo | null) {
 }
 
 if (typeof window !== "undefined") {
-	; (window as any).watermarkService = watermarkService
+	;(window as any).watermarkService = watermarkService
 }
 function getUserWatermarkText(userInfo: User.UserInfo) {
 	const id = userInfo.magic_id || userInfo.user_id
