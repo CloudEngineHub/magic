@@ -61,6 +61,7 @@ class AssetAppService extends AbstractAssetAppService
 
         $asset = $this->assetDomainService->createPersonal($dataIsolation, $asset);
         $this->grantAssetVisibility($dataIsolation, $asset, AssetVisibility::personal());
+        $dataIsolation->setContainOfficialOrganization(true);
         $this->assetTagDomainService->syncAssetTags($dataIsolation, $asset, $requestDTO->getTagIds());
         $this->resolveAssetFileUrls([$asset]);
         return $asset;
@@ -89,6 +90,7 @@ class AssetAppService extends AbstractAssetAppService
             $asset,
         );
         $this->grantAssetVisibility($dataIsolation, $asset, $requestDTO->getVisibility());
+        $dataIsolation->setContainOfficialOrganization(true);
         $this->assetTagDomainService->syncAssetTags($dataIsolation, $asset, $requestDTO->getTagIds());
         // 落库实体不带 file_url，列表与详情都会回填，保存响应保持一致，前端拿到即可直接展示。
         $this->resolveAssetFileUrls([$asset]);
@@ -191,6 +193,7 @@ class AssetAppService extends AbstractAssetAppService
     public function listTags(Authenticatable|BaseDataIsolation $authorization): array
     {
         $isolation = $this->createAssetDataIsolation($authorization);
+        $isolation->setContainOfficialOrganization(true);
         return $this->assetTagDomainService->listVisible($isolation);
     }
 
@@ -215,6 +218,7 @@ class AssetAppService extends AbstractAssetAppService
     public function syncAssetTags(Authenticatable|BaseDataIsolation $authorization, int|string $assetId, array $tagIds): void
     {
         $isolation = $this->createAssetDataIsolation($authorization);
+        $isolation->setContainOfficialOrganization(true);
         $asset = $this->assetDomainService->find($isolation, $assetId, $this->sharedAssetIds($isolation, [(string) $assetId]) !== []);
         if ($asset === null || ($asset->getOwnerUid() ?: $asset->getUserId()) !== $isolation->getCurrentUserId()) {
             ExceptionBuilder::throw(AssetErrorCode::DELETE_DENIED);
