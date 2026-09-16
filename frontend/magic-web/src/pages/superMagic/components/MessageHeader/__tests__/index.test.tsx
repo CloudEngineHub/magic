@@ -447,7 +447,7 @@ describe("MessageHeader", () => {
 		})
 
 		expect(screen.getByTestId("message-header-expand-files")).toHaveClass(
-			"!ml-1",
+			"!ml-2",
 			"!size-7",
 			"!min-h-7",
 			"!min-w-7",
