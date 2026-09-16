@@ -1,6 +1,9 @@
 import importlib.util
+import json
+import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 
 MODULE_PATH = Path(__file__).with_name("generate_catalog.py")
@@ -11,6 +14,35 @@ SPEC.loader.exec_module(MODULE)
 
 
 class SyncCatalogTest(unittest.TestCase):
+    def test_custom_output_generation_and_check(self):
+        with tempfile.TemporaryDirectory() as directory:
+            output = Path(directory) / "catalog.json"
+            argv = [str(MODULE_PATH), "--output", str(output)]
+            with patch("sys.argv", argv), patch.object(MODULE, "write_json", wraps=MODULE.write_json) as write:
+                MODULE.main()
+                self.assertEqual(write.call_count, 1)
+                self.assertEqual(write.call_args.args[0], output)
+
+            catalog = json.loads(output.read_text(encoding="utf-8"))
+            self.assertEqual(
+                output.read_text(encoding="utf-8"),
+                json.dumps(catalog, ensure_ascii=False, separators=(",", ":")) + "\n",
+            )
+            with patch("sys.argv", [*argv, "--check"]):
+                MODULE.main()
+
+            catalog["styles"][0]["title"] = "Outdated title"
+            for content in (json.dumps(catalog), "invalid json"):
+                output.write_text(content, encoding="utf-8")
+                with patch("sys.argv", [*argv, "--check"]):
+                    with self.assertRaisesRegex(SystemExit, "catalog is out of date"):
+                        MODULE.main()
+
+            output.unlink()
+            with patch("sys.argv", [*argv, "--check"]):
+                with self.assertRaisesRegex(SystemExit, "catalog is out of date"):
+                    MODULE.main()
+
     def test_reads_structured_typography_tokens(self):
         style = MODULE.read_style(
             MODULE.STYLES_ROOT / "apple" / "DESIGN.md",

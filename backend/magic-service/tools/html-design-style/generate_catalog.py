@@ -20,7 +20,6 @@ import yaml
 
 ROOT = Path(__file__).resolve().parents[2]
 STYLES_ROOT = ROOT / "storage" / "html-design-style" / "styles"
-SERVICE_CATALOG = ROOT / "storage" / "html-design-style" / "catalog.json"
 FRONTEND_CATALOG = (
     Path(__file__).resolve().parents[4]
     / "frontend"
@@ -431,7 +430,7 @@ def extract_body_typography(sections: dict[str, str]) -> list[dict[str, str]]:
 
 def write_json(path: Path, value: Any) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(f"{json.dumps(value, ensure_ascii=False, indent=2)}\n", encoding="utf-8")
+    path.write_text(f"{json.dumps(value, ensure_ascii=False, separators=(',', ':'))}\n", encoding="utf-8")
 
 
 LAYOUT_KEYWORDS = {
@@ -513,16 +512,13 @@ def main() -> None:
         "styles": [build_frontend_style(style) for style in styles],
     }
     output_path = args.output if args.output.is_absolute() else (Path.cwd() / args.output)
-    expected_catalog = json.dumps(frontend_catalog, ensure_ascii=False, indent=2) + "\n"
-    paths_to_check = [output_path, SERVICE_CATALOG]
+    expected_catalog = json.dumps(frontend_catalog, ensure_ascii=False, separators=(',', ':')) + "\n"
     if args.check:
-        stale = [str(path) for path in paths_to_check if not path.exists() or path.read_text(encoding="utf-8") != expected_catalog]
-        if stale:
-            raise SystemExit(f"catalog is out of date: {', '.join(stale)}")
+        if not output_path.exists() or output_path.read_text(encoding="utf-8") != expected_catalog:
+            raise SystemExit(f"catalog is out of date: {output_path}")
         return
 
-    for path in dict.fromkeys(paths_to_check):
-        write_json(path, frontend_catalog)
+    write_json(output_path, frontend_catalog)
 
 
 if __name__ == "__main__":
