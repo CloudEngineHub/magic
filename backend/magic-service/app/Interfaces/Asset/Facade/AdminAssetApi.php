@@ -8,11 +8,14 @@ declare(strict_types=1);
 namespace App\Interfaces\Asset\Facade;
 
 use App\Application\Asset\Service\AdminAssetAppService;
+use App\Application\Kernel\Enum\MagicOperationEnum;
+use App\Application\Kernel\Enum\MagicResourceEnum;
 use App\ErrorCode\AssetErrorCode;
 use App\Infrastructure\Core\AbstractApi;
 use App\Infrastructure\Core\Exception\ExceptionBuilder;
 use App\Infrastructure\Core\ValueObject\Page;
 use App\Infrastructure\Util\Auth\PermissionChecker;
+use App\Infrastructure\Util\Permission\Annotation\CheckPermission;
 use App\Interfaces\Asset\Assembler\AssetAssembler;
 use App\Interfaces\Asset\DTO\Request\CreateAssetRequestDTO;
 use App\Interfaces\Asset\DTO\Request\QueryAssetRequestDTO;
@@ -31,6 +34,7 @@ class AdminAssetApi extends AbstractApi
         parent::__construct($request);
     }
 
+    #[CheckPermission([MagicResourceEnum::PLATFORM_ASSET], MagicOperationEnum::EDIT)]
     public function create(): array
     {
         $requestDTO = CreateAssetRequestDTO::fromRequest($this->request);
@@ -43,7 +47,8 @@ class AdminAssetApi extends AbstractApi
         return AssetAssembler::createItem($asset, null, true)->toArray();
     }
 
-    public function list(): array
+    #[CheckPermission([MagicResourceEnum::PLATFORM_ASSET], MagicOperationEnum::QUERY)]
+    public function queries(): array
     {
         $requestDTO = QueryAssetRequestDTO::fromRequest($this->request);
         $authorization = $this->getAuthorization();
@@ -59,6 +64,7 @@ class AdminAssetApi extends AbstractApi
         return AssetAssembler::createList($result['list'], $page, $result['total'], [], true)->toArray();
     }
 
+    #[CheckPermission([MagicResourceEnum::PLATFORM_ASSET], MagicOperationEnum::EDIT)]
     public function update(int|string $assetId): array
     {
         $requestDTO = UpdateAssetRequestDTO::fromRequest($this->request);
@@ -75,6 +81,7 @@ class AdminAssetApi extends AbstractApi
         return AssetAssembler::createItem($asset, null, true)->toArray();
     }
 
+    #[CheckPermission([MagicResourceEnum::PLATFORM_ASSET], MagicOperationEnum::EDIT)]
     public function delete(int|string $assetId): array
     {
         $authorization = $this->getAuthorization();
@@ -86,6 +93,7 @@ class AdminAssetApi extends AbstractApi
         return AssetAssembler::createDeleteDTO($assetId, $deleted, true)->toArray();
     }
 
+    #[CheckPermission([MagicResourceEnum::PLATFORM_ASSET], MagicOperationEnum::EDIT)]
     public function createTag(): array
     {
         $authorization = $this->getAuthorization();
@@ -94,6 +102,7 @@ class AdminAssetApi extends AbstractApi
         return AssetAssembler::createTagItem($this->assetAppService->createOfficialTag($authorization, $request->getName(), $request->getNodeType(), $request->getParentId()));
     }
 
+    #[CheckPermission([MagicResourceEnum::PLATFORM_ASSET], MagicOperationEnum::QUERY)]
     public function tags(): array
     {
         $authorization = $this->getAuthorization();
@@ -101,6 +110,7 @@ class AdminAssetApi extends AbstractApi
         return AssetAssembler::createTagList($this->assetAppService->listOfficialTags($authorization));
     }
 
+    #[CheckPermission([MagicResourceEnum::PLATFORM_ASSET], MagicOperationEnum::EDIT)]
     public function updateTag(int|string $tagId): array
     {
         $authorization = $this->getAuthorization();
@@ -109,6 +119,7 @@ class AdminAssetApi extends AbstractApi
         return AssetAssembler::createTagItem($this->assetAppService->updateOfficialTag($authorization, $tagId, $request->getName(), $request->getNodeType(), $request->getParentId()));
     }
 
+    #[CheckPermission([MagicResourceEnum::PLATFORM_ASSET], MagicOperationEnum::EDIT)]
     public function deleteTag(int|string $tagId): array
     {
         $authorization = $this->getAuthorization();
