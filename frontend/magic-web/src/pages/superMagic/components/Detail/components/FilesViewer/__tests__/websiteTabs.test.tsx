@@ -1,3 +1,4 @@
+import { flattenFiles } from "../components/QuickOpenItem"
 import { act, fireEvent, render, renderHook, screen, within } from "@testing-library/react"
 import { beforeEach, describe, expect, it, vi } from "vitest"
 import magicToast from "@/components/base/MagicToaster/utils"
@@ -949,5 +950,33 @@ describe("website tabs", () => {
 		expect(screen.getByTestId("magic-file-icon")).toHaveAttribute("data-size", "28")
 		fireEvent.click(screen.getByRole("button", { name: "Release plan" }))
 		expect(onOpenFileTab).toHaveBeenCalledWith(matchingFile)
+	})
+	it("hides descendants of hidden directories from quick open and search", () => {
+		const hiddenFile = { file_id: "secret", file_name: "secret.md" }
+		const visibleFile = { file_id: "public", file_name: "public.md" }
+		const files = [
+			{
+				file_id: "hidden",
+				is_directory: true,
+				is_hidden: true,
+				children: [{ file_id: "nested", is_directory: true, children: [hiddenFile] }],
+			},
+			visibleFile,
+		]
+		expect(flattenFiles(files)).toEqual([visibleFile])
+		const onOpenFileTab = vi.fn()
+		render(
+			<WebsitePresetMenu
+				fileAttachments={files}
+				onOpenFileTab={onOpenFileTab}
+				onOpenWebsiteTab={vi.fn()}
+			/>,
+		)
+		expect(screen.queryByRole("button", { name: "secret.md" })).not.toBeInTheDocument()
+		fireEvent.change(screen.getByTestId("quick-open-search-input"), {
+			target: { value: "secret" },
+		})
+		expect(screen.queryByRole("button", { name: "secret.md" })).not.toBeInTheDocument()
+		expect(onOpenFileTab).not.toHaveBeenCalled()
 	})
 })

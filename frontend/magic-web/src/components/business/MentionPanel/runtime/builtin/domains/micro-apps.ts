@@ -37,6 +37,30 @@ function mapMentionItems(response: unknown): MentionItem[] {
 		})
 }
 
+/** Fetch the full catalog before publishing it, including server-side search pages. */
+async function loadMentionItems(keyword?: string): Promise<MentionItem[]> {
+	const items = new Map<string, MentionItem>()
+	for (let page = 1; ; page += 1) {
+		const response = await SuperMagicApi.getMentionMicroApps({
+			page,
+			page_size: MENTION_PAGE_SIZE,
+			...(keyword === undefined ? {} : { keyword }),
+		})
+		const list = listFromResponse(response)
+		for (const item of mapMentionItems(response)) items.set(item.id, item)
+		// Use raw pagination rather than visible/deduplicated counts to avoid truncation.
+		const pageSize = response?.page_size > 0 ? response.page_size : MENTION_PAGE_SIZE
+		if (
+			!list.length ||
+			(Number.isFinite(response?.total)
+				? page * pageSize >= response.total
+				: list.length < pageSize)
+		)
+			break
+	}
+	return [...items.values()]
+}
+
 export class MentionPanelMicroAppsStore {
 	items: MentionItem[] = []
 	private loaded = false
@@ -52,11 +76,7 @@ export class MentionPanelMicroAppsStore {
 		if (typeof SuperMagicApi?.getMentionMicroApps !== "function") return
 		this.loading = (async () => {
 			try {
-				const response = await SuperMagicApi.getMentionMicroApps({
-					page: 1,
-					page_size: MENTION_PAGE_SIZE,
-				})
-				this.items = mapMentionItems(response)
+				this.items = await loadMentionItems()
 				this.loaded = true
 			} catch {
 				if (!this.loaded) this.items = []
@@ -80,12 +100,8 @@ export class MentionPanelMicroAppsStore {
 			return this.items.filter((item) => matchesQuery(item.name, query))
 		}
 		try {
-			const response = await SuperMagicApi.getMentionMicroApps({
-				page: 1,
-				page_size: MENTION_PAGE_SIZE,
-				keyword: query,
-			})
-			return mapMentionItems(response).filter((item) => matchesQuery(item.name, query))
+			const items = await loadMentionItems(query)
+			return items.filter((item) => matchesQuery(item.name, query))
 		} catch {
 			await this.fetchItems().catch(() => undefined)
 			return this.items.filter((item) => matchesQuery(item.name, query))

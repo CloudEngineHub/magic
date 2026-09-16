@@ -198,4 +198,49 @@ describe("MentionPanelMicroAppsStore", () => {
 			),
 		).resolves.toEqual([expect.objectContaining({ id: "owned-1", name: "Owned App" })])
 	})
+	it.each([false, true])("loads and deduplicates all pages (search=%s)", async (search) => {
+		const app = (id: number) => ({
+			app_id: String(id),
+			app_name: `App ${id}`,
+			publish_status: "published",
+		})
+		mocks.getMentionMicroApps
+			.mockResolvedValueOnce({
+				list: Array.from({ length: 100 }, (_, i) => app(i)),
+				total: 202,
+				page_size: 100,
+			})
+			.mockResolvedValueOnce({
+				list: Array.from({ length: 100 }, (_, i) => app(i + 99)),
+				total: 202,
+				page_size: 100,
+			})
+			.mockResolvedValueOnce({ list: [app(199), app(200)], total: 202, page_size: 100 })
+		const store = new MentionPanelMicroAppsStore()
+		const items = search
+			? await store.searchItems("App", (name, query) => name.includes(query))
+			: await store.getItems()
+		expect(items).toHaveLength(201)
+		expect(items.at(-1)?.id).toBe("200")
+		expect(mocks.getMentionMicroApps.mock.calls.map(([params]) => params)).toEqual(
+			[1, 2, 3].map((page) => ({
+				page,
+				page_size: 100,
+				...(search ? { keyword: "App" } : {}),
+			})),
+		)
+	})
+
+	it("uses server page size and stops on an empty page", async () => {
+		mocks.getMentionMicroApps
+			.mockResolvedValueOnce({
+				list: [{ app_id: "1", app_name: "App", publish_status: "published" }],
+				total: 5,
+				page_size: 1,
+			})
+			.mockResolvedValueOnce({ list: [], total: 5, page_size: 1 })
+		const items = await new MentionPanelMicroAppsStore().getItems()
+		expect(items).toHaveLength(1)
+		expect(mocks.getMentionMicroApps).toHaveBeenCalledTimes(2)
+	})
 })

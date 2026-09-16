@@ -26,7 +26,9 @@ export function flattenFiles(items: FileItem[]) {
 	const result: FileItem[] = []
 	const visit = (children: FileItem[]) => {
 		children.forEach((item) => {
-			if (!item.is_directory && !item.is_hidden) result.push(item)
+			// A hidden directory hides its entire subtree, not just its own row.
+			if (item.is_hidden) return
+			if (!item.is_directory) result.push(item)
 			if (item.children?.length) visit(item.children)
 		})
 	}
