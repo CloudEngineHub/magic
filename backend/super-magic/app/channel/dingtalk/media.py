@@ -4,6 +4,7 @@ import asyncio
 import copy
 import json
 import mimetypes
+import posixpath
 import re
 from collections.abc import Callable
 from datetime import datetime, timezone
@@ -13,6 +14,7 @@ from zoneinfo import ZoneInfo
 
 import aiohttp
 
+from agentlang.logger import get_logger
 from app.channel.base.media import (
     MediaDownloadError,
     MediaSource,
@@ -23,6 +25,8 @@ from app.channel.base.media import (
 from app.channel.base.models import ChannelMediaType
 from app.channel.dingtalk.users import DingTalkUserResolver
 from app.i18n import i18n
+
+logger = get_logger(__name__)
 
 
 def _message_text(value: Any) -> str:
@@ -64,6 +68,47 @@ def _forwarded_filename(participants: list[str]) -> str:
     return f"{title}.md"
 
 
+def _rich_text_structure(items: Any, path: str = "root", depth: int = 0) -> list[dict[str, Any]]:
+    """Return a bounded, redacted shape of DingTalk rich-text nodes for diagnosis."""
+    if depth > 4:
+        return [{"path": path, "kind": type(items).__name__, "truncated": True}]
+    if isinstance(items, str):
+        try:
+            return _rich_text_structure(json.loads(items), path, depth + 1)
+        except json.JSONDecodeError:
+            return [{"path": path, "kind": "string", "value": items[:200], "truncated": len(items) > 200}]
+    if isinstance(items, dict):
+        result: list[dict[str, Any]] = []
+        node = {"path": path, "kind": "object", "fields": sorted(items)}
+        for key in ("type", "text", "content", "emoji", "emotion", "emotionText", "name"):
+            value = items.get(key)
+            if isinstance(value, str):
+                node[key] = value[:200] if key in {"text", "content", "emoji", "emotionText"} else value
+                if len(value) > 200:
+                    node[f"{key}_truncated"] = True
+        for key in ("downloadCode", "pictureDownloadCode"):
+            if key in items:
+                node[f"{key}_present"] = bool(items[key])
+        result.append(node)
+        for key in ("richText", "content", "children"):
+            if isinstance(items.get(key), (list, dict)):
+                result.extend(_rich_text_structure(items[key], f"{path}.{key}", depth + 1))
+        return result
+    if isinstance(items, list):
+        result = []
+        for index, item in enumerate(items[:50]):
+            result.extend(_rich_text_structure(item, f"{path}[{index}]", depth + 1))
+        if len(items) > 50:
+            result.append({"path": path, "truncated_items": len(items) - 50})
+        return result
+    return [{"path": path, "kind": type(items).__name__}]
+
+
+def _log_rich_text_structure(items: Any, context: str) -> None:
+    structure = _rich_text_structure(items)
+    logger.info(f"DingTalk rich text structure: context={context} nodes={len(structure)} structure={structure}")
+
+
 def merge_dingtalk_payloads(payloads: list[dict[str, Any]]) -> dict[str, Any]:
     """把钉钉留言和转发事件合成一个逻辑 payload。"""
     forwarded = next((item for item in payloads if item.get("msgtype") == "chatRecord"), None)
@@ -86,15 +131,32 @@ def _parse_rich_text_items(
     attachment_index: list[int],
 ) -> list[str]:
     parts: list[str] = []
+    if isinstance(items, str):
+        try:
+            items = json.loads(items)
+        except json.JSONDecodeError:
+            return [_escape_markdown(items)] if items.strip() else []
+    if isinstance(items, dict):
+        items = [items]
     if not isinstance(items, list):
         return parts
     for item in items:
+        if isinstance(item, str):
+            parts.append(_escape_markdown(item))
+            continue
         if not isinstance(item, dict):
             continue
-        if isinstance(item.get("text"), str):
-            parts.append(_escape_markdown(item["text"]))
-            continue
         node_type = item.get("type")
+        children = next((item[key] for key in ("richText", "content", "children") if isinstance(item.get(key), (list, dict))), None)
+        if children is not None:
+            parts.extend(_parse_rich_text_items(children, add_media, from_quote, attachment_index))
+            if node_type == "paragraph":
+                parts.append("\n")
+            continue
+        readable = next((item[key] for key in ("text", "content") if isinstance(item.get(key), str) and item[key]), "")
+        if readable:
+            parts.append(_escape_markdown(readable))
+            continue
         if node_type in ("paragraph", "lineBreak", "br"):
             parts.append("\n")
             continue
@@ -103,7 +165,14 @@ def _parse_rich_text_items(
             label = attrs.get("label") or attrs.get("name") or attrs.get("id")
             parts.append(f"@{label}" if label else "@")
             continue
-        if node_type in ("picture", "image") or item.get("pictureDownloadCode") or item.get("downloadCode"):
+        if node_type in ("emoji", "emotion"):
+            attrs = item.get("attrs") if isinstance(item.get("attrs"), dict) else {}
+            label = next((value for key in ("emoji", "emotion", "emotionText", "name", "label")
+                          for value in (item.get(key), attrs.get(key)) if isinstance(value, str) and value), "")
+            if label:
+                parts.append(_escape_markdown(label))
+            continue
+        if node_type in ("picture", "image") or item.get("pictureDownloadCode") or (node_type != "file" and item.get("downloadCode")):
             attachment_index[0] += 1
             name = item.get("fileName") or f"image-{attachment_index[0]:03d}.png"
             add_media({**item, "fileName": name}, "picture", from_quote)
@@ -119,7 +188,6 @@ def _parse_rich_text_items(
                 i18n.translate("dingtalk.forwarded_record.file", index=attachment_index[0], filename=name)
             )
             continue
-        parts.append(i18n.translate("dingtalk.forwarded_record.unknown_item"))
     return parts
 
 
@@ -177,7 +245,12 @@ def _parse_forwarded_chat_record(
         if msg_type == "text":
             parts.append(_escape_markdown(_message_text(record.get("content"))))
         elif msg_type == "richText":
-            parts.extend(_parse_rich_text_items(record.get("richText"), collect_media, True, attachment_index))
+            _log_rich_text_structure(record.get("richText"), f"forwarded:{record.get('msgId') or 'unknown'}")
+            rich_parts = _parse_rich_text_items(record.get("richText"), collect_media, True, attachment_index)
+            if not any(part.strip() for part in rich_parts):
+                fallback = _message_text(record.get("content"))
+                rich_parts = [_escape_markdown(fallback) if fallback else i18n.translate("dingtalk.forwarded_record.unknown_item")]
+            parts.extend(rich_parts)
         elif msg_type == "file":
             attachment_index[0] += 1
             name = record.get("fileName") or f"file-{attachment_index[0]:03d}.bin"
@@ -272,8 +345,9 @@ def _render_forwarded_markdown(body: str, media: list[Any], markdown_path: str) 
             )
         item = candidates.pop(0)
         target = Path(item.relative_path)
-        # Agent 文件工具按工作区根目录解析 Markdown 图片链接，使用工作区相对路径。
-        link = f"./{target.as_posix()}"
+        # 图片链接相对于 Markdown 所在目录，而非工作区根目录。
+        relative = posixpath.relpath(target.as_posix(), Path(markdown_path).parent.as_posix())
+        link = f"./{relative}"
         if is_image:
             return f"![{kind} {index}：{item.file_name or target.name}]({link})"
         return f"[{kind} {index}：{item.file_name or target.name}]({link})"
@@ -337,6 +411,7 @@ async def prepare_dingtalk_message(payload: dict, client):
         if kind in ("picture", "file"):
             register_media(content, kind)
         elif kind == "richText":
+            _log_rich_text_structure(content.get("richText"), f"message:{payload.get('msgId') or 'unknown'}")
             pieces.extend(_parse_rich_text_items(content.get("richText"), register_media, False, [0]))
             if not pieces and not sources:
                 pieces.append("[Unsupported or empty DingTalk rich text message.]")
