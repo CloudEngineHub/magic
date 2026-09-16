@@ -27,6 +27,12 @@ class AssetEntity extends AbstractEntity
 
     protected ?string $userId = null;
 
+    /** 当前素材归属人；历史数据为空时由应用回退到 user_id。 */
+    protected ?string $ownerUid = null;
+
+    /** 用于列表模糊搜索的预聚合文本（名称、描述及标签名称）。 */
+    protected ?string $searchText = null;
+
     protected AssetKind $assetKind = AssetKind::ASSET;
 
     protected ?string $assetBusinessType = null;
@@ -61,6 +67,14 @@ class AssetEntity extends AbstractEntity
 
     protected ?string $deletedAt = null;
 
+    /** API-only enrichment fields; deliberately excluded from persistence payload. */
+    protected string $ownerName = '';
+
+    /** @var array<int, array<string, mixed>> */
+    protected array $tags = [];
+
+    protected string $source = 'PERSONAL';
+
     public function __construct(?array $data = null)
     {
         parent::__construct($data);
@@ -94,6 +108,56 @@ class AssetEntity extends AbstractEntity
     public function setUserId(?string $value): void
     {
         $this->userId = $value;
+    }
+
+    public function getOwnerUid(): ?string
+    {
+        return $this->ownerUid;
+    }
+
+    public function setOwnerUid(?string $value): void
+    {
+        $this->ownerUid = $value;
+    }
+
+    public function getSearchText(): ?string
+    {
+        return $this->searchText;
+    }
+
+    public function setSearchText(?string $value): void
+    {
+        $this->searchText = $value;
+    }
+
+    public function getOwnerName(): string
+    {
+        return $this->ownerName;
+    }
+
+    public function setOwnerName(string $value): void
+    {
+        $this->ownerName = $value;
+    }
+
+    public function getTags(): array
+    {
+        return $this->tags;
+    }
+
+    public function setTags(array $value): void
+    {
+        $this->tags = array_values($value);
+    }
+
+    public function getSource(): string
+    {
+        return $this->source;
+    }
+
+    public function setSource(string $value): void
+    {
+        $this->source = $value;
     }
 
     public function getAssetKind(): AssetKind
@@ -259,6 +323,8 @@ class AssetEntity extends AbstractEntity
             'id' => $this->id,
             'organization_code' => $this->organizationCode,
             'user_id' => $this->userId,
+            'owner_uid' => $this->ownerUid,
+            'search_text' => $this->searchText,
             'asset_kind' => $this->assetKind->value,
             'asset_business_type' => $this->assetBusinessType,
             'parent_id' => $this->parentId,

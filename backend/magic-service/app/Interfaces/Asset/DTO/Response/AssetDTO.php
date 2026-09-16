@@ -39,6 +39,17 @@ class AssetDTO extends AbstractDTO
     /** 合规校验未通过的原因；只有 FAILED 时有值。 */
     public ?string $complianceFailedReason = null;
 
+    /** 当前素材归属人（历史数据回退到 user_id）。 */
+    public array $owner = ['id' => null, 'name' => ''];
+
+    public ?string $ownerUid = null;
+
+    /** PERSONAL=当前用户自己的素材，TEAM=团队分享素材。 */
+    public string $source = 'PERSONAL';
+
+    /** @var array<int, array<string, mixed>> */
+    public array $tags = [];
+
     public function getAssetId(): ?string
     {
         return $this->assetId;
@@ -137,5 +148,25 @@ class AssetDTO extends AbstractDTO
     public function setComplianceFailedReason(?string $complianceFailedReason): void
     {
         $this->complianceFailedReason = $complianceFailedReason;
+    }
+
+    public function setOwner(?string $id, string $name = ''): void
+    {
+        $this->owner = ['id' => $id, 'name' => $name];
+    }
+
+    public function setOwnerUid(null|int|string $ownerUid): void
+    {
+        $this->ownerUid = $ownerUid === null ? null : (string) $ownerUid;
+    }
+
+    public function setSource(string $source): void
+    {
+        $this->source = $source;
+    }
+
+    public function setTags(array $tags): void
+    {
+        $this->tags = array_values($tags);
     }
 }

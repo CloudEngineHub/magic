@@ -30,6 +30,15 @@ class QueryAssetRequestDTO extends AbstractRequestDTO
 
     public ?int $status = null;
 
+    public ?bool $isVerified = null;
+
+    public ?string $ownerUid = null;
+
+    /** @var array<int, int|string> */
+    public array $tagIds = [];
+
+    public string $tagMatch = 'any';
+
     public function getAssetKind(): ?string
     {
         return $this->assetKind;
@@ -73,6 +82,26 @@ class QueryAssetRequestDTO extends AbstractRequestDTO
     public function getPageSize(): int
     {
         return $this->pageSize;
+    }
+
+    public function getIsVerified(): ?bool
+    {
+        return $this->isVerified;
+    }
+
+    public function getOwnerUid(): ?string
+    {
+        return $this->ownerUid;
+    }
+
+    public function getTagIds(): array
+    {
+        return $this->tagIds;
+    }
+
+    public function getTagMatch(): string
+    {
+        return $this->tagMatch;
     }
 
     public function setScope(mixed $value): void
@@ -120,6 +149,30 @@ class QueryAssetRequestDTO extends AbstractRequestDTO
         $this->status = $value === null || $value === '' ? null : (int) $value;
     }
 
+    public function setIsVerified(mixed $value): void
+    {
+        $this->isVerified = $value === null || $value === '' ? null : filter_var($value, FILTER_VALIDATE_BOOLEAN, FILTER_NULL_ON_FAILURE);
+    }
+
+    public function setOwnerUid(mixed $value): void
+    {
+        $this->ownerUid = $value === null || $value === '' ? null : (string) $value;
+    }
+
+    public function setTagIds(mixed $value): void
+    {
+        $values = is_string($value) ? explode(',', $value) : (array) $value;
+        $this->tagIds = array_values(array_unique(array_filter(array_map(
+            static fn (mixed $id): string => is_scalar($id) ? (string) $id : '',
+            $values,
+        ), static fn (string $id): bool => $id !== '')));
+    }
+
+    public function setTagMatch(mixed $value): void
+    {
+        $this->tagMatch = in_array((string) $value, ['any', 'all'], true) ? (string) $value : 'any';
+    }
+
     protected static function getHyperfValidationRules(): array
     {
         return [
@@ -132,6 +185,10 @@ class QueryAssetRequestDTO extends AbstractRequestDTO
             'page' => 'nullable|integer|min:1',
             'page_size' => 'nullable|integer|min:1|max:200',
             'status' => 'nullable|integer|in:0,1',
+            'is_verified' => 'nullable|boolean',
+            'owner_uid' => 'nullable|string|max:64',
+            'tag_ids' => 'nullable',
+            'tag_match' => 'nullable|string|in:any,all',
         ];
     }
 

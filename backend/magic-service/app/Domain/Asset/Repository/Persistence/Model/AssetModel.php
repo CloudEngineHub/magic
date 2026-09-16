@@ -26,13 +26,13 @@ class AssetModel extends AbstractModel
     protected ?string $table = 'magic_assets';
 
     protected array $fillable = [
-        'id', 'organization_code', 'user_id', 'asset_kind', 'asset_business_type', 'parent_id', 'asset_media_type',
+        'id', 'organization_code', 'user_id', 'owner_uid', 'search_text', 'asset_kind', 'asset_business_type', 'parent_id', 'asset_media_type',
         'name_i18n', 'description_i18n', 'file_key', 'content_hash', 'status', 'sync_status', 'sync_failed_reason',
         'metadata', 'created_at', 'updated_at', 'deleted_at',
     ];
 
     protected array $casts = [
-        'id' => 'integer', 'organization_code' => 'string', 'user_id' => 'string',
+        'id' => 'integer', 'organization_code' => 'string', 'user_id' => 'string', 'owner_uid' => 'string', 'search_text' => 'string',
         'asset_kind' => 'string', 'asset_business_type' => 'string', 'parent_id' => 'integer', 'asset_media_type' => 'string',
         'name_i18n' => 'array', 'description_i18n' => 'array', 'file_key' => 'string',
         'content_hash' => 'string', 'status' => 'boolean', 'sync_status' => 'string', 'sync_failed_reason' => 'string',

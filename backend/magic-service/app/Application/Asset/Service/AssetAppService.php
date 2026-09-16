@@ -13,8 +13,14 @@ use App\Domain\Asset\Entity\AssetEntity;
 use App\Domain\Asset\Entity\ValueObject\AssetScope;
 use App\Domain\Asset\Entity\ValueObject\AssetVisibility;
 use App\Domain\Asset\Entity\ValueObject\Query\AssetQuery;
+use App\Domain\Asset\Entity\AssetTagEntity;
+use App\Domain\Asset\Repository\Facade\AssetTagRepositoryInterface;
+use App\Domain\Asset\Repository\Persistence\AssetTagRelationRepository;
+use App\Domain\Asset\Repository\Facade\AssetRepositoryInterface;
 use App\Domain\Asset\Service\AssetDomainService;
 use App\Domain\Permission\Service\ResourceVisibilityDomainService;
+use App\Domain\Permission\Entity\ValueObject\ResourceVisibility\PrincipalType;
+use App\Domain\Permission\Entity\ValueObject\ResourceVisibility\ResourceType;
 use App\ErrorCode\AssetErrorCode;
 use App\Infrastructure\Core\DataIsolation\BaseDataIsolation;
 use App\Infrastructure\Core\Exception\ExceptionBuilder;
@@ -23,6 +29,10 @@ use App\Interfaces\Asset\DTO\Request\CreateAssetRequestDTO;
 use App\Interfaces\Asset\DTO\Request\QueryAssetRequestDTO;
 use App\Interfaces\Asset\DTO\Request\SaveAssetToLibraryRequestDTO;
 use Qbhy\HyperfAuth\Authenticatable;
+use App\Application\Chat\Service\MagicUserInfoAppService;
+use App\Domain\Contact\Entity\ValueObject\DataIsolation as ContactDataIsolation;
+use App\Domain\Contact\Repository\Persistence\Model\UserModel;
+use Hyperf\DbConnection\Db;
 
 class AssetAppService extends AbstractAssetAppService
 {
@@ -30,6 +40,11 @@ class AssetAppService extends AbstractAssetAppService
         private readonly AssetDomainService $assetDomainService,
         ResourceVisibilityDomainService $resourceVisibilityDomainService,
         private readonly ProjectFileMaterializer $projectFileMaterializer,
+        private readonly AssetTagRepositoryInterface $assetTagRepository,
+        private readonly AssetTagRelationRepository $assetTagRelationRepository,
+        private readonly AssetRepositoryInterface $assetRepository,
+        private readonly MagicUserInfoAppService $userInfoAppService,
+        private readonly UserModel $userModel,
     ) {
         parent::__construct($resourceVisibilityDomainService);
     }
@@ -52,6 +67,7 @@ class AssetAppService extends AbstractAssetAppService
 
         $asset = $this->assetDomainService->createPersonal($dataIsolation, $asset);
         $this->grantAssetVisibility($dataIsolation, $asset, AssetVisibility::personal());
+        $this->syncTagsAndSearchText($dataIsolation, $asset, $requestDTO->getTagIds());
         $this->resolveAssetFileUrls([$asset]);
         return $asset;
     }
@@ -79,6 +95,7 @@ class AssetAppService extends AbstractAssetAppService
             $asset,
         );
         $this->grantAssetVisibility($dataIsolation, $asset, $requestDTO->getVisibility());
+        $this->syncTagsAndSearchText($dataIsolation, $asset, $requestDTO->getTagIds());
         // 落库实体不带 file_url，列表与详情都会回填，保存响应保持一致，前端拿到即可直接展示。
         $this->resolveAssetFileUrls([$asset]);
 
@@ -161,6 +178,7 @@ class AssetAppService extends AbstractAssetAppService
             $this->createQuery($requestDTO, $dataIsolation),
             $page,
         );
+        $this->enrichAssets($dataIsolation, $result['list'], $requestDTO->getScope()->value);
         $this->resolveAssetFileUrls($result['list']);
         return $result;
     }
@@ -175,6 +193,7 @@ class AssetAppService extends AbstractAssetAppService
         $granted = $this->sharedAssetIds($dataIsolation, [(string) $assetId]) !== [];
         $asset = $this->assetDomainService->find($dataIsolation, $assetId, $granted);
         if ($asset !== null) {
+            $this->enrichAssets($dataIsolation, [$asset], $granted ? 'TEAM' : 'PERSONAL');
             $this->resolveAssetFileUrls([$asset]);
         }
         return $asset;
@@ -208,6 +227,217 @@ class AssetAppService extends AbstractAssetAppService
         $query->setAssetMediaType($requestDTO->getAssetMediaType());
         $query->setKeyword($requestDTO->getKeyword());
         $query->setStatus($requestDTO->getStatus() ?? 1);
+        $query->setIsVerified($requestDTO->getIsVerified());
+        $query->setOwnerUid($requestDTO->getOwnerUid());
+        $query->setTagIds($requestDTO->getTagIds());
+        $query->setTagMatch($requestDTO->getTagMatch());
         return $query;
+    }
+
+    /** @return AssetTagEntity[] */
+    public function listTags(Authenticatable|BaseDataIsolation $authorization): array
+    {
+        $isolation = $this->createAssetDataIsolation($authorization);
+        return $this->assetTagRepository->queryVisible($isolation, $isolation->getCurrentUserId());
+    }
+
+    public function saveTag(Authenticatable|BaseDataIsolation $authorization, string $name, string $nodeType, int $parentId = 0): AssetTagEntity
+    {
+        $isolation = $this->createAssetDataIsolation($authorization);
+        $this->assertTagStructure($isolation, $nodeType, $parentId);
+        $entity = new AssetTagEntity();
+        $entity->setOrganizationCode($isolation->getCurrentOrganizationCode())->setNameI18n(['default' => trim($name)])
+            ->setNodeType($nodeType)->setParentId($parentId)->setOwnerUid($isolation->getCurrentUserId())
+            ->setCreatedUid($isolation->getCurrentUserId())->setUpdatedUid($isolation->getCurrentUserId());
+        return $this->assetTagRepository->save($isolation, $entity);
+    }
+
+    public function updateTag(Authenticatable|BaseDataIsolation $authorization, int|string $id, string $name, string $nodeType, int $parentId = 0): AssetTagEntity
+    {
+        $isolation = $this->createAssetDataIsolation($authorization);
+        $existing = $this->assetTagRepository->findById($isolation, $id);
+        if ($existing === null || $existing->getOwnerUid() !== $isolation->getCurrentUserId()) {
+            ExceptionBuilder::throw(AssetErrorCode::DELETE_DENIED);
+        }
+        $this->assertTagStructure($isolation, $nodeType, $parentId, $id);
+        $existing->setNameI18n(['default' => trim($name)])->setNodeType($nodeType)->setParentId($parentId)->setUpdatedUid($isolation->getCurrentUserId());
+        $saved = $this->assetTagRepository->save($isolation, $existing);
+        $this->rebuildSearchTextForTag($isolation, $id);
+        return $saved;
+    }
+
+    public function deleteTag(Authenticatable|BaseDataIsolation $authorization, int|string $id): void
+    {
+        $isolation = $this->createAssetDataIsolation($authorization);
+        $existing = $this->assetTagRepository->findById($isolation, $id);
+        if ($existing === null || $existing->getOwnerUid() === null || $existing->getOwnerUid() !== $isolation->getCurrentUserId()) {
+            ExceptionBuilder::throw(AssetErrorCode::DELETE_DENIED);
+        }
+        if ($this->assetTagRepository->hasChildren($isolation, $id)) {
+            ExceptionBuilder::throw(AssetErrorCode::DELETE_DENIED);
+        }
+        $assetIds = $this->assetTagRelationRepository->findAssetIdsByTagId($isolation, $id);
+        Db::transaction(function () use ($isolation, $id): void {
+            $this->assetTagRelationRepository->deleteByTagId($isolation, $id);
+            $this->assetTagRepository->delete($isolation, $id, $isolation->getCurrentUserId());
+        });
+        foreach ($assetIds as $assetId) {
+            $asset = $this->assetRepository->findById($isolation, $assetId);
+            if ($asset !== null) {
+                $this->syncTagsAndSearchText($isolation, $asset, $this->assetTagRelationRepository->findTagIdsByAssetId($isolation, $assetId));
+            }
+        }
+    }
+
+    public function syncAssetTags(Authenticatable|BaseDataIsolation $authorization, int|string $assetId, array $tagIds): void
+    {
+        $isolation = $this->createAssetDataIsolation($authorization);
+        $asset = $this->assetDomainService->find($isolation, $assetId, $this->sharedAssetIds($isolation, [(string) $assetId]) !== []);
+        if ($asset === null || ($asset->getOwnerUid() ?: $asset->getUserId()) !== $isolation->getCurrentUserId()) {
+            ExceptionBuilder::throw(AssetErrorCode::DELETE_DENIED);
+        }
+        $this->syncTagsAndSearchText($isolation, $asset, $tagIds);
+    }
+
+    public function listOwners(Authenticatable|BaseDataIsolation $authorization, ?string $keyword = null): array
+    {
+        $isolation = $this->createAssetDataIsolation($authorization);
+        $builder = $this->userModel::query();
+        $builder->where('organization_code', $isolation->getCurrentOrganizationCode())->where('user_id', '!=', $isolation->getCurrentUserId());
+        if ($keyword !== null && trim($keyword) !== '') {
+            $builder->where(static function ($q) use ($keyword): void {
+                $q->where('nickname', 'like', '%' . $keyword . '%')->orWhere('user_id', 'like', '%' . $keyword . '%');
+            });
+        }
+        return $builder->limit(100)->get()->map(static fn ($user): array => ['id' => (string) $user->user_id, 'name' => (string) ($user->nickname ?? '')])->all();
+    }
+
+    public function transferOwner(Authenticatable|BaseDataIsolation $authorization, array $assetIds, string $ownerUid): array
+    {
+        $isolation = $this->createAssetDataIsolation($authorization);
+        $ownerUid = trim($ownerUid);
+        if ($ownerUid === '' || $ownerUid === $isolation->getCurrentUserId() || ! $this->userModel::query()
+            ->where('organization_code', $isolation->getCurrentOrganizationCode())->where('user_id', $ownerUid)->exists()) {
+            ExceptionBuilder::throw(AssetErrorCode::DELETE_DENIED);
+        }
+        $assets = [];
+        foreach (array_values(array_unique(array_map('strval', $assetIds))) as $assetId) {
+            $asset = $this->assetDomainService->find($isolation, $assetId, true);
+            if ($asset === null || ($asset->getOwnerUid() ?: $asset->getUserId()) !== $isolation->getCurrentUserId()) {
+                ExceptionBuilder::throw(AssetErrorCode::DELETE_DENIED);
+            }
+            $asset->setOwnerUid($ownerUid);
+            $assets[] = $asset;
+        }
+        Db::transaction(function () use ($isolation, $assets, $ownerUid): void {
+            $permissionIsolation = $this->permissionDataIsolation($isolation);
+            foreach ($assets as $asset) {
+                $this->assetRepository->update($isolation, $asset);
+                $code = (string) $asset->getId();
+                $this->resourceVisibilityDomainService->deleteResourceVisibilityByPrincipals(
+                    $permissionIsolation,
+                    ResourceType::ASSET,
+                    $code,
+                    PrincipalType::USER,
+                    [$isolation->getCurrentUserId()],
+                );
+                $this->resourceVisibilityDomainService->addResourceVisibilityByPrincipalsIfMissing(
+                    $permissionIsolation,
+                    ResourceType::ASSET,
+                    $code,
+                    PrincipalType::USER,
+                    [$ownerUid],
+                );
+            }
+        });
+        return ['changed_num' => count($assets), 'owner_uid' => $ownerUid];
+    }
+
+    private function syncTagsAndSearchText(AssetDataIsolation $isolation, AssetEntity $asset, array $tagIds): void
+    {
+        $tags = $this->resolveUsableTags($isolation, $tagIds);
+        $tagNames = array_map(static fn (AssetTagEntity $tag): string => (string) ($tag->getNameI18n()['default'] ?? ''), $tags);
+        $asset->setSearchText(trim(implode(' ', array_filter([
+            $asset->getI18nName('default'), $asset->getI18nDescription('default'), ...$tagNames,
+        ], static fn (mixed $value): bool => is_string($value) && trim($value) !== ''))));
+        Db::transaction(function () use ($isolation, $asset, $tags): void {
+            $this->assetTagRelationRepository->sync($isolation, (string) $asset->getId(), array_map(static fn (AssetTagEntity $tag): int => (int) $tag->getId(), $tags), $isolation->getCurrentUserId());
+            $this->assetRepository->update($isolation, $asset);
+        });
+        $asset->setTags(array_map(static fn (AssetTagEntity $tag): array => [
+            'id' => (string) $tag->getId(), 'name' => (string) ($tag->getNameI18n()['default'] ?? ''),
+            'parentId' => (string) $tag->getParentId(), 'nodeType' => $tag->getNodeType(),
+            'isOfficial' => $tag->getOwnerUid() === null,
+        ], $tags));
+    }
+
+    private function enrichAssets(AssetDataIsolation $isolation, array $assets, string $scope): void
+    {
+        $ownerIds = [];
+        foreach ($assets as $asset) {
+            $ownerId = $asset->getOwnerUid() ?: $asset->getUserId();
+            if ($ownerId !== null) { $ownerIds[] = $ownerId; }
+            $asset->setSource($ownerId === $isolation->getCurrentUserId() ? 'PERSONAL' : (in_array($scope, ['TEAM', 'ALL'], true) ? 'TEAM' : 'PUBLIC'));
+            $tagIds = $this->assetTagRelationRepository->findTagIdsByAssetId($isolation, (string) $asset->getId());
+            $tags = [];
+            foreach ($tagIds as $tagId) {
+                $tag = $this->assetTagRepository->findById($isolation, $tagId);
+                if ($tag !== null) {
+                    $tags[] = [
+                        'id' => (string) $tag->getId(), 'name' => (string) ($tag->getNameI18n()['default'] ?? ''),
+                        'parentId' => (string) $tag->getParentId(), 'nodeType' => $tag->getNodeType(),
+                        'isOfficial' => $tag->getOwnerUid() === null,
+                    ];
+                }
+            }
+            $asset->setTags($tags);
+        }
+        $infos = $this->userInfoAppService->getBatchUserInfo(array_values(array_unique($ownerIds)), ContactDataIsolation::create($isolation->getCurrentOrganizationCode(), $isolation->getCurrentUserId()));
+        foreach ($assets as $asset) {
+            $ownerId = $asset->getOwnerUid() ?: $asset->getUserId();
+            $info = $infos[$ownerId] ?? [];
+            $asset->setOwnerName((string) ($info['nickname'] ?? $info['real_name'] ?? ''));
+        }
+    }
+
+    private function assertTagStructure(AssetDataIsolation $isolation, string $nodeType, int $parentId, int|string|null $ignoreId = null): void
+    {
+        $nodeType = strtolower(trim($nodeType));
+        if (! in_array($nodeType, ['group', 'tag'], true) || ($nodeType === 'group' && $parentId !== 0)) {
+            ExceptionBuilder::throw(AssetErrorCode::DELETE_DENIED);
+        }
+        if ($nodeType === 'tag') {
+            $parent = $this->assetTagRepository->findById($isolation, $parentId);
+            if ($parent === null || $parent->getNodeType() !== 'group' || ($ignoreId !== null && (string) $parent->getId() === (string) $ignoreId)) {
+                ExceptionBuilder::throw(AssetErrorCode::DELETE_DENIED);
+            }
+            if ($parent->getOwnerUid() !== null && $parent->getOwnerUid() !== $isolation->getCurrentUserId()) {
+                ExceptionBuilder::throw(AssetErrorCode::DELETE_DENIED);
+            }
+        }
+    }
+
+    /** @return AssetTagEntity[] */
+    private function resolveUsableTags(AssetDataIsolation $isolation, array $tagIds): array
+    {
+        $result = [];
+        foreach (array_values(array_unique(array_filter(array_map('intval', $tagIds), static fn (int $id): bool => $id > 0))) as $tagId) {
+            $tag = $this->assetTagRepository->findById($isolation, $tagId);
+            if ($tag === null || $tag->getNodeType() !== 'tag' || ($tag->getOwnerUid() !== null && $tag->getOwnerUid() !== $isolation->getCurrentUserId())) {
+                ExceptionBuilder::throw(AssetErrorCode::DELETE_DENIED);
+            }
+            $result[] = $tag;
+        }
+        return $result;
+    }
+
+    private function rebuildSearchTextForTag(AssetDataIsolation $isolation, int|string $tagId): void
+    {
+        foreach ($this->assetTagRelationRepository->findAssetIdsByTagId($isolation, $tagId) as $assetId) {
+            $asset = $this->assetRepository->findById($isolation, $assetId);
+            if ($asset !== null) {
+                $this->syncTagsAndSearchText($isolation, $asset, $this->assetTagRelationRepository->findTagIdsByAssetId($isolation, $assetId));
+            }
+        }
     }
 }

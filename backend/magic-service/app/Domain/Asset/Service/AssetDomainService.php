@@ -173,7 +173,7 @@ class AssetDomainService
         if ($existing === null) {
             ExceptionBuilder::throw(AssetErrorCode::NOT_FOUND);
         }
-        if ($existing->getUserId() !== $dataIsolation->getCurrentUserId()) {
+        if (($existing->getOwnerUid() ?: $existing->getUserId()) !== $dataIsolation->getCurrentUserId()) {
             ExceptionBuilder::throw(AssetErrorCode::DELETE_DENIED);
         }
         return $this->deleteAssetWithProvider($dataIsolation, $existing);
@@ -431,6 +431,15 @@ class AssetDomainService
     private function saveLocal(AssetDataIsolation $dataIsolation, AssetEntity $asset, ?AssetSyncStatus $syncStatus = null): AssetEntity
     {
         $asset->setOrganizationCode($dataIsolation->getCurrentOrganizationCode());
+        if ($asset->getOwnerUid() === null && $asset->getUserId() !== null) {
+            $asset->setOwnerUid($asset->getUserId());
+        }
+        if ($asset->getSearchText() === null || trim($asset->getSearchText()) === '') {
+            $asset->setSearchText(trim(implode(' ', array_filter([
+                $asset->getI18nName('default'),
+                $asset->getI18nDescription('default'),
+            ], static fn (mixed $value): bool => is_string($value) && trim($value) !== ''))));
+        }
         $asset->setSyncStatus($syncStatus ?? ($asset->getAssetKind()->isGroup() ? AssetSyncStatus::SYNCED : AssetSyncStatus::PENDING));
         $saved = $this->assets->save($dataIsolation, $asset);
         $this->logger->info(

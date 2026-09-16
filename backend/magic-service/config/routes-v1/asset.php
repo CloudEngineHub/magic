@@ -14,6 +14,13 @@ Router::addGroup('/api/v1/assets', static function (): void {
     Router::post('/library', [AssetApi::class, 'saveToLibrary']);
     Router::get('', [AssetApi::class, 'list']);
     Router::post('/queries', [AssetApi::class, 'list']);
+    Router::get('/tags', [AssetApi::class, 'tags']);
+    Router::post('/tags', [AssetApi::class, 'createTag']);
+    Router::put('/tags/{tagId:\d+}', [AssetApi::class, 'updateTag']);
+    Router::delete('/tags/{tagId:\d+}', [AssetApi::class, 'deleteTag']);
+    Router::put('/{assetId:\d+}/tags', [AssetApi::class, 'updateTags']);
+    Router::get('/owners', [AssetApi::class, 'owners']);
+    Router::post('/transfer-owner', [AssetApi::class, 'transferOwner']);
     Router::get('/{assetId:\d+}', [AssetApi::class, 'detail']);
     Router::delete('/{assetId:\d+}', [AssetApi::class, 'delete']);
 }, ['middleware' => [RequestContextMiddleware::class, UserAuthMiddleware::class]]);

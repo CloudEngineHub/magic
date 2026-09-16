@@ -58,9 +58,11 @@ use App\Domain\AppMenu\Repository\Persistence\AppMenuRepository;
 use App\Domain\Asset\Repository\Facade\AssetAgreementRepositoryInterface;
 use App\Domain\Asset\Repository\Facade\AssetProviderAssetRepositoryInterface;
 use App\Domain\Asset\Repository\Facade\AssetRepositoryInterface;
+use App\Domain\Asset\Repository\Facade\AssetTagRepositoryInterface;
 use App\Domain\Asset\Repository\Persistence\AssetAgreementRepository;
 use App\Domain\Asset\Repository\Persistence\AssetProviderAssetRepository;
 use App\Domain\Asset\Repository\Persistence\AssetRepository;
+use App\Domain\Asset\Repository\Persistence\AssetTagRepository;
 use App\Domain\Audit\Contract\PermissionLabelProviderInterface;
 use App\Domain\Audit\Contract\PermissionLabelServiceInterface;
 use App\Domain\Audit\ModelCall\Repository\Facade\AuditLogRepositoryInterface;
@@ -508,6 +510,7 @@ $dependencies = [
     OrganizationAdminRepositoryInterface::class => OrganizationAdminRepository::class,
     ResourceVisibilityRepositoryInterface::class => ResourceVisibilityRepository::class,
     AssetRepositoryInterface::class => AssetRepository::class,
+    AssetTagRepositoryInterface::class => AssetTagRepository::class,
     AssetProviderAssetRepositoryInterface::class => AssetProviderAssetRepository::class,
     AssetAgreementRepositoryInterface::class => AssetAgreementRepository::class,
 

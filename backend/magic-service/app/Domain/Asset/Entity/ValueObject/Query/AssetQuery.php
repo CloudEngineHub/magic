@@ -26,6 +26,15 @@ class AssetQuery
 
     private ?int $status = null;
 
+    private ?bool $isVerified = null;
+
+    private ?string $ownerUid = null;
+
+    /** @var array<string> */
+    private array $tagIds = [];
+
+    private string $tagMatch = 'any';
+
     /** 查询范围：个人 / 团队分享 / 官方公开 / 全部。 */
     private AssetScope $scope = AssetScope::PERSONAL;
 
@@ -98,6 +107,46 @@ class AssetQuery
     public function setStatus(?int $status): void
     {
         $this->status = $status;
+    }
+
+    public function isVerified(): ?bool
+    {
+        return $this->isVerified;
+    }
+
+    public function setIsVerified(?bool $isVerified): void
+    {
+        $this->isVerified = $isVerified;
+    }
+
+    public function getOwnerUid(): ?string
+    {
+        return $this->ownerUid;
+    }
+
+    public function setOwnerUid(?string $ownerUid): void
+    {
+        $this->ownerUid = $ownerUid;
+    }
+
+    public function getTagIds(): array
+    {
+        return $this->tagIds;
+    }
+
+    public function setTagIds(array $tagIds): void
+    {
+        $this->tagIds = array_values(array_unique(array_map('strval', $tagIds)));
+    }
+
+    public function getTagMatch(): string
+    {
+        return $this->tagMatch;
+    }
+
+    public function setTagMatch(string $tagMatch): void
+    {
+        $this->tagMatch = in_array($tagMatch, ['any', 'all'], true) ? $tagMatch : 'any';
     }
 
     public function getScope(): AssetScope

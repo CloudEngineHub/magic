@@ -29,6 +29,9 @@ class CreateAssetRequestDTO extends AbstractRequestDTO
 
     public ?int $status = null;
 
+    /** @var array<int, int|string> */
+    public array $tagIds = [];
+
     public function getAssetKind(): string
     {
         return $this->assetKind;
@@ -67,6 +70,11 @@ class CreateAssetRequestDTO extends AbstractRequestDTO
     public function getProjectFilePath(): ?string
     {
         return $this->projectFilePath;
+    }
+
+    public function getTagIds(): array
+    {
+        return $this->tagIds;
     }
 
     public function setAssetKind(mixed $value): void
@@ -114,6 +122,15 @@ class CreateAssetRequestDTO extends AbstractRequestDTO
         $this->status = $value === null || $value === '' ? null : (int) $value;
     }
 
+    public function setTagIds(mixed $value): void
+    {
+        $values = is_string($value) ? explode(',', $value) : (array) $value;
+        $this->tagIds = array_values(array_unique(array_filter(array_map(
+            static fn (mixed $id): string => is_scalar($id) ? (string) $id : '',
+            $values,
+        ), static fn (string $id): bool => $id !== '')));
+    }
+
     protected static function getHyperfValidationRules(): array
     {
         return [
@@ -126,6 +143,7 @@ class CreateAssetRequestDTO extends AbstractRequestDTO
             'project_id' => 'nullable|integer|min:1|required_with:project_file_path',
             'project_file_path' => 'nullable|string|max:1024|required_with:project_id',
             'status' => 'nullable|integer|in:0,1',
+            'tag_ids' => 'nullable',
         ];
     }
 

@@ -16,6 +16,8 @@ use App\Interfaces\Asset\Assembler\AssetAssembler;
 use App\Interfaces\Asset\DTO\Request\CreateAssetRequestDTO;
 use App\Interfaces\Asset\DTO\Request\QueryAssetRequestDTO;
 use App\Interfaces\Asset\DTO\Request\SaveAssetToLibraryRequestDTO;
+use App\Interfaces\Asset\DTO\Request\SaveAssetTagRequestDTO;
+use App\Interfaces\Asset\DTO\Request\TransferAssetOwnerRequestDTO;
 use Dtyq\ApiResponse\Annotation\ApiResponse;
 use Hyperf\HttpServer\Contract\RequestInterface;
 
@@ -98,5 +100,54 @@ class AssetApi extends AbstractApi
             $assetId,
         );
         return AssetAssembler::createDeleteDTO($assetId, $deleted)->toArray();
+    }
+
+    public function tags(): array
+    {
+        return array_map(static function ($tag): array {
+            return [
+                'id' => (string) $tag->getId(), 'parentId' => (string) $tag->getParentId(),
+                'nodeType' => $tag->getNodeType(), 'name' => (string) ($tag->getNameI18n()['default'] ?? ''),
+                'ownerUid' => $tag->getOwnerUid(), 'isOfficial' => $tag->getOwnerUid() === null,
+            ];
+        }, $this->assetAppService->listTags($this->getAuthorization()));
+    }
+
+    public function createTag(): array
+    {
+        $request = SaveAssetTagRequestDTO::fromRequest($this->request);
+        $tag = $this->assetAppService->saveTag($this->getAuthorization(), $request->getName(), $request->getNodeType(), $request->getParentId());
+        return ['id' => (string) $tag->getId(), 'name' => $request->getName(), 'parentId' => (string) $tag->getParentId(), 'nodeType' => $tag->getNodeType()];
+    }
+
+    public function updateTag(int|string $tagId): array
+    {
+        $request = SaveAssetTagRequestDTO::fromRequest($this->request);
+        $tag = $this->assetAppService->updateTag($this->getAuthorization(), $tagId, $request->getName(), $request->getNodeType(), $request->getParentId());
+        return ['id' => (string) $tag->getId(), 'name' => $request->getName(), 'parentId' => (string) $tag->getParentId(), 'nodeType' => $tag->getNodeType()];
+    }
+
+    public function deleteTag(int|string $tagId): array
+    {
+        $this->assetAppService->deleteTag($this->getAuthorization(), $tagId);
+        return ['id' => (string) $tagId, 'deleted' => true];
+    }
+
+    public function updateTags(int|string $assetId): array
+    {
+        $tagIds = (array) $this->request->input('tag_ids', []);
+        $this->assetAppService->syncAssetTags($this->getAuthorization(), $assetId, $tagIds);
+        return ['asset_id' => (string) $assetId, 'tag_ids' => array_values(array_map('strval', $tagIds))];
+    }
+
+    public function owners(): array
+    {
+        return $this->assetAppService->listOwners($this->getAuthorization(), (string) $this->request->query('keyword', ''));
+    }
+
+    public function transferOwner(): array
+    {
+        $request = TransferAssetOwnerRequestDTO::fromRequest($this->request);
+        return $this->assetAppService->transferOwner($this->getAuthorization(), $request->getAssetIds(), $request->getOwnerUid());
     }
 }

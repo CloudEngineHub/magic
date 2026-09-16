@@ -37,6 +37,11 @@ class AssetAssembler
         $complianceStatus = AssetComplianceStatus::forAsset($entity->getAssetKind(), $entity->getSyncStatus());
         $dto->setComplianceStatus($complianceStatus->value);
         $dto->setComplianceFailedReason($complianceStatus->isFailed() ? $entity->getSyncFailedReason() : null);
+        $ownerUid = $entity->getOwnerUid() ?: $entity->getUserId();
+        $dto->setOwner($ownerUid, $entity->getOwnerName());
+        $dto->setOwnerUid($ownerUid);
+        $dto->setSource($entity->getSource());
+        $dto->setTags($entity->getTags());
         if ($admin) {
             $dto->setStatus($entity->getStatus()->value);
             $dto->setFileKey($entity->getFileKey());

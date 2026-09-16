@@ -77,10 +77,37 @@ class AssetRepository implements AssetRepositoryInterface
             $builder->where('asset_media_type', $query->getAssetMediaType());
         }
         if ($query->getKeyword() !== null) {
-            $builder->where('name_i18n', 'like', '%' . $query->getKeyword() . '%');
+            $builder->where('search_text', 'like', '%' . $query->getKeyword() . '%');
         }
         if ($query->getStatus() !== null) {
             $builder->where('status', $query->getStatus());
+        }
+        if ($query->isVerified() === true) {
+            $builder->where('sync_status', AssetSyncStatus::SYNCED->value);
+        }
+        if ($query->getOwnerUid() !== null) {
+            $ownerUid = $query->getOwnerUid();
+            $builder->where(static function (Builder $builder) use ($ownerUid): void {
+                $builder->where('owner_uid', $ownerUid)
+                    ->orWhere(static function (Builder $builder) use ($ownerUid): void {
+                        $builder->whereNull('owner_uid')->where('user_id', $ownerUid);
+                    });
+            });
+        }
+        if ($query->getTagIds() !== []) {
+            $relationTable = 'magic_asset_tag_relations';
+            $organizationCode = $dataIsolation->getCurrentOrganizationCode();
+            $builder->whereIn('id', static function ($subQuery) use ($relationTable, $query, $organizationCode): void {
+                $subQuery->from($relationTable)
+                    ->select('asset_id')
+                    ->where('organization_code', $organizationCode)
+                    ->whereIn('tag_id', $query->getTagIds())
+                    ->groupBy('asset_id')
+                    ->havingRaw(
+                        'COUNT(DISTINCT tag_id) ' . ($query->getTagMatch() === 'all' ? '>=' : '>') . ' ?',
+                        [$query->getTagMatch() === 'all' ? count($query->getTagIds()) : 0]
+                    );
+            });
         }
 
         $total = (int) $builder->count();
@@ -205,15 +232,28 @@ class AssetRepository implements AssetRepositoryInterface
                 $builder->whereNull('user_id');
                 return;
             case AssetScope::PERSONAL:
-                $builder->where('user_id', $currentUserId);
+                $builder->where(static function (Builder $builder) use ($currentUserId): void {
+                    $builder->where('owner_uid', $currentUserId)
+                        ->orWhere(static function (Builder $builder) use ($currentUserId): void {
+                            $builder->whereNull('owner_uid')->where('user_id', $currentUserId);
+                        });
+                });
                 return;
             case AssetScope::TEAM:
-                $builder->where('user_id', '!=', $currentUserId)
+                $builder->where(static function (Builder $builder) use ($currentUserId): void {
+                    $builder->where('owner_uid', '!=', $currentUserId)
+                        ->orWhere(static function (Builder $builder) use ($currentUserId): void {
+                            $builder->whereNull('owner_uid')->where('user_id', '!=', $currentUserId);
+                        });
+                })
                     ->whereIn('id', $sharedAssetIds);
                 return;
             case AssetScope::ALL:
                 $builder->where(static function (Builder $builder) use ($currentUserId, $sharedAssetIds): void {
-                    $builder->where('user_id', $currentUserId);
+                    $builder->where('owner_uid', $currentUserId)
+                        ->orWhere(static function (Builder $builder) use ($currentUserId): void {
+                            $builder->whereNull('owner_uid')->where('user_id', $currentUserId);
+                        });
                     if ($sharedAssetIds !== []) {
                         $builder->orWhereIn('id', $sharedAssetIds);
                     }
