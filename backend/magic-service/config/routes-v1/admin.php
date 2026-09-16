@@ -201,7 +201,7 @@ Router::addGroup('/api/v1/admin', static function () {
     // 资产库管理：创建、查询、更新和删除公开资产。
     Router::addGroup('/assets', static function (): void {
         Router::post('', [AdminAssetApi::class, 'create']);
-        Router::get('', [AdminAssetApi::class, 'list']);
+        Router::post('/queries', [AdminAssetApi::class, 'list']);
         Router::patch('/{assetId:\d+}', [AdminAssetApi::class, 'update']);
         Router::delete('/{assetId:\d+}', [AdminAssetApi::class, 'delete']);
     }, ['middleware' => [RequestContextMiddleware::class, UserAuthMiddleware::class]]);
