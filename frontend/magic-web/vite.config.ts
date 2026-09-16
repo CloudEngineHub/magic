@@ -1,4 +1,10 @@
-import { defineConfig, mergeConfig, type PluginOption, type UserConfig } from "vite"
+import {
+	defaultClientConditions,
+	defineConfig,
+	mergeConfig,
+	type PluginOption,
+	type UserConfig,
+} from "vite"
 import { createRequire } from "node:module"
 import babel from "@rolldown/plugin-babel"
 import react from "@vitejs/plugin-react"
@@ -146,6 +152,8 @@ function getBaseViteConfig(env: NodeJS.ProcessEnv = process.env, mode?: string):
 		},
 		assetsInclude: ["**/*.md", "**/*.mdx", "**/*.mov", "**/*.webm", "**/*.png"],
 		resolve: {
+			// Workspace packages can expose source without coupling imports to their directory layout.
+			conditions: ["magic-web-source", ...defaultClientConditions],
 			// magic-flow lists react as a dep; force one React for hooks.
 			// This list also keeps the standalone enterprise/ install root safe:
 			// its packages resolve peers from enterprise/node_modules (a different
@@ -187,13 +195,6 @@ function getBaseViteConfig(env: NodeJS.ProcessEnv = process.env, mode?: string):
 					find: "@dtyq/x-markdown",
 					replacement: resolve(__dirname, "packages/x-markdown/src/index.ts"),
 				},
-				// packages/logger may have its own node_modules during local development.
-				// Pin ARMS to the app dependency so Vite does not resolve a nested version
-				// whose rrweb subpath imports are blocked by package exports.
-				{
-					find: "@arms/rum-browser",
-					replacement: resolve(__dirname, "node_modules/@arms/rum-browser/lib/index.js"),
-				},
 				{
 					find: "@magic-web/html2image",
 					replacement: resolve(__dirname, "packages/html2image/src/index.ts"),
@@ -215,6 +216,13 @@ function getBaseViteConfig(env: NodeJS.ProcessEnv = process.env, mode?: string):
 					replacement: resolve(
 						__dirname,
 						"packages/html-sandbox/src/utils/textContent.ts",
+					),
+				},
+				{
+					find: "@dtyq/html-sandbox/utils/inspectableTextContent",
+					replacement: resolve(
+						__dirname,
+						"packages/html-sandbox/src/utils/inspectableTextContent.ts",
 					),
 				},
 				{

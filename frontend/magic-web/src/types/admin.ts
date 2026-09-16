@@ -172,6 +172,7 @@ export namespace Admin {
 		points_amount: number
 		description?: string
 		validity: string
+		recharge_mode?: string
 	}
 
 	/** 创建支付订单的请求参数 */
@@ -185,6 +186,10 @@ export namespace Admin {
 			quit_url?: string
 			return_url?: string
 		}
+	}
+	export interface CreatePointsRechargeOrderParams extends CreatePaymentOrderParams {
+		points_amount: number
+		extras?: Record<string, unknown>
 	}
 
 	/** 创建支付订单的响应 */

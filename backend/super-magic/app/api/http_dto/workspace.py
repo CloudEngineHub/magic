@@ -132,6 +132,23 @@ class WorkspaceExportData(BaseModel):
     )
 
 
+class WorkspaceExportTaskRequest(WorkspaceExportRequest):
+    """异步工作区导出请求。"""
+
+    task_key: str = Field(..., min_length=1, description="幂等任务标识")
+
+
+class WorkspaceExportTaskData(BaseModel):
+    """异步工作区导出任务状态。"""
+
+    task_key: str
+    status: str
+    progress: int | None = None
+    file_key: str | None = None
+    metadata: Dict[str, Any] = Field(default_factory=dict)
+    error: str | None = None
+
+
 class WorkspaceImportRequest(BaseModel):
     """Request body for workspace import endpoint."""
 

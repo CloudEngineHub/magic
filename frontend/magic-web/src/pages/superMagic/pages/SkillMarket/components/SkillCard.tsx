@@ -1,5 +1,5 @@
 import { useMemo } from "react"
-import { Check, Loader2, Plus } from "lucide-react"
+import { Check, Loader2, Plus, ShieldCheck } from "lucide-react"
 import dayjs from "@/infrastructure/vendors/dayjs"
 import { useTranslation } from "react-i18next"
 import { observer } from "mobx-react-lite"
@@ -114,37 +114,34 @@ function SkillCard({
 						data-testid="skill-card-thumbnail"
 					/>
 					<div className="min-w-0 flex-1 pr-10">
-						<div className="flex min-w-0 items-center gap-2">
-							<p
-								className="min-w-0 truncate text-[15px] font-semibold tracking-[-0.01em] text-foreground"
-								data-testid="skill-card-name"
-							>
-								{skill.name}
-							</p>
-							{sourceLabel ? (
-								<Badge
-									variant="outline"
-									className={cn(
-										"shrink-0 rounded-md border-transparent px-1.5 py-0.5 text-[10px] font-medium",
-										isOfficialPublisher
-											? "bg-blue-500/10 text-blue-600 hover:bg-blue-500/10 dark:text-blue-400"
-											: "bg-emerald-500/10 text-emerald-700 hover:bg-emerald-500/10 dark:text-emerald-400",
-									)}
-									data-testid="skill-card-source-badge"
-								>
-									{sourceLabel}
-								</Badge>
-							) : null}
-							{showFeaturedTag ? (
-								<Badge
-									variant="outline"
-									className="shrink-0 rounded-md border-transparent bg-orange-500/10 px-1.5 py-0.5 text-[10px] font-medium text-orange-600 hover:bg-orange-500/10 dark:text-orange-300"
-									data-testid="skill-card-featured"
-								>
-									{t("skillsLibrary.featured")}
-								</Badge>
-							) : null}
-						</div>
+						<p
+							className="min-w-0 truncate text-[15px] font-semibold tracking-[-0.01em] text-foreground"
+							data-testid="skill-card-name"
+						>
+							{skill.name}
+						</p>
+						{sourceLabel || showFeaturedTag ? (
+							<div className="mt-1 flex min-w-0 items-center gap-2">
+								{sourceLabel ? (
+									<div
+										className="flex shrink-0 items-center gap-0.5 text-xs text-muted-foreground"
+										data-testid="skill-card-source-badge"
+									>
+										<ShieldCheck className="size-3" aria-hidden="true" />
+										<span>{sourceLabel}</span>
+									</div>
+								) : null}
+								{showFeaturedTag ? (
+									<Badge
+										variant="outline"
+										className="shrink-0 rounded-md border-transparent bg-orange-500/10 px-1.5 py-0.5 text-[10px] font-medium text-orange-600 hover:bg-orange-500/10 dark:text-orange-300"
+										data-testid="skill-card-featured"
+									>
+										{t("skillsLibrary.featured")}
+									</Badge>
+								) : null}
+							</div>
+						) : null}
 					</div>
 				</div>
 

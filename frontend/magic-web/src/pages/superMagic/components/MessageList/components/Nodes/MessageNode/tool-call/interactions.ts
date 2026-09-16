@@ -71,12 +71,14 @@ export function handleToolCallInteraction({
 	}
 
 	const fileId = resolveToolFileId((newDetail as { data?: unknown }).data)
-	if (fileId) {
+	if (
+		fileId &&
 		selectSourceFileFromTool({
 			detail: newDetail,
 			fileId,
 			onSelectDetail,
 		})
+	) {
 		return
 	}
 

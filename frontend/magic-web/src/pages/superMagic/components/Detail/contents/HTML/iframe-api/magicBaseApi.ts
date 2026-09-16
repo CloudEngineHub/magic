@@ -4,7 +4,7 @@
  * 这些请求通过 iframeClient 发起，避免 iframe 场景的错误触发主站全局跳转。
  */
 
-import iframeClient from "@/apis/clients/iframeClient"
+import { defaultIframeClient as iframeClient } from "@/infrastructure/network/http/runtime"
 
 function withMagicBaseShareToken() {
 	const token = (window as Window & { temporary_token?: string }).temporary_token || ""

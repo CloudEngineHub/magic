@@ -74,13 +74,21 @@ class FileVersionAppService extends AbstractAppService
             ExceptionBuilder::throw(SuperAgentErrorCode::FILE_PERMISSION_DENIED, 'file.cannot_version_file');
         }
 
-        $projectEntity = $this->projectDomainService->getProjectNotUserId($fileEntity->getProjectId());
-        if (! $projectEntity) {
-            ExceptionBuilder::throw(SuperAgentErrorCode::PROJECT_NOT_FOUND, 'project.project_not_found');
+        // 项目文件走项目解析（project_id > 0）；用户空间文件不挂在项目下
+        // （project_id = 0），组织编码直接取文件自身，版本副本落在该文件
+        // 自己的存储前缀下。
+        if ($fileEntity->getProjectId() > 0) {
+            $projectEntity = $this->projectDomainService->getProjectNotUserId($fileEntity->getProjectId());
+            if (! $projectEntity) {
+                ExceptionBuilder::throw(SuperAgentErrorCode::PROJECT_NOT_FOUND, 'project.project_not_found');
+            }
+            $organizationCode = $projectEntity->getUserOrganizationCode();
+        } else {
+            $organizationCode = $fileEntity->getOrganizationCode();
         }
 
         // 调用Domain Service创建版本
-        $versionEntity = $this->taskFileVersionDomainService->createFileVersion($projectEntity->getUserOrganizationCode(), $fileEntity, $editType);
+        $versionEntity = $this->taskFileVersionDomainService->createFileVersion($organizationCode, $fileEntity, $editType);
 
         if (! $versionEntity) {
             ExceptionBuilder::throw(SuperAgentErrorCode::FILE_SAVE_FAILED, 'file.version_create_failed');
@@ -237,15 +245,21 @@ class FileVersionAppService extends AbstractAppService
             ExceptionBuilder::throw(SuperAgentErrorCode::FILE_PERMISSION_DENIED, 'file.cannot_version_file');
         }
 
-        // 验证项目权限
-        $projectEntity = $this->getAccessibleProject(
-            $fileEntity->getProjectId(),
-            $dataIsolation->getCurrentUserId(),
-            $dataIsolation->getCurrentOrganizationCode()
-        );
+        // 项目文件走项目权限校验；用户空间文件（project_id = 0）不挂在
+        // 项目下，组织编码取文件自身。
+        if ($fileEntity->getProjectId() > 0) {
+            $projectEntity = $this->getAccessibleProject(
+                $fileEntity->getProjectId(),
+                $dataIsolation->getCurrentUserId(),
+                $dataIsolation->getCurrentOrganizationCode()
+            );
+            $organizationCode = $projectEntity->getUserOrganizationCode();
+        } else {
+            $organizationCode = $fileEntity->getOrganizationCode();
+        }
 
         $newVersionEntity = $this->taskFileVersionDomainService->rollbackFileToVersion(
-            $projectEntity->getUserOrganizationCode(),
+            $organizationCode,
             $fileEntity,
             $targetVersion
         );
@@ -257,7 +271,7 @@ class FileVersionAppService extends AbstractAppService
         // Refresh file metadata (file_size + updated_at) from cloud storage
         $this->taskFileDomainService->refreshFileMetadataFromCloudStorage(
             $fileEntity,
-            $projectEntity->getUserOrganizationCode()
+            $organizationCode
         );
 
         $this->logger->info('File rollback completed successfully', [

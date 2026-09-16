@@ -99,6 +99,14 @@ class AgentVersionRepository extends SuperMagicAbstractRepository implements Age
         return $this->toEntity($model->toArray());
     }
 
+    public function findByIdForUpdate(SuperMagicAgentDataIsolation $dataIsolation, int $id): ?AgentVersionEntity
+    {
+        $builder = $this->createBuilder($dataIsolation, $this->agentVersionModel::query());
+        /** @var null|AgentVersionModel $model */
+        $model = $builder->where('id', $id)->whereNull('deleted_at')->lockForUpdate()->first();
+        return $model ? $this->toEntity($model->toArray()) : null;
+    }
+
     public function findCurrentOrLatestByCodes(SuperMagicAgentDataIsolation $dataIsolation, array $codes): array
     {
         $codes = array_values(array_unique(array_filter($codes)));
@@ -418,11 +426,16 @@ class AgentVersionRepository extends SuperMagicAbstractRepository implements Age
         string $code,
         ?PublishTargetType $publishTargetType = null,
         ?ReviewStatus $reviewStatus = null,
-        Page $page = new Page()
+        Page $page = new Page(),
+        bool $includePublishing = false
     ): array {
         $builder = $this->createBuilder($dataIsolation, $this->agentVersionModel::query())
             ->where('code', $code)
             ->whereNull('deleted_at');
+
+        if (! $includePublishing) {
+            $builder->where('publish_status', '<>', PublishStatus::PUBLISHING->value);
+        }
 
         if ($publishTargetType !== null) {
             $builder->where('publish_target_type', $publishTargetType->value);

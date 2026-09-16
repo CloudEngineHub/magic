@@ -22,6 +22,7 @@ const mocks = vi.hoisted(() => ({
 	warningToast: vi.fn(),
 	canUseNativeShare: vi.fn(),
 	shareToNativeTarget: vi.fn(),
+	resolveShareDocumentDependencies: vi.fn(),
 	projectShareData: [] as ProjectShareItem[],
 	fileShareData: [] as FileShareItem[],
 	useShareDataCalls: [] as Array<{ resourceType: string; enabled?: boolean }>,
@@ -56,6 +57,13 @@ vi.mock("@/apis", () => ({
 		batchGetFileDetails: mocks.batchGetFileDetails,
 	},
 }))
+
+vi.mock(
+	"@/pages/superMagic/components/Share/FileShareModal/hooks/resolveShareDocumentDependencies",
+	() => ({
+		resolveShareDocumentDependencies: mocks.resolveShareDocumentDependencies,
+	}),
+)
 
 vi.mock("@/models/user", () => ({
 	userStore: {
@@ -149,6 +157,10 @@ describe("useProjectShareSheet", () => {
 		mocks.cancelShare.mockResolvedValue(undefined)
 		mocks.canUseNativeShare.mockReturnValue(false)
 		mocks.shareToNativeTarget.mockResolvedValue("shared")
+		mocks.resolveShareDocumentDependencies.mockResolvedValue({
+			dependencyFileIds: [],
+			missingResourcePaths: [],
+		})
 	})
 
 	it("Sheet 关闭或无 projectId 时不启用分享列表拉取", () => {
@@ -953,6 +965,105 @@ describe("useProjectShareSheet", () => {
 				share_project: false,
 				project_id: "project-1",
 				file_ids: ["file-transcript", "file-magic-project"],
+			}),
+		)
+	})
+
+	it("bundle 未就绪时仍允许提交当前选择并补齐必需文件", async () => {
+		const dependencyAttachments = [
+			{ file_id: "fake-transcript-id", file_name: "fake-transcript.md" },
+		]
+		const fileMap = {
+			transcript: { file_id: "fake-transcript-id", file_name: "fake-transcript.md" },
+			magicProject: {
+				file_id: "fake-project-config-id",
+				file_name: "magic.project.js",
+			},
+			summaryFiles: [],
+		}
+		const { result } = renderHook(() =>
+			useProjectShareSheet({
+				open: true,
+				projectId: "fake-project-id",
+				projectName: "Fake Recording",
+				attachments: [],
+				mode: "file",
+				projectMode: "audio",
+				dependencyAttachments,
+				fileMap,
+				defaultSelectedFileIds: ["fake-transcript-id"],
+				onClose: vi.fn(),
+			}),
+		)
+
+		act(() => {
+			result.current.setSelectedFileIds(["fake-transcript-id"])
+		})
+
+		await act(async () => {
+			await result.current.submitCreateShare()
+		})
+
+		expect(mocks.resolveShareDocumentDependencies).not.toHaveBeenCalled()
+		expect(mocks.createOrUpdateShareResource).toHaveBeenCalledWith(
+			expect.objectContaining({
+				file_ids: ["fake-transcript-id", "fake-project-config-id"],
+			}),
+		)
+	})
+
+	it("bundle 就绪后会等待依赖分析并追加依赖文件", async () => {
+		mocks.resolveShareDocumentDependencies.mockResolvedValue({
+			dependencyFileIds: ["fake-image-id"],
+			missingResourcePaths: [],
+		})
+		const dependencyAttachments = [
+			{ file_id: "fake-transcript-id", file_name: "fake-transcript.md" },
+			{ file_id: "fake-image-id", file_name: "fake-image.png" },
+		]
+		const { result } = renderHook(() =>
+			useProjectShareSheet({
+				open: true,
+				projectId: "fake-project-id",
+				projectName: "Fake Recording",
+				attachments: [],
+				mode: "file",
+				projectMode: "audio",
+				dependencyAttachments,
+				dependencyBundleRootPath: "fake-recording-bundle",
+				fileMap: {
+					transcript: { file_id: "fake-transcript-id", file_name: "fake-transcript.md" },
+					magicProject: {
+						file_id: "fake-project-config-id",
+						file_name: "magic.project.js",
+					},
+					summaryFiles: [],
+				},
+				defaultSelectedFileIds: ["fake-transcript-id"],
+				onClose: vi.fn(),
+			}),
+		)
+
+		act(() => {
+			result.current.setSelectedFileIds(["fake-transcript-id"])
+		})
+
+		await waitFor(() => {
+			expect(mocks.resolveShareDocumentDependencies).toHaveBeenCalledWith({
+				selectedFileIds: ["fake-transcript-id"],
+				attachments: dependencyAttachments,
+				bundleRootPath: "fake-recording-bundle",
+				requireBundleRootPath: true,
+			})
+		})
+
+		await act(async () => {
+			await result.current.submitCreateShare()
+		})
+
+		expect(mocks.createOrUpdateShareResource).toHaveBeenCalledWith(
+			expect.objectContaining({
+				file_ids: ["fake-transcript-id", "fake-image-id", "fake-project-config-id"],
 			}),
 		)
 	})

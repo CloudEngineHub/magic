@@ -20,7 +20,7 @@ export const messageMarkdownBaseClassName = cn(
 	"[&_ol]:m-0 [&_ol]:list-outside [&_ol]:p-0 [&_ol]:pl-5",
 	"[&>ul]:!mb-1 [&>ul]:!mt-1",
 	"[&>ol]:!mb-1 [&>ol]:!mt-1",
-	"[&_li]:!m-0 [&_li]:p-0 [&_li]:pl-1 [&_li]:align-top [&_li]:!leading-[2em] [&_li]:leading-normal",
+	"[&_li]:!m-0 [&_li]:p-0 [&_li]:pl-1 [&_li]:align-top [&_li]:!leading-[1.6em] [&_li]:leading-normal",
 	"[&_li_ul]:m-0 [&_li_ul]:p-0 [&_li_ul]:pl-5",
 	"[&_li_ol]:m-0 [&_li_ol]:p-0 [&_li_ol]:pl-5",
 	"[&_table]:mt-0 [&_table]:block [&_table]:w-full [&_table]:border-collapse [&_table]:border-spacing-0 [&_table]:overflow-auto",

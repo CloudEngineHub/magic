@@ -51,6 +51,7 @@ const CanvasDesign = forwardRef<CanvasDesignRef, CanvasDesignProps>((props, ref)
 								<div
 									ref={setAppContainerRef}
 									className={styles.appContainer}
+									data-canvas-design-app-container
 									data-canvas-ui-component
 								>
 									<ElementToolStateProvider>

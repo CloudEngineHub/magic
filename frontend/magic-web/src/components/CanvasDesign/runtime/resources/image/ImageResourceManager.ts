@@ -29,6 +29,7 @@ import {
 	type MediaDisplayResourceVariant,
 } from "../visibility/CanvasMediaViewingPolicy"
 import { parseImageDimensionsFromBlobHeader } from "./imageHeaderDimensions"
+import type { ImageExifOrientation } from "./imageOrientation"
 import {
 	buildImageResourceSnapshot,
 	createImageResourceDiagnostics,
@@ -56,7 +57,7 @@ import { SharedAbortableRequest } from "../offline-cache/SharedAbortableRequest"
 import { ImageDisplayVariantPersistentCache } from "./ImageDisplayVariantPersistentCache"
 import type { DecodedImageRetentionHint } from "../visibility/CanvasVisibilityManager"
 import {
-	buildVirtualResourceScope,
+	buildSharedMediaStorageScope,
 	getCanvasResourceAvailability,
 	type CanvasResourceReferenceResolverChangeOptions,
 } from "../../shared/path/canvasResourcePath"
@@ -77,6 +78,9 @@ function createImageAbortError(): Error {
 export interface ImageInfo {
 	naturalWidth: number
 	naturalHeight: number
+	orientation?: ImageExifOrientation
+	encodedWidth?: number
+	encodedHeight?: number
 	fileSize: number
 	mimeType: string
 	filename: string
@@ -367,10 +371,7 @@ export class ImageResourceManager {
 	private diagnostics = createImageResourceDiagnostics()
 
 	private urlLifecycle!: MediaResourceUrlLifecycle<ImageResourceEntry>
-	private bodyCache = new MediaResourceBodyCache<ImageResourceEntry>({
-		ttlMs: COMPRESSED_BODY_CACHE_TTL_MS,
-		maxBytes: COMPRESSED_BODY_CACHE_MAX_BYTES,
-	})
+	private bodyCache!: MediaResourceBodyCache<ImageResourceEntry>
 	private displayVariantPersistentCache = new ImageDisplayVariantPersistentCache()
 	private persistentLowReadyKeys = new Set<string>()
 	private persistentLowWritePromises = new Map<string, Promise<void>>()
@@ -647,6 +648,12 @@ export class ImageResourceManager {
 
 	constructor(options: { canvas: Canvas }) {
 		this.canvas = options.canvas
+		this.bodyCache = new MediaResourceBodyCache<ImageResourceEntry>({
+			ttlMs: COMPRESSED_BODY_CACHE_TTL_MS,
+			maxBytes: COMPRESSED_BODY_CACHE_MAX_BYTES,
+			shared: true,
+			sharedScope: () => this.getPersistentDisplayScope(),
+		})
 		this.urlLifecycle = new MediaResourceUrlLifecycle<ImageResourceEntry>({
 			canvas: this.canvas,
 			mediaType: "image",
@@ -1618,7 +1625,7 @@ export class ImageResourceManager {
 	}
 
 	private getPersistentDisplayScope(): string {
-		return buildVirtualResourceScope(
+		return buildSharedMediaStorageScope(
 			this.canvas.magicConfigManager.config?.methods?.getVirtualResourceScope?.(),
 			this.canvas.id,
 		)
@@ -1628,7 +1635,7 @@ export class ImageResourceManager {
 		const signature =
 			this.canvas.magicConfigManager.config?.methods?.getImageProcessCacheSignature?.() ??
 			"default"
-		return `image-process:${signature}`
+		return `image-process:${signature}:exif-orientation-v1`
 	}
 
 	private getPersistentLowIdentity(path: string, resourceVersion: string): string {
@@ -1883,13 +1890,10 @@ export class ImageResourceManager {
 			variant: "low",
 			rendition,
 			blob: persistentDisplay.blob,
-			width: persistentDisplay.width,
-			height: persistentDisplay.height,
 			imageInfo,
 			resourceVersion,
 			sourceUpdatedAt: entry.sourceUpdatedAt,
 			contentLength: entry.contentLength,
-			sourceUrl: entry.sourceUrl ?? entry.ossSrc,
 			maxEdge: this.getMaxEdgeForVariant("low"),
 			writeOrder,
 		})
@@ -1938,7 +1942,7 @@ export class ImageResourceManager {
 			return null
 		}
 		const { width, height } = getImageSourceDimensions(resource.image)
-		const maxEdge = this.getMaxEdgeForVariant("low")
+		const maxEdge = this.getMaxEdgeForVariant("low") ?? 0
 		const largestEdge = Math.max(width, height)
 		const resize =
 			maxEdge > 0 && largestEdge > maxEdge
@@ -2142,6 +2146,7 @@ export class ImageResourceManager {
 
 		const ossSrc = entry.bodyOssSrc ?? entry.ossSrc ?? entry.sourceUrl ?? ""
 		const hydratedCacheKey = this.getBodyCacheKey(resourceIdentity, ossSrc, entry)
+		this.bodyCache.rekeyBodyCacheKey(entry, previousCacheKey, hydratedCacheKey)
 		entry.bodyCacheKey = hydratedCacheKey
 		if (entry.bodyPromiseCacheKey === previousCacheKey) {
 			entry.bodyPromiseCacheKey = hydratedCacheKey
@@ -3897,7 +3902,7 @@ export class ImageResourceManager {
 			clearTimeout(this.cleanupTimer)
 			this.cleanupTimer = null
 		}
-		this.bodyCache.abortAll()
+		this.bodyCache.dispose()
 		this.workerWarmupPromise = null
 		this.displayVariantPersistentCache.destroy()
 		this.persistentLowWritePromises.clear()

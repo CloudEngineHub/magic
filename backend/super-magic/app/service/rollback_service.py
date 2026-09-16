@@ -12,6 +12,7 @@
 import asyncio
 from pathlib import Path
 from typing import List, Dict, Optional
+from app.core.entity.checkpoint import CheckpointActivity
 from app.service.checkpoint_service import CheckpointService
 from app.infrastructure.checkpoint.rollback_executor import RollbackExecutor
 from app.infrastructure.checkpoint.remote_sync import CheckpointRemoteSync
@@ -208,13 +209,14 @@ class RollbackService:
                 storage_service, topic_id, current_checkpoint_id, actual_target_checkpoint_id
             )
 
-            # 通知 magicfs：回滚期间跳过 checkpoint 维护，避免它把工作区改动回灌成 latest_content
-            await self.checkpoint_service.metadata_manager.set_rollback_in_progress(True)
+            # 通知 agfs 侧：回滚期间 activity=rollback，checkpoint hook 跳过记账，
+            # 避免把重放恢复的内容当作新用户改动回灌进快照
+            await self.checkpoint_service.metadata_manager.set_activity(CheckpointActivity.ROLLBACK)
             try:
                 # 执行回滚到实际目标checkpoint
                 success, affected_files = await self.rollback_executor.start_rollback(actual_target_checkpoint_id)
             finally:
-                await self.checkpoint_service.metadata_manager.set_rollback_in_progress(False)
+                await self.checkpoint_service.metadata_manager.set_activity(CheckpointActivity.IDLE)
             if not success:
                 raise RollbackException(ErrorCode.ROLLBACK_GENERAL_ERROR, "回滚执行失败")
             logger.info(f"开始回滚成功完成: {target_message_id}")
@@ -317,12 +319,12 @@ class RollbackService:
             await self._ensure_rollback_checkpoints_available(
                 storage_service, topic_id, current_checkpoint_id, latest_checkpoint_id
             )
-            # 通知 magicfs：回滚期间跳过 checkpoint 维护，避免它把工作区改动回灌成 latest_content
-            await self.checkpoint_service.metadata_manager.set_rollback_in_progress(True)
+            # 通知 agfs 侧：回滚期间 activity=rollback，checkpoint hook 跳过记账
+            await self.checkpoint_service.metadata_manager.set_activity(CheckpointActivity.ROLLBACK)
             try:
                 success, affected_files = await self.rollback_executor.undo_rollback(latest_checkpoint_id)
             finally:
-                await self.checkpoint_service.metadata_manager.set_rollback_in_progress(False)
+                await self.checkpoint_service.metadata_manager.set_activity(CheckpointActivity.IDLE)
             if not success:
                 raise RollbackException(ErrorCode.ROLLBACK_GENERAL_ERROR, "撤回回滚执行失败")
 

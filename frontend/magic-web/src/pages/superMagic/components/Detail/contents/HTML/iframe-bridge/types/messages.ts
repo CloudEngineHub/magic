@@ -489,6 +489,17 @@ export interface ElementSelectedPayload {
 		position?: string
 		display?: string
 	}>
+	ancestors?: Array<{
+		selector: string
+		tagName: string
+		textContent?: string
+		rect: {
+			top: number
+			left: number
+			width: number
+			height: number
+		}
+	}>
 	/** 元素旋转角度（度数） */
 	rotation?: number
 	/** 是否为文本元素 */

@@ -2,6 +2,7 @@ export {
 	getCanvasElementMentionItemId,
 	isCanvasElementsMentionItemId,
 	MentionPanelCanvasElementsStore,
+	CANVAS_SELECTION_PENDING_MENTION_LIMIT,
 	collectCanvasElementMentionItems,
 } from "./store"
 export {

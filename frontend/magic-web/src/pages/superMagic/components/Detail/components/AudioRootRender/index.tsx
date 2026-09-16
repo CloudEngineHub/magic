@@ -57,6 +57,8 @@ export default function AudioRootRender(props: AudioRootRenderProps) {
 		target: data,
 		attachments: { tree: attachments, list: attachmentList },
 	})
+	// Readonly shares may expose notes only when the attachment is part of the authorized snapshot.
+	const showNotesTab = !isReadonlyShare || Boolean(detail.fileMap?.notes?.file_id)
 	const capabilities = isReadonlyShare
 		? SHARE_RECORDING_DETAIL_CAPABILITIES
 		: {
@@ -80,12 +82,14 @@ export default function AudioRootRender(props: AudioRootRenderProps) {
 				<MobileAudioFolderContent
 					canEditSpeakers={capabilities.canEditSpeakers}
 					detail={detail}
+					showNotesTab={showNotesTab}
 				/>
 			) : (
 				<AudioFolderWorkbench
 					projectId={targetProjectId}
 					canEditSpeakers={capabilities.canEditSpeakers}
 					detail={detail}
+					showNotesTab={showNotesTab}
 				/>
 			)}
 		</RecordingDetailProvider>
@@ -96,10 +100,16 @@ interface AudioFolderWorkbenchProps {
 	projectId: string
 	canEditSpeakers: boolean
 	detail: ReturnType<typeof useShareRecordingDetailData>
+	showNotesTab: boolean
 }
 
 /** Owns playback, speaker editing, and content navigation without mounting the recording page header or chat rail. */
-function AudioFolderWorkbench({ projectId, canEditSpeakers, detail }: AudioFolderWorkbenchProps) {
+function AudioFolderWorkbench({
+	projectId,
+	canEditSpeakers,
+	detail,
+	showNotesTab,
+}: AudioFolderWorkbenchProps) {
 	const {
 		loading,
 		refreshing,
@@ -243,6 +253,7 @@ function AudioFolderWorkbench({ projectId, canEditSpeakers, detail }: AudioFolde
 						summaryReady={summaryReady}
 						summarizing={false}
 						summaryFailed={false}
+						showNotesTab={showNotesTab}
 						speakerNameMap={speakerNameMap}
 						onOpenSpeakerSettings={openSpeakerSettings}
 						onTimeClick={handleSummaryTimeClick}

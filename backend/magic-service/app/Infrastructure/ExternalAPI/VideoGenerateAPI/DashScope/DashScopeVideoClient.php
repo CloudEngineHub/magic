@@ -7,7 +7,9 @@ declare(strict_types=1);
 
 namespace App\Infrastructure\ExternalAPI\VideoGenerateAPI\DashScope;
 
+use App\ErrorCode\VideoGenerateErrorCode;
 use App\Infrastructure\Core\Traits\HasLogger;
+use App\Infrastructure\ExternalAPI\VideoGenerateAPI\ProviderVideoErrorMapper;
 use App\Infrastructure\ExternalAPI\VideoGenerateAPI\ProviderVideoException;
 use App\Infrastructure\Util\Log\PayloadLogSanitizer;
 use GuzzleHttp\Client;
@@ -30,7 +32,7 @@ readonly class DashScopeVideoClient
         }
     }
 
-    public function post(string $baseUrl, string $apiKey, string $path, array $payload, array $logContext = []): array
+    public function post(string $baseUrl, string $apiKey, string $path, array $payload, array $logContext = [], string $proxyUrl = ''): array
     {
         $normalizedBaseUrl = rtrim($baseUrl, '/');
         $normalizedPath = '/' . ltrim($path, '/');
@@ -44,7 +46,7 @@ readonly class DashScopeVideoClient
 
         try {
             $data = $this->requestJson(
-                fn (): array => Json::decode((string) $this->createClient()->post(
+                fn (): array => Json::decode((string) $this->createClient($proxyUrl)->post(
                     $normalizedBaseUrl . $normalizedPath,
                     [
                         'headers' => [
@@ -55,29 +57,22 @@ readonly class DashScopeVideoClient
                         'json' => $payload,
                     ],
                 )->getBody()),
-                'post',
             );
         } catch (ProviderVideoException $exception) {
             $this->logger->error('dashscope video post error', [
-                'base_url' => $normalizedBaseUrl,
-                'path' => $normalizedPath,
-                'context' => $sanitizedLogContext,
                 'error' => $exception->getMessage(),
             ]);
             throw $exception;
         }
 
         $this->logger->info('dashscope video post response', [
-            'base_url' => $normalizedBaseUrl,
-            'path' => $normalizedPath,
-            'context' => $sanitizedLogContext,
             'response' => PayloadLogSanitizer::sanitizeValue($data),
         ]);
 
         return $data;
     }
 
-    public function get(string $baseUrl, string $apiKey, string $path, array $logContext = []): array
+    public function get(string $baseUrl, string $apiKey, string $path, array $logContext = [], string $proxyUrl = ''): array
     {
         $normalizedBaseUrl = rtrim($baseUrl, '/');
         $normalizedPath = '/' . ltrim($path, '/');
@@ -90,7 +85,7 @@ readonly class DashScopeVideoClient
 
         try {
             $data = $this->requestJson(
-                fn (): array => Json::decode((string) $this->createClient()->get(
+                fn (): array => Json::decode((string) $this->createClient($proxyUrl)->get(
                     $normalizedBaseUrl . $normalizedPath,
                     [
                         'headers' => [
@@ -99,130 +94,74 @@ readonly class DashScopeVideoClient
                         ],
                     ],
                 )->getBody()),
-                'get',
             );
         } catch (ProviderVideoException $exception) {
             $this->logger->error('dashscope video get error', [
-                'base_url' => $normalizedBaseUrl,
-                'path' => $normalizedPath,
-                'context' => $sanitizedLogContext,
                 'error' => $exception->getMessage(),
             ]);
             throw $exception;
         }
 
         $this->logger->info('dashscope video get response', [
-            'base_url' => $normalizedBaseUrl,
-            'path' => $normalizedPath,
-            'context' => $sanitizedLogContext,
             'response' => PayloadLogSanitizer::sanitizeValue($data),
         ]);
 
         return $data;
     }
 
-    private function createClient(): Client
+    private function createClient(string $proxyUrl = ''): Client
     {
-        return $this->clientFactory->create([
+        $options = [
             'timeout' => 30,
             'verify' => false,
-        ]);
+        ];
+        if ($proxyUrl !== '') {
+            $options['proxy'] = $proxyUrl;
+        }
+        return $this->clientFactory->create($options);
     }
 
-    private function requestJson(callable $request, string $action): array
+    private function requestJson(callable $request): array
     {
         try {
             $data = $request();
         } catch (RequestException $exception) {
-            throw ProviderVideoException::retriable(
-                $this->formatRequestExceptionMessage($exception, $action),
+            $errorCode = ProviderVideoErrorMapper::resolveDashScope($exception);
+            throw new ProviderVideoException(
+                $errorCode,
+                $errorCode->getMessage(),
                 $exception,
             );
         } catch (Throwable $throwable) {
-            throw ProviderVideoException::retriable(
-                sprintf('dashscope video %s failed: %s', $action, $throwable->getMessage()),
-                $throwable,
-            );
+            throw new ProviderVideoException(VideoGenerateErrorCode::GENERAL_ERROR, VideoGenerateErrorCode::GENERAL_ERROR->getMessage(), $throwable);
         }
 
         if (! is_array($data)) {
-            throw ProviderVideoException::retriable(sprintf('dashscope video %s returned invalid json', $action));
+            throw new ProviderVideoException(VideoGenerateErrorCode::RESPONSE_FORMAT_ERROR, VideoGenerateErrorCode::RESPONSE_FORMAT_ERROR->getMessage());
         }
 
-        $this->assertProviderSuccess($data, $action);
+        $this->assertProviderSuccess($data);
 
         return $data;
     }
 
-    private function assertProviderSuccess(array $data, string $action): void
+    private function assertProviderSuccess(array $data): void
     {
-        if (! array_key_exists('code', $data)) {
+        $output = is_array($data['output'] ?? null) ? $data['output'] : [];
+        $error = is_array($data['error'] ?? null) ? $data['error'] : [];
+        $outputError = is_array($output['error'] ?? null) ? $output['error'] : [];
+        $code = $data['code'] ?? $error['code'] ?? $output['code'] ?? $outputError['code'] ?? null;
+        if ($code === null) {
+            return;
+        }
+        if ($code === 0 || $code === '0' || $code === '') {
             return;
         }
 
-        $code = $data['code'];
-        if ($code === 0 || $code === '0' || $code === null || $code === '') {
-            return;
-        }
-
-        $message = $this->extractProviderMessage($data) ?? 'unknown provider error';
-        throw ProviderVideoException::retriable(sprintf('dashscope video %s failed: %s', $action, $message));
-    }
-
-    private function formatRequestExceptionMessage(RequestException $exception, string $action): string
-    {
-        if (! $exception->hasResponse()) {
-            return sprintf('dashscope video %s failed: %s', $action, $exception->getMessage());
-        }
-
-        $response = $exception->getResponse();
-        $statusCode = $response?->getStatusCode() ?? 0;
-        $reason = $response?->getReasonPhrase() ?? 'unknown';
-        $body = trim((string) $response?->getBody());
-
-        if ($body === '') {
-            return sprintf('dashscope video %s failed: HTTP %d %s', $action, $statusCode, $reason);
-        }
-
-        $providerMessage = $this->extractProviderMessageFromBody($body);
-        return $providerMessage ?? sprintf(
-            'dashscope video %s failed: HTTP %d %s: %s',
-            $action,
-            $statusCode,
-            $reason,
-            PayloadLogSanitizer::sanitizeResponseBody($body),
+        $errorCode = ProviderVideoErrorMapper::resolveDashScope(null, $data);
+        throw new ProviderVideoException(
+            $errorCode,
+            $errorCode->getMessage(),
         );
-    }
-
-    private function extractProviderMessageFromBody(string $body): ?string
-    {
-        try {
-            $decoded = Json::decode($body);
-        } catch (Throwable) {
-            return null;
-        }
-
-        if (! is_array($decoded)) {
-            return null;
-        }
-
-        return $this->extractProviderMessage($decoded);
-    }
-
-    private function extractProviderMessage(array $data): ?string
-    {
-        foreach ([
-            is_array($data['error'] ?? null) ? ($data['error']['message'] ?? null) : null,
-            $data['message'] ?? null,
-            $data['msg'] ?? null,
-            is_array($data['output'] ?? null) ? ($data['output']['message'] ?? null) : null,
-            is_array($data['output'] ?? null) ? ($data['output']['task_status_msg'] ?? null) : null,
-        ] as $candidate) {
-            if (is_string($candidate) && trim($candidate) !== '') {
-                return trim($candidate);
-            }
-        }
-
-        return null;
     }
 }

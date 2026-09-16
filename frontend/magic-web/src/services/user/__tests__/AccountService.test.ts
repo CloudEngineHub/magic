@@ -58,7 +58,7 @@ vi.mock("@/broadcastChannel", () => ({
 	},
 }))
 
-vi.mock("@/utils/log", () => ({
+vi.mock("@/infrastructure/logger", () => ({
 	logger: {
 		createLogger: () => ({
 			report: vi.fn(),

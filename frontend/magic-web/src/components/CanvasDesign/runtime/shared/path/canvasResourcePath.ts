@@ -6,6 +6,7 @@ import type {
 } from "../../../public/resource-reference"
 import {
 	CANVAS_RESOURCE_ROOTS,
+	buildSharedMediaStorageScope,
 	buildVirtualResourceScope,
 	formatCanvasRelativeResourcePath,
 	hasCurrentDirectoryPrefix,
@@ -21,6 +22,7 @@ import {
 
 export {
 	CANVAS_RESOURCE_ROOTS,
+	buildSharedMediaStorageScope,
 	buildVirtualResourceScope,
 	formatCanvasRelativeResourcePath,
 	hasCurrentDirectoryPrefix,

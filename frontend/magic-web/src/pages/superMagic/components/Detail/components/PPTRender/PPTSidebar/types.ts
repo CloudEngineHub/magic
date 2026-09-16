@@ -15,7 +15,6 @@ export interface PPTSidebarProps {
 	onAddToCurrentChat?: (index: number) => void
 	onAddToNewChat?: (index: number) => void
 	onReplaceSlideTemplate?: (index: number) => void
-	mainFileId?: string
 	isMobile?: boolean
 	sidebarWidth?: number
 	allowEdit?: boolean
@@ -67,7 +66,6 @@ export interface SortableSlideItemProps {
 	onLocateFile?: () => void // Callback to locate file in file tree
 	onRefresh?: () => void // Callback to refresh slide content
 	onRegenerateScreenshot?: () => void // Callback to regenerate screenshot only
-	mainFileId?: string
 	className?: string
 	isMobile?: boolean
 	allowEdit?: boolean

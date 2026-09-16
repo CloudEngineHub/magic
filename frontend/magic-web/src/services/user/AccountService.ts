@@ -2,7 +2,7 @@ import { AccountRepository } from "@/models/user/repositories/AccountRepository"
 import { userStore } from "@/models/user"
 import { getHtmlPermissionGrantStore } from "@/pages/superMagic/components/Detail/contents/HTML/iframe-api/services/IndexedDbHtmlPermissionGrantStore"
 import type { User } from "@/types/user"
-import { logger as Logger } from "@/utils/log"
+import { logger as Logger } from "@/infrastructure/logger"
 import { BroadcastChannelSender } from "@/broadcastChannel"
 import type * as apis from "@/apis"
 import type { Container } from "@/services/ServiceContainer"
@@ -21,7 +21,7 @@ export class AccountService {
 	private readonly service: Container
 	private readonly authApi: typeof apis.AuthApi
 
-	constructor(dependencies: typeof apis, service: Container) {
+	constructor(dependencies: Pick<typeof apis, "AuthApi">, service: Container) {
 		this.authApi = dependencies.AuthApi
 		this.service = service
 	}

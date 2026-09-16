@@ -274,6 +274,8 @@ final class AdminOfficialSkillAppService extends AbstractSkillAppService
         $version->setSourceMeta(['imported_by' => $authorization->getId()]);
         $version->setProjectId(null);
 
+        $version = $this->officialSkillVersionDomainService->saveSkillVersion($dataIsolation, $version);
+        $version->setSkillFileKey($this->uploadSkillFileFromPackage($version));
         return $this->officialSkillVersionDomainService->saveSkillVersion($dataIsolation, $version);
     }
 

@@ -4,7 +4,6 @@ import { getTemporaryDownloadUrl } from "@/pages/superMagic/utils/api"
 import {
 	clearAllFileInfoCache,
 	cleanupFileInfoCache,
-	flushFileInfoCachePersistenceForTests,
 	getFileInfoById,
 	getFileInfoByPath,
 	getFileResourceMetaByPath,
@@ -41,17 +40,15 @@ function deferred<T>(): {
 }
 
 describe("getFileResourceMetaByPath", () => {
-	beforeEach(async () => {
+	beforeEach(() => {
 		vi.clearAllMocks()
 		vi.useRealTimers()
 		clearAllFileInfoCache()
-		await flushFileInfoCachePersistenceForTests()
 	})
 
-	afterEach(async () => {
+	afterEach(() => {
 		vi.useRealTimers()
 		clearAllFileInfoCache()
-		await flushFileInfoCachePersistenceForTests()
 	})
 
 	it("returns metadata-only resource version without fetching a signed url", async () => {
@@ -267,6 +264,49 @@ describe("getFileResourceMetaByPath", () => {
 		})
 	})
 
+	it("refreshes a cached URL inside the expiry safety window", async () => {
+		vi.useFakeTimers()
+		vi.setSystemTime(new Date("2026-09-14T10:00:00Z"))
+		const files = [
+			fileItem({
+				file_id: "expiring-file",
+				relative_file_path: "images/expiring.png",
+				file_name: "expiring.png",
+				file_size: 1024,
+			}),
+		]
+		vi.mocked(getTemporaryDownloadUrl)
+			.mockResolvedValueOnce([
+				{
+					file_id: "expiring-file",
+					url: "https://example.test/expiring.png?signature=old",
+					expires_at: "2026-09-14T10:00:20Z",
+				},
+			])
+			.mockResolvedValueOnce([
+				{
+					file_id: "expiring-file",
+					url: "https://example.test/expiring.png?signature=fresh",
+					expires_at: "2026-09-14T10:05:00Z",
+				},
+			])
+
+		const first = getFileInfoByPath("images/expiring.png", files, { priority: "critical" })
+		await vi.advanceTimersByTimeAsync(0)
+		await expect(first).resolves.toMatchObject({
+			src: "https://example.test/expiring.png?signature=old",
+		})
+
+		const refreshed = getFileInfoByPath("images/expiring.png", files, {
+			priority: "critical",
+		})
+		await vi.advanceTimersByTimeAsync(0)
+		await expect(refreshed).resolves.toMatchObject({
+			src: "https://example.test/expiring.png?signature=fresh",
+		})
+		expect(getTemporaryDownloadUrl).toHaveBeenCalledTimes(2)
+	})
+
 	it("does not expose host file id in path-based file info", async () => {
 		vi.useFakeTimers()
 		vi.mocked(getTemporaryDownloadUrl).mockResolvedValueOnce([
@@ -301,7 +341,7 @@ describe("getFileResourceMetaByPath", () => {
 		expect(fileInfo).not.toHaveProperty("file_id")
 	})
 
-	it("hydrates persisted path cache after a module reload", async () => {
+	it("re-signs URL after a module reload without durable path metadata", async () => {
 		const files = [
 			fileItem({
 				file_id: "file-4",
@@ -312,6 +352,7 @@ describe("getFileResourceMetaByPath", () => {
 			}),
 		]
 		const cachedSrc = "https://example.test/c.png?signature=cached"
+		const freshSrc = "https://example.test/c.png?signature=fresh"
 
 		setFileInfoCache(
 			"images/c.png",
@@ -328,20 +369,30 @@ describe("getFileResourceMetaByPath", () => {
 			"project-1",
 		)
 
-		await flushFileInfoCachePersistenceForTests()
 		vi.resetModules()
 		const apiModule = await import("@/pages/superMagic/utils/api")
-		vi.mocked(apiModule.getTemporaryDownloadUrl).mockClear()
+		vi.mocked(apiModule.getTemporaryDownloadUrl).mockResolvedValue([
+			{
+				file_id: "file-4",
+				url: freshSrc,
+				expires_at: "2099-01-01T00:00:00Z",
+			},
+		])
 		const cacheModule = await import("../designFileInfoCache")
 
 		const fileInfo = await cacheModule.getFileInfoByPath("images/c.png", files, {
 			designProjectId: "project-1",
 		})
 
-		expect(fileInfo?.src).toBe(cachedSrc)
-		expect(apiModule.getTemporaryDownloadUrl).not.toHaveBeenCalled()
+		expect(fileInfo).toMatchObject({
+			src: freshSrc,
+			fileName: "c.png",
+			resource_version: "file-4:2026-06-05 12:00:00:4096",
+			updated_at: "2026-06-05 12:00:00",
+			content_length: 4096,
+		})
+		expect(apiModule.getTemporaryDownloadUrl).toHaveBeenCalledTimes(1)
 		cacheModule.clearAllFileInfoCache()
-		await cacheModule.flushFileInfoCachePersistenceForTests()
 	})
 
 	it("does not delete restored path cache before attachments are ready", async () => {
@@ -654,7 +705,12 @@ describe("getFileResourceMetaByPath", () => {
 		expect(calls).toHaveLength(3)
 		expect(calls.map(([request]) => request.file_ids.length)).toEqual([100, 100, 50])
 		calls.forEach(([request]) => {
-			expect(request.options).toBeDefined()
+			expect(request.options).toEqual({
+				xMagicImageProcess: {
+					autoOrient: 1,
+					format: "webp",
+				},
+			})
 		})
 	})
 
@@ -1223,6 +1279,42 @@ describe("getFileResourceMetaByPath", () => {
 			src: "https://example.test/versioned-file.png?request=2",
 		})
 
+		expect(getTemporaryDownloadUrl).toHaveBeenCalledTimes(2)
+	})
+
+	it("does not batch the same file id across different resource versions", async () => {
+		vi.useRealTimers()
+		vi.mocked(getTemporaryDownloadUrl).mockImplementation(async ({ file_ids }) =>
+			file_ids.map((fileId) => ({
+				file_id: fileId,
+				url: `https://example.test/${fileId}.png?request=${vi.mocked(getTemporaryDownloadUrl).mock.calls.length}`,
+			})),
+		)
+		const firstFiles = [
+			fileItem({
+				file_id: "same-file-different-version",
+				file_name: "versioned.png",
+				resource_version: "resource-v1",
+			}),
+		]
+		const secondFiles = [
+			fileItem({
+				file_id: "same-file-different-version",
+				file_name: "versioned.png",
+				resource_version: "resource-v2",
+			}),
+		]
+
+		const [firstResult, secondResult] = await Promise.all([
+			getFileInfoById("same-file-different-version", "versioned.png", undefined, {
+				filesList: firstFiles,
+			}),
+			getFileInfoById("same-file-different-version", "versioned.png", undefined, {
+				filesList: secondFiles,
+			}),
+		])
+
+		expect(firstResult.src).not.toBe(secondResult.src)
 		expect(getTemporaryDownloadUrl).toHaveBeenCalledTimes(2)
 	})
 

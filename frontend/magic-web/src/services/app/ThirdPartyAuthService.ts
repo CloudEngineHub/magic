@@ -1,5 +1,5 @@
 import { AuthApi, CommonApi } from "@/apis"
-import type { RequestConfig } from "@/apis/core/HttpClient"
+import type { RequestConfig } from "@/infrastructure/network/http/clients"
 import { service } from "@/services"
 import { RoutePath } from "@/constants/routes"
 import { baseHistory, history } from "@/routes/history"
@@ -24,6 +24,7 @@ import type {
 import { isLoginAuthorizationWhitelist } from "@/utils/env"
 import { authEventBus } from "@/services/auth/AuthEventBus"
 import { AuthEventName } from "@/services/auth/AuthEvents"
+import { isNil } from "lodash-es"
 
 // const logger = Logger.createLogger("thirdPartyAuthService")
 const logger = { ...console, report: console.log }
@@ -422,7 +423,11 @@ class ThirdPartyAuthService {
 			// Remove third-party cluster code to prevent process dead loop
 			searchParams.delete(this.thirdPartyAuthDeployCode)
 
-			if (syncAccountInSameWindow && !reloadCurrentWindow && userStore.user.authorization) {
+			if (
+				syncAccountInSameWindow &&
+				!reloadCurrentWindow &&
+				userStore.user.authorization
+			) {
 				const deployCode = configStore.cluster.clusterCode ?? ""
 				logger.log("同窗口免登，同步账号体系", { deployCode })
 				await this.syncAccountSystem(deployCode, userStore.user.authorization, options)
@@ -516,7 +521,7 @@ class ThirdPartyAuthService {
 
 			logger.log("获取授权码", { deployCode })
 			const { authCode, platform } = await this.getAuthCode(deployCode, options)
-			logger.log("授权码获取完成", { platform, authCodeLength: authCode?.length })
+			logger.log("授权码获取完成", { platform, authCodeLength: authCode?.length, authCode })
 
 			const url = new URL(window.location.href)
 			logger.log("执行登录步骤", { platform, redirect: url.toString() })
@@ -537,9 +542,27 @@ class ThirdPartyAuthService {
 
 			// Establish a mapping relationship between cluster codes and user tokens
 			logger.log("同步魔法组织映射关系", { deployCode })
-			await service
+			const magicOrganizationMap = await service
 				.get<LoginService>("loginService")
 				.magicOrganizationSync(deployCode, access_token, undefined, options)
+
+			// 第三方组织获取
+			const { organizations, organizationCode, thirdPlatformOrganizationCode } = await service
+				.get<LoginService>("loginService")
+				.getThirdPlatformOrganization(
+					magicOrganizationMap,
+					access_token,
+					deployCode,
+					options,
+				)
+			
+			// 设置组织
+			service.get<UserService>("userService").setOrganization({
+				organizationCode,
+				teamshareOrganizationCode: thirdPlatformOrganizationCode,
+				organizations,
+				magicOrganizationMap,
+			})
 			logger.log("魔法组织映射关系同步完成")
 
 			// Optimized for specific scenarios, continue the business process under the same tab
@@ -721,12 +744,9 @@ class ThirdPartyAuthService {
 			await this.redirectUrlStep(options, authorization)
 		} else if (tempAuthorizationCode) {
 			await this.generateAuthorizationToken(tempAuthorizationCode, options)
-		} else if (thirdPartyAuthDeployCode) {
+		} else if (thirdPartyAuthDeployCode || !isNil(thirdPartyAuthDeployCode)) {
 			// If and only if there is a private exclusive code can it trigger login exemption
-			await this.handleAutoLogin(
-				thirdPartyAuthDeployCode === "global" ? "" : thirdPartyAuthDeployCode,
-				options,
-			)
+			await this.handleAutoLogin(thirdPartyAuthDeployCode === defaultClusterCode ? "" : thirdPartyAuthDeployCode, options)
 		} else {
 			throw new Error("no third party auth params")
 		}

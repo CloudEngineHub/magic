@@ -3,7 +3,10 @@ import { useTranslation } from "react-i18next"
 import { Label } from "@/components/shadcn-ui/label"
 import { Switch } from "@/components/shadcn-ui/switch"
 import { DimensionInput } from "./DimensionInput"
+import { LayoutConstraintHintCard } from "./LayoutConstraintHint"
 import { StylePopoverButton } from "./StylePopoverButton"
+import { getLayoutConstraintHints } from "../utils/layoutConstraintHint"
+import type { HTMLEditorV2Ref } from "../../../iframe-bridge/types/props"
 import type { SelectedElementInfo } from "../types"
 import { Ruler } from "lucide-react"
 
@@ -15,6 +18,7 @@ interface SizePopoverProps {
 	inline?: boolean
 	onStyleChange: (property: "width" | "height", value: string) => void
 	onBatchStyleChange: (styles: Record<string, string>) => void
+	editorRef?: React.RefObject<HTMLEditorV2Ref>
 }
 
 interface ParsedDimensionValue {
@@ -113,6 +117,7 @@ export function SizePopover({
 	inline = false,
 	onStyleChange,
 	onBatchStyleChange,
+	editorRef,
 }: SizePopoverProps) {
 	const { t } = useTranslation("super")
 	const [isAspectRatioLocked, setIsAspectRatioLocked] = useState(false)
@@ -232,6 +237,21 @@ export function SizePopover({
 					testIdPrefix="html-style-panel-size-height"
 				/>
 			</div>
+			{getLayoutConstraintHints({
+				...(selectedElement?.computedStyles || {}),
+				declaredWidth: selectedElement?.inlineStyles?.width,
+				declaredHeight: selectedElement?.inlineStyles?.height,
+			})
+				.filter((hint) => hint.kind === "parent-owned-size")
+				.map((hint) => (
+					<LayoutConstraintHintCard
+						key={`${hint.kind}-${hint.axis}`}
+						hint={hint}
+						selector={selectedElement?.selector}
+						editorRef={editorRef}
+						onApply={onBatchStyleChange}
+					/>
+				))}
 		</div>
 	)
 

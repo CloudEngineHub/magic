@@ -12,6 +12,10 @@ type ProjectReferenceFileLike = {
 	name?: string | number
 	file_extension?: string
 	file_size?: number
+	updated_at?: string
+	resource_version?: string | null
+	version?: string | null
+	file_version?: number
 	relative_file_path?: string
 	type?: string
 	is_directory?: boolean
@@ -399,6 +403,10 @@ export function createProjectFileMentionData(
 		file_extension: file.file_extension || "",
 		...(file.project_id ? { project_id: file.project_id } : {}),
 		file_size: file.file_size,
+		...(file.updated_at !== undefined ? { updated_at: file.updated_at } : {}),
+		...(file.resource_version !== undefined ? { resource_version: file.resource_version } : {}),
+		...(file.version !== undefined ? { version: file.version } : {}),
+		...(file.file_version !== undefined ? { file_version: file.file_version } : {}),
 	}
 }
 

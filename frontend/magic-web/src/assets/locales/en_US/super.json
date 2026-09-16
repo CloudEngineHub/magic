@@ -308,7 +308,8 @@
 	},
 	"clawPlayground": {
 		"stopTaskBeforeToolbarAction": "Stop the current task before using this",
-		"toolbarNewChat": "New Chat"
+		"toolbarNewChat": "New Chat",
+		"toolbarSkills": "Skills"
 	},
 	"collaborationInvite": {
 		"currentLogin": "You will join the shared project as",
@@ -2460,8 +2461,8 @@
 		"expandSidebar": "Expand Sidebar",
 		"favorite": "Favorite",
 		"fullscreen": "Fullscreen",
-		"insertAbove": "Insert Above",
-		"insertBelow": "Insert Below",
+		"insertAbove": "Insert New Slide Above",
+		"insertBelow": "Insert New Slide Below",
 		"insertSlideFailed": "Insert failed",
 		"insertSlideFailedInvalidFolder": "Unable to determine the correct folder location. Please check the PPT folder structure.",
 		"insertSlideSuccess": "Inserted successfully",
@@ -4037,6 +4038,8 @@
 				"browserNotSupported": "This browser does not support recording yet. Please switch to a browser with microphone support.",
 				"camera": "Camera",
 				"cancel": "Cancel recording",
+				"compatibilityModeDescription": "Keep this page and browser in the foreground while recording. Do not switch tabs, minimize the browser, or switch to another app, or the recording may be interrupted.",
+				"compatibilityModeTitle": "Keep browser in foreground",
 				"defaultTitle": "Current recording",
 				"enableTranscription": "Enable transcription",
 				"enableTranscriptionFailed": "Failed to enable transcription. Please try again later.",
@@ -4142,6 +4145,31 @@
 				},
 				"backAria": "Back",
 				"closeAria": "Close",
+				"healthCheck": {
+					"button": "Run check",
+					"checking": "Checking",
+					"description": "Checks whether this browser and page can record audio without requesting microphone permission.",
+					"environment": "Environment",
+					"items": {
+						"audioContext": "AudioContext",
+						"audioWorklet": "AudioWorklet",
+						"getUserMedia": "Microphone API",
+						"processingMode": "Processing mode",
+						"secureContext": "Secure context"
+					},
+					"processingModes": {
+						"script-processor": "Compatibility",
+						"worklet": "AudioWorklet"
+					},
+					"status": {
+						"partial": "Available with compatibility mode",
+						"supported": "Recording supported",
+						"unsupported": "Recording unavailable"
+					},
+					"supported": "Supported",
+					"title": "Audio recording health check",
+					"unsupported": "Unavailable"
+				},
 				"model": {
 					"description": "AI model used to generate summaries",
 					"label": "AI Model",
@@ -4309,7 +4337,7 @@
 			"closeSidebar": "Close sidebar",
 			"currentPage": "Current page",
 			"menuAria": "Open menu",
-			"navApps": "Apps",
+			"navApps": "More",
 			"navChats": "Chats",
 			"navMagiClaw": "{{clawBrand}}",
 			"navMicroApps": "Micro Apps",
@@ -4652,6 +4680,7 @@
 		"moveProjectTitle": "Move Project",
 		"moveTo": "Move To",
 		"noCreators": "No creators",
+		"noMatchingProjects": "No matching projects",
 		"noProjects": "No projects",
 		"openInNewWindow": "Open in new window",
 		"pin": "Pin",
@@ -6372,6 +6401,10 @@
 			"agentPromptPlaceholder": "Describe the problem here",
 			"agentPromptSuffix": "Please handle the selected element:",
 			"agentPromptTitle": "I selected an element on the page. Here are its details:",
+			"aiEditingCaptureAuthorizationAllow": "Allow",
+
+			"aiEditingCaptureAuthorizationDescription": "AI editing needs access to the current page. Click “Allow” to continue.",
+			"aiEditingCaptureAuthorizationTitle": "AI editing needs browser permission",
 			"cancel": "Cancel",
 			"collapsePendingTargets": "Collapse pending target list",
 			"comment": "Comment",
@@ -6422,6 +6455,14 @@
 			"submit": "Submit",
 			"submitSuccess": "Submitted; waiting for Agent",
 			"submitUnavailable": "Agent submission is not connected on this page",
+			"tagLabel": {
+				"audio": "Audio",
+				"canvas": "Canvas",
+				"embed": "Embedded content",
+				"iframe": "Embedded page",
+				"image": "Image",
+				"video": "Video"
+			},
 			"textContent": "Text Content"
 		},
 		"italic": "Italic",
@@ -6429,6 +6470,12 @@
 		"justifyItems": "Content horizontal position",
 		"justifySelf": "Self horizontal position",
 		"layout": "Layout",
+		"layoutHintDistributed": "Space between elements is distributed automatically",
+		"layoutHintFixGap": "Set a fixed gap",
+		"layoutHintFixHeight": "Set a fixed height",
+		"layoutHintFixWidth": "Set a fixed width",
+		"layoutHintParentHeight": "Height is controlled by the parent container",
+		"layoutHintParentWidth": "Width is controlled by the parent container",
 		"layoutSettings": "Layout Settings",
 		"layoutStyles": "Layout Styles",
 		"layoutValues": {
@@ -7254,6 +7301,8 @@
 		"processing": "Processing...",
 		"quickStart": "Quick Start",
 		"reportConversationRound": "Report Conversation",
+		"reportConversationRoundFailed": "Could not prepare conversation logs. Please try again.",
+		"reportConversationRoundSuccess": "Reported successfully",
 		"slogan": {
 			"rotatingText": {
 				"prefix": "Hire $t(common:platform.name) to",

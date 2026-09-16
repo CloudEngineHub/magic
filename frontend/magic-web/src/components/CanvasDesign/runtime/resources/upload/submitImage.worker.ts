@@ -1,4 +1,5 @@
 import { getNormalizedImageProcessCrop } from "../image/imageCropUtils"
+import { createOrientedImageBitmapFromBlob } from "../image/imageSourceUtils"
 import type {
 	SubmitImageSourceDimensions,
 	SubmitImageWorkerEraseRequest,
@@ -39,7 +40,7 @@ async function decodeImageBitmap(ossSrc: string): Promise<ImageBitmap> {
 		throw new Error(`Fetch failed: ${response.status}`)
 	}
 	const blob = await response.blob()
-	return createImageBitmap(blob)
+	return createOrientedImageBitmapFromBlob(blob)
 }
 
 function getSourceDimensionsFromRequest(

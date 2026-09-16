@@ -78,6 +78,10 @@ class AsrTimeConfig:
     FINISH_SHARD_STABLE_SCAN_COUNT: int = int(
         os.getenv("ASR_FINISH_SHARD_STABLE_SCAN_COUNT", "3")
     )
+    # finish 超时后允许自动收敛的尾部分片最大缺失数
+    FINISH_MAX_TAIL_MISSING_SHARDS: int = int(
+        os.getenv("ASR_FINISH_MAX_TAIL_MISSING_SHARDS", "3")
+    )
     OPUS_SHARD_SYNC_TIMEOUT: int = int(os.getenv("ASR_OPUS_SHARD_SYNC_TIMEOUT", "900"))
     OPUS_STAGING_UPLOAD_TIMEOUT: int = int(
         os.getenv("ASR_OPUS_STAGING_UPLOAD_TIMEOUT", "900")

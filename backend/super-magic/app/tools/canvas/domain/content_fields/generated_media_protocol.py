@@ -23,6 +23,7 @@ _GENERATED_MEDIA_PROTOCOLS = {
                 "src",
                 "status",
                 "errorMessage",
+                "visualUnderstanding",
                 "generateImageRequest",
                 "imageGenerationTaskMeta",
                 "crop",
@@ -37,7 +38,9 @@ _GENERATED_MEDIA_PROTOCOLS = {
                 "src",
                 "status",
                 "errorMessage",
+                "visualUnderstanding",
                 "generateVideoRequest",
+                "videoEditorDraft",
                 "videoGenerationResultMeta",
             }
         ),

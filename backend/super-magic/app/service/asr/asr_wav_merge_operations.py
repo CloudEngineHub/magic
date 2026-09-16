@@ -40,6 +40,8 @@ class AsrWavMergeOperations(AsrServiceBase):
         """
         self.file_detector = file_detector
         self._concat_locks = {}  # 合并操作锁
+        self._audio_signature_cache = {}
+        self._last_merge_context = {}
 
         logger.info(
             f"{self.LOG_PREFIX} ⚙️ 网络文件系统优化已启用 "
@@ -129,12 +131,145 @@ class AsrWavMergeOperations(AsrServiceBase):
             logger.warning(f"{self.LOG_PREFIX} ⚠️ task_key={task_key} 没有文件需要{operation_name}")
             return False
 
-        if len(group_files) == 1:
-            return await self._handle_single_file(group_files[0], output_path, operation_name)
+        prepared_files, temporary_files, merge_mode, merge_context = await self._prepare_wav_inputs(
+            group_files, output_path, include_context=True
+        )
+        self._last_merge_context[task_key] = merge_context
+        try:
+            if len(prepared_files) == 1:
+                if not await self._handle_single_file(prepared_files[0], output_path, operation_name):
+                    return False
+                return await self._verify_final_output(
+                    output_path,
+                    operation_name,
+                    1,
+                    0,
+                    merge_context=merge_context,
+                )
 
-        # 直接合并所有文件，不再进行分批
-        # 之前的分批逻辑会导致日志和行为不一致，且 ffmpeg concat list 模式本身支持大量文件
-        return await self._execute_concat_with_retry(task_key, group_files, output_path, operation_name)
+            # 直接合并所有文件，不再进行分批
+            # 之前的分批逻辑会导致日志和行为不一致，且 ffmpeg concat list 模式本身支持大量文件
+            if merge_mode == "normalized_reencode":
+                logger.warning(
+                    f"{self.LOG_PREFIX} ⚠️ task_key={task_key} 检测到 WAV 参数不一致，"
+                    "已统一转码为 16kHz/mono/pcm_s16le 后合并"
+                )
+            return await self._execute_concat_with_retry(
+                task_key, prepared_files, output_path, operation_name, merge_context=merge_context
+            )
+        finally:
+            for temporary_file in temporary_files:
+                await asyncio.to_thread(temporary_file.unlink, missing_ok=True)
+
+    async def _prepare_wav_inputs(
+        self, group_files: List[Path], output_path: Path, include_context: bool = False
+    ) -> tuple:
+        """检测 WAV 参数；仅在混合参数时创建统一格式的临时输入。"""
+        context = {"audio_signature": None, "merge_mode": "stream_copy", "source_duration": 0.0}
+        if output_path.suffix.lower() != ".wav" or any(path.suffix.lower() != ".wav" for path in group_files):
+            result = (group_files, [], "stream_copy", context)
+            return result if include_context else result[:3]
+
+        signatures = []
+        durations = []
+        shard_signatures = []
+        for path in group_files:
+            try:
+                stat = await asyncio.to_thread(path.stat)
+                cache_key = (str(path), stat.st_size, stat.st_mtime_ns)
+                signature = self._audio_signature_cache.get(cache_key)
+                if signature is None:
+                    signature = await self.file_detector.inspect_audio_signature(path, "wav")
+                    self._audio_signature_cache[cache_key] = signature
+                signatures.append(signature)
+                durations.append(await asyncio.to_thread(self._read_wav_duration, path))
+                shard_signatures.append(
+                    {
+                        "name": path.name,
+                        "signature": signature.as_key(),
+                        "size": stat.st_size,
+                        "mtime_ns": stat.st_mtime_ns,
+                    }
+                )
+            except Exception as exc:
+                logger.error(f"{self.LOG_PREFIX} ❌ WAV 参数检查失败，拒绝不安全的流复制合并: {path.name}, {exc}")
+                raise RuntimeError(f"WAV 参数检查失败: {path.name}: {exc}") from exc
+
+        signature_keys = {signature.as_key() for signature in signatures}
+        logger.debug(f"{self.LOG_PREFIX} WAV 合并参数签名: {sorted(signature_keys)}")
+        canonical_signature = signatures[0]
+        context = {
+            "audio_signature": canonical_signature.as_key(),
+            "audio_signature_details": {
+                "format": canonical_signature.format,
+                "codec": canonical_signature.codec,
+                "sample_rate": canonical_signature.sample_rate,
+                "channels": canonical_signature.channels,
+                "bits_per_sample": canonical_signature.bits_per_sample,
+            },
+            "source_duration": sum(durations),
+            "source_audio_signatures": shard_signatures,
+        }
+        if len(signature_keys) <= 1:
+            context["merge_mode"] = "stream_copy"
+            result = (group_files, [], "stream_copy", context)
+            return result if include_context else result[:3]
+
+        normalized_files: List[Path] = []
+        temporary_files: List[Path] = []
+        created_targets: List[Path] = []
+        semaphore = asyncio.Semaphore(4)
+
+        async def normalize_one(source: Path) -> tuple[Path, Path]:
+            target = source.parent / f".normalized_{uuid4().hex}.wav"
+            created_targets.append(target)
+            cmd = [
+                "ffmpeg", "-y", "-loglevel", "error", "-i", str(source),
+                "-ar", "16000", "-ac", "1", "-c:a", "pcm_s16le", str(target),
+            ]
+            async with semaphore:
+                process = await asyncio.create_subprocess_exec(
+                    *cmd, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE
+                )
+                _, stderr = await process.communicate()
+            if process.returncode != 0:
+                detail = stderr.decode("utf-8", errors="ignore").strip()
+                raise RuntimeError(f"WAV 分片标准化失败: {source.name}: {detail}")
+            return source, target
+
+        try:
+            results = await asyncio.gather(*(normalize_one(source) for source in group_files))
+            for _, target in results:
+                normalized_files.append(target)
+                temporary_files.append(target)
+        except Exception:
+            for candidate in created_targets:
+                await asyncio.to_thread(candidate.unlink, missing_ok=True)
+            raise
+        normalized_signature = "wav:pcm_s16le:16000:1:16"
+        context.update(
+            {
+                "audio_signature": normalized_signature,
+                "audio_signature_details": {
+                    "format": "wav",
+                    "codec": "pcm_s16le",
+                    "sample_rate": 16000,
+                    "channels": 1,
+                    "bits_per_sample": 16,
+                },
+                "merge_mode": "normalized_reencode",
+            }
+        )
+        result = (normalized_files, temporary_files, "normalized_reencode", context)
+        return result if include_context else result[:3]
+
+    @staticmethod
+    def _read_wav_duration(path: Path) -> float:
+        import wave
+
+        with wave.open(str(path), "rb") as wav_file:
+            rate = wav_file.getframerate()
+            return wav_file.getnframes() / rate if rate else 0.0
 
     async def _handle_single_file(self, source: Path, target: Path, operation_name: str) -> bool:
         if source != target:
@@ -148,21 +283,34 @@ class AsrWavMergeOperations(AsrServiceBase):
         return True
 
     async def _execute_concat_with_retry(
-        self, task_key: str, group_files: List[Path], output_path: Path, operation_name: str, max_retries: int = 1
+        self,
+        task_key: str,
+        group_files: List[Path],
+        output_path: Path,
+        operation_name: str,
+        max_retries: int = 1,
+        merge_context: dict | None = None,
     ) -> bool:
         for attempt in range(max_retries + 1):
             if attempt > 0:
                 logger.info(f"{self.LOG_PREFIX} 🔄 task_key={task_key} {operation_name} 重试第 {attempt} 次")
                 await asyncio.sleep(asr_time_config.OPERATION_RETRY_WAIT)
 
-            if await self._do_ffmpeg_concat(task_key, group_files, output_path, operation_name):
+            if await self._do_ffmpeg_concat(
+                task_key, group_files, output_path, operation_name, merge_context=merge_context
+            ):
                 return True
 
         logger.error(f"{self.LOG_PREFIX} ❌ {operation_name} 失败（已重试 {max_retries} 次）")
         return False
 
     async def _do_ffmpeg_concat(
-        self, task_key: str, group_files: List[Path], output_path: Path, operation_name: str
+        self,
+        task_key: str,
+        group_files: List[Path],
+        output_path: Path,
+        operation_name: str,
+        merge_context: dict | None = None,
     ) -> bool:
         """执行 ffmpeg concat 操作"""
         # 准备临时文件路径
@@ -196,7 +344,12 @@ class AsrWavMergeOperations(AsrServiceBase):
 
             # 4. 验证并替换结果
             return await self._finalize_concat_result(
-                temp_output, output_path, operation_name, len(valid_files), expected_size
+                temp_output,
+                output_path,
+                operation_name,
+                len(valid_files),
+                expected_size,
+                merge_context=merge_context,
             )
 
         except Exception as e:
@@ -331,7 +484,13 @@ class AsrWavMergeOperations(AsrServiceBase):
             logger.error(f"{self.LOG_PREFIX} ⚠️ 终止进程异常: {e}")
 
     async def _finalize_concat_result(
-        self, temp_output: Path, output_path: Path, operation_name: str, source_count: int, expected_size: int
+        self,
+        temp_output: Path,
+        output_path: Path,
+        operation_name: str,
+        source_count: int,
+        expected_size: int,
+        merge_context: dict | None = None,
     ) -> bool:
         """验证临时文件，移动到目标路径，并再次验证"""
 
@@ -360,6 +519,10 @@ class AsrWavMergeOperations(AsrServiceBase):
             )
             return False
 
+        if merge_context and temp_output.suffix.lower() == ".wav":
+            if not await self._validate_wav_output_properties(temp_output, operation_name, merge_context):
+                return False
+
         # 2. 替换目标文件
         await asyncio.to_thread(temp_output.replace, output_path)
 
@@ -367,14 +530,25 @@ class AsrWavMergeOperations(AsrServiceBase):
         await asyncio.sleep(asr_time_config.OPERATION_RETRY_WAIT)
 
         # 4. 验证目标文件
-        return await self._verify_final_output(output_path, operation_name, source_count, size_expectation or 0)
+        return await self._verify_final_output(
+            output_path,
+            operation_name,
+            source_count,
+            size_expectation or 0,
+            merge_context=merge_context,
+        )
 
     @staticmethod
     def _size_expectation_for_output(output_path: Path, expected_size: int) -> int | None:
         return expected_size or None
 
     async def _verify_final_output(
-        self, output_path: Path, operation_name: str, source_count: int, expected_size: int
+        self,
+        output_path: Path,
+        operation_name: str,
+        source_count: int,
+        expected_size: int,
+        merge_context: dict | None = None,
     ) -> bool:
         is_ready, reason = await self.wait_for_file_ready(
             output_path,
@@ -389,12 +563,44 @@ class AsrWavMergeOperations(AsrServiceBase):
             logger.error(f"{self.LOG_PREFIX} ❌ {operation_name}目标文件不可用: {reason}，replace 操作可能未完全同步")
             return False
 
+        if merge_context and output_path.suffix.lower() == ".wav":
+            if not await self._validate_wav_output_properties(output_path, operation_name, merge_context):
+                return False
+
         file_size_kb = (await asyncio.to_thread(lambda: output_path.stat().st_size)) / 1024
         logger.info(
             f"{self.LOG_PREFIX} ✅ {operation_name}成功: {source_count} 个文件 -> "
             f"{output_path.name} ({file_size_kb:.1f}KB)"
         )
         return True
+
+    async def _validate_wav_output_properties(
+        self, output_path: Path, operation_name: str, merge_context: dict
+    ) -> bool:
+        """校验 WAV 输出参数和时长；调用方在发布 checkpoint 前执行。"""
+        try:
+            actual_signature = await self.file_detector.inspect_audio_signature(output_path, "wav")
+            expected_signature = merge_context.get("audio_signature")
+            if expected_signature and actual_signature.as_key() != expected_signature:
+                logger.error(
+                    f"{self.LOG_PREFIX} ❌ {operation_name}输出参数不符合预期: "
+                    f"expected={expected_signature}, actual={actual_signature.as_key()}"
+                )
+                return False
+            expected_duration = float(merge_context.get("source_duration") or 0.0)
+            actual_duration = await asyncio.to_thread(self._read_wav_duration, output_path)
+            tolerance = max(0.25, expected_duration * 0.02)
+            if expected_duration > 0 and abs(actual_duration - expected_duration) > tolerance:
+                logger.error(
+                    f"{self.LOG_PREFIX} ❌ {operation_name}输出时长异常: "
+                    f"expected≈{expected_duration:.3f}s, actual={actual_duration:.3f}s, tolerance={tolerance:.3f}s"
+                )
+                return False
+            merge_context["merged_duration"] = actual_duration
+            return True
+        except Exception as exc:
+            logger.error(f"{self.LOG_PREFIX} ❌ {operation_name}输出参数校验失败: {exc}")
+            return False
 
     async def cleanup_temp_files(self, source_dir: Path, audio_format: str) -> None:
         """清理目录中的临时文件"""
@@ -527,6 +733,31 @@ class AsrWavMergeOperations(AsrServiceBase):
 
         # 1. 验证并同步检查点
         checkpoint_valid, last_merged_index = await proxy.validate_and_sync_checkpoint(is_first_run=is_first_run)
+
+        # 旧版本的 checkpoint 没有音频签名，或 checkpoint 的实际 WAV 参数已经与
+        # 元数据不一致时，不能把它当作可靠的增量输入；回退到数字分片全量重建。
+        if checkpoint_valid and effective_format == "wav":
+            checkpoint_metadata = await proxy.load_remote_metadata()
+            expected_signature = (checkpoint_metadata or {}).get("audio_signature")
+            checkpoint_path = proxy.get_local_path(proxy.merged_filename)
+            checkpoint_signature = None
+            if expected_signature and await asyncio.to_thread(checkpoint_path.exists):
+                try:
+                    checkpoint_signature = (
+                        await self.file_detector.inspect_audio_signature(checkpoint_path, "wav")
+                    ).as_key()
+                except Exception as exc:
+                    logger.warning(
+                        f"{self.LOG_PREFIX} ⚠️ task_key={task_key} checkpoint WAV 参数检查失败，"
+                        f"将全量重建: {exc}"
+                    )
+            if not expected_signature or checkpoint_signature != expected_signature:
+                logger.warning(
+                    f"{self.LOG_PREFIX} ⚠️ task_key={task_key} checkpoint 音频签名不可信，"
+                    f"expected={expected_signature}, actual={checkpoint_signature}，将从数字分片全量重建"
+                )
+                checkpoint_valid = False
+                last_merged_index = -1
 
         # 2. 根据检查点决定同步哪些源文件
         files_to_sync = []
@@ -667,6 +898,8 @@ class AsrWavMergeOperations(AsrServiceBase):
                 logger.warning(f"{self.LOG_PREFIX} ⚠️ 合并失败，已恢复本地 {proxy.merged_filename}")
             return False
 
+        merge_context = dict(self._last_merge_context.get(task_key) or {})
+
         # 合并成功，同步回 Remote
         # 大文件采用单次写回，减少网络挂载盘的双重写入开销（非原子，但失败会清理远端残留）
         sync_success = await proxy.sync_local_to_remote_single_pass(proxy.merged_filename)
@@ -677,7 +910,25 @@ class AsrWavMergeOperations(AsrServiceBase):
 
         # 同步成功，保存元数据并清理
         current_max_index = max(current_indices) if current_indices else -1
-        await proxy.save_metadata(current_max_index)
+        progress = await AsrMergeTaskManager.instance().get_progress(task_key)
+        metadata_extra = {
+            "audio_format": effective_format or audio_format or "wav",
+            "merge_strategy": merge_context.get("merge_mode", "stream_copy"),
+            "merge_mode": merge_context.get("merge_mode", "stream_copy"),
+            "source_shard_count": len(current_indices),
+            "source_last_index": current_max_index,
+            "merged_size": await asyncio.to_thread(lambda: local_merged_path.stat().st_size),
+        }
+        if merge_context.get("audio_signature"):
+            metadata_extra["audio_signature"] = merge_context["audio_signature"]
+            metadata_extra["audio_signature_details"] = merge_context.get("audio_signature_details")
+            metadata_extra["source_audio_signatures"] = merge_context.get("source_audio_signatures", [])
+        if merge_context.get("merged_duration") is not None:
+            metadata_extra["merged_duration"] = merge_context["merged_duration"]
+        if progress and progress.accepted_missing_shard_indices:
+            metadata_extra["accepted_missing_shard_indices"] = progress.accepted_missing_shard_indices
+            metadata_extra["finish_completion_mode"] = progress.finish_completion_mode
+        await proxy.save_metadata(current_max_index, extra=metadata_extra)
 
         # 清理资源
         if local_merged_temp_input and await asyncio.to_thread(local_merged_temp_input.exists):

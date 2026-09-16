@@ -66,6 +66,8 @@ Router::addGroup('/api/v1', static function () {
 
         // 发布技能版本
         Router::post('/{code}/publish', [SkillApi::class, 'publishSkill']);
+        Router::post('/{code}/publish/async', [SkillApi::class, 'publishSkillAsync']);
+        Router::get('/{code}/publish/check', [SkillApi::class, 'checkPublishAsync']);
 
         // 下架技能版本
         //        Router::put('/{code}/offline', [SkillApi::class, 'offlineSkill']);

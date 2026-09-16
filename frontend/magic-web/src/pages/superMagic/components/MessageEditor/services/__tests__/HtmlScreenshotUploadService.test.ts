@@ -24,7 +24,7 @@ vi.mock("@/apis", () => ({
 vi.mock("@/models/user", () => ({
 	userStore: { user: { organizationCode: "org-1", authorization: "Bearer token" } },
 }))
-vi.mock("@/utils/log", () => ({
+vi.mock("@/infrastructure/logger", () => ({
 	logger: { createLogger: () => ({ error: vi.fn() }) },
 }))
 vi.mock("../HtmlScreenshotStorage", () => ({

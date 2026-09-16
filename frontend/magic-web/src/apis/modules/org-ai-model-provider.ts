@@ -1,7 +1,5 @@
-import type { HttpClient } from "@/apis/core/HttpClient"
+import type { ServiceHttpClient } from "@/infrastructure/network/http/clients"
 import type { VideoGenerationConfig } from "@/components/CanvasDesign/public/magic-types"
-
-import { genRequestUrl } from "@/utils/http"
 
 /** Backend model_type: 0=文生图, 3=LLM, 5=文生视频 */
 export const MODEL_TYPE_LLM = 3
@@ -80,6 +78,7 @@ export interface SaveAiModelParams {
 export interface AiModelConnectivityTestParams {
 	service_provider_config_id: string
 	model_version: string
+	support_multi_modal?: boolean
 }
 
 export interface AiModelConnectivityTestResult {
@@ -126,17 +125,17 @@ export interface ServiceProviderModelsResponse {
 	total: number
 }
 
-export const generateOrgAiModelProviderApi = (fetch: HttpClient) => ({
+export const generateOrgAiModelProviderApi = (fetch: ServiceHttpClient) => ({
 	getOrgAiModelProviderList(category: ServiceProviderCategory = "llm") {
-		return fetch.get<ServiceProviderConfig[]>(
-			genRequestUrl("/api/v1/organization/admin/service-providers", {}, { category }),
-		)
+		return fetch.get<ServiceProviderConfig[]>("/api/v1/organization/admin/service-providers", {
+			params: { category },
+		})
 	},
 
 	getNonOfficialProviderTemplates(category: ServiceProviderCategory = "llm") {
-		return fetch.get<ProviderTemplate[]>(
-			genRequestUrl("/api/v1/service-providers/templates/queries", {}, { category }),
-		)
+		return fetch.get<ProviderTemplate[]>("/api/v1/service-providers/templates/queries", {
+			params: { category },
+		})
 	},
 
 	addOrgAiModelProvider(data: AddOrgAiModelProviderParams) {
@@ -154,14 +153,7 @@ export const generateOrgAiModelProviderApi = (fetch: HttpClient) => ({
 	},
 
 	deleteOrgAiModelProvider(id: string) {
-		return fetch.delete<null>(
-			genRequestUrl(
-				"/api/v1/organization/admin/service-providers/${serviceProviderConfigId}",
-				{
-					serviceProviderConfigId: id,
-				},
-			),
-		)
+		return fetch.delete<null>(`/api/v1/organization/admin/service-providers/${id}`)
 	},
 
 	saveAiModel(data: SaveAiModelParams) {
@@ -173,18 +165,12 @@ export const generateOrgAiModelProviderApi = (fetch: HttpClient) => ({
 
 	getOrgAiModelDetail(modelId: string) {
 		return fetch.get<ModelInfo>(
-			genRequestUrl("/api/v1/organization/admin/service-providers/models/${modelId}", {
-				modelId,
-			}),
+			`/api/v1/organization/admin/service-providers/models/${modelId}`,
 		)
 	},
 
 	deleteAiModel(modelId: string) {
-		return fetch.delete<null>(
-			genRequestUrl("/api/v1/organization/admin/service-providers/models/${modelId}", {
-				modelId,
-			}),
-		)
+		return fetch.delete<null>(`/api/v1/organization/admin/service-providers/models/${modelId}`)
 	},
 
 	testAiModelConnectivity(data: AiModelConnectivityTestParams) {
@@ -197,9 +183,7 @@ export const generateOrgAiModelProviderApi = (fetch: HttpClient) => ({
 
 	updateAiModelStatus(data: UpdateAiModelStatusParams) {
 		return fetch.put<null>(
-			genRequestUrl("/api/v1/organization/admin/service-providers/models/${modelId}/status", {
-				modelId: data.model_id,
-			}),
+			`/api/v1/organization/admin/service-providers/models/${data.model_id}/status`,
 			{ status: data.status },
 		)
 	},

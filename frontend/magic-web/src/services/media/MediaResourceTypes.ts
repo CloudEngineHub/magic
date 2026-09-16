@@ -15,8 +15,13 @@ export type MediaResourceStatus =
 export interface MediaResourceRef {
 	identity: string
 	provider: MediaResourceProvider
+	/** Permission namespace for runtime-only resources; prevents cross-account reuse. */
+	scope?: string
 	projectId?: string
 	fileId?: string
+	fileVersion?: number
+	updatedAt?: string
+	resourceVersion?: string
 	path?: string
 	file?: File | null
 	fileName: string

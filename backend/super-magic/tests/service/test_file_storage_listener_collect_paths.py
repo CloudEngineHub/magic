@@ -1,16 +1,25 @@
 # -*- coding: utf-8 -*-
-"""变更附件候选路径选择器的过滤规则测试。
+"""变更附件候选与文件版本候选选择器的过滤规则测试。
 
-覆盖核心回归点：聚合流水中 topic 空间的条目（聊天历史等内部状态）
-不得进入用户可见的变更附件列表；项目空间的既有过滤规则不回归。
+覆盖核心策略拆分：
+- 变更附件（用户可见的变更列表）：仅项目空间条目；
+- 文件版本创建：全部工作区空间（project / user，含用户空间 .magic/
+  等隐藏目录下的持久文件）；
+- topic / chat_history 等内部状态空间两者均不进入。
 """
 
 from datetime import datetime
 
-from app.core.entity.checkpoint import TOPIC_SPACE, FileOperation, FileSnapshot, FileType
+from app.core.entity.checkpoint import (
+    TOPIC_SPACE,
+    USER_SPACE,
+    FileOperation,
+    FileSnapshot,
+    FileType,
+)
 from app.infrastructure.checkpoint.attachment_candidates import (
-    is_hidden_checkpoint_path,
     select_changed_attachment_paths,
+    select_file_version_paths,
 )
 
 
@@ -33,8 +42,8 @@ def _snap(
     )
 
 
-def test_topic_entries_never_become_user_visible_changes():
-    """核心回归：topic 空间条目（聊天历史）不得出现在变更附件候选里。"""
+def test_internal_space_entries_excluded_from_both():
+    """核心回归：topic 空间条目（聊天历史）不进附件也不进版本。"""
     snapshots = [
         _snap("1", "/mnt/agfs/magicfs/project/report.md", space="project"),
         # 聊天历史文件：本轮被频繁保存，但属于内部状态
@@ -47,19 +56,74 @@ def test_topic_entries_never_become_user_visible_changes():
     assert select_changed_attachment_paths(snapshots) == [
         "/mnt/agfs/magicfs/project/report.md",
     ]
+    assert select_file_version_paths(snapshots) == [
+        "/mnt/agfs/magicfs/project/report.md",
+    ]
 
 
-def test_project_rules_keep_deeleted_and_hidden_filtered():
-    """既有规则不回归：created 保留、deleted/renamed/目录/隐藏路径剔除。"""
+def test_user_space_in_versions_but_not_attachments():
+    """策略拆分核心：user 空间变更创建文件版本，但不进变更附件列表。"""
+    snapshots = [
+        _snap("1", "/mnt/agfs/magicfs/project/report.md", space="project"),
+        _snap("2", "/mnt/agfs/magicfs/user/notes.txt", space=USER_SPACE),
+    ]
+
+    assert select_changed_attachment_paths(snapshots) == [
+        "/mnt/agfs/magicfs/project/report.md",
+    ]
+    assert select_file_version_paths(snapshots) == [
+        "/mnt/agfs/magicfs/project/report.md",
+        "/mnt/agfs/magicfs/user/notes.txt",
+    ]
+
+
+def test_hidden_path_files_in_versions_and_project_attachments():
+    """回归（生产案例）：以 "." 开头的目录里的持久文件不得被过滤。
+
+    用户空间的记忆文件位于 .magic/ 下，曾因隐藏路径过滤被整条剔除，
+    导致文件版本停在 v1。用户空间隐藏文件只进版本；项目空间隐藏文件
+    进附件与版本。
+    """
+    snapshots = [
+        _snap("1", "/mnt/agfs/magicfs/user/.magic/memory/global/MEMORY.md",
+              FileOperation.CREATED, space=USER_SPACE),
+        _snap("2", "/mnt/agfs/magicfs/user/.venv/lib.py", space=USER_SPACE),
+        _snap("3", "/mnt/agfs/magicfs/project/.magic/skills/README.md",
+              space="project"),
+    ]
+
+    assert select_changed_attachment_paths(snapshots) == [
+        "/mnt/agfs/magicfs/project/.magic/skills/README.md",
+    ]
+    assert select_file_version_paths(snapshots) == [
+        "/mnt/agfs/magicfs/user/.magic/memory/global/MEMORY.md",
+        "/mnt/agfs/magicfs/user/.venv/lib.py",
+        "/mnt/agfs/magicfs/project/.magic/skills/README.md",
+    ]
+
+
+def test_legacy_empty_space_treated_as_project():
+    """旧格式条目（space 为空）按项目空间解析：进附件也进版本。"""
+    snapshots = [
+        _snap("1", "legacy.txt", space=""),
+    ]
+
+    assert select_changed_attachment_paths(snapshots) == ["legacy.txt"]
+    assert select_file_version_paths(snapshots) == ["legacy.txt"]
+
+
+def test_operation_rules_shared_by_both_selectors():
+    """既有规则不回归：created 保留、deleted/renamed/目录剔除。"""
     snapshots = [
         _snap("1", "created.txt", FileOperation.CREATED),
         _snap("2", "deleted.txt", FileOperation.DELETED),
         _snap("3", "renamed-target.txt", FileOperation.RENAMED),
-        _snap("4", ".cache/junk.bin"),
-        _snap("5", "docs/readme.md"),
+        _snap("4", "docs/readme.md"),
+        _snap("5", "a-dir", FileOperation.CREATED, file_type=FileType.DIRECTORY),
     ]
 
     assert select_changed_attachment_paths(snapshots) == ["created.txt", "docs/readme.md"]
+    assert select_file_version_paths(snapshots) == ["created.txt", "docs/readme.md"]
 
 
 def test_renamed_then_updated_keeps_target():
@@ -70,21 +134,15 @@ def test_renamed_then_updated_keeps_target():
     ]
 
     assert select_changed_attachment_paths(snapshots) == ["final.txt"]
+    assert select_file_version_paths(snapshots) == ["final.txt"]
 
 
-def test_directory_entries_skipped_regardless_of_space():
+def test_duplicate_paths_deduped_keeping_first_occurrence():
     snapshots = [
-        _snap("7", "/mnt/agfs/magicfs/project/notes", FileOperation.CREATED,
-              space="project", file_type=FileType.DIRECTORY),
-        _snap("8", "/mnt/agfs/magicfs/topic/subagents/x<1>", FileOperation.CREATED,
-              space=TOPIC_SPACE, file_type=FileType.DIRECTORY),
+        _snap("1", "dup.txt"),
+        _snap("2", "other.txt"),
+        _snap("3", "dup.txt"),
     ]
 
-    assert select_changed_attachment_paths(snapshots) == []
-
-
-def test_is_hidden_checkpoint_path_segment_semantics():
-    assert is_hidden_checkpoint_path(".tmp/a.txt") is True
-    assert is_hidden_checkpoint_path("a/.hidden") is True
-    assert is_hidden_checkpoint_path("a.txt") is False
-    assert is_hidden_checkpoint_path("..") is True
+    assert select_changed_attachment_paths(snapshots) == ["dup.txt", "other.txt"]
+    assert select_file_version_paths(snapshots) == ["dup.txt", "other.txt"]

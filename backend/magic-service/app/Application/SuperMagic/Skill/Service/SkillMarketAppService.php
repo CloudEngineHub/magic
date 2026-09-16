@@ -9,8 +9,6 @@ namespace App\Application\SuperMagic\Skill\Service;
 
 use App\Domain\Contact\Entity\MagicUserEntity;
 use App\Domain\Contact\Service\MagicUserDomainService;
-use App\Domain\SuperMagic\File\Entity\TaskFileEntity;
-use App\Domain\SuperMagic\File\Service\TaskFileDomainService;
 use App\Domain\SuperMagic\Skill\Entity\SkillEntity;
 use App\Domain\SuperMagic\Skill\Entity\SkillMarketEntity;
 use App\Domain\SuperMagic\Skill\Entity\SkillVersionEntity;
@@ -22,6 +20,7 @@ use App\Domain\SuperMagic\Skill\Service\SkillMarketVectorIndexDomainService;
 use App\ErrorCode\SkillErrorCode;
 use App\Infrastructure\Core\Exception\ExceptionBuilder;
 use App\Infrastructure\Core\ValueObject\Page;
+use App\Infrastructure\Core\ValueObject\StorageBucketType;
 use App\Infrastructure\Util\Context\RequestContext;
 use Hyperf\Logger\LoggerFactory;
 use Psr\Log\LoggerInterface;
@@ -37,7 +36,6 @@ class SkillMarketAppService extends AbstractSkillAppService
     public function __construct(
         protected SkillMarketDomainService $skillMarketDomainService,
         protected MagicUserDomainService $magicUserDomainService,
-        protected TaskFileDomainService $taskFileDomainService,
         protected SkillCategoryRelationDomainService $skillCategoryRelationDomainService,
         protected SkillMarketVectorIndexDomainService $skillMarketVectorIndexDomainService,
         LoggerFactory $loggerFactory,
@@ -224,14 +222,10 @@ class SkillMarketAppService extends AbstractSkillAppService
             return '';
         }
 
-        $taskFileEntity = new TaskFileEntity();
-        $taskFileEntity->setFileKey($skillFileKey);
-        $taskFileEntity->setFileName(basename($skillFileKey));
-        $taskFileEntity->setIsDirectory(false);
-
-        return $this->taskFileDomainService->getFilePreSignedUrl(
+        return $this->fileDomainService->getLink(
             $skillVersion->getOrganizationCode(),
-            $taskFileEntity
-        );
+            $skillFileKey,
+            StorageBucketType::Private,
+        )?->getUrl() ?? '';
     }
 }

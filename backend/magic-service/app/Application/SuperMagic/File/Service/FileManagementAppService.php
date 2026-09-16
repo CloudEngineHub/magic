@@ -573,8 +573,8 @@ class FileManagementAppService extends AbstractAppService
                 }
             }
 
-            // 根据是否为目录确定文件类型
-            $fileType = $requestDTO->getIsDirectory() ? FileType::DIRECTORY : FileType::USER_UPLOAD;
+            // 根据是否为目录确定文件类型；用户新建的文件标记为 user_create，与用户上传（user_upload）区分
+            $fileType = $requestDTO->getIsDirectory() ? FileType::DIRECTORY : FileType::USER_CREATE;
 
             try {
                 // 调用 MagicFS 领域服务创建文件（会自动发布事件）
@@ -2341,13 +2341,23 @@ class FileManagementAppService extends AbstractAppService
     /**
      * Update the source of a task file.
      *
+     * @param RequestContext $requestContext Request context
      * @param UpdateFileSourceRequestDTO $requestDTO Request DTO containing file_id and source
      * @return array Updated file info
      */
-    public function updateFileSource(UpdateFileSourceRequestDTO $requestDTO): array
+    public function updateFileSource(RequestContext $requestContext, UpdateFileSourceRequestDTO $requestDTO): array
     {
+        $userAuthorization = $requestContext->getUserAuthorization();
+
         $fileId = $requestDTO->getFileId();
         $source = TaskFileSource::fromValue($requestDTO->getSource());
+
+        // 鉴权前置：项目空间文件校验项目编辑权限，用户空间文件校验文件 owner。
+        $fileEntity = $this->taskFileDomainService->getById($fileId);
+        if ($fileEntity === null) {
+            ExceptionBuilder::throw(SuperAgentErrorCode::FILE_NOT_FOUND, trans('file.file_not_found'));
+        }
+        $this->getAccessibleProjectForTaskFile($fileEntity, $userAuthorization, MemberRole::EDITOR);
 
         $fileEntity = $this->taskFileDomainService->updateFileSource($fileId, $source);
 

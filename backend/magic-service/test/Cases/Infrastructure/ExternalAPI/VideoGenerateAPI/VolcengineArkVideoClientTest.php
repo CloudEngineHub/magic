@@ -7,13 +7,13 @@ declare(strict_types=1);
 
 namespace HyperfTest\Cases\Infrastructure\ExternalAPI\VideoGenerateAPI;
 
+use App\ErrorCode\VideoGenerateErrorCode;
 use App\Infrastructure\ExternalAPI\VideoGenerateAPI\ProviderVideoException;
 use App\Infrastructure\ExternalAPI\VideoGenerateAPI\VolcengineArkVideoClient;
 use GuzzleHttp\Client;
 use GuzzleHttp\Exception\RequestException;
 use GuzzleHttp\Psr7\Request;
 use GuzzleHttp\Psr7\Response;
-use Hyperf\Contract\TranslatorInterface;
 use Hyperf\Guzzle\ClientFactory;
 use Hyperf\Logger\LoggerFactory;
 use PHPUnit\Framework\TestCase;
@@ -85,16 +85,10 @@ class VolcengineArkVideoClientTest extends TestCase
             ->method('create')
             ->willReturn($httpClient);
 
-        $client = new VolcengineArkVideoClient(
-            $clientFactory,
-            $loggerFactory,
-            $this->createTranslator([
-                'video.errors.generic' => '视频生成失败，请检查输入内容或稍后重试。',
-            ]),
-        );
+        $client = new VolcengineArkVideoClient($clientFactory, $loggerFactory);
 
         $this->expectException(ProviderVideoException::class);
-        $this->expectExceptionMessage('视频生成失败，请检查输入内容或稍后重试。');
+        $this->expectExceptionMessage(VideoGenerateErrorCode::GENERAL_ERROR->getMessage());
         try {
             $client->post(
                 'https://ark.cn-beijing.volces.com/api/v3',
@@ -110,7 +104,9 @@ class VolcengineArkVideoClientTest extends TestCase
             $this->assertSame('/contents/generations/tasks', $logger->records[1]['context']['path']);
             $this->assertSame('op-ark-400', $logger->records[1]['context']['context']['operation_id']);
             $this->assertSame(400, $logger->records[1]['context']['http_status']);
-            $this->assertSame('{"error":{"message":"service_tier must be empty"}}', $logger->records[1]['context']['error']);
+            $this->assertSame('{"error":{"message":"service_tier must be empty"}}', $logger->records[1]['context']['response']);
+            $this->assertSame(VideoGenerateErrorCode::GENERAL_ERROR->value, $logger->records[1]['context']['error_code']);
+            $this->assertSame('bad request', $logger->records[1]['context']['error_message']);
         }
     }
 
@@ -152,7 +148,7 @@ class VolcengineArkVideoClientTest extends TestCase
             );
             self::fail('Expected ProviderVideoException was not thrown.');
         } catch (ProviderVideoException $exception) {
-            $this->assertFalse($exception->isRetriable());
+            $this->assertFalse($exception->isRetry());
             $this->assertSame(404, $exception->getHttpStatus());
             $this->assertNotSame('', $exception->getMessage());
         }
@@ -185,17 +181,10 @@ class VolcengineArkVideoClientTest extends TestCase
             ->with(VolcengineArkVideoClient::class)
             ->willReturn(new VolcengineArkRecordingLogger());
 
-        $client = new VolcengineArkVideoClient(
-            $clientFactory,
-            $loggerFactory,
-            $this->createTranslator([
-                'video.errors.InputVideoSensitiveContentDetected.PrivacyInformation' => '输入视频可能包含真人或人脸，请更换无真人、无肖像的素材后再试。',
-                'video.errors.generic' => '视频生成失败，请检查输入内容或稍后重试。',
-            ]),
-        );
+        $client = new VolcengineArkVideoClient($clientFactory, $loggerFactory);
 
         $this->expectException(ProviderVideoException::class);
-        $this->expectExceptionMessage('输入视频可能包含真人或人脸，请更换无真人、无肖像的素材后再试。');
+        $this->expectExceptionMessage(VideoGenerateErrorCode::INPUT_VIDEO_PRIVACY_FAILED->getMessage());
 
         $client->post(
             'https://ark.cn-beijing.volces.com/api/v3',
@@ -286,17 +275,10 @@ class VolcengineArkVideoClientTest extends TestCase
             ->with(VolcengineArkVideoClient::class)
             ->willReturn(new VolcengineArkRecordingLogger());
 
-        $client = new VolcengineArkVideoClient(
-            $clientFactory,
-            $loggerFactory,
-            $this->createTranslator([
-                'video.errors.InvalidParameter.InvalidResolution' => '当前分辨率不受支持，请改为 480p 或 720p 后重试。',
-                'video.errors.generic' => '视频生成失败，请检查输入内容或稍后重试。',
-            ]),
-        );
+        $client = new VolcengineArkVideoClient($clientFactory, $loggerFactory);
 
         $this->expectException(ProviderVideoException::class);
-        $this->expectExceptionMessage('当前分辨率不受支持，请改为 480p 或 720p 后重试。');
+        $this->expectExceptionMessage(VideoGenerateErrorCode::INVALID_PARAMETER->getMessage());
 
         $client->post(
             'https://ark.cn-beijing.volces.com/api/v3',
@@ -348,42 +330,6 @@ class VolcengineArkVideoClientTest extends TestCase
             'id' => 'task-1',
             'status' => 'running',
         ], $logger->records[1]['context']['response']);
-    }
-
-    /**
-     * @param array<string, string> $lines
-     */
-    private function createTranslator(array $lines): TranslatorInterface
-    {
-        return new class($lines) implements TranslatorInterface {
-            public function __construct(private array $lines)
-            {
-            }
-
-            public function trans(string $key, array $replace = [], ?string $locale = null): array|string
-            {
-                $line = $this->lines[$key] ?? $key;
-                foreach ($replace as $name => $value) {
-                    $line = str_replace(':' . $name, (string) $value, $line);
-                }
-
-                return $line;
-            }
-
-            public function transChoice(string $key, $number, array $replace = [], ?string $locale = null): string
-            {
-                return (string) $this->trans($key, $replace, $locale);
-            }
-
-            public function getLocale(): string
-            {
-                return 'zh_CN';
-            }
-
-            public function setLocale(string $locale)
-            {
-            }
-        };
     }
 }
 

@@ -3250,7 +3250,7 @@ class TaskFileDomainService
         $taskFileEntity->setFileSize(! empty($attachment['file_size']) ? $attachment['file_size'] : 0);
 
         // message type
-        $taskFileEntity->setFileType(! empty($attachment['file_tag']) ? $attachment['file_tag'] : FileType::PROCESS->value);
+        $taskFileEntity->setFileType(FileType::fromValue($attachment['file_tag'] ?? null, FileType::PROCESS)->value);
         $taskFileEntity->setSource(TaskFileSource::AGENT);
 
         // Set storage type (will be overridden by saveProjectFile parameter)
@@ -3760,6 +3760,9 @@ class TaskFileDomainService
                 $fileEntity->setSource($source);
                 $fileEntity->setLatestVersion(1);
                 $fileEntity->setMetadataVersion(1);
+                // file_type 只在新建时写入；已存在的节点保留原类型，
+                // 避免同名覆盖把「用户创建（user_create）」改写为「用户上传（user_upload）」等。
+                $fileEntity->setFileType(! empty($taskFileEntity->getFileType()) ? $taskFileEntity->getFileType() : FileType::PROCESS->value);
             } else {
                 if ($source === TaskFileSource::AI_IMAGE_GENERATION) {
                     $fileEntity->setSource($source);
@@ -3781,7 +3784,6 @@ class TaskFileDomainService
                 $fileEntity->setLatestModifiedTaskId($taskFileEntity->getTaskId());
             }
 
-            $fileEntity->setFileType(! empty($taskFileEntity->getFileType()) ? $taskFileEntity->getFileType() : FileType::PROCESS->value);
             $fileEntity->setFileExtension(
                 ! empty($taskFileEntity->getFileExtension())
                     ? $taskFileEntity->getFileExtension()

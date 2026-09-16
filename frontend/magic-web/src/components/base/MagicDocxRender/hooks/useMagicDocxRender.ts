@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback, useRef } from "react"
 import magicToast from "@/components/base/MagicToaster/utils"
 import { useMemoizedFn } from "ahooks"
 import { renderAsync } from "docx-preview"
-import { logger as Logger } from "@/utils/log"
+import { logger as Logger } from "@/infrastructure/logger"
 
 // Types
 import type { MagicDocxRenderProps, DocxRenderState, SectionInfo } from "../types"

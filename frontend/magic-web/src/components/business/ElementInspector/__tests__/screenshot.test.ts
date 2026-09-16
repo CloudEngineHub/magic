@@ -1,9 +1,13 @@
+import { waitFor } from "@testing-library/react"
 import { describe, expect, it, vi } from "vitest"
 import {
+	htmlScreenshotLogger,
+	HTML_SCREENSHOT_FALLBACK_EVENT,
 	createCurrentTabCaptureSession,
 	captureWithIframeRuntime,
 	createPseudoElementsCapturePlugin,
 	freezeDocumentForCapture,
+	captureIframeRegion,
 	getCaptureOutputSize,
 	getCaptureRootRenderSize,
 	getCaptureSurfaceGeometry,
@@ -22,6 +26,16 @@ import {
 	waitForFreshCaptureVideoFrame,
 	waitForStableCaptureRect,
 } from "../screenshot"
+
+function createDeferred<T = void>() {
+	let resolve!: (value: T | PromiseLike<T>) => void
+	let reject!: (error: unknown) => void
+	const promise = new Promise<T>((res, rej) => {
+		resolve = res
+		reject = rej
+	})
+	return { promise, resolve, reject }
+}
 
 describe("HTML screenshot geometry", () => {
 	it("suppresses cursors in host and iframe documents during capture", () => {
@@ -96,7 +110,12 @@ describe("HTML screenshot geometry", () => {
 		const capture = captureWithIframeRuntime({
 			iframe,
 			selection,
-			viewportSelection: { left: 100, top: 120, ...selection },
+			viewportSelection: {
+				left: 100,
+				top: 120,
+				width: selection.width,
+				height: selection.height,
+			},
 			iframeTargetOrigin: "https://husky.example.test",
 		})
 		const request = targetWindow.postMessage.mock.calls[0]?.[0]
@@ -119,6 +138,177 @@ describe("HTML screenshot geometry", () => {
 		window.dispatchEvent(event)
 
 		await expect(capture).resolves.toMatch(/^data:image\/png;base64,/)
+	})
+
+	it("reports the iframe failure that causes current-tab fallback", async () => {
+		const report = vi.spyOn(htmlScreenshotLogger, "report").mockImplementation(() => undefined)
+		const iframe = document.createElement("iframe")
+		const targetWindow = { postMessage: vi.fn() }
+		Object.defineProperty(iframe, "contentWindow", {
+			configurable: true,
+			value: targetWindow,
+		})
+
+		const capture = captureWithIframeRuntime({
+			iframe,
+			selection: { left: 12, top: 18, width: 80, height: 60 },
+			viewportSelection: { left: 100, top: 120, width: 80, height: 60 },
+			iframeTargetOrigin: "https://husky.example.test",
+		})
+		const request = targetWindow.postMessage.mock.calls[0]?.[0]
+		const response = new MessageEvent("message", {
+			origin: "https://husky.example.test",
+			data: {
+				type: "MAGIC_INSPECTOR_SCREENSHOT_RESPONSE",
+				requestId: request.requestId,
+				success: false,
+				error: "Capture root has no size",
+			},
+		})
+		Object.defineProperty(response, "source", { configurable: true, value: targetWindow })
+		window.dispatchEvent(response)
+
+		await expect(capture).resolves.toBeNull()
+		expect(report).toHaveBeenCalledWith(
+			HTML_SCREENSHOT_FALLBACK_EVENT,
+			expect.objectContaining({
+				reason: "Capture root has no size",
+				requestId: request.requestId,
+				stage: "iframe-runtime-failure",
+				iframeTargetOrigin: "https://husky.example.test",
+			}),
+		)
+		report.mockRestore()
+	})
+
+	it("does not request browser capture when authorization is cancelled", async () => {
+		const iframe = document.createElement("iframe")
+		const targetWindow = { postMessage: vi.fn() }
+		Object.defineProperty(iframe, "contentWindow", {
+			configurable: true,
+			value: targetWindow,
+		})
+		const previousMediaDevices = Object.getOwnPropertyDescriptor(navigator, "mediaDevices")
+		const getDisplayMedia = vi.fn()
+		Object.defineProperty(navigator, "mediaDevices", {
+			configurable: true,
+			value: { getDisplayMedia },
+		})
+		try {
+			const authorization = vi.fn().mockResolvedValue(false)
+			const capture = captureIframeRegion({
+				iframe,
+				selection: { left: 12, top: 18, width: 80, height: 60 },
+				iframeTargetOrigin: "https://husky.example.test",
+				requestCurrentTabCaptureAuthorization: authorization,
+			})
+			const request = targetWindow.postMessage.mock.calls[0]?.[0]
+			const response = new MessageEvent("message", {
+				origin: "https://husky.example.test",
+				data: {
+					type: "MAGIC_INSPECTOR_SCREENSHOT_RESPONSE",
+					requestId: request.requestId,
+					success: false,
+					error: "Capture root has no size",
+				},
+			})
+			Object.defineProperty(response, "source", { configurable: true, value: targetWindow })
+			window.dispatchEvent(response)
+
+			await expect(capture).rejects.toMatchObject({ code: "cancelled" })
+			expect(authorization).toHaveBeenCalledOnce()
+			expect(getDisplayMedia).not.toHaveBeenCalled()
+		} finally {
+			if (previousMediaDevices) {
+				Object.defineProperty(navigator, "mediaDevices", previousMediaDevices)
+			}
+		}
+	})
+
+	it("waits for the capture chrome to hide before requesting browser capture", async () => {
+		const iframe = document.createElement("iframe")
+		const targetWindow = { postMessage: vi.fn() }
+		Object.defineProperty(iframe, "contentWindow", {
+			configurable: true,
+			value: targetWindow,
+		})
+		const beforeCapture = createDeferred<void>()
+		const captureStream = createDeferred<MediaStream>()
+		const currentTabSession = {
+			acquire: vi.fn(() => captureStream.promise),
+			release: vi.fn(),
+		}
+		const capture = captureIframeRegion({
+			iframe,
+			selection: { left: 12, top: 18, width: 80, height: 60 },
+			iframeTargetOrigin: "https://husky.example.test",
+			beforeCurrentTabCapture: () => beforeCapture.promise,
+			currentTabSession,
+		})
+		void capture.catch(() => undefined)
+
+		await Promise.resolve()
+		expect(currentTabSession.acquire).not.toHaveBeenCalled()
+
+		beforeCapture.resolve()
+		await waitFor(() => expect(currentTabSession.acquire).toHaveBeenCalledOnce())
+	})
+
+	it("does not request browser capture when hiding the capture chrome fails", async () => {
+		const iframe = document.createElement("iframe")
+		const targetWindow = { postMessage: vi.fn() }
+		Object.defineProperty(iframe, "contentWindow", {
+			configurable: true,
+			value: targetWindow,
+		})
+		const beforeCapture = createDeferred<void>()
+		const getDisplayMedia = vi.fn()
+		const previousMediaDevices = Object.getOwnPropertyDescriptor(navigator, "mediaDevices")
+		Object.defineProperty(navigator, "mediaDevices", {
+			configurable: true,
+			value: { getDisplayMedia },
+		})
+
+		try {
+			let startCapture: (() => Promise<string>) | undefined
+			const authorization = vi.fn((_context, start: () => Promise<string>) => {
+				startCapture = start
+				return new Promise<string | null>(() => undefined)
+			})
+			const capture = captureIframeRegion({
+				iframe,
+				selection: { left: 12, top: 18, width: 80, height: 60 },
+				iframeTargetOrigin: "https://husky.example.test",
+				beforeCurrentTabCapture: () => beforeCapture.promise,
+				requestCurrentTabCaptureAuthorization: authorization,
+			})
+			const request = targetWindow.postMessage.mock.calls[0]?.[0]
+			const response = new MessageEvent("message", {
+				origin: "https://husky.example.test",
+				data: {
+					type: "MAGIC_INSPECTOR_SCREENSHOT_RESPONSE",
+					requestId: request.requestId,
+					success: false,
+					error: "Capture root has no size",
+				},
+			})
+			Object.defineProperty(response, "source", { configurable: true, value: targetWindow })
+			window.dispatchEvent(response)
+
+			await vi.waitFor(() => expect(startCapture).toBeTypeOf("function"))
+			const failure = new Error("capture chrome could not be hidden")
+			const startPromise = startCapture?.()
+			beforeCapture.reject(failure)
+			await expect(startPromise).rejects.toBe(failure)
+			expect(getDisplayMedia).not.toHaveBeenCalled()
+			void capture
+		} finally {
+			if (previousMediaDevices) {
+				Object.defineProperty(navigator, "mediaDevices", previousMediaDevices)
+			} else {
+				Reflect.deleteProperty(navigator, "mediaDevices")
+			}
+		}
 	})
 
 	it("preserves the WebP format returned by the iframe runtime", async () => {
@@ -724,7 +914,7 @@ describe("HTML screenshot geometry", () => {
 		expect(
 			getRootCaptureSelection(
 				{ left: 240, top: 180, width: 640, height: 310 },
-				{ left: -120, top: -90, width: 1920, height: 1080 },
+				{ left: -120, top: -90 },
 			),
 		).toEqual({ left: 360, top: 270, width: 640, height: 310 })
 	})
@@ -733,7 +923,7 @@ describe("HTML screenshot geometry", () => {
 		expect(
 			getRootCaptureSelection(
 				{ left: 120, top: 80, width: 240, height: 120 },
-				{ left: -40, top: -60, width: 1920, height: 1080 },
+				{ left: -40, top: -60 },
 			),
 		).toEqual({ left: 160, top: 140, width: 240, height: 120 })
 	})

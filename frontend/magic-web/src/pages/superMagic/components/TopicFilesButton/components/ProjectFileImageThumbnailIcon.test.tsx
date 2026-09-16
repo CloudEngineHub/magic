@@ -11,7 +11,7 @@ import {
 import { getTemporaryDownloadUrl } from "@/pages/superMagic/utils/api"
 import {
 	__resetProjectFileImagePreviewCoordinatorForTests,
-	setProjectFileImagePreviewCacheItem,
+	seedProjectFileImagePreviewCacheItem,
 } from "./projectFileImagePreviewCoordinator"
 import { __resetProjectFileImagePreviewRuntimeForTests } from "./projectFileImagePreviewRuntime"
 
@@ -277,7 +277,7 @@ describe("ProjectFileImageThumbnailIcon", () => {
 		for (const item of attachments.slice(0, 3)) {
 			const source = resolveProjectFileImagePreviewSource(item)
 			if (!source) throw new Error("Expected an image preview source")
-			setProjectFileImagePreviewCacheItem(source.cacheKey, {
+			seedProjectFileImagePreviewCacheItem(source, {
 				url: `https://cdn.example.com/${item.file_id}.webp?from=memory`,
 				expiresAt: "2099-01-01 00:00:00",
 			})

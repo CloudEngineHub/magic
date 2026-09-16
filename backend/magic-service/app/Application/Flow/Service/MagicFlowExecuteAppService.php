@@ -40,6 +40,7 @@ use App\ErrorCode\GenericErrorCode;
 use App\Infrastructure\Core\Collector\BuiltInToolSet\BuiltInToolSetCollector;
 use App\Infrastructure\Core\Contract\Authorization\FlowOpenApiCheckInterface;
 use App\Infrastructure\Core\Exception\ExceptionBuilder;
+use App\Infrastructure\Util\File\EasyFileTools;
 use App\Infrastructure\Util\IdGenerator\IdGenerator;
 use App\Interfaces\Authorization\Web\MagicUserAuthorization;
 use App\Interfaces\Flow\DTO\MagicFlowApiChatDTO;
@@ -263,7 +264,15 @@ class MagicFlowExecuteAppService extends AbstractFlowAppService
             return str_replace('magic_knowledge_base_file_', '', $key);
         }, $keys);
 
-        $links = $this->getIconsWithSmartOrganization($keys);
+        $organizationCode = $flowDataIsolation->getCurrentOrganizationCode();
+        foreach ($keys as $key) {
+            $formattedKey = EasyFileTools::formatPath($key);
+            $keyOrganizationCode = explode('/', $formattedKey, 2)[0] ?? '';
+            if ($keyOrganizationCode !== $organizationCode) {
+                ExceptionBuilder::throw(FlowErrorCode::ValidateFailed, 'common.access');
+            }
+        }
+        $links = $this->getIcons($organizationCode, $keys);
 
         $list = [];
         foreach ($links as $link) {

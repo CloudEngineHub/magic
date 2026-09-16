@@ -44,6 +44,8 @@ interface AgentVersionRepositoryInterface
         string $code
     ): ?AgentVersionEntity;
 
+    public function findByIdForUpdate(SuperMagicAgentDataIsolation $dataIsolation, int $id): ?AgentVersionEntity;
+
     /**
      * 批量取当前生效版本（is_current_version = 1）.
      *
@@ -149,7 +151,8 @@ interface AgentVersionRepositoryInterface
         string $code,
         ?PublishTargetType $publishTargetType = null,
         ?ReviewStatus $reviewStatus = null,
-        Page $page = new Page()
+        Page $page = new Page(),
+        bool $includePublishing = false
     ): array;
 
     /**

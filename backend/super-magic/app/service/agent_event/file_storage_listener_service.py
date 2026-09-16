@@ -208,7 +208,7 @@ class FileStorageListenerService:
         await FileStorageListenerService._collect_changed_attachments_from_checkpoint(agent_context)
 
         logger.info("处理主代理完成事件：创建文件版本")
-        await FileStorageListenerService._create_changed_files_versions(agent_context)
+        await FileStorageListenerService._create_file_versions_from_checkpoint(agent_context)
 
         FileStorageListenerService._collect_local_debug_attachments(agent_context)
 
@@ -964,10 +964,13 @@ class FileStorageListenerService:
         FILE_UPDATED 事件。
 
         过滤规则:
-        - 只收集项目空间条目；topic 空间（聊天历史等内部状态）不出现在用户可见变更里
+        - 只收集项目空间条目（变更附件仅展示项目空间；user 空间等其它
+          工作区空间只进文件版本链路，见空间注册表）；topic 空间（聊天
+          历史等内部状态）不出现在用户可见变更里
         - 跳过目录快照 (版本与 attachment 都只针对文件)
         - 跳过 DELETED 操作 (文件已不存在，无法构造 attachment)
-        - 跳过任一路径段以 "." 开头的隐藏路径，覆盖工具和 Agent 生成的隐藏目录
+        - 不按隐藏路径过滤：以 "." 开头的目录（.magic/、.venv/ 等）里的
+          持久文件同样进入变更附件与文件版本链路
         - 同一路径同一 checkpoint 内只取第一次出现 (file_snapshots 已是按顺序追加
           的操作流，保留首次即可)
 
@@ -1040,8 +1043,8 @@ class FileStorageListenerService:
         """
         从 checkpoint 流水中挑出需要构造 attachment 的文件路径。
 
-        选择逻辑（含空间过滤：topic/聊天历史条目不呈现给用户、目录与删除跳过、
-        隐藏路径过滤）委托 infrastructure 层纯函数，便于单测直接覆盖；
+        选择逻辑（含空间过滤：topic/聊天历史条目不呈现给用户、目录与删除
+        跳过）委托 infrastructure 层纯函数，便于单测直接覆盖；
         本方法保留仅为调用点稳定。
 
         Args:
@@ -1097,9 +1100,15 @@ class FileStorageListenerService:
         )
 
     @staticmethod
-    async def _create_changed_files_versions(agent_context: AgentContext) -> bool:
+    async def _create_file_versions_from_checkpoint(agent_context: AgentContext) -> bool:
         """
-        创建变更文件的版本信息
+        从 checkpoint 流水创建文件版本（工作区空间：project / user）。
+
+        文件版本与变更附件是两条独立策略：附件列表仅展示项目空间变更，
+        版本创建覆盖全部工作区空间（如用户空间 .magic/ 下的记忆文件）。
+        权威数据源是 agfs 侧按空间分区的 operations.json，路径解析与
+        附件收集一致：绝对路径（挂载配置下发 path_prefix）原样使用，
+        相对路径按 workspace 目录拼接。
 
         Args:
             agent_context: Agent 上下文
@@ -1114,17 +1123,55 @@ class FileStorageListenerService:
             return True
 
         try:
+            # 延迟导入: CheckpointService / CheckpointUtils 在顶层 import 会形成
+            # file_storage_listener_service ↔ checkpoint_service 的循环依赖
+            from app.infrastructure.checkpoint.attachment_candidates import (
+                select_file_version_paths,
+            )
+            from app.service.checkpoint_service import CheckpointService
             from app.service.file_version_service import FileVersionService
+            from app.utils.checkpoint_utils import CheckpointUtils
+
+            message_id = CheckpointUtils.get_current_checkpoint_context(agent_context)
+            if not message_id:
+                logger.warning("未能获取 message_id，跳过创建文件版本")
+                return True
+
+            checkpoint_service = CheckpointService()
+            checkpoint_info = await checkpoint_service.get_checkpoint(message_id)
+            if not checkpoint_info or not checkpoint_info.file_snapshots:
+                logger.info(f"checkpoint {message_id} 无文件变更，跳过创建文件版本")
+                return True
+
+            recorded_paths = select_file_version_paths(checkpoint_info.file_snapshots)
+            if not recorded_paths:
+                logger.info(f"checkpoint {message_id} 过滤后无需要创建版本的文件变更")
+                return True
+
+            workspace_dir = PathManager.get_workspace_dir()
+            absolute_paths = []
+            for recorded_path in recorded_paths:
+                if os.path.isabs(recorded_path):
+                    # 跨挂载（user / referenced-projects）的变更以 agent 视角
+                    # 绝对路径记录，直接使用；无 magicfs xattr 的文件由
+                    # create_file_versions 优雅跳过
+                    absolute_paths.append(recorded_path)
+                else:
+                    absolute_paths.append(str(workspace_dir / recorded_path.lstrip("/")))
+
+            logger.info(f"准备为 {len(absolute_paths)} 个文件创建版本信息")
 
             version_service = FileVersionService()
-            result = await version_service.create_changed_files_versions(agent_context)
+            result = await version_service.create_file_versions(absolute_paths)
 
-            if result:
-                logger.info("文件版本创建成功")
+            if result.get("success"):
+                logger.info(
+                    f"文件版本创建完成: {result.get('success_count')}/{result.get('total_count')}"
+                )
             else:
-                logger.warning("文件版本创建失败")
+                logger.warning(f"文件版本创建失败: {result}")
 
-            return result
+            return bool(result.get("success"))
 
         except Exception as e:
             logger.error(f"创建文件版本过程中发生异常: {e}", exc_info=True)

@@ -7,10 +7,11 @@ PROJECT_ROOT = Path(__file__).resolve().parents[2]
 
 def test_service_modules_import():
     import app.service.asr.asr_local_proxy
-    import app.service.asr.asr_merge_operations
     import app.service.asr.asr_merge_service
     import app.service.asr.asr_merge_task_manager
+    import app.service.asr.asr_opus_merge_operations
     import app.service.asr.asr_task_finalizer  # noqa: F401
+    import app.service.asr.asr_wav_merge_operations  # noqa: F401
 
 
 def test_routes_asr_module_imports():

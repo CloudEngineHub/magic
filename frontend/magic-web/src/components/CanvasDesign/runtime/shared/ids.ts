@@ -15,6 +15,12 @@ import { ImageElement as ImageElementClass } from "../elements/image/ImageElemen
 import { VideoElement as VideoElementClass } from "../elements/video/VideoElement"
 import { getActiveContent } from "../document/elementContent"
 import { resolveGridPlacements, resolveHorizontalPlacements } from "./placement/placementMath"
+import {
+	closeImageSource,
+	createImageSourceFromBlob,
+	getImageSourceDimensions,
+} from "../resources/image/imageSourceUtils"
+import { parseImageMetadataFromBlobHeader } from "../resources/image/imageHeaderDimensions"
 
 function getEffectiveContentForRead(canvas: Canvas, element: LayerElement) {
 	if (typeof canvas.getEffectiveContent === "function") {
@@ -792,26 +798,17 @@ export function validateImageFilePaths(filePaths: string[]): {
  * @param file 图片文件对象
  * @returns Promise<{width: number, height: number}> 图片的宽度和高度
  */
-export function getImageDimensions(file: File): Promise<{ width: number; height: number }> {
-	return new Promise((resolve, reject) => {
-		const img = new Image()
-		const url = URL.createObjectURL(file)
+export async function getImageDimensions(file: File): Promise<{ width: number; height: number }> {
+	const metadata = await parseImageMetadataFromBlobHeader(file)
+	if (metadata) return { width: metadata.width, height: metadata.height }
 
-		img.onload = () => {
-			URL.revokeObjectURL(url)
-			resolve({
-				width: img.naturalWidth,
-				height: img.naturalHeight,
-			})
-		}
-
-		img.onerror = () => {
-			URL.revokeObjectURL(url)
-			reject(new Error("Failed to load image"))
-		}
-
-		img.src = url
-	})
+	const image = await createImageSourceFromBlob(file)
+	if (!image) throw new Error("Failed to load image")
+	try {
+		return getImageSourceDimensions(image)
+	} finally {
+		closeImageSource(image)
+	}
 }
 
 /**

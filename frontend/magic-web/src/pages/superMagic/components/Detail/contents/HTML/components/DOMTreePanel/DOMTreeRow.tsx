@@ -1,4 +1,5 @@
 import * as React from "react"
+import { createPortal } from "react-dom"
 import {
 	AlertTriangle,
 	ArrowDown,
@@ -14,6 +15,7 @@ import { useTranslation } from "react-i18next"
 import { Button } from "@/components/shadcn-ui/button"
 import { ContextMenu, ContextMenuTrigger } from "@/components/shadcn-ui/context-menu"
 import { cn } from "@/utils/cn"
+import { TAILWIND_Z_INDEX_CLASSES } from "../../constants/z-index"
 import type { DomTreeNode } from "../../iframe-bridge/types/messages"
 import { DOMTreeContextMenu } from "./DOMTreeContextMenu"
 import { ActionTooltip, AddNodeMenu, NodeDetailsPopover } from "./DOMTreeRowControls"
@@ -79,30 +81,218 @@ interface Props {
 	children?: React.ReactNode
 }
 
+const THUMBNAIL_PREVIEW_SIZE = 250
+const THUMBNAIL_PREVIEW_FRAME = 10
+const THUMBNAIL_PREVIEW_GAP = 8
+const THUMBNAIL_PREVIEW_VIEWPORT_PADDING = 8
+
+type ThumbnailPreviewSide = "top" | "bottom" | "right" | "left"
+
+interface ThumbnailPreviewPosition {
+	top: number
+	left: number
+	side: ThumbnailPreviewSide
+}
+
+interface ThumbnailPreviewSize {
+	width: number
+	height: number
+}
+
+const DEFAULT_THUMBNAIL_PREVIEW_SIZE: ThumbnailPreviewSize = {
+	width: THUMBNAIL_PREVIEW_SIZE,
+	height: THUMBNAIL_PREVIEW_SIZE,
+}
+
+function clamp(value: number, min: number, max: number) {
+	return Math.min(Math.max(value, min), Math.max(min, max))
+}
+
+function getBoundedThumbnailPreviewSize(image: HTMLImageElement): ThumbnailPreviewSize | null {
+	if (image.naturalWidth <= 0 || image.naturalHeight <= 0) return null
+	const scale = Math.min(
+		1,
+		THUMBNAIL_PREVIEW_SIZE / image.naturalWidth,
+		THUMBNAIL_PREVIEW_SIZE / image.naturalHeight,
+	)
+	return {
+		width: Math.round(image.naturalWidth * scale),
+		height: Math.round(image.naturalHeight * scale),
+	}
+}
+
+export function getThumbnailPreviewPosition(
+	rect: Pick<DOMRect, "top" | "left" | "right" | "bottom" | "width" | "height">,
+	preview: ThumbnailPreviewSize = DEFAULT_THUMBNAIL_PREVIEW_SIZE,
+	viewport = { width: window.innerWidth, height: window.innerHeight },
+): ThumbnailPreviewPosition {
+	const previewWidth = Math.min(
+		preview.width + THUMBNAIL_PREVIEW_FRAME,
+		Math.max(1, viewport.width - THUMBNAIL_PREVIEW_VIEWPORT_PADDING * 2),
+	)
+	const previewHeight = Math.min(
+		preview.height + THUMBNAIL_PREVIEW_FRAME,
+		Math.max(1, viewport.height - THUMBNAIL_PREVIEW_VIEWPORT_PADDING * 2),
+	)
+	const centeredLeft = rect.left + rect.width / 2
+	const centeredTop = rect.top + rect.height / 2
+	const availableTop = rect.top - THUMBNAIL_PREVIEW_GAP
+	const availableBottom = viewport.height - rect.bottom - THUMBNAIL_PREVIEW_GAP
+	const availableRight = viewport.width - rect.right - THUMBNAIL_PREVIEW_GAP
+	const availableLeft = rect.left - THUMBNAIL_PREVIEW_GAP
+
+	if (availableTop >= previewHeight) {
+		return {
+			top: clamp(
+				rect.top - THUMBNAIL_PREVIEW_GAP - previewHeight,
+				THUMBNAIL_PREVIEW_VIEWPORT_PADDING,
+				viewport.height - THUMBNAIL_PREVIEW_VIEWPORT_PADDING - previewHeight,
+			),
+			left: clamp(
+				centeredLeft - previewWidth / 2,
+				THUMBNAIL_PREVIEW_VIEWPORT_PADDING,
+				viewport.width - THUMBNAIL_PREVIEW_VIEWPORT_PADDING - previewWidth,
+			),
+			side: "top",
+		}
+	}
+
+	if (availableBottom >= previewHeight) {
+		return {
+			top: clamp(
+				rect.bottom + THUMBNAIL_PREVIEW_GAP,
+				THUMBNAIL_PREVIEW_VIEWPORT_PADDING,
+				viewport.height - THUMBNAIL_PREVIEW_VIEWPORT_PADDING - previewHeight,
+			),
+			left: clamp(
+				centeredLeft - previewWidth / 2,
+				THUMBNAIL_PREVIEW_VIEWPORT_PADDING,
+				viewport.width - THUMBNAIL_PREVIEW_VIEWPORT_PADDING - previewWidth,
+			),
+			side: "bottom",
+		}
+	}
+
+	const side = availableRight >= availableLeft ? "right" : "left"
+	return {
+		top: clamp(
+			centeredTop - previewHeight / 2,
+			THUMBNAIL_PREVIEW_VIEWPORT_PADDING,
+			viewport.height - THUMBNAIL_PREVIEW_VIEWPORT_PADDING - previewHeight,
+		),
+		left:
+			side === "right"
+				? clamp(
+						rect.right + THUMBNAIL_PREVIEW_GAP,
+						THUMBNAIL_PREVIEW_VIEWPORT_PADDING,
+						viewport.width - THUMBNAIL_PREVIEW_VIEWPORT_PADDING - previewWidth,
+					)
+				: clamp(
+						rect.left - THUMBNAIL_PREVIEW_GAP - previewWidth,
+						THUMBNAIL_PREVIEW_VIEWPORT_PADDING,
+						viewport.width - THUMBNAIL_PREVIEW_VIEWPORT_PADDING - previewWidth,
+					),
+		side,
+	}
+}
+
 function NodeThumbnail({ nodeId, src }: { nodeId: string; src: string }) {
 	const [failed, setFailed] = React.useState(false)
+	const [open, setOpen] = React.useState(false)
+	const [previewSize, setPreviewSize] = React.useState<ThumbnailPreviewSize | null>(null)
+	const [position, setPosition] = React.useState<ThumbnailPreviewPosition | null>(null)
+	const triggerRef = React.useRef<HTMLSpanElement>(null)
 
 	React.useEffect(() => {
 		setFailed(false)
+		setOpen(false)
+		setPreviewSize(null)
+		setPosition(null)
 	}, [src])
+
+	const updatePosition = React.useCallback(
+		(nextPreviewSize = previewSize ?? DEFAULT_THUMBNAIL_PREVIEW_SIZE) => {
+			const trigger = triggerRef.current
+			if (!trigger) return
+			setPosition(
+				getThumbnailPreviewPosition(trigger.getBoundingClientRect(), nextPreviewSize),
+			)
+		},
+		[previewSize],
+	)
+
+	const handleImageLoad = React.useCallback(
+		(event: React.SyntheticEvent<HTMLImageElement>) => {
+			const nextPreviewSize = getBoundedThumbnailPreviewSize(event.currentTarget)
+			if (!nextPreviewSize) return
+			setPreviewSize(nextPreviewSize)
+			if (open) updatePosition(nextPreviewSize)
+		},
+		[open, updatePosition],
+	)
+
+	const showPreview = React.useCallback(() => {
+		updatePosition()
+		setOpen(true)
+	}, [updatePosition])
+
+	React.useEffect(() => {
+		if (!open) return
+		const handleViewportChange = () => updatePosition()
+		window.addEventListener("resize", handleViewportChange)
+		document.addEventListener("scroll", handleViewportChange, true)
+		return () => {
+			window.removeEventListener("resize", handleViewportChange)
+			document.removeEventListener("scroll", handleViewportChange, true)
+		}
+	}, [open, updatePosition])
 
 	if (failed) return null
 
 	return (
-		<span
-			className="inline-flex h-5 w-5 shrink-0 overflow-hidden rounded-sm bg-muted/40 outline outline-1 outline-black/10 dark:outline-white/10"
-			data-testid={`dom-tree-thumbnail-${nodeId}`}
-			aria-hidden="true"
-		>
-			<img
-				src={src}
-				alt=""
-				loading="lazy"
-				draggable={false}
-				className="h-full w-full object-cover"
-				onError={() => setFailed(true)}
-			/>
-		</span>
+		<>
+			<span
+				ref={triggerRef}
+				className="inline-flex h-5 w-5 shrink-0 overflow-hidden rounded-sm bg-muted/40 outline outline-1 outline-black/10 dark:outline-white/10"
+				data-testid={`dom-tree-thumbnail-${nodeId}`}
+				aria-hidden="true"
+				onMouseEnter={showPreview}
+				onPointerMove={showPreview}
+				onMouseLeave={() => setOpen(false)}
+			>
+				<img
+					src={src}
+					alt=""
+					loading="lazy"
+					draggable={false}
+					className="h-full w-full object-cover"
+					onLoad={handleImageLoad}
+					onError={() => setFailed(true)}
+				/>
+			</span>
+			{open && position
+				? createPortal(
+						<div
+							role="tooltip"
+							data-testid={`dom-tree-thumbnail-preview-${nodeId}`}
+							data-preview-side={position.side}
+							className={`pointer-events-none fixed ${TAILWIND_Z_INDEX_CLASSES.EDITOR_FLOATING.TOOLTIP} rounded-md border border-white/15 bg-black/90 p-1 shadow-lg`}
+							style={{ top: position.top, left: position.left }}
+						>
+							<img
+								src={src}
+								alt={nodeId}
+								loading="lazy"
+								draggable={false}
+								className="block max-h-[250px] max-w-[250px] object-contain"
+								onLoad={handleImageLoad}
+								onError={() => setOpen(false)}
+							/>
+						</div>,
+						document.body,
+					)
+				: null}
+		</>
 	)
 }
 

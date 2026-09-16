@@ -106,28 +106,6 @@ export function createCodeSplittingGroups() {
 			},
 		},
 		{
-			name: "simple-editor",
-			priority: 20,
-			test: (id: string) =>
-				normalizeModuleId(id).includes("src/components/tiptap-templates/simple"),
-		},
-		{
-			name: "message-editor",
-			priority: 10,
-			test: (id: string) =>
-				normalizeModuleId(id).includes("src/pages/superMagic/components/MessageEditor"),
-		},
-		{
-			name: "hooks",
-			priority: 10,
-			test: (id: string) => normalizeModuleId(id).includes("src/hooks"),
-		},
-		{
-			name: "super-hooks",
-			priority: 10,
-			test: (id: string) => normalizeModuleId(id).includes("src/pages/superMagic/hooks"),
-		},
-		{
 			name: "mention-panel-default-runtime",
 			priority: 10,
 			test: (id: string) =>

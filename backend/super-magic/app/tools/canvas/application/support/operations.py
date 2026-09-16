@@ -25,9 +25,9 @@ class CanvasApplicationOperations:
         ContentMetadataService.set(metadata, element_id, content_id, detail)
 
     @staticmethod
-    def new_content_detail(element_id: str, data: dict[str, Any]) -> dict[str, Any]:
+    def new_content_detail(element_id: str, data: dict[str, Any], project_path: str | None = None) -> dict[str, Any]:
         """创建 Content 来源和生成尝试详情。"""
-        return ContentMetadataService.new_detail(element_id, data)
+        return ContentMetadataService.new_detail(element_id, data, project_path=project_path)
 
     @staticmethod
     def validate_unique_item_refs(items: Sequence[ItemReferenceCommand]) -> None:
@@ -45,7 +45,7 @@ class CanvasApplicationOperations:
         return ContentMetadataService.merge_generation_override(element_type, original, override)
 
     @staticmethod
-    def start_retry_detail(element_id: str, detail: dict[str, Any], retry_count: int, parameters: dict[str, Any], idempotency_key: str, element_type: str | None = None) -> dict[str, Any]:
+    def start_retry_detail(element_id: str, detail: dict[str, Any], retry_count: int, parameters: dict[str, Any], idempotency_key: str, element_type: str | None = None, project_path: str | None = None) -> dict[str, Any]:
         """归档上一次终态并创建新的重试详情。"""
         return ContentMetadataService.start_retry(
             element_id,
@@ -54,6 +54,7 @@ class CanvasApplicationOperations:
             parameters,
             idempotency_key,
             element_type=element_type,
+            project_path=project_path,
         )
 
     @staticmethod

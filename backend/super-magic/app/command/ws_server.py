@@ -209,9 +209,9 @@ async def lifespan(app: FastAPI):
 
     # 恢复通用沙箱任务，避免服务重启后丢失页面提交的合成任务。
     try:
-        from app.api.routes.sandbox_tasks import _run_capability
+        from app.service.sandbox_task.capability_runner import run_capability
         from app.service.sandbox_task.task_manager import SandboxTaskManager
-        recovered = await SandboxTaskManager.instance().recover(_run_capability)
+        recovered = await SandboxTaskManager.instance().recover(run_capability)
         logger.info("通用沙箱任务恢复完成: {}", recovered)
     except Exception as e:
         logger.error("通用沙箱任务恢复失败: {}", e)
