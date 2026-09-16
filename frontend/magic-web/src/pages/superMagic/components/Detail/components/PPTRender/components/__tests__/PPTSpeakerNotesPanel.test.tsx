@@ -9,8 +9,136 @@ vi.mock("react-i18next", () => ({
 	}),
 }))
 
+vi.mock("@/components/tiptap-templates/simple/simple-editor", async () => {
+	const { forwardRef } = await import("react")
+	return {
+		SimpleEditor: forwardRef(
+			(
+				{
+					content,
+					isEditable,
+					onContentChange,
+				}: {
+					content: string
+					isEditable: boolean
+					onContentChange: (value: string) => void
+				},
+				ref,
+			) => (
+				<>
+					{isEditable ? (
+						<textarea
+							ref={ref as React.Ref<HTMLTextAreaElement>}
+							data-testid="ppt-speaker-notes-editor"
+							value={content}
+							onChange={(event) => onContentChange(event.target.value)}
+						/>
+					) : (
+						<div>{content}</div>
+					)}
+				</>
+			),
+		),
+	}
+})
+
 describe("PPTSpeakerNotesPanel", () => {
-	it("keeps unsaved drafts on their own slide when navigating while collapsed", () => {
+	it("does not apply an AI action to another slide after a pending save", async () => {
+		let finishSave!: (value: boolean) => void
+		const onGenerate = vi.fn()
+		const props = {
+			slideIndex: 0,
+			fileId: "first",
+			rawContent: "",
+			allowEdit: true,
+			onGenerate,
+			onSaved: vi.fn().mockResolvedValue(undefined),
+			saveEditContent: vi.fn(
+				() =>
+					new Promise<boolean>((resolve) => {
+						finishSave = resolve
+					}),
+			),
+		}
+		const { rerender } = render(<PPTSpeakerNotesPanel {...props} />)
+		fireEvent.change(await screen.findByTestId("ppt-speaker-notes-editor"), {
+			target: { value: "First page draft" },
+		})
+		fireEvent.click(screen.getByText("ppt.speakerNotes.polish"))
+		rerender(<PPTSpeakerNotesPanel {...props} fileId="second" slideIndex={1} />)
+		finishSave(true)
+		await waitFor(() => expect(props.onSaved).toHaveBeenCalled())
+		expect(onGenerate).not.toHaveBeenCalled()
+	})
+
+	it("disables polish and shorten for empty notes", () => {
+		render(
+			<PPTSpeakerNotesPanel
+				slideIndex={0}
+				fileId="empty"
+				rawContent=""
+				allowEdit
+				onGenerate={vi.fn()}
+				onSaved={vi.fn()}
+			/>,
+		)
+		expect(screen.getByText("ppt.speakerNotes.generate")).toBeEnabled()
+		expect(screen.getByText("ppt.speakerNotes.polish")).toBeDisabled()
+		expect(screen.getByText("ppt.speakerNotes.shorten")).toBeDisabled()
+	})
+
+	it.each(["generate", "polish", "shorten"] as const)(
+		"saves the current draft before %s",
+		async (action) => {
+			const onGenerate = vi.fn()
+			const onSaved = vi.fn().mockResolvedValue(undefined)
+			render(
+				<PPTSpeakerNotesPanel
+					slideIndex={0}
+					fileId="draft"
+					rawContent=""
+					allowEdit
+					onGenerate={onGenerate}
+					onSaved={onSaved}
+					saveEditContent={vi.fn().mockResolvedValue(true)}
+				/>,
+			)
+			const editor = await screen.findByTestId("ppt-speaker-notes-editor")
+			fireEvent.change(editor, { target: { value: "**Current draft**" } })
+			const button = screen.getByText(`ppt.speakerNotes.${action}`)
+			fireEvent.blur(editor, { relatedTarget: button })
+			expect(onSaved).not.toHaveBeenCalled()
+			fireEvent.click(button)
+			await waitFor(() => expect(onGenerate).toHaveBeenCalledWith(action))
+			expect(onSaved.mock.invocationCallOrder[0]).toBeLessThan(
+				onGenerate.mock.invocationCallOrder[0],
+			)
+		},
+	)
+
+	it("does not request AI changes when saving the draft fails", async () => {
+		const onGenerate = vi.fn()
+		render(
+			<PPTSpeakerNotesPanel
+				slideIndex={0}
+				fileId="draft"
+				rawContent=""
+				allowEdit
+				onGenerate={onGenerate}
+				onSaved={vi.fn()}
+				saveEditContent={vi.fn().mockResolvedValue(false)}
+			/>,
+		)
+		fireEvent.change(await screen.findByTestId("ppt-speaker-notes-editor"), {
+			target: { value: "Do not lose this" },
+		})
+		fireEvent.click(screen.getByText("ppt.speakerNotes.polish"))
+		await screen.findByText("ppt.speakerNotes.saveFailed")
+		expect(onGenerate).not.toHaveBeenCalled()
+		expect(screen.getByTestId("ppt-speaker-notes-editor")).toHaveValue("Do not lose this")
+	})
+
+	it("keeps unsaved drafts on their own slide when navigating while collapsed", async () => {
 		const props = {
 			slideIndex: 0,
 			rawContent: "",
@@ -19,7 +147,7 @@ describe("PPTSpeakerNotesPanel", () => {
 			onSaved: vi.fn(),
 		}
 		const { rerender } = render(<PPTSpeakerNotesPanel {...props} />)
-		fireEvent.click(screen.getByTestId("ppt-speaker-notes-content"))
+		await screen.findByTestId("ppt-speaker-notes-editor")
 		fireEvent.change(screen.getByTestId("ppt-speaker-notes-editor"), {
 			target: { value: "Page one draft" },
 		})
@@ -32,7 +160,7 @@ describe("PPTSpeakerNotesPanel", () => {
 			"Page one draft",
 		)
 		rerender(<PPTSpeakerNotesPanel {...props} />)
-		expect(screen.getByTestId("ppt-speaker-notes-editor")).toHaveValue("Page one draft")
+		expect(await screen.findByTestId("ppt-speaker-notes-editor")).toHaveValue("Page one draft")
 	})
 
 	it("retains a failed draft while collapsed and retries after reopening", async () => {
@@ -46,7 +174,7 @@ describe("PPTSpeakerNotesPanel", () => {
 			onSaved: vi.fn().mockResolvedValue(undefined),
 		}
 		const { rerender } = render(<PPTSpeakerNotesPanel {...props} />)
-		fireEvent.click(screen.getByTestId("ppt-speaker-notes-content"))
+		await screen.findByTestId("ppt-speaker-notes-editor")
 		fireEvent.change(screen.getByTestId("ppt-speaker-notes-editor"), {
 			target: { value: "Keep this draft" },
 		})
@@ -76,7 +204,7 @@ describe("PPTSpeakerNotesPanel", () => {
 		expect(screen.getByTestId("ppt-speaker-notes-panel")).toHaveStyle({ height: "164px" })
 	})
 
-	it("enters an independent edit state while the slide remains outside PPT edit mode", async () => {
+	it("edits directly and saves on blur while the slide remains outside PPT edit mode", async () => {
 		const saveEditContent = vi.fn().mockResolvedValue(true)
 		const onSaved = vi.fn().mockResolvedValue(undefined)
 
@@ -91,7 +219,7 @@ describe("PPTSpeakerNotesPanel", () => {
 			/>,
 		)
 
-		fireEvent.click(screen.getByTestId("ppt-speaker-notes-content"))
+		await screen.findByTestId("ppt-speaker-notes-editor")
 		const editor = screen.getByTestId("ppt-speaker-notes-editor")
 		fireEvent.change(editor, { target: { value: "Introduce the key point." } })
 		fireEvent.blur(editor)
@@ -101,7 +229,7 @@ describe("PPTSpeakerNotesPanel", () => {
 		expect(savedContent).toContain("data-magic-slide-notes")
 		expect(saveEditContent.mock.calls[0].slice(1)).toEqual(["slide-1", true, undefined, true])
 		expect(onSaved).toHaveBeenCalledWith(expect.stringContaining("Introduce the key point."), 0)
-		expect(screen.getByTestId("ppt-speaker-notes-panel")).toHaveTextContent(
+		expect(screen.getByTestId("ppt-speaker-notes-editor")).toHaveValue(
 			"Introduce the key point.",
 		)
 	})
@@ -138,7 +266,7 @@ describe("PPTSpeakerNotesPanel", () => {
 			/>,
 		)
 
-		fireEvent.click(screen.getByTestId("ppt-speaker-notes-content"))
+		await screen.findByTestId("ppt-speaker-notes-editor")
 		fireEvent.change(screen.getByTestId("ppt-speaker-notes-editor"), {
 			target: { value: "Keep this AI change." },
 		})
@@ -177,7 +305,7 @@ describe("PPTSpeakerNotesPanel", () => {
 			/>,
 		)
 
-		fireEvent.click(screen.getByTestId("ppt-speaker-notes-content"))
+		await screen.findByTestId("ppt-speaker-notes-editor")
 		fireEvent.change(screen.getByTestId("ppt-speaker-notes-editor"), {
 			target: { value: "Keep my notes." },
 		})
@@ -216,7 +344,7 @@ describe("PPTSpeakerNotesPanel", () => {
 			/>,
 		)
 
-		fireEvent.click(screen.getByTestId("ppt-speaker-notes-content"))
+		await screen.findByTestId("ppt-speaker-notes-editor")
 		fireEvent.change(screen.getByTestId("ppt-speaker-notes-editor"), {
 			target: { value: "Stable note" },
 		})
@@ -246,7 +374,7 @@ describe("PPTSpeakerNotesPanel", () => {
 			/>,
 		)
 
-		fireEvent.click(screen.getByTestId("ppt-speaker-notes-content"))
+		await screen.findByTestId("ppt-speaker-notes-editor")
 		fireEvent.change(screen.getByTestId("ppt-speaker-notes-editor"), {
 			target: { value: "Do not lose this note" },
 		})

@@ -60,6 +60,7 @@ import type { PPTSlideStructureAdapter } from "./types"
 import { getPPTLiveRenderCacheSize } from "./PPTSidebar/utils/devicePerformance"
 import EditToolbar from "../EditToolbar"
 import PPTSpeakerNotesPanel from "./components/PPTSpeakerNotesPanel"
+import type { PPTNotesAction } from "./components/PPTNotesActions"
 import { pptNotesPreferenceStore } from "@/stores/layout/PPTNotesPreferenceStore"
 import { runGuardedAction } from "../../utils/actionGuard"
 import type { OptionItem } from "@/pages/superMagic/components/MainInputContainer/panels/types"
@@ -426,7 +427,12 @@ const PPTRenderInner = observer(function PPTRenderInner({
 		slideStructureAdapter,
 	})
 
-	const handleGenerateSpeakerNotes = useMemoizedFn(() => {
+	const handleGenerateSpeakerNotes = useMemoizedFn((action: PPTNotesAction) => {
+		const prompts = {
+			generate: t("ppt.speakerNotes.generatePrompt"),
+			polish: t("ppt.speakerNotes.polishPrompt"),
+			shorten: t("ppt.speakerNotes.shortenPrompt"),
+		}
 		const slide = store.currentSlide
 		if (!slide) return
 
@@ -441,7 +447,7 @@ const PPTRenderInner = observer(function PPTRenderInner({
 					{
 						type: "paragraph",
 						content: [
-							{ type: "text", text: t("ppt.speakerNotes.generatePrompt") },
+							{ type: "text", text: prompts[action] },
 							{
 								type: "mention",
 								attrs: {

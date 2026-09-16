@@ -1,11 +1,13 @@
 import { useEffect, useRef, useState } from "react"
 import { useTranslation } from "react-i18next"
-import { Loader2, NotebookPen, Sparkles } from "lucide-react"
+import { Loader2, NotebookPen } from "lucide-react"
 import { Button } from "@/components/shadcn-ui/button"
 import { cn } from "@/utils/cn"
 import { shadow } from "@/utils/shadow"
 import { extractSlideNotes, upsertSlideNotes } from "../utils/slideNotes"
 import { useSpeakerNotesResize } from "../hooks/useSpeakerNotesResize"
+import PPTNotesMarkdown from "./PPTNotesMarkdown"
+import PPTNotesActions, { type PPTNotesAction } from "./PPTNotesActions"
 
 interface PPTSpeakerNotesPanelProps {
 	visible?: boolean
@@ -22,7 +24,7 @@ interface PPTSpeakerNotesPanelProps {
 		isPPTEditMode?: boolean,
 	) => Promise<boolean | void>
 	onSaved: (content: string, slideIndex: number) => Promise<void>
-	onGenerate?: () => void
+	onGenerate?: (action: PPTNotesAction) => void
 }
 
 type SaveState = "idle" | "saving" | "saved" | "error"
@@ -72,14 +74,21 @@ function SpeakerNotesEditor({
 	resize: ReturnType<typeof useSpeakerNotesResize>
 }) {
 	const { t } = useTranslation("super")
-	const textareaRef = useRef<HTMLTextAreaElement>(null)
 	const savingRef = useRef(false)
+	const activeRef = useRef(true)
 	const lastSyncedRawContentRef = useRef(rawContent)
 	const [notes, setNotes] = useState(() => extractSlideNotes(rawContent))
 	const [draft, setDraft] = useState(initialDraft ?? notes)
 	const [isEditing, setIsEditing] = useState(initialDraft !== undefined && initialDraft !== notes)
 	const [saveState, setSaveState] = useState<SaveState>("idle")
 	const dirty = draft !== notes
+
+	useEffect(() => {
+		activeRef.current = true
+		return () => {
+			activeRef.current = false
+		}
+	}, [])
 
 	useEffect(() => {
 		if (isEditing && dirty) return
@@ -92,10 +101,6 @@ function SpeakerNotesEditor({
 		setDraft(nextNotes)
 		setSaveState("idle")
 	}, [dirty, isEditing, notes, rawContent])
-
-	useEffect(() => {
-		if (isEditing && visible) textareaRef.current?.focus()
-	}, [isEditing, visible])
 
 	const saveNotes = async () => {
 		if (!dirty) {
@@ -194,20 +199,20 @@ function SpeakerNotesEditor({
 						</span>
 					)}
 				</div>
-				<div className="flex shrink-0 items-center gap-2">
+				<div className="flex flex-wrap items-center gap-1">
 					{onGenerate && (
-						<Button
-							type="button"
-							variant="ghost"
-							size="sm"
-							onClick={onGenerate}
-							className="h-6 gap-1.5 rounded-md px-2 text-xs font-normal text-muted-foreground hover:text-foreground"
-						>
-							<Sparkles className="size-4" />
-							{t("ppt.speakerNotes.generate")}
-						</Button>
+						<PPTNotesActions
+							hasNotes={Boolean(draft.trim())}
+							disabled={saveState === "saving" || !allowEdit}
+							onAction={async (action) => {
+								if (dirty && !(await saveNotes())) return
+								// A save can finish after navigation; never apply its action to the new page.
+								if (!activeRef.current) return
+								onGenerate(action)
+							}}
+						/>
 					)}
-					{isEditing && dirty && (
+					{allowEdit && dirty && (
 						<Button
 							type="button"
 							variant="outline"
@@ -225,37 +230,17 @@ function SpeakerNotesEditor({
 				</div>
 			</div>
 
-			{isEditing ? (
-				<textarea
-					ref={textareaRef}
-					data-testid="ppt-speaker-notes-editor"
-					value={draft}
-					aria-label={t("ppt.speakerNotes.title")}
-					readOnly={saveState === "saving" || !allowEdit}
-					onChange={(event) => {
-						setDraft(event.target.value)
-						onDraftChange(event.target.value)
-						setSaveState("idle")
-					}}
-					onBlur={() => void saveNotes()}
-					placeholder={t("ppt.speakerNotes.placeholder")}
-					className="mx-3 mb-3 min-h-0 flex-1 resize-none rounded-lg border-0 bg-muted/40 px-3 py-2 text-[13px] leading-6 text-foreground focus-visible:outline focus-visible:outline-2 focus-visible:outline-ring"
-				/>
-			) : (
-				<button
-					data-testid="ppt-speaker-notes-content"
-					type="button"
-					disabled={!allowEdit}
-					onClick={() => allowEdit && setIsEditing(true)}
-					className={cn(
-						"mx-3 mb-3 flex min-h-0 flex-1 items-start overflow-y-auto whitespace-pre-wrap break-words rounded-lg bg-muted/40 px-3 py-2 text-left text-[13px] leading-6 focus-visible:outline focus-visible:outline-2 focus-visible:outline-ring",
-						notes ? "text-foreground" : "text-muted-foreground",
-						!allowEdit && "cursor-default",
-					)}
-				>
-					<span className="min-w-0">{notes || t("ppt.speakerNotes.empty")}</span>
-				</button>
-			)}
+			<PPTNotesMarkdown
+				value={isEditing ? draft : notes}
+				readOnly={saveState === "saving" || !allowEdit}
+				onChange={(value) => {
+					setIsEditing(true)
+					setDraft(value)
+					onDraftChange(value)
+					setSaveState("idle")
+				}}
+				onSave={() => void saveNotes()}
+			/>
 		</section>
 	)
 }
