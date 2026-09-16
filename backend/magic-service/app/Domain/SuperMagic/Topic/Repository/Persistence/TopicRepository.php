@@ -206,6 +206,34 @@ class TopicRepository implements TopicRepositoryInterface
         ];
     }
 
+    /**
+     * 根据条件获取话题ID列表（仅取 id，不构造实体）.
+     *
+     * @param array $conditions 查询条件，如 ['project_id' => 1, 'workspace_id' => 2]
+     * @param bool $withTrashed 是否包含已软删的话题
+     * @return int[] 话题ID列表
+     */
+    public function getTopicIdsByCondition(array $conditions, bool $withTrashed = false): array
+    {
+        $query = $this->model::query();
+        if ($withTrashed) {
+            /** @phpstan-ignore-next-line - TopicModel uses SoftDeletes trait which provides withTrashed() */
+            $query->withTrashed();
+        } else {
+            $query->whereNull('deleted_at');
+        }
+
+        foreach ($conditions as $field => $value) {
+            if (is_array($value)) {
+                $query->whereIn($field, $value);
+            } else {
+                $query->where($field, $value);
+            }
+        }
+
+        return array_map('intval', $query->pluck('id')->toArray());
+    }
+
     public function createTopic(TopicEntity $topicEntity): TopicEntity
     {
         $date = date('Y-m-d H:i:s');

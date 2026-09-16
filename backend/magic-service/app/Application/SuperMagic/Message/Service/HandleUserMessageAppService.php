@@ -560,8 +560,11 @@ class HandleUserMessageAppService extends AbstractAppService
         $updateSandboxIds = array_diff($sandboxIds, $runningSandboxIds);
         // Update topic status
         $this->topicDomainService->updateTopicStatusBySandboxIds($updateSandboxIds, TaskStatus::ERROR);
-        // Update task status
-        $this->taskDomainService->updateTaskStatusBySandboxIds($updateSandboxIds, TaskStatus::ERROR, 'Synchronize sandbox status');
+        // Update task status (via topic_id: task table is indexed by topic_id, not sandbox_id)
+        $updateTopicIds = array_values(array_intersect_key($sandboxIdToTopicId, array_flip($updateSandboxIds)));
+        if ($updateTopicIds !== []) {
+            $this->taskDomainService->updateTaskStatusByTopicIds($updateTopicIds, TaskStatus::ERROR, 'Synchronize sandbox status');
+        }
 
         // Collect running topic IDs
         $runningTopicIds = [];
