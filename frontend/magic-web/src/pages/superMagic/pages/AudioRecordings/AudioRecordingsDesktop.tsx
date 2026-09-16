@@ -366,7 +366,7 @@ function AudioRecordingsDesktop({ scrollViewportRef }: AudioRecordingsDesktopPro
 			className="mt-5 flex w-full min-w-0 flex-col gap-5 sm:gap-6"
 			data-testid="audio-recordings-desktop"
 		>
-			<div className="flex min-w-0 flex-wrap items-start justify-between gap-3">
+			<div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
 				<div className="flex min-w-0 flex-col gap-2">
 					<h1 className="break-words bg-gradient-to-br from-foreground via-foreground/90 to-muted-foreground bg-clip-text text-2xl font-bold leading-tight text-transparent sm:text-3xl lg:text-4xl">
 						{t("pageTitle")}
