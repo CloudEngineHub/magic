@@ -45,13 +45,17 @@ export class AccountService {
 	setAccount(userAccount: User.UserAccount) {
 		// 数据持久化同步
 		const account = new AccountRepository()
-		account.addAccount(userAccount).catch(logger.error)
+		const persistence = account.addAccount(userAccount)
+		void persistence.catch(logger.error)
 
 		// 内存状态同步
 		userStore.account.setAccount(userAccount)
 
 		// 广播添加账号
 		BroadcastChannelSender.addAccount(userAccount)
+
+		// Bootstrap callers must wait for disk as well as memory before reporting success.
+		return persistence
 	}
 
 	/**

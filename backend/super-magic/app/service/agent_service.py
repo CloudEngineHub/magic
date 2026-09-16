@@ -424,7 +424,7 @@ class AgentService(Base):
                 f"流式写入 {written_bytes} 字节)"
             )
 
-            # .chat_history 是沙盒本地临时目录，不跨沙盒启动持久化。
+            # .chat_history 是活动会话目录，跨沙盒恢复依赖已上传的归档。
             # 调用方在远程恢复前已经通过 _replace_local_chat_history_with_empty()
             # 清空该目录，因此远程归档可以直接解压到正式活动目录。
             target_dir = target_dir or PathManager.get_chat_history_dir()
@@ -558,6 +558,7 @@ class AgentService(Base):
 
         # 追加渠道专属上下文片段（如微信消息携带的媒体文件路径），不支持的渠道返回空串不影响
         query = ChannelContextService.append_channel_context(query, chat_client_message)
+        await ChannelContextService.suggest_channel_skills(chat_client_message, agent_context)
 
         # 原生视觉消费 mention 模块提取出的工作区或挂载目录图片路径。
         image_refs = await self._mention_builder.extract_image_refs(mentions, agent_context)
@@ -584,12 +585,10 @@ class AgentService(Base):
             agent.agent_context.horizon,
         )
 
-        # 每次用户消息前刷新工作区文件树，让 horizon 检测用户上传/删除文件等变化
-        try:
-            await agent.refresh_workspace_files()
-        except Exception as _e:
-            logger.warning(f"[AgentService] 刷新工作区文件树失败: {_e}")
-
+        """
+        文件树刷新放在 Agent 每轮准备 Horizon 的入口；只在用户消息入口刷新会漏掉工具新增文件。
+        这里不重复扫描，让首轮和后续工具轮使用同一个观察时机。
+        """
         await CliStatusFactory.wait_initial(agent_context)
 
         try:

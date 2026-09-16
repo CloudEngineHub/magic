@@ -19,6 +19,12 @@ export interface SlideProcessorConfig {
 	displayConfig?: any
 }
 
+/** 内容与资源摘要必须来自同一次处理，不能把编辑后的内容与旧摘要配对。 */
+export interface ProcessedSlideResult {
+	content: string
+	resourceVersionSignature: string | null
+}
+
 /**
  * SlideProcessorService - Responsible for processing HTML content
  * Pure service layer without state management
@@ -41,9 +47,9 @@ export class SlideProcessorService {
 		content: string,
 		slideIndex: number,
 		relativeFilePath?: string,
-	): Promise<string> {
+	): Promise<ProcessedSlideResult> {
 		if (!content) {
-			return ""
+			return { content: "", resourceVersionSignature: null }
 		}
 
 		try {
@@ -59,10 +65,13 @@ export class SlideProcessorService {
 			}
 
 			const result: ProcessHtmlContentOutput = await processHtmlContent(input)
-			return result.processedContent
+			return {
+				content: result.processedContent,
+				resourceVersionSignature: result.resourceVersionSignature ?? null,
+			}
 		} catch (error) {
 			console.error(`Failed to process slide at index ${slideIndex}:`, error)
-			return content // Return original content on error
+			return { content, resourceVersionSignature: null } // Return original content on error
 		}
 	}
 
@@ -110,9 +119,9 @@ export class SlideProcessorService {
 		slideIndex: number,
 		relativeFilePath: string | undefined,
 		urlMapping: Map<string, string>,
-	): Promise<string> {
+	): Promise<ProcessedSlideResult> {
 		if (!content) {
-			return ""
+			return { content: "", resourceVersionSignature: null }
 		}
 
 		try {
@@ -129,10 +138,13 @@ export class SlideProcessorService {
 			}
 
 			const result: ProcessHtmlContentOutput = await processHtmlContent(input)
-			return result.processedContent
+			return {
+				content: result.processedContent,
+				resourceVersionSignature: result.resourceVersionSignature ?? null,
+			}
 		} catch (error) {
 			console.error(`Failed to process slide at index ${slideIndex}:`, error)
-			return content // Return original content on error
+			return { content, resourceVersionSignature: null } // Return original content on error
 		}
 	}
 

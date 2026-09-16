@@ -1,13 +1,13 @@
+import { getClipboardPlainText } from "@/pages/superMagic/components/MessageList/utils/mentionClipboard"
 import { Node, mergeAttributes } from "@/infrastructure/editors/tiptap/core"
 import { ReactNodeViewRenderer } from "@/infrastructure/editors/tiptap/react"
 import { INSPECTOR_DETAIL_TYPE } from "./const"
-import type { InspectorDetailAttrs, InspectorDetailOptions } from "./types"
+import type { InspectorDetailOptions } from "./types"
 import { InspectorDetailComponent } from "./component"
 import { createMagicNodeDragPlugin } from "../node-drag"
 
 /**
- * Renders element-inspector context (selector, size, styles, text preview)
- * as a collapsible block inside the message editor.
+ * Renders a compact inline selection chip; details open in an independent popover.
  */
 export const InspectorDetailExtension = Node.create<InspectorDetailOptions>({
 	name: INSPECTOR_DETAIL_TYPE,
@@ -21,6 +21,28 @@ export const InspectorDetailExtension = Node.create<InspectorDetailOptions>({
 
 	addAttributes() {
 		return {
+			sourceType: {
+				default: "html",
+				parseHTML: (el) =>
+					el.getAttribute("data-source-type") === "markdown" ? "markdown" : "html",
+				renderHTML: (attrs) => ({ "data-source-type": attrs.sourceType }),
+			},
+			markdownSource: {
+				default: null,
+				parseHTML: (el) => {
+					const raw = el.getAttribute("data-markdown-source")
+					if (!raw) return null
+					try {
+						return JSON.parse(raw)
+					} catch {
+						return null
+					}
+				},
+				renderHTML: (attrs) =>
+					attrs.markdownSource
+						? { "data-markdown-source": JSON.stringify(attrs.markdownSource) }
+						: {},
+			},
 			title: {
 				default: "",
 				parseHTML: (el) => el.getAttribute("data-title") ?? "",
@@ -141,36 +163,7 @@ export const InspectorDetailExtension = Node.create<InspectorDetailOptions>({
 	},
 
 	renderText({ node }) {
-		const attrs = node.attrs as InspectorDetailAttrs
-		const lines: string[] = []
-
-		if (attrs.title) lines.push(attrs.title)
-		if (attrs.selector) lines.push(`selector: ${attrs.selector}`)
-		if (attrs.size) lines.push(`size: ${attrs.size}`)
-
-		if (attrs.computedStyles && attrs.computedStyles !== "{}") {
-			try {
-				const styles = JSON.parse(attrs.computedStyles) as Record<string, string>
-				const pairs = Object.entries(styles).map(([k, v]) => `${k}: ${v}`)
-				if (pairs.length > 0) lines.push(`computedStyles: ${pairs.join("; ")}`)
-			} catch {
-				// Fallback: raw value
-				lines.push(`computedStyles: ${attrs.computedStyles}`)
-			}
-		}
-
-		if (attrs.textContent) lines.push(`textContent: "${attrs.textContent}"`)
-		if (attrs.resource) lines.push(`resource: ${attrs.resource}`)
-		if (attrs.elementAttributes && attrs.elementAttributes !== "{}") {
-			lines.push(`elementAttributes: ${attrs.elementAttributes}`)
-		}
-		if (attrs.domContext && attrs.domContext !== "{}")
-			lines.push(`domContext: ${attrs.domContext}`)
-		if (attrs.elementHtml) lines.push(`elementHtml: ${attrs.elementHtml}`)
-		if (attrs.selectorMatchCount >= 0)
-			lines.push(`selectorMatchCount: ${attrs.selectorMatchCount}`)
-
-		return lines.length > 0 ? `${lines.join("\n")}\n` : ""
+		return getClipboardPlainText({ type: "doc", content: [node.toJSON()] })
 	},
 
 	addNodeView() {

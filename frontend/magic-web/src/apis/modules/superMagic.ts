@@ -91,6 +91,24 @@ export interface SaveFileContentResponse {
 	completed_at: string
 }
 
+export type FileReferenceSelector =
+	{ file_id: string } | { space_type: "user"; space_relative_path: string }
+
+interface FileReferenceMetadata {
+	file_id: string
+	file_name: string
+	is_directory: boolean
+	file_extension: string
+	space_relative_path: string
+}
+
+export type FileReference =
+	| (FileReferenceMetadata & { space_type: "user"; project_id?: never })
+	| (FileReferenceMetadata & { space_type: "project"; project_id: string })
+
+export type FileReferenceResult =
+	{ status: "resolved"; reference: FileReference } | { status: "unavailable" | "invalid" }
+
 export interface SuperMagicTopicModelExtra {
 	transcription_enabled?: boolean
 	auto_summary_enabled?: boolean
@@ -2129,7 +2147,10 @@ export const generateSuperMagicApi = (fetch: ServiceHttpClient) => ({
 	 * @param data
 	 */
 	deleteFiles(data: { file_ids: string[]; project_id?: string }) {
-		return fetch.post(`/api/v1/super-agent/file/batch-delete`, data)
+		return fetch.post<{ file_ids: string[]; project_id: number; count: number }>(
+			`/api/v1/super-agent/file/batch-delete`,
+			data,
+		)
 	},
 
 	/**
@@ -2150,11 +2171,21 @@ export const generateSuperMagicApi = (fetch: ServiceHttpClient) => ({
 		})
 	},
 
+	/** 按当前访问权限批量查询项目名称。 */
+	getProjectNames(projectIds: string[], signal?: AbortSignal) {
+		return fetch.post<{ names: Record<string, string> }>(
+			"/api/v1/super-agent/projects/names/queries",
+			{ project_ids: projectIds },
+			{ signal, enableErrorMessagePrompt: false },
+		)
+	},
+
 	/**
 	 * 获取项目列表
 	 * @param param0
 	 * @returns
 	 */
+
 	getProjects({
 		workspace_id,
 		project_name,
@@ -2227,19 +2258,30 @@ export const generateSuperMagicApi = (fetch: ServiceHttpClient) => ({
 			page,
 			page_size,
 			show_collaboration = 1,
+			sort_mode,
 		}: {
 			workspace_id?: string
 			project_name?: string
 			page: number
 			page_size: number
 			show_collaboration?: number
+			sort_mode?: "workspace" | "recent"
 		},
 		options?: Omit<RequestConfig, "url">,
 	) {
 		return fetch.post<WithPage<ProjectListItem>>(
 			"/api/v1/super-agent/projects/participated",
-			{ workspace_id, project_name, page, page_size, show_collaboration },
+			{ workspace_id, project_name, page, page_size, show_collaboration, sort_mode },
 			options,
+		)
+	},
+
+	/** 记录用户进入项目；后台详情读取不调用此接口。 */
+	recordProjectVisit(id: string) {
+		return fetch.post<{ id: string; last_active_at: string }>(
+			`/api/v1/super-agent/projects/${id}/visit`,
+			undefined,
+			{ enableErrorMessagePrompt: false },
 		)
 	},
 
@@ -2711,7 +2753,7 @@ export const generateSuperMagicApi = (fetch: ServiceHttpClient) => ({
 				page_size,
 			},
 			{
-				enableRequestUnion: true,
+				enableRequestUnion: false,
 			},
 		)
 	},
@@ -2724,11 +2766,13 @@ export const generateSuperMagicApi = (fetch: ServiceHttpClient) => ({
 		topic_id,
 		message_type,
 		message_content,
+		process_immediately,
 	}: {
 		project_id: string
 		topic_id: string
 		message_type: string
 		message_content: any
+		process_immediately?: boolean
 	}) {
 		return fetch.post<{ queue_id: string; status: number }>(
 			"/api/v1/super-agent/message-queue",
@@ -2737,6 +2781,7 @@ export const generateSuperMagicApi = (fetch: ServiceHttpClient) => ({
 				topic_id,
 				message_type,
 				message_content,
+				process_immediately,
 			},
 		)
 	},
@@ -2744,15 +2789,62 @@ export const generateSuperMagicApi = (fetch: ServiceHttpClient) => ({
 	/**
 	 * 主动消费队列消息
 	 */
-	consumeQueueMessage({ messageId }: { messageId: string }) {
-		return fetch.post(`/api/v1/super-agent/message-queue/${messageId}/consume`, {})
+	consumeQueueMessage({ messageId, force }: { messageId: string; force: boolean }) {
+		return fetch.post<{ success: boolean; status: string; error_message: string | null }>(
+			`/api/v1/super-agent/message-queue/${messageId}/consume`,
+			{ force },
+		)
 	},
 
 	/**
 	 * 删除队列消息
 	 */
-	deleteQueueMessage({ messageId }: { messageId: string }) {
-		return fetch.delete(`/api/v1/super-agent/message-queue/${messageId}`)
+	deleteQueueMessage({
+		messageId,
+		expectedSyncId,
+	}: {
+		messageId: string
+		expectedSyncId?: string
+	}) {
+		return fetch.delete<{ rows: number; removed: boolean }>(
+			`/api/v1/super-agent/message-queue/${messageId}`,
+			{ expected_sync_id: expectedSyncId },
+		)
+	},
+
+	restoreQueueMessage({
+		messageId,
+		...params
+	}: {
+		messageId: string
+		project_id: string
+		topic_id: string
+		message_type: string
+		message_content: Record<string, unknown>
+		before_id: string | null
+		after_id: string | null
+		original_index: number
+		expected_sync_id: string
+	}) {
+		return fetch.post<
+			| { result: "accepted"; queue_id: string; status: number }
+			| { result: "original_unavailable" }
+		>(`/api/v1/super-agent/message-queue/${messageId}/restore`, params)
+	},
+
+	moveQueueMessage({
+		messageId,
+		before_id,
+		after_id,
+	}: {
+		messageId: string
+		before_id: string | null
+		after_id: string | null
+	}) {
+		return fetch.patch<{ queue_id: string; sort_order: string }>(
+			`/api/v1/super-agent/message-queue/${messageId}/position`,
+			{ before_id, after_id },
+		)
 	},
 
 	/**
@@ -2846,6 +2938,14 @@ export const generateSuperMagicApi = (fetch: ServiceHttpClient) => ({
 				? undefined
 				: { enableErrorMessagePrompt: options.enableErrorMessagePrompt }
 		return fetch.get<FileInfo>(`/api/v1/super-agent/file/${file_id}`, config)
+	},
+
+	resolveFileReferences(references: FileReferenceSelector[], signal?: AbortSignal) {
+		return fetch.post<{ results: FileReferenceResult[] }>(
+			"/api/v1/super-agent/file/resolve-references",
+			{ references },
+			{ signal, enableErrorMessagePrompt: false },
+		)
 	},
 
 	/**

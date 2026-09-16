@@ -1,3 +1,7 @@
+import {
+	resolveFilePresentation,
+	getFilePresentationIndex,
+} from "@/pages/superMagic/components/TopicFilesButton/utils/file-presentation"
 import React, { useState, useMemo, useEffect, useRef } from "react"
 import { Checkbox, Dropdown, Menu } from "antd"
 import { useMemoizedFn, useDebounceFn } from "ahooks"
@@ -31,7 +35,7 @@ import FoldIcon from "@/pages/superMagic/assets/svg/file-folder.svg"
 import EmptyFilesIcon from "@/pages/superMagic/assets/svg/empty-files.svg"
 import { InputWithError } from "@/pages/superMagic/components/TopicFilesButton/components"
 import IconProject from "../../../icons/IconProject"
-import { ProjectResourceIcon } from "@/pages/superMagic/components/TopicFilesButton/components/ProjectResourceIcon"
+import { FileResourceIcon } from "@/pages/superMagic/components/TopicFilesButton/components/FileResourceIcon"
 import PinnedTag from "@/pages/superMagic/components/EmptyWorkspacePanel/components/ProjectItem/components/PinnedTag"
 import CollaborationProjectTag from "@/pages/superMagic/components/CollaborationProjectTag"
 import NavigationStatusIcon from "@/pages/superMagic/components/NavigationStatusIcon"
@@ -1936,9 +1940,10 @@ function ProjectResourceSelectorModal({
 								</div>
 								<div className="flex min-w-0 flex-1 items-center gap-1">
 									<div className={folderIconClass}>
-										<ProjectResourceIcon
-											item={directory}
-											resourceTree={attachments}
+										<FileResourceIcon
+											presentation={resolveFilePresentation(directory, {
+												index: getFilePresentationIndex(attachments),
+											})}
 											size={14}
 										/>
 									</div>
@@ -1993,9 +1998,10 @@ function ProjectResourceSelectorModal({
 							<div className="flex w-full flex-1 items-center justify-between gap-2.5">
 								<div className="flex flex-1 items-center gap-1">
 									<div className={folderIconClass}>
-										<ProjectResourceIcon
-											item={directory}
-											resourceTree={attachments}
+										<FileResourceIcon
+											presentation={resolveFilePresentation(directory, {
+												index: getFilePresentationIndex(attachments),
+											})}
 											size={14}
 											folderTestId="cross-project-file-operation-modal-image-4"
 										/>

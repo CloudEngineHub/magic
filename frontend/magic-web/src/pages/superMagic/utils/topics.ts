@@ -2,13 +2,15 @@
 import pubsub, { PubSubEvents } from "@/utils/pubsub"
 import type { JSONContent } from "@/infrastructure/editors/tiptap/react"
 import type { TiptapMentionAttributes } from "@/components/business/MentionPanel/tiptap-plugin"
-import { MentionItemType, ProjectFileMentionData } from "@/components/business/MentionPanel/types"
-import { getFolderMentionData } from "@/components/business/MentionPanel/utils/directoryMention"
 import { AttachmentItem } from "../components/TopicFilesButton/hooks"
 import type { Topic, Workspace, ProjectListItem } from "@/pages/superMagic/pages/Workspace/types"
 import { SuperMagicApi } from "@/apis"
 import SuperMagicService from "../services"
 import magicToast from "@/components/base/MagicToaster/utils"
+import i18n from "i18next"
+import projectFilesStore from "@/stores/projectFiles"
+import { createFileReferenceMention } from "@/components/business/MentionPanel/utils/fileReferenceMention"
+import { getFileReferenceIdentityKey } from "@/pages/superMagic/services/userFileReferenceResolver"
 
 interface CreateTopicOptions {
 	selectedWorkspace?: { id: string }
@@ -106,27 +108,29 @@ export function handleNewTopic(options: CreateTopicOptions): Promise<any> {
 /**
  * 将文件项转换为mention格式
  */
-function convertFileToMention(fileItem: AttachmentItem): TiptapMentionAttributes {
-	if (fileItem.is_directory) {
-		return {
-			type: MentionItemType.FOLDER,
-			data: getFolderMentionData({
-				directoryId: fileItem.file_id,
-				directoryName: fileItem.file_name || fileItem.filename || fileItem.display_filename,
-				directoryPath: fileItem.relative_file_path,
-				directoryMetadata: fileItem.display_config,
-			}),
-		}
-	}
-	return {
-		type: MentionItemType.PROJECT_FILE,
-		data: {
-			file_id: fileItem.file_id,
-			file_name: fileItem.file_name || fileItem.filename || fileItem.display_filename,
-			file_path: fileItem.relative_file_path,
-			file_extension: fileItem.file_extension,
-		} as ProjectFileMentionData,
-	}
+async function convertFilesToMentions(files: AttachmentItem[]): Promise<TiptapMentionAttributes[]> {
+	const identity = getFileReferenceIdentityKey()
+	const projectId = projectFilesStore.currentSelectedProject?.id
+	const items = await Promise.all(
+		files.map(async (file) => {
+			try {
+				return await createFileReferenceMention(file, {
+					getFolderData: (id) => projectFilesStore.getFolderData(id),
+					workspaceFilesList: projectFilesStore.workspaceFilesList,
+				})
+			} catch {
+				return null
+			}
+		}),
+	)
+	if (
+		identity !== getFileReferenceIdentityKey() ||
+		projectId !== projectFilesStore.currentSelectedProject?.id
+	)
+		return []
+	if (items.some((item) => !item))
+		magicToast.error(i18n.t("super:common.fileNotFoundOrLoadFailed"))
+	return items.filter((item): item is TiptapMentionAttributes => item !== null)
 }
 
 /** 将纯文本内容转换为消息编辑器可插入的文档结构。 */
@@ -185,12 +189,12 @@ export async function addTextToNewChat(options: AddTextToNewChatOptions) {
 /**
  * 添加文件到当前对话
  */
-export function addFileToCurrentChat(options: AddToCurrentChatOptions) {
+export async function addFileToCurrentChat(options: AddToCurrentChatOptions) {
 	const { fileItem, isNewTopic = false, autoFocus = false } = options
 
 	// 转换为 mention 格式并发布事件，由 MessageEditor 统一插入（仅此一条链路，避免与 insert_drag_data 重复插入）
-	const mentionItem = convertFileToMention(fileItem)
-	addMentionsToCurrentChat({ items: [mentionItem], isNewTopic, autoFocus })
+	const items = await convertFilesToMentions([fileItem])
+	addMentionsToCurrentChat({ items, isNewTopic, autoFocus })
 }
 
 /** 将已构造的 mention 添加到当前对话。 */
@@ -249,7 +253,7 @@ export async function addFileToNewChat(options: AddToNewChatOptions) {
 	}
 
 	return addMentionsToNewChat({
-		items: [convertFileToMention(fileItem)],
+		items: await convertFilesToMentions([fileItem]),
 		selectedProject,
 		afterAddFileToNewTopic,
 		autoFocus,
@@ -259,11 +263,11 @@ export async function addFileToNewChat(options: AddToNewChatOptions) {
 /**
  * 添加多个文件到当前对话
  */
-export function addMultipleFilesToCurrentChat(options: AddMultipleFilesToCurrentChatOptions) {
+export async function addMultipleFilesToCurrentChat(options: AddMultipleFilesToCurrentChatOptions) {
 	const { fileItems, autoFocus = false } = options
 
 	// 转换为 mention 格式并发布事件，由 MessageEditor 统一插入（仅此一条链路，避免与 insert_drag_data 重复插入）
-	const mentionItems = fileItems.map(convertFileToMention)
+	const mentionItems = await convertFilesToMentions(fileItems)
 	addMentionsToCurrentChat({ items: mentionItems, autoFocus })
 }
 
@@ -285,7 +289,7 @@ export async function addMultipleFilesToNewChat(options: AddMultipleFilesToNewCh
 	}
 
 	return addMentionsToNewChat({
-		items: fileItems.map(convertFileToMention),
+		items: await convertFilesToMentions(fileItems),
 		selectedProject,
 		afterAddFileToNewTopic,
 		autoFocus,

@@ -126,6 +126,31 @@ export function useDetailActions({
 	const handleOpenFile = (item: any) => {
 		if (!item || !item.file_id) return
 		const fileVersion = attachmentsVersionMap.get(item.file_id)
+		// 未知格式由预览入口有界读取，不能在识别前先下载完整文件。
+		if (getFileType(item.file_extension || "") === DetailType.NotSupport) {
+			setUserSelectDetail?.({
+				type: DetailType.NotSupport,
+				data: {
+					file_id: item.file_id,
+					file_name: item.display_filename || item.file_name || item.filename,
+					file_extension: item.file_extension,
+					file_size: item.file_size,
+					is_directory: item.is_directory,
+					project_id: item.project_id,
+					updated_at: item.updated_at,
+					resource_version: item.resource_version,
+					version: item.version,
+					file_version: fileVersion,
+					display_config: item.display_config,
+				},
+				currentFileId: item.file_id,
+				attachments:
+					disPlayDetail?.attachments && Array.isArray(disPlayDetail.attachments)
+						? disPlayDetail.attachments
+						: attachments,
+			})
+			return
+		}
 		getTemporaryDownloadUrl({
 			file_ids: [item.file_id],
 			file_versions: fileVersion ? { [item.file_id]: fileVersion } : undefined,

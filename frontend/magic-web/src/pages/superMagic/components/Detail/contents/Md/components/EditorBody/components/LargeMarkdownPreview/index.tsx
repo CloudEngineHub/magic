@@ -1,3 +1,4 @@
+import { createSourceLocationPlugin } from "./source-location"
 import {
 	forwardRef,
 	memo,
@@ -33,6 +34,7 @@ import { searchMarkdown, type MarkdownSearchResult } from "./largeMarkdownSearch
 import "@/components/tiptap-templates/simple/components/SearchAndReplace/search-and-replace.scss"
 
 interface LargeMarkdownPreviewProps {
+	enableSourceLocation?: boolean
 	content: string
 	className?: string
 	documentFlow?: boolean
@@ -237,6 +239,7 @@ function ResolvedMarkdownImage({
 }
 
 interface MarkdownChunkProps {
+	enableSourceLocation?: boolean
 	chunk: VirtualMarkdownChunk
 	content: string
 	searchMatches: MarkdownSearchResult[]
@@ -246,6 +249,7 @@ interface MarkdownChunkProps {
 }
 
 const MarkdownChunk = memo(function MarkdownChunk({
+	enableSourceLocation = false,
 	chunk,
 	content,
 	searchMatches,
@@ -253,6 +257,10 @@ const MarkdownChunk = memo(function MarkdownChunk({
 	onAnchorClick,
 	onLinkClick,
 }: MarkdownChunkProps) {
+	const sourceLocationPlugin = useMemo(
+		() => createSourceLocationPlugin(chunk, enableSourceLocation),
+		[chunk, enableSourceLocation],
+	)
 	const headingIdPlugin = useMemo(
 		() => createHeadingIdPlugin(chunk.headingSlugs),
 		[chunk.headingSlugs],
@@ -318,6 +326,7 @@ const MarkdownChunk = memo(function MarkdownChunk({
 				rehypePlugins={[
 					rehypeRaw,
 					[rehypeSanitize, markdownSanitizeSchema],
+					sourceLocationPlugin,
 					searchHighlightPlugin,
 					headingIdPlugin,
 				]}
@@ -473,6 +482,7 @@ function LargeMarkdownSearchToolbar({
 }
 
 export default function LargeMarkdownPreview({
+	enableSourceLocation = false,
 	content,
 	className,
 	documentFlow = false,
@@ -815,6 +825,7 @@ export default function LargeMarkdownPreview({
 					components={{ List: VirtualMarkdownList }}
 					itemContent={(_index, chunk) => (
 						<MarkdownChunk
+							enableSourceLocation={enableSourceLocation}
 							chunk={chunk}
 							content={content}
 							searchMatches={resultsByChunk.get(_index) ?? EMPTY_SEARCH_RESULTS}

@@ -240,7 +240,7 @@ export class LoginService {
 				if (userInfo) {
 					userStore.user.setUserInfo(userTransformer(userInfo))
 					// 登录完成后构造用户信息，维护在账号体系中
-					this.service.get<AccountService>("accountService").setAccount({
+					await this.service.get<AccountService>("accountService").setAccount({
 						deployCode,
 						nickname: userInfo?.nickname,
 						organizationCode: userInfo?.organization_code,

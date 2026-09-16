@@ -67,7 +67,7 @@ import { MessageViewStateProvider } from "./view-state/MessageViewStateContext"
 import type { RevokedMessageEditorContext } from "./revoked-editor-context"
 import type { MessageListScrollAdapter } from "./message-list-scroll-adapter"
 import { useStableArrayReference } from "./hooks/useStableArrayReference"
-import { classicNameResolver } from "typescript";
+import { classicNameResolver } from "typescript"
 
 export { MessageListProvider }
 
@@ -360,8 +360,7 @@ const MessageList = observer(
 		const isLastMessageError = useMemo(() => {
 			const lastNode = mainDisplayData?.[mainDisplayData?.length - 1]
 			const n = superMagicStore.getMessageNode(lastNode?.super_message_id) as
-				| { status?: TaskStatus }
-				| undefined
+				{ status?: TaskStatus } | undefined
 			return n?.status === TaskStatus.ERROR
 		}, [mainDisplayData])
 
@@ -603,12 +602,15 @@ const MessageList = observer(
 		const augmentedMessageListContext = useMemo(
 			() => ({
 				...parentCtx,
+				allowUserFileReferences: !isShare && parentCtx.allowUserFileReferences !== false,
 				allowExport: enableExport,
 				exportModeActive,
 				onExportRequest: enableExport ? exportEnterRequest : undefined,
 			}),
 			// eslint-disable-next-line react-hooks/exhaustive-deps
 			[
+				isShare,
+				parentCtx.allowUserFileReferences,
 				parentCtx.allowRevoke,
 				parentCtx.allowUserMessageCopy,
 				parentCtx.allowScheduleTaskCreate,
@@ -915,7 +917,7 @@ const MessageList = observer(
 									// the virtualizer canvas inside keeps its measurable height.
 									"mx-auto block min-h-full min-w-[unset] max-w-3xl pb-2",
 									isMobile ? "px-4 pt-[10px]" : "pl-2 pt-[50px]",
-									classNames?.scrollWrapper
+									classNames?.scrollWrapper,
 								)}
 							>
 								{visibleData.length > 0 || !isEmptyStatus ? (

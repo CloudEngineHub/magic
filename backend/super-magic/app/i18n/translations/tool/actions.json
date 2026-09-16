@@ -115,9 +115,29 @@
         "zh_CN": "执行命令",
         "en_US": "Run command"
     },
-    "shell_await": {
-        "zh_CN": "查询后台任务",
-        "en_US": "Check background task"
+    "shell_await.sleep": {
+        "zh_CN": "等待",
+        "en_US": "Wait"
+    },
+    "shell_await.sleep_for": {
+        "zh_CN": "等待 {{duration}}",
+        "en_US": "Wait {{duration}}"
+    },
+    "shell_await.snapshot": {
+        "zh_CN": "查看命令输出",
+        "en_US": "View command output"
+    },
+    "shell_await.wait": {
+        "zh_CN": "等待命令结果",
+        "en_US": "Wait for command result"
+    },
+    "shell_await.send_input": {
+        "zh_CN": "发送输入",
+        "en_US": "Send input"
+    },
+    "shell_await.kill": {
+        "zh_CN": "停止命令",
+        "en_US": "Stop command"
     },
     "run_sdk_snippet": {
         "zh_CN": "代码模式",
@@ -402,6 +422,18 @@
     "compact_chat_history": {
         "zh_CN": "整理对话内容",
         "en_US": "Compact chat history"
+    },
+    "list_chat_history": {
+        "zh_CN": "查看聊天记录",
+        "en_US": "List chat history"
+    },
+    "search_chat_history": {
+        "zh_CN": "搜索聊天记录",
+        "en_US": "Search chat history"
+    },
+    "read_chat_history": {
+        "zh_CN": "读取聊天记录",
+        "en_US": "Read chat history"
     },
     "read_skills": {
         "zh_CN": "装备技能",
@@ -962,5 +994,9 @@
     "canvas.search_import_reference_images": {
         "zh_CN": "搜索并导入参考图片",
         "en_US": "Search and import reference images"
+    },
+    "inspect_memory": {
+        "zh_CN": "检查记忆用量",
+        "en_US": "Inspect memory usage"
     }
 }

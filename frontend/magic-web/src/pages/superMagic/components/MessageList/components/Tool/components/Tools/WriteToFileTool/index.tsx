@@ -3,10 +3,7 @@ import ToolCard from "../../ToolCard"
 import ToolContainer from "../../ToolContainer"
 import { TextEditor } from "../../ToolDetail"
 import type { BaseToolProps } from "../../../types"
-import {
-	downloadFileContent,
-	getTemporaryDownloadUrl,
-} from "@/pages/superMagic/utils/api"
+import { downloadFileContent, getTemporaryDownloadUrl } from "@/pages/superMagic/utils/api"
 import { useCollapse } from "../hooks/useCollapse"
 
 interface WriteToFileToolProps extends BaseToolProps {
@@ -99,6 +96,7 @@ function WriteToFileTool(props: WriteToFileToolProps) {
 				cardClassName={expandedCardClassName}
 			/>
 			<TextEditor
+				file={fileData}
 				content={content}
 				fileName={fileName}
 				language={getLanguageFromFileName(fileName)}

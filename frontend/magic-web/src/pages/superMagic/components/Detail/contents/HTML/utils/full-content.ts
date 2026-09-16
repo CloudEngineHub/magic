@@ -6,6 +6,7 @@ import {
 	MAGIC_FETCH_POST_MESSAGE_TARGET_HELPER,
 } from "./fetchInterceptor"
 import { getNestedIframeInterceptorScript } from "./nested-iframe-content"
+import { getDevicePreviewScrollbarsScript } from "./device-preview-scrollbars"
 import {
 	createEphemeralVirtualStorageContext,
 	getVirtualStorageBridgeScript,
@@ -2340,6 +2341,14 @@ export const getFullContent = (
 		}
 		${getDynamicResourceInterceptorScript(dynamicInterceptionOptions)}
 		${getInlineInspectorFallbackScript(options.enableInlineInspectorFallback === true)}
+		${
+			typeof options.devicePreviewScrollbars === "boolean"
+				? getDevicePreviewScrollbarsScript(
+						window.location.origin,
+						options.devicePreviewScrollbars,
+					)
+				: ""
+		}
 	`
 	injectedHeadFragment.appendChild(scriptElement)
 
@@ -2417,6 +2426,8 @@ interface GetFullContentOptions {
 	dynamicInterception?: DynamicResourceInterceptorOptions
 	containOverscroll?: boolean
 	hideVerticalScroll?: boolean
+	/** 提供布尔值即安装设备呈现控制；undefined 表示当前入口不参与设备模式切换。 */
+	devicePreviewScrollbars?: boolean
 	reportContentMetrics?: boolean
 	/** Origin of the React page that owns the sandbox iframe. */
 	contentMetricsTargetOrigin?: string

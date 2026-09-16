@@ -19,11 +19,16 @@ class ToolDetailFactory:
     """工具详情工厂类，用于创建不同类型的ToolDetail对象"""
 
     @staticmethod
-    def create_search_detail_from_search_results(search_results: Dict[str, List[SearchResult]]) -> ToolDetail:
+    def create_search_detail_from_search_results(
+        search_results: Dict[str, List[SearchResult]],
+        *,
+        query_by_keyword: dict[str, str] | None = None,
+    ) -> ToolDetail:
         """从SearchResult对象创建搜索类型的工具详情
 
         Args:
             search_results: 搜索结果字典，键为查询词，值为SearchResult对象列表
+            query_by_keyword: 分组键对应的实际查询词，仅用于详情展示
 
         Returns:
             ToolDetail: 搜索类型的工具详情
@@ -42,7 +47,11 @@ class ToolDetailFactory:
             ]
 
             # 将一个关键词及其对应的结果创建为一个SearchGroupItem
-            group = SearchGroupItem(keyword=query, results=result_items)
+            group = SearchGroupItem(
+                keyword=query,
+                results=result_items,
+                query=(query_by_keyword or {}).get(query),
+            )
 
             search_groups.append(group)
 

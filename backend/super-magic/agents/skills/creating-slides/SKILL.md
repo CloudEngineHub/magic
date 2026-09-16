@@ -434,34 +434,27 @@ result = tool.call('create_slide', {
 from sdk.tool import tool
 
 result = tool.call('image_search', {
-    "topic_id": "ChatGPT-Evolution-Report",
-    "requirements_xml": """<requirements>
-    <requirement>
-        <name>Musk Portrait</name>
-        <query>Elon Musk portrait professional</query>
-        <visual_understanding_prompt>Verify this is a clear portrait of Elon Musk</visual_understanding_prompt>
-        <requirement_explanation>Need a professional portrait photo of Musk for the person introduction page</requirement_explanation>
-        <expected_aspect_ratio>3:4</expected_aspect_ratio>
-        <count>3</count>
-    </requirement>
-    <requirement>
-        <name>ChatGPT Interface</name>
-        <query>ChatGPT interface screenshot 2025</query>
-        <visual_understanding_prompt>Confirm this is a real ChatGPT interface screenshot</visual_understanding_prompt>
-        <requirement_explanation>Need a real ChatGPT interface screenshot to showcase product features</requirement_explanation>
-        <expected_aspect_ratio>16:9</expected_aspect_ratio>
-        <count>5</count>
-    </requirement>
-    <requirement>
-        <name>Tech Background</name>
-        <query>AI technology abstract background</query>
-        <visual_understanding_prompt>Assess whether this is suitable as a technology-themed background</visual_understanding_prompt>
-        <requirement_explanation>Need an abstract tech-style background image for slide backgrounds</requirement_explanation>
-        <expected_aspect_ratio>16:9</expected_aspect_ratio>
-        <count>3</count>
-    </requirement>
-</requirements>"""
+    "search_group_name": "product-report-images",
+    "requirements": [
+        {
+            "name": "Product Interface",
+            "query": "Example App product interface screenshot",
+            "visual_understanding_prompt": "Confirm the image shows the product interface and recognizable features.",
+            "requirement_explanation": "Use a product interface screenshot to illustrate the main features.",
+            "expected_aspect_ratio": "16:9",
+            "count": 5
+        },
+        {
+            "name": "Technology Background",
+            "query": "AI technology abstract background",
+            "visual_understanding_prompt": "Assess whether the content is suitable as a technology-themed background.",
+            "requirement_explanation": "Use an abstract technology image as a slide background.",
+            "expected_aspect_ratio": "16:9",
+            "count": 3
+        }
+    ]
 })
+print(result.content)
 ```
 
 ### Web Content Retrieval
@@ -471,26 +464,26 @@ from sdk.tool import tool
 
 # Search web pages
 search_result = tool.call('web_search', {
-    "topic_id": "ChatGPT-Research",
-    "requirements_xml": """<requirements>
-    <requirement>
-        <name>ChatGPT History</name>
-        <query>ChatGPT development history 2025</query>
-        <limit>10</limit>
-    </requirement>
-    <requirement>
-        <name>GPT-4 Breakthroughs</name>
-        <query>OpenAI GPT-4 technical breakthroughs</query>
-        <limit>10</limit>
-        <time_period>month</time_period>
-    </requirement>
-    <requirement>
-        <name>Commercialization</name>
-        <query>ChatGPT commercialization progress</query>
-        <limit>10</limit>
-    </requirement>
-</requirements>"""
+    "search_group_name": "industry-report",
+    "requirements": [
+        {
+            "name": "Industry Overview",
+            "query": "enterprise AI software industry report",
+            "limit": 10,
+            "language": "en-US",
+            "region": "US"
+        },
+        {
+            "name": "Recent Developments",
+            "query": "enterprise AI software product updates",
+            "limit": 10,
+            "language": "en-US",
+            "region": "US",
+            "time_period": "month"
+        }
+    ]
 })
+print(search_result.content)
 
 # Read high-value webpages (refer to separate documentation for this tool)
 # read_result = tool.call('read_webpages_as_markdown', {...})
@@ -553,11 +546,10 @@ search_result = tool.call('web_search', {
 
 | Parameter          | Required | Type   | Description                                  |
 | ------------------ | -------- | ------ | -------------------------------------------- |
-| `topic_id`         | Yes      | string | Search topic identifier for deduplication    |
-| `requirements_xml` | Yes      | string | XML format search requirements configuration |
+| `search_group_name` | Yes      | string | Short name you create for related searches. Reuse the exact name within a group and choose a new name for a separate group. Images are deduplicated within each group; do not use the platform conversation ID. |
+| `requirements`    | Yes      | array  | Non-empty list of search requirement objects; each item runs one search |
 
-**requirements_xml Format:**
-Each `<requirement>` contains:
+Each `requirements` item contains:
 
 - `name` - Requirement name (required)
 - `query` - Search keywords (required)
@@ -577,11 +569,10 @@ Each `<requirement>` contains:
 
 | Parameter          | Required | Type   | Description                                  |
 | ------------------ | -------- | ------ | -------------------------------------------- |
-| `topic_id`         | Yes      | string | Search topic identifier for deduplication    |
-| `requirements_xml` | Yes      | string | XML format search requirements configuration |
+| `search_group_name` | Yes      | string | Short name you create for related searches. Reuse the exact name within a group and choose a new name for a separate group. This labels results without deduplication; do not use the platform conversation ID. |
+| `requirements`    | Yes      | array  | Non-empty list of search requirement objects; each item runs one search |
 
-**requirements_xml Format:**
-Each `<requirement>` contains:
+Each `requirements` item contains:
 
 - `name` - Requirement name (required)
 - `query` - Search keywords (required)
@@ -936,7 +927,7 @@ If user has no special requirements, follow this workflow step by step to comple
 
 ### 2. Image Search and Content Planning
 
-- **Batch image search**: Use image_search tool to batch search image materials, default minimum batch search 5+ requirements at once, all different, covering large, medium, small, horizontal, vertical various sizes or different scenarios for later use, set topic_id to project name (ensure deduplication)
+- **Batch image search**: Use image_search tool to batch search image materials, default minimum batch search 5+ requirements at once, all different, covering large, medium, small, horizontal, vertical various sizes or different scenarios for later use, reuse the project's image search_group_name across calls to deduplicate images
 - **One-time batch search**: Speculate various types of image needs potentially needed later, initiate batch search in one go, common examples: search background large images, character portraits, product close-ups, icons in different sizes and scenarios
 - **Avoid duplicates**: Don't repeatedly use visual analysis on similar content images, ensure similar content images only used once
 - **Content planning**: Based on user needs and reference materials, analyze and plan slide content:

@@ -131,6 +131,7 @@ function useProjectItemActionProps({ selectedWorkspace }: UseProjectItemActionPr
 	)
 
 	return {
+		isProjectModalOpen: Boolean(moveProjectId || deleteProject),
 		moveProjectId,
 		setMoveProjectId,
 		isMoveProjectLoading,

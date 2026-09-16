@@ -178,12 +178,14 @@ const ProjectPageInputContainerComponent: React.FC<ProjectPageInputContainerProp
 		const messageQueueNode = messageQueue.queue.length > 0 && !isEmptyStatus && (
 			<MessageQueue
 				queue={messageQueue.queue}
+				editorRef={messageQueue.editorRef}
 				queueStats={messageQueue.queueStats}
-				editingQueueItem={messageQueue.editingQueueItem}
 				onRemoveMessage={messageQueue.removeFromQueue}
 				onSendMessage={messageQueue.sendQueuedMessage}
 				onStartEdit={messageQueue.startEditQueueItem}
-				onCancelEdit={messageQueue.cancelEditQueueItem}
+				onWithdraw={messageQueue.withdrawQueueItem}
+				onMove={messageQueue.moveQueueItem}
+				isOperationPending={messageQueue.isQueueOperationPending}
 				variant={isMobile ? "mobile" : "default"}
 			/>
 		)
@@ -192,18 +194,7 @@ const ProjectPageInputContainerComponent: React.FC<ProjectPageInputContainerProp
 			taskDataNode,
 			messageQueueNode,
 		}
-	}, [
-		taskData,
-		isEmptyStatus,
-		messageQueue.queue,
-		messageQueue.queueStats,
-		messageQueue.editingQueueItem,
-		messageQueue.removeFromQueue,
-		messageQueue.sendQueuedMessage,
-		messageQueue.startEditQueueItem,
-		messageQueue.cancelEditQueueItem,
-		isMobile,
-	])
+	}, [taskData, isEmptyStatus, messageQueue, isMobile])
 
 	const sceneEditorContext = useMemo<SceneEditorContext>(() => {
 		return {
@@ -258,11 +249,8 @@ const ProjectPageInputContainerComponent: React.FC<ProjectPageInputContainerProp
 			},
 			onSendComplete,
 			onMessageSendReady,
-			queueContext: {
-				editingQueueItem: messageQueue.editingQueueItem,
-				addToQueue: messageQueue.addToQueue,
-				finishEditQueueItem: messageQueue.finishEditQueueItem,
-			},
+			editorRef: messageQueue.editorRef,
+			queueContext: messageQueue,
 			showTopicExamplesPortal: showTopicModeExamplePortal,
 			onSendSuccess,
 			createTopic,
@@ -297,9 +285,7 @@ const ProjectPageInputContainerComponent: React.FC<ProjectPageInputContainerProp
 		allowRecordingMode,
 		onFileClick,
 		onMessageSendReady,
-		messageQueue.editingQueueItem,
-		messageQueue.addToQueue,
-		messageQueue.finishEditQueueItem,
+		messageQueue,
 		showTopicModeExamplePortal,
 		showModeToggle,
 		showModelSelector,
@@ -344,6 +330,7 @@ const ProjectPageInputContainerComponent: React.FC<ProjectPageInputContainerProp
 			containerRef={effectiveContainerRef}
 			className={className}
 			fillHeight={shouldFillHeight}
+			inputResizeHandle={inputLayout?.inputResizeHandle}
 			classNames={classNames}
 			editorSize={editorSize}
 			isFocused={isFocused}

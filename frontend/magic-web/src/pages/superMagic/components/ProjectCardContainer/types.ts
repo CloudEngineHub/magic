@@ -9,10 +9,8 @@ export interface ProjectCardContainerProps {
 	selectedProject: ProjectListItem | CollaborationProjectListItem | null
 	/** Selected workspace */
 	selectedWorkspace?: Workspace | null
-	/** Click handler for navigating to workspace home */
-	onWorkspaceHomeClick?: () => void
-	/** Click handler for dropdown toggle */
-	onDropdownClick?: () => void
+	onCollapse?: () => void
+	isPanelVisible?: boolean
 	/** Custom className */
 	className?: string
 }

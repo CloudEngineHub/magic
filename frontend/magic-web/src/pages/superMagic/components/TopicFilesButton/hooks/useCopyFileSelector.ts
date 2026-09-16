@@ -1,8 +1,10 @@
 import { useState, useCallback } from "react"
 import { useTranslation } from "react-i18next"
 import type { AttachmentItem } from "./types"
+import type { DirectorySource } from "../../SelectPathModal/components/SelectDirectoryModal/types"
 
 interface UseCopyFileSelectorOptions {
+	directorySource?: DirectorySource
 	projectId?: string
 	attachments?: AttachmentItem[]
 	onCopySuccess?: () => void
@@ -52,6 +54,7 @@ export function useCopyFileSelector(options: UseCopyFileSelectorOptions = {}) {
 		hideCopySelector,
 		notifyCopySuccess,
 		selectorConfig: {
+			directorySource: options.directorySource,
 			visible,
 			title: t("topicFiles.contextMenu.copyTo"),
 			tips: t("topicFiles.moveModal.tips"),

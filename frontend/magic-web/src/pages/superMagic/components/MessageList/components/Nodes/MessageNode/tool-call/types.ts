@@ -1,5 +1,6 @@
 import type { MouseEvent, ReactNode } from "react"
 import type { FileItem, Topic } from "@/pages/superMagic/pages/Workspace/types"
+import type { ToolCardInteractionTarget } from "../../toolDetailSelection"
 
 export interface ToolDetail {
 	type?: string
@@ -39,6 +40,7 @@ export interface ToolCallViewModel {
 	remark?: string
 	status?: string
 	attachments: ToolAttachment[]
+	interactionTarget?: ToolCardInteractionTarget
 	rawArguments?: string
 	detail?: ToolDetail
 }

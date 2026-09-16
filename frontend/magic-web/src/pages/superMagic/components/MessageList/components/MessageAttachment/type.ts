@@ -1,4 +1,5 @@
-export interface AttachmentProps {
+import type { AttachmentItem } from "@/pages/superMagic/components/TopicFilesButton/hooks/types"
+export interface AttachmentProps extends AttachmentItem {
 	file_extension: string | undefined
 	file_name: string
 	filename: string

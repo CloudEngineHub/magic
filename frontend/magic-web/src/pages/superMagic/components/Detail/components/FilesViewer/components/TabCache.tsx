@@ -1,4 +1,4 @@
-import { memo, useCallback, useEffect, useRef } from "react"
+import { lazy, Suspense, memo, useCallback, useEffect, useRef } from "react"
 import { cn } from "@/utils/cn"
 import useFullscreenMode from "@/hooks/useFullscreenMode"
 import Render from "../../../Render"
@@ -6,7 +6,8 @@ import PlaybackTabContent, { type PlaybackTabContentProps } from "./PlaybackTabC
 import KnowledgeBaseTabContent from "./KnowledgeBaseTabContent"
 import WebsiteIframeTabContent from "./WebsiteIframeTabContent"
 import { getWebsiteTabData } from "../utils/websiteTabs"
-import type { TabItem } from "../types"
+import type { TabItem, FileManagerContext, FileManagerStateChangeOptions } from "../types"
+import type { FileManagerSnapshot } from "@/models/config/repositories/SuperProjectStateTypes"
 import type { KnowledgeBaseTabData } from "../hooks/useKnowledgeBaseTab"
 import { getFileViewerTabType } from "../utils/tabType"
 import {
@@ -16,6 +17,12 @@ import {
 	shouldUseFileViewerFullscreenSafeArea,
 } from "../utils/fullscreenSafeArea"
 
+import type { ProjectFileManagerProps } from "../../../../TopicFilesButton/components/ProjectFileManager"
+const ProjectFileManager = lazy(
+	() => import("../../../../TopicFilesButton/components/ProjectFileManager"),
+)
+const UserSpaceFileManager = lazy(() => import("../../../../UserSpace/UserSpaceFileManager"))
+
 type CachedTab = Partial<TabItem> & {
 	id: string
 	refreshKey?: string
@@ -23,6 +30,13 @@ type CachedTab = Partial<TabItem> & {
 }
 
 interface TabCacheProps {
+	managerProps: Omit<ProjectFileManagerProps, "projectId" | "initialDirectoryId">
+	getFileManagerState: (context: FileManagerContext) => FileManagerSnapshot | undefined
+	onFileManagerStateChange: (
+		id: string,
+		state: FileManagerSnapshot,
+		options: FileManagerStateChangeOptions,
+	) => void
 	tab: CachedTab
 	isActive: boolean
 	renderProps: Record<string, unknown>
@@ -46,6 +60,9 @@ interface TabCacheProps {
 const TabCache = memo(
 	({
 		tab,
+		managerProps,
+		getFileManagerState,
+		onFileManagerStateChange,
 		isActive,
 		renderProps,
 		onActiveFileChange,
@@ -58,6 +75,9 @@ const TabCache = memo(
 		fillPortalSurface = false,
 	}: TabCacheProps) => {
 		const tabType = getFileViewerTabType(tab)
+		const managerState = tab.fileManager
+			? (getFileManagerState(tab.fileManager) ?? tab.fileManagerState)
+			: undefined
 		const isPlaybackTab = tabType === "playback"
 		const isWebsite = tabType === "website"
 		const isKnowledgeBaseTab = tabType === "knowledge_base"
@@ -106,6 +126,16 @@ const TabCache = memo(
 			? FILE_VIEWER_FULLSCREEN_TAB_CONTENT_CLASS_NAME
 			: FILE_VIEWER_FULLSCREEN_BROWSER_TAB_CONTENT_CLASS_NAME
 
+		const renderContent = (
+			<Render
+				key={tab.refreshKey || tab.id}
+				{...renderProps}
+				onActiveFileChange={handleActiveFileChange}
+				openFileTab={openFileTab}
+				isTabActive={isActive}
+			/>
+		)
+
 		return (
 			<div
 				ref={tabContentRef}
@@ -127,20 +157,46 @@ const TabCache = memo(
 					(isPlaybackTab || isKnowledgeBaseTab) && "bg-white dark:bg-background",
 				)}
 			>
-				{isPlaybackTab && playbackProps ? (
+				{tabType === "file_manager" && tab.fileManager ? (
+					<Suspense fallback={null}>
+						{tab.fileManager.spaceType === "user" ? (
+							<UserSpaceFileManager
+								initialState={
+									managerState?.spaceType === "user" ? managerState : undefined
+								}
+								onStateChange={(state, options) =>
+									onFileManagerStateChange(tab.id, state, options)
+								}
+								isActive={isActive}
+								context={tab.fileManager}
+								onFileClick={managerProps.onFileClick}
+								projectId={managerProps.selectedProject?.id}
+								projectName={managerProps.selectedProject?.project_name}
+								topicId={managerProps.selectedTopic?.id}
+							/>
+						) : (
+							<ProjectFileManager
+								{...managerProps}
+								initialState={
+									managerState?.spaceType === "project" ? managerState : undefined
+								}
+								onStateChange={(state, options) =>
+									onFileManagerStateChange(tab.id, state, options)
+								}
+								isActive={isActive}
+								projectId={tab.fileManager.projectId}
+								initialDirectoryId={tab.fileManager.directoryId}
+							/>
+						)}
+					</Suspense>
+				) : isPlaybackTab && playbackProps ? (
 					<PlaybackTabContent {...playbackProps} />
 				) : isWebsite ? (
 					<WebsiteIframeTabContent {...getWebsiteTabData(tab)} isActive={isActive} />
 				) : isKnowledgeBaseTab && knowledgeBaseData ? (
 					<KnowledgeBaseTabContent data={knowledgeBaseData} />
 				) : (
-					<Render
-						key={tab.refreshKey || tab.id}
-						{...renderProps}
-						onActiveFileChange={handleActiveFileChange}
-						openFileTab={openFileTab}
-						isTabActive={isActive}
-					/>
+					renderContent
 				)}
 			</div>
 		)

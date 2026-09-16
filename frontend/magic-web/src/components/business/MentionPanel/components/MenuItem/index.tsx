@@ -33,13 +33,14 @@ const MenuItem = memo(function MenuItem(props: MenuItemProps) {
 	useGeistFont()
 
 	const renderer = useMentionItemRenderer(item.type)
-	const filePreviewById = useMentionItemRenderContextValue()
+	const { filePreviewById, filePresentationOptions } = useMentionItemRenderContextValue()
 	const rendererContext = {
 		item,
 		t,
 		isSearch,
 		platform: "desktop" as const,
 		filePreviewById,
+		filePresentationOptions,
 	}
 
 	function renderDeleteButton() {

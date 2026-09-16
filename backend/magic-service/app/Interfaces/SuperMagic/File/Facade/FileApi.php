@@ -13,6 +13,7 @@ use App\Application\SuperMagic\File\Service\AgentFileAppService;
 use App\Application\SuperMagic\File\Service\FileBatchAppService;
 use App\Application\SuperMagic\File\Service\FileManagementAppService;
 use App\Application\SuperMagic\File\Service\FileProcessAppService;
+use App\Application\SuperMagic\File\Service\FileReferenceAppService;
 use App\Application\SuperMagic\File\Service\FileVersionAppService;
 use App\Application\SuperMagic\File\Service\SandboxFileNotificationAppService;
 use App\Application\SuperMagic\Workspace\Service\WorkspaceAppService;
@@ -40,9 +41,11 @@ use App\Interfaces\SuperMagic\File\DTO\Request\GetFileVersionsRequestDTO;
 use App\Interfaces\SuperMagic\File\DTO\Request\MoveFileRequestDTO;
 use App\Interfaces\SuperMagic\File\DTO\Request\RefreshStsTokenRequestDTO;
 use App\Interfaces\SuperMagic\File\DTO\Request\ReplaceFileRequestDTO;
+use App\Interfaces\SuperMagic\File\DTO\Request\ResolveFileReferencesRequestDTO;
 use App\Interfaces\SuperMagic\File\DTO\Request\RollbackFileToVersionRequestDTO;
 use App\Interfaces\SuperMagic\File\DTO\Request\SandboxFileNotificationRequestDTO;
 use App\Interfaces\SuperMagic\File\DTO\Request\SaveProjectFileRequestDTO;
+use App\Interfaces\SuperMagic\File\DTO\Response\FileReferenceResultDTO;
 use App\Interfaces\SuperMagic\File\DTO\Request\WorkspaceAttachmentsRequestDTO;
 use App\Interfaces\SuperMagic\Project\DTO\Request\ProjectUploadTokenRequestDTO;
 use App\Interfaces\SuperMagic\Topic\DTO\Request\TopicUploadTokenRequestDTO;
@@ -66,8 +69,19 @@ class FileApi extends AbstractApi
         private readonly SandboxFileNotificationAppService $sandboxFileNotificationAppService,
         private readonly AccessTokenAuthorizationService $accessTokenAuthorizationService,
         private readonly FileScopeHandlerResolver $fileScopeHandlerResolver,
+        private readonly FileReferenceAppService $fileReferenceAppService,
     ) {
         parent::__construct($request);
+    }
+
+    public function resolveReferences(): array
+    {
+        /** @var MagicUserAuthorization $authorization */
+        $authorization = $this->getAuthorization();
+        $request = ResolveFileReferencesRequestDTO::fromRequest($this->request);
+        $results = $this->fileReferenceAppService->resolve($authorization, $request->references);
+
+        return ['results' => array_map(static fn (FileReferenceResultDTO $result): array => $result->toArray(), $results)];
     }
 
     /**

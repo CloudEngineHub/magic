@@ -842,6 +842,7 @@ export const MentionExtension = Mention.extend<MentionPanelPluginOptions>({
 
 		if (
 			attrs.type === MentionItemType.FOLDER ||
+			attrs.type === MentionItemType.USER_DIRECTORY ||
 			attrs.type === MentionItemType.MEMORY_DIRECTORY
 		) {
 			displayName = `${displayName}/`

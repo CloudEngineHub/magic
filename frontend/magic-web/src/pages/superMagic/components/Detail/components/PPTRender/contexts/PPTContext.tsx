@@ -53,6 +53,8 @@ export function PPTProvider({ children, storeConfig }: PPTProviderProps) {
 		displayConfig: any
 		displayConfigSlidesSignature: string
 		attachmentListSignature: string
+		attachmentLoadState: PPTStoreConfig["attachmentLoadState"]
+		projectId: PPTStoreConfig["projectId"]
 		mainFileId: string | undefined
 		mainFileName: string | undefined
 		initialActiveIndex: number | undefined
@@ -71,6 +73,11 @@ export function PPTProvider({ children, storeConfig }: PPTProviderProps) {
 			!prev || prev.displayConfigSlidesSignature !== displayConfigSlidesSignature
 		const attachmentListChanged =
 			!prev || prev.attachmentListSignature !== attachmentListSignature
+		const attachmentLoadStateChanged =
+			!prev ||
+			prev.projectId !== storeConfig.projectId ||
+			prev.attachmentLoadState?.projectId !== storeConfig.attachmentLoadState?.projectId ||
+			prev.attachmentLoadState?.status !== storeConfig.attachmentLoadState?.status
 		const mainFileChanged =
 			!prev ||
 			prev.mainFileId !== storeConfig.mainFileId ||
@@ -82,6 +89,7 @@ export function PPTProvider({ children, storeConfig }: PPTProviderProps) {
 		if (
 			slidesChanged ||
 			attachmentListChanged ||
+			attachmentLoadStateChanged ||
 			mainFileChanged ||
 			displayConfigChanged ||
 			initialActiveIndexChanged
@@ -90,13 +98,17 @@ export function PPTProvider({ children, storeConfig }: PPTProviderProps) {
 				displayConfig: storeConfig.displayConfig,
 				displayConfigSlidesSignature,
 				attachmentListSignature,
+				attachmentLoadState: storeConfig.attachmentLoadState,
+				projectId: storeConfig.projectId,
 				mainFileId: storeConfig.mainFileId,
 				mainFileName: storeConfig.mainFileName,
 				initialActiveIndex: storeConfig.initialActiveIndex,
 			}
 			void store.updateConfig({
+				projectId: storeConfig.projectId,
 				attachments: storeConfig.attachments,
 				attachmentList: storeConfig.attachmentList,
+				attachmentLoadState: storeConfig.attachmentLoadState,
 				mainFileId: storeConfig.mainFileId,
 				mainFileName: storeConfig.mainFileName,
 				displayConfig: storeConfig.displayConfig,
@@ -107,6 +119,8 @@ export function PPTProvider({ children, storeConfig }: PPTProviderProps) {
 		store,
 		storeConfig.attachments,
 		storeConfig.attachmentList,
+		storeConfig.attachmentLoadState,
+		storeConfig.projectId,
 		storeConfig.displayConfig,
 		storeConfig.mainFileId,
 		storeConfig.mainFileName,

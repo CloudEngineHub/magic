@@ -941,12 +941,15 @@ class HandleUserMessageAppService extends AbstractAppService
     {
         $ids = [];
         foreach ($mentions as $mention) {
+            if (! is_array($mention) || ! in_array($mention['type'] ?? '', ['project', 'project_file', 'project_directory'], true)) {
+                continue;
+            }
             $pid = $mention['project_id'] ?? null;
-            if ($pid === null || $pid === '') {
+            if ((! is_string($pid) && ! is_int($pid)) || ! preg_match('/^[1-9][0-9]*$/D', (string) $pid)) {
                 continue;
             }
             $pidStr = (string) $pid;
-            if ((int) $pidStr !== $currentProjectId) {
+            if ((string) (int) $pidStr === $pidStr && $pidStr !== (string) $currentProjectId) {
                 $ids[$pidStr] = true;
             }
         }

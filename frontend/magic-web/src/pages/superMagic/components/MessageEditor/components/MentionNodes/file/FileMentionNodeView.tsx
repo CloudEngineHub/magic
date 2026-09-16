@@ -1,9 +1,10 @@
+import { FileResourceIcon } from "@/pages/superMagic/components/TopicFilesButton/components/FileResourceIcon"
+import { resolveFilePresentation } from "@/pages/superMagic/components/TopicFilesButton/utils/file-presentation"
 import { NodeViewWrapper } from "@/infrastructure/editors/tiptap/react"
 import { observer } from "mobx-react-lite"
 import { useCallback, type MouseEvent, type ReactNode } from "react"
 import { useTranslation } from "react-i18next"
 import { X } from "lucide-react"
-import MagicFileIcon from "@/components/base/MagicFileIcon"
 import { MediaPreviewTrigger, type MediaPreviewSource } from "@/components/base/MediaPreview"
 import {
 	getMentionDisplayName,
@@ -13,6 +14,7 @@ import {
 import {
 	MentionItemType,
 	type ProjectFileMentionData,
+	type UserFileMentionData,
 	type UploadFileMentionData,
 } from "@/components/business/MentionPanel/types"
 import { useIsMobile } from "@/hooks/useIsMobile"
@@ -28,7 +30,7 @@ import {
 	MESSAGE_FILE_MENTION_DESKTOP_CLASSES,
 } from "@/components/business/MentionPanel/messageMentionVisual"
 
-type FileMentionData = ProjectFileMentionData | UploadFileMentionData
+type FileMentionData = ProjectFileMentionData | UploadFileMentionData | UserFileMentionData
 
 function FileMentionNodeView({ attrs, deleteNode, selected }: MentionNodeViewRendererProps) {
 	const isMobile = useIsMobile()
@@ -69,9 +71,21 @@ function FileMentionNodeView({ attrs, deleteNode, selected }: MentionNodeViewRen
 		[deleteNode],
 	)
 
+	const fileStore = editorStore?.fileUploadStore.getProjectFilesStore()
 	const fileIcon = (
-		<MagicFileIcon
-			type={data.file_extension || fileName.split(".").pop() || ""}
+		<FileResourceIcon
+			presentation={resolveFilePresentation(
+				{
+					...data,
+					space_type: attrs.type === MentionItemType.USER_FILE ? "user" : undefined,
+					file_name: fileName,
+					file_extension: data.file_extension || fileName.split(".").pop() || "",
+				},
+				{
+					context: isUpload ? undefined : fileStore?.filePresentationContext,
+					index: isUpload ? undefined : fileStore?.filePresentationIndex,
+				},
+			)}
 			size={16}
 			className="shrink-0"
 		/>
@@ -108,7 +122,10 @@ function FileMentionNodeView({ attrs, deleteNode, selected }: MentionNodeViewRen
 				/>
 			)}
 			<span className="relative z-10 flex shrink-0 items-center">{thumbnail}</span>
-			<span className={MESSAGE_FILE_MENTION_NAME_CLASSES} title={fileName}>
+			<span
+				className={MESSAGE_FILE_MENTION_NAME_CLASSES}
+				title={attrs.type === MentionItemType.USER_FILE ? data.file_path : fileName}
+			>
 				{fileName}
 			</span>
 			{isUploading && (

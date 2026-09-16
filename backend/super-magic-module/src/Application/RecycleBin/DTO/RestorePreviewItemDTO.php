@@ -14,6 +14,7 @@ class RestorePreviewItemDTO
         public readonly string $resourceName,
         public readonly bool $isDirectory,
         public readonly ?RestoreConflictDTO $conflict = null,
+        public readonly string $spaceType = 'project',
     ) {
     }
 
@@ -29,6 +30,11 @@ class RestorePreviewItemDTO
             'resource_name' => $this->resourceName,
             'is_directory' => $this->isDirectory,
         ];
+
+        // 个人文件需要标明恢复位置所属空间；项目响应保持原有字段。
+        if ($this->spaceType === 'user') {
+            $data['space_type'] = $this->spaceType;
+        }
 
         if ($this->conflict !== null) {
             $data['conflict'] = $this->conflict->toArray();
