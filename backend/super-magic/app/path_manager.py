@@ -53,7 +53,11 @@ class PathManager(BasePathManager):
     - `get_*` 方法只返回路径，不隐式创建目录（`get_checkpoints_dir` / `get_checkpoint_dir` 除外，历史遗留）
 
     持久化边界：
-    - `.topic/chat_history/` 是启动恢复源；聊天活动数据运行期位于本地 `.chat_history/`。
+    - `.chat_history/` 是运行期聊天历史持久状态；沙箱内它是指向 localfs
+      空间挂载的 symlink（/mnt/agfs/localfs/chat_history，gateway 在 bind
+      时创建），每次保存由 checkpoint hook 增量记账进 checkpoint；本地开
+      发环境（无 agfs 挂载）它是普通本地目录，只是没有帧记账。
+    - `.topic/chat_history/` 是启动恢复源（一次性迁移/兜底恢复用）。
     - `.topic/tool_detail/content/` 保存已持久化的工具详情长文本；按需创建，不参与 checkpoint 回滚。
     - `.runtime/` 只保存可重新生成的运行数据，不进入归档和 checkpoint。
     - `.workspace/` 保存用户文件，由现有文件 checkpoint 机制单独管理。
@@ -107,6 +111,9 @@ class PathManager(BasePathManager):
     _bg_shell_dir_name: ClassVar[str] = "bg_shell"
     _bg_shell_dir: ClassVar[Optional[Path]] = None
 
+    # 通用沙箱任务状态目录：project_root/.runtime/sandbox_tasks（按需创建）
+    _runtime_sandbox_tasks_dir_name: ClassVar[str] = "sandbox_tasks"
+
     # ── workspace（project_root/.workspace）下 ────────────────────────────────
 
     # ASR 任务状态目录：.workspace/.asr_states（按需创建）
@@ -132,6 +139,7 @@ class PathManager(BasePathManager):
     # 工具详情长文本：.topic/tool_detail/content（按需创建）
     _tool_detail_dir_name: ClassVar[str] = "tool_detail"
     _tool_detail_content_dir_name: ClassVar[str] = "content"
+
     @classmethod
     def _ensure_app_initialization(cls) -> None:
         """确保应用层PathManager已初始化"""
@@ -647,6 +655,12 @@ class PathManager(BasePathManager):
     def get_bg_shell_log_file(cls, task_id: str) -> Path:
         """获取指定后台任务的日志文件路径（project_root/.runtime/bg_shell/{task_id}.log）"""
         return cls.get_bg_shell_dir() / f"{task_id}.log"
+
+    @classmethod
+    def get_sandbox_tasks_dir(cls) -> Path:
+        """获取通用沙箱任务状态目录（project_root/.runtime/sandbox_tasks，按需创建）。"""
+        cls._ensure_app_initialization()
+        return cls.get_runtime_dir() / cls._runtime_sandbox_tasks_dir_name
 
     @classmethod
     def get_wechat_im_uploads_dir(cls) -> Path:

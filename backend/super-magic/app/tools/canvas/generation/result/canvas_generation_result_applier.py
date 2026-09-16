@@ -1,6 +1,7 @@
 """生成结果 Canvas 回写器。"""
 
 from app.tools.canvas.domain.content_fields.generated_media import GeneratedMediaContentFields
+from app.tools.canvas.domain.content_fields.video import VideoContentFields
 from app.tools.canvas.domain.errors import CanvasDomainError
 from app.tools.canvas.domain.models import CanvasProject
 
@@ -16,6 +17,7 @@ class CanvasGenerationResultApplier:
         status: str,
         output_uri: str | None,
         error_message: str | None,
+        result_metadata: dict[str, object] | None = None,
     ) -> None:
         """只修改程序托管的生成状态和结果字段。"""
         element = project.canvas.get_element(element_id)
@@ -25,3 +27,5 @@ class CanvasGenerationResultApplier:
         if not isinstance(content.fields, GeneratedMediaContentFields):
             raise CanvasDomainError("CONTENT_GENERATION_UNSUPPORTED", "The target Content does not support generation results.")
         content.fields.update_generation_result(status, output_uri, error_message)
+        if isinstance(content.fields, VideoContentFields) and result_metadata is not None:
+            content.fields.replace_generation_result_metadata(result_metadata)

@@ -15,7 +15,7 @@ const uploadServiceMocks = vi.hoisted(() => ({
 	upload: vi.fn(),
 }))
 
-vi.mock("@/opensource/utils/log", () => ({
+vi.mock("@/infrastructure/logger", () => ({
 	logger: {
 		createLogger: () => ({
 			error: vi.fn(),

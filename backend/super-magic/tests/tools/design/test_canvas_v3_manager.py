@@ -5,7 +5,6 @@ import json
 import pytest
 
 from agentlang.path_manager import PathManager
-from app.tools.design.manager import canvas_manager_v3
 from app.tools.design.codec.envelope_codec import (
     CanvasEnvelopeCodec,
     UnsupportedCanvasVersionError,
@@ -17,6 +16,7 @@ from app.tools.design.domain.canvas_document import (
     MagicProjectConfigV3,
 )
 from app.tools.design.domain.content import ElementContent
+from app.tools.design.manager import canvas_manager_v3
 from app.tools.design.manager.canvas_manager_factory import get_canvas_manager
 from app.tools.design.manager.canvas_manager_v3 import (
     CanvasManagerV3,
@@ -61,6 +61,40 @@ def _build_config_with_heavy_fields() -> MagicProjectConfigV3:
     )
 
 
+def _build_video_config_with_runtime_metadata() -> MagicProjectConfigV3:
+    """构造带视频生成运行时间元数据的 mock V3 配置。"""
+    content_id = "video-1-content-1"
+    return MagicProjectConfigV3(
+        version=MAGIC_PROJECT_VERSION_V3,
+        type="design",
+        name="V3 视频运行时间模拟项目",
+        canvas=CanvasDocumentV3(
+            elements=[
+                CanvasElementV3(
+                    id="video-1",
+                    type="video",
+                    properties={
+                        "name": "模拟视频",
+                        "x": 0,
+                        "y": 0,
+                        "width": 320,
+                        "height": 180,
+                        "zIndex": 1,
+                    },
+                    contents=[
+                        ElementContent(
+                            content_id=content_id,
+                            fields={"src": "./videos/mock.mp4"},
+                        )
+                    ],
+                    active_content_id=content_id,
+                    main_content_id=content_id,
+                )
+            ]
+        ),
+    )
+
+
 @pytest.mark.asyncio
 async def test_v3_manager_stops_immediately_when_project_file_is_missing(monkeypatch):
     """V3 画布路径错误时立即失败，不把永久缺失误判为 MagicFS 延迟。"""
@@ -78,6 +112,45 @@ async def test_v3_manager_stops_immediately_when_project_file_is_missing(monkeyp
         await CanvasManagerV3("missing-project").read_current_canvas()
 
     assert attempts == 1
+
+
+@pytest.mark.asyncio
+async def test_v3_manager_persists_and_rehydrates_video_runtime_metadata(monkeypatch, tmp_path):
+    """V3 manager 持久化并恢复视频生成时间元数据。"""
+    monkeypatch.setattr(PathManager, "get_workspace_dir", lambda: tmp_path)
+    await async_mkdir(tmp_path / "v3-video-project", parents=True, exist_ok=True)
+    await write_magic_project_js_v3(
+        "v3-video-project", _build_video_config_with_runtime_metadata()
+    )
+    manager = await get_canvas_manager("v3-video-project")
+    assert isinstance(manager, CanvasManagerV3)
+
+    runtime_metadata = {
+        "generation_info": {"input_mode": "image_reference", "resolution": "720p"},
+        "runtime": {
+            "started_at": "2026-09-14 14:00:14",
+            "finished_at": "2026-09-14 14:12:11",
+            "elapsed_seconds": 717,
+        },
+    }
+
+    async def add_runtime_metadata(config: MagicProjectConfigV3) -> str:
+        video = config.canvas.get_element("video-1")
+        assert video is not None
+        content = video.get_active_content()
+        assert content is not None
+        content.fields["videoGenerationResultMeta"] = runtime_metadata
+        return content.content_id
+
+    await manager.run_write_transaction(add_runtime_metadata)
+
+    sidecar = await async_read_json(tmp_path / "v3-video-project" / "element-details.json")
+    content_details = sidecar["elements"]["video-1"]["contentDetails"]["video-1-content-1"]
+    assert content_details["videoGenerationResultMeta"] == runtime_metadata
+
+    hydrated = await manager.read_current_canvas()
+    hydrated_content = hydrated.canvas.get_element("video-1").get_active_content()
+    assert hydrated_content.fields["videoGenerationResultMeta"] == runtime_metadata
 
 
 @pytest.mark.asyncio

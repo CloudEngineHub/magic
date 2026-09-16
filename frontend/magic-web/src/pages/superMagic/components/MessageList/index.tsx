@@ -68,6 +68,7 @@ import type { RevokedMessageEditorContext } from "./revoked-editor-context"
 import type { MessageListScrollAdapter } from "./message-list-scroll-adapter"
 import { useStableArrayReference } from "./hooks/useStableArrayReference"
 import { useConversationCompactMode } from "./hooks/useConversationCompactMode"
+import { classicNameResolver } from "typescript";
 
 export { MessageListProvider }
 
@@ -82,6 +83,10 @@ interface MessageListProps {
 	isShare?: boolean
 	setSelectedDetail?: (detail: any) => void
 	className?: string
+
+	classNames?: {
+		scrollWrapper?: string
+	}
 	isEmptyStatus?: boolean
 	selectedTopic: Topic | null
 	handlePullMoreMessage?: (
@@ -160,6 +165,7 @@ const MessageList = observer(
 		setSelectedDetail,
 		selectedTopic,
 		className,
+		classNames,
 		isEmptyStatus = false,
 		handlePullMoreMessage,
 		showLoading,
@@ -912,6 +918,7 @@ const MessageList = observer(
 									// the virtualizer canvas inside keeps its measurable height.
 									"mx-auto block min-h-full min-w-[unset] max-w-3xl pb-2",
 									isMobile ? "px-4 pt-[10px]" : "pl-2 pt-[50px]",
+									classNames?.scrollWrapper
 								)}
 							>
 								{visibleData.length > 0 || !isEmptyStatus ? (

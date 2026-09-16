@@ -1,6 +1,6 @@
 const languageMiddleware = require("../middleware/languageMiddleware")
 const throttleMiddleware = require("../middleware/throttleMiddleware")
-const compressionMiddleware = require("../middleware/compressionMiddleware")
+const { logReportBody } = require("../middleware/logReportBody.cjs")
 const serviceWorkerMiddleware = require("../middleware/serviceWorkerMiddleware")
 const staticResourceMiddleware = require("../middleware/staticResourceMiddleware")
 const { setStaticAssetCacheHeaders } = require("../middleware/staticAssetCacheHeaders")
@@ -63,10 +63,9 @@ const configureRoutes = (app) => {
 	// JSON 解析中间件只用于需要的路由
 	app.post(
 		"/log-report",
-		express.json({ limit: "1mb" }),
 		throttleMiddleware,
-		compressionMiddleware,
-		logsRoutes.report,
+		logReportBody,
+		logsRoutes.report.bind(logsRoutes),
 	)
 	app.get("/sw.js", serviceWorkerMiddleware)
 	app.get(

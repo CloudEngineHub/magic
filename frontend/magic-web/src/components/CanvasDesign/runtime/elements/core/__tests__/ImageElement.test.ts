@@ -423,6 +423,38 @@ describe("ImageElement mounted image node sync", () => {
 		expect(element.getNameLabelText()).toBe("Agent image(生成中)")
 	})
 
+	it("keeps the base image name while its display resource is loading", () => {
+		const element = Object.create(ImageElement.prototype) as ImageElement & {
+			data: { name: string }
+			getDisplayState: ReturnType<typeof vi.fn>
+		}
+		element.data = { name: "Loaded thumbnail" }
+		element.getDisplayState = vi.fn(() => ({
+			status: "loading",
+			surface: "loading",
+			contentId: "image-content-1",
+		}))
+
+		expect(element.getNameLabelText()).toBe("Loaded thumbnail")
+		expect(element.getDisplayState()).toMatchObject({ status: "loading", surface: "loading" })
+	})
+
+	it("keeps the base video name while its preview resource is loading", () => {
+		const element = Object.create(VideoElement.prototype) as VideoElement & {
+			data: { name: string }
+			getDisplayState: ReturnType<typeof vi.fn>
+		}
+		element.data = { name: "Loaded poster" }
+		element.getDisplayState = vi.fn(() => ({
+			status: "loading",
+			surface: "loading",
+			contentId: "video-content-1",
+		}))
+
+		expect(element.getNameLabelText()).toBe("Loaded poster")
+		expect(element.getDisplayState()).toMatchObject({ status: "loading", surface: "loading" })
+	})
+
 	it("treats pasted video placeholders with existing info as uploading", () => {
 		const element = Object.create(VideoElement.prototype) as VideoElement & {
 			data: {
@@ -991,8 +1023,7 @@ describe("ImageElement mounted image node sync", () => {
 		const onImageResourceWillClose = vi.fn(() => cleanup)
 		const onImageResourceLoadFailed = vi.fn(() => cleanup)
 		let recoveryStartedHandler:
-			| ((event: { data: { path: string; ossSrc: string } }) => void)
-			| undefined
+			((event: { data: { path: string; ossSrc: string } }) => void) | undefined
 		const onImageResourceRecoveryStarted = vi.fn(
 			(_path: string, handler: typeof recoveryStartedHandler) => {
 				recoveryStartedHandler = handler

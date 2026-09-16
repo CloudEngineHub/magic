@@ -140,6 +140,20 @@ export class FrameManager {
 		const session = this.dragSession
 		if (!session) return
 
+		// 根级元素只是拖拽期间临时提升到 content layer，文档父级并未变化。
+		// 跳过无效的批量 reparent，避免为每个选中元素重复更新数据并派发事件。
+		// 画框子元素即使目标父级仍是原画框，也必须走 reparentElements 恢复局部节点层级。
+		if (session.sourceParentId === null && session.targetParentId === null) {
+			this.canvas.elementManager.reorderTopLevelElementsPublic()
+			this.canvas.runtimeScheduler.requestLayerDraw("content", {
+				source: "FrameManager",
+				reason: "restore-top-level-drag-order",
+				priority: "input",
+			})
+			this.clearFrameDropState()
+			return
+		}
+
 		const elements = this.getSessionElementsInContent(session.elementIds)
 		if (elements.length === session.elementIds.length) {
 			const committed = this.canvas.elementManager.reparentElements({

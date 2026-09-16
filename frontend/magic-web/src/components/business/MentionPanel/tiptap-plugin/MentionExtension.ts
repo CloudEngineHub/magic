@@ -3,7 +3,7 @@ import type { Editor } from "@/infrastructure/editors/tiptap/core"
 import { ReactNodeViewRenderer } from "@/infrastructure/editors/tiptap/react"
 import { Suggestion } from "@/infrastructure/editors/tiptap/suggestion"
 import { Plugin, PluginKey, type Transaction } from "@/infrastructure/editors/tiptap/pm-state"
-import { logger as Logger } from "@/utils/log"
+import { logger as Logger } from "@/infrastructure/logger"
 
 const logger = Logger.createLogger("MentionExtension")
 

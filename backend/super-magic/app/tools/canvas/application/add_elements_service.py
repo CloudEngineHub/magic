@@ -184,7 +184,7 @@ class AddElementsService:
                         metadata,
                         element.element_id,
                         element.contents[0].content_id,
-                        CanvasApplicationOperations.new_content_detail(element.element_id, content.to_metadata()),
+                        CanvasApplicationOperations.new_content_detail(element.element_id, content.to_metadata(), project_path),
                     )
                 await self.element_sizing.initialize(project_path, element)
                 project.canvas.elements.append(element)

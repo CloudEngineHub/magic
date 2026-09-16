@@ -17,7 +17,7 @@ import type {
 	MentionRemoveItemPayload,
 } from "@/components/business/MentionPanel/tiptap-plugin/types"
 import magicToast from "@/components/base/MagicToaster/utils"
-import { logger as Logger } from "@/utils/log"
+import { logger as Logger } from "@/infrastructure/logger"
 import type { FileData } from "../types"
 import type { FileUploadStore } from "../stores/FileUploadStore"
 import {

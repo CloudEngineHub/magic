@@ -4,9 +4,11 @@ import { MediaMainVersionTagDecorator } from "../MediaMainVersionTagDecorator"
 
 function createEventEmitterMock() {
 	const handlers = new Map<string, Array<() => void>>()
+	const viewportLayouts = new Map<string, Array<() => void>>()
 
 	return {
 		handlers,
+		viewportLayouts,
 		eventEmitter: {
 			on: vi.fn((eventType: string, handler: () => void) => {
 				const currentHandlers = handlers.get(eventType) ?? []
@@ -26,6 +28,19 @@ function createEventEmitterMock() {
 				)
 			}),
 		},
+		runtimeScheduler: {
+			registerViewportScaleLayout: vi.fn((elementId: string, handler: () => void) => {
+				viewportLayouts.set(elementId, [...(viewportLayouts.get(elementId) ?? []), handler])
+				return () => {
+					viewportLayouts.set(
+						elementId,
+						(viewportLayouts.get(elementId) ?? []).filter(
+							(current) => current !== handler,
+						),
+					)
+				}
+			}),
+		},
 	}
 }
 
@@ -38,16 +53,17 @@ function createHarness() {
 	stage.add(layer)
 	const group = new Konva.Group({ width: 240, height: 160, scaleX: 0.5, scaleY: 0.5 })
 	layer.add(group)
-	const { eventEmitter, handlers } = createEventEmitterMock()
+	const { eventEmitter, handlers, runtimeScheduler, viewportLayouts } = createEventEmitterMock()
 	const canvas = {
 		can: vi.fn(() => true),
 		permissionManager: { can: vi.fn(() => true) },
 		getEffectiveContent: vi.fn(() => ({ contentId: "main" })),
 		eventEmitter,
+		runtimeScheduler,
 		t: vi.fn((_key: string, options: { defaultValue: string }) => options.defaultValue),
 	}
 
-	return { canvas, group, handlers, stage }
+	return { canvas, group, handlers, stage, viewportLayouts }
 }
 
 function versionedMedia(type: "image" | "video", activeContentId = "main") {
@@ -127,39 +143,47 @@ describe("MediaMainVersionTagDecorator", () => {
 	})
 
 	it("keeps the tag at a fixed screen size and hides it below the content threshold", () => {
-		const { canvas, group, handlers, stage } = createHarness()
-		const decorator = new MediaMainVersionTagDecorator(group, {
-			canvas: canvas as never,
-			width: 240,
-			height: 160,
-			data: versionedMedia("image"),
-		})
+		const previousAutoDrawEnabled = Konva.autoDrawEnabled
+		Konva.autoDrawEnabled = false
+		try {
+			const { canvas, group, stage, viewportLayouts } = createHarness()
+			const decorator = new MediaMainVersionTagDecorator(group, {
+				canvas: canvas as never,
+				width: 240,
+				height: 160,
+				data: versionedMedia("image"),
+			})
 
-		decorator.create()
-		const tag = group.findOne<Konva.Group>(".decorator-media-main-version-tag")
-		expect(tag?.visible()).toBe(true)
+			decorator.create()
+			const tag = group.findOne<Konva.Group>(".decorator-media-main-version-tag")
+			const layerDrawSpy = vi.spyOn(group.getLayer() as Konva.Layer, "batchDraw")
+			expect(tag?.visible()).toBe(true)
 
-		stage.scale({ x: 0.5, y: 0.5 })
-		handlers.get("viewport:scale")?.[0]?.()
-		expect(tag?.visible()).toBe(true)
+			stage.scale({ x: 0.5, y: 0.5 })
+			viewportLayouts.get("image-1")?.[0]?.()
+			expect(tag?.visible()).toBe(true)
 
-		stage.scale({ x: 0.3, y: 0.3 })
-		handlers.get("viewport:scale")?.[0]?.()
-		expect(tag?.visible()).toBe(false)
+			stage.scale({ x: 0.3, y: 0.3 })
+			viewportLayouts.get("image-1")?.[0]?.()
+			expect(tag?.visible()).toBe(false)
 
-		stage.scale({ x: 0.2, y: 0.2 })
-		handlers.get("viewport:scale")?.[0]?.()
-		expect(tag?.visible()).toBe(false)
+			stage.scale({ x: 0.2, y: 0.2 })
+			viewportLayouts.get("image-1")?.[0]?.()
+			expect(tag?.visible()).toBe(false)
 
-		stage.scale({ x: 2, y: 2 })
-		handlers.get("viewport:scale")?.[0]?.()
-		expect(tag?.visible()).toBe(true)
-		expect(
-			(tag?.height() ?? 0) * (tag?.scaleY() ?? 0) * stage.scaleX() * group.scaleY(),
-		).toBeCloseTo(24)
-		expect((tag?.x() ?? 0) * stage.scaleX() * group.scaleX()).toBeCloseTo(8)
+			stage.scale({ x: 2, y: 2 })
+			viewportLayouts.get("image-1")?.[0]?.()
+			expect(tag?.visible()).toBe(true)
+			expect(
+				(tag?.height() ?? 0) * (tag?.scaleY() ?? 0) * stage.scaleX() * group.scaleY(),
+			).toBeCloseTo(24)
+			expect((tag?.x() ?? 0) * stage.scaleX() * group.scaleX()).toBeCloseTo(8)
+			expect(layerDrawSpy).not.toHaveBeenCalled()
 
-		decorator.destroy()
-		stage.destroy()
+			decorator.destroy()
+			stage.destroy()
+		} finally {
+			Konva.autoDrawEnabled = previousAutoDrawEnabled
+		}
 	})
 })

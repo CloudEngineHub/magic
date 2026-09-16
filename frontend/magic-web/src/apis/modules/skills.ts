@@ -1,6 +1,5 @@
-import type { HttpClient } from "@/apis/core/HttpClient"
+import type { ServiceHttpClient } from "@/infrastructure/network/http/clients"
 import type { CollaboratorPermission } from "@/pages/superMagic/types/collaboration"
-import { genRequestUrl } from "@/utils/http"
 
 import { SupportLocales } from "@/constants/locale"
 
@@ -8,11 +7,7 @@ import { SupportLocales } from "@/constants/locale"
 
 /** Publisher type for store skills */
 export type SkillPublisherType =
-	| "USER"
-	| "OFFICIAL"
-	| "OFFICIAL_BUILTIN"
-	| "VERIFIED_CREATOR"
-	| "PARTNER"
+	"USER" | "OFFICIAL" | "OFFICIAL_BUILTIN" | "VERIFIED_CREATOR" | "PARTNER"
 
 /** Source type for user skills */
 export type SkillSourceType =
@@ -32,11 +27,7 @@ export type SkillPublishStatus = "PUBLISHED" | "UNPUBLISHED"
 
 /** Review status for published skill versions */
 export type SkillVersionReviewStatus =
-	| "PENDING"
-	| "UNDER_REVIEW"
-	| "APPROVED"
-	| "REJECTED"
-	| "INVALIDATED"
+	"PENDING" | "UNDER_REVIEW" | "APPROVED" | "REJECTED" | "INVALIDATED"
 
 /**
  * i18n text object for skills.
@@ -336,8 +327,7 @@ export interface ImportOfficialSkillByFileKeyParams extends OfficialSkillImportF
 }
 
 export type ImportOfficialSkillParams =
-	| ImportOfficialSkillByTokenParams
-	| ImportOfficialSkillByFileKeyParams
+	ImportOfficialSkillByTokenParams | ImportOfficialSkillByFileKeyParams
 
 export interface ImportOfficialSkillResponse {
 	code: string
@@ -576,19 +566,15 @@ export interface UpdateSkillInfoParams {
 
 // ======================== API Generator ========================
 
-export const generateSkillsApi = (fetch: HttpClient) => ({
+export const generateSkillsApi = (fetch: ServiceHttpClient) => ({
 	/**
 	 * Get the skill-market category tree.
 	 * Empty categories are returned only when include_empty is explicitly enabled.
 	 */
 	getSkillMarketCategories(params: GetSkillMarketCategoriesParams = {}) {
-		return fetch.get<GetSkillMarketCategoriesResponse>(
-			genRequestUrl(
-				"/api/v1/skill-market/categories",
-				{},
-				{ include_empty: params.include_empty },
-			),
-		)
+		return fetch.get<GetSkillMarketCategoriesResponse>("/api/v1/skill-market/categories", {
+			params: { include_empty: params.include_empty },
+		})
 	},
 
 	/**
@@ -600,10 +586,7 @@ export const generateSkillsApi = (fetch: HttpClient) => ({
 	 * @param params Query parameters
 	 */
 	getStoreSkills(params: GetStoreSkillsParams = {}) {
-		return fetch.post<GetStoreSkillsResponse>(
-			genRequestUrl("/api/v1/skill-market/queries"),
-			params,
-		)
+		return fetch.post<GetStoreSkillsResponse>("/api/v1/skill-market/queries", params)
 	},
 
 	/**
@@ -613,7 +596,7 @@ export const generateSkillsApi = (fetch: HttpClient) => ({
 	 */
 	getSkillLastVersions(params: GetSkillLastVersionsParams = {}) {
 		return fetch.post<GetSkillLastVersionsResponse>(
-			genRequestUrl("/api/v1/skills/last-versions/queries"),
+			"/api/v1/skills/last-versions/queries",
 			params,
 		)
 	},
@@ -626,10 +609,7 @@ export const generateSkillsApi = (fetch: HttpClient) => ({
 	 * @deprecated Use getUserSkills({ ...params, scope: "created" }) instead.
 	 */
 	getCreatedSkills(params: GetSkillsParams = {}) {
-		return fetch.post<GetSkillsResponse>(
-			genRequestUrl("/api/v1/skills/queries/created"),
-			params,
-		)
+		return fetch.post<GetSkillsResponse>("/api/v1/skills/queries/created", params)
 	},
 
 	/**
@@ -637,7 +617,7 @@ export const generateSkillsApi = (fetch: HttpClient) => ({
 	 * Endpoint: POST /api/v1/skills/queries
 	 */
 	getUserSkills(params: GetSkillsParams = {}) {
-		return fetch.post<GetSkillsResponse>(genRequestUrl("/api/v1/skills/queries"), params)
+		return fetch.post<GetSkillsResponse>("/api/v1/skills/queries", params)
 	},
 
 	/**
@@ -648,10 +628,7 @@ export const generateSkillsApi = (fetch: HttpClient) => ({
 	 * @deprecated Use getUserSkills({ ...params, scope: "team_shared" }) instead.
 	 */
 	getTeamSharedSkills(params: GetSkillsParams = {}) {
-		return fetch.post<GetSkillsResponse>(
-			genRequestUrl("/api/v1/skills/queries/team-shared"),
-			params,
-		)
+		return fetch.post<GetSkillsResponse>("/api/v1/skills/queries/team-shared", params)
 	},
 
 	/**
@@ -662,10 +639,7 @@ export const generateSkillsApi = (fetch: HttpClient) => ({
 	 * @deprecated Use getUserSkills({ ...params, scope: "market_installed" }) instead.
 	 */
 	getMarketInstalledSkills(params: GetSkillsParams = {}) {
-		return fetch.post<GetSkillsResponse>(
-			genRequestUrl("/api/v1/skills/queries/market-installed"),
-			params,
-		)
+		return fetch.post<GetSkillsResponse>("/api/v1/skills/queries/market-installed", params)
 	},
 
 	/**
@@ -673,7 +647,7 @@ export const generateSkillsApi = (fetch: HttpClient) => ({
 	 * Backend generates a new skill record and returns its identity.
 	 */
 	createSkill() {
-		return fetch.post<CreateSkillResponse>(genRequestUrl("/api/v1/skills"), {})
+		return fetch.post<CreateSkillResponse>("/api/v1/skills", {})
 	},
 
 	/**
@@ -683,7 +657,7 @@ export const generateSkillsApi = (fetch: HttpClient) => ({
 	 * @param params.store_skill_id Store skill ID (magic_store_skills.id)
 	 */
 	addSkillFromStore(params: AddSkillFromStoreParams) {
-		return fetch.post<[]>(genRequestUrl("/api/v1/skills/from-store"), params)
+		return fetch.post<[]>("/api/v1/skills/from-store", params)
 	},
 
 	/**
@@ -694,10 +668,7 @@ export const generateSkillsApi = (fetch: HttpClient) => ({
 	 * @param params.file_key Object storage key of the uploaded .skill/.zip file
 	 */
 	parseSkillFile(params: ParseSkillFileParams) {
-		return fetch.post<ParseSkillResponse>(
-			genRequestUrl("/api/v1/skills/import/parse/file"),
-			params,
-		)
+		return fetch.post<ParseSkillResponse>("/api/v1/skills/import/parse/file", params)
 	},
 
 	/**
@@ -706,7 +677,7 @@ export const generateSkillsApi = (fetch: HttpClient) => ({
 	 */
 	parseOfficialSkillFile(params: ParseSkillFileParams) {
 		return fetch.post<ParseOfficialSkillResponse>(
-			genRequestUrl("/api/v1/admin/official-skills/import/parse/file"),
+			"/api/v1/admin/official-skills/import/parse/file",
 			params,
 		)
 	},
@@ -718,10 +689,7 @@ export const generateSkillsApi = (fetch: HttpClient) => ({
 	 * @param params.branch Branch name (default: main)
 	 */
 	parseSkillGithub(params: ParseSkillGithubParams) {
-		return fetch.post<ParseSkillResponse>(
-			genRequestUrl("/api/v1/skills/import/parse/github"),
-			params,
-		)
+		return fetch.post<ParseSkillResponse>("/api/v1/skills/import/parse/github", params)
 	},
 
 	/**
@@ -731,7 +699,7 @@ export const generateSkillsApi = (fetch: HttpClient) => ({
 	 * @param params Import confirmation payload including token and i18n fields
 	 */
 	importSkill(params: ImportSkillParams) {
-		return fetch.post<ImportSkillResponse>(genRequestUrl("/api/v1/skills/import"), params)
+		return fetch.post<ImportSkillResponse>("/api/v1/skills/import", params)
 	},
 
 	/**
@@ -740,7 +708,7 @@ export const generateSkillsApi = (fetch: HttpClient) => ({
 	 */
 	importOfficialSkill(params: ImportOfficialSkillParams) {
 		return fetch.post<ImportOfficialSkillResponse>(
-			genRequestUrl("/api/v1/admin/official-skills/import"),
+			"/api/v1/admin/official-skills/import",
 			params,
 		)
 	},
@@ -752,7 +720,7 @@ export const generateSkillsApi = (fetch: HttpClient) => ({
 	 * @param code Skill unique code (magic_skills.code)
 	 */
 	getSkillDetail({ code }: { code: string }) {
-		return fetch.get<SkillDetailResponse>(genRequestUrl("/api/v1/skills/${code}", { code }))
+		return fetch.get<SkillDetailResponse>(`/api/v1/skills/${code}`)
 	},
 
 	/**
@@ -761,9 +729,7 @@ export const generateSkillsApi = (fetch: HttpClient) => ({
 	 * @param code Skill unique code
 	 */
 	getSkillMarketDetail({ code }: { code: string }) {
-		return fetch.get<SkillMarketDetailResponse>(
-			genRequestUrl("/api/v1/skill-market/${code}", { code }),
-		)
+		return fetch.get<SkillMarketDetailResponse>(`/api/v1/skill-market/${code}`)
 	},
 
 	/**
@@ -772,9 +738,9 @@ export const generateSkillsApi = (fetch: HttpClient) => ({
 	 * @param params Pagination and filters
 	 */
 	getSkillVersions({ code, ...queries }: { code: string } & GetSkillVersionsParams) {
-		return fetch.get<GetSkillVersionsResponse>(
-			genRequestUrl("/api/v1/skills/${code}/versions", { code }, queries),
-		)
+		return fetch.get<GetSkillVersionsResponse>(`/api/v1/skills/${code}/versions`, {
+			params: { ...queries },
+		})
 	},
 
 	/**
@@ -783,10 +749,7 @@ export const generateSkillsApi = (fetch: HttpClient) => ({
 	 * @param params Version, i18n release notes, and target
 	 */
 	publishSkill({ code, ...body }: { code: string } & PublishSkillParams) {
-		return fetch.post<PublishSkillResponse>(
-			genRequestUrl("/api/v1/skills/${code}/publish", { code }),
-			body,
-		)
+		return fetch.post<PublishSkillResponse>(`/api/v1/skills/${code}/publish`, body)
 	},
 
 	/**
@@ -794,19 +757,16 @@ export const generateSkillsApi = (fetch: HttpClient) => ({
 	 * Request body matches the sync publish endpoint.
 	 */
 	publishSkillAsync({ code, ...body }: { code: string } & PublishSkillParams) {
-		return fetch.post<AsyncPublishTaskResponse>(
-			genRequestUrl("/api/v1/skills/${code}/publish/async", { code }),
-			body,
-		)
+		return fetch.post<AsyncPublishTaskResponse>(`/api/v1/skills/${code}/publish/async`, body)
 	},
 
 	/**
 	 * Poll async skill publish task status by publish_task_id.
 	 */
 	checkSkillPublish({ code, publish_task_id }: { code: string } & CheckSkillPublishParams) {
-		return fetch.get<AsyncPublishTaskResponse>(
-			genRequestUrl("/api/v1/skills/${code}/publish/check", { code }, { publish_task_id }),
-		)
+		return fetch.get<AsyncPublishTaskResponse>(`/api/v1/skills/${code}/publish/check`, {
+			params: { publish_task_id },
+		})
 	},
 
 	/**
@@ -814,9 +774,7 @@ export const generateSkillsApi = (fetch: HttpClient) => ({
 	 * @param code Skill unique code
 	 */
 	getSkillPublishPrefill({ code }: { code: string }) {
-		return fetch.get<PublishSkillPrefillResponse>(
-			genRequestUrl("/api/v1/skills/${code}/publish/prefill", { code }),
-		)
+		return fetch.get<PublishSkillPrefillResponse>(`/api/v1/skills/${code}/publish/prefill`)
 	},
 
 	/**
@@ -826,7 +784,7 @@ export const generateSkillsApi = (fetch: HttpClient) => ({
 	 * @param code Skill unique code (magic_skills.code)
 	 */
 	deleteSkill({ code }: { code: string }) {
-		return fetch.delete<[]>(genRequestUrl("/api/v1/skills/${code}", { code }))
+		return fetch.delete<[]>(`/api/v1/skills/${code}`)
 	},
 
 	/**
@@ -837,7 +795,7 @@ export const generateSkillsApi = (fetch: HttpClient) => ({
 	 * @param params Fields to update
 	 */
 	updateSkillInfo({ code, ...params }: { code: string } & UpdateSkillInfoParams) {
-		return fetch.put<[]>(genRequestUrl("/api/v1/skills/${code}/info", { code }), params)
+		return fetch.put<[]>(`/api/v1/skills/${code}/info`, params)
 	},
 
 	/**
@@ -847,6 +805,6 @@ export const generateSkillsApi = (fetch: HttpClient) => ({
 	 * @param code Skill unique code (magic_skills.code)
 	 */
 	upgradeSkill({ code }: { code: string }) {
-		return fetch.put<[]>(genRequestUrl("/api/v1/skills/${code}/upgrade", { code }), {})
+		return fetch.put<[]>(`/api/v1/skills/${code}/upgrade`, {})
 	},
 })

@@ -133,10 +133,10 @@ class AdminSkillAppService extends AbstractSkillAppService
     }
 
     /** Run the complete vector-index reconciliation for the current Skill market. */
-    public function reindexMarketVectors(RequestContext $requestContext): array
+    public function reindexMarketVectors(RequestContext $requestContext, bool $forceReEmbedding = false): array
     {
         $dataIsolation = $this->createSkillDataIsolation($requestContext->getUserAuthorization());
-        return $this->reconcileMarketVectorIndex($dataIsolation);
+        return $this->reconcileMarketVectorIndex($dataIsolation, $forceReEmbedding);
     }
 
     /** Backfill published market versions whose SKILL.md snapshot is missing. */
@@ -213,8 +213,10 @@ class AdminSkillAppService extends AbstractSkillAppService
     }
 
     /** Clean orphan points and queue every visible market Skill for reconciliation. */
-    public function reconcileMarketVectorIndex(SkillDataIsolation $dataIsolation): array
-    {
+    public function reconcileMarketVectorIndex(
+        SkillDataIsolation $dataIsolation,
+        bool $forceReEmbedding = false,
+    ): array {
         $organizationCode = $dataIsolation->getCurrentOrganizationCode();
         $reconcileSucceeded = true;
         $removed = 0;
@@ -231,7 +233,7 @@ class AdminSkillAppService extends AbstractSkillAppService
 
         $queued = 0;
         try {
-            $result = $this->reindexAllMarketVectors($dataIsolation);
+            $result = $this->reindexAllMarketVectors($dataIsolation, $forceReEmbedding);
             $queued = $result['queued'] ?? 0;
         } catch (Throwable $throwable) {
             $reconcileSucceeded = false;
@@ -246,6 +248,7 @@ class AdminSkillAppService extends AbstractSkillAppService
             'organization_code' => $organizationCode,
             'removed_orphans' => $removed,
             'queued' => $queued,
+            'force_re_embedding' => $forceReEmbedding,
         ]);
 
         if ($reconcileSucceeded && $this->skillMarketVectorIndexDomainService->isVectorSearchEnabled()) {

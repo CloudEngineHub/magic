@@ -141,8 +141,7 @@ const VirtualMessageRenderRow = observer(function VirtualMessageRenderRow({
 		? (((topicId
 				? superMagicStore.getTopicMessageNode?.(topicId, superMessageId)
 				: undefined) || superMagicStore.getMessageNode(superMessageId)) as
-				| Record<string, unknown>
-				| undefined)
+				Record<string, unknown> | undefined)
 		: undefined
 	if (item.isTool && !hasTerminalToolStatus(canonicalNode) && !hasTerminalToolStatus(item.node)) {
 		// Keep a measured zero-height placeholder while a streaming Tool has no visible body.
@@ -235,14 +234,13 @@ function VirtualMessageContent({
  * subtree paints one commit before producing any DOM. The virtualizer measures that commit and
  * records the row as collapsed, which shortens the projected total, which widens the range at the
  * bottom, which mounts more rows that then settle to their real height and shrink the range again.
- * Holding the remembered height as a floor keeps the empty commit from ever being measured, so the
- * total stops depending on which rows happen to be mounted and the list can reach a fixed point.
+ * Hold the remembered height through that initial commit, then actively remeasure it. A smaller
+ * first measurement can already be final, so waiting for another resize can leave a permanent gap.
  */
-const lastMeasuredRowHeights = new Map<string, number>()
-
 function VirtualMessageRow({
 	item,
 	topicId,
+	rowHeights,
 	renderNode,
 	stickyMessageClassName,
 	useMobileStickyOverlay,
@@ -253,6 +251,7 @@ function VirtualMessageRow({
 }: {
 	item: VirtualMessageItem
 	topicId?: string
+	rowHeights: Map<string, number>
 	renderNode: VirtualMessageListProps["renderNode"]
 	stickyMessageClassName?: string
 	useMobileStickyOverlay: boolean
@@ -265,29 +264,47 @@ function VirtualMessageRow({
 	const selectable = exportMode && item.exportSelectable
 	const disabled = selectable && !selected && Boolean(limitReached)
 	const contentRef = useRef<HTMLDivElement | null>(null)
-	const [heightFloor, setHeightFloor] = useState(() => lastMeasuredRowHeights.get(item.key) ?? 0)
+	const [heightFloor, setHeightFloor] = useState(() => rowHeights.get(item.key) ?? 0)
 
 	/**
-	 * The floor tracks the content, so a row that genuinely shrinks still shrinks — but never on
-	 * the first measurement after a mount, which is the empty commit the floor exists to cover.
+	 * Observe the inner content, which is not constrained by the outer height floor. Defer the
+	 * first shrink for one frame to cover the empty mount commit, then read the current DOM even
+	 * without a second resize. This is a bounded placeholder, not a content-readiness signal.
 	 */
 	useEffect(() => {
 		const content = contentRef.current
 		if (!content || typeof ResizeObserver === "undefined") return undefined
 		let measured = false
+		let measurementFrame: number | null = null
+		const commitHeight = () => {
+			const height = content.offsetHeight
+			rowHeights.set(item.key, height)
+			setHeightFloor(height)
+		}
 		const observer = new ResizeObserver(() => {
 			const height = content.offsetHeight
 			if (!measured) {
 				measured = true
-				if (height <= (lastMeasuredRowHeights.get(item.key) ?? 0)) return
+				if (height < (rowHeights.get(item.key) ?? 0)) {
+					measurementFrame = requestAnimationFrame(() => {
+						measurementFrame = null
+						commitHeight()
+					})
+					return
+				}
 			}
-			if (height <= 0) return
-			lastMeasuredRowHeights.set(item.key, height)
-			setHeightFloor(height)
+			if (measurementFrame !== null) {
+				cancelAnimationFrame(measurementFrame)
+				measurementFrame = null
+			}
+			commitHeight()
 		})
 		observer.observe(content)
-		return () => observer.disconnect()
-	}, [item.key])
+		return () => {
+			observer.disconnect()
+			if (measurementFrame !== null) cancelAnimationFrame(measurementFrame)
+		}
+	}, [item.key, rowHeights])
 
 	return (
 		<div
@@ -373,6 +390,8 @@ function VirtualMessageListInner({
 	onVirtualizerChange,
 	allowResizeStickySync = true,
 }: VirtualMessageListProps) {
+	// Heights survive virtual-range unmounts, but must not leak across list instances or topics.
+	const heightCache = useMemo(() => ({ topicId, rows: new Map<string, number>() }), [topicId])
 	const handleRef = useRef<VirtualizerHandle | null>(null)
 	const canvasRef = useRef<HTMLDivElement | null>(null)
 	const scrollRef = useRef<HTMLElement | null>(null)
@@ -808,9 +827,10 @@ function VirtualMessageListInner({
 	const rows = useMemo(() => {
 		const nodes: Array<ReactNode> = items.map((item) => (
 			<VirtualMessageRow
-				key={item.key}
+				key={`${topicId ?? ""}\u0000${item.key}`}
 				item={item}
 				topicId={topicId}
+				rowHeights={heightCache.rows}
 				renderNode={renderNode}
 				stickyMessageClassName={stickyMessageClassName}
 				useMobileStickyOverlay={isMobile && useMobileStickyOverlay}
@@ -835,6 +855,7 @@ function VirtualMessageListInner({
 	}, [
 		exportMode,
 		footer,
+		heightCache,
 		isMobile,
 		items,
 		limitReached,

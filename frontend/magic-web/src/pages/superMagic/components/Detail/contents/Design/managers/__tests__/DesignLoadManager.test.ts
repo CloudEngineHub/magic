@@ -19,7 +19,7 @@ vi.mock("@/apis", () => ({
 	},
 }))
 
-vi.mock("@/utils/log", () => ({
+vi.mock("@/infrastructure/logger", () => ({
 	logger: {
 		createLogger: () => ({ error: vi.fn() }),
 	},

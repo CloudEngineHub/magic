@@ -1,4 +1,4 @@
-import type { RequestConfig } from "@/apis/core/HttpClient"
+import type { RequestConfig } from "@/infrastructure/network/http/clients"
 import type { Login } from "@/types/login"
 
 export interface ThirdPartyAccountIdentity {

@@ -2,7 +2,8 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from copy import deepcopy
+from dataclasses import dataclass, field
 from typing import Literal
 
 from app.tools.canvas.domain.content_fields.base import CanvasContentFields
@@ -18,6 +19,7 @@ class GeneratedMediaContentFields(CanvasContentFields):
     src: str | None = None
     status: GenerationStatus | None = None
     stored_error_message: str | None = None
+    visual_understanding: JsonObject | None = field(default=None, kw_only=True)
 
     @property
     def generated_request_field(self) -> str | None:
@@ -31,6 +33,11 @@ class GeneratedMediaContentFields(CanvasContentFields):
     def clear_generation_request(self) -> None:
         """清除生成请求；具体媒体类型负责清除对应字段。"""
         raise NotImplementedError("Generated media fields must define a generation request field.")
+
+    def clear_sidecar_fields(self) -> None:
+        """清除写入公共 Sidecar 的重字段，避免主文件重复保存。"""
+        self.clear_generation_request()
+        self.visual_understanding = None
 
     @property
     def generation_status(self) -> str | None:
@@ -72,5 +79,6 @@ class GeneratedMediaContentFields(CanvasContentFields):
             "src": self.src,
             "status": self.status,
             "errorMessage": self.stored_error_message,
+            "visualUnderstanding": deepcopy(self.visual_understanding),
         }
         return {key: value for key, value in values.items() if value is not None}

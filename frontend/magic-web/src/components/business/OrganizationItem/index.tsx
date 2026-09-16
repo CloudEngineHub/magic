@@ -13,7 +13,7 @@ import { useTheme } from "antd-style"
 import PersonalOrganizationAvatar from "@/assets/resources/personal-organization-avatar.svg"
 import { useTranslation } from "react-i18next"
 import useCancelRecord from "@/components/business/RecordingSummary/hooks/useCancelRecord"
-import { logger as Logger } from "@/utils/log"
+import { logger as Logger } from "@/infrastructure/logger"
 
 export interface OrganizationItemProps {
 	disabled: boolean

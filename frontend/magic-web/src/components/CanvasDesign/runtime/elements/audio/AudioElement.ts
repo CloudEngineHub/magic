@@ -721,7 +721,7 @@ export class AudioElement extends BaseElement<AudioElementData> {
 
 		const syncHitTargets = () => this.syncInteractionHitTargets()
 		this.interactionEventUnsubscribers.push(
-			this.canvas.eventEmitter.on("viewport:scale", syncHitTargets),
+			this.canvas.runtimeScheduler.registerViewportScaleLayout(this.data.id, syncHitTargets),
 			this.canvas.eventEmitter.on("canvas:devicechange", syncHitTargets),
 		)
 	}

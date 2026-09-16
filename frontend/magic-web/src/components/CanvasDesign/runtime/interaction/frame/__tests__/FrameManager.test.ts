@@ -432,6 +432,45 @@ describe("FrameManager drag stacking", () => {
 		expect(rebaseActiveDragNodePositions).toHaveBeenCalledWith(["lower", "upper"])
 	})
 
+	it("skips reparenting when a root drag ends without changing its parent", () => {
+		const reorderTopLevelElementsPublic = vi.fn()
+		const requestLayerDraw = vi.fn()
+		const reparentElements = vi.fn()
+		const canvas = {
+			eventEmitter: { on: vi.fn(() => vi.fn()) },
+			runtimeScheduler: { requestLayerDraw },
+			elementManager: {
+				reorderTopLevelElementsPublic,
+				reparentElements,
+			},
+		} as unknown as Canvas
+		const manager = new FrameManager({ canvas })
+		const managerWithSession = manager as unknown as {
+			dragSession: {
+				elementIds: string[]
+				sourceParentId: string | null
+				targetParentId: string | null
+			} | null
+			handleFrameDropDragEnd: () => void
+		}
+		managerWithSession.dragSession = {
+			elementIds: ["element"],
+			sourceParentId: null,
+			targetParentId: null,
+		}
+
+		managerWithSession.handleFrameDropDragEnd()
+
+		expect(reorderTopLevelElementsPublic).toHaveBeenCalledOnce()
+		expect(requestLayerDraw).toHaveBeenCalledWith("content", {
+			source: "FrameManager",
+			reason: "restore-top-level-drag-order",
+			priority: "input",
+		})
+		expect(reparentElements).not.toHaveBeenCalled()
+		expect(manager.getDragTargetParentId("element")).toBeUndefined()
+	})
+
 	it("does not start a reparent session when the selection contains a frame", () => {
 		const rectangle: LayerElement = {
 			id: "element",

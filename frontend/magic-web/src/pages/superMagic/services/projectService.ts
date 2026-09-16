@@ -7,7 +7,7 @@ import type { TopicMode } from "../pages/Workspace/TopicMode"
 import { CollaborationProjectType } from "../pages/Workspace/types"
 import { SHARE_WORKSPACE_ID, isOtherCollaborationProject } from "../constants"
 import { generateCollaborationProjectUrl } from "../utils/project"
-import { RequestConfig } from "@/apis/core/HttpClient"
+import type { RequestConfig } from "@/infrastructure/network/http/clients"
 import {
 	shouldSyncChatConversationName,
 	syncChatConversationName,
@@ -19,6 +19,7 @@ import {
 import { topicStore, workspaceStore } from "../stores/core"
 import { getInsertIndexByAnchors, isSameOrder } from "./orderUtils"
 import { createOrderRequestOptions, reportOrderApiError } from "./orderErrorReporter"
+import { invalidateWorkspaceSearchResults } from "./workspaceListSearchInvalidation"
 
 export interface FetchProjectsParams {
 	workspaceId: string
@@ -436,6 +437,7 @@ class ProjectService {
 					console.error("后台刷新项目列表失败，失败原因：", error)
 				})
 				this.clearSnapshot(operationId)
+				invalidateWorkspaceSearchResults()
 			} catch (error) {
 				console.log("重命名项目失败，失败原因：", error)
 				this.rollbackSnapshot(operationId)
@@ -459,6 +461,7 @@ class ProjectService {
 			try {
 				await SuperMagicApi.deleteProject({ id })
 				this.clearSnapshot(operationId)
+				invalidateWorkspaceSearchResults()
 			} catch (error) {
 				console.log("删除项目失败，失败原因：", error)
 				// Rollback optimistic update
@@ -560,6 +563,7 @@ class ProjectService {
 						console.error("后台刷新项目列表失败，失败原因：", error)
 					})
 					this.clearSnapshot(operationId)
+					invalidateWorkspaceSearchResults()
 					return true
 				}
 
@@ -701,6 +705,7 @@ class ProjectService {
 				targetWorkspaceId,
 				projectStore.getProjectsByWorkspace(targetWorkspaceId),
 			)
+			invalidateWorkspaceSearchResults()
 		} catch (error) {
 			if (!orderingRequestCompleted && !usePinApi)
 				reportOrderApiError({

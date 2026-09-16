@@ -25,7 +25,7 @@ function ClusterLayoutBaseComponent(props: ClusterLayoutBaseProps) {
 	const { setClusterCode } = useClusterCode()
 	const { t } = useTranslation("interface")
 
-	const { isSameCluster, loading, setSameCluster } = useClusterSwitch({
+	const { isInitialing, isSameCluster, loading, setSameCluster } = useClusterSwitch({
 		targetClusterCode,
 	})
 
@@ -38,6 +38,9 @@ function ClusterLayoutBaseComponent(props: ClusterLayoutBaseProps) {
 			},
 		})
 	})
+
+	// AppService hydrates the session independently; HTTP readiness gates business requests.
+	if (isInitialing) return <Outlet />
 
 	if (loading) {
 		return (

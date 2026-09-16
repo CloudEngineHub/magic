@@ -1,6 +1,7 @@
 {
 	"compilerOptions": {
 		"allowImportingTsExtensions": true,
+		"customConditions": ["magic-web-source"],
 		"isolatedModules": true,
 		"jsx": "react-jsx",
 		"lib": ["ES2022", "DOM", "DOM.Iterable", "WebWorker"],

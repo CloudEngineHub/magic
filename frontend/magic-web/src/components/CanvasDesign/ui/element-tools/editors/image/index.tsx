@@ -7,7 +7,6 @@ import {
 	getActiveImageContentId,
 	getContentState,
 } from "../../../../runtime/document/elementContent"
-import { useImageOssSrc } from "../../../../app/hooks/resources/useImageOssSrc"
 import {
 	useCanvasEvent,
 	useGenerationRuntime,
@@ -158,7 +157,6 @@ function ActiveImageMessageEditor({
 		generationRuntime?.generateImageRequest || activeContent.generateImageRequest
 	)
 	const hasResultImage = !!activeContent.src
-	const { hasOssSrc } = useImageOssSrc(imageElement)
 
 	const isTemporaryElement =
 		canvas != null ? canvas.elementManager.isTemporary(imageElement.id) : false
@@ -249,8 +247,8 @@ function ActiveImageMessageEditor({
 		)
 	}
 
-	// 如果有结果图片且 ossSrc 已加载，则显示二次编辑
-	if (hasResultImage && hasOssSrc) {
+	// 结果资源可能已删除，但二次编辑器仍需挂载以展示失效引用并允许用户修复。
+	if (hasResultImage) {
 		return (
 			<SecondEdit
 				key={`${imageElement.id}-${activeContent.contentId}`}

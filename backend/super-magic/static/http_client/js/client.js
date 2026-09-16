@@ -8509,11 +8509,22 @@ function selectApiCanvasContentDetail(agentDetail, userDetail, userElement = nul
     return agentDetail || userDetail || null;
 }
 
-/** 移除元素级 sidecar 的 Content 容器，避免把协议包装层注入预览元素。 */
-function stripApiCanvasContentDetails(detail) {
+/** 返回与前端 elementDetailsStore 一致的可回填重字段。 */
+function getApiCanvasHeavyFields(elementType) {
+    const requestFields = ['generateImageRequest', 'generateVideoRequest'];
+    return ['image', 'video'].includes(elementType)
+        ? [...requestFields, 'visualUnderstanding']
+        : requestFields;
+}
+
+/** 只提取前端允许从公共 Sidecar 回填的字段。 */
+function pickApiCanvasHeavyFields(detail, elementType) {
     if (!detail || typeof detail !== 'object') return null;
-    const { contentDetails: _contentDetails, ...fields } = detail;
-    return fields;
+    const fields = {};
+    getApiCanvasHeavyFields(elementType).forEach(field => {
+        if (detail[field] !== undefined && detail[field] !== null) fields[field] = detail[field];
+    });
+    return Object.keys(fields).length ? fields : null;
 }
 
 /** 将画布 sidecar 中的元素级或 Content 级详情回填到预览数据。 */
@@ -8534,21 +8545,24 @@ function hydrateApiCanvasElementDetails(config, agentDoc, userDoc) {
             const userContentDetails = userElement?.contentDetails;
 
             if (Array.isArray(element.contents) && element.contents.length) {
+                const firstContent = element.contents[0];
+                const legacyDetail = selectApiCanvasContentDetail(agentElement, userElement, userElement);
+                const legacyFields = pickApiCanvasHeavyFields(legacyDetail, element.type);
+                if (legacyFields && firstContent && typeof firstContent === 'object') {
+                    Object.entries(legacyFields).forEach(([field, value]) => {
+                        if (firstContent[field] === undefined) firstContent[field] = value;
+                    });
+                }
                 element.contents = element.contents.map(content => {
                     const contentId = content?.contentId;
                     const agentDetail = contentId && agentContentDetails?.[contentId];
                     const userDetail = contentId && userContentDetails?.[contentId];
                     const detail = selectApiCanvasContentDetail(agentDetail, userDetail, userElement);
-                    return detail && typeof detail === 'object'
-                        ? { ...content, ...stripApiCanvasContentDetails(detail) }
+                    const heavyFields = pickApiCanvasHeavyFields(detail, element.type);
+                    return heavyFields
+                        ? { ...content, ...heavyFields }
                         : content;
                 });
-            } else {
-                // 兼容旧版元素级 sidecar；不把 contentDetails 容器本身写入元素。
-                const detail = selectApiCanvasContentDetail(agentElement, userElement, userElement);
-                if (detail && typeof detail === 'object') {
-                    Object.assign(element, stripApiCanvasContentDetails(detail));
-                }
             }
 
             if (Array.isArray(element.children)) visit(element.children);
@@ -10193,12 +10207,11 @@ function toggleMagicProjectDataView() {
 
 /**
  * 选择 V3 Element 当前用于调试预览的 Content。
- * 只读画布默认展示 main Content，再回退 active Content 和第一个 Content。
+ * 只读画布默认展示 active Content，再回退第一个 Content。
  */
 function selectCanvasPreviewContent(element, preferredContentId = null) {
     const contents = Array.isArray(element?.contents) ? element.contents : [];
     return contents.find(content => content?.contentId === preferredContentId)
-        || contents.find(content => content?.contentId === element.mainContentId)
         || contents.find(content => content?.contentId === element.activeContentId)
         || contents[0]
         || {};
@@ -10227,7 +10240,9 @@ function resolveCanvasPreviewContentFields(element, content) {
         generateImageRequest: content?.generateImageRequest ?? element?.generateImageRequest ?? null,
         generateVideoRequest: content?.generateVideoRequest ?? element?.generateVideoRequest ?? null,
         imageGenerationTaskMeta: content?.imageGenerationTaskMeta ?? element?.imageGenerationTaskMeta ?? null,
-        videoGenerationResultMeta: content?.videoGenerationResultMeta ?? element?.videoGenerationResultMeta ?? null,
+        visualUnderstanding: content?.visualUnderstanding ?? null,
+        videoEditorDraft: content?.videoEditorDraft ?? null,
+        videoGenerationResultMeta: content?.videoGenerationResultMeta ?? null,
         videoSequence: Array.isArray(content?.videoSequence ?? element?.videoSequence)
             ? (content?.videoSequence ?? element?.videoSequence)
             : [],
@@ -10749,6 +10764,38 @@ function createCanvasGenerationDetailRow(label, value) {
     return row;
 }
 
+/** 将生成详情时间格式化为带时区的人类可读文本。 */
+function formatCanvasGenerationDateTime(value) {
+    if (!value) return null;
+    const date = new Date(value);
+    if (Number.isNaN(date.getTime())) return String(value);
+    const pad = number => String(number).padStart(2, '0');
+    const offsetMinutes = -date.getTimezoneOffset();
+    const sign = offsetMinutes >= 0 ? '+' : '-';
+    const offsetHours = Math.floor(Math.abs(offsetMinutes) / 60);
+    const offsetRemainder = Math.abs(offsetMinutes) % 60;
+    return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())} `
+        + `${pad(date.getHours())}:${pad(date.getMinutes())}:${pad(date.getSeconds())} UTC${sign}`
+        + `${pad(offsetHours)}:${pad(offsetRemainder)}`;
+}
+
+/** 使用前端历史面板相同的天、时、分、秒格式展示耗时。 */
+function formatCanvasGenerationDuration(seconds) {
+    if (!Number.isFinite(seconds)) return null;
+    let remaining = Math.max(0, Math.floor(seconds));
+    const days = Math.floor(remaining / 86400);
+    remaining %= 86400;
+    const hours = Math.floor(remaining / 3600);
+    remaining %= 3600;
+    const minutes = Math.floor(remaining / 60);
+    const parts = [];
+    if (days) parts.push(`${days}天`);
+    if (hours) parts.push(`${hours}小时`);
+    if (minutes) parts.push(`${minutes}分`);
+    if (remaining % 60 || !parts.length) parts.push(`${remaining % 60}秒`);
+    return parts.join('');
+}
+
 /** 创建媒体节点右上角的生成记录入口按钮。 */
 function createCanvasGenerationInfoButton(element, onClick) {
     if (!hasCanvasGenerationRequest(element)) return null;
@@ -10914,6 +10961,8 @@ async function renderCanvasGenerationDetailPanel(element, request, resolveMediaU
         createCanvasGenerationDetailRow('模型', model),
         createCanvasGenerationDetailRow('尺寸', size),
     ];
+    let runningStartedAtMs = NaN;
+    let runningDurationRow = null;
     if (element.type === 'image') {
         const imageConfig = request.image_generation_config && typeof request.image_generation_config === 'object'
             ? request.image_generation_config
@@ -10938,20 +10987,44 @@ async function renderCanvasGenerationDetailPanel(element, request, resolveMediaU
             ? resultMeta.runtime
             : {};
         const finalResolution = generationInfo.resolution || request.generation?.resolution || request.resolution;
-        rows.push(
-            createCanvasGenerationDetailRow('积分消耗', resultMeta.billing?.points),
-            createCanvasGenerationDetailRow('任务类型', generationInfo.task || request.task),
-            createCanvasGenerationDetailRow('生成模式', generationInfo.input_mode || request.input_mode),
-            createCanvasGenerationDetailRow('最终分辨率', finalResolution),
-            createCanvasGenerationDetailRow('开始时间', runtime.started_at),
-            createCanvasGenerationDetailRow('完成时间', runtime.finished_at),
-            createCanvasGenerationDetailRow('生成耗时', runtime.elapsed_seconds ? `${runtime.elapsed_seconds}s` : null),
+        const startedAt = runtime.started_at;
+        const finishedAt = runtime.finished_at;
+        const startedMs = startedAt ? Date.parse(startedAt) : NaN;
+        const isRunning = ['pending', 'processing'].includes(element.status);
+        runningStartedAtMs = startedMs;
+        const durationSeconds = generationInfo.duration_seconds ?? request.generation?.duration_seconds;
+        const generationSpec = [
+            generationInfo.aspect_ratio || request.generation?.aspect_ratio,
+            durationSeconds !== undefined && durationSeconds !== null ? `${durationSeconds}s` : null,
+            finalResolution,
+        ].filter(Boolean).join(' · ') || null;
+        const inputMode = generationInfo.input_mode || request.input_mode;
+        const inputModeLabels = {
+            standard: '标准模式',
+            omni_reference: '全能模式',
+            image_reference: '参考图',
+            keyframe_guided: '首尾帧',
+            video_edit: '视频编辑',
+        };
+        const elapsed = Number.isFinite(runtime.elapsed_seconds)
+            ? runtime.elapsed_seconds
+            : Number.isFinite(startedMs) && finishedAt
+                ? Math.max(0, Math.floor((Date.parse(finishedAt) - startedMs) / 1000))
+                : isRunning && Number.isFinite(startedMs)
+                    ? Math.max(0, Math.floor((Date.now() - startedMs) / 1000))
+                    : null;
+        runningDurationRow = createCanvasGenerationDetailRow(
+            isRunning ? '已耗时' : '生成耗时',
+            formatCanvasGenerationDuration(elapsed),
         );
         rows.push(
-            createCanvasGenerationDetailRow('画面比例', generationInfo.aspect_ratio || request.generation?.aspect_ratio),
-            createCanvasGenerationDetailRow('时长', (generationInfo.duration_seconds ?? request.generation?.duration_seconds) !== undefined
-                ? `${generationInfo.duration_seconds ?? request.generation.duration_seconds}s`
-                : null),
+            createCanvasGenerationDetailRow('积分消耗', resultMeta.billing?.points),
+            createCanvasGenerationDetailRow('生成方式', inputModeLabels[inputMode] || inputMode),
+            createCanvasGenerationDetailRow('任务类型', generationInfo.task || request.task),
+            createCanvasGenerationDetailRow('生成规格', generationSpec),
+            createCanvasGenerationDetailRow('开始时间', formatCanvasGenerationDateTime(startedAt)),
+            createCanvasGenerationDetailRow('完成时间', formatCanvasGenerationDateTime(finishedAt)),
+            runningDurationRow,
         );
     }
     rows.filter(Boolean).forEach(row => body.appendChild(row));
@@ -10960,6 +11033,19 @@ async function renderCanvasGenerationDetailPanel(element, request, resolveMediaU
     positionCanvasGenerationDetailPanel(panel, anchorElement, containerEl);
     panel.addEventListener('pointerdown', event => event.stopPropagation());
     panel.addEventListener('click', event => event.stopPropagation());
+    if (element.type === 'video' && ['pending', 'processing'].includes(element.status)
+        && Number.isFinite(runningStartedAtMs) && runningDurationRow) {
+        const timer = window.setInterval(() => {
+            if (!panel.isConnected) {
+                window.clearInterval(timer);
+                return;
+            }
+            const value = runningDurationRow.querySelector('.canvas-generation-detail-value');
+            if (value) value.textContent = formatCanvasGenerationDuration(
+                Math.max(0, Math.floor((Date.now() - runningStartedAtMs) / 1000)),
+            );
+        }, 1000);
+    }
 }
 
 /**

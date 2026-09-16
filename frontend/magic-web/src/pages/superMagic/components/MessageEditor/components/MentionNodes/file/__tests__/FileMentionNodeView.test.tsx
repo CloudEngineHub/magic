@@ -162,5 +162,11 @@ describe("FileMentionNodeView", () => {
 		)
 
 		expect(screen.getByText("project.png").closest(".magic-mention")).toHaveClass("opacity-50")
+		expect(storeMocks.useMediaResourceSnapshot).toHaveBeenCalledWith(
+			expect.anything(),
+			expect.objectContaining({
+				loadThumbnail: true,
+			}),
+		)
 	})
 })

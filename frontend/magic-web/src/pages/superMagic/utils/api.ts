@@ -1,4 +1,4 @@
-import magicClient from "@/apis/clients/magic"
+import { defaultMagicClient as magicClient } from "@/infrastructure/network/http/runtime"
 import { DownloadImageMode } from "../pages/Workspace/types"
 import { getSuperIdState } from "./query"
 import { WorkspaceStateCache } from "./superMagicCache"

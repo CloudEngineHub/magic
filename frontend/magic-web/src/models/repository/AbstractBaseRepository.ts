@@ -1,6 +1,6 @@
 import type { IndexableType, Table, UpdateSpec } from "dexie"
 import type Dexie from "dexie"
-import { logger as Logger } from "@/utils/log"
+import { logger as Logger } from "@/infrastructure/logger"
 
 const logger = Logger.createLogger("repository")
 

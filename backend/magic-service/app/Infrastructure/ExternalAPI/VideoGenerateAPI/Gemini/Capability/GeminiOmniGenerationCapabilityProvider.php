@@ -50,7 +50,7 @@ readonly class GeminiOmniGenerationCapabilityProvider
         $translate = fn (string $key, array $replace = []): string => di(TranslatorInterface::class)->trans('video.input_modes.' . $key, $replace);
         return new VideoGenerationConfig([
             'generation' => [
-                'duration_type' => 'range', 'durations' => [3, 4, 5, 6, 7, 8, 9, 10], 'default_duration_seconds' => 8,
+                'duration_type' => 'range', 'durations' => [3, 4, 5, 6, 7, 8, 9, 10], 'default_duration_seconds' => 5,
                 'resolutions' => ['360p', '720p', '1080p', '4k'], 'default_resolution' => '720p',
                 'sizes' => self::SUPPORTED_SIZES,
                 'aspect_ratios' => ['16:9', '9:16'], 'supports_background' => true, 'supports_generate_audio' => true,
@@ -75,7 +75,7 @@ readonly class GeminiOmniGenerationCapabilityProvider
                             ],
                         ],
                     )->toArray(),
-                    ['generation_constraints' => ['durations' => []]],
+                    ['generation_constraints' => ['durations' => [], 'aspect_ratios' => []]],
                 ),
                 VideoInputMode::OmniReference->value => VideoInputModeDefinition::omniReference(
                     $translate('gemini_omni_reference'),

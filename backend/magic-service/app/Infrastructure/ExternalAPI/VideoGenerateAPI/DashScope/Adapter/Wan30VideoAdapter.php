@@ -126,11 +126,19 @@ final class Wan30VideoAdapter implements VideoGenerationConnectivityTestableInte
 
     public function testConnection(QueueExecutorConfig $config, string $modelVersion): bool
     {
-        $response = $this->transport->submitVideo($config, [
-            'model' => $this->capabilityProvider->resolveProviderModelName($modelVersion),
-            'input' => ['prompt' => 'connectivity-test'],
-            'parameters' => ['resolution' => '720P', 'duration' => 0],
-        ], ['connectivity_test' => true]);
+        try {
+            $response = $this->transport->submitVideo($config, [
+                'model' => $this->capabilityProvider->resolveProviderModelName($modelVersion) . '11',
+                'input' => ['prompt' => 'connectivity-test'],
+                'parameters' => ['resolution' => '720P', 'duration' => 0],
+            ], ['connectivity_test' => true]);
+        } catch (ProviderVideoException $throwable) {
+            if (str_contains($throwable->getMessage(), '请求参数不合法，请检查后重试')) {
+                return true;
+            }
+            throw $throwable;
+        }
+
         $taskId = $this->firstString($response['output']['task_id'] ?? null, $response['task_id'] ?? null);
         if ($taskId === null) {
             throw new ProviderVideoException(VideoGenerateErrorCode::INVALID_PARAMETER, 'Wan connectivity test task id missing');

@@ -136,6 +136,35 @@ class ModeAppServiceTest extends TestCase
         $this->assertSame(ProviderCode::Cloudsway, $candidates[0]->getProviderCode());
     }
 
+    public function testBuildVideoGenerationConfigCandidatesFollowsRuntimeProviderPriority(): void
+    {
+        $service = $this->createService(
+            [
+                11 => $this->createProviderConfigEntity(11, ProviderCode::Cloudsway),
+                12 => $this->createProviderConfigEntity(12, ProviderCode::Cloudsway),
+            ],
+            [
+                'veo-3.1-fast-generate-preview' => [
+                    $this->createProviderModel('veo-3.1-fast-generate-preview', Category::VGM, 'sort-low', 11, sort: 0, id: 1001),
+                    $this->createProviderModel('veo-3.1-fast-generate-preview', Category::VGM, 'sort-high-config-low', 11, sort: 9, id: 1002),
+                    $this->createProviderModel('veo-3.1-fast-generate-preview', Category::VGM, 'sort-high-config-high', 12, sort: 9, id: 1003),
+                ],
+            ]
+        );
+
+        /** @var list<VideoGenerationConfigCandidate> $candidates */
+        $candidates = $this->invokePrivateMethod($service, 'buildVideoGenerationConfigCandidates', [[
+            'veo-3.1-fast-generate-preview',
+        ]]);
+
+        // 必须与运行时一致：sort desc → service_provider_config_id desc → id asc，取首条
+        $this->assertCount(3, $candidates);
+        $this->assertSame(
+            ['sort-high-config-high', 'sort-high-config-low', 'sort-low'],
+            array_map(static fn (VideoGenerationConfigCandidate $candidate): string => $candidate->getModelVersion(), $candidates)
+        );
+    }
+
     public function testBuildModeRuntimeDataIncludesVideoModelsForFeaturedResponse(): void
     {
         $service = $this->createService(
@@ -580,16 +609,19 @@ class ModeAppServiceTest extends TestCase
         int $serviceProviderConfigId = 1,
         Status $status = Status::Enabled,
         ProviderModelType $providerModelType = ProviderModelType::ATOM,
-        ?array $aggregateConfig = null
+        ?array $aggregateConfig = null,
+        int $sort = 0,
+        ?int $id = null
     ): ProviderModelEntity {
         return new ProviderModelEntity([
-            'id' => random_int(1000, 9999),
+            'id' => $id ?? random_int(1000, 9999),
             'service_provider_config_id' => $serviceProviderConfigId,
             'name' => strtoupper($modelId),
             'model_id' => $modelId,
             'model_version' => $modelVersion ?? ($modelId . '-version'),
             'category' => $category->value,
             'status' => $status->value,
+            'sort' => $sort,
             'type' => $providerModelType->value,
             'aggregate_config' => $aggregateConfig,
             'organization_code' => 'TGosRaFhvb',
