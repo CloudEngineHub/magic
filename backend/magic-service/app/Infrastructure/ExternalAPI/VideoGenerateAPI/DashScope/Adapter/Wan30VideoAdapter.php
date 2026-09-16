@@ -383,6 +383,9 @@ final class Wan30VideoAdapter implements VideoGenerationConnectivityTestableInte
         return [];
     }
 
+    /**
+     * Reference images stay reference media: only keyframe mode may claim first/last frame semantics.
+     */
     private function buildImageReferenceMedia(array $inputs, array &$accepted): array
     {
         $images = $inputs['reference_images'] ?? [];
@@ -390,9 +393,12 @@ final class Wan30VideoAdapter implements VideoGenerationConnectivityTestableInte
             throw new InvalidArgumentException('Wan 3.x image reference mode requires exactly one image.');
         }
         $accepted[] = 'inputs.reference_images';
-        return [['type' => 'first_frame', 'url' => $images[0]['uri']]];
+        return [['type' => 'reference_image', 'url' => $images[0]['uri']]];
     }
 
+    /**
+     * Keyframe mode is the only mode that maps request frames to first_frame / last_frame media.
+     */
     private function buildKeyframeMedia(array $inputs, array &$accepted, array $capability): array
     {
         if ($this->hasItems($inputs, 'reference_images') || $this->hasItems($inputs, 'reference_videos') || $this->hasItems($inputs, 'reference_audios')) {
