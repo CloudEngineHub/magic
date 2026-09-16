@@ -177,7 +177,7 @@ vi.mock("lucide-react", () => {
 
 	return {
 		MessageCirclePlus: createIcon("message-circle-plus"),
-		PanelLeftOpen: createIcon("panel-left-open"),
+		FolderTree: createIcon("folder-tree"),
 		PanelRightClose: createIcon("panel-right-close"),
 		PanelRightOpen: createIcon("panel-right-open"),
 		Ellipsis: createIcon("ellipsis"),
@@ -447,10 +447,14 @@ describe("MessageHeader", () => {
 		})
 
 		expect(screen.getByTestId("message-header-expand-files")).toHaveClass(
+			"!size-7",
+			"!min-h-7",
+			"!min-w-7",
 			"!rounded-full",
 			"!bg-background",
 			"shadow-sm",
 		)
+		expect(screen.getByTestId("icon-folder-tree")).toBeInTheDocument()
 	})
 
 	it("collapses the history panel together when collapsing the conversation panel", () => {

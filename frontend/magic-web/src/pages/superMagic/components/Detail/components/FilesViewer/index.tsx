@@ -14,7 +14,7 @@ import { observer } from "mobx-react-lite"
 import userFilesStore from "@/stores/userFiles"
 import type { AttachmentItem } from "../../../TopicFilesButton/hooks/types"
 import { IconMenu2, IconX } from "@tabler/icons-react"
-import { PanelLeftOpen } from "lucide-react"
+import { FolderTree } from "lucide-react"
 import { clipboard } from "@/utils/clipboard-helpers"
 import pubsub, { PubSubEvents } from "@/utils/pubsub"
 import { useFileInfoPanel } from "../../../TopicFilesButton/hooks/useFileInfoPanel"
@@ -528,7 +528,7 @@ const FilesViewer = memo(
 						aria-label={t("sidebarPanels.expandFiles")}
 						data-testid="file-viewer-expand-files"
 					>
-						<PanelLeftOpen size={16} />
+						<FolderTree size={16} />
 					</button>
 				</Tooltip>
 			) : null

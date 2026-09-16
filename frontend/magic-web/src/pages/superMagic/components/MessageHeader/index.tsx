@@ -23,7 +23,7 @@ import magicToast from "@/components/base/MagicToaster/utils"
 import {
 	MessageCirclePlus,
 	PanelRightClose,
-	PanelLeftOpen,
+	FolderTree,
 	PanelRightOpen,
 	Ellipsis,
 	PenLine,
@@ -641,14 +641,14 @@ function MessageHeader({
 									size="icon-sm"
 									className={cn(
 										headerIconButtonClassName,
-										"!rounded-full !bg-background shadow-sm",
+										"!size-7 !min-h-7 !min-w-7 !rounded-full !bg-background shadow-sm",
 										alignWithContent && "col-start-1 row-start-1",
 									)}
 									onClick={fileSidebarControl.onToggle}
 									aria-label={t("sidebarPanels.expandFiles")}
 									data-testid="message-header-expand-files"
 								>
-									<PanelLeftOpen size={16} />
+									<FolderTree size={16} />
 								</Button>
 							</MagicTooltip>
 						)}
