@@ -46,6 +46,49 @@ class AssetTagDomainService
         return $this->tags->save($dataIsolation, $entity);
     }
 
+    public function createOfficial(AssetDataIsolation $dataIsolation, string $name, AssetTagNodeType $nodeType, int $parentId): AssetTagEntity
+    {
+        $this->assertStructure($dataIsolation, $nodeType, $parentId);
+        $uid = $dataIsolation->getCurrentUserId();
+        $entity = (new AssetTagEntity())
+            ->setOrganizationCode($dataIsolation->getCurrentOrganizationCode())
+            ->setNameI18n(['default' => trim($name)])
+            ->setNodeType($nodeType->value)
+            ->setParentId($parentId)
+            ->setCreatedUid($uid)
+            ->setUpdatedUid($uid);
+        return $this->tags->save($dataIsolation, $entity);
+    }
+
+    public function updateOfficial(AssetDataIsolation $dataIsolation, int|string $id, string $name, AssetTagNodeType $nodeType, int $parentId): AssetTagEntity
+    {
+        $entity = $this->tags->findById($dataIsolation, $id);
+        if ($entity === null || $entity->getOwnerUid() !== null) {
+            ExceptionBuilder::throw(AssetErrorCode::TAG_NOT_ALLOWED);
+        }
+        if ($entity->getNodeType() !== $nodeType) {
+            ExceptionBuilder::throw(AssetErrorCode::TAG_STRUCTURE_INVALID);
+        }
+        $this->assertStructure($dataIsolation, $nodeType, $parentId, $id);
+        $entity->setNameI18n(['default' => trim($name)])->setParentId($parentId)->setUpdatedUid($dataIsolation->getCurrentUserId());
+        return $this->tags->save($dataIsolation, $entity);
+    }
+
+    public function deleteOfficial(AssetDataIsolation $dataIsolation, int|string $id): void
+    {
+        $entity = $this->tags->findById($dataIsolation, $id);
+        if ($entity === null || $entity->getOwnerUid() !== null) {
+            ExceptionBuilder::throw(AssetErrorCode::TAG_NOT_ALLOWED);
+        }
+        if ($entity->isGroup() && $this->tags->hasChildren($dataIsolation, $id)) {
+            ExceptionBuilder::throw(AssetErrorCode::GROUP_NOT_EMPTY);
+        }
+        $this->relations->deleteByTagId($dataIsolation, $id);
+        if (! $this->tags->delete($dataIsolation, $id)) {
+            ExceptionBuilder::throw(AssetErrorCode::TAG_NOT_FOUND);
+        }
+    }
+
     public function update(AssetDataIsolation $dataIsolation, int|string $id, string $name, AssetTagNodeType $nodeType, int $parentId): AssetTagEntity
     {
         $entity = $this->findOwned($dataIsolation, $id);

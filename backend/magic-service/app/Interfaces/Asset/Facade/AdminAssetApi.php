@@ -17,6 +17,7 @@ use App\Interfaces\Asset\Assembler\AssetAssembler;
 use App\Interfaces\Asset\DTO\Request\CreateAssetRequestDTO;
 use App\Interfaces\Asset\DTO\Request\QueryAssetRequestDTO;
 use App\Interfaces\Asset\DTO\Request\UpdateAssetRequestDTO;
+use App\Interfaces\Asset\DTO\Request\SaveAssetTagRequestDTO;
 use Dtyq\ApiResponse\Annotation\ApiResponse;
 use Hyperf\HttpServer\Contract\RequestInterface;
 
@@ -83,6 +84,37 @@ class AdminAssetApi extends AbstractApi
             $assetId,
         );
         return AssetAssembler::createDeleteDTO($assetId, $deleted, true)->toArray();
+    }
+
+    public function createTag(): array
+    {
+        $authorization = $this->getAuthorization();
+        $this->assertAdmin($authorization);
+        $request = SaveAssetTagRequestDTO::fromRequest($this->request);
+        return AssetAssembler::createTagItem($this->assetAppService->createOfficialTag($authorization, $request->getName(), $request->getNodeType(), $request->getParentId()));
+    }
+
+    public function tags(): array
+    {
+        $authorization = $this->getAuthorization();
+        $this->assertAdmin($authorization);
+        return AssetAssembler::createTagList($this->assetAppService->listOfficialTags($authorization));
+    }
+
+    public function updateTag(int|string $tagId): array
+    {
+        $authorization = $this->getAuthorization();
+        $this->assertAdmin($authorization);
+        $request = SaveAssetTagRequestDTO::fromRequest($this->request);
+        return AssetAssembler::createTagItem($this->assetAppService->updateOfficialTag($authorization, $tagId, $request->getName(), $request->getNodeType(), $request->getParentId()));
+    }
+
+    public function deleteTag(int|string $tagId): array
+    {
+        $authorization = $this->getAuthorization();
+        $this->assertAdmin($authorization);
+        $this->assetAppService->deleteOfficialTag($authorization, $tagId);
+        return ['id' => (string) $tagId, 'deleted' => true];
     }
 
     private function assertAdmin(object $authorization): void

@@ -13,6 +13,9 @@ use App\Domain\Asset\Entity\ValueObject\AssetScope;
 use App\Domain\Asset\Entity\ValueObject\AssetVisibility;
 use App\Domain\Asset\Entity\ValueObject\Query\AssetQuery;
 use App\Domain\Asset\Service\AssetDomainService;
+use App\Domain\Asset\Service\AssetTagDomainService;
+use App\Domain\Asset\Entity\AssetTagEntity;
+use App\Domain\Asset\Entity\ValueObject\AssetTagNodeType;
 use App\Domain\Permission\Service\ResourceVisibilityDomainService;
 use App\ErrorCode\AssetErrorCode;
 use App\Infrastructure\Core\DataIsolation\BaseDataIsolation;
@@ -28,8 +31,31 @@ class AdminAssetAppService extends AbstractAssetAppService
     public function __construct(
         private readonly AssetDomainService $assetDomainService,
         ResourceVisibilityDomainService $resourceVisibilityDomainService,
+        private readonly AssetTagDomainService $assetTagDomainService,
     ) {
         parent::__construct($resourceVisibilityDomainService);
+    }
+
+    public function listOfficialTags(Authenticatable|BaseDataIsolation $authorization): array
+    {
+        return $this->assetTagDomainService->listVisible($this->officialDataIsolation($authorization));
+    }
+
+    public function createOfficialTag(Authenticatable|BaseDataIsolation $authorization, string $name, string $nodeType, int $parentId): AssetTagEntity
+    {
+        $isolation = $this->officialDataIsolation($authorization);
+        return $this->assetTagDomainService->createOfficial($isolation, $name, AssetTagNodeType::from($nodeType), $parentId);
+    }
+
+    public function updateOfficialTag(Authenticatable|BaseDataIsolation $authorization, int|string $id, string $name, string $nodeType, int $parentId): AssetTagEntity
+    {
+        $isolation = $this->officialDataIsolation($authorization);
+        return $this->assetTagDomainService->updateOfficial($isolation, $id, $name, AssetTagNodeType::from($nodeType), $parentId);
+    }
+
+    public function deleteOfficialTag(Authenticatable|BaseDataIsolation $authorization, int|string $id): void
+    {
+        $this->assetTagDomainService->deleteOfficial($this->officialDataIsolation($authorization), $id);
     }
 
     public function createPublicAsset(
