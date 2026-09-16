@@ -570,7 +570,7 @@ function WorkspaceList({
 				handleRefresh={handleRefresh}
 				handleStartCreateWorkspace={handleStartCreateWorkspace}
 			/>
-			<div className="mt-1 bg-muted/20">
+			<div className="mt-1">
 				<SidebarMenu>
 					<div className="w-full">
 						{beforeItems}
