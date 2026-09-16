@@ -453,7 +453,7 @@ describe("MessageHeader", () => {
 			"!min-w-7",
 			"!rounded-full",
 			"!bg-background",
-			"shadow-sm",
+			"shadow-md",
 		)
 		expect(screen.getByTestId("icon-folder-tree")).toBeInTheDocument()
 	})
