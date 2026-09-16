@@ -7,7 +7,7 @@ description: Create, modify, evaluate, package, and upload skills. Use when user
 
 Helps users design, build, evaluate, and persist Skills. Your core job is not "doing the task" but "teaching AI how to do a class of tasks".
 
-High-level workflow: Capture Intent → Interview → Plan (write `<skill>_plan.md` + show in chat, wait for confirm) → **Check Conflicts** → Write SKILL.md → Test → Iterate → Optimize → Package.
+High-level workflow: Capture Intent → Interview → Plan (write `<skill>_plan.md` + show in chat, wait for confirm) → **Check Conflicts** → Write SKILL.md (execute checklist & clean up plan) → Test → Iterate → Optimize → Package.
 Assess where the user is and jump in from there.
 
 ---
@@ -129,8 +129,9 @@ Plan document contents:
 - Whether `scripts/`, `references/`, `assets/` subdirectories are needed
 - Final output form (from Phase 1 decision)
 - Evaluation plan (test prompts, expected outputs)
+- **Step-by-step implementation checklist (Todo Checklist)**: Must include a clear task checklist specifying every concrete step for Phase 4 execution (e.g., checking name conflicts, creating skill directories, writing SKILL.md, creating scripts/references/assets, writing `skill_config.yaml`, deleting the plan file, etc.) to guide strict step-by-step execution and verification.
 
-For a knowledge-base skill, the plan must also specify the resource directories, root index, organization of reference images and files, and how SKILL.md loads resources on demand.
+For a knowledge-base skill, the plan must also specify the resource directories, root index, organization of reference images and files, and how SKILL.md loads resources on demand. The checklist must include at least one index-integrity check and one resource-reference check.
 
 **Wait for user confirmation before proceeding to Phase 4.**
 
@@ -138,7 +139,9 @@ For a knowledge-base skill, the plan must also specify the resource directories,
 
 ### Phase 4: Check Conflicts and Write Files
 
-After user confirms the plan, **check for name conflicts first**, then create files.
+After user confirms the plan, **strictly follow the step-by-step implementation checklist (Todo Checklist) in `<skill-name>_plan.md` to proceed, checking off each item as completed**.
+
+Before creating files, **check for name conflicts first**.
 
 Before finalizing, confirm that the employee's `AGENTS.md` explicitly specifies which workflow calls this skill, or specifies its trigger conditions, applicable scenarios, and invocation timing. If this invocation mapping is missing or has not been confirmed by the user, you may create files as a reviewable draft, but do not overwrite an existing skill, update formal registration, run publication steps, package, or upload it.
 
@@ -186,7 +189,7 @@ Directory structure (paths relative to `.workspace/`, i.e. use `<workspace-skill
 ```
 <workspace-skills-dir>/<skill-name>/
 ├── SKILL.md          (required)
-├── (no plan.md here — plan file lives at <workspace-skills-dir>/<skill-name>_plan.md)
+├── (no plan.md here — temporary plan file lives in parent dir and is deleted after creation)
 ├── evals/
 │   └── evals.json    (test cases)
 ├── scripts/          (executable scripts, optional)
@@ -222,6 +225,10 @@ Only write the `dir` field — this file tracks which skill directory was most r
 skill:
   dir: "my-skill"
 ```
+
+**Clean up Plan Document:**
+
+Once all skill files, subdirectory resources, and `skill_config.yaml` have been written, and all checklist items in the plan have been verified as complete, **immediately delete** the temporary plan file `<workspace-skills-dir>/<skill-name>_plan.md` to keep the workspace clean and avoid leaving stale plan files.
 
 ---
 

@@ -26,6 +26,7 @@ tools:
 skills:
   system_skills:
     - name: crew-creator
+    - name: agent-profile
     - name: skill-creator
     - name: skill-vetter
     - name: using-llm

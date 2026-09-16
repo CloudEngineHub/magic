@@ -1,6 +1,6 @@
 # Digital Employee Logo Generation Guidelines
 
-This document provides guidance for automatically generating a default logo from `IDENTITY.md` and `SOUL.md` when creating a digital employee. The logo is the digital employee's persistent `icon`, not a temporary placeholder displayed only in the user interface.
+This document provides guidance for automatically generating a default logo from `IDENTITY.md` and `SOUL.md` when creating or updating a digital employee. The logo is the digital employee's persistent `icon`, not a temporary placeholder displayed only in the user interface.
 
 ## Basic Requirements
 
@@ -52,8 +52,8 @@ Treat the current working directory as the employee workspace root. All paths be
 1. Use the `generate_images` tool to generate one image. The `size` must be `1024x1024`.
 2. Save the image as `.magic/avatars/agent-logo.png` in the current employee workspace. If the tool cannot write directly to this path, move or rename the generated image afterward.
 3. Confirm that the image exists, is readable, and is square, and verify that its file size does not exceed `500KB`. If it cannot be compressed to fit the limit, prefer converting it to a JPG of suitable quality while preserving the square aspect ratio.
-4. If generation fails, do not falsely report success. Continue the employee creation process, record the reason for failure, and proceed with synchronizing the name, role, and description.
-5. If a user-provided logo already exists, or the Agent already has an image icon, do not overwrite the existing image.
+4. If generation fails, do not falsely report success. Record the reason for failure and proceed with synchronizing the name, role, and description.
+5. If a user-provided logo already exists, or the Agent already has an image icon, do not overwrite the existing image without user confirmation.
 
 ## Agent Synchronization Payload
 

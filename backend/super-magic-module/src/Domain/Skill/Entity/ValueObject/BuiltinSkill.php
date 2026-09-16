@@ -15,6 +15,7 @@ enum BuiltinSkill: string
     case ImChannels = 'im-channels';
     case CreatingSlides = 'creating-slides';
     case CrewCreator = 'crew-creator';
+    case AgentProfile = 'agent-profile';
     case DeepResearch = 'deep-research';
     case CanvasDesigner = 'canvas-designer';
     case SkillCreator = 'skill-creator';
