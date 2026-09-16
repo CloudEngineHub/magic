@@ -121,6 +121,43 @@ export function getDragTargetBlockRange(
 	return { startIndex, endIndex }
 }
 
+export interface DragTargetBlockMeasurement {
+	start: number
+	end: number
+}
+
+export function resolveDragTargetBlockStyle(
+	range: { startIndex: number; endIndex: number },
+	options: {
+		rowEstimateSize: number
+		shouldVirtualize: boolean
+		scrollMargin?: number
+		measurements?: ReadonlyArray<DragTargetBlockMeasurement | undefined>
+	},
+) {
+	const { startIndex, endIndex } = range
+	const { rowEstimateSize, shouldVirtualize, scrollMargin = 0, measurements = [] } = options
+
+	const toTreeLocalOffset = (scrollOffset: number) => scrollOffset - scrollMargin
+
+	if (shouldVirtualize) {
+		const startMeasurement = measurements[startIndex]
+		const endMeasurement = measurements[endIndex]
+		const top = toTreeLocalOffset(startMeasurement?.start ?? startIndex * rowEstimateSize)
+		const bottom = toTreeLocalOffset(endMeasurement?.end ?? (endIndex + 1) * rowEstimateSize)
+
+		return {
+			top,
+			height: Math.max(rowEstimateSize, bottom - top),
+		}
+	}
+
+	return {
+		top: startIndex * rowEstimateSize,
+		height: Math.max(rowEstimateSize, (endIndex - startIndex + 1) * rowEstimateSize),
+	}
+}
+
 export function buildVisibleNodeIndexByKey(visibleNodes: TreeNodeData[]) {
 	const indexByKey = new Map<string, number>()
 

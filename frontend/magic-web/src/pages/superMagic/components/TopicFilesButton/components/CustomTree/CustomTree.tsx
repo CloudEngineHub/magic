@@ -6,6 +6,7 @@ import type { TreeNodeData } from "../../utils/treeDataConverter"
 import {
 	getDragReceiverNode,
 	getDragTargetBlockRange,
+	resolveDragTargetBlockStyle,
 	resolveVisibleTreeScrollAnchor,
 	resolveVisibleTreeScrollTopForAnchor,
 	type VisibleTreeScrollAnchor,
@@ -277,16 +278,22 @@ function CustomTree({
 	const dragTargetBlockStyle = useMemo(() => {
 		if (!dragTargetBlockRange) return null
 
-		return {
-			top: dragTargetBlockRange.startIndex * rowEstimateSize,
-			height: Math.max(
-				rowEstimateSize,
-				(dragTargetBlockRange.endIndex - dragTargetBlockRange.startIndex + 1) *
-					rowEstimateSize,
-			),
-		}
-	}, [dragTargetBlockRange, rowEstimateSize])
-	const shouldShowDragTargetBlock = Boolean(dragTargetBlockStyle && dragTargetNodeClass)
+		return resolveDragTargetBlockStyle(dragTargetBlockRange, {
+			rowEstimateSize,
+			shouldVirtualize,
+			scrollMargin,
+			measurements: rowVirtualizer.measurementsCache,
+		})
+	}, [
+		dragTargetBlockRange,
+		rowEstimateSize,
+		rowVirtualizer.measurementsCache,
+		scrollMargin,
+		shouldVirtualize,
+	])
+	const shouldShowDragTargetBlock = Boolean(
+		shouldVirtualize && dragTargetBlockStyle && dragTargetNodeClass,
+	)
 	const mountedRows = useMemo(() => {
 		if (!shouldVirtualize) return visibleRows
 
