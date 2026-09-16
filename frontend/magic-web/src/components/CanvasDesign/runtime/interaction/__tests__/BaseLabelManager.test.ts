@@ -91,7 +91,7 @@ describe("BaseLabelManager candidate cache", () => {
 		vi.restoreAllMocks()
 	})
 
-	it("shares label candidate ids across managers and reuses them on viewport scale", () => {
+	it("updates existing labels on viewport scale without querying candidates", () => {
 		const requestAnimationFrameSpy = vi
 			.spyOn(globalThis, "requestAnimationFrame")
 			.mockImplementation((callback: FrameRequestCallback) => {
@@ -195,7 +195,7 @@ describe("BaseLabelManager candidate cache", () => {
 
 		expect(requestAnimationFrameSpy).toHaveBeenCalledTimes(2)
 		expect(getAllElementIds).toHaveBeenCalledTimes(1)
-		expect(getSnapshot).toHaveBeenCalledTimes(4)
+		expect(getSnapshot).toHaveBeenCalledTimes(2)
 		expect(firstManager.hasLabel("image-1")).toBe(false)
 		expect(firstManager.hasLabel("frame-1")).toBe(true)
 
@@ -297,18 +297,28 @@ describe("BaseLabelManager candidate cache", () => {
 		eventEmitter.emit("viewport:scale")
 		flushRaf()
 		expect(manager.getLabelScaleX("frame-1")).toBe(2)
+		expect(getSnapshot).toHaveBeenCalledTimes(1)
 
 		labelElementIds = ["frame-1"]
 		requestLayerDraw.mockClear()
 		eventEmitter.emit("viewport:pan")
-		flushRaf()
+		expect(rafCallbacks).toHaveLength(0)
+
+		stageScale = 0.4
+		snapshotGeneration = 3
+		eventEmitter.emit("viewport:scale")
 		eventEmitter.emit("viewport:changed", { data: { phase: "end" } })
+		expect(rafCallbacks).toHaveLength(1)
 		flushRaf()
 
-		expect(manager.getLabelScaleX("frame-1")).toBe(2)
-		expect(getSnapshot).toHaveBeenCalledTimes(4)
+		expect(manager.getLabelScaleX("frame-1")).toBe(2.5)
+		expect(getSnapshot).toHaveBeenCalledTimes(2)
 		expect(manager.getReorderCount()).toBe(initialReorderCount)
-		expect(requestLayerDraw).not.toHaveBeenCalled()
+		expect(requestLayerDraw).toHaveBeenCalledWith("overlay", {
+			priority: "input",
+			reason: "visible-labels:viewport-end",
+			source: "TestLabelManager",
+		})
 
 		manager.destroy()
 	})

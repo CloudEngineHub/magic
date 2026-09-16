@@ -9,6 +9,8 @@ interface VisibleLabelQueryCache {
 	candidateRevision: number
 }
 
+type VisibleLabelSyncMode = "existing" | "full"
+
 /**
  * 标签配置
  */
@@ -177,6 +179,8 @@ export abstract class BaseLabelManager {
 	// 追踪上一次 hover 的元素 ID
 	protected lastHoveredElementId: string | null = null
 	private visibleLabelSyncRafId: number | null = null
+	private pendingVisibleLabelSyncMode: VisibleLabelSyncMode | null = null
+	private pendingVisibleLabelSyncReason = "unknown"
 	private visibleLabelQueryCache: VisibleLabelQueryCache | null = null
 	private lastSyncedViewportScale: number | null = null
 	private labelZIndexes = new Map<string, number>()
@@ -239,7 +243,11 @@ export abstract class BaseLabelManager {
 		})
 	}
 
-	private scheduleVisibleLabelSync(reason: string): void {
+	private scheduleVisibleLabelSync(reason: string, mode: VisibleLabelSyncMode): void {
+		if (mode === "full" || this.pendingVisibleLabelSyncMode === null) {
+			this.pendingVisibleLabelSyncMode = mode
+			this.pendingVisibleLabelSyncReason = reason
+		}
 		if (this.visibleLabelSyncRafId !== null) return
 		const schedule =
 			typeof requestAnimationFrame === "function"
@@ -250,19 +258,30 @@ export abstract class BaseLabelManager {
 							16,
 						) as unknown as number
 		this.visibleLabelSyncRafId = schedule(() => {
+			const pendingMode = this.pendingVisibleLabelSyncMode
+			const pendingReason = this.pendingVisibleLabelSyncReason
 			this.visibleLabelSyncRafId = null
-			this.syncVisibleLabels(reason)
+			this.pendingVisibleLabelSyncMode = null
+			this.pendingVisibleLabelSyncReason = "unknown"
+			if (pendingMode === "full") {
+				this.syncVisibleLabels(pendingReason)
+				return
+			}
+			this.syncExistingLabels(pendingReason)
 		})
 	}
 
 	private cancelVisibleLabelSync(): void {
-		if (this.visibleLabelSyncRafId === null) return
-		const cancel =
-			typeof cancelAnimationFrame === "function"
-				? cancelAnimationFrame
-				: (id: number) => globalThis.clearTimeout(id)
-		cancel(this.visibleLabelSyncRafId)
+		if (this.visibleLabelSyncRafId !== null) {
+			const cancel =
+				typeof cancelAnimationFrame === "function"
+					? cancelAnimationFrame
+					: (id: number) => globalThis.clearTimeout(id)
+			cancel(this.visibleLabelSyncRafId)
+		}
 		this.visibleLabelSyncRafId = null
+		this.pendingVisibleLabelSyncMode = null
+		this.pendingVisibleLabelSyncReason = "unknown"
 	}
 
 	private markLabelCandidatesDirty(): void {
@@ -383,18 +402,14 @@ export abstract class BaseLabelManager {
 			this.lastHoveredElementId = newHoveredId
 		})
 
-		// 监听 viewport 变化：scale 会改变反向缩放；pan 可能让带旧 scale 的离屏标签进入视口。
+		// Scale 只更新已实例化标签；平移期间标签的画布坐标不变，候选在 end 时统一同步。
 		this.listen("viewport:scale", () => {
-			this.scheduleVisibleLabelSync("viewport-scale")
-		})
-
-		this.listen("viewport:pan", () => {
-			this.scheduleVisibleLabelSync("viewport-pan")
+			this.scheduleVisibleLabelSync("viewport-scale", "existing")
 		})
 
 		this.listen("viewport:changed", ({ data }) => {
 			if (data.phase === "end") {
-				this.scheduleVisibleLabelSync("viewport-end")
+				this.scheduleVisibleLabelSync("viewport-end", "full")
 			}
 		})
 
@@ -929,6 +944,15 @@ export abstract class BaseLabelManager {
 		}
 
 		return requiresDraw
+	}
+
+	private syncExistingLabels(reason: string): void {
+		const currentViewportScale = this.canvas.stage.scaleX()
+		if (this.lastSyncedViewportScale === currentViewportScale) return
+		if (this.updateExistingLabels(true)) {
+			this.requestOverlayDraw(`visible-labels:${reason}`)
+		}
+		this.lastSyncedViewportScale = currentViewportScale
 	}
 
 	private syncVisibleLabels(reason: string): void {
