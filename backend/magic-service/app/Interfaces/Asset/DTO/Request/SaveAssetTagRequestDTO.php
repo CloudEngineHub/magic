@@ -53,4 +53,9 @@ class SaveAssetTagRequestDTO extends AbstractRequestDTO
             'parent_id' => 'nullable|integer|min:0',
         ];
     }
+
+    protected static function getHyperfValidationMessage(): array
+    {
+        return [];
+    }
 }

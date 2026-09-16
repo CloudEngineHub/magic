@@ -42,4 +42,9 @@ class TransferAssetOwnerRequestDTO extends AbstractRequestDTO
             'owner_uid' => 'required|string|max:64',
         ];
     }
+
+    protected static function getHyperfValidationMessage(): array
+    {
+        return [];
+    }
 }
