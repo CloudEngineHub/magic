@@ -142,6 +142,12 @@ class MagicUserDomainService extends AbstractContactDomainService
         return $this->userRepository->getUserByIdsAndOrganizations($ids, [$dataIsolation->getCurrentOrganizationCode()], $column);
     }
 
+    /** @return array<MagicUserEntity> */
+    public function getUserByIdsInOrganization(array $ids, string $organizationCode): array
+    {
+        return $this->userRepository->getUserByIdsAndOrganizations($ids, [$organizationCode]);
+    }
+
     public function getUserByPageToken(string $pageToken = '', int $pageSize = 50): array
     {
         return $this->userRepository->getUserByPageToken($pageToken, $pageSize);

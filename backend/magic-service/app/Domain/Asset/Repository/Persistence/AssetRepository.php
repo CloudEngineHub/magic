@@ -152,6 +152,20 @@ class AssetRepository implements AssetRepositoryInterface
             ->all();
     }
 
+    public function batchUpdateOwner(AssetDataIsolation $dataIsolation, array $assetIds, string $ownerUid): int
+    {
+        if ($assetIds === []) {
+            return 0;
+        }
+        return $this->assetModel::query()
+            ->whereIn('organization_code', $dataIsolation->getOrganizationCodes())
+            ->whereIn('id', $assetIds)
+            ->update([
+                'owner_uid' => $ownerUid,
+                'updated_at' => date('Y-m-d H:i:s'),
+            ]);
+    }
+
     /**
      * 按内容指纹查存活素材主键，用于复用第三方素材。
      *

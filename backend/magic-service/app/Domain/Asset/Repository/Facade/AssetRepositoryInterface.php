@@ -48,6 +48,8 @@ interface AssetRepositoryInterface
     /** @return array<string> */
     public function findIdsByOwnerUid(AssetDataIsolation $dataIsolation, string $ownerUid): array;
 
+    public function batchUpdateOwner(AssetDataIsolation $dataIsolation, array $assetIds, string $ownerUid): int;
+
     /**
      * 按内容指纹查询未删除的资产主键，用于跨组织复用已经通过审核的第三方素材凭证。
      * 该查询刻意不按组织编码过滤，但只返回本地主键，调用方仍需校验对应映射是否满足复用条件。

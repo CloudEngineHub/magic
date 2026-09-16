@@ -184,8 +184,12 @@ class AssetDomainService
     /** @param array<int, int|string> $assetIds @return AssetEntity[] */
     public function transferOwner(AssetDataIsolation $dataIsolation, array $assetIds, string $ownerUid): array
     {
+        $assetIds = array_values(array_unique(array_map('strval', $assetIds)));
+        if ($assetIds === []) {
+            return [];
+        }
         $assets = [];
-        foreach (array_values(array_unique(array_map('strval', $assetIds))) as $assetId) {
+        foreach ($assetIds as $assetId) {
             $asset = $this->assets->findById($dataIsolation, $assetId);
             if ($asset === null || ($asset->getOwnerUid() ?: $asset->getUserId()) !== $dataIsolation->getCurrentUserId()) {
                 ExceptionBuilder::throw(AssetErrorCode::DELETE_DENIED);
@@ -194,11 +198,25 @@ class AssetDomainService
             $assets[] = $asset;
         }
         Db::transaction(function () use ($dataIsolation, $assets): void {
-            foreach ($assets as $asset) {
-                $this->assets->update($dataIsolation, $asset);
-            }
+            $this->assets->batchUpdateOwner(
+                $dataIsolation,
+                array_map(static fn (AssetEntity $asset): int|string => $asset->getId(), $assets),
+                (string) $assets[0]->getOwnerUid(),
+            );
         });
         return $assets;
+    }
+
+    /** @return array<string> */
+    public function findIdsByOwnerUid(AssetDataIsolation $dataIsolation, string $ownerUid): array
+    {
+        return $this->assets->findIdsByOwnerUid($dataIsolation, $ownerUid);
+    }
+
+    /** @return array<string> */
+    public function findOwnerUidsByIds(AssetDataIsolation $dataIsolation, array $assetIds): array
+    {
+        return $this->assets->findOwnerUidsByIds($dataIsolation, $assetIds);
     }
 
     /**

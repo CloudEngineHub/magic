@@ -15,10 +15,9 @@ use App\Domain\Asset\Entity\ValueObject\AssetScope;
 use App\Domain\Asset\Entity\ValueObject\AssetTagNodeType;
 use App\Domain\Asset\Entity\ValueObject\AssetVisibility;
 use App\Domain\Asset\Entity\ValueObject\Query\AssetQuery;
-use App\Domain\Asset\Repository\Facade\AssetRepositoryInterface;
+use App\Domain\Contact\Service\MagicUserDomainService;
 use App\Domain\Asset\Service\AssetDomainService;
 use App\Domain\Asset\Service\AssetTagDomainService;
-use App\Domain\Contact\Repository\Facade\MagicUserRepositoryInterface;
 use App\Domain\Permission\Entity\ValueObject\ResourceVisibility\PrincipalType;
 use App\Domain\Permission\Entity\ValueObject\ResourceVisibility\ResourceType;
 use App\Domain\Permission\Service\ResourceVisibilityDomainService;
@@ -39,8 +38,7 @@ class AssetAppService extends AbstractAssetAppService
         ResourceVisibilityDomainService $resourceVisibilityDomainService,
         private readonly ProjectFileMaterializer $projectFileMaterializer,
         private readonly AssetTagDomainService $assetTagDomainService,
-        private readonly AssetRepositoryInterface $assetRepository,
-        private readonly MagicUserRepositoryInterface $userRepository,
+        private readonly MagicUserDomainService $userDomainService,
     ) {
         parent::__construct($resourceVisibilityDomainService);
     }
@@ -221,7 +219,7 @@ class AssetAppService extends AbstractAssetAppService
         if ($scope === AssetScope::ALL) {
             $query->setAccessibleAssetIds(array_merge(
                 $sharedAssetIds,
-                $this->assetRepository->findIdsByOwnerUid($dataIsolation, $dataIsolation->getCurrentUserId()),
+                $this->assetDomainService->findIdsByOwnerUid($dataIsolation, $dataIsolation->getCurrentUserId()),
             ));
         }
         $query->setAssetKind($requestDTO->getAssetKind());
@@ -280,15 +278,15 @@ class AssetAppService extends AbstractAssetAppService
             return [];
         }
         $ownerUids = array_values(array_diff(
-            $this->assetRepository->findOwnerUidsByIds($isolation, $assetIds),
+            $this->assetDomainService->findOwnerUidsByIds($isolation, $assetIds),
             [$isolation->getCurrentUserId()],
         ));
         if ($ownerUids === []) {
             return [];
         }
-        $users = $this->userRepository->getUserByIdsAndOrganizations(
+        $users = $this->userDomainService->getUserByIdsInOrganization(
             $ownerUids,
-            [$isolation->getCurrentOrganizationCode()],
+            $isolation->getCurrentOrganizationCode(),
         );
         return array_map(static fn ($user): array => [
             'id' => $user->getUserId(),
@@ -300,7 +298,7 @@ class AssetAppService extends AbstractAssetAppService
     {
         $isolation = $this->createAssetDataIsolation($authorization);
         $ownerUid = trim($ownerUid);
-        if ($ownerUid === '' || $ownerUid === $isolation->getCurrentUserId() || $this->userRepository->getUserByIdsAndOrganizations([$ownerUid], [$isolation->getCurrentOrganizationCode()]) === []) {
+        if ($ownerUid === '' || $ownerUid === $isolation->getCurrentUserId() || $this->userDomainService->getUserByIdsInOrganization([$ownerUid], $isolation->getCurrentOrganizationCode()) === []) {
             ExceptionBuilder::throw(AssetErrorCode::DELETE_DENIED);
         }
         $assets = [];
@@ -349,7 +347,7 @@ class AssetAppService extends AbstractAssetAppService
             ], $this->assetTagDomainService->findAssetTags($isolation, (string) $asset->getId())));
         }
         $infos = [];
-        foreach ($this->userRepository->getUserByIdsAndOrganizations(array_values(array_unique($ownerIds)), [$isolation->getCurrentOrganizationCode()]) as $user) {
+        foreach ($this->userDomainService->getUserByIdsInOrganization(array_values(array_unique($ownerIds)), $isolation->getCurrentOrganizationCode()) as $user) {
             $infos[$user->getUserId()] = ['nickname' => $user->getNickname()];
         }
         foreach ($assets as $asset) {
