@@ -5847,7 +5847,11 @@
 		"releaseToCollapse": "松开即可收起",
 		"renameCancel": "取消（Esc）",
 		"renameSave": "保存（Enter）",
+		"resizeGuideDescription": "拖动窗口边缘或右下角，调整宽度和高度。调整后的大小会自动记住。",
+		"resizeGuideDismiss": "知道了",
+		"resizeGuideTitle": "窗口大小可以调整",
 		"resizeSidebar": "调整侧栏宽度",
+		"restoreRecommendedSize": "恢复推荐尺寸",
 		"retry": "重试",
 		"updatedTime": "更新时间",
 		"workspacesLoadFailed": "工作区加载失败"

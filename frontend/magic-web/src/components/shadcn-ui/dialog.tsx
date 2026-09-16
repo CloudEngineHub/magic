@@ -66,7 +66,7 @@ const resizeHandles: Record<DialogResizeDirection, string> = {
 	w: "inset-y-2 -left-2 w-2 cursor-ew-resize after:h-7 after:w-0.5",
 	ne: "-right-2 -top-2 size-4 cursor-nesw-resize",
 	nw: "-left-2 -top-2 size-4 cursor-nwse-resize",
-	se: "-bottom-2 -right-2 size-4 cursor-nwse-resize",
+	se: "-bottom-2 -right-2 size-6 cursor-nwse-resize",
 	sw: "-bottom-2 -left-2 size-4 cursor-nesw-resize",
 }
 
