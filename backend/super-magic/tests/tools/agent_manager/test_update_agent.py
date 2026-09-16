@@ -8,14 +8,8 @@ from app.tools.agent_manager.update_agent import UpdateAgent
 
 @pytest.mark.asyncio
 async def test_resolve_icon_key_tolerates_path_variants(tmp_path):
-    # Set workspace and magic directories in tmp_path
     workspace_dir = tmp_path / "workspace"
     magic_dir = workspace_dir / ".magic"
-    avatars_dir = magic_dir / "avatars"
-    avatars_dir.mkdir(parents=True, exist_ok=True)
-
-    logo_file = avatars_dir / "agent-logo.jpg"
-    logo_file.write_bytes(b"dummy-image-data")
 
     with patch.object(PathManager, "get_workspace_dir", return_value=workspace_dir), \
          patch.object(PathManager, "get_magic_dir", return_value=magic_dir), \
@@ -23,20 +17,34 @@ async def test_resolve_icon_key_tolerates_path_variants(tmp_path):
         mock_upload.return_value = "DT001/public/avatar_mock123.jpg"
 
         # 1. Exact path
+        avatars_dir = magic_dir / "avatars"
+        avatars_dir.mkdir(parents=True, exist_ok=True)
+        logo_file = avatars_dir / "agent-logo.jpg"
+        logo_file.write_bytes(b"dummy-image-data")
         res1 = await UpdateAgent._resolve_icon_key(".magic/avatars/agent-logo.jpg")
         assert res1 == "DT001/public/avatar_mock123.jpg"
+        assert not logo_file.exists()
 
         # 2. Tolerates .magics misspelling
+        avatars_dir.mkdir(parents=True, exist_ok=True)
+        logo_file.write_bytes(b"dummy-image-data")
         res2 = await UpdateAgent._resolve_icon_key(".magics/avatars/agent-logo.jpg")
         assert res2 == "DT001/public/avatar_mock123.jpg"
+        assert not logo_file.exists()
 
         # 3. Tolerates avatars/... relative path
+        avatars_dir.mkdir(parents=True, exist_ok=True)
+        logo_file.write_bytes(b"dummy-image-data")
         res3 = await UpdateAgent._resolve_icon_key("avatars/agent-logo.jpg")
         assert res3 == "DT001/public/avatar_mock123.jpg"
+        assert not logo_file.exists()
 
         # 4. Tolerates bare filename
+        avatars_dir.mkdir(parents=True, exist_ok=True)
+        logo_file.write_bytes(b"dummy-image-data")
         res4 = await UpdateAgent._resolve_icon_key("agent-logo.jpg")
         assert res4 == "DT001/public/avatar_mock123.jpg"
+        assert not logo_file.exists()
 
 
 @pytest.mark.asyncio

@@ -1,6 +1,7 @@
 """Update the current custom agent profile through Magic Service."""
 
 import json
+from pathlib import Path
 from typing import Any, Dict, Optional
 
 from agentlang.context.tool_context import ToolContext
@@ -147,7 +148,8 @@ class UpdateAgent(BaseTool[UpdateAgentParams]):
 
     @staticmethod
     async def _resolve_icon_key(icon_file_key: str) -> Optional[str]:
-        """将工作区相对/绝对路径上传为公共对象存储 file_key；若已是 key/url 则直接返回。"""
+        """将工作区相对/绝对路径上传为公共对象存储 file_key 并清理本地临时头像文件；若已是 key/url 则直接返回。"""
+        import os
         from pathlib import Path
         from app.utils.public_storage_uploader import upload_file_to_public_storage
 
@@ -180,6 +182,8 @@ class UpdateAgent(BaseTool[UpdateAgentParams]):
                 try:
                     public_key = await upload_file_to_public_storage(candidate)
                     logger.info(f"本地头像文件上传公共存储成功: {candidate} -> {public_key}")
+                    # 上传成功后清理本地临时头像文件及空的 avatars 目录
+                    await UpdateAgent._cleanup_local_avatar_file(candidate)
                     return public_key
                 except Exception as e:
                     logger.error(f"上传本地头像到公共存储失败: {candidate} ({e})")
@@ -192,6 +196,7 @@ class UpdateAgent(BaseTool[UpdateAgentParams]):
                 try:
                     public_key = await upload_file_to_public_storage(icon_file_key)
                     logger.info(f"本地头像绝对路径上传公共存储成功: {icon_file_key} -> {public_key}")
+                    await UpdateAgent._cleanup_local_avatar_file(abs_path)
                     return public_key
                 except Exception as e:
                     logger.error(f"上传本地头像到公共存储失败: {icon_file_key} ({e})")
@@ -228,6 +233,24 @@ class UpdateAgent(BaseTool[UpdateAgentParams]):
         # 6. 裸文件名且非本地文件，无法确定来源
         logger.error(f"icon_file_key '{icon_file_key}' 无法解析为有效的文件路径或对象存储 key")
         return None
+
+    @staticmethod
+    async def _cleanup_local_avatar_file(avatar_path: Path) -> None:
+        """上传成功后清理本地临时头像文件，并在 avatars 目录为空时连同目录一起清理。"""
+        from app.utils.async_file_utils import async_exists, async_iterdir, async_rmdir, async_unlink
+        try:
+            if await async_exists(str(avatar_path)):
+                await async_unlink(str(avatar_path))
+                logger.info(f"已清理本地临时头像文件: {avatar_path}")
+            # 若父目录名为 avatars 且已空，则一并清理
+            parent_dir = avatar_path.parent
+            if parent_dir.name == "avatars" and await async_exists(str(parent_dir)):
+                children = await async_iterdir(parent_dir)
+                if not children:
+                    await async_rmdir(parent_dir)
+                    logger.info(f"已清理空头像目录: {parent_dir}")
+        except Exception as e:
+            logger.warning(f"清理本地头像文件失败（不影响主流程）: {avatar_path} ({e})")
 
     @staticmethod
     async def _update_local_cache(

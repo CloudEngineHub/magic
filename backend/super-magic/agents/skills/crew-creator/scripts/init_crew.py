@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Initialize a minimal set of employee definition files in .workspace/.magic/.
+Initialize a minimal set of employee definition files in .magic/.
 
 Reads a JSON config (via --config <path>) containing employee metadata
 and generates the appropriate definition files.
@@ -21,9 +21,9 @@ Config JSON schema:
     }
 
 Files generated:
-    .workspace/.magic/IDENTITY.md   — always
-    .workspace/.magic/AGENTS.md     — if instructions provided
-    .workspace/.magic/SOUL.md       — if personality provided
+    .magic/IDENTITY.md   — always
+    .magic/AGENTS.md     — if instructions provided
+    .magic/SOUL.md       — if personality provided
     (TOOLS.md / SKILLS.md are intentionally NOT created so the system uses defaults)
 """
 
@@ -31,8 +31,13 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
+import shutil
 import sys
 from pathlib import Path
+
+# Set environment variables to prevent runtime logging from polluting workspace
+os.environ.setdefault("LOG_DIR", "/app/logs" if Path("/app/logs").exists() else "/tmp/logs")
 
 # agents/skills/_shared/ is under parents[2] for all skill scripts.
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
@@ -43,13 +48,28 @@ REQUIRED_FIELDS = ("name", "role", "description", "instructions", "skill_decompo
 VALID_SKILL_DECOMPOSITION_DECISIONS = {"yes", "no"}
 
 
-def _resolve_config_path(config_arg: str, project_root: Path) -> tuple[Path | None, list[Path]]:
+def _resolve_workspace_dir(project_root: Path) -> Path:
+    """
+    Resolve the employee workspace directory.
+    When running inside sandbox (/app), cwd is usually the workspace (/mnt/agfs/magicfs/project).
+    If project_root contains .workspace, prefer cwd or project_root/.workspace accordingly.
+    """
+    cwd = Path.cwd()
+    if (cwd / ".magic").exists() or cwd.name == "project":
+        return cwd
+    if (project_root / ".workspace").exists():
+        return project_root / ".workspace"
+    return cwd
+
+
+def _resolve_config_path(config_arg: str, workspace_dir: Path, project_root: Path) -> tuple[Path | None, list[Path]]:
     config_path = Path(config_arg).expanduser()
     if config_path.is_absolute():
         candidates = [config_path]
     else:
         candidates = [
             Path.cwd() / config_path,
+            workspace_dir / config_path,
             project_root / ".workspace" / config_path,
             project_root / config_path,
         ]
@@ -58,6 +78,22 @@ def _resolve_config_path(config_arg: str, project_root: Path) -> tuple[Path | No
         if candidate.is_file():
             return candidate.resolve(), candidates
     return None, candidates
+
+
+def _cleanup_unwanted_dirs(workspace_dir: Path) -> None:
+    """Clean up unwanted runtime directories created accidentally in the workspace root."""
+    unwanted_dirs = [".browser", ".cache", ".workspace", "logs"]
+    for dir_name in unwanted_dirs:
+        target = workspace_dir / dir_name
+        if target.exists() and target.is_dir():
+            try:
+                # If it's a symlink or empty/non-essential directory, remove it
+                if target.is_symlink():
+                    target.unlink()
+                else:
+                    shutil.rmtree(target, ignore_errors=True)
+            except Exception:
+                pass
 
 
 def _build_identity(cfg: dict) -> str:
@@ -124,7 +160,7 @@ def _validate_agents_content(content: str) -> list[str]:
 
 def main() -> int:
     parser = argparse.ArgumentParser(
-        description="Initialize employee definition files in .workspace/.magic/",
+        description="Initialize employee definition files in .magic/",
     )
     parser.add_argument(
         "--config",
@@ -139,7 +175,8 @@ def main() -> int:
     args = parser.parse_args()
 
     project_root = get_project_root()
-    config_path, candidates = _resolve_config_path(args.config, project_root)
+    workspace_dir = _resolve_workspace_dir(project_root)
+    config_path, candidates = _resolve_config_path(args.config, workspace_dir, project_root)
     if config_path is None:
         checked_paths = ", ".join(str(path) for path in candidates)
         print(json.dumps({
@@ -176,7 +213,7 @@ def main() -> int:
         }, ensure_ascii=False))
         return 1
 
-    ws_dir = project_root / ".workspace" / ".magic"
+    ws_dir = workspace_dir / ".magic"
 
     identity_path = ws_dir / "IDENTITY.md"
     if identity_path.exists() and not args.overwrite:
@@ -201,6 +238,9 @@ def main() -> int:
     if soul_content:
         (ws_dir / "SOUL.md").write_text(soul_content, encoding="utf-8")
         created.append("SOUL.md")
+
+    # Clean up any unexpected runtime directories created in workspace
+    _cleanup_unwanted_dirs(workspace_dir)
 
     print(json.dumps({
         "ok": True,
