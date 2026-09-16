@@ -124,6 +124,62 @@ describe("ElementManager element creation names", () => {
 	})
 })
 
+describe("ElementManager nested geometry invalidation", () => {
+	it("invalidates descendants and ancestors when a container changes", () => {
+		const image = createElement("image")
+		const group = {
+			...createElement("group"),
+			type: "group" as const,
+			children: [image],
+		}
+		const frame = {
+			...createElement("frame"),
+			type: "frame" as const,
+			children: [group],
+		}
+		const outerGroup = {
+			...createElement("outer-group"),
+			type: "group" as const,
+			children: [frame],
+		}
+		const dataById = new Map<string, LayerElement>([
+			[image.id, image],
+			[group.id, group],
+			[frame.id, frame],
+			[outerGroup.id, outerGroup],
+		])
+		const parentById = new Map([
+			[image.id, group.id],
+			[group.id, frame.id],
+			[frame.id, outerGroup.id],
+		])
+		const invalidateElements = vi.fn()
+		const manager = Object.create(ElementManager.prototype) as unknown as {
+			elements: Map<string, { getData: () => LayerElement }>
+			canvas: {
+				geometryCacheManager: { invalidateElements: typeof invalidateElements }
+			}
+			findParentElement: (elementId: string) => { getData: () => LayerElement } | undefined
+			invalidateGeometryForElement: (elementId: string) => void
+		}
+		manager.elements = new Map(
+			Array.from(dataById, ([elementId, data]) => [elementId, { getData: () => data }]),
+		)
+		manager.canvas = { geometryCacheManager: { invalidateElements } }
+		manager.findParentElement = (elementId) => {
+			const parentId = parentById.get(elementId)
+			return parentId ? manager.elements.get(parentId) : undefined
+		}
+
+		manager.invalidateGeometryForElement(frame.id)
+
+		expect(invalidateElements).toHaveBeenCalledOnce()
+		expect(invalidateElements).toHaveBeenCalledWith(
+			new Set([frame.id, group.id, image.id, outerGroup.id]),
+		)
+	})
+})
+
 describe("ElementManager document loading", () => {
 	it("preserves persisted Frame dimensions during document loading", () => {
 		const manager = Object.create(ElementManager.prototype) as unknown as {

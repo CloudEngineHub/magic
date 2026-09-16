@@ -694,6 +694,9 @@ importers:
       radix-ui:
         specifier: ^1.4.3
         version: 1.6.7(@types/react-dom@18.3.7(@types/react@18.3.23))(@types/react@18.3.23)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
+      rbush:
+        specifier: ^4.0.1
+        version: 4.0.1
       rc-virtual-list:
         specifier: ^3.18.4
         version: 3.19.2(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
@@ -932,6 +935,9 @@ importers:
       '@types/prismjs':
         specifier: ^1.26.5
         version: 1.26.6
+      '@types/rbush':
+        specifier: ^4.0.0
+        version: 4.0.0
       '@types/react':
         specifier: 18.3.23
         version: 18.3.23
@@ -5520,6 +5526,9 @@ packages:
 
   '@types/raf@3.4.3':
     resolution: {integrity: sha512-c4YAvMedbPZ5tEyxzQdMoOhhJ4RD3rngZIdwC2/qDN3d7JpEhB6fiBRKVY1lg5B7Wk+uPBjn5f39j1/2MY1oOw==}
+
+  '@types/rbush@4.0.0':
+    resolution: {integrity: sha512-+N+2H39P8X+Hy1I5mC6awlTX54k3FhiUmvt7HWzGJZvF+syUAAxP/stwppS8JE84YHqFgRMv6fCy31202CMFxQ==}
 
   '@types/react-big-calendar@1.16.3':
     resolution: {integrity: sha512-CR+5BKMhlr/wPgsp+sXOeNKNkoU1h/+6H1XoWuL7xnurvzGRQv/EnM8jPS9yxxBvXI8pjQBaJcI7RTSGiewG/Q==}
@@ -21154,6 +21163,8 @@ snapshots:
 
   '@types/raf@3.4.3':
     optional: true
+
+  '@types/rbush@4.0.0': {}
 
   '@types/react-big-calendar@1.16.3':
     dependencies:
