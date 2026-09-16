@@ -12,7 +12,7 @@ from pydantic import Field, field_validator
 
 from app.path_manager import PathManager
 from app.tools.core import BaseTool, BaseToolParams, tool
-from app.utils.async_file_utils import async_exists, async_read_text, async_write_text
+from app.utils.async_file_utils import async_exists
 
 logger = get_logger(__name__)
 
@@ -136,7 +136,6 @@ class UpdateAgent(BaseTool[UpdateAgentParams]):
                 file_key=resolved_key if params.icon_file_key is not None else None,
             )
             await get_magic_service_sdk().agent.update_agent_async(parameter)
-            await self._update_local_cache(agent_code, params, icon, icon_type)
             return ToolResult(
                 content=f"Agent {agent_code} profile updated successfully.",
                 data={"code": agent_code},
@@ -297,31 +296,3 @@ class UpdateAgent(BaseTool[UpdateAgentParams]):
         except Exception as e:
             logger.warning(f"清理本地头像文件失败（不影响主流程）: {avatar_path} ({e})")
 
-    @staticmethod
-    async def _update_local_cache(
-        agent_code: str,
-        params: UpdateAgentParams,
-        icon: Optional[Dict[str, Any]],
-        icon_type: Optional[int],
-    ) -> None:
-        cache_path = PathManager.get_magic_dir() / "agent.json"
-        if not await async_exists(cache_path):
-            return
-        try:
-            profile = json.loads(await async_read_text(cache_path))
-            if params.name_i18n:
-                profile["name_i18n"] = {**profile.get("name_i18n", {}), **params.name_i18n}
-            if params.description_i18n:
-                profile["description_i18n"] = {
-                    **profile.get("description_i18n", {}), **params.description_i18n
-                }
-            if params.role_i18n is not None:
-                profile["role_i18n"] = params.role_i18n
-            if params.prompt is not None:
-                profile["prompt"] = params.prompt
-            if icon is not None:
-                profile["icon"] = icon
-                profile["icon_type"] = icon_type
-            await async_write_text(cache_path, json.dumps(profile, ensure_ascii=False, indent=2))
-        except Exception as error:
-            logger.warning(f"Failed to update local agent cache: {error}")

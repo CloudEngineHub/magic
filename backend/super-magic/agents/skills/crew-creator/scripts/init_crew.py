@@ -35,39 +35,26 @@ import os
 import sys
 from pathlib import Path
 
-# Set environment variables to prevent runtime logging from polluting workspace
-os.environ.setdefault("LOG_DIR", "/app/logs" if Path("/app/logs").exists() else "/tmp/logs")
-
-# agents/skills/_shared/ is under parents[2] for all skill scripts.
-sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
-from _shared.bootstrap import get_project_root
-
-
 REQUIRED_FIELDS = ("name", "role", "description", "instructions", "skill_decomposition_decision")
 VALID_SKILL_DECOMPOSITION_DECISIONS = {"yes", "no"}
 
 
-def _resolve_workspace_dir(project_root: Path) -> Path:
+def _resolve_workspace_dir() -> Path:
     """
     Resolve the employee workspace directory.
     When running inside sandbox (/app), cwd is usually the workspace (/mnt/agfs/magicfs/project).
-    If running outside project_root, prefer cwd.
-    If project_root contains .workspace, prefer cwd or project_root/.workspace accordingly.
+    If cwd has .magic or is named 'project', cwd is the employee workspace.
+    If cwd/.workspace exists, prefer cwd/.workspace.
     """
     cwd = Path.cwd()
     if (cwd / ".magic").exists() or cwd.name == "project":
         return cwd
-    try:
-        if cwd != project_root and not cwd.is_relative_to(project_root):
-            return cwd
-    except Exception:
-        pass
-    if (project_root / ".workspace").exists():
-        return project_root / ".workspace"
+    if (cwd / ".workspace").exists():
+        return cwd / ".workspace"
     return cwd
 
 
-def _resolve_config_path(config_arg: str, workspace_dir: Path, project_root: Path) -> tuple[Path | None, list[Path]]:
+def _resolve_config_path(config_arg: str, workspace_dir: Path) -> tuple[Path | None, list[Path]]:
     config_path = Path(config_arg).expanduser()
     if config_path.is_absolute():
         candidates = [config_path]
@@ -75,8 +62,7 @@ def _resolve_config_path(config_arg: str, workspace_dir: Path, project_root: Pat
         candidates = [
             Path.cwd() / config_path,
             workspace_dir / config_path,
-            project_root / ".workspace" / config_path,
-            project_root / config_path,
+            workspace_dir / ".workspace" / config_path,
         ]
 
     for candidate in candidates:
@@ -163,9 +149,8 @@ def main() -> int:
     )
     args = parser.parse_args()
 
-    project_root = get_project_root()
-    workspace_dir = _resolve_workspace_dir(project_root)
-    config_path, candidates = _resolve_config_path(args.config, workspace_dir, project_root)
+    workspace_dir = _resolve_workspace_dir()
+    config_path, candidates = _resolve_config_path(args.config, workspace_dir)
     if config_path is None:
         checked_paths = ", ".join(str(path) for path in candidates)
         print(json.dumps({

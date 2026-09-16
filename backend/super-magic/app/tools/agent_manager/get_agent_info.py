@@ -8,9 +8,7 @@ from agentlang.logger import get_logger
 from agentlang.tools.tool_result import ToolResult
 from agentlang.utils.shadow_code import ShadowCode
 
-from app.path_manager import PathManager
 from app.tools.core import BaseTool, BaseToolParams, tool
-from app.utils.async_file_utils import async_mkdir, async_write_text
 
 logger = get_logger(__name__)
 
@@ -62,12 +60,6 @@ class GetAgentInfo(BaseTool[GetAgentInfoParams]):
                 "skills": [skill.to_dict() for skill in result.skills],
             }
 
-            cache_dir = PathManager.get_magic_dir()
-            await async_mkdir(cache_dir, parents=True, exist_ok=True)
-            await async_write_text(
-                cache_dir / "agent.json",
-                json.dumps(profile, ensure_ascii=False, indent=2),
-            )
             return ToolResult(content=json.dumps(profile, ensure_ascii=False, indent=2))
         except Exception as error:
             logger.error(f"Failed to get agent info: {error}")
