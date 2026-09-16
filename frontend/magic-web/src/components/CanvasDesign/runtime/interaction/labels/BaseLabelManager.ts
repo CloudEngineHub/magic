@@ -2,33 +2,11 @@ import Konva from "konva"
 import { ElementTypeEnum, type LayerElement } from "../../document/types"
 import type { Canvas } from "../../core/Canvas"
 import type { CanvasEvent, CanvasEventMap } from "../../core/EventEmitter"
-import type { Rect } from "../../shared/ids"
-import { getViewportCanvasRect } from "../../shared/placement/elementUtils"
-
-const LABEL_VIEWPORT_QUERY_PADDING_RATIO = 0.5
 
 interface VisibleLabelQueryCache {
-	coverageRect: Rect
+	viewportGeneration: number
 	candidateIds: string[]
 	candidateRevision: number
-}
-
-function expandRect(rect: Rect, padding: number): Rect {
-	return {
-		x: rect.x - padding,
-		y: rect.y - padding,
-		width: rect.width + padding * 2,
-		height: rect.height + padding * 2,
-	}
-}
-
-function containsRect(outer: Rect, inner: Rect): boolean {
-	return (
-		inner.x >= outer.x &&
-		inner.y >= outer.y &&
-		inner.x + inner.width <= outer.x + outer.width &&
-		inner.y + inner.height <= outer.y + outer.height
-	)
 }
 
 /**
@@ -910,30 +888,26 @@ export abstract class BaseLabelManager {
 	}
 
 	private getVisibleLabelCandidateIds(): string[] {
-		const viewportRect = getViewportCanvasRect(this.canvas)
+		const viewportSnapshot = this.canvas.viewportQueryCoordinator.getSnapshot()
 		const candidateRevision = this.labelCandidateIndex.getRevision()
 		const cached = this.visibleLabelQueryCache
 		if (
 			cached &&
 			cached.candidateRevision === candidateRevision &&
-			containsRect(cached.coverageRect, viewportRect)
+			cached.viewportGeneration === viewportSnapshot.generation
 		) {
 			return cached.candidateIds
 		}
 
-		const padding =
-			Math.max(viewportRect.width, viewportRect.height) * LABEL_VIEWPORT_QUERY_PADDING_RATIO
-		const coverageRect = expandRect(viewportRect, padding)
 		const elementIds = this.getLabelCandidateElementIds()
-		const candidateIds =
-			elementIds.size === 0
-				? []
-				: this.canvas.geometryCacheManager.queryElementIdsByExpandedRect(
-						viewportRect,
-						padding,
-						{ elementIds },
-					)
-		this.visibleLabelQueryCache = { coverageRect, candidateIds, candidateRevision }
+		const candidateIds = viewportSnapshot.labelElementIds.filter((elementId) =>
+			elementIds.has(elementId),
+		)
+		this.visibleLabelQueryCache = {
+			viewportGeneration: viewportSnapshot.generation,
+			candidateIds,
+			candidateRevision,
+		}
 		return candidateIds
 	}
 

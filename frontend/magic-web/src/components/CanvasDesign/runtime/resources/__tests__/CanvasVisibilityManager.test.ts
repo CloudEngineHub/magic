@@ -84,6 +84,19 @@ function createImageCandidate(
 	}
 }
 
+function createViewportSnapshot(visibleElementIds: string[] = [], nearElementIds: string[] = []) {
+	return {
+		generation: 1,
+		geometryRevision: 0,
+		labelElementIds: [],
+		nearElementIds: new Set(nearElementIds),
+		nearRect: { x: -200, y: -200, width: 500, height: 500 },
+		viewportRect: { x: 0, y: 0, width: 100, height: 100 },
+		viewportScale: 1,
+		visibleElementIds: new Set(visibleElementIds),
+	}
+}
+
 type SelectImageCandidatesToLoad = (options: {
 	pendingVisibleCandidates: ImageCandidate[]
 	pendingLowDetailVisibleCandidates: ImageCandidate[]
@@ -118,7 +131,6 @@ function createManager(requestPreviewLoad = vi.fn()) {
 		registeredImages: Map<string, { elementId: string; path: string }>
 		registeredVideos: Map<string, { elementId: string; path: string }>
 		registeredAudios: Map<string, { elementId: string; path: string }>
-		registeredMediaElementIds: Set<string>
 		lastVideoVisibilityState: Map<string, string>
 		scheduleRefresh: ReturnType<typeof vi.fn>
 	}
@@ -134,7 +146,7 @@ function createManager(requestPreviewLoad = vi.fn()) {
 	manager.registeredImages = new Map()
 	manager.registeredVideos = new Map()
 	manager.registeredAudios = new Map()
-	manager.registeredMediaElementIds = new Set()
+	;(manager as unknown as { activeVideoIds: Set<string> }).activeVideoIds = new Set()
 	manager.lastVideoVisibilityState = new Map()
 	manager.scheduleRefresh = vi.fn()
 	return { ensureFreshOssInfo, manager, requestPreviewLoad }
@@ -195,6 +207,10 @@ function createConstructedManager(requestPreviewLoad = vi.fn()) {
 		contentLayer,
 		elementManager: {
 			getElementInstance: () => ({ requestPreviewLoad }),
+			isElementVisibleInDataTree: () => true,
+		},
+		viewportQueryCoordinator: {
+			getSnapshot: vi.fn(() => createViewportSnapshot()),
 		},
 		videoResourceManager: {
 			ensureFreshOssInfo,
@@ -253,7 +269,9 @@ function createConstructedManager(requestPreviewLoad = vi.fn()) {
 		},
 	}
 	const manager = new CanvasVisibilityManager({
-		canvas: canvas as ConstructorParameters<typeof CanvasVisibilityManager>[0]["canvas"],
+		canvas: canvas as unknown as ConstructorParameters<
+			typeof CanvasVisibilityManager
+		>[0]["canvas"],
 	}) as CanvasVisibilityManager & {
 		lastRequestedVideoLoadState: Map<
 			string,
@@ -289,41 +307,19 @@ interface ConsumerVisibilityTestCanvas {
 	elementManager: {
 		isElementVisibleInDataTree: () => boolean
 	}
-	geometryCacheManager: {
-		queryElementIdsByExpandedRect: (
-			viewportRect: unknown,
-			padding: number,
-			options: { elementIds: string[] },
-		) => string[]
-	}
-	stage: {
-		width: () => number
-		height: () => number
-		scaleX: () => number
-		getAbsoluteTransform: () => {
-			copy: () => {
-				invert: () => {
-					point: (point: unknown) => unknown
-				}
-			}
-		}
-	}
-	viewportController: {
-		getResolvedDefaultViewportPadding: () => {
-			left: number
-			right: number
-			top: number
-			bottom: number
-		}
+	viewportQueryCoordinator: {
+		getSnapshot: () => ReturnType<typeof createViewportSnapshot>
 	}
 }
 
 describe("CanvasVisibilityManager video load requests", () => {
-	it("maintains one shared candidate id set across media registrations", () => {
+	it("registers media without maintaining a duplicate candidate id set", () => {
 		const { manager: constructedManager } = createConstructedManager()
 		const manager = constructedManager as unknown as CanvasVisibilityManager
 		const internals = constructedManager as unknown as {
-			registeredMediaElementIds: Set<string>
+			registeredImages: Map<string, unknown>
+			registeredVideos: Map<string, unknown>
+			registeredAudios: Map<string, unknown>
 			scheduleRefresh: ReturnType<typeof vi.fn>
 		}
 		internals.scheduleRefresh = vi.fn()
@@ -331,43 +327,30 @@ describe("CanvasVisibilityManager video load requests", () => {
 		manager.registerImageElement("image-1", "./images/a.png")
 		manager.registerVideoElement("video-1", "./videos/a.mp4")
 		manager.registerAudioElement("audio-1", "./audios/a.mp3")
-		expect(internals.registeredMediaElementIds).toEqual(
-			new Set(["image-1", "video-1", "audio-1"]),
-		)
+		expect(internals.registeredImages.has("image-1")).toBe(true)
+		expect(internals.registeredVideos.has("video-1")).toBe(true)
+		expect(internals.registeredAudios.has("audio-1")).toBe(true)
+		expect("registeredMediaElementIds" in internals).toBe(false)
 
 		manager.unregisterImageElement("image-1")
 		manager.unregisterVideoElement("video-1")
 		manager.unregisterAudioElement("audio-1")
-		expect(internals.registeredMediaElementIds.size).toBe(0)
+		expect(internals.registeredImages.size).toBe(0)
+		expect(internals.registeredVideos.size).toBe(0)
+		expect(internals.registeredAudios.size).toBe(0)
 	})
 
 	it("notifies consumer visibility changes independently of registered media", () => {
 		const { manager } = createConstructedManager()
 		let relation: "visible" | "near" | "far" = "visible"
 		const canvas = (manager as unknown as { canvas: ConsumerVisibilityTestCanvas }).canvas
-		canvas.geometryCacheManager = {
-			queryElementIdsByExpandedRect: vi.fn(),
-		}
 		canvas.elementManager.isElementVisibleInDataTree = () => true
-		canvas.geometryCacheManager.queryElementIdsByExpandedRect = (
-			_rect: unknown,
-			padding: number,
-			options: { elementIds: string[] },
-		) => {
-			if (!options.elementIds.includes("consumer")) return []
-			if (padding === 0) return relation === "visible" ? ["consumer"] : []
-			return relation === "far" ? [] : ["consumer"]
-		}
-		canvas.stage = {
-			width: () => 100,
-			height: () => 100,
-			getAbsoluteTransform: () => ({
-				copy: () => ({ invert: () => ({ point: (point: unknown) => point }) }),
-			}),
-			scaleX: () => 1,
-		}
-		canvas.viewportController = {
-			getResolvedDefaultViewportPadding: () => ({ left: 0, right: 0, top: 0, bottom: 0 }),
+		canvas.viewportQueryCoordinator = {
+			getSnapshot: () =>
+				createViewportSnapshot(
+					relation === "visible" ? ["consumer"] : [],
+					relation === "near" ? ["consumer"] : [],
+				),
 		}
 
 		const states: string[] = []
@@ -376,20 +359,63 @@ describe("CanvasVisibilityManager video load requests", () => {
 		const unsubscribe = registerConsumerVisibility.call(manager, "consumer", (state) => {
 			states.push(state)
 		})
+		expect(
+			(manager as unknown as { activeConsumerIds: Set<string> }).activeConsumerIds,
+		).toEqual(new Set(["consumer"]))
 
 		relation = "near"
-		const refreshConsumerVisibility = (
+		const applyConsumerVisibilityStates = (
 			manager as unknown as {
-				refreshConsumerVisibility: (viewportRect: unknown, nearPadding: number) => void
+				applyConsumerVisibilityStates: (
+					visibleIds: ReadonlySet<string>,
+					nearIds: ReadonlySet<string>,
+				) => void
 			}
-		).refreshConsumerVisibility
-		refreshConsumerVisibility.call(manager, { x: 0, y: 0, width: 100, height: 100 }, 200)
+		).applyConsumerVisibilityStates
+		applyConsumerVisibilityStates.call(manager, new Set(), new Set(["consumer"]))
 		relation = "far"
-		refreshConsumerVisibility.call(manager, { x: 0, y: 0, width: 100, height: 100 }, 200)
-		refreshConsumerVisibility.call(manager, { x: 0, y: 0, width: 100, height: 100 }, 200)
+		applyConsumerVisibilityStates.call(manager, new Set(), new Set())
+		applyConsumerVisibilityStates.call(manager, new Set(), new Set())
 
 		expect(states).toEqual(["visible", "near", "far"])
 		unsubscribe()
+	})
+
+	it("updates visibility state only for current and previous active media", () => {
+		const manager = Object.create(CanvasVisibilityManager.prototype) as unknown as {
+			replaceMediaVisibilityStates: (
+				visibleIds: ReadonlySet<string>,
+				nearIds: ReadonlySet<string>,
+				previousActiveIds: Set<string>,
+				states: Map<string, "visible" | "near" | "far">,
+				registeredCount: number,
+			) => number
+		}
+		const previousActiveIds = new Set(["stays-visible", "leaves-near"])
+		const states = new Map<string, "visible" | "near" | "far">([
+			["stays-visible", "visible"],
+			["leaves-near", "near"],
+			["already-far", "far"],
+		])
+		const setState = vi.spyOn(states, "set")
+
+		const farCount = manager.replaceMediaVisibilityStates(
+			new Set(["stays-visible", "enters-visible"]),
+			new Set(["enters-near"]),
+			previousActiveIds,
+			states,
+			10_000,
+		)
+
+		expect(farCount).toBe(9997)
+		expect(previousActiveIds).toEqual(
+			new Set(["stays-visible", "enters-visible", "enters-near"]),
+		)
+		expect(setState.mock.calls).toEqual([
+			["leaves-near", "far"],
+			["enters-visible", "visible"],
+			["enters-near", "near"],
+		])
 	})
 
 	it("binds viewport video requests to the shared path signal", () => {
@@ -697,6 +723,7 @@ describe("CanvasVisibilityManager audio viewport requests", () => {
 		const audioState = manager as unknown as {
 			registeredAudios: Map<string, { elementId: string; path: string }>
 			lastAudioVisibilityState: Map<string, string>
+			viewportPreloadedAudioIds: Set<string>
 			scheduleFarVisibilityDrain: ReturnType<typeof vi.fn>
 			updateAudioVisibilityStates: (
 				visibleAudioIds: ReadonlySet<string>,
@@ -713,6 +740,7 @@ describe("CanvasVisibilityManager audio viewport requests", () => {
 			elementId: "audio-far",
 			path: "./audios/far.mp3",
 		})
+		audioState.viewportPreloadedAudioIds.add("audio-far")
 
 		expect(
 			audioState.updateAudioVisibilityStates(new Set(["audio-visible"]), new Set(), false),
@@ -1533,7 +1561,6 @@ describe("CanvasVisibilityManager decoded image retention hints", () => {
 			registeredImages: Map<string, { elementId: string; path: string }>
 			registeredVideos: Map<string, { elementId: string; path: string }>
 			registeredAudios: Map<string, { elementId: string; path: string }>
-			registeredMediaElementIds: Set<string>
 			consumerVisibilityListeners: Map<string, Set<(state: string) => void>>
 			lastVisibilityState: Map<string, string>
 			lastRequestedLoadState: Map<string, unknown>
@@ -1562,7 +1589,9 @@ describe("CanvasVisibilityManager decoded image retention hints", () => {
 		])
 		manager.registeredVideos = new Map()
 		manager.registeredAudios = new Map()
-		manager.registeredMediaElementIds = new Set(["image-1"])
+		;(manager as unknown as { activeImageIds: Set<string> }).activeImageIds = new Set([
+			"image-1",
+		])
 		manager.lastVisibilityState = new Map()
 		manager.lastRequestedLoadState = new Map()
 		manager.lowFallbackPreviewPathByElementId = new Map()
@@ -1789,6 +1818,7 @@ describe("CanvasVisibilityManager skipped pan visible refresh", () => {
 			lastQueryCoverRect: ViewportRect
 			lastScaleBand: number
 			lastQueryViewportScale: number
+			lastQueryGeometryRevision: number
 			renderVisibilityController: { getCulledCount: () => number }
 			shouldSkipViewportMovementQuery: (options: {
 				reason: string
@@ -1796,6 +1826,7 @@ describe("CanvasVisibilityManager skipped pan visible refresh", () => {
 				viewportRect: ViewportRect
 				viewportScale: number
 				scaleBand: number
+				geometryRevision: number
 			}) => boolean
 		}
 		manager.canvas = {
@@ -1810,6 +1841,7 @@ describe("CanvasVisibilityManager skipped pan visible refresh", () => {
 		manager.lastQueryCoverRect = { x: 0, y: 0, width: 1000, height: 800 }
 		manager.lastScaleBand = 3
 		manager.lastQueryViewportScale = 1
+		manager.lastQueryGeometryRevision = 7
 		manager.renderVisibilityController = { getCulledCount: () => 500 }
 		const shouldSkip = manager.shouldSkipViewportMovementQuery.bind(manager)
 
@@ -1820,6 +1852,7 @@ describe("CanvasVisibilityManager skipped pan visible refresh", () => {
 				viewportRect: { x: 100, y: 100, width: 600, height: 400 },
 				viewportScale: 1,
 				scaleBand: 3,
+				geometryRevision: 7,
 			}),
 		).toBe(true)
 		expect(
@@ -1829,6 +1862,7 @@ describe("CanvasVisibilityManager skipped pan visible refresh", () => {
 				viewportRect: { x: 80, y: 80, width: 700, height: 500 },
 				viewportScale: 1.05,
 				scaleBand: 3,
+				geometryRevision: 7,
 			}),
 		).toBe(true)
 		expect(
@@ -1838,59 +1872,36 @@ describe("CanvasVisibilityManager skipped pan visible refresh", () => {
 				viewportRect: { x: 500, y: 300, width: 600, height: 600 },
 				viewportScale: 1,
 				scaleBand: 3,
+				geometryRevision: 7,
+			}),
+		).toBe(false)
+		expect(
+			shouldSkip({
+				reason: "viewport:pan",
+				force: false,
+				viewportRect: { x: 100, y: 100, width: 600, height: 400 },
+				viewportScale: 1,
+				scaleBand: 3,
+				geometryRevision: 8,
 			}),
 		).toBe(false)
 	})
 
-	it("queries each viewport tier once and partitions roots and media ids", () => {
-		const queryElementIdsByExpandedRect = vi.fn(
-			(_rect: ViewportRect, padding: number, options?: { elementIds?: Iterable<string> }) => {
-				void options
-				return padding === 0
-					? [
-							"root-visible",
-							"consumer-visible",
-							"image-visible",
-							"video-visible",
-							"audio-visible",
-							"layout-visible",
-						]
-					: [
-							"root-visible",
-							"root-near",
-							"consumer-visible",
-							"consumer-near",
-							"image-visible",
-							"image-near",
-							"video-visible",
-							"video-near",
-							"audio-visible",
-							"audio-near",
-							"layout-visible",
-							"layout-near",
-						]
-			},
-		)
+	it("partitions one shared viewport snapshot into roots, layouts, consumers, and media", () => {
 		const getAllElements = vi.fn(() => [{ id: "root-visible" }, { id: "root-near" }])
 		const manager = Object.create(CanvasVisibilityManager.prototype) as unknown as {
 			canvas: {
 				elementManager: { getAllElements: () => Array<{ id: string }> }
-				geometryCacheManager: {
-					queryElementIdsByExpandedRect: typeof queryElementIdsByExpandedRect
-				}
 				runtimeScheduler: {
-					getViewportScaleLayoutElementIds: () => IterableIterator<string>
 					hasViewportScaleLayoutElement: (elementId: string) => boolean
 				}
 			}
 			registeredImages: Map<string, { elementId: string; path: string }>
 			registeredVideos: Map<string, { elementId: string; path: string }>
 			registeredAudios: Map<string, { elementId: string; path: string }>
-			registeredMediaElementIds: Set<string>
 			consumerVisibilityListeners: Map<string, Set<(state: string) => void>>
 			queryViewportElementIds: (
-				viewportRect: ViewportRect,
-				nearPadding: number,
+				viewportSnapshot: ReturnType<typeof createViewportSnapshot>,
 				includeRenderRoots: boolean,
 			) => Record<string, Set<string>>
 		}
@@ -1899,9 +1910,7 @@ describe("CanvasVisibilityManager skipped pan visible refresh", () => {
 			elementManager: {
 				getAllElements,
 			},
-			geometryCacheManager: { queryElementIdsByExpandedRect },
 			runtimeScheduler: {
-				getViewportScaleLayoutElementIds: () => viewportLayoutElementIds.values(),
 				hasViewportScaleLayoutElement: (elementId) =>
 					viewportLayoutElementIds.has(elementId),
 			},
@@ -1918,37 +1927,31 @@ describe("CanvasVisibilityManager skipped pan visible refresh", () => {
 			["audio-visible", { elementId: "audio-visible", path: "visible.mp3" }],
 			["audio-near", { elementId: "audio-near", path: "near.mp3" }],
 		])
-		manager.registeredMediaElementIds = new Set([
-			"image-visible",
-			"image-near",
-			"video-visible",
-			"video-near",
-			"audio-visible",
-			"audio-near",
-		])
 		manager.consumerVisibilityListeners = new Map([
 			["consumer-visible", new Set()],
 			["consumer-near", new Set()],
 		])
 		const queryViewportElementIds = manager.queryViewportElementIds.bind(manager)
-
-		const mediaOnlyResult = queryViewportElementIds(
-			{ x: 0, y: 0, width: 800, height: 600 },
-			1200,
-			false,
+		const viewportSnapshot = createViewportSnapshot(
+			[
+				"root-visible",
+				"consumer-visible",
+				"image-visible",
+				"video-visible",
+				"audio-visible",
+				"layout-visible",
+			],
+			["root-near", "consumer-near", "image-near", "video-near", "audio-near", "layout-near"],
 		)
+
+		const mediaOnlyResult = queryViewportElementIds(viewportSnapshot, false)
 		expect(getAllElements).not.toHaveBeenCalled()
 		expect(mediaOnlyResult.rootElementIds.size).toBe(0)
 		expect(mediaOnlyResult.renderActiveRootIds.size).toBe(0)
-		queryElementIdsByExpandedRect.mockClear()
 
-		const result = queryViewportElementIds({ x: 0, y: 0, width: 800, height: 600 }, 1200, true)
+		const result = queryViewportElementIds(viewportSnapshot, true)
 
 		expect(getAllElements).toHaveBeenCalledTimes(1)
-		expect(queryElementIdsByExpandedRect).toHaveBeenCalledTimes(2)
-		expect(queryElementIdsByExpandedRect.mock.calls[0]?.[2]?.elementIds).toBe(
-			queryElementIdsByExpandedRect.mock.calls[1]?.[2]?.elementIds,
-		)
 		expect(result.renderActiveRootIds).toEqual(new Set(["root-visible", "root-near"]))
 		expect(result.activeViewportScaleLayoutElementIds).toEqual(
 			new Set(["layout-visible", "layout-near"]),
@@ -1963,16 +1966,11 @@ describe("CanvasVisibilityManager skipped pan visible refresh", () => {
 		expect(result.nearAudioIds).toEqual(new Set(["audio-near"]))
 	})
 
-	it("requests visible images without running the large near query when viewport movement is skipped", () => {
+	it("requests the shared visible partition when viewport movement is skipped", () => {
 		const requestImageLoad = vi.fn()
 		const scheduleDrainIfNeeded = vi.fn()
 		const scheduleFarVisibilityDrain = vi.fn()
 		const replaceTargets = vi.fn()
-		const queryElementIdsByExpandedRect = vi.fn((_rect, padding, options) =>
-			padding === 0 && Array.from(options?.elementIds ?? []).includes("image-1")
-				? ["image-1"]
-				: [],
-		)
 		const manager = Object.create(
 			CanvasVisibilityManager.prototype,
 		) as CanvasVisibilityManager & {
@@ -1986,7 +1984,6 @@ describe("CanvasVisibilityManager skipped pan visible refresh", () => {
 				}
 				geometryCacheManager: {
 					getElementBounds: () => { x: number; y: number; width: number; height: number }
-					queryElementIdsByExpandedRect: typeof queryElementIdsByExpandedRect
 				}
 				imagePresentationScheduler: {
 					replaceTargets: typeof replaceTargets
@@ -1995,7 +1992,6 @@ describe("CanvasVisibilityManager skipped pan visible refresh", () => {
 			registeredImages: Map<string, { elementId: string; path: string }>
 			registeredVideos: Map<string, { elementId: string; path: string }>
 			registeredAudios: Map<string, { elementId: string; path: string }>
-			registeredMediaElementIds: Set<string>
 			lastRequestedLoadState: Map<
 				string,
 				{
@@ -2024,6 +2020,7 @@ describe("CanvasVisibilityManager skipped pan visible refresh", () => {
 				startedAt: number
 				viewportRect: { x: number; y: number; width: number; height: number }
 				viewportScale: number
+				viewportElements: Record<string, Set<string>>
 			}) => void
 		}
 
@@ -2037,7 +2034,6 @@ describe("CanvasVisibilityManager skipped pan visible refresh", () => {
 			},
 			geometryCacheManager: {
 				getElementBounds: () => ({ x: 0, y: 0, width: 1000, height: 800 }),
-				queryElementIdsByExpandedRect,
 			},
 			imagePresentationScheduler: {
 				replaceTargets,
@@ -2048,7 +2044,20 @@ describe("CanvasVisibilityManager skipped pan visible refresh", () => {
 		])
 		manager.registeredVideos = new Map()
 		manager.registeredAudios = new Map()
-		manager.registeredMediaElementIds = new Set(["image-1"])
+		Object.assign(
+			manager as unknown as {
+				activeImageIds: Set<string>
+				activeVideoIds: Set<string>
+				activeAudioIds: Set<string>
+				viewportPreloadedAudioIds: Set<string>
+			},
+			{
+				activeImageIds: new Set<string>(),
+				activeVideoIds: new Set<string>(),
+				activeAudioIds: new Set<string>(),
+				viewportPreloadedAudioIds: new Set<string>(),
+			},
+		)
 		manager.lastRequestedLoadState = new Map()
 		manager.lastRequestedVideoLoadState = new Map()
 		manager.lastRequestedAudioLoadState = new Map()
@@ -2107,14 +2116,21 @@ describe("CanvasVisibilityManager skipped pan visible refresh", () => {
 			startedAt: performance.now(),
 			viewportRect: { x: 100, y: 200, width: 800, height: 600 },
 			viewportScale: 0.2,
+			viewportElements: {
+				activeViewportScaleLayoutElementIds: new Set(),
+				nearAudioIds: new Set(),
+				nearConsumerIds: new Set(),
+				nearImageIds: new Set(),
+				nearVideoIds: new Set(),
+				renderActiveRootIds: new Set(),
+				rootElementIds: new Set(),
+				visibleAudioIds: new Set(),
+				visibleConsumerIds: new Set(),
+				visibleImageIds: new Set(["image-1"]),
+				visibleVideoIds: new Set(),
+			},
 		})
 
-		expect(queryElementIdsByExpandedRect).toHaveBeenCalledTimes(1)
-		expect(queryElementIdsByExpandedRect).toHaveBeenCalledWith(
-			{ x: 100, y: 200, width: 800, height: 600 },
-			0,
-			expect.objectContaining({ elementIds: new Set(["image-1"]) }),
-		)
 		expect(requestImageLoad).toHaveBeenCalledTimes(1)
 		expect(requestImageLoad).toHaveBeenCalledWith(
 			expect.objectContaining({
@@ -2264,6 +2280,7 @@ describe("CanvasVisibilityManager immediate media loading", () => {
 			getViewportResourceSignal: (
 				mediaType: "image" | "video" | "audio",
 				path: string,
+				elementId: string,
 			) => AbortSignal
 			getViewportResourceAbortKey: (
 				mediaType: "image" | "video" | "audio",
@@ -2296,10 +2313,14 @@ describe("CanvasVisibilityManager immediate media loading", () => {
 		manager.lastRequestedVideoLoadState = new Map([["video-1", {}]])
 		manager.lastRequestedAudioLoadState = new Map()
 
-		const initialSignal = manager.getViewportResourceSignal("image", "./images/a.png")
-		const nextSignal = manager.getViewportResourceSignal("image", "./images/a.png")
-		manager.getViewportResourceSignal("image", "./images/b.png")
-		manager.getViewportResourceSignal("video", "./videos/a.mp4")
+		const initialSignal = manager.getViewportResourceSignal(
+			"image",
+			"./images/a.png",
+			"image-1",
+		)
+		const nextSignal = manager.getViewportResourceSignal("image", "./images/a.png", "image-2")
+		manager.getViewportResourceSignal("image", "./images/b.png", "image-3")
+		manager.getViewportResourceSignal("video", "./videos/a.mp4", "video-1")
 		const resourceKey = manager.getViewportResourceAbortKey("image", "./images/a.png")
 		const retainedImageKey = manager.getViewportResourceAbortKey("image", "./images/b.png")
 		const retainedVideoKey = manager.getViewportResourceAbortKey("video", "./videos/a.mp4")
@@ -2318,7 +2339,7 @@ describe("CanvasVisibilityManager immediate media loading", () => {
 		expect(manager.lastRequestedLoadState.has("image-2")).toBe(false)
 		expect(manager.lastRequestedLoadState.has("image-3")).toBe(true)
 		expect(manager.lastRequestedVideoLoadState.has("video-1")).toBe(true)
-		expect(getResourceKeySpy).toHaveBeenCalledTimes(4)
+		expect(getResourceKeySpy).not.toHaveBeenCalled()
 	})
 })
 

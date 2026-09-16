@@ -36,7 +36,7 @@ function mergeRects(rects: Rect[]): Rect | null {
 	}
 }
 
-function expandRect(rect: Rect, padding: number): Rect {
+export function expandRect(rect: Rect, padding: number): Rect {
 	return {
 		x: rect.x - padding,
 		y: rect.y - padding,
@@ -45,7 +45,7 @@ function expandRect(rect: Rect, padding: number): Rect {
 	}
 }
 
-function containsRect(outer: Rect, inner: Rect): boolean {
+export function containsRect(outer: Rect, inner: Rect): boolean {
 	return (
 		inner.x >= outer.x &&
 		inner.y >= outer.y &&
@@ -54,7 +54,7 @@ function containsRect(outer: Rect, inner: Rect): boolean {
 	)
 }
 
-function intersectsRect(a: Rect, b: Rect): boolean {
+export function intersectsRect(a: Rect, b: Rect): boolean {
 	return (
 		a.x <= b.x + b.width &&
 		a.x + a.width >= b.x &&
@@ -65,6 +65,7 @@ function intersectsRect(a: Rect, b: Rect): boolean {
 
 const DEFAULT_SPATIAL_CELL_SIZE = 2048
 const DIRECT_SCAN_CELL_TO_ALLOWED_RATIO = 8
+const UNFILTERED_DIRECT_SCAN_MIN_CELL_COUNT = 4096
 
 /**
  * 统一管理元素几何边界缓存。
@@ -79,6 +80,7 @@ export class GeometryCacheManager {
 	private spatialIndex: Map<string, Set<string>> = new Map()
 	private elementSpatialCells: Map<string, string[]> = new Map()
 	private spatialIndexDirty = true
+	private revision = 0
 	private readonly spatialCellSize = DEFAULT_SPATIAL_CELL_SIZE
 
 	constructor(options: { canvas: Canvas }) {
@@ -154,8 +156,21 @@ export class GeometryCacheManager {
 			: null
 		const estimatedCellCount = this.getCellCountForRect(queryRect)
 
-		if (allowedIds && this.shouldDirectScanAllowedIds(allowedIds, estimatedCellCount)) {
-			return this.queryAllowedIdsByRect(allowedIds, queryRect)
+		if (allowedIds && this.shouldDirectScanElementCount(allowedIds.size, estimatedCellCount)) {
+			return this.queryElementIdsByRect(allowedIds, queryRect)
+		}
+		if (
+			!allowedIds &&
+			estimatedCellCount >= UNFILTERED_DIRECT_SCAN_MIN_CELL_COUNT &&
+			this.shouldDirectScanElementCount(
+				this.canvas.elementManager.getElementCount(),
+				estimatedCellCount,
+			)
+		) {
+			return this.queryElementIdsByRect(
+				this.canvas.elementManager.getAllElementIds(),
+				queryRect,
+			)
 		}
 
 		this.ensureSpatialIndex()
@@ -186,8 +201,17 @@ export class GeometryCacheManager {
 		return containsRect(outer, inner)
 	}
 
+	/**
+	 * Monotonic geometry revision used by shared viewport snapshots. A revision changes only when
+	 * cached bounds may be stale, so multiple consumers can reuse one spatial result safely.
+	 */
+	public getRevision(): number {
+		return this.revision
+	}
+
 	public invalidateElement(elementId: string): void {
 		this.invalidateElementInternal(elementId)
+		this.revision += 1
 	}
 
 	public invalidateElements(elementIds: ReadonlySet<string> | readonly string[]): void {
@@ -198,6 +222,7 @@ export class GeometryCacheManager {
 		})
 		if (hasInvalidated) {
 			this.allElementsBoundsCache = undefined
+			this.revision += 1
 		}
 	}
 
@@ -207,6 +232,7 @@ export class GeometryCacheManager {
 		this.spatialIndex.clear()
 		this.elementSpatialCells.clear()
 		this.spatialIndexDirty = true
+		this.revision += 1
 	}
 
 	public destroy(): void {
@@ -270,23 +296,20 @@ export class GeometryCacheManager {
 		this.spatialIndexDirty = false
 	}
 
-	private shouldDirectScanAllowedIds(
-		allowedIds: ReadonlySet<string>,
-		cellCount: number,
-	): boolean {
-		if (allowedIds.size === 0) return true
-		return cellCount > allowedIds.size * DIRECT_SCAN_CELL_TO_ALLOWED_RATIO
+	private shouldDirectScanElementCount(elementCount: number, cellCount: number): boolean {
+		if (elementCount === 0) return true
+		return cellCount > elementCount * DIRECT_SCAN_CELL_TO_ALLOWED_RATIO
 	}
 
-	private queryAllowedIdsByRect(allowedIds: ReadonlySet<string>, queryRect: Rect): string[] {
+	private queryElementIdsByRect(elementIds: Iterable<string>, queryRect: Rect): string[] {
 		const result: string[] = []
-		allowedIds.forEach((elementId) => {
-			if (!this.canvas.elementManager.isElementVisibleInDataTree(elementId)) return
+		for (const elementId of elementIds) {
+			if (!this.canvas.elementManager.isElementVisibleInDataTree(elementId)) continue
 			const bounds = this.getElementBounds(elementId)
 			if (bounds && intersectsRect(bounds, queryRect)) {
 				result.push(elementId)
 			}
-		})
+		}
 		return result
 	}
 

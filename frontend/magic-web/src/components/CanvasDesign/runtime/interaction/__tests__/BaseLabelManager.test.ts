@@ -64,6 +64,19 @@ function createEventEmitter() {
 	}
 }
 
+function createViewportSnapshot(generation: number, labelElementIds: string[]) {
+	return {
+		generation,
+		geometryRevision: 0,
+		labelElementIds,
+		nearElementIds: new Set<string>(),
+		nearRect: { x: -1600, y: -1600, width: 4000, height: 3800 },
+		viewportRect: { x: 0, y: 0, width: 800, height: 600 },
+		viewportScale: 1,
+		visibleElementIds: new Set<string>(),
+	}
+}
+
 describe("BaseLabelManager candidate cache", () => {
 	beforeEach(() => {
 		vi.spyOn(HTMLCanvasElement.prototype, "getContext").mockReturnValue({
@@ -90,7 +103,9 @@ describe("BaseLabelManager candidate cache", () => {
 			[
 				"frame-1",
 				{
+					getBoundingRect: () => ({ x: 0, y: 0, width: 100, height: 100 }),
 					getData: () => ({ id: "frame-1", type: ElementTypeEnum.Frame }),
+					getNode: () => ({}),
 				},
 			],
 			[
@@ -107,7 +122,7 @@ describe("BaseLabelManager candidate cache", () => {
 			],
 		])
 		const getAllElementIds = vi.fn(() => Array.from(elements.keys()))
-		const queryElementIdsByExpandedRect = vi.fn(() => [])
+		const getSnapshot = vi.fn(() => createViewportSnapshot(1, ["frame-1"]))
 		const canvas = {
 			cropManager: { getCroppingElementId: () => null },
 			elementManager: {
@@ -117,7 +132,6 @@ describe("BaseLabelManager candidate cache", () => {
 			eraserManager: { getErasingElementId: () => null },
 			eventEmitter,
 			extendManager: { getExtendingElementId: () => null },
-			geometryCacheManager: { queryElementIdsByExpandedRect },
 			hoverManager: { getHoveredElementId: () => null },
 			overlayLayer: { add: vi.fn(), destroy: vi.fn() },
 			runtimeScheduler: { requestLayerDraw: vi.fn() },
@@ -142,6 +156,7 @@ describe("BaseLabelManager candidate cache", () => {
 					top: 0,
 				}),
 			},
+			viewportQueryCoordinator: { getSnapshot },
 		} as never
 		const firstManager = new TestLabelManager({
 			canvas,
@@ -180,19 +195,15 @@ describe("BaseLabelManager candidate cache", () => {
 
 		expect(requestAnimationFrameSpy).toHaveBeenCalledTimes(2)
 		expect(getAllElementIds).toHaveBeenCalledTimes(1)
-		expect(queryElementIdsByExpandedRect).toHaveBeenCalledTimes(2)
+		expect(getSnapshot).toHaveBeenCalledTimes(4)
 		expect(firstManager.hasLabel("image-1")).toBe(false)
-		expect(queryElementIdsByExpandedRect).toHaveBeenLastCalledWith(
-			expect.any(Object),
-			expect.any(Number),
-			{ elementIds: new Set(["frame-1"]) },
-		)
+		expect(firstManager.hasLabel("frame-1")).toBe(true)
 
 		firstManager.destroy()
 		secondManager.destroy()
 	})
 
-	it("refreshes existing label scale even when viewport query misses it", () => {
+	it("refreshes existing label scale even when the shared snapshot misses it", () => {
 		vi.spyOn(console, "warn").mockImplementation(() => undefined)
 		const rafCallbacks: FrameRequestCallback[] = []
 		vi.spyOn(globalThis, "requestAnimationFrame").mockImplementation(
@@ -207,7 +218,8 @@ describe("BaseLabelManager candidate cache", () => {
 		}
 		const eventEmitter = createEventEmitter()
 		let stageScale = 1
-		let visibleElementIds = ["frame-1"]
+		let snapshotGeneration = 1
+		let labelElementIds = ["frame-1"]
 		const elements = new Map([
 			[
 				"frame-1",
@@ -218,7 +230,7 @@ describe("BaseLabelManager candidate cache", () => {
 				},
 			],
 		])
-		const queryElementIdsByExpandedRect = vi.fn(() => visibleElementIds)
+		const getSnapshot = vi.fn(() => createViewportSnapshot(snapshotGeneration, labelElementIds))
 		const requestLayerDraw = vi.fn()
 		const canvas = {
 			cropManager: { getCroppingElementId: () => null },
@@ -230,7 +242,6 @@ describe("BaseLabelManager candidate cache", () => {
 			eraserManager: { getErasingElementId: () => null },
 			eventEmitter,
 			extendManager: { getExtendingElementId: () => null },
-			geometryCacheManager: { queryElementIdsByExpandedRect },
 			hoverManager: { getHoveredElementId: () => null },
 			overlayLayer: { add: vi.fn(), destroy: vi.fn() },
 			runtimeScheduler: { requestLayerDraw },
@@ -258,6 +269,7 @@ describe("BaseLabelManager candidate cache", () => {
 					top: 0,
 				}),
 			},
+			viewportQueryCoordinator: { getSnapshot },
 		} as never
 		const manager = new TestLabelManager({
 			canvas,
@@ -280,13 +292,13 @@ describe("BaseLabelManager candidate cache", () => {
 		const initialReorderCount = manager.getReorderCount()
 
 		stageScale = 0.5
-		visibleElementIds = []
+		snapshotGeneration = 2
+		labelElementIds = []
 		eventEmitter.emit("viewport:scale")
 		flushRaf()
 		expect(manager.getLabelScaleX("frame-1")).toBe(2)
-		expect(queryElementIdsByExpandedRect).toHaveBeenCalledTimes(2)
 
-		visibleElementIds = ["frame-1"]
+		labelElementIds = ["frame-1"]
 		requestLayerDraw.mockClear()
 		eventEmitter.emit("viewport:pan")
 		flushRaf()
@@ -294,7 +306,7 @@ describe("BaseLabelManager candidate cache", () => {
 		flushRaf()
 
 		expect(manager.getLabelScaleX("frame-1")).toBe(2)
-		expect(queryElementIdsByExpandedRect).toHaveBeenCalledTimes(2)
+		expect(getSnapshot).toHaveBeenCalledTimes(4)
 		expect(manager.getReorderCount()).toBe(initialReorderCount)
 		expect(requestLayerDraw).not.toHaveBeenCalled()
 
@@ -313,7 +325,9 @@ describe("BaseLabelManager candidate cache", () => {
 			[
 				"frame-1",
 				{
+					getBoundingRect: () => ({ x: 0, y: 0, width: 100, height: 100 }),
 					getData: () => ({ id: "frame-1", type: ElementTypeEnum.Frame }),
+					getNode: () => ({}),
 				},
 			],
 		])
@@ -327,7 +341,6 @@ describe("BaseLabelManager candidate cache", () => {
 			eraserManager: { getErasingElementId: () => null },
 			eventEmitter,
 			extendManager: { getExtendingElementId: () => null },
-			geometryCacheManager: { queryElementIdsByExpandedRect: vi.fn(() => []) },
 			hoverManager: { getHoveredElementId: () => null },
 			overlayLayer: { add: vi.fn(), destroy: vi.fn() },
 			runtimeScheduler: { requestLayerDraw: vi.fn() },
@@ -351,6 +364,9 @@ describe("BaseLabelManager candidate cache", () => {
 					right: 0,
 					top: 0,
 				}),
+			},
+			viewportQueryCoordinator: {
+				getSnapshot: () => createViewportSnapshot(1, ["frame-1"]),
 			},
 		} as never
 		const labelConfig = {
@@ -423,7 +439,6 @@ describe("BaseLabelManager candidate cache", () => {
 			eraserManager: { getErasingElementId: () => null },
 			eventEmitter,
 			extendManager: { getExtendingElementId: () => null },
-			geometryCacheManager: { queryElementIdsByExpandedRect: vi.fn(() => []) },
 			hoverManager: { getHoveredElementId: () => hoveredElementId },
 			overlayLayer: { add: vi.fn(), destroy: vi.fn() },
 			runtimeScheduler: { requestLayerDraw },
@@ -447,6 +462,9 @@ describe("BaseLabelManager candidate cache", () => {
 					right: 0,
 					top: 0,
 				}),
+			},
+			viewportQueryCoordinator: {
+				getSnapshot: () => createViewportSnapshot(stageScale === 1 ? 1 : 2, []),
 			},
 		} as never
 		const manager = new TestLabelManager({

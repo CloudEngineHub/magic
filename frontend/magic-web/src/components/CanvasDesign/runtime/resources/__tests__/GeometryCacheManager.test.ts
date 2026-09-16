@@ -163,6 +163,54 @@ describe("GeometryCacheManager", () => {
 		expect(ids).toEqual(["visible"])
 	})
 
+	it("directly scans all elements when an unfiltered query would enumerate excessive cells", () => {
+		const boundsById = new Map([
+			["visible", { x: 0, y: 0, width: 100, height: 100 }],
+			["hidden", { x: 10, y: 10, width: 100, height: 100 }],
+		])
+		const elementIds = Array.from(boundsById.keys())
+		const getAllElementIds = vi.fn(() => elementIds)
+		const manager = new GeometryCacheManager({
+			canvas: {
+				elementManager: {
+					getAllElementIds,
+					getElementCount: () => elementIds.length,
+					isElementVisibleInDataTree: (id: string) => id === "visible",
+					getElementInstance: (id: string) => ({
+						getBoundingRect: () => boundsById.get(id) ?? null,
+					}),
+				},
+			} as never,
+		})
+
+		expect(
+			manager.queryElementIdsByExpandedRect(
+				{ x: -500_000, y: -500_000, width: 1_000_000, height: 1_000_000 },
+				0,
+			),
+		).toEqual(["visible"])
+		expect(getAllElementIds).toHaveBeenCalledTimes(1)
+
+		manager.queryElementIdsByExpandedRect({ x: 0, y: 0, width: 200, height: 200 }, 0)
+		expect(getAllElementIds).toHaveBeenCalledTimes(2)
+	})
+
+	it("advances the geometry revision once per invalidation batch", () => {
+		const manager = createManager(
+			new Map([["element", { x: 0, y: 0, width: 100, height: 100 }]]),
+		)
+
+		expect(manager.getRevision()).toBe(0)
+		manager.invalidateElement("element")
+		expect(manager.getRevision()).toBe(1)
+		manager.invalidateElements([])
+		expect(manager.getRevision()).toBe(1)
+		manager.invalidateElements(["element"])
+		expect(manager.getRevision()).toBe(2)
+		manager.invalidateAll()
+		expect(manager.getRevision()).toBe(3)
+	})
+
 	it("updates indexed cells incrementally after an element moves", () => {
 		const boundsById = new Map([
 			["moving", { x: 0, y: 0, width: 100, height: 100 }],

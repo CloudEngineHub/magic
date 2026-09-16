@@ -1638,6 +1638,10 @@ export class ElementManager {
 		return Array.from(this.elements.keys())
 	}
 
+	public getElementCount(): number {
+		return this.elements.size
+	}
+
 	/**
 	 * 获取所有顶层元素（不包含子元素）
 	 */
@@ -2254,9 +2258,7 @@ export class ElementManager {
 
 		// 销毁所有子节点，但保留背景
 		const background = this.canvas.contentLayer.findOne(".canvas-background") as
-			| Konva.Shape
-			| Konva.Group
-			| null
+			Konva.Shape | Konva.Group | null
 		this.canvas.contentLayer.destroyChildren()
 
 		// 如果背景存在，重新添加到 layer
