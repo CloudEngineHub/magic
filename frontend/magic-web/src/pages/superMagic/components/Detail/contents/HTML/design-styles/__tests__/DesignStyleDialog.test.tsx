@@ -35,9 +35,9 @@ describe("DesignStyleDialog", () => {
 		expect(screen.getByTestId("design-style-grid")).toHaveClass(
 			"grid-cols-1",
 			"sm:grid-cols-2",
-			"lg:grid-cols-4",
-			"gap-3",
-			"pt-2",
+			"lg:grid-cols-3",
+			"gap-x-6",
+			"pt-5",
 		)
 		expect(screen.queryByTestId("design-style-preview")).not.toBeInTheDocument()
 		expect(screen.queryByTestId("design-style-apply-button")).not.toBeInTheDocument()
@@ -58,7 +58,7 @@ describe("DesignStyleDialog", () => {
 			"htmlEditor.designStyle.gallery.styleExample",
 		)
 		expect(screen.queryByText("htmlEditor.designStyle.title")).not.toBeInTheDocument()
-		fireEvent.click(screen.getByRole("tab", { name: "htmlEditor.designStyle.rawMode" }))
+		fireEvent.click(screen.getByRole("button", { name: "htmlEditor.designStyle.rawMode" }))
 		expect(screen.getByTestId("design-style-preview")).toHaveAttribute(
 			"data-preview-mode",
 			"raw",

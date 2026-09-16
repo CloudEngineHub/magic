@@ -1,4 +1,4 @@
-import { ArrowLeft, FileText, Palette } from "lucide-react"
+import { ArrowLeft, FileText, Palette, Layout } from "lucide-react"
 import type { Ref } from "react"
 import { useTranslation } from "react-i18next"
 import { Button } from "@/components/shadcn-ui/button"
@@ -6,7 +6,7 @@ import { DialogDescription, DialogTitle } from "@/components/shadcn-ui/dialog"
 import type { DesignStyle } from "./catalog"
 import { getStyleProfile } from "./styleProfiles"
 
-export type DesignStyleDetailMode = "details" | "raw"
+export type DesignStyleDetailMode = "details" | "rules" | "raw"
 
 interface DesignStyleDetailHeaderProps {
 	style: DesignStyle
@@ -31,7 +31,7 @@ export default function DesignStyleDetailHeader({
 
 	return (
 		<div
-			className="flex flex-wrap items-end justify-between gap-3"
+			className="flex flex-wrap items-center justify-between gap-3"
 			data-testid="design-style-detail-header"
 		>
 			<div className="min-w-0 max-w-3xl">
@@ -40,29 +40,34 @@ export default function DesignStyleDetailHeader({
 						ref={backButtonRef}
 						variant="ghost"
 						size="icon"
-						className="size-7 shrink-0 rounded-lg"
+						className="size-8 shrink-0 rounded-lg"
 						onClick={onBack}
 						aria-label={t("htmlEditor.designStyle.gallery.back")}
 						data-testid="design-style-back"
 					>
 						<ArrowLeft className="size-4" aria-hidden="true" />
 					</Button>
-					<DialogTitle className="text-xl font-semibold tracking-[-0.03em] text-foreground [text-wrap:balance]">
+					<DialogTitle className="text-lg font-semibold tracking-[-0.03em] text-foreground [text-wrap:balance]">
 						{name}
 					</DialogTitle>
 				</div>
-				<DialogDescription className="mt-1 max-w-[72ch] text-[11px] leading-4 [text-wrap:pretty]">
+				<DialogDescription className="mt-1 max-w-[72ch] text-xs leading-5 [text-wrap:pretty]">
 					{description}
 				</DialogDescription>
 			</div>
 			<div
-				className="flex rounded-lg border border-border/70 bg-background p-1"
-				role="tablist"
+				className="flex max-w-full flex-wrap items-center gap-x-4 gap-y-1"
+				role="group"
 				aria-label={t("htmlEditor.designStyle.detailSectionsLabel")}
 			>
 				{[
 					{
 						value: "details" as const,
+						label: t("htmlEditor.designStyle.pagePreview"),
+						Icon: Layout,
+					},
+					{
+						value: "rules" as const,
 						label: t("htmlEditor.designStyle.tokenDetails"),
 						Icon: Palette,
 					},
@@ -75,9 +80,8 @@ export default function DesignStyleDetailHeader({
 					<button
 						key={value}
 						type="button"
-						role="tab"
-						aria-selected={mode === value}
-						className={`flex items-center gap-1.5 whitespace-nowrap rounded-md px-2.5 py-1.5 text-[11px] font-medium transition-[color,background-color,transform] active:scale-[0.96] ${mode === value ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:bg-muted hover:text-foreground"}`}
+						aria-pressed={mode === value}
+						className={`flex items-center gap-1.5 whitespace-nowrap border-b-2 px-0 py-2 text-xs font-medium transition-[color,background-color,transform] focus-visible:outline focus-visible:outline-2 focus-visible:outline-ring ${mode === value ? "border-foreground text-foreground" : "border-transparent text-muted-foreground hover:text-foreground"}`}
 						onClick={() => onModeChange(value)}
 					>
 						<Icon

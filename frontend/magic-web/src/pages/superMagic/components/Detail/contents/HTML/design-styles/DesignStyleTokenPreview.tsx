@@ -51,11 +51,11 @@ function ColorSwatches({ colors }: { colors: DesignColorToken[] }) {
 
 	return (
 		<div className="grid w-full min-w-0 grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-5">
-			{colors.slice(0, 20).map((color) => (
+			{colors.map((color) => (
 				<button
 					key={color.name}
 					type="button"
-					className="group flex min-w-0 items-center gap-2 overflow-hidden rounded-lg border border-border/70 bg-background p-1.5 text-left transition-colors hover:border-primary/50 hover:bg-muted/30 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
+					className="group flex min-w-0 items-center gap-2 overflow-hidden border-b border-border/60 bg-background p-1.5 text-left transition-colors hover:border-primary/50 hover:bg-muted/30 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
 					aria-label={t("htmlEditor.designStyle.copyColor", {
 						value: tokenText(color.value),
 					})}
@@ -70,7 +70,7 @@ function ColorSwatches({ colors }: { colors: DesignColorToken[] }) {
 					/>
 					<span className="min-w-0 flex-1">
 						<span className="flex items-center justify-between gap-1">
-							<span className="truncate text-[10px] font-medium text-foreground">
+							<span className="truncate text-xs font-medium text-foreground">
 								{color.name}
 							</span>
 							{copiedName === color.name ? (
@@ -85,7 +85,7 @@ function ColorSwatches({ colors }: { colors: DesignColorToken[] }) {
 								/>
 							)}
 						</span>
-						<span className="block truncate font-mono text-[9px] text-muted-foreground">
+						<span className="block truncate font-mono text-[11px] text-muted-foreground">
 							{copiedName === color.name
 								? t("htmlEditor.designStyle.copied")
 								: tokenText(color.value)}
@@ -108,17 +108,17 @@ function TypographySpecimen({ typography }: { typography: DesignTypographyToken[
 
 	return (
 		<div className="grid gap-2 lg:grid-cols-2">
-			{typography.slice(0, 10).map((item) => (
+			{typography.map((item) => (
 				<div
 					key={item.name}
-					className="min-w-0 rounded-lg border border-border/70 bg-background p-3"
+					className="min-w-0 border-b border-border/60 bg-background p-3"
 				>
 					<div className="flex items-center justify-between gap-3">
-						<span className="truncate text-[10px] font-medium uppercase tracking-[0.08em] text-muted-foreground">
+						<span className="truncate text-xs font-medium uppercase tracking-[0.08em] text-muted-foreground">
 							{item.name}
 						</span>
 						<div className="flex shrink-0 items-center gap-2">
-							<span className="font-mono text-[9px] text-muted-foreground">
+							<span className="font-mono text-[11px] text-muted-foreground">
 								{tokenText(item.fontSize)} / {tokenText(item.fontWeight)}
 							</span>
 							<CopyFeedbackButton
@@ -129,18 +129,18 @@ function TypographySpecimen({ typography }: { typography: DesignTypographyToken[
 						</div>
 					</div>
 					<div
-						className="mt-2 truncate text-foreground"
+						className="mt-2 break-words text-foreground"
 						style={{
 							fontFamily: cssFontStack(item.fontFamily),
 							fontSize: `clamp(18px, ${previewFontSize(item.fontSize)}, 30px)`,
 							fontWeight: fontWeightValue(item.fontWeight),
-							lineHeight: 1.15,
+							lineHeight: 1.6,
 							letterSpacing: cssValue(item.letterSpacing),
 						}}
 					>
 						{t("htmlEditor.designStyle.typographySample")}
 					</div>
-					<div className="mt-1 truncate text-[9px] text-muted-foreground">
+					<div className="mt-1 break-words text-[11px] text-muted-foreground">
 						{tokenText(item.fontFamily)} · {tokenText(item.lineHeight)} ·{" "}
 						{tokenText(item.letterSpacing)}
 					</div>
@@ -160,17 +160,17 @@ function SpacingRhythm({ items }: { items: DesignScaleToken[] }) {
 		)
 	return (
 		<div className="grid grid-cols-2 gap-2 xl:grid-cols-3">
-			{items.slice(0, 8).map((item) => (
+			{items.map((item) => (
 				<div
 					key={`spacing-${item.name}`}
-					className="flex min-w-0 items-center gap-2 rounded-lg border border-border/70 bg-background p-2"
+					className="flex min-w-0 items-center gap-2 border-b border-border/60 bg-background p-2"
 				>
 					<div className="min-w-0 flex-1">
 						<div className="flex items-center justify-between gap-2">
-							<span className="truncate font-mono text-[10px] text-foreground">
+							<span className="truncate font-mono text-xs text-foreground">
 								{item.name}
 							</span>
-							<span className="shrink-0 font-mono text-[9px] text-muted-foreground">
+							<span className="shrink-0 font-mono text-[11px] text-muted-foreground">
 								{tokenText(item.value)}
 							</span>
 						</div>
@@ -204,22 +204,22 @@ function ShapeSpecimen({ items }: { items: DesignScaleToken[] }) {
 		)
 	return (
 		<div className="grid grid-cols-2 gap-2 xl:grid-cols-3">
-			{items.slice(0, 8).map((item) => {
+			{items.map((item) => {
 				const radius = cssLength(item.value, 8, 999)
 				return (
 					<div
 						key={`rounded-${item.name}`}
-						className="flex min-w-0 items-center gap-2 rounded-lg border border-border/70 bg-background p-2"
+						className="flex min-w-0 items-center gap-2 border-b border-border/60 bg-background p-2"
 					>
 						<div
 							className="size-8 shrink-0 border-2 border-primary bg-primary/10"
 							style={{ borderRadius: radius }}
 						/>
 						<div className="min-w-0 flex-1">
-							<div className="truncate font-mono text-[10px] text-foreground">
+							<div className="truncate font-mono text-xs text-foreground">
 								{item.name}
 							</div>
-							<div className="font-mono text-[9px] text-muted-foreground">
+							<div className="font-mono text-[11px] text-muted-foreground">
 								{tokenText(item.value)}
 							</div>
 						</div>
@@ -251,7 +251,7 @@ export default function DesignStyleTokenPreview({ style }: { style: DesignStyle 
 	].join("\n")
 
 	return (
-		<div className="space-y-5">
+		<div className="space-y-8">
 			<section className="space-y-2.5">
 				<DesignStyleSectionHeader
 					title={t("htmlEditor.designStyle.colorSystem")}
@@ -259,7 +259,7 @@ export default function DesignStyleTokenPreview({ style }: { style: DesignStyle 
 					testId="design-style-color-header"
 					action={
 						<div className="flex items-center gap-2">
-							<span className="font-mono text-[10px] text-muted-foreground">
+							<span className="font-mono text-xs text-muted-foreground">
 								{t("htmlEditor.designStyle.colorCount", {
 									count: style.design.colors.length,
 								})}
@@ -281,7 +281,7 @@ export default function DesignStyleTokenPreview({ style }: { style: DesignStyle 
 					description={t("htmlEditor.designStyle.typographyDescription")}
 					testId="design-style-typography-header"
 					action={
-						<span className="font-mono text-[10px] text-muted-foreground">
+						<span className="font-mono text-xs text-muted-foreground">
 							{t("htmlEditor.designStyle.typographyCount", {
 								count: style.design.typography.length,
 							})}
@@ -308,8 +308,8 @@ export default function DesignStyleTokenPreview({ style }: { style: DesignStyle 
 					<ShapeSpecimen items={style.design.rounded} />
 				</section>
 			</div>
-			<section className="rounded-lg border border-border/70 bg-background p-3">
-				<div className="mb-2 text-[10px] font-medium uppercase tracking-[0.12em] text-muted-foreground">
+			<section className="border-b border-border/60 bg-background p-3">
+				<div className="mb-2 text-xs font-medium uppercase tracking-[0.12em] text-muted-foreground">
 					{t("htmlEditor.designStyle.semanticRoles")}
 				</div>
 				<div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
@@ -319,17 +319,14 @@ export default function DesignStyleTokenPreview({ style }: { style: DesignStyle 
 						[t("htmlEditor.designStyle.mainColor"), visuals.primary],
 						[t("htmlEditor.designStyle.textColor"), visuals.text],
 					].map(([label, color]) => (
-						<div
-							key={label}
-							className="flex items-center gap-2 rounded-md border border-border/60 p-2"
-						>
+						<div key={label} className="flex items-center gap-2  p-2">
 							<div
 								className="size-7 shrink-0 rounded"
 								style={{ backgroundColor: color }}
 							/>
 							<div className="min-w-0">
-								<div className="text-[10px] font-medium">{label}</div>
-								<div className="truncate font-mono text-[9px] text-muted-foreground">
+								<div className="text-xs font-medium">{label}</div>
+								<div className="truncate font-mono text-[11px] text-muted-foreground">
 									{color}
 								</div>
 							</div>

@@ -1,6 +1,7 @@
 import { useTranslation } from "react-i18next"
 import type { DesignStyle } from "./catalog"
 import { getStyleVisuals } from "./designStyleVisuals"
+import { readableText } from "./sceneTheme"
 import DesignStyleSectionHeader from "./DesignStyleSectionHeader"
 
 export default function DesignStyleComponentStates({ style }: { style: DesignStyle }) {
@@ -20,16 +21,17 @@ export default function DesignStyleComponentStates({ style }: { style: DesignSty
 				testId="design-style-component-states-header"
 			/>
 			<div className="grid gap-2.5 lg:grid-cols-3">
-				<div className="rounded-lg border border-border/70 bg-background p-3">
-					<div className="mb-2.5 text-[10px] font-medium uppercase tracking-[0.12em] text-muted-foreground">
+				<div className="border-t border-border/60 py-4">
+					<div className="mb-2.5 text-xs font-medium uppercase tracking-[0.12em] text-muted-foreground">
 						{t("htmlEditor.designStyle.buttons")}
 					</div>
 					<div className="flex flex-wrap gap-2">
 						<button
 							type="button"
-							className="rounded-lg px-3 py-2 text-[10px] font-medium text-white"
+							className="rounded-lg px-3 py-2 text-xs font-medium text-white"
 							style={{
 								backgroundColor: visuals.primary,
+								color: readableText(visuals.primary),
 								borderRadius: visuals.controlRadius,
 							}}
 						>
@@ -37,9 +39,11 @@ export default function DesignStyleComponentStates({ style }: { style: DesignSty
 						</button>
 						<button
 							type="button"
-							className="rounded-lg px-3 py-2 text-[10px] font-medium text-white opacity-70"
+							disabled
+							className="rounded-lg px-3 py-2 text-xs font-medium opacity-50"
 							style={{
 								backgroundColor: visuals.primary,
+								color: readableText(visuals.primary),
 								borderRadius: visuals.controlRadius,
 							}}
 						>
@@ -47,7 +51,7 @@ export default function DesignStyleComponentStates({ style }: { style: DesignSty
 						</button>
 						<button
 							type="button"
-							className="rounded-lg border px-3 py-2 text-[10px] font-medium"
+							className="rounded-lg border px-3 py-2 text-xs font-medium"
 							style={{
 								borderColor: visuals.primary,
 								color: visuals.primary,
@@ -58,13 +62,13 @@ export default function DesignStyleComponentStates({ style }: { style: DesignSty
 						</button>
 					</div>
 				</div>
-				<div className="rounded-lg border border-border/70 bg-background p-3">
-					<div className="mb-2.5 text-[10px] font-medium uppercase tracking-[0.12em] text-muted-foreground">
+				<div className="border-t border-border/60 py-4">
+					<div className="mb-2.5 text-xs font-medium uppercase tracking-[0.12em] text-muted-foreground">
 						{t("htmlEditor.designStyle.formStates")}
 					</div>
 					<div className="space-y-2">
 						<div
-							className="h-8 rounded-lg border px-2 text-[10px] leading-8 text-muted-foreground"
+							className="h-8 rounded-lg border px-2 text-xs leading-8 text-muted-foreground"
 							style={{
 								borderColor: visuals.border,
 								backgroundColor: visuals.canvas,
@@ -74,7 +78,7 @@ export default function DesignStyleComponentStates({ style }: { style: DesignSty
 							{t("htmlEditor.designStyle.inputState")}
 						</div>
 						<div
-							className="h-8 rounded-lg border px-2 text-[10px] leading-8"
+							className="h-8 rounded-lg border px-2 text-xs leading-8"
 							style={{
 								borderColor: visuals.primary,
 								outline: `2px solid ${visuals.primary}`,
@@ -85,7 +89,7 @@ export default function DesignStyleComponentStates({ style }: { style: DesignSty
 							{t("htmlEditor.designStyle.focusState")}
 						</div>
 						<div
-							className="h-8 rounded-lg border px-2 text-[10px] leading-8"
+							className="h-8 rounded-lg border px-2 text-xs leading-8"
 							style={{
 								borderColor: visuals.danger,
 								color: visuals.danger,
@@ -96,8 +100,8 @@ export default function DesignStyleComponentStates({ style }: { style: DesignSty
 						</div>
 					</div>
 				</div>
-				<div className="rounded-lg border border-border/70 bg-background p-3">
-					<div className="mb-2.5 text-[10px] font-medium uppercase tracking-[0.12em] text-muted-foreground">
+				<div className="border-t border-border/60 py-4">
+					<div className="mb-2.5 text-xs font-medium uppercase tracking-[0.12em] text-muted-foreground">
 						{t("htmlEditor.designStyle.statusStates")}
 					</div>
 					<div className="flex flex-wrap gap-2">
@@ -108,7 +112,7 @@ export default function DesignStyleComponentStates({ style }: { style: DesignSty
 						].map(([label, color]) => (
 							<span
 								key={label}
-								className="rounded-full border px-2.5 py-1 text-[10px] font-medium"
+								className="rounded-full border px-2.5 py-1 text-xs font-medium"
 								style={{ borderColor: color, color }}
 							>
 								{label}

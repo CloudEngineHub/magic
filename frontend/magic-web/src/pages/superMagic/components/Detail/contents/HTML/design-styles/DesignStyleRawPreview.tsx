@@ -72,7 +72,7 @@ export default function DesignStyleRawPreview({ style, active }: DesignStyleRawP
 				<>
 					{source?.content ? (
 						<pre
-							className="max-h-[560px] overflow-auto whitespace-pre-wrap break-words rounded-xl border border-border/70 bg-muted/30 p-4 font-mono text-[11px] leading-5 text-foreground"
+							className=" whitespace-pre-wrap break-words rounded-md bg-muted/30 p-4 font-mono text-xs leading-6 text-foreground"
 							data-testid="design-style-raw-content"
 						>
 							{source.content}

@@ -1,6 +1,8 @@
 import { useEffect, useState } from "react"
 import { useIsMobile } from "@/hooks/useIsMobile"
 import type { DesignStyle } from "./catalog"
+import DesignStyleLayoutPreview from "./DesignStyleLayoutPreview"
+import DesignStyleGuidelines from "./DesignStyleGuidelines"
 import DesignStyleComponentStates from "./DesignStyleComponentStates"
 import type { DesignStyleDetailMode } from "./DesignStyleDetailHeader"
 import DesignStylePageCanvas, { DesignStylePageCanvasToolbar } from "./DesignStylePageCanvas"
@@ -28,17 +30,21 @@ export default function DesignStylePreview({ style, mode }: DesignStylePreviewPr
 			data-testid="design-style-preview"
 			data-preview-mode={mode}
 		>
-			{mode === "details" && (
+			{mode !== "raw" && (
 				<div className="space-y-8">
-					<div className="space-y-3">
-						<DesignStylePageCanvasToolbar
-							viewport={viewport}
-							onViewportChange={setViewport}
-						/>
-						<DesignStylePageCanvas style={style} viewport={viewport} />
-					</div>
+					{mode === "details" && (
+						<div className="space-y-3">
+							<DesignStylePageCanvasToolbar
+								viewport={viewport}
+								onViewportChange={setViewport}
+							/>
+							<DesignStylePageCanvas style={style} viewport={viewport} />
+						</div>
+					)}
+					<DesignStyleLayoutPreview style={style} />
 					<DesignStyleTokenPreview style={style} />
 					<DesignStyleComponentStates style={style} />
+					<DesignStyleGuidelines style={style} />
 				</div>
 			)}
 			{mode === "raw" && (

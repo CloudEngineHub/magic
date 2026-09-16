@@ -1,64 +1,74 @@
-import { useId } from "react"
 import type { DesignStyle } from "./catalog"
-import CommerceCover from "./cover-components/CommerceCover"
-import DashboardCover from "./cover-components/DashboardCover"
-import EditorialCover from "./cover-components/EditorialCover"
-import LandingCover from "./cover-components/LandingCover"
-import { hasFeature } from "./cover-components/types"
+import DesignStyleArtwork from "./DesignStyleArtwork"
 import { getSceneTheme } from "./sceneTheme"
 import { getStyleProfile } from "./styleProfiles"
 
 export default function DesignStyleCover({ style }: { style: DesignStyle }) {
 	const profile = getStyleProfile(style.code)
 	const theme = getSceneTheme(style)
-	const features = profile?.features ?? []
-	const layout = profile?.layout ?? "split"
-	const radius = hasFeature(features, "sharp-corners")
-		? 0
-		: hasFeature(features, "rounded-cards")
-			? 22
-			: 10
-	const gradientId = useId().replace(/:/g, "")
-	const context = { layout, features, radius }
-
+	const name = profile?.name.en ?? style.title
+	const words = name.split(/\s+/)
+	const lines: string[] = [""]
+	for (const word of words) {
+		const last = lines.length - 1
+		if (lines[last] && `${lines[last]} ${word}`.length > 22) lines.push(word)
+		else lines[last] = `${lines[last]} ${word}`.trim()
+	}
+	const stacked = profile?.layout === "stacked" || profile?.layout === "grid"
+	// Covers deliberately use local fallbacks; browsing 176 styles must not load 176 web fonts.
+	const fontFamily = profile?.features.includes("serif-type")
+		? 'Georgia, "Songti SC", serif'
+		: profile?.features.includes("mono-type")
+			? "ui-monospace, monospace"
+			: 'system-ui, "PingFang SC", sans-serif'
 	return (
 		<svg
 			viewBox="0 0 800 500"
 			aria-hidden="true"
 			focusable="false"
 			className="block size-full"
-			style={theme.variables}
-			preserveAspectRatio="xMidYMid slice"
+			style={{ ...theme.variables, fontFamily }}
 		>
-			<defs>
-				<radialGradient id={gradientId} cx="82%" cy="8%" r="75%">
-					<stop
-						stopColor="var(--scene-primary)"
-						stopOpacity={hasFeature(features, "glow") ? 0.42 : 0.16}
-					/>
-					<stop offset="1" stopColor="var(--scene-bg)" stopOpacity="0" />
-				</radialGradient>
-			</defs>
 			<rect width="800" height="500" fill="var(--scene-bg)" />
-			{(hasFeature(features, "glow") || hasFeature(features, "soft-gradient")) && (
-				<rect width="800" height="500" fill={`url(#${gradientId})`} />
-			)}
-			{hasFeature(features, "hairline-grid") && (
-				<path
-					d="M0 100H800M0 200H800M0 300H800M0 400H800M100 0V500M200 0V500M300 0V500M400 0V500M500 0V500M600 0V500M700 0V500"
-					stroke="var(--scene-line)"
-					opacity=".5"
+			{profile?.features.includes("bold-borders") && (
+				<rect
+					x="16"
+					y="16"
+					width="768"
+					height="468"
+					fill="none"
+					stroke="var(--scene-ink)"
+					strokeWidth="4"
 				/>
 			)}
-			{profile?.scene === "dashboard" ? (
-				<DashboardCover {...context} />
-			) : profile?.scene === "editorial" || profile?.scene === "portfolio" ? (
-				<EditorialCover {...context} />
-			) : profile?.scene === "commerce" ? (
-				<CommerceCover {...context} />
-			) : (
-				<LandingCover {...context} />
-			)}
+			<text
+				x="56"
+				y="96"
+				fill="var(--scene-ink)"
+				fontSize={Math.min(
+					86,
+					660 / (Math.max(...lines.map((line) => line.length), 1) * 0.75),
+				)}
+				fontWeight={profile?.features.includes("oversized-type") ? 700 : 500}
+				letterSpacing="-1.8"
+			>
+				{lines.slice(0, 3).map((line, index) => (
+					<tspan key={index} x="56" dy={index ? 64 : 0}>
+						{line}
+					</tspan>
+				))}
+			</text>
+			<g
+				transform={
+					stacked ? "translate(330 170) scale(.95)" : "translate(420 170) scale(.95)"
+				}
+			>
+				<DesignStyleArtwork profile={profile} />
+			</g>
+			<path d="M56 407H106" stroke="var(--scene-primary)" strokeWidth="3" />
+			<text x="56" y="444" fill="var(--scene-muted)" fontSize="20">
+				{profile?.name.zh ?? style.title}
+			</text>
 		</svg>
 	)
 }

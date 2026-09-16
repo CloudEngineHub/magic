@@ -15,7 +15,7 @@ export default memo(function DesignStyleThumbnail({ style }: DesignStyleThumbnai
 		<div
 			data-testid={`design-style-thumbnail-${style.code}`}
 			data-variant={profile?.layout ?? "pending"}
-			className="aspect-[8/5] overflow-hidden bg-muted/30 outline outline-1 outline-black/10 dark:outline-white/10"
+			className="aspect-[8/5] overflow-hidden border-b border-border/50 bg-muted/30"
 			aria-hidden="true"
 		>
 			<DesignStyleCover style={style} />
