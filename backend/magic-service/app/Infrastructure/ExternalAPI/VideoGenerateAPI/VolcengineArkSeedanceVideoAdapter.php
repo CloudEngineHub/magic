@@ -317,11 +317,6 @@ readonly class VolcengineArkSeedanceVideoAdapter implements VideoGenerationConne
             'content' => $content,
         ];
 
-        if ($isVideoEdit && $this->isSeedanceTwoPointFiveModel($modelVersion, $modelId)) {
-            // 只有 2.5 支持显式声明子任务类型；2.0 系列由模型按素材与提示词自行判定。
-            $payload['omni_reference_task_type'] = self::EDIT_TASK_TYPE;
-        }
-
         $payload['resolution'] = $this->resolveResolution(
             $generation,
             $acceptedParams,
@@ -407,6 +402,10 @@ readonly class VolcengineArkSeedanceVideoAdapter implements VideoGenerationConne
                 if (array_key_exists($field, $generation)) {
                     $ignoredParams[] = 'generation.' . $field;
                 }
+            }
+            // 只有 2.5 支持显式声明子任务类型；2.0 系列由模型按素材与提示词自行判定。
+            if ($this->isSeedanceTwoPointFiveModel($modelVersion, $modelId)) {
+                $payload['omni_reference_task_type'] = self::EDIT_TASK_TYPE;
             }
         }
 
