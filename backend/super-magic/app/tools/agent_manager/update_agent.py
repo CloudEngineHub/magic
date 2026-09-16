@@ -148,29 +148,71 @@ class UpdateAgent(BaseTool[UpdateAgentParams]):
 
     @staticmethod
     async def _resolve_icon_key(icon_file_key: str) -> Optional[str]:
-        """将工作区相对/绝对路径上传为公共对象存储 file_key 并清理本地临时头像文件；若已是 key/url 则直接返回。"""
+        """将工作区内受控白名单路径的头像文件上传为公共对象存储 file_key 并安全清理临时文件；若已是 key/url 则直接返回。"""
         import os
         from pathlib import Path
         from app.utils.public_storage_uploader import upload_file_to_public_storage
 
+        # 1. HTTP / HTTPS URL 直接使用
+        if icon_file_key.startswith("http://") or icon_file_key.startswith("https://"):
+            logger.info(f"icon_file_key 视为直接 URL: {icon_file_key}")
+            return icon_file_key
+
         workspace_dir = PathManager.get_workspace_dir()
         magic_dir = PathManager.get_magic_dir()
 
-        clean_path = icon_file_key.strip().lstrip("/")
+        # 白名单允许的头像目录（解析物理真实路径）
+        try:
+            allowed_avatar_dirs = [
+                (magic_dir / "avatars").resolve(),
+                (workspace_dir / "avatars").resolve(),
+                (workspace_dir / ".magic" / "avatars").resolve(),
+                workspace_dir.resolve(),
+                magic_dir.resolve(),
+            ]
+        except Exception:
+            allowed_avatar_dirs = [
+                magic_dir / "avatars",
+                workspace_dir / "avatars",
+                workspace_dir / ".magic" / "avatars",
+                workspace_dir,
+                magic_dir,
+            ]
 
-        # 1. 尝试工作区相对路径与常见变体（如 .magic/avatars、avatars、拼写容错等）
+        # 2. 严格拒绝路径遍历（包含 '..' 分量）
+        raw_path_obj = Path(icon_file_key)
+        if ".." in raw_path_obj.parts:
+            logger.warning(f"拒绝包含父目录遍历分量的 icon_file_key: {icon_file_key}")
+            return None
+
+        clean_path = icon_file_key.strip().lstrip("/")
         path_obj = Path(clean_path)
-        candidates = [
+
+        # 3. 构造受控的候选路径列表（只在工作区/magic/avatars目录内搜索）
+        candidates: list[Path] = []
+        if ".magics" in clean_path:
+            fixed_clean_path = clean_path.replace(".magics", ".magic")
+            candidates.append(workspace_dir / fixed_clean_path)
+            candidates.append(magic_dir / fixed_clean_path.replace(".magic/", "").lstrip("/"))
+
+        candidates.extend([
             workspace_dir / clean_path,
             magic_dir / clean_path,
             magic_dir / "avatars" / path_obj.name,
             workspace_dir / "avatars" / path_obj.name,
-            workspace_dir / path_obj.name,
-        ]
-        if ".magics" in clean_path:
-            fixed_clean_path = clean_path.replace(".magics", ".magic")
-            candidates.insert(0, workspace_dir / fixed_clean_path)
-            candidates.insert(1, magic_dir / fixed_clean_path.replace(".magic/", "").lstrip("/"))
+        ])
+
+        # 若调用方传入了绝对路径，仅当其严格位于白名单目录内时允许作为候选路径
+        if icon_file_key.startswith("/"):
+            abs_candidate = Path(icon_file_key)
+            try:
+                resolved_abs = abs_candidate.resolve(strict=False)
+                if any(resolved_abs.is_relative_to(allowed_dir) for allowed_dir in allowed_avatar_dirs):
+                    candidates.insert(0, abs_candidate)
+                else:
+                    logger.warning(f"拒绝位于白名单之外的绝对路径: {icon_file_key}")
+            except Exception:
+                pass
 
         seen_paths = set()
         for candidate in candidates:
@@ -178,55 +220,50 @@ class UpdateAgent(BaseTool[UpdateAgentParams]):
             if cand_str in seen_paths:
                 continue
             seen_paths.add(cand_str)
-            if await async_exists(cand_str) and candidate.is_file():
-                try:
-                    public_key = await upload_file_to_public_storage(candidate)
-                    logger.info(f"本地头像文件上传公共存储成功: {candidate} -> {public_key}")
-                    # 上传成功后清理本地临时头像文件及空的 avatars 目录
-                    await UpdateAgent._cleanup_local_avatar_file(candidate)
-                    return public_key
-                except Exception as e:
-                    logger.error(f"上传本地头像到公共存储失败: {candidate} ({e})")
-                    return None
 
-        # 2. 尝试绝对路径
-        if icon_file_key.startswith("/") and await async_exists(icon_file_key):
-            abs_path = Path(icon_file_key)
-            if abs_path.is_file():
-                try:
-                    public_key = await upload_file_to_public_storage(icon_file_key)
-                    logger.info(f"本地头像绝对路径上传公共存储成功: {icon_file_key} -> {public_key}")
-                    await UpdateAgent._cleanup_local_avatar_file(abs_path)
-                    return public_key
-                except Exception as e:
-                    logger.error(f"上传本地头像到公共存储失败: {icon_file_key} ({e})")
-                    return None
+            if not await async_exists(cand_str):
+                continue
 
-        # 3. HTTP / HTTPS URL 直接使用
-        if icon_file_key.startswith("http://") or icon_file_key.startswith("https://"):
-            logger.info(f"icon_file_key 视为直接 URL: {icon_file_key}")
-            return icon_file_key
+            try:
+                # 解析真实物理路径（防止符号链接逃逸到白名单目录之外）
+                resolved_cand = candidate.resolve(strict=True)
+            except Exception as exc:
+                logger.warning(f"解析候选头像路径失败: {candidate} ({exc})")
+                continue
 
-        # 4. 判断是否为本地文件路径特征（若具有本地路径特征但本地文件不存在，报错拦截，禁止误判为远程 key）
-        image_extensions = (".png", ".jpg", ".jpeg", ".webp", ".svg", ".gif", ".bmp", ".ico")
-        is_likely_local_path = (
-            icon_file_key.startswith(".")
-            or "/" in icon_file_key
-            or any(icon_file_key.lower().endswith(ext) for ext in image_extensions)
-        )
-        if is_likely_local_path:
-            # 只有具有本地路径前缀（. / avatars / .magic）或图片扩展名且本地不存在时，确认为丢失的本地文件
-            if (
-                icon_file_key.startswith(".")
-                or icon_file_key.startswith("avatars/")
-                or icon_file_key.startswith(".magic/")
-                or any(icon_file_key.lower().endswith(ext) for ext in image_extensions)
-            ):
-                logger.error(f"本地头像文件未找到，无法上传: '{icon_file_key}'")
+            if not resolved_cand.is_file():
+                continue
+
+            # 严格校验：真实物理路径必须位于允许的白名单目录之内
+            if not any(resolved_cand.is_relative_to(allowed_dir) for allowed_dir in allowed_avatar_dirs):
+                logger.warning(f"拒绝上传白名单目录之外的文件: {candidate} (真实路径: {resolved_cand})")
+                continue
+
+            try:
+                public_key = await upload_file_to_public_storage(resolved_cand)
+                logger.info(f"本地头像文件上传公共存储成功: {resolved_cand} -> {public_key}")
+                # 上传成功后安全清理本地临时头像文件及空的 avatars 目录
+                await UpdateAgent._cleanup_local_avatar_file(resolved_cand, allowed_avatar_dirs)
+                return public_key
+            except Exception as e:
+                logger.error(f"上传本地头像到公共存储失败: {resolved_cand} ({e})")
                 return None
 
+        # 4. 判断是否为本地文件路径特征（若具有本地路径特征但本地文件不存在或不在白名单内，报错拦截，禁止误判为远程 key）
+        image_extensions = (".png", ".jpg", ".jpeg", ".webp", ".svg", ".gif", ".bmp", ".ico")
+        is_local_pattern = (
+            icon_file_key.startswith("/")
+            or icon_file_key.startswith(".")
+            or icon_file_key.startswith("avatars/")
+            or icon_file_key.startswith(".magic/")
+            or any(icon_file_key.lower().endswith(ext) for ext in image_extensions)
+        )
+        if is_local_pattern:
+            logger.error(f"本地头像文件未找到或不在允许的白名单目录内，无法上传: '{icon_file_key}'")
+            return None
+
         # 5. 其他已是对象存储 key 的情况（向后兼容已有合法 key，如 DT001/...）
-        if "/" in icon_file_key:
+        if "/" in icon_file_key and not icon_file_key.startswith("/"):
             logger.info(f"icon_file_key 视为已有对象存储 key: {icon_file_key}")
             return icon_file_key
 
@@ -235,20 +272,28 @@ class UpdateAgent(BaseTool[UpdateAgentParams]):
         return None
 
     @staticmethod
-    async def _cleanup_local_avatar_file(avatar_path: Path) -> None:
-        """上传成功后清理本地临时头像文件，并在 avatars 目录为空时连同目录一起清理。"""
+    async def _cleanup_local_avatar_file(avatar_path: Path, allowed_avatar_dirs: list[Path]) -> None:
+        """上传成功后安全清理本地临时头像文件，并在 avatars 目录为空时连同目录一起清理。"""
         from app.utils.async_file_utils import async_exists, async_iterdir, async_rmdir, async_unlink
         try:
-            if await async_exists(str(avatar_path)):
-                await async_unlink(str(avatar_path))
-                logger.info(f"已清理本地临时头像文件: {avatar_path}")
-            # 若父目录名为 avatars 且已空，则一并清理
-            parent_dir = avatar_path.parent
-            if parent_dir.name == "avatars" and await async_exists(str(parent_dir)):
-                children = await async_iterdir(parent_dir)
-                if not children:
-                    await async_rmdir(parent_dir)
-                    logger.info(f"已清理空头像目录: {parent_dir}")
+            resolved_path = avatar_path.resolve(strict=False)
+            # 严格限制：绝不清理白名单目录之外的任何文件
+            if not any(resolved_path.is_relative_to(allowed_dir) for allowed_dir in allowed_avatar_dirs):
+                logger.warning(f"跳过清理白名单目录之外的文件: {avatar_path}")
+                return
+
+            if await async_exists(str(resolved_path)) and resolved_path.is_file():
+                await async_unlink(str(resolved_path))
+                logger.info(f"已清理本地临时头像文件: {resolved_path}")
+
+            # 仅当父目录名为 avatars 且在白名单内、且已空时，才清理 avatars 目录
+            parent_dir = resolved_path.parent
+            if parent_dir.name == "avatars" and any(parent_dir == allowed_dir or parent_dir.is_relative_to(allowed_dir) for allowed_dir in allowed_avatar_dirs):
+                if await async_exists(str(parent_dir)):
+                    children = await async_iterdir(parent_dir)
+                    if not children:
+                        await async_rmdir(parent_dir)
+                        logger.info(f"已清理空头像目录: {parent_dir}")
         except Exception as e:
             logger.warning(f"清理本地头像文件失败（不影响主流程）: {avatar_path} ({e})")
 

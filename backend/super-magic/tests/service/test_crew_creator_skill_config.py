@@ -99,6 +99,64 @@ def test_crew_creator_registers_agent_manager_tools():
         assert f"  - {tool_name}\n" in frontmatter
 
 
+def test_init_crew_preserves_existing_workspace_directories(tmp_path, monkeypatch):
+    import subprocess
+    import sys
+
+    # 模拟一个既有工作区，包含 logs, .cache, .workspace, .browser 等既有目录
+    workspace_dir = tmp_path / "workspace"
+    workspace_dir.mkdir(parents=True, exist_ok=True)
+    logs_dir = workspace_dir / "logs"
+    logs_dir.mkdir(exist_ok=True)
+    (logs_dir / "app.log").write_text("important log", encoding="utf-8")
+
+    cache_dir = workspace_dir / ".cache"
+    cache_dir.mkdir(exist_ok=True)
+    (cache_dir / "cache.db").write_text("important cache", encoding="utf-8")
+
+    browser_dir = workspace_dir / ".browser"
+    browser_dir.mkdir(exist_ok=True)
+    (browser_dir / "state.json").write_text("browser state", encoding="utf-8")
+
+    config_file = workspace_dir / "test_config.json"
+    config_file.write_text(
+        json.dumps({
+            "name": "Test Employee",
+            "role": "Software Engineer",
+            "description": "Writes code",
+            "instructions": "1. Step one\n2. Step two",
+            "personality": "Helpful",
+            "skill_decomposition_decision": "no",
+        }, ensure_ascii=False),
+        encoding="utf-8",
+    )
+
+    init_script = CREW_CREATOR_DIR / "scripts" / "init_crew.py"
+
+    # 在 workspace 目录下运行 init_crew.py
+    proc = subprocess.run(
+        [sys.executable, str(init_script), "--config", str(config_file)],
+        cwd=str(workspace_dir),
+        capture_output=True,
+        text=True,
+    )
+
+    assert proc.returncode == 0
+    res = json.loads(proc.stdout)
+    assert res["ok"] is True
+
+    # 验证 .magic 目录生成正常
+    assert (workspace_dir / ".magic" / "IDENTITY.md").exists()
+    assert (workspace_dir / ".magic" / "AGENTS.md").exists()
+    assert (workspace_dir / ".magic" / "SOUL.md").exists()
+
+    # 核心验证：既有的 logs, .cache, .browser 目录绝对不能被删除
+    assert logs_dir.exists() and (logs_dir / "app.log").exists()
+    assert cache_dir.exists() and (cache_dir / "cache.db").exists()
+    assert browser_dir.exists() and (browser_dir / "state.json").exists()
+
+
+
 def test_restored_agent_manager_tools_are_exported_and_workspace_scoped():
     tools_init = (PROJECT_ROOT / "app" / "tools" / "__init__.py").read_text(encoding="utf-8")
     manager_dir = PROJECT_ROOT / "app" / "tools" / "agent_manager"

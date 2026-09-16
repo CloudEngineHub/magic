@@ -70,3 +70,41 @@ async def test_resolve_icon_key_url_and_remote_key():
 
     # Already valid object storage key (without local image filename suffix / local prefix)
     assert await UpdateAgent._resolve_icon_key("DT001/12345/u/67890/avatar_abc123") == "DT001/12345/u/67890/avatar_abc123"
+
+
+@pytest.mark.asyncio
+async def test_resolve_icon_key_rejects_path_traversal_and_out_of_bounds(tmp_path):
+    workspace_dir = tmp_path / "workspace"
+    magic_dir = workspace_dir / ".magic"
+    outside_dir = tmp_path / "outside"
+    outside_dir.mkdir(parents=True, exist_ok=True)
+    secret_file = outside_dir / "secret.key"
+    secret_file.write_bytes(b"sensitive_secret_data")
+
+    avatars_dir = magic_dir / "avatars"
+    avatars_dir.mkdir(parents=True, exist_ok=True)
+
+    with patch.object(PathManager, "get_workspace_dir", return_value=workspace_dir), \
+         patch.object(PathManager, "get_magic_dir", return_value=magic_dir), \
+         patch("app.utils.public_storage_uploader.upload_file_to_public_storage", new_callable=AsyncMock) as mock_upload:
+
+        # 1. 相对路径 traversal
+        res1 = await UpdateAgent._resolve_icon_key("../../outside/secret.key")
+        assert res1 is None
+        assert secret_file.exists()
+        mock_upload.assert_not_called()
+
+        # 2. 外部绝对路径
+        res2 = await UpdateAgent._resolve_icon_key(str(secret_file))
+        assert res2 is None
+        assert secret_file.exists()
+        mock_upload.assert_not_called()
+
+        # 3. 符号链接逃逸到工作区外部
+        symlink_file = avatars_dir / "escaped_symlink.jpg"
+        symlink_file.symlink_to(secret_file)
+        res3 = await UpdateAgent._resolve_icon_key(".magic/avatars/escaped_symlink.jpg")
+        assert res3 is None
+        assert secret_file.exists()
+        mock_upload.assert_not_called()
+

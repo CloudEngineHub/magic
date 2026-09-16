@@ -32,7 +32,6 @@ from __future__ import annotations
 import argparse
 import json
 import os
-import shutil
 import sys
 from pathlib import Path
 
@@ -52,11 +51,17 @@ def _resolve_workspace_dir(project_root: Path) -> Path:
     """
     Resolve the employee workspace directory.
     When running inside sandbox (/app), cwd is usually the workspace (/mnt/agfs/magicfs/project).
+    If running outside project_root, prefer cwd.
     If project_root contains .workspace, prefer cwd or project_root/.workspace accordingly.
     """
     cwd = Path.cwd()
     if (cwd / ".magic").exists() or cwd.name == "project":
         return cwd
+    try:
+        if cwd != project_root and not cwd.is_relative_to(project_root):
+            return cwd
+    except Exception:
+        pass
     if (project_root / ".workspace").exists():
         return project_root / ".workspace"
     return cwd
@@ -78,22 +83,6 @@ def _resolve_config_path(config_arg: str, workspace_dir: Path, project_root: Pat
         if candidate.is_file():
             return candidate.resolve(), candidates
     return None, candidates
-
-
-def _cleanup_unwanted_dirs(workspace_dir: Path) -> None:
-    """Clean up unwanted runtime directories created accidentally in the workspace root."""
-    unwanted_dirs = [".browser", ".cache", ".workspace", "logs"]
-    for dir_name in unwanted_dirs:
-        target = workspace_dir / dir_name
-        if target.exists() and target.is_dir():
-            try:
-                # If it's a symlink or empty/non-essential directory, remove it
-                if target.is_symlink():
-                    target.unlink()
-                else:
-                    shutil.rmtree(target, ignore_errors=True)
-            except Exception:
-                pass
 
 
 def _build_identity(cfg: dict) -> str:
@@ -238,9 +227,6 @@ def main() -> int:
     if soul_content:
         (ws_dir / "SOUL.md").write_text(soul_content, encoding="utf-8")
         created.append("SOUL.md")
-
-    # Clean up any unexpected runtime directories created in workspace
-    _cleanup_unwanted_dirs(workspace_dir)
 
     print(json.dumps({
         "ok": True,
