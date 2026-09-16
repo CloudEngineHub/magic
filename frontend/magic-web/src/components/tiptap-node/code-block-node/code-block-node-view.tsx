@@ -9,6 +9,7 @@ import {
 	loadDiffSyntaxHighlighter,
 } from "@/infrastructure/vendors/react-syntax-highlighter/diff"
 import type { CodeBlockNodeOptions } from "./code-block-node-extension"
+import { cn } from "@/utils/cn"
 
 const MagicCode = lazy(() => import("@/components/base/MagicCode"))
 const MagicMermaid = lazy(() => import("@/components/base/MagicMermaid"))
@@ -90,9 +91,7 @@ export function CodeBlockNodeView(props: CodeBlockNodeViewProps) {
 		return (
 			<NodeViewWrapper
 				as="div"
-				className={["diff-code-block-node-view", diffWrapClassName]
-					.filter(Boolean)
-					.join(" ")}
+				className={cn("diff-code-block-node-view", diffWrapClassName)}
 			>
 				<Suspense fallback={null}>
 					<DiffSyntaxHighlighter
