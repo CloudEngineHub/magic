@@ -1652,6 +1652,7 @@ export default memo(function HTML(props: HTMLProps) {
 								enabled={devicePreviewEnabled}
 							>
 								<DashboardIsolatedHTMLRenderer
+									devicePreviewEnabled={devicePreviewEnabled}
 									key={`dashboard-html-${dashboardDataJsFile?.file_id || "none"}-${activeHistory.previewRevision}`}
 									content={processedContent}
 									className={className}

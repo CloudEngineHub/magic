@@ -21,6 +21,7 @@ import { useUpload } from "@/hooks/useUploadFiles"
 import { useTranslation } from "react-i18next"
 import { addContentToChat } from "@/pages/superMagic/components/Detail/components/AIOptimization/utils"
 import { decodeHTMLEntities, getFullContent } from "./utils/full-content"
+import { syncDevicePreviewScrollbars } from "./utils/device-preview-scrollbars"
 import { extractStaticDependencies } from "./utils/extractDependencies"
 import {
 	buildHtmlVirtualStorageNamespace,
@@ -551,6 +552,15 @@ const IsolatedHTMLRendererInner = forwardRef<IsolatedHTMLRendererRef, IsolatedHT
 		const contentWrapperRef = useRef<HTMLDivElement>(null)
 		const scrollContainerRef = useRef<HTMLDivElement>(null)
 		const iframeRef = useRef<HTMLIFrameElement>(null)
+		const supportsDevicePreview = devicePreview !== undefined
+		const syncDeviceScrollbars = useMemoizedFn(() => {
+			if (!supportsDevicePreview || sandboxType !== "iframe") return
+			syncDevicePreviewScrollbars(iframeRef.current, iframeTargetOrigin, devicePreviewEnabled)
+		})
+		// 模式只同步呈现状态；文档重新注入后由 contentLoaded 再应用，不能为此刷新 iframe。
+		useEffect(() => {
+			syncDeviceScrollbars()
+		}, [devicePreviewEnabled, supportsDevicePreview, sandboxType, syncDeviceScrollbars])
 		const inspectorCapturePrewarmRef = useRef<(() => void) | null>(null)
 		const registerInspectorCapturePrewarm = useCallback((prewarm: (() => void) | null) => {
 			inspectorCapturePrewarmRef.current = prewarm
@@ -1561,6 +1571,7 @@ const IsolatedHTMLRendererInner = forwardRef<IsolatedHTMLRendererRef, IsolatedHT
 			const navigationRequestId = `${fileId || "html"}:${navigationRequestSequenceRef.current}`
 			// 创建完整HTML内容
 			const fullContent = getFullContent(decodedContent, markerId, {
+				devicePreviewScrollbars: supportsDevicePreview ? devicePreviewEnabled : undefined,
 				dynamicInterception: dynamicResourceInterceptionConfig,
 				containOverscroll: containIframeOverscroll,
 				hideVerticalScroll,
@@ -1697,6 +1708,9 @@ const IsolatedHTMLRendererInner = forwardRef<IsolatedHTMLRendererRef, IsolatedHT
 					const navigationRequestId = `${fileId || "html"}:${navigationRequestSequenceRef.current}`
 					// 创建完整HTML内容
 					const fullContent = getFullContent(decodedContent, markerId, {
+						devicePreviewScrollbars: supportsDevicePreview
+							? devicePreviewEnabled
+							: undefined,
 						dynamicInterception: dynamicResourceInterceptionConfig,
 						containOverscroll: containIframeOverscroll,
 						hideVerticalScroll,
@@ -1775,6 +1789,8 @@ const IsolatedHTMLRendererInner = forwardRef<IsolatedHTMLRendererRef, IsolatedHT
 				closeElementContextPanel,
 				contentMetricsTargetOrigin,
 				disableIframeDocumentClickBridge,
+				devicePreviewEnabled,
+				supportsDevicePreview,
 				documentFlowFullscreen,
 				dynamicResourceInterceptionConfig,
 				fileId,
@@ -2094,6 +2110,7 @@ const IsolatedHTMLRendererInner = forwardRef<IsolatedHTMLRendererRef, IsolatedHT
 					navigationRuntimeService.markShellReady()
 					setIframeLoaded(true)
 				} else if (event.data && event.data.type === "contentLoaded") {
+					syncDeviceScrollbars()
 					// 内容已写入iframe，但可能还未完成渲染
 					reportRenderLifecycleStage("content_loaded")
 					// 如果处于编辑模式，重置 contentInjected 状态以触发脚本重新注入

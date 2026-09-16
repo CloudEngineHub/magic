@@ -17,6 +17,7 @@ const definitions = [
 		folded: { width: 466, height: 678 },
 		profile: "foldable",
 		reference: true,
+		common: true,
 	},
 	{
 		id: "iphone-18-pro-max",
