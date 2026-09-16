@@ -2,6 +2,7 @@
 
 import json
 import mimetypes
+import re
 from collections.abc import Callable
 from datetime import datetime, timezone
 from email.message import Message
@@ -21,6 +22,7 @@ from app.channel.base.media import (
 )
 from app.channel.base.models import ChannelMediaContext, ChannelMediaType
 from app.channel.lark.aggregation import LarkInboundBatch
+from app.i18n import i18n
 
 logger = get_logger(__name__)
 
@@ -219,7 +221,7 @@ def _parse_post(
                 continue
             if item.get("is_folder"):
                 name = item.get("file_name") or "folder"
-                pieces.append(f"[Folder attachment: {name}; folder download is not supported]")
+                pieces.append(i18n.translate("lark.inbound.folder_unsupported", filename=name))
                 continue
             marker = add_media(item, ChannelMediaType.FILE, item.get("file_key"))
             if marker:
@@ -284,6 +286,33 @@ def _forwarded_sender(item: dict) -> str:
     return str(sender.get("sender_name") or sender.get("name") or sender.get("id") or "Participant")
 
 
+def _safe_filename_part(value: str) -> str:
+    return re.sub(r'[\\/:*?"<>|\r\n]+', "_", value).strip(" .")[:80]
+
+
+def _forwarded_filename(items: list[dict], root_message_id: str) -> str:
+    """根据查询结果中的实际参与人生成飞书会话记录文件名。"""
+    participants: list[str] = []
+    for item in items:
+        item_id = str(item.get("message_id") or "")
+        upper_id = str(item.get("upper_message_id") or "")
+        if item_id == root_message_id and not upper_id:
+            continue
+        name = _safe_filename_part(_forwarded_sender(item))
+        if name and name not in participants:
+            participants.append(name)
+
+    if not participants:
+        return f"{i18n.translate('lark.forwarded_record.filename_fallback')}.md"
+
+    participant_text = i18n.translate("lark.forwarded_record.participant_separator").join(
+        participants[:3]
+    )
+    if len(participants) > 3:
+        participant_text += i18n.translate("lark.forwarded_record.more_participants")
+    return f"{i18n.translate('lark.forwarded_record.filename', participants=participant_text)}.md"
+
+
 def _forwarded_content(
     item: dict,
     add_media: Callable[[dict, ChannelMediaType, str | None], str],
@@ -311,7 +340,7 @@ def _forwarded_content(
         }[kind]
         key_name = "image_key" if kind == "image" else "file_key"
         return add_media(content, media_type, content.get(key_name))
-    return f"[Unsupported forwarded Lark message type: {kind}]"
+    return i18n.translate("lark.inbound.unsupported_forwarded_type", kind=kind)
 
 
 def _forwarded_markdown_template(
@@ -341,7 +370,8 @@ def _forwarded_markdown_template(
         return sections
 
     body = "\n\n".join(render(root_message_id, 0))
-    return f"# Forwarded messages\n\n{body or '[No readable forwarded messages]'}\n"
+    empty = i18n.translate("lark.inbound.no_readable_forwarded_messages")
+    return f"# Forwarded messages\n\n{body or empty}\n"
 
 
 def _render_forwarded_media_links(
@@ -358,7 +388,7 @@ def _render_forwarded_media_links(
         matches = by_name.get(name, [])
         downloaded = matches.pop(0) if matches else None
         if downloaded is None:
-            replacement = "[Forwarded attachment download failed]"
+            replacement = i18n.translate("lark.inbound.forwarded_attachment_download_failed")
         else:
             target = f"./{Path(downloaded.relative_path).name}"
             if media_type == ChannelMediaType.IMAGE:
@@ -370,7 +400,14 @@ def _render_forwarded_media_links(
     return rendered
 
 
-async def prepare_lark_message(kind: str, content: dict, message_id: str, app_id: str, app_secret: str):
+async def prepare_lark_message(
+    kind: str,
+    content: dict,
+    message_id: str,
+    app_id: str,
+    app_secret: str,
+    accompanying_text: str = "",
+):
     if kind == "text":
         return await prepare_media_message("lark", (content.get("text") or "").strip(), [])
     pieces = []
@@ -469,7 +506,7 @@ async def prepare_lark_message(kind: str, content: dict, message_id: str, app_id
             if post_text:
                 pieces.append(post_text)
             if not pieces and not sources:
-                pieces.append("[Unsupported or empty Lark post message.]")
+                pieces.append(i18n.translate("lark.inbound.unsupported_or_empty_post"))
         elif kind in ("image", "file", "audio", "media", "video"):
             media_type = {
                 "image": ChannelMediaType.IMAGE,
@@ -486,8 +523,16 @@ async def prepare_lark_message(kind: str, content: dict, message_id: str, app_id
                 logger.warning(
                     f"[Lark inbound] merged-forward query failed error_type={type(error).__name__}"
                 )
+                text = "\n\n".join(
+                    part
+                    for part in (
+                        accompanying_text,
+                        i18n.translate("lark.inbound.merged_forward_retrieval_failed"),
+                    )
+                    if part
+                )
                 return await prepare_media_message(
-                    "lark", "[Merged forwarded messages could not be retrieved. Please resend.]", []
+                    "lark", text, []
                 )
 
             source_names: list[str] = []
@@ -508,13 +553,14 @@ async def prepare_lark_message(kind: str, content: dict, message_id: str, app_id
                 return f"{{{{LARK_MEDIA_{index}}}}}"
 
             template = _forwarded_markdown_template(items, message_id, add_forwarded_media)
-            media_result = await prepare_media_message("lark", "[Received forwarded messages]", sources)
+            media_result = await prepare_media_message("lark", accompanying_text, sources)
             markdown = _render_forwarded_media_links(
                 template,
                 media_result.media,
                 source_names,
                 source_types,
             )
+            markdown_filename = _forwarded_filename(items, message_id)
 
             async def markdown_bytes() -> bytes:
                 return markdown.encode()
@@ -525,7 +571,7 @@ async def prepare_lark_message(kind: str, content: dict, message_id: str, app_id
                 [
                     MediaSource(
                         media_type=ChannelMediaType.FILE,
-                        file_name="forwarded-messages.md",
+                        file_name=markdown_filename,
                         mime_type="text/markdown",
                         fetch=markdown_bytes,
                         from_quote=True,
@@ -540,7 +586,7 @@ async def prepare_lark_message(kind: str, content: dict, message_id: str, app_id
                 media=[*media_result.media, *markdown_result.media],
             )
         else:
-            pieces.append("[Unsupported Lark message type. Please resend as text or a supported attachment.]")
+            pieces.append(i18n.translate("lark.inbound.unsupported_message_type"))
         return await prepare_media_message("lark", "\n".join(pieces).strip(), sources)
 
 
@@ -551,16 +597,15 @@ async def prepare_lark_batch(
 ) -> PreparedMediaMessage:
     """准备一个逻辑 Lark 消息；只有已配对的转发备注才去除 p 包装。"""
     canonical = batch.canonical_event
-    prepared = await prepare_lark_message(
+    note = ""
+    if batch.merge_forward is not None and batch.note is not None:
+        note = normalize_lark_forward_note(str(batch.note.content.get("text") or ""))
+
+    return await prepare_lark_message(
         canonical.message_type,
         canonical.content,
         canonical.message_id,
         app_id,
         app_secret,
+        accompanying_text=note,
     )
-    if batch.merge_forward is None or batch.note is None:
-        return prepared
-
-    note = normalize_lark_forward_note(str(batch.note.content.get("text") or ""))
-    text = "\n\n".join(part for part in (note, prepared.text) if part)
-    return PreparedMediaMessage(text=text, media=prepared.media)

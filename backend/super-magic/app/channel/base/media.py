@@ -17,6 +17,7 @@ import aiohttp
 
 from agentlang.logger import get_logger
 from app.channel.base.models import ChannelMediaContext, ChannelMediaType
+from app.i18n import i18n
 from app.path_manager import PathManager
 from app.utils.async_file_utils import async_stat, async_unlink, async_write_bytes
 
@@ -193,11 +194,11 @@ async def prepare_media_message(channel: str, text: str, sources: list[MediaSour
     for index, source in enumerate(sources):
         label = source.file_name or source.media_type.value
         if index >= MAX_ATTACHMENTS:
-            notes.append("[Additional attachments skipped: attachment count limit reached]")
+            notes.append(i18n.translate("im.media.additional_attachments_skipped"))
             break
         remaining = deadline - time.monotonic()
         if remaining <= 0:
-            notes.append(f"[Attachment: {label}; download failed: message time limit reached. Please resend.]")
+            notes.append(i18n.translate("im.media.download_timeout", filename=label))
             continue
         try:
             item = await asyncio.wait_for(download_media_source(channel, source), timeout=remaining)
@@ -205,8 +206,8 @@ async def prepare_media_message(channel: str, text: str, sources: list[MediaSour
         except Exception as error:
             # 不吞掉 CancelledError，不把平台响应或签名 URL 注入提示词和日志。
             logger.warning(f"[IM media] failed channel={channel} error_type={type(error).__name__}")
-            notes.append(f"[Attachment: {label}; download failed. Please resend.]")
+            notes.append(i18n.translate("im.media.download_failed", filename=label))
     if not text.strip() and result.media:
-        notes.insert(0, "[Received attachments]")
+        notes.insert(0, i18n.translate("im.media.received_attachments"))
     result.text = "\n".join(part for part in [text, *notes] if part)
     return result
