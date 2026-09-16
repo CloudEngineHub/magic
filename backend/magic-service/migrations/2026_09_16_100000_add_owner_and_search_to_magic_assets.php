@@ -1,7 +1,9 @@
 <?php
 
 declare(strict_types=1);
-
+/**
+ * Copyright (c) The Magic , Distributed under the software license
+ */
 use Hyperf\Database\Migrations\Migration;
 use Hyperf\Database\Schema\Blueprint;
 use Hyperf\Database\Schema\Schema;
@@ -30,14 +32,5 @@ return new class extends Migration {
 
     public function down(): void
     {
-        Schema::table('magic_assets', static function (Blueprint $table): void {
-            if (Schema::hasColumn('magic_assets', 'owner_uid')) {
-                $table->dropIndex('idx_asset_org_owner');
-                $table->dropColumn('owner_uid');
-            }
-            if (Schema::hasColumn('magic_assets', 'search_text')) {
-                $table->dropColumn('search_text');
-            }
-        });
     }
 };

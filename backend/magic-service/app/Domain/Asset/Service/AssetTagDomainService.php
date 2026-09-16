@@ -1,6 +1,9 @@
 <?php
 
 declare(strict_types=1);
+/**
+ * Copyright (c) The Magic , Distributed under the software license
+ */
 
 namespace App\Domain\Asset\Service;
 
@@ -164,7 +167,7 @@ class AssetTagDomainService
         return $entity;
     }
 
-    private function assertStructure(AssetDataIsolation $dataIsolation, AssetTagNodeType $nodeType, int $parentId, int|string|null $ignoreId = null): void
+    private function assertStructure(AssetDataIsolation $dataIsolation, AssetTagNodeType $nodeType, int $parentId, null|int|string $ignoreId = null): void
     {
         if ($nodeType === AssetTagNodeType::Group) {
             if ($parentId !== 0) {

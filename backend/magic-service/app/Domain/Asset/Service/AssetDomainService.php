@@ -297,8 +297,7 @@ class AssetDomainService
         string $userId,
         string $contentHash,
         bool $anySyncStatus = false,
-    ): ?AssetEntity
-    {
+    ): ?AssetEntity {
         return $this->assets->findPersonalAssetByContentHash($userId, $contentHash, $anySyncStatus);
     }
 

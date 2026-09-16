@@ -1,6 +1,9 @@
 <?php
 
 declare(strict_types=1);
+/**
+ * Copyright (c) The Magic , Distributed under the software license
+ */
 
 namespace App\Domain\Asset\Repository\Persistence;
 
@@ -59,7 +62,9 @@ class AssetTagRepository implements AssetTagRepositoryInterface
             ? AssetTagModel::query()->whereIn('organization_code', $dataIsolation->getOrganizationCodes())->where('id', $entity->getId())->first()
             : new AssetTagModel();
         $model ??= new AssetTagModel();
-        if (! $entity->getId()) { $entity->setId(IdGenerator::getSnowId()); }
+        if (! $entity->getId()) {
+            $entity->setId(IdGenerator::getSnowId());
+        }
         $model->fill($entity->toArray());
         $model->save();
         return AssetTagFactory::modelToEntity($model);
@@ -68,7 +73,9 @@ class AssetTagRepository implements AssetTagRepositoryInterface
     public function delete(AssetDataIsolation $dataIsolation, int|string $id, ?string $ownerUid = null): bool
     {
         $builder = AssetTagModel::query()->whereIn('organization_code', $dataIsolation->getOrganizationCodes())->where('id', $id);
-        if ($ownerUid !== null) { $builder->where('owner_uid', $ownerUid); }
+        if ($ownerUid !== null) {
+            $builder->where('owner_uid', $ownerUid);
+        }
         return (bool) $builder->first()?->delete();
     }
 

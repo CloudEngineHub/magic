@@ -19,8 +19,8 @@ use App\Infrastructure\Util\Permission\Annotation\CheckPermission;
 use App\Interfaces\Asset\Assembler\AssetAssembler;
 use App\Interfaces\Asset\DTO\Request\CreateAssetRequestDTO;
 use App\Interfaces\Asset\DTO\Request\QueryAssetRequestDTO;
-use App\Interfaces\Asset\DTO\Request\UpdateAssetRequestDTO;
 use App\Interfaces\Asset\DTO\Request\SaveAssetTagRequestDTO;
+use App\Interfaces\Asset\DTO\Request\UpdateAssetRequestDTO;
 use Dtyq\ApiResponse\Annotation\ApiResponse;
 use Hyperf\HttpServer\Contract\RequestInterface;
 

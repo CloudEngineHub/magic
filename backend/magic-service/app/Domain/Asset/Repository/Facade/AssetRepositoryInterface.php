@@ -28,7 +28,7 @@ interface AssetRepositoryInterface
      * 在组织隔离范围内按资产范围、类型和业务条件分页查询，并按创建时间及主键倒序返回。
      * 团队共享资产主键由应用层通过 {@see AssetQuery::setSharedAssetIds()} 传入，仓储不得跨领域读取权限表。
      *
-     * @return array{total: int, list: AssetEntity[]} 符合条件的资产总数和当前页实体列表。
+     * @return array{total: int, list: AssetEntity[]} 符合条件的资产总数和当前页实体列表
      */
     public function queries(
         AssetDataIsolation $dataIsolation,
@@ -54,7 +54,7 @@ interface AssetRepositoryInterface
      * 按内容指纹查询未删除的资产主键，用于跨组织复用已经通过审核的第三方素材凭证。
      * 该查询刻意不按组织编码过滤，但只返回本地主键，调用方仍需校验对应映射是否满足复用条件。
      *
-     * @return int[] 最多返回指定数量的资产主键列表。
+     * @return int[] 最多返回指定数量的资产主键列表
      */
     public function findIdsByContentHash(string $contentHash, int $limit = 20): array;
 

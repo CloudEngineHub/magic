@@ -1,6 +1,9 @@
 <?php
 
 declare(strict_types=1);
+/**
+ * Copyright (c) The Magic , Distributed under the software license
+ */
 
 namespace App\Domain\Asset\Repository\Persistence;
 
@@ -16,7 +19,9 @@ class AssetTagRelationRepository implements AssetTagRelationRepositoryInterface
     {
         $this->deleteByAssetId($dataIsolation, $assetId);
         $tagIds = array_values(array_unique(array_filter(array_map('intval', $tagIds), static fn (int $id): bool => $id > 0)));
-        if ($tagIds === []) { return; }
+        if ($tagIds === []) {
+            return;
+        }
         $now = date('Y-m-d H:i:s');
         AssetTagRelationModel::query()->insert(array_map(static fn (int $tagId): array => [
             'id' => IdGenerator::getSnowId(), 'organization_code' => $dataIsolation->getCurrentOrganizationCode(),

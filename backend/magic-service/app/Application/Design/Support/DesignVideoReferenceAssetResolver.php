@@ -102,8 +102,8 @@ final class DesignVideoReferenceAssetResolver
      * 遍历一个引用素材列表，并只替换每项中的 uri 字段。
      * 非数组项保持原样；方法返回与输入结构一致的列表，供任务实体重新写回。
      *
-     * @param array<int, array<string, mixed>> $items 待解析的引用素材列表。
-     * @return array<int, array<string, mixed>> 处理后的引用素材列表。
+     * @param array<int, array<string, mixed>> $items 待解析的引用素材列表
+     * @return array<int, array<string, mixed>> 处理后的引用素材列表
      */
     private function materializeList(
         DesignDataIsolation $dataIsolation,

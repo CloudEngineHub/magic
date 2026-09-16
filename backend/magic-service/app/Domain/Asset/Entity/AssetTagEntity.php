@@ -1,6 +1,9 @@
 <?php
 
 declare(strict_types=1);
+/**
+ * Copyright (c) The Magic , Distributed under the software license
+ */
 
 namespace App\Domain\Asset\Entity;
 
@@ -60,7 +63,7 @@ class AssetTagEntity extends AbstractEntity
         return $this->parentId;
     }
 
-    public function setParentId(int|string|null $value): self
+    public function setParentId(null|int|string $value): self
     {
         $this->parentId = max(0, (int) ($value ?? 0));
         return $this;

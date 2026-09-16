@@ -204,8 +204,8 @@ Router::addGroup('/api/v1/admin', static function () {
         Router::post('/queries', [AdminAssetApi::class, 'queries']);
         Router::get('/tags', [AdminAssetApi::class, 'tags']);
         Router::post('/tags', [AdminAssetApi::class, 'createTag']);
-        Router::put('/tags/{tagId:\\d+}', [AdminAssetApi::class, 'updateTag']);
-        Router::delete('/tags/{tagId:\\d+}', [AdminAssetApi::class, 'deleteTag']);
+        Router::put('/tags/{tagId:\d+}', [AdminAssetApi::class, 'updateTag']);
+        Router::delete('/tags/{tagId:\d+}', [AdminAssetApi::class, 'deleteTag']);
         Router::patch('/{assetId:\d+}', [AdminAssetApi::class, 'update']);
         Router::delete('/{assetId:\d+}', [AdminAssetApi::class, 'delete']);
     }, ['middleware' => [RequestContextMiddleware::class, UserAuthMiddleware::class]]);

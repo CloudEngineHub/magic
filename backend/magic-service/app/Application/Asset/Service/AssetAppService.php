@@ -15,9 +15,9 @@ use App\Domain\Asset\Entity\ValueObject\AssetScope;
 use App\Domain\Asset\Entity\ValueObject\AssetTagNodeType;
 use App\Domain\Asset\Entity\ValueObject\AssetVisibility;
 use App\Domain\Asset\Entity\ValueObject\Query\AssetQuery;
-use App\Domain\Contact\Service\MagicUserDomainService;
 use App\Domain\Asset\Service\AssetDomainService;
 use App\Domain\Asset\Service\AssetTagDomainService;
+use App\Domain\Contact\Service\MagicUserDomainService;
 use App\Domain\Permission\Entity\ValueObject\ResourceVisibility\PrincipalType;
 use App\Domain\Permission\Entity\ValueObject\ResourceVisibility\ResourceType;
 use App\Domain\Permission\Service\ResourceVisibilityDomainService;
@@ -94,25 +94,6 @@ class AssetAppService extends AbstractAssetAppService
         $this->resolveAssetFileUrls([$asset]);
 
         return $asset;
-    }
-
-    /** 未提供 file_key 时，从项目文件生成私有桶文件并返回已计算的内容哈希。 */
-    private function materializeProjectFileIfNeeded(AssetDataIsolation $dataIsolation, CreateAssetRequestDTO $requestDTO): ?string
-    {
-        if (trim((string) $requestDTO->getFileKey()) !== '') {
-            return null;
-        }
-        $projectId = $requestDTO->getProjectId();
-        $projectFilePath = $requestDTO->getProjectFilePath();
-        if ($projectId === null || $projectFilePath === null) {
-            ExceptionBuilder::throw(AssetErrorCode::FILE_REQUIRED);
-        }
-        $materialized = $this->projectFileMaterializer->materialize($dataIsolation, $projectId, $projectFilePath);
-        if ($materialized === null || ($materialized['file_key'] ?? '') === '') {
-            ExceptionBuilder::throw(AssetErrorCode::FILE_REQUIRED);
-        }
-        $requestDTO->setFileKey($materialized['file_key']);
-        return $materialized['content_hash'] ?? null;
     }
 
     public function signAgreement(Authenticatable|BaseDataIsolation $authorization): void
@@ -204,35 +185,6 @@ class AssetAppService extends AbstractAssetAppService
             $this->revokeAssetVisibility($dataIsolation, $assetId, AssetVisibility::personal());
         }
         return $deleted;
-    }
-
-    /**
-     * 组装列表查询条件；团队分享与全部范围需要先解析出已授权给当前用户的资产主键。
-     */
-    private function createQuery(QueryAssetRequestDTO $requestDTO, AssetDataIsolation $dataIsolation): AssetQuery
-    {
-        $query = new AssetQuery();
-        $scope = $requestDTO->getScope();
-        $query->setScope($scope);
-        $sharedAssetIds = $scope->includesSharedAssets() ? $this->sharedAssetIds($dataIsolation) : [];
-        $query->setSharedAssetIds($sharedAssetIds);
-        if ($scope === AssetScope::ALL) {
-            $query->setAccessibleAssetIds(array_merge(
-                $sharedAssetIds,
-                $this->assetDomainService->findIdsByOwnerUid($dataIsolation, $dataIsolation->getCurrentUserId()),
-            ));
-        }
-        $query->setAssetKind($requestDTO->getAssetKind());
-        $query->setParentId($requestDTO->getParentId());
-        $query->setAssetBusinessType($requestDTO->getAssetBusinessType());
-        $query->setAssetMediaType($requestDTO->getAssetMediaType());
-        $query->setKeyword($requestDTO->getKeyword());
-        $query->setStatus($requestDTO->getStatus() ?? 1);
-        $query->setIsVerified($requestDTO->getIsVerified());
-        $query->setOwnerUids($requestDTO->getOwnerUids());
-        $query->setTagIds($requestDTO->getTagIds());
-        $query->setTagMatch($requestDTO->getTagMatch());
-        return $query;
     }
 
     /** @return AssetTagEntity[] */
@@ -329,6 +281,54 @@ class AssetAppService extends AbstractAssetAppService
         return ['changed_num' => count($assets), 'owner_uid' => $ownerUid];
     }
 
+    /** 未提供 file_key 时，从项目文件生成私有桶文件并返回已计算的内容哈希。 */
+    private function materializeProjectFileIfNeeded(AssetDataIsolation $dataIsolation, CreateAssetRequestDTO $requestDTO): ?string
+    {
+        if (trim((string) $requestDTO->getFileKey()) !== '') {
+            return null;
+        }
+        $projectId = $requestDTO->getProjectId();
+        $projectFilePath = $requestDTO->getProjectFilePath();
+        if ($projectId === null || $projectFilePath === null) {
+            ExceptionBuilder::throw(AssetErrorCode::FILE_REQUIRED);
+        }
+        $materialized = $this->projectFileMaterializer->materialize($dataIsolation, $projectId, $projectFilePath);
+        if ($materialized === null || ($materialized['file_key'] ?? '') === '') {
+            ExceptionBuilder::throw(AssetErrorCode::FILE_REQUIRED);
+        }
+        $requestDTO->setFileKey($materialized['file_key']);
+        return $materialized['content_hash'] ?? null;
+    }
+
+    /**
+     * 组装列表查询条件；团队分享与全部范围需要先解析出已授权给当前用户的资产主键。
+     */
+    private function createQuery(QueryAssetRequestDTO $requestDTO, AssetDataIsolation $dataIsolation): AssetQuery
+    {
+        $query = new AssetQuery();
+        $scope = $requestDTO->getScope();
+        $query->setScope($scope);
+        $sharedAssetIds = $scope->includesSharedAssets() ? $this->sharedAssetIds($dataIsolation) : [];
+        $query->setSharedAssetIds($sharedAssetIds);
+        if ($scope === AssetScope::ALL) {
+            $query->setAccessibleAssetIds(array_merge(
+                $sharedAssetIds,
+                $this->assetDomainService->findIdsByOwnerUid($dataIsolation, $dataIsolation->getCurrentUserId()),
+            ));
+        }
+        $query->setAssetKind($requestDTO->getAssetKind());
+        $query->setParentId($requestDTO->getParentId());
+        $query->setAssetBusinessType($requestDTO->getAssetBusinessType());
+        $query->setAssetMediaType($requestDTO->getAssetMediaType());
+        $query->setKeyword($requestDTO->getKeyword());
+        $query->setStatus($requestDTO->getStatus() ?? 1);
+        $query->setIsVerified($requestDTO->getIsVerified());
+        $query->setOwnerUids($requestDTO->getOwnerUids());
+        $query->setTagIds($requestDTO->getTagIds());
+        $query->setTagMatch($requestDTO->getTagMatch());
+        return $query;
+    }
+
     private function enrichAssets(AssetDataIsolation $isolation, array $assets, string $scope): void
     {
         $ownerIds = [];
@@ -353,5 +353,4 @@ class AssetAppService extends AbstractAssetAppService
             $asset->setOwnerName((string) ($info['nickname'] ?? $info['real_name'] ?? ''));
         }
     }
-
 }
