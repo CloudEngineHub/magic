@@ -6,7 +6,8 @@ import PlaybackTabContent, { type PlaybackTabContentProps } from "./PlaybackTabC
 import KnowledgeBaseTabContent from "./KnowledgeBaseTabContent"
 import WebsiteIframeTabContent from "./WebsiteIframeTabContent"
 import { getWebsiteTabData } from "../utils/websiteTabs"
-import type { TabItem } from "../types"
+import type { TabItem, FileManagerContext, FileManagerStateChangeOptions } from "../types"
+import type { FileManagerSnapshot } from "@/models/config/repositories/SuperProjectStateTypes"
 import type { KnowledgeBaseTabData } from "../hooks/useKnowledgeBaseTab"
 import { getFileViewerTabType } from "../utils/tabType"
 import {
@@ -30,6 +31,12 @@ type CachedTab = Partial<TabItem> & {
 
 interface TabCacheProps {
 	managerProps: Omit<ProjectFileManagerProps, "projectId" | "initialDirectoryId">
+	getFileManagerState: (context: FileManagerContext) => FileManagerSnapshot | undefined
+	onFileManagerStateChange: (
+		id: string,
+		state: FileManagerSnapshot,
+		options: FileManagerStateChangeOptions,
+	) => void
 	tab: CachedTab
 	isActive: boolean
 	renderProps: Record<string, unknown>
@@ -54,6 +61,8 @@ const TabCache = memo(
 	({
 		tab,
 		managerProps,
+		getFileManagerState,
+		onFileManagerStateChange,
 		isActive,
 		renderProps,
 		onActiveFileChange,
@@ -66,6 +75,9 @@ const TabCache = memo(
 		fillPortalSurface = false,
 	}: TabCacheProps) => {
 		const tabType = getFileViewerTabType(tab)
+		const managerState = tab.fileManager
+			? (getFileManagerState(tab.fileManager) ?? tab.fileManagerState)
+			: undefined
 		const isPlaybackTab = tabType === "playback"
 		const isWebsite = tabType === "website"
 		const isKnowledgeBaseTab = tabType === "knowledge_base"
@@ -149,6 +161,12 @@ const TabCache = memo(
 					<Suspense fallback={null}>
 						{tab.fileManager.spaceType === "user" ? (
 							<UserSpaceFileManager
+								initialState={
+									managerState?.spaceType === "user" ? managerState : undefined
+								}
+								onStateChange={(state, options) =>
+									onFileManagerStateChange(tab.id, state, options)
+								}
 								isActive={isActive}
 								context={tab.fileManager}
 								onFileClick={managerProps.onFileClick}
@@ -159,6 +177,12 @@ const TabCache = memo(
 						) : (
 							<ProjectFileManager
 								{...managerProps}
+								initialState={
+									managerState?.spaceType === "project" ? managerState : undefined
+								}
+								onStateChange={(state, options) =>
+									onFileManagerStateChange(tab.id, state, options)
+								}
 								isActive={isActive}
 								projectId={tab.fileManager.projectId}
 								initialDirectoryId={tab.fileManager.directoryId}

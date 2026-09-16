@@ -146,6 +146,8 @@ const FilesViewer = memo(
 				exitPreviewFullscreen,
 				getCheckBeforeClose,
 				getTabFileContext,
+				getFileManagerState,
+				updateFileManagerState,
 			} = useFilesViewer(props)
 			const tabsRef = useRef(tabs)
 			tabsRef.current = tabs
@@ -678,6 +680,8 @@ const FilesViewer = memo(
 						isActive,
 						node: (
 							<TabCache
+								getFileManagerState={getFileManagerState}
+								onFileManagerStateChange={updateFileManagerState}
 								managerProps={{
 									attachments: (props.attachments ?? []) as AttachmentItem[],
 									selectedProject: props.selectedProject,
@@ -685,6 +689,7 @@ const FilesViewer = memo(
 									allowEdit: props.allowEdit,
 									allowDownload: props.allowDownload,
 									loading: isAwaitingProjectAttachments,
+									attachmentLoadState: props.attachmentLoadState,
 									onFileClick: openFileTab,
 								}}
 								key={tab.id}

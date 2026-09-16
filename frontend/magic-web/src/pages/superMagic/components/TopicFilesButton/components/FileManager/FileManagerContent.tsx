@@ -47,7 +47,9 @@ interface Props {
 	view: FileManagerView
 	selection: ReturnType<typeof useFileManagerSelection>
 	initialScrollTop: number
-	onScroll: (top: number) => void
+	initialScrollLeft: number
+	restoreReady: boolean
+	onScroll: (top: number, left: number) => void
 	onOpen: (file: AttachmentItem) => void
 	onBack: () => void
 	onForward: () => void
@@ -120,10 +122,48 @@ export function FileManagerContent(props: Props) {
 	useLayoutEffect(() => {
 		virtualizer.measure()
 	}, [columns, layout.rowHeight, virtualizer])
+	const restoredDirectory = useRef<string | null>()
 	const restoreScroll = useMemoizedFn(() => {
-		if (viewport.current) viewport.current.scrollTop = props.initialScrollTop
+		const element = viewport.current
+		if (
+			restoredDirectory.current === props.directoryId ||
+			props.loading ||
+			props.error ||
+			!props.restoreReady ||
+			!props.isActive ||
+			!width ||
+			!element?.clientHeight
+		)
+			return
+		// 虚拟列表先取得实际尺寸，再恢复位置；用户已经操作时不能再次跳回旧位置。
+		element.scrollTop = props.initialScrollTop
+		if (props.listColumns.containerRef.current)
+			props.listColumns.containerRef.current.scrollLeft = props.initialScrollLeft
+		restoredDirectory.current = props.directoryId
 	})
-	useLayoutEffect(restoreScroll, [props.directoryId, restoreScroll])
+	useLayoutEffect(restoreScroll, [
+		props.directoryId,
+		props.loading,
+		props.error,
+		props.restoreReady,
+		props.isActive,
+		width,
+		props.items.length,
+		restoreScroll,
+	])
+	const onScroll = () => {
+		if (
+			restoredDirectory.current !== props.directoryId ||
+			props.loading ||
+			props.error ||
+			!props.isActive
+		)
+			return
+		props.onScroll(
+			viewport.current?.scrollTop ?? 0,
+			props.listColumns.containerRef.current?.scrollLeft ?? 0,
+		)
+	}
 	const selectIndex = (index: number, event: KeyboardEvent<HTMLDivElement>) => {
 		const item = props.items[Math.max(0, Math.min(props.items.length - 1, index))]?.item
 		if (!item?.file_id) return
@@ -270,6 +310,13 @@ export function FileManagerContent(props: Props) {
 	return (
 		<div
 			ref={props.listColumns.containerRef}
+			onScroll={onScroll}
+			onWheelCapture={() => {
+				restoredDirectory.current = props.directoryId
+			}}
+			onKeyDownCapture={() => {
+				restoredDirectory.current = props.directoryId
+			}}
 			className="flex min-h-0 min-w-0 flex-1 overflow-x-auto"
 		>
 			<div
@@ -311,7 +358,7 @@ export function FileManagerContent(props: Props) {
 						data-manager-target={props.directoryId ?? undefined}
 						className="relative min-h-0 flex-1 overflow-auto overscroll-contain outline-none"
 						onKeyDown={onKeyDown}
-						onScroll={(event) => props.onScroll(event.currentTarget.scrollTop)}
+						onScroll={onScroll}
 						onPointerDown={(event) => {
 							setKeyboardFocus(false)
 							props.gestures.onPointerDown(event)

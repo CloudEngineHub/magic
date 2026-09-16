@@ -1,4 +1,5 @@
-import { useDeferredValue, useMemo, useRef, useState } from "react"
+import { useDeferredValue, useMemo, useRef, useState, useEffect, useLayoutEffect } from "react"
+import { useMemoizedFn } from "ahooks"
 import { observer } from "mobx-react-lite"
 import { useTranslation } from "react-i18next"
 import { useVirtualizer } from "@tanstack/react-virtual"
@@ -10,8 +11,16 @@ import { cn } from "@/utils/cn"
 import type { AttachmentItem } from "../TopicFilesButton/hooks/types"
 import { MemoryGroup } from "./UserSpaceMemoryView"
 import { useUserMemoryProjects } from "./hooks/useUserMemoryProjects"
+import type { UserFileManagerSnapshot } from "@/models/config/repositories/SuperProjectStateTypes"
+import type { FileManagerStateChangeOptions } from "../Detail/components/FilesViewer/types"
+import magicToast from "@/components/base/MagicToaster/utils"
 
 interface Props {
+	initialState?: UserFileManagerSnapshot["memory"]
+	onStateChange: (
+		state: NonNullable<UserFileManagerSnapshot["memory"]>,
+		options: FileManagerStateChangeOptions,
+	) => void
 	projectId?: string
 	projectName?: string
 	topicId?: string
@@ -31,13 +40,62 @@ const MemoryProjects = observer(function MemoryProjects({
 	topicId,
 	onFileClick,
 	active,
+	initialState,
+	onStateChange,
 }: Props) {
 	const { t, i18n } = useTranslation("super")
-	const [selectedId, setSelectedId] = useState<string | null>(projectId ?? null)
-	const [search, setSearch] = useState("")
+	const [selectedId, setSelectedId] = useState<string | null>(
+		initialState ? initialState.projectId : (projectId ?? null),
+	)
+	const [search, setSearch] = useState(initialState?.query ?? "")
+	const saved = useRef(initialState)
+	const scrollTop = useRef(initialState?.scrollTop ?? 0)
+	const scrollRestored = useRef(false)
+	const emitState = useMemoizedFn((options: FileManagerStateChangeOptions = {}) => {
+		saved.current = {
+			projectId: selectedId,
+			query: search,
+			scrollTop: scrollTop.current,
+			location: saved.current?.projectId === selectedId ? saved.current.location : undefined,
+		}
+		onStateChange(saved.current, options)
+	})
+	useEffect(() => emitState(), [selectedId, search, emitState])
+	const selectProject = (id: string | null) => {
+		if (id === selectedId) return
+		saved.current = { projectId: id, query: search, scrollTop: scrollTop.current }
+		setSelectedId(id)
+		onStateChange(saved.current, { userInteraction: true })
+	}
 	const query = useDeferredValue(search.trim().toLocaleLowerCase())
 	const { projects, loading, error, loaded, refresh } = useUserMemoryProjects(projectId, active)
 	const viewport = useRef<HTMLDivElement>(null)
+	useEffect(() => {
+		if (
+			!loaded ||
+			loading ||
+			error ||
+			!selectedId ||
+			selectedId === projectId ||
+			projects.some(({ id }) => id === selectedId)
+		)
+			return
+		setSelectedId(null)
+		magicToast.info(t("fileManager.restoredDirectoryUnavailable"))
+	}, [loaded, loading, error, selectedId, projectId, projects, t])
+	useLayoutEffect(() => {
+		if (
+			scrollRestored.current ||
+			!active ||
+			!loaded ||
+			loading ||
+			error ||
+			!viewport.current?.clientHeight
+		)
+			return
+		viewport.current.scrollTop = scrollTop.current
+		scrollRestored.current = true
+	}, [active, loaded, loading, error])
 	const namedProjects = projects.map((project) => ({
 		...project,
 		name: userFilesStore.projectNames.get(project.id) ?? t("userSpace.projectNameUnavailable"),
@@ -90,7 +148,7 @@ const MemoryProjects = observer(function MemoryProjects({
 				<button
 					className={rowClass(selectedId === null)}
 					aria-current={selectedId === null ? "page" : undefined}
-					onClick={() => setSelectedId(null)}
+					onClick={() => selectProject(null)}
 				>
 					<Brain size={15} />
 					{t("userSpace.globalMemory")}
@@ -100,7 +158,7 @@ const MemoryProjects = observer(function MemoryProjects({
 						className={rowClass(selectedId === projectId)}
 						aria-current={selectedId === projectId ? "page" : undefined}
 						title={projectName}
-						onClick={() => setSelectedId(projectId)}
+						onClick={() => selectProject(projectId)}
 					>
 						<Folder size={15} className="shrink-0" />
 						<span className="truncate">
@@ -119,7 +177,18 @@ const MemoryProjects = observer(function MemoryProjects({
 					<Input
 						className="h-7 rounded-md bg-background/70 pl-7 text-xs"
 						value={search}
-						onChange={(event) => setSearch(event.target.value)}
+						onChange={(event) => {
+							setSearch(event.target.value)
+							onStateChange(
+								{
+									projectId: selectedId,
+									...saved.current,
+									query: event.target.value,
+									scrollTop: scrollTop.current,
+								},
+								{ userInteraction: true },
+							)
+						}}
 						placeholder={t("fileManager.memory.search")}
 						aria-label={t("fileManager.memory.search")}
 					/>
@@ -144,7 +213,19 @@ const MemoryProjects = observer(function MemoryProjects({
 						)}
 					</p>
 				)}
-				<div ref={viewport} className="min-h-0 flex-1 overflow-y-auto">
+				<div
+					ref={viewport}
+					className="min-h-0 flex-1 overflow-y-auto"
+					onWheelCapture={() => {
+						scrollRestored.current = true
+					}}
+					onScroll={(event) => {
+						if (scrollRestored.current && active) {
+							scrollTop.current = event.currentTarget.scrollTop
+							emitState({ deferred: true })
+						}
+					}}
+				>
 					<div className="relative" style={{ height: rows.getTotalSize() }}>
 						{rows.getVirtualItems().map((row) => {
 							const project = visibleProjects[row.index]
@@ -154,7 +235,7 @@ const MemoryProjects = observer(function MemoryProjects({
 									style={{ position: "absolute", top: row.start }}
 									className={rowClass(selectedId === project.id)}
 									aria-current={selectedId === project.id ? "page" : undefined}
-									onClick={() => setSelectedId(project.id)}
+									onClick={() => selectProject(project.id)}
 									title={project.name}
 								>
 									<Folder size={15} className="shrink-0" />
@@ -169,6 +250,18 @@ const MemoryProjects = observer(function MemoryProjects({
 				</p>
 			</aside>
 			<MemoryGroup
+				initialManagerState={
+					saved.current?.projectId === selectedId ? saved.current.location : undefined
+				}
+				onManagerStateChange={(location, options = {}) => {
+					saved.current = {
+						projectId: selectedId,
+						query: search,
+						scrollTop: scrollTop.current,
+						location,
+					}
+					onStateChange(saved.current, options)
+				}}
 				key={selectedId ?? "global"}
 				manager
 				active={active}

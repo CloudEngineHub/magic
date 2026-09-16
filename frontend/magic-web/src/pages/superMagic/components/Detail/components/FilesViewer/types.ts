@@ -1,6 +1,7 @@
 import type { FileHelpContext } from "@/pages/superMagic/components/TopicFilesButton/utils/magic-system-folder"
 import type { ReactNode, CSSProperties, RefObject } from "react"
 import type { AttachmentLoadState } from "@/stores/projectFiles/types"
+import type { FileManagerSnapshot } from "@/models/config/repositories/SuperProjectStateTypes"
 import type { MagicWidget } from "@magic-web/widget-sdk"
 import type {
 	DownloadImageMode,
@@ -74,6 +75,12 @@ export type FileManagerContext =
 export interface FileManagerOpenRequest {
 	file_manager: FileManagerContext
 }
+
+export interface FileManagerStateChangeOptions {
+	/** 滚动只更新最新快照并合并写入，目录与布局操作及时保存。 */
+	deferred?: boolean
+	userInteraction?: boolean
+}
 export type FileViewerTabType = "file" | "website" | "knowledge_base" | "playback" | "file_manager"
 export type ActiveDetailTabType = FileViewerTabType | null
 
@@ -125,6 +132,7 @@ export interface TabFileContext {
 export interface TabItem {
 	userIdentityKey?: string | null
 	fileManager?: FileManagerContext
+	fileManagerState?: FileManagerSnapshot
 	returnTabId?: string
 	id: string
 	type?: FileViewerTabType
@@ -345,6 +353,7 @@ export enum TabActionType {
 	DEACTIVATE_ALL = "DEACTIVATE_ALL",
 	SYNC_USER_FILE_REFERENCES = "SYNC_USER_FILE_REFERENCES",
 	RESTORE_USER_FILE_TABS = "RESTORE_USER_FILE_TABS",
+	RESTORE_PROJECT_TABS = "RESTORE_PROJECT_TABS",
 }
 
 // Tab reducer action interface
@@ -355,6 +364,9 @@ export interface TabAction {
 		userFileResults?: Record<string, FileReferenceResult>
 		userIdentityKey?: string
 		userTabPositions?: Record<string, number>
+		tabOrder?: string[]
+		restoreActive?: boolean
+		userInteraction?: boolean
 		restoredActiveTabId?: string
 		tabId?: string
 		tabs?: TabItem[]

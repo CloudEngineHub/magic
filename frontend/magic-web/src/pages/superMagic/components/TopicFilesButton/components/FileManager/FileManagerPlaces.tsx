@@ -15,6 +15,7 @@ import {
 import type { FileManagerProps } from "./types"
 import type { AttachmentIndex } from "../../utils/attachmentIndex"
 import type { AttachmentItem } from "../../hooks/types"
+import type { FileManagerLocationSnapshot } from "@/models/config/repositories/SuperProjectStateTypes"
 
 export function FileManagerPlaces({
 	rootId,
@@ -29,6 +30,9 @@ export function FileManagerPlaces({
 	directorySource,
 	before,
 	getPopupContainer,
+	initialState,
+	onStateChange,
+	ready,
 }: {
 	rootId: string
 	rootName: string
@@ -42,15 +46,49 @@ export function FileManagerPlaces({
 	onOpen: (file: AttachmentItem) => void
 	before?: ReactNode
 	getPopupContainer: () => HTMLElement | null
+	initialState?: FileManagerLocationSnapshot["places"]
+	onStateChange: (state: FileManagerLocationSnapshot["places"], deferred: boolean) => void
+	ready: boolean
 }) {
 	const { t } = useTranslation("super")
 	const viewport = useRef<HTMLDivElement>(null)
-	const [rootExpanded, setRootExpanded] = useState(true)
-	const { expandedKeys, setExpandedKeys } = useTreeUI({ enableCache: false })
+	const [rootExpanded, setRootExpanded] = useState(initialState?.rootExpanded ?? true)
+	const [keys, setKeys] = useState<React.Key[]>(initialState?.expandedIds ?? [])
+	const { expandedKeys, setExpandedKeys } = useTreeUI({
+		enableCache: false,
+		expandedKeys: keys,
+		onExpandedKeysChange: setKeys,
+	})
+	const scrollTop = useRef(initialState?.scrollTop ?? 0)
+	const restored = useRef(false)
+	const expandedPending = expandedKeys.some((id) => {
+		const state = index.getItemById(String(id))?.directoryLoadState
+		return state === "unloaded" || state === "loading" || state === "error"
+	})
+	const emitState = useMemoizedFn((deferred = false) => {
+		if (ready)
+			onStateChange(
+				{
+					rootExpanded,
+					expandedIds: expandedKeys.map(String),
+					scrollTop: scrollTop.current,
+				},
+				deferred,
+			)
+	})
+	const restoreScroll = useMemoizedFn(() => {
+		if (restored.current || !ready || expandedPending || !viewport.current?.clientHeight) return
+		viewport.current.scrollTop = scrollTop.current
+		restored.current = true
+	})
+	useEffect(() => {
+		restoreScroll()
+		emitState()
+	}, [ready, keys, rootExpanded, expandedPending, restoreScroll, emitState])
 	const tree = useVisibleTreeRows({ attachmentTree: attachments, expandedKeys })
 	const [focusId, setFocusId] = useState<string | null>(null)
 	const pendingFocus = useRef<string | null>(null)
-	const previousDirectory = useRef<string>()
+	const previousDirectory = useRef<string | undefined>(initialState ? directoryId : undefined)
 	const revealDirectory = useMemoizedFn(() => {
 		if (previousDirectory.current === directoryId) return
 		if (directoryId !== rootId && !index.getItemById(directoryId)) return
@@ -199,6 +237,15 @@ export function FileManagerPlaces({
 			</div>
 			<div
 				ref={viewport}
+				onWheelCapture={() => {
+					restored.current = true
+				}}
+				onScroll={(event) => {
+					if (restored.current && ready) {
+						scrollTop.current = event.currentTarget.scrollTop
+						emitState(true)
+					}
+				}}
 				className="min-h-0 flex-1 overflow-y-auto"
 				role="tree"
 				aria-label={t("fileManager.places")}
@@ -209,7 +256,10 @@ export function FileManagerPlaces({
 					selectedKeys={[directoryId]}
 					scrollElementRef={viewport}
 					scrollToKey={focusId}
-					onMountedRowsChange={focusPendingRow}
+					onMountedRowsChange={() => {
+						restoreScroll()
+						focusPendingRow()
+					}}
 					titleRender={({ item, level, isLeaf }) => {
 						if (!item?.file_id) return null
 						const id = item.file_id

@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react"
 import { useMemoizedFn } from "ahooks"
+import type { FileManagerLocationSnapshot } from "@/models/config/repositories/SuperProjectStateTypes"
 import type {
 	FileManagerLocationState,
 	FileManagerSort,
@@ -7,14 +8,18 @@ import type {
 	FileManagerView,
 } from "../components/FileManager/types"
 
-function createLocation(directoryId: string | null): FileManagerLocationState {
+function createLocation(
+	directoryId: string | null,
+	saved?: FileManagerLocationSnapshot,
+): FileManagerLocationState {
 	return {
 		directoryId,
-		selectedIds: new Set(),
-		focusedId: null,
-		anchorId: null,
-		scrollTop: 0,
-		query: "",
+		selectedIds: new Set(saved?.selectedIds ?? []),
+		focusedId: saved?.focusedId ?? null,
+		anchorId: saved?.anchorId ?? null,
+		scrollTop: saved?.scrollTop ?? 0,
+		scrollLeft: saved?.scrollLeft ?? 0,
+		query: saved?.query ?? "",
 	}
 }
 
@@ -22,15 +27,18 @@ function createLocation(directoryId: string | null): FileManagerLocationState {
 export function useFileManagerNavigation(
 	initialDirectoryId: string | null,
 	initialView: FileManagerView = "grid",
+	initialState?: FileManagerLocationSnapshot,
 ) {
-	const [location, setLocation] = useState(() => createLocation(initialDirectoryId))
+	const [location, setLocation] = useState(() => createLocation(initialDirectoryId, initialState))
 	const [history, setHistory] = useState({
 		ids: initialDirectoryId === null ? [] : [initialDirectoryId],
 		cursor: initialDirectoryId === null ? -1 : 0,
 	})
-	const [view, setView] = useState<FileManagerView>(initialView)
-	const [sort, setSort] = useState<FileManagerSort>("name")
-	const [sortDirection, setSortDirection] = useState<FileManagerSortDirection>("ascending")
+	const [view, setView] = useState<FileManagerView>(initialState?.view ?? initialView)
+	const [sort, setSort] = useState<FileManagerSort>(initialState?.sort ?? "name")
+	const [sortDirection, setSortDirection] = useState<FileManagerSortDirection>(
+		initialState?.sortDirection ?? "ascending",
+	)
 	const changeSort = useMemoizedFn((next: FileManagerSort, toggle = false) => {
 		setSortDirection(
 			next === sort
@@ -46,18 +54,21 @@ export function useFileManagerNavigation(
 		setSort(next)
 	})
 	const savedLocations = useRef(new Map<string, FileManagerLocationState>())
-	const scrollTop = useRef(0)
+	const scrollTop = useRef(initialState?.scrollTop ?? 0)
+	const scrollLeft = useRef(initialState?.scrollLeft ?? 0)
 	const previousInitial = useRef(initialDirectoryId)
 	const saveCurrent = useMemoizedFn(() => {
 		if (location.directoryId === null) return
 		savedLocations.current.set(location.directoryId, {
 			...location,
 			scrollTop: scrollTop.current,
+			scrollLeft: scrollLeft.current,
 		})
 	})
 	const restore = useMemoizedFn((id: string) => {
 		const next = savedLocations.current.get(id) ?? createLocation(id)
 		scrollTop.current = next.scrollTop
+		scrollLeft.current = next.scrollLeft
 		setLocation(next)
 	})
 	const navigate = useMemoizedFn((id: string) => {
@@ -104,8 +115,10 @@ export function useFileManagerNavigation(
 		forward: () => go(1),
 		canBack: history.cursor > 0,
 		canForward: history.cursor < history.ids.length - 1,
-		onScroll: (top: number) => {
+		getScrollPosition: () => ({ scrollTop: scrollTop.current, scrollLeft: scrollLeft.current }),
+		onScroll: (top: number, left: number) => {
 			scrollTop.current = top
+			scrollLeft.current = left
 		},
 	}
 }

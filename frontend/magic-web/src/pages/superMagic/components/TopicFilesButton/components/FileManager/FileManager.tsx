@@ -31,6 +31,8 @@ import { FileManagerContent } from "./FileManagerContent"
 import { FileManagerDragPreview } from "./FileManagerDragPreview"
 import { FileManagerDialogs } from "./FileManagerDialogs"
 import type { FileManagerProps, FileManagerSort } from "./types"
+import type { FileManagerLocationSnapshot } from "@/models/config/repositories/SuperProjectStateTypes"
+import magicToast from "@/components/base/MagicToaster/utils"
 
 const RecycleBinContent = lazy(() =>
 	import("@/pages/recycleBin/components/RecycleBinContent").then((module) => ({
@@ -43,20 +45,43 @@ const noExpandedKeys: React.Key[] = []
 /** 完整管理器负责桌面交互；附件索引仍由原文件数据提供，不另建 store。 */
 export function FileManager(props: FileManagerProps) {
 	const { t, i18n } = useTranslation("super")
-	const [recycle, setRecycle] = useState(false)
+	const initialState = useRef(props.initialState).current
+	const initialDirectoryId =
+		props.rootId === null
+			? null
+			: (props.initialDirectoryId ?? (initialState?.directoryId || props.rootId))
+	const locating =
+		props.initialDirectoryId !== undefined &&
+		props.initialDirectoryId !== (initialState?.directoryId || props.rootId)
+	const [recycle, setRecycle] = useState(!locating && initialState?.area === "recycle")
+	const interacted = useRef(false)
+	const places = useRef(
+		initialState?.places ?? { expandedIds: [], rootExpanded: true, scrollTop: 0 },
+	)
 	const [recycleCount, setRecycleCount] = useState(0)
 	const activeProps = { ...props, isActive: props.isActive && !recycle }
 	const container = useRef<HTMLDivElement>(null)
 	const dragPreview = useRef<HTMLDivElement>(null)
 	const [dragPreviewIds, setDragPreviewIds] = useState<string[]>([])
 	const viewport = useRef<HTMLDivElement>(null)
-	const listColumns = useFileManagerColumns()
+	const listColumns = useFileManagerColumns(initialState?.columns)
 	const getColumnText = useMemoizedFn((file: FilePresentation, column: FileManagerSort) =>
 		getFileManagerColumnText(file, column, i18n.language, props.rootName),
 	)
 	const navigation = useFileManagerNavigation(
-		props.initialDirectoryId ?? props.rootId,
+		initialDirectoryId,
 		props.defaultView,
+		locating && initialState
+			? {
+					...initialState,
+					query: "",
+					selectedIds: [],
+					focusedId: null,
+					anchorId: null,
+					scrollTop: 0,
+					scrollLeft: 0,
+				}
+			: initialState,
 	)
 	const { location } = navigation
 	const index = useMemo(() => buildAttachmentIndex(props.attachments), [props.attachments])
@@ -73,16 +98,42 @@ export function FileManager(props: FileManagerProps) {
 	)
 	const missing =
 		location.directoryId !== null &&
+		props.dataReady !== false &&
 		location.directoryId !== props.rootId &&
 		!directory &&
 		!props.loading
 	const error = Boolean(props.error || missing || directory?.directoryLoadState === "error")
 	const loading = Boolean(
+		props.dataReady === false ||
 		props.loading ||
 		directory?.directoryLoadState === "loading" ||
 		directory?.directoryLoadState === "unloaded",
 	)
-	const listTree = useTreeUI({ enableCache: false })
+	const [expandedKeys, setExpandedKeys] = useState<React.Key[]>(initialState?.expandedIds ?? [])
+	const listTree = useTreeUI({
+		enableCache: false,
+		expandedKeys,
+		onExpandedKeysChange: setExpandedKeys,
+	})
+	const contentLoading =
+		loading ||
+		expandedKeys.some((id) => {
+			const state = index.getItemById(String(id))?.directoryLoadState
+			return state === "unloaded" || state === "loading"
+		})
+	const navigate = navigation.navigate
+	const expandedError = expandedKeys.some(
+		(id) => index.getItemById(String(id))?.directoryLoadState === "error",
+	)
+	useEffect(() => {
+		if (!missing || props.context.kind !== "project" || props.error || props.rootId === null)
+			return
+		const ancestor = [...(initialState?.ancestorIds ?? [])]
+			.reverse()
+			.find((id) => index.getItemById(id)?.is_directory)
+		navigate(ancestor ?? props.rootId)
+		magicToast.info(t("fileManager.restoredDirectoryUnavailable"))
+	}, [missing, props.context.kind, props.error, initialState, index, navigate, props.rootId, t])
 	const sorted = useMemo(() => {
 		const collator = new Intl.Collator(i18n.language.replaceAll("_", "-"), {
 			numeric: true,
@@ -225,7 +276,7 @@ export function FileManager(props: FileManagerProps) {
 		ids,
 		location,
 		setLocation: navigation.setLocation,
-		ready: !loading && !error,
+		ready: !contentLoading && !error && !expandedError,
 	})
 	const onOpen = useMemoizedFn((file: AttachmentItem) => {
 		if (file.is_directory && file.file_id) navigation.navigate(file.file_id)
@@ -350,12 +401,57 @@ export function FileManager(props: FileManagerProps) {
 	useEffect(() => {
 		if (location.directoryId !== null) onDirectoryChange?.(location.directoryId)
 	}, [location.directoryId, onDirectoryChange])
+	const emitState = useMemoizedFn((deferred = false) => {
+		if (loading || error) return
+		const snapshot: FileManagerLocationSnapshot = {
+			directoryId:
+				location.directoryId === props.rootId || location.directoryId === null
+					? ""
+					: location.directoryId,
+			ancestorIds: path.slice(1, -1).flatMap(({ id }) => (id === null ? [] : [id])),
+			view: navigation.view,
+			sort: navigation.sort,
+			sortDirection: navigation.sortDirection,
+			area: recycle ? "recycle" : "files",
+			query: location.query,
+			selectedIds: [...location.selectedIds],
+			focusedId: location.focusedId,
+			anchorId: location.anchorId,
+			...navigation.getScrollPosition(),
+			expandedIds: listTree.expandedKeys.map(String),
+			places: places.current,
+			columns: { visibleIds: listColumns.visibleIds, widths: listColumns.widths },
+		}
+		props.onStateChange?.(snapshot, { deferred, userInteraction: interacted.current })
+		interacted.current = false
+	})
+	useEffect(() => {
+		emitState()
+	}, [
+		location,
+		navigation.view,
+		navigation.sort,
+		navigation.sortDirection,
+		recycle,
+		expandedKeys,
+		listColumns.visibleIds,
+		listColumns.widths,
+		loading,
+		error,
+		emitState,
+	])
 	return (
 		<div
 			ref={container}
 			data-file-manager={props.scopeKey}
 			tabIndex={-1}
 			onKeyDown={commands.onClipboardKeyDown}
+			onPointerDownCapture={() => {
+				interacted.current = true
+			}}
+			onKeyDownCapture={() => {
+				interacted.current = true
+			}}
 			onDragStart={gestures.onDragStart}
 			onDragEnd={gestures.onDragEnd}
 			onDragOver={gestures.onDragOver}
@@ -411,6 +507,12 @@ export function FileManager(props: FileManagerProps) {
 			<div className={cn("flex min-h-0 flex-1", recycle && "hidden")}>
 				{!props.hidePlaces && props.rootId !== null && location.directoryId !== null && (
 					<FileManagerPlaces
+						initialState={initialState?.places}
+						ready={!loading && !error && activeProps.isActive}
+						onStateChange={(state, deferred) => {
+							places.current = state
+							emitState(deferred)
+						}}
 						rootId={props.rootId}
 						rootName={props.rootName}
 						directoryId={location.directoryId}
@@ -460,7 +562,7 @@ export function FileManager(props: FileManagerProps) {
 						sortDirection={navigation.sortDirection}
 						onSort={navigation.setSort}
 						onRefresh={props.onRefresh}
-						loading={loading}
+						loading={contentLoading}
 						getPopupContainer={getPopupContainer}
 					/>
 					<FileManagerContent
@@ -480,13 +582,18 @@ export function FileManager(props: FileManagerProps) {
 						view={navigation.view}
 						selection={selection}
 						initialScrollTop={location.scrollTop}
-						onScroll={navigation.onScroll}
+						initialScrollLeft={location.scrollLeft}
+						restoreReady={!expandedError}
+						onScroll={(top, left) => {
+							navigation.onScroll(top, left)
+							emitState(true)
+						}}
 						onOpen={onOpen}
 						onBack={navigation.back}
 						onForward={navigation.forward}
 						onUp={() => parentId != null && navigation.navigate(parentId)}
 						isActive={activeProps.isActive && !operations.busy}
-						loading={loading}
+						loading={contentLoading}
 						error={error}
 						onRefresh={props.onRefresh}
 						query={query}

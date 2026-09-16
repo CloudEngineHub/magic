@@ -7,6 +7,7 @@ import { normalizeLocale } from "@/utils/locale"
 import { sourceLabelKey } from "../components/FileInfoPanel/utils"
 import type { FileManagerSort } from "../components/FileManager/types"
 import type { FilePresentation } from "../utils/file-presentation"
+import type { FileManagerColumnsSnapshot } from "@/models/config/repositories/SuperProjectStateTypes"
 
 interface ColumnDefinition {
 	id: FileManagerSort
@@ -25,16 +26,28 @@ const columns: ColumnDefinition[] = [
 ]
 
 /** 列宽只属于当前管理器。指针移动只更新共同 CSS，结束时再提交小型 React 状态。 */
-export function useFileManagerColumns() {
+export function useFileManagerColumns(saved?: FileManagerColumnsSnapshot) {
 	const { t } = useTranslation("super")
 	const containerRef = useRef<HTMLDivElement>(null)
-	const [visibleIds, setVisibleIds] = useState<FileManagerSort[]>([
-		"name",
-		"size",
-		"type",
-		"modified",
-	])
-	const [widths, setWidths] = useState<Partial<Record<FileManagerSort, number>>>({})
+	const [visibleIds, setVisibleIds] = useState<FileManagerSort[]>(() =>
+		saved?.visibleIds
+			? columns
+					.filter(
+						(column) => column.id === "name" || saved.visibleIds?.includes(column.id),
+					)
+					.map((column) => column.id)
+			: ["name", "size", "type", "modified"],
+	)
+	const [widths, setWidths] = useState<Partial<Record<FileManagerSort, number>>>(() =>
+		Object.fromEntries(
+			columns.flatMap((column) => {
+				const value = saved?.widths?.[column.id]
+				return typeof value === "number" && Number.isFinite(value)
+					? [[column.id, Math.max(column.min, Math.min(1200, Math.round(value)))]]
+					: []
+			}),
+		),
+	)
 	const labels: Record<FileManagerSort, string> = {
 		name: t("fileManager.name"),
 		size: t("fileManager.columns.size"),
@@ -93,6 +106,7 @@ export function useFileManagerColumns() {
 		columns,
 		visible,
 		visibleIds,
+		widths,
 		labels,
 		setWidth,
 		previewWidth,

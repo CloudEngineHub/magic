@@ -17,8 +17,12 @@ import { getUserResourceKind } from "./userSpaceFilePresentation"
 import { toUserAttachment } from "./services/userSpaceFileService"
 import { useUserSpaceFileActions } from "./hooks/useUserSpaceFileActions"
 import { SidebarExpandableItem, type SidebarSectionOptions } from "../SidebarSection"
+import type { FileManagerProps } from "../TopicFilesButton/components/FileManager/types"
+import { useUserFileManagerDirectory } from "./hooks/useUserFileManagerDirectory"
 
 export interface UserSpaceFilesViewProps {
+	initialState?: FileManagerProps["initialState"]
+	onStateChange?: FileManagerProps["onStateChange"]
 	hidePlaces?: boolean
 	defaultView?: "list" | "grid"
 	defaultWritePath?: string
@@ -63,13 +67,15 @@ export default observer(function UserSpaceFilesView({
 	contentBefore,
 	active = true,
 	scrollElementRef,
+	initialState,
+	onStateChange,
 }: UserSpaceFilesViewProps) {
 	const { t } = useTranslation("super")
 	const identity = userFilesStore.currentIdentityKey
 	const mutationVersion = userFilesStore.mutationVersion
 	const hasScope = Boolean(scope)
 	const rootId = scope ? scope.rootId : userFilesStore.rootId
-	const parentId = compact ? rootId : (directoryId ?? rootId)
+	const parentId = hasScope && !rootId ? null : compact ? rootId : (directoryId ?? rootId)
 	const state = parentId ? userFilesStore.getDirectory(parentId) : undefined
 	const rootState = userFilesStore.getDirectory()
 	const loading = scope?.loading || (parentId ? !state?.loaded || state.loading : !scope)
@@ -77,8 +83,18 @@ export default observer(function UserSpaceFilesView({
 	const viewKey = scope?.path ?? "root"
 	const path = parentId ? userFilesStore.getPath(parentId) : []
 	const items = parentId ? userFilesStore.getTree(parentId) : []
+	const restoredDirectory = useUserFileManagerDirectory({
+		enabled:
+			active &&
+			!compact &&
+			(!scope || (Boolean(scope.rootId) && !scope.loading && !scope.error)),
+		directoryId,
+		rootId: scope?.rootId ?? undefined,
+		initialState,
+		onDirectoryChange,
+	})
 	useEffect(() => {
-		if (!active || (hasScope && !rootId)) return
+		if (!active || !compact || (hasScope && !rootId)) return
 		void userFilesStore
 			.getRoot()
 			.then((root) => {
@@ -98,7 +114,8 @@ export default observer(function UserSpaceFilesView({
 	}, [identity, parentId, rootId, hasScope, active, mutationVersion, compact])
 	const parent = async () => {
 		if (scope && (scope.loading || scope.error)) throw new Error("Directory is unavailable")
-		if (resolveParent && (!directoryId || directoryId === scope?.rootId)) return resolveParent()
+		if (resolveParent && (!parentId || !directoryId || directoryId === scope?.rootId))
+			return resolveParent()
 		if (scope && !parentId) throw new Error("Directory is unavailable")
 		const root = await userFilesStore.getRoot()
 		const file = userFilesStore.files.get(parentId ?? root.id)
@@ -113,6 +130,7 @@ export default observer(function UserSpaceFilesView({
 		topicId,
 	})
 	const refresh = async () => {
+		if (!compact) restoredDirectory.retry()
 		if (scope) {
 			scope.onRefresh()
 			if (parentId) await userFilesStore.loadTree(parentId, true)
@@ -239,6 +257,13 @@ export default observer(function UserSpaceFilesView({
 		)
 	const content = (
 		<FileManager
+			initialState={initialState}
+			onStateChange={onStateChange}
+			dataReady={
+				scope && scope.rootId === null
+					? !scope.loading && !scope.error
+					: restoredDirectory.ready
+			}
 			hidePlaces={hidePlaces}
 			defaultView={defaultView}
 			defaultWritePath={defaultWritePath}
@@ -252,7 +277,7 @@ export default observer(function UserSpaceFilesView({
 			context={{ kind: "user" }}
 			isActive={active}
 			loading={Boolean(loading)}
-			error={error}
+			error={error || Boolean(restoredDirectory.error)}
 			onRefresh={() => void refresh().catch(() => undefined)}
 			onOpen={(item) => onFileClick?.(item)}
 			onDirectoryChange={onDirectoryChange}

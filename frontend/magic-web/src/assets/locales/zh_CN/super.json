@@ -2474,6 +2474,7 @@
 			"scope": "所有可访问文件的回收记录，包含其他项目和个人空间；此处不按当前项目筛选。",
 			"title": "文件回收站"
 		},
+		"restoredDirectoryUnavailable": "上次浏览的目录已不可用，已打开最近的可用目录。",
 		"selectionHint": "单击选择，双击打开",
 		"sort": "排序",
 		"sortModified": "按修改时间",

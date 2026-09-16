@@ -29,8 +29,8 @@ export function createFileManagerTab(
 			display_config: {
 				previewPolicy: {
 					standalone: true,
-					persistTab: false,
-					restoreAsActive: false,
+					persistTab: true,
+					restoreAsActive: true,
 					syncWithAttachments: false,
 					allowShare: false,
 					allowVersionHistory: false,
