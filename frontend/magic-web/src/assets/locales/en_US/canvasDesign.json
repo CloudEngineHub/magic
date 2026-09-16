@@ -122,6 +122,8 @@
 			"title": "Crop"
 		},
 		"imageEraser": {
+			"invertErase": "Reverse erase",
+			"invertEraseShortcut": "(Option/Alt)",
 			"tip": "Paint areas to erase",
 			"title": "Eraser"
 		},

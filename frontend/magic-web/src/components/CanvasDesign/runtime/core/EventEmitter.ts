@@ -383,6 +383,7 @@ export interface CanvasEventMap {
 		strokeCount: number
 		canUndo: boolean
 		canRedo: boolean
+		mode: "erase" | "restore"
 	}
 
 	// 键盘事件
@@ -396,6 +397,8 @@ export interface CanvasEventMap {
 	"keyboard:zoom:fit": void
 	"keyboard:shift:down": void
 	"keyboard:shift:up": void
+	"keyboard:alt:down": void
+	"keyboard:alt:up": void
 	"keyboard:meta:down": void
 	"keyboard:meta:up": void
 	"keyboard:select:all": void

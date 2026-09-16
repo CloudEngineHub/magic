@@ -119,6 +119,8 @@
 			"title": "裁剪"
 		},
 		"imageEraser": {
+			"invertErase": "反向擦除",
+			"invertEraseShortcut": "(Option/Alt)",
 			"tip": "涂抹可擦除区域",
 			"title": "橡皮工具"
 		},
