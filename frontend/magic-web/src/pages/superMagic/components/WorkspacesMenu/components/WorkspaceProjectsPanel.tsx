@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react"
 import { useMemoizedFn } from "ahooks"
 import { observer } from "mobx-react-lite"
+import { comparer, reaction } from "mobx"
 import { Layers, Users, AppWindow, Clock3 } from "lucide-react"
 import { useTranslation } from "react-i18next"
 import { SuperMagicApi } from "@/apis"
@@ -125,6 +126,37 @@ function WorkspaceProjectsPanel({
 			pending.current = false
 		}
 	}, [open, loadWorkspaces, resetSource])
+
+	useEffect(() => {
+		if (!open) return
+		return reaction(
+			() =>
+				workspaceStore.workspaces.map(({ id, name, workspace_type }) => [
+					id,
+					name,
+					workspace_type,
+				]),
+			() => {
+				const updates = workspaceStore.workspaces.filter(
+					(workspace) => workspace.id && workspace.workspace_type === "default",
+				)
+				// 移动弹窗新建的目录同步到管理器；全局缓存不完整，不能覆盖已分页浏览的目录。
+				setWorkspaces((previous) =>
+					Array.from(
+						new Map(
+							[...previous, ...updates].map((workspace) => [workspace.id, workspace]),
+						).values(),
+					),
+				)
+				setSource((current) => {
+					if (current.type !== "workspace") return current
+					const workspace = updates.find((item) => item.id === current.workspace.id)
+					return workspace ? { ...current, workspace } : current
+				})
+			},
+			{ equals: comparer.structural },
+		)
+	}, [open])
 
 	const selectSource = (next: ProjectBrowserSource) => {
 		if (
