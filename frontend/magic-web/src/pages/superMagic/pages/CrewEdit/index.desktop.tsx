@@ -33,10 +33,10 @@ import {
 	useTopicHistoryLayoutState,
 } from "@/pages/superMagic/pages/TopicPage/hooks/useTopicHistoryLayoutState"
 import {
-	FileActionVisibilityProvider,
-	HIDE_COPY_MOVE_SHARE_FILE_AND_TOPIC_ACTIONS,
-	VIEWER_FILE_ACTIONS,
-} from "@/pages/superMagic/providers/file-action-visibility-provider"
+	FileAccessProvider,
+	EDITOR_FILE_CONFIG,
+	VIEWER_FILE_CONFIG,
+} from "@/pages/superMagic/providers/FileAccessProvider"
 import { isReadOnlyProject } from "@/pages/superMagic/utils/permission"
 import { convertSearchParams } from "@/routes/history/helpers"
 import { RouteName } from "@/routes/constants"
@@ -594,9 +594,7 @@ function CrewEditInner({ crewId }: { crewId: string }) {
 	}
 
 	return (
-		<FileActionVisibilityProvider
-			value={isViewer ? VIEWER_FILE_ACTIONS : HIDE_COPY_MOVE_SHARE_FILE_AND_TOPIC_ACTIONS}
-		>
+		<FileAccessProvider {...(isViewer ? VIEWER_FILE_CONFIG : EDITOR_FILE_CONFIG)}>
 			<div className="flex h-full w-full overflow-hidden" data-testid="crew-edit-page">
 				<CrewEditPanels
 					sidebarWidthPx={sidebarWidthPx}
@@ -683,7 +681,7 @@ function CrewEditInner({ crewId }: { crewId: string }) {
 					}
 				/>
 			</div>
-		</FileActionVisibilityProvider>
+		</FileAccessProvider>
 	)
 }
 
@@ -739,4 +737,10 @@ function CrewEditPage() {
 	)
 }
 
-export default CrewEditPage
+export default function FileAccessPage() {
+	return (
+		<FileAccessProvider>
+			<CrewEditPage />
+		</FileAccessProvider>
+	)
+}

@@ -1,3 +1,4 @@
+import { useFileAccess } from "@/pages/superMagic/providers/FileAccessProvider"
 import { useState, useRef } from "react"
 import { TFunction } from "i18next"
 import { getTemporaryDownloadUrl } from "@/pages/superMagic/utils/api"
@@ -87,6 +88,7 @@ function useFileExport({
 	const [exportProgress, setExportProgress] = useState(0)
 	const toastIdRef = useRef<string | number | null>(null)
 	const downloadProgress = useDownloadProgress()
+	const { permissions: access } = useFileAccess()
 
 	const startExport = () => {
 		setIsExporting(true)
@@ -152,6 +154,7 @@ function useFileExport({
 	}
 
 	const exportFile = async (fileIds: string[], fileVersion?: { [key: string]: number }) => {
+		if (!access.download) return
 		if (!fileIds || fileIds.length === 0) return
 
 		// 检查是否为文件夹
@@ -190,6 +193,7 @@ function useFileExport({
 	}
 
 	const exportPdf = async (fileIds: string[]) => {
+		if (!access.export) return
 		if (!fileIds || fileIds.length === 0) return
 
 		const documentExporter = documentExportService.get()
@@ -256,6 +260,7 @@ function useFileExport({
 	}
 
 	const exportPpt = async (fileIds: string[]) => {
+		if (!access.export) return
 		if (!fileIds || fileIds.length === 0) return
 
 		if (fileIds?.length > 0) {
@@ -272,6 +277,7 @@ function useFileExport({
 	}
 
 	const exportImage = async (fileIds: string[], format: ImageExportFormat = "png") => {
+		if (!access.export) return
 		if (!fileIds || fileIds.length === 0) return
 
 		const fileId = fileIds[0]

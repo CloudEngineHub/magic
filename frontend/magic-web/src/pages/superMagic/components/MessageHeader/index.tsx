@@ -51,7 +51,7 @@ import {
 	shouldSyncChatConversationName,
 	syncChatProjectNameOnly,
 } from "../../services/chatConversationNameSync"
-import { useFileActionVisibility } from "@/pages/superMagic/providers/file-action-visibility-provider"
+import { useFileAccess } from "@/pages/superMagic/providers/FileAccessProvider"
 import {
 	resolveMessageHeaderEditableTitle,
 	resolveMessageHeaderTitle,
@@ -124,8 +124,10 @@ function useTopicHistoryPanelController({
 	onExpandConversationPanel,
 }: MessageHeaderTopicHistoryPanelProps) {
 	const { t } = useTranslation("super")
-	const { hideCreateNewTopic } = useFileActionVisibility()
-	const shouldHideTopicEntry = hideCreateNewTopic
+	const {
+		options: { createNewTopic },
+	} = useFileAccess()
+	const shouldHideTopicEntry = !createNewTopic
 	const topics = topicStore.topics
 	const selectedTopic = topicStore.selectedTopic
 	const messages = useMemo(
@@ -362,7 +364,9 @@ function MessageHeader({
 	trailingActions,
 }: MessageHeaderProps) {
 	const { t } = useTranslation("super")
-	const { hideShareTopic } = useFileActionVisibility()
+	const {
+		options: { shareTopic },
+	} = useFileAccess()
 	const {
 		messages,
 		topics,
@@ -749,7 +753,7 @@ function MessageHeader({
 									</div>
 								) : null}
 
-								{!hideShareTopic ? (
+								{shareTopic ? (
 									<TopicSharePopover
 										open={sharePopoverVisible}
 										onOpenChange={(open) => {

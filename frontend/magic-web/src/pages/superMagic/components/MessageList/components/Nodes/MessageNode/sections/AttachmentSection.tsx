@@ -1,6 +1,7 @@
 import { FileResourceIcon } from "@/pages/superMagic/components/TopicFilesButton/components/FileResourceIcon"
 import { resolveFilePresentation } from "@/pages/superMagic/components/TopicFilesButton/utils/file-presentation"
 import type { FilePresentation } from "@/pages/superMagic/components/TopicFilesButton/utils/file-presentation"
+import { useFileAccess } from "@/pages/superMagic/providers/FileAccessProvider"
 import { memo, useMemo, type MouseEvent } from "react"
 import { observer } from "mobx-react-lite"
 import { useTranslation } from "react-i18next"
@@ -122,6 +123,7 @@ const FilePathAttachmentList = memo(function FilePathAttachmentList({
 	const { t } = useTranslation("super")
 	const [expanded, setExpanded] = useMessageViewState("file-path-attachments-expanded", false)
 	const downloadFileByPath = useFilePathAttachmentDownload()
+	const { permissions: access } = useFileAccess()
 
 	if (attachments.length === 0) return null
 
@@ -160,7 +162,9 @@ const FilePathAttachmentList = memo(function FilePathAttachmentList({
 						<div
 							key={attachment.filePath}
 							className="w-full cursor-pointer"
-							onClick={() => openFileByPath(attachment)}
+							onClick={() => {
+								if (access.view && access.preview) openFileByPath(attachment)
+							}}
 							data-testid="open-file-by-path"
 						>
 							<div
@@ -177,26 +181,31 @@ const FilePathAttachmentList = memo(function FilePathAttachmentList({
 								<span className="mr-2 min-w-0 flex-1 overflow-hidden text-ellipsis whitespace-nowrap text-foreground">
 									{attachment.fileName}
 								</span>
-								<MagicIcon
-									className="shrink-0 cursor-pointer text-muted-foreground [&_svg]:text-muted-foreground hover:[&_svg]:text-foreground/80"
-									onClick={(event: MouseEvent) => {
-										event.stopPropagation()
-										openFileByPath(attachment)
-									}}
-									component={IconEye}
-									stroke={2}
-									size={18}
-								/>
-								<MagicIcon
-									className="shrink-0 cursor-pointer text-muted-foreground [&_svg]:text-muted-foreground hover:[&_svg]:text-foreground/80"
-									onClick={(event: MouseEvent) => {
-										event.stopPropagation()
-										downloadFileByPath(attachment)
-									}}
-									component={IconDownload}
-									stroke={2}
-									size={18}
-								/>
+								{access.view && access.preview && (
+									<MagicIcon
+										className="shrink-0 cursor-pointer text-muted-foreground [&_svg]:text-muted-foreground hover:[&_svg]:text-foreground/80"
+										onClick={(event: MouseEvent) => {
+											event.stopPropagation()
+											if (access.view && access.preview)
+												openFileByPath(attachment)
+										}}
+										component={IconEye}
+										stroke={2}
+										size={18}
+									/>
+								)}
+								{access.download && (
+									<MagicIcon
+										className="shrink-0 cursor-pointer text-muted-foreground [&_svg]:text-muted-foreground hover:[&_svg]:text-foreground/80"
+										onClick={(event: MouseEvent) => {
+											event.stopPropagation()
+											downloadFileByPath(attachment)
+										}}
+										component={IconDownload}
+										stroke={2}
+										size={18}
+									/>
+								)}
 							</div>
 						</div>
 					))}

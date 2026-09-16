@@ -1,3 +1,4 @@
+import { useFileAccess } from "@/pages/superMagic/providers/FileAccessProvider"
 import { useCallback, useMemo, useState } from "react"
 import type { AttachmentItem } from "@/pages/superMagic/components/TopicFilesButton/hooks/types"
 import type { AttachmentFile } from "@/pages/superMagic/utils/image-url-resolver"
@@ -39,6 +40,7 @@ export function RecordingDetailShareDesktop({
 	allowDownloadProjectFile,
 	attachments,
 }: RecordingDetailShareDesktopProps) {
+	const { permissions: access } = useFileAccess()
 	const {
 		loading,
 		error,
@@ -115,15 +117,17 @@ export function RecordingDetailShareDesktop({
 
 	/** Downloads the original audio file when the share permission allows export. */
 	const handleDownloadAudio = useCallback(async () => {
+		if (!access.download) return
 		await downloadRecordingAudioFile({
 			fileId: fileMap?.audio?.file_id,
 			audioFile: fileMap?.audio,
 			fallbackName: `${title || "recording"}_audio`,
 		})
-	}, [fileMap?.audio, title])
+	}, [access.download, fileMap?.audio, title])
 
 	/** Downloads the transcript markdown directly from the shared attachment file id. */
 	const handleDownloadTranscript = useCallback(async () => {
+		if (!access.download) return
 		if (!fileMap?.transcript?.file_id) return
 		await downloadRecordingAttachmentFile({
 			fileId: fileMap.transcript.file_id,
@@ -131,20 +135,22 @@ export function RecordingDetailShareDesktop({
 				getAttachmentFileName(fileMap.transcript) ||
 				`${title || "recording"}_transcript.md`,
 		})
-	}, [fileMap?.transcript, title])
+	}, [access.download, fileMap?.transcript, title])
 
 	/** Downloads the notes markdown directly from the shared attachment file id. */
 	const handleDownloadNotes = useCallback(async () => {
+		if (!access.download) return
 		if (!fileMap?.notes?.file_id) return
 		await downloadRecordingAttachmentFile({
 			fileId: fileMap.notes.file_id,
 			fileName: getAttachmentFileName(fileMap.notes) || `${title || "recording"}_notes.md`,
 		})
-	}, [fileMap?.notes, title])
+	}, [access.download, fileMap?.notes, title])
 
 	/** Downloads one summary artifact at a time because share detail never exposes owner batch operations. */
 	const handleDownloadSummaryType = useCallback(
 		async (type: string) => {
+			if (!access.download) return
 			const fileRef = fileMap?.summaryFiles.find((item) => item.type === type)
 			if (!fileRef?.file?.file_id) return
 			await downloadRecordingAttachmentFile({
@@ -153,7 +159,7 @@ export function RecordingDetailShareDesktop({
 					getAttachmentFileName(fileRef.file) || `${title || "recording"}_${type}.md`,
 			})
 		},
-		[fileMap?.summaryFiles, title],
+		[access.download, fileMap?.summaryFiles, title],
 	)
 
 	const exportAvailability = useMemo(

@@ -8,7 +8,7 @@ import TopicFilesButton from "@/pages/superMagic/components/TopicFilesButton"
 import type { AttachmentItem } from "@/pages/superMagic/components/TopicFilesButton/hooks"
 import { useFileOpen } from "@/pages/superMagic/components/TopicFilesButton/hooks/useFileOpen"
 import { useMobileFilePreviewPubSub } from "@/pages/superMagic/hooks/useMobileFilePreviewPubSub"
-import { FileActionVisibilityProvider } from "@/pages/superMagic/providers/file-action-visibility-provider"
+import { FileAccessProvider } from "@/pages/superMagic/providers/FileAccessProvider"
 import PreviewDetailPopup, {
 	type PreviewDetail,
 	type PreviewDetailPopupRef,
@@ -161,7 +161,7 @@ function MicroAppPageMobileInner({
 	}
 
 	return (
-		<FileActionVisibilityProvider>
+		<FileAccessProvider>
 			<div
 				className="absolute inset-0 flex h-full min-h-0 w-full flex-col overflow-hidden bg-mobile-background"
 				data-testid="micro-app-page-mobile"
@@ -299,13 +299,13 @@ function MicroAppPageMobileInner({
 				selectedProject={selectedProject}
 				allowEdit={!isReadOnly}
 			/>
-		</FileActionVisibilityProvider>
+		</FileAccessProvider>
 	)
 }
 
 const MicroAppPageMobileInnerObserver = observer(MicroAppPageMobileInner)
 
-export default function MicroAppPageMobile() {
+function MicroAppPageMobile() {
 	const { appId = "" } = useParams<{ appId: string }>()
 	const navigate = useNavigate()
 	const { projectId, isPublished, setIsPublished, loading, error } =
@@ -340,5 +340,13 @@ export default function MicroAppPageMobile() {
 				onPublishStatusChange={setIsPublished}
 			/>
 		</AppStoreProvider>
+	)
+}
+
+export default function FileAccessPage() {
+	return (
+		<FileAccessProvider>
+			<MicroAppPageMobile />
+		</FileAccessProvider>
 	)
 }

@@ -3,11 +3,12 @@ import { FileResourceIcon } from "./components/FileResourceIcon"
 import { getFilePresentationIndex, resolveFilePresentation } from "./utils/file-presentation"
 import type { FileHelpContext } from "./utils/magic-system-folder"
 import { ProjectFileTag } from "./components/TopicFileTag"
+import { useFileAccess } from "@/pages/superMagic/providers/FileAccessProvider"
 import { IconChevronDown, IconChevronRight, IconDots } from "@tabler/icons-react"
 import { Loader2, ChevronDown } from "lucide-react"
 import { Flex, message } from "antd"
 import { Checkbox } from "@/components/shadcn-ui/checkbox"
-import { useMemo, useImperativeHandle, forwardRef, useRef, useEffect } from "react"
+import { useMemo, useImperativeHandle, forwardRef, useRef, useEffect, useCallback } from "react"
 import { createPortal } from "react-dom"
 import { useTranslation } from "react-i18next"
 import MagicFileIcon from "@/components/base/MagicFileIcon"
@@ -229,7 +230,7 @@ const TopicFilesCore = forwardRef<TopicFilesCoreRef, TopicFilesCoreProps>(functi
 		scrollElementRef,
 		attachments = [],
 		setUserSelectDetail,
-		onFileClick,
+		onFileClick: onFileClickProp,
 		projectId,
 		shareCode,
 		sharePassword,
@@ -276,6 +277,15 @@ const TopicFilesCore = forwardRef<TopicFilesCoreRef, TopicFilesCoreProps>(functi
 	},
 	ref,
 ) {
+	const { permissions: access } = useFileAccess()
+	// Folder, keyboard and custom display entries all use this callback to open a file.
+	const guardedFileClick = useCallback<NonNullable<TopicFilesCoreProps["onFileClick"]>>(
+		(item) => {
+			if (access.view && access.preview) onFileClickProp?.(item)
+		},
+		[access.view, access.preview, onFileClickProp],
+	)
+	const onFileClick = onFileClickProp ? guardedFileClick : undefined
 	const { t, i18n } = useTranslation("super")
 	const { styles, cx } = useStyles({ isExpanded: true })
 	const isMobile = useIsMobile()

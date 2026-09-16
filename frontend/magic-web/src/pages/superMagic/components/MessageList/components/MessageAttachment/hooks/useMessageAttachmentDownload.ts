@@ -1,3 +1,4 @@
+import { useFileAccess } from "@/pages/superMagic/providers/FileAccessProvider"
 import { useMemoizedFn } from "ahooks"
 import { useTranslation } from "react-i18next"
 import magicToast from "@/components/base/MagicToaster/utils"
@@ -16,6 +17,7 @@ import type { AttachmentProps } from "../type"
 /** Downloads message attachments with registered dependencies. */
 export function useMessageAttachmentDownload(messageAttachments?: AttachmentProps[]) {
 	const { t } = useTranslation("super")
+	const { permissions: access } = useFileAccess()
 	const { projectFilesStore } = useMessageListContext()
 	const downloadProgress = useDownloadProgress()
 
@@ -29,6 +31,7 @@ export function useMessageAttachmentDownload(messageAttachments?: AttachmentProp
 	})
 
 	return useMemoizedFn(async (fileId: string) => {
+		if (!access.download) return
 		const projectAttachments = projectFilesStore?.workspaceFilesList || []
 		const projectFile = projectAttachments.find((file) => file.file_id === fileId)
 		const messageFile = messageAttachments?.find((file) => file.file_id === fileId)

@@ -1,3 +1,4 @@
+import { useFileAccess, FileAccessProvider } from "@/pages/superMagic/providers/FileAccessProvider"
 import ContentRenderer from "./components/ContentRenderer"
 import { DetailType } from "./types"
 import { SuperMagicApi } from "@/apis"
@@ -47,12 +48,9 @@ import {
 	isFileShareAllowed,
 	isFileVersionHistoryAllowed,
 } from "./components/FilesViewer/hooks/previewPolicy"
-import {
-	FileActionVisibilityProvider,
-	useFileActionVisibility,
-} from "@/pages/superMagic/providers/file-action-visibility-provider"
 
-export default function Render(props: any) {
+function FileContentRender(props: any) {
+	const { permissions: access, options: inheritedOptions } = useFileAccess()
 	const {
 		type,
 		data,
@@ -121,16 +119,6 @@ export default function Render(props: any) {
 	const editingPresenceEnabled = isEditingPresenceEnabled(effectiveDisplayConfig)
 	const fileShareAllowed = isFileShareAllowed(effectiveDisplayConfig)
 	const fileVersionHistoryAllowed = isFileVersionHistoryAllowed(effectiveDisplayConfig)
-	const inheritedFileActionVisibility = useFileActionVisibility()
-	const fileActionVisibility = useMemo(
-		() => ({
-			...inheritedFileActionVisibility,
-			hideShareFile: inheritedFileActionVisibility.hideShareFile || !fileShareAllowed,
-			hideVersionHistory:
-				inheritedFileActionVisibility.hideVersionHistory || !fileVersionHistoryAllowed,
-		}),
-		[inheritedFileActionVisibility, fileShareAllowed, fileVersionHistoryAllowed],
-	)
 	const isPptRenderer =
 		type === DetailType.PowerPoint ||
 		type === DetailType.SlidesTemplate ||
@@ -346,6 +334,7 @@ export default function Render(props: any) {
 	}
 
 	const exportFile = async (fileId: string, fileVersion?: number) => {
+		if (!access.download || allowDownload === false) return
 		try {
 			const dependencyResult = await resolveSingleDocumentStaticDependencies({
 				fileIds: [fileId],
@@ -415,6 +404,7 @@ export default function Render(props: any) {
 	}
 
 	const exportPdf = async (fileId: string) => {
+		if (!access.export || allowDownload === false) return
 		if (!fileId) return
 
 		const documentExporter = documentExportService.get()
@@ -512,6 +502,7 @@ export default function Render(props: any) {
 	}
 
 	const exportRasterPdf = async (fileId: string, pageMode: "fit" | "paginate") => {
+		if (!access.export || allowDownload === false) return
 		if (!fileId) return
 
 		const documentExporter = documentExportService.get()
@@ -595,6 +586,7 @@ export default function Render(props: any) {
 		}
 	}
 	const exportPpt = async (fileId: string) => {
+		if (!access.export || allowDownload === false) return
 		const fileIds = getExportAllFileIds(fileId, attachments)
 		fileIds?.length > 0 &&
 			exportSingleFileToPpt({
@@ -609,6 +601,7 @@ export default function Render(props: any) {
 	}
 
 	const exportPptx = async (fileId: string) => {
+		if (!access.export || allowDownload === false) return
 		if (!fileId) return
 
 		const toastId = createRandomUuidV4()
@@ -708,6 +701,7 @@ export default function Render(props: any) {
 	}
 
 	const exportImage = async (fileId: string, format: ImageExportFormat = "png") => {
+		if (!access.export || allowDownload === false) return
 		if (!fileId) return
 
 		const toastId = createRandomUuidV4()
@@ -776,7 +770,8 @@ export default function Render(props: any) {
 		onPrevious,
 		onNext,
 		onFullscreen,
-		onDownload: onDownload ?? exportFile,
+		onDownload:
+			access.download && allowDownload !== false ? (onDownload ?? exportFile) : undefined,
 		totalFiles,
 		hasUserSelectDetail,
 		isFromNode,
@@ -830,7 +825,7 @@ export default function Render(props: any) {
 		documentFlowFullscreen: supportsDocumentFlow,
 		mdToolbarContainer,
 		isTabActive: props.isTabActive,
-		allowDownload,
+		allowDownload: allowDownload !== false,
 		audioPlayerMode,
 		projectId,
 		browserAttachments,
@@ -867,9 +862,15 @@ export default function Render(props: any) {
 						)
 					}
 				>
-					<FileActionVisibilityProvider value={fileActionVisibility}>
+					<FileAccessProvider
+						permissions={{ share: fileShareAllowed }}
+						options={{
+							versionHistory:
+								inheritedOptions.versionHistory && fileVersionHistoryAllowed,
+						}}
+					>
 						<ContentRenderer type={type} data={data} commonProps={commonProps} />
-					</FileActionVisibilityProvider>
+					</FileAccessProvider>
 				</Suspense>
 			</div>
 
@@ -884,5 +885,28 @@ export default function Render(props: any) {
 				progressHeight={4}
 			/>
 		</>
+	)
+}
+
+/** Avoid mounting file preview content when its containing scope disallows viewing. */
+export default function Render(props: any) {
+	const { permissions: access } = useFileAccess()
+	// Tool-only panels keep working; file previews can contain inline data without a file id.
+	const isFile = ![
+		DetailType.Terminal,
+		DetailType.Browser,
+		DetailType.Search,
+		DetailType.KnowledgeSearch,
+		DetailType.Empty,
+		DetailType.Deleted,
+		DetailType.FileTree,
+	].includes(props.type)
+	if (isFile && (!access.view || !access.preview)) return null
+	return (
+		<FileAccessProvider
+			permissions={{ download: props.allowDownload, export: props.allowDownload }}
+		>
+			<FileContentRender {...props} />
+		</FileAccessProvider>
 	)
 }

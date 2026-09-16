@@ -42,7 +42,7 @@ import {
 } from "@/pages/superMagic/services/chatConversationNameSync"
 import usePaginatedTopics from "@/pages/superMagic/hooks/usePaginatedTopics"
 import TopicService from "@/pages/superMagic/services/topicService"
-import { useFileActionVisibility } from "@/pages/superMagic/providers/file-action-visibility-provider"
+import { useFileAccess } from "@/pages/superMagic/providers/FileAccessProvider"
 
 interface MessageHeaderProps {
 	isConversationPanelCollapsed?: boolean
@@ -73,8 +73,10 @@ function MessageHeader({
 	hideTopicListModeIcon = false,
 }: MessageHeaderProps) {
 	const { t } = useTranslation("super")
-	const { hideCreateNewTopic } = useFileActionVisibility()
-	const shouldHideTopicEntry = hideCreateNewTopic
+	const {
+		options: { createNewTopic },
+	} = useFileAccess()
+	const shouldHideTopicEntry = !createNewTopic
 
 	const selectedTopic = topicStore.selectedTopic
 	const topicService = useMemo(() => new TopicService({ store: topicStore }), [topicStore])

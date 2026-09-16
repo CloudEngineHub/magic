@@ -1,3 +1,4 @@
+import { useFileAccess } from "@/pages/superMagic/providers/FileAccessProvider"
 import { useState, useEffect, useMemo, useCallback } from "react"
 import { downloadFileContent, getTemporaryDownloadUrl } from "@/pages/superMagic/utils/api"
 import { downloadFileWithAnchor, getFileType } from "@/pages/superMagic/utils/handleFIle"
@@ -37,6 +38,7 @@ export function useDetailActions({
 	filesViewerRef?: React.RefObject<FilesViewerRef>
 }) {
 	const [isFullscreen, setIsFullscreen] = useState(false)
+	const { permissions: access } = useFileAccess()
 	// 判断是否来自Node点击
 	const isFromNode = disPlayDetail?.isFromNode || false
 	const [currentIndex, setCurrentIndex] = useState<number>(-1)
@@ -124,6 +126,7 @@ export function useDetailActions({
 
 	// 处理打开文件
 	const handleOpenFile = (item: any) => {
+		if (!access.view || !access.preview) return
 		if (!item || !item.file_id) return
 		const fileVersion = attachmentsVersionMap.get(item.file_id)
 		// 未知格式由预览入口有界读取，不能在识别前先下载完整文件。
@@ -216,6 +219,7 @@ export function useDetailActions({
 		fileVersion?: number,
 		mode = "download" as DownloadImageMode,
 	) => {
+		if (!access.download) return
 		if (fileId) {
 			getTemporaryDownloadUrl({
 				file_ids: [fileId],

@@ -1,3 +1,4 @@
+import { useFileAccess } from "@/pages/superMagic/providers/FileAccessProvider"
 import { useState, useCallback } from "react"
 import { useTranslation } from "react-i18next"
 import type { AttachmentItem } from "./types"
@@ -280,6 +281,7 @@ export function useFileOperations(options: UseFileOperationsOptions = {}) {
 		downloadProgress,
 	} = options
 	const { t } = useTranslation("super")
+	const { permissions: access } = useFileAccess()
 	const waitForAttachmentMutation = useMemoizedFn(
 		(options: {
 			fileIds?: string[]
@@ -883,6 +885,7 @@ export function useFileOperations(options: UseFileOperationsOptions = {}) {
 	// 分享操作
 	const handleShareItem = useCallback(
 		(item: AttachmentItem) => {
+			if (!access.share) return
 			if (!selectedItems || !filteredFiles) {
 				// 如果没有选中项或文件列表，只分享当前文件
 				const clickedItemId = item.file_id || ""
@@ -907,7 +910,7 @@ export function useFileOperations(options: UseFileOperationsOptions = {}) {
 				})
 			}
 		},
-		[selectedItems, filteredFiles, getItemId, selectedProject?.project_name],
+		[access.share, selectedItems, filteredFiles, getItemId, selectedProject?.project_name],
 	)
 
 	// 处理分享保存
@@ -1034,6 +1037,7 @@ export function useFileOperations(options: UseFileOperationsOptions = {}) {
 
 	// Registered dependency parsers make linked resources part of the default download.
 	const handleDownloadOriginal = async (item: AttachmentItem, mode?: DownloadImageMode) => {
+		if (!access.download) return
 		if (fileScope !== "user" && supportsStaticDependencies(item)) {
 			await downloadDocumentWithDependencies(item)
 			return
@@ -1054,6 +1058,7 @@ export function useFileOperations(options: UseFileOperationsOptions = {}) {
 	// 下载PDF格式（Markdown 走 markdown 导出；HTML 走 exportPDF；仅 display_config.type === "slide" 时传 pptMode）
 	const handleDownloadPdf = useCallback(
 		async (item: AttachmentItem, folderChildren?: AttachmentItem[]) => {
+			if (!access.export) return
 			if (!item.file_id) return
 
 			const documentExporter = documentExportService.get()
@@ -1250,12 +1255,13 @@ export function useFileOperations(options: UseFileOperationsOptions = {}) {
 				})
 			}
 		},
-		[t, attachments],
+		[access.export, t, attachments],
 	)
 
 	// 下载PPT格式
 	const handleDownloadPpt = useCallback(
 		(item: AttachmentItem) => {
+			if (!access.export) return
 			if (item.file_id) {
 				const onStart = () => {
 					setExportingFiles((prev) => new Set(prev).add(item.file_id || ""))
@@ -1277,12 +1283,13 @@ export function useFileOperations(options: UseFileOperationsOptions = {}) {
 				})
 			}
 		},
-		[projectId, t],
+		[access.export, projectId, t],
 	)
 
 	// 导出可编辑PPTX（前端 html2pptx，通过 prepareExportSlides 服务准备数据）
 	const handleDownloadPptx = useCallback(
 		async (item: AttachmentItem, folderChildren?: AttachmentItem[]) => {
+			if (!access.export) return
 			if (!item.file_id) return
 
 			const toastId = createRandomUuidV4()
@@ -1400,12 +1407,13 @@ export function useFileOperations(options: UseFileOperationsOptions = {}) {
 				})
 			}
 		},
-		[t, attachments],
+		[access.export, t, attachments],
 	)
 
 	// 导出 HTML / 文本类文件 为图片（PNG / JPEG）
 	const handleDownloadImage = useCallback(
 		async (item: AttachmentItem, format: "png" | "jpeg" = "png") => {
+			if (!access.export) return
 			if (!item.file_id) return
 
 			const toastId = createRandomUuidV4()
@@ -1531,7 +1539,7 @@ export function useFileOperations(options: UseFileOperationsOptions = {}) {
 				})
 			}
 		},
-		[t, attachments],
+		[access.export, t, attachments],
 	)
 
 	// 文件下载功能 - 支持单个文件或多个文件
@@ -1543,6 +1551,7 @@ export function useFileOperations(options: UseFileOperationsOptions = {}) {
 			isFolder?: boolean,
 			downloadName?: string,
 		) => {
+			if (!access.download) return
 			const fileIds = Array.isArray(file_id) ? file_id : [file_id]
 			const folderDownloadToastId = isFolder ? createRandomUuidV4() : undefined
 
@@ -1890,7 +1899,7 @@ export function useFileOperations(options: UseFileOperationsOptions = {}) {
 		handleOpenFile,
 		handleMoveFile,
 		// 分享相关
-		shareModalVisible,
+		shareModalVisible: shareModalVisible && access.share,
 		setShareModalVisible,
 		shareFileInfo,
 		setShareFileInfo,

@@ -48,10 +48,10 @@ import {
 	runAsyncPublish,
 } from "@/pages/superMagic/utils/asyncPublish"
 import {
-	FileActionVisibilityProvider,
-	HIDE_COPY_MOVE_SHARE_FILE_AND_TOPIC_ACTIONS,
-	VIEWER_FILE_ACTIONS,
-} from "@/pages/superMagic/providers/file-action-visibility-provider"
+	FileAccessProvider,
+	EDITOR_FILE_CONFIG,
+	VIEWER_FILE_CONFIG,
+} from "@/pages/superMagic/providers/FileAccessProvider"
 import { isReadOnlyProject } from "@/pages/superMagic/utils/permission"
 import { SkillEditStoreProvider, useSkillEditStore } from "./context"
 import QuickActionCards from "./components/QuickActionCards"
@@ -852,9 +852,7 @@ function SkillEditWorkspace({ skillCode }: { skillCode: string }) {
 	}
 
 	return (
-		<FileActionVisibilityProvider
-			value={isViewer ? VIEWER_FILE_ACTIONS : HIDE_COPY_MOVE_SHARE_FILE_AND_TOPIC_ACTIONS}
-		>
+		<FileAccessProvider {...(isViewer ? VIEWER_FILE_CONFIG : EDITOR_FILE_CONFIG)}>
 			<>
 				<TopicDesktopPanels
 					containerClassName="flex h-full w-full min-w-0 items-center overflow-hidden"
@@ -1023,7 +1021,7 @@ function SkillEditWorkspace({ skillCode }: { skillCode: string }) {
 				/>
 				{noticeDialog}
 			</>
-		</FileActionVisibilityProvider>
+		</FileAccessProvider>
 	)
 }
 

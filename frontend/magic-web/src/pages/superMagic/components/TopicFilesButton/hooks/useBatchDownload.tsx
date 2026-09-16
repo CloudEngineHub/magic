@@ -1,5 +1,7 @@
 import { useState, useMemo, useRef } from "react"
 import type { AttachmentItem, ConfirmFileOperation } from "./types"
+import { useFileAccess } from "@/pages/superMagic/providers/FileAccessProvider"
+import { filterFileAccessMenuItems } from "../utils/file-access-menu"
 import { MenuProps } from "antd"
 import { collectFileIds } from "../utils/collectFileIds"
 import { collectSelectedItemIds } from "../utils/collectSelectedItemIds"
@@ -28,7 +30,6 @@ import { SuperMagicApi } from "@/apis"
 import useShareRoute from "../../../hooks/useShareRoute"
 import magicToast from "@/components/base/MagicToaster/utils"
 import { createRandomUuidV4 } from "@/utils/create-random-uuid-v4"
-import { useFileActionVisibility } from "@/pages/superMagic/providers/file-action-visibility-provider"
 import { isCachedChatWorkspaceProject } from "@/pages/superMagic/utils/isChatWorkspaceProject"
 import { normalizeMenuItems } from "../utils/menu-items"
 import { useMobileDeleteConfirmSheet } from "./useMobileDeleteConfirmSheet"
@@ -131,7 +132,11 @@ export function useBatchDownload(options: UseBatchDownloadOptions) {
 	const isChatProject = isCachedChatWorkspaceProject(selectedProject)
 	const { deleteConfirmNode, openDeleteConfirm } = useMobileDeleteConfirmSheet()
 	const { isShareRoute, isFileShare } = useShareRoute()
-	const { hideCopyTo, hideMoveTo, hideShareFile } = useFileActionVisibility()
+
+	const {
+		permissions: access,
+		options: { copyTo, moveTo },
+	} = useFileAccess()
 	const canDownload = allowDownload !== false
 
 	// 退出多选模式的辅助函数
@@ -389,7 +394,12 @@ export function useBatchDownload(options: UseBatchDownloadOptions) {
 
 	// 批量下载选中文件
 	const handleBatchDownload = async () => {
-		if (!canDownload || selectedItems.size === 0 || (!projectId && !options.onDownloadSelected))
+		if (
+			!access.download ||
+			!canDownload ||
+			selectedItems.size === 0 ||
+			(!projectId && !options.onDownloadSelected)
+		)
 			return
 		setBatchLoading(true)
 		let keepLoadingForPolling = false
@@ -529,7 +539,7 @@ export function useBatchDownload(options: UseBatchDownloadOptions) {
 	}
 
 	const handleExportPdfOrPpt = async (convert_type = "pdf") => {
-		if (!canDownload || selectedItems.size === 0) return
+		if (!access.export || !canDownload || selectedItems.size === 0) return
 		const convertType = convert_type as "pdf" | "ppt"
 		const format = convertType === "pdf" ? "pdf" : "pptx"
 		// Always resolve against the complete attachment tree. The filtered tree can omit
@@ -647,6 +657,7 @@ export function useBatchDownload(options: UseBatchDownloadOptions) {
 
 	// 批量分享选中文件
 	const handleBatchShare = () => {
+		if (!access.share) return
 		if (selectedItems.size === 0 || !onBatchShareClick) return
 
 		// PC multi-select stores the folder row ID itself, so share must preserve direct selections.
@@ -687,9 +698,9 @@ export function useBatchDownload(options: UseBatchDownloadOptions) {
 	}
 
 	// 创建下拉菜单项配置
-	const batchMenuItems = normalizeMenuItems([
+	const rawBatchMenuItems = [
 		// 分享文件（仅在项目内显示）
-		...(isInProject && allowEdit && allowShare && onBatchShareClick && !hideShareFile
+		...(isInProject && allowEdit && allowShare && onBatchShareClick && access.share
 			? [
 					{
 						key: "share",
@@ -800,7 +811,7 @@ export function useBatchDownload(options: UseBatchDownloadOptions) {
 					]
 				: []),
 		// 批量移动（仅在允许编辑时显示）
-		...((isInProject || options.fileScope === "user") && allowEdit && allowMove && !hideMoveTo
+		...((isInProject || options.fileScope === "user") && allowEdit && allowMove && moveTo
 			? [
 					{
 						key: "move",
@@ -816,7 +827,7 @@ export function useBatchDownload(options: UseBatchDownloadOptions) {
 				]
 			: []),
 		// 批量复制（仅在允许编辑时显示）
-		...(((isInProject && allowEdit) || allowCopyTo) && allowCopy && !hideCopyTo
+		...(((isInProject && allowEdit) || allowCopyTo) && allowCopy && copyTo
 			? [
 					{
 						key: "copy",
@@ -865,7 +876,10 @@ export function useBatchDownload(options: UseBatchDownloadOptions) {
 					},
 				]
 			: []),
-	]).filter(
+	]
+	const batchMenuItems = normalizeMenuItems(
+		filterFileAccessMenuItems(rawBatchMenuItems, access),
+	).filter(
 		(item) =>
 			options.fileScope !== "user" ||
 			!item ||

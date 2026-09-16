@@ -27,7 +27,7 @@ import type { HandleSendParams } from "@/pages/superMagic/services/messageSendFl
 import type { MentionListItem } from "@/components/business/MentionPanel/tiptap-plugin/types"
 import type { ModelItem } from "@/pages/superMagic/components/MessageEditor/types"
 import projectFilesStore from "@/stores/projectFiles"
-import { useFileActionVisibility } from "@/pages/superMagic/providers/file-action-visibility-provider"
+import { useFileAccess } from "@/pages/superMagic/providers/FileAccessProvider"
 import type { MentionPanelStore } from "@/components/business/MentionPanel/builtin-store"
 import ChatProjectMessageLayout from "@/pages/superMagic/pages/ChatProjectPage/components/ChatProjectMessageLayout"
 import { resolveComposerMinInputHeight } from "@/pages/superMagic/components/ConversationInputResize/constants"
@@ -162,9 +162,11 @@ function TopicMessagePanel({
 }: TopicMessagePanelProps) {
 	const scopedTopicStore = topicStoreProp ?? topicStore
 	const scopedProjectFilesStore = projectFilesStoreProp ?? projectFilesStore
-	// Chat detail route hides branch-topic actions via FileActionVisibilityProvider.
-	const { hideCreateNewTopic } = useFileActionVisibility()
-	const allowTopicBranchActions = !hideCreateNewTopic
+	// Chat detail route hides branch-topic actions via FileAccessProvider.
+	const {
+		options: { createNewTopic },
+	} = useFileAccess()
+	const allowTopicBranchActions = createNewTopic
 
 	/**
 	 * 聊天页的话题模式，用于已有话题的模式展示或新话题的模式切换

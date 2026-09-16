@@ -1,3 +1,4 @@
+import { FileAccessProvider } from "@/pages/superMagic/providers/FileAccessProvider"
 import { type ComponentProps, useCallback, useEffect, useMemo, useState } from "react"
 import { useParams } from "react-router"
 import { useTranslation } from "react-i18next"
@@ -50,7 +51,7 @@ function buildPreviewFile(entryFile: AttachmentItem) {
 	}
 }
 
-export default function MicroAppSharePage() {
+function MicroAppSharePage() {
 	const { t } = useTranslation("super")
 	const { appId = "" } = useParams<{ appId: string }>()
 	useMicroAppManifestLinks(appId)
@@ -237,5 +238,13 @@ export default function MicroAppSharePage() {
 				) : null}
 			</main>
 		</div>
+	)
+}
+
+export default function FileAccessPage() {
+	return (
+		<FileAccessProvider>
+			<MicroAppSharePage />
+		</FileAccessProvider>
 	)
 }

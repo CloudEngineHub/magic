@@ -1,3 +1,4 @@
+import { useFileAccess } from "@/pages/superMagic/providers/FileAccessProvider"
 import MagicDropdown from "@/components/base/MagicDropdown"
 import {
 	IconDownload,
@@ -59,6 +60,7 @@ export function useExportMenuItems({
 }) {
 	const { t } = useTranslation("super")
 	const { styles } = useStyles()
+	const { permissions: access } = useFileAccess()
 	const exportMenuItems: MenuProps["items"] = useMemo(
 		() =>
 			guardMenuItems(
@@ -141,11 +143,13 @@ export function useExportMenuItems({
 								},
 							]
 						: []),
-				],
+				].filter((item) => (item.key === "source" ? access.download : access.export)),
 				beforeAction,
 			),
 		[
 			beforeAction,
+			access.download,
+			access.export,
 			handleExportPDF,
 			handleExportPPT,
 			handleExportPptx,
@@ -161,7 +165,7 @@ export function useExportMenuItems({
 		],
 	)
 
-	const ExportDropdownButton = (
+	const ExportDropdownButton = exportMenuItems?.length ? (
 		<MagicDropdown
 			menu={{ items: exportMenuItems }}
 			placement="bottomRight"
@@ -186,7 +190,7 @@ export function useExportMenuItems({
 				/>
 			</span>
 		</MagicDropdown>
-	)
+	) : null
 
 	return { ExportDropdownButton, exportMenuItems }
 }

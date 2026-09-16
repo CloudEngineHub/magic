@@ -1,3 +1,5 @@
+import { useFileAccess } from "@/pages/superMagic/providers/FileAccessProvider"
+import { filterFileAccessMenuItems } from "../utils/file-access-menu"
 import type { ReactNode } from "react"
 import { useTranslation } from "react-i18next"
 import {
@@ -39,7 +41,6 @@ import {
 	type SingleFileDownloadHandlers,
 } from "../utils/build-single-file-download-menu"
 import { createFileMenuItems } from "../components/hooks/useFileMenuItems"
-import { useFileActionVisibility } from "@/pages/superMagic/providers/file-action-visibility-provider"
 import { normalizeMenuItems, type TopicFilesMenuItem } from "../utils/menu-items"
 import { isMagicSystemFolder } from "../utils/magic-system-folder"
 import type { AttachmentIndex } from "../utils/attachmentIndex"
@@ -292,11 +293,15 @@ function hasDisplayConfigInAncestors(item: AttachmentItem, treeIndex?: Attachmen
  * useContextMenu - 处理右键菜单配置
  */
 export function useContextMenu(options: UseContextMenuOptions) {
+	const {
+		permissions: access,
+		options: { copyTo, createNewTopic, moveTo },
+	} = useFileAccess()
 	const { t } = useTranslation("super")
 	const { styles } = useStyles()
 	const isMobile = useIsMobile()
 	const { deleteConfirmNode, openDeleteConfirm } = useMobileDeleteConfirmSheet()
-	const { hideCopyTo, hideCreateNewTopic, hideMoveTo, hideShareFile } = useFileActionVisibility()
+
 	const {
 		handleUploadFile,
 		handleUploadFolder,
@@ -633,7 +638,7 @@ export function useContextMenu(options: UseContextMenuOptions) {
 					onClick: () => handleStartRename(item),
 					disabled: isMoving,
 				},
-				...(handleMoveFile && !hideMoveTo
+				...(handleMoveFile && moveTo
 					? [
 							{
 								key: "moveFile",
@@ -646,7 +651,7 @@ export function useContextMenu(options: UseContextMenuOptions) {
 							},
 						]
 					: []),
-				...(onCopyFile && !hideCopyTo
+				...(onCopyFile && copyTo
 					? [
 							{
 								key: "copyFile",
@@ -689,7 +694,7 @@ export function useContextMenu(options: UseContextMenuOptions) {
 								onClick: () => handleAddMultipleFilesToNewChat?.(),
 							},
 						].filter((menuItem) =>
-							hideCreateNewTopic ? menuItem.key !== "addSelectedToNewChat" : true,
+							!createNewTopic ? menuItem.key !== "addSelectedToNewChat" : true,
 						)
 					: handleAddToCurrentChat && handleAddToNewChat
 						? [
@@ -756,7 +761,7 @@ export function useContextMenu(options: UseContextMenuOptions) {
 									onClick: () => handleAddToNewChat(item),
 								},
 							].filter((menuItem) =>
-								hideCreateNewTopic ? menuItem.key !== "addToNewChat" : true,
+								!createNewTopic ? menuItem.key !== "addToNewChat" : true,
 							)
 						: []),
 				{ type: "divider" as const },
@@ -775,7 +780,7 @@ export function useContextMenu(options: UseContextMenuOptions) {
 					return downloadMenuItems
 				})(),
 				{ type: "divider" as const },
-				...(handleShareItem && !hideShareFile
+				...(handleShareItem && access.share
 					? [
 							{
 								key: "share",
@@ -848,7 +853,9 @@ export function useContextMenu(options: UseContextMenuOptions) {
 				},
 			)
 
-			return normalizeMenuItems(filterMenuItems?.(menuItems, item) || menuItems)
+			return normalizeMenuItems(
+				filterFileAccessMenuItems(filterMenuItems?.(menuItems, item) || menuItems, access),
+			)
 		} else {
 			const convertPresentationMenuItem: MenuItem | undefined =
 				!isMobile && handleConvertToSlidesTemplate && isConvertiblePresentationFile(item)
@@ -877,7 +884,7 @@ export function useContextMenu(options: UseContextMenuOptions) {
 					onClick: () => handleStartRename(item),
 					disabled: isMoving,
 				},
-				...(handleMoveFile && !hideMoveTo
+				...(handleMoveFile && moveTo
 					? [
 							{
 								key: "moveFile",
@@ -890,7 +897,7 @@ export function useContextMenu(options: UseContextMenuOptions) {
 							},
 						]
 					: []),
-				...(onCopyFile && !hideCopyTo
+				...(onCopyFile && copyTo
 					? [
 							{
 								key: "copyFile",
@@ -944,7 +951,7 @@ export function useContextMenu(options: UseContextMenuOptions) {
 								onClick: () => handleAddMultipleFilesToNewChat?.(),
 							},
 						].filter((menuItem) =>
-							hideCreateNewTopic ? menuItem.key !== "addSelectedToNewChat" : true,
+							!createNewTopic ? menuItem.key !== "addSelectedToNewChat" : true,
 						)
 					: handleAddToCurrentChat && handleAddToNewChat
 						? [
@@ -1011,7 +1018,7 @@ export function useContextMenu(options: UseContextMenuOptions) {
 									onClick: () => handleAddToNewChat(item),
 								},
 							].filter((menuItem) =>
-								hideCreateNewTopic ? menuItem.key !== "addToNewChat" : true,
+								!createNewTopic ? menuItem.key !== "addToNewChat" : true,
 							)
 						: []),
 				{ type: "divider" as const },
@@ -1030,7 +1037,7 @@ export function useContextMenu(options: UseContextMenuOptions) {
 
 			menuItems.push(
 				{ type: "divider" as const },
-				...(handleShareItem && !hideShareFile
+				...(handleShareItem && access.share
 					? [
 							{
 								key: "share",
@@ -1082,7 +1089,9 @@ export function useContextMenu(options: UseContextMenuOptions) {
 			)
 		}
 
-		return normalizeMenuItems(filterMenuItems?.(menuItems, item) || menuItems)
+		return normalizeMenuItems(
+			filterFileAccessMenuItems(filterMenuItems?.(menuItems, item) || menuItems, access),
+		)
 	}
 
 	return {

@@ -5,7 +5,7 @@ import { useMemoizedFn, useSize } from "ahooks"
 
 import Detail from "@/pages/superMagic/components/Detail"
 import { getToolDetailSelectionTarget } from "@/pages/superMagic/components/MessageList/components/Nodes/toolDetailSelection"
-import { FileActionVisibilityProvider } from "@/pages/superMagic/providers/file-action-visibility-provider"
+import { FileAccessProvider } from "@/pages/superMagic/providers/FileAccessProvider"
 import TopicFilesButton from "@/pages/superMagic/components/TopicFilesButton"
 import useResizablePanel from "@/pages/superMagic/hooks/useResizablePanel"
 import { useScopedMessageHeaderTopicActions } from "@/pages/superMagic/hooks/useScopedMessageHeaderTopicActions"
@@ -265,7 +265,7 @@ function MicroAppPageInner({
 	}
 
 	return (
-		<FileActionVisibilityProvider>
+		<FileAccessProvider>
 			<div
 				className={cn(
 					"flex h-full w-full flex-col rounded-lg border border-border bg-background",
@@ -514,7 +514,7 @@ function MicroAppPageInner({
 				selectedProject={selectedProject}
 				allowEdit={!isReadOnly}
 			/>
-		</FileActionVisibilityProvider>
+		</FileAccessProvider>
 	)
 }
 
@@ -524,4 +524,10 @@ function MicroAppPageDesktop() {
 	return <MicroAppDesktopRoute Content={MicroAppPageInnerObserver} />
 }
 
-export default MicroAppPageDesktop
+export default function FileAccessPage() {
+	return (
+		<FileAccessProvider>
+			<MicroAppPageDesktop />
+		</FileAccessProvider>
+	)
+}
