@@ -94,6 +94,8 @@ interface TaskFileRepositoryInterface
      */
     public function getByProjectParentAndName(int $projectId, ?int $parentId, string $fileName, bool $withTrash = false): ?TaskFileEntity;
 
+    public function getBySpaceParentAndName(string $spaceType, int $projectId, ?int $parentId, string $fileName, string $userId, string $organizationCode, bool $withTrash = false): ?TaskFileEntity;
+
     /**
      * 根据项目、父目录和文件名批量查询直接子节点。
      *

@@ -179,7 +179,8 @@ class MagicFSFileAppService extends AbstractAppService
             null,                                    // source
             $requestDTO->getFileMetadata(),          // 持久化的插件 flag，如 local_shadow
             $requestDTO->getReuseDeletedFileId(),    // rollback 重放时请求复用已软删除同名的 file_id
-            (int) $messageMetadata->getTopicId()     // 直接透传 topic_id，作为 task 查不到时的 fallback
+            (int) $messageMetadata->getTopicId(),    // 直接透传 topic_id，作为 task 查不到时的 fallback
+            $requestDTO->getSpaceType()
         );
 
         // Dispatch file uploaded event so downstream subscribers are notified
