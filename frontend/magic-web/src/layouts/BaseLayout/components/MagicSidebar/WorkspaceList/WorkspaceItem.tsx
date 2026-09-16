@@ -297,7 +297,7 @@ function WorkspaceItem({
 								)}
 								<div
 									className={cn(
-										"absolute inset-y-0 right-2 flex items-center gap-2 bg-gradient-to-l from-sidebar from-70% to-transparent pl-4 transition-opacity group-focus-within/workspace-row:pointer-events-auto group-focus-within/workspace-row:opacity-100 no-hover:pointer-events-auto no-hover:opacity-100",
+										"absolute inset-y-0 right-2 flex items-center gap-2 bg-gradient-to-l from-sidebar from-70% to-transparent pl-4 transition-opacity group-focus-within/workspace-row:pointer-events-auto group-focus-within/workspace-row:opacity-100 group-hover/workspace-row:from-sidebar-accent group-data-[active=true]/workspace-row:from-sidebar-accent no-hover:pointer-events-auto no-hover:opacity-100",
 										isHovered || isMenuOpen
 											? "opacity-100"
 											: "pointer-events-none opacity-0",

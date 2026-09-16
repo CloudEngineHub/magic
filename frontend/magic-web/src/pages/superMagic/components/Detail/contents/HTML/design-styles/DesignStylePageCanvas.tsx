@@ -85,7 +85,7 @@ export default function DesignStylePageCanvas({ style, viewport }: DesignStylePa
 		<section data-testid="design-style-page-canvas">
 			<div className="min-w-0">
 				<div
-					className="mx-auto overflow-hidden rounded-md bg-background ring-1 ring-inset ring-foreground/10"
+					className="mx-auto overflow-hidden rounded-md border border-border bg-background"
 					style={{ width: WIDTHS[viewport] }}
 					data-testid="design-style-scene-viewport"
 					data-viewport={viewport}
