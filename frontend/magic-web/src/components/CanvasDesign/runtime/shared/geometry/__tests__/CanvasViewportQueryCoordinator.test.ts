@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from "vitest"
+import { ElementTypeEnum } from "../../../document/types"
 import type { Rect } from "../../ids"
 import { CanvasViewportQueryCoordinator } from "../CanvasViewportQueryCoordinator"
 
@@ -11,7 +12,13 @@ function intersectsRect(left: Rect, right: Rect): boolean {
 	)
 }
 
-function createCoordinator(boundsById: Map<string, Rect>) {
+function createCoordinator(
+	boundsById: Map<string, Rect>,
+	options?: {
+		parentById?: Map<string, string>
+		typeById?: Map<string, string>
+	},
+) {
 	let geometryRevision = 0
 	let viewportRect: Rect = { x: 0, y: 0, width: 100, height: 100 }
 	let viewportScale = 1
@@ -28,6 +35,16 @@ function createCoordinator(boundsById: Map<string, Rect>) {
 	})
 	const getElementBounds = vi.fn((elementId: string) => boundsById.get(elementId) ?? null)
 	const canvas = {
+		elementManager: {
+			findParentIdForElement: (elementId: string) => options?.parentById?.get(elementId),
+			getElementData: (elementId: string) =>
+				boundsById.has(elementId)
+					? {
+							id: elementId,
+							type: options?.typeById?.get(elementId) ?? ElementTypeEnum.Image,
+						}
+					: undefined,
+		},
 		geometryCacheManager: {
 			getElementBounds,
 			getRevision: () => geometryRevision,
@@ -117,6 +134,46 @@ describe("CanvasViewportQueryCoordinator", () => {
 		expect(queryElementIdsByExpandedRect).toHaveBeenCalledTimes(1)
 		expect(moved.visibleElementIds.size).toBe(0)
 		expect(moved.nearElementIds).toEqual(new Set(["left", "right"]))
+	})
+
+	it("clips nested Frame descendants before sharing viewport candidates", () => {
+		const parentById = new Map([
+			["group", "outer-frame"],
+			["inner-frame", "group"],
+			["inside", "inner-frame"],
+			["outside-inner-frame", "inner-frame"],
+			["partially-clipped", "inner-frame"],
+		])
+		const typeById = new Map([
+			["outer-frame", ElementTypeEnum.Frame],
+			["group", ElementTypeEnum.Group],
+			["inner-frame", ElementTypeEnum.Frame],
+		])
+		const { coordinator, queryElementIdsByExpandedRect, setViewport } = createCoordinator(
+			new Map([
+				["outer-frame", { x: 0, y: 0, width: 100, height: 100 }],
+				["group", { x: 0, y: 0, width: 100, height: 100 }],
+				["inner-frame", { x: 20, y: 20, width: 40, height: 40 }],
+				["inside", { x: 30, y: 30, width: 10, height: 10 }],
+				["outside-inner-frame", { x: 70, y: 30, width: 10, height: 10 }],
+				["partially-clipped", { x: 55, y: 30, width: 20, height: 10 }],
+			]),
+			{ parentById, typeById },
+		)
+
+		const initial = coordinator.getSnapshot()
+
+		expect(initial.visibleElementIds).toEqual(
+			new Set(["outer-frame", "group", "inner-frame", "inside", "partially-clipped"]),
+		)
+		expect(initial.labelElementIds).not.toContain("outside-inner-frame")
+
+		setViewport({ x: 65, y: 20, width: 20, height: 20 })
+		const moved = coordinator.getSnapshot()
+
+		expect(queryElementIdsByExpandedRect).toHaveBeenCalledTimes(1)
+		expect(moved.visibleElementIds).toEqual(new Set(["outer-frame", "group"]))
+		expect(moved.nearElementIds).not.toContain("outside-inner-frame")
 	})
 
 	it("rebuilds coverage after crossing its boundary or changing geometry", () => {

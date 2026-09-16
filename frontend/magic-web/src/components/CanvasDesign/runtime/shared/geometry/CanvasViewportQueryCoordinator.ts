@@ -1,4 +1,5 @@
 import type { Canvas } from "../../core/Canvas"
+import { ElementTypeEnum } from "../../document/types"
 import type { Rect } from "../ids"
 import { getViewportCanvasRect } from "../placement/elementUtils"
 import { containsRect, expandRect, intersectsRect } from "./GeometryCacheManager"
@@ -38,6 +39,15 @@ function areRectsEqual(left: Rect, right: Rect): boolean {
 	)
 }
 
+function getIntersectionRect(left: Rect, right: Rect): Rect | null {
+	const minX = Math.max(left.x, right.x)
+	const minY = Math.max(left.y, right.y)
+	const maxX = Math.min(left.x + left.width, right.x + right.width)
+	const maxY = Math.min(left.y + left.height, right.y + right.height)
+	if (maxX <= minX || maxY <= minY) return null
+	return { x: minX, y: minY, width: maxX - minX, height: maxY - minY }
+}
+
 /**
  * Owns the spatial result for one Canvas viewport generation.
  *
@@ -49,6 +59,9 @@ export class CanvasViewportQueryCoordinator {
 	private readonly canvas: Canvas
 	private coverageCache: ViewportCoverageCache | null = null
 	private currentSnapshot: CanvasViewportSpatialSnapshot | null = null
+	private clippingFrameIdsByParentId = new Map<string, readonly string[] | null>()
+	private clippingFrameBoundsById = new Map<string, Rect | null>()
+	private clippingHierarchyRevision: number | null = null
 	private generation = 0
 	private destroyed = false
 
@@ -115,6 +128,9 @@ export class CanvasViewportQueryCoordinator {
 		this.destroyed = true
 		this.coverageCache = null
 		this.currentSnapshot = null
+		this.clippingFrameIdsByParentId.clear()
+		this.clippingFrameBoundsById.clear()
+		this.clippingHierarchyRevision = null
 	}
 
 	private rebuildCoverage(viewportRect: Rect, geometryRevision: number): ViewportCoverageCache {
@@ -126,18 +142,89 @@ export class CanvasViewportQueryCoordinator {
 			Math.max(viewportRect.width, viewportRect.height) *
 			CANVAS_VIEWPORT_COVERAGE_PADDING_RATIO
 		const coverageRect = expandRect(viewportRect, coveragePadding)
+		if (this.clippingHierarchyRevision !== geometryRevision) {
+			this.clippingFrameIdsByParentId.clear()
+			this.clippingFrameBoundsById.clear()
+			this.clippingHierarchyRevision = geometryRevision
+		}
 		const elementIds = this.canvas.geometryCacheManager.queryElementIdsByExpandedRect(
 			viewportRect,
 			coveragePadding,
 		)
 		const elements: CoverageElement[] = []
 		for (const elementId of elementIds) {
-			const bounds = this.canvas.geometryCacheManager.getElementBounds(elementId)
+			const bounds = this.getViewportClippedBounds(elementId)
 			if (bounds) elements.push({ elementId, bounds })
 		}
 
 		const coverage = { geometryRevision, coverageRect, elements }
 		this.coverageCache = coverage
 		return coverage
+	}
+
+	/**
+	 * Spatial entries use scene bounds, which can extend beyond an ancestor Frame's clip. Keep the
+	 * shared viewport result on effective visible bounds so every downstream consumer avoids those
+	 * false-positive candidates without repeating the same ancestor walk.
+	 */
+	private getViewportClippedBounds(elementId: string): Rect | null {
+		let bounds = this.canvas.geometryCacheManager.getElementBounds(elementId)
+		if (!bounds) return null
+
+		const parentId = this.canvas.elementManager.findParentIdForElement(elementId)
+		if (!parentId) return bounds
+
+		const clippingFrameIds = this.getClippingFrameIds(parentId)
+		if (!clippingFrameIds) return null
+		for (const frameId of clippingFrameIds) {
+			const frameBounds = this.getClippingFrameBounds(frameId)
+			if (!frameBounds) return null
+			bounds = getIntersectionRect(bounds, frameBounds)
+			if (!bounds) return null
+		}
+		return bounds
+	}
+
+	private getClippingFrameBounds(frameId: string): Rect | null {
+		if (this.clippingFrameBoundsById.has(frameId)) {
+			return this.clippingFrameBoundsById.get(frameId) ?? null
+		}
+
+		const bounds = this.canvas.geometryCacheManager.getElementBounds(frameId)
+		this.clippingFrameBoundsById.set(frameId, bounds)
+		return bounds
+	}
+
+	private getClippingFrameIds(
+		parentId: string,
+		resolvingParentIds: Set<string> = new Set(),
+	): readonly string[] | null {
+		if (this.clippingFrameIdsByParentId.has(parentId)) {
+			return this.clippingFrameIdsByParentId.get(parentId) ?? null
+		}
+		if (resolvingParentIds.has(parentId)) return null
+		resolvingParentIds.add(parentId)
+
+		const parent = this.canvas.elementManager.getElementData(parentId)
+		if (!parent) {
+			this.clippingFrameIdsByParentId.set(parentId, null)
+			return null
+		}
+
+		const ancestorParentId = this.canvas.elementManager.findParentIdForElement(parentId)
+		const ancestorFrameIds = ancestorParentId
+			? this.getClippingFrameIds(ancestorParentId, resolvingParentIds)
+			: []
+		if (!ancestorFrameIds) {
+			this.clippingFrameIdsByParentId.set(parentId, null)
+			return null
+		}
+
+		const frameIds =
+			parent.type === ElementTypeEnum.Frame
+				? [parentId, ...ancestorFrameIds]
+				: ancestorFrameIds
+		this.clippingFrameIdsByParentId.set(parentId, frameIds)
+		return frameIds
 	}
 }

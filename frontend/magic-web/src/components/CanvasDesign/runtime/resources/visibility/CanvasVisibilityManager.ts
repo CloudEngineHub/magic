@@ -141,7 +141,7 @@ const MAX_VISIBLE_AUDIO_LOAD_REQUESTS_PER_QUERY = MAX_VISIBLE_VIDEO_LOAD_REQUEST
 const MAX_NEAR_AUDIO_LOAD_REQUESTS_PER_QUERY = MAX_NEAR_VIDEO_LOAD_REQUESTS_PER_QUERY
 const VISIBILITY_DRAIN_DELAY_MS = 80
 const INITIAL_VISIBLE_CRITICAL_WINDOW_MS = 5000
-const MAX_INITIAL_VISIBLE_CONTAINER_IMAGE_REQUESTS = 48
+const MAX_INITIAL_VISIBLE_CONTAINER_MEDIA_REQUESTS = 48
 const VIEWPORT_MOVEMENT_SCALE_REFRESH_RATIO = 1.15
 const IMAGE_VARIANT_SWITCH_COOLDOWN_MS = 450
 const DECODED_IMAGE_RETENTION_GRACE_MS = 5000
@@ -175,8 +175,7 @@ interface RequestedAudioLoadState {
 type ViewportResourceMediaType = "image" | "video" | "audio"
 
 interface ContainerRootCache {
-	allContainerCount: number
-	rootContainers: LayerElement[]
+	rootContainerIds: string[]
 }
 
 interface ViewportElementQueryResult {
@@ -1383,23 +1382,11 @@ export class CanvasVisibilityManager {
 	private getContainerRootCache(): ContainerRootCache {
 		if (this.containerRootCache) return this.containerRootCache
 
-		const allElements = this.canvas.elementManager.getAllElements()
-		const nestedElementIds = new Set<string>()
-		let allContainerCount = 0
-		allElements.forEach((element) => {
-			if (isContainerElement(element)) {
-				allContainerCount += 1
-			}
-			if (!hasChildren(element)) return
-			element.children.forEach((child) => nestedElementIds.add(child.id))
-		})
-		const rootContainers = allElements.filter(
-			(element) => isContainerElement(element) && !nestedElementIds.has(element.id),
-		)
-
 		this.containerRootCache = {
-			allContainerCount,
-			rootContainers,
+			rootContainerIds: this.canvas.elementManager
+				.getAllElements()
+				.filter(isContainerElement)
+				.map((element) => element.id),
 		}
 		return this.containerRootCache
 	}
@@ -1614,6 +1601,8 @@ export class CanvasVisibilityManager {
 		const nearVideoCandidates: VideoLoadCandidate[] = []
 		const visibleAudioCandidates: AudioLoadCandidate[] = []
 		const nearAudioCandidates: AudioLoadCandidate[] = []
+		const frameAdjustedVideoIds = new Set<string>()
+		const frameAdjustedAudioIds = new Set<string>()
 
 		visibleIds.forEach((elementId) => {
 			const candidate = this.createCandidate(
@@ -1668,28 +1657,19 @@ export class CanvasVisibilityManager {
 				visibleCandidates.push(...imageCandidates)
 			}
 			if (visibleContainerMediaCandidates.videoCandidates.length > 0) {
-				const frameAdjustedVideoIds = new Set(
-					visibleContainerMediaCandidates.videoCandidates.map(
-						(candidate) => candidate.elementId,
-					),
+				visibleContainerMediaCandidates.videoCandidates.forEach((candidate) =>
+					frameAdjustedVideoIds.add(candidate.elementId),
 				)
-				removeCandidatesByIds(visibleVideoCandidates, frameAdjustedVideoIds)
-				removeCandidatesByIds(lowDetailVisibleVideoCandidates, frameAdjustedVideoIds)
-				removeCandidatesByIds(nearVideoCandidates, frameAdjustedVideoIds)
 				visibleVideoCandidates.push(...visibleContainerMediaCandidates.videoCandidates)
 			}
 			if (visibleContainerMediaCandidates.audioCandidates.length > 0) {
-				const frameAdjustedAudioIds = new Set(
-					visibleContainerMediaCandidates.audioCandidates.map(
-						(candidate) => candidate.elementId,
-					),
+				visibleContainerMediaCandidates.audioCandidates.forEach((candidate) =>
+					frameAdjustedAudioIds.add(candidate.elementId),
 				)
 				frameAdjustedAudioIds.forEach((elementId) => {
 					visibleAudioIds.add(elementId)
 					nearAudioIds.delete(elementId)
 				})
-				removeCandidatesByIds(visibleAudioCandidates, frameAdjustedAudioIds)
-				removeCandidatesByIds(nearAudioCandidates, frameAdjustedAudioIds)
 				visibleAudioCandidates.push(...visibleContainerMediaCandidates.audioCandidates)
 			}
 		}
@@ -1702,6 +1682,7 @@ export class CanvasVisibilityManager {
 		this.updateImageRetentionHints(presentationCandidates, startedAt)
 
 		visibleVideoIds.forEach((elementId) => {
+			if (frameAdjustedVideoIds.has(elementId)) return
 			const candidate = this.createVideoCandidate(
 				elementId,
 				"visible",
@@ -1717,6 +1698,7 @@ export class CanvasVisibilityManager {
 			}
 		})
 		nearVideoIds.forEach((elementId) => {
+			if (frameAdjustedVideoIds.has(elementId)) return
 			const candidate = this.createVideoCandidate(
 				elementId,
 				"near",
@@ -1731,6 +1713,7 @@ export class CanvasVisibilityManager {
 		})
 
 		visibleAudioIds.forEach((elementId) => {
+			if (frameAdjustedAudioIds.has(elementId)) return
 			const candidate = this.createAudioCandidate(
 				elementId,
 				"visible",
@@ -1745,6 +1728,7 @@ export class CanvasVisibilityManager {
 		})
 
 		nearAudioIds.forEach((elementId) => {
+			if (frameAdjustedAudioIds.has(elementId)) return
 			const candidate = this.createAudioCandidate(
 				elementId,
 				"near",
@@ -2563,15 +2547,15 @@ export class CanvasVisibilityManager {
 		videoCandidates: VideoLoadCandidate[]
 		audioCandidates: AudioLoadCandidate[]
 	} {
-		const { rootContainers } = this.getContainerRootCache()
-		if (rootContainers.length === 0) {
+		const { rootContainerIds } = this.getContainerRootCache()
+		if (rootContainerIds.length === 0) {
 			return { imageCandidates: [], videoCandidates: [], audioCandidates: [] }
 		}
 
 		const visibleContainerIds = this.canvas.geometryCacheManager.queryElementIdsByExpandedRect(
 			options.viewportRect,
 			0,
-			{ elementIds: rootContainers.map((element) => element.id) },
+			{ elementIds: rootContainerIds },
 		)
 		if (visibleContainerIds.length === 0) {
 			return { imageCandidates: [], videoCandidates: [], audioCandidates: [] }
@@ -2594,7 +2578,7 @@ export class CanvasVisibilityManager {
 		): void => {
 			if (
 				imageCandidates.length + videoCandidates.length + audioCandidates.length >=
-				MAX_INITIAL_VISIBLE_CONTAINER_IMAGE_REQUESTS
+				MAX_INITIAL_VISIBLE_CONTAINER_MEDIA_REQUESTS
 			) {
 				return
 			}
