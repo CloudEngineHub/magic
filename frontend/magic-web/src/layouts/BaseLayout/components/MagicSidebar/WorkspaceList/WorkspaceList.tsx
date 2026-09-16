@@ -88,7 +88,7 @@ function WorkspaceList({
 		workspaceStore.isWorkspaceListLoading && workspaces.length === 0
 	const selectedWorkspaceId = workspaceStore.selectedWorkspace?.id
 	const lastLocatedWorkspace = useRef(
-		sidebarStore.navigationScrollPositions.has("sidebar-scroll:workspaces")
+		sidebarStore.navigationScrollPositions.has("sidebar-scroll:expanded")
 			? selectedWorkspaceId
 			: undefined,
 	)
@@ -158,9 +158,10 @@ function WorkspaceList({
 		const items = Array.from(
 			list.querySelectorAll<HTMLElement>("[data-sidebar-workspace-root]"),
 		)
+		// Skip the overlapping hidden tab's toolbar; it still has layout boxes.
 		const navigationHeaders = Array.from(
 			scrollArea.querySelectorAll<HTMLElement>("[data-sidebar-navigation-header]"),
-		)
+		).filter((header) => getComputedStyle(header).visibility !== "hidden")
 		const measure = () => {
 			// 高度预算扣除双向提示的最大占位；提示显隐不再反过来改变项目高度和溢出状态。
 			// 分类和操作栏吸顶后持续占位，项目列表与下一组标题使用剩余高度。
@@ -233,10 +234,13 @@ function WorkspaceList({
 	})
 
 	const defaultScrollTop = useRef(
-		sidebarStore.navigationScrollPositions.get("sidebar-scroll:workspaces") ?? 0,
+		sidebarStore.navigationScrollPositions.get("sidebar-scroll:expanded") ?? 0,
 	)
+	const wasSearchModeRef = useRef(isSearchMode)
 	useLayoutEffect(() => {
-		if (isExpanded && !isSearchMode && scrollRef.current)
+		const exitedSearch = wasSearchModeRef.current && !isSearchMode
+		wasSearchModeRef.current = isSearchMode
+		if (isExpanded && exitedSearch && scrollRef.current)
 			scrollRef.current.scrollTop = defaultScrollTop.current
 	}, [isSearchMode, isExpanded, scrollRef])
 	useEffect(() => {
@@ -504,6 +508,11 @@ function WorkspaceList({
 	}, [workspaces.length])
 
 	useEffect(() => {
+		// Remember the current selection when hiding this tab so reshow does not relocate.
+		if (!isExpanded && selectedWorkspaceId) {
+			lastLocatedWorkspace.current = selectedWorkspaceId
+			return
+		}
 		if (
 			!selectedWorkspaceId ||
 			!isExpanded ||
@@ -549,8 +558,8 @@ function WorkspaceList({
 			onDragLeave={handleDragLeave}
 			onDrop={handleDrop}
 			onDragEnd={handleDragEnd}
-			className={cn("relative flex-col", isExpanded ? "flex" : "hidden")}
-			hidden={!isExpanded}
+			// Stay in flow when inactive so the shared tree scroll does not clamp.
+			className="relative flex flex-col"
 		>
 			{confirmationDialog}
 			<ProjectNavigationToolbar
