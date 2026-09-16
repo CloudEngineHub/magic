@@ -523,7 +523,7 @@ const FilesViewer = memo(
 					<button
 						ref={props.fileSidebarControl.triggerRef}
 						type="button"
-						className="mx-1 flex size-7 shrink-0 items-center justify-center rounded-md hover:bg-accent focus-visible:ring-2 focus-visible:ring-ring"
+						className="mx-1 flex size-7 shrink-0 items-center justify-center rounded-full bg-background shadow-sm hover:bg-accent focus-visible:ring-2 focus-visible:ring-ring"
 						onClick={props.fileSidebarControl.onToggle}
 						aria-label={t("sidebarPanels.expandFiles")}
 						data-testid="file-viewer-expand-files"

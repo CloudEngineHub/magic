@@ -641,6 +641,7 @@ function MessageHeader({
 									size="icon-sm"
 									className={cn(
 										headerIconButtonClassName,
+										"!rounded-full !bg-background shadow-sm",
 										alignWithContent && "col-start-1 row-start-1",
 									)}
 									onClick={fileSidebarControl.onToggle}

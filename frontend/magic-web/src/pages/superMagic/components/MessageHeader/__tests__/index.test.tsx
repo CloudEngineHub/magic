@@ -1,5 +1,10 @@
 import { fireEvent, render, screen } from "@testing-library/react"
-import type { ButtonHTMLAttributes, InputHTMLAttributes, ReactNode } from "react"
+import {
+	forwardRef,
+	type ButtonHTMLAttributes,
+	type InputHTMLAttributes,
+	type ReactNode,
+} from "react"
 import { beforeEach, describe, expect, it, vi } from "vitest"
 import MessageHeader from "../index"
 
@@ -172,6 +177,7 @@ vi.mock("lucide-react", () => {
 
 	return {
 		MessageCirclePlus: createIcon("message-circle-plus"),
+		PanelLeftOpen: createIcon("panel-left-open"),
 		PanelRightClose: createIcon("panel-right-close"),
 		PanelRightOpen: createIcon("panel-right-open"),
 		Ellipsis: createIcon("ellipsis"),
@@ -186,22 +192,21 @@ vi.mock("@tabler/icons-react", () => ({
 }))
 
 vi.mock("@/components/shadcn-ui/button", () => ({
-	Button: ({
-		children,
-		className,
-		onClick,
-		disabled,
-		...props
-	}: ButtonHTMLAttributes<HTMLButtonElement>) => (
-		<button
-			type="button"
-			className={className}
-			onClick={onClick}
-			disabled={disabled}
-			{...props}
-		>
-			{children}
-		</button>
+	Button: forwardRef<HTMLButtonElement, ButtonHTMLAttributes<HTMLButtonElement>>(
+		function MockButton({ children, className, onClick, disabled, ...props }, ref) {
+			return (
+				<button
+					ref={ref}
+					type="button"
+					className={className}
+					onClick={onClick}
+					disabled={disabled}
+					{...props}
+				>
+					{children}
+				</button>
+			)
+		},
 	),
 }))
 
@@ -430,6 +435,22 @@ describe("MessageHeader", () => {
 
 		expect(screen.queryByTestId("message-header-history-button")).not.toBeInTheDocument()
 		expect(screen.queryByTestId("mock-topic-history-dropdown")).not.toBeInTheDocument()
+	})
+
+	it("项目侧栏收起后使用圆形白色投影按钮展开", () => {
+		renderComponent({
+			fileSidebarControl: {
+				isCollapsed: true,
+				onToggle: vi.fn(),
+				triggerRef: { current: null },
+			},
+		})
+
+		expect(screen.getByTestId("message-header-expand-files")).toHaveClass(
+			"!rounded-full",
+			"!bg-background",
+			"shadow-sm",
+		)
 	})
 
 	it("collapses the history panel together when collapsing the conversation panel", () => {
