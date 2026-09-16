@@ -532,7 +532,7 @@ class MagicBaseApi extends AbstractApi
      */
     private function denyRuntimeAccess()
     {
-        MagicBaseExceptionBuilder::accessDenied('无项目访问权限');
+        MagicBaseExceptionBuilder::accessDenied('magicbase.project_access_denied');
         throw new RuntimeException('Unreachable.');
     }
 }

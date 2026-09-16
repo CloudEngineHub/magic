@@ -21,6 +21,7 @@ use App\Domain\MagicBase\Exception\MagicBaseExceptionBuilder;
 use App\Domain\MagicBase\Exception\MagicBaseInvalidFilterException;
 use App\Domain\MagicBase\Exception\MagicBaseUnsupportedQueryException;
 use App\Domain\MagicBase\Service\MagicBaseMetadataDomainService;
+use App\Domain\MagicBase\Service\MagicBasePermissionDomainService;
 use App\Domain\MagicBase\Service\MagicBaseRowQueryCriteriaDomainService;
 use App\Domain\MagicBase\Service\MagicBaseRowStorageResolverDomainService;
 use App\Interfaces\Authorization\Web\MagicUserAuthorization;
@@ -43,7 +44,25 @@ readonly class MagicBaseRowQuerySupport
         private MagicBaseAccessControl $accessControl,
         private MagicBaseRowStorageResolverDomainService $rowStorageResolver,
         private MagicBaseRowQueryCriteriaDomainService $rowQueryCriteriaDomainService,
+        private MagicBasePermissionDomainService $permissionDomainService,
     ) {
+    }
+
+    /** Writing a row does not grant permission to read its contents or relations. */
+    public function formatWrittenRow(
+        MagicUserAuthorization $authorization,
+        int $projectId,
+        MagicBaseTableEntity $table,
+        MagicBaseRowEntity $row,
+        MagicBaseAccessContext $access,
+        SelectQuery $select,
+        ActorContext $actor,
+    ): MagicBaseFormattedRow {
+        if (! $this->permissionDomainService->canReadTable($actor, $table, $access->getTablePermissions(), $access->isManager())
+            || ! $this->permissionDomainService->canReadRow($actor, $row, $table, $access->getRowPermissions((int) $row->getRecordId()), $access->isManager())) {
+            return new MagicBaseFormattedRow(['id' => (string) $row->getRecordId()]);
+        }
+        return $this->formatRow($authorization, $projectId, $table, $row, $access, $select, $actor);
     }
 
     public function formatRow(
@@ -69,7 +88,15 @@ readonly class MagicBaseRowQuerySupport
                 $result[$field] = $this->formatRootField($row, $field);
                 continue;
             }
-            if ($access->getColumns()->get($field) === null) {
+            $column = $access->getColumns()->get($field);
+            // Apply the same column scopes and explicit grants to selected and default fields.
+            if ($column === null || ! $this->permissionDomainService->canReadColumn(
+                $actor,
+                $row,
+                $column,
+                $access->getColumnPermissions((int) $column->getId()),
+                $access->isManager(),
+            )) {
                 continue;
             }
 
@@ -415,7 +442,7 @@ readonly class MagicBaseRowQuerySupport
 
     private function loadTargetContext(MagicUserAuthorization $authorization, int $projectId, int $tableId): MagicBaseTableAccessContext
     {
-        return $this->accessControl->loadTableContext($authorization, $projectId, $tableId);
+        return $this->accessControl->requireReadableTable($authorization, $projectId, $tableId);
     }
 
     private function normalizeRelationValueKey(mixed $value): string

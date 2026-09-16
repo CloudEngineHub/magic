@@ -8,6 +8,7 @@ declare(strict_types=1);
 namespace HyperfTest\Cases\Application\MagicBase\Support;
 
 use App\Application\MagicBase\Support\MagicBaseAccessControl;
+use App\Application\MagicBase\Support\MagicBaseRuntimeProjectAccessContext;
 use App\Application\SuperMagic\Project\Service\PublishedMicroAppFileAccessService;
 use App\Domain\Contact\Repository\Facade\MagicDepartmentUserRepositoryInterface;
 use App\Domain\Contact\Service\MagicDepartmentUserDomainService;
@@ -179,6 +180,121 @@ class MagicBaseAccessControlTest extends TestCase
         $other->setCreatedBy('owner');
         $rows = $this->access->filterReadableRows($context, new MagicBaseEntityCollection([$own, $other]));
         self::assertSame([$own], iterator_to_array($rows));
+    }
+
+    #[DataProvider('runtimeIdentities')]
+    public function testRuntimeUserCanInsertWithoutBecomingManager(string $identity): void
+    {
+        $this->runtimeIdentity($identity);
+        $table = new MagicBaseTableEntity();
+        $this->tables->method('getTable')->willReturn($table);
+        $context = $this->access->requireInsertableTable($this->reader(), 11, 22);
+        self::assertSame('reader', $context->getActor()->getUserId());
+        self::assertFalse($context->getAccess()->isManager());
+    }
+
+    #[DataProvider('runtimeIdentities')]
+    public function testRuntimeUserCannotInsertIntoDisabledTable(string $identity): void
+    {
+        $this->runtimeIdentity($identity);
+        $table = new MagicBaseTableEntity();
+        $table->setDynamicPermissions(['table' => ['insert_scope' => MagicBaseConst::SCOPE_DISABLED]]);
+        $this->tables->method('getTable')->willReturn($table);
+        $this->expectException(BusinessException::class);
+        $this->expectExceptionCode(MagicBaseErrorCode::AccessDenied->value);
+        $this->access->requireInsertableTable($this->reader(), 11, 22);
+    }
+
+    #[DataProvider('runtimeIdentities')]
+    public function testRuntimeUserCannotReadDisabledTable(string $identity): void
+    {
+        $this->runtimeIdentity($identity);
+        $table = new MagicBaseTableEntity();
+        $table->setDynamicPermissions(['table' => ['read_scope' => MagicBaseConst::SCOPE_DISABLED]]);
+        $this->tables->method('getTable')->willReturn($table);
+        $this->expectException(BusinessException::class);
+        $this->expectExceptionCode(MagicBaseErrorCode::AccessDenied->value);
+        $this->access->requireReadableTable($this->reader(), 11, 22);
+    }
+
+    public static function runtimeIdentities(): array
+    {
+        return [['publication'], ['share']];
+    }
+
+    public function testViewerWithoutPublicationCannotWriteData(): void
+    {
+        $member = new ProjectMemberEntity();
+        $member->setRole(MemberRole::VIEWER);
+        $this->members->method('getMemberByProjectAndUser')->willReturn($member);
+        $this->publication->expects(self::once())->method('canAccessProject')->willReturn(false);
+        $this->expectException(BusinessException::class);
+        $this->expectExceptionCode(MagicBaseErrorCode::AccessDenied->value);
+        $this->access->requireDataWritableTable($this->reader(), 11, 22);
+    }
+
+    public function testViewerWithPublicationCanUseDataPermissions(): void
+    {
+        $member = new ProjectMemberEntity();
+        $member->setRole(MemberRole::VIEWER);
+        $this->members->method('getMemberByProjectAndUser')->willReturn($member);
+        $this->publication->method('canAccessProject')->willReturn(true);
+        $this->tables->method('getTable')->willReturn(new MagicBaseTableEntity());
+        self::assertFalse($this->access->requireDataWritableTable($this->reader(), 11, 22)->getAccess()->isManager());
+    }
+
+    public function testPublicationWriteAccessIsRecheckedAfterRevocation(): void
+    {
+        $this->publication->expects(self::exactly(2))->method('canAccessProject')->willReturnOnConsecutiveCalls(true, false);
+        $this->tables->method('getTable')->willReturn(new MagicBaseTableEntity());
+        $this->access->requireDataWritableTable($this->reader(), 11, 22);
+        $this->expectException(BusinessException::class);
+        $this->expectExceptionCode(MagicBaseErrorCode::AccessDenied->value);
+        $this->access->requireDataWritableTable($this->reader(), 11, 22);
+    }
+
+    #[DataProvider('writeOperations')]
+    public function testShareRuntimeDoesNotGrantSchemaOrManagement(string $method): void
+    {
+        MagicBaseRuntimeProjectAccessContext::allowShareAccess(11, 'reader', 'org');
+        $this->publication->expects(self::never())->method('canAccessProject');
+        $this->expectException(BusinessException::class);
+        $this->expectExceptionCode(MagicBaseErrorCode::AccessDenied->value);
+        $this->access->{$method}($this->reader(), 11);
+    }
+
+    public function testEditorRetainsDataAdministratorAccess(): void
+    {
+        $member = new ProjectMemberEntity();
+        $member->setRole(MemberRole::EDITOR);
+        $this->members->method('getMemberByProjectAndUser')->willReturn($member);
+        $table = new MagicBaseTableEntity();
+        $table->setDynamicPermissions(['table' => ['insert_scope' => MagicBaseConst::SCOPE_DISABLED, 'read_scope' => MagicBaseConst::SCOPE_DISABLED]]);
+        $this->tables->method('getTable')->willReturn($table);
+        self::assertTrue($this->access->requireInsertableTable($this->reader(), 11, 22)->getAccess()->isManager());
+        self::assertTrue($this->access->requireReadableTable($this->reader(), 11, 22)->getAccess()->isManager());
+    }
+
+    public function testTableListingExcludesTablesWithoutReadPermission(): void
+    {
+        $this->publication->method('canAccessProject')->willReturn(true);
+        $visible = new MagicBaseTableEntity();
+        $visible->setId(22);
+        $hidden = new MagicBaseTableEntity();
+        $hidden->setId(23);
+        $hidden->setDynamicPermissions(['table' => ['read_scope' => MagicBaseConst::SCOPE_DISABLED]]);
+        $this->tables->expects(self::never())->method('listColumns');
+        $result = $this->access->filterReadableTables($this->reader(), 11, new MagicBaseEntityCollection([$visible, $hidden]));
+        self::assertSame([$visible], $result->all());
+    }
+
+    private function runtimeIdentity(string $identity): void
+    {
+        if ($identity === 'share') {
+            MagicBaseRuntimeProjectAccessContext::allowShareAccess(11, 'reader', 'org');
+        } else {
+            $this->publication->method('canAccessProject')->willReturn(true);
+        }
     }
 
     private function reader(): MagicUserAuthorization
