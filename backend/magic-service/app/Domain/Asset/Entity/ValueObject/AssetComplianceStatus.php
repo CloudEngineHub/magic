@@ -27,7 +27,7 @@ enum AssetComplianceStatus: string
     /**
      * 由资产类型与同步状态推导。
      *
-     * 素材组只是本地层级、不参与第三方合规校验，恒为「未校验」——若按 SYNCED 映射成「已通过」，
+     * 素材组只是本地层级、不参与第三方合规校验，恒为「未校验」——若按 PASSED 映射成「已通过」，
      * 会让前端误以为素材组也过了审。
      */
     public static function forAsset(AssetKind $assetKind, AssetSyncStatus $syncStatus): self
@@ -36,7 +36,7 @@ enum AssetComplianceStatus: string
             return self::UNVERIFIED;
         }
         return match ($syncStatus) {
-            AssetSyncStatus::SYNCED => self::PASSED,
+            AssetSyncStatus::PASSED => self::PASSED,
             AssetSyncStatus::FAILED => self::FAILED,
             default => self::UNVERIFIED,
         };

@@ -24,7 +24,7 @@ return new class extends Migration {
             $table->string('file_key', 512)->nullable()->comment('对象存储文件 key');
             $table->string('content_hash', 64)->nullable()->comment('内容 SHA-256');
             $table->boolean('status')->default(true)->comment('是否显示');
-            $table->string('sync_status', 32)->default('PENDING')->comment('同步状态：PENDING待同步 SYNCING同步中 SYNCED已同步 FAILED同步失败');
+            $table->string('sync_status', 32)->default('PENDING')->comment('认证状态：PENDING待同步 SYNCING同步中 PASSED认证通过 FAILED认证失败');
             $table->string('sync_failed_reason', 512)->nullable()->comment('同步失败原因');
             $table->json('metadata')->nullable()->comment('扩展元数据');
             $table->dateTime('created_at');

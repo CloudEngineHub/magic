@@ -477,7 +477,7 @@ class AssetDomainService
         if ($asset->getSearchText() === null || trim($asset->getSearchText()) === '') {
             $asset->setSearchText($this->searchTextBuilder->build($asset));
         }
-        $asset->setSyncStatus($syncStatus ?? ($asset->getAssetKind()->isGroup() ? AssetSyncStatus::SYNCED : AssetSyncStatus::PENDING));
+        $asset->setSyncStatus($syncStatus ?? ($asset->getAssetKind()->isGroup() ? AssetSyncStatus::PASSED : AssetSyncStatus::PENDING));
         $saved = $this->assets->save($dataIsolation, $asset);
         $this->logger->info(
             $saved->getSyncStatus()->isSynced() ? '资产已落库，无需同步第三方' : '资产已落库，等待同步第三方',
@@ -502,7 +502,7 @@ class AssetDomainService
                     'provider_asset_id' => $resumable->getProviderAssetId(),
                 ]);
                 $this->awaitProviderAssetActive($dataIsolation, $resumable);
-                return $this->markSyncStatus($dataIsolation, $asset, AssetSyncStatus::SYNCED);
+                return $this->markSyncStatus($dataIsolation, $asset, AssetSyncStatus::PASSED);
             }
 
             // 命中已审核通过的相同内容时复用第三方凭证。
@@ -513,7 +513,7 @@ class AssetDomainService
                     'asset_id' => $asset->getId(),
                     'provider_asset_id' => $reusable->getProviderAssetId(),
                 ]);
-                return $this->markSyncStatus($dataIsolation, $asset, AssetSyncStatus::SYNCED);
+                return $this->markSyncStatus($dataIsolation, $asset, AssetSyncStatus::PASSED);
             }
 
             // 创建专属素材组后提交素材。
@@ -525,7 +525,7 @@ class AssetDomainService
             $this->markSyncStatus($dataIsolation, $asset, AssetSyncStatus::FAILED, $throwable->getMessage());
             throw $throwable;
         }
-        return $this->markSyncStatus($dataIsolation, $asset, AssetSyncStatus::SYNCED);
+        return $this->markSyncStatus($dataIsolation, $asset, AssetSyncStatus::PASSED);
     }
 
     /**

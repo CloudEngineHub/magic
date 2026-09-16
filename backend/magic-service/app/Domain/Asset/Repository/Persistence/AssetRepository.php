@@ -83,8 +83,7 @@ class AssetRepository implements AssetRepositoryInterface
             $builder->where('status', $query->getStatus());
         }
         if ($query->isVerified() === true) {
-            // 历史数据使用 SYNCED，新认证流程使用 PASSED；两者都表示认证通过。
-            $builder->whereIn('sync_status', [AssetSyncStatus::SYNCED->value, 'PASSED']);
+            $builder->where('sync_status', AssetSyncStatus::PASSED->value);
         }
         if ($query->getOwnerUids() !== []) {
             $builder->whereIn('owner_uid', $query->getOwnerUids());
@@ -201,7 +200,7 @@ class AssetRepository implements AssetRepositoryInterface
             ->where('content_hash', $contentHash)
             ->whereNull('deleted_at');
         if (! $anySyncStatus) {
-            $builder->whereIn('sync_status', [AssetSyncStatus::SYNCED->value, 'PASSED']);
+            $builder->where('sync_status', AssetSyncStatus::PASSED->value);
         }
         $model = $builder->orderBy('id', $anySyncStatus ? 'desc' : 'asc')->first();
         return $model === null ? null : new AssetEntity($model->toArray());
