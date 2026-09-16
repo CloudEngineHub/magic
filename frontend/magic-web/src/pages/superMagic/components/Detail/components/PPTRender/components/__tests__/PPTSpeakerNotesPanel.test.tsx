@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor } from "@testing-library/react"
+import { act, fireEvent, render, screen, waitFor } from "@testing-library/react"
 import { describe, expect, it, vi } from "vitest"
 import PPTSpeakerNotesPanel from "../PPTSpeakerNotesPanel"
 import { unshadow } from "@/utils/shadow"
@@ -66,10 +66,58 @@ describe("PPTSpeakerNotesPanel", () => {
 		})
 		fireEvent.click(screen.getByText("ppt.speakerNotes.polish"))
 		rerender(<PPTSpeakerNotesPanel {...props} fileId="second" slideIndex={1} />)
-		finishSave(true)
-		await waitFor(() => expect(props.onSaved).toHaveBeenCalled())
+		await act(async () => finishSave(true))
+		expect(props.onSaved).not.toHaveBeenCalled()
 		expect(onGenerate).not.toHaveBeenCalled()
 	})
+
+	it.each(["reorder", "replace", "unmount"])(
+		"handles %s while a note save is pending",
+		async (change) => {
+			let finishSave!: (value: boolean) => void
+			const getLatestRawContent = vi.fn(() => "<main>Original</main>")
+			const props = {
+				slideIndex: 0,
+				fileId: "first",
+				rawContent: "<main>Original</main>",
+				allowEdit: true,
+				getLatestRawContent,
+				onSaved: vi.fn().mockResolvedValue(undefined),
+				saveEditContent: vi.fn(
+					() =>
+						new Promise<boolean>((resolve) => {
+							finishSave = resolve
+						}),
+				),
+			}
+			const { rerender, unmount } = render(<PPTSpeakerNotesPanel {...props} />)
+			fireEvent.change(await screen.findByTestId("ppt-speaker-notes-editor"), {
+				target: { value: "Saved note" },
+			})
+			fireEvent.click(screen.getByText("ppt.speakerNotes.save"))
+			if (change === "unmount") unmount()
+			else
+				rerender(
+					<PPTSpeakerNotesPanel
+						{...props}
+						slideIndex={1}
+						fileId={change === "replace" ? "second" : "first"}
+					/>,
+				)
+			await act(async () => finishSave(true))
+			if (change === "reorder") {
+				expect(props.onSaved).toHaveBeenCalledWith(
+					expect.stringContaining("Saved note"),
+					"first",
+				)
+				expect(getLatestRawContent).toHaveBeenLastCalledWith("first")
+			} else {
+				expect(props.onSaved).not.toHaveBeenCalled()
+				expect(getLatestRawContent).toHaveBeenCalledTimes(1)
+			}
+			expect(props.saveEditContent).toHaveBeenCalledTimes(1)
+		},
+	)
 
 	it("disables polish and shorten for empty notes", () => {
 		render(
@@ -228,7 +276,10 @@ describe("PPTSpeakerNotesPanel", () => {
 		const savedContent = unshadow(saveEditContent.mock.calls[0][0])
 		expect(savedContent).toContain("data-magic-slide-notes")
 		expect(saveEditContent.mock.calls[0].slice(1)).toEqual(["slide-1", true, undefined, true])
-		expect(onSaved).toHaveBeenCalledWith(expect.stringContaining("Introduce the key point."), 0)
+		expect(onSaved).toHaveBeenCalledWith(
+			expect.stringContaining("Introduce the key point."),
+			"slide-1",
+		)
 		expect(screen.getByTestId("ppt-speaker-notes-editor")).toHaveValue(
 			"Introduce the key point.",
 		)

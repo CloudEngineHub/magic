@@ -1163,14 +1163,17 @@ const PPTRenderInner = observer(function PPTRenderInner({
 										fileId={
 											store.getFileIdByPath(store.currentSlide.path) || ""
 										}
-										getLatestRawContent={() =>
-											store.slides[activeSlideIndex]?.rawContent || ""
+										getLatestRawContent={(fileId) =>
+											store.slides.find(
+												(slide) =>
+													store.getFileIdByPath(slide.path) === fileId,
+											)?.rawContent || ""
 										}
 										allowEdit={effectiveAllowEdit}
 										saveEditContent={saveEditContent}
-										onSaved={(nextContent, slideIndex) =>
+										onSaved={(nextContent, fileId) =>
 											Promise.resolve(
-												store.updateSlideNotes(slideIndex, nextContent),
+												store.updateSlideNotes(fileId, nextContent),
 											).then(() => undefined)
 										}
 										onGenerate={

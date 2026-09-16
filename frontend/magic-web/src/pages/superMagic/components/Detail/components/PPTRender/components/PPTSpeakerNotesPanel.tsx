@@ -14,7 +14,7 @@ interface PPTSpeakerNotesPanelProps {
 	slideIndex: number
 	rawContent: string
 	fileId: string
-	getLatestRawContent?: () => string
+	getLatestRawContent?: (fileId: string) => string
 	allowEdit: boolean
 	saveEditContent?: (
 		content: any,
@@ -23,7 +23,7 @@ interface PPTSpeakerNotesPanelProps {
 		fetchFileVersions?: (fileId: string) => void,
 		isPPTEditMode?: boolean,
 	) => Promise<boolean | void>
-	onSaved: (content: string, slideIndex: number) => Promise<void>
+	onSaved: (content: string, fileId: string) => Promise<void>
 	onGenerate?: (action: PPTNotesAction) => void
 }
 
@@ -113,7 +113,7 @@ function SpeakerNotesEditor({
 		savingRef.current = true
 		setSaveState("saving")
 		try {
-			let latestRawContent = getLatestRawContent?.() || rawContent
+			let latestRawContent = getLatestRawContent?.(fileId) || rawContent
 			let nextContent = upsertSlideNotes(latestRawContent, draft)
 			for (let attempt = 0; attempt <= MAX_NOTE_SAVE_REBASES; attempt += 1) {
 				const result = await saveEditContent(
@@ -123,9 +123,11 @@ function SpeakerNotesEditor({
 					undefined,
 					true,
 				)
+				// Navigation invalidates this editor, including retries against the latest HTML.
+				if (!activeRef.current) return false
 				if (result === false) throw new Error("Failed to save speaker notes")
 
-				const currentRawContent = getLatestRawContent?.() || latestRawContent
+				const currentRawContent = getLatestRawContent?.(fileId) || latestRawContent
 				if (currentRawContent === latestRawContent || currentRawContent === nextContent)
 					break
 				if (attempt === MAX_NOTE_SAVE_REBASES) {
@@ -135,7 +137,8 @@ function SpeakerNotesEditor({
 				nextContent = upsertSlideNotes(latestRawContent, draft)
 			}
 
-			await onSaved(nextContent, slideIndex)
+			await onSaved(nextContent, fileId)
+			if (!activeRef.current) return false
 			onDraftSaved(draft)
 			setNotes(draft)
 			setIsEditing(false)
@@ -143,7 +146,7 @@ function SpeakerNotesEditor({
 			return true
 		} catch (error) {
 			console.error("Failed to save speaker notes:", error)
-			setSaveState("error")
+			if (activeRef.current) setSaveState("error")
 			return false
 		} finally {
 			savingRef.current = false
