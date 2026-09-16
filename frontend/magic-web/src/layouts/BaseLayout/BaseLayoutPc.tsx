@@ -257,7 +257,10 @@ const BaseLayoutPc = observer(() => {
 				<ResizablePanel id="main-content-panel">
 					{/* Keep the desktop floating gap only when the page is not embedded by Widget SDK. */}
 					<div
-						className={cn("flex h-full flex-col", !embedContext && "py-2 pl-0 pr-2")}
+						className={cn(
+							"relative flex h-full flex-col",
+							!embedContext && "py-2 pl-0 pr-2",
+						)}
 						data-testid="base-layout-pc-main-frame"
 					>
 						{/* 白色容器，带圆角、边框、阴影 */}

@@ -152,19 +152,19 @@ describe("TopicDesktopPanels", () => {
 
 	it("项目侧栏收起且无文件预览时显示全局导航分割线", () => {
 		layoutState = createLayoutState({ isProjectSiderCollapsed: true })
+		const mainFrame = document.createElement("div")
+		mainFrame.dataset.testid = "base-layout-pc-main-frame"
+		document.body.appendChild(mainFrame)
 
 		renderComponent({
 			shouldShowDetailPanel: false,
 			historyLayout: undefined,
 		})
 
-		expect(screen.getByTestId("collapsed-project-sidebar-divider")).toHaveClass(
-			"absolute",
-			"inset-y-0",
-			"left-0",
-			"w-px",
-			"bg-border",
-		)
+		const divider = screen.getByTestId("collapsed-project-sidebar-divider")
+		expect(divider.parentElement).toBe(mainFrame)
+		expect(divider).toHaveClass("absolute", "inset-y-0", "left-0", "w-px", "bg-border")
+		mainFrame.remove()
 	})
 
 	it("项目侧栏展开时不显示全局导航分割线", () => {
