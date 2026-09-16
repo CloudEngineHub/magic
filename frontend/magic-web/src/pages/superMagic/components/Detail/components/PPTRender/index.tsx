@@ -60,6 +60,7 @@ import type { PPTSlideStructureAdapter } from "./types"
 import { getPPTLiveRenderCacheSize } from "./PPTSidebar/utils/devicePerformance"
 import EditToolbar from "../EditToolbar"
 import PPTSpeakerNotesPanel from "./components/PPTSpeakerNotesPanel"
+import { pptNotesPreferenceStore } from "@/stores/layout/PPTNotesPreferenceStore"
 import { runGuardedAction } from "../../utils/actionGuard"
 import type { OptionItem } from "@/pages/superMagic/components/MainInputContainer/panels/types"
 import {
@@ -1104,6 +1105,12 @@ const PPTRenderInner = observer(function PPTRenderInner({
 									store.isReady &&
 									hasSlides && (
 										<PPTControlBar
+											notesVisible={pptNotesPreferenceStore.visible}
+											onToggleNotes={
+												!isPlaybackMode && store.currentSlide
+													? pptNotesPreferenceStore.toggle
+													: undefined
+											}
 											activeIndex={store.activeIndex}
 											totalSlides={store.slideUrls.length}
 											isTransitioning={store.isTransitioning}
@@ -1144,6 +1151,7 @@ const PPTRenderInner = observer(function PPTRenderInner({
 								hasSlides &&
 								store.currentSlide && (
 									<PPTSpeakerNotesPanel
+										visible={pptNotesPreferenceStore.visible}
 										slideIndex={activeSlideIndex}
 										rawContent={store.currentSlide.rawContent || ""}
 										fileId={

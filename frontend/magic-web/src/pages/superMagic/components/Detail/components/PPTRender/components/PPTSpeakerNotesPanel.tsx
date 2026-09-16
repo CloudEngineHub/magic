@@ -1,12 +1,14 @@
 import { useEffect, useRef, useState } from "react"
 import { useTranslation } from "react-i18next"
-import { Loader2, Pencil, Sparkles } from "lucide-react"
+import { Loader2, Sparkles } from "lucide-react"
 import { Button } from "@/components/shadcn-ui/button"
 import { cn } from "@/utils/cn"
 import { shadow } from "@/utils/shadow"
 import { extractSlideNotes, upsertSlideNotes } from "../utils/slideNotes"
+import { useSpeakerNotesResize } from "../hooks/useSpeakerNotesResize"
 
 interface PPTSpeakerNotesPanelProps {
+	visible?: boolean
 	slideIndex: number
 	rawContent: string
 	fileId: string
@@ -30,7 +32,27 @@ const MAX_NOTE_SAVE_REBASES = 3
  * Notes deliberately own their edit state instead of reusing PPT HTML edit mode.
  * This lets a user prepare speaker notes while the slide remains a normal preview.
  */
-export default function PPTSpeakerNotesPanel({
+export default function PPTSpeakerNotesPanel(props: PPTSpeakerNotesPanelProps) {
+	const drafts = useRef(new Map<string, string>())
+	const resize = useSpeakerNotesResize()
+	const slideKey = props.fileId || String(props.slideIndex)
+	// Isolate edit/save state by slide, retaining only unsaved text when switching pages.
+	return (
+		<SpeakerNotesEditor
+			key={slideKey}
+			{...props}
+			resize={resize}
+			initialDraft={drafts.current.get(slideKey)}
+			onDraftChange={(draft) => drafts.current.set(slideKey, draft)}
+			onDraftSaved={(draft) => {
+				if (drafts.current.get(slideKey) === draft) drafts.current.delete(slideKey)
+			}}
+		/>
+	)
+}
+
+function SpeakerNotesEditor({
+	visible = true,
 	slideIndex,
 	rawContent,
 	fileId,
@@ -39,14 +61,23 @@ export default function PPTSpeakerNotesPanel({
 	saveEditContent,
 	onSaved,
 	onGenerate,
-}: PPTSpeakerNotesPanelProps) {
+	initialDraft,
+	onDraftChange,
+	onDraftSaved,
+	resize: { panelRef, height, resizeHandleProps },
+}: PPTSpeakerNotesPanelProps & {
+	initialDraft?: string
+	onDraftChange: (draft: string) => void
+	onDraftSaved: (draft: string) => void
+	resize: ReturnType<typeof useSpeakerNotesResize>
+}) {
 	const { t } = useTranslation("super")
 	const textareaRef = useRef<HTMLTextAreaElement>(null)
 	const savingRef = useRef(false)
 	const lastSyncedRawContentRef = useRef(rawContent)
 	const [notes, setNotes] = useState(() => extractSlideNotes(rawContent))
-	const [draft, setDraft] = useState(notes)
-	const [isEditing, setIsEditing] = useState(false)
+	const [draft, setDraft] = useState(initialDraft ?? notes)
+	const [isEditing, setIsEditing] = useState(initialDraft !== undefined && initialDraft !== notes)
 	const [saveState, setSaveState] = useState<SaveState>("idle")
 	const dirty = draft !== notes
 
@@ -63,8 +94,8 @@ export default function PPTSpeakerNotesPanel({
 	}, [dirty, isEditing, notes, rawContent])
 
 	useEffect(() => {
-		if (isEditing) textareaRef.current?.focus()
-	}, [isEditing])
+		if (isEditing && visible) textareaRef.current?.focus()
+	}, [isEditing, visible])
 
 	const saveNotes = async () => {
 		if (!dirty) {
@@ -100,6 +131,7 @@ export default function PPTSpeakerNotesPanel({
 			}
 
 			await onSaved(nextContent, slideIndex)
+			onDraftSaved(draft)
 			setNotes(draft)
 			setIsEditing(false)
 			setSaveState("saved")
@@ -124,17 +156,32 @@ export default function PPTSpeakerNotesPanel({
 
 	return (
 		<section
+			ref={panelRef}
 			data-testid="ppt-speaker-notes-panel"
-			className="flex max-h-56 shrink-0 flex-col overflow-y-auto border-t border-border/60 bg-background px-4 py-3"
+			hidden={!visible}
+			style={{ height }}
+			// Keep the editor mounted while collapsed so unsaved or failed drafts survive.
+			className={cn(
+				"max-h-[40%] min-h-0 shrink-0 flex-col overflow-hidden border-t border-border/60 bg-background",
+				visible ? "flex" : "hidden",
+			)}
 		>
-			<div className="flex items-center justify-between gap-3">
+			<button
+				type="button"
+				aria-label={t("ppt.speakerNotes.resize")}
+				className="flex h-3 w-full shrink-0 cursor-ns-resize touch-none items-center justify-center focus-visible:outline focus-visible:outline-2 focus-visible:outline-ring"
+				{...resizeHandleProps}
+			>
+				<span className="h-0.5 w-7 rounded-full bg-border" />
+			</button>
+			<div className="flex shrink-0 flex-wrap items-center justify-between gap-2 px-4 pb-1">
 				<div className="flex min-w-0 items-center gap-2">
-					<Pencil className="size-4 shrink-0 text-muted-foreground" />
 					<h2 className="truncate text-sm font-medium text-foreground">
-						{t("ppt.speakerNotes.title")}
+						{t("ppt.speakerNotes.pageTitle", { page: slideIndex + 1 })}
 					</h2>
 					{statusLabel && (
 						<span
+							role="status"
 							className={cn(
 								"text-xs",
 								saveState === "error"
@@ -182,27 +229,30 @@ export default function PPTSpeakerNotesPanel({
 					ref={textareaRef}
 					data-testid="ppt-speaker-notes-editor"
 					value={draft}
+					aria-label={t("ppt.speakerNotes.title")}
+					readOnly={saveState === "saving" || !allowEdit}
 					onChange={(event) => {
 						setDraft(event.target.value)
+						onDraftChange(event.target.value)
 						setSaveState("idle")
 					}}
 					onBlur={() => void saveNotes()}
 					placeholder={t("ppt.speakerNotes.placeholder")}
-					className="mt-2 min-h-24 resize-y rounded-md border border-input bg-background px-3 py-2 text-sm leading-6 outline-none ring-offset-background focus-visible:ring-2 focus-visible:ring-ring"
+					className="mx-4 mb-3 min-h-0 flex-1 resize-none rounded-sm border-0 bg-transparent px-1 py-2 text-sm leading-6 text-foreground focus-visible:outline focus-visible:outline-2 focus-visible:outline-ring"
 				/>
 			) : (
 				<button
+					data-testid="ppt-speaker-notes-content"
 					type="button"
 					disabled={!allowEdit}
 					onClick={() => allowEdit && setIsEditing(true)}
 					className={cn(
-						"mt-2 min-h-16 w-full rounded-md border border-dashed border-border/70 px-3 py-2 text-left text-sm leading-6 transition-colors",
-						allowEdit
-							? "text-muted-foreground hover:border-primary/50 hover:bg-muted/40"
-							: "cursor-default text-muted-foreground/80",
+						"mx-4 mb-3 flex min-h-0 flex-1 items-start overflow-y-auto whitespace-pre-wrap break-words rounded-sm px-1 py-2 text-left text-sm leading-6 focus-visible:outline focus-visible:outline-2 focus-visible:outline-ring",
+						notes ? "text-foreground" : "text-muted-foreground",
+						!allowEdit && "cursor-default",
 					)}
 				>
-					{notes || t("ppt.speakerNotes.empty")}
+					<span className="min-w-0">{notes || t("ppt.speakerNotes.empty")}</span>
 				</button>
 			)}
 		</section>

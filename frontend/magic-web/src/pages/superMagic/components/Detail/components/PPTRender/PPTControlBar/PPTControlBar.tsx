@@ -10,6 +10,7 @@ import {
 	RefreshCw,
 	RotateCw,
 	PanelsTopLeft,
+	NotebookPen,
 } from "lucide-react"
 import type { PPTControlBarProps } from "./types"
 import { PPTZoomControl } from "./PPTZoomControl"
@@ -32,6 +33,8 @@ export function PPTControlBar({
 	onJumpToPage,
 	onToggleFullscreen,
 	onReplaceTemplate,
+	notesVisible,
+	onToggleNotes,
 	scaleRatio,
 	isAutoScale,
 	portalContainer,
@@ -289,6 +292,24 @@ export function PPTControlBar({
 						</span>
 					</MagicTooltip>
 				</div>
+
+				{onToggleNotes && (
+					<Button
+						variant="ghost"
+						size="sm"
+						data-testid="ppt-control-bar-notes-button"
+						className="h-7 gap-[5px] px-[7px] text-[13px] font-normal aria-pressed:bg-accent"
+						aria-pressed={Boolean(notesVisible)}
+						aria-expanded={Boolean(notesVisible)}
+						onClick={(event) => {
+							event.stopPropagation()
+							onToggleNotes()
+						}}
+					>
+						<NotebookPen className="size-4" />
+						{t("ppt.speakerNotes.title")}
+					</Button>
+				)}
 
 				{/* Fullscreen button */}
 				{!isMobile && (

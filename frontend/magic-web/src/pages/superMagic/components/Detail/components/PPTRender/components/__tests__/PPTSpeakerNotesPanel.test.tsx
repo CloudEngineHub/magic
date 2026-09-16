@@ -10,6 +10,72 @@ vi.mock("react-i18next", () => ({
 }))
 
 describe("PPTSpeakerNotesPanel", () => {
+	it("keeps unsaved drafts on their own slide when navigating while collapsed", () => {
+		const props = {
+			slideIndex: 0,
+			rawContent: "",
+			fileId: "slide-1",
+			allowEdit: true,
+			onSaved: vi.fn(),
+		}
+		const { rerender } = render(<PPTSpeakerNotesPanel {...props} />)
+		fireEvent.click(screen.getByTestId("ppt-speaker-notes-content"))
+		fireEvent.change(screen.getByTestId("ppt-speaker-notes-editor"), {
+			target: { value: "Page one draft" },
+		})
+		rerender(<PPTSpeakerNotesPanel {...props} visible={false} />)
+		rerender(
+			<PPTSpeakerNotesPanel {...props} fileId="slide-2" slideIndex={1} visible={false} />,
+		)
+		rerender(<PPTSpeakerNotesPanel {...props} fileId="slide-2" slideIndex={1} />)
+		expect(screen.getByTestId("ppt-speaker-notes-content")).not.toHaveTextContent(
+			"Page one draft",
+		)
+		rerender(<PPTSpeakerNotesPanel {...props} />)
+		expect(screen.getByTestId("ppt-speaker-notes-editor")).toHaveValue("Page one draft")
+	})
+
+	it("retains a failed draft while collapsed and retries after reopening", async () => {
+		const saveEditContent = vi.fn().mockResolvedValueOnce(false).mockResolvedValue(true)
+		const props = {
+			slideIndex: 0,
+			rawContent: "<main>Slide</main>",
+			fileId: "slide-1",
+			allowEdit: true,
+			saveEditContent,
+			onSaved: vi.fn().mockResolvedValue(undefined),
+		}
+		const { rerender } = render(<PPTSpeakerNotesPanel {...props} />)
+		fireEvent.click(screen.getByTestId("ppt-speaker-notes-content"))
+		fireEvent.change(screen.getByTestId("ppt-speaker-notes-editor"), {
+			target: { value: "Keep this draft" },
+		})
+		fireEvent.blur(screen.getByTestId("ppt-speaker-notes-editor"))
+		await screen.findByText("ppt.speakerNotes.saveFailed")
+		rerender(<PPTSpeakerNotesPanel {...props} visible={false} />)
+		expect(screen.getByTestId("ppt-speaker-notes-panel")).not.toBeVisible()
+		rerender(<PPTSpeakerNotesPanel {...props} visible />)
+		expect(screen.getByTestId("ppt-speaker-notes-editor")).toHaveValue("Keep this draft")
+		fireEvent.click(screen.getByText("ppt.speakerNotes.save"))
+		await waitFor(() => expect(props.onSaved).toHaveBeenCalled())
+	})
+
+	it("allows keyboard resizing without editing the notes", () => {
+		render(
+			<PPTSpeakerNotesPanel
+				slideIndex={0}
+				rawContent=""
+				fileId="slide-1"
+				allowEdit
+				onSaved={vi.fn()}
+			/>,
+		)
+		fireEvent.keyDown(screen.getByRole("button", { name: "ppt.speakerNotes.resize" }), {
+			key: "ArrowUp",
+		})
+		expect(screen.getByTestId("ppt-speaker-notes-panel")).toHaveStyle({ height: "200px" })
+	})
+
 	it("enters an independent edit state while the slide remains outside PPT edit mode", async () => {
 		const saveEditContent = vi.fn().mockResolvedValue(true)
 		const onSaved = vi.fn().mockResolvedValue(undefined)
@@ -25,7 +91,7 @@ describe("PPTSpeakerNotesPanel", () => {
 			/>,
 		)
 
-		fireEvent.click(screen.getByTestId("ppt-speaker-notes-panel").querySelector("button")!)
+		fireEvent.click(screen.getByTestId("ppt-speaker-notes-content"))
 		const editor = screen.getByTestId("ppt-speaker-notes-editor")
 		fireEvent.change(editor, { target: { value: "Introduce the key point." } })
 		fireEvent.blur(editor)
@@ -72,7 +138,7 @@ describe("PPTSpeakerNotesPanel", () => {
 			/>,
 		)
 
-		fireEvent.click(screen.getByTestId("ppt-speaker-notes-panel").querySelector("button")!)
+		fireEvent.click(screen.getByTestId("ppt-speaker-notes-content"))
 		fireEvent.change(screen.getByTestId("ppt-speaker-notes-editor"), {
 			target: { value: "Keep this AI change." },
 		})
@@ -111,7 +177,7 @@ describe("PPTSpeakerNotesPanel", () => {
 			/>,
 		)
 
-		fireEvent.click(screen.getByTestId("ppt-speaker-notes-panel").querySelector("button")!)
+		fireEvent.click(screen.getByTestId("ppt-speaker-notes-content"))
 		fireEvent.change(screen.getByTestId("ppt-speaker-notes-editor"), {
 			target: { value: "Keep my notes." },
 		})
@@ -150,7 +216,7 @@ describe("PPTSpeakerNotesPanel", () => {
 			/>,
 		)
 
-		fireEvent.click(screen.getByTestId("ppt-speaker-notes-panel").querySelector("button")!)
+		fireEvent.click(screen.getByTestId("ppt-speaker-notes-content"))
 		fireEvent.change(screen.getByTestId("ppt-speaker-notes-editor"), {
 			target: { value: "Stable note" },
 		})
@@ -180,7 +246,7 @@ describe("PPTSpeakerNotesPanel", () => {
 			/>,
 		)
 
-		fireEvent.click(screen.getByTestId("ppt-speaker-notes-panel").querySelector("button")!)
+		fireEvent.click(screen.getByTestId("ppt-speaker-notes-content"))
 		fireEvent.change(screen.getByTestId("ppt-speaker-notes-editor"), {
 			target: { value: "Do not lose this note" },
 		})
