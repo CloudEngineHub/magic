@@ -7,6 +7,7 @@ declare(strict_types=1);
 
 namespace App\Application\MagicBase\Support;
 
+use App\Application\SuperMagic\Project\Service\PublishedMicroAppFileAccessService;
 use App\Domain\Contact\Entity\ValueObject\DataIsolation;
 use App\Domain\Contact\Service\MagicDepartmentUserDomainService;
 use App\Domain\MagicBase\Entity\MagicBaseColumnEntity;
@@ -41,6 +42,7 @@ readonly class MagicBaseAccessControl
         private ProjectMemberDomainService $projectMemberDomainService,
         private MagicDepartmentUserDomainService $departmentUserDomainService,
         private MicroAppRepositoryInterface $microAppRepository,
+        private PublishedMicroAppFileAccessService $publishedMicroAppFileAccessService,
     ) {
     }
 
@@ -346,6 +348,16 @@ readonly class MagicBaseAccessControl
             if ($departmentMember->getRole()->isHigherOrEqualThan($requiredRole)) {
                 return $project;
             }
+        }
+
+        // 发布访问只允许读取，数据权限仍按真实用户检查，不转换为协作者或分享运行身份。
+        if ($requiredRole === MemberRole::VIEWER
+            && $this->publishedMicroAppFileAccessService->canAccessProject(
+                $projectId,
+                $authorization->getId(),
+                $authorization->getOrganizationCode()
+            )) {
+            return $project;
         }
 
         $this->forbidden($deniedMessage);
