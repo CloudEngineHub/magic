@@ -258,7 +258,7 @@ function ProjectCard({
 						<>
 							<button
 								type="button"
-								className="flex min-w-0 items-center gap-1.5 rounded p-0 text-left text-xs leading-4 text-muted-foreground hover:bg-fill"
+								className="-ml-1.5 flex h-7 min-w-0 items-center gap-1.5 rounded-md px-1.5 text-left text-xs leading-4 text-muted-foreground hover:bg-fill"
 								title={workspaceName}
 								onClick={onWorkspaceProjectsOpen}
 								data-testid="project-card-workspace"

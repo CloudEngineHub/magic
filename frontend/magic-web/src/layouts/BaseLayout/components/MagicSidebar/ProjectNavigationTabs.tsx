@@ -19,7 +19,7 @@ function ProjectNavigationTabs({
 	const workspaces = t("projectNavigation.workspaces")
 	return (
 		<div
-			className="sticky top-0 z-30 flex h-8 items-center gap-2 bg-sidebar px-2"
+			className="sticky top-0 z-30 flex h-9 items-center gap-2 bg-sidebar px-2 pb-1"
 			data-sidebar-navigation-header="tabs"
 		>
 			<SidebarMenu
@@ -69,7 +69,7 @@ function ProjectNavigationTabs({
 					disabled={disabled}
 					onClick={onOpenManager}
 					data-testid="sidebar-project-manager"
-					className="size-6 shrink-0 text-sidebar-foreground/80 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground focus-visible:bg-sidebar-accent focus-visible:text-sidebar-accent-foreground focus-visible:ring-1"
+					className="size-7 shrink-0 text-sidebar-foreground/80 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground focus-visible:bg-sidebar-accent focus-visible:text-sidebar-accent-foreground focus-visible:ring-1"
 				>
 					<AppWindow size={16} />
 				</Button>
