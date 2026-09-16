@@ -12,11 +12,11 @@ import {
 import { useTranslation } from "react-i18next"
 import { Button } from "@/components/shadcn-ui/button"
 import { cn } from "@/utils/cn"
-import { getOperationResultData } from "@/pages/superMagic/utils/toolDetailDisplay"
+import { getOperationResultListData } from "@/pages/superMagic/utils/toolDetailDisplay"
 import { ToolIconBadge } from "../../../shared/ToolIconConfig"
 import { useToggleWithScrollPreserve } from "../hooks/useToggleWithScrollPreserve"
 
-interface OperationResultProps {
+interface OperationResultListProps {
 	toolData: {
 		id?: string
 		name?: string
@@ -31,18 +31,18 @@ interface OperationResultProps {
 	onMouseLeave?: MouseEventHandler
 }
 
-function OperationResult({
+function OperationResultList({
 	toolData,
 	loading = false,
 	className,
 	onMouseEnter,
 	onMouseLeave,
-}: OperationResultProps) {
+}: OperationResultListProps) {
 	const { t } = useTranslation("super")
 	const contentId = useId()
 	// 沿用消息作用域和滚动保护；虚拟行重新挂载仍保留用户的展开选择。
-	const [open, toggle] = useToggleWithScrollPreserve(false, "operation-result-expanded")
-	const data = getOperationResultData(toolData.detail)
+	const [open, toggle] = useToggleWithScrollPreserve(false, "operation-result-list-expanded")
+	const data = getOperationResultListData(toolData.detail)
 	const settled = !loading && (toolData.status === "finished" || toolData.status === "error")
 	const items = settled ? data?.items : undefined
 	const failedCount = items?.filter((item) => item.status === "error").length ?? 0
@@ -63,14 +63,14 @@ function OperationResult({
 				? CircleX
 				: CircleAlert
 	const unavailable = loading
-		? t("operationResult.running")
+		? t("operationResultList.running")
 		: toolData.status === "suspended"
-			? t("operationResult.interrupted")
-			: t("operationResult.unavailable")
+			? t("operationResultList.interrupted")
+			: t("operationResultList.unavailable")
 	const summary = items
 		? singleItem?.message ||
 			toolData.remark ||
-			t("operationResult.summary", { success: successCount, error: failedCount })
+			t("operationResultList.summary", { success: successCount, error: failedCount })
 		: unavailable
 
 	return (
@@ -96,7 +96,7 @@ function OperationResult({
 				>
 					<ToolIconBadge toolName={toolData.name} />
 					<span className="shrink-0">
-						{toolData.action || t("operationResult.title")}
+						{toolData.action || t("operationResultList.title")}
 					</span>
 					{singleItem && (
 						<span className="min-w-0 break-all text-muted-foreground">
@@ -147,8 +147,8 @@ function OperationResult({
 													className="shrink-0 text-muted-foreground"
 													aria-label={
 														item.kind === "directory"
-															? t("operationResult.directory")
-															: t("operationResult.file")
+															? t("operationResultList.directory")
+															: t("operationResultList.file")
 													}
 												/>
 											)}
@@ -193,4 +193,4 @@ function OperationResult({
 	)
 }
 
-export default observer(OperationResult)
+export default observer(OperationResultList)

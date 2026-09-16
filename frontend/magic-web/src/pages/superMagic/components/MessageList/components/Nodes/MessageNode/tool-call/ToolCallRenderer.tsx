@@ -5,7 +5,7 @@ import WriteFileTool from "./tools/WriteFile"
 import { MCPTool } from "./tools/MCP"
 import type { ToolCallRendererProps } from "./types"
 import { isInlineToolDetail } from "@/pages/superMagic/utils/toolDetailDisplay"
-import OperationResult from "../../shared/OperationResult"
+import OperationResultList from "../../shared/OperationResultList"
 
 const AskUserToolCall = lazy(() => import("./tools/AskUser"))
 const MicroAppPlanToolCall = lazy(() => import("./tools/MicroAppPlan"))
@@ -24,7 +24,7 @@ export function ToolCallRenderer({
 }: ToolCallRendererProps) {
 	if (isInlineToolDetail(toolData.detail)) {
 		return (
-			<OperationResult
+			<OperationResultList
 				toolData={toolData}
 				loading={loading}
 				className={classNames}

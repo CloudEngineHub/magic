@@ -4512,7 +4512,7 @@
 		"uploadImageCountLimit": "最多支持添加 10 张图",
 		"uploadImageSizeLimit": "请上传大小小于 2MB 的 JPG 或 PNG"
 	},
-	"operationResult": {
+	"operationResultList": {
 		"directory": "文件夹",
 		"file": "文件",
 		"interrupted": "操作已中断",

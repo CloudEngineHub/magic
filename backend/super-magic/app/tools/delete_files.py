@@ -14,7 +14,7 @@ from agentlang.utils.file import safe_delete
 from app.core.entity.message.server_message import (
     DisplayType,
     FileContent,
-    OperationResultContent,
+    OperationResultListContent,
     OperationResultItem,
     OperationResultKind,
     OperationResultStatus,
@@ -249,7 +249,7 @@ Before using delete_files:
             description=i18n.translate(item.error.value, category="tool.messages") if item.error else "",
         ) for item in items]
         if len(display_items) <= MAX_INLINE_DELETE_ITEMS:
-            return ToolDetail(type=DisplayType.OPERATION_RESULT, data=OperationResultContent(items=display_items))
+            return ToolDetail(type=DisplayType.OPERATION_RESULT_LIST, data=OperationResultListContent(items=display_items))
 
         # 报告与卡片共用同一份结果，完整保留顺序、失败项和脱敏原因。
         lines = [f"## {title}", "", self._get_remark_content(result), ""]

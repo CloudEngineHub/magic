@@ -1,15 +1,17 @@
 import {
 	DetailType,
-	type DetailOperationResultData,
+	type DetailOperationResultListData,
 	type OperationResultItem,
 } from "../components/Detail/types"
 
 /** 展示位置由类型决定；即使数据损坏，也在原卡片说明，不切换到回放面板。 */
 export function isInlineToolDetail(detail: unknown): boolean {
-	return isRecord(detail) && detail.type === DetailType.OperationResult
+	return isRecord(detail) && detail.type === DetailType.OperationResultList
 }
 
-export function getOperationResultData(detail: unknown): DetailOperationResultData | undefined {
+export function getOperationResultListData(
+	detail: unknown,
+): DetailOperationResultListData | undefined {
 	if (!isRecord(detail) || !isInlineToolDetail(detail) || !isRecord(detail.data)) return
 	const { items } = detail.data
 	if (!Array.isArray(items) || items.length === 0 || !items.every(isOperationResultItem)) return

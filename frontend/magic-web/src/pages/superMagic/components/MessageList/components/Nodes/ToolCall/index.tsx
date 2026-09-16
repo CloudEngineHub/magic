@@ -10,7 +10,7 @@ import pubsub, { PubSubEvents } from "@/utils/pubsub"
 import { filterClickableMessageWithoutRevoked } from "@/pages/superMagic/utils/handleMessage"
 import { getToolDesignProjectInfo } from "@/pages/superMagic/components/Detail/contents/Design/utils/toolDesignProjectInfo"
 import { isInlineToolDetail } from "@/pages/superMagic/utils/toolDetailDisplay"
-import OperationResult from "../shared/OperationResult"
+import OperationResultList from "../shared/OperationResultList"
 import {
 	getToolCardInteractionTarget,
 	selectToolFile,
@@ -102,7 +102,7 @@ function ToolCall(props: NodeProps) {
 
 	if (tool && isInlineToolDetail(tool.detail)) {
 		return (
-			<OperationResult
+			<OperationResultList
 				toolData={tool}
 				loading={tool.status === "running" || tool.status === "waiting"}
 				className={props.classNames?.markdown}

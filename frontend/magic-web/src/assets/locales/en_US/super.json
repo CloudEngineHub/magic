@@ -4513,7 +4513,7 @@
 		"uploadImageCountLimit": "It supports adding up to 10 JPG or PNG images.",
 		"uploadImageSizeLimit": "The file size should be less than 2MB."
 	},
-	"operationResult": {
+	"operationResultList": {
 		"directory": "Folder",
 		"file": "File",
 		"interrupted": "Operation interrupted",
