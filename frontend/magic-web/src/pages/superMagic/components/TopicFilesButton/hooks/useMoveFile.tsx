@@ -1058,21 +1058,31 @@ export function useMoveFile(options: UseMoveFileOptions = {}) {
 				}
 
 				try {
-					const canvasRisk = await detectCanvasProjectOperationRisk({
-						attachments,
-						items: [currentMoveItem],
-						operation: "move",
-					})
+					const skipCanvasGuard = currentMoveItem.file_id
+						? canSkipCanvasProjectOperationRiskForMove(
+								[currentMoveItem.file_id],
+								attachmentIndex,
+							)
+						: false
+					const canvasRisk = skipCanvasGuard
+						? { shouldWarn: false, riskTypes: [], affectedProjectNames: [] }
+						: await detectCanvasProjectOperationRisk({
+								attachments,
+								attachmentIndex,
+								items: [currentMoveItem],
+								operation: "move",
+							})
 					const preflightResult = await runCanvasFileOperationPreflight({
-						repairOptions: currentMoveItem.is_directory
-							? {
-									attachments,
-									attachmentIndex,
-									items: [currentMoveItem],
-									operation: "move",
-									projectId,
-								}
-							: undefined,
+						repairOptions:
+							!skipCanvasGuard && currentMoveItem.is_directory
+								? {
+										attachments,
+										attachmentIndex,
+										items: [currentMoveItem],
+										operation: "move",
+										projectId,
+									}
+								: undefined,
 						requiresConfirmation: canvasRisk.shouldWarn,
 						confirm: (repairPlan) =>
 							confirmCanvasProjectRisk(

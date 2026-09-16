@@ -308,6 +308,180 @@ function isAffectedProject(
 	})
 }
 
+function resolveIndexedItem(
+	attachmentIndex: AttachmentIndex,
+	lookupKey: string,
+): AttachmentItem | undefined {
+	return attachmentIndex.getItemById(lookupKey) || attachmentIndex.getItemByKey(lookupKey)
+}
+
+function resolveSelectedItemsWithIndex(options: CanvasProjectPathRepairOptions): AttachmentItem[] {
+	const attachmentIndex = options.attachmentIndex
+	if (!attachmentIndex) return []
+
+	const selected = [...(options.items || [])]
+	for (const fileId of options.fileIds || []) {
+		const item = resolveIndexedItem(attachmentIndex, String(fileId))
+		if (item) selected.push(item)
+	}
+
+	const seen = new Set<string>()
+	return selected.filter((item) => {
+		const key = String(item.file_id || item.relative_file_path || item.path || "")
+		if (!key || key === "undefined") return false
+		if (seen.has(key)) return false
+		seen.add(key)
+		return true
+	})
+}
+
+function directoryHasMagicProjectChild(
+	directory: AttachmentItem,
+	attachmentIndex: AttachmentIndex,
+): AttachmentItem | undefined {
+	const lookupKey = String(directory.file_id || directory.relative_file_path || "")
+	if (!lookupKey) return undefined
+
+	const childKeys = directory.file_id
+		? attachmentIndex.getChildKeysById(String(directory.file_id))
+		: attachmentIndex.getChildKeysByKey(lookupKey)
+
+	for (const childKey of childKeys) {
+		const child = attachmentIndex.getItemByKey(childKey)
+		if (!child || child.is_directory) continue
+		if (itemName(child) === MAGIC_PROJECT_FILE_NAME) return child
+	}
+	return undefined
+}
+
+function getIndexedParentItems(
+	item: AttachmentItem,
+	attachmentIndex: AttachmentIndex,
+): AttachmentItem[] {
+	if (item.file_id) return attachmentIndex.getParentItemsById(String(item.file_id))
+	const path = normalizePath(item.relative_file_path || item.path)
+	if (!path) return []
+	return attachmentIndex.getParentItemsByKey(path)
+}
+
+/**
+ * Path repair only applies when the selection is the canvas root or an ancestor
+ * directory. Resource files / folders inside a canvas (images, magic.project.js,
+ * etc.) must not trigger a full-tree collect + rewrite plan.
+ */
+function selectedCanTriggerPathRepair(
+	selectedItems: AttachmentItem[],
+	attachmentIndex: AttachmentIndex,
+): boolean {
+	return selectedItems.some((item) => {
+		if (!item.is_directory) return false
+
+		// Descendant of an existing canvas root → cannot be "root or ancestor".
+		const ancestors = getIndexedParentItems(item, attachmentIndex)
+		if (ancestors.some((ancestor) => directoryHasMagicProjectChild(ancestor, attachmentIndex)))
+			return false
+
+		return true
+	})
+}
+
+function collectSidecarsForRoot(
+	root: AttachmentItem,
+	mainFile: AttachmentItem,
+	attachmentIndex: AttachmentIndex,
+): AttachmentItem[] {
+	const lookupKey = String(root.file_id || root.relative_file_path || "")
+	if (!lookupKey) return []
+
+	const childKeys = root.file_id
+		? attachmentIndex.getChildKeysById(String(root.file_id))
+		: attachmentIndex.getChildKeysByKey(lookupKey)
+
+	return childKeys
+		.map((key) => attachmentIndex.getItemByKey(key))
+		.filter((candidate): candidate is AttachmentItem => {
+			if (!candidate || candidate.is_directory || !candidate.file_id) return false
+			if (String(candidate.file_id) === String(mainFile.file_id)) return false
+			const name = itemName(candidate)
+			return name === ELEMENT_DETAILS_FILENAME || name === ELEMENT_DETAILS_USER_FILENAME
+		})
+}
+
+function collectAffectedProjectsWithIndex(
+	selectedItems: AttachmentItem[],
+	attachmentIndex: AttachmentIndex,
+	projectId?: string,
+): CanvasProjectInfo[] {
+	const projects = new Map<string, CanvasProjectInfo>()
+
+	const maybeAddProject = (root: AttachmentItem, mainFile: AttachmentItem) => {
+		if (
+			projectId &&
+			[root, mainFile].some(
+				(candidate) =>
+					candidate.project_id !== undefined &&
+					candidate.project_id !== null &&
+					String(candidate.project_id) !== String(projectId),
+			)
+		)
+			return
+
+		const rootPath = normalizePath(root.relative_file_path || root.path) || itemName(root)
+		if (!rootPath || !mainFile.file_id) return
+
+		const projectKey = String(root.file_id || rootPath)
+		if (projects.has(projectKey)) return
+
+		projects.set(projectKey, {
+			rootPath,
+			projectName: itemName(root) || rootPath.split("/").pop() || rootPath,
+			mainFile,
+			sidecars: collectSidecarsForRoot(root, mainFile, attachmentIndex),
+		})
+	}
+
+	for (const item of selectedItems) {
+		if (!item.is_directory) continue
+
+		const ancestors = getIndexedParentItems(item, attachmentIndex)
+		if (ancestors.some((ancestor) => directoryHasMagicProjectChild(ancestor, attachmentIndex)))
+			continue
+
+		const ownMainFile = directoryHasMagicProjectChild(item, attachmentIndex)
+		if (ownMainFile) {
+			maybeAddProject(item, ownMainFile)
+			continue
+		}
+
+		const lookupKey = String(item.file_id || item.relative_file_path || "")
+		if (!lookupKey) continue
+
+		const descendantKeys = item.file_id
+			? attachmentIndex.getDescendantKeysById(String(item.file_id))
+			: attachmentIndex.getDescendantKeysByKey(lookupKey)
+
+		for (const key of descendantKeys) {
+			const candidate = attachmentIndex.getItemByKey(key)
+			if (
+				!candidate ||
+				candidate.is_directory ||
+				itemName(candidate) !== MAGIC_PROJECT_FILE_NAME
+			)
+				continue
+			if (!candidate.file_id) continue
+
+			const parent =
+				(candidate.file_id
+					? attachmentIndex.getParentItemById(String(candidate.file_id))
+					: null) || attachmentIndex.getParentItemByKey(key)
+			if (!parent?.is_directory) continue
+			maybeAddProject(parent, candidate)
+		}
+	}
+
+	return [...projects.values()]
+}
+
 function getSaveFailureMessage(response: unknown, fileId: string): string | null {
 	if (!response || typeof response !== "object") return "save-result-missing"
 	const payload = response as {
@@ -808,17 +982,38 @@ export async function planCanvasProjectsBeforeFileOperation(
 	options: CanvasProjectPathRepairOptions,
 ): Promise<CanvasProjectPathRepairResult> {
 	options.signal?.throwIfAborted()
+	let projects: CanvasProjectInfo[] = []
+
+	// Local-index fast path: resource moves inside a canvas (images / magic.project.js /
+	// sidecars) must not materialize the full attachment list just to discover that no
+	// project root is affected.
+	if (options.attachmentIndex) {
+		const indexedSelectedItems = resolveSelectedItemsWithIndex(options)
+		if (indexedSelectedItems.length === 0) return emptyPathRepairResult()
+		if (!selectedCanTriggerPathRepair(indexedSelectedItems, options.attachmentIndex))
+			return emptyPathRepairResult()
+
+		projects = collectAffectedProjectsWithIndex(
+			indexedSelectedItems,
+			options.attachmentIndex,
+			options.projectId,
+		)
+		if (projects.length === 0) return emptyPathRepairResult()
+	} else {
+		const flatItems = resolveFlatAttachmentItems(options)
+		const selectedItems = selectedOperationItems(options, flatItems)
+		if (selectedItems.length === 0) {
+			return emptyPathRepairResult()
+		}
+		projects = collectCanvasProjects(flatItems, options.projectId).filter((project) =>
+			isAffectedProject(project, selectedItems, flatItems),
+		)
+		if (projects.length === 0) {
+			return emptyPathRepairResult()
+		}
+	}
+
 	const flatItems = resolveFlatAttachmentItems(options)
-	const selectedItems = selectedOperationItems(options, flatItems)
-	if (selectedItems.length === 0) {
-		return emptyPathRepairResult()
-	}
-	const projects = collectCanvasProjects(flatItems, options.projectId).filter((project) =>
-		isAffectedProject(project, selectedItems, flatItems),
-	)
-	if (projects.length === 0) {
-		return emptyPathRepairResult()
-	}
 
 	const mainFileIds = projects.map((project) => String(project.mainFile.file_id))
 	const mainContents = await getFileContentsByIds(mainFileIds, {
