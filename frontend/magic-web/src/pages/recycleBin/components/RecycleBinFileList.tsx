@@ -16,7 +16,6 @@ import type { RecycleBinListProps } from "./RecycleBinList"
 import type { RecycleBinItem } from "./recycle-bin-domain"
 import { RecycleBinFileItem } from "./RecycleBinFileItem"
 import {
-	getRecycleBinRelativePath,
 	parseRecycleBinTime,
 	type RecycleBinFileGroup,
 	type RecycleBinFileView,
@@ -175,10 +174,8 @@ export function RecycleBinFileList({
 														placement="top"
 													>
 														{row.group.location === "/"
-															? t("recycleBin.project.topLevelFiles")
-															: (getRecycleBinRelativePath(
-																	row.group.location,
-																) ??
+															? t("recycleBin.project.root")
+															: (row.group.location ??
 																t(
 																	"recycleBin.project.unknownLocation",
 																))}
@@ -273,8 +270,8 @@ export function RecycleBinFileList({
 								</dt>
 								<dd className="break-all">
 									{detail.originalPath === "/"
-										? t("recycleBin.project.topLevelFiles")
-										: (getRecycleBinRelativePath(detail.originalPath) ??
+										? t("recycleBin.project.root")
+										: (detail.originalPath ??
 											t("recycleBin.project.unknownLocation"))}
 								</dd>
 							</div>

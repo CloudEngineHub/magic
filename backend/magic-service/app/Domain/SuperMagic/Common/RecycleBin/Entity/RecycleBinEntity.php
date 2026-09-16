@@ -31,8 +31,6 @@ class RecycleBinEntity extends AbstractEntity
 
     protected int $retainDays = 30;
 
-    protected bool $isHidden = false;
-
     protected ?string $removedAt = null;
 
     protected ?string $removedBy = null;
@@ -140,17 +138,6 @@ class RecycleBinEntity extends AbstractEntity
         return $this->removedAt;
     }
 
-    public function getIsHidden(): bool
-    {
-        return $this->isHidden;
-    }
-
-    public function setIsHidden(bool $isHidden): self
-    {
-        $this->isHidden = $isHidden;
-        return $this;
-    }
-
     public function setRemovedAt(?string $removedAt): self
     {
         $this->removedAt = $removedAt;
@@ -237,7 +224,6 @@ class RecycleBinEntity extends AbstractEntity
             'deleted_by' => $this->deletedBy,
             'deleted_at' => $this->deletedAt,
             'retain_days' => $this->retainDays,
-            'is_hidden' => $this->isHidden,
             'removed_at' => $this->removedAt,
             'removed_by' => $this->removedBy,
             'purged_at' => $this->purgedAt,
