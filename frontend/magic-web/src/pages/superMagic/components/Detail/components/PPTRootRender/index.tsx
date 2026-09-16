@@ -475,6 +475,7 @@ export default memo(function PPTRootRender(props: PPTRootRenderProps) {
 				</Flex>
 			) : (
 				<PPTRender
+					attachmentLoadState={props.attachmentLoadState}
 					key={`ppt-${renderKey}`}
 					slidePaths={derivedSlidePaths}
 					attachments={pptAttachments}

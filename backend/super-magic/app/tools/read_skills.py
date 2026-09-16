@@ -12,6 +12,7 @@ from agentlang.tools.tool_result import ToolResult
 from app.core.context.agent_context import AgentContext
 from app.core.entity.message.server_message import DisplayType, FileContent, ToolDetail
 from app.core.skill_manager import find_skill
+from app.core.skill_utils.constants import SKILL_MAX_TOKENS, SKILL_READ_LIMIT_NOTICE
 from app.core.skill_utils.referenced_project_skills import (
     find_referenced_project_skill,
     get_referenced_project_skills_dir,
@@ -20,6 +21,8 @@ from app.core.skill_utils.referenced_project_skills import (
 from app.core.skill_utils.skill_sources import get_personal_skills_dir
 from app.i18n import i18n
 from app.tools.core import AutoMount, BaseTool, BaseToolParams, tool
+from app.tools.core.base_tool import ToolResultContentMode
+from app.tools.read_files import FileReadOperation, ReadFiles, ReadFilesParams
 from app.tools.read_skills_hooks import (
     SkillLoadedHookContext,
     notify_skill_loaded,
@@ -69,7 +72,8 @@ Optional. The already bound/mounted referenced-project id. When set, read only t
         return text or None
 
 
-@tool(auto_mount=AutoMount.SKILLS)
+# hook 在返回前执行，必须交付完整指令；此豁免不代表已有安全预算。
+@tool(auto_mount=AutoMount.SKILLS, result_content_mode=ToolResultContentMode.INSTRUCTION)
 class ReadSkills(BaseTool[ReadSkillsParams]):
     """<!--zh
     批量读取可用 skills 的完整内容工具
@@ -94,7 +98,7 @@ class ReadSkills(BaseTool[ReadSkillsParams]):
             ToolResult: 工具执行结果
         """
         if not params.skill_names:
-            error_msg = "skill_names 列表不能为空"
+            error_msg = "skill_names must not be empty"
             return ToolResult(ok=False, content=error_msg)
 
         project_id = params.project_id
@@ -128,6 +132,8 @@ class ReadSkills(BaseTool[ReadSkillsParams]):
             success_count = 0
             failure_count = 0
             failed_skills = []
+            pending_confirmation_count = 0
+            read_files_tool = ReadFiles()
 
             for skill_name in params.skill_names:
                 # 被禁用的 skill 直接拒绝，不尝试查找或读取
@@ -174,12 +180,28 @@ class ReadSkills(BaseTool[ReadSkillsParams]):
                                 "or system skills with the same name."
                             )
                         else:
-                            error_msg = f"未找到名为 '{skill_name}' 的 skill"
+                            error_msg = f"Skill '{skill_name}' was not found"
                         results.append({"skill_name": skill_name, "success": False, "error": error_msg})
                         failure_count += 1
                         failed_skills.append(skill_name)
                         logger.warning(f"Skill 不存在: {skill_name}")
                         continue
+
+                    if not skill.skill_file:
+                        raise ValueError(f"Skill '{skill.name}' has no source file")
+                    file_result = await read_files_tool.execute(
+                        tool_context,
+                        ReadFilesParams(operations=[FileReadOperation(
+                            file_path=str(skill.skill_file), offset=0, limit=-1,
+                        )]),
+                        max_tokens=SKILL_MAX_TOKENS,
+                        allow_fuzzy_match=False,
+                        apply_batch_limit=False,
+                        use_context_budget=False,
+                    )
+                    if not file_result.ok or not file_result.extra_info["file_results"][0]["is_success"]:
+                        raise ValueError(file_result.content)
+                    needs_confirmation: bool = file_result.extra_info["file_results"][0]["was_truncated"]
 
                     # 构建单个 skill 的输出，使用 XML 标签包裹
                     skill_output_parts = [
@@ -197,7 +219,9 @@ class ReadSkills(BaseTool[ReadSkillsParams]):
                     if location or skill_dir:
                         skill_output_parts.append("")
 
-                    skill_output_parts += [skill.content, "</skill_content>"]
+                    if needs_confirmation:
+                        skill_output_parts.append(SKILL_READ_LIMIT_NOTICE)
+                    skill_output_parts += [file_result.content, "</skill_content>"]
 
                     skill_content = "\n".join(skill_output_parts)
 
@@ -221,7 +245,10 @@ class ReadSkills(BaseTool[ReadSkillsParams]):
                         "location": str(location) if location else None,
                         "skill_dir": str(skill_dir) if skill_dir else None,
                         "skill_dir_path": actual_skill_dir,
+                        "needs_confirmation": needs_confirmation,
                     })
+                    if needs_confirmation:
+                        pending_confirmation_count += 1
                     success_count += 1
                     logger.info(f"成功读取 skill: {skill_name}")
 
@@ -231,7 +258,7 @@ class ReadSkills(BaseTool[ReadSkillsParams]):
 
                     logger.error(traceback.format_exc())
 
-                    error_msg = f"读取 skill '{skill_name}' 失败: {e!s}"
+                    error_msg = f"Failed to read Skill '{skill_name}': {e!s}"
                     results.append({"skill_name": skill_name, "success": False, "error": error_msg})
                     failure_count += 1
                     failed_skills.append(skill_name)
@@ -294,11 +321,12 @@ class ReadSkills(BaseTool[ReadSkillsParams]):
             content = "\n".join(output_parts)
 
             return ToolResult(
-                ok=True,
+                ok=success_count > 0,
                 content=content,
                 extra_info={
                     "success_count": success_count,
                     "failure_count": failure_count,
+                    "pending_confirmation_count": pending_confirmation_count,
                     "skill_names": params.skill_names,
                     "md_content": _format_result_md(results, len(params.skill_names), success_count, failure_count),
                 },
@@ -310,7 +338,7 @@ class ReadSkills(BaseTool[ReadSkillsParams]):
 
             logger.error(traceback.format_exc())
 
-            error_msg = f"批量读取 skills 失败: {e!s}"
+            error_msg = f"Failed to read Skills: {e!s}"
             result = ToolResult(ok=False, content=error_msg)
             result.use_custom_remark = True
             return result
@@ -321,6 +349,12 @@ class ReadSkills(BaseTool[ReadSkillsParams]):
         success_count = extra.get("success_count", 0)
         failure_count = extra.get("failure_count", 0)
         skill_names: List[str] = (arguments or {}).get("skill_names", [])
+
+        if extra.get("pending_confirmation_count", 0):
+            return i18n.translate(
+                "read_skills.awaiting_read_confirmation", category="tool.messages",
+                count=extra["pending_confirmation_count"],
+            )
 
         if failure_count == 0:
             # 全部成功
@@ -382,8 +416,8 @@ class ReadSkills(BaseTool[ReadSkillsParams]):
     ) -> Dict:
         """获取工具调用后的友好动作和备注"""
         action = i18n.translate(tool_name, category="tool.actions")
-        if not result.ok:
-            # 只有 skill_names 为空时才走这里
+        if not result.ok and not result.extra_info:
+            # 尚未形成逐项结果时使用通用失败说明。
             remark = i18n.translate("read_skills.error", category="tool.messages")
         else:
             remark = self._get_remark_content(result, arguments)
@@ -508,7 +542,12 @@ def _format_result_md(results: List[Dict[str, Any]], total_count: int, success_c
             lines.extend(meta_lines)
             lines.append("")
 
-        lines.append("已成功读取。")
+        if result.get("needs_confirmation"):
+            lines.append(i18n.translate(
+                "read_skills.awaiting_read_confirmation", category="tool.messages", count=1,
+            ))
+        else:
+            lines.append("已成功读取。")
         lines.append("")
 
     return "\n".join(lines).strip()

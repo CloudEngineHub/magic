@@ -15,13 +15,10 @@ const MicroAppScheduledTasksPanel = lazy(
 const ShareManagementPanel = lazy(
 	() => import("@/pages/superMagic/components/ShareManagement/ShareManagementPanel"),
 )
-const LongTremMemorySider = lazy(() =>
-	import("@/pages/superMagic/components/LongTremMemory/components/MemorySider").then(
-		(module) => ({ default: module.LongTremMemorySider }),
-	),
-)
+const UserSpacePanel = lazy(() => import("@/pages/superMagic/components/UserSpace/UserSpacePanel"))
 
 interface MicroAppProjectPanelsProps {
+	placement?: "workspace" | "sidebar"
 	activeView: MicroAppWorkspaceView
 	attachmentList?: AttachmentItem[]
 	canEdit?: boolean
@@ -31,16 +28,11 @@ interface MicroAppProjectPanelsProps {
 	workspaceName?: string
 	projectName?: string
 	topicId?: string
-	activeLongMemoryFileId?: string | null
-	onLongMemoryFileClick?: (fileItem: AttachmentItem) => void
+	activeUserFileId?: string | null
+	onUserFileClick?: (fileItem: AttachmentItem) => void
 }
 
-const PROJECT_PANEL_VIEWS: MicroAppWorkspaceView[] = [
-	"skills",
-	"scheduledTasks",
-	"shareManagement",
-	"longMemory",
-]
+const PROJECT_PANEL_VIEWS: MicroAppWorkspaceView[] = ["skills", "scheduledTasks", "shareManagement"]
 
 const PROJECT_PANEL_CLASS_NAME = cn(
 	"h-full gap-0",
@@ -83,16 +75,29 @@ export default function MicroAppProjectPanels({
 	activeView,
 	attachmentList = [],
 	canEdit = false,
+	placement = "workspace",
 	projectId,
 	projectRole,
 	workspaceId,
 	workspaceName,
 	projectName,
 	topicId,
-	activeLongMemoryFileId,
-	onLongMemoryFileClick,
+	activeUserFileId,
+	onUserFileClick,
 }: MicroAppProjectPanelsProps) {
 	const isProjectPanelActive = PROJECT_PANEL_VIEWS.includes(activeView)
+	if (placement === "sidebar")
+		return activeView === "userSpace" ? (
+			<Suspense fallback={<PanelLoading />}>
+				<UserSpacePanel
+					projectId={projectId}
+					projectName={projectName}
+					topicId={topicId}
+					activeFileId={activeUserFileId}
+					onFileClick={onUserFileClick}
+				/>
+			</Suspense>
+		) : null
 
 	return (
 		<>
@@ -139,14 +144,6 @@ export default function MicroAppProjectPanels({
 							<ShareManagementPanel
 								className={PROJECT_PANEL_CLASS_NAME}
 								projectId={projectId}
-							/>
-						) : null}
-						{activeView === "longMemory" ? (
-							<LongTremMemorySider
-								className={PROJECT_PANEL_CLASS_NAME}
-								projectId={projectId}
-								activeFileId={activeLongMemoryFileId}
-								onFileClick={onLongMemoryFileClick}
 							/>
 						) : null}
 					</Suspense>

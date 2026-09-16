@@ -108,4 +108,24 @@ class ReferencedProjectMountPlannerTest extends TestCase
         self::assertSame('micro_app', $mounts[0]->sourceType);
         self::assertSame('3001', $mounts[0]->appId);
     }
+
+    public function testPlanRejectsInvalidProjectIdsAndUserSpaceMentions(): void
+    {
+        $planner = new ReferencedProjectMountPlanner();
+        foreach ([[], true, 0, -1, 1.5, '04001', ' 4001 ', '../4001', '9223372036854775808'] as $projectId) {
+            foreach (['project', 'micro_app', 'project_file', 'project_directory'] as $type) {
+                self::assertSame([], $planner->plan([[
+                    'type' => $type,
+                    'project_id' => $projectId,
+                    'access_kind' => ReferencedProjectAccessKind::Collaboration->value,
+                ]], 1001));
+            }
+        }
+        self::assertSame([], $planner->plan([
+            ['type' => 'user_file', 'project_id' => 4001],
+            ['type' => 'user_directory', 'project_id' => 4001],
+            ['type' => 'memory_file', 'project_id' => 4001],
+            ['type' => 'memory_directory', 'project_id' => 4001],
+        ], 1001));
+    }
 }

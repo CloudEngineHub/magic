@@ -2,7 +2,7 @@ import { Upload, UploadConfig as SDKUploadConfig } from "@dtyq/upload-sdk"
 import { UploadTokenManager } from "./UploadTokenManager"
 import { RecordingBatchSaveReporter } from "./RecordingBatchSaveReporter"
 import { VoiceResultUtterance } from "@/components/business/VoiceInput/services/VoiceClient/types"
-import { logger as Logger } from "@/utils/log"
+import { logger as Logger } from "@/infrastructure/logger"
 import recordSummaryStore from "@/stores/recordingSummary"
 import { getSnowflakeUploadFileName } from "./utils/getSnowflakeUploadFileName"
 

@@ -4,7 +4,7 @@ import { RequestMethod as OpenSourceRequestMethod } from "@/apis/constant"
 import { userStore } from "@/models/user"
 import { env } from "@/utils/env"
 import { genRequestUrl } from "@/utils/http"
-import { logger as Logger } from "@/utils/log"
+import { logger as Logger } from "@/infrastructure/logger"
 import { groupBy } from "lodash-es"
 import { normalizeUploadProgress } from "../utils/uploadProgress"
 

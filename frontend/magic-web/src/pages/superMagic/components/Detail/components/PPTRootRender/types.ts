@@ -1,8 +1,10 @@
+import type { AttachmentLoadState } from "@/stores/projectFiles/types"
 import type { DetailHTMLData } from "../../types"
 import type { ProjectListItem, Topic } from "@/pages/superMagic/pages/Workspace/types"
 import type { PPTSlideStructureAdapter } from "../PPTRender/types"
 
 export interface PPTRootRenderProps {
+	attachmentLoadState?: AttachmentLoadState
 	data: DetailHTMLData
 	attachments?: any[]
 	type?: string

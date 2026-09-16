@@ -3,6 +3,7 @@ import { useFileApi } from "@/pages/superMagic/fileAccess/fileApi"
 import { shouldWaitForShareAccess } from "@/pages/superMagic/fileAccess/fileAccessContext"
 import { memo, useEffect, useMemo, useState } from "react"
 import { Flex } from "antd"
+import { useMemoizedFn } from "ahooks"
 import { IconWorld } from "@tabler/icons-react"
 import {
 	ChevronLeft,
@@ -102,6 +103,11 @@ export default memo(function Browser(props: BrowserProps) {
 	const showViewSwitcher = hasScreenshot && hasDetail
 	const showDetail = hasDetail && (!hasScreenshot || viewMode === "code" || fallbackToDetail)
 
+	// 回调变化不代表截图变化；保持加载依赖稳定，失败时仍通知最新的父组件回调。
+	const switchToTextDetail = useMemoizedFn((): void => {
+		onViewModeChange?.("code")
+	})
+
 	const onOpenUrl = hasUrl
 		? () => {
 				window.open(url, "_blank", "noopener,noreferrer")
@@ -125,7 +131,7 @@ export default memo(function Browser(props: BrowserProps) {
 			if (!snapshotUrl && hasDetail) {
 				setImageError(true)
 				setFallbackToDetail(true)
-				onViewModeChange?.("code")
+				switchToTextDetail()
 			}
 			return () => {
 				cancelled = true
@@ -144,7 +150,7 @@ export default memo(function Browser(props: BrowserProps) {
 				if (!source && hasDetail) {
 					setImageError(true)
 					setFallbackToDetail(true)
-					onViewModeChange?.("code")
+					switchToTextDetail()
 				}
 			})
 			.catch(() => {
@@ -153,14 +159,14 @@ export default memo(function Browser(props: BrowserProps) {
 				if (!snapshotUrl && hasDetail) {
 					setImageError(true)
 					setFallbackToDetail(true)
-					onViewModeChange?.("code")
+					switchToTextDetail()
 				}
 			})
 
 		return () => {
 			cancelled = true
 		}
-	}, [fileAccess, fileApi, hasDetail, onViewModeChange, resolvedFileId, snapshotUrl])
+	}, [fileAccess, fileApi, hasDetail, switchToTextDetail, resolvedFileId, snapshotUrl])
 
 	const handleImageError = () => {
 		setImageError(true)

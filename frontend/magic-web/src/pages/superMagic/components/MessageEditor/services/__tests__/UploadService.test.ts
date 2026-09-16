@@ -57,7 +57,7 @@ vi.mock("@/utils/http", () => ({
 	genRequestUrl: vi.fn((path: string) => path),
 }))
 
-vi.mock("@/utils/log", () => ({
+vi.mock("@/infrastructure/logger", () => ({
 	logger: {
 		createLogger: () => ({
 			error: vi.fn(),

@@ -90,6 +90,9 @@ function CrewConversationDesktop({
 
 	const {
 		shouldShowDetailPanel,
+		isDetailPanelCollapsed,
+		collapseDetailPanel,
+		expandDetailPanel,
 		handleFileClickWithPanel,
 		topicFilesPropsWithPanel,
 		handleActiveDetailTabChange,
@@ -255,6 +258,12 @@ function CrewConversationDesktop({
 						previewMode={previewMode}
 						previewSessionKey={previewSessionKey}
 						onPreviewDismiss={handlePreviewDismiss}
+						onPreviewCollapse={
+							isWidgetEmbed || isReadOnly ? undefined : collapseDetailPanel
+						}
+						onPreviewOpen={isWidgetEmbed ? undefined : expandDetailPanel}
+						isPreviewCollapsed={isDetailPanelCollapsed}
+						canLocateFile={showProjectSidebar && !isReadOnly}
 						persistFileTabs={!isWidgetEmbed}
 						projectId={selectedProject.id}
 						showFallbackWhenEmpty
@@ -291,6 +300,8 @@ function CrewConversationDesktop({
 						: undefined
 				}
 				shouldShowDetailPanel={shouldShowDetailPanel}
+				isDetailPanelCollapsed={isDetailPanelCollapsed}
+				onExpandDetailPanel={isWidgetEmbed ? undefined : expandDetailPanel}
 				renderMessagePanel={({
 					isConversationPanelCollapsed,
 					onToggleConversationPanel,

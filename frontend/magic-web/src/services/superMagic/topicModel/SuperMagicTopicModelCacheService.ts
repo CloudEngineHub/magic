@@ -1,5 +1,5 @@
 import { IStorageAdapter, LocalStorageAdapter } from "./storage"
-import { logger as Logger } from "@/utils/log"
+import { logger as Logger } from "@/infrastructure/logger"
 import { platformKey } from "@/utils/storage"
 import { userStore } from "@/models/user"
 

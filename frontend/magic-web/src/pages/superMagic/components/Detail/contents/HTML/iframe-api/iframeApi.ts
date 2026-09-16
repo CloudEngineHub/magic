@@ -5,7 +5,7 @@
  * 确保 iframe 场景下的请求错误被抛出而非导致主站跳转登录页。
  */
 
-import iframeClient from "@/apis/clients/iframeClient"
+import { defaultIframeClient as iframeClient } from "@/infrastructure/network/http/runtime"
 import type { SaveFileContentResponse } from "@/apis/modules/superMagic"
 import { userStore } from "@/models/user"
 import {

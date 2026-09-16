@@ -2,7 +2,7 @@ import { AccountRepository } from "@/models/user/repositories/AccountRepository"
 import { userStore } from "@/models/user"
 import { getHtmlPermissionGrantStore } from "@/pages/superMagic/components/Detail/contents/HTML/iframe-api/services/IndexedDbHtmlPermissionGrantStore"
 import type { User } from "@/types/user"
-import { logger as Logger } from "@/utils/log"
+import { logger as Logger } from "@/infrastructure/logger"
 import { BroadcastChannelSender } from "@/broadcastChannel"
 import type * as apis from "@/apis"
 import type { Container } from "@/services/ServiceContainer"
@@ -21,7 +21,7 @@ export class AccountService {
 	private readonly service: Container
 	private readonly authApi: typeof apis.AuthApi
 
-	constructor(dependencies: typeof apis, service: Container) {
+	constructor(dependencies: Pick<typeof apis, "AuthApi">, service: Container) {
 		this.authApi = dependencies.AuthApi
 		this.service = service
 	}
@@ -45,13 +45,17 @@ export class AccountService {
 	setAccount(userAccount: User.UserAccount) {
 		// 数据持久化同步
 		const account = new AccountRepository()
-		account.addAccount(userAccount).catch(logger.error)
+		const persistence = account.addAccount(userAccount)
+		void persistence.catch(logger.error)
 
 		// 内存状态同步
 		userStore.account.setAccount(userAccount)
 
 		// 广播添加账号
 		BroadcastChannelSender.addAccount(userAccount)
+
+		// Bootstrap callers must wait for disk as well as memory before reporting success.
+		return persistence
 	}
 
 	/**

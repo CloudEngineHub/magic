@@ -126,6 +126,8 @@ vi.mock("@/stores/layout", () => ({
 		collapsed: false,
 		collapsedSizePercent: 8,
 		MAX_WIDTH_PERCENT: 40,
+		windowWidth: 1280,
+		getMaxWidthPercent: (): number => 40,
 	},
 }))
 

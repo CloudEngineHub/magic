@@ -6,29 +6,41 @@ import {
 } from "react"
 import ReactDOM from "react-dom"
 import { ResizeGrip } from "@/pages/superMagic/components/ResizeGrip/ResizeGrip"
+import { useTranslation } from "react-i18next"
 import { cn } from "@/utils/cn"
+import { ResizableCollapseFeedback, resizeGlowClassName } from "@/components/shadcn-ui/resizable"
 
 interface TopicResizeHandleProps {
 	className?: string
-	disabled?: boolean
 	gripVariant?: "default" | "dots"
+	disabled?: boolean
 	onResizeStart: (clientX: number) => void
 	style?: CSSProperties
+	dragging?: boolean
+	collapseProgress?: number
+	collapseArmed?: boolean
+	collapseDirection?: -1 | 1
 }
 
 /** Keeps the layout divider narrow while exposing a wider pointer target for reliable resizing. */
 function TopicResizeHandle({
 	className,
-	disabled = false,
 	gripVariant = "default",
+	disabled = false,
 	onResizeStart,
 	style,
+	dragging,
+	collapseProgress = 0,
+	collapseArmed = false,
+	collapseDirection = 1,
 }: TopicResizeHandleProps) {
-	const [isDragging, setIsDragging] = useState(false)
+	const { t } = useTranslation("super")
+	const [localDragging, setIsDragging] = useState(false)
+	const isDragging = dragging ?? localDragging
 
 	/** Starts resize from a unified pointer event so mouse, trackpad, and touch share one path. */
 	const handlePointerDown = (event: ReactPointerEvent<HTMLDivElement>) => {
-		if (disabled) return
+		if (disabled || event.button !== 0) return
 		event.preventDefault()
 		setIsDragging(true)
 		onResizeStart(event.clientX)
@@ -56,13 +68,15 @@ function TopicResizeHandle({
 				style={style}
 				data-slot="resizable-handle"
 				data-resizing={isDragging ? "true" : undefined}
+				data-dragging={isDragging}
 				onPointerDown={handlePointerDown}
 				className={cn(
-					"focus-visible:outline-hidden relative flex w-px items-center justify-center bg-border focus-visible:ring-1 focus-visible:ring-ring focus-visible:ring-offset-1 data-[panel-group-direction=vertical]:h-px data-[panel-group-direction=vertical]:w-full [&[data-panel-group-direction=vertical]>div]:rotate-90",
+					"relative flex w-px items-center justify-center bg-border focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring focus-visible:ring-offset-1 data-[panel-group-direction=vertical]:h-px data-[panel-group-direction=vertical]:w-full [&[data-panel-group-direction=vertical]>div]:rotate-90",
 					"group relative flex !w-2 cursor-col-resize touch-none items-center justify-center !bg-transparent",
-					"overflow-visible before:pointer-events-none before:absolute before:inset-0 before:z-0",
-					"before:bg-gradient-to-b before:from-[rgba(239,246,255,0)] before:via-[rgba(210,230,255,1)] before:to-[rgba(239,246,255,0)]",
-					"before:opacity-0 before:transition-opacity before:duration-200 hover:before:opacity-100",
+					resizeGlowClassName,
+					gripVariant === "dots" &&
+						"group/resize outline-none focus-visible:ring-0 focus-visible:ring-offset-0 focus-visible:before:opacity-100 dark:[--resize-glow-rgb:52,88,136]",
+					gripVariant === "dots" && isDragging && "before:opacity-100",
 					"data-[panel-group-direction=vertical]:!h-2 data-[panel-group-direction=vertical]:!w-full",
 					"data-[panel-group-direction=vertical]:before:bg-gradient-to-r",
 					disabled && "pointer-events-none",
@@ -76,6 +90,25 @@ function TopicResizeHandle({
 					className="absolute inset-y-0 left-1/2 z-20 w-4 -translate-x-1/2 cursor-col-resize touch-none"
 					data-testid="resize-handle-hit-area"
 					aria-hidden="true"
+				/>
+				<ResizableCollapseFeedback
+					dragging={isDragging}
+					collapseProgress={collapseProgress}
+					collapseArmed={collapseArmed}
+					collapseDirection={collapseDirection}
+					pullLabel={
+						collapseDirection < 0
+							? t("sidebarPanels.pullLeftToCollapse")
+							: t("sidebarPanels.pullRightToCollapse")
+					}
+					description={
+						collapseArmed
+							? collapseDirection < 0
+								? t("sidebarPanels.pullRightToCancel")
+								: t("sidebarPanels.pullLeftToCancel")
+							: t("sidebarPanels.releaseKeepsOpen")
+					}
+					releaseLabel={t("sidebarPanels.releaseToCollapse")}
 				/>
 				{gripVariant === "dots" ? (
 					<ResizeGrip orientation="vertical" />

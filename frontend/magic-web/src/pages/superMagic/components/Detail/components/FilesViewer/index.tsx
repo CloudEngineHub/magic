@@ -1,3 +1,4 @@
+import type { FileHelpContext } from "@/pages/superMagic/components/TopicFilesButton/utils/magic-system-folder"
 import {
 	memo,
 	useRef,
@@ -10,7 +11,14 @@ import {
 } from "react"
 import { createPortal } from "react-dom"
 import { observer } from "mobx-react-lite"
+import userFilesStore from "@/stores/userFiles"
+import type { AttachmentItem } from "../../../TopicFilesButton/hooks/types"
 import { IconMenu2, IconX } from "@tabler/icons-react"
+import { PanelLeftOpen } from "lucide-react"
+import { clipboard } from "@/utils/clipboard-helpers"
+import pubsub, { PubSubEvents } from "@/utils/pubsub"
+import { useFileInfoPanel } from "../../../TopicFilesButton/hooks/useFileInfoPanel"
+import { copyAttachmentPath } from "../../../TopicFilesButton/utils/attachmentPath"
 import { Tooltip } from "antd"
 import magicToast from "@/components/base/MagicToaster/utils"
 import { cn } from "@/utils/cn"
@@ -26,6 +34,7 @@ import type { FilesViewerProps, FilesViewerRef, TabItem as TabItemType } from ".
 
 // Hooks
 import { useFilesViewer } from "./hooks/useFilesViewer"
+import { useTabDrag } from "./hooks/useTabDrag"
 import { useTabContextMenu } from "./hooks/useTabContextMenu"
 import { useTabCache } from "./hooks/useTabCache"
 
@@ -90,6 +99,15 @@ const FilesViewer = memo(
 		forwardRef<FilesViewerRef, FilesViewerProps>((props, ref) => {
 			// Props are passed directly to hook
 			const tabAttachments = props.attachments ?? props.attachmentList
+			const ownerId = props.selectedProject?.id ?? props.projectId
+			const fileHelpContext = useMemo<FileHelpContext>(
+				() =>
+					props.fileHelpContext ??
+					(ownerId
+						? { kind: "project", projectId: String(ownerId) }
+						: { kind: "unknown" }),
+				[props.fileHelpContext, ownerId],
+			)
 			const { t } = useTranslation("super")
 			const isUrlFullscreenMode = useFullscreenMode()
 			const isFullscreenMode = Boolean(props.forceFullscreenMode) || isUrlFullscreenMode
@@ -115,13 +133,7 @@ const FilesViewer = memo(
 				getRenderProps,
 				fullscreenFileId,
 				handleRefresh,
-				handleTabDragStart,
-				handleTabDragEnd,
-				handleTabDragOver,
-				handleTabDrop,
-				draggedTab,
-				dragOverIndex,
-				dragDirection,
+				reorderTabs,
 				openPlaybackTab,
 				closePlaybackTab,
 				isPlaybackTab,
@@ -136,7 +148,44 @@ const FilesViewer = memo(
 				enterPreviewFullscreen,
 				exitPreviewFullscreen,
 				getCheckBeforeClose,
+				getTabFileContext,
+				getFileManagerState,
+				updateFileManagerState,
 			} = useFilesViewer(props)
+			const tabsRef = useRef(tabs)
+			tabsRef.current = tabs
+			const closingLeftTabsRef = useRef(false)
+			const { handleShowInfo, fileInfoPanel } = useFileInfoPanel()
+
+			const handleFileInfo = (tabId: string) => {
+				const context = getTabFileContext(tabId)
+				if (context?.canShowInfo) handleShowInfo(context.item)
+			}
+			const handleCopyFileName = async (tabId: string) => {
+				const context = getTabFileContext(tabId)
+				if (!context?.fileName) return
+				try {
+					await clipboard.writeText(context.fileName)
+					magicToast.success(t("fileViewer.tabs.copyFileNameSuccess"))
+				} catch {
+					magicToast.error(t("fileViewer.tabs.copyFileNameFailed"))
+				}
+			}
+			const handleCopyFilePath = async (tabId: string) => {
+				const context = getTabFileContext(tabId)
+				if (context?.canCopyPath) await copyAttachmentPath({ item: context.item, t })
+			}
+			const handleLocateFile = (tabId: string) => {
+				const context = getTabFileContext(tabId)
+				if (context?.canLocate) {
+					pubsub.publish(PubSubEvents.Locate_File_In_Tree, context.item.file_id)
+				}
+			}
+			const { isDragging, handleDragStart, handleDragEnd } = useTabDrag({
+				tabs,
+				containerRef: tabsContainerRef,
+				onReorder: reorderTabs,
+			})
 
 			// 使用缓存 Hook
 			const {
@@ -213,6 +262,40 @@ const FilesViewer = memo(
 				clearCache()
 			}
 
+			const handleCloseTabsToLeft = async (tabId: string) => {
+				if (closingLeftTabsRef.current) return
+				const targetIndex = tabsRef.current.findIndex((tab) => tab.id === tabId)
+				if (targetIndex <= 0) return
+				const candidates = tabsRef.current
+					.slice(0, targetIndex)
+					.filter((tab) => tab.closeable !== false)
+					.map((tab) => tab.id)
+				if (candidates.length === 0) return
+				closingLeftTabsRef.current = true
+				try {
+					// 先完成这一批的编辑确认；取消时不关闭前面已确认的标签。
+					for (const candidateId of candidates) {
+						if (!tabsRef.current.some((tab) => tab.id === tabId)) return
+						const candidate = tabsRef.current.find((tab) => tab.id === candidateId)
+						if (!candidate || candidate.closeable === false) continue
+						const checkBeforeClose = getCheckBeforeClose(candidateId)
+						if (checkBeforeClose && !(await checkBeforeClose())) return
+					}
+					if (!tabsRef.current.some((tab) => tab.id === tabId)) return
+					for (const candidateId of candidates) {
+						const candidate = tabsRef.current.find((tab) => tab.id === candidateId)
+						if (!candidate || candidate.closeable === false) continue
+						closeFileTab(candidateId)
+						removeFromCache(candidateId)
+					}
+					switchToTab(tabId)
+				} catch {
+					magicToast.error(t("fileViewer.tabs.closeFailed"))
+				} finally {
+					closingLeftTabsRef.current = false
+				}
+			}
+
 			// Handle refresh tab action
 			const handleRefreshTab = useCallback(
 				(tabId: string) => {
@@ -271,15 +354,27 @@ const FilesViewer = memo(
 				hideContextMenu,
 			} = useTabContextMenu({
 				tabs,
+				getFileContext: getTabFileContext,
 				actions: {
 					closeFileTab: handleTabClose,
 					closeOtherTabs,
+					closeTabsToLeft: handleCloseTabsToLeft,
 					closeTabsToRight,
 					clearAllTabs: handleClearAllTabs,
 					refreshTab: handleRefreshTab,
 					addWebsiteToCommon: handleAddWebsiteToCommon,
+					showFileInfo: handleFileInfo,
+					copyFileName: handleCopyFileName,
+					copyFilePath: handleCopyFilePath,
+					locateFile: handleLocateFile,
 				},
 			})
+
+			const handlePreviewCollapse = () => {
+				setExpandPanelVisible(false)
+				hideContextMenu()
+				props.onPreviewCollapse?.()
+			}
 
 			// 暴露组件方法
 			useImperativeHandle(ref, () => ({
@@ -339,31 +434,25 @@ const FilesViewer = memo(
 			}, [activeTab?.id, tabs.length])
 
 			// 渲染tab项
-			const renderTabItem = (tab: TabItemType, index: number) => {
+			const renderTabItem = (tab: TabItemType) => {
 				const isActive = activeTab?.id === tab.id
-				const isDragging = draggedTab?.id === tab.id
-				const isDragOver = dragOverIndex === index
 				const isPlayback = isPlaybackTab(tab.id)
 
 				return (
 					<TabItem
 						key={tab.id}
 						tab={tab}
-						index={index}
 						allTabs={tabs}
 						isActive={isActive}
 						isDragging={isDragging}
-						isDragOver={isDragOver}
-						dragDirection={dragDirection || undefined}
 						isPlayback={isPlayback}
 						contextMenuState={contextMenuState}
 						attachments={tabAttachments}
+						context={fileHelpContext}
 						onSwitchToTab={switchToTab}
 						onCloseTab={handleTabClose}
-						onDragStart={handleTabDragStart}
-						onDragEnd={handleTabDragEnd}
-						onDragOver={handleTabDragOver}
-						onDrop={handleTabDrop}
+						onDragStart={handleDragStart}
+						onDragEnd={handleDragEnd}
 					/>
 				)
 			}
@@ -392,6 +481,7 @@ const FilesViewer = memo(
 							<FileTabMagicIcon
 								tab={tab}
 								attachments={tabAttachments}
+								context={fileHelpContext}
 								isPlayback={isPlayback}
 								size={12}
 							/>
@@ -429,6 +519,25 @@ const FilesViewer = memo(
 				}),
 				[effectiveIsFullscreen, isDocumentFlowFullscreen, otherProps],
 			)
+			const fileSidebarButton = props.fileSidebarControl?.isCollapsed ? (
+				<Tooltip
+					title={t("sidebarPanels.expandFiles")}
+					placement="bottom"
+					trigger={["hover", "focus"]}
+				>
+					<button
+						ref={props.fileSidebarControl.triggerRef}
+						type="button"
+						className="mx-1 flex size-7 shrink-0 items-center justify-center rounded-md hover:bg-accent focus-visible:ring-2 focus-visible:ring-ring"
+						onClick={props.fileSidebarControl.onToggle}
+						aria-label={t("sidebarPanels.expandFiles")}
+						data-testid="file-viewer-expand-files"
+					>
+						<PanelLeftOpen size={16} />
+					</button>
+				</Tooltip>
+			) : null
+
 			const shouldUseSafeAreaFullscreen = shouldUseFileViewerFullscreenSafeArea()
 			const currentRenderPropsRef = useRef(currentRenderProps)
 			currentRenderPropsRef.current = currentRenderProps
@@ -438,7 +547,7 @@ const FilesViewer = memo(
 
 				return [
 					currentTab.id,
-					currentTab.refreshKey || "",
+					("refreshKey" in currentTab && currentTab.refreshKey) || "",
 					currentTab.fileData.file_id || "",
 					currentTab.fileData.updated_at || "",
 					String(effectiveIsFullscreen),
@@ -450,6 +559,8 @@ const FilesViewer = memo(
 					currentTab.fileData.htmlNavigation?.hash || "",
 					currentTab.fileData.htmlNavigation?.anchor || "",
 					props.activeFileId || "",
+					props.attachmentLoadState?.projectId || "",
+					props.attachmentLoadState?.status || "",
 					props.showFileFooter ? "1" : "0",
 				].join("|")
 			}, [
@@ -463,6 +574,8 @@ const FilesViewer = memo(
 				currentTab?.fileData.htmlNavigation?.hash,
 				currentTab?.fileData.htmlNavigation?.anchor,
 				props.activeFileId,
+				props.attachmentLoadState?.projectId,
+				props.attachmentLoadState?.status,
 				props.showFileFooter,
 			])
 			const shouldShowDetailEmpty =
@@ -477,6 +590,12 @@ const FilesViewer = memo(
 				}
 			}, [currentTabId, currentRenderCacheKey, addToCache])
 
+			const editingUserFiles = [...userFilesStore.editingFileIds].join(":")
+			const editingUserFileIds = useMemo(
+				() => new Set(editingUserFiles.split(":")),
+				[editingUserFiles],
+			)
+
 			// 判断是否应该渲染某个 tab
 			const shouldRenderTab = useCallback(
 				(tab: any) => {
@@ -484,9 +603,14 @@ const FilesViewer = memo(
 					const isCached = cachedTabIds.includes(tab.id)
 
 					// 只渲染活跃的 tab 和缓存中的 tab
-					return isActive || isCached
+					return (
+						isActive ||
+						isCached ||
+						(tab.fileData.space_type === "user" &&
+							editingUserFileIds.has(tab.fileData.file_id))
+					)
 				},
-				[activeTab?.id, cachedTabIds],
+				[activeTab?.id, cachedTabIds, editingUserFileIds],
 			)
 
 			// 每个 Tab 只生成一个 TabCache。非文档流模式统一放入稳定 body Portal，
@@ -499,9 +623,16 @@ const FilesViewer = memo(
 					const cachedProps = getFromCache(tab.id)
 
 					// 如果没有缓存，使用当前 tab 的属性
-					const renderProps = isActive
-						? currentRenderProps
-						: cachedProps || currentRenderProps
+					const renderProps =
+						tab.fileData.space_type === "user"
+							? {
+									...getRenderProps(tab),
+									isFullscreen: effectiveIsFullscreen,
+									documentFlowFullscreen: isDocumentFlowFullscreen,
+								}
+							: isActive
+								? currentRenderProps
+								: cachedProps || currentRenderProps
 
 					// 判断是否是演示模式tab，如果是则构建playbackProps
 					const isPlayback = isPlaybackTab(tab.id)
@@ -556,6 +687,18 @@ const FilesViewer = memo(
 						isActive,
 						node: (
 							<TabCache
+								getFileManagerState={getFileManagerState}
+								onFileManagerStateChange={updateFileManagerState}
+								managerProps={{
+									attachments: (props.attachments ?? []) as AttachmentItem[],
+									selectedProject: props.selectedProject,
+									selectedTopic: props.selectedTopic,
+									allowEdit: props.allowEdit,
+									allowDownload: props.allowDownload,
+									loading: isAwaitingProjectAttachments,
+									attachmentLoadState: props.attachmentLoadState,
+									onFileClick: openFileTab,
+								}}
 								key={tab.id}
 								tab={tab as any}
 								isActive={isActive}
@@ -635,16 +778,26 @@ const FilesViewer = memo(
 						)}
 					>
 						{/* Tab Bar — hidden in immersive read-only mode (e.g. audio recording detail) */}
+						{tabs.length === 0 &&
+							fileSidebarButton &&
+							!effectiveIsFullscreen &&
+							!props.hideTabBar && (
+								<div className="flex h-11 shrink-0 items-center border-b border-border bg-accent">
+									{fileSidebarButton}
+								</div>
+							)}
 						{tabs.length > 0 && !effectiveIsFullscreen && !props.hideTabBar && (
-							<div className="relative flex h-11 items-center bg-accent">
+							<div className="relative flex h-11 shrink-0 items-center bg-accent">
+								{fileSidebarButton}
 								<HeadlessHorizontalScroll
 									className="h-full min-w-0 flex-1"
 									controlBackground="rgb(var(--accent-rgb))"
 									scrollContainerClassName="no-scrollbar flex h-full w-full items-center overflow-x-auto overflow-y-hidden px-1 gap-0.5"
 									scrollContainerRef={tabsContainerRef}
+									dragIgnoreSelector="[data-tab-id], button, a, input, [role='button']"
 									onScrollContainerContextMenu={handleContainerContextMenu}
 								>
-									{tabs.map((tab, index) => renderTabItem(tab, index))}
+									{tabs.map(renderTabItem)}
 								</HeadlessHorizontalScroll>
 
 								<WebsitePresetMenu
@@ -659,11 +812,26 @@ const FilesViewer = memo(
 									open={expandPanelVisible}
 									onOpenChange={setExpandPanelVisible}
 								>
-									<DropdownMenuTrigger asChild>
-										<div className="relative mx-1 flex size-7 shrink-0 cursor-pointer select-none items-center justify-center rounded-md transition-all duration-200 hover:bg-black/10">
-											<MagicIcon component={IconMenu2} size={18} />
-										</div>
-									</DropdownMenuTrigger>
+									<Tooltip
+										title={
+											expandPanelVisible
+												? null
+												: t("fileViewer.tabs.openTabs")
+										}
+										placement="bottom"
+										trigger={["hover", "focus"]}
+										mouseEnterDelay={0.3}
+									>
+										<DropdownMenuTrigger asChild>
+											<button
+												type="button"
+												aria-label={t("fileViewer.tabs.openTabs")}
+												className="relative mx-1 flex size-7 shrink-0 cursor-pointer select-none items-center justify-center rounded-md transition-all duration-200 hover:bg-black/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+											>
+												<MagicIcon component={IconMenu2} size={18} />
+											</button>
+										</DropdownMenuTrigger>
+									</Tooltip>
 									<DropdownMenuContent
 										align="end"
 										className="max-h-[300px] w-[180px] overflow-y-auto p-1"
@@ -672,13 +840,31 @@ const FilesViewer = memo(
 									</DropdownMenuContent>
 								</DropdownMenu>
 
-								{/* 关闭所有 tab 按钮 */}
-								{hasCloseableTabs ? (
+								{props.onPreviewCollapse ? (
+									<Tooltip
+										title={t("fileViewer.tabs.collapsePreview")}
+										placement="bottom"
+										trigger={["hover", "focus"]}
+										mouseEnterDelay={0.3}
+									>
+										<button
+											type="button"
+											className="relative mr-1 flex size-7 shrink-0 items-center justify-center rounded-md hover:bg-black/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+											aria-label={t("fileViewer.tabs.collapsePreview")}
+											aria-expanded={true}
+											onClick={handlePreviewCollapse}
+											data-files-viewer-collapse-preview
+										>
+											<MagicIcon component={IconX} size={16} />
+										</button>
+									</Tooltip>
+								) : hasCloseableTabs ? (
 									<Tooltip
 										title={t("shortcut.closeAllTabs")}
 										placement="bottom"
 										mouseEnterDelay={0.3}
 									>
+										{/* 关闭所有 tab 按钮 */}
 										<div
 											className="relative mr-1 flex size-7 shrink-0 cursor-pointer select-none items-center justify-center rounded-md transition-all duration-200 hover:bg-black/10"
 											onClick={handleClearAllTabs}
@@ -768,11 +954,12 @@ const FilesViewer = memo(
 						enabled={Boolean(currentTab) && !isRestoringFileTabs && hasStableTabs}
 						isFullscreen={effectiveIsFullscreen}
 						isPpt={isActivePptPreview}
-						visible={hasActiveStableTab}
+						visible={hasActiveStableTab && !props.isPreviewCollapsed}
 					>
 						{stableCachedTabs}
 					</StablePreviewPortalSurface>
 					{viewerLayer}
+					{fileInfoPanel}
 				</>
 			)
 		}),

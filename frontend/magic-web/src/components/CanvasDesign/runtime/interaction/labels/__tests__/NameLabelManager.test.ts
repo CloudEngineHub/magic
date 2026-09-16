@@ -1,13 +1,31 @@
-import { describe, expect, it, vi } from "vitest"
-import { ElementTypeEnum } from "../../../document/types"
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
+import { ElementTypeEnum, type ElementType } from "../../../document/types"
 import { NameLabelManager } from "../NameLabelManager"
 
 type TestElement = {
-	getData: () => { id: string; type: ElementTypeEnum }
+	getData: () => { id: string; type: ElementType }
 	getBoundingRect?: () => { x: number; y: number; width: number; height: number }
+	getNameLabelText?: () => string
+	getNode?: () => object
 }
 
 class TestNameLabelManager extends NameLabelManager {
+	protected override reorderAllLabels(skipBatchDraw = false): void {
+		void skipBatchDraw
+	}
+
+	public createOrUpdateLabelForTest(elementId: string): boolean {
+		return this.createOrUpdateLabel(elementId)
+	}
+
+	public hasLabel(elementId: string): boolean {
+		return this.labelMap.has(elementId)
+	}
+
+	public isLabelVisible(elementId: string): boolean | undefined {
+		return this.labelMap.get(elementId)?.visible()
+	}
+
 	public isLabelVisibleByDefault(elementId: string): boolean | null {
 		const element = this.canvas.elementManager.getElementInstance(elementId)
 		return this.calculateBaseVisibility(elementId, element)
@@ -44,14 +62,33 @@ function createManager(
 			hoverManager: {
 				getHoveredElementId: () => options.hoveredElementId ?? null,
 			},
+			overlayLayer: { add: vi.fn() },
+			runtimeScheduler: { requestLayerDraw: vi.fn() },
 			selectionManager: {
 				isSelected: (elementId: string) => options.selectedElementId === elementId,
+			},
+			stage: {
+				position: () => ({ x: 0, y: 0 }),
+				scaleX: () => 1,
 			},
 		} as never,
 	})
 }
 
 describe("NameLabelManager visibility", () => {
+	beforeEach(() => {
+		vi.spyOn(HTMLCanvasElement.prototype, "getContext").mockReturnValue({
+			clearRect: vi.fn(),
+			fillRect: vi.fn(),
+			getImageData: vi.fn(() => ({ data: new Uint8ClampedArray([0, 0, 0, 0]) })),
+			measureText: vi.fn((text: string) => ({ width: text.length * 8 })),
+		} as unknown as CanvasRenderingContext2D)
+	})
+
+	afterEach(() => {
+		vi.restoreAllMocks()
+	})
+
 	it("keeps audio labels visible without hover or selection", () => {
 		const elements = new Map<string, TestElement>([
 			[
@@ -97,6 +134,44 @@ describe("NameLabelManager visibility", () => {
 
 		expect(manager.getTooWideLabelVisibility("audio-1")).toBe(false)
 		expect(manager.getTooWideLabelVisibility("image-1")).toBe(false)
+
+		manager.destroy()
+	})
+
+	it("retains a hidden media label only while renaming", () => {
+		const options: { selectedElementId?: string } = {}
+		const elements = new Map<string, TestElement>([
+			[
+				"image-1",
+				{
+					getBoundingRect: () => ({ x: 10, y: 20, width: 100, height: 80 }),
+					getData: () => ({ id: "image-1", type: ElementTypeEnum.Image }),
+					getNameLabelText: () => "Image 1",
+					getNode: () => ({}),
+				},
+			],
+		])
+		const manager = createManager(elements, options)
+
+		expect(manager.createOrUpdateLabelForTest("image-1")).toBe(false)
+		expect(manager.hasLabel("image-1")).toBe(false)
+
+		manager.setRenamingElementId("image-1")
+		expect(manager.getRenameInputLayout("image-1")).toMatchObject({ text: "Image 1" })
+		expect(manager.hasLabel("image-1")).toBe(true)
+		expect(manager.isLabelVisible("image-1")).toBe(false)
+
+		manager.setRenamingElementId(null)
+		expect(manager.hasLabel("image-1")).toBe(false)
+
+		options.selectedElementId = "image-1"
+		manager.setRenamingElementId("image-1")
+		expect(manager.getRenameInputLayout("image-1")).not.toBeNull()
+		expect(manager.isLabelVisible("image-1")).toBe(false)
+
+		manager.setRenamingElementId(null)
+		expect(manager.hasLabel("image-1")).toBe(true)
+		expect(manager.isLabelVisible("image-1")).toBe(true)
 
 		manager.destroy()
 	})

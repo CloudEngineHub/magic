@@ -528,76 +528,88 @@
         "en_US": "Failed to check background task: {{error}}"
     },
     "shell_await.error_task_not_found": {
-        "zh_CN": "找不到这个后台任务，可能已经结束了",
-        "en_US": "Task not found — it may have already finished"
+        "zh_CN": "找不到这条命令，可能已经结束了",
+        "en_US": "Command not found — it may have already finished"
     },
     "shell_await.error_invalid_pattern": {
         "zh_CN": "匹配规则写法有误，请检查后重试",
         "en_US": "Pattern expression has a syntax error — please check and retry"
     },
     "shell_await.error_log_missing": {
-        "zh_CN": "任务日志丢失，无法获取输出",
-        "en_US": "Task output log is missing and can't be retrieved"
+        "zh_CN": "命令日志丢失，无法获取输出",
+        "en_US": "Command output log is missing and can't be retrieved"
     },
     "shell_await.error_exception": {
-        "zh_CN": "等待任务时遇到了问题",
-        "en_US": "Something went wrong while waiting for the task"
+        "zh_CN": "处理时遇到了问题",
+        "en_US": "Something went wrong during this operation"
     },
     "shell_await.error_failed": {
-        "zh_CN": "无法查询到任务状态",
-        "en_US": "Couldn't retrieve task status"
+        "zh_CN": "无法获取命令状态",
+        "en_US": "Couldn't retrieve command status"
     },
     "shell_await.status_completed": {
-        "zh_CN": "任务已完成",
-        "en_US": "Task completed"
+        "zh_CN": "命令已完成",
+        "en_US": "Command completed"
     },
     "shell_await.status_killed": {
-        "zh_CN": "任务已终止",
-        "en_US": "Task stopped"
+        "zh_CN": "命令已停止",
+        "en_US": "Command stopped"
     },
     "shell_await.status_error": {
-        "zh_CN": "任务异常退出",
-        "en_US": "Task exited with an error"
+        "zh_CN": "命令异常退出",
+        "en_US": "Command exited with an error"
     },
     "shell_await.status_timeout": {
-        "zh_CN": "仍在运行中，等待超时",
-        "en_US": "Still running — timed out while waiting"
+        "zh_CN": "命令仍在运行，本次等待已结束",
+        "en_US": "Command is still running — this wait has ended"
     },
     "shell_await.status_running": {
-        "zh_CN": "任务正在运行",
-        "en_US": "Task is running"
+        "zh_CN": "命令仍在运行",
+        "en_US": "Command is still running"
     },
     "shell_await.status_pattern_matched": {
         "zh_CN": "已在输出中匹配到指定内容",
         "en_US": "Pattern matched in output"
     },
     "shell_await.status_waiting_for_input": {
-        "zh_CN": "任务正在等待用户输入",
-        "en_US": "Task is waiting for input"
+        "zh_CN": "命令正在等待输入",
+        "en_US": "Command is waiting for input"
     },
     "shell_await.status_slept": {
-        "zh_CN": "等待完成",
-        "en_US": "Sleep completed"
+        "zh_CN": "已完成",
+        "en_US": "Completed"
     },
     "shell_await.before_sleep": {
-        "zh_CN": "等待 {{seconds}} 秒",
-        "en_US": "Sleeping for {{seconds}} seconds"
+        "zh_CN": "计时中",
+        "en_US": "Waiting"
     },
     "shell_await.before_kill": {
-        "zh_CN": "终止后台任务",
-        "en_US": "Stopping background task"
+        "zh_CN": "正在停止命令",
+        "en_US": "Stopping command"
     },
     "shell_await.before_snapshot": {
-        "zh_CN": "查询任务当前状态",
-        "en_US": "Checking current task status"
+        "zh_CN": "读取当前输出",
+        "en_US": "Reading current output"
     },
     "shell_await.before_send_input": {
-        "zh_CN": "向任务发送输入",
-        "en_US": "Sending input to task"
+        "zh_CN": "向命令发送输入",
+        "en_US": "Sending input to command"
     },
     "shell_await.before_wait": {
-        "zh_CN": "等待任务执行",
-        "en_US": "Waiting for task"
+        "zh_CN": "等待新输出或执行结束",
+        "en_US": "Waiting for new output or completion"
+    },
+    "shell_await.duration_seconds": {
+        "zh_CN": "{{seconds}} 秒",
+        "en_US": "{{seconds}} sec"
+    },
+    "shell_await.duration_minutes": {
+        "zh_CN": "{{minutes}} 分钟",
+        "en_US": "{{minutes}} min"
+    },
+    "shell_await.duration_minutes_seconds": {
+        "zh_CN": "{{minutes}} 分 {{seconds}} 秒",
+        "en_US": "{{minutes}} min {{seconds}} sec"
     },
     "run_sdk_snippet.after_dispatched": {
         "zh_CN": "正在执行",
@@ -2187,6 +2199,112 @@
         "zh_CN": "等待智能体失败: {{error}}",
         "en_US": "Failed while waiting for Agents: {{error}}"
     },
+    "chat_history.history_root": {
+        "zh_CN": "历史根目录（只读）：{{root}}",
+        "en_US": "History root (read-only): {{root}}"
+    },
+    "chat_history.history_type.current": {
+        "zh_CN": "当前对话",
+        "en_US": "Current conversation"
+    },
+    "chat_history.history_type.compacted": {
+        "zh_CN": "压缩前记录",
+        "en_US": "Compacted history"
+    },
+    "chat_history.history_type.subagent": {
+        "zh_CN": "子任务记录",
+        "en_US": "Subagent history"
+    },
+    "chat_history.message_type.user_input": {
+        "zh_CN": "用户输入",
+        "en_US": "User input"
+    },
+    "chat_history.message_type.user": {
+        "zh_CN": "用户角色消息",
+        "en_US": "User role message"
+    },
+    "chat_history.message_type.assistant": {
+        "zh_CN": "助手回复",
+        "en_US": "Assistant reply"
+    },
+    "chat_history.message_type.tool": {
+        "zh_CN": "工具结果",
+        "en_US": "Tool result"
+    },
+    "chat_history.message_type.system": {
+        "zh_CN": "系统消息",
+        "en_US": "System message"
+    },
+    "chat_history.status.idle": {"zh_CN": "空闲", "en_US": "Idle"},
+    "chat_history.status.pending": {"zh_CN": "等待中", "en_US": "Pending"},
+    "chat_history.status.running": {"zh_CN": "运行中", "en_US": "Running"},
+    "chat_history.status.interrupted": {"zh_CN": "已中断", "en_US": "Interrupted"},
+    "chat_history.status.done": {"zh_CN": "已完成", "en_US": "Done"},
+    "chat_history.status.error": {"zh_CN": "失败", "en_US": "Error"},
+    "chat_history.range.unlimited": {"zh_CN": "不限制时间", "en_US": "No time limit"},
+    "chat_history.range.beginning": {"zh_CN": "起始时间", "en_US": "the beginning"},
+    "chat_history.range.now": {"zh_CN": "当前时间", "en_US": "now"},
+    "chat_history.range.value": {"zh_CN": "{{start}} 至 {{end}}", "en_US": "{{start}} to {{end}}"},
+    "chat_history.time_unavailable": {"zh_CN": "时间不可用", "en_US": "Time unavailable"},
+    "chat_history.field.type": {"zh_CN": "类型", "en_US": "Type"},
+    "chat_history.field.history_file": {"zh_CN": "记录文件", "en_US": "History file"},
+    "chat_history.field.modified": {"zh_CN": "更新时间", "en_US": "Modified"},
+    "chat_history.field.size": {"zh_CN": "大小", "en_US": "Size"},
+    "chat_history.field.status": {"zh_CN": "状态", "en_US": "Status"},
+    "chat_history.field.finished": {"zh_CN": "完成时间", "en_US": "Finished"},
+    "chat_history.field.result": {"zh_CN": "摘要", "en_US": "Summary"},
+    "chat_history.field.range": {"zh_CN": "时间范围", "en_US": "Time range"},
+    "chat_history.field.candidate_files": {"zh_CN": "候选记录", "en_US": "Candidate files"},
+    "chat_history.field.searched_files": {"zh_CN": "实际搜索", "en_US": "Searched files"},
+    "chat_history.field.returned": {"zh_CN": "本次返回", "en_US": "Returned"},
+    "chat_history.field.time": {"zh_CN": "时间", "en_US": "Time"},
+    "chat_history.field.time_filter": {"zh_CN": "时间筛选", "en_US": "Time filter"},
+    "chat_history.field.matched": {"zh_CN": "范围内匹配", "en_US": "Matched in range"},
+    "chat_history.empty_message": {"zh_CN": "（空消息）", "en_US": "(empty message)"},
+    "chat_history.detail_truncated": {"zh_CN": "详情展示已缩略。", "en_US": "The detail preview was shortened."},
+    "chat_history.list.before": {"zh_CN": "正在查看可用聊天记录", "en_US": "Inspecting available chat history"},
+    "chat_history.list.after": {"zh_CN": "找到 {{total}} 份记录，本次展示 {{returned}} 份", "en_US": "Found {{total}} history file(s); showing {{returned}}"},
+    "chat_history.list.empty": {"zh_CN": "当前筛选范围内没有聊天记录。", "en_US": "No chat history matched the selected filters."},
+    "chat_history.list.failed": {"zh_CN": "聊天记录查询未完成", "en_US": "Chat history lookup did not complete"},
+    "chat_history.list.truncated": {"zh_CN": "结果受到数量限制，可能还有其它记录。", "en_US": "The result was limited; more history files may exist."},
+    "chat_history.list.detail_title": {"zh_CN": "聊天记录清单", "en_US": "Chat history inventory"},
+    "chat_history.list.detail_summary": {"zh_CN": "找到 {{total}} 份记录，本次展示 {{returned}} 份。", "en_US": "Found {{total}} history file(s); showing {{returned}}."},
+    "chat_history.list.detail_inventory": {"zh_CN": "当前对话 {{current}} 份 · 压缩前记录 {{compacted}} 份 · 子任务记录 {{subagent}} 份。", "en_US": "Current {{current}} · compacted {{compacted}} · subagent {{subagent}}."},
+    "chat_history.search.before": {"zh_CN": "正在筛选历史消息", "en_US": "Filtering history messages"},
+    "chat_history.search.before_pattern": {"zh_CN": "正在查找「{{pattern}}」", "en_US": "Searching for “{{pattern}}”"},
+    "chat_history.search.after": {"zh_CN": "本次返回 {{returned}} 条消息", "en_US": "Returned {{returned}} message(s)"},
+    "chat_history.search.empty": {"zh_CN": "在本次已搜索的记录中没有找到符合条件的消息。", "en_US": "No matching messages were found in the searched history."},
+    "chat_history.search.failed": {"zh_CN": "聊天记录搜索未完成", "en_US": "Chat history search did not complete"},
+    "chat_history.search.skipped": {"zh_CN": "另有 {{count}} 份记录因文件过大未搜索，结果可能不完整。", "en_US": "{{count}} oversized file(s) were skipped, so the search may be incomplete."},
+    "chat_history.search.truncated": {"zh_CN": "已达到返回数量上限，可能还有其它匹配。", "en_US": "The result limit was reached; more matches may exist."},
+    "chat_history.search.detail_title": {"zh_CN": "聊天记录搜索结果", "en_US": "Chat history search results"},
+    "chat_history.search.message_heading": {"zh_CN": "消息 {{index}}", "en_US": "Message {{index}}"},
+    "chat_history.read.before": {"zh_CN": "正在读取消息 {{start}}–{{end}}", "en_US": "Reading messages {{start}}–{{end}}"},
+    "chat_history.read.after": {"zh_CN": "消息 {{start}}–{{end}}，返回 {{returned}} 条消息", "en_US": "Messages {{start}}–{{end}}, returned {{returned}} message(s)"},
+    "chat_history.read.failed": {"zh_CN": "聊天记录读取未完成", "en_US": "Chat history read did not complete"},
+    "chat_history.read.empty": {"zh_CN": "所选范围内没有符合筛选条件的消息。", "en_US": "No messages matched within the selected range."},
+    "chat_history.read.detail_title": {"zh_CN": "聊天记录片段", "en_US": "Chat history excerpt"},
+    "chat_history.read.range": {"zh_CN": "消息 {{start}}–{{end}}（原始编号，从 0 开始）", "en_US": "Messages {{start}}–{{end}} (original zero-based indexes)"},
+    "chat_history.read.message_heading": {"zh_CN": "消息 {{index}}", "en_US": "Message {{index}}"},
+    "chat_history.read.message_truncated": {"zh_CN": "该消息内容在本次输出中被截短。", "en_US": "This message was truncated in the current output."},
+    "chat_history.read.output_truncated": {"zh_CN": "本次输出已达到字符限制，详情不代表完整读取整个范围。", "en_US": "The output reached its character limit; the detail does not represent the complete range."},
+    "chat_history.read.detail_unavailable": {"zh_CN": "详情暂不可用。", "en_US": "The detail is temporarily unavailable."},
+    "chat_history.error.suggestion": {"zh_CN": "请调整筛选条件或记录范围后重试。", "en_US": "Adjust the filters or history range and try again."},
+    "chat_history.list.error_title": {"zh_CN": "聊天记录列表未完成", "en_US": "Chat history list incomplete"},
+    "chat_history.search.error_title": {"zh_CN": "聊天记录搜索未完成", "en_US": "Chat history search incomplete"},
+    "chat_history.read.error_title": {"zh_CN": "聊天记录读取未完成", "en_US": "Chat history read incomplete"},
+    "chat_history.error.unavailable.title": {"zh_CN": "当前无法查询聊天记录", "en_US": "Chat history is unavailable here"},
+    "chat_history.error.unavailable.description": {"zh_CN": "当前执行环境无法查询聊天记录。", "en_US": "This execution context cannot query chat history."},
+    "chat_history.error.timeout.title": {"zh_CN": "聊天记录查询超时", "en_US": "Chat history query timed out"},
+    "chat_history.error.timeout.description": {"zh_CN": "聊天记录查询超时，请缩小范围后重试。", "en_US": "The chat history query timed out. Narrow the range and try again."},
+    "chat_history.error.invalid_record.title": {"zh_CN": "聊天记录暂时无法读取", "en_US": "Chat history could not be read"},
+    "chat_history.error.invalid_record.description": {"zh_CN": "所选聊天记录格式暂时无法读取。", "en_US": "The selected history record could not be read in its current format."},
+    "chat_history.error.access_failed.title": {"zh_CN": "暂时无法访问聊天记录", "en_US": "Chat history could not be accessed"},
+    "chat_history.error.access_failed.description": {"zh_CN": "暂时无法访问所选聊天记录。", "en_US": "The selected chat history could not be accessed."},
+    "chat_history.error.invalid_query.title": {"zh_CN": "查询条件无法处理", "en_US": "The query could not be processed"},
+    "chat_history.error.invalid_query.description": {"zh_CN": "查询条件无法处理。", "en_US": "The selected query could not be processed."},
+    "chat_history.error.unknown.title": {"zh_CN": "聊天记录查询未完成", "en_US": "Chat history query incomplete"},
+    "chat_history.error.unknown.description": {"zh_CN": "聊天记录查询未完成，请检查条件后重试。", "en_US": "The chat history query did not complete. Check the conditions and try again."},
     "compact_chat_history.remark": {
         "zh_CN": "当前对话内容过长，「{{agent_name}}」将整理自己的记忆，可能导致先前对话中的一些细节被遗忘；太长的对话会影响「{{agent_name}}」的工作效率",
         "en_US": "Current conversation is too long. {{agent_name}} will organize its memory, which may cause some details from previous conversations to be forgotten. Long conversations will affect {{agent_name}}'s work efficiency."
@@ -2214,6 +2332,10 @@
     "read_skills.success": {
         "zh_CN": "技能装备成功",
         "en_US": "Skill equipped"
+    },
+    "read_skills.awaiting_read_confirmation": {
+        "zh_CN": "{{count}} 个 Skill 的说明过大，继续读取前需要确认",
+        "en_US": "{{count}} Skills have unusually large instructions; confirmation is needed before reading further"
     },
     "read_skills.success_single": {
         "zh_CN": "已装备技能 {{skill_name}}",
@@ -2247,6 +2369,10 @@
         "zh_CN": "查看浏览器会话",
         "en_US": "List browser sessions"
     },
+    "browser.list_instances": {
+        "zh_CN": "查看浏览器实例",
+        "en_US": "List Browser instances"
+    },
     "browser.list_pages": {
         "zh_CN": "查看浏览器页面",
         "en_US": "List browser pages"
@@ -2258,6 +2384,18 @@
     "browser.activate_page": {
         "zh_CN": "切换网页",
         "en_US": "Activate webpage"
+    },
+    "browser.select_instance": {
+        "zh_CN": "选择浏览器实例",
+        "en_US": "Select Browser instance"
+    },
+    "browser.select_tab": {
+        "zh_CN": "选择标签页",
+        "en_US": "Select Browser tab"
+    },
+    "browser.activate_tab": {
+        "zh_CN": "激活标签页",
+        "en_US": "Activate Browser tab"
     },
     "browser.wait": {
         "zh_CN": "等待网页状态",
@@ -2728,20 +2866,20 @@
         "en_US": "After reading"
     },
     "browser.detail.result.sessions": {
-        "zh_CN": "当前有 {{count}} 个可用浏览器会话。",
-        "en_US": "{{count}} Browser sessions are available."
+        "zh_CN": "当前有 {{count}} 个可用浏览器实例。",
+        "en_US": "{{count}} Browser instances are available."
     },
     "browser.detail.result.no_sessions": {
-        "zh_CN": "当前没有可用的浏览器会话。",
-        "en_US": "No Browser sessions are currently available."
+        "zh_CN": "当前没有可用的浏览器实例。",
+        "en_US": "No Browser instances are currently available."
     },
     "browser.detail.result.pages": {
         "zh_CN": "当前打开了 {{count}} 个网页。",
         "en_US": "{{count}} webpages are currently open."
     },
     "browser.detail.result.no_pages": {
-        "zh_CN": "当前浏览器会话中没有打开的网页。",
-        "en_US": "No webpages are open in this Browser session."
+        "zh_CN": "当前浏览器实例中没有打开的网页。",
+        "en_US": "No webpages are open in this Browser instance."
     },
     "browser.detail.result.page_opened": {
         "zh_CN": "网页已经打开，可以继续读取或操作。",
@@ -2750,6 +2888,10 @@
     "browser.detail.result.page_activated": {
         "zh_CN": "该网页已切换为当前操作页面。",
         "en_US": "This webpage is now the active page."
+    },
+    "browser.detail.result.page_selected": {
+        "zh_CN": "该标签页已设为后续操作的默认页面。",
+        "en_US": "This tab is now the default target for later operations."
     },
     "browser.detail.result.page_navigated": {
         "zh_CN": "网页已完成导航，可以继续读取或操作。",
@@ -2832,8 +2974,8 @@
         "en_US": "Untitled webpage"
     },
     "browser.detail.session": {
-        "zh_CN": "浏览器会话 {{index}}",
-        "en_US": "Browser session {{index}}"
+        "zh_CN": "浏览器实例 {{index}}",
+        "en_US": "Browser instance {{index}}"
     },
     "browser.detail.element": {
         "zh_CN": "元素",
@@ -3072,8 +3214,8 @@
         "en_US": "A closed page no longer provides a readable title, URL, or screenshot."
     },
     "browser.detail.label.page_id": {
-        "zh_CN": "页面 ID",
-        "en_US": "Page ID"
+        "zh_CN": "标签页 ID",
+        "en_US": "Tab ID"
     },
     "browser.detail.label.warning": {
         "zh_CN": "提示",
@@ -3382,6 +3524,10 @@
     "get_user_info.error": {
         "zh_CN": "无法获取用户信息",
         "en_US": "Failed to get user info"
+    },
+    "get_user_info.detail_error": {
+        "zh_CN": "本次未能获取当前用户的最新资料。请稍后重试；之前显示的资料和积分可能已经变化。",
+        "en_US": "The current user's latest profile could not be retrieved. Please try again later; previously shown profile and points may have changed."
     },
     "unknown.message": {
         "zh_CN": "未知",
@@ -6314,5 +6460,53 @@
     "canvas.search_prompts_pending": {
         "zh_CN": "正在搜索提示词灵感：{{query}}",
         "en_US": "Searching prompt inspirations for {{query}}"
+    },
+    "inspect_memory.before": {
+        "zh_CN": "正在统计所选记忆文件的用量",
+        "en_US": "Measuring the selected memory files"
+    },
+    "inspect_memory.success": {
+        "zh_CN": "已统计所选记忆文件的用量",
+        "en_US": "Selected memory files measured"
+    },
+    "inspect_memory.failed": {
+        "zh_CN": "部分记忆文件未能完成统计，已保留成功结果",
+        "en_US": "Some memory files could not be measured; successful results are retained"
+    },
+    "inspect_memory.usage": {
+        "zh_CN": "约 {{tokens}} Token，{{size}} 字节",
+        "en_US": "About {{tokens}} tokens, {{size}} bytes"
+    },
+    "inspect_memory.missing": {
+        "zh_CN": "文件不存在",
+        "en_US": "File does not exist"
+    },
+    "inspect_memory.not_file": {
+        "zh_CN": "所选路径不是普通文件",
+        "en_US": "The selected path is not a regular file"
+    },
+    "inspect_memory.unreadable": {
+        "zh_CN": "文件暂时无法读取",
+        "en_US": "File could not be read"
+    },
+    "inspect_memory.invalid_utf8": {
+        "zh_CN": "文件不是有效的 UTF-8 文本",
+        "en_US": "File is not valid UTF-8 text"
+    },
+    "inspect_memory.unstable": {
+        "zh_CN": "统计期间文件发生变化，用量暂不可用",
+        "en_US": "File changed during measurement; usage is unavailable"
+    },
+    "inspect_memory.invalid_path": {
+        "zh_CN": "请使用有效的绝对文件路径",
+        "en_US": "A valid absolute file path is required"
+    },
+    "inspect_memory.outside_scope": {
+        "zh_CN": "文件不在当前可用的记忆范围内",
+        "en_US": "File is outside the current available memory scope"
+    },
+    "inspect_memory.unavailable": {
+        "zh_CN": "当前任务无法使用记忆用量统计",
+        "en_US": "Memory measurement is unavailable for this task"
     }
 }

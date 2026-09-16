@@ -30,6 +30,31 @@ export interface LoadedVideoMetadata {
 /** 海报位图来源：由 VideoResourceManager 绘制到 canvas，供 Konva.Image 使用 */
 export type VideoPosterSource = HTMLCanvasElement
 
+/**
+ * 已交给资源管理器释放的 poster 不得再次进入 Konva.Image。
+ * poster 是可变的 HTMLCanvasElement，单看 width/height 不能区分“刚创建的 1×1
+ * poster”和“已经被释放后降级成 1×1 的 poster”，因此额外保留对象身份标记。
+ */
+const releasedVideoPosters = new WeakSet<object>()
+
+export function isUsableVideoPosterSource(value: unknown): value is VideoPosterSource {
+	if (typeof value !== "object" || value === null || releasedVideoPosters.has(value)) {
+		return false
+	}
+
+	try {
+		const poster = value as VideoPosterSource
+		return (
+			Number.isFinite(poster.width) &&
+			Number.isFinite(poster.height) &&
+			poster.width > 0 &&
+			poster.height > 0
+		)
+	} catch {
+		return false
+	}
+}
+
 /** 已解析的可播放地址 + 首帧海报 + 元数据 */
 export interface LoadedVideoResource {
 	/** 带签名的可播放 URL（可能过期，需结合 ensureFreshOssSrc） */
@@ -379,7 +404,10 @@ export class VideoResourceManager {
 		for (const candidate of candidates) {
 			if (totalBytes <= VIDEO_POSTER_CACHE_MAX_BYTES) break
 			if (!candidate.entry.resource) continue
-			this.releaseResource(candidate.entry.resource)
+			this.releaseResource(candidate.entry.resource, {
+				path: candidate.entry.referencePath,
+				reason: "viewport-far",
+			})
 			candidate.entry.resource = null
 			candidate.entry.resourceNeedsReload = true
 			totalBytes = Math.max(0, totalBytes - candidate.bytes)
@@ -403,7 +431,10 @@ export class VideoResourceManager {
 		this.previewLoader.destroy(pendingError)
 		this.entries.forEach((entry) => {
 			entry.loadingPromise?.abort()
-			this.releaseResource(entry.resource)
+			this.releaseResource(entry.resource, {
+				path: entry.referencePath,
+				reason: "manager-destroy",
+			})
 		})
 		this.entries.clear()
 		this.canvas.eventEmitter.off("element:deleted", this.handleElementDeleted)
@@ -413,6 +444,15 @@ export class VideoResourceManager {
 
 	private buildLoadedResource(entry: ResourceEntry): LoadedVideoResource | null {
 		if (!entry.ossSrc || !entry.resource) {
+			return null
+		}
+		if (!isUsableVideoPosterSource(entry.resource.poster)) {
+			this.releaseResource(entry.resource, {
+				path: entry.referencePath,
+				reason: "invalid-entry-poster",
+			})
+			entry.resource = null
+			entry.resourceNeedsReload = true
 			return null
 		}
 		this.setFailureReason(entry, null)
@@ -588,7 +628,10 @@ export class VideoResourceManager {
 			mediaType: "video",
 		})
 		if (entry.resource) {
-			this.releaseResource(entry.resource)
+			this.releaseResource(entry.resource, {
+				path: entry.referencePath,
+				reason: "resource-deleted",
+			})
 			entry.resource = null
 		}
 		entry.ossSrc = null
@@ -717,7 +760,10 @@ export class VideoResourceManager {
 			if (isNotFound) {
 				const hadSurface = !!entry.resource || !!options?.forceRefresh
 				if (entry.resource) {
-					this.releaseResource(entry.resource)
+					this.releaseResource(entry.resource, {
+						path: entry.referencePath,
+						reason: "resource-not-found",
+					})
 					entry.resource = null
 				}
 				entry.resourceNeedsReload = false
@@ -757,7 +803,10 @@ export class VideoResourceManager {
 			return false
 		}
 		if (loaded) {
-			this.releaseResource(previousResource)
+			this.releaseResource(previousResource, {
+				path: entry.referencePath,
+				reason: "resource-refreshed",
+			})
 			this.canvas.eventEmitter.emit({
 				type: "resource:video:refreshed",
 				data: { path: entry.referencePath, resource: loaded },
@@ -817,7 +866,13 @@ export class VideoResourceManager {
 		}
 		if (this.shouldDropAbortedLoad(options)) return null
 		if (loaded && entry.ossSrc !== ossSrc) {
-			this.releaseResource({ poster: loaded.poster, metadata: loaded.metadata })
+			this.releaseResource(
+				{ poster: loaded.poster, metadata: loaded.metadata },
+				{
+					path: entry.referencePath,
+					reason: "stale-load",
+				},
+			)
 			return null
 		}
 		if (!loaded && retryCount === 0) {
@@ -862,7 +917,10 @@ export class VideoResourceManager {
 		}
 		entry.resourceLastAccessAt = Date.now()
 		if (previousResource && previousResource !== entry.resource) {
-			this.releaseResource(previousResource)
+			this.releaseResource(previousResource, {
+				path: entry.referencePath,
+				reason: "resource-replaced",
+			})
 		}
 		entry.resourceNeedsReload = false
 		this.setFailureReason(entry, null)
@@ -935,8 +993,7 @@ export class VideoResourceManager {
 		for (const elementData of Object.values(elementsDict)) {
 			if (elementData.type !== ElementTypeEnum.Video) continue
 			const effectiveContent = this.canvas.getEffectiveContent(elementData.id) as
-				| { src?: string }
-				| undefined
+				{ src?: string } | undefined
 			if (!effectiveContent?.src) continue
 			usedPaths.add(this.getResourceIdentity(effectiveContent.src))
 		}
@@ -945,7 +1002,10 @@ export class VideoResourceManager {
 			if (usedPaths.has(resourceIdentity)) return
 
 			if (entry.resource) {
-				this.releaseResource(entry.resource)
+				this.releaseResource(entry.resource, {
+					path: entry.referencePath,
+					reason: "unused-resource",
+				})
 				entry.resource = null
 				this.canvas.eventEmitter.emit({
 					type: "resource:released",
@@ -965,13 +1025,72 @@ export class VideoResourceManager {
 		})
 	}
 
-	private releaseResource(resource: VideoResource | null): void {
+	private releaseResource(
+		resource: VideoResource | null,
+		context?: { path?: string; reason?: string },
+	): void {
 		if (!resource) {
 			return
 		}
 
-		resource.poster.width = 0
-		resource.poster.height = 0
+		if (releasedVideoPosters.has(resource.poster)) return
+
+		// Notify consumers while the source still has its original dimensions. The
+		// scene-graph fallback below covers both VideoElement and VideoEditElement,
+		// including stale Konva nodes left behind by a deferred rerender.
+		releasedVideoPosters.add(resource.poster)
+		this.canvas.eventEmitter?.emit({
+			type: "resource:video:will-release",
+			data: {
+				path: context?.path,
+				poster: resource.poster,
+				reason: context?.reason ?? "unknown",
+			},
+		})
+		this.detachPosterFromSceneGraph(resource.poster)
+
+		// Keep a drawable fallback surface. A stale Konva node must never receive a
+		// 0×0 canvas, even if it survives until the next render pass.
+		resource.poster.width = 1
+		resource.poster.height = 1
+	}
+
+	private detachPosterFromSceneGraph(poster: VideoPosterSource): void {
+		const roots: unknown[] = [this.canvas.stage]
+		try {
+			const layers = this.canvas.getAllLayers?.()
+			if (layers) roots.unshift(...Array.from(layers.values()))
+		} catch {
+			// Canvas teardown can race resource cleanup; the stage root is still best effort.
+		}
+		const visited = new Set<object>()
+
+		const visit = (value: unknown): void => {
+			if (!value || typeof value !== "object" || visited.has(value)) return
+			visited.add(value)
+
+			const node = value as {
+				getClassName?: () => string
+				image?: (next?: CanvasImageSource) => CanvasImageSource | undefined
+				getChildren?: () => unknown
+			}
+			if (node.getClassName?.() === "Image" && typeof node.image === "function") {
+				try {
+					if (node.image() === poster) node.image(undefined)
+				} catch {
+					// Destroyed Konva nodes can reject reads while Canvas is unmounting.
+				}
+			}
+
+			try {
+				const children = node.getChildren?.()
+				if (Array.isArray(children)) children.forEach(visit)
+			} catch {
+				// Continue with other layer roots if one stale node is unavailable.
+			}
+		}
+
+		roots.forEach(visit)
 	}
 
 	private getPosterBytes(poster: VideoPosterSource): number {

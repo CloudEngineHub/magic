@@ -1,3 +1,4 @@
+import type { AttachmentLoadState } from "@/stores/projectFiles/types"
 import {
 	lazy,
 	Suspense,
@@ -34,6 +35,8 @@ import { useResizableSidebar } from "./hooks/useResizableSidebar"
 import { useIsMobile } from "@/hooks/useIsMobile"
 import { useOrganization } from "@/models/user/hooks/useOrganization"
 import { useFileApi } from "@/pages/superMagic/fileAccess/fileApi"
+import { userStore } from "@/models/user"
+import { configStore } from "@/models/config"
 import {
 	AlertDialog,
 	AlertDialogAction,
@@ -50,12 +53,14 @@ import { MagicDropdown, MagicTooltip } from "@/components/base"
 import MagicModal from "@/components/base/MagicModal"
 import { Button } from "@/components/shadcn-ui/button"
 import { cn } from "@/utils/cn"
+import { findPPTSlideIndex } from "./utils/slideNavigation"
 import { PPTProvider } from "./contexts/PPTContext"
 import { useContainerShowButtonText } from "@/hooks/useContainerShowButtonText"
 import type { MenuProps } from "antd"
 import type { PPTSlideStructureAdapter } from "./types"
 import { getPPTLiveRenderCacheSize } from "./PPTSidebar/utils/devicePerformance"
 import EditToolbar from "../EditToolbar"
+import { runGuardedAction } from "../../utils/actionGuard"
 import type { OptionItem } from "@/pages/superMagic/components/MainInputContainer/panels/types"
 import {
 	buildSlidesTemplateReplacementPayload,
@@ -102,6 +107,7 @@ function getHtmlRelativeFolderPath(fileItem?: { relative_file_path?: string; fil
 }
 
 interface PPTRenderProps {
+	attachmentLoadState?: AttachmentLoadState
 	// ========== 外部依赖（必需） ==========
 	slidePaths: string[]
 	attachments?: any[]
@@ -153,7 +159,7 @@ interface PPTRenderProps {
  * PPTRender 包装组件
  * 创建事件总线和 store 实例并提供给子组件
  */
-const PPTRender = function PPTRender(props: PPTRenderProps) {
+const PPTRender = observer(function PPTRender(props: PPTRenderProps) {
 	const {
 		slidePaths,
 		attachments,
@@ -170,6 +176,29 @@ const PPTRender = function PPTRender(props: PPTRenderProps) {
 	const { organizationCode } = useOrganization()
 	const fileApi = useFileApi()
 	const resolvedProjectId = selectedProject?.id || projectId
+	const userId = userStore.user.userInfo?.user_id
+	const clusterCode = configStore.cluster.clusterCode
+	const thumbnailCacheScope = useMemo(
+		() =>
+			userId && organizationCode && resolvedProjectId && mainFileId
+				? {
+						clusterCode,
+						userId,
+						organizationCode,
+						projectId: resolvedProjectId,
+						mainFileId,
+					}
+				: undefined,
+		[clusterCode, userId, organizationCode, resolvedProjectId, mainFileId],
+	)
+	// 身份变化复用 Provider 的卸载清理，旧 HTML／请求不能进入新账号的缓存作用域。
+	const previewScopeKey = JSON.stringify([
+		clusterCode,
+		userId,
+		organizationCode,
+		resolvedProjectId,
+		mainFileId,
+	])
 	const effectiveDisplayConfig = useMemo(() => {
 		if (!slidePaths?.length) return displayConfig
 		return {
@@ -180,6 +209,8 @@ const PPTRender = function PPTRender(props: PPTRenderProps) {
 
 	const storeConfig = useMemo(
 		() => ({
+			thumbnailCacheScope,
+			attachmentLoadState: props.attachmentLoadState,
 			attachments,
 			attachmentList,
 			projectId: resolvedProjectId,
@@ -194,6 +225,8 @@ const PPTRender = function PPTRender(props: PPTRenderProps) {
 			fileApi,
 		}),
 		[
+			thumbnailCacheScope,
+			props.attachmentLoadState,
 			attachments,
 			attachmentList,
 			resolvedProjectId,
@@ -209,11 +242,11 @@ const PPTRender = function PPTRender(props: PPTRenderProps) {
 	)
 
 	return (
-		<PPTProvider storeConfig={storeConfig}>
+		<PPTProvider key={previewScopeKey} storeConfig={storeConfig}>
 			<PPTRenderInner {...props} />
 		</PPTProvider>
 	)
-}
+})
 
 /**
  * PPTRenderInner - PPT 渲染主逻辑
@@ -395,6 +428,24 @@ const PPTRenderInner = observer(function PPTRenderInner({
 		slideStructureAdapter,
 	})
 
+	const handleOpenNewTab = useMemoizedFn((fileId: string, path: string) => {
+		const currentSlide =
+			store.slides.find((slide) => store.getFileIdByPath(slide.path) === fileId) ||
+			store.slides[store.activeIndex]
+		const targetIndex = currentSlide
+			? findPPTSlideIndex(store.slides, currentSlide.path, path)
+			: -1
+
+		if (targetIndex >= 0) {
+			void checkBeforeNavigate("jump", targetIndex).then((canNavigate) => {
+				if (canNavigate) store.setActiveIndex(targetIndex)
+			})
+			return
+		}
+
+		openNewTab?.(fileId, path)
+	})
+
 	// 导航函数（上一张/下一张/跳转）
 	const { changeSlide, goToFirstSlide, handleJumpToPage } = useSlideNavigation({
 		store,
@@ -503,6 +554,13 @@ const PPTRenderInner = observer(function PPTRenderInner({
 	const presentedToolbarModel = scopedPresentedKey
 		? toolbarModels.get(scopedPresentedKey)
 		: undefined
+	// 上下两个当前页刷新入口共用版本恢复、更新提示和刷新状态；预备页切换中不能刷新旧页。
+	const handleRefreshCurrentSlide = useMemoizedFn(() => {
+		const toolbar = presentedToolbarModel?.props
+		if (pendingKey || !toolbar?.showRefresh || !toolbar.onRefresh || toolbar.isRefreshing)
+			return
+		void runGuardedAction(toolbar.beforeAction, toolbar.onRefresh)
+	})
 	// Slide template projects manage their own template manifest and should not
 	// expose the regular PPT template replacement flow.
 	const isSlidesTemplateProject = Boolean(slideStructureAdapter)
@@ -876,6 +934,7 @@ const PPTRenderInner = observer(function PPTRenderInner({
 									<EditToolbar
 										key={liveRenderScopeKey}
 										{...presentedToolbarModel.props}
+										getPopupContainer={() => containerRef.current}
 										interactionDisabled={Boolean(pendingKey)}
 										testIdsEnabled={isTabActive !== false}
 									/>
@@ -955,12 +1014,7 @@ const PPTRenderInner = observer(function PPTRenderInner({
 											fileId={slideFileId}
 											projectId={resolvedProjectId}
 											filePathMapping={filePathMapping}
-											openNewTab={
-												openNewTab ||
-												(() => {
-													// 空操作回退
-												})
-											}
+											openNewTab={handleOpenNewTab}
 											htmlRelativeFolderPath={slideHtmlRelativeFolderPath}
 											selectedProject={selectedProject}
 											attachmentList={attachmentList}
@@ -1009,6 +1063,7 @@ const PPTRenderInner = observer(function PPTRenderInner({
 							{/* 控制栏 - 在编辑模式和全屏模式下隐藏 */}
 							{!isAnySlideEditing &&
 								!isPresentationFullscreen &&
+								presentedToolbarModel?.props.viewMode !== "code" &&
 								store.isReady &&
 								hasSlides && (
 									<PPTControlBar
@@ -1021,6 +1076,14 @@ const PPTRenderInner = observer(function PPTRenderInner({
 										onNextSlide={() => changeSlide("next")}
 										onGoToFirstSlide={goToFirstSlide}
 										onRefreshSlides={handleRefreshAllSlides}
+										onRefreshCurrentSlide={
+											!pendingKey && presentedToolbarModel?.props.showRefresh
+												? handleRefreshCurrentSlide
+												: undefined
+										}
+										isRefreshingCurrentSlide={Boolean(
+											presentedToolbarModel?.props.isRefreshing,
+										)}
 										onJumpToPage={handleJumpToPage}
 										onToggleFullscreen={togglePresentationFullscreen}
 										onReplaceTemplate={
@@ -1029,9 +1092,10 @@ const PPTRenderInner = observer(function PPTRenderInner({
 												: undefined
 										}
 										scaleRatio={activeSlideScaleRatio}
+										isAutoScale={manualScale === null}
+										portalContainer={containerRef.current}
 										onScaleChange={handleManualScaleChange}
 										onResetScale={() => handleManualScaleChange(null)}
-										t={t}
 									/>
 								)}
 						</div>

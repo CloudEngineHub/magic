@@ -1,6 +1,7 @@
 import { render, screen } from "@testing-library/react"
 import { describe, expect, it, vi } from "vitest"
 import type { AttachmentItem } from "../hooks/types"
+import type { ReactNode } from "react"
 import { MobileAttachmentRowIcon } from "./MobileAttachmentRowIcon"
 
 vi.mock("./CustomFolderMagicIcon", () => ({
@@ -13,9 +14,18 @@ vi.mock("./CustomFolderMagicIcon", () => ({
 }))
 
 vi.mock("./ProjectFileImageThumbnailIcon", () => ({
-	ProjectFileImageThumbnailIcon: ({ item }: { item: AttachmentItem }) => (
-		<span data-testid="project-file-image-thumbnail" data-file-id={item.file_id} />
-	),
+	ProjectFileImageThumbnailIcon: ({
+		item,
+		fallback,
+	}: {
+		item: AttachmentItem
+		fallback?: ReactNode
+	}) =>
+		item.file_extension === "png" ? (
+			<span data-testid="project-file-image-thumbnail" data-file-id={item.file_id} />
+		) : (
+			fallback
+		),
 }))
 
 vi.mock("@/components/base/MagicFileIcon", () => ({
@@ -24,11 +34,37 @@ vi.mock("@/components/base/MagicFileIcon", () => ({
 	),
 }))
 
-vi.mock("../utils/magic-system-folder", () => ({
-	isMagicSystemFolder: vi.fn(() => false),
+vi.mock("./SlidesTemplateFolderIcon", () => ({
+	SlidesTemplateFolderIcon: () => <span data-testid="slides-template-icon" />,
 }))
 
 describe("MobileAttachmentRowIcon", () => {
+	it.each(["micro-app", "html-app"])("preserves configured icons for %s projects", (type) => {
+		const item: AttachmentItem = {
+			file_id: "app-folder",
+			name: "App",
+			is_directory: true,
+			display_config: { type, icon: "icon.png" },
+			children: [{ file_id: "icon", name: "icon.png", file_extension: "png" }],
+		}
+		render(<MobileAttachmentRowIcon item={item} attachments={[item]} />)
+		expect(screen.getByTestId("mobile-attachment-custom-folder-icon")).toHaveAttribute(
+			"data-children-count",
+			"1",
+		)
+	})
+
+	it("uses the dedicated template icon through shared file presentation", () => {
+		const item: AttachmentItem = {
+			file_id: "template",
+			name: "Template",
+			is_directory: true,
+			display_config: { type: "slide-template" },
+		}
+		render(<MobileAttachmentRowIcon item={item} attachments={[item]} />)
+		expect(screen.getByTestId("slides-template-icon")).toBeInTheDocument()
+	})
+
 	it("uses the full attachment tree when a custom folder item is missing children", () => {
 		const customFolderSummary: AttachmentItem = {
 			file_id: "file-special-folder",

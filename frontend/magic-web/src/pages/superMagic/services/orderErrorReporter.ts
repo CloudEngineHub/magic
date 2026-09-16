@@ -1,5 +1,5 @@
 import { StringUtils } from "@/apis/utils"
-import { logger as Logger } from "@/utils/log"
+import { logger as Logger } from "@/infrastructure/logger"
 
 const logger = Logger.createLogger("sidebar-order")
 

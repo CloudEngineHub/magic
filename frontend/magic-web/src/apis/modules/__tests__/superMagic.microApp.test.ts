@@ -1,10 +1,31 @@
 import { describe, expect, it, vi } from "vitest"
-import type { HttpClient } from "@/apis/core/HttpClient"
+import type { ServiceHttpClient } from "@/infrastructure/network/http/clients"
 import { generateSuperMagicApi } from "../superMagic"
 
-type MicroAppHttpClientMock = Pick<HttpClient, "get" | "post" | "put" | "delete">
+type MicroAppHttpClientMock = Pick<ServiceHttpClient, "get" | "post" | "put" | "delete">
 
 describe("SuperMagic micro app API", () => {
+	it("reads and creates a runtime project with string-safe parsing", async () => {
+		const client: MicroAppHttpClientMock = {
+			get: vi.fn().mockResolvedValue({}),
+			post: vi.fn().mockResolvedValue({}),
+			put: vi.fn(),
+			delete: vi.fn(),
+		}
+		const api = generateSuperMagicApi(client as ServiceHttpClient)
+		await api.getMicroAppRuntimeProject("app-1", { enableErrorMessagePrompt: false })
+		await api.ensureMicroAppRuntimeProject("app-1")
+		expect(client.get).toHaveBeenCalledWith(
+			"/api/v1/super-agent/micro-app-projects/app-1/runtime-project",
+			{ parseJsonLargeIntAsString: true, enableErrorMessagePrompt: false },
+		)
+		expect(client.post).toHaveBeenCalledWith(
+			"/api/v1/super-agent/micro-app-projects/app-1/runtime-project",
+			undefined,
+			{ parseJsonLargeIntAsString: true },
+		)
+	})
+
 	it("uses the workspace and list query endpoints", async () => {
 		const client: MicroAppHttpClientMock = {
 			get: vi.fn().mockResolvedValue({}),
@@ -12,7 +33,7 @@ describe("SuperMagic micro app API", () => {
 			put: vi.fn(),
 			delete: vi.fn(),
 		}
-		const api = generateSuperMagicApi(client as HttpClient)
+		const api = generateSuperMagicApi(client as ServiceHttpClient)
 
 		await api.getMicroAppWorkspace()
 		await api.getMicroApps({
@@ -36,21 +57,18 @@ describe("SuperMagic micro app API", () => {
 			1,
 			"/api/v1/super-agent/workspaces/app/micro-app",
 		)
-		expect(client.get).toHaveBeenNthCalledWith(
-			2,
-			"/api/v1/super-agent/micro-apps/queries?page=2&page_size=50&keyword=%E5%AE%A2%E6%88%B7%E8%B7%9F%E8%BF%9B&scope=collaborated",
-			{ parseJsonLargeIntAsString: true },
-		)
-		expect(client.get).toHaveBeenNthCalledWith(
-			3,
-			"/api/v1/super-agent/micro-apps/queries?page=1&page_size=20&keyword=&scope=accessible",
-			{ parseJsonLargeIntAsString: true },
-		)
-		expect(client.get).toHaveBeenNthCalledWith(
-			4,
-			"/api/v1/super-agent/micro-apps/mention?page=1&page_size=100&keyword=%E5%AE%A2%E6%88%B7",
-			{ parseJsonLargeIntAsString: true },
-		)
+		expect(client.get).toHaveBeenNthCalledWith(2, "/api/v1/super-agent/micro-apps/queries", {
+			params: { page: 2, page_size: 50, keyword: "客户跟进", scope: "collaborated" },
+			parseJsonLargeIntAsString: true,
+		})
+		expect(client.get).toHaveBeenNthCalledWith(3, "/api/v1/super-agent/micro-apps/queries", {
+			params: { page: 1, page_size: 20, keyword: "", scope: "accessible" },
+			parseJsonLargeIntAsString: true,
+		})
+		expect(client.get).toHaveBeenNthCalledWith(4, "/api/v1/super-agent/micro-apps/mention", {
+			params: { page: 1, page_size: 100, keyword: "客户" },
+			parseJsonLargeIntAsString: true,
+		})
 	})
 
 	it("records an authenticated micro app visit", async () => {
@@ -60,7 +78,7 @@ describe("SuperMagic micro app API", () => {
 			put: vi.fn(),
 			delete: vi.fn(),
 		}
-		const api = generateSuperMagicApi(client as HttpClient)
+		const api = generateSuperMagicApi(client as ServiceHttpClient)
 
 		await api.recordMicroAppVisit("app-1")
 
@@ -77,7 +95,7 @@ describe("SuperMagic micro app API", () => {
 			put: vi.fn().mockResolvedValue({ app_id: "100000000000009001" }),
 			delete: vi.fn(),
 		}
-		const api = generateSuperMagicApi(client as HttpClient)
+		const api = generateSuperMagicApi(client as ServiceHttpClient)
 
 		await api.createMicroAppProject({
 			workspace_id: "workspace-1",

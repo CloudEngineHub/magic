@@ -20,7 +20,7 @@ vi.mock("@/stores/recordingSummary", () => ({
 	},
 }))
 
-vi.mock("@/utils/log", () => {
+vi.mock("@/infrastructure/logger", () => {
 	const logger = {
 		log: vi.fn(),
 		error: vi.fn(),

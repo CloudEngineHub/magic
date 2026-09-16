@@ -63,6 +63,8 @@ interface UseContextMenuOptions {
 	handleImportFromOtherProject?: (item?: AttachmentItem) => void
 	handleShareItem?: (item: AttachmentItem) => void
 	handleDeleteItem: (item: AttachmentItem) => void
+	handleDeleteWithConfirm?: (item: AttachmentItem) => void
+	handleOpenDirectory?: (item: AttachmentItem) => void
 	handleDownloadOriginal: (item: AttachmentItem, mode?: DownloadImageMode) => void
 	handleDownloadPdf: (item: AttachmentItem, folderChildren?: AttachmentItem[]) => void
 	handleDownloadPpt: (item: AttachmentItem) => void
@@ -342,6 +344,10 @@ export function useContextMenu(options: UseContextMenuOptions) {
 	} = options
 
 	const openDeleteConfirmWithCanvasRisk = async (item: AttachmentItem) => {
+		if (options.handleDeleteWithConfirm) {
+			options.handleDeleteWithConfirm(item)
+			return
+		}
 		const isFolder = Boolean(item.is_directory)
 		const isMagicFolder = Boolean(isFolder && isMagicSystemFolder(item))
 		const canvasRisk = await detectCanvasProjectOperationRisk({
@@ -475,6 +481,22 @@ export function useContextMenu(options: UseContextMenuOptions) {
 	// 生成菜单项
 	const getMenuItems = (item: AttachmentItem): MenuItem[] => {
 		const menuItems: MenuItem[] = []
+		if (item.is_directory && options.handleOpenDirectory) {
+			menuItems.push({
+				key: "openFile",
+				label: t("topicFiles.contextMenu.openFile"),
+				icon: <MagicIcon component={IconOpenWindow} stroke={2} size={18} />,
+				onClick: () => options.handleOpenDirectory?.(item),
+			})
+		}
+		if (handleAddToCurrentChat && !handleAddToNewChat) {
+			menuItems.push({
+				key: "addToCurrentChat",
+				label: t("topicFiles.contextMenu.addToCurrentChat"),
+				icon: <MagicIcon component={IconMessageCircleShare} stroke={2} size={18} />,
+				onClick: () => handleAddToCurrentChat(item),
+			})
+		}
 		const downloadIcon = <MagicIcon component={IconDownload} stroke={2} size={18} />
 		const downloadHandlers: SingleFileDownloadHandlers = {
 			handleDownloadOriginal,

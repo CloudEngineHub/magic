@@ -3733,6 +3733,14 @@ class TaskFileDomainService
         $targetOrganizationCode = $targetParentFile?->getOrganizationCode() ?? $sourceFile->getOrganizationCode();
         $targetUserId = $targetParentFile?->getUserId() ?? $sourceFile->getUserId();
 
+        // 个人空间没有项目对象；在原复制流程前确认源和目标属于同一用户、同一组织。
+        if (! $sourceFile->isProjectFile()
+            && ($sourceFile->getSpaceType() !== 'user' || $targetParentFile === null
+                || $targetParentFile->getSpaceType() !== 'user' || $targetParentFile->isProjectFile()
+                || $targetUserId !== $sourceFile->getUserId() || $targetOrganizationCode !== $sourceFile->getOrganizationCode())) {
+            ExceptionBuilder::throw(SuperAgentErrorCode::FILE_PERMISSION_DENIED, 'file.permission_denied');
+        }
+
         // 冲突处理
         $existingTarget = $this->taskFileRepository->getByProjectParentAndName(
             $targetProjectId,
@@ -3760,11 +3768,15 @@ class TaskFileDomainService
             );
         }
 
-        $project = $this->projectRepository->findById($targetProjectId);
-        if ($project === null) {
-            ExceptionBuilder::throw(SuperAgentErrorCode::PROJECT_NOT_FOUND, trans('project.project_not_found'));
+        if ($sourceFile->isProjectFile()) {
+            $project = $this->projectRepository->findById($targetProjectId);
+            if ($project === null) {
+                ExceptionBuilder::throw(SuperAgentErrorCode::PROJECT_NOT_FOUND, trans('project.project_not_found'));
+            }
+            $workDir = $project->getWorkDir();
+        } else {
+            $workDir = WorkDirectoryUtil::getUserWorkDir($targetUserId);
         }
-        $workDir = $project->getWorkDir();
 
         $newFileId = IdGenerator::getSnowId();
         $fullPrefix = $this->cloudFileRepository->getFullPrefix($targetOrganizationCode);
@@ -3790,6 +3802,9 @@ class TaskFileDomainService
         $newFileEntity = new TaskFileEntity();
         $newFileEntity->setFileId($newFileId);
         $newFileEntity->setUserId($targetUserId);
+        if (! $sourceFile->isProjectFile()) {
+            $newFileEntity->setSpaceType($sourceFile->getSpaceType());
+        }
         $newFileEntity->setOrganizationCode($targetOrganizationCode);
         $newFileEntity->setProjectId($targetProjectId);
         $newFileEntity->setFileName($targetFileName);

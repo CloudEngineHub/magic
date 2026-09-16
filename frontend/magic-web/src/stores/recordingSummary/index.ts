@@ -15,6 +15,7 @@ import { TopicMode } from "@/pages/superMagic/pages/Workspace/TopicMode"
 import { ModelItem } from "@/pages/superMagic/components/MessageEditor/components/ModelSwitch/types"
 import superMagicModeService from "@/services/superMagic/SuperMagicModeService"
 import { resolveIsOtherTabRecording } from "./resolveIsOtherTabRecording"
+import type { AudioProcessingMode } from "@/services/recordSummary/MediaRecorderService/types/RecorderTypes"
 
 /**
  * 录音纪要状态管理
@@ -47,6 +48,13 @@ class RecordingSummaryStore {
 	 * 是否正在录音
 	 */
 	status: RecordingStatus = "init"
+
+	/** 实际使用的音频处理模式，用于在录音面板展示兼容模式提示。 */
+	processingMode: AudioProcessingMode | null = null
+
+	setProcessingMode(processingMode: AudioProcessingMode | undefined) {
+		this.processingMode = processingMode ?? null
+	}
 
 	/**
 	 * 是否正在等待总结
@@ -500,6 +508,7 @@ class RecordingSummaryStore {
 		userId,
 		audioSource,
 		transcriptionEnabled = true,
+		processingMode,
 	}: {
 		workspace: Workspace | null
 		model: ModelItem
@@ -509,6 +518,7 @@ class RecordingSummaryStore {
 		chatTopic?: Topic | null
 		audioSource?: AudioSourceConfig
 		transcriptionEnabled?: boolean
+		processingMode?: AudioProcessingMode
 	}) {
 		this.businessData = {
 			workspace,
@@ -522,6 +532,7 @@ class RecordingSummaryStore {
 		}
 		this.isVisible = true
 		this.status = "recording"
+		this.processingMode = processingMode ?? null
 		this.isPausing = false
 		this.isContinuing = false
 		this.message = []
@@ -658,6 +669,7 @@ class RecordingSummaryStore {
 		this.isVisible = false
 		this.floatPanel.setExternallyHidden(false)
 		this.status = "init"
+		this.processingMode = null
 		this.isPausing = false
 		this.isContinuing = false
 		this.businessData.workspace = null

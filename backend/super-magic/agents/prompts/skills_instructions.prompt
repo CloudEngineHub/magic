@@ -16,6 +16,10 @@ Example: `<skill_dir>/abs/path/to/skill-name</skill_dir>` + `reference/doc.md` f
 **Never** use a relative path. Copy the file name and subdirectory exactly as written in the skill content — do not guess or infer any part of the path.
 After reading, if another skill is also needed, call `read_skills` again for that skill.
 
+Read results preserve the source file, including frontmatter and comments. Omit displayed line-number prefixes when copying text into edits.
+An oversized Skill requires informed user consent before further reading: explain that context compaction may summarize earlier conversation and tool results and lose some details. No response or refusal is not consent; do not ask again for each continuation page after consent for that Skill.
+When a relevant Skill file changes, use the file change information. If the notice only provides a summary or the current instructions are unclear, reload its main instructions with `read_skills` or its reference file with `read_files`. Do not infer current instructions from a summary.
+
 <!--zh
 ## 安装外部 skill 前建议先执行安全审查
 
@@ -106,5 +110,3 @@ When executing any skill script, you **MUST** set cwd to the skill directory's *
 <available_skills>
 {{ @variable("skills_content") }}
 </available_skills>
-
-{{ @variable("preloaded_skills_content") }}

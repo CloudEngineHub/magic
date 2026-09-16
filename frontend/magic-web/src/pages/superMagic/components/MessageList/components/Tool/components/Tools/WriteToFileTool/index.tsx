@@ -104,6 +104,7 @@ function WriteToFileTool(props: WriteToFileToolProps) {
 				cardClassName={expandedCardClassName}
 			/>
 			<TextEditor
+				file={fileData}
 				content={content}
 				fileName={fileName}
 				language={getLanguageFromFileName(fileName)}

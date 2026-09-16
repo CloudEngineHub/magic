@@ -14,8 +14,6 @@ use App\Domain\Chat\DTO\Message\Common\MessageExtra\SuperAgent\Mention\Directory
 use App\Domain\Chat\DTO\Message\Common\MessageExtra\SuperAgent\Mention\File\FileData;
 use App\Domain\Chat\DTO\Message\Common\MessageExtra\SuperAgent\Mention\Mcp\McpData;
 use App\Domain\Chat\DTO\Message\Common\MessageExtra\SuperAgent\Mention\MicroApp\MicroAppData;
-use App\Domain\Chat\DTO\Message\Common\MessageExtra\SuperAgent\Mention\Memory\Directory\MemoryDirectoryData;
-use App\Domain\Chat\DTO\Message\Common\MessageExtra\SuperAgent\Mention\Memory\File\MemoryFileData;
 use App\Domain\Chat\DTO\Message\Common\MessageExtra\SuperAgent\Mention\Project\ProjectData;
 use App\Domain\Chat\DTO\Message\Common\MessageExtra\SuperAgent\Mention\Skill\SkillData;
 use App\Domain\Chat\DTO\Message\Common\MessageExtra\SuperAgent\Mention\Tool\ToolData;
@@ -59,9 +57,8 @@ final class MentionAttrs extends AbstractDTO
             $this->data = $data;
         } else {
             $this->data = match ($this->getType()) {
-                MentionType::PROJECT_FILE, MentionType::UPLOAD_FILE => new FileData($data),
-                MentionType::MEMORY_FILE => new MemoryFileData($data),
-                MentionType::MEMORY_DIRECTORY => new MemoryDirectoryData($data),
+                MentionType::PROJECT_FILE, MentionType::UPLOAD_FILE, MentionType::USER_FILE, MentionType::MEMORY_FILE => new FileData($data),
+                MentionType::USER_DIRECTORY, MentionType::MEMORY_DIRECTORY => new DirectoryData($data),
                 MentionType::AGENT => new AgentData($data),
                 MentionType::ASSISTANT => new AssistantData($data),
                 MentionType::MCP => new McpData($data),

@@ -5,7 +5,7 @@ import type {
 } from "@/components/CanvasDesign/public/magic-types"
 import {
 	parseExpiresAt,
-	isOssExpired,
+	isOssExpiring,
 } from "@/components/CanvasDesign/runtime/resources/offline-cache/ossExpiryUtils"
 import {
 	normalizePathSeparators,
@@ -263,7 +263,7 @@ function parseScopedPathKey(scopedPathKey: string): {
 function isCachedFileInfoExpired(entry: CacheEntry): boolean {
 	const expiresAtTs = parseExpiresAt(entry.fileInfo.expires_at)
 	if (expiresAtTs !== null) {
-		return isOssExpired(expiresAtTs)
+		return isOssExpiring(entry.fileInfo.expires_at)
 	}
 	if (entry.cachedAt === undefined) {
 		return false
@@ -498,9 +498,8 @@ function buildFileUrlIdentityKey(
 	return `${buildNamespaceKey(designProjectId)}\0${fileId}\0${getRenditionCacheIdentity(rendition)}\0${resourceVersion ?? ""}\0${fileApi?.identityKey ?? "none"}`
 }
 
-function invalidateFileUrlResultsForFileId(fileId: string): void {
-	if (!fileId) return
-	invalidateSharedMediaUrl(fileId)
+function invalidateFileUrlResultsForFileId(fileId: string, designProjectId?: string): void {
+	supersedeFileUrlRequestsForFileId(fileId, designProjectId)
 }
 
 function supersedeFileUrlRequestsForFileId(fileId: string, designProjectId?: string): void {
@@ -854,7 +853,10 @@ export async function getFileInfoByPath(
 			)
 			const cachedEntry = fileInfoCache.get(cacheKey)
 			if (cachedEntry?.resolvedFileId) {
-				invalidateFileUrlResultsForFileId(cachedEntry.resolvedFileId)
+				invalidateFileUrlResultsForFileId(
+					cachedEntry.resolvedFileId,
+					options?.designProjectId,
+				)
 			}
 			forceRefreshRequestTokens.set(cacheKey, forceRefreshToken)
 			forceRefreshCacheKeys.add(cacheKey)
@@ -882,7 +884,10 @@ export async function getFileInfoByPath(
 				hasAttachmentSnapshot,
 			)
 			if (staleReasons.length > 0) {
-				invalidateFileUrlResultsForFileId(cachedEntry.resolvedFileId ?? "")
+				invalidateFileUrlResultsForFileId(
+					cachedEntry.resolvedFileId ?? "",
+					options?.designProjectId,
+				)
 				deleteMemoryCache(cacheKey)
 			} else {
 				fileInfoCache.delete(cacheKey)
@@ -1342,7 +1347,7 @@ export function cleanupFileInfoCache(
 			if (isOptimisticMissingAttachmentAllowed(entry)) {
 				return
 			}
-			invalidateFileUrlResultsForFileId(entry.resolvedFileId ?? "")
+			invalidateFileUrlResultsForFileId(entry.resolvedFileId ?? "", designProjectId)
 			keysToDelete.push(cacheKey)
 			return
 		}
@@ -1352,7 +1357,7 @@ export function cleanupFileInfoCache(
 			entry.resolvedFileId &&
 			currentFileIdByPath.get(parsedKey.normalizedPath) !== entry.resolvedFileId
 		) {
-			invalidateFileUrlResultsForFileId(entry.resolvedFileId)
+			invalidateFileUrlResultsForFileId(entry.resolvedFileId, designProjectId)
 			keysToDelete.push(cacheKey)
 			return
 		}
@@ -1362,7 +1367,7 @@ export function cleanupFileInfoCache(
 			entry.resolvedResourceVersion !==
 				currentResourceVersionByPath.get(parsedKey.normalizedPath)
 		) {
-			invalidateFileUrlResultsForFileId(entry.resolvedFileId ?? "")
+			invalidateFileUrlResultsForFileId(entry.resolvedFileId ?? "", designProjectId)
 			keysToDelete.push(cacheKey)
 		}
 	})

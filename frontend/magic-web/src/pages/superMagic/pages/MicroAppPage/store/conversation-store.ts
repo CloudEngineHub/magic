@@ -3,7 +3,7 @@ import { SuperMagicApi } from "@/apis"
 import { TopicStore } from "@/pages/superMagic/stores/core/topic"
 import { takeProjectRenameTask } from "@/pages/superMagic/services/messageSendRenameTask"
 import type { MessageSendRenameResult } from "@/pages/superMagic/services/messageSendRenameTask"
-import { logger as Logger } from "@/utils/log"
+import { logger as Logger } from "@/infrastructure/logger"
 import { type ProjectListItem, type TaskStatus, type Topic } from "../../Workspace/types"
 
 const logger = Logger.createLogger("AppConversationStore")

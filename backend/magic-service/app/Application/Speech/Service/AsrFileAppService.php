@@ -3663,10 +3663,18 @@ class AsrFileAppService extends AbstractAppService
         AsrTaskStatusDTO $taskStatus,
         AudioProjectEntity $audioProject
     ): bool {
-        return ! $audioProject->isAutoSummary()                                    // Manual mode
-            && in_array($taskStatus->status, [AsrTaskStatusDTO::PHASE_MERGING, AsrTaskStatusEnum::AUDIO_PROCESSED])          // Audio processed
+        // 手动总结不再限制项目必须为手动模式（auto_summary），自动模式项目也允许手动补总结
+        // 优先按 Redis 实时任务状态判断
+        if ($taskStatus->status === AsrTaskStatusEnum::AUDIO_PROCESSED
             && $taskStatus->recordingStatus === AsrRecordingStatusEnum::STOPPED->value
-            && ! empty($taskStatus->audioFileId);                                  // Has audio file
+            && ! empty($taskStatus->audioFileId)) {
+            return true;
+        }
+
+        // Redis 状态不满足时，回退按数据库音频项目状态兜底，避免 Redis 与数据库不一致时误拒：
+        // 已有合并产物（audio_file_id 非空）且尚未进入总结阶段
+        return $audioProject->getAudioFileId() !== null
+            && $audioProject->getCurrentPhase() !== AsrTaskStatusDTO::PHASE_SUMMARIZING;
     }
 
     private function canManualResummarize(AsrTaskStatusDTO $taskStatus): bool

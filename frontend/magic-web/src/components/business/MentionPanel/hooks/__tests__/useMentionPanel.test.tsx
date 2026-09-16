@@ -321,6 +321,48 @@ describe("useMentionPanel", () => {
 		})
 	})
 
+	it("should mark an installed MCP direct selection as validated", async () => {
+		const mcpItem: MentionItem = {
+			id: "miro",
+			type: MentionItemType.MCP,
+			name: "Miro",
+			data: {
+				id: "miro",
+				name: "Miro",
+				icon: "",
+				require_fields: [],
+			},
+		}
+		const dataService: MockDataService = {
+			preLoadList: vi.fn(),
+			removeFromHistory: vi.fn(),
+			dispatch: vi.fn(async (request: MentionStoreRequest) => {
+				if (request.kind === "default") return { items: [mcpItem] }
+				return {}
+			}),
+		}
+		const onSelect = vi.fn()
+		const { result } = renderHook(() =>
+			useMentionPanel({
+				dataService,
+				onSelect,
+				t: en,
+				catalogBehavior: defaultMentionPanelCatalogBehavior,
+			}),
+		)
+
+		await waitFor(() => expect(result.current.state.items).toEqual([mcpItem]))
+
+		await act(async () => {
+			await result.current.actions.confirmSelection()
+		})
+
+		expect(onSelect).toHaveBeenCalledWith(
+			mcpItem,
+			expect.objectContaining({ mcpValidated: true }),
+		)
+	})
+
 	it("should keep catalog search results after filtering current items", async () => {
 		const catalogAgents: MentionItem[] = [
 			{

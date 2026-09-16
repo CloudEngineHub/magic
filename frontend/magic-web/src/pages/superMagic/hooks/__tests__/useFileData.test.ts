@@ -97,6 +97,28 @@ describe("useFileData", () => {
 		})
 	})
 
+	it("does not read a share file while an external session supplies its content", async () => {
+		const access = createShareFileAccess({ token: "share-token", projectId: "origin-project" })
+		const { result, rerender } = renderHook(
+			({ enabled }) => useFileData({ file_id: "file-1", isSharePreview: true, enabled }),
+			{
+				initialProps: { enabled: false },
+				wrapper: ({ children }: { children: ReactNode }) =>
+					createElement(FileAccessProvider, { value: access }, children),
+			},
+		)
+		expect(result.current.loading).toBe(false)
+		expect(getTemporaryDownloadUrlMock).not.toHaveBeenCalled()
+		expect(getFileHistoryVersionsMock).not.toHaveBeenCalled()
+		rerender({ enabled: true })
+		await waitFor(() =>
+			expect(getTemporaryDownloadUrlMock).toHaveBeenCalledWith({
+				file_ids: ["file-1"],
+				access,
+			}),
+		)
+	})
+
 	it("skips history versions on share routes even without isSharePreview", async () => {
 		isShareRouteState.current = true
 		const access = createShareFileAccess({

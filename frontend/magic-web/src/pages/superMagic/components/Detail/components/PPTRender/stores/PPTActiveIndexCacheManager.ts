@@ -132,11 +132,6 @@ export class PPTActiveIndexCacheManager {
 			}
 
 			const fileState = {
-				tabs: currentState?.fileState?.tabs || [],
-				activeTabId: currentState?.fileState?.activeTabId,
-				detailState: currentState?.fileState?.detailState,
-				playbackTabExists: currentState?.fileState?.playbackTabExists,
-				playbackTabActive: currentState?.fileState?.playbackTabActive,
 				pptActiveIndexMap,
 			}
 

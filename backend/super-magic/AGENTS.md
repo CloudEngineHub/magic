@@ -15,6 +15,30 @@
 - 不要为了"未来可能需要"而提前引入复杂抽象
 - 不要写没有新增语义的包装层
 - 抽象只有在满足以下至少一项时才成立：新增语义、屏蔽复杂性、减少重复决策、显著降低错误率
+- AGENTS.md 只保留影响全项目开发的长期规则；具体模块的行为、配置、阈值和设计原因写在对应代码注释中。
+- 修改既有机制前先理解调用关系和历史约束；不要借局部需求改变无关的权限、性能保护、异常恢复或生命周期。
+
+### 用行为对照和具体例子解释代码
+
+- 注释应让维护者看懂业务含义、判断依据和行为边界，不只复述函数名或语法。涉及开关、自动与手动操作、状态流转、部分完成或容易混淆的职责时，主动用简短对照表、前后示例或数据流程解释。
+- 不以注释越少越好为目标。关键取舍要写清楚；简单赋值不逐行解释，同一规则放在职责归属处，避免到处重复。示例使用通用业务和具体输入／结果，不依赖当前对话背景。
+- 注释只描述真实契约和已确认的取舍。不要用低概率假设堆砌复杂解释，也不要为了让注释成立而增加无必要的检查或状态。
+
+示例一：说明开关影响什么、保留什么。
+
+```python
+# | 操作         | 自动同步关闭后             |
+# | 定时同步     | 不再自动执行               |
+# | 用户手动同步 | 仍可执行，遵守原有权限     |
+# 开关只控制自动调度，不改变同步能力和访问权限。
+```
+
+示例二：用具体结果说明状态含义。
+
+```python
+# 例：批量处理 4 项，3 项成功、1 项失败。
+# 保留 3 项已完成结果，同时返回失败项及原因；不能把整批标成全部成功。
+```
 
 ### 用行为对照和具体例子解释代码
 
@@ -81,6 +105,9 @@ return ToolResult.error("转换失败", extra_info={"path": "/tmp/file"})    # �
 - 大型 `data` 不得完整打印进模型上下文。应在代码中完成筛选、聚合或校验，只输出结论、相关证据和后续所需的少量精确字段
 - 工具实现不能因为已经返回 `data` 就降低 `content` 质量；两者服务不同用途，`content` 必须始终能独立支持模型理解和继续决策
 - `ok=False` 不表示代码必须立即终止。调用方应先保留或输出 `content`，再根据步骤间的依赖关系决定重试、改用其它路径、继续独立步骤或向用户说明；只有该结果是后续步骤的必要前置时才终止管线
+
+- 面向不同受众的结果转换，应在各自统一出口处理；不得原地改写其它消费者仍持有的共享对象，也不得改变业务状态或调度信号。
+- 截断、预览或文件化都必须说明完整性；不能把交付成功当成业务成功，也不能为恢复输出自动重复有副作用的操作。
 
 ## 4. 给你（当前这个助手）的规则
 
@@ -468,6 +495,18 @@ finally:
 
 `.runtime/` 不得作为用户交付或业务持久存储。只有用户需要长期保留、下载、展示或继续编辑的最终文件才写入当前 `.workspace/`。不要因为路径以点开头、应用层不展示或会执行删除，就假设 MagicFS 不会记录或计费。
 
+### 17.1 Agent 活动会话目录
+
+- `.topic/` 是网络文件系统挂载。Agent 会频繁读写 history、session、Horizon、token usage 等会话文件；每次网络文件操作的往返延迟会累积到运行耗时，异步 I/O 也不能消除这项成本。
+- 主 Agent 和普通子 Agent 使用配置的 `.chat_history/`、`.chat_history/subagents/`；后台压缩、Memory After Run 等临时会话使用 `.runtime/<capability>/`。通过 `PathManager` 获取目录，使用项目异步文件 API 操作；聊天历史归档不识别存储后端，不因平台配置根软链接而拒绝执行。禁止把活动 `chat_history_dir` 指向 `.topic/`，包括经软链接指向该目录。
+- `.topic/chat_history/` 只作启动恢复和交接源：先恢复活动目录再运行，持久化沿用现有 checkpoint 和归档上传流程。需要跨沙盒保留的排查资料由 owner 在内容生成完成后按保留策略低频存档；持久化需求不改变活动目录的用途。
+
+### 17.2 有限保留的排查档案
+
+- `.topic/archives/<capability>/` 集中保存完整生成的排查资料，各能力只清理自己的目录。LLM 失败日志由 `debug_logger` 直接写入 `archives/llm_requests/`，默认保留最近 3 份完整日志；写入成功后才淘汰旧档案，不使用网络目录内的临时文件替换。
+- Memory After Run 继续在 `.runtime/memory_after_run/` 运行，结束后由 `ChatHistoryArchiveService` 保存整次会话到配置的 `.chat_history/subagents/` 并主动上传。`ChatHistoryCleanupService` 独立保留最近 3 次完整终态运行，成功、失败、中断都计入；普通子 Agent 的年龄、数量和总容量规则不淘汰这组档案。
+- runtime 源文件仍按原规则清理。有限副本使用 `diagnostic_retention` 配额，不放宽 runtime helper 的路径边界；会话复制与远端上传结果分别报告。3 份／3 次限制活跃档案数量，不限制 checkpoint 历史和云端累计空间。
+
 ## 18. 工作区文件转 URL 必须走统一入口
 
 `.workspace/` 下的本地文件转可访问 URL，统一调用：
@@ -521,6 +560,35 @@ xattr 缺失说明文件尚未与对象存储同步完成，应直接抛错让�
 | Magic 文件系统与目录边界 | `agents/guides/MAGIC_FILE_SYSTEM_GUIDE.md` | 新增运行文件、聊天记录、checkpoint、workspace 或 runtime 数据时，确认目录归属和持久化边界 |
 
 ## 20. 每次改动前自检
+
+### 运行周期术语
+
+| 术语 | 本项目中的含义 | 边界 |
+|---|---|---|
+| 业务任务 Task | Magic Service 的任务记录；metadata.super_magic_task_id | 与一次运行有关联，恢复和系统运行时不能假设严格一一对应 |
+| 完整 Agent Loop／Main Run | 主 Agent 接受一次 AgentRunRequest，完成其中全部推理、工具调用和结果检查，直到终态 | 对应 Claude Code、Codex 产品交互层的一个 Turn |
+| 核心循环 | Agent._handle_agent_loop | 负责 Loop 内反复执行；外层还有会话准备和清理 |
+| 循环迭代 | 核心循环中的一个重复步骤 | 一个完整 Loop 可以有多次迭代 |
+| 模型请求 LLM request | 对模型服务的一次请求 | 重试、压缩或内部调用不能视为主 Loop 完成 |
+| 工具批次 | 一次模型输出中的工具调用及执行结果 | 不是完整主运行的边界 |
+| asyncio.Task | Python 并发调度对象 | 不能与业务 Task 或 Main Run 混用 |
+
+例如：用户提出问题 → 模型调用工具 → 检查结果并再次调用工具 → 最终回复，
+是一次完整 Agent Loop，即一次 Main Run。用户资料首次查询后，只在完整主 Loop
+正常结束时自动刷新一次，不随内部工具批次、重试或附件发送次数刷新。
+
+外部术语必须注明来源和层次。Claude Agent SDK 的 turn 表示 Loop 内一次模型／工具往返，
+比产品层 Turn 小；外层 Goal、定时或主动 Loop 又可能跨多个 Main Run。
+此对应关系不要求重命名现有代码、事件或新增 loop_id／turn_id。
+
+官方定义：
+
+- [Claude Code 团队：Getting started with loops](https://x.com/ClaudeDevs/status/2074208949205881033)：重复工作直到满足停止条件；普通提示触发的全过程称为 agentic loop。
+- [Claude Code Glossary：Turn](https://code.claude.com/docs/en/glossary#turn)：从用户发消息到完成回复，期间允许任意多次工具调用。
+- [Codex App Server：Core primitives](https://developers.openai.com/codex/app-server/#core-primitives)：一个用户请求及其后续 Agent 工作。
+- [Claude Agent SDK：Turns and messages](https://code.claude.com/docs/en/agent-sdk/agent-loop#turns-and-messages)：turn 是 Loop 内一次往返。
+
+### 修改检查
 
 - 这是在解决真实问题，还是在满足抽象冲动？
 - 这层包装有没有新增语义？

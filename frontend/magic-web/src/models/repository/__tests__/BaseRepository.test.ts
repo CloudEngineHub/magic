@@ -4,7 +4,7 @@ import { BaseRepository } from "../BaseRepository"
 import { DatabaseManager } from "../DatabaseManager"
 
 // Mock logger
-vi.mock("@/opensource/utils/log", () => ({
+vi.mock("@/infrastructure/logger", () => ({
 	logger: {
 		createLogger: () => ({
 			log: vi.fn(),

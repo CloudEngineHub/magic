@@ -560,7 +560,7 @@ export class PPTStore {
 
 						runInAction(() => {
 							if (this.slides[index]) {
-								this.slides[index].content = processedContent
+								this.slides[index].content = processedContent.content
 								this.slides[index].loadingState = "loaded"
 								this.loadingProgress = this.loadingPercentage
 							}
@@ -677,7 +677,7 @@ export class PPTStore {
 			// Update store
 			runInAction(() => {
 				if (this.slides[index]) {
-					this.slides[index].content = processedContent
+					this.slides[index].content = processedContent.content
 					this.slides[index].loadingState = "loaded"
 					this.loadingProgress = this.loadingPercentage
 				}
@@ -687,7 +687,7 @@ export class PPTStore {
 				slideIndex: index,
 			})
 
-			return processedContent
+			return processedContent.content
 		} catch (error) {
 			this.logger.logOperationError("loadSlideContent", error, {
 				slideIndex: index,

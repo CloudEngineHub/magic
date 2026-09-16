@@ -116,6 +116,7 @@ export function useConversationInputHeight({
 	const [autoHeight, setAutoHeight] = useState(initialPreference.height)
 	const [availableHeight, setAvailableHeight] = useState(0)
 	const [accessoryHeight, setAccessoryHeight] = useState(0)
+	const [queueListHeight, setQueueListHeight] = useState(0)
 	const [measurementReady, setMeasurementReady] = useState(false)
 	const manualHeightRef = useRef(initialPreference.height)
 	const previousLayoutKeyRef = useRef(layoutKey)
@@ -211,6 +212,13 @@ export function useConversationInputHeight({
 
 			const nextAvailableHeight = available.getBoundingClientRect().height
 			const nextAccessoryHeight = measureAccessoryHeight(container)
+			const nextQueueListHeight =
+				container
+					.querySelector<HTMLElement>("[data-message-queue-viewport]")
+					?.getBoundingClientRect().height ?? 0
+			setQueueListHeight((previous) =>
+				Math.abs(previous - nextQueueListHeight) < 1 ? previous : nextQueueListHeight,
+			)
 			// The Splitter can retain its previous size during the first expanded frames.
 			// Keep the persisted/default height for this pass and establish only live bounds.
 			if (reason === "initial") {
@@ -317,10 +325,8 @@ export function useConversationInputHeight({
 		const available = availableRef.current
 		if (!container || !available || typeof ResizeObserver === "undefined") return
 
-		const resizeObserver = new ResizeObserver((entries) => {
-			if (heightMode === "manual" && entries.every((entry) => entry.target !== available)) {
-				return
-			}
+		const resizeObserver = new ResizeObserver(() => {
+			// 队列可以独立拉高；手动模式仍需重新测量附件区，输入区自身偏好保持不变。
 			scheduleMeasure("layout")
 		})
 		resizeObserver.observe(available)
@@ -393,6 +399,7 @@ export function useConversationInputHeight({
 		setManualHeight(currentPreference.height)
 		setAvailableHeight(0)
 		setAccessoryHeight(0)
+		setQueueListHeight(0)
 		setMeasurementReady(false)
 	}, [enabled, scope])
 
@@ -480,6 +487,19 @@ export function useConversationInputHeight({
 		effectiveHeight,
 		minHeight: effectiveMinHeight,
 		maxHeight: manualMaxHeight,
+		// 队列和附件区来自同次测量，输出绝对上限，避免两个 ResizeObserver 互相增减高度。
+		queueListMaxHeight: Math.max(
+			0,
+			getMaxHeight(
+				availableHeight,
+				minHeight,
+				heightMode === "manual" ? manualMaxRatio : maxRatio,
+				heightMode === "manual" ? manualMinAvailableHeight : 0,
+			) -
+				Math.max(minHeight, heightMode === "manual" ? manualHeight : autoHeight) -
+				accessoryHeight +
+				queueListHeight,
+		),
 		fillHeight,
 		startPointerResize,
 		resizeByPointerDelta,

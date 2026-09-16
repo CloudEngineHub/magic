@@ -131,6 +131,8 @@ export interface CustomComposedAction {
 export type ComposedAction = BuiltinComposedAction | CustomComposedAction
 
 export interface CommonHeaderV2Props {
+	/** Optional DOM anchor for a feature tour of the More menu. */
+	moreButtonId?: string
 	/** Optional guard run before toolbar actions. */
 	beforeAction?: BeforeAction
 	/** Whether this cached preview should expose test ids. */

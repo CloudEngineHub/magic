@@ -50,7 +50,10 @@ describe("TopicResizeHandle", () => {
 	it("clears the drag portal when the pointer is cancelled", () => {
 		render(<TopicResizeHandle onResizeStart={vi.fn()} />)
 
-		fireEvent.pointerDown(screen.getByTestId("handle-mouse-down"), { clientX: 480 })
+		fireEvent(
+			screen.getByTestId("handle-mouse-down"),
+			new MouseEvent("pointerdown", { bubbles: true, button: 0, clientX: 480 }),
+		)
 		expect(screen.getByTestId("set-is-dragging")).toBeInTheDocument()
 
 		fireEvent.pointerCancel(document)

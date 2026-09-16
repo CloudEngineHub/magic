@@ -62,9 +62,14 @@ def test_read_skills_params_rejects_empty_skill_name_string():
 
 
 @pytest.mark.asyncio
-async def test_read_skills_executes_with_single_skill_name_string(monkeypatch):
+async def test_read_skills_executes_with_single_skill_name_string(tmp_path, monkeypatch):
+    _write_skill(tmp_path, "mock-skill-a", "Mock skill content.")
+
     async def mock_find_skill(skill_name: str, **kwargs):
-        return MockSkill(skill_name)
+        skill = MockSkill(skill_name)
+        skill.skill_dir = tmp_path / skill_name
+        skill.skill_file = skill.skill_dir / "SKILL.md"
+        return skill
 
     monkeypatch.setattr(read_skills_module, "find_skill", mock_find_skill)
 

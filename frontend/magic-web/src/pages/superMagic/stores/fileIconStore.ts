@@ -1,6 +1,9 @@
 import { makeAutoObservable, runInAction } from "mobx"
 import { getTemporaryDownloadUrl } from "@/pages/superMagic/utils/api"
 import type { FileAccessContext } from "@/pages/superMagic/fileAccess/fileAccessContext"
+import type { FileContentKind } from "../utils/fileContentType"
+
+const CONTENT_KIND_CACHE_MAX_ENTRIES = 512
 
 /**
  * 文件图标 URL 缓存 Store
@@ -13,8 +16,28 @@ class FileIconStore {
 	/** 正在请求的 file_id 集合，避免并发重复请求 */
 	private pendingRequests = new Map<string, Promise<string | undefined>>()
 
+	/** 作用域与版本组成的 key -> 分类；只影响图标，不能替代重新预览时的内容读取。 */
+	private contentKinds = new Map<string, Exclude<FileContentKind, "unknown">>()
+
 	constructor() {
 		makeAutoObservable(this, {}, { autoBind: true })
+	}
+
+	getContentKind(key: string): FileContentKind {
+		return this.contentKinds.get(key) ?? "unknown"
+	}
+
+	setContentKind(key: string, kind: Exclude<FileContentKind, "unknown">): void {
+		this.contentKinds.delete(key)
+		this.contentKinds.set(key, kind)
+		if (this.contentKinds.size > CONTENT_KIND_CACHE_MAX_ENTRIES) {
+			const oldestKey = this.contentKinds.keys().next().value
+			if (oldestKey !== undefined) this.contentKinds.delete(oldestKey)
+		}
+	}
+
+	invalidateContentKind(key: string): void {
+		this.contentKinds.delete(key)
 	}
 
 	/**
@@ -88,6 +111,7 @@ class FileIconStore {
 	clearAll() {
 		this.urlCache.clear()
 		this.pendingRequests.clear()
+		this.contentKinds.clear()
 	}
 
 	/**

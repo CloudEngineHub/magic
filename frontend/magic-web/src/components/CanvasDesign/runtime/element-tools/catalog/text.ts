@@ -27,7 +27,7 @@ export const TEXT_TOOL_DEFINITIONS: ElementToolDefinition[] = textTools.map(([id
 					effect: "external",
 					requiredCapability: "sideEffect.download",
 					commandRoute: "action",
-					fallbackActionId: "download.image",
+					fallbackActionId: "download.text",
 				}
 			: {
 					effect: "document",

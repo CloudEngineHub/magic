@@ -42,6 +42,9 @@ Instruction priority: system/developer instructions and the user's request take 
 - **Testing**: Vitest with `__tests__/` colocated alongside source.
 
 ## Implementation Standards
+- **Navigation feedback**: Reuse shared navigation components with their complete hover and keyboard-focus behavior. For `SidebarRow`, use `labelVariant="navigation"` to inherit the sidebar hover and `focus-visible` background treatment. Do not copy thick black/gray focus rings into sidebar navigation entries or treat focus as route selection; keep selection in its existing state contract.
+- **Focus preservation**: Removing a focus outline or ring requires a visible, theme-aware keyboard-focus alternative. Do not hide focus problems with `blur()`, blocked focus, removed tab stops, or global outline/ring resets; preserve dialog focus restoration. Inputs and other controls retain their component-specific focus design.
+- Before adding or changing tooltips, read [Tooltip usage](src/components/base/MagicTooltip/README.md). Use the existing entries for action labels and truncated text; preserve the interaction and lifecycle of rich content and media previews.
 - Maintain strict TypeScript typing; add or update types when altering APIs or props.
 - Keep React components modular: separate `styles.ts`, `types.ts`, `hooks/`, and `index.tsx` where the pattern already exists.
 - For changes under an edition-shared or edition-specific module, check whether `enterprise/` has a corresponding implementation, adapter, test, or config that must be updated in sync. Do not scan the whole overlay for unrelated changes.
@@ -87,6 +90,7 @@ Instruction priority: system/developer instructions and the user's request take 
   - Never convert existing antd-style components to Tailwind unless explicitly requested
 - **Data/Store Changes**: Modify MobX/Zustand stores cautiously, update dependent selectors, and add tests or storybook notes if behaviour shifts.
 - **Super Magic File-System Performance**: Before touching Super Magic attachments, file trees, file preview tabs, PPT rendering, or folder upload, read `docs/file-dependency-development-pitfalls.md` and `docs/file-system-optimization-summary.md`. Treat 10k files as the baseline: do not `JSON.stringify`, deep-clone, deep-compare, or log full `attachments` / `attachmentList` / `renderProps` in render paths; use `loadProjectAttachments`, `attachmentIndex` / `treeIndex`, primitive cache keys, abortable requests, and explicit MobX annotations for large input configs.
+- **Network file operations**: Copy/cut only records clipboard intent. Actual copy/move writes must use the shared scope confirmation after preparation; show preparation in a centered modal with cancellation. Cancelling preparation is not rollback of already submitted writes. Reuse the existing file menus, upload queues, conflict handling, and operation lifecycle.
 - **Docs & Configuration**: Keep documentation bilingual when user-facing, and update related config or example snippets.
 - **Bug Fixes**: Reproduce, add a failing test when practical, fix, and confirm the test passes.
 

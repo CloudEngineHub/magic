@@ -58,6 +58,7 @@ Router::addGroup(
             Router::get('/queries', [ProjectApi::class, 'index']);
             // 获取用户参与的项目列表（支持协作项目过滤）
             Router::post('/participated', [ProjectApi::class, 'getParticipatedProjects']);
+            Router::post('/{id}/visit', [ProjectApi::class, 'visit']);
             // 获取项目详情
             Router::get('/{id}', [ProjectApi::class, 'show']);
             // 创建项目
@@ -278,6 +279,8 @@ Router::addGroup(
             Router::post('', [MessageApi::class, 'createMessageQueue']);
             // 修改消息队列
             Router::put('/{id}', [MessageApi::class, 'updateMessageQueue']);
+            Router::post('/{id}/restore', [MessageApi::class, 'restoreMessageQueue']);
+            Router::patch('/{id}/position', [MessageApi::class, 'moveMessageQueue']);
             // 删除消息队列
             Router::delete('/{id}', [MessageApi::class, 'deleteMessageQueue']);
             // 查询消息队列
@@ -305,6 +308,7 @@ Router::addGroup(
         });
 
         Router::addGroup('/file', static function () {
+            Router::post('/resolve-references', [FileApi::class, 'resolveReferences']);
             // 获取项目文件上传STS Token
             Router::get('/project-upload-token', [FileApi::class, 'getProjectUploadToken']);
             // 获取话题文件上传STS Token

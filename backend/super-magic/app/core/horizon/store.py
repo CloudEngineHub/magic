@@ -15,11 +15,13 @@ Skill、通知、模型配置、workspace 快照和 context usage baseline。这
 from __future__ import annotations
 
 import asyncio
-from dataclasses import fields
+from dataclasses import asdict, fields
 from pathlib import Path
 from typing import Optional
 
 from agentlang.logger import get_logger
+from app.core.entity.user_context import UserContextSnapshot
+from app.core.horizon.profile_context import AgentIdentityState
 from app.core.horizon.migration import CURRENT_VERSION, apply_migrations
 from app.core.horizon.models import (
     BrowserPageObservation,
@@ -27,6 +29,7 @@ from app.core.horizon.models import (
     HorizonState,
     ImageModelState,
     ManualContextWindowState,
+    MemoryDirectorySnapshot,
     PendingNotification,
     PendingResumption,
     ResumptionStatus,
@@ -179,6 +182,23 @@ def _manual_context_windows_from_dict(data: object) -> dict[str, ManualContextWi
     return result
 
 
+def _memory_directory_from_dict(data: object) -> MemoryDirectorySnapshot | None:
+    """
+    恢复有限深度快照；旧成员摘要没有完整条目，下一次扫描重新建立。
+
+    恢复真实条目后，进程重启或完整 fork 才能识别同数量的文件替换。
+    只有分组名称或计数无法重建这些路径，所以不猜旧状态，交给下一次真实扫描。
+    """
+    if not isinstance(data, dict) or "entries" not in data or "scan_depth" not in data:
+        return None
+    return MemoryDirectorySnapshot(
+        root=data["root"],
+        scan_depth=data["scan_depth"],
+        entries=data["entries"],
+        exists=bool(data.get("exists", True)),
+    )
+
+
 def _assert_codec_covers_horizon_state(codec_name: str, field_names: set[str]) -> None:
     """新增持久化字段时，强制维护者同时更新 Horizon codec。
 
@@ -204,7 +224,12 @@ def _encode_state(state: HorizonState) -> dict:
     data = {
         "version": CURRENT_VERSION,
         "agent_id": state.agent_id,
+        "user_context": state.user_context.model_dump(mode="json") if state.user_context else None,
+        "user_context_baseline": state.user_context_baseline.model_dump(mode="json") if state.user_context_baseline else None,
+        "user_context_auto_fetch_attempted": state.user_context_auto_fetch_attempted,
+        "agent_identity": state.agent_identity.model_dump(mode="json") if state.agent_identity else None,
         "loaded_skills": state.loaded_skills,
+        "suggested_skill_names": state.suggested_skill_names,
         "pending_notifications": [_notif_to_dict(n) for n in state.pending_notifications],
         "pending_resumptions": [_resumption_to_dict(r) for r in state.pending_resumptions],
         "browser_pages": {
@@ -226,6 +251,8 @@ def _encode_state(state: HorizonState) -> dict:
         "user_preferred_language": state.user_preferred_language,
         "workspace_files": state.workspace_files,
         "workspace_entries": state.workspace_entries,
+        # 目录快照跟其它 Horizon 字段一起保存；显示折叠从不写回这个结构。
+        "memory_directory": asdict(state.memory_directory) if state.memory_directory is not None else None,
         "client_context": state.client_context,
         "cli_status": state.cli_status,
         "context_usage_baseline_used": state.context_usage_baseline_used,
@@ -246,12 +273,17 @@ def _decode_state(data: dict) -> HorizonState:
     恢复逻辑。
     """
     decoded_fields = {
+        "user_context",
+        "user_context_baseline",
+        "user_context_auto_fetch_attempted",
+        "agent_identity",
         "agent_id",
         "file_records",
         "pending_notifications",
         "pending_resumptions",
         "browser_pages",
         "loaded_skills",
+        "suggested_skill_names",
         "image_model",
         "video_model",
         "manual_context_windows",
@@ -262,6 +294,7 @@ def _decode_state(data: dict) -> HorizonState:
         "user_preferred_language",
         "workspace_files",
         "workspace_entries",
+        "memory_directory",
         "client_context",
         "cli_status",
         "context_usage_baseline_used",
@@ -273,7 +306,15 @@ def _decode_state(data: dict) -> HorizonState:
     _assert_codec_covers_horizon_state("decoder", decoded_fields)
 
     state = HorizonState(agent_id=data.get("agent_id", ""))
+    if data.get("user_context") is not None:
+        state.user_context = UserContextSnapshot.model_validate(data["user_context"])
+    if data.get("user_context_baseline") is not None:
+        state.user_context_baseline = UserContextSnapshot.model_validate(data["user_context_baseline"])
+    state.user_context_auto_fetch_attempted = bool(data.get("user_context_auto_fetch_attempted", False))
+    if data.get("agent_identity") is not None:
+        state.agent_identity = AgentIdentityState.model_validate(data["agent_identity"])
     state.loaded_skills = data.get("loaded_skills", [])
+    state.suggested_skill_names = data.get("suggested_skill_names", [])
     state.pending_notifications = [
         _notif_from_dict(notification)
         for notification in data.get("pending_notifications", [])
@@ -314,6 +355,7 @@ def _decode_state(data: dict) -> HorizonState:
     state.user_preferred_language = data.get("user_preferred_language", "")
     state.workspace_files = data.get("workspace_files", "")
     state.workspace_entries = data.get("workspace_entries", [])
+    state.memory_directory = _memory_directory_from_dict(data.get("memory_directory"))
     state.client_context = data.get("client_context", "")
     state.cli_status = data.get("cli_status", "")
     state.context_usage_baseline_used = int(data.get("context_usage_baseline_used", 0))

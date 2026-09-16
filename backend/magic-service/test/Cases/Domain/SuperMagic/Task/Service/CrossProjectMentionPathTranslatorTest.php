@@ -86,4 +86,30 @@ class CrossProjectMentionPathTranslatorTest extends TestCase
 
         self::assertArrayNotHasKey('project_path', $result[0]);
     }
+
+    public function testTranslateSkipsInvalidProjectIds(): void
+    {
+        $translator = new CrossProjectMentionPathTranslator();
+        foreach ([[], true, 0, -1, 1.5, '04001', ' 4001 ', '../4001', '9223372036854775808'] as $projectId) {
+            foreach (['project', 'micro_app', 'project_file', 'project_directory'] as $type) {
+                $mention = ['type' => $type, 'project_id' => $projectId, 'file_path' => 'report.md'];
+                self::assertSame([$mention], $translator->translate([$mention], 1001, '/mounts'));
+            }
+        }
+    }
+
+    public function testTranslatePreservesUserPathsAndMountsProjectRelativePaths(): void
+    {
+        $translator = new CrossProjectMentionPathTranslator();
+        $mentions = [
+            ['type' => 'project_file', 'project_id' => 4001, 'file_path' => '~/report.md'],
+            ['type' => 'project_directory', 'project_id' => 4001, 'directory_path' => '~/.magic'],
+            ['type' => 'user_file', 'project_id' => 4001, 'file_path' => 'report.md'],
+            ['type' => 'project_file', 'project_id' => 4001, 'file_path' => 'report.md'],
+        ];
+        $expected = $mentions;
+        $expected[3]['file_path'] = '/mounts/4001/report.md';
+
+        self::assertSame($expected, $translator->translate($mentions, 1001, '/mounts'));
+    }
 }

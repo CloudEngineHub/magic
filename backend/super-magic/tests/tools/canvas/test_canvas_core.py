@@ -2,6 +2,10 @@
 
 from __future__ import annotations
 
+import base64
+import gzip
+import json
+
 import pytest
 
 import tests.tools.canvas.helpers  # noqa: F401
@@ -29,7 +33,7 @@ from app.tools.canvas.generation import (
 )
 from app.tools.canvas.generation.adapters import FakeImageGenerationPort
 from app.tools.canvas.hierarchy import HierarchyMutationPlan
-from app.tools.canvas.infrastructure.persistence.canvas_codec import CanvasCodec
+from app.tools.canvas.infrastructure.persistence.canvas_codec import CANVAS_PREFIX, CanvasCodec
 from app.tools.canvas.production.adapters import FakeMediaProbePort
 from app.tools.canvas.production.ports import VideoMediaInfo
 from app.tools.canvas.repository import CanvasRepository
@@ -95,8 +99,8 @@ def test_codec_preserves_unknown_frontend_fields_when_reading_and_saving() -> No
     draft = {
         "version": 1,
         "request": {
-            "model_id": "minimaxh3",
-            "input_mode": "omni_reference",
+            "model_id": "mock-model",
+            "input_mode": "mock-mode",
         },
     }
     project = CanvasProject(
@@ -127,12 +131,308 @@ def test_codec_preserves_unknown_frontend_fields_when_reading_and_saving() -> No
     content = decoded.canvas.elements[0].contents[0]
     element = decoded.canvas.elements[0]
 
-    assert content.extra_data["videoEditorDraft"] == draft
+    assert content.fields.video_editor_draft == draft
     assert element.extra_data == {"frontendElementState": {"selected": True}}
 
     saved_again = CanvasCodec.decode(CanvasCodec.encode(decoded))
-    assert saved_again.canvas.elements[0].contents[0].extra_data["videoEditorDraft"] == draft
+    assert saved_again.canvas.elements[0].contents[0].fields.video_editor_draft == draft
     assert saved_again.canvas.elements[0].extra_data == {"frontendElementState": {"selected": True}}
+
+
+def test_codec_preserves_frontend_media_fields_and_fractional_z_index() -> None:
+    """前端已声明的媒体字段和小数层级必须由后端显式无损处理。"""
+    project = CanvasProject(
+        version="3.0.0",
+        project_type="design",
+        name="mock-project",
+        canvas=CanvasDocument(elements=[
+            CanvasElement(
+                element_id="video-1",
+                element_type="video",
+                properties=ElementProperties(z_index=1.5),
+                contents=[CanvasContent(
+                    "content-1",
+                    VideoContentFields(
+                        visual_understanding={"summary": "mock visual summary"},
+                        video_editor_draft={"version": 1, "request": {}},
+                        video_generation_result_meta={"billing": {"points": 2}},
+                    ),
+                )],
+                active_content_id="content-1",
+                main_content_id="content-1",
+            ),
+        ]),
+    )
+
+    content = CanvasCodec.decode(CanvasCodec.encode(project)).canvas.elements[0]
+
+    assert content.properties.z_index == 1.5
+    assert content.contents[0].fields.visual_understanding == {"summary": "mock visual summary"}
+    assert content.contents[0].fields.video_editor_draft == {"version": 1, "request": {}}
+    assert content.contents[0].fields.video_generation_result_meta == {"billing": {"points": 2}}
+
+
+@pytest.mark.asyncio
+async def test_repository_splits_public_heavy_fields_from_video_main_content(tmp_path) -> None:
+    """新写数据只把前端公共重字段放入 Sidecar，视频结果字段留在主文件。"""
+    repository = CanvasRepository(tmp_path)
+    await repository.initialize("mock-project")
+
+    def mutate(project, metadata):
+        project.canvas.elements.append(CanvasElement(
+            element_id="video-1",
+            element_type="video",
+            contents=[CanvasContent(
+                "content-1",
+                VideoContentFields(
+                    src="./videos/mock.mp4",
+                    status="completed",
+                    visual_understanding={"summary": "mock visual summary"},
+                    generate_video_request={"prompt": "mock prompt"},
+                    video_editor_draft={"version": 1, "request": {}},
+                    video_generation_result_meta={"billing": {"points": 2}},
+                ),
+            )],
+            active_content_id="content-1",
+            main_content_id="content-1",
+        ))
+        return None, metadata
+
+    await repository.transaction_with_sidecar("mock-project", mutate)
+
+    saved_content = (await repository.read("mock-project")).canvas.elements[0].contents[0].fields
+    detail = (await repository.read_sidecar("mock-project"))["elements"]["video-1"]["contentDetails"]["content-1"]
+    assert saved_content.generate_video_request is None
+    assert saved_content.visual_understanding is None
+    assert saved_content.video_editor_draft == {"version": 1, "request": {}}
+    assert saved_content.video_generation_result_meta == {"billing": {"points": 2}}
+    assert detail == {
+        "generateVideoRequest": {"prompt": "mock prompt"},
+        "visualUnderstanding": {"summary": "mock visual summary"},
+    }
+
+
+def _encode_raw_canvas(name: str, canvas: dict) -> str:
+    """把原始 Canvas 字典编码成 magic.project.js，用于模拟前端落盘文件。"""
+    payload = json.dumps(canvas, ensure_ascii=False, separators=(",", ":")).encode("utf-8")
+    encoded = CANVAS_PREFIX + base64.b64encode(gzip.compress(payload)).decode("ascii")
+    envelope = {"version": "3.0.0", "type": "design", "name": name, "canvas": encoded}
+    return f"window.magicProjectConfig = {json.dumps(envelope, ensure_ascii=False, separators=(',', ':'))};\n"
+
+
+def test_codec_reads_frontend_video_editor_draft_without_failing_project() -> None:
+    """前端把 videoEditorDraft 写进 video content 时，整张画布仍可读取。"""
+    draft = {"version": 1, "request": {"model_id": "mock-model", "input_mode": "mock-mode"}}
+    source = _encode_raw_canvas("mock-project", {
+        "elements": [
+            {
+                "id": "image-1",
+                "type": "image",
+                "name": "mock-image",
+                "contents": [{"contentId": "image-1-content", "src": "./images/mock.png", "status": "completed"}],
+                "activeContentId": "image-1-content",
+                "mainContentId": "image-1-content",
+            },
+            {
+                "id": "video-1",
+                "type": "video",
+                "contents": [{"contentId": "video-1-content", "videoEditorDraft": draft}],
+                "activeContentId": "video-1-content",
+                "mainContentId": "video-1-content",
+            },
+        ],
+        "connections": [],
+    })
+
+    decoded = CanvasCodec.decode(source)
+
+    assert decoded.canvas.get_element("image-1") is not None
+    video = decoded.canvas.get_element("video-1")
+    assert video is not None
+    assert video.contents[0].extra_data["videoEditorDraft"] == draft
+
+
+def test_codec_skips_unsupported_frontend_element_types() -> None:
+    """前端新增、后端尚未支持的节点跳过解析，不影响已支持节点，保存时原样写回。"""
+    unsupported = {
+        "id": "widget-1",
+        "type": "frontend-only-widget",
+        "name": "mock-widget",
+        "contents": [{"contentId": "widget-1-content", "customPayload": {"ok": True}}],
+        "activeContentId": "widget-1-content",
+        "mainContentId": "widget-1-content",
+    }
+    source = _encode_raw_canvas("mock-project", {
+        "elements": [
+            {
+                "id": "image-1",
+                "type": "image",
+                "contents": [{"contentId": "image-1-content", "src": "./images/mock.png", "status": "completed"}],
+                "activeContentId": "image-1-content",
+                "mainContentId": "image-1-content",
+            },
+            unsupported,
+            {
+                "id": "text-1",
+                "type": "text",
+                "contents": [{"contentId": "text-1-content", "content": []}],
+                "activeContentId": "text-1-content",
+                "mainContentId": "text-1-content",
+            },
+        ],
+        "connections": [
+            {"id": "connection-1", "sourceElementId": "image-1", "targetElementId": "widget-1"},
+        ],
+    })
+
+    decoded = CanvasCodec.decode(source)
+
+    assert [element.element_id for element in decoded.canvas.elements] == ["image-1", "text-1"]
+    assert decoded.canvas.get_element("widget-1") is None
+    assert decoded.canvas.opaque_elements[0][1] == unsupported
+    assert decoded.canvas.connections[0].target_element_id == "widget-1"
+
+    saved = CanvasCodec.decode(CanvasCodec.encode(decoded))
+    assert [element.element_id for element in saved.canvas.elements] == ["image-1", "text-1"]
+    assert saved.canvas.opaque_elements[0][1] == unsupported
+    assert saved.canvas.connections[0].target_element_id == "widget-1"
+
+
+def test_codec_skips_unsupported_child_element_inside_frame() -> None:
+    """Frame 内的前端新节点同样跳过解析，并在保存时留在 children 原位。"""
+    unsupported_child = {
+        "id": "widget-child",
+        "type": "frontend-only-widget",
+        "contents": [{"contentId": "widget-child-content"}],
+        "activeContentId": "widget-child-content",
+        "mainContentId": "widget-child-content",
+    }
+    source = _encode_raw_canvas("mock-project", {
+        "elements": [
+            {
+                "id": "frame-1",
+                "type": "frame",
+                "contents": [{"contentId": "frame-1-content"}],
+                "activeContentId": "frame-1-content",
+                "mainContentId": "frame-1-content",
+                "children": [
+                    {
+                        "id": "text-1",
+                        "type": "text",
+                        "contents": [{"contentId": "text-1-content", "content": []}],
+                        "activeContentId": "text-1-content",
+                        "mainContentId": "text-1-content",
+                    },
+                    unsupported_child,
+                ],
+            },
+        ],
+        "connections": [],
+    })
+
+    decoded = CanvasCodec.decode(source)
+    frame = decoded.canvas.get_element("frame-1")
+    assert frame is not None
+    assert [child.element_id for child in frame.children or []] == ["text-1"]
+    assert frame.opaque_children[0][1] == unsupported_child
+
+    saved = CanvasCodec.decode(CanvasCodec.encode(decoded))
+    saved_frame = saved.canvas.get_element("frame-1")
+    assert saved_frame is not None
+    assert saved_frame.opaque_children[0][1] == unsupported_child
+
+
+def test_codec_skips_broken_supported_element_without_failing_project() -> None:
+    """已支持节点损坏时跳过该节点，其它正常节点仍可读取和保存。"""
+    broken = {
+        "id": "image-broken",
+        "type": "image",
+        "contents": [{"contentId": "image-broken-content", "src": 123, "status": "not-a-status"}],
+        "activeContentId": "image-broken-content",
+        "mainContentId": "image-broken-content",
+    }
+    source = _encode_raw_canvas("mock-project", {
+        "elements": [
+            {
+                "id": "image-1",
+                "type": "image",
+                "contents": [{"contentId": "image-1-content", "src": "./images/mock.png", "status": "completed"}],
+                "activeContentId": "image-1-content",
+                "mainContentId": "image-1-content",
+            },
+            broken,
+            {
+                "id": "text-1",
+                "type": "text",
+                "contents": [{"contentId": "text-1-content", "content": []}],
+                "activeContentId": "text-1-content",
+                "mainContentId": "text-1-content",
+            },
+        ],
+        "connections": [
+            {"id": "connection-1", "sourceElementId": "image-1", "targetElementId": "image-broken"},
+            {"id": "connection-broken", "sourceElementId": "image-1"},
+        ],
+    })
+
+    decoded = CanvasCodec.decode(source)
+
+    assert [element.element_id for element in decoded.canvas.elements] == ["image-1", "text-1"]
+    assert decoded.canvas.get_element("image-broken") is None
+    assert decoded.canvas.opaque_elements[0][1] == broken
+    assert [connection.connection_id for connection in decoded.canvas.connections] == ["connection-1"]
+    assert decoded.canvas.opaque_connections[0][1]["id"] == "connection-broken"
+
+    saved = CanvasCodec.decode(CanvasCodec.encode(decoded))
+    assert [element.element_id for element in saved.canvas.elements] == ["image-1", "text-1"]
+    assert saved.canvas.opaque_elements[0][1] == broken
+    assert saved.canvas.connections[0].target_element_id == "image-broken"
+    assert saved.canvas.opaque_connections[0][1]["id"] == "connection-broken"
+
+
+def test_codec_skips_broken_supported_child_inside_frame() -> None:
+    """Frame 内已支持但损坏的子节点跳过解析，其它子节点和父节点仍可用。"""
+    broken_child = {
+        "id": "text-broken",
+        "type": "text",
+        "contents": "not-an-array",
+        "activeContentId": "text-broken-content",
+        "mainContentId": "text-broken-content",
+    }
+    source = _encode_raw_canvas("mock-project", {
+        "elements": [
+            {
+                "id": "frame-1",
+                "type": "frame",
+                "contents": [{"contentId": "frame-1-content"}],
+                "activeContentId": "frame-1-content",
+                "mainContentId": "frame-1-content",
+                "children": [
+                    {
+                        "id": "text-1",
+                        "type": "text",
+                        "contents": [{"contentId": "text-1-content", "content": []}],
+                        "activeContentId": "text-1-content",
+                        "mainContentId": "text-1-content",
+                    },
+                    broken_child,
+                ],
+            },
+        ],
+        "connections": [],
+    })
+
+    decoded = CanvasCodec.decode(source)
+    frame = decoded.canvas.get_element("frame-1")
+    assert frame is not None
+    assert [child.element_id for child in frame.children or []] == ["text-1"]
+    assert frame.opaque_children[0][1] == broken_child
+
+    saved = CanvasCodec.decode(CanvasCodec.encode(decoded))
+    saved_frame = saved.canvas.get_element("frame-1")
+    assert saved_frame is not None
+    assert [child.element_id for child in saved_frame.children or []] == ["text-1"]
+    assert saved_frame.opaque_children[0][1] == broken_child
 
 
 @pytest.mark.asyncio
@@ -383,6 +683,13 @@ async def test_generation_strategies_write_sync_result_and_wait_async_result(tmp
         "mock-project",
         [{"item_ref": "video", "element_type": "video", "content": {"source": "generated", "content_type": "video", "prompt": "mock"}}],
     )
+    pending_project = await repository.read("mock-project")
+    pending_video = pending_project.canvas.get_element(video_result["items"][0]["element_id"])
+    pending_content = pending_video.get_content(pending_video.active_content_id)
+    pending_sidecar = await repository.read_sidecar("mock-project")
+    pending_detail = pending_sidecar["elements"][pending_video.element_id]["contentDetails"][pending_content.content_id]
+    assert pending_content.fields.video_generation_result_meta["generation_info"]["input_mode"] == "standard"
+    assert "videoGenerationResultMeta" not in pending_detail
     waited = await application.wait("mock-project", ["canvas-task-1"], max_wait_seconds=1)
     waited_again = await application.wait("mock-project", ["canvas-task-1"], max_wait_seconds=1)
     project = await repository.read("mock-project")
@@ -403,7 +710,8 @@ async def test_generation_strategies_write_sync_result_and_wait_async_result(tmp
     video_detail = sidecar["elements"][video.element_id]["contentDetails"][video.active_content_id]
     assert video_detail["generateVideoRequest"]["model_id"] == "mock-video-model"
     assert video_detail["generateVideoRequest"]["input_mode"] == "standard"
-    assert video_detail["videoGenerationResultMeta"] == {
+    assert "videoGenerationResultMeta" not in video_detail
+    assert video.get_content(video.active_content_id).fields.video_generation_result_meta == {
         "generation_info": {
             "input_mode": "standard",
             "resolution": "720p",

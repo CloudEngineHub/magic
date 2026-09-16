@@ -1,6 +1,6 @@
 import * as htmlToImage from "html-to-image"
 import type { FileApi } from "@/pages/superMagic/fileAccess/fileApi"
-import { logger as rootLogger } from "@/utils/log"
+import { logger as rootLogger } from "@/infrastructure/logger"
 import type { CardFrameRef } from "../components/CardFrame"
 import {
 	WECHAT_COVER_BASE_HEIGHT,

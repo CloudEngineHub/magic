@@ -148,7 +148,7 @@ function DefaultInputContainer({ editorContext, editorNodes }: DefaultInputConta
 						className={cn("flex flex-col gap-2", shouldFillHeight && "h-full min-h-0")}
 					>
 						<div
-							className={cn(shouldFillHeight && "min-h-0 flex-1 [&>div]:h-full")}
+							className={cn(shouldFillHeight && "min-h-0 flex-1")}
 							onDragEnterCapture={handleEditorRandomDragOver}
 							onDragOverCapture={handleEditorRandomDragOver}
 							onDropCapture={handleEditorRandomDrop}

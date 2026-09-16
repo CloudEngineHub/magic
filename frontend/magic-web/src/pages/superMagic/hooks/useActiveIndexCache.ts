@@ -60,10 +60,6 @@ export function useActiveIndexCache({
 				}
 
 				const fileState = {
-					tabs: currentState?.fileState?.tabs || [],
-					activeTabId: currentState?.fileState?.activeTabId,
-					detailMode: currentState?.fileState?.detailMode,
-					singleModeDetail: currentState?.fileState?.singleModeDetail,
 					pptActiveIndexMap,
 				}
 

@@ -1,5 +1,6 @@
 import MarkdownIt from "markdown-it"
 import {
+	classifyMarkdownFileHref,
 	parseCanonicalWorkspaceHref,
 	parseMarkdownFileHref,
 	type MarkdownFileTarget,
@@ -9,6 +10,9 @@ export {
 	classifyMarkdownFileHref,
 	createCanonicalWorkspaceHref,
 	createReferencedProjectHref,
+	createUserFileHref,
+	normalizeUserRelativePath,
+	isValidProjectReferenceId,
 	getReferencedProjectMountBasePath,
 	isMarkdownFileHrefCandidate,
 	isReferencedProjectHrefCandidate,
@@ -240,6 +244,20 @@ export function extractWorkspaceMarkdownLinks(content: string): WorkspaceMarkdow
 
 export function extractMarkdownFileLinks(content: string): MarkdownFileLinkMatch[] {
 	return extractMarkdownLinks(content, parseMarkdownFileLinkAt)
+}
+
+/** 无效但明确的文件链接也应保留为正文，不能触发长文本上传。 */
+export function containsMarkdownFileReference(content: string): boolean {
+	return (
+		extractMarkdownLinks(content, (text, index) => {
+			const syntax = parseMarkdownLinkSyntaxAt(text, index)
+			if (!syntax) return null
+			const result = classifyMarkdownFileHref(syntax.href)
+			return result.target || result.explicitFileReference
+				? { ...syntax, path: syntax.href }
+				: null
+		}).length > 0
+	)
 }
 
 function parseQuotedFilePath(

@@ -62,8 +62,12 @@ final class ReferencedProjectMountPlanner
             return null;
         }
 
-        $projectId = trim((string) ($mention['project_id'] ?? ''));
-        if ($projectId === '' || $projectId === (string) $currentProjectId) {
+        $projectIdRaw = $mention['project_id'] ?? null;
+        if ((! is_string($projectIdRaw) && ! is_int($projectIdRaw)) || ! preg_match('/^[1-9][0-9]*$/D', (string) $projectIdRaw)) {
+            return null;
+        }
+        $projectId = (string) $projectIdRaw;
+        if ((string) (int) $projectId !== $projectId || $projectId === (string) $currentProjectId) {
             return null;
         }
 

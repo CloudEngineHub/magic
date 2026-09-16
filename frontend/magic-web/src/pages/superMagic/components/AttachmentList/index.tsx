@@ -1,6 +1,9 @@
-import MagicFileIcon from "@/components/base/MagicFileIcon"
+import { FileResourceIcon } from "@/pages/superMagic/components/TopicFilesButton/components/FileResourceIcon"
+import {
+	resolveFilePresentation,
+	getFilePresentationIndex,
+} from "@/pages/superMagic/components/TopicFilesButton/utils/file-presentation"
 import MagicIcon from "@/components/base/MagicIcon"
-import FoldIcon from "@/pages/superMagic/assets/svg/file-folder.svg"
 import topicEmpty from "@/pages/superMagic/assets/svg/topic-empty.svg"
 import type { MouseEvent } from "react"
 import { getFileType } from "@/pages/superMagic/utils/handleFIle"
@@ -232,12 +235,12 @@ export default function AttachmentList({
 									/>
 								</div>
 								<div className={styles.iconWrapper} style={{ marginLeft: "2px" }}>
-									<img
-										src={FoldIcon}
-										alt="folder"
-										width={18}
-										height={18}
-										data-testid="attachment-list-image"
+									<FileResourceIcon
+										presentation={resolveFilePresentation(item, {
+											index: getFilePresentationIndex(attachments),
+										})}
+										size={18}
+										folderTestId="attachment-list-image"
 									/>
 								</div>
 								<div className={styles.fileNameContainer}>
@@ -296,8 +299,10 @@ export default function AttachmentList({
 								className={styles.iconWrapper}
 								style={{ marginLeft: hasFolders || level > 0 ? "2px" : "0" }}
 							>
-								<MagicFileIcon
-									type={item.file_extension}
+								<FileResourceIcon
+									presentation={resolveFilePresentation(item, {
+										index: getFilePresentationIndex(attachments),
+									})}
 									size={18}
 									className={styles.threadTitleImage}
 								/>

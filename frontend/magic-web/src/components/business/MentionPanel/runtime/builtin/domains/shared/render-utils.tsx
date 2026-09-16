@@ -1,6 +1,7 @@
+import { FileResourceIcon } from "@/pages/superMagic/components/TopicFilesButton/components/FileResourceIcon"
+import { resolveFilePresentation } from "@/pages/superMagic/components/TopicFilesButton/utils/file-presentation"
 import TSIcon, { IconParkIconElement } from "@/components/base/TSIcon"
 import MagicAvatar from "@/components/base/MagicAvatar"
-import FoldIcon from "@/pages/superMagic/assets/svg/file-folder.svg"
 import { cn } from "@/utils/cn"
 import { ICON_MAPPINGS } from "../../../../constants"
 import type { DirectoryMentionData, MentionItem } from "../../../../types"
@@ -9,8 +10,6 @@ import type {
 	MentionItemRendererPlatform,
 } from "../../../../renderers/types"
 import { MentionPanelFileImageIcon } from "../file-preview/MentionPanelFileImageIcon"
-import projectFilesStore from "@/stores/projectFiles"
-import { MentionPanelResourceIcon } from "./resource-icon"
 
 export function getRendererIconSize(platform: MentionItemRendererPlatform) {
 	return platform === "desktop" ? 16 : 20
@@ -44,56 +43,19 @@ export function renderMentionFolderIcon(context: MentionItemRendererContext) {
 
 	const size = getRendererIconSize(platform)
 
-	// Normalize path for comparison (remove leading slash)
-	const normalizePath = (path: string) => {
-		return path.startsWith("/") ? path.slice(1) : path
-	}
-
-	// Get directory metadata from item.data or find from store
-	const directoryData = item.data as DirectoryMentionData | undefined
-	let directoryDisplayConfig = directoryData?.directory_metadata
-	let childrenItems = item.children as unknown[]
-
-	// If metadata not available, try to find from store
-	if (!directoryDisplayConfig && directoryData) {
-		const folderNode = projectFilesStore.workspaceFilesList.find((f) => {
-			if (f.type !== "directory") return false
-
-			if (directoryData.directory_id) {
-				return f.file_id === directoryData.directory_id
-			}
-			if (directoryData.directory_path) {
-				return (
-					normalizePath(f.relative_file_path || "") ===
-					normalizePath(directoryData.directory_path)
-				)
-			}
-			return false
-		})
-
-		if (folderNode) {
-			directoryDisplayConfig = folderNode.display_config
-			childrenItems = (folderNode.children as unknown[]) || []
-		}
-	}
-
-	if (directoryDisplayConfig?.type) {
-		return (
-			<MentionPanelResourceIcon
-				displayConfig={directoryDisplayConfig}
-				childrenItems={childrenItems}
-				typeFallback="folder"
-				isDirectoryLike
-				size={size}
-			/>
-		)
-	}
-
-	if (platform === "desktop") {
-		return <img src={FoldIcon} alt="file-folder" className="h-4 w-4" />
-	}
-
-	return <img src={FoldIcon} alt="file-folder" style={{ width: size, height: size }} />
+	const data = item.data as DirectoryMentionData | undefined
+	const presentation = resolveFilePresentation(
+		{
+			...data,
+			file_id: data?.directory_id,
+			file_name: data?.directory_name ?? item.name,
+			relative_file_path: data?.directory_path,
+			is_directory: true,
+			display_config: data?.directory_metadata ?? item.displayConfig,
+		},
+		context.filePresentationOptions,
+	)
+	return <FileResourceIcon presentation={presentation} size={size} />
 }
 
 export function renderMentionFileIcon(context: MentionItemRendererContext) {

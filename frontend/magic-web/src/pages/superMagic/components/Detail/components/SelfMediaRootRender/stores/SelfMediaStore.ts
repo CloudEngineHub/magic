@@ -1,5 +1,5 @@
 import { comparer, makeAutoObservable, reaction, runInAction, type IReactionDisposer } from "mobx"
-import { logger as rootLogger } from "@/utils/log"
+import { logger as rootLogger } from "@/infrastructure/logger"
 import type { SelfMediaInitialNavigation, SelfMediaPlatform } from "../../../types"
 import type {
 	SelfMediaPost,

@@ -1,4 +1,5 @@
 import pubsub, { PubSubEvents } from "@/utils/pubsub"
+import { runInAction } from "mobx"
 import { useDeepCompareEffect, useDebounceFn, useUpdateEffect, useMemoizedFn } from "ahooks"
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import Detail, { type DetailRef } from "../../components/Detail"
@@ -216,6 +217,7 @@ function ProjectPage() {
 			let didCommitFinalSnapshot = false
 
 			try {
+				projectFilesStore.setAttachmentLoadStatus(projectId, "loading")
 				pubsub.publish(PubSubEvents.Update_Attachments_Loading, true)
 				withAttachmentsRefreshWaitersResolved(
 					projectId,
@@ -237,15 +239,24 @@ function ProjectPage() {
 												{ tree, list },
 												{ preserveList: true },
 											)
-										setAttachments(processedData.tree)
-										setAttachmentList(processedData.list)
-										projectFilesStore.setWorkspaceFileTree(processedData.tree, {
-											list: processedData.list,
-											source: `ProjectPage.batch.${phase}`,
+										runInAction(() => {
+											setAttachments(processedData.tree)
+											setAttachmentList(processedData.list)
+											projectFilesStore.setWorkspaceFileTree(
+												processedData.tree,
+												{
+													list: processedData.list,
+													source: `ProjectPage.batch.${phase}`,
+												},
+											)
+											if (isFinal) {
+												didCommitFinalSnapshot = true
+												projectFilesStore.setAttachmentLoadStatus(
+													projectId,
+													"ready",
+												)
+											}
 										})
-										if (isFinal) {
-											didCommitFinalSnapshot = true
-										}
 									}
 								: undefined,
 						}),
@@ -258,14 +269,17 @@ function ProjectPage() {
 								)
 								return
 							}
-							if (!didCommitFinalSnapshot) {
-								setAttachments(res.tree)
-								setAttachmentList(res.list)
-								projectFilesStore.setWorkspaceFileTree(res.tree, {
-									list: res.list,
-									source: "ProjectPage.load_result",
-								})
-							}
+							runInAction(() => {
+								if (!didCommitFinalSnapshot) {
+									setAttachments(res.tree)
+									setAttachmentList(res.list)
+									projectFilesStore.setWorkspaceFileTree(res.tree, {
+										list: res.list,
+										source: "ProjectPage.load_result",
+									})
+								}
+								projectFilesStore.setAttachmentLoadStatus(projectId, "ready")
+							})
 							GlobalMentionPanelStore.finishLoadAttachmentsPromise(projectId)
 						})
 						.catch((error: unknown) => {
@@ -278,8 +292,8 @@ function ProjectPage() {
 								return
 							}
 							console.error("Failed to fetch attachments:", error)
-							setAttachments([])
-							projectFilesStore.setWorkspaceFileTree([])
+							// 读取失败不能证明文件被删除，保留已交付快照供当前预览继续使用。
+							projectFilesStore.setAttachmentLoadStatus(projectId, "error")
 						})
 						.finally(() => {
 							request.release()
@@ -291,9 +305,10 @@ function ProjectPage() {
 				)
 			} catch (error) {
 				if (isAbortError(error)) return
+				if (!request.isCurrent()) return
 				console.error("Failed to fetch attachments:", error)
-				setAttachments([])
-				projectFilesStore.setWorkspaceFileTree([])
+				// 读取失败不能证明文件被删除，保留已交付快照供当前预览继续使用。
+				projectFilesStore.setAttachmentLoadStatus(projectId, "error")
 				resolveAttachmentsRefreshWaitersForProject(projectId)
 				callback?.()
 			}
@@ -370,13 +385,16 @@ function ProjectPage() {
 				containerClassName={styles.container}
 				detailPanelClassName={styles.detailPanel}
 				isDetailPanelFullscreen={false}
-				sidebar={
+				enableProjectCollapse={!hideProjectCard}
+				sidebar={({ onCollapse, isCollapsed }) => (
 					<div
 						className="flex h-full flex-col gap-2"
 						data-testid="workspace-sidebar-wrapper"
 					>
 						{hideProjectCard ? null : (
 							<ProjectCardContainer
+								onCollapse={onCollapse}
+								isPanelVisible={!isCollapsed}
 								selectedProject={selectedProject}
 								selectedWorkspace={selectedWorkspace}
 							/>
@@ -410,9 +428,11 @@ function ProjectPage() {
 							className="flex-1 overflow-hidden rounded-lg border border-border bg-background"
 						/>
 					</div>
-				}
-				detailPanel={
+				)}
+				detailPanel={(fileSidebarControl) => (
 					<Detail
+						fileSidebarControl={fileSidebarControl}
+						attachmentLoadState={projectFilesStore.attachmentLoadState}
 						ref={detailRef}
 						disPlayDetail={disPlayDetail}
 						userSelectDetail={userSelectDetail}
@@ -431,7 +451,7 @@ function ProjectPage() {
 						onActiveFileChange={setActiveFileId}
 						showFallbackWhenEmpty
 					/>
-				}
+				)}
 				isReadOnly={isReadOnly}
 				showProjectResizeHandle={showProjectResizeHandle}
 				shouldShowDetailPanel={shouldShowDetailPanel}

@@ -505,6 +505,16 @@ class ProjectDomainService
     }
 
     /**
+     * @param list<string> $projectIds
+     * @param array<string, array{user_id: string, department_ids: array<string>, collaboration_allowed: bool}> $scopes
+     * @return array<string, string>
+     */
+    public function getAccessibleProjectNamesBatch(array $projectIds, array $scopes): array
+    {
+        return $this->projectRepository->getAccessibleProjectNamesBatch($projectIds, $scopes);
+    }
+
+    /**
      * 批量获取项目的workspace_id.
      *
      * @param array $projectIds 项目ID列表

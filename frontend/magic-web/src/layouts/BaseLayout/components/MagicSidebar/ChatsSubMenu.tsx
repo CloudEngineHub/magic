@@ -31,6 +31,7 @@ import ChatConversationSubMenuRow from "./ChatConversationSubMenuRow"
 type ChatsSubMenuProps = {
 	children: ReactNode
 	visible?: boolean
+	onOpenChange?: (open: boolean) => void
 }
 
 const CHAT_SUBMENU_SKELETON_WIDTHS = ["w-[82%]", "w-[68%]", "w-[74%]", "w-[58%]", "w-[88%]"]
@@ -53,10 +54,14 @@ function renderChatSubMenuSkeletonRow(widthClassName: string, index: number) {
 }
 
 /** Desktop sidebar chat list popup; shell and rows align with workspace/project nested popovers. */
-function ChatsSubMenu({ children, visible = true }: ChatsSubMenuProps) {
+function ChatsSubMenu({ children, visible = true, onOpenChange }: ChatsSubMenuProps) {
 	const { t } = useTranslation(["sidebar", "super", "common", "interface"])
 	const location = useLocation()
 	const [open, setOpen] = useState(false)
+	useEffect(() => {
+		onOpenChange?.(open)
+	}, [open, onOpenChange])
+	useEffect(() => () => onOpenChange?.(false), [onOpenChange])
 	const [isCreatingChat, setIsCreatingChat] = useState(false)
 	const [isRefreshing, setIsRefreshing] = useState(false)
 	const isCreatingChatRef = useRef(false)

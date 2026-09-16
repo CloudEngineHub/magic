@@ -5,6 +5,7 @@ declare(strict_types=1);
  * Copyright (c) The Magic , Distributed under the software license
  */
 return [
+    'queue_changed' => 'The queue has changed. Refresh it and try again.',
     'cannot_modify_message' => 'Message cannot be modified in current status',
     'status_not_modifiable' => 'Message status does not allow modification',
     'update_failed' => 'Failed to update message',

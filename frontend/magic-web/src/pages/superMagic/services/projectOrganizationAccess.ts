@@ -1,5 +1,5 @@
 import { SuperMagicApi } from "@/apis"
-import type { RequestConfig } from "@/apis/core/HttpClient"
+import type { RequestConfig } from "@/infrastructure/network/http/clients"
 import { interfaceStore } from "@/stores/interface"
 import type { User } from "@/types/user"
 

@@ -9,10 +9,13 @@ namespace App\Domain\ModelGateway\Event;
 
 use App\Domain\ImageGenerate\ValueObject\ImageGenerateSourceEnum;
 use App\Infrastructure\Core\AbstractEvent;
+use App\Infrastructure\Util\IdGenerator\IdGenerator;
 use DateTime;
 
 class VideoGeneratedEvent extends AbstractEvent
 {
+    protected ?string $eventId = null;
+
     protected string $organizationCode;
 
     protected string $userId;
@@ -83,6 +86,16 @@ class VideoGeneratedEvent extends AbstractEvent
     ];
 
     protected array $businessParams = [];
+
+    public function __construct(?string $eventId = null)
+    {
+        $this->eventId = $eventId ?: (string) IdGenerator::getSnowId();
+    }
+
+    public function getEventId(): string
+    {
+        return $this->eventId ??= (string) ($this->businessParams['event_id'] ?? IdGenerator::getSnowId());
+    }
 
     public function getOrganizationCode(): string
     {
@@ -366,5 +379,8 @@ class VideoGeneratedEvent extends AbstractEvent
     public function setBusinessParams(array $businessParams): void
     {
         $this->businessParams = $businessParams;
+        if (! empty($businessParams['event_id'])) {
+            $this->eventId = (string) $businessParams['event_id'];
+        }
     }
 }

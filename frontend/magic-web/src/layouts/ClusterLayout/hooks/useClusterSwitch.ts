@@ -16,6 +16,7 @@ import { omit } from "lodash-es"
 import { whiteListRoutes } from "@/routes/const/whiteRoutes"
 import { refreshAccountContextPage } from "@/broadcastChannel/eventFactory/accountContextRefresh"
 import { defaultClusterCode } from "@/routes/helpers"
+import { appStore } from "@/stores/app"
 
 const clusterConfigLoadedCache = new Set<string>()
 
@@ -24,6 +25,7 @@ interface UseClusterSwitchOptions {
 }
 
 interface UseClusterSwitchResult {
+	isInitialing: boolean
 	isSameCluster: boolean
 	loading: boolean
 	setSameCluster: (value: boolean) => void
@@ -44,14 +46,14 @@ export function useClusterSwitch(options: UseClusterSwitchOptions): UseClusterSw
 	const { accountSwitch } = useAccount()
 	const { clustersConfig } = useClusterConfig()
 
-	// 使用 useMemo 避免不必要的初始状态计算
-	const initialSameCluster = useMemo(
-		() => {
-			const code = configStore.cluster.clusterCode === defaultClusterCode ? "" : configStore.cluster.clusterCode
-			return targetClusterCode === code
-		},
-		[targetClusterCode, configStore.cluster.clusterCode],
-	)
+	// ClusterLayoutBase is an observer: read bootstrap and account state during
+	// render so hydration and in-place MobX updates can restart the gate.
+	const { isInitialing } = appStore
+	const currentClusterCode =
+		configStore.cluster.clusterCode === defaultClusterCode
+			? ""
+			: configStore.cluster.clusterCode
+	const initialSameCluster = targetClusterCode === currentClusterCode
 
 	// 预先检查是否为白名单路由（只在 mount 时计算一次）
 	const isWhiteListRoute = useMemo(
@@ -59,23 +61,48 @@ export function useClusterSwitch(options: UseClusterSwitchOptions): UseClusterSw
 		[], // 空依赖，只在组件挂载时计算
 	)
 
-	// 优化 loading 初始状态：如果集群匹配或在白名单中，不需要 loading
+	// Bootstrap owns session hydration; only an actual cluster check blocks the view.
 	const initialLoading = useMemo(
-		() => !initialSameCluster && !isWhiteListRoute,
-		[initialSameCluster, isWhiteListRoute],
+		() => !isInitialing && !initialSameCluster && !isWhiteListRoute,
+		[isInitialing, initialSameCluster, isWhiteListRoute],
 	)
 
-	const [isSameCluster, setSameCluster] = useState(initialSameCluster)
+	const [isSameCluster, setSameCluster] = useState(
+		isInitialing || initialSameCluster || isWhiteListRoute,
+	)
 	const [loading, setLoading] = useState(initialLoading)
 
 	// 使用 ref 存储 AbortController，用于取消过期请求
 	const abortControllerRef = useRef<AbortController | null>(null)
 	const debounceTimerRef = useRef<NodeJS.Timeout | null>(null)
+	// A switch updates the active cluster before its remaining work completes.
+	// Rechecks must await that same task, not start another switch or lose its refresh.
+	const switchTaskRef = useRef<{ target: string; promise: Promise<void> } | null>(null)
 
-	// 查找匹配的账号（使用 useMemo 缓存）
-	const matchedAccount = useMemo(() => {
-		return userStore.account.accounts.find((account) => account.deployCode?.toLowerCase?.() === targetClusterCode?.toLowerCase?.())
-	}, [targetClusterCode, userStore.account.accounts])
+	const matchedAccount = userStore.account.accounts.find(
+		(account) => account.deployCode?.toLowerCase() === targetClusterCode.toLowerCase(),
+	)
+	const matchedMagicId = matchedAccount?.magic_id
+	const matchedUserId = matchedAccount?.magic_user_id
+	const matchedOrganizationCode = matchedAccount?.organizationCode
+
+	const finishSwitch = async (
+		task: NonNullable<typeof switchTaskRef.current>,
+		signal: AbortSignal,
+	) => {
+		try {
+			await task.promise
+			if (signal.aborted) return
+			setSameCluster(true)
+			refreshAccountContextPage()
+		} catch (error) {
+			if (signal.aborted) return
+			setSameCluster(false)
+			console.error(error)
+		} finally {
+			if (!signal.aborted && switchTaskRef.current === task) switchTaskRef.current = null
+		}
+	}
 
 	// 稳定的错误处理函数
 	const handleError = useMemoizedFn((error: unknown) => {
@@ -97,11 +124,21 @@ export function useClusterSwitch(options: UseClusterSwitchOptions): UseClusterSw
 	// 主初始化逻辑
 	const initialize = useMemoizedFn(async (signal: AbortSignal) => {
 		try {
+			if (signal.aborted || appStore.isInitialing) return
+			const pendingSwitch = switchTaskRef.current
+			if (pendingSwitch?.target === targetClusterCode) {
+				await finishSwitch(pendingSwitch, signal)
+				return
+			}
 			// 提前判断：如果目标集群与当前集群一致，或在白名单中，直接通过（无需 loading）
-			if (targetClusterCode === configStore.cluster.clusterCode || isWhiteListRoute) {
+			if (initialSameCluster || isWhiteListRoute) {
+				// Config synchronization must not unmount an already admitted route.
+				setSameCluster(true)
+				setLoading(false)
 				if (!clustersConfig?.[targetClusterCode]) {
 					try {
 						await ensureClusterConfigReady(targetClusterCode)
+						if (signal.aborted) return
 						await service
 							.get<ConfigService>("configService")
 							.setClusterCode(targetClusterCode)
@@ -109,8 +146,6 @@ export function useClusterSwitch(options: UseClusterSwitchOptions): UseClusterSw
 						console.warn("whiteList cluster config sync failed", error)
 					}
 				}
-				setSameCluster(true)
-				setLoading(false)
 				return
 			}
 
@@ -118,7 +153,11 @@ export function useClusterSwitch(options: UseClusterSwitchOptions): UseClusterSw
 			setLoading(true)
 
 			// 1. 获取私有配置
-			await CommonApi.getPrivateConfigure(targetClusterCode, { skipAppInitWait: true })
+			await CommonApi.getPrivateConfigure(targetClusterCode, {
+				skipAppInitWait: true,
+				enableErrorMessagePrompt: false,
+				enableRequestUnion: true,
+			})
 
 			// 检查请求是否已被取消
 			if (signal.aborted) return
@@ -132,25 +171,27 @@ export function useClusterSwitch(options: UseClusterSwitchOptions): UseClusterSw
 			if (signal.aborted) return
 
 			// 3. 再次检查集群是否一致（可能在异步操作期间已切换）
-			if (targetClusterCode === configStore.cluster.clusterCode || isWhiteListRoute) {
+			const code =
+				configStore.cluster.clusterCode === defaultClusterCode
+					? ""
+					: configStore.cluster.clusterCode
+			if (targetClusterCode === code || isWhiteListRoute) {
 				setSameCluster(true)
 				return
 			}
 
 			// 4. 如果找到匹配账号，自动切换
 			if (matchedAccount) {
-				setSameCluster(true)
-				try {
-					await accountSwitch(
+				const task = {
+					target: targetClusterCode,
+					promise: accountSwitch(
 						matchedAccount.magic_id,
 						matchedAccount.magic_user_id,
 						matchedAccount.organizationCode,
-					)
-					// Rebuild account-scoped stores after the route-driven account switch succeeds.
-					refreshAccountContextPage()
-				} catch (error) {
-					console.error(error)
+					),
 				}
+				switchTaskRef.current = task
+				await finishSwitch(task, signal)
 			} else {
 				// 目标集群不存在已登录账号，且为非白名单
 				setSameCluster(false)
@@ -181,12 +222,29 @@ export function useClusterSwitch(options: UseClusterSwitchOptions): UseClusterSw
 		// 创建新的 AbortController
 		const abortController = new AbortController()
 		abortControllerRef.current = abortController
+		// Defer account decisions until hydration finishes, while keeping React mounted.
+		// Preserve admission across bootstrap completion so a matching route never remounts.
+		if (isInitialing) {
+			setLoading(false)
+			setSameCluster(true)
+			return () => abortController.abort()
+		}
 
 		// 快速判断：如果集群已匹配或在白名单中，立即执行（无需防抖）
-		const code = configStore.cluster.clusterCode === defaultClusterCode ? "" : configStore.cluster.clusterCode
+		const code =
+			configStore.cluster.clusterCode === defaultClusterCode
+				? ""
+				: configStore.cluster.clusterCode
 		const needsSwitch = targetClusterCode !== code && !isWhiteListRoute
+		const hasPendingSwitch = switchTaskRef.current?.target === targetClusterCode
 
-		if (!needsSwitch) {
+		// A pending switch can already have updated the cluster code; still await it.
+		if (needsSwitch || hasPendingSwitch) {
+			setLoading(true)
+			setSameCluster(false)
+		}
+
+		if (!needsSwitch || hasPendingSwitch) {
 			// 无需切换，立即执行
 			initialize(abortController.signal).catch(console.error)
 		} else {
@@ -203,9 +261,19 @@ export function useClusterSwitch(options: UseClusterSwitchOptions): UseClusterSw
 				clearTimeout(debounceTimerRef.current)
 			}
 		}
-	}, [targetClusterCode, initialize, isWhiteListRoute])
+	}, [
+		targetClusterCode,
+		currentClusterCode,
+		isInitialing,
+		matchedMagicId,
+		matchedUserId,
+		matchedOrganizationCode,
+		initialize,
+		isWhiteListRoute,
+	])
 
 	return {
+		isInitialing,
 		isSameCluster,
 		loading,
 		setSameCluster,

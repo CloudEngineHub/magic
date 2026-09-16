@@ -1,3 +1,7 @@
+import {
+	resolveFilePresentation,
+	getFilePresentationIndex,
+} from "@/pages/superMagic/components/TopicFilesButton/utils/file-presentation"
 import MobilePathBreadcrumb from "@/pages/superMagic/components/MobilePathBreadcrumb"
 import {
 	Box,
@@ -31,7 +35,7 @@ import MobileBottomSearchBar from "@/pages/superMagicMobile/components/MobileBot
 import type { ProjectListItem, Workspace } from "@/pages/superMagic/pages/Workspace/types"
 
 import type { AttachmentItem } from "../../../TopicFilesButton/hooks"
-import { ProjectResourceIcon } from "@/pages/superMagic/components/TopicFilesButton/components/ProjectResourceIcon"
+import { FileResourceIcon } from "@/pages/superMagic/components/TopicFilesButton/components/FileResourceIcon"
 import { getDirectoriesFromPath, getItemId, getItemName } from "../../utils/attachmentUtils"
 import type { MobileCrossProjectConfig, SelectDirectorySubmitParams } from "./types"
 import { MAX_MENTION_PROJECT_COUNT, type ProjectResourceSelection } from "../../types"
@@ -481,9 +485,10 @@ function DirectoryRow({
 					) : null}
 				</div>
 				<div className="flex size-[22px] shrink-0 items-center justify-center">
-					<ProjectResourceIcon
-						item={directory}
-						resourceTree={resourceTree}
+					<FileResourceIcon
+						presentation={resolveFilePresentation(directory, {
+							index: getFilePresentationIndex(resourceTree),
+						})}
 						size={20}
 						folderWidth={22}
 						folderHeight={18}

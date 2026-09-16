@@ -35,7 +35,7 @@ import MicroAppPreviewToolbar from "./components/MicroAppPreviewToolbar"
 import MicroAppProjectPanels from "./components/MicroAppProjectPanels"
 import MicroAppWorkspaceNav, { type MicroAppWorkspaceView } from "./components/MicroAppWorkspaceNav"
 import type { MicroAppPageMode } from "./components/MicroAppModeSwitcher"
-import { useLongMemoryPreview } from "./hooks/useLongMemoryPreview"
+import { useUserSpacePreview } from "./hooks/useUserSpacePreview"
 import { useMicroAppMessageFileOpen } from "./hooks/useMicroAppMessageFileOpen"
 import { useMicroAppPageController } from "./hooks/useMicroAppPageController"
 import { useMicroAppPreviewFiles } from "./hooks/useMicroAppPreviewFiles"
@@ -54,6 +54,9 @@ function MicroAppPageInner({
 }) {
 	const { t } = useTranslation("super")
 	const [activeView, setActiveView] = useState<MicroAppWorkspaceView>("preview")
+	// 首次打开文件后保留 Detail；返回应用预览只隐藏它，避免卸载用户文件草稿。
+	const fileDetailVisited = useRef(false)
+	if (activeView !== "preview") fileDetailVisited.current = true
 	const [previewMode, setPreviewMode] = useState<"desktop" | "phone">("desktop")
 	const [previewRefreshKey, setPreviewRefreshKey] = useState(0)
 	const [isPreviewFullscreen, setIsPreviewFullscreen] = useState(false)
@@ -275,13 +278,16 @@ function MicroAppPageInner({
 		if (!detail || typeof detail !== "object") return
 		linkPreviewPopupRef.current?.open(detail as PreviewDetail, attachments, attachmentList)
 	})
-	const { activeLongMemoryFileId, handleLongMemoryFileClick, resetLongMemoryFile } =
-		useLongMemoryPreview({ openPreview: setPreviewDetail })
+	const { handleUserFileClick } = useUserSpacePreview({
+		detailRef,
+		isFilesViewActive: activeView === "files" || activeView === "userSpace",
+		showFilesView,
+	})
 
 	useMicroAppMessageFileOpen({
 		attachmentList,
 		detailRef,
-		isFilesViewActive: activeView === "files",
+		isFilesViewActive: activeView === "files" || activeView === "userSpace",
 		showFilesView,
 	})
 
@@ -300,8 +306,7 @@ function MicroAppPageInner({
 		setIsAIEditActive(false)
 		setIsDevConsoleActive(false)
 		setIsDevConsoleAvailable(false)
-		resetLongMemoryFile()
-	}, [projectId, resetLongMemoryFile, setIsMessagePanelCollapsed, setPreviewEntryFile])
+	}, [projectId, setIsMessagePanelCollapsed, setPreviewEntryFile])
 
 	useEffect(() => {
 		if (!isPreviewFullscreen) return undefined
@@ -425,17 +430,21 @@ function MicroAppPageInner({
 											isPreviewFullscreen
 												? "fixed z-detail-fullscreen h-dvh w-screen bg-background"
 												: "absolute",
-											activeView === "preview" || activeView === "files"
+											activeView === "preview" ||
+												activeView === "files" ||
+												activeView === "userSpace"
 												? "flex"
 												: "hidden",
 										)}
 										aria-hidden={
-											activeView !== "preview" && activeView !== "files"
+											activeView !== "preview" &&
+											activeView !== "files" &&
+											activeView !== "userSpace"
 										}
 										data-fullscreen={isPreviewFullscreen ? "true" : "false"}
 										data-testid="micro-app-preview-workspace"
 									>
-										{activeView === "files" ? (
+										{activeView === "files" || activeView === "userSpace" ? (
 											<>
 												<aside
 													className="flex h-full shrink-0 flex-col overflow-hidden border-r border-border bg-background"
@@ -443,12 +452,29 @@ function MicroAppPageInner({
 													data-testid="micro-app-file-sidebar"
 												>
 													<div className="min-h-0 flex-1 overflow-hidden py-1">
-														<TopicFilesButton
-															{...topicFilesProps}
-															title={t(
-																"microAppPage.header.codeFiles",
-															)}
-														/>
+														{activeView === "userSpace" ? (
+															<MicroAppProjectPanels
+																placement="sidebar"
+																activeView={activeView}
+																projectId={selectedProject?.id}
+																projectName={
+																	selectedProject?.project_name
+																}
+																topicId={selectedTopic?.id}
+																activeUserFileId={activeFileId}
+																onUserFileClick={
+																	handleUserFileClick
+																}
+															/>
+														) : (
+															<TopicFilesButton
+																{...topicFilesProps}
+																showFileManager
+																title={t(
+																	"microAppPage.header.codeFiles",
+																)}
+															/>
+														)}
 													</div>
 												</aside>
 												<TopicResizeHandle
@@ -519,32 +545,42 @@ function MicroAppPageInner({
 														/>
 													</div>
 												</>
-											) : (
-												<Detail
-													className="my-2"
-													ref={detailRef}
-													disPlayDetail={userSelectDetail}
-													userSelectDetail={userSelectDetail}
-													setUserSelectDetail={setUserSelectDetail}
-													attachments={attachments}
-													attachmentList={attachmentList}
-													topicId={selectedTopic?.id}
-													baseShareUrl={`${window.location.origin}/share`}
-													currentTopicStatus={selectedTopic?.task_status}
-													messages={[]}
-													allowEdit={!isReadOnly}
-													selectedTopic={selectedTopic}
-													selectedProject={selectedProject}
-													activeFileId={activeFileId}
-													onActiveFileChange={handleActiveFileChange}
-													projectId={selectedProject?.id}
-													showFileHeader
-													showFileFooter={false}
-													showFallbackWhenEmpty
-													onFileTabsCacheLoaded={
-														handleFileTabsCacheLoaded
-													}
-												/>
+											) : null}
+											{fileDetailVisited.current && (
+												<div
+													className={cn(
+														"h-full min-h-0 flex-1",
+														activeView === "preview" && "hidden",
+													)}
+												>
+													<Detail
+														className="my-2"
+														ref={detailRef}
+														disPlayDetail={userSelectDetail}
+														userSelectDetail={userSelectDetail}
+														setUserSelectDetail={setUserSelectDetail}
+														attachments={attachments}
+														attachmentList={attachmentList}
+														topicId={selectedTopic?.id}
+														baseShareUrl={`${window.location.origin}/share`}
+														currentTopicStatus={
+															selectedTopic?.task_status
+														}
+														messages={[]}
+														allowEdit={!isReadOnly}
+														selectedTopic={selectedTopic}
+														selectedProject={selectedProject}
+														activeFileId={activeFileId}
+														onActiveFileChange={handleActiveFileChange}
+														projectId={selectedProject?.id}
+														showFileHeader
+														showFileFooter={false}
+														showFallbackWhenEmpty
+														onFileTabsCacheLoaded={
+															handleFileTabsCacheLoaded
+														}
+													/>
+												</div>
 											)}
 										</div>
 									</div>
@@ -559,8 +595,6 @@ function MicroAppPageInner({
 										workspaceName={selectedProject?.workspace_name}
 										projectName={selectedProject?.project_name}
 										topicId={selectedTopic?.id}
-										activeLongMemoryFileId={activeLongMemoryFileId}
-										onLongMemoryFileClick={handleLongMemoryFileClick}
 									/>
 								</main>
 

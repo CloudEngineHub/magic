@@ -70,7 +70,7 @@ vi.mock("@/utils/env", () => ({
 	getPrivateDeploymentConfig: vi.fn(() => null),
 }))
 
-vi.mock("@/utils/log", () => ({
+vi.mock("@/infrastructure/logger", () => ({
 	logger: {
 		createLogger: () => ({
 			report: vi.fn(),

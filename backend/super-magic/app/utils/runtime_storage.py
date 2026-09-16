@@ -90,7 +90,7 @@ owner：     SnippetEnvironment、run_python_snippet、run_sdk_snippet
 -------------------------------------------------------------------------------
 [05] llm_requests
 -------------------------------------------------------------------------------
-路径：      .runtime/llm_requests/<model>_<time>_<status>.log
+路径：      .runtime/llm_requests/<model>_<time>_<duration>_<id>_<status>.log
 兼容边界：  `.runtime` 只使用 `llm_requests`；`.topic` 迁移和归档同时排除旧的
             `llm_request` 和当前的 `llm_requests`，启动时删除旧的
             `.topic/chat_history/llm_request/`；该删除在后台异步执行，不阻塞启动主链路。
@@ -107,6 +107,9 @@ owner：     agentlang/agentlang/llms/utils/debug_logger.py、ChatHistoryCleanup
 配置：      `runtime_cleanup.llm_request.max_file_count`。
 实现归属：  debug_logger 和 ChatHistoryCleanupService 共用文件数配置；清理动作使用通用
             evict_runtime_files()。
+持久副本：  debug_logger 另将完整失败日志写入 .topic/archives/llm_requests/，由
+            diagnostic_retention.llm_failed_max_count 独立保留最近 3 份；本模块不管理
+            持久副本，也不放宽 runtime 路径校验。成功日志不占持久名额。
 
 -------------------------------------------------------------------------------
 [06] background_compact
@@ -131,8 +134,11 @@ owner：     MemoryExtractionService、ws_server 启动清理
 立即处理：  成功、失败、取消后都保留，便于 debug。
 延后处理：  创建会话目录后触发；服务启动时再次检查；超过 7 天后淘汰。
 活动保护：  当前新建目录通过 protected_paths 保护。
-淘汰规则：  按整次运行目录删除；不进入 .topic/chat_history/subagents；不支持 resume，
-            不属于持久化历史。
+淘汰规则：  runtime 源按整次运行目录删除，不直接进入持久历史，也不作为 resume 入口。
+持久副本：  整理结束后由 ChatHistoryArchiveService 将完整终态会话复制到配置的
+            .chat_history/subagents/；归档上传成功后可跨沙盒恢复。
+            ChatHistoryCleanupService 独立保留最近 3 次，不按普通历史的年龄和容量规则删除。配置位于
+            diagnostic_retention.memory_after_run_max_count，不影响 runtime 的 7 天策略。
 配置：      `runtime_cleanup.memory_after_run.max_age_days`。
 实现归属：  通用 evict_runtime_directories()。
 
@@ -447,13 +453,15 @@ config/config.yaml 中线上 `.runtime` 的清理配置统一位于 `runtime_cle
 各段的具体默认值直接查看 `config/config.yaml`。容量字段使用人类可读写法，例如 `256MB`、
 `192MB`、`8KB`；解析器也接受 `MiB`、`KiB` 等写法，并按项目约定使用 1024 进制。
 
-LLM 调试日志只有一个线上清理入口：
+本地 LLM 调试日志只有一个线上清理配置：
 
     runtime_cleanup.llm_request.max_file_count   默认值：10
 
 设置为 0 时，不执行按文件数的清理。
+持久失败副本由 debug_logger 使用 diagnostic_retention.llm_failed_max_count 管理，
+只接受正整数；它不属于本模块的清理范围。
 
-同一段 chat_history_cleanup 配置中的下面几项目标是 .topic/chat_history，不是 .runtime：
+同一段 chat_history_cleanup 配置中的下面几项目标是本地 .chat_history，不是 .runtime：
 
     completed_subagent_max_age_days
     completed_subagent_max_count
@@ -461,7 +469,7 @@ LLM 调试日志只有一个线上清理入口：
     compacted_max_count
     total_max_bytes
 
-`chat_history_cleanup` 中的配置仍然只服务 `.topic/chat_history` 的持久化历史，不控制
+`chat_history_cleanup` 中的配置仍然只服务随归档上传的 `.chat_history`，不控制
 `.runtime/llm_requests`。`verification/real_compaction` 仍由
 `scripts/verify_real_compaction.py` 自己管理，不读取 `runtime_cleanup`。
 
@@ -471,7 +479,8 @@ LLM 调试日志只有一个线上清理入口：
 
 .runtime 与 .workspace、.topic 同级，是 sandbox 本地运行数据目录：
     - 不属于用户持久化文件。
-    - 不进入 checkpoint 或 archive。
+    - runtime 源目录不进入 checkpoint 或 archive；已完成的 LLM 失败日志和记忆整理
+      会话可由各自 owner 保存有限副本，副本遵循自己的持久化和清理规则。
     - 普通 sandbox 退出或重建时自然消失。
     - Claw 可能长期运行，所以不能依赖 sandbox 退出作为日常清理机制。
     - 不提供跨 sandbox 重建恢复保证。

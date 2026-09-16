@@ -1,9 +1,11 @@
+import { FileResourceIcon } from "@/pages/superMagic/components/TopicFilesButton/components/FileResourceIcon"
+import { resolveFilePresentation } from "@/pages/superMagic/components/TopicFilesButton/utils/file-presentation"
+import type { FilePresentation } from "@/pages/superMagic/components/TopicFilesButton/utils/file-presentation"
 import { memo, useMemo, type MouseEvent } from "react"
 import { observer } from "mobx-react-lite"
 import { useTranslation } from "react-i18next"
 import { useMemoizedFn } from "ahooks"
 import { IconChevronDown, IconChevronRight, IconDownload, IconEye } from "@tabler/icons-react"
-import MagicFileIcon from "@/components/base/MagicFileIcon"
 import MagicIcon from "@/components/base/MagicIcon"
 import { cn } from "@/utils/cn"
 import { Attachment } from "@/pages/superMagic/components/MessageList/components/MessageAttachment"
@@ -44,15 +46,25 @@ export const AttachmentSection = observer(function AttachmentSection({
 	const { projectFilesStore: scopedProjectFilesStore } = useMessageListContext()
 	const resolvedProjectFilesStore = scopedProjectFilesStore ?? projectFilesStore
 	const attachments = resolveAttachmentList(node, fallbackNode) as AttachmentProps[]
+
 	const rawFilePathAttachments = useMemo(() => {
 		if (!prevSuperMessageId) return []
 		const prevMessageNode = superMagicStore.getMessageNode(prevSuperMessageId) as
-			| Record<string, unknown>
-			| undefined
+			Record<string, unknown> | undefined
 		const prevContent =
 			typeof prevMessageNode?.content === "string" ? prevMessageNode.content : ""
-		return prevContent ? buildFilePathAttachments(prevContent) : []
+		if (!prevContent) return []
+		const seenReferences = new Set<string>()
+		return buildFilePathAttachments(prevContent).filter((attachment) => {
+			// 同一路径的 Markdown 与旧语法有不同解码规则；只跳过语义相同的重复查找。
+			const referenceKey = `${attachment.source}\u0000${attachment.filePath}`
+			if (seenReferences.has(referenceKey)) return false
+			seenReferences.add(referenceKey)
+			return true
+		})
 	}, [prevSuperMessageId])
+
+	const seenFilePaths = new Set<string>()
 	const filePathAttachments = rawFilePathAttachments.flatMap((attachment) => {
 		const found = findFilePathAttachment(
 			resolvedProjectFilesStore.workspaceFilesList,
@@ -63,8 +75,21 @@ export const AttachmentSection = observer(function AttachmentSection({
 		const filePath = normalizeWorkspacePathForComparison(
 			found.relative_file_path || found.path || attachment.filePath,
 		)
-		return filePath ? [{ ...attachment, filePath }] : []
+		// 不同引用写法可能指向同一真实文件，按完整路径去重并保留首次出现的顺序。
+		if (!filePath || seenFilePaths.has(filePath)) return []
+		seenFilePaths.add(filePath)
+		return [
+			{
+				...attachment,
+				filePath,
+				presentation: resolveFilePresentation(found, {
+					context: resolvedProjectFilesStore.filePresentationContext,
+					index: resolvedProjectFilesStore.filePresentationIndex,
+				}),
+			},
+		]
 	})
+
 	const onFileClick = useMemoizedFn((item?: unknown) => {
 		openMessageFile(item)
 		onSelectDetail?.(item)
@@ -86,7 +111,7 @@ export const AttachmentSection = observer(function AttachmentSection({
 })
 
 interface FilePathAttachmentListProps {
-	attachments: FilePathAttachment[]
+	attachments: Array<FilePathAttachment & { presentation: FilePresentation }>
 	className?: string
 }
 
@@ -144,8 +169,8 @@ const FilePathAttachmentList = memo(function FilePathAttachmentList({
 									"bg-fill hover:bg-fill-secondary",
 								)}
 							>
-								<MagicFileIcon
-									type={attachment.fileExt}
+								<FileResourceIcon
+									presentation={attachment.presentation}
 									size={24}
 									className="shrink-0"
 								/>

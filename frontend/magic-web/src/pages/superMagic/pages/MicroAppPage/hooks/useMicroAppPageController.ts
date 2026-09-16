@@ -29,6 +29,7 @@ import useNavigate from "@/routes/hooks/useNavigate"
 import pubsub, { PubSubEvents } from "@/utils/pubsub"
 
 import type { DetailRef } from "@/pages/superMagic/components/Detail"
+import { getFileManagerRequest } from "@/pages/superMagic/components/Detail/components/FilesViewer/utils/fileManagerTabs"
 import { useAppStore } from "../context"
 import { captureMicroAppCover } from "../utils/captureMicroAppCover"
 import { canEditMicroAppMetadata, canPublishMicroApp } from "../utils/microAppPermissions"
@@ -285,7 +286,7 @@ export function useMicroAppPageController(appId: string, projectId: string) {
 
 	const handleOpenFile = useMemoizedFn((value?: unknown) => {
 		const fileItem = value as AttachmentItem | undefined
-		if (!fileItem?.file_id) return
+		if (!fileItem?.file_id && !getFileManagerRequest(value)) return
 		detailRef.current?.openFileTab(fileItem)
 	})
 

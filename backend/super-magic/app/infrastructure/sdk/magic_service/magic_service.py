@@ -18,6 +18,7 @@ from .api.micro_app_api import MicroAppApi
 from .api.oauth2_callback_relay_api import OAuth2CallbackRelayApi
 from .api.share_api import ShareApi
 from .api.skill_api import SkillApi
+from .api.user_api import UserApi
 
 
 class MagicService:
@@ -44,6 +45,7 @@ class MagicService:
 
         # Initialize API routes
         self._routes = {
+            'user': UserApi,
             'ai_ability': AiAbilityApi,
             'agent': AgentApi,
             'file': FileApi,  # TEMP: scan-wav workaround, remove when MagicFS auto-refreshes
@@ -77,6 +79,10 @@ class MagicService:
         if api_instance is None:
             raise AttributeError(f"No API route found for '{name}'. Available routes: {list(self._routes.keys())}")
         return api_instance
+
+    @property
+    def user(self) -> UserApi:
+        return self._fetched_definitions['user']
 
     @property
     def agent(self) -> 'AgentApi':

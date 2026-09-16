@@ -1,7 +1,7 @@
 import { useCallback, useRef, useState } from "react"
 import { loadJSZip } from "@/infrastructure/vendors/jszip"
 import { saveAs } from "file-saver"
-import { logger as rootLogger } from "@/utils/log"
+import { logger as rootLogger } from "@/infrastructure/logger"
 import type { CardFrameRef } from "../components/CardFrame"
 import type { SelfMediaPost } from "../types"
 import { DEFAULT_SELF_MEDIA_EXPORT_FORMAT } from "../utils/exportImageFormat"

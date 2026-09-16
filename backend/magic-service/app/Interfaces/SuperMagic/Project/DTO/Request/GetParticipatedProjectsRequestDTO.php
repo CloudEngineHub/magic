@@ -7,12 +7,26 @@ declare(strict_types=1);
 
 namespace App\Interfaces\SuperMagic\Project\DTO\Request;
 
+use App\Domain\SuperMagic\Project\Entity\ValueObject\ProjectSortMode;
+
 /**
  * Get participated projects request DTO
  * Used to receive request parameters for getting user participated projects list.
  */
 class GetParticipatedProjectsRequestDTO extends GetProjectListRequestDTO
 {
+    public ?string $sortMode = null;
+
+    public function setSortMode(?string $sortMode): void
+    {
+        $this->sortMode = $sortMode;
+    }
+
+    public function getSortMode(): ?ProjectSortMode
+    {
+        return $this->sortMode === null ? null : ProjectSortMode::from($this->sortMode);
+    }
+
     /**
      * Whether to show collaboration projects.
      */
@@ -65,6 +79,7 @@ class GetParticipatedProjectsRequestDTO extends GetProjectListRequestDTO
         return array_merge($parentRules, [
             'show_collaboration' => 'nullable|integer|in:0,1',
             'show_hidden' => 'nullable|integer|in:0,1',
+            'sort_mode' => 'nullable|string|in:workspace,recent',
         ]);
     }
 

@@ -9,7 +9,7 @@ import superMagicTopicModelService from "../SuperMagicTopicModelService"
 
 const reportMock = vi.hoisted(() => vi.fn())
 
-vi.mock("@/utils/log", () => ({
+vi.mock("@/infrastructure/logger", () => ({
 	logger: {
 		createLogger: () => ({
 			log: vi.fn(),

@@ -8,6 +8,7 @@ Parameter classes for Magic Service API requests.
 
 from .ai_ability_runtime_config_parameter import AiAbilityRuntimeConfigParameter
 from .get_agent_details_parameter import GetAgentDetailsParameter
+from .get_user_info_parameter import GetUserInfoParameter
 from .message_schedule_parameter import MessageScheduleParameter, TimeConfig
 from .oauth2_callback_relay_parameter import OAuth2CallbackRelayParameter
 from .mcp_authorization_credential_parameter import MCPAuthorizationCredentialParameter
@@ -48,6 +49,7 @@ from .magicbase_row_parameter import (
 
 
 __all__ = [  # noqa: RUF022 - 保留既有分组和导出顺序
+    'GetUserInfoParameter',
     'AiAbilityRuntimeConfigParameter',
     'GetAgentDetailsParameter',
     'MessageScheduleParameter',

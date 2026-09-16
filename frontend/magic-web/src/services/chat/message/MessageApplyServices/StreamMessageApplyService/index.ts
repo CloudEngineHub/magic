@@ -7,7 +7,7 @@ import type {
 	TextConversationMessage,
 } from "@/types/chat/conversation_message"
 import { ConversationMessageType } from "@/types/chat/conversation_message"
-import { logger as Logger } from "@/utils/log"
+import { logger as Logger } from "@/infrastructure/logger"
 import { isUndefined } from "lodash-es"
 import AiSearchApplyService from "../ChatMessageApplyServices/AiSearchApplyService"
 import MessageService from "../../MessageService"

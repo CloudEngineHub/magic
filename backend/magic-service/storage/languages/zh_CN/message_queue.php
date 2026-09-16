@@ -5,6 +5,7 @@ declare(strict_types=1);
  * Copyright (c) The Magic , Distributed under the software license
  */
 return [
+    'queue_changed' => '队列顺序已变化，请刷新后重新操作',
     'cannot_modify_message' => '当前状态下无法修改消息',
     'status_not_modifiable' => '消息状态不允许修改',
     'update_failed' => '更新消息失败',
