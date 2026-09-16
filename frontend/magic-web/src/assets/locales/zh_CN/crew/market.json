@@ -57,7 +57,7 @@
 			"namePlaceholder": "例如：我的连接器",
 			"oauthLabels": {
 				"authorizationContentType": "Authorization Content Type",
-				"authorizationMethod": "Token 请求方法",
+				"authorizationMethod": "Token Request Method",
 				"authorizationUrl": "Authorization URL",
 				"clientId": "Client ID",
 				"clientSecret": "Client Secret",
