@@ -200,7 +200,7 @@ class AssetDomainService
         Db::transaction(function () use ($dataIsolation, $assets): void {
             $this->assets->batchUpdateOwner(
                 $dataIsolation,
-                array_map(static fn (AssetEntity $asset): int|string => $asset->getId(), $assets),
+                array_map(static fn (AssetEntity $asset): ?int => $asset->getId(), $assets),
                 (string) $assets[0]->getOwnerUid(),
             );
         });

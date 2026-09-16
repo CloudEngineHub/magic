@@ -350,7 +350,7 @@ class AssetAppService extends AbstractAssetAppService
         foreach ($assets as $asset) {
             $ownerId = $asset->getOwnerUid() ?: $asset->getUserId();
             $info = $infos[$ownerId] ?? [];
-            $asset->setOwnerName((string) ($info['nickname'] ?? $info['real_name'] ?? ''));
+            $asset->setOwnerName((string) ($info['nickname'] ?? ''));
         }
     }
 }

@@ -31,10 +31,11 @@ class AssetProviderAssetRepository implements AssetProviderAssetRepositoryInterf
             ['organization_code', 'asset_id', 'provider_code', 'project_name'],
             ['provider_asset_id', 'provider_group_id', 'provider_status', 'metadata', 'updated_at', 'deleted_at']
         );
-        /* @var AssetProviderAssetModel $model */
-        return $this->providerAssetModel::query()
+        /** @var AssetProviderAssetModel $model */
+        $model = $this->providerAssetModel::query()
             ->where('organization_code', $organizationCode)->where('asset_id', $providerAsset->getAssetId())
             ->where('provider_code', $providerAsset->getProviderCode())->where('project_name', $providerAsset->getProjectName())->firstOrFail();
+        return $model;
     }
 
     /**
@@ -72,7 +73,7 @@ class AssetProviderAssetRepository implements AssetProviderAssetRepositoryInterf
      */
     public function findReusableMappingByAssetIds(array $assetIds, string $providerCode, string $projectName): ?ProviderAssetEntity
     {
-        $assetIds = array_values(array_unique(array_filter($assetIds, static fn (mixed $id): bool => $id !== null && $id !== '')));
+        $assetIds = array_values(array_unique(array_filter($assetIds, static fn (mixed $id): bool => (int) $id > 0)));
         if ($assetIds === []) {
             return null;
         }
