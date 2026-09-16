@@ -26,7 +26,7 @@ final class Wan30VideoAdapter implements VideoGenerationConnectivityTestableInte
 
     private const array GENERATION_FIELDS = ['resolution', 'duration_seconds', 'aspect_ratio', 'enhance_prompt', 'generate_audio', 'seed', 'watermark'];
 
-    private const int SMART_DURATION = 0;
+    private const int SMART_DURATION = -1;
 
     public function __construct(
         private Wan30GenerationCapabilityProvider $capabilityProvider,
