@@ -265,8 +265,6 @@ class FileRecycleBinSubscriber implements ListenerInterface
             ownerId: $fileEntity->getUserId(),
             deletedBy: $deletedBy,
             parentId: $fileEntity->getProjectId(),
-            // 删除时直接保存已有隐藏标记，列表无需逐条查文件；保留原来的过期与清理生命周期。
-            isHidden: $fileEntity->getIsHidden(),
             extraData: [
                 'delete_source' => $source->value,
                 'is_directory' => $fileEntity->getIsDirectory(),
