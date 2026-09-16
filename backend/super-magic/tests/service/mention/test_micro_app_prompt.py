@@ -526,7 +526,8 @@ async def test_sync_micro_app_project_scope_from_prompt_merges_into_existing(
     }
 
 
-def test_format_bound_micro_app_scope_context_renders_typed_links(tmp_path, monkeypatch):
+@pytest.mark.asyncio
+async def test_format_bound_micro_app_scope_context_renders_typed_links(tmp_path, monkeypatch):
     from app.service.mention.utils.micro_app_prompt import (
         format_bound_micro_app_scope_context,
     )
@@ -544,7 +545,7 @@ def test_format_bound_micro_app_scope_context_renders_typed_links(tmp_path, monk
         encoding="utf-8",
     )
 
-    context = format_bound_micro_app_scope_context()
+    context = await format_bound_micro_app_scope_context()
     assert "[App One](micro_app://app-1)" in context
     assert "project_id: project-1" in context
     assert "use-magicbase" in context

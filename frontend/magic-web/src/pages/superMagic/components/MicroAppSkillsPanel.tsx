@@ -1,3 +1,4 @@
+import { useFileApi } from "@/pages/superMagic/fileAccess/fileApi"
 import { useEffect, useMemo, useState } from "react"
 import { BookOpen, Loader2, Sparkles } from "lucide-react"
 import { useTranslation } from "react-i18next"
@@ -27,6 +28,7 @@ export default function MicroAppSkillsPanel({
 	microAppId,
 	microAppName,
 }: MicroAppSkillsPanelProps) {
+	const fileApi = useFileApi()
 	const { t, i18n } = useTranslation("super")
 	const [open, setOpen] = useState(false)
 	const [skills, setSkills] = useState<ProjectSkill[]>([])
@@ -47,7 +49,7 @@ export default function MicroAppSkillsPanel({
 		let active = true
 		setLoading(true)
 		setLoadFailed(false)
-		void loadProjectSkills(attachmentList, language)
+		void loadProjectSkills(attachmentList, language, fileApi)
 			.then((nextSkills) => {
 				if (!active) return
 				setSkills(nextSkills)
@@ -62,7 +64,7 @@ export default function MicroAppSkillsPanel({
 		return () => {
 			active = false
 		}
-	}, [attachmentList, language, open, skillFiles])
+	}, [attachmentList, fileApi, language, open, skillFiles])
 
 	function handleUse(skill: ProjectSkill) {
 		const content: JSONContent = {

@@ -1,3 +1,4 @@
+import type { FileApi } from "@/pages/superMagic/fileAccess/fileApi"
 import type { AttachmentItem } from "@/pages/superMagic/components/TopicFilesButton/hooks"
 import {
 	parseSkillDirFromSkillMdRelativePath,
@@ -37,16 +38,18 @@ export function resolveLocalizedText(
 export async function loadProjectSkills(
 	attachmentList: AttachmentItem[],
 	language: string,
+	fileApi: Pick<FileApi, "getFileContentsByIds">,
 ): Promise<ProjectSkill[]> {
 	const skillFiles = getSkillFiles(attachmentList)
 	if (!skillFiles.length) return []
 
-	const { getFileContentsByIds } = await import("@/pages/superMagic/utils/api")
-	const { successes } = await getFileContentsByIds(
+	const { successes, failures } = await fileApi.getFileContentsByIds(
 		skillFiles.map(([, file]) => String(file.file_id)),
 		{ responseType: "text" },
 	)
 
+	// Do not turn unreadable manifests into apparently valid, empty skills.
+	if (failures.size) throw failures.values().next().value
 	return skillFiles.map(([directory, file]) => {
 		const content = String(successes.get(String(file.file_id)) ?? "")
 		const manifest = parseSkillMdFrontmatter(content)

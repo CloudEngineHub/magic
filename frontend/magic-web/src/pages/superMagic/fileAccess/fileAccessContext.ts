@@ -57,12 +57,12 @@ export function isSharePageLocation(
 	)
 }
 
-/** Share routes must not request files until share access is ready. */
+/** Share routes require explicit access; a runtime conversation can bind session access. */
 export function shouldWaitForShareAccess(
 	access?: FileAccessContext | null,
 	pathname?: string,
 ): boolean {
-	return isSharePageLocation(pathname) && !isShareFileAccess(access)
+	return isSharePageLocation(pathname) && !access
 }
 
 export function getAccessProjectId(access?: FileAccessContext | null, fallback = ""): string {

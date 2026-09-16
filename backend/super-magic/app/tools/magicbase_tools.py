@@ -267,7 +267,17 @@ def _find_column(table: Dict[str, Any], column_key: str) -> Optional[Dict[str, A
     return None
 
 
-async def _reconcile_pending_migrations_with_tables(tables: List[Dict[str, Any]]) -> int:
+async def _reconcile_pending_migrations_with_tables(
+    tables: List[Dict[str, Any]], *, project_id: str
+) -> int:
+    # 迁移文件属于当前沙箱工作区；引用项目中的同名表不能用于确认本地迁移。
+    try:
+        workspace_project_id = str(InitClientMessageUtil.get_metadata().get("project_id") or "").strip()
+    except Exception:
+        return 0
+    if not workspace_project_id or workspace_project_id != project_id:
+        return 0
+
     state = await read_migrations_state()
     data_model = state["data_model"]
     migrations = state["migrations"]
@@ -317,7 +327,7 @@ async def _try_reconcile_pending_migrations(project_id: str) -> int:
             QueryMagicBaseTablesParameter(project_id=project_id)
         )
         tables = result.to_dict().get("tables", [])
-        return await _reconcile_pending_migrations_with_tables(tables)
+        return await _reconcile_pending_migrations_with_tables(tables, project_id=project_id)
     except Exception:
         return 0
 
@@ -520,7 +530,7 @@ async def _query_magicbase_tables_for_project(
         QueryMagicBaseTablesParameter(project_id=project_id)
     )
     tables = result.to_dict().get("tables", [])
-    await _reconcile_pending_migrations_with_tables(tables)
+    await _reconcile_pending_migrations_with_tables(tables, project_id=project_id)
     if table_key:
         tables = [table for table in tables if table.get("table_key") == table_key]
     if table_name:
@@ -631,7 +641,7 @@ class GetMagicTable(MagicBaseFriendlyRemarkMixin, BaseTool[GetMagicbaseTablePara
             return ToolResult.error(f"Failed to get MagicBase table: {e}")
 
         table = result.to_dict()
-        reconciled_count = await _reconcile_pending_migrations_with_tables([table])
+        reconciled_count = await _reconcile_pending_migrations_with_tables([table], project_id=project_id)
         suffix = f" Reconciled {reconciled_count} pending MagicBase migration(s)." if reconciled_count else ""
         content = f"MagicBase table loaded. {_table_summary(table)}.{suffix}"
         return ToolResult(content=content, data={"project_id": project_id, "table": table})

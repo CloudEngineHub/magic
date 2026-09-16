@@ -22,6 +22,9 @@ import { userStore } from "@/models/user"
 import { loadProjectAttachments } from "@/pages/superMagic/services/projectAttachmentsLoader"
 import { cn } from "@/utils/cn"
 
+import { FileAccessProvider } from "@/pages/superMagic/fileAccess/FileAccessProvider"
+import { createSessionFileAccess } from "@/pages/superMagic/fileAccess/fileAccessContext"
+
 import PublishedMicroAppAttachmentPopover from "./PublishedMicroAppAttachmentPopover"
 
 const RUNTIME_PROJECT_LOAD_SUPERSEDED = "Runtime project load superseded"
@@ -59,6 +62,15 @@ const PublishedMicroAppConversationSurface = observer(
 		const mentionPanelStore = useMemo(
 			() => createMentionPanelStore(projectFilesStore),
 			[projectFilesStore],
+		)
+		// Runtime attachments belong to the current user, independently of the source share.
+		const runtimeFileAccess = useMemo(
+			() =>
+				createSessionFileAccess({
+					projectId: runtimeProject?.id,
+					topicId: conversation.topicStore.selectedTopic?.id ?? "",
+				}),
+			[runtimeProject?.id, conversation.topicStore.selectedTopic?.id],
 		)
 		const topicActions = useScopedMessageHeaderTopicActions({
 			selectedProject: runtimeProject,
@@ -246,27 +258,31 @@ const PublishedMicroAppConversationSurface = observer(
 								</div>
 							) : null}
 							<div className="min-h-0 flex-1">
-								<AppConversationPanel
-									selectedProject={runtimeProject}
-									topicStore={conversation.topicStore}
-									mentionPanelStore={mentionPanelStore}
-									projectFilesStore={projectFilesStore}
-									detailPanelVisible
-									isConversationPanelCollapsed={isConversationPanelCollapsed}
-									onToggleConversationPanel={onToggleConversationPanel}
-									onExpandConversationPanel={onExpandConversationPanel}
-									hideConversationPanelToggle={!isConversationPanelCollapsed}
-									historyTriggerMode={historyTriggerMode}
-									isHistoryPanelOpen={isHistoryPanelOpen}
-									onToggleHistoryPanel={onToggleHistoryPanel}
-									trailingActions={
-										isConversationPanelCollapsed ? (
-											<PublishedMicroAppAttachmentPopover
-												attachments={projectFilesStore.workspaceFileTree}
-											/>
-										) : undefined
-									}
-								/>
+								<FileAccessProvider value={runtimeFileAccess}>
+									<AppConversationPanel
+										selectedProject={runtimeProject}
+										topicStore={conversation.topicStore}
+										mentionPanelStore={mentionPanelStore}
+										projectFilesStore={projectFilesStore}
+										detailPanelVisible
+										isConversationPanelCollapsed={isConversationPanelCollapsed}
+										onToggleConversationPanel={onToggleConversationPanel}
+										onExpandConversationPanel={onExpandConversationPanel}
+										hideConversationPanelToggle={!isConversationPanelCollapsed}
+										historyTriggerMode={historyTriggerMode}
+										isHistoryPanelOpen={isHistoryPanelOpen}
+										onToggleHistoryPanel={onToggleHistoryPanel}
+										trailingActions={
+											isConversationPanelCollapsed ? (
+												<PublishedMicroAppAttachmentPopover
+													attachments={
+														projectFilesStore.workspaceFileTree
+													}
+												/>
+											) : undefined
+										}
+									/>
+								</FileAccessProvider>
 							</div>
 						</aside>
 					)}

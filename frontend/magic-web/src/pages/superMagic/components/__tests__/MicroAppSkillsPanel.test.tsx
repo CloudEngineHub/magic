@@ -1,3 +1,5 @@
+import { FileAccessProvider } from "@/pages/superMagic/fileAccess/FileAccessProvider"
+import { createShareFileAccess } from "@/pages/superMagic/fileAccess/fileAccessContext"
 import {
 	cloneElement,
 	createContext,
@@ -98,18 +100,28 @@ describe("MicroAppSkillsPanel", () => {
 
 	it("loads project skill metadata and appends the selected skill prompt", async () => {
 		render(
-			<MicroAppSkillsPanel
-				microAppId="app-1"
-				microAppName="客户跟进助手"
-				attachmentList={[
-					{ file_id: "skill-1", relative_file_path: ".magic/skills/data/SKILL.md" },
-				]}
-			/>,
+			<FileAccessProvider
+				value={createShareFileAccess({ token: "share-token", projectId: "source-project" })}
+			>
+				<MicroAppSkillsPanel
+					microAppId="app-1"
+					microAppName="客户跟进助手"
+					attachmentList={[
+						{ file_id: "skill-1", relative_file_path: ".magic/skills/data/SKILL.md" },
+					]}
+				/>
+			</FileAccessProvider>,
 		)
 
 		fireEvent.click(screen.getByTestId("micro-app-skills-trigger"))
 		expect(await screen.findByText("数据助手")).toBeInTheDocument()
 		expect(screen.getByText("分析项目数据")).toBeInTheDocument()
+		expect(getFileContentsByIdsMock).toHaveBeenCalledWith(
+			["skill-1"],
+			expect.objectContaining({
+				access: { kind: "share", token: "share-token", projectId: "source-project" },
+			}),
+		)
 
 		fireEvent.click(screen.getByTestId("micro-app-skill-use-skill-1"))
 		expect(publishMock).toHaveBeenCalledWith(
@@ -132,5 +144,22 @@ describe("MicroAppSkillsPanel", () => {
 				],
 			}),
 		)
+	})
+	it("shows a load error when a manifest fails to download", async () => {
+		getFileContentsByIdsMock.mockResolvedValue({
+			successes: new Map(),
+			failures: new Map([["skill-1", new Error("Forbidden")]]),
+		})
+		render(
+			<MicroAppSkillsPanel
+				microAppId="app-1"
+				attachmentList={[
+					{ file_id: "skill-1", relative_file_path: ".magic/skills/data/SKILL.md" },
+				]}
+			/>,
+		)
+		fireEvent.click(screen.getByTestId("micro-app-skills-trigger"))
+		expect(await screen.findByText("技能加载失败")).toBeInTheDocument()
+		expect(screen.queryByTestId("micro-app-skill-use-skill-1")).not.toBeInTheDocument()
 	})
 })

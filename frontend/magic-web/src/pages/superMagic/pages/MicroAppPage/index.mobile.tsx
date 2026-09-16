@@ -278,6 +278,8 @@ function MicroAppPageMobileInner({
 						>
 							<Suspense fallback={null}>
 								<MicroAppMobileEntryPreview
+									microAppId={appId}
+									microAppName={selectedProject?.project_name}
 									entryFile={defaultEntryFile}
 									attachments={attachments}
 									attachmentList={attachmentList}
@@ -320,6 +322,8 @@ function MicroAppPageMobileInner({
 								>
 									<Suspense fallback={null}>
 										<MicroAppMobileEntryPreview
+											microAppId={appId}
+											microAppName={selectedProject?.project_name}
 											entryFile={defaultEntryFile}
 											attachments={attachments}
 											attachmentList={attachmentList}

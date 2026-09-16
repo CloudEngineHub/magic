@@ -1,3 +1,4 @@
+import { useFileApi } from "@/pages/superMagic/fileAccess/fileApi"
 import { useEffect, useState } from "react"
 import { BookOpen, FileText, Loader2, Pencil, Save, X } from "lucide-react"
 import { useTranslation } from "react-i18next"
@@ -20,6 +21,7 @@ export default function MicroAppSkillsWorkspace({
 	attachmentList,
 	canEdit = false,
 }: MicroAppSkillsWorkspaceProps) {
+	const fileApi = useFileApi()
 	const { t, i18n } = useTranslation("super")
 	const [skills, setSkills] = useState<ProjectSkill[]>([])
 	const [selectedSkillId, setSelectedSkillId] = useState<string>()
@@ -38,7 +40,7 @@ export default function MicroAppSkillsWorkspace({
 		setLoading(true)
 		setLoadFailed(false)
 
-		void loadProjectSkills(attachmentList, language)
+		void loadProjectSkills(attachmentList, language, fileApi)
 			.then((nextSkills) => {
 				if (!active) return
 				setSkills(nextSkills)
@@ -62,7 +64,7 @@ export default function MicroAppSkillsWorkspace({
 		return () => {
 			active = false
 		}
-	}, [attachmentList, language])
+	}, [attachmentList, fileApi, language])
 
 	useEffect(() => {
 		if (selectedSkillContent === undefined) {

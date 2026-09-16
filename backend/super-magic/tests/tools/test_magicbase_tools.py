@@ -47,6 +47,7 @@ from app.tools.magicbase_tools import (
     DeleteMagicRow,
     DeleteMagicTable,
     GetMagicbaseRowParams,
+    GetMagicbaseTableParams,
     GetMagicRow,
     GetMagicTable,
     MagicbaseColumnDefinition,
@@ -711,3 +712,74 @@ async def test_create_magicbase_table_returns_real_table_id(tmp_path):
     assert len(state["migrations"]) == 1
     assert state["migrations"][0]["result_table_id"] == "200"
     assert "result" not in state["migrations"][0]
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("operation", ["query", "get", "query_all"])
+@pytest.mark.parametrize("host_project_id", ["100", ""])
+async def test_referenced_table_reads_do_not_reconcile_host_migrations(operation, host_project_id):
+    table = {"id": "foreign-table", "table_key": "orders", "table_name": "Orders"}
+    state = {
+        "data_model": {"tables": []},
+        "migrations": [{"status": "Pending", "operation": "create_table", "target": {"table_key": "orders"}}],
+    }
+    sdk = MagicMock()
+    sdk.magicbase.query_tables_async = AsyncMock(return_value=MagicMock(to_dict=lambda: {"tables": [table]}))
+    sdk.magicbase.get_table_async = AsyncMock(return_value=MagicMock(to_dict=lambda: table))
+    scopes = {
+        "app-1": {"project_id": "200", "app_name": "App One"},
+        "app-2": {"project_id": "300", "app_name": "App Two"},
+    }
+    with (
+        patch("app.tools.magicbase_tools.InitClientMessageUtil.get_metadata", return_value={"project_id": host_project_id}),
+        patch("app.tools.magicbase_tools.resolve_magicbase_project_id", return_value="200"),
+        patch("app.tools.magicbase_tools.get_micro_app_project_scopes", return_value=scopes),
+        patch("app.tools.magicbase_tools.get_magic_service_sdk", return_value=sdk),
+        patch("app.tools.magicbase_tools.read_migrations_state", new=AsyncMock(return_value=state)) as read,
+        patch("app.tools.magicbase_tools.write_migrations_state", new=AsyncMock()) as write,
+        patch("app.tools.magicbase_tools.sync_html_app_magicbase_model", new=AsyncMock()) as sync,
+    ):
+        if operation == "query":
+            result = await QueryMagicTables().execute(None, QueryMagicbaseTablesParams(app_id="app-1"))
+        elif operation == "get":
+            result = await GetMagicTable().execute(None, GetMagicbaseTableParams(table_id="foreign-table", app_id="app-1"))
+        else:
+            result = await QueryMagicTablesAllMentionedApps().execute(None, QueryMagicbaseTablesAllMentionedAppsParams())
+
+    assert result.ok
+    read.assert_not_awaited()
+    write.assert_not_awaited()
+    sync.assert_not_awaited()
+    assert state["migrations"][0]["status"] == "Pending"
+    assert state["data_model"]["tables"] == []
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("operation", ["query", "get"])
+async def test_host_table_reads_still_reconcile_pending_migrations(operation):
+    table = {"id": "host-table", "table_key": "orders", "table_name": "Orders"}
+    state = {
+        "data_model": {"tables": []},
+        "migrations": [{"status": "Pending", "operation": "create_table", "target": {"table_key": "orders"}}],
+    }
+    sdk = MagicMock()
+    sdk.magicbase.query_tables_async = AsyncMock(return_value=MagicMock(to_dict=lambda: {"tables": [table]}))
+    sdk.magicbase.get_table_async = AsyncMock(return_value=MagicMock(to_dict=lambda: table))
+    with (
+        patch("app.tools.magicbase_tools.InitClientMessageUtil.get_metadata", return_value={"project_id": "100"}),
+        patch("app.tools.magicbase_tools.resolve_magicbase_project_id", return_value=None),
+        patch("app.tools.magicbase_tools.get_magic_service_sdk", return_value=sdk),
+        patch("app.tools.magicbase_tools.read_migrations_state", new=AsyncMock(return_value=state)),
+        patch("app.tools.magicbase_tools.write_migrations_state", new=AsyncMock()) as write,
+        patch("app.tools.magicbase_tools.sync_html_app_magicbase_model", new=AsyncMock()) as sync,
+    ):
+        if operation == "query":
+            result = await QueryMagicTables().execute(None, QueryMagicbaseTablesParams())
+        else:
+            result = await GetMagicTable().execute(None, GetMagicbaseTableParams(table_id="host-table"))
+
+    assert result.ok
+    assert state["migrations"][0]["status"] == "Success"
+    assert state["migrations"][0]["result_table_id"] == "host-table"
+    write.assert_awaited_once()
+    sync.assert_awaited_once()

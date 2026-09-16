@@ -43,6 +43,8 @@ describe("MicroAppMobileEntryPreview", () => {
 				attachments={[]}
 				attachmentList={[]}
 				projectId="project-1"
+				microAppId="app-1"
+				microAppName="App One"
 				selectedProject={null}
 				allowEdit
 				onOpenFile={onOpenFile}
@@ -54,6 +56,8 @@ describe("MicroAppMobileEntryPreview", () => {
 			expect.objectContaining({
 				activeFileId: "entry-1",
 				projectId: "project-1",
+				microAppId: "app-1",
+				microAppName: "App One",
 				virtualStorageMarkerId: "entry-1",
 				updatedAt: "2026-07-20T06:00:00Z",
 				allowEdit: true,

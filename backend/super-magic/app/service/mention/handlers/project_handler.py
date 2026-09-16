@@ -33,7 +33,7 @@ class ProjectHandler(BaseMentionHandler):
             context_lines.append(f"   - Project name: {project_name}")
         context_lines.append(f"   - Project path: {project_path}")
         if project_id:
-            context_lines.extend(format_referenced_project_skill_lines(project_id))
+            context_lines.extend(await format_referenced_project_skill_lines(project_id))
 
         logger.info(f"用户prompt添加项目引用: {project_path}")
         return context_lines

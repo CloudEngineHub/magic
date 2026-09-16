@@ -3,6 +3,8 @@ import type { ProjectListItem } from "@/pages/superMagic/pages/Workspace/types"
 import MicroAppEntryPreview from "./MicroAppEntryPreview"
 
 interface MicroAppMobileEntryPreviewProps {
+	microAppId?: string
+	microAppName?: string
 	entryFile: AttachmentItem | null
 	attachments: AttachmentItem[]
 	attachmentList: AttachmentItem[]
@@ -14,6 +16,8 @@ interface MicroAppMobileEntryPreviewProps {
 }
 
 function MicroAppMobileEntryPreview({
+	microAppId,
+	microAppName,
 	entryFile,
 	attachments,
 	attachmentList,
@@ -25,6 +29,8 @@ function MicroAppMobileEntryPreview({
 }: MicroAppMobileEntryPreviewProps) {
 	return (
 		<MicroAppEntryPreview
+			microAppId={microAppId}
+			microAppName={microAppName}
 			entryFile={entryFile}
 			attachments={attachments}
 			attachmentList={attachmentList}

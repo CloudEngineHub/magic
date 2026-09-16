@@ -5,6 +5,7 @@ import {
 	getAccessTopicId,
 	getShareAccessToken,
 	isSharePageLocation,
+	shouldWaitForShareAccess,
 	type FileAccessContext,
 } from "../fileAccess/fileAccessContext"
 import { getSuperIdState } from "./query"
@@ -251,8 +252,8 @@ export const getTemporaryDownloadUrl = async ({
 	enableErrorMessagePrompt?: boolean
 	access?: FileAccessContext
 }) => {
-	// Share pages must not send unauthenticated file-url requests.
-	if (isSharePageLocation() && access?.kind !== "share") {
+	// Share pages require explicit access; runtime conversations deliberately use session access.
+	if (shouldWaitForShareAccess(access)) {
 		return []
 	}
 	const isMagicShare = window?.location?.pathname?.includes("magic-share")

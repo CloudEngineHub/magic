@@ -558,7 +558,7 @@ class AgentService(Base):
             query = f"{mentions_context}\n\n---\n\n{query}"
             logger.info(f"Injected {len(mentions)} mention(s) into query")
         else:
-            bound_context = format_bound_micro_app_scope_context()
+            bound_context = await format_bound_micro_app_scope_context()
             if bound_context:
                 query = f"{bound_context}\n\n---\n\n{query}"
                 logger.info("Injected bound micro-app scope into follow-up query")

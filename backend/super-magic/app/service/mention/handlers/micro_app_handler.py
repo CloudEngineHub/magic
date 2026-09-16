@@ -88,5 +88,5 @@ class MicroAppHandler(BaseMentionHandler):
         lines = [f"{index}. [{label}](micro_app://{target})"]
         project_id = _mention_project_id(mention, app_id)
         if project_id:
-            lines.extend(format_referenced_project_skill_lines(project_id))
+            lines.extend(await format_referenced_project_skill_lines(project_id))
         return lines

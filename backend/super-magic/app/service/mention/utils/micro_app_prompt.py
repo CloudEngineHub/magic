@@ -156,7 +156,7 @@ def has_bound_micro_app_project_scope() -> bool:
     return bool(get_micro_app_project_scopes())
 
 
-def format_bound_micro_app_scope_context() -> str:
+async def format_bound_micro_app_scope_context() -> str:
     """Render the currently bound @micro_app scope for follow-up turns."""
     scopes = get_micro_app_project_scopes()
     if not scopes:
@@ -169,7 +169,7 @@ def format_bound_micro_app_scope_context() -> str:
         lines.append(f"{index}. [{label}](micro_app://{quote(app_id, safe='-._~')})")
         project_id = str(entry.get("project_id") or "").strip()
         if project_id:
-            lines.extend(format_referenced_project_skill_lines(project_id))
+            lines.extend(await format_referenced_project_skill_lines(project_id))
 
     mentioned_ids = get_mentioned_micro_app_ids()
     incomplete = bool(mentioned_ids) and set(mentioned_ids) != set(scopes.keys())

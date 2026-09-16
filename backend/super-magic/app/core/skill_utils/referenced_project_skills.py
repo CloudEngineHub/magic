@@ -9,6 +9,7 @@ from typing import List, Optional
 from agentlang.logger import get_logger
 from agentlang.skills import SkillManager
 from agentlang.skills.models import SkillMetadata
+from app.utils.async_file_utils import async_is_dir, async_is_file, async_iterdir
 
 logger = get_logger(__name__)
 
@@ -64,14 +65,14 @@ def get_referenced_project_mount_root(project_id: str) -> Optional[Path]:
     return root
 
 
-def is_referenced_project_bound(project_id: str) -> bool:
+async def is_referenced_project_bound(project_id: str) -> bool:
     """True when the id is already mounted or bound via @micro_app scope."""
     normalized = normalize_referenced_project_id(project_id)
     if not normalized:
         return False
 
     mount_root = get_referenced_project_mount_root(normalized)
-    if mount_root is not None and mount_root.is_dir():
+    if mount_root is not None and await async_is_dir(mount_root):
         return True
 
     from app.service.mention.utils.micro_app_prompt import get_micro_app_project_scopes
@@ -82,47 +83,47 @@ def is_referenced_project_bound(project_id: str) -> bool:
     return False
 
 
-def get_referenced_project_skills_dir(project_id: str) -> Optional[Path]:
+async def get_referenced_project_skills_dir(project_id: str) -> Optional[Path]:
     mount_root = get_referenced_project_mount_root(project_id)
     if mount_root is None:
         return None
     for relative in _SKILLS_RELATIVE_CANDIDATES:
         candidate = mount_root / relative
-        if candidate.is_dir():
+        if await async_is_dir(candidate):
             return candidate
     return None
 
 
-def _find_skill_md(root: Path, max_depth: int = _MAX_NEST_DEPTH) -> Optional[Path]:
+async def _find_skill_md(root: Path, max_depth: int = _MAX_NEST_DEPTH) -> Optional[Path]:
     queue: list[tuple[Path, int]] = [(root, 0)]
     while queue:
         current, depth = queue.pop(0)
         if depth > max_depth:
             continue
         candidate = current / _SKILL_MD_FILENAME
-        if candidate.is_file():
+        if await async_is_file(candidate):
             return candidate
         if depth < max_depth:
             try:
-                for child in current.iterdir():
-                    if child.is_dir() and not child.name.startswith("."):
+                for child in await async_iterdir(current):
+                    if await async_is_dir(child) and not child.name.startswith("."):
                         queue.append((child, depth + 1))
             except OSError:
                 pass
     return None
 
 
-def list_referenced_project_skill_names(project_id: str) -> List[str]:
-    skills_dir = get_referenced_project_skills_dir(project_id)
+async def list_referenced_project_skill_names(project_id: str) -> List[str]:
+    skills_dir = await get_referenced_project_skills_dir(project_id)
     if skills_dir is None:
         return []
 
     names: List[str] = []
     try:
-        for entry in skills_dir.iterdir():
-            if not entry.is_dir() or entry.name.startswith("."):
+        for entry in await async_iterdir(skills_dir):
+            if not await async_is_dir(entry) or entry.name.startswith("."):
                 continue
-            if (entry / _SKILL_MD_FILENAME).is_file() or _find_skill_md(entry) is not None:
+            if await _find_skill_md(entry) is not None:
                 names.append(entry.name)
     except OSError as exc:
         logger.warning(f"Failed to list referenced-project skills ({skills_dir}): {exc}")
@@ -130,11 +131,11 @@ def list_referenced_project_skill_names(project_id: str) -> List[str]:
     return sorted(names)
 
 
-def format_referenced_project_skill_lines(project_id: str) -> List[str]:
+async def format_referenced_project_skill_lines(project_id: str) -> List[str]:
     normalized = normalize_referenced_project_id(project_id)
     if not normalized:
         return []
-    names = list_referenced_project_skill_names(normalized)
+    names = await list_referenced_project_skill_names(normalized)
     skill_text = ", ".join(names) if names else "none"
     return [
         f"   - project_id: {normalized}",
@@ -146,7 +147,7 @@ async def find_referenced_project_skill(
     skill_name: str,
     project_id: str,
 ) -> Optional[SkillMetadata]:
-    skills_dir = get_referenced_project_skills_dir(project_id)
+    skills_dir = await get_referenced_project_skills_dir(project_id)
     if skills_dir is None:
         return None
     manager = SkillManager(skills_dirs=[skills_dir])

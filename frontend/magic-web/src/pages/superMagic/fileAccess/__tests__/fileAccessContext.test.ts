@@ -64,6 +64,12 @@ describe("fileAccessContext", () => {
 		expect(isSharePageLocation("")).toBe(false)
 		expect(shouldWaitForShareAccess(null, "/share/files/1")).toBe(true)
 		expect(shouldWaitForShareAccess(share, "/share/files/1")).toBe(false)
+		expect(
+			shouldWaitForShareAccess(
+				createSessionFileAccess({ projectId: "runtime-project" }),
+				"/micro-app/1",
+			),
+		).toBe(false)
 		expect(shouldWaitForShareAccess(null, "/global/super/1/2")).toBe(false)
 		expect(shouldWaitForShareAccess(null, "/global/super/micro-app/9575893229010228865")).toBe(
 			false,

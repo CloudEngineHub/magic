@@ -1,9 +1,9 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
-import magicClient from "@/apis/clients/magic"
-import { createShareFileAccess } from "../../fileAccess/fileAccessContext"
+import { defaultMagicClient as magicClient } from "@/infrastructure/network/http/runtime"
+import { createSessionFileAccess, createShareFileAccess } from "../../fileAccess/fileAccessContext"
 import { getFileContentsByIds, getTemporaryDownloadUrl } from "../api"
 
-vi.mock("@/apis/clients/magic", () => ({ default: { post: vi.fn() } }))
+vi.mock("@/infrastructure/network/http/runtime", () => ({ defaultMagicClient: { post: vi.fn() } }))
 
 vi.mock("@/models/user", () => ({
 	userStore: { user: { userInfo: { user_id: "user-1" } } },
@@ -42,6 +42,31 @@ describe("getTemporaryDownloadUrl file access", () => {
 				token: "",
 				project_id: "workspace-project",
 				topic_id: "workspace-topic",
+			}),
+			expect.any(Object),
+		)
+	})
+
+	it("allows an explicit runtime session on a share route", async () => {
+		const originalPath = window.location.pathname
+		window.history.replaceState(null, "", "/share/files/share-1")
+		try {
+			await getTemporaryDownloadUrl({
+				file_ids: ["runtime-file"],
+				access: createSessionFileAccess({
+					projectId: "runtime-project",
+					topicId: "runtime-topic",
+				}),
+			})
+		} finally {
+			window.history.replaceState(null, "", originalPath)
+		}
+		expect(magicClient.post).toHaveBeenCalledWith(
+			"/api/v1/super-agent/tasks/get-file-url",
+			expect.objectContaining({
+				project_id: "runtime-project",
+				topic_id: "runtime-topic",
+				token: "",
 			}),
 			expect.any(Object),
 		)

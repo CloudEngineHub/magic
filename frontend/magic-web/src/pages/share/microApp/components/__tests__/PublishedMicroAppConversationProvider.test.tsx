@@ -2,7 +2,7 @@ import { fireEvent, render, screen, waitFor, within } from "@testing-library/rea
 import { beforeEach, describe, expect, it, vi } from "vitest"
 import { SuperMagicApi } from "@/apis"
 import { loadProjectAttachments } from "@/pages/superMagic/services/projectAttachmentsLoader"
-import { FileAccessProvider } from "@/pages/superMagic/fileAccess/FileAccessProvider"
+import { FileAccessProvider, useFileAccess } from "@/pages/superMagic/fileAccess/FileAccessProvider"
 import { createShareFileAccess } from "@/pages/superMagic/fileAccess/fileAccessContext"
 import { useHostConversation } from "@/pages/superMagic/contexts/HostConversationContext"
 import PublishedMicroAppConversationProvider from "../PublishedMicroAppConversationProvider"
@@ -27,10 +27,13 @@ vi.mock("react-i18next", () => ({
 }))
 
 vi.mock("@/pages/superMagic/pages/MicroAppPage/components/AppConversationPanel", () => ({
-	default: (props: Record<string, unknown>) => {
+	default: function MockAppConversationPanel(props: Record<string, unknown>) {
 		layoutMocks.messagePanelProps = props
 		return (
-			<div data-testid="app-conversation-panel">
+			<div
+				data-testid="app-conversation-panel"
+				data-file-access={JSON.stringify(useFileAccess())}
+			>
 				{props.trailingActions as React.ReactNode}
 			</div>
 		)
@@ -164,6 +167,11 @@ describe("PublishedMicroAppConversationProvider", () => {
 			"border-l",
 			"border-border",
 		)
+		expect(
+			JSON.parse(
+				screen.getByTestId("app-conversation-panel").getAttribute("data-file-access")!,
+			),
+		).toEqual({ kind: "session", projectId: "runtime-project-1", topicId: "" })
 		expect(loadProjectAttachments).toHaveBeenCalledWith({
 			projectId: "runtime-project-1",
 			enableErrorMessagePrompt: false,

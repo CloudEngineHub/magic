@@ -102,7 +102,7 @@ class ReadSkills(BaseTool[ReadSkillsParams]):
             return ToolResult(ok=False, content=error_msg)
 
         project_id = params.project_id
-        if project_id and not is_referenced_project_bound(project_id):
+        if project_id and not await is_referenced_project_bound(project_id):
             error_msg = (
                 f"project_id '{project_id}' is not in the bound or mounted referenced-project set. "
                 "Copy project_id from a @micro_app or @project mention; do not invent IDs."
@@ -152,7 +152,7 @@ class ReadSkills(BaseTool[ReadSkillsParams]):
                     # s3 挂载有延迟，首次找不到时等待 2s 后重试一次
                     if not skill:
                         should_retry = True
-                        if project_id and get_referenced_project_skills_dir(project_id) is not None:
+                        if project_id and await get_referenced_project_skills_dir(project_id) is not None:
                             should_retry = False
                         if should_retry:
                             logger.warning(f"Skill 未找到，2s 后重试: {skill_name}")
