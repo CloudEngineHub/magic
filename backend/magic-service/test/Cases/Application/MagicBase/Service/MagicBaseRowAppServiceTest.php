@@ -17,6 +17,7 @@ use App\Application\SuperMagic\Project\Service\PublishedMicroAppFileAccessServic
 use App\Domain\Contact\Repository\Facade\MagicDepartmentUserRepositoryInterface;
 use App\Domain\Contact\Service\MagicDepartmentUserDomainService;
 use App\Domain\MagicBase\Entity\MagicBaseColumnEntity;
+use App\Domain\MagicBase\Entity\MagicBaseRelationEntity;
 use App\Domain\MagicBase\Entity\MagicBaseRowEntity;
 use App\Domain\MagicBase\Entity\MagicBaseTableEntity;
 use App\Domain\MagicBase\Entity\ValueObject\MagicBaseConst;
@@ -48,6 +49,7 @@ use Hyperf\Database\ConnectionInterface;
 use Hyperf\Database\ConnectionResolverInterface;
 use Hyperf\DbConnection\Db;
 use Hyperf\Snowflake\IdGeneratorInterface;
+use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
 use Psr\Container\ContainerInterface;
 use ReflectionClass;
@@ -62,6 +64,10 @@ class MagicBaseRowAppServiceTest extends TestCase
     private RowPermissionStorageStub $storage;
 
     private MagicBaseTableEntity $table;
+
+    private ?MagicBaseTableEntity $relatedTable = null;
+
+    private MagicBaseRelationRepositoryInterface $relations;
 
     private MagicBaseColumnEntity $column;
 
@@ -89,7 +95,7 @@ class MagicBaseRowAppServiceTest extends TestCase
         $agent = $this->createMock(AgentDomainService::class);
         $agent->method('getAuthorizationByUserId')->willReturn('test-token');
         $ids = $this->createMock(IdGeneratorInterface::class);
-        $ids->method('generate')->willReturn(103);
+        $ids->method('generate')->willReturnOnConsecutiveCalls(103, 104);
         $container = $this->createMock(ContainerInterface::class);
         $connection = $this->createMock(ConnectionInterface::class);
         // Execute the real application callback without requiring a database server.
@@ -112,9 +118,10 @@ class MagicBaseRowAppServiceTest extends TestCase
         $departments = new MagicDepartmentUserDomainService($this->createMock(MagicDepartmentUserRepositoryInterface::class));
         $this->publication = $this->createMock(PublishedMicroAppFileAccessService::class);
         $this->tables = $this->createMock(MagicBaseTableRepositoryInterface::class);
+        $this->relations = $this->createMock(MagicBaseRelationRepositoryInterface::class);
         $metadata = new MagicBaseMetadataDomainService(
             $this->tables,
-            $this->createMock(MagicBaseRelationRepositoryInterface::class),
+            $this->relations,
             $this->createMock(MagicBasePermissionRepositoryInterface::class),
             $this->createMock(MagicBaseMigrationLogRepositoryInterface::class),
         );
@@ -132,9 +139,9 @@ class MagicBaseRowAppServiceTest extends TestCase
         $this->publication->method('canAccessProject')->with(11, 'reader', 'org')->willReturn(true);
         $this->table = new MagicBaseTableEntity();
         $this->table->setId(22);
-        $this->tables->method('getTable')->with('org', 11, 22)->willReturn($this->table);
+        $this->tables->method('getTable')->willReturnCallback(fn ($org, $project, $id) => $id === 22 ? $this->table : $this->relatedTable);
         $this->column = new MagicBaseColumnEntity(['id' => 33, 'column_key' => 'title', 'data_type' => 'text']);
-        $this->tables->method('listColumns')->with('org', 22)->willReturn(new MagicBaseEntityCollection([$this->column]));
+        $this->tables->method('listColumns')->willReturn(new MagicBaseEntityCollection([$this->column]));
         $this->service = new MagicBaseRowAppService(
             $this->access,
             new MagicBaseRowQuerySupport(
@@ -252,6 +259,40 @@ class MagicBaseRowAppServiceTest extends TestCase
         $this->service->updateRow($this->reader(), 11, 22, 101, new CreateRowRequestDTO(['title' => 'Forbidden']));
     }
 
+    #[DataProvider('writeOperationsWithRelation')]
+    public function testSuccessfulWriteOmitsUnreadableRelation(string $operation): void
+    {
+        $this->relatedTable = new MagicBaseTableEntity(['id' => 23, 'project_id' => 11, 'dynamic_permissions' => ['table' => ['read_scope' => MagicBaseConst::SCOPE_DISABLED]]]);
+        $this->relations->method('listRelations')->willReturn(new MagicBaseEntityCollection([
+            new MagicBaseRelationEntity(['source_table_id' => 22, 'target_table_id' => 23, 'relation_name' => 'secret', 'source_column_key' => 'title', 'target_column_key' => 'record_id', 'relation_type' => MagicBaseConst::RELATION_HAS_MANY]),
+        ]));
+        $select = 'id,title,secret:title(id)';
+        if ($operation === 'batch') {
+            $result = $this->service->batchCreateRows($this->reader(), 11, 22, new BatchCreateRowsRequestDTO([['title' => 'a'], ['title' => 'b']], $select));
+            self::assertSame(2, $result['created_count']);
+            self::assertSame(['103', '104'], $result['record_ids']);
+            self::assertSame(['id' => '103', 'title' => 'a'], $result['rows'][0]->toArray());
+            self::assertSame(['id' => '104', 'title' => 'b'], $result['rows'][1]->toArray());
+            self::assertSame(['save:103', 'save:104'], $this->storage->state->events);
+            return;
+        }
+        if ($operation === 'update') {
+            $this->storage->state->rows[101] = $this->row(101, 'reader');
+            $result = $this->service->updateRow($this->reader(), 11, 22, 101, new CreateRowRequestDTO(['title' => 'a'], $select));
+            self::assertSame(['id' => '101', 'title' => 'a'], $result->toArray());
+            self::assertSame(['authorize:101', 'save:101'], $this->storage->state->events);
+            return;
+        }
+        $result = $this->service->createRow($this->reader(), 11, 22, new CreateRowRequestDTO(['title' => 'a'], $select));
+        self::assertSame(['id' => '103', 'title' => 'a'], $result->toArray());
+        self::assertSame(['save:103'], $this->storage->state->events);
+    }
+
+    public static function writeOperationsWithRelation(): array
+    {
+        return [['create'], ['batch'], ['update']];
+    }
+
     private function row(int $id, string $owner): MagicBaseRowEntity
     {
         $row = new MagicBaseRowEntity();
@@ -294,6 +335,6 @@ readonly class RowPermissionStorageStub extends MagicBaseRowStorageResolverDomai
 
     public function saveRows(array $payloads): array
     {
-        TestCase::fail('Denied batch inserts must not reach storage.');
+        return array_map(fn (MagicBaseRowEntity $row) => $this->saveRow($row), $payloads);
     }
 }

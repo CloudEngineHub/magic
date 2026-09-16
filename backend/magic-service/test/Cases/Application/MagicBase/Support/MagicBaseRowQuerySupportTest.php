@@ -134,6 +134,7 @@ class MagicBaseRowQuerySupportTest extends TestCase
         $this->expectExceptionMessage('Target access denied: org/11/22');
         match ($operation) {
             'row' => $support->formatRow($authorization, 11, $table, $row, $access, $select, $actor),
+            'write' => $support->formatWrittenRow($authorization, 11, $table, $row, $access, $select, $actor),
             'page' => $support->formatRows($authorization, 11, $table, [$row], $access, $select, $actor),
             'filter' => $support->resolveFiltersForRowStorage($authorization, 11, $table, $access, $actor, ['customer.name' => ['eq' => 'secret']]),
         };
@@ -141,7 +142,7 @@ class MagicBaseRowQuerySupportTest extends TestCase
 
     public static function relationOperations(): array
     {
-        return [['row'], ['page'], ['filter']];
+        return [['row'], ['page'], ['filter'], ['write']];
     }
 
     private function access(MagicBaseColumnEntity $column, array $permissions = [], bool $manager = false): MagicBaseAccessContext

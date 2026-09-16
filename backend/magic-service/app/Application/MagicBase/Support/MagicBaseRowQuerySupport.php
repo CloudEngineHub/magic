@@ -24,6 +24,8 @@ use App\Domain\MagicBase\Service\MagicBaseMetadataDomainService;
 use App\Domain\MagicBase\Service\MagicBasePermissionDomainService;
 use App\Domain\MagicBase\Service\MagicBaseRowQueryCriteriaDomainService;
 use App\Domain\MagicBase\Service\MagicBaseRowStorageResolverDomainService;
+use App\ErrorCode\MagicBaseErrorCode;
+use App\Infrastructure\Core\Exception\BusinessException;
 use App\Interfaces\Authorization\Web\MagicUserAuthorization;
 use DateTimeInterface;
 use LogicException;
@@ -62,7 +64,7 @@ readonly class MagicBaseRowQuerySupport
             || ! $this->permissionDomainService->canReadRow($actor, $row, $table, $access->getRowPermissions((int) $row->getRecordId()), $access->isManager())) {
             return new MagicBaseFormattedRow(['id' => (string) $row->getRecordId()]);
         }
-        return $this->formatRow($authorization, $projectId, $table, $row, $access, $select, $actor);
+        return $this->formatRow($authorization, $projectId, $table, $row, $access, $select, $actor, true);
     }
 
     public function formatRow(
@@ -73,6 +75,7 @@ readonly class MagicBaseRowQuerySupport
         MagicBaseAccessContext $access,
         SelectQuery $select,
         ActorContext $actor,
+        bool $omitDeniedRelations = false,
     ): MagicBaseFormattedRow {
         $fields = $select->getFields();
         if ($fields === []) {
@@ -114,14 +117,22 @@ readonly class MagicBaseRowQuerySupport
                 $alias,
                 $select->getRelationSourceColumn($alias)
             );
-            $related = $this->resolveRelationRows(
-                $authorization,
-                $projectId,
-                $relation,
-                $row,
-                $actor,
-                $select->getRelationFields($alias)
-            );
+            try {
+                $related = $this->resolveRelationRows(
+                    $authorization,
+                    $projectId,
+                    $relation,
+                    $row,
+                    $actor,
+                    $select->getRelationFields($alias)
+                );
+            } catch (BusinessException $exception) {
+                if (! $omitDeniedRelations || $exception->getCode() !== MagicBaseErrorCode::AccessDenied->value) {
+                    throw $exception;
+                }
+                // 写入已经成功，不因响应中的关联不可读而把成功操作报告为失败。
+                continue;
+            }
 
             $result[$alias] = match ($relation->getRelationType()) {
                 MagicBaseConst::RELATION_HAS_MANY => array_map(static fn (MagicBaseFormattedRow $row): array => $row->toArray(), $related),
