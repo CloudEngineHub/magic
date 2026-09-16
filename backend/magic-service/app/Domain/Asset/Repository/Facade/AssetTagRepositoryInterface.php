@@ -11,6 +11,9 @@ interface AssetTagRepositoryInterface
 {
     /** @return AssetTagEntity[] */
     public function queryVisible(AssetDataIsolation $dataIsolation, ?string $ownerUid = null): array;
+
+    /** @return AssetTagEntity[] */
+    public function queryVisibleTree(AssetDataIsolation $dataIsolation, ?string $ownerUid = null): array;
     public function findById(AssetDataIsolation $dataIsolation, int|string $id): ?AssetTagEntity;
     public function save(AssetDataIsolation $dataIsolation, AssetTagEntity $entity): AssetTagEntity;
     public function delete(AssetDataIsolation $dataIsolation, int|string $id, ?string $ownerUid = null): bool;

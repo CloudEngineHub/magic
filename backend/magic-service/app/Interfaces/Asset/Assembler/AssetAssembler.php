@@ -24,7 +24,11 @@ class AssetAssembler
 {
     public static function createTagList(array $tags): array
     {
-        return array_map(static fn (AssetTagEntity $tag): array => self::createTagItem($tag), $tags);
+        return array_map(static function (AssetTagEntity $group): array {
+            $item = self::createTagItem($group);
+            $item['tags'] = array_map(static fn (AssetTagEntity $tag): array => self::createTagItem($tag), $group->getChildren());
+            return $item;
+        }, $tags);
     }
 
     public static function createTagItem(AssetTagEntity $tag): array

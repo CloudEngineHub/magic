@@ -28,7 +28,7 @@ class AssetTagDomainService
     /** @return AssetTagEntity[] */
     public function listVisible(AssetDataIsolation $dataIsolation): array
     {
-        return $this->tags->queryVisible($dataIsolation, $dataIsolation->getCurrentUserId());
+        return $this->tags->queryVisibleTree($dataIsolation, $dataIsolation->getCurrentUserId());
     }
 
     public function create(AssetDataIsolation $dataIsolation, string $name, AssetTagNodeType $nodeType, int $parentId): AssetTagEntity

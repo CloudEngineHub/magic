@@ -30,6 +30,9 @@ class AssetTagEntity extends AbstractEntity
 
     protected ?string $updatedUid = null;
 
+    /** @var AssetTagEntity[] */
+    protected array $children = [];
+
     public function getId(): ?int
     {
         return $this->id;
@@ -147,6 +150,19 @@ class AssetTagEntity extends AbstractEntity
     public function setUpdatedUid(?string $value): self
     {
         $this->updatedUid = $value;
+        return $this;
+    }
+
+    /** @return AssetTagEntity[] */
+    public function getChildren(): array
+    {
+        return $this->children;
+    }
+
+    /** @param AssetTagEntity[] $children */
+    public function setChildren(array $children): self
+    {
+        $this->children = $children;
         return $this;
     }
 

@@ -25,6 +25,27 @@ class AssetTagRepository implements AssetTagRepositoryInterface
         return $builder->orderBy('sort', 'desc')->orderBy('id', 'desc')->get()->map(static fn (AssetTagModel $model) => AssetTagFactory::modelToEntity($model))->all();
     }
 
+    public function queryVisibleTree(AssetDataIsolation $dataIsolation, ?string $ownerUid = null): array
+    {
+        $nodes = $this->queryVisible($dataIsolation, $ownerUid);
+        $groups = [];
+        $tags = [];
+        foreach ($nodes as $node) {
+            if ($node->isGroup()) {
+                $groups[(string) $node->getId()] = $node;
+            } elseif ($node->isTag()) {
+                $tags[] = $node;
+            }
+        }
+        foreach ($tags as $tag) {
+            $group = $groups[(string) $tag->getParentId()] ?? null;
+            if ($group !== null) {
+                $group->setChildren([...$group->getChildren(), $tag]);
+            }
+        }
+        return array_values($groups);
+    }
+
     public function findById(AssetDataIsolation $dataIsolation, int|string $id): ?AssetTagEntity
     {
         $model = AssetTagModel::query()->whereIn('organization_code', $dataIsolation->getOrganizationCodes())->where('id', $id)->first();

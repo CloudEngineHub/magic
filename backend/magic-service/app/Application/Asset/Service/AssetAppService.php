@@ -341,9 +341,6 @@ class AssetAppService extends AbstractAssetAppService
             $asset->setTags(array_map(static fn ($tag): array => [
                 'id' => (string) $tag->getId(),
                 'name' => (string) ($tag->getNameI18n()['default'] ?? ''),
-                'parentId' => (string) $tag->getParentId(),
-                'nodeType' => $tag->getNodeType()->value,
-                'isOfficial' => $tag->getOwnerUid() === null,
             ], $this->assetTagDomainService->findAssetTags($isolation, (string) $asset->getId())));
         }
         $infos = [];
