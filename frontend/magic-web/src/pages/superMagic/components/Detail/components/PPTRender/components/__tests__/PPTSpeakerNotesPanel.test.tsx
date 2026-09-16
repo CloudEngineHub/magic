@@ -73,7 +73,7 @@ describe("PPTSpeakerNotesPanel", () => {
 		fireEvent.keyDown(screen.getByRole("button", { name: "ppt.speakerNotes.resize" }), {
 			key: "ArrowUp",
 		})
-		expect(screen.getByTestId("ppt-speaker-notes-panel")).toHaveStyle({ height: "200px" })
+		expect(screen.getByTestId("ppt-speaker-notes-panel")).toHaveStyle({ height: "164px" })
 	})
 
 	it("enters an independent edit state while the slide remains outside PPT edit mode", async () => {

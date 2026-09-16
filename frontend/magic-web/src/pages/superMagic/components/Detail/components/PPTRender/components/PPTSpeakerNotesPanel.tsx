@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react"
 import { useTranslation } from "react-i18next"
-import { Loader2, Sparkles } from "lucide-react"
+import { Loader2, NotebookPen, Sparkles } from "lucide-react"
 import { Button } from "@/components/shadcn-ui/button"
 import { cn } from "@/utils/cn"
 import { shadow } from "@/utils/shadow"
@@ -169,14 +169,15 @@ function SpeakerNotesEditor({
 			<button
 				type="button"
 				aria-label={t("ppt.speakerNotes.resize")}
-				className="flex h-3 w-full shrink-0 cursor-ns-resize touch-none items-center justify-center focus-visible:outline focus-visible:outline-2 focus-visible:outline-ring"
+				className="group flex h-2 w-full shrink-0 cursor-ns-resize touch-none items-center justify-center focus-visible:outline focus-visible:outline-2 focus-visible:outline-ring"
 				{...resizeHandleProps}
 			>
-				<span className="h-0.5 w-7 rounded-full bg-border" />
+				<span className="h-0.5 w-7 rounded-full bg-border transition-colors group-hover:bg-muted-foreground/50" />
 			</button>
-			<div className="flex shrink-0 flex-wrap items-center justify-between gap-2 px-4 pb-1">
+			<div className="flex shrink-0 flex-wrap items-center justify-between gap-2 px-4 pb-2">
 				<div className="flex min-w-0 items-center gap-2">
-					<h2 className="truncate text-sm font-medium text-foreground">
+					<NotebookPen className="size-4 shrink-0 text-muted-foreground" />
+					<h2 className="truncate text-xs font-normal text-muted-foreground">
 						{t("ppt.speakerNotes.pageTitle", { page: slideIndex + 1 })}
 					</h2>
 					{statusLabel && (
@@ -200,9 +201,9 @@ function SpeakerNotesEditor({
 							variant="ghost"
 							size="sm"
 							onClick={onGenerate}
-							className="h-7 gap-1.5 px-2 text-xs"
+							className="h-6 gap-1.5 rounded-md px-2 text-xs font-normal text-muted-foreground hover:text-foreground"
 						>
-							<Sparkles className="size-3.5" />
+							<Sparkles className="size-4" />
 							{t("ppt.speakerNotes.generate")}
 						</Button>
 					)}
@@ -238,7 +239,7 @@ function SpeakerNotesEditor({
 					}}
 					onBlur={() => void saveNotes()}
 					placeholder={t("ppt.speakerNotes.placeholder")}
-					className="mx-4 mb-3 min-h-0 flex-1 resize-none rounded-sm border-0 bg-transparent px-1 py-2 text-sm leading-6 text-foreground focus-visible:outline focus-visible:outline-2 focus-visible:outline-ring"
+					className="mx-3 mb-3 min-h-0 flex-1 resize-none rounded-lg border-0 bg-muted/40 px-3 py-2 text-[13px] leading-6 text-foreground focus-visible:outline focus-visible:outline-2 focus-visible:outline-ring"
 				/>
 			) : (
 				<button
@@ -247,7 +248,7 @@ function SpeakerNotesEditor({
 					disabled={!allowEdit}
 					onClick={() => allowEdit && setIsEditing(true)}
 					className={cn(
-						"mx-4 mb-3 flex min-h-0 flex-1 items-start overflow-y-auto whitespace-pre-wrap break-words rounded-sm px-1 py-2 text-left text-sm leading-6 focus-visible:outline focus-visible:outline-2 focus-visible:outline-ring",
+						"mx-3 mb-3 flex min-h-0 flex-1 items-start overflow-y-auto whitespace-pre-wrap break-words rounded-lg bg-muted/40 px-3 py-2 text-left text-[13px] leading-6 focus-visible:outline focus-visible:outline-2 focus-visible:outline-ring",
 						notes ? "text-foreground" : "text-muted-foreground",
 						!allowEdit && "cursor-default",
 					)}

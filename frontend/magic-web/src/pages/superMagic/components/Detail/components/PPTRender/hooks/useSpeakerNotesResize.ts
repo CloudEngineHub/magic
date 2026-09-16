@@ -4,7 +4,7 @@ import type { KeyboardEvent, PointerEvent } from "react"
 export function useSpeakerNotesResize() {
 	const panelRef = useRef<HTMLElement>(null)
 	const dragRef = useRef<{ y: number; height: number } | null>(null)
-	const [height, setHeight] = useState(180)
+	const [height, setHeight] = useState(144)
 
 	function resize(nextHeight: number) {
 		const parentHeight = panelRef.current?.parentElement?.clientHeight || 650

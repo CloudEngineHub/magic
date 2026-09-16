@@ -56,7 +56,7 @@ export function PPTControlBar({
 	const zoomBarSize = useSize(zoomBarRef)
 	const barClassName =
 		"pointer-events-auto flex w-max max-w-full items-center gap-1 rounded-[9px] border border-[#dfe2e7]/50 bg-white p-[5px] text-[#252830] shadow-[0_1px_2px_#17213b08,0_3px_8px_#17213b08] dark:border-[#4b515b]/55 dark:bg-[#292c33] dark:text-[#eef0f4] dark:shadow-[0_1px_2px_#00000020,0_3px_8px_#00000015] [&_button]:rounded-[5px] [&_button]:text-[13px] [&_button]:font-normal [&_button]:leading-[1.5] [&_button]:text-inherit [&_button:hover]:bg-[#f0f2f6] dark:[&_button:hover]:bg-[#3a3f49] [&_svg]:stroke-[1.7]"
-	// 三块作为整体居中，以实际文案宽度决定换行；窄预览中两块辅助操作仍靠拢。
+	// 独立按钮组整体居中；右侧测量包含备注与缩放，窄预览时一起换行。
 	// 40px 常规高度由 28px 控件、上下 5px 留白和边框组成，避免默认按钮样式改变视觉尺寸。
 	const sideWidth =
 		(onReplaceTemplate ? (templateBarSize?.width ?? 0) : 0) + (zoomBarSize?.width ?? 0)
@@ -293,24 +293,6 @@ export function PPTControlBar({
 					</MagicTooltip>
 				</div>
 
-				{onToggleNotes && (
-					<Button
-						variant="ghost"
-						size="sm"
-						data-testid="ppt-control-bar-notes-button"
-						className="h-7 gap-[5px] px-[7px] text-[13px] font-normal aria-pressed:bg-accent"
-						aria-pressed={Boolean(notesVisible)}
-						aria-expanded={Boolean(notesVisible)}
-						onClick={(event) => {
-							event.stopPropagation()
-							onToggleNotes()
-						}}
-					>
-						<NotebookPen className="size-4" />
-						{t("ppt.speakerNotes.title")}
-					</Button>
-				)}
-
 				{/* Fullscreen button */}
 				{!isMobile && (
 					<MagicTooltip
@@ -347,22 +329,44 @@ export function PPTControlBar({
 					</MagicTooltip>
 				)}
 			</div>
-			{!isMobile && (
+			{(!isMobile || onToggleNotes) && (
 				<div
 					ref={zoomBarRef}
 					className={cn(
-						barClassName,
-						"row-start-1 justify-self-start",
+						"row-start-1 flex flex-wrap items-center justify-center gap-2 justify-self-start",
 						separateRows || !onReplaceTemplate ? "col-start-2" : "col-start-3",
 					)}
 				>
-					<PPTZoomControl
-						scaleRatio={scaleRatio}
-						isAutoScale={isAutoScale}
-						portalContainer={portalContainer}
-						onScaleChange={onScaleChange}
-						onResetScale={onResetScale}
-					/>
+					{onToggleNotes && (
+						<div className={barClassName} data-testid="ppt-control-bar-notes-group">
+							<Button
+								variant="ghost"
+								size="sm"
+								data-testid="ppt-control-bar-notes-button"
+								className="h-7 gap-[5px] px-[7px] text-[13px] font-normal aria-pressed:bg-accent"
+								aria-pressed={Boolean(notesVisible)}
+								aria-expanded={Boolean(notesVisible)}
+								onClick={(event) => {
+									event.stopPropagation()
+									onToggleNotes()
+								}}
+							>
+								<NotebookPen className="size-4" />
+								{t("ppt.speakerNotes.title")}
+							</Button>
+						</div>
+					)}
+					{!isMobile && (
+						<div className={barClassName}>
+							<PPTZoomControl
+								scaleRatio={scaleRatio}
+								isAutoScale={isAutoScale}
+								portalContainer={portalContainer}
+								onScaleChange={onScaleChange}
+								onResetScale={onResetScale}
+							/>
+						</div>
+					)}
 				</div>
 			)}
 
