@@ -1,7 +1,8 @@
 import { forwardRef, type CSSProperties, type ReactNode, type Ref } from "react"
-import { BatteryFull, Signal, Wifi } from "lucide-react"
 import { cn } from "@/utils/cn"
+import PhoneStatusIcons from "./PhoneStatusIcons"
 import {
+	getPhoneShellGeometry,
 	getPhoneShellInsets,
 	NO_PHONE_SHELL_INSETS,
 	type PhoneShellProfile,
@@ -51,35 +52,13 @@ const PhoneShellContent = forwardRef<HTMLDivElement, PhoneShellContentProps>(
 		const horizontalHinge = profile === "flip" ? !rotated : rotated
 		const homeButton = profile === "home-button"
 		const sideCamera = landscape && !tablet && !foldable
-		const radius = tablet
-			? 28
-			: foldable
-				? 25
-				: homeButton
-					? 32
-					: profile === "punch-hole"
-						? 39
-						: 53
-		const cameraWidth = tablet
-			? 7
-			: homeButton
-				? 53
-				: profile === "punch-hole" || profile === "flip"
-					? 14
-					: profile === "notch"
-						? 155
-						: foldable
-							? 82
-							: 115
-		const cameraHeight = tablet
-			? 7
-			: homeButton
-				? 5
-				: profile === "punch-hole" || profile === "flip"
-					? 14
-					: foldable
-						? 21
-						: 29
+		const geometry = getPhoneShellGeometry(profile, landscape, posture)
+		const iphoneStatus = profile === "modern" || profile === "notch"
+		const statusHeight = iphoneStatus ? 34 : 20
+		const statusSideWidth = (width - geometry.cameraWidth - 16) / 2
+		// 两侧空间按缺口宽度计算；窄视口先隐藏图标，再隐藏时间，避免压住圆角或缺口。
+		const showStatus = iphoneStatus ? width >= 230 && statusSideWidth >= 40 : width >= 280
+		const showStatusIcons = !iphoneStatus || statusSideWidth >= 78
 		const cameraStyle: CSSProperties = sideCamera
 			? {
 					left: homeButton ? 30 : 21,
@@ -88,15 +67,7 @@ const PhoneShellContent = forwardRef<HTMLDivElement, PhoneShellContentProps>(
 				}
 			: {
 					left: "50%",
-					top: tablet
-						? 8
-						: homeButton
-							? 30
-							: foldable
-								? 14
-								: profile === "notch"
-									? 9
-									: 17,
+					top: geometry.cameraTop,
 					transform: "translateX(-50%)",
 				}
 
@@ -119,7 +90,7 @@ const PhoneShellContent = forwardRef<HTMLDivElement, PhoneShellContentProps>(
 					hidden={!framed}
 					className="pointer-events-none absolute inset-0 border-[3px] border-[#777980] bg-[#101113]"
 					style={{
-						borderRadius: radius,
+						borderRadius: geometry.radius,
 						boxShadow:
 							foldable && posture === "folded"
 								? "-3px 0 0 #484b51,-5px 0 0 #96989c,inset 0 0 0 2px #17181b,0 18px 35px -14px #00000050"
@@ -131,8 +102,8 @@ const PhoneShellContent = forwardRef<HTMLDivElement, PhoneShellContentProps>(
 					hidden={!framed}
 					className="pointer-events-none absolute bg-background"
 					style={{
-						inset: tablet ? 20 : 9,
-						borderRadius: tablet ? 14 : foldable ? 17 : homeButton ? 2 : radius - 9,
+						...geometry.glassInsets,
+						borderRadius: geometry.glassRadius,
 					}}
 				/>
 				<div
@@ -140,22 +111,45 @@ const PhoneShellContent = forwardRef<HTMLDivElement, PhoneShellContentProps>(
 					hidden={!framed}
 					className="pointer-events-none absolute inset-0 select-none text-foreground"
 				>
-					{!homeButton && (!landscape || tablet || foldable) && width >= 280 && (
+					{!homeButton && (!landscape || tablet || foldable) && showStatus && (
 						<div
-							className="absolute flex items-center justify-between font-medium"
+							className={cn(
+								"absolute items-center",
+								iphoneStatus
+									? "grid font-semibold"
+									: "flex justify-between font-medium",
+							)}
 							style={{
-								left: 30,
-								right: 28,
-								top: tablet ? 24 : 16,
-								height: 20,
-								fontSize: tablet || foldable ? 12 : 14,
+								left: iphoneStatus ? insets.left : 30,
+								right: iphoneStatus ? insets.right : 28,
+								top: geometry.statusCenter - statusHeight / 2,
+								height: statusHeight,
+								gridTemplateColumns: iphoneStatus
+									? `minmax(0, 1fr) ${geometry.cameraWidth + 16}px minmax(0, 1fr)`
+									: undefined,
+								fontFamily: iphoneStatus
+									? '-apple-system, BlinkMacSystemFont, "Helvetica Neue", sans-serif'
+									: undefined,
+								fontSize: iphoneStatus ? 17 : tablet || foldable ? 12 : 14,
+								lineHeight: iphoneStatus ? "22px" : undefined,
+								letterSpacing: iphoneStatus ? "-0.45px" : undefined,
 							}}
 						>
-							<span>9:41</span>
-							<span className="flex items-center gap-1">
-								<Signal size={16} />
-								<Wifi size={16} />
-								<BatteryFull size={16} />
+							<span
+								className={
+									iphoneStatus ? "col-start-1 justify-self-center" : undefined
+								}
+							>
+								9:41
+							</span>
+							<span
+								className={cn(
+									"flex items-center gap-[6px]",
+									iphoneStatus && "col-start-3 justify-self-center",
+									!showStatusIcons && "invisible",
+								)}
+							>
+								<PhoneStatusIcons />
 							</span>
 						</div>
 					)}
@@ -164,8 +158,8 @@ const PhoneShellContent = forwardRef<HTMLDivElement, PhoneShellContentProps>(
 							className="absolute bg-[#08090a]"
 							style={{
 								...cameraStyle,
-								width: cameraWidth,
-								height: cameraHeight,
+								width: geometry.cameraWidth,
+								height: geometry.cameraHeight,
 								borderRadius: profile === "notch" ? "0 0 19px 19px" : 20,
 							}}
 						>
@@ -233,6 +227,8 @@ const PhoneShellContent = forwardRef<HTMLDivElement, PhoneShellContentProps>(
 						enabled
 							? cn(
 									"relative overflow-auto overscroll-contain bg-background",
+									// 保留滚动节点和内容尺寸，仅隐藏设备内容区及其内部原生条。
+									"[scrollbar-width:none] [&::-webkit-scrollbar]:hidden [&_*::-webkit-scrollbar]:hidden [&_*]:[scrollbar-width:none]",
 									!framed && "outline outline-1 outline-border",
 								)
 							: "contents"
@@ -245,6 +241,7 @@ const PhoneShellContent = forwardRef<HTMLDivElement, PhoneShellContentProps>(
 									marginLeft: insets.left,
 									top: insets.top,
 									borderRadius: framed ? 0 : 4,
+									clipPath: framed ? geometry.contentClipPath : undefined,
 								}
 							: undefined
 					}
