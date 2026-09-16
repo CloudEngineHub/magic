@@ -203,10 +203,6 @@
         "zh_CN": "参与者 {index}",
         "en_US": "Participant {index}"
     },
-    "dingtalk.forwarded_record.prompt": {
-        "zh_CN": "用户发送了一份转发的聊天记录，请阅读附件中的聊天内容并根据需要进行处理。",
-        "en_US": "The user forwarded a chat record. Please read the attached file and process its contents as needed."
-    },
     "dingtalk.forwarded_record.image": {
         "zh_CN": "[图片附件 {index}：{filename}]",
         "en_US": "[Image attachment {index}: {filename}]"

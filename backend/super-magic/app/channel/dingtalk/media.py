@@ -1,11 +1,12 @@
 """钉钉接收媒体：downloadCode 每次重试重新换取临时链接。"""
 
 import asyncio
+import copy
 import json
 import mimetypes
 import re
 from collections.abc import Callable
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 from zoneinfo import ZoneInfo
@@ -20,6 +21,7 @@ from app.channel.base.media import (
     read_response_bytes,
 )
 from app.channel.base.models import ChannelMediaType
+from app.channel.dingtalk.users import DingTalkUserResolver
 from app.i18n import i18n
 
 
@@ -36,7 +38,9 @@ def _format_forwarded_time(value: Any) -> str:
         return ""
     timestamp = value / 1000 if value > 10_000_000_000 else value
     try:
-        return datetime.fromtimestamp(timestamp, tz=ZoneInfo("Asia/Shanghai")).strftime("%Y-%m-%d %H:%M:%S UTC+08:00")
+        return datetime.fromtimestamp(timestamp, tz=timezone.utc).astimezone(ZoneInfo("Asia/Shanghai")).isoformat(
+            sep=" ", timespec="seconds"
+        )
     except (OverflowError, OSError, ValueError):
         return ""
 
@@ -58,6 +62,21 @@ def _forwarded_filename(participants: list[str]) -> str:
             participants_text += i18n.translate("dingtalk.forwarded_record.more_participants")
         return f"{title} {participants_text} {suffix}.md"
     return f"{title}.md"
+
+
+def merge_dingtalk_payloads(payloads: list[dict[str, Any]]) -> dict[str, Any]:
+    """把钉钉留言和转发事件合成一个逻辑 payload。"""
+    forwarded = next((item for item in payloads if item.get("msgtype") == "chatRecord"), None)
+    merged = copy.deepcopy(forwarded or payloads[-1])
+    notes = [
+        _message_text(item.get("text", {}).get("content"))
+        for item in payloads
+        if item.get("msgtype") == "text" and isinstance(item.get("text"), dict)
+    ]
+    if notes:
+        merged["_dingtalk_merged_text"] = "\n".join(note for note in notes if note)
+    merged["_dingtalk_source_message_ids"] = [str(item.get("msgId")) for item in payloads if item.get("msgId")]
+    return merged
 
 
 def _parse_rich_text_items(
@@ -107,6 +126,7 @@ def _parse_rich_text_items(
 def _parse_forwarded_chat_record(
     content: dict,
     add_media: Callable[[dict, str, bool], MediaSource | None] | None = None,
+    sender_display_names: dict[str, str] | None = None,
 ) -> tuple[str, list[MediaSource], str]:
     """Parse a DingTalk forwarded record into Markdown text and media sources."""
     sources: list[MediaSource] = []
@@ -121,12 +141,11 @@ def _parse_forwarded_chat_record(
             if source is not None:
                 sources.append(source)
 
-    try:
-        records = json.loads(content.get("chatRecord") or "[]")
-    except (TypeError, json.JSONDecodeError):
-        records = []
-    if not isinstance(records, list):
-        records = []
+    records = _chat_records(content)
+    sender_display_names = {
+        **_summary_sender_names(content, records),
+        **(sender_display_names or {}),
+    }
 
     for record in records:
         if not isinstance(record, dict):
@@ -137,6 +156,9 @@ def _parse_forwarded_chat_record(
             sender = ""
         elif sender_key in sender_names:
             sender = sender_names[sender_key]
+        elif sender_display_names and sender_key in sender_display_names:
+            sender = sender_display_names[sender_key]
+            sender_names[sender_key] = sender
         elif not raw_sender or raw_sender.startswith("$:LWCP"):
             sender = i18n.translate("dingtalk.forwarded_record.participant", index=len(sender_names) + 1)
             sender_names[sender_key] = sender
@@ -179,6 +201,57 @@ def _parse_forwarded_chat_record(
     return body, sources, _forwarded_filename(participants)
 
 
+def _summary_sender_names(content: dict, records: list[dict[str, Any]]) -> dict[str, str]:
+    """从钉钉 summary 的“昵称:摘要”中建立历史消息的可读名称映射。"""
+    summary = content.get("summary")
+    try:
+        summary_items = json.loads(summary) if isinstance(summary, str) else summary
+    except (TypeError, json.JSONDecodeError):
+        return {}
+    if not isinstance(summary_items, list):
+        return {}
+    candidates: list[tuple[str, str]] = []
+    for item in summary_items:
+        value = _message_text(item)
+        if not value:
+            continue
+        name, separator, preview = value.partition(":")
+        if not separator:
+            name, separator, preview = value.partition("：")
+        if name.strip() and separator and preview.strip():
+            candidates.append((name.strip(), preview.strip()))
+
+    mapping: dict[str, str] = {}
+    used: set[int] = set()
+    for record in records:
+        sender_id = _message_text(record.get("senderId"))
+        if not sender_id:
+            continue
+        text = _message_text(record.get("content"))
+        if not text and record.get("msgType") == "richText":
+            text = "".join(
+                _message_text(item.get("text"))
+                for item in record.get("richText", [])
+                if isinstance(item, dict)
+            )
+        for index, (name, preview) in enumerate(candidates):
+            if index in used:
+                continue
+            if text and (text == preview or text in preview or preview in text):
+                mapping[sender_id] = name
+                used.add(index)
+                break
+    return mapping
+
+
+def _chat_records(content: dict) -> list[dict[str, Any]]:
+    try:
+        records = json.loads(content.get("chatRecord") or "[]")
+    except (TypeError, json.JSONDecodeError):
+        return []
+    return [record for record in records if isinstance(record, dict)] if isinstance(records, list) else []
+
+
 def _render_forwarded_markdown(body: str, media: list[Any], markdown_path: str) -> str:
     """Replace logical attachment markers with links to downloaded workspace files."""
     media_by_name: dict[str, list[Any]] = {}
@@ -199,9 +272,8 @@ def _render_forwarded_markdown(body: str, media: list[Any], markdown_path: str) 
             )
         item = candidates.pop(0)
         target = Path(item.relative_path)
-        source = Path(markdown_path)
-        relative = Path(target.name) if target.parent == source.parent else Path("../") / target.name
-        link = f"./{relative.as_posix()}"
+        # Agent 文件工具按工作区根目录解析 Markdown 图片链接，使用工作区相对路径。
+        link = f"./{target.as_posix()}"
         if is_image:
             return f"![{kind} {index}：{item.file_name or target.name}]({link})"
         return f"[{kind} {index}：{item.file_name or target.name}]({link})"
@@ -269,7 +341,29 @@ async def prepare_dingtalk_message(payload: dict, client):
             if not pieces and not sources:
                 pieces.append("[Unsupported or empty DingTalk rich text message.]")
         elif kind == "chatRecord":
-            record_body, record_sources, filename = _parse_forwarded_chat_record(content, add_media=add_media)
+            records = _chat_records(content)
+            display_names = _summary_sender_names(content, records)
+            outer_sender_ids = {
+                _message_text(payload.get("senderId")),
+                _message_text(payload.get("senderStaffId")),
+            }
+            outer_nick = _message_text(payload.get("senderNick"))
+            if outer_nick:
+                for sender_id in outer_sender_ids - {""}:
+                    display_names.setdefault(sender_id, outer_nick)
+            unresolved = [
+                _message_text(record.get("senderId"))
+                for record in records
+                if _message_text(record.get("senderId")) not in display_names
+            ]
+            if unresolved and client is not None:
+                resolver = DingTalkUserResolver(client)
+                display_names.update(await resolver.resolve_many(unresolved, session))
+            record_body, record_sources, filename = _parse_forwarded_chat_record(
+                content,
+                add_media=add_media,
+                sender_display_names=display_names,
+            )
             sources.extend(record_sources)
             media_result = await prepare_media_message("dingtalk", "", sources)
             markdown_path = f"uploads/im-channels/dingtalk/{filename}"
@@ -283,7 +377,7 @@ async def prepare_dingtalk_message(payload: dict, client):
 
             markdown_result = await prepare_media_message(
                 "dingtalk",
-                i18n.translate("dingtalk.forwarded_record.prompt"),
+                "",
                 [
                     MediaSource(
                         media_type=ChannelMediaType.FILE,
@@ -294,7 +388,10 @@ async def prepare_dingtalk_message(payload: dict, client):
                     )
                 ],
             )
-            return PreparedMediaMessage(text=markdown_result.text, media=[*media_result.media, *markdown_result.media])
+            return PreparedMediaMessage(
+                text=_message_text(payload.get("_dingtalk_merged_text")),
+                media=[*media_result.media, *markdown_result.media],
+            )
         elif kind != "text":
             pieces.append("[Unsupported DingTalk message type. Please resend as text or a supported attachment.]")
         if pieces:
