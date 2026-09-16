@@ -120,6 +120,16 @@ readonly class ModelAccessRoleDomainService
 
     public function getUserSummary(PermissionDataIsolation $dataIsolation, string $userId): array
     {
+        if ($this->shouldBypassModelAccessControl($dataIsolation)) {
+            $context = $this->createOfficialOrganizationAccessContext();
+            return [
+                'permission_control_status' => $context->getPermissionControlStatus(),
+                'roles' => [],
+                'denied_model_ids' => $context->getDeniedModelIds(),
+                'accessible_model_ids' => $context->getAccessibleModelIds(),
+            ];
+        }
+
         $roles = $this->getUserAssignedRoles($dataIsolation, $userId);
         $context = $this->buildAccessContext($dataIsolation, $roles);
 
@@ -171,6 +181,10 @@ readonly class ModelAccessRoleDomainService
 
     private function doResolveAccessContext(PermissionDataIsolation $dataIsolation, string $userId): ModelAccessContext
     {
+        if ($this->shouldBypassModelAccessControl($dataIsolation)) {
+            return $this->createOfficialOrganizationAccessContext();
+        }
+
         $status = $this->resolvePermissionControlStatus($dataIsolation->getCurrentOrganizationCode());
         if ($status === PermissionControlStatus::DISABLED) {
             return new ModelAccessContext(
@@ -425,6 +439,24 @@ readonly class ModelAccessRoleDomainService
         }
 
         return $excludedUserIdMap;
+    }
+
+    /**
+     * 官方组织不参与模型访问管控：开关、套餐白名单、角色禁用都不生效。
+     * 关闭的模型仍可被官方组织连通性测试和真实调用使用，与 getByAdmin 语义对齐。
+     */
+    private function shouldBypassModelAccessControl(PermissionDataIsolation $dataIsolation): bool
+    {
+        return $dataIsolation->isOfficialOrganization();
+    }
+
+    private function createOfficialOrganizationAccessContext(): ModelAccessContext
+    {
+        return new ModelAccessContext(
+            PermissionControlStatus::DISABLED,
+            [],
+            []
+        );
     }
 
     /**
