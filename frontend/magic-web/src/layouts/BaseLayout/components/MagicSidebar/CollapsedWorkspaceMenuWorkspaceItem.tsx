@@ -6,7 +6,16 @@ import {
 	type KeyboardEvent,
 	type MouseEvent,
 } from "react"
-import { ChevronRight, CirclePlus, Ellipsis, Home, Search, AppWindow } from "lucide-react"
+import {
+	ChevronRight,
+	CirclePlus,
+	Ellipsis,
+	Home,
+	AppWindow,
+	Search,
+	Loader2,
+	RefreshCw,
+} from "lucide-react"
 import { observer } from "mobx-react-lite"
 import { useTranslation } from "react-i18next"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/shadcn-ui/popover"
@@ -31,6 +40,8 @@ import { openProjectInNewTab } from "@/pages/superMagic/utils/project"
 import { getWorkspaceRouteUrl } from "@/pages/superMagic/utils/route"
 import NavigationStatusIcon from "@/pages/superMagic/components/NavigationStatusIcon"
 import { shouldIgnoreSelectionAfterWorkspaceRename } from "@/pages/superMagic/utils/workspaceRenameSelectionGuard"
+
+const PROJECT_ROW_HEIGHT = 36
 
 export interface CollapsedWorkspaceMenuWorkspaceItemProps {
 	workspace: Workspace
@@ -122,6 +133,9 @@ const CollapsedWorkspaceMenuWorkspaceItem = observer(function CollapsedWorkspace
 
 	const page = projectStore.workspacePages.get(workspace.id)
 	const loading = projectStore.isLoadingWorkspace(workspace.id)
+	const isProjectLoading = loading || !!page?.loadingMore
+	// 状态行随项目滚动；项目为空时也计入视口高度，避免加载和重试入口被隐藏。
+	const showProjectListStatus = isProjectLoading || !!page?.error
 	const loadMore = useCallback(() => {
 		void projectStore.loadMoreProjectsForWorkspace(workspace.id)
 	}, [workspace.id])
@@ -139,10 +153,10 @@ const CollapsedWorkspaceMenuWorkspaceItem = observer(function CollapsedWorkspace
 	const list = useVirtualProjectList({
 		scrollKey: `collapsed-workspace-projects:${workspace.id}:${normalizedProjectSearchKeyword}`,
 		projects: filteredProjects,
-		rowHeight: 36,
+		rowHeight: PROJECT_ROW_HEIGHT,
 		enabled: isProjectMenuOpen,
 		hasMore: page?.hasMore,
-		loading: loading || page?.loadingMore,
+		loading: isProjectLoading,
 		error: page?.error,
 		onLoadMore: loadMore,
 	})
@@ -490,7 +504,11 @@ const CollapsedWorkspaceMenuWorkspaceItem = observer(function CollapsedWorkspace
 						<div
 							ref={list.scrollRef}
 							className="min-h-0 w-full overflow-y-auto overscroll-contain"
-							style={{ height: list.virtualizer.getTotalSize() }}
+							style={{
+								height:
+									list.virtualizer.getTotalSize() +
+									(showProjectListStatus ? PROJECT_ROW_HEIGHT : 0),
+							}}
 							data-project-scroll-container
 							onFocusCapture={list.onFocusCapture}
 							onBlurCapture={list.onBlurCapture}
@@ -503,13 +521,37 @@ const CollapsedWorkspaceMenuWorkspaceItem = observer(function CollapsedWorkspace
 							>
 								{renderProjectList()}
 							</div>
+							{showProjectListStatus && (
+								<div
+									className="flex w-full items-center justify-center gap-2 py-0.5 text-xs text-muted-foreground"
+									style={{ height: PROJECT_ROW_HEIGHT }}
+									role="status"
+								>
+									{isProjectLoading ? (
+										<>
+											<Loader2
+												className="size-4 shrink-0 animate-spin motion-reduce:animate-none"
+												aria-hidden="true"
+											/>
+											<span>{t("projectNavigation.loading")}</span>
+										</>
+									) : (
+										<Button
+											type="button"
+											variant="ghost"
+											size="sm"
+											className="h-8 w-full gap-2 px-2 text-xs font-normal text-muted-foreground hover:bg-sidebar-accent hover:text-sidebar-foreground focus-visible:bg-sidebar-accent focus-visible:text-sidebar-foreground focus-visible:ring-0 active:bg-sidebar-foreground/10 dark:hover:bg-sidebar-accent"
+											disabled={isProjectLoading}
+											onClick={loadMore}
+										>
+											<RefreshCw className="size-4" aria-hidden="true" />
+											{t("projectNavigation.retry")}
+										</Button>
+									)}
+								</div>
+							)}
 						</div>
-						{(loading || page?.loadingMore) && (
-							<div className="px-2 py-1 text-xs text-muted-foreground">
-								{t("projectNavigation.loading")}
-							</div>
-						)}
-						{!loading && !page?.error && filteredProjects.length === 0 && (
+						{!showProjectListStatus && filteredProjects.length === 0 && (
 							<div
 								className={cn(
 									"px-2 text-sm text-muted-foreground",
@@ -530,18 +572,6 @@ const CollapsedWorkspaceMenuWorkspaceItem = observer(function CollapsedWorkspace
 									? t("super:project.noMatchingProjects")
 									: t("super:project.noProjects")}
 							</div>
-						)}
-						{(page?.error || page?.hasMore) && (
-							<button
-								type="button"
-								className="shrink-0 px-2 py-1 text-left text-xs text-muted-foreground"
-								disabled={loading || page.loadingMore}
-								onClick={loadMore}
-							>
-								{page.error
-									? t("projectNavigation.retry")
-									: t("projectNavigation.loadMore")}
-							</button>
 						)}
 					</PopoverContent>
 				</Popover>
