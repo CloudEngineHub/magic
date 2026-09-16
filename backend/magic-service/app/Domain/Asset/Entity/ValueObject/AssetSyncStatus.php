@@ -34,6 +34,8 @@ enum AssetSyncStatus: string
         }
         $raw = strtoupper(trim((string) $value));
         return self::tryFrom($raw) ?? match ($raw) {
+            // 认证流程使用 PASSED 表示已通过，领域层统一按已同步处理。
+            'PASSED' => self::SYNCED,
             '0' => self::PENDING,
             '1' => self::SYNCING,
             '2' => self::SYNCED,
