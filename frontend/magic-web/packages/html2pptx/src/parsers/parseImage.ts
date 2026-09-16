@@ -70,6 +70,7 @@ export function parseImage(
 			imgElement.naturalWidth > 0 && imgElement.naturalHeight > 0
 				? { width: imgElement.naturalWidth, height: imgElement.naturalHeight }
 				: undefined
+		const objectPosition = parseObjectPosition(style.objectPosition, rect.w, rect.h)
 		const assetKey = createMediaAssetKey("image", getOriginalMediaPath(imgElement))
 
 		return {
@@ -79,6 +80,7 @@ export function parseImage(
 			source: createMediaSourceDescriptor(src, { key: assetKey }),
 			sizing,
 			intrinsicSize,
+			objectPosition,
 			transparency,
 			radius, // Apply corner radius.
 			rotate, // Apply rotation.
@@ -115,5 +117,56 @@ export function parseImage(
 		transparency,
 		radius, // Apply corner radius.
 		rotate, // Apply rotation.
+	}
+}
+
+/** Preserve CSS object-position because PptxGenJS cover defaults to centering. */
+function parseObjectPosition(
+	value: string | undefined,
+	boxW: number,
+	boxH: number,
+): { x: number; y: number; offsetX?: number; offsetY?: number } | undefined {
+	if (!value) return undefined
+	const tokens = value.trim().toLowerCase().split(/\s+/).filter(Boolean)
+	if (!tokens.length) return undefined
+	let xToken = tokens[0]
+	let yToken = tokens[1] ?? "center"
+	if (tokens.length === 1 && (xToken === "top" || xToken === "bottom")) {
+		yToken = xToken
+		xToken = "center"
+	} else if (tokens.length > 1 && (xToken === "top" || xToken === "bottom")) {
+		;[xToken, yToken] = [yToken, xToken]
+	}
+	const parse = (
+		token: string,
+		axis: "x" | "y",
+	): { fraction: number; offset?: number } | undefined => {
+		const keywords =
+			axis === "x" ? { left: 0, center: 0.5, right: 1 } : { top: 0, center: 0.5, bottom: 1 }
+		if (token in keywords) {
+			const fraction = keywords[token as keyof typeof keywords]
+			return fraction === undefined ? undefined : { fraction }
+		}
+		const percent = token.match(/^(-?(?:\d+\.?\d*|\.\d+))%$/)
+		if (percent) return { fraction: Number(percent[1]) / 100 }
+		const px = token.match(/^(-?(?:\d+\.?\d*|\.\d+))px$/)
+		if (px) return { fraction: 0.5, offset: Number(px[1]) }
+		return undefined
+	}
+	const x = parse(xToken, "x")
+	const y = parse(yToken, "y")
+	if (!x || !y) return undefined
+	if (
+		x.fraction === 0.5 &&
+		y.fraction === 0.5 &&
+		x.offset === undefined &&
+		y.offset === undefined
+	)
+		return undefined
+	return {
+		x: x.fraction,
+		y: y.fraction,
+		...(x.offset === undefined ? {} : { offsetX: x.offset / Math.max(1, boxW) }),
+		...(y.offset === undefined ? {} : { offsetY: y.offset / Math.max(1, boxH) }),
 	}
 }

@@ -4,7 +4,7 @@ import { log, LogLevel } from "../logger"
 type ImageProps = Parameters<Slide["addImage"]>[0]
 
 export function drawImage(slide: Slide, node: PPTImageNode): void {
-	const { x, y, w, h, sizing, intrinsicSize, transparency, rotate } = node
+	const { x, y, w, h, sizing, intrinsicSize, objectPosition, transparency, rotate } = node
 	const source = node.source
 	if (!source) throw new TypeError("Image node must provide a source descriptor")
 
@@ -37,10 +37,32 @@ export function drawImage(slide: Slide, node: PPTImageNode): void {
 	if (transparency !== undefined) options.transparency = transparency
 
 	if (sizing === "cover" || sizing === "contain") {
-		options.sizing = {
-			type: sizing,
-			w,
-			h,
+		if (objectPosition && intrinsicSize) {
+			const sourceRatio = intrinsicSize.width / intrinsicSize.height
+			const boxRatio = w / h
+			const useCover = sizing === "cover"
+			const sourceW = useCover
+				? sourceRatio < boxRatio
+					? w
+					: h * sourceRatio
+				: sourceRatio > boxRatio
+					? w
+					: h * sourceRatio
+			const sourceH = useCover
+				? sourceRatio < boxRatio
+					? w / sourceRatio
+					: h
+				: sourceRatio > boxRatio
+					? w / sourceRatio
+					: h
+			const dx = (w - sourceW) * objectPosition.x + (objectPosition.offsetX ?? 0) * w
+			const dy = (h - sourceH) * objectPosition.y + (objectPosition.offsetY ?? 0) * h
+			// Crop coordinates are measured in the scaled source frame, not the final box.
+			options.w = sourceW
+			options.h = sourceH
+			options.sizing = { type: "crop", w, h, x: -dx, y: -dy }
+		} else {
+			options.sizing = { type: sizing, w, h }
 		}
 	} else if (sizing === "crop") {
 		options.sizing = {

@@ -118,6 +118,8 @@ export interface PPTImageNode extends PPTNodeBase {
 	sizing: "cover" | "contain" | "crop" | "stretch"
 	/** Intrinsic source dimensions, used to preserve the image aspect ratio for cover/contain sizing */
 	intrinsicSize?: { width: number; height: number }
+	/** CSS object-position expressed as an axis fraction plus an optional box-relative offset. */
+	objectPosition?: { x: number; y: number; offsetX?: number; offsetY?: number }
 	/** Crop rectangle */
 	cropRect?: { x: number; y: number; w: number; h: number }
 	/** Corner radius */
