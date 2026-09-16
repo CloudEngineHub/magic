@@ -108,7 +108,7 @@ Custom JavaScript analysis script function body content. Don't include function(
     insert_after_slide: str = Field(
         ...,
         description="""<!--zh
-插入位置（必填）：
+新页面插入位置（必填）；已有页面保留原顺序，忽略此参数：
 - 空字符串 ""：插入到第一页（slides数组开头）
 - 具体文件名：插入到该文件之后，如 "封面.html"、"cover.html"
 - 如果指定的文件不存在于slides数组中，将自动插入到末尾并给出警告
@@ -120,7 +120,7 @@ Custom JavaScript analysis script function body content. Don't include function(
 
 此参数用于自动更新 magic.project.js 的 slides 数组，确保幻灯片在演示控制器中可见。
 -->
-Insert position (required):
+Insert position for new slides (required); ignored for existing slides, which keep their order:
 - Empty string "": Insert at first position (beginning of slides array)
 - Specific filename: Insert after that file, e.g., "cover.html", "contents.html"
 - If specified file doesn't exist in slides array, will auto-insert at end with warning
@@ -599,24 +599,17 @@ class CreateSlide(AbstractFileTool[CreateSlideParams], WorkspaceTool[CreateSlide
             logger.warning(f"Error parsing magic.project.js: {e}")
             return None
 
-    def _calculate_insert_position(self, slides: List[str], insert_after: str, current_file: str) -> tuple[int, str]:
+    def _calculate_insert_position(self, slides: List[str], insert_after: str) -> tuple[int, str]:
         """
         Calculate insert position in slides array
 
         Args:
             slides: Current slides array
             insert_after: Insert position parameter (empty string or filename)
-            current_file: Current filename
 
         Returns:
             tuple[int, str]: (insert position index, status message)
         """
-        # Check if file already exists in array
-        if current_file in slides:
-            # File exists, remove it first (will re-insert at new position)
-            slides.remove(current_file)
-            logger.info(f"File '{current_file}' already exists in slides array, will reposition")
-
         # Empty string: insert at beginning
         if not insert_after or insert_after.strip() == "":
             return 0, f"✓ 已插入到第一页位置"
@@ -672,11 +665,14 @@ class CreateSlide(AbstractFileTool[CreateSlideParams], WorkspaceTool[CreateSlide
                 logger.warning(f"Invalid slides array type: {type(slides)}")
                 return "⚠️ slides 数组格式错误，请手动检查 magic.project.js"
 
+            # 内容更新不负责排序，也不重写项目配置，避免旧的插入参数移动已有页面。
+            if file_name in slides:
+                return f"Slide order preserved: '{file_name}' remains at position {slides.index(file_name) + 1}."
+
             # Calculate insert position
             insert_position, position_msg = self._calculate_insert_position(
                 slides, 
-                params.insert_after_slide, 
-                file_name
+                params.insert_after_slide,
             )
 
             # Insert file at calculated position

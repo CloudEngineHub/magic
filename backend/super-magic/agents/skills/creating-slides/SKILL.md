@@ -533,14 +533,14 @@ print(search_result.content)
 | `max_width`          | Yes      | number | Expected max width (usually 1920)                                                 |
 | `max_height`         | Yes      | number | Expected max height (usually 1080)                                                |
 | `analysis_js`        | Yes      | string | Layout analysis JavaScript function body (without function declaration)           |
-| `insert_after_slide` | Yes      | string | Insert position: `""` for first page, filename to insert after that file          |
+| `insert_after_slide` | Yes      | string | New slide position: `""` for first page, filename to insert after; ignored for existing slides |
 
 **Tool Functions:**
 
 - Write HTML file
 - Load via browser and execute `analysis_js` for quality check
 - Detect layout issues, height overflow, image stretch, small fonts
-- Auto-update slides array based on `insert_after_slide`
+- Register new slides based on `insert_after_slide`; preserve existing slide order on content updates
 
 **analysis_js Instructions:**
 
@@ -552,7 +552,7 @@ print(search_result.content)
 **insert_after_slide Instructions:**
 
 - `""` for first page, filename to insert after
-- Auto-updates slides array
+- Applies only to slides not yet in the slides array. Updating an existing slide preserves its position.
 
 ### image_search - Batch Search Images
 
