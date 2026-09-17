@@ -121,6 +121,7 @@ function useProjectItemActionProps({ selectedWorkspace }: UseProjectItemActionPr
 								magicToast.success(t("project.deleteProjectSuccess"))
 							} catch (error) {
 								console.log("删除项目失败，失败原因：", error)
+								throw error
 							}
 						}}
 						onClose={() => setDeleteProject(null)}
