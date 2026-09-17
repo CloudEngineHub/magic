@@ -614,12 +614,16 @@ class BackfillFileParentIdCommand extends HyperfCommand
                 );
 
                 // 3. 更新任务表的 work_dir
-                TaskModel::query()
-                    ->where('project_id', $project->getId())
-                    ->update([
-                        'work_dir' => $convertedWorkDir,
-                        'updated_at' => date('Y-m-d H:i:s'),
-                    ]);
+                // 路线 C：task 表无 project_id 索引，先经 topics 表（含已软删话题）取 topic_id，再按批更新 task
+                $topicIds = $this->topicRepository->getTopicIdsByCondition(['project_id' => $project->getId()], true);
+                foreach (array_chunk($topicIds, 500) as $topicIdChunk) {
+                    TaskModel::query()
+                        ->whereIn('topic_id', $topicIdChunk)
+                        ->update([
+                            'work_dir' => $convertedWorkDir,
+                            'updated_at' => date('Y-m-d H:i:s'),
+                        ]);
+                }
 
                 $this->line(sprintf('  ✅ Updated work_dir in project, topics, and tasks tables'));
                 $this->logger->info(sprintf('Updated work_dir for project %d and its topics and tasks', $project->getId()));

@@ -420,16 +420,25 @@ class ProjectDomainService
                 );
 
                 // Update tasks workspace_id
-                $taskUpdateResult = $this->taskRepository->updateTaskByCondition(
+                // 路线 C：task 表无 project_id 索引，先经 topics 表（含已软删话题）取 topic_id，再按 topic_id 一次性更新
+                $topicIds = $this->topicRepository->getTopicIdsByCondition(
                     [
                         'project_id' => $sourceProjectId,
                         'workspace_id' => $originalWorkspaceId,
                     ],
-                    [
-                        'workspace_id' => $targetWorkspaceId,
-                        'updated_at' => $currentTime,
-                    ]
+                    true
                 );
+                if ($topicIds !== []) {
+                    $this->taskRepository->updateTaskByCondition(
+                        [
+                            'topic_id' => $topicIds,
+                        ],
+                        [
+                            'workspace_id' => $targetWorkspaceId,
+                            'updated_at' => $currentTime,
+                        ]
+                    );
+                }
 
                 $this->messageScheduleDomainService->syncMovedProjectSchedules(
                     [$sourceProjectId],
