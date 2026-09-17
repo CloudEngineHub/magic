@@ -226,16 +226,20 @@ const BaseLayoutPc = observer(() => {
 							onDragging={handleSidebarDraggingChange}
 							onKeyDownCapture={handleSidebarHandleKeyDown}
 							className={cn(
-								"group/resize w-2 shrink-0 bg-transparent outline-none before:!inset-0 before:!w-full before:!translate-x-0 after:!inset-0 after:!w-full after:!translate-x-0 hover:!bg-transparent focus-visible:ring-0 focus-visible:ring-offset-0 focus-visible:before:opacity-100 dark:[--resize-glow-rgb:52,88,136]",
+								// Overlay both panels and stay above the project page's z-20 collapsed divider and preview resize slots.
+								"group/resize z-40 -mx-1 w-2 shrink-0 bg-transparent outline-none before:!inset-0 before:!w-full before:!translate-x-0 after:!inset-0 after:!w-full after:!translate-x-0 hover:!bg-transparent focus-visible:ring-0 focus-visible:ring-offset-0 focus-visible:before:opacity-100 dark:[--resize-glow-rgb:52,88,136]",
 								resizeGlowClassName,
 								resizeDrag.dragging && "before:opacity-100",
-								resizeDrag.dragging && "z-20",
+								resizeDrag.dragging && "z-50",
 								!showAppSidebar || overlayMode
 									? "pointer-events-none opacity-0"
 									: "opacity-100 hover:bg-primary/30",
 							)}
 						>
-							<ResizeGrip orientation="vertical" />
+							<ResizeGrip
+								orientation="vertical"
+								className="rounded-md border border-gray-200 bg-white px-0.5 py-1"
+							/>
 							<ResizableCollapseFeedback
 								dragging={resizeDrag.dragging}
 								collapseProgress={resizeDrag.progress}

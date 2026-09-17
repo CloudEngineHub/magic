@@ -121,7 +121,9 @@ vi.mock("@/components/shadcn-ui/resizable", () => ({
 			onKeyDownCapture={onKeyDownCapture}
 		/>
 	),
-	ResizeGrip: () => <span data-testid="mock-resize-grip" />,
+	ResizeGrip: ({ className }: { className?: string }) => (
+		<span className={className} data-testid="mock-resize-grip" />
+	),
 }))
 
 vi.mock("@/stores/layout", () => ({
@@ -188,10 +190,20 @@ describe("BaseLayoutPc safe area", () => {
 		)
 		expect(screen.getByTestId("base-layout-pc-main-frame").className).toContain("pr-2")
 		expect(screen.getByTestId("mock-resize-handle")).toHaveClass(
+			"-mx-1",
+			"z-40",
 			"w-2",
 			"shrink-0",
 			"after:!inset-0",
 			"after:!w-full",
+		)
+		expect(screen.getByTestId("mock-resize-grip")).toHaveClass(
+			"rounded-md",
+			"border",
+			"border-gray-200",
+			"bg-white",
+			"px-0.5",
+			"py-1",
 		)
 		expect(sidebarResizeMock).toHaveBeenCalledWith(20)
 		cancelSidebarAnimationMock.mockClear()
