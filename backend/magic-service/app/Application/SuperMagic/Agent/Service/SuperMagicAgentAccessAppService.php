@@ -199,7 +199,7 @@ class SuperMagicAgentAccessAppService extends AbstractSuperMagicAppService
             'agent_organizations' => array_reduce(
                 $accessibleAgentCodes,
                 static function (array $result, string $agentCode) use ($globalAgents): array {
-                    $organizationCode = $globalAgents[$agentCode]?->getOrganizationCode() ?? '';
+                    $organizationCode = ($globalAgents[$agentCode] ?? null)?->getOrganizationCode() ?? '';
                     if ($organizationCode !== '') {
                         $result[$agentCode] = $organizationCode;
                     }

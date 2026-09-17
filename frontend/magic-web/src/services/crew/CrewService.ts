@@ -82,6 +82,8 @@ export interface MyCrewView {
 	name: string
 	role: string
 	description: string
+	/** Canonical source value returned by agent query list endpoints. */
+	source: string
 	icon: string | null
 	playbooks: CrewPlaybookView[]
 	sourceType: CrewSourceType
@@ -430,19 +432,19 @@ export class CrewService {
 			userCode: item.user_code ?? null,
 			isFeatured: Boolean(item.is_featured),
 			latestVersionCode: item.latest_version_code,
-			name: this.mapI18nText(item.name_i18n),
-			role: this.mapI18nArrayText(item.role_i18n),
-			description: this.mapI18nText(item.description_i18n),
+			name: item.name,
+			role: item.role,
+			description: item.description,
 			icon: iconUrl,
 			playbooks: featureRows.map((f) => ({
-				name: this.mapI18nText(f.name_i18n),
+				name: f.name ?? this.mapI18nText(f.name_i18n),
 				icon: f.icon,
 				themeColor: f.theme_color,
 			})),
 			publisherType: item.publisher_type,
 			publisherName: item.publisher?.name?.trim() || null,
 			marketType: item.market_type,
-			categoryId: item.category_id,
+			categoryId: item.category_ids?.[0] ?? item.category_id ?? null,
 			isAdded: item.is_added,
 			allowDelete: item.allow_delete,
 			updatedAt: item.updated_at,
@@ -478,12 +480,13 @@ export class CrewService {
 			agentCode: item.code,
 			projectId: item.project_id,
 			userRole: item.user_role,
-			name: this.mapI18nText(item.name_i18n),
-			role: this.mapI18nArrayText(item.role_i18n),
-			description: this.mapI18nText(item.description_i18n),
+			name: item.name,
+			role: item.role,
+			description: item.description,
+			source: item.source,
 			icon: iconUrl,
 			playbooks: item?.playbooks?.map((f) => ({
-				name: this.mapI18nText(f.name_i18n),
+				name: f.name ?? this.mapI18nText(f.name_i18n),
 				icon: f.icon,
 				themeColor: f.theme_color,
 			})),

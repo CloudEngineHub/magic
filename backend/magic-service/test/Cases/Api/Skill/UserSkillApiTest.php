@@ -340,8 +340,12 @@ class UserSkillApiTest extends AbstractApiTest
             $this->assertArrayHasKey('id', $item);
             $this->assertIsString($item['id']);
             $this->assertArrayHasKey('code', $item);
-            $this->assertArrayHasKey('name_i18n', $item);
-            $this->assertArrayHasKey('description_i18n', $item);
+            $this->assertArrayHasKey('name', $item);
+            $this->assertArrayHasKey('description', $item);
+            $this->assertArrayHasKey('source', $item);
+            $this->assertArrayNotHasKey('name_i18n', $item);
+            $this->assertArrayNotHasKey('description_i18n', $item);
+            $this->assertArrayNotHasKey('source_i18n', $item);
             $this->assertArrayHasKey('logo', $item);
             $this->assertArrayHasKey('source_type', $item);
             $this->assertArrayHasKey('is_enabled', $item);
@@ -378,8 +382,8 @@ class UserSkillApiTest extends AbstractApiTest
         // 验证搜索结果中包含关键词
         $found = false;
         foreach ($keywordResponse['data']['list'] as $item) {
-            $nameZh = $item['name_i18n']['zh_CN'] ?? '';
-            $descZh = $item['description_i18n']['zh_CN'] ?? '';
+            $nameZh = $item['name'] ?? '';
+            $descZh = $item['description'] ?? '';
             if (str_contains($nameZh, '测试') || str_contains($descZh, '测试')) {
                 $found = true;
                 break;
@@ -404,8 +408,8 @@ class UserSkillApiTest extends AbstractApiTest
         if ($keywordEnResponse['data']['total'] > 0) {
             $foundEn = false;
             foreach ($keywordEnResponse['data']['list'] as $item) {
-                $nameEn = $item['name_i18n']['en_US'] ?? '';
-                $descEn = $item['description_i18n']['en_US'] ?? '';
+                $nameEn = $item['name'] ?? '';
+                $descEn = $item['description'] ?? '';
                 if (stripos($nameEn, 'Test') !== false || stripos($descEn, 'Test') !== false) {
                     $foundEn = true;
                     break;
@@ -630,10 +634,12 @@ class UserSkillApiTest extends AbstractApiTest
         }
 
         $this->assertNotNull($targetSkill, 'Installed skill should be returned in the visible skill list');
-        $this->assertEquals('已发布技能名称', $targetSkill['name_i18n']['zh_CN'] ?? null);
-        $this->assertEquals('Published Skill Name', $targetSkill['name_i18n']['en_US'] ?? null);
-        $this->assertEquals('已发布技能描述', $targetSkill['description_i18n']['zh_CN'] ?? null);
-        $this->assertEquals('Published Skill Description', $targetSkill['description_i18n']['en_US'] ?? null);
+        $this->assertArrayHasKey('name', $targetSkill);
+        $this->assertArrayHasKey('description', $targetSkill);
+        $this->assertArrayHasKey('source', $targetSkill);
+        $this->assertArrayNotHasKey('name_i18n', $targetSkill);
+        $this->assertArrayNotHasKey('description_i18n', $targetSkill);
+        $this->assertArrayNotHasKey('source_i18n', $targetSkill);
         $this->assertEquals('MARKET', $targetSkill['source_type'] ?? null);
     }
 
@@ -663,6 +669,12 @@ class UserSkillApiTest extends AbstractApiTest
         }
 
         $this->assertNotNull($targetSkill, '我创建的技能应该出现在 queries/created 列表中');
+        $this->assertArrayHasKey('name', $targetSkill);
+        $this->assertArrayHasKey('description', $targetSkill);
+        $this->assertArrayHasKey('source', $targetSkill);
+        $this->assertArrayNotHasKey('name_i18n', $targetSkill);
+        $this->assertArrayNotHasKey('description_i18n', $targetSkill);
+        $this->assertArrayNotHasKey('source_i18n', $targetSkill);
         $this->assertSame('LOCAL_UPLOAD', $targetSkill['source_type'] ?? null);
         $this->assertArrayHasKey('creator_info', $targetSkill);
         $this->assertSame('', $targetSkill['latest_version'] ?? null);
@@ -751,10 +763,12 @@ class UserSkillApiTest extends AbstractApiTest
 
         $this->assertNotNull($targetSkill, '团队共享技能应该出现在 queries/team-shared 列表中');
         $this->assertNotSame('MARKET', $targetSkill['source_type'] ?? null);
-        $this->assertSame('团队共享已发布名称', $targetSkill['name_i18n']['zh_CN'] ?? null);
-        $this->assertSame('Team Shared Published Name', $targetSkill['name_i18n']['en_US'] ?? null);
-        $this->assertSame('团队共享已发布描述', $targetSkill['description_i18n']['zh_CN'] ?? null);
-        $this->assertSame('Team Shared Published Description', $targetSkill['description_i18n']['en_US'] ?? null);
+        $this->assertArrayHasKey('name', $targetSkill);
+        $this->assertArrayHasKey('description', $targetSkill);
+        $this->assertArrayHasKey('source', $targetSkill);
+        $this->assertArrayNotHasKey('name_i18n', $targetSkill);
+        $this->assertArrayNotHasKey('description_i18n', $targetSkill);
+        $this->assertArrayNotHasKey('source_i18n', $targetSkill);
         $this->assertSame('1.0.0', $targetSkill['latest_version'] ?? null);
         $this->assertArrayHasKey('creator_info', $targetSkill);
         $this->assertNotEmpty($targetSkill['creator_info']['id'] ?? null);
@@ -954,8 +968,12 @@ class UserSkillApiTest extends AbstractApiTest
 
         $this->assertNotNull($targetSkill, '从市场安装的技能应该出现在 queries/market-installed 列表中');
         $this->assertSame('MARKET', $targetSkill['source_type'] ?? null);
-        $this->assertSame('测试技能', $targetSkill['name_i18n']['zh_CN'] ?? null);
-        $this->assertSame('Test Skill', $targetSkill['name_i18n']['en_US'] ?? null);
+        $this->assertArrayHasKey('name', $targetSkill);
+        $this->assertArrayHasKey('description', $targetSkill);
+        $this->assertArrayHasKey('source', $targetSkill);
+        $this->assertArrayNotHasKey('name_i18n', $targetSkill);
+        $this->assertArrayNotHasKey('description_i18n', $targetSkill);
+        $this->assertArrayNotHasKey('source_i18n', $targetSkill);
         $this->assertSame('1.0.0', $targetSkill['latest_version'] ?? null);
         $this->assertArrayHasKey('creator_info', $targetSkill);
         $this->assertNotEmpty($targetSkill['creator_info']['id'] ?? null);
@@ -1714,8 +1732,12 @@ class UserSkillApiTest extends AbstractApiTest
             $item = $response['data']['list'][0];
             $this->assertArrayHasKey('id', $item);
             $this->assertArrayHasKey('skill_code', $item);
-            $this->assertArrayHasKey('name_i18n', $item);
-            $this->assertArrayHasKey('description_i18n', $item);
+            $this->assertArrayHasKey('name', $item);
+            $this->assertArrayHasKey('description', $item);
+            $this->assertArrayHasKey('source', $item);
+            $this->assertArrayNotHasKey('name_i18n', $item);
+            $this->assertArrayNotHasKey('description_i18n', $item);
+            $this->assertArrayNotHasKey('source_i18n', $item);
             $this->assertArrayHasKey('logo', $item);
             $this->assertArrayHasKey('publisher_type', $item);
             $this->assertArrayHasKey('publisher', $item);
@@ -1730,8 +1752,9 @@ class UserSkillApiTest extends AbstractApiTest
             // 验证字段类型
             $this->assertIsString($item['id']);
             $this->assertIsString($item['skill_code']);
-            $this->assertIsArray($item['name_i18n']);
-            $this->assertIsArray($item['description_i18n']);
+            $this->assertIsString($item['name']);
+            $this->assertIsString($item['description']);
+            $this->assertIsString($item['source']);
             $this->assertIsString($item['publisher_type']);
             $this->assertIsArray($item['publisher']);
             $this->assertIsString($item['publish_status']);
@@ -1765,8 +1788,8 @@ class UserSkillApiTest extends AbstractApiTest
         if ($keywordResponse['data']['list'] !== []) {
             $found = false;
             foreach ($keywordResponse['data']['list'] as $item) {
-                $nameZh = $item['name_i18n']['zh_CN'] ?? '';
-                $descZh = $item['description_i18n']['zh_CN'] ?? '';
+                $nameZh = $item['name'] ?? '';
+                $descZh = $item['description'] ?? '';
                 if (str_contains($nameZh, '搜索') || str_contains($descZh, '搜索')) {
                     $found = true;
                     break;
@@ -1790,8 +1813,8 @@ class UserSkillApiTest extends AbstractApiTest
         if ($keywordEnResponse['data']['list'] !== []) {
             $foundEn = false;
             foreach ($keywordEnResponse['data']['list'] as $item) {
-                $nameEn = $item['name_i18n']['en_US'] ?? '';
-                $descEn = $item['description_i18n']['en_US'] ?? '';
+                $nameEn = $item['name'] ?? '';
+                $descEn = $item['description'] ?? '';
                 if (stripos($nameEn, 'Search') !== false || stripos($descEn, 'Search') !== false) {
                     $foundEn = true;
                     break;

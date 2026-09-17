@@ -38,6 +38,7 @@ class SlidesTemplateCategoryAssembler
     {
         $dto = new AdminSlidesTemplateCategoryItemDTO();
         self::fillBase($dto, $category);
+        $dto->setNameI18n(I18nTextDTO::fromArray($category->getNameI18n()));
         $dto->setTemplateCount($category->getTemplateCount());
         $dto->setOrganizationCode($category->getOrganizationCode());
         $dto->setStatus($category->getStatus()->value);
@@ -72,7 +73,6 @@ class SlidesTemplateCategoryAssembler
         $dto->setId($category->getId());
         $dto->setCode($category->getCode());
         $dto->setName($category->getI18nName(CoContext::getLanguage()));
-        $dto->setNameI18n(I18nTextDTO::fromArray($category->getNameI18n()));
         $dto->setSort($category->getSort());
         $dto->setIsOfficial(OfficialOrganizationUtil::isOfficialOrganization($category->getOrganizationCode()));
     }

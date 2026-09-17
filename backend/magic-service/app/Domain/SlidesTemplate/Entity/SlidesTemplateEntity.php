@@ -7,6 +7,7 @@ declare(strict_types=1);
 
 namespace App\Domain\SlidesTemplate\Entity;
 
+use App\Domain\SuperMagic\Common\Entity\ResolvesI18nText;
 use App\Domain\SlidesTemplate\Entity\ValueObject\SlidesTemplateOwnerType;
 use App\Domain\SlidesTemplate\Entity\ValueObject\SlidesTemplateSourceType;
 use App\Domain\SlidesTemplate\Entity\ValueObject\SlidesTemplateStatus;
@@ -14,6 +15,8 @@ use App\Infrastructure\Core\AbstractEntity;
 
 class SlidesTemplateEntity extends AbstractEntity
 {
+    use ResolvesI18nText;
+
     protected ?int $id = null;
 
     protected string $organizationCode = '';
@@ -255,6 +258,11 @@ class SlidesTemplateEntity extends AbstractEntity
         return $this->label;
     }
 
+    public function getI18nLabel(string $language): string
+    {
+        return $this->resolveI18nText($this->label, $language);
+    }
+
     public function setLabel(array $label): self
     {
         $this->label = $label;
@@ -264,6 +272,11 @@ class SlidesTemplateEntity extends AbstractEntity
     public function getDescription(): array
     {
         return $this->description;
+    }
+
+    public function getI18nDescription(string $language): string
+    {
+        return $this->resolveI18nText($this->description, $language);
     }
 
     public function setDescription(array $description): self
