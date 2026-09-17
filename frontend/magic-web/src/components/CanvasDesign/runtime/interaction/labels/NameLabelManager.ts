@@ -1,7 +1,9 @@
 import Konva from "konva"
 import { ElementTypeEnum } from "../../document/types"
 import { BaseLabelManager, type BaseLabelManagerConfig } from "./BaseLabelManager"
+import { NAME_LABEL_GROUP_PREFIX, NAME_LABEL_HIT_NAME } from "./nameLabelNodeUtils"
 import type { Canvas } from "../../core/Canvas"
+import type { CanvasEventMap } from "../../core/EventEmitter"
 
 /**
  * 名称标签配置
@@ -17,6 +19,8 @@ const NAME_LABEL_CONFIG = {
 	OFFSET_TOP: 5,
 	/** 标签左侧对齐偏移（像素） */
 	OFFSET_LEFT: 0,
+	/** 透明命中区相对文字的内边距，避免短名称难以点中 */
+	HIT_PADDING: 2,
 } as const
 
 /**
@@ -26,9 +30,12 @@ const NAME_LABEL_CONFIG = {
  * 2. 监听元素变化，同步更新名称标签
  * 3. 管理名称标签的可见性（Frame/Audio 一直显示，Image 只在 hover 时显示）
  * 4. 处理名称标签的位置和缩放
+ * 5. 选择工具下命中名称：hover 手势、单击选中、双击重命名（不从名称拖动元素）
  */
 export class NameLabelManager extends BaseLabelManager {
 	private renamingElementId: string | null = null
+	private interactionUnsubscribers: Array<() => void> = []
+	private pointerHoverElementId: string | null = null
 
 	constructor(options: { canvas: Canvas }) {
 		const { canvas } = options
@@ -65,6 +72,7 @@ export class NameLabelManager extends BaseLabelManager {
 		}
 
 		super(baseConfig)
+		this.setupInteractionListeners()
 	}
 
 	public canStartRename(elementId: string): boolean {
@@ -128,8 +136,51 @@ export class NameLabelManager extends BaseLabelManager {
 		return element?.getNameLabelText() || ""
 	}
 
+	protected override createLabel(elementId: string): Konva.Group {
+		const labelText = this.getLabelText(elementId)
+		const labelGroup = new Konva.Group({
+			listening: this.areNameLabelsInteractive(),
+			visible: false,
+			name: `${NAME_LABEL_GROUP_PREFIX}${elementId}`,
+		})
+		const textNode = new Konva.Text({
+			text: labelText,
+			fontSize: this.labelConfig.fontSize,
+			fontFamily: this.labelConfig.fontFamily,
+			fill: this.labelConfig.textColor,
+			listening: false,
+		})
+		const hitRect = new Konva.Rect({
+			name: NAME_LABEL_HIT_NAME,
+			fill: "rgba(0, 0, 0, 0.001)",
+			listening: true,
+		})
+		labelGroup.add(hitRect)
+		labelGroup.add(textNode)
+		this.syncHitRect(labelGroup)
+		this.bindLabelInteraction(labelGroup, elementId)
+		return labelGroup
+	}
+
+	protected override updateLabelText(labelGroup: Konva.Group, text: string): boolean {
+		const changed = super.updateLabelText(labelGroup, text)
+		if (changed) {
+			this.syncHitRect(labelGroup)
+		}
+		return changed
+	}
+
 	protected override shouldRetainHiddenLabel(elementId: string): boolean {
 		return this.renamingElementId === elementId
+	}
+
+	public override destroy(): void {
+		this.clearPointerHover()
+		for (const unsubscribe of this.interactionUnsubscribers) {
+			unsubscribe()
+		}
+		this.interactionUnsubscribers = []
+		super.destroy()
 	}
 
 	/**
@@ -204,5 +255,130 @@ export class NameLabelManager extends BaseLabelManager {
 
 		// 不修改基础可见性
 		return null
+	}
+
+	private setupInteractionListeners(): void {
+		this.listenInteraction("tool:change")
+		this.listenInteraction("crop:enter")
+		this.listenInteraction("crop:exit")
+		this.listenInteraction("extend:enter")
+		this.listenInteraction("extend:exit")
+		this.listenInteraction("eraser:enter")
+		this.listenInteraction("eraser:exit")
+		this.listenInteraction("text:editing-state-change")
+		this.listenInteraction("permission:changed")
+	}
+
+	private listenInteraction<K extends keyof CanvasEventMap>(eventType: K): void {
+		this.interactionUnsubscribers.push(
+			this.canvas.eventEmitter.on(eventType, () => {
+				this.syncLabelListening()
+			}),
+		)
+	}
+
+	/**
+	 * 仅在选择工具且无独占编辑会话时接收命中。
+	 * 平移/形状/裁剪等工具下必须关闭，避免挡住落笔或手柄。
+	 */
+	private areNameLabelsInteractive(): boolean {
+		const { toolManager, cropManager, extendManager, eraserManager, textEditingManager } =
+			this.canvas
+		if (!toolManager?.getSelectionTool) return false
+		if (toolManager.getActiveTool() !== toolManager.getSelectionTool()) return false
+		if (cropManager?.getCroppingElementId()) return false
+		if (extendManager?.getExtendingElementId()) return false
+		if (eraserManager?.getErasingElementId()) return false
+		if (textEditingManager?.isEditing()) return false
+		return true
+	}
+
+	private syncLabelListening(): void {
+		const listening = this.areNameLabelsInteractive()
+		for (const labelGroup of this.labelMap.values()) {
+			labelGroup.listening(listening)
+		}
+		if (
+			this.pointerHoverElementId &&
+			(!listening || !this.canvas.elementRenameManager?.canRename(this.pointerHoverElementId))
+		) {
+			this.clearPointerHover()
+		}
+	}
+
+	private syncHitRect(labelGroup: Konva.Group): void {
+		const textNode = labelGroup.findOne("Text") as Konva.Text | null
+		const hitRect = labelGroup.findOne(`.${NAME_LABEL_HIT_NAME}`) as Konva.Rect | null
+		if (!textNode || !hitRect) return
+
+		const padding = NAME_LABEL_CONFIG.HIT_PADDING
+		hitRect.setAttrs({
+			x: -padding,
+			y: -padding,
+			width: Math.max(textNode.width() + padding * 2, padding * 2),
+			height: Math.max(textNode.height() + padding * 2, padding * 2),
+		})
+	}
+
+	private bindLabelInteraction(labelGroup: Konva.Group, elementId: string): void {
+		const stopPointerEvent = (e: Konva.KonvaEventObject<MouseEvent | TouchEvent>) => {
+			e.cancelBubble = true
+			e.evt?.stopPropagation()
+		}
+
+		labelGroup.on("mousedown touchstart", (e) => {
+			stopPointerEvent(e)
+			this.selectElementFromLabel(elementId)
+		})
+		labelGroup.on("mouseup click tap", stopPointerEvent)
+		labelGroup.on("dblclick dbltap", (e) => {
+			stopPointerEvent(e)
+			this.canvas.elementRenameManager?.startRename(elementId)
+		})
+		labelGroup.on("contextmenu", (e) => {
+			e.evt.preventDefault()
+			stopPointerEvent(e)
+			this.selectElementFromLabel(elementId)
+			this.canvas.eventEmitter.emit({
+				type: "element:contextmenu",
+				data: {
+					elementId,
+					x: e.evt.clientX,
+					y: e.evt.clientY,
+				},
+			})
+		})
+		labelGroup.on("mouseenter", () => {
+			this.pointerHoverElementId = elementId
+			if (this.canvas.elementRenameManager?.canRename(elementId)) {
+				this.canvas.cursorManager.setTemporary("pointer")
+			}
+		})
+		labelGroup.on("mouseleave", () => {
+			if (this.pointerHoverElementId === elementId) {
+				this.clearPointerHover()
+			}
+		})
+	}
+
+	private selectElementFromLabel(elementId: string): void {
+		const elementData = this.canvas.elementManager.getElementData(elementId)
+		if (!this.canvas.permissionManager.canSelect(elementData)) {
+			return
+		}
+		if (this.canvas.selectionManager.isSelected(elementId)) {
+			if (this.canvas.selectionManager.getSelectionCount() > 1) {
+				this.canvas.selectionManager.replaceSelection([elementId])
+			}
+			return
+		}
+		this.canvas.connectionManager?.deselectConnection()
+		this.canvas.selectionManager.replaceSelection([elementId])
+	}
+
+	private clearPointerHover(): void {
+		if (!this.pointerHoverElementId) return
+		this.pointerHoverElementId = null
+		this.canvas.cursorManager?.restoreToolCursor()
 	}
 }

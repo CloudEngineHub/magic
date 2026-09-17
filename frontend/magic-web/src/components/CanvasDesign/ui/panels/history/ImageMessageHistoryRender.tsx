@@ -17,6 +17,7 @@ import { getReferenceImageCrop } from "../../../runtime/resources/image/imageCro
 import { ImageGenerationTaskTypeMap, type GenerateImageRequest } from "../../../public/magic-types"
 import type { MediaResourceFullscreenPreviewItem } from "../../fullscreen/media-resource/index"
 import { resolvePromptPlaceholderTokenConfig } from "../../editors/message/reference-assets/promptPlaceholderTokenConfig"
+import { copyHistoryPromptToClipboard } from "./historyPromptClipboard"
 import { MessageHistoryCollapsiblePrompt } from "./MessageHistoryCollapsiblePrompt"
 import { PromptPlaceholderPreviewText } from "./PromptPlaceholderPreviewText"
 import { useGenerationRuntime } from "../../../app/hooks/canvas"
@@ -51,8 +52,7 @@ export default function ImageMessageHistoryRender(props: ImageMessageHistoryRend
 	const elementInstance = useMemo(() => {
 		if (!canvas || !imageElement.id) return undefined
 		return canvas.elementManager.getElementInstance(imageElement.id) as
-			| ImageElementClass
-			| undefined
+			ImageElementClass | undefined
 	}, [canvas, imageElement.id])
 
 	// 获取尺寸
@@ -112,13 +112,24 @@ export default function ImageMessageHistoryRender(props: ImageMessageHistoryRend
 
 	const handleCopyPrompt = useCallback(() => {
 		if (!promptText) return
-		void navigator.clipboard
-			.writeText(promptText)
+		void copyHistoryPromptToClipboard({
+			text: request?.prompt ?? "",
+			tokenConfig: promptPlaceholderTokenConfig,
+			placeholderPaths: { image: referenceImagePaths },
+			resolveResourceReference: methods?.resolveResourceReference,
+		})
 			.then(() => {
 				toast.success(t("menu.copySuccess", "复制成功"))
 			})
 			.catch(() => undefined)
-	}, [promptText, t])
+	}, [
+		methods?.resolveResourceReference,
+		promptPlaceholderTokenConfig,
+		promptText,
+		referenceImagePaths,
+		request?.prompt,
+		t,
+	])
 
 	// 根据 modelId 查找对应的模型信息
 	const modelInfo = useMemo(() => {

@@ -1,4 +1,3 @@
-import { isEqual } from "lodash-es"
 import type { LayerElement } from "@/components/CanvasDesign/runtime/document/types"
 import {
 	getContents,
@@ -7,6 +6,7 @@ import {
 import type {
 	ElementDetailSource,
 	ElementDetailsProvenance,
+	ElementDetailsSidecarSource,
 } from "@/components/CanvasDesign/runtime/document/elementDetailsProvenance"
 
 export const ELEMENT_DETAILS_FILENAME = "element-details.json"
@@ -96,22 +96,6 @@ function getHeavyFieldsForElement(type: string): readonly string[] {
 	return supportsVisualUnderstanding(type) ? HEAVY_FIELDS : NON_VISUAL_HEAVY_FIELDS
 }
 
-function pickContentDetails(element: AnyElement): Record<string, ContentDetailEntry> | null {
-	const details: Record<string, ContentDetailEntry> = {}
-	const heavyFields = getHeavyFieldsForElement(element.type)
-	for (const content of getContents(element) as unknown as Array<
-		Record<string, unknown> & { contentId: string }
-	>) {
-		const detail: ContentDetailEntry = {}
-		for (const field of heavyFields) {
-			const value = content[field]
-			if (value !== undefined && value !== null) detail[field] = value
-		}
-		if (Object.keys(detail).length > 0) details[content.contentId] = detail
-	}
-	return Object.keys(details).length > 0 ? details : null
-}
-
 export function stripHeavyFields(elements: LayerElement[] | undefined): void {
 	walkElements(elements, (element) => {
 		const contents = getContents(element) as unknown as Array<Record<string, unknown>>
@@ -122,34 +106,39 @@ export function stripHeavyFields(elements: LayerElement[] | undefined): void {
 	})
 }
 
-function stripEntryMeta(entry: ElementDetailEntry | undefined, type: string): ElementHeavyFields {
-	if (!entry) return {}
-	const result: ElementHeavyFields = {}
-	const heavyFields = getHeavyFieldsForElement(type)
-	if (entry.contentDetails) {
-		const contentDetails: Record<string, ContentDetailEntry> = {}
-		for (const [contentId, contentDetail] of Object.entries(entry.contentDetails)) {
-			const nextDetail: ContentDetailEntry = {}
-			for (const field of heavyFields) {
-				const value = contentDetail[field]
-				if (value !== undefined && value !== null) nextDetail[field] = value
-			}
-			if (Object.keys(nextDetail).length > 0) contentDetails[contentId] = nextDetail
-		}
-		if (Object.keys(contentDetails).length > 0) result.contentDetails = contentDetails
-	}
-	for (const field of heavyFields) {
-		if (entry[field] !== undefined && entry[field] !== null) result[field] = entry[field]
-	}
-	return result
+function isPlainObject(value: unknown): value is Record<string, unknown> {
+	return !!value && typeof value === "object" && !Array.isArray(value)
 }
 
+/**
+ * 同路径两边都有叶子值时用 agent；仅 user 有的字段补进结果。
+ * 数组当叶子处理，不按下标合并。
+ */
+function deepMergePreferAgent(user: unknown, agent: unknown): unknown {
+	if (agent === undefined || agent === null) return user
+	if (user === undefined || user === null) return agent
+	if (!isPlainObject(user) || !isPlainObject(agent)) return agent
+	const merged: Record<string, unknown> = {}
+	for (const key of new Set([...Object.keys(user), ...Object.keys(agent)])) {
+		merged[key] = deepMergePreferAgent(user[key], agent[key])
+	}
+	return merged
+}
+
+/**
+ * 同一 Content 两边都有时深度合并（冲突字段以 agent 为准）。
+ * 合并结果仍视为 agent 来源，写回时整条不进 user sidecar。
+ */
 function resolveWinner(
 	userEntry: ElementDetailEntry | undefined,
 	agentEntry: ElementDetailEntry | undefined,
 ): { entry: ElementDetailEntry | undefined; source: ElementDetailSource } {
-	if (userEntry?.source === ELEMENT_DETAIL_SOURCE_USER)
-		return { entry: userEntry, source: "user" }
+	if (agentEntry && userEntry) {
+		return {
+			entry: deepMergePreferAgent(userEntry, agentEntry) as ElementDetailEntry,
+			source: "agent",
+		}
+	}
 	if (agentEntry) return { entry: agentEntry, source: "agent" }
 	if (userEntry) return { entry: userEntry, source: "user" }
 	return { entry: undefined, source: "unknown" }
@@ -205,19 +194,25 @@ export function rehydrateHeavyFields(
 						content[field] = winner[field]
 				}
 			}
+			const appliedSource = winner
+				? winnerSource
+				: content === firstContent && legacyFieldsAppliedToFirstContent
+					? legacyWinnerSource
+					: undefined
+			const sidecarSource = toSidecarSource(appliedSource)
 			const imageId = getRequestImageId(content.generateImageRequest)
-			if (imageId) {
-				const source = winner
-					? winnerSource
-					: content === firstContent && legacyFieldsAppliedToFirstContent
-						? legacyWinnerSource
-						: "inline"
+			if (sidecarSource || imageId) {
 				contentProvenance[content.contentId] = {
-					generateImageRequest: {
-						valueSource: source,
-						imageId,
-						imageIdSource: source,
-					},
+					...(sidecarSource ? { sidecarSource } : {}),
+					...(imageId
+						? {
+								generateImageRequest: {
+									valueSource: appliedSource ?? "inline",
+									imageId,
+									imageIdSource: appliedSource ?? "inline",
+								},
+							}
+						: {}),
 				}
 			}
 		}
@@ -228,19 +223,81 @@ export function rehydrateHeavyFields(
 	return provenance
 }
 
+function toSidecarSource(
+	source: ElementDetailSource | undefined,
+): ElementDetailsSidecarSource | undefined {
+	if (source === "agent" || source === "user") return source
+	return undefined
+}
+
+/**
+ * 前端只写 user sidecar。agent 来源的 Content 排除，画布新建走 user。
+ * 磁盘上已在 agent 文件中的 Content 也排除，避免 provenance 丢失时抄进 user。
+ */
+export function isAgentOwnedContent(options: {
+	provenance?: ElementDetailsProvenance
+	agentDoc?: ElementDetailsDoc
+	elementId: string
+	contentId: string
+	isFirstContent: boolean
+}): boolean {
+	const contentProv = options.provenance?.[options.elementId]?.contentDetails?.[options.contentId]
+	if (contentProv?.sidecarSource === "agent") return true
+	if (contentProv?.generateImageRequest?.imageIdSource === "agent") return true
+	if (contentProv?.generateImageRequest?.valueSource === "agent") return true
+	if (contentProv?.sidecarSource === "user") return false
+
+	const agentEntry = options.agentDoc?.elements[options.elementId]
+	if (!agentEntry) return false
+	if (agentEntry.contentDetails?.[options.contentId]) return true
+	if (!options.isFirstContent) return false
+	return HEAVY_FIELDS.some(
+		(field) => agentEntry[field] !== undefined && agentEntry[field] !== null,
+	)
+}
+
+/**
+ * 只收集应写入 element-details-user.json 的 Content。
+ * 前端永不写 element-details.json。
+ */
 export function buildUserElementDetailsDoc(
 	elements: LayerElement[] | undefined,
-	agentBaseline: ElementDetailsDoc,
+	provenance?: ElementDetailsProvenance,
+	agentDoc?: ElementDetailsDoc,
 ): ElementDetailsDoc {
-	const result: Record<string, ElementDetailEntry> = {}
+	const userElements: Record<string, ElementDetailEntry> = {}
 	walkElements(elements, (rawElement) => {
 		const element = rawElement as AnyElement
-		const contentDetails = pickContentDetails(element)
-		if (!contentDetails) return
-		const detail = { contentDetails }
-		const baselineDetail = stripEntryMeta(agentBaseline.elements[element.id], element.type)
-		if (isEqual(detail, baselineDetail)) return
-		result[element.id] = { ...detail, source: ELEMENT_DETAIL_SOURCE_USER }
+		const heavyFields = getHeavyFieldsForElement(element.type)
+		const userContentDetails: Record<string, ContentDetailEntry> = {}
+		const contents = getContents(element) as unknown as Array<
+			Record<string, unknown> & { contentId: string }
+		>
+		contents.forEach((content, index) => {
+			const detail: ContentDetailEntry = {}
+			for (const field of heavyFields) {
+				const value = content[field]
+				if (value !== undefined && value !== null) detail[field] = value
+			}
+			if (Object.keys(detail).length === 0) return
+			if (
+				isAgentOwnedContent({
+					provenance,
+					agentDoc,
+					elementId: element.id,
+					contentId: content.contentId,
+					isFirstContent: index === 0,
+				})
+			)
+				return
+			userContentDetails[content.contentId] = detail
+		})
+		if (Object.keys(userContentDetails).length > 0) {
+			userElements[element.id] = {
+				contentDetails: userContentDetails,
+				source: ELEMENT_DETAIL_SOURCE_USER,
+			}
+		}
 	})
-	return { version: ELEMENT_DETAILS_VERSION, elements: result }
+	return { version: ELEMENT_DETAILS_VERSION, elements: userElements }
 }

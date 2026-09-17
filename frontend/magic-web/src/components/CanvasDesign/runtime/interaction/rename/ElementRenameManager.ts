@@ -32,6 +32,10 @@ export class ElementRenameManager {
 		this.cancelRename()
 		this.renamingElementId = elementId
 		this.canvas.nameLabelManager.setRenamingElementId(elementId)
+		this.canvas.eventEmitter.emit({
+			type: "element:rename-start",
+			data: { elementId },
+		})
 		return true
 	}
 
@@ -57,8 +61,13 @@ export class ElementRenameManager {
 			return
 		}
 
+		const elementId = this.renamingElementId
 		this.renamingElementId = null
 		this.canvas.nameLabelManager.setRenamingElementId(null)
+		this.canvas.eventEmitter.emit({
+			type: "element:rename-end",
+			data: { elementId },
+		})
 	}
 
 	public getRenamingElementId(): string | null {

@@ -124,6 +124,62 @@ describe("ElementManager element creation names", () => {
 	})
 })
 
+describe("ElementManager nested geometry invalidation", () => {
+	it("invalidates descendants and ancestors when a container changes", () => {
+		const image = createElement("image")
+		const group = {
+			...createElement("group"),
+			type: "group" as const,
+			children: [image],
+		}
+		const frame = {
+			...createElement("frame"),
+			type: "frame" as const,
+			children: [group],
+		}
+		const outerGroup = {
+			...createElement("outer-group"),
+			type: "group" as const,
+			children: [frame],
+		}
+		const dataById = new Map<string, LayerElement>([
+			[image.id, image],
+			[group.id, group],
+			[frame.id, frame],
+			[outerGroup.id, outerGroup],
+		])
+		const parentById = new Map([
+			[image.id, group.id],
+			[group.id, frame.id],
+			[frame.id, outerGroup.id],
+		])
+		const invalidateElements = vi.fn()
+		const manager = Object.create(ElementManager.prototype) as unknown as {
+			elements: Map<string, { getData: () => LayerElement }>
+			canvas: {
+				geometryCacheManager: { invalidateElements: typeof invalidateElements }
+			}
+			findParentElement: (elementId: string) => { getData: () => LayerElement } | undefined
+			invalidateGeometryForElement: (elementId: string) => void
+		}
+		manager.elements = new Map(
+			Array.from(dataById, ([elementId, data]) => [elementId, { getData: () => data }]),
+		)
+		manager.canvas = { geometryCacheManager: { invalidateElements } }
+		manager.findParentElement = (elementId) => {
+			const parentId = parentById.get(elementId)
+			return parentId ? manager.elements.get(parentId) : undefined
+		}
+
+		manager.invalidateGeometryForElement(frame.id)
+
+		expect(invalidateElements).toHaveBeenCalledOnce()
+		expect(invalidateElements).toHaveBeenCalledWith(
+			new Set([frame.id, group.id, image.id, outerGroup.id]),
+		)
+	})
+})
+
 describe("ElementManager document loading", () => {
 	it("preserves persisted Frame dimensions during document loading", () => {
 		const manager = Object.create(ElementManager.prototype) as unknown as {
@@ -375,6 +431,45 @@ describe("ElementManager node-only resize sync", () => {
 		expect(node.width()).toBe(160)
 		expect(node.height()).toBe(120)
 		expect(onTransformResize).toHaveBeenCalledWith(160, 120)
+	})
+})
+
+describe("ElementManager image crop resize sync", () => {
+	it("preserves an explicit nested crop clear during a resize update", () => {
+		const currentData = {
+			id: "image-1",
+			type: "image",
+			width: 100,
+			height: 80,
+			activeContentId: "content-1",
+			mainContentId: "content-1",
+			contents: [
+				{
+					contentId: "content-1",
+					src: "./image.png",
+					crop: { x: 10, y: 12, width: 40, height: 30 },
+				},
+			],
+		} as ImageElement
+		const element = {
+			getData: () => currentData,
+		}
+		const manager = Object.create(ElementManager.prototype) as {
+			normalizeUpdates: (element: unknown, updates: ElementUpdatePatch) => ElementUpdatePatch
+		}
+
+		const normalized = manager.normalizeUpdates(element, {
+			width: 200,
+			height: 160,
+			contents: [
+				{
+					...currentData.contents[0],
+					crop: undefined,
+				},
+			],
+		})
+
+		expect(normalized.contents?.[0]?.crop).toBeUndefined()
 	})
 })
 

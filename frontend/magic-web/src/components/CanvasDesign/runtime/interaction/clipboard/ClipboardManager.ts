@@ -1072,10 +1072,21 @@ export class ClipboardManager {
 				}),
 			),
 		])
-		// Element media has no inline Blob in the standard copy payload. Writing
-		// the element without a usable source reference would create a clipboard
-		// item that can only fail later during paste, so abort the copy instead.
-		if (mediaMetadataResults.some((result) => !result)) {
+		// A source-less image/video/audio can be a valid placeholder element (for
+		// example, an unfinished generation node), so it must stay in payload.elements
+		// without contributing file metadata. Only fail when an existing source could
+		// not be resolved, because that would create a media element that cannot be
+		// restored during paste.
+		const hasUnresolvedSourceBackedMedia = mediaMetadataResults.some((result, index) => {
+			if (result) return false
+			const element = mediaElements[index]
+			const source =
+				element.type === ElementTypeEnum.Image
+					? this.getEffectiveImageContent(element).src
+					: this.getEffectiveContent(element)?.src
+			return Boolean(source)
+		})
+		if (hasUnresolvedSourceBackedMedia) {
 			throw new Error("Unable to prepare a valid media source for clipboard copy")
 		}
 		const metadataList: CanvasElementClipboardFileMetadata[] = []

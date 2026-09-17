@@ -1,13 +1,17 @@
 import { htmlToClipboardMarkdown } from "../../MessageList/utils/clipboardMarkdown"
 
 export type MixedClipboardPart =
-	| { type: "text"; text: string }
-	| { type: "file"; file: File; originalText: string }
+	{ type: "text"; text: string } | { type: "file"; file: File; originalText: string }
 
 export interface MixedClipboardContent {
 	parts: MixedClipboardPart[]
 	/** false 表示只保留了内容，无法证明附件与正文的穿插位置。 */
 	ordered: boolean
+}
+
+interface ParseMixedClipboardOptions {
+	/** paste 事件未提供文本时，通过 Clipboard API 补读的系统文本。 */
+	textFromClipboardApi?: boolean
 }
 
 interface FileMarker {
@@ -82,6 +86,11 @@ function localFileName(source: string): string | null {
 	}
 }
 
+function fileDisplayName(fileName: string): string {
+	const extensionIndex = fileName.lastIndexOf(".")
+	return extensionIndex > 0 ? fileName.slice(0, extensionIndex) : fileName
+}
+
 function parseHtmlFiles(html: string, files: File[]): MixedClipboardContent | null {
 	if (!html) return null
 	const container = new DOMParser().parseFromString(html, "text/html").body
@@ -128,19 +137,29 @@ export function parseMixedClipboard(
 	text: string,
 	html: string,
 	files: File[],
+	options: ParseMixedClipboardOptions = {},
 ): MixedClipboardContent {
 	let normalizedText = text.replace(/\r\n?/g, "\n")
-	// Finder 等文件管理器的文字格式只是文件 URL 列表，不是附带正文。
+	// Finder 等文件管理器可能返回路径、完整文件名，或隐藏扩展名后的显示名称；
+	// 后两种只接受 Clipboard API 的补读结果，避免吞掉事件中主动携带的同名正文。
 	const lines = normalizedText.trim().split("\n")
-	const remainingNames = files.map((file) => file.name)
+	const remainingFiles = [...files]
 	const isFileList =
 		lines.length === files.length &&
 		lines.every((line) => {
-			if (!/^(?:file:|\/)/.test(line.trim())) return false
-			const name = localFileName(line.trim())
-			const index = name ? remainingNames.indexOf(name) : -1
+			const source = line.trim()
+			const isExplicitLocalReference = /^(?:file:|\/)/.test(source)
+			if (!isExplicitLocalReference && !options.textFromClipboardApi) return false
+			const name = localFileName(source)
+			const index = name
+				? remainingFiles.findIndex(
+						(file) =>
+							file.name === name ||
+							(options.textFromClipboardApi && fileDisplayName(file.name) === name),
+					)
+				: -1
 			if (index < 0) return false
-			remainingNames.splice(index, 1)
+			remainingFiles.splice(index, 1)
 			return true
 		})
 	if (isFileList) normalizedText = ""
