@@ -1,4 +1,4 @@
-import { useMemo, useRef, useState, memo, ComponentType } from "react"
+import { useEffect, useMemo, useRef, useState, memo, ComponentType } from "react"
 import { useTranslation } from "react-i18next"
 import { getSuperIdState } from "@/pages/superMagic/utils/query"
 import { projectStore } from "@/pages/superMagic/stores/core"
@@ -37,15 +37,13 @@ import type { MentionListItem } from "@/components/business/MentionPanel/tiptap-
 import AttachmentHoverButton from "./components/AttachmentHoverButton"
 import OptimisticStatusIndicator from "./OptimisticStatusIndicator"
 import { getCurrentConversationRound } from "./round-log"
-import { logger as Logger } from "@/utils/log"
+import { createLogger } from "@/infrastructure/logger"
 import {
 	getClipboardHtml,
 	getClipboardPlainText,
 	prependPortableMentions,
 } from "@/pages/superMagic/components/MessageList/utils/mentionClipboard"
 import { resolveClipboardFilePaths } from "@/pages/superMagic/components/MessageList/utils/resolveClipboardFilePaths"
-
-const logger = Logger.createLogger("UserCard")
 
 const enum MenuKey {
 	/** Create a scheduled task. */
@@ -63,6 +61,7 @@ const undoButtonBase =
 	"!flex h-6 flex-none cursor-pointer items-center gap-1.5 rounded-md border border-border px-2 text-xs font-normal leading-4 !bg-white shadow-sm !text-foreground dark:!bg-card hover:!bg-fill"
 
 const UNDO_BUTTON_DEBOUNCE_MS = 300
+const logger = createLogger("UserCard")
 
 export function withUserNode<
 	T extends {
@@ -92,16 +91,27 @@ export function withUserNode<
 
 		const [isCheckUndoLoading, setIsCheckUndoLoading] = useState(false)
 		const undoClickLockRef = useRef(false)
+		const reportBusy = useRef(false)
+		const reportTimer = useRef<ReturnType<typeof setTimeout>>()
+		const mounted = useRef(true)
+		useEffect(() => {
+			mounted.current = true
+			return () => {
+				mounted.current = false
+				clearTimeout(reportTimer.current)
+			}
+		}, [])
 
 		const reportConversationRound = useMemoizedFn(async () => {
 			const topicId = selectedTopic?.chat_topic_id
 			const currentMessageId = node?.app_message_id
-			if (!topicId || !currentMessageId) return
+			if (!topicId || !currentMessageId || reportBusy.current) return
 
 			const topicMessages = superMagicStore.messages.get(topicId) || []
 			const roundMessages = getCurrentConversationRound(topicMessages, currentMessageId)
 			if (roundMessages.length === 0) return
 
+			reportBusy.current = true
 			try {
 				await superMagicStore.flushMessagePersistenceForReport(topicId)
 				// IndexedDB/report codec stays outside the MessageList bundle until the user reports.
@@ -117,14 +127,27 @@ export function withUserNode<
 					preferredWriterId: getConversationRoundReportWriterId(),
 				})
 
+				if (!mounted.current) return
 				logger.report("messages", {
 					topic_id: selectedTopic?.id,
 					chat_topic_id: topicId,
 					message_id: currentMessageId,
 					messages,
 				})
+				// Product feedback uses a fixed delay; it does not wait for a delivery receipt.
+				reportTimer.current = setTimeout(() => {
+					reportBusy.current = false
+					magicToast.success(t("ui.reportConversationRoundSuccess"))
+				}, 1000)
 			} catch (error) {
-				logger.error("Failed to prepare conversation round report", error)
+				reportBusy.current = false
+				if (!mounted.current) return
+				logger.error({
+					eventKey: "conversation_diagnostic_prepare_failed",
+					errorKind: "unknown",
+					error,
+				})
+				magicToast.error(t("ui.reportConversationRoundFailed"))
 			}
 		})
 

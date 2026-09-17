@@ -1,6 +1,6 @@
 import Dexie from "dexie"
 import type { TableSchema } from "./types"
-import { logger as Logger } from "@/utils/log"
+import { logger as Logger } from "@/infrastructure/logger"
 
 const logger = Logger.createLogger("database")
 
@@ -396,6 +396,15 @@ export class DatabaseManager {
 						"Successfully upgraded database to version 5, added self-media brand records table",
 				})
 			})
+
+		// 只追加可重建的 PPT 缩略图；Dexie 继承前序表结构，不重建用户业务数据。
+		db.version(6).stores({
+			"ppt-thumbnail-cache": "&key, scope, lastAccessAt",
+			"ppt-thumbnail-cache-body": "&key",
+		})
+
+		// 个人标签按现有账号身份独立保存；其余表沿用前一版本。
+		db.version(7).stores({ "super-user-file-tabs": "&id" })
 
 		this.globalDatabase = db
 		return this.globalDatabase

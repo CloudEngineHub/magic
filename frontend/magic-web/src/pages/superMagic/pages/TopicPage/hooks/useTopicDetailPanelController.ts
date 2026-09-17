@@ -23,6 +23,9 @@ interface UseTopicDetailPanelControllerOptions {
 
 interface UseTopicDetailPanelControllerReturn {
 	shouldShowDetailPanel: boolean
+	isDetailPanelCollapsed: boolean
+	collapseDetailPanel: () => void
+	expandDetailPanel: () => void
 	handleFileClickWithPanel: (fileItem?: unknown) => void
 	topicFilesPropsWithPanel: {
 		onFileClick?: (fileItem?: unknown) => void
@@ -47,6 +50,8 @@ export function useTopicDetailPanelController({
 	attachmentList = [],
 }: UseTopicDetailPanelControllerOptions): UseTopicDetailPanelControllerReturn {
 	const [activeDetailTabType, setActiveDetailTabType] = useState<DetailTabType>(null)
+	// 收起只改变布局，不清空活动文件；展开继续使用原标签和编辑实例。
+	const [isDetailPanelCollapsed, setIsDetailPanelCollapsed] = useState(false)
 	const fileOpenFallbackTimerRef = useRef<number | null>(null)
 	const activeFileIdRef = useRef<string | null>(activeFileId)
 	const activeDetailTabTypeRef = useRef<DetailTabType>(null)
@@ -55,8 +60,15 @@ export function useTopicDetailPanelController({
 		if (isReadOnly) {
 			return true
 		}
-		return Boolean(activeFileId) || Boolean(activeDetailTabType)
-	}, [activeDetailTabType, activeFileId, isReadOnly])
+		return !isDetailPanelCollapsed && (Boolean(activeFileId) || Boolean(activeDetailTabType))
+	}, [activeDetailTabType, activeFileId, isReadOnly, isDetailPanelCollapsed])
+
+	const collapseDetailPanel = useMemoizedFn(() => {
+		if (!isReadOnly) setIsDetailPanelCollapsed(true)
+	})
+	const expandDetailPanel = useMemoizedFn(() => {
+		setIsDetailPanelCollapsed(false)
+	})
 
 	useEffect(() => {
 		activeFileIdRef.current = activeFileId
@@ -88,6 +100,7 @@ export function useTopicDetailPanelController({
 	}, [])
 
 	const handleFileClickWithPanel = useMemoizedFn((fileItem?: unknown) => {
+		expandDetailPanel()
 		const fallbackTabType = activeDetailTabTypeRef.current
 		setActiveDetailTabType("file")
 		handleFileClick(fileItem)
@@ -211,10 +224,17 @@ export function useTopicDetailPanelController({
 
 	const clearActiveDetailTabType = useMemoizedFn(() => {
 		setActiveDetailTabType(null)
+		setIsDetailPanelCollapsed(false)
 	})
 
 	return {
 		shouldShowDetailPanel,
+		isDetailPanelCollapsed:
+			!isReadOnly &&
+			isDetailPanelCollapsed &&
+			(Boolean(activeFileId) || Boolean(activeDetailTabType)),
+		collapseDetailPanel,
+		expandDetailPanel,
 		handleFileClickWithPanel,
 		topicFilesPropsWithPanel,
 		handleActiveDetailTabChange,

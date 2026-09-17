@@ -82,6 +82,10 @@ interface MessageListProps {
 	isShare?: boolean
 	setSelectedDetail?: (detail: any) => void
 	className?: string
+
+	classNames?: {
+		scrollWrapper?: string
+	}
 	isEmptyStatus?: boolean
 	selectedTopic: Topic | null
 	handlePullMoreMessage?: (
@@ -159,6 +163,7 @@ const MessageList = observer(
 		setSelectedDetail,
 		selectedTopic,
 		className,
+		classNames,
 		isEmptyStatus = false,
 		handlePullMoreMessage,
 		showLoading,
@@ -355,8 +360,7 @@ const MessageList = observer(
 		const isLastMessageError = useMemo(() => {
 			const lastNode = mainDisplayData?.[mainDisplayData?.length - 1]
 			const n = superMagicStore.getMessageNode(lastNode?.super_message_id) as
-				| { status?: TaskStatus }
-				| undefined
+				{ status?: TaskStatus } | undefined
 			return n?.status === TaskStatus.ERROR
 		}, [mainDisplayData])
 
@@ -598,17 +602,16 @@ const MessageList = observer(
 		const augmentedMessageListContext = useMemo(
 			() => ({
 				...parentCtx,
-<<<<<<< Updated upstream
-=======
 				projectFilesStore: parentCtx.projectFilesStore ?? defaultProjectFilesStore,
 				allowUserFileReferences: !isShare && parentCtx.allowUserFileReferences !== false,
->>>>>>> Stashed changes
 				allowExport: enableExport,
 				exportModeActive,
 				onExportRequest: enableExport ? exportEnterRequest : undefined,
 			}),
 			// eslint-disable-next-line react-hooks/exhaustive-deps
 			[
+				isShare,
+				parentCtx.allowUserFileReferences,
 				parentCtx.allowRevoke,
 				parentCtx.allowUserMessageCopy,
 				parentCtx.allowScheduleTaskCreate,
@@ -916,6 +919,7 @@ const MessageList = observer(
 									// the virtualizer canvas inside keeps its measurable height.
 									"mx-auto block min-h-full min-w-[unset] max-w-3xl pb-2",
 									isMobile ? "px-4 pt-[10px]" : "pl-2 pt-[50px]",
+									classNames?.scrollWrapper,
 								)}
 							>
 								{visibleData.length > 0 || !isEmptyStatus ? (

@@ -722,6 +722,7 @@ export function RecordingSummaryFloatPanel() {
 				resolveImagesFolderParentId={resolveImagesFolderParentId}
 				requireImagesFolderParentId
 				isAudioProjectMode={isAudioRecordingProject}
+				processingMode={recordingSummaryStore.processingMode}
 				transcriptionEnabled={recordingSummaryStore.businessData.transcriptionEnabled}
 				isTranscriptionToggling={isTranscriptionToggling}
 				onTranscriptionEnabledChange={handleTranscriptionEnabledChange}

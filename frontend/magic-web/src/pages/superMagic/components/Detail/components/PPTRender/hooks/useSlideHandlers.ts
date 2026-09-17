@@ -45,7 +45,7 @@ export function useSlideHandlers({
 
 		try {
 			// 通过文件 ID 刷新幻灯片（获取最新 URL 并重新加载内容）
-			await store.refreshSlideByFileId(fileId)
+			await store.refreshSlideByFileId(fileId, "refresh")
 		} catch (error) {
 			console.error("Failed to refresh slide content:", error)
 			throw error
@@ -69,7 +69,7 @@ export function useSlideHandlers({
 		await Promise.all(
 			fileIds.map(async (fileId) => {
 				try {
-					await store.refreshSlideByFileId(fileId)
+					await store.refreshSlideByFileId(fileId, "refresh")
 				} catch (error) {
 					console.error("Failed to refresh slide content:", fileId, error)
 				}
@@ -98,7 +98,7 @@ export function useSlideHandlers({
 					const fileId = store.getFileIdByPath(slide.path)
 					if (!fileId) return
 					try {
-						await store.refreshSlideByFileId(fileId)
+						await store.refreshSlideByFileId(fileId, "refresh")
 					} catch (error) {
 						// Silently ignore - file may still not be ready
 					}
@@ -117,7 +117,7 @@ export function useSlideHandlers({
 		try {
 			// 清除旧缓存后重新生成截图
 			store.clearSlideScreenshot(index)
-			await store.generateSlideScreenshot(index)
+			await store.generateSlideScreenshot(index, undefined, "required", "refresh")
 		} catch (error) {
 			console.error("Failed to regenerate screenshot:", error)
 			throw error

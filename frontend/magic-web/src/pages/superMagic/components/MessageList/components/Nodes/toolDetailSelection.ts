@@ -1,5 +1,24 @@
 import projectFilesStore from "@/stores/projectFiles"
 import pubsub, { PubSubEvents } from "@/utils/pubsub"
+import { DisabledDetailToolTypes } from "@/pages/superMagic/components/Detail/constants"
+import { reaction } from "mobx"
+import magicToast from "@/components/base/MagicToaster/utils"
+import i18n from "i18next"
+import type { FileReference } from "@/apis/modules/superMagic"
+import {
+	getFileReferenceIdentityKey,
+	resolveFileReference,
+} from "@/pages/superMagic/services/userFileReferenceResolver"
+import { resolveReferencedProjectAttachment } from "@/pages/superMagic/services/referencedProjectAttachmentResolver"
+import {
+	classifyMarkdownFileHref,
+	findAttachmentByPath,
+} from "@/pages/superMagic/utils/markdownFileReference"
+import {
+	createReferencedProjectPreviewFile,
+	openMessageFile,
+	openUserFileReference,
+} from "../../utils/openMessageFile"
 
 // Internal marker: keeps the single-arg callback shape without colliding with tool fields.
 const TOOL_DETAIL_SELECTION_TARGET = Symbol("toolDetailSelectionTarget")
@@ -9,24 +28,54 @@ type ToolDetail = Record<string, unknown> & {
 	[TOOL_DETAIL_SELECTION_TARGET]?: ToolDetailSelectionTarget
 }
 
+export type ToolCardInteractionTarget =
+	| { type: "disabled" }
+	| { type: "playback" }
+	| { type: "file"; fileId: string }
+	| { type: "file-reference"; fileId?: string; filePath?: string }
+	| { type: "design" }
+
+const DESIGN_TOOL_NAMES = new Set([
+	"create_design_project",
+	"create_canvas_element",
+	"update_canvas_element",
+	"batch_create_canvas_elements",
+	"batch_update_canvas_elements",
+	"reorder_canvas_elements",
+	"query_canvas_overview",
+	"query_canvas_element",
+	"generate_images_to_canvas",
+	"search_images_to_canvas",
+	"generate_videos_to_canvas",
+	"query_video_generation",
+	"create_canvas",
+	"generate_canvas_images",
+	"generate_canvas_videos",
+])
+
+type ToolFilesStore = Pick<
+	typeof projectFilesStore,
+	"workspaceFilesList" | "currentSelectedProject"
+>
+
 interface SelectToolDetailOptions {
 	detail: Record<string, unknown>
 	onSelectDetail?: (detail: ToolDetail) => void
-	filesStore?: { workspaceFilesList: Array<{ file_id?: string | number }> }
+	filesStore?: ToolFilesStore
 }
 
 interface SelectSourceFileOptions extends SelectToolDetailOptions {
 	fileId: string
 }
 
+function resolveFilesStore(filesStore?: ToolFilesStore): ToolFilesStore {
+	return filesStore ?? projectFilesStore
+}
+
 export function resolveToolFileId(data: unknown): string | undefined {
 	if (!data || typeof data !== "object" || Array.isArray(data)) return undefined
 
 	const detailData = data as Record<string, unknown>
-<<<<<<< Updated upstream
-	const candidate = detailData.source_file_id
-	return typeof candidate === "string" && candidate ? candidate : undefined
-=======
 	const candidate = [detailData.source_file_id, detailData.target_file_id].find(
 		(value): value is string => typeof value === "string" && value.length > 0,
 	)
@@ -71,19 +120,25 @@ export function getToolCardInteractionTarget(
 
 let pendingFileSelection: AbortController | null = null
 
-/** 两种消息卡片共用真实目标解析。 */
+/** 两种消息卡片共用真实目标解析；旧来源字段继续遵守原附件判断。 */
 export function selectToolFile({
 	detail,
 	target,
 	onSelectDetail,
+	filesStore,
 }: SelectToolDetailOptions & {
 	target: ToolCardInteractionTarget
 }): boolean {
 	if (target.type === "file")
-		return selectSourceFileFromTool({ detail, fileId: target.fileId, onSelectDetail })
+		return selectSourceFileFromTool({
+			detail,
+			fileId: target.fileId,
+			onSelectDetail,
+			filesStore,
+		})
 	if (target.type !== "file-reference") return false
 	pendingFileSelection?.abort()
-	void selectReferencedToolFile({ detail, target, onSelectDetail })
+	void selectReferencedToolFile({ detail, target, onSelectDetail, filesStore })
 	return true
 }
 
@@ -91,16 +146,18 @@ async function selectReferencedToolFile({
 	detail,
 	target,
 	onSelectDetail,
+	filesStore,
 }: SelectToolDetailOptions & {
 	target: Extract<ToolCardInteractionTarget, { type: "file-reference" }>
 }): Promise<void> {
+	const resolvedFilesStore = resolveFilesStore(filesStore)
 	const controller = new AbortController()
 	pendingFileSelection = controller
 	const identity = getFileReferenceIdentityKey()
-	const projectId = projectFilesStore.currentSelectedProject?.id
+	const projectId = resolvedFilesStore.currentSelectedProject?.id
 	const cancel = () => controller.abort()
 	const disposeIdentity = reaction(
-		() => [getFileReferenceIdentityKey(), projectFilesStore.currentSelectedProject?.id],
+		() => [getFileReferenceIdentityKey(), resolvedFilesStore.currentSelectedProject?.id],
 		cancel,
 	)
 	const selectionEvents = [
@@ -133,7 +190,7 @@ async function selectReferencedToolFile({
 				if (result.status === "resolved") reference = result.reference
 			} else if (pathTarget?.scope === "workspace" && projectId) {
 				const attachment = findAttachmentByPath(
-					projectFilesStore.workspaceFilesList,
+					resolvedFilesStore.workspaceFilesList,
 					pathTarget.relativePath,
 				)
 				if (attachment)
@@ -148,7 +205,7 @@ async function selectReferencedToolFile({
 		}
 		if (reference?.space_type === "project" && !reference.is_directory) {
 			// ID 已完成鉴权；直接使用其元信息，不再通过同路径查找另一个目标。
-			const attachment = projectFilesStore.workspaceFilesList.find(
+			const attachment = resolvedFilesStore.workspaceFilesList.find(
 				(item) => String(item.file_id) === reference.file_id,
 			)
 			file = {
@@ -167,7 +224,7 @@ async function selectReferencedToolFile({
 		if (
 			controller.signal.aborted ||
 			identity !== getFileReferenceIdentityKey() ||
-			projectId !== projectFilesStore.currentSelectedProject?.id
+			projectId !== resolvedFilesStore.currentSelectedProject?.id
 		)
 			return
 		release()
@@ -189,7 +246,12 @@ async function selectReferencedToolFile({
 	} finally {
 		release()
 	}
->>>>>>> Stashed changes
+}
+
+function isFileInAttachments(fileId: string, filesStore?: ToolFilesStore): boolean {
+	return resolveFilesStore(filesStore).workspaceFilesList.some(
+		(item) => String(item.file_id ?? "") === fileId,
+	)
 }
 
 function markSelectionTarget(
@@ -207,13 +269,15 @@ export function getToolDetailSelectionTarget(
 	return (detail as ToolDetail)[TOOL_DETAIL_SELECTION_TARGET]
 }
 
-/** Opens a workspace file tab for `source_file_id`. Browser artifacts stay on playback via card target. */
+/** Opens a file tab only if `fileId` exists in attachments. Returns false to fall back to playback. */
 export function selectSourceFileFromTool({
 	detail,
 	fileId,
 	onSelectDetail,
+	filesStore,
 }: SelectSourceFileOptions): boolean {
-	if (!fileId) return false
+	// Runtime artifacts (e.g. browser screenshots) are not workspace files.
+	if (!isFileInAttachments(fileId, filesStore)) return false
 
 	pubsub.publish(PubSubEvents.Open_File_Tab, { fileId })
 	pubsub.publish(PubSubEvents.Locate_File_In_Tree, fileId)

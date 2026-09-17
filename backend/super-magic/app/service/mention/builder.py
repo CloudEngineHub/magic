@@ -9,8 +9,6 @@ from app.service.mention.handlers import (
     DesignMarkerHandler,
     FileHandler,
     MCPHandler,
-    MemoryDirectoryHandler,
-    MemoryFileHandler,
     ProjectDirectoryHandler,
     ProjectHandler,
     SkillHandler,
@@ -25,7 +23,7 @@ class MentionContextBuilder:
     """构建mentions的系统上下文信息"""
 
     # 文件类型的mention类型列表
-    FILE_TYPES = ['file', 'project_file', 'upload_file']
+    FILE_TYPES = ['file', 'project_file', 'upload_file', 'user_file']
 
     def _create_handlers(self) -> Dict[str, BaseMentionHandler]:
         """为当前构建创建独立的 mention handler，避免并发请求共享聚合状态。"""
@@ -43,8 +41,7 @@ class MentionContextBuilder:
         handlers['tool'] = ToolHandler()
         handlers['design_marker'] = DesignMarkerHandler()
         handlers['project_directory'] = ProjectDirectoryHandler()
-        handlers['memory_file'] = MemoryFileHandler()
-        handlers['memory_directory'] = MemoryDirectoryHandler()
+        handlers['user_directory'] = handlers['project_directory']
         handlers['project'] = ProjectHandler()
         handlers['skill'] = SkillHandler()
         return handlers
@@ -79,6 +76,7 @@ class MentionContextBuilder:
 
         # 处理每个mention（异步）
         for i, mention in enumerate(mentions, 1):
+            mention = self._normalize_file_reference_input(mention)
             mention_type = mention.get('type', 'unknown')
 
             # 使用对应的handler处理mention（异步）
@@ -142,6 +140,7 @@ class MentionContextBuilder:
         for mention in mentions:
             if not isinstance(mention, dict):
                 continue
+            mention = self._normalize_file_reference_input(mention)
             mention_type = self._resolve_mention_type(mention)
             handler = handlers.get(mention_type)
             if handler is None:
@@ -153,6 +152,31 @@ class MentionContextBuilder:
             agent_context.get_workspace_dir()
         ).normalize(raw_image_refs)
         return self._deduplicate_image_refs(normalized_refs)
+
+    @staticmethod
+    def _normalize_file_reference_input(mention: dict[str, object]) -> dict[str, object]:
+        """旧记忆类型只在输入边界转换，用户文件不携带项目或复制字段。"""
+        mention_type = MentionContextBuilder._resolve_mention_type(mention)
+        user_type = {
+            "memory_file": "user_file",
+            "memory_directory": "user_directory",
+            "user_file": "user_file",
+            "user_directory": "user_directory",
+        }.get(mention_type)
+        if user_type is None:
+            return mention
+        data = mention
+        if mention.get("type") == "mention":
+            attrs = mention.get("attrs")
+            nested_data = attrs.get("data") if isinstance(attrs, dict) else None
+            data = nested_data if isinstance(nested_data, dict) else {}
+        return {
+            **{
+                key: value for key, value in data.items()
+                if key not in {"project_id", "pending_project_copy"} and not key.startswith("source_")
+            },
+            "type": user_type,
+        }
 
     @staticmethod
     def _deduplicate_image_refs(image_refs: List[str]) -> List[str]:

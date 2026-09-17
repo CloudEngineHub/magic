@@ -50,6 +50,8 @@ from app.tools.purify import Purify
 # 导出工具类
 from app.tools.read_file import ReadFile
 from app.tools.read_files import ReadFiles
+# Code Mode 也依赖模块显式导入完成工具注册；仅写 Skill 示例不会让运行时找到这个工具。
+from app.tools.inspect_memory import InspectMemory
 from app.tools.read_webpages_as_markdown import ReadWebpagesAsMarkdown
 from app.tools.reflection import Reflection
 from app.tools.deep_write import DeepWrite
@@ -64,11 +66,13 @@ from app.tools.todo_update import TodoUpdate
 from app.tools.restart_sandbox import RestartSandbox
 from app.tools.upgrade_sandbox import UpgradeSandbox
 from app.tools.browser import (
-    BrowserActivatePage,
+    BrowserSelectInstance,
+    BrowserSelectTab,
+    BrowserActivateTab,
     BrowserAddInitScript,
     BrowserCheck,
     BrowserClick,
-    BrowserClosePage,
+    BrowserCloseTab,
     BrowserEvaluate,
     BrowserFill,
     BrowserFindVisual,
@@ -76,10 +80,10 @@ from app.tools.browser import (
     BrowserReadHtml,
     BrowserHover,
     BrowserKeepAlive,
-    BrowserListPages,
-    BrowserListSessions,
+    BrowserListTabs,
+    BrowserListInstances,
     BrowserNavigate,
-    BrowserOpenPage,
+    BrowserNewTab,
     BrowserPress,
     BrowserReadConsole,
     BrowserReadNetwork,
@@ -355,6 +359,7 @@ __all__ = [
     "SearchKnowledge",
     "InstallSlidesTemplate",
     "ReadFile",
+    "InspectMemory",
     "ReadFiles",
     "ReadWebpagesAsMarkdown",
     "Reflection",
@@ -367,21 +372,23 @@ __all__ = [
     "TodoUpdate",
     "RestartSandbox",
     "UpgradeSandbox",
-    "BrowserActivatePage",
+    "BrowserSelectInstance",
+    "BrowserSelectTab",
+    "BrowserActivateTab",
     "BrowserAddInitScript",
     "BrowserCheck",
     "BrowserClick",
-    "BrowserClosePage",
+    "BrowserCloseTab",
     "BrowserEvaluate",
     "BrowserFill",
     "BrowserFindVisual",
     "BrowserFind",
     "BrowserHover",
     "BrowserKeepAlive",
-    "BrowserListPages",
-    "BrowserListSessions",
+    "BrowserListTabs",
+    "BrowserListInstances",
     "BrowserNavigate",
-    "BrowserOpenPage",
+    "BrowserNewTab",
     "BrowserPress",
     "BrowserReadConsole",
     "BrowserReadHtml",

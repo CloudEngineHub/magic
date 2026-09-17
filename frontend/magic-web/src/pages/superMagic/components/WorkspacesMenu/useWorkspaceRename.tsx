@@ -35,6 +35,7 @@ export function useWorkspaceRename() {
 	))
 
 	return {
+		renameDialogOpen,
 		openRenameModal,
 		closeRenameModal,
 		renderRenameModal,

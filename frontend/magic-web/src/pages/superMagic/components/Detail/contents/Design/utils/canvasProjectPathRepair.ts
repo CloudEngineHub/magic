@@ -19,6 +19,7 @@ import { rewriteLayerElementsPathsForMagicProjectSave } from "./internal/designP
 export type CanvasProjectPathRepairOperation = "rename" | "move"
 
 export interface CanvasProjectPathRepairOptions {
+	signal?: AbortSignal
 	attachments: AttachmentItem[]
 	flatAttachments?: AttachmentItem[]
 	attachmentIndex?: AttachmentIndex
@@ -806,6 +807,7 @@ function addPathWarnings(
 export async function planCanvasProjectsBeforeFileOperation(
 	options: CanvasProjectPathRepairOptions,
 ): Promise<CanvasProjectPathRepairResult> {
+	options.signal?.throwIfAborted()
 	const flatItems = resolveFlatAttachmentItems(options)
 	const selectedItems = selectedOperationItems(options, flatItems)
 	if (selectedItems.length === 0) {
@@ -819,7 +821,11 @@ export async function planCanvasProjectsBeforeFileOperation(
 	}
 
 	const mainFileIds = projects.map((project) => String(project.mainFile.file_id))
-	const mainContents = await getFileContentsByIds(mainFileIds, { responseType: "text" })
+	const mainContents = await getFileContentsByIds(mainFileIds, {
+		responseType: "text",
+		signal: options.signal,
+	})
+	options.signal?.throwIfAborted()
 
 	const checkedProjects: ProjectCheckState[] = projects.map((project) => ({
 		project,
@@ -891,12 +897,13 @@ export async function planCanvasProjectsBeforeFileOperation(
 	const sidecarContents = sidecarReads.length
 		? await getFileContentsByIds(
 				sidecarReads.map(({ sidecar }) => String(sidecar.file_id)),
-				{ responseType: "text" },
+				{ responseType: "text", signal: options.signal },
 			)
 		: {
 				successes: new Map<string, string | ArrayBuffer | Blob>(),
 				failures: new Map<string, Error>(),
 			}
+	options.signal?.throwIfAborted()
 	for (const { state, sidecar } of sidecarReads) {
 		const { project, resourceLookup, projectFailures, projectSaves, projectResult } = state
 		const sidecarFileId = String(sidecar.file_id)

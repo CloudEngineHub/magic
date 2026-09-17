@@ -44,6 +44,8 @@ interface HeadlessHorizontalScrollProps {
 	onScrollContainerContextMenu?: MouseEventHandler<HTMLDivElement>
 	children: ReactNode
 	scrollStep?: number
+	/** 拖动交由后代自身处理；空白区域仍可拖动滚动。 */
+	dragIgnoreSelector?: string
 	hideScrollbar?: boolean
 	renderLeftControl?: (props: HeadlessHorizontalScrollRenderProps) => ReactNode
 	renderRightControl?: (props: HeadlessHorizontalScrollRenderProps) => ReactNode
@@ -107,6 +109,7 @@ function HeadlessHorizontalScroll({
 	onScrollContainerContextMenu,
 	children,
 	scrollStep = 200,
+	dragIgnoreSelector,
 	hideScrollbar = true,
 	renderLeftControl = defaultRenderLeftControl,
 	renderRightControl = defaultRenderRightControl,
@@ -162,6 +165,12 @@ function HeadlessHorizontalScroll({
 		function handlePointerDown(event: PointerEvent) {
 			if (event.pointerType === "touch") return
 			if (event.isPrimary === false || event.button !== 0) return
+			if (
+				dragIgnoreSelector &&
+				event.target instanceof Element &&
+				event.target.closest(dragIgnoreSelector)
+			)
+				return
 			if (container.scrollWidth <= container.clientWidth) return
 
 			dragState = {
@@ -293,7 +302,7 @@ function HeadlessHorizontalScroll({
 			resizeObserver?.disconnect()
 			window.removeEventListener("resize", checkScrollPosition)
 		}
-	}, [checkScrollPosition, scrollContainerRef])
+	}, [checkScrollPosition, scrollContainerRef, dragIgnoreSelector])
 
 	useEffect(() => {
 		const frameId = setTimeout(checkScrollPosition, 100)

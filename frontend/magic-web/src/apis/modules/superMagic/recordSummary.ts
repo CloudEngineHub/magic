@@ -1,6 +1,5 @@
 import { CHARACTER_COUNT_LIMIT } from "@/components/business/RecordingSummary/const"
-import type { HttpClient } from "@/apis/core/HttpClient"
-import { genRequestUrl } from "@/utils/http"
+import type { ServiceHttpClient } from "@/infrastructure/network/http/clients"
 import { UploadConfig as SDKUploadConfig } from "@dtyq/upload-sdk"
 import { PresetFile, RecordingDirectory } from "@/types/recordSummary"
 
@@ -128,7 +127,7 @@ export interface RecoverFinishRecordingTaskResponse {
 	message?: string
 }
 
-export const generateRecordingSummaryApi = (fetch: HttpClient) => ({
+export const generateRecordingSummaryApi = (fetch: ServiceHttpClient) => ({
 	/**
 	 * @description 获取录音总结上传token
 	 * @param task_key 任务key
@@ -162,7 +161,7 @@ export const generateRecordingSummaryApi = (fetch: HttpClient) => ({
 				transcript_file: PresetFile
 				marker_file: PresetFile
 			}
-		}>(genRequestUrl(`/api/v1/asr/upload-tokens`, {}, { task_key, topic_id, type, file_name }))
+		}>(`/api/v1/asr/upload-tokens`, { params: { task_key, topic_id, type, file_name } })
 	},
 
 	/**
@@ -247,7 +246,7 @@ export const generateRecordingSummaryApi = (fetch: HttpClient) => ({
 		const limitAsrStreamContent = asr_stream_content?.slice(0, 10000) || ""
 		const limitNote = note?.content?.slice(0, CHARACTER_COUNT_LIMIT) || ""
 
-		return fetch.post<GetRecordingSummaryResultResponse>(genRequestUrl("/api/v1/asr/summary"), {
+		return fetch.post<GetRecordingSummaryResultResponse>("/api/v1/asr/summary", {
 			task_key,
 			project_id,
 			topic_id,
@@ -278,7 +277,7 @@ export const generateRecordingSummaryApi = (fetch: HttpClient) => ({
 				user_id: string
 				organization_code: string
 			}
-		}>(genRequestUrl(`/api/v1/asr/download-url`, {}, { task_key }))
+		}>(`/api/v1/asr/download-url`, { params: { task_key } })
 	},
 
 	/**
@@ -298,7 +297,7 @@ export const generateRecordingSummaryApi = (fetch: HttpClient) => ({
 	}) {
 		const limitedAsrStreamContent = asr_stream_content.slice(0, 10000)
 		return fetch.post<FinishRecordingTaskResponse>(
-			genRequestUrl(`/api/v1/asr/tasks/${encodeURIComponent(task_key)}/finish-recording`),
+			`/api/v1/asr/tasks/${encodeURIComponent(task_key)}/finish-recording`,
 			{
 				generated_title,
 				asr_stream_content: limitedAsrStreamContent,
@@ -312,7 +311,7 @@ export const generateRecordingSummaryApi = (fetch: HttpClient) => ({
 	 */
 	getTaskProgress({ task_key }: { task_key: string }) {
 		return fetch.get<RecordTaskProgress>(
-			genRequestUrl(`/api/v1/asr/tasks/${encodeURIComponent(task_key)}/progress`),
+			`/api/v1/asr/tasks/${encodeURIComponent(task_key)}/progress`,
 		)
 	},
 
@@ -332,7 +331,7 @@ export const generateRecordingSummaryApi = (fetch: HttpClient) => ({
 		model_id: string
 	}) {
 		return fetch.post<SummarizeRecordedTaskResponse>(
-			genRequestUrl(`/api/v1/asr/tasks/${encodeURIComponent(task_key)}/summarize`),
+			`/api/v1/asr/tasks/${encodeURIComponent(task_key)}/summarize`,
 			{ topic_id, model_id },
 		)
 	},
@@ -344,7 +343,7 @@ export const generateRecordingSummaryApi = (fetch: HttpClient) => ({
 	 */
 	resummarizeRecordedTask({ task_key, model_id }: { task_key: string; model_id: string }) {
 		return fetch.post<ResummarizeRecordedTaskResponse>(
-			genRequestUrl(`/api/v1/asr/tasks/${encodeURIComponent(task_key)}/resummarize`),
+			`/api/v1/asr/tasks/${encodeURIComponent(task_key)}/resummarize`,
 			{ model_id },
 		)
 	},
@@ -353,10 +352,9 @@ export const generateRecordingSummaryApi = (fetch: HttpClient) => ({
 	 * @description Batch query progress for in-flight ASR summary tasks
 	 */
 	batchTaskProgress({ task_keys }: { task_keys: string[] }) {
-		return fetch.post<BatchTaskProgressResponse>(
-			genRequestUrl("/api/v1/asr/tasks/progress/batch"),
-			{ task_keys },
-		)
+		return fetch.post<BatchTaskProgressResponse>("/api/v1/asr/tasks/progress/batch", {
+			task_keys,
+		})
 	},
 
 	/**
@@ -366,9 +364,7 @@ export const generateRecordingSummaryApi = (fetch: HttpClient) => ({
 	 */
 	recoverFinishRecordingTask({ task_key }: { task_key: string }) {
 		return fetch.post<RecoverFinishRecordingTaskResponse>(
-			genRequestUrl(
-				`/api/v1/asr/tasks/${encodeURIComponent(task_key)}/finish-recording/recover`,
-			),
+			`/api/v1/asr/tasks/${encodeURIComponent(task_key)}/finish-recording/recover`,
 		)
 	},
 })

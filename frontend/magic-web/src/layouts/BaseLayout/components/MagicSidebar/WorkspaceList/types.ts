@@ -1,9 +1,15 @@
+import type { RefObject } from "react"
 import type { ProjectListItem, Workspace } from "@/pages/superMagic/pages/Workspace/types"
 import type { HandleRenameProjectParams } from "@/pages/superMagic/hooks/useProjects"
 
 type ProjectItemActionHandler = (project: ProjectListItem) => void | Promise<void>
 
 export interface WorkspaceItemProps {
+	onBusyChange?: (id: string, busy: boolean) => void
+	active: boolean
+	scrollRef: RefObject<HTMLDivElement>
+	maxProjectHeight?: number
+	onOpenManager: () => void
 	workspace: Workspace
 	className?: string
 	dndDisabled?: boolean
@@ -12,6 +18,9 @@ export interface WorkspaceItemProps {
 }
 
 export interface ProjectListProps {
+	onBusyChange?: (busy: boolean) => void
+	isSearchResult?: boolean
+	active: boolean
 	workspace: Workspace
 	projects: ProjectListItem[]
 	workspaceId: string
@@ -20,9 +29,11 @@ export interface ProjectListProps {
 	onCancelCreate?: () => void
 	onProjectCreated?: () => void
 	dndDisabled?: boolean
+	maxProjectHeight?: number
 }
 
 export interface ProjectItemProps {
+	onInteractionChange?: (id: string, active: boolean) => void
 	project: ProjectListItem
 	dndDisabled?: boolean
 	onOpenInNewWindow?: ProjectItemActionHandler

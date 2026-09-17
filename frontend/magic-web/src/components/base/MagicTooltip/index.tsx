@@ -1,6 +1,14 @@
-import { ReactElement, ReactNode } from "react"
+import {
+	useEffect,
+	useRef,
+	useState,
+	type FocusEvent,
+	type ReactElement,
+	type ReactNode,
+} from "react"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/shadcn-ui/tooltip"
 import { useIsMobile } from "@/hooks/useIsMobile"
+import { cn } from "@/utils/cn"
 
 interface MagicTooltipProps {
 	title?: ReactNode
@@ -51,13 +59,44 @@ export function MagicTooltip({
 	getPopupContainer,
 	contentClassName,
 	contentZIndex,
-	sideOffset,
+	sideOffset = 4,
 	disabled = false,
 }: MagicTooltipProps) {
 	const isMobile = useIsMobile()
+	const [open, setOpen] = useState(false)
+	const canOpenRef = useRef(false)
+
+	useEffect(() => {
+		if (disabled) {
+			canOpenRef.current = false
+			setOpen(false)
+		}
+	}, [disabled])
+
+	// 菜单打开后使本次悬停失效；恢复可用时必须重新进入或聚焦，旧等待不能重新弹出提示。
+	/** Allow hover to start the delay; click-focus must not reuse this grant. */
+	function handlePointerEnter() {
+		canOpenRef.current = !disabled
+	}
+
+	/** Hide on press so the focus that follows a pointer click cannot flash the tip. */
+	function handlePointerDown() {
+		canOpenRef.current = false
+		setOpen(false)
+	}
+
+	/** Keyboard-only: click-induced focus is not :focus-visible and must not enable the tip. */
+	function handleFocus(event: FocusEvent<HTMLElement>) {
+		if (!event.currentTarget.matches(":focus-visible")) return
+		canOpenRef.current = !disabled
+	}
+
+	const handleOpenChange = (nextOpen: boolean) => {
+		setOpen(nextOpen && !disabled && canOpenRef.current)
+	}
 
 	// 移动端不显示 Tooltip
-	if (isMobile || !title || disabled) {
+	if (isMobile || !title) {
 		return children
 	}
 
@@ -69,16 +108,32 @@ export function MagicTooltip({
 			: placement.startsWith("left")
 				? "left"
 				: "right"
+	const align = /Left$|Top$/.test(placement)
+		? "start"
+		: /Right$|Bottom$/.test(placement)
+			? "end"
+			: "center"
 
 	// 桌面端正常显示
 	const container = getPopupContainer?.() ?? undefined
 	return (
-		<Tooltip>
-			<TooltipTrigger asChild>{children}</TooltipTrigger>
+		<Tooltip open={open && !disabled} onOpenChange={handleOpenChange}>
+			<TooltipTrigger
+				asChild
+				onPointerEnter={handlePointerEnter}
+				onPointerDown={handlePointerDown}
+				onFocus={handleFocus}
+			>
+				{children}
+			</TooltipTrigger>
 			<TooltipContent
 				side={side}
+				align={align}
 				sideOffset={sideOffset}
-				className={contentClassName || "z-tooltip"}
+				className={cn(
+					"z-tooltip max-w-[min(20rem,var(--radix-tooltip-content-available-width,100vw))] whitespace-normal text-wrap break-words",
+					contentClassName,
+				)}
 				container={container}
 				zIndex={contentZIndex}
 			>

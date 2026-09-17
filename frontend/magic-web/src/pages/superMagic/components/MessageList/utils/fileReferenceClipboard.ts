@@ -2,6 +2,7 @@ import type { ClipboardEvent } from "react"
 import {
 	createCanonicalWorkspaceHref,
 	createReferencedProjectHref,
+	createUserFileHref,
 	parseMarkdownFileHref,
 } from "@/pages/superMagic/utils/filePathMention"
 import { htmlToClipboardMarkdown } from "./clipboardMarkdown"
@@ -57,15 +58,26 @@ export function copySelectedFileReferences(event: ClipboardEvent<HTMLDivElement>
 		const target = parseMarkdownFileHref(reference.dataset.fileReference || "")
 		if (!target) continue
 		const href =
-			target.scope === "workspace"
-				? createCanonicalWorkspaceHref(target.relativePath)
-				: createReferencedProjectHref(target.projectId, target.relativePath)
+			target.scope === "user"
+				? createUserFileHref(
+						target.relativePath,
+						reference.dataset.fileReference?.endsWith("/"),
+					)
+				: target.scope === "workspace"
+					? createCanonicalWorkspaceHref(target.relativePath)
+					: createReferencedProjectHref(target.projectId, target.relativePath)
 		const label = reference.querySelector("[data-file-reference-label]")?.textContent || ""
 		if (!href || !label) continue
 
 		const anchor = root.ownerDocument.createElement("a")
 		anchor.setAttribute("href", href)
 		anchor.textContent = label
+		// 沿用消息节点的身份属性，站内粘贴按原 ID 鉴权；外部仍得到普通链接。
+		const attrs = reference.dataset.magicNodeAttrs
+		if (attrs) {
+			anchor.dataset.magicNodeType = "mention"
+			anchor.dataset.magicNodeAttrs = attrs
+		}
 		reference.replaceWith(anchor)
 		linkCount++
 	}

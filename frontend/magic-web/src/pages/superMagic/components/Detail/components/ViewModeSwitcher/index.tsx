@@ -78,10 +78,14 @@ function ViewModeSwitcher(props: ViewModeSwitcherProps) {
 							</span>
 						</MagicTooltip>
 						{enableMobileMode && (
-							<MagicTooltip title={t("fileViewer.phoneMode")} placement="top">
+							<MagicTooltip
+								title={t("fileViewer.devicePreview.mode")}
+								placement="top"
+							>
 								<span className="inline-flex h-full items-center">
 									<TabsTrigger
 										value="phone"
+										aria-label={t("fileViewer.devicePreview.mode")}
 										className={TRIGGER_CLASS}
 										data-testid={getTriggerTestId("phone")}
 									>

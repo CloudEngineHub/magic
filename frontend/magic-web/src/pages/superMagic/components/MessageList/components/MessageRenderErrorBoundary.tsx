@@ -2,7 +2,7 @@ import { ErrorBoundary } from "react-error-boundary"
 import type { PropsWithChildren, ReactNode } from "react"
 import { useTranslation } from "react-i18next"
 import { IconAlertCircle } from "@tabler/icons-react"
-import { logger as Logger } from "@/utils/log"
+import { logger as Logger } from "@/infrastructure/logger"
 
 const logger = Logger.createLogger("MessageRenderErrorBoundary")
 

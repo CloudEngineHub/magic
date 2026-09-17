@@ -10,6 +10,7 @@ interface MessageEditorContainerViewProps {
 	store: MessageEditorStore
 	className?: string
 	containerClassName?: string
+	headerContent?: ReactNode
 	size: MessageEditorSize
 	tiptapEditor: Editor | null
 	domRef: React.RefObject<HTMLDivElement>
@@ -39,6 +40,7 @@ export default function MessageEditorContainerView({
 	store,
 	className,
 	containerClassName,
+	headerContent,
 	size,
 	tiptapEditor,
 	domRef,
@@ -61,6 +63,7 @@ export default function MessageEditorContainerView({
 		<MessageEditorView
 			className={className}
 			containerClassName={containerClassName}
+			headerContent={headerContent}
 			size={size}
 			tiptapEditor={tiptapEditor}
 			domRef={domRef}

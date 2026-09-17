@@ -12,7 +12,7 @@ import { Button, MenuProps } from "antd"
 import { splitNumber } from "@/utils/number"
 import { Ellipsis } from "lucide-react"
 import { MagicDropdown, MagicTooltip } from "@/components/base"
-import { logger as Logger } from "@/utils/log"
+import { logger as Logger } from "@/infrastructure/logger"
 import { StatusBadge } from "./components/StatusBadge"
 import { useGlobalSuggestion } from "@/components/settings/FollowUpSuggestionItems/hooks"
 import useShareRoute from "@/pages/superMagic/hooks/useShareRoute"
@@ -104,8 +104,7 @@ export function withAssistantCard<
 
 			const resolveModel = (
 				modelData:
-					| { model_id?: string; model_name?: string; model_icon?: string }
-					| undefined,
+					{ model_id?: string; model_name?: string; model_icon?: string } | undefined,
 				getModelList: () => ModelItem[],
 			) => {
 				if (!modelData?.model_id) return

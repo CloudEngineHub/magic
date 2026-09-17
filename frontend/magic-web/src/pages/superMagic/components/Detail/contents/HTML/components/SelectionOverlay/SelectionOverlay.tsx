@@ -19,6 +19,8 @@ import { SelectionBox } from "./components/SelectionBox"
 import { HoverBox } from "./components/HoverBox"
 
 interface SelectionOverlayProps {
+	/** 宿主视口改变但比例相同时，也需要重新计算 iframe 的位置。 */
+	layoutKey?: string
 	scrollContainerRef?: React.RefObject<HTMLElement>
 	containerRef?: React.RefObject<HTMLElement>
 	iframeRef: React.RefObject<HTMLIFrameElement>
@@ -35,6 +37,7 @@ interface SelectionOverlayProps {
 
 // observer already memos; wrapping memo() throws in mobx-react-lite 4
 export const SelectionOverlay = observer(function SelectionOverlay({
+	layoutKey,
 	scrollContainerRef,
 	containerRef,
 	iframeRef,
@@ -138,6 +141,7 @@ export const SelectionOverlay = observer(function SelectionOverlay({
 
 	// Sync highlights on scale changes (hides during scaling, shows after)
 	const { isScaling } = useScaleSync({
+		layoutKey,
 		scaleRatio,
 		isSelectionMode,
 		selectedInfoList,

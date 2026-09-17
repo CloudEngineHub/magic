@@ -523,37 +523,44 @@ if result.ok:
 
 对于复杂的参数格式，提供清晰的说明和示例：
 
-```markdown
-### search_images_to_canvas - 搜索网络图片
+````markdown
+### web_search - 搜索网页
 
 | 参数 | 必填 | 说明 |
 |------|------|------|
-| `requirements_xml` | 是 | XML 格式的搜索需求 |
+| `search_group_name` | 是 | 自行为相关搜索起一个简短名称；同组复用完全相同的名称，独立搜索使用新名称。仅标记网页结果分组，不做去重；不需要查询或填写平台话题 ID。 |
+| `requirements` | 是 | 至少包含一项的搜索需求对象数组，每项独立搜索 |
 
-**requirements_xml 格式：**
+**调用参数示例：**
 
-```xml
-<requirements>
-  <requirement>
-    <name>需求名称</name>
-    <query>搜索关键词</query>
-    <requirement_explanation>需求说明</requirement_explanation>
-    <expected_aspect_ratio>期望宽高比</expected_aspect_ratio>
-    <count>图片数量</count>
-  </requirement>
-</requirements>
+```json
+{
+  "search_group_name": "行业报告资料",
+  "requirements": [
+    {
+      "name": "行业动态",
+      "query": "企业软件季度报告",
+      "limit": 10,
+      "time_period": "month"
+    }
+  ]
+}
 ```
 
-**字段说明：**
+**requirements 每项的字段说明：**
 
 | 字段 | 必填 | 说明 |
 |------|------|------|
 | `name` | 是 | 需求名称 |
 | `query` | 是 | 搜索关键词 |
-| `requirement_explanation` | 是 | 需求详细说明 |
-| `expected_aspect_ratio` | 否 | 期望宽高比，如 `16:9`, `1:1` |
-| `count` | 否 | 图片数量，默认 10，最多 20 |
-```
+| `limit` | 否 | 结果数量，默认 10，范围 1–20 |
+| `offset` | 否 | 分页偏移量，默认 0，不得为负数 |
+| `language` | 否 | 搜索语言，默认 zh-CN |
+| `region` | 否 | 搜索区域，默认 CN |
+| `time_period` | 否 | day/week/month/year；省略表示不限 |
+
+直接传对象数组，不要再次序列化为字符串。必填文字字段不得为空，非法字段由工具返回明确错误。
+````
 
 ### 参数值的枚举说明
 

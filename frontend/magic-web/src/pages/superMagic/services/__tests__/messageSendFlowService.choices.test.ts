@@ -53,7 +53,7 @@ vi.mock("@/pages/superMagic/components/MessageEditor/services/InternetSearchMana
 	},
 }))
 
-vi.mock("@/utils/log", () => ({
+vi.mock("@/infrastructure/logger", () => ({
 	logger: { createLogger: () => ({ error: vi.fn() }) },
 }))
 

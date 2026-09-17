@@ -74,7 +74,8 @@ class RecycleBinAppService extends AbstractAppService
             keyword: $requestDTO->getKeyword(),
             order: $requestDTO->getOrder(),
             page: $requestDTO->getPage(),
-            pageSize: $requestDTO->getPageSize()
+            pageSize: $requestDTO->getPageSize(),
+            organizationCode: $userAuthorization->getOrganizationCode(),
         );
 
         $deletedByIds = array_unique(array_map(
@@ -113,7 +114,8 @@ class RecycleBinAppService extends AbstractAppService
 
         $countsByType = $this->recycleBinDomainService->getCountsByType(
             $userId,
-            $requestDTO->getKeyword()
+            $requestDTO->getKeyword(),
+            $userAuthorization->getOrganizationCode(),
         );
 
         $this->logger->info('查询回收站类型数量', [
@@ -150,7 +152,7 @@ class RecycleBinAppService extends AbstractAppService
 
         if ($resourceType === RecycleBinResourceType::File) {
             // File type: full conflict detection (parent_missing + name_conflict)
-            $result = $this->recycleBinRestoreDomainService->previewFileConflicts($resourceIds, $userId);
+            $result = $this->recycleBinRestoreDomainService->previewFileConflicts($resourceIds, $userId, $userAuthorization->getOrganizationCode());
             $itemsWithConflict = $result['items_with_conflict'];
             $itemsNoConflict = $result['items_no_conflict'];
         } else {
@@ -235,7 +237,8 @@ class RecycleBinAppService extends AbstractAppService
             $resourceIds,
             $resourceType,
             $userId,
-            $requestDTO->getConflictResolutions()
+            $requestDTO->getConflictResolutions(),
+            $userAuthorization->getOrganizationCode(),
         );
 
         $resultDTOs = [];
@@ -582,7 +585,8 @@ class RecycleBinAppService extends AbstractAppService
 
         $result = $this->recycleBinDomainService->permanentDelete(
             $requestDTO->getIds(),
-            $userId
+            $userId,
+            $userAuthorization->getOrganizationCode(),
         );
 
         $this->logger->info('彻底删除回收站记录完成', [

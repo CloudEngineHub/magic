@@ -2,15 +2,18 @@ import * as React from "react"
 import * as TooltipPrimitive from "@radix-ui/react-tooltip"
 
 import { cn } from "@/utils/cn"
+import { TOOLTIP_DELAY_DURATION } from "@/constants/style"
 
 function TooltipProvider({
-	delayDuration = 0,
+	delayDuration = TOOLTIP_DELAY_DURATION,
+	skipDelayDuration = 0,
 	...props
 }: React.ComponentProps<typeof TooltipPrimitive.Provider>) {
 	return (
 		<TooltipPrimitive.Provider
 			data-slot="tooltip-provider"
 			delayDuration={delayDuration}
+			skipDelayDuration={skipDelayDuration}
 			{...props}
 		/>
 	)

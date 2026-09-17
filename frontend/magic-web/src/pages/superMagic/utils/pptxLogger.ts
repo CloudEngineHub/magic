@@ -1,4 +1,4 @@
-import { logger } from "@/utils/log"
+import { logger } from "@/infrastructure/logger"
 import type { ExternalLogger } from "@magic/html2pptx"
 
 const pptLogger = logger.createLogger("html2pptx")

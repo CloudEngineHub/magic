@@ -132,12 +132,13 @@ export async function prepareSingleSlideExport(input: {
 		} catch (error) {
 			console.error("[pptService] Failed to fetch resource URLs:", error)
 		}
-		processed = await processorService.processSlideWithUrlMapping(
+		const processedSlide = await processorService.processSlideWithUrlMapping(
 			rawContent,
 			0,
 			relativeFilePath,
 			resourceUrlMapping,
 		)
+		processed = processedSlide.content
 	}
 
 	return {
@@ -267,7 +268,7 @@ export async function prepareExportSlides(
 					relativeFilePath,
 					resourceUrlMapping,
 				)
-				processedSlides.set(index, processed)
+				processedSlides.set(index, processed.content)
 			} catch (error) {
 				console.error(`[pptService] Failed to process slide ${index}:`, error)
 				processedSlides.set(index, content)

@@ -26,7 +26,7 @@ import {
 import DotsService from "../dots/DotsService"
 import { userStore } from "@/models/user"
 import AiSearchApplyService from "./MessageApplyServices/ChatMessageApplyServices/AiSearchApplyService"
-import { logger as Logger } from "@/utils/log"
+import { logger as Logger } from "@/infrastructure/logger"
 import OrganizationDotsService from "../dots/OrganizationDotsService"
 
 interface PullMessagesFromServerOptions {
@@ -320,8 +320,7 @@ class MessagePullService {
 					string,
 					Promise<{
 						message:
-							| SeqResponse<AggregateAISearchCardConversationMessage<false>>
-							| undefined
+							SeqResponse<AggregateAISearchCardConversationMessage<false>> | undefined
 						index: number
 					}>
 				>,

@@ -53,12 +53,7 @@ import {
 } from "./StoryboardElement.layout"
 
 type StoryboardControlKind =
-	| "parameter"
-	| "description"
-	| "delete"
-	| "add"
-	| "generate"
-	| "reference-preview"
+	"parameter" | "description" | "delete" | "add" | "generate" | "reference-preview"
 
 interface StoryboardControlMetadata {
 	action: StoryboardControlAction
@@ -393,8 +388,7 @@ export class StoryboardElement extends BaseElement<StoryboardElementData> {
 			node.find(".storyboard-control-hit").forEach((candidate) => {
 				if (!(candidate instanceof Konva.Rect)) return
 				const metadata = candidate.getAttr("storyboardControlMetadata") as
-					| StoryboardControlMetadata
-					| undefined
+					StoryboardControlMetadata | undefined
 				if (!metadata) return
 				this.interactionCleanups.push(
 					manager.bindControl({
@@ -414,7 +408,10 @@ export class StoryboardElement extends BaseElement<StoryboardElementData> {
 		const syncHitTargets = () => this.syncInteractionHitTargets()
 		if (this.canvas.eventEmitter) {
 			this.interactionEventUnsubscribers.push(
-				this.canvas.eventEmitter.on("viewport:scale", syncHitTargets),
+				this.canvas.runtimeScheduler.registerViewportScaleLayout(
+					this.data.id,
+					syncHitTargets,
+				),
 				this.canvas.eventEmitter.on("canvas:devicechange", syncHitTargets),
 			)
 		}
@@ -1537,8 +1534,7 @@ export class StoryboardElement extends BaseElement<StoryboardElementData> {
 		this.node.find(".storyboard-control-hit").forEach((candidate) => {
 			if (!(candidate instanceof Konva.Rect)) return
 			const baseBounds = candidate.getAttr("storyboardBaseHitBounds") as
-				| { x: number; y: number; width: number; height: number }
-				| undefined
+				{ x: number; y: number; width: number; height: number } | undefined
 			if (!baseBounds) return
 			syncControlHitRect(candidate, baseBounds, minimumScreenSize)
 		})
@@ -1553,21 +1549,16 @@ export class StoryboardElement extends BaseElement<StoryboardElementData> {
 		state: StoryboardControlState,
 	): void {
 		const background = metadata.visualNode.findOne(".storyboard-control-background") as
-			| Konva.Shape
-			| undefined
+			Konva.Shape | undefined
 		const border = metadata.visualNode.findOne(".storyboard-control-border") as
-			| Konva.Shape
-			| undefined
+			Konva.Shape | undefined
 		const text = metadata.visualNode.findOne(".storyboard-control-text") as
-			| Konva.Text
-			| undefined
+			Konva.Text | undefined
 		const suffix = metadata.visualNode.findOne(".storyboard-control-suffix") as
-			| Konva.Shape
-			| undefined
+			Konva.Shape | undefined
 		const icons = metadata.visualNode.find(".storyboard-control-icon")
 		const generateAgainIcon = metadata.visualNode.findOne(".storyboard-generate-again-icon") as
-			| Konva.Path
-			| undefined
+			Konva.Path | undefined
 		if (!background) return
 
 		switch (metadata.kind) {

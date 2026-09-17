@@ -6,7 +6,7 @@
 import type { VoiceConfig, ConnectionState, VoiceClientEvents, AudioStats } from "./types"
 import type { WorkerMessage, MainThreadMessage, PendingRequest } from "./worker-types"
 import Worker from "./voice-client.worker?worker"
-import { logger as Logger } from "@/utils/log"
+import { logger as Logger } from "@/infrastructure/logger"
 
 const logger = Logger.createLogger("VoiceClientProxy", { enableConfig: { console: false } })
 

@@ -168,8 +168,9 @@ function ConversationPanelScaffold({
 	const inputLayoutContext = useMemo(
 		() => ({
 			fillHeight: inputHeight.fillHeight,
+			queueListMaxHeight: inputHeight.enabled ? inputHeight.queueListMaxHeight : undefined,
 		}),
-		[inputHeight.fillHeight],
+		[inputHeight.fillHeight, inputHeight.enabled, inputHeight.queueListMaxHeight],
 	)
 	const renderedEmptyHero = isValidElement(emptyHero)
 		? cloneElement(emptyHero as ReactElement<AnimatedEmptyStateProps>, {
@@ -459,19 +460,6 @@ function ConversationPanelScaffold({
 					ref={editorLayoutRef}
 					data-testid={editorTestId || `${scope}-editor-layout`}
 				>
-					{inputHeight.enabled ? (
-						<ConversationInputResizeHandle
-							value={inputHeight.effectiveHeight}
-							min={effectiveInputMinHeight}
-							max={inputHeight.maxHeight}
-							positionClassName={resizeHandlePositionClassName}
-							onResizeStart={inputHeight.startPointerResize}
-							onResize={inputHeight.resizeByPointerDelta}
-							onResizeEnd={inputHeight.finishPointerResize}
-							onDoubleClick={inputHeight.restoreAutoHeight}
-							onResizeStateChange={setIsInputResizing}
-						/>
-					) : null}
 					{messageListBottomFade && !isCenteredEmptyStateVisible ? (
 						<div
 							className={cn(
@@ -499,8 +487,24 @@ function ConversationPanelScaffold({
 								{editorNodes?.messageQueueNode}
 							</div>
 							<div
-								className={cn("w-full", inputHeight.fillHeight && "min-h-0 flex-1")}
+								className={cn(
+									"relative w-full",
+									inputHeight.fillHeight && "min-h-0 flex-1",
+								)}
 							>
+								{inputHeight.enabled && (
+									<ConversationInputResizeHandle
+										value={inputHeight.effectiveHeight}
+										min={effectiveInputMinHeight}
+										max={inputHeight.maxHeight}
+										positionClassName={resizeHandlePositionClassName}
+										onResizeStart={inputHeight.startPointerResize}
+										onResize={inputHeight.resizeByPointerDelta}
+										onResizeEnd={inputHeight.finishPointerResize}
+										onDoubleClick={inputHeight.restoreAutoHeight}
+										onResizeStateChange={setIsInputResizing}
+									/>
+								)}
 								{editor}
 							</div>
 							{isCenteredEmptyStateVisible && emptyHint ? (

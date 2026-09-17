@@ -18,6 +18,7 @@ export const HEAVY_FIELDS = [
 	"generateImageRequest",
 	"generateVideoRequest",
 	"visualUnderstanding",
+	"videoGenerationResultMeta",
 ] as const
 
 const NON_VISUAL_HEAVY_FIELDS = ["generateImageRequest", "generateVideoRequest"] as const

@@ -29,11 +29,14 @@ export async function resolveSingleDocumentStaticDependencies({
 	fileIds,
 	attachments,
 	attachmentIndex,
+	signal,
 }: {
 	fileIds: string[]
 	attachments: StaticDependencyAttachment[]
 	attachmentIndex?: AttachmentIndex
+	signal?: AbortSignal
 }): Promise<StaticDependencyResult> {
+	signal?.throwIfAborted()
 	if (fileIds.length !== 1) return EMPTY_RESULT
 
 	const resolvedAttachmentIndex =
@@ -44,7 +47,8 @@ export async function resolveSingleDocumentStaticDependencies({
 	const parser = getStaticDependencyParser(file)
 	if (!parser) return EMPTY_RESULT
 
-	const content = await getFileContentById(file.file_id, { responseType: "text" })
+	const content = await getFileContentById(file.file_id, { responseType: "text", signal })
+	signal?.throwIfAborted()
 	if (typeof content !== "string") {
 		throw new Error("Static dependency analysis requires text content")
 	}

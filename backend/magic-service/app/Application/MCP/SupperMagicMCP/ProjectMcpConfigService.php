@@ -9,6 +9,7 @@ namespace App\Application\MCP\SupperMagicMCP;
 
 use App\Application\Contact\UserSetting\UserSettingKey;
 use App\Application\MCP\Service\MCPServerAppService;
+use App\Application\MCP\Utils\MCPAuthorizationReferenceBuilder;
 use App\Application\MCP\Utils\MCPServerConfigUtil;
 use App\Domain\Contact\Entity\ValueObject\DataIsolation;
 use App\Domain\Contact\Service\MagicUserSettingDomainService;
@@ -150,7 +151,7 @@ readonly class ProjectMcpConfigService
                 $config['description'] = $mcpServer->getDescription();
                 $config['server_options'] = [];
                 if ($this->isMcpAuthorizationServer($mcpServer)) {
-                    $config = $this->applyMcpAuthorizationReference($config, $mcpServer->getCode());
+                    $config = MCPAuthorizationReferenceBuilder::build($config, $mcpServer->getCode());
                 }
             } catch (Throwable $throwable) {
                 $this->logger->notice('ProjectMcpConfigBuildNotice', [
@@ -187,26 +188,4 @@ readonly class ProjectMcpConfigService
             && $serviceConfig->getAuthType() === ServiceConfigAuthType::MCP_AUTHORIZATION;
     }
 
-    /**
-     * 将运行时配置收敛为授权引用，避免向 Super Magic 下发任何 OAuth 凭据。
-     *
-     * @param array<string, mixed> $config
-     * @return array<string, mixed>
-     */
-    private function applyMcpAuthorizationReference(array $config, string $mcpServerCode): array
-    {
-        $headers = is_array($config['headers'] ?? null) ? $config['headers'] : [];
-        foreach (array_keys($headers) as $headerName) {
-            if (is_string($headerName) && strtolower($headerName) === 'authorization') {
-                unset($headers[$headerName]);
-            }
-        }
-
-        $config['headers'] = $headers;
-        unset($config['token']);
-        $config['auth_type'] = ServiceConfigAuthType::MCP_AUTHORIZATION->value;
-        $config['mcp_server_code'] = $mcpServerCode;
-
-        return $config;
-    }
 }

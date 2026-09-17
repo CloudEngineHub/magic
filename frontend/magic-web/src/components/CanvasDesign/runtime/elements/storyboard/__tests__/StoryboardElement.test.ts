@@ -55,6 +55,10 @@ function createCanvasMock(
 			isTransformInteractionActive: vi.fn(() => false),
 			isTransforming: vi.fn(() => false),
 		},
+		runtimeScheduler: {
+			requestLayerDraw: vi.fn(),
+			registerViewportScaleLayout: vi.fn(() => vi.fn()),
+		},
 		permissionManager: {
 			can: vi.fn(() => true),
 			canUseSelectionToolAffordance: vi.fn(() => true),
@@ -196,13 +200,11 @@ describe("StoryboardElement", () => {
 		const generateAgainIcon = group.findOne(".storyboard-generate-again-icon") as Konva.Path
 		const modelHit = group.find(".storyboard-control-hit").find((node) => {
 			const metadata = node.getAttr("storyboardControlMetadata") as
-				| { action?: { type?: string } }
-				| undefined
+				{ action?: { type?: string } } | undefined
 			return metadata?.action?.type === "select-model"
 		})
 		const modelMetadata = modelHit?.getAttr("storyboardControlMetadata") as
-			| { selectPresentation?: Record<string, number> }
-			| undefined
+			{ selectPresentation?: Record<string, number> } | undefined
 
 		expect(group.size()).toEqual({
 			width: STORYBOARD_CONFIG.DEFAULT_WIDTH,
@@ -481,7 +483,10 @@ describe("StoryboardElement", () => {
 					isFullSize: true,
 				})),
 			},
-			runtimeScheduler: { requestLayerDraw },
+			runtimeScheduler: {
+				requestLayerDraw,
+				registerViewportScaleLayout: vi.fn(() => vi.fn()),
+			},
 		})
 
 		const element = new StoryboardElement(
@@ -587,8 +592,7 @@ describe("StoryboardElement", () => {
 		const closeIcons = group.find(".storyboard-control-icon")
 		const deleteHit = group.find(".storyboard-control-hit").find((node) => {
 			const metadata = node.getAttr("storyboardControlMetadata") as
-				| { action?: { type?: string } }
-				| undefined
+				{ action?: { type?: string } } | undefined
 			return metadata?.action?.type === "delete-shot"
 		}) as Konva.Rect | undefined
 		const deleteBackground = group.findOne(".storyboard-control-background")

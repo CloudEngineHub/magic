@@ -220,10 +220,9 @@ class MessageQueueCompensationAppService extends AbstractAppService
             );
 
             // 2.5 Update status to in progress (Application layer → Domain layer → Repository layer)
-            $this->messageQueueDomainService->updateStatus(
-                $message->getId(),
-                MessageQueueStatus::IN_PROGRESS
-            );
+            if (! $this->messageQueueDomainService->tryStartProcessing($message->getId())) {
+                return 'skipped';
+            }
 
             // 2.6 Call send interface (Application layer → Application layer)
             $sendResult = $this->sendMessageToAgent($topicEntity->getChatTopicId(), $message, $messageStruct);

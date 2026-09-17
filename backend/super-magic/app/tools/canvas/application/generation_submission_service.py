@@ -11,6 +11,7 @@ from app.tools.canvas.application.commands import GenerationSubmissionCommand
 from app.tools.canvas.application.element_sizing_service import CanvasElementSizingService
 from app.tools.canvas.application.results import CanvasBatchResult, CanvasResultItem, GeneratedResultItem
 from app.tools.canvas.domain.content_fields.generated_media_protocol import generation_request_field
+from app.tools.canvas.domain.content_fields.video import VideoContentFields
 from app.tools.canvas.domain.models import CanvasProject
 from app.tools.canvas.generation import (
     CanvasGenerationResultApplier,
@@ -102,15 +103,13 @@ class GenerationSubmissionService:
         """在 provider 调用前把最终模型和模式写入公共生成请求。"""
         for work_item in work_items:
             resolver = getattr(work_item.capability.submission_port, "resolve_request_metadata", None)
-            if resolver is None:
-                continue
-            try:
-                request_metadata = await resolver(work_item.request, tool_context)
-            except Exception:
-                # 解析失败时仍交给 provider 执行，保持原有单项失败收敛语义。
-                continue
-            if not request_metadata:
-                continue
+            request_metadata: dict[str, Any] = {}
+            if resolver is not None:
+                try:
+                    request_metadata = await resolver(work_item.request, tool_context) or {}
+                except Exception:
+                    # 解析失败时仍写入已有参数，并交给 provider 执行。
+                    request_metadata = {}
 
             def persist(project: CanvasProject, metadata: dict[str, Any]) -> tuple[None, dict[str, Any]]:
                 """在项目事务中更新当前 Content 的公共生成请求。"""
@@ -133,13 +132,28 @@ class GenerationSubmissionService:
                     request_field: ContentMetadataService.build_public_generation_request(
                         parameters,
                         work_item.submission_item.element_type,
+                        project_path=project_path,
                     ),
                 }
                 if work_item.submission_item.element_type == "video":
-                    detail_update["videoGenerationResultMeta"] = ContentMetadataService.merge_video_result_metadata(
-                        detail.get("videoGenerationResultMeta") or {},
+                    existing = self._video_result_metadata(
+                        project,
+                        work_item.submission_item.element_id,
+                        work_item.submission_item.content_id,
+                    )
+                    result_metadata = ContentMetadataService.merge_video_result_metadata(
+                        existing,
                         ContentMetadataService.build_video_result_metadata(parameters),
                         "pending",
+                    )
+                    self.generation_result_applier.apply(
+                        project,
+                        work_item.submission_item.element_id,
+                        work_item.submission_item.content_id,
+                        "pending",
+                        None,
+                        None,
+                        result_metadata,
                     )
                 ContentMetadataService.set(
                     metadata,
@@ -256,6 +270,7 @@ class GenerationSubmissionService:
                 submission.status,
                 submission.output_uri,
                 submission.error_message,
+                self._merged_video_result_metadata(project, work_item, submission),
             )
             element = project.canvas.get_element(submission_item.element_id)
             if element is not None:
@@ -268,6 +283,7 @@ class GenerationSubmissionService:
                     **dict(submission.request_metadata or {}),
                 },
                 submission_item.element_type,
+                project_path=project_path,
             )
             detail_update: dict[str, Any] = {
                 **detail,
@@ -289,12 +305,6 @@ class GenerationSubmissionService:
                         submission.status,
                     )
                 detail_update[request_field] = public_request
-            if submission_item.element_type == "video":
-                detail_update["videoGenerationResultMeta"] = ContentMetadataService.merge_video_result_metadata(
-                    detail.get("videoGenerationResultMeta") or {},
-                    submission.result_metadata,
-                    submission.status,
-                )
             if submission_item.retry_idempotency_key:
                 detail_update["retryIdempotencyKey"] = submission_item.retry_idempotency_key
                 detail_update["retryResult"] = {
@@ -328,6 +338,36 @@ class GenerationSubmissionService:
                 target.persistence_error = "Canvas metadata persistence is temporarily unavailable."
         if task_repository_error and target is not None:
             target.persistence_warning = task_repository_error
+
+    @staticmethod
+    def _video_result_metadata(project: CanvasProject, element_id: str, content_id: str) -> dict[str, Any]:
+        """读取目标 Video Content 当前的结果元数据副本。"""
+        element = project.canvas.get_element(element_id)
+        content = element.get_content(content_id) if element is not None else None
+        fields = content.fields if content is not None else None
+        if isinstance(fields, VideoContentFields) and isinstance(fields.video_generation_result_meta, dict):
+            return dict(fields.video_generation_result_meta)
+        return {}
+
+    @classmethod
+    def _merged_video_result_metadata(
+        cls,
+        project: CanvasProject,
+        work_item: _GenerationWorkItem,
+        submission: GenerationSubmission,
+    ) -> dict[str, Any] | None:
+        """为 Video Content 合并本次提交返回的结果元数据。"""
+        item = work_item.submission_item
+        if item.element_type != "video":
+            return None
+        existing = cls._video_result_metadata(project, item.element_id, item.content_id)
+        initial = ContentMetadataService.build_video_result_metadata(work_item.parameter_payload)
+        merged = ContentMetadataService.merge_video_result_metadata(existing, initial, submission.status)
+        return ContentMetadataService.merge_video_result_metadata(
+            merged,
+            submission.result_metadata,
+            submission.status,
+        )
 
     @staticmethod
     def _apply_result_item(target: GeneratedResultItem, submission: GenerationSubmission) -> None:

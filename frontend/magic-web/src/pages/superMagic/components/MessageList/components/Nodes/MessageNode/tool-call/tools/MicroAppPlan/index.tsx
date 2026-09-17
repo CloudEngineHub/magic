@@ -11,7 +11,7 @@ import type {
 import useShareRoute from "@/pages/superMagic/hooks/useShareRoute"
 import { sendUserToolCallReply } from "@/pages/superMagic/services/askUserToolReplyService"
 import { superMagicStore } from "@/pages/superMagic/stores"
-import { logger as Logger } from "@/utils/log"
+import { logger as Logger } from "@/infrastructure/logger"
 import { IconLoader2 } from "@tabler/icons-react"
 import { CheckCircle2, ChevronDown, ClipboardList, PencilLine, XCircle } from "lucide-react"
 import { observer } from "mobx-react-lite"
@@ -66,8 +66,7 @@ function MicroAppPlanToolCall(props: DefaultToolProps) {
 	const [pendingAction, setPendingAction] = useState<PlanResponseStatus | null>(null)
 
 	const node = superMagicStore.getMessageNode(props?.node?.app_message_id) as
-		| { tool?: ToolDataLike }
-		| undefined
+		{ tool?: ToolDataLike } | undefined
 	const tool = props.toolData || node?.tool
 	const deferredRawArguments = useDeferredValue(tool?.rawArguments)
 	const plan = resolvePlan(

@@ -218,6 +218,13 @@ const ScrollDetailContainer = forwardRef<ScrollDetailContainerRef, ScrollDetailC
 							file_name: fileName,
 							file_id: file.file_id,
 							file_extension: file.file_extension,
+							file_size: file.file_size,
+							is_directory: file.is_directory,
+							project_id: file.project_id,
+							updated_at: file.updated_at,
+							resource_version: file.resource_version,
+							version: file.version,
+							display_config: file.display_config,
 							content: null, // Lazy load content
 						},
 						currentFileId: file.file_id,
@@ -241,8 +248,8 @@ const ScrollDetailContainer = forwardRef<ScrollDetailContainerRef, ScrollDetailC
 								attachments={attachments}
 								setUserSelectDetail={setUserSelectDetail}
 								currentIndex={index}
-								onPrevious={() => { }}
-								onNext={() => { }}
+								onPrevious={() => {}}
+								onNext={() => {}}
 								onFullscreen={() => handleFileFullscreen(file.file_id)}
 								onDownload={() => onDownload?.(file.file_id)}
 								totalFiles={fileList.length}
@@ -286,8 +293,8 @@ const ScrollDetailContainer = forwardRef<ScrollDetailContainerRef, ScrollDetailC
 									attachments={attachments}
 									setUserSelectDetail={setUserSelectDetail}
 									currentIndex={index}
-									onPrevious={() => { }}
-									onNext={() => { }}
+									onPrevious={() => {}}
+									onNext={() => {}}
 									onFullscreen={() => handleFileFullscreen(file.file_id)}
 									onDownload={() => onDownload?.(file.file_id)}
 									totalFiles={fileList.length}

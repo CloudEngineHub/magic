@@ -460,6 +460,36 @@ export const useStyles = createStyles(({ token, css, prefixCls }) => {
 			white-space: nowrap;
 		`,
 
+		compatibilityModeIcon: css`
+			display: inline-flex;
+			align-items: center;
+			color: ${token.colorWarning};
+		`,
+
+		compatibilityModeNotice: css`
+			display: flex;
+			align-items: center;
+			gap: 4px;
+			padding: 6px 8px;
+			border-bottom: 1px solid ${token.colorBorder};
+			background: ${token.colorWarningBg};
+			color: ${token.colorWarningText};
+			font-size: 12px;
+			line-height: 18px;
+		`,
+
+		compatibilityModeTitle: css`
+			font-weight: 600;
+			margin-bottom: 2px;
+		`,
+
+		compatibilityModeDescription: css`
+			color: ${token.magicColorUsages.text[2]};
+			font-size: 12px;
+			font-weight: 400;
+			line-height: 18px;
+		`,
+
 		controlsArea: css`
 			display: flex;
 			align-items: center;

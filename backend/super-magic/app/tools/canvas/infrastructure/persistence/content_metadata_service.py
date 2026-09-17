@@ -17,7 +17,7 @@ from app.tools.video_generation_utils.provider_asset_uri import normalize_provid
 
 RUNTIME_METADATA_KEY = "__canvas_runtime__"
 RUNTIME_SIDECAR_FILENAME = "element-details-runtime.json"
-PUBLIC_DETAIL_FIELDS = generated_request_fields() | {"videoGenerationResultMeta", "visualUnderstanding"}
+PUBLIC_DETAIL_FIELDS = generated_request_fields() | {"visualUnderstanding"}
 
 
 class ContentMetadataService:
@@ -81,7 +81,7 @@ class ContentMetadataService:
             elements.pop(element_id, None)
 
     @staticmethod
-    def new_detail(element_id: str, data: dict[str, Any]) -> dict[str, Any]:
+    def new_detail(element_id: str, data: dict[str, Any], project_path: str | None = None) -> dict[str, Any]:
         """创建来源、公共生成请求和运行态生成尝试详情。"""
         detail: dict[str, Any] = {
             "elementId": element_id,
@@ -100,12 +100,7 @@ class ContentMetadataService:
                 detail[request_field] = ContentMetadataService.build_public_generation_request(
                     parameters,
                     str(data.get("contentType") or ""),
-                )
-            if data.get("contentType") == "video":
-                detail["videoGenerationResultMeta"] = ContentMetadataService.merge_video_result_metadata(
-                    {},
-                    ContentMetadataService.build_video_result_metadata(parameters),
-                    "pending",
+                    project_path=project_path,
                 )
         elif data.get("source") == "imported":
             detail["assetPath"] = data.get("assetPath")
@@ -169,6 +164,7 @@ class ContentMetadataService:
         parameters: dict[str, Any],
         idempotency_key: str,
         element_type: str | None = None,
+        project_path: str | None = None,
     ) -> dict[str, Any]:
         """归档上一终态并创建携带新公共请求的新尝试。"""
         updated = dict(detail)
@@ -200,12 +196,7 @@ class ContentMetadataService:
             updated[request_field] = ContentMetadataService.build_public_generation_request(
                 cleaned_parameters,
                 element_type or "",
-            )
-        if element_type == "video":
-            updated["videoGenerationResultMeta"] = ContentMetadataService.merge_video_result_metadata(
-                {},
-                ContentMetadataService.build_video_result_metadata(cleaned_parameters),
-                "pending",
+                project_path=project_path,
             )
         return updated
 
@@ -335,6 +326,7 @@ class ContentMetadataService:
     def build_public_generation_request(
         parameters: dict[str, Any],
         element_type: str,
+        project_path: str | None = None,
     ) -> dict[str, Any]:
         """按媒体类型注册的构建器生成公共请求。"""
         request: dict[str, Any] = {
@@ -351,18 +343,18 @@ class ContentMetadataService:
                 request[key] = value
         builder = _PUBLIC_GENERATION_REQUEST_BUILDERS.get(element_type)
         if builder is not None:
-            request.update(builder(parameters))
+            request.update(builder(parameters, project_path=project_path))
         return request
 
 
-def _build_public_image_request(parameters: dict[str, Any]) -> dict[str, Any]:
+def _build_public_image_request(parameters: dict[str, Any], project_path: str | None = None) -> dict[str, Any]:
     """构建图片生成请求的媒体特有字段。"""
     references = parameters.get("reference_images")
     if not isinstance(references, (list, tuple)) or not references:
         return {}
     return {
         "reference_images": [
-            _normalize_project_path(path)
+            _normalize_project_path(path, project_path)
             for path in references
             if isinstance(path, str) and path
         ]
@@ -384,8 +376,8 @@ def _with_generation_start_metadata(parameters: dict[str, Any], element_type: st
 
 
 def _now_text() -> str:
-    """返回前端详情面板兼容的本地时间文本。"""
-    return datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    """返回包含明确时区的新生成详情时间文本。"""
+    return datetime.now().astimezone().isoformat(timespec="seconds")
 
 
 def _diff_seconds(started_at: Any, finished_at: Any) -> int | None:
@@ -455,18 +447,26 @@ def _clean_generation_parameters(data: dict[str, Any]) -> dict[str, Any]:
     }
 
 
-def _normalize_project_path(value: str) -> str:
-    """将 Canvas 项目相对路径规范为 ./ 开头。"""
-    normalized = value.replace("\\", "/")
+def _normalize_project_path(value: str, project_path: str | None = None) -> str:
+    """将路径规范为相对于当前 magic.project.js 的 ./ URI。"""
+    normalized = value.replace("\\", "/").strip()
     normalized_provider_uri = normalize_provider_asset_uri(normalized)
     if normalized_provider_uri is not None:
         return normalized_provider_uri
-    if normalized.startswith("./") or "://" in normalized or normalized.startswith("data:"):
+    if "://" in normalized or normalized.startswith("data:"):
         return normalized
-    return f"./{normalized.lstrip('/')}"
+    normalized = normalized.lstrip("/")
+    without_dot = normalized[2:] if normalized.startswith("./") else normalized
+    if project_path:
+        project_prefix = project_path.replace("\\", "/").strip().strip("/")
+        if without_dot == project_prefix:
+            return "./"
+        if without_dot.startswith(f"{project_prefix}/"):
+            without_dot = without_dot[len(project_prefix) + 1 :]
+    return f"./{without_dot}"
 
 
-def _build_public_video_request(parameters: dict[str, Any]) -> dict[str, Any]:
+def _build_public_video_request(parameters: dict[str, Any], project_path: str | None = None) -> dict[str, Any]:
     """将内部视频参数转换为 magic-web 读取的 GenerateVideoRequest 结构。"""
     request: dict[str, Any] = {}
     for key in ("input_mode", "task", "model_id"):
@@ -494,10 +494,10 @@ def _build_public_video_request(parameters: dict[str, Any]) -> dict[str, Any]:
     video_paths = parameters.get("reference_video_paths") or []
     audio_paths = parameters.get("reference_audio_paths") or []
     inputs: dict[str, Any] = {
-        "reference_images": _build_uri_inputs(image_paths),
-        "reference_videos": _build_uri_inputs(video_paths),
-        "reference_audios": _build_uri_inputs(audio_paths),
-        "frames": _build_video_frames(parameters),
+        "reference_images": _build_uri_inputs(image_paths, project_path),
+        "reference_videos": _build_uri_inputs(video_paths, project_path),
+        "reference_audios": _build_uri_inputs(audio_paths, project_path),
+        "frames": _build_video_frames(parameters, project_path),
     }
     request["inputs"] = inputs
 
@@ -521,24 +521,24 @@ _PUBLIC_GENERATION_REQUEST_BUILDERS = {
 }
 
 
-def _build_uri_inputs(values: Any) -> list[dict[str, str]]:
+def _build_uri_inputs(values: Any, project_path: str | None = None) -> list[dict[str, str]]:
     """将路径列表转换成 GenerateVideoRequest 的 URI 输入项。"""
     if not isinstance(values, (list, tuple)):
         return []
     return [
-        {"uri": _normalize_project_path(value)}
+        {"uri": _normalize_project_path(value, project_path)}
         for value in values
         if isinstance(value, str) and value
     ]
 
 
-def _build_video_frames(parameters: dict[str, Any]) -> list[dict[str, str]]:
+def _build_video_frames(parameters: dict[str, Any], project_path: str | None = None) -> list[dict[str, str]]:
     """将首尾帧路径转换成带角色的输入项。"""
     frames: list[dict[str, str]] = []
     for role, key in (("start", "frame_start_path"), ("end", "frame_end_path")):
         value = parameters.get(key)
         if isinstance(value, str) and value:
-            frames.append({"role": role, "uri": _normalize_project_path(value)})
+            frames.append({"role": role, "uri": _normalize_project_path(value, project_path)})
     return frames
 
 

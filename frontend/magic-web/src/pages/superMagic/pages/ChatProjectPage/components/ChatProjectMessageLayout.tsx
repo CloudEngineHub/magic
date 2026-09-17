@@ -1,4 +1,4 @@
-import { useMemo, useRef, type ReactNode } from "react"
+import { useRef, type ReactNode } from "react"
 import MagicSplitter from "@/components/base/MagicSplitter"
 import { cn } from "@/utils/cn"
 import { CONVERSATION_INPUT_HEIGHT_CONFIG } from "@/pages/superMagic/components/ConversationInputResize/constants"
@@ -41,12 +41,23 @@ export default function ChatProjectMessageLayout({
 		...CONVERSATION_INPUT_HEIGHT_CONFIG,
 	})
 	const effectiveInputMinHeight = inputHeight.minHeight ?? inputMinHeight
-	const inputLayoutContext = useMemo(
-		() => ({
-			fillHeight: inputHeight.fillHeight,
-		}),
-		[inputHeight.fillHeight],
-	)
+	// 尺寸仍由此处的 Splitter 管理，把手放到实际头像上方，避免被误认为队列把手。
+	const inputLayoutContext = {
+		fillHeight: inputHeight.fillHeight,
+		queueListMaxHeight: inputHeight.enabled ? inputHeight.queueListMaxHeight : undefined,
+		inputResizeHandle: inputHeight.enabled ? (
+			<ConversationInputResizeHandle
+				positionClassName="-top-1.5"
+				value={inputHeight.effectiveHeight}
+				min={effectiveInputMinHeight}
+				max={inputHeight.maxHeight}
+				onResizeStart={inputHeight.startPointerResize}
+				onResize={inputHeight.resizeByPointerDelta}
+				onResizeEnd={inputHeight.finishPointerResize}
+				onDoubleClick={inputHeight.restoreAutoHeight}
+			/>
+		) : null,
+	}
 	return (
 		<div
 			ref={layoutRef}
@@ -82,20 +93,6 @@ export default function ChatProjectMessageLayout({
 							inputHeight.fillHeight && "h-full",
 						)}
 					>
-						{inputHeight.enabled ? (
-							// Keep the hover affordance aligned with the centered editor card on wide panels.
-							<div className="absolute inset-x-2 top-0 mx-auto h-2 max-w-3xl">
-								<ConversationInputResizeHandle
-									value={inputHeight.effectiveHeight}
-									min={effectiveInputMinHeight}
-									max={inputHeight.maxHeight}
-									onResizeStart={inputHeight.startPointerResize}
-									onResize={inputHeight.resizeByPointerDelta}
-									onResizeEnd={inputHeight.finishPointerResize}
-									onDoubleClick={inputHeight.restoreAutoHeight}
-								/>
-							</div>
-						) : null}
 						<ConversationInputLayoutProvider value={inputLayoutContext}>
 							{input}
 						</ConversationInputLayoutProvider>

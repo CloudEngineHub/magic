@@ -3,6 +3,7 @@ import { observer } from "mobx-react-lite"
 import { superMagicStore } from "@/pages/superMagic/stores"
 import { MessageViewStateScopeProvider } from "@/pages/superMagic/components/MessageList/view-state/MessageViewStateContext"
 import { handleToolCallInteraction } from "./interactions"
+import { getToolCardInteractionTarget } from "../../toolDetailSelection"
 import { useToolRemarkPreview } from "./preview/useToolRemarkPreview"
 import { ToolCallRenderer } from "./ToolCallRenderer"
 import { useMessageListProjectFilesStore } from "@/pages/superMagic/components/MessageList/context"
@@ -81,6 +82,10 @@ export const ToolCallContainer = observer(function ToolCallContainer(
 			remark: responseRemark || previewRemark,
 			status: effectiveStatus,
 			attachments,
+			interactionTarget: getToolCardInteractionTarget(
+				toolCall.function.name,
+				effectiveDetail,
+			),
 			rawArguments: toolCall.function.arguments,
 			detail: effectiveDetail,
 		}

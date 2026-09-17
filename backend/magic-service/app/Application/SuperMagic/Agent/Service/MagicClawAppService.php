@@ -163,9 +163,9 @@ class MagicClawAppService extends AbstractSuperMagicAppService
 
     /**
      * Get paginated magic claw list with resolved icon URLs and sandbox status.
-     * Each item in list contains 'entity' (MagicClawEntity), 'status' (?string), 'topic_id' (?int), and 'need_upgrade' (bool).
+     * Each item in list contains 'entity' (MagicClawEntity), 'status' (?string), 'topic_id' (?int), and 'need_upgrade' (bool|null).
      *
-     * @return array{total: int, list: array<array{entity: MagicClawEntity, status: null|string, topic_id: null|int, need_upgrade: bool}>, page: int, page_size: int}
+     * @return array{total: int, list: array<array{entity: MagicClawEntity, status: null|string, topic_id: null|int, need_upgrade: null|bool}>, page: int, page_size: int}
      */
     public function queries(Authenticatable $authorization, int $page, int $pageSize): array
     {
@@ -194,7 +194,7 @@ class MagicClawAppService extends AbstractSuperMagicAppService
                 'entity' => $entity,
                 'status' => $projectId !== null ? ($statusByProjectId[$projectId] ?? null) : null,
                 'topic_id' => $topicId,
-                'need_upgrade' => $topicId !== null ? ($needUpgradeByTopicId[$topicId] ?? false) : false,
+                'need_upgrade' => $topicId !== null ? ($needUpgradeByTopicId[$topicId] ?? null) : null,
             ];
         }, $entities);
 
@@ -310,7 +310,7 @@ class MagicClawAppService extends AbstractSuperMagicAppService
      * Batch-resolve sandbox version upgrade requirement indexed by topic ID.
      *
      * @param array<int, null|int> $topicIdMap Map of projectId => topicId
-     * @return array<int, bool> Map of topicId => needUpgrade
+     * @return array<int, null|bool> Map of topicId => needUpgrade
      */
     private function resolveNeedUpgradeByTopicIdMap(array $topicIdMap): array
     {
@@ -332,7 +332,7 @@ class MagicClawAppService extends AbstractSuperMagicAppService
         try {
             return $this->sandboxVersionDomainService->checkNeedUpgradeByTopicIds($topicIds);
         } catch (Throwable $e) {
-            $this->logger->warning('[MagicClaw] Failed to resolve need_upgrade in queries, fallback to false', [
+            $this->logger->warning('[MagicClaw] Failed to resolve need_upgrade in queries, version unknown', [
                 'topic_ids_count' => count($topicIds),
                 'error' => $e->getMessage(),
             ]);

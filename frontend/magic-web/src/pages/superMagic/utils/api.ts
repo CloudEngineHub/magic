@@ -1,4 +1,4 @@
-import magicClient from "@/apis/clients/magic"
+import { defaultMagicClient as magicClient } from "@/infrastructure/network/http/runtime"
 import { DownloadImageMode } from "../pages/Workspace/types"
 import { getSuperIdState } from "./query"
 import { WorkspaceStateCache } from "./superMagicCache"
@@ -163,6 +163,7 @@ export interface GetTemporaryDownloadUrlItem {
 }
 
 export interface GetFileContentOptions {
+	signal?: AbortSignal
 	responseType?: "text" | "arrayBuffer" | "blob"
 	file_versions?: Record<string, number>
 	download_mode?: DownloadImageMode
@@ -310,6 +311,7 @@ export const getFileContentsByIds = async (
 			const content = await downloadFileContent(url, {
 				responseType: options.responseType || "text",
 				cache: options.forceRefresh ? "no-store" : undefined,
+				signal: options.signal,
 			})
 			return { fileId, content }
 		}),

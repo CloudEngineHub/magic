@@ -19,8 +19,9 @@ function ClusterLayoutBaseComponent(props: ClusterLayoutBaseProps) {
 	const { loginAdapter } = props
 	const { clusterCode } = useParams()
 	const [searchParams] = useSearchParams()
-	// query 中的集群编码权重优先
-	const targetClusterCode = (searchParams.get("thirdPartyAuthDeployCode") === defaultClusterCode ? "" : searchParams.get("thirdPartyAuthDeployCode")) || (clusterCode === defaultClusterCode ? "" : clusterCode) || ""
+	// Explicit query overrides include "global" (the empty SaaS cluster).
+	const requestedCluster = searchParams.get("thirdPartyAuthDeployCode") ?? clusterCode ?? ""
+	const targetClusterCode = requestedCluster === defaultClusterCode ? "" : requestedCluster
 
 	const { setClusterCode } = useClusterCode()
 	const { t } = useTranslation("interface")

@@ -25,6 +25,7 @@ export const useFileData = ({
 	isFromNode = false,
 	content,
 	disabledUrlCache = false,
+	enabled = true,
 }: {
 	file_id: string
 	responseType?: "text" | "arrayBuffer" | "blob"
@@ -34,6 +35,8 @@ export const useFileData = ({
 	isFromNode?: boolean
 	content?: string
 	disabledUrlCache?: boolean
+	/** 外部编辑会话供数时关闭读取、历史版本与事件订阅。 */
+	enabled?: boolean
 }) => {
 	const { t } = useTranslation("super")
 	const { isShareRoute } = useShareRoute()
@@ -50,7 +53,7 @@ export const useFileData = ({
 	/** 版本列表 */
 	const [fileVersionsList, setFileVersionsList] = useState<FileHistoryVersion[]>([])
 	/** 是否正在加载 */
-	const [loading, setLoading] = useState(isNil(content))
+	const [loading, setLoading] = useState(enabled && isNil(content))
 	/** 是否是删除的文件 */
 	const [isDeleted, setIsDeleted] = useState(false)
 
@@ -87,7 +90,7 @@ export const useFileData = ({
 	/** 更改文件版本 */
 	const changeFileVersion = useMemoizedFn(
 		(file_version: number | undefined, fileVersionsList?: FileHistoryVersion[]) => {
-			if (!file_id || (file_version && file_version === fileVersion)) return
+			if (!enabled || !file_id || (file_version && file_version === fileVersion)) return
 			// 获取文件下载地址
 			getTemporaryDownloadUrl({
 				file_ids: [file_id],
@@ -146,6 +149,7 @@ export const useFileData = ({
 	 * @returns 文件版本列表
 	 */
 	const fetchFileVersions = useMemoizedFn(async (fileId: string, isSelectNewest = false) => {
+		if (!enabled) return []
 		try {
 			const res = await SuperMagicApi.getFileHistoryVersions({
 				file_id: fileId,
@@ -172,7 +176,7 @@ export const useFileData = ({
 	/** 还原文件版本 */
 	const handleVersionRollback = useMemoizedFn(async (file_version?: number) => {
 		try {
-			if (!file_id || !file_version) return
+			if (!enabled || !file_id || !file_version) return
 
 			const loading = magicToast.loading(t("common.rollbacking"))
 
@@ -205,6 +209,7 @@ export const useFileData = ({
 
 	useDebounceEffect(
 		() => {
+			if (!enabled) return
 			// 如果正在编辑但文件数据还没有加载，需要先加载文件
 			if (isEditing && !fileData && file_id && activeFileId === file_id && !isShareRoute) {
 				getFileVersion(file_id)
@@ -218,7 +223,7 @@ export const useFileData = ({
 			// 如果用户正在查看历史版本，只更新版本列表，不自动切换到最新版本
 			getFileVersion(file_id, !isViewingHistoryVersion)
 		},
-		[activeFileId, updatedAt, file_id, isEditing, isShareRoute, fileData],
+		[enabled, activeFileId, updatedAt, file_id, isEditing, isShareRoute, fileData],
 		{
 			wait: 100,
 		},
@@ -226,7 +231,7 @@ export const useFileData = ({
 
 	/** 针对 分享/工具预览/内容审查 等场景，单独获取文件的最新下载地址 */
 	useEffect(() => {
-		if (!file_id) return
+		if (!enabled || !file_id) return
 		if (isShareRoute || !activeFileId || activeFileId !== file_id) {
 			setLoading(true)
 			setFileData(null)
@@ -263,9 +268,10 @@ export const useFileData = ({
 					setLoading(false)
 				})
 		}
-	}, [file_id])
+	}, [enabled, file_id])
 
 	useEffect(() => {
+		if (!enabled) return
 		pubsub.subscribe(PubSubEvents.Change_Preview_File, () => {
 			setFileUrl("")
 			setFileData(undefined)
@@ -278,11 +284,12 @@ export const useFileData = ({
 		return () => {
 			pubsub.unsubscribe(PubSubEvents.Change_Preview_File)
 		}
-	}, [])
+	}, [enabled])
 
 	// 由于后端的文件版本生成机制，是在每一轮 Topic 执行结束时生成，
 	// 因此这里监听 Topic 级终态事件，而不是单条 Assistant Final。
 	useEffect(() => {
+		if (!enabled) return
 		const unregister = superMagicStore.subscribe("topic.execution.ended", () => {
 			if (activeFileId !== file_id) return
 			getFileVersion(file_id)
@@ -291,7 +298,7 @@ export const useFileData = ({
 		return () => {
 			unregister()
 		}
-	}, [activeFileId])
+	}, [enabled, activeFileId])
 
 	return {
 		loading,

@@ -1,3 +1,6 @@
+import type { AttachmentItem } from "../../../../../TopicFilesButton/hooks/types"
+import { createMarkdownSourceLocation } from "./extensions/markdown-source-location"
+import type { SourceReplacement } from "./source-location"
 import { memo, useEffect, useMemo, useRef } from "react"
 import { useMemoizedFn } from "ahooks"
 import MagicSpin from "@/components/base/MagicSpin"
@@ -25,6 +28,8 @@ import LargeMarkdownPreview from "./components/LargeMarkdownPreview"
 import { isLargeMarkdownContent } from "./largeMarkdown"
 
 interface EditorBodyProps {
+	selectionRootRef?: React.Ref<HTMLDivElement>
+	enableSourceLocation?: boolean
 	isLoading: boolean
 	/** Keeps pure-share loading in the page-level overlay instead of rendering a second spinner. */
 	suppressLoadingIndicator?: boolean
@@ -52,6 +57,7 @@ interface EditorBodyProps {
 	placeholder?: string
 	attachments?: AttachmentFile[]
 	onOpenFile?: (fileItem: { file_id: string }) => void
+	resolveRelativeFile?: (href: string) => Promise<AttachmentItem | undefined>
 	onSave?: (editor: Editor | null) => void
 	"data-testid"?: string
 	/**
@@ -64,6 +70,8 @@ interface EditorBodyProps {
 }
 
 function EditorBody({
+	selectionRootRef,
+	enableSourceLocation = false,
 	isLoading,
 	suppressLoadingIndicator = false,
 	documentFlowFullscreen = false,
@@ -87,6 +95,7 @@ function EditorBody({
 	placeholder,
 	attachments,
 	onOpenFile,
+	resolveRelativeFile,
 	onSave,
 	"data-testid": dataTestId,
 	resolveImagesFolderParentId,
@@ -126,6 +135,15 @@ function EditorBody({
 				// Open external URL in new tab
 				// Browser will handle anchor navigation automatically
 				window.open(href, "_blank", "noopener,noreferrer")
+				return true
+			}
+
+			if (resolveRelativeFile && onOpenFile) {
+				void resolveRelativeFile(filePath)
+					.then((file) => {
+						if (file?.file_id) onOpenFile({ ...file, file_id: file.file_id })
+					})
+					.catch(() => undefined)
 				return true
 			}
 
@@ -183,6 +201,17 @@ function EditorBody({
 	const isLargeMarkdown = useMemo(() => isLargeMarkdownContent(content), [content])
 	const shouldUseCodeSourceEditor = viewMode === "code" || (isLargeMarkdown && isEditMode)
 
+	const parseSourceRef = useRef({ content: "", replacements: [] as SourceReplacement[] })
+	const handleFrontmatterSourceMap = useMemoizedFn(
+		(replacements: SourceReplacement[], content: string) => {
+			parseSourceRef.current = { content, replacements }
+		},
+	)
+	const sourceLocationExtension = useMemo(
+		() => createMarkdownSourceLocation(() => parseSourceRef.current),
+		[],
+	)
+
 	// Combine all extensions
 	const allExtensions = [
 		...projectImageExtensions,
@@ -191,6 +220,7 @@ function EditorBody({
 		SafeHtmlSpan,
 		SafeHtmlTextBlockStyles,
 		SafeVideo,
+		...(enableSourceLocation && !isEditMode ? [sourceLocationExtension] : []),
 	]
 
 	// 创建内部的 editorRef（如果外部没有传入）
@@ -239,7 +269,11 @@ function EditorBody({
 				className,
 			}}
 		>
-			<div className={className} data-testid={dataTestId}>
+			<div
+				ref={selectionRootRef}
+				className={`${enableSourceLocation ? "relative " : ""}${className}`}
+				data-testid={dataTestId}
+			>
 				{isLoading ? (
 					suppressLoadingIndicator ? (
 						<div className="min-h-dvh" />
@@ -261,11 +295,12 @@ function EditorBody({
 						language={language}
 						isEditMode={isEditMode}
 						isLargeFile={isLargeMarkdown}
-						content={isEditMode ? editContent || content : previewCodeContent}
+						content={isEditMode ? (editContent ?? content) : previewCodeContent}
 						onChange={setEditContent}
 					/>
 				) : isLargeMarkdown ? (
 					<LargeMarkdownPreview
+						enableSourceLocation={enableSourceLocation}
 						content={processedContent || content}
 						documentFlow={documentFlowFullscreen}
 						isTabActive={isTabActive}
@@ -275,8 +310,16 @@ function EditorBody({
 					/>
 				) : (
 					<SimpleEditor
+						key={`${!!isEditMode}-${enableSourceLocation}`}
+						onFrontmatterSourceMap={
+							enableSourceLocation && !isEditMode
+								? handleFrontmatterSourceMap
+								: undefined
+						}
 						ref={actualEditorRef}
-						content={isEditMode ? editContent || content : processedContent || content}
+						content={
+							isEditMode ? (editContent ?? content) : processedContent || content
+						}
 						enableCodeBlockWrap
 						enableReadonlySearch={enableSearch}
 						isTabActive={isTabActive}

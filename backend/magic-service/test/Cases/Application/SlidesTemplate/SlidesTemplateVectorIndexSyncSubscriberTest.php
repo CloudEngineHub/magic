@@ -24,6 +24,7 @@ use Hyperf\Context\ApplicationContext;
 use Hyperf\Contract\ConfigInterface;
 use Hyperf\Contract\ContainerInterface;
 use Hyperf\Logger\LoggerFactory;
+use Hyperf\Redis\Redis;
 use PHPUnit\Framework\TestCase;
 use Psr\EventDispatcher\EventDispatcherInterface;
 use Psr\Log\LoggerInterface;
@@ -78,6 +79,7 @@ final class SlidesTemplateVectorIndexSyncSubscriberTest extends TestCase
                 $tagRelationRepository,
                 $vectorStore,
                 $embeddingGenerator,
+                $this->redisMock(),
                 $this->domainLoggerFactory(),
             ),
             $loggerFactory,
@@ -118,6 +120,7 @@ final class SlidesTemplateVectorIndexSyncSubscriberTest extends TestCase
             $tagRelationRepository,
             $vectorStore,
             $embeddingGenerator,
+            $this->redisMock(),
             $this->domainLoggerFactory(),
         );
         $dispatcher = $this->createMock(EventDispatcherInterface::class);
@@ -216,5 +219,10 @@ final class SlidesTemplateVectorIndexSyncSubscriberTest extends TestCase
         $loggerFactory = $this->createMock(LoggerFactory::class);
         $loggerFactory->method('get')->willReturn(new NullLogger());
         return $loggerFactory;
+    }
+
+    private function redisMock(): Redis
+    {
+        return $this->createMock(Redis::class);
     }
 }

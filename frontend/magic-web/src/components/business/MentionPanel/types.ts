@@ -40,6 +40,8 @@ export const MentionBusinessItemType = {
 	TOOL: "tool",
 	PROJECT: "project",
 	PROJECT_FILE: "project_file",
+	USER_FILE: "user_file",
+	USER_DIRECTORY: "user_directory",
 	MEMORY_FILE: "memory_file",
 	MEMORY_DIRECTORY: "memory_directory",
 	UPLOAD_FILE: "upload_file",
@@ -126,6 +128,32 @@ export interface ProjectFileMentionData {
 	/** Internal: marks a project-file mention that must be copied before sending. */
 	pending_project_copy?: boolean
 }
+
+/** 用户引用没有项目或复制语义；路径由真实用户根元数据生成。 */
+export interface UserFileMentionData {
+	file_id: string
+	file_name: string
+	file_path: string
+	file_extension: string
+	project_id?: never
+	source_project_id?: never
+	source_file_id?: never
+	pending_project_copy?: never
+}
+
+export interface UserDirectoryMentionData {
+	directory_id: string
+	directory_name: string
+	directory_path: string
+	project_id?: never
+	source_project_id?: never
+	source_directory_id?: never
+	pending_project_copy?: never
+}
+
+export type UserFileReferenceMention =
+	| { type: typeof MentionBusinessItemType.USER_FILE; data: UserFileMentionData }
+	| { type: typeof MentionBusinessItemType.USER_DIRECTORY; data: UserDirectoryMentionData }
 
 /** 记忆文件 mention 数据。 */
 export interface MemoryFileMentionData {
@@ -255,6 +283,8 @@ export interface MentionBusinessItemDataMap {
 	[MentionBusinessItemType.TOOL]: ToolMentionData
 	[MentionBusinessItemType.PROJECT]: ProjectMentionData
 	[MentionBusinessItemType.PROJECT_FILE]: ProjectFileMentionData
+	[MentionBusinessItemType.USER_FILE]: UserFileMentionData
+	[MentionBusinessItemType.USER_DIRECTORY]: UserDirectoryMentionData
 	[MentionBusinessItemType.MEMORY_FILE]: MemoryFileMentionData
 	[MentionBusinessItemType.MEMORY_DIRECTORY]: MemoryDirectoryMentionData
 	[MentionBusinessItemType.UPLOAD_FILE]: UploadFileMentionData

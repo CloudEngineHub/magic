@@ -9,7 +9,7 @@ namespace App\Infrastructure\Core\Embeddings\VectorStores;
 
 interface VectorStoreInterface
 {
-    public function createCollection(string $name, int $vectorSize = 1536): bool;
+    public function createCollection(string $name, int $vectorSize): bool;
 
     public function getCollection(string $name): ?CollectionInfo;
 

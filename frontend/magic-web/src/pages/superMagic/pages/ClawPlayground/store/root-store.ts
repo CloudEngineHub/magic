@@ -64,7 +64,7 @@ class ClawProjectStore {
 
 export class ClawPlaygroundRootStore {
 	readonly topicStore = new TopicStore()
-	readonly projectFilesStore = new ProjectFilesStore()
+	readonly projectFilesStore = new ProjectFilesStore("claw")
 	readonly mentionPanelStore = createMentionPanelStore(this.projectFilesStore)
 	readonly projectStore = new ClawProjectStore(this.projectFilesStore)
 	readonly workspaceStore = new ClawWorkspaceStore()

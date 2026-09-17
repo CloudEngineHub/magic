@@ -158,12 +158,12 @@ class AuditService
 
     private function resolveUserDisplayNameFromDetail(UserDetailDTO $detail): string
     {
-        $real = trim($detail->getRealName());
-        if ($real !== '') {
-            return $real;
+        $nickname = trim($detail->getNickname());
+        if ($nickname !== '') {
+            return $nickname;
         }
 
-        return $detail->getNickname();
+        return trim($detail->getRealName());
     }
 
     private function maskEmail(string $email): string

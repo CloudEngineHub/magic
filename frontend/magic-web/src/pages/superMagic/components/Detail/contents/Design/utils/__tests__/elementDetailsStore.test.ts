@@ -3,6 +3,7 @@ import type {
 	ImageElement,
 	LayerElement,
 	TextElement,
+	VideoElement,
 } from "@/components/CanvasDesign/runtime/document/types"
 import {
 	ELEMENT_DETAIL_SOURCE_USER,
@@ -29,6 +30,16 @@ function textElement(): TextElement {
 		activeContentId: "c1",
 		mainContentId: "c1",
 		contents: [{ contentId: "c1", content: [] }],
+	}
+}
+
+function videoElement(contents: VideoElement["contents"]): VideoElement {
+	return {
+		id: "video-1",
+		type: "video",
+		activeContentId: contents[0]?.contentId ?? null,
+		mainContentId: contents[0]?.contentId ?? null,
+		contents,
 	}
 }
 
@@ -65,6 +76,47 @@ describe("Content sidecar", () => {
 			valueSource: "agent",
 			imageId: "two",
 			imageIdSource: "agent",
+		})
+	})
+
+	it("rehydrates and writes video generation runtime metadata", () => {
+		const runtimeMetadata = {
+			generation_info: {
+				input_mode: "image_reference",
+				resolution: "720p",
+			},
+			runtime: {
+				started_at: "2026-09-14 14:00:14",
+				finished_at: "2026-09-14 14:12:11",
+				elapsed_seconds: 717,
+			},
+		}
+		const elements: LayerElement[] = [videoElement([{ contentId: "c1" }])]
+
+		rehydrateHeavyFields(elements, emptyElementDetailsDoc(), {
+			version: ELEMENT_DETAILS_VERSION,
+			elements: {
+				"video-1": {
+					contentDetails: {
+						c1: { videoGenerationResultMeta: runtimeMetadata },
+					},
+				},
+			},
+		})
+
+		expect((elements[0] as VideoElement).contents[0].videoGenerationResultMeta).toEqual(
+			runtimeMetadata,
+		)
+		expect(buildUserElementDetailsDoc(elements, emptyElementDetailsDoc())).toEqual({
+			version: ELEMENT_DETAILS_VERSION,
+			elements: {
+				"video-1": {
+					source: ELEMENT_DETAIL_SOURCE_USER,
+					contentDetails: {
+						c1: { videoGenerationResultMeta: runtimeMetadata },
+					},
+				},
+			},
 		})
 	})
 

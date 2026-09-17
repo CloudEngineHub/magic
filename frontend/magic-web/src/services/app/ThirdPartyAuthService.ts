@@ -1,5 +1,5 @@
 import { AuthApi, CommonApi } from "@/apis"
-import type { RequestConfig } from "@/apis/core/HttpClient"
+import type { RequestConfig } from "@/infrastructure/network/http/clients"
 import { service } from "@/services"
 import { RoutePath } from "@/constants/routes"
 import { baseHistory, history } from "@/routes/history"
@@ -423,11 +423,7 @@ class ThirdPartyAuthService {
 			// Remove third-party cluster code to prevent process dead loop
 			searchParams.delete(this.thirdPartyAuthDeployCode)
 
-			if (
-				syncAccountInSameWindow &&
-				!reloadCurrentWindow &&
-				userStore.user.authorization
-			) {
+			if (syncAccountInSameWindow && !reloadCurrentWindow && userStore.user.authorization) {
 				const deployCode = configStore.cluster.clusterCode ?? ""
 				logger.log("同窗口免登，同步账号体系", { deployCode })
 				await this.syncAccountSystem(deployCode, userStore.user.authorization, options)
@@ -499,7 +495,11 @@ class ThirdPartyAuthService {
 			 * (as authorization requires obtaining the corresponding third-party organization ID, application key, etc.)
 			 */
 			logger.log("获取私有化配置", { deployCode })
-			const data = await CommonApi.getPrivateConfigure(deployCode, { enableRequestUnion: true, enableErrorMessagePrompt: false, ...options })
+			const data = await CommonApi.getPrivateConfigure(deployCode, {
+				enableRequestUnion: true,
+				enableErrorMessagePrompt: false,
+				...options,
+			})
 			logger.log("私有化配置获取完成")
 
 			/**
@@ -553,8 +553,9 @@ class ThirdPartyAuthService {
 					magicOrganizationMap,
 					access_token,
 					deployCode,
+					options,
 				)
-			
+
 			// 设置组织
 			service.get<UserService>("userService").setOrganization({
 				organizationCode,
@@ -623,7 +624,11 @@ class ThirdPartyAuthService {
 			if (!(await this.canBackgroundProbe())) return "unsupported"
 
 			// Load the target deployment configuration for the platform SDK without switching the current access cluster.
-			const targetConfig = await CommonApi.getPrivateConfigure(deployCode, { enableRequestUnion: true, enableErrorMessagePrompt: false, ...options })
+			const targetConfig = await CommonApi.getPrivateConfigure(deployCode, {
+				enableRequestUnion: true,
+				enableErrorMessagePrompt: false,
+				...options,
+			})
 			await service
 				.get<ConfigService>("configService")
 				.setClusterConfig(deployCode, targetConfig.config)
@@ -745,7 +750,10 @@ class ThirdPartyAuthService {
 			await this.generateAuthorizationToken(tempAuthorizationCode, options)
 		} else if (thirdPartyAuthDeployCode || !isNil(thirdPartyAuthDeployCode)) {
 			// If and only if there is a private exclusive code can it trigger login exemption
-			await this.handleAutoLogin(thirdPartyAuthDeployCode === defaultClusterCode ? "" : thirdPartyAuthDeployCode, options)
+			await this.handleAutoLogin(
+				thirdPartyAuthDeployCode === defaultClusterCode ? "" : thirdPartyAuthDeployCode,
+				options,
+			)
 		} else {
 			throw new Error("no third party auth params")
 		}

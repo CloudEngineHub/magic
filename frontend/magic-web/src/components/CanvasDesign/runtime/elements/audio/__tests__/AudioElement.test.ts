@@ -139,7 +139,6 @@ function createAudioElementHarness(options?: {
 		eventEmitter: {
 			emit,
 			on: vi.fn((eventType: string, listener: (event: unknown) => void) => {
-				if (eventType === "viewport:scale") viewportScaleListeners.add(listener)
 				if (eventType === "canvas:devicechange") deviceChangeListeners.add(listener)
 				if (
 					eventType === "element:audio:replaceStateChanged" ||
@@ -148,7 +147,6 @@ function createAudioElementHarness(options?: {
 					audioReplaceStateListeners.add(listener)
 				if (eventType === "content:previewChanged") contentPreviewListeners.add(listener)
 				return () => {
-					viewportScaleListeners.delete(listener)
 					deviceChangeListeners.delete(listener)
 					audioReplaceStateListeners.delete(listener)
 					contentPreviewListeners.delete(listener)
@@ -184,7 +182,13 @@ function createAudioElementHarness(options?: {
 		mediaReplaceController: {
 			getReplacementState: vi.fn(() => replacementState),
 		},
-		runtimeScheduler: { requestLayerDraw: vi.fn() },
+		runtimeScheduler: {
+			requestLayerDraw: vi.fn(),
+			registerViewportScaleLayout: vi.fn((_elementId: string, listener: () => void) => {
+				viewportScaleListeners.add(listener)
+				return () => viewportScaleListeners.delete(listener)
+			}),
+		},
 		transformManager: {
 			isTransformInteractionActive: vi.fn(() => false),
 			isTransforming: vi.fn(() => false),

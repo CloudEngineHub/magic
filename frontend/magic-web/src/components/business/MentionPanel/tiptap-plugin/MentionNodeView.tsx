@@ -15,7 +15,7 @@ import PlugIcon from "@/components/business/MentionPanel/components/icons/PlugIc
 import SkillIcon from "@/components/business/MentionPanel/components/icons/SkillIcon"
 import ToolIcon from "@/components/business/MentionPanel/components/icons/ToolIcon"
 import { useIsMobile } from "@/hooks/useIsMobile"
-import { logger as Logger } from "@/utils/log"
+import { logger as Logger } from "@/infrastructure/logger"
 import type { LocaleInput } from "../i18n"
 import { MentionItemType, type ProjectMentionData } from "../types"
 import {
@@ -72,6 +72,8 @@ interface MentionNodeChipProps {
 function isStaticResourceMention(type: TiptapMentionAttributes["type"]) {
 	return (
 		type === MentionItemType.PROJECT_FILE ||
+		type === MentionItemType.USER_FILE ||
+		type === MentionItemType.USER_DIRECTORY ||
 		type === MentionItemType.UPLOAD_FILE ||
 		type === MentionItemType.MEMORY_FILE ||
 		type === MentionItemType.FOLDER ||
@@ -107,12 +109,17 @@ function getMentionNodeDisplayName(attrs?: TiptapMentionAttributes, language?: L
 }
 
 const MentionNodeIcon = memo(({ type, icon }: MentionNodeIconProps) => {
-	if (type === MentionItemType.FOLDER || type === MentionItemType.MEMORY_DIRECTORY) {
+	if (
+		type === MentionItemType.FOLDER ||
+		type === MentionItemType.MEMORY_DIRECTORY ||
+		type === MentionItemType.USER_DIRECTORY
+	) {
 		return <TSIcon type="ts-folder" size="16" />
 	}
 
 	if (
 		type === MentionItemType.PROJECT_FILE ||
+		type === MentionItemType.USER_FILE ||
 		type === MentionItemType.UPLOAD_FILE ||
 		type === MentionItemType.MEMORY_FILE
 	)

@@ -42,6 +42,7 @@ import {
 	DEFAULT_RECORDING_CHANNELS,
 	createRecordingEncodingSnapshot,
 } from "./utils/RecordingEncodingProfile"
+import { hasAudioWorkletSupport } from "./utils/AudioWorkletSupport"
 
 // Import strategies
 import type { AudioSourceStrategy } from "./strategies/AudioSourceStrategy"
@@ -653,6 +654,7 @@ export class RecorderCoreAdapter {
 				: null,
 			bufferDuration: this.bufferManager?.getDuration() || 0,
 			isPaused: this.state === "paused",
+			processingMode: this.audioRecorder?.processingMode,
 		}
 	}
 
@@ -1664,38 +1666,7 @@ export class RecorderCoreAdapter {
 	 * 检查当前浏览器是否支持 AudioWorklet
 	 */
 	static isAudioWorkletSupported(): boolean {
-		try {
-			if (typeof window === "undefined") {
-				return false
-			}
-
-			// Check for AudioWorklet support
-			if (typeof AudioContext === "undefined") {
-				return false
-			}
-
-			// Check if audioWorklet property exists on AudioContext prototype
-			// Safari 16.x defines AudioContext/AudioWorkletNode but may not
-			// expose audioWorklet on the prototype, causing runtime failures.
-			if (typeof AudioContext.prototype.audioWorklet === "undefined") {
-				return false
-			}
-
-			// Check for AudioWorkletNode support
-			if (typeof AudioWorkletNode === "undefined") {
-				return false
-			}
-
-			return true
-		} catch (error) {
-			logger.error({
-				eventKey: "checking_audio_worklet_support_failed",
-				errorKind: "worker",
-				error: error,
-				message: "Error checking AudioWorklet support:",
-			})
-			return false
-		}
+		return hasAudioWorkletSupport()
 	}
 
 	/**

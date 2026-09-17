@@ -30,6 +30,8 @@ use Psr\EventDispatcher\EventDispatcherInterface;
 use Psr\Log\LoggerInterface;
 use Throwable;
 
+use function Hyperf\Translation\trans;
+
 /**
  * Message Queue Process Application Service
  * Handles message queue processing after task completion and sends WebSocket notifications.
@@ -59,7 +61,7 @@ class MessageQueueProcessAppService extends AbstractAppService
      * @param int $messageId Message queue ID
      * @return array Result with success status and error message
      */
-    public function processSingleMessage(int $messageId): array
+    public function processSingleMessage(int $messageId, bool $force = true): array
     {
         // 1. Get message entity
         $message = $this->messageQueueDomainService->getMessageById($messageId);
@@ -93,8 +95,21 @@ class MessageQueueProcessAppService extends AbstractAppService
             ];
         }
         try {
+            if (! $force) {
+                // 自动兜底只请求处理话题；锁内重新选队首，遵守活动任务与 IN_PROGRESS 保护。
+                if (! config('super-magic.user_message_queue.enabled', true)) {
+                    return ['success' => false, 'error_message' => null];
+                }
+                return $this->processTopicMessagesInternal($topicEntity->getId());
+            }
+            $message = $this->messageQueueDomainService->getMessageById($messageId);
+            $currentTopic = $this->topicDomainService->getTopicById($topicEntity->getId());
+            if (! $message || ! $currentTopic || $message->getTopicId() !== $topicEntity->getId()
+                || $message->getStatus() !== MessageQueueStatus::PENDING) {
+                return ['success' => false, 'error_message' => trans('message_queue.status_not_modifiable')];
+            }
             // Send queued message to agent with status tracking
-            $sendResult = $this->sendQueuedMessageToAgent($message, $topicEntity);
+            $sendResult = $this->sendQueuedMessageToAgent($message, $currentTopic);
             $this->logger->info('Single message processed successfully', [
                 'message_id' => $messageId,
                 'success' => $sendResult['success'],
@@ -149,14 +164,14 @@ class MessageQueueProcessAppService extends AbstractAppService
     /**
      * Internal processing logic for topic messages.
      */
-    private function processTopicMessagesInternal(int $topicId): void
+    private function processTopicMessagesInternal(int $topicId): array
     {
         try {
             // 1. Get topic entity
             $topicEntity = $this->topicDomainService->getTopicById($topicId);
             if (! $topicEntity) {
                 $this->logger->warning('Topic not found, skip processing', ['topic_id' => $topicId]);
-                return;
+                return ['success' => false, 'error_message' => null];
             }
 
             // 2. Guard: check topic status before sending any queued message.
@@ -169,7 +184,7 @@ class MessageQueueProcessAppService extends AbstractAppService
                     'topic_id' => $topicId,
                     'current_status' => $currentStatus->value,
                 ]);
-                return;
+                return ['success' => false, 'error_message' => null];
             }
 
             $this->logger->info('Topic status allows message queue processing, proceeding', [
@@ -187,14 +202,14 @@ class MessageQueueProcessAppService extends AbstractAppService
                     'in_progress_message_id' => $inProgressMessage->getId(),
                     'in_progress_execute_time' => $inProgressMessage->getExecuteTime(),
                 ]);
-                return;
+                return ['success' => false, 'error_message' => null];
             }
 
             // 4. Get earliest pending message
             $message = $this->messageQueueDomainService->getEarliestMessageByTopic($topicId);
             if (! $message) {
                 $this->logger->debug('No pending messages for topic', ['topic_id' => $topicId]);
-                return;
+                return ['success' => false, 'error_message' => null];
             }
 
             $this->logger->info('Processing message queue for topic', [
@@ -213,12 +228,14 @@ class MessageQueueProcessAppService extends AbstractAppService
                 'success' => $sendResult['success'],
                 'error_message' => $sendResult['error_message'] ?? null,
             ]);
+            return $sendResult;
         } catch (Throwable $e) {
             $this->logger->error('Failed to process topic messages', [
                 'topic_id' => $topicId,
                 'error' => $e->getMessage(),
                 'trace' => $e->getTraceAsString(),
             ]);
+            return ['success' => false, 'error_message' => $e->getMessage()];
         }
     }
 
@@ -247,10 +264,9 @@ class MessageQueueProcessAppService extends AbstractAppService
         );
 
         // 2. Update status to in progress
-        $this->messageQueueDomainService->updateStatus(
-            $message->getId(),
-            MessageQueueStatus::IN_PROGRESS
-        );
+        if (! $this->messageQueueDomainService->tryStartProcessing($message->getId())) {
+            return ['success' => false, 'error_message' => trans('message_queue.status_not_modifiable')];
+        }
 
         // 3. Send message to agent
         $sendResult = $this->sendMessageToAgent(

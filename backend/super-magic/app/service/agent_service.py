@@ -161,6 +161,14 @@ class AgentService(Base):
         """
         Download and extract workspace with separated archive support
 
+        恢复顺序契约（承重墙，勿改）：聊天历史必须先于 checkpoint manifest
+        落地。沙箱内 `.chat_history/` 是 localfs 空间的挂载，其 checkpoint
+        hook 只在 manifest 存在且 current_checkpoint_id 有效时记账——恢复
+        阶段（解压 zip / topic 恢复 / 清空）发生在 manifest 下载之前，此时
+        hook 因"无 manifest"静默跳过，恢复出的文件不会被记成 created。
+        若把 manifest 下载挪到聊天历史恢复之前，整个聊天历史会被灌进上一
+        会话的旧 checkpoint（一次全量帧拷贝 + 语义污染）。
+
         Args:
             agent_context: Agent context containing storage configuration
 
@@ -208,6 +216,9 @@ class AgentService(Base):
             if not chat_ready:
                 logger.warning("聊天记录未能从远程归档恢复，将使用空的本地聊天记录")
 
+        # 顺序契约的最后一步：聊天历史恢复完成后才写回 manifest（见方法
+        # docstring）。download_manifest 还会把 activity 置为 restore，让
+        # hook 跳过 manifest 恢复后到首个新 checkpoint 之间窗口的记账。
         await self._download_and_extract_checkpoints_archive(storage_service, agent_context)
 
         logger.info("聊天历史和checkpoints处理完成")
@@ -413,7 +424,7 @@ class AgentService(Base):
                 f"流式写入 {written_bytes} 字节)"
             )
 
-            # .chat_history 是沙盒本地临时目录，不跨沙盒启动持久化。
+            # .chat_history 是活动会话目录，跨沙盒恢复依赖已上传的归档。
             # 调用方在远程恢复前已经通过 _replace_local_chat_history_with_empty()
             # 清空该目录，因此远程归档可以直接解压到正式活动目录。
             target_dir = target_dir or PathManager.get_chat_history_dir()
@@ -436,18 +447,13 @@ class AgentService(Base):
                 os.remove(temp_file_path)
 
     async def _replace_local_chat_history_with_empty(self, target_dir: Path) -> None:
-        """Clear local history through the same replacement path used by restores."""
-        with tempfile.TemporaryDirectory(
-            prefix=".chat-history-empty-",
-            dir=PathManager.get_project_root(),
-        ) as staging_root:
-            staging_dir = Path(staging_root) / ".chat_history"
-            staging_dir.mkdir()
-            await asyncio.to_thread(
-                TopicPersistenceManager.replace_directory,
-                staging_dir,
-                target_dir,
-            )
+        """Clear local history through the same replacement path used by restores.
+
+        运行期聊天历史目录在沙箱内是指向 localfs 挂载的 symlink，原地
+        清空内容（保留 symlink/挂载点本身），不能走整目录 rename 替换
+        （容器 overlay → FUSE 跨设备 EXDEV）。
+        """
+        await asyncio.to_thread(TopicPersistenceManager.clear_directory, target_dir)
 
     async def _download_and_extract_checkpoints_archive(self, storage_service, agent_context: AgentContext) -> None:
         """
@@ -552,6 +558,7 @@ class AgentService(Base):
 
         # 追加渠道专属上下文片段（如微信消息携带的媒体文件路径），不支持的渠道返回空串不影响
         query = ChannelContextService.append_channel_context(query, chat_client_message)
+        await ChannelContextService.suggest_channel_skills(chat_client_message, agent_context)
 
         # 原生视觉消费 mention 模块提取出的工作区或挂载目录图片路径。
         image_refs = await self._mention_builder.extract_image_refs(mentions, agent_context)
@@ -578,12 +585,10 @@ class AgentService(Base):
             agent.agent_context.horizon,
         )
 
-        # 每次用户消息前刷新工作区文件树，让 horizon 检测用户上传/删除文件等变化
-        try:
-            await agent.refresh_workspace_files()
-        except Exception as _e:
-            logger.warning(f"[AgentService] 刷新工作区文件树失败: {_e}")
-
+        """
+        文件树刷新放在 Agent 每轮准备 Horizon 的入口；只在用户消息入口刷新会漏掉工具新增文件。
+        这里不重复扫描，让首轮和后续工具轮使用同一个观察时机。
+        """
         await CliStatusFactory.wait_initial(agent_context)
 
         try:

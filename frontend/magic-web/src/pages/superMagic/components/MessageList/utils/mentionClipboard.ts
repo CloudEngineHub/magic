@@ -1,5 +1,5 @@
+import { encodeSelectionText } from "@/pages/superMagic/components/MessageEditor/extensions/inspector-detail/serialization"
 import type { JSONContent } from "@/infrastructure/editors/tiptap/core"
-import i18next from "i18next"
 import {
 	MentionItemType,
 	type DirectoryMentionData,
@@ -14,12 +14,17 @@ import {
 import {
 	createCanonicalWorkspaceHref,
 	createReferencedProjectHref,
+	createUserFileHref,
+	isValidProjectReferenceId,
 	escapeHtmlText,
 	escapeMarkdownLinkLabel,
 	normalizeWorkspacePathForComparison,
 } from "@/pages/superMagic/utils/filePathMention"
 import { INSPECTOR_DETAIL_TYPE } from "@/pages/superMagic/components/MessageEditor/extensions/inspector-detail/const"
-import { serializeInspectorContent } from "@/pages/superMagic/components/MessageEditor/extensions/inspector-detail/transform"
+import {
+	serializeInspectorContent,
+	transformInspectorContent,
+} from "@/pages/superMagic/components/MessageEditor/extensions/inspector-detail/transform"
 import type { AttachmentItem } from "@/pages/superMagic/components/TopicFilesButton/hooks"
 
 function getWorkspaceResourceId(attrs: TiptapMentionAttributes): string | undefined {
@@ -72,6 +77,10 @@ function isPendingUpload(attrs: TiptapMentionAttributes): boolean {
 
 function isWorkspaceFileMention(attrs: TiptapMentionAttributes): boolean {
 	return (
+		attrs.type === MentionItemType.USER_FILE ||
+		attrs.type === MentionItemType.USER_DIRECTORY ||
+		attrs.type === MentionItemType.MEMORY_FILE ||
+		attrs.type === MentionItemType.MEMORY_DIRECTORY ||
 		attrs.type === MentionItemType.FOLDER ||
 		attrs.type === MentionItemType.PROJECT_FILE ||
 		attrs.type === MentionItemType.UPLOAD_FILE
@@ -86,7 +95,7 @@ function getReferencedProjectId(
 
 	const data = attrs.data as ProjectFileMentionData
 	const sourceProjectId = String(data.source_project_id || data.project_id || "").trim()
-	if (!sourceProjectId) return null
+	if (!isValidProjectReferenceId(sourceProjectId)) return null
 	if (currentProjectId && sourceProjectId === String(currentProjectId)) return null
 	if (!currentProjectId && !data.source_project_id) return null
 	return sourceProjectId
@@ -243,11 +252,32 @@ export function getMentionClipboardRepresentation(
 		return null
 	}
 	const resolvedAttrs = resolveMentionForClipboard(attrs, workspaceFiles, currentProjectId)
+	if (
+		resolvedAttrs.type === MentionItemType.PROJECT_FILE ||
+		resolvedAttrs.type === MentionItemType.FOLDER
+	) {
+		const data = resolvedAttrs.data as ProjectFileMentionData | DirectoryMentionData
+		if (data.project_id === "0" || data.source_project_id === "0") return null
+	}
 	let path = ""
 	let label = ""
 	let referencedProjectId: string | null = null
+	const userDirectory =
+		resolvedAttrs.type === MentionItemType.USER_DIRECTORY ||
+		resolvedAttrs.type === MentionItemType.MEMORY_DIRECTORY
+	const userFile =
+		resolvedAttrs.type === MentionItemType.USER_FILE ||
+		resolvedAttrs.type === MentionItemType.MEMORY_FILE
 
-	if (resolvedAttrs.type === MentionItemType.FOLDER) {
+	if (userDirectory) {
+		const data = resolvedAttrs.data as { directory_path: string; directory_name: string }
+		path = data.directory_path
+		label = data.directory_name
+	} else if (userFile) {
+		const data = resolvedAttrs.data as { file_path: string; file_name: string }
+		path = data.file_path
+		label = data.file_name
+	} else if (resolvedAttrs.type === MentionItemType.FOLDER) {
 		const data = resolvedAttrs.data as DirectoryMentionData
 		path = data.directory_path
 		label = data.directory_name?.trim() || ""
@@ -263,9 +293,14 @@ export function getMentionClipboardRepresentation(
 		return null
 	}
 
-	const href = referencedProjectId
-		? createReferencedProjectHref(referencedProjectId, path)
-		: createCanonicalWorkspaceHref(path)
+	const href =
+		userFile || userDirectory
+			? path.startsWith("~/")
+				? createUserFileHref(path, userDirectory)
+				: null
+			: referencedProjectId
+				? createReferencedProjectHref(referencedProjectId, path)
+				: createCanonicalWorkspaceHref(path)
 	if (!href || !label) return null
 	const markdownDestination = href.includes(" ") ? `<${href}>` : href
 
@@ -330,7 +365,7 @@ export function getClipboardPlainText(
 	workspaceFiles: ReadonlyArray<AttachmentItem> = [],
 	currentProjectId?: string,
 ): string {
-	function serialize(node: JSONContent): string {
+	function serialize(node: JSONContent, inSelection = false): string {
 		if (node.type === "text") return node.text || ""
 
 		if (node.type === "mention" && node.attrs) {
@@ -351,7 +386,9 @@ export function getClipboardPlainText(
 			const fallback = isWorkspaceFileMention(attrs)
 				? `${displayName}${suffix}`
 				: `@${displayName}${suffix}`
-			return ` ${portable?.plainText || fallback} `
+			return inSelection
+				? encodeSelectionText(portable?.plainText || fallback)
+				: ` ${portable?.plainText || fallback} `
 		}
 
 		if (node.type === "super-placeholder") {
@@ -360,33 +397,20 @@ export function getClipboardPlainText(
 		}
 
 		if (node.type === INSPECTOR_DETAIL_TYPE) {
-			return serialize(serializeClipboardInspectors({ type: "doc", content: [node] }))
+			return (
+				serializeInspectorContent({ type: "doc", content: [node] })
+					.content?.map((child) => serialize(child, true))
+					.join("") ?? ""
+			)
 		}
 
 		if (node.type === "hardBreak" || node.type === "hard_break") return "\n"
 
-		const childText = node.content?.map(serialize).join("") || ""
+		const childText = node.content?.map((child) => serialize(child, inSelection)).join("") || ""
 		return node.type === "paragraph" ? `${childText}\n` : childText
 	}
 
-	return serialize(serializeClipboardInspectors(content)).replace(/\n$/, "")
-}
-
-/** 复用发送时的完整元素描述；文件节点仍由剪贴板序列化为标准链接。 */
-function serializeClipboardInspectors(content: JSONContent): JSONContent {
-	const t = i18next.getFixedT(i18next.language, "super")
-	return serializeInspectorContent(content, {
-		title: t("stylePanel.inspector.agentPromptTitle"),
-		selector: t("stylePanel.inspector.selector"),
-		size: t("stylePanel.inspector.size"),
-		computedStyles: t("stylePanel.inspector.computedStyles"),
-		textContent: t("stylePanel.inspector.textContent"),
-		elementAttributes: t("stylePanel.inspector.elementAttributes"),
-		resource: t("stylePanel.inspector.resource"),
-		domContext: t("stylePanel.inspector.domContext"),
-		elementHtml: t("stylePanel.inspector.elementHtml"),
-		selectorMatchCount: t("stylePanel.inspector.selectorMatchCount"),
-	})
+	return serialize(transformInspectorContent(content)).replace(/\n$/, "")
 }
 
 export function getClipboardHtml(
@@ -403,7 +427,11 @@ export function getClipboardHtml(
 			const attrs: Record<string, unknown> = {}
 			for (const [key, value] of Object.entries(element.dataset)) {
 				if (key === "type") continue
-				if (key === "fileMention" || key === "screenshotMention") {
+				if (
+					key === "fileMention" ||
+					key === "screenshotMention" ||
+					key === "markdownSource"
+				) {
 					try {
 						attrs[key] = JSON.parse(value || "null")
 					} catch {
@@ -415,29 +443,22 @@ export function getClipboardHtml(
 					attrs[key] = value
 				}
 			}
-			const details = serializeClipboardInspectors({
+			const details = serializeInspectorContent({
 				type: "doc",
 				content: [{ type: INSPECTOR_DETAIL_TYPE, attrs }],
 			})
 			const replacement = document.createElement("span")
-			details.content?.forEach((paragraph) => {
-				paragraph.content?.forEach((node) => {
-					if (node.type === "mention" && node.attrs) {
-						const mention = node.attrs as TiptapMentionAttributes
-						const portable = getMentionClipboardRepresentation(
-							mention,
-							workspaceFiles,
-							currentProjectId,
-						)
-						if (portable)
-							replacement.insertAdjacentHTML("beforeend", portable.htmlContent)
-						else
-							replacement.append(
-								document.createTextNode(getMentionDisplayName(mention)),
-							)
-					} else if (node.text) replacement.append(document.createTextNode(node.text))
-				})
-				replacement.append(document.createElement("br"))
+			details.content?.forEach((node) => {
+				if (node.type === "mention" && node.attrs) {
+					const mention = node.attrs as TiptapMentionAttributes
+					const portable = getMentionClipboardRepresentation(
+						mention,
+						workspaceFiles,
+						currentProjectId,
+					)
+					if (portable) replacement.insertAdjacentHTML("beforeend", portable.htmlContent)
+					else replacement.append(document.createTextNode(getMentionDisplayName(mention)))
+				} else if (node.text) replacement.append(document.createTextNode(node.text))
 			})
 			element.replaceWith(replacement)
 		})
