@@ -83,6 +83,9 @@ class PlatformSettingsApi
         if (array_key_exists('footer', $payload) && is_array($payload['footer'])) {
             $data['footer'] = self::mergeFooterSettings((array) ($data['footer'] ?? []), $payload['footer']);
         }
+        if (array_key_exists('watermark', $payload) && is_array($payload['watermark'])) {
+            $data['watermark'] = array_replace((array) ($data['watermark'] ?? []), $payload['watermark']);
+        }
 
         $this->validateUrls($data);
         $this->validateFooter($data);
@@ -138,6 +141,11 @@ class PlatformSettingsApi
             'minimal_logo' => $minimalLogo,
             'default_language' => (string) ($settings['default_language'] ?? 'zh_CN'),
             'footer' => PlatformSettings::fromArray($settings)->getFooter(),
+            'watermark' => (array) ($settings['watermark'] ?? [
+                'enabled' => false,
+                'fields' => ['real_name'],
+                'depth' => 'light',
+            ]),
         ];
         foreach (['name_i18n', 'title_i18n', 'keywords_i18n', 'description_i18n', 'agent_role_name_i18n', 'agent_role_description_i18n'] as $key) {
             if (isset($settings[$key])) {

@@ -13,6 +13,8 @@ class PlatformSettings
 
     private const string DEFAULT_FILING_LINK = 'https://beian.miit.gov.cn/';
 
+    private const array WATERMARK_DEPTHS = ['light', 'standard', 'strong'];
+
     private string $defaultLanguage = 'zh_CN';
 
     private string $faviconUrl = '';
@@ -66,6 +68,15 @@ class PlatformSettings
             'number' => '',
             'link' => self::DEFAULT_FILING_LINK,
         ],
+    ];
+
+    /**
+     * @var array{enabled: bool, fields: string[], depth: string}
+     */
+    private array $watermark = [
+        'enabled' => false,
+        'fields' => ['real_name'],
+        'depth' => 'light',
     ];
 
     public function getDefaultLanguage(): string
@@ -268,6 +279,7 @@ class PlatformSettings
             'agent_role_description_i18n' => $this->agentRoleDescriptionI18n,
             'custom_service_provider_whitelist' => $this->customServiceProviderWhitelist,
             'footer' => $this->getFooter(),
+            'watermark' => $this->watermark,
         ];
     }
 
@@ -290,6 +302,7 @@ class PlatformSettings
             ?? []
         ));
         $i->setFooter((array) ($data['footer'] ?? []));
+        $i->watermark = self::normalizeWatermark((array) ($data['watermark'] ?? []));
         return $i;
     }
 
@@ -329,6 +342,34 @@ class PlatformSettings
                 'number' => trim((string) ($filing['number'] ?? '')),
                 'link' => $link,
             ],
+        ];
+    }
+
+    /**
+     * @return array{enabled: bool, fields: string[], depth: string}
+     */
+    private static function normalizeWatermark(array $watermark): array
+    {
+        $fields = [];
+        foreach ((array) ($watermark['fields'] ?? ['real_name']) as $field) {
+            if (! is_scalar($field) && $field !== null) {
+                continue;
+            }
+            $value = trim((string) $field);
+            if ($value !== '') {
+                $fields[] = $value;
+            }
+        }
+
+        $depth = (string) ($watermark['depth'] ?? 'light');
+        if (! in_array($depth, self::WATERMARK_DEPTHS, true)) {
+            $depth = 'light';
+        }
+
+        return [
+            'enabled' => (bool) ($watermark['enabled'] ?? false),
+            'fields' => $fields,
+            'depth' => $depth,
         ];
     }
 }

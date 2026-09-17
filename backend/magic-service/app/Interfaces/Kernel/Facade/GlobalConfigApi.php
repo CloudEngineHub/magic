@@ -112,6 +112,7 @@ class GlobalConfigApi extends AbstractApi
         $cachedData = GlobalConfigCacheUtil::get(GlobalConfigCacheUtil::getGlobalConfigKey());
         if ($cachedData !== false) {
             $this->logger->info('Global config - cache hit');
+            $this->logger->info('watermark_debug settings/all cache=' . (isset($cachedData['platform_settings']['watermark']) ? 'hit_with_watermark' : 'hit_no_watermark'));
             return $cachedData;
         }
         $result = [];
@@ -144,6 +145,8 @@ class GlobalConfigApi extends AbstractApi
 
             $result = $parallel->wait();
             $result['global_config'] = $this->appendBootstrapState((array) ($result['global_config'] ?? []));
+
+            $this->logger->info('watermark_debug settings/all cache=miss has_watermark=' . (isset($result['platform_settings']['watermark']) ? '1' : '0'));
 
             // Cache the result for 5 minutes (300 seconds) - longer TTL since it's global
             GlobalConfigCacheUtil::setGlobalConfig($result);
@@ -515,6 +518,11 @@ class GlobalConfigApi extends AbstractApi
             'minimal_logo' => $minimalLogo,
             'default_language' => (string) ($settings['default_language'] ?? 'zh_CN'),
             'footer' => PlatformSettings::fromArray($settings)->getFooter(),
+            'watermark' => (array) ($settings['watermark'] ?? [
+                'enabled' => false,
+                'fields' => ['real_name'],
+                'depth' => 'light',
+            ]),
         ];
         foreach (['name_i18n', 'title_i18n', 'keywords_i18n', 'description_i18n'] as $key) {
             if (isset($settings[$key])) {
