@@ -99,17 +99,19 @@ class TaskFileRepository implements TaskFileRepositoryInterface
                 $query->where('space_type', $spaceType);
             }
 
-            $models = $query->get();
+            // 取原始行、跳过 Eloquent 模型水合：5000 行实测模型实例化要 137ms CPU，裸取数只要 18ms
+            // （见 debug/bench_magicfs_db_fetch.php）。
+            //
+            // 行形状一律用 (array) 归一后再按列名读：框架默认是 PDO::FETCH_OBJ，而项目里的
+            // App\Listener\FetchModeListener 会把每个 statement 改成 PDO::FETCH_ASSOC，
+            // 两种都要能读——之前在这里踩过"把数组当对象读"的线上报错。
+            //
+            // 查询条件仍由 Eloquent builder 组装，toBase() 会带上软删除等全局作用域，
+            // 走上层连接的 select() 因此查询事件（SQL 审计日志）也照常触发。
+            $scoped = $query->toBase();
 
-            foreach ($models as $model) {
-                // 只取原始列值做水合：跳过 Eloquent 的 toArray()（cast + 关系处理）和
-                // BaseObject::set() 的字段名解析，5000 行实测约省 100ms CPU。
-                //
-                // 刻意保留模型、而不是直接取底层查询构建器的行（applyScopes()->getQuery()->get()）：
-                // 那条路径返回数组还是对象取决于连接的 fetch 模式，实测不同环境不一致
-                // （本地 vendor 是 PDO::FETCH_OBJ，测试环境拿到的是数组），
-                // 而 Model::getAttributes() 永远是以列名为键的数组。
-                $list[] = TaskFileEntity::fromRow($model->getAttributes());
+            foreach ($this->model->getConnection()->select($scoped->toSql(), $scoped->getBindings()) as $row) {
+                $list[] = TaskFileEntity::fromRow((array) $row);
             }
         }
 
@@ -1771,22 +1773,22 @@ class TaskFileRepository implements TaskFileRepositoryInterface
                 $query->where('project_id', $projectId);
             }
 
-            $children = $query->get(['file_id', 'is_directory']);
+            // 只取两列，没必要为每行建一个 Eloquent 模型：5000 行的 BFS 实测模型水合要 143ms CPU，
+            // 直接读原始行只要个位数毫秒。行形状用 (array) 归一（框架默认 FETCH_OBJ，
+            // App\Listener\FetchModeListener 会改成 FETCH_ASSOC），列名由下面的 select 确定。
+            $scoped = $query->select(['file_id', 'is_directory'])->toBase();
+            $children = $this->model->getConnection()->select($scoped->toSql(), $scoped->getBindings());
 
-            if ($children->isEmpty()) {
+            if ($children === []) {
                 break;
             }
 
             $nextLevelParentIds = [];
             foreach ($children as $child) {
-                // 读原始列值而不是 $child->file_id / $child->is_directory：后者每行都要走
-                // Model::__get() -> getAttribute() 的 cast 判定与属性转换，5000 行实测
-                // 15.9ms -> 3.8ms。getAttributes() 永远返回以列名为键的数组，
-                // 不依赖连接的 fetch 模式（列名由上面的 get(['file_id', 'is_directory']) 确定）。
-                $attributes = $child->getAttributes();
-                $fileId = (int) ($attributes['file_id'] ?? 0);
+                $child = (array) $child;
+                $fileId = (int) ($child['file_id'] ?? 0);
                 $allIds[] = $fileId;
-                if ((bool) ($attributes['is_directory'] ?? false)) {
+                if ((bool) ($child['is_directory'] ?? false)) {
                     $nextLevelParentIds[] = $fileId;
                 }
             }
