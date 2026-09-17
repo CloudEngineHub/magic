@@ -1553,6 +1553,7 @@ class LLMAppService extends AbstractLLMAppService
 
         $data = $imageGenerateParamsVO->toArray();
         $data['organization_code'] = $organizationCode;
+        $data['user_id'] = (string) $creator;
 
         // 图片水印处理
         $modelId = $imageModel->getModelId() ?: $proxyModelRequest->getModel();

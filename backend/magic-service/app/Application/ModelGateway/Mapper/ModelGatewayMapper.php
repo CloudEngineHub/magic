@@ -761,10 +761,12 @@ class ModelGatewayMapper extends ModelMapper
         );
 
         if ($providerModelEntity->getModelType()->isVLM()) {
+            $imageConfig = $providerConfigItem->toArray();
+            $imageConfig['model_extra'] = $providerModelEntity->getExtraArray() ?? [];
             return new ModelEntry(
                 attributes: $attributes,
                 model: new ImageModel(
-                    $providerConfigItem->toArray(),
+                    $imageConfig,
                     $providerModelEntity->getModelVersion(),
                     (string) $providerModelEntity->getId(),
                     $providerEntity->getProviderCode(),
