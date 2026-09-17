@@ -24,6 +24,7 @@ return [
         'scope' => 'ขอบเขต',
         'authorization_url' => 'URL การอนุญาต',
         'authorization_content_type' => 'ประเภทเนื้อหาการอนุญาต',
+        'authorization_method' => 'Authorization Method',
         'issuer_url' => 'URL ผู้ออก',
         'redirect_uri' => 'URI เปลี่ยนเส้นทาง',
         'use_pkce' => 'ใช้ PKCE',

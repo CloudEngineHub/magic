@@ -24,6 +24,7 @@ return [
         'scope' => 'Phạm vi',
         'authorization_url' => 'URL Ủy quyền',
         'authorization_content_type' => 'Loại Nội dung Ủy quyền',
+        'authorization_method' => 'Authorization Method',
         'issuer_url' => 'URL Nhà phát hành',
         'redirect_uri' => 'URI Chuyển hướng',
         'use_pkce' => 'Sử dụng PKCE',

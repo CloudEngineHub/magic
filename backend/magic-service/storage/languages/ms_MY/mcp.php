@@ -24,6 +24,7 @@ return [
         'scope' => 'Skop',
         'authorization_url' => 'URL Kebenaran',
         'authorization_content_type' => 'Jenis Kandungan Kebenaran',
+        'authorization_method' => 'Authorization Method',
         'issuer_url' => 'URL Pengeluar',
         'redirect_uri' => 'URI Ubah Hala',
         'use_pkce' => 'Gunakan PKCE',
