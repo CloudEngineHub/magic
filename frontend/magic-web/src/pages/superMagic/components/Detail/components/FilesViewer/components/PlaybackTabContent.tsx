@@ -227,7 +227,7 @@ function PlaybackTabContent(props: PlaybackTabContentProps) {
 					className="mb-[14px] flex h-6 items-center gap-1"
 					align="center"
 				>
-					<Flex align="center" gap={4}>
+					<Flex align="center" gap={4} className="min-w-0 flex-1 overflow-hidden">
 						<StatusIcon status={currentTopicStatus} className="shrink-0" />
 						<span className="shrink-0 text-[18px] font-medium leading-6 text-foreground">
 							{t("playbackControl.magicVirtualMachine")}
@@ -265,9 +265,9 @@ function PlaybackTabContent(props: PlaybackTabContentProps) {
 								</div>
 							)}
 					</Flex>
-					<Flex align="center" gap={4}>
+					<Flex align="center" gap={4} className="shrink-0">
 						{/* Md 工具栏 portal 挂载点，Md 组件会渲染渲染/原文/复制按钮到此处 */}
-						<div ref={setMdToolbarEl} />
+						<div ref={setMdToolbarEl} className="flex shrink-0" />
 						{/* 打开原文件按钮 */}
 						{shouldShowOpenSourceFileButton && (
 							<ActionButton

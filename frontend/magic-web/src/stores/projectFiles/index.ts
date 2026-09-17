@@ -15,6 +15,14 @@ import {
 	type ProjectAttachmentsChangeTraceContext,
 } from "@/pages/superMagic/utils/projectAttachments/changeLogReporter"
 import type { SuperMagicFileChangeItem } from "@/types/chat/intermediate_message"
+import { clearAttachmentIndexSessionCache } from "@/pages/superMagic/components/TopicFilesButton/utils/attachmentIndexSessionCache"
+
+type ProjectAttachmentsApplySource =
+	| "ws_realtime"
+	| "refresh_parent_ids"
+	| "refresh_parent_merged"
+	| "refresh_parent_children"
+	| "unknown"
 
 interface SetWorkspaceFileTreeOptions {
 	list?: AttachmentItem[]
@@ -61,6 +69,7 @@ export class ProjectFilesStore {
 			this.attachmentLoadState = selectedProject
 				? { projectId: selectedProject.id, status: "idle" }
 				: undefined
+			clearAttachmentIndexSessionCache()
 		}
 		this.currentSelectedProject = selectedProject
 	}
@@ -149,6 +158,7 @@ export class ProjectFilesStore {
 
 		this.workspaceFileTree = this.excludeHiddenItems(tree)
 		this.workspaceFilesList = this.excludeHiddenItems(workspaceFilesList)
+		clearAttachmentIndexSessionCache()
 		perf.recordDuration("store_commit_ms", commitStartedAt, {
 			workspace_file_tree_count: this.workspaceFileTree.length,
 			workspace_files_list_count: this.workspaceFilesList.length,
@@ -222,8 +232,13 @@ export class ProjectFilesStore {
 
 	applyFileChanges(
 		changes: SuperMagicFileChangeItem[],
-		options: { locale?: string; trace?: ProjectAttachmentsChangeTraceContext } = {},
+		options: {
+			locale?: string
+			trace?: ProjectAttachmentsChangeTraceContext
+			applySource?: ProjectAttachmentsApplySource
+		} = {},
 	): ApplyProjectAttachmentsChangesResult {
+		const applySource = options.applySource || "unknown"
 		const perf = createFileTreePerfScope(this.workspaceFileTree)
 		const commitStartedAt = perf.start()
 		projectAttachmentsChangeLog.storeApplyStart({
@@ -232,16 +247,28 @@ export class ProjectFilesStore {
 			beforeTreeCount: this.workspaceFileTree.length,
 			beforeListCount: this.workspaceFilesList.length,
 		})
-		const result = perf.measure("store_apply_file_changes_ms", () =>
-			applyProjectAttachmentsChangesToTree(this.workspaceFileTree, changes, options),
+		const result = perf.measure(
+			"store_apply_file_changes_ms",
+			() =>
+				applyProjectAttachmentsChangesToTree(this.workspaceFileTree, changes, {
+					locale: options.locale,
+				}),
+			() => ({
+				apply_source: applySource,
+				trace_id: options.trace?.traceId,
+				project_id: options.trace?.projectId,
+				change_count: changes.length,
+			}),
 		)
 
 		if (!result.fallbackRequired) {
 			this.workspaceFileTree = result.tree
 			this.workspaceFilesList = result.list
+			clearAttachmentIndexSessionCache()
 		}
 
 		perf.recordDuration("store_apply_file_changes_commit_ms", commitStartedAt, {
+			apply_source: applySource,
 			trace_id: options.trace?.traceId,
 			project_id: options.trace?.projectId,
 			change_count: changes.length,
