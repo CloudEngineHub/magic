@@ -496,12 +496,13 @@ const IsolatedHTMLRendererInner = forwardRef<IsolatedHTMLRendererRef, IsolatedHT
 			enableInlineInspectorFallback = false,
 			permissionController,
 		} = props
-		// host：用户当前所在项目。分享页没有 Provider，会话 API 必须失败。
+		// host：用户当前所在项目；发布页通过 Provider 按需创建运行项目。
 		const {
 			selectedProject,
 			topicStore: scopedTopicStore,
 			ensureConversation,
 			requestPreviewMode,
+			requireAuthentication,
 		} = useHostConversation()
 		// origin：文件/库所在项目。发布预览传微应用原项目，普通预览回落到 host。
 		const runtimeProjectId = projectId ?? selectedProject?.id
@@ -1260,6 +1261,8 @@ const IsolatedHTMLRendererInner = forwardRef<IsolatedHTMLRendererRef, IsolatedHT
 		const projectContextUnavailableError = t("htmlEditor.projectContextUnavailable")
 		const previewModeCancelledError = t("microAppPage.conversation.switchToPreviewCancelled")
 		const authorizeProjectPermission = useMemoizedFn(async (scope: HtmlPermissionScope) => {
+			// Login confirmation precedes app permissions and never creates a runtime project.
+			if (scope === "project.message.write") await requireAuthentication?.()
 			if (scope === "project.message.write" && requestPreviewMode) {
 				if (!(await requestPreviewMode())) throw new Error(previewModeCancelledError)
 				return true

@@ -47,6 +47,14 @@ Do not create wrapper directories or use `../` to traverse above the root. Unles
 
 Data-oriented micro-apps use MagicBase by default. Use files only for file-shaped configuration, caches, exports, or when explicitly requested; store shared CRUD records as one file per record, render lists from `listDir()` and filename projections, and read record details on demand.
 
+## Anonymous Access and Form Drafts
+
+- Set `app.json.anonymous` explicitly. For `anonymous: true`, browsing, form editing, and local calculations must work without login or a runtime project. Prefer browser APIs and documented anonymous-capable endpoints over project-dependent `window.Magic.*` APIs. Do not replace shared business persistence with browser storage or assume a share token grants authenticated write access.
+- Never create a runtime project or send Agent messages during initialization, context reads, or form restoration. Call project-dependent APIs only for an explicit user action that needs them; the host owns runtime-project creation and login confirmation. Do not redirect to login automatically, bypass the host confirmation, or automatically replay a submission after login.
+- For anonymous-access apps with forms, declare `metadata.form_draft: { "enabled": true, "storage": "sessionStorage" }` in `app.json` by default. This is an app-owned policy, not a host-managed feature: implement saving, restoration, and cleanup in the micro-app itself, using browser storage rather than project APIs. The app must read and honor this configuration.
+- Save draft values on input/change and flush before invoking an action that may require login. Use a stable app/form key and a schema version that remain unchanged across login; restore before applying empty defaults, retain drafts on cancellation or failure, and clear only after confirmed submission success or explicit reset. Do not persist passwords, credentials, or file-input contents; handle unavailable storage with visible feedback rather than silently losing input.
+- Verify the actual published-page flow: enter values while logged out, cancel login, then confirm login and return to the same app. Values must survive, unrelated apps/forms must not share drafts, and returning must not submit automatically.
+
 ## MagicBase, Identity, and Permissions
 
 - Load the `magicbase` Skill as needed for persistence, CRUD, queries, statistics, exports, current users, creators, owners, or permissions.
@@ -101,6 +109,7 @@ When one exact Skill file is required, the message may still include an explicit
 
 - The manifest, entry point, and project memory are in the workspace root without wrapper paths or `../` traversal.
 - Display fields match between `app.json` and `magic.project.js`; `anonymous` and permission declarations reflect the actual scenario.
+- Anonymous apps render without project-dependent initialization; their app-owned form draft policy preserves input across the confirmed login round trip.
 - MagicBase ownership, identity source, permission enforceability, and the database mutation flow are documented.
 - Medium and complex apps include `.magic/skills/<skill-name>/SKILL.md`, and task messages reference the Skill name.
 - Agent messages rely on the host-provided `@micro_app` mention; ordinary tasks still work when sharing permission or the Skill is unavailable.

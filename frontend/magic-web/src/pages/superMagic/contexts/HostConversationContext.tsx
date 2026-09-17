@@ -11,6 +11,8 @@ export interface HostConversationContextValue {
 	} | null>
 	/** Request the host editor to switch from development to preview mode. */
 	requestPreviewMode?: () => Promise<boolean> | boolean
+	/** Authenticate a published-app action without creating its runtime project. */
+	requireAuthentication?: () => Promise<void>
 }
 
 const HostConversationContext = createContext<HostConversationContextValue | null>(null)
@@ -20,23 +22,37 @@ interface HostConversationProviderProps {
 	topicStore?: TopicStore
 	ensureConversation?: HostConversationContextValue["ensureConversation"]
 	requestPreviewMode?: HostConversationContextValue["requestPreviewMode"]
+	requireAuthentication?: HostConversationContextValue["requireAuthentication"]
 	children: ReactNode
 }
 
 /**
  * 宿主会话：用户当前所在项目 + 该会话的 topicStore。
- * 分享页不包这个 Provider，会话类 API 必须失败，不能回落到 origin。
+ * 发布页按需提供运行项目；没有宿主时不能回落到 origin。
  */
 export function HostConversationProvider({
 	selectedProject,
 	topicStore,
 	ensureConversation,
 	requestPreviewMode,
+	requireAuthentication,
 	children,
 }: HostConversationProviderProps) {
 	const value = useMemo(
-		() => ({ selectedProject, topicStore, ensureConversation, requestPreviewMode }),
-		[ensureConversation, requestPreviewMode, selectedProject, topicStore],
+		() => ({
+			selectedProject,
+			topicStore,
+			ensureConversation,
+			requestPreviewMode,
+			requireAuthentication,
+		}),
+		[
+			ensureConversation,
+			requestPreviewMode,
+			requireAuthentication,
+			selectedProject,
+			topicStore,
+		],
 	)
 
 	return (

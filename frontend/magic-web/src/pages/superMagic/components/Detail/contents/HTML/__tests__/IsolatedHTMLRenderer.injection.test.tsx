@@ -5,6 +5,7 @@ import type { TopicStore } from "@/pages/superMagic/stores/core/topic"
 import { HostConversationProvider } from "@/pages/superMagic/contexts/HostConversationContext"
 import pubsub, { PubSubEvents } from "@/utils/pubsub"
 import IsolatedHTMLRenderer, { type IsolatedHTMLRendererRef } from "../IsolatedHTMLRenderer"
+import type { UseIframeAgentOptions } from "../iframe-api/hooks/useIframeAgent"
 
 const hookState = vi.hoisted(() => ({
 	editorContentInjectedValues: [] as boolean[],
@@ -41,6 +42,8 @@ const iframeMessageMocks = vi.hoisted(() => ({
 
 const agentActionMocks = vi.hoisted(() => ({
 	useIframeAgentActions: vi.fn(),
+	agentOptions: null as UseIframeAgentOptions | null,
+	authorizeHtmlPermission: vi.fn(async () => true),
 }))
 
 vi.mock("react-i18next", () => ({
@@ -315,7 +318,7 @@ vi.mock("../hooks/useHtmlAppPermissions", () => ({
 		htmlAppConfig: null,
 		htmlAppConfigState: { loading: false, error: null },
 		htmlAppInstanceKey: "test-app",
-		authorizeHtmlPermission: vi.fn(async () => true),
+		authorizeHtmlPermission: agentActionMocks.authorizeHtmlPermission,
 	}),
 }))
 
@@ -332,9 +335,10 @@ vi.mock("../iframe-api/hooks/useIframeLLM", () => ({
 }))
 
 vi.mock("../iframe-api/hooks/useIframeAgent", () => ({
-	useIframeAgent: () => ({
-		handleAgentMessage: iframeMessageMocks.handleAgentMessage,
-	}),
+	useIframeAgent: (options: UseIframeAgentOptions) => {
+		agentActionMocks.agentOptions = options
+		return { handleAgentMessage: iframeMessageMocks.handleAgentMessage }
+	},
 }))
 
 vi.mock("../iframe-api/hooks/useIframeUserInfo", () => ({
@@ -626,6 +630,39 @@ describe("IsolatedHTMLRenderer iframe injection", () => {
 			{ microAppId: undefined, microAppName: undefined },
 			undefined,
 		)
+	})
+
+	it("asks for authentication before message permissions without creating the runtime project", async () => {
+		const requireAuthentication = vi
+			.fn()
+			.mockRejectedValue(new Error("Authentication required"))
+		const ensureConversation = vi.fn()
+		render(
+			<HostConversationProvider
+				requireAuthentication={requireAuthentication}
+				ensureConversation={ensureConversation}
+			>
+				<IsolatedHTMLRenderer {...defaultProps} projectId="published-origin" />
+			</HostConversationProvider>,
+		)
+		await flushReactEffects()
+		expect(requireAuthentication).not.toHaveBeenCalled()
+		expect(ensureConversation).not.toHaveBeenCalled()
+		await expect(
+			agentActionMocks.agentOptions?.authorizePermission?.("project.message.write"),
+		).rejects.toThrow("Authentication required")
+		expect(requireAuthentication).toHaveBeenCalledTimes(1)
+		expect(agentActionMocks.authorizeHtmlPermission).not.toHaveBeenCalled()
+		expect(ensureConversation).not.toHaveBeenCalled()
+
+		requireAuthentication.mockResolvedValue(undefined)
+		await expect(
+			agentActionMocks.agentOptions?.authorizePermission?.("project.message.write"),
+		).resolves.toBe(true)
+		expect(agentActionMocks.authorizeHtmlPermission).toHaveBeenCalledWith(
+			"project.message.write",
+		)
+		expect(ensureConversation).not.toHaveBeenCalled()
 	})
 
 	it("does not read window.project_id when host props omit projectId", async () => {

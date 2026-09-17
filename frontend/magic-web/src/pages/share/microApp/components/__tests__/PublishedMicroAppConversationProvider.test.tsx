@@ -3,6 +3,8 @@ import { userStore } from "@/models/user"
 import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react"
 import { beforeEach, describe, expect, it, vi } from "vitest"
 import { SuperMagicApi } from "@/apis"
+import MagicModal from "@/components/base/MagicModal"
+import { authEventBus } from "@/services/auth/AuthEventBus"
 import { loadProjectAttachments } from "@/pages/superMagic/services/projectAttachmentsLoader"
 import { FileAccessProvider, useFileAccess } from "@/pages/superMagic/fileAccess/FileAccessProvider"
 import { createShareFileAccess } from "@/pages/superMagic/fileAccess/fileAccessContext"
@@ -24,6 +26,11 @@ const layoutMocks = vi.hoisted(() => ({
 	tasksProps: null as Record<string, unknown> | null,
 	expand: () => {},
 }))
+
+vi.mock("@/components/base/MagicModal", () => ({
+	default: { confirm: vi.fn(() => ({ destroy: vi.fn() })) },
+}))
+vi.mock("@/services/auth/AuthEventBus", () => ({ authEventBus: { emit: vi.fn() } }))
 
 vi.mock("react-i18next", () => ({
 	initReactI18next: { type: "3rdParty", init: vi.fn() },
@@ -113,6 +120,8 @@ vi.mock("@/pages/superMagic/services/projectAttachmentsLoader", () => ({
 
 describe("PublishedMicroAppConversationProvider", () => {
 	beforeEach(() => {
+		vi.mocked(MagicModal.confirm).mockClear()
+		vi.mocked(authEventBus.emit).mockClear()
 		userStore.user.authorization = "test-token"
 		layoutMocks.tasksProps = null
 		layoutMocks.props = null
@@ -151,6 +160,7 @@ describe("PublishedMicroAppConversationProvider", () => {
 				enableErrorMessagePrompt: false,
 			})
 		})
+		expect(SuperMagicApi.ensureMicroAppRuntimeProject).not.toHaveBeenCalled()
 	})
 
 	it("uses the shared desktop layout and history panel for a runtime project", async () => {
@@ -396,6 +406,7 @@ describe("PublishedMicroAppConversationProvider", () => {
 		)
 		await act(() => Promise.resolve())
 		expect(screen.queryByTestId("published-micro-app-tasks-button")).not.toBeInTheDocument()
+		expect(SuperMagicApi.getMicroAppRuntimeProject).not.toHaveBeenCalled()
 		expect(SuperMagicApi.ensureMicroAppRuntimeProject).not.toHaveBeenCalled()
 	})
 
@@ -442,6 +453,44 @@ describe("PublishedMicroAppConversationProvider", () => {
 		expect(ensured?.selectedProject).not.toEqual({ id: hydratedProject.id })
 	})
 
+	it.each(["onCancel", "onOk"] as const)(
+		"does not create a runtime project when an anonymous action chooses %s",
+		async (choice) => {
+			userStore.user.authorization = ""
+			const errors: string[] = []
+			function StartButton() {
+				const { ensureConversation } = useHostConversation()
+				return (
+					<button
+						onClick={() =>
+							void ensureConversation?.().catch((error: Error) => {
+								errors.push(error.message)
+							})
+						}
+					>
+						Start
+					</button>
+				)
+			}
+			render(
+				<PublishedMicroAppConversationProvider appId="app-1">
+					<StartButton />
+				</PublishedMicroAppConversationProvider>,
+			)
+			fireEvent.click(screen.getByText("Start"))
+			fireEvent.click(screen.getByText("Start"))
+			expect(MagicModal.confirm).toHaveBeenCalledTimes(1)
+			expect(authEventBus.emit).not.toHaveBeenCalled()
+			await act(async () => {
+				vi.mocked(MagicModal.confirm).mock.calls[0][0][choice]?.()
+			})
+			expect(errors).toEqual(["Authentication required", "Authentication required"])
+			expect(authEventBus.emit).toHaveBeenCalledTimes(choice === "onOk" ? 1 : 0)
+			expect(SuperMagicApi.getMicroAppRuntimeProject).not.toHaveBeenCalled()
+			expect(SuperMagicApi.ensureMicroAppRuntimeProject).not.toHaveBeenCalled()
+		},
+	)
+
 	it("does not render a stale runtime project after switching apps", async () => {
 		const appA = createDeferred<{ exists: boolean; project?: { id: string } }>()
 		const appB = createDeferred<{ exists: boolean; project?: { id: string } }>()
@@ -482,6 +531,92 @@ describe("PublishedMicroAppConversationProvider", () => {
 		expect(SuperMagicApi.getProjectDetail).not.toHaveBeenCalled()
 		expect(layoutMocks.messagePanelProps?.selectedProject).toBeNull()
 		expect(layoutMocks.props?.isReadOnly).toBe(false)
+	})
+
+	it("reuses one creation request for concurrent actions", async () => {
+		const creation = createDeferred<{ project: { id: string } }>()
+		vi.mocked(SuperMagicApi.ensureMicroAppRuntimeProject).mockReturnValue(
+			creation.promise as never,
+		)
+		vi.mocked(SuperMagicApi.getProjectDetail).mockResolvedValue({ id: "runtime-new" } as never)
+		vi.mocked(SuperMagicApi.getTopicsByProjectId).mockResolvedValue({ list: [] } as never)
+		const results: unknown[] = []
+		function StartButton() {
+			const { ensureConversation } = useHostConversation()
+			return (
+				<button
+					onClick={() =>
+						void ensureConversation?.().then((result) => results.push(result))
+					}
+				>
+					Start
+				</button>
+			)
+		}
+		render(
+			<PublishedMicroAppConversationProvider appId="app-1">
+				<StartButton />
+			</PublishedMicroAppConversationProvider>,
+		)
+		await act(() => Promise.resolve())
+		expect(SuperMagicApi.ensureMicroAppRuntimeProject).not.toHaveBeenCalled()
+		fireEvent.click(screen.getByText("Start"))
+		fireEvent.click(screen.getByText("Start"))
+		await waitFor(() =>
+			expect(SuperMagicApi.ensureMicroAppRuntimeProject).toHaveBeenCalledTimes(1),
+		)
+		await act(async () => creation.resolve({ project: { id: "runtime-new" } }))
+		await waitFor(() => expect(results).toHaveLength(2))
+		expect(results[0]).toBe(results[1])
+	})
+
+	it("discards a pending project query after logout without querying anonymously", async () => {
+		const query = createDeferred<{ exists: boolean; project: { id: string } }>()
+		vi.mocked(SuperMagicApi.getMicroAppRuntimeProject).mockReturnValue(query.promise as never)
+		const { rerender } = render(
+			<PublishedMicroAppConversationProvider appId="app-1">
+				<div />
+			</PublishedMicroAppConversationProvider>,
+		)
+		userStore.user.authorization = ""
+		rerender(
+			<PublishedMicroAppConversationProvider appId="app-1">
+				<div />
+			</PublishedMicroAppConversationProvider>,
+		)
+		await act(async () => query.resolve({ exists: true, project: { id: "old-runtime" } }))
+		expect(SuperMagicApi.getMicroAppRuntimeProject).toHaveBeenCalledTimes(1)
+		expect(SuperMagicApi.getProjectDetail).not.toHaveBeenCalled()
+		expect(SuperMagicApi.ensureMicroAppRuntimeProject).not.toHaveBeenCalled()
+	})
+
+	it("does not start creation if the preview unmounts during authentication", async () => {
+		let errorMessage = ""
+		function StartButton() {
+			const { ensureConversation } = useHostConversation()
+			return (
+				<button
+					onClick={() =>
+						void ensureConversation?.().catch((error: Error) => {
+							errorMessage = error.message
+						})
+					}
+				>
+					Start
+				</button>
+			)
+		}
+		const { unmount } = render(
+			<PublishedMicroAppConversationProvider appId="app-1">
+				<StartButton />
+			</PublishedMicroAppConversationProvider>,
+		)
+		await act(() => Promise.resolve())
+		fireEvent.click(screen.getByText("Start"))
+		unmount()
+		await act(() => Promise.resolve())
+		expect(errorMessage).toBe("Runtime project load superseded")
+		expect(SuperMagicApi.ensureMicroAppRuntimeProject).not.toHaveBeenCalled()
 	})
 })
 

@@ -22,6 +22,7 @@ import { FileAccessProvider } from "@/pages/superMagic/fileAccess/FileAccessProv
 import { createSessionFileAccess } from "@/pages/superMagic/fileAccess/fileAccessContext"
 
 import PublishedMicroAppSidebar, { type PublishedMicroAppPanel } from "./PublishedMicroAppSidebar"
+import { useMicroAppAuthentication } from "../hooks/useMicroAppAuthentication"
 
 const RUNTIME_PROJECT_LOAD_SUPERSEDED = "Runtime project load superseded"
 
@@ -47,6 +48,8 @@ const PublishedMicroAppConversationSurface = observer(
 		const [panel, setPanel] = useState<PublishedMicroAppPanel>("conversation")
 		const appStore = useAppStore()
 		const { conversation } = appStore
+		const requireAuthentication = useMicroAppAuthentication()
+		const authorization = userStore.user.authorization?.trim() || ""
 		const [runtimeProject, setRuntimeProject] = useState<ProjectListItem | null>(null)
 		const [runtimeProjectState, setRuntimeProjectState] = useState<
 			"loading" | "absent" | "ready"
@@ -119,37 +122,55 @@ const PublishedMicroAppConversationSurface = observer(
 		useEffect(() => {
 			// Every appId gets a version so old responses cannot update the new preview.
 			const requestId = ++runtimeRequestIdRef.current
-			const isCurrent = () => runtimeRequestIdRef.current === requestId
+			const isCurrent = () =>
+				runtimeRequestIdRef.current === requestId &&
+				(userStore.user.authorization?.trim() || "") === authorization
 			setRuntimeProject(null)
-			setRuntimeProjectState("loading")
-			void SuperMagicApi.getMicroAppRuntimeProject(appId, { enableErrorMessagePrompt: false })
-				.then(async (result) => {
-					if (!isCurrent()) return
-					if (result.exists && result.project)
-						await loadRuntimeProject(result.project, isCurrent)
-					else if (isCurrent()) setRuntimeProjectState("absent")
+			setRuntimeProjectState(authorization ? "loading" : "absent")
+			// Anonymous browsing must not call session APIs, which can trigger a login redirect.
+			if (authorization)
+				void SuperMagicApi.getMicroAppRuntimeProject(appId, {
+					enableErrorMessagePrompt: false,
 				})
-				.catch(() => {
-					if (isCurrent()) setRuntimeProjectState("absent")
-				})
+					.then(async (result) => {
+						if (!isCurrent()) return
+						if (result.exists && result.project)
+							await loadRuntimeProject(result.project, isCurrent)
+						else if (isCurrent()) setRuntimeProjectState("absent")
+					})
+					.catch(() => {
+						if (isCurrent()) setRuntimeProjectState("absent")
+					})
 			return () => {
 				runtimeRequestIdRef.current += 1
+				ensurePromiseRef.current = null
+				ensurePromiseAppIdRef.current = null
 				setRuntimeProject(null)
 				conversation.reset()
 				projectFilesStore.setSelectedProject(null)
 			}
-		}, [appId, conversation, loadRuntimeProject, projectFilesStore])
+		}, [appId, authorization, conversation, loadRuntimeProject, projectFilesStore])
 
 		const ensureConversation = async () => {
+			const initialRequestId = runtimeRequestIdRef.current
+			await requireAuthentication()
+			if ((userStore.user.authorization?.trim() || "") !== authorization) {
+				throw new Error(RUNTIME_PROJECT_LOAD_SUPERSEDED)
+			}
 			if (ensurePromiseRef.current && ensurePromiseAppIdRef.current === appId) {
 				return ensurePromiseRef.current
 			}
-			if (!userStore.user.authorization?.trim()) throw new Error("Authentication required")
+			// Authentication is async; the preview may have unmounted while awaiting it.
+			if (runtimeRequestIdRef.current !== initialRequestId) {
+				throw new Error(RUNTIME_PROJECT_LOAD_SUPERSEDED)
+			}
 			if (runtimeProject && conversation.selectedProject?.id === runtimeProject.id) {
 				return { selectedProject: runtimeProject, topicStore: conversation.topicStore }
 			}
 			const requestId = ++runtimeRequestIdRef.current
-			const isCurrent = () => runtimeRequestIdRef.current === requestId
+			const isCurrent = () =>
+				runtimeRequestIdRef.current === requestId &&
+				(userStore.user.authorization?.trim() || "") === authorization
 			setRuntimeProject(null)
 			setRuntimeProjectState("loading")
 			const promise = (async () => {
@@ -177,6 +198,7 @@ const PublishedMicroAppConversationSurface = observer(
 				selectedProject={runtimeProject}
 				topicStore={conversation.topicStore}
 				ensureConversation={ensureConversation}
+				requireAuthentication={requireAuthentication}
 			>
 				<TopicDesktopPanels
 					containerClassName="h-full w-full overflow-hidden"
