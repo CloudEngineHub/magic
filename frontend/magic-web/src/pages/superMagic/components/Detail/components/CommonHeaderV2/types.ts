@@ -138,6 +138,8 @@ export interface CommonHeaderV2Props {
 	/** Whether this cached preview should expose test ids. */
 	testIdsEnabled?: boolean
 	renderMode?: "full" | "actions"
+	/** Keeps the standard separator unless an embedded preview already provides its own border. */
+	showBottomBorder?: boolean
 	type?: string
 	onFullscreen?: () => void
 	onDownload?: (mode?: DownloadImageMode) => void

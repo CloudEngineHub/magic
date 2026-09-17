@@ -8,7 +8,12 @@ import { cn } from "@/utils/cn"
 import UserSpaceIcon from "../../../components/UserSpace/UserSpaceIcon"
 
 export type MicroAppWorkspaceView =
-	"preview" | "files" | "database" | "scheduledTasks" | "shareManagement" | "userSpace"
+	| "preview"
+	| "files"
+	| "database"
+	| "scheduledTasks"
+	| "shareManagement"
+	| "userSpace"
 
 interface MicroAppWorkspaceNavProps {
 	activeView: MicroAppWorkspaceView

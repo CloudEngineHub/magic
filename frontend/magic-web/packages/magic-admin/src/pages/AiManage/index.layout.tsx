@@ -12,6 +12,7 @@ import {
 	IconRobot,
 	IconSitemap,
 	IconChartLine,
+	IconFileAnalytics,
 } from "@tabler/icons-react"
 import {
 	AI_APP_MENU,
@@ -179,6 +180,14 @@ function AIManagerLayout() {
 								)
 							)
 						},
+					},
+					{
+						key: RoutePath.AIDataDashboardFileProductionAnalysis,
+						label: t("nav.aiSubMenu.fileProductionAnalysis"),
+						icon: <IconFileAnalytics size={20} />,
+						validate: (permissions: string[], isSuperAdmin?: boolean) =>
+							isSuperAdmin ||
+							permissions.includes(PERMISSION_KEY_MAP.DATA_DASHBOARD_FILE_QUERY),
 					},
 				],
 			},

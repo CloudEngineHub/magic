@@ -9,6 +9,7 @@ import {
 	pickSelectedElementIdAtStagePointer,
 	resolveManagedElementIdFromKonvaNode,
 } from "../transform/elementNodeUtils"
+import { getNameLabelElementIdFromNode } from "../labels/nameLabelNodeUtils"
 import type {
 	CanvasNativePointerEvent,
 	CanvasPointerInput,
@@ -227,6 +228,10 @@ export class SelectionTool extends BaseTool {
 		const clickedNode = input.target
 
 		if (isConnectionNode(clickedNode)) {
+			return
+		}
+
+		if (getNameLabelElementIdFromNode(clickedNode)) {
 			return
 		}
 
@@ -517,6 +522,10 @@ export class SelectionTool extends BaseTool {
 		const clickedNode = e.target
 
 		if (isConnectionNode(clickedNode)) {
+			return
+		}
+
+		if (getNameLabelElementIdFromNode(clickedNode)) {
 			return
 		}
 
@@ -829,8 +838,8 @@ export class SelectionTool extends BaseTool {
 	) {
 		return (
 			(this.canvas.getEffectiveContent?.(element.id) as
-				| ReturnType<typeof getActiveImageContent>
-				| undefined) ?? getActiveImageContent(element)
+				ReturnType<typeof getActiveImageContent> | undefined) ??
+			getActiveImageContent(element)
 		)
 	}
 

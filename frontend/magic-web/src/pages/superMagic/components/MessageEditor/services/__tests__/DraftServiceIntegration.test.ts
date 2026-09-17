@@ -7,7 +7,9 @@ import type {
 
 // Mock Logger
 vi.mock("@/infrastructure/logger", () => ({
-	logger: { createLogger: () => ({ log: vi.fn(), warn: vi.fn(), error: vi.fn(), report: vi.fn() }) },
+	logger: {
+		createLogger: () => ({ log: vi.fn(), warn: vi.fn(), error: vi.fn(), report: vi.fn() }),
+	},
 }))
 
 // Mock isIndexedDBAvailable

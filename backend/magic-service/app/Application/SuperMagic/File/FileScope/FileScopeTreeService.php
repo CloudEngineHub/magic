@@ -209,6 +209,34 @@ final class FileScopeTreeService
     }
 
     /**
+     * 将文件实体或查询行转换为项目附件 V2 响应格式。
+     */
+    public function formatAttachmentRowV2(array $row): array
+    {
+        $item = TaskFileItemDTO::fromArray($row)->toArray();
+        $item['file_url'] = '';
+        unset($item['relative_file_path']);
+
+        return $item;
+    }
+
+    /**
+     * 校验目录编号格式。
+     */
+    public function assertValidParentId(string $parentId): void
+    {
+        if (preg_match('/^[1-9][0-9]*$/', $parentId) === 1) {
+            return;
+        }
+
+        ExceptionBuilder::throw(
+            MagicFSErrorCode::PARENT_DIRECTORY_NOT_FOUND,
+            'magicfs.parent_directory_not_found',
+            ['parent_id' => $parentId],
+        );
+    }
+
+    /**
      * 判断文件是否满足附件类型过滤条件，目录节点始终保留以维持树结构。
      *
      * @param string[] $fileTypes
@@ -235,18 +263,6 @@ final class FileScopeTreeService
     }
 
     /**
-     * 将文件实体或查询行转换为项目附件 V2 响应格式。
-     */
-    public function formatAttachmentRowV2(array $row): array
-    {
-        $item = TaskFileItemDTO::fromArray($row)->toArray();
-        $item['file_url'] = '';
-        unset($item['relative_file_path']);
-
-        return $item;
-    }
-
-    /**
      * 创建 V2 广度优先遍历游标。
      *
      * @return array{parent_id: string, after_sort: null|int, after_file_id: null|string}
@@ -261,21 +277,5 @@ final class FileScopeTreeService
             'after_sort' => $afterSort,
             'after_file_id' => $afterFileId === '' ? null : $afterFileId,
         ];
-    }
-
-    /**
-     * 校验目录编号格式。
-     */
-    public function assertValidParentId(string $parentId): void
-    {
-        if (preg_match('/^[1-9][0-9]*$/', $parentId) === 1) {
-            return;
-        }
-
-        ExceptionBuilder::throw(
-            MagicFSErrorCode::PARENT_DIRECTORY_NOT_FOUND,
-            'magicfs.parent_directory_not_found',
-            ['parent_id' => $parentId],
-        );
     }
 }

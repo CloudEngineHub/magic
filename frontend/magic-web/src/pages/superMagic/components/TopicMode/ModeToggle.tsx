@@ -11,12 +11,11 @@ import { observer } from "mobx-react-lite"
 import { useTranslation, Trans } from "react-i18next"
 import { isString } from "lodash-es"
 import { useMemoizedFn } from "ahooks"
-import { Check, ChevronDown, ChevronsUpDown, MessageCirclePlus, Search } from "lucide-react"
+import { Check, ChevronDown, ChevronsUpDown, Search } from "lucide-react"
 import { CrewItem } from "../../pages/Workspace/types"
 import { TopicMode } from "../../pages/Workspace/TopicMode"
 import { useFeaturedModeListRefreshOnFirstOpen } from "@/pages/superMagic/hooks/useFeaturedModeListRefresh"
 import superMagicModeService from "@/services/superMagic/SuperMagicModeService"
-import { MagicIcon } from "@/components/base"
 import pubsub, { PubSubEvents } from "@/utils/pubsub"
 import BlackPurpleButton from "@/components/other/BlackPurpleButton"
 import {
@@ -77,8 +76,6 @@ interface ModeToggleProps {
 	/** Controls which mobile viewport edge owns the crew selector sheet. */
 	mobilePopupPosition?: "bottom" | "top"
 }
-
-const TopicPlusIcon = <MagicIcon component={MessageCirclePlus} size={18} color="currentColor" />
 
 function modeMatchesTopic(
 	modeIdentifier: string,
@@ -551,9 +548,9 @@ function ModeToggle({
 						/>
 					)}
 				</div>
+				{/* Text-only CTA: skip the lucide icon so copy stays centered without a blank 18px slot. */}
 				<BlackPurpleButton
 					onClick={handleCreateNewTopic}
-					icon={TopicPlusIcon}
 					data-testid="super-message-editor-mode-toggle-create-topic-button"
 				>
 					<span className="text-xs font-normal leading-4">

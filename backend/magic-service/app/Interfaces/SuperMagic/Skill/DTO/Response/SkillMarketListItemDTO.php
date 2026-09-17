@@ -31,15 +31,6 @@ class SkillMarketListItemDTO implements JsonSerializable
     /** @deprecated 仅序列化为 `user_skill_code`，请改用 `code` */
     private string $userSkillCode;
 
-    /** @deprecated 前端请使用 `name`，后续将移除。 */
-    private array $nameI18n;
-
-    /** @deprecated 前端请使用 `description`，后续将移除。 */
-    private array $descriptionI18n;
-
-    /** @deprecated 前端请使用 `source`，后续将移除。 */
-    private array $sourceI18n;
-
     private string $logo;
 
     private string $publisherType;
@@ -83,9 +74,6 @@ class SkillMarketListItemDTO implements JsonSerializable
         string $name,
         string $description,
         string $source,
-        array $nameI18n,
-        array $descriptionI18n,
-        array $sourceI18n,
         string $logo,
         string $publisherType,
         array $publisher,
@@ -110,9 +98,6 @@ class SkillMarketListItemDTO implements JsonSerializable
         $this->name = $name;
         $this->description = $description;
         $this->source = $source;
-        $this->nameI18n = $nameI18n;
-        $this->descriptionI18n = $descriptionI18n;
-        $this->sourceI18n = $sourceI18n;
         $this->logo = $logo;
         $this->publisherType = $publisherType;
         $this->publisher = $publisher;
@@ -141,12 +126,6 @@ class SkillMarketListItemDTO implements JsonSerializable
             'name' => $this->name,
             'description' => $this->description,
             'source' => $this->source,
-            // Deprecated: use `name` instead.
-            'name_i18n' => $this->nameI18n,
-            // Deprecated: use `description` instead.
-            'description_i18n' => $this->descriptionI18n,
-            // Deprecated: use `source` instead.
-            'source_i18n' => $this->sourceI18n,
             'logo' => $this->logo,
             'publisher_type' => $this->publisherType,
             'publisher' => $this->publisher,

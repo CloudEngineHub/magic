@@ -1,13 +1,12 @@
 import { useEffect, useRef, useState } from "react"
 import { useMemoizedFn } from "ahooks"
 import { observer } from "mobx-react-lite"
+import { comparer, reaction } from "mobx"
 import { Layers, Users, AppWindow, Clock3 } from "lucide-react"
 import { useTranslation } from "react-i18next"
 import { SuperMagicApi } from "@/apis"
 import { Button } from "@/components/shadcn-ui/button"
 import { cn } from "@/utils/cn"
-import { platformKey } from "@/utils/storage"
-import { useUserInfo } from "@/models/user/hooks"
 import type { Workspace } from "@/pages/superMagic/pages/Workspace/types"
 import { projectStore, workspaceStore } from "@/pages/superMagic/stores/core"
 import SuperMagicService from "@/pages/superMagic/services"
@@ -15,6 +14,7 @@ import useSearchValue from "@/pages/superMagic/pages/Assistant/components/TopicP
 import { ProjectsPanel } from "./ProjectsPanel"
 import WorkspaceProjectsContent from "./WorkspaceProjectsContent"
 import { CollaborationProjectsContent } from "./CollaborationProjectsPanel"
+import { useProjectManagerWindow } from "../useProjectManagerWindow"
 
 interface WorkspaceProjectsPanelProps {
 	open: boolean
@@ -26,7 +26,6 @@ interface WorkspaceProjectsPanelProps {
 export type ProjectBrowserSource =
 	{ type: "workspace"; workspace: Workspace } | { type: "collaboration" } | { type: "recent" }
 const WORKSPACE_PAGE_SIZE = 20
-const DEFAULT_WINDOW_WIDTH_RATIO = 0.85
 
 function getInitialWorkspaces(source: ProjectBrowserSource): Workspace[] {
 	return Array.from(
@@ -48,7 +47,8 @@ function WorkspaceProjectsPanel({
 	onClose,
 }: WorkspaceProjectsPanelProps) {
 	const { t } = useTranslation("super")
-	const { userInfo } = useUserInfo()
+	const { windowOptions, resizeGuideVisible, dismissResizeGuide, restoreRecommendedSize } =
+		useProjectManagerWindow(open)
 	const { searchValue, onSearchValueChange, setSearchValue } = useSearchValue()
 	const [source, setSource] = useState<ProjectBrowserSource>(initialSource)
 	const [createPending, setCreatePending] = useState(initialAction === "create-project")
@@ -126,6 +126,37 @@ function WorkspaceProjectsPanel({
 		}
 	}, [open, loadWorkspaces, resetSource])
 
+	useEffect(() => {
+		if (!open) return
+		return reaction(
+			() =>
+				workspaceStore.workspaces.map(({ id, name, workspace_type }) => [
+					id,
+					name,
+					workspace_type,
+				]),
+			() => {
+				const updates = workspaceStore.workspaces.filter(
+					(workspace) => workspace.id && workspace.workspace_type === "default",
+				)
+				// 移动弹窗新建的目录同步到管理器；全局缓存不完整，不能覆盖已分页浏览的目录。
+				setWorkspaces((previous) =>
+					Array.from(
+						new Map(
+							[...previous, ...updates].map((workspace) => [workspace.id, workspace]),
+						).values(),
+					),
+				)
+				setSource((current) => {
+					if (current.type !== "workspace") return current
+					const workspace = updates.find((item) => item.id === current.workspace.id)
+					return workspace ? { ...current, workspace } : current
+				})
+			},
+			{ equals: comparer.structural },
+		)
+	}, [open])
+
 	const selectSource = (next: ProjectBrowserSource) => {
 		if (
 			next.type === source.type &&
@@ -168,24 +199,11 @@ function WorkspaceProjectsPanel({
 					</span>
 				</>
 			}
-			windowOptions={{
-				open,
-				draggable: true,
-				resizable: true,
-				defaultSize: {
-					width:
-						(window.visualViewport?.width ?? window.innerWidth) *
-						DEFAULT_WINDOW_WIDTH_RATIO,
-					height: 680,
-				},
-				minSize: { width: 720, height: 480 },
-				// 所有项目入口共用尺寸偏好；账号未就绪时不使用 undefined 组成共享键。
-				sizeStorageKey:
-					userInfo?.organization_code && userInfo.user_id
-						? platformKey(
-								`super_magic/project_manager_size/${userInfo.organization_code}/${userInfo.user_id}`,
-							)
-						: undefined,
+			windowOptions={windowOptions}
+			onRestoreRecommendedSize={restoreRecommendedSize}
+			resizeGuide={{
+				visible: resizeGuideVisible,
+				onDismiss: dismissResizeGuide,
 			}}
 			searchValue={searchValue}
 			onSearchValueChange={onSearchValueChange}

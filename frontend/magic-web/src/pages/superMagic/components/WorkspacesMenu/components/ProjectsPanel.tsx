@@ -1,4 +1,5 @@
 import {
+	useEffect,
 	useRef,
 	type ChangeEventHandler,
 	type ComponentProps,
@@ -7,14 +8,18 @@ import {
 } from "react"
 import { useTranslation } from "react-i18next"
 import { IconSearch, IconX } from "@tabler/icons-react"
+import { MoveDiagonal, RotateCcw } from "lucide-react"
 import type { DialogWindowOptions } from "@/hooks/use-dialog-window"
 import {
 	Dialog,
 	DialogContent,
+	DialogPortal,
 	DialogTitle,
 	DialogDescription,
 } from "@/components/shadcn-ui/dialog"
 import { Input } from "@/components/shadcn-ui/input"
+import { Button } from "@/components/shadcn-ui/button"
+import { Alert, AlertDescription, AlertTitle } from "@/components/shadcn-ui/alert"
 import MagicIcon from "@/components/base/MagicIcon"
 import MagicSpin from "@/components/base/MagicSpin"
 import MagicEmpty from "@/components/base/MagicEmpty"
@@ -38,6 +43,8 @@ interface ProjectsPanelProps {
 	titleIcon?: ReactNode
 	location?: ReactNode
 	windowOptions?: DialogWindowOptions
+	onRestoreRecommendedSize?: () => void
+	resizeGuide?: { visible: boolean; onDismiss: () => void }
 	description?: string
 	searchValue: string
 	onSearchValueChange: ChangeEventHandler<HTMLInputElement>
@@ -52,6 +59,8 @@ export function ProjectsPanel({
 	titleIcon,
 	location,
 	windowOptions,
+	onRestoreRecommendedSize,
+	resizeGuide,
 	description,
 	searchValue,
 	onSearchValueChange,
@@ -66,13 +75,38 @@ export function ProjectsPanel({
 		returnFocusRef.current =
 			document.activeElement instanceof HTMLElement ? document.activeElement : null
 	wasOpenRef.current = !!open
+
+	// modal={false} disables Radix's focus trap and body scroll lock so the nested
+	// MagicModal (AddCollaborationToWorkspaceModal / MoveProjectModal / DeleteDangerModal,
+	// portaled to body via Antd Modal) can receive focus. Restore the body scroll lock
+	// manually below since modal={false} drops it.
+	useEffect(() => {
+		if (!open) return
+		const previousOverflow = document.body.style.overflow
+		document.body.style.overflow = "hidden"
+		return () => {
+			document.body.style.overflow = previousOverflow
+		}
+	}, [open])
+
 	return (
 		<Dialog
 			open={open}
+			modal={false}
 			onOpenChange={(nextOpen) => {
 				if (!nextOpen) onClose()
 			}}
 		>
+			{/* modal={false} drops Radix's overlay, so render a manual mask below the content z-index. */}
+			{open && (
+				<DialogPortal>
+					<div
+						aria-hidden="true"
+						className="fixed inset-0 z-detail-fullscreen bg-black/50"
+						data-testid="shared-workspace-dialog-mask"
+					/>
+				</DialogPortal>
+			)}
 			{open && (
 				<DialogContent
 					showCloseButton={false}
@@ -137,6 +171,18 @@ export function ProjectsPanel({
 							className="flex items-center gap-2.5"
 							data-testid="shared-workspace-dialog-actions"
 						>
+							{windowOptions?.resizable && onRestoreRecommendedSize && (
+								<Button
+									type="button"
+									variant="ghost"
+									size="sm"
+									className="gap-1.5 px-2 text-xs font-normal text-muted-foreground"
+									onClick={onRestoreRecommendedSize}
+								>
+									<RotateCcw size={16} aria-hidden="true" />
+									{t("sidebarPanels.restoreRecommendedSize")}
+								</Button>
+							)}
 							<button
 								type="button"
 								aria-label={t("button.close", { ns: "interface" })}
@@ -182,10 +228,55 @@ export function ProjectsPanel({
 							{children}
 						</div>
 					</div>
+					{/* 说明留在窗口内，不接管焦点；角落热区与边缘拖拽仍由 Dialog 管理。 */}
+					{windowOptions?.resizable && resizeGuide?.visible && (
+						<Alert
+							role="note"
+							aria-label={t("sidebarPanels.resizeGuideTitle")}
+							className="absolute bottom-6 right-5 z-20 block w-80 max-w-[calc(100%-2.5rem)] space-y-2 bg-popover p-3 text-popover-foreground shadow-lg"
+						>
+							<AlertTitle className="flex items-center gap-2 text-sm font-medium">
+								<MoveDiagonal size={16} aria-hidden="true" />
+								{t("sidebarPanels.resizeGuideTitle")}
+							</AlertTitle>
+							<AlertDescription className="block text-xs leading-relaxed">
+								{t("sidebarPanels.resizeGuideDescription")}
+							</AlertDescription>
+							<div className="flex flex-wrap items-center justify-end gap-2 pt-1">
+								{onRestoreRecommendedSize && (
+									<Button
+										type="button"
+										variant="ghost"
+										size="sm"
+										className="text-xs font-normal"
+										onClick={onRestoreRecommendedSize}
+									>
+										{t("sidebarPanels.restoreRecommendedSize")}
+									</Button>
+								)}
+								<Button
+									type="button"
+									size="sm"
+									className="text-xs"
+									onClick={resizeGuide.onDismiss}
+								>
+									{t("sidebarPanels.resizeGuideDismiss")}
+								</Button>
+							</div>
+							<span
+								aria-hidden="true"
+								className="pointer-events-none absolute -bottom-1.5 right-2.5 size-3 rotate-45 border-b border-r border-border bg-popover"
+							/>
+						</Alert>
+					)}
 					{windowOptions?.resizable && (
 						<span
 							aria-hidden="true"
-							className="pointer-events-none absolute bottom-1 right-1 size-3 text-muted-foreground/60"
+							className={cn(
+								"pointer-events-none absolute bottom-1 right-1 size-3 text-muted-foreground",
+								resizeGuide?.visible &&
+									"rounded-sm bg-primary/10 text-primary ring-4 ring-primary/10",
+							)}
 						>
 							<span className="absolute bottom-1 right-0 h-px w-3 -rotate-45 bg-current" />
 							<span className="absolute bottom-0.5 right-0 h-px w-1.5 -rotate-45 bg-current" />

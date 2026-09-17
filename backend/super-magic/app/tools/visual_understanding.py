@@ -9,6 +9,7 @@ from agentlang.context.tool_context import ToolContext
 from agentlang.logger import get_logger
 from agentlang.tools.tool_result import ToolResult
 from app.core.ai_abilities import get_visual_understanding_model_id
+from app.core.entity.attachment import AttachmentStorageType
 from app.core.entity.message.server_message import DisplayType, FileContent, ToolDetail
 from app.i18n import i18n
 from app.path_manager import PathManager
@@ -299,7 +300,15 @@ class VisualUnderstanding(WorkspaceTool[VisualUnderstandingParams]):
                 provide_native_visual=provide_native_visual,
             ):
                 # 工具结果只保留最小动作提示，原生视觉机制说明统一由 Horizon 承载。
-                return ToolResult(content="Please read the image(s).")
+                return ToolResult(
+                    content="Please read the image(s).",
+                    extra_info={
+                        "images": images,
+                        "image_source_names": [extract_image_source_name(image) for image in images],
+                        "image_count": len(images),
+                        "native_visual": True,
+                    },
+                )
 
             # 并发处理所有图片来源
             tasks = [
@@ -454,6 +463,23 @@ class VisualUnderstanding(WorkspaceTool[VisualUnderstandingParams]):
 
         try:
             image_count = result.extra_info.get("image_count", 0) if result.extra_info else 0
+
+            if result.extra_info and result.extra_info.get("native_visual") and image_count == 1:
+                image_path = Path(result.extra_info["images"][0])
+                workspace_dir = PathManager.get_workspace_dir().resolve()
+                try:
+                    relative_path = image_path.resolve().relative_to(workspace_dir).as_posix()
+                except ValueError:
+                    return None
+                return ToolDetail(
+                    type=DisplayType.IMAGE,
+                    data=FileContent(
+                        file_name=image_path.name,
+                        content="",
+                        relative_file_path=relative_path,
+                        storage_type=AttachmentStorageType.WORKSPACE,
+                    ),
+                )
 
             title = i18n.translate("visual_understanding.title", category="tool.messages")
             if image_count == 1:

@@ -38,7 +38,8 @@ export interface MarkdownFilePasteOptions {
 }
 
 type PastePart =
-	{ type: "text"; text: string } | { type: "mention"; attrs: TiptapMentionAttributes }
+	| { type: "text"; text: string }
+	| { type: "mention"; attrs: TiptapMentionAttributes }
 
 type ReferencedProjectAttachmentMap = ReadonlyMap<string, ReferencedProjectAttachment | null>
 

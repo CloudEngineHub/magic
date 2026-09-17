@@ -46,8 +46,14 @@ class PlatformSettingsUpdateRequest extends FormRequest
             'agent_role_name_i18n.*' => 'nullable|string|max:255',
             'agent_role_description_i18n' => 'sometimes|array',
             'agent_role_description_i18n.*' => 'nullable|string|max:1000',
+            'global_system_prompt' => 'sometimes|string|max:5000',
             'custom_service_provider_whitelist' => 'sometimes|array',
             'custom_service_provider_whitelist.*' => 'string|max:128',
+            'watermark' => 'sometimes|array',
+            'watermark.enabled' => 'sometimes|boolean',
+            'watermark.fields' => 'sometimes|array',
+            'watermark.fields.*' => 'string|min:1|max:64',
+            'watermark.depth' => 'sometimes|string|in:light,standard,strong',
         ];
     }
 

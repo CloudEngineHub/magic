@@ -275,6 +275,15 @@ export function CanvasUIProvider({ children }: CanvasUIProviderProps) {
 		setErasingElementId(null)
 	})
 
+	useCanvasEvent("element:rename-start", ({ data }) => {
+		setLayerRenamingElementId(null)
+		setCanvasRenamingElementId(data.elementId)
+	})
+
+	useCanvasEvent("element:rename-end", () => {
+		setCanvasRenamingElementId(null)
+	})
+
 	useUpdateEffect(() => {
 		if (selectedElementIds.length !== 1 || selectedElementIds[0] !== messageHistoryElementId) {
 			setMessageHistoryElementId(null)

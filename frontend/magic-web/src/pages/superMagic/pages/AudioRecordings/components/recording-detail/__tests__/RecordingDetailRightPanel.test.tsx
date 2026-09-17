@@ -1,5 +1,5 @@
 import type { ReactNode } from "react"
-import { render, screen } from "@testing-library/react"
+import { fireEvent, render, screen } from "@testing-library/react"
 import { describe, expect, it, vi } from "vitest"
 import { RecordingDetailRightPanel } from "../RecordingDetailRightPanel"
 
@@ -18,10 +18,21 @@ vi.mock("../RecordingDetailSummaryState", () => ({
 }))
 
 vi.mock("../RecordingDetailTabStrip", () => ({
-	RecordingDetailTabStrip: ({ tabs }: { tabs: Array<{ key: string }> }) => (
+	RecordingDetailTabStrip: ({
+		tabs,
+		onChange,
+	}: {
+		tabs: Array<{ key: string }>
+		onChange?: (key: string) => void
+	}) => (
 		<div data-testid="summary-tabs">
 			{tabs.map((tab) => (
-				<span key={tab.key} data-testid={`summary-tab-${tab.key}`} />
+				<button
+					key={tab.key}
+					type="button"
+					data-testid={`summary-tab-${tab.key}`}
+					onClick={() => onChange?.(tab.key)}
+				/>
 			))}
 		</div>
 	),
@@ -200,5 +211,81 @@ describe("RecordingDetailRightPanel responsive height", () => {
 		)
 
 		expect(screen.getByTestId("summary-content")).toHaveAttribute("data-attachment-count", "1")
+	})
+
+	it("reports the resolved tab when a controlled activeKey becomes invalid", () => {
+		const onActiveKeyChange = vi.fn()
+		render(
+			<RecordingDetailRightPanel
+				{...baseProps}
+				summaryReady
+				activeKey="nonexistent"
+				onActiveKeyChange={onActiveKeyChange}
+				fileMap={{
+					summaryFiles: [
+						{
+							type: "summary",
+							fileName: "summary.md",
+							file: { file_id: "mock-summary-file", file_name: "summary.md" },
+						},
+					],
+				}}
+				summaryContent={{ summary: "content" }}
+			/>,
+		)
+
+		expect(onActiveKeyChange).toHaveBeenCalledWith("summary")
+	})
+
+	it("does not report when the controlled activeKey is already valid", () => {
+		const onActiveKeyChange = vi.fn()
+		render(
+			<RecordingDetailRightPanel
+				{...baseProps}
+				summaryReady
+				activeKey="summary"
+				onActiveKeyChange={onActiveKeyChange}
+				fileMap={{
+					summaryFiles: [
+						{
+							type: "summary",
+							fileName: "summary.md",
+							file: { file_id: "mock-summary-file", file_name: "summary.md" },
+						},
+					],
+				}}
+				summaryContent={{ summary: "content" }}
+			/>,
+		)
+
+		expect(onActiveKeyChange).not.toHaveBeenCalled()
+	})
+
+	it("forwards tab selection to the controlled owner without owning the state", () => {
+		const onActiveKeyChange = vi.fn()
+		render(
+			<RecordingDetailRightPanel
+				{...baseProps}
+				summaryReady
+				activeKey="summary"
+				onActiveKeyChange={onActiveKeyChange}
+				fileMap={{
+					summaryFiles: [
+						{
+							type: "summary",
+							fileName: "summary.md",
+							file: { file_id: "mock-summary-file", file_name: "summary.md" },
+						},
+					],
+					notes: { file_id: "mock-notes-file", file_name: "mock-notes.md" },
+					magicProjectConfig: { files: { notes: "notes/mock-notes.md" } },
+				}}
+				summaryContent={{ summary: "content" }}
+			/>,
+		)
+
+		fireEvent.click(screen.getByTestId("summary-tab-notes"))
+
+		expect(onActiveKeyChange).toHaveBeenCalledWith("notes")
 	})
 })

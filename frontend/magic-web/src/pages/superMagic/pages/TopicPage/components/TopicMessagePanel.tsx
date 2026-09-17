@@ -32,6 +32,7 @@ import type { MentionPanelStore } from "@/components/business/MentionPanel/built
 import ChatProjectMessageLayout from "@/pages/superMagic/pages/ChatProjectPage/components/ChatProjectMessageLayout"
 import { resolveComposerMinInputHeight } from "@/pages/superMagic/components/ConversationInputResize/constants"
 import { isSelfMediaComposerContext } from "@/pages/superMagic/components/MainInputContainer/utils/selfMediaComposerConfig"
+import { isVideoProductionContext } from "@/pages/superMagic/components/MainInputContainer/utils/videoProductionConfig"
 
 const ProjectPageInputContainer = lazy(
 	() => import("../../../components/ProjectPageInputContainer"),
@@ -79,7 +80,8 @@ function resolveRetrySendParams(
 ): HandleSendParams {
 	// Failed retry must go through the first-layer send entry, so we restore rich_text extra back to editor send params.
 	const superAgent = retryPayload.options?.extra?.super_agent as
-		RetrySendSuperAgentExtra | undefined
+		| RetrySendSuperAgentExtra
+		| undefined
 
 	return {
 		value: retryPayload.content,
@@ -371,11 +373,13 @@ function TopicMessagePanel({
 	// that is smaller than the controls rendered below their editor.
 	const inputMinHeight = resolveComposerMinInputHeight({
 		isPptMode: topicMode === TopicMode.PPT,
-		isSelfMediaMode: isSelfMediaComposerContext({
-			topicMode,
-			agentCode: selectedTopic?.agent_code ?? undefined,
-		}),
-		isRecordSummaryMode: topicMode === TopicMode.RecordSummary,
+		isVideoProductionMode: isVideoProductionContext({ topicMode, selectedTopic }),
+		isSpecializedMode:
+			topicMode === TopicMode.RecordSummary ||
+			isSelfMediaComposerContext({
+				topicMode,
+				agentCode: selectedTopic?.agent_code ?? undefined,
+			}),
 	})
 
 	return (

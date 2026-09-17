@@ -9,7 +9,13 @@ import type { SkillFileKind } from "./skill-file-structure"
 import type { UserResourceKind } from "../../UserSpace/userSpaceFilePresentation"
 
 export type FileHelpGroupId =
-	"projectTypes" | "project" | "skills" | "personal" | "assistant" | "crew" | "current"
+	| "projectTypes"
+	| "project"
+	| "skills"
+	| "personal"
+	| "assistant"
+	| "crew"
+	| "current"
 export type FileHelpIcon =
 	| TopicFileMagicVariant
 	| `skill:${SkillFileKind}`

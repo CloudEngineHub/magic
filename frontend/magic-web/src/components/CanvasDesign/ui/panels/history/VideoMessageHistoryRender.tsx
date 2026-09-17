@@ -16,6 +16,7 @@ import { useFloatingComponent } from "../../../app/hooks/layout/useFloatingCompo
 import { useCanvasDesignI18n } from "../../../app/providers/I18nProvider"
 import type { MediaResourceFullscreenPreviewItem } from "../../fullscreen/media-resource/index"
 import { resolvePromptPlaceholderTokenConfig } from "../../editors/message/reference-assets/promptPlaceholderTokenConfig"
+import { copyHistoryPromptToClipboard } from "./historyPromptClipboard"
 import { MessageHistoryCollapsiblePrompt } from "./MessageHistoryCollapsiblePrompt"
 import { PromptPlaceholderPreviewText } from "./PromptPlaceholderPreviewText"
 import { GenerationStatus, type VideoGenerationInfo } from "../../../public/magic-types"
@@ -45,8 +46,7 @@ export default function VideoMessageHistoryRender(props: VideoMessageHistoryRend
 	const generationRuntime = useGenerationRuntime(videoElement.id)
 	const videoContent =
 		(canvas?.getEffectiveContent(videoElement.id) as
-			| ReturnType<typeof getActiveContent>
-			| undefined) ?? getActiveContent(videoElement)
+			ReturnType<typeof getActiveContent> | undefined) ?? getActiveContent(videoElement)
 	const promptPlaceholderTokenConfig = useMemo(() => resolvePromptPlaceholderTokenConfig(t), [t])
 
 	const request = generationRuntime?.generateVideoRequest || videoContent?.generateVideoRequest
@@ -89,16 +89,6 @@ export default function VideoMessageHistoryRender(props: VideoMessageHistoryRend
 
 	const promptText = request?.prompt?.trim() ?? ""
 
-	const handleCopyPrompt = useCallback(() => {
-		if (!promptText) return
-		void navigator.clipboard
-			.writeText(promptText)
-			.then(() => {
-				toast.success(t("menu.copySuccess", "复制成功"))
-			})
-			.catch(() => undefined)
-	}, [promptText, t])
-
 	const modelInfo = useMemo(() => {
 		if (!request?.model_id) return undefined
 		return videoModelList.find((model) => model.model_id === request.model_id)
@@ -128,6 +118,28 @@ export default function VideoMessageHistoryRender(props: VideoMessageHistoryRend
 		}),
 		[referenceAudios, referenceImages, referenceVideos],
 	)
+
+	const handleCopyPrompt = useCallback(() => {
+		if (!promptText) return
+		void copyHistoryPromptToClipboard({
+			text: request?.prompt ?? "",
+			tokenConfig: promptPlaceholderTokenConfig,
+			placeholderPaths: promptPlaceholderPaths,
+			resolveResourceReference: methods?.resolveResourceReference,
+		})
+			.then(() => {
+				toast.success(t("menu.copySuccess", "复制成功"))
+			})
+			.catch(() => undefined)
+	}, [
+		methods?.resolveResourceReference,
+		promptPlaceholderPaths,
+		promptPlaceholderTokenConfig,
+		promptText,
+		request?.prompt,
+		t,
+	])
+
 	const generationInfoRows = useMemo(
 		() =>
 			buildGenerationInfoRows({

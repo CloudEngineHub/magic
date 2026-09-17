@@ -49,7 +49,8 @@ interface TopicDesktopPanelsProps {
 	detailPanelClassName: string
 	isDetailPanelFullscreen: boolean
 	sidebar:
-		ReactNode | ((controller: { onCollapse?: () => void; isCollapsed: boolean }) => ReactNode)
+		| ReactNode
+		| ((controller: { onCollapse?: () => void; isCollapsed: boolean }) => ReactNode)
 	enableProjectCollapse?: boolean
 	detailPanel: ReactNode | ((control?: FileSidebarControl) => ReactNode)
 	isReadOnly: boolean

@@ -111,7 +111,6 @@ interface TextEditorProps {
 	showFooter?: boolean
 	exportFile?: (fileId: string, fileVersion?: number) => void
 	exportPdf?: (fileId: string) => void
-	exportPpt?: (fileId: string) => void
 	isExporting?: boolean
 	openFileTab?: (fileItem: { file_id: string } & Record<string, any>) => void
 	isPlaybackMode?: boolean
@@ -143,11 +142,9 @@ const MdExportAction = memo(function MdExportAction({
 	const { ExportDropdownButton } = useExportMenuItems({
 		handleExportSource,
 		handleExportPDF,
-		handleExportPPT: undefined,
 		handleExportImage,
 		handleExportRasterPdf,
 		isExporting,
-		supportPPT: false,
 		showButtonText,
 		showExportImage: !!handleExportImage,
 		showExportPdf: true,
@@ -999,9 +996,9 @@ export default memo(function TextEditor(props: TextEditorProps) {
 					/>
 				) : loading ? (
 					documentFlowFullscreen ? (
-						<div className="min-h-dvh" />
+						<div className="min-h-0 flex-1" />
 					) : (
-						<div className="flex h-full w-full items-center justify-center bg-background">
+						<div className="flex min-h-0 flex-1 items-center justify-center bg-background">
 							<MagicSpin spinning />
 						</div>
 					)
@@ -1060,7 +1057,7 @@ export default memo(function TextEditor(props: TextEditorProps) {
 										!documentFlowFullscreen &&
 											(internalViewMode === "code"
 												? "overflow-hidden"
-												: "overflow-auto whitespace-pre-wrap"),
+												: "overflow-visible whitespace-pre-wrap"),
 										internalViewMode === "code" && "[&_>_pre]:!bg-background",
 									)}
 									isEditMode={isEditMode}
@@ -1099,12 +1096,12 @@ export default memo(function TextEditor(props: TextEditorProps) {
 			{isPlaybackMode &&
 				mdToolbarContainer &&
 				createPortal(
-					<div className="align-center flex gap-2">
-						<div className="flex h-6 items-center overflow-hidden rounded-full border border-border bg-muted text-xs">
+					<div className="flex shrink-0 flex-nowrap items-center gap-2">
+						<div className="flex h-6 shrink-0 items-center overflow-hidden rounded-full border border-border bg-muted text-xs">
 							<button
 								type="button"
 								className={cn(
-									"flex h-6 items-center rounded-full px-3 text-muted-foreground transition-colors",
+									"flex h-6 shrink-0 items-center whitespace-nowrap rounded-full px-2.5 text-muted-foreground transition-colors",
 									internalViewMode !== "code" &&
 										"bg-background font-medium text-foreground shadow-sm",
 								)}
@@ -1119,7 +1116,7 @@ export default memo(function TextEditor(props: TextEditorProps) {
 							<button
 								type="button"
 								className={cn(
-									"flex h-6 items-center rounded-full px-3 text-muted-foreground transition-colors",
+									"flex h-6 shrink-0 items-center whitespace-nowrap rounded-full px-2.5 text-muted-foreground transition-colors",
 									internalViewMode === "code" &&
 										"bg-background font-medium text-foreground shadow-sm",
 								)}
@@ -1134,7 +1131,7 @@ export default memo(function TextEditor(props: TextEditorProps) {
 						</div>
 						<button
 							type="button"
-							className="flex h-6 items-center rounded-full border border-border px-3 text-xs text-muted-foreground transition-colors hover:text-foreground"
+							className="flex h-6 shrink-0 items-center whitespace-nowrap rounded-full border border-border px-2.5 text-xs text-muted-foreground transition-colors hover:text-foreground"
 							onClick={handleCopyMarkdown}
 							data-testid="handle-copy-markdown"
 						>

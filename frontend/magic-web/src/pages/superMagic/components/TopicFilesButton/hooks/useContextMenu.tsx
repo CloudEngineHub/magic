@@ -67,7 +67,6 @@ interface UseContextMenuOptions {
 	handleOpenDirectory?: (item: AttachmentItem) => void
 	handleDownloadOriginal: (item: AttachmentItem, mode?: DownloadImageMode) => void
 	handleDownloadPdf: (item: AttachmentItem, folderChildren?: AttachmentItem[]) => void
-	handleDownloadPpt: (item: AttachmentItem) => void
 	handleDownloadPptx: (item: AttachmentItem, folderChildren?: AttachmentItem[]) => void
 	handleDownloadImage?: (item: AttachmentItem, format: "png" | "jpeg") => void
 	handleOpenFile: (item: AttachmentItem) => void
@@ -307,7 +306,6 @@ export function useContextMenu(options: UseContextMenuOptions) {
 		handleDownloadNoWaterMark,
 		preloadWaterMarkFreeModal,
 		handleDownloadPdf,
-		handleDownloadPpt,
 		handleDownloadPptx,
 		handleDownloadImage,
 		handleOpenFile,
@@ -501,7 +499,6 @@ export function useContextMenu(options: UseContextMenuOptions) {
 		const downloadHandlers: SingleFileDownloadHandlers = {
 			handleDownloadOriginal,
 			handleDownloadPdf,
-			handleDownloadPpt,
 			handleDownloadPptx,
 			handleDownloadImage,
 			handleDownloadNoWaterMark,

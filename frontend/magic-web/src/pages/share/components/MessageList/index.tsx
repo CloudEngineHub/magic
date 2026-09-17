@@ -38,7 +38,7 @@ function MessageList({
 	 *  [--sticky-message-mask-fade-from:rgb(var(--background-rgb))]`
 	 */
 	stickyMessageClassName?: string
-	projectFilesStore?: ProjectFilesStore
+	projectFilesStore: ProjectFilesStore
 	/** Scroll owner supplied by the share shell; virtualization does not create a nested viewport. */
 	scrollContainerRef: RefObject<HTMLDivElement | null>
 	/**

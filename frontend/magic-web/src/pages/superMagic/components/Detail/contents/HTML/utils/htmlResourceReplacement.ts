@@ -18,6 +18,8 @@ interface ReplaceHtmlResourceUrlsOptions {
 	preloadedUrlMapping?: Map<string, string>
 	imageProcessOptions?: ImageProcessOptions
 	imageFileIds: Set<string>
+	/** Subset of imageFileIds that may be converted to WebP (GIF is excluded). */
+	imageProcessingFileIds?: Set<string>
 	fileUpdatedAtMap: Map<string, string>
 	htmlContent: string
 	urlMap: Map<string, HtmlResourceInfo>
@@ -48,6 +50,7 @@ async function resolveHtmlResourceUrls({
 	preloadedUrlMapping,
 	imageProcessOptions,
 	imageFileIds,
+	imageProcessingFileIds,
 	fileUpdatedAtMap,
 }: Pick<
 	ReplaceHtmlResourceUrlsOptions,
@@ -56,8 +59,10 @@ async function resolveHtmlResourceUrls({
 	| "preloadedUrlMapping"
 	| "imageProcessOptions"
 	| "imageFileIds"
+	| "imageProcessingFileIds"
 	| "fileUpdatedAtMap"
 >) {
+	const processableImageFileIds = imageProcessingFileIds ?? imageFileIds
 	return resolveResourceUrlsWithVersionOverrides({
 		fileIds,
 		resourceFileVersions,
@@ -66,9 +71,11 @@ async function resolveHtmlResourceUrls({
 
 			if (preloadedUrlMapping) {
 				const preloadedUrls = unversionedFileIds
-					// Preloaded image URLs point to originals. When processing is enabled,
-					// reuse only non-image resources and request processed image variants.
-					.filter((fileId) => (imageProcessOptions ? !imageFileIds.has(fileId) : true))
+					// Preloaded URLs are originals. Reuse them for non-images and formats
+					// that must not be transformed (notably animated GIFs).
+					.filter((fileId) =>
+						imageProcessOptions ? !processableImageFileIds.has(fileId) : true,
+					)
 					.map((fileId) => ({
 						file_id: fileId,
 						url: preloadedUrlMapping.get(fileId),
@@ -78,20 +85,29 @@ async function resolveHtmlResourceUrls({
 				if (!imageProcessOptions) return preloadedUrls
 
 				const imageIdsToProcess = unversionedFileIds.filter((fileId) =>
-					imageFileIds.has(fileId),
+					processableImageFileIds.has(fileId),
 				)
-				if (imageIdsToProcess.length === 0) return preloadedUrls
+				const originalIdsToFetch = unversionedFileIds.filter(
+					(fileId) =>
+						!processableImageFileIds.has(fileId) && !preloadedUrlMapping.has(fileId),
+				)
+				const originalUrls =
+					originalIdsToFetch.length > 0
+						? await getTemporaryDownloadUrl({ file_ids: originalIdsToFetch })
+						: []
+				if (imageIdsToProcess.length === 0)
+					return [...preloadedUrls, ...(originalUrls || [])]
 
 				const processedImageUrls = await getTemporaryDownloadUrl({
 					file_ids: imageIdsToProcess,
 					options: { xMagicImageProcess: imageProcessOptions },
 				})
-				return [...preloadedUrls, ...(processedImageUrls || [])]
+				return [...preloadedUrls, ...(processedImageUrls || []), ...(originalUrls || [])]
 			}
 
 			return resolveCachedResourceUrls({
 				fileIds: unversionedFileIds,
-				imageFileIds,
+				imageFileIds: processableImageFileIds,
 				fileUpdatedAtMap,
 				imageProcessOptions,
 			})
@@ -106,6 +122,7 @@ export async function replaceHtmlResourceUrls({
 	preloadedUrlMapping,
 	imageProcessOptions,
 	imageFileIds,
+	imageProcessingFileIds,
 	fileUpdatedAtMap,
 	htmlContent,
 	urlMap,
@@ -120,6 +137,7 @@ export async function replaceHtmlResourceUrls({
 		preloadedUrlMapping,
 		imageProcessOptions,
 		imageFileIds,
+		imageProcessingFileIds,
 		fileUpdatedAtMap,
 	})
 	const filePathMapping = new Map<string, string>()

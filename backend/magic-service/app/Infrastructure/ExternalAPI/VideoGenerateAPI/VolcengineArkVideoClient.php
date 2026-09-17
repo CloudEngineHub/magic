@@ -146,7 +146,8 @@ readonly class VolcengineArkVideoClient
                 $response->getBody()->rewind();
             }
             $httpStatus = $response?->getStatusCode();
-            $errorCode = ProviderVideoErrorMapper::resolveVolcengine($exception);
+            $resolvedError = ProviderVideoErrorMapper::resolveVolcengine($exception, $responseBody);
+            $errorCode = $resolvedError['errorCode'];
             $this->logger->error('volcengine ark video error', [
                 'method' => $method,
                 'base_url' => $normalizedBaseUrl,
@@ -160,7 +161,7 @@ readonly class VolcengineArkVideoClient
             ]);
             throw new ProviderVideoException(
                 $errorCode,
-                $errorCode->getMessage(),
+                $resolvedError['message'],
                 $exception,
             );
         } catch (ProviderVideoException $exception) {

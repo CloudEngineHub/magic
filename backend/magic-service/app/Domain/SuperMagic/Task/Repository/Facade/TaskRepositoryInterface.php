@@ -83,25 +83,6 @@ interface TaskRepositoryInterface
     public function deleteTasksByTopicId(int $topicId): int;
 
     /**
-     * 通过用户ID和任务ID(沙箱服务返回的taskId)获取任务
-     */
-    public function getTaskByUserIdAndTaskId(string $userId, string $taskId): ?TaskEntity;
-
-    /**
-     * 通过沙箱ID获取任务
-     */
-    public function getTaskBySandboxId(string $sandboxId): ?TaskEntity;
-
-    /**
-     * 根据用户ID获取任务列表.
-     *
-     * @param string $userId 用户ID
-     * @param array $conditions 条件数组，如 ['task_status' => 'running']
-     * @return array 任务列表
-     */
-    public function getTasksByUserId(string $userId, array $conditions = []): array;
-
-    /**
      * 更新长时间处于运行状态的任务为错误状态
      *
      * @param string $timeThreshold 时间阈值，早于此时间的运行中任务将被标记为错误
@@ -141,26 +122,21 @@ interface TaskRepositoryInterface
     public function getTaskCountByTopicId(int $topicId): int;
 
     /**
-     * 根据项目ID获取任务列表.
-     */
-    public function getTasksByProjectId(int $projectId, string $userId): array;
-
-    /**
-     * Update task status by sandbox IDs.
+     * Update task status by topic IDs.
      *
-     * @param array $sandboxIds Sandbox IDs to filter
+     * @param array $topicIds Topic IDs to filter
      * @param string $status New status value
      * @param string $errMsg Error message
      * @param null|string $finishedTime Finished time
      * @param array $fromStatuses Only update tasks with these statuses (empty means no filter)
      */
-    public function updateTaskStatusBySandboxIds(array $sandboxIds, string $status, string $errMsg = '', ?string $finishedTime = null, array $fromStatuses = []): int;
+    public function updateTaskStatusByTopicIds(array $topicIds, string $status, string $errMsg = '', ?string $finishedTime = null, array $fromStatuses = []): int;
 
     /**
-     * 统计项目下的任务数量.
+     * 按条件批量更新任务.
+     * 条件值为数组时走 whereIn，标量走 where。
+     * 禁止传入 project_id / user_id 作为查询条件（这两个维度无索引），项目/用户维度请先经 topics 表转换为 topic_id 后再更新。
      */
-    public function countTasksByProjectId(int $projectId): int;
-
     public function updateTaskByCondition(array $condition, array $data): bool;
 
     /**

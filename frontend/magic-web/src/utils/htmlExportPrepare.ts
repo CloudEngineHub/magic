@@ -24,7 +24,7 @@ type HtmlExportDisplayConfig = Record<string, unknown>
 const EXPORT_LOCAL_SCRIPT_NAMES = ["config.js", "magic.project.js"] as const
 type ExportLocalScriptName = (typeof EXPORT_LOCAL_SCRIPT_NAMES)[number]
 
-interface PrepareHtmlForExportOptions {
+export interface PrepareHtmlForExportOptions {
 	content: string
 	attachments?: HtmlExportAttachment[]
 	fileId?: string
@@ -35,8 +35,17 @@ interface PrepareHtmlForExportOptions {
 	postMessageTargetStrategy?: PostMessageTargetStrategy
 }
 
-interface PrepareHtmlPagesForExportOptions extends Omit<PrepareHtmlForExportOptions, "content"> {
-	pages: string[]
+export interface PrepareHtmlPagesForExportOptions extends Omit<
+	PrepareHtmlForExportOptions,
+	"content"
+> {
+	pages: Iterable<string> | AsyncIterable<string>
+	signal?: AbortSignal
+}
+
+export interface PreparedHtmlPage {
+	index: number
+	html: string
 }
 
 function flattenHtmlExportAttachments(items: HtmlExportAttachment[] = []): HtmlExportAttachment[] {
@@ -253,12 +262,82 @@ export async function prepareHtmlForExport(options: PrepareHtmlForExportOptions)
 export async function prepareHtmlPagesForExport(
 	options: PrepareHtmlPagesForExportOptions,
 ): Promise<string[]> {
-	return Promise.all(
-		options.pages.map((content) =>
+	const preparedPages: string[] = []
+	for await (const page of iteratePreparedHtmlPages(options)) {
+		preparedPages.push(page.html)
+	}
+	return preparedPages
+}
+
+/**
+ * Prepare one page at a time so a large export never keeps hundreds of page-preparation
+ * promises, processed HTML strings, and their attachment lookups alive concurrently.
+ */
+export async function* iteratePreparedHtmlPages(
+	options: PrepareHtmlPagesForExportOptions,
+): AsyncIterable<PreparedHtmlPage> {
+	const { pages, signal, ...pageOptions } = options
+	let index = 0
+	for await (const page of pages) {
+		throwIfAborted(signal)
+		const html = await waitForAbortable(
 			prepareHtmlForExport({
-				...options,
-				content,
+				...pageOptions,
+				content: page,
 			}),
-		),
+			signal,
+		)
+		throwIfAborted(signal)
+		yield { index, html }
+		index += 1
+	}
+}
+
+function waitForAbortable<T>(promise: PromiseLike<T>, signal?: AbortSignal): Promise<T> {
+	if (!signal) return Promise.resolve(promise)
+	if (signal.aborted) return Promise.reject(createAbortError(signal))
+
+	return new Promise<T>((resolve, reject) => {
+		let settled = false
+		const onAbort = () => {
+			if (settled) return
+			settled = true
+			signal.removeEventListener("abort", onAbort)
+			reject(createAbortError(signal))
+		}
+		signal.addEventListener("abort", onAbort, { once: true })
+		Promise.resolve(promise).then(
+			(value) => {
+				if (settled) return
+				settled = true
+				signal.removeEventListener("abort", onAbort)
+				resolve(value)
+			},
+			(error) => {
+				if (settled) return
+				settled = true
+				signal.removeEventListener("abort", onAbort)
+				reject(error)
+			},
+		)
+	})
+}
+
+function throwIfAborted(signal?: AbortSignal): void {
+	if (signal?.aborted) throw createAbortError(signal)
+}
+
+function createAbortError(signal: AbortSignal): Error {
+	if (signal.reason instanceof Error && signal.reason.name === "AbortError") return signal.reason
+	if (typeof DOMException !== "undefined") {
+		return new DOMException(
+			signal.reason === undefined ? "The operation was aborted" : String(signal.reason),
+			"AbortError",
+		)
+	}
+	const error = new Error(
+		signal.reason === undefined ? "The operation was aborted" : String(signal.reason),
 	)
+	error.name = "AbortError"
+	return error
 }

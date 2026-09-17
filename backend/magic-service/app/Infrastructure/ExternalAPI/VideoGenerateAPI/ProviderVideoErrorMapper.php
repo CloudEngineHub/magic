@@ -11,6 +11,8 @@ use App\ErrorCode\VideoGenerateErrorCode;
 use GuzzleHttp\Exception\RequestException;
 use Throwable;
 
+use function Hyperf\Translation\trans;
+
 final class ProviderVideoErrorMapper
 {
     public static function resolveGemini(
@@ -50,10 +52,13 @@ final class ProviderVideoErrorMapper
         return VideoGenerateErrorCode::GENERAL_ERROR;
     }
 
+    /**
+     * @return array{errorCode: VideoGenerateErrorCode, message: string}
+     */
     public static function resolveVolcengine(
         ?RequestException $exception = null,
         null|array|string $body = null,
-    ): VideoGenerateErrorCode {
+    ): array {
         $body = is_array($body) ? json_encode($body, JSON_THROW_ON_ERROR) : $body;
         $body ??= $exception === null ? null : self::readResponseBody($exception);
         $payload = self::decodeResponseBody($body);
@@ -61,7 +66,7 @@ final class ProviderVideoErrorMapper
         $providerCode = (string) ($error['code'] ?? $payload['code'] ?? '');
         $code = self::normalize($providerCode);
 
-        return match ($providerCode) {
+        $errorCode = match ($providerCode) {
             'SensitiveContentDetected' => VideoGenerateErrorCode::SENSITIVE_CONTENT_DETECTED,
             'InputTextSensitiveContentDetected' => VideoGenerateErrorCode::INPUT_TEXT_SENSITIVE_CONTENT_DETECTED,
             'InputTextSensitiveContentDetected.PolicyViolation' => VideoGenerateErrorCode::INPUT_TEXT_SENSITIVE_CONTENT_DETECTED_POLICY_VIOLATION,
@@ -83,9 +88,11 @@ final class ProviderVideoErrorMapper
             'ContentSecurity.TrademarkRisk' => VideoGenerateErrorCode::CONTENT_SECURITY_TRADEMARK_RISK,
             'ContentSecurity.ViolentContent' => VideoGenerateErrorCode::CONTENT_SECURITY_VIOLENT_CONTENT,
             'MissingParameter' => VideoGenerateErrorCode::MISSING_PARAMETER,
+            'InvalidParameter' => VideoGenerateErrorCode::INVALID_PARAMETER,
             'InvalidParameter.InvalidVideoDuration' => VideoGenerateErrorCode::INVALID_PARAMETER_INVALID_VIDEO_DURATION,
             'InvalidParameter.InvalidResolution' => VideoGenerateErrorCode::INVALID_PARAMETER_INVALID_RESOLUTION,
             'InvalidParameter.EmptyInput' => VideoGenerateErrorCode::INVALID_PARAMETER_EMPTY_INPUT,
+            'InvalidParameter.TaskTypeConstraint' => VideoGenerateErrorCode::INVALID_PARAMETER,
             'InvalidRequestError' => VideoGenerateErrorCode::INVALID_REQUEST_ERROR,
             'InvalidArgumentError' => VideoGenerateErrorCode::INVALID_ARGUMENT_ERROR,
             'ServerOverloaded' => VideoGenerateErrorCode::SERVER_OVERLOADED,
@@ -93,8 +100,44 @@ final class ProviderVideoErrorMapper
             'InvalidFileFormat' => VideoGenerateErrorCode::INVALID_FILE_FORMAT,
             'FileSizeTooLarge' => VideoGenerateErrorCode::FILE_SIZE_TOO_LARGE,
             'AudioDurationTooLong' => VideoGenerateErrorCode::AUDIO_DURATION_TOO_LONG,
-            default => VideoGenerateErrorCode::GENERAL_ERROR,
+            default => str_starts_with($providerCode, 'InputImageSensitiveContentDetected.')
+                ? VideoGenerateErrorCode::INPUT_IMAGE_SENSITIVE_CONTENT_DETECTED
+                : VideoGenerateErrorCode::GENERAL_ERROR,
         };
+
+        // 结构：[错误码数值 => [报文关键字 => 提示文案]]，命中即用；关键字以 / 包裹时按正则匹配（覆盖多种措辞）。
+        $text = (string) $body;
+        $messages = [
+            VideoGenerateErrorCode::INVALID_PARAMETER->value => [
+                // 视频时长超出模型上限
+                'request must be less than or equal to 15.2' => trans('video_generate.invalid_parameter_video_duration_exceeds_limit'),
+                // 视频像素总数超出模型上限
+                'video pixel count specified in the request must be less than or equal to' => trans('video_generate.invalid_parameter_video_pixel_count_exceeds_limit'),
+                // 视频宽或高超出模型上限
+                '/video (?:height|width) specified in the request must be less than or equal to/' => trans('video_generate.invalid_parameter_video_dimension_exceeds_limit'),
+                // 图片宽高比超出支持范围
+                'expected the aspect ratio to be between' => trans('video_generate.invalid_parameter_image_aspect_ratio_out_of_range'),
+                // 图片尺寸过小
+                'to be at least 300px' => trans('video_generate.invalid_parameter_image_size_too_small'),
+            ],
+        ];
+        /** @var array<string, string> $hints 关键字 => 提示文案；以 / 包裹的关键字按正则匹配 */
+        $hints = $messages[$errorCode->value] ?? [];
+        $message = $errorCode->getMessage();
+        foreach ($hints as $keyword => $hint) {
+            $matched = str_starts_with($keyword, '/')
+                ? preg_match($keyword, $text) === 1
+                : str_contains($text, $keyword);
+            if ($matched) {
+                $message = $hint;
+                break;
+            }
+        }
+
+        return [
+            'errorCode' => $errorCode,
+            'message' => $message,
+        ];
     }
 
     public static function resolveDashScope(

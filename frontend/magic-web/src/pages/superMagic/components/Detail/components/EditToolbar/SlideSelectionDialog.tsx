@@ -22,7 +22,7 @@ import { resolvePptScaleContentDimensions } from "../../contents/HTML/utils/slid
 
 import { Image as ImageIcon } from "lucide-react"
 
-export type ExportFormat = "source" | "pdf" | "ppt" | "pptx" | "image_png" | "image_jpeg"
+export type ExportFormat = "source" | "pdf" | "pptx" | "image_png" | "image_jpeg"
 
 interface SlideSelectionDialogProps {
 	/** 是否打开对话框 */
@@ -37,8 +37,8 @@ interface SlideSelectionDialogProps {
 	isExporting?: boolean
 	/** 生成截图回调 */
 	onGenerateScreenshot?: (index: number) => Promise<void>
-	/** 是否支持导出PPT */
-	supportPPT?: boolean
+	/** 是否支持导出 PPTX */
+	supportPptx?: boolean
 }
 
 function SlideSelectionDialog({
@@ -48,11 +48,11 @@ function SlideSelectionDialog({
 	onConfirm,
 	isExporting = false,
 	onGenerateScreenshot,
-	supportPPT = true,
+	supportPptx = true,
 }: SlideSelectionDialogProps) {
 	const { t } = useTranslation("super")
 	const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
-	const [exportFormat, setExportFormat] = useState<ExportFormat>(supportPPT ? "pptx" : "pdf")
+	const [exportFormat, setExportFormat] = useState<ExportFormat>(supportPptx ? "pptx" : "pdf")
 	// 延后渲染列表，先让对话框壳出现，减轻首屏卡顿
 	const [contentReady, setContentReady] = useState(false)
 
@@ -148,17 +148,13 @@ function SlideSelectionDialog({
 	// 重置选择并关闭
 	function handleClose() {
 		setSelectedIds(new Set())
-		setExportFormat(supportPPT ? "ppt" : "pdf")
+		setExportFormat(supportPptx ? "pptx" : "pdf")
 		onOpenChange(false)
 	}
 
 	return (
 		<Dialog open={open} onOpenChange={onOpenChange}>
-			<DialogContent
-				className="flex max-h-[calc(100vh-2rem)] w-[calc(100%-2rem)] !max-w-[calc(100vw-2rem)] flex-col p-6 xl:!max-w-[1100px]"
-				data-testid="slide-selection-dialog"
-				closeButtonTestId="slide-selection-dialog-close-button"
-			>
+			<DialogContent className="flex max-h-[calc(100vh-2rem)] w-[calc(100%-2rem)] !max-w-[calc(100vw-2rem)] flex-col p-6 xl:!max-w-[1100px]">
 				<DialogHeader>
 					<DialogTitle>{t("ppt.selectSlidesToExport")}</DialogTitle>
 					<DialogDescription>
@@ -175,7 +171,6 @@ function SlideSelectionDialog({
 						size="sm"
 						onClick={toggleSelectAll}
 						className="h-8 text-sm"
-						data-testid="slide-selection-dialog-select-all-button"
 					>
 						<Checkbox
 							checked={isAllSelected}
@@ -289,16 +284,11 @@ function SlideSelectionDialog({
 						value={exportFormat}
 						onValueChange={(value) => setExportFormat(value as ExportFormat)}
 						className="mt-2 flex flex-wrap gap-x-4 gap-y-2"
-						data-testid="slide-selection-dialog-format-group"
 					>
-						{supportPPT && (
+						{supportPptx && (
 							<>
 								<div className="flex items-center space-x-2">
-									<RadioGroupItem
-										value="pptx"
-										id="format-pptx"
-										data-testid="slide-selection-dialog-format-option-pptx"
-									/>
+									<RadioGroupItem value="pptx" id="format-pptx" />
 									<Label
 										htmlFor="format-pptx"
 										className="flex cursor-pointer items-center gap-2 text-sm font-normal"
@@ -307,28 +297,10 @@ function SlideSelectionDialog({
 										{t("topicFiles.exportPptx")}
 									</Label>
 								</div>
-								<div className="flex items-center space-x-2">
-									<RadioGroupItem
-										value="ppt"
-										id="format-ppt"
-										data-testid="slide-selection-dialog-format-option-ppt"
-									/>
-									<Label
-										htmlFor="format-ppt"
-										className="flex cursor-pointer items-center gap-2 text-sm font-normal"
-									>
-										<TSIcon type="ts-ppt-file" size="16" />
-										{t("topicFiles.ppt")}
-									</Label>
-								</div>
 							</>
 						)}
 						<div className="flex items-center space-x-2">
-							<RadioGroupItem
-								value="pdf"
-								id="format-pdf"
-								data-testid="slide-selection-dialog-format-option-pdf"
-							/>
+							<RadioGroupItem value="pdf" id="format-pdf" />
 							<Label
 								htmlFor="format-pdf"
 								className="flex cursor-pointer items-center gap-2 text-sm font-normal"
@@ -338,11 +310,7 @@ function SlideSelectionDialog({
 							</Label>
 						</div>
 						<div className="flex items-center space-x-2">
-							<RadioGroupItem
-								value="source"
-								id="format-source"
-								data-testid="slide-selection-dialog-format-option-source"
-							/>
+							<RadioGroupItem value="source" id="format-source" />
 							<Label
 								htmlFor="format-source"
 								className="flex cursor-pointer items-center gap-2 text-sm font-normal"
@@ -352,11 +320,7 @@ function SlideSelectionDialog({
 							</Label>
 						</div>
 						<div className="flex items-center space-x-2">
-							<RadioGroupItem
-								value="image_png"
-								id="format-image-png"
-								data-testid="slide-selection-dialog-format-option-image-png"
-							/>
+							<RadioGroupItem value="image_png" id="format-image-png" />
 							<Label
 								htmlFor="format-image-png"
 								className="flex cursor-pointer items-center gap-2 text-sm font-normal"
@@ -366,11 +330,7 @@ function SlideSelectionDialog({
 							</Label>
 						</div>
 						<div className="flex items-center space-x-2">
-							<RadioGroupItem
-								value="image_jpeg"
-								id="format-image-jpeg"
-								data-testid="slide-selection-dialog-format-option-image-jpeg"
-							/>
+							<RadioGroupItem value="image_jpeg" id="format-image-jpeg" />
 							<Label
 								htmlFor="format-image-jpeg"
 								className="flex cursor-pointer items-center gap-2 text-sm font-normal"
@@ -383,18 +343,12 @@ function SlideSelectionDialog({
 				</div>
 
 				<DialogFooter>
-					<Button
-						variant="outline"
-						onClick={handleClose}
-						disabled={isExporting}
-						data-testid="slide-selection-dialog-cancel-button"
-					>
+					<Button variant="outline" onClick={handleClose} disabled={isExporting}>
 						{t("common.cancel")}
 					</Button>
 					<Button
 						onClick={handleConfirm}
 						disabled={selectedIds.size === 0 || isExporting}
-						data-testid="slide-selection-dialog-export-button"
 					>
 						{isExporting
 							? t("topicFiles.exporting")

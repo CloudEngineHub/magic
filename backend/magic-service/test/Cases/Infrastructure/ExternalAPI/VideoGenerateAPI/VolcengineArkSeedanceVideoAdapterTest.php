@@ -412,6 +412,29 @@ class VolcengineArkSeedanceVideoAdapterTest extends TestCase
         $this->assertArrayNotHasKey('ratio', $payload);
     }
 
+    public function testBuildProviderPayloadPinsVideoEditDurationAndRatio(): void
+    {
+        $adapter = new VolcengineArkSeedanceVideoAdapter(new VolcengineArkVideoClient($this->createMock(ClientFactory::class)));
+
+        $seedanceTwoPointFiveOperation = $this->buildVideoEditOperation('doubao-seedance-2-5-260628');
+        $seedanceTwoPointFive = $adapter->buildProviderPayload($seedanceTwoPointFiveOperation);
+        $this->assertSame(-1, $seedanceTwoPointFive['duration']);
+        $this->assertSame('adaptive', $seedanceTwoPointFive['ratio']);
+        $this->assertSame('edit', $seedanceTwoPointFive['omni_reference_task_type']);
+        $this->assertSame('reference_video', $seedanceTwoPointFive['content'][1]['role']);
+        // 调用方传入的时长与比例被固定值替换，必须记为未生效且不能同时出现在 accepted 列表里。
+        $this->assertContains('generation.duration_seconds', $seedanceTwoPointFiveOperation->getIgnoredParams());
+        $this->assertContains('generation.aspect_ratio', $seedanceTwoPointFiveOperation->getIgnoredParams());
+        $this->assertNotContains('generation.duration_seconds', $seedanceTwoPointFiveOperation->getAcceptedParams());
+        $this->assertNotContains('generation.aspect_ratio', $seedanceTwoPointFiveOperation->getAcceptedParams());
+
+        // 2.0 系列不支持 omni_reference_task_type，由模型按素材与提示词判定任务类型。
+        $seedanceTwo = $adapter->buildProviderPayload($this->buildVideoEditOperation('doubao-seedance-2-0-260128'));
+        $this->assertSame(-1, $seedanceTwo['duration']);
+        $this->assertSame('adaptive', $seedanceTwo['ratio']);
+        $this->assertArrayNotHasKey('omni_reference_task_type', $seedanceTwo);
+    }
+
     public function testBuildProviderPayloadMapsStartAndEndFramesWithoutDroppingThem(): void
     {
         $adapter = new VolcengineArkSeedanceVideoAdapter(new VolcengineArkVideoClient($this->createMock(ClientFactory::class)));
@@ -559,11 +582,44 @@ class VolcengineArkSeedanceVideoAdapterTest extends TestCase
         $this->assertSame('https://example.com/generated.mp4', $succeeded['output']['video_url']);
         $this->assertSame('https://example.com/last-frame.png', $succeeded['output']['last_frame_url']);
         $this->assertSame('failed', $failed['status']);
-        $this->assertSame('PROVIDER_FAILED', $failed['error']['code']);
+        $this->assertSame((string) VideoGenerateErrorCode::GENERAL_ERROR->value, $failed['error']['code']);
+        $this->assertSame(VideoGenerateErrorCode::GENERAL_ERROR->getMessage(), $failed['error']['message']);
         $this->assertSame('failed', $expired['status']);
-        $this->assertSame('PROVIDER_EXPIRED', $expired['error']['code']);
+        $this->assertSame((string) VideoGenerateErrorCode::GENERAL_ERROR->value, $expired['error']['code']);
         $this->assertSame('failed', $cancelled['status']);
-        $this->assertSame('PROVIDER_CANCELLED', $cancelled['error']['code']);
+        $this->assertSame((string) VideoGenerateErrorCode::GENERAL_ERROR->value, $cancelled['error']['code']);
+    }
+
+    public function testQueryMapsProviderErrorPayloadToVideoErrorCodeAndRefinedMessage(): void
+    {
+        $httpClient = $this->createMock(Client::class);
+        $httpClient->expects($this->once())
+            ->method('get')
+            ->willReturn(new Response(200, [], json_encode([
+                'id' => 'task-failed',
+                'status' => 'failed',
+                'error' => [
+                    'code' => 'InvalidParameter',
+                    'message' => 'Error while downloading video, video height specified in the request must be less than or equal to 6000.',
+                ],
+            ], JSON_THROW_ON_ERROR)));
+
+        $clientFactory = $this->createMock(ClientFactory::class);
+        $clientFactory->expects($this->once())->method('create')->willReturn($httpClient);
+
+        $adapter = new VolcengineArkSeedanceVideoAdapter(new VolcengineArkVideoClient($clientFactory));
+        $result = $adapter->query(
+            $this->createOperation(),
+            new QueueExecutorConfig('https://ark.cn-beijing.volces.com/api/v3', 'secret', 3, 20),
+            'task-failed',
+        );
+
+        $this->assertSame('failed', $result['status']);
+        $this->assertSame((string) VideoGenerateErrorCode::INVALID_PARAMETER->value, $result['error']['code']);
+        $this->assertSame(
+            trans('video_generate.invalid_parameter_video_dimension_exceeds_limit'),
+            $result['error']['message'],
+        );
     }
 
     public function testSubmitHandlesNonJsonErrorBodyWithoutDecodeException(): void
@@ -590,6 +646,41 @@ class VolcengineArkSeedanceVideoAdapterTest extends TestCase
         $adapter->submit(
             $this->createOperation(),
             new QueueExecutorConfig('https://ark.cn-beijing.volces.com/api/v3', 'secret', 3, 20),
+        );
+    }
+
+    private function buildVideoEditOperation(string $model): VideoQueueOperationEntity
+    {
+        return new VideoQueueOperationEntity(
+            id: 'op-ark-video-edit',
+            endpoint: 'video:' . $model,
+            model: $model,
+            modelVersion: $model,
+            providerModelId: $model,
+            providerCode: 'VolcengineArk',
+            providerName: 'volcengineark',
+            organizationCode: 'org-1',
+            userId: 'user-1',
+            status: VideoOperationStatus::QUEUED,
+            seq: 1,
+            rawRequest: [
+                'model_id' => $model,
+                'task' => 'edit',
+                'input_mode' => 'video_edit',
+                'prompt' => '{{video_1}} 再加一只橘猫',
+                'inputs' => [
+                    'reference_videos' => [
+                        ['uri' => 'https://example.com/source.mp4'],
+                    ],
+                ],
+                'generation' => [
+                    'resolution' => '720p',
+                    'duration_seconds' => 5,
+                    'aspect_ratio' => '16:9',
+                ],
+            ],
+            createdAt: date(DATE_ATOM),
+            heartbeatAt: date(DATE_ATOM),
         );
     }
 

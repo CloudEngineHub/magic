@@ -44,6 +44,7 @@ describe("Canvas destroy", () => {
 			cursorManager: destroyable("cursorManager"),
 			permissionManager: destroyable("permissionManager"),
 			imageBatchPollingRegistry: destroyable("imageBatchPollingRegistry"),
+			viewportQueryCoordinator: destroyable("viewportQueryCoordinator"),
 			elementManager: destroyable("elementManager"),
 			geometryCacheManager: destroyable("geometryCacheManager"),
 			connectionManager: destroyable("connectionManager"),
@@ -104,5 +105,12 @@ describe("Canvas destroy", () => {
 				expect(managerIndex).toBeLessThan(dependencyIndex)
 			})
 		}
+
+		const viewportQueryCoordinatorIndex = destroyOrder.indexOf("viewportQueryCoordinator")
+		expect(viewportQueryCoordinatorIndex).toBeGreaterThanOrEqual(0)
+		expect(viewportQueryCoordinatorIndex).toBeLessThan(destroyOrder.indexOf("elementManager"))
+		expect(viewportQueryCoordinatorIndex).toBeLessThan(
+			destroyOrder.indexOf("geometryCacheManager"),
+		)
 	})
 })

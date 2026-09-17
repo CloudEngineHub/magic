@@ -40,6 +40,8 @@ const routeNameToPathMap: Record<RouteName, RoutePath> = {
 		RoutePath.AIDataDashboardDigitalEmployeeAnalysis,
 	[RouteName.AdminAIDataDashboardConsumptionAnalysis]:
 		RoutePath.AIDataDashboardConsumptionAnalysis,
+	[RouteName.AdminAIDataDashboardFileProductionAnalysis]:
+		RoutePath.AIDataDashboardFileProductionAnalysis,
 	[RouteName.AdminAIDataDashboardDataDictionary]: RoutePath.AIDataDashboardDataDictionary,
 	[RouteName.AdminAIManage]: RoutePath.AIManage,
 	[RouteName.AdminAIAppMenu]: RoutePath.AIAppMenu,

@@ -60,6 +60,7 @@ export default function WorkspaceProjectsContent({
 	const isOpenRef = useRef(open)
 	const actions = useProjectItemActionProps({ selectedWorkspace: workspace ?? null })
 	const request = useRef<AbortController | null>(null)
+	const modalWasOpen = useRef(false)
 
 	const load = useMemoizedFn(async (nextPage = 1) => {
 		if (!isOpenRef.current) return
@@ -143,6 +144,20 @@ export default function WorkspaceProjectsContent({
 		)
 	}, [open, workspaceId, load])
 
+	useEffect(() => {
+		// 与最近项目一致：动作弹窗结束后重查，不能把提前修改缓存当作服务端已完成。
+		if (modalWasOpen.current && !actions.isProjectModalOpen) void load()
+		modalWasOpen.current = actions.isProjectModalOpen
+	}, [actions.isProjectModalOpen, load])
+
+	const refreshAfterShortcutRemoval = (removeShortcut?: (projectId: string) => void) =>
+		removeShortcut
+			? async (projectId: string) => {
+					await removeShortcut(projectId)
+					await load()
+				}
+			: undefined
+
 	const close = useMemoizedFn(() => {
 		isOpenRef.current = false
 		requestId.current += 1
@@ -210,10 +225,9 @@ export default function WorkspaceProjectsContent({
 					onMoveProject: actions.handleMoveProject,
 					onTransferProject: actions.handleTransferProject,
 					onAddCollaborators: actions.onAddCollaborators,
-					onCancelWorkspaceShortcut: actions.handleCancelWorkspaceShortcut,
-					refetchProjects: () => {
-						void load()
-					},
+					onCancelWorkspaceShortcut: refreshAfterShortcutRemoval(
+						actions.handleCancelWorkspaceShortcut,
+					),
 				}}
 				error={
 					failed && (

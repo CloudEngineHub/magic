@@ -409,6 +409,59 @@ describe("repairCanvasProjectsBeforeFileOperation", () => {
 		expect(SuperMagicApi.saveFileContent).not.toHaveBeenCalled()
 	})
 
+	it("skips path-repair planning for in-canvas resource moves when attachmentIndex is present", async () => {
+		const { buildAttachmentIndex } =
+			await import("@/pages/superMagic/components/TopicFilesButton/utils/attachmentIndex")
+
+		const image = {
+			file_id: "image",
+			file_name: "a.png",
+			parent_id: "images",
+			relative_file_path: "Canvas/images/a.png",
+		}
+		const images = {
+			file_id: "images",
+			file_name: "images",
+			parent_id: "root",
+			is_directory: true,
+			relative_file_path: "Canvas/images",
+			children: [image],
+		}
+		const main = {
+			file_id: "main",
+			file_name: "magic.project.js",
+			parent_id: "root",
+			relative_file_path: "Canvas/magic.project.js",
+		}
+		const root = {
+			file_id: "root",
+			file_name: "Canvas",
+			name: "Canvas",
+			is_directory: true,
+			relative_file_path: "Canvas",
+			children: [main, images],
+		}
+		const nestedAttachments = [root] as any
+		const attachmentIndex = buildAttachmentIndex(nestedAttachments)
+
+		const imagesPlan = await planCanvasProjectsBeforeFileOperation({
+			attachments: nestedAttachments,
+			attachmentIndex,
+			fileIds: ["images"],
+			operation: "move",
+		})
+		const entryPlan = await planCanvasProjectsBeforeFileOperation({
+			attachments: nestedAttachments,
+			attachmentIndex,
+			fileIds: ["main"],
+			operation: "move",
+		})
+
+		expect(imagesPlan.affectedProjects).toEqual([])
+		expect(entryPlan.affectedProjects).toEqual([])
+		expect(getFileContentsByIds).not.toHaveBeenCalled()
+	})
+
 	it("resolves parent_id-only trees and absolute workspace paths", async () => {
 		vi.mocked(getFileContentById).mockResolvedValue(
 			projectContent("1.0.0", {

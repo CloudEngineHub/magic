@@ -392,10 +392,16 @@ class MessageQueueAppService extends AbstractAppService
             ExceptionBuilder::throw(SuperAgentErrorCode::VALIDATE_FAILED, trans('message_queue.invalid_message_type', ['type' => $dto->messageType]));
         }
         $result = $this->messageQueueDomainService->restoreMessage(
-            $isolation, $messageId, (int) $dto->projectId, (int) $dto->topicId, $dto->messageContent, $type,
+            $isolation,
+            $messageId,
+            (int) $dto->projectId,
+            (int) $dto->topicId,
+            $dto->messageContent,
+            $type,
             $dto->beforeId === null ? null : (int) $dto->beforeId,
             $dto->afterId === null ? null : (int) $dto->afterId,
-            $dto->originalIndex, $dto->expectedSyncId
+            $dto->originalIndex,
+            $dto->expectedSyncId
         );
         if ($result === null) {
             return ['result' => 'original_unavailable'];
@@ -415,12 +421,18 @@ class MessageQueueAppService extends AbstractAppService
         $existing = $this->messageQueueDomainService->getMessageForUser($messageId, $authorization->getId());
         $topic = $this->validateQueueScope($isolation, $existing->getProjectId(), $existing->getTopicId());
         $message = $this->messageQueueDomainService->moveMessage(
-            $isolation, $messageId,
+            $isolation,
+            $messageId,
             $dto->beforeId === null ? null : (int) $dto->beforeId,
             $dto->afterId === null ? null : (int) $dto->afterId
         );
         $this->eventDispatcher->dispatch(new MessageQueueUpdatedEvent($message, $topic, $authorization->getId(), $authorization->getOrganizationCode()));
         return ['queue_id' => (string) $message->getId(), 'sort_order' => (string) $message->getSortOrder()];
+    }
+
+    public function getMessageQueueEntity(int $queueId, string $userId): ?MessageQueueEntity
+    {
+        return $this->messageQueueDomainService->getMessageForUser($queueId, $userId);
     }
 
     private function validateQueueScope(DataIsolation $isolation, int $projectId, int $topicId): TopicEntity
@@ -434,10 +446,5 @@ class MessageQueueAppService extends AbstractAppService
             ExceptionBuilder::throw(SuperAgentErrorCode::TOPIC_ACCESS_DENIED, 'topic.topic_access_denied');
         }
         return $topic;
-    }
-
-    public function getMessageQueueEntity(int $queueId, string $userId): ?MessageQueueEntity
-    {
-        return $this->messageQueueDomainService->getMessageForUser($queueId, $userId);
     }
 }

@@ -530,7 +530,12 @@ function TopicPage({
 					)
 				: undefined,
 		}
-	}, [capabilities.canCreateSiblingTopic, switchToProjectTopic, topicModeConfig])
+	}, [
+		capabilities.canCreateSiblingTopic,
+		projectFilesStore,
+		switchToProjectTopic,
+		topicModeConfig,
+	])
 
 	const setUserSelectDetail = useMemoizedFn((detail: PreviewDetail | null) => {
 		if (!detail) return

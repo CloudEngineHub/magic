@@ -29,6 +29,8 @@ export function ProjectShareSheetFooter({ controller }: ProjectShareSheetFooterP
 					disabled={
 						controller.saving ||
 						controller.isCheckingShare ||
+						controller.shareTypePermissionLoading ||
+						controller.isSelectedShareTypePermitted === false ||
 						(controller.view === "edit" && controller.editLoading)
 					}
 					onClick={controller.submitCreateShare}

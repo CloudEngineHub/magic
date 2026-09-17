@@ -80,6 +80,9 @@ const canAccessDigitalEmployeeAnalysis = (permissions: string[], isSuperAdmin?: 
 const canAccessConsumptionAnalysis = (permissions: string[], isSuperAdmin?: boolean) =>
 	isSuperAdmin || permissions.includes(PERMISSION_KEY_MAP.DATA_DASHBOARD_CONSUMPTION_QUERY)
 
+const canAccessFileProductionAnalysis = (permissions: string[], isSuperAdmin?: boolean) =>
+	isSuperAdmin || permissions.includes(PERMISSION_KEY_MAP.DATA_DASHBOARD_FILE_QUERY)
+
 // 首页重定向
 function AIIndexRedirect() {
 	const { isPermissionInitialized, isOfficialOrg, isPersonalOrganization, userPermissions } =
@@ -107,6 +110,9 @@ function AIIndexRedirect() {
 			: null,
 		!isPersonalOrganization && canAccessConsumptionAnalysis(userPermissions, isSuperAdmin)
 			? RoutePath.AIDataDashboardConsumptionAnalysis
+			: null,
+		!isPersonalOrganization && canAccessFileProductionAnalysis(userPermissions, isSuperAdmin)
+			? RoutePath.AIDataDashboardFileProductionAnalysis
 			: null,
 		!isOfficialOrg && canAccessAIAppMenu(userPermissions, isSuperAdmin)
 			? RoutePath.AIAppMenu
@@ -150,6 +156,9 @@ function DataStatisticsIndexRedirect() {
 			: null,
 		canAccessConsumptionAnalysis(userPermissions, isSuperAdmin)
 			? RoutePath.AIDataDashboardConsumptionAnalysis
+			: null,
+		canAccessFileProductionAnalysis(userPermissions, isSuperAdmin)
+			? RoutePath.AIDataDashboardFileProductionAnalysis
 			: null,
 	].find(Boolean)
 
@@ -283,6 +292,13 @@ export default {
 					element: <DataDashboardPage view={DataDashboardView.ConsumptionAnalysis} />,
 					title: "nav.aiSubMenu.consumptionAnalysis",
 					validate: canAccessConsumptionAnalysis,
+				},
+				{
+					name: RouteName.AdminAIDataDashboardFileProductionAnalysis,
+					path: RoutePath.AIDataDashboardFileProductionAnalysis,
+					element: <DataDashboardPage view={DataDashboardView.FileProductionAnalysis} />,
+					title: "nav.aiSubMenu.fileProductionAnalysis",
+					validate: canAccessFileProductionAnalysis,
 				},
 			],
 		},

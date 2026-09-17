@@ -18,6 +18,9 @@
 	"filingNumberRequired": "展示备案号时，备案号为必填项",
 	"footerConfig": "页脚配置",
 	"globalMaintain": "全局维护",
+	"globalSystemPrompt": "全局系统提示词",
+	"globalSystemPromptMaxLength": "全局系统提示词不能超过 5000 个字符",
+	"globalSystemPromptPlaceholder": "请输入全局系统提示词，最多 5000 个字符",
 	"keywordsPlaceholder": "请输入平台 Keywords",
 	"mainAgentPrompt": "主 Agent 提示词",
 	"maintainDesc": "维护描述",
@@ -45,5 +48,41 @@
 	"uploadLogo": "上传图标",
 	"uploadPngTip": "建议上传 PNG 图标，大小不超过 2 M",
 	"uploadSizeLimit": "文件大小不能超过 2 M",
-	"uploadSvgTip": "建议上传 SVG 图标，大小不超过 2 M"
+	"uploadSvgTip": "建议上传 SVG 图标，大小不超过 2 M",
+	"watermarkContent": "水印内容",
+	"watermarkContentDescription": "选择水印中展示的信息。",
+	"watermarkContentRequired": "请选择至少一项水印内容",
+	"watermarkDefaultTip": "水印默认关闭，可根据企业安全要求开启，用于访问者识别与事后追踪。",
+	"watermarkDisabledLabel": "关闭",
+	"watermarkEnabled": "启用水印",
+	"watermarkEnabledDescription": "开启后，企业成员访问平台时将展示身份水印。",
+	"watermarkEnabledLabel": "开启",
+	"watermarkFields": {
+		"department": "所属部门",
+		"email": "邮箱",
+		"employee_no": "员工工号",
+		"phone": "手机号",
+		"real_name": "员工姓名",
+		"visit_time": "访问时间"
+	},
+	"watermarkIntensity": "水印深浅",
+	"watermarkIntensityDescription": "水印越深，身份识别越清晰。",
+	"watermarkIntensityOptions": {
+		"light": "淡",
+		"standard": "标准",
+		"strong": "加强"
+	},
+	"watermarkPreview": "水印预览",
+	"watermarkPreviewFallback": "张三 · 2021034291 · 2026-09-09 14:30",
+	"watermarkPreviewSamples": {
+		"department": "技术部",
+		"email": "zhangsan@example.com",
+		"employee_no": "2021034291",
+		"phone": "138****8888",
+		"real_name": "张三",
+		"visit_time": "2026-09-09 14:30"
+	},
+	"watermarkPreviewTip": "预览为示例效果，实际水印内容以访问用户信息为准。",
+	"watermarkSettings": "水印设置",
+	"watermarkSettingsDescription": "配置企业成员访问平台时展示的身份水印。"
 }

@@ -37,6 +37,26 @@ export function normalizeSandboxHtml(html: string): string {
 	return injectExportPatches(injectVideoCrossOriginAnonymous(decodeInlineScriptEntities(html)))
 }
 
+/**
+ * Identify page content that may continue changing after the document reaches
+ * `readyState === "complete"`. Static HTML still gets resource-specific waits
+ * for images and videos, so it does not need the legacy fixed native-load
+ * grace period. Executable pages and CSS that can load fonts or other external
+ * resources retain that grace period for fidelity.
+ */
+export function requiresNativeLoadWait(html: string): boolean {
+	return (
+		/<script\b/i.test(html) ||
+		/<link\b[^>]*\brel\s*=\s*(?:["'][^"']*\bstylesheet\b[^"']*["']|[^\s>]*\bstylesheet\b)/i.test(
+			html,
+		) ||
+		/<(?:canvas|video|audio|iframe|object|embed)\b/i.test(html) ||
+		/<(?:svg:)?(?:image|use)\b[^>]*(?:\bhref|\bxlink:href)\s*=/i.test(html) ||
+		/\bon[a-z][\w:-]*\s*=/i.test(html) ||
+		/\bdata-render-ready\s*=|@(?:font-face|import)\b|\burl\s*\(/i.test(html)
+	)
+}
+
 /** Determine whether the document is ready to enter the export render stage */
 export function isDocumentReadyForRender({
 	iframeDocument,
@@ -108,7 +128,7 @@ function decodeInlineScriptEntities(rawHtml: string): string {
 				.replace(/&amp;(?=(?:lt|gt|quot|#39|apos);)/gi, "&")
 				.replace(/&lt;/gi, "<")
 				.replace(/&gt;/gi, ">")
-				.replace(/&quot;/gi, "\"")
+				.replace(/&quot;/gi, '"')
 				.replace(/&#39;|&apos;/gi, "'")
 			if (decodedCode === code) return full
 			return `<script${attrs}>${decodedCode}</script>`
@@ -154,7 +174,9 @@ function injectExportPatches(html: string): string {
 	const htmlMatch = html.match(/<html\b[^>]*>/i)
 	if (htmlMatch) {
 		const insertPos = htmlMatch.index! + htmlMatch[0].length
-		return html.slice(0, insertPos) + "<head>" + EXPORT_PATCHES + "</head>" + html.slice(insertPos)
+		return (
+			html.slice(0, insertPos) + "<head>" + EXPORT_PATCHES + "</head>" + html.slice(insertPos)
+		)
 	}
 	return EXPORT_PATCHES + html
 }

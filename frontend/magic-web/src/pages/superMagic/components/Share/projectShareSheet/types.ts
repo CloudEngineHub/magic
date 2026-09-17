@@ -14,12 +14,7 @@ import type { RecordingDetailFileMap } from "@/pages/superMagic/pages/AudioRecor
 import type { RecordingShareGroupedItem } from "@/pages/superMagic/pages/AudioRecordings/utils/build-recording-share-selection"
 
 export type ProjectShareSheetView =
-	| "create"
-	| "manage"
-	| "linkDetail"
-	| "edit"
-	| "expiry"
-	| "deleteConfirm"
+	"create" | "manage" | "linkDetail" | "edit" | "expiry" | "deleteConfirm"
 export type MobileShareSheetMode = "project" | "file"
 export type MobileShareItem = ProjectShareItem | FileShareItem
 
@@ -75,6 +70,9 @@ export interface ProjectShareSheetController {
 	loading: boolean
 	saving: boolean
 	isCheckingShare: boolean
+	permittedShareTypes?: ShareType[]
+	shareTypePermissionLoading?: boolean
+	isSelectedShareTypePermitted?: boolean
 	advancedOpen: boolean
 	defaultSelectedFileIds: string[]
 	selectedFileIds: string[]

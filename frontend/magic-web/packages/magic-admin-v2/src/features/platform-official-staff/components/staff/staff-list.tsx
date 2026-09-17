@@ -1,0 +1,223 @@
+import { Bot, Edit3, MoreHorizontal, Settings2, SlidersHorizontal } from "lucide-react";
+import { useTranslation } from "react-i18next";
+import { EntityAvatarRender } from "@magic-admin-v2/components/entity-avatar-render";
+import { Badge } from "@magic-admin-v2/components/ui/badge";
+import { Button } from "@magic-admin-v2/components/ui/button";
+import { Card, CardContent } from "@magic-admin-v2/components/ui/card";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@magic-admin-v2/components/ui/dropdown-menu";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@magic-admin-v2/components/ui/select";
+import { Separator } from "@magic-admin-v2/components/ui/separator";
+import { Skeleton } from "@magic-admin-v2/components/ui/skeleton";
+import { Switch } from "@magic-admin-v2/components/ui/switch";
+import { StaffAvatar } from "@magic-admin-v2/features/platform-official-staff/components/avatars";
+import type { OfficialStaff } from "@magic-admin-v2/features/platform-official-staff/types";
+import type { DefaultAgentOption } from "@magic-admin-v2/features/platform-official-staff/utils/default-agent";
+import { getI18nText } from "@magic-admin-v2/features/platform-official-staff/utils/page-utils";
+import { useI18n } from "@magic-admin-v2/i18n/use-i18n";
+
+export function StaffCard({
+  canEdit,
+  item,
+  onAssign,
+  onEdit,
+  onFloatingOpenChange,
+  openFloatingId,
+  onStatusChange,
+}: {
+  canEdit: boolean;
+  item: OfficialStaff;
+  onAssign: (item: OfficialStaff) => void;
+  onEdit: (item: OfficialStaff) => void;
+  onFloatingOpenChange: (id: string | null) => void;
+  openFloatingId: string | null;
+  onStatusChange: (item: OfficialStaff, status: boolean) => void;
+}) {
+  const { t } = useTranslation();
+  const { language } = useI18n();
+  const isDefault = item.is_default === 1;
+  const name = getI18nText(item.name_i18n, language);
+  const placeholder = getI18nText(item.placeholder_i18n, language);
+
+  return (
+    <Card className="py-0">
+      <CardContent className="flex h-full flex-col gap-4 p-4">
+        <div className="flex min-w-0 gap-3">
+          <StaffAvatar item={item} />
+          <div className="min-w-0 flex-1">
+            <div className="flex min-w-0 items-center gap-2" data-drag-preview-root>
+              <div className="truncate font-medium text-foreground">{name}</div>
+              {isDefault ? <Badge variant="secondary">{t("officialStaff.badge.default")}</Badge> : null}
+            </div>
+            <div className="truncate font-mono text-xs text-muted-foreground">{item.identifier}</div>
+          </div>
+        </div>
+        <p className="line-clamp-2 min-h-10 text-sm text-muted-foreground">
+          {placeholder === "-" ? t("officialStaff.card.noPlaceholder") : placeholder}
+        </p>
+        <Separator />
+        <div className="mt-auto flex items-center justify-between gap-3">
+          <div className="flex min-w-0 items-center gap-2">
+            <Switch
+              checked={item.status}
+              disabled={!canEdit || isDefault}
+              onCheckedChange={(checked) => onStatusChange(item, checked)}
+            />
+            <span className="text-sm text-muted-foreground">
+              {item.status ? t("common.enabled") : t("common.disabled")}
+            </span>
+          </div>
+          <div className="flex items-center gap-2">
+            <Button onClick={() => onAssign(item)} size="sm" variant="outline">
+              <Settings2 className="size-4" />
+              {t("officialStaff.action.assignModels")}
+            </Button>
+            {canEdit ? (
+              <DropdownMenu
+                onOpenChange={(open) => onFloatingOpenChange(open ? `staff-more-${item.id}` : null)}
+                open={openFloatingId === `staff-more-${item.id}`}
+              >
+                <DropdownMenuTrigger asChild>
+                  <Button aria-label={t("officialStaff.action.more")} size="icon" variant="ghost">
+                    <MoreHorizontal className="size-4" />
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end">
+                  <DropdownMenuItem disabled={isDefault} onSelect={() => onEdit(item)}>
+                    <Edit3 className="mr-2 size-4" />
+                    {t("common.edit")}
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
+            ) : null}
+          </div>
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
+export function DefaultSettingsCard({
+  canEdit,
+  defaultAgentCode,
+  defaultAgentLoading,
+  defaultAgentOptions,
+  defaultAgentStaffList,
+  defaultConfigItem,
+  onAssign,
+  onDefaultAgentChange,
+  onFloatingOpenChange,
+  openFloatingId,
+}: {
+  canEdit: boolean;
+  defaultAgentCode?: string;
+  defaultAgentLoading: boolean;
+  defaultAgentOptions: DefaultAgentOption[];
+  defaultAgentStaffList: OfficialStaff[];
+  defaultConfigItem?: OfficialStaff;
+  onAssign: (item: OfficialStaff) => void;
+  onDefaultAgentChange: (value: string) => void;
+  onFloatingOpenChange: (id: string | null) => void;
+  openFloatingId: string | null;
+}) {
+  const { t } = useTranslation();
+  const defaultAgentStaff = defaultAgentStaffList.find(
+    (staff) => staff.identifier === defaultAgentCode,
+  );
+
+  return (
+    <Card className="overflow-hidden py-0">
+      <CardContent className="grid p-0 md:grid-cols-2">
+        <div className="flex min-w-0 flex-col gap-3 p-4 lg:flex-row lg:items-center lg:justify-between">
+          <div className="flex min-w-0 items-center gap-3">
+            <EntityAvatarRender
+              className="size-9"
+              fallbackIcon={<Bot className="size-4" aria-hidden="true" />}
+              name={defaultAgentStaff?.name_i18n?.zh_CN ?? defaultAgentCode}
+              src={defaultAgentStaff?.icon_url || defaultAgentStaff?.icon}
+            />
+            <div className="min-w-0">
+              <div className="truncate font-medium text-foreground">{t("officialStaff.defaultAgent.title")}</div>
+              <div className="line-clamp-2 text-xs text-muted-foreground">
+                {t("officialStaff.defaultAgent.description")}
+              </div>
+            </div>
+          </div>
+          <div className="w-full shrink-0 lg:w-64">
+            {defaultAgentLoading ? (
+              <Skeleton className="h-9 w-full" />
+            ) : (
+              <Select
+                disabled={!canEdit || defaultAgentOptions.length === 0}
+                onOpenChange={(open) => onFloatingOpenChange(open ? "default-agent" : null)}
+                onValueChange={onDefaultAgentChange}
+                open={openFloatingId === "default-agent"}
+                value={defaultAgentCode}
+              >
+                <SelectTrigger className="w-full">
+                  <SelectValue placeholder={t("officialStaff.defaultAgent.placeholder")} />
+                </SelectTrigger>
+                <SelectContent>
+                  {defaultAgentOptions.map((option) => {
+                    const staff = defaultAgentStaffList.find(
+                      (item) => item.identifier === option.value,
+                    );
+                    return (
+                      <SelectItem
+                        disabled={option.disabled}
+                        key={option.value}
+                        textValue={option.label}
+                        value={option.value}
+                      >
+                        <div className="flex min-w-0 items-center gap-2">
+                          <EntityAvatarRender
+                            className="size-5"
+                            fallbackIcon={<Bot className="size-3" aria-hidden="true" />}
+                            name={staff?.name_i18n?.zh_CN ?? option.label}
+                            src={staff?.icon_url || staff?.icon}
+                          />
+                          <span className="truncate">{option.label}</span>
+                        </div>
+                      </SelectItem>
+                    );
+                  })}
+                </SelectContent>
+              </Select>
+            )}
+          </div>
+        </div>
+        <div className="flex min-w-0 flex-col gap-3 border-t p-4 lg:flex-row lg:items-center lg:justify-between md:border-l md:border-t-0">
+          <div className="flex min-w-0 items-center gap-3">
+            <EntityAvatarRender
+              className="size-9"
+              fallbackIcon={<SlidersHorizontal className="size-4" aria-hidden="true" />}
+              name={t("officialStaff.builtIn.defaultConfig")}
+            />
+            <div className="min-w-0">
+              <div className="truncate font-medium text-foreground">{t("officialStaff.builtIn.defaultConfig")}</div>
+              <div className="line-clamp-2 text-xs text-muted-foreground">
+                {t("officialStaff.builtIn.defaultConfigDesc")}
+              </div>
+            </div>
+          </div>
+          {defaultConfigItem ? (
+            <Button onClick={() => onAssign(defaultConfigItem)} size="sm" variant="outline">
+              <Settings2 className="size-4" />
+              {t("officialStaff.action.assignModels")}
+            </Button>
+          ) : null}
+        </div>
+      </CardContent>
+    </Card>
+  );
+}

@@ -8,6 +8,84 @@ export namespace DataDashboard {
 	/** 数字员工来源筛选枚举；仅数字员工分析页面允许传入 */
 	export type AgentSourceType = LocalCreateSource | MarketSource | OrganizationSource
 
+	/** 文件产出分析操作类型 */
+	export type FileSourceType = "user_created" | "ai_created"
+	/** 文件产出分析文件类别 */
+	export type FileCategory =
+		| "doc"
+		| "spreadsheet"
+		| "image"
+		| "video"
+		| "ppt"
+		| "html"
+		| "md"
+		| "other"
+	/** 文件产出分析明细 Tabs */
+	export type FileTabType = "file_user" | "file_department" | "file_agent"
+	/** 文件产出分析 Summary 查询参数 */
+	export interface FileAnalysisSummaryQuery {
+		start_date?: string
+		end_date?: string
+		source_type?: FileSourceType
+		file_category?: FileCategory
+	}
+	/** 文件产出分析 Tabs 查询参数 */
+	export interface FileAnalysisTabsQuery extends FileAnalysisSummaryQuery {
+		tab_type?: FileTabType
+		page?: number
+		page_size?: number
+	}
+	/** 文件产出分析趋势点 */
+	export interface FileAnalysisTrendItem {
+		date: string
+		file_output_count: number
+		user_created_count: number
+		ai_created_count: number
+	}
+	/** 文件产出分析 Summary */
+	export interface FileAnalysisSummary {
+		file_output_count: number
+		user_created_count: number
+		ai_created_count: number
+		file_output_trend: FileAnalysisTrendItem[]
+	}
+	/** 文件产出分析明细计数字段 */
+	export interface FileAnalysisCounts {
+		file_output_count: number
+		doc_count: number
+		spreadsheet_count: number
+		image_count: number
+		video_count: number
+		ppt_count: number
+		html_count: number
+		md_count: number
+		other_count: number
+	}
+	/** 按用户的文件产出明细 */
+	export interface FileUserRow extends FileAnalysisCounts {
+		user_id: string
+		user_name: string | null
+		department_id: string
+		department_name_path: string | null
+	}
+	/** 按部门的文件产出明细 */
+	export interface FileDepartmentRow extends FileAnalysisCounts {
+		department_id: string
+		department_name_path: string | null
+		member_count: number
+	}
+	/** 按数字员工的文件产出明细 */
+	export interface FileAgentRow extends FileAnalysisCounts {
+		agent_code: string
+		agent_name: string | null
+		agent_status: "published" | "unpublished" | "offline" | "deleted" | null
+		user_id: string
+		user_name: string | null
+		department_id: string
+		department_name_path: string | null
+	}
+	export type FileTabRow = FileUserRow | FileDepartmentRow | FileAgentRow
+
 	/** 数字员工 Tabs 类型 */
 	export type AgentTabType = "agent_usage" | "agent_call" | "agent_member" | "agent_department"
 
@@ -503,9 +581,11 @@ export namespace DataDashboard {
 	/** 数据看板导出请求；不携带分页和表格排序参数 */
 	export interface DashboardExportRequest extends BaseQuery {
 		/** 数字员工来源；仅数字员工分析发送 */
-		source_type?: AgentSourceType
+		source_type?: AgentSourceType | FileSourceType
+		/** 文件类别；仅文件产出分析发送 */
+		file_category?: FileCategory
 		/** 当前导出的明细 Tab */
-		tab_type: AgentTabType | MemberTabType | OrganizationTabType
+		tab_type: AgentTabType | MemberTabType | OrganizationTabType | FileTabType
 	}
 
 	/** 创建导出任务响应 */

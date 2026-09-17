@@ -95,6 +95,7 @@
 		"@dtyq/es6-template-strings": "~0.0.5",
 		"@dtyq/html-sandbox": "workspace:*",
 		"@dtyq/magic-admin": "workspace:*",
+		"@dtyq/magic-admin-v2": "workspace:*",
 		"@dtyq/magic-flow": "~0.0.16",
 		"@dtyq/timezone": "^0.0.2",
 		"@dtyq/upload-sdk": "~0.0.12",
@@ -280,12 +281,13 @@
 		"pdf-lib": "^1.17.1",
 		"polished": "^4.3.1",
 		"pptx-preview": "^1.0.7",
-		"pptxgenjs": "^4.0.1",
+		"pptxgenjs": "4.0.1",
 		"prismjs": "^1.30.0",
 		"prosemirror-model": "^1.25.0",
 		"prosemirror-state": "^1.4.3",
 		"prosemirror-view": "^1.38.1",
 		"radix-ui": "^1.4.3",
+		"rbush": "^4.0.1",
 		"rc-virtual-list": "^3.18.4",
 		"re-resizable": "^6.11.2",
 		"react": "^18.3.1",
@@ -367,6 +369,7 @@
 		"@types/node": "^22.16.4",
 		"@types/pako": "^2.0.3",
 		"@types/prismjs": "^1.26.5",
+		"@types/rbush": "^4.0.0",
 		"@types/react": "^18.3.2",
 		"@types/react-dom": "^18.3.0",
 		"@types/react-resizable": "^3.0.8",
@@ -446,6 +449,12 @@
 	"packageManager": "pnpm@10.6.5",
 	"engines": {
 		"node": "^20.19.0 || >=22.12.0"
+	},
+	"pnpm": {
+		"patchedDependencies": {
+			"pptxgenjs@4.0.1": "patches/pptxgenjs@4.0.1.patch",
+			"tiptap-markdown@0.9.0": "patches/tiptap-markdown.patch"
+		}
 	},
 	"msw": {
 		"workerDirectory": [
