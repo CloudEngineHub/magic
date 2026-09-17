@@ -13,7 +13,7 @@ interface LlmModelConfigProps {
 	innerModelType?: AiModel.ModelTypeGroup | null
 	form: FormInstance
 }
-const LlmModelConfig = ({ innerModelType, form }: LlmModelConfigProps) => {
+const LlmModelConfig = ({ innerModelType }: LlmModelConfigProps) => {
 	const { t } = useTranslation("admin/ai/model")
 	const { styles, cx } = useStyles()
 
@@ -57,9 +57,7 @@ const LlmModelConfig = ({ innerModelType, form }: LlmModelConfigProps) => {
 		[t],
 	)
 
-	const isEmbedding =
-		form.getFieldValue("model_type") === AiModel.ModelTypeGroup.Embedding ||
-		innerModelType === AiModel.ModelTypeGroup.Embedding
+	const isEmbedding = innerModelType === AiModel.ModelTypeGroup.Embedding
 
 	return (
 		<>
@@ -121,23 +119,16 @@ const LlmModelConfig = ({ innerModelType, form }: LlmModelConfigProps) => {
 			{/* 创造性温度 */}
 			<ModelTemperature isOfficialOrg={isOfficialOrg} />
 
-			{/* OpenAI 兼容聊天接口 */}
+			{/* OpenAI 兼容聊天接口：name 直接挂在 Form.Item 上，避免嵌套 Flex 导致控件不渲染 */}
 			<Form.Item
 				label={t("form.chatApi")}
+				name={["config", "chat_api"]}
 				className={styles.formItem}
-				dependencies={["model_type"]}
+				initialValue={AiModel.ChatApi.ChatCompletions}
 				hidden={isEmbedding}
+				extra={<div className={styles.desc}>{t("form.chatApiDesc")}</div>}
 			>
-				<Flex gap={6} vertical>
-					<Form.Item
-						name={["config", "chat_api"]}
-						noStyle
-						initialValue={AiModel.ChatApi.ChatCompletions}
-					>
-						<MagicSelect options={chatApiOptions} />
-					</Form.Item>
-					<div className={styles.desc}>{t("form.chatApiDesc")}</div>
-				</Flex>
+				<MagicSelect options={chatApiOptions} />
 			</Form.Item>
 
 			{/* 模型能力 */}
@@ -145,7 +136,6 @@ const LlmModelConfig = ({ innerModelType, form }: LlmModelConfigProps) => {
 				label={t("form.modelPower")}
 				name="model_power"
 				className={styles.formItem}
-				dependencies={["model_type"]}
 				initialValue={[AiModel.ModelPower.SupportTool, AiModel.ModelPower.SupportVision]}
 				hidden={isEmbedding}
 			>
