@@ -7,9 +7,9 @@ declare(strict_types=1);
 
 namespace App\Domain\SlidesTemplate\Entity;
 
-use App\Domain\SuperMagic\Common\Entity\ResolvesI18nText;
 use App\Domain\SlidesTemplate\Entity\ValueObject\SlidesTemplateTagNodeType;
 use App\Domain\SlidesTemplate\Entity\ValueObject\SlidesTemplateTagStatus;
+use App\Domain\SuperMagic\Common\Entity\ResolvesI18nText;
 use App\Infrastructure\Core\AbstractEntity;
 
 class SlidesTemplateTagEntity extends AbstractEntity

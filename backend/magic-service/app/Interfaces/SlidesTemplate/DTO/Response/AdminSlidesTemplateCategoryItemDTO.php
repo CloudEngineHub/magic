@@ -11,6 +11,20 @@ class AdminSlidesTemplateCategoryItemDTO extends SlidesTemplateCategoryItemDTO
 {
     public I18nTextDTO $nameI18n;
 
+    public string $organizationCode = '';
+
+    public int $templateCount = 0;
+
+    public int $status = 0;
+
+    public ?string $createdUid = null;
+
+    public ?string $updatedUid = null;
+
+    public ?string $createdAt = null;
+
+    public ?string $updatedAt = null;
+
     public function __construct(?array $data = null)
     {
         $this->setNameI18n(null);
@@ -26,20 +40,6 @@ class AdminSlidesTemplateCategoryItemDTO extends SlidesTemplateCategoryItemDTO
     {
         $this->nameI18n = $nameI18n instanceof I18nTextDTO ? $nameI18n : I18nTextDTO::fromArray($nameI18n ?? []);
     }
-
-    public string $organizationCode = '';
-
-    public int $templateCount = 0;
-
-    public int $status = 0;
-
-    public ?string $createdUid = null;
-
-    public ?string $updatedUid = null;
-
-    public ?string $createdAt = null;
-
-    public ?string $updatedAt = null;
 
     public function getOrganizationCode(): string
     {

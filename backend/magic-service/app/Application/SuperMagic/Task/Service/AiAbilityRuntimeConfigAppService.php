@@ -7,11 +7,11 @@ declare(strict_types=1);
 
 namespace App\Application\SuperMagic\Task\Service;
 
+use App\Application\Kernel\Service\PlatformSettingsAppService;
 use App\Domain\Provider\Entity\AiAbilityEntity;
 use App\Domain\Provider\Entity\ValueObject\AiAbilityCode;
 use App\Domain\Provider\Entity\ValueObject\ProviderDataIsolation;
 use App\Domain\Provider\Service\AiAbilityDomainService;
-use App\Application\Kernel\Service\PlatformSettingsAppService;
 use Hyperf\Coroutine\Parallel;
 use Psr\Log\LoggerInterface;
 use Throwable;

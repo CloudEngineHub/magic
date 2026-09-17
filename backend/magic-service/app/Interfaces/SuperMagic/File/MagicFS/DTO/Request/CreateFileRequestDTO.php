@@ -7,8 +7,8 @@ declare(strict_types=1);
 
 namespace App\Interfaces\SuperMagic\File\MagicFS\DTO\Request;
 
-use App\Domain\SuperMagic\Message\Entity\ValueObject\MessageMetadata;
 use App\Domain\SuperMagic\File\Entity\ValueObject\FileSpaceType;
+use App\Domain\SuperMagic\Message\Entity\ValueObject\MessageMetadata;
 use App\ErrorCode\MagicFSErrorCode;
 use App\Infrastructure\Core\Exception\ExceptionBuilder;
 use Hyperf\HttpServer\Contract\RequestInterface;

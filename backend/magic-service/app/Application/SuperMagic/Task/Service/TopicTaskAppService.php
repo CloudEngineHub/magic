@@ -1822,8 +1822,7 @@ class TopicTaskAppService extends AbstractAppService
 
         $chatAttachments = array_values(array_filter(
             $attachments,
-            static fn (mixed $attachment): bool =>
-                ! is_array($attachment)
+            static fn (mixed $attachment): bool => ! is_array($attachment)
                 || ($attachment['type'] ?? '') !== 'project_file'
         ));
 

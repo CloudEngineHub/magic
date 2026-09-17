@@ -317,5 +317,4 @@ class SlidesTemplateAssembler
             && $template->getOwnerId() === $template->getOrganizationCode()
             && OfficialOrganizationUtil::isOfficialOrganization($template->getOrganizationCode());
     }
-
 }

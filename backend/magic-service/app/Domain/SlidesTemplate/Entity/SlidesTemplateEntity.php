@@ -7,10 +7,10 @@ declare(strict_types=1);
 
 namespace App\Domain\SlidesTemplate\Entity;
 
-use App\Domain\SuperMagic\Common\Entity\ResolvesI18nText;
 use App\Domain\SlidesTemplate\Entity\ValueObject\SlidesTemplateOwnerType;
 use App\Domain\SlidesTemplate\Entity\ValueObject\SlidesTemplateSourceType;
 use App\Domain\SlidesTemplate\Entity\ValueObject\SlidesTemplateStatus;
+use App\Domain\SuperMagic\Common\Entity\ResolvesI18nText;
 use App\Infrastructure\Core\AbstractEntity;
 
 class SlidesTemplateEntity extends AbstractEntity

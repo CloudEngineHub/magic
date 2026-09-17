@@ -172,7 +172,7 @@ class ModelConfigItem extends AbstractDTO
         return $this->chatApi;
     }
 
-    public function setChatApi(null|string $chatApi): void
+    public function setChatApi(?string $chatApi): void
     {
         if (is_string($chatApi) && in_array($chatApi, [ChatApi::CHAT_COMPLETIONS, ChatApi::RESPONSES], true)) {
             $this->chatApi = $chatApi;

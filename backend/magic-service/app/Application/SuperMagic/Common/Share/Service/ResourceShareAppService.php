@@ -445,29 +445,6 @@ class ResourceShareAppService extends AbstractShareAppService
         return $shareDto;
     }
 
-    private function assertAllowed(
-        MagicUserAuthorization $userAuthorization,
-        string $resourceKind,
-        int $shareType
-    ): void {
-        $prefix = $resourceKind === 'micro_app' ? 'micro_app' : 'project';
-        $shareFunctionCode = match ($shareType) {
-            ShareAccessType::TeamShare->value => $prefix . '.share_team',
-            ShareAccessType::Internet->value => $prefix . '.share_public',
-            ShareAccessType::PasswordProtected->value => $prefix . '.share_password',
-            default => null,
-        };
-
-        if ($shareFunctionCode !== null
-            && ! $this->functionPermissionAppService->checkPermission($userAuthorization, $shareFunctionCode)) {
-            ExceptionBuilder::throw(
-                ShareErrorCode::SHARE_METHOD_NOT_ALLOWED,
-                'share.share_method_not_allowed',
-                ['shareType' => (string) $shareType]
-            );
-        }
-    }
-
     /**
      * 取消分享.
      *
@@ -1660,6 +1637,29 @@ class ResourceShareAppService extends AbstractShareAppService
             MemberRole::EDITOR,
             false,
         );
+    }
+
+    private function assertAllowed(
+        MagicUserAuthorization $userAuthorization,
+        string $resourceKind,
+        int $shareType
+    ): void {
+        $prefix = $resourceKind === 'micro_app' ? 'micro_app' : 'project';
+        $shareFunctionCode = match ($shareType) {
+            ShareAccessType::TeamShare->value => $prefix . '.share_team',
+            ShareAccessType::Internet->value => $prefix . '.share_public',
+            ShareAccessType::PasswordProtected->value => $prefix . '.share_password',
+            default => null,
+        };
+
+        if ($shareFunctionCode !== null
+            && ! $this->functionPermissionAppService->checkPermission($userAuthorization, $shareFunctionCode)) {
+            ExceptionBuilder::throw(
+                ShareErrorCode::SHARE_METHOD_NOT_ALLOWED,
+                'share.share_method_not_allowed',
+                ['shareType' => (string) $shareType]
+            );
+        }
     }
 
     /**

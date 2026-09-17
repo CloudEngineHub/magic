@@ -218,7 +218,7 @@ class TopicRepository implements TopicRepositoryInterface
     {
         $query = $this->model::query();
         if ($withTrashed) {
-            /** @phpstan-ignore-next-line - TopicModel uses SoftDeletes trait which provides withTrashed() */
+            /* @phpstan-ignore-next-line - TopicModel uses SoftDeletes trait which provides withTrashed() */
             $query->withTrashed();
         } else {
             $query->whereNull('deleted_at');
