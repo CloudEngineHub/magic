@@ -561,6 +561,15 @@ class Agent(BaseAgent):
         if skill_result.preloaded_content:
             self.system_prompt += "\n\n---\n\n" + skill_result.preloaded_content
 
+        # 在安全规则之前追加平台级全局系统提示词。
+        global_system_prompt = self.agent_context.get_global_system_prompt()
+        if global_system_prompt.strip():
+            self.system_prompt += (
+                "\n\n---\n\n<global_system_prompt>\n"
+                + global_system_prompt
+                + "\n</global_system_prompt>"
+            )
+
         # 在完整 system prompt 末尾统一注入安全规则；大陆环境额外追加内容合规规则
         self.system_prompt += "\n\n---\n\n" + build_security_guardrails_prompt(
             is_mainland=Environment.is_mainland(),
