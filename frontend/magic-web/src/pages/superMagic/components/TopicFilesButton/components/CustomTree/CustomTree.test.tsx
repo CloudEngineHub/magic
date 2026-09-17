@@ -8,13 +8,17 @@ vi.mock("@tanstack/react-virtual", () => ({
 	useVirtualizer: () => ({
 		getVirtualItems: () => [{ index: 55, key: "file-55", start: 1870 }],
 		getTotalSize: () => 2040,
+		measurementsCache: Array.from({ length: 60 }, (_, index) => ({
+			index,
+			key: `file-${index}`,
+			start: index === 55 ? 1870 : index * 34,
+			end: index === 55 ? 1904 : (index + 1) * 34,
+			size: index === 55 ? 34 : 34,
+			lane: 0,
+		})),
 		measureElement: vi.fn(),
 		scrollToIndex: vi.fn(),
 		scrollToOffset: vi.fn(),
-		measurementsCache: Array.from({ length: 60 }, (_, index) => ({
-			start: index * 34,
-			end: (index + 1) * 34,
-		})),
 	}),
 }))
 
@@ -29,41 +33,28 @@ vi.mock("./useCustomTreePerf", () => ({
 	useCustomTreePerfMetrics: vi.fn(),
 }))
 
-function createRows(count: number): VisibleTreeNodeRow[] {
+function createRows(
+	count: number,
+	options?: { directoryIndexes?: number[] },
+): VisibleTreeNodeRow[] {
+	const directoryIndexes = new Set(options?.directoryIndexes ?? [])
+
 	return Array.from({ length: count }, (_, index) => {
+		const isDirectory = directoryIndexes.has(index)
 		const node: TreeNodeData = {
 			key: `file-${index}`,
 			title: `File ${index}`,
-			item: { file_id: `file-${index}`, file_name: `File ${index}` },
+			item: {
+				file_id: `file-${index}`,
+				file_name: `File ${index}`,
+				is_directory: isDirectory,
+			},
 			level: 0,
-			isLeaf: true,
+			isLeaf: !isDirectory,
 		}
 
 		return { node, parentNode: null, ancestorKeys: [] }
 	})
-}
-
-function createFolderRows(): VisibleTreeNodeRow[] {
-	const folder: TreeNodeData = {
-		key: "folder-0",
-		title: "Folder 0",
-		item: { file_id: "folder-0", is_directory: true },
-		level: 0,
-		isLeaf: false,
-	}
-	const children = Array.from({ length: 4 }, (_, index) => {
-		const node: TreeNodeData = {
-			key: `file-${index}`,
-			title: `File ${index}`,
-			item: { file_id: `file-${index}`, file_name: `File ${index}` },
-			level: 1,
-			isLeaf: true,
-		}
-
-		return { node, parentNode: folder, ancestorKeys: ["folder-0"] }
-	})
-
-	return [{ node: folder, parentNode: null, ancestorKeys: [] }, ...children]
 }
 
 describe("CustomTree virtualization", () => {
@@ -92,8 +83,8 @@ describe("CustomTree virtualization", () => {
 		scrollElement.remove()
 	})
 
-	it("positions drag target block from virtualizer measurements", () => {
-		const visibleRows = createFolderRows()
+	it("positions the drag target block with measured virtual offsets", () => {
+		const visibleRows = createRows(60, { directoryIndexes: [50] })
 		const scrollElement = document.createElement("div")
 		document.body.appendChild(scrollElement)
 
@@ -105,15 +96,15 @@ describe("CustomTree virtualization", () => {
 					new Map(visibleRows.map((row, index) => [String(row.node.key), index]))
 				}
 				scrollElementRef={{ current: scrollElement }}
-				virtualThreshold={0}
-				dragTargetKey="folder-0"
-				dragTargetNodeClass="drag-target-block"
+				dragTargetKey="file-50"
+				dragTargetNodeClass="drag-target"
 			/>,
 		)
 
-		const dragTargetBlock = container.querySelector<HTMLElement>(".drag-target-block")
-		expect(dragTargetBlock?.style.top).toBe("0px")
-		expect(dragTargetBlock?.style.height).toBe("170px")
+		const highlight = container.querySelector<HTMLElement>(".drag-target")
+		// Measured start for index 50 is 50 * 34; estimate-based math would use 50 * 32.
+		expect(highlight?.style.top).toBe("1700px")
+		expect(highlight?.style.height).toBe("34px")
 
 		unmount()
 		scrollElement.remove()

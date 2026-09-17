@@ -178,72 +178,35 @@ describe("visibleTreeRows", () => {
 		expect(getDragTargetBlockRange(rows, "nested-leaf")).toBeNull()
 	})
 
-	it("positions drag target block from virtualizer measurements and scroll margin", () => {
-		const measurements = [
-			{ start: 100, end: 140 },
-			{ start: 140, end: 180 },
-			{ start: 200, end: 280 },
-			{ start: 280, end: 320 },
-		]
+	it("positions drag target blocks from measured virtual offsets", () => {
+		const range = { startIndex: 50, endIndex: 52 }
+		const rowHeight = 32
+		// Measured rows taller than the estimate; estimate-based math would place top at 1600.
+		const measurements = Array.from({ length: 53 }, (_, index) => ({
+			start: 100 + index * 40,
+			end: 100 + (index + 1) * 40,
+		}))
 
 		expect(
-			resolveDragTargetBlockStyle(
-				{ startIndex: 0, endIndex: 3 },
-				{
-					rowEstimateSize: 32,
-					shouldVirtualize: true,
-					scrollMargin: 50,
-					measurements,
-				},
-			),
+			resolveDragTargetBlockStyle({
+				range,
+				rowHeight,
+				measurements,
+				scrollMargin: 100,
+			}),
 		).toEqual({
-			top: 50,
-			height: 220,
+			top: 50 * 40,
+			height: 3 * 40,
 		})
 
 		expect(
-			resolveDragTargetBlockStyle(
-				{ startIndex: 2, endIndex: 3 },
-				{
-					rowEstimateSize: 32,
-					shouldVirtualize: true,
-					scrollMargin: 0,
-					measurements,
-				},
-			),
+			resolveDragTargetBlockStyle({
+				range,
+				rowHeight,
+			}),
 		).toEqual({
-			top: 200,
-			height: 120,
-		})
-	})
-
-	it("falls back to row estimates when virtual measurements are missing", () => {
-		expect(
-			resolveDragTargetBlockStyle(
-				{ startIndex: 5, endIndex: 7 },
-				{
-					rowEstimateSize: 32,
-					shouldVirtualize: true,
-					scrollMargin: 0,
-					measurements: [],
-				},
-			),
-		).toEqual({
-			top: 160,
-			height: 96,
-		})
-
-		expect(
-			resolveDragTargetBlockStyle(
-				{ startIndex: 1, endIndex: 3 },
-				{
-					rowEstimateSize: 32,
-					shouldVirtualize: false,
-				},
-			),
-		).toEqual({
-			top: 32,
-			height: 96,
+			top: 50 * rowHeight,
+			height: 3 * rowHeight,
 		})
 	})
 

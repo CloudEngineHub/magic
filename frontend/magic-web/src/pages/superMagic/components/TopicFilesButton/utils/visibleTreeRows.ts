@@ -126,35 +126,39 @@ export interface DragTargetBlockMeasurement {
 	end: number
 }
 
-export function resolveDragTargetBlockStyle(
-	range: { startIndex: number; endIndex: number },
-	options: {
-		rowEstimateSize: number
-		shouldVirtualize: boolean
-		scrollMargin?: number
-		measurements?: ReadonlyArray<DragTargetBlockMeasurement | undefined>
-	},
-) {
-	const { startIndex, endIndex } = range
-	const { rowEstimateSize, shouldVirtualize, scrollMargin = 0, measurements = [] } = options
+export interface DragTargetBlockStyle {
+	top: number
+	height: number
+}
 
-	const toTreeLocalOffset = (scrollOffset: number) => scrollOffset - scrollMargin
+/**
+ * Position the drop-target highlight with the same coordinates as virtualized rows.
+ * Using a fixed row estimate drifts as measured row heights accumulate in long lists.
+ */
+export function resolveDragTargetBlockStyle({
+	range,
+	rowHeight,
+	measurements,
+	scrollMargin = 0,
+}: {
+	range: { startIndex: number; endIndex: number }
+	rowHeight: number
+	measurements?: ReadonlyArray<DragTargetBlockMeasurement | undefined | null>
+	scrollMargin?: number
+}): DragTargetBlockStyle {
+	const startItem = measurements?.[range.startIndex]
+	const endItem = measurements?.[range.endIndex]
 
-	if (shouldVirtualize) {
-		const startMeasurement = measurements[startIndex]
-		const endMeasurement = measurements[endIndex]
-		const top = toTreeLocalOffset(startMeasurement?.start ?? startIndex * rowEstimateSize)
-		const bottom = toTreeLocalOffset(endMeasurement?.end ?? (endIndex + 1) * rowEstimateSize)
-
+	if (startItem && endItem) {
 		return {
-			top,
-			height: Math.max(rowEstimateSize, bottom - top),
+			top: startItem.start - scrollMargin,
+			height: Math.max(rowHeight, endItem.end - startItem.start),
 		}
 	}
 
 	return {
-		top: startIndex * rowEstimateSize,
-		height: Math.max(rowEstimateSize, (endIndex - startIndex + 1) * rowEstimateSize),
+		top: range.startIndex * rowHeight,
+		height: Math.max(rowHeight, (range.endIndex - range.startIndex + 1) * rowHeight),
 	}
 }
 
