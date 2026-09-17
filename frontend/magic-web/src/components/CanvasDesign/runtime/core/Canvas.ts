@@ -178,7 +178,7 @@ export class Canvas {
 	public selectionLayer: Konva.Layer // 2. 选择层：框选矩形和选中高亮效果
 	public controlsLayer: Konva.Layer // 3. 控制层：Transformer 和 Hover 边框
 	public markersLayer: Konva.Layer // 4. 标记层：图片上的 Marker 标记（在最上层，不被遮挡）
-	public overlayLayer: Konva.Layer // 5. 辅助层：吸附辅助线、名称标签、尺寸标签
+	public overlayLayer: Konva.Layer // 5. 辅助层：吸附辅助线、名称标签、尺寸标签；仅名称标签接收命中
 
 	public viewportController: ViewportController
 	public eventEmitter: EventEmitter<CanvasEventMap>
@@ -316,7 +316,8 @@ export class Canvas {
 		this.selectionLayer = new Konva.Layer({ name: "selection", listening: false })
 		this.markersLayer = new Konva.Layer({ name: "markers", listening: true })
 		this.controlsLayer = new Konva.Layer({ name: "controls", listening: true })
-		this.overlayLayer = new Konva.Layer({ name: "overlay", listening: false })
+		// 名称标签需要命中；尺寸标签、吸附线等子节点保持 listening: false，空白处仍穿透到下层。
+		this.overlayLayer = new Konva.Layer({ name: "overlay", listening: true })
 
 		// 按顺序添加到 Stage（从底到顶）
 		this.stage.add(this.contentLayer)
