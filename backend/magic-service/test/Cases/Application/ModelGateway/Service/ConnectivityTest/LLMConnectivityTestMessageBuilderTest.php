@@ -32,4 +32,15 @@ class LLMConnectivityTestMessageBuilderTest extends TestCase
         $this->assertSame('image_url', $messages[0]['content'][1]['type']);
         $this->assertSame($dataUri, $messages[0]['content'][1]['image_url']['url']);
     }
+
+    public function testFunctionCallToolsContainStableConnectivityTool(): void
+    {
+        $tools = LLMConnectivityTestMessageBuilder::buildFunctionCallTools();
+
+        $this->assertCount(1, $tools);
+        $this->assertSame('function', $tools[0]['type']);
+        $this->assertSame('get_current_time', $tools[0]['function']['name']);
+        $this->assertSame('object', $tools[0]['function']['parameters']['type']);
+        $this->assertArrayHasKey('timezone', $tools[0]['function']['parameters']['properties']);
+    }
 }
