@@ -527,7 +527,10 @@ function EditToolbar({
 					config: createPptxSlideConfig(
 						resolvePptScaleContentDimensions(firstPage.html, firstSlide.rawContent),
 					),
-					skipFailedPages: false,
+					// A malformed page script (for example, ECharts targeting a missing container)
+					// is reported through onExportIssue but must not prevent the remaining slides
+					// from being written to the selected PPTX destination.
+					skipFailedPages: true,
 					fontResolver: pptFontResolver,
 					logger: pptxExternalLogger,
 					logLevel: "warn",
