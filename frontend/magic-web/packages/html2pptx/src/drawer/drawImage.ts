@@ -37,11 +37,27 @@ export function drawImage(slide: Slide, node: PPTImageNode): void {
 	if (transparency !== undefined) options.transparency = transparency
 
 	if (sizing === "cover" || sizing === "contain") {
-		if (objectPosition && intrinsicSize && sizing === "cover") {
+		if (objectPosition && intrinsicSize) {
 			const sourceRatio = intrinsicSize.width / intrinsicSize.height
 			const boxRatio = w / h
-			const sourceW = sourceRatio < boxRatio ? w : h * sourceRatio
-			const sourceH = sourceRatio < boxRatio ? w / sourceRatio : h
+			const useCover = sizing === "cover"
+			// A crop with negative edges is how PptxGenJS implements `contain` letterboxing.
+			// Keeping the complete scaled source frame lets asymmetric crop offsets preserve
+			// CSS object-position without moving or resizing the image's layout box.
+			const sourceW = useCover
+				? sourceRatio < boxRatio
+					? w
+					: h * sourceRatio
+				: sourceRatio > boxRatio
+					? w
+					: h * sourceRatio
+			const sourceH = useCover
+				? sourceRatio < boxRatio
+					? w / sourceRatio
+					: h
+				: sourceRatio > boxRatio
+					? w / sourceRatio
+					: h
 			const dx = (w - sourceW) * objectPosition.x + (objectPosition.offsetX ?? 0) * w
 			const dy = (h - sourceH) * objectPosition.y + (objectPosition.offsetY ?? 0) * h
 			// Crop coordinates are measured in the scaled source frame, not the final box.
