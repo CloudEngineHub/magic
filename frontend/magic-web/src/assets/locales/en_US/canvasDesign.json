@@ -282,6 +282,24 @@
 		"batchMenu": "Batch images to video"
 	},
 	"layers": {
+		"batch": {
+			"cancel": "Cancel",
+			"clear": "Clear selection",
+			"delete": "Delete",
+			"enter": "Multi-select",
+			"hide": "Hide",
+			"lock": "Lock",
+			"moveDown": "Move down",
+			"moveToBottom": "Move to bottom",
+			"moveToTop": "Move to top",
+			"moveUp": "Move up",
+			"order": "Adjust layer order",
+			"selectAll": "Select all",
+			"selected": "{{count}} selected",
+			"show": "Show",
+			"title": "Batch actions",
+			"unlock": "Unlock"
+		},
 		"collapse": "Collapse",
 		"empty": {
 			"description": "Let AI help you easily generate various creative images!",

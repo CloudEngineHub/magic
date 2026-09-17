@@ -282,6 +282,24 @@
 		"batchMenu": "批量图片生成视频"
 	},
 	"layers": {
+		"batch": {
+			"cancel": "取消",
+			"clear": "清除选择",
+			"delete": "删除",
+			"enter": "多选",
+			"hide": "隐藏",
+			"lock": "锁定",
+			"moveDown": "下移一层",
+			"moveToBottom": "移至底部",
+			"moveToTop": "移至顶部",
+			"moveUp": "上移一层",
+			"order": "调整层级",
+			"selectAll": "全选",
+			"selected": "已选 {{count}} 项",
+			"show": "显示",
+			"title": "批量操作",
+			"unlock": "解锁"
+		},
 		"collapse": "收起",
 		"empty": {
 			"description": "让智能体帮你轻松生成各种创意图像!",

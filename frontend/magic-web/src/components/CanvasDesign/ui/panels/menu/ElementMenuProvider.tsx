@@ -546,7 +546,7 @@ export function ElementMenuProvider(props: PropsWithChildren<unknown>) {
 	)
 
 	return (
-		<ElementMenuContext.Provider value={{ openMenu }}>
+		<ElementMenuContext.Provider value={{ openMenu, openMenuAt: openMenuByPosition }}>
 			<ContextMenu key={menuKey} onOpenChange={handleMenuOpenChange}>
 				<ContextMenuTrigger asChild>
 					<div
