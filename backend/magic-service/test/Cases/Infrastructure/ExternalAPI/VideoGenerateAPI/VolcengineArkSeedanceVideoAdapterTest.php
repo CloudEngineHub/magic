@@ -582,11 +582,44 @@ class VolcengineArkSeedanceVideoAdapterTest extends TestCase
         $this->assertSame('https://example.com/generated.mp4', $succeeded['output']['video_url']);
         $this->assertSame('https://example.com/last-frame.png', $succeeded['output']['last_frame_url']);
         $this->assertSame('failed', $failed['status']);
-        $this->assertSame('PROVIDER_FAILED', $failed['error']['code']);
+        $this->assertSame((string) VideoGenerateErrorCode::GENERAL_ERROR->value, $failed['error']['code']);
+        $this->assertSame(VideoGenerateErrorCode::GENERAL_ERROR->getMessage(), $failed['error']['message']);
         $this->assertSame('failed', $expired['status']);
-        $this->assertSame('PROVIDER_EXPIRED', $expired['error']['code']);
+        $this->assertSame((string) VideoGenerateErrorCode::GENERAL_ERROR->value, $expired['error']['code']);
         $this->assertSame('failed', $cancelled['status']);
-        $this->assertSame('PROVIDER_CANCELLED', $cancelled['error']['code']);
+        $this->assertSame((string) VideoGenerateErrorCode::GENERAL_ERROR->value, $cancelled['error']['code']);
+    }
+
+    public function testQueryMapsProviderErrorPayloadToVideoErrorCodeAndRefinedMessage(): void
+    {
+        $httpClient = $this->createMock(Client::class);
+        $httpClient->expects($this->once())
+            ->method('get')
+            ->willReturn(new Response(200, [], json_encode([
+                'id' => 'task-failed',
+                'status' => 'failed',
+                'error' => [
+                    'code' => 'InvalidParameter',
+                    'message' => 'Error while downloading video, video height specified in the request must be less than or equal to 6000.',
+                ],
+            ], JSON_THROW_ON_ERROR)));
+
+        $clientFactory = $this->createMock(ClientFactory::class);
+        $clientFactory->expects($this->once())->method('create')->willReturn($httpClient);
+
+        $adapter = new VolcengineArkSeedanceVideoAdapter(new VolcengineArkVideoClient($clientFactory));
+        $result = $adapter->query(
+            $this->createOperation(),
+            new QueueExecutorConfig('https://ark.cn-beijing.volces.com/api/v3', 'secret', 3, 20),
+            'task-failed',
+        );
+
+        $this->assertSame('failed', $result['status']);
+        $this->assertSame((string) VideoGenerateErrorCode::INVALID_PARAMETER->value, $result['error']['code']);
+        $this->assertSame(
+            trans('video_generate.invalid_parameter_video_dimension_exceeds_limit'),
+            $result['error']['message'],
+        );
     }
 
     public function testSubmitHandlesNonJsonErrorBodyWithoutDecodeException(): void
