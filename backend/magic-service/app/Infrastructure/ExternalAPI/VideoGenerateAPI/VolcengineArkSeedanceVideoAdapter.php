@@ -452,17 +452,11 @@ readonly class VolcengineArkSeedanceVideoAdapter implements VideoGenerationConne
             default => 'processing',
         };
 
-        $error = is_array($detail['error'] ?? null) ? $detail['error'] : [];
-        $data = is_array($detail['data'] ?? null) ? $detail['data'] : [];
-
-        $errorCode = $error['code'] ?? '';
-        if (! $errorCode) {
-            $errorCode = match ($status) {
-                'expired' => 'PROVIDER_EXPIRED',
-                'cancelled', 'canceled' => 'PROVIDER_CANCELLED',
-                'failed', 'error' => 'PROVIDER_FAILED',
-                default => null,
-            };
+        $errorCode = $message = null;
+        if ($resultStatus === 'failed') {
+            $resolvedError = ProviderVideoErrorMapper::resolveVolcengine(null, $detail);
+            $errorCode = $resolvedError['errorCode'];
+            $message = $resolvedError['message'];
         }
 
         return [
@@ -474,8 +468,8 @@ readonly class VolcengineArkSeedanceVideoAdapter implements VideoGenerationConne
                 'provider_task_id' => $providerTaskId,
             ], static fn (mixed $value): bool => $value !== null && $value !== ''),
             'error' => $errorCode === null ? null : [
-                'code' => $errorCode,
-                'message' => VideoGenerateErrorCode::GENERAL_ERROR->getMessage(),
+                'code' => (string) $errorCode->value,
+                'message' => $message,
             ],
         ];
     }
