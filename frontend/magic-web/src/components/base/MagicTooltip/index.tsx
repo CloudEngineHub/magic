@@ -1,4 +1,11 @@
-import { ReactElement, ReactNode, useEffect, useRef, useState } from "react"
+import {
+	useEffect,
+	useRef,
+	useState,
+	type FocusEvent,
+	type ReactElement,
+	type ReactNode,
+} from "react"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/shadcn-ui/tooltip"
 import { useIsMobile } from "@/hooks/useIsMobile"
 import { cn } from "@/utils/cn"
@@ -67,9 +74,23 @@ export function MagicTooltip({
 	}, [disabled])
 
 	// 菜单打开后使本次悬停失效；恢复可用时必须重新进入或聚焦，旧等待不能重新弹出提示。
-	const handleInteraction = () => {
+	/** Allow hover to start the delay; click-focus must not reuse this grant. */
+	function handlePointerEnter() {
 		canOpenRef.current = !disabled
 	}
+
+	/** Hide on press so the focus that follows a pointer click cannot flash the tip. */
+	function handlePointerDown() {
+		canOpenRef.current = false
+		setOpen(false)
+	}
+
+	/** Keyboard-only: click-induced focus is not :focus-visible and must not enable the tip. */
+	function handleFocus(event: FocusEvent<HTMLElement>) {
+		if (!event.currentTarget.matches(":focus-visible")) return
+		canOpenRef.current = !disabled
+	}
+
 	const handleOpenChange = (nextOpen: boolean) => {
 		setOpen(nextOpen && !disabled && canOpenRef.current)
 	}
@@ -97,7 +118,12 @@ export function MagicTooltip({
 	const container = getPopupContainer?.() ?? undefined
 	return (
 		<Tooltip open={open && !disabled} onOpenChange={handleOpenChange}>
-			<TooltipTrigger asChild onPointerEnter={handleInteraction} onFocus={handleInteraction}>
+			<TooltipTrigger
+				asChild
+				onPointerEnter={handlePointerEnter}
+				onPointerDown={handlePointerDown}
+				onFocus={handleFocus}
+			>
 				{children}
 			</TooltipTrigger>
 			<TooltipContent
