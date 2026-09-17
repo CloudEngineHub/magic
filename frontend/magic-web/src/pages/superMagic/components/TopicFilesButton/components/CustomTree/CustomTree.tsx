@@ -6,7 +6,6 @@ import type { TreeNodeData } from "../../utils/treeDataConverter"
 import {
 	getDragReceiverNode,
 	getDragTargetBlockRange,
-	resolveDragTargetBlockStyle,
 	resolveVisibleTreeScrollAnchor,
 	resolveVisibleTreeScrollTopForAnchor,
 	type VisibleTreeScrollAnchor,
@@ -275,26 +274,18 @@ function CustomTree({
 		() => visibleRows.reduce((count, row) => count + (row.node.level === 0 ? 1 : 0), 0),
 		[visibleRows],
 	)
-	// Keep the highlight aligned with virtual rows: use measured offsets when available,
-	// not estimateSize * index (that drifts near the bottom of long lists).
 	const dragTargetBlockStyle = useMemo(() => {
 		if (!dragTargetBlockRange) return null
 
-		return resolveDragTargetBlockStyle({
-			range: dragTargetBlockRange,
-			rowHeight: rowEstimateSize,
-			measurements: shouldVirtualize ? rowVirtualizer.measurementsCache : undefined,
-			scrollMargin: shouldVirtualize ? scrollMargin : 0,
-		})
-	}, [
-		dragTargetBlockRange,
-		rowEstimateSize,
-		rowVirtualizer.measurementsCache,
-		scrollMargin,
-		shouldVirtualize,
-		totalSize,
-		virtualItems,
-	])
+		return {
+			top: dragTargetBlockRange.startIndex * rowEstimateSize,
+			height: Math.max(
+				rowEstimateSize,
+				(dragTargetBlockRange.endIndex - dragTargetBlockRange.startIndex + 1) *
+					rowEstimateSize,
+			),
+		}
+	}, [dragTargetBlockRange, rowEstimateSize])
 	const shouldShowDragTargetBlock = Boolean(dragTargetBlockStyle && dragTargetNodeClass)
 	const mountedRows = useMemo(() => {
 		if (!shouldVirtualize) return visibleRows

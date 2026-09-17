@@ -4,7 +4,6 @@ import {
 	flattenVisibleAttachmentTreeRows,
 	getDragReceiverNode,
 	getDragTargetBlockRange,
-	resolveDragTargetBlockStyle,
 	resolveVisibleTreeScrollAnchor,
 	resolveVisibleTreeScrollTopForAnchor,
 } from "../visibleTreeRows"
@@ -176,38 +175,6 @@ describe("visibleTreeRows", () => {
 			endIndex: 3,
 		})
 		expect(getDragTargetBlockRange(rows, "nested-leaf")).toBeNull()
-	})
-
-	it("positions drag target blocks from measured virtual offsets", () => {
-		const range = { startIndex: 50, endIndex: 52 }
-		const rowHeight = 32
-		// Measured rows taller than the estimate; estimate-based math would place top at 1600.
-		const measurements = Array.from({ length: 53 }, (_, index) => ({
-			start: 100 + index * 40,
-			end: 100 + (index + 1) * 40,
-		}))
-
-		expect(
-			resolveDragTargetBlockStyle({
-				range,
-				rowHeight,
-				measurements,
-				scrollMargin: 100,
-			}),
-		).toEqual({
-			top: 50 * 40,
-			height: 3 * 40,
-		})
-
-		expect(
-			resolveDragTargetBlockStyle({
-				range,
-				rowHeight,
-			}),
-		).toEqual({
-			top: 50 * rowHeight,
-			height: 3 * rowHeight,
-		})
 	})
 
 	it("restores scroll top from a visible row anchor after rows shift", () => {

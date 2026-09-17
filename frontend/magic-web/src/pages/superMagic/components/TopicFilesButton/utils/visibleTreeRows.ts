@@ -121,47 +121,6 @@ export function getDragTargetBlockRange(
 	return { startIndex, endIndex }
 }
 
-export interface DragTargetBlockMeasurement {
-	start: number
-	end: number
-}
-
-export interface DragTargetBlockStyle {
-	top: number
-	height: number
-}
-
-/**
- * Position the drop-target highlight with the same coordinates as virtualized rows.
- * Using a fixed row estimate drifts as measured row heights accumulate in long lists.
- */
-export function resolveDragTargetBlockStyle({
-	range,
-	rowHeight,
-	measurements,
-	scrollMargin = 0,
-}: {
-	range: { startIndex: number; endIndex: number }
-	rowHeight: number
-	measurements?: ReadonlyArray<DragTargetBlockMeasurement | undefined | null>
-	scrollMargin?: number
-}): DragTargetBlockStyle {
-	const startItem = measurements?.[range.startIndex]
-	const endItem = measurements?.[range.endIndex]
-
-	if (startItem && endItem) {
-		return {
-			top: startItem.start - scrollMargin,
-			height: Math.max(rowHeight, endItem.end - startItem.start),
-		}
-	}
-
-	return {
-		top: range.startIndex * rowHeight,
-		height: Math.max(rowHeight, (range.endIndex - range.startIndex + 1) * rowHeight),
-	}
-}
-
 export function buildVisibleNodeIndexByKey(visibleNodes: TreeNodeData[]) {
 	const indexByKey = new Map<string, number>()
 
