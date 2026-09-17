@@ -105,12 +105,15 @@ vi.mock("@/components/shadcn-ui/resizable", () => ({
 		disabled,
 		onDragging,
 		onKeyDownCapture,
+		className,
 	}: {
 		disabled?: boolean
 		onDragging?: (isDragging: boolean) => void
 		onKeyDownCapture?: React.KeyboardEventHandler<HTMLDivElement>
+		className?: string
 	}) => (
 		<div
+			className={className}
 			data-testid="mock-resize-handle"
 			data-disabled={String(Boolean(disabled))}
 			onPointerDown={() => onDragging?.(true)}
@@ -118,6 +121,7 @@ vi.mock("@/components/shadcn-ui/resizable", () => ({
 			onKeyDownCapture={onKeyDownCapture}
 		/>
 	),
+	ResizeGrip: () => <span data-testid="mock-resize-grip" />,
 }))
 
 vi.mock("@/stores/layout", () => ({
@@ -183,6 +187,12 @@ describe("BaseLayoutPc safe area", () => {
 			"--safe-area-inset-top",
 		)
 		expect(screen.getByTestId("base-layout-pc-main-frame").className).toContain("pr-2")
+		expect(screen.getByTestId("mock-resize-handle")).toHaveClass(
+			"w-2",
+			"shrink-0",
+			"after:!inset-0",
+			"after:!w-full",
+		)
 		expect(sidebarResizeMock).toHaveBeenCalledWith(20)
 		cancelSidebarAnimationMock.mockClear()
 

@@ -226,7 +226,7 @@ const BaseLayoutPc = observer(() => {
 							onDragging={handleSidebarDraggingChange}
 							onKeyDownCapture={handleSidebarHandleKeyDown}
 							className={cn(
-								"group/resize w-px bg-transparent outline-none before:!inset-x-auto before:!left-1/2 before:w-2 before:-translate-x-1/2 after:w-4 hover:!bg-transparent focus-visible:ring-0 focus-visible:ring-offset-0 focus-visible:before:opacity-100 dark:[--resize-glow-rgb:52,88,136]",
+								"group/resize w-2 shrink-0 bg-transparent outline-none before:!inset-0 before:!w-full before:!translate-x-0 after:!inset-0 after:!w-full after:!translate-x-0 hover:!bg-transparent focus-visible:ring-0 focus-visible:ring-offset-0 focus-visible:before:opacity-100 dark:[--resize-glow-rgb:52,88,136]",
 								resizeGlowClassName,
 								resizeDrag.dragging && "before:opacity-100",
 								resizeDrag.dragging && "z-20",
@@ -257,7 +257,10 @@ const BaseLayoutPc = observer(() => {
 				<ResizablePanel id="main-content-panel">
 					{/* Keep the desktop floating gap only when the page is not embedded by Widget SDK. */}
 					<div
-						className={cn("flex h-full flex-col", !embedContext && "py-2 pl-0 pr-2")}
+						className={cn(
+							"relative flex h-full flex-col",
+							!embedContext && "py-2 pl-0 pr-2",
+						)}
 						data-testid="base-layout-pc-main-frame"
 					>
 						{/* 白色容器，带圆角、边框、阴影 */}

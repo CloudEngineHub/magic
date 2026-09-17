@@ -238,10 +238,7 @@ function WorkspaceItem({
 							suppressItemClickRef.current = false
 						}, 0)
 					}}
-					className={cn(
-						"sticky top-[var(--workspace-list-sticky-top)] z-10 w-full",
-						"bg-sidebar",
-					)}
+					className={cn("sticky top-[var(--workspace-list-sticky-top)] z-10 w-full")}
 				>
 					<MagicDropdown
 						menu={{ items: menuProps.items }}
