@@ -53,6 +53,7 @@ return [
     'task' => [
         'pending' => 'Task is pending',
         'stop' => 'Task is stopped',
+        'question_expired' => 'Question expired',
     ],
     'credit' => [
         'insufficient_limit' => 'Insufficient credit limit',

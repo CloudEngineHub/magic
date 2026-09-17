@@ -161,6 +161,7 @@ return [
         'prompt_length_exceeded' => '输入文本过长，建议以文件形式上传后，在对话框中进行引用。',
         'sandbox_init_failed' => '运行环境异常，请稍后重试。',
         'chat_task_start_failed' => '任务启动失败，请稍后重试。',
+        'question_expired' => '该问题已超时或已被处理，您的回答未能送达。您可以直接发送新消息继续对话。',
     ],
     'magic_claw' => [
         'create_system_error' => '系统出现异常，请稍后重试。',

@@ -290,6 +290,21 @@ class TaskFileRepository implements TaskFileRepositoryInterface
         return new TaskFileEntity($model->toArray());
     }
 
+    public function getBySpaceParentAndName(string $spaceType, int $projectId, ?int $parentId, string $fileName, string $userId, string $organizationCode, bool $withTrash = false): ?TaskFileEntity
+    {
+        $query = $withTrash ? $this->model::withTrashed() : $this->model::query();
+        $query->where('space_type', $spaceType)
+            ->where('parent_id', $parentId)
+            ->where('file_name', $fileName);
+        if ($spaceType === FileSpaceType::USER->value) {
+            $query->where('user_id', $userId)->where('organization_code', $organizationCode);
+        } else {
+            $query->where('project_id', $projectId);
+        }
+        $model = $query->first();
+        return $model ? new TaskFileEntity($model->toArray()) : null;
+    }
+
     /**
      * 根据项目、父目录和文件名批量查询直接子节点。
      *

@@ -114,4 +114,7 @@ enum EventErrorCode: int
 
     #[ErrorMessage('event.credit.insufficient_limit')]
     case EVENT_CREDIT_INSUFFICIENT_LIMIT = 6606;
+
+    #[ErrorMessage('event.task.question_expired')]
+    case EVENT_USER_TOOL_CALL_EXPIRED = 6607;
 }
