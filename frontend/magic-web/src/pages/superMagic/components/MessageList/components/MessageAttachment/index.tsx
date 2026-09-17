@@ -1,13 +1,13 @@
-import MagicFileIcon from "@/components/base/MagicFileIcon"
+import type { AttachmentItem } from "@/pages/superMagic/components/TopicFilesButton/hooks/types"
+import { FileResourceIcon } from "@/pages/superMagic/components/TopicFilesButton/components/FileResourceIcon"
+import { resolveFilePresentation } from "@/pages/superMagic/components/TopicFilesButton/utils/file-presentation"
 import { getFileType } from "@/pages/superMagic/utils/handleFIle"
 import { useState } from "react"
 import type { AttachmentProps } from "./type"
 import MagicIcon from "@/components/base/MagicIcon"
 import { IconChevronDown, IconChevronRight, IconDownload, IconEye } from "@tabler/icons-react"
-import FolderIcon from "@/pages/superMagic/assets/svg/file-folder.svg"
 import { useTranslation } from "react-i18next"
 import {
-	getAttachmentType,
 	isMagicProjectConfigFile,
 	resolveMagicProjectAttachment,
 	type MagicProjectAttachmentFile,
@@ -17,8 +17,6 @@ import { cn } from "@/utils/cn"
 import { useIsMobile } from "@/hooks/useIsMobile"
 import { openMessageFile } from "../../utils/openMessageFile"
 import { useMessageAttachmentDownload } from "./hooks/useMessageAttachmentDownload"
-import { TopicFileIcon } from "@/pages/superMagic/components/TopicFilesButton/components/TopicFileIcon"
-import { resolveProjectInstructionsFileKind } from "@/pages/superMagic/components/TopicFilesButton/utils/magic-system-folder"
 import projectFilesStore from "@/stores/projectFiles"
 import { observer } from "mobx-react-lite"
 import { useMessageListContext } from "../../context"
@@ -145,7 +143,6 @@ export const Attachment = observer(function Attachment({
 							magicProjectResolution?.projectName ||
 							getMetaDataName(display_config) ||
 							fileName
-						const projectInstructionsFileKind = resolveProjectInstructionsFileKind(item)
 						return (
 							<div
 								key={item.file_id}
@@ -166,27 +163,24 @@ export const Attachment = observer(function Attachment({
 										"hover:bg-fill-secondary",
 									)}
 								>
-									{isFolder && !attachmentDisplayConfig ? (
-										<img
-											src={FolderIcon}
-											alt="folder"
-											width={24}
-											height={24}
-											data-testid="message-attachment-image"
-										/>
-									) : projectInstructionsFileKind ? (
-										<TopicFileIcon magicVariant="magic-file-agent" size={24} />
-									) : (
-										<MagicFileIcon
-											type={
-												magicProjectResolution?.iconType ||
-												getAttachmentType(item) ||
-												item.file_extension
-											}
-											size={24}
-											className="shrink-0"
-										/>
-									)}
+									<FileResourceIcon
+										presentation={resolveFilePresentation(
+											(magicProjectResolution?.projectDirectory as
+												| AttachmentItem
+												| undefined) ?? {
+												...item,
+												is_directory: item.is_directory ?? isFolder,
+											},
+											{
+												context:
+													resolvedProjectFilesStore.filePresentationContext,
+												index: resolvedProjectFilesStore.filePresentationIndex,
+											},
+										)}
+										size={24}
+										className="shrink-0"
+										folderTestId="message-attachment-image"
+									/>
 
 									<span
 										className={cn(

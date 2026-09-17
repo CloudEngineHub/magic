@@ -16,6 +16,13 @@ export interface MagicFSFile {
 	latest_version: number
 }
 
+export interface MagicFSFileTree extends MagicFSFile {
+	children?: MagicFSFileTree[]
+}
+
+// 与服务端现有后代深度保护一致；边界目录仍可继续读取，不能当成空目录。
+export const MAGIC_FS_TREE_DEPTH = 100
+
 /** MagicFS 文件列表请求。 */
 export interface ListMagicFSFilesParams {
 	parent_id?: string
@@ -42,6 +49,14 @@ export interface MagicFSFileResponse {
  */
 export function generateMagicFSApi(fetch: ServiceHttpClient) {
 	return {
+		getFileTree(fileId: string, signal?: AbortSignal) {
+			return fetch.post<{ file: MagicFSFileTree }>(
+				`/api/v1/open-api/magicfs/files/${fileId}/tree`,
+				{ depth: MAGIC_FS_TREE_DEPTH },
+				{ signal },
+			)
+		},
+
 		/** 查询指定目录的直接子节点。 */
 		listFiles(params: ListMagicFSFilesParams, config?: Omit<RequestConfig, "url" | "body">) {
 			return fetch.post<{ files: MagicFSFile[] }>(

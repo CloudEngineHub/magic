@@ -17,8 +17,11 @@ class PathManager(BasePathManager):
     - project_root/          ← 项目根目录
         .browser/            ← 浏览器数据（父类管理）
         .cache/              ← 缓存（父类管理）
-        .topic/              ← 话题持久状态（父类管理）
-            chat_history/    ← 聊天记录
+        .chat_history/       ← 活动聊天记录（父类管理）
+            subagents/       ← 子 Agent 会话
+        .topic/              ← 话题网络持久卷（父类管理）
+            chat_history/    ← 启动恢复和交接源，不作活动会话目录
+            archives/        ← 各能力有限保留的完整排查档案
         .credentials/        ← 凭证（应用层，预创建）
         .project_schemas/    ← 项目架构（应用层，预创建）
         .client_message/     ← 客户端消息（应用层，预创建）
@@ -57,9 +60,12 @@ class PathManager(BasePathManager):
       空间挂载的 symlink（/mnt/agfs/localfs/chat_history，gateway 在 bind
       时创建），每次保存由 checkpoint hook 增量记账进 checkpoint；本地开
       发环境（无 agfs 挂载）它是普通本地目录，只是没有帧记账。
-    - `.topic/chat_history/` 是启动恢复源（一次性迁移/兜底恢复用）。
+    - `.topic/chat_history/` 是启动恢复源；恢复到配置的 `.chat_history/` 后再运行。
+      活动会话不放在 `.topic/`，避免频繁读写话题网络卷；需要持久保留的内容
+      由 owner 在生成完成后归档。不同运行环境的目录映射见文件系统指南。
     - `.topic/tool_detail/content/` 保存已持久化的工具详情长文本；按需创建，不参与 checkpoint 回滚。
-    - `.runtime/` 只保存可重新生成的运行数据，不进入归档和 checkpoint。
+    - `.runtime/` 是本地运行数据，源目录不进入归档和 checkpoint；完整失败日志与记忆
+      整理会话结束后可另存有限副本，副本不改变活动文件的本地读写边界。
     - `.workspace/` 保存用户文件，由现有文件 checkpoint 机制单独管理。
     - `.checkpoints/` 保存 checkpoint 自身，不能作为聊天记录快照源。
     """
@@ -633,6 +639,21 @@ class PathManager(BasePathManager):
         """获取运行后记忆整理临时目录。"""
         cls._ensure_app_initialization()
         return cls.get_runtime_dir() / cls._memory_after_run_dir_name
+
+    @classmethod
+    def get_chat_history_archive_dir(cls) -> Path:
+        """获取聊天历史归档的本地 staging 和压缩包目录。"""
+        return cls.get_runtime_dir() / "chat_history_archive"
+
+    @classmethod
+    def get_topic_archives_dir(cls) -> Path:
+        """获取话题持久排查存档根目录，按能力分别保留和清理。"""
+        return cls.get_topic_dir() / "archives"
+
+    @classmethod
+    def get_llm_failed_logs_archive_dir(cls) -> Path:
+        """获取完整 LLM 失败日志的持久存档目录。"""
+        return cls.get_topic_archives_dir() / cls.get_llm_requests_dir_name()
 
     @classmethod
     def get_llm_requests_dir_name(cls) -> str:

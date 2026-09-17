@@ -32,6 +32,8 @@ export interface SlideItem {
 	title?: string
 	rawContent?: string // Raw unprocessed HTML content
 	content?: string // Processed HTML content
+	/** 与 rawContent/content 配对；直接覆盖内容时必须清除，避免持久缓存复用旧依赖。 */
+	resourceVersionSignature?: string | null
 	loadingState?: SlideLoadingState // Slide loading state (idle -> loading -> loaded/error)
 	loadingError?: Error // Error if loading failed
 	// Screenshot properties

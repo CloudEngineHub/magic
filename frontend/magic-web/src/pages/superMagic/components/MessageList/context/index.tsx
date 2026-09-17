@@ -4,6 +4,8 @@ import { createContext, type PropsWithChildren, type ReactNode, useContext } fro
 import type { ProjectFilesStore } from "@/stores/projectFiles"
 
 export interface MessageListContextState {
+	/** 仅登录的非分享会话解析当前用户的个人文件引用。 */
+	allowUserFileReferences?: boolean
 	/** 是否允许撤回 */
 	allowRevoke?: boolean
 	/** 是否允许用户消息复制 */

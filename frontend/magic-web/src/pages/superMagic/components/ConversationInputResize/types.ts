@@ -1,7 +1,12 @@
+import type { ReactNode } from "react"
+
 export type { ChatInputHeightMode, ChatInputHeightPreference } from "@/stores/interface"
 
 export interface ConversationInputLayoutContextValue {
 	fillHeight: boolean
+	inputResizeHandle?: ReactNode
+	/** 同次布局测量计算的队列列表高度上限，不包含标题和其它附件区。 */
+	queueListMaxHeight?: number
 }
 
 export interface ConversationInputHeightController {
@@ -10,6 +15,7 @@ export interface ConversationInputHeightController {
 	/** Expose the live minimum so every resize entry point shares the same floor. */
 	minHeight: number
 	maxHeight: number
+	queueListMaxHeight: number
 	fillHeight: boolean
 	/** Start a pointer-driven manual resize. */
 	startPointerResize: () => void

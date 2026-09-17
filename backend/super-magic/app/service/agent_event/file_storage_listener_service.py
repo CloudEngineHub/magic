@@ -47,7 +47,6 @@ from app.path_manager import PathManager
 from app.service.agent_event.base_listener_service import BaseListenerService
 from app.service.topic_persistence import (
     TopicPersistenceManager,
-    get_chat_history_excluded_dir_names,
 )
 from app.utils.init_client_message_util import InitClientMessageUtil
 from app.utils.path_utils import get_workspace_dir, get_storage_dir_with_fallback
@@ -497,7 +496,6 @@ class FileStorageListenerService:
 
         try:
             # Get directory paths
-            chat_history_dir = PathManager.get_chat_history_dir()
             workspace_dir = PathManager.get_workspace_dir()
             metadata = agent_context.get_metadata()
             topic_id = metadata.get("topic_id") or metadata.get("chat_topic_id")
@@ -532,8 +530,9 @@ class FileStorageListenerService:
             #     project_archive_info = local_manifest or ProjectArchiveInfo(archives={})
 
             # Process and upload chat history archive
-            uploaded = await FileStorageListenerService._process_chat_history_archive(
-                chat_history_dir, topic_id, storage_service
+            from app.service.chat_history_archive_service import ChatHistoryArchiveService
+            uploaded = await ChatHistoryArchiveService().upload(
+                topic_id=topic_id, storage_service=storage_service
             )
             if uploaded:
                 persistence = TopicPersistenceManager(PathManager.get_project_root())
@@ -549,14 +548,13 @@ class FileStorageListenerService:
                 else:
                     logger.info("聊天历史归档上传成功，已清理 .topic/chat_history")
             else:
-                logger.warning("聊天历史归档上传失败，保留 .topic/chat_history 作为恢复源")
+                logger.warning("本轮聊天历史归档未上传；未清理已有 .topic/chat_history，本轮未更新该副本")
 
             # 每轮只上传本轮 checkpoint 归档与 manifest（不再整目录打包全量上传）
             await FileStorageListenerService._sync_checkpoints_archive(topic_id, storage_service)
 
             # Save and upload the final manifest
             # await FileStorageListenerService._save_and_upload_project_archive_info(project_archive_info, agent_context)
-            logger.info("聊天历史和checkpoints上传完成")
 
         except Exception as e:
             logger.error(f"分离式打包和上传过程中发生错误: {e}")
@@ -656,92 +654,6 @@ class FileStorageListenerService:
         except Exception as e:
             logger.error(f"处理工作区归档时出错: {e}")
             return None
-
-    @staticmethod
-    async def _process_chat_history_archive(
-        chat_history_dir: str,
-        topic_id: str,
-        storage_service
-    ) -> bool:
-        """
-        Process chat history archive: compress if changed and upload
-
-        Args:
-            chat_history_dir: Path to chat history directory
-            topic_id: Topic ID for naming the archive
-            storage_service: Storage service instance
-        """
-        if not os.path.isdir(chat_history_dir) or not os.listdir(chat_history_dir):
-            logger.info("聊天历史目录为空或不存在，跳过处理")
-            return False
-
-        return await FileStorageListenerService._archive_and_upload_single_chat_history(
-            chat_history_dir, topic_id, storage_service
-        )
-
-    @staticmethod
-    async def _archive_and_upload_single_chat_history(
-        chat_history_dir: str, topic_id: str, storage_service
-    ) -> bool:
-        """
-        Compress and upload a single chat history archive.
-
-        Args:
-            chat_history_dir: Path to the chat history directory.
-            topic_id: The topic ID for this chat history.
-            storage_service: The storage service instance.
-        """
-        try:
-            from app.service.chat_history_cleanup_service import ChatHistoryCleanupService
-            await ChatHistoryCleanupService().run()
-            # Always archive and upload chat history for the current topic
-            logger.info(f"为话题 {topic_id} 处理聊天历史归档")
-
-            # Create archive in a temporary directory
-            with tempfile.TemporaryDirectory() as temp_dir:
-                archive_name = f"chat_history_{topic_id}"
-                archive_path = os.path.join(temp_dir, archive_name)
-                zip_path = f"{archive_path}.zip"
-                with zipfile.ZipFile(zip_path, "w", zipfile.ZIP_DEFLATED) as zip_ref:
-                    source_dir = Path(chat_history_dir)
-                    excluded_dir_names = get_chat_history_excluded_dir_names()
-                    for root, dirnames, filenames in os.walk(source_dir):
-                        dirnames[:] = [
-                            dirname for dirname in dirnames if dirname not in excluded_dir_names
-                        ]
-                        root_path = Path(root)
-                        relative_root = root_path.relative_to(source_dir)
-                        for dirname in dirnames:
-                            arcname = (relative_root / dirname).as_posix() + "/"
-                            zip_ref.writestr(arcname, "")
-                        for filename in filenames:
-                            file_path = root_path / filename
-                            zip_ref.write(file_path, (relative_root / filename).as_posix())
-                logger.info(f"聊天历史已压缩到: {zip_path}")
-
-                # Determine the directory path for upload
-                configured_path = InitClientMessageUtil.get_chat_history_dir()
-                dir_path = configured_path if configured_path else get_workspace_dir(storage_service.credentials)
-
-                # Define object key
-                object_key = BaseFileProcessor.combine_path(
-                    dir_path,
-                    os.path.basename(zip_path)
-                )
-
-                # Upload archive
-                logger.info(f"上传聊天历史归档到: {object_key}")
-                await storage_service.upload(
-                    file=zip_path,
-                    key=object_key,
-                    options=None
-                )
-                logger.info(f"聊天历史归档上传成功: {object_key}")
-                return True
-
-        except Exception as e:
-            logger.error(f"处理聊天历史归档时出错: {e}", exc_info=True)
-            return False
 
     @staticmethod
     async def _sync_checkpoints_archive(topic_id: str, storage_service) -> None:

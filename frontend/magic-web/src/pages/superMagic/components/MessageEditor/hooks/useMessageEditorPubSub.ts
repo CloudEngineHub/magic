@@ -1,4 +1,5 @@
 import { useEffect, useRef } from "react"
+import { useUserFileMentionSync } from "../../UserSpace/hooks/useUserFileMentionSync"
 import { useTranslation } from "react-i18next"
 import type { Editor, JSONContent } from "@/infrastructure/editors/tiptap/react"
 import { useMemoizedFn } from "ahooks"
@@ -157,6 +158,7 @@ function useMessageEditorPubSub({
 	projectId,
 	topicId,
 }: UseMessageEditorPubSubParams) {
+	useUserFileMentionSync(editor)
 	const { t } = useTranslation("super")
 	const activeEditorRef = useLatestActiveEditor(editor)
 	const preparedScreenshotMentionsRef = useRef(
@@ -314,18 +316,7 @@ function useMessageEditorPubSub({
 					screenshotMentions,
 					t,
 				)
-				const serializedContent = serializeInspectorContent(content, {
-					title: "HTML 页面修改目标",
-					selector: "选择器",
-					size: "尺寸",
-					computedStyles: "计算样式",
-					textContent: "文本内容",
-					elementAttributes: "元素属性",
-					resource: "资源信息",
-					domContext: "DOM 上下文",
-					elementHtml: "元素片段",
-					selectorMatchCount: "选择器匹配数",
-				})
+				const serializedContent = serializeInspectorContent(content)
 				if (projectId) {
 					const uploadItems = htmlScreenshotUploadService.collectUploadItems([
 						...screenshotMentions.values(),

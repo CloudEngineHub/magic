@@ -26,6 +26,11 @@ import { JSONContent } from "@/infrastructure/editors/tiptap/core"
 import { SuperMagicApi } from "@/apis"
 import type { AttachmentItem } from "@/pages/superMagic/components/TopicFilesButton/hooks"
 import { loadProjectAttachments } from "@/pages/superMagic/services"
+import {
+	normalizeFileReferenceContent,
+	normalizeFileReferenceMention,
+} from "@/components/business/MentionPanel/utils/fileReferenceMention"
+import { isValidProjectReferenceId } from "@/pages/superMagic/utils/markdownFileReference"
 
 interface BatchOperationResult {
 	status?: "success" | "processing" | "completed" | "failed"
@@ -65,7 +70,10 @@ export class MentionItemsProcessor {
 	): Promise<{ mentionItems: MentionListItem[]; content: JSONContent }> {
 		// Validate input parameters
 		if (!mentionItems || mentionItems.length === 0) {
-			return { mentionItems, content }
+			return {
+				mentionItems,
+				content: await normalizeFileReferenceContent(content, { strict: true }),
+			}
 		}
 
 		if (!projectId) {
@@ -73,9 +81,19 @@ export class MentionItemsProcessor {
 		}
 
 		try {
+			const [normalizedContent, normalizedMentions] = await Promise.all([
+				normalizeFileReferenceContent(content, { strict: true }),
+				Promise.all(
+					mentionItems.map(async (item) => {
+						const attrs = await normalizeFileReferenceMention(item.attrs)
+						if (!attrs) throw new Error("File reference is unavailable")
+						return { ...item, attrs }
+					}),
+				),
+			])
 			const uploadResult = await this.processUploadFileMentions(
-				content,
-				mentionItems,
+				normalizedContent,
+				normalizedMentions,
 				projectId,
 				topicId,
 			)
@@ -251,10 +269,15 @@ export class MentionItemsProcessor {
 		const groupMap = new Map<string, PendingProjectFileGroup>()
 
 		for (const item of pendingItems) {
+			if (!isPendingProjectReferenceMention(item.attrs)) continue
 			const data = item.attrs.data as ProjectFileMentionData | DirectoryMentionData
 			const sourceProjectId = data.source_project_id
 			const sourceFileId = getProjectReferenceSourceId(item.attrs)
-			if (!sourceProjectId || !sourceFileId) continue
+			if (
+				!isValidProjectReferenceId(sourceProjectId) ||
+				!isValidProjectReferenceId(sourceFileId)
+			)
+				continue
 
 			const group = groupMap.get(sourceProjectId) ?? {
 				sourceProjectId,

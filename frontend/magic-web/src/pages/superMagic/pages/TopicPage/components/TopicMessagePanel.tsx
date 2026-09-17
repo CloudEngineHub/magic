@@ -1,4 +1,5 @@
-import { lazy, memo, useLayoutEffect, useMemo, useRef, type ReactNode } from "react"
+import type { FileSidebarControl } from "../../../components/Detail/components/FilesViewer/types"
+import { lazy, memo, useLayoutEffect, useMemo, useRef, type ReactNode, type RefObject } from "react"
 import { JSONContent } from "@/infrastructure/editors/tiptap/core"
 import { useMemoizedFn } from "ahooks"
 import { observer } from "mobx-react-lite"
@@ -117,6 +118,8 @@ interface TopicMessagePanelProps {
 	historyTriggerMode?: "dropdown" | "layout"
 	isHistoryPanelOpen?: boolean
 	onToggleHistoryPanel?: () => void
+	historyTriggerRef?: RefObject<HTMLButtonElement>
+	fileSidebarControl?: FileSidebarControl
 	/** Injected by singleTopicChat variant for conversation-level overflow actions. */
 	trailingActions?: ReactNode
 	/** Optional scoped stores used by recording detail; normal project pages keep global defaults. */
@@ -128,6 +131,8 @@ interface TopicMessagePanelProps {
 }
 
 function TopicMessagePanel({
+	historyTriggerRef,
+	fileSidebarControl,
 	selectedProject,
 	selectedWorkspace,
 	selectedTopic,
@@ -387,6 +392,13 @@ function TopicMessagePanel({
 			)}
 		>
 			<MessageHeader
+				historyTriggerRef={historyTriggerRef}
+				fileSidebarControl={fileSidebarControl}
+				alignWithContent={
+					Boolean(fileSidebarControl) &&
+					!detailPanelVisible &&
+					!isConversationPanelCollapsed
+				}
 				isConversationPanelCollapsed={isConversationPanelCollapsed}
 				onToggleConversationPanel={onToggleConversationPanel}
 				onExpandConversationPanel={onExpandConversationPanel}

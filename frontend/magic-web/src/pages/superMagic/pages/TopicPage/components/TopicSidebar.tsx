@@ -1,7 +1,8 @@
 import { memo, useMemo } from "react"
-import { Brain, Files, Timer } from "lucide-react"
+import { Files, Timer } from "lucide-react"
 import { useTranslation } from "react-i18next"
-import { LongTremMemorySider } from "../../../components/LongTremMemory/components/MemorySider"
+import UserSpacePanel from "../../../components/UserSpace/UserSpacePanel"
+import UserSpaceIcon from "../../../components/UserSpace/UserSpaceIcon"
 import IconShareCog from "@/enhance/tabler/icons-react/icons/iconShareCog"
 import ProjectCardContainer from "../../../components/ProjectCardContainer"
 import ProjectSider from "../../../components/ProjectSider"
@@ -18,6 +19,8 @@ import ShareModal from "../../../components/Share/Modal"
 import { ShareMode, ShareType } from "../../../components/Share/types"
 
 interface TopicSidebarProps {
+	onCollapse?: () => void
+	isCollapsed?: boolean
 	selectedProject: ProjectListItem | null
 	selectedWorkspace: Workspace | null
 	selectedTopic: Topic | null
@@ -31,6 +34,8 @@ interface TopicSidebarProps {
 
 function TopicSidebar({
 	selectedProject,
+	onCollapse,
+	isCollapsed = false,
 	selectedWorkspace,
 	selectedTopic,
 	isReadOnly,
@@ -39,7 +44,6 @@ function TopicSidebar({
 	siderVariant = "default",
 }: TopicSidebarProps) {
 	const { t } = useTranslation("super")
-	const { t: tLongMemory } = useTranslation("super/longMemory")
 	const isChatSider = siderVariant === "chat"
 	const audioController = useAudioProjectSidebarController({
 		selectedProject,
@@ -70,7 +74,12 @@ function TopicSidebar({
 				icon: <Files size={16} />,
 				// Keep the panel header aligned with the active sidebar label in chat scenes.
 				content: (
-					<TopicFilesButton {...topicFilesProps} title={topicFilesTitle} showTitle />
+					<TopicFilesButton
+						{...topicFilesProps}
+						title={topicFilesTitle}
+						showTitle
+						showFileManager
+					/>
 				),
 			},
 			...(isChatSider || isAudioProject
@@ -90,14 +99,14 @@ function TopicSidebar({
 							visible: !isReadOnly,
 						},
 						{
-							key: "longMemory",
-							title: tLongMemory("longMemory"),
-							icon: <Brain size={16} />,
+							key: "userSpace",
+							title: t("userSpace.title"),
+							icon: <UserSpaceIcon size={16} />,
 							content: (
-								<LongTremMemorySider
+								<UserSpacePanel
 									projectId={selectedProject?.id}
-									selectedProject={selectedProject}
-									selectedWorkspace={selectedWorkspace}
+									projectName={selectedProject?.project_name}
+									topicId={selectedTopic?.id}
 									activeFileId={topicFilesProps.activeFileId}
 									onFileClick={topicFilesProps.onFileClick}
 								/>
@@ -125,7 +134,6 @@ function TopicSidebar({
 			selectedTopic?.id,
 			selectedWorkspace?.id,
 			t,
-			tLongMemory,
 			topicFilesTitle,
 			topicFilesProps,
 		],
@@ -156,6 +164,8 @@ function TopicSidebar({
 				/>
 			) : hideProjectCard ? null : (
 				<ProjectCardContainer
+					onCollapse={onCollapse}
+					isPanelVisible={!isCollapsed}
 					selectedProject={selectedProject}
 					selectedWorkspace={selectedWorkspace}
 				/>

@@ -1,11 +1,21 @@
 import { useState, useEffect, useCallback } from "react"
 import { useTranslation } from "react-i18next"
-import { AlertTriangle, Crosshair, Maximize, Minimize, RefreshCw, Share2 } from "lucide-react"
+import {
+	AlertTriangle,
+	Crosshair,
+	DownloadIcon,
+	Maximize,
+	Minimize,
+	RefreshCw,
+	Share2,
+	MoreHorizontal,
+} from "lucide-react"
 import { observer } from "mobx-react-lite"
 import { Button } from "@/components/shadcn-ui/button"
 import { cn } from "@/utils/cn"
 import ViewModeSwitcher from "../ViewModeSwitcher"
-import AIEditButton from "./AIEditButton"
+import { useAIEditMenuItems } from "./useAIEditMenuItems"
+import MagicDropdown from "@/components/base/MagicDropdown"
 import ConditionalTooltip from "./ConditionalTooltip"
 import FileEditButtons from "./FileEditButtons"
 import ExportDropdown from "./ExportDropdown"
@@ -34,10 +44,12 @@ import {
 	documentExportService,
 	type DocumentExport,
 } from "@/pages/superMagic/services/documentExport"
-import { runGuardedAction } from "../../utils/actionGuard"
+import { runGuardedAction, guardMenuItems } from "../../utils/actionGuard"
 import type { BeforeAction } from "../../utils/actionGuard"
 
 export interface EditToolbarProps {
+	/** 将更多菜单挂载到当前预览容器，以支持全屏。 */
+	getPopupContainer?: () => HTMLElement | null
 	/** Only the active cached preview should expose fixed test ids. */
 	testIdsEnabled?: boolean
 	style?: React.CSSProperties
@@ -175,6 +187,7 @@ function EditToolbar({
 	onStartInspectorQuickSelect,
 	isQuickSelecting = false,
 	beforeAction,
+	getPopupContainer,
 }: EditToolbarProps) {
 	const { t } = useTranslation("super")
 	const { emitFullscreenToggle } = usePPTEventBus()
@@ -534,9 +547,18 @@ function EditToolbar({
 		attachments,
 	})
 
+	const isCodeViewMode = viewMode === "code"
 	const showViewModeSwitcher = !isEditMode && onViewModeChange
 	const showServerUpdateButton = isEditMode && hasServerUpdate
 	const showAIOptimizationButton = showAIOptimization && !isEditMode
+	const aiEditMenuItems = useAIEditMenuItems({
+		attachmentList,
+		fileId,
+		enabled: showAIOptimizationButton && !interactionDisabled && testIdsEnabled,
+		maxItems: 3,
+		onPrimaryAction: isCodeViewMode ? undefined : onStartInspectorAppend,
+		isPrimaryActive: isAppendPicking,
+	})
 	const showFileEditButtons = showFileEdit
 	const quickSelectionLabel = t(
 		isQuickSelecting ? "topicFiles.exitSelectElement" : "topicFiles.selectElement",
@@ -551,6 +573,13 @@ function EditToolbar({
 		},
 		[beforeAction],
 	)
+	const handleDownloadSource = (): void => {
+		if (!fileId || interactionDisabled) return
+		// 源码下载当前页的已保存版本，不使用主文稿 ID，也不导出预览加工后的 HTML。
+		runToolbarAction(() =>
+			exportFile([fileId], fileVersion !== undefined ? { [fileId]: fileVersion } : undefined),
+		)
+	}
 
 	return (
 		<div
@@ -634,6 +663,7 @@ function EditToolbar({
 					{/* AI 选取按钮 */}
 					{showFileEditButtons &&
 						!isEditMode &&
+						!isCodeViewMode &&
 						(onStartInspectorQuickSelect || onStartInspectorAppend) && (
 							<ConditionalTooltip
 								showText={shouldShowButtonText}
@@ -676,19 +706,6 @@ function EditToolbar({
 							onSave={onSave}
 							onSaveAndExit={onSaveAndExit}
 							onCancel={onCancel}
-						/>
-					)}
-
-					{/* AI 编辑按钮 */}
-					{showAIOptimizationButton && fileId && (
-						<AIEditButton
-							testIdPrefix={testIdsEnabled ? "ppt-edit-toolbar" : undefined}
-							showButtonText={shouldShowButtonText}
-							maxItems={3}
-							onPrimaryAction={onStartInspectorAppend}
-							isPrimaryActive={isAppendPicking}
-							attachmentList={attachmentList}
-							fileId={fileId}
 						/>
 					)}
 
@@ -742,7 +759,22 @@ function EditToolbar({
 						/>
 					)}
 
-					{showDownload && (
+					{showDownload && isCodeViewMode && (
+						<ActionButton
+							data-testid={
+								testIdsEnabled
+									? "ppt-edit-toolbar-download-source-button"
+									: undefined
+							}
+							icon={<DownloadIcon size={16} />}
+							title={t("ppt.download")}
+							text={t("ppt.download")}
+							showText={shouldShowButtonText}
+							disabled={!fileId || interactionDisabled}
+							onClick={handleDownloadSource}
+						/>
+					)}
+					{showDownload && !isCodeViewMode && (
 						<ExportDropdown
 							showText={shouldShowButtonText}
 							isExporting={isExporting || isEditableExporting}
@@ -819,7 +851,12 @@ function EditToolbar({
 							onExportSpecificPages={(
 								filePaths: string[],
 								format:
-									"source" | "pdf" | "ppt" | "pptx" | "image_png" | "image_jpeg",
+									| "source"
+									| "pdf"
+									| "ppt"
+									| "pptx"
+									| "image_png"
+									| "image_jpeg",
 							) => {
 								if (!filePaths.length) return
 
@@ -878,6 +915,32 @@ function EditToolbar({
 							loading={isCheckingShare}
 							disabled={isCheckingShare}
 						/>
+					)}
+
+					{showAIOptimizationButton && fileId && (
+						<MagicDropdown
+							menu={{ items: guardMenuItems(aiEditMenuItems, beforeAction) }}
+							trigger={["click"]}
+							placement="bottomRight"
+							disabled={interactionDisabled}
+							getPopupContainer={() => getPopupContainer?.() ?? document.body}
+						>
+							<Button
+								type="button"
+								variant="ghost"
+								size="sm"
+								aria-label={t("fileViewer.more")}
+								title={t("fileViewer.more")}
+								className="h-6 gap-1.5 rounded-lg px-1.5 text-xs font-normal"
+								data-testid={
+									testIdsEnabled ? "ppt-edit-toolbar-more-button" : undefined
+								}
+								disabled={interactionDisabled}
+							>
+								<MoreHorizontal size={16} />
+								{shouldShowButtonText && <span>{t("fileViewer.more")}</span>}
+							</Button>
+						</MagicDropdown>
 					)}
 
 					{/* File sharing modals */}

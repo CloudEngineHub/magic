@@ -30,6 +30,7 @@ interface ReplaceHtmlResourceUrlsOptions {
 interface ReplaceHtmlResourceUrlsResult {
 	content: string
 	filePathMapping: Map<string, string>
+	resourcesResolved: boolean
 }
 
 function escapeHtmlAttributeValue(value: string): string {
@@ -217,5 +218,10 @@ export async function replaceHtmlResourceUrls({
 		})
 	}
 
-	return { content, filePathMapping }
+	const resolvedFileIds = new Set(urlData.filter((item) => item.url).map((item) => item.file_id))
+	return {
+		content,
+		filePathMapping,
+		resourcesResolved: fileIds.every((id) => resolvedFileIds.has(id)),
+	}
 }

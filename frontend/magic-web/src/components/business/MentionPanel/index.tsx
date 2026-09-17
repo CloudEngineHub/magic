@@ -920,6 +920,7 @@ const MentionPanel = observer(
 
 		const panelBody = (
 			<MentionPanelRootProviders
+				dataService={resolvedRuntime.dataService}
 				getItemRenderer={resolvedRuntime.getItemRenderer}
 				items={displayItems}
 			>

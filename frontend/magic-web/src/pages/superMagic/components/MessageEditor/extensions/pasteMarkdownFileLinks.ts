@@ -9,6 +9,8 @@ import type { AttachmentItem } from "@/pages/superMagic/components/TopicFilesBut
 import { findAttachmentByPath } from "@/pages/superMagic/utils/markdownFileReference"
 import {
 	extractMarkdownFileLinks,
+	containsMarkdownFileReference,
+	classifyMarkdownFileHref,
 	parseMarkdownFileHref,
 	type MarkdownFileTarget,
 } from "@/pages/superMagic/utils/filePathMention"
@@ -21,6 +23,13 @@ import {
 import { loadProjectAttachments } from "@/pages/superMagic/services/projectAttachmentsLoader"
 import { runActiveEditor } from "@/utils/tiptapEditorLifecycle"
 import { transformInspectorContent } from "./inspector-detail"
+import magicToast from "@/components/base/MagicToaster/utils"
+import i18n from "i18next"
+import { createUserFileMention } from "@/components/business/MentionPanel/utils/fileReferenceMention"
+import {
+	getFileReferenceIdentityKey,
+	resolveFileReference,
+} from "@/pages/superMagic/services/userFileReferenceResolver"
 
 export interface MarkdownFilePasteOptions {
 	onMentionsInsert?: (items: TiptapMentionAttributes[]) => void
@@ -35,6 +44,8 @@ type PastePart =
 type ReferencedProjectAttachmentMap = ReadonlyMap<string, ReferencedProjectAttachment | null>
 
 const EMPTY_REFERENCED_PROJECT_ATTACHMENTS: ReferencedProjectAttachmentMap = new Map()
+type UserFileMentionMap = ReadonlyMap<string, TiptapMentionAttributes | null>
+const EMPTY_USER_FILE_MENTIONS: UserFileMentionMap = new Map()
 
 function createWorkspaceMention(
 	attachments: AttachmentItem[],
@@ -86,7 +97,9 @@ function createMentionFromMarkdownTarget(
 	target: MarkdownFileTarget,
 	workspaceAttachments: AttachmentItem[],
 	referencedProjectAttachments: ReferencedProjectAttachmentMap,
+	userFileMentions: UserFileMentionMap,
 ): TiptapMentionAttributes | null {
+	if (target.scope === "user") return userFileMentions.get(target.relativePath) ?? null
 	if (target.scope === "workspace") {
 		return createWorkspaceMention(workspaceAttachments, target.relativePath)
 	}
@@ -104,12 +117,33 @@ function appendText(parts: PastePart[], text: string): void {
 	}
 }
 
+function hasMagicSelection(text: string): boolean {
+	return /<magic-selection>[\s\S]*?<\/magic-selection>/.test(text)
+}
+
+function extractPasteFileLinks(text: string) {
+	const selectionRanges = [...text.matchAll(/<magic-selection>([\s\S]*?)<\/magic-selection>/g)]
+	return extractMarkdownFileLinks(text).filter((match) => {
+		const selection = selectionRanges.find(
+			(range) =>
+				match.startIndex >= (range.index ?? 0) &&
+				match.endIndex <= (range.index ?? 0) + range[0].length,
+		)
+		if (!selection) return true
+		// 引用原文中的 Markdown 示例仍是资料，只解析 File／Screenshot 的实际附件链接。
+		return /(?:^|\\n)(?:File|Screenshot): $/.test(
+			text.slice((selection.index ?? 0) + "<magic-selection>".length, match.startIndex),
+		)
+	})
+}
+
 function buildPlainTextPasteParts(
 	text: string,
 	attachments: AttachmentItem[],
 	referencedProjectAttachments: ReferencedProjectAttachmentMap = EMPTY_REFERENCED_PROJECT_ATTACHMENTS,
+	userFileMentions: UserFileMentionMap = EMPTY_USER_FILE_MENTIONS,
 ): PastePart[] | null {
-	const matches = extractMarkdownFileLinks(text)
+	const matches = extractPasteFileLinks(text)
 	if (matches.length === 0) return null
 
 	const parts: PastePart[] = []
@@ -120,6 +154,7 @@ function buildPlainTextPasteParts(
 			match.target,
 			attachments,
 			referencedProjectAttachments,
+			userFileMentions,
 		)
 		if (attrs) {
 			parts.push({ type: "mention", attrs })
@@ -136,6 +171,7 @@ function buildPlainTextPasteParts(
 export function replaceWorkspaceLinksInRichText(
 	content: JSONContent,
 	attachments: AttachmentItem[],
+	userFileMentions: UserFileMentionMap = EMPTY_USER_FILE_MENTIONS,
 ): { content: JSONContent; mentions: TiptapMentionAttributes[] } {
 	const mentions: TiptapMentionAttributes[] = []
 
@@ -149,7 +185,12 @@ export function replaceWorkspaceLinksInRichText(
 		}
 
 		if (node.type === "text" && node.text) {
-			const parts = buildPlainTextPasteParts(node.text, attachments)
+			const parts = buildPlainTextPasteParts(
+				node.text,
+				attachments,
+				EMPTY_REFERENCED_PROJECT_ATTACHMENTS,
+				userFileMentions,
+			)
 			if (!parts) return [node]
 
 			const replacementContent: JSONContent[] = []
@@ -177,6 +218,7 @@ function buildHtmlPasteParts(
 	html: string,
 	attachments: AttachmentItem[],
 	referencedProjectAttachments: ReferencedProjectAttachmentMap = EMPTY_REFERENCED_PROJECT_ATTACHMENTS,
+	userFileMentions: UserFileMentionMap = EMPTY_USER_FILE_MENTIONS,
 ): PastePart[] | null {
 	if (!html) return null
 
@@ -194,6 +236,7 @@ function buildHtmlPasteParts(
 		htmlToClipboardMarkdown(container),
 		attachments,
 		referencedProjectAttachments,
+		userFileMentions,
 	)
 }
 
@@ -209,10 +252,12 @@ function extractHtmlMarkdownFileTargets(html: string): MarkdownFileTarget[] {
 }
 
 function getPreferredMarkdownFileTargets(html: string, plainText: string): MarkdownFileTarget[] {
+	if (hasMagicSelection(plainText))
+		return extractPasteFileLinks(plainText).map((match) => match.target)
 	const htmlTargets = extractHtmlMarkdownFileTargets(html)
 	if (htmlTargets.length > 0) return htmlTargets
 
-	return extractMarkdownFileLinks(plainText).map((match) => match.target)
+	return extractPasteFileLinks(plainText).map((match) => match.target)
 }
 
 async function resolveReferencedProjectTargets(
@@ -233,15 +278,78 @@ async function resolveReferencedProjectTargets(
 	return new Map(resolvedEntries)
 }
 
+async function resolveUserFileTargets(
+	targets: MarkdownFileTarget[],
+	signal?: AbortSignal,
+): Promise<UserFileMentionMap> {
+	const paths = new Set(
+		targets.filter((target) => target.scope === "user").map((target) => target.relativePath),
+	)
+	return new Map(
+		await Promise.all(
+			[...paths].map(async (path) => {
+				try {
+					const result = await resolveFileReference(
+						{ space_type: "user", space_relative_path: path },
+						signal,
+					)
+					return [
+						path,
+						result.status === "resolved" && result.reference.space_type === "user"
+							? createUserFileMention(result.reference)
+							: null,
+					] as const
+				} catch {
+					return [path, null] as const
+				}
+			}),
+		),
+	)
+}
+
+export async function resolveUserLinksInRichText(
+	content: JSONContent,
+	attachments: AttachmentItem[],
+) {
+	const targets: MarkdownFileTarget[] = []
+	const visit = (node: JSONContent): void => {
+		if (
+			node.type === "codeBlock" ||
+			node.type === "code" ||
+			node.marks?.some((mark) => mark.type === "code")
+		)
+			return
+		if (node.type === "text" && node.text)
+			targets.push(...extractMarkdownFileLinks(node.text).map((match) => match.target))
+		node.content?.forEach(visit)
+	}
+	visit(content)
+	const mentions = await resolveUserFileTargets(targets)
+	return replaceWorkspaceLinksInRichText(content, attachments, mentions).content
+}
+
 function buildClipboardPasteParts(
 	html: string,
 	plainText: string,
 	attachments: AttachmentItem[],
 	referencedProjectAttachments: ReferencedProjectAttachmentMap = EMPTY_REFERENCED_PROJECT_ATTACHMENTS,
+	userFileMentions: UserFileMentionMap = EMPTY_USER_FILE_MENTIONS,
 ): PastePart[] | null {
+	if (hasMagicSelection(plainText))
+		return buildPlainTextPasteParts(
+			plainText,
+			attachments,
+			referencedProjectAttachments,
+			userFileMentions,
+		)
 	return (
-		buildHtmlPasteParts(html, attachments, referencedProjectAttachments) ||
-		buildPlainTextPasteParts(plainText, attachments, referencedProjectAttachments)
+		buildHtmlPasteParts(html, attachments, referencedProjectAttachments, userFileMentions) ||
+		buildPlainTextPasteParts(
+			plainText,
+			attachments,
+			referencedProjectAttachments,
+			userFileMentions,
+		)
 	)
 }
 
@@ -250,6 +358,19 @@ function hasMentionPart(parts: PastePart[] | null): parts is PastePart[] {
 }
 
 function getClipboardFallbackText(html: string, plainText: string): string {
+	if (hasMagicSelection(plainText)) return plainText
+	if (html) {
+		const container = document.createElement("div")
+		container.innerHTML = html
+		const hasFileReference = Array.from(container.querySelectorAll("a[href]")).some(
+			(anchor) => {
+				if (anchor.closest("code, pre")) return false
+				const result = classifyMarkdownFileHref(anchor.getAttribute("href") || "")
+				return result.target || result.explicitFileReference
+			},
+		)
+		if (hasFileReference) return htmlToClipboardMarkdown(container)
+	}
 	const htmlParts = buildHtmlPasteParts(html, [], EMPTY_REFERENCED_PROJECT_ATTACHMENTS)
 	if (!htmlParts) return plainText
 
@@ -299,6 +420,8 @@ export function pasteMarkdownFileLinks(
 	const html = clipboardData.getData("text/html")
 	const plainText = clipboardData.getData("text/plain")
 	const targets = getPreferredMarkdownFileTargets(html, plainText)
+	const identity = getFileReferenceIdentityKey()
+	const hasUserTarget = targets.some((target) => target.scope === "user")
 	const hasReferencedProjectTarget = targets.some(
 		(target) => target.scope === "referenced-project",
 	)
@@ -312,11 +435,24 @@ export function pasteMarkdownFileLinks(
 		),
 	)
 
-	if (!hasReferencedProjectTarget && !needsWorkspaceLookup) {
+	if (!hasReferencedProjectTarget && !needsWorkspaceLookup && !hasUserTarget) {
 		const parts = buildClipboardPasteParts(html, plainText, attachments)
-		if (!hasMentionPart(parts)) return false
+		if (!hasMentionPart(parts) && !hasMagicSelection(plainText)) {
+			const fallback = getClipboardFallbackText(html, plainText)
+			if (!containsMarkdownFileReference(fallback)) return false
+			return (
+				runActiveEditor(
+					editor,
+					(active) =>
+						active.commands.insertContent(
+							buildPasteContent([{ type: "text", text: fallback }]).content,
+						),
+					false,
+				) ?? false
+			)
+		}
 
-		const paste = buildPasteContent(parts)
+		const paste = buildPasteContent(parts ?? [{ type: "text", text: plainText }])
 		return (
 			runActiveEditor(
 				editor,
@@ -342,31 +478,38 @@ export function pasteMarkdownFileLinks(
 
 	void (async () => {
 		let resolvedPaste: ReturnType<typeof buildPasteContent> | null = null
+		let unavailableUserReference = false
 		try {
 			// 仅在可见列表未命中时查询隐藏文件，不改变文件面板的可见性。
-			const [referencedProjectAttachments, workspaceFiles] = await Promise.all([
-				resolveReferencedProjectTargets(targets),
-				needsWorkspaceLookup && currentProjectId
-					? loadProjectAttachments({
-							projectId: currentProjectId,
-							includeHidden: true,
-							enableErrorMessagePrompt: false,
-						})
-							.then((result) => result.list)
-							.catch((error: unknown) => {
-								console.warn(
-									"Workspace Markdown paste could not be resolved",
-									error,
-								)
-								return attachments
+			const [referencedProjectAttachments, workspaceFiles, userFileMentions] =
+				await Promise.all([
+					resolveReferencedProjectTargets(targets),
+					needsWorkspaceLookup && currentProjectId
+						? loadProjectAttachments({
+								projectId: currentProjectId,
+								includeHidden: true,
+								enableErrorMessagePrompt: false,
 							})
-					: attachments,
-			])
+								.then((result) => result.list)
+								.catch((error: unknown) => {
+									console.warn(
+										"Workspace Markdown paste could not be resolved",
+										error,
+									)
+									return attachments
+								})
+						: attachments,
+					resolveUserFileTargets(targets),
+				])
 			const parts = buildClipboardPasteParts(
 				html,
 				plainText,
 				workspaceFiles,
 				referencedProjectAttachments,
+				userFileMentions,
+			)
+			unavailableUserReference = [...userFileMentions.values()].some(
+				(mention) => mention === null,
 			)
 			if (parts) {
 				resolvedPaste = buildPasteContent(parts)
@@ -379,6 +522,9 @@ export function pasteMarkdownFileLinks(
 		try {
 			runActiveEditor(editor, (editor) => {
 				if (options.getCurrentProjectId?.() !== currentProjectId) return
+				if (identity !== getFileReferenceIdentityKey()) return
+				if (unavailableUserReference)
+					magicToast.error(i18n.t("super:common.fileNotFoundOrLoadFailed"))
 				// 文档内容发生变化时不再按旧位置转换，只在当前光标处插入一次原始 Markdown。
 				const canUseCapturedSelection = initialDoc.eq(editor.state.doc)
 				const paste = canUseCapturedSelection

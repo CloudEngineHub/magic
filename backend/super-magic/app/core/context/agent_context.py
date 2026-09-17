@@ -13,6 +13,7 @@ from typing import TYPE_CHECKING, Any, Dict, List, Optional, Type
 from app.core.context.pending_reply_state import PendingReplyState
 
 if TYPE_CHECKING:
+    from app.infrastructure.sdk.magic_service.kernel.magic_service_parameter import MagicServiceAuthConfig
     from app.core.entity.factory.task_message_factory_protocol import TaskMessageFactoryProtocol
     from app.core.entity.message.client_message import SuperMagicProductContext
     from app.core.horizon.agent_horizon import AgentHorizon
@@ -127,6 +128,9 @@ class AgentContext(BaseAgentContext):
         # 普通路径与隔离路径都走同一初始化逻辑；共享实例由 is_initialized 保护避免重复注册。
         self._init_shared_fields()
         self.model_context = AgentModelContext()
+        self._user_context_host: str = ""
+        self._user_context_auth: MagicServiceAuthConfig | None = None
+        self._user_context_config_loaded = False
 
         # 初始化中断事件通知
         self._interruption_event = asyncio.Event()
@@ -146,6 +150,8 @@ class AgentContext(BaseAgentContext):
         self._horizon_agent_id: Optional[str] = None
         # Runtime 完成定义准备后写入的确定运行目标。
         self._agent_target: Optional[AgentTarget] = None
+        self._user_facing_agent_target: AgentTarget | None = None
+        self._user_facing_agent_name: str = ""
 
         # 设置工作空间目录
         try:
@@ -547,6 +553,13 @@ class AgentContext(BaseAgentContext):
         """
         return self.shared_context.get_field("organization_code")
 
+    def set_user_facing_agent_name(self, target: AgentTarget, name: str) -> None:
+        self._user_facing_agent_target = target
+        self._user_facing_agent_name = name.strip()
+
+    def get_user_facing_agent_name(self, target: AgentTarget) -> str:
+        return self._user_facing_agent_name if target == self._user_facing_agent_target else ""
+
     def set_agent_profile(self, profile: AgentProfile) -> None:
         """设置 Agent Profile
 
@@ -619,6 +632,21 @@ class AgentContext(BaseAgentContext):
         """
         excluded = self.shared_context.get_field("excluded_skills")
         return excluded if excluded is not None else []
+
+    def set_user_context_request_config(self, host: str, auth: "MagicServiceAuthConfig | None") -> None:
+        """只保存在当前运行内存，避免全局 init 文件把不同会话的主体混用。"""
+        self._user_context_host = host
+        self._user_context_auth = auth
+        self._user_context_config_loaded = True
+
+    def get_user_context_host(self) -> str:
+        return self._user_context_host
+
+    def get_user_context_auth(self) -> "MagicServiceAuthConfig | None":
+        return self._user_context_auth
+
+    def is_user_context_config_loaded(self) -> bool:
+        return self._user_context_config_loaded
 
     def get_init_client_message(self) -> Optional[InitClientMessage]:
         """获取初始化客户端消息
@@ -701,6 +729,8 @@ class AgentContext(BaseAgentContext):
             chat_client_message: 聊天客户端消息
         """
         self.shared_context.update_field("chat_client_message", chat_client_message)
+        from app.service.user_context_service import UserContextService
+        UserContextService.apply_chat_config(self, chat_client_message.metadata)
 
         dynamic_config = getattr(chat_client_message, "dynamic_config", None) or {}
         version = dynamic_config.get("message_version") if isinstance(dynamic_config, dict) else None

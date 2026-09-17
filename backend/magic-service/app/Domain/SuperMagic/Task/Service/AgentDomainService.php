@@ -1843,6 +1843,7 @@ class AgentDomainService
             'profile' => [
                 'code' => $entity->getCode(),
                 'name' => $entity->getName(),
+                'user_facing_name' => $entity->getName(),
                 'description' => $entity->getDescription(),
                 'template_code' => $entity->getTemplateCode(),
             ],
@@ -1871,6 +1872,7 @@ class AgentDomainService
             'profile' => [
                 'code' => $entity->getCode(),
                 'name' => $entity->getI18nName($language),
+                'user_facing_name' => $entity->getI18nName($language),
                 'description' => $entity->getI18nDescription($language),
             ],
         ];
@@ -1897,6 +1899,7 @@ class AgentDomainService
             'profile' => [
                 'code' => $entity->getCode(),
                 'name' => $entity->getI18nName($language),
+                'user_facing_name' => $entity->getI18nName($language),
                 'description' => $entity->getI18nDescription($language),
                 'role' => $entity->getI18nRole($language),
             ],
@@ -2011,10 +2014,13 @@ class AgentDomainService
 
             // 共享 project_id 校验：缺失或同项目则跳过，走 agent 自身 workspace
             $pidRaw = $mention['project_id'] ?? null;
-            if ($pidRaw === null || $pidRaw === '') {
+            if ((! is_string($pidRaw) && ! is_int($pidRaw)) || ! preg_match('/^[1-9][0-9]*$/D', (string) $pidRaw)) {
                 continue;
             }
             $pidStr = (string) $pidRaw;
+            if ((string) (int) $pidStr !== $pidStr) {
+                continue;
+            }
             if ($currentProjectId !== null && (string) $currentProjectId === $pidStr) {
                 continue;
             }
@@ -2029,7 +2035,7 @@ class AgentDomainService
 
             // 文件/目录：拼接相对路径；为空或已是绝对路径则跳过（防双前缀）
             $relativePath = (string) ($mention[$pathKey] ?? '');
-            if ($relativePath === '' || str_starts_with($relativePath, '/')) {
+            if ($relativePath === '' || str_starts_with($relativePath, '/') || str_starts_with($relativePath, '~')) {
                 continue;
             }
             $mentions[$i][$pathKey] = $mountRoot . '/' . ltrim($relativePath, '/');

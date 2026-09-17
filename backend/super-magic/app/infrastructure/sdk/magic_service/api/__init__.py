@@ -14,8 +14,10 @@ from .mcp_authorization_credential_api import MCPAuthorizationCredentialApi
 from .message_schedule_api import MessageScheduleApi
 from .oauth2_callback_relay_api import OAuth2CallbackRelayApi
 from .share_api import ShareApi
+from .user_api import UserApi
 
 __all__ = [
+    'UserApi',
     'AgentApi',
     'AiAbilityApi',
     'FileApi',

@@ -1,3 +1,10 @@
+import type { TextFileSession } from "../../types"
+import DetailEmpty from "../../components/DetailEmpty"
+import type {
+	MarkdownSourceSnapshot,
+	SourceReplacement,
+} from "./components/EditorBody/source-location"
+import { useMarkdownSelection } from "./hooks/useMarkdownSelection"
 import { getTemporaryDownloadUrl } from "@/pages/superMagic/utils/api"
 import { memo, useEffect, useMemo, useRef, useState } from "react"
 import { createPortal } from "react-dom"
@@ -9,7 +16,10 @@ import { useTranslation } from "react-i18next"
 import { getLanguage } from "@/pages/superMagic/utils/handleFIle"
 import EditorBody from "./components/EditorBody"
 import MagicSpin from "@/components/base/MagicSpin"
-import AIOptimization from "@/pages/superMagic/components/Detail/components/AIOptimization"
+import { useAIEditMenuItems } from "@/pages/superMagic/components/Detail/components/EditToolbar/useAIEditMenuItems"
+import ConditionalTooltip from "../../components/EditToolbar/ConditionalTooltip"
+import { Button } from "@/components/shadcn-ui/button"
+import { Crosshair } from "lucide-react"
 import FileEditButtons from "@/pages/superMagic/components/Detail/components/EditToolbar/FileEditButtons"
 import CommonFooter from "../../components/CommonFooter"
 import { useIsMobile } from "@/hooks/useIsMobile"
@@ -38,8 +48,14 @@ import { SuperMagicApiErrorCode } from "@/pages/superMagic/constants/apiErrorCod
 import { requestProjectAttachmentsFullRefresh } from "@/pages/superMagic/services/attachmentsTopicSync"
 import { documentExportService } from "@/pages/superMagic/services/documentExport"
 import { isLargeMarkdownContent } from "./components/EditorBody/largeMarkdown"
+import { useDevicePreview } from "../../components/DevicePreview/useDevicePreview"
+import { DevicePreviewToolbar } from "../../components/DevicePreview/DevicePreviewToolbar"
+import { DevicePreviewViewport } from "../../components/DevicePreview/DevicePreviewViewport"
 
 interface TextEditorProps {
+	textFileSession?: TextFileSession
+	resolveRelativeFile?: (href: string) => Promise<AttachmentItem | undefined>
+	resolveImageUrl?: (href: string) => Promise<string>
 	data?: any
 	attachments?: AttachmentFile[]
 	attachmentList?: AttachmentFile[]
@@ -143,6 +159,9 @@ const MdExportAction = memo(function MdExportAction({
 
 export default memo(function TextEditor(props: TextEditorProps) {
 	const {
+		textFileSession,
+		resolveRelativeFile,
+		resolveImageUrl,
 		data: displayData,
 		attachments,
 		attachmentList,
@@ -177,6 +196,7 @@ export default memo(function TextEditor(props: TextEditorProps) {
 		isTabActive = true,
 		allowDownload,
 		mdToolbarContainer,
+		topicId,
 	} = props
 	const { t } = useTranslation("super")
 	const isMobile = useIsMobile()
@@ -191,7 +211,7 @@ export default memo(function TextEditor(props: TextEditorProps) {
 
 	const {
 		fileData,
-		loading,
+		loading: fileLoading,
 		fileVersion,
 		changeFileVersion,
 		fileVersionsList,
@@ -200,6 +220,7 @@ export default memo(function TextEditor(props: TextEditorProps) {
 		isNewestVersion,
 		isDeleted,
 	} = useFileData({
+		enabled: !textFileSession,
 		file_id: displayData?.file_id || "",
 		updatedAt,
 		isEditing: isEditMode,
@@ -209,7 +230,10 @@ export default memo(function TextEditor(props: TextEditorProps) {
 		disabledUrlCache: isPlaybackMode,
 	})
 
-	const [editContent, setEditContent] = useState<string>("")
+	const [localEditContent, setLocalEditContent] = useState<string>("")
+	const editContent = textFileSession?.draft ?? localEditContent
+	const setEditContent = textFileSession?.setDraft ?? setLocalEditContent
+	const loading = textFileSession?.loading ?? fileLoading
 	const [originalContent, setOriginalContent] = useState<string>("")
 	const [savedContent, setSavedContent] = useState<string>("")
 	const [isExportingPdf, setIsExportingPdf] = useState(false)
@@ -218,9 +242,16 @@ export default memo(function TextEditor(props: TextEditorProps) {
 	const [internalViewMode, setInternalViewMode] = useState<"code" | "desktop" | "phone">(viewMode)
 	// The phone frame has fixed dimensions and its own clipping; pure shares need page scrolling.
 	const shouldUsePhoneFrame = !documentFlowFullscreen && internalViewMode === "phone"
+	const devicePreview = useDevicePreview(
+		String(selectedProject?.id || ""),
+		String(displayData?.file_id || ""),
+	)
+	const devicePreviewEnabled =
+		shouldUsePhoneFrame && !isMobile && showFileHeader && !isPlaybackMode
 
 	// 计算当前的内容源 - savedContent 优先于 fileData 和 displayData?.content
-	const currentContent = savedContent || displayData?.content || fileData || ""
+	const currentContent =
+		textFileSession?.content ?? (savedContent || displayData?.content || fileData || "")
 	const isLargeMarkdown = useMemo(() => isLargeMarkdownContent(currentContent), [currentContent])
 	const wasEditingLargeMarkdownRef = useRef(false)
 
@@ -245,6 +276,7 @@ export default memo(function TextEditor(props: TextEditorProps) {
 
 	// 初始化编辑内容和原始内容
 	useEffect(() => {
+		if (textFileSession) return
 		if (isEditMode) {
 			// 如果 currentContent 有值，需要确保 editContent 和 originalContent 都被正确初始化
 			if (currentContent) {
@@ -256,7 +288,7 @@ export default memo(function TextEditor(props: TextEditorProps) {
 					return prevOriginal
 				})
 				// 然后更新 editContent
-				setEditContent((prevEditContent) => {
+				setLocalEditContent((prevEditContent) => {
 					// 如果 editContent 为空，使用 currentContent 初始化
 					if (!prevEditContent) {
 						return currentContent
@@ -271,7 +303,7 @@ export default memo(function TextEditor(props: TextEditorProps) {
 				})
 			} else {
 				// currentContent 为空时，确保 editContent 至少是空字符串
-				setEditContent((prevEditContent) => {
+				setLocalEditContent((prevEditContent) => {
 					if (!prevEditContent) {
 						return ""
 					}
@@ -281,7 +313,7 @@ export default memo(function TextEditor(props: TextEditorProps) {
 		} else {
 			// 非编辑模式下，同步更新内容
 			if (currentContent) {
-				setEditContent(currentContent)
+				setLocalEditContent(currentContent)
 				setOriginalContent(currentContent)
 			}
 		}
@@ -299,7 +331,8 @@ export default memo(function TextEditor(props: TextEditorProps) {
 		}
 	}, [displayData, fileData])
 
-	const [processedContent, setProcessedContent] = useState<string>(data?.content || "")
+	const [sourceSnapshot, setSourceSnapshot] = useState<MarkdownSourceSnapshot | null>(null)
+	const processedContent = sourceSnapshot?.content ?? ""
 	const [isLoading, setIsLoading] = useState<boolean>(true)
 	// Get language for syntax highlighting
 	const language = useMemo(() => {
@@ -318,6 +351,7 @@ export default memo(function TextEditor(props: TextEditorProps) {
 
 	// Use the image URL resolver hook
 	const { imageUrlMap, setImageUrlMap, urlResolver } = useImageUrlResolver({
+		resolveUrl: resolveImageUrl,
 		attachments,
 		relativeFilePath,
 	})
@@ -406,6 +440,14 @@ export default memo(function TextEditor(props: TextEditorProps) {
 
 	// Process markdown images to resolve URLs
 	useEffect(() => {
+		let disposed = false
+		const processContent = () => {
+			let replacements: SourceReplacement[] = []
+			const content = escapeDangerousInvisibleHtmlTags(currentContent, (ranges) => {
+				replacements = ranges
+			})
+			setSourceSnapshot({ source: currentContent, content, replacements })
+		}
 		const processImages = async () => {
 			setIsLoading(true)
 			setImageUrlMap(new Map())
@@ -414,7 +456,17 @@ export default memo(function TextEditor(props: TextEditorProps) {
 			const imagePaths = extractImagePaths(currentContent)
 
 			if (imagePaths.length === 0) {
-				setProcessedContent(escapeDangerousInvisibleHtmlTags(currentContent))
+				processContent()
+				setIsLoading(false)
+				return
+			}
+
+			if (resolveImageUrl) {
+				await Promise.all(
+					imagePaths.filter((path) => !isExternalUrl(path)).map(urlResolver),
+				)
+				if (disposed) return
+				processContent()
 				setIsLoading(false)
 				return
 			}
@@ -468,35 +520,43 @@ export default memo(function TextEditor(props: TextEditorProps) {
 							},
 						})) || []
 
+					if (disposed) return
+
 					// Build image URL map using utility function
 					const resolvedMap = buildImageUrlMapEntries(downloadUrls, fileIdToPaths)
 
 					setImageUrlMap(resolvedMap)
-					setProcessedContent(escapeDangerousInvisibleHtmlTags(currentContent))
+					processContent()
 					setIsLoading(false)
 				} catch (error) {
+					if (disposed) return
 					console.error("Error fetching download URLs:", error)
-					setProcessedContent(escapeDangerousInvisibleHtmlTags(currentContent))
+					processContent()
 					setImageUrlMap(new Map())
 					setIsLoading(false)
 				}
 			} else {
-				setProcessedContent(escapeDangerousInvisibleHtmlTags(currentContent))
+				processContent()
 				setImageUrlMap(new Map())
 				setIsLoading(false)
 			}
 		}
 		processImages()
+		return () => {
+			disposed = true
+		}
 		// eslint-disable-next-line react-hooks/exhaustive-deps
 	}, [currentContent, relativeFilePath])
 
 	const handleEdit = useMemoizedFn(() => {
+		markdownSelection.stop()
 		setIsEditMode?.(true)
 		// 进入编辑模式时，使用当前的内容作为编辑内容
-		setEditContent(currentContent)
+		if (!textFileSession) setEditContent(currentContent)
 	})
 
 	const handleSave = useMemoizedFn(async () => {
+		if (textFileSession) return textFileSession.save()
 		try {
 			if (originalContent === editContent) {
 				return
@@ -523,6 +583,11 @@ export default memo(function TextEditor(props: TextEditorProps) {
 	})
 
 	const handleSaveAndExit = useMemoizedFn(async () => {
+		if (textFileSession) {
+			await textFileSession.save()
+			setIsEditMode?.(false)
+			return
+		}
 		try {
 			if (originalContent === editContent) {
 				setIsEditMode?.(false)
@@ -724,6 +789,33 @@ export default memo(function TextEditor(props: TextEditorProps) {
 			.catch(() => magicToast.error(t("playbackControl.copyMarkdownFailed")))
 	})
 
+	const markdownSelection = useMarkdownSelection({
+		file: displayData,
+		enabled:
+			!!allowEdit &&
+			!isMobile &&
+			!isEditMode &&
+			isNewestVersion &&
+			isTabActive &&
+			!loading &&
+			!isLoading &&
+			internalViewMode !== "code" &&
+			!shouldHideByPermission,
+		snapshot: sourceSnapshot?.source === currentContent ? sourceSnapshot : null,
+		fileId: displayData?.file_id,
+		fileName: displayData?.file_name || displayData?.title,
+		filePath: relativeFilePath,
+		topicId,
+		projectId: selectedProject?.id,
+	})
+
+	const aiEditMenuItems = useAIEditMenuItems({
+		file: textFileSession ? displayData : undefined,
+		attachmentList: attachmentList as AttachmentItem[],
+		fileId: displayData?.file_id,
+		enabled: !!allowEdit && !isMobile && !isEditMode && isNewestVersion && isTabActive,
+	})
+
 	const headerActionConfig = useMemo(() => {
 		const customActions: NonNullable<HeaderActionConfig["customActions"]> = []
 
@@ -745,45 +837,97 @@ export default memo(function TextEditor(props: TextEditorProps) {
 			})
 		}
 
-		if (allowEdit && !isMobile && displayData?.file_id && !isEditMode && isNewestVersion) {
+		if (
+			allowEdit &&
+			!isMobile &&
+			!isEditMode &&
+			isNewestVersion &&
+			internalViewMode !== "code"
+		) {
+			const label = t(
+				markdownSelection.active
+					? "topicFiles.exitSelectElement"
+					: "topicFiles.selectElement",
+			)
 			customActions.push({
-				key: "md-ai-optimize",
-				zone: "primary" as const,
-				render: () => (
-					<AIOptimization
-						attachmentList={attachmentList as AttachmentItem[]}
-						file_id={displayData?.file_id}
-						showButtonText
-					/>
+				key: "md-select",
+				zone: "secondary",
+				before: "refresh",
+				render: (context) => (
+					<ConditionalTooltip showText={context.showButtonText} title={label}>
+						<Button
+							variant="outline"
+							size="sm"
+							onClick={markdownSelection.toggle}
+							disabled={!markdownSelection.canSelect}
+							aria-pressed={markdownSelection.active}
+							aria-label={label}
+							className={cn(
+								"h-6 gap-1.5 rounded-[8px] px-3 py-0 text-xs font-normal shadow-xs",
+								markdownSelection.active && "text-primary",
+							)}
+						>
+							<Crosshair size={16} />
+							{context.showButtonText && <span>{label}</span>}
+						</Button>
+					</ConditionalTooltip>
 				),
 			})
 		}
-
 		if (setIsEditMode && allowEdit && !isMobile && displayData?.file_id && isNewestVersion) {
 			customActions.push({
 				key: "md-edit-buttons",
-				zone: "primary" as const,
-				render: () => (
+				zone: "secondary" as const,
+				before: "refresh" as const,
+				render: (context) => (
 					<FileEditButtons
 						isEditMode={isEditMode}
-						isSaving={false}
-						showButtonText
+						isSaving={textFileSession?.saving ?? false}
+						interactionDisabled={Boolean(
+							textFileSession &&
+							(loading || textFileSession.loadError || !isTabActive),
+						)}
+						showButtonText={context.showButtonText}
 						onEdit={handleEdit}
-						onSave={handleSave}
-						onSaveAndExit={handleSaveAndExit}
+						onSave={
+							textFileSession ? () => handleSave().catch(() => undefined) : handleSave
+						}
+						onSaveAndExit={
+							textFileSession
+								? () => handleSaveAndExit().catch(() => undefined)
+								: handleSaveAndExit
+						}
 						onCancel={handleCancel}
 					/>
 				),
 			})
 		}
 
-		if (customActions.length === 0) {
+		if (customActions.length === 0 && !textFileSession) {
 			return undefined
 		}
 
-		return { customActions }
+		return {
+			customActions,
+			overrides: textFileSession
+				? {
+						refresh: {
+							onClick: textFileSession.refresh,
+							disabled: loading || textFileSession.saving || isEditMode,
+						},
+					}
+				: undefined,
+		}
 	}, [
+		textFileSession,
+		loading,
+		isTabActive,
 		allowEdit,
+		markdownSelection.active,
+		markdownSelection.canSelect,
+		markdownSelection.toggle,
+		internalViewMode,
+		t,
 		attachmentList,
 		displayData?.file_id,
 		handleExportImage,
@@ -839,9 +983,21 @@ export default memo(function TextEditor(props: TextEditorProps) {
 						allowEdit={allowEdit}
 						attachments={attachments as AttachmentItem[] | undefined}
 						actionConfig={headerActionConfig}
+						extraMoreMenuItems={aiEditMenuItems}
 					/>
 				)}
-				{loading ? (
+				{devicePreviewEnabled && (
+					<DevicePreviewToolbar
+						{...devicePreview}
+						active={isTabActive && !loading && !isDeleted}
+					/>
+				)}
+				{textFileSession?.loadError ? (
+					<DetailEmpty
+						title={t("common.fileNotFoundOrLoadFailed")}
+						onRetry={textFileSession.refresh}
+					/>
+				) : loading ? (
 					documentFlowFullscreen ? (
 						<div className="min-h-0 flex-1" />
 					) : (
@@ -858,54 +1014,72 @@ export default memo(function TextEditor(props: TextEditorProps) {
 								? "min-h-dvh flex-1 overflow-visible transition-[background-color_0.4s_cubic-bezier(0.4,0,0.2,1)]"
 								: "min-h-0 flex-1 transition-[background-color_0.4s_cubic-bezier(0.4,0,0.2,1)]",
 							!documentFlowFullscreen &&
-								(internalViewMode === "code" ? "overflow-hidden" : "overflow-auto"),
+								(internalViewMode === "code" || devicePreviewEnabled
+									? "overflow-hidden"
+									: "overflow-auto"),
 							shouldUsePhoneFrame &&
+								!devicePreviewEnabled &&
 								"flex w-full items-center justify-center bg-muted",
 						)}
 					>
-						<div
-							className={cn(
-								documentFlowFullscreen
-									? "m-auto min-h-dvh w-full flex-none overflow-visible transition-[width_0.4s_cubic-bezier(0.4,0,0.2,1),border-radius_0.4s_cubic-bezier(0.4,0,0.2,1),background-color_0.4s_cubic-bezier(0.4,0,0.2,1),box-shadow_0.4s_cubic-bezier(0.4,0,0.2,1)]"
-									: "m-auto h-full min-h-0 w-full flex-none transition-[width_0.4s_cubic-bezier(0.4,0,0.2,1),border-radius_0.4s_cubic-bezier(0.4,0,0.2,1),background-color_0.4s_cubic-bezier(0.4,0,0.2,1),box-shadow_0.4s_cubic-bezier(0.4,0,0.2,1)]",
-								!documentFlowFullscreen &&
-									internalViewMode === "code" &&
-									"overflow-hidden",
-								shouldUsePhoneFrame &&
-									"!my-5 h-[calc(100%-40px)] w-[416px] flex-none overflow-hidden rounded-lg border border-border bg-background shadow-[0_4px_14px_0_rgba(0,0,0,0.1),0_0_1px_0_rgba(0,0,0,0.3)]",
-							)}
+						<DevicePreviewViewport
+							{...devicePreview}
+							active={isTabActive}
+							enabled={devicePreviewEnabled}
 						>
-							<EditorBody
-								isLoading={isLoading}
-								viewMode={internalViewMode as "code" | "markdown"}
-								language={language}
-								content={currentContent}
-								processedContent={processedContent}
+							<div
 								className={cn(
 									documentFlowFullscreen
-										? "min-h-dvh flex-1 overflow-visible bg-background text-base"
-										: "h-full min-h-0 flex-1 bg-background text-base [&::-webkit-scrollbar-thumb]:rounded [&::-webkit-scrollbar-thumb]:bg-black/15 dark:[&::-webkit-scrollbar-thumb]:bg-white/20 [&::-webkit-scrollbar-track]:bg-transparent [&::-webkit-scrollbar]:w-1.5",
+										? "m-auto min-h-dvh w-full flex-none overflow-visible transition-[width_0.4s_cubic-bezier(0.4,0,0.2,1),border-radius_0.4s_cubic-bezier(0.4,0,0.2,1),background-color_0.4s_cubic-bezier(0.4,0,0.2,1),box-shadow_0.4s_cubic-bezier(0.4,0,0.2,1)]"
+										: "m-auto h-full min-h-0 w-full flex-none transition-[width_0.4s_cubic-bezier(0.4,0,0.2,1),border-radius_0.4s_cubic-bezier(0.4,0,0.2,1),background-color_0.4s_cubic-bezier(0.4,0,0.2,1),box-shadow_0.4s_cubic-bezier(0.4,0,0.2,1)]",
 									!documentFlowFullscreen &&
-										(internalViewMode === "code"
-											? "overflow-hidden"
-											: "overflow-visible whitespace-pre-wrap"),
-									internalViewMode === "code" && "[&_>_pre]:!bg-background",
+										internalViewMode === "code" &&
+										"overflow-hidden",
+									shouldUsePhoneFrame &&
+										!devicePreviewEnabled &&
+										"!my-5 h-[calc(100%-40px)] w-[416px] flex-none overflow-hidden rounded-lg border border-border bg-background shadow-[0_4px_14px_0_rgba(0,0,0,0.1),0_0_1px_0_rgba(0,0,0,0.3)]",
 								)}
-								isEditMode={isEditMode}
-								editContent={editContent}
-								setEditContent={setEditContent}
-								selectedProject={selectedProject}
-								currentDocumentPath={relativeFilePath}
-								urlResolver={urlResolver}
-								attachments={attachments}
-								onOpenFile={openFileTab}
-								placeholder={t("fileViewer.placeholder.content")}
-								resolveImagesFolderParentId={resolveImagesFolderParentId}
-								suppressLoadingIndicator={documentFlowFullscreen}
-								documentFlowFullscreen={documentFlowFullscreen}
-								isTabActive={isTabActive}
-							/>
-						</div>
+							>
+								<EditorBody
+									selectionRootRef={markdownSelection.selectionRootRef}
+									enableSourceLocation={
+										!!allowEdit &&
+										!isMobile &&
+										!isEditMode &&
+										internalViewMode !== "code"
+									}
+									isLoading={isLoading}
+									viewMode={internalViewMode as "code" | "markdown"}
+									language={language}
+									content={currentContent}
+									processedContent={processedContent}
+									className={cn(
+										documentFlowFullscreen
+											? "min-h-dvh flex-1 overflow-visible bg-background text-base"
+											: "h-full min-h-0 flex-1 bg-background text-base [&::-webkit-scrollbar-thumb]:rounded [&::-webkit-scrollbar-thumb]:bg-black/15 dark:[&::-webkit-scrollbar-thumb]:bg-white/20 [&::-webkit-scrollbar-track]:bg-transparent [&::-webkit-scrollbar]:w-1.5",
+										!documentFlowFullscreen &&
+											(internalViewMode === "code"
+												? "overflow-hidden"
+												: "overflow-visible whitespace-pre-wrap"),
+										internalViewMode === "code" && "[&_>_pre]:!bg-background",
+									)}
+									isEditMode={isEditMode}
+									editContent={editContent}
+									setEditContent={setEditContent}
+									selectedProject={selectedProject}
+									currentDocumentPath={relativeFilePath}
+									urlResolver={urlResolver}
+									attachments={attachments}
+									onOpenFile={openFileTab}
+									resolveRelativeFile={resolveRelativeFile}
+									placeholder={t("fileViewer.placeholder.content")}
+									resolveImagesFolderParentId={resolveImagesFolderParentId}
+									suppressLoadingIndicator={documentFlowFullscreen}
+									documentFlowFullscreen={documentFlowFullscreen}
+									isTabActive={isTabActive}
+								/>
+							</div>
+						</DevicePreviewViewport>
 					</div>
 				)}
 				{/* 底部 */}

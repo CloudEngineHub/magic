@@ -1,4 +1,5 @@
-import type { TabItem, FileItem } from "../types"
+import type { TabItem, FileItem, TabAction } from "../types"
+import { TabActionType } from "../types"
 import type { AttachmentItem } from "../../../../TopicFilesButton/hooks/types"
 import { getParentIdFromPath } from "../../../../TopicFilesButton/utils/getParentIdFromPath"
 import {
@@ -6,6 +7,83 @@ import {
 	toSlidesTemplatePreviewItem,
 } from "../../../../TopicFilesButton/utils/slides-template-folder"
 import { isMagicProjectConfigFile } from "@/pages/superMagic/components/MessageList/components/MessageAttachment/utils"
+
+export interface TabRestoreState {
+	interacted: boolean
+	closedIds: Set<string>
+	closeAll: boolean
+	keepOnly?: string
+}
+
+export function createTabRestoreState(): TabRestoreState {
+	return { interacted: false, closedIds: new Set(), closeAll: false }
+}
+
+/** 恢复只补齐用户尚未处理的标签；读取期间的关闭、排序和选择优先于旧缓存。 */
+export function recordTabRestoreAction(state: TabRestoreState, action: TabAction, tabs: TabItem[]) {
+	if (
+		[
+			TabActionType.SYNC_TABS_DATA,
+			TabActionType.SYNC_USER_FILE_REFERENCES,
+			TabActionType.RESTORE_USER_FILE_TABS,
+			TabActionType.RESTORE_PROJECT_TABS,
+		].includes(action.type) ||
+		(action.type === TabActionType.UPDATE_TAB && !action.payload?.userInteraction)
+	)
+		return
+	state.interacted = true
+	const tabId = action.payload?.tabId
+	if (action.type === TabActionType.REMOVE_TAB && tabId) state.closedIds.add(tabId)
+	if (action.type === TabActionType.ADD_TAB && action.payload?.tab)
+		state.closedIds.delete(action.payload.tab.id)
+	if (
+		action.type === TabActionType.CLEAR_TABS ||
+		action.type === TabActionType.CLOSE_OTHER_TABS
+	) {
+		state.closeAll = true
+		state.keepOnly = action.type === TabActionType.CLOSE_OTHER_TABS ? tabId : undefined
+	}
+	if (action.type === TabActionType.CLOSE_TABS_TO_RIGHT) {
+		const index = tabs.findIndex((tab) => tab.id === tabId)
+		if (index >= 0) tabs.slice(index + 1).forEach((tab) => state.closedIds.add(tab.id))
+	}
+}
+
+export function canRestoreTab(state: TabRestoreState, id: string): boolean {
+	return (!state.closeAll || id === state.keepOnly) && !state.closedIds.has(id)
+}
+
+/** 缺失项不会占据绝对下标；临时 Tab 被排除后，仍按剩余 ID 的相对顺序恢复。 */
+export function restoreTabOrder(tabs: TabItem[], order?: string[]): TabItem[] {
+	if (!order) return tabs
+	const positions = new Map(order.map((id, index) => [id, index]))
+	return [...tabs].sort(
+		(left, right) =>
+			(positions.get(left.id) ?? order.length) - (positions.get(right.id) ?? order.length),
+	)
+}
+
+/** 将个人文件插回已保存的位置；用户已重新排序时只追加缺少的标签。 */
+export function mergeUserFileTabs(
+	tabs: TabItem[],
+	userTabs: TabItem[],
+	positions?: Record<string, number>,
+): TabItem[] {
+	const result = [...tabs]
+	const ids = new Set(result.map((tab) => tab.id))
+	const ordered = positions
+		? [...userTabs].sort(
+				(a, b) => (positions[a.id] ?? Infinity) - (positions[b.id] ?? Infinity),
+			)
+		: userTabs
+	for (const tab of ordered) {
+		if (ids.has(tab.id)) continue
+		const order = positions?.[tab.id] ?? result.length
+		result.splice(Math.min(order, result.length), 0, tab)
+		ids.add(tab.id)
+	}
+	return result
+}
 
 function normalizeTabFileId(fileId: unknown): string {
 	if (typeof fileId === "string") return fileId.trim()
@@ -145,6 +223,7 @@ function resolveProjectTabFile(
 	file: FileItem | AttachmentItem,
 	attachments?: FileItem[] | AttachmentItem[],
 ): FileItem | AttachmentItem {
+	if (file.space_type === "user" || file.file_reference?.space_type === "user") return file
 	const templateTabFile = resolveSlidesTemplateTabFile(file, attachments)
 	if (templateTabFile) return templateTabFile
 	if (isProjectBundleFolder(file)) return file
@@ -392,6 +471,7 @@ export function convertFileToTabItem(
 export function calculateCalvedRelativePath(
 	filePath: string | undefined,
 	existingPaths: string[],
+	spaceType?: "user" | "project",
 ): string | undefined {
 	if (!filePath) return undefined
 
@@ -409,6 +489,11 @@ export function calculateCalvedRelativePath(
 	// If no duplicates found, no need for calvedRelativePath
 	if (duplicateFilenames.length === 0) {
 		return undefined
+	}
+
+	if (spaceType === "user") {
+		const parent = pathParts.slice(0, -1).join("/")
+		return parent === "~" ? "~/" : parent
 	}
 
 	// Calculate minimum required parent directories to make paths unique

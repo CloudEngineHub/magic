@@ -144,6 +144,7 @@ export const MessageEditorContainer = observer(
 				projectFilesStore,
 				topicModelStore,
 				layoutConfig,
+				headerContent,
 				enableMessageSendByContent = false,
 				skipInitialDraftRestore = false,
 			},
@@ -1071,6 +1072,7 @@ export const MessageEditorContainer = observer(
 					store={store}
 					className={className}
 					containerClassName={containerClassName}
+					headerContent={headerContent}
 					size={size}
 					tiptapEditor={tiptapEditor}
 					domRef={domRef}

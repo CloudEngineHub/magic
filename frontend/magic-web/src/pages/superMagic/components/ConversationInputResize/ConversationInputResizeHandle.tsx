@@ -6,13 +6,12 @@ import {
 	type PointerEvent as ReactPointerEvent,
 } from "react"
 import { cn } from "@/utils/cn"
-import {
-	ResizeGrip,
-	resizeHandleGlowClass,
-} from "@/pages/superMagic/components/ResizeGrip/ResizeGrip"
+import { useTranslation } from "react-i18next"
+import { ResizeGrip, resizeGlowClassName } from "@/components/shadcn-ui/resizable"
 
 interface ConversationInputResizeHandleProps {
 	disabled?: boolean
+	label?: string
 	/** Allows a page-specific offset while keeping the default handle position unchanged. */
 	positionClassName?: string
 	value: number
@@ -28,6 +27,7 @@ interface ConversationInputResizeHandleProps {
 /** Render the grab target and translate pointer movement into height deltas. */
 export default function ConversationInputResizeHandle({
 	disabled = false,
+	label,
 	positionClassName = "top-0",
 	value,
 	min,
@@ -38,6 +38,7 @@ export default function ConversationInputResizeHandle({
 	onDoubleClick,
 	onResizeStateChange,
 }: ConversationInputResizeHandleProps) {
+	const { t } = useTranslation("super")
 	const startYRef = useRef<number | null>(null)
 	const pointerIdRef = useRef<number | null>(null)
 	const pointerTargetRef = useRef<HTMLDivElement | null>(null)
@@ -161,20 +162,39 @@ export default function ConversationInputResizeHandle({
 			aria-valuemin={min}
 			aria-valuemax={max}
 			aria-valuenow={value}
-			aria-label="Resize conversation input"
+			aria-label={label ?? t("messageQueue.resizeInputHeight")}
+			tabIndex={disabled ? -1 : 0}
 			data-resizing={isDragging}
+			data-dragging={isDragging}
 			data-testid="conversation-input-resize-handle"
 			className={cn(
-				"group absolute inset-x-0 z-10 flex h-3 items-center justify-center bg-transparent",
+				"group/resize absolute inset-x-0 z-10 flex h-3 items-center justify-center bg-transparent",
 				positionClassName,
 				"cursor-row-resize touch-none select-none",
-				resizeHandleGlowClass("horizontal"),
+				resizeGlowClassName,
+				"before:bg-gradient-to-r focus-visible:before:opacity-100 motion-reduce:before:transition-none dark:[--resize-glow-rgb:52,88,136]",
+				isDragging && "before:opacity-100",
 				disabled && "pointer-events-none",
 			)}
 			onPointerDown={handlePointerDown}
 			onDoubleClick={handleDoubleClick}
+			onKeyDown={(event) => {
+				if (
+					disabled ||
+					isDragging ||
+					(event.key !== "ArrowUp" && event.key !== "ArrowDown")
+				)
+					return
+				event.preventDefault()
+				onResizeStart()
+				onResize(event.key === "ArrowUp" ? -10 : 10)
+				onResizeEnd()
+			}}
 		>
-			<ResizeGrip orientation="horizontal" />
+			<ResizeGrip
+				orientation="horizontal"
+				className="group-hover/resize:text-blue-400 group-focus-visible/resize:text-blue-400 group-data-[dragging=true]/resize:text-blue-400"
+			/>
 		</div>
 	)
 }

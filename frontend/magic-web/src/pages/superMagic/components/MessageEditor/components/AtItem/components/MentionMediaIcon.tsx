@@ -1,8 +1,13 @@
+import { FileResourceIcon } from "@/pages/superMagic/components/TopicFilesButton/components/FileResourceIcon"
+import {
+	resolveFilePresentation,
+	type FilePresentation,
+} from "@/pages/superMagic/components/TopicFilesButton/utils/file-presentation"
 import { memo } from "react"
-import MagicFileIcon from "@/components/base/MagicFileIcon"
 import { MediaPreviewThumbnail } from "@/components/base/MediaPreview"
 import type {
 	ProjectFileMentionData,
+	UserFileMentionData,
 	UploadFileMentionData,
 } from "@/components/business/MentionPanel/types"
 import { MentionItemType } from "@/components/business/MentionPanel/types"
@@ -13,13 +18,15 @@ import {
 } from "../../MentionMedia/useMentionMediaSource"
 
 interface MentionMediaIconProps {
-	type: MentionItemType.PROJECT_FILE | MentionItemType.UPLOAD_FILE
-	data: ProjectFileMentionData | UploadFileMentionData
+	presentation?: FilePresentation
+	type: (typeof MentionItemType)["PROJECT_FILE" | "UPLOAD_FILE" | "USER_FILE"]
+	data: ProjectFileMentionData | UploadFileMentionData | UserFileMentionData
 	size: number
 	mediaSource?: MentionMediaSource
 }
 
 function MentionMediaIcon({
+	presentation,
 	type,
 	data,
 	size,
@@ -38,7 +45,19 @@ function MentionMediaIcon({
 		enabled: !providedSource,
 	})
 	const { mediaType, thumbnailUrl } = providedSource ?? ownSource
-	const fallback = <MagicFileIcon type={extension} size={size} />
+	const fallback = (
+		<FileResourceIcon
+			presentation={
+				presentation ??
+				resolveFilePresentation({
+					...data,
+					space_type: type === MentionItemType.USER_FILE ? "user" : undefined,
+					file_extension: extension,
+				})
+			}
+			size={size}
+		/>
+	)
 
 	if (!mediaType) {
 		return fallback

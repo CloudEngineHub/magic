@@ -16,6 +16,8 @@ import asyncio
 import os
 import pkgutil
 import time
+from collections.abc import Iterable
+from types import ModuleType
 from typing import Dict, List, Type, TypeVar, Optional, get_origin, get_args
 from dataclasses import dataclass
 
@@ -733,9 +735,16 @@ class ToolFactory:
             logger.info(f"发现工具包: {entry_point.value}")
         try:
             # 定义一个递归扫描函数
-            def scan_package(pkg_name: str, pkg_path: str) -> None:
+            def scan_package(pkg_name: str, package: ModuleType) -> None:
+                # 命名空间包可能没有 __file__，应沿用 __path__ 的全部搜索位置。
+                # 路径缺失时不能传 None，否则 iter_modules 会扫描整个 sys.path。
+                package_paths: Optional[Iterable[str]] = getattr(package, '__path__', None)
+                if package_paths is None:
+                    logger.error(f"工具包 {pkg_name} 没有 __path__ 搜索路径，跳过扫描")
+                    return
+
                 # 扫描该包下的所有模块
-                for _, module_name, is_pkg in pkgutil.iter_modules([pkg_path]):
+                for _, module_name, is_pkg in pkgutil.iter_modules(list(package_paths)):
                     # 只在 app.tools 包中跳过 core 包
                     if is_pkg and module_name == 'core' and pkg_name == 'app.tools':
                         continue
@@ -746,15 +755,8 @@ class ToolFactory:
                         logger.debug(f"发现子包: {subpackage_name}")
                         try:
                             subpackage = importlib.import_module(subpackage_name)
-                            # 检查 subpackage.__file__ 是否存在
-                            if not hasattr(subpackage, '__file__') or subpackage.__file__ is None:
-                                logger.warning(f"子包 {subpackage_name} 没有 __file__ 属性或为 None，跳过扫描")
-                                continue
-
-                            subpackage_path = os.path.dirname(subpackage.__file__)
-
                             # 递归扫描子包
-                            scan_package(subpackage_name, subpackage_path)
+                            scan_package(subpackage_name, subpackage)
                         except Exception as e:
                             logger.error(f"扫描子包 {subpackage_name} 失败: {e!s}")
                         continue
@@ -789,9 +791,8 @@ class ToolFactory:
             for package_name in package_names:
                 try:
                     package = importlib.import_module(package_name)
-                    package_path = os.path.dirname(package.__file__)
                     # 开始扫描
-                    scan_package(package_name, package_path)
+                    scan_package(package_name, package)
                 except ImportError:
                     logger.error(f"未找到工具包: {package_name}")
                     continue  # 跳过不存在的包

@@ -117,7 +117,7 @@ describe("DraftStore", () => {
 		vi.useFakeTimers()
 
 		store.isSendingGuard = true
-		mockDraftManager.createSentDraft.mockResolvedValue({} as any)
+		mockDraftManager.createSentDraft.mockResolvedValue(undefined)
 
 		await store.createSentDraft({ value: createContent("sent") })
 

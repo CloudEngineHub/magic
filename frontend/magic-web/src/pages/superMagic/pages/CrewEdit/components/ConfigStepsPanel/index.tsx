@@ -48,7 +48,7 @@ import { useMemberDisplay } from "../../hooks/useMemberDisplay"
 import SkillAddDropdown from "../SkillAddDropdown"
 import EditCrewDialog from "./EditCrewDialog"
 import CrewCollaboratorsEntry from "./CrewCollaboratorsEntry"
-import { SidebarRow } from "./SidebarRow"
+import { SidebarRow, SidebarExpandableItem } from "@/pages/superMagic/components/SidebarSection"
 import { useBuiltinSkills } from "./BuiltinSkillsPanel"
 import { RoleIcon } from "../common/RoleIcon"
 import { resolveLocalText } from "../StepDetailPanel/PlaybookPanel/components/SceneEditPanel/utils"
@@ -68,73 +68,6 @@ interface ConfigStepsPanelProps {
 	filesContent: ReactNode
 	isAttachmentsLoaded: boolean
 	isAttachmentsLoadFailed: boolean
-}
-
-function SidebarExpandableItem({
-	label,
-	onClick,
-	isActive = false,
-	isExpanded = false,
-	leading,
-	trailing,
-	testId,
-	className,
-	contentClassName,
-	childrenClassName,
-	children,
-}: {
-	label: string
-	onClick: () => void
-	isActive?: boolean
-	isExpanded?: boolean
-	leading?: ReactNode
-	trailing?: ReactNode
-	testId: string
-	className?: string
-	contentClassName?: string
-	childrenClassName?: string
-	children: ReactNode
-}) {
-	return (
-		<div className={className} data-testid={`${testId}-section`}>
-			<SidebarRow
-				label={label}
-				onClick={onClick}
-				isActive={isActive}
-				isExpanded={isExpanded}
-				leading={leading}
-				trailing={trailing}
-				testId={testId}
-			/>
-			<div
-				className={cn(
-					"grid overflow-hidden transition-all duration-200 ease-out",
-					isExpanded
-						? "grid-rows-[minmax(0,1fr)] opacity-100"
-						: "pointer-events-none grid-rows-[0fr] opacity-0",
-					contentClassName,
-				)}
-				data-testid={`${testId}-content`}
-			>
-				<div
-					className={cn(
-						"min-h-0 overflow-hidden bg-muted/20 transition-[transform,opacity] duration-200 ease-out",
-						isExpanded ? "translate-y-0" : "-translate-y-1",
-					)}
-				>
-					<div
-						className={cn(
-							"duration-200",
-							isExpanded && "animate-in fade-in slide-in-from-top-1",
-							childrenClassName,
-						)}
-					>
-						{children}
-					</div>
-				</div>
-			</div>
-		</div>
-	)
 }
 
 const SidebarKnowledgeList = observer(function SidebarKnowledgeList({

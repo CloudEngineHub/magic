@@ -509,38 +509,6 @@ html.magic-pure-share-document-flow #root .magic-app {
 		}
 	}
 
-	/* The compact BorderBeam preset is intentionally subtle. Increase only its
-	 * effect layers so the moving light reads clearly on the black toolbar button. */
-	.ai-edit-button-shell {
-		position: relative;
-		display: flex;
-		height: 24px;
-		min-width: max-content;
-		flex: none;
-		align-items: center;
-		overflow: visible;
-	}
-
-	.ai-edit-border-beam {
-		display: block;
-		height: 24px;
-		min-width: max-content;
-		overflow: visible !important;
-	}
-
-	.ai-edit-border-beam > * {
-		height: 100%;
-		overflow: visible !important;
-	}
-
-	.ai-edit-border-beam--inner {
-		/* Keep the button surface neutral. The beam is a restrained edge highlight
-		 * with a low-opacity inset glow, rather than a full purple fill. */
-		--beam-stroke-opacity: 0.92;
-		--beam-inner-opacity: 0.1;
-		--beam-bloom-opacity: 0;
-	}
-
 	.dark .skeleton {
 		@apply bg-fill;
 	}

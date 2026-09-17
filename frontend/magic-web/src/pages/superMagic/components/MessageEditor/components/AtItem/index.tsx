@@ -15,6 +15,7 @@ import {
 	DirectoryMentionData,
 	MentionItemType,
 	ProjectFileMentionData,
+	UserFileMentionData,
 	UploadFileMentionData,
 } from "@/components/business/MentionPanel/types"
 import { getFileType } from "@/pages/superMagic/utils/handleFIle"
@@ -44,6 +45,12 @@ import { type MarkerClickScene } from "../../hooks/useMarkerClickHandler"
 import MarkerAtItem from "../MentionNodes/marker/MarkerAtItem"
 import { observer } from "mobx-react-lite"
 import type { ProjectFilesStore } from "@/stores/projectFiles"
+import {
+	getFileReferenceIdentityKey,
+	resolveFileReference,
+} from "@/pages/superMagic/services/userFileReferenceResolver"
+import { openUserFileReference } from "@/pages/superMagic/components/MessageList/utils/openMessageFile"
+import magicToast from "@/components/base/MagicToaster/utils"
 
 interface AtItemProps {
 	data: TiptapMentionAttributes
@@ -118,6 +125,21 @@ function AtItem({
 	const isUploadError = uploadData?.upload_status === "error"
 
 	const handleClick = (item: TiptapMentionAttributes) => {
+		if (item.type === MentionItemType.USER_FILE) {
+			const identity = getFileReferenceIdentityKey()
+			void resolveFileReference({ file_id: (item.data as UserFileMentionData).file_id })
+				.then((result) => {
+					if (identity !== getFileReferenceIdentityKey()) return
+					if (result.status === "resolved" && result.reference.space_type === "user")
+						openUserFileReference(result.reference)
+					else magicToast.error(t("common.fileNotFoundOrLoadFailed"))
+				})
+				.catch(() => {
+					if (identity === getFileReferenceIdentityKey())
+						magicToast.error(t("common.fileNotFoundOrLoadFailed"))
+				})
+			return
+		}
 		if (!onFileClick) {
 			if (item.type === MentionItemType.PROJECT_FILE) {
 				const data = item.data as ProjectFileMentionData
@@ -318,6 +340,15 @@ function AtItem({
 			}
 			case MentionItemType.MEMORY_FILE:
 				return <MagicFileIcon type={icon as string} size={iconSize} />
+			case MentionItemType.USER_FILE:
+				return (
+					<MentionMediaIcon
+						type={MentionItemType.USER_FILE}
+						data={data.data as UserFileMentionData}
+						size={iconSize}
+						mediaSource={mentionMediaSource}
+					/>
+				)
 			case MentionItemType.TOOL:
 				return icon ? (
 					<img
@@ -401,6 +432,7 @@ function AtItem({
 					/>
 				)
 			case MentionItemType.MEMORY_DIRECTORY:
+			case MentionItemType.USER_DIRECTORY:
 				return (
 					<img
 						src={FoldIcon}
@@ -429,7 +461,9 @@ function AtItem({
 		return null
 	}
 	const isFileMention =
-		data.type === MentionItemType.PROJECT_FILE || data.type === MentionItemType.UPLOAD_FILE
+		data.type === MentionItemType.PROJECT_FILE ||
+		data.type === MentionItemType.UPLOAD_FILE ||
+		data.type === MentionItemType.USER_FILE
 	const fileRenderType = isFileMention
 		? getFileMentionRenderType(mentionMediaSource.mediaType)
 		: null

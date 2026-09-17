@@ -1,7 +1,10 @@
+import { FileResourceIcon } from "@/pages/superMagic/components/TopicFilesButton/components/FileResourceIcon"
+import { resolveFilePresentation } from "@/pages/superMagic/components/TopicFilesButton/utils/file-presentation"
+import { observer } from "mobx-react-lite"
+import { useMessageListContext } from "@/pages/superMagic/components/MessageList/context"
 import { useState } from "react"
 import { Paperclip } from "lucide-react"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/shadcn-ui/popover"
-import MagicFileIcon from "@/components/base/MagicFileIcon"
 import { cn } from "@/utils/cn"
 import type { MentionListItem } from "@/components/business/MentionPanel/tiptap-plugin/types"
 import type {
@@ -19,6 +22,7 @@ interface AttachmentHoverButtonProps {
 }
 
 function AttachmentHoverButton({ attachments, t, className }: AttachmentHoverButtonProps) {
+	const { projectFilesStore } = useMessageListContext()
 	const fileCount = attachments.length
 	const [open, setOpen] = useState(false)
 	const { t: tSuper } = useTranslation("super")
@@ -90,7 +94,16 @@ function AttachmentHoverButton({ attachments, t, className }: AttachmentHoverBut
 							>
 								{/* File Icon */}
 								<div className="flex h-6 w-6 shrink-0 items-center justify-center">
-									<MagicFileIcon type={fileExtension} size={24} />
+									<FileResourceIcon
+										presentation={resolveFilePresentation(
+											{ ...mentionData, file_extension: fileExtension },
+											{
+												context: projectFilesStore?.filePresentationContext,
+												index: projectFilesStore?.filePresentationIndex,
+											},
+										)}
+										size={24}
+									/>
 								</div>
 
 								{/* File Name */}
@@ -106,4 +119,4 @@ function AttachmentHoverButton({ attachments, t, className }: AttachmentHoverBut
 	)
 }
 
-export default AttachmentHoverButton
+export default observer(AttachmentHoverButton)

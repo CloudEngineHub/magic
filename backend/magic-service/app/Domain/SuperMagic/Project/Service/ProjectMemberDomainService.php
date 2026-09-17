@@ -12,6 +12,7 @@ use App\Domain\SuperMagic\Project\Entity\ProjectMemberSettingEntity;
 use App\Domain\SuperMagic\Project\Entity\ValueObject\MemberJoinMethod;
 use App\Domain\SuperMagic\Project\Entity\ValueObject\MemberRole;
 use App\Domain\SuperMagic\Project\Entity\ValueObject\MemberType;
+use App\Domain\SuperMagic\Project\Entity\ValueObject\ProjectSortMode;
 use App\Domain\SuperMagic\Project\Repository\Facade\ProjectMemberRepositoryInterface;
 use App\Domain\SuperMagic\Project\Repository\Facade\ProjectMemberSettingRepositoryInterface;
 use App\Domain\SuperMagic\Project\Repository\Facade\ProjectRepositoryInterface;
@@ -259,6 +260,19 @@ class ProjectMemberDomainService
         return $this->projectRepository->updateUpdatedAtToNow($projectId);
     }
 
+    /** 查看只更新个人活跃；内容操作仍走 updateUserLastActiveTime 更新项目时间。 */
+    public function recordProjectVisit(string $userId, int $projectId, string $organizationCode): string
+    {
+        // upsert 保留已有置顶、排序和工作区绑定，并避免首次访问并发创建重复设置。
+        $this->projectMemberSettingRepository->batchEnsureSettings($userId, [$projectId], $organizationCode);
+        $setting = $this->projectMemberSettingRepository->findByUserAndProject($userId, $projectId);
+        if ($setting === null) {
+            throw new \RuntimeException('Project visit settings were not persisted');
+        }
+
+        return $setting->getLastActiveAt();
+    }
+
     /**
      * 删除项目时清理相关的成员设置.
      */
@@ -377,6 +391,7 @@ class ProjectMemberDomainService
         string $sortField = 'last_active_at',
         string $sortDirection = 'desc',
         bool $showHidden = false,
+        ?ProjectSortMode $sortMode = null,
     ): array {
         // 判断是否限制工作区（null 或 0 均表示不限制）
         $limitWorkspace = $workspaceId !== null && $workspaceId > 0;
@@ -391,7 +406,8 @@ class ProjectMemberDomainService
             $sortField,
             $sortDirection,
             $organizationCodes,
-            $showHidden
+            $showHidden,
+            $sortMode
         );
     }
 

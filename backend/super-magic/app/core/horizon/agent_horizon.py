@@ -2,6 +2,52 @@
 
 替换全局单例 FileTimestampManager，并统一编排注入给 LLM 的动态上下文：
 当前时间、文件变化 Diff、系统通知等，未来可扩展更多上下文类型。
+
+
+首次信息与后续变化分开处理。 新会话开始时，先把已知的环境、模型、工作区、身份和用户资料等初始信息提供一次。以后开始新的 Loop，不重复整套初始信息。对话压缩后，需要恢复的初始信息再提供一次；用户资料从已保存的查询结果恢复，不重新访问账户接口。
+
+下表描述完成首次展示后的正常处理。表中的「检查」都在代码执行到相应位置时进行，没有额外的定时后台监听。
+
+| 告诉模型什么 | 什么时候检查或查询 | 什么情况下写入上下文 | 会重复写多少次 |
+|---|---|---|---|
+| 当前时间 | 每次 Loop 开始时，以及每批工具执行结束后 | 每次都写入当时的时间 | 一个 Loop 内可以多次；Loop 结束刷新账户时不再单独写时间 |
+| 运行环境是否重启 | 每次 Loop 开始时，以及每批工具执行结束后 | 发现当前 Python 进程与之前不同 | 没重启就不重复写；检测到重启时写入变化 |
+| 当前工作区、项目和话题 | 每次 Loop 开始时，以及每批工具执行结束后 | 当前业务位置与上次提供的信息不同 | 未变化不写；一个 Loop 内若多次切换，可以多次写 |
+| 正在使用的文本模型 | 每次 Loop 开始时，以及每批工具执行结束后 | 现有模型变化标记表明需要更新 | 没变化不重复写 |
+| 可用的图像、视频模型及其用法 | 每次 Loop 开始时，以及每批工具执行结束后 | 图像或视频模型发生变化，且已有有效能力信息 | 只更新发生变化的部分 |
+| 工作区文件列表 | 每次 Loop 开始时，以及每批工具执行结束后 | 文件或目录路径增加、删除 | 没有路径变化不写；不把文件内容修改当作路径变化 |
+| 已追踪文件的内容变化 | 每次 Loop 开始时，以及每批工具执行结束后 | 检测到相对已知内容的变化 | 没变化不写；多次检测到新的变化时可以多次写 |
+| 已观察的浏览器页面变化 | 每次 Loop 开始时，以及每批工具执行结束后 | 已观察页面发生有效地址跳转或关闭 | 无相关变化不写；仅标题或地址锚点变化不单独通知 |
+| 用户当前页面的信息 | 每次 Loop 开始时，以及每批工具执行结束后 | 前端提供的页面资料新增、改变或明确清空 | 没变化不重复写 |
+| 已登录的本地 CLI 信息 | 每次 Loop 开始时，以及每批工具执行结束后 | 已收到的 CLI 状态变为新的非空内容 | 没变化不写；当前变空时没有单独的清空通知 |
+| 用户希望使用的语言 | 每次 Loop 开始时，以及每批工具执行结束后 | 语言偏好改变 | 不改变就不重复写 |
+| 对话已占用多少上下文 | 每次 Loop 开始时，以及每批工具执行结束后 | 首次有有效用量，或用量变化达到既有阈值 | 未达到阈值不写；达到后可以再次写，不按工具数量机械重复 |
+| 系统通知 | 每次 Loop 开始时，以及每批工具执行结束后 | 有尚未处理的新通知 | 同一通知按现有规则处理后不重复；新通知可以继续写 |
+| 本次恢复运行要继续处理的事项 | 每次 Loop 开始时，以及每批工具执行结束后 | 有明确分配给本次运行、尚未完成注入的恢复事项 | 仅处理本次运行的事项；按现有写入确认和恢复规则处理 |
+| Claw 启动时还没读完哪些必读文件 | 每次 Loop 开始时，以及每批工具执行结束后 | 仍有必读文件未读完 | 未读完时重复提醒；读完即停止 |
+| Agent 自己是谁、以什么角色工作 | 每次 Loop 开始时，以及每批工具执行结束后 | 身份、主／子角色、管理对象或对外名称改变 | 首次提供后，无变化就不重复写 |
+| 用户基本资料 | 会话首次查询；以后每个主 Agent Loop 正常结束时查询一次 | 姓名、联系方式、组织等资料与上次写入的结果不同 | 任务执行中不自动写变化；结束时无变化写 0 次，有变化写 1 次 |
+| 当前套餐（有商业实现时） | 与用户资料共用同一次查询 | 套餐名称、有效期、范围或查询状态改变 | 任务执行中不自动写变化；结束时最多写入一次变化 |
+| 当前可见积分（有商业实现时） | 与用户资料共用同一次查询 | 可见余额、范围或查询状态改变 | 任务执行中不自动写变化；结束时最多写入一次变化 |
+
+套餐、积分和基本资料虽然分三行说明，实际通过同一个用户接口取得；若三项都变化，合并为一次用户资料更新。这里只说明自动处理，Agent 主动调用查询工具仍可立即取得最新结果。
+
+次数示例：同一会话中的第二个 Loop，执行了四批工具，期间没有压缩。 假设五个既有环境检查位置都正常执行：Loop 开始一次，四批工具结束后各一次。
+
+| 内容 | 这个 Loop 检查或查询几次 | 这个 Loop 实际写几次 |
+|---|---|---|
+| 当前时间 | 读取 5 次 | 写入 5 次当前时间 |
+| 文件内容变化 | 检查 5 次 | 五次都没有新变化则写 0 次；只有一次检测到新变化则写 1 次 |
+| Agent 身份 | 检查 5 次 | 身份未变化，写 0 次 |
+| 用户资料、套餐、积分 | 整个主 Loop 正常结束后合并查询 1 次 | 无变化写 0 次；有变化合并写 1 次 |
+
+第一个 Loop 开始时还会首次查询并提供完整资料；压缩后从已有安全快照恢复，不重新查询。
+
+监听或查询、生成文本、写入历史、模型读取是不同动作。用户资料与工作区快照一样，
+在构建内容通过预算检查后，由 Horizon 内部更新本次采用的 baseline，再返回字符串。
+工具序列未完整或内容超限时保留基准；Loop 结束的变化由下一次模型请求读取，不重写已完成回复。
+特殊工具原有的跳过注入规则不变；结束刷新不处理待入库用户消息、通知或恢复事项。
+上下文用量继续使用原有 5／3／1 个百分点阈值；文件、浏览器和时间保护保持原实现。
 """
 from __future__ import annotations
 
@@ -13,7 +59,8 @@ import html
 import re
 import time
 import uuid
-from datetime import datetime, timezone
+from collections.abc import Sequence
+from datetime import date, datetime, timezone
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Optional, Set, Tuple, Union
 from urllib.parse import urldefrag
@@ -25,12 +72,17 @@ if TYPE_CHECKING:
 
 from agentlang.chat_history.chat_history_models import UserMessage
 from agentlang.logger import get_logger
+from agentlang.utils.token_estimator import num_tokens_from_string
 from app.core.horizon.diff_builder import detect_file_changes
+from app.core.horizon.memory_directory import render_memory_directory
 from app.core.horizon.models import (
     BrowserPageObservation,
     ContextUsage,
     FileContextRecord,
+    HorizonDisplayBudget,
+    HorizonInjectionPoint,
     HorizonState,
+    MemoryDirectorySnapshot,
     ImageModelState,
     ManualContextWindowState,
     PendingNotification,
@@ -45,7 +97,10 @@ from app.core.horizon.models import (
     VideoModelState,
 )
 from app.core.horizon.store import HorizonStore
+from app.core.entity.user_context import UserContextSnapshot
+from app.core.horizon.profile_context import build_agent_identity, render_agent_identity, render_user_context
 from app.core.process_runtime import PROCESS_STARTED_AT_NS
+from app.core.skill_utils.suggestions import SKILL_SUGGESTION_NOTIFICATION_SOURCE, SkillSuggestion
 from app.utils.file_utils import calculate_file_hash, get_fresh_file_stat
 
 logger = get_logger(__name__)
@@ -53,10 +108,13 @@ logger = get_logger(__name__)
 # 与原 FileTimestampManager 保持一致
 HASH_DETECTION_THRESHOLD = 5 * 1024 * 1024   # 5 MB
 NETWORK_FS_MTIME_BUFFER = 1.0                  # seconds
+"""
+线上网络文件系统的元数据可能延迟约 1 秒；这个容差是实际使用形成的保护。
+MOCK DEMO：刚写入后 path stat 暂时返回较旧时间，不能据此误判为外部变更并阻止下一次编辑。
+大于 5 MiB 的文件继续使用 __mtime__ 信号；分段哈希仍会读取全文，不可替换这条快速路径。
+"""
 VALIDATION_ERROR_NOT_READ = "File must be read before editing. Please read the file first."
 VALIDATION_ERROR_CHANGED = "File changed since last read. Please read the file again."
-FILE_CONTENT_SNAPSHOT_MAX_BYTES = 64 * 1024   # 64 KB — 整文件快照上限
-HORIZON_CONTEXT_MAX_CHARS = 32 * 1024          # 32 KB — 单条 horizon 注入上限
 HORIZON_CONTEXT_OVERSIZED_NOTICE = (
     "<system_injected_context>\n"
     '<horizon_update_status status="omitted" reason="size_limit_exceeded">\n'
@@ -100,6 +158,7 @@ _DIAGNOSTIC_BLOCK_TAGS = (
     "local_cli_context_changed",
     "user_preferred_language_changed",
     "file_changes",
+    "memory_directory",
     "notifications",
     "resumptions",
     "magiclaw_startup",
@@ -154,9 +213,16 @@ async def _read_file_content_for_snapshot(abs_path: str) -> tuple[str, str, Opti
     from app.utils.async_file_utils import async_read_text, async_stat
     try:
         stat = await async_stat(abs_path)
-        if stat.st_size > FILE_CONTENT_SNAPSHOT_MAX_BYTES:
+        if stat.st_size > HASH_DETECTION_THRESHOLD:
             return "", "metadata_only", "file_too_large"
+        """
+        Token 限制缓存多少正文，5 MiB 保护实际自动读取量；两者不能互相替代。
+        例：50 MiB 文件只记录元数据，不为估算 Token 读一遍；500 KiB 文件可以读取，
+        但正文超过缓存 Token 预算时仍只保留元数据。缓存额度变大不等于放弃大文件保护。
+        """
         content = await async_read_text(abs_path)
+        if num_tokens_from_string(content) > HorizonDisplayBudget.from_config().file_snapshot_max_tokens:
+            return "", "metadata_only", "snapshot_token_limit"
         return content, "full", None
     except Exception as e:
         logger.debug(f"[AgentHorizon] 读取文件快照失败 {abs_path}: {e}")
@@ -391,6 +457,7 @@ class AgentHorizon:
         # 持久化 state.* 则始终表达模型上次已经看到的 baseline。
         self._workspace_files_current: Optional[str] = None
         self._workspace_entries_current: Optional[list] = None
+        self._memory_directory_current: MemoryDirectorySnapshot | None = None
         self._client_context_current: Optional[str] = None
         self._cli_status_current: Optional[str] = None
         self._language_current: Optional[str] = None
@@ -458,6 +525,7 @@ class AgentHorizon:
 
         self._workspace_files_current = None
         self._workspace_entries_current = None
+        self._memory_directory_current = None
         self._client_context_current = None
         self._cli_status_current = None
         self._language_current = None
@@ -588,9 +656,14 @@ class AgentHorizon:
         )
 
     async def validate_file_not_modified(
-        self, file_path: Union[str, Path]
+        self, file_path: Union[str, Path], *, allow_changed: bool = False
     ) -> Tuple[bool, str]:
-        """编辑前校验文件自上次读/写后是否被外部修改。"""
+        """编辑前校验文件观察记录及当前版本。
+
+        allow_changed 仅供已确认唯一精确目标的调用方使用：无关正文变化可以通过，
+        无观察记录、缺历史 hash 或检查失败仍拒绝。范围编辑保留默认严格校验。
+        此处不更新记录，避免失败的编辑尝试成为新的观察依据。
+        """
         await self._ensure_loaded()
         abs_path = _abs(file_path)
 
@@ -607,12 +680,12 @@ class AgentHorizon:
                 if not rec.file_hash:
                     return False, VALIDATION_ERROR_CHANGED
                 current_hash = await calculate_file_hash(abs_path)
-                if current_hash != rec.file_hash:
+                if current_hash != rec.file_hash and not allow_changed:
                     return False, VALIDATION_ERROR_CHANGED
                 return True, ""
             else:
                 # 大文件：mtime 快速校验
-                if mtime_ms > rec.file_mtime_ms:
+                if mtime_ms > rec.file_mtime_ms and not allow_changed:
                     return False, VALIDATION_ERROR_CHANGED
                 return True, ""
         except FileNotFoundError:
@@ -643,13 +716,22 @@ class AgentHorizon:
         - file_records：清空，强制重新读取才能编辑
         - image_model / video_model：清空，确保新上下文重新获得模型信息
         - _is_first_injection：重置为 True，下次 build_context_update 输出完整 initial_context
-        - pending_notifications：保留，下次 build_context_update 仍会投递到新上下文
+        - pending_notifications：保留其它通知；旧 Skill 建议由压缩模型的新选择替代
+        - suggested_skill_names：清空，新上下文可以接收新的建议
         - workspace_files/language：保留（首次注入时重新全量输出给新上下文）
         - process_started_at_ns：保留（进程代次独立于上下文窗口）
         - session 内存计数器：归零
         """
         await self._ensure_loaded()
         self._state.file_records.clear()
+        # 新窗口没有见过目录成员；下次从当前项目根重新生成首次发现信息。
+        self._state.memory_directory = None
+        self._state.suggested_skill_names.clear()
+        self._state.pending_notifications = [
+            notification
+            for notification in self._state.pending_notifications
+            if notification.source != SKILL_SUGGESTION_NOTIFICATION_SOURCE
+        ]
         self._state.image_model = ImageModelState()
         self._state.video_model = VideoModelState()
         self._context_used = 0
@@ -663,6 +745,8 @@ class AgentHorizon:
         self._state.context_usage_baseline_used = 0
         self._state.context_usage_baseline_total = 0
         self._state.context_usage_baseline_used_pct = 0
+        self._state.user_context_baseline = None
+        self._state.agent_identity = None
 
         # magiclaw：重算固定文件集合和 BOOTSTRAP 状态，清空已读记录，强制重新进入必读流程
         # file_records 已被清空，所以无法从中恢复已读状态，这里必须走完整重置
@@ -690,7 +774,7 @@ class AgentHorizon:
         """read_file 工具成功读取后调用。
 
         Horizon 自主决定是否读取整文件并保存快照：
-        - 小文件（<= FILE_CONTENT_SNAPSHOT_MAX_BYTES）：读整文件存快照
+        - 自动读取范围内（<= 5 MiB）且正文未超 Token 缓存预算：读整文件存快照
         - 大文件或读取失败：file_content 置空，变化时退化为 summary
         """
         await self._ensure_loaded()
@@ -968,6 +1052,68 @@ class AgentHorizon:
             content=content,
         )
         self._state.pending_notifications.append(notif)
+
+    async def suggest_skills(
+        self,
+        suggestions: Sequence[SkillSuggestion],
+        *,
+        source: str,
+    ) -> None:
+        """将调用方选出的可用 Skill 建议入队；不推断任务相关性，也不自动读取。
+
+        例：渠道与压缩恢复都建议同一个 Skill，本上下文只提醒一次；模型没有读取也不重试。
+        压缩或 /new 重置记录，重启和 fork 则沿用当前上下文的记录。
+        """
+        if not suggestions or self._agent_context is None:
+            return
+
+        from app.core.skill_utils.manager import find_skill
+
+        await self._ensure_loaded()
+        excluded = {
+            name.strip().casefold()
+            for name in self._agent_context.get_excluded_skills()
+        }
+        already_suggested = {name.casefold() for name in self._state.suggested_skill_names}
+        available: dict[str, SkillSuggestion] = {}
+        for suggestion in suggestions:
+            requested_key = suggestion.name.casefold()
+            if requested_key in excluded or requested_key in already_suggested or requested_key in available:
+                continue
+            try:
+                skill = await find_skill(suggestion.name, agent_name=self._agent_context.agent_name)
+            except Exception as error:
+                logger.warning(
+                    "[AgentHorizon] Skill 建议解析失败: source=%s skill=%s error=%s",
+                    source, suggestion.name, error,
+                )
+                continue
+            if skill is None:
+                continue
+            name = skill.name.strip()
+            key = name.casefold()
+            if not name or key in excluded or key in available:
+                continue
+            available[key] = SkillSuggestion(name=name, reason=suggestion.reason)
+
+        # 查找文件会让出事件循环；全部查找完成后再读最新记录，入队和登记之间不 await。
+        # 不用 loaded_skills 或 file_records 推断完整阅读，已预加载的内容由模型自行跳过。
+        suggested = {name.casefold() for name in self._state.suggested_skill_names}
+        pending = [item for key, item in available.items() if key not in suggested]
+        if not pending:
+            return
+        lines = ["Suggested skills:"]
+        lines.extend(f"- {html.escape(item.name)}: {html.escape(item.reason)}" for item in pending)
+        lines.append(
+            "Read any skill you still need with read_skills. Skip skills that are already "
+            "available in this context or are not relevant to the remaining work."
+        )
+        self.push_notification(SKILL_SUGGESTION_NOTIFICATION_SOURCE, "\n".join(lines))
+        self._state.suggested_skill_names.extend(item.name for item in pending)
+        logger.debug(
+            "[AgentHorizon] Skill 建议已入队: source=%s skills=%s",
+            source, [item.name for item in pending],
+        )
 
     def push_user_message(
         self,
@@ -1319,6 +1465,23 @@ class AgentHorizon:
             self._workspace_files_current = snapshot.display
             self._workspace_entries_current = list(snapshot.entries)
 
+    async def set_memory_directory_snapshot(self, snapshot: MemoryDirectorySnapshot | None) -> None:
+        """
+        接收本轮目录快照；扫描失败或没有作用域时不覆盖上次成功结果。
+
+        current 是刚观察到的事实，state.memory_directory 是已进入模型上下文的比较基准。
+        先暂存再构建通知；本轮扫描失败传 None 时不产生删除通知，也不改写已保存的基准。
+        """
+        await self._ensure_loaded()
+        self._memory_directory_current = snapshot
+
+    def _build_memory_directory_context(self, today_date: str) -> str:
+        if self._memory_directory_current is None:
+            return ""
+        return render_memory_directory(
+            self._memory_directory_current, self._state.memory_directory, date.fromisoformat(today_date),
+        )
+
     async def set_client_context(self, content: str) -> None:
         """更新运行时 current 客户端页面上下文，不直接覆盖持久化 baseline。"""
         await self._ensure_loaded()
@@ -1347,7 +1510,7 @@ class AgentHorizon:
     # 核心：构建注入给 LLM 的动态上下文
     # ─────────────────────────────────────────────────────────────────────────
 
-    def _log_oversized_context_update(self, content: str, injection_point: str) -> None:
+    def _log_oversized_context_update(self, content: str, injection_point: HorizonInjectionPoint) -> None:
         file_count, largest_file_path, largest_file_len = _largest_xml_block(content, "file", "path")
         notification_count, largest_notification_source, largest_notification_len = _largest_xml_block(
             content, "notification", "source"
@@ -1359,7 +1522,8 @@ class AgentHorizon:
             f"injection_point={injection_point} "
             f"horizon_file={getattr(self._store, 'path', 'unknown')} "
             f"content_len={len(content):,} "
-            f"limit={HORIZON_CONTEXT_MAX_CHARS:,} "
+            f"content_tokens={num_tokens_from_string(content):,} "
+            f"limit={HorizonDisplayBudget.from_config().context_max_tokens:,} limit_unit=tokens "
             f"sha256={_sha256_short(content)} "
             f"blocks={_format_context_block_lengths(content)} "
             f"workspace_entries={len(self._get_workspace_entries_current())} "
@@ -1374,9 +1538,65 @@ class AgentHorizon:
             f"largest_notification_len={largest_notification_len:,}"
         )
 
-    async def build_context_update(self, injection_point: str = "unknown") -> str:
+    async def prepare_user_context_subject(self, user_id: str, organization_code: str) -> None:
+        await self._ensure_loaded()
+        auth = self._agent_context.get_user_context_auth() if self._agent_context else None
+        expected_subject = (auth.user_id, auth.organization_code) if auth else ("", "")
+        if (user_id, organization_code) != expected_subject:
+            return
+        current = self._state.user_context
+        if current is not None and (current.user_id != user_id or current.organization_code != organization_code):
+            self._state.user_context = None
+            self._state.user_context_baseline = None
+            self._state.user_context_auto_fetch_attempted = False
+            await self._save()
+
+    async def get_user_context_snapshot(self) -> UserContextSnapshot | None:
+        await self._ensure_loaded()
+        return self._state.user_context
+
+    async def has_attempted_user_context_fetch(self) -> bool:
+        await self._ensure_loaded()
+        return self._state.user_context_auto_fetch_attempted
+
+    async def mark_user_context_fetch_attempted(self) -> None:
+        await self._ensure_loaded()
+        self._state.user_context_auto_fetch_attempted = True
+        await self._save()
+
+    async def set_user_context(self, snapshot: UserContextSnapshot) -> None:
+        """缓存当前安全资料；比较基准由构建上下文时更新。"""
+        await self._ensure_loaded()
+        auth = self._agent_context.get_user_context_auth() if self._agent_context else None
+        if auth is not None:
+            if snapshot.user_id != auth.user_id or snapshot.organization_code != auth.organization_code:
+                return
+        elif snapshot.user_id or snapshot.organization_code:
+            return
+        # 调用方只能存入默认安全副本；完整手机号即使已获工具授权也不写入 Horizon。
+        from app.service.user_context_service import UserContextService
+        if snapshot.context is not None:
+            snapshot = snapshot.model_copy(update={"context": UserContextService.for_model(snapshot.context)})
+        self._state.user_context = snapshot
+        await self._save()
+
+    async def inherit_user_context(self, parent: "AgentHorizon") -> None:
+        await self._ensure_loaded()
+        inherited = await parent.get_user_context_snapshot()
+        auth = self._agent_context.get_user_context_auth() if self._agent_context else None
+        if self._state.user_context is None and inherited is not None and auth is not None and (
+            inherited.user_id == auth.user_id and inherited.organization_code == auth.organization_code
+        ):
+            self._state.user_context = inherited
+            self._state.user_context_auto_fetch_attempted = await parent.has_attempted_user_context_fetch()
+            await self._save()
+
+    async def build_context_update(
+        self,
+        injection_point: HorizonInjectionPoint = HorizonInjectionPoint.UNKNOWN,
+    ) -> str:
         """
-        编排所有动态上下文，返回完整的 <system_injected_context> XML 文本，每次调用均输出。
+        编排动态上下文并返回字符串。Loop 结束只返回用户变化；无变化时返回空字符串。
 
         首次注入（_is_first_injection=True）时包含 <initial_context> 全量块：
           当前时间、运行环境、LLM 模型、图片模型、workspace_files、user_preferred_language
@@ -1396,6 +1616,26 @@ class AgentHorizon:
         超过安全上限时丢弃原始内容，返回轻量状态消息，并保留当前 baseline。
         """
         await self._ensure_loaded()
+
+        user_snapshot = self._state.user_context
+        # Loop 内仅恢复尚未提供的完整资料；手动查询产生的新值统一留到 Loop 结束。
+        include_user = (
+            injection_point == HorizonInjectionPoint.AFTER_MAIN_AGENT_RUN
+            or self._state.user_context_baseline is None
+            or injection_point == HorizonInjectionPoint.BEFORE_FIRST_LLM
+        )
+        user_block = render_user_context(user_snapshot, self._state.user_context_baseline) if include_user else ""
+        if injection_point == HorizonInjectionPoint.AFTER_MAIN_AGENT_RUN:
+            if user_snapshot is None or not user_block:
+                return ""
+            content = "\n".join(("<system_injected_context>", user_block, "</system_injected_context>"))
+            if num_tokens_from_string(content) > HorizonDisplayBudget.from_config().context_max_tokens:
+                self._log_oversized_context_update(content, injection_point)
+                return HORIZON_CONTEXT_OVERSIZED_NOTICE
+            # 结束路径同样在预算检查后更新本次资料基准，不消费其他监控数据。
+            self._state.user_context_baseline = user_snapshot
+            await self._save()
+            return content
 
         # 并发计算所有被追踪文件的当前 hash 和 mtime
         current_hashes: dict[str, tuple[str, int]] = {}
@@ -1420,8 +1660,13 @@ class AgentHorizon:
             current_hashes[abs_path] = (h, size)
             current_mtimes[abs_path] = mtime_ms
 
-        # 文件变化检测
-        file_blocks = await detect_file_changes(self._state, current_hashes, current_mtimes)
+        # 只替换文件展示策略；前面的并发采集、5 MiB 分界和编辑前校验保持原样。
+        display_budget = HorizonDisplayBudget.from_config()
+        file_changes = await detect_file_changes(
+            self._state, current_hashes, current_mtimes, budget=display_budget,
+            max_read_bytes=HASH_DETECTION_THRESHOLD,
+        )
+        file_blocks = file_changes.blocks
         browser_pages_context, next_browser_pages = await self._build_browser_pages_changed_context()
 
         # 通知块
@@ -1459,6 +1704,9 @@ class AgentHorizon:
         # 同一天内省略周几、第几周、时区，只保留 "YYYY-MM-DD HH:MM:SS"
         time_display = now_str if date_changed else now_str[:19]
 
+        # 目录扫描由 Agent 提前完成；这里只比较并展示，整包超限时仍不推进基准。
+        memory_directory_context = self._build_memory_directory_context(today_date)
+
         current_workspace_files = self._get_workspace_files_current()
         current_workspace_entries = self._get_workspace_entries_current()
         current_client_context = self._get_client_context_current()
@@ -1478,6 +1726,11 @@ class AgentHorizon:
         injected_context_usage_used_pct = 0
 
         parts = ["<system_injected_context>"]
+        identity = build_agent_identity(self._agent_context) if self._agent_context else None
+        if identity is not None and identity != self._state.agent_identity:
+            parts.append(render_agent_identity(identity))
+        if user_block:
+            parts.append(user_block)
         was_first_injection = self._is_first_injection
         llm_model_change_injected = False
         media_model_change_injected = False
@@ -1655,6 +1908,9 @@ class AgentHorizon:
             parts.extend(file_blocks)
             parts.append("</file_changes>")
 
+        if memory_directory_context:
+            parts.append(memory_directory_context)
+
         if browser_pages_context:
             parts.append(browser_pages_context)
 
@@ -1676,7 +1932,11 @@ class AgentHorizon:
         parts.append("</system_injected_context>")
         context_update = "\n".join(parts)
 
-        if len(context_update) > HORIZON_CONTEXT_MAX_CHARS:
+        if num_tokens_from_string(context_update) > display_budget.context_max_tokens:
+            """
+            单个文件、目录各自放得下，和其它通知拼起来仍可能超限。
+            此时返回轻量提示，并保留旧比较基准；下一轮仍有机会把未交付的变化告诉模型。
+            """
             self._log_oversized_context_update(context_update, injection_point)
             return HORIZON_CONTEXT_OVERSIZED_NOTICE
 
@@ -1695,6 +1955,27 @@ class AgentHorizon:
 
         # 注入完成后，把 current staging 提交成新的持久化 baseline。
         persistence_changed = False
+        current_user_context = self._state.user_context
+        if (
+            user_block
+            and user_snapshot is not None
+            and current_user_context is not None
+            and current_user_context.user_id == user_snapshot.user_id
+            and current_user_context.organization_code == user_snapshot.organization_code
+        ):
+            # 采用本次正文对应的版本，不能把构建期间取得的新资料一起标为已提供。
+            self._state.user_context_baseline = user_snapshot
+            persistence_changed = True
+        if identity != self._state.agent_identity:
+            self._state.agent_identity = identity
+            persistence_changed = True
+        if memory_directory_context:
+            self._state.memory_directory = self._memory_directory_current
+            """
+            只保存扫描范围内的成员事实，沿用 Horizon 原有保存／fork 入口。
+            年月折叠不丢掉底层条目，也不额外记录某个目录名称是否已经被模型逐项读过。
+            """
+            persistence_changed = True
         if self._state.last_injected_date != today_date:
             self._state.last_injected_date = today_date
             persistence_changed = True
@@ -1744,12 +2025,36 @@ class AgentHorizon:
             persistence_changed = True
 
         state_changed = bool(file_blocks) or bool(self._state.pending_notifications) or persistence_changed
+        displayed_files = {change.path: change for change in file_changes.changes}
         for abs_path, (cur_hash, cur_size) in current_hashes.items():
             rec = self._state.file_records.get(abs_path)
             if rec and cur_hash and rec.file_hash != cur_hash:
                 rec.file_hash = cur_hash
                 rec.file_size_bytes = cur_size
                 rec.file_mtime_ms = current_mtimes.get(abs_path, rec.file_mtime_ms)
+                r"""
+                只更新本文件快照，不重构其它动态上下文的提交状态。
+                完整 diff／真实全文已展示才缓存新正文；摘要不含新正文，清空旧快照，
+                防止下次把旧 A 与新版本 C 的差异误当成 B -> C。文件级编辑校验仍用原 hash/mtime。
+                比如 B 只显示「改了 80 行」，继续拿 A 生成后续 Diff 会让模型误拼正文。
+                清空的是无法再作为已知版本的缓存，磁盘文件和模型正常编辑能力不因此改变。
+                例：原缓存 A="format=csv\n"，磁盘已是 B="format=tsv\n"，整包通过预算检查后：
+                  展示完整 Diff／全文，且 B 可缓存 -> file_content=B，snapshot_mode="full"。
+                  只展示摘要或本文件被省略        -> file_content=""，snapshot_mode="metadata_only"，
+                                                     snapshot_reason="changed_content_not_cached"。
+                两种结果的 hash/size/mtime 都记录 B；只有第一种保留可供下次比较的正文。
+                整包超限则在前面直接返回，仍保留 A 的原状态，不会到达此处。
+                """
+                displayed = displayed_files.get(abs_path)
+                snapshot = displayed.new_snapshot if displayed is not None else None
+                if snapshot is not None and num_tokens_from_string(snapshot) <= display_budget.file_snapshot_max_tokens:
+                    rec.file_content = snapshot
+                    rec.metadata["snapshot_mode"] = "full"
+                    rec.metadata.pop("snapshot_reason", None)
+                else:
+                    rec.file_content = ""
+                    rec.metadata["snapshot_mode"] = "metadata_only"
+                    rec.metadata["snapshot_reason"] = "changed_content_not_cached"
 
         self._state.pending_notifications.clear()
 

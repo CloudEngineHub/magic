@@ -1,3 +1,4 @@
+import { resolveFilePresentation } from "@/pages/superMagic/components/TopicFilesButton/utils/file-presentation"
 import { observer } from "mobx-react-lite"
 import { useEffect, useState, type ReactNode } from "react"
 import { useTranslation } from "react-i18next"
@@ -13,8 +14,10 @@ import {
 	type ReferencedProjectAttachment,
 } from "@/pages/superMagic/services/referencedProjectAttachmentResolver"
 import { useMessageListContext } from "@/pages/superMagic/components/MessageList/context"
+import { createReferencedProjectPreviewFile } from "@/pages/superMagic/components/MessageList/utils/openMessageFile"
 import { normalizeInlineStyle } from "../normalizeInlineStyle"
 import { FileReference, getFileExtensionFromPath } from "./FileReference"
+import { UserFileReference } from "./UserFileReference"
 import { IconExternalLink } from "@tabler/icons-react"
 import { MentionItemType } from "@/components/business/MentionPanel/types"
 import type { TiptapMentionAttributes } from "@/components/business/MentionPanel/tiptap-plugin"
@@ -44,22 +47,6 @@ export interface MarkdownLinkProps {
 interface ReferencedProjectResolution {
 	href: string
 	file: ReferencedProjectAttachment | null
-}
-
-function createReferencedProjectPreviewFile(file: ReferencedProjectAttachment) {
-	return {
-		...file,
-		display_config: {
-			...(file.display_config || {}),
-			previewPolicy: {
-				...(file.display_config?.previewPolicy || {}),
-				standalone: true,
-				syncWithAttachments: false,
-				persistTab: false,
-				restoreAsActive: false,
-			},
-		},
-	}
 }
 
 export const MarkdownLink = observer((props: MarkdownLinkProps) => {
@@ -129,6 +116,16 @@ export const MarkdownLink = observer((props: MarkdownLinkProps) => {
 		})
 	}
 
+	if (fileTarget?.scope === "user") {
+		return (
+			<UserFileReference
+				selector={{ space_type: "user", space_relative_path: fileTarget.relativePath }}
+				label={children}
+				href={normalizedHref}
+			/>
+		)
+	}
+
 	if (resolvedFileInfo) {
 		// 复用解析结果的真实身份，不能根据展示名称在拖入时重新匹配文件。
 		const projectId =
@@ -152,6 +149,14 @@ export const MarkdownLink = observer((props: MarkdownLinkProps) => {
 			: undefined
 		return (
 			<FileReference
+				presentation={resolveFilePresentation(resolvedFileInfo, {
+					context: referencedProjectId
+						? { kind: "project", projectId: referencedProjectId }
+						: resolvedProjectFilesStore.filePresentationContext,
+					index: referencedProjectId
+						? undefined
+						: resolvedProjectFilesStore.filePresentationIndex,
+				})}
 				label={children}
 				href={normalizedHref}
 				mentionAttrs={mentionAttrs}

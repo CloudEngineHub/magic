@@ -1,4 +1,4 @@
-export type MediaResourceProvider = "canvas" | "project-file" | "upload-file"
+export type MediaResourceProvider = "canvas" | "project-file" | "user-file" | "upload-file"
 
 export type MediaResourceRendition = "thumbnail" | "preview"
 

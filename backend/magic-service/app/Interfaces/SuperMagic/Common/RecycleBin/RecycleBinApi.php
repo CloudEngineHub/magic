@@ -41,9 +41,15 @@ class RecycleBinApi extends AbstractApi
     public function getRecycleBinList(RequestContext $requestContext): array
     {
         $requestContext->setUserAuthorization($this->getAuthorization());
-        $requestDTO = RecycleBinListRequestDTO::fromRequest($this->request);
-
-        return $this->recycleBinAppService->getRecycleBinList($requestContext, $requestDTO)->toArray();
+        try {
+            $requestDTO = RecycleBinListRequestDTO::fromRequest($this->request);
+            return $this->recycleBinAppService->getRecycleBinList($requestContext, $requestDTO)->toArray();
+        } catch (InvalidArgumentException $e) {
+            throw new BusinessException(
+                \Hyperf\Translation\trans($e->getMessage()),
+                GenericErrorCode::ParameterValidationFailed->value
+            );
+        }
     }
 
     /**
@@ -52,9 +58,15 @@ class RecycleBinApi extends AbstractApi
     public function getRecycleBinCounts(RequestContext $requestContext): array
     {
         $requestContext->setUserAuthorization($this->getAuthorization());
-        $requestDTO = RecycleBinCountsRequestDTO::fromRequest($this->request);
-
-        return $this->recycleBinAppService->getRecycleBinCounts($requestContext, $requestDTO)->toArray();
+        try {
+            $requestDTO = RecycleBinCountsRequestDTO::fromRequest($this->request);
+            return $this->recycleBinAppService->getRecycleBinCounts($requestContext, $requestDTO)->toArray();
+        } catch (InvalidArgumentException $e) {
+            throw new BusinessException(
+                \Hyperf\Translation\trans($e->getMessage()),
+                GenericErrorCode::ParameterValidationFailed->value
+            );
+        }
     }
 
     /**

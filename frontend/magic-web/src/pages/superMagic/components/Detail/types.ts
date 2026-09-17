@@ -1,3 +1,9 @@
+/** 已验证完整内容的只读供数入口，不承担草稿或保存职责。 */
+export interface TextReadOnlyPreview {
+	content: string
+	refresh: () => Promise<void>
+}
+
 /** 详情类型 */
 export enum DetailType {
 	Terminal = "terminal",
@@ -79,6 +85,12 @@ export interface DetailData {
 }
 
 /** 终端 Terminal */
+export interface TerminalToolInfo {
+	id: string
+	action: string
+	remark: string
+}
+
 export interface DetailTerminalData {
 	action: "execute" | string
 	finished: boolean
@@ -197,4 +209,16 @@ export interface FileTreeNode {
 	children: FileTreeNode[] | null
 	type: "file" | "directory"
 	error: string | null
+}
+
+/** 文本预览复用原 UI；外部会话独占内容、草稿与修订基准，保存失败必须 reject。 */
+export interface TextFileSession {
+	content: string
+	draft: string
+	loading: boolean
+	loadError: boolean
+	saving: boolean
+	setDraft: (content: string) => void
+	refresh: () => Promise<void>
+	save: () => Promise<void>
 }

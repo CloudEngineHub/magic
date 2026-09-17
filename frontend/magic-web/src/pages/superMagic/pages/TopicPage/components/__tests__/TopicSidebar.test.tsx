@@ -36,8 +36,8 @@ vi.mock("@/pages/superMagic/components/SiderTask", () => ({
 	default: () => <div data-testid="sider-task" />,
 }))
 
-vi.mock("@/pages/superMagic/components/LongTremMemory/components/MemorySider", () => ({
-	LongTremMemorySider: () => <div data-testid="long-memory-sider" />,
+vi.mock("@/pages/superMagic/components/UserSpace/UserSpacePanel", () => ({
+	default: () => <div data-testid="user-space-panel" />,
 }))
 
 vi.mock("@/pages/superMagic/components/ShareManagement/ShareManagementPanel", () => ({
@@ -134,7 +134,7 @@ describe("TopicSidebar", () => {
 		)
 		expect(screen.getByTestId("topic-files-button")).toHaveTextContent("topicFiles.title")
 		expect(screen.getByTestId("project-sider-item-task")).toBeInTheDocument()
-		expect(screen.getByTestId("project-sider-item-longMemory")).toBeInTheDocument()
+		expect(screen.getByTestId("project-sider-item-userSpace")).toBeInTheDocument()
 		expect(screen.getByTestId("project-sider-item-share")).toBeInTheDocument()
 	})
 
@@ -147,7 +147,7 @@ describe("TopicSidebar", () => {
 		expect(screen.getByTestId("topic-files-button")).toHaveTextContent("topicFiles.fileTitle")
 		expect(screen.getByTestId("project-sider-item-share")).toBeInTheDocument()
 		expect(screen.queryByTestId("project-sider-item-task")).not.toBeInTheDocument()
-		expect(screen.queryByTestId("project-sider-item-longMemory")).not.toBeInTheDocument()
+		expect(screen.queryByTestId("project-sider-item-userSpace")).not.toBeInTheDocument()
 		expect(screen.queryByTestId("project-card-container")).not.toBeInTheDocument()
 	})
 
@@ -163,7 +163,7 @@ describe("TopicSidebar", () => {
 		expect(screen.getByTestId("audio-project-header")).toBeInTheDocument()
 		expect(screen.getByTestId("project-sider-item-topicFiles")).toBeInTheDocument()
 		expect(screen.queryByTestId("project-sider-item-task")).not.toBeInTheDocument()
-		expect(screen.queryByTestId("project-sider-item-longMemory")).not.toBeInTheDocument()
+		expect(screen.queryByTestId("project-sider-item-userSpace")).not.toBeInTheDocument()
 		expect(screen.queryByTestId("project-sider-item-share")).not.toBeInTheDocument()
 	})
 

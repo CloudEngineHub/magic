@@ -17,7 +17,9 @@ from agentlang.logger import get_logger
 from agentlang.tools.tool_result import ToolResult
 
 from app.core.context.agent_context import AgentContext
+from app.core.horizon.models import HorizonInjectionPoint
 from app.tools.core.tool_call_event_manager import ToolCallEventManager
+from app.tools.core.tool_result_content_manager import tool_result_content_manager
 from app.utils.async_file_utils import (
     async_exists,
     async_read_json,
@@ -228,10 +230,14 @@ class UserToolCallService:
 
         try:
             ctx_update = await pending.agent_context.horizon.build_context_update(
-                injection_point="after_user_tool_call_cancel"
+                injection_point=HorizonInjectionPoint.AFTER_USER_TOOL_CALL_CANCEL
             )
             if ctx_update:
-                await chat_history.append_user_message(ctx_update, show_in_ui=False, source="horizon")
+                await chat_history.append_user_message(
+                    ctx_update,
+                    show_in_ui=False,
+                    source="horizon",
+                )
         except Exception as e:
             logger.warning(f"[AgentHorizon] horizon injection after user_tool_call cancel failed: {e}")
 
@@ -287,8 +293,17 @@ class UserToolCallService:
             return
 
         try:
+            # 恢复入口绕过普通执行器；只转换写入历史的副本，AFTER 仍使用用户原文。
+            tool_context = ToolCallEventManager.create_tool_context(
+                pending.agent_context, pending.tool_call_id, pending.tool_name, pending.raw_params,
+            )
+            model_result = await tool_result_content_manager.prepare(
+                ToolResult(content=content, tool_call_id=pending.tool_call_id, extra_info=extra_info),
+                tool_name=pending.tool_name,
+                tool_context=tool_context,
+            )
             await chat_history.append_tool_message(
-                content=content,
+                content=model_result.content,
                 tool_call_id=pending.tool_call_id,
             )
             logger.info(f"Appended user_tool_call ToolResult: tool_call_id={pending.tool_call_id}")

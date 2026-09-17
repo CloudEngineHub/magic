@@ -18,7 +18,7 @@ File Operation Guidelines:
   - 查看前已通过其它途径得知文件大小在万字以内，且内容重要，决定读取全部：read_files(['a.txt', 'b.txt'], limit=-1)
 工作效率原则：
 - 若已决定读取多个文件，确保使用files参数一次性读取
-- 当你已经读取过文件内容且文件仅由你修改时，直接基于记忆执行操作，不要反复grep_search或read_file确认——相信你的上下文记忆，除非工具的提示说明文件内容有变化，避免过度防御性的重复读取。
+- 精确编辑需要已登记的文件观察；读取工具、grep_search 或可识别的单文件 shell 查看均可登记，用户片段不能代替记录。已有记录和精确目标时不必重复读取，局部读取不限制编辑位置；版本变化后仅唯一精确替换可继续，批量编辑要求每个实际替换项均唯一。只有摘要、目标不确定或判断依赖周边内容时，读取相关部分；工具拒绝时按提示处理。
 -->
 Reading Text Files:
 - When reading text files of unknown size: Use read_files to read first 200 lines to understand, then decide whether to read entire file. If decided to read all, ensure using limit=-1 for one-time read.
@@ -28,7 +28,7 @@ Reading Text Files:
   - Already know file size is within 10k words through other means and content is important, decide to read all: read_files(['a.txt', 'b.txt'], limit=-1)
 Work Efficiency Principles:
 - When decided to read multiple files, ensure using files parameter for one-time batch read.
-- When you've already read file content and the file is only modified by you, operate directly based on memory. Don't repeatedly grep_search or read_file to confirm—trust your context memory unless tool indicates file content has changed. Avoid excessively defensive repeated reads.
+- Exact edits require a recorded file observation from read tools, grep_search, or a recognized single-file shell view; user snippets do not replace that record. With a record and exact target text, do not read again just for confirmation. Partial reads do not restrict edit locations. After a version change, only unique exact replacements may proceed; every applied batch edit must be unique. Read relevant content when you only have a summary, the target is uncertain, or your decision depends on surrounding content. Follow the tool's guidance if it rejects the edit.
 
 <!--zh
 读数据类文件：
