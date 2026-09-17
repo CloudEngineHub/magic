@@ -1,6 +1,11 @@
 import type { Canvas } from "../../core/Canvas"
 import type { LayerElement } from "../../document/types"
 import type { Rect } from "../ids"
+import {
+	GeometryRTreeIndex,
+	type GeometrySpatialIndexEntry,
+	type GeometrySpatialIndexUpdate,
+} from "./GeometryRTreeIndex"
 
 interface GeometrySpatialQueryOptions {
 	elementIds?: Iterable<string>
@@ -36,7 +41,7 @@ function mergeRects(rects: Rect[]): Rect | null {
 	}
 }
 
-function expandRect(rect: Rect, padding: number): Rect {
+export function expandRect(rect: Rect, padding: number): Rect {
 	return {
 		x: rect.x - padding,
 		y: rect.y - padding,
@@ -45,7 +50,7 @@ function expandRect(rect: Rect, padding: number): Rect {
 	}
 }
 
-function containsRect(outer: Rect, inner: Rect): boolean {
+export function containsRect(outer: Rect, inner: Rect): boolean {
 	return (
 		inner.x >= outer.x &&
 		inner.y >= outer.y &&
@@ -54,7 +59,7 @@ function containsRect(outer: Rect, inner: Rect): boolean {
 	)
 }
 
-function intersectsRect(a: Rect, b: Rect): boolean {
+export function intersectsRect(a: Rect, b: Rect): boolean {
 	return (
 		a.x <= b.x + b.width &&
 		a.x + a.width >= b.x &&
@@ -63,23 +68,22 @@ function intersectsRect(a: Rect, b: Rect): boolean {
 	)
 }
 
-const DEFAULT_SPATIAL_CELL_SIZE = 2048
-const DIRECT_SCAN_CELL_TO_ALLOWED_RATIO = 8
+const DIRECT_SCAN_CANDIDATE_LIMIT = 32
 
 /**
  * 统一管理元素几何边界缓存。
  *
- * 这一层先提供稳定的缓存/失效接口，后续如果要接空间索引，
- * 可以在不改上层调用方的前提下替换 nearby 查询实现。
+ * 空间索引实现封装在这一层，上层调用方只依赖稳定的缓存、查询和失效接口。
  */
 export class GeometryCacheManager {
 	private canvas: Canvas
 	private elementBoundsCache: Map<string, Rect | null> = new Map()
 	private allElementsBoundsCache: Rect | null | undefined
-	private spatialIndex: Map<string, Set<string>> = new Map()
-	private elementSpatialCells: Map<string, string[]> = new Map()
+	private spatialIndex = new GeometryRTreeIndex()
 	private spatialIndexDirty = true
-	private readonly spatialCellSize = DEFAULT_SPATIAL_CELL_SIZE
+	// Coalesce repeated element changes and apply only the latest bounds before the next index query.
+	private pendingSpatialUpdates = new Set<string>()
+	private revision = 0
 
 	constructor(options: { canvas: Canvas }) {
 		this.canvas = options.canvas
@@ -152,165 +156,100 @@ export class GeometryCacheManager {
 		const allowedIds: ReadonlySet<string> | null = candidateElementIds
 			? (existingSetFilter ?? new Set(candidateElementIds))
 			: null
-		const estimatedCellCount = this.getCellCountForRect(queryRect)
 
-		if (allowedIds && this.shouldDirectScanAllowedIds(allowedIds, estimatedCellCount)) {
-			return this.queryAllowedIdsByRect(allowedIds, queryRect)
+		// For a tiny explicit candidate list, direct bounds checks are cheaper than traversing the
+		// complete index. The 32-item cutoff is the crossover observed in the 10k-element benchmark.
+		if (allowedIds && allowedIds.size <= DIRECT_SCAN_CANDIDATE_LIMIT) {
+			return this.queryElementIdsByRect(allowedIds, queryRect)
 		}
 
 		this.ensureSpatialIndex()
-
-		const candidateIds = new Set<string>()
-		const cellKeys = this.getCellKeysForRect(queryRect)
-		for (const cellKey of cellKeys) {
-			const cell = this.spatialIndex.get(cellKey)
-			if (!cell) continue
-			cell.forEach((elementId) => {
-				if (!allowedIds || allowedIds.has(elementId)) {
-					candidateIds.add(elementId)
-				}
-			})
-		}
-
-		const result: string[] = []
-		candidateIds.forEach((elementId) => {
-			const bounds = this.getElementBounds(elementId)
-			if (bounds && intersectsRect(bounds, queryRect)) {
-				result.push(elementId)
-			}
-		})
-		return result
+		return this.spatialIndex.queryElementIds(queryRect, allowedIds ?? undefined)
 	}
 
 	public containsRect(outer: Rect, inner: Rect): boolean {
 		return containsRect(outer, inner)
 	}
 
+	/**
+	 * Monotonic geometry revision used by shared viewport snapshots. A revision changes only when
+	 * cached bounds may be stale, so multiple consumers can reuse one spatial result safely.
+	 */
+	public getRevision(): number {
+		return this.revision
+	}
+
 	public invalidateElement(elementId: string): void {
-		this.invalidateElementInternal(elementId)
+		this.elementBoundsCache.delete(elementId)
+		this.allElementsBoundsCache = undefined
+		if (!this.spatialIndexDirty) this.pendingSpatialUpdates.add(elementId)
+		this.revision += 1
 	}
 
 	public invalidateElements(elementIds: ReadonlySet<string> | readonly string[]): void {
-		let hasInvalidated = false
-		elementIds.forEach((elementId) => {
-			this.invalidateElementInternal(elementId)
-			hasInvalidated = true
-		})
-		if (hasInvalidated) {
-			this.allElementsBoundsCache = undefined
+		const invalidatedIds = elementIds instanceof Set ? elementIds : new Set(elementIds)
+		if (invalidatedIds.size === 0) return
+
+		this.allElementsBoundsCache = undefined
+		for (const elementId of invalidatedIds) {
+			this.elementBoundsCache.delete(elementId)
+			if (!this.spatialIndexDirty) this.pendingSpatialUpdates.add(elementId)
 		}
+		this.revision += 1
 	}
 
 	public invalidateAll(): void {
 		this.elementBoundsCache.clear()
 		this.allElementsBoundsCache = undefined
 		this.spatialIndex.clear()
-		this.elementSpatialCells.clear()
 		this.spatialIndexDirty = true
+		this.pendingSpatialUpdates.clear()
+		this.revision += 1
 	}
 
 	public destroy(): void {
 		this.invalidateAll()
 	}
 
-	private invalidateElementInternal(elementId: string): void {
-		this.removeElementFromSpatialIndex(elementId)
-		this.elementBoundsCache.delete(elementId)
-		this.allElementsBoundsCache = undefined
-
-		if (!this.spatialIndexDirty) {
-			this.addElementToSpatialIndex(elementId)
-		}
-	}
-
-	private removeElementFromSpatialIndex(elementId: string): void {
-		const cellKeys = this.elementSpatialCells.get(elementId)
-		if (!cellKeys) return
-
-		for (const cellKey of cellKeys) {
-			const cell = this.spatialIndex.get(cellKey)
-			if (!cell) continue
-			cell.delete(elementId)
-			if (cell.size === 0) {
-				this.spatialIndex.delete(cellKey)
-			}
-		}
-		this.elementSpatialCells.delete(elementId)
-	}
-
-	private addElementToSpatialIndex(elementId: string): void {
-		if (!this.canvas.elementManager.isElementVisibleInDataTree(elementId)) return
-
-		const bounds = this.getElementBounds(elementId)
-		if (!bounds) return
-
-		const cellKeys = this.getCellKeysForRect(bounds)
-		this.elementSpatialCells.set(elementId, cellKeys)
-		for (const cellKey of cellKeys) {
-			let cell = this.spatialIndex.get(cellKey)
-			if (!cell) {
-				cell = new Set<string>()
-				this.spatialIndex.set(cellKey, cell)
-			}
-			cell.add(elementId)
-		}
-	}
-
 	private ensureSpatialIndex(): void {
-		if (!this.spatialIndexDirty) return
+		if (this.spatialIndexDirty) {
+			this.spatialIndex.rebuild(this.getSpatialIndexEntries())
+			this.spatialIndexDirty = false
+			this.pendingSpatialUpdates.clear()
+			return
+		}
 
-		this.spatialIndex.clear()
-		this.elementSpatialCells.clear()
+		if (this.pendingSpatialUpdates.size === 0) return
 
+		const updates: GeometrySpatialIndexUpdate[] = []
+		this.pendingSpatialUpdates.forEach((elementId) => {
+			const bounds = this.canvas.elementManager.isElementVisibleInDataTree(elementId)
+				? this.getElementBounds(elementId)
+				: null
+			updates.push({ elementId, bounds })
+		})
+		this.spatialIndex.replaceMany(updates)
+		this.pendingSpatialUpdates.clear()
+	}
+
+	private *getSpatialIndexEntries(): IterableIterator<GeometrySpatialIndexEntry> {
 		const elementIds = this.canvas.elementManager.getAllElementIds()
 		for (const elementId of elementIds) {
-			this.addElementToSpatialIndex(elementId)
+			if (!this.canvas.elementManager.isElementVisibleInDataTree(elementId)) continue
+			const bounds = this.getElementBounds(elementId)
+			if (bounds) yield { elementId, bounds }
 		}
-
-		this.spatialIndexDirty = false
 	}
 
-	private shouldDirectScanAllowedIds(
-		allowedIds: ReadonlySet<string>,
-		cellCount: number,
-	): boolean {
-		if (allowedIds.size === 0) return true
-		return cellCount > allowedIds.size * DIRECT_SCAN_CELL_TO_ALLOWED_RATIO
-	}
-
-	private queryAllowedIdsByRect(allowedIds: ReadonlySet<string>, queryRect: Rect): string[] {
+	private queryElementIdsByRect(elementIds: Iterable<string>, queryRect: Rect): string[] {
 		const result: string[] = []
-		allowedIds.forEach((elementId) => {
-			if (!this.canvas.elementManager.isElementVisibleInDataTree(elementId)) return
+		for (const elementId of elementIds) {
+			if (!this.canvas.elementManager.isElementVisibleInDataTree(elementId)) continue
 			const bounds = this.getElementBounds(elementId)
 			if (bounds && intersectsRect(bounds, queryRect)) {
 				result.push(elementId)
 			}
-		})
-		return result
-	}
-
-	private getCellCountForRect(rect: Rect): number {
-		const minCellX = Math.floor(rect.x / this.spatialCellSize)
-		const minCellY = Math.floor(rect.y / this.spatialCellSize)
-		const maxCellX = Math.floor((rect.x + rect.width) / this.spatialCellSize)
-		const maxCellY = Math.floor((rect.y + rect.height) / this.spatialCellSize)
-		return (maxCellX - minCellX + 1) * (maxCellY - minCellY + 1)
-	}
-
-	private getCellKeysForRect(rect: Rect): string[] {
-		const minCellX = Math.floor(rect.x / this.spatialCellSize)
-		const minCellY = Math.floor(rect.y / this.spatialCellSize)
-		const maxCellX = Math.floor((rect.x + rect.width) / this.spatialCellSize)
-		const maxCellY = Math.floor((rect.y + rect.height) / this.spatialCellSize)
-		const keys: string[] = []
-
-		for (let cellX = minCellX; cellX <= maxCellX; cellX += 1) {
-			for (let cellY = minCellY; cellY <= maxCellY; cellY += 1) {
-				keys.push(`${cellX}:${cellY}`)
-			}
 		}
-
-		return keys
+		return result
 	}
 }

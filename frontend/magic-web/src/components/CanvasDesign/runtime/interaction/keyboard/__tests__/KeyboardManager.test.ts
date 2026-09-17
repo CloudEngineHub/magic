@@ -8,6 +8,39 @@ afterEach(() => {
 })
 
 describe("KeyboardManager eraser history routing", () => {
+	it("emits restore mode while Alt is held and resets it on keyup, blur, and hidden", () => {
+		const container = document.createElement("div")
+		container.tabIndex = 0
+		document.body.append(container)
+		container.focus()
+		const eventEmitter = new EventEmitter()
+		const altDown = vi.fn()
+		const altUp = vi.fn()
+		eventEmitter.on("keyboard:alt:down", altDown)
+		eventEmitter.on("keyboard:alt:up", altUp)
+		const canvas = {
+			eventEmitter,
+			resetKeepRatioModifier: vi.fn(),
+			permissionManager: { can: () => true },
+		} as unknown as Canvas
+		const manager = new KeyboardManager({ canvas, container })
+
+		window.dispatchEvent(new KeyboardEvent("keydown", { key: "Alt", code: "AltLeft" }))
+		window.dispatchEvent(
+			new KeyboardEvent("keydown", { key: "Alt", code: "AltLeft", repeat: true }),
+		)
+		const outsideInput = document.createElement("input")
+		document.body.append(outsideInput)
+		outsideInput.focus()
+		window.dispatchEvent(new KeyboardEvent("keyup", { key: "Alt", code: "AltLeft" }))
+		Object.defineProperty(document, "visibilityState", { configurable: true, value: "hidden" })
+		document.dispatchEvent(new Event("visibilitychange"))
+		window.dispatchEvent(new Event("blur"))
+
+		expect(altDown).toHaveBeenCalledTimes(1)
+		expect(altUp).toHaveBeenCalledTimes(3)
+		manager.destroy()
+	})
 	it("routes undo and redo to the eraser session without emitting canvas history events", () => {
 		const container = document.createElement("div")
 		container.tabIndex = 0

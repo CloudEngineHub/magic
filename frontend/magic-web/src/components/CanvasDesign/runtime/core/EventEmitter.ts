@@ -140,6 +140,10 @@ export interface CanvasEventMap {
 	}
 	"canvas:dblclick": { x: number; y: number; canvasX: number; canvasY: number }
 	"element:contextmenu": { elementId: string; x: number; y: number }
+	/** 画布名称标签或菜单开始重命名，供 React overlay 同步输入框 */
+	"element:rename-start": { elementId: string }
+	/** 提交或取消画布重命名，供 React overlay 关闭输入框 */
+	"element:rename-end": { elementId: string }
 	"element:image:infoButtonClick": { elementId: string }
 	"element:video:infoButtonClick": { elementId: string }
 	/** 失败态点击重新生成，交给 UI 打开编辑器并恢复草稿 */
@@ -383,6 +387,7 @@ export interface CanvasEventMap {
 		strokeCount: number
 		canUndo: boolean
 		canRedo: boolean
+		mode: "erase" | "restore"
 	}
 
 	// 键盘事件
@@ -396,6 +401,8 @@ export interface CanvasEventMap {
 	"keyboard:zoom:fit": void
 	"keyboard:shift:down": void
 	"keyboard:shift:up": void
+	"keyboard:alt:down": void
+	"keyboard:alt:up": void
 	"keyboard:meta:down": void
 	"keyboard:meta:up": void
 	"keyboard:select:all": void
