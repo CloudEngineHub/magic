@@ -70,6 +70,10 @@ export class ElementDetailsRuntimeManager {
 			imageId,
 			imageIdSource: "user",
 		}
+		const contentProvenance = {
+			sidecarSource: "user" as const,
+			generateImageRequest: requestProvenance,
+		}
 		const current = this.provenance[elementId]
 		this.provenance = {
 			...this.provenance,
@@ -78,14 +82,14 @@ export class ElementDetailsRuntimeManager {
 						...current,
 						contentDetails: {
 							...current?.contentDetails,
-							[contentId]: { generateImageRequest: requestProvenance },
+							[contentId]: contentProvenance,
 						},
 					}
 				: {
 						...current,
 						contentDetails: {
 							...current?.contentDetails,
-							unknown: { generateImageRequest: requestProvenance },
+							unknown: contentProvenance,
 						},
 					},
 		}
