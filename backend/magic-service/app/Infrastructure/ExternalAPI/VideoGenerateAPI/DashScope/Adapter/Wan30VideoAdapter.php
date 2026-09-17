@@ -26,6 +26,8 @@ final class Wan30VideoAdapter implements VideoGenerationConnectivityTestableInte
 
     private const array GENERATION_FIELDS = ['resolution', 'duration_seconds', 'aspect_ratio', 'enhance_prompt', 'generate_audio', 'seed', 'watermark'];
 
+    private const int SMART_DURATION = -1;
+
     public function __construct(
         private Wan30GenerationCapabilityProvider $capabilityProvider,
         private DashScopeTransportInterface $transport,
@@ -79,7 +81,8 @@ final class Wan30VideoAdapter implements VideoGenerationConnectivityTestableInte
         $generationConfig = $capabilityData['generation'];
         $inputModeConfig = $capabilityData['input_modes'][$inputMode];
         $constraints = $capabilityData['constraints'];
-        $includeDuration = $inputMode !== VideoInputMode::VideoEdit->value;
+        $isVideoEdit = $inputMode === VideoInputMode::VideoEdit->value;
+        $includeDuration = ! $isVideoEdit;
         $this->validateGeneration($generation, $generationConfig, $includeDuration);
         $inputs = $this->normalizeMediaInputs($rawInputs);
 
@@ -107,6 +110,9 @@ final class Wan30VideoAdapter implements VideoGenerationConnectivityTestableInte
         }
 
         $parameters = $this->buildGenerationParameters($generation, $generationConfig, $acceptedParams, $ignoredParams, $includeDuration);
+        if ($inputMode === VideoInputMode::VideoEdit->value) {
+            $parameters['duration'] = self::SMART_DURATION;
+        }
         $this->markIgnoredParams($request, $rawInputs, $inputs, $acceptedParams, $ignoredParams);
 
         $operation->setAcceptedParams(array_values(array_unique($acceptedParams)));
@@ -383,6 +389,9 @@ final class Wan30VideoAdapter implements VideoGenerationConnectivityTestableInte
         return [];
     }
 
+    /**
+     * Reference images stay reference media: only keyframe mode may claim first/last frame semantics.
+     */
     private function buildImageReferenceMedia(array $inputs, array &$accepted): array
     {
         $images = $inputs['reference_images'] ?? [];
@@ -390,9 +399,12 @@ final class Wan30VideoAdapter implements VideoGenerationConnectivityTestableInte
             throw new InvalidArgumentException('Wan 3.x image reference mode requires exactly one image.');
         }
         $accepted[] = 'inputs.reference_images';
-        return [['type' => 'first_frame', 'url' => $images[0]['uri']]];
+        return [['type' => 'reference_image', 'url' => $images[0]['uri']]];
     }
 
+    /**
+     * Keyframe mode is the only mode that maps request frames to first_frame / last_frame media.
+     */
     private function buildKeyframeMedia(array $inputs, array &$accepted, array $capability): array
     {
         if ($this->hasItems($inputs, 'reference_images') || $this->hasItems($inputs, 'reference_videos') || $this->hasItems($inputs, 'reference_audios')) {
