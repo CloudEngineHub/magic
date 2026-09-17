@@ -20,9 +20,19 @@ For casual conversation, keep the response brief. Start the detailed workflow on
 
 Use this skill only for real, publishable micro-apps: the workspace root is the app root, and the host identifies, previews, and publishes it from `app.json` and `magic.project.js`. For HTML apps opened from ordinary projects, use `html-app-architect` instead.
 
+## AI Execution Routing
+
+Classify each user-facing AI operation by how it must execute; do not infer the route only from the overall app size.
+
+- Prefer `window.Magic.llm.chat` or `window.Magic.llm.stream` for a single inference when the page already has the complete input, or can load a small bounded input directly with `window.Magic.fs`, and one model response can finish the request without external tools, Agent-managed file work, a companion Skill, or follow-up execution. Typical examples are rewriting a paragraph, classifying one value, or summarizing short text loaded in the page.
+- Prefer `window.Magic.project` for an Agent task when the Agent must inspect, read, or write workspace files; file processing spans multiple steps or cross-file reasoning; the input is not suitable for one direct prompt; or execution needs external tools, multi-turn continuation, long-running progress, or a companion business Skill. Use `createTopicAndSend` to start a new task. `sendMessage` sends to the host's currently selected topic; use it only when that current topic is the intended continuation, and do not treat it as a way to target the `topicId` returned by `createTopicAndSend`.
+- If any Agent-task condition applies, choose `window.Magic.project` even when the user's prompt is short. Do not copy large or project-scoped files into a direct LLM prompt merely to avoid Agent execution.
+- Do not chain repeated `window.Magic.llm` calls or maintain a pseudo-Agent loop in page state for work that should be handled as one Agent task.
+- If the route is still ambiguous, use `window.Magic.llm` only when the app can provide all required input immediately and treat the first response as the completed result; otherwise use `window.Magic.project`.
+
 ## Development Workflow
 
-1. Identify the app type, core scenario, real page count, and whether a database is needed.
+1. Identify the app type, core scenario, real page count, whether a database is needed, and the execution route for each AI operation.
 2. Read the root `MICRO-APP.md`; if only the legacy `HTML-APP.md` exists, read it first and migrate it to `MICRO-APP.md` before finishing. MagicBase migration history is managed in `.magicbase/migrations.json`; reconcile any Pending migration first.
 3. Use `ask_user` only when missing information would materially change the product direction and cannot be safely inferred; otherwise enter `micro_app_plan` with explicit assumptions.
 4. Choose the file structure from real pages and reuse relationships. Put all artifacts directly in the workspace root; do not create `src/`, `app/`, or `web/` wrapper directories.
@@ -45,7 +55,7 @@ New micro-apps must be generated directly in the workspace root:
 
 Do not create wrapper directories or use `../` to traverse above the root. Unless explicitly requested, do not create `home.html`, `test.html`, `verify.html`, or documentation-only pages.
 
-Data-oriented micro-apps use MagicBase by default. Use files only for file-shaped configuration, caches, exports, or when explicitly requested; store shared CRUD records as one file per record, render lists from `listDir()` and filename projections, and read record details on demand.
+Data-oriented micro-apps use MagicBase by default for user-submitted, editable, searchable, analytical, exportable, or reusable business records. Use files for file-shaped configuration, imports, caches, derived artifacts, and exports, or when the user explicitly chooses file-backed persistence. If CRUD is explicitly file-backed, follow the shared-data rules in `html-api-sdk`: store one file per record, render lists from `listDir()` and filename projections, and read record details on demand. Do not maintain the same source-of-truth records in both MagicBase and files.
 
 ## Anonymous Access and Form Drafts
 
@@ -57,7 +67,7 @@ Data-oriented micro-apps use MagicBase by default. Use files only for file-shape
 
 ## MagicBase, Identity, and Permissions
 
-- Load the `magicbase` Skill as needed for persistence, CRUD, queries, statistics, exports, current users, creators, owners, or permissions.
+- Load the `magicbase` Skill as needed for MagicBase persistence, CRUD, queries, statistics, exports, current users, creators, owners, or permissions.
 - MagicBase tools manage schema migrations. Row-level operations must use real `table_id` values; obtain user identity from `window.Magic.getContext()` and compare only stable `user_id` values for permissions.
 - `created_by`, `organization_code`, `created_at`, and `updated_at` are MagicBase system fields and must not be created as ordinary dynamic columns.
 - If a rule only hides buttons, disables inputs, or filters in the frontend, mark it `ui_only_not_secure`; if it requires state transitions, cross-table checks, hierarchy, time windows, quotas, or sensitive validation, mark it `requires_backend` and tell the user first.
@@ -69,15 +79,17 @@ Data-oriented micro-apps use MagicBase by default. Use files only for file-shape
 
 ## Companion business skills
 
-Medium and complex micro-apps must use `skill-creator` to generate a business workflow Skill at `.magic/skills/<skill-name>/SKILL.md`. The Skill must specify:
+Use `skill-creator` to generate a business workflow Skill at `.magic/skills/<skill-name>/SKILL.md` when an Agent task has a repeatable domain workflow, business-specific tool sequence, MagicBase mutation or permission flow, required intermediate or output artifacts, or recovery rules that must remain consistent across runs. Do not create a companion Skill merely because the app is medium or complex, or because it sends a one-off Agent task that the message can specify completely. Operations routed to `window.Magic.llm` do not need a companion Skill.
+
+When a companion Skill is required, it must specify:
 
 - Business goals, inputs, outputs, and failure handling;
-- that data belongs to the current micro-app's MagicBase;
-- that all database reads and writes load the built-in system skill `use-magicbase` with `read_skills` (do not search the workspace);
+- the approved persistence boundary and, for MagicBase-backed data, that the data belongs to the current micro-app's MagicBase;
+- that all MagicBase reads and writes load the built-in system skill `use-magicbase` with `read_skills` (do not search the workspace);
 - steps requiring user preview, confirmation, or permission checks;
 - verifiable completion conditions.
 
-The micro-app implementation chooses the Skill name and writes it in the task message. For example:
+For a task that uses a companion Skill, the micro-app implementation chooses the Skill name and writes it in the task message. For example:
 
 ```javascript
 window.Magic.project.createTopicAndSend(
@@ -88,9 +100,9 @@ window.Magic.project.createTopicAndSend(
 
 ## Agent Messages and Runtime Loading
 
-When a published micro-app calls `createTopicAndSend` or `sendMessage`, the host automatically prepends the current micro-app's trusted `@micro_app` mention. The micro-app only describes the task and Skill name in the message; it does not pass `skillName`, `appId`, or `projectId` through the public API and cannot forge the micro-app identity.
+When a published micro-app calls `createTopicAndSend` or `sendMessage`, the host automatically prepends the current micro-app's trusted `@micro_app` mention. The micro-app describes the task and, when applicable, the companion Skill name in the message; it does not pass `skillName`, `appId`, or `projectId` through the public API and cannot forge the micro-app identity.
 
-After receiving the mention, load a matching companion Skill with `read_skills(skill_names=[...], project_id=...)` using the `project_id` printed under that mention. Companion skills live on the mounted source project's `.magic/skills/` and are not listed in `<available_skills>`. If the directory, target Skill, or share permission is unavailable, continue as a normal task without falling back to a same-named workspace skill, bypassing permissions, or writing to the source project.
+If the task message names a companion Skill, load that Skill with `read_skills(skill_names=[...], project_id=...)` using the `project_id` printed under the host-provided mention. Companion skills live on the mounted source project's `.magic/skills/` and are not listed in `<available_skills>`. If the directory, target Skill, or share permission is unavailable, continue as a normal task without falling back to a same-named workspace skill, bypassing permissions, or writing to the source project.
 
 When one exact Skill file is required, the message may still include an explicit `@file` mention for `.magic/skills/<skill-name>/SKILL.md`; this supplements rather than replaces the host-provided `@micro_app` identity context.
 
@@ -109,8 +121,10 @@ When one exact Skill file is required, the message may still include an explicit
 
 - The manifest, entry point, and project memory are in the workspace root without wrapper paths or `../` traversal.
 - Display fields match between `app.json` and `magic.project.js`; `anonymous` and permission declarations reflect the actual scenario.
+- Each AI operation is routed independently: complete single-inference work, including small bounded input loaded directly by the page, uses `window.Magic.llm`; work requiring external tools, Agent-managed file processing, multiple steps, or continuation uses `window.Magic.project`.
 - Anonymous apps render without project-dependent initialization; their app-owned form draft policy preserves input across the confirmed login round trip.
-- MagicBase ownership, identity source, permission enforceability, and the database mutation flow are documented.
-- Medium and complex apps include `.magic/skills/<skill-name>/SKILL.md`, and task messages reference the Skill name.
+- Persistence has one clear source of truth: business records use MagicBase by default; explicitly file-backed CRUD follows the one-file-per-record shared-data rules.
+- MagicBase-backed apps document ownership, identity source, permission enforceability, and the database mutation flow.
+- Agent tasks with repeatable business workflows, MagicBase mutations, required artifacts, or recovery rules include `.magic/skills/<skill-name>/SKILL.md`, and task messages reference the Skill name.
 - Agent messages rely on the host-provided `@micro_app` mention; ordinary tasks still work when sharing permission or the Skill is unavailable.
 - Errors are logged with `console.error`; blocking errors have UI feedback; UI and data operations form a real working loop.
