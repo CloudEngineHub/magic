@@ -83,6 +83,9 @@ return [
         'support_multi_modal' => [
             'boolean' => '多模态支持标记必须为布尔值',
         ],
+        'support_function' => [
+            'boolean' => '函数调用支持标记必须为布尔值',
+        ],
     ],
     'model_id_required' => '参数不能为空',
     'model_version_required' => '参数不能为空',

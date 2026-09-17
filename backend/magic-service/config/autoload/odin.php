@@ -357,6 +357,18 @@ return [
         ],
         'model_fixed_temperature' => [
             '%gpt-5%' => 1,
+            '%kimi-k2.5%' => 1,
+        ],
+
+        // 命中后会把请求体中的 max_tokens 替换为 max_completion_tokens。
+        // 同时匹配 models 配置别名和实际模型名（item.model），支持 % 通配符。
+        // 精确匹配优先于通配符；精确匹配为 false 时可排除某个模型。
+        'model_max_completion_tokens' => [
+            '%gpt-5%' => true,
+            '%gpt-6%' => true,
+            'o1-%' => true,
+            'o3-%' => true,
+            'o4-%' => true,
         ],
     ],
     'content_copy_keys' => [

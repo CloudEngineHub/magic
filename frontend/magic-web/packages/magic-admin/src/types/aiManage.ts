@@ -372,6 +372,8 @@ export namespace AiManage {
 		support_multi_modal: boolean
 		/** 支持深度思考 */
 		support_deep_think: boolean
+		/** OpenAI 兼容聊天接口：chat_completions | responses */
+		chat_api?: "chat_completions" | "responses"
 		/** 计费单位 */
 		billing_currency: BillingCurrency
 		/** 输入计价 */
@@ -584,6 +586,8 @@ export namespace AiManage {
 			support_multi_modal: boolean
 			/* 支持深度思考 */
 			support_deep_think: boolean
+			/** OpenAI 兼容聊天接口：chat_completions | responses */
+			chat_api?: "chat_completions" | "responses"
 			/* 计费单位 */
 			billing_currency: BillingCurrency
 			/* 输入计价 */
