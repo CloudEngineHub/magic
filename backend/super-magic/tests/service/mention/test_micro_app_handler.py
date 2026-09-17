@@ -66,6 +66,9 @@ async def test_micro_app_mention_tip_tells_agent_to_read_skills_with_project_id(
     assert "read_skills" in tip
     assert "project_id" in tip
     assert "use-magicbase" in tip
+    assert "Only load" in tip
+    assert "mounted read-only" in tip
+    assert "Do not create, edit, delete, move, or rename files" in tip
 
 
 @pytest.mark.asyncio
@@ -93,6 +96,8 @@ async def test_micro_app_mention_tip_requires_bound_scope():
     assert "use-magicbase" in tip
     assert "built-in system skill" in tip
     assert "read_skills" in tip
+    assert "Only load" in tip
+    assert "source project or another writable workspace" in tip
 
 
 @pytest.mark.asyncio

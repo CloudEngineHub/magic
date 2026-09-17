@@ -552,3 +552,6 @@ async def test_format_bound_micro_app_scope_context_renders_typed_links(tmp_path
     assert "built-in system skill" in context
     assert "read_skills" in context
     assert "project_id" in context
+    assert "Only load" in context
+    assert "mounted read-only" in context
+    assert "Do not create, edit, delete, move, or rename files" in context
