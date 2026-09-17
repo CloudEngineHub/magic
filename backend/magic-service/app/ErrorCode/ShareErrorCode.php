@@ -70,4 +70,7 @@ enum ShareErrorCode: int
 
     #[ErrorMessage('share.download_not_allowed')]
     case DOWNLOAD_NOT_ALLOWED = 51318;
+
+    #[ErrorMessage('share.share_method_not_allowed')]
+    case SHARE_METHOD_NOT_ALLOWED = 51319;
 }

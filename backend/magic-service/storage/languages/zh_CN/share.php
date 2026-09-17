@@ -54,4 +54,5 @@ return [
 
     'share_project_only_for_file_collection' => '请求处理失败',
     'target_ids_required' => '参数不能为空',
+    'share_method_not_allowed' => '当前用户无权使用该分享方式：:shareType',
 ];
