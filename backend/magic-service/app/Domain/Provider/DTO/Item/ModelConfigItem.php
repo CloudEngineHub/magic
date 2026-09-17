@@ -11,6 +11,7 @@ use App\Domain\Provider\DTO\Item\TokenPricing\BillingTiers;
 use App\ErrorCode\ServiceProviderErrorCode;
 use App\Infrastructure\Core\AbstractDTO;
 use App\Infrastructure\Core\Exception\ExceptionBuilder;
+use Hyperf\Odin\Constants\ChatApi;
 
 class ModelConfigItem extends AbstractDTO
 {
@@ -27,6 +28,11 @@ class ModelConfigItem extends AbstractDTO
     protected bool $supportEmbedding = false;
 
     protected ?int $maxOutputTokens = null;
+
+    /**
+     * OpenAI 兼容接口类型：chat_completions 或 responses.
+     */
+    protected string $chatApi = ChatApi::CHAT_COMPLETIONS;
 
     protected ?float $creativity = null;
 
@@ -159,6 +165,21 @@ class ModelConfigItem extends AbstractDTO
     public function getMaxOutputTokens(): ?int
     {
         return $this->maxOutputTokens;
+    }
+
+    public function getChatApi(): string
+    {
+        return $this->chatApi;
+    }
+
+    public function setChatApi(null|string $chatApi): void
+    {
+        if (is_string($chatApi) && in_array($chatApi, [ChatApi::CHAT_COMPLETIONS, ChatApi::RESPONSES], true)) {
+            $this->chatApi = $chatApi;
+            return;
+        }
+
+        $this->chatApi = ChatApi::CHAT_COMPLETIONS;
     }
 
     public function getCreativity(): ?float

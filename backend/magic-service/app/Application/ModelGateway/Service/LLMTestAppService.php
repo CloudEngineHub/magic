@@ -417,6 +417,7 @@ class LLMTestAppService extends AbstractLLMAppService
             'max_output_tokens' => $modelConfig?->getMaxOutputTokens(),
             'default_temperature' => $modelConfig?->getCreativity(),
             'fixed_temperature' => $modelConfig?->getTemperature(),
+            'chat_api' => $modelConfig?->getChatApi(),
         ]);
     }
 

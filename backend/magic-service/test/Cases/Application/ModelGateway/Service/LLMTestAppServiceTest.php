@@ -100,6 +100,20 @@ class LLMTestAppServiceTest extends TestCase
         $this->assertTrue($options->isMultiModal());
     }
 
+    public function testConnectivityModelOptionsPassThroughChatApi(): void
+    {
+        $service = (new ReflectionClass(LLMTestAppService::class))->newInstanceWithoutConstructor();
+        $method = new ReflectionMethod($service, 'buildConnectivityModelOptions');
+        $method->setAccessible(true);
+
+        $defaultOptions = $method->invoke($service, false, null, false);
+        $this->assertSame('chat_completions', $defaultOptions->getChatApi());
+
+        $responsesConfig = new ModelConfigItem(['chat_api' => 'responses']);
+        $responsesOptions = $method->invoke($service, false, $responsesConfig, false);
+        $this->assertSame('responses', $responsesOptions->getChatApi());
+    }
+
     public function testMultimodalChatRequestContainsImageMessage(): void
     {
         $service = (new ReflectionClass(LLMTestAppService::class))->newInstanceWithoutConstructor();
