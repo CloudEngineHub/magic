@@ -6,6 +6,8 @@ import { extractCitations, trimIncompleteCitationTag } from "@/pages/superMagic/
 import { hasKnowledgeBaseTabTarget } from "@/pages/superMagic/events/openFileTab"
 import pubsub, { PubSubEvents } from "@/utils/pubsub"
 import { useMessageViewState } from "@/pages/superMagic/components/MessageList/view-state/MessageViewStateContext"
+import { getModelRecoveryMessage } from "@/pages/superMagic/utils/model-error-recovery"
+import { ModelErrorRecovery } from "../../../Card/components/ModelErrorRecovery"
 
 export const messageMarkdownBaseClassName = cn(
 	"w-full break-words leading-relaxed text-foreground",
@@ -66,7 +68,7 @@ export function ContentSection({
 
 	if (!hasContent) return null
 
-	return (
+	const content = (
 		<>
 			<MarkdownComponent
 				className={messageMarkdownBaseClassName}
@@ -105,5 +107,11 @@ export function ContentSection({
 				/>
 			)}
 		</>
+	)
+	const recovery = getModelRecoveryMessage(node)
+	return recovery ? (
+		<ModelErrorRecovery message={recovery}>{content}</ModelErrorRecovery>
+	) : (
+		content
 	)
 }

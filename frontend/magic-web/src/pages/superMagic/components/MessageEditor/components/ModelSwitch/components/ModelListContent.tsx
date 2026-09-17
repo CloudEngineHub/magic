@@ -11,6 +11,7 @@ import { ModelEmptyState } from "./ModelEmptyState"
 import { ModelGroupSection, type RenderableModelGroup } from "./ModelGroupSection"
 
 interface ModelListContentProps {
+	allowModelManagement?: boolean
 	modelList: ModelListGroup[]
 	selectedModel: ModelItem | null
 	searchKeyword: string
@@ -32,6 +33,7 @@ export const ModelListContent = observer(function ModelListContent({
 	getModelDescription,
 	modelKey = "models",
 	onModelsLoaded,
+	allowModelManagement,
 }: ModelListContentProps) {
 	const { t } = useTranslation("super")
 	const visibleGroups = getVisibleGroups({ modelList, modelKey, searchKeyword })
@@ -55,6 +57,7 @@ export const ModelListContent = observer(function ModelListContent({
 				onModelClick={onModelClick}
 				selectedItemRef={selectedItemRef}
 				onModelsLoaded={onModelsLoaded}
+				allowModelManagement={allowModelManagement}
 			/>
 			{visibleGroups.length === 0 && (
 				<ModelEmptyState

@@ -192,6 +192,18 @@ export default function DefaultMessageEditorContainer(props: DefaultMessageEdito
 	})
 
 	const handleSend = useMemoizedFn(async (params: HandleSendParams): Promise<boolean> => {
+		const isModelRecovery = params.origin === "model_recovery"
+		if (params.canSend && !params.canSend()) return false
+		// 恢复沿用发送准备，但不能改写队列草稿，也不能在新运行开始后自动入队。
+		if (
+			isModelRecovery &&
+			(showLoading ||
+				isWaitingForUser ||
+				editorContext?.isTaskRunning ||
+				queueContext?.isQueueOperationPending ||
+				params.targetTopic?.id !== selectedTopic?.id)
+		)
+			return false
 		let hasStartedSend = false
 		let sendResult:
 			| {
@@ -201,10 +213,9 @@ export default function DefaultMessageEditorContainer(props: DefaultMessageEdito
 			| undefined
 		let shouldShowHomeSendLoading = false
 
-		const nextValue = appendPresetSuffixContent(
-			params.value,
-			sceneStateStore?.presetSuffixContent,
-		)
+		const nextValue = isModelRecovery
+			? params.value
+			: appendPresetSuffixContent(params.value, sceneStateStore?.presetSuffixContent)
 		const sendSelection = resolveAgentSelection(effectiveTopicMode, editorContext?.agentCode)
 		const extra = { ...(params.extra ?? {}) }
 		delete extra.agent_code
@@ -239,7 +250,7 @@ export default function DefaultMessageEditorContainer(props: DefaultMessageEdito
 			: defaultParams
 		const finalParams: HandleSendParams = mergedParams
 
-		if (queueContext && tiptapEditorRef.current?.getQueueDraft()) {
+		if (!isModelRecovery && queueContext && tiptapEditorRef.current?.getQueueDraft()) {
 			isPreparingSendRef.current = true
 			setIsSending(true)
 			try {
@@ -257,7 +268,12 @@ export default function DefaultMessageEditorContainer(props: DefaultMessageEdito
 			}
 		}
 
-		const shouldQueue = showLoading && !isWaitingForUser && !params.isFromQueue && queueContext
+		const shouldQueue =
+			!isModelRecovery &&
+			showLoading &&
+			!isWaitingForUser &&
+			!params.isFromQueue &&
+			queueContext
 
 		if (shouldQueue) {
 			// Clear editor immediately to prevent duplicate queue entries on rapid Enter presses.
@@ -322,7 +338,7 @@ export default function DefaultMessageEditorContainer(props: DefaultMessageEdito
 				messagesLength: editorContext?.messagesLength ?? 0,
 			})
 
-			if (!preparedSend) {
+			if (!preparedSend || (params.canSend && !params.canSend())) {
 				return false
 			}
 

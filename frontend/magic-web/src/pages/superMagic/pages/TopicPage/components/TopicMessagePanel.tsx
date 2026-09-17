@@ -13,6 +13,7 @@ import { topicStore } from "../../../stores/core"
 import useTopicMode from "@/pages/superMagic/hooks/useTopicMode"
 import { createSuperMagicTopicModelStore } from "@/stores/superMagic/topicModelStore"
 import useTopicModel from "@/pages/superMagic/components/MessageEditor/hooks/useTopicModel"
+import { useModelErrorRecovery } from "@/pages/superMagic/hooks/useModelErrorRecovery"
 import ModeAvatar from "@/pages/superMagic/components/ModeAvatar"
 import superMagicModeService from "@/services/superMagic/SuperMagicModeService"
 import { MessageListContextState } from "@/pages/superMagic/components/MessageList/context"
@@ -185,6 +186,14 @@ function TopicMessagePanel({
 	const shouldScrollAfterRetryRef = useRef(false)
 	const sendRetryMessageRef = useRef<(params: HandleSendParams) => Promise<boolean>>()
 	const retryingOptimisticMessageIdsRef = useRef<Set<string>>(new Set())
+	const modelErrorRecovery = useModelErrorRecovery({
+		selectedProject,
+		selectedTopic,
+		topicModelStore,
+		sendMessageRef: sendRetryMessageRef,
+		showLoading,
+		isMessagesLoading,
+	})
 
 	const topicModeConfig = useMemo(() => {
 		return superMagicModeService.getModeConfigWithLegacy(
@@ -252,6 +261,7 @@ function TopicMessagePanel({
 
 	const value = useMemo<MessageListContextState>(() => {
 		return {
+			modelErrorRecovery,
 			allowRevoke: true,
 			allowUserMessageCopy: true,
 			allowScheduleTaskCreate: true,
@@ -273,6 +283,7 @@ function TopicMessagePanel({
 				: undefined,
 		}
 	}, [
+		modelErrorRecovery,
 		allowTopicBranchActions,
 		topicModeConfig,
 		setSelectedTopic,
@@ -345,15 +356,7 @@ function TopicMessagePanel({
 			selectedTopic={selectedTopic}
 			setSelectedTopic={setSelectedTopic}
 			onFileClick={handleFileClick}
-			onMessageSendReady={(sendMessage, prevSendMessage) => {
-				// Only update ref if it still points to the old instance (or is a new registration); prevents stale cleanup from clearing newly registered functions.
-				if (
-					prevSendMessage === undefined ||
-					sendRetryMessageRef.current === prevSendMessage
-				) {
-					sendRetryMessageRef.current = sendMessage
-				}
-			}}
+			onMessageSendReady={modelErrorRecovery.onMessageSendReady}
 			attachments={attachments}
 			mentionPanelStore={mentionPanelStore}
 			topicStore={scopedTopicStore}

@@ -51,9 +51,10 @@ export function HelpDialogFrame({
 	id,
 	help,
 	onCloseAutoFocus,
+	header,
 	hasNavigation,
 	children,
-}: Pick<HelpDialogProps, "id" | "help" | "onCloseAutoFocus"> & {
+}: Pick<HelpDialogProps, "id" | "help" | "onCloseAutoFocus" | "header"> & {
 	hasNavigation: boolean
 	children: ReactNode
 }) {
@@ -81,17 +82,25 @@ export function HelpDialogFrame({
 				</span>
 				<div className="min-w-0 flex-1 space-y-0.5 pr-12">
 					<DialogTitle className="text-sm leading-5">
-						{t("contextHelp.guideTitle")}
+						{header?.title ?? t("contextHelp.guideTitle")}
 					</DialogTitle>
-					<DialogDescription className="text-xs">
-						{t("contextHelp.guideSubtitle")}
+					<DialogDescription
+						className={header && !header.description ? "sr-only" : "text-xs"}
+					>
+						{header
+							? (header.description ?? header.title)
+							: t("contextHelp.guideSubtitle")}
 					</DialogDescription>
 				</div>
 				<DialogClose asChild>
 					<Button
 						variant="ghost"
 						size="icon-lg"
-						aria-label={t("contextHelp.dismiss")}
+						aria-label={
+							header
+								? t("contextHelp.dismissWithTitle", { title: header.title })
+								: t("contextHelp.dismiss")
+						}
 						className="group size-10 shrink-0 cursor-pointer rounded-lg bg-muted/40 text-muted-foreground transition-colors duration-150 hover:bg-muted hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring active:bg-accent motion-reduce:transition-none [@media(pointer:coarse)]:size-11"
 					>
 						<X

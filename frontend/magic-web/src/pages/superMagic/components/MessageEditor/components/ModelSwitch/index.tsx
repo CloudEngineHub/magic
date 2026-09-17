@@ -1,4 +1,6 @@
 import { useEffect, useRef, useState } from "react"
+import { Slot } from "@radix-ui/react-slot"
+import { ScrollArea } from "@/components/shadcn-ui/scroll-area"
 import { observer } from "mobx-react-lite"
 import { useTranslation } from "react-i18next"
 import { userStore } from "@/models/user"
@@ -16,6 +18,7 @@ import { ModelPreferenceTooltip } from "./components/ModelPreferenceTooltip"
 import { cn } from "@/utils/cn"
 import { modelSwitchVariants, ICON_SIZE_MAP, CHEVRON_SIZE_MAP } from "./constants"
 import { useModelSwitchLogic } from "./hooks/useModelSwitchLogic"
+import { useModelSwitchConfirmation } from "./hooks/useModelSwitchConfirmation"
 import { ModelListContent } from "./components/ModelListContent"
 import {
 	ChevronsUpDownIcon,
@@ -62,8 +65,16 @@ export const ModelSwitch = observer(function ModelSwitch({
 	defaultTab = "language",
 	triggerTab,
 	triggerTestId,
+	trigger,
+	selection,
+	allowedTabs,
 }: ModelSwitchProps) {
-	const [activeTab, setActiveTab] = useState<ModelTabType>(defaultTab)
+	const confirmation = useModelSwitchConfirmation(selection)
+	const { setPendingModel } = confirmation
+	const needsConfirmation = selection?.mode === "confirm"
+	const allowedDefaultTab =
+		!allowedTabs || allowedTabs.includes(defaultTab) ? defaultTab : allowedTabs[0]
+	const [activeTab, setActiveTab] = useState<ModelTabType>(allowedDefaultTab)
 	const [tooltipOpen, setTooltipOpen] = useState(false)
 	const [addMenuOpen, setAddMenuOpen] = useState(false)
 	const dropdownJustClosedRef = useRef(false)
@@ -86,6 +97,10 @@ export const ModelSwitch = observer(function ModelSwitch({
 		getModelDescription,
 	} = useModelSwitchLogic({
 		onModelClick: (model) => {
+			if (needsConfirmation) {
+				if (!confirmation.submitting) confirmation.setPendingModel(model)
+				return
+			}
 			if (activeTab === "image") {
 				onImageModelChange?.(model)
 			} else if (activeTab === "video") {
@@ -94,8 +109,23 @@ export const ModelSwitch = observer(function ModelSwitch({
 				onModelChange?.(model)
 			}
 		},
-		onBeforeOpen,
+		onBeforeOpen: async () => {
+			await onBeforeOpen?.()
+			if (needsConfirmation)
+				confirmation.setPendingModel(
+					allowedDefaultTab === "image"
+						? (selectedImageModel ?? null)
+						: allowedDefaultTab === "video"
+							? (selectedVideoModel ?? null)
+							: (selectedModel ?? null),
+				)
+		},
+		shouldCloseOnSelect: needsConfirmation ? false : undefined,
 	})
+
+	useEffect(() => {
+		if (!isOpen) setPendingModel(null)
+	}, [isOpen, setPendingModel])
 
 	const { isPersonalOrganization } = userStore.user
 	const canManageModels = isPersonalOrganization
@@ -134,11 +164,19 @@ export const ModelSwitch = observer(function ModelSwitch({
 			((activeTab === "image" && !hasAnyImageModels) ||
 				(activeTab === "video" && !hasAnyVideoModels)) &&
 			!isLoadingCustomModels &&
-			!canAddModel
+			!canAddModel &&
+			(!allowedTabs || allowedTabs.includes("language"))
 		if (shouldFallbackToLanguage) {
 			setActiveTab("language")
 		}
-	}, [activeTab, hasAnyImageModels, hasAnyVideoModels, isLoadingCustomModels, canAddModel])
+	}, [
+		activeTab,
+		hasAnyImageModels,
+		hasAnyVideoModels,
+		isLoadingCustomModels,
+		canAddModel,
+		allowedTabs,
+	])
 
 	useEffect(() => {
 		if (!openAddModelMenuSignal || isMobile || !canAddModel) return
@@ -166,8 +204,8 @@ export const ModelSwitch = observer(function ModelSwitch({
 
 	useEffect(() => {
 		if (!isOpen) return
-		setActiveTab(defaultTab)
-	}, [defaultTab, isOpen])
+		setActiveTab(allowedDefaultTab)
+	}, [allowedDefaultTab, isOpen])
 
 	const currentModelList =
 		activeTab === "image"
@@ -175,8 +213,9 @@ export const ModelSwitch = observer(function ModelSwitch({
 			: activeTab === "video"
 				? videoModelList || []
 				: modelList
-	const currentSelectedModel =
-		activeTab === "image"
+	const currentSelectedModel = needsConfirmation
+		? confirmation.pendingModel
+		: activeTab === "image"
 			? selectedImageModel || null
 			: activeTab === "video"
 				? selectedVideoModel || null
@@ -285,9 +324,13 @@ export const ModelSwitch = observer(function ModelSwitch({
 		</div>
 	)
 
-	const showImageTab = hasAnyImageModels || canAddModel
-	const showVideoTab = hasAnyVideoModels || canAddModel
-	const showTabSwitcher = showImageTab || showVideoTab
+	const showImageTab =
+		(hasAnyImageModels || canAddModel) && (!allowedTabs || allowedTabs.includes("image"))
+	const showVideoTab =
+		(hasAnyVideoModels || canAddModel) && (!allowedTabs || allowedTabs.includes("video"))
+	const showLanguageTab = !allowedTabs || allowedTabs.includes("language")
+	const showTabSwitcher =
+		Number(showLanguageTab) + Number(showImageTab) + Number(showVideoTab) > 1
 	const resolvedShowSelectedModelName = resolveShowSelectedModelName({
 		showSelectedModelName,
 		showImageTab,
@@ -298,6 +341,7 @@ export const ModelSwitch = observer(function ModelSwitch({
 			activeTab={activeTab}
 			onTabChange={setActiveTab}
 			showImageTab={showImageTab}
+			showLanguageTab={showLanguageTab}
 			showVideoTab={showVideoTab}
 			isMobile={isMobile}
 		/>
@@ -338,39 +382,72 @@ export const ModelSwitch = observer(function ModelSwitch({
 			getModelDescription={getModelDescription}
 			modelKey={currentModelKey}
 			onModelsLoaded={onBeforeOpen}
+			allowModelManagement={!needsConfirmation}
 		/>
+	)
+
+	const confirmationFooter = selection?.mode === "confirm" && (
+		<div className="shrink-0 space-y-3 border-t px-4 py-3">
+			{selection.description && (
+				<div className="text-xs leading-5 text-muted-foreground">
+					{selection.description}
+				</div>
+			)}
+			<div className="flex justify-end gap-2">
+				<Button variant="ghost" size="sm" onClick={handleClose}>
+					{t("common.cancel")}
+				</Button>
+				<Button
+					size="sm"
+					disabled={
+						confirmation.submitting ||
+						!confirmation.pendingModel ||
+						!selection.canConfirm(confirmation.pendingModel)
+					}
+					onClick={() => void confirmation.confirm(handleClose)}
+				>
+					{confirmation.submitting
+						? t("modelRecovery.submitting")
+						: selection.confirmText}
+				</Button>
+			</div>
+		</div>
 	)
 
 	// Mobile render using MagicPopup
 	if (isMobile) {
 		return (
 			<>
-				<FlexBox
-					gap={showName ? 4 : 2}
-					align="center"
-					className={cn(
-						modelSwitchVariants({ size, variant: "secondary" }),
-						showBorder && "border border-border",
-						"shrink-0",
-						className,
-					)}
-					onClick={() => void handleOpenChange(true)}
-					data-testid={triggerTestId ?? "super-message-editor-model-switch-mobile"}
-				>
-					{showName && (
-						<ModelSwitchTriggerContent
-							showLabel={showLabel}
-							selectedLanguageModel={selectedModel}
-							selectedImageModel={selectedImageModel}
-							selectedVideoModel={selectedVideoModel}
-							isLoading={isLoading}
-							iconSize={iconSize}
-							triggerTab={triggerTab}
-							showSelectedModelName={resolvedShowSelectedModelName}
-						/>
-					)}
-					<ChevronsUpDownIcon size={chevronSize} />
-				</FlexBox>
+				{trigger ? (
+					<Slot onClick={() => void handleOpenChange(true)}>{trigger}</Slot>
+				) : (
+					<FlexBox
+						gap={showName ? 4 : 2}
+						align="center"
+						className={cn(
+							modelSwitchVariants({ size, variant: "secondary" }),
+							showBorder && "border border-border",
+							"shrink-0",
+							className,
+						)}
+						onClick={() => void handleOpenChange(true)}
+						data-testid={triggerTestId ?? "super-message-editor-model-switch-mobile"}
+					>
+						{showName && (
+							<ModelSwitchTriggerContent
+								showLabel={showLabel}
+								selectedLanguageModel={selectedModel}
+								selectedImageModel={selectedImageModel}
+								selectedVideoModel={selectedVideoModel}
+								isLoading={isLoading}
+								iconSize={iconSize}
+								triggerTab={triggerTab}
+								showSelectedModelName={resolvedShowSelectedModelName}
+							/>
+						)}
+						<ChevronsUpDownIcon size={chevronSize} />
+					</FlexBox>
+				)}
 
 				<MagicPopup
 					visible={isOpen}
@@ -380,12 +457,13 @@ export const ModelSwitch = observer(function ModelSwitch({
 					<div className="flex h-[min(640px,calc(100vh-var(--safe-area-inset-top)-var(--safe-area-inset-bottom)-44px))] min-h-0 w-full flex-col overflow-hidden bg-card">
 						{mobilePopoverHeader}
 						<div className="shrink-0 pt-2.5">{tabSwitcher}</div>
-						<div
-							ref={mobileScrollContainerRef}
-							className="scrollbar-y-thin flex min-h-0 flex-1 flex-col gap-5 overflow-y-auto rounded-lg p-3"
+						<ScrollArea
+							viewportRef={mobileScrollContainerRef}
+							className="min-h-0 flex-1"
+							viewportClassName="rounded-lg p-3"
 						>
 							{mainContent}
-						</div>
+						</ScrollArea>
 						<div className="shrink-0 px-2.5 pb-safe-bottom pt-2">
 							<div className="flex items-center gap-2 rounded-full border border-border bg-background px-4 py-2.5 shadow-xs">
 								<Search className="h-4 w-4 shrink-0 text-muted-foreground" />
@@ -415,6 +493,7 @@ export const ModelSwitch = observer(function ModelSwitch({
 								) : null}
 							</div>
 						</div>
+						{confirmationFooter}
 					</div>
 				</MagicPopup>
 			</>
@@ -435,7 +514,7 @@ export const ModelSwitch = observer(function ModelSwitch({
 	return (
 		<TooltipProvider delayDuration={200}>
 			<TooltipPrimitive.Root
-				open={isOpen ? false : tooltipOpen}
+				open={isOpen || trigger ? false : tooltipOpen}
 				onOpenChange={(open) => {
 					if (isOpen) {
 						setTooltipOpen(false)
@@ -468,35 +547,39 @@ export const ModelSwitch = observer(function ModelSwitch({
 					<TooltipTrigger asChild>
 						<span className="inline-flex">
 							<DropdownMenuTrigger asChild>
-								<button
-									type="button"
-									className={cn(
-										"inline-flex shrink-0 items-center justify-center gap-2 border-0 bg-transparent p-0",
-										"outline-none",
-										modelSwitchVariants({ size, variant: "secondary" }),
-										showBorder && "border border-border",
-										className,
-									)}
-									data-testid={
-										triggerTestId ?? "super-message-editor-model-switch"
-									}
-									data-model-id={selectedModel?.model_id}
-									data-model-name={selectedModel?.model_name}
-								>
-									{showName && (
-										<ModelSwitchTriggerContent
-											showLabel={showLabel}
-											selectedLanguageModel={selectedModel}
-											selectedImageModel={selectedImageModel}
-											selectedVideoModel={selectedVideoModel}
-											isLoading={isLoading}
-											iconSize={iconSize}
-											triggerTab={triggerTab}
-											showSelectedModelName={resolvedShowSelectedModelName}
-										/>
-									)}
-									<ChevronsUpDownIcon size={chevronSize} />
-								</button>
+								{trigger ?? (
+									<button
+										type="button"
+										className={cn(
+											"inline-flex shrink-0 items-center justify-center gap-2 border-0 bg-transparent p-0",
+											"outline-none",
+											modelSwitchVariants({ size, variant: "secondary" }),
+											showBorder && "border border-border",
+											className,
+										)}
+										data-testid={
+											triggerTestId ?? "super-message-editor-model-switch"
+										}
+										data-model-id={selectedModel?.model_id}
+										data-model-name={selectedModel?.model_name}
+									>
+										{showName && (
+											<ModelSwitchTriggerContent
+												showLabel={showLabel}
+												selectedLanguageModel={selectedModel}
+												selectedImageModel={selectedImageModel}
+												selectedVideoModel={selectedVideoModel}
+												isLoading={isLoading}
+												iconSize={iconSize}
+												triggerTab={triggerTab}
+												showSelectedModelName={
+													resolvedShowSelectedModelName
+												}
+											/>
+										)}
+										<ChevronsUpDownIcon size={chevronSize} />
+									</button>
+								)}
 							</DropdownMenuTrigger>
 						</span>
 					</TooltipTrigger>
@@ -521,12 +604,18 @@ export const ModelSwitch = observer(function ModelSwitch({
 						<div className="flex flex-col">
 							{popoverHeader}
 							{tabSwitcher}
-							<div
-								ref={desktopScrollContainerRef}
-								className="scrollbar-y-thin flex max-h-[min(420px,calc(var(--radix-dropdown-menu-content-available-height)-7rem))] min-h-0 flex-col gap-2.5 overflow-y-auto px-4 pr-2"
+							<ScrollArea
+								viewportRef={desktopScrollContainerRef}
+								className={
+									needsConfirmation
+										? "max-h-[min(420px,calc(var(--radix-dropdown-menu-content-available-height)-13rem))] min-h-0"
+										: "max-h-[min(420px,calc(var(--radix-dropdown-menu-content-available-height)-7rem))] min-h-0"
+								}
+								viewportClassName="max-h-[inherit] px-4 pr-2"
 							>
 								{mainContent}
-							</div>
+							</ScrollArea>
+							{confirmationFooter}
 						</div>
 					</DropdownMenuContent>
 				</DropdownMenu>

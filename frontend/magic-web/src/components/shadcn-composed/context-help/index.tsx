@@ -35,7 +35,7 @@ export type { ContextHelpProps, HelpDefinition, HelpDialogProps } from "./types"
 const HELP_PREVIEW_OPEN_DELAY = 500
 
 /** 同一个入口负责简介和完整说明；业务只提供内容，不复制浮层状态与焦点逻辑。 */
-export function ContextHelp({ help, mode, children, renderDialog }: ContextHelpProps) {
+export function ContextHelp({ help, mode, children, renderDialog, header }: ContextHelpProps) {
 	const { t } = useTranslation("interface")
 	const [layer, setLayer] = useState<"closed" | "preview" | "dialog">("closed")
 	const suppressFocusPreview = useRef(false)
@@ -199,6 +199,7 @@ export function ContextHelp({ help, mode, children, renderDialog }: ContextHelpP
 			)}
 			{layer === "dialog" && (
 				<CompleteHelpDialog
+					header={header}
 					help={help}
 					id={dialogId}
 					renderDialog={renderDialog}

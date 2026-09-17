@@ -59,6 +59,8 @@ import { createSuperMagicTopicModelStore } from "@/stores/superMagic/topicModelS
 import ModeAvatar from "@/pages/superMagic/components/ModeAvatar"
 import superMagicModeService from "@/services/superMagic/SuperMagicModeService"
 import { MessageListContextState } from "@/pages/superMagic/components/MessageList/context"
+import { useModelErrorRecovery } from "@/pages/superMagic/hooks/useModelErrorRecovery"
+import type { HandleSendParams } from "@/pages/superMagic/services/messageSendFlowService"
 import { useTopicConversationLoading } from "@/pages/superMagic/hooks/useTopicConversationLoading"
 import { RouteName } from "@/routes/constants"
 import { useLocation } from "react-router"
@@ -510,8 +512,20 @@ function TopicPage({
 		() => resolveTopicPageMessageListFallback(messageListFallbackRender),
 		[messageListFallbackRender],
 	)
+	const recoverySendMessageRef = useRef<
+		((params: HandleSendParams) => Promise<boolean>) | undefined
+	>()
+	const modelErrorRecovery = useModelErrorRecovery({
+		selectedProject,
+		selectedTopic,
+		topicModelStore: sharedTopicModelStore,
+		sendMessageRef: recoverySendMessageRef,
+		showLoading,
+		isMessagesLoading: isMessagesInitialLoading,
+	})
 	const value = useMemo<MessageListContextState>(() => {
 		return {
+			modelErrorRecovery,
 			allowRevoke: true,
 			allowUserMessageCopy: true,
 			allowScheduleTaskCreate: true,
@@ -530,7 +544,12 @@ function TopicPage({
 					)
 				: undefined,
 		}
-	}, [capabilities.canCreateSiblingTopic, switchToProjectTopic, topicModeConfig])
+	}, [
+		capabilities.canCreateSiblingTopic,
+		switchToProjectTopic,
+		topicModeConfig,
+		modelErrorRecovery,
+	])
 
 	const setUserSelectDetail = useMemoizedFn((detail: PreviewDetail | null) => {
 		if (!detail) return
@@ -634,6 +653,7 @@ function TopicPage({
 						attachments={attachments}
 						isShowLoadingInit={isShowLoadingInit}
 						enableReEditMessageFromPubSub
+						onMessageSendReady={modelErrorRecovery.onMessageSendReady}
 						onSendComplete={handleEditorSendComplete}
 						topicModeLogic={{
 							topicMode,

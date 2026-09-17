@@ -81,6 +81,8 @@ from app.magic.security_guardrails import build_security_guardrails_prompt
 from app.core.entity.final_task_state import (
     FinalTaskState,
     FinalTaskStateCode,
+    ModelError,
+    ModelErrorCode,
     build_final_task_state,
 )
 from app.core.entity.message.server_message import TaskStatus
@@ -223,6 +225,13 @@ class LLMCallRequestException(Exception):
         self.original_exception = original_exception
 
 
+@dataclass(frozen=True)
+class ModelCallFailure:
+    """保留真实调用的错误与模型身份，终态不能借用之后的模型选择。"""
+    exception: Exception
+    error: ModelError
+
+
 @dataclass
 class SessionPrepResult:
     """Session preparation result after handling pending tool calls and user query"""
@@ -290,6 +299,7 @@ class Agent(BaseAgent):
         self._workspace_snapshot: WorkspaceSnapshot | None = None
         # 当前最近一次真实 LLM 请求是否包含原生图片输入。
         self._last_llm_request_contains_native_images = False
+        self._last_model_call_failure: ModelCallFailure | None = None
         # 同一轮只注入一次相同的原生视觉 Horizon 状态，避免工具循环重复提示。
         self._native_visual_horizon_context_signature: tuple[str, ...] | None = None
         self._native_visual_horizon_render_hint: str | None = None
@@ -760,6 +770,7 @@ class Agent(BaseAgent):
     def _apply_final_task_state(self, final_task_state: FinalTaskState) -> None:
         """应用最终任务终态并同步 Agent 状态。"""
         self.agent_context.set_final_task_state(final_task_state)
+        self._last_model_call_failure = None
         self.agent_context.set_final_response(None)
         if final_task_state.task_status == TaskStatus.SUSPENDED:
             self.set_agent_state(AgentState.SUSPENDED)
@@ -859,47 +870,54 @@ class Agent(BaseAgent):
             return build_final_task_state(
                 FinalTaskStateCode.MESSAGE_PROCESSING_FAILED,
                 vendor_message=str(exception),
-                custom_message=self._build_user_friendly_custom_message(exception, is_llm_path=True),
+                model_error=self._resolve_model_error(exception),
             )
 
         return None
 
-    def _classify_llm_exception_for_user(self, exception: Exception) -> str | None:
-        """根据 LLM 异常类型返回用户友好的 i18n key，返回 None 则使用默认文案。"""
+    def _classify_llm_exception_for_user(self, exception: Exception) -> ModelErrorCode | None:
+        """仅分类已确认的模型调用异常；文案与动作由终态定义统一维护。"""
         from openai import APITimeoutError, APIConnectionError, APIStatusError
 
         if is_non_retryable_model_config_error(exception):
-            return "messages.llm_provider_config_error"
+            return ModelErrorCode.CONFIG_ERROR
 
-        if isinstance(exception, (StreamChunkTimeoutError, StreamInterruptedError, asyncio.TimeoutError, APITimeoutError)):
-            return "messages.llm_provider_timeout"
-
-        if isinstance(exception, APIConnectionError):
-            return "messages.llm_provider_connection_failed"
-
-        if isinstance(exception, APIStatusError) and exception.status_code in self._PROVIDER_RATE_LIMIT_STATUS_CODES:
-            return "messages.llm_provider_rate_limited"
-
-        if isinstance(exception, APIStatusError) and exception.status_code in self._NON_RETRYABLE_STATUS_CODES:
-            # 400/401/403/404/405：配置错误、权限问题或消息序列损坏，重试无意义，需要人工介入
-            return "messages.llm_provider_config_error"
-
-        if isinstance(exception, APIStatusError):
-            return "messages.llm_provider_error"
-
-        if isinstance(exception, (ConnectionError, OSError)):
-            return "messages.llm_provider_connection_failed"
+        for current in self._iter_exception_chain(exception):
+            if isinstance(current, (StreamChunkTimeoutError, StreamInterruptedError, asyncio.TimeoutError, APITimeoutError)):
+                return ModelErrorCode.TIMEOUT
+            if isinstance(current, APIConnectionError):
+                return ModelErrorCode.CONNECTION_FAILED
+            if isinstance(current, APIStatusError):
+                if current.status_code in self._PROVIDER_RATE_LIMIT_STATUS_CODES:
+                    return ModelErrorCode.RATE_LIMITED
+                if current.status_code in self._NON_RETRYABLE_STATUS_CODES:
+                    # 400/401/403/404/405：配置错误、权限问题或消息序列损坏，重试无意义，需要人工介入
+                    return (
+                        ModelErrorCode.REQUEST_REJECTED
+                        if current.status_code in (400, 405)
+                        else ModelErrorCode.CONFIG_ERROR
+                    )
+                return ModelErrorCode.SERVICE_ERROR
+            if isinstance(current, (ConnectionError, OSError)):
+                return ModelErrorCode.CONNECTION_FAILED
 
         return None
 
-    def _build_user_friendly_custom_message(self, exception: Exception, is_llm_path: bool) -> str | None:
-        """为终态构建用户友好的 custom_message。非 LLM 路径或无法分类时返回 None。"""
-        if not is_llm_path:
-            return None
-        i18n_key = self._classify_llm_exception_for_user(exception)
-        if not i18n_key:
-            return None
-        return i18n.translate(i18n_key, category="common.messages")
+    def _create_model_error(self, code: ModelErrorCode) -> ModelError:
+        model_context = self.agent_context.model_context
+        can_switch = (
+            self.agent_context.is_interactive_main_agent_context()
+            and not model_context.has_active_compact_text_model()
+        )
+        return ModelError(code, model_context.current_text_model_id if can_switch else None)
+
+    def _resolve_model_error(self, exception: Exception) -> ModelError | None:
+        failure = self._last_model_call_failure
+        if failure and any(current is failure.exception for current in self._iter_exception_chain(exception)):
+            return failure.error
+        if is_non_retryable_model_config_error(exception):
+            return ModelError(ModelErrorCode.CONFIG_ERROR)
+        return None
 
     async def run_main_agent(self, request: AgentRunRequest):
         """运行主 agent。"""
@@ -2768,6 +2786,7 @@ Since your subsequent output will be merged with pre-interruption content and di
         Returns:
             LLMResponseContext: 包含LLM响应的所有相关数据
         """
+        self._last_model_call_failure = None
         # 压缩判断必须使用压缩前的业务模型；若触发压缩，后续会切换到 compact 专属模型。
         threshold_model_id = self._require_current_text_model_id()
         await self._try_compact_chat_history(threshold_model_id=threshold_model_id)
@@ -2926,7 +2945,14 @@ Since your subsequent output will be merged with pre-interruption content and di
 
     def _resolve_current_text_model(self) -> TextModelState:
         """解析当前运行时文本模型。"""
-        return self.agent_context.model_context.resolve_text_model()
+        try:
+            return self.agent_context.model_context.resolve_text_model()
+        except ValueError as exception:
+            if is_non_retryable_model_config_error(exception):
+                self._last_model_call_failure = ModelCallFailure(
+                    exception, self._create_model_error(ModelErrorCode.CONFIG_ERROR),
+                )
+            raise
 
     def _resolve_current_max_context_tokens(self, text_model_state: TextModelState) -> int:
         """返回当前用于展示、压缩判断和 Horizon 入参的上下文上限。"""
@@ -3546,8 +3572,6 @@ Since your subsequent output will be merged with pre-interruption content and di
         Returns:
             ExceptionHandlingResult: 异常处理结果
         """
-        from openai import APIError as _openai_APIError
-
         self._log_agent_loop_exception(exception)
 
         # 处理中断的工具调用
@@ -3637,14 +3661,7 @@ Since your subsequent output will be merged with pre-interruption content and di
             self._apply_final_task_state(build_final_task_state(
                 FinalTaskStateCode.MESSAGE_PROCESSING_FAILED,
                 vendor_message=str(exception),
-                custom_message=self._build_user_friendly_custom_message(
-                    exception,
-                    is_llm_path=isinstance(exception, LLMCallRequestException)
-                    or any(
-                        isinstance(exc, _openai_APIError)
-                        for exc in self._iter_exception_chain(exception)
-                    ),
-                ),
+                model_error=self._resolve_model_error(exception),
             ))
             loop_state.last_llm_message = None
             return ExceptionHandlingResult(should_continue=False, final_response=None)
@@ -3871,6 +3888,12 @@ Since your subsequent output will be merged with pre-interruption content and di
                 llm_config=text_model_state.config,
             )
         except ResourceLimitExceededException:
+            raise
+        except Exception as exception:
+            # 在真实调用边界记住身份并原样抛出；不改变重试分类、时机或取消行为。
+            code = self._classify_llm_exception_for_user(exception)
+            if code is not None:
+                self._last_model_call_failure = ModelCallFailure(exception, self._create_model_error(code))
             raise
 
         # 检查 model_extra 中的响应状态码

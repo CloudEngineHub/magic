@@ -2,6 +2,7 @@ import type { VideoGenerationConfig } from "@/components/CanvasDesign/public/mag
 import type { ModeItem } from "@/pages/superMagic/pages/Workspace/types"
 import type { MessageEditorSize } from "../../types"
 import type { AddModelType } from "./components/AddModel/store"
+import type { ReactElement, ReactNode } from "react"
 
 export type { MessageEditorSize }
 
@@ -58,6 +59,18 @@ export interface ModelItem {
 }
 
 export interface ModelSwitchProps {
+	/** 确认式选择只暂存候选，确认后由调用方保存偏好并提交。 */
+	selection?:
+		| { mode: "immediate" }
+		| {
+				mode: "confirm"
+				onConfirm: (model: ModelItem) => Promise<boolean>
+				confirmText: string
+				canConfirm: (model: ModelItem) => boolean
+				description?: ReactNode
+		  }
+	trigger?: ReactElement
+	allowedTabs?: readonly [ModelTabType, ...ModelTabType[]]
 	size?: MessageEditorSize
 	selectedModel?: ModelItem | null
 	modelList: ModeItem["groups"]

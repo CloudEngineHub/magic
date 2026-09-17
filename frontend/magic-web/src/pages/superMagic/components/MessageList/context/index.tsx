@@ -2,8 +2,11 @@ import { Topic } from "@/pages/superMagic/pages/Workspace/types"
 import type { JSONContent } from "@/infrastructure/editors/tiptap/core"
 import { createContext, type PropsWithChildren, type ReactNode, useContext } from "react"
 import type { ProjectFilesStore } from "@/stores/projectFiles"
+import type { ModelErrorRecoveryCapability } from "@/pages/superMagic/hooks/useModelErrorRecovery"
 
 export interface MessageListContextState {
+	/** 当前会话注入；分享、历史预览等未注入场景只能阅读帮助。 */
+	modelErrorRecovery?: ModelErrorRecoveryCapability
 	/** 仅登录的非分享会话解析当前用户的个人文件引用。 */
 	allowUserFileReferences?: boolean
 	/** 是否允许撤回 */

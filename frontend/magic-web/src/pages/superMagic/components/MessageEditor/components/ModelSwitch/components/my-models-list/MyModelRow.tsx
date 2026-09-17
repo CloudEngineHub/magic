@@ -14,6 +14,7 @@ import type { MyModelGroup, MyModelProviderEntry } from "./utils"
 import { userStore } from "@/models/user"
 
 interface MyModelRowProps {
+	allowModelManagement?: boolean
 	group: MyModelGroup
 	isSelected?: boolean
 	onSelect?: (model: ModelItem) => void
@@ -29,6 +30,7 @@ export function MyModelRow({
 	selectedItemRef,
 	onEdit,
 	onDelete,
+	allowModelManagement = true,
 }: MyModelRowProps) {
 	const { t } = useTranslation("super")
 	const isActionMenuOpenRef = useRef(false)
@@ -44,7 +46,7 @@ export function MyModelRow({
 
 	// 企业组织的模型由管理后台维护，模型选择器只允许个人组织用户管理自定义模型。
 	const { isPersonalOrganization } = userStore.user
-	const canManageModels = isPersonalOrganization
+	const canManageModels = isPersonalOrganization && allowModelManagement
 
 	const handleSelect = () => onSelect?.(serviceProviderModelToModelItem(representativeModel))
 

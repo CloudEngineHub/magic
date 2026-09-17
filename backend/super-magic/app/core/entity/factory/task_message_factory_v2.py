@@ -395,6 +395,8 @@ class TaskMessageFactoryV2(TaskMessageFactoryProtocol):
             content=content,
             status=status.value,
         )
+        if final_task_state.model_error is not None:
+            inner["error"] = final_task_state.model_error.to_payload()
         return cls._build_and_send(
             agent_context,
             inner,

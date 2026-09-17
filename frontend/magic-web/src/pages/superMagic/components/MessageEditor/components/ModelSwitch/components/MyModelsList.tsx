@@ -31,6 +31,7 @@ const MODEL_TYPE_BY_KEY: Record<"models" | "image_models" | "video_models", numb
 }
 
 interface MyModelsListProps {
+	allowModelManagement?: boolean
 	modelKey?: "models" | "image_models" | "video_models"
 	selectedModel?: ModelItem | null
 	onModelClick?: (model: ModelItem) => void
@@ -44,6 +45,7 @@ function MyModelsListInner({
 	onModelClick,
 	selectedItemRef,
 	onModelsLoaded,
+	allowModelManagement = true,
 }: MyModelsListProps) {
 	const { t } = useTranslation("super")
 	const store = useOptionalAddModelStore()
@@ -98,6 +100,7 @@ function MyModelsListInner({
 						<MyModelRow
 							key={group.representativeModel.model_id}
 							group={group}
+							allowModelManagement={allowModelManagement}
 							isSelected={
 								selectedModel?.model_id === group.representativeModel.model_id
 							}
