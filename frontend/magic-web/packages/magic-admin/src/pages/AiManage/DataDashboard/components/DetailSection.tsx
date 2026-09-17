@@ -579,12 +579,6 @@ function fileUserColumns(
 			width: 280,
 			render: (value) => renderFileDepartment(value, t),
 		}),
-		createDetailColumn(styles, t, {
-			titleKey: "departmentId",
-			dataIndex: "department_id",
-			width: 200,
-			render: displayText,
-		}),
 		...fileCountColumns(styles, t, fileCategory),
 	]
 }
@@ -603,13 +597,8 @@ function fileDepartmentColumns(
 			render: (value) => renderFileDepartment(value, t),
 		}),
 		createDetailColumn(styles, t, {
-			titleKey: "departmentId",
-			dataIndex: "department_id",
-			width: 150,
-			render: displayText,
-		}),
-		createDetailColumn(styles, t, {
 			titleKey: "memberCount",
+			helperKey: "fileDepartmentMemberCount",
 			dataIndex: "member_count",
 			width: 120,
 			render: renderNumber,
@@ -659,12 +648,6 @@ function fileAgentColumns(
 			dataIndex: "department_name_path",
 			width: 280,
 			render: (value) => renderFileDepartment(value, t),
-		}),
-		createDetailColumn(styles, t, {
-			titleKey: "departmentId",
-			dataIndex: "department_id",
-			width: 150,
-			render: displayText,
 		}),
 		...fileCountColumns(styles, t, fileCategory),
 	]

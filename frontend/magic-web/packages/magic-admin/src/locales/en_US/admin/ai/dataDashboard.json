@@ -92,6 +92,7 @@
 		"mdCount": "Files classified as Markdown by extension.",
 		"member": "Member name and user ID.",
 		"memberCount": "Unique members in the department for the selected scope.",
+		"fileDepartmentMemberCount": "Number of members in the current department.",
 		"members": "Deduplicated calling members in the current statistical scope.",
 		"organizationDepartment": "The level-1 department containing the current department; level-1 rows show the department itself.",
 		"otherCount": "Files that do not match another category.",
