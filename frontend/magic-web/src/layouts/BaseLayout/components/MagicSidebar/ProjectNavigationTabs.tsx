@@ -37,7 +37,7 @@ function ProjectNavigationTabs({
 	]
 	return (
 		<div
-			className="sticky top-0 z-30 flex items-center gap-2 bg-sidebar px-2"
+			className="sticky top-0 z-20 flex items-center gap-2 bg-sidebar px-2"
 			data-sidebar-navigation-header="tabs"
 		>
 			{/* Native fieldset disabling preserves the existing busy-state behavior for both tab buttons. */}
@@ -45,15 +45,15 @@ function ProjectNavigationTabs({
 				disabled={disabled}
 				role="group"
 				aria-label={t("sidebarPanels.projectManager")}
-				className="m-0 min-w-0 flex-1 border-0 p-0"
+				className="m-0 min-w-0 flex-1 border-0 p-0 [container-name:project-navigation-tabs] [container-type:inline-size]"
 			>
-				<div className="flex-shrink-0">
+				<div className="w-full min-w-0">
 					<SmoothTabs
 						tabs={tabs}
 						value={sidebarStore.expandedNavigationSection}
 						onChange={sidebarStore.selectNavigationSection}
 						variant="background"
-						className="h-auto w-full bg-muted p-[3px]"
+						className="h-auto w-full bg-muted p-[3px] [@container_project-navigation-tabs_(max-width:190px)]:[&>button>span:last-child]:hidden"
 						buttonClassName="h-[28px] py-0 text-[13px] font-normal"
 						indicatorClassName="inset-y-[3px] h-[28px]"
 						data-testid="sidebar-navigation-tabs"
