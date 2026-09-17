@@ -20,7 +20,15 @@ export function useMicroAppSkillActions(attachmentList: AttachmentItem[], canEdi
 	const enabled = canEdit && Boolean(selectedProject?.id)
 	const folders = useMemo(() => {
 		const result = new Map<string, AttachmentItem>()
-		for (const item of attachmentList) {
+		const stack = [...attachmentList].reverse()
+		while (stack.length) {
+			const item = stack.pop()
+			if (!item) continue
+			// Traverse children before filtering: grouping parents may have no file ID or skill path.
+			const children = item.children ?? []
+			for (let index = children.length - 1; index >= 0; index--) {
+				stack.push(children[index])
+			}
 			if (!(item.is_directory || item.type === "directory") || !item.file_id) continue
 			const path = normalizeRelativeFilePath(item.relative_file_path)
 			const directory = parseSkillDirFromSkillMdRelativePath(`${path}/SKILL.md`)

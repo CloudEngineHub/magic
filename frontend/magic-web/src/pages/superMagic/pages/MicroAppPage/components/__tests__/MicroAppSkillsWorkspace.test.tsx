@@ -190,59 +190,73 @@ describe("skill creation and folder references", () => {
 			pubsub.unsubscribe(PubSubEvents.Send_Message_by_Content, listener)
 		}
 	})
-	it("uses the actual folder identity for both drag and add-to-conversation", async () => {
-		loadProjectSkillsMock.mockResolvedValue([
-			{ id: "manifest", directory: "data", name: "Data", content: "# Data" },
-		])
-		const publish = vi.spyOn(pubsub, "publish")
-		render(
-			<MicroAppSkillsWorkspace
-				canEdit
-				attachmentList={[
-					{
-						file_id: "folder",
-						file_name: "data",
-						is_directory: true,
-						relative_file_path: ".magic/skills/data/",
-						children: [{ file_id: "nested" }],
-					},
-				]}
-			/>,
-		)
-		const item = await screen.findByTestId("micro-app-skill-workspace-item-manifest")
-		expect(item).toHaveAttribute("draggable", "true")
-		fireEvent.dragStart(item, { dataTransfer: { effectAllowed: "none" } })
-		expect(handleAttachmentDragStart).toHaveBeenCalledWith(
-			expect.anything(),
-			expect.objectContaining({ file_id: "folder", is_directory: true }),
-			expect.objectContaining({
-				type: "project_directory",
-				data: expect.objectContaining({
-					directory_id: "folder",
-					directory_path: ".magic/skills/data",
-				}),
-			}),
-		)
-		const payload = vi.mocked(handleAttachmentDragStart).mock.calls.at(-1)?.[1]
-		expect(payload).not.toHaveProperty("children")
-		fireEvent.click(item)
-		fireEvent.click(
-			screen.getByRole("button", { name: "microAppPage.skills.addToConversation" }),
-		)
-		expect(publish).toHaveBeenCalledWith(
-			PubSubEvents.Add_File_To_Chat,
-			expect.objectContaining({
-				items: [
-					expect.objectContaining({
-						type: "project_directory",
-						data: expect.objectContaining({
-							directory_id: "folder",
-							project_id: "project-1",
-						}),
+	it.each([false, true])(
+		"uses the actual folder identity for drag and add-to-conversation (nested: %s)",
+		async (nested) => {
+			loadProjectSkillsMock.mockResolvedValue([
+				{ id: "manifest", directory: "data", name: "Data", content: "# Data" },
+			])
+			const publish = vi.spyOn(pubsub, "publish")
+			const folder = {
+				file_id: "folder",
+				file_name: "data",
+				is_directory: true,
+				relative_file_path: ".magic/skills/data/",
+				children: [{ file_id: "nested" }],
+			}
+			const attachmentList = nested
+				? [
+						{
+							is_directory: true,
+							relative_file_path: ".magic",
+							children: [
+								{
+									file_id: "skills-root",
+									type: "directory",
+									relative_file_path: ".magic/skills",
+									children: [folder],
+								},
+							],
+						},
+					]
+				: [folder]
+			render(<MicroAppSkillsWorkspace canEdit attachmentList={attachmentList} />)
+
+			const item = await screen.findByTestId("micro-app-skill-workspace-item-manifest")
+			expect(item).toHaveAttribute("draggable", "true")
+			fireEvent.dragStart(item, { dataTransfer: { effectAllowed: "none" } })
+			expect(handleAttachmentDragStart).toHaveBeenCalledWith(
+				expect.anything(),
+				expect.objectContaining({ file_id: "folder", is_directory: true }),
+				expect.objectContaining({
+					type: "project_directory",
+					data: expect.objectContaining({
+						directory_id: "folder",
+						directory_path: ".magic/skills/data",
 					}),
-				],
-			}),
-		)
-		publish.mockRestore()
-	})
+				}),
+			)
+			const payload = vi.mocked(handleAttachmentDragStart).mock.calls.at(-1)?.[1]
+			expect(payload).not.toHaveProperty("children")
+			fireEvent.click(item)
+			fireEvent.click(
+				screen.getByRole("button", { name: "microAppPage.skills.addToConversation" }),
+			)
+			expect(publish).toHaveBeenCalledWith(
+				PubSubEvents.Add_File_To_Chat,
+				expect.objectContaining({
+					items: [
+						expect.objectContaining({
+							type: "project_directory",
+							data: expect.objectContaining({
+								directory_id: "folder",
+								project_id: "project-1",
+							}),
+						}),
+					],
+				}),
+			)
+			publish.mockRestore()
+		},
+	)
 })
