@@ -32,12 +32,14 @@ export function useDataDashboardExport({
 	agentQuery,
 	memberQuery,
 	organizationQuery,
+	fileQuery,
 }: {
 	view: DataDashboardView
 	currentTab: DashboardTabType
 	agentQuery: DataDashboard.AgentSummaryQuery
 	memberQuery: DataDashboard.MemberSummaryQuery
 	organizationQuery: DataDashboard.OrganizationSummaryQuery
+	fileQuery: DataDashboard.FileAnalysisSummaryQuery
 }) {
 	const { AIManageApi } = useApis()
 	const { t } = useTranslation("admin/ai/dataDashboard")
@@ -77,6 +79,9 @@ export function useDataDashboardExport({
 			} else if (view === VIEW.OrganizationAnalysis) {
 				payload = { ...organizationQuery, tab_type: exportTab }
 				created = await AIManageApi.createDataDashboardOrganizationExport(payload)
+			} else if (view === VIEW.FileProductionAnalysis) {
+				payload = { ...fileQuery, tab_type: exportTab as DataDashboard.FileTabType }
+				created = await AIManageApi.createDataDashboardFileAnalysisExport(payload)
 			} else {
 				throw new Error(t("export.failed"))
 			}
