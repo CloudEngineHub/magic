@@ -82,7 +82,7 @@ export default function MicroAppEntryPreview({
 
 		return (
 			<div
-				className="flex h-full min-h-[280px] flex-col items-center justify-center px-6 text-center"
+				className="flex h-full min-h-[280px] w-full flex-col items-center justify-center px-6 text-center"
 				data-testid={emptyTestId}
 			>
 				<MicroAppEmptyIllustration size="md" />
