@@ -95,6 +95,7 @@
 		"@dtyq/es6-template-strings": "~0.0.5",
 		"@dtyq/html-sandbox": "workspace:*",
 		"@dtyq/magic-admin": "workspace:*",
+		"@dtyq/magic-admin-v2": "workspace:*",
 		"@dtyq/magic-flow": "~0.0.16",
 		"@dtyq/timezone": "^0.0.2",
 		"@dtyq/upload-sdk": "~0.0.12",
