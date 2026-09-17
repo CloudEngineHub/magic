@@ -20,11 +20,11 @@ class AgentListItemDTO extends AbstractDTO
 
     private ?string $projectId;
 
-    private array $nameI18n;
+    private string $name;
 
-    private ?array $roleI18n;
+    private string $role;
 
-    private ?array $descriptionI18n;
+    private string $description;
 
     /**
      * Agent图标对象，包含 type 和 value.
@@ -36,11 +36,13 @@ class AgentListItemDTO extends AbstractDTO
     /**
      * Playbook 列表（feature）.
      *
-     * @var array<int, array{name_i18n: array, icon: null|string, theme_color: null|string}>
+     * @var array<int, array{name: string, icon: null|string, theme_color: null|string}>
      */
     private array $playbooks;
 
     private string $sourceType;
+
+    private string $source;
 
     private bool $enabled;
 
@@ -81,13 +83,14 @@ class AgentListItemDTO extends AbstractDTO
         int $id,
         string $code,
         ?string $projectId,
-        array $nameI18n,
-        ?array $roleI18n,
-        ?array $descriptionI18n,
+        string $name,
+        string $role,
+        string $description,
         ?array $icon,
         int $iconType,
         array $playbooks,
         string $sourceType,
+        string $source,
         bool $enabled,
         ?bool $isStoreOffline,
         ?string $latestVersionCode,
@@ -108,13 +111,14 @@ class AgentListItemDTO extends AbstractDTO
         $this->id = $id;
         $this->code = $code;
         $this->projectId = $projectId;
-        $this->nameI18n = $nameI18n;
-        $this->roleI18n = $roleI18n;
-        $this->descriptionI18n = $descriptionI18n;
+        $this->name = $name;
+        $this->role = $role;
+        $this->description = $description;
         $this->icon = $icon;
         $this->iconType = $iconType;
         $this->playbooks = $playbooks;
         $this->sourceType = $sourceType;
+        $this->source = $source;
         $this->enabled = $enabled;
         $this->isStoreOffline = $isStoreOffline;
         $this->latestVersionCode = $latestVersionCode;
@@ -142,13 +146,14 @@ class AgentListItemDTO extends AbstractDTO
             'id' => (string) $this->id,
             'code' => $this->code,
             'project_id' => $this->projectId,
-            'name_i18n' => $this->nameI18n,
-            'role_i18n' => $this->roleI18n,
-            'description_i18n' => $this->descriptionI18n,
+            'name' => $this->name,
+            'role' => $this->role,
+            'description' => $this->description,
             'icon' => $this->icon,
             'icon_type' => $this->iconType,
             'playbooks' => $this->playbooks,
             'source_type' => $this->sourceType,
+            'source' => $this->source,
             'enabled' => $this->enabled,
             'is_store_offline' => $this->isStoreOffline,
             'latest_version_code' => $this->latestVersionCode,

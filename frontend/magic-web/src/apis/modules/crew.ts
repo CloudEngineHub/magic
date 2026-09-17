@@ -101,7 +101,10 @@ export function resolveCrewIconUrl(icon: CrewIconObject | null | undefined): str
 
 /** A single playbook base data (used in list views) */
 export interface CrewPlayBookBaseData {
-	name_i18n: CrewI18nText
+	/** Resolved display name returned by agent query list endpoints. */
+	name?: string
+	/** Legacy localized name retained for detail/compatibility payloads. */
+	name_i18n?: CrewI18nText
 	/** Emoji or icon key */
 	icon: string | null
 	theme_color: string | null
@@ -135,8 +138,10 @@ export interface GetStoreAgentsParams {
 	page?: number
 	page_size?: number
 	keyword?: string
-	/** Filter by category ID; omit for all */
+	/** Filter by category ID in the UI; converted to category_ids for the API. */
 	category_id?: string
+	/** API query field; supports multiple category IDs. */
+	category_ids?: Array<string | number>
 	/** Filter by market source; omit to include both public and organization markets. */
 	market_type?: StoreAgentMarketType
 }
@@ -150,9 +155,10 @@ export interface StoreAgentItem {
 	agent_code: string
 	user_code?: string | null
 	is_featured?: boolean
-	name_i18n: CrewI18nText
-	role_i18n: CrewI18nArrayText
-	description_i18n: CrewI18nText
+	/** Resolved display fields returned by the market query endpoint. */
+	name: string
+	role: string
+	description: string
 	/** Agent icon object (url, type, color) */
 	icon: CrewIconObject | null
 	/** Icon type: 1=icon, 2=image */
@@ -164,7 +170,9 @@ export interface StoreAgentItem {
 	publisher?: CrewPublisher | null
 	/** Market source returned by the store-agent query. */
 	market_type: StoreAgentMarketType
-	category_id: string | null
+	category_ids?: string[]
+	/** Legacy response field retained for older servers. */
+	category_id?: string | null
 	/** Whether the current user has added this agent */
 	is_added: boolean
 	/** Latest market version code */
@@ -221,15 +229,20 @@ export interface AgentItem {
 	/** Crew unique code (magic_super_magic_agents.code) */
 	code: string
 	user_role?: CollaboratorPermission
-	name_i18n: CrewI18nText
-	role_i18n: CrewI18nArrayText
-	description_i18n: CrewI18nText
+	/** Display name returned by agent query list endpoints. */
+	name: string
+	/** Resolved role returned by agent query list endpoints. */
+	role: string
+	/** Display description returned by agent query list endpoints. */
+	description: string
 	/** Agent icon object (url, type, color) */
 	icon: CrewIconObject | null
 	/** Icon type: 1=icon, 2=image */
 	icon_type: CrewIconType
 	playbooks: CrewPlayBookBaseData[]
 	source_type: CrewSourceType
+	/** Canonical source value returned by agent query list endpoints. */
+	source: string
 	/** Current user's display source for this agent (returned by list endpoints). */
 	origin: CrewAgentOrigin
 	/** Publish visibility for the current agent. */
@@ -659,17 +672,17 @@ export const generateCrewApi = (fetch: ServiceHttpClient) => ({
 
 	/**
 	 * Get store agents list (marketplace).
-	 * POST with body: page, page_size, keyword, category_id, market_type.
+	 * POST with body: page, page_size, keyword, category_ids, market_type.
 	 * Results include is_added and allow_delete flags for each agent.
 	 * @param params Request body
 	 */
 	getStoreAgents(params: GetStoreAgentsParams = {}) {
-		const { page = 1, page_size = 20, keyword, category_id, market_type } = params
+		const { page = 1, page_size = 20, keyword, category_id, category_ids, market_type } = params
 		return fetch.post<GetStoreAgentsResponse>("/api/v2/super-magic/agent-market/queries", {
 			page,
 			page_size,
 			keyword,
-			category_id,
+			category_ids: category_ids ?? (category_id ? [category_id] : undefined),
 			...(market_type ? { market_type } : {}),
 		})
 	},

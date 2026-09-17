@@ -125,7 +125,7 @@ class SuperMagicAgentMarketAssembler
         $features = [];
         foreach ($playbooks as $playbook) {
             $features[] = [
-                'name_i18n' => $playbook->getNameI18n() ?? [],
+                'name' => $playbook->getI18nName(CoContext::getLanguage()),
                 'icon' => $playbook->getIcon(),
                 'theme_color' => $playbook->getThemeColor(),
             ];
@@ -135,6 +135,7 @@ class SuperMagicAgentMarketAssembler
         $allowDelete = $isAdded && $userAgent?->getSourceType()->isMarket() === true;
 
         $latestVersionCode = isset($latestVersionsMap[$agentCode]) ? $latestVersionsMap[$agentCode]->getVersion() : null;
+        $latestVersion = $latestVersionsMap[$agentCode] ?? null;
         $publisher = self::buildPublisher(
             $agentMarket->getPublisherType(),
             $publisherUserMap[$agentMarket->getPublisherId()] ?? null
@@ -150,9 +151,20 @@ class SuperMagicAgentMarketAssembler
             id: $agentMarket->getId() ?? 0,
             agentCode: $agentCode,
             userCode: $userAgent?->getAgentCode(),
-            nameI18n: $agentMarket->getNameI18n() ?? [],
-            roleI18n: $agentMarket->getRoleI18n(),
-            descriptionI18n: $agentMarket->getDescriptionI18n(),
+            name: self::resolveLocalizedText(
+                $agentMarket->getNameI18n(),
+                $latestVersion?->getI18nName(CoContext::getLanguage()) ?? '',
+                CoContext::getLanguage()
+            ),
+            role: self::resolveLocalizedRole(
+                $agentMarket->getRoleI18n() ?? $latestVersion?->getRoleI18n(),
+                CoContext::getLanguage()
+            ),
+            description: self::resolveLocalizedText(
+                $agentMarket->getDescriptionI18n(),
+                $latestVersion?->getI18nDescription(CoContext::getLanguage()) ?? '',
+                CoContext::getLanguage()
+            ),
             icon: $agentMarket->getIcon(),
             iconType: $agentMarket->getIconType()->value,
             playbooks: $features,
@@ -174,9 +186,17 @@ class SuperMagicAgentMarketAssembler
      */
     private static function resolveLocalizedText(?array $i18n, string $fallback, string $language): string
     {
-        $localizedValue = $i18n[$language] ?? $i18n[LanguageEnum::DEFAULT->value] ?? null;
-        if (is_string($localizedValue) && $localizedValue !== '') {
-            return $localizedValue;
+        foreach ([$language, LanguageEnum::DEFAULT->value, 'en_US', 'zh_CN'] as $key) {
+            $localizedValue = $i18n[$key] ?? null;
+            if (is_string($localizedValue) && $localizedValue !== '') {
+                return $localizedValue;
+            }
+        }
+
+        foreach ($i18n ?? [] as $localizedValue) {
+            if (is_string($localizedValue) && $localizedValue !== '') {
+                return $localizedValue;
+            }
         }
 
         return $fallback;
@@ -189,13 +209,50 @@ class SuperMagicAgentMarketAssembler
      */
     private static function resolveLocalizedList(?array $i18n, string $language): array
     {
-        $localizedValue = $i18n[$language] ?? $i18n[LanguageEnum::DEFAULT->value] ?? [];
-        if (! is_array($localizedValue)) {
+        if ($i18n === null) {
             return [];
         }
 
+        $preferredKeys = [$language, LanguageEnum::DEFAULT->value, 'en_US', 'zh_CN'];
+        foreach ($preferredKeys as $key) {
+            $localizedValue = $i18n[$key] ?? null;
+            if (! is_array($localizedValue)) {
+                continue;
+            }
+
+            $resolved = self::filterLocalizedList($localizedValue);
+            if ($resolved !== []) {
+                return $resolved;
+            }
+        }
+
+        foreach ($i18n as $localizedValue) {
+            if (! is_array($localizedValue)) {
+                continue;
+            }
+
+            $resolved = self::filterLocalizedList($localizedValue);
+            if ($resolved !== []) {
+                return $resolved;
+            }
+        }
+
+        return [];
+    }
+
+    private static function resolveLocalizedRole(?array $i18n, string $language): string
+    {
+        return implode(', ', self::resolveLocalizedList($i18n, $language));
+    }
+
+    /**
+     * @param array<mixed> $values
+     * @return array<int, string>
+     */
+    private static function filterLocalizedList(array $values): array
+    {
         return array_values(array_filter(
-            $localizedValue,
+            $values,
             static fn ($item) => is_string($item) && $item !== ''
         ));
     }

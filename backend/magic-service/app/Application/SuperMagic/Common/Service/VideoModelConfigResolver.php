@@ -74,7 +74,7 @@ class VideoModelConfigResolver
 
             $videoGenerationConfigDomainService = di(VideoGenerationConfigDomainService::class);
             $featuredConfigs = $videoGenerationConfigDomainService->resolveFeatured($candidates);
-            return $featuredConfigs[$modelId]?->toArray() ?? null;
+            return ($featuredConfigs[$modelId] ?? null)?->toArray() ?? null;
         } catch (Throwable $throwable) {
             di(LoggerFactory::class)->get(static::class)->warning('Failed to resolve video generation config, fallback to model_id only', [
                 'model_id' => $modelId,

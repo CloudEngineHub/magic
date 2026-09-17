@@ -96,7 +96,7 @@ export interface SlidesTemplateLocaleItem {
 	value: string
 }
 
-export type SlidesTemplateResponseText = SlidesTemplateItem["label"] | SlidesTemplateLocaleItem[]
+export type SlidesTemplateResponseText = string | SlidesTemplateItem["label"] | SlidesTemplateLocaleItem[]
 
 export interface SlidesTemplateRawListResponse {
 	page: number
@@ -211,6 +211,7 @@ export function getSlidesTemplateName(
 		"code" | "name" | "name_i18n"
 	>,
 ) {
+	// Keep a read-only fallback for cached responses during the API rollout; new responses only provide `name`.
 	return item.name ?? item.name_i18n ?? item.code
 }
 
