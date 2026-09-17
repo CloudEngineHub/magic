@@ -923,13 +923,16 @@ readonly class AdminProviderAppService
             'source_id' => SourceId::CONNECTIVITY_TEST,
         ];
 
+        $supportFunction = $providerModelEntity->getConfig()?->isSupportFunction() ?? false;
+
         return LLMConnectivityTestExecutor::execute(
-            function () use ($llmAppService, $modelPrimaryId, $businessParams): void {
+            function () use ($llmAppService, $modelPrimaryId, $businessParams, $supportFunction): void {
                 $completionDTO = $this->buildSavedModelConnectivityCompletion(
                     $modelPrimaryId,
                     $businessParams,
                     [['role' => 'user', 'content' => '你好']],
-                    -1
+                    -1,
+                    $supportFunction ? LLMConnectivityTestMessageBuilder::buildFunctionCallTools() : []
                 );
                 $llmAppService->chatCompletion($completionDTO);
             },
@@ -953,7 +956,8 @@ readonly class AdminProviderAppService
         string $modelPrimaryId,
         array $businessParams,
         array $messages,
-        int $maxTokens
+        int $maxTokens,
+        array $tools = []
     ): CompletionDTO {
         $completionDTO = new CompletionDTO();
         if (defined('MAGIC_ACCESS_TOKEN')) {
@@ -964,6 +968,7 @@ readonly class AdminProviderAppService
         $completionDTO->setEnableHighAvailability(false);
         $completionDTO->setBusinessParams($businessParams);
         $completionDTO->setMaxTokens($maxTokens);
+        $completionDTO->setTools($tools);
         return $completionDTO;
     }
 

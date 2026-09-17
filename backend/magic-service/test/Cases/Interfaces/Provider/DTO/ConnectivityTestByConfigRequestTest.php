@@ -35,4 +35,25 @@ class ConnectivityTestByConfigRequestTest extends TestCase
         $request->setSupportMultiModal(null);
         $this->assertNull($request->getSupportMultiModal());
     }
+
+    public function testSupportFunctionKeepsNullWhenMissing(): void
+    {
+        $request = new ConnectivityTestByConfigRequest();
+
+        $this->assertNull($request->getSupportFunction());
+    }
+
+    public function testSupportFunctionParsesCommonBooleanValues(): void
+    {
+        $request = new ConnectivityTestByConfigRequest();
+
+        $request->setSupportFunction('true');
+        $this->assertTrue($request->getSupportFunction());
+
+        $request->setSupportFunction(0);
+        $this->assertFalse($request->getSupportFunction());
+
+        $request->setSupportFunction(null);
+        $this->assertNull($request->getSupportFunction());
+    }
 }
