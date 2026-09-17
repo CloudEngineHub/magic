@@ -10,6 +10,7 @@ import { loadProjectAttachments } from "@/pages/superMagic/services/projectAttac
 import { FileAccessProvider, useFileAccess } from "@/pages/superMagic/fileAccess/FileAccessProvider"
 import { createShareFileAccess } from "@/pages/superMagic/fileAccess/fileAccessContext"
 import { useHostConversation } from "@/pages/superMagic/contexts/HostConversationContext"
+import { AppStoreProvider, useAppStore } from "@/pages/superMagic/pages/MicroAppPage/context"
 import BasePublishedMicroAppConversationProvider from "../PublishedMicroAppConversationProvider"
 
 function PublishedMicroAppConversationProvider(
@@ -33,6 +34,7 @@ interface TestLayoutProps extends Record<string, unknown> {
 const layoutMocks = vi.hoisted(() => ({
 	props: null as TestLayoutProps | null,
 	messagePanelProps: null as Record<string, unknown> | null,
+	historyPanelProps: null as Record<string, unknown> | null,
 	tasksProps: null as Record<string, unknown> | null,
 	expand: () => {},
 }))
@@ -94,7 +96,10 @@ vi.mock("@/pages/superMagic/hooks/useScopedMessageHeaderTopicActions", () => ({
 }))
 
 vi.mock("@/pages/superMagic/components/MessageHeader", () => ({
-	MessageHeaderTopicHistoryPanel: () => <div data-testid="message-header-topic-history-panel" />,
+	MessageHeaderTopicHistoryPanel: (props: Record<string, unknown>) => {
+		layoutMocks.historyPanelProps = props
+		return <div data-testid="message-header-topic-history-panel" />
+	},
 }))
 
 vi.mock(
@@ -162,6 +167,7 @@ describe("PublishedMicroAppConversationProvider", () => {
 		layoutMocks.tasksProps = null
 		layoutMocks.props = null
 		layoutMocks.messagePanelProps = null
+		layoutMocks.historyPanelProps = null
 		vi.mocked(loadProjectAttachments).mockClear()
 		vi.mocked(SuperMagicApi.getMicroAppRuntimeProject).mockReset()
 		vi.mocked(SuperMagicApi.ensureMicroAppRuntimeProject).mockReset()
@@ -361,6 +367,7 @@ describe("PublishedMicroAppConversationProvider", () => {
 		})
 		const { unmount } = render(historyPanel)
 		expect(screen.getByTestId("message-header-topic-history-panel")).toBeInTheDocument()
+		expect(layoutMocks.historyPanelProps?.hideTopicListModeIcon).toBeUndefined()
 		unmount()
 	})
 
@@ -385,6 +392,11 @@ describe("PublishedMicroAppConversationProvider", () => {
 				id: "runtime-project",
 			}),
 		)
+		expect(layoutMocks.messagePanelProps).toMatchObject({
+			microAppId: "app-1",
+			microAppName: "My app",
+			lockToMicroAppMode: false,
+		})
 		fireEvent.change(screen.getByLabelText("draft"), { target: { value: "Unsent message" } })
 		fireEvent.click(screen.getByTestId("published-micro-app-tasks-button"))
 		expect(await screen.findByTestId("runtime-tasks")).toBeVisible()
@@ -816,6 +828,45 @@ describe("PublishedMicroAppConversationProvider", () => {
 		await act(() => Promise.resolve())
 		expect(errorMessage).toBe("Runtime project load superseded")
 		expect(SuperMagicApi.ensureMicroAppRuntimeProject).not.toHaveBeenCalled()
+	})
+
+	it("reuses the editor usage conversation instead of a nested runtime store", async () => {
+		vi.mocked(SuperMagicApi.getMicroAppRuntimeProject).mockResolvedValue({
+			exists: true,
+			project: { id: "runtime-project-1" },
+		} as never)
+		vi.mocked(SuperMagicApi.getProjectDetail).mockResolvedValue({
+			id: "runtime-project-1",
+		} as never)
+		vi.mocked(SuperMagicApi.getTopicsByProjectId).mockResolvedValue({ list: [] } as never)
+
+		let usageTopicStore: unknown
+		function EditorPreviewHarness() {
+			const store = useAppStore()
+			useState(() => {
+				store.setConversationType("usage")
+				usageTopicStore = store.usageConversation.topicStore
+				return null
+			})
+			return (
+				<PublishedMicroAppConversationProvider appId="app-1">
+					<div />
+				</PublishedMicroAppConversationProvider>
+			)
+		}
+
+		render(
+			<AppStoreProvider>
+				<EditorPreviewHarness />
+			</AppStoreProvider>,
+		)
+
+		await waitFor(() => {
+			expect(layoutMocks.messagePanelProps?.selectedProject).toMatchObject({
+				id: "runtime-project-1",
+			})
+		})
+		expect(layoutMocks.messagePanelProps?.topicStore).toBe(usageTopicStore)
 	})
 })
 

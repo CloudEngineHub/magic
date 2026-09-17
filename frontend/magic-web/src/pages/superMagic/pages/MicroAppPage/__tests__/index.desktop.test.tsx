@@ -222,6 +222,10 @@ vi.mock("../hooks/useMicroAppPageController", () => ({
 			initError: null,
 			mentionPanelStore: {},
 			projectFilesStore: {},
+			setConversationType: vi.fn(),
+			usageConversation: {
+				topicStore: {},
+			},
 		},
 		conversation: {
 			topicStore: {
@@ -564,13 +568,29 @@ describe("MicroAppPageDesktop", () => {
 		)
 	})
 
-	it("hides the topic mode icon in the micro-app history panel", () => {
+	it("hides the topic mode icon in the development history panel", () => {
 		topicHistoryMocks.isOpen = true
 
 		render(<MicroAppPageDesktop />)
 
 		expect(topicHistoryMocks.render).toHaveBeenCalledWith(
 			expect.objectContaining({ hideTopicListModeIcon: true }),
+		)
+	})
+
+	it("shows employee icons in the preview history panel", async () => {
+		topicHistoryMocks.isOpen = true
+
+		render(<MicroAppPageDesktop />)
+		await screen.findByTestId("desktop-entry-preview")
+		const headerProps = headerMocks.render.mock.lastCall?.[0] as {
+			onPageModeChange: (mode: "development" | "preview") => void
+		}
+
+		act(() => headerProps.onPageModeChange("preview"))
+
+		expect(topicHistoryMocks.render).toHaveBeenCalledWith(
+			expect.objectContaining({ hideTopicListModeIcon: false }),
 		)
 	})
 

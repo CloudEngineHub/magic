@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest"
 import { MentionItemType } from "../../../../types"
-import { MentionPanelMicroAppsStore } from "../micro-apps"
+import { MentionPanelMicroAppsStore, createMicroAppMentionItem } from "../micro-apps"
 
 const mocks = vi.hoisted(() => ({
 	getMentionMicroApps: vi.fn(),
@@ -15,6 +15,18 @@ vi.mock("@/apis", () => ({
 describe("MentionPanelMicroAppsStore", () => {
 	beforeEach(() => {
 		mocks.getMentionMicroApps.mockReset()
+	})
+
+	it("creates a selectable mention item for the current app", () => {
+		expect(createMicroAppMentionItem({ appId: "app-1", appName: "Todo App" })).toEqual({
+			id: "app-1",
+			type: MentionItemType.MICRO_APP,
+			name: "Todo App",
+			icon: "",
+			hasChildren: false,
+			isFolder: false,
+			data: { app_id: "app-1", app_name: "Todo App" },
+		})
 	})
 
 	it("loads published mention apps from the dedicated endpoint", async () => {

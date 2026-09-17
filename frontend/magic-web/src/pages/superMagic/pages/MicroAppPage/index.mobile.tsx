@@ -401,6 +401,8 @@ function MicroAppPageMobileInner({
 							onOpenFile={handlePreviewFile}
 							onOpenChange={setConversationOpen}
 							lockToMicroAppMode={pageMode === "development"}
+							microAppId={appId}
+							microAppName={selectedProject?.project_name}
 						/>
 					</Suspense>
 				) : null}

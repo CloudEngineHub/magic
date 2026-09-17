@@ -1,4 +1,4 @@
-import { render, screen } from "@testing-library/react"
+import { fireEvent, render, screen } from "@testing-library/react"
 import { beforeEach, describe, expect, it, vi } from "vitest"
 
 import AppConversationPanel from "../AppConversationPanel"
@@ -15,9 +15,15 @@ const scaffoldMocks = vi.hoisted(() => ({
 	revokedEditorContext: null as Record<string, unknown> | null,
 }))
 
+const mentionInsertMocks = vi.hoisted(() => ({
+	insertCurrentMicroAppMention: vi.fn(),
+}))
+
 const scopedProgressMocks = vi.hoisted(() => ({
 	params: null as Record<string, unknown> | null,
 }))
+
+vi.mock("../../utils/insertCurrentMicroAppMention", () => mentionInsertMocks)
 
 vi.mock("../../context", () => ({
 	useAppStore: () => ({
@@ -29,8 +35,13 @@ vi.mock("../../utils/microAppModelMode", () => ({
 	resolveMicroAppModelSelectionMode: () => "default",
 }))
 
+const topicModeMocks = vi.hoisted(() => ({
+	useCreateTopicListener: vi.fn(),
+}))
+
 vi.mock("@/pages/superMagic/components/TopicMode", () => ({
 	ModeToggle: () => <div data-testid="runtime-mode-toggle" />,
+	useCreateTopicListener: topicModeMocks.useCreateTopicListener,
 }))
 
 vi.mock("@/pages/superMagic/components/ConversationPanelScaffold", () => ({
@@ -105,6 +116,8 @@ vi.mock(
 					data-model-topic-mode={editorContext.modelTopicMode}
 					data-topic-mode={editorContext.topicMode}
 					data-agent-code={editorContext.agentCode}
+					data-show-mode-toggle={String(editorContext.showModeToggle)}
+					data-show-topic-examples-portal={String(editorContext.showTopicExamplesPortal)}
 					data-send-topic-mode={mergedParams?.topicMode}
 					data-send-agent-code={
 						(mergedParams?.extra as { agent_code?: string } | undefined)?.agent_code
@@ -120,6 +133,10 @@ vi.mock("@/pages/superMagic/components/MessageHeader", () => ({
 		scaffoldMocks.messageHeaderProps = props
 		return <div data-testid="message-header">{props.trailingActions as React.ReactNode}</div>
 	},
+}))
+
+vi.mock("@/pages/superMagic/components/MessageList/components/MessageListFallback", () => ({
+	default: () => <div data-testid="message-list-fallback" />,
 }))
 
 vi.mock("@/pages/superMagic/components/MessagePanel/components/MessageQueue", () => ({
@@ -203,6 +220,7 @@ vi.mock("@/pages/superMagic/components/MessagePanel/hooks/useMessageQueue", () =
 		cancelEditQueueItem: vi.fn(),
 		addToQueue: vi.fn(),
 		finishEditQueueItem: vi.fn(),
+		editorRef: { current: { editor: {} } },
 	}),
 }))
 
@@ -219,6 +237,9 @@ vi.mock("@/models/user", () => ({
 }))
 
 describe("AppConversationPanel", () => {
+	const mentionPanelStoreMock = { setPinnedCurrentMicroApp: vi.fn() }
+	const mentionPanelStore = mentionPanelStoreMock as never
+
 	beforeEach(() => {
 		vi.clearAllMocks()
 	})
@@ -234,7 +255,7 @@ describe("AppConversationPanel", () => {
 			<AppConversationPanel
 				selectedProject={{ id: "project-1", project_name: "Micro App" } as never}
 				topicStore={topicStore}
-				mentionPanelStore={{} as never}
+				mentionPanelStore={mentionPanelStore}
 				projectFilesStore={{ workspaceFileTree: [] } as never}
 				trailingActions={<button data-testid="page-action">attachment</button>}
 			/>,
@@ -242,6 +263,7 @@ describe("AppConversationPanel", () => {
 
 		expect(screen.getByTestId("page-action")).toBeInTheDocument()
 		expect(scaffoldMocks.messageHeaderProps?.trailingActions).toBeTruthy()
+		expect(scaffoldMocks.messageHeaderProps?.hideTopicListModeIcon).toBe(true)
 	})
 
 	it("uses the micro app conversation illustration and action-oriented copy", () => {
@@ -255,7 +277,7 @@ describe("AppConversationPanel", () => {
 			<AppConversationPanel
 				selectedProject={{ id: "project-1", project_name: "Micro App" } as never}
 				topicStore={topicStore}
-				mentionPanelStore={{} as never}
+				mentionPanelStore={mentionPanelStore}
 				projectFilesStore={{} as never}
 			/>,
 		)
@@ -267,6 +289,40 @@ describe("AppConversationPanel", () => {
 		).toHaveAttribute("data-state", "conversation-empty")
 		expect(emptyState).toHaveTextContent("microAppPage.conversation.emptyTitle")
 		expect(emptyState).toHaveTextContent("microAppPage.conversation.emptyDescription")
+		expect(screen.getByTestId("web-micro-app-editor")).toHaveAttribute(
+			"data-show-topic-examples-portal",
+			"false",
+		)
+	})
+
+	it("uses the shared message list fallback in preview and published chats", () => {
+		const topicStore = {
+			selectedTopic: {
+				id: "topic-1",
+				topic_name: "Topic",
+				topic_mode: "custom_agent",
+				agent_code: "SMA123",
+			},
+			setSelectedTopic: vi.fn(),
+			updateTopic: vi.fn(),
+		} as never
+
+		render(
+			<AppConversationPanel
+				selectedProject={{ id: "project-1", project_name: "Micro App" } as never}
+				topicStore={topicStore}
+				mentionPanelStore={mentionPanelStore}
+				projectFilesStore={{} as never}
+				lockToMicroAppMode={false}
+			/>,
+		)
+
+		expect(screen.queryByTestId("micro-app-conversation-empty-compact")).not.toBeInTheDocument()
+		expect(screen.getByTestId("message-list-fallback")).toBeInTheDocument()
+		expect(screen.getByTestId("web-micro-app-editor")).toHaveAttribute(
+			"data-show-topic-examples-portal",
+			"true",
+		)
 	})
 
 	it("uses the default model catalog and locks development sends to micro-app mode", () => {
@@ -280,7 +336,7 @@ describe("AppConversationPanel", () => {
 			<AppConversationPanel
 				selectedProject={{ id: "project-1", project_name: "Micro App" } as never}
 				topicStore={topicStore}
-				mentionPanelStore={{} as never}
+				mentionPanelStore={mentionPanelStore}
 				projectFilesStore={{} as never}
 			/>,
 		)
@@ -312,7 +368,7 @@ describe("AppConversationPanel", () => {
 			<AppConversationPanel
 				selectedProject={{ id: "project-1", project_name: "Micro App" } as never}
 				topicStore={topicStore}
-				mentionPanelStore={{} as never}
+				mentionPanelStore={mentionPanelStore}
 				projectFilesStore={{} as never}
 				lockToMicroAppMode={false}
 			/>,
@@ -330,6 +386,40 @@ describe("AppConversationPanel", () => {
 			"data-send-topic-mode",
 		)
 		expect(screen.getByTestId("runtime-mode-toggle")).toBeInTheDocument()
+		expect(scaffoldMocks.messageHeaderProps?.hideTopicListModeIcon).toBe(false)
+	})
+
+	it("binds create-topic events to the visible conversation store", () => {
+		const selectedProject = { id: "runtime-project-1", project_name: "Published App" } as never
+		const topicStore = {
+			selectedTopic: {
+				id: "topic-1",
+				topic_name: "Topic",
+				topic_mode: "custom_agent",
+				agent_code: "SMA123",
+			},
+			setSelectedTopic: vi.fn(),
+			updateTopic: vi.fn(),
+		} as never
+
+		render(
+			<AppConversationPanel
+				selectedProject={selectedProject}
+				topicStore={topicStore}
+				mentionPanelStore={mentionPanelStore}
+				projectFilesStore={{} as never}
+				lockToMicroAppMode={false}
+			/>,
+		)
+
+		expect(topicModeMocks.useCreateTopicListener).toHaveBeenCalledWith({
+			selectedProject,
+			topicStore,
+		})
+		expect(screen.getByTestId("web-micro-app-editor")).toHaveAttribute(
+			"data-show-mode-toggle",
+			"false",
+		)
 	})
 
 	it("only forces micro-app send parameters while development mode is active", () => {
@@ -346,7 +436,7 @@ describe("AppConversationPanel", () => {
 		const props = {
 			selectedProject: { id: "project-1", project_name: "Micro App" } as never,
 			topicStore,
-			mentionPanelStore: {} as never,
+			mentionPanelStore,
 			projectFilesStore: {} as never,
 		}
 
@@ -365,6 +455,7 @@ describe("AppConversationPanel", () => {
 			"data-send-topic-mode",
 		)
 		expect(screen.getByTestId("runtime-mode-toggle")).toBeInTheDocument()
+		expect(scaffoldMocks.messageHeaderProps?.hideTopicListModeIcon).toBe(false)
 
 		rerender(<AppConversationPanel {...props} lockToMicroAppMode />)
 		expect(screen.getByTestId("web-micro-app-editor")).toHaveAttribute(
@@ -386,7 +477,7 @@ describe("AppConversationPanel", () => {
 			<AppConversationPanel
 				selectedProject={{ id: "project-1", project_name: "Micro App" } as never}
 				topicStore={topicStore}
-				mentionPanelStore={{} as never}
+				mentionPanelStore={mentionPanelStore}
 				projectFilesStore={{} as never}
 			/>,
 		)
@@ -419,7 +510,7 @@ describe("AppConversationPanel", () => {
 			<AppConversationPanel
 				selectedProject={{ id: "project-1", project_name: "Micro App" } as never}
 				topicStore={topicStore}
-				mentionPanelStore={{} as never}
+				mentionPanelStore={mentionPanelStore}
 				projectFilesStore={projectFilesStore}
 			/>,
 		)
@@ -441,7 +532,7 @@ describe("AppConversationPanel", () => {
 			<AppConversationPanel
 				selectedProject={selectedProject}
 				topicStore={topicStore}
-				mentionPanelStore={{} as never}
+				mentionPanelStore={mentionPanelStore}
 				projectFilesStore={{} as never}
 			/>,
 		)
@@ -490,7 +581,7 @@ describe("AppConversationPanel", () => {
 			<AppConversationPanel
 				selectedProject={{ id: "project-1", project_name: "Micro App" } as never}
 				topicStore={topicStore}
-				mentionPanelStore={{} as never}
+				mentionPanelStore={mentionPanelStore}
 				projectFilesStore={{} as never}
 			/>,
 		)
@@ -516,7 +607,7 @@ describe("AppConversationPanel", () => {
 			<AppConversationPanel
 				selectedProject={{ id: "project-1", project_name: "Micro App" } as never}
 				topicStore={topicStore}
-				mentionPanelStore={{} as never}
+				mentionPanelStore={mentionPanelStore}
 				projectFilesStore={{} as never}
 				onSelectDetail={onSelectDetail}
 			/>,
@@ -537,7 +628,7 @@ describe("AppConversationPanel", () => {
 			<AppConversationPanel
 				selectedProject={{ id: "project-1", project_name: "Micro App" } as never}
 				topicStore={topicStore}
-				mentionPanelStore={{} as never}
+				mentionPanelStore={mentionPanelStore}
 				projectFilesStore={{} as never}
 				onTerminalTopicStatusChange={checkAttachmentsNowDebounced}
 			/>,
@@ -548,5 +639,64 @@ describe("AppConversationPanel", () => {
 				onTerminalTopicStatusChange: checkAttachmentsNowDebounced,
 			}),
 		)
+	})
+
+	it("shows the mention hint and pins the current app in preview", () => {
+		const topicStore = {
+			selectedTopic: { id: "topic-1", topic_name: "Topic" },
+			setSelectedTopic: vi.fn(),
+			updateTopic: vi.fn(),
+		} as never
+
+		render(
+			<AppConversationPanel
+				selectedProject={{ id: "runtime-project", project_name: "Published App" } as never}
+				topicStore={topicStore}
+				mentionPanelStore={mentionPanelStore}
+				projectFilesStore={{} as never}
+				lockToMicroAppMode={false}
+				microAppId="app-1"
+				microAppName="Todo App"
+			/>,
+		)
+
+		expect(screen.getByTestId("micro-app-runtime-mention-hint")).toHaveTextContent(
+			"microAppPage.conversation.mentionAppHintPrefix",
+		)
+		expect(screen.getByTestId("micro-app-runtime-mention-hint")).toHaveTextContent(
+			"microAppPage.conversation.mentionAppHintAction",
+		)
+		expect(mentionPanelStoreMock.setPinnedCurrentMicroApp).toHaveBeenCalledWith({
+			appId: "app-1",
+			appName: "Todo App",
+		})
+
+		fireEvent.click(screen.getByTestId("micro-app-runtime-mention-hint"))
+		expect(mentionInsertMocks.insertCurrentMicroAppMention).toHaveBeenCalledWith(
+			{},
+			{ appId: "app-1", appName: "Todo App" },
+		)
+	})
+
+	it("does not show the mention hint or pin the app in development", () => {
+		const topicStore = {
+			selectedTopic: { id: "topic-1", topic_name: "Topic" },
+			setSelectedTopic: vi.fn(),
+			updateTopic: vi.fn(),
+		} as never
+
+		render(
+			<AppConversationPanel
+				selectedProject={{ id: "project-1", project_name: "Micro App" } as never}
+				topicStore={topicStore}
+				mentionPanelStore={mentionPanelStore}
+				projectFilesStore={{} as never}
+				microAppId="app-1"
+				microAppName="Todo App"
+			/>,
+		)
+
+		expect(screen.queryByTestId("micro-app-runtime-mention-hint")).not.toBeInTheDocument()
+		expect(mentionPanelStoreMock.setPinnedCurrentMicroApp).toHaveBeenCalledWith(null)
 	})
 })

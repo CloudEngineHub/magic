@@ -120,7 +120,8 @@ export default function MicroAppDesktopConversationPanels({
 						topicActions={topicActions}
 						isConversationPanelCollapsed={isMessagePanelCollapsed}
 						onExpandConversationPanel={onExpandConversationPanel}
-						hideTopicListModeIcon
+						// Preview/published topics can be employees; hide icons in development.
+						hideTopicListModeIcon={lockToMicroAppMode}
 						onClose={onCloseHistoryPanel}
 					/>
 				</aside>

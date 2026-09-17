@@ -23,11 +23,27 @@ const mocks = vi.hoisted(() => {
 		workspace_id: "workspace-1",
 		project_name: "Micro App",
 	}
+	const usageSelectedProject = {
+		id: "runtime-project-1",
+		workspace_id: "workspace-1",
+		project_name: "Published App",
+	}
+	const developmentTopicStore = {
+		selectedTopic: null,
+		topics: [],
+	}
+	const usageTopicStore = {
+		selectedTopic: null,
+		topics: [],
+	}
 
 	return {
 		setWorkspaceFileTree,
 		projectFilesStore,
 		selectedProject,
+		usageSelectedProject,
+		developmentTopicStore,
+		usageTopicStore,
 		checkAttachmentsNowDebounced: vi.fn(),
 		useProjectAttachmentsChangeRealtime: vi.fn(),
 		useCollaboratorUpdatePanel: vi.fn(),
@@ -68,17 +84,14 @@ vi.mock("../../context", () => ({
 		initFromProjectId: vi.fn(),
 		developmentConversation: {
 			selectedProject: mocks.selectedProject,
-			topicStore: {
-				selectedTopic: null,
-				topics: [],
-			},
+			topicStore: mocks.developmentTopicStore,
 			setSelectedProject: vi.fn(),
 		},
 		conversation: {
-			selectedProject: mocks.selectedProject,
-			topicStore: { selectedTopic: null, topics: [] },
+			selectedProject: mocks.usageSelectedProject,
+			topicStore: mocks.usageTopicStore,
 		},
-		conversationType: "development",
+		conversationType: "usage",
 		setConversationType: vi.fn(),
 		loadRuntimeProject: mocks.loadRuntimeProject,
 		resetRuntimeProjectContext: mocks.resetRuntimeProjectContext,

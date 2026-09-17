@@ -4,7 +4,9 @@ import { useTranslation } from "react-i18next"
 import MagicPopup from "@/components/base-mobile/MagicPopup"
 import { Button } from "@/components/shadcn-ui/button"
 import type { Topic } from "@/pages/superMagic/pages/Workspace/types"
+import { getFallbackTopicModeIdentifier } from "@/services/superMagic/DefaultAgentSelectionService"
 import { MobileResourceTypeIcon } from "@/pages/superMagicMobile/components/icons/mobile-resource-type-icon"
+import ModeTag from "@/pages/superMagicMobile/pages/ProjectPage/ProjectPageMain/components/TopicsPopup/components/TopicItem/components/ModeTag"
 import { cn } from "@/utils/cn"
 
 interface MicroAppTopicPickerProps {
@@ -13,6 +15,8 @@ interface MicroAppTopicPickerProps {
 	selectedTopicId?: string
 	onSelect: (topic: Topic) => void
 	onClose: () => void
+	/** Preview/published lists show the employee icon for each topic. */
+	showModeIcon?: boolean
 }
 
 /** 微应用移动端话题选择使用独立底部列表，不引入桌面历史话题面板。 */
@@ -22,6 +26,7 @@ export default function MicroAppTopicPicker({
 	selectedTopicId,
 	onSelect,
 	onClose,
+	showModeIcon = false,
 }: MicroAppTopicPickerProps) {
 	const { t } = useTranslation("super")
 
@@ -90,6 +95,17 @@ export default function MicroAppTopicPicker({
 											iconSizeClass="size-5"
 											data-testid="micro-app-mobile-topic-icon"
 										/>
+										{showModeIcon ? (
+											<span data-testid="micro-app-mobile-topic-mode-icon">
+												<ModeTag
+													mode={
+														topic.topic_mode ||
+														getFallbackTopicModeIdentifier()
+													}
+													agentCode={topic.agent_code}
+												/>
+											</span>
+										) : null}
 										<div className="min-w-0 flex-1">
 											<p className="truncate text-sm font-medium text-foreground">
 												{topic.topic_name || t("topic.unnamedTopic")}

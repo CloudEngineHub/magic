@@ -7,7 +7,11 @@ import type { MicroAppRuntimeProject } from "@/apis/modules/superMagic/microApps
 import { createMentionPanelStore } from "@/components/business/MentionPanel/builtin-store"
 import { MessageHeaderTopicHistoryPanel } from "@/pages/superMagic/components/MessageHeader"
 import { useScopedMessageHeaderTopicActions } from "@/pages/superMagic/hooks/useScopedMessageHeaderTopicActions"
-import { AppStoreProvider, useAppStore } from "@/pages/superMagic/pages/MicroAppPage/context"
+import {
+	AppStoreProvider,
+	useAppStore,
+	useOptionalAppStore,
+} from "@/pages/superMagic/pages/MicroAppPage/context"
 import TopicDesktopPanels from "@/pages/superMagic/pages/TopicPage/components/TopicDesktopPanels"
 import {
 	TOPIC_HISTORY_PANEL_OPEN_STORAGE_KEYS,
@@ -41,6 +45,8 @@ interface PublishedMicroAppConversationSurfaceProps {
 	appId: string
 	appName?: string
 	sourceOrganizationCode?: string
+	/** Editor preview already owns a usage conversation; do not hydrate development. */
+	preferUsageConversation?: boolean
 	children: ReactNode
 }
 
@@ -49,11 +55,14 @@ const PublishedMicroAppConversationSurface = observer(
 		appId,
 		appName,
 		sourceOrganizationCode,
+		preferUsageConversation = false,
 		children,
 	}: PublishedMicroAppConversationSurfaceProps) {
 		const [panel, setPanel] = useState<PublishedMicroAppPanel>("conversation")
 		const appStore = useAppStore()
-		const { conversation } = appStore
+		const conversation = preferUsageConversation
+			? appStore.usageConversation
+			: appStore.conversation
 		const requireAuthentication = useMicroAppAuthentication()
 		const { t } = useTranslation("super")
 		const authorization = userStore.user.authorization?.trim() || ""
@@ -282,7 +291,6 @@ const PublishedMicroAppConversationSurface = observer(
 									setPanel("conversation")
 									onExpandConversationPanel()
 								}}
-								hideTopicListModeIcon
 								onClose={onClose}
 								closeButtonRef={closeButtonRef}
 							/>
@@ -332,19 +340,21 @@ function PublishedMicroAppConversationProvider({
 	enabled = true,
 	children,
 }: PublishedMicroAppConversationProviderProps) {
+	const existingStore = useOptionalAppStore()
 	if (!enabled) return <>{children}</>
-	return (
-		<AppStoreProvider>
-			<PublishedMicroAppConversationSurface
-				key={appId}
-				appId={appId}
-				appName={appName}
-				sourceOrganizationCode={sourceOrganizationCode}
-			>
-				{children}
-			</PublishedMicroAppConversationSurface>
-		</AppStoreProvider>
+	const surface = (
+		<PublishedMicroAppConversationSurface
+			key={appId}
+			appId={appId}
+			appName={appName}
+			sourceOrganizationCode={sourceOrganizationCode}
+			preferUsageConversation={Boolean(existingStore)}
+		>
+			{children}
+		</PublishedMicroAppConversationSurface>
 	)
+	if (existingStore) return surface
+	return <AppStoreProvider>{surface}</AppStoreProvider>
 }
 
 export default PublishedMicroAppConversationProvider

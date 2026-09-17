@@ -11,19 +11,32 @@ function listFromResponse(response: unknown): MicroAppListItem[] {
 	return Array.isArray(list) ? (list as MicroAppListItem[]) : []
 }
 
-function toMentionItem(item: MicroAppListItem): MentionItem | null {
-	if (item.publish_status !== "published") return null
-	const appId = String(item.app_id ?? "")
+export function createMicroAppMentionItem(params: {
+	appId: string
+	appName?: string
+	icon?: string | null
+}): MentionItem | null {
+	const appId = String(params.appId ?? "").trim()
 	if (!appId) return null
+	const appName = params.appName?.trim() || appId
 	return {
 		id: appId,
 		type: MentionItemType.MICRO_APP,
-		name: item.app_name,
-		icon: item.cover_url,
+		name: appName,
+		icon: params.icon ?? "",
 		hasChildren: false,
 		isFolder: false,
-		data: { app_id: appId, app_name: item.app_name } as MicroAppMentionData,
+		data: { app_id: appId, app_name: appName } as MicroAppMentionData,
 	}
+}
+
+function toMentionItem(item: MicroAppListItem): MentionItem | null {
+	if (item.publish_status !== "published") return null
+	return createMicroAppMentionItem({
+		appId: String(item.app_id ?? ""),
+		appName: item.app_name,
+		icon: item.cover_url,
+	})
 }
 
 function mapMentionItems(response: unknown): MentionItem[] {

@@ -120,7 +120,9 @@ function MicroAppPageInner({
 	const usageConversationRequestedRef = useRef(false)
 	const previewModeRequestRef = useRef<Promise<boolean> | null>(null)
 	const panelConversation =
-		pageMode === "development" ? developmentConversation : store.usageConversation
+		pageMode === "development"
+			? developmentConversation
+			: (store.usageConversation ?? developmentConversation)
 	const panelSelectedProject = pageMode === "development" ? selectedProject : store.runtimeProject
 
 	useEffect(() => {
@@ -174,6 +176,7 @@ function MicroAppPageInner({
 				onOk: () => {
 					pageModeRef.current = "preview"
 					usageConversationRequestedRef.current = true
+					store.setConversationType("usage")
 					closeTopicHistoryPanel()
 					setPageMode("preview")
 					modal.destroy()
@@ -363,7 +366,7 @@ function MicroAppPageInner({
 	return (
 		<HostConversationProvider
 			selectedProject={panelSelectedProject}
-			topicStore={developmentConversation.topicStore}
+			topicStore={panelConversation.topicStore}
 			ensureConversation={ensureHostConversation}
 			requestPreviewMode={requestPreviewMode}
 		>

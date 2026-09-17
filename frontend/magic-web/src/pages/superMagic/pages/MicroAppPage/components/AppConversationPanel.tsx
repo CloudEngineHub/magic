@@ -44,8 +44,12 @@ import { applyOptimisticTopicRunningState } from "@/pages/superMagic/services/to
 import { useAppStore } from "../context"
 import { resolveMicroAppModelSelectionMode } from "../utils/microAppModelMode"
 import type { RevokedMessageEditorContext } from "@/pages/superMagic/components/MessageList/revoked-editor-context"
+import MessageListFallback from "@/pages/superMagic/components/MessageList/components/MessageListFallback"
 import { resolveAgentSelection } from "@/services/superMagic/DefaultAgentSelectionService"
-import { ModeToggle } from "@/pages/superMagic/components/TopicMode"
+import { ModeToggle, useCreateTopicListener } from "@/pages/superMagic/components/TopicMode"
+import MicroAppRuntimeMentionHint from "./MicroAppRuntimeMentionHint"
+import { usePinnedCurrentMicroAppMention } from "../hooks/usePinnedCurrentMicroAppMention"
+import { insertCurrentMicroAppMention } from "../utils/insertCurrentMicroAppMention"
 
 interface AppConversationPanelProps {
 	selectedProject: ProjectListItem | null
@@ -65,6 +69,8 @@ interface AppConversationPanelProps {
 	trailingActions?: ReactNode
 	/** Only the micro-app editor's development conversation is locked to the internal mode. */
 	lockToMicroAppMode?: boolean
+	microAppId?: string
+	microAppName?: string
 }
 
 function AppConversationPanel({
@@ -84,8 +90,17 @@ function AppConversationPanel({
 	hideConversationPanelToggle = false,
 	trailingActions,
 	lockToMicroAppMode = true,
+	microAppId,
+	microAppName,
 }: AppConversationPanelProps) {
 	const { conversation } = useAppStore()
+	// Runtime chats pin this app at the @ panel root so users can mention it.
+	usePinnedCurrentMicroAppMention({
+		mentionPanelStore,
+		enabled: !lockToMicroAppMode,
+		appId: microAppId,
+		appName: microAppName,
+	})
 	const selectedTopic = topicStore.selectedTopic
 	const selectableTopicMode = useTopicMode({ selectedTopic, selectedProject })
 	const topicMode = lockToMicroAppMode ? TopicMode.MicroApp : selectableTopicMode.topicMode
@@ -100,6 +115,15 @@ function AppConversationPanel({
 	const recoverTopicMode = lockToMicroAppMode
 		? keepMicroAppMode
 		: selectableTopicMode.recoverTopicMode
+
+	// Create-topic events must select on this panel's store.
+	useCreateTopicListener({
+		selectedProject,
+		topicStore,
+	})
+	const handleCreateTopicForMode = useMemoizedFn((mode: TopicMode) => {
+		pubsub.publish(PubSubEvents.Create_New_Topic, { topicMode: mode })
+	})
 
 	const sharedTopicModelStore = useMemo(() => createSuperMagicTopicModelStore(), [])
 
@@ -143,6 +167,12 @@ function AppConversationPanel({
 		isWaitingForUser: isTopicWaitingForUser(selectedTopic),
 		isEmptyStatus: false,
 		isShowLoadingInit: isMessagesInitialLoading,
+	})
+	const handleMentionHintClick = useMemoizedFn(() => {
+		insertCurrentMicroAppMention(messageQueue.editorRef.current?.editor, {
+			appId: microAppId,
+			appName: microAppName,
+		})
 	})
 
 	const mergeMicroAppSendParams = useMemoizedFn(
@@ -229,6 +259,9 @@ function AppConversationPanel({
 			attachments: projectFilesStore.workspaceFileTree,
 			topicModelStore,
 			layoutConfig: DEFAULT_LAYOUT_CONFIG,
+			// Panel owns ModeToggle so the composer does not patch the old topic.
+			showModeToggle: false,
+			showTopicExamplesPortal: !lockToMicroAppMode,
 			showLoading,
 			size: detailPanelVisible ? "small" : "default",
 			onSendComplete: ({ success, currentProject, currentTopic }) => {
@@ -322,15 +355,29 @@ function AppConversationPanel({
 					selectedProject={selectedProject}
 					topicStore={topicStore}
 					topicActions={topicActions}
-					hideTopicListModeIcon
+					// Preview/published topics can be employees; hide icons in development.
+					hideTopicListModeIcon={lockToMicroAppMode}
 					historyTriggerMode={historyTriggerMode}
 					isHistoryPanelOpen={isHistoryPanelOpen}
 					onToggleHistoryPanel={onToggleHistoryPanel}
 					trailingActions={trailingActions}
 				/>
 			}
-			emptyHero={<AppConversationEmptyState variant="hero" className="w-full" />}
-			emptyCompact={<AppConversationEmptyState variant="compact" />}
+			emptyHero={
+				lockToMicroAppMode ? (
+					<AppConversationEmptyState variant="hero" className="w-full" />
+				) : (
+					// Runtime chats reuse the workspace greeting, not the development empty.
+					<MessageListFallback className="h-full" />
+				)
+			}
+			emptyCompact={
+				lockToMicroAppMode ? (
+					<AppConversationEmptyState variant="compact" />
+				) : (
+					<MessageListFallback className="h-full" />
+				)
+			}
 			editor={
 				<div className="flex h-full min-h-0 w-full flex-none flex-col items-stretch gap-2 self-stretch pt-3">
 					{/* Preserve the scaffold height so the editor can fill the manually resized panel. */}
@@ -346,10 +393,17 @@ function AppConversationPanel({
 								agentCode={agentCode ?? selectedTopic?.agent_code}
 								allowChangeMode={messages.length === 0}
 								onModeChange={setTopicMode}
+								onCreateTopic={handleCreateTopicForMode}
 							/>
 						</div>
 					)}
 					<DefaultMessageEditorContainer editorContext={editorContext} />
+					{lockToMicroAppMode ? null : (
+						<MicroAppRuntimeMentionHint
+							className="px-1"
+							onClick={handleMentionHintClick}
+						/>
+					)}
 				</div>
 			}
 			editorNodes={editorNodes}

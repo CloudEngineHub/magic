@@ -30,7 +30,7 @@ import { MentionPanelMcpStore } from "./domains/mcp"
 import { MentionPanelSkillsStore } from "./domains/skills"
 import { MentionPanelTabsStore } from "./domains/tabs"
 import { MentionPanelToolsStore } from "./domains/tools"
-import { MentionPanelMicroAppsStore } from "./domains/micro-apps"
+import { MentionPanelMicroAppsStore, createMicroAppMentionItem } from "./domains/micro-apps"
 import { MentionPanelUploadFilesStore } from "./domains/upload-files"
 import { MentionPanelWorkspaceFilesStore } from "./domains/workspace-files"
 import projectFilesStore from "@/stores/projectFiles"
@@ -39,6 +39,7 @@ import {
 	convertMentionListItemToMentionItem,
 	mergeSmartRecommendations,
 } from "./store-helpers/history"
+import { prependPinnedRootItems } from "./store-helpers/pinned-root-items"
 import { matchesQuery, searchBuiltinMentionItems } from "./store-helpers/search"
 import type { MentionFilePreviewSourceRow } from "./domains/file-preview/preview-utils"
 import { resolveFolderWorkspaceEntryFromTab } from "../../utils/projectReferenceMention"
@@ -58,6 +59,7 @@ export class MentionPanelStore {
 	private readonly tabsStore: MentionPanelTabsStore
 	private readonly historyStore: MentionPanelHistoryStore
 	private readonly canvasElementsStore: MentionPanelCanvasElementsStore
+	pinnedRootItems: MentionItem[] = []
 
 	constructor(projectFilesStore: ProjectFilesStore) {
 		this.projectFilesStore = projectFilesStore
@@ -152,6 +154,11 @@ export class MentionPanelStore {
 			delete this.initLoadAttachmentsPromise[projectId]
 			delete this.initLoadAttachmentsPromiseResolve[projectId]
 		}
+	}
+
+	setPinnedCurrentMicroApp(app: { appId: string; appName?: string } | null) {
+		const item = app ? createMicroAppMentionItem(app) : null
+		this.pinnedRootItems = item ? [item] : []
 	}
 
 	setSkillQueryContext(topicMode?: string, agentCode?: string) {
@@ -323,10 +330,16 @@ export class MentionPanelStore {
 				]
 			}
 
-			return defaultItems
+			return this.prependPinnedRootItems(defaultItems)
 		}
 
-		return defaultItems.filter((item) => item.id !== BuiltinItemId.PROJECT_FILES)
+		return this.prependPinnedRootItems(
+			defaultItems.filter((item) => item.id !== BuiltinItemId.PROJECT_FILES),
+		)
+	}
+
+	private prependPinnedRootItems(items: MentionItem[]): MentionItem[] {
+		return prependPinnedRootItems(items, this.pinnedRootItems)
 	}
 
 	private injectCanvasElementsRootItem(items: MentionItem[], t: I18nTexts): MentionItem[] {

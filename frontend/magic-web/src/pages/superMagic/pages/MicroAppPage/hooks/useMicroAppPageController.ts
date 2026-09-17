@@ -7,7 +7,6 @@ import type { UpdateMicroAppBody } from "@/apis/modules/superMagic"
 import magicToast from "@/components/base/MagicToaster/utils"
 import type { AttachmentItem } from "@/pages/superMagic/components/TopicFilesButton/hooks"
 import useCollaboratorUpdatePanel from "@/pages/superMagic/components/WithCollaborators/hooks/useCollaboratorUpdatePanel"
-import { useCreateTopicListener } from "@/pages/superMagic/components/TopicMode"
 import { useDefaultModeModelListRefreshOnMount } from "@/pages/superMagic/hooks"
 import { useAttachmentsPolling } from "@/pages/superMagic/hooks/useAttachmentsPolling"
 import { useProjectAttachmentsChangeRealtime } from "@/pages/superMagic/hooks/useProjectAttachmentsChangeRealtime"
@@ -161,10 +160,6 @@ export function useMicroAppPageController(appId: string, projectId: string) {
 	}, [appId])
 
 	useDefaultModeModelListRefreshOnMount()
-	useCreateTopicListener({
-		selectedProject,
-		topicStore: store.developmentConversation.topicStore,
-	})
 
 	const updateAttachments = useDebounceFn(
 		(pid?: string, callback?: (didLoad: boolean) => void) => {
