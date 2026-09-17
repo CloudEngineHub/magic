@@ -11,7 +11,7 @@ import VipIcon from "@/pages/superMagic/components/VipIcon"
 import type { ShareTypeFieldProps } from "./types"
 
 export default memo(function ShareTypeField(props: ShareTypeFieldProps) {
-	const { value, onChange, availableTypes } = props
+	const { value, onChange, availableTypes, permittedTypes, preserveCurrentType = false } = props
 
 	const { t } = useTranslation("super")
 	const [hoveredType, setHoveredType] = useState<ShareType | null>(null)
@@ -51,31 +51,43 @@ export default memo(function ShareTypeField(props: ShareTypeFieldProps) {
 				return false
 			}
 			// If Internet is in allowed types, show both Public and PasswordProtected
-			return (
+			const isAvailable =
 				item.type === ShareType.Public ||
 				item.type === ShareType.PasswordProtected ||
 				availableTypes.includes(item.type)
+			if (!isAvailable) return false
+
+			return (
+				permittedTypes === undefined ||
+				permittedTypes.includes(item.type) ||
+				(preserveCurrentType && item.type === value)
 			)
 		})
-	}, [availableTypes, isFreePlan, t])
+	}, [availableTypes, isFreePlan, permittedTypes, preserveCurrentType, t, value])
 
 	// Handle type change
 	const handleTypeChange = (newType: ShareType) => {
+		if (permittedTypes && !permittedTypes.includes(newType)) return
 		onChange(newType)
 	}
 
 	return (
 		<div className="flex flex-col gap-2" data-testid="share-type-field">
-			<div className="text-sm font-medium leading-none text-foreground" data-testid="share-type-field-label">
+			<div
+				className="text-sm font-medium leading-none text-foreground"
+				data-testid="share-type-field-label"
+			>
 				{t("share.shareMethod")}
 			</div>
 			<div className="flex flex-col gap-1" data-testid="share-type-list">
 				{shareTypeList.map((item) => {
 					const isActive = item.type === normalizedValue
 					const isPasswordProtected = item.type === ShareType.PasswordProtected
+					const isPermissionDisabled =
+						permittedTypes !== undefined && !permittedTypes.includes(item.type)
 
 					// 免费用户，密码保护为禁用状态
-					const isDisabled = isFreePlan && isPasswordProtected
+					const isDisabled = (isFreePlan && isPasswordProtected) || isPermissionDisabled
 
 					// 禁用状态始终显示 VIP Badge，否则在选中或悬浮时显示 Checkbox
 					const showCheckbox = isDisabled || isActive || hoveredType === item.type
@@ -90,9 +102,13 @@ export default memo(function ShareTypeField(props: ShareTypeFieldProps) {
 						>
 							<div
 								className={cn(
-									"flex cursor-pointer flex-row items-start gap-2 rounded-lg px-2.5 py-2 transition-colors hover:bg-[#F5F5F5]",
+									"flex flex-row items-start gap-2 rounded-lg px-2.5 py-2 transition-colors",
+									isDisabled
+										? "cursor-not-allowed"
+										: "cursor-pointer hover:bg-[#F5F5F5]",
 								)}
 								onClick={() => handleTypeChange(item.type)}
+								aria-disabled={isDisabled}
 								data-testid="handle-type-change"
 							>
 								<div className="h-6 w-6 flex-shrink-0">
@@ -128,7 +144,14 @@ export default memo(function ShareTypeField(props: ShareTypeFieldProps) {
 										showCheckbox ? "opacity-100" : "opacity-0",
 									)}
 								>
-									{isDisabled ? <VipIcon /> : <Checkbox checked={isActive}  data-testid="share-type-field-checkbox"/>}
+									{isDisabled ? (
+										<VipIcon />
+									) : (
+										<Checkbox
+											checked={isActive}
+											data-testid="share-type-field-checkbox"
+										/>
+									)}
 								</div>
 							</div>
 						</div>

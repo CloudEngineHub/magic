@@ -7,6 +7,7 @@ import Detail from "@/pages/superMagic/components/Detail"
 import { getToolDetailSelectionTarget } from "@/pages/superMagic/components/MessageList/components/Nodes/toolDetailSelection"
 import { FileActionVisibilityProvider } from "@/pages/superMagic/providers/file-action-visibility-provider"
 import TopicFilesButton from "@/pages/superMagic/components/TopicFilesButton"
+import { SharePermissionResourceProvider } from "@/pages/superMagic/components/Share/SharePermissionResourceContext"
 import useResizablePanel from "@/pages/superMagic/hooks/useResizablePanel"
 import { useScopedMessageHeaderTopicActions } from "@/pages/superMagic/hooks/useScopedMessageHeaderTopicActions"
 import TopicResizeHandle from "@/pages/superMagic/pages/TopicPage/components/TopicResizeHandle"
@@ -524,4 +525,10 @@ function MicroAppPageDesktop() {
 	return <MicroAppDesktopRoute Content={MicroAppPageInnerObserver} />
 }
 
-export default MicroAppPageDesktop
+export default function FileAccessPage() {
+	return (
+		<SharePermissionResourceProvider value="microApp">
+			<MicroAppPageDesktop />
+		</SharePermissionResourceProvider>
+	)
+}
