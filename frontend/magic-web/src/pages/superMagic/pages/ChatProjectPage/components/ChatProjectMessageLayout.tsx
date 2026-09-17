@@ -46,9 +46,10 @@ export default function ChatProjectMessageLayout({
 	const inputLayoutContext = {
 		fillHeight: inputHeight.fillHeight,
 		queueListMaxHeight: inputHeight.enabled ? inputHeight.queueListMaxHeight : undefined,
+		// Lift the 12px grip so the three dots sit above shortcut chips, still inside card padding.
 		inputResizeHandle: inputHeight.enabled ? (
 			<ConversationInputResizeHandle
-				positionClassName="-top-1.5"
+				positionClassName="-top-2.5"
 				value={inputHeight.effectiveHeight}
 				min={effectiveInputMinHeight}
 				max={inputHeight.maxHeight}
