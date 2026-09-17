@@ -43,10 +43,6 @@ import { applyOptimisticTopicRunningState } from "@/pages/superMagic/services/to
 import { useAppStore } from "../context"
 import { resolveMicroAppModelSelectionMode } from "../utils/microAppModelMode"
 import type { RevokedMessageEditorContext } from "@/pages/superMagic/components/MessageList/revoked-editor-context"
-import useTopicMode from "@/pages/superMagic/hooks/useTopicMode"
-import { ModeToggle } from "@/pages/superMagic/components/TopicMode"
-import { resolveAgentSelection } from "@/services/superMagic/DefaultAgentSelectionService"
-import TopicService from "@/pages/superMagic/services/topicService"
 
 interface AppConversationPanelProps {
 	selectedProject: ProjectListItem | null
@@ -86,13 +82,10 @@ function AppConversationPanel({
 	const { conversation } = useAppStore()
 	const selectedTopic = topicStore.selectedTopic
 	const modelTopicMode = resolveMicroAppModelSelectionMode()
-	// Runtime conversations default to MicroApp while still allowing the shared employee selector
-	// to switch the send-time topic mode for a newly created scoped topic.
-	const { topicMode, setTopicMode, recoverTopicMode } = useTopicMode({
-		selectedTopic,
-		selectedProject,
-		fallbackTopicMode: TopicMode.MicroApp,
-	})
+	const topicMode = TopicMode.MicroApp
+	// Development conversations are always handled by the micro-app agent. Keep shared editor
+	// callbacks scoped so project-level employee preferences cannot change this runtime.
+	const keepMicroAppMode = useMemoizedFn((mode: TopicMode) => void mode)
 
 	const sharedTopicModelStore = useMemo(() => createSuperMagicTopicModelStore(), [])
 
@@ -130,7 +123,7 @@ function AppConversationPanel({
 	const messageQueue = useMessageQueue({
 		projectId: selectedProject?.id,
 		topicId: selectedTopic?.id,
-		agentCode: selectedTopic?.agent_code,
+		agentCode: undefined,
 		isTaskRunning: showLoading,
 		isWaitingForUser: isTopicWaitingForUser(selectedTopic),
 		isEmptyStatus: false,
@@ -139,38 +132,16 @@ function AppConversationPanel({
 
 	const mergeMicroAppSendParams = useMemoizedFn(
 		({ defaultParams }: { defaultParams: HandleSendParams }) => {
-			const selection = resolveAgentSelection(topicMode, selectedTopic?.agent_code)
 			const extra = { ...(defaultParams.extra ?? {}) }
 			delete extra.agent_code
 
 			return {
 				...defaultParams,
-				topicMode: selection.topicPattern,
-				extra: selection.agentCode
-					? { ...extra, agent_code: selection.agentCode }
-					: Object.keys(extra).length > 0
-						? extra
-						: undefined,
+				topicMode: TopicMode.MicroApp,
+				extra: Object.keys(extra).length > 0 ? extra : undefined,
 			}
 		},
 	)
-
-	const handleCreateTopic = useMemoizedFn((mode: TopicMode) => {
-		if (!selectedProject?.id) return
-
-		const selection = resolveAgentSelection(mode)
-		void new TopicService({ store: topicStore }).createTopic({
-			projectId: selectedProject.id,
-			topicName: "",
-			sourceTopic: selectedTopic
-				? {
-						project_id: selectedProject.id,
-						topic_mode: selection.topicPattern,
-						agent_code: selection.agentCode,
-					}
-				: null,
-		})
-	})
 
 	const handleSendMsg = useMemoizedFn(
 		(content: JSONContent | string, options?: SendMessageOptions) => {
@@ -233,9 +204,9 @@ function AppConversationPanel({
 			selectedProject,
 			topicMode,
 			modelTopicMode,
-			agentCode: selectedTopic?.agent_code,
-			setTopicMode,
-			recoverTopicMode,
+			agentCode: undefined,
+			setTopicMode: keepMicroAppMode,
+			recoverTopicMode: keepMicroAppMode,
 			topicStore,
 			setSelectedTopic: topicStore.setSelectedTopic,
 			mentionPanelStore,
@@ -264,8 +235,7 @@ function AppConversationPanel({
 		selectedTopic,
 		topicMode,
 		modelTopicMode,
-		setTopicMode,
-		recoverTopicMode,
+		keepMicroAppMode,
 		topicStore,
 		mentionPanelStore,
 		projectFilesStore,
@@ -282,9 +252,9 @@ function AppConversationPanel({
 			setSelectedTopic: topicStore.setSelectedTopic,
 			topicMode,
 			modelTopicMode,
-			agentCode: selectedTopic?.agent_code,
-			setTopicMode,
-			recoverTopicMode,
+			agentCode: undefined,
+			setTopicMode: keepMicroAppMode,
+			recoverTopicMode: keepMicroAppMode,
 			topicStore,
 			mentionPanelStore,
 			projectFilesStore,
@@ -295,10 +265,8 @@ function AppConversationPanel({
 		selectedProject,
 		topicStore,
 		topicMode,
-		selectedTopic?.agent_code,
 		modelTopicMode,
-		setTopicMode,
-		recoverTopicMode,
+		keepMicroAppMode,
 		mentionPanelStore,
 		projectFilesStore,
 		topicModelStore,
@@ -344,17 +312,6 @@ function AppConversationPanel({
 			emptyCompact={<AppConversationEmptyState variant="compact" />}
 			editor={
 				<div className="flex h-full min-h-0 w-full flex-none flex-col items-stretch gap-2 self-stretch pt-3">
-					{/* The shared editor owns the bordered surface; this wrapper only aligns controls. */}
-					<div className="flex w-full shrink-0 items-center gap-4 overflow-hidden">
-						<ModeToggle
-							size={detailPanelVisible ? "small" : "default"}
-							topicMode={topicMode}
-							agentCode={selectedTopic?.agent_code}
-							allowChangeMode={messages.length === 0}
-							onModeChange={setTopicMode}
-							onCreateTopic={handleCreateTopic}
-						/>
-					</div>
 					{/* Preserve the scaffold height so the editor can fill the manually resized panel. */}
 					{/* <div className="flex px-1">
 						<MicroAppIssuePromptPanel variant="desktop" />

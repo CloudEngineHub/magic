@@ -19,16 +19,6 @@ const scopedProgressMocks = vi.hoisted(() => ({
 	params: null as Record<string, unknown> | null,
 }))
 
-const topicModeMocks = vi.hoisted(() => ({
-	setTopicMode: vi.fn(),
-	recoverTopicMode: vi.fn(),
-	modeToggleProps: null as Record<string, unknown> | null,
-}))
-
-const topicServiceMocks = vi.hoisted(() => ({
-	createTopic: vi.fn(),
-}))
-
 vi.mock("../../context", () => ({
 	useAppStore: () => ({
 		conversation: { setConversationGenerating: vi.fn() },
@@ -39,32 +29,8 @@ vi.mock("../../utils/microAppModelMode", () => ({
 	resolveMicroAppModelSelectionMode: () => "default",
 }))
 
-vi.mock("@/services/superMagic/DefaultAgentSelectionService", () => ({
-	resolveAgentSelection: (mode: string, agentCode?: string) => ({
-		topicPattern:
-			mode === "custom_agent" || mode.startsWith("SMA") ? "custom_agent" : "micro-app",
-		agentCode:
-			mode === "custom_agent" || mode.startsWith("SMA") ? (agentCode ?? mode) : undefined,
-	}),
-}))
-
-vi.mock("@/pages/superMagic/services/topicService", () => ({
-	default: vi.fn().mockImplementation(() => ({ createTopic: topicServiceMocks.createTopic })),
-}))
-
-vi.mock("@/pages/superMagic/hooks/useTopicMode", () => ({
-	default: ({ selectedTopic }: { selectedTopic?: { topic_mode?: string } | null }) => ({
-		topicMode: selectedTopic?.topic_mode ?? "micro-app",
-		setTopicMode: topicModeMocks.setTopicMode,
-		recoverTopicMode: topicModeMocks.recoverTopicMode,
-	}),
-}))
-
 vi.mock("@/pages/superMagic/components/TopicMode", () => ({
-	ModeToggle: (props: Record<string, unknown>) => {
-		topicModeMocks.modeToggleProps = props
-		return <div data-testid="runtime-mode-toggle" data-topic-mode={props.topicMode as string} />
-	},
+	ModeToggle: () => <div data-testid="runtime-mode-toggle" />,
 }))
 
 vi.mock("@/pages/superMagic/components/ConversationPanelScaffold", () => ({
@@ -126,7 +92,12 @@ vi.mock(
 			const mergeSendParams = editorContext.mergeSendParams as
 				| ((params: { defaultParams: Record<string, unknown> }) => Record<string, unknown>)
 				| undefined
-			const mergedParams = mergeSendParams?.({ defaultParams: { topicMode: "default" } })
+			const mergedParams = mergeSendParams?.({
+				defaultParams: {
+					topicMode: "custom_agent",
+					extra: { agent_code: "stale-employee" },
+				},
+			})
 
 			return (
 				<div
@@ -282,7 +253,7 @@ describe("AppConversationPanel", () => {
 		expect(emptyState).toHaveTextContent("microAppPage.conversation.emptyDescription")
 	})
 
-	it("uses the default model catalog and keeps the micro-app send mode", () => {
+	it("uses the default model catalog and locks development sends to micro-app mode", () => {
 		const topicStore = {
 			selectedTopic: { id: "topic-1", topic_name: "Topic" },
 			setSelectedTopic: vi.fn(),
@@ -306,37 +277,7 @@ describe("AppConversationPanel", () => {
 			"data-send-topic-mode",
 			"micro-app",
 		)
-		expect(screen.getByTestId("runtime-mode-toggle")).toBeInTheDocument()
-		expect(topicModeMocks.modeToggleProps?.onCreateTopic).toBeTypeOf("function")
-	})
-
-	it("creates a scoped topic with the selected employee", () => {
-		const topicStore = {
-			selectedTopic: { id: "topic-1", topic_name: "Topic", project_id: "project-1" },
-			setSelectedTopic: vi.fn(),
-			updateTopic: vi.fn(),
-		} as never
-
-		render(
-			<AppConversationPanel
-				selectedProject={{ id: "project-1", project_name: "Micro App" } as never}
-				topicStore={topicStore}
-				mentionPanelStore={{} as never}
-				projectFilesStore={{} as never}
-			/>,
-		)
-
-		;(topicModeMocks.modeToggleProps?.onCreateTopic as (mode: string) => void)("SMA123")
-
-		expect(topicServiceMocks.createTopic).toHaveBeenCalledWith({
-			projectId: "project-1",
-			topicName: "",
-			sourceTopic: {
-				project_id: "project-1",
-				topic_mode: "custom_agent",
-				agent_code: "SMA123",
-			},
-		})
+		expect(screen.queryByTestId("runtime-mode-toggle")).not.toBeInTheDocument()
 	})
 
 	it("stretches the runtime editor without adding a second bordered container", () => {
@@ -416,18 +357,29 @@ describe("AppConversationPanel", () => {
 				selectedProject,
 				topicMode: "micro-app",
 				modelTopicMode: "default",
+				agentCode: undefined,
 				topicStore,
 			}),
 		)
 		const mergeSendParams = scaffoldMocks.revokedEditorContext?.mergeSendParams as
 			| ((params: { defaultParams: Record<string, unknown> }) => Record<string, unknown>)
 			| undefined
-		expect(mergeSendParams?.({ defaultParams: { topicMode: "default" } })).toEqual(
-			expect.objectContaining({ topicMode: "micro-app", extra: undefined }),
+		expect(
+			mergeSendParams?.({
+				defaultParams: {
+					topicMode: "custom_agent",
+					extra: { agent_code: "stale-employee", request_id: "request-1" },
+				},
+			}),
+		).toEqual(
+			expect.objectContaining({
+				topicMode: "micro-app",
+				extra: { request_id: "request-1" },
+			}),
 		)
 	})
 
-	it("keeps the selected employee in runtime send parameters", () => {
+	it("removes a stale employee from development send parameters", () => {
 		const topicStore = {
 			selectedTopic: {
 				id: "topic-1",
@@ -448,17 +400,12 @@ describe("AppConversationPanel", () => {
 			/>,
 		)
 
-		expect(screen.getByTestId("runtime-mode-toggle")).toHaveAttribute(
-			"data-topic-mode",
-			"custom_agent",
-		)
 		expect(screen.getByTestId("web-micro-app-editor")).toHaveAttribute(
 			"data-send-topic-mode",
-			"custom_agent",
+			"micro-app",
 		)
-		expect(screen.getByTestId("web-micro-app-editor")).toHaveAttribute(
+		expect(screen.getByTestId("web-micro-app-editor")).not.toHaveAttribute(
 			"data-send-agent-code",
-			"SMA123",
 		)
 	})
 
