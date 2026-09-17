@@ -54,6 +54,10 @@ const PublishedMicroAppConversationSurface = observer(
 		const [runtimeProjectState, setRuntimeProjectState] = useState<
 			"loading" | "absent" | "ready"
 		>("loading")
+		// Fail closed while authentication or the runtime binding is unconfirmed.
+		const shouldShowRuntimeSidebar = Boolean(
+			authorization && runtimeProject && runtimeProjectState === "ready",
+		)
 		const runtimeRequestIdRef = useRef(0)
 		const ensurePromiseRef = useRef<Promise<{
 			selectedProject: ProjectListItem
@@ -207,7 +211,7 @@ const PublishedMicroAppConversationSurface = observer(
 					isDetailPanelFullscreen={false}
 					sidebar={null}
 					detailPanel={children}
-					isReadOnly={!userStore.user.authorization?.trim()}
+					isReadOnly={!shouldShowRuntimeSidebar}
 					showProjectSidebar={false}
 					showProjectResizeHandle={false}
 					autoExpandConversationWhenDetailVisible={false}

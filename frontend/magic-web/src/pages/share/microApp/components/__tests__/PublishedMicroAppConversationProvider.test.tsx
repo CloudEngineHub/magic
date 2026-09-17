@@ -145,7 +145,7 @@ describe("PublishedMicroAppConversationProvider", () => {
 		expect(screen.queryByTestId("topic-desktop-panels")).not.toBeInTheDocument()
 	})
 
-	it("renders children without a parent AppStoreProvider when enabled", async () => {
+	it("hides the sidebar when the runtime project does not exist", async () => {
 		render(
 			<PublishedMicroAppConversationProvider appId="app-1">
 				<div data-testid="preview-child" />
@@ -154,13 +154,41 @@ describe("PublishedMicroAppConversationProvider", () => {
 
 		expect(screen.getByTestId("preview-child")).toBeInTheDocument()
 		expect(screen.getByTestId("topic-desktop-panels")).toBeInTheDocument()
-		expect(layoutMocks.props?.isReadOnly).toBe(false)
 		await waitFor(() => {
 			expect(SuperMagicApi.getMicroAppRuntimeProject).toHaveBeenCalledWith("app-1", {
 				enableErrorMessagePrompt: false,
 			})
 		})
+		expect(layoutMocks.props?.isReadOnly).toBe(true)
+		expect(
+			screen.queryByTestId("published-micro-app-conversation-panel"),
+		).not.toBeInTheDocument()
 		expect(SuperMagicApi.ensureMicroAppRuntimeProject).not.toHaveBeenCalled()
+	})
+
+	it("keeps the sidebar hidden while checking the runtime project and after failure", async () => {
+		const runtimeLookup = createDeferred<{ exists: boolean }>()
+		vi.mocked(SuperMagicApi.getMicroAppRuntimeProject).mockReturnValue(
+			runtimeLookup.promise as never,
+		)
+
+		render(
+			<PublishedMicroAppConversationProvider appId="app-1">
+				<div data-testid="preview-child" />
+			</PublishedMicroAppConversationProvider>,
+		)
+
+		expect(screen.getByTestId("preview-child")).toBeInTheDocument()
+		expect(layoutMocks.props?.isReadOnly).toBe(true)
+		expect(
+			screen.queryByTestId("published-micro-app-conversation-panel"),
+		).not.toBeInTheDocument()
+
+		await act(async () => runtimeLookup.reject(new Error("lookup failed")))
+		expect(layoutMocks.props?.isReadOnly).toBe(true)
+		expect(
+			screen.queryByTestId("published-micro-app-conversation-panel"),
+		).not.toBeInTheDocument()
 	})
 
 	it("uses the shared desktop layout and history panel for a runtime project", async () => {
@@ -370,7 +398,7 @@ describe("PublishedMicroAppConversationProvider", () => {
 		},
 	)
 
-	it("creates the runtime project from the tasks entry and allows retry after failure", async () => {
+	it("shows the sidebar after a host action creates the runtime project", async () => {
 		vi.mocked(SuperMagicApi.ensureMicroAppRuntimeProject)
 			.mockRejectedValueOnce(new Error("failed"))
 			.mockResolvedValueOnce({ project: { id: "runtime-new" } } as never)
@@ -379,22 +407,42 @@ describe("PublishedMicroAppConversationProvider", () => {
 			workspace_id: "runtime-workspace",
 		} as never)
 		vi.mocked(SuperMagicApi.getTopicsByProjectId).mockResolvedValue({ list: [] } as never)
+		function EnsureButton() {
+			const { ensureConversation } = useHostConversation()
+			return (
+				<button
+					type="button"
+					onClick={() => void ensureConversation?.().catch(() => undefined)}
+				>
+					Start
+				</button>
+			)
+		}
+
 		render(
 			<PublishedMicroAppConversationProvider appId="app-1">
-				<div />
+				<EnsureButton />
 			</PublishedMicroAppConversationProvider>,
 		)
 		await act(() => Promise.resolve())
-		fireEvent.click(screen.getByTestId("published-micro-app-tasks-button"))
-		expect(await screen.findByRole("alert")).toHaveTextContent(
-			"microAppPage.conversation.loadFailed",
+		expect(
+			screen.queryByTestId("published-micro-app-conversation-panel"),
+		).not.toBeInTheDocument()
+		fireEvent.click(screen.getByText("Start"))
+		await waitFor(() =>
+			expect(SuperMagicApi.ensureMicroAppRuntimeProject).toHaveBeenCalledTimes(1),
 		)
-		expect(screen.queryByTestId("runtime-tasks")).not.toBeInTheDocument()
-		fireEvent.click(screen.getByRole("button", { name: "common.retry" }))
-		expect(await screen.findByTestId("runtime-tasks")).toBeVisible()
+		expect(
+			screen.queryByTestId("published-micro-app-conversation-panel"),
+		).not.toBeInTheDocument()
+
+		fireEvent.click(screen.getByText("Start"))
+		await waitFor(() => {
+			expect(screen.getByTestId("published-micro-app-conversation-panel")).toBeVisible()
+		})
 		expect(SuperMagicApi.ensureMicroAppRuntimeProject).toHaveBeenCalledTimes(2)
 		expect(SuperMagicApi.ensureMicroAppRuntimeProject).toHaveBeenLastCalledWith("app-1")
-		expect(layoutMocks.tasksProps?.selectProjectId).toBe("runtime-new")
+		expect(layoutMocks.messagePanelProps?.selectedProject).toMatchObject({ id: "runtime-new" })
 	})
 
 	it("keeps runtime controls hidden for unauthenticated visitors", async () => {
@@ -408,6 +456,38 @@ describe("PublishedMicroAppConversationProvider", () => {
 		expect(screen.queryByTestId("published-micro-app-tasks-button")).not.toBeInTheDocument()
 		expect(SuperMagicApi.getMicroAppRuntimeProject).not.toHaveBeenCalled()
 		expect(SuperMagicApi.ensureMicroAppRuntimeProject).not.toHaveBeenCalled()
+	})
+
+	it("hides an existing runtime sidebar immediately after logout", async () => {
+		vi.mocked(SuperMagicApi.getMicroAppRuntimeProject).mockResolvedValue({
+			exists: true,
+			project: { id: "runtime-project" },
+		} as never)
+		vi.mocked(SuperMagicApi.getProjectDetail).mockResolvedValue({
+			id: "runtime-project",
+		} as never)
+		vi.mocked(SuperMagicApi.getTopicsByProjectId).mockResolvedValue({ list: [] } as never)
+		const { rerender } = render(
+			<PublishedMicroAppConversationProvider appId="app-1">
+				<div data-testid="preview-child" />
+			</PublishedMicroAppConversationProvider>,
+		)
+		await waitFor(() => {
+			expect(screen.getByTestId("published-micro-app-conversation-panel")).toBeVisible()
+		})
+
+		userStore.user.authorization = ""
+		rerender(
+			<PublishedMicroAppConversationProvider appId="app-1">
+				<div data-testid="preview-child" />
+			</PublishedMicroAppConversationProvider>,
+		)
+
+		expect(screen.getByTestId("preview-child")).toBeInTheDocument()
+		expect(layoutMocks.props?.isReadOnly).toBe(true)
+		expect(
+			screen.queryByTestId("published-micro-app-conversation-panel"),
+		).not.toBeInTheDocument()
 	})
 
 	it("returns the hydrated project from ensureConversation", async () => {
@@ -529,8 +609,8 @@ describe("PublishedMicroAppConversationProvider", () => {
 			await new Promise((resolve) => setTimeout(resolve, 0))
 		})
 		expect(SuperMagicApi.getProjectDetail).not.toHaveBeenCalled()
-		expect(layoutMocks.messagePanelProps?.selectedProject).toBeNull()
-		expect(layoutMocks.props?.isReadOnly).toBe(false)
+		expect(layoutMocks.messagePanelProps).toBeNull()
+		expect(layoutMocks.props?.isReadOnly).toBe(true)
 	})
 
 	it("reuses one creation request for concurrent actions", async () => {
@@ -622,9 +702,11 @@ describe("PublishedMicroAppConversationProvider", () => {
 
 function createDeferred<T>() {
 	let resolve!: (value: T) => void
-	const promise = new Promise<T>((resolvePromise) => {
+	let reject!: (reason?: unknown) => void
+	const promise = new Promise<T>((resolvePromise, rejectPromise) => {
 		resolve = resolvePromise
+		reject = rejectPromise
 	})
 
-	return { promise, resolve }
+	return { promise, resolve, reject }
 }
