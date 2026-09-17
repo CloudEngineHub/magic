@@ -257,7 +257,7 @@ function ProjectItem({
 							</div>
 						</a>
 					</SidebarMenuSubButton>
-					{/* 固定 32px 操作区独立于项目链接；只隐藏图标，周围留白仍由菜单按钮响应。 */}
+					{/* 默认不占标题宽度；hover、键盘聚焦或菜单打开时再从右侧展开操作按钮。 */}
 					<Button
 						type="button"
 						variant="ghost"
@@ -269,9 +269,10 @@ function ProjectItem({
 						data-project-more-trigger="true"
 						draggable={false}
 						className={cn(
-							"relative size-8 shrink-0 bg-transparent p-0 text-sidebar-foreground before:absolute before:inset-0.5 before:rounded-md before:transition-colors",
+							"relative h-7 w-0 shrink-0 overflow-hidden bg-transparent p-0 text-sidebar-foreground transition-[width] before:absolute before:inset-0.5 before:rounded-md before:transition-colors group-focus-within/project-row:w-7 no-hover:w-7",
 							"hover:bg-transparent hover:before:bg-sidebar-foreground/10 focus-visible:ring-0 focus-visible:before:bg-sidebar-foreground/10 active:before:bg-sidebar-foreground/15 dark:hover:bg-transparent",
 							"data-[state=open]:before:bg-sidebar-foreground/10",
+							(isHovered || open) && "w-7",
 						)}
 						onClick={(e) => {
 							blockItemClickTemporarily()
