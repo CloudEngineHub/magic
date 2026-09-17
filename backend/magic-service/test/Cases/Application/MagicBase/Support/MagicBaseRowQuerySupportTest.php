@@ -22,12 +22,14 @@ use App\Domain\MagicBase\Entity\ValueObject\MagicBaseEntityCollection;
 use App\Domain\MagicBase\Entity\ValueObject\MagicBasePermissionIndex;
 use App\Domain\MagicBase\Entity\ValueObject\MagicBaseTableAccessContext;
 use App\Domain\MagicBase\Entity\ValueObject\SelectQuery;
+use App\Domain\MagicBase\Exception\MagicBaseInvalidFilterException;
 use App\Domain\MagicBase\Repository\Facade\MagicBaseMigrationLogRepositoryInterface;
 use App\Domain\MagicBase\Repository\Facade\MagicBasePermissionRepositoryInterface;
 use App\Domain\MagicBase\Repository\Facade\MagicBaseRelationRepositoryInterface;
 use App\Domain\MagicBase\Repository\Facade\MagicBaseTableRepositoryInterface;
 use App\Domain\MagicBase\Service\MagicBaseMetadataDomainService;
 use App\Domain\MagicBase\Service\MagicBasePermissionDomainService;
+use App\Domain\MagicBase\Service\MagicBaseRowFilterDomainService;
 use App\Domain\MagicBase\Service\MagicBaseRowQueryCriteriaDomainService;
 use App\Domain\MagicBase\Service\MagicBaseRowStorageResolverDomainService;
 use App\Interfaces\Authorization\Web\MagicUserAuthorization;
@@ -82,6 +84,46 @@ class MagicBaseRowQuerySupportTest extends TestCase
             'explicit grant' => [MagicBaseConst::SCOPE_DISABLED, 'owner', false, true, true],
             'manager' => [MagicBaseConst::SCOPE_DISABLED, 'owner', true, false, true],
         ];
+    }
+
+    public function testAnonymousSelectionCannotExposePrivateColumns(): void
+    {
+        $authorization = (new MagicUserAuthorization())->setId('')->setOrganizationCode('org');
+        foreach ([MagicBaseConst::SCOPE_PRIVATE_USER, MagicBaseConst::SCOPE_PRIVATE_ORG, MagicBaseConst::SCOPE_PRIVATE_DEPARTMENT, MagicBaseConst::SCOPE_DISABLED] as $scope) {
+            $column = new MagicBaseColumnEntity(['id' => 10, 'column_key' => 'secret', 'dynamic_permission' => ['read_scope' => $scope]]);
+            $row = new MagicBaseRowEntity(['record_id' => 1, 'created_by' => 'owner', 'organization_code' => 'org', 'data' => ['secret' => 'hidden']]);
+            foreach ([[], ['record_id', 'secret']] as $fields) {
+                $result = $this->support()->formatRow($authorization, 11, new MagicBaseTableEntity(), $row, $this->access($column), new SelectQuery(['fields' => $fields]), new ActorContext('', ''))->toArray();
+                self::assertArrayNotHasKey('secret', $result, $scope);
+            }
+        }
+    }
+
+    #[DataProvider('anonymousQueryCases')]
+    public function testAnonymousQueryCannotInferHiddenColumns(array $filter, array $sort): void
+    {
+        $column = new MagicBaseColumnEntity(['id' => 10, 'column_key' => 'secret', 'data_type' => 'text', 'dynamic_permission' => ['read_scope' => MagicBaseConst::SCOPE_PRIVATE_ORG]]);
+        $criteria = new MagicBaseRowQueryCriteriaDomainService(new MagicBaseRowFilterDomainService());
+        $this->expectException(MagicBaseInvalidFilterException::class);
+        $criteria->buildReadableQuery('org', new MagicBaseTableEntity(), $this->access($column), new ActorContext('', ''), $filter, $sort, 1, 20);
+    }
+
+    public static function anonymousQueryCases(): array
+    {
+        return [
+            [['secret' => ['eq' => 'guess']], []],
+            [['logic' => 'or', 'items' => [['field' => 'secret', 'operator' => 'eq', 'value' => 'guess']]], []],
+            [[], [['field' => 'secret', 'order' => 'asc']]],
+        ];
+    }
+
+    public function testAnonymousQueryCanFilterAndSortPublicColumns(): void
+    {
+        $column = new MagicBaseColumnEntity(['id' => 10, 'column_key' => 'rank', 'data_type' => 'number', 'dynamic_permission' => ['read_scope' => MagicBaseConst::SCOPE_PUBLIC]]);
+        $criteria = new MagicBaseRowQueryCriteriaDomainService(new MagicBaseRowFilterDomainService());
+        $sort = [['field' => 'rank', 'order' => 'asc']];
+        $query = $criteria->buildReadableQuery('org', new MagicBaseTableEntity(), $this->access($column), new ActorContext('', ''), ['rank' => ['lte' => 10]], $sort, 1, 100);
+        self::assertSame($sort, $query->getSorts());
     }
 
     #[DataProvider('unreadableWriteCases')]

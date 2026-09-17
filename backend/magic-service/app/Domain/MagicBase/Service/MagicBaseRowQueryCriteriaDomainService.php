@@ -8,11 +8,13 @@ declare(strict_types=1);
 namespace App\Domain\MagicBase\Service;
 
 use App\Domain\MagicBase\Entity\MagicBaseColumnEntity;
+use App\Domain\MagicBase\Entity\MagicBaseRowEntity;
 use App\Domain\MagicBase\Entity\MagicBaseTableEntity;
 use App\Domain\MagicBase\Entity\ValueObject\ActorContext;
 use App\Domain\MagicBase\Entity\ValueObject\MagicBaseAccessContext;
 use App\Domain\MagicBase\Entity\ValueObject\MagicBaseConst;
 use App\Domain\MagicBase\Entity\ValueObject\MagicBaseRowQuery;
+use App\Domain\MagicBase\Exception\MagicBaseInvalidFilterException;
 
 readonly class MagicBaseRowQueryCriteriaDomainService
 {
@@ -41,7 +43,16 @@ readonly class MagicBaseRowQueryCriteriaDomainService
         bool $includeTotal = true,
         array $unboundedInFields = [],
     ): MagicBaseRowQuery {
-        $fieldTypes = $this->getFieldTypes($access);
+        $fieldTypes = $this->getFieldTypes($access, $actor);
+        if ($actor->getUserId() === '') {
+            // Filtering and sorting are observable even when response fields are hidden.
+            foreach ($sorts as $sort) {
+                $field = (string) ($sort['field'] ?? '');
+                if (! isset($fieldTypes[$field]) && ! in_array($field, ['id', 'record_id', 'organization_code', 'created_at', 'updated_at', 'created_by'], true)) {
+                    throw new MagicBaseInvalidFilterException('排序字段不存在或当前用户无读取权限');
+                }
+            }
+        }
         return new MagicBaseRowQuery(
             $dataOrganizationCode,
             (int) $table->getProjectId(),
@@ -70,15 +81,27 @@ readonly class MagicBaseRowQueryCriteriaDomainService
     /**
      * @return array<string, string>
      */
-    private function getFieldTypes(MagicBaseAccessContext $access): array
+    private function getFieldTypes(MagicBaseAccessContext $access, ActorContext $actor): array
     {
         $fieldTypes = [];
+        $permissions = new MagicBasePermissionDomainService();
         foreach ($access->getColumns()->all() as $columnKey => $column) {
             if (
                 ! $column instanceof MagicBaseColumnEntity
                 || ! is_string($columnKey)
                 || $column->getStatus() === MagicBaseConst::STATUS_DISABLED
             ) {
+                continue;
+            }
+            // Anonymous actors cannot satisfy owner/department/organization scopes.
+            // Reuse column permissions before the shared filter parser sees any field.
+            if ($actor->getUserId() === '' && ! $permissions->canReadColumn(
+                $actor,
+                new MagicBaseRowEntity(),
+                $column,
+                $access->getColumnPermissions((int) $column->getId()),
+                $access->isManager(),
+            )) {
                 continue;
             }
             $fieldTypes[$columnKey] = $column->getDataType();

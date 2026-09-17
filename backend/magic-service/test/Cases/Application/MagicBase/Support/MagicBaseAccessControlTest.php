@@ -182,6 +182,44 @@ class MagicBaseAccessControlTest extends TestCase
         self::assertSame([$own], iterator_to_array($rows));
     }
 
+    #[DataProvider('anonymousReadScopes')]
+    public function testAnonymousShareDoesNotInheritOwnerOrOrganizationRowAccess(string $scope, bool $allowed): void
+    {
+        MagicBaseRuntimeProjectAccessContext::allowShareAccess(11);
+        $authorization = (new MagicUserAuthorization())->setId('')->setOrganizationCode('org');
+        $table = new MagicBaseTableEntity();
+        $table->setDynamicPermissions(['row' => ['read_scope' => $scope]]);
+        $this->tables->method('getTable')->with('org', 11, 22)->willReturn($table);
+        $context = $this->access->requireReadableTable($authorization, 11, 22);
+        self::assertSame('', $context->getActor()->getUserId());
+        self::assertSame('', $context->getActor()->getOrganizationCode());
+        self::assertFalse($context->getAccess()->isManager());
+        $row = new MagicBaseRowEntity(['created_by' => 'owner', 'organization_code' => 'org']);
+        $rows = $this->access->filterReadableRows($context, new MagicBaseEntityCollection([$row]));
+        self::assertSame($allowed ? [$row] : [], $rows->all());
+    }
+
+    public static function anonymousReadScopes(): array
+    {
+        return [
+            [MagicBaseConst::SCOPE_PUBLIC, true],
+            [MagicBaseConst::SCOPE_PRIVATE_USER, false],
+            [MagicBaseConst::SCOPE_PRIVATE_ORG, false],
+            [MagicBaseConst::SCOPE_PRIVATE_DEPARTMENT, false],
+            [MagicBaseConst::SCOPE_DISABLED, false],
+        ];
+    }
+
+    public function testAnonymousShareCannotReadADisabledTable(): void
+    {
+        MagicBaseRuntimeProjectAccessContext::allowShareAccess(11);
+        $table = new MagicBaseTableEntity();
+        $table->setDynamicPermissions(['table' => ['read_scope' => MagicBaseConst::SCOPE_DISABLED]]);
+        $this->tables->method('getTable')->willReturn($table);
+        $this->expectException(BusinessException::class);
+        $this->access->requireReadableTable((new MagicUserAuthorization())->setId('')->setOrganizationCode('org'), 11, 22);
+    }
+
     #[DataProvider('runtimeIdentities')]
     public function testRuntimeUserCanInsertWithoutBecomingManager(string $identity): void
     {
