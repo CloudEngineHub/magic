@@ -33,7 +33,7 @@ const InfoManagementPage = () => {
 	const { siderCollapsed } = useAdminStore()
 	const isMobile = useIsMobile()
 
-	const { styles } = useStyles({ siderCollapsed })
+	const { styles, cx } = useStyles({ siderCollapsed })
 
 	const { PlatformInfoApi } = useApis()
 
@@ -118,6 +118,7 @@ const InfoManagementPage = () => {
 							zh_CN: res.agent_role_description_i18n?.zh_CN || "",
 							en_US: res.agent_role_description_i18n?.en_US || "",
 						},
+						global_system_prompt: res.global_system_prompt || "",
 						footer: {
 							copyright_i18n: {
 								zh_CN: res.footer?.copyright_i18n?.zh_CN || "",
@@ -153,6 +154,14 @@ const InfoManagementPage = () => {
 			setLoading(true)
 			const values = form.getFieldsValue()
 			const { watermark, ...platformValues } = values
+			const globalSystemPrompt =
+				typeof platformValues.global_system_prompt === "string"
+					? platformValues.global_system_prompt
+					: ""
+			if (globalSystemPrompt.length > 5000) {
+				message.error(tPlatform("globalSystemPromptMaxLength"))
+				return
+			}
 			const watermarkParams = {
 				enabled: watermark?.enabled ?? false,
 				fields: watermark?.fields ?? [],
@@ -164,26 +173,21 @@ const InfoManagementPage = () => {
 				logo_en_url: imageUploadUrl[PlatformLogoType.EN],
 				minimal_logo_url: imageUploadUrl[PlatformLogoType.MINIMAL],
 				favicon_url: imageUploadUrl[PlatformLogoType.FAVICON],
+				global_system_prompt: globalSystemPrompt,
 			}
 			const res = await PlatformInfoApi.updatePlatformInfo({
 				...params,
 				watermark: watermarkParams,
 			})
-			if (res?.watermark) {
-				form.setFieldValue("watermark", {
-					enabled: res.watermark.enabled,
-					fields: res.watermark.fields,
-					depth: res.watermark.depth,
-				})
-			} else {
-				form.setFieldValue("watermark", watermarkParams)
+			if (res) {
+				message.success(tCommon("message.saveSuccess"))
+				// Preserve the submitted watermark if the backend has not started returning it yet.
+				initPlatformInfo(res.watermark ?? watermarkParams)
 			}
-			message.success(tCommon("message.saveSuccess"))
-			// The backend does not return watermark yet. Preserve the submitted value
-			// until support for the new platform setting field is deployed.
-			initPlatformInfo(res?.watermark ?? watermarkParams)
 		} catch (error) {
-			// console.error(`保存平台信息失败: ${error}`)
+			if (!(error && typeof error === "object" && "errorFields" in error)) {
+				message.error(tCommon("message.saveFailed"))
+			}
 		} finally {
 			setLoading(false)
 		}
@@ -405,6 +409,30 @@ const InfoManagementPage = () => {
 							/>
 						</Flex>
 					</div>
+				</Flex>
+				<SubHeader title={tPlatform("globalSystemPrompt")} />
+				<Flex className={cx(styles.formWrapper, styles.formItem)}>
+					<div className={styles.formItemLabel}>{tPlatform("globalSystemPrompt")}</div>
+					<Flex flex={1} className={styles.formItemContent}>
+						<Form.Item
+							name="global_system_prompt"
+							noStyle
+							rules={[
+								{
+									max: 5000,
+									message: tPlatform("globalSystemPromptMaxLength"),
+								},
+							]}
+						>
+							<MagicInput.TextArea
+								rows={8}
+								maxLength={5000}
+								showCount
+								placeholder={tPlatform("globalSystemPromptPlaceholder")}
+								disabled={!hasEditRight}
+							/>
+						</Form.Item>
+					</Flex>
 				</Flex>
 				<SubHeader title={tPlatform("footerConfig")} />
 				<Flex vertical className={styles.formWrapper}>

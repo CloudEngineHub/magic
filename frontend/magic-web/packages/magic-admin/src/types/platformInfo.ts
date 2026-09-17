@@ -6,12 +6,7 @@ export const enum SupportLocales {
 
 /** 组织水印中可展示的用户信息字段。 */
 export type PlatformWatermarkField =
-	| "real_name"
-	| "employee_no"
-	| "visit_time"
-	| "department"
-	| "phone"
-	| "email"
+	"real_name" | "employee_no" | "visit_time" | "department" | "phone" | "email"
 
 /** 组织水印的深浅档位。 */
 export type PlatformWatermarkIntensity = "light" | "standard" | "strong"
@@ -56,6 +51,7 @@ export namespace PlatformInfo {
 		watermark?: WatermarkConfig
 		agent_role_name_i18n?: Record<SupportLocales, string>
 		agent_role_description_i18n?: Record<SupportLocales, string>
+		global_system_prompt: string
 		footer?: Footer
 	}
 	/** 修改平台信息 */
@@ -73,6 +69,7 @@ export namespace PlatformInfo {
 		watermark?: WatermarkUpdateParams
 		agent_role_name_i18n?: Record<SupportLocales, string>
 		agent_role_description_i18n?: Record<SupportLocales, string>
+		global_system_prompt?: string
 		footer?: Footer
 	}
 }
