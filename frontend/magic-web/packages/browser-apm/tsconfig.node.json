@@ -1,11 +1,11 @@
 {
 	"compilerOptions": {
+		"allowSyntheticDefaultImports": true,
 		"module": "ESNext",
 		"moduleResolution": "bundler",
-		"allowSyntheticDefaultImports": true,
-		"strict": true,
-		"skipLibCheck": true,
 		"noEmit": true,
+		"skipLibCheck": true,
+		"strict": true,
 		"types": ["node"]
 	},
 	"include": ["vite.config.ts", "vitest.config.ts"]

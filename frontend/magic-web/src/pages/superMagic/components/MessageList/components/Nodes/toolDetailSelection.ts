@@ -53,13 +53,23 @@ const DESIGN_TOOL_NAMES = new Set([
 	"generate_canvas_videos",
 ])
 
+type ToolFilesStore = Pick<
+	typeof projectFilesStore,
+	"workspaceFilesList" | "currentSelectedProject"
+>
+
 interface SelectToolDetailOptions {
 	detail: Record<string, unknown>
 	onSelectDetail?: (detail: ToolDetail) => void
+	filesStore?: ToolFilesStore
 }
 
 interface SelectSourceFileOptions extends SelectToolDetailOptions {
 	fileId: string
+}
+
+function resolveFilesStore(filesStore?: ToolFilesStore): ToolFilesStore {
+	return filesStore ?? projectFilesStore
 }
 
 export function resolveToolFileId(data: unknown): string | undefined {
@@ -115,14 +125,20 @@ export function selectToolFile({
 	detail,
 	target,
 	onSelectDetail,
+	filesStore,
 }: SelectToolDetailOptions & {
 	target: ToolCardInteractionTarget
 }): boolean {
 	if (target.type === "file")
-		return selectSourceFileFromTool({ detail, fileId: target.fileId, onSelectDetail })
+		return selectSourceFileFromTool({
+			detail,
+			fileId: target.fileId,
+			onSelectDetail,
+			filesStore,
+		})
 	if (target.type !== "file-reference") return false
 	pendingFileSelection?.abort()
-	void selectReferencedToolFile({ detail, target, onSelectDetail })
+	void selectReferencedToolFile({ detail, target, onSelectDetail, filesStore })
 	return true
 }
 
@@ -130,16 +146,18 @@ async function selectReferencedToolFile({
 	detail,
 	target,
 	onSelectDetail,
+	filesStore,
 }: SelectToolDetailOptions & {
 	target: Extract<ToolCardInteractionTarget, { type: "file-reference" }>
 }): Promise<void> {
+	const resolvedFilesStore = resolveFilesStore(filesStore)
 	const controller = new AbortController()
 	pendingFileSelection = controller
 	const identity = getFileReferenceIdentityKey()
-	const projectId = projectFilesStore.currentSelectedProject?.id
+	const projectId = resolvedFilesStore.currentSelectedProject?.id
 	const cancel = () => controller.abort()
 	const disposeIdentity = reaction(
-		() => [getFileReferenceIdentityKey(), projectFilesStore.currentSelectedProject?.id],
+		() => [getFileReferenceIdentityKey(), resolvedFilesStore.currentSelectedProject?.id],
 		cancel,
 	)
 	const selectionEvents = [
@@ -172,7 +190,7 @@ async function selectReferencedToolFile({
 				if (result.status === "resolved") reference = result.reference
 			} else if (pathTarget?.scope === "workspace" && projectId) {
 				const attachment = findAttachmentByPath(
-					projectFilesStore.workspaceFilesList,
+					resolvedFilesStore.workspaceFilesList,
 					pathTarget.relativePath,
 				)
 				if (attachment)
@@ -187,7 +205,7 @@ async function selectReferencedToolFile({
 		}
 		if (reference?.space_type === "project" && !reference.is_directory) {
 			// ID 已完成鉴权；直接使用其元信息，不再通过同路径查找另一个目标。
-			const attachment = projectFilesStore.workspaceFilesList.find(
+			const attachment = resolvedFilesStore.workspaceFilesList.find(
 				(item) => String(item.file_id) === reference.file_id,
 			)
 			file = {
@@ -206,7 +224,7 @@ async function selectReferencedToolFile({
 		if (
 			controller.signal.aborted ||
 			identity !== getFileReferenceIdentityKey() ||
-			projectId !== projectFilesStore.currentSelectedProject?.id
+			projectId !== resolvedFilesStore.currentSelectedProject?.id
 		)
 			return
 		release()
@@ -230,8 +248,8 @@ async function selectReferencedToolFile({
 	}
 }
 
-function isFileInAttachments(fileId: string): boolean {
-	return projectFilesStore.workspaceFilesList.some(
+function isFileInAttachments(fileId: string, filesStore?: ToolFilesStore): boolean {
+	return resolveFilesStore(filesStore).workspaceFilesList.some(
 		(item) => String(item.file_id ?? "") === fileId,
 	)
 }
@@ -256,9 +274,10 @@ export function selectSourceFileFromTool({
 	detail,
 	fileId,
 	onSelectDetail,
+	filesStore,
 }: SelectSourceFileOptions): boolean {
 	// Runtime artifacts (e.g. browser screenshots) are not workspace files.
-	if (!isFileInAttachments(fileId)) return false
+	if (!isFileInAttachments(fileId, filesStore)) return false
 
 	pubsub.publish(PubSubEvents.Open_File_Tab, { fileId })
 	pubsub.publish(PubSubEvents.Locate_File_In_Tree, fileId)

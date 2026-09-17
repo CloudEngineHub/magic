@@ -2,7 +2,6 @@ import { resolveFilePresentation } from "@/pages/superMagic/components/TopicFile
 import { observer } from "mobx-react-lite"
 import { useEffect, useState, type ReactNode } from "react"
 import { useTranslation } from "react-i18next"
-import projectFilesStore from "@/stores/projectFiles"
 import { cn } from "@/utils/cn"
 import pubsub, { PubSubEvents } from "@/utils/pubsub"
 import {
@@ -13,7 +12,7 @@ import {
 	resolveReferencedProjectAttachment,
 	type ReferencedProjectAttachment,
 } from "@/pages/superMagic/services/referencedProjectAttachmentResolver"
-import { useMessageListContext } from "@/pages/superMagic/components/MessageList/context"
+import { useMessageListProjectFilesStore } from "@/pages/superMagic/components/MessageList/context"
 import { createReferencedProjectPreviewFile } from "@/pages/superMagic/components/MessageList/utils/openMessageFile"
 import { normalizeInlineStyle } from "../normalizeInlineStyle"
 import { FileReference, getFileExtensionFromPath } from "./FileReference"
@@ -51,8 +50,7 @@ interface ReferencedProjectResolution {
 
 export const MarkdownLink = observer((props: MarkdownLinkProps) => {
 	const { children, href, rel, target, title } = props
-	const { projectFilesStore: scopedProjectFilesStore } = useMessageListContext()
-	const resolvedProjectFilesStore = scopedProjectFilesStore ?? projectFilesStore
+	const resolvedProjectFilesStore = useMessageListProjectFilesStore()
 	const { t } = useTranslation("super")
 	const normalizedHref = typeof href === "string" ? href : ""
 	const normalizedRel = typeof rel === "string" ? rel : undefined
@@ -69,7 +67,7 @@ export const MarkdownLink = observer((props: MarkdownLinkProps) => {
 		),
 	)
 	const normalizedStyle = normalizeInlineStyle(rawAttributes.style)
-	const attachments = resolvedProjectFilesStore.workspaceFilesList
+	const attachments = resolvedProjectFilesStore?.workspaceFilesList ?? []
 	const { target: fileTarget, explicitFileReference } = classifyMarkdownFileHref(normalizedHref)
 	const workspacePath = fileTarget?.scope === "workspace" ? fileTarget.relativePath : null
 	const referencedProjectId =
@@ -129,7 +127,7 @@ export const MarkdownLink = observer((props: MarkdownLinkProps) => {
 	if (resolvedFileInfo) {
 		// 复用解析结果的真实身份，不能根据展示名称在拖入时重新匹配文件。
 		const projectId =
-			resolvedFileInfo.project_id || resolvedProjectFilesStore.currentSelectedProject?.id
+			resolvedFileInfo.project_id || resolvedProjectFilesStore?.currentSelectedProject?.id
 		const mentionAttrs: TiptapMentionAttributes | undefined = resolvedFileInfo.file_id
 			? resolvedFileInfo.is_directory || resolvedFileInfo.type === "directory"
 				? {

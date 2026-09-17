@@ -5,7 +5,7 @@ import type { CommonResponse, PaginationResponse } from "@/types/request"
 import type { GroupConversationDetail } from "@/types/chat/conversation"
 
 import type { ServiceHttpClient, RequestConfig } from "@/infrastructure/network/http/clients"
-import { A } from "@/pages/chatNew/components/ChatMessageList/components/MessageFactory/components/Markdown/EnhanceMarkdown/components/A";
+import { A } from "@/pages/chatNew/components/ChatMessageList/components/MessageFactory/components/Markdown/EnhanceMarkdown/components/A"
 
 export const generateContactApi = (fetch: ServiceHttpClient) => ({
 	/**
