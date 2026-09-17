@@ -377,4 +377,60 @@ describe("ProjectShareCreateView", () => {
 
 		expect(openDefaultOpenFilePicker).toHaveBeenCalledTimes(1)
 	})
+
+	it("项目分享只展示管理员允许的分享方式", () => {
+		render(
+			<ProjectShareCreateView
+				controller={createController({
+					permittedShareTypes: [ShareType.Public],
+					isSelectedShareTypePermitted: true,
+				})}
+			/>,
+		)
+
+		expect(
+			screen.getByTestId(`project-share-sheet-type-${ShareType.Public}`),
+		).toBeInTheDocument()
+		expect(
+			screen.queryByTestId(`project-share-sheet-type-${ShareType.PasswordProtected}`),
+		).not.toBeInTheDocument()
+		expect(
+			screen.queryByTestId(`project-share-sheet-type-${ShareType.Organization}`),
+		).not.toBeInTheDocument()
+	})
+
+	it("编辑时保留但禁用已经失权的当前分享方式", () => {
+		render(
+			<ProjectShareCreateView
+				controller={createController({
+					view: "edit",
+					isEditing: true,
+					formState: {
+						...createController().formState,
+						shareType: ShareType.PasswordProtected,
+					},
+					permittedShareTypes: [ShareType.Public],
+					isSelectedShareTypePermitted: false,
+				})}
+			/>,
+		)
+
+		expect(
+			screen.getByTestId(`project-share-sheet-type-${ShareType.PasswordProtected}`),
+		).toBeDisabled()
+		expect(screen.getByText("share.currentShareMethodUnavailable")).toBeInTheDocument()
+	})
+
+	it("管理员未开放任何项目分享方式时显示提示", () => {
+		render(
+			<ProjectShareCreateView
+				controller={createController({
+					permittedShareTypes: [],
+					isSelectedShareTypePermitted: false,
+				})}
+			/>,
+		)
+
+		expect(screen.getByText("share.noAvailableShareMethods")).toBeInTheDocument()
+	})
 })

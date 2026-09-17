@@ -9,6 +9,7 @@ import type { AttachmentItem } from "@/pages/superMagic/components/TopicFilesBut
 import { useFileOpen } from "@/pages/superMagic/components/TopicFilesButton/hooks/useFileOpen"
 import { useMobileFilePreviewPubSub } from "@/pages/superMagic/hooks/useMobileFilePreviewPubSub"
 import { FileActionVisibilityProvider } from "@/pages/superMagic/providers/file-action-visibility-provider"
+import { SharePermissionResourceProvider } from "@/pages/superMagic/components/Share/SharePermissionResourceContext"
 import PreviewDetailPopup, {
 	type PreviewDetail,
 	type PreviewDetailPopupRef,
@@ -305,7 +306,7 @@ function MicroAppPageMobileInner({
 
 const MicroAppPageMobileInnerObserver = observer(MicroAppPageMobileInner)
 
-export default function MicroAppPageMobile() {
+function MicroAppPageMobile() {
 	const { appId = "" } = useParams<{ appId: string }>()
 	const navigate = useNavigate()
 	const { projectId, isPublished, setIsPublished, loading, error } =
@@ -340,5 +341,13 @@ export default function MicroAppPageMobile() {
 				onPublishStatusChange={setIsPublished}
 			/>
 		</AppStoreProvider>
+	)
+}
+
+export default function FileAccessPage() {
+	return (
+		<SharePermissionResourceProvider value="microApp">
+			<MicroAppPageMobile />
+		</SharePermissionResourceProvider>
 	)
 }
