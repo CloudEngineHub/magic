@@ -10,7 +10,6 @@ return [
         'im-channels' => '连接 IM 机器人',
         'creating-slides' => '创建幻灯片',
         'crew-creator' => '智能体配置管理',
-        'agent-profile' => '员工资料管理',
         'deep-research' => '深度研究',
         'canvas-designer' => '画布设计',
         'skill-creator' => '技能创建',

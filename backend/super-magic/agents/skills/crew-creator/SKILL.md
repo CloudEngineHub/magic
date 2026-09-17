@@ -1,17 +1,17 @@
 ---
 name: crew-creator
 description: |
-    Manage and optimize custom agent definition files (IDENTITY.md, AGENTS.md, SOUL.md, TOOLS.md).
+    Manage and optimize custom crew definition files (IDENTITY.md, AGENTS.md, SOUL.md, TOOLS.md).
     Also handles first-time employee initialization when .magic/ has no IDENTITY.md, including
-    guiding setup and synchronizing the Agent profile.
-    Use when users want to edit agent identity, modify workflow instructions, adjust personality,
+    guiding setup and generating the crew definition.
+    Use when users want to edit crew identity, modify workflow instructions, adjust personality,
     add/remove tools, optimize prompts, or initialize a new employee from scratch.
     Trigger signals: 'modify prompt', 'change identity', 'add tool', 'remove tool', 'optimize workflow',
     'adjust personality', 'initialize employee', 'create employee'.
-    Do NOT use for: skill creation (use skill-creator), skill searching (use find_skills tool), standalone logo generation (use agent-logo-creator).
+    Do NOT use for: skill creation (use skill-creator), skill searching (use find_skills tool).
 ---
 
-# Agent Prompt Manager
+# Crew Definition Manager
 
 Manages the 4 core employee definition files under `.magic/`, helping users view, edit, and optimize their employee's identity, instructions, personality, and tool configuration.
 Also handles first-time employee initialization when the workspace has no definition files.
@@ -110,22 +110,30 @@ The script generates files based on the config (TOOLS.md and SKILLS.md are inten
 - `AGENTS.md` — generated if workflow instructions were provided
 - `SOUL.md` — generated if personality was provided
 
-### Employee Logo Generation & Profile Synchronization
+### Employee Logo Generation
 
-After `init_crew.py` completes successfully and employee definition files are ready, logo generation and server profile synchronization are handled by the dedicated **`agent-profile`** skill.
+After `init_crew.py` completes successfully and employee definition files are ready, generate the employee Logo (Avatar):
 
-1. **Invoke `agent-profile` skill**: Load the `agent-profile` skill to handle automatic logo generation, image compliance validation (1024x1024, ≤500KB), `update_agent` profile synchronization, and `get_agent_info()` read-back verification.
-2. **Boundary of Responsibilities**: `crew-creator` focuses on prompt engineering and core definition files; all details regarding logo prompt design, image compression, and server profile synchronization adhere to `agent-profile` specifications.
+1. **Extract Identity and Personality**:
+   - Read `.magic/IDENTITY.md` to extract name, role, description, and capability characteristics.
+   - Read `.magic/SOUL.md` (if present) to extract personality traits, aesthetic preferences, and communication style.
+2. **Assemble Generation Prompt**:
+   - Refer to `references/avatar-generation-guide.md`.
+   - Assemble a prompt combining style prefix, character identity, professional visual elements, personality temperament, background color scheme, and quality suffix.
+3. **Generate Image and Save Locally**:
+   - Call `generate_images` with `size="1024x1024"` to generate 1 square image.
+   - Save to `.magic/avatars/agent-logo.png` (path relative to workspace root; never prepend `.workspace/`).
+   - Validate that the image is square and its size does not exceed `500KB` (convert to high-quality JPG if necessary).
+   - Preserve existing custom logos if user already provided one and did not request replacement.
 
 ### Mandatory Initialization Completion Gate
 
 Creating or validating definition files is not the end of initialization. After the files and any requested skills are ready, execute this sequence before cleanup or the final response:
 
-1. Invoke the `agent-profile` skill to generate the employee Logo and synchronize profile metadata based on `.magic/IDENTITY.md` and `.magic/SOUL.md` (if present).
-2. `agent-profile` calls `update_agent` with text metadata and local logo path (`icon_file_key`), and verifies the updated profile via `get_agent_info()` (confirming Agent code, text metadata, and public logo URL with `icon_type: 2`).
-3. If logo generation/upload fails, `agent-profile` automatically falls back to text-only metadata synchronization and records the reason without breaking employee initialization.
+1. Generate the employee Logo based on `.magic/IDENTITY.md` and `.magic/SOUL.md` (if present) and save to `.magic/avatars/agent-logo.png`.
+2. Verify that all employee definition files (`IDENTITY.md`, `AGENTS.md`, `SOUL.md`) exist and are valid.
 
-**Do not delete `.crew_init_config.json`, announce completion, or return the final initialization summary until profile synchronization and read-back verification have been attempted.** The final response must separately report `text metadata synchronization` and `Logo synchronization` status.
+**Do not delete `.crew_init_config.json`, announce completion, or return the final initialization summary until definition files and Logo generation have been completed.**
 
 If the user chooses skill decomposition in Round 4, after initialization call `skill-creator` once for each independent workflow. Follow `skill-creator`'s plan, confirmation, creation, and validation process; do not write `SKILL.md` manually.
 
@@ -135,11 +143,11 @@ If the user chooses skill decomposition in Round 4, after initialization call `s
 2. If validation fails, revise the workflow content and validate it again; do not initialize with a plain unstructured checklist or omit the mandatory baseline security constraints.
 3. Show the generated files to the user via `read_files`.
 4. If the user chose skill decomposition, call `skill-creator` for each independent skill and validate the results before reporting completion.
-5. Complete the mandatory initialization completion gate above (via `agent-profile` for Logo generation, `update_agent`, and `get_agent_info()` verification).
-6. Verify the generated files and the Agent update response, and require successful `get_agent_info()` read-back verification before reporting synchronization as successful.
-7. Present the complete **Employee Initialization & Verification Checklist** to the user (see format below), explicitly verifying definition files, Logo generation, and Agent profile synchronization.
+5. Complete the mandatory initialization completion gate above.
+6. Verify the generated files and the employee directory structure.
+7. Present the complete **Employee Initialization & Verification Checklist** to the user (see format below), explicitly verifying definition files and Logo generation.
 8. Ask if the user wants any adjustments.
-9. Clean up the temp config only after synchronization has been attempted: `delete_files(path=".crew_init_config.json")`.
+9. Clean up the temp config only after initialization has completed: `delete_files(path=".crew_init_config.json")`.
 10. Inform the user: TOOLS.md and SKILLS.md were not generated by the initialization script (system defaults apply); custom skills are created under `.magic/skills/` and can be adjusted later through employee management.
 
 ### Employee Initialization & Verification Checklist Format
@@ -153,9 +161,7 @@ After employee initialization completes, you MUST present the following checklis
 |------------|--------|----------------------|
 | Definition files created | pass | IDENTITY.md, AGENTS.md, SOUL.md created under .magic/ |
 | Skill decomposition decision | pass | Recorded user decision ('yes'/'no') |
-| Logo generated | pass / skipped / failed | agent-profile generated .magic/avatars/agent-logo.png |
-| Employee profile updated | pass / failed | update_agent called with name_i18n, role_i18n, description_i18n, icon_file_key |
-| Employee info verified | pass / failed | get_agent_info() confirmed profile and public Logo URL (icon_type: 2) |
+| Logo generated | pass / skipped / failed | Generated .magic/avatars/agent-logo.png |
 ```
 
 ## File Responsibility Mapping
@@ -166,7 +172,7 @@ After employee initialization completes, you MUST present the following checklis
 | `AGENTS.md` | WHAT — Instructions | Workflow, rules, special directives | Recommended |
 | `SOUL.md` | HOW — Personality | Core personality, communication style, behavior guidelines | Optional |
 | `TOOLS.md` | WITH WHAT — Tools | Tool whitelist (YAML) + usage preferences | Optional |
-| `.magic/avatars/agent-logo.png` | VISUAL — Logo | Default employee Logo generated and managed by `agent-profile` | Optional |
+| `.magic/avatars/agent-logo.png` | VISUAL — Logo | Default employee Logo generated under .magic/avatars/ | Optional |
 
 ## Editing Workflow
 

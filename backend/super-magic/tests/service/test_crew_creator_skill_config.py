@@ -4,7 +4,6 @@ from pathlib import Path
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 CREW_CREATOR_DIR = PROJECT_ROOT / "agents" / "skills" / "crew-creator"
-AGENT_PROFILE_DIR = PROJECT_ROOT / "agents" / "skills" / "agent-profile"
 
 
 def test_crew_creator_prefers_choice_questions_for_enumerable_information():
@@ -56,9 +55,9 @@ def test_crew_creator_design_tool_names_are_registered():
     assert documented_tools <= registered_tools
 
 
-def test_agent_profile_logo_paths_are_workspace_relative():
-    skill = (AGENT_PROFILE_DIR / "SKILL.md").read_text(encoding="utf-8")
-    guide = (AGENT_PROFILE_DIR / "references" / "avatar-generation-guide.md").read_text(
+def test_crew_creator_logo_paths_are_workspace_relative():
+    skill = (CREW_CREATOR_DIR / "SKILL.md").read_text(encoding="utf-8")
+    guide = (CREW_CREATOR_DIR / "references" / "avatar-generation-guide.md").read_text(
         encoding="utf-8"
     )
 
@@ -68,35 +67,6 @@ def test_agent_profile_logo_paths_are_workspace_relative():
     assert "`.workspace/.magic/" not in skill
     assert "do not prepend `.workspace/`" in guide
     assert "`.magic/avatars/agent-logo.png`" in guide
-
-
-def test_crew_creator_delegates_to_agent_profile_before_completion():
-    skill = (CREW_CREATOR_DIR / "SKILL.md").read_text(encoding="utf-8")
-    completion_gate = skill.split("### Mandatory Initialization Completion Gate", 1)[
-        1
-    ].split("### After Initialization", 1)[0]
-
-    assert "agent-profile" in completion_gate
-    assert "update_agent" in completion_gate
-    assert "`icon_file_key`" in completion_gate
-    assert "get_agent_info" in completion_gate
-    assert "Do not delete `.crew_init_config.json`" in completion_gate
-    assert "text metadata synchronization" in completion_gate
-    assert "Logo synchronization" in completion_gate
-
-
-def test_crew_creator_registers_agent_manager_tools():
-    agent = (PROJECT_ROOT / "agents" / "crew-creator.agent").read_text(encoding="utf-8")
-    frontmatter = agent.split("---", 2)[1]
-
-    for tool_name in (
-        "get_agent_info",
-        "update_agent",
-        "create_skill",
-        "edit_skill",
-        "upload_skill",
-    ):
-        assert f"  - {tool_name}\n" in frontmatter
 
 
 def test_init_crew_preserves_existing_workspace_directories(tmp_path, monkeypatch):
@@ -155,27 +125,3 @@ def test_init_crew_preserves_existing_workspace_directories(tmp_path, monkeypatc
     assert cache_dir.exists() and (cache_dir / "cache.db").exists()
     assert browser_dir.exists() and (browser_dir / "state.json").exists()
 
-
-
-def test_restored_agent_manager_tools_are_exported_and_workspace_scoped():
-    tools_init = (PROJECT_ROOT / "app" / "tools" / "__init__.py").read_text(encoding="utf-8")
-    manager_dir = PROJECT_ROOT / "app" / "tools" / "agent_manager"
-
-    assert "from app.tools.agent_manager import" in tools_init
-    for module_name in (
-        "get_agent_info",
-        "update_agent",
-        "create_skill",
-        "edit_skill",
-        "upload_skill",
-    ):
-        assert (manager_dir / f"{module_name}.py").is_file()
-
-    for module_name in ("create_skill", "edit_skill", "upload_skill"):
-        source = (manager_dir / f"{module_name}.py").read_text(encoding="utf-8")
-        assert "PathManager.get_magic_skills_dir()" in source
-        assert "get_agent_studio_dir" not in source
-
-    update_source = (manager_dir / "update_agent.py").read_text(encoding="utf-8")
-    assert 'icon = {"type": "Image", "value": resolved_key}' in update_source
-    assert "params.agent_code" not in update_source

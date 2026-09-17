@@ -177,7 +177,6 @@ from app.tools.read_skills import ReadSkills
 from app.tools.run_sdk_snippet import RunSdkSnippet
 from app.tools.search_knowledge import SearchKnowledge
 from app.tools.install_slides_template import InstallSlidesTemplate
-from app.tools.agent_manager import CreateSkill, EditSkill, GetAgentInfo, UpdateAgent, UploadSkill
 
 # MCP 工具集（@tool(code_mode_only=True)，只允许通过 sdk.tool.call 调用）
 from app.tools.mcp import (

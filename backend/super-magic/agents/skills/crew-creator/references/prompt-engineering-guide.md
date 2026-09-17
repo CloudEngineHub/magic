@@ -92,12 +92,10 @@ After writing, verify against this checklist:
 - [ ] Is all generated content written in one selected language without duplicate translations?
 - [ ] Is any information lost or ambiguous?
 
-### Employee Initialization & Profile Synchronization (For First-time Creation)
+### Employee Initialization (For First-time Creation)
 - [ ] Are definition files (`IDENTITY.md`, `AGENTS.md`, `SOUL.md`) properly created under `.magic/`?
 - [ ] Is the skill decomposition decision explicitly recorded?
 - [ ] Is the employee Logo generated via `generate_images` and saved under `.magic/avatars/` (or existing icon preserved)?
-- [ ] Is `update_agent` called with `name_i18n`, `role_i18n`, `description_i18n`, and `icon_file_key`?
-- [ ] Is `get_agent_info()` called to verify the profile and confirm the Logo public URL resolution (`icon_type: 2`)?
 
 ## 3. Anti-pattern Detection
 

@@ -52,28 +52,11 @@ Treat the current working directory as the employee workspace root. All paths be
 1. Use the `generate_images` tool to generate one image. The `size` must be `1024x1024`.
 2. Save the image as `.magic/avatars/agent-logo.png` in the current employee workspace. If the tool cannot write directly to this path, move or rename the generated image afterward.
 3. Confirm that the image exists, is readable, and is square, and verify that its file size does not exceed `500KB`. If it cannot be compressed to fit the limit, prefer converting it to a JPG of suitable quality while preserving the square aspect ratio.
-4. If generation fails, do not falsely report success. Record the reason for failure and proceed with synchronizing the name, role, and description.
+4. If generation fails, do not falsely report success. Record the reason for failure and proceed with saving the employee definition files.
 5. If a user-provided logo already exists, or the Agent already has an image icon, do not overwrite the existing image without user confirmation.
-
-## Agent Synchronization Payload
-
-Pass the local Logo path (e.g. `.magic/avatars/agent-logo.png` or `.magic/avatars/agent-logo.jpg`) as `icon_file_key` when calling the `update_agent` tool:
-
-```json
-{
-  "name_i18n": {"zh_CN": "<name>"},
-  "role_i18n": {"zh_CN": ["<role>"]},
-  "description_i18n": {"zh_CN": "<description>"},
-  "icon_file_key": ".magic/avatars/agent-logo.png"
-}
-```
-
-The `update_agent` tool will automatically upload the local file to public object storage via STS credentials and configure the appropriate `icon` (`type: "Image"`) and `icon_type: 2` on magic-service. If logo synchronization fails, retry with text fields only, and the failure must not block employee creation.
 
 ## Acceptance Criteria
 
 - `.magic/avatars/agent-logo.png`, or an equivalent JPG, has been generated and is square.
-- The `update_agent` tool is called with `icon_file_key` pointing to the local image path.
-- `get_agent_info()` confirms that `icon` has been resolved to a public URL starting with `http://` or `https://` with `icon_type: 2`.
-- If logo generation or upload fails, the text metadata is still synchronized and the reason for failure is reported to the user.
-- An existing user-provided logo is not overwritten by the automatically generated logo.
+- The avatar file is persisted in `.magic/avatars/` as part of the employee definition files.
+- An existing user-provided logo is not overwritten by the automatically generated logo without confirmation.
