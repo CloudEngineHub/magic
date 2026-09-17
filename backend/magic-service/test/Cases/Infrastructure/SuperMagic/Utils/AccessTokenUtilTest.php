@@ -16,6 +16,7 @@ use App\Infrastructure\SuperMagic\Utils\AccessTokenUtil;
 use Hyperf\Context\ApplicationContext;
 use Hyperf\Database\Model\Builder;
 use Hyperf\Redis\Redis;
+use InvalidArgumentException;
 use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
 use Psr\Container\ContainerInterface;
@@ -29,6 +30,8 @@ class AccessTokenUtilTest extends TestCase
     private array $values = [];
 
     private ?ResourceShareEntity $share;
+
+    private int $shareLookupCount = 0;
 
     protected function setUp(): void
     {
@@ -45,7 +48,10 @@ class AccessTokenUtilTest extends TestCase
             };
         });
         $shares = $this->createMock(ResourceShareDomainService::class);
-        $shares->method('getValidShareById')->with('44')->willReturnCallback(fn () => $this->share);
+        $shares->method('getValidShareById')->willReturnCallback(function (string $shareId) {
+            ++$this->shareLookupCount;
+            return $shareId === '44' ? $this->share : null;
+        });
         $container = $this->createMock(ContainerInterface::class);
         $container->method('get')->willReturnMap([[Redis::class, $redis], [ResourceShareDomainService::class, $shares]]);
         ApplicationContext::setContainer($container);
@@ -64,6 +70,81 @@ class AccessTokenUtilTest extends TestCase
         }
         self::assertCount(20, array_unique($tokens));
         self::assertMatchesRegularExpression('/^[a-f0-9]{64}$/', $tokens[0]);
+    }
+
+    public function testTokenGeneratedWithDefaultMetadataValidatesImmediately(): void
+    {
+        $token = AccessTokenUtil::generate('44', 'org');
+
+        self::assertTrue(AccessTokenUtil::validate($token));
+    }
+
+    public function testDefaultGenerationPreservesMetadataAndUsesShareOrganization(): void
+    {
+        $token = AccessTokenUtil::generate('44', metadata: ['request_id' => 'request-1']);
+
+        self::assertSame('org', AccessTokenUtil::getOrganizationCode($token));
+        self::assertSame('request-1', AccessTokenUtil::getMetadata($token)['request_id'] ?? null);
+        self::assertTrue(AccessTokenUtil::validate($token));
+    }
+
+    public function testDefaultGeneratedTokenIsInvalidatedBySecurityChange(): void
+    {
+        $token = AccessTokenUtil::generate('44', 'org');
+        $this->share->setIsEnabled(false);
+
+        self::assertFalse(AccessTokenUtil::validate($token));
+    }
+
+    public function testGenerateRejectsMismatchedOrganization(): void
+    {
+        $this->expectException(InvalidArgumentException::class);
+
+        AccessTokenUtil::generate('44', 'another-org');
+    }
+
+    #[DataProvider('invalidShares')]
+    public function testGenerateRejectsInvalidSharesWithoutWritingToken(string $change): void
+    {
+        match ($change) {
+            'missing' => $this->share = null,
+            'disabled' => $this->share->setIsEnabled(false),
+            'type' => $this->share->setShareType(PHP_INT_MAX),
+        };
+        $this->expectException(InvalidArgumentException::class);
+
+        try {
+            AccessTokenUtil::generate('44', 'org');
+        } finally {
+            self::assertSame([], $this->values);
+        }
+    }
+
+    public static function invalidShares(): array
+    {
+        return [['missing'], ['disabled'], ['type']];
+    }
+
+    public function testGenerateRejectsInvalidExplicitFingerprintWithoutReloadingShare(): void
+    {
+        $this->expectException(InvalidArgumentException::class);
+
+        try {
+            AccessTokenUtil::generate('44', 'org', metadata: ['share_security_fingerprint' => null]);
+        } finally {
+            self::assertSame(0, $this->shareLookupCount);
+        }
+    }
+
+    public function testGenerateForShareUsesTheAuthorizedSnapshotWithoutReloadingShare(): void
+    {
+        $token = AccessTokenUtil::generateForShare($this->share);
+
+        self::assertSame(0, $this->shareLookupCount);
+        self::assertSame(
+            AccessTokenUtil::shareSecurityFingerprint($this->share),
+            AccessTokenUtil::getMetadata($token)['share_security_fingerprint'] ?? null
+        );
     }
 
     #[DataProvider('securityChanges')]

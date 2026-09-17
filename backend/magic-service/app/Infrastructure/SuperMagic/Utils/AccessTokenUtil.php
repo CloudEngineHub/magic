@@ -12,6 +12,7 @@ use App\Domain\SuperMagic\Common\Share\Entity\ResourceShareEntity;
 use App\Domain\SuperMagic\Common\Share\Service\ResourceShareDomainService;
 use Hyperf\Context\ApplicationContext;
 use Hyperf\Redis\Redis;
+use InvalidArgumentException;
 
 /**
  * 临时访问令牌工具类.
@@ -41,6 +42,27 @@ class AccessTokenUtil
      */
     public static function generate(string $shareId, string $organizationCode = '', string $scope = 'read', ?int $ttl = null, ?array $metadata = null): string
     {
+        $metadata ??= [];
+        if (array_key_exists('share_security_fingerprint', $metadata)) {
+            // The caller already authorized this exact share snapshot; reloading it here would introduce a race.
+            $fingerprint = $metadata['share_security_fingerprint'];
+            if (! is_string($fingerprint) || preg_match('/^[a-f0-9]{64}$/D', $fingerprint) !== 1) {
+                throw new InvalidArgumentException('Invalid share security fingerprint.');
+            }
+        } else {
+            $share = ApplicationContext::getContainer()->get(ResourceShareDomainService::class)
+                ->getValidShareById($shareId);
+            if ($share === null || ! $share->getIsEnabled()
+                || ShareAccessType::tryFrom($share->getShareType()) === null) {
+                throw new InvalidArgumentException('Cannot generate an access token for an invalid share.');
+            }
+            if ($organizationCode !== '' && $organizationCode !== $share->getOrganizationCode()) {
+                throw new InvalidArgumentException('Share organization does not match the token organization.');
+            }
+            $organizationCode = $share->getOrganizationCode();
+            $metadata['share_security_fingerprint'] = self::shareSecurityFingerprint($share);
+        }
+
         $redis = self::getRedis();
         $actualTtl = $ttl ?? self::$defaultTtl;
 
@@ -53,7 +75,7 @@ class AccessTokenUtil
             'scope' => $scope,
             'created_at' => time(),
             'expires_at' => time() + $actualTtl,
-            'metadata' => $metadata ?? [],
+            'metadata' => $metadata,
             'organization_code' => $organizationCode,
         ];
 
