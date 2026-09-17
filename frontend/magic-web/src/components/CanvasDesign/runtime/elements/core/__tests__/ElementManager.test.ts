@@ -434,6 +434,45 @@ describe("ElementManager node-only resize sync", () => {
 	})
 })
 
+describe("ElementManager image crop resize sync", () => {
+	it("preserves an explicit nested crop clear during a resize update", () => {
+		const currentData = {
+			id: "image-1",
+			type: "image",
+			width: 100,
+			height: 80,
+			activeContentId: "content-1",
+			mainContentId: "content-1",
+			contents: [
+				{
+					contentId: "content-1",
+					src: "./image.png",
+					crop: { x: 10, y: 12, width: 40, height: 30 },
+				},
+			],
+		} as ImageElement
+		const element = {
+			getData: () => currentData,
+		}
+		const manager = Object.create(ElementManager.prototype) as {
+			normalizeUpdates: (element: unknown, updates: ElementUpdatePatch) => ElementUpdatePatch
+		}
+
+		const normalized = manager.normalizeUpdates(element, {
+			width: 200,
+			height: 160,
+			contents: [
+				{
+					...currentData.contents[0],
+					crop: undefined,
+				},
+			],
+		})
+
+		expect(normalized.contents?.[0]?.crop).toBeUndefined()
+	})
+})
+
 describe("ElementManager transform-safe full updates", () => {
 	it("preserves the live node position and defers structural rerender for resource updates", () => {
 		const node = new Konva.Group({ x: 140, y: 180 })

@@ -319,7 +319,9 @@ export class CropManager {
 				width: displaySize.width,
 				height: displaySize.height,
 			},
-			{ silent: true },
+			// Entering crop mode temporarily expands the element; keep the persisted crop
+			// unchanged until the user confirms or cancels the editing session.
+			{ silent: true, skipImageCropResizeSync: true },
 		)
 		this.canvas.markerManager.previewMarkersForCrop(
 			elementId,

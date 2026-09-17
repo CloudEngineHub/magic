@@ -851,9 +851,23 @@ export class ElementManager {
 				normalizedUpdates,
 				"crop",
 			)
+			// Content fields can be updated through the complete contents array. Preserve an
+			// explicit nested crop change, including crop: undefined, during resize sync.
+			const hasExplicitNestedCropField =
+				!!activeImageContent &&
+				Array.isArray(normalizedUpdates.contents) &&
+				normalizedUpdates.contents.some((content) => {
+					if (!content || typeof content !== "object") return false
+					const contentRecord = content as { contentId?: string }
+					return (
+						contentRecord.contentId === activeImageContent.contentId &&
+						Object.prototype.hasOwnProperty.call(content, "crop")
+					)
+				})
 			const shouldSyncCropOnResize =
 				!!activeImageContent?.crop &&
 				!hasExplicitCropField &&
+				!hasExplicitNestedCropField &&
 				!options?.skipImageCropResizeSync
 
 			if (shouldSyncCropOnResize && imageData && activeImageContent?.crop) {
