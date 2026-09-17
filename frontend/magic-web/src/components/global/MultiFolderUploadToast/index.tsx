@@ -1,4 +1,4 @@
-import React, { useState, useEffect, lazy, Suspense } from "react"
+import React, { useState, useEffect, useLayoutEffect, lazy, Suspense } from "react"
 import ReactDOM from "react-dom"
 import { observer } from "mobx-react-lite"
 import { Button, Tooltip } from "antd"
@@ -127,6 +127,16 @@ export const MultiFolderUploadToast: React.FC = observer(() => {
 
 	// 当总任务数变化时，检查并调整位置边界
 	const totalTasks = multiFolderUploadStore.totalTasksCount
+	// 首次显示、展开/收起和长文案换行都按实际尺寸定位，移动端继续由安全区和抽屉负责。
+	useLayoutEffect(() => {
+		const element = containerProps.ref.current
+		if (isMobile || !element) return
+		adjustPositionToBounds()
+		const observer = new ResizeObserver(adjustPositionToBounds)
+		observer.observe(element)
+		return () => observer.disconnect()
+	}, [collapsed, currentView, totalTasks, isMobile, containerProps.ref, adjustPositionToBounds])
+
 	useUpdateEffect(() => {
 		if (totalTasks > 0) {
 			requestAnimationFrame(() => {

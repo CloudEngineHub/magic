@@ -6,7 +6,8 @@ import { observer } from "mobx-react-lite"
 import { useIsMobile } from "@/hooks/useIsMobile"
 import { useSafeArea } from "@/providers/AppearanceProvider/hooks/useSafeArea"
 import { useCollapsedHeaderStyles } from "./CollapsedHeader.styles"
-import { MagicLoadingIcon } from "@/components/base/MagicLoadingIcon"
+import { Upload } from "lucide-react"
+import ProgressIndicator from "@/components/base/MagicProgressToast/ProgressIndicator"
 import { useMultiFolderUploadActions } from "./useMultiFolderUploadActions"
 
 interface UploadInfo {
@@ -52,6 +53,25 @@ export const CollapsedHeader: React.FC<CollapsedHeaderProps> = observer(
 		const hasCreatingFolderTasks = activeTasks.some(
 			(task) => task.state.currentPhase === "creating_folders",
 		)
+		const normalizedProgress = Number.isFinite(globalProgress)
+			? Math.min(Math.max(globalProgress, 0), 100)
+			: 0
+		// 文件数量与字节进度各读原统计：一个大文件上传至 66% 时仍是 0/1。
+		const fileCount = `${uploadInfo.totalProcessedFiles}/${uploadInfo.totalFiles}`
+		const activeProgress = (
+			<Flex align="center" gap={10} wrap="wrap">
+				<span>{fileCount}</span>
+				<Progress
+					percent={normalizedProgress}
+					showInfo={false}
+					className={cx(
+						styles.progressBar,
+						allActiveTasksPaused && styles.pausedProgress,
+					)}
+				/>
+				<span>{Math.round(normalizedProgress)}%</span>
+			</Flex>
+		)
 
 		// 获取状态图标和文本
 		const getStatusContent = () => {
@@ -59,33 +79,45 @@ export const CollapsedHeader: React.FC<CollapsedHeaderProps> = observer(
 				if (allActiveTasksPaused) {
 					// 已暂停状态
 					return {
-						icon: <MagicLoadingIcon size={20} paused={true} />,
+						icon: (
+							<span className={styles.pausedIcon}>
+								<ProgressIndicator
+									value={hasCreatingFolderTasks ? undefined : normalizedProgress}
+									icon={<Upload />}
+									label={t("folderUpload.collapsed.paused")}
+								/>
+							</span>
+						),
 						text: t("folderUpload.collapsed.paused"),
-						progress: `${uploadInfo.totalProcessedFiles}/${uploadInfo.totalFiles}`,
+						progress: hasCreatingFolderTasks ? fileCount : activeProgress,
 					}
 				} else if (hasCreatingFolderTasks) {
 					return {
-						icon: <MagicLoadingIcon size={20} />,
+						icon: (
+							<span className={styles.progressIcon}>
+								<ProgressIndicator
+									icon={<Upload />}
+									label={t("folderUpload.collapsed.creatingFolders")}
+								/>
+							</span>
+						),
 						text: t("folderUpload.collapsed.creatingFolders"),
 						progress: `${uploadInfo.totalProcessedFiles}/${uploadInfo.totalFiles}`,
 					}
 				} else {
 					// 上传中状态
 					return {
-						icon: <MagicLoadingIcon size={20} />,
-						text: t("folderUpload.collapsed.uploading"),
-						progress: (
-							<Flex align="center" gap={10}>
-								<Progress
-									percent={globalProgress}
-									showInfo={false}
-									strokeColor="#315CEC"
-									trailColor="rgba(46, 47, 56, 0.13)"
-									className={styles.progressBar}
+						icon: (
+							<span className={styles.progressIcon}>
+								<ProgressIndicator
+									value={normalizedProgress}
+									icon={<Upload />}
+									label={t("folderUpload.collapsed.uploading")}
 								/>
-								<span>{globalProgress}%</span>
-							</Flex>
+							</span>
 						),
+						text: t("folderUpload.collapsed.uploading"),
+						progress: activeProgress,
 					}
 				}
 			} else if (hasErrors) {
