@@ -62,8 +62,10 @@ export const WATERMARK_DOM_ID = "magic-watermark"
 export const WATERMARK_CONFIG = {
 	fontSize: 18,
 	/** 文字颜色 */
-	textColor: "rgba(0, 0, 0, 0.015)",
-	/** 文字底衬背景色 */
+	// Keep the watermark visible through translucent modal masks by strengthening
+	// the text itself instead of drawing a contrasting rectangle behind every label.
+	textColor: "rgba(0, 0, 0, 0.05)",
+	/** 仅供显式开启底衬的特殊场景使用；页面水印默认不绘制 */
 	backgroundColor: "rgba(255, 255, 255, 0.015)",
 	rotate: -12,
 	gapX: 60,
@@ -71,25 +73,25 @@ export const WATERMARK_CONFIG = {
 	patchPaddingX: 3,
 	patchPaddingY: 3,
 	patchRadius: 4,
-	/** 文字底衬，默认开启；仅当显式传入 `useBackground: false` 时关闭。 */
-	useBackground: true,
+	/** 文字底衬默认关闭，避免在 modal 遮罩下出现矩形背景块。 */
+	useBackground: false,
 	/** @deprecated 请使用 textColor */
-	color: "rgba(0, 0, 0, 0.02)",
+	color: "rgba(0, 0, 0, 0.05)",
 }
 
 /** Visual strength used by the organization watermark configuration. */
 const WATERMARK_DEPTH_CONFIG: Record<PlatformWatermarkConfig["depth"], WatermarkDataUrlOptions> = {
 	light: {
 		textColor: "rgba(0, 0, 0, 0.03)",
-		backgroundColor: "rgba(255, 255, 255, 0.03)",
+		useBackground: false,
 	},
 	standard: {
 		textColor: "rgba(0, 0, 0, 0.045)",
-		backgroundColor: "rgba(255, 255, 255, 0.045)",
+		useBackground: false,
 	},
 	strong: {
 		textColor: "rgba(0, 0, 0, 0.06)",
-		backgroundColor: "rgba(255, 255, 255, 0.06)",
+		useBackground: false,
 	},
 }
 
@@ -307,9 +309,9 @@ function resolveTextColor(config: WatermarkDataUrlOptions) {
 	return config.textColor ?? config.color ?? WATERMARK_CONFIG.textColor
 }
 
-/** 文字底衬默认开启，仅显式 `useBackground: false` 时关闭。 */
+/** 是否绘制文字底衬；未传时沿用全局默认配置。 */
 function resolveUseBackground(config: { useBackground?: boolean } = {}) {
-	return config.useBackground !== false
+	return config.useBackground ?? WATERMARK_CONFIG.useBackground
 }
 
 function resolveWatermarkDrawConfig(config: WatermarkDataUrlOptions = {}) {
