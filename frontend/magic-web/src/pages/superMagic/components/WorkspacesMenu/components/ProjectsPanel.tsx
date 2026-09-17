@@ -12,6 +12,7 @@ import type { DialogWindowOptions } from "@/hooks/use-dialog-window"
 import {
 	Dialog,
 	DialogContent,
+	DialogPortal,
 	DialogTitle,
 	DialogDescription,
 } from "@/components/shadcn-ui/dialog"
@@ -89,6 +90,16 @@ export function ProjectsPanel({
 				if (!nextOpen) onClose()
 			}}
 		>
+			{/* modal={false} drops Radix's overlay, so render a manual mask below the content z-index. */}
+			{open && (
+				<DialogPortal>
+					<div
+						aria-hidden="true"
+						className="fixed inset-0 z-detail-fullscreen bg-black/50"
+						data-testid="shared-workspace-dialog-mask"
+					/>
+				</DialogPortal>
+			)}
 			{open && (
 				<DialogContent
 					showCloseButton={false}
