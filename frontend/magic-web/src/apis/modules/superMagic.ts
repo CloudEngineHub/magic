@@ -92,7 +92,8 @@ export interface SaveFileContentResponse {
 }
 
 export type FileReferenceSelector =
-	{ file_id: string } | { space_type: "user"; space_relative_path: string }
+	| { file_id: string }
+	| { space_type: "user"; space_relative_path: string }
 
 interface FileReferenceMetadata {
 	file_id: string
@@ -107,7 +108,8 @@ export type FileReference =
 	| (FileReferenceMetadata & { space_type: "project"; project_id: string })
 
 export type FileReferenceResult =
-	{ status: "resolved"; reference: FileReference } | { status: "unavailable" | "invalid" }
+	| { status: "resolved"; reference: FileReference }
+	| { status: "unavailable" | "invalid" }
 
 export interface SuperMagicTopicModelExtra {
 	transcription_enabled?: boolean

@@ -24,7 +24,9 @@ interface WorkspaceProjectsPanelProps {
 }
 
 export type ProjectBrowserSource =
-	{ type: "workspace"; workspace: Workspace } | { type: "collaboration" } | { type: "recent" }
+	| { type: "workspace"; workspace: Workspace }
+	| { type: "collaboration" }
+	| { type: "recent" }
 const WORKSPACE_PAGE_SIZE = 20
 const DEFAULT_WINDOW_WIDTH_RATIO = 0.85
 

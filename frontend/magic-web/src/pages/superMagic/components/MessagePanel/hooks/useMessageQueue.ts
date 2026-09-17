@@ -347,7 +347,8 @@ function useMessageQueue({
 					const clientSyncId = messageContent.extra?.super_agent?.client_queue_sync_id
 					const dynamicParams = messageContent.extra?.super_agent?.dynamic_params
 					const topicPattern = messageContent.extra?.super_agent?.topic_pattern as
-						TopicMode | undefined
+						| TopicMode
+						| undefined
 
 					return {
 						content: jsonContent,

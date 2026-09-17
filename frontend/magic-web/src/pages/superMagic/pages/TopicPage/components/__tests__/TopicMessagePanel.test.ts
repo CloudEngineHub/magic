@@ -1,8 +1,8 @@
 import { describe, expect, it } from "vitest"
 import {
 	PPT_COMPOSER_MIN_INPUT_HEIGHT,
-	DEFAULT_COMPOSER_MIN_INPUT_HEIGHT,
 	SPECIALIZED_COMPOSER_MIN_INPUT_HEIGHT,
+	VIDEO_PRODUCTION_COMPOSER_MIN_INPUT_HEIGHT,
 	resolveComposerMinInputHeight,
 } from "@/pages/superMagic/components/ConversationInputResize/constants"
 
@@ -11,8 +11,8 @@ describe("TopicMessagePanel input minimum height", () => {
 		expect(
 			resolveComposerMinInputHeight({
 				isPptMode: true,
-				isSelfMediaMode: true,
-				isRecordSummaryMode: true,
+				isVideoProductionMode: true,
+				isSpecializedMode: true,
 			}),
 		).toBe(PPT_COMPOSER_MIN_INPUT_HEIGHT)
 	})
@@ -21,26 +21,29 @@ describe("TopicMessagePanel input minimum height", () => {
 		expect(
 			resolveComposerMinInputHeight({
 				isPptMode: false,
-				isSelfMediaMode: false,
-				isRecordSummaryMode: false,
+				isVideoProductionMode: false,
+				isSpecializedMode: false,
 			}),
-		).toBe(DEFAULT_COMPOSER_MIN_INPUT_HEIGHT)
+		).toBeUndefined()
 	})
 
-	it("keeps the existing specialized floor for self-media and recording modes", () => {
+	it("keeps the existing floor for composers with specialized controls", () => {
 		expect(
 			resolveComposerMinInputHeight({
 				isPptMode: false,
-				isSelfMediaMode: true,
-				isRecordSummaryMode: false,
+				isVideoProductionMode: false,
+				isSpecializedMode: true,
 			}),
 		).toBe(SPECIALIZED_COMPOSER_MIN_INPUT_HEIGHT)
+	})
+
+	it("uses the video production floor before other specialized composer rules", () => {
 		expect(
 			resolveComposerMinInputHeight({
 				isPptMode: false,
-				isSelfMediaMode: false,
-				isRecordSummaryMode: true,
+				isVideoProductionMode: true,
+				isSpecializedMode: true,
 			}),
-		).toBe(SPECIALIZED_COMPOSER_MIN_INPUT_HEIGHT)
+		).toBe(VIDEO_PRODUCTION_COMPOSER_MIN_INPUT_HEIGHT)
 	})
 })

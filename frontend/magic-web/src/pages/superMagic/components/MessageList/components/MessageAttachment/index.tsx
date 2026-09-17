@@ -166,7 +166,8 @@ export const Attachment = observer(function Attachment({
 									<FileResourceIcon
 										presentation={resolveFilePresentation(
 											(magicProjectResolution?.projectDirectory as
-												AttachmentItem | undefined) ?? {
+												| AttachmentItem
+												| undefined) ?? {
 												...item,
 												is_directory: item.is_directory ?? isFolder,
 											},

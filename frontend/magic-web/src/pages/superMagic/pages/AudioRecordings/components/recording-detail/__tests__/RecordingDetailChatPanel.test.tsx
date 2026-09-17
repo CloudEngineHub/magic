@@ -395,6 +395,8 @@ describe("RecordingDetailChatPanel", () => {
 		)
 
 		expect(screen.queryByTestId("recording-detail-chat-skeleton")).not.toBeInTheDocument()
+		// Collapsed rail must not leak the topics-loading "loading" copy while the project is unresolved.
+		expect(screen.queryByText("loading")).not.toBeInTheDocument()
 	})
 
 	it("keeps AiChat mounted under a messages-loading skeleton overlay", () => {

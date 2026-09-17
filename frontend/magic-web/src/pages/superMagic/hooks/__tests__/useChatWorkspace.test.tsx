@@ -93,6 +93,7 @@ describe("useChatWorkspace", () => {
 			project_name: "server keyword",
 			order_by: "updated_at",
 			sort: "desc",
+			pin_priority: 1,
 			page: 1,
 			page_size: 20,
 		})

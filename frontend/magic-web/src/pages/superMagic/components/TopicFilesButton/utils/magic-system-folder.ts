@@ -6,7 +6,8 @@ const PROJECT_INSTRUCTIONS_FILE_NAME = "AGENTS.md" as const
 
 /** 场景属于文件定义工作区；使用某个员工聊天不等于正在编辑该员工。 */
 export type FileHelpContext =
-	{ kind: "project" | "claw" | "crew"; projectId: string } | { kind: "user" | "unknown" }
+	| { kind: "project" | "claw" | "crew"; projectId: string }
+	| { kind: "user" | "unknown" }
 
 export type SystemFileHelpKind =
 	| "projectMagic"

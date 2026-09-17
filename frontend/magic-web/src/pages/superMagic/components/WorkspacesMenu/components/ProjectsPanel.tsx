@@ -1,4 +1,5 @@
 import {
+	useEffect,
 	useRef,
 	type ChangeEventHandler,
 	type ComponentProps,
@@ -66,9 +67,24 @@ export function ProjectsPanel({
 		returnFocusRef.current =
 			document.activeElement instanceof HTMLElement ? document.activeElement : null
 	wasOpenRef.current = !!open
+
+	// modal={false} disables Radix's focus trap and body scroll lock so the nested
+	// MagicModal (AddCollaborationToWorkspaceModal / MoveProjectModal / DeleteDangerModal,
+	// portaled to body via Antd Modal) can receive focus. Restore the body scroll lock
+	// manually below since modal={false} drops it.
+	useEffect(() => {
+		if (!open) return
+		const previousOverflow = document.body.style.overflow
+		document.body.style.overflow = "hidden"
+		return () => {
+			document.body.style.overflow = previousOverflow
+		}
+	}, [open])
+
 	return (
 		<Dialog
 			open={open}
+			modal={false}
 			onOpenChange={(nextOpen) => {
 				if (!nextOpen) onClose()
 			}}

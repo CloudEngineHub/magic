@@ -94,6 +94,10 @@ import {
 	type HtmlPermissionManagerHandle,
 	useHtmlPermissionManagerBridge,
 } from "./hooks/useHtmlPermissionManagerBridge"
+import {
+	readCachedHtmlEditButton,
+	writeCachedHtmlEditButton,
+} from "./utils/edit-capability-session"
 
 const htmlRenderLogger = Logger.createLogger("HTMLContent")
 const HtmlPermissionManagerDialog = lazy(
@@ -311,6 +315,11 @@ export default memo(function HTML(props: HTMLProps) {
 		(() => Promise<SaveResult | undefined>) | (() => void) | null
 	>(null) // 保存函数
 	const [renderKey, setRenderKey] = useState(0)
+	const fileIdForEditCache = displayData?.file_id || currentFile?.id
+	const cachedEditButtonVisible = useMemo(
+		() => readCachedHtmlEditButton(fileIdForEditCache),
+		[fileIdForEditCache],
+	)
 	/** 当前展示的 HTML 文件的数据 */
 	const [data, setData] = useState<any>({})
 	const [editingCodeContent, setEditingCodeContent] = useState<string>("")
@@ -974,9 +983,17 @@ export default memo(function HTML(props: HTMLProps) {
 	// AI modification detection is now handled by PPTStore internally
 	// This logic has been removed to simplify the component
 
+	const editButtonStateReady = Boolean(
+		displayData?.file_id &&
+		!loading &&
+		!activeHistory.loading &&
+		(saveFunction !== null || viewMode === "code"),
+	)
+
 	// 按钮处理函数
 	const handleEdit = useMemoizedFn(() => {
-		if (setIsEditMode) {
+		// Cached visibility prevents a visual flash, but must not enable editing before live data is ready.
+		if (setIsEditMode && editButtonStateReady) {
 			editSessionBaselineContentRef.current = getEditSessionBaselineContent()
 			setIsEditMode(true)
 			// 初始化编辑内容
@@ -1302,6 +1319,19 @@ export default memo(function HTML(props: HTMLProps) {
 		displayData?.file_id,
 		activeHistory.isNewestVersion,
 	])
+	const canUseCachedEditButton = Boolean(
+		fileIdForEditCache && !isReadonlyPreview && !isMediaScenario && !isMobile && allowEdit,
+	)
+	const effectiveShowFileEditButton = editButtonStateReady
+		? showFileEditButton
+		: canUseCachedEditButton
+			? (cachedEditButtonVisible ?? showFileEditButton)
+			: showFileEditButton
+
+	useEffect(() => {
+		if (!editButtonStateReady || !fileIdForEditCache) return
+		writeCachedHtmlEditButton(fileIdForEditCache, showFileEditButton)
+	}, [editButtonStateReady, fileIdForEditCache, showFileEditButton])
 
 	/** 使用分享按钮可见性控制 Hook */
 	const { showDownloadButton, showExportButton } = useShareButtonVisibility({
@@ -1379,7 +1409,7 @@ export default memo(function HTML(props: HTMLProps) {
 					key: "html-toolbar-actions",
 					zone: "secondary",
 					before: "refresh",
-					visible: () => Boolean(showAIOptimizationButton || showFileEditButton),
+					visible: () => Boolean(showAIOptimizationButton || effectiveShowFileEditButton),
 					render: (context) => (
 						<div
 							className="flex items-center gap-1"
@@ -1415,7 +1445,7 @@ export default memo(function HTML(props: HTMLProps) {
 									)}
 								</Button>
 							)}
-							{showFileEditButton && (
+							{effectiveShowFileEditButton && (
 								<FileEditButtons
 									testIdPrefix={htmlTestIdsEnabled ? "html-editor" : undefined}
 									isEditMode={isEditMode}
@@ -1507,7 +1537,7 @@ export default memo(function HTML(props: HTMLProps) {
 			isReadonlyPreview,
 			showAIOptimizationButton,
 			showExportButton,
-			showFileEditButton,
+			effectiveShowFileEditButton,
 			isAppendPicking,
 			isQuickSelecting,
 			quickSelectionLabel,

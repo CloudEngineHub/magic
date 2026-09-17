@@ -146,7 +146,8 @@ function resolveSlidesTemplateTabFile(
 		isSlidesTemplateFolder(asAttachmentItem(parentDirectory))
 	) {
 		return toSlidesTemplatePreviewItem(asAttachmentItem(parentDirectory)) as
-			FileItem | AttachmentItem
+			| FileItem
+			| AttachmentItem
 	}
 
 	return null
