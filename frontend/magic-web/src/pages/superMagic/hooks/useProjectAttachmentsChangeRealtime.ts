@@ -17,6 +17,7 @@ import {
 	loadProjectAttachmentsSingleflight,
 	normalizeRefreshParentIds,
 	resolveProjectAttachmentsChangeEvent,
+	shouldSkipParentChildrenReconcileAfterWsApply,
 } from "../utils/projectAttachments/changeRealtimeUtils"
 import { resolveProjectAttachmentMutationWaiters } from "../utils/projectAttachments/attachmentMutationWaiter"
 import {
@@ -70,8 +71,7 @@ export function useProjectAttachmentsChangeRealtime({
 	}, [onFallbackError])
 
 	const {
-		scheduleRefreshParentIds,
-		scheduleRefreshParentChildren,
+		scheduleParentRefresh,
 		clearRefreshParentWindow,
 		clearRefreshParentChildrenWindow,
 		abortRefreshParentRequests,
@@ -183,8 +183,9 @@ export function useProjectAttachmentsChangeRealtime({
 		projectAttachmentsChangeLog.flushStart(batchLogContext)
 
 		if (changes.length === 0) {
-			scheduleRefreshParentIds({
-				parentIds: refreshParentIds,
+			scheduleParentRefresh({
+				parentItemIds: refreshParentIds,
+				childrenParentIds: [],
 				traceId,
 				seqKeys,
 				lastUpdatedAt,
@@ -196,6 +197,7 @@ export function useProjectAttachmentsChangeRealtime({
 		let result: ReturnType<typeof store.applyFileChanges>
 		try {
 			result = store.applyFileChanges(changes, {
+				applySource: "ws_realtime",
 				trace: {
 					traceId,
 					projectId,
@@ -260,21 +262,28 @@ export function useProjectAttachmentsChangeRealtime({
 			source: "ws",
 		})
 		// File changes reconcile the parent subtree; refresh_parent_ids only updates parent items.
-		const childrenRefreshParentIds = collectFileChangeParentRefreshIds(
-			changes,
-			workspaceFilesListBeforeApply,
-		)
+		const skipParentRefreshAfterWsApply = shouldSkipParentChildrenReconcileAfterWsApply(changes)
+		const childrenRefreshParentIds = skipParentRefreshAfterWsApply
+			? []
+			: collectFileChangeParentRefreshIds(changes, workspaceFilesListBeforeApply)
 		const itemOnlyRefreshParentIds = normalizeRefreshParentIds(refreshParentIds).filter(
 			(parentId: string) => !childrenRefreshParentIds.includes(parentId),
 		)
-		scheduleRefreshParentIds({
-			parentIds: itemOnlyRefreshParentIds,
-			traceId,
-			seqKeys,
-			lastUpdatedAt,
-		})
-		scheduleRefreshParentChildren({
-			parentIds: childrenRefreshParentIds,
+		// Move/update payloads already applied; defer folder updated_at-only refresh to avoid a second render spike.
+		if (skipParentRefreshAfterWsApply && childrenRefreshParentIds.length === 0) {
+			if (itemOnlyRefreshParentIds.length > 0) {
+				projectAttachmentsChangeLog.refreshParentIdsSkipped({
+					projectId,
+					parentIds: itemOnlyRefreshParentIds,
+					reason: "deferred_after_ws_file_apply",
+					traceId,
+				})
+			}
+			return
+		}
+		scheduleParentRefresh({
+			parentItemIds: itemOnlyRefreshParentIds,
+			childrenParentIds: childrenRefreshParentIds,
 			traceId,
 			seqKeys,
 			lastUpdatedAt,
