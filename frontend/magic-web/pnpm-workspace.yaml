@@ -4,6 +4,7 @@
 packages:
   - "packages/browser-apm"
   - "packages/magic-admin"
+  - "packages/magic-admin-v2"
   - "packages/html2pptx"
   - "packages/html2image"
   - "packages/magic-widget-sdk"
