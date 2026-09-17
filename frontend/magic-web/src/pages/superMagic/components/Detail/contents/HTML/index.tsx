@@ -151,7 +151,6 @@ interface HTMLProps {
 	exportFile?: (fileId: string, fileVersion?: number) => void
 	exportPdf?: (fileId: string) => void
 	exportRasterPdf?: (fileId: string, pageMode: "fit" | "paginate") => void
-	exportPpt?: (fileId: string) => void
 	exportPptx?: (fileId: string) => void
 	exportImage?: (fileId: string, format?: ImageExportFormat) => void
 	isExporting?: boolean
@@ -184,12 +183,10 @@ interface HTMLProps {
 interface HtmlExportActionProps {
 	handleExportSource: () => void
 	handleExportPDF: () => void
-	handleExportPPT: () => void
 	handleExportPptx: () => void
 	handleExportImage?: (format: ImageExportFormat) => void
 	handleExportRasterPdf?: (pageMode: "fit" | "paginate") => void
 	isExporting?: boolean
-	supportPPT: boolean
 	showButtonText: boolean
 	showExportPptx?: boolean
 	showExportImage?: boolean
@@ -200,12 +197,10 @@ interface HtmlExportActionProps {
 const HtmlExportAction = memo(function HtmlExportAction({
 	handleExportSource,
 	handleExportPDF,
-	handleExportPPT,
 	handleExportPptx,
 	handleExportImage,
 	handleExportRasterPdf,
 	isExporting,
-	supportPPT,
 	showButtonText,
 	showExportPptx,
 	showExportImage,
@@ -215,13 +210,11 @@ const HtmlExportAction = memo(function HtmlExportAction({
 	const { ExportDropdownButton } = useExportMenuItems({
 		handleExportSource,
 		handleExportPDF,
-		handleExportPPT,
 		handleExportPptx,
 		handleExportImage,
 		handleExportRasterPdf,
 		isExporting,
 		showButtonText,
-		supportPPT,
 		showExportPptx,
 		showExportImage,
 		showExportRasterPdf,
@@ -259,7 +252,6 @@ export default memo(function HTML(props: HTMLProps) {
 		exportFile,
 		exportPdf,
 		exportRasterPdf,
-		exportPpt,
 		exportPptx,
 		exportImage,
 		isExporting,
@@ -1244,10 +1236,6 @@ export default memo(function HTML(props: HTMLProps) {
 		exportRasterPdf?.(displayData?.file_id, pageMode)
 	})
 
-	const handleExportPPT = useMemoizedFn(() => {
-		exportPpt?.(displayData?.file_id)
-	})
-
 	const handleExportPptx = useMemoizedFn(() => {
 		exportPptx?.(displayData?.file_id)
 	})
@@ -1497,12 +1485,10 @@ export default memo(function HTML(props: HTMLProps) {
 						<HtmlExportAction
 							handleExportSource={handleExportSource}
 							handleExportPDF={handleExportPDF}
-							handleExportPPT={handleExportPPT}
 							handleExportPptx={handleExportPptx}
 							handleExportImage={handleExportImage}
 							handleExportRasterPdf={handleExportRasterPdf}
 							isExporting={isExporting}
-							supportPPT={isInPPTMode}
 							showButtonText={context.showButtonText}
 							showExportPptx={isConvertibleFile(displayData, ["html"])}
 							showExportImage={isConvertibleFile(displayData, ["html"])}
@@ -1521,7 +1507,6 @@ export default memo(function HTML(props: HTMLProps) {
 			handleQuickSelection,
 			handleEdit,
 			handleExportPDF,
-			handleExportPPT,
 			handleExportPptx,
 			handleExportImage,
 			handleExportRasterPdf,

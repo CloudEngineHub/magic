@@ -111,7 +111,6 @@ interface TextEditorProps {
 	showFooter?: boolean
 	exportFile?: (fileId: string, fileVersion?: number) => void
 	exportPdf?: (fileId: string) => void
-	exportPpt?: (fileId: string) => void
 	isExporting?: boolean
 	openFileTab?: (fileItem: { file_id: string } & Record<string, any>) => void
 	isPlaybackMode?: boolean
@@ -143,11 +142,9 @@ const MdExportAction = memo(function MdExportAction({
 	const { ExportDropdownButton } = useExportMenuItems({
 		handleExportSource,
 		handleExportPDF,
-		handleExportPPT: undefined,
 		handleExportImage,
 		handleExportRasterPdf,
 		isExporting,
-		supportPPT: false,
 		showButtonText,
 		showExportImage: !!handleExportImage,
 		showExportPdf: true,

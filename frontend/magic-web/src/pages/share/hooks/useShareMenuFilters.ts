@@ -41,6 +41,7 @@ function useShareMenuFilters({
 							key === "downloadOriginal" ||
 							key === "downloadFolder" ||
 							key === "downloadPdf" ||
+							key === "downloadPptx" ||
 							key === "downloadPpt" ||
 							key === "downloadImage" ||
 							key === "downloadImageNoWaterMark")) ||

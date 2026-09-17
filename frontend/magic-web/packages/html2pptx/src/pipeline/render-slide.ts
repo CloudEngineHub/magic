@@ -1,5 +1,5 @@
 import type { SlideConfig } from "../api/options"
-import type { ResourceLoadError } from "../api/options"
+import type { ExportIssue, ResourceLoadError } from "../api/options"
 import type { PPTNode } from "../ir/node"
 import type { SandboxInstance } from "../sandbox/htmlRenderSandbox"
 import { log, LogLevel } from "../logger"
@@ -7,8 +7,6 @@ import { collectElements, filterRenderable, sortByZOrder } from "../collector"
 import { transformElements } from "../transform"
 import {
 	materializePptImageNodes,
-	materializeVideoCoverNodes,
-	resolveCaptures,
 	materializePseudoIcons,
 	restoreIcons,
 } from "../materialize"
@@ -22,7 +20,9 @@ export interface PrepareSlideNodesInput {
 	html: string
 	sandbox: SandboxInstance
 	signal: AbortSignal
+	pageIndex?: number
 	onResourceError?: (error: ResourceLoadError) => void
+	onExportIssue?: (issue: ExportIssue) => void
 	textMergeMode?: TextMergeMode
 	runtime?: RenderSlideRuntime
 }
@@ -49,14 +49,27 @@ export async function prepareSlideNodes({
 	html,
 	sandbox,
 	signal,
+	pageIndex,
 	onResourceError,
+	onExportIssue,
 	textMergeMode = DEFAULT_TEXT_MERGE_MODE,
 	runtime,
 }: PrepareSlideNodesInput): Promise<PrepareSlideNodesResult> {
 	ensureNotAborted(signal)
+	const reportResourceError = (error: ResourceLoadError) => {
+		onResourceError?.(error)
+		onExportIssue?.({
+			pageIndex,
+			code: "resource-error",
+			message: `${error.kind} ${error.reason}`,
+			severity: "warning",
+			details: { kind: error.kind, reason: error.reason },
+		})
+	}
 	const { iWindow, iDocument, totalWidth, totalHeight } = await sandbox.render(html, {
 		signal,
-		onResourceError,
+		onResourceError: reportResourceError,
+		onExportIssue: (issue) => onExportIssue?.({ ...issue, pageIndex: issue.pageIndex ?? pageIndex }),
 	})
 	ensureNotAborted(signal)
 
@@ -64,9 +77,6 @@ export async function prepareSlideNodes({
 	const activeMaterializePseudoIcons = runtime?.materializePseudoIcons ?? materializePseudoIcons
 	const activeRestoreIcons = runtime?.restoreIcons ?? restoreIcons
 	const activeTransformElements = runtime?.transformElements ?? transformElements
-	const activeResolveCaptures = runtime?.resolveCaptures ?? resolveCaptures
-	const activeMaterializeVideoCoverNodes =
-		runtime?.materializeVideoCoverNodes ?? materializeVideoCoverNodes
 	const activeMaterializePptImageNodes =
 		runtime?.materializePptImageNodes ?? materializePptImageNodes
 	const iconBackups = activeMaterializePseudoIcons(iDocument, iWindow)
@@ -90,9 +100,13 @@ export async function prepareSlideNodes({
 		})
 
 		ensureNotAborted(signal)
-		await activeResolveCaptures(pptNodes, signal, onResourceError)
-		await activeMaterializeVideoCoverNodes(pptNodes, signal, onResourceError)
-		await activeMaterializePptImageNodes(pptNodes, signal, onResourceError)
+		if (runtime?.resolveCaptures) {
+			await runtime.resolveCaptures(pptNodes, signal, reportResourceError)
+		}
+		if (runtime?.materializeVideoCoverNodes) {
+			await runtime.materializeVideoCoverNodes(pptNodes, signal, reportResourceError)
+		}
+		await activeMaterializePptImageNodes(pptNodes, signal, reportResourceError)
 		return { pptNodes, totalWidth, totalHeight, bodyBackground }
 	} catch (error) {
 		throw error

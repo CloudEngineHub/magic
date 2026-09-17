@@ -92,8 +92,7 @@ export interface SaveFileContentResponse {
 }
 
 export type FileReferenceSelector =
-	| { file_id: string }
-	| { space_type: "user"; space_relative_path: string }
+	{ file_id: string } | { space_type: "user"; space_relative_path: string }
 
 interface FileReferenceMetadata {
 	file_id: string
@@ -108,8 +107,7 @@ export type FileReference =
 	| (FileReferenceMetadata & { space_type: "project"; project_id: string })
 
 export type FileReferenceResult =
-	| { status: "resolved"; reference: FileReference }
-	| { status: "unavailable" | "invalid" }
+	{ status: "resolved"; reference: FileReference } | { status: "unavailable" | "invalid" }
 
 export interface SuperMagicTopicModelExtra {
 	transcription_enabled?: boolean
@@ -2549,23 +2547,6 @@ export const generateSuperMagicApi = (fetch: ServiceHttpClient) => ({
 	},
 
 	/**
-	 * @description 导出pdf或者ppt
-	 * @param data
-	 */
-	exportPdfOrPpt(data: {
-		file_ids: string[]
-		project_id?: string
-		is_debug?: boolean
-		convert_type?: "pdf" | "ppt"
-	}) {
-		return fetch.post("/api/v1/super-agent/file-convert/create", {
-			...data,
-			// @ts-ignore
-			token: window.temporary_token,
-		})
-	},
-
-	/**
 	 * @description 创建文件或文件夹
 	 * @param data
 	 * @param config Optional request config
@@ -2581,18 +2562,6 @@ export const generateSuperMagicApi = (fetch: ServiceHttpClient) => ({
 		config?: { enableErrorMessagePrompt?: boolean },
 	) {
 		return fetch.post("/api/v1/super-agent/file", data, config)
-	},
-
-	/**
-	 * @description 查询文件导出pdf或者ppt的状态
-	 * @param task_key
-	 */
-	checkExportPdfOrPptStatus(task_key: string) {
-		const token = (window as any).temporary_token
-		const url = token
-			? `/api/v1/super-agent/file-convert/check?task_key=${task_key}&token=${token}`
-			: `/api/v1/super-agent/file-convert/check?task_key=${task_key}`
-		return fetch.get(url)
 	},
 
 	/**

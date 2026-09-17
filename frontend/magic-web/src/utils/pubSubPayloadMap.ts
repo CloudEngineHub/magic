@@ -37,6 +37,7 @@ import type {
 	SuperMagicSetContentWhenSlideAddedArgs,
 	SuperMagicSetDemoTextToInputArgs,
 	SuperMagicSetInputMessageArgs,
+	SuperMagicPptxExportIssuesPayload,
 	SuperMagicStreamMessageArgs,
 	SuperMagicSyncMarkersToChatPayload,
 	SuperMagicWidgetEditorCommandPayload,
@@ -174,6 +175,8 @@ export interface PubSubTypedPayloadMap {
 	[PubSubEvents.Receive_RecordSummary_Audio_File]: SuperMagicReceiveRecordSummaryAudioFileArgs
 	/** 设置输入框文本：传入字符串消息。 */
 	[PubSubEvents.Set_Input_Message]: SuperMagicSetInputMessageArgs
+	/** PPT 导出问题：供商业化层展示并触发 AI 修复。 */
+	[PubSubEvents.Pptx_Export_Issues]: SuperMagicPptxExportIssuesPayload
 	/** Executes Widget-only append, clear, or read operations against the active editor. */
 	[PubSubEvents.Magic_Widget_Editor_Command]: SuperMagicWidgetEditorCommandPayload
 	/** 添加内容到聊天框：传入可选内容与额外信息。 */

@@ -76,7 +76,3 @@ overrides:
   eslint: 8.57.1
   katex: 0.16.21
   marked: 15.0.12
-
-patchedDependencies:
-  pptxgenjs: patches/pptxgenjs.patch
-  tiptap-markdown: patches/tiptap-markdown.patch
