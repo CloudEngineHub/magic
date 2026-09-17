@@ -184,6 +184,10 @@ function getBaseViteConfig(env: NodeJS.ProcessEnv = process.env, mode?: string):
 					replacement: resolve(__dirname, "src"),
 				},
 				{
+					find: "@magic-admin-v2",
+					replacement: resolve(__dirname, "packages/magic-admin-v2/src"),
+				},
+				{
 					find: "@enterprise",
 					replacement: resolve(__dirname, "enterprise/src"),
 				},
