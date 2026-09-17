@@ -115,7 +115,10 @@ class MicroAppProjectAppServiceTest extends TestCase
         $shareDomainService->expects(self::once())
             ->method('getShareByResourceIdWithTrashed')
             ->with('resource-1')
-            ->willReturn((new ResourceShareEntity())->setExtra(['allow_copy_project_files' => true]));
+            ->willReturn((new ResourceShareEntity())->setExtra([
+                'allow_copy_project_files' => true,
+                '_authorization_version' => 'internal-version',
+            ]));
         $shareItem = ShareItemDTO::fromArray([
             'id' => 'share-1',
             'share_code' => 'share-code-1',
