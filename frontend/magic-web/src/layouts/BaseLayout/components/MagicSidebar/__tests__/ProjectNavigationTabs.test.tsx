@@ -88,8 +88,21 @@ describe("ProjectNavigationTabs", () => {
 		render(<ProjectNavigationTabs disabled={false} onOpenManager={onOpenManager} />)
 
 		const tabs = screen.getByTestId("sidebar-navigation-tabs")
+		const group = screen.getByRole("group")
+		const header = group.parentElement
+		expect(header).toHaveClass("z-20", "gap-2")
+		expect(header).not.toHaveClass("z-30")
+		expect(header).toHaveClass("bg-sidebar")
+		expect(group).toHaveClass(
+			"[container-name:project-navigation-tabs]",
+			"[container-type:inline-size]",
+		)
+		expect(group.firstElementChild).toHaveClass("min-w-0", "w-full")
 		expect(tabs).toHaveAttribute("data-value", "workspaces")
-		expect(tabs).toHaveAttribute("data-class-name", "h-auto w-full bg-muted p-[3px]")
+		expect(tabs).toHaveAttribute(
+			"data-class-name",
+			"h-auto w-full bg-muted p-[3px] [@container_project-navigation-tabs_(max-width:190px)]:[&>button>span:last-child]:hidden",
+		)
 		expect(tabs).toHaveAttribute(
 			"data-button-class-name",
 			"h-[28px] py-0 text-[13px] font-normal",
