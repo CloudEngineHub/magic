@@ -11,6 +11,7 @@ use App\Domain\SuperMagic\Agent\Entity\ValueObject\AgentIconType;
 use App\Domain\SuperMagic\Agent\Entity\ValueObject\AgentMarketType;
 use App\Domain\SuperMagic\Agent\Entity\ValueObject\PublisherType;
 use App\Domain\SuperMagic\Agent\Entity\ValueObject\PublishStatus;
+use App\Domain\SuperMagic\Common\Entity\ResolvesI18nText;
 use App\Infrastructure\Core\AbstractEntity;
 use Hyperf\Codec\Json;
 
@@ -19,6 +20,8 @@ use Hyperf\Codec\Json;
  */
 class AgentMarketEntity extends AbstractEntity
 {
+    use ResolvesI18nText;
+
     /**
      * @var int 主键 ID
      */
@@ -222,6 +225,16 @@ class AgentMarketEntity extends AbstractEntity
         }
         $this->descriptionI18n = $descriptionI18n;
         return $this;
+    }
+
+    public function getI18nName(string $language): string
+    {
+        return $this->resolveI18nText($this->nameI18n, $language);
+    }
+
+    public function getI18nDescription(string $language): string
+    {
+        return $this->resolveI18nText($this->descriptionI18n, $language);
     }
 
     public function getRoleI18n(): ?array

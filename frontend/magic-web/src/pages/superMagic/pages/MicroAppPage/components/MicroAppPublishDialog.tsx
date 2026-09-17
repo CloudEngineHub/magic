@@ -16,6 +16,7 @@ import type { ShareRange, ShareTarget } from "@/pages/superMagic/components/Shar
 import type { AttachmentItem } from "@/pages/superMagic/components/TopicFilesButton/hooks"
 import { ShareType } from "@/pages/superMagic/components/Share/types"
 import { generateSharePassword } from "@/pages/superMagic/components/Share/utils"
+import { useShareTypePermissions } from "@/pages/superMagic/components/Share/hooks/useShareTypePermissions"
 import { clipboard } from "@/utils/clipboard-helpers"
 import { isMicroAppPublished } from "../utils/microAppPublish"
 import {
@@ -68,6 +69,7 @@ function MicroAppPublishDialog({
 }: MicroAppPublishDialogProps) {
 	const { t } = useTranslation("super")
 	const isPersonalOrganization = userStore.user.isPersonalOrganization
+	const microAppSharePermissions = useShareTypePermissions("microApp")
 	const [formState, setFormState] = useState<MicroAppPublishFormState>(() =>
 		createDefaultFormState("", isPersonalOrganization),
 	)
@@ -95,6 +97,19 @@ function MicroAppPublishDialog({
 	)
 	const accessUrl = useMemo(() => buildMicroAppAccessUrl(publishedItem), [publishedItem])
 	const hasPublished = isMicroAppPublished(publishedItem)
+	const permittedMicroAppShareTypes = useMemo(() => {
+		if (microAppSharePermissions.isLoading) return undefined
+		return microAppSharePermissions.permittedShareTypes.filter(
+			(type) => !isPersonalOrganization || type !== ShareType.Organization,
+		)
+	}, [
+		isPersonalOrganization,
+		microAppSharePermissions.isLoading,
+		microAppSharePermissions.permittedShareTypes,
+	])
+	const isSelectedShareTypePermitted =
+		permittedMicroAppShareTypes === undefined ||
+		permittedMicroAppShareTypes.includes(formState.shareType)
 	const hasUnsavedPublishedChanges = useMemo(
 		() => hasPublished && hasMicroAppPublishFormChanged(formState, publishedFormState),
 		[formState, hasPublished, publishedFormState],
@@ -194,8 +209,35 @@ function MicroAppPublishDialog({
 		})
 	}, [isPersonalOrganization])
 
+	useEffect(() => {
+		if (
+			!open ||
+			hasPublished ||
+			permittedMicroAppShareTypes === undefined ||
+			permittedMicroAppShareTypes.length === 0
+		) {
+			return
+		}
+
+		setFormState((prev) => {
+			if (permittedMicroAppShareTypes.includes(prev.shareType)) return prev
+			const nextShareType = permittedMicroAppShareTypes[0]
+			return {
+				...prev,
+				shareType: nextShareType,
+				password:
+					nextShareType === ShareType.PasswordProtected && !prev.password
+						? generateSharePassword()
+						: prev.password,
+			}
+		})
+	}, [formState.shareType, hasPublished, open, permittedMicroAppShareTypes])
+
 	const handleShareTypeChange = useCallback(
 		(shareType: ShareType) => {
+			if (permittedMicroAppShareTypes && !permittedMicroAppShareTypes.includes(shareType)) {
+				return
+			}
 			setFormState((prev) => {
 				const nextShareType = normalizeMicroAppPublishShareType(
 					shareType as MicroAppPublishShareType,
@@ -211,7 +253,7 @@ function MicroAppPublishDialog({
 				}
 			})
 		},
-		[isPersonalOrganization],
+		[isPersonalOrganization, permittedMicroAppShareTypes],
 	)
 
 	const handleAppNameChange = useCallback((event: React.ChangeEvent<HTMLInputElement>) => {
@@ -302,6 +344,10 @@ function MicroAppPublishDialog({
 
 	const handleSave = useCallback(async () => {
 		if (!appId || saving || coverUploading || coverUploadError) return
+		if (!isSelectedShareTypePermitted) {
+			magicToast.error(t("share.currentShareMethodUnavailable"))
+			return
+		}
 		const nextValidationError = getMicroAppPublishValidationError(formState)
 		if (nextValidationError) {
 			magicToast.error(t(`microAppPage.publish.${nextValidationError}`))
@@ -379,6 +425,7 @@ function MicroAppPublishDialog({
 		coverUploading,
 		formState,
 		isPersonalOrganization,
+		isSelectedShareTypePermitted,
 		onProjectNameChange,
 		onPublishStatusChange,
 		saving,
@@ -430,6 +477,9 @@ function MicroAppPublishDialog({
 			accessUrl={accessUrl}
 			hasPublished={hasPublished}
 			hasUnsavedPublishedChanges={hasUnsavedPublishedChanges}
+			permittedShareTypes={permittedMicroAppShareTypes}
+			isSelectedShareTypePermitted={isSelectedShareTypePermitted}
+			shareTypePermissionLoading={microAppSharePermissions.isLoading}
 			loading={loading}
 			saving={saving}
 			unpublishing={unpublishing}

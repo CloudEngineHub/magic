@@ -791,6 +791,7 @@ function TopicPage({ pageVariant = "default" }: TopicPageDesktopProps) {
 				handleFileClick={handleFileClickWithPanel}
 				setUserSelectDetail={setUserSelectDetail}
 				setSelectedTopic={handleSelectedTopicChange}
+				projectFilesStore={projectFilesStore}
 				topicActions={topicActions}
 				isConversationPanelCollapsed={isConversationPanelCollapsed}
 				isDraggingPanel={isDraggingPanel}

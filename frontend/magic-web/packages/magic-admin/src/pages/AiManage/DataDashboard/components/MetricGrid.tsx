@@ -30,6 +30,7 @@ export function buildMetrics(
 		| DataDashboard.MemberSummary
 		| DataDashboard.OrganizationSummary
 		| DataDashboard.ConsumptionAnalysisSummary
+		| DataDashboard.FileAnalysisSummary
 		| null,
 	t: DashboardT,
 	statisticsDayCount = 0,
@@ -92,6 +93,30 @@ export function buildMetrics(
 				METRIC_KEY.AvgTokens,
 				formatNumber(safeDivide(agentSummary.total_tokens, agentSummary.total_call_count)),
 				"gray",
+			),
+		]
+	}
+
+	if (view === VIEW.FileProductionAnalysis) {
+		const fileSummary = summary as DataDashboard.FileAnalysisSummary
+		return [
+			metricFromKey(
+				t,
+				METRIC_KEY.FileOutputCount,
+				formatNumber(fileSummary.file_output_count),
+				"blue",
+			),
+			metricFromKey(
+				t,
+				METRIC_KEY.FileUserCreatedCount,
+				formatNumber(fileSummary.user_created_count),
+				"green",
+			),
+			metricFromKey(
+				t,
+				METRIC_KEY.FileAiCreatedCount,
+				formatNumber(fileSummary.ai_created_count),
+				"cyan",
 			),
 		]
 	}
@@ -499,6 +524,9 @@ const METRIC_ICON_MAP: Partial<Record<MetricKey, typeof BarChart3>> = {
 	[METRIC_KEY.DepartmentAvgTokens]: Database,
 	[METRIC_KEY.AgentAvgAmount]: CircleGauge,
 	[METRIC_KEY.AgentAvgTokens]: UsersRound,
+	[METRIC_KEY.FileOutputCount]: BarChart3,
+	[METRIC_KEY.FileUserCreatedCount]: UserRoundCheck,
+	[METRIC_KEY.FileAiCreatedCount]: Bot,
 }
 
 function getMetricIcon(key: string) {

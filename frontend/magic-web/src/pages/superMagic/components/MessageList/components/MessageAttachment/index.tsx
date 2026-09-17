@@ -17,9 +17,8 @@ import { cn } from "@/utils/cn"
 import { useIsMobile } from "@/hooks/useIsMobile"
 import { openMessageFile } from "../../utils/openMessageFile"
 import { useMessageAttachmentDownload } from "./hooks/useMessageAttachmentDownload"
-import projectFilesStore from "@/stores/projectFiles"
 import { observer } from "mobx-react-lite"
-import { useMessageListContext } from "../../context"
+import { useMessageListProjectFilesStore } from "../../context"
 import { detectContentTypeRender } from "@/pages/superMagic/components/Detail/components/FilesViewer/utils/preview"
 
 export const Attachment = observer(function Attachment({
@@ -34,8 +33,7 @@ export const Attachment = observer(function Attachment({
 	className?: string
 }) {
 	const { t } = useTranslation("super")
-	const { projectFilesStore: scopedProjectFilesStore } = useMessageListContext()
-	const resolvedProjectFilesStore = scopedProjectFilesStore ?? projectFilesStore
+	const resolvedProjectFilesStore = useMessageListProjectFilesStore()
 	const isMobile = useIsMobile()
 	const handleDownload = useMessageAttachmentDownload(attachments)
 	const [expanded, setExpanded] = useState(false)
@@ -52,8 +50,8 @@ export const Attachment = observer(function Attachment({
 	const resolveMagicProject = (item: MagicProjectAttachmentFile) =>
 		resolveMagicProjectAttachment(
 			item,
-			resolvedProjectFilesStore.workspaceFilesList,
-			resolvedProjectFilesStore.workspaceFileTree,
+			resolvedProjectFilesStore?.workspaceFilesList ?? [],
+			resolvedProjectFilesStore?.workspaceFileTree ?? [],
 		)
 
 	const handleOpenFile = (item: any) => {
@@ -166,7 +164,8 @@ export const Attachment = observer(function Attachment({
 									<FileResourceIcon
 										presentation={resolveFilePresentation(
 											(magicProjectResolution?.projectDirectory as
-												AttachmentItem | undefined) ?? {
+												| AttachmentItem
+												| undefined) ?? {
 												...item,
 												is_directory: item.is_directory ?? isFolder,
 											},

@@ -30,6 +30,8 @@ export interface HtmlResourcePlan {
 	filePathMap: Map<string, string>
 	slidesMap: Map<string, string>
 	imageFileIds: Set<string>
+	/** 可安全转换为 WebP 的静态图片文件 ID 集合；动画 GIF 保持原格式。 */
+	imageProcessingFileIds: Set<string>
 }
 
 /**
@@ -49,6 +51,7 @@ export function collectHtmlResourcePlan(
 	const filePathMap = new Map<string, string>()
 	const slidesMap = new Map<string, string>()
 	const imageFileIds = new Set<string>()
+	const imageProcessingFileIds = new Set<string>()
 
 	const collectElementResource = (
 		tagName: string,
@@ -132,8 +135,17 @@ export function collectHtmlResourcePlan(
 	urlMap.forEach((info, id) => {
 		if (info.contentType?.startsWith("image/")) {
 			imageFileIds.add(id)
+			// TOS 的 WebP 转换会破坏或拒绝动画 GIF，因此保留原始 GIF URL。
+			if (info.contentType !== "image/gif") imageProcessingFileIds.add(id)
 		}
 	})
 
-	return { fileIdsToFetch, urlMap, filePathMap, slidesMap, imageFileIds }
+	return {
+		fileIdsToFetch,
+		urlMap,
+		filePathMap,
+		slidesMap,
+		imageFileIds,
+		imageProcessingFileIds,
+	}
 }

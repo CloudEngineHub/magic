@@ -9,6 +9,7 @@ namespace App\Domain\SuperMagic\Common\RecycleBin\Entity;
 
 use DateTimeImmutable;
 use DateTimeZone;
+use Exception;
 use InvalidArgumentException;
 use JsonException;
 
@@ -119,7 +120,7 @@ final class RecycleBinFileQuery
         }
         try {
             $time = new DateTimeImmutable($value);
-        } catch (\Exception) {
+        } catch (Exception) {
             throw new InvalidArgumentException('recycle_bin.query.time_invalid');
         }
         $errors = DateTimeImmutable::getLastErrors();

@@ -15,7 +15,7 @@ final readonly class UserPointsDTO
     public function __construct(
         public UserAccountDataStatus $status,
         public ?DateTimeImmutable $capturedAt = null,
-        public int|float|null $available = null,
+        public null|float|int $available = null,
     ) {
         // 查询失败不能用 0 代替；真实的 0 和负余额均是有效业务结果。
         if ($status === UserAccountDataStatus::None
@@ -27,7 +27,7 @@ final readonly class UserPointsDTO
     }
 
     /**
-     * @return array{status: string, scope: string, captured_at?: string, available?: int|float}
+     * @return array{status: string, scope: string, captured_at?: string, available?: float|int}
      */
     public function toArray(): array
     {

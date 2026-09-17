@@ -80,7 +80,7 @@ describe("SkillsService", () => {
 		})
 	})
 
-	it("uses resolved fields for user skill lists instead of legacy i18n values", async () => {
+	it("uses resolved fields for user skill lists", async () => {
 		vi.mocked(SkillsApi.getUserSkills).mockResolvedValue({
 			list: [
 				{
@@ -89,16 +89,6 @@ describe("SkillsService", () => {
 					name: "Resolved name",
 					description: "Resolved description",
 					source: "Resolved source",
-					name_i18n: {
-						default: "Legacy name",
-						en_US: "Legacy name",
-						zh_CN: "旧名称",
-					},
-					description_i18n: {
-						default: "Legacy description",
-						en_US: "Legacy description",
-						zh_CN: "旧描述",
-					},
 					logo: "logo.png",
 					source_type: "LOCAL_UPLOAD",
 					is_enabled: 1,
@@ -120,9 +110,9 @@ describe("SkillsService", () => {
 			source: "Resolved source",
 		})
 		expect(result.list[0]?.nameI18n).toEqual({
-			default: "Legacy name",
-			en_US: "Legacy name",
-			zh_CN: "旧名称",
+			default: "Resolved name",
+			en_US: "Resolved name",
+			zh_CN: "Resolved name",
 		})
 	})
 

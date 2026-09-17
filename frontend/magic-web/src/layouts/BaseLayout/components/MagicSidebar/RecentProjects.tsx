@@ -139,7 +139,7 @@ function RecentProjects({
 	const search = useRecentProjectSearch(keyword, active, busyIds.size > 0)
 	const defaultScrollTop = useRef(
 		sidebarStore.navigationScrollPositions.get(
-			externalScrollRef ? "sidebar-scroll:recent" : "recent-projects",
+			externalScrollRef ? "sidebar-scroll:expanded" : "recent-projects",
 		) ?? 0,
 	)
 	const [referenceNow, setReferenceNow] = useState(() => Date.now())
@@ -192,18 +192,26 @@ function RecentProjects({
 		onLoadMore: loadMore,
 	})
 	const viewportRef = externalScrollRef ?? list.scrollRef
+	const wasSearchingRef = useRef(searching)
 	useLayoutEffect(() => {
 		const viewport = viewportRef.current
+		const exitedSearch = wasSearchingRef.current && !searching
+		wasSearchingRef.current = searching
 		if (!active || !viewport) return
-		// 共享滚动时搜索从本栏目开始，避免把搜索框滚走；退出搜索恢复原列表的位置。
-		const searchTop =
-			externalScrollRef && panelRef.current
-				? viewport.scrollTop +
-					panelRef.current.getBoundingClientRect().top -
-					viewport.getBoundingClientRect().top -
-					parseFloat(getComputedStyle(panelRef.current).scrollMarginTop)
-				: 0
-		viewport.scrollTop = searching ? Math.max(0, searchTop) : defaultScrollTop.current
+		if (searching) {
+			// Shared scroll starts at this panel so search does not hide the toolbar.
+			const searchTop =
+				externalScrollRef && panelRef.current
+					? viewport.scrollTop +
+						panelRef.current.getBoundingClientRect().top -
+						viewport.getBoundingClientRect().top -
+						parseFloat(getComputedStyle(panelRef.current).scrollMarginTop)
+					: 0
+			viewport.scrollTop = Math.max(0, searchTop)
+			return
+		}
+		// Shared tree: restore only after search. Private popover restores whenever shown.
+		if (!externalScrollRef || exitedSearch) viewport.scrollTop = defaultScrollTop.current
 	}, [active, keyword, searching, viewportRef, externalScrollRef])
 	useEffect(() => {
 		const viewport = viewportRef.current
@@ -335,7 +343,6 @@ function RecentProjects({
 			{externalScrollRef ? (
 				<div
 					ref={list.scrollRef}
-					className="bg-muted/20"
 					onFocusCapture={list.onFocusCapture}
 					onBlurCapture={list.onBlurCapture}
 					data-testid="sidebar-recent-projects-list"

@@ -158,7 +158,9 @@ const Editor: FC<EditorProps> = ({
 
 	const messageQueueNode = messageQueue.queue.length > 0 && (
 		<div className="mb-2">
+			{/* Desktop overlay queue is a sibling of the input, so add the same border-border token other sessions inherit from their input card. Skip mobile to keep the existing unbordered overlay queue. */}
 			<MessageQueue
+				className={cn(!isMobile && "border border-border")}
 				queue={messageQueue.queue}
 				editorRef={messageQueue.editorRef}
 				queueStats={messageQueue.queueStats}

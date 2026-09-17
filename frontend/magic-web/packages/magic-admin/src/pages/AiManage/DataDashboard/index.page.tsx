@@ -21,7 +21,12 @@ import { useDataDashboardActions } from "./hooks/useDataDashboardActions"
 import { useDataDashboardExport } from "./hooks/useDataDashboardExport"
 import { useDataDashboardRequests } from "./hooks/useDataDashboardRequests"
 import { useStyles } from "./styles"
-import { displayText, formatNumber, getStatisticsDayCount } from "./utils"
+import {
+	displayText,
+	formatNumber,
+	getFileProductionLatestDate,
+	getStatisticsDayCount,
+} from "./utils"
 
 interface DataDashboardPageProps {
 	view: DataDashboardView
@@ -47,6 +52,9 @@ export default function DataDashboardPage({ view }: DataDashboardPageProps) {
 		memberQuery,
 		organizationQuery,
 		consumptionQuery,
+		fileQuery,
+		fileSource,
+		fileCategory,
 		metricSkeletonCount,
 		handleReset,
 		handleTimeRangeChange,
@@ -54,12 +62,20 @@ export default function DataDashboardPage({ view }: DataDashboardPageProps) {
 		handleMemberChange,
 		handleAgentCodeChange,
 		handleAgentSourceChange,
+		handleFileSourceChange,
+		handleFileCategoryChange,
 		handleTabChange,
 		handlePageChange,
 	} = useDataDashboardActions({
 		view,
 		timeRangeLabel: t("filters.last7Days"),
 	})
+	const fileProductionMaxDate = useMemo(
+		() =>
+			stateView === VIEW.FileProductionAnalysis ? getFileProductionLatestDate() : undefined,
+		[stateView],
+	)
+	const fileProductionDataAsOf = fileProductionMaxDate?.format("YYYY-MM-DD")
 
 	const {
 		agentOptions,
@@ -76,6 +92,7 @@ export default function DataDashboardPage({ view }: DataDashboardPageProps) {
 		memberQuery,
 		organizationQuery,
 		consumptionQuery,
+		fileQuery,
 		page,
 		pageSize,
 	})
@@ -85,6 +102,7 @@ export default function DataDashboardPage({ view }: DataDashboardPageProps) {
 		agentQuery,
 		memberQuery,
 		organizationQuery,
+		fileQuery,
 	})
 
 	const pageText = useMemo(() => {
@@ -94,6 +112,24 @@ export default function DataDashboardPage({ view }: DataDashboardPageProps) {
 			desc: t(`pages.${pageTextKey}.desc`),
 		}
 	}, [t, stateView])
+
+	const fileSourceOptions = useMemo(
+		() => [
+			{ label: t("fileProduction.allTypes"), value: ALL_OPTION_VALUE },
+			{ label: t("fileProduction.operationTypes.original"), value: "user_created" },
+			{ label: t("fileProduction.operationTypes.ai"), value: "ai_created" },
+		],
+		[t],
+	)
+	const fileCategoryOptions = useMemo(
+		() => [
+			{ label: t("fileProduction.allCategories"), value: ALL_OPTION_VALUE },
+			...(
+				["doc", "spreadsheet", "image", "video", "ppt", "html", "md", "other"] as const
+			).map((value) => ({ label: t(`fileProduction.categories.${value}`), value })),
+		],
+		[t],
+	)
 
 	const sourceOptions = useMemo(
 		() => [
@@ -127,7 +163,9 @@ export default function DataDashboardPage({ view }: DataDashboardPageProps) {
 		[agentOptions?.list, t],
 	)
 
-	const statisticsDayCount = getStatisticsDayCount(consumptionQuery)
+	const statisticsDayCount = getStatisticsDayCount(
+		stateView === VIEW.FileProductionAnalysis ? fileQuery : consumptionQuery,
+	)
 	const metrics = useMemo(
 		() => buildMetrics(stateView, summaryData, t, statisticsDayCount),
 		[statisticsDayCount, summaryData, t, stateView],
@@ -141,9 +179,21 @@ export default function DataDashboardPage({ view }: DataDashboardPageProps) {
 						<h1 className={styles.title}>{pageText.title}</h1>
 						<div className={styles.subtitle}>{pageText.desc}</div>
 					</div>
-					<MagicButton icon={<RotateCcw size={16} />} onClick={handleReset}>
-						{t("actions.resetFilters")}
-					</MagicButton>
+					<div className={styles.headerActions}>
+						{stateView === VIEW.FileProductionAnalysis ? (
+							<div className={styles.updateInfo}>
+								<div>{t("fileProduction.updateSchedule")}</div>
+								<div>
+									{t("fileProduction.dataAsOf", {
+										date: fileProductionDataAsOf,
+									})}
+								</div>
+							</div>
+						) : null}
+						<MagicButton icon={<RotateCcw size={16} />} onClick={handleReset}>
+							{t("actions.resetFilters")}
+						</MagicButton>
+					</div>
 				</header>
 
 				<section className={styles.filterPanel}>
@@ -154,93 +204,126 @@ export default function DataDashboardPage({ view }: DataDashboardPageProps) {
 								<TimeFilterPanel
 									clearable={false}
 									defaultPresetKey={TimePresetKey.last_7_days}
+									maxDate={fileProductionMaxDate}
 									precision={TimeFilterPrecision.day}
 									value={timeRange}
 									onChange={handleTimeRangeChange}
 								/>
 							</div>
 						</div>
-						{stateView !== VIEW.OrganizationAnalysis &&
-						stateView !== VIEW.ConsumptionAnalysis ? (
-							<div className={styles.filterItem}>
-								<div className={styles.filterLabel}>{t("filters.memberId")}</div>
-								<UserSelect
-									selected={members}
-									setSelected={handleMemberChange}
-									placeholder={t("filters.memberIdPlaceholder")}
-									maxTagCount="responsive"
-									departmentSelectorProps={{
-										onFetchData: fetchMagicDepartmentUser,
-										searchUser,
-										maxCount: 1,
-										organization: organizationInfo,
-									}}
-									formItemProps={{ style: { marginBottom: 0 } }}
-								/>
-							</div>
-						) : null}
-						<div className={styles.filterItem}>
-							<div className={styles.filterLabel}>{t("filters.department")}</div>
-							<UserSelect
-								selected={departments}
-								setSelected={handleDepartmentChange}
-								placeholder={t("filters.departmentPlaceholder")}
-								maxTagCount="responsive"
-								departmentSelectorProps={{
-									showUser: false,
-									onFetchData: fetchMagicDepartmentUser,
-									organization: organizationInfo,
-								}}
-								formItemProps={{ style: { marginBottom: 0 } }}
-							/>
-						</div>
-						<div className={styles.filterItem}>
-							<div className={styles.filterLabel}>{t("filters.digitalEmployee")}</div>
-							<SearchSelect
-								allowClear={false}
-								value={agentCode || ALL_OPTION_VALUE}
-								options={agentSelectOptions}
-								loading={agentOptionsLoading}
-								showAvatar={false}
-								searchPlaceholder={t("filters.agentSearchPlaceholder")}
-								dropdownFooter={t("filters.agentOptionsCount", {
-									count: agentOptions?.total ?? 0,
-									formattedCount: formatNumber(agentOptions?.total ?? 0),
-								})}
-								classNames={{ popup: { root: styles.agentSelectPopup } }}
-								optionRender={(option) => {
-									const item = option.data as {
-										value?: string
-										label?: string
-										agentCode?: string
-										agentName?: string | null
-									}
-									if (item.value === ALL_OPTION_VALUE) {
-										return (
-											<div className={styles.agentOptionAll}>
-												{item.label}
-											</div>
-										)
-									}
-									return (
-										<div className={styles.agentOption}>
-											<div className={styles.agentOptionName}>
-												{displayText(item.agentName || item.label)}
-											</div>
-											<div className={styles.agentOptionCode}>
-												{displayText(item.agentCode)}
-											</div>
+						{stateView === VIEW.FileProductionAnalysis ? (
+							<>
+								<div className={styles.filterItem}>
+									<div className={styles.filterLabel}>
+										{t("fileProduction.operationType")}
+									</div>
+									<Select
+										value={fileSource}
+										options={fileSourceOptions}
+										onChange={handleFileSourceChange}
+									/>
+								</div>
+								<div className={styles.filterItem}>
+									<div className={styles.filterLabel}>
+										{t("fileProduction.fileCategory")}
+									</div>
+									<Select
+										value={fileCategory}
+										options={fileCategoryOptions}
+										onChange={handleFileCategoryChange}
+									/>
+								</div>
+							</>
+						) : (
+							<>
+								{stateView !== VIEW.OrganizationAnalysis && (
+									<div className={styles.filterItem}>
+										<div className={styles.filterLabel}>
+											{t("filters.memberId")}
 										</div>
-									)
-								}}
-								onChange={(value) => {
-									handleAgentCodeChange(
-										!value || value === ALL_OPTION_VALUE ? "" : String(value),
-									)
-								}}
-							/>
-						</div>
-
+										<UserSelect
+											selected={members}
+											setSelected={handleMemberChange}
+											placeholder={t("filters.memberIdPlaceholder")}
+											maxTagCount="responsive"
+											departmentSelectorProps={{
+												onFetchData: fetchMagicDepartmentUser,
+												searchUser,
+												maxCount: 1,
+												organization: organizationInfo,
+											}}
+											formItemProps={{ style: { marginBottom: 0 } }}
+										/>
+									</div>
+								)}
+								<div className={styles.filterItem}>
+									<div className={styles.filterLabel}>
+										{t("filters.department")}
+									</div>
+									<UserSelect
+										selected={departments}
+										setSelected={handleDepartmentChange}
+										placeholder={t("filters.departmentPlaceholder")}
+										maxTagCount="responsive"
+										departmentSelectorProps={{
+											showUser: false,
+											onFetchData: fetchMagicDepartmentUser,
+											organization: organizationInfo,
+										}}
+										formItemProps={{ style: { marginBottom: 0 } }}
+									/>
+								</div>
+								<div className={styles.filterItem}>
+									<div className={styles.filterLabel}>
+										{t("filters.digitalEmployee")}
+									</div>
+									<SearchSelect
+										allowClear={false}
+										value={agentCode || ALL_OPTION_VALUE}
+										options={agentSelectOptions}
+										loading={agentOptionsLoading}
+										showAvatar={false}
+										searchPlaceholder={t("filters.agentSearchPlaceholder")}
+										dropdownFooter={t("filters.agentOptionsCount", {
+											count: agentOptions?.total ?? 0,
+											formattedCount: formatNumber(agentOptions?.total ?? 0),
+										})}
+										classNames={{ popup: { root: styles.agentSelectPopup } }}
+										optionRender={(option) => {
+											const item = option.data as {
+												value?: string
+												label?: string
+												agentCode?: string
+												agentName?: string | null
+											}
+											if (item.value === ALL_OPTION_VALUE)
+												return (
+													<div className={styles.agentOptionAll}>
+														{item.label}
+													</div>
+												)
+											return (
+												<div className={styles.agentOption}>
+													<div className={styles.agentOptionName}>
+														{displayText(item.agentName || item.label)}
+													</div>
+													<div className={styles.agentOptionCode}>
+														{displayText(item.agentCode)}
+													</div>
+												</div>
+											)
+										}}
+										onChange={(value) =>
+											handleAgentCodeChange(
+												!value || value === ALL_OPTION_VALUE
+													? ""
+													: String(value),
+											)
+										}
+									/>
+								</div>
+							</>
+						)}
 						{stateView === VIEW.DigitalEmployeeAnalysis ? (
 							<div className={styles.filterItem}>
 								<div className={styles.filterLabel}>{t("filters.source")}</div>
@@ -266,7 +349,9 @@ export default function DataDashboardPage({ view }: DataDashboardPageProps) {
 					loading={summaryLoading}
 					styles={styles}
 					t={t}
-					dateQuery={consumptionQuery}
+					dateQuery={
+						stateView === VIEW.FileProductionAnalysis ? fileQuery : consumptionQuery
+					}
 				/>
 				{stateView !== VIEW.ConsumptionAnalysis ? (
 					<DetailSection
@@ -276,6 +361,7 @@ export default function DataDashboardPage({ view }: DataDashboardPageProps) {
 						timeRange={timeRange}
 						pageSize={pageSize}
 						loading={tableLoading}
+						fileCategory={fileCategory}
 						exportingTab={exportingTab}
 						onTabChange={handleTabChange}
 						onPageChange={handlePageChange}

@@ -49,7 +49,8 @@ interface TopicDesktopPanelsProps {
 	detailPanelClassName: string
 	isDetailPanelFullscreen: boolean
 	sidebar:
-		ReactNode | ((controller: { onCollapse?: () => void; isCollapsed: boolean }) => ReactNode)
+		| ReactNode
+		| ((controller: { onCollapse?: () => void; isCollapsed: boolean }) => ReactNode)
 	enableProjectCollapse?: boolean
 	detailPanel: ReactNode | ((control?: FileSidebarControl) => ReactNode)
 	isReadOnly: boolean
@@ -176,6 +177,19 @@ function TopicDesktopPanels({
 		: 0
 	const shouldShowProjectResizeHandle =
 		showProjectSidebar && showProjectResizeHandle && !isProjectSiderCollapsed
+	const showCollapsedProjectDivider =
+		showProjectSidebar && isProjectSiderCollapsed && !shouldShowDetailPanel
+	const collapsedProjectDividerHost =
+		typeof document !== "undefined"
+			? document.querySelector<HTMLElement>('[data-testid="base-layout-pc-main-frame"]')
+			: null
+	const collapsedProjectDivider = (
+		<div
+			className="pointer-events-none absolute inset-y-0 left-0 z-20 w-px bg-border"
+			data-testid="collapsed-project-sidebar-divider"
+			aria-hidden="true"
+		/>
+	)
 	const sidebarTransition =
 		reducedMotion || isDraggingProjectSider || isDraggingHistoryPanel
 			? "none"
@@ -464,7 +478,13 @@ function TopicDesktopPanels({
 			className={containerClassName}
 			data-testid="main-workspace-container"
 		>
-			<div className="flex h-full w-full min-w-0">
+			<div className="relative flex h-full w-full min-w-0">
+				{/* Render in the outer frame so the boundary also covers its desktop top/bottom spacing. */}
+				{showCollapsedProjectDivider
+					? collapsedProjectDividerHost
+						? createPortal(collapsedProjectDivider, collapsedProjectDividerHost)
+						: collapsedProjectDivider
+					: null}
 				{showProjectSidebar ? (
 					<div
 						className="shrink-0"

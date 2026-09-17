@@ -1,11 +1,26 @@
-import { generatePPTX } from "@magic/html2pptx"
 import { loadJSZip } from "@/infrastructure/vendors/jszip"
 import { prepareHtmlPagesForExport } from "@/utils/htmlExportPrepare"
 import { isMarkdownFileName } from "@/utils/pdfFileType"
 import {
+	iterateExportSlides,
+	iterateSingleExportSlide,
 	prepareExportSlides,
 	prepareSingleSlideExport,
 } from "@/pages/superMagic/services/pptService"
+import {
+	createPptxDestinationLease,
+	ensurePptxFileName,
+	iteratePreparedPptxPages,
+	openPptxDestination,
+	startPptxStreamingExportFromFactory,
+	supportsPptxFileStreaming,
+	type PptxStreamingPageSourceFactory,
+} from "@/pages/superMagic/services/pptxStreamingExport"
+import {
+	createPptxSlideConfig,
+	resolvePptScaleContentDimensions,
+} from "@/pages/superMagic/components/Detail/contents/HTML/utils/slide-dimensions"
+import type { PptxDestination, StreamingHtmlPageInput } from "@magic/html2pptx"
 import {
 	documentExportService,
 	type DocumentExport,
@@ -29,6 +44,19 @@ export * from "./types"
 type PdfDocumentGenerator = DocumentExport.Runtime & {
 	generatePages: NonNullable<DocumentExport.Runtime["generatePages"]>
 	generateMarkdownFile: NonNullable<DocumentExport.Runtime["generateMarkdownFile"]>
+}
+
+interface DirectoryPickerGlobal {
+	showDirectoryPicker?: (options?: {
+		mode?: "read" | "readwrite"
+	}) => Promise<FileSystemDirectoryHandle>
+}
+
+interface PptxTargetStreamingInput {
+	fileName: string
+	pageCount: number
+	displayConfig?: ClientBatchDisplayConfig
+	createPages: PptxStreamingPageSourceFactory
 }
 
 function hasPdfDocumentGenerator(
@@ -213,44 +241,280 @@ async function exportPdfTarget(options: {
 	return { warnings }
 }
 
-async function exportPptxTarget(options: {
+function supportsPptxDirectoryStreaming(): boolean {
+	return typeof (globalThis as DirectoryPickerGlobal).showDirectoryPicker === "function"
+}
+
+async function openPptxDirectory(): Promise<FileSystemDirectoryHandle | null> {
+	const picker = (globalThis as DirectoryPickerGlobal).showDirectoryPicker
+	if (!picker) return null
+
+	try {
+		return await picker({ mode: "readwrite" })
+	} catch (error) {
+		if (isAbortError(error)) return null
+		throw error
+	}
+}
+
+async function openPptxDestinationInDirectory(
+	directory: FileSystemDirectoryHandle,
+	fileName: string,
+): Promise<ReturnType<typeof createPptxDestinationLease>> {
+	const handle = await directory.getFileHandle(ensurePptxFileName(fileName), { create: true })
+	return createPptxDestinationLease(await handle.createWritable())
+}
+
+function createPptxTargetStreamingInput(
+	target: ClientBatchExportTarget,
+	attachments: ClientBatchAttachment[],
+	access?: ClientBatchExportRunOptions["access"],
+	fileApi?: ClientBatchExportRunOptions["fileApi"],
+): PptxTargetStreamingInput {
+	const entryFile = getTargetEntryFile(target)
+	const displayConfig = getTargetDisplayConfig(target)
+	const slidePaths: string[] = Array.isArray(displayConfig?.slides) ? displayConfig.slides : []
+	const fileId = entryFile.file_id || target.item.file_id || ""
+	const sourceFileName = entryFile.file_name || target.item.file_name || target.item.name
+	const fileName = String(displayConfig?.name || sourceFileName || "export").replace(
+		/\.html?$/i,
+		"",
+	)
+
+	return {
+		fileName,
+		pageCount: slidePaths.length || 1,
+		displayConfig,
+		createPages: (signal) => {
+			const pages: AsyncIterable<StreamingHtmlPageInput> = slidePaths.length
+				? iterateExportSlides({
+						slidePaths,
+						attachmentList: attachments,
+						mainFileId: fileId,
+						mainFileName: sourceFileName,
+						displayConfig,
+						access,
+						fileApi,
+						signal,
+					})
+				: iterateSingleExportSlide({
+						fileId,
+						fileName: sourceFileName,
+						attachmentList: attachments,
+						access,
+						fileApi,
+						signal,
+					})
+
+			return iteratePreparedPptxPages(pages, {
+				attachments,
+				fileId,
+				fileName: sourceFileName,
+				attachmentList: attachments,
+				displayConfig,
+				signal,
+			})
+		},
+	}
+}
+
+async function streamPptxTarget(options: {
 	target: ClientBatchExportTarget
 	attachments: ClientBatchAttachment[]
-	addOutput: (data: Blob, fileName: string) => void
+	destination: PptxDestination
+	fileName?: string
+	onProgress?: (progress: number) => void
+	signal?: AbortSignal
 	access?: ClientBatchExportRunOptions["access"]
 	fileApi?: ClientBatchExportRunOptions["fileApi"]
 }): Promise<{ warnings: number }> {
-	const { target, attachments, addOutput, access, fileApi } = options
-	const prepared = await prepareTargetSlides(target, attachments, access, fileApi)
-	if (!hasHtmlSlides(prepared.result.htmlSlides)) {
-		throw new Error("No HTML slides were prepared")
-	}
-
-	const preparedHtmlSlides = await prepareHtmlPagesForExport({
-		pages: prepared.result.htmlSlides,
-		attachments,
-		fileId: prepared.fileId,
-		fileName: prepared.fileName,
-		attachmentList: attachments,
-		displayConfig: prepared.displayConfig,
-		access,
-		fileApi,
-	})
-
+	const { target, attachments, destination, fileName, onProgress, signal, access, fileApi } =
+		options
+	throwIfAborted(signal)
+	const input = createPptxTargetStreamingInput(target, attachments, access, fileApi)
 	let warnings = 0
 	const fontResolver = documentExportService.get()?.getPptFontResolver?.()
-	const output = await generatePPTX(preparedHtmlSlides, {
-		fileName: prepared.result.fileName,
+	const handle = startPptxStreamingExportFromFactory(input.createPages, (firstPage) => ({
+		fileName: fileName || input.fileName,
+		destination,
+		outputPolicy: "file-stream",
+		pageCount: input.pageCount,
+		autoSize: !isClientBatchSlideDisplayConfig(input.displayConfig),
+		config: createPptxSlideConfig(resolvePptScaleContentDimensions(firstPage.html)),
 		skipFailedPages: true,
-		autoSize: !isClientBatchSlideDisplayConfig(prepared.displayConfig),
 		fontResolver,
 		onResourceLoadError: () => {
 			warnings += 1
 		},
+		onProgress: (progress) => {
+			if (progress.pageIndex === undefined || !input.pageCount) return
+			onProgress?.(Math.min(99, ((progress.pageIndex + 1) / input.pageCount) * 100))
+		},
 		logLevel: "warn",
-	}).promise
-	addOutput(output.data, output.fileName)
+	}))
+	const cancel = () => handle.cancel()
+	if (signal?.aborted) cancel()
+	else signal?.addEventListener("abort", cancel, { once: true })
+	try {
+		await handle.promise
+	} finally {
+		signal?.removeEventListener("abort", cancel)
+	}
 	return { warnings }
+}
+
+async function runStreamingPptxBatch(options: {
+	targets: ClientBatchExportTarget[]
+	resolveAttachmentScope: (target: ClientBatchExportTarget) => ClientBatchAttachment[]
+	onProgress?: (progress: number) => void
+	signal?: AbortSignal
+	access?: ClientBatchExportRunOptions["access"]
+	fileApi?: ClientBatchExportRunOptions["fileApi"]
+}): Promise<ClientBatchExportRunResult> {
+	const { targets, resolveAttachmentScope, onProgress, signal, access, fileApi } = options
+	const failures: ClientBatchExportFailure[] = []
+	const usedNames = new Set<string>()
+	let successCount = 0
+	let warnings = 0
+	if (signal?.aborted) return createCancelledBatchResult(successCount, failures, warnings)
+
+	if (targets.length === 1 && supportsPptxFileStreaming()) {
+		const input = createPptxTargetStreamingInput(
+			targets[0],
+			resolveAttachmentScope(targets[0]),
+			access,
+			fileApi,
+		)
+		const lease = await openPptxDestination({ suggestedName: input.fileName })
+		if (!lease) {
+			return { successCount: 0, failureCount: 0, failures, warnings: 0, cancelled: true }
+		}
+		try {
+			const result = await streamPptxTarget({
+				target: targets[0],
+				attachments: resolveAttachmentScope(targets[0]),
+				destination: lease.destination,
+				onProgress,
+				signal,
+				access,
+				fileApi,
+			})
+			warnings += result.warnings
+			successCount = 1
+		} catch (error) {
+			await lease.abort(error).catch(() => undefined)
+			if (signal?.aborted || isAbortError(error)) {
+				return createCancelledBatchResult(successCount, failures, warnings)
+			}
+			failures.push({ target: targets[0], error })
+		}
+		onProgress?.(100)
+		return {
+			streamedToDisk: successCount > 0,
+			successCount,
+			failureCount: failures.length,
+			failures,
+			warnings,
+		}
+	}
+
+	if (!supportsPptxDirectoryStreaming()) {
+		return {
+			successCount: 0,
+			failureCount: targets.length,
+			failures: [],
+			warnings: 0,
+			unavailable: true,
+		}
+	}
+
+	const directory = await openPptxDirectory()
+	if (!directory) {
+		return { successCount: 0, failureCount: 0, failures, warnings: 0, cancelled: true }
+	}
+	if (signal?.aborted) return createCancelledBatchResult(successCount, failures, warnings)
+
+	for (let index = 0; index < targets.length; index += 1) {
+		if (signal?.aborted) return createCancelledBatchResult(successCount, failures, warnings)
+		const target = targets[index]
+		const attachments = resolveAttachmentScope(target)
+		const input = createPptxTargetStreamingInput(target, attachments, access, fileApi)
+		const fileName = uniqueFileName(ensurePptxFileName(input.fileName), usedNames)
+		let lease: ReturnType<typeof createPptxDestinationLease> | null = null
+		try {
+			lease = await openPptxDestinationInDirectory(directory, fileName)
+			const result = await streamPptxTarget({
+				target,
+				attachments,
+				destination: lease.destination,
+				fileName,
+				onProgress: (targetProgress) => {
+					onProgress?.(
+						Math.round(((index + targetProgress / 100) / targets.length) * 100),
+					)
+				},
+				signal,
+				access,
+				fileApi,
+			})
+			warnings += result.warnings
+			successCount += 1
+		} catch (error) {
+			await lease?.abort(error).catch(() => undefined)
+			if (signal?.aborted || isAbortError(error)) {
+				return createCancelledBatchResult(successCount, failures, warnings)
+			}
+			failures.push({ target, error })
+		}
+		onProgress?.(Math.round(((index + 1) / targets.length) * 100))
+	}
+
+	return {
+		streamedToDisk: successCount > 0,
+		successCount,
+		failureCount: failures.length,
+		failures,
+		warnings,
+	}
+}
+
+function createCancelledBatchResult(
+	successCount: number,
+	failures: ClientBatchExportFailure[],
+	warnings: number,
+): ClientBatchExportRunResult {
+	return {
+		streamedToDisk: successCount > 0,
+		successCount,
+		failureCount: failures.length,
+		failures,
+		warnings,
+		cancelled: true,
+	}
+}
+
+function throwIfAborted(signal?: AbortSignal): void {
+	if (!signal?.aborted) return
+	const reason = signal.reason
+	if (isAbortError(reason)) throw reason
+	if (typeof DOMException !== "undefined") {
+		throw new DOMException("PPTX export cancelled", "AbortError")
+	}
+	const error = new Error("PPTX export cancelled")
+	error.name = "AbortError"
+	throw error
+}
+
+function isAbortError(error: unknown): boolean {
+	return (
+		(typeof DOMException !== "undefined" &&
+			error instanceof DOMException &&
+			error.name === "AbortError") ||
+		(typeof error === "object" &&
+			error !== null &&
+			"name" in error &&
+			(error as { name?: unknown }).name === "AbortError")
+	)
 }
 
 function buildArtifact(
@@ -294,18 +558,29 @@ function buildArtifact(
 /**
  * Runs one client-side export per logical target and returns one browser artifact.
  * This module deliberately owns no toast, selection state, or backend conversion task;
- * the legacy menu remains a thin adapter while the exporter stays reusable elsewhere.
+ * menu and batch callers share the same streaming exporter.
  */
 export async function runClientBatchDocumentExport(
 	options: ClientBatchExportRunOptions,
 ): Promise<ClientBatchExportRunResult> {
-	const { format, targets, attachments, projectName, onProgress, access, fileApi } = options
+	const { format, targets, attachments, projectName, onProgress, access, fileApi, signal } =
+		options
 	if (targets.length === 0) {
 		return { successCount: 0, failureCount: 0, failures: [], warnings: 0 }
 	}
 
 	const documentExporter = documentExportService.get()
 	const resolveAttachmentScope = createAttachmentScopeResolver(attachments)
+	if (format === "pptx") {
+		return runStreamingPptxBatch({
+			targets,
+			resolveAttachmentScope,
+			onProgress,
+			signal,
+			access,
+			fileApi,
+		})
+	}
 
 	let page: DocumentExport.PdfPageConfig | undefined
 	if (format === "pdf") {
@@ -355,15 +630,6 @@ export async function runClientBatchDocumentExport(
 					attachments: attachmentScope,
 					page,
 					documentExporter,
-					addOutput: (data, fileName) => outputs.push({ data, fileName }),
-					access,
-					fileApi,
-				})
-				warnings += result.warnings
-			} else {
-				const result = await exportPptxTarget({
-					target,
-					attachments: attachmentScope,
 					addOutput: (data, fileName) => outputs.push({ data, fileName }),
 					access,
 					fileApi,

@@ -57,6 +57,7 @@
 			"namePlaceholder": "e.g., My Connector",
 			"oauthLabels": {
 				"authorizationContentType": "Authorization Content Type",
+				"authorizationMethod": "Token Request Method",
 				"authorizationUrl": "Authorization URL",
 				"clientId": "Client ID",
 				"clientSecret": "Client Secret",

@@ -6,13 +6,12 @@ import { IMAGE_EXTENSIONS } from "@/constants/file"
 import { useFileApi, type FileApi } from "@/pages/superMagic/fileAccess/fileApi"
 import { useFileAccess } from "@/pages/superMagic/fileAccess/FileAccessProvider"
 import { shouldWaitForShareAccess } from "@/pages/superMagic/fileAccess/fileAccessContext"
-import projectFilesStore from "@/stores/projectFiles"
 import { decodePathForDisplay } from "./helper"
 import {
 	findAttachmentByPath,
 	parseCanonicalWorkspaceHref,
 } from "@/pages/superMagic/utils/markdownFileReference"
-import { useMessageListContext } from "@/pages/superMagic/components/MessageList/context"
+import { useMessageListProjectFilesStore } from "@/pages/superMagic/components/MessageList/context"
 
 const IMAGE_EXTENSION_SET = new Set(
 	[...IMAGE_EXTENSIONS, "avif", "bmp", "ico", "tif", "tiff"].map((extension) =>
@@ -176,11 +175,11 @@ const ResolvedImage = memo(
 
 export const Image = observer(
 	({ alt, src, title }: { alt?: unknown; src?: unknown; title?: unknown }) => {
-		const { projectFilesStore: scopedProjectFilesStore } = useMessageListContext()
+		const projectFilesStore = useMessageListProjectFilesStore()
 		const normalizedAlt = typeof alt === "string" ? alt : undefined
 		const normalizedSrc = typeof src === "string" ? src : ""
 		const normalizedTitle = typeof title === "string" ? title : undefined
-		const attachments = (scopedProjectFilesStore ?? projectFilesStore).workspaceFilesList
+		const attachments = projectFilesStore?.workspaceFilesList ?? []
 		const filePath = parseCanonicalWorkspaceHref(normalizedSrc, { allowWorkspaceRoot: true })
 		const fileInfo = filePath ? findAttachmentByPath(attachments, filePath) : undefined
 		const hasExternalSource = isExternalImageSource(normalizedSrc)

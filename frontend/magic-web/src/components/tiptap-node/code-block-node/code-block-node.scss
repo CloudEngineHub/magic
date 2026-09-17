@@ -75,6 +75,23 @@
     }
   }
 
+  .diff-code-block-node-view.diff-code-wrapped {
+    .diff-code {
+      overflow-x: hidden;
+    }
+
+    .diff-code > code {
+      overflow-wrap: anywhere;
+      word-break: break-word;
+    }
+  }
+
+  .diff-code-block-node-view.diff-code-unwrapped {
+    .diff-code {
+      overflow-x: auto;
+    }
+  }
+
   .code-block-node-view {
     margin-bottom: 1em;
     background-color: var(--tt-codeblock-bg);

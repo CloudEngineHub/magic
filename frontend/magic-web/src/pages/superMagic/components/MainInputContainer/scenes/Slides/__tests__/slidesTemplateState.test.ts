@@ -13,6 +13,7 @@ import {
 	groupSlidesTemplates,
 	isSlidesMode,
 	markSlidesTemplateImageUrl,
+	normalizeSlidesTemplateResponse,
 	toTemplateOption,
 	type SlidesTemplateCategoryItem,
 	type SlidesTemplateItem,
@@ -88,6 +89,24 @@ const featuredTag: SlidesTemplateTagItem = {
 }
 
 describe("slides template state", () => {
+	it("normalizes localized list fields returned as strings", () => {
+		const response = normalizeSlidesTemplateResponse({
+			page: 1,
+			page_size: 20,
+			list: [
+				{
+					code: "PPT-string",
+					label: "模板",
+					description: "描述",
+					is_official: true,
+				},
+			],
+		})
+
+		expect(response.list[0]?.label).toEqual({ zh_CN: "模板", en_US: "模板" })
+		expect(response.list[0]?.description).toEqual({ zh_CN: "描述", en_US: "描述" })
+	})
+
 	it("detects PPT topic mode", () => {
 		expect(isSlidesMode(TopicMode.PPT)).toBe(true)
 		expect(isSlidesMode(TopicMode.General)).toBe(false)

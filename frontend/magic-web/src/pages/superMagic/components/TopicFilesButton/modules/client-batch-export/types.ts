@@ -55,6 +55,8 @@ export interface ClientBatchExportArtifact {
 
 export interface ClientBatchExportRunResult {
 	artifact?: ClientBatchExportArtifact
+	/** PPTX files were written directly to a user-selected file or directory. */
+	streamedToDisk?: boolean
 	successCount: number
 	failureCount: number
 	failures: ClientBatchExportFailure[]
@@ -72,4 +74,6 @@ export interface ClientBatchExportRunOptions {
 	onProgress?: (progress: number) => void
 	access?: FileAccessContext
 	fileApi?: FileApi
+	/** Cancels the active streaming target and prevents later targets from starting. */
+	signal?: AbortSignal
 }

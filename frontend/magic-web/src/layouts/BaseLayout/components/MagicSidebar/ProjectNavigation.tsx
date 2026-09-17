@@ -16,11 +16,13 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/shadcn-ui/
 import { Button } from "@/components/shadcn-ui/button"
 import { ScrollArea } from "@/components/shadcn-ui/scroll-area"
 import { SidebarMenu, SidebarMenuButton, SidebarMenuItem } from "@/components/shadcn-ui/sidebar"
+import MagicTooltip from "@/components/base/MagicTooltip"
 import type { ProjectBrowserSource } from "@/pages/superMagic/components/WorkspacesMenu/components/WorkspaceProjectsPanel"
 import workspaceStore from "@/pages/superMagic/stores/core/workspace"
 import { isCollaborationWorkspace } from "@/pages/superMagic/constants"
 import { sidebarStore } from "@/stores/layout/SidebarStore"
 import { userStore } from "@/models/user"
+import { cn } from "@/utils/cn"
 import { WorkspaceList } from "./WorkspaceList"
 import CollapsedWorkspaceMenu from "./CollapsedWorkspaceMenu"
 import RecentProjects from "./RecentProjects"
@@ -59,15 +61,15 @@ function ProjectNavigation({
 	const scrollRef = useRef<HTMLDivElement>(null)
 	const scrollAreaRef = useRef<HTMLDivElement>(null)
 	const navigationRef = useRef<HTMLDivElement>(null)
-	const scrollKey = `sidebar-scroll:${collapsed ? "collapsed" : sidebarStore.expandedNavigationSection}`
+	const scrollKey = `sidebar-scroll:${collapsed ? "collapsed" : "expanded"}`
 	useLayoutEffect(() => {
 		const navigation = navigationRef.current
 		if (collapsed || !navigation) return
 		const headers = Array.from(
 			navigation.querySelectorAll<HTMLElement>("[data-sidebar-navigation-header]"),
-		)
+		).filter((header) => getComputedStyle(header).visibility !== "hidden")
 		const tabs = headers.find((header) => header.dataset.sidebarNavigationHeader === "tabs")
-		// 分类、操作栏、工作区标题逐层吸顶；实际高度同时覆盖搜索态和字号变化，隐藏栏目不占位。
+		// Stack tabs then the visible toolbar. Hidden overlapping headers still have layout boxes.
 		const measure = () => {
 			navigation.style.setProperty(
 				"--project-navigation-tabs-height",
@@ -148,7 +150,7 @@ function ProjectNavigation({
 				data-testid="sidebar-content-root"
 			>
 				{apps}
-				<div className="mx-2 my-1 h-px bg-sidebar-border/40" />
+				<div className="mx-2 mb-2 mt-1 h-px bg-sidebar-border/40" />
 				<div
 					ref={navigationRef}
 					className={
@@ -224,15 +226,22 @@ function ProjectNavigation({
 								/>
 							</SidebarMenuItem>
 							<SidebarMenuItem>
-								<SidebarMenuButton
-									tooltip={t("sidebarPanels.projectManager")}
-									aria-label={t("sidebarPanels.projectManager")}
-									disabled={workspaceBusy || recentBusy}
-									onClick={() => openManager()}
-									data-testid="sidebar-project-manager-icon"
+								{/* SidebarMenuButton does not forward ref; anchor MagicTooltip on a DOM node. */}
+								<MagicTooltip
+									title={t("sidebarPanels.projectManager")}
+									placement="right"
 								>
-									{managerIcon}
-								</SidebarMenuButton>
+									<span>
+										<SidebarMenuButton
+											aria-label={t("sidebarPanels.projectManager")}
+											disabled={workspaceBusy || recentBusy}
+											onClick={() => openManager()}
+											data-testid="sidebar-project-manager-icon"
+										>
+											{managerIcon}
+										</SidebarMenuButton>
+									</span>
+								</MagicTooltip>
 							</SidebarMenuItem>
 						</SidebarMenu>
 					) : (
@@ -241,47 +250,67 @@ function ProjectNavigation({
 								disabled={workspaceBusy || recentBusy}
 								onOpenManager={() => openManager()}
 							/>
-							<div
-								hidden={!recentExpanded}
-								className={recentExpanded ? "flex flex-col" : "hidden"}
-							>
-								{(recentVisited || sidebarStore.recentProjectsExpanded) && (
-									<RecentProjects
+							{/* Overlap both lists so hiding one cannot clamp the shared tree. */}
+							<div className="grid grid-cols-1 grid-rows-1">
+								<div
+									aria-hidden={!recentExpanded}
+									className={cn(
+										"col-start-1 row-start-1",
+										!recentExpanded && "invisible",
+									)}
+									{...(!recentExpanded ? { inert: "" as const } : {})}
+								>
+									{(recentVisited || sidebarStore.recentProjectsExpanded) && (
+										<RecentProjects
+											key={JSON.stringify([userId, organizationCode])}
+											externalScrollRef={scrollRef}
+											active={recentExpanded}
+											onBusyChange={setRecentBusy}
+											onSelect={onSelect}
+											onCreate={handleCreateProject}
+										/>
+									)}
+								</div>
+								<div
+									aria-hidden={recentExpanded}
+									className={cn(
+										"col-start-1 row-start-1",
+										recentExpanded && "invisible",
+									)}
+									{...(recentExpanded ? { inert: "" as const } : {})}
+								>
+									<WorkspaceList
+										scrollRef={scrollRef}
+										scrollAreaRef={scrollAreaRef}
 										key={JSON.stringify([userId, organizationCode])}
-										externalScrollRef={scrollRef}
-										active={recentExpanded}
-										onBusyChange={setRecentBusy}
-										onSelect={onSelect}
-										onCreate={handleCreateProject}
+										onBusyChange={setWorkspaceBusy}
+										onOpenManager={(workspace) =>
+											openManager({ type: "workspace", workspace })
+										}
+										beforeItems={
+											<SidebarMenuItem>
+												<SidebarMenuButton
+													isActive={isCollaborationWorkspace(
+														selectedWorkspace,
+													)}
+													disabled={workspaceBusy || recentBusy}
+													className="mb-1 text-[13px] font-normal leading-5 data-[active=true]:font-normal"
+													onClick={() =>
+														openManager({ type: "collaboration" })
+													}
+													data-testid="sidebar-content-share-workspace-button"
+												>
+													<UsersRound
+														size={16}
+														className="ml-6 text-sidebar-foreground/70"
+													/>
+													<span>{t("workspace.shareWorkspaceName")}</span>
+												</SidebarMenuButton>
+											</SidebarMenuItem>
+										}
 									/>
-								)}
+								</div>
 							</div>
-							<WorkspaceList
-								scrollRef={scrollRef}
-								scrollAreaRef={scrollAreaRef}
-								key={JSON.stringify([userId, organizationCode])}
-								onBusyChange={setWorkspaceBusy}
-								onOpenManager={(workspace) =>
-									openManager({ type: "workspace", workspace })
-								}
-								beforeItems={
-									<SidebarMenuItem>
-										<SidebarMenuButton
-											isActive={isCollaborationWorkspace(selectedWorkspace)}
-											disabled={workspaceBusy || recentBusy}
-											className="mb-1 text-[13px] font-normal leading-5 data-[active=true]:font-normal"
-											onClick={() => openManager({ type: "collaboration" })}
-											data-testid="sidebar-content-share-workspace-button"
-										>
-											<UsersRound
-												size={16}
-												className="ml-6 text-sidebar-foreground/70"
-											/>
-											<span>{t("workspace.shareWorkspaceName")}</span>
-										</SidebarMenuButton>
-									</SidebarMenuItem>
-								}
-							/>
 						</>
 					)}
 				</div>

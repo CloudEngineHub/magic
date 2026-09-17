@@ -159,6 +159,61 @@ export interface SerializeMessageClipboardOptions {
 	enrichMentionAttrs?: (attrs: TiptapMentionAttributes) => TiptapMentionAttributes
 }
 
+function escapeClipboardHtml(text: string): string {
+	return text.replace(/[&<>"']/g, (character) => {
+		const escaped: Record<string, string> = {
+			"&": "&amp;",
+			"<": "&lt;",
+			">": "&gt;",
+			'"': "&quot;",
+			"'": "&#039;",
+		}
+		return escaped[character] ?? character
+	})
+}
+
+/** Programmatic copy for history / reconstructed docs that have no EditorView selection. */
+export function createMessageClipboardPayloadFromContent(
+	content: JSONContent,
+	options?: SerializeMessageClipboardOptions,
+): MessageClipboardPayload {
+	const enrichMentionAttrs = options?.enrichMentionAttrs
+	const workspaceFiles = options?.workspaceFiles ?? []
+	const sourceProjectId = options?.sourceProjectId
+	const applyEnrichment = (attrs: TiptapMentionAttributes): TiptapMentionAttributes =>
+		enrichMentionAttrs ? enrichMentionAttrs(attrs) : attrs
+
+	const sourceNodes = content.type === "doc" ? (content.content ?? []) : [content]
+	const richTextContent: JSONContent[] = []
+	sourceNodes.forEach((node) => {
+		const enriched = enrichRichTextMentions(node, applyEnrichment)
+		const normalized = normalizeRichTextNode(enriched)
+		if (normalized) richTextContent.push(normalized)
+	})
+	const richTextJson: JSONContent = {
+		type: "doc",
+		content: richTextContent,
+	}
+	const mentions: TiptapMentionAttributes[] = []
+	collectMentionAttrs(richTextJson, mentions)
+
+	const metadata: MessageClipboardMetadata = {
+		richText: JSON.stringify(richTextJson),
+		sourceProjectId,
+		mentions: mentions.map((attrs) => ({ attrs })),
+	}
+	const metadataBase64 = btoa(encodeURIComponent(JSON.stringify(metadata)))
+	const plainText = getClipboardPlainText(richTextJson, workspaceFiles, sourceProjectId)
+
+	return {
+		plainText,
+		htmlWithMetadata: `<div data-magic-clipboard="${metadataBase64}">${escapeClipboardHtml(
+			plainText,
+		)}</div>`,
+		metadata,
+	}
+}
+
 export function serializeMessageClipboard(
 	view: EditorView,
 	options?: SerializeMessageClipboardOptions,

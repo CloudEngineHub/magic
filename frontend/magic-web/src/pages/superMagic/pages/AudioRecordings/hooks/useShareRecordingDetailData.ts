@@ -45,6 +45,19 @@ export function useShareRecordingDetailData(input: ShareRecordingDetailDataInput
 	const fileAccess = useFileAccess()
 	// Bound to the ambient FileAccessProvider identity so share reads carry the share access.
 	const fileApi = useFileApi()
+	const targetRef = useRef(target)
+	const attachmentsRef = useRef(attachments)
+	targetRef.current = target
+	attachmentsRef.current = attachments
+	const targetKey = `${String(target?.file_id || "")}:${String(target?.relative_file_path || "")}`
+	const attachmentsKey = useMemo(
+		() =>
+			attachments.list
+				.map((item) => `${item.file_id}:${item.updated_at || ""}`)
+				.sort()
+				.join("|"),
+		[attachments.list],
+	)
 
 	const activeProjectIdRef = useRef(projectId)
 	useEffect(() => {
@@ -52,97 +65,115 @@ export function useShareRecordingDetailData(input: ShareRecordingDetailDataInput
 	}, [projectId])
 
 	/** Resolves every readonly detail dependency from the already-authorized share attachment snapshot. */
-	const loadDetail = useCallback(async () => {
-		if (shouldWaitForShareAccess(fileAccess)) return
-		if (!projectId) {
-			setLoading(false)
-			setError(true)
-			return
-		}
-
-		const currentProjectId = projectId
-		const requestSequence = ++requestSequenceRef.current
-		const requestKey = `${projectId}:${String(target?.file_id || target?.relative_file_path || "")}`
-		const isInitialLoad = loadedRequestKeyRef.current !== requestKey
-		// Target changes can happen inside one project, so projectId alone cannot identify the latest request.
-		const isCurrentRequest = () =>
-			requestSequence === requestSequenceRef.current &&
-			currentProjectId === activeProjectIdRef.current
-		// Keep the workbench mounted during same-bundle refreshes; only a new bundle needs the blocking skeleton.
-		if (isInitialLoad) setLoading(true)
-		else setRefreshing(true)
-		setError(false)
-		if (isInitialLoad) {
-			setTexts({ summary: {} })
-			setAudioUrl("")
-		}
-
-		try {
-			const audioDirectory = findAudioDirectoryNode(attachments.tree, target)
-			const bundleRootPath = resolveRecordingBundleRootPath(
-				attachments.tree,
-				attachments.list,
-				target,
-			)
-			const magicProjectFile = findMagicProjectFile(attachments.list, bundleRootPath)
-			const magicProjectContent = magicProjectFile
-				? await readTextFile(fileApi, magicProjectFile.file_id)
-				: undefined
-			if (!isCurrentRequest()) return
-
-			const parsedMagicProjectConfig = magicProjectContent?.content
-				? parseMagicProjectConfig(magicProjectContent.content)
-				: null
-			const magicProjectConfig = buildShareRecordingMagicProjectConfig({
-				magicProjectConfig: parsedMagicProjectConfig,
-				audioDisplayConfig: (audioDirectory?.display_config ||
-					target?.display_config) as ShareRecordingDisplayConfig | null,
-			})
-			const nextFileMap = buildRecordingDetailFileMap({
-				tree: attachments.tree,
-				list: attachments.list,
-				magicProjectConfig,
-				bundleRootPath,
-			})
-			// Share pages may only render files that are present in the authorized snapshot.
-			nextFileMap.summaryFiles = nextFileMap.summaryFiles.filter((entry) =>
-				Boolean(entry.file?.file_id),
-			)
-			const [nextTexts, nextAudioUrl] = await Promise.all([
-				loadTextFiles(fileApi, nextFileMap, magicProjectContent),
-				loadAudioUrl(fileApi, nextFileMap.audio),
-			])
-			if (!nextFileMap.audio?.file_id || !nextAudioUrl) {
-				throw new Error("Recording bundle is missing a playable audio attachment")
-			}
-			if (!isCurrentRequest()) return
-
-			setProjectItem(
-				buildShareProjectItem({
-					projectId,
-					resourceName,
-					fileMap: nextFileMap,
-					audioDisplayConfig: audioDirectory?.display_config as
-						ShareRecordingDisplayConfig | null | undefined,
-				}),
-			)
-			setFileMap(nextFileMap)
-			setTexts(nextTexts)
-			setAudioUrl(nextAudioUrl)
-			loadedRequestKeyRef.current = requestKey
-		} catch (loadError) {
-			console.error("Failed to load share recording detail:", loadError)
-			if (isCurrentRequest()) setError(true)
-		} finally {
-			if (isCurrentRequest()) {
+	const loadDetail = useCallback(
+		async ({ silent = false }: { silent?: boolean } = {}) => {
+			if (shouldWaitForShareAccess(fileAccess)) return
+			if (!projectId) {
 				setLoading(false)
-				setRefreshing(false)
+				setError(true)
+				return
 			}
-		}
-	}, [attachments.list, attachments.tree, fileAccess, fileApi, projectId, resourceName, target])
+
+			const currentProjectId = projectId
+			const requestSequence = ++requestSequenceRef.current
+			const requestKey = `${projectId}:${targetKey}`
+			const isInitialLoad = loadedRequestKeyRef.current !== requestKey
+			// Target changes can happen inside one project, so projectId alone cannot identify the latest request.
+			const isCurrentRequest = () =>
+				requestSequence === requestSequenceRef.current &&
+				currentProjectId === activeProjectIdRef.current
+			// Keep the workbench mounted during same-bundle refreshes; only a new bundle needs the blocking skeleton.
+			if (isInitialLoad) setLoading(true)
+			else if (!silent) setRefreshing(true)
+			setError(false)
+			if (isInitialLoad) {
+				setTexts({ summary: {} })
+				setAudioUrl("")
+			}
+
+			try {
+				const currentTarget = targetRef.current
+				const currentAttachments = attachmentsRef.current
+				const audioDirectory = findAudioDirectoryNode(
+					currentAttachments.tree,
+					currentTarget,
+				)
+				const bundleRootPath = resolveRecordingBundleRootPath(
+					currentAttachments.tree,
+					currentAttachments.list,
+					currentTarget,
+				)
+				const magicProjectFile = findMagicProjectFile(
+					currentAttachments.list,
+					bundleRootPath,
+				)
+				const magicProjectContent = magicProjectFile
+					? await readTextFile(fileApi, magicProjectFile.file_id)
+					: undefined
+				if (!isCurrentRequest()) return
+
+				const parsedMagicProjectConfig = magicProjectContent?.content
+					? parseMagicProjectConfig(magicProjectContent.content)
+					: null
+				const magicProjectConfig = buildShareRecordingMagicProjectConfig({
+					magicProjectConfig: parsedMagicProjectConfig,
+					audioDisplayConfig: (audioDirectory?.display_config ||
+						currentTarget?.display_config) as ShareRecordingDisplayConfig | null,
+				})
+				const nextFileMap = buildRecordingDetailFileMap({
+					tree: currentAttachments.tree,
+					list: currentAttachments.list,
+					magicProjectConfig,
+					bundleRootPath,
+				})
+				// Share pages may only render files that are present in the authorized snapshot.
+				nextFileMap.summaryFiles = nextFileMap.summaryFiles.filter((entry) =>
+					Boolean(entry.file?.file_id),
+				)
+				const [nextTexts, nextAudioUrl] = await Promise.all([
+					loadTextFiles(fileApi, nextFileMap, magicProjectContent),
+					loadAudioUrl(fileApi, nextFileMap.audio),
+				])
+				if (!nextFileMap.audio?.file_id || !nextAudioUrl) {
+					throw new Error("Recording bundle is missing a playable audio attachment")
+				}
+				if (!isCurrentRequest()) return
+
+				setProjectItem(
+					buildShareProjectItem({
+						projectId,
+						resourceName,
+						fileMap: nextFileMap,
+						audioDisplayConfig: audioDirectory?.display_config as
+							| ShareRecordingDisplayConfig
+							| null
+							| undefined,
+					}),
+				)
+				setFileMap(nextFileMap)
+				setTexts(nextTexts)
+				setAudioUrl(nextAudioUrl)
+				loadedRequestKeyRef.current = requestKey
+			} catch (loadError) {
+				console.error("Failed to load share recording detail:", loadError)
+				if (isCurrentRequest()) setError(true)
+			} finally {
+				if (isCurrentRequest()) {
+					setLoading(false)
+					setRefreshing(false)
+				}
+			}
+		},
+		// attachmentsKey intentionally recreates the loader for real attachment updates;
+		// the latest arrays are read from refs to avoid unstable object dependencies.
+		// eslint-disable-next-line react-hooks/exhaustive-deps
+		[attachmentsKey, fileAccess, fileApi, projectId, resourceName, targetKey],
+	)
 
 	useEffect(() => {
-		void loadDetail()
+		// Attachment synchronization should update content quietly; only the explicit refresh button
+		// requests the visible local skeleton.
+		void loadDetail({ silent: true })
 	}, [loadDetail])
 
 	/** Keeps the share title stable even when the file map can only recover bundle metadata. */

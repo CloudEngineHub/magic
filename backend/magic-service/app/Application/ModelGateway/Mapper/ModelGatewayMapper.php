@@ -798,6 +798,7 @@ class ModelGatewayMapper extends ModelMapper
                         'max_output_tokens' => $providerModelEntity->getConfig()?->getMaxOutputTokens(),
                         'default_temperature' => $providerModelEntity->getConfig()?->getCreativity(),
                         'fixed_temperature' => $providerModelEntity->getConfig()?->getTemperature(),
+                        'chat_api' => $providerModelEntity->getConfig()?->getChatApi(),
                     ],
                     'api_options' => [
                         'proxy' => $proxy,

@@ -4,8 +4,11 @@ import {
 	useLayoutEffect,
 	useRef,
 	useState,
+	type FocusEvent,
+	type KeyboardEvent,
 	type MouseEvent,
 	type ReactNode,
+	type RefObject,
 } from "react"
 import { useMemoizedFn } from "ahooks"
 import { useTranslation } from "react-i18next"
@@ -15,6 +18,7 @@ import MagicTooltip from "@/components/base/MagicTooltip"
 import MagicDropdown from "@/components/base/MagicDropdown"
 import { MoreHorizontal, ChevronRight, Loader2, RotateCw } from "lucide-react"
 import { Button } from "@/components/shadcn-ui/button"
+import type { InputRef } from "antd"
 import type { TopicFilesMenuItem } from "../../utils/menu-items"
 import { FileResourceIcon } from "../FileResourceIcon"
 import { ProjectFileTag } from "../TopicFileTag"
@@ -111,7 +115,7 @@ export const FileManagerItem = memo(function FileManagerItem({
 				<div
 					className={cn(
 						"flex min-w-0",
-						grid ? "flex-col items-center gap-1.5" : "items-center gap-1.5 px-2",
+						grid ? "w-full flex-col items-center gap-1.5" : "items-center gap-1.5 px-2",
 					)}
 					style={!grid ? { paddingLeft: (row?.level ?? 0) * 16 } : undefined}
 				>
@@ -256,6 +260,53 @@ export const FileManagerItem = memo(function FileManagerItem({
 	)
 })
 
+/** Match grid filename typography: 13px / 17px leading, at most two lines. */
+const GRID_NAME_LINE_HEIGHT = 17
+const GRID_NAME_MAX_LINES = 2
+const GRID_RENAME_PADDING_Y = 1
+/** 1px border on each side. Tailwind preflight uses border-box, so height must include it. */
+const GRID_RENAME_BORDER_Y = 1
+const GRID_RENAME_MIN_HEIGHT =
+	GRID_NAME_LINE_HEIGHT + GRID_RENAME_PADDING_Y * 2 + GRID_RENAME_BORDER_Y * 2
+const GRID_RENAME_MAX_HEIGHT =
+	GRID_NAME_LINE_HEIGHT * GRID_NAME_MAX_LINES +
+	GRID_RENAME_PADDING_Y * 2 +
+	GRID_RENAME_BORDER_Y * 2
+
+/**
+ * Grow with wrapped text from one line up to the filename's two-line cap.
+ * scrollHeight includes padding but not border; add borders so two 17px lines actually fit.
+ */
+function clampGridRenameHeight(scrollHeight: number) {
+	return Math.min(
+		GRID_RENAME_MAX_HEIGHT,
+		Math.max(GRID_RENAME_MIN_HEIGHT, scrollHeight + GRID_RENAME_BORDER_Y * 2),
+	)
+}
+
+/** Deferred cancel timers keyed by the shared rename input ref. */
+const pendingRenameCancelTimers = new WeakMap<object, number>()
+
+/** Expose a textarea as the InputRef useRename already knows how to focus and select. */
+function bindRenameTextArea(
+	renameInputRef: RefObject<InputRef | null>,
+	node: HTMLTextAreaElement | null,
+) {
+	if (!node) {
+		renameInputRef.current = null
+		return
+	}
+	renameInputRef.current = {
+		input: node as unknown as HTMLInputElement,
+		nativeElement: node,
+		focus: (options) => node.focus(options),
+		blur: () => node.blur(),
+		setSelectionRange: (start, end, direction) => node.setSelectionRange(start, end, direction),
+		select: () => node.select(),
+	}
+}
+
+/** Inline filename editor. Blur-cancel is armed only after the input has actually focused. */
 function FileManagerNameInput({
 	rename,
 	grid,
@@ -268,21 +319,54 @@ function FileManagerNameInput({
 	getPopupContainer: () => HTMLElement | null
 }) {
 	const { t } = useTranslation("super")
-	const measure = useRef<HTMLSpanElement>(null)
-	const [width, setWidth] = useState(48)
+	// Ignore the blur Radix fires while restoring trigger focus after the menu closes.
+	const hasFocused = useRef(false)
+	const [gridHeight, setGridHeight] = useState(GRID_RENAME_MIN_HEIGHT)
+	/** Exit rename without saving, unless a confirm request is already in flight. */
 	const cancel = useMemoizedFn(() => {
 		if (!rename.isRenamePending()) rename.handleRenameCancel()
 	})
-	useLayoutEffect(() => {
-		if (measure.current) setWidth(Math.max(48, measure.current.offsetWidth + 14))
-	}, [rename.renameValue])
-	useEffect(
-		() => () => {
-			// 虚拟行真正离开 DOM 时丢弃草稿；StrictMode 重跑 effect 时输入仍在页面内。
-			if (!rename.renameInputRef.current?.input?.isConnected) cancel()
+	/** Cancel on real blur; skip menu-close focus restore onto the row trigger. */
+	const handleBlur = useMemoizedFn(
+		(event: FocusEvent<HTMLInputElement | HTMLTextAreaElement>) => {
+			if (!hasFocused.current) return
+			const next = event.relatedTarget
+			if (next instanceof Node) {
+				const renameRoot = event.currentTarget.closest("[data-manager-rename]")
+				const trigger =
+					event.currentTarget.closest("[data-radix-context-menu-trigger]") ??
+					event.currentTarget.closest("[data-manager-item]")?.parentElement
+				// Radix restores focus to the ContextMenu trigger wrapping this row, not into the input.
+				if (renameRoot?.contains(next) || trigger?.contains(next)) {
+					rename.renameInputRef.current?.focus()
+					return
+				}
+			}
+			cancel()
 		},
-		[cancel, rename.renameInputRef],
 	)
+	useEffect(() => {
+		const key = rename.renameInputRef
+		const pending = pendingRenameCancelTimers.get(key)
+		if (pending) window.clearTimeout(pending)
+		return () => {
+			// 虚拟行真正离开 DOM 时丢弃草稿；StrictMode 重跑 effect 时先清掉延后的 cancel。
+			if (rename.renameInputRef.current?.input?.isConnected) return
+			const timer = window.setTimeout(() => {
+				pendingRenameCancelTimers.delete(key)
+				if (!rename.renameInputRef.current?.input?.isConnected) cancel()
+			}, 0)
+			pendingRenameCancelTimers.set(key, timer)
+		}
+	}, [cancel, rename.renameInputRef])
+	useLayoutEffect(() => {
+		if (!grid) return
+		const node = rename.renameInputRef.current?.input
+		if (!node) return
+		// Collapse to one line first so scrollHeight reflects the wrapped content, not the previous box.
+		node.style.height = `${GRID_RENAME_MIN_HEIGHT}px`
+		setGridHeight(clampGridRenameHeight(node.scrollHeight))
+	}, [grid, rename.renameValue, rename.renameInputRef])
 	const error = rename.renameValue.trim()
 		? rename.renameErrorMessage
 		: t(
@@ -290,69 +374,109 @@ function FileManagerNameInput({
 					? "filenameValidator.error.folderEmpty"
 					: "filenameValidator.error.fileEmpty",
 			)
+	/** Esc cancels; Enter confirms and must not insert a newline in the grid textarea. */
+	const onRenameKeyDown = (event: KeyboardEvent<HTMLInputElement | HTMLTextAreaElement>) => {
+		event.stopPropagation()
+		if (event.nativeEvent.isComposing || event.repeat || rename.isRenamePending()) return
+		if (event.key === "Escape") {
+			event.preventDefault()
+			cancel()
+		}
+		if (
+			event.key === "Enter" &&
+			!event.metaKey &&
+			!event.ctrlKey &&
+			!event.altKey &&
+			!event.shiftKey
+		) {
+			event.preventDefault()
+			if (rename.renameValue.trim()) void rename.handleRenameConfirm()
+		}
+	}
+	const renameField = grid ? (
+		<textarea
+			ref={(node) => bindRenameTextArea(rename.renameInputRef, node)}
+			data-testid="file-manager-rename-input"
+			value={rename.renameValue}
+			aria-label={t("userSpace.rename")}
+			readOnly={rename.renamePending}
+			rows={1}
+			className="box-border w-full min-w-0 max-w-full rounded-[5px] border border-input bg-transparent outline-none"
+			style={{
+				cursor: "text",
+				textAlign: "center",
+				fontSize: 13,
+				fontWeight: 500,
+				lineHeight: `${GRID_NAME_LINE_HEIGHT}px`,
+				letterSpacing: 0,
+				padding: `${GRID_RENAME_PADDING_Y}px 4px`,
+				height: gridHeight,
+				minHeight: GRID_RENAME_MIN_HEIGHT,
+				maxHeight: GRID_RENAME_MAX_HEIGHT,
+				width: "100%",
+				minWidth: 0,
+				maxWidth: "100%",
+				resize: "none",
+				// Clip overflow instead of scrolling: a scrollbar steals width and reflows a 2-line name.
+				overflowX: "hidden",
+				overflowY: "hidden",
+				overflowWrap: "anywhere",
+				whiteSpace: "pre-wrap",
+			}}
+			onChange={(event) => rename.setRenameValue(event.target.value)}
+			onFocus={() => {
+				hasFocused.current = true
+			}}
+			onBlur={handleBlur}
+			onKeyDown={onRenameKeyDown}
+		/>
+	) : (
+		<InputWithError
+			ref={rename.renameInputRef}
+			data-testid="file-manager-rename-input"
+			value={rename.renameValue}
+			aria-label={t("userSpace.rename")}
+			readOnly={rename.renamePending}
+			height={20}
+			className="w-full min-w-0 max-w-full"
+			style={{
+				cursor: "text",
+				textAlign: "left",
+				fontSize: 12,
+				fontWeight: 400,
+				lineHeight: "16px",
+				letterSpacing: 0,
+				padding: "1px 4px",
+				width: "100%",
+				minWidth: 0,
+				maxWidth: "100%",
+				overflowX: "auto",
+			}}
+			errorMessage={error}
+			onChange={(event) => rename.setRenameValue(event.target.value)}
+			onFocus={() => {
+				hasFocused.current = true
+			}}
+			onBlur={handleBlur}
+			onKeyDown={onRenameKeyDown}
+		/>
+	)
 	return (
 		<div
 			data-manager-rename
-			className={cn("relative min-w-0 max-w-full", grid ? "self-center" : "flex-1")}
-			style={grid ? { width } : undefined}
+			className={cn(
+				// Fill the name slot and never grow past it, even for long filenames.
+				"relative w-full min-w-0 max-w-full overflow-hidden",
+				grid ? "self-stretch" : "flex-1",
+			)}
 			onPointerDown={(event) => event.stopPropagation()}
 			onClick={(event) => event.stopPropagation()}
 			onDoubleClick={(event) => event.stopPropagation()}
 			onContextMenu={(event) => event.stopPropagation()}
 		>
-			<span
-				ref={measure}
-				aria-hidden
-				className="pointer-events-none invisible absolute whitespace-pre text-[13px] font-medium leading-[17px] tracking-normal"
-			>
-				{rename.renameValue}
-			</span>
 			<Tooltip open={Boolean(error)}>
 				<TooltipTrigger asChild>
-					<div>
-						<InputWithError
-							ref={rename.renameInputRef}
-							value={rename.renameValue}
-							aria-label={t("userSpace.rename")}
-							readOnly={rename.renamePending}
-							height={grid ? 21 : 20}
-							style={{
-								cursor: "text",
-								textAlign: grid ? "center" : "left",
-								fontSize: grid ? 13 : 12,
-								fontWeight: grid ? 500 : 400,
-								lineHeight: grid ? "17px" : "16px",
-								letterSpacing: 0,
-								padding: "1px 4px",
-							}}
-							errorMessage={error}
-							onChange={(event) => rename.setRenameValue(event.target.value)}
-							onBlur={cancel}
-							onKeyDown={(event) => {
-								event.stopPropagation()
-								if (
-									event.nativeEvent.isComposing ||
-									event.repeat ||
-									rename.isRenamePending()
-								)
-									return
-								if (event.key === "Escape") {
-									event.preventDefault()
-									cancel()
-								}
-								if (
-									event.key === "Enter" &&
-									!event.metaKey &&
-									!event.ctrlKey &&
-									!event.altKey &&
-									!event.shiftKey
-								) {
-									event.preventDefault()
-									if (rename.renameValue.trim()) void rename.handleRenameConfirm()
-								}
-							}}
-						/>
-					</div>
+					<div className="flex w-full min-w-0 max-w-full">{renameField}</div>
 				</TooltipTrigger>
 				{error && (
 					<TooltipContent container={getPopupContainer() ?? undefined} side="bottom">

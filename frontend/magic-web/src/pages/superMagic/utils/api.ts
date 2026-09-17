@@ -867,15 +867,6 @@ export type SaveUploadFileToProjectResponse = {
 // 	return magicClient.get(`/api/v1/super-agent/projects/${project_id}/last-file-updated-time`)
 // }
 
-// // 导出pdf或者ppt
-// export const exportPdfOrPpt = async (data: {
-// 	file_ids: string[]
-// 	project_id?: string
-// 	is_debug?: boolean
-// 	convert_type?: "pdf" | "ppt"
-// }) => {
-// 	return magicClient.post("/api/v1/super-agent/file-convert/create", data)
-// }
 //
 // // 创建文件或文件夹
 // export const createFile = async (data: {
@@ -887,10 +878,6 @@ export type SaveUploadFileToProjectResponse = {
 // 	return magicClient.post("/api/v1/super-agent/file", data)
 // }
 //
-// // 查询文件导出pdf或者ppt的状态
-// export const checkExportPdfOrPptStatus = async (task_key: string) => {
-// 	return magicClient.get(`/api/v1/super-agent/file-convert/check?task_key=${task_key}`)
-// }
 //
 // /**
 //  * 获取模式列表

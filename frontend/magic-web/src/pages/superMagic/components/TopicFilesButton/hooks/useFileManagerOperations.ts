@@ -24,6 +24,7 @@ import { useSelectedFilesManager } from "./useSelectedFilesManager"
 import { useShareFile } from "./useShareFile"
 import { useFileInfoPanel } from "./useFileInfoPanel"
 import { useContextMenu } from "./useContextMenu"
+import { scheduleFileManagerRename } from "./scheduleFileManagerRename"
 import { useDownloadImageMenu } from "../../Detail/contents/Image/hooks/useDownloadImageMenu"
 import { useAICardCreateDialog } from "../../Detail/components/SelfMediaRootRender/components/AICardCreateDialog"
 import { getAttachmentKey } from "../utils/getAttachmentKey"
@@ -400,7 +401,13 @@ export function useFileManagerOperations({
 			if (isMutable(file)) void batch.deleteWithConfirm([file])
 		},
 		handleStartRename: (file) => {
-			if (isMutable(file)) names.rename.handleStartRename(file)
+			if (!isMutable(file)) return
+			clearScheduledRename()
+			// Wait for the Radix menu to restore trigger focus before mounting the input.
+			cancelScheduledRename.current = scheduleFileManagerRename(() => {
+				cancelScheduledRename.current = null
+				if (isMutable(file)) names.rename.handleStartRename(file)
+			})
 		},
 		handleDownloadOriginal: operations.handleDownloadOriginal,
 		handleDownloadPdf: operations.handleDownloadPdf,
@@ -496,6 +503,16 @@ export function useFileManagerOperations({
 		if (!props.isActive) cancelTransfer()
 		return cancelTransfer
 	}, [props.scopeKey, props.isActive, cancelTransfer])
+	const cancelScheduledRename = useRef<(() => void) | null>(null)
+	/** Drop a pending menu-triggered rename if the panel closes before the timeout. */
+	const clearScheduledRename = useMemoizedFn(() => {
+		cancelScheduledRename.current?.()
+		cancelScheduledRename.current = null
+	})
+	useEffect(() => {
+		if (!props.isActive) clearScheduledRename()
+		return clearScheduledRename
+	}, [props.scopeKey, props.isActive, clearScheduledRename])
 	const runPreparedTransfer = useMemoizedFn(
 		async (
 			requestData: {

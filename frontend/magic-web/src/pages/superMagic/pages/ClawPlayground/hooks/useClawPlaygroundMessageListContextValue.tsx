@@ -11,7 +11,7 @@ import { getMagiClawTemplateAvatarConfig } from "../../MagiClawPage/MagiClawTemp
 interface UseClawPlaygroundMessageListContextValueParams {
 	setSelectedTopic: (topic: Topic) => void
 	magicClaw?: MagicClawItem | null
-	projectFilesStore?: ProjectFilesStore
+	projectFilesStore: ProjectFilesStore
 }
 
 /** Shared MessageListProvider value for Claw playground (desktop + mobile). */

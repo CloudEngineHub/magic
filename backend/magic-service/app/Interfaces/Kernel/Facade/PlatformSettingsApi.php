@@ -77,11 +77,17 @@ class PlatformSettingsApi
         if (! empty($payload['agent_role_description_i18n'] ?? [])) {
             $data['agent_role_description_i18n'] = (array) $payload['agent_role_description_i18n'];
         }
+        if (array_key_exists('global_system_prompt', $payload)) {
+            $data['global_system_prompt'] = (string) $payload['global_system_prompt'];
+        }
         if (array_key_exists('custom_service_provider_whitelist', $payload)) {
             $data['custom_service_provider_whitelist'] = (array) ($payload['custom_service_provider_whitelist'] ?? []);
         }
         if (array_key_exists('footer', $payload) && is_array($payload['footer'])) {
             $data['footer'] = self::mergeFooterSettings((array) ($data['footer'] ?? []), $payload['footer']);
+        }
+        if (array_key_exists('watermark', $payload) && is_array($payload['watermark'])) {
+            $data['watermark'] = array_replace((array) ($data['watermark'] ?? []), $payload['watermark']);
         }
 
         $this->validateUrls($data);
@@ -138,12 +144,18 @@ class PlatformSettingsApi
             'minimal_logo' => $minimalLogo,
             'default_language' => (string) ($settings['default_language'] ?? 'zh_CN'),
             'footer' => PlatformSettings::fromArray($settings)->getFooter(),
+            'watermark' => (array) ($settings['watermark'] ?? [
+                'enabled' => false,
+                'fields' => ['real_name'],
+                'depth' => 'light',
+            ]),
         ];
         foreach (['name_i18n', 'title_i18n', 'keywords_i18n', 'description_i18n', 'agent_role_name_i18n', 'agent_role_description_i18n'] as $key) {
             if (isset($settings[$key])) {
                 $resp[$key] = (array) $settings[$key];
             }
         }
+        $resp['global_system_prompt'] = (string) ($settings['global_system_prompt'] ?? '');
         $resp['custom_service_provider_whitelist'] = (array) ($settings['custom_service_provider_whitelist'] ?? []);
         return $resp;
     }

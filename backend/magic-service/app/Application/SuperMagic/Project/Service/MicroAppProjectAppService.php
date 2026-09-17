@@ -131,7 +131,7 @@ class MicroAppProjectAppService extends AbstractAppService
                 $shareData['extra'] = $this->shareConfig->buildExtra($existingShare?->getExtra(), $requestDTO);
             }
             $shareDTO = CreateShareRequestDTO::fromArray($shareData);
-            $shareItem = $this->resourceShareAppService->createShare($authorization, $shareDTO);
+            $shareItem = $this->resourceShareAppService->createShare($authorization, $shareDTO, 'micro_app');
             $accessUrl = $this->shareUrlBuilder->buildMicroAppShareUrl((string) $record->getId());
 
             $record

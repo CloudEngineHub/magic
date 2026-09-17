@@ -4,6 +4,7 @@
 packages:
   - "packages/browser-apm"
   - "packages/magic-admin"
+  - "packages/magic-admin-v2"
   - "packages/html2pptx"
   - "packages/html2image"
   - "packages/magic-widget-sdk"
@@ -76,7 +77,3 @@ overrides:
   eslint: 8.57.1
   katex: 0.16.21
   marked: 15.0.12
-
-patchedDependencies:
-  pptxgenjs: patches/pptxgenjs.patch
-  tiptap-markdown: patches/tiptap-markdown.patch

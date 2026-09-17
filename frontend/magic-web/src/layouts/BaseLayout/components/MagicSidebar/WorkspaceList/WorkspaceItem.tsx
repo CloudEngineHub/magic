@@ -15,6 +15,7 @@ import { useWorkspaceRename } from "@/pages/superMagic/components/WorkspacesMenu
 import { useProjectCreate } from "./useProjectCreate"
 import { MagicDropdown } from "@/components/base"
 import { SidebarMenuButton, SidebarMenuItem } from "@/components/shadcn-ui/sidebar"
+import { Button } from "@/components/shadcn-ui/button"
 import { toTestIdSegment } from "@/utils/testid"
 import { getWorkspaceRouteUrl } from "@/pages/superMagic/utils/route"
 import NavigationStatusIcon from "@/pages/superMagic/components/NavigationStatusIcon"
@@ -192,15 +193,22 @@ function WorkspaceItem({
 		sidebarStore.toggleWorkspaceExpanded(workspace.id)
 	}
 
-	function handleCreateProjectClick(e: React.MouseEvent<HTMLDivElement>) {
+	function handleCreateProjectClick(e: React.MouseEvent<HTMLButtonElement>) {
 		e.preventDefault()
 		e.stopPropagation()
 		handleCreateProject(e)
 	}
 
-	function handleMoreClick(e: React.MouseEvent<HTMLDivElement>) {
+	function handleMoreClick(e: React.MouseEvent<HTMLButtonElement>) {
 		e.preventDefault()
 		e.stopPropagation()
+		e.currentTarget.dispatchEvent(
+			new MouseEvent("contextmenu", {
+				bubbles: true,
+				clientX: e.clientX,
+				clientY: e.clientY,
+			}),
+		)
 	}
 
 	return (
@@ -247,107 +255,119 @@ function WorkspaceItem({
 						menu={{ items: menuProps.items }}
 						trigger={["contextMenu"]}
 						onOpenChange={setIsMenuOpen}
-						placement={menuProps.placement}
+						placement="bottomRight"
 						rootClassName="w-full"
 					>
-						<SidebarMenuButton
-							asChild
-							size="default"
-							isActive={isActive}
-							className="group/workspace-row relative h-8 gap-2 px-2 font-normal leading-5 text-sidebar-foreground data-[active=true]:font-normal"
+						<div
+							className={cn(
+								"group/workspace-row flex h-8 w-full min-w-0 items-center rounded-md focus-within:bg-sidebar-accent hover:bg-sidebar-accent",
+								isActive && "bg-sidebar-accent",
+							)}
 							onMouseEnter={() => setIsHovered(true)}
 							onMouseLeave={() => setIsHovered(false)}
 						>
-							<a
-								href={getWorkspaceRouteUrl(workspace.id)}
-								onClick={handleClick}
-								draggable={false}
-								data-sidebar-workspace-link="true"
-								className="text-current no-underline [-webkit-tap-highlight-color:transparent]"
+							<SidebarMenuButton
+								asChild
+								size="default"
+								isActive={isActive}
+								className="relative h-8 min-w-0 flex-1 gap-2 px-2 font-normal leading-5 text-sidebar-foreground hover:bg-transparent data-[active=true]:bg-transparent data-[active=true]:font-normal"
 							>
-								<div
-									className="flex size-4 shrink-0 items-center justify-center rounded-xl text-muted-foreground hover:bg-sidebar-accent"
-									onClick={handleToggle}
-									data-testid={workspaceToggleTestId}
+								<a
+									href={getWorkspaceRouteUrl(workspace.id)}
+									onClick={handleClick}
+									draggable={false}
+									data-sidebar-workspace-link="true"
+									className="text-current no-underline [-webkit-tap-highlight-color:transparent]"
 								>
-									<ChevronRight
-										strokeWidth={1.5}
-										className={cn(
-											"h-4 w-4 shrink-0 transition-transform",
-											isExpanded && "rotate-90",
-										)}
-									/>
-								</div>
-								<NavigationStatusIcon
-									itemType="workspace"
-									status={workspace.workspace_status}
-									className="text-muted-foreground [&_.lucide]:stroke-[1.5]"
-								/>
-								<span
-									className="min-w-0 flex-1 truncate text-left text-[13px] font-normal leading-5"
-									data-testid={workspaceNameTestId}
-								>
-									{workspace.name || t("super:workspace.unnamedWorkspace")}
-								</span>
-								{isLoading && (
-									<Loader2Icon
-										className="h-4 w-4 shrink-0 animate-spin text-[#a3a3a3]"
-										data-testid={workspaceLoadingTestId}
-									/>
-								)}
-								<div
-									className={cn(
-										"absolute inset-y-0 right-2 flex items-center gap-2 bg-gradient-to-l from-sidebar from-70% to-transparent pl-4 transition-opacity group-focus-within/workspace-row:pointer-events-auto group-focus-within/workspace-row:opacity-100 no-hover:pointer-events-auto no-hover:opacity-100",
-										isHovered || isMenuOpen
-											? "opacity-100"
-											: "pointer-events-none opacity-0",
-									)}
-								>
-									{/* Keep action controls mounted; no-hover makes them visible on iPad desktop touch input. */}
 									<div
-										className={cn(
-											"flex h-4 w-4 shrink-0 cursor-pointer items-center justify-center rounded-full text-sidebar-foreground transition-opacity [-webkit-tap-highlight-color:transparent] hover:bg-sidebar-accent",
-
-											"no-hover:pointer-events-auto no-hover:opacity-100",
-										)}
-										onClick={handleCreateProjectClick}
-										onPointerDown={(e) => {
-											e.stopPropagation()
-										}}
-										onMouseDown={(e) => {
-											e.stopPropagation()
-										}}
-										data-testid="workspace-item-create-project"
+										className="flex size-4 shrink-0 items-center justify-center rounded-xl text-muted-foreground hover:bg-sidebar-accent"
+										onClick={handleToggle}
+										data-testid={workspaceToggleTestId}
 									>
-										<Plus className="h-4 w-4" />
-									</div>
-									<MagicDropdown
-										menu={{ items: menuProps.items }}
-										trigger={["click"]}
-										placement={menuProps.placement}
-										onOpenChange={setIsMenuOpen}
-									>
-										<div
+										<ChevronRight
+											strokeWidth={1.5}
 											className={cn(
-												"flex h-4 w-4 shrink-0 cursor-pointer items-center justify-center rounded-full text-sidebar-foreground transition-opacity [-webkit-tap-highlight-color:transparent] hover:bg-sidebar-accent",
-
-												"no-hover:pointer-events-auto no-hover:opacity-100",
+												"h-4 w-4 shrink-0 transition-transform",
+												isExpanded && "rotate-90",
 											)}
-											onClick={handleMoreClick}
-											onPointerDown={(e) => {
-												e.stopPropagation()
-											}}
-											onMouseDown={(e) => {
-												e.stopPropagation()
-											}}
-											data-testid="workspace-item-more"
-										>
-											<EllipsisIcon className="h-4 w-4" />
-										</div>
-									</MagicDropdown>
-								</div>
-							</a>
-						</SidebarMenuButton>
+										/>
+									</div>
+									<NavigationStatusIcon
+										itemType="workspace"
+										status={workspace.workspace_status}
+										className="text-muted-foreground [&_.lucide]:stroke-[1.5]"
+									/>
+									<span
+										className="min-w-0 flex-1 truncate text-left text-[13px] font-normal leading-5"
+										data-testid={workspaceNameTestId}
+									>
+										{workspace.name || t("super:workspace.unnamedWorkspace")}
+									</span>
+									{isLoading && (
+										<Loader2Icon
+											className="h-4 w-4 shrink-0 animate-spin text-[#a3a3a3]"
+											data-testid={workspaceLoadingTestId}
+										/>
+									)}
+								</a>
+							</SidebarMenuButton>
+							{/* 默认不占标题宽度；hover、键盘聚焦或触摸设备常显时再从右侧展开操作区。 */}
+							<div
+								className={cn(
+									"ml-auto flex w-0 shrink-0 items-center gap-px overflow-hidden transition-[width,opacity] group-focus-within/workspace-row:pointer-events-auto group-focus-within/workspace-row:w-[57px] group-focus-within/workspace-row:opacity-100 no-hover:pointer-events-auto no-hover:w-[57px] no-hover:opacity-100",
+									isHovered || isMenuOpen
+										? "w-[57px] opacity-100"
+										: "pointer-events-none opacity-0",
+								)}
+							>
+								<Button
+									type="button"
+									variant="ghost"
+									size="icon-sm"
+									aria-label={t("super:sidebarPanels.createProject")}
+									draggable={false}
+									className={cn(
+										"relative size-7 shrink-0 bg-transparent p-0 text-sidebar-foreground before:absolute before:inset-0.5 before:rounded-md before:transition-colors",
+										"hover:bg-transparent hover:before:bg-sidebar-foreground/10 focus-visible:ring-0 focus-visible:before:bg-sidebar-foreground/10 active:before:bg-sidebar-foreground/15 dark:hover:bg-transparent",
+									)}
+									onClick={handleCreateProjectClick}
+									onPointerDown={(e) => {
+										e.stopPropagation()
+									}}
+									onMouseDown={(e) => {
+										e.stopPropagation()
+									}}
+									data-testid="workspace-item-create-project"
+								>
+									<Plus className="relative h-4 w-4" />
+								</Button>
+								<Button
+									type="button"
+									variant="ghost"
+									size="icon-sm"
+									aria-label={t("common.moreActions")}
+									aria-haspopup="menu"
+									aria-expanded={isMenuOpen}
+									data-state={isMenuOpen ? "open" : "closed"}
+									draggable={false}
+									className={cn(
+										"relative size-7 shrink-0 bg-transparent p-0 text-sidebar-foreground before:absolute before:inset-0.5 before:rounded-md before:transition-colors",
+										"hover:bg-transparent hover:before:bg-sidebar-foreground/10 focus-visible:ring-0 focus-visible:before:bg-sidebar-foreground/10 active:before:bg-sidebar-foreground/15 dark:hover:bg-transparent",
+										"data-[state=open]:before:bg-sidebar-foreground/10",
+									)}
+									onClick={handleMoreClick}
+									onPointerDown={(e) => {
+										e.stopPropagation()
+									}}
+									onMouseDown={(e) => {
+										e.stopPropagation()
+									}}
+									data-testid="workspace-item-more"
+								>
+									<EllipsisIcon className="relative h-4 w-4" />
+								</Button>
+							</div>
+						</div>
 					</MagicDropdown>
 				</div>
 

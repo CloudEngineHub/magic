@@ -1,4 +1,4 @@
-import { memo, useEffect, useMemo, useRef, useState } from "react"
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { useTranslation } from "react-i18next"
 import type { AttachmentItem } from "@/pages/superMagic/components/TopicFilesButton/hooks/types"
 import type { AttachmentFile } from "@/pages/superMagic/utils/image-url-resolver"
@@ -31,6 +31,10 @@ interface RecordingDetailRightPanelProps {
 	summarySubmitting?: boolean
 	/** Controls whether the notes source tab is available in readonly share views. */
 	showNotesTab?: boolean
+	/** Optionally controls the selected content tab for project-preview integrations. */
+	activeKey?: string
+	/** Reports the resolved content tab so external toolbars can follow its file context. */
+	onActiveKeyChange?: (activeKey: string) => void
 }
 
 /** Builds the dynamic right-panel tabs and renders summary/notes content or state placeholders. */
@@ -50,26 +54,45 @@ export const RecordingDetailRightPanel = memo(function RecordingDetailRightPanel
 	onGenerateSummary,
 	summarySubmitting = false,
 	showNotesTab = true,
+	activeKey: controlledActiveKey,
+	onActiveKeyChange,
 }: RecordingDetailRightPanelProps) {
 	const { t } = useTranslation("audioRecordings")
 	const tabs = useMemo(
 		() => buildRightPanelTabs(fileMap, summaryContent, t, showNotesTab),
 		[fileMap, showNotesTab, summaryContent, t],
 	)
-	const [activeKey, setActiveKey] = useState<string>(tabs[0]?.key ?? "notes")
+	const [internalActiveKey, setInternalActiveKey] = useState<string>(tabs[0]?.key ?? "notes")
 	const prevSummaryReadyRef = useRef(summaryReady)
+	const activeKey = controlledActiveKey ?? internalActiveKey
+
+	/** Keeps standalone pages uncontrolled while allowing project previews to own tab context. */
+	const handleActiveKeyChange = useCallback(
+		(nextActiveKey: string) => {
+			if (controlledActiveKey === undefined) setInternalActiveKey(nextActiveKey)
+			onActiveKeyChange?.(nextActiveKey)
+		},
+		[controlledActiveKey, onActiveKeyChange],
+	)
 
 	// Reset to the first summary tab when summary content becomes ready after a pending/generating state.
 	useEffect(() => {
 		if (!prevSummaryReadyRef.current && summaryReady) {
-			setActiveKey(tabs[0]?.key ?? "notes")
+			handleActiveKeyChange(tabs[0]?.key ?? "notes")
 		}
 		prevSummaryReadyRef.current = summaryReady
-	}, [summaryReady, tabs])
+	}, [handleActiveKeyChange, summaryReady, tabs])
 
 	const resolvedActiveKey = tabs.some((tab) => tab.key === activeKey)
 		? activeKey
 		: (tabs[0]?.key ?? "notes")
+
+	// Notify controlled consumers when loading or file-map changes invalidate the requested tab.
+	useEffect(() => {
+		if (resolvedActiveKey !== controlledActiveKey && controlledActiveKey !== undefined) {
+			onActiveKeyChange?.(resolvedActiveKey)
+		}
+	}, [controlledActiveKey, onActiveKeyChange, resolvedActiveKey])
 
 	if (!summaryReady) {
 		const status = summarizing ? "generating" : summaryFailed ? "failed" : "pending"
@@ -109,7 +132,7 @@ export const RecordingDetailRightPanel = memo(function RecordingDetailRightPanel
 			<RecordingDetailTabStrip
 				tabs={tabs}
 				activeKey={resolvedActiveKey}
-				onChange={setActiveKey}
+				onChange={handleActiveKeyChange}
 			/>
 
 			{activeTab?.kind === "metrics" || activeTab?.file.type === "mindmap" ? (

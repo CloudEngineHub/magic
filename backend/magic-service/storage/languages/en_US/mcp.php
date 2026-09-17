@@ -25,6 +25,7 @@ return [
         'scope' => 'Scope',
         'authorization_url' => 'Authorization URL',
         'authorization_content_type' => 'Authorization Content Type',
+        'authorization_method' => 'Authorization Method',
         'issuer_url' => 'Issuer URL',
         'resource_metadata_url' => 'Resource Metadata URL',
         'authorization_server_url' => 'Authorization Server URL',

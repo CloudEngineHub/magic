@@ -74,7 +74,7 @@ export const MarkdownLink = observer((props: MarkdownLinkProps) => {
 	)
 	const normalizedStyle = normalizeInlineStyle(rawAttributes.style)
 	const microAppId = parseMicroAppLink(normalizedHref)
-	const attachments = resolvedProjectFilesStore.workspaceFilesList
+	const attachments = resolvedProjectFilesStore?.workspaceFilesList ?? []
 	const { target: fileTarget, explicitFileReference } = classifyMarkdownFileHref(normalizedHref)
 	const workspacePath = fileTarget?.scope === "workspace" ? fileTarget.relativePath : null
 	const referencedProjectId =
@@ -134,7 +134,7 @@ export const MarkdownLink = observer((props: MarkdownLinkProps) => {
 	if (resolvedFileInfo) {
 		// 复用解析结果的真实身份，不能根据展示名称在拖入时重新匹配文件。
 		const projectId =
-			resolvedFileInfo.project_id || resolvedProjectFilesStore.currentSelectedProject?.id
+			resolvedFileInfo.project_id || resolvedProjectFilesStore?.currentSelectedProject?.id
 		const mentionAttrs: TiptapMentionAttributes | undefined = resolvedFileInfo.file_id
 			? resolvedFileInfo.is_directory || resolvedFileInfo.type === "directory"
 				? {

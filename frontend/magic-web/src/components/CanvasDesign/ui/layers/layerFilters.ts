@@ -47,7 +47,10 @@ export function hasActiveLayersFilter(filter: LayersFilterState): boolean {
 	return !isDefaultLayersFilter(filter)
 }
 
-function matchesStructuredFilter(node: TreeNode<LayerTreeData>, filter: LayersFilterState) {
+export function matchesStructuredLayerFilter(
+	node: TreeNode<LayerTreeData>,
+	filter: LayersFilterState,
+) {
 	const data = node.data
 	if (!data) return false
 
@@ -58,6 +61,11 @@ function matchesStructuredFilter(node: TreeNode<LayerTreeData>, filter: LayersFi
 	if (filter.types.length > 0 && !filter.types.includes(data.type)) return false
 
 	return true
+}
+
+export function matchesLayerSearch(node: TreeNode<LayerTreeData>, keyword: string): boolean {
+	const normalizedKeyword = keyword.trim().toLowerCase()
+	return !normalizedKeyword || node.label.trim().toLowerCase().includes(normalizedKeyword)
 }
 
 /**
@@ -75,9 +83,8 @@ export function filterLayerTreeData(
 
 	const filterNodes = (items: TreeNode<LayerTreeData>[]): TreeNode<LayerTreeData>[] => {
 		return items.reduce<TreeNode<LayerTreeData>[]>((result, node) => {
-			const matchesKeyword =
-				!normalizedKeyword || node.label.trim().toLowerCase().includes(normalizedKeyword)
-			const matchesFilter = matchesStructuredFilter(node, filter)
+			const matchesKeyword = matchesLayerSearch(node, normalizedKeyword)
+			const matchesFilter = matchesStructuredLayerFilter(node, filter)
 			const children = node.children ? filterNodes(node.children) : []
 
 			if (matchesKeyword && matchesFilter) {

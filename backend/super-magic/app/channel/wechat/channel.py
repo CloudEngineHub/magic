@@ -10,17 +10,18 @@ from __future__ import annotations
 
 import asyncio
 import uuid
-from typing import List, Optional
+from typing import Optional
 
 import aiohttp
 
 from agentlang.logger import get_logger
 from app.channel.base.channel import BaseChannel
+from app.channel.base.third_party_message import dispatch_third_party_message
 from app.channel.config import IMChannelsConfig, WechatCredential
 from app.channel.wechat import api
 from app.channel.wechat.state import (
-    WechatUserContext,
     WechatRuntimeState,
+    WechatUserContext,
     get_latest_context,
     load_runtime_state,
     save_context_token,
@@ -28,10 +29,9 @@ from app.channel.wechat.state import (
 )
 from app.channel.wechat.stream import WechatStream
 from app.channel.wechat.typing import WechatTypingConfigManager, WechatTypingController
-from app.channel.base.third_party_message import dispatch_third_party_message
 from app.core.context.execution_source import EXECUTION_SOURCE_DYNAMIC_CONFIG_KEY, SuperMagicExecutionSource
-from app.core.keepalive_registry import KeepaliveRegistry
 from app.core.entity.message.client_message import ChatClientMessage, Metadata
+from app.core.keepalive_registry import KeepaliveRegistry
 from app.utils.time_utils import now_ms
 
 logger = get_logger(__name__)
@@ -82,23 +82,6 @@ class WechatChannel(BaseChannel):
         if credential is None:
             return None
         return f"Bot ID: {credential.ilink_bot_id}"
-
-    def build_agent_context_fragment(self, message: ChatClientMessage | None) -> str:
-        ctx = message.channel_context if message else None
-        raw_media: List[dict] = ctx.get("wechat_media", []) if ctx else []
-
-        if not raw_media:
-            return f'<im source="{self.source_name}" />'
-
-        lines = [f'<im source="{self.source_name}">', "  <media>"]
-        for item in raw_media:
-            quoted = ' from="quoted"' if item.get("from_quote") else ""
-            lines.append(
-                f'    <file type="{item.get("media_type")}" mime="{item.get("mime_type")}"'
-                f' path="{item.get("relative_path")}"{quoted} />'
-            )
-        lines.extend(["  </media>", "</im>"])
-        return "\n".join(lines)
 
     def render_status_lines(self, config: IMChannelsConfig) -> list[str]:
         from app.channel.wechat.login import LoginStatus, WechatLoginManager
@@ -316,8 +299,8 @@ class WechatChannel(BaseChannel):
 
     async def _handle_message(self, msg: dict) -> None:
         """提取文本与 context_token，下载媒体，转发给 AgentDispatcher。"""
-        from app.service.agent_dispatcher import AgentDispatcher
         from app.channel.wechat.media import download_message_media
+        from app.service.agent_dispatcher import AgentDispatcher
 
         dispatcher = AgentDispatcher.get_instance()
         if not dispatcher.agent_context:
@@ -403,7 +386,7 @@ class WechatChannel(BaseChannel):
                 channel_name="wechat",
             ),
             channel_context={
-                "wechat_media": [wechat_media.model_dump()] if wechat_media else []
+                "channel_media": [wechat_media.model_dump(mode="json")] if wechat_media else []
             },
             dynamic_config={
                 EXECUTION_SOURCE_DYNAMIC_CONFIG_KEY: SuperMagicExecutionSource.THIRD_PARTY_IM.value,

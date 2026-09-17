@@ -72,14 +72,17 @@ describe("Content sidecar", () => {
 				visualUnderstanding: { summary: "content two" },
 			}),
 		)
-		expect(provenance["image-1"].contentDetails?.c2.generateImageRequest).toEqual({
-			valueSource: "agent",
-			imageId: "two",
-			imageIdSource: "agent",
+		expect(provenance["image-1"].contentDetails?.c2).toEqual({
+			sidecarSource: "agent",
+			generateImageRequest: {
+				valueSource: "agent",
+				imageId: "two",
+				imageIdSource: "agent",
+			},
 		})
 	})
 
-	it("rehydrates and writes video generation runtime metadata", () => {
+	it("excludes agent-sourced video metadata from the user sidecar", () => {
 		const runtimeMetadata = {
 			generation_info: {
 				input_mode: "image_reference",
@@ -93,7 +96,7 @@ describe("Content sidecar", () => {
 		}
 		const elements: LayerElement[] = [videoElement([{ contentId: "c1" }])]
 
-		rehydrateHeavyFields(elements, emptyElementDetailsDoc(), {
+		const provenance = rehydrateHeavyFields(elements, emptyElementDetailsDoc(), {
 			version: ELEMENT_DETAILS_VERSION,
 			elements: {
 				"video-1": {
@@ -107,27 +110,17 @@ describe("Content sidecar", () => {
 		expect((elements[0] as VideoElement).contents[0].videoGenerationResultMeta).toEqual(
 			runtimeMetadata,
 		)
-		expect(buildUserElementDetailsDoc(elements, emptyElementDetailsDoc())).toEqual({
-			version: ELEMENT_DETAILS_VERSION,
-			elements: {
-				"video-1": {
-					source: ELEMENT_DETAIL_SOURCE_USER,
-					contentDetails: {
-						c1: { videoGenerationResultMeta: runtimeMetadata },
-					},
-				},
-			},
-		})
+		expect(buildUserElementDetailsDoc(elements, provenance)).toEqual(emptyElementDetailsDoc())
 	})
 
-	it("writes only Content-specific user details", () => {
+	it("writes canvas-created Content details to the user doc", () => {
 		const elements: LayerElement[] = [
 			imageElement([
 				{ contentId: "c1", generateImageRequest: { image_id: "one" } },
 				{ contentId: "c2", generateImageRequest: { image_id: "two" } },
 			]),
 		]
-		const doc = buildUserElementDetailsDoc(elements, emptyElementDetailsDoc())
+		const doc = buildUserElementDetailsDoc(elements, undefined)
 
 		expect(doc).toEqual({
 			version: ELEMENT_DETAILS_VERSION,
@@ -143,6 +136,50 @@ describe("Content sidecar", () => {
 		})
 	})
 
+	it("keeps only user Contents when the same element also has agent Contents", () => {
+		const elements: LayerElement[] = [
+			imageElement([
+				{ contentId: "c1", generateImageRequest: { image_id: "agent-one" } },
+				{ contentId: "c2", generateImageRequest: { image_id: "user-two" } },
+			]),
+		]
+		const doc = buildUserElementDetailsDoc(elements, {
+			"image-1": {
+				contentDetails: {
+					c1: { sidecarSource: "agent" },
+					c2: { sidecarSource: "user" },
+				},
+			},
+		})
+
+		expect(doc.elements["image-1"]).toEqual({
+			source: ELEMENT_DETAIL_SOURCE_USER,
+			contentDetails: {
+				c2: { generateImageRequest: { image_id: "user-two" } },
+			},
+		})
+	})
+
+	it("does not copy agent-owned Contents into the user doc when provenance is missing", () => {
+		const elements: LayerElement[] = [
+			imageElement([{ contentId: "c1", generateImageRequest: { prompt: "from-agent" } }]),
+		]
+		const agentDoc = {
+			version: ELEMENT_DETAILS_VERSION,
+			elements: {
+				"image-1": {
+					contentDetails: {
+						c1: { generateImageRequest: { prompt: "from-agent" } },
+					},
+				},
+			},
+		}
+
+		expect(buildUserElementDetailsDoc(elements, undefined, agentDoc)).toEqual(
+			emptyElementDetailsDoc(),
+		)
+	})
+
 	it("does not rehydrate or write visual understanding for non-media Contents", () => {
 		const elements: LayerElement[] = [textElement()]
 		const baseline = {
@@ -156,10 +193,10 @@ describe("Content sidecar", () => {
 			},
 		}
 
-		rehydrateHeavyFields(elements, emptyElementDetailsDoc(), baseline)
+		const provenance = rehydrateHeavyFields(elements, emptyElementDetailsDoc(), baseline)
 
 		expect(elements[0].contents[0]).not.toHaveProperty("visualUnderstanding")
-		expect(buildUserElementDetailsDoc(elements, baseline)).toEqual(emptyElementDetailsDoc())
+		expect(buildUserElementDetailsDoc(elements, provenance)).toEqual(emptyElementDetailsDoc())
 	})
 
 	it("migrates an old element-level sidecar entry into the first Content", () => {
@@ -182,12 +219,93 @@ describe("Content sidecar", () => {
 			image_id: "user-task",
 			prompt: "retry",
 		})
-		expect(provenance["image-1"].contentDetails?.c1.generateImageRequest?.imageIdSource).toBe(
-			"user",
-		)
+		expect(provenance["image-1"].contentDetails?.c1).toEqual({
+			sidecarSource: "user",
+			generateImageRequest: {
+				valueSource: "user",
+				imageId: "user-task",
+				imageIdSource: "user",
+			},
+		})
 	})
 
-	it("marks inline Content requests as inline", () => {
+	it("deep-merges overlapping Content details and keeps the merge agent-owned", () => {
+		const elements: LayerElement[] = [imageElement([{ contentId: "c1" }, { contentId: "c2" }])]
+		const agentDoc = {
+			version: ELEMENT_DETAILS_VERSION,
+			elements: {
+				"image-1": {
+					contentDetails: {
+						c1: {
+							generateImageRequest: { image_id: "agent-truth", prompt: "agent" },
+							visualUnderstanding: { summary: "agent-vu", tags: ["agent"] },
+						},
+					},
+				},
+			},
+		}
+		const provenance = rehydrateHeavyFields(
+			elements,
+			{
+				version: ELEMENT_DETAILS_VERSION,
+				elements: {
+					"image-1": {
+						source: ELEMENT_DETAIL_SOURCE_USER,
+						contentDetails: {
+							c1: {
+								generateImageRequest: {
+									image_id: "dirty-user",
+									prompt: "dirty",
+									size: "1024x1024",
+								},
+								visualUnderstanding: {
+									summary: "user-vu",
+									caption: "user-only-nested",
+								},
+							},
+							c2: { generateImageRequest: { image_id: "user-only", prompt: "keep" } },
+						},
+					},
+				},
+			},
+			agentDoc,
+		)
+
+		expect((elements[0] as ImageElement).contents[0]).toEqual(
+			expect.objectContaining({
+				contentId: "c1",
+				generateImageRequest: {
+					image_id: "agent-truth",
+					prompt: "agent",
+					size: "1024x1024",
+				},
+				visualUnderstanding: {
+					summary: "agent-vu",
+					tags: ["agent"],
+					caption: "user-only-nested",
+				},
+			}),
+		)
+		expect((elements[0] as ImageElement).contents[1].generateImageRequest).toEqual({
+			image_id: "user-only",
+			prompt: "keep",
+		})
+		expect(provenance["image-1"].contentDetails?.c1.sidecarSource).toBe("agent")
+		expect(provenance["image-1"].contentDetails?.c2.sidecarSource).toBe("user")
+		expect(buildUserElementDetailsDoc(elements, provenance, agentDoc)).toEqual({
+			version: ELEMENT_DETAILS_VERSION,
+			elements: {
+				"image-1": {
+					source: ELEMENT_DETAIL_SOURCE_USER,
+					contentDetails: {
+						c2: { generateImageRequest: { image_id: "user-only", prompt: "keep" } },
+					},
+				},
+			},
+		})
+	})
+
+	it("marks inline Content requests as inline without a sidecar source", () => {
 		const elements: LayerElement[] = [
 			imageElement([
 				{
@@ -202,10 +320,12 @@ describe("Content sidecar", () => {
 			emptyElementDetailsDoc(),
 		)
 
-		expect(provenance["image-1"].contentDetails?.c1.generateImageRequest).toEqual({
-			valueSource: "inline",
-			imageId: "inline-task",
-			imageIdSource: "inline",
+		expect(provenance["image-1"].contentDetails?.c1).toEqual({
+			generateImageRequest: {
+				valueSource: "inline",
+				imageId: "inline-task",
+				imageIdSource: "inline",
+			},
 		})
 	})
 })

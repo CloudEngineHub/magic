@@ -10,9 +10,13 @@ const DATE_FORMAT = "YYYY-MM-DD"
 
 export const EMPTY_TEXT = "-"
 
+/** 文件产出分析允许查询到的最新自然日，即当前日期的前一天。 */
+export const getFileProductionLatestDate = (now = dayjs()) => now.subtract(1, "day").endOf("day")
+
 const AGENT_TAB_TYPES = new Set<DashboardTabType>(Object.values(AGENT_TAB_TYPE))
 const MEMBER_TAB_TYPES = new Set<DashboardTabType>(Object.values(MEMBER_TAB_TYPE))
 const ORGANIZATION_TAB_TYPES = new Set<DashboardTabType>(Object.values(ORGANIZATION_TAB_TYPE))
+const FILE_TAB_TYPES = new Set<DashboardTabType>(["file_user", "file_department", "file_agent"])
 
 export const formatNumber = (value: number) =>
 	new Intl.NumberFormat("zh-CN", { maximumFractionDigits: 0 }).format(Math.round(value || 0))
@@ -25,21 +29,30 @@ export const formatPercent = (value: number) =>
 export const safeDivide = (numerator: number, denominator: number) =>
 	denominator > 0 ? numerator / denominator : 0
 
-export const createDefaultTimeRange = (label: string): TimeRangeValue => ({
-	startDate: dayjs().subtract(6, "day").startOf("day").format(DATE_TIME_FORMAT),
-	endDate: dayjs().endOf("day").format(DATE_TIME_FORMAT),
+export const createDefaultTimeRange = (label: string, endYesterday = false): TimeRangeValue => ({
+	startDate: dayjs()
+		.subtract(endYesterday ? 7 : 6, "day")
+		.startOf("day")
+		.format(DATE_TIME_FORMAT),
+	endDate: (endYesterday ? dayjs().subtract(1, "day") : dayjs())
+		.endOf("day")
+		.format(DATE_TIME_FORMAT),
 	label,
 	tab: "relative" as TimeRangeValue["tab"],
 	mode: "relative" as TimeRangeValue["mode"],
 	presetKey: "last_7_days" as TimeRangeValue["presetKey"],
 })
 
-export const getDateQuery = (timeRange: TimeRangeValue | null) => {
+export const getDateQuery = (timeRange: TimeRangeValue | null, endYesterday = false) => {
 	if (!timeRange?.startDate || !timeRange?.endDate) return {}
 
 	return {
 		start_date: dayjs(timeRange.startDate).format(DATE_FORMAT),
-		end_date: dayjs(timeRange.endDate).format(DATE_FORMAT),
+		end_date: (endYesterday &&
+		dayjs(timeRange.endDate).isAfter(dayjs().subtract(1, "day"), "day")
+			? dayjs().subtract(1, "day")
+			: dayjs(timeRange.endDate)
+		).format(DATE_FORMAT),
 	}
 }
 
@@ -123,4 +136,8 @@ export function isMemberTab(tab: DashboardTabType): tab is DataDashboard.MemberT
 
 export function isOrganizationTab(tab: DashboardTabType): tab is DataDashboard.OrganizationTabType {
 	return ORGANIZATION_TAB_TYPES.has(tab)
+}
+
+export function isFileTab(tab: DashboardTabType): tab is DataDashboard.FileTabType {
+	return FILE_TAB_TYPES.has(tab)
 }

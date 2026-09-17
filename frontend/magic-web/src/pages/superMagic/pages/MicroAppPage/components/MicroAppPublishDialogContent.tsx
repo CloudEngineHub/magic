@@ -44,6 +44,9 @@ interface MicroAppPublishDialogContentProps {
 	accessUrl: string
 	hasPublished: boolean
 	hasUnsavedPublishedChanges: boolean
+	permittedShareTypes?: ShareType[]
+	isSelectedShareTypePermitted: boolean
+	shareTypePermissionLoading: boolean
 	loading: boolean
 	saving: boolean
 	unpublishing: boolean
@@ -93,6 +96,9 @@ export default function MicroAppPublishDialogContent({
 	accessUrl,
 	hasPublished,
 	hasUnsavedPublishedChanges,
+	permittedShareTypes,
+	isSelectedShareTypePermitted,
+	shareTypePermissionLoading,
 	loading,
 	saving,
 	unpublishing,
@@ -350,7 +356,18 @@ export default function MicroAppPublishDialogContent({
 												? PERSONAL_MICRO_APP_PUBLISH_TYPES
 												: MICRO_APP_PUBLISH_TYPES
 										}
+										permittedTypes={permittedShareTypes}
+										preserveCurrentType={hasPublished}
 									/>
+									{permittedShareTypes?.length === 0 ? (
+										<p className="text-xs text-destructive" role="alert">
+											{t("share.noAvailableShareMethods")}
+										</p>
+									) : !isSelectedShareTypePermitted ? (
+										<p className="text-xs text-destructive" role="alert">
+											{t("share.currentShareMethodUnavailable")}
+										</p>
+									) : null}
 									{!isPersonalOrganization &&
 									formState.shareType === ShareType.Organization ? (
 										<ShareRangeField
@@ -547,7 +564,18 @@ export default function MicroAppPublishDialogContent({
 													? PERSONAL_MICRO_APP_PUBLISH_TYPES
 													: MICRO_APP_PUBLISH_TYPES
 											}
+											permittedTypes={permittedShareTypes}
+											preserveCurrentType={hasPublished}
 										/>
+										{permittedShareTypes?.length === 0 ? (
+											<p className="text-xs text-destructive" role="alert">
+												{t("share.noAvailableShareMethods")}
+											</p>
+										) : !isSelectedShareTypePermitted ? (
+											<p className="text-xs text-destructive" role="alert">
+												{t("share.currentShareMethodUnavailable")}
+											</p>
+										) : null}
 
 										{!isPersonalOrganization &&
 										formState.shareType === ShareType.Organization ? (
@@ -779,6 +807,8 @@ export default function MicroAppPublishDialogContent({
 								!appId ||
 								loading ||
 								isBusy ||
+								shareTypePermissionLoading ||
+								!isSelectedShareTypePermitted ||
 								coverUploadError ||
 								Boolean(validationError) ||
 								// 如果已发布且没有未保存的变更，则禁用保存按钮

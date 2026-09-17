@@ -1,19 +1,17 @@
 import { act, cleanup, render, renderHook } from "@testing-library/react"
 import { useEffect, type PropsWithChildren } from "react"
-import { MemoryRouter, Route, Routes } from "react-router"
+import { MemoryRouter, Route, Routes, useNavigate } from "react-router"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
-import { observable, runInAction } from "mobx"
-import { observer } from "mobx-react-lite"
 import { appStore } from "@/stores/app"
 
 const mocks = vi.hoisted(() => ({
 	accountSwitch: vi.fn(),
+	setClusterCode: vi.fn(),
 	ensureClusterConfigReady: vi.fn(),
 	getPrivateConfigure: vi.fn(),
 	refreshAccountContextPage: vi.fn(),
 	historyReplace: vi.fn(),
 	routesMatch: vi.fn(),
-	clustersConfig: { "mock-target-cluster": {} } as Record<string, object>,
 	userStore: {
 		account: {
 			accounts: [
@@ -29,21 +27,13 @@ const mocks = vi.hoisted(() => ({
 	configStore: {
 		cluster: {
 			clusterCode: "mock-current-cluster",
-			clusterConfig: {
-				"mock-target-cluster": {},
-			},
+			clusterConfig: { "mock-target-cluster": {} } as Record<string, object>,
 		},
 	},
 }))
 
 vi.mock("@/models/config", () => ({
 	configStore: mocks.configStore,
-}))
-
-vi.mock("@/models/config/hooks", () => ({
-	useClusterConfig: () => ({
-		clustersConfig: mocks.clustersConfig,
-	}),
 }))
 
 vi.mock("@/models/user", () => ({
@@ -59,7 +49,7 @@ vi.mock("@/stores/authentication", () => ({
 vi.mock("@/services", () => ({
 	service: {
 		get: () => ({
-			setClusterCode: vi.fn(),
+			setClusterCode: mocks.setClusterCode,
 		}),
 	},
 }))
@@ -128,10 +118,7 @@ import { ClusterLayoutBase } from "../../ClusterLayoutBase"
 
 describe("useClusterSwitch", () => {
 	const account = { ...mocks.userStore.account.accounts[0] }
-	const advance = () =>
-		act(async () => {
-			await vi.advanceTimersByTimeAsync(60)
-		})
+	const wrapper = ({ children }: PropsWithChildren) => <MemoryRouter>{children}</MemoryRouter>
 	function deferred() {
 		let resolve!: () => void
 		let reject!: (error: Error) => void
@@ -141,302 +128,223 @@ describe("useClusterSwitch", () => {
 		})
 		return { promise, resolve, reject }
 	}
+	const flush = () =>
+		act(async () => {
+			await Promise.resolve()
+		})
 	beforeEach(() => {
-		vi.resetAllMocks()
-		vi.useFakeTimers()
-		appStore.setIsInitialing(false)
+		vi.clearAllMocks()
+		appStore.setAppInitPromise(Promise.resolve({ result: "SUCCESS" }))
 		mocks.configStore.cluster.clusterCode = "mock-current-cluster"
-		mocks.clustersConfig = { "mock-target-cluster": {} }
+		mocks.configStore.cluster.clusterConfig = { "mock-target-cluster": {} }
 		mocks.userStore.account.accounts = [{ ...account }]
 		mocks.accountSwitch.mockResolvedValue(undefined)
 		mocks.getPrivateConfigure.mockResolvedValue({})
 		mocks.ensureClusterConfigReady.mockResolvedValue(undefined)
 	})
-
 	afterEach(() => {
 		cleanup()
-		window.history.replaceState(null, "", "/")
-		appStore.setIsInitialing(false)
+		appStore.setAppInitPromise(null)
 		vi.restoreAllMocks()
-		vi.useRealTimers()
 	})
 
-	it("自动切换到匹配账号成功后刷新页面", async () => {
-		let resolveSwitch: (() => void) | undefined
-		mocks.accountSwitch.mockReturnValueOnce(
-			new Promise<void>((resolve) => {
-				resolveSwitch = resolve
-			}),
-		)
-
-		const { result } = renderHook(() =>
-			useClusterSwitch({ targetClusterCode: "mock-target-cluster" }),
-		)
-
-		await act(async () => {
-			await vi.advanceTimersByTimeAsync(60)
-		})
-		await act(async () => {
-			await Promise.resolve()
-		})
-
-		expect(mocks.accountSwitch).toHaveBeenCalledWith(
-			"mock-magic-id",
-			"mock-user-id",
-			"mock-org-code",
-		)
-		expect(mocks.refreshAccountContextPage).not.toHaveBeenCalled()
-		expect(result.current.isSameCluster).toBe(false)
-		expect(result.current.loading).toBe(true)
-
-		await act(async () => {
-			resolveSwitch?.()
-		})
-		await act(async () => {
-			await Promise.resolve()
-		})
-
-		expect(mocks.refreshAccountContextPage).toHaveBeenCalledTimes(1)
-	})
-
-	it("waits for bootstrap before deciding whether the restored account exists", async () => {
-		appStore.setIsInitialing(true)
-		mocks.userStore.account.accounts = []
-		const { result, rerender } = renderHook(() =>
-			useClusterSwitch({ targetClusterCode: "mock-target-cluster" }),
-		)
-		await advance()
-		expect(result.current).toMatchObject({ isInitialing: true, loading: false })
-		expect(mocks.getPrivateConfigure).not.toHaveBeenCalled()
-		act(() => {
-			mocks.userStore.account.accounts.push(account)
-			appStore.setIsInitialing(false)
-			rerender()
-		})
-		await advance()
-		expect(result.current.isSameCluster).toBe(true)
-		expect(mocks.accountSwitch).toHaveBeenCalledTimes(1)
-	})
-
-	// Exercise the real layout and Outlet so state transitions cannot hide a remount.
 	function renderLayout(path = "/mock-target-cluster/page") {
 		const mounted = vi.fn()
 		const unmounted = vi.fn()
+		const open = vi.fn()
+		let navigate!: ReturnType<typeof useNavigate>
 		function Child() {
 			useEffect(() => {
 				mounted()
-				return () => unmounted()
+				return unmounted
 			}, [])
 			return <div data-testid="child-view" />
 		}
-		window.history.replaceState(null, "", path)
+		function Layout() {
+			navigate = useNavigate()
+			return <ClusterLayoutBase loginAdapter={{ open }} />
+		}
 		const view = render(
 			<MemoryRouter initialEntries={[path]}>
 				<Routes>
-					<Route
-						path="/:clusterCode"
-						element={<ClusterLayoutBase loginAdapter={{ open: vi.fn() }} />}
-					>
+					<Route path="/:clusterCode" element={<Layout />}>
 						<Route path="*" element={<Child />} />
 					</Route>
 				</Routes>
 			</MemoryRouter>,
 		)
-		return { ...view, mounted, unmounted }
+		return { ...view, mounted, unmounted, open, navigate: (path: string) => navigate(path) }
 	}
-
-	it.each(["page", "preview"])(
-		"keeps the %s child mounted through bootstrap and pending config synchronization",
-		async (page) => {
-			appStore.setIsInitialing(true)
-			mocks.userStore.account.accounts = []
-			mocks.clustersConfig = {}
-			const configTask = deferred()
-			mocks.ensureClusterConfigReady.mockReturnValue(configTask.promise)
-			const view = renderLayout(`/mock-target-cluster/${page}`)
-			expect(view.queryByTestId("child-view")).not.toBeNull()
-			await advance()
-			expect(mocks.getPrivateConfigure).not.toHaveBeenCalled()
-			expect(mocks.ensureClusterConfigReady).not.toHaveBeenCalled()
-			expect(mocks.accountSwitch).not.toHaveBeenCalled()
-
-			act(() => {
-				// For the ordinary route, bootstrap restores the requested cluster.
-				// The allowlisted route must stay mounted even with a different cluster.
-				if (page === "page")
-					mocks.configStore.cluster.clusterCode = "mock-target-cluster"
-				appStore.setIsInitialing(false)
-			})
-			await advance()
-			expect(mocks.ensureClusterConfigReady).toHaveBeenCalled()
-			expect(view.queryByTestId("child-view")).not.toBeNull()
-			expect(view.queryByTestId("cluster-layout-loading")).toBeNull()
-			expect(view.queryByTestId("login-failed")).toBeNull()
-			expect(view.mounted).toHaveBeenCalledTimes(1)
-			expect(view.unmounted).not.toHaveBeenCalled()
-
-			await act(async () => configTask.resolve())
-			expect(view.mounted).toHaveBeenCalledTimes(1)
-			expect(view.unmounted).not.toHaveBeenCalled()
-		},
-	)
-
-	it("blocks the child only when a real switch remains after bootstrap", async () => {
-		appStore.setIsInitialing(true)
-		const switchTask = deferred()
-		mocks.accountSwitch.mockReturnValue(switchTask.promise)
+	it("waits for the complete bootstrap promise before reading hydrated accounts", async () => {
+		const init = deferred()
+		appStore.setAppInitPromise(init.promise)
+		mocks.userStore.account.accounts = []
 		const view = renderLayout()
-		expect(view.queryByTestId("child-view")).not.toBeNull()
-		act(() => appStore.setIsInitialing(false))
-		await advance()
+		await flush()
 		expect(view.queryByTestId("child-view")).toBeNull()
-		expect(view.queryByTestId("cluster-layout-loading")).not.toBeNull()
+		expect(mocks.accountSwitch).not.toHaveBeenCalled()
+		expect(mocks.getPrivateConfigure).not.toHaveBeenCalled()
+		await act(async () => {
+			mocks.userStore.account.accounts.push(account)
+			init.resolve()
+		})
 		expect(mocks.accountSwitch).toHaveBeenCalledTimes(1)
-		await act(async () => switchTask.resolve())
-		expect(view.queryByTestId("child-view")).not.toBeNull()
 		expect(mocks.refreshAccountContextPage).toHaveBeenCalledTimes(1)
 	})
-
-	it("shows the login gate when bootstrap finishes without a matching account", async () => {
-		appStore.setIsInitialing(true)
-		mocks.userStore.account.accounts = []
-		const { result, rerender } = renderHook(() =>
-			useClusterSwitch({ targetClusterCode: "mock-target-cluster" }),
-		)
-		act(() => {
-			appStore.setIsInitialing(false)
-			rerender()
-		})
-		await advance()
-		expect(result.current).toMatchObject({ loading: false, isSameCluster: false })
-	})
-
-	it("reacts to an in-place MobX account insertion after the first rejection", async () => {
-		mocks.userStore.account.accounts = observable.array([])
-		let result!: ReturnType<typeof useClusterSwitch>
-		const Probe = observer(() => {
-			result = useClusterSwitch({ targetClusterCode: "mock-target-cluster" })
-			return null
-		})
-		render(<Probe />)
-		await advance()
-		expect(result.isSameCluster).toBe(false)
-		act(() => {
-			runInAction(() => mocks.userStore.account.accounts.push(account))
-		})
-		await advance()
-		expect(result.isSameCluster).toBe(true)
-		expect(mocks.accountSwitch).toHaveBeenCalledTimes(1)
-	})
-
-	it("recovers when the active cluster becomes the target after a rejection", async () => {
-		mocks.userStore.account.accounts = []
-		const { result, rerender } = renderHook(() =>
-			useClusterSwitch({ targetClusterCode: "mock-target-cluster" }),
-		)
-		await advance()
-		expect(result.current.isSameCluster).toBe(false)
-		act(() => {
+	it("admits the account restored by DingTalk without switching it again", async () => {
+		const init = deferred()
+		appStore.setAppInitPromise(init.promise)
+		const view = renderLayout()
+		await act(async () => {
 			mocks.configStore.cluster.clusterCode = "mock-target-cluster"
-			rerender()
+			init.resolve()
 		})
-		await advance()
-		expect(result.current).toMatchObject({ loading: false, isSameCluster: true })
+		expect(view.mounted).toHaveBeenCalledTimes(1)
+		expect(mocks.accountSwitch).not.toHaveBeenCalled()
+	})
+	it("does not admit when the bootstrap promise rejects", async () => {
+		vi.spyOn(console, "error").mockImplementation(() => undefined)
+		appStore.setAppInitPromise(Promise.reject(new Error("bootstrap failed")))
+		mocks.configStore.cluster.clusterCode = "mock-target-cluster"
+		const view = renderLayout()
+		await flush()
+		expect(view.queryByTestId("child-view")).toBeNull()
+		expect(mocks.accountSwitch).not.toHaveBeenCalled()
+	})
+	it("uses the current account after a later login instead of a cached bootstrap failure", async () => {
+		appStore.setAppInitPromise(
+			Promise.resolve({ result: "INIT_FAILED_REDIRECTED", error: new Error("old failure") }),
+		)
+		mocks.configStore.cluster.clusterCode = "mock-target-cluster"
+		const view = renderLayout()
+		await flush()
+		expect(view.queryByTestId("child-view")).not.toBeNull()
 		expect(mocks.accountSwitch).not.toHaveBeenCalled()
 	})
 
-	it("keeps waiting for one switch when the switch updates the active cluster", async () => {
-		const switchTask = deferred()
-		mocks.accountSwitch.mockReturnValueOnce(switchTask.promise)
-		const { result, rerender } = renderHook(() =>
-			useClusterSwitch({ targetClusterCode: "mock-target-cluster" }),
+	it("does not switch back when adding kk changes global cluster and accounts", async () => {
+		mocks.configStore.cluster.clusterCode = "mock-target-cluster"
+		const { result, rerender } = renderHook(
+			() => useClusterSwitch({ targetClusterCode: "mock-target-cluster" }),
+			{ wrapper },
 		)
-		await advance()
+		await flush()
 		act(() => {
-			mocks.configStore.cluster.clusterCode = "mock-target-cluster"
+			mocks.configStore.cluster.clusterCode = "kk"
+			mocks.userStore.account.accounts.push({ ...account, deployCode: "kk" })
 			rerender()
 		})
-		await advance()
-		expect(result.current).toMatchObject({ loading: true, isSameCluster: false })
+		await flush()
+		expect(result.current.isSameCluster).toBe(true)
+		expect(mocks.accountSwitch).not.toHaveBeenCalled()
+		expect(mocks.getPrivateConfigure).not.toHaveBeenCalled()
+	})
+	it("keeps the Outlet mounted during same-cluster pathname and query navigation", async () => {
+		mocks.configStore.cluster.clusterCode = "mock-target-cluster"
+		const view = renderLayout()
+		await flush()
+		await act(async () => view.navigate("/mock-target-cluster/page?tab=other"))
+		await act(async () => view.navigate("/mock-target-cluster/another"))
+		expect(view.mounted).toHaveBeenCalledTimes(1)
+		expect(view.unmounted).not.toHaveBeenCalled()
+		expect(mocks.accountSwitch).not.toHaveBeenCalled()
+	})
+	it("still checks a protected route after navigating from a public route", async () => {
+		mocks.userStore.account.accounts = []
+		const view = renderLayout("/mock-target-cluster/preview")
+		await flush()
+		expect(view.queryByTestId("child-view")).not.toBeNull()
+		await act(async () => view.navigate("/mock-target-cluster/page"))
+		expect(view.queryByTestId("login-failed")).not.toBeNull()
+	})
+	it("continues one pending switch across unrelated query changes", async () => {
+		const task = deferred()
+		mocks.accountSwitch.mockReturnValueOnce(task.promise)
+		const view = renderLayout()
+		await flush()
+		await act(async () => view.navigate("/mock-target-cluster/page?tab=other"))
 		expect(mocks.accountSwitch).toHaveBeenCalledTimes(1)
-		await act(async () => {
-			switchTask.resolve()
-		})
-		expect(result.current).toMatchObject({ loading: false, isSameCluster: true })
+		expect(view.queryByTestId("child-view")).toBeNull()
+		await act(async () => task.resolve())
+		expect(view.queryByTestId("child-view")).not.toBeNull()
 		expect(mocks.refreshAccountContextPage).toHaveBeenCalledTimes(1)
 	})
-
-	it("does not allow entry when account switching fails", async () => {
+	it("does not admit or refresh when account switching fails", async () => {
 		vi.spyOn(console, "error").mockImplementation(() => undefined)
 		mocks.accountSwitch.mockRejectedValueOnce(new Error("switch failed"))
-		const { result } = renderHook(() =>
-			useClusterSwitch({ targetClusterCode: "mock-target-cluster" }),
-		)
-		await advance()
-		expect(result.current).toMatchObject({ loading: false, isSameCluster: false })
+		const view = renderLayout()
+		await flush()
+		expect(view.queryByTestId("login-failed")).not.toBeNull()
 		expect(mocks.refreshAccountContextPage).not.toHaveBeenCalled()
 	})
-
-	it("ignores completion from a switch for a previous target", async () => {
-		const switchTask = deferred()
-		mocks.accountSwitch.mockReturnValueOnce(switchTask.promise)
-		const { result, rerender } = renderHook(
-			({ target }) => useClusterSwitch({ targetClusterCode: target }),
-			{
-				initialProps: { target: "mock-target-cluster" },
-			},
-		)
-		await advance()
-		rerender({ target: "other-cluster" })
-		await advance()
+	it("ignores stale configuration results after changing target", async () => {
+		const task = deferred()
+		mocks.getPrivateConfigure.mockReturnValueOnce(task.promise)
+		const view = renderLayout()
+		await flush()
+		await act(async () => view.navigate("/missing/page"))
+		await act(async () => task.resolve())
+		expect(view.queryByTestId("login-failed")).not.toBeNull()
+		expect(mocks.accountSwitch).not.toHaveBeenCalled()
+	})
+	it("waits for the previous switch before reconciling another target", async () => {
+		const task = deferred()
+		mocks.accountSwitch.mockReturnValueOnce(task.promise)
+		const view = renderLayout()
+		await flush()
+		await act(async () => view.navigate("/missing/page"))
+		expect(mocks.getPrivateConfigure).toHaveBeenCalledTimes(1)
+		await act(async () => task.resolve())
+		expect(view.queryByTestId("login-failed")).not.toBeNull()
+		expect(mocks.refreshAccountContextPage).not.toHaveBeenCalled()
+	})
+	it("refreshes once when navigation returns to the target of a pending switch", async () => {
+		const task = deferred()
+		mocks.accountSwitch.mockReturnValueOnce(task.promise)
+		const view = renderLayout()
+		await flush()
+		await act(async () => view.navigate("/missing/page"))
+		await act(async () => view.navigate("/mock-target-cluster/page"))
 		await act(async () => {
-			switchTask.resolve()
+			mocks.configStore.cluster.clusterCode = "mock-target-cluster"
+			task.resolve()
 		})
-		expect(result.current).toMatchObject({ loading: false, isSameCluster: false })
+		expect(mocks.accountSwitch).toHaveBeenCalledTimes(1)
+		expect(mocks.refreshAccountContextPage).toHaveBeenCalledTimes(1)
+	})
+	it("does not refresh after unmounting a pending switch", async () => {
+		const task = deferred()
+		mocks.accountSwitch.mockReturnValueOnce(task.promise)
+		const view = renderLayout()
+		await flush()
+		view.unmount()
+		await act(async () => task.resolve())
 		expect(mocks.refreshAccountContextPage).not.toHaveBeenCalled()
 	})
-
-	it("does not refresh after unmounting during a switch", async () => {
-		const switchTask = deferred()
-		mocks.accountSwitch.mockReturnValueOnce(switchTask.promise)
-		const { unmount } = renderHook(() =>
-			useClusterSwitch({ targetClusterCode: "mock-target-cluster" }),
-		)
-		await advance()
-		unmount()
-		await act(async () => {
-			switchTask.resolve()
-		})
-		expect(mocks.refreshAccountContextPage).not.toHaveBeenCalled()
-	})
-
-	it("preserves admission for an already active cluster with no cached account", async () => {
+	it("does not overwrite a new active cluster when config discovery finishes", async () => {
 		mocks.configStore.cluster.clusterCode = "mock-target-cluster"
-		mocks.userStore.account.accounts = []
-		const { result } = renderHook(() =>
-			useClusterSwitch({ targetClusterCode: "mock-target-cluster" }),
-		)
-		await advance()
-		expect(result.current).toMatchObject({ loading: false, isSameCluster: true })
+		delete mocks.configStore.cluster.clusterConfig["mock-target-cluster"]
+		const task = deferred()
+		mocks.ensureClusterConfigReady.mockReturnValueOnce(task.promise)
+		const view = renderLayout()
+		await flush()
+		mocks.configStore.cluster.clusterCode = "kk"
+		await act(async () => task.resolve())
+		expect(mocks.setClusterCode).not.toHaveBeenCalled()
+		expect(view.mounted).toHaveBeenCalledTimes(1)
+	})
+	it("honors an explicit global query override over a private path", async () => {
+		mocks.configStore.cluster.clusterCode = ""
+		const view = renderLayout("/mock-target-cluster/page?thirdPartyAuthDeployCode=global")
+		await flush()
+		expect(view.queryByTestId("child-view")).not.toBeNull()
 		expect(mocks.accountSwitch).not.toHaveBeenCalled()
 	})
-
-	it("ignores a stale config request after the target changes", async () => {
-		const configTask = deferred()
-		mocks.getPrivateConfigure.mockReturnValueOnce(configTask.promise)
-		const { result, rerender } = renderHook(
-			({ target }) => useClusterSwitch({ targetClusterCode: target }),
-			{
-				initialProps: { target: "mock-target-cluster" },
-			},
-		)
-		await advance()
-		rerender({ target: "other-cluster" })
-		await advance()
-		await act(async () => {
-			configTask.resolve()
-		})
-		expect(result.current).toMatchObject({ loading: false, isSameCluster: false })
-		expect(mocks.accountSwitch).not.toHaveBeenCalled()
+	it("retains invalid-cluster redirect behavior", async () => {
+		vi.spyOn(console, "error").mockImplementation(() => undefined)
+		mocks.getPrivateConfigure.mockRejectedValueOnce(new Error("invalid cluster"))
+		renderLayout()
+		await flush()
+		expect(mocks.historyReplace).toHaveBeenCalled()
 	})
 })

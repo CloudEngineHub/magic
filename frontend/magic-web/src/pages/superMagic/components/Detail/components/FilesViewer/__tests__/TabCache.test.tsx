@@ -114,29 +114,17 @@ describe("TabCache", () => {
 	})
 
 	it("uses tab refreshKey as key when available", () => {
-		const tabWithRefreshKey = {
-			...mockTab,
-			refreshKey: "custom-refresh-key",
-		}
-
+		const tabWithRefreshKey = { ...mockTab, refreshKey: "custom-refresh-key" }
 		render(<TabCache tab={tabWithRefreshKey} isActive={true} renderProps={mockRenderProps} />)
-
-		const renderComponent = screen.getByTestId("render-component")
-		expect(renderComponent).toBeInTheDocument()
+		expect(screen.getByTestId("render-component")).toBeInTheDocument()
 	})
 
 	it("falls back to tab id when refreshKey is not available", () => {
-		const tabWithoutRefreshKey = {
-			...mockTab,
-			refreshKey: undefined,
-		}
-
+		const tabWithoutRefreshKey = { ...mockTab, refreshKey: undefined }
 		render(
 			<TabCache tab={tabWithoutRefreshKey} isActive={true} renderProps={mockRenderProps} />,
 		)
-
-		const renderComponent = screen.getByTestId("render-component")
-		expect(renderComponent).toBeInTheDocument()
+		expect(screen.getByTestId("render-component")).toBeInTheDocument()
 	})
 
 	it("renders website tabs through iframe content instead of the file Render component", () => {

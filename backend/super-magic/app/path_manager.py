@@ -685,6 +685,13 @@ class PathManager(BasePathManager):
         return cls.get_runtime_dir() / cls._runtime_sandbox_tasks_dir_name
 
     @classmethod
+    def get_im_uploads_dir(cls, channel: str) -> Path:
+        """统一入站附件目录，渠道值来自内部注册标识。"""
+        if channel not in {"wechat", "wecom", "dingtalk", "lark"}:
+            raise ValueError(f"Unknown IM channel: {channel}")
+        return cls.get_workspace_dir() / "uploads" / "im-channels" / channel
+
+    @classmethod
     def get_wechat_im_uploads_dir(cls) -> Path:
         """获取微信 IM 媒体存储根目录（.workspace/uploads/im-channels/wechat/，按需创建）"""
         cls._ensure_app_initialization()

@@ -82,6 +82,74 @@ describe("processHtmlContent image processing", () => {
 		expect(result.processedContent).toContain("https://oss.example.com/app.js")
 	})
 
+	it("replaces inline background URLs when the filename contains parentheses", async () => {
+		vi.mocked(getTemporaryDownloadUrl).mockResolvedValue([
+			{
+				file_id: "background-file",
+				url: "https://oss.example.com/background.webp",
+			},
+		] as never)
+
+		const attachments = [
+			{
+				file_id: "background-file",
+				file_name: "hero (2).jpg",
+				relative_file_path: "deck/images/hero (2).jpg",
+				updated_at: "2026-07-15T00:00:00.000Z",
+			},
+		]
+
+		const result = await processHtmlContent({
+			content: `<p style="background-image: url('./images/hero (2).jpg')">text</p>`,
+			attachments,
+			attachmentList: attachments,
+			html_relative_path: "deck/",
+			xMagicImageProcess: HTML_PREVIEW_IMAGE_PROCESS,
+		})
+
+		expect(getTemporaryDownloadUrl).toHaveBeenCalledWith({
+			file_ids: ["background-file"],
+			options: { xMagicImageProcess: HTML_PREVIEW_IMAGE_PROCESS },
+		})
+		expect(result.processedContent).toContain("https://oss.example.com/background.webp")
+		expect(result.processedContent).not.toContain("url('./images/hero (2).jpg')")
+	})
+
+	it("keeps GIF URLs original when WebP processing is enabled", async () => {
+		vi.mocked(getTemporaryDownloadUrl).mockResolvedValue([
+			{
+				file_id: "animation-file",
+				url: "https://oss.example.com/animation.gif",
+			},
+		] as never)
+
+		const attachments = [
+			{
+				file_id: "animation-file",
+				file_name: "animation.gif",
+				relative_file_path: "deck/animation.gif",
+				updated_at: "2026-07-15T00:00:00.000Z",
+			},
+		]
+
+		const result = await processHtmlContent({
+			content: '<img src="animation.gif">',
+			attachments,
+			attachmentList: attachments,
+			html_relative_path: "deck/",
+			xMagicImageProcess: HTML_PREVIEW_IMAGE_PROCESS,
+		})
+
+		expect(getTemporaryDownloadUrl).toHaveBeenCalledWith({
+			file_ids: ["animation-file"],
+		})
+		expect(getTemporaryDownloadUrl).not.toHaveBeenCalledWith({
+			file_ids: ["animation-file"],
+			options: { xMagicImageProcess: HTML_PREVIEW_IMAGE_PROCESS },
+		})
+		expect(result.processedContent).toContain("https://oss.example.com/animation.gif")
+	})
+
 	it("preserves the slide bridge position with an inert placeholder", async () => {
 		const attachments = [
 			{

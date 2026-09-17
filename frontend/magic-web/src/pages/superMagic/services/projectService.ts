@@ -787,10 +787,11 @@ class ProjectService {
 			workspaceId,
 		})
 
-		// Optimistic update: remove project from list immediately
+		// Optimistic update: remove the shortcut project from the list cache without
+		// clearing the active selection — the project itself is not deleted.
 		this.saveSnapshot(operationId)
 		runInAction(() => {
-			projectStore.removeProject(projectId)
+			projectStore.removeProjectFromCollections(projectId)
 		})
 
 		// Await API so callers refreshing the list do not race ahead of server state
@@ -799,6 +800,18 @@ class ProjectService {
 				await SuperMagicApi.updateCollaborationProjectShortcutStatus(projectId, {
 					workspace_id: workspaceId,
 					is_bind_workspace: 0,
+				})
+
+				// Sync the active project's binding flags so the "取消关联" menu item
+				// hides immediately instead of waiting for a full list refresh.
+				runInAction(() => {
+					if (projectStore.selectedProject?.id === projectId) {
+						projectStore.selectedProject = {
+							...projectStore.selectedProject,
+							is_bind_workspace: false,
+							bind_workspace_id: "",
+						}
+					}
 				})
 
 				this.fetchProjects({

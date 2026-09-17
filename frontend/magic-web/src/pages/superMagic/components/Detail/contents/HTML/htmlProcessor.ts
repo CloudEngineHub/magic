@@ -342,6 +342,7 @@ export async function processHtmlContent(
 		filePathMap,
 		slidesMap,
 		imageFileIds,
+		imageProcessingFileIds,
 	} = collectHtmlResourcePlan(newHtmlDoc, allFiles, relativeFolderPath, processingMetadata)
 
 	let fileIdsToFetch = collectedFileIds
@@ -373,6 +374,7 @@ export async function processHtmlContent(
 				preloadedUrlMapping: input.preloadedUrlMapping,
 				imageProcessOptions: input.xMagicImageProcess,
 				imageFileIds,
+				imageProcessingFileIds,
 				fileUpdatedAtMap,
 				htmlContent: modifiedHtmlContent,
 				urlMap,
