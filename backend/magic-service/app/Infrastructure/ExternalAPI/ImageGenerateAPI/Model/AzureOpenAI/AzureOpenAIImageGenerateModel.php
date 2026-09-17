@@ -86,9 +86,8 @@ class AzureOpenAIImageGenerateModel extends AbstractImageGenerate
             $requestData['quality'] = $imageGenerateRequest->getQuality();
         }
 
-        $extra = $imageGenerateRequest->getExtra();
-        if (! empty($extra)) {
-            $requestData = array_merge($requestData, $extra);
+        if (! empty($imageGenerateRequest->getExtra())) {
+            $requestData['extra'] = $imageGenerateRequest->getExtra();
         }
 
         return $this->api->generateImage($this->model, $requestData);

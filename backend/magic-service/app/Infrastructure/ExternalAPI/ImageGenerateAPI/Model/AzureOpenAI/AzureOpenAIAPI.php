@@ -16,6 +16,7 @@ use Exception;
 use GuzzleHttp\Exception\RequestException;
 use GuzzleHttp\Psr7\Request;
 use GuzzleHttp\Psr7\Response;
+use Hyperf\Codec\Json;
 use Hyperf\Logger\LoggerFactory;
 use InvalidArgumentException;
 use Psr\Http\Message\ResponseInterface;
@@ -113,10 +114,8 @@ class AzureOpenAIAPI
                 $multipartData[] = ['name' => 'quality', 'contents' => $quality];
             }
 
-            foreach ($extra as $extraKey => $extraValue) {
-                if (is_scalar($extraValue)) {
-                    $multipartData[] = ['name' => (string) $extraKey, 'contents' => is_bool($extraValue) ? ($extraValue ? 'true' : 'false') : (string) $extraValue];
-                }
+            if (! empty($extra)) {
+                $multipartData[] = ['name' => 'extra', 'contents' => Json::encode($extra)];
             }
 
             $this->logger->info('Azure OpenAI API 请求', [
