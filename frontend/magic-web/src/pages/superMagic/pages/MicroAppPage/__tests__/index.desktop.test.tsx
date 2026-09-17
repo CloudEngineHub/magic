@@ -18,6 +18,10 @@ const previewMocks = vi.hoisted(() => ({
 	render: vi.fn(),
 }))
 
+const previewWorkspaceMocks = vi.hoisted(() => ({
+	render: vi.fn(),
+}))
+
 const resolverMocks = vi.hoisted(() => ({
 	result: {
 		projectId: "project-1",
@@ -32,6 +36,7 @@ const controllerMocks = vi.hoisted(() => ({
 	initLoading: false,
 	isReadOnly: false,
 	canUseDevelopment: true,
+	ensureUsageProject: vi.fn(),
 	checkAttachmentsNowDebounced: vi.fn(),
 	attachmentList: [
 		{ file_id: "entry-1", file_name: "index.html", relative_file_path: "index.html" },
@@ -260,6 +265,8 @@ vi.mock("../hooks/useMicroAppPageController", () => ({
 		captureCoverReady: true,
 		handleCaptureCover: vi.fn(),
 		handleEditMicroApp: vi.fn(),
+		ensureUsageProject: controllerMocks.ensureUsageProject,
+		sourceOrganizationCode: "org-1",
 	}),
 }))
 
@@ -271,6 +278,13 @@ vi.mock("../components/MicroAppHeader", () => ({
 	default: (props: Record<string, unknown>) => {
 		headerMocks.render(props)
 		return <header data-testid="desktop-micro-app-header" />
+	},
+}))
+
+vi.mock("../components/MicroAppPreviewWorkspace", () => ({
+	default: (props: Record<string, unknown>) => {
+		previewWorkspaceMocks.render(props)
+		return <div data-testid="micro-app-runtime-preview-workspace" />
 	},
 }))
 
@@ -412,6 +426,7 @@ describe("MicroAppPageDesktop", () => {
 		previewMocks.aiEdit.mockClear()
 		previewMocks.devConsoleToggle.mockClear()
 		previewMocks.render.mockClear()
+		previewWorkspaceMocks.render.mockClear()
 		headerMocks.render.mockClear()
 		overlayMocks.render.mockClear()
 		conversationPanelMocks.render.mockClear()
@@ -419,6 +434,10 @@ describe("MicroAppPageDesktop", () => {
 		topicHistoryMocks.render.mockClear()
 		previewPopupMocks.open.mockClear()
 		controllerMocks.checkAttachmentsNowDebounced.mockClear()
+		controllerMocks.ensureUsageProject.mockReset()
+		controllerMocks.ensureUsageProject.mockRejectedValue(
+			new Error("microAppShare.crossOrganizationConversationUnsupported"),
+		)
 	})
 
 	it("uses the loading illustration while resolving the project", () => {
@@ -448,6 +467,25 @@ describe("MicroAppPageDesktop", () => {
 		expect(overlayMocks.render).toHaveBeenCalledWith(
 			expect.objectContaining({
 				onPublishStatusChange: resolverMocks.result.setIsPublished,
+			}),
+		)
+	})
+
+	it("does not initialize a usage conversation when only switching to preview mode", async () => {
+		render(<MicroAppPageDesktop />)
+		await screen.findByTestId("desktop-entry-preview")
+		const headerProps = headerMocks.render.mock.lastCall?.[0] as {
+			onPageModeChange: (mode: "development" | "preview") => void
+		}
+
+		act(() => headerProps.onPageModeChange("preview"))
+
+		expect(controllerMocks.ensureUsageProject).not.toHaveBeenCalled()
+		expect(screen.getByTestId("micro-app-runtime-preview-workspace")).toBeInTheDocument()
+		expect(previewWorkspaceMocks.render).toHaveBeenCalledWith(
+			expect.objectContaining({
+				appId: "app-1",
+				sourceOrganizationCode: "org-1",
 			}),
 		)
 	})

@@ -25,6 +25,7 @@ import type { MentionPanelStore } from "@/components/business/MentionPanel/built
 import type { ProjectFilesStore } from "@/stores/projectFiles"
 import MicroAppTopicPicker from "./MicroAppTopicPicker"
 import { resolveMicroAppModelSelectionMode } from "../../utils/microAppModelMode"
+import { TopicMode } from "../../../Workspace/TopicMode"
 
 interface MicroAppMobileConversationProps {
 	open: boolean
@@ -37,6 +38,7 @@ interface MicroAppMobileConversationProps {
 	onOpenFile: (file?: unknown) => void
 	onOpenChange: (open: boolean) => void
 	onTerminalTopicStatusChange?: () => void
+	lockToMicroAppMode?: boolean
 }
 
 function MobileConversationEmpty() {
@@ -75,11 +77,13 @@ const MicroAppMobileConversation = observer(function MicroAppMobileConversation(
 	onOpenFile,
 	onOpenChange,
 	onTerminalTopicStatusChange,
+	lockToMicroAppMode = true,
 }: MicroAppMobileConversationProps) {
 	const { t } = useTranslation("super")
 	const [topicPickerOpen, setTopicPickerOpen] = useState(false)
 	const selectedTopic = topicStore.selectedTopic
-	const modelTopicMode = resolveMicroAppModelSelectionMode()
+	const modelTopicMode = lockToMicroAppMode ? resolveMicroAppModelSelectionMode() : undefined
+	const keepMicroAppMode = useMemoizedFn((mode: TopicMode) => void mode)
 
 	useRefreshTopicDetailOnTaskComplete({
 		selectedTopic,
@@ -221,12 +225,21 @@ const MicroAppMobileConversation = observer(function MicroAppMobileConversation(
 							selectedTopic={selectedTopic}
 							setSelectedTopic={topicStore.setSelectedTopic}
 							modelTopicMode={modelTopicMode}
+							topicModeLogic={
+								lockToMicroAppMode
+									? {
+											topicMode: TopicMode.MicroApp,
+											setTopicMode: keepMicroAppMode,
+											recoverTopicMode: keepMicroAppMode,
+										}
+									: undefined
+							}
 							attachments={attachments}
 							mentionPanelStore={mentionPanelStore}
 							onFileClick={handleFileClick}
 							isShowLoadingInit={!isSelectedTopicMessagesReady}
 							showTopicModeExamplePortal={false}
-							showModeToggle={false}
+							showModeToggle={!lockToMicroAppMode}
 							showModelSelector
 							onSendComplete={({ success, currentProject, currentTopic }) => {
 								if (!success) return

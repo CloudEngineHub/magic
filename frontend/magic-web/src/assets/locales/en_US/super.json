@@ -3885,6 +3885,7 @@
 	},
 	"microAppShare": {
 		"copyLink": "Copy link",
+		"crossOrganizationConversationUnsupported": "Micro app conversations across organizations are not supported yet",
 		"errorTitle": "Micro app unavailable",
 		"install": "Install to desktop",
 		"installConfirm": "Continue installation",

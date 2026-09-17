@@ -400,6 +400,7 @@ function MicroAppPageMobileInner({
 							onTerminalTopicStatusChange={checkAttachmentsNowDebounced}
 							onOpenFile={handlePreviewFile}
 							onOpenChange={setConversationOpen}
+							lockToMicroAppMode={pageMode === "development"}
 						/>
 					</Suspense>
 				) : null}

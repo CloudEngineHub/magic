@@ -1,15 +1,25 @@
-import { useState } from "react"
+import { useState, type ComponentProps } from "react"
 import { userStore } from "@/models/user"
 import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react"
 import { beforeEach, describe, expect, it, vi } from "vitest"
 import { SuperMagicApi } from "@/apis"
 import MagicModal from "@/components/base/MagicModal"
+import magicToast from "@/components/base/MagicToaster/utils"
 import { authEventBus } from "@/services/auth/AuthEventBus"
 import { loadProjectAttachments } from "@/pages/superMagic/services/projectAttachmentsLoader"
 import { FileAccessProvider, useFileAccess } from "@/pages/superMagic/fileAccess/FileAccessProvider"
 import { createShareFileAccess } from "@/pages/superMagic/fileAccess/fileAccessContext"
 import { useHostConversation } from "@/pages/superMagic/contexts/HostConversationContext"
-import PublishedMicroAppConversationProvider from "../PublishedMicroAppConversationProvider"
+import BasePublishedMicroAppConversationProvider from "../PublishedMicroAppConversationProvider"
+
+function PublishedMicroAppConversationProvider(
+	props: Omit<
+		ComponentProps<typeof BasePublishedMicroAppConversationProvider>,
+		"sourceOrganizationCode"
+	>,
+) {
+	return <BasePublishedMicroAppConversationProvider sourceOrganizationCode="org-1" {...props} />
+}
 
 interface TestLayoutProps extends Record<string, unknown> {
 	detailPanel: React.ReactNode
@@ -29,6 +39,9 @@ const layoutMocks = vi.hoisted(() => ({
 
 vi.mock("@/components/base/MagicModal", () => ({
 	default: { confirm: vi.fn(() => ({ destroy: vi.fn() })) },
+}))
+vi.mock("@/components/base/MagicToaster/utils", () => ({
+	default: { error: vi.fn() },
 }))
 vi.mock("@/services/auth/AuthEventBus", () => ({ authEventBus: { emit: vi.fn() } }))
 
@@ -99,11 +112,32 @@ vi.mock(
 	}),
 )
 
-vi.mock("@/models/user", () => ({
-	userStore: {
-		user: { authorization: "test-token" },
-	},
-}))
+vi.mock("@/models/user", async () => {
+	const { makeAutoObservable } = await import("mobx")
+
+	class MockUserState {
+		authorization = "test-token"
+		organizationCode = "org-1"
+
+		constructor() {
+			makeAutoObservable(this, {}, { autoBind: true })
+		}
+
+		setAuthorization(authorization: string) {
+			this.authorization = authorization
+		}
+
+		setOrganizationCode(organizationCode: string) {
+			this.organizationCode = organizationCode
+		}
+	}
+
+	return {
+		userStore: {
+			user: new MockUserState(),
+		},
+	}
+})
 
 vi.mock("@/apis", () => ({
 	SuperMagicApi: {
@@ -121,8 +155,10 @@ vi.mock("@/pages/superMagic/services/projectAttachmentsLoader", () => ({
 describe("PublishedMicroAppConversationProvider", () => {
 	beforeEach(() => {
 		vi.mocked(MagicModal.confirm).mockClear()
+		vi.mocked(magicToast.error).mockClear()
 		vi.mocked(authEventBus.emit).mockClear()
-		userStore.user.authorization = "test-token"
+		userStore.user.setAuthorization("test-token")
+		userStore.user.setOrganizationCode("org-1")
 		layoutMocks.tasksProps = null
 		layoutMocks.props = null
 		layoutMocks.messagePanelProps = null
@@ -132,6 +168,21 @@ describe("PublishedMicroAppConversationProvider", () => {
 		vi.mocked(SuperMagicApi.getProjectDetail).mockReset()
 		vi.mocked(SuperMagicApi.getTopicsByProjectId).mockReset()
 		vi.mocked(SuperMagicApi.getMicroAppRuntimeProject).mockResolvedValue({ exists: false })
+	})
+
+	it("does not crash while legacy share data has no source organization", () => {
+		expect(() =>
+			render(
+				<BasePublishedMicroAppConversationProvider
+					appId="app-1"
+					sourceOrganizationCode={undefined as never}
+				>
+					<div data-testid="preview-child" />
+				</BasePublishedMicroAppConversationProvider>,
+			),
+		).not.toThrow()
+		expect(screen.getByTestId("preview-child")).toBeInTheDocument()
+		expect(SuperMagicApi.getMicroAppRuntimeProject).not.toHaveBeenCalled()
 	})
 
 	it("renders children without AppStoreProvider when conversation is disabled", () => {
@@ -446,7 +497,7 @@ describe("PublishedMicroAppConversationProvider", () => {
 	})
 
 	it("keeps runtime controls hidden for unauthenticated visitors", async () => {
-		userStore.user.authorization = ""
+		userStore.user.setAuthorization("")
 		render(
 			<PublishedMicroAppConversationProvider appId="app-1">
 				<div />
@@ -458,6 +509,79 @@ describe("PublishedMicroAppConversationProvider", () => {
 		expect(SuperMagicApi.ensureMicroAppRuntimeProject).not.toHaveBeenCalled()
 	})
 
+	it("blocks cross-organization conversations before runtime creation", async () => {
+		userStore.user.setOrganizationCode("org-2")
+		const errors: string[] = []
+		function StartButton() {
+			const { ensureConversation } = useHostConversation()
+			return (
+				<button
+					onClick={() =>
+						void ensureConversation?.().catch((error: Error) =>
+							errors.push(error.message),
+						)
+					}
+				>
+					Start
+				</button>
+			)
+		}
+
+		render(
+			<BasePublishedMicroAppConversationProvider appId="app-1" sourceOrganizationCode="org-1">
+				<StartButton />
+			</BasePublishedMicroAppConversationProvider>,
+		)
+		await act(() => Promise.resolve())
+		fireEvent.click(screen.getByText("Start"))
+
+		await waitFor(() => {
+			expect(errors).toEqual(["microAppShare.crossOrganizationConversationUnsupported"])
+		})
+		expect(magicToast.error).toHaveBeenCalledWith(
+			"microAppShare.crossOrganizationConversationUnsupported",
+		)
+		expect(SuperMagicApi.getMicroAppRuntimeProject).not.toHaveBeenCalled()
+		expect(SuperMagicApi.ensureMicroAppRuntimeProject).not.toHaveBeenCalled()
+		expect(SuperMagicApi.getProjectDetail).not.toHaveBeenCalled()
+	})
+
+	it("starts runtime lookup only after the current organization is available", async () => {
+		userStore.user.setOrganizationCode("")
+		render(
+			<BasePublishedMicroAppConversationProvider appId="app-1" sourceOrganizationCode="org-1">
+				<div />
+			</BasePublishedMicroAppConversationProvider>,
+		)
+		await act(() => Promise.resolve())
+		expect(SuperMagicApi.getMicroAppRuntimeProject).not.toHaveBeenCalled()
+
+		act(() => userStore.user.setOrganizationCode("org-1"))
+		await waitFor(() => {
+			expect(SuperMagicApi.getMicroAppRuntimeProject).toHaveBeenCalledTimes(1)
+		})
+	})
+
+	it("discards a pending runtime lookup after switching organizations", async () => {
+		const query = createDeferred<{ exists: boolean; project: { id: string } }>()
+		vi.mocked(SuperMagicApi.getMicroAppRuntimeProject).mockReturnValue(query.promise as never)
+		render(
+			<BasePublishedMicroAppConversationProvider appId="app-1" sourceOrganizationCode="org-1">
+				<div />
+			</BasePublishedMicroAppConversationProvider>,
+		)
+		await waitFor(() => {
+			expect(SuperMagicApi.getMicroAppRuntimeProject).toHaveBeenCalledTimes(1)
+		})
+
+		act(() => userStore.user.setOrganizationCode("org-2"))
+		await act(async () => query.resolve({ exists: true, project: { id: "old-runtime" } }))
+
+		expect(SuperMagicApi.getProjectDetail).not.toHaveBeenCalled()
+		expect(SuperMagicApi.ensureMicroAppRuntimeProject).not.toHaveBeenCalled()
+		expect(layoutMocks.props?.isReadOnly).toBe(true)
+	})
+
 	it("hides an existing runtime sidebar immediately after logout", async () => {
 		vi.mocked(SuperMagicApi.getMicroAppRuntimeProject).mockResolvedValue({
 			exists: true,
@@ -467,7 +591,7 @@ describe("PublishedMicroAppConversationProvider", () => {
 			id: "runtime-project",
 		} as never)
 		vi.mocked(SuperMagicApi.getTopicsByProjectId).mockResolvedValue({ list: [] } as never)
-		const { rerender } = render(
+		render(
 			<PublishedMicroAppConversationProvider appId="app-1">
 				<div data-testid="preview-child" />
 			</PublishedMicroAppConversationProvider>,
@@ -476,12 +600,7 @@ describe("PublishedMicroAppConversationProvider", () => {
 			expect(screen.getByTestId("published-micro-app-conversation-panel")).toBeVisible()
 		})
 
-		userStore.user.authorization = ""
-		rerender(
-			<PublishedMicroAppConversationProvider appId="app-1">
-				<div data-testid="preview-child" />
-			</PublishedMicroAppConversationProvider>,
-		)
+		act(() => userStore.user.setAuthorization(""))
 
 		expect(screen.getByTestId("preview-child")).toBeInTheDocument()
 		expect(layoutMocks.props?.isReadOnly).toBe(true)
@@ -536,7 +655,7 @@ describe("PublishedMicroAppConversationProvider", () => {
 	it.each(["onCancel", "onOk"] as const)(
 		"does not create a runtime project when an anonymous action chooses %s",
 		async (choice) => {
-			userStore.user.authorization = ""
+			userStore.user.setAuthorization("")
 			const errors: string[] = []
 			function StartButton() {
 				const { ensureConversation } = useHostConversation()
@@ -658,7 +777,7 @@ describe("PublishedMicroAppConversationProvider", () => {
 				<div />
 			</PublishedMicroAppConversationProvider>,
 		)
-		userStore.user.authorization = ""
+		userStore.user.setAuthorization("")
 		rerender(
 			<PublishedMicroAppConversationProvider appId="app-1">
 				<div />

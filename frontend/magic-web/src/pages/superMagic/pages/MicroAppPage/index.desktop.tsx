@@ -79,6 +79,7 @@ function MicroAppPageInner({
 		store,
 		conversation,
 		ensureUsageProject,
+		sourceOrganizationCode,
 		canUseDevelopment,
 		selectedProject,
 		selectedTopic,
@@ -113,12 +114,14 @@ function MicroAppPageInner({
 		handleCaptureCover,
 		handleEditMicroApp,
 	} = controller
-	const panelSelectedProject = selectedProject
 	const developmentConversation = store.developmentConversation ?? conversation
 	const [pageMode, setPageMode] = useState<MicroAppPageMode>("development")
 	const pageModeRef = useRef<MicroAppPageMode>("development")
 	const usageConversationRequestedRef = useRef(false)
 	const previewModeRequestRef = useRef<Promise<boolean> | null>(null)
+	const panelConversation =
+		pageMode === "development" ? developmentConversation : store.usageConversation
+	const panelSelectedProject = pageMode === "development" ? selectedProject : store.runtimeProject
 
 	useEffect(() => {
 		if (selectedProject?.id && canUseDevelopment === false) {
@@ -139,8 +142,8 @@ function MicroAppPageInner({
 
 	const topicActions = useScopedMessageHeaderTopicActions({
 		selectedProject: panelSelectedProject,
-		selectedTopic,
-		topicStore: developmentConversation.topicStore,
+		selectedTopic: panelConversation.topicStore.selectedTopic,
+		topicStore: panelConversation.topicStore,
 	})
 	const { isTopicHistoryPanelOpen, closeTopicHistoryPanel, toggleTopicHistoryPanel } =
 		useTopicHistoryLayoutState({
@@ -152,6 +155,7 @@ function MicroAppPageInner({
 		if (nextMode === "preview") closeTopicHistoryPanel()
 		pageModeRef.current = nextMode
 		usageConversationRequestedRef.current = nextMode === "preview"
+		store.setConversationType(nextMode === "preview" ? "usage" : "development")
 		setPageMode(nextMode)
 	})
 	const requestPreviewMode = useMemoizedFn(async () => {
@@ -402,6 +406,7 @@ function MicroAppPageInner({
 								attachmentList={attachmentList}
 								projectId={projectId}
 								selectedProject={selectedProject}
+								sourceOrganizationCode={sourceOrganizationCode}
 								storageMarkerId={defaultEntryFile?.file_id}
 								onOpenFile={handlePreviewOpenFile}
 							/>
@@ -601,7 +606,7 @@ function MicroAppPageInner({
 								{canUseDevelopment !== false ? (
 									<MicroAppDesktopConversationPanels
 										selectedProject={panelSelectedProject}
-										topicStore={developmentConversation.topicStore}
+										topicStore={panelConversation.topicStore}
 										mentionPanelStore={store.mentionPanelStore}
 										projectFilesStore={store.projectFilesStore}
 										topicActions={topicActions}
@@ -622,6 +627,7 @@ function MicroAppPageInner({
 										showConversationLabel={t(
 											"microAppPage.header.showConversation",
 										)}
+										lockToMicroAppMode={pageMode === "development"}
 									/>
 								) : null}
 							</>

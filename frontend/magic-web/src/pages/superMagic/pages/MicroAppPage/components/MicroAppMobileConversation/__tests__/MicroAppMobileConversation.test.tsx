@@ -189,6 +189,37 @@ describe("MicroApp mobile conversation controls", () => {
 		).toHaveAttribute("data-state", "conversation-empty")
 	})
 
+	it("shows the employee selector in preview mode", () => {
+		const topicStore = {
+			selectedTopic: { id: "topic-1", topic_name: "需求讨论" },
+			topics: [],
+			setSelectedTopic: vi.fn(),
+			updateTopic: vi.fn(),
+		} as never
+
+		render(
+			<MicroAppMobileConversation
+				open
+				selectedProject={{ id: "runtime-project", project_name: "微应用" } as never}
+				topicStore={topicStore}
+				mentionPanelStore={{} as never}
+				projectFilesStore={{} as never}
+				attachments={[]}
+				onOpenFile={vi.fn()}
+				onOpenChange={vi.fn()}
+				lockToMicroAppMode={false}
+			/>,
+		)
+
+		expect(screen.getByTestId("mobile-project-input")).toHaveAttribute(
+			"data-show-mode-toggle",
+			"true",
+		)
+		expect(screen.getByTestId("mobile-project-input")).not.toHaveAttribute(
+			"data-model-topic-mode",
+		)
+	})
+
 	it("requests an attachment refresh when the topic reaches a terminal status", () => {
 		const checkAttachmentsNowDebounced = vi.fn()
 		const topicStore = {

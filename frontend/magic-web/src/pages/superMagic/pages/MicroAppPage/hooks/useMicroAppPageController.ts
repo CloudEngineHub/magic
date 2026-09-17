@@ -27,6 +27,7 @@ import { TaskStatus } from "@/pages/superMagic/pages/Workspace/types"
 import { RouteName } from "@/routes/constants"
 import useNavigate from "@/routes/hooks/useNavigate"
 import pubsub, { PubSubEvents } from "@/utils/pubsub"
+import { useOrganization } from "@/models/user/hooks/useOrganization"
 
 import type { DetailRef } from "@/pages/superMagic/components/Detail"
 import { getFileManagerRequest } from "@/pages/superMagic/components/Detail/components/FilesViewer/utils/fileManagerTabs"
@@ -43,6 +44,7 @@ import { useMicroAppVisit } from "./useMicroAppVisit"
  */
 export function useMicroAppPageController(appId: string, projectId: string) {
 	const { t } = useTranslation("super")
+	const { organizationCode: currentOrganizationCode } = useOrganization()
 	const store = useAppStore()
 	const { conversation } = store
 	const conversationType = store.conversationType
@@ -58,6 +60,7 @@ export function useMicroAppPageController(appId: string, projectId: string) {
 	const [publishedDefaultOpenFileId, setPublishedDefaultOpenFileId] = useState<string | null>(
 		null,
 	)
+	const [sourceOrganizationCode, setSourceOrganizationCode] = useState("")
 	const detailRef = useRef<DetailRef>(null)
 	const defaultEntryOpenedKeyRef = useRef<string | null>(null)
 	const recordVisit = useMicroAppVisit(appId)
@@ -68,6 +71,9 @@ export function useMicroAppPageController(appId: string, projectId: string) {
 	const canUseDevelopment = canEditProject(
 		store.developmentConversation.selectedProject?.user_role,
 	)
+	// Developers already sit in the source org; fall back while detail loads.
+	const resolvedSourceOrganizationCode =
+		sourceOrganizationCode || (canUseDevelopment ? currentOrganizationCode || "" : "")
 	const hasRunningTopic =
 		selectedTopic?.task_status === TaskStatus.RUNNING ||
 		store.developmentConversation.topicStore.topics.some(
@@ -98,10 +104,21 @@ export function useMicroAppPageController(appId: string, projectId: string) {
 		if (projectId && store.projectId !== projectId) {
 			store.initFromProjectId(projectId)
 		}
-		if (appId && typeof store.loadRuntimeProject === "function") {
-			void store.loadRuntimeProject(appId)
-		}
 	}, [appId, projectId, store])
+
+	useEffect(() => {
+		const canUseRuntime = Boolean(
+			appId &&
+			currentOrganizationCode &&
+			resolvedSourceOrganizationCode &&
+			currentOrganizationCode === resolvedSourceOrganizationCode,
+		)
+		if (canUseRuntime) {
+			void store.loadRuntimeProject(appId)
+			return
+		}
+		store.resetRuntimeProjectContext()
+	}, [appId, currentOrganizationCode, resolvedSourceOrganizationCode, store])
 
 	useEffect(() => {
 		if (selectedProject && !canUseDevelopment && conversationType === "development") {
@@ -125,9 +142,11 @@ export function useMicroAppPageController(appId: string, projectId: string) {
 		if (!appId) return
 
 		let active = true
+		setSourceOrganizationCode("")
 		void SuperMagicApi.getMicroAppProject(appId, { enableErrorMessagePrompt: false })
 			.then((detail) => {
 				if (!active) return
+				setSourceOrganizationCode(detail.organization_code?.trim() || "")
 				const published = detail.publish as
 					{ default_open_file_id?: string | null } | undefined
 				setPublishedDefaultOpenFileId(published?.default_open_file_id ?? null)
@@ -402,6 +421,18 @@ export function useMicroAppPageController(appId: string, projectId: string) {
 	const handleConversationTypeChange = useMemoizedFn((type: "development" | "usage") => {
 		store.setConversationType(type)
 	})
+	const ensureUsageProject = useMemoizedFn(() => {
+		if (
+			!currentOrganizationCode ||
+			!resolvedSourceOrganizationCode ||
+			currentOrganizationCode !== resolvedSourceOrganizationCode
+		) {
+			const message = t("microAppShare.crossOrganizationConversationUnsupported")
+			magicToast.error(message)
+			return Promise.reject(new Error(message))
+		}
+		return store.ensureUsageProject(appId)
+	})
 
 	return {
 		store,
@@ -410,7 +441,8 @@ export function useMicroAppPageController(appId: string, projectId: string) {
 		canUseDevelopment,
 		runtimeProject: store.runtimeProject,
 		runtimeProjectState: store.runtimeProjectState,
-		ensureUsageProject: () => store.ensureUsageProject(appId),
+		ensureUsageProject,
+		sourceOrganizationCode: resolvedSourceOrganizationCode,
 		handleConversationTypeChange,
 		selectedProject,
 		selectedTopic,

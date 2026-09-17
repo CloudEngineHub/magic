@@ -32,6 +32,7 @@ interface MicroAppDesktopConversationPanelsProps {
 	onSelectDetail: (detail: unknown) => void
 	onExpandCollapsedPanel: () => void
 	showConversationLabel: string
+	lockToMicroAppMode: boolean
 }
 
 export default function MicroAppDesktopConversationPanels({
@@ -53,6 +54,7 @@ export default function MicroAppDesktopConversationPanels({
 	onSelectDetail,
 	onExpandCollapsedPanel,
 	showConversationLabel,
+	lockToMicroAppMode,
 }: MicroAppDesktopConversationPanelsProps) {
 	const { t } = useTranslation("super")
 	return (
@@ -78,6 +80,7 @@ export default function MicroAppDesktopConversationPanels({
 									topicStore={topicStore}
 									mentionPanelStore={mentionPanelStore}
 									projectFilesStore={projectFilesStore}
+									lockToMicroAppMode={lockToMicroAppMode}
 									onTerminalTopicStatusChange={onTerminalTopicStatusChange}
 									detailPanelVisible
 									isConversationPanelCollapsed={isMessagePanelCollapsed}

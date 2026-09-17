@@ -123,6 +123,34 @@ describe("useIframeAgentActions", () => {
 		expect(mocks.publish).not.toHaveBeenCalled()
 	})
 
+	it("preserves runtime access errors without creating a topic or sending", async () => {
+		const ensureConversation = vi
+			.fn()
+			.mockRejectedValue(
+				new Error("Password-protected micro apps only support collaborators"),
+			)
+		const { result } = renderHook(() =>
+			useIframeAgentActions(
+				"project-from-preview",
+				undefined,
+				null,
+				{ microAppId: "app-1" },
+				ensureConversation,
+			),
+		)
+
+		await act(async () => {
+			await expect(result.current.createTopicAndSend({ message: "hello" })).rejects.toThrow(
+				"Password-protected micro apps only support collaborators",
+			)
+		})
+
+		expect(ensureConversation).toHaveBeenCalledTimes(1)
+		expect(mocks.createTopic).not.toHaveBeenCalled()
+		expect(mocks.dispatchMessage).not.toHaveBeenCalled()
+		expect(mocks.publish).not.toHaveBeenCalled()
+	})
+
 	it("creates topics in the host project instead of the preview origin", async () => {
 		const topicStore = {
 			topics: [],

@@ -116,6 +116,7 @@ export interface PublishedMicroAppProjectsResponse {
 export interface MicroAppProjectDetail {
 	app_id: string
 	project_id: string
+	organization_code: string
 	project?: ProjectListItem
 	publish?: PublishedMicroAppProjectItem
 }
@@ -143,6 +144,7 @@ export interface ResolvedPublishedMicroApp {
 	app_id: string
 	resource_id: string
 	share_code: string
+	organization_code: string
 	cover_url?: string
 	default_open_file_id?: string | null
 	extra?: MicroAppShareExtra

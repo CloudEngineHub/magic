@@ -103,6 +103,8 @@ vi.mock(
 				<div
 					data-testid="web-micro-app-editor"
 					data-model-topic-mode={editorContext.modelTopicMode}
+					data-topic-mode={editorContext.topicMode}
+					data-agent-code={editorContext.agentCode}
 					data-send-topic-mode={mergedParams?.topicMode}
 					data-send-agent-code={
 						(mergedParams?.extra as { agent_code?: string } | undefined)?.agent_code
@@ -174,6 +176,20 @@ vi.mock("@/pages/superMagic/hooks/useInterruptAndUndoMessage", () => ({
 
 vi.mock("@/pages/superMagic/hooks/useScopedMessageHeaderTopicActions", () => ({
 	useScopedMessageHeaderTopicActions: () => ({}),
+}))
+
+vi.mock("@/pages/superMagic/hooks/useTopicMode", () => ({
+	default: ({ selectedTopic }: { selectedTopic?: { topic_mode?: string } }) => ({
+		topicMode: selectedTopic?.topic_mode ?? "general",
+		setTopicMode: vi.fn(),
+		recoverTopicMode: vi.fn(),
+	}),
+}))
+
+vi.mock("@/services/superMagic/DefaultAgentSelectionService", () => ({
+	resolveAgentSelection: (mode: string, agentCode?: string) => ({
+		agentCode: mode.startsWith("SMA") ? mode : agentCode,
+	}),
 }))
 
 vi.mock("@/pages/superMagic/components/MessagePanel/hooks/useMessageQueue", () => ({
@@ -277,6 +293,85 @@ describe("AppConversationPanel", () => {
 			"data-send-topic-mode",
 			"micro-app",
 		)
+		expect(screen.queryByTestId("runtime-mode-toggle")).not.toBeInTheDocument()
+	})
+
+	it("keeps the selected employee available in published conversations", () => {
+		const topicStore = {
+			selectedTopic: {
+				id: "topic-1",
+				topic_name: "Topic",
+				topic_mode: "custom_agent",
+				agent_code: "SMA123",
+			},
+			setSelectedTopic: vi.fn(),
+			updateTopic: vi.fn(),
+		} as never
+
+		render(
+			<AppConversationPanel
+				selectedProject={{ id: "project-1", project_name: "Micro App" } as never}
+				topicStore={topicStore}
+				mentionPanelStore={{} as never}
+				projectFilesStore={{} as never}
+				lockToMicroAppMode={false}
+			/>,
+		)
+
+		expect(screen.getByTestId("web-micro-app-editor")).toHaveAttribute(
+			"data-topic-mode",
+			"custom_agent",
+		)
+		expect(screen.getByTestId("web-micro-app-editor")).toHaveAttribute(
+			"data-agent-code",
+			"SMA123",
+		)
+		expect(screen.getByTestId("web-micro-app-editor")).not.toHaveAttribute(
+			"data-send-topic-mode",
+		)
+		expect(screen.getByTestId("runtime-mode-toggle")).toBeInTheDocument()
+	})
+
+	it("only forces micro-app send parameters while development mode is active", () => {
+		const topicStore = {
+			selectedTopic: {
+				id: "topic-1",
+				topic_name: "Topic",
+				topic_mode: "custom_agent",
+				agent_code: "SMA123",
+			},
+			setSelectedTopic: vi.fn(),
+			updateTopic: vi.fn(),
+		} as never
+		const props = {
+			selectedProject: { id: "project-1", project_name: "Micro App" } as never,
+			topicStore,
+			mentionPanelStore: {} as never,
+			projectFilesStore: {} as never,
+		}
+
+		const { rerender } = render(<AppConversationPanel {...props} lockToMicroAppMode />)
+		expect(screen.getByTestId("web-micro-app-editor")).toHaveAttribute(
+			"data-send-topic-mode",
+			"micro-app",
+		)
+
+		rerender(<AppConversationPanel {...props} lockToMicroAppMode={false} />)
+		expect(screen.getByTestId("web-micro-app-editor")).toHaveAttribute(
+			"data-agent-code",
+			"SMA123",
+		)
+		expect(screen.getByTestId("web-micro-app-editor")).not.toHaveAttribute(
+			"data-send-topic-mode",
+		)
+		expect(screen.getByTestId("runtime-mode-toggle")).toBeInTheDocument()
+
+		rerender(<AppConversationPanel {...props} lockToMicroAppMode />)
+		expect(screen.getByTestId("web-micro-app-editor")).toHaveAttribute(
+			"data-send-topic-mode",
+			"micro-app",
+		)
+		expect(screen.getByTestId("web-micro-app-editor")).not.toHaveAttribute("data-agent-code")
 		expect(screen.queryByTestId("runtime-mode-toggle")).not.toBeInTheDocument()
 	})
 

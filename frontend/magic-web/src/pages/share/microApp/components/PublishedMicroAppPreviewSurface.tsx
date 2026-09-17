@@ -67,6 +67,7 @@ function PublishedMicroAppPreviewSurface({
 		displayAppName,
 		coverUrl,
 		resourceId,
+		sourceOrganizationCode,
 		passwordFromUrl,
 		handleVerifySuccess,
 		getShareData,
@@ -170,6 +171,7 @@ function PublishedMicroAppPreviewSurface({
 						<PublishedMicroAppConversationProvider
 							appId={appId}
 							appName={displayAppName}
+							sourceOrganizationCode={sourceOrganizationCode}
 							enabled={testIdPrefix === "micro-app-share"}
 						>
 							<div

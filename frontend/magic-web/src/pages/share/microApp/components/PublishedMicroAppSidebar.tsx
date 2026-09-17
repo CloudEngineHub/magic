@@ -157,6 +157,7 @@ const PublishedMicroAppSidebar = observer(function PublishedMicroAppSidebar({
 			>
 				<AppConversationPanel
 					{...conversationProps}
+					lockToMicroAppMode={false}
 					onExpandConversationPanel={() => selectPanel("conversation")}
 					onToggleConversationPanel={
 						collapsed ? () => selectPanel("conversation") : onToggleConversationPanel

@@ -173,6 +173,7 @@ export default function useMicroAppShareData({ appId }: UseMicroAppShareDataPara
 	const currentAppIdRef = useRef(appId)
 	const requestSequenceRef = useRef(0)
 	const [resourceId, setResourceId] = useState("")
+	const [sourceOrganizationCode, setSourceOrganizationCode] = useState("")
 	const [coverUrl, setCoverUrl] = useState("")
 	const [displayMode, setDisplayMode] = useState<MicroAppDisplayMode | null>(null)
 	const [shareData, setShareData] = useState<any>(null)
@@ -277,6 +278,7 @@ export default function useMicroAppShareData({ appId }: UseMicroAppShareDataPara
 		setError(null)
 		setRequiredOrgCode("")
 		setResourceId("")
+		setSourceOrganizationCode("")
 		setCoverUrl("")
 		setDisplayMode(null)
 		setShareData(null)
@@ -290,6 +292,7 @@ export default function useMicroAppShareData({ appId }: UseMicroAppShareDataPara
 			if (!isRequestCurrent(requestContext)) return
 			const appData = unwrapResponse<{
 				resource_id?: string
+				organization_code?: string
 				cover_url?: string
 				extra?: {
 					pure_mode?: boolean
@@ -298,6 +301,7 @@ export default function useMicroAppShareData({ appId }: UseMicroAppShareDataPara
 			resolvedResourceId = readString(appData?.resource_id)
 			if (!resolvedResourceId) throw new Error("Micro app share mapping is missing")
 			setResourceId(resolvedResourceId)
+			setSourceOrganizationCode(readString(appData?.organization_code))
 			setCoverUrl(readString(appData?.cover_url))
 			setDisplayMode({
 				appId: requestContext.appId,
@@ -404,6 +408,7 @@ export default function useMicroAppShareData({ appId }: UseMicroAppShareDataPara
 	return {
 		shareData,
 		resourceId,
+		sourceOrganizationCode,
 		coverUrl,
 		fullScreen,
 		displayModeResolved,

@@ -3884,6 +3884,7 @@
 	},
 	"microAppShare": {
 		"copyLink": "复制链接",
+		"crossOrganizationConversationUnsupported": "暂不支持跨组织使用微应用对话",
 		"errorTitle": "微应用不可访问",
 		"install": "安装到桌面",
 		"installConfirm": "继续安装",

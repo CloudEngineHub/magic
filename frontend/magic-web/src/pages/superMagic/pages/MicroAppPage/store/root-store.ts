@@ -61,6 +61,18 @@ export class AppRootStore {
 		this.conversationType = type
 	}
 
+	resetRuntimeProjectContext() {
+		// Invalidate pending runtime hydration before clearing state during app or organization changes.
+		this.runtimeProjectRequestId += 1
+		this.runtimeProject = null
+		this.runtimeProjectAppId = null
+		this.runtimeProjectState = "unknown"
+		this.runtimeProjectPromise = null
+		this.runtimeProjectPromiseAppId = null
+		this.usageConversation.reset()
+		if (this.conversationType === "usage") this.conversationType = "development"
+	}
+
 	async loadRuntimeProject(appId: string): Promise<void> {
 		if (this.runtimeProject && this.runtimeProjectAppId === appId) return
 		// A new app invalidates every callback from the previous runtime load.

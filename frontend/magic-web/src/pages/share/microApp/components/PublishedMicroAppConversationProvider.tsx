@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react"
 import { observer } from "mobx-react-lite"
+import { useTranslation } from "react-i18next"
 
 import { SuperMagicApi } from "@/apis"
 import type { MicroAppRuntimeProject } from "@/apis/modules/superMagic/microApps"
@@ -23,12 +24,15 @@ import { createSessionFileAccess } from "@/pages/superMagic/fileAccess/fileAcces
 
 import PublishedMicroAppSidebar, { type PublishedMicroAppPanel } from "./PublishedMicroAppSidebar"
 import { useMicroAppAuthentication } from "../hooks/useMicroAppAuthentication"
+import magicToast from "@/components/base/MagicToaster/utils"
 
 const RUNTIME_PROJECT_LOAD_SUPERSEDED = "Runtime project load superseded"
 
 interface PublishedMicroAppConversationProviderProps {
 	appId: string
 	appName?: string
+	/** Older published mappings may not include the source organization. */
+	sourceOrganizationCode?: string
 	enabled?: boolean
 	children: ReactNode
 }
@@ -36,6 +40,7 @@ interface PublishedMicroAppConversationProviderProps {
 interface PublishedMicroAppConversationSurfaceProps {
 	appId: string
 	appName?: string
+	sourceOrganizationCode?: string
 	children: ReactNode
 }
 
@@ -43,20 +48,32 @@ const PublishedMicroAppConversationSurface = observer(
 	function PublishedMicroAppConversationSurface({
 		appId,
 		appName,
+		sourceOrganizationCode,
 		children,
 	}: PublishedMicroAppConversationSurfaceProps) {
 		const [panel, setPanel] = useState<PublishedMicroAppPanel>("conversation")
 		const appStore = useAppStore()
 		const { conversation } = appStore
 		const requireAuthentication = useMicroAppAuthentication()
+		const { t } = useTranslation("super")
 		const authorization = userStore.user.authorization?.trim() || ""
+		const currentOrganizationCode = userStore.user.organizationCode?.trim() || ""
+		const normalizedSourceOrganizationCode = sourceOrganizationCode?.trim() || ""
+		const isSameOrganization = Boolean(
+			currentOrganizationCode &&
+			normalizedSourceOrganizationCode &&
+			currentOrganizationCode === normalizedSourceOrganizationCode,
+		)
 		const [runtimeProject, setRuntimeProject] = useState<ProjectListItem | null>(null)
 		const [runtimeProjectState, setRuntimeProjectState] = useState<
 			"loading" | "absent" | "ready"
 		>("loading")
 		// Fail closed while authentication or the runtime binding is unconfirmed.
 		const shouldShowRuntimeSidebar = Boolean(
-			authorization && runtimeProject && runtimeProjectState === "ready",
+			authorization &&
+			isSameOrganization &&
+			runtimeProject &&
+			runtimeProjectState === "ready",
 		)
 		const runtimeRequestIdRef = useRef(0)
 		const ensurePromiseRef = useRef<Promise<{
@@ -128,11 +145,13 @@ const PublishedMicroAppConversationSurface = observer(
 			const requestId = ++runtimeRequestIdRef.current
 			const isCurrent = () =>
 				runtimeRequestIdRef.current === requestId &&
-				(userStore.user.authorization?.trim() || "") === authorization
+				(userStore.user.authorization?.trim() || "") === authorization &&
+				(userStore.user.organizationCode?.trim() || "") === currentOrganizationCode &&
+				(sourceOrganizationCode?.trim() || "") === normalizedSourceOrganizationCode
 			setRuntimeProject(null)
 			setRuntimeProjectState(authorization ? "loading" : "absent")
 			// Anonymous browsing must not call session APIs, which can trigger a login redirect.
-			if (authorization)
+			if (authorization && isSameOrganization)
 				void SuperMagicApi.getMicroAppRuntimeProject(appId, {
 					enableErrorMessagePrompt: false,
 				})
@@ -153,13 +172,35 @@ const PublishedMicroAppConversationSurface = observer(
 				conversation.reset()
 				projectFilesStore.setSelectedProject(null)
 			}
-		}, [appId, authorization, conversation, loadRuntimeProject, projectFilesStore])
+		}, [
+			appId,
+			authorization,
+			conversation,
+			currentOrganizationCode,
+			isSameOrganization,
+			loadRuntimeProject,
+			projectFilesStore,
+			normalizedSourceOrganizationCode,
+			sourceOrganizationCode,
+		])
 
 		const ensureConversation = async () => {
 			const initialRequestId = runtimeRequestIdRef.current
 			await requireAuthentication()
 			if ((userStore.user.authorization?.trim() || "") !== authorization) {
 				throw new Error(RUNTIME_PROJECT_LOAD_SUPERSEDED)
+			}
+			// Published micro-app conversations are intentionally limited to the source organization.
+			// Treat missing organization context as unsupported so no runtime request can escape the gate.
+			const liveOrganizationCode = userStore.user.organizationCode?.trim() || ""
+			if (
+				!liveOrganizationCode ||
+				!normalizedSourceOrganizationCode ||
+				liveOrganizationCode !== normalizedSourceOrganizationCode
+			) {
+				const message = t("microAppShare.crossOrganizationConversationUnsupported")
+				magicToast.error(message)
+				throw new Error(message)
 			}
 			if (ensurePromiseRef.current && ensurePromiseAppIdRef.current === appId) {
 				return ensurePromiseRef.current
@@ -174,7 +215,9 @@ const PublishedMicroAppConversationSurface = observer(
 			const requestId = ++runtimeRequestIdRef.current
 			const isCurrent = () =>
 				runtimeRequestIdRef.current === requestId &&
-				(userStore.user.authorization?.trim() || "") === authorization
+				(userStore.user.authorization?.trim() || "") === authorization &&
+				(userStore.user.organizationCode?.trim() || "") === liveOrganizationCode &&
+				(sourceOrganizationCode?.trim() || "") === normalizedSourceOrganizationCode
 			setRuntimeProject(null)
 			setRuntimeProjectState("loading")
 			const promise = (async () => {
@@ -285,13 +328,19 @@ const PublishedMicroAppConversationSurface = observer(
 function PublishedMicroAppConversationProvider({
 	appId,
 	appName,
+	sourceOrganizationCode,
 	enabled = true,
 	children,
 }: PublishedMicroAppConversationProviderProps) {
 	if (!enabled) return <>{children}</>
 	return (
 		<AppStoreProvider>
-			<PublishedMicroAppConversationSurface key={appId} appId={appId} appName={appName}>
+			<PublishedMicroAppConversationSurface
+				key={appId}
+				appId={appId}
+				appName={appName}
+				sourceOrganizationCode={sourceOrganizationCode}
+			>
 				{children}
 			</PublishedMicroAppConversationSurface>
 		</AppStoreProvider>

@@ -110,6 +110,23 @@ describe("AppRootStore runtime conversation", () => {
 		await expect(staleEnsure).rejects.toThrow("superseded")
 		expect(store.runtimeProject).toMatchObject({ id: "project-b" })
 	})
+
+	it("invalidates an in-flight usage project when runtime access is reset", async () => {
+		const creation = createDeferred<{ project: { id: string } }>()
+		vi.mocked(SuperMagicApi.ensureMicroAppRuntimeProject).mockReturnValue(
+			creation.promise as never,
+		)
+		const store = new AppRootStore()
+		const pending = store.ensureUsageProject("app-1")
+
+		store.resetRuntimeProjectContext()
+		creation.resolve({ project: { id: "stale-runtime" } })
+
+		await expect(pending).rejects.toThrow("superseded")
+		expect(SuperMagicApi.getProjectDetail).not.toHaveBeenCalled()
+		expect(store.runtimeProject).toBeNull()
+		expect(store.conversationType).toBe("development")
+	})
 })
 
 function createDeferred<T>() {
