@@ -5,6 +5,7 @@ import { NodeType, type TreeNode } from "@dtyq/user-selector"
 import {
 	ALL_OPTION_VALUE,
 	DEFAULT_TAB_BY_VIEW,
+	FILE_TABLE_PAGE_SIZE,
 	TABLE_PAGE_SIZE,
 	VIEW,
 	type DataDashboardView,
@@ -17,6 +18,7 @@ import {
 	isAgentTab,
 	isMemberTab,
 	isOrganizationTab,
+	isFileTab,
 } from "../utils"
 import type { DashboardTabType } from "../types"
 
@@ -29,6 +31,8 @@ interface DashboardState {
 	members: TreeNode[]
 	agentCode: string
 	agentSource: DataDashboard.AgentSourceType | typeof ALL_OPTION_VALUE
+	fileSource: DataDashboard.FileSourceType | typeof ALL_OPTION_VALUE
+	fileCategory: DataDashboard.FileCategory | typeof ALL_OPTION_VALUE
 	activeTab: DashboardTabType
 }
 
@@ -40,6 +44,8 @@ type DashboardAction =
 	| { type: "setMembers"; value: TreeNode[] }
 	| { type: "setAgentCode"; value: string }
 	| { type: "setAgentSource"; value: DataDashboard.AgentSourceType | typeof ALL_OPTION_VALUE }
+	| { type: "setFileSource"; value: DataDashboard.FileSourceType | typeof ALL_OPTION_VALUE }
+	| { type: "setFileCategory"; value: DataDashboard.FileCategory | typeof ALL_OPTION_VALUE }
 	| { type: "setActiveTab"; value: DashboardTabType }
 	| { type: "setPage"; page: number; pageSize: number }
 
@@ -48,17 +54,21 @@ const getDefaultTab = (view: DataDashboardView): DashboardTabType =>
 		? DEFAULT_TAB_BY_VIEW[VIEW.DigitalEmployeeAnalysis]
 		: view === VIEW.OrganizationAnalysis
 			? DEFAULT_TAB_BY_VIEW[VIEW.OrganizationAnalysis]
-			: DEFAULT_TAB_BY_VIEW[VIEW.MemberAnalysis]
+			: view === VIEW.FileProductionAnalysis
+				? DEFAULT_TAB_BY_VIEW[VIEW.FileProductionAnalysis]
+				: DEFAULT_TAB_BY_VIEW[VIEW.MemberAnalysis]
 
 const createDashboardState = (view: DataDashboardView, timeRangeLabel: string): DashboardState => ({
 	view,
-	timeRange: createDefaultTimeRange(timeRangeLabel),
+	timeRange: createDefaultTimeRange(timeRangeLabel, view === VIEW.FileProductionAnalysis),
 	page: 1,
-	pageSize: TABLE_PAGE_SIZE,
+	pageSize: view === VIEW.FileProductionAnalysis ? FILE_TABLE_PAGE_SIZE : TABLE_PAGE_SIZE,
 	departments: [],
 	members: [],
 	agentCode: "",
 	agentSource: ALL_OPTION_VALUE,
+	fileSource: ALL_OPTION_VALUE,
+	fileCategory: ALL_OPTION_VALUE,
 	activeTab: getDefaultTab(view),
 })
 
@@ -80,6 +90,10 @@ const dashboardReducer = (state: DashboardState, action: DashboardAction): Dashb
 			return { ...state, agentCode: action.value, page: 1 }
 		case "setAgentSource":
 			return { ...state, agentSource: action.value, page: 1 }
+		case "setFileSource":
+			return { ...state, fileSource: action.value, page: 1 }
+		case "setFileCategory":
+			return { ...state, fileCategory: action.value, page: 1 }
 		case "setActiveTab":
 			return { ...state, activeTab: action.value, page: 1 }
 		case "setPage":
@@ -108,6 +122,8 @@ export function useDataDashboardActions({
 		members,
 		agentCode,
 		agentSource,
+		fileSource,
+		fileCategory,
 		activeTab,
 	} = dashboardState
 
@@ -126,6 +142,15 @@ export function useDataDashboardActions({
 			department_id: departmentId || undefined,
 		}
 	}, [agentCode, departments, members, timeRange])
+
+	const fileQuery = useMemo<DataDashboard.FileAnalysisSummaryQuery>(() => {
+		const dateQuery = getDateQuery(timeRange, true)
+		return {
+			...dateQuery,
+			source_type: fileSource === ALL_OPTION_VALUE ? undefined : fileSource,
+			file_category: fileCategory === ALL_OPTION_VALUE ? undefined : fileCategory,
+		}
+	}, [fileCategory, fileSource, timeRange])
 
 	const agentQuery = useMemo<DataDashboard.AgentSummaryQuery>(
 		() => ({
@@ -153,6 +178,12 @@ export function useDataDashboardActions({
 				: DEFAULT_TAB_BY_VIEW[VIEW.DigitalEmployeeAnalysis]
 		}
 
+		if (stateView === VIEW.FileProductionAnalysis) {
+			return isFileTab(activeTab)
+				? activeTab
+				: DEFAULT_TAB_BY_VIEW[VIEW.FileProductionAnalysis]
+		}
+
 		if (stateView === VIEW.OrganizationAnalysis) {
 			return isOrganizationTab(activeTab)
 				? activeTab
@@ -170,6 +201,8 @@ export function useDataDashboardActions({
 				return 10
 			case VIEW.OrganizationAnalysis:
 				return 11
+			case VIEW.FileProductionAnalysis:
+				return 3
 			default:
 				return 8
 		}
@@ -197,6 +230,18 @@ export function useDataDashboardActions({
 		dispatch({ type: "setAgentCode", value })
 	}
 
+	const handleFileSourceChange = (
+		value: DataDashboard.FileSourceType | typeof ALL_OPTION_VALUE,
+	) => {
+		dispatch({ type: "setFileSource", value })
+	}
+
+	const handleFileCategoryChange = (
+		value: DataDashboard.FileCategory | typeof ALL_OPTION_VALUE,
+	) => {
+		dispatch({ type: "setFileCategory", value })
+	}
+
 	const handleAgentSourceChange = (
 		value: DataDashboard.AgentSourceType | typeof ALL_OPTION_VALUE,
 	) => {
@@ -220,11 +265,14 @@ export function useDataDashboardActions({
 		members,
 		agentCode,
 		agentSource,
+		fileSource,
+		fileCategory,
 		currentTab,
 		agentQuery,
 		memberQuery,
 		organizationQuery,
 		consumptionQuery,
+		fileQuery,
 		metricSkeletonCount,
 		handleReset,
 		handleTimeRangeChange,
@@ -232,6 +280,8 @@ export function useDataDashboardActions({
 		handleMemberChange,
 		handleAgentCodeChange,
 		handleAgentSourceChange,
+		handleFileSourceChange,
+		handleFileCategoryChange,
 		handleTabChange,
 		handlePageChange,
 	}
