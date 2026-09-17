@@ -53,6 +53,7 @@ import { ExportPreviewModal } from "./components/ExportPreviewModal"
 import { extractTurns } from "./export/extractMessageContent"
 
 import { MessageListProvider, useMessageListContext } from "./context"
+import defaultProjectFilesStore from "@/stores/projectFiles"
 import MessageRenderContent from "./components/MessageRenderContent"
 import { projectRevokedMessageBranches } from "../../utils/project-visible-messages-by-revoked-tail"
 import { resolveBottomLoadingVisibility } from "./bottom-loading-visibility"
@@ -68,7 +69,6 @@ import type { RevokedMessageEditorContext } from "./revoked-editor-context"
 import type { MessageListScrollAdapter } from "./message-list-scroll-adapter"
 import { useStableArrayReference } from "./hooks/useStableArrayReference"
 import { useConversationCompactMode } from "./hooks/useConversationCompactMode"
-import { classicNameResolver } from "typescript"
 
 export { MessageListProvider }
 
@@ -606,6 +606,7 @@ const MessageList = observer(
 		const augmentedMessageListContext = useMemo(
 			() => ({
 				...parentCtx,
+				projectFilesStore: parentCtx.projectFilesStore ?? defaultProjectFilesStore,
 				allowUserFileReferences: !isShare && parentCtx.allowUserFileReferences !== false,
 				allowExport: enableExport,
 				exportModeActive,
@@ -625,6 +626,7 @@ const MessageList = observer(
 				parentCtx.onTopicSwitch,
 				parentCtx.renderAssistantAvatar,
 				parentCtx.showTaskCompletedBadge,
+				parentCtx.projectFilesStore,
 				enableExport,
 				exportModeActive,
 				exportEnterRequest,

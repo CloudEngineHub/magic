@@ -320,8 +320,7 @@ class MessagePullService {
 					string,
 					Promise<{
 						message:
-							| SeqResponse<AggregateAISearchCardConversationMessage<false>>
-							| undefined
+							SeqResponse<AggregateAISearchCardConversationMessage<false>> | undefined
 						index: number
 					}>
 				>,
