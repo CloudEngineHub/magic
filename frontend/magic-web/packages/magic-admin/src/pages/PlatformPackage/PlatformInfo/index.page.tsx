@@ -16,9 +16,11 @@ import useRights from "@admin/hooks/useRights"
 import { PERMISSION_KEY_MAP } from "@admin/const/common"
 import { useApis } from "@admin/apis"
 import type { AiManage } from "@admin/types/aiManage"
+import type { PlatformInfo } from "@admin/types/platformInfo"
 import { useStyles } from "./styles"
 import LogoUploadItemComponent from "./components/LogoUploadItem"
 import { useIsMobile } from "@admin/hooks/useIsMobile"
+import WatermarkSettings from "./WatermarkSettings"
 
 export enum PlatformLogoType {
 	ZH = "zh",
@@ -59,7 +61,8 @@ const InfoManagementPage = () => {
 	// 	[PlatformLogoType.FAVICON]: "",
 	// })
 
-	const hasEditRight = useRights(PERMISSION_KEY_MAP.INFO_MANAGEMENT_EDIT)
+	// Platform information is a separate permission from maintenance settings.
+	const hasEditRight = useRights(PERMISSION_KEY_MAP.PLATFORM_INFO_MANAGEMENT_EDIT)
 
 	const [form] = Form.useForm()
 
@@ -74,59 +77,70 @@ const InfoManagementPage = () => {
 	const footerFilingEnabled = Form.useWatch(["footer", "filing", "enabled"], form)
 
 	/** 获取平台信息 */
-	const initPlatformInfo = useMemoizedFn(async () => {
-		try {
-			const res = await PlatformInfoApi.getPlatformInfo()
-			if (res) {
-				setImagePreviewUrl({
-					[PlatformLogoType.ZH]: res.logo.zh_CN,
-					[PlatformLogoType.EN]: res.logo.en_US,
-					[PlatformLogoType.MINIMAL]: res.minimal_logo || "",
-					[PlatformLogoType.FAVICON]: res.favicon || "",
-				})
-				form.setFieldsValue({
-					default_language: res.default_language,
-					name_i18n: {
-						zh_CN: res.name_i18n.zh_CN || "",
-						en_US: res.name_i18n.en_US || "",
-					},
-					title_i18n: {
-						zh_CN: res.title_i18n.zh_CN || "",
-						en_US: res.title_i18n.en_US || "",
-					},
-					keywords_i18n: {
-						zh_CN: res.keywords_i18n.zh_CN || "",
-						en_US: res.keywords_i18n.en_US || "",
-					},
-					description_i18n: {
-						zh_CN: res.description_i18n.zh_CN || "",
-						en_US: res.description_i18n.en_US || "",
-					},
-					agent_role_name_i18n: {
-						zh_CN: res.agent_role_name_i18n?.zh_CN || "",
-						en_US: res.agent_role_name_i18n?.en_US || "",
-					},
-					agent_role_description_i18n: {
-						zh_CN: res.agent_role_description_i18n?.zh_CN || "",
-						en_US: res.agent_role_description_i18n?.en_US || "",
-					},
-					footer: {
-						copyright_i18n: {
-							zh_CN: res.footer?.copyright_i18n?.zh_CN || "",
-							en_US: res.footer?.copyright_i18n?.en_US || "",
+	const initPlatformInfo = useMemoizedFn(
+		async (watermarkFallback?: PlatformInfo.WatermarkUpdateParams) => {
+			try {
+				const res = await PlatformInfoApi.getPlatformInfo()
+				const watermark =
+					res?.watermark ??
+					watermarkFallback ??
+					({ id: "", enabled: false, fields: [], depth: "light" } as const)
+				if (res) {
+					setImagePreviewUrl({
+						[PlatformLogoType.ZH]: res.logo.zh_CN,
+						[PlatformLogoType.EN]: res.logo.en_US,
+						[PlatformLogoType.MINIMAL]: res.minimal_logo || "",
+						[PlatformLogoType.FAVICON]: res.favicon || "",
+					})
+					form.setFieldsValue({
+						default_language: res.default_language,
+						name_i18n: {
+							zh_CN: res.name_i18n.zh_CN || "",
+							en_US: res.name_i18n.en_US || "",
 						},
-						filing: {
-							enabled: res.footer?.filing?.enabled || false,
-							number: res.footer?.filing?.number || "",
-							link: res.footer?.filing?.link || "https://beian.miit.gov.cn/",
+						title_i18n: {
+							zh_CN: res.title_i18n.zh_CN || "",
+							en_US: res.title_i18n.en_US || "",
 						},
-					},
-				})
+						keywords_i18n: {
+							zh_CN: res.keywords_i18n.zh_CN || "",
+							en_US: res.keywords_i18n.en_US || "",
+						},
+						description_i18n: {
+							zh_CN: res.description_i18n.zh_CN || "",
+							en_US: res.description_i18n.en_US || "",
+						},
+						agent_role_name_i18n: {
+							zh_CN: res.agent_role_name_i18n?.zh_CN || "",
+							en_US: res.agent_role_name_i18n?.en_US || "",
+						},
+						agent_role_description_i18n: {
+							zh_CN: res.agent_role_description_i18n?.zh_CN || "",
+							en_US: res.agent_role_description_i18n?.en_US || "",
+						},
+						footer: {
+							copyright_i18n: {
+								zh_CN: res.footer?.copyright_i18n?.zh_CN || "",
+								en_US: res.footer?.copyright_i18n?.en_US || "",
+							},
+							filing: {
+								enabled: res.footer?.filing?.enabled || false,
+								number: res.footer?.filing?.number || "",
+								link: res.footer?.filing?.link || "https://beian.miit.gov.cn/",
+							},
+						},
+						watermark: {
+							enabled: watermark.enabled,
+							fields: watermark.fields,
+							depth: watermark.depth,
+						},
+					})
+				}
+			} catch (error) {
+				// console.error(`获取平台信息失败: ${error}`)
 			}
-		} catch (error) {
-			// console.error(`获取平台信息失败: ${error}`)
-		}
-	})
+		},
+	)
 
 	useEffect(() => {
 		initPlatformInfo()
@@ -138,18 +152,36 @@ const InfoManagementPage = () => {
 			await form.validateFields()
 			setLoading(true)
 			const values = form.getFieldsValue()
+			const { watermark, ...platformValues } = values
+			const watermarkParams = {
+				enabled: watermark?.enabled ?? false,
+				fields: watermark?.fields ?? [],
+				depth: watermark?.depth ?? "light",
+			}
 			const params = {
-				...values,
+				...platformValues,
 				logo_zh_url: imageUploadUrl[PlatformLogoType.ZH],
 				logo_en_url: imageUploadUrl[PlatformLogoType.EN],
 				minimal_logo_url: imageUploadUrl[PlatformLogoType.MINIMAL],
 				favicon_url: imageUploadUrl[PlatformLogoType.FAVICON],
 			}
-			const res = await PlatformInfoApi.updatePlatformInfo(params)
-			if (res) {
-				message.success(tCommon("message.saveSuccess"))
-				initPlatformInfo()
+			const res = await PlatformInfoApi.updatePlatformInfo({
+				...params,
+				watermark: watermarkParams,
+			})
+			if (res?.watermark) {
+				form.setFieldValue("watermark", {
+					enabled: res.watermark.enabled,
+					fields: res.watermark.fields,
+					depth: res.watermark.depth,
+				})
+			} else {
+				form.setFieldValue("watermark", watermarkParams)
 			}
+			message.success(tCommon("message.saveSuccess"))
+			// The backend does not return watermark yet. Preserve the submitted value
+			// until support for the new platform setting field is deployed.
+			initPlatformInfo(res?.watermark ?? watermarkParams)
 		} catch (error) {
 			// console.error(`保存平台信息失败: ${error}`)
 		} finally {
@@ -465,6 +497,8 @@ const InfoManagementPage = () => {
 						</>
 					)}
 				</Flex>
+				<SubHeader title={tPlatform("watermarkSettings")} />
+				<WatermarkSettings form={form} canEdit={hasEditRight} />
 			</Form>
 		</BaseLayout>
 	)
