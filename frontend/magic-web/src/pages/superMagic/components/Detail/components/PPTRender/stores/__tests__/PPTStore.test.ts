@@ -126,6 +126,42 @@ describe("PPTStore", () => {
 		store?.dispose()
 	})
 
+	describe("speaker notes save completion", () => {
+		it.each(["reorder", "delete", "replace"])(
+			"uses file identity after slides %s while saving",
+			async (change) => {
+				store.setSlides(
+					[
+						createSlide(0, { rawContent: "First" }),
+						createSlide(1, { rawContent: "Second" }),
+					],
+					true,
+				)
+				let finishSave!: () => void
+				const save = new Promise<void>((resolve) => {
+					finishSave = resolve
+				})
+				const completion = save.then(() => store.updateSlideNotes("file1", "Saved notes"))
+				if (change === "reorder") {
+					store.setSlides([store.slides[1], store.slides[0]], true)
+				} else if (change === "delete") {
+					store.setSlides([store.slides[1]], true)
+				} else {
+					store.setSlides([createSlide(2, { rawContent: "Other deck" })], true)
+				}
+				finishSave()
+				await completion
+				expect(store.slides[0].rawContent).toBe(
+					change === "replace" ? "Other deck" : "Second",
+				)
+				if (change === "reorder") {
+					expect(store.slides[1].rawContent).toBe("Saved notes")
+					expect(store.slides[1].rawRevision).toBe(1)
+				}
+			},
+		)
+	})
+
 	describe("initialization", () => {
 		it("should initialize with default values", () => {
 			expect(store.slideUrls).toEqual([])

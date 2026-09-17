@@ -387,6 +387,48 @@ describe("PPTSlide", () => {
 		)
 	})
 
+	it("updates the raw notes baseline without remounting the slide renderer", async () => {
+		const original = "<main>Slide</main><template data-magic-slide-notes>Old note</template>"
+		const updated =
+			"<main>Slide</main><template data-magic-slide-notes>Updated note with more text</template>"
+		const view = renderPPTSlide({
+			content: "<main>Processed slide</main>",
+			rawContent: original,
+			renderRevision: "visual-revision-1",
+		})
+		const renderer = screen.getByTestId("isolated-html-renderer")
+
+		view.rerender(
+			<PPTSlide
+				index={0}
+				isActive={true}
+				content="<main>Processed slide</main>"
+				rawContent={updated}
+				renderRevision="visual-revision-1"
+				isFullscreen={false}
+				fileId="slide-1"
+				filePathMapping={new Map()}
+				openNewTab={vi.fn()}
+				updateSlideContents={vi.fn()}
+				allowEdit={true}
+				loadingState="loaded"
+				attachmentList={[]}
+				saveEditContent={mockState.saveEditContent}
+			/>,
+		)
+
+		await waitFor(() => {
+			expect(mockState.renderedIsolatedProps).toHaveBeenLastCalledWith(
+				expect.objectContaining({
+					content: "<main>Processed slide</main>",
+					rawSourceCode: updated,
+				}),
+			)
+		})
+		expect(screen.getByTestId("isolated-html-renderer")).toBe(renderer)
+		expect(screen.queryByTestId("ppt-slide-content-updating")).not.toBeInTheDocument()
+	})
+
 	it("编辑工具栏显示时，渲染区域只占用剩余高度", () => {
 		renderPPTSlide()
 

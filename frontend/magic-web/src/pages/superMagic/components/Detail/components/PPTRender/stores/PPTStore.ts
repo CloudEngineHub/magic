@@ -2086,6 +2086,19 @@ export class PPTStore {
 		return processedContent.content
 	}
 
+	/** Update inert HTML metadata without reprocessing or remounting the slide iframe. */
+	updateSlideNotes(fileId: string, rawContent: string): void {
+		if (!fileId) return
+		// Resolve at completion: a pending save may outlive a reorder or deck replacement.
+		const index = this.slides.findIndex((slide) => this.getSlideFileId(slide) === fileId)
+		const slide = this.slides[index]
+		if (!slide) return
+		this.slideManager.updateSlideItem(index, {
+			rawContent,
+			rawRevision: (slide.rawRevision || 0) + 1,
+		})
+	}
+
 	updateSlideContents(updates: Map<number, string>): void {
 		this.slideManager.updateSlideContents(updates)
 	}

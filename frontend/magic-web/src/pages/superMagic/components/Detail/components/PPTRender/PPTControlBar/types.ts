@@ -13,6 +13,8 @@ export interface PPTControlBarProps {
 	onJumpToPage: (index: number) => void
 	onToggleFullscreen: () => void
 	onReplaceTemplate?: () => void
+	notesVisible?: boolean
+	onToggleNotes?: () => void
 	scaleRatio: number
 	isAutoScale: boolean
 	portalContainer: HTMLElement | null
