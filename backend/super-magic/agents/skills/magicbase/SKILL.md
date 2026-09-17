@@ -294,6 +294,8 @@ Scope selection:
 
 Permission intent matrix:
 
+When permissions are omitted, reads are public, table inserts are disabled, and row edits/deletes and column edits are creator-only (`private_user`). Enable inserts explicitly for submission flows. For shared editing of other users' rows, configure both row edit scope and the editable columns; a row grant alone does not override column permissions. Preserve these defaults unless the user's requested collaboration requires broader access. Existing explicitly saved permissions are not changed by these defaults.
+
 | User intent | Table scope | Row scope |
 | --- | --- | --- |
 | Everyone collaborates and can edit/delete all rows | `read_scope=public`, `insert_scope=public` | `read_scope=public`, `edit_scope=public`, `delete_scope=public` |

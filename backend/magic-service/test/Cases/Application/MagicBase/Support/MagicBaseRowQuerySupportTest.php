@@ -22,7 +22,7 @@ use App\Domain\MagicBase\Entity\ValueObject\MagicBaseEntityCollection;
 use App\Domain\MagicBase\Entity\ValueObject\MagicBasePermissionIndex;
 use App\Domain\MagicBase\Entity\ValueObject\MagicBaseTableAccessContext;
 use App\Domain\MagicBase\Entity\ValueObject\SelectQuery;
-use App\Domain\MagicBase\Exception\MagicBaseInvalidFilterException;
+use App\Domain\MagicBase\Exception\MagicBaseColumnAccessDeniedException;
 use App\Domain\MagicBase\Repository\Facade\MagicBaseMigrationLogRepositoryInterface;
 use App\Domain\MagicBase\Repository\Facade\MagicBasePermissionRepositoryInterface;
 use App\Domain\MagicBase\Repository\Facade\MagicBaseRelationRepositoryInterface;
@@ -104,7 +104,7 @@ class MagicBaseRowQuerySupportTest extends TestCase
     {
         $column = new MagicBaseColumnEntity(['id' => 10, 'column_key' => 'secret', 'data_type' => 'text', 'dynamic_permission' => ['read_scope' => MagicBaseConst::SCOPE_PRIVATE_ORG]]);
         $criteria = new MagicBaseRowQueryCriteriaDomainService(new MagicBaseRowFilterDomainService());
-        $this->expectException(MagicBaseInvalidFilterException::class);
+        $this->expectException(MagicBaseColumnAccessDeniedException::class);
         $criteria->buildReadableQuery('org', new MagicBaseTableEntity(), $this->access($column), new ActorContext('', ''), $filter, $sort, 1, 20);
     }
 
@@ -185,6 +185,37 @@ class MagicBaseRowQuerySupportTest extends TestCase
     public static function relationOperations(): array
     {
         return [['row'], ['page'], ['filter'], ['write']];
+    }
+
+    #[DataProvider('hiddenRelationSources')]
+    public function testRelationExpansionCannotRevealUnreadableSourceKeys(string $userId, string $scope): void
+    {
+        $authorization = (new MagicUserAuthorization())->setOrganizationCode('org');
+        $relations = $this->createMock(MagicBaseRelationRepositoryInterface::class);
+        $relations->method('listRelations')->willReturn(new MagicBaseEntityCollection([
+            new MagicBaseRelationEntity(['source_table_id' => 12, 'target_table_id' => 22, 'relation_name' => 'customer', 'source_column_key' => 'customer_id', 'target_column_key' => 'record_id']),
+        ]));
+        $metadata = new MagicBaseMetadataDomainService($this->createMock(MagicBaseTableRepositoryInterface::class), $relations, $this->createMock(MagicBasePermissionRepositoryInterface::class), $this->createMock(MagicBaseMigrationLogRepositoryInterface::class));
+        // This fails if an unreadable source value reaches target lookup or storage.
+        $support = $this->support(new DeniedTargetAccessControl(), $metadata);
+        $table = new MagicBaseTableEntity(['id' => 12]);
+        $row = new MagicBaseRowEntity(['record_id' => 1, 'created_by' => 'owner', 'organization_code' => 'other-org', 'data' => ['customer_id' => 7]]);
+        $access = $this->access(new MagicBaseColumnEntity(['id' => 10, 'column_key' => 'customer_id', 'dynamic_permission' => ['read_scope' => $scope]]));
+        $actor = new ActorContext($userId, $userId === '' ? '' : 'org');
+        $select = new SelectQuery(['fields' => ['customer_id'], 'relations' => ['customer' => ['fields' => ['record_id']]]]);
+        self::assertSame(['customer' => null], $support->formatRow($authorization, 11, $table, $row, $access, $select, $actor)->toArray());
+        self::assertSame(['customer' => null], $support->formatRows($authorization, 11, $table, [$row], $access, $select, $actor)[0]->toArray());
+    }
+
+    public static function hiddenRelationSources(): array
+    {
+        $cases = [];
+        foreach (['', 'reader'] as $userId) {
+            foreach (['disabled', 'private_user', 'private_org', 'private_department'] as $scope) {
+                $cases[] = [$userId, $scope];
+            }
+        }
+        return $cases;
     }
 
     private function access(MagicBaseColumnEntity $column, array $permissions = [], bool $manager = false): MagicBaseAccessContext

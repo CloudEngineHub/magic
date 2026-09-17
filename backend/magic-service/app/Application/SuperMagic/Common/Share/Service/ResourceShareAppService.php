@@ -630,7 +630,7 @@ class ResourceShareAppService extends AbstractShareAppService
             'resource_type' => $resourceType->value, // 使用枚举的整数值，而不是枚举对象
             'resource_name' => $shareEntity->getResourceName() ?: $factory->getResourceNameForDetail($shareEntity) ?: '', // 优先使用数据库中的 resource_name，如果为空则从资源获取
             'project_id' => $shareEntity->getProjectId() !== null ? (string) $shareEntity->getProjectId() : null,
-            'temporary_token' => AccessTokenUtil::generate((string) $shareEntity->getId(), $shareEntity->getOrganizationCode()),
+            'temporary_token' => AccessTokenUtil::generateForShare($shareEntity),
             'default_open_file_id' => $shareEntity->getDefaultOpenFileId() !== null ? (string) $shareEntity->getDefaultOpenFileId() : null,
             'extra' => $extra,
             'share_project' => $shareEntity->isShareProject(),

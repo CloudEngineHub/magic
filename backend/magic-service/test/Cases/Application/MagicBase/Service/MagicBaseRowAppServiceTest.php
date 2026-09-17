@@ -71,6 +71,8 @@ class MagicBaseRowAppServiceTest extends TestCase
 
     private MagicBaseColumnEntity $column;
 
+    private ?MagicBaseColumnEntity $relatedColumn = null;
+
     private PublishedMicroAppFileAccessService $publication;
 
     private MagicBaseTableRepositoryInterface $tables;
@@ -138,10 +140,11 @@ class MagicBaseRowAppServiceTest extends TestCase
         );
         $this->publication->method('canAccessProject')->with(11, 'reader', 'org')->willReturn(true);
         $this->table = new MagicBaseTableEntity();
+        $this->table->setDynamicPermissions(['table' => ['insert_scope' => MagicBaseConst::SCOPE_PUBLIC]]);
         $this->table->setId(22);
         $this->tables->method('getTable')->willReturnCallback(fn ($org, $project, $id) => $id === 22 ? $this->table : $this->relatedTable);
         $this->column = new MagicBaseColumnEntity(['id' => 33, 'column_key' => 'title', 'data_type' => 'text']);
-        $this->tables->method('listColumns')->willReturn(new MagicBaseEntityCollection([$this->column]));
+        $this->tables->method('listColumns')->willReturnCallback(fn ($org, $tableId) => new MagicBaseEntityCollection([$tableId === 23 && $this->relatedColumn !== null ? $this->relatedColumn : $this->column]));
         $this->service = new MagicBaseRowAppService(
             $this->access,
             new MagicBaseRowQuerySupport(
@@ -260,11 +263,12 @@ class MagicBaseRowAppServiceTest extends TestCase
     }
 
     #[DataProvider('writeOperationsWithRelation')]
-    public function testSuccessfulWriteOmitsUnreadableRelation(string $operation): void
+    public function testSuccessfulWriteOmitsUnreadableRelation(string $operation, bool $denyColumn): void
     {
-        $this->relatedTable = new MagicBaseTableEntity(['id' => 23, 'project_id' => 11, 'dynamic_permissions' => ['table' => ['read_scope' => MagicBaseConst::SCOPE_DISABLED]]]);
+        $this->relatedTable = new MagicBaseTableEntity(['id' => 23, 'project_id' => 11, 'dynamic_permissions' => ['table' => ['read_scope' => $denyColumn ? MagicBaseConst::SCOPE_PUBLIC : MagicBaseConst::SCOPE_DISABLED]]]);
+        $this->relatedColumn = new MagicBaseColumnEntity(['id' => 34, 'column_key' => 'join_key', 'data_type' => 'text', 'dynamic_permission' => ['read_scope' => MagicBaseConst::SCOPE_DISABLED]]);
         $this->relations->method('listRelations')->willReturn(new MagicBaseEntityCollection([
-            new MagicBaseRelationEntity(['source_table_id' => 22, 'target_table_id' => 23, 'relation_name' => 'secret', 'source_column_key' => 'title', 'target_column_key' => 'record_id', 'relation_type' => MagicBaseConst::RELATION_HAS_MANY]),
+            new MagicBaseRelationEntity(['source_table_id' => 22, 'target_table_id' => 23, 'relation_name' => 'secret', 'source_column_key' => 'title', 'target_column_key' => $denyColumn ? 'join_key' : 'record_id', 'relation_type' => MagicBaseConst::RELATION_HAS_MANY]),
         ]));
         $select = 'id,title,secret:title(id)';
         if ($operation === 'batch') {
@@ -290,7 +294,7 @@ class MagicBaseRowAppServiceTest extends TestCase
 
     public static function writeOperationsWithRelation(): array
     {
-        return [['create'], ['batch'], ['update']];
+        return [['create', false], ['batch', false], ['update', false], ['create', true], ['batch', true], ['update', true]];
     }
 
     private function row(int $id, string $owner): MagicBaseRowEntity

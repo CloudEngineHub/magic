@@ -16,6 +16,7 @@ use App\Domain\SuperMagic\Common\Share\Service\ResourceShareDomainService;
 use App\Domain\SuperMagic\Project\Repository\Facade\MicroAppRepositoryInterface;
 use App\ErrorCode\MagicBaseErrorCode;
 use App\Infrastructure\Core\Exception\BusinessException;
+use App\Infrastructure\SuperMagic\Utils\AccessTokenUtil;
 use App\Infrastructure\Util\Context\RequestCoContext;
 use App\Interfaces\Authorization\Web\MagicUserAuthorization;
 use App\Interfaces\MagicBase\Facade\MagicBaseApi;
@@ -53,6 +54,7 @@ class MagicBaseShareAuthorizationTest extends TestCase
     {
         $this->previousContainer = ApplicationContext::hasContainer() ? ApplicationContext::getContainer() : null;
         $this->clearContext();
+        $this->shares = $this->createMock(ResourceShareDomainService::class);
         $this->tokenData = json_encode(['share_id' => '44', 'scope' => 'read', 'expires_at' => time() + 3600]);
         $redis = $this->createMock(Redis::class);
         $redis->method('__call')->willReturnCallback(fn ($name) => $name === 'get' ? $this->tokenData : 1);
@@ -65,7 +67,7 @@ class MagicBaseShareAuthorizationTest extends TestCase
         $translator = $this->createMock(TranslatorInterface::class);
         $translator->method('trans')->willReturnArgument(0);
         $container = $this->createMock(ContainerInterface::class);
-        $container->method('get')->willReturnMap([[Redis::class, $redis], [ConfigInterface::class, $config], [TranslatorInterface::class, $translator]]);
+        $container->method('get')->willReturnMap([[Redis::class, $redis], [ResourceShareDomainService::class, $this->shares], [ConfigInterface::class, $config], [TranslatorInterface::class, $translator]]);
         ApplicationContext::setContainer($container);
 
         $request = $this->createMock(RequestInterface::class);
@@ -86,10 +88,10 @@ class MagicBaseShareAuthorizationTest extends TestCase
         $apps->expects(self::once())->method('findByProjectIdWithTrashed')->with(11)->willReturn(null);
         (new ReflectionProperty(MagicBaseAccessControl::class, 'microAppRepository'))->setValue($access, $apps);
         (new ReflectionProperty(MagicBaseApi::class, 'accessControl'))->setValue($this->api, $access);
-        $this->shares = $this->createMock(ResourceShareDomainService::class);
         (new ReflectionProperty(MagicBaseApi::class, 'resourceShareDomainService'))->setValue($this->api, $this->shares);
-        $this->share = (new ResourceShareEntity())->setProjectId('11')->setResourceType(ResourceType::Project->value)
+        $this->share = (new ResourceShareEntity())->setId(44)->setProjectId('11')->setResourceType(ResourceType::Project->value)
             ->setShareType(ShareAccessType::Internet->value)->setOrganizationCode('data-org')->setCreatedUid('owner')->setIsEnabled(true);
+        $this->bindTokenToCurrentShare();
     }
 
     protected function tearDown(): void
@@ -102,6 +104,7 @@ class MagicBaseShareAuthorizationTest extends TestCase
     public function testPublicShareKeepsAnonymousIdentitySeparateFromDataOrganization(int $shareType): void
     {
         $this->share->setShareType($shareType);
+        $this->bindTokenToCurrentShare();
         $this->shares->method('getValidShareById')->with('44')->willReturn($this->share);
         $authorization = $this->resolve();
         self::assertSame('', $authorization->getId());
@@ -160,10 +163,27 @@ class MagicBaseShareAuthorizationTest extends TestCase
     {
         RequestCoContext::setUserAuthorization((new MagicUserAuthorization())->setId('reader')->setOrganizationCode('other-org'));
         $this->share->setShareType(ShareAccessType::TeamShare->value)->setShareCode('team-share');
+        $this->bindTokenToCurrentShare();
         $this->shares->method('getValidShareById')->willReturn($this->share);
         $this->shares->expects(self::once())->method('validateShareAccess')->with($this->share, 'reader', 'other-org', 'team-share')->willThrowException(new RuntimeException('Team denied'));
         $this->expectExceptionMessage('Team denied');
         $this->resolve();
+    }
+
+    public function testPublicTokenCannotAccessShareAfterPasswordIsAdded(): void
+    {
+        $this->share->setShareType(ShareAccessType::PasswordProtected->value)->setPassword('encrypted-password');
+        $this->shares->method('getValidShareById')->willReturn($this->share);
+        $this->expectException(BusinessException::class);
+        $this->resolve();
+    }
+
+    private function bindTokenToCurrentShare(): void
+    {
+        $this->tokenData = json_encode([
+            'share_id' => '44', 'scope' => 'read', 'expires_at' => time() + 3600,
+            'metadata' => ['share_security_fingerprint' => AccessTokenUtil::shareSecurityFingerprint($this->share)],
+        ]);
     }
 
     private function resolve(): MagicUserAuthorization

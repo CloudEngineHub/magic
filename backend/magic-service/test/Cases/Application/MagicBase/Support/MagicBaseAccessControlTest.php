@@ -225,6 +225,7 @@ class MagicBaseAccessControlTest extends TestCase
     {
         $this->runtimeIdentity($identity);
         $table = new MagicBaseTableEntity();
+        $table->setDynamicPermissions(['table' => ['insert_scope' => MagicBaseConst::SCOPE_PUBLIC]]);
         $this->tables->method('getTable')->willReturn($table);
         $context = $this->access->requireInsertableTable($this->reader(), 11, 22);
         self::assertSame('reader', $context->getActor()->getUserId());

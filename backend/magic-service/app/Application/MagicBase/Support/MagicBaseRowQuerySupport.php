@@ -124,6 +124,7 @@ readonly class MagicBaseRowQuerySupport
                     $relation,
                     $row,
                     $actor,
+                    $access,
                     $select->getRelationFields($alias)
                 );
             } catch (BusinessException $exception) {
@@ -173,6 +174,7 @@ readonly class MagicBaseRowQuerySupport
                 $relation,
                 $rows,
                 $actor,
+                $access,
                 $select->getRelationFields($alias)
             );
             foreach ($rows as $row) {
@@ -291,12 +293,15 @@ readonly class MagicBaseRowQuerySupport
         MagicBaseRelationEntity $relation,
         array $rows,
         ActorContext $actor,
+        MagicBaseAccessContext $sourceAccess,
         array $selectedFields,
     ): array {
-        unset($actor);
         $sourceValuesByRecord = [];
         $sourceValues = [];
         foreach ($rows as $row) {
+            if (! $this->canReadRelationSource($sourceAccess, $actor, $row, $relation)) {
+                continue;
+            }
             $sourceValue = $this->readFieldValue($row, $relation->getSourceColumnKey());
             if ($sourceValue === null || $sourceValue === '') {
                 continue;
@@ -361,9 +366,12 @@ readonly class MagicBaseRowQuerySupport
         MagicBaseRelationEntity $relation,
         MagicBaseRowEntity $row,
         ActorContext $actor,
+        MagicBaseAccessContext $sourceAccess,
         array $selectedFields,
     ): array {
-        unset($actor);
+        if (! $this->canReadRelationSource($sourceAccess, $actor, $row, $relation)) {
+            return [];
+        }
         $sourceValue = $this->readFieldValue($row, $relation->getSourceColumnKey());
         if ($sourceValue === null || $sourceValue === '') {
             return [];
@@ -434,6 +442,7 @@ readonly class MagicBaseRowQuerySupport
             MagicBaseConst::ROW_STORAGE_SEARCH_SIZE,
             false,
             $this->accessControl->getStaticReadableRecordIds($targetContext),
+            requiredReadableFields: [$relation->getTargetColumnKey()],
         );
 
         $values = [];
@@ -449,6 +458,27 @@ readonly class MagicBaseRowQuerySupport
         }
 
         return array_values(array_unique($values, SORT_REGULAR));
+    }
+
+    private function canReadRelationSource(
+        MagicBaseAccessContext $access,
+        ActorContext $actor,
+        MagicBaseRowEntity $row,
+        MagicBaseRelationEntity $relation,
+    ): bool {
+        $field = $relation->getSourceColumnKey();
+        if (in_array($field, self::DEFAULT_SYSTEM_FIELDS, true)) {
+            return true;
+        }
+        $column = $access->getColumns()->get($field);
+        return $column !== null && $column->getStatus() !== MagicBaseConst::STATUS_DISABLED
+            && $this->permissionDomainService->canReadColumn(
+                $actor,
+                $row,
+                $column,
+                $access->getColumnPermissions((int) $column->getId()),
+                $access->isManager(),
+            );
     }
 
     private function loadTargetContext(MagicUserAuthorization $authorization, int $projectId, int $tableId): MagicBaseTableAccessContext
