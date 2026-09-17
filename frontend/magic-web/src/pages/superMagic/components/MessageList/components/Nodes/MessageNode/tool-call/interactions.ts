@@ -1,5 +1,6 @@
 import { pick } from "lodash-es"
 import { getToolDesignProjectInfo } from "@/pages/superMagic/components/Detail/contents/Design/utils/toolDesignProjectInfo"
+import type { ProjectFilesStore } from "@/stores/projectFiles"
 import pubsub, { PubSubEvents } from "@/utils/pubsub"
 import {
 	getToolCardInteractionTarget,
@@ -11,11 +12,13 @@ import type { ToolCallViewModel } from "./types"
 interface HandleToolCallInteractionOptions {
 	toolData: ToolCallViewModel
 	onSelectDetail?: (detail: unknown) => void
+	filesStore?: ProjectFilesStore
 }
 
 export function handleToolCallInteraction({
 	toolData,
 	onSelectDetail,
+	filesStore,
 }: HandleToolCallInteractionOptions) {
 	const toolInfo = pick(toolData, ["name", "url", "action", "remark", "id"])
 	const newDetail = {
@@ -28,7 +31,10 @@ export function handleToolCallInteraction({
 	if (target.type === "disabled") return
 
 	if (target.type === "design") {
-		const { designProjectId, designProject, elements } = getToolDesignProjectInfo(toolData)
+		const { designProjectId, designProject, elements } = getToolDesignProjectInfo(
+			toolData,
+			filesStore,
+		)
 		const canvasDesignId = String(designProjectId || "")
 		pubsub.publish(PubSubEvents.Open_File_Tab, {
 			...designProject,
@@ -53,6 +59,7 @@ export function handleToolCallInteraction({
 			detail: newDetail,
 			target,
 			onSelectDetail,
+			filesStore,
 		})
 	) {
 		return

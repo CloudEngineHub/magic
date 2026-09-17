@@ -7,8 +7,8 @@ import { useToolTooltip } from "@/pages/superMagic/components/MessageList/compon
 import { useTranslation } from "react-i18next"
 import pubsub, { PubSubEvents } from "@/utils/pubsub"
 import { ToolIconBadge } from "@/pages/superMagic/components/MessageList/components/shared/ToolIconConfig"
-import projectFilesStore from "@/stores/projectFiles"
-import { LayerElement } from "@/components/CanvasDesign/runtime/document/types"
+import { getToolDesignProjectInfo } from "@/pages/superMagic/components/Detail/contents/Design/utils/toolDesignProjectInfo"
+import { useMessageListProjectFilesStore } from "@/pages/superMagic/components/MessageList/context"
 import { FileItem } from "@/pages/superMagic/pages/Workspace/types"
 import { MonitorPlay, CircleAlert } from "lucide-react"
 import { MagicTooltip, VerticalLine } from "@/components/base"
@@ -44,28 +44,9 @@ interface DefaultToolProps {
 	onMouseLeave?: NodeProps["onMouseLeave"]
 }
 
-export const getToolDesignProjectInfo = (tool: unknown) => {
-	// eslint-disable-next-line @typescript-eslint/no-explicit-any
-	const toolData = tool as any
-	const magicProjectJSFile = toolData.attachments?.find(
-		(item: FileItem) => item.filename === "magic.project.js",
-	)
-	const fileTree = projectFilesStore.workspaceFileTree
-	const designProject = fileTree.find((item) =>
-		item.children?.find((child) => child.file_id === magicProjectJSFile?.file_id),
-	)
-	const designProjectId = designProject?.file_id || ""
-	const elements = (toolData.detail?.data?.elements || []) as LayerElement[]
-	return {
-		designProjectId,
-		designProject,
-		magicProjectJSFile,
-		elements,
-	}
-}
-
 function DefaultTool(props: DefaultToolProps) {
 	const { t } = useTranslation("super")
+	const filesStore = useMessageListProjectFilesStore()
 	const { onMouseEnter, onMouseLeave, loading, classNames, onClick } = props
 	const node = superMagicStore.getMessageNode(props?.node?.super_message_id) as
 		| { tool?: ToolDataLike }
@@ -90,7 +71,7 @@ function DefaultTool(props: DefaultToolProps) {
 			const detail = { ...tool?.detail, id: tool?.id }
 			selectToolDetail({ detail, onSelectDetail: props?.onSelectDetail })
 			if (interactionTargetType === "design") {
-				const { designProjectId, elements } = getToolDesignProjectInfo(tool)
+				const { designProjectId, elements } = getToolDesignProjectInfo(tool, filesStore)
 				pubsub.publish(PubSubEvents.Super_Magic_Focus_Canvas_Element, {
 					isFromPlaybackToolNode: true,
 					canvasDesignId: designProjectId,
@@ -100,7 +81,7 @@ function DefaultTool(props: DefaultToolProps) {
 				})
 			}
 		},
-		[hasInteraction, interactionTargetType, props?.onSelectDetail, tool],
+		[filesStore, hasInteraction, interactionTargetType, props?.onSelectDetail, tool],
 	)
 
 	const showSuffixIcon = hasInteraction

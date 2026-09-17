@@ -50,8 +50,8 @@
 		"vitest": "^3.2.4"
 	},
 	"peerDependencies": {
-		"@apmplus/web": "^2.10.3",
 		"@apmplus/integrations": "^2.7.2",
+		"@apmplus/web": "^2.10.3",
 		"@arms/rum-browser": "^0.0.37",
 		"@cloudcare/browser-rum": "3.3.6"
 	},
