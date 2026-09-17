@@ -9,6 +9,7 @@ import {
 	loadDiffSyntaxHighlighter,
 } from "@/infrastructure/vendors/react-syntax-highlighter/diff"
 import type { CodeBlockNodeOptions } from "./code-block-node-extension"
+import { cn } from "@/utils/cn"
 
 const MagicCode = lazy(() => import("@/components/base/MagicCode"))
 const MagicMermaid = lazy(() => import("@/components/base/MagicMermaid"))
@@ -29,6 +30,7 @@ export function CodeBlockNodeView(props: CodeBlockNodeViewProps) {
 	const { node, editor, extension } = props
 	const language = node.attrs.language || "text"
 	const { enableWrapToggle } = extension.options
+	const diffWrapClassName = enableWrapToggle ? "diff-code-wrapped" : "diff-code-unwrapped"
 	const [diffStyle, setDiffStyle] = useState<Record<string, CSSProperties> | null>(null)
 	useEffect(() => {
 		if (language !== "diff" || diffStyle) return
@@ -87,13 +89,16 @@ export function CodeBlockNodeView(props: CodeBlockNodeViewProps) {
 		}
 
 		return (
-			<NodeViewWrapper as="div" className="diff-code-block-node-view">
+			<NodeViewWrapper
+				as="div"
+				className={cn("diff-code-block-node-view", diffWrapClassName)}
+			>
 				<Suspense fallback={null}>
 					<DiffSyntaxHighlighter
 						language="diff"
 						style={diffStyle}
 						showLineNumbers={false}
-						wrapLines={true}
+						wrapLongLines={enableWrapToggle}
 						customStyle={{
 							fontSize: "14px",
 							textShadow: "none !important",
