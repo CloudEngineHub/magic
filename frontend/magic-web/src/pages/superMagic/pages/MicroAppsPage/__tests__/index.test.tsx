@@ -330,7 +330,7 @@ describe("MicroAppsPage", () => {
 		)
 	})
 
-	it("hides the collaborated scope in a personal organization", () => {
+	it("hides redundant development filters in a personal organization", () => {
 		mocks.useMicroAppsPage.mockReturnValue({
 			...mocks.useMicroAppsPage(),
 			availableScopes: ["all", "created", "accessible", "recent"],
@@ -340,7 +340,7 @@ describe("MicroAppsPage", () => {
 
 		expect(screen.queryByTestId("micro-apps-scope-collaborated")).not.toBeInTheDocument()
 		expect(screen.queryByTestId("micro-apps-scope-all")).not.toBeInTheDocument()
-		expect(screen.getByTestId("micro-apps-scope-created")).toBeInTheDocument()
+		expect(screen.queryByTestId("micro-apps-scope-created")).not.toBeInTheDocument()
 		expect(screen.getByTestId("micro-apps-access-scope-accessible")).toBeInTheDocument()
 		expect(screen.getByTestId("micro-apps-access-scope-recent")).toBeInTheDocument()
 	})
@@ -353,23 +353,35 @@ describe("MicroAppsPage", () => {
 		expect(mocks.setScope).toHaveBeenCalledWith("accessible")
 	})
 
-	it("shows the published empty copy on the accessible tab", () => {
+	it.each([
+		[
+			"accessible",
+			"microAppsPage.publishedEmptyTitle",
+			"microAppsPage.publishedEmptyDescription",
+		],
+		["recent", "microAppsPage.recentEmptyTitle", "microAppsPage.recentEmptyDescription"],
+	])("shows distinct empty content for the %s tab", (scope, title, description) => {
 		mocks.useMicroAppsPage.mockReturnValue({
 			...mocks.useMicroAppsPage(),
-			scope: "accessible",
+			scope,
 			apps: [],
 		})
 
 		render(<MicroAppsPage />)
+		expect(
+			within(screen.getByRole("region", { name: "microAppsPage.accessTitle" })).queryByTestId(
+				"micro-app-state-empty",
+			),
+		).not.toBeInTheDocument()
 
 		expect(
 			within(screen.getByRole("region", { name: "microAppsPage.accessTitle" })).getByText(
-				"microAppsPage.publishedEmptyTitle",
+				title,
 			),
 		).toBeInTheDocument()
 		expect(
 			within(screen.getByRole("region", { name: "microAppsPage.accessTitle" })).getByText(
-				"microAppsPage.publishedEmptyDescription",
+				description,
 			),
 		).toBeInTheDocument()
 	})

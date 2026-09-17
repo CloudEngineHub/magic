@@ -3984,6 +3984,8 @@
 		"openGallery": "查看微应用列表",
 		"publishedEmptyDescription": "发布者把微应用分享给你后，会显示在这里。",
 		"publishedEmptyTitle": "暂无可访问的微应用",
+		"recentEmptyDescription": "访问过的应用会显示在这里，方便下次继续使用。",
+		"recentEmptyTitle": "暂无访问记录",
 		"refresh": "刷新",
 		"resizePanels": "调整开发区和访问区的宽度",
 		"retryLoadMore": "重试加载",

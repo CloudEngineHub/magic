@@ -26,6 +26,8 @@ function MicroAppScopeTabs({
 		accessible: t("microAppsPage.scopeAccessible"),
 		recent: t("microAppsPage.scopeRecent"),
 	}
+	if (availableScopes.length <= 1) return null
+
 	return (
 		<Tabs value={value} onValueChange={(nextValue) => onChange(nextValue as MicroAppListScope)}>
 			<TabsList

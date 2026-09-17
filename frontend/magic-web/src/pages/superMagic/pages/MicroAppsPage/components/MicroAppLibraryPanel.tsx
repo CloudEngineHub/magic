@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef } from "react"
 import { useTranslation } from "react-i18next"
-import { Loader2 } from "lucide-react"
+import { AppWindow, History, Loader2 } from "lucide-react"
 import type { MicroAppListItem } from "@/apis/modules/superMagic"
 import { Button } from "@/components/shadcn-ui/button"
 import { ScrollArea } from "@/components/shadcn-ui/scroll-area"
@@ -34,19 +34,33 @@ function EmptyState({
 	title,
 	description,
 	searching,
+	access,
+	recent,
 }: {
 	title: string
 	description: string
 	searching: boolean
+	access: boolean
+	recent: boolean
 }) {
 	const Illustration = searching ? MicroAppSearchEmptyIllustration : MicroAppEmptyIllustration
+	const AccessIcon = recent ? History : AppWindow
 
 	return (
 		<div className="flex min-h-[220px] flex-col items-center justify-center rounded-2xl border border-border/70 bg-muted/[0.08] px-6 py-8 text-center">
-			<Illustration size="md" />
+			{access && !searching ? (
+				<div
+					className="mb-5 flex size-12 items-center justify-center rounded-2xl border border-border/60 bg-muted/40 text-muted-foreground"
+					aria-hidden
+				>
+					<AccessIcon size={16} />
+				</div>
+			) : (
+				<Illustration size="md" />
+			)}
 			<div className="space-y-1">
 				<p className="text-sm font-semibold text-foreground">{title}</p>
-				<p className="text-sm text-muted-foreground">{description}</p>
+				<p className="max-w-sm text-sm leading-6 text-muted-foreground">{description}</p>
 			</div>
 		</div>
 	)
@@ -224,19 +238,25 @@ export default function MicroAppLibraryPanel({
 						{!loading && !error && apps.length === 0 ? (
 							<EmptyState
 								searching={Boolean(keyword)}
+								access={access}
+								recent={scope === "recent"}
 								title={
 									keyword
 										? t("microAppsPage.noSearchResults")
 										: scope === "accessible"
 											? t("microAppsPage.publishedEmptyTitle")
-											: t("microAppsPage.emptyTitle")
+											: scope === "recent"
+												? t("microAppsPage.recentEmptyTitle")
+												: t("microAppsPage.emptyTitle")
 								}
 								description={
 									keyword
 										? t("microAppsPage.noSearchResultsDescription")
 										: scope === "accessible"
 											? t("microAppsPage.publishedEmptyDescription")
-											: t("microAppsPage.emptyDescription")
+											: scope === "recent"
+												? t("microAppsPage.recentEmptyDescription")
+												: t("microAppsPage.emptyDescription")
 								}
 							/>
 						) : null}

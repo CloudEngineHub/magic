@@ -3985,6 +3985,8 @@
 		"openGallery": "View micro app list",
 		"publishedEmptyDescription": "Micro apps shared with you will appear here.",
 		"publishedEmptyTitle": "No accessible micro apps",
+		"recentEmptyDescription": "Apps you visit will appear here so you can easily return to them.",
+		"recentEmptyTitle": "No recent apps",
 		"refresh": "Refresh",
 		"resizePanels": "Resize development and access panels",
 		"retryLoadMore": "Retry loading",
