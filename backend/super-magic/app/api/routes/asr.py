@@ -43,7 +43,10 @@ def _build_task_response(task: AsrTaskResult) -> AsrTaskResponse:
         error_message=task.error_message or task.audio_format_error,
         files=task.files,
         deleted_files=task.deleted_files,
-        operations=task.operations
+        operations=task.operations,
+        degraded=task.degraded,
+        completion_mode=task.completion_mode,
+        missing_shard_indices=task.missing_shard_indices,
     )
 
 

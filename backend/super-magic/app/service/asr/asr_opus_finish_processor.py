@@ -77,6 +77,8 @@ class AsrOpusFinishProcessor(AsrServiceBase):
             expected_shard_count = (
                 len(all_files)
                 if claimed_progress.finish_completion_mode == "tail_missing_convergence"
+                else max((index for index, _ in all_files), default=-1) + 1
+                if claimed_progress.finish_completion_mode == "middle_gap_silence_fill"
                 else claimed_progress.file_shard_count
                 if claimed_progress.file_shard_count >= 0
                 else None
@@ -85,8 +87,11 @@ class AsrOpusFinishProcessor(AsrServiceBase):
                 task.task_key,
                 task.source_dir,
                 all_files,
-                expected_shard_count,
+                expected_shard_count=expected_shard_count,
                 merge_attempt_id=attempt_id,
+                missing_indices=claimed_progress.accepted_missing_shard_indices
+                if claimed_progress.finish_completion_mode == "middle_gap_silence_fill"
+                else None,
             )
         except OpusShardsNotReadyError as exc:
             if self._deadline_reached(claimed_progress.completion_deadline_at):
@@ -113,6 +118,21 @@ class AsrOpusFinishProcessor(AsrServiceBase):
                 return True
             return False
 
+        if claimed_progress.finish_completion_mode == "middle_gap_silence_fill":
+            degraded_saved = await task_manager.set_degraded_merge_info(
+                task.task_key,
+                "middle_gap_silence_fill",
+                claimed_progress.accepted_missing_shard_indices,
+            )
+            if not degraded_saved:
+                await task_manager.set_opus_merge_status(
+                    task.task_key, "failed", "记录降级合并结果失败", expected_attempt_id=attempt_id
+                )
+                logger.error(
+                    f"{self.LOG_PREFIX} ❌ task_key={task.task_key} "
+                    "降级合并结果写入失败，阻止任务完成"
+                )
+                return False
         status_saved = await task_manager.set_opus_merge_status(
             task.task_key,
             "completed",

@@ -5,7 +5,9 @@
 
 import asyncio
 import time
+from dataclasses import dataclass
 from pathlib import Path
+from statistics import median
 from uuid import uuid4
 
 from loguru import logger
@@ -15,10 +17,24 @@ from app.service.asr.asr_file_detector import AsrFileDetector
 from app.service.asr.asr_local_proxy import AsrLocalWorkspaceProxy
 from app.service.asr.asr_merge_task_manager import AsrMergeTaskManager
 from app.service.asr.asr_time_config import asr_time_config
+from app.utils.async_file_utils import (
+    async_chmod,
+    async_rename,
+    async_unlink,
+    async_write_text,
+)
 
 
 class OpusShardsNotReadyError(RuntimeError):
     """finish 已到达，但 Opus 分片集合尚未完整或尚未稳定。"""
+
+
+@dataclass(frozen=True)
+class OpusMergeInput:
+    index: int
+    path: Path
+    synthetic: bool
+    duration_ms: int | None = None
 
 
 class AsrOpusMergeOperations(AsrServiceBase):
@@ -34,11 +50,13 @@ class AsrOpusMergeOperations(AsrServiceBase):
         all_files: list[tuple[int, Path]],
         expected_shard_count: int | None = None,
         merge_attempt_id: str | None = None,
+        missing_indices: list[int] | None = None,
     ) -> bool:
         started_at = time.monotonic()
         ordered_files = sorted(all_files, key=lambda item: item[0])
         indices = [index for index, _ in ordered_files]
-        self._validate_shard_indices(ordered_files, expected_shard_count)
+        accepted_missing = sorted(missing_indices or [])
+        self._validate_shard_indices(ordered_files, expected_shard_count, accepted_missing)
 
         proxy = AsrLocalWorkspaceProxy(task_key, source_dir, audio_format="opus")
         filenames = [path.name for _, path in ordered_files]
@@ -66,13 +84,28 @@ class AsrOpusMergeOperations(AsrServiceBase):
         list_file = proxy.get_local_path(f".concat_list_opus_finish_{token}.txt")
         temp_output = proxy.get_local_path(f".concat_temp_opus_finish_{token}.opus")
         local_merged_path = proxy.get_local_path(proxy.merged_filename)
+        synthetic_files: list[Path] = []
 
         try:
-            await self._create_concat_list_file(strict_local_paths, list_file)
+            real_local_files = {
+                index: path
+                for (index, _), path in zip(ordered_files, strict_local_paths, strict=True)
+            }
+            merge_inputs, synthetic_files = await self._build_merge_inputs(
+                task_key=task_key,
+                local_files=real_local_files,
+                expected_shard_count=expected_shard_count,
+                missing_indices=accepted_missing,
+                synthetic_dir=proxy.local_dir,
+                attempt_id=token,
+            )
+            await self._create_concat_list_file([item.path for item in merge_inputs], list_file)
             cmd = self._build_ffmpeg_command(list_file, temp_output)
-            logger.info(
-                f"{self.LOG_PREFIX} 🎙️ task_key={task_key} Opus finish 全量合并开始: "
-                f"attempt_id={token}, input_count={len(strict_local_paths)}, "
+            log_event = "ASR_DEGRADED_MERGE_STARTED" if accepted_missing else "ASR_MERGE_STARTED"
+            logger.warning(
+                f"{self.LOG_PREFIX} event={log_event} task_key={task_key} "
+                f"attempt_id={token} input_count={len(merge_inputs)} "
+                f"real_shard_count={len(strict_local_paths)} synthetic_shard_count={len(synthetic_files)} "
                 f"index_range={indices[0]}-{indices[-1]}, codec=libopus, "
                 f"sample_rate=16000, channels=1, bitrate={asr_time_config.OGG_REENCODE_BITRATE}"
             )
@@ -85,7 +118,7 @@ class AsrOpusMergeOperations(AsrServiceBase):
             if duration <= 0:
                 raise RuntimeError("Opus finish 输出时长无效")
 
-            await asyncio.to_thread(temp_output.replace, local_merged_path)
+            await async_rename(temp_output, local_merged_path)
             upload_ok = await proxy.sync_local_to_remote_atomic(
                 proxy.merged_filename,
                 timeout=asr_time_config.OPUS_STAGING_UPLOAD_TIMEOUT,
@@ -110,7 +143,22 @@ class AsrOpusMergeOperations(AsrServiceBase):
                     },
                     "merge_attempt_id": token,
                     "source_shard_count": len(indices),
+                    "expected_shard_count": expected_shard_count or len(indices),
                     "source_last_index": indices[-1],
+                    "degraded": bool(accepted_missing),
+                    "completion_mode": (
+                        "middle_gap_silence_fill" if accepted_missing else "strict"
+                    ),
+                    "missing_shard_indices": accepted_missing,
+                    "synthetic_shards": [
+                        {
+                            "index": item.index,
+                            "duration_ms": item.duration_ms,
+                            "reason": "source_shard_missing",
+                        }
+                        for item in merge_inputs
+                        if item.synthetic
+                    ],
                     "merged_duration": duration,
                     "merged_size": merged_size,
                 },
@@ -120,24 +168,39 @@ class AsrOpusMergeOperations(AsrServiceBase):
                 raise RuntimeError("Opus finish metadata 原子上传失败")
 
             progress_saved = await AsrMergeTaskManager.instance().update_progress(
-                task_key, indices[-1], len(indices)
+                task_key,
+                expected_shard_count - 1 if expected_shard_count else indices[-1],
+                expected_shard_count or len(indices),
             )
             if not progress_saved:
                 raise RuntimeError("Opus finish 进度写入失败")
 
-            logger.info(
-                f"{self.LOG_PREFIX} ✅ task_key={task_key} Opus finish 全量合并成功: "
+            completed_event = (
+                "ASR_DEGRADED_MERGE_COMPLETED" if accepted_missing else "ASR_MERGE_COMPLETED"
+            )
+            logger.warning(
+                f"{self.LOG_PREFIX} event={completed_event} task_key={task_key} "
                 f"attempt_id={token}, size={merged_size}B, duration={duration}s, "
+                f"missing_indices={accepted_missing[:20]} "
                 f"elapsed={time.monotonic() - started_at:.2f}s"
             )
             return True
+        except Exception as exc:
+            if accepted_missing:
+                logger.error(
+                    f"{self.LOG_PREFIX} event=ASR_DEGRADED_MERGE_FAILED task_key={task_key} "
+                    f"attempt_id={token} missing_indices={accepted_missing[:20]} error={exc}"
+                )
+            raise
         finally:
-            await asyncio.to_thread(list_file.unlink, missing_ok=True)
-            await asyncio.to_thread(temp_output.unlink, missing_ok=True)
+            for path in [list_file, temp_output, *synthetic_files]:
+                await async_unlink(path)
 
     @staticmethod
     def _validate_shard_indices(
-        ordered_files: list[tuple[int, Path]], expected_shard_count: int | None
+        ordered_files: list[tuple[int, Path]],
+        expected_shard_count: int | None,
+        accepted_missing_indices: list[int] | None = None,
     ) -> None:
         if not ordered_files:
             raise OpusShardsNotReadyError("尚未扫描到 Opus 分片")
@@ -147,9 +210,12 @@ class AsrOpusMergeOperations(AsrServiceBase):
             if path.name != f"{index}.opus":
                 raise ValueError(f"Opus 分片文件名非法: index={index}, filename={path.name}")
 
+        accepted_missing = sorted(accepted_missing_indices or [])
         if expected_shard_count is not None and expected_shard_count >= 0:
             expected_indices = list(range(expected_shard_count))
             if indices == expected_indices:
+                return
+            if accepted_missing and sorted(set(expected_indices) - set(indices)) == accepted_missing:
                 return
             if len(indices) <= expected_shard_count and set(indices).issubset(expected_indices):
                 missing = sorted(set(expected_indices) - set(indices))
@@ -162,6 +228,98 @@ class AsrOpusMergeOperations(AsrServiceBase):
         if indices != expected_indices:
             missing = sorted(set(expected_indices) - set(indices))
             raise OpusShardsNotReadyError(f"Opus 分片索引不连续，缺少: {missing[:20]}")
+
+    async def _build_merge_inputs(
+        self,
+        task_key: str,
+        local_files: dict[int, Path],
+        expected_shard_count: int | None,
+        missing_indices: list[int],
+        synthetic_dir: Path,
+        attempt_id: str,
+    ) -> tuple[list[OpusMergeInput], list[Path]]:
+        if not missing_indices:
+            return (
+                [
+                    OpusMergeInput(index=index, path=path, synthetic=False)
+                    for index, path in sorted(local_files.items())
+                ],
+                [],
+            )
+        if expected_shard_count is None or expected_shard_count <= 0:
+            raise ValueError("静音补片需要明确的预期分片范围")
+
+        neighbor_indices = {
+            neighbor
+            for missing_index in missing_indices
+            for neighbor in range(
+                max(0, missing_index - 3),
+                min(expected_shard_count, missing_index + 4),
+            )
+            if neighbor in local_files
+        }
+        durations = {
+            index: duration
+            for index, duration in await asyncio.gather(
+                *(
+                    self._probe_index_duration(index, local_files[index])
+                    for index in sorted(neighbor_indices)
+                )
+            )
+            if duration > 0
+        }
+        inputs: list[OpusMergeInput] = []
+        synthetic_files: list[Path] = []
+        for index in range(expected_shard_count):
+            real_path = local_files.get(index)
+            if real_path is not None:
+                inputs.append(OpusMergeInput(index=index, path=real_path, synthetic=False))
+                continue
+            if index not in missing_indices:
+                raise OpusShardsNotReadyError(f"未获批准的 Opus 缺片: {index}")
+            neighbors = [
+                durations[neighbor]
+                for neighbor in range(max(0, index - 3), min(expected_shard_count, index + 4))
+                if neighbor in durations
+            ]
+            if not neighbors:
+                raise OpusShardsNotReadyError(f"无法推算 Opus 缺片 {index} 的时长")
+            duration = float(median(neighbors))
+            synthetic_path = synthetic_dir / f".synthetic_{attempt_id}_{index}.opus"
+            logger.warning(
+                f"{self.LOG_PREFIX} event=ASR_SILENCE_FILL_PLANNED task_key={task_key} "
+                f"index={index} duration_ms={round(duration * 1000)} duration_source=neighbor_median"
+            )
+            await self._generate_silence_opus(synthetic_path, duration)
+            logger.warning(
+                f"{self.LOG_PREFIX} event=ASR_SILENCE_FILL_GENERATED task_key={task_key} "
+                f"index={index} duration_ms={round(duration * 1000)} codec=opus "
+                "sample_rate=16000 channels=1"
+            )
+            synthetic_files.append(synthetic_path)
+            inputs.append(
+                OpusMergeInput(
+                    index=index,
+                    path=synthetic_path,
+                    synthetic=True,
+                    duration_ms=round(duration * 1000),
+                )
+            )
+        return inputs, synthetic_files
+
+    async def _probe_index_duration(self, index: int, path: Path) -> tuple[int, float]:
+        return index, await self._get_audio_duration(path)
+
+    async def _generate_silence_opus(self, output_path: Path, duration: float) -> None:
+        cmd = [
+            "ffmpeg", "-y", "-loglevel", "error",
+            "-f", "lavfi", "-i", "anullsrc=r=16000:cl=mono",
+            "-t", f"{duration:.3f}", "-c:a", "libopus",
+            "-b:a", asr_time_config.OGG_REENCODE_BITRATE,
+            "-application", "audio", str(output_path),
+        ]
+        await self._run_ffmpeg(cmd)
+        await async_chmod(output_path, 0o600)
 
     async def _validate_local_shards(
         self,
@@ -185,7 +343,7 @@ class AsrOpusMergeOperations(AsrServiceBase):
     @staticmethod
     async def _create_concat_list_file(files: list[Path], list_file: Path) -> None:
         lines = [f"file '{path.absolute()}'" for path in files]
-        await asyncio.to_thread(list_file.write_text, "\n".join(lines), encoding="utf-8")
+        await async_write_text(list_file, "\n".join(lines), encoding="utf-8")
 
     @staticmethod
     def _build_ffmpeg_command(list_file: Path, temp_output: Path) -> list[str]:

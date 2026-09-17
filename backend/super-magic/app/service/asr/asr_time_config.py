@@ -82,6 +82,14 @@ class AsrTimeConfig:
     FINISH_MAX_TAIL_MISSING_SHARDS: int = int(
         os.getenv("ASR_FINISH_MAX_TAIL_MISSING_SHARDS", "3")
     )
+    # 中间缺片只能在 finish 超时后用静音补齐。数量与比例同时受限，
+    # 避免把严重丢包伪装成一次正常完成。
+    FINISH_MAX_MIDDLE_MISSING_SHARDS: int = int(
+        os.getenv("ASR_FINISH_MAX_MIDDLE_MISSING_SHARDS", "3")
+    )
+    FINISH_MAX_MIDDLE_MISSING_RATIO: float = float(
+        os.getenv("ASR_FINISH_MAX_MIDDLE_MISSING_RATIO", "0.01")
+    )
     OPUS_SHARD_SYNC_TIMEOUT: int = int(os.getenv("ASR_OPUS_SHARD_SYNC_TIMEOUT", "900"))
     OPUS_STAGING_UPLOAD_TIMEOUT: int = int(
         os.getenv("ASR_OPUS_STAGING_UPLOAD_TIMEOUT", "900")
