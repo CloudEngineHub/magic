@@ -93,7 +93,7 @@ class TaskProgress(BaseModel):
     opus_merge_started_at: Optional[float] = None
     opus_merge_completed_at: Optional[float] = None
     start_time: float = Field(default_factory=lambda: datetime.now().timestamp())
-    retry_count: int = 0  # 整体任务重试次数（由 finish 触发），最大允许次数由服务端控制
+    retry_count: int = 0  # 整体任务重试次数（仅人工 force_reset 触发），上限见 MAX_TASK_RETRIES
 
 
 class TaskState(BaseModel):
@@ -126,13 +126,17 @@ def classify_shard_set(
     return True, missing, "tail_missing" if missing else "complete"
 
 
-def classify_middle_gap_for_silence_fill(
+def classify_missing_for_silence_fill(
     indices: list[int],
     declared_count: int | None,
     max_missing: int,
     max_missing_ratio: float,
 ) -> tuple[bool, list[int], str]:
-    """判断中间缺片能否用静音补齐；不会推测未声明的尾部分片。"""
+    """判断声明范围内的缺片（中间/尾部/混合）能否用静音补齐。
+
+    需要客户端已声明分片总数；未声明时只能看到 ``ordered[-1]`` 之前的缺口，
+    不会推测不可见的尾部。
+    """
     if not indices:
         return False, [], "empty"
     ordered = sorted(indices)
@@ -146,13 +150,13 @@ def classify_middle_gap_for_silence_fill(
     missing = sorted(set(range(expected_count)) - set(ordered))
     if not missing:
         return False, [], "no_gap"
-    if any(index > ordered[-1] for index in missing):
-        return False, missing, "tail_or_mixed_gap"
     if len(missing) > max_missing:
-        return False, missing, "too_many_middle_missing"
-    if len(missing) / expected_count > max_missing_ratio:
-        return False, missing, "middle_missing_ratio_exceeded"
-    return True, missing, "middle_gap"
+        return False, missing, "too_many_missing"
+    # 单片丢失是客户端偶发漏传的主要场景，即使录音较短也允许静音补偿。
+    # 多片丢失同时受数量和比例限制，避免把大段内容静音后伪装成正常完成。
+    if len(missing) > 1 and len(missing) / expected_count > max_missing_ratio:
+        return False, missing, "missing_ratio_exceeded"
+    return True, missing, "silence_fill"
 
 
 class AsrMergeTaskManager(AsrServiceBase):
@@ -166,7 +170,10 @@ class AsrMergeTaskManager(AsrServiceBase):
 
     # 常量定义
     STATE_FILE_SUFFIX = ".json"
-    MAX_TASK_RETRIES = 10  # 最大允许重试整个任务次数（由 finish 触发）
+    # 最大允许重试整个任务次数。自动重试已移除（ERROR 任务的普通 finish 只幂等返回错误），
+    # 仅人工 force_reset 会触发 request_retry 且会归零计数；该上限只是防御性兜底。
+    # finish 超时后的缺片分类对同一分片集合是确定性的，重等不会改变结果，故不设大值。
+    MAX_TASK_RETRIES = 3
 
     def __init__(self):
         """初始化任务管理器"""
@@ -1167,12 +1174,13 @@ class AsrMergeTaskManager(AsrServiceBase):
             await self.fail_task(task_key, f"finish 收敛后分片集合失效: reason={reason_now}, indices={indices}")
             return False, True
 
-        if progress.finish_completion_mode == "middle_gap_silence_fill":
-            accepted_now, missing_now, reason_now = classify_middle_gap_for_silence_fill(
+        if progress.finish_completion_mode in {"silence_fill", "middle_gap_silence_fill"}:
+            # middle_gap_silence_fill 是旧版持久化状态值，只读兼容；新状态统一写 silence_fill。
+            accepted_now, missing_now, reason_now = classify_missing_for_silence_fill(
                 indices,
                 expected if expected >= 0 else None,
-                asr_time_config.FINISH_MAX_MIDDLE_MISSING_SHARDS,
-                asr_time_config.FINISH_MAX_MIDDLE_MISSING_RATIO,
+                asr_time_config.FINISH_MAX_MISSING_SHARDS,
+                asr_time_config.FINISH_MAX_MISSING_RATIO,
             )
             if accepted_now and missing_now == progress.accepted_missing_shard_indices:
                 return True, False
@@ -1190,6 +1198,55 @@ class AsrMergeTaskManager(AsrServiceBase):
         if not deadline_reached:
             return False, False
 
+        # Opus：已声明总数时，声明范围内的缺片（中间/尾部/混合）统一用静音补齐，不再截断。
+        if expected >= 0 and state.task.audio_format == "opus":
+            fill_accepted, fill_missing, fill_reason = classify_missing_for_silence_fill(
+                indices,
+                expected,
+                asr_time_config.FINISH_MAX_MISSING_SHARDS,
+                asr_time_config.FINISH_MAX_MISSING_RATIO,
+            )
+            if fill_accepted:
+                await self._atomic_update_state(
+                    task_key,
+                    lambda current: self._apply_state_updates(
+                        current,
+                        progress_updates={
+                            "accepted_missing_shard_indices": fill_missing,
+                            "finish_completion_mode": "silence_fill",
+                        },
+                    ),
+                    "记录缺片静音补片状态失败",
+                )
+                logger.warning(
+                    f"{self.LOG_PREFIX} event=ASR_SHARD_GAP_DETECTED task_key={task_key} "
+                    f"declared_count={expected} scanned_count={len(indices)} "
+                    f"index_range={indices[0]}-{indices[-1]} missing_indices={fill_missing[:20]}"
+                )
+                logger.warning(
+                    f"{self.LOG_PREFIX} event=ASR_DEGRADED_MERGE_APPROVED task_key={task_key} "
+                    f"missing_count={len(fill_missing)} "
+                    f"missing_ratio={len(fill_missing) / expected:.6f} "
+                    "completion_mode=silence_fill"
+                )
+                return True, False
+            if fill_reason == "no_gap":
+                # 分片已齐但稳定扫描次数不足即到期；与旧尾部收敛行为一致，直接接受当前完整集合。
+                # 后续合并前还会做本地同步与逐片校验。
+                logger.warning(
+                    f"{self.LOG_PREFIX} ⚠️ task_key={task_key} finish 超时但分片已齐，"
+                    f"按当前完整集合继续: declared={expected}, scanned_count={len(indices)}"
+                )
+                return True, False
+            message = (
+                f"finish 等待分片超时: declared={expected}, scanned={indices}, "
+                f"stable_count={progress.finish_stable_count}, reason={fill_reason}"
+            )
+            await self.fail_task(task_key, message)
+            logger.error(f"{self.LOG_PREFIX} ❌ task_key={task_key} {message}")
+            return False, True
+
+        # WAV：保持尾部缺片截断收敛；中间缺片直接失败。
         accepted, missing, reason = classify_shard_set(
             indices,
             expected if expected >= 0 else None,
@@ -1215,39 +1272,7 @@ class AsrMergeTaskManager(AsrServiceBase):
             )
             return True, False
 
-        middle_accepted, middle_missing, middle_reason = classify_middle_gap_for_silence_fill(
-            indices,
-            expected if expected >= 0 else None,
-            asr_time_config.FINISH_MAX_MIDDLE_MISSING_SHARDS,
-            asr_time_config.FINISH_MAX_MIDDLE_MISSING_RATIO,
-        )
         # 未声明总片数的历史客户端无法证明缺口位于完整范围内，继续走原有兼容路径。
-        if expected >= 0 and state.task.audio_format == "opus" and middle_accepted:
-            await self._atomic_update_state(
-                task_key,
-                lambda current: self._apply_state_updates(
-                    current,
-                    progress_updates={
-                        "accepted_missing_shard_indices": middle_missing,
-                        "finish_completion_mode": "middle_gap_silence_fill",
-                    },
-                ),
-                "记录中间缺片静音补片状态失败",
-            )
-            logger.warning(
-                f"{self.LOG_PREFIX} event=ASR_SHARD_GAP_DETECTED task_key={task_key} "
-                f"declared_count={expected} scanned_count={len(indices)} "
-                f"index_range={indices[0]}-{indices[-1]} missing_indices={middle_missing[:20]} "
-                "reason=middle_gap"
-            )
-            logger.warning(
-                f"{self.LOG_PREFIX} event=ASR_DEGRADED_MERGE_APPROVED task_key={task_key} "
-                f"missing_count={len(middle_missing)} "
-                f"missing_ratio={len(middle_missing) / (expected if expected >= 0 else indices[-1] + 1):.6f} "
-                "completion_mode=middle_gap_silence_fill"
-            )
-            return True, False
-
         if expected < 0 and progress.last_stable_shard_indices:
             logger.warning(
                 f"{self.LOG_PREFIX} task_key={task_key} 历史客户端达到 finish 超时，使用最后稳定分片集合: "
@@ -1257,7 +1282,7 @@ class AsrMergeTaskManager(AsrServiceBase):
 
         message = (
             f"finish 等待分片超时: declared={expected}, scanned={indices}, "
-            f"stable_count={progress.finish_stable_count}, reason={middle_reason if reason == 'middle_gap' else reason}"
+            f"stable_count={progress.finish_stable_count}, reason={reason}"
         )
         await self.fail_task(task_key, message)
         logger.error(f"{self.LOG_PREFIX} ❌ task_key={task_key} {message}")
@@ -1587,7 +1612,7 @@ class AsrMergeTaskManager(AsrServiceBase):
 
         if progress.finish_completion_mode == "tail_missing_convergence":
             required_count = scanned_file_count
-        elif progress.finish_completion_mode == "middle_gap_silence_fill":
+        elif progress.finish_completion_mode in {"silence_fill", "middle_gap_silence_fill"}:
             required_count = (
                 progress.file_shard_count
                 if progress.file_shard_count >= 0
@@ -1606,7 +1631,7 @@ class AsrMergeTaskManager(AsrServiceBase):
         expected_real_count = required_count - len(progress.accepted_missing_shard_indices)
         scanned_matches = (
             scanned_file_count == expected_real_count
-            if progress.finish_completion_mode == "middle_gap_silence_fill"
+            if progress.finish_completion_mode in {"silence_fill", "middle_gap_silence_fill"}
             else scanned_file_count == required_count
         )
         if not scanned_matches or processed_count != required_count:
@@ -1630,17 +1655,18 @@ class AsrMergeTaskManager(AsrServiceBase):
             )
             return False
         degraded_metadata_invalid = (
-            progress.finish_completion_mode == "middle_gap_silence_fill"
+            progress.finish_completion_mode in {"silence_fill", "middle_gap_silence_fill"}
             and (
                 metadata.get("expected_shard_count") != required_count
                 or metadata.get("source_shard_count") != expected_real_count
                 or metadata.get("missing_shard_indices")
                 != progress.accepted_missing_shard_indices
-                or metadata.get("completion_mode") != "middle_gap_silence_fill"
+                or metadata.get("completion_mode")
+                not in {"silence_fill", "middle_gap_silence_fill"}
             )
         )
         strict_metadata_invalid = (
-            progress.finish_completion_mode != "middle_gap_silence_fill"
+            progress.finish_completion_mode not in {"silence_fill", "middle_gap_silence_fill"}
             and metadata.get("source_shard_count") != required_count
         )
         if (

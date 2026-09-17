@@ -74,15 +74,18 @@ class AsrOpusFinishProcessor(AsrServiceBase):
         attempt_id = claimed_progress.opus_merge_attempt_id
 
         try:
-            expected_shard_count = (
-                len(all_files)
-                if claimed_progress.finish_completion_mode == "tail_missing_convergence"
-                else max((index for index, _ in all_files), default=-1) + 1
-                if claimed_progress.finish_completion_mode == "middle_gap_silence_fill"
-                else claimed_progress.file_shard_count
-                if claimed_progress.file_shard_count >= 0
-                else None
-            )
+            # silence_fill（含旧值 middle_gap_silence_fill）必须用声明总数作为合并范围，
+            # 否则尾部缺片进不了补齐范围；尾部截断收敛只存在旧持久化状态中。
+            if claimed_progress.finish_completion_mode == "tail_missing_convergence":
+                expected_shard_count = len(all_files)
+            elif claimed_progress.file_shard_count >= 0:
+                expected_shard_count = claimed_progress.file_shard_count
+            else:
+                expected_shard_count = None
+            is_silence_fill = claimed_progress.finish_completion_mode in {
+                "silence_fill",
+                "middle_gap_silence_fill",
+            }
             await self.merge_operations.merge_opus_on_finish(
                 task.task_key,
                 task.source_dir,
@@ -90,7 +93,7 @@ class AsrOpusFinishProcessor(AsrServiceBase):
                 expected_shard_count=expected_shard_count,
                 merge_attempt_id=attempt_id,
                 missing_indices=claimed_progress.accepted_missing_shard_indices
-                if claimed_progress.finish_completion_mode == "middle_gap_silence_fill"
+                if is_silence_fill
                 else None,
             )
         except OpusShardsNotReadyError as exc:
@@ -118,10 +121,10 @@ class AsrOpusFinishProcessor(AsrServiceBase):
                 return True
             return False
 
-        if claimed_progress.finish_completion_mode == "middle_gap_silence_fill":
+        if claimed_progress.finish_completion_mode in {"silence_fill", "middle_gap_silence_fill"}:
             degraded_saved = await task_manager.set_degraded_merge_info(
                 task.task_key,
-                "middle_gap_silence_fill",
+                claimed_progress.finish_completion_mode,
                 claimed_progress.accepted_missing_shard_indices,
             )
             if not degraded_saved:

@@ -37,6 +37,18 @@ class OpusMergeInput:
     duration_ms: int | None = None
 
 
+@dataclass(frozen=True)
+class SilenceFillParams:
+    """静音补片的编码参数，对齐相邻真实分片，避免 concat 段参数跳变。"""
+
+    sample_rate: int = 16000
+    channels: int = 1
+    bitrate: str = ""  # ffmpeg -b:a 取值，如 "32k"；空串表示用全局默认
+
+    def effective_bitrate(self) -> str:
+        return self.bitrate or asr_time_config.OGG_REENCODE_BITRATE
+
+
 class AsrOpusMergeOperations(AsrServiceBase):
     """Use original numbered Opus shards to build one committed staging file."""
 
@@ -127,8 +139,14 @@ class AsrOpusMergeOperations(AsrServiceBase):
                 raise RuntimeError("Opus finish staging 原子上传失败")
 
             merged_size = await asyncio.to_thread(lambda: local_merged_path.stat().st_size)
+            # 静音补片后合并产物逻辑上覆盖 0..expected-1（尾部缺片也算在内），
+            # source_last_index 必须反映覆盖范围而非最后一个真实分片，
+            # 否则 check_should_complete_opus 的 metadata 校验会卡住尾部补片任务。
+            covered_last_index = (
+                expected_shard_count - 1 if expected_shard_count and accepted_missing else indices[-1]
+            )
             metadata_ok = await proxy.save_metadata(
-                indices[-1],
+                covered_last_index,
                 extra={
                     "audio_format": "opus",
                     "merge_strategy": "opus_finish_full_rebuild_v1",
@@ -144,10 +162,10 @@ class AsrOpusMergeOperations(AsrServiceBase):
                     "merge_attempt_id": token,
                     "source_shard_count": len(indices),
                     "expected_shard_count": expected_shard_count or len(indices),
-                    "source_last_index": indices[-1],
+                    "source_last_index": covered_last_index,
                     "degraded": bool(accepted_missing),
                     "completion_mode": (
-                        "middle_gap_silence_fill" if accepted_missing else "strict"
+                        "silence_fill" if accepted_missing else "strict"
                     ),
                     "missing_shard_indices": accepted_missing,
                     "synthetic_shards": [
@@ -285,16 +303,23 @@ class AsrOpusMergeOperations(AsrServiceBase):
             if not neighbors:
                 raise OpusShardsNotReadyError(f"无法推算 Opus 缺片 {index} 的时长")
             duration = float(median(neighbors))
+            fill_params = await self._probe_neighbor_fill_params(
+                task_key, local_files, index, expected_shard_count
+            )
             synthetic_path = synthetic_dir / f".synthetic_{attempt_id}_{index}.opus"
+            position = "tail" if index > max(local_files) else "middle"
             logger.warning(
                 f"{self.LOG_PREFIX} event=ASR_SILENCE_FILL_PLANNED task_key={task_key} "
-                f"index={index} duration_ms={round(duration * 1000)} duration_source=neighbor_median"
+                f"index={index} position={position} duration_ms={round(duration * 1000)} "
+                f"duration_source=neighbor_median sample_rate={fill_params.sample_rate} "
+                f"channels={fill_params.channels} bitrate={fill_params.effective_bitrate()}"
             )
-            await self._generate_silence_opus(synthetic_path, duration)
+            await self._generate_silence_opus(synthetic_path, duration, fill_params)
             logger.warning(
                 f"{self.LOG_PREFIX} event=ASR_SILENCE_FILL_GENERATED task_key={task_key} "
                 f"index={index} duration_ms={round(duration * 1000)} codec=opus "
-                "sample_rate=16000 channels=1"
+                f"sample_rate={fill_params.sample_rate} channels={fill_params.channels} "
+                f"bitrate={fill_params.effective_bitrate()}"
             )
             synthetic_files.append(synthetic_path)
             inputs.append(
@@ -307,15 +332,67 @@ class AsrOpusMergeOperations(AsrServiceBase):
             )
         return inputs, synthetic_files
 
+    async def _probe_neighbor_fill_params(
+        self,
+        task_key: str,
+        local_files: dict[int, Path],
+        missing_index: int,
+        expected_shard_count: int,
+    ) -> SilenceFillParams:
+        """探测缺片相邻真实分片的编码参数；探测失败回落到合并输出的统一参数。"""
+        fallback = SilenceFillParams()
+        candidates = sorted(
+            (
+                neighbor
+                for neighbor in range(
+                    max(0, missing_index - 3),
+                    min(expected_shard_count, missing_index + 4),
+                )
+                if neighbor in local_files
+            ),
+            # 优先前一个分片，其次按距离取最近
+            key=lambda neighbor: (0 if neighbor == missing_index - 1 else 1, abs(neighbor - missing_index)),
+        )
+        if not candidates:
+            return fallback
+        try:
+            metadata = await self.file_detector.probe_audio_file(local_files[candidates[0]])
+        except Exception as exc:
+            logger.warning(
+                f"{self.LOG_PREFIX} ⚠️ task_key={task_key} 探测缺片 {missing_index} 相邻分片参数失败，"
+                f"使用默认静音参数: {exc}"
+            )
+            return fallback
+        try:
+            sample_rate = int(metadata.get("sample_rate") or 0)
+            channels = int(metadata.get("channels") or 0)
+        except (TypeError, ValueError):
+            return fallback
+        # 分片入库前已校验为 opus/单声道/16000|48000；探测值越界说明文件异常，不值得对齐
+        if sample_rate not in {16000, 48000} or channels != 1:
+            return fallback
+        bitrate = ""
+        try:
+            bit_rate_bps = int(metadata.get("bit_rate") or 0)
+        except (TypeError, ValueError):
+            bit_rate_bps = 0
+        if 6000 <= bit_rate_bps <= 510000:
+            bitrate = f"{round(bit_rate_bps / 1000)}k"
+        return SilenceFillParams(sample_rate=sample_rate, channels=channels, bitrate=bitrate)
+
     async def _probe_index_duration(self, index: int, path: Path) -> tuple[int, float]:
         return index, await self._get_audio_duration(path)
 
-    async def _generate_silence_opus(self, output_path: Path, duration: float) -> None:
+    async def _generate_silence_opus(
+        self, output_path: Path, duration: float, params: SilenceFillParams | None = None
+    ) -> None:
+        params = params or SilenceFillParams()
+        channel_layout = "mono" if params.channels == 1 else "stereo"
         cmd = [
             "ffmpeg", "-y", "-loglevel", "error",
-            "-f", "lavfi", "-i", "anullsrc=r=16000:cl=mono",
+            "-f", "lavfi", "-i", f"anullsrc=r={params.sample_rate}:cl={channel_layout}",
             "-t", f"{duration:.3f}", "-c:a", "libopus",
-            "-b:a", asr_time_config.OGG_REENCODE_BITRATE,
+            "-b:a", params.effective_bitrate(),
             "-application", "audio", str(output_path),
         ]
         await self._run_ffmpeg(cmd)

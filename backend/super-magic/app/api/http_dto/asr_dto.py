@@ -175,7 +175,7 @@ class AsrTaskResponse(BaseModel):
     deleted_files: Optional[list[DeletedFile]] = Field(None, description="被删除的文件列表")
     operations: Optional[OperationsResult] = Field(None, description="操作结果汇总")
     degraded: bool = Field(default=False, description="是否使用缺片静音补偿完成")
-    completion_mode: Optional[str] = Field(None, description="完成方式，例如 middle_gap_silence_fill")
+    completion_mode: Optional[str] = Field(None, description="完成方式，例如 silence_fill")
     missing_shard_indices: list[int] = Field(default_factory=list, description="被静音补偿的缺失分片索引")
 
     class Config:
