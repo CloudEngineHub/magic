@@ -6131,7 +6131,11 @@
 		"releaseToCollapse": "Release to collapse",
 		"renameCancel": "Cancel (Esc)",
 		"renameSave": "Save (Enter)",
+		"resizeGuideDescription": "Drag an edge or the bottom-right corner to adjust the width and height. Your preferred size will be remembered.",
+		"resizeGuideDismiss": "Got it",
+		"resizeGuideTitle": "You can resize this window",
 		"resizeSidebar": "Resize sidebar",
+		"restoreRecommendedSize": "Restore recommended size",
 		"retry": "Retry",
 		"updatedTime": "Updated",
 		"workspacesLoadFailed": "Could not load workspaces"

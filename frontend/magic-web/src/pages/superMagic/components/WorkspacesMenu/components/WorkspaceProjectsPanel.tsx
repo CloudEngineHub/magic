@@ -6,8 +6,6 @@ import { useTranslation } from "react-i18next"
 import { SuperMagicApi } from "@/apis"
 import { Button } from "@/components/shadcn-ui/button"
 import { cn } from "@/utils/cn"
-import { platformKey } from "@/utils/storage"
-import { useUserInfo } from "@/models/user/hooks"
 import type { Workspace } from "@/pages/superMagic/pages/Workspace/types"
 import { projectStore, workspaceStore } from "@/pages/superMagic/stores/core"
 import SuperMagicService from "@/pages/superMagic/services"
@@ -15,6 +13,7 @@ import useSearchValue from "@/pages/superMagic/pages/Assistant/components/TopicP
 import { ProjectsPanel } from "./ProjectsPanel"
 import WorkspaceProjectsContent from "./WorkspaceProjectsContent"
 import { CollaborationProjectsContent } from "./CollaborationProjectsPanel"
+import { useProjectManagerWindow } from "../useProjectManagerWindow"
 
 interface WorkspaceProjectsPanelProps {
 	open: boolean
@@ -24,11 +23,8 @@ interface WorkspaceProjectsPanelProps {
 }
 
 export type ProjectBrowserSource =
-	| { type: "workspace"; workspace: Workspace }
-	| { type: "collaboration" }
-	| { type: "recent" }
+	{ type: "workspace"; workspace: Workspace } | { type: "collaboration" } | { type: "recent" }
 const WORKSPACE_PAGE_SIZE = 20
-const DEFAULT_WINDOW_WIDTH_RATIO = 0.85
 
 function getInitialWorkspaces(source: ProjectBrowserSource): Workspace[] {
 	return Array.from(
@@ -50,7 +46,8 @@ function WorkspaceProjectsPanel({
 	onClose,
 }: WorkspaceProjectsPanelProps) {
 	const { t } = useTranslation("super")
-	const { userInfo } = useUserInfo()
+	const { windowOptions, resizeGuideVisible, dismissResizeGuide, restoreRecommendedSize } =
+		useProjectManagerWindow(open)
 	const { searchValue, onSearchValueChange, setSearchValue } = useSearchValue()
 	const [source, setSource] = useState<ProjectBrowserSource>(initialSource)
 	const [createPending, setCreatePending] = useState(initialAction === "create-project")
@@ -170,24 +167,11 @@ function WorkspaceProjectsPanel({
 					</span>
 				</>
 			}
-			windowOptions={{
-				open,
-				draggable: true,
-				resizable: true,
-				defaultSize: {
-					width:
-						(window.visualViewport?.width ?? window.innerWidth) *
-						DEFAULT_WINDOW_WIDTH_RATIO,
-					height: 680,
-				},
-				minSize: { width: 720, height: 480 },
-				// 所有项目入口共用尺寸偏好；账号未就绪时不使用 undefined 组成共享键。
-				sizeStorageKey:
-					userInfo?.organization_code && userInfo.user_id
-						? platformKey(
-								`super_magic/project_manager_size/${userInfo.organization_code}/${userInfo.user_id}`,
-							)
-						: undefined,
+			windowOptions={windowOptions}
+			onRestoreRecommendedSize={restoreRecommendedSize}
+			resizeGuide={{
+				visible: resizeGuideVisible,
+				onDismiss: dismissResizeGuide,
 			}}
 			searchValue={searchValue}
 			onSearchValueChange={onSearchValueChange}
