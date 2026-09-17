@@ -65,6 +65,7 @@ class MicroAppProjectAppService extends AbstractAppService
         private readonly PackageFilterInterface $packageFilterService,
         private readonly EventDispatcherInterface $eventDispatcher,
         private readonly PublishedMicroAppResolver $publishedMicroAppResolver,
+        private readonly PublishedMicroAppFileAccessService $publishedMicroAppFileAccessService,
         private readonly MicroAppProjectResponseFormatter $responseFormatter,
         private readonly MicroAppShareConfig $shareConfig,
         private readonly MicroAppVisitRepositoryInterface $microAppVisitRepository,
@@ -535,6 +536,17 @@ class MicroAppProjectAppService extends AbstractAppService
     {
         $authorization = $requestContext->getUserAuthorization();
         [$record, $project] = $this->getValidatedMicroApp($appId);
+        $organizationCode = $authorization->getOrganizationCode();
+        $sourceOrganizationCode = $record->getOrganizationCode();
+        $projectOrganizationCode = $project->getUserOrganizationCode();
+        if ($organizationCode === '' || $sourceOrganizationCode === '' || $projectOrganizationCode === ''
+            || $sourceOrganizationCode !== $projectOrganizationCode
+            || $sourceOrganizationCode !== $organizationCode) {
+            ExceptionBuilder::throw(
+                SuperAgentErrorCode::PROJECT_ACCESS_DENIED,
+                'micro_app.cross_organization_conversation_unsupported'
+            );
+        }
 
         try {
             $this->getAccessibleProject(
@@ -544,8 +556,18 @@ class MicroAppProjectAppService extends AbstractAppService
             );
             return;
         } catch (Throwable) {
-            if (! $this->publishedMicroAppResolver->canAccessPublishedShare(
-                $record->getId(),
+            $published = $this->publishedMicroAppResolver->findPublished($record->getId());
+            if ($published === null) {
+                ExceptionBuilder::throw(SuperAgentErrorCode::PROJECT_ACCESS_DENIED, 'project.access_denied');
+            }
+
+            [, $share] = $published;
+            if ($share->getShareType() === ShareAccessType::PasswordProtected->value) {
+                ExceptionBuilder::throw(SuperAgentErrorCode::PROJECT_ACCESS_DENIED, 'micro_app.password_conversation_unsupported');
+            }
+
+            if (! $this->publishedMicroAppFileAccessService->canAccessProject(
+                $record->getProjectId(),
                 $authorization->getId(),
                 $authorization->getOrganizationCode(),
             )) {

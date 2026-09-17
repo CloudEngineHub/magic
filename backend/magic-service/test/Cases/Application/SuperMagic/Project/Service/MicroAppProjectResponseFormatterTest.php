@@ -56,6 +56,7 @@ final class MicroAppProjectResponseFormatterTest extends TestCase
         self::assertFalse($result['publish']['extra']['pure_mode']);
         self::assertArrayNotHasKey('pure_mode', $result['publish']);
         self::assertArrayNotHasKey('allow_copy_project_files', $result['publish']['extra']);
+        self::assertSame('org-1', $result['organization_code']);
         self::assertSame('Demo App', $result['project']['project_name']);
     }
 
@@ -73,6 +74,7 @@ final class MicroAppProjectResponseFormatterTest extends TestCase
         );
 
         self::assertSame('share-code-1', $result['share_code']);
+        self::assertSame('org-1', $result['organization_code']);
         self::assertTrue($result['extra']['pure_mode']);
         self::assertArrayNotHasKey('pure_mode', $result);
     }

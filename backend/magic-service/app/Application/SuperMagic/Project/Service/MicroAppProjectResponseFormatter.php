@@ -62,6 +62,7 @@ class MicroAppProjectResponseFormatter
         return [
             'app_id' => (string) $record->getId(),
             'project_id' => (string) $record->getProjectId(),
+            'organization_code' => $project->getUserOrganizationCode(),
             'project' => $this->formatProject($project),
             'publish' => $this->formatPublishRecord(
                 $record,
@@ -119,6 +120,7 @@ class MicroAppProjectResponseFormatter
 
         return [
             'app_id' => (string) $record->getId(),
+            'organization_code' => $record->getOrganizationCode(),
             'resource_id' => $record->getResourceId(),
             'share_code' => $shareEntity->getShareCode(),
             'cover_url' => $coverUrls[$this->coverUrlMapKey($coverRow, $coverKey)] ?? '',

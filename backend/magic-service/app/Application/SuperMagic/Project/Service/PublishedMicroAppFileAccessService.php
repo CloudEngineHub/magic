@@ -46,7 +46,7 @@ class PublishedMicroAppFileAccessService
             && $record->getOrganizationCode() === $organizationCode
             && $project->getUserOrganizationCode() === $organizationCode
             && $share->getOrganizationCode() === $organizationCode
-            && $share->getShareType() === ShareAccessType::TeamShare->value
+            && in_array($share->getShareType(), [ShareAccessType::TeamShare->value, ShareAccessType::Internet->value], true)
             && ! $share->getIsPasswordEnabled()
             && $share->getResourceType() === ResourceType::Project->value
             && $share->isShareProject()

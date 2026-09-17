@@ -27,6 +27,23 @@ use PHPUnit\Framework\TestCase;
 /** @internal */
 class PublishedMicroAppFileAccessServiceTest extends TestCase
 {
+    #[DataProvider('supportedShares')]
+    public function testSupportsSameOrganizationPasswordlessPublication(ShareAccessType $shareType): void
+    {
+        [$record, $project, $share] = $this->publication();
+        $share->setShareType($shareType->value);
+
+        self::assertTrue(PublishedMicroAppFileAccessService::supportsShare($record, $project, $share, 'org'));
+    }
+
+    public static function supportedShares(): array
+    {
+        return [
+            'team' => [ShareAccessType::TeamShare],
+            'public' => [ShareAccessType::Internet],
+        ];
+    }
+
     #[DataProvider('rejectedShares')]
     public function testRejectsUnsupportedOrMismatchedShare(string $target, string $setter, mixed $value): void
     {
@@ -38,7 +55,6 @@ class PublishedMicroAppFileAccessServiceTest extends TestCase
     public static function rejectedShares(): array
     {
         return [
-            'public' => ['share', 'setShareType', ShareAccessType::Internet->value],
             'password' => ['share', 'setShareType', ShareAccessType::PasswordProtected->value],
             'password enabled' => ['share', 'setIsPasswordEnabled', true],
             'disabled' => ['share', 'setIsEnabled', false],
@@ -67,6 +83,20 @@ class PublishedMicroAppFileAccessServiceTest extends TestCase
         $service = $this->service($record, $project, $resolver, $this->createMock(TaskFileRepositoryInterface::class));
         self::assertTrue($service->canAccessProject(11, 'reader', 'org'));
         self::assertFalse($service->canAccessProject(11, 'reader', 'org'));
+    }
+
+    public function testSameOrganizationUserCanReadPublicProject(): void
+    {
+        [$record, $project, $share] = $this->publication();
+        $share->setShareType(ShareAccessType::Internet->value);
+        $resolver = $this->createMock(PublishedMicroAppResolver::class);
+        $resolver->method('findPublished')->with(7)->willReturn([$record, $share]);
+        $resolver->expects(self::once())->method('canAccessShare')->with($share, 'reader', 'org')->willReturn(true);
+
+        $service = $this->service($record, $project, $resolver, $this->createMock(TaskFileRepositoryInterface::class));
+
+        self::assertTrue($service->canAccessProject(11, 'reader', 'org'));
+        self::assertFalse($service->canAccessProject(11, 'reader', 'other-org'));
     }
 
     public function testBatchSharesProjectAndParentChecksButRejectsScopeAndActorChanges(): void
