@@ -119,10 +119,10 @@ After `init_crew.py` completes successfully and employee definition files are re
    - Read `.magic/SOUL.md` (if present) to extract personality traits, aesthetic preferences, and communication style.
 2. **Assemble Generation Prompt**:
    - Refer to `references/avatar-generation-guide.md`.
-   - Assemble a prompt combining style prefix, character identity, professional visual elements, personality temperament, background color scheme, and quality suffix.
+   - Assemble a prompt combining style prefix, character identity (must depict a person/character bust portrait, never pure objects or logos), professional visual elements (as attire, accessories, or handheld props), personality temperament, background color scheme, and quality suffix.
 3. **Generate Image and Save Locally**:
    - Call `generate_images` with `size="1024x1024"` to generate 1 square image.
-   - Save to `.magic/avatars/agent-logo.png` (path relative to workspace root; never prepend `.workspace/`).
+   - Save to `.magic/avatars/logo.png` (path relative to workspace root; never prepend `.workspace/`).
    - Validate that the image is square and its size does not exceed `500KB` (convert to high-quality JPG if necessary).
    - Preserve existing custom logos if user already provided one and did not request replacement.
 
@@ -130,7 +130,7 @@ After `init_crew.py` completes successfully and employee definition files are re
 
 Creating or validating definition files is not the end of initialization. After the files and any requested skills are ready, execute this sequence before cleanup or the final response:
 
-1. Generate the employee Logo based on `.magic/IDENTITY.md` and `.magic/SOUL.md` (if present) and save to `.magic/avatars/agent-logo.png`.
+1. Generate the employee Logo based on `.magic/IDENTITY.md` and `.magic/SOUL.md` (if present) and save to `.magic/avatars/logo.png`.
 2. Verify that all employee definition files (`IDENTITY.md`, `AGENTS.md`, `SOUL.md`) exist and are valid.
 
 **Do not delete `.crew_init_config.json`, announce completion, or return the final initialization summary until definition files and Logo generation have been completed.**
@@ -161,7 +161,7 @@ After employee initialization completes, you MUST present the following checklis
 |------------|--------|----------------------|
 | Definition files created | pass | IDENTITY.md, AGENTS.md, SOUL.md created under .magic/ |
 | Skill decomposition decision | pass | Recorded user decision ('yes'/'no') |
-| Logo generated | pass / skipped / failed | Generated .magic/avatars/agent-logo.png |
+| Logo generated | pass / skipped / failed | Generated .magic/avatars/logo.png |
 ```
 
 ## File Responsibility Mapping
@@ -172,7 +172,7 @@ After employee initialization completes, you MUST present the following checklis
 | `AGENTS.md` | WHAT — Instructions | Workflow, rules, special directives | Recommended |
 | `SOUL.md` | HOW — Personality | Core personality, communication style, behavior guidelines | Optional |
 | `TOOLS.md` | WITH WHAT — Tools | Tool whitelist (YAML) + usage preferences | Optional |
-| `.magic/avatars/agent-logo.png` | VISUAL — Logo | Default employee Logo generated under .magic/avatars/ | Optional |
+| `.magic/avatars/logo.png` | VISUAL — Logo | Default employee Logo generated under .magic/avatars/ | Optional |
 
 ## Editing Workflow
 

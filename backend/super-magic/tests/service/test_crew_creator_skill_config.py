@@ -63,10 +63,26 @@ def test_crew_creator_logo_paths_are_workspace_relative():
 
     assert "`.magic/IDENTITY.md`" in skill
     assert "`.magic/SOUL.md`" in skill
-    assert "`.magic/avatars/agent-logo.png`" in skill
+    assert "`.magic/avatars/logo.png`" in skill
     assert "`.workspace/.magic/" not in skill
     assert "do not prepend `.workspace/`" in guide
-    assert "`.magic/avatars/agent-logo.png`" in guide
+    assert "`.magic/avatars/logo.png`" in guide
+
+
+def test_crew_creator_avatar_requires_character_portrait():
+    skill = (CREW_CREATOR_DIR / "SKILL.md").read_text(encoding="utf-8")
+    guide = (CREW_CREATOR_DIR / "references" / "avatar-generation-guide.md").read_text(
+        encoding="utf-8"
+    )
+
+    # 必须要求生成人物肖像/半身像，不能是纯工具或徽标
+    assert "person/character portrait" in guide.lower()
+    assert "No object-only images" in guide
+    assert "No pure logos or emblems" in guide
+    assert "No mannequins or dress forms" in guide
+    assert "bust shot or symbolic emblem" not in guide
+    assert "upper body bust portrait" in guide
+    assert "must depict a person/character bust portrait" in skill
 
 
 def test_init_crew_preserves_existing_workspace_directories(tmp_path, monkeypatch):
