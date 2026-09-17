@@ -473,4 +473,36 @@ describe("MicroAppPublishDialog", () => {
 		expect(pasteEvent.defaultPrevented).toBe(false)
 		expect(mocks.uploadAndGetFileUrl).not.toHaveBeenCalled()
 	})
+
+	it("只展示管理员允许的微应用分享方式，并自动选中首个可用项", async () => {
+		mocks.functionPermissions = {
+			"micro_app.share_password": false,
+			"micro_app.share_public": true,
+			"micro_app.share_team": false,
+		}
+
+		renderDialog()
+
+		await waitFor(() => {
+			expect(screen.getByTestId("share-type-field")).toHaveAttribute(
+				"data-value",
+				String(ShareType.Public),
+			)
+		})
+		expect(screen.getByTestId("share-type-public")).toBeInTheDocument()
+		expect(screen.queryByTestId("share-type-organization")).not.toBeInTheDocument()
+	})
+
+	it("管理员未开放任何微应用分享方式时禁用发布", async () => {
+		mocks.functionPermissions = {
+			"micro_app.share_password": false,
+			"micro_app.share_public": false,
+			"micro_app.share_team": false,
+		}
+
+		renderDialog()
+
+		expect(await screen.findByText("share.noAvailableShareMethods")).toBeInTheDocument()
+		expect(screen.getByTestId("micro-app-publish-save")).toBeDisabled()
+	})
 })

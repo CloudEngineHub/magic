@@ -165,62 +165,6 @@ class TaskRepository implements TaskRepositoryInterface
     }
 
     /**
-     * 通过用户ID和任务ID(沙箱服务返回的taskId)获取任务
-     */
-    public function getTaskByUserIdAndTaskId(string $userId, string $taskId): ?TaskEntity
-    {
-        $model = $this->model::query()
-            ->where('user_id', $userId)
-            ->where('id', $taskId)
-            ->first();
-
-        if (empty($model->toArray())) {
-            return null;
-        }
-
-        return new TaskEntity($model->toArray());
-    }
-
-    /**
-     * 通过沙箱ID获取任务
-     */
-    public function getTaskBySandboxId(string $sandboxId): ?TaskEntity
-    {
-        $model = $this->model::query()->where('sandbox_id', $sandboxId)->first();
-        if (! $model) {
-            return null;
-        }
-        return new TaskEntity($model->toArray());
-    }
-
-    /**
-     * 根据用户ID获取任务列表.
-     *
-     * @param string $userId 用户ID
-     * @param array $conditions 条件数组，如 ['task_status' => 'running']
-     * @return array 任务列表
-     */
-    public function getTasksByUserId(string $userId, array $conditions = []): array
-    {
-        $query = $this->model::query()
-            ->where('user_id', $userId);
-
-        // 添加其他过滤条件
-        foreach ($conditions as $field => $value) {
-            $query->where($field, $value);
-        }
-
-        $tasks = Db::select($query->toSql(), $query->getBindings());
-
-        $result = [];
-        foreach ($tasks as $task) {
-            $result[] = new TaskEntity((array) $task);
-        }
-
-        return $result;
-    }
-
-    /**
      * 更新长时间处于运行状态的任务为错误状态
      *
      * @param string $timeThreshold 时间阈值，早于此时间的运行中任务将被标记为错误
@@ -340,6 +284,8 @@ class TaskRepository implements TaskRepositoryInterface
 
     /**
      * 获取创建时间超过指定时间且状态为运行中的任务列表.
+     * 注意：不加 ORDER BY 是为了让 MySQL 优化器使用 idx_task_status（ORDER BY id 会诱导其放弃索引改走主键全表扫描），
+     * 候选集（running/waiting 任务）仅数百条，取回后在 PHP 内按 id 升序排序，保持批内最老优先的处理顺序。
      *
      * @param string $timeThreshold 时间阈值，如果任务的创建时间早于此时间，则会被包含在结果中
      * @param int $limit 返回结果的最大数量
@@ -351,7 +297,6 @@ class TaskRepository implements TaskRepositoryInterface
             ->where('started_at', '<', $timeThreshold)
             ->whereIn('task_status', [TaskStatus::RUNNING->value, TaskStatus::WAITING->value])
             ->whereNull('deleted_at')
-            ->orderBy('id', 'asc')
             ->limit($limit)
             ->get();
 
@@ -359,6 +304,8 @@ class TaskRepository implements TaskRepositoryInterface
         foreach ($models as $model) {
             $result[] = new TaskEntity($model->toArray());
         }
+
+        usort($result, static fn (TaskEntity $a, TaskEntity $b): int => $a->getId() <=> $b->getId());
 
         return $result;
     }
@@ -374,30 +321,10 @@ class TaskRepository implements TaskRepositoryInterface
             ->count();
     }
 
-    /**
-     * 根据项目ID获取任务列表.
-     */
-    public function getTasksByProjectId(int $projectId, string $userId): array
-    {
-        $models = $this->model::query()
-            ->where('project_id', $projectId)
-            ->where('user_id', $userId)
-            ->whereNull('deleted_at')
-            ->orderBy('updated_at', 'desc')
-            ->get();
-
-        $result = [];
-        foreach ($models as $model) {
-            $result[] = new TaskEntity($model->toArray());
-        }
-
-        return $result;
-    }
-
-    public function updateTaskStatusBySandboxIds(array $sandboxIds, string $status, string $errMsg = '', $finishedTime = null, array $fromStatuses = []): int
+    public function updateTaskStatusByTopicIds(array $topicIds, string $status, string $errMsg = '', $finishedTime = null, array $fromStatuses = []): int
     {
         $query = $this->model::query()
-            ->whereIn('sandbox_id', $sandboxIds);
+            ->whereIn('topic_id', $topicIds);
 
         // Only update tasks with specified statuses
         if (! empty($fromStatuses)) {
@@ -413,21 +340,21 @@ class TaskRepository implements TaskRepositoryInterface
     }
 
     /**
-     * 统计项目下的任务数量.
+     * 按条件批量更新任务.
+     * 条件值为数组时走 whereIn，标量走 where。
+     * 禁止传入 project_id / user_id 作为查询条件（这两个维度无索引），项目/用户维度请先经 topics 表转换为 topic_id 后再更新。
      */
-    public function countTasksByProjectId(int $projectId): int
-    {
-        return $this->model::query()
-            ->where('project_id', $projectId)
-            ->whereNull('deleted_at')
-            ->count();
-    }
-
     public function updateTaskByCondition(array $condition, array $data): bool
     {
-        return $this->model::query()
-            ->where($condition)
-            ->update($data) > 0;
+        $query = $this->model::query();
+        foreach ($condition as $field => $value) {
+            if (is_array($value)) {
+                $query->whereIn($field, $value);
+            } else {
+                $query->where($field, $value);
+            }
+        }
+        return $query->update($data) > 0;
     }
 
     public function getTasksByTopicIdAndTaskIds(int $topicId, array $taskIds): array

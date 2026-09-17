@@ -16,6 +16,9 @@ class ErrorCode:
 
     NOT_FOUND = 4004
 
+    # user_tool_call 的 pending 问题不存在（已超时被消费或重复提交）
+    USER_TOOL_CALL_NOT_FOUND = 4100
+
 
 class BusinessException(Exception):
     """

@@ -58,6 +58,7 @@ use App\Infrastructure\SuperMagic\ExternalAPI\SandboxOS\Agent\Request\UserToolCa
 use App\Infrastructure\SuperMagic\ExternalAPI\SandboxOS\Agent\Response\AgentResponse;
 use App\Infrastructure\SuperMagic\ExternalAPI\SandboxOS\Agent\SandboxAgentInterface;
 use App\Infrastructure\SuperMagic\ExternalAPI\SandboxOS\Exception\SandboxOperationException;
+use App\Infrastructure\SuperMagic\ExternalAPI\SandboxOS\Exception\UserToolCallNotFoundException;
 use App\Infrastructure\SuperMagic\ExternalAPI\SandboxOS\Gateway\Constant\ResponseCode;
 use App\Infrastructure\SuperMagic\ExternalAPI\SandboxOS\Gateway\Constant\SandboxStatus;
 use App\Infrastructure\SuperMagic\ExternalAPI\SandboxOS\Gateway\Result\BatchStatusResult;
@@ -833,6 +834,11 @@ class AgentDomainService
                 'tool_call_id' => $toolCallId,
                 'error' => $result->getMessage(),
             ]);
+            // 问题已被超时消费或重复提交，属于可预期的业务边界而非沙箱故障，
+            // 抛专用异常让上层转换为温和提醒而不是任务错误。
+            if (ResponseCode::isUserToolCallNotFound($result->getCode())) {
+                throw new UserToolCallNotFoundException($result->getMessage(), $result->getCode());
+            }
             throw new SandboxOperationException('Send user_tool_call feedback', $result->getMessage(), $result->getCode());
         }
 

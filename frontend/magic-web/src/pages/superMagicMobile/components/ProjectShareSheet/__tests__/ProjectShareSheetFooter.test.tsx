@@ -256,4 +256,26 @@ describe("ProjectShareSheetFooter", () => {
 
 		expect(container).toBeEmptyDOMElement()
 	})
+
+	it("disables create and edit submission when the selected share type is unavailable", () => {
+		const { rerender } = render(
+			<ProjectShareSheetFooter
+				controller={createController({ isSelectedShareTypePermitted: false })}
+			/>,
+		)
+
+		expect(screen.getByTestId("project-share-sheet-create-submit-button")).toBeDisabled()
+
+		rerender(
+			<ProjectShareSheetFooter
+				controller={createController({
+					view: "edit",
+					isEditing: true,
+					isSelectedShareTypePermitted: false,
+				})}
+			/>,
+		)
+
+		expect(screen.getByTestId("project-share-sheet-edit-submit-button")).toBeDisabled()
+	})
 })

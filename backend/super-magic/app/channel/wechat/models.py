@@ -1,21 +1,10 @@
-"""微信渠道私有数据模型。"""
-from enum import Enum
+"""微信历史上下文兼容；新增渠道复用公共媒体模型。"""
+from app.channel.base.models import ChannelMediaContext, ChannelMediaType
 
-from pydantic import BaseModel
-
-
-class WechatMediaType(str, Enum):
-    IMAGE = "image"
-    VIDEO = "video"
-    FILE = "file"
-    VOICE = "voice"
+WechatMediaType = ChannelMediaType
 
 
-class WechatMediaContext(BaseModel):
-    """微信入站媒体的本次请求上下文，仅在 ChatClientMessage.channel_context 中流转，不进入 Metadata。"""
+class WechatMediaContext(ChannelMediaContext):
+    """保留微信旧调用方使用的绝对路径。"""
 
-    relative_path: str
     absolute_path: str
-    media_type: WechatMediaType
-    mime_type: str
-    from_quote: bool = False

@@ -161,6 +161,7 @@ return [
         'prompt_length_exceeded' => 'Input text is too long. Please upload it as a file and reference it in the dialog.',
         'sandbox_init_failed' => 'Runtime environment error. Please try again later.',
         'chat_task_start_failed' => 'Failed to start the task. Please try again later.',
+        'question_expired' => 'This question has expired or already been handled, so your answer was not delivered. You can continue the conversation by sending a new message.',
     ],
     'magic_claw' => [
         'create_system_error' => 'A system error occurred. Please try again later.',

@@ -42,6 +42,9 @@ import { generateShareMessageText } from "../utils/generateShareMessageText"
 import { mergeRecordingShareFileIds } from "@/pages/superMagic/pages/AudioRecordings/utils/build-recording-share-selection"
 import FileShareDocumentDependenciesOption from "./FileShareDocumentDependenciesOption"
 import { useFileShareDocumentDependencies } from "./hooks/useFileShareDocumentDependencies"
+import { useShareTypePermissions } from "../hooks/useShareTypePermissions"
+import { useSharePermissionResource } from "../SharePermissionResourceContext"
+
 interface FileShareModalProps {
 	attachments?: any[] // 可选，如果没有 resourceId 时使用（文件树）
 	attachmentList?: any[] // 可选，扁平化的文件列表
@@ -105,6 +108,19 @@ export default memo(function FileShareModal(props: FileShareModalProps) {
 	const isMobile = useIsMobile()
 
 	const isFreePlan = userStore.user.organizationSubscriptionInfo?.is_paid_plan === false
+	const sharePermissionResource = useSharePermissionResource()
+	const shareTypePermissions = useShareTypePermissions(sharePermissionResource)
+	// Project and child-file shares inherit the permission group injected by their owning page.
+	const shouldControlShareType = shareMode === ShareMode.Project || shareMode === ShareMode.File
+	const permittedShareTypes = useMemo(() => {
+		if (!shouldControlShareType || shareTypePermissions.isLoading) return undefined
+		return shareTypePermissions.permittedShareTypes.filter((type) => types.includes(type))
+	}, [
+		shareTypePermissions.isLoading,
+		shareTypePermissions.permittedShareTypes,
+		shouldControlShareType,
+		types,
+	])
 	const initialLockShareProject = fileShareUiConfig?.lockShareProject ?? false
 	const initialForceViewFileList = fileShareUiConfig?.forceViewFileList
 
@@ -127,6 +143,9 @@ export default memo(function FileShareModal(props: FileShareModalProps) {
 	const [shareType, setShareType] = useState<ShareType>(
 		isFreePlan ? ShareType.Public : ShareType.PasswordProtected,
 	)
+	const isSelectedShareTypePermitted =
+		permittedShareTypes === undefined || permittedShareTypes.includes(shareType)
+	const hasNoPermittedShareType = permittedShareTypes?.length === 0
 	const [shareProject, setShareProject] = useState<boolean>(
 		initialLockShareProject ? false : shareMode === ShareMode.Project,
 	)
@@ -399,36 +418,46 @@ export default memo(function FileShareModal(props: FileShareModalProps) {
 		setDefaultOpenFileId(fileId)
 	}, [])
 
+	const commitShareType = useCallback((confirmedType: ShareType) => {
+		setShareType(confirmedType)
+		// Keep password state aligned so a previous password never leaks into another share type.
+		setExtraData((prev) => ({
+			...prev,
+			passwordEnabled: confirmedType === ShareType.PasswordProtected,
+			password:
+				confirmedType === ShareType.PasswordProtected
+					? prev.password || generateSharePassword()
+					: prev.password,
+		}))
+	}, [])
+
 	// Handle share type change
 	const handleShareTypeChange = useCallback(
 		(newType: ShareType) => {
 			handleShareTypeChangeWithConfirm({
 				currentType: shareType,
 				newType,
-				onConfirm: (confirmedType) => {
-					// Just set the confirmed type directly
-					// Public and PasswordProtected are separate types now
-					setShareType(confirmedType)
-					// Keep passwordEnabled in sync with share type. Switching to
-					// Organization/Public must clear it, otherwise success URL still
-					// embeds the previous password even though the API omits it.
-					if (confirmedType === ShareType.PasswordProtected) {
-						setExtraData((prev) => ({
-							...prev,
-							passwordEnabled: true,
-							password: prev.password || generateSharePassword(),
-						}))
-					} else {
-						setExtraData((prev) => ({
-							...prev,
-							passwordEnabled: false,
-						}))
-					}
-				},
+				onConfirm: commitShareType,
 			})
 		},
-		[shareType],
+		[commitShareType, shareType],
 	)
+
+	useEffect(() => {
+		if (
+			externalResourceId ||
+			permittedShareTypes === undefined ||
+			permittedShareTypes.includes(shareType)
+		) {
+			return
+		}
+
+		// New resource shares start on the first option allowed by both function permission and plan.
+		const nextType = permittedShareTypes.find(
+			(type) => !isFreePlan || type === ShareType.Public,
+		)
+		if (nextType !== undefined) commitShareType(nextType)
+	}, [commitShareType, externalResourceId, isFreePlan, permittedShareTypes, shareType])
 
 	// Handle password copy
 	const handlePasswordCopy = useCallback(() => {
@@ -705,6 +734,11 @@ export default memo(function FileShareModal(props: FileShareModalProps) {
 
 	// Manual save function (called by footer button)
 	const handleSave = useCallback(async () => {
+		if (shouldControlShareType && !isSelectedShareTypePermitted) {
+			magicToast.error(t("share.currentShareMethodUnavailable"))
+			return
+		}
+
 		// Validation: resource_name is required
 		if (!shareName || shareName.trim() === "") {
 			magicToast.error(t("share.shareNameRequired"))
@@ -864,6 +898,8 @@ export default memo(function FileShareModal(props: FileShareModalProps) {
 		shareRange,
 		shareTargets,
 		documentDependencyAnalysisError,
+		isSelectedShareTypePermitted,
+		shouldControlShareType,
 		extraData.passwordEnabled,
 		extraData.password,
 		extraData.allowCopy,
@@ -986,7 +1022,18 @@ export default memo(function FileShareModal(props: FileShareModalProps) {
 								value={normalizedShareType}
 								onChange={handleShareTypeChange}
 								availableTypes={types}
+								permittedTypes={permittedShareTypes}
+								preserveCurrentType={Boolean(externalResourceId)}
 							/>
+							{hasNoPermittedShareType ? (
+								<p className="text-xs text-destructive" role="alert">
+									{t("share.noAvailableShareMethods")}
+								</p>
+							) : !isSelectedShareTypePermitted ? (
+								<p className="text-xs text-destructive" role="alert">
+									{t("share.currentShareMethodUnavailable")}
+								</p>
+							) : null}
 
 							{/* Share Range - only show for Organization share type */}
 							{shareType === ShareType.Organization && (
@@ -1037,7 +1084,12 @@ export default memo(function FileShareModal(props: FileShareModalProps) {
 						onSave={handleSave}
 						onCancelShare={handleCancelShare}
 						isSaving={isSaving}
-						isDisabled={selectedFileIds.length === 0 || isAnalyzingDocumentDependencies}
+						isDisabled={
+							selectedFileIds.length === 0 ||
+							isAnalyzingDocumentDependencies ||
+							(shouldControlShareType && shareTypePermissions.isLoading) ||
+							!isSelectedShareTypePermitted
+						}
 						hideManageShareLinks={fileShareUiConfig?.hideManageShareLinks}
 					/>
 				</div>
@@ -1149,7 +1201,18 @@ export default memo(function FileShareModal(props: FileShareModalProps) {
 								value={normalizedShareType}
 								onChange={handleShareTypeChange}
 								availableTypes={types}
+								permittedTypes={permittedShareTypes}
+								preserveCurrentType={Boolean(externalResourceId)}
 							/>
+							{hasNoPermittedShareType ? (
+								<p className="text-xs text-destructive" role="alert">
+									{t("share.noAvailableShareMethods")}
+								</p>
+							) : !isSelectedShareTypePermitted ? (
+								<p className="text-xs text-destructive" role="alert">
+									{t("share.currentShareMethodUnavailable")}
+								</p>
+							) : null}
 
 							{/* Share Range - only show for Organization share type */}
 							{shareType === ShareType.Organization && (
@@ -1204,7 +1267,9 @@ export default memo(function FileShareModal(props: FileShareModalProps) {
 				isSaving={isSaving}
 				isDisabled={
 					(selectedFileIds.length === 0 && !effectiveShareProject) ||
-					isAnalyzingDocumentDependencies
+					isAnalyzingDocumentDependencies ||
+					(shouldControlShareType && shareTypePermissions.isLoading) ||
+					!isSelectedShareTypePermitted
 				}
 				hideManageShareLinks={fileShareUiConfig?.hideManageShareLinks}
 			/>

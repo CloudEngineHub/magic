@@ -39,7 +39,7 @@ class TaskFileModel extends AbstractModel
         'file_key',
         'file_size',
         'external_url',
-        'storage_type', // 存储类型，由FileProcessAppService.processAttachmentsArray方法传入
+        'storage_type', // 存储类型
         'is_hidden', // 是否为隐藏文件
         'is_directory', // 是否为目录
         'sort', // 排序字段

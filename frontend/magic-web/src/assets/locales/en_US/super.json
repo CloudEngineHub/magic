@@ -5711,6 +5711,7 @@
 			"suffix": ""
 		},
 		"createdDate": "Created",
+		"currentShareMethodUnavailable": "The current sharing method has been disabled by the administrator. Select another method",
 		"days": "days",
 		"departmentOrMemberFileShare": "Specified members can access the file",
 		"departmentOrMemberFileShareDescription": "Specified members can access the file: {{fileName}}",
@@ -5799,6 +5800,7 @@
 		"newProjectDescription": "By default, the copied project will retain the same name as the original. If you need to distinguish between different projects more clearly, you can also customize the name as needed.",
 		"newProjectName": "New project name",
 		"newProjectWorkspaceDescription": "Please select the workspace to store the copied project, or select the workspace to store the copied project",
+		"noAvailableShareMethods": "The administrator has not enabled any sharing methods",
 		"noPermission": "No permission to view replay",
 		"noPermissionToView": "No permission to view",
 		"noPreviewSupport": "Preview not supported, please download the file",
