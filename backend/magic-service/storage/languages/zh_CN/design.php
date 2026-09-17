@@ -82,6 +82,7 @@ return [
         'area' => '请求处理失败',
         'area_coordinate' => '请求处理失败',
         'image_generation_config' => '请求处理失败',
+        'extra' => '附加参数',
         'number' => '请求处理失败',
         'resolution' => '请求处理失败',
         'type' => '请求处理失败',

@@ -58,6 +58,8 @@ class AIImageGenerateParamsVO extends AbstractValueObject
     // 输出图片格式（统一使用小写格式，如 png、jpeg、webp；空字符串表示使用服务商默认格式）
     public string $outputFormat = '';
 
+    public ?array $extra = null;
+
     public function __construct()
     {
         $this->model = ImageGenerateModelType::Volcengine->value;
@@ -257,5 +259,15 @@ class AIImageGenerateParamsVO extends AbstractValueObject
     public function setOutputFormat(string $outputFormat): void
     {
         $this->outputFormat = $outputFormat;
+    }
+
+    public function getExtra(): ?array
+    {
+        return $this->extra;
+    }
+
+    public function setExtra(?array $extra): void
+    {
+        $this->extra = $extra;
     }
 }

@@ -84,7 +84,7 @@ class AzureOpenAIAPI
     /**
      * Image edit API call with OSS URL support - supports multiple images.
      */
-    public function editImage(string $model, array $imageUrls, ?string $maskUrl, string $prompt, string $size = '1024x1024', int $n = 1, ?string $quality = null): array
+    public function editImage(string $model, array $imageUrls, ?string $maskUrl, string $prompt, string $size = '1024x1024', int $n = 1, ?string $quality = null, array $extra = []): array
     {
         $url = $this->buildUrl($model, 'images/edits');
 
@@ -113,6 +113,12 @@ class AzureOpenAIAPI
                 $multipartData[] = ['name' => 'quality', 'contents' => $quality];
             }
 
+            foreach ($extra as $extraKey => $extraValue) {
+                if (is_scalar($extraValue)) {
+                    $multipartData[] = ['name' => (string) $extraKey, 'contents' => is_bool($extraValue) ? ($extraValue ? 'true' : 'false') : (string) $extraValue];
+                }
+            }
+
             $this->logger->info('Azure OpenAI API 请求', [
                 'url' => $url,
                 'payload' => $this->sanitizePayloadForLog([
@@ -122,6 +128,7 @@ class AzureOpenAIAPI
                     'size' => $size,
                     'n' => $n,
                     'quality' => $quality,
+                    'extra' => $extra,
                 ]),
             ]);
 
