@@ -131,6 +131,32 @@ class TaskFileEntityRowHydrationTest extends TestCase
     }
 
     /**
+     * getAllDescendantIds() 的 BFS 用 `(bool) $attributes['is_directory']` 取代
+     * 模型的 boolean cast（省掉每行一次 Model::__get()），这里钉住两者结果一致。
+     */
+    public function testRawIsDirectoryMatchesModelCast(): void
+    {
+        foreach ([1, 0, '1', '0'] as $raw) {
+            $model = new TaskFileModel();
+            $model->setRawAttributes(['file_id' => 5, 'is_directory' => $raw], true);
+
+            $this->assertSame(
+                $model->is_directory,
+                (bool) $model->getAttributes()['is_directory'],
+                "is_directory={$raw} 时原始值取 bool 必须与模型 cast 一致"
+            );
+        }
+
+        $model = new TaskFileModel();
+        $model->setRawAttributes(['file_id' => 5, 'is_directory' => 1], true);
+        $this->assertTrue((bool) $model->getAttributes()['is_directory']);
+
+        $model = new TaskFileModel();
+        $model->setRawAttributes(['file_id' => 5, 'is_directory' => 0], true);
+        $this->assertFalse((bool) $model->getAttributes()['is_directory']);
+    }
+
+    /**
      * 字符串数字（部分 PDO 配置会 STRINGIFY_FETCHES）也应能正确落成 int/bool。
      */
     public function testFromRowAcceptsStringifiedNumericColumns(): void
