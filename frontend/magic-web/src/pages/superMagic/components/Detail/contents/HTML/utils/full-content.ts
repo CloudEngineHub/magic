@@ -7,6 +7,7 @@ import {
 } from "./fetchInterceptor"
 import { getNestedIframeInterceptorScript } from "./nested-iframe-content"
 import { getDevicePreviewScrollbarsScript } from "./device-preview-scrollbars"
+import { rewriteHtmlLocationHref } from "./location-href-rewrite"
 import {
 	createEphemeralVirtualStorageContext,
 	getVirtualStorageBridgeScript,
@@ -919,7 +920,7 @@ const getDOMContentLoadedScript = (disableParentClickBridge = false) => {
 }
 
 // 链接处理脚本
-const getLinkHandlingScript = (navigationBasePath = "") => {
+export const getLinkHandlingScript = (navigationBasePath = "") => {
 	return `
 		(function() {
 			${MAGIC_FETCH_POST_MESSAGE_TARGET_HELPER}
@@ -936,10 +937,11 @@ const getLinkHandlingScript = (navigationBasePath = "") => {
 
 					var isAbsoluteUrl = /^[a-z][a-z\\d+.-]*:/i.test(raw);
 					if (!isAbsoluteUrl) {
-						if (!navigationBasePath) return raw;
+						var currentBasePath = navigationRuntime.navigationBasePath;
+						if (!currentBasePath) return raw;
 
 						try {
-							var basePath = "/" + navigationBasePath.replace(/^\\/+/, "");
+							var basePath = "/" + currentBasePath.replace(/^\\/+/, "");
 							var baseUrl = new URL(basePath, "https://magic-html.invalid/");
 							var targetUrl = new URL(raw, baseUrl);
 							return targetUrl.pathname + targetUrl.search + targetUrl.hash;
@@ -994,7 +996,29 @@ const getLinkHandlingScript = (navigationBasePath = "") => {
 					return { committed: completed, finished: completed };
 				}
 
+				// Location.href is unforgeable. Rewritten assignments use this adapter;
+				// the identity check preserves locally shadowed window/location objects.
+				var hostLocation = {
+					get href() { return window.location.href; },
+					set href(value) {
+						var raw = String(value);
+						// Setting href="#..." in srcdoc resolves against the parent's base URL.
+						// Set hash directly to keep the current document and its hash router alive.
+						if (raw.trim().indexOf("#") === 0) {
+							window.location.hash = raw.trim();
+							return;
+						}
+						var href = getInternalNavigationHref(raw);
+						if (href) {
+							postHtmlNavigation(href, raw, "_self", false, "");
+						} else {
+							window.location.href = raw;
+						}
+					}
+				};
+
 				navigationRuntime = {
+					getLocation: function(location) { return location === window.location ? hostLocation : location; },
 					getInternalNavigationHref: getInternalNavigationHref,
 					postHtmlNavigation: postHtmlNavigation,
 					createNavigationResult: createNavigationResult,
@@ -1033,7 +1057,7 @@ const getLinkHandlingScript = (navigationBasePath = "") => {
 
 							// document.open/write used by setContent is a same-URL rewrite.
 							if (isSameDocumentRewrite) return;
-							if (isSameDocument && isHashRouter) return;
+							if (isSameDocument && (isHashRouter || destination.hash !== window.location.hash)) return;
 						} catch (error) {
 							console.warn("linkClicked navigate URL parse failed", error);
 						}
@@ -1088,6 +1112,9 @@ const getLinkHandlingScript = (navigationBasePath = "") => {
 					return nativeWindowOpen.call(this, url, target, features);
 				};
 			}
+
+			// setContent reuses the window/runtime while changing the preview file.
+			navigationRuntime.navigationBasePath = navigationBasePath;
 
 			// document is replaced by setContent, so this listener must be installed for each document.
 			document.addEventListener("DOMContentLoaded", function() {
@@ -2255,6 +2282,7 @@ export const getFullContent = (
 	// 使用DOMParser解析原始HTML
 	const parser = new DOMParser()
 	const doc = parser.parseFromString(decodedContent, "text/html")
+	rewriteHtmlLocationHref(doc)
 
 	// 确保有html、head和body标签
 	if (!doc.documentElement) {

@@ -365,7 +365,8 @@ vi.mock("@/utils/shadow", () => ({
 	shadow: (value: string) => value,
 }))
 
-vi.mock("@/utils/slug", () => ({
+vi.mock("@/utils/slug", async (importOriginal) => ({
+	...(await importOriginal<typeof import("@/utils/slug")>()),
 	parseAnchorLink: (path: string) => ({
 		filePath: path,
 		anchor: "",
@@ -739,6 +740,44 @@ describe("HTML", () => {
 			expect.objectContaining({
 				htmlRelativeFolderPath: "magic-api-devtools/",
 			}),
+		)
+	})
+
+	it("opens the resolved file through the host callback with query and hash intact", async () => {
+		const openFileTab = vi.fn()
+		const currentFile = {
+			file_id: "file-1",
+			file_name: "index.html",
+			relative_file_path: "pages/index.html",
+		}
+		const targetFile = {
+			file_id: "file-2",
+			file_name: "detail.html",
+			relative_file_path: "detail.html",
+		}
+		render(
+			<HTML
+				{...baseProps}
+				viewMode="desktop"
+				isEditMode={false}
+				attachmentList={[currentFile, targetFile]}
+				openFileTab={openFileTab}
+			/>,
+		)
+		await waitFor(() => expect(mockIsolatedHTMLRendererProps).toHaveBeenCalled())
+		const props = mockIsolatedHTMLRendererProps.mock.lastCall?.[0]
+		act(() => props.openNewTab("file-1", "/detail.html?mode=preview#summary", false))
+		expect(openFileTab).toHaveBeenCalledExactlyOnceWith(
+			{
+				...targetFile,
+				htmlNavigation: {
+					filePath: "/detail.html",
+					search: "?mode=preview",
+					hash: "#summary",
+					anchor: "summary",
+				},
+			},
+			false,
 		)
 	})
 
