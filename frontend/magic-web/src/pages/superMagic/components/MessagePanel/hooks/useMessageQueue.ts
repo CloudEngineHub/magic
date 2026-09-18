@@ -167,7 +167,6 @@ function useMessageQueue({
 	agentCode,
 	isTaskRunning,
 	isWaitingForUser,
-	isShowLoadingInit,
 }: UseMessageQueueProps) {
 	const { t } = useTranslation("super")
 	const [queue, setQueue] = useState<QueuedMessage[]>([])
@@ -864,6 +863,10 @@ function useMessageQueue({
 					message_content: messageContentData,
 				})
 
+				if (!response?.queue_id) throw new Error("queue_submission_unconfirmed")
+				// Invalidate initialization or older polling responses before refreshing the authoritative queue.
+				queueVersionRef.current += 1
+
 				// 成功后刷新队列列表
 				await fetchQueueList()
 				magicToast.success(t("messageQueue.addSuccess"))
@@ -1286,8 +1289,9 @@ function useMessageQueue({
 		setIsMutating(false)
 		// userOperationIntentRef.current.clear() // 清除所有用户操作意图
 
-		// 2. 如果有有效话题，获取新数据；否则清空队列
-		if (projectId && topicId && isShowLoadingInit) {
+		// 2. 队列与消息历史独立，话题有效时立即从服务端恢复队列。
+		// 不等待消息历史初始化，避免已有队列在刷新后因 loading 状态已结束而不再加载。
+		if (projectId && topicId) {
 			// Restore local offline queue first, then fetch server queue, to prevent offline-appended messages from briefly disappearing after refresh.
 			setQueue(getCurrentTopicClientQueue(currentTopicContext))
 			fetchQueueList().then((_queueData) => {
@@ -1307,7 +1311,7 @@ function useMessageQueue({
 			// 只有在没有有效话题时才清空
 			setQueue([])
 		}
-	}, [topicId, projectId, isShowLoadingInit, currentTopicContext, getCurrentTopicClientQueue])
+	}, [topicId, projectId, currentTopicContext, getCurrentTopicClientQueue])
 
 	useEffect(() => {
 		const handler = () => {
