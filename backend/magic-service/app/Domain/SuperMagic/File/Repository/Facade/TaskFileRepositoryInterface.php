@@ -450,6 +450,15 @@ interface TaskFileRepositoryInterface
     public function getFilesByProjectIdWithResume(int $projectId, ?int $lastFileId, int $limit): array;
 
     /**
+     * Parent map of the project-space files the fork enumeration can see
+     * (space_type=project, visible, not deleted). Used to compute which files
+     * still have a valid ancestor chain up to the project root.
+     *
+     * @return array<int, null|int> [file_id => parent_id]
+     */
+    public function getVisibleProjectFileParentMap(int $projectId): array;
+
+    /**
      * Batch update parent_id for multiple files.
      * Used for fixing parent relationships during fork operations.
      *

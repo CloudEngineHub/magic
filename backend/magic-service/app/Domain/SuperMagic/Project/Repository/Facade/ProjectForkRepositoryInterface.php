@@ -55,6 +55,11 @@ interface ProjectForkRepositoryInterface
     public function updateProgress(int $id, int $processedFiles, int $progress): bool;
 
     /**
+     * Update total files count (progress denominator).
+     */
+    public function updateTotalFiles(int $id, int $totalFiles): bool;
+
+    /**
      * Get fork records by user ID with pagination.
      */
     public function getForksByUser(

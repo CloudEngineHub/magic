@@ -1360,6 +1360,30 @@ class TaskFileRepository implements TaskFileRepositoryInterface
     }
 
     /**
+     * Parent map of the project-space files the fork enumeration can see
+     * (space_type=project, visible, not deleted). Used to compute which files
+     * still have a valid ancestor chain up to the project root.
+     *
+     * @return array<int, null|int> [file_id => parent_id]
+     */
+    public function getVisibleProjectFileParentMap(int $projectId): array
+    {
+        $rows = $this->model::query()
+            ->where('project_id', $projectId)
+            ->where('space_type', FileSpaceType::PROJECT->value)
+            ->where('is_hidden', false)
+            ->whereNull('deleted_at')
+            ->get(['file_id', 'parent_id']);
+
+        $map = [];
+        foreach ($rows as $row) {
+            $map[(int) $row->file_id] = $row->parent_id === null ? null : (int) $row->parent_id;
+        }
+
+        return $map;
+    }
+
+    /**
      * Count attachments by project ID using the V2 list endpoint semantics:
      * workspace storage + not deleted. No is_hidden filter and no root-row
      * trimming. Used by the V2 count endpoint so the returned total matches
