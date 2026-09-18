@@ -36,6 +36,9 @@ export interface PreparedExportSlidePage {
 	index: number
 	html: string
 	key?: string
+	pageName?: string
+	pagePath?: string
+	pageFileId?: string
 }
 
 export interface IterateExportSlidesInput extends PrepareExportSlidesInput {
@@ -195,7 +198,14 @@ export async function* iterateSingleExportSlide(
 	const result = await prepareSingleSlideExport(input)
 	throwIfAborted(input.signal)
 	for (let index = 0; index < result.htmlSlides.length; index += 1) {
-		yield { index, html: result.htmlSlides[index] }
+		yield {
+			index,
+			html: result.htmlSlides[index],
+			key: input.fileId,
+			pageName: input.fileName,
+			pagePath: input.fileName,
+			pageFileId: input.fileId,
+		}
 	}
 }
 
@@ -349,8 +359,16 @@ export async function prepareExportSlides(
 export async function* iterateExportSlides(
 	input: IterateExportSlidesInput,
 ): AsyncIterable<PreparedExportSlidePage> {
-	const { slidePaths, attachmentList, mainFileId, mainFileName, displayConfig, access, fileApi, signal } =
-		input
+	const {
+		slidePaths,
+		attachmentList,
+		mainFileId,
+		mainFileName,
+		displayConfig,
+		access,
+		fileApi,
+		signal,
+	} = input
 	if (!slidePaths.length) return
 
 	const searchScope = ensureFlatScope(attachmentList, mainFileId)
@@ -450,6 +468,9 @@ export async function* iterateExportSlides(
 				index,
 				key: path,
 				html: typeof processed === "string" ? processed : processed.content,
+				pageName: fileItem?.file_name || path.split("/").pop() || path,
+				pagePath: path,
+				pageFileId: fileId,
 			}
 		} catch (error) {
 			if (signal?.aborted || isAbortError(error)) throw createAbortError(signal, error)

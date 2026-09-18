@@ -1,5 +1,6 @@
 import type { ExportIssue } from "@magic/html2pptx"
 import pubsub, { PubSubEvents } from "@/utils/pubsub"
+import { reportPptxExportIssue } from "./pptxLogger"
 
 export type PptxExportIssueStatus = "completed-with-issues" | "failed"
 
@@ -26,6 +27,10 @@ export function createPptxExportFailureIssue(error: unknown): ExportIssue {
 		? {
 				phase: diagnostic.phase,
 				failureCode: diagnostic.code,
+				...(diagnostic.details ? { diagnostic: diagnostic.details } : {}),
+				...(error instanceof Error && error.stack
+					? { stack: error.stack.slice(0, 4000) }
+					: {}),
 			}
 		: undefined
 	return {
@@ -72,6 +77,13 @@ export function publishPptxExportIssues(
 					candidate.message === issue.message,
 			) === index,
 	)
+	for (const issue of uniqueIssues) {
+		reportPptxExportIssue(issue, {
+			status,
+			fileId: context.fileId,
+			fileName: context.fileName,
+		})
+	}
 	pubsub.publish(PubSubEvents.Pptx_Export_Issues, {
 		issues: uniqueIssues,
 		status,

@@ -6,7 +6,6 @@ import type { CreateStreamingPresentationPackagerInput } from "../src/packaging/
 import type { StreamingStagingStore } from "../src/runtime"
 import { runStreamingExport } from "../src/pipeline/streaming-export"
 import type { StreamingExportTaskInput } from "../src"
-import { isExportFidelityError, isPptxExportError } from "../src/errors"
 import { MAX_PPT_PAGE_PX } from "../src/shared/unit"
 
 const config = {
@@ -781,10 +780,11 @@ describe("runStreamingExport", () => {
 		expect(store.cleanupCalls).toHaveLength(1)
 	})
 
-	it("does not skip an auto-size page that exceeds the PowerPoint width limit", async () => {
+	it("keeps a placeholder slide when an auto-size page exceeds the PowerPoint width limit", async () => {
 		const destination = createSinkDestination()
 		const store = new FakeStagingStore()
-		const factory = vi.fn()
+		const issues: unknown[] = []
+		const { factory, packager } = createPackagerFactory({})
 		const tooWide = MAX_PPT_PAGE_PX + 1
 		const input = createBaseInput({
 			pageCount: 2,
@@ -805,32 +805,21 @@ describe("runStreamingExport", () => {
 				createStreamingPresentationPackager: factory,
 				createStreamingStagingStore: () => store,
 			},
+			onExportIssue: (issue) => issues.push(issue),
 			stagingPolicy: { mode: "opfs", cleanup: "always" },
 		})
 
-		const rejected = runStreamingExport(input)
-		await expect(rejected).rejects.toMatchObject({
-			name: "PptxExportError",
-			code: "fidelity-failed",
-			diagnostic: {
-				phase: "prepare-page",
+		await expect(runStreamingExport(input)).resolves.toMatchObject({ pageCount: 2 })
+		expect(factory).toHaveBeenCalledOnce()
+		expect(packager.commitSlide).toHaveBeenCalledTimes(2)
+		expect(issues).toEqual([
+			expect.objectContaining({
+				code: "render-error",
 				pageIndex: 1,
-				code: "fidelity-failed",
-			},
-		})
-		try {
-			await rejected
-		} catch (error) {
-			expect(isPptxExportError(error)).toBe(true)
-			if (isPptxExportError(error)) {
-				expect(isExportFidelityError(error.sourceError)).toBe(true)
-				if (isExportFidelityError(error.sourceError)) {
-					expect(error.sourceError.kind).toBe("page-size")
-				}
-			}
-		}
-		expect(factory).not.toHaveBeenCalled()
-		expect(destination.sink.abort).toHaveBeenCalledOnce()
+				message: expect.stringContaining("exceeds PowerPoint"),
+			}),
+		])
+		expect(destination.sink.abort).not.toHaveBeenCalled()
 		expect(store.cleanupCalls).toHaveLength(1)
 	})
 
