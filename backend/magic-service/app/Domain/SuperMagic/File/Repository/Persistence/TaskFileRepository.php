@@ -1439,7 +1439,8 @@ class TaskFileRepository implements TaskFileRepositoryInterface
 
     /**
      * 统计项目空间文件数量，最多统计到 $limit 即提前返回（大表场景避免全量 COUNT）.
-     * 只取 file_id 单列并跳过实体水合；按 space_type='project' 统计，包含隐藏文件与目录行。
+     * 只取 file_id 单列并跳过实体水合；按 space_type='project' + storage_type='workspace'
+     * 双重口径统计（防历史数据两字段不一致），包含隐藏文件与目录行。
      */
     public function countProjectFilesWithLimit(int $projectId, int $limit): int
     {
@@ -1447,6 +1448,7 @@ class TaskFileRepository implements TaskFileRepositoryInterface
             ->select(['file_id'])
             ->where('project_id', $projectId)
             ->where('space_type', FileSpaceType::PROJECT->value)
+            ->where('storage_type', StorageType::WORKSPACE->value)
             ->whereNull('deleted_at')
             ->limit($limit);
 
@@ -1455,7 +1457,8 @@ class TaskFileRepository implements TaskFileRepositoryInterface
 
     /**
      * 统计用户空间文件数量，最多统计到 $limit 即提前返回（大表场景避免全量 COUNT）.
-     * 只取 file_id 单列并跳过实体水合，依赖 idx_user_id 索引命中即停。
+     * 只取 file_id 单列并跳过实体水合；按 space_type='user' + storage_type='user'
+     * 双重口径统计（防历史数据两字段不一致），依赖 idx_user_id 索引命中即停。
      */
     public function countUserSpaceFilesWithLimit(string $userId, string $organizationCode, int $limit): int
     {
@@ -1464,6 +1467,7 @@ class TaskFileRepository implements TaskFileRepositoryInterface
             ->where('user_id', $userId)
             ->where('organization_code', $organizationCode)
             ->where('space_type', FileSpaceType::USER->value)
+            ->where('storage_type', StorageType::USER->value)
             ->whereNull('deleted_at')
             ->limit($limit);
 
