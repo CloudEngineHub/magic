@@ -15,6 +15,7 @@ const detailMocks = vi.hoisted(() => ({
 const previewMocks = vi.hoisted(() => ({
 	aiEdit: vi.fn(),
 	devConsoleToggle: vi.fn(),
+	permissionManagerOpen: vi.fn(),
 	render: vi.fn(),
 }))
 
@@ -300,9 +301,11 @@ vi.mock("../components/MicroAppEntryPreview", () => ({
 		onRegisterAIEdit?: (handler: (() => void) | null) => void
 		onRegisterDevConsoleToggle?: (handler: (() => void) | null) => void
 		onDevConsoleActiveChange?: (active: boolean) => void
+		onHtmlPermissionManagerChange?: (manager: { open: () => void } | null) => void
 		onOpenFile?: (fileItem?: unknown) => void
 	}) {
-		const { onRegisterAIEdit, onRegisterDevConsoleToggle } = props
+		const { onRegisterAIEdit, onRegisterDevConsoleToggle, onHtmlPermissionManagerChange } =
+			props
 		const hasEntryFile = Boolean(props.entryFile?.file_id)
 		useEffect(() => {
 			onRegisterAIEdit?.(previewMocks.aiEdit)
@@ -312,6 +315,12 @@ vi.mock("../components/MicroAppEntryPreview", () => ({
 			onRegisterDevConsoleToggle?.(hasEntryFile ? previewMocks.devConsoleToggle : null)
 			return () => onRegisterDevConsoleToggle?.(null)
 		}, [hasEntryFile, onRegisterDevConsoleToggle])
+		useEffect(() => {
+			onHtmlPermissionManagerChange?.(
+				hasEntryFile ? { open: previewMocks.permissionManagerOpen } : null,
+			)
+			return () => onHtmlPermissionManagerChange?.(null)
+		}, [hasEntryFile, onHtmlPermissionManagerChange])
 		previewMocks.render(props)
 		return <div data-testid="desktop-entry-preview" />
 	},
@@ -429,6 +438,7 @@ describe("MicroAppPageDesktop", () => {
 		detailMocks.render.mockClear()
 		previewMocks.aiEdit.mockClear()
 		previewMocks.devConsoleToggle.mockClear()
+		previewMocks.permissionManagerOpen.mockClear()
 		previewMocks.render.mockClear()
 		previewWorkspaceMocks.render.mockClear()
 		headerMocks.render.mockClear()
@@ -473,6 +483,20 @@ describe("MicroAppPageDesktop", () => {
 				onPublishStatusChange: resolverMocks.result.setIsPublished,
 			}),
 		)
+	})
+
+	it("wires the HTML permission manager from the preview to the header", async () => {
+		render(<MicroAppPageDesktop />)
+		await screen.findByTestId("desktop-entry-preview")
+
+		const headerProps = headerMocks.render.mock.lastCall?.[0] as {
+			canManageHtmlPermissions: boolean
+			onManageHtmlPermissions: () => void
+		}
+		expect(headerProps.canManageHtmlPermissions).toBe(true)
+
+		act(() => headerProps.onManageHtmlPermissions())
+		expect(previewMocks.permissionManagerOpen).toHaveBeenCalledOnce()
 	})
 
 	it("does not initialize a usage conversation when only switching to preview mode", async () => {

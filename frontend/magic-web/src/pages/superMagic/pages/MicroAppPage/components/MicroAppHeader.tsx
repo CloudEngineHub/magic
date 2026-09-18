@@ -1,4 +1,4 @@
-import { ArrowLeft, PenLine, Rocket, UserRoundPlus } from "lucide-react"
+import { ArrowLeft, PenLine, Rocket, ShieldCheck, UserRoundPlus } from "lucide-react"
 import { useTranslation } from "react-i18next"
 import { Button } from "@/components/shadcn-ui/button"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/shadcn-ui/tooltip"
@@ -16,6 +16,8 @@ interface MicroAppHeaderProps {
 	onEdit?: () => void
 	canManageCollaborators?: boolean
 	onManageCollaborators?: () => void
+	canManageHtmlPermissions?: boolean
+	onManageHtmlPermissions?: () => void
 	canUseDevelopment?: boolean
 	pageMode?: MicroAppPageMode
 	onPageModeChange?: (mode: MicroAppPageMode) => void
@@ -32,6 +34,8 @@ export default function MicroAppHeader({
 	onEdit,
 	canManageCollaborators,
 	onManageCollaborators,
+	canManageHtmlPermissions,
+	onManageHtmlPermissions,
 	canUseDevelopment = false,
 	pageMode = "development",
 	onPageModeChange,
@@ -42,6 +46,7 @@ export default function MicroAppHeader({
 		isPublished ? "microAppPage.publish.published" : "microAppPage.publish.button",
 	)
 	const showCollaboratorAction = Boolean(canManageCollaborators && onManageCollaborators)
+	const showHtmlPermissionAction = Boolean(canManageHtmlPermissions && onManageHtmlPermissions)
 	return (
 		<header
 			className="flex h-12 shrink-0 items-center gap-2 border-b border-border bg-background px-3"
@@ -86,6 +91,28 @@ export default function MicroAppHeader({
 					<p className="truncate text-sm font-medium text-foreground">{projectName}</p>
 				)}
 			</div>
+
+			{showHtmlPermissionAction ? (
+				<Tooltip>
+					<TooltipTrigger asChild>
+						<Button
+							type="button"
+							variant="outline"
+							size="sm"
+							className="h-8 shrink-0 gap-2"
+							aria-label={t("htmlEditor.permissionManager.open")}
+							data-testid="micro-app-permission-manager"
+							onClick={() => onManageHtmlPermissions?.()}
+						>
+							<ShieldCheck size={14} />
+							{t("htmlEditor.permissionManager.open")}
+						</Button>
+					</TooltipTrigger>
+					<TooltipContent side="bottom">
+						{t("htmlEditor.permissionManager.open")}
+					</TooltipContent>
+				</Tooltip>
+			) : null}
 
 			{canUseDevelopment && onPageModeChange ? (
 				<MicroAppModeSwitcher value={pageMode} onChange={onPageModeChange} />

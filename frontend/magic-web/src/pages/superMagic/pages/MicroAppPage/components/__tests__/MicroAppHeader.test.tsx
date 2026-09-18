@@ -89,6 +89,37 @@ describe("MicroAppHeader", () => {
 		expect(screen.queryByTestId("micro-app-manage-collaborators")).not.toBeInTheDocument()
 	})
 
+	it("opens the HTML permission manager when available", () => {
+		const onManageHtmlPermissions = vi.fn()
+		renderHeader({
+			canManageHtmlPermissions: true,
+			onManageHtmlPermissions,
+			canUseDevelopment: true,
+			onPageModeChange: vi.fn(),
+		})
+
+		fireEvent.click(screen.getByTestId("micro-app-permission-manager"))
+
+		expect(onManageHtmlPermissions).toHaveBeenCalledOnce()
+		expect(screen.getByTestId("micro-app-permission-manager")).toHaveTextContent(
+			"htmlEditor.permissionManager.open",
+		)
+		const permissionManager = screen.getByTestId("micro-app-permission-manager")
+		const modeSwitcher = screen.getByTestId("micro-app-mode-switcher")
+		expect(permissionManager).toHaveClass("h-8")
+		expect(modeSwitcher).toHaveClass("h-8")
+		expect(
+			permissionManager.compareDocumentPosition(modeSwitcher) &
+				Node.DOCUMENT_POSITION_FOLLOWING,
+		).toBe(Node.DOCUMENT_POSITION_FOLLOWING)
+	})
+
+	it("hides the HTML permission manager when unavailable", () => {
+		renderHeader({ onManageHtmlPermissions: vi.fn() })
+
+		expect(screen.queryByTestId("micro-app-permission-manager")).not.toBeInTheDocument()
+	})
+
 	it("renders collaborator management when the project is manageable", () => {
 		renderHeader({
 			canManageCollaborators: true,
