@@ -19,6 +19,7 @@ use App\Domain\SuperMagic\Topic\Repository\Model\TopicModel;
 use App\Domain\SuperMagic\Workspace\Repository\Model\WorkspaceModel;
 use App\Infrastructure\Util\IdGenerator\IdGenerator;
 use Exception;
+use Hyperf\Codec\Json;
 use Hyperf\DbConnection\Db;
 use Hyperf\Logger\LoggerFactory;
 use Psr\Log\LoggerInterface;
@@ -217,7 +218,7 @@ class TopicRepository implements TopicRepositoryInterface
     {
         $query = $this->model::query();
         if ($withTrashed) {
-            /** @phpstan-ignore-next-line - TopicModel uses SoftDeletes trait which provides withTrashed() */
+            /* @phpstan-ignore-next-line - TopicModel uses SoftDeletes trait which provides withTrashed() */
             $query->withTrashed();
         } else {
             $query->whereNull('deleted_at');
@@ -257,6 +258,9 @@ class TopicRepository implements TopicRepositoryInterface
     {
         $topicEntity->setUpdatedAt(date('Y-m-d H:i:s'));
         $entityArray = $topicEntity->toArray();
+        if (isset($entityArray['sandbox_images'])) {
+            $entityArray['sandbox_images'] = Json::encode($entityArray['sandbox_images']);
+        }
 
         return $this->model::query()
             ->where('id', $topicEntity->getId())
@@ -268,6 +272,9 @@ class TopicRepository implements TopicRepositoryInterface
     {
         $topicEntity->setUpdatedAt(date('Y-m-d H:i:s'));
         $entityArray = $topicEntity->toArray();
+        if (isset($entityArray['sandbox_images'])) {
+            $entityArray['sandbox_images'] = Json::encode($entityArray['sandbox_images']);
+        }
         return $this->model::query()
             ->where('id', $topicEntity->getId())
             ->where('updated_at', $updatedAt)
@@ -276,6 +283,9 @@ class TopicRepository implements TopicRepositoryInterface
 
     public function updateTopicByCondition(array $condition, array $data, bool $touchUpdatedAt = true): bool
     {
+        if (isset($data['sandbox_images']) && is_array($data['sandbox_images'])) {
+            $data['sandbox_images'] = Json::encode($data['sandbox_images']);
+        }
         $query = $this->model::query()->where($condition);
 
         if (! $touchUpdatedAt) {

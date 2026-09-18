@@ -467,7 +467,8 @@ class AgentDomainService
         }
 
         $returnedSandboxId = $result->getDataValue('sandbox_id');
-        $agentImage = (string) ($result->getDataValue('agent_image') ?? '');
+        $agentImage = $result->getDataValue('agent_image');
+        $agentImage = is_string($agentImage) ? $agentImage : '';
 
         $this->logger->info('[Sandbox][App] Create sandbox success', [
             'project_id' => $projectId,
@@ -476,11 +477,12 @@ class AgentDomainService
             'agent_image' => $agentImage,
         ]);
 
-        // 创建成功后立即持久化 sandbox id 与 agent 镜像版本。优先使用调用方传入的 topic id，
+        // 创建成功后立即持久化 sandbox id 与响应中的双镜像。优先使用调用方传入的 topic id，
         // 避免自定义 sandbox_id 场景把 sandbox_id 误当成 topic_id。
         $topicUpdateId = $topicId ?? ((string) (int) $returnedSandboxId === (string) $returnedSandboxId ? (int) $returnedSandboxId : 0);
         if ($topicUpdateId > 0) {
             $topicUpdateData = [
+                'sandbox_images' => $result->getSandboxImages(),
                 'updated_uid' => $dataIsolation->getCurrentUserId(),
                 'updated_at' => date('Y-m-d H:i:s'),
             ];
@@ -488,6 +490,8 @@ class AgentDomainService
                 $topicUpdateData['sandbox_id'] = (string) $returnedSandboxId;
             }
             if (! empty($agentImage)) {
+                // Keep the legacy column populated for old readers only;
+                // sandbox_images is the canonical field for new consumers.
                 $topicUpdateData['agent_image'] = $agentImage;
             }
             if (isset($topicUpdateData['sandbox_id']) || isset($topicUpdateData['agent_image'])) {
@@ -555,9 +559,12 @@ class AgentDomainService
         return $result;
     }
 
-    /**
-     * 获取沙箱网关当前部署的最新 Agent 镜像.
-     */
+    /** @return array{agent_image: string, agfs_image: string} */
+    public function getLatestImages(): array
+    {
+        return $this->gateway->getLatestImages();
+    }
+
     public function getLatestAgentImage(): string
     {
         return $this->gateway->getLatestAgentImage();
@@ -1521,7 +1528,7 @@ class AgentDomainService
      * bound sandbox_id on success, or null when the warm path is not
      * applicable / unavailable so the caller falls back to cold create.
      *
-     * Topic side-effects (sandbox_id + agent_image columns) are persisted
+     * Topic side-effects (sandbox_id + recorded images) are persisted
      * here so that the caller doesn't need to know whether the warm or
      * cold path was taken.
      */
@@ -1578,6 +1585,7 @@ class AgentDomainService
             return null;
         }
 
+        $sandboxImages = null;
         try {
             $sandboxId = $this->getWarmPoolSandboxDomainService()->tryAcquireAndMount(
                 dataIsolation: $dataIsolation,
@@ -1586,7 +1594,8 @@ class AgentDomainService
                 userSpaceRootFileId: $userSpaceRootFileId,
                 topicSpaceRootFileId: $topicSpaceRootFileId,
                 labels: $this->buildSandboxLabels($topicEntity),
-                topicId: (string) $topicEntity->getId()
+                topicId: (string) $topicEntity->getId(),
+                sandboxImages: $sandboxImages
             );
         } catch (Throwable $e) {
             // Fall back to the cold path on any unexpected error.
@@ -1601,24 +1610,24 @@ class AgentDomainService
             return null;
         }
 
-        // Persist sandbox_id binding on the topic. The agent_image side is
-        // best-effort: we ask the gateway, but if it fails we don't roll
-        // back the bound sandbox.
+        // Persist the binding and response images together. A new binding with
+        // incomplete images must not inherit the previous sandbox's version.
         try {
-            $topicDomainService = $this->getTopicDomainService();
-            $topicDomainService->updateTopicSandboxId(
-                $dataIsolation,
-                (int) $topicEntity->getId(),
-                $sandboxId
-            );
-            $latestImage = $this->gateway->getLatestAgentImage();
-            if ($latestImage !== '') {
-                $topicDomainService->updateTopicAgentImage(
-                    $dataIsolation,
-                    (int) $topicEntity->getId(),
-                    $latestImage
-                );
+            $topicUpdateData = [
+                'sandbox_id' => $sandboxId,
+                'sandbox_images' => $sandboxImages,
+                'updated_uid' => $dataIsolation->getCurrentUserId(),
+                'updated_at' => date('Y-m-d H:i:s'),
+            ];
+            if ($sandboxImages !== null) {
+                // Backward compatibility for old readers; new code must use
+                // the complete sandbox_images pair above.
+                $topicUpdateData['agent_image'] = $sandboxImages['agent_image'];
             }
+            $this->topicRepository->updateTopicByCondition(
+                ['id' => (int) $topicEntity->getId()],
+                $topicUpdateData
+            );
         } catch (Throwable $e) {
             $this->logger->warning('[Sandbox][WarmPath] Failed to stamp topic with warm sandbox metadata', [
                 'topic_id' => $topicEntity->getId(),

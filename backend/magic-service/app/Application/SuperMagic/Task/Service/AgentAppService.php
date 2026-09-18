@@ -196,13 +196,13 @@ readonly class AgentAppService
             'sandbox_id' => $sandboxId,
         ]);
 
-        // 检查当前沙箱镜像与最新 agent 镜像是否一致，一致则无需升级。
+        // 检查当前沙箱双镜像与最新发布镜像是否一致，一致则无需升级。
         $versionInfo = $this->sandboxVersionDomainService->checkSandboxVersion(
             $topicId,
             false,
             $sandboxId
         );
-        if (! $versionInfo['needs_update']) {
+        if ($versionInfo['needs_update'] === false) {
             $this->logger->info('[Sandbox][App] Sandbox image is already up-to-date, skipping upgrade', [
                 'topic_id' => $topicId,
                 'current_version' => $versionInfo['current_version'],
@@ -229,7 +229,7 @@ readonly class AgentAppService
      * 检查话题沙箱的镜像版本，返回当前版本和最新版本.
      *
      * @param int $topicId 话题ID
-     * @return array{current_version: string, latest_version: string, needs_update: bool}
+     * @return array{current_version: string, latest_version: string, needs_update: null|bool}
      */
     public function checkSandboxVersion(int $topicId, bool $useCache = true, string $effectiveSandboxId = ''): array
     {
@@ -240,7 +240,7 @@ readonly class AgentAppService
      * 批量检查话题沙箱镜像版本，返回每个 topic_id 是否需要升级.
      *
      * @param int[] $topicIds
-     * @return array<int, bool> topicId => needUpgrade
+     * @return array<int, null|bool> topicId => needUpgrade
      */
     public function checkSandboxVersionsByTopicIds(array $topicIds, bool $useCache = true): array
     {

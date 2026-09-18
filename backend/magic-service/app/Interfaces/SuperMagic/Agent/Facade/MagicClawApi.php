@@ -181,7 +181,7 @@ class MagicClawApi extends AbstractApi
                 $item['entity'],
                 $item['status'],
                 $item['topic_id'] ?? null,
-                (bool) ($item['need_upgrade'] ?? false)
+                $item['need_upgrade'] ?? null
             );
         }
 
