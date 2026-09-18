@@ -5655,6 +5655,16 @@
 		"weeklyAt": "Runs weekly on {{day}} · {{time}}",
 		"workspaceDescription": "Automate recurring work and keep every task under control"
 	},
+	"scriptExecution": {
+		"code": "Code",
+		"copyCode": "Copy code",
+		"noCodeToCopy": "No code to copy",
+		"noOutput": "No output",
+		"output": "Output",
+		"stderr": "Standard error",
+		"stdout": "Standard output",
+		"title": "Python script"
+	},
 	"search": {
 		"batchSummary_one": "{{count}} search in this batch",
 		"batchSummary_other": "{{count}} searches in this batch",

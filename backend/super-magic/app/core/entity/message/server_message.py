@@ -38,6 +38,7 @@ class DisplayType(str, Enum):
     MD = "md"
     HTML = "html"
     TERMINAL = "terminal"
+    SCRIPT_EXECUTION = "script_execution"
     BROWSER = "browser"
     SEARCH = "search"
     CODE = "code"

@@ -5656,6 +5656,16 @@
 		"weeklyAt": "每周 {{day}} · {{time}} 执行",
 		"workspaceDescription": "让工作按计划自动执行，随时查看任务状态"
 	},
+	"scriptExecution": {
+		"code": "执行代码",
+		"copyCode": "复制代码",
+		"noCodeToCopy": "没有可复制的代码",
+		"noOutput": "无输出",
+		"output": "输出结果",
+		"stderr": "标准错误",
+		"stdout": "标准输出",
+		"title": "Python 脚本"
+	},
 	"search": {
 		"batchSummary": "本次 {{count}} 组搜索",
 		"collapseSnippet": "收起摘要",
