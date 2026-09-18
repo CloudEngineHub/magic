@@ -3125,7 +3125,7 @@ class ResourceShareAppService extends AbstractShareAppService
                 $topicEntity->getId()
             );
 
-            // 发布异步文件迁移事件（新增：传递文件ID列表）
+            // Build the async file migration event; it is published after the commit
             $event = new ProjectForkEvent(
                 $sourceProjectId,
                 $forkProjectEntity->getId(),
@@ -3134,22 +3134,42 @@ class ResourceShareAppService extends AbstractShareAppService
                 $forkProjectRecordEntity->getId(),
                 $fileIds  // 新增: 传递文件ID列表
             );
-            $publisher = new ProjectForkPublisher($event);
-            $this->producer->produce($publisher);
-
-            $this->logger->info(sprintf('Published fork event, event ID: %s', $event->getEventId()));
 
             Db::commit();
 
             // 返回复制结果
             $responseDto = CopyResourceFilesResponseDTO::fromEntity($forkProjectRecordEntity);
             $responseDto->projectMode = $forkProjectEntity->getProjectMode();
-
-            return $responseDto->toArray();
         } catch (Throwable $e) {
             Db::rollBack();
             $this->logger->error('Copy resource files failed, error: ' . $e->getMessage());
             throw $e;
+        }
+
+        // The consumer reads the forked project on its own connection, so the event may only be
+        // published once the transaction is committed and those rows are visible to it.
+        $this->publishProjectForkEvent($event);
+
+        return $responseDto->toArray();
+    }
+
+    /**
+     * Publish the fork event, marking the fork record as failed when the message cannot be sent,
+     * so the client stops polling a progress that would never advance.
+     */
+    private function publishProjectForkEvent(ProjectForkEvent $event): void
+    {
+        try {
+            $this->producer->produce(new ProjectForkPublisher($event));
+            $this->logger->info(sprintf('Published fork event, event ID: %s', $event->getEventId()));
+        } catch (Throwable $e) {
+            $this->logger->error(sprintf(
+                'Failed to publish fork event, fork record ID: %d, event ID: %s, error: %s',
+                $event->getForkRecordId(),
+                $event->getEventId(),
+                $e->getMessage()
+            ));
+            $this->projectDomainService->markForkRecordFailed($event->getForkRecordId(), 'File migration failed');
         }
     }
 
