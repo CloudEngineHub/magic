@@ -71,7 +71,7 @@ export default memo(function ProjectSider(props: ProjectSiderProps) {
 			id={GuideTourElementId.ProjectFileSider}
 			style={width ? { width } : undefined}
 		>
-			<div className="flex h-full flex-col gap-2">
+			<div className="flex h-full flex-col gap-1">
 				{/* Header - 横向 Tabs */}
 				<div className="m-2 mb-0 flex-shrink-0">
 					<SmoothTabs

@@ -8,8 +8,11 @@ import { cn } from "@/utils/cn"
 import userFilesStore from "@/stores/userFiles"
 import type { AttachmentItem } from "../TopicFilesButton/hooks/types"
 import type { UserSpaceView } from "../Detail/components/FilesViewer/types"
+import {
+	PROJECT_PANEL_HEADER_CLASSNAME,
+	PROJECT_PANEL_TITLE_CLASSNAME,
+} from "../ProjectSider/panelChrome"
 import UserSpaceFilesView from "./UserSpaceFilesView"
-import UserSpaceIcon from "./UserSpaceIcon"
 import { useUserSpaceOverviewHelp } from "./useUserFileHelp"
 
 const UserSpaceMemoryView = lazy(() => import("./UserSpaceMemoryView"))
@@ -47,15 +50,8 @@ export default observer(function UserSpacePanel({
 	}, [identity])
 	return (
 		<div className={cn("flex h-full min-h-0 flex-col bg-background", className)}>
-			<div
-				className="flex h-9 shrink-0 items-center gap-2 px-3"
-				data-slot="project-panel-header"
-			>
-				<UserSpaceIcon size={16} />
-				<h2
-					className="truncate text-[13px] font-medium leading-5"
-					data-slot="project-panel-title"
-				>
+			<div className={PROJECT_PANEL_HEADER_CLASSNAME} data-slot="project-panel-header">
+				<h2 className={PROJECT_PANEL_TITLE_CLASSNAME} data-slot="project-panel-title">
 					{t("userSpace.title")}
 				</h2>
 				<ContextHelp
@@ -69,7 +65,7 @@ export default observer(function UserSpacePanel({
 					<Button
 						variant="ghost"
 						size="sm"
-						className="ml-auto h-6 shrink-0 gap-1 px-1.5 text-xs text-muted-foreground"
+						className="h-6 shrink-0 gap-1 px-1.5 text-xs text-muted-foreground"
 						aria-label={t("userSpace.help.privateLabel")}
 					>
 						<span>{t("userSpace.help.private")}</span>

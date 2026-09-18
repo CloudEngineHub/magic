@@ -23,6 +23,24 @@ vi.mock("./UploadMenuDropdown", () => ({
 }))
 
 describe("NormalModeHeader", () => {
+	it("uses the shared project panel header padding and title style", () => {
+		render(
+			<NormalModeHeader
+				title="项目文件"
+				isShareRoute={false}
+				refreshLoading={false}
+				allowEdit={false}
+				onRefresh={vi.fn()}
+			/>,
+		)
+
+		const header = screen.getByText("项目文件").closest("[data-slot='project-panel-header']")
+		expect(header).toHaveClass("h-8", "px-2")
+		expect(
+			screen.getByText("项目文件").closest("[data-slot='project-panel-title']"),
+		).toHaveClass("text-[13px]", "font-medium")
+	})
+
 	it("只读时保留搜索和刷新，隐藏所有写操作入口", () => {
 		render(
 			<NormalModeHeader

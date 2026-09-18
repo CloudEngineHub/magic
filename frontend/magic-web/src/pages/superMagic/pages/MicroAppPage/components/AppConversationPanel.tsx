@@ -65,6 +65,7 @@ interface AppConversationPanelProps {
 	projectFilesStore: ProjectFilesStore
 	onTerminalTopicStatusChange?: () => void
 	onSelectDetail?: (detail: unknown) => void
+	onFileClick?: (fileItem: unknown) => void
 	hideConversationPanelToggle?: boolean
 	trailingActions?: ReactNode
 	/** Only the micro-app editor's development conversation is locked to the internal mode. */
@@ -87,6 +88,7 @@ function AppConversationPanel({
 	projectFilesStore,
 	onTerminalTopicStatusChange,
 	onSelectDetail,
+	onFileClick,
 	hideConversationPanelToggle = false,
 	trailingActions,
 	lockToMicroAppMode = true,
@@ -411,6 +413,7 @@ function AppConversationPanel({
 			messages={messages as SuperMagicMessageItem[]}
 			selectedTopic={selectedTopic}
 			setSelectedDetail={onSelectDetail}
+			onFileClick={onFileClick}
 			enableRevokedUserMessageReedit
 			revokedEditorContext={revokedEditorContext}
 			handlePullMoreMessage={handlePullMoreMessage}

@@ -663,6 +663,7 @@ const TopicFilesPanel = forwardRef<TopicFilesPanelRef, TopicFilesPanelProps>(
 		) : (
 			<NormalModeHeader
 				adaptive={adaptiveHeader}
+				showTitle={showTitle}
 				expandAllLabel={
 					spaceConfig?.directorySource ? t("userSpace.expandLoaded") : undefined
 				}
