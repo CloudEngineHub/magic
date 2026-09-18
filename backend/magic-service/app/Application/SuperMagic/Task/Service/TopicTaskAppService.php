@@ -810,11 +810,56 @@ class TopicTaskAppService extends AbstractAppService
         // Check task permission (validates ownership)
         $taskEntity = $this->checkTaskPermission($dataIsolation, $taskId);
 
-        return [
+        $result = [
             'id' => (string) $taskEntity->getId(),
             'task_status' => $taskEntity->getTaskStatus(),
             'err_msg' => $taskEntity->getErrMsg(),
             'updated_at' => $taskEntity->getUpdatedAt(),
+        ];
+
+        if ($taskEntity->getTaskStatus() === TaskStatus::FINISHED->value) {
+            $result['result'] = $this->buildTaskResult(
+                (int) $taskEntity->getTopicId(),
+                (int) $taskEntity->getId(),
+            );
+        }
+
+        return $result;
+    }
+
+    /**
+     * Build the compact result returned by the task status polling API.
+     * The first message for each event is used when duplicate records exist.
+     *
+     * @return array{content: string, attachments: array}
+     */
+    private function buildTaskResult(int $topicId, int $taskId): array
+    {
+        $messages = $this->taskMessageDomainService->findCompletedResultMessages($topicId, $taskId);
+        $content = '';
+        $attachments = [];
+        $contentMessageFound = false;
+        $attachmentsMessageFound = false;
+
+        foreach ($messages as $message) {
+            if ($message->getEvent() === 'after_agent_reply' && ! $contentMessageFound) {
+                $contentMessageFound = true;
+                $rawContent = $message->getRawContent();
+                if ($rawContent !== '' && json_validate($rawContent)) {
+                    $decoded = json_decode($rawContent, true);
+                    $content = (string) ($decoded['super_magic_message']['content'] ?? '');
+                }
+            }
+
+            if ($message->getEvent() === 'after_main_agent_run' && ! $attachmentsMessageFound) {
+                $attachmentsMessageFound = true;
+                $attachments = $message->getAttachments() ?? [];
+            }
+        }
+
+        return [
+            'content' => $content,
+            'attachments' => $attachments,
         ];
     }
 

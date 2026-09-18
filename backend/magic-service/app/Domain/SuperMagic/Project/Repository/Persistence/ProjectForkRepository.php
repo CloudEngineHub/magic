@@ -161,6 +161,19 @@ class ProjectForkRepository extends AbstractRepository implements ProjectForkRep
     }
 
     /**
+     * Update total files count (progress denominator).
+     */
+    public function updateTotalFiles(int $id, int $totalFiles): bool
+    {
+        return $this->projectForkModel::query()
+            ->where('id', $id)
+            ->update([
+                'total_files' => $totalFiles,
+                'updated_at' => date('Y-m-d H:i:s'),
+            ]) > 0;
+    }
+
+    /**
      * Get fork records by user ID with pagination.
      */
     public function getForksByUser(
