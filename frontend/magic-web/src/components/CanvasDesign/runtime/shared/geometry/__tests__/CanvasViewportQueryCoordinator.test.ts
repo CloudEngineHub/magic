@@ -113,8 +113,10 @@ describe("CanvasViewportQueryCoordinator", () => {
 		)
 		expect(getElementBounds).toHaveBeenCalledTimes(4)
 		expect(first.nearRect).toEqual({ x: -200, y: -200, width: 500, height: 500 })
+		expect(first.layoutRect).toEqual({ x: -50, y: -50, width: 200, height: 200 })
 		expect(first.visibleElementIds).toEqual(new Set(["visible"]))
 		expect(first.nearElementIds).toEqual(new Set(["label", "near"]))
+		expect(first.layoutElementIds).toEqual(new Set(["visible", "label"]))
 		expect(first.labelElementIds).toEqual(["visible", "label"])
 	})
 
@@ -134,6 +136,7 @@ describe("CanvasViewportQueryCoordinator", () => {
 		expect(queryElementIdsByExpandedRect).toHaveBeenCalledTimes(1)
 		expect(moved.visibleElementIds.size).toBe(0)
 		expect(moved.nearElementIds).toEqual(new Set(["left", "right"]))
+		expect(moved.layoutElementIds).toEqual(new Set(["left"]))
 	})
 
 	it("clips nested Frame descendants before sharing viewport candidates", () => {

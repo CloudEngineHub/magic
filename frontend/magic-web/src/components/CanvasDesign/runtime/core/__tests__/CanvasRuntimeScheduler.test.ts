@@ -124,7 +124,7 @@ describe("CanvasRuntimeScheduler", () => {
 		for (let index = 0; index < 10_000; index += 1) {
 			scheduler.registerViewportScaleLayout(`element-${index}`, callback)
 		}
-		scheduler.replaceActiveViewportScaleLayoutElementIds(new Set(["element-7", "element-9999"]))
+		scheduler.replaceViewportScaleLayoutEligibility(new Set(["element-7", "element-9999"]))
 
 		eventEmitter.emit({ type: "viewport:scale", data: { scale: 2 } })
 
@@ -147,9 +147,9 @@ describe("CanvasRuntimeScheduler", () => {
 		const second = vi.fn()
 		scheduler.registerViewportScaleLayout("first", first)
 		scheduler.registerViewportScaleLayout("second", second)
-		scheduler.replaceActiveViewportScaleLayoutElementIds(new Set(["first"]))
+		scheduler.replaceViewportScaleLayoutEligibility(new Set(["first"]))
 
-		scheduler.replaceActiveViewportScaleLayoutElementIds(new Set(["second"]))
+		scheduler.replaceViewportScaleLayoutEligibility(new Set(["second"]))
 
 		expect(first).not.toHaveBeenCalled()
 		expect(second).toHaveBeenCalledTimes(1)
@@ -164,7 +164,7 @@ describe("CanvasRuntimeScheduler", () => {
 		const scheduler = new CanvasRuntimeScheduler({ canvas })
 		const callback = vi.fn()
 		const unregister = scheduler.registerViewportScaleLayout("element-1", callback)
-		scheduler.replaceActiveViewportScaleLayoutElementIds(new Set(["element-1"]))
+		scheduler.replaceViewportScaleLayoutEligibility(new Set(["element-1"]))
 
 		unregister()
 		eventEmitter.emit({ type: "viewport:scale", data: { scale: 2 } })
@@ -179,19 +179,37 @@ describe("CanvasRuntimeScheduler", () => {
 		})
 	})
 
-	it("keeps a newly registered layout active until visibility publishes its next set", () => {
+	it("does not activate a late far registration until it enters the spatial eligibility set", () => {
 		const { canvas, eventEmitter } = createCanvasStub()
 		const scheduler = new CanvasRuntimeScheduler({ canvas })
 		const existing = vi.fn()
 		const addedLater = vi.fn()
 		scheduler.registerViewportScaleLayout("existing", existing)
-		scheduler.replaceActiveViewportScaleLayoutElementIds(new Set(["existing"]))
+		scheduler.replaceViewportScaleLayoutEligibility(new Set(["existing"]))
 
 		scheduler.registerViewportScaleLayout("added-later", addedLater)
 		eventEmitter.emit({ type: "viewport:scale", data: { scale: 2 } })
 
 		expect(existing).toHaveBeenCalledTimes(1)
+		expect(addedLater).not.toHaveBeenCalled()
+		expect(scheduler.getSnapshot().viewportScaleLayouts.activeElementCount).toBe(1)
+
+		scheduler.replaceViewportScaleLayoutEligibility(new Set(["existing", "added-later"]))
+
 		expect(addedLater).toHaveBeenCalledTimes(1)
 		expect(scheduler.getSnapshot().viewportScaleLayouts.activeElementCount).toBe(2)
+	})
+
+	it("activates a late registration already covered by the latest spatial set", () => {
+		const { canvas, eventEmitter } = createCanvasStub()
+		const scheduler = new CanvasRuntimeScheduler({ canvas })
+		const callback = vi.fn()
+		scheduler.replaceViewportScaleLayoutEligibility(new Set(["added-later"]))
+
+		scheduler.registerViewportScaleLayout("added-later", callback)
+		eventEmitter.emit({ type: "viewport:scale", data: { scale: 2 } })
+
+		expect(callback).toHaveBeenCalledTimes(1)
+		expect(scheduler.getSnapshot().viewportScaleLayouts.activeElementCount).toBe(1)
 	})
 })

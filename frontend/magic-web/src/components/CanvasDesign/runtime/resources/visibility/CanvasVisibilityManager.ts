@@ -180,9 +180,8 @@ interface ContainerRootCache {
 }
 
 interface ViewportElementQueryResult {
-	rootElementIds: Set<string>
-	renderActiveRootIds: Set<string>
-	activeViewportScaleLayoutElementIds: Set<string>
+	renderElementIds: string[]
+	renderActiveElementIds: Set<string>
 	visibleConsumerIds: Set<string>
 	nearConsumerIds: Set<string>
 	visibleImageIds: Set<string>
@@ -372,6 +371,7 @@ export class CanvasVisibilityManager {
 	private scheduledRequiresFullRefresh = false
 	private scheduledReason = "unknown"
 	private lastQueryCoverRect: Rect | null = null
+	private lastQueryLayoutRect: Rect | null = null
 	private lastScaleBand: number | null = null
 	private lastQueryViewportScale: number | null = null
 	private lastQueryGeometryRevision: number | null = null
@@ -1370,9 +1370,15 @@ export class CanvasVisibilityManager {
 		if (!this.canvas.geometryCacheManager.containsRect(this.lastQueryCoverRect, viewportRect)) {
 			return false
 		}
-		// The cover rect is also the render-active and viewport-layout window from the last full
-		// query. A viewport contained by it cannot expose a culled root or a previously inactive
-		// layout element on screen; crossing the boundary forces a full query before either is used.
+		if (
+			!this.lastQueryLayoutRect ||
+			!this.canvas.geometryCacheManager.containsRect(this.lastQueryLayoutRect, viewportRect)
+		) {
+			return false
+		}
+		// Reuse the previous classifications only while the viewport remains inside both windows.
+		// Crossing the narrower layout window refreshes eligibility before an inactive element can
+		// become visible, while the near window preserves the existing resource/culling contract.
 		if (!this.lastQueryViewportScale || this.lastQueryViewportScale <= 0) return false
 
 		const scaleRatio = viewportScale / this.lastQueryViewportScale
@@ -1465,16 +1471,15 @@ export class CanvasVisibilityManager {
 
 	private queryViewportElementIds(
 		viewportSnapshot: CanvasViewportSpatialSnapshot,
-		includeRenderRoots: boolean,
+		includeRenderVisibility: boolean,
+		includeAllRenderElements = false,
 	): ViewportElementQueryResult {
-		const rootElementIds = new Set<string>()
-		if (includeRenderRoots) {
-			this.canvas.elementManager.getAllElements().forEach((element) => {
-				rootElementIds.add(element.id)
-			})
-		}
-		const renderActiveRootIds = new Set<string>()
-		const activeViewportScaleLayoutElementIds = new Set<string>()
+		const renderElementIds = includeAllRenderElements
+			? this.canvas.elementManager.getAllElementIds()
+			: []
+		const renderActiveElementIds = includeRenderVisibility
+			? this.getRenderActiveElementIds(viewportSnapshot)
+			: new Set<string>()
 		const visibleConsumerIds = new Set<string>()
 		const nearConsumerIds = new Set<string>()
 		const visibleImageIds = new Set<string>()
@@ -1485,20 +1490,12 @@ export class CanvasVisibilityManager {
 		const nearAudioIds = new Set<string>()
 
 		viewportSnapshot.visibleElementIds.forEach((elementId) => {
-			if (rootElementIds.has(elementId)) renderActiveRootIds.add(elementId)
-			if (this.canvas.runtimeScheduler.hasViewportScaleLayoutElement(elementId)) {
-				activeViewportScaleLayoutElementIds.add(elementId)
-			}
 			if (this.consumerVisibilityListeners.has(elementId)) visibleConsumerIds.add(elementId)
 			if (this.registeredImages.has(elementId)) visibleImageIds.add(elementId)
 			if (this.registeredVideos.has(elementId)) visibleVideoIds.add(elementId)
 			if (this.registeredAudios.has(elementId)) visibleAudioIds.add(elementId)
 		})
 		viewportSnapshot.nearElementIds.forEach((elementId) => {
-			if (rootElementIds.has(elementId)) renderActiveRootIds.add(elementId)
-			if (this.canvas.runtimeScheduler.hasViewportScaleLayoutElement(elementId)) {
-				activeViewportScaleLayoutElementIds.add(elementId)
-			}
 			if (this.consumerVisibilityListeners.has(elementId)) {
 				nearConsumerIds.add(elementId)
 			}
@@ -1514,9 +1511,8 @@ export class CanvasVisibilityManager {
 		})
 
 		return {
-			rootElementIds,
-			renderActiveRootIds,
-			activeViewportScaleLayoutElementIds,
+			renderElementIds,
+			renderActiveElementIds,
 			visibleConsumerIds,
 			nearConsumerIds,
 			visibleImageIds,
@@ -1526,6 +1522,52 @@ export class CanvasVisibilityManager {
 			visibleAudioIds,
 			nearAudioIds,
 		}
+	}
+
+	private getRenderActiveElementIds(
+		viewportSnapshot: CanvasViewportSpatialSnapshot,
+	): Set<string> {
+		// Near is a resource warm-up window and must not expand the Konva scene. The narrower
+		// layout window is sufficient to keep upcoming content mounted while avoiding draw work
+		// for media that is only being prefetched.
+		const activeElementIds = new Set<string>([
+			...viewportSnapshot.visibleElementIds,
+			...viewportSnapshot.layoutElementIds,
+		])
+
+		// Selection and edit sessions can intentionally keep an element active outside the current
+		// viewport. Their parent chain must stay admitted as well, otherwise hiding a nested child
+		// would break its transformer, crop, extend, eraser, or text-editing surface.
+		this.canvas.selectionManager?.getSelectedIds?.().forEach((elementId) => {
+			activeElementIds.add(elementId)
+		})
+		const interactionElementIds = [
+			this.canvas.hoverManager?.getHoveredElementId?.(),
+			this.canvas.cropManager?.getCroppingElementId?.(),
+			this.canvas.extendManager?.getExtendingElementId?.(),
+			this.canvas.eraserManager?.getErasingElementId?.(),
+			this.canvas.textEditingManager?.getEditingElementId?.(),
+			this.canvas.elementRenameManager?.getRenamingElementId?.(),
+		]
+		interactionElementIds.forEach((elementId) => {
+			if (elementId) activeElementIds.add(elementId)
+		})
+
+		// CanvasDocumentIndex already owns the parent map. Track expanded IDs only for this closure so
+		// shared ancestors are resolved once and malformed cyclic data cannot loop indefinitely.
+		const expandedElementIds = new Set<string>()
+		for (const elementId of activeElementIds) {
+			let currentId: string | undefined = elementId
+			while (currentId && !expandedElementIds.has(currentId)) {
+				expandedElementIds.add(currentId)
+				const parentId = this.canvas.elementManager.findParentIdForElement(currentId)
+				if (!parentId) break
+				activeElementIds.add(parentId)
+				currentId = parentId
+			}
+		}
+
+		return activeElementIds
 	}
 
 	private refreshVisibility(reason: string, requiresFullRefresh: boolean): void {
@@ -1570,13 +1612,16 @@ export class CanvasVisibilityManager {
 			farDrainReady || this.renderVisibilityController.getCulledCount() > 0
 
 		this.lastQueryCoverRect = viewportSnapshot.nearRect
+		this.lastQueryLayoutRect = viewportSnapshot.layoutRect
 		this.lastScaleBand = scaleBand
 		this.lastQueryViewportScale = viewportScale
 		this.lastQueryGeometryRevision = viewportSnapshot.geometryRevision
+		this.canvas.runtimeScheduler.replaceViewportScaleLayoutEligibility(
+			viewportSnapshot.layoutElementIds,
+		)
 		const {
-			rootElementIds,
-			renderActiveRootIds,
-			activeViewportScaleLayoutElementIds,
+			renderElementIds,
+			renderActiveElementIds,
 			visibleConsumerIds,
 			nearConsumerIds,
 			visibleImageIds: visibleIds,
@@ -1585,10 +1630,7 @@ export class CanvasVisibilityManager {
 			nearVideoIds,
 			visibleAudioIds,
 			nearAudioIds,
-		} = this.queryViewportElementIds(viewportSnapshot, needsRenderVisibilitySync)
-		this.canvas.runtimeScheduler.replaceActiveViewportScaleLayoutElementIds(
-			activeViewportScaleLayoutElementIds,
-		)
+		} = this.queryViewportElementIds(viewportSnapshot, needsRenderVisibilitySync, farDrainReady)
 		this.applyConsumerVisibilityStates(visibleConsumerIds, nearConsumerIds)
 
 		const viewportCenter = getRectCenter(viewportRect)
@@ -1837,8 +1879,8 @@ export class CanvasVisibilityManager {
 		}
 		if (needsRenderVisibilitySync) {
 			this.renderVisibilityController.sync({
-				activeElementIds: renderActiveRootIds,
-				allElementIds: rootElementIds,
+				activeElementIds: renderActiveElementIds,
+				allElementIds: renderElementIds,
 				allowCullFar: farDrainReady,
 			})
 		}

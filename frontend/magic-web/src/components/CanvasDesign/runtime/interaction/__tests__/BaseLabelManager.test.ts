@@ -69,6 +69,8 @@ function createViewportSnapshot(generation: number, labelElementIds: string[]) {
 		generation,
 		geometryRevision: 0,
 		labelElementIds,
+		layoutElementIds: new Set<string>(),
+		layoutRect: { x: -1600, y: -1600, width: 4000, height: 3800 },
 		nearElementIds: new Set<string>(),
 		nearRect: { x: -1600, y: -1600, width: 4000, height: 3800 },
 		viewportRect: { x: 0, y: 0, width: 800, height: 600 },
