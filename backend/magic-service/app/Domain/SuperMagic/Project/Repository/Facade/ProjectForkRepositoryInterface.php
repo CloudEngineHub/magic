@@ -86,6 +86,22 @@ interface ProjectForkRepositoryInterface
     public function hasRunningFork(string $userId, int $sourceProjectId): bool;
 
     /**
+     * Fail the running forks of a source project that stopped progressing.
+     *
+     * The update is conditional, so concurrent callers cannot both reclaim the same record.
+     * Progress is left untouched to keep however far the abandoned migration got.
+     *
+     * @param string $staleBefore Records not updated since this timestamp are considered abandoned
+     * @return bool Whether at least one record was reclaimed
+     */
+    public function failStaleRunningForks(
+        string $userId,
+        int $sourceProjectId,
+        string $staleBefore,
+        string $errMsg
+    ): bool;
+
+    /**
      * Get fork statistics by user.
      */
     public function getForkStatsByUser(string $userId): array;

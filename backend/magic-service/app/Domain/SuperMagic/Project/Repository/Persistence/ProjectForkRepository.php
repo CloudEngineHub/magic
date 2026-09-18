@@ -8,6 +8,7 @@ declare(strict_types=1);
 namespace App\Domain\SuperMagic\Project\Repository\Persistence;
 
 use App\Domain\SuperMagic\Project\Entity\ProjectForkEntity;
+use App\Domain\SuperMagic\Project\Entity\ValueObject\ForkStatus;
 use App\Domain\SuperMagic\Project\Repository\Facade\ProjectForkRepositoryInterface;
 use App\Domain\SuperMagic\Project\Repository\Model\ProjectForkModel;
 use App\Infrastructure\Core\AbstractRepository;
@@ -250,8 +251,26 @@ class ProjectForkRepository extends AbstractRepository implements ProjectForkRep
         return $this->projectForkModel::query()
             ->where('user_id', $userId)
             ->where('source_project_id', $sourceProjectId)
-            ->where('status', 'running')
+            ->where('status', ForkStatus::RUNNING->value)
             ->exists();
+    }
+
+    public function failStaleRunningForks(
+        string $userId,
+        int $sourceProjectId,
+        string $staleBefore,
+        string $errMsg
+    ): bool {
+        return $this->projectForkModel::query()
+            ->where('user_id', $userId)
+            ->where('source_project_id', $sourceProjectId)
+            ->where('status', ForkStatus::RUNNING->value)
+            ->where('updated_at', '<=', $staleBefore)
+            ->update([
+                'status' => ForkStatus::FAILED->value,
+                'err_msg' => $errMsg,
+                'updated_at' => date('Y-m-d H:i:s'),
+            ]) > 0;
     }
 
     /**

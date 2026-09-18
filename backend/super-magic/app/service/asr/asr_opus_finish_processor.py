@@ -74,19 +74,27 @@ class AsrOpusFinishProcessor(AsrServiceBase):
         attempt_id = claimed_progress.opus_merge_attempt_id
 
         try:
-            expected_shard_count = (
-                len(all_files)
-                if claimed_progress.finish_completion_mode == "tail_missing_convergence"
-                else claimed_progress.file_shard_count
-                if claimed_progress.file_shard_count >= 0
-                else None
-            )
+            # silence_fill（含旧值 middle_gap_silence_fill）必须用声明总数作为合并范围，
+            # 否则尾部缺片进不了补齐范围；尾部截断收敛只存在旧持久化状态中。
+            if claimed_progress.finish_completion_mode == "tail_missing_convergence":
+                expected_shard_count = len(all_files)
+            elif claimed_progress.file_shard_count >= 0:
+                expected_shard_count = claimed_progress.file_shard_count
+            else:
+                expected_shard_count = None
+            is_silence_fill = claimed_progress.finish_completion_mode in {
+                "silence_fill",
+                "middle_gap_silence_fill",
+            }
             await self.merge_operations.merge_opus_on_finish(
                 task.task_key,
                 task.source_dir,
                 all_files,
-                expected_shard_count,
+                expected_shard_count=expected_shard_count,
                 merge_attempt_id=attempt_id,
+                missing_indices=claimed_progress.accepted_missing_shard_indices
+                if is_silence_fill
+                else None,
             )
         except OpusShardsNotReadyError as exc:
             if self._deadline_reached(claimed_progress.completion_deadline_at):
@@ -113,6 +121,21 @@ class AsrOpusFinishProcessor(AsrServiceBase):
                 return True
             return False
 
+        if claimed_progress.finish_completion_mode in {"silence_fill", "middle_gap_silence_fill"}:
+            degraded_saved = await task_manager.set_degraded_merge_info(
+                task.task_key,
+                claimed_progress.finish_completion_mode,
+                claimed_progress.accepted_missing_shard_indices,
+            )
+            if not degraded_saved:
+                await task_manager.set_opus_merge_status(
+                    task.task_key, "failed", "记录降级合并结果失败", expected_attempt_id=attempt_id
+                )
+                logger.error(
+                    f"{self.LOG_PREFIX} ❌ task_key={task.task_key} "
+                    "降级合并结果写入失败，阻止任务完成"
+                )
+                return False
         status_saved = await task_manager.set_opus_merge_status(
             task.task_key,
             "completed",

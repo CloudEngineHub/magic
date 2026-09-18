@@ -41,11 +41,12 @@ readonly class SandboxVersionDomainService
 
         // 持久化映射为空时，仅接受与 topic_id 完全一致的 legacy 沙箱身份。
         if ($topicEntity->getSandboxId() === '' && $effectiveSandboxId !== (string) $topicId) {
-            return $this->buildSandboxVersionResult(null, []);
+            return $this->buildSandboxVersionResult(null, null, []);
         }
 
         return $this->buildSandboxVersionResult(
             $topicEntity->getSandboxImages(),
+            $topicEntity->getAgentImage(),
             $this->getLatestImages()
         );
     }
@@ -71,12 +72,14 @@ readonly class SandboxVersionDomainService
             return [];
         }
 
-        $latestImage = $this->getLatestImages();
+        $latestImages = $this->getLatestImages();
         $needUpgradeMap = [];
         foreach ($topics as $topic) {
+            $hasSandbox = $topic->getSandboxId() !== '';
             $versionResult = $this->buildSandboxVersionResult(
-                $topic->getSandboxId() === '' ? null : $topic->getSandboxImages(),
-                $latestImage
+                $hasSandbox ? $topic->getSandboxImages() : null,
+                $hasSandbox ? $topic->getAgentImage() : null,
+                $latestImages
             );
             $needUpgradeMap[$topic->getId()] = $versionResult['needs_update'];
         }
@@ -85,34 +88,65 @@ readonly class SandboxVersionDomainService
     }
 
     /**
+     * Historical rows may not have the AGFS image. A known Agent mismatch is
+     * still sufficient to require an upgrade, while an Agent match remains
+     * unknown because the historical AGFS version cannot be inferred.
+     *
+     * @param null|array<string, mixed> $currentImages
+     * @param array<string, mixed> $latestImages
      * @return array{current_version: string, latest_version: string, needs_update: null|bool}
      */
-    private function buildSandboxVersionResult(?array $currentImages, array $latestImages): array
-    {
+    private function buildSandboxVersionResult(
+        ?array $currentImages,
+        ?string $legacyAgentImage,
+        array $latestImages
+    ): array {
         $needsUpdate = null;
-        if ($this->hasCompleteImages($currentImages) && $this->hasCompleteImages($latestImages)) {
-            $needsUpdate = $currentImages['agent_image'] !== $latestImages['agent_image']
-                || $currentImages['agfs_image'] !== $latestImages['agfs_image'];
+        if ($this->hasCompleteImages($latestImages)) {
+            if ($this->hasCompleteImages($currentImages)) {
+                $needsUpdate = $currentImages['agent_image'] !== $latestImages['agent_image']
+                    || $currentImages['agfs_image'] !== $latestImages['agfs_image'];
+            } else {
+                $knownAgentImage = $this->nonEmptyImage($currentImages['agent_image'] ?? null)
+                    ?? $this->nonEmptyImage($legacyAgentImage);
+                if ($knownAgentImage !== null && $knownAgentImage !== $latestImages['agent_image']) {
+                    $needsUpdate = true;
+                }
+            }
         }
+
+        $currentAgentImage = $this->nonEmptyImage($currentImages['agent_image'] ?? null)
+            ?? $this->nonEmptyImage($legacyAgentImage)
+            ?? '';
+
         return [
-            'current_version' => self::extractImageVersion($currentImages['agent_image'] ?? ''),
+            'current_version' => self::extractImageVersion($currentAgentImage),
             'latest_version' => self::extractImageVersion($latestImages['agent_image'] ?? ''),
             'needs_update' => $needsUpdate,
         ];
     }
 
+    /** @param null|array<string, mixed> $images */
     private function hasCompleteImages(?array $images): bool
     {
-        return is_string($images['agent_image'] ?? null) && trim($images['agent_image']) !== ''
-            && is_string($images['agfs_image'] ?? null) && trim($images['agfs_image']) !== '';
+        return $this->nonEmptyImage($images['agent_image'] ?? null) !== null
+            && $this->nonEmptyImage($images['agfs_image'] ?? null) !== null;
     }
 
+    private function nonEmptyImage(mixed $image): ?string
+    {
+        return is_string($image) && trim($image) !== '' ? $image : null;
+    }
+
+    /** @return array<string, mixed> */
     private function getLatestImages(): array
     {
         try {
             return $this->agentDomainService->getLatestImages();
         } catch (Throwable $e) {
-            $this->logger->warning('[Sandbox][Version] Failed to fetch latest images', ['error' => $e->getMessage()]);
+            $this->logger->warning('[Sandbox][Version] Failed to fetch latest images', [
+                'error' => $e->getMessage(),
+            ]);
             return [];
         }
     }
@@ -123,8 +157,14 @@ readonly class SandboxVersionDomainService
         if (! is_string($image) || $image === '') {
             return '';
         }
-        $name = substr($image, (strrpos($image, '/') ?: -1) + 1);
-        $tagPos = strpos($name, ':');
-        return $tagPos === false ? $name : substr($name, $tagPos + 1);
+
+        $imageWithoutDigest = explode('@', $image, 2)[0];
+        $lastSlashPos = strrpos($imageWithoutDigest, '/');
+        $tagPos = strrpos($imageWithoutDigest, ':');
+        if ($tagPos === false || ($lastSlashPos !== false && $tagPos < $lastSlashPos)) {
+            return '';
+        }
+
+        return substr($imageWithoutDigest, $tagPos + 1);
     }
 }

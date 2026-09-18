@@ -224,6 +224,32 @@ class AgentDomainService
      * Uses distributed lock to prevent concurrent sandbox creation.
      * Supports interrupt checking at each step for early termination.
      *
+     * 沙箱绑定模型：话题只存一个 sandbox_id 指针，pod 的生死由 K8s 管理，
+     * 换绑 = 只改指针，不停 pod：
+     *
+     *     MySQL topics.sandbox_id                 K8s pod（真实资源）
+     *     +----------------------+              +--------------------------+
+     *     |     'sandbox-A'      |------------->| pod sandbox-A  Running   |
+     *     +----------+-----------+              +--------------------------+
+     *                |
+     *                | UPDATE sandbox_id = 'sandbox-B'
+     *                v
+     *     +----------------------+              +--------------------------+
+     *     |     'sandbox-B'      |------------->| pod sandbox-B  Running   |
+     *     +----------------------+              +--------------------------+
+     *                                           +--------------------------+
+     *                                           | pod sandbox-A  Running   |
+     *                                           +--------------------------+
+     *                                             ^^ 指针已绕开它，无人停止
+     *                                                => 带着同样的 topic-id /
+     *                                                   agent-code 标签泄漏
+     *
+     * 因此本方法对绑定切换做了三重保护：
+     *   1. 拿锁【后】重读 DB 最新绑定（等锁期间可能已被升级/重启、预热池
+     *      mount 换绑，拿锁前的快照不可信）；
+     *   2. 探测失败不急着绑新的，先给预热池机会（tryWarmPoolFastPath）；
+     *   3. 无论 warm/cold 换绑成功，都 releaseReplacedSandbox 停掉旧沙箱。
+     *
      * @param DataIsolation $dataIsolation Data isolation context
      * @param AgentContext $agentContext Agent context with initialization data
      * @param null|callable $interruptChecker Optional callable that returns true to interrupt initialization
@@ -289,6 +315,39 @@ class AgentDomainService
                 'lock_owner' => $lockOwner,
             ]);
 
+            // 上面的 $sandboxId 是拿锁【前】解析出的快照，等锁期间可能已失效。
+            // 典型竞态（A=升级/重启流程，B=本方法的另一次并发调用）：
+            //
+            //   t0   A: 读 DB 绑定=X           B: 读 DB 绑定=X（快照）
+            //   t1   A: 拿锁, 删 pod X,
+            //            冷创建 B, 绑定=B      B: 排队等锁...
+            //   t2   A: 释放锁                 B: 拿到锁
+            //                                      若仍用快照 X 探测 -> NOT_FOUND
+            //                                      -> 误判"绑定已丢", 再绑一个 C
+            //                                      -> pod B 被绕开, 泄漏
+            //                                      重读 DB 绑定=B -> 直接复用 B
+            //
+            // 所以拿到锁后必须以 DB 现值为准，而不是拿锁前的快照。
+            // 调用方显式传入 sandbox_id（重连固定 pod）时保持原语义，不重读。
+            if (empty($contextSandboxId)) {
+                $freshTopic = $this->topicRepository->getTopicById((int) $topicEntity->getId());
+                $freshPersistedSandboxId = (string) ($freshTopic?->getSandboxId() ?? '');
+                if ($freshPersistedSandboxId !== '' && $freshPersistedSandboxId !== $sandboxId) {
+                    $this->logger->info('[Sandbox][Domain] Re-read topic binding after acquiring lock', [
+                        'topic_id' => $topicEntity->getId(),
+                        'stale_sandbox_id' => $sandboxId,
+                        'fresh_sandbox_id' => $freshPersistedSandboxId,
+                    ]);
+                    $sandboxId = $freshPersistedSandboxId;
+                }
+            }
+
+            // 记下"即将被替换"的当前绑定，换绑（warm/cold）成功后据此停旧 pod。
+            // 必须在 Step 1 探测之前捕获：探测失败会把 $sandboxId 清空为 ''，
+            // 之后就拿不到被替换者是谁了。调用方显式指定 sandbox_id（重连固定
+            // pod）时不做释放，保持原语义。
+            $boundBeforeSwitch = empty($contextSandboxId) ? $sandboxId : '';
+
             // Step 1: Check workspace status (quick-returns if sandbox already ready).
             //
             // 如果探测发现 sandbox_id 对应的 pod 已经不存在 / 不在 Ready 状态，
@@ -345,12 +404,13 @@ class AgentDomainService
                 $topicSpaceRootFileId
             );
             if ($warmSandboxId !== null) {
+                $this->releaseReplacedSandbox($boundBeforeSwitch, $warmSandboxId, (int) $topicEntity->getId());
                 $sandboxId = $warmSandboxId;
             } else {
                 // Step 3: Create sandbox container (cold path)
                 // 冷启动一律使用 topic_id 作为 sandbox_id，让沙箱与话题一一对应，
                 // 便于排障与去重；调用方即便显式传了 sandbox_id 也以话题为准。
-                $sandboxId = $this->createSandbox(
+                $createdSandboxId = $this->createSandbox(
                     dataIsolation: $dataIsolation,
                     projectId: (string) $agentContext->getProjectEntity()->getId(),
                     sandboxID: (string) $topicEntity->getId(),
@@ -361,6 +421,8 @@ class AgentDomainService
                     topicId: $topicEntity->getId(),
                     agentCode: $this->resolveAgentCodeLabel($topicEntity)
                 );
+                $this->releaseReplacedSandbox($boundBeforeSwitch, $createdSandboxId, (int) $topicEntity->getId());
+                $sandboxId = $createdSandboxId;
             }
 
             $this->refreshInitContextSandboxId($agentContext, $sandboxId);
@@ -417,6 +479,46 @@ class AgentDomainService
                     'released' => $released,
                 ]);
             }
+        }
+    }
+
+    /**
+     * 话题换绑后，尽力停掉被替换的旧沙箱。
+     *
+     * 换绑只是 UPDATE topics.sandbox_id 这一条 SQL，改的是 MySQL 里的指针，
+     * K8s 里的旧 pod 收不到任何通知：
+     *
+     *     换绑前:  topics.sandbox_id = 'A'      pod A  Running
+     *     换绑后:  topics.sandbox_id = 'B'      pod A  Running   <- SQL 不停它
+     *                                                pod B  Running
+     *     本方法:  gateway.delete('A')  ==>     pod A  消失, 只剩 B
+     *
+     * 若缺了"补一刀"，pod A 就带着同样的 topic-id / agent-code 标签继续
+     * Running，从此无人认领——这是"同 topic-id 多个沙箱"问题的直接成因。
+     *
+     * 尽力而为：旧沙箱可能已被其他流程删除（NOT_FOUND），或停止失败，
+     * 都只记日志，绝不影响新沙箱的初始化。
+     */
+    private function releaseReplacedSandbox(string $previousSandboxId, string $newSandboxId, int $topicId): void
+    {
+        if ($previousSandboxId === '' || $previousSandboxId === $newSandboxId) {
+            return;
+        }
+
+        try {
+            $this->stopSandbox($previousSandboxId);
+            $this->logger->info('[Sandbox][Domain] Stopped sandbox replaced by new binding', [
+                'topic_id' => $topicId,
+                'old_sandbox_id' => $previousSandboxId,
+                'new_sandbox_id' => $newSandboxId,
+            ]);
+        } catch (Throwable $e) {
+            $this->logger->info('[Sandbox][Domain] Skip stopping replaced sandbox', [
+                'topic_id' => $topicId,
+                'old_sandbox_id' => $previousSandboxId,
+                'new_sandbox_id' => $newSandboxId,
+                'reason' => $e->getMessage(),
+            ]);
         }
     }
 
@@ -491,6 +593,8 @@ class AgentDomainService
                 $topicUpdateData['sandbox_id'] = (string) $returnedSandboxId;
             }
             if (! empty($agentImage)) {
+                // Keep the legacy column populated for old readers only;
+                // sandbox_images is the canonical field for new consumers.
                 $topicUpdateData['agent_image'] = $agentImage;
             }
             if (isset($topicUpdateData['sandbox_id']) || isset($topicUpdateData['agent_image'])) {
@@ -1620,9 +1724,14 @@ class AgentDomainService
                 'updated_at' => date('Y-m-d H:i:s'),
             ];
             if ($sandboxImages !== null) {
+                // Backward compatibility for old readers; new code must use
+                // the complete sandbox_images pair above.
                 $topicUpdateData['agent_image'] = $sandboxImages['agent_image'];
             }
-            $this->topicRepository->updateTopicByCondition(['id' => (int) $topicEntity->getId()], $topicUpdateData);
+            $this->topicRepository->updateTopicByCondition(
+                ['id' => (int) $topicEntity->getId()],
+                $topicUpdateData
+            );
         } catch (Throwable $e) {
             $this->logger->warning('[Sandbox][WarmPath] Failed to stamp topic with warm sandbox metadata', [
                 'topic_id' => $topicEntity->getId(),
