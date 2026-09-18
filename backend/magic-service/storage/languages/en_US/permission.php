@@ -80,6 +80,7 @@ return [
             'agent' => 'Agent',
             'magic_claw' => 'Magic Claw',
             'micro_app' => 'Micro App',
+            'topic' => 'Topic',
             'project' => 'Project',
         ],
         'functions' => [
@@ -113,6 +114,8 @@ return [
             'project_share_public' => ['name' => 'Project Public Sharing', 'description' => 'Allow projects to be shared publicly.'],
             'project_share_password' => ['name' => 'Project Password Sharing', 'description' => 'Allow projects to be shared with password protection.'],
             'project_share_team' => ['name' => 'Project Team Sharing', 'description' => 'Allow projects to be shared with team members.'],
+            'topic_share_public' => ['name' => 'Topic Public Sharing', 'description' => 'Allow topics to be shared publicly.'],
+            'topic_share_password' => ['name' => 'Topic Password Sharing', 'description' => 'Allow topics to be shared with password protection.'],
         ],
         'binding_scope_label' => [
             'all_users_available' => 'Available to everyone',
