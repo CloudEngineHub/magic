@@ -215,7 +215,8 @@ class MicroAppRepository implements MicroAppRepositoryInterface
         string $keyword,
         int $page,
         int $pageSize,
-        bool $publishedOnly = false
+        bool $publishedOnly = false,
+        bool $mentionableOnly = false,
     ): array {
         if ($organizationCodes === []) {
             return ['total' => 0, 'list' => []];
@@ -230,6 +231,49 @@ class MicroAppRepository implements MicroAppRepositoryInterface
             ->whereNull('p.deleted_at');
         if ($publishedOnly) {
             $query->where('ma.publish_status', MicroAppPublishStatus::Published->value);
+        }
+        if ($mentionableOnly) {
+            // Drafts are executable only for the owner or edit-capable collaborators.
+            // Published apps remain mentionable for the existing viewer-access path.
+            $query->where(function ($mentionQuery) use ($userId, $departmentIds): void {
+                $mentionQuery->where('ma.publish_status', MicroAppPublishStatus::Published->value)
+                    ->orWhere(function ($draftQuery) use ($userId, $departmentIds): void {
+                        $draftQuery
+                            ->where('ma.publish_status', MicroAppPublishStatus::Unpublished->value)
+                            ->where(function ($editorQuery) use ($userId, $departmentIds): void {
+                                $editorQuery->where('p.user_id', $userId);
+                                $editorQuery->orWhere(function ($memberQuery) use ($userId, $departmentIds): void {
+                                    $memberQuery
+                                        ->where('p.user_id', '<>', $userId)
+                                        ->where('p.is_collaboration_enabled', 1)
+                                        ->whereExists(function ($roleQuery) use ($userId, $departmentIds): void {
+                                            $roleQuery
+                                                ->select(Db::raw('1'))
+                                                ->from('magic_super_agent_project_members as draft_pm')
+                                                ->whereColumn('draft_pm.project_id', 'p.id')
+                                                ->where('draft_pm.status', 1)
+                                                ->whereNull('draft_pm.deleted_at')
+                                                ->whereIn('draft_pm.role', ['manage', 'editor'])
+                                                ->where(function ($targetQuery) use ($userId, $departmentIds): void {
+                                                    $targetQuery
+                                                        ->where(function ($userQuery) use ($userId): void {
+                                                            $userQuery
+                                                                ->where('draft_pm.target_type', 'User')
+                                                                ->where('draft_pm.target_id', $userId);
+                                                        });
+                                                    if ($departmentIds !== []) {
+                                                        $targetQuery->orWhere(function ($departmentQuery) use ($departmentIds): void {
+                                                            $departmentQuery
+                                                                ->where('draft_pm.target_type', 'Department')
+                                                                ->whereIn('draft_pm.target_id', $departmentIds);
+                                                        });
+                                                    }
+                                                });
+                                        });
+                                });
+                            });
+                    });
+            });
         }
         $query = $query
             ->where(function ($accessQuery) use ($userId, $departmentIds): void {

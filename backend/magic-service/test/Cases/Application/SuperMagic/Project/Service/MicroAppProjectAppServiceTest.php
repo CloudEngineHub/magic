@@ -748,7 +748,7 @@ class MicroAppProjectAppServiceTest extends TestCase
         );
     }
 
-    public function testMentionListOnlyIncludesPublishedAccessibleApps(): void
+    public function testMentionListIncludesAccessibleUnpublishedApps(): void
     {
         $authorization = (new MagicUserAuthorization())
             ->setId('user-1')
@@ -793,6 +793,32 @@ class MicroAppProjectAppServiceTest extends TestCase
                 'project_owner_id' => 'user-2',
                 'organization_code' => 'org-1',
             ],
+            [
+                'app_id' => 1004,
+                'project_id' => 2004,
+                'app_name' => 'Editor Draft App',
+                'app_description' => 'Editor draft',
+                'creator_id' => 'user-2',
+                'cover_file_key' => null,
+                'publish_status' => 'unpublished',
+                'updated_at' => '2026-08-30 10:00:00',
+                'project_owner_id' => 'user-2',
+                'organization_code' => 'org-1',
+                'test_role' => 'editor',
+            ],
+            [
+                'app_id' => 1005,
+                'project_id' => 2005,
+                'app_name' => 'Viewer Draft App',
+                'app_description' => 'Viewer draft',
+                'creator_id' => 'user-3',
+                'cover_file_key' => null,
+                'publish_status' => 'unpublished',
+                'updated_at' => '2026-08-31 10:00:00',
+                'project_owner_id' => 'user-3',
+                'organization_code' => 'org-1',
+                'test_role' => 'viewer',
+            ],
         ];
         $microAppRepository = $this->createMock(MicroAppRepositoryInterface::class);
         $microAppRepository->expects(self::once())->method('findPublishedByOrganization')->with('org-1')->willReturn([]);
@@ -806,9 +832,19 @@ class MicroAppProjectAppServiceTest extends TestCase
                 '',
                 1,
                 1000,
+                false,
                 true,
             )
-            ->willReturn(['total' => 3, 'list' => $ownedRows]);
+            ->willReturnCallback(static function (...$args) use ($ownedRows): array {
+                self::assertFalse($args[7]);
+                self::assertTrue($args[8]);
+                $rows = array_values(array_filter(
+                    $ownedRows,
+                    static fn (array $row): bool => $row['publish_status'] === 'published'
+                        || in_array($row['test_role'] ?? 'owner', ['owner', 'manage', 'editor'], true),
+                ));
+                return ['total' => count($rows), 'list' => $rows];
+            });
         $projectRepository = $this->createMock(ProjectRepositoryInterface::class);
         $projectRepository->expects(self::once())->method('findByIds')->with([])->willReturn([]);
 
@@ -822,8 +858,8 @@ class MicroAppProjectAppServiceTest extends TestCase
             ->willReturn([]);
         $projectMemberDomainService->expects(self::once())
             ->method('getUserHighestRolesInProjects')
-            ->with([2001, 2003], ['user-1', 'dept-1'])
-            ->willReturn([2003 => 'viewer']);
+            ->with([2004, 2002, 2001, 2003], ['user-1', 'dept-1'])
+            ->willReturn([2003 => 'viewer', 2004 => 'editor']);
 
         $departmentRepository = $this->createMock(MagicDepartmentUserRepositoryInterface::class);
         $departmentRepository->expects(self::once())
@@ -841,7 +877,7 @@ class MicroAppProjectAppServiceTest extends TestCase
             ->with([])
             ->willReturn([]);
 
-        $mergedRows = [$ownedRows[0], $ownedRows[2]];
+        $mergedRows = [$ownedRows[3], $ownedRows[1], $ownedRows[0], $ownedRows[2]];
         $responseFormatter = $this->createMock(MicroAppProjectResponseFormatter::class);
         $responseFormatter->expects(self::once())
             ->method('resolveCoverUrls')
@@ -869,6 +905,30 @@ class MicroAppProjectAppServiceTest extends TestCase
             [
                 'list' => [
                     [
+                        'app_id' => '1004',
+                        'project_id' => '2004',
+                        'app_name' => 'Editor Draft App',
+                        'app_description' => 'Editor draft',
+                        'creator_id' => 'user-2',
+                        'cover_url' => '',
+                        'publish_status' => 'unpublished',
+                        'updated_at' => '2026-08-30 10:00:00',
+                        'user_role' => 'editor',
+                        'can_delete' => false,
+                    ],
+                    [
+                        'app_id' => '1002',
+                        'project_id' => '2002',
+                        'app_name' => 'Draft App',
+                        'app_description' => 'Unpublished',
+                        'creator_id' => 'user-1',
+                        'cover_url' => '',
+                        'publish_status' => 'unpublished',
+                        'updated_at' => '2026-08-29 10:00:00',
+                        'user_role' => 'owner',
+                        'can_delete' => true,
+                    ],
+                    [
                         'app_id' => '1001',
                         'project_id' => '2001',
                         'app_name' => 'Owned App',
@@ -893,7 +953,7 @@ class MicroAppProjectAppServiceTest extends TestCase
                         'can_delete' => false,
                     ],
                 ],
-                'total' => 2,
+                'total' => 4,
                 'page' => 1,
                 'page_size' => 20,
             ],

@@ -31,7 +31,7 @@ export function createMicroAppMentionItem(params: {
 }
 
 function toMentionItem(item: MicroAppListItem): MentionItem | null {
-	if (item.publish_status !== "published") return null
+	if (item.publish_status !== "published" && item.publish_status !== "unpublished") return null
 	return createMicroAppMentionItem({
 		appId: String(item.app_id ?? ""),
 		appName: item.app_name,
