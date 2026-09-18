@@ -17,6 +17,7 @@ import { ToolbarButton } from "@/pages/superMagic/components/MessageEditor/types
 import { TopicMode } from "@/pages/superMagic/pages/Workspace/TopicMode"
 import type { CreatedProject, Workspace } from "@/pages/superMagic/pages/Workspace/types"
 import { projectStore, topicStore, workspaceStore } from "@/pages/superMagic/stores/core"
+import { trackProjectCreated } from "@/pages/superMagic/services/trackCreatedEntities"
 import { resolveMicroAppModelSelectionMode } from "@/pages/superMagic/pages/MicroAppPage/utils/microAppModelMode"
 import MobileInputContainer from "@/pages/superMagicMobile/pages/ChatPage/components/MobileInputContainer"
 import promptExampleData from "./microAppPromptExamples.json"
@@ -144,6 +145,8 @@ function MicroAppCreatePrompt({
 						message_version: "v2",
 					},
 				})
+				// 该专用接口会同时创建微应用的底层项目和首个话题，因此成功后需要成对上报。
+				trackProjectCreated(created, String(workspace.id), "micro_app")
 				appIdsByProjectIdRef.current.set(String(created.project.id), String(created.app_id))
 				return {
 					project: created.project,

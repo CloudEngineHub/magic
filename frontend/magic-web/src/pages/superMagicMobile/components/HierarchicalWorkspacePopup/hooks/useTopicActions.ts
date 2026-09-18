@@ -10,6 +10,7 @@ import { FetchTopicsParams } from "@/pages/superMagic/hooks/useTopics"
 import { SuperMagicApi } from "@/apis"
 import magicToast from "@/components/base/MagicToaster/utils"
 import { renameTopicWithChatSync } from "@/pages/superMagic/services"
+import { trackTopicCreated } from "@/pages/superMagic/services/trackCreatedEntities"
 
 interface UseTopicActionsParams {
 	currentTopics?: Topic[]
@@ -132,6 +133,11 @@ export function useTopicActions({
 				page_size: 999,
 			})) as { list: Topic[] }
 			const newTopic = topicsResponse?.list.find((topic) => topic?.id === res?.id)
+			trackTopicCreated(newTopic ?? res, {
+				projectId,
+				workspaceId: workspace,
+				mode: selectedProject?.project_mode,
+			})
 			if (setSelectedTopic && newTopic) {
 				setSelectedTopic(newTopic)
 				routeManageService.navigateToState({

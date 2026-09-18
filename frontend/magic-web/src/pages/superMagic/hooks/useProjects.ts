@@ -13,6 +13,7 @@ import { isCollaborationWorkspace, SHARE_WORKSPACE_ID } from "../constants"
 import { useNoPermissionCollaborationProject } from "./useNoPermissionCollaborationProject"
 import magicToast from "@/components/base/MagicToaster/utils"
 import SuperMagicService from "@/pages/superMagic/services"
+import { resolveCreationScene, trackProjectCreated } from "../services/trackCreatedEntities"
 
 export const enum COLLABORATION_TAB_KEY {
 	FROM_OTHER = "received",
@@ -330,6 +331,11 @@ export function useProjects({ selectedWorkspace, onWorkspaceStateChange }: UsePr
 					workdir,
 				})
 				if (res) {
+					trackProjectCreated(
+						res,
+						selectedWorkspace.id,
+						resolveCreationScene(projectMode),
+					)
 					await updateProjects({ workspaceId: selectedWorkspace.id })
 
 					if (isAutoSelect) {

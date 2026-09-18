@@ -5,6 +5,7 @@ import { SuperMagicApi } from "@/apis"
 import { validateFilename } from "@/utils/filename-validator"
 import type { ProjectListItem } from "@/pages/superMagic/pages/Workspace/types"
 import magicToast from "@/components/base/MagicToaster/utils"
+import { trackProjectCreated } from "@/pages/superMagic/services/trackCreatedEntities"
 
 interface UseCreateProjectOptions {
 	workspaceId: string
@@ -74,6 +75,7 @@ export function useCreateProject(options: UseCreateProjectOptions) {
 			})
 
 			if (response?.project) {
+				trackProjectCreated(response, workspaceId)
 				magicToast.success(t("selectPathModal.createdSuccessfully"))
 
 				// 刷新项目列表

@@ -63,6 +63,10 @@ import { imageMigrationService } from "./ImageMigrationService"
 import { RecordingStatusReporter, RecordingSummaryStatus } from "./RecordingStatusReporter"
 import MagicModal from "@/components/base/MagicModal"
 import { SuperMagicApi } from "@/apis"
+import {
+	trackProjectCreated,
+	trackTopicCreated,
+} from "@/pages/superMagic/services/trackCreatedEntities"
 import VoiceTimeoutChecker from "./VoiceTimeoutChecker"
 import SilenceDetector from "./SilenceDetector"
 import { DurationTracker } from "./DurationTracker"
@@ -4890,6 +4894,9 @@ class RecordSummaryService {
 			})
 			session.project = res.project
 			session.topic = res.topic
+			// This legacy recording bootstrap bypasses ProjectService, so report the
+			// recording-specific project/topic pair at its authoritative success point.
+			trackProjectCreated(res, workspaceId, "ai_recording")
 		}
 		// Topic creation only needs project_id; allow null workspace (ungrouped).
 		else if (session.project && !session.topic) {
@@ -4900,6 +4907,11 @@ class RecordSummaryService {
 				project_mode: TopicMode.RecordSummary,
 			})
 			session.topic = res
+			trackTopicCreated(res, {
+				projectId: session.project.id,
+				workspaceId: session.project.workspace_id || workspaceId,
+				scene: "ai_recording",
+			})
 		}
 
 		if (!session.project || !session.topic) {

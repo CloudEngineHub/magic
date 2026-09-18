@@ -294,6 +294,8 @@ export function useChatWorkspace(options: UseChatWorkspaceOptions = {}): UseChat
 				workspaceId: workspace.id,
 				projectMode,
 				workdir,
+				// Chat owns this creation even when the user selected another expert/mode.
+				creationScene: "chat",
 			})
 		},
 	)

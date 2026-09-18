@@ -29,6 +29,11 @@ vi.mock("@/apis", () => ({
 	},
 }))
 
+const trackMock = vi.hoisted(() => vi.fn())
+vi.mock("@/services/analytics", () => ({
+	track: trackMock,
+}))
+
 vi.mock("@/models/user", () => ({
 	userStore: {
 		user: {
@@ -745,5 +750,151 @@ describe("TopicService frontend mode patch", () => {
 			topic_mode: TopicMode.CustomAgent,
 			agent_code: "employee-code-1",
 		})
+	})
+})
+
+describe("TopicService scene topic-created analytics", () => {
+	let topicService: TopicService
+	let topicStore: TopicStore
+
+	beforeEach(() => {
+		vi.clearAllMocks()
+		vi.useRealTimers()
+		window.sessionStorage.clear()
+		topicStore = new TopicStore()
+		topicService = new TopicService({ store: topicStore })
+		interfaceStore.isMobile = false
+	})
+
+	it("reports the created topic with this request's project and workspace ids", async () => {
+		vi.mocked(SuperMagicApi.createTopic).mockResolvedValue(
+			createTopic({
+				id: "topic-new",
+				project_id: "project-1",
+				workspace_id: "workspace-1",
+			}),
+		)
+		vi.mocked(SuperMagicApi.getTopicsByProjectId).mockResolvedValue({
+			list: [
+				createTopic({
+					id: "topic-new",
+					project_id: "project-1",
+					workspace_id: "workspace-1",
+				}),
+			],
+			total: 1,
+		})
+
+		await topicService.createTopic({ projectId: "project-1", topicName: "New" })
+
+		expect(trackMock).toHaveBeenCalledTimes(1)
+		expect(trackMock).toHaveBeenCalledWith("workspace_topic_created", {
+			topic_id: "topic-new",
+			project_id: "project-1",
+			workspace_id: "workspace-1",
+		})
+	})
+
+	it("still reports once when list refresh fails after a successful create", async () => {
+		vi.mocked(SuperMagicApi.createTopic).mockResolvedValue(
+			createTopic({
+				id: "topic-new",
+				project_id: "project-1",
+				workspace_id: "workspace-1",
+			}),
+		)
+		vi.mocked(SuperMagicApi.getTopicsByProjectId).mockRejectedValue(new Error("list-failed"))
+
+		await expect(
+			topicService.createTopic({ projectId: "project-1", topicName: "New" }),
+		).resolves.toBeNull()
+
+		expect(trackMock).toHaveBeenCalledTimes(1)
+		expect(trackMock).toHaveBeenCalledWith("workspace_topic_created", {
+			topic_id: "topic-new",
+			project_id: "project-1",
+			workspace_id: "workspace-1",
+		})
+	})
+
+	it("uses the list payload when create response omitted workspace_id", async () => {
+		vi.mocked(SuperMagicApi.createTopic).mockResolvedValue(
+			createTopic({
+				id: "topic-new",
+				project_id: "project-1",
+				workspace_id: "",
+			}),
+		)
+		vi.mocked(SuperMagicApi.getTopicsByProjectId).mockResolvedValue({
+			list: [
+				createTopic({
+					id: "topic-new",
+					project_id: "project-1",
+					workspace_id: "workspace-from-list",
+				}),
+			],
+			total: 1,
+		})
+
+		await topicService.createTopic({ projectId: "project-1", topicName: "New" })
+
+		expect(trackMock).toHaveBeenCalledTimes(1)
+		expect(trackMock).toHaveBeenCalledWith("workspace_topic_created", {
+			topic_id: "topic-new",
+			project_id: "project-1",
+			workspace_id: "workspace-from-list",
+		})
+	})
+
+	it("does not report when workspace_id is missing from both create and list payloads", async () => {
+		vi.mocked(SuperMagicApi.createTopic).mockResolvedValue(
+			createTopic({
+				id: "topic-new",
+				project_id: "project-1",
+				workspace_id: "",
+			}),
+		)
+		vi.mocked(SuperMagicApi.getTopicsByProjectId).mockResolvedValue({
+			list: [
+				createTopic({
+					id: "topic-new",
+					project_id: "project-1",
+					workspace_id: "",
+				}),
+			],
+			total: 1,
+		})
+
+		await topicService.createTopic({ projectId: "project-1", topicName: "New" })
+
+		expect(trackMock).not.toHaveBeenCalled()
+	})
+
+	it("does not report when the created topic id is blank", async () => {
+		vi.mocked(SuperMagicApi.createTopic).mockResolvedValue(
+			createTopic({
+				id: "   ",
+				project_id: "project-1",
+				workspace_id: "workspace-1",
+			}),
+		)
+		vi.mocked(SuperMagicApi.getTopicsByProjectId).mockResolvedValue({
+			list: [],
+			total: 0,
+		})
+
+		await topicService.createTopic({ projectId: "project-1", topicName: "New" })
+
+		expect(trackMock).not.toHaveBeenCalled()
+	})
+
+	it("does not report when createTopic fails", async () => {
+		vi.mocked(SuperMagicApi.createTopic).mockRejectedValue(new Error("create-failed"))
+
+		await expect(
+			topicService.createTopic({ projectId: "project-1", topicName: "New" }),
+		).resolves.toBeNull()
+
+		expect(trackMock).not.toHaveBeenCalled()
 	})
 })

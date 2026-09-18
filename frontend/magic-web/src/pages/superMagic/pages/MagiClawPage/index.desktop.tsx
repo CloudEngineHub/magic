@@ -17,6 +17,7 @@ import { EMPTY_MAGIC_CLAW_LIST, MAGI_CLAW_LIST_POLLING_INTERVAL } from "./consta
 import { MagiClawFeatures } from "./MagiClawFeatures"
 import { MagiClawHeader } from "./MagiClawHeader"
 import { MagiClawHero } from "./MagiClawHero"
+import { markMagicClawCreationPending } from "./magicClawCreationAnalytics"
 
 export default function MagiClawDesktopPage() {
 	const { t } = useTranslation("sidebar")
@@ -74,6 +75,7 @@ export default function MagiClawDesktopPage() {
 				toast.error(t("superLobster.created.createFailed", clawBrandValues))
 				return
 			}
+			await markMagicClawCreationPending(created.code)
 			setIsCreateDialogOpen(false)
 			void refreshClawList()
 			handleOpenClawPlayground(created.code)

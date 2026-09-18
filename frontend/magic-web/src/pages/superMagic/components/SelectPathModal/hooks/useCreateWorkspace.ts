@@ -5,6 +5,7 @@ import { SuperMagicApi } from "@/apis"
 import { validateFilename } from "@/utils/filename-validator"
 import type { Workspace } from "@/pages/superMagic/pages/Workspace/types"
 import magicToast from "@/components/base/MagicToaster/utils"
+import { trackWorkspaceCreated } from "@/pages/superMagic/services/trackCreatedEntities"
 
 interface UseCreateWorkspaceOptions {
 	workspaces: Workspace[]
@@ -68,6 +69,7 @@ export function useCreateWorkspace(options: UseCreateWorkspaceOptions) {
 			})
 
 			if (response?.id) {
+				trackWorkspaceCreated(response)
 				magicToast.success(t("selectPathModal.createdSuccessfully"))
 
 				// 刷新工作区列表

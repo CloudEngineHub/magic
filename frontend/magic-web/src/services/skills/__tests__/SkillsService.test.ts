@@ -2,6 +2,14 @@ import { beforeEach, describe, expect, it, vi } from "vitest"
 import { SkillsApi } from "@/apis"
 import { SkillsService } from "../SkillsService"
 
+const trackMock = vi.hoisted(() => vi.fn())
+const markPendingMock = vi.hoisted(() => vi.fn().mockResolvedValue(undefined))
+
+vi.mock("@/services/analytics", () => ({
+	track: trackMock,
+	markPendingEntityCreation: markPendingMock,
+}))
+
 vi.mock("@/apis", () => ({
 	SkillsApi: {
 		getSkillMarketCategories: vi.fn(),
@@ -9,6 +17,9 @@ vi.mock("@/apis", () => ({
 		getUserSkills: vi.fn(),
 		getSkillLastVersions: vi.fn(),
 		getSkillDetail: vi.fn(),
+		createSkill: vi.fn(),
+		addSkillFromStore: vi.fn(),
+		importSkill: vi.fn(),
 	},
 }))
 
@@ -247,5 +258,203 @@ describe("SkillsService", () => {
 			description: "Resolved description",
 			sourceLabel: "Resolved source",
 		})
+	})
+})
+
+describe("SkillsService skill_created analytics", () => {
+	let analyticsService: SkillsService
+
+	beforeEach(() => {
+		vi.clearAllMocks()
+		analyticsService = new SkillsService()
+	})
+
+	it("reports empty after empty create returns a skill code", async () => {
+		vi.mocked(SkillsApi.createSkill).mockResolvedValue({
+			id: "skill-1",
+			code: "SKL-empty",
+		})
+
+		await analyticsService.createEmptySkill()
+
+		expect(trackMock).toHaveBeenCalledTimes(1)
+		expect(trackMock).toHaveBeenCalledWith("skill_created", {
+			skill_code: "SKL-empty",
+			source_type: "empty",
+		})
+		expect(markPendingMock).toHaveBeenCalledWith({
+			scene: "skill",
+			resourceCode: "SKL-empty",
+		})
+	})
+
+	it("does not report empty create when the response has no skill code", async () => {
+		vi.mocked(SkillsApi.createSkill).mockResolvedValue({ id: "skill-1" })
+
+		await expect(analyticsService.createEmptySkill()).rejects.toThrow(
+			"create-skill-missing-code",
+		)
+		expect(trackMock).not.toHaveBeenCalled()
+		expect(markPendingMock).not.toHaveBeenCalled()
+	})
+
+	it("does not report empty create when the skill code is blank", async () => {
+		vi.mocked(SkillsApi.createSkill).mockResolvedValue({ id: "skill-1", code: "   " })
+
+		await expect(analyticsService.createEmptySkill()).rejects.toThrow(
+			"create-skill-missing-code",
+		)
+		expect(trackMock).not.toHaveBeenCalled()
+	})
+
+	it("does not report empty create when the API fails", async () => {
+		vi.mocked(SkillsApi.createSkill).mockRejectedValue(new Error("network"))
+
+		await expect(analyticsService.createEmptySkill()).rejects.toThrow("network")
+		expect(trackMock).not.toHaveBeenCalled()
+	})
+
+	it("reports store from a from-store object skill_code, not the store id", async () => {
+		vi.mocked(SkillsApi.addSkillFromStore).mockResolvedValue({
+			skill_code: "SKL-market",
+			id: "store-row-9",
+		} as never)
+
+		await analyticsService.addSkillFromStore("store-row-9")
+
+		expect(trackMock).toHaveBeenCalledTimes(1)
+		expect(trackMock).toHaveBeenCalledWith("skill_created", {
+			skill_code: "SKL-market",
+			source_type: "store",
+		})
+	})
+
+	it("reports store when from-store returns a one-item list", async () => {
+		vi.mocked(SkillsApi.addSkillFromStore).mockResolvedValue([{ code: "SKL-list" }] as never)
+
+		await analyticsService.addSkillFromStore("store-1")
+
+		expect(trackMock).toHaveBeenCalledWith("skill_created", {
+			skill_code: "SKL-list",
+			source_type: "store",
+		})
+	})
+
+	it("reports store from the loaded marketplace row when the install response is empty", async () => {
+		vi.mocked(SkillsApi.getStoreSkills).mockResolvedValue({
+			list: [{ id: "store-1", code: "SKL-cached" }],
+			page: 1,
+			page_size: 20,
+		} as never)
+		vi.mocked(SkillsApi.addSkillFromStore).mockResolvedValue([] as never)
+
+		await analyticsService.getStoreSkills()
+		await analyticsService.addSkillFromStore("store-1")
+
+		expect(trackMock).toHaveBeenCalledWith("skill_created", {
+			skill_code: "SKL-cached",
+			source_type: "store",
+		})
+	})
+
+	it("does not report store when neither response nor loaded row provides a skill code", async () => {
+		vi.mocked(SkillsApi.addSkillFromStore).mockResolvedValue([] as never)
+
+		await analyticsService.addSkillFromStore("store-unknown")
+
+		expect(trackMock).not.toHaveBeenCalled()
+	})
+
+	it("uses a caller-known market code when the install response is empty", async () => {
+		vi.mocked(SkillsApi.addSkillFromStore).mockResolvedValue([] as never)
+
+		await analyticsService.addSkillFromStore("store-unknown", " SKL-row ")
+
+		expect(trackMock).toHaveBeenCalledWith("skill_created", {
+			skill_code: "SKL-row",
+			source_type: "store",
+		})
+	})
+
+	it("folds the import request source_type into the import analytics bucket", async () => {
+		vi.mocked(SkillsApi.importSkill).mockResolvedValue({
+			id: "1",
+			skill_code: "SKL-gh",
+		})
+
+		await analyticsService.importSkill({
+			import_token: "token",
+			name_i18n: { zh_CN: "n", en_US: "n" },
+			description_i18n: { zh_CN: "d", en_US: "d" },
+			source_type: "GITHUB",
+		})
+
+		expect(trackMock).toHaveBeenCalledWith("skill_created", {
+			skill_code: "SKL-gh",
+			source_type: "import",
+		})
+	})
+
+	it("reports import when the request omits its internal source_type", async () => {
+		vi.mocked(SkillsApi.importSkill).mockResolvedValue({
+			id: "1",
+			skill_code: "SKL-file",
+		})
+
+		await analyticsService.importSkill({
+			import_token: "token",
+			name_i18n: { zh_CN: "n", en_US: "n" },
+			description_i18n: { zh_CN: "d", en_US: "d" },
+		})
+
+		expect(trackMock).toHaveBeenCalledWith("skill_created", {
+			skill_code: "SKL-file",
+			source_type: "import",
+		})
+	})
+
+	it("does not report import when skill_code is missing", async () => {
+		vi.mocked(SkillsApi.importSkill).mockResolvedValue({
+			id: "1",
+			skill_code: "",
+		})
+
+		await analyticsService.importSkill({
+			import_token: "token",
+			name_i18n: { zh_CN: "n", en_US: "n" },
+			description_i18n: { zh_CN: "d", en_US: "d" },
+			source_type: "GITHUB",
+		})
+
+		expect(trackMock).not.toHaveBeenCalled()
+	})
+
+	it("does not report import when skill_code is blank", async () => {
+		vi.mocked(SkillsApi.importSkill).mockResolvedValue({
+			id: "1",
+			skill_code: "   ",
+		})
+
+		await analyticsService.importSkill({
+			import_token: "token",
+			name_i18n: { zh_CN: "n", en_US: "n" },
+			description_i18n: { zh_CN: "d", en_US: "d" },
+			source_type: "GITHUB",
+		})
+
+		expect(trackMock).not.toHaveBeenCalled()
+	})
+
+	it("does not report import when the API fails", async () => {
+		vi.mocked(SkillsApi.importSkill).mockRejectedValue(new Error("import-failed"))
+
+		await expect(
+			analyticsService.importSkill({
+				import_token: "token",
+				name_i18n: { zh_CN: "n", en_US: "n" },
+				description_i18n: { zh_CN: "d", en_US: "d" },
+			}),
+		).rejects.toThrow("import-failed")
+		expect(trackMock).not.toHaveBeenCalled()
 	})
 })

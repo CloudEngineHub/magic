@@ -25,6 +25,12 @@ import TopicService from "./topicService"
 import SuperMagicService from "./index"
 import type { CreatedProject, ProjectListItem, Topic, Workspace } from "../pages/Workspace/types"
 import type { TopicMode } from "../pages/Workspace/TopicMode"
+import {
+	resolveCreationScene,
+	trackProjectCreated,
+	trackTopicCreated,
+	type CreationScene,
+} from "./trackCreatedEntities"
 
 interface CreateProjectParams {
 	projectMode: TopicMode
@@ -39,6 +45,8 @@ export interface MessageSendPreparationContext {
 	selectedProject?: ProjectListItem | null
 	selectedTopic?: Topic | null
 	selectedWorkspace?: Workspace | null
+	/** Explicit business entry for creation analytics, independent of the selected agent mode. */
+	creationScene?: CreationScene
 	setSelectedProject?: (project: ProjectListItem | null) => void
 	setSelectedTopic?: (topic: Topic | null) => void
 	setSelectedWorkspace?: (workspace: Workspace | null) => void
@@ -154,6 +162,7 @@ export function resolveMessageSendContext(
 			createProjectForContext({
 				params,
 				selectedWorkspace,
+				creationScene: context?.creationScene,
 				setSelectedProject,
 				setSelectedTopic,
 			}))
@@ -380,11 +389,13 @@ export async function createTopicForMessageContext(
 async function createProjectForContext({
 	params,
 	selectedWorkspace,
+	creationScene,
 	setSelectedProject,
 	setSelectedTopic,
 }: {
 	params: CreateProjectParams
 	selectedWorkspace: Workspace | null
+	creationScene?: CreationScene
 	setSelectedProject: (project: ProjectListItem | null) => void
 	setSelectedTopic: (topic: Topic | null) => void
 }): Promise<CreatedProject | null> {
@@ -403,6 +414,12 @@ async function createProjectForContext({
 	if (!createdProject?.project || !createdProject.topic) {
 		return null
 	}
+	// Only the direct fallback reports here; injected createProject services own their own success event.
+	trackProjectCreated(
+		createdProject,
+		selectedWorkspace.id,
+		creationScene ?? resolveCreationScene(params.projectMode),
+	)
 
 	await copyGlobalModelConfiguration({
 		projectMode: params.projectMode,
@@ -450,6 +467,11 @@ async function createTopicForContext({
 	})
 
 	if (newTopic?.id) {
+		trackTopicCreated(newTopic, {
+			projectId: selectedProject.id,
+			workspaceId: selectedProject.workspace_id,
+			mode: selectedProject.project_mode,
+		})
 		SuperMagicApi.preWarmSandbox({
 			topic_id: newTopic.id,
 		})

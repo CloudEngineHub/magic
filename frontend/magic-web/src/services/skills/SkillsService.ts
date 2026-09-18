@@ -31,6 +31,7 @@ import type {
 	StoreSkillItem,
 	UpdateSkillInfoParams,
 } from "@/apis/modules/skills"
+import { markPendingEntityCreation, track } from "@/services/analytics"
 
 export type { SkillDetailResponse }
 
@@ -124,6 +125,9 @@ export interface SkillDetailView {
 export type UserSkillsListScope = "created" | "team-shared" | "collaborated" | "market-installed"
 
 export class SkillsService {
+	/** The marketplace install API returns no identity, so retain the code from the loaded row. */
+	private storeSkillCodes = new Map<string, string>()
+
 	async getSkillMarketCategories(
 		params: GetSkillMarketCategoriesParams = {},
 	): Promise<SkillMarketCategoryView[]> {
@@ -135,8 +139,13 @@ export class SkillsService {
 		params: GetStoreSkillsParams = {},
 	): Promise<StoreSkillsPage<StoreSkillView>> {
 		const data = await SkillsApi.getStoreSkills(params)
+		const list = data.list.map((item) => {
+			const skillCode = item.code?.trim() || item.skill_code?.trim()
+			if (skillCode) this.storeSkillCodes.set(String(item.id), skillCode)
+			return this.mapStoreSkill(item)
+		})
 		return {
-			list: data.list.map((item) => this.mapStoreSkill(item)),
+			list,
 			page: data.page,
 			pageSize: data.page_size,
 		}
@@ -176,14 +185,24 @@ export class SkillsService {
 		const data = await SkillsApi.createSkill()
 		const code = this.resolveCreatedSkillCode(data)
 		if (!code) throw new Error("create-skill-missing-code")
+		track("skill_created", { skill_code: code, source_type: "empty" })
+		await markPendingEntityCreation({ scene: "skill", resourceCode: code })
 		return {
 			id: data.id,
 			code,
 		}
 	}
 
-	addSkillFromStore(storeSkillId: string) {
-		return SkillsApi.addSkillFromStore({ store_skill_id: storeSkillId })
+	async addSkillFromStore(storeSkillId: string, knownSkillCode?: string) {
+		const result = await SkillsApi.addSkillFromStore({ store_skill_id: storeSkillId })
+		const skillCode =
+			this.resolveSkillCodeFromUnknown(result) ??
+			this.storeSkillCodes.get(String(storeSkillId)) ??
+			knownSkillCode?.trim()
+		if (skillCode) {
+			track("skill_created", { skill_code: skillCode, source_type: "store" })
+		}
+		return result
 	}
 
 	deleteSkill(code: string) {
@@ -202,8 +221,18 @@ export class SkillsService {
 		return SkillsApi.parseOfficialSkillFile({ file_key })
 	}
 
-	importSkill(params: ImportSkillParams): Promise<ImportSkillResponse> {
-		return SkillsApi.importSkill(params)
+	async importSkill(params: ImportSkillParams): Promise<ImportSkillResponse> {
+		const result = await SkillsApi.importSkill(params)
+		const skillCode = result?.skill_code?.trim()
+		if (skillCode) {
+			track("skill_created", {
+				skill_code: skillCode,
+				// The API distinguishes GitHub/local/etc.; analytics intentionally folds
+				// every non-empty creation path into the PRD's single `import` bucket.
+				source_type: "import",
+			})
+		}
+		return result
 	}
 
 	importOfficialSkill(params: ImportOfficialSkillParams): Promise<ImportOfficialSkillResponse> {
@@ -443,7 +472,20 @@ export class SkillsService {
 
 	private resolveCreatedSkillCode(data: CreateSkillResponse | null | undefined) {
 		if (!data) return ""
-		return data.code || data.skill_code || ""
+		return data.code?.trim() || data.skill_code?.trim() || ""
+	}
+
+	/** Market install may return an object or a one-item list; never treat store id as skill_code. */
+	private resolveSkillCodeFromUnknown(result: unknown): string | undefined {
+		if (!result) return undefined
+		if (Array.isArray(result)) {
+			return this.resolveSkillCodeFromUnknown(result[0])
+		}
+		if (typeof result === "object") {
+			const value = result as { skill_code?: string; code?: string }
+			return value.skill_code?.trim() || value.code?.trim() || undefined
+		}
+		return undefined
 	}
 }
 

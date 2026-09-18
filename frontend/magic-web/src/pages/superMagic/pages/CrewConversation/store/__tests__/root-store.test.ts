@@ -11,6 +11,8 @@ import {
 } from "@/pages/superMagic/pages/Workspace/types"
 import { CrewConversationStore } from "../root-store"
 
+const analyticsTrackMock = vi.hoisted(() => vi.fn())
+
 type SpecialProjectResponse = Awaited<ReturnType<typeof SuperMagicApi.getSpecialProject>>
 type ProjectDetailResponse = Awaited<ReturnType<typeof SuperMagicApi.getProjectDetail>>
 type TopicsResponse = Awaited<ReturnType<typeof SuperMagicApi.getTopicsByProjectId>>
@@ -41,6 +43,10 @@ vi.mock("@/services/superMagic/SuperMagicModeService", () => ({
 		fetchModeList: vi.fn(),
 		fetchDefaultModeModelList: vi.fn(),
 	},
+}))
+
+vi.mock("@/services/analytics", () => ({
+	track: analyticsTrackMock,
 }))
 
 vi.mock("@/components/business/MentionPanel/builtin-store", () => ({
@@ -353,6 +359,39 @@ describe("CrewConversationStore", () => {
 		expect(SuperMagicApi.getSpecialProject).toHaveBeenCalledWith({ key: "agent-id-1" })
 		expect(store.selectedProject?.id).toBe("project-1")
 		expect(store.selectedTopic?.id).toBe("topic-1")
+		expect(analyticsTrackMock).toHaveBeenCalledWith("crew_project_created", {
+			project_id: "project-1",
+			workspace_id: "workspace-1",
+		})
+		expect(analyticsTrackMock).toHaveBeenCalledWith("crew_topic_created", {
+			topic_id: "topic-1",
+			project_id: "project-1",
+			workspace_id: "workspace-1",
+		})
+	})
+
+	it("does not report entity creation when the employee special project already exists", async () => {
+		vi.mocked(crewService.getAgentDetail).mockResolvedValue(createAgent())
+		vi.mocked(SuperMagicApi.getSpecialProject).mockResolvedValue({
+			project: createProject(),
+			is_existing: true,
+		} as SpecialProjectResponse)
+		vi.mocked(SuperMagicApi.getProjectDetail).mockResolvedValue(
+			createProject() as ProjectDetailResponse,
+		)
+		vi.mocked(SuperMagicApi.getTopicsByProjectId).mockResolvedValue({
+			list: [createTopic()],
+		} as TopicsResponse)
+
+		const store = new CrewConversationStore()
+		await store.bootstrap("SMA-existing-agent")
+
+		expect(store.status).toBe("ready")
+		expect(analyticsTrackMock).not.toHaveBeenCalledWith(
+			"crew_project_created",
+			expect.anything(),
+		)
+		expect(analyticsTrackMock).not.toHaveBeenCalledWith("crew_topic_created", expect.anything())
 	})
 
 	it("uses the validated employee id to create the special project", async () => {

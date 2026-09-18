@@ -11,6 +11,7 @@ import { CrewPlaybookStore } from "./playbook-store"
 import { CrewSkillsStore } from "./skills-store"
 import { CrewKnowledgeStore } from "./knowledge-store"
 import { loadCrewEditBootstrap } from "./services/load-crew-edit-bootstrap"
+import { reportPendingCrewCreatedEntities } from "./services/report-crew-created-entities"
 import { hasCrewUnpublishedChanges } from "../utils/publish-status"
 import {
 	CREW_EDIT_STEP,
@@ -110,6 +111,11 @@ export class CrewEditRootStore {
 
 		try {
 			const bootstrap = await loadCrewEditBootstrap(crewCode)
+			await reportPendingCrewCreatedEntities({
+				crewCode,
+				project: bootstrap.project,
+				topics: bootstrap.topics,
+			})
 
 			runInAction(() => {
 				this.hydrateAgentDetail(bootstrap.agentDetail)

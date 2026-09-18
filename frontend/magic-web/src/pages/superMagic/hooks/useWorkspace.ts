@@ -8,6 +8,7 @@ import { SHARE_WORKSPACE_ID } from "../constants"
 import { SuperMagicApi } from "@/apis"
 import { useWorkspaceEditing } from "./useWorkspaceEditing"
 import magicToast from "@/components/base/MagicToaster/utils"
+import { trackWorkspaceCreated } from "../services/trackCreatedEntities"
 
 export interface FetchWorkspacesParams {
 	isAutoSelect?: boolean
@@ -178,6 +179,7 @@ export function useWorkspace({
 					workspace_name: workspaceName || defaultWorkspaceName,
 				})
 				if (res?.id) {
+					trackWorkspaceCreated(res)
 					// 创建完成后直接获取最新工作区列表
 					await fetchWorkspaces({
 						isSelectLast: true,

@@ -64,6 +64,7 @@ import { AudioRecordingCopyDialog } from "@/pages/superMagic/pages/AudioRecordin
 import { useAudioRecordingCopyToProject } from "@/pages/superMagic/pages/AudioRecordings/hooks/useAudioRecordingCopyToProject"
 import { canCopyAudioProject } from "@/pages/superMagic/pages/AudioRecordings/utils/copy-availability"
 import { SuperMagicApi } from "@/apis"
+import { trackTopicCreated } from "@/pages/superMagic/services/trackCreatedEntities"
 import type { ProjectListItem, Topic, Workspace } from "@/pages/superMagic/pages/Workspace/types"
 import ProjectPageInputContainer from "@/pages/superMagic/components/ProjectPageInputContainer"
 import { ProjectFilesStore } from "@/stores/projectFiles"
@@ -397,13 +398,19 @@ export default function MobileAudioRecordingDetailPage() {
 		const created = await SuperMagicApi.createTopic({
 			project_id: chatProject.id,
 			topic_name: "",
-			project_mode: chatProject.project_mode,
+			project_mode: chatProject.project_mode || undefined,
 		})
 		let topic = created as Topic
 		if (topic?.id && (!topic.chat_topic_id || !topic.chat_conversation_id)) {
 			topic = await SuperMagicApi.getTopicDetail({ id: topic.id })
 		}
 		if (topic?.id) {
+			// Mobile recording detail creates topics directly instead of TopicService.
+			trackTopicCreated(topic, {
+				projectId: chatProject.id,
+				workspaceId: chatProject.workspace_id,
+				scene: "ai_recording",
+			})
 			setComposerTopic(topic)
 			setTopics((current) => [topic, ...current.filter((item) => item.id !== topic.id)])
 		}

@@ -15,6 +15,7 @@ import type { AudioProjectListItem } from "@/types/audioProject"
 import { resolveRecordingDisplayName } from "../utils/audio-recordings-utils"
 import { canCopyAudioProject } from "../utils/copy-availability"
 import { resolveAudioCopyRootFileIds } from "../utils/resolve-audio-copy-files"
+import { trackProjectCreated } from "@/pages/superMagic/services/trackCreatedEntities"
 
 const BATCH_OPERATION_POLL_INTERVAL_MS = 2000
 const PROGRESS_RESET_DELAY_MS = 500
@@ -127,6 +128,7 @@ export function useAudioRecordingCopyToProject(
 				project_description: "",
 				project_mode: "",
 			})
+			trackProjectCreated(response, workspaceId, "ai_recording")
 			return response?.project
 		},
 		[defaultProjectName, t],

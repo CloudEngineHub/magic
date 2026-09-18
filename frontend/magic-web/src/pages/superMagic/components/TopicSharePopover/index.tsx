@@ -20,6 +20,7 @@ import {
 	useTopicShareTypePermissions,
 } from "../Share/hooks/useTopicShareTypePermissions"
 import { generateSharePassword, generateTopicShareMessageText } from "../Share/utils"
+import { trackContentShared } from "../Share/utils/trackContentShared"
 import { SharePasswordField } from "../Share/ShareFields"
 import { useStyles } from "./styles"
 import { cn } from "@/utils/cn"
@@ -212,11 +213,11 @@ function TopicSharePopoverContent({
 			try {
 				const data = await SuperMagicApi.getShareInfoByCode({ code: topicId })
 				if (data?.resource_id) {
+					const isShareEnabled = data.share_type !== ShareType.None
 					const shareUrl = `${window.location.origin}/share/topic/${topicId}`
 					const finalShareUrl = data.password
 						? `${shareUrl}?password=${data.password}`
 						: shareUrl
-					const isShareEnabled = data.share_type !== ShareType.None
 
 					setSettings({
 						shareEnabled: isShareEnabled,
@@ -263,11 +264,16 @@ function TopicSharePopoverContent({
 						resource_id: topicId,
 						resource_type: ResourceType.Topic,
 						share_type: newShareType,
-						password: password,
+						password,
 						extra: {
 							show_original_info: settings.showOriginalInfo,
 							view_file_list: settings.showFileList,
 						},
+					})
+					// Re-enabling an existing topic share is a new user share action as well.
+					trackContentShared({
+						resourceId: topicId,
+						resourceType: ResourceType.Topic,
 					})
 
 					const shareUrl = `${window.location.origin}/share/topic/${topicId}`

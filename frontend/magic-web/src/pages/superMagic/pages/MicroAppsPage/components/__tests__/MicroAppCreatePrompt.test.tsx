@@ -11,6 +11,7 @@ const mocks = vi.hoisted(() => ({
 	setSelectedTopic: vi.fn(),
 	setSelectedWorkspace: vi.fn(),
 	createMicroAppProject: vi.fn(),
+	trackProjectCreated: vi.fn(),
 	editorContext: undefined as SceneEditorContext | undefined,
 }))
 
@@ -18,6 +19,10 @@ vi.mock("@/apis", () => ({
 	SuperMagicApi: {
 		createMicroAppProject: mocks.createMicroAppProject,
 	},
+}))
+
+vi.mock("@/pages/superMagic/services/trackCreatedEntities", () => ({
+	trackProjectCreated: mocks.trackProjectCreated,
 }))
 
 vi.mock("react-i18next", () => ({
@@ -138,6 +143,15 @@ describe("MicroAppCreatePrompt", () => {
 				message_version: "v2",
 			},
 		})
+		expect(mocks.trackProjectCreated).toHaveBeenCalledWith(
+			{
+				app_id: "app-created",
+				project: { id: "project-created" },
+				topic: { id: "topic-created" },
+			},
+			"workspace-1",
+			"micro_app",
+		)
 		fireEvent.focus(editor)
 		expect(onFocusChange).toHaveBeenCalledWith(true)
 

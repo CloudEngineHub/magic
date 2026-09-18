@@ -3,6 +3,7 @@ import { useMemoizedFn } from "ahooks"
 import { useTranslation } from "react-i18next"
 import { SuperMagicApi } from "@/apis"
 import magicToast from "@/components/base/MagicToaster/utils"
+import { trackProjectCreated } from "@/pages/superMagic/services/trackCreatedEntities"
 import { SHARE_WORKSPACE_ID } from "@/pages/superMagic/constants"
 import type { ProjectListItem } from "@/pages/superMagic/pages/Workspace/types"
 
@@ -33,16 +34,16 @@ export function useProjects(workspaceId?: string) {
 			const response =
 				workspaceId === SHARE_WORKSPACE_ID
 					? await SuperMagicApi.getCollaborationProjects({
-						page: currentPage,
-						page_size: PAGE_SIZE,
-						name: projectName || undefined,
-					})
+							page: currentPage,
+							page_size: PAGE_SIZE,
+							name: projectName || undefined,
+						})
 					: await SuperMagicApi.getProjects({
-						workspace_id: workspaceId || undefined,
-						page: currentPage,
-						page_size: PAGE_SIZE,
-						project_name: projectName || undefined,
-					})
+							workspace_id: workspaceId || undefined,
+							page: currentPage,
+							page_size: PAGE_SIZE,
+							project_name: projectName || undefined,
+						})
 
 			const newProjects = response?.list || []
 			setProjects((prevProjects) =>
@@ -103,7 +104,10 @@ export function useProjects(workspaceId?: string) {
 					project_mode: "",
 				})
 
-				if (response?.project) fetchProjects(1)
+				if (response?.project) {
+					trackProjectCreated(response, workspaceId)
+					fetchProjects(1)
+				}
 				return response.project
 			} catch (currentError) {
 				console.log("创建项目失败，失败原因：", currentError)

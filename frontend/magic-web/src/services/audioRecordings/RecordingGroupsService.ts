@@ -1,5 +1,6 @@
 import { SuperMagicApi } from "@/apis"
 import { AUDIO_WORKSPACE_TYPE } from "./RecordingGroupsConstants"
+import { trackWorkspaceCreated } from "@/pages/superMagic/services/trackCreatedEntities"
 
 const WORKSPACE_PAGE_SIZE = 200
 
@@ -102,6 +103,7 @@ export class RecordingGroupsService {
 			workspace_name: name.trim(),
 			workspace_type: AUDIO_WORKSPACE_TYPE,
 		})) as RecordingWorkspaceApiItem
+		trackWorkspaceCreated(workspace)
 
 		return normalizeWorkspaceGroup(workspace)
 	}

@@ -4,6 +4,7 @@ import { useTranslation } from "react-i18next"
 import { type FetchWorkspacesParams } from "@/pages/superMagic/hooks/useWorkspace"
 import { SuperMagicApi } from "@/apis"
 import magicToast from "@/components/base/MagicToaster/utils"
+import { trackWorkspaceCreated } from "@/pages/superMagic/services/trackCreatedEntities"
 
 interface UseWorkspaceCreationOptions {
 	/** Fetch workspaces function */
@@ -64,6 +65,7 @@ export function useWorkspaceCreation({
 				})
 
 				if (res?.id) {
+					trackWorkspaceCreated(res)
 					// Refresh workspace list
 					fetchWorkspaces({
 						isAutoSelect: false,

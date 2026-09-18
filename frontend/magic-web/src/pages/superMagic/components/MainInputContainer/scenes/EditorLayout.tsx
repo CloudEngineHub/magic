@@ -70,6 +70,8 @@ function EditorLayout({
 			selectedTopic,
 			selectedProject,
 			selectedWorkspace,
+			// This home screen creates entities inside the workspace selected in the header.
+			creationScene: "workspace",
 			setSelectedTopic: topicStore.setSelectedTopic,
 			setSelectedProject: projectStore.setSelectedProject,
 			topicMode: resolvedMode,

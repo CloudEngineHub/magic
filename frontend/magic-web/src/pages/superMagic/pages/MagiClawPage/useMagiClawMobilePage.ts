@@ -16,6 +16,7 @@ import { EMPTY_MAGIC_CLAW_LIST, MAGI_CLAW_LIST_POLLING_INTERVAL } from "./consta
 import type { MagiClawCreatePayload } from "./MagiClawCreateDialog"
 import { confirmMagiClawSandboxUpgrade } from "./magiClawSandboxUpgradeConfirm"
 import { useMagiClawCreatedSectionActions } from "./useMagiClawCreatedSectionActions"
+import { markMagicClawCreationPending } from "./magicClawCreationAnalytics"
 
 export interface MagiClawContextMenuAnchorRect {
 	top: number
@@ -217,6 +218,7 @@ export function useMagiClawMobilePage() {
 				toast.error(t("superLobster.created.createFailed", clawBrandValues))
 				return
 			}
+			await markMagicClawCreationPending(createdClaw.code)
 
 			setIsCreateDialogOpen(false)
 			await refreshClawListAsync()

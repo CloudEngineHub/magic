@@ -10,6 +10,10 @@ import {
 } from "@/pages/superMagic/pages/Workspace/types"
 import { TopicMode } from "@/pages/superMagic/pages/Workspace/TopicMode"
 import { SuperMagicApi } from "@/apis"
+import {
+	resolveCreationScene,
+	trackProjectCreated,
+} from "@/pages/superMagic/services/trackCreatedEntities"
 
 interface UseProjectCreationOptions {
 	/** Selected workspace for creating project */
@@ -90,6 +94,11 @@ export function useProjectCreation({
 				})
 
 				if (res?.project) {
+					trackProjectCreated(
+						res,
+						selectedWorkspace.id,
+						resolveCreationScene(projectMode),
+					)
 					magicToast.success(t("project.createProjectSuccess"))
 
 					// Refresh projects list

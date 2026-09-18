@@ -1,8 +1,8 @@
 import { fireEvent, render, screen, waitFor } from "@testing-library/react"
 import { beforeEach, describe, expect, it, vi } from "vitest"
 import FileShareModal from "../FileShareModal"
-import { ShareMode, ShareType } from "../../types"
 import { SharePermissionResourceProvider } from "../../SharePermissionResourceContext"
+import { ResourceType, ShareMode, ShareType } from "../../types"
 
 const mocks = vi.hoisted(() => ({
 	getSnowflakeIds: vi.fn(),
@@ -15,6 +15,8 @@ const mocks = vi.hoisted(() => ({
 	errorToast: vi.fn(),
 	functionPermissions: {} as Record<string, boolean>,
 	isMobile: false,
+	track: vi.fn(),
+	trackContentSharedIfCreated: vi.fn(),
 }))
 
 vi.hoisted(() => {
@@ -36,6 +38,32 @@ vi.hoisted(() => {
 		configurable: true,
 	})
 })
+
+vi.mock("@/services/analytics", () => ({
+	track: mocks.track,
+}))
+
+vi.mock("../../utils/trackContentShared", () => ({
+	trackContentSharedIfCreated: mocks.trackContentSharedIfCreated,
+}))
+
+vi.mock("@/pages/superMagic/components/Share/utils/trackContentShared", () => ({
+	trackContentSharedIfCreated: mocks.trackContentSharedIfCreated,
+}))
+
+vi.mock("@/routes/history", () => ({
+	baseHistory: {
+		listen: () => () => undefined,
+		push: vi.fn(),
+		replace: vi.fn(),
+		location: { pathname: "/", search: "", hash: "", state: null },
+		action: "POP",
+	},
+}))
+
+vi.mock("@/services/recordSummary/MediaRecorderService/encoders/WasmOpusEncoder", () => ({
+	WasmOpusEncoder: class {},
+}))
 
 vi.mock("@/apis", () => ({
 	FUNCTION_PERMISSION_CODE: {
@@ -612,5 +640,165 @@ describe("FileShareModal", () => {
 		expect(screen.queryByTestId("share-expiry-field")).not.toBeInTheDocument()
 		expect(screen.queryByTestId("share-advanced-settings")).not.toBeInTheDocument()
 		expect(screen.getByTestId("save-share")).toBeDisabled()
+	})
+
+	it("新建文件分享成功后上报 content_shared，再次保存不重复上报", async () => {
+		render(
+			<FileShareModal
+				types={[ShareType.PasswordProtected]}
+				projectId="project-1"
+				projectName="Demo Project"
+				attachments={[
+					{
+						file_id: "file-transcript",
+						file_name: "session-transcript.md",
+						is_directory: false,
+					},
+				]}
+				defaultSelectedFileIds={["file-transcript"]}
+			/>,
+		)
+
+		fireEvent.change(screen.getByTestId("share-name-input"), {
+			target: { value: "File Share" },
+		})
+		fireEvent.click(screen.getByTestId("save-share"))
+
+		await waitFor(() => {
+			expect(mocks.trackContentSharedIfCreated).toHaveBeenCalledTimes(1)
+		})
+		expect(mocks.trackContentSharedIfCreated).toHaveBeenCalledWith({
+			created: true,
+			resourceId: "share-1",
+			resourceType: ResourceType.FileCollection,
+			shareProject: false,
+		})
+
+		fireEvent.click(screen.getByTestId("save-share"))
+
+		await waitFor(() => {
+			expect(mocks.createOrUpdateShareResource).toHaveBeenCalledTimes(2)
+		})
+		expect(mocks.trackContentSharedIfCreated).toHaveBeenNthCalledWith(2, {
+			created: false,
+			resourceId: "share-1",
+			resourceType: ResourceType.FileCollection,
+			shareProject: false,
+		})
+	})
+
+	it("新建项目分享成功后上报 project", async () => {
+		render(
+			<FileShareModal
+				types={[ShareType.PasswordProtected]}
+				shareMode={ShareMode.Project}
+				projectId="project-1"
+				projectName="Demo Project"
+				attachments={[
+					{
+						file_id: "file-transcript",
+						file_name: "session-transcript.md",
+						is_directory: false,
+					},
+				]}
+				defaultSelectedFileIds={["file-transcript"]}
+			/>,
+		)
+
+		fireEvent.change(screen.getByTestId("share-name-input"), {
+			target: { value: "Project Share" },
+		})
+		fireEvent.click(screen.getByTestId("save-share"))
+
+		await waitFor(() => {
+			expect(mocks.trackContentSharedIfCreated).toHaveBeenCalledWith({
+				created: true,
+				resourceId: "share-1",
+				resourceType: ResourceType.FileCollection,
+				shareProject: true,
+			})
+		})
+	})
+
+	it("编辑已有分享保存时不上报 content_shared", async () => {
+		mocks.getShareInfoByCode.mockResolvedValue({
+			project_id: "project-1",
+			resource_name: "Existing File Share",
+			share_type: ShareType.PasswordProtected,
+			file_ids: ["file-transcript"],
+			extra: {},
+		})
+		mocks.getAttachmentsByProjectId.mockResolvedValue({
+			tree: [
+				{
+					file_id: "file-transcript",
+					file_name: "session-transcript.md",
+					is_directory: false,
+				},
+			],
+			list: [
+				{
+					file_id: "file-transcript",
+					file_name: "session-transcript.md",
+					is_directory: false,
+				},
+			],
+		})
+
+		render(
+			<FileShareModal
+				types={[ShareType.PasswordProtected]}
+				projectId="project-1"
+				projectName="Demo Project"
+				resourceId="share-existing"
+			/>,
+		)
+
+		await waitFor(() => {
+			expect(mocks.getShareInfoByCode).toHaveBeenCalledWith({ code: "share-existing" })
+		})
+
+		fireEvent.click(screen.getByTestId("save-share"))
+
+		await waitFor(() => {
+			expect(mocks.createOrUpdateShareResource).toHaveBeenCalled()
+		})
+		expect(mocks.trackContentSharedIfCreated).toHaveBeenCalledTimes(1)
+		expect(mocks.trackContentSharedIfCreated).toHaveBeenCalledWith({
+			created: false,
+			resourceId: "share-existing",
+			resourceType: ResourceType.FileCollection,
+			shareProject: false,
+		})
+	})
+
+	it("新建分享失败时不上报 content_shared", async () => {
+		mocks.createOrUpdateShareResource.mockRejectedValue(new Error("create failed"))
+
+		render(
+			<FileShareModal
+				types={[ShareType.PasswordProtected]}
+				projectId="project-1"
+				projectName="Demo Project"
+				attachments={[
+					{
+						file_id: "file-transcript",
+						file_name: "session-transcript.md",
+						is_directory: false,
+					},
+				]}
+				defaultSelectedFileIds={["file-transcript"]}
+			/>,
+		)
+
+		fireEvent.change(screen.getByTestId("share-name-input"), {
+			target: { value: "Broken Share" },
+		})
+		fireEvent.click(screen.getByTestId("save-share"))
+
+		await waitFor(() => {
+			expect(mocks.errorToast).toHaveBeenCalled()
+		})
+		expect(mocks.trackContentSharedIfCreated).not.toHaveBeenCalled()
 	})
 })

@@ -313,6 +313,7 @@ export default function DefaultMessageEditorContainer(props: DefaultMessageEdito
 					selectedProject,
 					selectedTopic,
 					selectedWorkspace,
+					creationScene: editorContext?.creationScene,
 					setSelectedProject: editorContext?.setSelectedProject,
 					setSelectedTopic: editorContext?.setSelectedTopic,
 					refreshProjectAfterTopicRename: editorContext?.refreshProjectAfterTopicRename,

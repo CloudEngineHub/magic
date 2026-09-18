@@ -4,6 +4,7 @@ import { useTranslation } from "react-i18next"
 import { SuperMagicApi } from "@/apis"
 import magicToast from "@/components/base/MagicToaster/utils"
 import type { Topic } from "@/pages/superMagic/pages/Workspace/types"
+import { trackTopicCreated } from "@/pages/superMagic/services/trackCreatedEntities"
 
 /** Loads topics for the selected project while isolating responses by project context. */
 export function useTopics(workspaceId?: string, projectId?: string) {
@@ -44,6 +45,7 @@ export function useTopics(workspaceId?: string, projectId?: string) {
 			})
 
 			if (response?.id) {
+				trackTopicCreated(response, { projectId, workspaceId })
 				fetchTopics()
 				return response
 			}

@@ -40,6 +40,7 @@ import {
 import { useClawPlaygroundMessageListContextValue } from "../hooks/useClawPlaygroundMessageListContextValue"
 import { ClawPlaygroundInputToolbar } from "./ClawPlaygroundInputToolbar"
 import { dispatchClawNewChatSlash } from "../utils/dispatchClawNewChatSlash"
+import { useClawConversationAnalytics } from "../hooks/useClawConversationAnalytics"
 
 export interface ClawConversationPanelProps {
 	isConversationPanelCollapsed?: boolean
@@ -63,6 +64,7 @@ export const ClawConversationPanel = observer(function ClawConversationPanel({
 	const store = useClawPlaygroundStore()
 	const selectedProject = store.selectedProject
 	const selectedTopic = store.selectedTopic
+	useClawConversationAnalytics(selectedTopic?.id)
 	const topicStore = store.topicStore
 	const attachments = store.projectFilesStore.workspaceFileTree
 	const sharedTopicModelStore = useMemo(() => createSuperMagicTopicModelStore(), [])

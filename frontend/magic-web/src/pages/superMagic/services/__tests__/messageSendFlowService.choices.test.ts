@@ -1,6 +1,9 @@
-import { describe, expect, it, vi } from "vitest"
+import { beforeEach, describe, expect, it, vi } from "vitest"
 import type { Topic } from "@/pages/superMagic/pages/Workspace/types"
+import { TopicMode } from "@/pages/superMagic/pages/Workspace/TopicMode"
 import { createMessageSendService } from "@/pages/superMagic/services/messageSendFlowService"
+
+const { track } = vi.hoisted(() => ({ track: vi.fn() }))
 
 // This unit owns outbound request construction only; isolate UI/router/store singletons so the
 // assertion exercises MessageSendService's real option merge without unrelated application boot.
@@ -64,6 +67,13 @@ vi.mock("@/utils/pubsub", () => ({
 
 vi.mock("@/pages/superMagic/services/topicRename", () => ({
 	smartRenameTopicIfUnnamed: vi.fn(async () => null),
+}))
+
+vi.mock("@/services/analytics", () => ({ track }))
+
+vi.mock("@/pages/superMagic/utils/isChatWorkspaceProject", () => ({
+	isCachedChatWorkspaceProject: (project?: { workspace_id?: string } | null) =>
+		project?.workspace_id === "chat-workspace",
 }))
 
 vi.mock("@/pages/superMagic/services/chatConversationNameSync", () => ({
@@ -335,5 +345,223 @@ describe("MessageSendService / SuperMagic 单候选请求", () => {
 			task_status: "finished",
 			status: "finished",
 		})
+	})
+})
+
+describe("MessageSendService / conversation_message_sent", () => {
+	beforeEach(() => {
+		vi.mocked(track).mockReset()
+	})
+
+	function createService(chat: ReturnType<typeof vi.fn>) {
+		return createMessageSendService({
+			chatApi: { chat } as unknown as MessageSendServiceDeps["chatApi"],
+			superMagicApi: {} as unknown as MessageSendServiceDeps["superMagicApi"],
+			pubsub: { publish: vi.fn() } as unknown as MessageSendServiceDeps["pubsub"],
+			mentionPanelStore: {
+				addMentionListItemsToHistory: vi.fn(),
+			} as unknown as MessageSendServiceDeps["mentionPanelStore"],
+			userStore: {
+				user: { userInfo: { user_id: "user-1" } },
+			} as unknown as MessageSendServiceDeps["userStore"],
+			superMagicStore: {
+				messages: new Map([["chat-topic-1", []]]),
+				getLatestMessageAnchor: vi.fn(() => ({})),
+				addUserMessage: vi.fn(),
+				replaceUserMessage: vi.fn(),
+			} as unknown as MessageSendServiceDeps["superMagicStore"],
+			logger: { error: vi.fn() } as unknown as MessageSendServiceDeps["logger"],
+		})
+	}
+
+	const successResponse = {
+		data: { seq: { message: { app_message_id: "server-1" } } },
+	}
+
+	it("tracks once after chat confirms the message", async () => {
+		const chat = vi.fn().mockResolvedValue(successResponse)
+		const service = createService(chat)
+
+		await service.dispatchMessage({
+			content: "hello",
+			showLoading: false,
+			selectedProject: { id: "project-1", workspace_id: "ws-1" } as never,
+			selectedTopic: {
+				id: "topic-1",
+				chat_topic_id: "chat-topic-1",
+				chat_conversation_id: "conversation-1",
+				topic_mode: TopicMode.General,
+			} as Topic,
+			context: {
+				selectedWorkspace: {
+					id: "ws-1",
+					workspace_type: "default",
+				} as never,
+			},
+			options: {
+				extra: { super_agent: { mentions: [], chat_mode: "normal" } },
+			},
+		})
+
+		await vi.waitFor(() => expect(track).toHaveBeenCalledTimes(1))
+		expect(track).toHaveBeenCalledWith(
+			"conversation_message_sent",
+			expect.objectContaining({
+				conversation_type: "task",
+				topic_id: "topic-1",
+				workspace_id: "ws-1",
+				project_id: "project-1",
+			}),
+		)
+	})
+
+	it("does not track when chat fails", async () => {
+		const chat = vi.fn().mockRejectedValue(new Error("request failed"))
+		const service = createService(chat)
+
+		await service.dispatchMessage({
+			content: "hello",
+			showLoading: false,
+			selectedTopic: {
+				id: "topic-1",
+				chat_topic_id: "chat-topic-1",
+				chat_conversation_id: "conversation-1",
+			} as Topic,
+		})
+
+		await vi.waitFor(() => expect(chat).toHaveBeenCalledTimes(1))
+		expect(track).not.toHaveBeenCalled()
+	})
+
+	it("does not track when chat returns no message payload", async () => {
+		const chat = vi.fn().mockResolvedValue({})
+		const service = createService(chat)
+
+		await service.dispatchMessage({
+			content: "hello",
+			showLoading: false,
+			selectedTopic: {
+				id: "topic-1",
+				chat_topic_id: "chat-topic-1",
+				chat_conversation_id: "conversation-1",
+			} as Topic,
+		})
+
+		await vi.waitFor(() => expect(chat).toHaveBeenCalledTimes(1))
+		expect(track).not.toHaveBeenCalled()
+	})
+
+	it("does not duplicate when two real sends succeed (queue flush is another dispatch)", async () => {
+		const chat = vi.fn().mockResolvedValue(successResponse)
+		const service = createService(chat)
+		const payload = {
+			content: "hello",
+			showLoading: false,
+			selectedTopic: {
+				id: "topic-1",
+				chat_topic_id: "chat-topic-1",
+				chat_conversation_id: "conversation-1",
+				topic_mode: TopicMode.General,
+			} as Topic,
+		}
+
+		await service.dispatchMessage(payload)
+		await service.dispatchMessage(payload)
+		await vi.waitFor(() => expect(track).toHaveBeenCalledTimes(2))
+	})
+
+	it("tracks MicroApp sends as micro_app", async () => {
+		const chat = vi.fn().mockResolvedValue(successResponse)
+		const service = createService(chat)
+
+		await service.dispatchMessage({
+			content: "hello",
+			showLoading: false,
+			selectedTopic: {
+				id: "topic-1",
+				chat_topic_id: "chat-topic-1",
+				chat_conversation_id: "conversation-1",
+				topic_mode: TopicMode.MicroApp,
+			} as Topic,
+		})
+
+		await vi.waitFor(() => expect(chat).toHaveBeenCalledTimes(1))
+		await vi.waitFor(() =>
+			expect(track).toHaveBeenCalledWith(
+				"conversation_message_sent",
+				expect.objectContaining({
+					conversation_type: "micro_app",
+					topic_mode: TopicMode.MicroApp,
+				}),
+			),
+		)
+	})
+
+	it.each([
+		[TopicMode.MagiClaw, "magic_claw"],
+		[TopicMode.CrewCreator, "crew_edit"],
+		[TopicMode.SkillCreator, "skill_edit"],
+	] as const)("maps %s send options to %s", async (topicPattern, conversationType) => {
+		const chat = vi.fn().mockResolvedValue(successResponse)
+		const service = createService(chat)
+
+		await service.dispatchMessage({
+			content: "hello",
+			showLoading: false,
+			selectedProject: { id: "project-1", workspace_id: "chat-workspace" } as never,
+			selectedTopic: {
+				id: "topic-1",
+				chat_topic_id: "chat-topic-1",
+				chat_conversation_id: "conversation-1",
+				topic_mode: TopicMode.General,
+			} as Topic,
+			context: {
+				selectedWorkspace: {
+					id: "chat-workspace",
+					workspace_type: "chat",
+				} as never,
+			},
+			options: {
+				extra: { super_agent: { topic_pattern: topicPattern } },
+			},
+		})
+
+		await vi.waitFor(() => expect(track).toHaveBeenCalledTimes(1))
+		expect(track).toHaveBeenCalledWith(
+			"conversation_message_sent",
+			expect.objectContaining({
+				conversation_type: conversationType,
+				topic_mode: topicPattern,
+			}),
+		)
+	})
+
+	it("maps chat workspace to chat for a regular topic", async () => {
+		const chat = vi.fn().mockResolvedValue(successResponse)
+		const service = createService(chat)
+
+		await service.dispatchMessage({
+			content: "hello",
+			showLoading: false,
+			selectedProject: { id: "project-1", workspace_id: "chat-workspace" } as never,
+			selectedTopic: {
+				id: "topic-1",
+				chat_topic_id: "chat-topic-1",
+				chat_conversation_id: "conversation-1",
+				topic_mode: TopicMode.General,
+			} as Topic,
+			context: {
+				selectedWorkspace: {
+					id: "chat-workspace",
+					workspace_type: "chat",
+				} as never,
+			},
+		})
+
+		await vi.waitFor(() => expect(track).toHaveBeenCalledTimes(1))
+		expect(track).toHaveBeenCalledWith(
+			"conversation_message_sent",
+			expect.objectContaining({ conversation_type: "chat" }),
+		)
 	})
 })

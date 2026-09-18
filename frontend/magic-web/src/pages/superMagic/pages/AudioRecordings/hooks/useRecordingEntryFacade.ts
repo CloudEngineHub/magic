@@ -1,5 +1,5 @@
 import type { ComponentType } from "react"
-import { useCallback, useEffect, useRef, useState } from "react"
+import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import i18next from "i18next"
 import { useTranslation } from "react-i18next"
 import { toast } from "sonner"
@@ -37,6 +37,11 @@ import { buildOptimisticRecordingItem } from "../utils/build-optimistic-recordin
 import { resolveCardStatusFromListItem } from "../utils/normalize-audio-project-item"
 import { readAudioRecordingsFilterSession } from "../utils/audio-recordings-filter-session"
 import { runForceRecordingOverride } from "@/components/business/RecordingSummary/utils/force-recording-override"
+import {
+	createAiRecordingStartedReporter,
+	resolveRecordingAnalyticsSource,
+} from "../utils/trackAiRecordingStarted"
+import { trackProjectCreated } from "@/pages/superMagic/services/trackCreatedEntities"
 
 export type EntryPresentation = "list" | "recording"
 export type RecordingStartupState = "idle" | "starting" | "error"
@@ -187,6 +192,8 @@ interface AudioProjectContext {
 	workspace: Workspace | null
 	project: ProjectListItem
 	topic: Topic
+	/** The exact setting persisted when this audio project was created. */
+	transcriptionEnabled: boolean
 }
 
 export type TranscriptMessage = VoiceResultUtterance & { add_time: number; id: string }
@@ -259,7 +266,7 @@ export function useRecordingEntryFacade(): UseRecordingEntryFacadeResult {
 	// Resolve the web recording source so backend can distinguish H5 vs PC origins;
 	// consumed by createAudioProject and seeded onto optimistic cards for immediate icon/label.
 	const isMobile = useIsMobile()
-	const recordingSource: "h5" | "pc" = isMobile ? "h5" : "pc"
+	const recordingSource = resolveRecordingAnalyticsSource(isMobile)
 	const [presentation, setPresentation] = useState<EntryPresentation>(() => {
 		if (recordSummaryStore.status === "init") return "list"
 		// Desktop reuses the global FloatPanel; only mobile takes over with full-screen UI.
@@ -270,6 +277,7 @@ export function useRecordingEntryFacade(): UseRecordingEntryFacadeResult {
 	const [startupErrorDetail, setStartupErrorDetail] = useState("")
 	const [isPreparingRecordingStart, setIsPreparingRecordingStart] = useState(false)
 	const startRecordingInFlightRef = useRef(false)
+	const reportedCreatedProjectIdsRef = useRef(new Set<string>())
 	const [transcriptionEnabled, setTranscriptionEnabled] = useState(
 		recordSummaryStore.businessData.transcriptionEnabled,
 	)
@@ -284,6 +292,22 @@ export function useRecordingEntryFacade(): UseRecordingEntryFacadeResult {
 		recordSummaryStore.isContinuing ||
 		runtime.state.isStartingRecord
 	const isImporting = audioImportStore.hasUploadingTasks
+
+	/**
+	 * Both recorder startup and import upload can cross several async callbacks.
+	 * Keying the event by the real project id keeps retries and duplicate callbacks
+	 * from reporting the same recording start more than once.
+	 */
+	const reportRecordingStartedOnce = useMemo(
+		() => createAiRecordingStartedReporter(() => recordingSource),
+		[recordingSource],
+	)
+	const reportCreatedEntitiesOnce = useCallback((context: AudioProjectContext) => {
+		const projectId = context.project.id
+		if (!projectId || reportedCreatedProjectIdsRef.current.has(projectId)) return
+		reportedCreatedProjectIdsRef.current.add(projectId)
+		trackProjectCreated(context, context.workspace?.id, "ai_recording")
+	}, [])
 
 	/**
 	 * Resolves the summary model lazily for deep links into recordings, where
@@ -368,11 +392,11 @@ export function useRecordingEntryFacade(): UseRecordingEntryFacadeResult {
 			})
 
 			if (!createdProject?.project || !createdProject?.topic) return null
-
 			return {
 				workspace,
 				project: createdProject.project,
 				topic: createdProject.topic,
+				transcriptionEnabled: nextTranscriptionEnabled,
 			}
 		},
 		[recordingSource],
@@ -514,6 +538,13 @@ export function useRecordingEntryFacade(): UseRecordingEntryFacadeResult {
 				throw new Error("recording-start-failed")
 			}
 
+			reportCreatedEntitiesOnce(audioProjectContext)
+			reportRecordingStartedOnce({
+				projectId: audioProjectContext.project.id,
+				audioSource: "recorded",
+				transcriptionEnabled: audioProjectContext.transcriptionEnabled,
+			})
+
 			setStartupState("idle")
 			setStartupErrorMessage("")
 			setStartupErrorDetail("")
@@ -539,7 +570,9 @@ export function useRecordingEntryFacade(): UseRecordingEntryFacadeResult {
 	}, [
 		isMobile,
 		createAudioProjectContext,
+		reportCreatedEntitiesOnce,
 		resolveRecordingModel,
+		reportRecordingStartedOnce,
 		runtime.actions,
 		runtime.state.isRecording,
 		t,
@@ -833,9 +866,24 @@ export function useRecordingEntryFacade(): UseRecordingEntryFacadeResult {
 				modelId: model.model_id,
 				taskKey,
 				autoSummaryEnabled,
+				onUploadStarted: () => {
+					reportCreatedEntitiesOnce(audioProjectContext)
+					reportRecordingStartedOnce({
+						projectId: audioProjectContext.project.id,
+						audioSource: "imported",
+						transcriptionEnabled: audioProjectContext.transcriptionEnabled,
+					})
+				},
 			})
 		},
-		[createAudioProjectContext, resolveRecordingModel, recordingSource, t],
+		[
+			createAudioProjectContext,
+			reportCreatedEntitiesOnce,
+			reportRecordingStartedOnce,
+			resolveRecordingModel,
+			recordingSource,
+			t,
+		],
 	)
 
 	return {

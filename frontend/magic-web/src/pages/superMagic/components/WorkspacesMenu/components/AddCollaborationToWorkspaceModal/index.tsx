@@ -12,6 +12,7 @@ import { useIsMobile } from "@/hooks/useIsMobile"
 import MagicPopup from "@/components/base-mobile/MagicPopup"
 import { SuperMagicApi } from "@/apis"
 import magicToast from "@/components/base/MagicToaster/utils"
+import { trackWorkspaceCreated } from "@/pages/superMagic/services/trackCreatedEntities"
 
 interface AddCollaborationToWorkspaceModalProps {
 	workspaces: Workspace[]
@@ -97,6 +98,7 @@ export function AddCollaborationToWorkspaceModal({
 					workspace_name: trimmedName,
 				})
 				if (res?.id) {
+					trackWorkspaceCreated(res)
 					fetchWorkspaces({
 						isAutoSelect: false,
 						isSelectLast: false,

@@ -29,6 +29,7 @@ import {
 	canUseNativeShare,
 	shareToNativeTarget,
 } from "@/pages/superMagic/components/Share/utils/nativeShare"
+import { trackContentSharedIfCreated } from "@/pages/superMagic/components/Share/utils/trackContentShared"
 import type { AttachmentItem } from "@/pages/superMagic/components/TopicFilesButton/hooks/types"
 import type {
 	MobileShareItem,
@@ -1155,7 +1156,6 @@ export function useProjectShareSheet({
 							projectName: projectName || t("common.untitledProject"),
 						})
 			const resourceName = formState.shareName.trim() || fallbackShareName
-
 			await SuperMagicApi.createOrUpdateShareResource({
 				resource_id: resourceId,
 				resource_type: ResourceType.FileCollection,
@@ -1193,6 +1193,13 @@ export function useProjectShareSheet({
 						formState.advancedSettings.allowDownloadProjectFile ?? true,
 					pure_mode: formState.advancedSettings.pureMode ?? false,
 				},
+			})
+
+			trackContentSharedIfCreated({
+				created: !isEditing,
+				resourceId: currentResourceId,
+				resourceType: ResourceType.FileCollection,
+				shareProject: !isAudioRecordingScene && activeMode === "project",
 			})
 
 			const createdShareForClipboard: MobileShareItem =

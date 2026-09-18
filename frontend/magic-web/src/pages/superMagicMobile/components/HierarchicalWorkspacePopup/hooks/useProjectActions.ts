@@ -12,6 +12,7 @@ import routeManageService from "@/pages/superMagic/services/routeManageService"
 import pubsub, { PubSubEvents } from "@/utils/pubsub"
 import { SHARE_WORKSPACE_ID } from "@/pages/superMagic/constants"
 import magicToast from "@/components/base/MagicToaster/utils"
+import { trackProjectCreated } from "@/pages/superMagic/services/trackCreatedEntities"
 
 interface UseProjectActionsParams {
 	currentProject?: ProjectListItem
@@ -118,6 +119,7 @@ export function useProjectActions({
 			})
 				.then((res: CreatedProject) => {
 					if (res?.project) {
+						trackProjectCreated(res, workspaceId)
 						setProjects((prevProjects) => {
 							return [...prevProjects, res.project]
 						})

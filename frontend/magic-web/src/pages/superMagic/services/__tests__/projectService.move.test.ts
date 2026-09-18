@@ -11,6 +11,7 @@ const { mockWorkspaces, mockProjectStore } = vi.hoisted(() => ({
 		selectedProject: null as ProjectListItem | null,
 		setSelectedProject: vi.fn(),
 		setProjects: vi.fn(),
+		setProjectsForWorkspace: vi.fn(),
 	},
 }))
 
@@ -20,6 +21,10 @@ vi.mock("@/apis", () => ({
 		getProjects: vi.fn(),
 		getProjectsWithCollaboration: vi.fn(),
 	},
+}))
+
+vi.mock("@/services/analytics", () => ({
+	track: vi.fn(),
 }))
 
 vi.mock("@/pages/superMagic/stores/core/project", () => ({

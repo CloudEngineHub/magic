@@ -22,6 +22,11 @@ import { topicStore, workspaceStore } from "../stores/core"
 import { getInsertIndexByAnchors, isSameOrder } from "./orderUtils"
 import { createOrderRequestOptions, reportOrderApiError } from "./orderErrorReporter"
 import { invalidateWorkspaceSearchResults } from "./workspaceListSearchInvalidation"
+import {
+	resolveCreationScene,
+	trackProjectCreated,
+	type CreationScene,
+} from "./trackCreatedEntities"
 
 export interface FetchProjectsParams {
 	workspaceId: string
@@ -364,17 +369,21 @@ class ProjectService {
 		projectMode,
 		workdir,
 		projectName,
+		creationScene,
 	}: {
 		workspaceId: string
 		projectMode: TopicMode
 		workdir?: string
 		projectName?: string
+		/** The product entry that initiated creation; independent from the selected agent mode. */
+		creationScene?: CreationScene
 	}): Promise<CreatedProject | null> => {
 		const requestKey = this.getRequestKey("createProject", {
 			workspaceId,
 			projectMode,
 			workdir,
 			projectName,
+			creationScene,
 		})
 
 		return this.getOrCreateRequest(requestKey, async () => {
@@ -388,6 +397,13 @@ class ProjectService {
 				})
 
 				if (res) {
+					// Entry scene and agent mode are separate dimensions: e.g. a recording
+					// expert selected inside Chat still belongs to the Chat creation funnel.
+					trackProjectCreated(
+						res,
+						workspaceId,
+						creationScene ?? resolveCreationScene(projectMode),
+					)
 					// Update project list with the new project
 					runInAction(() => {
 						projectStore.setProjects([res.project, ...projectStore.projects])

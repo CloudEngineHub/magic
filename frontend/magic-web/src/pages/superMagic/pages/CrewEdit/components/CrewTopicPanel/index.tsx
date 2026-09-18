@@ -41,6 +41,7 @@ import { createSuperMagicTopicModelStore } from "@/stores/superMagic/topicModelS
 import { useRefreshTopicDetailOnTaskComplete } from "@/pages/superMagic/hooks/useRefreshTopicDetailOnTaskComplete"
 import { useScopedTopicReadProgress } from "@/pages/superMagic/hooks/useScopedTopicReadProgress"
 import { applyOptimisticTopicRunningState } from "@/pages/superMagic/services/topicStatusSyncService"
+import { reportPendingCrewCreatedEntities } from "../../store/services/report-crew-created-entities"
 
 interface CrewTopicPanelProps {
 	selectedProject: ProjectListItem | null
@@ -191,12 +192,24 @@ function CrewTopicPanel({
 			showLoading,
 			size: detailPanelVisible ? "small" : "default",
 			onSendComplete: ({ success, currentProject, currentTopic }) => {
+				const resolvedProject = currentProject ?? selectedProject
+				const resolvedTopic = currentTopic ?? topicStore.selectedTopic
 				if (!success) return
+
+				if (resolvedProject && resolvedTopic) {
+					// A newly created Crew may not receive its backing project/topic until the
+					// first message. Complete the pending creation report with those real ids.
+					void reportPendingCrewCreatedEntities({
+						crewCode: crewId,
+						project: resolvedProject,
+						topics: [resolvedTopic],
+					})
+				}
 
 				applyOptimisticTopicRunningState({
 					topicStore,
-					topic: currentTopic ?? topicStore.selectedTopic,
-					project: currentProject ?? selectedProject,
+					topic: resolvedTopic,
+					project: resolvedProject,
 				})
 			},
 			mergeSendParams: ({ defaultParams }) => {

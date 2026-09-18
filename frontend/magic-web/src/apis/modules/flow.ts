@@ -24,6 +24,18 @@ import type { MethodOption } from "@dtyq/magic-flow/dist/MagicExpressionWidget/t
 import type { ServiceHttpClient } from "@/infrastructure/network/http/clients"
 import type { MCPOAuthStatus } from "@/components/Agent/MCP/service/MCPOAuthService"
 import type { IMCPItem } from "@/components/Agent/MCP"
+import { track, type ConnectorType } from "@/services/analytics"
+
+const connectorTypes = new Set<ConnectorType>([
+	"sse",
+	"external_sse",
+	"external_http",
+	"external_stdio",
+])
+
+function isConnectorType(value: unknown): value is ConnectorType {
+	return typeof value === "string" && connectorTypes.has(value as ConnectorType)
+}
 
 export const generateFlowApi = (fetch: ServiceHttpClient) => ({
 	/**
@@ -423,8 +435,20 @@ export const generateFlowApi = (fetch: ServiceHttpClient) => ({
 	},
 
 	/** 创建 / 更新 MCP */
-	saveMcp(params: Flow.Mcp.SaveParams) {
-		return fetch.post<Flow.Mcp.Detail>("/api/v1/mcp/server", params)
+	async saveMcp(params: Flow.Mcp.SaveParams) {
+		const response = await fetch.post<Flow.Mcp.Detail>("/api/v1/mcp/server", params)
+
+		// The same endpoint handles create, edit and enable toggles. Only a request without
+		// an existing id is a creation, and the event must use the id returned by the server.
+		const connectorId = response?.id?.trim()
+		if (!params.id?.trim() && connectorId && isConnectorType(params.type)) {
+			track("connector_created", {
+				connector_id: connectorId,
+				connector_type: params.type,
+			})
+		}
+
+		return response
 	},
 
 	/** 获取超级麦吉项目中的MCP配置 */

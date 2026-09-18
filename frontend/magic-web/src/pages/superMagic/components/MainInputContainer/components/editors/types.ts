@@ -30,6 +30,7 @@ import type {
 import type { TopicMode } from "@/pages/superMagic/pages/Workspace/TopicMode"
 import type { QueuedMessage } from "@/pages/superMagic/components/MessagePanel/hooks/useMessageQueue"
 import { TopicStore } from "@/pages/superMagic/stores/core/topic"
+import type { CreationScene } from "@/pages/superMagic/services/trackCreatedEntities"
 
 export type { QueueMessageInput } from "@/pages/superMagic/components/MessageEditor/types"
 
@@ -54,6 +55,8 @@ export interface SceneEditorContext {
 	selectedTopic: Topic | null
 	selectedProject: ProjectListItem | null
 	selectedWorkspace?: Workspace | null
+	/** Product surface that owns entity creation; do not infer it from the selected agent. */
+	creationScene?: CreationScene
 	setSelectedTopic?: (topic: Topic | null) => void
 	/** 话题自动命名完成后，让目标详情页同步话题名称并重新读取项目名称。 */
 	refreshProjectAfterTopicRename?: boolean

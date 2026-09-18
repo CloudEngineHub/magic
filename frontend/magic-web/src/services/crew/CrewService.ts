@@ -40,6 +40,7 @@ import {
 	type PlaybookConfig,
 	normalizeCrewI18nArrayValue,
 } from "@/apis/modules/crew"
+import { markPendingEntityCreation, track } from "@/services/analytics"
 
 // ======================== View Models ========================
 
@@ -294,11 +295,16 @@ export class CrewService {
 	}
 
 	/**
-	 * Create an agent and resolve its generated code.
-	 * The create API only returns an id, so we fetch the agent list to get the code.
+	 * Create an agent and remember that its lazily provisioned project/topic still
+	 * need reporting after the edit page resolves their real ids.
 	 */
 	async createAgent(params: CreateAgentParams): Promise<{ id: string; code: string }> {
 		const data = await CrewApi.createAgent(params)
+		const agentId = data?.id?.trim()
+		if (agentId) {
+			track("agent_created", { agent_id: agentId })
+		}
+		await markPendingEntityCreation({ scene: "crew", resourceCode: data?.code ?? "" })
 		return { id: data.id, code: data.code }
 	}
 

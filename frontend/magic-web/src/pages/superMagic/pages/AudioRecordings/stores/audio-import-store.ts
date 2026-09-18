@@ -181,6 +181,7 @@ export class AudioImportStore {
 			modelId: string
 			taskKey: string
 			autoSummaryEnabled: boolean
+			onUploadStarted?: () => void
 		},
 	): Promise<void> {
 		const {
@@ -229,7 +230,7 @@ export class AudioImportStore {
 		})
 
 		try {
-			// Trigger file upload using global upload service
+			let didNotifyUploadStarted = false
 			await ossUploadService.uploadFiles(
 				[
 					{
@@ -245,6 +246,17 @@ export class AudioImportStore {
 				undefined,
 				// onProgress handler
 				(fileId, uploadedBytes) => {
+					// A created upload task is not yet a started transfer. Report only after
+					// OSS confirms that bytes are moving, and never more than once per import.
+					if (!didNotifyUploadStarted && uploadedBytes > 0) {
+						didNotifyUploadStarted = true
+						try {
+							context.onUploadStarted?.()
+						} catch (error) {
+							// Observability callbacks must never interrupt the user's upload.
+							console.warn("Audio import start observer failed:", error)
+						}
+					}
 					const progress = Math.min(uploadedBytes / targetFile.size, 0.99)
 					runInAction(() => {
 						const task = this.importingTasks.get(projectId)

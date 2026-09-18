@@ -39,6 +39,7 @@ import magicToast from "@/components/base/MagicToaster/utils"
 import { projectStore } from "@/pages/superMagic/stores/core"
 import { userStore } from "@/models/user"
 import { generateShareMessageText } from "../utils/generateShareMessageText"
+import { trackContentSharedIfCreated } from "../utils/trackContentShared"
 import { mergeRecordingShareFileIds } from "@/pages/superMagic/pages/AudioRecordings/utils/build-recording-share-selection"
 import FileShareDocumentDependenciesOption from "./FileShareDocumentDependenciesOption"
 import { useFileShareDocumentDependencies } from "./hooks/useFileShareDocumentDependencies"
@@ -773,6 +774,8 @@ export default memo(function FileShareModal(props: FileShareModalProps) {
 		}
 
 		setIsSaving(true)
+		// Capture create vs edit before the API; the first successful save marks the resource created.
+		const isNewShare = !hasResourceIdCreated.current
 
 		try {
 			let currentResourceId = resourceId
@@ -801,9 +804,9 @@ export default memo(function FileShareModal(props: FileShareModalProps) {
 				target_ids:
 					shareType === ShareType.Organization && shareRange === "designated"
 						? shareTargets.map((t) => ({
-							target_type: t.target_type,
-							target_id: t.target_id,
-						}))
+								target_type: t.target_type,
+								target_id: t.target_id,
+							}))
 						: undefined,
 				...(shareType === ShareType.Organization
 					? {}
@@ -824,6 +827,13 @@ export default memo(function FileShareModal(props: FileShareModalProps) {
 				project_id: projectId, // 传递项目ID
 			})
 
+			trackContentSharedIfCreated({
+				created: isNewShare,
+				resourceId: currentResourceId,
+				resourceType: ResourceType.FileCollection,
+				shareProject: effectiveShareProject,
+			})
+
 			// Mark as created after successful API call
 			if (!hasResourceIdCreated.current) {
 				hasResourceIdCreated.current = true
@@ -839,7 +849,7 @@ export default memo(function FileShareModal(props: FileShareModalProps) {
 			// Step 3: Generate share message and copy to clipboard (silently, no toast)
 			try {
 				const fileIds = apiResult?.file_ids || submittedFileIds
-				let fileDisplayConfig: { type?: string;[key: string]: unknown } | undefined =
+				let fileDisplayConfig: { type?: string; [key: string]: unknown } | undefined =
 					undefined
 
 				// 如果是单文件分享，获取文件详情
@@ -1327,21 +1337,21 @@ function applyShareDisplayNames<T extends { file_id?: string; children?: T[] }>(
 	return items.map((item) => ({
 		...item,
 		...((item.file_id && displayNameByFileId[item.file_id]) ||
-			getShareDisplayNameByFileName(item, displayNameByFileName)
+		getShareDisplayNameByFileName(item, displayNameByFileName)
 			? {
-				share_display_name:
-					displayNameByFileId[item.file_id || ""] ||
-					getShareDisplayNameByFileName(item, displayNameByFileName),
-			}
+					share_display_name:
+						displayNameByFileId[item.file_id || ""] ||
+						getShareDisplayNameByFileName(item, displayNameByFileName),
+				}
 			: {}),
 		...(item.children
 			? {
-				children: applyShareDisplayNames(
-					item.children,
-					displayNameByFileId,
-					displayNameByFileName,
-				),
-			}
+					children: applyShareDisplayNames(
+						item.children,
+						displayNameByFileId,
+						displayNameByFileName,
+					),
+				}
 			: {}),
 	}))
 }

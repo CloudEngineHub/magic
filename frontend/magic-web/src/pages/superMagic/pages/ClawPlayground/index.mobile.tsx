@@ -83,6 +83,7 @@ import { useMobileMicroAppPreview } from "@/pages/superMagic/hooks/useMobileMicr
 import KnowledgeBasePreviewPopup from "@/pages/superMagic/components/KnowledgeBasePreviewPopup"
 import MicroAppPreviewPopup from "@/pages/superMagic/components/MicroAppPreviewPopup"
 import { HostConversationProvider } from "@/pages/superMagic/contexts/HostConversationContext"
+import { useClawConversationAnalytics } from "./hooks/useClawConversationAnalytics"
 
 interface ClawMobileConversationPanelRef {
 	sendSkillInstallPrompt: (content: JSONContent) => void
@@ -114,6 +115,7 @@ const ClawMobileConversationPanel = observer(
 			const store = useClawPlaygroundStore()
 			const selectedProject = store.selectedProject
 			const selectedTopic = store.selectedTopic
+			useClawConversationAnalytics(selectedTopic?.id)
 			const topicStore = store.topicStore
 			const attachments = store.projectFilesStore.workspaceFileTree
 			const [stopEventLoading, setStopEventLoading] = useState(false)

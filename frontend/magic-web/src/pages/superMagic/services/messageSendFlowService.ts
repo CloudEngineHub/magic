@@ -46,6 +46,7 @@ import { shouldSyncChatConversationName, syncChatProjectNameOnly } from "./chatC
 import { shouldClearEditorAfterSend } from "./messageSendEditorPolicy"
 import { startMessageSendRenameTask, trackProjectRenameTask } from "./messageSendRenameTask"
 import { projectVisibleMessagesByRevokedTail } from "../utils/project-visible-messages-by-revoked-tail"
+import { trackConversationMessageSent } from "./trackConversationMessageSent"
 
 const logger = Logger.createLogger("messageSendService")
 
@@ -97,6 +98,8 @@ export interface DispatchMessageParams {
 	content?: string
 	jsonContent?: JSONContent
 	options?: SendMessageOptions
+	/** Editor surface classification used only by analytics, never serialized to chat payloads. */
+	analyticsTopicMode?: TopicMode
 	showLoading: boolean
 	selectedProject?: ProjectListItem | null
 	selectedTopic?: Topic | null
@@ -184,6 +187,7 @@ class MessageSendService {
 		jsonContent,
 		showLoading,
 		options,
+		analyticsTopicMode,
 		selectedProject,
 		selectedTopic,
 		context,
@@ -341,6 +345,19 @@ class MessageSendService {
 					// 响应成功后替换 superMagicStore 中对应数据
 					this.deps.superMagicStore.replaceUserMessage(chat_topic_id, responseSeq)
 					optimisticMessageStore.confirm({ chat_topic_id, app_message_id: messageId })
+					try {
+						trackConversationMessageSent({
+							messageId,
+							topic: currentTopic,
+							project: currentProject,
+							workspace: context?.selectedWorkspace,
+							workspaceId: context?.workspaceId,
+							options: sendOptions,
+							topicMode: analyticsTopicMode,
+						})
+					} catch {
+						// Analytics must never fail the send path.
+					}
 				})
 				.catch((error) => {
 					console.log("error", error)
@@ -389,7 +406,6 @@ class MessageSendService {
 		}
 
 		setIsSending(true)
-		void tabPattern
 
 		try {
 			if (!currentProject?.id || !currentTopic?.id) {
@@ -417,6 +433,7 @@ class MessageSendService {
 				selectedProject: currentProject,
 				selectedTopic: currentTopic,
 				context,
+				analyticsTopicMode: params.topicMode ?? tabPattern,
 			})
 			if (!isDispatched) return
 			this.deps.pubsub.publish(PubSubEvents.Message_Scroll_To_Bottom, { time: 1000 })

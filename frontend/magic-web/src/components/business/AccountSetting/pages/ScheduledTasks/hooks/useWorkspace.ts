@@ -5,6 +5,7 @@ import { SuperMagicApi } from "@/apis"
 import magicToast from "@/components/base/MagicToaster/utils"
 import { SHARE_WORKSPACE_ID } from "@/pages/superMagic/constants"
 import type { Workspace } from "@/pages/superMagic/pages/Workspace/types"
+import { trackWorkspaceCreated } from "@/pages/superMagic/services/trackCreatedEntities"
 
 export function useWorkspace() {
 	const { t } = useTranslation("super")
@@ -43,6 +44,7 @@ export function useWorkspace() {
 			})
 
 			if (response?.id) {
+				trackWorkspaceCreated(response)
 				await fetchWorkspaces()
 				return response
 			}

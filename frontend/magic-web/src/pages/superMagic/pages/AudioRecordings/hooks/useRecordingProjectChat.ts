@@ -9,6 +9,7 @@ import { TopicStore } from "@/pages/superMagic/stores/core/topic"
 import { normalizeTopicHistoryItem } from "@/pages/superMagic/utils/topicHistory"
 import type { AttachmentItem } from "@/pages/superMagic/components/TopicFilesButton/hooks"
 import { ProjectFilesStore } from "@/stores/projectFiles"
+import { trackTopicCreated } from "@/pages/superMagic/services/trackCreatedEntities"
 
 interface UseRecordingProjectChatInput {
 	projectId: string
@@ -88,7 +89,14 @@ export function useRecordingProjectChat({
 						project_mode: nextProject.project_mode || undefined,
 					})
 					const resolvedCreatedTopic = await resolveTopic(createdTopic as Topic)
-					if (resolvedCreatedTopic) nextTopics = [resolvedCreatedTopic]
+					if (resolvedCreatedTopic) {
+						trackTopicCreated(resolvedCreatedTopic, {
+							projectId,
+							workspaceId: nextProject.workspace_id,
+							scene: "ai_recording",
+						})
+						nextTopics = [resolvedCreatedTopic]
+					}
 				}
 				if (disposed) return
 
@@ -166,6 +174,11 @@ export function useRecordingProjectChat({
 		})
 		const createdTopic = await resolveTopic(response as Topic)
 		if (!createdTopic) return
+		trackTopicCreated(createdTopic, {
+			projectId: project.id,
+			workspaceId: project.workspace_id,
+			scene: "ai_recording",
+		})
 
 		topicStore.setTopics([
 			createdTopic,
