@@ -125,7 +125,7 @@ export default function MicroAppHeader({
 							type="button"
 							variant="outline"
 							size="icon"
-							className="size-8 shrink-0"
+							className="size-7 shrink-0"
 							aria-label={t("project.addCollaborators")}
 							data-testid="micro-app-manage-collaborators"
 							onClick={() => onManageCollaborators?.()}
