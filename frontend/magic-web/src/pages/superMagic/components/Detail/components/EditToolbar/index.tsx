@@ -522,7 +522,7 @@ function EditToolbar({
 									html: content,
 									key: slide.path,
 									pageName:
-										slide.title || slide.path.split("/").pop() || slide.path,
+										slide.path.split("/").pop() || slide.title || slide.path,
 									pagePath: slide.path,
 									pageFileId: fileId,
 								}
