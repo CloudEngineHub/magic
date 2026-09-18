@@ -33,6 +33,7 @@ import { cn } from "@/utils/cn"
 import { crewService } from "@/services/crew/CrewService"
 import { useCrewEditStore } from "../../context"
 import { RoleIcon } from "../common/RoleIcon"
+import { useCrewAvatarUrl } from "../../hooks/useCrewAvatarUrl"
 
 const SUPPORTED_LOCALES = ["en_US", "zh_CN"] as const
 
@@ -175,6 +176,11 @@ function EditCrewDialog({
 		[createT],
 	)
 
+	const avatarFallbackUrl = useCrewAvatarUrl(
+		store.identity.icon,
+		store.projectFilesStore.workspaceFilesList,
+	)
+
 	useEffect(() => {
 		if (!open) return
 
@@ -189,13 +195,14 @@ function EditCrewDialog({
 
 		setDraft(
 			createDraftFromStore({
-				iconUrl: resolveCrewIconUrl(store.identity.icon),
+				iconUrl: avatarFallbackUrl || resolveCrewIconUrl(store.identity.icon),
 				nameI18n: store.identity.name_i18n,
 				roleI18n: store.identity.role_i18n,
 				descriptionI18n: store.identity.description_i18n,
 			}),
 		)
 	}, [
+		avatarFallbackUrl,
 		open,
 		store.identity.description_i18n,
 		store.identity.icon,

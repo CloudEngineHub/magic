@@ -71,15 +71,26 @@ def _resolve_config_path(config_arg: str, workspace_dir: Path) -> tuple[Path | N
     return None, candidates
 
 
-def _build_identity(cfg: dict) -> str:
+def _detect_existing_avatar(workspace_dir: Path) -> str | None:
+    """Detect if an avatar already exists in workspace (.magic/logo.*)."""
+    magic_dir = workspace_dir / ".magic"
+    for ext in [".png", ".jpg", ".jpeg", ".webp"]:
+        candidate = magic_dir / f"logo{ext}"
+        if candidate.is_file():
+            return f".magic/logo{ext}"
+    return None
+
+
+def _build_identity(cfg: dict, workspace_dir: Path | None = None) -> str:
     header_lines = [
         "---",
         f"name: {cfg['name']}",
         f"role: {cfg['role']}",
         f"description: {cfg['description']}",
     ]
-    if cfg.get("icon"):
-        header_lines.append(f"icon: {cfg['icon']}")
+    existing_avatar = _detect_existing_avatar(workspace_dir) if workspace_dir else None
+    icon = cfg.get("icon") or existing_avatar or ".magic/logo.png"
+    header_lines.append(f"icon: {icon}")
 
     header_lines.append("---")
     header = "\n".join(header_lines) + "\n"
@@ -202,7 +213,7 @@ def main() -> int:
     ws_dir.mkdir(parents=True, exist_ok=True)
     created: list[str] = []
 
-    identity_path.write_text(_build_identity(cfg), encoding="utf-8")
+    identity_path.write_text(_build_identity(cfg, workspace_dir), encoding="utf-8")
     created.append("IDENTITY.md")
 
     agents_content = _build_agents(cfg)

@@ -63,26 +63,75 @@ def test_crew_creator_logo_paths_are_workspace_relative():
 
     assert "`.magic/IDENTITY.md`" in skill
     assert "`.magic/SOUL.md`" in skill
-    assert "`.magic/avatars/logo.png`" in skill
+    assert "`.magic/logo.png`" in skill
     assert "`.workspace/.magic/" not in skill
     assert "do not prepend `.workspace/`" in guide
-    assert "`.magic/avatars/logo.png`" in guide
+    assert "`.magic/logo.png`" in guide
 
 
-def test_crew_creator_avatar_requires_character_portrait():
+def test_crew_creator_avatar_requires_character_headshot_portrait():
     skill = (CREW_CREATOR_DIR / "SKILL.md").read_text(encoding="utf-8")
     guide = (CREW_CREATOR_DIR / "references" / "avatar-generation-guide.md").read_text(
         encoding="utf-8"
     )
 
-    # 必须要求生成人物肖像/半身像，不能是纯工具或徽标
-    assert "person/character portrait" in guide.lower()
+    # 必须要求生成人物头像/面部特写肖像，不能是纯工具、徽标或假人
+    assert "avatar / face portrait of a person" in guide
     assert "No object-only images" in guide
     assert "No pure logos or emblems" in guide
     assert "No mannequins or dress forms" in guide
     assert "bust shot or symbolic emblem" not in guide
-    assert "upper body bust portrait" in guide
-    assert "must depict a person/character bust portrait" in skill
+    assert "head and shoulders avatar portrait" in guide
+    assert "close-up face/head avatar of a person" in skill
+
+
+def test_check_crew_verification_script(tmp_path):
+    import subprocess
+    import sys
+
+    workspace_dir = tmp_path / "employee_workspace"
+    workspace_dir.mkdir(parents=True, exist_ok=True)
+    magic_dir = workspace_dir / ".magic"
+    magic_dir.mkdir(parents=True, exist_ok=True)
+
+    # 1. 构造一个合规的数字员工工作区
+    (magic_dir / "IDENTITY.md").write_text(
+        "---\nname: 视觉设计师\nrole: 资深视觉设计师\ndescription: 负责品牌视觉与设计\nicon: .magic/logo.png\n---\n\n你是视觉设计师...",
+        encoding="utf-8",
+    )
+    (magic_dir / "AGENTS.md").write_text(
+        "## SOP\n1. 第一步：需求沟通\n2. 第二步：方案设计\n",
+        encoding="utf-8",
+    )
+    # 创建一个 10KB 的正方形 logo
+    (magic_dir / "logo.png").write_bytes(b"dummy_png_data" * 100)
+
+    check_script = CREW_CREATOR_DIR / "scripts" / "check_crew.py"
+
+    proc = subprocess.run(
+        [sys.executable, str(check_script), "--workspace-dir", str(workspace_dir)],
+        capture_output=True,
+        text=True,
+    )
+    assert proc.returncode == 0
+    res = json.loads(proc.stdout)
+    assert res["ok"] is True
+    assert res["details"]["icon"] == ".magic/logo.png"
+
+    # 2. 检查多语言字段不合规的情况
+    (magic_dir / "IDENTITY.md").write_text(
+        "---\nname: 视觉设计师\nname_cn: 视觉设计师\nrole: 资深视觉设计师\ndescription: 负责品牌视觉与设计\nicon: .magic/logo.png\n---\n",
+        encoding="utf-8",
+    )
+    proc_bad = subprocess.run(
+        [sys.executable, str(check_script), "--workspace-dir", str(workspace_dir)],
+        capture_output=True,
+        text=True,
+    )
+    assert proc_bad.returncode == 1
+    res_bad = json.loads(proc_bad.stdout)
+    assert res_bad["ok"] is False
+    assert any("forbidden multilingual field" in err for err in res_bad["errors"])
 
 
 def test_init_crew_preserves_existing_workspace_directories(tmp_path, monkeypatch):

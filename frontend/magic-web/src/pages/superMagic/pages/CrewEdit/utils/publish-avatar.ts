@@ -7,7 +7,7 @@ import { crewService } from "@/services/crew/CrewService"
 const SUPPORTED_AVATAR_EXTENSIONS = [".png", ".jpg", ".jpeg", ".webp", ".svg", ".gif", ".bmp"]
 
 /**
- * 寻找工作区中的员工头像文件（如 .magic/avatars/logo.png 等）
+ * 寻找工作区中的员工头像文件（优先 .magic/logo.png / .magic/logo.jpg 等）
  */
 export function findWorkspaceAvatarFile(
 	files: AttachmentItem[],
@@ -35,7 +35,33 @@ export function findWorkspaceAvatarFile(
 		if (exact) return exact
 	}
 
-	// 查找 .magic/avatars/ 或 avatars/ 目录下的图片文件
+	// 优先查找 .magic/logo.png, .magic/logo.jpg 或 .magic/ 下的直接图片文件
+	const directLogoCandidate = files.find((file) => {
+		if (file.is_directory) return false
+		const filePath = normalizeWorkspaceRelativePath(
+			file.relative_file_path ?? file.file_path ?? file.path ?? "",
+		)
+		const ext = `.${(
+			file.file_extension ??
+			file.file_name?.split(".").pop() ??
+			file.name?.split(".").pop() ??
+			""
+		).toLowerCase()}`
+		if (
+			filePath === ".magic/logo.png" ||
+			filePath === ".magic/logo.jpg" ||
+			filePath === "logo.png" ||
+			filePath === "logo.jpg"
+		) {
+			return true
+		}
+		const isDirectUnderMagic =
+			filePath.startsWith(".magic/") && !filePath.replace(/^\.magic\//, "").includes("/")
+		return isDirectUnderMagic && SUPPORTED_AVATAR_EXTENSIONS.includes(ext)
+	})
+	if (directLogoCandidate) return directLogoCandidate
+
+	// 降级查找 .magic/avatars/ 或 avatars/ 目录下的图片文件
 	const avatarCandidate = files.find((file) => {
 		if (file.is_directory) return false
 		const filePath = normalizeWorkspaceRelativePath(

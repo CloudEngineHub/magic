@@ -119,10 +119,11 @@ After `init_crew.py` completes successfully and employee definition files are re
    - Read `.magic/SOUL.md` (if present) to extract personality traits, aesthetic preferences, and communication style.
 2. **Assemble Generation Prompt**:
    - Refer to `references/avatar-generation-guide.md`.
-   - Assemble a prompt combining style prefix, character identity (must depict a person/character bust portrait, never pure objects or logos), professional visual elements (as attire, accessories, or handheld props), personality temperament, background color scheme, and quality suffix.
+   - Assemble a prompt combining style prefix, character identity (must depict a close-up face/head avatar of a person, never pure objects, tools, or logos), professional visual elements (as subtle attire collar or styling), personality temperament, background color scheme, and quality suffix.
 3. **Generate Image and Save Locally**:
    - Call `generate_images` with `size="1024x1024"` to generate 1 square image.
-   - Save to `.magic/avatars/logo.png` (path relative to workspace root; never prepend `.workspace/`).
+   - Save directly to `.magic/logo.png` (or `.magic/logo.jpg`) under workspace `.magic/` root (never prepend `.workspace/`, never place in `assets/`).
+   - Update `.magic/IDENTITY.md` YAML frontmatter to set `icon: .magic/logo.png` (or `.magic/logo.jpg`).
    - Validate that the image is square and its size does not exceed `500KB` (convert to high-quality JPG if necessary).
    - Preserve existing custom logos if user already provided one and did not request replacement.
 
@@ -130,10 +131,16 @@ After `init_crew.py` completes successfully and employee definition files are re
 
 Creating or validating definition files is not the end of initialization. After the files and any requested skills are ready, execute this sequence before cleanup or the final response:
 
-1. Generate the employee Logo based on `.magic/IDENTITY.md` and `.magic/SOUL.md` (if present) and save to `.magic/avatars/logo.png`.
-2. Verify that all employee definition files (`IDENTITY.md`, `AGENTS.md`, `SOUL.md`) exist and are valid.
+1. Generate the employee Logo based on `.magic/IDENTITY.md` and `.magic/SOUL.md` (if present) and save directly to `.magic/logo.png` (or `.magic/logo.jpg`). Ensure `icon: .magic/logo.png` is written into `.magic/IDENTITY.md`.
+2. Run the verification script:
+```python
+shell_exec(
+    command="python '<skill_dir>/scripts/check_crew.py'"
+)
+```
+3. Verify that `check_crew.py` returns `"ok": true`. If any error is returned, fix the issues immediately before proceeding.
 
-**Do not delete `.crew_init_config.json`, announce completion, or return the final initialization summary until definition files and Logo generation have been completed.**
+**Do not delete `.crew_init_config.json`, announce completion, or return the final initialization summary until definition files, Logo generation, and `check_crew.py` verification have passed.**
 
 If the user chooses skill decomposition in Round 4, after initialization call `skill-creator` once for each independent workflow. Follow `skill-creator`'s plan, confirmation, creation, and validation process; do not write `SKILL.md` manually.
 
@@ -143,7 +150,7 @@ If the user chooses skill decomposition in Round 4, after initialization call `s
 2. If validation fails, revise the workflow content and validate it again; do not initialize with a plain unstructured checklist or omit the mandatory baseline security constraints.
 3. Show the generated files to the user via `read_files`.
 4. If the user chose skill decomposition, call `skill-creator` for each independent skill and validate the results before reporting completion.
-5. Complete the mandatory initialization completion gate above.
+5. Complete the mandatory initialization completion gate above (including `check_crew.py`).
 6. Verify the generated files and the employee directory structure.
 7. Present the complete **Employee Initialization & Verification Checklist** to the user (see format below), explicitly verifying definition files and Logo generation.
 8. Ask if the user wants any adjustments.
@@ -161,18 +168,19 @@ After employee initialization completes, you MUST present the following checklis
 |------------|--------|----------------------|
 | Definition files created | pass | IDENTITY.md, AGENTS.md, SOUL.md created under .magic/ |
 | Skill decomposition decision | pass | Recorded user decision ('yes'/'no') |
-| Logo generated | pass / skipped / failed | Generated .magic/avatars/logo.png |
+| Logo generated | pass / skipped / failed | Generated .magic/logo.png and icon recorded in IDENTITY.md |
+| Check crew verification | pass | check_crew.py verification passed with 0 errors |
 ```
 
 ## File Responsibility Mapping
 
 | File | Dimension | Responsibility | Required |
 |------|-----------|----------------|----------|
-| `IDENTITY.md` | WHO — Identity | Name, role, description + role definition body | **Required** |
+| `IDENTITY.md` | WHO — Identity | Name, role, description, icon + role definition body | **Required** |
 | `AGENTS.md` | WHAT — Instructions | Workflow, rules, special directives | Recommended |
 | `SOUL.md` | HOW — Personality | Core personality, communication style, behavior guidelines | Optional |
 | `TOOLS.md` | WITH WHAT — Tools | Tool whitelist (YAML) + usage preferences | Optional |
-| `.magic/avatars/logo.png` | VISUAL — Logo | Default employee Logo generated under .magic/avatars/ | Optional |
+| `.magic/logo.png` | VISUAL — Logo | Default employee Logo directly under .magic/ | Optional |
 
 ## Editing Workflow
 

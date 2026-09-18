@@ -16,12 +16,12 @@ YAML header carries agent-level metadata; the body defines the role description.
 | `name` | Employee name | `AgentProfile.name` | **Yes** |
 | `role` | Employee role | `AgentProfile.role` | **Yes** |
 | `description` | Employee description | `AgentProfile.description` | **Yes** |
-| `icon` | Employee logo path (e.g. `avatars/logo.png`) | `AgentProfile.icon` | Optional |
+| `icon` | Employee logo path (e.g. `.magic/logo.png` or `.magic/logo.jpg`) | `AgentProfile.icon` | Optional |
 
 ### Strict Header Rules & Prohibitions
 
-- **Standard fields ONLY**: Use strictly `name`, `role`, `description`, `icon`. No multilingual or translated field variants.
-- **Fixed avatar location**: When `icon` is specified, it must point to `avatars/logo.png`. Never use arbitrary directory paths (e.g., `assets/`) or custom filenames.
+- **Standard fields ONLY**: Use strictly `name`, `role`, `description`, `icon`. Absolutely DO NOT generate any multilingual or translated field variants such as `name_cn`, `name_en`, `role_cn`, `role_en`, `description_cn`, `description_en`, `name-cn`, etc.
+- **Fixed avatar location**: When `icon` is specified, it must point directly to `.magic/logo.png` or `.magic/logo.jpg`. Never use arbitrary directory paths (e.g., `assets/`, `images/`) or custom filenames.
 
 ### AgentProfile Rendering Rules
 
@@ -35,7 +35,7 @@ YAML header carries agent-level metadata; the body defines the role description.
 name: Research Assistant
 role: Academic Researcher
 description: A professional research assistant for academic work
-icon: avatars/logo.png
+icon: .magic/logo.png
 ---
 
 You are a professional academic research assistant, skilled in
