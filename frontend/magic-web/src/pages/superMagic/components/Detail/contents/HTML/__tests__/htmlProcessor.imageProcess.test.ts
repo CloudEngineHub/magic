@@ -16,6 +16,29 @@ describe("processHtmlContent image processing", () => {
 		vi.mocked(getTemporaryDownloadUrl).mockReset()
 	})
 
+	it("only replaces standalone window reload calls", async () => {
+		const result = await processHtmlContent({
+			content: `
+				<script>
+					window.reload()
+					window.location.reload(true)
+					previewwindow.reload()
+					mywindow.reload(false)
+					obj.window.reload()
+				</script>
+			`,
+			attachments: [],
+		})
+
+		expect(result.processedContent).toContain("window.Magic.reload()")
+		expect(result.processedContent).toContain("previewwindow.reload()")
+		expect(result.processedContent).toContain("mywindow.reload(false)")
+		expect(result.processedContent).toContain("obj.window.reload()")
+		expect(result.processedContent).not.toContain("preview/*__ORIGINAL_RELOAD__:")
+		expect(result.processedContent).not.toContain("my/*__ORIGINAL_RELOAD__:")
+		expect(result.processedContent).not.toContain("obj./*__ORIGINAL_RELOAD__:")
+	})
+
 	it("replaces preloaded image URLs with the WebP variant without reprocessing scripts", async () => {
 		vi.mocked(getTemporaryDownloadUrl).mockResolvedValue([
 			{
@@ -57,6 +80,74 @@ describe("processHtmlContent image processing", () => {
 		})
 		expect(result.processedContent).toContain("https://oss.example.com/hero.webp")
 		expect(result.processedContent).toContain("https://oss.example.com/app.js")
+	})
+
+	it("replaces inline background URLs when the filename contains parentheses", async () => {
+		vi.mocked(getTemporaryDownloadUrl).mockResolvedValue([
+			{
+				file_id: "background-file",
+				url: "https://oss.example.com/background.webp",
+			},
+		] as never)
+
+		const attachments = [
+			{
+				file_id: "background-file",
+				file_name: "hero (2).jpg",
+				relative_file_path: "deck/images/hero (2).jpg",
+				updated_at: "2026-07-15T00:00:00.000Z",
+			},
+		]
+
+		const result = await processHtmlContent({
+			content: `<p style="background-image: url('./images/hero (2).jpg')">text</p>`,
+			attachments,
+			attachmentList: attachments,
+			html_relative_path: "deck/",
+			xMagicImageProcess: HTML_PREVIEW_IMAGE_PROCESS,
+		})
+
+		expect(getTemporaryDownloadUrl).toHaveBeenCalledWith({
+			file_ids: ["background-file"],
+			options: { xMagicImageProcess: HTML_PREVIEW_IMAGE_PROCESS },
+		})
+		expect(result.processedContent).toContain("https://oss.example.com/background.webp")
+		expect(result.processedContent).not.toContain("url('./images/hero (2).jpg')")
+	})
+
+	it("keeps GIF URLs original when WebP processing is enabled", async () => {
+		vi.mocked(getTemporaryDownloadUrl).mockResolvedValue([
+			{
+				file_id: "animation-file",
+				url: "https://oss.example.com/animation.gif",
+			},
+		] as never)
+
+		const attachments = [
+			{
+				file_id: "animation-file",
+				file_name: "animation.gif",
+				relative_file_path: "deck/animation.gif",
+				updated_at: "2026-07-15T00:00:00.000Z",
+			},
+		]
+
+		const result = await processHtmlContent({
+			content: '<img src="animation.gif">',
+			attachments,
+			attachmentList: attachments,
+			html_relative_path: "deck/",
+			xMagicImageProcess: HTML_PREVIEW_IMAGE_PROCESS,
+		})
+
+		expect(getTemporaryDownloadUrl).toHaveBeenCalledWith({
+			file_ids: ["animation-file"],
+		})
+		expect(getTemporaryDownloadUrl).not.toHaveBeenCalledWith({
+			file_ids: ["animation-file"],
+			options: { xMagicImageProcess: HTML_PREVIEW_IMAGE_PROCESS },
+		})
+		expect(result.processedContent).toContain("https://oss.example.com/animation.gif")
 	})
 
 	it("preserves the slide bridge position with an inert placeholder", async () => {

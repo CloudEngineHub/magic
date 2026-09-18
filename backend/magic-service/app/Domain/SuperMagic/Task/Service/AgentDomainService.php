@@ -58,6 +58,7 @@ use App\Infrastructure\SuperMagic\ExternalAPI\SandboxOS\Agent\Request\UserToolCa
 use App\Infrastructure\SuperMagic\ExternalAPI\SandboxOS\Agent\Response\AgentResponse;
 use App\Infrastructure\SuperMagic\ExternalAPI\SandboxOS\Agent\SandboxAgentInterface;
 use App\Infrastructure\SuperMagic\ExternalAPI\SandboxOS\Exception\SandboxOperationException;
+use App\Infrastructure\SuperMagic\ExternalAPI\SandboxOS\Exception\UserToolCallNotFoundException;
 use App\Infrastructure\SuperMagic\ExternalAPI\SandboxOS\Gateway\Constant\ResponseCode;
 use App\Infrastructure\SuperMagic\ExternalAPI\SandboxOS\Gateway\Constant\SandboxStatus;
 use App\Infrastructure\SuperMagic\ExternalAPI\SandboxOS\Gateway\Result\BatchStatusResult;
@@ -101,6 +102,7 @@ class AgentDomainService
         private readonly TopicRepositoryInterface $topicRepository,
         private readonly WorkspaceRepositoryInterface $workspaceRepository,
         private readonly TaskMessageRepositoryInterface $taskMessageRepository,
+        private readonly CrossProjectMentionPathTranslator $crossProjectMentionPathTranslator,
     ) {
         $this->logger = $loggerFactory->get('sandbox');
     }
@@ -833,6 +835,11 @@ class AgentDomainService
                 'tool_call_id' => $toolCallId,
                 'error' => $result->getMessage(),
             ]);
+            // 问题已被超时消费或重复提交，属于可预期的业务边界而非沙箱故障，
+            // 抛专用异常让上层转换为温和提醒而不是任务错误。
+            if (ResponseCode::isUserToolCallNotFound($result->getCode())) {
+                throw new UserToolCallNotFoundException($result->getMessage(), $result->getCode());
+            }
             throw new SandboxOperationException('Send user_tool_call feedback', $result->getMessage(), $result->getCode());
         }
 
@@ -1542,7 +1549,8 @@ class AgentDomainService
         // the listed user ids are routed through the warm pool; everyone else
         // falls back to the cold create path. Empty list means no restriction.
         $allowedUserIds = (array) config('super-magic.warm_pool.allowed_user_ids', []);
-        if (! empty($allowedUserIds)
+        if (
+            ! empty($allowedUserIds)
             && ! in_array($dataIsolation->getCurrentUserId(), $allowedUserIds, true)
         ) {
             $this->logger->info('[Sandbox][WarmPath] Skipping warm pool: user not in allowlist', [
@@ -1972,76 +1980,11 @@ class AgentDomainService
             $mentions = [];
         }
 
-        return $this->translateCrossProjectPaths($mentions, $currentProjectId, $mountBasePath);
-    }
-
-    /**
-     * 将跨项目 mention 中的相对路径转换为容器内的绝对路径。
-     *
-     * - type=project_file / type=project_directory：把相对 file_path/directory_path 前缀挂载根
-     * - type=project：整项目挂载，直接注入 project_path = {mountBasePath}/{project_id}
-     * - 同项目（project_id === currentProjectId）跳过，走 agent 自身 workspace
-     * - file_path/directory_path 已为绝对路径（以 / 开头）跳过，防双前缀
-     * - project_id 缺失或为空时跳过.
-     */
-    private function translateCrossProjectPaths(
-        array $mentions,
-        ?int $currentProjectId,
-        string $mountBasePath
-    ): array {
-        if ($mountBasePath === '' || empty($mentions)) {
-            return $mentions;
-        }
-
-        $base = rtrim($mountBasePath, '/');
-
-        foreach ($mentions as $i => $mention) {
-            if (! is_array($mention)) {
-                continue;
-            }
-            $type = $mention['type'] ?? null;
-
-            // 统一派发：三类跨项目挂载各自要写入的路径字段
-            $pathKey = match ($type) {
-                'project' => 'project_path',
-                'project_file' => 'file_path',
-                'project_directory' => 'directory_path',
-                default => null,
-            };
-            if ($pathKey === null) {
-                continue;
-            }
-
-            // 共享 project_id 校验：缺失或同项目则跳过，走 agent 自身 workspace
-            $pidRaw = $mention['project_id'] ?? null;
-            if ((! is_string($pidRaw) && ! is_int($pidRaw)) || ! preg_match('/^[1-9][0-9]*$/D', (string) $pidRaw)) {
-                continue;
-            }
-            $pidStr = (string) $pidRaw;
-            if ((string) (int) $pidStr !== $pidStr) {
-                continue;
-            }
-            if ($currentProjectId !== null && (string) $currentProjectId === $pidStr) {
-                continue;
-            }
-
-            $mountRoot = $base . '/' . $pidStr;
-
-            if ($type === 'project') {
-                // 整项目挂载：直接使用挂载根
-                $mentions[$i][$pathKey] = $mountRoot;
-                continue;
-            }
-
-            // 文件/目录：拼接相对路径；为空或已是绝对路径则跳过（防双前缀）
-            $relativePath = (string) ($mention[$pathKey] ?? '');
-            if ($relativePath === '' || str_starts_with($relativePath, '/') || str_starts_with($relativePath, '~')) {
-                continue;
-            }
-            $mentions[$i][$pathKey] = $mountRoot . '/' . ltrim($relativePath, '/');
-        }
-
-        return $mentions;
+        return $this->crossProjectMentionPathTranslator->translate(
+            $mentions,
+            $currentProjectId,
+            $mountBasePath
+        );
     }
 
     /**

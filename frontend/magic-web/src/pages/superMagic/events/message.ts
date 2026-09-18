@@ -8,6 +8,15 @@ import {
 import type { TiptapMentionAttributes } from "@/components/business/MentionPanel/tiptap-plugin"
 import type { MentionListItem } from "@/components/business/MentionPanel/tiptap-plugin/types"
 import type { RawMessage } from "@/types/chat/intermediate_message"
+import type { ExportIssue } from "@magic/html2pptx"
+
+export interface SuperMagicPptxExportIssuesPayload {
+	issues: ExportIssue[]
+	/** Whether the export completed with recoverable issues or failed entirely. */
+	status?: "completed-with-issues" | "failed"
+	fileId?: string
+	fileName?: string
+}
 
 /**
  * Message_Scroll_To_Bottom 的可选参数结构。
@@ -82,11 +91,7 @@ export interface SuperMagicCreateNewTopicPayload {
 }
 
 export type SuperMagicWidgetEditorCommandName =
-	| "setInput"
-	| "appendInput"
-	| "clearInput"
-	| "getInput"
-	| "sendMessage"
+	"setInput" | "appendInput" | "clearInput" | "getInput" | "sendMessage"
 
 /** Carries one Widget-only editor request without exposing editor state to the host page. */
 export interface SuperMagicWidgetEditorCommandPayload {

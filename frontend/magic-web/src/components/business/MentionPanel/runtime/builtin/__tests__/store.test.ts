@@ -48,6 +48,10 @@ vi.mock("@/apis", () => ({
 	GlobalApi: {
 		getSettingsGlobalData: vi.fn(),
 	},
+	SuperMagicApi: {
+		getCrewList: vi.fn().mockResolvedValue({ list: [] }),
+		getMentionMicroApps: vi.fn().mockResolvedValue({ list: [] }),
+	},
 }))
 
 vi.mock("@/pages/superMagic/components/MessageList/components/MessageAttachment/utils", () => ({
@@ -302,6 +306,7 @@ describe("MentionPanelStore Sorting Algorithm", () => {
 		store.skillsStore.currentSkillQueryKey = "__default__"
 		mentionPanelStore.setCurrentTabs([])
 		mentionPanelStore.clearActiveCanvasElementsContext()
+		mentionPanelStore.setPinnedCurrentMicroApp(null)
 
 		vi.mocked(CrewApi.getMentionSkills).mockResolvedValue([])
 
@@ -346,6 +351,22 @@ describe("MentionPanelStore Sorting Algorithm", () => {
 			expect(items.some((item) => item.id === "project-files")).toBe(false)
 			expect(uploadFilesIndex).toBe(0)
 			expect(otherProjectFilesIndex).toBe(1)
+		})
+
+		it("puts the pinned current micro app at the start of the root list", async () => {
+			projectFilesStore.setSelectedProject(createTestProject("test-project"))
+			mentionPanelStore.setPinnedCurrentMicroApp({
+				appId: "app-1",
+				appName: "Todo App",
+			})
+
+			const items = await getDefaultItems()
+			expect(items[0]).toMatchObject({
+				id: "app-1",
+				type: MentionItemType.MICRO_APP,
+				name: "Todo App",
+				data: { app_id: "app-1", app_name: "Todo App" },
+			})
 		})
 	})
 
@@ -870,8 +891,10 @@ describe("MentionPanelStore Sorting Algorithm", () => {
 							id: "hero",
 							type: ElementTypeEnum.Image,
 							name: "Hero Layer",
-							src: "./images/hero.png",
 							zIndex: 1,
+							contents: [{ contentId: "main", src: "./images/hero.png" }],
+							activeContentId: "main",
+							mainContentId: "main",
 						},
 					],
 				}),

@@ -851,9 +851,23 @@ export class ElementManager {
 				normalizedUpdates,
 				"crop",
 			)
+			// Content fields can be updated through the complete contents array. Preserve an
+			// explicit nested crop change, including crop: undefined, during resize sync.
+			const hasExplicitNestedCropField =
+				!!activeImageContent &&
+				Array.isArray(normalizedUpdates.contents) &&
+				normalizedUpdates.contents.some((content) => {
+					if (!content || typeof content !== "object") return false
+					const contentRecord = content as { contentId?: string }
+					return (
+						contentRecord.contentId === activeImageContent.contentId &&
+						Object.prototype.hasOwnProperty.call(content, "crop")
+					)
+				})
 			const shouldSyncCropOnResize =
 				!!activeImageContent?.crop &&
 				!hasExplicitCropField &&
+				!hasExplicitNestedCropField &&
 				!options?.skipImageCropResizeSync
 
 			if (shouldSyncCropOnResize && imageData && activeImageContent?.crop) {
@@ -1638,6 +1652,10 @@ export class ElementManager {
 		return Array.from(this.elements.keys())
 	}
 
+	public getElementCount(): number {
+		return this.elements.size
+	}
+
 	/**
 	 * 获取所有顶层元素（不包含子元素）
 	 */
@@ -2254,9 +2272,7 @@ export class ElementManager {
 
 		// 销毁所有子节点，但保留背景
 		const background = this.canvas.contentLayer.findOne(".canvas-background") as
-			| Konva.Shape
-			| Konva.Group
-			| null
+			Konva.Shape | Konva.Group | null
 		this.canvas.contentLayer.destroyChildren()
 
 		// 如果背景存在，重新添加到 layer

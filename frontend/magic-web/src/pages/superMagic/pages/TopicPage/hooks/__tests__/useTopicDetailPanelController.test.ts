@@ -42,16 +42,40 @@ describe("useTopicDetailPanelController", () => {
 		)
 
 		expect(result.current.shouldShowDetailPanel).toBe(false)
+		expect(result.current.hasActiveDetailTab).toBe(false)
 
 		act(() => {
 			result.current.handleActiveDetailTabChange("playback")
 		})
 		expect(result.current.shouldShowDetailPanel).toBe(true)
+		expect(result.current.hasActiveDetailTab).toBe(true)
 
 		act(() => {
 			result.current.clearActiveDetailTabType()
 		})
 		expect(result.current.shouldShowDetailPanel).toBe(false)
+	})
+
+	it("keeps a published micro-app preview open when preserving it across topic changes", () => {
+		const { result } = renderHook(() =>
+			useTopicDetailPanelController({
+				detailRef: { current: { openFileTab: vi.fn(), openPlaybackTab: vi.fn() } },
+				isReadOnly: false,
+				activeFileId: null,
+				setActiveFileId: vi.fn(),
+				handleFileClick: vi.fn(),
+				topicFilesProps: {},
+			}),
+		)
+
+		act(() => {
+			result.current.handleActiveDetailTabChange("micro_app")
+		})
+		act(() => {
+			result.current.clearActiveDetailTabType({ preservePublishedMicroApp: true })
+		})
+
+		expect(result.current.shouldShowDetailPanel).toBe(true)
 	})
 
 	it("keeps the detail panel visible for non-file preview tab types", () => {
@@ -219,6 +243,76 @@ describe("useTopicDetailPanelController", () => {
 			vi.advanceTimersByTime(101)
 		})
 		expect(openPlaybackTab).toHaveBeenCalledWith({ toolData, forceActivate: true })
+	})
+
+	it("opens a published micro-app tab from the shared mention event", () => {
+		const openMicroAppTab = vi.fn()
+		const detailRef = {
+			current: {
+				openFileTab: vi.fn(),
+				openPlaybackTab: vi.fn(),
+				openMicroAppTab,
+			},
+		}
+
+		const { result } = renderHook(() =>
+			useTopicDetailPanelController({
+				detailRef,
+				isReadOnly: false,
+				activeFileId: null,
+				setActiveFileId: vi.fn(),
+				handleFileClick: vi.fn(),
+				topicFilesProps: {},
+			}),
+		)
+
+		act(() => {
+			pubsub.publish(PubSubEvents.Open_Micro_App_Tab, {
+				appId: "app-1",
+				appName: "内购",
+			})
+			vi.advanceTimersByTime(101)
+		})
+
+		expect(result.current.shouldShowDetailPanel).toBe(true)
+		expect(openMicroAppTab).toHaveBeenCalledWith({
+			appId: "app-1",
+			appName: "内购",
+		})
+	})
+
+	it("skips embedded micro-app tab events when mobile popup owns the preview", () => {
+		const openMicroAppTab = vi.fn()
+		const detailRef = {
+			current: {
+				openFileTab: vi.fn(),
+				openPlaybackTab: vi.fn(),
+				openMicroAppTab,
+			},
+		}
+
+		const { result } = renderHook(() =>
+			useTopicDetailPanelController({
+				detailRef,
+				isReadOnly: false,
+				activeFileId: null,
+				setActiveFileId: vi.fn(),
+				handleFileClick: vi.fn(),
+				topicFilesProps: {},
+				subscribeMicroAppTab: false,
+			}),
+		)
+
+		act(() => {
+			pubsub.publish(PubSubEvents.Open_Micro_App_Tab, {
+				appId: "app-1",
+				appName: "内购",
+			})
+			vi.advanceTimersByTime(101)
+		})
+
+		expect(result.current.shouldShowDetailPanel).toBe(false)
+		expect(openMicroAppTab).not.toHaveBeenCalled()
 	})
 
 	it("keeps the detail panel when Open_File_Tab fails after file tab desync", () => {

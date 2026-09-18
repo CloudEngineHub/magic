@@ -453,7 +453,6 @@ const TopicFilesPanel = forwardRef<TopicFilesPanelRef, TopicFilesPanelProps>(
 		// 	handleDeleteItem: () => {},
 		// 	handleDownloadOriginal: () => {},
 		// 	handleDownloadPdf: () => {},
-		// 	handleDownloadPpt: () => {},
 		// 	handleOpenFile: () => {},
 		// 	handleStartRename: () => {},
 		// 	handleAddToCurrentChat: () => {},

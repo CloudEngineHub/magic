@@ -4,27 +4,32 @@
  * Add a mode-specific constant below when a new composer contains extra or specialized UI;
  * do not raise this shared value unless every consumer has the same layout contract.
  */
-export const DEFAULT_COMPOSER_MIN_INPUT_HEIGHT = 260
-/** Keep the legacy name available for specialized composer consumers. */
-export const SPECIALIZED_COMPOSER_MIN_INPUT_HEIGHT = DEFAULT_COMPOSER_MIN_INPUT_HEIGHT
+/** Minimum height for the ordinary composer. */
+export const DEFAULT_COMPOSER_MIN_INPUT_HEIGHT = 220
+/** Keep specialized composer controls readable at their larger fixed height. */
+export const SPECIALIZED_COMPOSER_MIN_INPUT_HEIGHT = 260
+/** Reserve enough space for video production controls. */
+export const VIDEO_PRODUCTION_COMPOSER_MIN_INPUT_HEIGHT = 274
 /** Reserve enough vertical space for the PPT editor and its template controls. */
-export const PPT_COMPOSER_MIN_INPUT_HEIGHT = 320
+export const PPT_COMPOSER_MIN_INPUT_HEIGHT = 274
 
 /** Resolve the shared minimum height while keeping PPT's larger control set explicit. */
 export function resolveComposerMinInputHeight({
 	isPptMode,
-	isSelfMediaMode,
-	isRecordSummaryMode,
+	isVideoProductionMode,
+	isSpecializedMode,
 }: {
 	isPptMode: boolean
-	isSelfMediaMode: boolean
-	isRecordSummaryMode: boolean
+	isVideoProductionMode: boolean
+	isSpecializedMode: boolean
 }) {
 	// PPT has the most vertically demanding controls and must win if multiple flags are true.
 	if (isPptMode) return PPT_COMPOSER_MIN_INPUT_HEIGHT
-	// All non-PPT composers share the same floor so scene presets cannot overlap the editor.
-	if (isSelfMediaMode || isRecordSummaryMode) return SPECIALIZED_COMPOSER_MIN_INPUT_HEIGHT
-	return DEFAULT_COMPOSER_MIN_INPUT_HEIGHT
+	// Video production needs additional room for its configuration controls.
+	if (isVideoProductionMode) return VIDEO_PRODUCTION_COMPOSER_MIN_INPUT_HEIGHT
+	// Keep existing specialized controls above the ordinary composer floor.
+	if (isSpecializedMode) return SPECIALIZED_COMPOSER_MIN_INPUT_HEIGHT
+	return undefined
 }
 
 export const CONVERSATION_INPUT_HEIGHT_CONFIG = {

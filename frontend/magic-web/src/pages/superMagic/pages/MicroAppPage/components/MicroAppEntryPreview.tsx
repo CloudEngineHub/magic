@@ -4,8 +4,7 @@ import { useTranslation } from "react-i18next"
 
 import type { AttachmentItem } from "@/pages/superMagic/components/TopicFilesButton/hooks"
 import { DetailType } from "@/pages/superMagic/components/Detail/types"
-import type { ProjectListItem, Topic } from "@/pages/superMagic/pages/Workspace/types"
-import type { TopicStore } from "@/pages/superMagic/stores/core/topic"
+import type { ProjectListItem } from "@/pages/superMagic/pages/Workspace/types"
 import { MicroAppEmptyIllustration } from "@/pages/superMagic/components/MicroAppStateIllustration"
 import MicroAppBuildingPreview from "./MicroAppBuildingPreview"
 import MicroAppPhonePreviewFrame from "./MicroAppPhonePreviewFrame"
@@ -20,14 +19,14 @@ export interface MicroAppEntryPreviewProps {
 	attachments: AttachmentItem[]
 	attachmentList: AttachmentItem[]
 	projectId?: string
-	topicStore?: TopicStore
 	selectedProject: ProjectListItem | null
-	selectedTopic?: Topic | null
 	allowEdit: boolean
 	onOpenFile?: (fileItem?: unknown) => void
 	viewMode?: MicroAppEntryPreviewMode
 	refreshKey?: number
 	storageMarkerId?: string
+	microAppId?: string
+	microAppName?: string
 	onRegisterAIEdit?: (handler: (() => void) | null) => void
 	onAIEditActiveChange?: (active: boolean) => void
 	onRegisterDevConsoleToggle?: (handler: (() => void) | null) => void
@@ -56,14 +55,14 @@ export default function MicroAppEntryPreview({
 	attachments,
 	attachmentList,
 	projectId,
-	topicStore,
 	selectedProject,
-	selectedTopic,
 	allowEdit,
 	onOpenFile,
 	viewMode = "desktop",
 	refreshKey = 0,
 	storageMarkerId,
+	microAppId,
+	microAppName,
 	onRegisterAIEdit,
 	onAIEditActiveChange,
 	onRegisterDevConsoleToggle,
@@ -83,7 +82,7 @@ export default function MicroAppEntryPreview({
 
 		return (
 			<div
-				className="flex h-full min-h-[280px] flex-col items-center justify-center px-6 text-center"
+				className="flex h-full min-h-[280px] w-full flex-col items-center justify-center px-6 text-center"
 				data-testid={emptyTestId}
 			>
 				<MicroAppEmptyIllustration size="md" />
@@ -105,11 +104,11 @@ export default function MicroAppEntryPreview({
 			attachments={attachments}
 			attachmentList={attachmentList}
 			projectId={projectId}
-			topicStore={topicStore}
 			selectedProject={selectedProject}
-			selectedTopic={selectedTopic}
 			activeFileId={entryData.file_id}
 			virtualStorageMarkerId={storageMarkerId}
+			microAppId={microAppId}
+			microAppName={microAppName}
 			updatedAt={entryData.updated_at}
 			allowEdit={allowEdit}
 			// 自己模拟手机壳，不复用原来的viewMode

@@ -1,0 +1,237 @@
+import { Plus, RefreshCw, RotateCcw } from "lucide-react"
+import { useRef, useState } from "react"
+import { useTranslation } from "react-i18next"
+import { toast } from "sonner"
+import { useIsFetching, useQueryClient } from "@tanstack/react-query"
+import { DeleteConfirmDialog } from "@magic-admin-v2/components/delete-confirm-dialog"
+import { ListShell } from "@magic-admin-v2/components/list-shell"
+import { Button } from "@magic-admin-v2/components/ui/button"
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@magic-admin-v2/components/ui/tabs"
+import { PERMISSION_KEY_MAP } from "@magic-admin-v2/constants/permissions"
+import {
+	CategoryManager,
+	type CategoryManagerHandle,
+} from "@magic-admin-v2/features/platform-slides-template/components/category-manager"
+import {
+	TagManager,
+	type TagManagerHandle,
+} from "@magic-admin-v2/features/platform-slides-template/components/tag-manager"
+import { TemplateEditorSheet } from "@magic-admin-v2/features/platform-slides-template/components/template-editor-sheet"
+import {
+	TemplateLibrary,
+	type TemplateLibraryHandle,
+} from "@magic-admin-v2/features/platform-slides-template/components/template-library"
+import {
+	useSlidesTemplateCategoryMutations,
+	useSlidesTemplateMutations,
+	useSlidesTemplateTagMutations,
+} from "@magic-admin-v2/features/platform-slides-template/mutations"
+import { platformSlidesTemplateKeys } from "@magic-admin-v2/features/platform-slides-template/queries"
+import type {
+	SlidesTemplate,
+	SlidesTemplateCategory,
+	SlidesTemplateTag,
+} from "@magic-admin-v2/features/platform-slides-template/types"
+import {
+	isSystemSlidesTemplate,
+	resolveSlidesTemplateCategoryName,
+	resolveSlidesTemplateTagName,
+	resolveSlidesTemplateTitle,
+} from "@magic-admin-v2/features/platform-slides-template/utils"
+import { allowMagic } from "@magic-admin-v2/routes/access"
+import { useRuntime } from "@magic-admin-v2/runtime/context"
+import { cn } from "@magic-admin-v2/utils/cn"
+
+type TabValue = "categories" | "library" | "tags"
+type DeleteTarget = {
+	id: string
+	kind: "category" | "tag" | "tagGroup" | "template"
+	label: string
+} | null
+
+export default function PlatformSlidesTemplatePage() {
+	const { t } = useTranslation()
+	const { access } = useRuntime()
+	const queryClient = useQueryClient()
+	const isFetching = useIsFetching({ queryKey: platformSlidesTemplateKeys.all }) > 0
+	const templateLibraryRef = useRef<TemplateLibraryHandle>(null)
+	const categoryManagerRef = useRef<CategoryManagerHandle>(null)
+	const tagManagerRef = useRef<TagManagerHandle>(null)
+	const [tab, setTab] = useState<TabValue>("library")
+	const [canCreateTag, setCanCreateTag] = useState(false)
+	const [editorOpen, setEditorOpen] = useState(false)
+	const [selectedTemplate, setSelectedTemplate] = useState<SlidesTemplate | null>(null)
+	const [deleteTarget, setDeleteTarget] = useState<DeleteTarget>(null)
+	const canEdit = Boolean(access && allowMagic(PERMISSION_KEY_MAP.SLIDES_TEMPLATE_EDIT)(access))
+	const templateMutations = useSlidesTemplateMutations()
+	const categoryMutations = useSlidesTemplateCategoryMutations()
+	const tagMutations = useSlidesTemplateTagMutations()
+	const isDeletePending =
+		deleteTarget?.kind === "template"
+			? templateMutations.delete.isPending
+			: deleteTarget?.kind === "category"
+				? categoryMutations.delete.isPending
+				: deleteTarget?.kind === "tag" || deleteTarget?.kind === "tagGroup"
+					? tagMutations.delete.isPending
+					: false
+
+	const openEditor = (template?: SlidesTemplate) => {
+		if (!canEdit) return
+		if (template && isSystemSlidesTemplate(template)) return
+		setSelectedTemplate(template ?? null)
+		setEditorOpen(true)
+	}
+	const confirmDelete = async () => {
+		if (!deleteTarget || !canEdit) return
+		try {
+			if (deleteTarget.kind === "template")
+				await templateMutations.delete.mutateAsync(deleteTarget.id)
+			else if (deleteTarget.kind === "category")
+				await categoryMutations.delete.mutateAsync(deleteTarget.id)
+			else await tagMutations.delete.mutateAsync(deleteTarget.id)
+			toast.success(t("common.deleteSuccess"))
+			setDeleteTarget(null)
+		} catch (error) {
+			toast.error((error as { message?: string }).message || t("common.requestFailed"))
+		}
+	}
+	const requestTemplateDelete = (record: SlidesTemplate) => {
+		setDeleteTarget({
+			id: record.id,
+			kind: "template",
+			label: resolveSlidesTemplateTitle(record),
+		})
+	}
+	const requestCategoryDelete = (record: SlidesTemplateCategory) => {
+		setDeleteTarget({
+			id: record.id,
+			kind: "category",
+			label: resolveSlidesTemplateCategoryName(record),
+		})
+	}
+	const requestTagDelete = (record: SlidesTemplateTag) => {
+		setDeleteTarget({
+			id: record.id,
+			kind: record.node_type === "group" ? "tagGroup" : "tag",
+			label: resolveSlidesTemplateTagName(record),
+		})
+	}
+	const deleteDialogTitle = !deleteTarget
+		? t("slidesTemplate.delete")
+		: deleteTarget.kind === "template"
+			? t("slidesTemplate.deleteConfirm.templateTitle")
+			: deleteTarget.kind === "category"
+				? t("slidesTemplate.deleteConfirm.categoryTitle")
+				: deleteTarget.kind === "tagGroup"
+					? t("slidesTemplate.deleteConfirm.tagGroupTitle")
+					: t("slidesTemplate.deleteConfirm.tagTitle")
+	const deleteDialogDescription = !deleteTarget
+		? ""
+		: deleteTarget.kind === "template"
+			? t("slidesTemplate.deleteConfirm.templateDescription", {
+					name: deleteTarget.label,
+				})
+			: deleteTarget.kind === "category"
+				? t("slidesTemplate.deleteConfirm.categoryDescription", {
+						name: deleteTarget.label,
+					})
+				: deleteTarget.kind === "tagGroup"
+					? t("slidesTemplate.deleteConfirm.tagGroupDescription", {
+							name: deleteTarget.label,
+						})
+					: t("slidesTemplate.deleteConfirm.tagDescription", {
+							name: deleteTarget.label,
+						})
+	const refresh = () => {
+		void queryClient.invalidateQueries({ queryKey: platformSlidesTemplateKeys.all })
+	}
+	const resetCurrentTab = () => {
+		if (tab === "library") templateLibraryRef.current?.reset()
+		else if (tab === "categories") categoryManagerRef.current?.reset()
+		else tagManagerRef.current?.reset()
+	}
+	const createCurrentTab = () => {
+		if (tab === "library") openEditor()
+		else if (tab === "categories") categoryManagerRef.current?.create()
+		else tagManagerRef.current?.create()
+	}
+	const createLabel =
+		tab === "library"
+			? t("slidesTemplate.add")
+			: tab === "categories"
+				? t("slidesTemplate.createCategory")
+				: t("slidesTemplate.createTag")
+	const createDisabled = !canEdit || (tab === "tags" && !canCreateTag)
+
+	return (
+		<>
+			<ListShell
+				actions={
+					<>
+						<Button onClick={refresh} size="sm" variant="outline">
+							<RefreshCw
+								className={cn("mr-2 size-4", isFetching && "animate-spin")}
+							/>
+							{t("slidesTemplate.refresh")}
+						</Button>
+						<Button onClick={resetCurrentTab} size="sm" variant="outline">
+							<RotateCcw className="mr-2 size-4" />
+							{t("slidesTemplate.reset")}
+						</Button>
+						<Button disabled={createDisabled} onClick={createCurrentTab} size="sm">
+							<Plus className="mr-2 size-4" />
+							{createLabel}
+						</Button>
+					</>
+				}
+				description={t("slidesTemplate.description")}
+				showSeparator={false}
+				title={t("slidesTemplate.title")}
+			>
+			<Tabs onValueChange={(value) => setTab(value as TabValue)} value={tab}>
+				<TabsList>
+					<TabsTrigger value="library">{t("slidesTemplate.library")}</TabsTrigger>
+					<TabsTrigger value="categories">{t("slidesTemplate.categories")}</TabsTrigger>
+					<TabsTrigger value="tags">{t("slidesTemplate.tags")}</TabsTrigger>
+				</TabsList>
+				<TabsContent className="mt-5" value="library">
+					<TemplateLibrary
+						canEdit={canEdit}
+						onDelete={requestTemplateDelete}
+						onEdit={openEditor}
+						ref={templateLibraryRef}
+					/>
+				</TabsContent>
+				<TabsContent className="mt-5" value="categories">
+					<CategoryManager
+						canEdit={canEdit}
+						onDelete={requestCategoryDelete}
+						ref={categoryManagerRef}
+					/>
+				</TabsContent>
+				<TabsContent className="mt-5" value="tags">
+					<TagManager
+						canEdit={canEdit}
+						onCreateAvailabilityChange={setCanCreateTag}
+						onDelete={requestTagDelete}
+						ref={tagManagerRef}
+					/>
+				</TabsContent>
+			</Tabs>
+			</ListShell>
+			<TemplateEditorSheet
+				onOpenChange={setEditorOpen}
+				open={editorOpen}
+				template={selectedTemplate}
+			/>
+			<DeleteConfirmDialog
+				open={Boolean(deleteTarget)}
+				onOpenChange={(open) => !open && setDeleteTarget(null)}
+				title={deleteDialogTitle}
+				description={deleteDialogDescription}
+				isPending={isDeletePending}
+				onConfirm={confirmDelete}
+			/>
+		</>
+	)
+}

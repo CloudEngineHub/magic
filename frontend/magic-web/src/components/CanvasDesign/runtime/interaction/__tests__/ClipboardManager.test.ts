@@ -302,6 +302,50 @@ describe("ClipboardManager frame clipboard trees", () => {
 		})
 	})
 
+	it("keeps source-less image and video placeholders in a multi-element copy", async () => {
+		const validImage = v3<ImageElement>({
+			id: "valid-image",
+			type: "image",
+			src: "source/valid.png",
+			x: 0,
+			y: 0,
+			width: 80,
+			height: 60,
+		})
+		const emptyImage = v3<ImageElement>({
+			id: "empty-image",
+			type: "image",
+			x: 100,
+			y: 0,
+			width: 80,
+			height: 60,
+		})
+		const emptyVideo = v3<VideoElement>({
+			id: "empty-video",
+			type: "video",
+			x: 200,
+			y: 0,
+			width: 80,
+			height: 60,
+		})
+		const getFileInfo = vi.fn(async (path: string) => ({
+			src: `https://example.test/${path}`,
+			fileName: path.split("/").pop() ?? "image.png",
+		}))
+		const manager = createClipboardManager()
+		;(manager.canvas as unknown as { magicConfigManager: unknown }).magicConfigManager = {
+			config: { methods: { getFileInfo } },
+		}
+
+		const result = await manager.collectClipboardFiles([validImage, emptyImage, emptyVideo])
+
+		expect(result.metadata).toEqual([
+			expect.objectContaining({ elementId: validImage.id, role: "element-media" }),
+		])
+		expect(getFileInfo).toHaveBeenCalledTimes(1)
+		expect(getFileInfo).toHaveBeenCalledWith("source/valid.png", { useImageProcess: false })
+	})
+
 	it("collects media metadata from frame children", async () => {
 		const child = v3<ImageElement>({
 			id: "image-child",

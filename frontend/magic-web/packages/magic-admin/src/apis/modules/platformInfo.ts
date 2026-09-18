@@ -11,7 +11,7 @@ export const generatePlatformInfoApi = (client: HttpClient) => {
 
 		/** 修改平台信息 */
 		updatePlatformInfo(data: Partial<PlatformInfo.UpdateParams>) {
-			return client.put<null>(RequestUrl.updatePlatformInfo, data)
+			return client.put<PlatformInfo.Details>(RequestUrl.updatePlatformInfo, data)
 		},
 	}
 }

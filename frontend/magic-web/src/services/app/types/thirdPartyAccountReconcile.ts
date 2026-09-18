@@ -31,10 +31,4 @@ export type RequestThirdPartyAccountConflictDecision = (
 ) => Promise<ThirdPartyAccountConflictDecision>
 
 export type ThirdPartyAccountReconcileResult =
-	| "same-user"
-	| "kept-current"
-	| "switched"
-	| "skipped"
-	| "unsupported"
-	| "stale"
-	| "failed"
+	"same-user" | "kept-current" | "switched" | "skipped" | "unsupported" | "stale" | "failed"

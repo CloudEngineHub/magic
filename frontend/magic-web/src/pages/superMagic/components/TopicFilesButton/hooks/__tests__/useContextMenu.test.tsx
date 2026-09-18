@@ -125,7 +125,6 @@ function createOptions(overrides: Partial<Parameters<typeof useContextMenu>[0]> 
 		handleDeleteItem: vi.fn(),
 		handleDownloadOriginal: vi.fn(),
 		handleDownloadPdf: vi.fn(),
-		handleDownloadPpt: vi.fn(),
 		handleDownloadPptx: vi.fn(),
 		handleOpenFile: vi.fn(),
 		handleStartRename: vi.fn(),

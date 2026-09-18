@@ -7,11 +7,13 @@ export type DashboardTabType =
 	| DataDashboard.AgentTabType
 	| DataDashboard.MemberTabType
 	| DataDashboard.OrganizationTabType
+	| DataDashboard.FileTabType
 
 export type DashboardRow =
 	| DataDashboard.AgentTabRow
 	| DataDashboard.MemberTabRow
 	| DataDashboard.OrganizationTabRow
+	| DataDashboard.FileTabRow
 export interface MetricCardData {
 	key: string
 	label: string
@@ -37,6 +39,10 @@ export type DashboardSummaryRequest =
 			view: typeof VIEW.ConsumptionAnalysis
 			query: DataDashboard.ConsumptionAnalysisQuery
 	  }
+	| {
+			view: typeof VIEW.FileProductionAnalysis
+			query: DataDashboard.FileAnalysisSummaryQuery
+	  }
 
 export type DashboardTabsRequest =
 	| {
@@ -50,4 +56,8 @@ export type DashboardTabsRequest =
 	| {
 			view: typeof VIEW.OrganizationAnalysis
 			query: DataDashboard.OrganizationTabsQuery
+	  }
+	| {
+			view: typeof VIEW.FileProductionAnalysis
+			query: DataDashboard.FileAnalysisTabsQuery
 	  }

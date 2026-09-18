@@ -14,9 +14,11 @@ import {
 	selectToolFile,
 	selectToolDetail,
 } from "../toolDetailSelection"
+import { useMessageListProjectFilesStore } from "@/pages/superMagic/components/MessageList/context"
 
 function ToolCall(props: NodeProps) {
 	const { onSelectDetail } = props
+	const filesStore = useMessageListProjectFilesStore()
 	const node = superMagicStore.getMessageNode(props?.node?.super_message_id) as
 		| {
 				tool?: {
@@ -45,7 +47,10 @@ function ToolCall(props: NodeProps) {
 		if (target.type === "disabled") return
 
 		if (target.type === "design") {
-			const { designProjectId, designProject, elements } = getToolDesignProjectInfo(tool)
+			const { designProjectId, designProject, elements } = getToolDesignProjectInfo(
+				tool,
+				filesStore,
+			)
 			if (!designProjectId) return
 			pubsub.publish(PubSubEvents.Open_File_Tab, {
 				...designProject,
@@ -76,6 +81,7 @@ function ToolCall(props: NodeProps) {
 				detail,
 				target,
 				onSelectDetail,
+				filesStore,
 			})
 		) {
 			return

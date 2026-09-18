@@ -73,6 +73,8 @@ export interface UseIframeFSOptions {
 	confirmProjectDeleteFn?: ConfirmProjectDeleteFn
 	/** 执行高风险能力前的授权检查。 */
 	authorizePermission?: (scope: HtmlPermissionScope) => Promise<boolean>
+	getFileAccess?: () =>
+		import("@/pages/superMagic/fileAccess/fileAccessContext").FileAccessContext | null
 }
 
 export interface UseIframeFSReturn {
@@ -99,6 +101,7 @@ export function useIframeFS(options: UseIframeFSOptions): UseIframeFSReturn {
 		verifyFileFn,
 		confirmProjectDeleteFn,
 		authorizePermission,
+		getFileAccess,
 	} = options
 
 	const serviceRef = useRef<IframeFSService | null>(null)
@@ -130,6 +133,7 @@ export function useIframeFS(options: UseIframeFSOptions): UseIframeFSReturn {
 			verifyFileFn,
 			confirmProjectDeleteFn,
 			authorizePermission,
+			getFileAccess,
 		})
 
 		return () => {
@@ -151,6 +155,7 @@ export function useIframeFS(options: UseIframeFSOptions): UseIframeFSReturn {
 		verifyFileFn,
 		confirmProjectDeleteFn,
 		authorizePermission,
+		getFileAccess,
 	])
 
 	// fileList 变化时仅更新内部引用，避免重建 service（会中断 watch 轮询）

@@ -1,13 +1,19 @@
 import { LayerElement } from "@/components/CanvasDesign/runtime/document/types"
 import projectFilesStore from "@/stores/projectFiles"
 
-export function getToolDesignProjectInfo(tool: unknown) {
+export function getToolDesignProjectInfo(
+	tool: unknown,
+	filesStore: Pick<
+		typeof projectFilesStore,
+		"workspaceFileTree" | "workspaceFilesList"
+	> = projectFilesStore,
+) {
 	const toolData = tool as ToolDesignProjectData
 	const magicProjectJSFile = toolData.attachments?.find(
 		(item) => item.filename === "magic.project.js" || item.file_name === "magic.project.js",
 	)
-	const fileTree = projectFilesStore.workspaceFileTree as unknown as WorkspaceFileItem[]
-	const fileList = projectFilesStore.workspaceFilesList as unknown as WorkspaceFileItem[]
+	const fileTree = filesStore.workspaceFileTree as unknown as WorkspaceFileItem[]
+	const fileList = filesStore.workspaceFilesList as unknown as WorkspaceFileItem[]
 	const designProject = findDesignProjectByMagicProjectFile(
 		magicProjectJSFile,
 		fileTree,

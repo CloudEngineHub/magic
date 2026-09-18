@@ -194,7 +194,7 @@ export function getCustomIndexPath(displayConfig: any): string | undefined {
 }
 
 /**
- * custom / micro-app 文件夹图标配置字符串（display_config.icon，兼容旧字段 display_config.icon_path）。
+ * custom / micro-app / html-app 文件夹图标配置字符串（display_config.icon，兼容旧字段 display_config.icon_path）。
  * 可为：相对文件夹根的路径；或以 http(s) / data: 开头的可直接作为 img src 的地址。
  */
 export function getCustomIcon(displayConfig?: Record<string, unknown> | null): string | undefined {
@@ -223,7 +223,7 @@ export function resolveCustomIconPathToDirectSrc(iconPath: string): string | und
 }
 
 /**
- * 树/列表里「文件」行：合并了 custom/micro-app display_config 时仍可按扩展名作为 MagicFileIcon 回退（无 icon 或远程失败时）
+ * 树/列表里「文件」行：合并了 custom/micro-app/html-app display_config 时仍可按扩展名作为 MagicFileIcon 回退（无 icon 或远程失败时）
  */
 export function getFileTreeIconType(item?: MagicProjectIconContext): string | undefined {
 	const magicProjectIconType = resolveMagicProjectIconType(item)

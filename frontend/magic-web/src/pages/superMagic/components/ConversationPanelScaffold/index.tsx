@@ -1,5 +1,9 @@
 import { useIsMobile } from "@/hooks/useIsMobile"
 import { cn } from "@/utils/cn"
+import {
+	CONVERSATION_INPUT_HEIGHT_CONFIG,
+	DEFAULT_COMPOSER_MIN_INPUT_HEIGHT,
+} from "@/pages/superMagic/components/ConversationInputResize/constants"
 import { INPUT_CONTAINER_MIN_HEIGHT } from "@/pages/superMagic/components/MainInputContainer/constants"
 import MessageList, { MessageListProvider } from "@/pages/superMagic/components/MessageList"
 import type { MessageListContextState } from "@/pages/superMagic/components/MessageList/context"
@@ -22,7 +26,6 @@ import {
 } from "react"
 import ConversationInputResizeHandle from "@/pages/superMagic/components/ConversationInputResize/ConversationInputResizeHandle"
 import { ConversationInputLayoutProvider } from "@/pages/superMagic/components/ConversationInputResize/context"
-import { CONVERSATION_INPUT_HEIGHT_CONFIG } from "@/pages/superMagic/components/ConversationInputResize/constants"
 import { useConversationInputHeight } from "@/pages/superMagic/components/ConversationInputResize/useConversationInputHeight"
 
 interface ConversationPanelScaffoldProps {
@@ -157,14 +160,16 @@ function ConversationPanelScaffold({
 	const editorLayoutRef = useRef<HTMLDivElement>(null)
 	const isCenteredEmptyStateVisible =
 		shouldShowCenteredEmptyState || shouldPreserveCenteredEmptyState
+	const inputEnabled = !isMobile && !isConversationPanelCollapsed && !isCenteredEmptyStateVisible
 	const inputHeight = useConversationInputHeight({
 		scope,
-		enabled: !isMobile && !isConversationPanelCollapsed && !isCenteredEmptyStateVisible,
+		enabled: inputEnabled,
 		containerRef: editorLayoutRef,
 		availableRef: bodyRef,
+		minHeight: DEFAULT_COMPOSER_MIN_INPUT_HEIGHT,
 		...CONVERSATION_INPUT_HEIGHT_CONFIG,
 	})
-	const effectiveInputMinHeight = inputHeight.minHeight ?? 200
+	const effectiveInputMinHeight = inputHeight.minHeight ?? DEFAULT_COMPOSER_MIN_INPUT_HEIGHT
 	const inputLayoutContext = useMemo(
 		() => ({
 			fillHeight: inputHeight.fillHeight,

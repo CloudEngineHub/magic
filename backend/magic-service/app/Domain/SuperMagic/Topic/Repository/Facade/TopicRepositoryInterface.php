@@ -54,6 +54,15 @@ interface TopicRepositoryInterface
     ): array;
 
     /**
+     * 根据条件获取话题ID列表（仅取 id，不构造实体）.
+     *
+     * @param array $conditions 查询条件，如 ['project_id' => 1, 'workspace_id' => 2]
+     * @param bool $withTrashed 是否包含已软删的话题
+     * @return int[] 话题ID列表
+     */
+    public function getTopicIdsByCondition(array $conditions, bool $withTrashed = false): array;
+
+    /**
      * 创建话题.
      */
     public function createTopic(TopicEntity $topicEntity): TopicEntity;

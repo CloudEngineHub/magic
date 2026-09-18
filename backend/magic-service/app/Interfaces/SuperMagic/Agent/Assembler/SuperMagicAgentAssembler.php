@@ -52,7 +52,7 @@ class SuperMagicAgentAssembler
         $DTO->setId($superMagicAgentEntity->getCode());
         $DTO->setCode($superMagicAgentEntity->getCode());
         $DTO->setName($superMagicAgentEntity->getI18nName($language));
-        $DTO->setDescription($superMagicAgentEntity->getI18nName($language));
+        $DTO->setDescription($superMagicAgentEntity->getI18nDescription($language));
         $DTO->setIcon($superMagicAgentEntity->getIcon());
         $DTO->setIconType($superMagicAgentEntity->getIconType());
         $DTO->setPrompt($superMagicAgentEntity->getPrompt());
@@ -102,10 +102,11 @@ class SuperMagicAgentAssembler
 
     public static function createListDTO(SuperMagicAgentEntity $superMagicAgentEntity): SuperMagicAgentListDTO
     {
+        $language = CoContext::getLanguage();
         $DTO = new SuperMagicAgentListDTO();
         $DTO->setId($superMagicAgentEntity->getCode());
-        $DTO->setName($superMagicAgentEntity->getName());
-        $DTO->setDescription($superMagicAgentEntity->getDescription());
+        $DTO->setName($superMagicAgentEntity->getI18nName($language));
+        $DTO->setDescription($superMagicAgentEntity->getI18nDescription($language));
         $DTO->setIcon($superMagicAgentEntity->getIcon());
         $DTO->setIconType($superMagicAgentEntity->getIconType());
         $DTO->setType($superMagicAgentEntity->getType()->value);
@@ -514,10 +515,11 @@ class SuperMagicAgentAssembler
         ?string $scope = null,
         ?array $organizationInfo = null
     ): AgentListItemDTO {
+        $language = CoContext::getLanguage();
         $features = [];
         foreach ($playbooks as $playbook) {
             $features[] = [
-                'name_i18n' => $playbook->getNameI18n(),
+                'name' => $playbook->getI18nName($language),
                 'icon' => $playbook->getIcon(),
                 'theme_color' => $playbook->getThemeColor(),
             ];
@@ -536,13 +538,15 @@ class SuperMagicAgentAssembler
             id: $agent->getId(),
             code: $agent->getCode(),
             projectId: $agent->getProjectId() === null ? null : (string) $agent->getProjectId(),
-            nameI18n: $agent->getNameI18n() ?? [],
-            roleI18n: $agent->getRoleI18n() ?? [],
-            descriptionI18n: $agent->getDescriptionI18n() ?? [],
+            name: $agent->getI18nName($language),
+            role: $agent->getI18nRole($language),
+            description: $agent->getI18nDescription($language),
             icon: $agent->getIcon(),
             iconType: $agent->getIconType(),
             playbooks: $features,
             sourceType: $agent->getSourceType()->value,
+            // `source` is the scalar replacement for the removed source_i18n field; keep source_type for compatibility.
+            source: $agent->getSourceType()->value,
             enabled: $agent->getEnabled() ?? false,
             isStoreOffline: false,
             latestVersionCode: $latestVersionCode,

@@ -56,6 +56,8 @@ interface MicroAppRepositoryInterface
         MicroAppListScope $scope,
         string $keyword,
         int $page,
-        int $pageSize
+        int $pageSize,
+        bool $publishedOnly = false,
+        bool $mentionableOnly = false,
     ): array;
 }

@@ -49,6 +49,8 @@ import {
 } from "@/pages/superMagic/pages/AudioRecordings/utils/build-recording-share-selection"
 import { isAudioProjectMode } from "@/services/audioRecordings/audioProjectMode"
 import { resolveShareDocumentDependencies } from "@/pages/superMagic/components/Share/FileShareModal/hooks/resolveShareDocumentDependencies"
+import { useShareTypePermissions } from "@/pages/superMagic/components/Share/hooks/useShareTypePermissions"
+import { useSharePermissionResource } from "@/pages/superMagic/components/Share/SharePermissionResourceContext"
 
 /**
  * Constructs the base default values for the share form.
@@ -501,10 +503,41 @@ export function useProjectShareSheet({
 	const [userDefaultOpenFileId, setUserDefaultOpenFileId] = useState<string | undefined>()
 	const [defaultOpenFilePickerOpen, setDefaultOpenFilePickerOpen] = useState(false)
 	const activeMode = editingShareMode || effectiveMode
+	const sharePermissionResource = useSharePermissionResource()
+	const shareTypePermissions = useShareTypePermissions(sharePermissionResource)
+	// The owning project or micro-app page supplies one permission group for both whole-resource
+	// and child-file shares, so every mobile entry point exposes the same administrator choices.
+	const shouldControlShareType = activeMode === "project" || activeMode === "file"
+	const permittedShareTypes = useMemo(() => {
+		if (!shouldControlShareType || shareTypePermissions.isLoading) return undefined
+		return shareTypePermissions.permittedShareTypes
+	}, [
+		shareTypePermissions.isLoading,
+		shareTypePermissions.permittedShareTypes,
+		shouldControlShareType,
+	])
+	const isSelectedShareTypePermitted =
+		permittedShareTypes === undefined || permittedShareTypes.includes(formState.shareType)
 	const recordingDependencyAnalysisEnabled =
 		isAudioRecordingScene &&
 		Boolean(dependencyAttachments) &&
 		Boolean(dependencyBundleRootPath?.trim())
+
+	useEffect(() => {
+		if (
+			!open ||
+			editResourceId ||
+			permittedShareTypes === undefined ||
+			permittedShareTypes.length === 0
+		) {
+			return
+		}
+
+		setFormState((prev) => {
+			if (permittedShareTypes.includes(prev.shareType)) return prev
+			return { ...prev, shareType: permittedShareTypes[0] }
+		})
+	}, [editResourceId, formState.shareType, open, permittedShareTypes])
 
 	useEffect(() => {
 		if (!recordingDependencyAnalysisEnabled || !dependencyAttachments) {
@@ -711,8 +744,16 @@ export function useProjectShareSheet({
 					? initialSelectedShare.file_ids || []
 					: defaultSelectedFileIds || [],
 		)
+		const initialFormState = createInitialFormState(isAudioRecordingScene)
+		const initialShareType =
+			permittedShareTypes?.length && !permittedShareTypes.includes(initialFormState.shareType)
+				? permittedShareTypes[0]
+				: initialFormState.shareType
 		setFormState({
-			...createInitialFormState(isAudioRecordingScene),
+			...initialFormState,
+			// The open-reset effect runs after permission normalization on first mount;
+			// apply the permission-aware default here so it cannot restore a hidden option.
+			shareType: initialShareType,
 			shareName: initialSelectedShare
 				? ""
 				: buildDefaultShareNameForSheet({
@@ -1008,6 +1049,10 @@ export function useProjectShareSheet({
 
 	const submitCreateShare = useMemoizedFn(async () => {
 		const isEditing = Boolean(editResourceId)
+		if (shouldControlShareType && !isSelectedShareTypePermitted) {
+			magicToast.error(t("share.currentShareMethodUnavailable"))
+			return
+		}
 		const selectedIdsForSubmission = [...effectiveSelectedFileIds]
 		// Desktop behavior keeps the selected default file in the share scope even when it was picked from elsewhere.
 		if (
@@ -1365,6 +1410,9 @@ export function useProjectShareSheet({
 			activeMode === "project"
 				? shareProject.isCheckingShare
 				: recordingDependencyAnalysisLoading,
+		permittedShareTypes,
+		shareTypePermissionLoading: shouldControlShareType && shareTypePermissions.isLoading,
+		isSelectedShareTypePermitted,
 		advancedOpen,
 		defaultSelectedFileIds: effectiveSelectedFileIds,
 		selectedFileIds,

@@ -377,6 +377,7 @@ export const useStyles = createStyles(({ token }) => ({
 		flexWrap: "nowrap",
 	},
 	fileItemWithTag: {
+		height: 30,
 		"@media (max-width: 768px)": {
 			height: "auto",
 			minHeight: 40,

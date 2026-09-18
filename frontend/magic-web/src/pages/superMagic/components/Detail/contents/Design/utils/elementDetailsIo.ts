@@ -1,5 +1,6 @@
 import { SuperMagicApi } from "@/apis"
 import { getFileContentById } from "@/pages/superMagic/utils/api"
+import type { FileApi } from "@/pages/superMagic/fileAccess/fileApi"
 import { isEqual } from "lodash-es"
 import type { FileItem } from "@/pages/superMagic/components/Detail/components/FilesViewer/types"
 import type { DesignData } from "../types"
@@ -98,15 +99,26 @@ interface ReadElementDetailsResult {
 	unsupported: boolean
 }
 
+function readElementDetailsFileContent(
+	fileId: string,
+	fileApi?: FileApi,
+): Promise<string | ArrayBuffer | Blob> {
+	// Bound FileApi forwarding share/session identity; host-only callers fall back
+	// to the unbound leaf (session identity is the intentional default there).
+	return fileApi
+		? fileApi.getFileContentById(fileId, { responseType: "text" })
+		: getFileContentById(fileId, { responseType: "text" })
+}
+
 async function readElementDetailsByFile(
 	fileItem: FileItem | null,
+	fileApi?: FileApi,
 ): Promise<ReadElementDetailsResult> {
 	if (!fileItem?.file_id)
 		return { doc: emptyElementDetailsDoc(), exists: false, unsupported: false }
 	try {
-		const content = (await getFileContentById(fileItem.file_id, {
-			responseType: "text",
-		})) as string | null
+		const content = (await readElementDetailsFileContent(fileItem.file_id, fileApi)) as
+			string | null
 		if (!content || !content.trim())
 			return { doc: emptyElementDetailsDoc(), exists: true, unsupported: false }
 		const raw = JSON.parse(content)
@@ -120,26 +132,13 @@ async function readElementDetailsByFile(
 	}
 }
 
-async function readComparableElementDetailsByFile(
-	fileItem: FileItem | null,
-): Promise<unknown | null> {
-	if (!fileItem?.file_id) return emptyElementDetailsDoc()
-	try {
-		const content = (await getFileContentById(fileItem.file_id, {
-			responseType: "text",
-		})) as string | null
-		if (!content || !content.trim()) return emptyElementDetailsDoc()
-		return JSON.parse(content)
-	} catch {
-		return null
-	}
-}
-
 export interface ElementDetailsContext {
 	attachments?: FileItem[]
 	flatAttachments?: FileItem[]
 	mainFileId: string | null
 	projectId?: string
+	/** Bound file client injected at the Design boundary; omitted on host-only paths. */
+	fileApi?: FileApi
 }
 
 export interface HydrateElementDetailsResult {
@@ -163,8 +162,8 @@ export async function getElementDetailsSidecarStatus(
 		ELEMENT_DETAILS_USER_FILENAME,
 	)
 	const [agentResult, userResult] = await Promise.all([
-		readElementDetailsByFile(agentLookup.fileItem),
-		readElementDetailsByFile(userLookup.fileItem),
+		readElementDetailsByFile(agentLookup.fileItem, ctx.fileApi),
+		readElementDetailsByFile(userLookup.fileItem, ctx.fileApi),
 	])
 	if (agentResult.unsupported || userResult.unsupported) return "unsupported"
 	return agentResult.exists || userResult.exists ? "loaded" : "missing"
@@ -200,8 +199,8 @@ export async function hydrateDesignDataDetails(
 	)
 
 	const [agentResult, userResult] = await Promise.all([
-		readElementDetailsByFile(agentLookup.fileItem),
-		readElementDetailsByFile(userLookup.fileItem),
+		readElementDetailsByFile(agentLookup.fileItem, ctx.fileApi),
+		readElementDetailsByFile(userLookup.fileItem, ctx.fileApi),
 	])
 	if (agentResult.unsupported || userResult.unsupported) {
 		setHydratedElementDetailsProvenance(designData, {})
@@ -225,14 +224,17 @@ export async function hydrateDesignDataDetails(
 }
 
 /**
- * v3 项目：根据内存元素树写出 element-details-user.json。
- * 仅写用户文件，永不触碰后端的 element-details.json。
+ * v3 项目：只写 element-details-user.json。
+ * agent 来源 Content 排除；画布新建写入 user 文件。永不写 element-details.json。
  */
 export async function writeUserElementDetails(
 	designData: DesignData,
 	ctx: ElementDetailsContext,
+	provenance?: ElementDetailsProvenance,
 ): Promise<"persisted" | "unchanged" | "skipped" | "blocked-unsupported" | "failed"> {
 	if (!isContentDesignData(designData) || !ctx.mainFileId) return "skipped"
+
+	const resolvedProvenance = provenance ?? getHydratedElementDetailsProvenance(designData) ?? {}
 
 	const agentLookup = findSiblingFile(
 		ctx.attachments,
@@ -240,13 +242,6 @@ export async function writeUserElementDetails(
 		ctx.mainFileId,
 		ELEMENT_DETAILS_FILENAME,
 	)
-	const agentBaselineResult = await readElementDetailsByFile(agentLookup.fileItem)
-	if (agentBaselineResult.unsupported) return "blocked-unsupported"
-	const agentBaseline = agentBaselineResult.doc
-
-	const userDoc = buildUserElementDetailsDoc(designData.canvas?.elements, agentBaseline)
-	const hasEntries = Object.keys(userDoc.elements).length > 0
-
 	const userLookup = findSiblingFile(
 		ctx.attachments,
 		ctx.flatAttachments,
@@ -254,17 +249,25 @@ export async function writeUserElementDetails(
 		ELEMENT_DETAILS_USER_FILENAME,
 	)
 
+	const [agentBaselineResult, userBaselineResult] = await Promise.all([
+		readElementDetailsByFile(agentLookup.fileItem, ctx.fileApi),
+		readElementDetailsByFile(userLookup.fileItem, ctx.fileApi),
+	])
+	if (agentBaselineResult.unsupported || userBaselineResult.unsupported)
+		return "blocked-unsupported"
+
+	const userDoc = buildUserElementDetailsDoc(
+		designData.canvas?.elements,
+		resolvedProvenance,
+		agentBaselineResult.doc,
+	)
+	const hasEntries = Object.keys(userDoc.elements).length > 0
 	let userFileId = userLookup.fileItem?.file_id ?? null
 
-	// 用户文件不存在且当前没有任何用户重字段，无需创建空文件
 	if (!userFileId && !hasEntries) return "skipped"
 
 	if (userFileId) {
-		const currentUserRaw = await readComparableElementDetailsByFile(userLookup.fileItem)
-		if (currentUserRaw === null) return "failed"
-		if (hasUnsupportedElementDetailsStructure(currentUserRaw)) return "blocked-unsupported"
-		const currentUserDoc = normalizeElementDetailsDoc(currentUserRaw)
-		if (isElementDetailsContentEqual(currentUserDoc, userDoc)) return "unchanged"
+		if (isElementDetailsContentEqual(userBaselineResult.doc, userDoc)) return "unchanged"
 	}
 
 	if (!userFileId) {
@@ -286,9 +289,14 @@ export async function writeUserElementDetails(
 
 	if (!userFileId) return "failed"
 
-	const content = JSON.stringify(userDoc, null, 2)
 	try {
-		await SuperMagicApi.saveFileContent([{ file_id: userFileId, content, enable_shadow: true }])
+		await SuperMagicApi.saveFileContent([
+			{
+				file_id: userFileId,
+				content: JSON.stringify(userDoc, null, 2),
+				enable_shadow: true,
+			},
+		])
 		return "persisted"
 	} catch {
 		return "failed"

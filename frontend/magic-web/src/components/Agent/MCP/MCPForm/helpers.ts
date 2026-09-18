@@ -28,6 +28,7 @@ export const enum MCPFormField {
 	ClientUrl = "client_url",
 	Scope = "scope",
 	AuthorizationUrl = "authorization_url",
+	AuthorizationMethod = "authorization_method",
 }
 
 interface JsonObject {
@@ -108,6 +109,7 @@ export function MCPConfigToJson(values: JsonObject) {
 			[MCPFormField.OAuthConfig, MCPFormField.ClientId],
 			[MCPFormField.OAuthConfig, MCPFormField.ClientUrl],
 			[MCPFormField.OAuthConfig, MCPFormField.Scope],
+			[MCPFormField.OAuthConfig, MCPFormField.AuthorizationMethod],
 		].forEach((k) => setServiceConfig(config, k))
 		;[MCPFormField.Header, MCPFormField.Env].forEach((k) => setObject(config, k))
 

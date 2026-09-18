@@ -7,6 +7,7 @@ declare(strict_types=1);
 
 namespace HyperfTest\Cases\Application\Provider\Service;
 
+use App\Application\ModelGateway\Service\ConnectivityTest\LLMConnectivityTestMessageBuilder;
 use App\Application\ModelGateway\Service\LLMAppService;
 use App\Application\Provider\Service\AdminProviderAppService;
 use App\Domain\ModelGateway\Entity\Dto\CompletionDTO;
@@ -40,6 +41,7 @@ class AdminProviderAppServiceConnectivityTest extends TestCase
 
         $this->assertCount(1, $requests);
         $this->assertSame('你好', $requests[0]->getMessages()[0]['content']);
+        $this->assertSame([], $requests[0]->getTools());
         $this->assertFalse($requests[0]->isEnableHighAvailability());
         $this->assertSame(-1, $requests[0]->getMaxTokens());
     }
@@ -50,6 +52,7 @@ class AdminProviderAppServiceConnectivityTest extends TestCase
 
         $this->assertCount(2, $requests);
         $this->assertSame('你好', $requests[0]->getMessages()[0]['content']);
+        $this->assertSame([], $requests[0]->getTools());
         $this->assertSame('image_url', $requests[1]->getMessages()[0]['content'][1]['type']);
         $this->assertStringStartsWith(
             'data:image/jpeg;base64,',
@@ -59,10 +62,22 @@ class AdminProviderAppServiceConnectivityTest extends TestCase
         $this->assertSame(64, $requests[1]->getMaxTokens());
     }
 
+    public function testSavedFunctionCallModelIncludesConnectivityTestTool(): void
+    {
+        $requests = $this->runConnectivityTest(false, true);
+
+        $this->assertCount(1, $requests);
+        $this->assertSame('你好', $requests[0]->getMessages()[0]['content']);
+        $this->assertSame(
+            LLMConnectivityTestMessageBuilder::buildFunctionCallTools(),
+            $requests[0]->getTools()
+        );
+    }
+
     /**
      * @return CompletionDTO[]
      */
-    private function runConnectivityTest(bool $supportMultiModal): array
+    private function runConnectivityTest(bool $supportMultiModal, bool $supportFunction = false): array
     {
         $requests = [];
         /** @var MockInterface&ResponseInterface $response */
@@ -79,7 +94,10 @@ class AdminProviderAppServiceConnectivityTest extends TestCase
 
         $providerModelEntity = (new ProviderModelEntity())
             ->setId(123)
-            ->setConfig(['support_multi_modal' => $supportMultiModal]);
+            ->setConfig([
+                'support_multi_modal' => $supportMultiModal,
+                'support_function' => $supportFunction,
+            ]);
         $authorization = (new MagicUserAuthorization())
             ->setId('user-1')
             ->setOrganizationCode('organization-1');

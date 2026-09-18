@@ -1,6 +1,6 @@
 import { resolveFilePresentation } from "@/pages/superMagic/components/TopicFilesButton/utils/file-presentation"
 import { observer } from "mobx-react-lite"
-import { useEffect, useState, type ReactNode } from "react"
+import { useEffect, useState, type MouseEvent, type ReactNode } from "react"
 import { useTranslation } from "react-i18next"
 import projectFilesStore from "@/stores/projectFiles"
 import { cn } from "@/utils/cn"
@@ -19,12 +19,19 @@ import { normalizeInlineStyle } from "../normalizeInlineStyle"
 import { FileReference, getFileExtensionFromPath } from "./FileReference"
 import { UserFileReference } from "./UserFileReference"
 import { IconExternalLink } from "@tabler/icons-react"
+import MagicTooltip from "@/components/base/MagicTooltip"
 import { MentionItemType } from "@/components/business/MentionPanel/types"
 import type { TiptapMentionAttributes } from "@/components/business/MentionPanel/tiptap-plugin"
 import {
 	createDirectoryMentionData,
 	createProjectFileMentionData,
 } from "@/components/business/MentionPanel/utils/projectReferenceMention"
+import {
+	isCurrentMicroAppLink,
+	normalizeMicroAppHref,
+	openMicroAppTab,
+	parseMicroAppLink,
+} from "@/pages/superMagic/components/MessageList/utils/openMicroAppTab"
 
 // 授权链接这类超长 URL 没有空格，nowrap + ellipsis 会把消息气泡撑出去。
 const markdownLinkClassName =
@@ -69,7 +76,12 @@ export const MarkdownLink = observer((props: MarkdownLinkProps) => {
 		),
 	)
 	const normalizedStyle = normalizeInlineStyle(rawAttributes.style)
-	const attachments = resolvedProjectFilesStore.workspaceFilesList
+	const microAppId = parseMicroAppLink(normalizedHref)
+	// Keep the custom scheme out of the anchor href. Browsers treat it as a relative
+	// path in the micro-app route, which produces `/micro-app/micro_app://...`.
+	const microAppHref = normalizeMicroAppHref(normalizedHref)
+	const isCurrentMicroApp = isCurrentMicroAppLink(microAppId)
+	const attachments = resolvedProjectFilesStore?.workspaceFilesList ?? []
 	const { target: fileTarget, explicitFileReference } = classifyMarkdownFileHref(normalizedHref)
 	const workspacePath = fileTarget?.scope === "workspace" ? fileTarget.relativePath : null
 	const referencedProjectId =
@@ -129,7 +141,7 @@ export const MarkdownLink = observer((props: MarkdownLinkProps) => {
 	if (resolvedFileInfo) {
 		// 复用解析结果的真实身份，不能根据展示名称在拖入时重新匹配文件。
 		const projectId =
-			resolvedFileInfo.project_id || resolvedProjectFilesStore.currentSelectedProject?.id
+			resolvedFileInfo.project_id || resolvedProjectFilesStore?.currentSelectedProject?.id
 		const mentionAttrs: TiptapMentionAttributes | undefined = resolvedFileInfo.file_id
 			? resolvedFileInfo.is_directory || resolvedFileInfo.type === "directory"
 				? {
@@ -193,15 +205,30 @@ export const MarkdownLink = observer((props: MarkdownLinkProps) => {
 		)
 	}
 
+	const handleLinkClick = (event: MouseEvent<HTMLAnchorElement>) => {
+		if (!microAppId) return
+
+		// 自定义协议不能交给浏览器导航，交由详情区现有 tab 事件处理。
+		event.preventDefault()
+		event.stopPropagation()
+		if (isCurrentMicroApp) return
+
+		openMicroAppTab({
+			appId: microAppId,
+			appName: typeof children === "string" ? children : undefined,
+		})
+	}
+
 	const isExternalLink = /^(?:https?:|mailto:)/i.test(normalizedHref)
 
-	return (
+	const link = (
 		<a
-			href={normalizedHref}
+			href={microAppHref}
+			onClick={handleLinkClick}
 			rel={normalizedRel}
 			target={normalizedTarget}
 			className={cn(markdownLinkClassName, "!text-[#315cec]")}
-			title={normalizedTitle ?? normalizedHref}
+			title={isCurrentMicroApp ? undefined : (normalizedTitle ?? normalizedHref)}
 			data-testid="markdown-link-anchor"
 			{...safeAttributes}
 			style={normalizedStyle}
@@ -211,5 +238,11 @@ export const MarkdownLink = observer((props: MarkdownLinkProps) => {
 			) : null}
 			{children}
 		</a>
+	)
+
+	return isCurrentMicroApp ? (
+		<MagicTooltip title={t("microAppPage.conversation.currentAppLink")}>{link}</MagicTooltip>
+	) : (
+		link
 	)
 })

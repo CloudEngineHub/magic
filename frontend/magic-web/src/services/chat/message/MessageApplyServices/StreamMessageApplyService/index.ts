@@ -329,8 +329,7 @@ class StreamMessageApplyService {
 						targetSeqInfo.messageId,
 						(m) => {
 							const textMessage = m.message as
-								| TextConversationMessage
-								| MarkdownConversationMessage
+								TextConversationMessage | MarkdownConversationMessage
 							switch (true) {
 								case textMessage.type === ConversationMessageType.Text:
 									if (textMessage.text) {

@@ -111,8 +111,7 @@ function createRegularWorkspaceItems(
 }
 
 function getTemporaryToken() {
-	if (typeof window === "undefined") return ""
-	return (window as Window & { temporary_token?: string }).temporary_token || ""
+	return ""
 }
 
 /**

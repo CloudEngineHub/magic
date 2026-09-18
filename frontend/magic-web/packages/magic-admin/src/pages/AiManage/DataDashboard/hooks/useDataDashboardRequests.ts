@@ -2,7 +2,7 @@ import { useEffect, useMemo } from "react"
 import { useRequest } from "ahooks"
 import { useApis } from "@admin/apis"
 import type { DataDashboard } from "@admin/types/datadashboard"
-import { VIEW, type DataDashboardView } from "../consts"
+import { FILE_TABLE_PAGE_SIZE, VIEW, type DataDashboardView } from "../consts"
 import {
 	type DashboardSummaryRequest,
 	type DashboardTabsRequest,
@@ -17,6 +17,7 @@ interface UseDataDashboardRequestsOptions {
 	memberQuery: DataDashboard.MemberSummaryQuery
 	organizationQuery: DataDashboard.OrganizationSummaryQuery
 	consumptionQuery: DataDashboard.ConsumptionAnalysisQuery
+	fileQuery?: DataDashboard.FileAnalysisSummaryQuery
 	page: number
 	pageSize: number
 }
@@ -29,10 +30,12 @@ export function useDataDashboardRequests({
 	memberQuery,
 	organizationQuery,
 	consumptionQuery,
+	fileQuery,
 	page,
 	pageSize,
 }: UseDataDashboardRequestsOptions) {
 	const { AIManageApi } = useApis()
+	const normalizedFileQuery = useMemo(() => fileQuery ?? {}, [fileQuery])
 
 	const summaryRequest = useMemo<DashboardSummaryRequest | null>(() => {
 		if (stateView !== view) return null
@@ -65,8 +68,20 @@ export function useDataDashboardRequests({
 			}
 		}
 
+		if (stateView === VIEW.FileProductionAnalysis) {
+			return { view: stateView, query: normalizedFileQuery }
+		}
+
 		return null
-	}, [agentQuery, consumptionQuery, memberQuery, organizationQuery, stateView, view])
+	}, [
+		agentQuery,
+		consumptionQuery,
+		normalizedFileQuery,
+		memberQuery,
+		organizationQuery,
+		stateView,
+		view,
+	])
 
 	const tabsRequest = useMemo<DashboardTabsRequest | null>(() => {
 		if (stateView !== view) return null
@@ -107,8 +122,30 @@ export function useDataDashboardRequests({
 			}
 		}
 
+		if (stateView === VIEW.FileProductionAnalysis) {
+			return {
+				view: stateView,
+				query: {
+					...normalizedFileQuery,
+					tab_type: currentTab as DataDashboard.FileTabType,
+					page,
+					page_size: FILE_TABLE_PAGE_SIZE,
+				},
+			}
+		}
+
 		return null
-	}, [agentQuery, currentTab, memberQuery, organizationQuery, page, pageSize, stateView, view])
+	}, [
+		agentQuery,
+		currentTab,
+		normalizedFileQuery,
+		memberQuery,
+		organizationQuery,
+		page,
+		pageSize,
+		stateView,
+		view,
+	])
 
 	const {
 		data: agentOptions,
@@ -142,6 +179,15 @@ export function useDataDashboardRequests({
 		{ manual: true },
 	)
 	const {
+		data: fileSummary = null,
+		loading: fileSummaryLoading,
+		run: runFileSummary,
+	} = useRequest(
+		(query: DataDashboard.FileAnalysisSummaryQuery) =>
+			AIManageApi.getDataDashboardFileAnalysisSummary(query),
+		{ manual: true },
+	)
+	const {
 		data: consumptionSummary = null,
 		loading: consumptionSummaryLoading,
 		run: runConsumptionSummary,
@@ -167,6 +213,15 @@ export function useDataDashboardRequests({
 		{ manual: true },
 	)
 	const {
+		data: fileTabs,
+		loading: fileTabsLoading,
+		run: runFileTabs,
+	} = useRequest(
+		(query: DataDashboard.FileAnalysisTabsQuery) =>
+			AIManageApi.getDataDashboardFileAnalysisTabs(query),
+		{ manual: true },
+	)
+	const {
 		data: organizationTabs,
 		loading: organizationTabsLoading,
 		run: runOrganizationTabs,
@@ -177,7 +232,7 @@ export function useDataDashboardRequests({
 	)
 
 	useEffect(() => {
-		runAgentOptions()
+		if (view !== VIEW.FileProductionAnalysis) runAgentOptions()
 	}, [runAgentOptions, view])
 
 	useEffect(() => {
@@ -190,6 +245,8 @@ export function useDataDashboardRequests({
 			runOrganizationSummary(summaryRequest.query)
 		} else if (summaryRequest.view === VIEW.ConsumptionAnalysis) {
 			runConsumptionSummary(summaryRequest.query)
+		} else if (summaryRequest.view === VIEW.FileProductionAnalysis) {
+			runFileSummary(summaryRequest.query)
 		} else {
 			runMemberSummary(summaryRequest.query)
 		}
@@ -199,6 +256,7 @@ export function useDataDashboardRequests({
 		runConsumptionSummary,
 		runMemberSummary,
 		runOrganizationSummary,
+		runFileSummary,
 	])
 
 	useEffect(() => {
@@ -208,10 +266,12 @@ export function useDataDashboardRequests({
 			runAgentTabs(tabsRequest.query)
 		} else if (tabsRequest.view === VIEW.OrganizationAnalysis) {
 			runOrganizationTabs(tabsRequest.query)
+		} else if (tabsRequest.view === VIEW.FileProductionAnalysis) {
+			runFileTabs(tabsRequest.query)
 		} else {
 			runMemberTabs(tabsRequest.query)
 		}
-	}, [runAgentTabs, runMemberTabs, runOrganizationTabs, tabsRequest])
+	}, [runAgentTabs, runFileTabs, runMemberTabs, runOrganizationTabs, tabsRequest])
 
 	const summaryLoading =
 		stateView === VIEW.DigitalEmployeeAnalysis
@@ -220,7 +280,9 @@ export function useDataDashboardRequests({
 				? organizationSummaryLoading
 				: stateView === VIEW.ConsumptionAnalysis
 					? consumptionSummaryLoading
-					: memberSummaryLoading
+					: stateView === VIEW.FileProductionAnalysis
+						? fileSummaryLoading
+						: memberSummaryLoading
 	const tableLoading =
 		stateView === VIEW.ConsumptionAnalysis
 			? false
@@ -228,14 +290,18 @@ export function useDataDashboardRequests({
 				? agentTabsLoading
 				: stateView === VIEW.OrganizationAnalysis
 					? organizationTabsLoading
-					: memberTabsLoading
+					: stateView === VIEW.FileProductionAnalysis
+						? fileTabsLoading
+						: memberTabsLoading
 	const tabData =
 		stateView !== VIEW.ConsumptionAnalysis && !tableLoading
 			? stateView === VIEW.DigitalEmployeeAnalysis
 				? agentTabs
 				: stateView === VIEW.OrganizationAnalysis
 					? organizationTabs
-					: memberTabs
+					: stateView === VIEW.FileProductionAnalysis
+						? fileTabs
+						: memberTabs
 			: undefined
 
 	const summaryData =
@@ -245,7 +311,9 @@ export function useDataDashboardRequests({
 				? organizationSummary
 				: stateView === VIEW.ConsumptionAnalysis
 					? consumptionSummary
-					: memberSummary
+					: stateView === VIEW.FileProductionAnalysis
+						? fileSummary
+						: memberSummary
 
 	return {
 		agentOptions,

@@ -4,6 +4,7 @@
 """
 
 import asyncio
+import html
 import json
 import os
 import re
@@ -31,6 +32,46 @@ logger = get_logger(__name__)
 
 # 字号检测常量
 MIN_FONT_SIZE_PX = 16  # 最小字号阈值
+SLIDE_NOTES_PATTERN = re.compile(
+    r'<template\b(?=[^>]*\bdata-magic-slide-notes(?:\s|=|>))[^>]*>[\s\S]*?</template\s*>',
+    re.IGNORECASE,
+)
+
+
+def _extract_slide_notes(content: str) -> str:
+    match = SLIDE_NOTES_PATTERN.search(content)
+    if not match:
+        return ""
+    opening_end = match.group(0).find(">")
+    closing_start = match.group(0).lower().rfind("</template")
+    if opening_end < 0 or closing_start < 0:
+        return ""
+    return html.unescape(match.group(0)[opening_end + 1 : closing_start]).strip()
+
+
+def _upsert_slide_notes(content: str, notes: str) -> str:
+    notes_block = (
+        '<template data-magic-slide-notes data-format="plain-text" data-version="1">\n'
+        f"{html.escape(notes, quote=False)}\n"
+        "</template>"
+    )
+    if SLIDE_NOTES_PATTERN.search(content):
+        has_written_block = False
+
+        def replace_notes_block(_match: re.Match[str]) -> str:
+            nonlocal has_written_block
+            if has_written_block:
+                return ""
+            has_written_block = True
+            return notes_block
+
+        return SLIDE_NOTES_PATTERN.sub(replace_notes_block, content)
+
+    for closing_tag in ("</body>", "</html>"):
+        index = content.lower().find(closing_tag)
+        if index >= 0:
+            return f"{content[:index]}{notes_block}\n{content[index:]}"
+    return f"{content}\n{notes_block}"
 
 
 class CreateSlideParams(BaseToolParams):
@@ -43,6 +84,11 @@ Slide HTML file output path, relative to working directory"""
         ...,
         description="""<!--zh: 幻灯片HTML内容-->
 Slide HTML content"""
+    )
+    speaker_notes: Optional[str] = Field(
+        default=None,
+        description="""<!--zh: 页面演讲备注。传入时写入或更新不可见的 data-magic-slide-notes 节点；省略时新页面创建空节点，覆盖已有页面则保留原备注。-->
+Speaker notes for the slide. When provided, write or update the inert data-magic-slide-notes node. When omitted, create an empty node for a new slide or preserve existing notes when overwriting a slide.""",
     )
     max_width: int = Field(
         ...,
@@ -62,7 +108,7 @@ Custom JavaScript analysis script function body content. Don't include function(
     insert_after_slide: str = Field(
         ...,
         description="""<!--zh
-插入位置（必填）：
+新页面插入位置（必填）；已有页面保留原顺序，忽略此参数：
 - 空字符串 ""：插入到第一页（slides数组开头）
 - 具体文件名：插入到该文件之后，如 "封面.html"、"cover.html"
 - 如果指定的文件不存在于slides数组中，将自动插入到末尾并给出警告
@@ -74,7 +120,7 @@ Custom JavaScript analysis script function body content. Don't include function(
 
 此参数用于自动更新 magic.project.js 的 slides 数组，确保幻灯片在演示控制器中可见。
 -->
-Insert position (required):
+Insert position for new slides (required); ignored for existing slides, which keep their order:
 - Empty string "": Insert at first position (beginning of slides array)
 - Specific filename: Insert after that file, e.g., "cover.html", "contents.html"
 - If specified file doesn't exist in slides array, will auto-insert at end with warning
@@ -125,9 +171,10 @@ class CreateSlide(AbstractFileTool[CreateSlideParams], WorkspaceTool[CreateSlide
     """<!--zh
     创建幻灯片工具
 
-    创建HTML幻灯片文件并执行自定义分析脚本。主要用于：
+    创建HTML幻灯片文件、保存页面演讲备注并执行自定义分析脚本。主要用于：
     1. 创建幻灯片HTML文件（总是覆盖模式）
-    2. 通过浏览器加载并执行自定义JavaScript分析
+    2. 写入不可见的页面演讲备注
+    3. 通过浏览器加载并执行自定义JavaScript分析
 
     analysis_js 参数用法：
     - 传入函数体内容（不要包含 function() 或 () => 声明）
@@ -182,7 +229,7 @@ class CreateSlide(AbstractFileTool[CreateSlideParams], WorkspaceTool[CreateSlide
     -->
     Create slide tool
 
-    Create HTML slide file and execute custom analysis script. Main uses:
+    Create HTML slide file, persist inert speaker notes, and execute custom analysis script. Main uses:
     1. Create slide HTML file (always override mode)
     2. Load via browser and execute custom JavaScript analysis
 
@@ -289,10 +336,20 @@ class CreateSlide(AbstractFileTool[CreateSlideParams], WorkspaceTool[CreateSlide
         Returns:
             tuple[str, bool]: (文件操作状态描述, 文件是否已存在)
         """
+        content = params.content
+        target_path = self.base_dir / params.file_path
+        if params.speaker_notes is None and await async_exists(target_path):
+            existing_content = await async_read_text(target_path)
+            # Preserve the newly authored visual HTML while retaining notes when the model
+            # omitted the optional field during an overwrite.
+            content = _upsert_slide_notes(params.content, _extract_slide_notes(existing_content))
+        else:
+            content = _upsert_slide_notes(content, params.speaker_notes or "")
+
         # 构建 WriteFile 参数
         write_params = WriteFileParams(
             file_path=params.file_path,
-            content=params.content
+            content=content
         )
 
         # 调用 WriteFile 工具
@@ -542,24 +599,17 @@ class CreateSlide(AbstractFileTool[CreateSlideParams], WorkspaceTool[CreateSlide
             logger.warning(f"Error parsing magic.project.js: {e}")
             return None
 
-    def _calculate_insert_position(self, slides: List[str], insert_after: str, current_file: str) -> tuple[int, str]:
+    def _calculate_insert_position(self, slides: List[str], insert_after: str) -> tuple[int, str]:
         """
         Calculate insert position in slides array
 
         Args:
             slides: Current slides array
             insert_after: Insert position parameter (empty string or filename)
-            current_file: Current filename
 
         Returns:
             tuple[int, str]: (insert position index, status message)
         """
-        # Check if file already exists in array
-        if current_file in slides:
-            # File exists, remove it first (will re-insert at new position)
-            slides.remove(current_file)
-            logger.info(f"File '{current_file}' already exists in slides array, will reposition")
-
         # Empty string: insert at beginning
         if not insert_after or insert_after.strip() == "":
             return 0, f"✓ 已插入到第一页位置"
@@ -615,11 +665,14 @@ class CreateSlide(AbstractFileTool[CreateSlideParams], WorkspaceTool[CreateSlide
                 logger.warning(f"Invalid slides array type: {type(slides)}")
                 return "⚠️ slides 数组格式错误，请手动检查 magic.project.js"
 
+            # 内容更新不负责排序，也不重写项目配置，避免旧的插入参数移动已有页面。
+            if file_name in slides:
+                return f"Slide order preserved: '{file_name}' remains at position {slides.index(file_name) + 1}."
+
             # Calculate insert position
             insert_position, position_msg = self._calculate_insert_position(
                 slides, 
-                params.insert_after_slide, 
-                file_name
+                params.insert_after_slide,
             )
 
             # Insert file at calculated position

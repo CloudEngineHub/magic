@@ -362,8 +362,6 @@ export const ProjectSelectionStep = observer(function ProjectSelectionStep({
 		async (projectId: string) => {
 			const res = await loadProjectAttachments({
 				projectId,
-				temporaryToken:
-					(window as Window & { temporary_token?: string }).temporary_token || "",
 			})
 			return res?.tree || []
 		},

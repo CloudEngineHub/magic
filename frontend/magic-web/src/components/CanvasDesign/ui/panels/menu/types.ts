@@ -36,4 +36,6 @@ export type MenuSource = "canvas" | "layers"
 // Context 值类型
 export interface ElementMenuContextValue {
 	openMenu: (event: React.MouseEvent, elementId: string, source?: MenuSource) => void
+	/** Open the element menu at screen coordinates (e.g. layers batch actions). */
+	openMenuAt: (elementId: string, x: number, y: number, source?: MenuSource) => void
 }

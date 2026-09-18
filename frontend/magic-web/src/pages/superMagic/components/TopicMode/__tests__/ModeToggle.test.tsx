@@ -562,4 +562,28 @@ describe("ModeToggle", () => {
 		expect(publishMock).toHaveBeenCalledWith("Create_New_Topic", { topicMode: "mode-b" })
 		expect(onModeChange).toHaveBeenCalledWith("mode-b")
 	})
+
+	it("uses the scoped topic callback when provided", () => {
+		vi.useFakeTimers()
+		const onCreateTopic = vi.fn()
+		const onModeChange = vi.fn()
+
+		render(
+			<ModeToggle
+				topicMode={"mode-a" as never}
+				allowChangeMode={false}
+				onModeChange={onModeChange}
+				onCreateTopic={onCreateTopic}
+			/>,
+		)
+
+		fireEvent.click(screen.getByTestId("mock-popover-trigger"))
+		fireEvent.click(screen.getAllByTestId("super-message-editor-mode-toggle-item")[1])
+		fireEvent.click(screen.getByTestId("super-message-editor-mode-toggle-create-topic-button"))
+		vi.runAllTimers()
+
+		expect(onCreateTopic).toHaveBeenCalledWith("mode-b")
+		expect(publishMock).not.toHaveBeenCalled()
+		expect(onModeChange).not.toHaveBeenCalled()
+	})
 })

@@ -23,6 +23,19 @@ describe("microAppPublishDialogUtils", () => {
 		})
 	})
 
+	it("includes the selected expiry days and restores them from published data", () => {
+		const formState = {
+			...createDefaultMicroAppPublishFormState("Demo App"),
+			shareExpiry: 30,
+		}
+		expect(buildMicroAppPublishPayload(formState)).toMatchObject({ expire_days: 30 })
+		expect(createFormStateFromPublishedItem({ expire_days: 7 }).shareExpiry).toBe(7)
+		expect(createFormStateFromPublishedItem({}).shareExpiry).toBeNull()
+		expect(hasMicroAppPublishFormChanged(formState, { ...formState, shareExpiry: null })).toBe(
+			true,
+		)
+	})
+
 	it("normalizes organization sharing to public access for personal organizations", () => {
 		expect(normalizeMicroAppPublishShareType(ShareType.Organization, true)).toBe(
 			ShareType.Public,

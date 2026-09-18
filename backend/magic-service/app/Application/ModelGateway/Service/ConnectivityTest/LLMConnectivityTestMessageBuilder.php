@@ -296,4 +296,32 @@ final class LLMConnectivityTestMessageBuilder
     {
         return self::IMAGE_DATA_URI_PREFIX . self::IMAGE_BASE64;
     }
+
+    /**
+     * 构建函数调用连通性测试使用的固定 tool。
+     * 只用于验证供应商是否接受 tools 参数，不要求模型实际调用。
+     *
+     * @return array<int, array<string, mixed>>
+     */
+    public static function buildFunctionCallTools(): array
+    {
+        return [
+            [
+                'type' => 'function',
+                'function' => [
+                    'name' => 'get_current_time',
+                    'description' => 'Get the current time. This is a connectivity test tool and does not need to be called.',
+                    'parameters' => [
+                        'type' => 'object',
+                        'properties' => [
+                            'timezone' => [
+                                'type' => 'string',
+                                'description' => 'Timezone name, e.g. Asia/Shanghai',
+                            ],
+                        ],
+                    ],
+                ],
+            ],
+        ];
+    }
 }

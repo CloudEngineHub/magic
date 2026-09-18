@@ -13,6 +13,7 @@ import {
 	getToolDesignProjectInfo,
 	type ToolDesignProjectData,
 } from "@/pages/superMagic/components/Detail/contents/Design/utils/toolDesignProjectInfo"
+import { useMessageListProjectFilesStore } from "@/pages/superMagic/components/MessageList/context"
 import { getToolCardInteractionTarget, selectToolDetail } from "../../../toolDetailSelection"
 import type { ReactNode } from "react"
 import { IconLoader2 } from "@tabler/icons-react"
@@ -43,9 +44,11 @@ interface ToolMessageNode {
 
 function DefaultTool(props: DefaultToolProps) {
 	const { t } = useTranslation("super")
+	const filesStore = useMessageListProjectFilesStore()
 	const { onMouseEnter, onMouseLeave, loading, classNames } = props
 	const node = superMagicStore.getMessageNode(props?.node?.super_message_id) as
-		ToolMessageNode | undefined
+		| ToolMessageNode
+		| undefined
 	const tool = props.toolData || node?.tool
 	const interactionTarget = useMemo(
 		() => getToolCardInteractionTarget(tool?.name, tool?.detail),
@@ -74,7 +77,7 @@ function DefaultTool(props: DefaultToolProps) {
 			const detail = { ...tool?.detail, id: tool?.id }
 			selectToolDetail({ detail, onSelectDetail: props?.onSelectDetail })
 			if (interactionTargetType === "design") {
-				const { designProjectId, elements } = getToolDesignProjectInfo(tool)
+				const { designProjectId, elements } = getToolDesignProjectInfo(tool, filesStore)
 				if (!designProjectId) return
 				pubsub.publish(PubSubEvents.Super_Magic_Focus_Canvas_Element, {
 					isFromPlaybackToolNode: true,
@@ -85,7 +88,7 @@ function DefaultTool(props: DefaultToolProps) {
 				})
 			}
 		},
-		[hasInteraction, interactionTargetType, props?.onSelectDetail, tool],
+		[filesStore, hasInteraction, interactionTargetType, props?.onSelectDetail, tool],
 	)
 
 	const showSuffixIcon = hasInteraction

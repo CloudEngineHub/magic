@@ -205,13 +205,19 @@ class SuperMagicAgentApiTest extends AbstractApiTest
             $item = $response['data']['list'][0];
             $this->assertArrayHasKey('id', $item);
             $this->assertArrayHasKey('code', $item);
-            $this->assertArrayHasKey('name_i18n', $item);
-            $this->assertArrayHasKey('role_i18n', $item);
-            $this->assertArrayHasKey('description_i18n', $item);
+            $this->assertArrayHasKey('name', $item);
+            $this->assertArrayHasKey('role', $item);
+            $this->assertArrayNotHasKey('role_i18n', $item);
+            $this->assertArrayHasKey('description', $item);
+            $this->assertArrayHasKey('source', $item);
+            $this->assertArrayNotHasKey('name_i18n', $item);
+            $this->assertArrayNotHasKey('description_i18n', $item);
+            $this->assertArrayNotHasKey('source_i18n', $item);
             $this->assertArrayHasKey('icon', $item);
             $this->assertArrayHasKey('icon_type', $item);
             $this->assertArrayHasKey('playbooks', $item);
             $this->assertArrayHasKey('source_type', $item);
+            $this->assertSame($item['source_type'], $item['source']);
             $this->assertArrayHasKey('enabled', $item);
             $this->assertArrayHasKey('is_store_offline', $item);
             $this->assertArrayHasKey('latest_version_code', $item);
@@ -616,7 +622,14 @@ class SuperMagicAgentApiTest extends AbstractApiTest
         }
 
         $this->assertNotNull($createdItem);
+        $this->assertArrayNotHasKey('name_i18n', $createdItem);
+        $this->assertArrayNotHasKey('description_i18n', $createdItem);
+        $this->assertArrayNotHasKey('source_i18n', $createdItem);
+        $this->assertArrayHasKey('name', $createdItem);
+        $this->assertArrayHasKey('description', $createdItem);
+        $this->assertArrayHasKey('source', $createdItem);
         $this->assertSame('LOCAL_CREATE', $createdItem['source_type']);
+        $this->assertSame('LOCAL_CREATE', $createdItem['source']);
         $this->assertFalse($createdItem['allow_delete']);
     }
 
@@ -821,7 +834,16 @@ class SuperMagicAgentApiTest extends AbstractApiTest
         }
 
         $this->assertNotNull($marketItem);
+        $this->assertArrayNotHasKey('name_i18n', $marketItem);
+        $this->assertArrayNotHasKey('role_i18n', $marketItem);
+        $this->assertArrayNotHasKey('description_i18n', $marketItem);
+        $this->assertArrayNotHasKey('source_i18n', $marketItem);
+        $this->assertArrayHasKey('name', $marketItem);
+        $this->assertArrayHasKey('role', $marketItem);
+        $this->assertArrayHasKey('description', $marketItem);
+        $this->assertArrayHasKey('source', $marketItem);
         $this->assertSame('MARKET', $marketItem['source_type']);
+        $this->assertSame('MARKET', $marketItem['source']);
         $this->assertSame('7.0.0', $marketItem['latest_version_code']);
         $this->assertTrue($marketItem['allow_delete']);
     }

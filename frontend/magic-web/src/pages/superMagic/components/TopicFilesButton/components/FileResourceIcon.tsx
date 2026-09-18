@@ -1,3 +1,4 @@
+import { getMagicProjectType } from "@/constants/magicProjectTypes"
 import { isMagicProjectConfigFile } from "../../MessageList/components/MessageAttachment/utils"
 import {
 	BookOpen,
@@ -95,7 +96,7 @@ export function FileResourceIcon({
 		return <SlidesTemplateFolderIcon size={size} className={className} />
 	// magic.project.js 描述项目本身，保留代码图标；其它入口沿用自定义远程图与原有缓存。
 	if (
-		(displayType === "custom" || displayType === "micro-app") &&
+		getMagicProjectType(displayType)?.customIconPolicy === "configured" &&
 		!isMagicProjectConfigFile(
 			item.file_name || item.display_filename || item.filename || item.name,
 		)

@@ -48,17 +48,21 @@ export function getLiveRenderSlideKey(slide: SlideItem): string {
 
 /**
  * A revision change means the existing iframe no longer represents the current slide content.
- * lastLoadedAt is updated by every load/refresh/save path; the remaining fields cover terminal
- * loading-state changes and test/legacy slide objects without a timestamp.
+ * lastLoadedAt is updated by every visual load/refresh/save path. Raw source changes that only
+ * update inert slide metadata (for example speaker notes) must not invalidate the live iframe.
  */
 export function getLiveRenderSlideRevision(slide: SlideItem): string {
 	return [
 		slide.path,
 		slide.loadingState || "idle",
 		slide.lastLoadedAt || 0,
-		slide.rawContent?.length || 0,
 		slide.content?.length || 0,
 	].join(":")
+}
+
+/** Source revisions update cached component props without remounting the iframe. */
+export function getLiveRenderSlideSourceRevision(slide: SlideItem): string {
+	return `${getLiveRenderSlideRevision(slide)}:${slide.rawRevision || 0}`
 }
 
 /**
@@ -120,7 +124,7 @@ export function usePPTLiveRenderCache({
 }: UsePPTLiveRenderCacheOptions): UsePPTLiveRenderCacheResult {
 	const getScopedKey = (slide: SlideItem) => `${scopeKey}::${getLiveRenderSlideKey(slide)}`
 	const entriesSignature = slides
-		.map((slide) => `${getScopedKey(slide)}@${getLiveRenderSlideRevision(slide)}`)
+		.map((slide) => `${getScopedKey(slide)}@${getLiveRenderSlideSourceRevision(slide)}`)
 		.join("|")
 	const entriesCacheRef = useRef<{ signature: string; entries: LiveRenderSlide[] } | null>(null)
 	if (!entriesCacheRef.current || entriesCacheRef.current.signature !== entriesSignature) {

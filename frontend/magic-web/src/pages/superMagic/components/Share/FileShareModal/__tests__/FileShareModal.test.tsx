@@ -1,7 +1,8 @@
 import { fireEvent, render, screen, waitFor } from "@testing-library/react"
 import { beforeEach, describe, expect, it, vi } from "vitest"
 import FileShareModal from "../FileShareModal"
-import { ShareType } from "../../types"
+import { ShareMode, ShareType } from "../../types"
+import { SharePermissionResourceProvider } from "../../SharePermissionResourceContext"
 
 const mocks = vi.hoisted(() => ({
 	getSnowflakeIds: vi.fn(),
@@ -12,6 +13,7 @@ const mocks = vi.hoisted(() => ({
 	writeText: vi.fn(),
 	successToast: vi.fn(),
 	errorToast: vi.fn(),
+	functionPermissions: {} as Record<string, boolean>,
 }))
 
 vi.hoisted(() => {
@@ -35,6 +37,14 @@ vi.hoisted(() => {
 })
 
 vi.mock("@/apis", () => ({
+	FUNCTION_PERMISSION_CODE: {
+		MicroAppSharePassword: "micro_app.share_password",
+		MicroAppSharePublic: "micro_app.share_public",
+		MicroAppShareTeam: "micro_app.share_team",
+		ProjectSharePassword: "project.share_password",
+		ProjectSharePublic: "project.share_public",
+		ProjectShareTeam: "project.share_team",
+	},
 	SuperMagicApi: {
 		getSnowflakeIds: mocks.getSnowflakeIds,
 		createOrUpdateShareResource: mocks.createOrUpdateShareResource,
@@ -42,6 +52,15 @@ vi.mock("@/apis", () => ({
 		getAttachmentsByProjectId: mocks.getAttachmentsByProjectId,
 		batchGetFileDetails: mocks.batchGetFileDetails,
 	},
+}))
+
+vi.mock("@/hooks/useFunctionPermission", () => ({
+	useFunctionPermissions: () => ({
+		data: mocks.functionPermissions,
+		error: undefined,
+		isLoading: false,
+		mutate: vi.fn(),
+	}),
 }))
 
 vi.mock("@dtyq/magic-admin/components", () => ({}))
@@ -53,6 +72,7 @@ vi.mock("@dtyq/magic-admin", () => ({
 	},
 	PlatformPackageRoutes: {},
 	AiManageRoutes: {},
+	EnterpriseManageRoutes: {},
 	otherRoutes: [],
 }))
 vi.mock("@/assets/locales/locale-adapters", () => ({
@@ -86,6 +106,10 @@ vi.mock("react-i18next", () => ({
 vi.mock("ahooks", () => ({
 	useResponsive: () => ({ md: true }),
 	useDebounceFn: (fn: () => void) => ({ run: fn }),
+}))
+
+vi.mock("@/hooks/useIsMobile", () => ({
+	useIsMobile: () => false,
 }))
 
 vi.mock("@/models/user", () => ({
@@ -123,6 +147,10 @@ vi.mock("@/components/base/MagicToaster/utils", () => ({
 		error: mocks.errorToast,
 		warning: vi.fn(),
 	},
+}))
+
+vi.mock("@/components/base/MagicModal", () => ({
+	default: Object.assign(() => null, { confirm: vi.fn() }),
 }))
 
 vi.mock("@/pages/superMagic/hooks/useSingleDocumentStaticDependencies", () => ({
@@ -165,8 +193,8 @@ vi.mock("../MobileFileSelectorPopup", () => ({
 }))
 
 vi.mock("../FileShareModalFooter", () => ({
-	default: ({ onSave }: { onSave: () => void }) => (
-		<button data-testid="save-share" onClick={onSave}>
+	default: ({ onSave, isDisabled }: { onSave: () => void; isDisabled?: boolean }) => (
+		<button data-testid="save-share" onClick={onSave} disabled={isDisabled}>
 			save
 		</button>
 	),
@@ -180,7 +208,19 @@ vi.mock("../../ShareFields", () => ({
 			onChange={(event) => onChange(event.target.value)}
 		/>
 	),
-	ShareTypeField: () => null,
+	ShareTypeField: ({
+		value,
+		permittedTypes,
+	}: {
+		value: ShareType
+		permittedTypes?: ShareType[]
+	}) => (
+		<div
+			data-testid="share-type-field"
+			data-value={value}
+			data-permitted-types={permittedTypes?.join(",") ?? "unrestricted"}
+		/>
+	),
 	SharePasswordField: () => null,
 	ShareExpiryField: () => null,
 	ShareRangeField: () => null,
@@ -203,6 +243,11 @@ vi.mock("../../utils/generateShareMessageText", () => ({
 describe("FileShareModal", () => {
 	beforeEach(() => {
 		vi.clearAllMocks()
+		mocks.functionPermissions = {
+			"project.share_password": true,
+			"project.share_public": true,
+			"project.share_team": true,
+		}
 		mocks.getSnowflakeIds.mockResolvedValue({ ids: ["share-1"] })
 		mocks.createOrUpdateShareResource.mockResolvedValue({ file_ids: [] })
 		mocks.batchGetFileDetails.mockResolvedValue({ files: [] })
@@ -406,5 +451,129 @@ describe("FileShareModal", () => {
 				}),
 			)
 		})
+	})
+
+	it("项目分享只展示允许的分享方式，并按可用方式提交", async () => {
+		mocks.functionPermissions = {
+			"project.share_password": false,
+			"project.share_public": true,
+			"project.share_team": false,
+		}
+
+		render(
+			<FileShareModal
+				types={[ShareType.PasswordProtected, ShareType.Public, ShareType.Organization]}
+				shareMode={ShareMode.Project}
+				projectId="project-1"
+				projectName="Demo Project"
+				attachments={[]}
+			/>,
+		)
+
+		await waitFor(() => {
+			expect(screen.getByTestId("share-type-field")).toHaveAttribute(
+				"data-value",
+				String(ShareType.Public),
+			)
+		})
+		expect(screen.getByTestId("share-type-field")).toHaveAttribute(
+			"data-permitted-types",
+			String(ShareType.Public),
+		)
+
+		fireEvent.change(screen.getByTestId("share-name-input"), {
+			target: { value: "Demo Project" },
+		})
+		fireEvent.click(screen.getByTestId("save-share"))
+
+		await waitFor(() => {
+			expect(mocks.createOrUpdateShareResource).toHaveBeenCalledWith(
+				expect.objectContaining({ share_type: ShareType.Public, share_project: true }),
+			)
+		})
+	})
+
+	it("PC 项目内文件分享同步应用项目分享方式权限", async () => {
+		mocks.functionPermissions = {
+			"project.share_password": false,
+			"project.share_public": true,
+			"project.share_team": false,
+		}
+
+		render(
+			<FileShareModal
+				types={[ShareType.PasswordProtected, ShareType.Public, ShareType.Organization]}
+				shareMode={ShareMode.File}
+				projectId="project-1"
+				projectName="Demo Project"
+				attachments={[]}
+			/>,
+		)
+
+		await waitFor(() => {
+			expect(screen.getByTestId("share-type-field")).toHaveAttribute(
+				"data-value",
+				String(ShareType.Public),
+			)
+		})
+		expect(screen.getByTestId("share-type-field")).toHaveAttribute(
+			"data-permitted-types",
+			String(ShareType.Public),
+		)
+	})
+
+	it("微应用内文件分享使用微应用分享方式权限", async () => {
+		mocks.functionPermissions = {
+			"micro_app.share_password": false,
+			"micro_app.share_public": false,
+			"micro_app.share_team": true,
+			"project.share_password": true,
+			"project.share_public": false,
+			"project.share_team": false,
+		}
+
+		render(
+			<SharePermissionResourceProvider value="microApp">
+				<FileShareModal
+					types={[ShareType.PasswordProtected, ShareType.Public, ShareType.Organization]}
+					shareMode={ShareMode.File}
+					projectId="project-1"
+					projectName="Demo Project"
+					attachments={[]}
+				/>
+			</SharePermissionResourceProvider>,
+		)
+
+		await waitFor(() => {
+			expect(screen.getByTestId("share-type-field")).toHaveAttribute(
+				"data-value",
+				String(ShareType.Organization),
+			)
+		})
+		expect(screen.getByTestId("share-type-field")).toHaveAttribute(
+			"data-permitted-types",
+			String(ShareType.Organization),
+		)
+	})
+
+	it("管理员未开放任何项目分享方式时禁用保存", async () => {
+		mocks.functionPermissions = {
+			"project.share_password": false,
+			"project.share_public": false,
+			"project.share_team": false,
+		}
+
+		render(
+			<FileShareModal
+				types={[ShareType.PasswordProtected, ShareType.Public, ShareType.Organization]}
+				shareMode={ShareMode.Project}
+				projectId="project-1"
+				projectName="Demo Project"
+				attachments={[]}
+			/>,
+		)
+
+		expect(await screen.findByText("share.noAvailableShareMethods")).toBeInTheDocument()
+		expect(screen.getByTestId("save-share")).toBeDisabled()
 	})
 })

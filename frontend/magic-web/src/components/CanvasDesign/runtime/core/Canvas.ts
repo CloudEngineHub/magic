@@ -40,6 +40,7 @@ import { UserActionRegistry } from "../actions/UserActionRegistry"
 import { BackgroundManager } from "../interaction/background/BackgroundManager"
 import { CanvasFileUploadManager } from "../resources/upload/CanvasFileUploadManager"
 import { GeometryCacheManager } from "../shared/geometry/GeometryCacheManager"
+import { CanvasViewportQueryCoordinator } from "../shared/geometry/CanvasViewportQueryCoordinator"
 import { ImageResourceManager } from "../resources/image/ImageResourceManager"
 import { CanvasImagePresentationScheduler } from "../resources/image/CanvasImagePresentationScheduler"
 import { ImageBatchPollingRegistry } from "../resources/polling/ImageBatchPollingRegistry"
@@ -177,7 +178,7 @@ export class Canvas {
 	public selectionLayer: Konva.Layer // 2. 选择层：框选矩形和选中高亮效果
 	public controlsLayer: Konva.Layer // 3. 控制层：Transformer 和 Hover 边框
 	public markersLayer: Konva.Layer // 4. 标记层：图片上的 Marker 标记（在最上层，不被遮挡）
-	public overlayLayer: Konva.Layer // 5. 辅助层：吸附辅助线、名称标签、尺寸标签
+	public overlayLayer: Konva.Layer // 5. 辅助层：吸附辅助线、名称标签、尺寸标签；仅名称标签接收命中
 
 	public viewportController: ViewportController
 	public eventEmitter: EventEmitter<CanvasEventMap>
@@ -220,6 +221,7 @@ export class Canvas {
 	public backgroundManager: BackgroundManager
 	public canvasFileUploadManager: CanvasFileUploadManager
 	public geometryCacheManager: GeometryCacheManager
+	public viewportQueryCoordinator: CanvasViewportQueryCoordinator
 	public imageResourceManager: ImageResourceManager
 	public imagePresentationScheduler: CanvasImagePresentationScheduler
 	public imageBatchPollingRegistry: ImageBatchPollingRegistry
@@ -314,7 +316,8 @@ export class Canvas {
 		this.selectionLayer = new Konva.Layer({ name: "selection", listening: false })
 		this.markersLayer = new Konva.Layer({ name: "markers", listening: true })
 		this.controlsLayer = new Konva.Layer({ name: "controls", listening: true })
-		this.overlayLayer = new Konva.Layer({ name: "overlay", listening: false })
+		// 名称标签需要命中；尺寸标签、吸附线等子节点保持 listening: false，空白处仍穿透到下层。
+		this.overlayLayer = new Konva.Layer({ name: "overlay", listening: true })
 
 		// 按顺序添加到 Stage（从底到顶）
 		this.stage.add(this.contentLayer)
@@ -461,6 +464,7 @@ export class Canvas {
 		this.geometryCacheManager = new GeometryCacheManager({
 			canvas: this,
 		})
+		this.viewportQueryCoordinator = new CanvasViewportQueryCoordinator({ canvas: this })
 
 		// 初始化关联线管理器（使用 contentLayer 内的 connectionGroup 绘制元素业务因果关系）
 		this.connectionManager = new ConnectionManager({
@@ -1409,8 +1413,7 @@ export class Canvas {
 
 	public getEffectiveContentId(elementId: string): string | undefined {
 		const element = this.elementManager.getElementData(elementId) as
-			| ContentViewElement
-			| undefined
+			ContentViewElement | undefined
 		const previewContentId = this.previewContentIds.get(elementId)
 		const resolution = resolveEffectiveContentIdForElement(element, previewContentId)
 		if (previewContentId && !resolution.previewMatched) {
@@ -1421,8 +1424,7 @@ export class Canvas {
 
 	public getEffectiveContent<T extends { contentId: string }>(elementId: string): T | undefined {
 		const element = this.elementManager.getElementData(elementId) as
-			| (LayerElement & { contents?: readonly T[] })
-			| undefined
+			(LayerElement & { contents?: readonly T[] }) | undefined
 		if (!element || !Array.isArray(element.contents)) return undefined
 		const contentId = this.getEffectiveContentId(elementId)
 		return element.contents.find((content) => content.contentId === contentId) as T | undefined
@@ -1713,6 +1715,7 @@ export class Canvas {
 		this.cursorManager.destroy()
 		this.permissionManager.destroy()
 		this.imageBatchPollingRegistry.destroy()
+		this.viewportQueryCoordinator.destroy()
 		this.elementManager.destroy()
 		this.geometryCacheManager.destroy()
 		this.connectionManager.destroy()

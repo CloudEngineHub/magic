@@ -21,6 +21,7 @@ export enum RoutePath {
 	AIDataDashboardOrganizationAnalysis = "/admin/ai/statistics/organization-analysis",
 	AIDataDashboardDigitalEmployeeAnalysis = "/admin/ai/statistics/digital-employee-analysis",
 	AIDataDashboardConsumptionAnalysis = "/admin/ai/statistics/consumption-analysis",
+	AIDataDashboardFileProductionAnalysis = "/admin/ai/statistics/file-production-analysis",
 	AIDataDashboardDataDictionary = "/admin/ai/statistics/data-dictionary",
 	AIManage = "/admin/ai/manage",
 	AIAppMenu = "/admin/ai/manage/app-menu",
@@ -90,6 +91,8 @@ export enum RouteName {
 	AdminAIDataDashboardDigitalEmployeeAnalysis = "AdminAIDataDashboardDigitalEmployeeAnalysis",
 	/** 数据看板 - 消耗分析 */
 	AdminAIDataDashboardConsumptionAnalysis = "AdminAIDataDashboardConsumptionAnalysis",
+	/** 数据看板 - 文件产出分析 */
+	AdminAIDataDashboardFileProductionAnalysis = "AdminAIDataDashboardFileProductionAnalysis",
 	/** 数据看板 - 指标说明 */
 	AdminAIDataDashboardDataDictionary = "AdminAIDataDashboardDataDictionary",
 	/** 平台管理 - 应用菜单 */

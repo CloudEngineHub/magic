@@ -485,6 +485,25 @@ export default function MCPForm(props: MCPFormProps) {
 					<Form.Item
 						{...SubFormProps}
 						hidden={authType !== 1}
+						name={[
+							MCPFormField.ServiceConfig,
+							MCPFormField.OAuthConfig,
+							MCPFormField.AuthorizationMethod,
+						]}
+						label="authorization_method"
+						className={formItemClassName}
+						initialValue="POST"
+					>
+						<Select
+							options={[
+								{ label: "POST", value: "POST" },
+								{ label: "GET", value: "GET" },
+							]}
+						/>
+					</Form.Item>
+					<Form.Item
+						{...SubFormProps}
+						hidden={authType !== 1}
 						name="authorization_content_type"
 						label="authorization_content_type"
 						className={formItemClassName}

@@ -70,6 +70,7 @@ export class DesignVersionManager {
 		try {
 			content = await loadMagicProjectJsContent(magicProjectJsFileId, {
 				file_versions: { [magicProjectJsFileId]: version },
+				fileApi: this.options.fileApi,
 			})
 		} catch (error) {
 			throw new DesignLoadError({
@@ -99,7 +100,9 @@ export class DesignVersionManager {
 
 		let content: string
 		try {
-			content = await loadMagicProjectJsContent(magicProjectJsFileId)
+			content = await loadMagicProjectJsContent(magicProjectJsFileId, {
+				fileApi: this.options.fileApi,
+			})
 		} catch (error) {
 			throw new DesignLoadError({
 				kind: "invalid-envelope",
@@ -116,6 +119,7 @@ export class DesignVersionManager {
 				flatAttachments: this.options.flatAttachments,
 				mainFileId: magicProjectJsFileId,
 				projectId: this.options.projectId,
+				fileApi: this.options.fileApi,
 			},
 			pathContext: {
 				projectBasePath: dslBase,

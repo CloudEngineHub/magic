@@ -13,6 +13,7 @@ import { resolveSafePreviewUrl } from "@/pages/superMagic/components/Detail/comp
 import { getPreviewFileUrlWatermarkSignature } from "@/utils/aiWatermarkPreviewFileUrlMode"
 import { getAiWatermarkPreferenceUserKey } from "@/utils/aiWatermarkPreferenceCache"
 import type { AttachmentItem } from "../hooks/types"
+import { useFileApi, type FileApi } from "@/pages/superMagic/fileAccess/fileApi"
 import {
 	cancelProjectFileImagePreviewRequest,
 	deleteProjectFileImagePreviewCacheItem,
@@ -156,9 +157,12 @@ function resolveAttachmentResourceVersion(item: AttachmentItem): string | undefi
 	return undefined
 }
 
-function seedDirectPreviewSourceIfNeeded(source: ProjectFileImagePreviewSource): void {
+function seedDirectPreviewSourceIfNeeded(
+	source: ProjectFileImagePreviewSource,
+	fileApi: Pick<FileApi, "identityKey" | "requestSharedMediaUrls">,
+): void {
 	if (!source.directThumbnailUrl) return
-	seedProjectFileImagePreviewDirectUrls([source])
+	seedProjectFileImagePreviewDirectUrls([source], { fileApi })
 }
 
 function getAttachmentDisplayNameFallback(item: AttachmentItem): string {
@@ -264,6 +268,9 @@ export function useProjectFileImagePreviewManager({
 	const disposedRef = useRef(false)
 	// One forceRefresh per cacheKey after <img> onError; broken URLs otherwise loop forever.
 	const imageErrorRetryAttemptedKeysRef = useRef<Set<string>>(new Set())
+	// Boundary identity: thumbnail requests must carry the ambient share token so
+	// share-page previews are not emptied by the leaf guard.
+	const fileApi = useFileApi()
 
 	const currentPreviewKeys = useMemo(() => collectCurrentPreviewKeys(attachments), [attachments])
 
@@ -304,12 +311,12 @@ export function useProjectFileImagePreviewManager({
 	)
 	const hydrateCachedPreview = useCallback(
 		(source: ProjectFileImagePreviewSource) => {
-			if (!getProjectFileImagePreviewCacheItem(source)) return false
+			if (!getProjectFileImagePreviewCacheItem(source, { fileApi })) return false
 
 			notifyPreviewKeys([source.cacheKey])
 			return true
 		},
-		[notifyPreviewKeys],
+		[notifyPreviewKeys, fileApi],
 	)
 	const getPreviewState = useCallback((source: ProjectFileImagePreviewSource): PreviewState => {
 		const state = previewStatesRef.current.get(source.cacheKey)
@@ -375,11 +382,15 @@ export function useProjectFileImagePreviewManager({
 				nextPendingSources.map((source) => [source.cacheKey, { status: "loading" }]),
 			)
 
+			const requestOptions = {
+				...options,
+				fileApi,
+			}
 			const request = options?.prebatched
-				? requestProjectFileImagePreviewBatch(nextPendingSources, options)
+				? requestProjectFileImagePreviewBatch(nextPendingSources, requestOptions)
 				: Promise.all(
 						nextPendingSources.map((source) =>
-							requestProjectFileImagePreview(source, options),
+							requestProjectFileImagePreview(source, requestOptions),
 						),
 					)
 
@@ -426,7 +437,7 @@ export function useProjectFileImagePreviewManager({
 					}
 				})
 		},
-		[applyPreviewStateChanges, isSourceAdmitted],
+		[applyPreviewStateChanges, isSourceAdmitted, fileApi],
 	)
 
 	const flushThumbnailQueue = useCallback(() => {
@@ -592,7 +603,7 @@ export function useProjectFileImagePreviewManager({
 		(source: ProjectFileImagePreviewSource) => {
 			const alreadyRetried = imageErrorRetryAttemptedKeysRef.current.has(source.cacheKey)
 			const willForceRefresh = isSourceAdmitted(source.cacheKey) && !alreadyRetried
-			deleteProjectFileImagePreviewCacheItem(source)
+			deleteProjectFileImagePreviewCacheItem(source, { fileApi })
 			applyPreviewStateChanges([[source.cacheKey, { status: "error" }]])
 			// Broken thumbnail URLs must not force-refresh forever while the row stays visible.
 			if (!willForceRefresh) return
@@ -602,12 +613,12 @@ export function useProjectFileImagePreviewManager({
 				allowAttachmentListUrl: false,
 			})
 		},
-		[applyPreviewStateChanges, isSourceAdmitted, requestPreviewSources],
+		[applyPreviewStateChanges, isSourceAdmitted, requestPreviewSources, fileApi],
 	)
 
 	const ensurePreview = useCallback(
 		(source: ProjectFileImagePreviewSource) => {
-			seedDirectPreviewSourceIfNeeded(source)
+			seedDirectPreviewSourceIfNeeded(source, fileApi)
 			if (hydrateCachedPreview(source)) return
 			if (
 				shouldRequestPreview(
@@ -620,7 +631,7 @@ export function useProjectFileImagePreviewManager({
 				requestPreviewSources([source])
 			}
 		},
-		[hydrateCachedPreview, requestPreviewSources],
+		[hydrateCachedPreview, requestPreviewSources, fileApi],
 	)
 
 	return useMemo(

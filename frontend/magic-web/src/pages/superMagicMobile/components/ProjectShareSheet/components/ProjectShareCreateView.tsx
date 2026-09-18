@@ -185,8 +185,8 @@ export default function ProjectShareCreateView({ controller }: ProjectShareCreat
 	const { t } = useTranslation("super")
 	const { formState } = controller
 
-	const typeCards = useMemo(
-		() => [
+	const typeCards = useMemo(() => {
+		const cards = [
 			{
 				type: ShareType.PasswordProtected,
 				label: t("projectShare.typePassword"),
@@ -202,9 +202,14 @@ export default function ProjectShareCreateView({ controller }: ProjectShareCreat
 				label: t("projectShare.typeOrganization"),
 				icon: Users,
 			},
-		],
-		[t],
-	)
+		]
+		return cards.filter(
+			(item) =>
+				controller.permittedShareTypes === undefined ||
+				controller.permittedShareTypes.includes(item.type) ||
+				(controller.isEditing && item.type === formState.shareType),
+		)
+	}, [controller.isEditing, controller.permittedShareTypes, formState.shareType, t])
 
 	if (controller.view === "edit" && controller.editLoading) {
 		return (
@@ -238,13 +243,18 @@ export default function ProjectShareCreateView({ controller }: ProjectShareCreat
 					{typeCards.map((item) => {
 						const Icon = item.icon
 						const active = formState.shareType === item.type
+						const disabled =
+							controller.permittedShareTypes !== undefined &&
+							!controller.permittedShareTypes.includes(item.type)
 						return (
 							<button
 								key={item.type}
 								type="button"
 								onClick={() => controller.setShareType(item.type)}
+								disabled={disabled}
 								className={cn(
 									"flex flex-col items-center justify-center gap-2 rounded-[14px] bg-white px-2 py-[18px] text-center transition-all active:opacity-75",
+									disabled && "cursor-not-allowed opacity-50",
 									active
 										? "border-[1.5px] border-foreground shadow-[0_2px_10px_rgba(0,0,0,0.07)]"
 										: "border border-transparent",
@@ -262,6 +272,15 @@ export default function ProjectShareCreateView({ controller }: ProjectShareCreat
 						)
 					})}
 				</div>
+				{controller.permittedShareTypes?.length === 0 ? (
+					<p className="px-3.5 text-xs text-destructive" role="alert">
+						{t("share.noAvailableShareMethods")}
+					</p>
+				) : controller.isSelectedShareTypePermitted === false ? (
+					<p className="px-3.5 text-xs text-destructive" role="alert">
+						{t("share.currentShareMethodUnavailable")}
+					</p>
+				) : null}
 			</div>
 
 			<div className="space-y-2">

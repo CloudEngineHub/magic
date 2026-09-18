@@ -56,6 +56,7 @@ interface CrewTopicPanelProps {
 	mentionPanelStore: MentionPanelStore
 	projectFilesStore: ProjectFilesStore
 	onTerminalTopicStatusChange?: () => void
+	setSelectedDetail?: (detail: unknown) => void
 }
 
 function CrewTopicPanel({
@@ -72,6 +73,7 @@ function CrewTopicPanel({
 	mentionPanelStore,
 	projectFilesStore,
 	onTerminalTopicStatusChange,
+	setSelectedDetail,
 }: CrewTopicPanelProps) {
 	const { t } = useTranslation("crew/create")
 	const { conversation } = useCrewEditStore()
@@ -267,6 +269,7 @@ function CrewTopicPanel({
 			editor={<DefaultMessageEditorContainer editorContext={editorContext} />}
 			editorNodes={editorNodes}
 			messageListProviderValue={messageListProviderValue}
+			setSelectedDetail={setSelectedDetail}
 			messages={messages as SuperMagicMessageItem[]}
 			selectedTopic={selectedTopic}
 			handlePullMoreMessage={handlePullMoreMessage}

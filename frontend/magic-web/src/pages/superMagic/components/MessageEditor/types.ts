@@ -138,7 +138,7 @@ export interface MessageEditorProps {
 		shouldClearEditorAfterSend?: boolean
 		extra?: Record<string, unknown>
 		targetTopic?: Topic | null
-	}) => void
+	}) => void | boolean | Promise<void | boolean>
 	/** Placeholder */
 	placeholder?: string
 	/** Rotating prompt examples shown while the editor is empty */
@@ -219,6 +219,10 @@ export interface MessageEditorProps {
 }
 
 export interface SendMessageByContentPayload {
+	/** Optional scoped request acknowledgement; transport failures remain in message history. */
+	targetProjectId?: string
+	tryClaim?: () => boolean
+	onHandled?: (accepted: boolean) => void
 	jsonContent: JSONContent
 	mentionItems?: MentionListItem[]
 	topicMode?: TopicMode

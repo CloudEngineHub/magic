@@ -202,11 +202,25 @@ from app.tools.canvas import (
 
 # 用户信息工具
 from app.tools.get_user_info import GetUserInfo
+# CodeModeOnly MagicBase tools: see agents/skills/use-magicbase/SKILL.md.
 from app.tools.magicbase_tools import (
+    BatchCreateMagicRows,
+    BatchDeleteMagicRows,
+    BatchGetMagicRows,
     CreateMagicColumn,
     CreateMagicTable,
+    CreateMagicRow,
+    DeleteMagicColumn,
+    DeleteMagicRow,
+    DeleteMagicTable,
+    GetMagicRow,
     GetMagicTable,
+    QueryMagicRows,
     QueryMagicTables,
+    QueryMagicTablesAllMentionedApps,
+    UpdateMagicColumn,
+    UpdateMagicRow,
+    UpdateMagicTablePermissions,
 )
 
 # Skill 管理工具
@@ -347,7 +361,9 @@ __all__ = [
     "FindSkillsTool",
     "GetUserInfo",
     "QueryMagicTables",
+    "QueryMagicTablesAllMentionedApps",
     "GetMagicTable",
+    "BatchGetMagicRows",
     "CreateMagicTable",
     "CreateMagicColumn",
     "InstallSkillsTool",

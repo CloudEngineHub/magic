@@ -99,10 +99,19 @@ class TaskFileRepository implements TaskFileRepositoryInterface
                 $query->where('space_type', $spaceType);
             }
 
-            $models = $query->get();
+            // 取原始行、跳过 Eloquent 模型水合：5000 行实测模型实例化要 137ms CPU，裸取数只要 18ms
+            // （见 debug/bench_magicfs_db_fetch.php）。
+            //
+            // 行形状一律用 (array) 归一后再按列名读：框架默认是 PDO::FETCH_OBJ，而项目里的
+            // App\Listener\FetchModeListener 会把每个 statement 改成 PDO::FETCH_ASSOC，
+            // 两种都要能读——之前在这里踩过"把数组当对象读"的线上报错。
+            //
+            // 查询条件仍由 Eloquent builder 组装，toBase() 会带上软删除等全局作用域，
+            // 走上层连接的 select() 因此查询事件（SQL 审计日志）也照常触发。
+            $scoped = $query->toBase();
 
-            foreach ($models as $model) {
-                $list[] = new TaskFileEntity($model->toArray());
+            foreach ($this->model->getConnection()->select($scoped->toSql(), $scoped->getBindings()) as $row) {
+                $list[] = TaskFileEntity::fromRow((array) $row);
             }
         }
 
@@ -288,6 +297,21 @@ class TaskFileRepository implements TaskFileRepositoryInterface
         }
 
         return new TaskFileEntity($model->toArray());
+    }
+
+    public function getBySpaceParentAndName(string $spaceType, int $projectId, ?int $parentId, string $fileName, string $userId, string $organizationCode, bool $withTrash = false): ?TaskFileEntity
+    {
+        $query = $withTrash ? $this->model::withTrashed() : $this->model::query();
+        $query->where('space_type', $spaceType)
+            ->where('parent_id', $parentId)
+            ->where('file_name', $fileName);
+        if ($spaceType === FileSpaceType::USER->value) {
+            $query->where('user_id', $userId)->where('organization_code', $organizationCode);
+        } else {
+            $query->where('project_id', $projectId);
+        }
+        $model = $query->first();
+        return $model ? new TaskFileEntity($model->toArray()) : null;
     }
 
     /**
@@ -1764,17 +1788,23 @@ class TaskFileRepository implements TaskFileRepositoryInterface
                 $query->where('project_id', $projectId);
             }
 
-            $children = $query->get(['file_id', 'is_directory']);
+            // 只取两列，没必要为每行建一个 Eloquent 模型：5000 行的 BFS 实测模型水合要 143ms CPU，
+            // 直接读原始行只要个位数毫秒。行形状用 (array) 归一（框架默认 FETCH_OBJ，
+            // App\Listener\FetchModeListener 会改成 FETCH_ASSOC），列名由下面的 select 确定。
+            $scoped = $query->select(['file_id', 'is_directory'])->toBase();
+            $children = $this->model->getConnection()->select($scoped->toSql(), $scoped->getBindings());
 
-            if ($children->isEmpty()) {
+            if ($children === []) {
                 break;
             }
 
             $nextLevelParentIds = [];
             foreach ($children as $child) {
-                $allIds[] = (int) $child->file_id;
-                if ($child->is_directory) {
-                    $nextLevelParentIds[] = (int) $child->file_id;
+                $child = (array) $child;
+                $fileId = (int) ($child['file_id'] ?? 0);
+                $allIds[] = $fileId;
+                if ((bool) ($child['is_directory'] ?? false)) {
+                    $nextLevelParentIds[] = $fileId;
                 }
             }
 

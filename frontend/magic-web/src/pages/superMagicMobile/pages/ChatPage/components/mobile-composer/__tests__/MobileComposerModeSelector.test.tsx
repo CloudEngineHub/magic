@@ -156,4 +156,19 @@ describe("MobileComposerModeSelector", () => {
 			"synthetic-agent-code",
 		)
 	})
+
+	it("uses the employee selector trigger for the default variant", () => {
+		render(
+			<MobileComposerModeSelector
+				topicMode={TopicMode.CustomAgent}
+				agentCode="synthetic-agent-code"
+				selectorVariant="default"
+			/>,
+		)
+
+		expect(screen.getByTestId("mobile-composer-mode-selector-trigger")).toBeInTheDocument()
+		expect(
+			screen.queryByTestId("mobile-composer-claw-model-selector-trigger"),
+		).not.toBeInTheDocument()
+	})
 })

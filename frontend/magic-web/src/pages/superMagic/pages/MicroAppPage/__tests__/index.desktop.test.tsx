@@ -1,10 +1,11 @@
 import { Children, forwardRef, useEffect, useImperativeHandle, type ReactNode } from "react"
-import { fireEvent, render, screen } from "@testing-library/react"
+import { act, fireEvent, render, screen } from "@testing-library/react"
 import { beforeEach, describe, expect, it, vi } from "vitest"
 
 import type { AttachmentItem } from "@/pages/superMagic/components/TopicFilesButton/hooks"
 import MicroAppPageDesktop from "../index.desktop"
 import { registerMicroAppDesktopWorkspaceCases } from "./index.desktop.workspace-cases"
+import pubsub, { PubSubEvents } from "@/utils/pubsub"
 
 const detailMocks = vi.hoisted(() => ({
 	openFileTab: vi.fn(),
@@ -14,6 +15,10 @@ const detailMocks = vi.hoisted(() => ({
 const previewMocks = vi.hoisted(() => ({
 	aiEdit: vi.fn(),
 	devConsoleToggle: vi.fn(),
+	render: vi.fn(),
+}))
+
+const previewWorkspaceMocks = vi.hoisted(() => ({
 	render: vi.fn(),
 }))
 
@@ -30,6 +35,8 @@ const resolverMocks = vi.hoisted(() => ({
 const controllerMocks = vi.hoisted(() => ({
 	initLoading: false,
 	isReadOnly: false,
+	canUseDevelopment: true,
+	ensureUsageProject: vi.fn(),
 	checkAttachmentsNowDebounced: vi.fn(),
 	attachmentList: [
 		{ file_id: "entry-1", file_name: "index.html", relative_file_path: "index.html" },
@@ -192,6 +199,20 @@ vi.mock("@/pages/superMagic/components/MessageHeader", () => ({
 
 vi.mock("../context", () => ({
 	AppStoreProvider: ({ children }: { children: ReactNode }) => children,
+	useAppStore: () => ({
+		conversation: {
+			selectedProject: null,
+			topicStore: {},
+			loadProjectContext: vi.fn(),
+			reset: vi.fn(),
+		},
+	}),
+}))
+
+vi.mock("@/apis", () => ({
+	SuperMagicApi: {
+		getMicroAppRuntimeProject: vi.fn().mockResolvedValue({ exists: false, project: null }),
+	},
 }))
 
 vi.mock("../hooks/useMicroAppPageController", () => ({
@@ -201,6 +222,10 @@ vi.mock("../hooks/useMicroAppPageController", () => ({
 			initError: null,
 			mentionPanelStore: {},
 			projectFilesStore: {},
+			setConversationType: vi.fn(),
+			usageConversation: {
+				topicStore: {},
+			},
 		},
 		conversation: {
 			topicStore: {
@@ -214,6 +239,7 @@ vi.mock("../hooks/useMicroAppPageController", () => ({
 			workspace_name: "Workspace",
 		},
 		selectedTopic: { id: "topic-1", topic_name: "Topic" },
+		canUseDevelopment: controllerMocks.canUseDevelopment,
 		hasRunningTopic: true,
 		isReadOnly: controllerMocks.isReadOnly,
 		canEdit: false,
@@ -243,6 +269,8 @@ vi.mock("../hooks/useMicroAppPageController", () => ({
 		captureCoverReady: true,
 		handleCaptureCover: vi.fn(),
 		handleEditMicroApp: vi.fn(),
+		ensureUsageProject: controllerMocks.ensureUsageProject,
+		sourceOrganizationCode: "org-1",
 	}),
 }))
 
@@ -254,6 +282,13 @@ vi.mock("../components/MicroAppHeader", () => ({
 	default: (props: Record<string, unknown>) => {
 		headerMocks.render(props)
 		return <header data-testid="desktop-micro-app-header" />
+	},
+}))
+
+vi.mock("../components/MicroAppPreviewWorkspace", () => ({
+	default: (props: Record<string, unknown>) => {
+		previewWorkspaceMocks.render(props)
+		return <div data-testid="micro-app-runtime-preview-workspace" />
 	},
 }))
 
@@ -383,6 +418,7 @@ describe("MicroAppPageDesktop", () => {
 		}
 		controllerMocks.initLoading = false
 		controllerMocks.isReadOnly = false
+		controllerMocks.canUseDevelopment = true
 		controllerMocks.attachmentList = [
 			{ file_id: "entry-1", file_name: "index.html", relative_file_path: "index.html" },
 			{ file_id: "admin-1", file_name: "admin.html", relative_file_path: "admin.html" },
@@ -394,6 +430,7 @@ describe("MicroAppPageDesktop", () => {
 		previewMocks.aiEdit.mockClear()
 		previewMocks.devConsoleToggle.mockClear()
 		previewMocks.render.mockClear()
+		previewWorkspaceMocks.render.mockClear()
 		headerMocks.render.mockClear()
 		overlayMocks.render.mockClear()
 		conversationPanelMocks.render.mockClear()
@@ -401,6 +438,10 @@ describe("MicroAppPageDesktop", () => {
 		topicHistoryMocks.render.mockClear()
 		previewPopupMocks.open.mockClear()
 		controllerMocks.checkAttachmentsNowDebounced.mockClear()
+		controllerMocks.ensureUsageProject.mockReset()
+		controllerMocks.ensureUsageProject.mockRejectedValue(
+			new Error("microAppShare.crossOrganizationConversationUnsupported"),
+		)
 	})
 
 	it("uses the loading illustration while resolving the project", () => {
@@ -434,6 +475,25 @@ describe("MicroAppPageDesktop", () => {
 		)
 	})
 
+	it("does not initialize a usage conversation when only switching to preview mode", async () => {
+		render(<MicroAppPageDesktop />)
+		await screen.findByTestId("desktop-entry-preview")
+		const headerProps = headerMocks.render.mock.lastCall?.[0] as {
+			onPageModeChange: (mode: "development" | "preview") => void
+		}
+
+		act(() => headerProps.onPageModeChange("preview"))
+
+		expect(controllerMocks.ensureUsageProject).not.toHaveBeenCalled()
+		expect(screen.getByTestId("micro-app-runtime-preview-workspace")).toBeInTheDocument()
+		expect(previewWorkspaceMocks.render).toHaveBeenCalledWith(
+			expect.objectContaining({
+				appId: "app-1",
+				sourceOrganizationCode: "org-1",
+			}),
+		)
+	})
+
 	it("opens tool details from the conversation panel in a preview modal", async () => {
 		render(<MicroAppPageDesktop />)
 		await screen.findByTestId("desktop-entry-preview")
@@ -452,6 +512,7 @@ describe("MicroAppPageDesktop", () => {
 
 	it("hides the conversation panel for read-only projects", async () => {
 		controllerMocks.isReadOnly = true
+		controllerMocks.canUseDevelopment = false
 
 		render(<MicroAppPageDesktop />)
 		await screen.findByTestId("desktop-entry-preview")
@@ -481,6 +542,22 @@ describe("MicroAppPageDesktop", () => {
 		expect(screen.queryByTestId("micro-app-conversation-rail")).not.toBeInTheDocument()
 	})
 
+	it("expands a collapsed conversation panel when a micro-app sends a message", async () => {
+		render(<MicroAppPageDesktop />)
+		await screen.findByTestId("desktop-entry-preview")
+
+		const conversationPanelProps = conversationPanelMocks.render.mock.calls.at(-1)?.[0] as {
+			onToggleConversationPanel: () => void
+		}
+		act(() => conversationPanelProps.onToggleConversationPanel())
+		expect(screen.queryByTestId("desktop-conversation-panel")).not.toBeInTheDocument()
+		expect(screen.getByTestId("micro-app-conversation-rail")).toBeInTheDocument()
+
+		act(() => pubsub.publish(PubSubEvents.Expand_Topic_Conversation_Panel))
+		expect(screen.getByTestId("desktop-conversation-panel")).toBeInTheDocument()
+		expect(screen.queryByTestId("micro-app-conversation-rail")).not.toBeInTheDocument()
+	})
+
 	it("connects task completion to the attachment refresh check", () => {
 		render(<MicroAppPageDesktop />)
 
@@ -491,13 +568,29 @@ describe("MicroAppPageDesktop", () => {
 		)
 	})
 
-	it("hides the topic mode icon in the micro-app history panel", () => {
+	it("hides the topic mode icon in the development history panel", () => {
 		topicHistoryMocks.isOpen = true
 
 		render(<MicroAppPageDesktop />)
 
 		expect(topicHistoryMocks.render).toHaveBeenCalledWith(
 			expect.objectContaining({ hideTopicListModeIcon: true }),
+		)
+	})
+
+	it("shows employee icons in the preview history panel", async () => {
+		topicHistoryMocks.isOpen = true
+
+		render(<MicroAppPageDesktop />)
+		await screen.findByTestId("desktop-entry-preview")
+		const headerProps = headerMocks.render.mock.lastCall?.[0] as {
+			onPageModeChange: (mode: "development" | "preview") => void
+		}
+
+		act(() => headerProps.onPageModeChange("preview"))
+
+		expect(topicHistoryMocks.render).toHaveBeenCalledWith(
+			expect.objectContaining({ hideTopicListModeIcon: false }),
 		)
 	})
 

@@ -39,7 +39,7 @@ skills:
     - name: lark-cli
     - name: dingtalk-cli
     - name: teamshare-cli
-    - name: micro-app-architect
+    - name: html-app-architect
     - name: document-converter
     - name: using-oauth2
   workspace_skills: "*"

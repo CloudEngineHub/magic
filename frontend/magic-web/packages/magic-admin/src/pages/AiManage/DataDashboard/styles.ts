@@ -32,6 +32,24 @@ export const useStyles = createStyles(
 			gap: 6px;
 			min-width: 0;
 		`,
+		headerActions: css`
+			display: flex;
+			align-items: center;
+			flex-shrink: 0;
+			gap: 16px;
+
+			@media (max-width: 768px) {
+				width: 100%;
+				justify-content: flex-end;
+			}
+		`,
+		updateInfo: css`
+			color: ${token.magicColorUsages.text[2]};
+			font-size: 12px;
+			line-height: 20px;
+			text-align: right;
+			white-space: nowrap;
+		`,
 		title: css`
 			margin: 0;
 			color: ${token.magicColorUsages.text[0]};

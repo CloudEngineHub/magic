@@ -4,7 +4,7 @@ import type { CollaboratorPermission } from "@/pages/superMagic/types/collaborat
 
 export type MicroAppPublishShareType = 2 | 4 | 5
 export type MicroAppPublishShareRange = "all" | "designated"
-export type MicroAppListScope = "all" | "created" | "collaborated"
+export type MicroAppListScope = "all" | "created" | "collaborated" | "accessible" | "recent"
 
 export interface MicroAppShareExtra {
 	pure_mode?: boolean
@@ -22,6 +22,8 @@ export interface PublishMicroAppProjectBody {
 	target_ids?: MicroAppPublishTarget[]
 	password?: string
 	cover_file_key?: string | null
+	expire_days?: number | null
+	default_open_file_id?: string | null
 	extra?: MicroAppShareExtra
 }
 
@@ -40,6 +42,9 @@ export interface PublishedMicroAppProjectItem {
 	published_at?: string
 	password?: string
 	cover_file_key?: string | null
+	expire_days?: number | null
+	expire_at?: string | null
+	default_open_file_id?: string | null
 	cover_url?: string
 	extra?: MicroAppShareExtra
 	publish_status?: "published" | "unpublished" | string
@@ -111,6 +116,7 @@ export interface PublishedMicroAppProjectsResponse {
 export interface MicroAppProjectDetail {
 	app_id: string
 	project_id: string
+	organization_code: string
 	project?: ProjectListItem
 	publish?: PublishedMicroAppProjectItem
 }
@@ -121,11 +127,26 @@ export interface CreateMicroAppProjectResponse {
 	topic: Topic
 }
 
+export type MicroAppRuntimeProject = Pick<ProjectListItem, "id"> &
+	Partial<Omit<ProjectListItem, "id">>
+
+export interface MicroAppRuntimeProjectResponse {
+	exists: boolean
+	project: MicroAppRuntimeProject | null
+}
+
+export interface EnsureMicroAppRuntimeProjectResponse {
+	project: MicroAppRuntimeProject
+	is_existing: boolean
+}
+
 export interface ResolvedPublishedMicroApp {
 	app_id: string
 	resource_id: string
 	share_code: string
+	organization_code: string
 	cover_url?: string
+	default_open_file_id?: string | null
 	extra?: MicroAppShareExtra
 }
 
@@ -172,6 +193,27 @@ export const generateMicroAppApi = (fetch: ServiceHttpClient) => ({
 		})
 	},
 
+	getMentionMicroApps(
+		params: {
+			page?: number
+			page_size?: number
+			keyword?: string
+		} = {},
+	) {
+		const { page = 1, page_size = 100, keyword = "" } = params
+		return fetch.get<MicroAppListResponse>("/api/v1/super-agent/micro-apps/mention", {
+			params: { page, page_size, keyword },
+			parseJsonLargeIntAsString: true,
+		})
+	},
+
+	recordMicroAppVisit(appId: string) {
+		return fetch.post<{ recorded: boolean }>(
+			`/api/v1/super-agent/micro-apps/${appId}/visit`,
+			undefined,
+		)
+	},
+
 	updateMicroApp(appId: string, body: UpdateMicroAppBody) {
 		return fetch.put<MicroAppMetadata>(`/api/v1/super-agent/micro-apps/${appId}`, body, {
 			parseJsonLargeIntAsString: true,
@@ -196,6 +238,21 @@ export const generateMicroAppApi = (fetch: ServiceHttpClient) => ({
 	getMicroAppProjectByProjectId(projectId: string) {
 		return fetch.get<MicroAppProjectDetail>(
 			`/api/v1/super-agent/micro-app-projects/by-project/${projectId}`,
+			{ parseJsonLargeIntAsString: true },
+		)
+	},
+
+	getMicroAppRuntimeProject(appId: string, options?: { enableErrorMessagePrompt?: boolean }) {
+		return fetch.get<MicroAppRuntimeProjectResponse>(
+			`/api/v1/super-agent/micro-app-projects/${appId}/runtime-project`,
+			{ parseJsonLargeIntAsString: true, ...options },
+		)
+	},
+
+	ensureMicroAppRuntimeProject(appId: string) {
+		return fetch.post<EnsureMicroAppRuntimeProjectResponse>(
+			`/api/v1/super-agent/micro-app-projects/${appId}/runtime-project`,
+			undefined,
 			{ parseJsonLargeIntAsString: true },
 		)
 	},

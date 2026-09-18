@@ -58,6 +58,7 @@ export function PPTProvider({ children, storeConfig }: PPTProviderProps) {
 		mainFileId: string | undefined
 		mainFileName: string | undefined
 		initialActiveIndex: number | undefined
+		fileApiIdentityKey: string
 	} | null>(null)
 
 	// Single-channel update: sync config to store as early as possible (useLayoutEffect)
@@ -69,6 +70,7 @@ export function PPTProvider({ children, storeConfig }: PPTProviderProps) {
 			storeConfig.attachmentList,
 			storeConfig.mainFileId,
 		)
+		const fileApiIdentityKey = storeConfig.fileApi?.identityKey ?? "none"
 		const slidesChanged =
 			!prev || prev.displayConfigSlidesSignature !== displayConfigSlidesSignature
 		const attachmentListChanged =
@@ -85,6 +87,7 @@ export function PPTProvider({ children, storeConfig }: PPTProviderProps) {
 		const displayConfigChanged = !prev || prev.displayConfig !== storeConfig.displayConfig
 		const initialActiveIndexChanged =
 			!prev || prev.initialActiveIndex !== storeConfig.initialActiveIndex
+		const fileApiChanged = !prev || prev.fileApiIdentityKey !== fileApiIdentityKey
 
 		if (
 			slidesChanged ||
@@ -92,7 +95,8 @@ export function PPTProvider({ children, storeConfig }: PPTProviderProps) {
 			attachmentLoadStateChanged ||
 			mainFileChanged ||
 			displayConfigChanged ||
-			initialActiveIndexChanged
+			initialActiveIndexChanged ||
+			fileApiChanged
 		) {
 			prevConfigRef.current = {
 				displayConfig: storeConfig.displayConfig,
@@ -103,6 +107,7 @@ export function PPTProvider({ children, storeConfig }: PPTProviderProps) {
 				mainFileId: storeConfig.mainFileId,
 				mainFileName: storeConfig.mainFileName,
 				initialActiveIndex: storeConfig.initialActiveIndex,
+				fileApiIdentityKey,
 			}
 			void store.updateConfig({
 				projectId: storeConfig.projectId,
@@ -113,6 +118,7 @@ export function PPTProvider({ children, storeConfig }: PPTProviderProps) {
 				mainFileName: storeConfig.mainFileName,
 				displayConfig: storeConfig.displayConfig,
 				initialActiveIndex: storeConfig.initialActiveIndex,
+				fileApi: storeConfig.fileApi,
 			})
 		}
 	}, [
@@ -122,6 +128,7 @@ export function PPTProvider({ children, storeConfig }: PPTProviderProps) {
 		storeConfig.attachmentLoadState,
 		storeConfig.projectId,
 		storeConfig.displayConfig,
+		storeConfig.fileApi?.identityKey,
 		storeConfig.mainFileId,
 		storeConfig.mainFileName,
 		storeConfig.initialActiveIndex,

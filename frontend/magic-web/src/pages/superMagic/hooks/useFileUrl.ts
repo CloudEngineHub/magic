@@ -2,7 +2,9 @@ import { useDebounceEffect } from "ahooks"
 import { useEffect, useRef, useState } from "react"
 import type { DownloadImageMode } from "../pages/Workspace/types"
 import type { ImageProcessOptions } from "@/utils/image-processing"
-import { resolveSharedMediaUrl } from "@/pages/superMagic/services/sharedMediaUrlCache"
+import { useFileApi } from "@/pages/superMagic/fileAccess/fileApi"
+import { useFileAccess } from "@/pages/superMagic/fileAccess/FileAccessProvider"
+import { shouldWaitForShareAccess } from "@/pages/superMagic/fileAccess/fileAccessContext"
 
 export const useFileUrl = ({
 	file_id,
@@ -27,11 +29,15 @@ export const useFileUrl = ({
 	const [isLoading, setIsLoading] = useState(false)
 	const [hasError, setHasError] = useState(false)
 	const requestIdRef = useRef(0)
+	const fileAccess = useFileAccess()
+	// Bind the ambient share/session identity at this React boundary; the shared
+	// media URL client is called through it so share previews do not fail closed.
+	const fileApi = useFileApi()
 
 	useDebounceEffect(
 		() => {
 			const requestId = ++requestIdRef.current
-			if (!enabled || !file_id) {
+			if (!enabled || !file_id || shouldWaitForShareAccess(fileAccess)) {
 				setFileUrl("")
 				setIsLoading(false)
 				setHasError(false)
@@ -39,17 +45,19 @@ export const useFileUrl = ({
 			}
 			setIsLoading(true)
 			setHasError(false)
-			resolveSharedMediaUrl({
-				fileId: file_id,
-				fileVersion: file_version,
-				updatedAt: updated_at,
-				downloadMode: download_mode,
-				isDownload: is_download,
-				imageProcess: image_process,
-			})
-				.then((item) => {
+			fileApi
+				.requestSharedMediaUrls([file_id], {
+					fileVersions:
+						file_version === undefined ? undefined : { [file_id]: file_version },
+					fileUpdatedAtMap:
+						updated_at === undefined ? undefined : { [file_id]: updated_at },
+					downloadMode: download_mode,
+					isDownload: is_download,
+					imageProcess: image_process,
+				})
+				.then((items) => {
 					if (requestIdRef.current !== requestId) return
-					const url = item?.url || ""
+					const url = items?.[0]?.url || ""
 					setFileUrl(url)
 					setHasError(!url)
 				})
@@ -62,7 +70,17 @@ export const useFileUrl = ({
 					if (requestIdRef.current === requestId) setIsLoading(false)
 				})
 		},
-		[file_id, file_version, updated_at, download_mode, is_download, image_process, enabled],
+		[
+			file_id,
+			file_version,
+			updated_at,
+			download_mode,
+			is_download,
+			image_process,
+			enabled,
+			fileAccess,
+			fileApi,
+		],
 		{
 			wait: 16,
 		},

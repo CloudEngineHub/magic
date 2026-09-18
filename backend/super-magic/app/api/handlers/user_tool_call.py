@@ -12,6 +12,7 @@ from pydantic import BaseModel, Field, field_validator
 
 from agentlang.logger import get_logger
 from app.api.http_dto.response import BaseResponse, create_error_response, create_success_response
+from app.core.exceptions.business import ErrorCode
 
 logger = get_logger(__name__)
 
@@ -78,7 +79,7 @@ async def dispatch(payload: UserToolCallPayload) -> BaseResponse:
                 f"user_tool_call: tool_call_id={tool_call_id} not in pending, "
                 "may have timed out or been submitted twice"
             )
-            return create_error_response("问题不存在或已超时")
+            return create_error_response("问题不存在或已超时", code=ErrorCode.USER_TOOL_CALL_NOT_FOUND)
 
         pending.cancel_timeout()
 

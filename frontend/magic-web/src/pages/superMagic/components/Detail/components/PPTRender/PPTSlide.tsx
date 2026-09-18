@@ -45,6 +45,7 @@ import { cn } from "@/utils/cn"
 import useShareRoute from "@/pages/superMagic/hooks/useShareRoute"
 import { AttachmentItem } from "../../../TopicFilesButton/hooks"
 import MagicSpin from "@/components/base/MagicSpin"
+import { stripSlideNotes } from "./utils/slideNotes"
 
 export interface PPTSlideToolbarModel {
 	token: object
@@ -200,6 +201,11 @@ const PPTSlide = observer(function PPTSlide({
 	const pendingSaveIntentRef = useRef<"save" | "save-and-exit" | "save-and-switch" | null>(null)
 	const pendingSaveResolveRef = useRef<((didSave: boolean) => void) | null>(null)
 	const isConfirmingConflictSaveRef = useRef(false)
+	const presentedVisualRef = useRef<{
+		revision: string
+		content: string
+		usesIframe: boolean
+	} | null>(null)
 
 	const { isShareRoute } = useShareRoute()
 
@@ -228,7 +234,8 @@ const PPTSlide = observer(function PPTSlide({
 	})
 	const isDisplayContentCurrent =
 		fileVersion === undefined
-			? displayContent.sourceVersion === undefined && displayContent.rawContent === rawContent
+			? displayContent.sourceVersion === undefined &&
+				stripSlideNotes(displayContent.rawContent) === stripSlideNotes(rawContent)
 			: typeof versionContent === "string" &&
 				displayContent.sourceVersion === fileVersion &&
 				displayContent.rawContent === versionContent
@@ -299,6 +306,13 @@ const PPTSlide = observer(function PPTSlide({
 			displayContent.sourceVersion === undefined &&
 			rawContent === displayContent.rawContent
 		) {
+			return
+		}
+		if (
+			displayContent.sourceVersion === undefined &&
+			stripSlideNotes(rawContent) === stripSlideNotes(displayContent.rawContent)
+		) {
+			setDisplayContent((current) => ({ ...current, rawContent }))
 			return
 		}
 
@@ -381,7 +395,17 @@ const PPTSlide = observer(function PPTSlide({
 		setTriggerSaveRef(() => triggerSave)
 	}, [])
 
+	const presentedReadyRef = useRef<boolean | null>(null)
 	const reportSlideRenderReady = useMemoizedFn((ready: boolean) => {
+		if (ready) {
+			presentedVisualRef.current = {
+				revision: renderRevision,
+				content: displayContent.content,
+				usesIframe: viewMode !== "code",
+			}
+		}
+		if (presentedReadyRef.current === ready) return
+		presentedReadyRef.current = ready
 		setIsSlideRenderReady(ready)
 		onRenderReadyChange?.(ready)
 	})
@@ -405,6 +429,18 @@ const PPTSlide = observer(function PPTSlide({
 			return
 		}
 
+		// Keep iframe ready when visual identity is unchanged.
+		// Code view unmounts the iframe, so it is a new present.
+		const presentedVisual = presentedVisualRef.current
+		const isUnchangedPresentedVisual =
+			Boolean(presentedVisual) &&
+			presentedVisual?.revision === renderRevision &&
+			presentedVisual?.content === displayContent.content &&
+			presentedVisual?.usesIframe === (viewMode !== "code") &&
+			loadingState === "loaded" &&
+			isDisplayContentCurrent
+
+		if (isUnchangedPresentedVisual) return
 		reportSlideRenderReady(false)
 		if (loadingState !== "loaded" || !displayContent.content || !isDisplayContentCurrent) return
 
@@ -1065,7 +1101,7 @@ const PPTSlide = observer(function PPTSlide({
 				className={cn("relative min-h-0 w-full", isFullscreen ? "h-full" : "flex-1")}
 			>
 				<IsolatedHTMLRenderer
-					key={`${renderRevision || `${fileId}:${content.length}:${rawContent.length}`}:${displayContent.sourceVersion ?? "latest"}`}
+					key={`${renderRevision || `${fileId}:${content.length}`}:${displayContent.sourceVersion ?? "latest"}`}
 					ref={rendererRef as React.RefObject<IsolatedHTMLRendererRef>}
 					content={displayContent.content}
 					rawSourceCode={displayContent.rawContent}

@@ -70,7 +70,14 @@ class SlidesTemplateTagAssembler
                 $group->getChildren()
             ));
 
-            return $dto->toArray();
+            $item = $dto->toArray();
+            unset($item['name_i18n']);
+            foreach ($item['tags'] as &$tag) {
+                unset($tag['name_i18n']);
+            }
+            unset($tag);
+
+            return $item;
         }, $groups);
     }
 

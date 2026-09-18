@@ -3,6 +3,7 @@ import { useTranslation } from "react-i18next"
 import { Button } from "@/components/shadcn-ui/button"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/shadcn-ui/tooltip"
 import type { ProjectListItem } from "@/pages/superMagic/pages/Workspace/types"
+import MicroAppModeSwitcher, { type MicroAppPageMode } from "./MicroAppModeSwitcher"
 
 interface MicroAppHeaderProps {
 	selectedProject: ProjectListItem | null
@@ -15,6 +16,9 @@ interface MicroAppHeaderProps {
 	onEdit?: () => void
 	canManageCollaborators?: boolean
 	onManageCollaborators?: () => void
+	canUseDevelopment?: boolean
+	pageMode?: MicroAppPageMode
+	onPageModeChange?: (mode: MicroAppPageMode) => void
 }
 
 export default function MicroAppHeader({
@@ -28,6 +32,9 @@ export default function MicroAppHeader({
 	onEdit,
 	canManageCollaborators,
 	onManageCollaborators,
+	canUseDevelopment = false,
+	pageMode = "development",
+	onPageModeChange,
 }: MicroAppHeaderProps) {
 	const { t } = useTranslation("super")
 	const projectName = selectedProject?.project_name || t("project.unnamedProject")
@@ -79,6 +86,10 @@ export default function MicroAppHeader({
 					<p className="truncate text-sm font-medium text-foreground">{projectName}</p>
 				)}
 			</div>
+
+			{canUseDevelopment && onPageModeChange ? (
+				<MicroAppModeSwitcher value={pageMode} onChange={onPageModeChange} />
+			) : null}
 
 			{showCollaboratorAction ? (
 				<Tooltip>

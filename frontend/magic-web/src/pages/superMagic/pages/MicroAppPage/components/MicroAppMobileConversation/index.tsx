@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react"
+import { useMemo, useRef, useState } from "react"
 import { observer } from "mobx-react-lite"
 import { useMemoizedFn } from "ahooks"
 import { ChevronDown, MessageCircle, X } from "lucide-react"
@@ -19,13 +19,18 @@ import { useTopicConversationLoading } from "@/pages/superMagic/hooks/useTopicCo
 import { useTopicMessages } from "@/pages/superMagic/hooks/useTopicMessages"
 import type { ProjectListItem, Topic } from "@/pages/superMagic/pages/Workspace/types"
 import { applyOptimisticTopicRunningState } from "@/pages/superMagic/services/topicStatusSyncService"
+import { useCreateTopicListener } from "@/pages/superMagic/components/TopicMode"
 import type { TopicStore } from "@/pages/superMagic/stores/core/topic"
 import { userStore } from "@/models/user"
 import type { MentionPanelStore } from "@/components/business/MentionPanel/builtin-store"
 import type { ProjectFilesStore } from "@/stores/projectFiles"
-
+import type { MessageEditorRef } from "@/pages/superMagic/components/MessageEditor/MessageEditor"
 import MicroAppTopicPicker from "./MicroAppTopicPicker"
+import MicroAppRuntimeMentionHint from "../MicroAppRuntimeMentionHint"
 import { resolveMicroAppModelSelectionMode } from "../../utils/microAppModelMode"
+import { TopicMode } from "../../../Workspace/TopicMode"
+import { usePinnedCurrentMicroAppMention } from "../../hooks/usePinnedCurrentMicroAppMention"
+import { insertCurrentMicroAppMention } from "../../utils/insertCurrentMicroAppMention"
 
 interface MicroAppMobileConversationProps {
 	open: boolean
@@ -38,6 +43,9 @@ interface MicroAppMobileConversationProps {
 	onOpenFile: (file?: unknown) => void
 	onOpenChange: (open: boolean) => void
 	onTerminalTopicStatusChange?: () => void
+	lockToMicroAppMode?: boolean
+	microAppId?: string
+	microAppName?: string
 }
 
 function MobileConversationEmpty() {
@@ -76,11 +84,34 @@ const MicroAppMobileConversation = observer(function MicroAppMobileConversation(
 	onOpenFile,
 	onOpenChange,
 	onTerminalTopicStatusChange,
+	lockToMicroAppMode = true,
+	microAppId,
+	microAppName,
 }: MicroAppMobileConversationProps) {
 	const { t } = useTranslation("super")
+	const editorRef = useRef<MessageEditorRef | null>(null)
+	const handleMentionHintClick = useMemoizedFn(() => {
+		insertCurrentMicroAppMention(editorRef.current?.editor, {
+			appId: microAppId,
+			appName: microAppName,
+		})
+	})
+	// Runtime chats pin this app at the @ panel root so users can mention it.
+	usePinnedCurrentMicroAppMention({
+		mentionPanelStore,
+		enabled: !lockToMicroAppMode,
+		appId: microAppId,
+		appName: microAppName,
+	})
 	const [topicPickerOpen, setTopicPickerOpen] = useState(false)
 	const selectedTopic = topicStore.selectedTopic
-	const modelTopicMode = resolveMicroAppModelSelectionMode()
+	const modelTopicMode = lockToMicroAppMode ? resolveMicroAppModelSelectionMode() : undefined
+	const keepMicroAppMode = useMemoizedFn((mode: TopicMode) => void mode)
+
+	useCreateTopicListener({
+		selectedProject,
+		topicStore,
+	})
 
 	useRefreshTopicDetailOnTaskComplete({
 		selectedTopic,
@@ -208,7 +239,9 @@ const MicroAppMobileConversation = observer(function MicroAppMobileConversation(
 								onFileClick={handleFileClick}
 								isEmptyStatus={isEmpty}
 								isMessagesLoading={isMessagesInitialLoading}
-								fallbackRender={<MobileConversationEmpty />}
+								fallbackRender={
+									lockToMicroAppMode ? <MobileConversationEmpty /> : undefined
+								}
 								className="bg-mobile-background"
 							/>
 						</MessageListProvider>
@@ -222,13 +255,25 @@ const MicroAppMobileConversation = observer(function MicroAppMobileConversation(
 							selectedTopic={selectedTopic}
 							setSelectedTopic={topicStore.setSelectedTopic}
 							modelTopicMode={modelTopicMode}
+							topicModeLogic={
+								lockToMicroAppMode
+									? {
+											topicMode: TopicMode.MicroApp,
+											setTopicMode: keepMicroAppMode,
+											recoverTopicMode: keepMicroAppMode,
+										}
+									: undefined
+							}
 							attachments={attachments}
 							mentionPanelStore={mentionPanelStore}
 							onFileClick={handleFileClick}
 							isShowLoadingInit={!isSelectedTopicMessagesReady}
-							showTopicModeExamplePortal={false}
-							showModeToggle={false}
-							showModelSelector
+							showTopicModeExamplePortal={!lockToMicroAppMode}
+							showModeToggle={!lockToMicroAppMode}
+							// Runtime previews use the default selector so the employee list stays available;
+							// its popup still contains the model rows below the employee list.
+							showModelSelector={lockToMicroAppMode}
+							editorRef={editorRef}
 							onSendComplete={({ success, currentProject, currentTopic }) => {
 								if (!success) return
 								applyOptimisticTopicRunningState({
@@ -238,6 +283,12 @@ const MicroAppMobileConversation = observer(function MicroAppMobileConversation(
 								})
 							}}
 						/>
+						{lockToMicroAppMode ? null : (
+							<MicroAppRuntimeMentionHint
+								className="px-3 pt-2"
+								onClick={handleMentionHintClick}
+							/>
+						)}
 					</div>
 				</div>
 			</MagicPopup>
@@ -248,6 +299,7 @@ const MicroAppMobileConversation = observer(function MicroAppMobileConversation(
 				selectedTopicId={selectedTopic?.id}
 				onSelect={handleSelectTopic}
 				onClose={() => setTopicPickerOpen(false)}
+				showModeIcon={!lockToMicroAppMode}
 			/>
 		</>
 	)

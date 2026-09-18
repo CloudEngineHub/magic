@@ -14,6 +14,7 @@ import BotIcon from "@/components/business/MentionPanel/components/icons/BotIcon
 import PlugIcon from "@/components/business/MentionPanel/components/icons/PlugIcon"
 import SkillIcon from "@/components/business/MentionPanel/components/icons/SkillIcon"
 import ToolIcon from "@/components/business/MentionPanel/components/icons/ToolIcon"
+import MicroAppIcon from "@/components/business/MentionPanel/components/icons/MicroAppIcon"
 import { useIsMobile } from "@/hooks/useIsMobile"
 import { logger as Logger } from "@/infrastructure/logger"
 import type { LocaleInput } from "../i18n"
@@ -93,6 +94,7 @@ const mentionIconFallbackMap: Partial<Record<string, ComponentType<{ size: numbe
 	[MentionItemType.AGENT]: BotIcon,
 	[MentionItemType.SKILL]: SkillIcon,
 	[MentionItemType.TOOL]: ToolIcon,
+	[MentionItemType.MICRO_APP]: MicroAppIcon,
 }
 
 function getMentionNodeDisplayName(attrs?: TiptapMentionAttributes, language?: LocaleInput) {

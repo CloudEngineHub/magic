@@ -17,12 +17,12 @@ export interface MicroAppPublishFormState {
 	coverFileKey?: string | null
 	coverUrl: string
 	fullScreen: boolean
+	shareExpiry: number | null
+	defaultOpenFileId: string | null
 }
 
 export type MicroAppPublishValidationError =
-	| "projectNameRequired"
-	| "projectNameTooLong"
-	| "passwordInvalid"
+	"projectNameRequired" | "projectNameTooLong" | "passwordInvalid"
 
 export function normalizeMicroAppPublishShareType(
 	shareType: MicroAppPublishShareType,
@@ -49,6 +49,8 @@ export function createDefaultMicroAppPublishFormState(
 		coverFileKey: undefined,
 		coverUrl: "",
 		fullScreen: false,
+		shareExpiry: null,
+		defaultOpenFileId: null,
 	}
 }
 
@@ -66,6 +68,12 @@ export function buildMicroAppPublishPayload(
 		payload.cover_file_key = formState.coverFileKey
 	}
 	payload.extra = { pure_mode: formState.fullScreen }
+	if (formState.shareExpiry !== null) {
+		payload.expire_days = formState.shareExpiry
+	}
+	if (formState.defaultOpenFileId !== null) {
+		payload.default_open_file_id = formState.defaultOpenFileId
+	}
 
 	if (shareType === ShareType.Organization) {
 		payload.share_range = formState.shareRange
@@ -125,6 +133,8 @@ export function createFormStateFromPublishedItem(
 		coverFileKey: item?.cover_file_key ?? undefined,
 		coverUrl: item?.cover_url || "",
 		fullScreen: item?.extra?.pure_mode === true,
+		shareExpiry: item?.expire_days ?? null,
+		defaultOpenFileId: item?.default_open_file_id ?? null,
 	}
 }
 
@@ -144,6 +154,9 @@ export function hasMicroAppPublishFormChanged(
 	if ((formState.coverFileKey ?? null) !== (publishedFormState.coverFileKey ?? null)) return true
 	if (formState.coverUrl.trim() !== publishedFormState.coverUrl.trim()) return true
 	if (formState.fullScreen !== publishedFormState.fullScreen) return true
+	if ((formState.shareExpiry ?? null) !== (publishedFormState.shareExpiry ?? null)) return true
+	if ((formState.defaultOpenFileId ?? null) !== (publishedFormState.defaultOpenFileId ?? null))
+		return true
 
 	if (formState.shareType === ShareType.Organization) {
 		if (formState.shareRange !== publishedFormState.shareRange) return true

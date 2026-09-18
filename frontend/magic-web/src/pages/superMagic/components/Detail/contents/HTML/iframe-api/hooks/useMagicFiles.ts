@@ -1,7 +1,6 @@
 import { useRef } from "react"
 import { useMemoizedFn } from "ahooks"
 import { useTranslation } from "react-i18next"
-import { runInAction } from "mobx"
 import magicToast from "@/components/base/MagicToaster/utils"
 import {
 	arrayBufferToFile,
@@ -15,14 +14,15 @@ import {
 } from "@/services/superMagic/DefaultAgentSelectionService"
 import { addMultipleFilesToCurrentChat } from "@/pages/superMagic/utils/topics"
 import { SuperMagicApi } from "@/apis"
-import SuperMagicService from "@/pages/superMagic/services"
-import { topicStore, workspaceStore } from "@/pages/superMagic/stores/core"
-import { getTemporaryDownloadUrl } from "@/pages/superMagic/utils/api"
+import { useFileApi } from "@/pages/superMagic/fileAccess/fileApi"
+import { workspaceStore } from "@/pages/superMagic/stores/core"
 import { downloadFileWithAnchor } from "@/pages/superMagic/utils/handleFIle"
 import pubsub, { PubSubEvents } from "@/utils/pubsub"
 import { waitForProjectAttachmentChange } from "@/pages/superMagic/utils/projectAttachments/attachmentMutationWaiter"
 import type { HtmlPermissionScope } from "../types"
 import type { TopicStore } from "@/pages/superMagic/stores/core/topic"
+import { isSingleTopicHostProject } from "@/pages/superMagic/utils/isSingleTopicHostProject"
+import { notifySpecifiedAgentUnavailable } from "@/pages/superMagic/utils/notifySpecifiedAgentUnavailable"
 
 interface MagicUploadFileData {
 	/** 二进制对象（优先使用；ArrayBuffer 可通过 transfer list 转移所有权） */
@@ -60,6 +60,10 @@ interface UseMagicFilesOptions {
 	selectedProject?: any
 	projectId?: string
 	topicStore?: TopicStore
+	ensureConversation?: () => Promise<{
+		selectedProject: any
+		topicStore: TopicStore
+	} | null>
 	projectContextUnavailableError?: string
 	attachmentList?: any[]
 	htmlRelativeFolderPath?: string
@@ -109,6 +113,7 @@ export function useMagicFiles(options: UseMagicFilesOptions): UseMagicFilesRetur
 		selectedProject,
 		projectId,
 		topicStore: scopedTopicStore,
+		ensureConversation,
 		projectContextUnavailableError,
 		attachmentList,
 		htmlRelativeFolderPath,
@@ -116,6 +121,7 @@ export function useMagicFiles(options: UseMagicFilesOptions): UseMagicFilesRetur
 		authorizePermission,
 	} = options
 	const { t } = useTranslation("super")
+	const fileApi = useFileApi()
 
 	// Keep a stable ref to attachmentList so handlers always see latest value
 	const attachmentListRef = useRef(attachmentList)
@@ -279,8 +285,26 @@ export function useMagicFiles(options: UseMagicFilesOptions): UseMagicFilesRetur
 				return
 			}
 
-			const runtimeProjectId = projectId ?? selectedProject?.id
-			if (!runtimeProjectId) {
+			let ensuredConversation:
+				| {
+						selectedProject: any
+						topicStore: TopicStore
+				  }
+				| null
+				| undefined
+			try {
+				ensuredConversation = await ensureConversation?.()
+			} catch (error) {
+				replyToIframe(replyType, requestId, {
+					success: false,
+					error: error instanceof Error ? error.message : "No project selected",
+				})
+				return
+			}
+			const activeSelectedProject = ensuredConversation?.selectedProject ?? selectedProject
+			const activeTopicStore = ensuredConversation?.topicStore ?? scopedTopicStore
+			const hostProjectId = activeSelectedProject?.id
+			if (!hostProjectId) {
 				replyToIframe(replyType, requestId, {
 					success: false,
 					error: projectContextUnavailableError || "No project selected",
@@ -323,6 +347,32 @@ export function useMagicFiles(options: UseMagicFilesOptions): UseMagicFilesRetur
 					return
 				}
 
+				// 龙虾/对话只有一个会话，把文件加到当前话题；忽略 agentMode。
+				if (isSingleTopicHostProject(activeSelectedProject)) {
+					if (!activeTopicStore) {
+						replyToIframe(replyType, requestId, {
+							success: false,
+							error: "No topic store",
+						})
+						return
+					}
+					if (!activeTopicStore.selectedTopic?.id) {
+						replyToIframe(replyType, requestId, {
+							success: false,
+							error: "No topic selected",
+						})
+						return
+					}
+
+					notifySpecifiedAgentUnavailable(agentMode, activeSelectedProject)
+					addMultipleFilesToCurrentChat({ fileItems: foundFiles, autoFocus: true })
+					replyToIframe(replyType, requestId, {
+						success: true,
+						result: { foundCount: foundFiles.length, notFoundPaths },
+					})
+					return
+				}
+
 				const selection = resolveAgentSelection(agentMode)
 				if (!isAgentSelectionAvailable(selection.modeIdentifier, selection.agentCode)) {
 					replyToIframe(replyType, requestId, {
@@ -334,7 +384,9 @@ export function useMagicFiles(options: UseMagicFilesOptions): UseMagicFilesRetur
 				const finalAgentMode = selection.modeIdentifier as TopicMode
 
 				const workspaceId =
-					selectedProject?.workspace_id || workspaceStore.selectedWorkspace?.id || ""
+					activeSelectedProject?.workspace_id ||
+					workspaceStore.selectedWorkspace?.id ||
+					""
 
 				if (!workspaceId) {
 					replyToIframe(replyType, requestId, {
@@ -344,8 +396,16 @@ export function useMagicFiles(options: UseMagicFilesOptions): UseMagicFilesRetur
 					return
 				}
 
+				if (!activeTopicStore) {
+					replyToIframe(replyType, requestId, {
+						success: false,
+						error: "No topic store",
+					})
+					return
+				}
+
 				const newTopic = await SuperMagicApi.createTopic({
-					project_id: runtimeProjectId,
+					project_id: hostProjectId,
 					topic_name: "",
 					project_mode: finalAgentMode as TopicMode,
 				})
@@ -360,28 +420,18 @@ export function useMagicFiles(options: UseMagicFilesOptions): UseMagicFilesRetur
 
 				const topicWithMode: any = { ...newTopic, topic_mode: finalAgentMode as TopicMode }
 
-				if (scopedTopicStore) {
-					// 微应用编辑页不走全局路由，直接同步独立话题列表和当前话题。
-					scopedTopicStore.setTopics([
-						topicWithMode,
-						...scopedTopicStore.topics.filter((topic) => topic.id !== newTopic.id),
-					])
-					scopedTopicStore.setSelectedTopic(topicWithMode)
-				} else {
-					runInAction(() => {
-						topicStore.setSelectedTopic(topicWithMode)
-					})
-				}
+				// 必须用传入的 store，不能回落到全局 topicStore。
+				activeTopicStore.setTopics([
+					topicWithMode,
+					...activeTopicStore.topics.filter((topic) => topic.id !== newTopic.id),
+				])
+				activeTopicStore.setSelectedTopic(topicWithMode)
 
 				pubsub.publish(PubSubEvents.Super_Magic_Topic_Mode_Changed, {
 					mode: finalAgentMode as TopicMode,
 					workspaceId,
-					projectId: runtimeProjectId,
+					projectId: hostProjectId,
 				})
-
-				if (!scopedTopicStore) {
-					SuperMagicService.route.navigateToState({ topicId: newTopic.id || null })
-				}
 
 				// Wait for navigation before adding files to the message input
 				setTimeout(() => {
@@ -461,7 +511,7 @@ export function useMagicFiles(options: UseMagicFilesOptions): UseMagicFilesRetur
 			await Promise.allSettled(
 				foundFiles.map(async ({ fileItem, originalPath }) => {
 					try {
-						const downloadUrls = await getTemporaryDownloadUrl({
+						const downloadUrls = await fileApi.getTemporaryDownloadUrl({
 							file_ids: [fileItem.file_id],
 						})
 

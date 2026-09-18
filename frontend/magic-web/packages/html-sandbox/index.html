@@ -589,8 +589,10 @@
 					if (!existingStyle) {
 						var style = document.createElement("style")
 						style.id = styleId
+						// Keep animation timelines intact: animation:none cancels them and
+						// replays entrance effects when a cached slide becomes visible again.
 						style.textContent =
-							"*{animation:none!important}*::before,*::after{animation:none!important}"
+							"*,*::before,*::after{animation-play-state:paused!important}"
 						if (document.head) document.head.appendChild(style)
 						else if (document.documentElement)
 							document.documentElement.appendChild(style)

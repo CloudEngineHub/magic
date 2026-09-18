@@ -450,6 +450,36 @@ describe("VirtualMessageList", () => {
 		expect(pinned?.style.top).toBe("var(--message-group-sticky-top, 0px)")
 	})
 
+	it("recomputes sticky ownership when User candidates are disabled and restored", () => {
+		const items = [message("user-0", "user"), ...assistantTail(5, 1)]
+		const projection = buildVirtualMessageProjection(items)
+		const viewport = createViewport()
+		const renderVirtualList = (userIndices: Array<number>) => (
+			<VirtualMessageList
+				items={projection.items}
+				userIndices={userIndices}
+				isMobile={false}
+				getScrollElement={() => viewport}
+				startMargin={50}
+				renderNode={({ item }) => <span>{item.key}</span>}
+			/>
+		)
+		const { container, rerender } = render(renderVirtualList(projection.userIndices))
+
+		scrollTo(100)
+		expect(container.querySelector('[data-virtual-item-sticky="true"]')).not.toBeNull()
+		const previousScrollOffset = virtualState.scrollOffset
+
+		rerender(renderVirtualList([]))
+		expect(container.querySelector('[data-virtual-item-sticky="true"]')).toBeNull()
+		expect(virtualState.scrollOffset).toBe(previousScrollOffset)
+
+		rerender(renderVirtualList(projection.userIndices))
+		flushAnimationFrame()
+		expect(container.querySelector('[data-virtual-item-sticky="true"]')).not.toBeNull()
+		expect(virtualState.scrollOffset).toBe(previousScrollOffset)
+	})
+
 	it("leaves the first User row unpinned while it still sits in its natural slot", () => {
 		// A list that opens with a User row is the shape of a conversation started from empty.
 		// `findItemIndex` clamps the negative probe to row 0 and reports it as parked, but the

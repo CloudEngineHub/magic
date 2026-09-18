@@ -2,6 +2,7 @@ import { act, renderHook, waitFor } from "@testing-library/react"
 import { beforeEach, describe, expect, it, vi } from "vitest"
 import { NodeType } from "@dtyq/user-selector"
 import { ResourceType, ShareMode, ShareType } from "@/pages/superMagic/components/Share/types"
+import { SharePermissionResourceProvider } from "@/pages/superMagic/components/Share/SharePermissionResourceContext"
 import type {
 	FileShareItem,
 	ProjectShareItem,
@@ -26,6 +27,7 @@ const mocks = vi.hoisted(() => ({
 	projectShareData: [] as ProjectShareItem[],
 	fileShareData: [] as FileShareItem[],
 	useShareDataCalls: [] as Array<{ resourceType: string; enabled?: boolean }>,
+	functionPermissions: {} as Record<string, boolean>,
 }))
 
 vi.hoisted(() => {
@@ -49,6 +51,14 @@ vi.hoisted(() => {
 })
 
 vi.mock("@/apis", () => ({
+	FUNCTION_PERMISSION_CODE: {
+		MicroAppSharePassword: "micro_app.share_password",
+		MicroAppSharePublic: "micro_app.share_public",
+		MicroAppShareTeam: "micro_app.share_team",
+		ProjectSharePassword: "project.share_password",
+		ProjectSharePublic: "project.share_public",
+		ProjectShareTeam: "project.share_team",
+	},
 	SuperMagicApi: {
 		getSnowflakeIds: mocks.getSnowflakeIds,
 		getShareInfoByCode: mocks.getShareInfoByCode,
@@ -56,6 +66,15 @@ vi.mock("@/apis", () => ({
 		createOrUpdateShareResource: mocks.createOrUpdateShareResource,
 		batchGetFileDetails: mocks.batchGetFileDetails,
 	},
+}))
+
+vi.mock("@/hooks/useFunctionPermission", () => ({
+	useFunctionPermissions: () => ({
+		data: mocks.functionPermissions,
+		error: undefined,
+		isLoading: false,
+		mutate: vi.fn(),
+	}),
 }))
 
 vi.mock(
@@ -149,6 +168,11 @@ describe("useProjectShareSheet", () => {
 		mocks.projectShareData = []
 		mocks.fileShareData = []
 		mocks.useShareDataCalls = []
+		mocks.functionPermissions = {
+			"project.share_password": true,
+			"project.share_public": true,
+			"project.share_team": true,
+		}
 		mocks.getSnowflakeIds.mockResolvedValue({ ids: ["share-1"] })
 		mocks.getShareInfoByCode.mockResolvedValue({})
 		mocks.getShareResourceMembers.mockResolvedValue({ members: [] })
@@ -218,6 +242,94 @@ describe("useProjectShareSheet", () => {
 		})
 
 		expect(result.current.view).toBe("create")
+	})
+
+	it("项目分享前两项被关闭时默认选中剩余的团队内分享", async () => {
+		mocks.functionPermissions = {
+			"project.share_password": false,
+			"project.share_public": false,
+			"project.share_team": true,
+		}
+
+		const { result } = renderHook(() =>
+			useProjectShareSheet({
+				open: true,
+				projectId: "project-1",
+				projectName: "Demo Project",
+				attachments: [],
+				mode: "project",
+				onClose: vi.fn(),
+			}),
+		)
+
+		await waitFor(() => {
+			expect(result.current.permittedShareTypes).toEqual([ShareType.Organization])
+			expect(result.current.formState.shareType).toBe(ShareType.Organization)
+			expect(result.current.isSelectedShareTypePermitted).toBe(true)
+		})
+	})
+
+	it("单个文件分享同步应用项目分享方式权限", async () => {
+		mocks.functionPermissions = {
+			"project.share_password": false,
+			"project.share_public": true,
+			"project.share_team": false,
+		}
+
+		const { result } = renderHook(() =>
+			useProjectShareSheet({
+				open: true,
+				projectId: "project-1",
+				projectName: "Demo Project",
+				attachments: [{ file_id: "file-1", file_name: "demo.md", is_directory: false }],
+				defaultSelectedFileIds: ["file-1"],
+				mode: "file",
+				onClose: vi.fn(),
+			}),
+		)
+
+		await waitFor(() => {
+			expect(result.current.permittedShareTypes).toEqual([ShareType.Public])
+			expect(result.current.formState.shareType).toBe(ShareType.Public)
+			expect(result.current.isSelectedShareTypePermitted).toBe(true)
+		})
+	})
+
+	it("微应用内文件分享使用微应用分享方式权限", async () => {
+		mocks.functionPermissions = {
+			"micro_app.share_password": false,
+			"micro_app.share_public": false,
+			"micro_app.share_team": true,
+			"project.share_password": true,
+			"project.share_public": false,
+			"project.share_team": false,
+		}
+
+		const { result } = renderHook(
+			() =>
+				useProjectShareSheet({
+					open: true,
+					projectId: "project-1",
+					projectName: "Demo Project",
+					attachments: [{ file_id: "file-1", file_name: "demo.md", is_directory: false }],
+					defaultSelectedFileIds: ["file-1"],
+					mode: "file",
+					onClose: vi.fn(),
+				}),
+			{
+				wrapper: ({ children }) => (
+					<SharePermissionResourceProvider value="microApp">
+						{children}
+					</SharePermissionResourceProvider>
+				),
+			},
+		)
+
+		await waitFor(() => {
+			expect(result.current.permittedShareTypes).toEqual([ShareType.Organization])
+			expect(result.current.formState.shareType).toBe(ShareType.Organization)
+			expect(result.current.isSelectedShareTypePermitted).toBe(true)
+		})
 	})
 
 	it("项目模式打开创建页时预填默认链接名称", () => {

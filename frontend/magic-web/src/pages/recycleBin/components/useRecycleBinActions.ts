@@ -36,7 +36,10 @@ interface SelectPathSubmitPayload {
 }
 
 type ConflictType =
-	"parent_missing" | "name_conflict" | "project_missing" | "duplicate_restore_target"
+	| "parent_missing"
+	| "name_conflict"
+	| "project_missing"
+	| "duplicate_restore_target"
 
 type ConflictResolution = {
 	parent_missing?: "restore_to_root"

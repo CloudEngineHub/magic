@@ -124,6 +124,14 @@ export namespace AiModel {
 		SupportThink = "3",
 	}
 
+	/** OpenAI 兼容聊天接口类型 */
+	export enum ChatApi {
+		/** Chat Completions：POST /chat/completions */
+		ChatCompletions = "chat_completions",
+		/** Responses：POST /responses */
+		Responses = "responses",
+	}
+
 	/** 模型类型组 */
 	export enum ModelTypeGroup {
 		/** 文生图 */
