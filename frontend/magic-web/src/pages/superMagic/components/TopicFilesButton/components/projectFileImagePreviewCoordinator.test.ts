@@ -1,5 +1,9 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 import { getTemporaryDownloadUrl } from "@/pages/superMagic/utils/api"
+import {
+	createSessionFileAccess,
+	createShareFileAccess,
+} from "@/pages/superMagic/fileAccess/fileAccessContext"
 import { SHARED_MEDIA_THUMBNAIL_IMAGE_PROCESS } from "@/pages/superMagic/services/sharedMediaImageProcess"
 import {
 	__resetProjectFileImagePreviewCoordinatorForTests,
@@ -62,6 +66,29 @@ describe("projectFileImagePreviewCoordinator", () => {
 		})
 		expect(secondResult).toEqual(firstResult)
 		expect(getTemporaryDownloadUrl).toHaveBeenCalledTimes(1)
+	})
+
+	it("keeps concurrent share and session thumbnail requests in separate exchanges", async () => {
+		const source = createSource(2)
+		vi.mocked(getTemporaryDownloadUrl).mockResolvedValue(createRows([source.fileId]))
+		const shareAccess = createShareFileAccess({
+			token: "share-token-coalesce",
+			projectId: "project-1",
+		})
+		const sessionAccess = createSessionFileAccess({ projectId: "project-1" })
+
+		// Two identities request the same file in the same batch window. They must
+		// not be coalesced into one exchange or share an in-flight promise.
+		const shareRequest = requestProjectFileImagePreview(source, { access: shareAccess })
+		const sessionRequest = requestProjectFileImagePreview(source, { access: sessionAccess })
+		await vi.advanceTimersByTimeAsync(projectFileImagePreviewCoordinatorConfig.batchDelayMs * 3)
+		const [shareResult, sessionResult] = await Promise.all([shareRequest, sessionRequest])
+
+		expect(getTemporaryDownloadUrl).toHaveBeenCalledTimes(2)
+		expect(shareResult.status).toBe("loaded")
+		expect(sessionResult.status).toBe("loaded")
+		const kinds = vi.mocked(getTemporaryDownloadUrl).mock.calls.map(([arg]) => arg.access?.kind)
+		expect(kinds).toEqual(["share", "session"])
 	})
 
 	it("seeds an attachment-list URL for reuse by the preview coordinator", async () => {

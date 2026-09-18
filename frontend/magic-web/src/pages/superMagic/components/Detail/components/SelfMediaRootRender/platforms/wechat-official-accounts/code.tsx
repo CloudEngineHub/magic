@@ -14,7 +14,7 @@ import {
 import { MonacoEditor } from "@/infrastructure/editors/monaco"
 import type { editor } from "@/infrastructure/editors/monaco"
 import { useTheme } from "@/models/config/hooks"
-import { getTemporaryDownloadUrl } from "@/pages/superMagic/utils/api"
+import { useFileApi } from "@/pages/superMagic/fileAccess/fileApi"
 import { flattenAttachments } from "../../../../contents/HTML/utils"
 import type { FileItem } from "../../../../contents/HTML/utils/fetchInterceptor"
 import FileEditButtons from "@/pages/superMagic/components/Detail/components/EditToolbar/FileEditButtons"
@@ -44,6 +44,7 @@ function WechatCodeView({
 	onRequestPostChangeReady,
 }: WechatCodeViewProps) {
 	const { t } = useTranslation("super")
+	const fileApi = useFileApi()
 	const article = post.article
 	const fileId = article?.fileId
 
@@ -102,7 +103,7 @@ function WechatCodeView({
 		setError(null)
 		;(async () => {
 			try {
-				const urls = await getTemporaryDownloadUrl({ file_ids: [fileId] })
+				const urls = await fileApi.getTemporaryDownloadUrl({ file_ids: [fileId] })
 				const url = urls?.[0]?.url
 				if (!url) throw new Error("noArticleUrl")
 				if (cancelled) return
@@ -125,7 +126,7 @@ function WechatCodeView({
 		return () => {
 			cancelled = true
 		}
-	}, [fileId, fileUpdatedAt, setDirtyState])
+	}, [fileId, fileUpdatedAt, setDirtyState, fileApi])
 
 	// Reset dirty state on post change
 	useEffect(() => {

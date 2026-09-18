@@ -17,6 +17,12 @@ import { createVirtualStorageMessageHandler } from "./utils/virtual-storage"
 import { HTML_IFRAME_RENDER_LIFECYCLE_EVENT } from "./telemetry/iframeRenderLifecycle"
 import type { SaveResult } from "./iframe-bridge/types"
 import { useStyles } from "./styles"
+import { useFileAccess } from "@/pages/superMagic/fileAccess/FileAccessProvider"
+import { useFileApi } from "@/pages/superMagic/fileAccess/fileApi"
+import {
+	getFileAccessContentKey,
+	isShareFileAccess,
+} from "@/pages/superMagic/fileAccess/fileAccessContext"
 import { useFileData } from "@/pages/superMagic/hooks/useFileData"
 import { processHtmlContent, type HtmlPreviewBundledTemplateKind } from "./htmlProcessor"
 import { resolveHtmlPreviewBundledTemplate } from "./html-preview-bundled-shell"
@@ -45,7 +51,7 @@ import { useDashboardVersioning } from "./dashboard/useDashboardVersioning"
 import { useAIEditMenuItems } from "@/pages/superMagic/components/Detail/components/EditToolbar/useAIEditMenuItems"
 import FileEditButtons from "@/pages/superMagic/components/Detail/components/EditToolbar/FileEditButtons"
 import ActionButton from "@/pages/superMagic/components/Detail/components/CommonHeader/components/ActionButton"
-import { ProjectListItem, Topic } from "@/pages/superMagic/pages/Workspace/types"
+import { ProjectListItem } from "@/pages/superMagic/pages/Workspace/types"
 import CommonFooter from "../../components/CommonFooter"
 import { useIsMobile } from "@/hooks/useIsMobile"
 import useExportMenuItems from "./useExportMenuItems"
@@ -60,11 +66,7 @@ import useServerUpdate from "../../hooks/useServerUpdate"
 import CodeVersionCompareDialog from "../../components/versioning/CodeVersionCompareDialog"
 import VersionCompareDialog from "../../components/versioning/VersionCompareDialog"
 import HistoryVersionCompareDialog from "../../components/PPTRender/components/HistoryVersionCompareDialog"
-import {
-	getFileContentById,
-	getTemporaryDownloadUrl,
-	downloadFileContent,
-} from "@/pages/superMagic/utils/api"
+import { getFileContentById, downloadFileContent } from "@/pages/superMagic/utils/api"
 import { useTranslation } from "react-i18next"
 import { AlertTriangle, Crosshair, ShieldCheck, Terminal } from "lucide-react"
 import { Button } from "@/components/shadcn-ui/button"
@@ -88,7 +90,6 @@ import {
 	shouldShowHtmlPermissionManager,
 	useHtmlAppPermissions,
 } from "./hooks/useHtmlAppPermissions"
-import type { TopicStore } from "@/pages/superMagic/stores/core/topic"
 import { useHtmlDevConsoleState } from "./hooks/useHtmlDevConsoleState"
 import {
 	type HtmlPermissionManagerHandle,
@@ -155,7 +156,6 @@ interface HTMLProps {
 	exportImage?: (fileId: string, format?: ImageExportFormat) => void
 	isExporting?: boolean
 	selectedProject?: ProjectListItem | null
-	selectedTopic?: Topic | null
 	showFileHeader?: boolean
 	activeFileId?: string | null
 	/** Live tab state, excluded from cached renderProps. */
@@ -174,10 +174,13 @@ interface HTMLProps {
 	// 是否允许下载（用于分享页面权限控制）
 	allowDownload?: boolean
 	projectId?: string
-	/** 微应用编辑页传入的独立话题 store，供 iframe Agent 操作同步当前话题。 */
-	topicStore?: TopicStore
+	/** 发布微应用身份，仅由宿主传入。 */
+	microAppId?: string
+	microAppName?: string
 	/** 跨多个 HTML 文件共享虚拟存储时使用的稳定标记。 */
 	virtualStorageMarkerId?: string
+	/** 分享预览不拉项目文件版本，走分享下载 */
+	isSharePreview?: boolean
 }
 
 interface HtmlExportActionProps {
@@ -225,6 +228,10 @@ const HtmlExportAction = memo(function HtmlExportAction({
 })
 
 export default memo(function HTML(props: HTMLProps) {
+	const fileAccess = useFileAccess()
+	const fileApi = useFileApi()
+	// Token refresh must not reprocess HTML / remount the iframe.
+	const fileAccessContentKey = getFileAccessContentKey(fileAccess)
 	const {
 		data: displayData,
 		attachments,
@@ -256,7 +263,6 @@ export default memo(function HTML(props: HTMLProps) {
 		exportImage,
 		isExporting,
 		selectedProject,
-		selectedTopic,
 		showFileHeader = true,
 		activeFileId,
 		isTabActive,
@@ -272,9 +278,12 @@ export default memo(function HTML(props: HTMLProps) {
 		isInPPTMode = false,
 		allowDownload,
 		projectId,
-		topicStore,
+		microAppId,
+		microAppName,
 		virtualStorageMarkerId,
+		isSharePreview = false,
 	} = props
+	// origin：显式传入的项目，缺省时用当前选中项目
 	const runtimeProjectId = projectId ?? selectedProject?.id
 
 	const displayConfig = displayData?.display_config || externalDisplayConfig
@@ -348,6 +357,7 @@ export default memo(function HTML(props: HTMLProps) {
 		isFromNode,
 		content: displayData?.content || "",
 		disabledUrlCache: isPlaybackMode,
+		isSharePreview,
 	})
 
 	const {
@@ -365,6 +375,7 @@ export default memo(function HTML(props: HTMLProps) {
 		displayConfig,
 		isFromNode,
 		isPlaybackMode,
+		isSharePreview,
 		htmlVersioning: {
 			fileVersion: htmlFileVersion,
 			changeFileVersion: changeHtmlFileVersion,
@@ -622,7 +633,7 @@ export default memo(function HTML(props: HTMLProps) {
 		async (targetVersion: number): Promise<string | null> => {
 			if (!fileId) return null
 			try {
-				const urlRes = await getTemporaryDownloadUrl({
+				const urlRes = await fileApi.getTemporaryDownloadUrl({
 					file_ids: [fileId],
 					file_versions: { [fileId]: targetVersion },
 				})
@@ -651,6 +662,8 @@ export default memo(function HTML(props: HTMLProps) {
 				attachmentList,
 				displayConfig,
 				xMagicImageProcess: HTML_PREVIEW_IMAGE_PROCESS,
+				access: fileAccess,
+				fileApi,
 			})
 			return result.processedContent
 		} catch {
@@ -845,6 +858,8 @@ export default memo(function HTML(props: HTMLProps) {
 			htmlRelativeFolderPath,
 			currentFileId || "",
 			onFetchIntercepted,
+			fileAccess,
+			fileApi,
 		)
 
 		// 处理嵌套 HTML iframe 内容请求
@@ -856,7 +871,8 @@ export default memo(function HTML(props: HTMLProps) {
 			{
 				postMessageTargetStrategy,
 				projectId: runtimeProjectId,
-				topicId: selectedTopic?.id ?? selectedProject?.current_topic_id,
+				access: fileAccess,
+				fileApi,
 				parentTargetOrigin: window.location.origin,
 				onTelemetry: (data) => {
 					htmlRenderLogger.report(HTML_IFRAME_RENDER_LIFECYCLE_EVENT, {
@@ -894,9 +910,10 @@ export default memo(function HTML(props: HTMLProps) {
 			window.removeEventListener("message", virtualStorageMessageHandler)
 		}
 		// eslint-disable-next-line react-hooks/exhaustive-deps
-	}, [attachmentList, displayData?.file_id, runtimeProjectId, selectedTopic?.id])
+	}, [attachmentList, displayData?.file_id, runtimeProjectId, fileApi, fileAccess])
 
 	const processContent = useMemoizedFn(async () => {
+		if (isSharePreview && !isShareFileAccess(fileAccess)) return
 		if (isDataAnalysis && !activeHistory.isPreviewReady) return
 
 		try {
@@ -910,6 +927,8 @@ export default memo(function HTML(props: HTMLProps) {
 				resourceFileVersions,
 				htmlPreviewBundledTemplate,
 				xMagicImageProcess: HTML_PREVIEW_IMAGE_PROCESS,
+				access: fileAccess,
+				fileApi,
 			})
 
 			let finalProcessedContent = result.processedContent
@@ -943,6 +962,7 @@ export default memo(function HTML(props: HTMLProps) {
 
 	useDeepCompareEffect(() => {
 		if (!data?.content) return
+		if (isSharePreview && !isShareFileAccess(fileAccess)) return
 		if (isDataAnalysis && !activeHistory.isPreviewReady) return
 		processContent()
 	}, [
@@ -952,7 +972,9 @@ export default memo(function HTML(props: HTMLProps) {
 		htmlPreviewBundledTemplate,
 		resourceFileVersions,
 		dashboardDataJsContent,
+		fileAccessContentKey,
 		isDataAnalysis,
+		isSharePreview,
 		activeHistory.isPreviewReady,
 	])
 
@@ -961,6 +983,7 @@ export default memo(function HTML(props: HTMLProps) {
 	useDeepCompareEffect(() => {
 		if (isEditMode) return
 		if (!data?.content) return
+		if (isSharePreview && !isShareFileAccess(fileAccess)) return
 		if (isDataAnalysis && !activeHistory.isPreviewReady) return
 		processContent()
 	}, [
@@ -968,7 +991,9 @@ export default memo(function HTML(props: HTMLProps) {
 		htmlPreviewBundledTemplate,
 		resourceFileVersions,
 		dashboardDataJsContent,
+		fileAccessContentKey,
 		isDataAnalysis,
+		isSharePreview,
 		activeHistory.isPreviewReady,
 	])
 
@@ -1720,10 +1745,9 @@ export default memo(function HTML(props: HTMLProps) {
 									htmlRelativeFolderPath={
 										currentHtmlFileInfo.htmlRelativeFolderPath
 									}
-									selectedProject={selectedProject}
 									projectId={runtimeProjectId}
-									topicStore={topicStore}
-									selectedTopic={selectedTopic}
+									microAppId={microAppId}
+									microAppName={microAppName}
 									devConsoleEnabled={devConsoleEnabled}
 									permissionController={htmlPermissionController}
 									attachmentList={attachmentList}

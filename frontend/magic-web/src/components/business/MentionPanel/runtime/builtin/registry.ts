@@ -1,4 +1,5 @@
 import { MentionItemType } from "../../types"
+import { MentionPanelBuiltinItemId } from "./catalog-ids"
 import { agentsCatalogPlugin, agentsSearchPlugin, agentsValidationPlugin } from "./domains/agents"
 import {
 	digitalEmployeesCatalogPlugin,
@@ -9,7 +10,9 @@ import { historyCatalogPlugin } from "./domains/history"
 import { mcpCatalogPlugin, mcpSearchPlugin, mcpValidationPlugin } from "./domains/mcp"
 import { skillsCatalogPlugin, skillsSearchPlugin, skillsValidationPlugin } from "./domains/skills"
 import { tabsCatalogPlugin } from "./domains/tabs"
+import { isMicroAppEnabled } from "@/services/microAppFeature"
 import { toolsCatalogPlugin, toolsSearchPlugin, toolsValidationPlugin } from "./domains/tools"
+import type { MentionPanelSearchPlugin } from "./registry-types"
 import {
 	uploadFilesCatalogPlugin,
 	uploadFilesSearchPlugin,
@@ -26,6 +29,14 @@ const catalogPlugins = [
 	digitalEmployeesCatalogPlugin,
 	flowsCatalogPlugin,
 	agentsCatalogPlugin,
+	...(!isMicroAppEnabled()
+		? []
+		: [
+				{
+					catalogId: MentionPanelBuiltinItemId.MICRO_APPS,
+					resolveCatalog: ({ store }) => store.microAppsStore.getItems(),
+				},
+			]),
 	skillsCatalogPlugin,
 	toolsCatalogPlugin,
 	historyCatalogPlugin,
@@ -57,6 +68,10 @@ const validationPlugins = [
 		itemType: MentionItemType.PROJECT,
 		validate: ({ data }) => Boolean(data && "project_id" in data && data.project_id),
 	},
+	{
+		itemType: MentionItemType.MICRO_APP,
+		validate: ({ data }) => Boolean(data && "app_id" in data && data.app_id),
+	},
 ]
 
 export const mentionPanelCatalogPluginMap = new Map(
@@ -64,6 +79,14 @@ export const mentionPanelCatalogPluginMap = new Map(
 )
 
 export const mentionPanelSearchPlugins = searchPlugins
+
+const microAppsSearchPlugin: MentionPanelSearchPlugin = {
+	id: "micro-apps",
+	search: ({ store, normalizedQuery }) =>
+		store.microAppsStore.searchItems(normalizedQuery, store.matchesQuery),
+}
+
+if (isMicroAppEnabled()) mentionPanelSearchPlugins.push(microAppsSearchPlugin)
 
 export const mentionPanelValidationPluginMap = new Map(
 	validationPlugins.map((plugin) => [plugin.itemType, plugin]),

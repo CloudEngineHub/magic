@@ -16,6 +16,29 @@ describe("processHtmlContent image processing", () => {
 		vi.mocked(getTemporaryDownloadUrl).mockReset()
 	})
 
+	it("only replaces standalone window reload calls", async () => {
+		const result = await processHtmlContent({
+			content: `
+				<script>
+					window.reload()
+					window.location.reload(true)
+					previewwindow.reload()
+					mywindow.reload(false)
+					obj.window.reload()
+				</script>
+			`,
+			attachments: [],
+		})
+
+		expect(result.processedContent).toContain("window.Magic.reload()")
+		expect(result.processedContent).toContain("previewwindow.reload()")
+		expect(result.processedContent).toContain("mywindow.reload(false)")
+		expect(result.processedContent).toContain("obj.window.reload()")
+		expect(result.processedContent).not.toContain("preview/*__ORIGINAL_RELOAD__:")
+		expect(result.processedContent).not.toContain("my/*__ORIGINAL_RELOAD__:")
+		expect(result.processedContent).not.toContain("obj./*__ORIGINAL_RELOAD__:")
+	})
+
 	it("replaces preloaded image URLs with the WebP variant without reprocessing scripts", async () => {
 		vi.mocked(getTemporaryDownloadUrl).mockResolvedValue([
 			{

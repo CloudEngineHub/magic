@@ -38,6 +38,7 @@ export const MentionBusinessItemType = {
 	AGENT: "agent",
 	SKILL: "skill",
 	TOOL: "tool",
+	MICRO_APP: "micro_app",
 	PROJECT: "project",
 	PROJECT_FILE: "project_file",
 	USER_FILE: "user_file",
@@ -96,6 +97,11 @@ export interface ToolMentionData {
 	name: string
 	icon?: string
 	description?: string
+}
+
+export interface MicroAppMentionData {
+	app_id: string
+	app_name?: string
 }
 
 export interface ProjectMentionData {
@@ -279,6 +285,7 @@ export interface MentionCoreItemDataMap {
 export interface MentionBusinessItemDataMap {
 	[MentionBusinessItemType.MCP]: McpMentionData
 	[MentionBusinessItemType.AGENT]: AgentMentionData
+	[MentionBusinessItemType.MICRO_APP]: MicroAppMentionData
 	[MentionBusinessItemType.SKILL]: SkillMentionData
 	[MentionBusinessItemType.TOOL]: ToolMentionData
 	[MentionBusinessItemType.PROJECT]: ProjectMentionData

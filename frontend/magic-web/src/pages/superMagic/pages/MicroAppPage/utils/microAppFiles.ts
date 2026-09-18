@@ -101,7 +101,9 @@ export function resolveSelectedHtmlEntry({
 	if (rootHtmlFiles.length === 0) return null
 
 	if (selectedFileId) {
-		const selected = rootHtmlFiles.find((item) => getAttachmentId(item) === selectedFileId)
+		const selected = rootHtmlFiles.find(
+			(item) => String(getAttachmentId(item)) === String(selectedFileId),
+		)
 		if (selected) return selected
 	}
 

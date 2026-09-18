@@ -42,7 +42,9 @@ from .magicbase_row_parameter import (
     BatchDeleteMagicBaseRowsParameter,
     CreateMagicBaseRowParameter,
     DeleteMagicBaseRowParameter,
+    GetMagicBaseRowParameter,
     QueryMagicBaseRowsParameter,
+    UpdateMagicBaseRowParameter,
 )
 
 
@@ -86,5 +88,7 @@ __all__ = [  # noqa: RUF022 - 保留既有分组和导出顺序
     'BatchDeleteMagicBaseRowsParameter',
     'CreateMagicBaseRowParameter',
     'DeleteMagicBaseRowParameter',
+    'GetMagicBaseRowParameter',
     'QueryMagicBaseRowsParameter',
+    'UpdateMagicBaseRowParameter',
 ]

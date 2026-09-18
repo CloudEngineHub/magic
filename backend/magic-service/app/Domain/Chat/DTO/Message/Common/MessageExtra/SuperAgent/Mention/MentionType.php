@@ -29,6 +29,7 @@ enum MentionType: string
     case AGENT = 'agent';
     case ASSISTANT = 'assistant';
     case MCP = 'mcp';
+    case MICRO_APP = 'micro_app';
     case TOOL = 'tool';
     case SKILL = 'skill';
 

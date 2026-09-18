@@ -9,6 +9,8 @@ import type { CharacterCountOptions } from "@/infrastructure/editors/tiptap/exte
 import type { SlashDropdownMenuProps } from "@/components/tiptap-ui-primitive/SlashDropdownMenu"
 
 export interface SimpleEditorProps {
+	/** Embedded editors can use inline Markdown shortcuts without a full toolbar. */
+	showToolbar?: boolean
 	content?: Content
 	/** Preview-only position mapping; does not update the editor document. */
 	onFrontmatterSourceMap?: (ranges: FrontmatterSourceReplacement[], content: string) => void

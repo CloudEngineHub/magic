@@ -41,4 +41,23 @@ describe("FileTabMagicIcon", () => {
 		expect(screen.getByTestId("slides-template-folder-icon")).toHaveTextContent("16")
 		expect(screen.queryByTestId("magic-file-icon")).not.toBeInTheDocument()
 	})
+
+	it("uses an app window icon for published micro-app tabs", () => {
+		render(
+			<FileTabMagicIcon
+				tab={
+					{
+						type: "micro_app",
+						fileData: {},
+					} as never
+				}
+				attachments={[]}
+				isPlayback={false}
+				size={16}
+			/>,
+		)
+
+		expect(screen.getByTestId("micro-app-tab-icon")).toBeInTheDocument()
+		expect(screen.queryByTestId("magic-file-icon")).not.toBeInTheDocument()
+	})
 })

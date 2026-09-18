@@ -1,4 +1,5 @@
 import type { ImageProcessOptions } from "@/utils/image-processing"
+import type { FileApi } from "@/pages/superMagic/fileAccess/fileApi"
 import {
 	extractSlidesFromScript,
 	flattenAttachments,
@@ -62,14 +63,14 @@ function mergePreviewBundledMetadata(
  * @returns 处理后的 HTML 内容
  */
 function replaceLocationReload(htmlContent: string): string {
-	// 匹配 window.location.reload() 的各种写法
-	// 包括：window.location.reload()、window.location.reload(true)、window.location.reload(false)
-	// 以及可能的空格变体
+	// 匹配 window.reload() 和 window.location.reload() 的各种写法
+	// 包括 reload()、reload(true)、reload(false) 以及可能的空格变体
 	return htmlContent.replace(
-		/window\.location\.reload\s*\(\s*(?:true|false)?\s*\)/gi,
-		(match) => {
+		/(^|[^\w$.])window(?:\.location)?\.reload\s*\(\s*(?:true|false)?\s*\)/gi,
+		(match, prefix: string) => {
+			const originalReload = match.slice(prefix.length)
 			// 保存原始代码到注释中，以便保存时恢复
-			return `/*__ORIGINAL_RELOAD__:${match}__*/window.Magic.reload()`
+			return `${prefix}/*__ORIGINAL_RELOAD__:${originalReload}__*/window.Magic.reload()`
 		},
 	)
 }
@@ -135,6 +136,9 @@ export interface ProcessHtmlContentInput {
 	htmlPreviewBundledTemplate?: HtmlPreviewBundledTemplateKind
 	/** 图片处理参数，用于对资源图片进行压缩/缩放（通过 X-Magic-Image-Process 请求头） */
 	xMagicImageProcess?: ImageProcessOptions
+	access?: import("@/pages/superMagic/fileAccess/fileAccessContext").FileAccessContext | null
+	/** Bound file client for callers outside the main HTML preview tree. */
+	fileApi?: FileApi
 }
 
 // 输出结果接口
@@ -378,6 +382,8 @@ export async function processHtmlContent(
 				processingMetadata,
 				allFiles,
 				relativeFolderPath,
+				access: input.access,
+				fileApi: input.fileApi,
 			})
 
 			// 替换 window.location.reload 为 window.Magic.reload

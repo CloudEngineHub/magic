@@ -43,6 +43,8 @@ describe("MicroAppPublishDialog", () => {
 		const publishedSection = screen.getByTestId("micro-app-published-section")
 		const basicSettings = screen.getByTestId("micro-app-publish-basic-settings")
 		expect(publishedSection).toHaveClass("border-emerald-200", "bg-emerald-50/60")
+		expect(publishedSection).not.toHaveClass("col-span-2")
+		expect(publishedSection.parentElement).toHaveClass("grid-cols-1")
 		expect(publishedSection.nextElementSibling).toBe(basicSettings)
 	})
 
@@ -129,10 +131,14 @@ describe("MicroAppPublishDialog", () => {
 	it("limits the content height and scrolls overflowing settings", async () => {
 		renderDialog()
 
-		const scrollArea = await screen.findByTestId("micro-app-publish-scroll-area")
-		expect(scrollArea).toHaveAttribute("data-slot", "scroll-area")
-		expect(scrollArea).toHaveClass("min-h-0")
-		expect(scrollArea.querySelector("[data-slot='scroll-area-viewport']")).not.toBeNull()
+		const basicScrollArea = await screen.findByTestId("micro-app-publish-scroll-area")
+		const shareScrollArea = screen.getByTestId("micro-app-publish-share-panel")
+		expect(basicScrollArea).toHaveAttribute("data-slot", "scroll-area")
+		expect(shareScrollArea).toHaveAttribute("data-slot", "scroll-area")
+		expect(basicScrollArea).toHaveClass("h-full", "min-h-0", "min-w-0")
+		expect(shareScrollArea).toHaveClass("h-full", "min-h-0", "min-w-0")
+		expect(basicScrollArea.querySelector("[data-slot='scroll-area-viewport']")).not.toBeNull()
+		expect(shareScrollArea.querySelector("[data-slot='scroll-area-viewport']")).not.toBeNull()
 		expect(screen.getByTestId("micro-app-publish-basic-settings").parentElement).toHaveClass(
 			"p-5",
 		)
@@ -191,6 +197,23 @@ describe("MicroAppPublishDialog", () => {
 		const settings = await screen.findByTestId("micro-app-publish-basic-settings")
 		expect(settings).toContainElement(screen.getByTestId("micro-app-publish-project-name"))
 		expect(settings).toContainElement(screen.getByTestId("micro-app-cover-upload"))
+	})
+
+	it("uses the shadcn select for the default entry", async () => {
+		renderDialog({
+			attachmentList: [
+				{
+					file_id: "entry-1",
+					file_name: "index.html",
+					relative_file_path: "index.html",
+				},
+			],
+		})
+
+		const trigger = await screen.findByTestId("micro-app-default-open-file")
+		expect(trigger).toHaveAttribute("data-slot", "select-trigger")
+		expect(trigger).toHaveAttribute("role", "combobox")
+		expect(trigger).toHaveTextContent("microAppPage.publish.defaultOpenFileAuto")
 	})
 
 	it("disables publishing and prompts for a missing app name", async () => {

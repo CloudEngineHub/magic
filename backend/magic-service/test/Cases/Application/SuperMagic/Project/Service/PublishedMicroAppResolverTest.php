@@ -8,11 +8,15 @@ declare(strict_types=1);
 namespace HyperfTest\Cases\Application\SuperMagic\Project\Service;
 
 use App\Application\SuperMagic\Project\Service\PublishedMicroAppResolver;
+use App\Domain\File\Repository\Persistence\Facade\CloudFileRepositoryInterface;
 use App\Domain\File\Service\FileDomainService;
+use App\Domain\SuperMagic\Common\Share\Constant\ShareAccessType;
+use App\Domain\SuperMagic\Common\Share\Entity\ResourceShareEntity;
 use App\Domain\SuperMagic\Common\Share\Service\ResourceShareDomainService;
 use App\Domain\SuperMagic\File\Entity\TaskFileEntity;
 use App\Domain\SuperMagic\File\Repository\Facade\TaskFileRepositoryInterface;
 use App\Domain\SuperMagic\Project\Entity\MicroAppEntity;
+use App\Domain\SuperMagic\Project\Entity\ValueObject\MicroAppPublishStatus;
 use App\Domain\SuperMagic\Project\Repository\Facade\MicroAppRepositoryInterface;
 use App\Domain\SuperMagic\Project\Repository\Facade\ProjectRepositoryInterface;
 use App\Infrastructure\Core\ValueObject\StorageBucketType;
@@ -111,6 +115,76 @@ class PublishedMicroAppResolverTest extends TestCase
         self::assertSame('', $resolver->getInstallIconUrl($record));
     }
 
+    public function testCanAccessPublishedShareAllowsOrgShare(): void
+    {
+        $resolver = $this->createShareResolver(
+            $this->publishedRecord(),
+            $this->orgShare(),
+            shareAccessible: true,
+        );
+
+        self::assertTrue($resolver->canAccessPublishedShare(1001, 'user-1', 'org-1'));
+    }
+
+    public function testCanAccessPublishedShareRejectsPasswordShare(): void
+    {
+        $shareDomainService = $this->createMock(ResourceShareDomainService::class);
+        $shareDomainService->method('getValidShareByResourceId')
+            ->willReturn(
+                (new ResourceShareEntity())
+                    ->setShareCode('share-password')
+                    ->setShareType(ShareAccessType::PasswordProtected->value)
+            );
+        $shareDomainService->expects($this->never())->method('validateShareAccess');
+
+        $microAppRepository = $this->createMock(MicroAppRepositoryInterface::class);
+        $microAppRepository->method('findById')->with(1001)->willReturn($this->publishedRecord());
+
+        $resolver = $this->createResolver(
+            $this->createMock(TaskFileRepositoryInterface::class),
+            $this->unusedFileDomainService(),
+            $microAppRepository,
+            $shareDomainService,
+        );
+
+        self::assertFalse($resolver->canAccessPublishedShare(1001, 'user-1', 'org-1'));
+    }
+
+    public function testCanAccessPublishedShareRejectsUnpublished(): void
+    {
+        $shareDomainService = $this->createMock(ResourceShareDomainService::class);
+        $shareDomainService->expects($this->never())->method('getValidShareByResourceId');
+
+        $microAppRepository = $this->createMock(MicroAppRepositoryInterface::class);
+        $microAppRepository->method('findById')->with(1001)->willReturn(
+            (new MicroAppEntity())
+                ->setId(1001)
+                ->setProjectId(2001)
+                ->setResourceId('resource-1')
+                ->setPublishStatus(MicroAppPublishStatus::Unpublished->value)
+        );
+
+        $resolver = $this->createResolver(
+            $this->createMock(TaskFileRepositoryInterface::class),
+            $this->unusedFileDomainService(),
+            $microAppRepository,
+            $shareDomainService,
+        );
+
+        self::assertFalse($resolver->canAccessPublishedShare(1001, 'user-1', 'org-1'));
+    }
+
+    public function testCanAccessPublishedShareRejectsInaccessibleShare(): void
+    {
+        $resolver = $this->createShareResolver(
+            $this->publishedRecord(),
+            $this->orgShare(),
+            shareAccessible: false,
+        );
+
+        self::assertFalse($resolver->canAccessPublishedShare(1001, 'user-1', 'org-1'));
+    }
+
     /** @return array{0: PublishedMicroAppResolver, 1: MicroAppEntity} */
     private function createResolverWithIconLinks(array|RuntimeException $links): array
     {
@@ -138,17 +212,66 @@ class PublishedMicroAppResolverTest extends TestCase
         ];
     }
 
+    private function createShareResolver(
+        MicroAppEntity $record,
+        ResourceShareEntity $shareEntity,
+        bool $shareAccessible,
+    ): PublishedMicroAppResolver {
+        $microAppRepository = $this->createMock(MicroAppRepositoryInterface::class);
+        $microAppRepository->method('findById')->with($record->getId())->willReturn($record);
+
+        $shareDomainService = $this->createMock(ResourceShareDomainService::class);
+        $shareDomainService->method('getValidShareByResourceId')
+            ->with($record->getResourceId())
+            ->willReturn($shareEntity);
+        if (! $shareAccessible) {
+            $shareDomainService->method('validateShareAccess')
+                ->willThrowException(new RuntimeException('share denied'));
+        }
+
+        return $this->createResolver(
+            $this->createMock(TaskFileRepositoryInterface::class),
+            $this->unusedFileDomainService(),
+            $microAppRepository,
+            $shareDomainService,
+        );
+    }
+
     private function createResolver(
         TaskFileRepositoryInterface $taskFileRepository,
         FileDomainService $fileDomainService,
+        ?MicroAppRepositoryInterface $microAppRepository = null,
+        ?ResourceShareDomainService $shareDomainService = null,
     ): PublishedMicroAppResolver {
         return new PublishedMicroAppResolver(
-            $this->createMock(MicroAppRepositoryInterface::class),
+            $microAppRepository ?? $this->createMock(MicroAppRepositoryInterface::class),
             $this->createMock(ProjectRepositoryInterface::class),
-            $this->createMock(ResourceShareDomainService::class),
+            $shareDomainService ?? $this->createMock(ResourceShareDomainService::class),
             $taskFileRepository,
             $fileDomainService,
         );
+    }
+
+    private function unusedFileDomainService(): FileDomainService
+    {
+        return new FileDomainService($this->createMock(CloudFileRepositoryInterface::class));
+    }
+
+    private function publishedRecord(): MicroAppEntity
+    {
+        return (new MicroAppEntity())
+            ->setId(1001)
+            ->setProjectId(2001)
+            ->setResourceId('resource-1')
+            ->setPublishStatus(MicroAppPublishStatus::Published->value);
+    }
+
+    private function orgShare(): ResourceShareEntity
+    {
+        return (new ResourceShareEntity())
+            ->setShareCode('share-org')
+            ->setShareType(ShareAccessType::TeamShare->value)
+            ->setShareRange('all');
     }
 
     private function createFile(string $fileName, string $fileKey, ?int $parentId, ?int $fileId = null): TaskFileEntity

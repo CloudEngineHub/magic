@@ -1,5 +1,6 @@
 import { SuperMagicApi } from "@/apis"
 import { getFileContentById } from "@/pages/superMagic/utils/api"
+import type { FileApi } from "@/pages/superMagic/fileAccess/fileApi"
 import { isEqual } from "lodash-es"
 import type { FileItem } from "@/pages/superMagic/components/Detail/components/FilesViewer/types"
 import type { DesignData } from "../types"
@@ -98,15 +99,26 @@ interface ReadElementDetailsResult {
 	unsupported: boolean
 }
 
+function readElementDetailsFileContent(
+	fileId: string,
+	fileApi?: FileApi,
+): Promise<string | ArrayBuffer | Blob> {
+	// Bound FileApi forwarding share/session identity; host-only callers fall back
+	// to the unbound leaf (session identity is the intentional default there).
+	return fileApi
+		? fileApi.getFileContentById(fileId, { responseType: "text" })
+		: getFileContentById(fileId, { responseType: "text" })
+}
+
 async function readElementDetailsByFile(
 	fileItem: FileItem | null,
+	fileApi?: FileApi,
 ): Promise<ReadElementDetailsResult> {
 	if (!fileItem?.file_id)
 		return { doc: emptyElementDetailsDoc(), exists: false, unsupported: false }
 	try {
-		const content = (await getFileContentById(fileItem.file_id, {
-			responseType: "text",
-		})) as string | null
+		const content = (await readElementDetailsFileContent(fileItem.file_id, fileApi)) as
+			string | null
 		if (!content || !content.trim())
 			return { doc: emptyElementDetailsDoc(), exists: true, unsupported: false }
 		const raw = JSON.parse(content)
@@ -125,6 +137,8 @@ export interface ElementDetailsContext {
 	flatAttachments?: FileItem[]
 	mainFileId: string | null
 	projectId?: string
+	/** Bound file client injected at the Design boundary; omitted on host-only paths. */
+	fileApi?: FileApi
 }
 
 export interface HydrateElementDetailsResult {
@@ -148,8 +162,8 @@ export async function getElementDetailsSidecarStatus(
 		ELEMENT_DETAILS_USER_FILENAME,
 	)
 	const [agentResult, userResult] = await Promise.all([
-		readElementDetailsByFile(agentLookup.fileItem),
-		readElementDetailsByFile(userLookup.fileItem),
+		readElementDetailsByFile(agentLookup.fileItem, ctx.fileApi),
+		readElementDetailsByFile(userLookup.fileItem, ctx.fileApi),
 	])
 	if (agentResult.unsupported || userResult.unsupported) return "unsupported"
 	return agentResult.exists || userResult.exists ? "loaded" : "missing"
@@ -185,8 +199,8 @@ export async function hydrateDesignDataDetails(
 	)
 
 	const [agentResult, userResult] = await Promise.all([
-		readElementDetailsByFile(agentLookup.fileItem),
-		readElementDetailsByFile(userLookup.fileItem),
+		readElementDetailsByFile(agentLookup.fileItem, ctx.fileApi),
+		readElementDetailsByFile(userLookup.fileItem, ctx.fileApi),
 	])
 	if (agentResult.unsupported || userResult.unsupported) {
 		setHydratedElementDetailsProvenance(designData, {})
@@ -236,8 +250,8 @@ export async function writeUserElementDetails(
 	)
 
 	const [agentBaselineResult, userBaselineResult] = await Promise.all([
-		readElementDetailsByFile(agentLookup.fileItem),
-		readElementDetailsByFile(userLookup.fileItem),
+		readElementDetailsByFile(agentLookup.fileItem, ctx.fileApi),
+		readElementDetailsByFile(userLookup.fileItem, ctx.fileApi),
 	])
 	if (agentBaselineResult.unsupported || userBaselineResult.unsupported)
 		return "blocked-unsupported"

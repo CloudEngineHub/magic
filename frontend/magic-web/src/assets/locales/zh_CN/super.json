@@ -2681,6 +2681,7 @@
 		"waitForPreviousOperation": "请等待上一次操作结束",
 		"website": {
 			"add": "打开网站",
+			"clearSearch": "清除搜索",
 			"closeLoadFallback": "关闭加载提示",
 			"commonAddTitle": "保存常用链接",
 			"commonAlreadyExists": "这个链接已添加为常用",
@@ -2701,8 +2702,17 @@
 			"loadFallbackDescription": "如果页面未完整显示，可能是站点限制 iframe 嵌入，或当前网络加载较慢。",
 			"loadFallbackTitle": "网页加载时间较长",
 			"menuTitle": "常用网站",
+			"microApps": {
+				"empty": "暂无可用微应用",
+				"loading": "正在加载微应用...",
+				"loadingMore": "正在加载更多...",
+				"searchPlaceholder": "搜索微应用",
+				"title": "微应用"
+			},
+			"noResults": "没有匹配的结果",
 			"openCustom": "打开",
 			"openExternal": "新窗口打开",
+			"openUrl": "打开 {{url}}",
 			"presets": {
 				"baiduImages": {
 					"description": "图片搜索与素材参考",
@@ -2733,8 +2743,17 @@
 					"title": "站酷"
 				}
 			},
+			"quickOpen": "快速打开",
+			"quickOpenDescription": "搜索文件、网站或微应用",
 			"refresh": "刷新",
-			"removeCommon": "移除常用链接"
+			"removeCommon": "移除常用链接",
+			"searchAllPlaceholder": "搜索文件、网站或微应用，或输入网址",
+			"sections": {
+				"all": "全部",
+				"files": "文件",
+				"label": "内容分类",
+				"websites": "网站"
+			}
 		}
 	},
 	"filenameValidator": {
@@ -3110,6 +3129,7 @@
 			},
 			"title": "确认{{operation}}项目文件"
 		},
+		"specifiedAgentUnavailable": "当前无法使用指定员工，已沿用本会话员工",
 		"userInfoAuthorizationConfirm": {
 			"allow": "允许",
 			"appConfigUnavailableContent": "该 HTML 微应用的 app.json 暂不可用，正在按旧版方式请求读取：{{fields}}。",
@@ -3444,8 +3464,25 @@
 	},
 	"microAppPage": {
 		"conversation": {
+			"collapse": "收起消息面板",
+			"defaultAppName": "微应用",
+			"development": "开发项目",
 			"emptyDescription": "描述需求，我会直接修改这个微应用。",
-			"emptyTitle": "说说你想改什么"
+			"emptyTitle": "说说你想改什么",
+			"expand": "展开消息面板",
+			"loadFailed": "项目加载失败，请重试",
+			"mentionAppHintAction": "请先 @ 当前应用。",
+			"mentionAppHintHoverAction": "请点击添加该微应用",
+			"mentionAppHintPrefix": "当你需要修改微应用数据时，",
+			"switchToPreviewCancel": "取消",
+			"switchToPreviewCancelled": "已取消本次操作",
+			"switchToPreviewConfirm": "切换",
+			"switchToPreviewDescription": "创建话题、发送消息等操作需要在预览模式下执行。是否切换到预览模式？",
+			"switchToPreviewTitle": "切换到预览模式",
+			"title": "对话",
+			"usage": "使用项目",
+			"usageEmptyDescription": "运行微应用后，消息会显示在这里。",
+			"usageEmptyTitle": "还没有使用项目"
 		},
 		"databasePanel": {
 			"accessPermissions": "访问权限",
@@ -3724,6 +3761,11 @@
 			"files": "文件",
 			"preview": "预览"
 		},
+		"mode": {
+			"ariaLabel": "微应用工作模式",
+			"development": "开发模式",
+			"preview": "预览模式"
+		},
 		"navigation": {
 			"ariaLabel": "微应用编辑区域",
 			"database": "数据",
@@ -3731,7 +3773,8 @@
 			"longMemory": "长期记忆",
 			"preview": "预览",
 			"scheduledTasks": "定时任务",
-			"shareManagement": "分享管理"
+			"shareManagement": "分享管理",
+			"skills": "技能"
 		},
 		"preview": {
 			"buildingDescription": "页面生成后会自动显示在这里。",
@@ -3777,6 +3820,9 @@
 			"coverTooLarge": "封面图片不能超过 10 MB",
 			"coverUpload": "上传封面",
 			"coverUploadFailed": "封面上传失败，请重试",
+			"defaultOpenFile": "默认入口",
+			"defaultOpenFileAuto": "自动选择",
+			"defaultOpenFileDescription": "仅显示项目根目录下的 HTML 文件。文件失效后会自动回退。",
 			"description": "配置访问范围后，其他人可以通过发布链接使用这个微应用。",
 			"displaySettings": "高级选项",
 			"fullScreen": "全屏显示",
@@ -3809,10 +3855,39 @@
 			"unpublishFailed": "下架失败，请重试",
 			"unpublishSuccess": "微应用已下架",
 			"update": "保存设置"
+		},
+		"skills": {
+			"addToConversation": "添加到对话",
+			"cancel": "取消",
+			"contentEmpty": "该技能暂无 SKILL.md 内容",
+			"create": "创建技能",
+			"createDescription": "描述你希望技能完成的工作，创建请求将发送到当前对话。",
+			"createFailed": "创建请求未能发送，请稍后重试。",
+			"createPrompt": "请在当前项目中创建一个技能，满足以下需求：\n\n{{requirement}}\n\n请结合项目已有功能，先检查现有技能，避免覆盖或重复创建。在 .magic/skills/<技能目录>/SKILL.md 中编写技能，包含 name、description 元数据，以及适用场景、触发条件、输入、执行步骤和输出要求；如有必要，创建配套脚本或参考资料。完成后说明技能用途和使用方式。",
+			"createSubmit": "创建",
+			"detailEmpty": "选择一个技能查看 SKILL.md",
+			"edit": "编辑",
+			"empty": "当前项目暂无技能",
+			"loadFailed": "技能加载失败，请稍后重试。",
+			"loading": "正在加载技能...",
+			"noDescription": "暂无描述",
+			"requirement": "技能需求",
+			"requirementPlaceholder": "例如：搜索行业热点，生成选题建议，并整理到内容日历中。",
+			"save": "保存",
+			"saveFailed": "技能保存失败，请稍后重试。",
+			"saveSuccess": "技能已保存",
+			"saving": "保存中...",
+			"subtitle": "选择技能后，将自动填入当前对话编辑器。",
+			"title": "项目技能",
+			"trigger": "技能",
+			"use": "使用",
+			"usePrompt": "使用 {{skill}} 技能",
+			"workspaceSubtitle": "查看项目技能及其 SKILL.md 内容"
 		}
 	},
 	"microAppShare": {
 		"copyLink": "复制链接",
+		"crossOrganizationConversationUnsupported": "暂不支持跨组织使用微应用对话",
 		"errorTitle": "微应用不可访问",
 		"install": "安装到桌面",
 		"installConfirm": "继续安装",
@@ -3826,6 +3901,9 @@
 		"installWebViewTitle": "请使用系统浏览器",
 		"linkCopied": "链接已复制",
 		"login": "登录",
+		"loginRequiredConfirm": "去登录",
+		"loginRequiredDescription": "此操作需要登录。是否前往登录？",
+		"loginRequiredTitle": "登录后才能发起",
 		"noEntryDescription": "发布内容中没有可运行的根目录 HTML 文件。",
 		"noEntryTitle": "未找到入口 HTML",
 		"openInBrowser": "在系统浏览器中打开",
@@ -3851,6 +3929,7 @@
 		"user": "已登录用户"
 	},
 	"microAppsPage": {
+		"accessTitle": "打开应用",
 		"actions": {
 			"collaboratorsFailed": "加载协作者信息失败，请重试。",
 			"collaboratorsNoPermission": "你没有管理该应用协作者的权限。",
@@ -3872,8 +3951,14 @@
 			"renaming": "保存中..."
 		},
 		"backToCreate": "返回创建微应用",
+		"clearSearch": "清空搜索",
+		"continueDevelopment": "继续开发",
+		"createApp": "创建应用",
+		"createBlankApp": "创建空白应用",
 		"createProject": "新建项目",
 		"createProjectFailed": "新建项目失败，请重试。",
+		"creating": "创建中…",
+		"developmentTitle": "继续开发",
 		"draftBadge": "开发中",
 		"emptyDescription": "在上方描述你的想法，创建第一个微应用。",
 		"emptyTitle": "暂无微应用项目",
@@ -3898,16 +3983,27 @@
 		"heroTitleProduct": "微应用",
 		"heroTitleProductHint": "Micro App",
 		"loadMore": "加载更多",
+		"loadMoreFailed": "加载失败，已显示的应用仍可使用。",
+		"loadedCount": "已显示 {{count}} / {{total}} 个应用",
 		"noSearchResults": "没有匹配的微应用",
 		"noSearchResultsDescription": "换个关键词试试。",
+		"openApp": "打开应用",
 		"openGallery": "查看微应用列表",
 		"publishedEmptyDescription": "发布者把微应用分享给你后，会显示在这里。",
 		"publishedEmptyTitle": "暂无可访问的微应用",
+		"recentEmptyDescription": "访问过的应用会显示在这里，方便下次继续使用。",
+		"recentEmptyTitle": "暂无访问记录",
 		"refresh": "刷新",
+		"resizePanels": "调整开发区和访问区的宽度",
+		"retryLoadMore": "重试加载",
+		"scopeAccessible": "可访问的",
 		"scopeAll": "全部",
 		"scopeCollaborated": "我协作的",
 		"scopeCreated": "我创建的",
+		"scopeRecent": "最近访问",
+		"searchLoadedCount": "已显示 {{count}} 个应用",
 		"searchPlaceholder": "搜索微应用",
+		"searchResultsTitle": "搜索结果",
 		"shareType": {
 			"organization": "团队可见",
 			"password": "密码访问",
@@ -3920,7 +4016,8 @@
 		"tabPublished": "已发布微应用",
 		"title": "微应用",
 		"unnamedApp": "未命名微应用",
-		"updatedAt": "更新于 {{date}}"
+		"updatedAt": "更新于 {{date}}",
+		"viewProject": "查看项目"
 	},
 	"mobile": {
 		"apps": {
@@ -4667,6 +4764,24 @@
 		"slideIdleDescription": "第 {{index}} 页正在等待加载",
 		"slideLoadError": "第 {{index}} 页加载失败",
 		"slideLoading": "正在加载第 {{index}} 页...",
+		"speakerNotes": {
+			"empty": "暂无备注",
+			"generate": "写讲稿",
+			"generatePrompt": "请为这页 PPT 生成适合演讲时使用的备注。",
+			"generatePromptSuffix": "请使用 Markdown 编写讲稿（按需使用段落、列表和加粗），将结果写入该页面已有的 data-magic-slide-notes 备注区域，沿用现有存储格式，不要改动幻灯片视觉内容。",
+			"pageTitle": "第 {{page}} 页 · 备注",
+			"placeholder": "点击这里，记下这页要讲的内容。也可以点击「写讲稿」，让 AI 帮你起草。",
+			"polish": "润色",
+			"polishPrompt": "请润色这页 PPT 已有的讲稿，让表达自然流畅、适合口头讲述，保留原意、事实与数据。",
+			"resize": "调整备注区高度",
+			"save": "保存",
+			"saveFailed": "保存失败，请重试",
+			"saved": "已保存",
+			"saving": "保存中",
+			"shorten": "精简",
+			"shortenPrompt": "请精简这页 PPT 已有的讲稿，保留核心观点和关键数据，删除重复及冗余表达。",
+			"title": "备注"
+		},
 		"templateReplacement": {
 			"button": "更换模板",
 			"confirm": "确认使用",

@@ -199,6 +199,10 @@ Architecture Working Principles:
 5. Each slide project must be a complete self-contained project, therefore:
    - Slide pages prohibited from referencing images or resources outside project folder, e.g., all images must be stored in images folder, otherwise cannot render correctly
    - User-uploaded images need to be copied to images folder via shell_exec(command="cp src_path dst_path") command to be correctly referenced
+
+6. Every slide HTML file must include one inert speaker-notes block outside the visual slide DOM:
+   `<template data-magic-slide-notes data-format="plain-text" data-version="1">...</template>`
+   Generate concise presentation-ready notes from the page purpose, visible content, audience, and narrative flow. Preserve and update this block whenever an existing slide's message changes; never render notes on the slide canvas.
 </project_structure>
 
 <content_design_principles>

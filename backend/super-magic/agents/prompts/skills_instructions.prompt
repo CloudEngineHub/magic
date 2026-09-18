@@ -2,6 +2,7 @@
 <!--zh
 ## 如何读取 skills
 **读取内容**：`read_skills(skill_names=["skill-name"])`
+**读取引用项目业务 skill**：从 `@micro_app` 或 `@project` mention 复制 `project_id`，调用 `read_skills(skill_names=["skill-name"], project_id="...")`。禁止编造 `project_id`，禁止改读当前工作区或系统同名 skill。
 **读取关联文件**：skill 内容中会列出需要阅读的关联文件路径（相对于 skill 目录），使用 `read_files` 读取时，必须拼成绝对路径。优先使用 `<skill_dir>` 标签给出的绝对 skill 目录，再拼上 skill 内容中给出的相对路径；若没有 `<skill_dir>`，再取 `<location>` 标签中的绝对路径并去掉文件名得到 skill 目录。
 例如 `<skill_dir>/abs/path/to/skill-name</skill_dir>` + skill 内容中的 `reference/doc.md` → `read_files(files=[{"file_path": "/abs/path/to/skill-name/reference/doc.md"}])`
 **禁止**使用相对路径；文件名和子目录名必须完全来自 skill 内容原文，不得凭经验猜测或自行补全。
@@ -9,6 +10,7 @@
 -->
 ## How to read skills
 **Read content**: `read_skills(skill_names=["skill-name"])`
+**Read a referenced-project companion skill**: copy `project_id` from the `@micro_app` or `@project` mention and call `read_skills(skill_names=["skill-name"], project_id="...")`. Do not invent `project_id`, and do not load a same-named workspace or system skill instead.
 **Read related files**: The skill content lists related file paths (relative to the skill directory). When using `read_files`, always construct an absolute path. Prefer the absolute skill directory from the `<skill_dir>` tag, then append the relative path given in the skill content. If `<skill_dir>` is unavailable, take the absolute path from the `<location>` tag and strip the filename to get the skill directory.
 Example: `<skill_dir>/abs/path/to/skill-name</skill_dir>` + `reference/doc.md` from skill content → `read_files(files=[{"file_path": "/abs/path/to/skill-name/reference/doc.md"}])`
 **Never** use a relative path. Copy the file name and subdirectory exactly as written in the skill content — do not guess or infer any part of the path.

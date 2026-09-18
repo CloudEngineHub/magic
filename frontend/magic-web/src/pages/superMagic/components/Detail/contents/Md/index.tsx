@@ -1,3 +1,6 @@
+import { useFileAccess } from "@/pages/superMagic/fileAccess/FileAccessProvider"
+import { useFileApi } from "@/pages/superMagic/fileAccess/fileApi"
+import { shouldWaitForShareAccess } from "@/pages/superMagic/fileAccess/fileAccessContext"
 import type { TextFileSession } from "../../types"
 import DetailEmpty from "../../components/DetailEmpty"
 import type {
@@ -5,7 +8,6 @@ import type {
 	SourceReplacement,
 } from "./components/EditorBody/source-location"
 import { useMarkdownSelection } from "./hooks/useMarkdownSelection"
-import { getTemporaryDownloadUrl } from "@/pages/superMagic/utils/api"
 import { memo, useEffect, useMemo, useRef, useState } from "react"
 import { createPortal } from "react-dom"
 import CommonHeaderV2 from "../../components/CommonHeaderV2"
@@ -197,6 +199,8 @@ export default memo(function TextEditor(props: TextEditorProps) {
 	} = props
 	const { t } = useTranslation("super")
 	const isMobile = useIsMobile()
+	const fileAccess = useFileAccess()
+	const fileApi = useFileApi()
 
 	/** 使用分享按钮可见性控制 Hook，用于控制导出按钮和下载按钮 */
 	const { shouldHideByPermission } = useShareButtonVisibility({
@@ -446,6 +450,7 @@ export default memo(function TextEditor(props: TextEditorProps) {
 			setSourceSnapshot({ source: currentContent, content, replacements })
 		}
 		const processImages = async () => {
+			if (shouldWaitForShareAccess(fileAccess)) return
 			setIsLoading(true)
 			setImageUrlMap(new Map())
 
@@ -507,7 +512,7 @@ export default memo(function TextEditor(props: TextEditorProps) {
 				try {
 					// Batch fetch temporary download URLs
 					const downloadUrls =
-						(await getTemporaryDownloadUrl({
+						(await fileApi.getTemporaryDownloadUrl({
 							file_ids: Array.from(imagesToProcess),
 							options: {
 								xMagicImageProcess: {
@@ -543,7 +548,7 @@ export default memo(function TextEditor(props: TextEditorProps) {
 			disposed = true
 		}
 		// eslint-disable-next-line react-hooks/exhaustive-deps
-	}, [currentContent, relativeFilePath])
+	}, [currentContent, relativeFilePath, fileAccess, fileApi])
 
 	const handleEdit = useMemoizedFn(() => {
 		markdownSelection.stop()

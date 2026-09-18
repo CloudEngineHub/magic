@@ -53,6 +53,25 @@ describe("MicroAppHeader", () => {
 		expect(screen.queryByTestId("micro-app-publish-button")).not.toBeInTheDocument()
 	})
 
+	it("renders the development and preview mode switch for developers", () => {
+		const onPageModeChange = vi.fn()
+		renderHeader({
+			canUseDevelopment: true,
+			pageMode: "development",
+			onPageModeChange,
+		})
+
+		expect(screen.getByTestId("micro-app-mode-switcher")).toBeInTheDocument()
+		fireEvent.click(screen.getByTestId("micro-app-mode-preview"))
+		expect(onPageModeChange).toHaveBeenCalledWith("preview")
+	})
+
+	it("hides the mode switch when the user cannot edit the app", () => {
+		renderHeader({ canUseDevelopment: false, onPageModeChange: vi.fn() })
+
+		expect(screen.queryByTestId("micro-app-mode-switcher")).not.toBeInTheDocument()
+	})
+
 	it("shows published status when the micro app is already published", () => {
 		renderHeader({ hasEntries: true, isPublished: true })
 

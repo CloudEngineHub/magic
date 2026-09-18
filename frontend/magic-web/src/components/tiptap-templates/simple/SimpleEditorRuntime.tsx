@@ -73,6 +73,7 @@ export type { SimpleEditorProps, SimpleEditorRef } from "./types"
 export const SimpleEditor = React.forwardRef<SimpleEditorRef, SimpleEditorProps>(function (
 	{
 		content,
+		showToolbar = true,
 		characterCountConfig,
 		onUpdate,
 		onContentChange,
@@ -445,7 +446,7 @@ export const SimpleEditor = React.forwardRef<SimpleEditorRef, SimpleEditorProps>
 			)}
 		>
 			<EditorContext.Provider value={{ editor }}>
-				{toolbar(!isMobile && isEditable)}
+				{showToolbar && toolbar(!isMobile && isEditable)}
 				{enableDragHandle && editor && (
 					<DragHandle
 						editor={editor}
@@ -487,7 +488,7 @@ export const SimpleEditor = React.forwardRef<SimpleEditorRef, SimpleEditorProps>
 					className="simple-editor-content"
 				/>
 				{isEditable && <TableMenu editor={editor} isEditable={isEditable} />}
-				{toolbar(isMobile && isEditable)}
+				{showToolbar && toolbar(isMobile && isEditable)}
 			</EditorContext.Provider>
 		</div>
 	)

@@ -8,6 +8,7 @@ declare(strict_types=1);
 namespace App\Application\SuperMagic\Project\Service;
 
 use App\Domain\File\Service\FileDomainService;
+use App\Domain\SuperMagic\Common\Share\Constant\ShareAccessType;
 use App\Domain\SuperMagic\Common\Share\Entity\ResourceShareEntity;
 use App\Domain\SuperMagic\Common\Share\Service\ResourceShareDomainService;
 use App\Domain\SuperMagic\File\Repository\Facade\TaskFileRepositoryInterface;
@@ -28,8 +29,7 @@ class PublishedMicroAppResolver
         private readonly ResourceShareDomainService $resourceShareDomainService,
         private readonly TaskFileRepositoryInterface $taskFileRepository,
         private readonly FileDomainService $fileDomainService,
-    ) {
-    }
+    ) {}
 
     /**
      * @return null|array{0: MicroAppEntity, 1: ResourceShareEntity}
@@ -49,6 +49,40 @@ class PublishedMicroAppResolver
         return [$record, $shareEntity];
     }
 
+    /**
+     * Org/team/internet published shares are visible without membership.
+     * Password shares stay collaborator-only.
+     */
+    public function canAccessPublishedShare(int $appId, string $userId, string $organizationCode): bool
+    {
+        $publishedMicroApp = $this->findPublished($appId);
+        if ($publishedMicroApp === null) {
+            return false;
+        }
+
+        [, $shareEntity] = $publishedMicroApp;
+        if ($shareEntity->getShareType() === ShareAccessType::PasswordProtected->value) {
+            return false;
+        }
+
+        return $this->canAccessShare($shareEntity, $userId, $organizationCode);
+    }
+
+    public function canAccessShare(ResourceShareEntity $shareEntity, string $userId, string $organizationCode): bool
+    {
+        try {
+            $this->resourceShareDomainService->validateShareAccess(
+                $shareEntity,
+                $userId,
+                $organizationCode,
+                $shareEntity->getShareCode()
+            );
+            return true;
+        } catch (Throwable) {
+            return false;
+        }
+    }
+
     public function getProjectName(int $appId): string
     {
         $publishedMicroApp = $this->findPublished($appId);
@@ -57,6 +91,11 @@ class PublishedMicroAppResolver
         }
 
         [$record] = $publishedMicroApp;
+        return $this->getProjectNameFromRecord($record);
+    }
+
+    public function getProjectNameFromRecord(MicroAppEntity $record): string
+    {
         $project = $this->projectRepository->findById($record->getProjectId());
         if ($project === null || $project->getDeletedAt() !== null) {
             return '';

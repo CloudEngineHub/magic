@@ -37,6 +37,7 @@ import {
 	HIDE_COPY_MOVE_SHARE_FILE_AND_TOPIC_ACTIONS,
 	VIEWER_FILE_ACTIONS,
 } from "@/pages/superMagic/providers/file-action-visibility-provider"
+import { HostConversationProvider } from "@/pages/superMagic/contexts/HostConversationContext"
 import { isReadOnlyProject } from "@/pages/superMagic/utils/permission"
 import { convertSearchParams } from "@/routes/history/helpers"
 import { RouteName } from "@/routes/constants"
@@ -274,8 +275,6 @@ function CrewEditInner({ crewId }: { crewId: string }) {
 				return
 			}
 
-			const temporaryToken =
-				(window as Window & { temporary_token?: string }).temporary_token || ""
 			let didLoad = false
 
 			pubsub.publish(PubSubEvents.Update_Attachments_Loading, true)
@@ -283,7 +282,6 @@ function CrewEditInner({ crewId }: { crewId: string }) {
 				projectId,
 				loadProjectAttachments({
 					projectId,
-					temporaryToken,
 				})
 					.then((res) => {
 						store.projectFilesStore.setWorkspaceFileTree(res.tree)
@@ -619,97 +617,108 @@ function CrewEditInner({ crewId }: { crewId: string }) {
 	}
 
 	return (
-		<FileActionVisibilityProvider
-			value={isViewer ? VIEWER_FILE_ACTIONS : HIDE_COPY_MOVE_SHARE_FILE_AND_TOPIC_ACTIONS}
+		<HostConversationProvider
+			selectedProject={selectedProject}
+			topicStore={conversation.topicStore}
 		>
-			<div className="flex h-full w-full overflow-hidden" data-testid="crew-edit-page">
-				<CrewEditPanels
-					sidebarWidthPx={sidebarWidthPx}
-					messagePanelWidthPx={messagePanelWidthPx}
-					showDetailPanel={shouldShowDetailPanel}
-					isDetailPanelFullscreen={isDetailPanelFullscreen}
-					isConversationPanelCollapsed={layout.isConversationPanelCollapsed}
-					hideMessagePanel={shouldHideMessagePanel}
-					keepDetailMountedWhenHidden
-					historyLayout={
-						isViewer
-							? undefined
-							: {
-									isOpen: isTopicHistoryPanelOpen,
-									onClose: closeTopicHistoryPanel,
-									onToggle: toggleTopicHistoryPanel,
-									renderPanel: ({
-										isConversationPanelCollapsed,
-										onExpandConversationPanel,
-										onClose,
-										closeButtonRef,
-									}) => (
-										<MessageHeaderTopicHistoryPanel
-											selectedProject={selectedProject}
-											topicStore={conversation.topicStore}
-											topicActions={topicActions}
-											isConversationPanelCollapsed={
-												isConversationPanelCollapsed
-											}
-											onExpandConversationPanel={onExpandConversationPanel}
-											hideTopicListModeIcon
-											onClose={onClose}
-											closeButtonRef={closeButtonRef}
-										/>
-									),
-								}
-					}
-					onSidebarResizeStart={onSidebarResizeStart}
-					onMessagePanelResizeStart={onMessagePanelResizeStart}
-					isDraggingSidebar={isDraggingSidebar}
-					isDraggingMessagePanel={isDraggingMessagePanel}
-					sidebar={
-						<ConfigStepsPanel
-							onBack={handleBack}
-							isAttachmentsLoaded={isInitialAttachmentsLoaded}
-							isAttachmentsLoadFailed={isInitialAttachmentsLoadFailed}
-							filesContent={
-								<TopicFilesButton
-									{...topicFilesPropsWithPanel}
-									fileHelpContext={
-										selectedProject?.id
-											? {
-													kind: "crew",
-													projectId: String(selectedProject.id),
+			<FileActionVisibilityProvider
+				value={isViewer ? VIEWER_FILE_ACTIONS : HIDE_COPY_MOVE_SHARE_FILE_AND_TOPIC_ACTIONS}
+			>
+				<div className="flex h-full w-full overflow-hidden" data-testid="crew-edit-page">
+					<CrewEditPanels
+						sidebarWidthPx={sidebarWidthPx}
+						messagePanelWidthPx={messagePanelWidthPx}
+						showDetailPanel={shouldShowDetailPanel}
+						isDetailPanelFullscreen={isDetailPanelFullscreen}
+						isConversationPanelCollapsed={layout.isConversationPanelCollapsed}
+						hideMessagePanel={shouldHideMessagePanel}
+						keepDetailMountedWhenHidden
+						historyLayout={
+							isViewer
+								? undefined
+								: {
+										isOpen: isTopicHistoryPanelOpen,
+										onClose: closeTopicHistoryPanel,
+										onToggle: toggleTopicHistoryPanel,
+										renderPanel: ({
+											isConversationPanelCollapsed,
+											onExpandConversationPanel,
+											onClose,
+											closeButtonRef,
+										}) => (
+											<MessageHeaderTopicHistoryPanel
+												selectedProject={selectedProject}
+												topicStore={conversation.topicStore}
+												topicActions={topicActions}
+												isConversationPanelCollapsed={
+													isConversationPanelCollapsed
 												}
-											: { kind: "unknown" }
+												onExpandConversationPanel={
+													onExpandConversationPanel
+												}
+												hideTopicListModeIcon
+												onClose={onClose}
+												closeButtonRef={closeButtonRef}
+											/>
+										),
 									}
-									className="h-full"
-									title={tSuper("topicFiles.fileTitle")}
-								/>
-							}
-						/>
-					}
-					detailPanel={detailPanel}
-					messagePanel={
-						isViewer ? null : (
-							<CrewTopicPanel
-								selectedProject={selectedProject}
-								topicStore={conversation.topicStore}
-								mentionPanelStore={store.mentionPanelStore}
-								projectFilesStore={store.projectFilesStore}
-								setSelectedDetail={handleUserSelectDetail}
-								onTerminalTopicStatusChange={checkAttachmentsNowDebounced}
-								isConversationPanelCollapsed={
-									shouldShowDetailPanel
-										? layout.isConversationPanelCollapsed
-										: false
+						}
+						onSidebarResizeStart={onSidebarResizeStart}
+						onMessagePanelResizeStart={onMessagePanelResizeStart}
+						isDraggingSidebar={isDraggingSidebar}
+						isDraggingMessagePanel={isDraggingMessagePanel}
+						sidebar={
+							<ConfigStepsPanel
+								onBack={handleBack}
+								isAttachmentsLoaded={isInitialAttachmentsLoaded}
+								isAttachmentsLoadFailed={isInitialAttachmentsLoadFailed}
+								filesContent={
+									<TopicFilesButton
+										{...topicFilesPropsWithPanel}
+										fileHelpContext={
+											selectedProject?.id
+												? {
+														kind: "crew",
+														projectId: String(selectedProject.id),
+													}
+												: { kind: "unknown" }
+										}
+										className="h-full"
+										title={tSuper("topicFiles.fileTitle")}
+									/>
 								}
-								onToggleConversationPanel={() => layout.toggleConversationPanel()}
-								onExpandConversationPanel={() => layout.expandConversationPanel()}
-								detailPanelVisible={shouldShowDetailPanel}
-								crewId={crewId}
 							/>
-						)
-					}
-				/>
-			</div>
-		</FileActionVisibilityProvider>
+						}
+						detailPanel={detailPanel}
+						messagePanel={
+							isViewer ? null : (
+								<CrewTopicPanel
+									selectedProject={selectedProject}
+									topicStore={conversation.topicStore}
+									mentionPanelStore={store.mentionPanelStore}
+									projectFilesStore={store.projectFilesStore}
+									setSelectedDetail={handleUserSelectDetail}
+									onTerminalTopicStatusChange={checkAttachmentsNowDebounced}
+									isConversationPanelCollapsed={
+										shouldShowDetailPanel
+											? layout.isConversationPanelCollapsed
+											: false
+									}
+									onToggleConversationPanel={() =>
+										layout.toggleConversationPanel()
+									}
+									onExpandConversationPanel={() =>
+										layout.expandConversationPanel()
+									}
+									detailPanelVisible={shouldShowDetailPanel}
+									crewId={crewId}
+								/>
+							)
+						}
+					/>
+				</div>
+			</FileActionVisibilityProvider>
+		</HostConversationProvider>
 	)
 }
 

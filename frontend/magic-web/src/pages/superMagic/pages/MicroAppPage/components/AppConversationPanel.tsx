@@ -1,4 +1,4 @@
-import { useMemo } from "react"
+import { useMemo, type ReactNode } from "react"
 import { observer } from "mobx-react-lite"
 import { useMemoizedFn } from "ahooks"
 import { JSONContent } from "@/infrastructure/editors/tiptap/react"
@@ -39,11 +39,17 @@ import { createSuperMagicTopicModelStore } from "@/stores/superMagic/topicModelS
 import useTopicModel from "@/pages/superMagic/components/MessageEditor/hooks/useTopicModel"
 import { useRefreshTopicDetailOnTaskComplete } from "@/pages/superMagic/hooks/useRefreshTopicDetailOnTaskComplete"
 import { useScopedTopicReadProgress } from "@/pages/superMagic/hooks/useScopedTopicReadProgress"
+import useTopicMode from "@/pages/superMagic/hooks/useTopicMode"
 import { applyOptimisticTopicRunningState } from "@/pages/superMagic/services/topicStatusSyncService"
 import { useAppStore } from "../context"
 import { resolveMicroAppModelSelectionMode } from "../utils/microAppModelMode"
-import MicroAppIssuePromptPanel from "./MicroAppIssuePromptPanel"
 import type { RevokedMessageEditorContext } from "@/pages/superMagic/components/MessageList/revoked-editor-context"
+import MessageListFallback from "@/pages/superMagic/components/MessageList/components/MessageListFallback"
+import { resolveAgentSelection } from "@/services/superMagic/DefaultAgentSelectionService"
+import { ModeToggle, useCreateTopicListener } from "@/pages/superMagic/components/TopicMode"
+import MicroAppRuntimeMentionHint from "./MicroAppRuntimeMentionHint"
+import { usePinnedCurrentMicroAppMention } from "../hooks/usePinnedCurrentMicroAppMention"
+import { insertCurrentMicroAppMention } from "../utils/insertCurrentMicroAppMention"
 
 interface AppConversationPanelProps {
 	selectedProject: ProjectListItem | null
@@ -59,6 +65,12 @@ interface AppConversationPanelProps {
 	projectFilesStore: ProjectFilesStore
 	onTerminalTopicStatusChange?: () => void
 	onSelectDetail?: (detail: unknown) => void
+	hideConversationPanelToggle?: boolean
+	trailingActions?: ReactNode
+	/** Only the micro-app editor's development conversation is locked to the internal mode. */
+	lockToMicroAppMode?: boolean
+	microAppId?: string
+	microAppName?: string
 }
 
 function AppConversationPanel({
@@ -75,10 +87,43 @@ function AppConversationPanel({
 	projectFilesStore,
 	onTerminalTopicStatusChange,
 	onSelectDetail,
+	hideConversationPanelToggle = false,
+	trailingActions,
+	lockToMicroAppMode = true,
+	microAppId,
+	microAppName,
 }: AppConversationPanelProps) {
 	const { conversation } = useAppStore()
+	// Runtime chats pin this app at the @ panel root so users can mention it.
+	usePinnedCurrentMicroAppMention({
+		mentionPanelStore,
+		enabled: !lockToMicroAppMode,
+		appId: microAppId,
+		appName: microAppName,
+	})
 	const selectedTopic = topicStore.selectedTopic
-	const modelTopicMode = resolveMicroAppModelSelectionMode()
+	const selectableTopicMode = useTopicMode({ selectedTopic, selectedProject })
+	const topicMode = lockToMicroAppMode ? TopicMode.MicroApp : selectableTopicMode.topicMode
+	const modelTopicMode = lockToMicroAppMode ? resolveMicroAppModelSelectionMode() : topicMode
+	const agentCode = lockToMicroAppMode
+		? undefined
+		: resolveAgentSelection(topicMode, selectedTopic?.agent_code).agentCode
+	// Development conversations are always handled by the micro-app agent. Keep shared editor
+	// callbacks scoped so project-level employee preferences cannot change this runtime.
+	const keepMicroAppMode = useMemoizedFn((mode: TopicMode) => void mode)
+	const setTopicMode = lockToMicroAppMode ? keepMicroAppMode : selectableTopicMode.setTopicMode
+	const recoverTopicMode = lockToMicroAppMode
+		? keepMicroAppMode
+		: selectableTopicMode.recoverTopicMode
+
+	// Create-topic events must select on this panel's store.
+	useCreateTopicListener({
+		selectedProject,
+		topicStore,
+	})
+	const handleCreateTopicForMode = useMemoizedFn((mode: TopicMode) => {
+		pubsub.publish(PubSubEvents.Create_New_Topic, { topicMode: mode })
+	})
 
 	const sharedTopicModelStore = useMemo(() => createSuperMagicTopicModelStore(), [])
 
@@ -91,6 +136,7 @@ function AppConversationPanel({
 		selectedTopic,
 		selectedProject,
 		topicMode: modelTopicMode,
+		agentCode,
 		topicModelStore: sharedTopicModelStore,
 	})
 
@@ -116,18 +162,28 @@ function AppConversationPanel({
 	const messageQueue = useMessageQueue({
 		projectId: selectedProject?.id,
 		topicId: selectedTopic?.id,
-		agentCode: selectedTopic?.agent_code,
+		agentCode,
 		isTaskRunning: showLoading,
 		isWaitingForUser: isTopicWaitingForUser(selectedTopic),
 		isEmptyStatus: false,
 		isShowLoadingInit: isMessagesInitialLoading,
 	})
+	const handleMentionHintClick = useMemoizedFn(() => {
+		insertCurrentMicroAppMention(messageQueue.editorRef.current?.editor, {
+			appId: microAppId,
+			appName: microAppName,
+		})
+	})
 
 	const mergeMicroAppSendParams = useMemoizedFn(
 		({ defaultParams }: { defaultParams: HandleSendParams }) => {
+			const extra = { ...(defaultParams.extra ?? {}) }
+			delete extra.agent_code
+
 			return {
 				...defaultParams,
 				topicMode: TopicMode.MicroApp,
+				extra: Object.keys(extra).length > 0 ? extra : undefined,
 			}
 		},
 	)
@@ -191,13 +247,21 @@ function AppConversationPanel({
 			}),
 			selectedTopic,
 			selectedProject,
-			topicMode: modelTopicMode,
+			topicMode,
+			modelTopicMode,
+			agentCode,
+			setTopicMode,
+			recoverTopicMode,
 			topicStore,
 			setSelectedTopic: topicStore.setSelectedTopic,
 			mentionPanelStore,
 			projectFilesStore,
+			attachments: projectFilesStore.workspaceFileTree,
 			topicModelStore,
 			layoutConfig: DEFAULT_LAYOUT_CONFIG,
+			// Panel owns ModeToggle so the composer does not patch the old topic.
+			showModeToggle: false,
+			showTopicExamplesPortal: !lockToMicroAppMode,
 			showLoading,
 			size: detailPanelVisible ? "small" : "default",
 			onSendComplete: ({ success, currentProject, currentTopic }) => {
@@ -209,7 +273,7 @@ function AppConversationPanel({
 					project: currentProject ?? selectedProject,
 				})
 			},
-			mergeSendParams: mergeMicroAppSendParams,
+			mergeSendParams: lockToMicroAppMode ? mergeMicroAppSendParams : undefined,
 			editorRef: messageQueue.editorRef,
 			queueContext: messageQueue,
 			enableMessageSendByContent: true,
@@ -217,7 +281,11 @@ function AppConversationPanel({
 	}, [
 		selectedProject,
 		selectedTopic,
+		topicMode,
 		modelTopicMode,
+		agentCode,
+		setTopicMode,
+		recoverTopicMode,
 		topicStore,
 		mentionPanelStore,
 		projectFilesStore,
@@ -225,6 +293,7 @@ function AppConversationPanel({
 		showLoading,
 		messageQueue,
 		mergeMicroAppSendParams,
+		lockToMicroAppMode,
 		detailPanelVisible,
 	])
 
@@ -232,22 +301,30 @@ function AppConversationPanel({
 		return {
 			selectedProject,
 			setSelectedTopic: topicStore.setSelectedTopic,
-			topicMode: modelTopicMode,
+			topicMode,
 			modelTopicMode,
+			agentCode,
+			setTopicMode,
+			recoverTopicMode,
 			topicStore,
 			mentionPanelStore,
 			projectFilesStore,
 			topicModelStore,
-			mergeSendParams: mergeMicroAppSendParams,
+			mergeSendParams: lockToMicroAppMode ? mergeMicroAppSendParams : undefined,
 		}
 	}, [
 		selectedProject,
 		topicStore,
+		topicMode,
 		modelTopicMode,
+		agentCode,
+		setTopicMode,
+		recoverTopicMode,
 		mentionPanelStore,
 		projectFilesStore,
 		topicModelStore,
 		mergeMicroAppSendParams,
+		lockToMicroAppMode,
 	])
 
 	const messageListProviderValue = useMemo(() => {
@@ -262,6 +339,7 @@ function AppConversationPanel({
 		}
 	}, [projectFilesStore, topicStore.setSelectedTopic])
 
+	// Keep the composer inset symmetric inside the narrow conversation rail.
 	return (
 		<ConversationPanelScaffold
 			scope="app-conversation-panel"
@@ -273,24 +351,59 @@ function AppConversationPanel({
 					onToggleConversationPanel={onToggleConversationPanel}
 					onExpandConversationPanel={onExpandConversationPanel}
 					detailPanelVisible={detailPanelVisible}
+					hideConversationPanelToggle={hideConversationPanelToggle}
 					selectedProject={selectedProject}
 					topicStore={topicStore}
 					topicActions={topicActions}
-					hideTopicListModeIcon
+					// Preview/published topics can be employees; hide icons in development.
+					hideTopicListModeIcon={lockToMicroAppMode}
 					historyTriggerMode={historyTriggerMode}
 					isHistoryPanelOpen={isHistoryPanelOpen}
 					onToggleHistoryPanel={onToggleHistoryPanel}
+					trailingActions={trailingActions}
 				/>
 			}
-			emptyHero={<AppConversationEmptyState variant="hero" className="w-full" />}
-			emptyCompact={<AppConversationEmptyState variant="compact" />}
+			emptyHero={
+				lockToMicroAppMode ? (
+					<AppConversationEmptyState variant="hero" className="w-full" />
+				) : (
+					// Runtime chats reuse the workspace greeting, not the development empty.
+					<MessageListFallback className="h-full" />
+				)
+			}
+			emptyCompact={
+				lockToMicroAppMode ? (
+					<AppConversationEmptyState variant="compact" />
+				) : (
+					<MessageListFallback className="h-full" />
+				)
+			}
 			editor={
-				<div className="flex h-full min-h-0 w-full flex-col gap-1.5">
+				<div className="flex h-full min-h-0 w-full flex-none flex-col items-stretch gap-2 self-stretch pt-3">
 					{/* Preserve the scaffold height so the editor can fill the manually resized panel. */}
 					{/* <div className="flex px-1">
 						<MicroAppIssuePromptPanel variant="desktop" />
 					</div> */}
+					{/* Runtime chats can pick an employee; development stays locked. */}
+					{lockToMicroAppMode ? null : (
+						<div className="flex w-full shrink-0 items-center overflow-hidden px-1">
+							<ModeToggle
+								size={detailPanelVisible ? "small" : "default"}
+								topicMode={topicMode}
+								agentCode={agentCode ?? selectedTopic?.agent_code}
+								allowChangeMode={messages.length === 0}
+								onModeChange={setTopicMode}
+								onCreateTopic={handleCreateTopicForMode}
+							/>
+						</div>
+					)}
 					<DefaultMessageEditorContainer editorContext={editorContext} />
+					{lockToMicroAppMode ? null : (
+						<MicroAppRuntimeMentionHint
+							className="px-1"
+							onClick={handleMentionHintClick}
+						/>
+					)}
 				</div>
 			}
 			editorNodes={editorNodes}
@@ -305,7 +418,7 @@ function AppConversationPanel({
 			currentTopicStatus={selectedTopic?.task_status}
 			handleSendMsg={handleSendMsg}
 			isMessagesLoading={isMessagesInitialLoading}
-			className="rounded-none bg-sidebar px-2"
+			className="rounded-none bg-sidebar pb-2 pr-2"
 		/>
 	)
 }

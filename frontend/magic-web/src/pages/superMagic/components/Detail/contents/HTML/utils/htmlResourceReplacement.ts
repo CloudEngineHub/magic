@@ -1,3 +1,5 @@
+import type { FileAccessContext } from "@/pages/superMagic/fileAccess/fileAccessContext"
+import type { FileApi } from "@/pages/superMagic/fileAccess/fileApi"
 import {
 	getTemporaryDownloadUrl,
 	type GetTemporaryDownloadUrlItem,
@@ -27,6 +29,8 @@ interface ReplaceHtmlResourceUrlsOptions {
 	processingMetadata?: HtmlDisplayConfig
 	allFiles: FileItem[]
 	relativeFolderPath: string
+	access?: FileAccessContext | null
+	fileApi?: FileApi
 }
 
 interface ReplaceHtmlResourceUrlsResult {
@@ -52,6 +56,8 @@ async function resolveHtmlResourceUrls({
 	imageFileIds,
 	imageProcessingFileIds,
 	fileUpdatedAtMap,
+	access,
+	fileApi,
 }: Pick<
 	ReplaceHtmlResourceUrlsOptions,
 	| "fileIds"
@@ -61,11 +67,15 @@ async function resolveHtmlResourceUrls({
 	| "imageFileIds"
 	| "imageProcessingFileIds"
 	| "fileUpdatedAtMap"
+	| "access"
+	| "fileApi"
 >) {
 	const processableImageFileIds = imageProcessingFileIds ?? imageFileIds
 	return resolveResourceUrlsWithVersionOverrides({
 		fileIds,
 		resourceFileVersions,
+		access,
+		fileApi,
 		fetchUnversionedUrls: async (unversionedFileIds) => {
 			if (unversionedFileIds.length === 0) return []
 
@@ -98,9 +108,12 @@ async function resolveHtmlResourceUrls({
 				if (imageIdsToProcess.length === 0)
 					return [...preloadedUrls, ...(originalUrls || [])]
 
-				const processedImageUrls = await getTemporaryDownloadUrl({
+				const processedImageUrls = await (
+					fileApi?.getTemporaryDownloadUrl ?? getTemporaryDownloadUrl
+				)({
 					file_ids: imageIdsToProcess,
 					options: { xMagicImageProcess: imageProcessOptions },
+					access: access ?? undefined,
 				})
 				return [...preloadedUrls, ...(processedImageUrls || []), ...(originalUrls || [])]
 			}
@@ -110,6 +123,8 @@ async function resolveHtmlResourceUrls({
 				imageFileIds: processableImageFileIds,
 				fileUpdatedAtMap,
 				imageProcessOptions,
+				access,
+				fileApi,
 			})
 		},
 	})
@@ -130,6 +145,8 @@ export async function replaceHtmlResourceUrls({
 	processingMetadata,
 	allFiles,
 	relativeFolderPath,
+	access,
+	fileApi,
 }: ReplaceHtmlResourceUrlsOptions): Promise<ReplaceHtmlResourceUrlsResult> {
 	const urlData = await resolveHtmlResourceUrls({
 		fileIds,
@@ -139,6 +156,8 @@ export async function replaceHtmlResourceUrls({
 		imageFileIds,
 		imageProcessingFileIds,
 		fileUpdatedAtMap,
+		access,
+		fileApi,
 	})
 	const filePathMapping = new Map<string, string>()
 	const magicProjectConfig: Record<string, unknown> = {}

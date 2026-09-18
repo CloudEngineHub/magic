@@ -140,6 +140,9 @@ const FilesViewer = memo(
 				openKnowledgeBaseTab,
 				closeKnowledgeBaseTab,
 				isKnowledgeBaseTab,
+				openMicroAppTab,
+				closeMicroAppTab,
+				isPublishedMicroAppTab,
 				handleFileFullscreen,
 				handleExitFullscreen,
 				enterPreviewFullscreen,
@@ -392,6 +395,8 @@ const FilesViewer = memo(
 				// Knowledge base tab相关方法
 				openKnowledgeBaseTab,
 				closeKnowledgeBaseTab,
+				openMicroAppTab,
+				closeMicroAppTab,
 				enterPreviewFullscreen,
 				exitPreviewFullscreen,
 				// Website tab相关方法
@@ -676,6 +681,8 @@ const FilesViewer = memo(
 					// 判断是否是知识库tab
 					const isKbTab = isKnowledgeBaseTab(tab.id)
 					const knowledgeBaseData = isKbTab ? (tab as any).data : undefined
+					const isMicroAppTab = isPublishedMicroAppTab(tab.id)
+					const microAppData = isMicroAppTab ? (tab as any).data : undefined
 					return {
 						isActive,
 						node: (
@@ -703,7 +710,9 @@ const FilesViewer = memo(
 								playbackProps={playbackProps}
 								hideTabBar={props.hideTabBar}
 								knowledgeBaseData={knowledgeBaseData}
+								microAppData={microAppData}
 								fillPortalSurface={!isDocumentFlowFullscreen}
+								onCloseTab={handleTabClose}
 							/>
 						),
 					}
@@ -720,10 +729,13 @@ const FilesViewer = memo(
 				shouldRenderTab,
 				cachedTabIds,
 				isPlaybackTab,
+				isKnowledgeBaseTab,
+				isPublishedMicroAppTab,
 				props,
 				props.autoDetail,
 				props.userSelectDetail,
 				openFileTab,
+				handleTabClose,
 			])
 			const inlineCachedTabs = cachedTabRenders
 				.filter(() => isDocumentFlowFullscreen)
@@ -788,7 +800,12 @@ const FilesViewer = memo(
 									{tabs.map(renderTabItem)}
 								</HeadlessHorizontalScroll>
 
-								<WebsitePresetMenu onOpenWebsiteTab={openWebsiteTab} />
+								<WebsitePresetMenu
+									onOpenWebsiteTab={openWebsiteTab}
+									onOpenMicroAppTab={openMicroAppTab}
+									onOpenFileTab={openFileTab}
+									fileAttachments={tabAttachments}
+								/>
 
 								{/* 展开按钮 */}
 								<DropdownMenu

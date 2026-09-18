@@ -3,6 +3,7 @@ import type { AnchorHTMLAttributes, ComponentProps, MouseEvent } from "react"
 import { cn } from "@/utils/cn"
 import type { AttachmentFile } from "@/pages/superMagic/utils/image-url-resolver"
 import { resolveSingleImageUrl } from "@/pages/superMagic/utils/image-url-resolver"
+import { useFileApi } from "@/pages/superMagic/fileAccess/fileApi"
 import {
 	isRecordingTimeText,
 	parseMarkdownSpeakerLink,
@@ -121,6 +122,7 @@ function RecordingMarkdownImage({
 	relativeFilePath?: string
 }) {
 	const [resolvedSrc, setResolvedSrc] = useState(src)
+	const fileApi = useFileApi()
 
 	useEffect(() => {
 		let disposed = false
@@ -131,14 +133,16 @@ function RecordingMarkdownImage({
 			}
 		}
 
-		void resolveSingleImageUrl(src, attachments, relativeFilePath).then((nextSrc) => {
-			if (!disposed) setResolvedSrc(nextSrc)
-		})
+		void resolveSingleImageUrl(src, attachments, relativeFilePath, undefined, fileApi).then(
+			(nextSrc) => {
+				if (!disposed) setResolvedSrc(nextSrc)
+			},
+		)
 
 		return () => {
 			disposed = true
 		}
-	}, [attachments, relativeFilePath, src])
+	}, [attachments, fileApi, relativeFilePath, src])
 
 	return <img {...props} src={resolvedSrc} />
 }

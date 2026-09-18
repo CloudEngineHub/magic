@@ -10,6 +10,8 @@ import {
 } from "@/pages/superMagic/components/Detail/contents/HTML/utils/fetchInterceptor"
 import { findMatchingFile } from "@/pages/superMagic/components/Detail/contents/HTML/utils"
 import { downloadFileContent, getTemporaryDownloadUrl } from "@/pages/superMagic/utils/api"
+import type { FileAccessContext } from "@/pages/superMagic/fileAccess/fileAccessContext"
+import type { FileApi } from "@/pages/superMagic/fileAccess/fileApi"
 
 interface HtmlExportAttachment extends Record<string, unknown> {
 	file_id?: string
@@ -33,6 +35,8 @@ export interface PrepareHtmlForExportOptions {
 	displayConfig?: HtmlExportDisplayConfig
 	htmlPreviewBundledTemplate?: HtmlPreviewBundledTemplateKind
 	postMessageTargetStrategy?: PostMessageTargetStrategy
+	access?: FileAccessContext
+	fileApi?: FileApi
 }
 
 export interface PrepareHtmlPagesForExportOptions extends Omit<
@@ -126,13 +130,20 @@ async function loadSiblingExportFileContent(
 	input: {
 		fileId?: string
 		attachmentList?: HtmlExportAttachment[]
+		access?: FileAccessContext
+		fileApi?: FileApi
 	},
 ): Promise<string | undefined> {
 	const file = findSiblingExportFile(fileName, input)
 	if (!file?.file_id) return undefined
 
 	try {
-		const [urlItem] = (await getTemporaryDownloadUrl({ file_ids: [file.file_id] })) ?? []
+		const fetchUrls = input.fileApi?.getTemporaryDownloadUrl ?? getTemporaryDownloadUrl
+		const [urlItem] =
+			(await fetchUrls({
+				file_ids: [file.file_id],
+				access: input.access,
+			})) ?? []
 		if (!urlItem?.url) return undefined
 
 		const content = await downloadFileContent(urlItem.url)
@@ -146,6 +157,8 @@ async function loadSiblingExportFileContent(
 async function loadDashboardDataJsContent(input: {
 	fileId?: string
 	attachmentList?: HtmlExportAttachment[]
+	access?: FileAccessContext
+	fileApi?: FileApi
 }): Promise<string | undefined> {
 	return loadSiblingExportFileContent("data.js", input)
 }
@@ -187,6 +200,8 @@ async function inlineExportLocalScripts(
 	input: {
 		fileId?: string
 		attachmentList?: HtmlExportAttachment[]
+		access?: FileAccessContext
+		fileApi?: FileApi
 	},
 ): Promise<string> {
 	if (typeof DOMParser === "undefined") return html
@@ -232,6 +247,8 @@ export async function prepareHtmlForExport(options: PrepareHtmlForExportOptions)
 		attachmentList: options.attachmentList,
 		displayConfig: options.displayConfig,
 		htmlPreviewBundledTemplate,
+		access: options.access,
+		fileApi: options.fileApi,
 	})
 
 	let processedContent = result.processedContent
@@ -242,6 +259,8 @@ export async function prepareHtmlForExport(options: PrepareHtmlForExportOptions)
 			dataJsContent: await loadDashboardDataJsContent({
 				fileId: options.fileId,
 				attachmentList: options.attachmentList,
+				access: options.access,
+				fileApi: options.fileApi,
 			}),
 		})
 	}
@@ -249,6 +268,8 @@ export async function prepareHtmlForExport(options: PrepareHtmlForExportOptions)
 	processedContent = await inlineExportLocalScripts(processedContent, {
 		fileId: options.fileId,
 		attachmentList: options.attachmentList,
+		access: options.access,
+		fileApi: options.fileApi,
 	})
 
 	return injectFetchInterceptorScript(processedContent, {

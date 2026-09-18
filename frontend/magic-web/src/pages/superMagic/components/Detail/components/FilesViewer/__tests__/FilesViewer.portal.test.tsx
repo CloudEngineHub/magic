@@ -120,8 +120,13 @@ vi.mock("../hooks/useFilesViewer", () => ({
 		openKnowledgeBaseTab: mockState.noop,
 		closeKnowledgeBaseTab: mockState.noop,
 		isKnowledgeBaseTab: () => false,
+		openMicroAppTab: mockState.noop,
+		closeMicroAppTab: mockState.noop,
+		isPublishedMicroAppTab: () => false,
 		handleFileFullscreen: mockState.noop,
 		handleExitFullscreen: mockState.noop,
+		enterPreviewFullscreen: mockState.noop,
+		exitPreviewFullscreen: mockState.noop,
 		getCheckBeforeClose: () => undefined,
 	}),
 }))

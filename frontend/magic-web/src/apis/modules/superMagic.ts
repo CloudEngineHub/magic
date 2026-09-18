@@ -2089,7 +2089,7 @@ export const generateSuperMagicApi = (fetch: ServiceHttpClient) => ({
 		return fetch.post("/api/v1/super-agent/file/batch-download/create", {
 			file_ids,
 			project_id,
-			token: token || (window as any).temporary_token || "",
+			token: token || "",
 		})
 	},
 
@@ -2098,8 +2098,7 @@ export const generateSuperMagicApi = (fetch: ServiceHttpClient) => ({
 	 * @param batch_key The batch task key
 	 * @returns Batch download status and download url if ready
 	 */
-	checkBatchDownloadStatus(batch_key: string) {
-		const token = (window as any).temporary_token
+	checkBatchDownloadStatus(batch_key: string, token?: string) {
 		const url = token
 			? `/api/v1/super-agent/file/batch-download/check?batch_key=${batch_key}&token=${token}`
 			: `/api/v1/super-agent/file/batch-download/check?batch_key=${batch_key}`

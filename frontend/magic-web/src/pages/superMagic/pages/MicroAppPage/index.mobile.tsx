@@ -5,15 +5,19 @@ import { useTranslation } from "react-i18next"
 import { useMemoizedFn } from "ahooks"
 
 import TopicFilesButton from "@/pages/superMagic/components/TopicFilesButton"
+import MagicModal from "@/components/base/MagicModal"
 import type { AttachmentItem } from "@/pages/superMagic/components/TopicFilesButton/hooks"
 import { useFileOpen } from "@/pages/superMagic/components/TopicFilesButton/hooks/useFileOpen"
 import { useMobileFilePreviewPubSub } from "@/pages/superMagic/hooks/useMobileFilePreviewPubSub"
+import { useMobileMicroAppPreview } from "@/pages/superMagic/hooks/useMobileMicroAppPreview"
 import { FileActionVisibilityProvider } from "@/pages/superMagic/providers/file-action-visibility-provider"
+import { HostConversationProvider } from "@/pages/superMagic/contexts/HostConversationContext"
 import { SharePermissionResourceProvider } from "@/pages/superMagic/components/Share/SharePermissionResourceContext"
 import PreviewDetailPopup, {
 	type PreviewDetail,
 	type PreviewDetailPopupRef,
 } from "@/pages/superMagicMobile/components/PreviewDetailPopup"
+import MicroAppPreviewPopup from "@/pages/superMagic/components/MicroAppPreviewPopup"
 import { RouteName } from "@/routes/constants"
 import useNavigate from "@/routes/hooks/useNavigate"
 import { cn } from "@/utils/cn"
@@ -21,8 +25,10 @@ import { cn } from "@/utils/cn"
 import MicroAppConversationFloatingButton from "./components/MicroAppMobileConversation/MicroAppConversationFloatingButton"
 import MicroAppFallbackState from "./components/MicroAppFallbackState"
 import MicroAppMobileHeader from "./components/MicroAppMobileHeader"
+import MicroAppMobileModeBar from "./components/MicroAppMobileModeBar"
 import MicroAppPageOverlays from "./components/MicroAppPageOverlays"
 import MicroAppPageLoadingState from "./components/MicroAppPageLoadingState"
+import type { MicroAppPageMode } from "./components/MicroAppModeSwitcher"
 import { AppStoreProvider } from "./context"
 import { useMicroAppPageController } from "./hooks/useMicroAppPageController"
 import { useMicroAppProjectResolver } from "./hooks/useMicroAppProjectResolver"
@@ -83,12 +89,18 @@ function MicroAppPageMobileInner({
 	const [activePanel, setActivePanel] = useState<MobileMicroAppPanel>("preview")
 	const [conversationOpen, setConversationOpen] = useState(false)
 	const [previewFileId, setPreviewFileId] = useState<string | null>(null)
+	const [pageMode, setPageMode] = useState<MicroAppPageMode>("development")
+	const pageModeRef = useRef<MicroAppPageMode>("development")
 	const previewDetailPopupRef = useRef<PreviewDetailPopupRef>(null)
 	const linkPreviewPopupRef = useRef<PreviewDetailPopupRef>(null)
 	const controller = useMicroAppPageController(appId, projectId)
 	const {
 		store,
 		conversation,
+		conversationType,
+		canUseDevelopment,
+		ensureUsageProject,
+		handleConversationTypeChange,
 		selectedProject,
 		selectedTopic,
 		hasRunningTopic,
@@ -105,6 +117,7 @@ function MicroAppPageMobileInner({
 		checkAttachmentsNowDebounced,
 		publishDialogOpen,
 		setPublishDialogOpen,
+		setPublishedDefaultOpenFileId,
 		editDialogOpen,
 		setEditDialogOpen,
 		editSubmitting,
@@ -118,6 +131,70 @@ function MicroAppPageMobileInner({
 		handleCaptureCover,
 		handleEditMicroApp,
 	} = controller
+	const panelSelectedProject = conversation.selectedProject
+	const previewModeRequestRef = useRef<Promise<boolean> | null>(null)
+
+	useEffect(() => {
+		if (selectedProject?.id && !canUseDevelopment) {
+			pageModeRef.current = "preview"
+			setPageMode("preview")
+		}
+	}, [canUseDevelopment, selectedProject?.id])
+
+	const handlePageModeChange = useMemoizedFn((nextMode: MicroAppPageMode) => {
+		if (nextMode === "development" && !canUseDevelopment) return
+		pageModeRef.current = nextMode
+		setPageMode(nextMode)
+		setConversationOpen(false)
+		if (nextMode === "preview") {
+			setActivePanel("preview")
+			handleConversationTypeChange("usage")
+		} else {
+			handleConversationTypeChange("development")
+		}
+	})
+
+	const requestPreviewMode = useMemoizedFn(async () => {
+		if (pageModeRef.current === "preview" || conversationType === "usage") return true
+		if (previewModeRequestRef.current) return previewModeRequestRef.current
+
+		const request = new Promise<boolean>((resolve) => {
+			const modal = MagicModal.confirm({
+				title: t("microAppPage.conversation.switchToPreviewTitle"),
+				content: t("microAppPage.conversation.switchToPreviewDescription"),
+				okText: t("microAppPage.conversation.switchToPreviewConfirm"),
+				cancelText: t("microAppPage.conversation.switchToPreviewCancel"),
+				closable: false,
+				maskClosable: false,
+				centered: true,
+				onOk: () => {
+					pageModeRef.current = "preview"
+					setPageMode("preview")
+					setConversationOpen(false)
+					setActivePanel("preview")
+					handleConversationTypeChange("usage")
+					modal.destroy()
+					resolve(true)
+				},
+				onCancel: () => {
+					modal.destroy()
+					resolve(false)
+				},
+			})
+		})
+		previewModeRequestRef.current = request
+		try {
+			return await request
+		} finally {
+			previewModeRequestRef.current = null
+		}
+	})
+	const ensureMobileHostConversation = useMemoizedFn(async () => {
+		if (conversationType !== "usage" && !(await requestPreviewMode())) {
+			throw new Error(t("microAppPage.conversation.switchToPreviewCancelled"))
+		}
+		return ensureUsageProject()
+	})
 
 	const setPreviewDetail = useMemoizedFn((detail: unknown) => {
 		if (!detail || typeof detail !== "object") return
@@ -146,11 +223,14 @@ function MicroAppPageMobileInner({
 		setUserSelectDetail: setPreviewDetail,
 		onFileClick: handlePreviewFile,
 	})
+	const microAppPreviewState = useMobileMicroAppPreview()
 
 	useEffect(() => {
 		setActivePanel("preview")
 		setConversationOpen(false)
 		setPreviewFileId(null)
+		pageModeRef.current = "development"
+		setPageMode("development")
 	}, [projectId])
 
 	if (store.initLoading) {
@@ -162,145 +242,195 @@ function MicroAppPageMobileInner({
 	}
 
 	return (
-		<FileActionVisibilityProvider>
-			<div
-				className="absolute inset-0 flex h-full min-h-0 w-full flex-col overflow-hidden bg-mobile-background"
-				data-testid="micro-app-page-mobile"
-			>
-				<MicroAppMobileHeader
-					selectedProject={selectedProject}
-					hasEntries={Boolean(defaultEntryFile)}
-					canPublish={canPublish}
-					isPublished={isPublished}
-					isDatabasePanelOpen={isDatabasePanelOpen}
-					onBack={handleBackToMicroApps}
-					onToggleDatabasePanel={handleToggleDatabasePanel}
-					onPublish={handleOpenPublishDialog}
-					canEdit={canEdit}
-					onEdit={() => setEditDialogOpen(true)}
-					canManageCollaborators={canManageCollaborators}
-					onManageCollaborators={handleManageCollaborators}
-				/>
-
+		<HostConversationProvider
+			selectedProject={panelSelectedProject}
+			topicStore={conversation.topicStore}
+			ensureConversation={ensureMobileHostConversation}
+			requestPreviewMode={requestPreviewMode}
+		>
+			<FileActionVisibilityProvider>
 				<div
-					className="grid shrink-0 grid-cols-2 border-b border-border bg-background px-3"
-					role="tablist"
-					aria-label={t("microAppPage.mobileTabs.ariaLabel")}
+					className="absolute inset-0 flex h-full min-h-0 w-full flex-col overflow-hidden bg-mobile-background"
+					data-testid="micro-app-page-mobile"
 				>
-					<MobilePanelTab
-						active={activePanel === "preview"}
-						label={t("microAppPage.mobileTabs.preview")}
-						onClick={() => setActivePanel("preview")}
-						testId="micro-app-mobile-tab-preview"
+					<MicroAppMobileHeader
+						selectedProject={selectedProject}
+						hasEntries={Boolean(defaultEntryFile)}
+						canPublish={canPublish}
+						isPublished={isPublished}
+						isDatabasePanelOpen={isDatabasePanelOpen}
+						onBack={handleBackToMicroApps}
+						onToggleDatabasePanel={handleToggleDatabasePanel}
+						onPublish={handleOpenPublishDialog}
+						canEdit={canEdit}
+						onEdit={() => setEditDialogOpen(true)}
+						canManageCollaborators={canManageCollaborators}
+						onManageCollaborators={handleManageCollaborators}
 					/>
-					<MobilePanelTab
-						active={activePanel === "files"}
-						label={t("microAppPage.mobileTabs.files")}
-						onClick={() => setActivePanel("files")}
-						testId="micro-app-mobile-tab-files"
-					/>
-				</div>
 
-				<div className="relative min-h-0 flex-1 overflow-hidden bg-background">
-					<div
-						className={cn("absolute inset-0", activePanel !== "preview" && "hidden")}
-						data-testid="micro-app-mobile-preview-panel"
-					>
-						<Suspense fallback={null}>
-							<MicroAppMobileEntryPreview
-								entryFile={defaultEntryFile}
-								attachments={attachments}
-								attachmentList={attachmentList}
-								projectId={projectId}
-								topicStore={conversation.topicStore}
-								selectedProject={selectedProject}
-								selectedTopic={selectedTopic}
-								allowEdit={!isReadOnly}
-								onOpenFile={handlePreviewFile}
-								isBuilding={hasRunningTopic}
-							/>
-						</Suspense>
-					</div>
+					{canUseDevelopment ? (
+						<MicroAppMobileModeBar value={pageMode} onChange={handlePageModeChange} />
+					) : null}
 
-					{activePanel === "files" ? (
+					{pageMode === "preview" ? (
 						<div
-							className="absolute inset-0 overflow-hidden py-1"
-							data-testid="micro-app-mobile-files-panel"
+							className="relative min-h-0 flex-1 overflow-hidden bg-background"
+							data-testid="micro-app-mobile-runtime-preview-workspace"
 						>
-							<TopicFilesButton
-								{...topicFilesProps}
-								title={t("microAppPage.header.codeFiles")}
-								activeFileId={previewFileId}
-								onFileClick={handlePreviewFile}
-							/>
+							<Suspense fallback={null}>
+								<MicroAppMobileEntryPreview
+									microAppId={appId}
+									microAppName={selectedProject?.project_name}
+									entryFile={defaultEntryFile}
+									attachments={attachments}
+									attachmentList={attachmentList}
+									projectId={projectId}
+									selectedProject={selectedProject}
+									allowEdit={false}
+									onOpenFile={handlePreviewFile}
+									isBuilding={false}
+								/>
+							</Suspense>
 						</div>
+					) : (
+						<>
+							<div
+								className="grid shrink-0 grid-cols-2 border-b border-border bg-background px-3"
+								role="tablist"
+								aria-label={t("microAppPage.mobileTabs.ariaLabel")}
+							>
+								<MobilePanelTab
+									active={activePanel === "preview"}
+									label={t("microAppPage.mobileTabs.preview")}
+									onClick={() => setActivePanel("preview")}
+									testId="micro-app-mobile-tab-preview"
+								/>
+								<MobilePanelTab
+									active={activePanel === "files"}
+									label={t("microAppPage.mobileTabs.files")}
+									onClick={() => setActivePanel("files")}
+									testId="micro-app-mobile-tab-files"
+								/>
+							</div>
+
+							<div className="relative min-h-0 flex-1 overflow-hidden bg-background">
+								<div
+									className={cn(
+										"absolute inset-0",
+										activePanel !== "preview" && "hidden",
+									)}
+									data-testid="micro-app-mobile-preview-panel"
+								>
+									<Suspense fallback={null}>
+										<MicroAppMobileEntryPreview
+											microAppId={appId}
+											microAppName={selectedProject?.project_name}
+											entryFile={defaultEntryFile}
+											attachments={attachments}
+											attachmentList={attachmentList}
+											projectId={projectId}
+											selectedProject={selectedProject}
+											allowEdit={!isReadOnly}
+											onOpenFile={handlePreviewFile}
+											isBuilding={hasRunningTopic}
+										/>
+									</Suspense>
+								</div>
+
+								{activePanel === "files" ? (
+									<div
+										className="absolute inset-0 overflow-hidden py-1"
+										data-testid="micro-app-mobile-files-panel"
+									>
+										<TopicFilesButton
+											{...topicFilesProps}
+											title={t("microAppPage.header.codeFiles")}
+											activeFileId={previewFileId}
+											onFileClick={handlePreviewFile}
+										/>
+									</div>
+								) : null}
+							</div>
+						</>
+					)}
+
+					{!isReadOnly || conversationType === "usage" ? (
+						<MicroAppConversationFloatingButton
+							onClick={() => setConversationOpen(true)}
+						/>
 					) : null}
 				</div>
 
-				{!isReadOnly ? (
-					<MicroAppConversationFloatingButton onClick={() => setConversationOpen(true)} />
+				<MicroAppPageOverlays
+					appId={appId}
+					projectName={selectedProject?.project_name}
+					attachmentList={attachmentList}
+					mobile
+					publishDialogOpen={publishDialogOpen}
+					onPublishDialogOpenChange={setPublishDialogOpen}
+					onPublishStatusChange={onPublishStatusChange}
+					onDefaultOpenFileChange={setPublishedDefaultOpenFileId}
+					onProjectNameChange={handleProjectNameChange}
+					editDialogOpen={editDialogOpen}
+					editSubmitting={editSubmitting}
+					onEditDialogOpenChange={setEditDialogOpen}
+					onEditMicroApp={handleEditMicroApp}
+					onCaptureCover={captureCoverReady ? handleCaptureCover : undefined}
+					collaboratorPanel={CollaboratorUpdatePanel}
+				/>
+				{isDatabasePanelOpen ? (
+					<Suspense fallback={null}>
+						<MicroAppDatabasePanelMobile
+							open={isDatabasePanelOpen}
+							projectId={selectedProject?.id}
+							projectName={selectedProject?.project_name}
+							onOpenChange={setIsDatabasePanelOpen}
+						/>
+					</Suspense>
 				) : null}
-			</div>
-
-			<MicroAppPageOverlays
-				appId={appId}
-				projectName={selectedProject?.project_name}
-				mobile
-				publishDialogOpen={publishDialogOpen}
-				onPublishDialogOpenChange={setPublishDialogOpen}
-				onPublishStatusChange={onPublishStatusChange}
-				onProjectNameChange={handleProjectNameChange}
-				editDialogOpen={editDialogOpen}
-				editSubmitting={editSubmitting}
-				onEditDialogOpenChange={setEditDialogOpen}
-				onEditMicroApp={handleEditMicroApp}
-				onCaptureCover={captureCoverReady ? handleCaptureCover : undefined}
-				collaboratorPanel={CollaboratorUpdatePanel}
-			/>
-			{isDatabasePanelOpen ? (
-				<Suspense fallback={null}>
-					<MicroAppDatabasePanelMobile
-						open={isDatabasePanelOpen}
-						projectId={selectedProject?.id}
-						projectName={selectedProject?.project_name}
-						onOpenChange={setIsDatabasePanelOpen}
-					/>
-				</Suspense>
-			) : null}
-			{conversationOpen && !isReadOnly ? (
-				<Suspense fallback={null}>
-					<MicroAppMobileConversation
-						open={conversationOpen}
-						selectedProject={selectedProject}
-						topicStore={conversation.topicStore}
-						mentionPanelStore={store.mentionPanelStore}
-						projectFilesStore={store.projectFilesStore}
-						attachments={attachments}
-						onSelectDetail={setPreviewDetail}
-						onTerminalTopicStatusChange={checkAttachmentsNowDebounced}
-						onOpenFile={handlePreviewFile}
-						onOpenChange={setConversationOpen}
-					/>
-				</Suspense>
-			) : null}
-			<PreviewDetailPopup
-				ref={previewDetailPopupRef}
-				setUserSelectDetail={setPreviewDetail}
-				selectedTopic={selectedTopic}
-				selectedProject={selectedProject}
-				allowEdit={!isReadOnly}
-				onOpenNewPopup={(detail, attachmentTree, nextAttachmentList) => {
-					linkPreviewPopupRef.current?.open(detail, attachmentTree, nextAttachmentList)
-				}}
-			/>
-			<PreviewDetailPopup
-				ref={linkPreviewPopupRef}
-				setUserSelectDetail={setLinkPreviewDetail}
-				selectedTopic={selectedTopic}
-				selectedProject={selectedProject}
-				allowEdit={!isReadOnly}
-			/>
-		</FileActionVisibilityProvider>
+				{conversationOpen && (!isReadOnly || conversationType === "usage") ? (
+					<Suspense fallback={null}>
+						<MicroAppMobileConversation
+							open={conversationOpen}
+							selectedProject={panelSelectedProject}
+							topicStore={conversation.topicStore}
+							mentionPanelStore={store.mentionPanelStore}
+							projectFilesStore={store.projectFilesStore}
+							attachments={attachments}
+							onSelectDetail={setPreviewDetail}
+							onTerminalTopicStatusChange={checkAttachmentsNowDebounced}
+							onOpenFile={handlePreviewFile}
+							onOpenChange={setConversationOpen}
+							lockToMicroAppMode={pageMode === "development"}
+							microAppId={appId}
+							microAppName={selectedProject?.project_name}
+						/>
+					</Suspense>
+				) : null}
+				<PreviewDetailPopup
+					ref={previewDetailPopupRef}
+					setUserSelectDetail={setPreviewDetail}
+					selectedTopic={selectedTopic}
+					selectedProject={selectedProject}
+					allowEdit={!isReadOnly}
+					onOpenNewPopup={(detail, attachmentTree, nextAttachmentList) => {
+						linkPreviewPopupRef.current?.open(
+							detail,
+							attachmentTree,
+							nextAttachmentList,
+						)
+					}}
+				/>
+				<PreviewDetailPopup
+					ref={linkPreviewPopupRef}
+					setUserSelectDetail={setLinkPreviewDetail}
+					selectedTopic={selectedTopic}
+					selectedProject={selectedProject}
+					allowEdit={!isReadOnly}
+				/>
+				<MicroAppPreviewPopup state={microAppPreviewState} />
+			</FileActionVisibilityProvider>
+		</HostConversationProvider>
 	)
 }
 

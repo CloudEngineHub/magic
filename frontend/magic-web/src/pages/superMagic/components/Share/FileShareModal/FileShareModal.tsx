@@ -694,8 +694,6 @@ export default memo(function FileShareModal(props: FileShareModalProps) {
 				// Step 2: Get full file tree
 				const fileTreeRes = await loadProjectAttachments({
 					projectId: resolvedProjectId,
-					// @ts-ignore 使用window添加临时的token
-					temporaryToken: window?.temporary_token || "",
 				})
 				if (latestExternalResourceIdRef.current !== requestResourceId) return
 				const fileTree = fileTreeRes.tree || []

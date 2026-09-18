@@ -2,7 +2,9 @@ import { useEffect, useRef, useState } from "react"
 import { useMemoizedFn } from "ahooks"
 import { useLocation } from "react-router"
 import { fetchBoundedBlob } from "@/utils/fetch-bounded-blob"
-import { getTemporaryDownloadUrl } from "../utils/api"
+import { useFileAccess } from "../fileAccess/FileAccessProvider"
+import { useFileApi } from "../fileAccess/fileApi"
+import { shouldWaitForShareAccess } from "../fileAccess/fileAccessContext"
 import {
 	classifyFileContent,
 	getFileContentKey,
@@ -29,19 +31,29 @@ export function useUnknownFilePreview(
 	file: FileContentMetadata,
 	isActive: boolean,
 ): UnknownFilePreview {
+	const fileAccess = useFileAccess()
+	const fileApi = useFileApi()
 	const resourceScope = useSharedMediaResourceScope()
 	const { pathname } = useLocation()
 	const scope = JSON.stringify([resourceScope, pathname])
 	const key = getFileContentKey(scope, file)
 	const enabled = Boolean(
 		isActive &&
+		!shouldWaitForShareAccess(fileAccess) &&
 		file.file_id &&
 		!file.is_directory &&
 		file.type !== "directory" &&
 		!file.display_config?.type &&
 		getFileType(file.file_extension || "") === "notSupport",
 	)
-	const requestKey = JSON.stringify([key, file.file_name, file.file_size, enabled])
+	// A published preview can change share identity without changing the host URL.
+	const requestKey = JSON.stringify([
+		key,
+		fileApi.identityKey,
+		file.file_name,
+		file.file_size,
+		enabled,
+	])
 	const currentRequestKey = useRef(requestKey)
 	currentRequestKey.current = requestKey
 	const [snapshot, setSnapshot] = useState<{ key: string; state: PreviewState }>()
@@ -71,7 +83,7 @@ export function useUnknownFilePreview(
 				publish({ status: "too-large" })
 				return
 			}
-			const urls = await getTemporaryDownloadUrl({
+			const urls = await fileApi.getTemporaryDownloadUrl({
 				file_ids: [file.file_id],
 				file_versions: file.file_version
 					? { [file.file_id]: file.file_version }

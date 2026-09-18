@@ -42,6 +42,15 @@ describe("MagicReloadApi", () => {
 		expect(origin).toBe("*")
 	})
 
+	it("调用 window.reload() 使用同一个宿主刷新桥接", () => {
+		api.install()
+		;(window as any).reload()
+
+		expect(postMessageSpy).toHaveBeenCalledOnce()
+		expect(postMessageSpy.mock.calls[0][0].type).toBe("MAGIC_RELOAD_REQUEST")
+		expect((window as any).reload).toBe((window as any).Magic.reload)
+	})
+
 	it("install() 幂等：多次调用不重复注册（reload 引用不变）", () => {
 		api.install()
 		const firstReload = (window as any).Magic.reload

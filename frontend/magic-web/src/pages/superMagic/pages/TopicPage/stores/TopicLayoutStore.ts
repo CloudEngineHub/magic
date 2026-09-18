@@ -21,6 +21,8 @@ interface ConversationPanelState {
 interface TopicLayoutStoreOptions {
 	/** Controls whether the conversation collapse state is shared across page mounts. */
 	persistConversationPanelState?: boolean
+	/** Initial state for temporary layouts that do not restore the shared preference. */
+	initialConversationPanelCollapsed?: boolean
 	bufferedMessageCollapse?: boolean
 	allowConversationPanelResize?: boolean
 }
@@ -70,10 +72,12 @@ export class TopicLayoutStore {
 	/** Creates one layout state container with optional conversation-state persistence. */
 	constructor({
 		persistConversationPanelState = true,
+		initialConversationPanelCollapsed = false,
 		bufferedMessageCollapse = false,
 		allowConversationPanelResize = true,
 	}: TopicLayoutStoreOptions = {}) {
 		this.persistConversationPanelState = persistConversationPanelState
+		this.isConversationPanelCollapsed = initialConversationPanelCollapsed
 		this.bufferedMessageCollapse = bufferedMessageCollapse
 		this.allowConversationPanelResize = allowConversationPanelResize
 		makeAutoObservable(this, {}, { autoBind: true })

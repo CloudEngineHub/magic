@@ -53,15 +53,11 @@ export function useClawPlaygroundCore() {
 				return
 			}
 
-			const temporaryToken =
-				(window as Window & { temporary_token?: string }).temporary_token || ""
-
 			pubsub.publish(PubSubEvents.Update_Attachments_Loading, true)
 			withAttachmentsRefreshWaitersResolved(
 				projectId,
 				loadProjectAttachments({
 					projectId,
-					temporaryToken,
 				})
 					.then((res) => {
 						store.projectFilesStore.setWorkspaceFileTree(res.tree)

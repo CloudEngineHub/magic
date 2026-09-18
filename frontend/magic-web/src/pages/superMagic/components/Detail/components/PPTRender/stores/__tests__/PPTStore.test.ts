@@ -126,6 +126,42 @@ describe("PPTStore", () => {
 		store?.dispose()
 	})
 
+	describe("speaker notes save completion", () => {
+		it.each(["reorder", "delete", "replace"])(
+			"uses file identity after slides %s while saving",
+			async (change) => {
+				store.setSlides(
+					[
+						createSlide(0, { rawContent: "First" }),
+						createSlide(1, { rawContent: "Second" }),
+					],
+					true,
+				)
+				let finishSave!: () => void
+				const save = new Promise<void>((resolve) => {
+					finishSave = resolve
+				})
+				const completion = save.then(() => store.updateSlideNotes("file1", "Saved notes"))
+				if (change === "reorder") {
+					store.setSlides([store.slides[1], store.slides[0]], true)
+				} else if (change === "delete") {
+					store.setSlides([store.slides[1]], true)
+				} else {
+					store.setSlides([createSlide(2, { rawContent: "Other deck" })], true)
+				}
+				finishSave()
+				await completion
+				expect(store.slides[0].rawContent).toBe(
+					change === "replace" ? "Other deck" : "Second",
+				)
+				if (change === "reorder") {
+					expect(store.slides[1].rawContent).toBe("Saved notes")
+					expect(store.slides[1].rawRevision).toBe(1)
+				}
+			},
+		)
+	})
+
 	describe("initialization", () => {
 		it("should initialize with default values", () => {
 			expect(store.slideUrls).toEqual([])
@@ -399,6 +435,55 @@ describe("PPTStore", () => {
 			})
 
 			expect(store).toBeDefined()
+		})
+
+		it("does not abort in-flight init when fileApi identity is unchanged", async () => {
+			let resolveUrls: (value: Array<{ file_id: string; url: string }>) => void = () =>
+				undefined
+			mockState.getTemporaryDownloadUrl.mockImplementation(
+				() =>
+					new Promise<Array<{ file_id: string; url: string }>>((resolve) => {
+						resolveUrls = resolve
+					}),
+			)
+			const fileApi = {
+				identityKey: "none",
+				getTemporaryDownloadUrl: mockState.getTemporaryDownloadUrl,
+				getFileContentById: vi.fn(),
+				getFileContentsByIds: vi.fn(),
+				requestSharedMediaUrls: vi.fn(),
+			}
+
+			const init = store.updateConfig({
+				displayConfig: { type: "slide", slides: ["slide-0.html"] },
+				attachmentList: [
+					{
+						file_id: "main-id",
+						file_name: "index.html",
+						relative_file_path: "deck/index.html",
+						is_directory: false,
+					},
+					{
+						file_id: "file1",
+						file_name: "slide-0.html",
+						relative_file_path: "deck/slide-0.html",
+					},
+				],
+				mainFileId: "main-id",
+				mainFileName: "index.html",
+				fileApi: fileApi as never,
+			})
+			await vi.waitFor(() =>
+				expect(mockState.getTemporaryDownloadUrl).toHaveBeenCalledTimes(1),
+			)
+
+			await store.updateConfig({ fileApi: fileApi as never })
+			resolveUrls([{ file_id: "file1", url: "https://example.com/file1.html" }])
+			await init
+
+			expect(store.slides).toHaveLength(1)
+			expect(store.slides[0]?.url).toBe("https://example.com/file1.html")
+			expect(store.isReady).toBe(true)
 		})
 	})
 

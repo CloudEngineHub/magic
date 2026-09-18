@@ -13,6 +13,23 @@ describe("TopicResizeHandle", () => {
 		expect(hitArea).toHaveClass("absolute", "w-4")
 	})
 
+	it("supports the shared grip on a gray divider with a left border", () => {
+		render(
+			<TopicResizeHandle
+				gripVariant="dots"
+				className="border-l border-border !bg-sidebar"
+				onResizeStart={vi.fn()}
+			/>,
+		)
+
+		expect(screen.getByTestId("handle-mouse-down")).toHaveClass(
+			"border-l",
+			"border-border",
+			"!bg-sidebar",
+		)
+		expect(screen.getByTestId("resize-grip")).toHaveAttribute("data-orientation", "vertical")
+	})
+
 	it("starts resizing from the extended pointer target and clears the drag portal", () => {
 		const onResizeStart = vi.fn()
 		render(<TopicResizeHandle onResizeStart={onResizeStart} />)
@@ -33,7 +50,10 @@ describe("TopicResizeHandle", () => {
 	it("clears the drag portal when the pointer is cancelled", () => {
 		render(<TopicResizeHandle onResizeStart={vi.fn()} />)
 
-		fireEvent.pointerDown(screen.getByTestId("handle-mouse-down"), { clientX: 480 })
+		fireEvent(
+			screen.getByTestId("handle-mouse-down"),
+			new MouseEvent("pointerdown", { bubbles: true, button: 0, clientX: 480 }),
+		)
 		expect(screen.getByTestId("set-is-dragging")).toBeInTheDocument()
 
 		fireEvent.pointerCancel(document)

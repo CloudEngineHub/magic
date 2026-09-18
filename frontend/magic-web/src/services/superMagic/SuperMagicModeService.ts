@@ -937,6 +937,8 @@ class SuperMagicModeService {
 				TopicMode.CrewCreator,
 				TopicMode.SkillCreator,
 				TopicMode.MagiClaw,
+				// Micro-app topics use an internal agent and are not returned by the crew list.
+				TopicMode.MicroApp,
 			].includes(mode as TopicMode)
 		if (interfaceStore.isMobile) {
 			return isValid && mode !== TopicMode.Chat

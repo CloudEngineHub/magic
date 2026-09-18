@@ -2,6 +2,8 @@
 
 Guidance for autonomous or semi-autonomous coding agents contributing to the Magic Web codebase.
 
+Instruction priority: system/developer instructions and the user's request take precedence over this file; this file takes precedence over an applicable Skill; reference documents provide context only. If guidance conflicts, follow the higher-priority instruction and report the conflict when it affects the result.
+
 ## Mission & Responsibilities
 - Deliver changes that align with the existing product vision and user experience.
 - Follow repository conventions for TypeScript, React, styling, and internationalization.
@@ -45,7 +47,7 @@ Guidance for autonomous or semi-autonomous coding agents contributing to the Mag
 - Before adding or changing tooltips, read [Tooltip usage](src/components/base/MagicTooltip/README.md). Use the existing entries for action labels and truncated text; preserve the interaction and lifecycle of rich content and media previews.
 - Maintain strict TypeScript typing; add or update types when altering APIs or props.
 - Keep React components modular: separate `styles.ts`, `types.ts`, `hooks/`, and `index.tsx` where the pattern already exists.
-- For every file change, explicitly check whether `enterprise/` contains a corresponding implementation, adapter, test, or config that must be updated in sync. Treat this as a required review step before finishing any code change.
+- For changes under an edition-shared or edition-specific module, check whether `enterprise/` has a corresponding implementation, adapter, test, or config that must be updated in sync. Do not scan the whole overlay for unrelated changes.
 - **Styling conventions**:
   - **For new components**: Use Tailwind CSS utility classes and shadcn/ui components from `@/components/shadcn-ui`
   - **For existing components**: Use `createStyles` and `cx` helpers from `antd-style`; never import `classnames` or `clsx`
@@ -57,6 +59,7 @@ Guidance for autonomous or semi-autonomous coding agents contributing to the Mag
 - **i18n — keys**: Keys must be **static full strings** (`t("a.b.c")`). Avoid building keys from variables, `+`, or template literals—tooling cannot see those. Use dynamic keys **only** when there is no workable literal-based design; add a short comment explaining why.
 - **i18n — elsewhere**: In plain functions, stores, or post-init module code (no hooks), use **`i18next.t("key", { ns: "…" })`** or **`i18next.getFixedT(i18next.language, "ns")`** with literal keys; call only after i18n has initialized. Language-sensitive UI still belongs in components with `useTranslation`.
 - Honour existing project aliases (`@/`) and barrel exports. Add exports to `index.ts` files when exposing new modules.
+- **Scroll areas**: Wrap new or modified scrollable content regions with the shared `ScrollArea` from `@/components/shadcn-ui/scroll-area`. Use `viewportRef` for scroll positioning and `viewportClassName` for viewport behavior; do not create separate native `overflow-auto` / `overflow-scroll` containers for product content. Keep independent panels in separate `ScrollArea` instances, with controls outside the scrolling viewport.
 - **Mobile detection**: Use `@/hooks/useIsMobile` as the default source of truth for mobile viewport checks. Do not introduce new business usage of `@/hooks/use-mobile`; treat it as a compatibility entry only unless a task explicitly requires otherwise.
 - When touching MobX stores, ensure actions remain pure and derivations are memoized where necessary.
 - Keep business logic out of presentation components—place it in services or hooks.
@@ -67,7 +70,7 @@ Guidance for autonomous or semi-autonomous coding agents contributing to the Mag
 
 
 ## Workflow for Agents
-1. **Orient**: Read the user request, repo instructions (`README.md`, `CLAUDE.local.md`, this file), and any task-specific files.
+1. **Orient**: Read the user request, applicable parent instructions, this file, and task-specific files. Read `README.md` or `CLAUDE.local.md` only when the task depends on their documented workflow or architecture.
 2. **Investigate**: Use `rg`/`pnpm` tooling to locate relevant code; inspect existing patterns before creating new ones.
 3. **Plan**: Outline multi-step approaches for non-trivial work; update plan status as steps progress.
 4. **Implement**: Prefer minimal, targeted diffs. Annotate complex logic with succinct comments when needed.
@@ -75,7 +78,7 @@ Guidance for autonomous or semi-autonomous coding agents contributing to the Mag
 6. **Report**: Summarize changes, reference touched files with line numbers, and call out risks or follow-up work.
 
 ## Testing & Quality Gates
-- Always run `pnpm lint` and relevant `pnpm test` commands when feasible.
+- Run focused lint and relevant tests when feasible. Do not run repository-wide type-check or lint commands by default; use them only when the task explicitly requires full validation or a focused check cannot cover the change.
 - For utility changes, add or update Vitest specs under `__tests__/`.
 - For UI changes, describe manual verification steps (screens navigated, states tested) if automated tests are absent.
 - Keep coverage stable; when adding significant logic, include regression tests.
@@ -86,7 +89,7 @@ Guidance for autonomous or semi-autonomous coding agents contributing to the Mag
   - For existing components: Mirror component structure, extend styles via `createStyles`, maintain consistency
   - Never convert existing antd-style components to Tailwind unless explicitly requested
 - **Data/Store Changes**: Modify MobX/Zustand stores cautiously, update dependent selectors, and add tests or storybook notes if behaviour shifts.
-- **Super Magic File-System Performance**: Before touching Super Magic attachments, file trees, file preview tabs, PPT rendering, or folder upload, read `docs/file-dependency-development-pitfalls.md` and `docs/file-system-optimization-summary.md`. Treat 10k files as the baseline: do not `JSON.stringify`, deep-clone, deep-compare, or log full `attachments` / `attachmentList` / `renderProps` in render paths; use `loadProjectAttachments`, `attachmentIndex` / `treeIndex`, primitive cache keys, abortable requests, and explicit MobX annotations for large input configs.
+- **Super Magic File-System Performance**: Treat 10k files as the baseline: do not `JSON.stringify`, deep-clone, deep-compare, or log full `attachments` / `attachmentList` / `renderProps` in render paths; use `loadProjectAttachments`, `attachmentIndex` / `treeIndex`, primitive cache keys, abortable requests, and explicit MobX annotations for large input configs.
 - **Network file operations**: Copy/cut only records clipboard intent. Actual copy/move writes must use the shared scope confirmation after preparation; show preparation in a centered modal with cancellation. Cancelling preparation is not rollback of already submitted writes. Reuse the existing file menus, upload queues, conflict handling, and operation lifecycle.
 - **Docs & Configuration**: Keep documentation bilingual when user-facing, and update related config or example snippets.
 - **Bug Fixes**: Reproduce, add a failing test when practical, fix, and confirm the test passes.

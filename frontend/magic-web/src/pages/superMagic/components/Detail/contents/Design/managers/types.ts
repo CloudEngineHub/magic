@@ -11,6 +11,7 @@ import type { DesignAttachmentIndex } from "../utils/designAttachmentIndex"
 import type { FileHistoryVersion } from "@/pages/superMagic/pages/Workspace/types"
 import type { DesignLoadIssue, DesignSidecarStatus } from "../utils/designDataLoader"
 import type { CanvasAccessMode } from "@/components/CanvasDesign/public/props"
+import type { FileApi } from "@/pages/superMagic/fileAccess/fileApi"
 
 export type DesignRemoteUpdateListenerMode = "message" | "file-change"
 
@@ -110,6 +111,13 @@ export interface DesignProjectManagerOptions {
 	onVersionChange?: (designData: DesignData, isViewingHistory: boolean) => void
 	/** i18n 翻译函数，用于 toasts 等 */
 	getT?: () => (key: string) => string
+	/**
+	 * Boundary-bound file client. Design managers live outside React, so the
+	 * entry hook injects one closure built from the ambient FileAccessProvider.
+	 * Omitted in host-only/test construction; managers then fall back to the
+	 * unbound leaves (session identity is the intended host default).
+	 */
+	fileApi?: FileApi
 }
 
 /**

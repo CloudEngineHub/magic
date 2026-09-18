@@ -5,6 +5,9 @@ import { SuperMagicApi } from "@/apis"
 import MagicSpin from "@/components/base/MagicSpin"
 import { Button } from "@/components/shadcn-ui/button"
 import useShareRoute from "@/pages/superMagic/hooks/useShareRoute"
+import { useFileApi } from "@/pages/superMagic/fileAccess/fileApi"
+import { useFileAccess } from "@/pages/superMagic/fileAccess/FileAccessProvider"
+import { shouldWaitForShareAccess } from "@/pages/superMagic/fileAccess/fileAccessContext"
 import { createSlidesTemplateStructureAdapter } from "./templateStructureAdapter"
 import { loadSlidesTemplateProject, stringifySlidesTemplateManifest } from "./templateProject"
 import {
@@ -54,6 +57,8 @@ interface SlidesTemplateReadyProps {
 function SlidesTemplateReady({ project, props }: SlidesTemplateReadyProps) {
 	const { i18n } = useTranslation("super")
 	const { isShareRoute } = useShareRoute()
+	// Slide-source reads carry the ambient identity for read-only share previews.
+	const fileApi = useFileApi()
 	const [manifest, setManifest] = useState(project.manifest)
 	const [settingsOpen, setSettingsOpen] = useState(false)
 	const manifestRef = useRef(project.manifest)
@@ -88,8 +93,9 @@ function SlidesTemplateReady({ project, props }: SlidesTemplateReadyProps) {
 				projectId,
 				getManifest,
 				saveManifest,
+				fileApi,
 			}),
-		[project, projectId, getManifest, saveManifest],
+		[project, projectId, getManifest, saveManifest, fileApi],
 	)
 	const { isSaving, startSave, dialogs } = useSlidesTemplateSaveFlow({
 		project,
@@ -147,6 +153,10 @@ function SlidesTemplateReady({ project, props }: SlidesTemplateReadyProps) {
 
 export default function SlidesTemplateRootRender(props: PPTRootRenderProps) {
 	const { t } = useTranslation("super")
+	// Bind the template manifest read at this boundary so share previews do not
+	// stall on the leaf guard while waiting for a share identity.
+	const fileApi = useFileApi()
+	const fileAccess = useFileAccess()
 	const [project, setProject] = useState<SlidesTemplateProjectContext>()
 	const [error, setError] = useState<Error>()
 	const [reloadKey, setReloadKey] = useState(0)
@@ -166,6 +176,7 @@ export default function SlidesTemplateRootRender(props: PPTRootRenderProps) {
 
 	useEffect(() => {
 		if (!root) return
+		if (shouldWaitForShareAccess(fileAccess)) return
 		const isRetry = reloadKey !== loadedReloadKeyRef.current
 		if (!isRetry && loadedSyncKeyRef.current === syncKey && projectRef.current) return
 
@@ -179,7 +190,7 @@ export default function SlidesTemplateRootRender(props: PPTRootRenderProps) {
 			setError(undefined)
 			// Keep the last preview mounted while this template reloads.
 			if (!projectRef.current) setProject(undefined)
-			loadSlidesTemplateProject(root)
+			loadSlidesTemplateProject(root, fileApi)
 				.then((result) => {
 					if (!cancelled) setProject(result)
 				})
@@ -193,7 +204,7 @@ export default function SlidesTemplateRootRender(props: PPTRootRenderProps) {
 			cancelled = true
 			window.clearTimeout(timer)
 		}
-	}, [reloadKey, root, syncKey])
+	}, [reloadKey, root, syncKey, fileApi, fileAccess])
 
 	if (error) {
 		return (

@@ -26,6 +26,9 @@ import { MagicSystemFolderIcon } from "../components/MagicSystemFolderIcon"
 import pubsub, { PubSubEvents } from "@/utils/pubsub"
 import { useIsMobile } from "@/hooks/useIsMobile"
 import { SuperMagicApi } from "@/apis"
+import { getShareAccessToken } from "@/pages/superMagic/fileAccess/fileAccessContext"
+import { useFileAccess } from "@/pages/superMagic/fileAccess/FileAccessProvider"
+import { useFileApi } from "@/pages/superMagic/fileAccess/fileApi"
 import useShareRoute from "../../../hooks/useShareRoute"
 import magicToast from "@/components/base/MagicToaster/utils"
 import { createRandomUuidV4 } from "@/utils/create-random-uuid-v4"
@@ -132,6 +135,8 @@ export function useBatchDownload(options: UseBatchDownloadOptions) {
 	const isChatProject = isCachedChatWorkspaceProject(selectedProject)
 	const { deleteConfirmNode, openDeleteConfirm } = useMobileDeleteConfirmSheet()
 	const { isShareRoute, isFileShare } = useShareRoute()
+	const fileAccess = useFileAccess()
+	const fileApi = useFileApi()
 	const { hideCopyTo, hideMoveTo, hideShareFile } = useFileActionVisibility()
 	const canDownload = allowDownload !== false
 
@@ -413,7 +418,7 @@ export function useBatchDownload(options: UseBatchDownloadOptions) {
 
 			const token =
 				isShareRoute || isFileShare
-					? ((window as unknown as { temporary_token?: string }).temporary_token ?? "")
+					? getShareAccessToken(fileAccess) || undefined
 					: undefined
 
 			if (downloadProgress) {
@@ -475,6 +480,7 @@ export function useBatchDownload(options: UseBatchDownloadOptions) {
 					try {
 						const checkData = await SuperMagicApi.checkBatchDownloadStatus(
 							data.batch_key,
+							token,
 						)
 						if (checkData.status === "ready" && checkData.download_url) {
 							downloadFileWithAnchor(checkData.download_url)
@@ -602,6 +608,8 @@ export function useBatchDownload(options: UseBatchDownloadOptions) {
 				targets,
 				attachments: sourceItems,
 				projectName: selectedProject?.project_name,
+				access: fileAccess ?? undefined,
+				fileApi,
 				signal: exportController?.signal,
 				onProgress: (progress) => {
 					magicToast.loading({

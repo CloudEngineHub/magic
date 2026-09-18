@@ -70,6 +70,7 @@ const ProjectPageInputContainerComponent: React.FC<ProjectPageInputContainerProp
 	onSendSuccess,
 	onSendComplete,
 	createTopic,
+	editorRef,
 }) => {
 	const isMobile = useIsMobile()
 	const inputLayout = useConversationInputLayout()
@@ -125,6 +126,7 @@ const ProjectPageInputContainerComponent: React.FC<ProjectPageInputContainerProp
 
 	/** 消息队列 */
 	const messageQueue = useMessageQueue({
+		editorRef,
 		projectId: selectedProject?.id,
 		topicId: selectedTopic?.id,
 		agentCode: selectedTopic?.agent_code,

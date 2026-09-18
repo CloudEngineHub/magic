@@ -7,6 +7,8 @@ import {
 	type GetTemporaryDownloadUrlItem,
 } from "@/pages/superMagic/utils/api"
 import type { AttachmentItem } from "@/pages/superMagic/components/TopicFilesButton/hooks/types"
+import type { FileAccessContext } from "@/pages/superMagic/fileAccess/fileAccessContext"
+import type { FileApi } from "@/pages/superMagic/fileAccess/fileApi"
 
 interface SlideMetadata {
 	name?: string
@@ -20,6 +22,8 @@ export interface PrepareExportSlidesInput {
 	mainFileId: string
 	mainFileName?: string
 	displayConfig?: SlideMetadata
+	access?: FileAccessContext
+	fileApi?: FileApi
 }
 
 export interface PrepareExportSlidesOutput {
@@ -86,6 +90,17 @@ function ensureFlatScope(attachmentList: AttachmentItem[], mainFileId: string): 
 	return flattenAttachments(attachmentList)
 }
 
+function fetchTemporaryDownloadUrls(
+	fileIds: string[],
+	fileApi?: FileApi,
+	access?: FileAccessContext,
+) {
+	return (fileApi?.getTemporaryDownloadUrl ?? getTemporaryDownloadUrl)({
+		file_ids: fileIds,
+		access,
+	})
+}
+
 function extractFileIdFromPath(
 	path: string,
 	searchScope: AttachmentItem[],
@@ -108,15 +123,18 @@ export async function prepareSingleSlideExport(input: {
 	fileId: string
 	fileName?: string
 	attachmentList: AttachmentItem[]
+	access?: FileAccessContext
+	fileApi?: FileApi
 	signal?: AbortSignal
 }): Promise<PrepareExportSlidesOutput> {
-	const { fileId, fileName, attachmentList, signal } = input
+	const { fileId, fileName, attachmentList, access, fileApi, signal } = input
 	throwIfAborted(signal)
 
 	const searchScope = flattenAttachments(attachmentList)
 
 	const [urlItem] =
-		(await waitForAbortable(getTemporaryDownloadUrl({ file_ids: [fileId] }), signal)) ?? []
+		(await waitForAbortable(fetchTemporaryDownloadUrls([fileId], fileApi, access), signal)) ??
+		[]
 	if (!urlItem?.url) return { htmlSlides: [], fileName: fileName ?? "slide" }
 
 	const loaderService = new SlideLoaderService()
@@ -141,7 +159,7 @@ export async function prepareSingleSlideExport(input: {
 		const resourceUrlMapping = new Map<string, string>()
 		try {
 			const response = await waitForAbortable(
-				getTemporaryDownloadUrl({ file_ids: Array.from(resourceIds) }),
+				fetchTemporaryDownloadUrls(Array.from(resourceIds), fileApi, access),
 				signal,
 			)
 			response?.forEach((item: GetTemporaryDownloadUrlItem) => {
@@ -191,7 +209,8 @@ export async function* iterateSingleExportSlide(
 export async function prepareExportSlides(
 	input: PrepareExportSlidesInput,
 ): Promise<PrepareExportSlidesOutput> {
-	const { slidePaths, attachmentList, mainFileId, mainFileName, displayConfig } = input
+	const { slidePaths, attachmentList, mainFileId, mainFileName, displayConfig, access, fileApi } =
+		input
 	const fileName = displayConfig?.name || mainFileName || "slides"
 	if (!slidePaths.length) return { htmlSlides: [], fileName }
 
@@ -213,7 +232,7 @@ export async function prepareExportSlides(
 
 	if (fileIds.length > 0) {
 		try {
-			const response = await getTemporaryDownloadUrl({ file_ids: fileIds })
+			const response = await fetchTemporaryDownloadUrls(fileIds, fileApi, access)
 			response?.forEach((item: GetTemporaryDownloadUrlItem) => {
 				if (!item.file_id || !item.url) return
 				pathToFileId.forEach((fid, path) => {
@@ -278,9 +297,11 @@ export async function prepareExportSlides(
 
 	if (allResourceFileIds.size > 0) {
 		try {
-			const response = await getTemporaryDownloadUrl({
-				file_ids: Array.from(allResourceFileIds),
-			})
+			const response = await fetchTemporaryDownloadUrls(
+				Array.from(allResourceFileIds),
+				fileApi,
+				access,
+			)
 			response?.forEach((item: GetTemporaryDownloadUrlItem) => {
 				if (item.file_id && item.url) {
 					resourceUrlMapping.set(item.file_id, item.url)
@@ -328,7 +349,8 @@ export async function prepareExportSlides(
 export async function* iterateExportSlides(
 	input: IterateExportSlidesInput,
 ): AsyncIterable<PreparedExportSlidePage> {
-	const { slidePaths, attachmentList, mainFileId, mainFileName, displayConfig, signal } = input
+	const { slidePaths, attachmentList, mainFileId, mainFileName, displayConfig, access, fileApi, signal } =
+		input
 	if (!slidePaths.length) return
 
 	const searchScope = ensureFlatScope(attachmentList, mainFileId)
@@ -346,7 +368,7 @@ export async function* iterateExportSlides(
 	if (fileIds.length > 0) {
 		try {
 			const response = await waitForAbortable(
-				getTemporaryDownloadUrl({ file_ids: fileIds }),
+				fetchTemporaryDownloadUrls(fileIds, fileApi, access),
 				signal,
 			)
 			response?.forEach((item: GetTemporaryDownloadUrlItem) => {
@@ -397,9 +419,7 @@ export async function* iterateExportSlides(
 			if (resourceIds.size > 0) {
 				try {
 					const response = await waitForAbortable(
-						getTemporaryDownloadUrl({
-							file_ids: Array.from(resourceIds),
-						}),
+						fetchTemporaryDownloadUrls(Array.from(resourceIds), fileApi, access),
 						signal,
 					)
 					response?.forEach((item: GetTemporaryDownloadUrlItem) => {

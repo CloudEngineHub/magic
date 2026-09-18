@@ -227,6 +227,7 @@ export function useDownloadProgress() {
 							try {
 								const checkData = (await SuperMagicApi.checkBatchDownloadStatus(
 									batchKey,
+									options.token,
 								)) as BatchDownloadTaskResponse
 
 								if (!isCurrentTask()) return
