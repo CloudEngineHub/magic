@@ -33,7 +33,7 @@ vi.mock("react-i18next", () => ({
 }))
 
 describe("PublishedMicroAppAttachmentsPanel", () => {
-	it("lets the owner edit runtime project files", () => {
+	it("keeps runtime project files read-only when the role is unknown", () => {
 		render(
 			<PublishedMicroAppAttachmentsPanel
 				attachments={[]}
@@ -43,6 +43,19 @@ describe("PublishedMicroAppAttachmentsPanel", () => {
 		)
 
 		expect(screen.getByTestId("published-micro-app-attachments-panel")).toBeInTheDocument()
+		expect(filesMocks.allowEdit).toBe(false)
+	})
+
+	it("lets an owner edit runtime project files", () => {
+		render(
+			<PublishedMicroAppAttachmentsPanel
+				attachments={[]}
+				projectId="runtime-1"
+				selectedProject={{ user_role: "owner" } as never}
+				setUserSelectDetail={vi.fn()}
+			/>,
+		)
+
 		expect(filesMocks.allowEdit).toBe(true)
 	})
 

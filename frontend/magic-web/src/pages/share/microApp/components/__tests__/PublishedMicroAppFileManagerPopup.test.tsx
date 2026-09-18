@@ -87,6 +87,7 @@ describe("PublishedMicroAppFileManagerPopup", () => {
 				context={{ spaceType: "project", projectId: "runtime-1" }}
 				attachments={[]}
 				attachmentLoadState={{ projectId: "runtime-1", status: "ready" }}
+				selectedProject={{ id: "runtime-1", user_role: "owner" } as never}
 				onOpenFile={onOpenFile}
 				onClose={onClose}
 			/>,

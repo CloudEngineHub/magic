@@ -8,6 +8,7 @@ import type { AttachmentItem } from "@/pages/superMagic/components/TopicFilesBut
 import type { AttachmentLoadState } from "@/stores/projectFiles/types"
 import type { ProjectListItem, Topic } from "@/pages/superMagic/pages/Workspace/types"
 import type { UserFileManagerSnapshot } from "@/models/config/repositories/SuperProjectStateTypes"
+import { canEditProject } from "@/pages/superMagic/utils/permission"
 import {
 	PREVIEW_MODAL_BODY_CLASSNAME,
 	PREVIEW_MODAL_BODY_WRAPPER_CLASSNAME,
@@ -49,6 +50,7 @@ export default function PublishedMicroAppFileManagerPopup({
 	const project = selectedProject
 		? { ...selectedProject, project_name: projectName }
 		: selectedProject
+	const canEdit = canEditProject(selectedProject?.user_role)
 
 	return (
 		<MagicModal
@@ -84,7 +86,7 @@ export default function PublishedMicroAppFileManagerPopup({
 							attachmentLoadState={attachmentLoadState}
 							selectedProject={project}
 							selectedTopic={selectedTopic}
-							allowEdit
+							allowEdit={canEdit}
 							onFileClick={onOpenFile}
 						/>
 					)}

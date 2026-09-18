@@ -3,6 +3,7 @@ import { useTranslation } from "react-i18next"
 import TopicFilesButton from "@/pages/superMagic/components/TopicFilesButton"
 import type { AttachmentItem } from "@/pages/superMagic/components/TopicFilesButton/hooks"
 import type { ProjectListItem, Topic } from "@/pages/superMagic/pages/Workspace/types"
+import { canEditProject } from "@/pages/superMagic/utils/permission"
 
 interface PublishedMicroAppAttachmentsPanelProps {
 	attachments: AttachmentItem[]
@@ -13,10 +14,6 @@ interface PublishedMicroAppAttachmentsPanelProps {
 	onFileClick?: (fileItem: unknown) => void
 }
 
-/**
- * Runtime attachments belong to the current user's project, so the
- * standard file tree keeps create, upload, rename and delete enabled.
- */
 export default function PublishedMicroAppAttachmentsPanel({
 	attachments,
 	projectId,
@@ -26,6 +23,7 @@ export default function PublishedMicroAppAttachmentsPanel({
 	onFileClick,
 }: PublishedMicroAppAttachmentsPanelProps) {
 	const { t } = useTranslation("super")
+	const canEdit = canEditProject(selectedProject?.user_role)
 
 	return (
 		<div
@@ -38,7 +36,7 @@ export default function PublishedMicroAppAttachmentsPanel({
 				selectedProject={selectedProject}
 				selectedTopic={selectedTopic}
 				title={t("attachmentList.projectFiles")}
-				allowEdit
+				allowEdit={canEdit}
 				showFileManager
 				onFileClick={onFileClick}
 				setUserSelectDetail={setUserSelectDetail}

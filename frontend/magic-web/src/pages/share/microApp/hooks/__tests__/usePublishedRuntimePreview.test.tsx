@@ -77,6 +77,7 @@ describe("usePublishedRuntimePreview", () => {
 				enabled: true,
 				fileTree: [],
 				fileList,
+				selectedProject: { id: "runtime-1", user_role: "owner" } as never,
 			}),
 		)
 		render(result.current.previewPopup)
@@ -163,7 +164,7 @@ describe("usePublishedRuntimePreview", () => {
 				enabled: true,
 				fileTree: [],
 				fileList: [],
-				selectedProject: { id: "runtime-1" } as never,
+				selectedProject: { id: "runtime-1", user_role: "owner" } as never,
 			}),
 		)
 		const { rerender: rerenderPopup } = render(

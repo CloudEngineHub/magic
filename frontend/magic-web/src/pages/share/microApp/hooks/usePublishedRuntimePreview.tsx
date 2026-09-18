@@ -5,6 +5,7 @@ import type { FileManagerContext } from "@/pages/superMagic/components/Detail/co
 import type { AttachmentItem } from "@/pages/superMagic/components/TopicFilesButton/hooks"
 import type { ProjectListItem, Topic } from "@/pages/superMagic/pages/Workspace/types"
 import type { AttachmentLoadState } from "@/stores/projectFiles/types"
+import { canEditProject } from "@/pages/superMagic/utils/permission"
 import PreviewDetailPopup, {
 	type PreviewDetail,
 	type PreviewDetailPopupRef,
@@ -41,6 +42,7 @@ export function usePublishedRuntimePreview({
 	const previewDetailPopupRef = useRef<PreviewDetailPopupRef>(null)
 	const [fileManagerContext, setFileManagerContext] = useState<FileManagerContext | null>(null)
 	const selectedProjectId = selectedProject?.id
+	const canEdit = canEditProject(selectedProject?.user_role)
 
 	useEffect(() => {
 		setFileManagerContext(null)
@@ -108,7 +110,7 @@ export function usePublishedRuntimePreview({
 			setUserSelectDetail={openPreviewDetail}
 			selectedProject={selectedProject}
 			selectedTopic={selectedTopic}
-			allowEdit
+			allowEdit={canEdit}
 			// File manager stays at the default 1000; preview must stack above it.
 			zIndex={1100}
 		/>

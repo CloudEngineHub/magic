@@ -128,7 +128,8 @@ export interface CreateMicroAppProjectResponse {
 }
 
 export type MicroAppRuntimeProject = Pick<ProjectListItem, "id"> &
-	Partial<Omit<ProjectListItem, "id">>
+	Partial<Omit<ProjectListItem, "id" | "user_role">> &
+	Pick<ProjectListItem, "user_role">
 
 export interface MicroAppRuntimeProjectResponse {
 	exists: boolean
