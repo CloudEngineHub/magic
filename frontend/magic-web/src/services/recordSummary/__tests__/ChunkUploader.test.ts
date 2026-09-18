@@ -228,6 +228,98 @@ describe("ChunkUploader", () => {
 		expect(testState.uploadCancels[0]).toHaveBeenCalledTimes(1)
 	})
 
+	it("reports retry scheduling and retry start transitions", async () => {
+		const chunk = createChunk(0)
+		testState.chunks.set(chunk.id, chunk)
+		testState.uploadBehaviors.push("fail", "success")
+
+		const uploader = new ChunkUploader(
+			{
+				chunkSizeThreshold: 1,
+				timeThreshold: 1,
+				chunkCountThreshold: 1,
+				maxConcurrentUploads: 1,
+				maxRetryCount: 2,
+			},
+			createBatchSaveReporter(),
+		)
+
+		await uploader.uploadSession("session-1", "topic-1", "project-1")
+		await vi.waitFor(() => expect(testState.uploadCalls).toHaveLength(1))
+		await vi.advanceTimersByTimeAsync(2_000)
+		await vi.waitFor(() => expect(testState.chunks.get(chunk.id)?.uploadStatus).toBe("uploaded"))
+
+		const lifecycleEvents = testState.loggerReports
+			.map((args) => args[0])
+			.filter(
+				(value): value is { namespace: string; data: { event: string } } =>
+					typeof value === "object" &&
+					value !== null &&
+					(value as { namespace?: unknown }).namespace === "recordingUploadLifecycle",
+			)
+			.map((value) => value.data.event)
+
+		expect(lifecycleEvents).toEqual(
+			expect.arrayContaining(["chunk_retry_scheduled", "chunk_retry_started"]),
+		)
+	})
+
+	it("retries an IndexedDB fallback upload and preserves BatchSave", async () => {
+		const chunk = createChunk(0)
+		testState.uploadBehaviors.push("fail", "success")
+		const batchSaveReporter = createBatchSaveReporter()
+		const uploader = new ChunkUploader(
+			{
+				chunkSizeThreshold: 1,
+				timeThreshold: 1,
+				chunkCountThreshold: 1,
+				maxConcurrentUploads: 1,
+				maxRetryCount: 2,
+			},
+			batchSaveReporter,
+		)
+		const internalUploader = uploader as unknown as {
+			sessionTopicMap: Map<string, string>
+			sessionProjectMap: Map<string, string>
+			directUploadChunks: Map<string, StoredAudioChunk>
+		}
+		internalUploader.sessionTopicMap.set("session-1", "topic-1")
+		internalUploader.sessionProjectMap.set("session-1", "project-1")
+
+		await uploader.uploadChunkAndSave(chunk)
+		await vi.advanceTimersByTimeAsync(2_000)
+		await vi.waitFor(() => expect(testState.uploadCalls).toHaveLength(2))
+
+		expect(batchSaveReporter.reportUploadedFileStrict).toHaveBeenCalledTimes(1)
+		expect(internalUploader.directUploadChunks.has(chunk.id)).toBe(false)
+	})
+
+	it("cancels an active IndexedDB fallback upload during session cleanup", async () => {
+		const chunk = createChunk(0)
+		testState.uploadBehaviors.push("hang")
+		const uploader = new ChunkUploader(
+			{
+				chunkSizeThreshold: 1,
+				timeThreshold: 1,
+				chunkCountThreshold: 1,
+				maxConcurrentUploads: 1,
+			},
+			createBatchSaveReporter(),
+		)
+		const internalUploader = uploader as unknown as {
+			sessionTopicMap: Map<string, string>
+			sessionProjectMap: Map<string, string>
+		}
+		internalUploader.sessionTopicMap.set("session-1", "topic-1")
+		internalUploader.sessionProjectMap.set("session-1", "project-1")
+
+		void uploader.uploadChunkAndSave(chunk)
+		await vi.waitFor(() => expect(testState.uploadCalls).toHaveLength(1))
+		await uploader.clearSessionChunks("session-1", "cancel:user_cancel")
+
+		expect(testState.uploadCancels[0]).toHaveBeenCalledTimes(1)
+	})
+
 	it("starts only one active upload per session when multiple pending chunks are queued", async () => {
 		testState.chunks.set("chunk-0", createChunk(0))
 		testState.chunks.set("chunk-1", createChunk(1))
@@ -472,6 +564,16 @@ describe("ChunkUploader", () => {
 		await uploader.resumeStalledSessionUploads("session-1", "topic-1", "project-1")
 
 		expect(testState.uploadCalls).toHaveLength(0)
+		const cleanupEvent = testState.loggerReports
+			.map((args) => args[0])
+			.find(
+				(value): value is { namespace: string; data: { event: string; clearIndexedDB: boolean } } =>
+					typeof value === "object" &&
+					value !== null &&
+					(value as { namespace?: unknown }).namespace === "recordingUploadLifecycle" &&
+					(value as { data?: { event?: unknown } }).data?.event === "session_upload_cleanup",
+			)
+		expect(cleanupEvent?.data.clearIndexedDB).toBe(true)
 	})
 
 	it("does not restart uploads after a session cleanup request", async () => {
@@ -983,6 +1085,15 @@ describe("ChunkUploader", () => {
 		)
 
 		expect(testState.uploadCalls).toHaveLength(1)
+		expect(
+			testState.loggerReports.some(
+				(args) =>
+					(args[0] as { namespace?: string; data?: { event?: string } })?.namespace ===
+						"recordingUploadLifecycle" &&
+					(args[0] as { data?: { event?: string } })?.data?.event ===
+						"session_pending_chunks_restored",
+			),
+		).toBe(true)
 	})
 
 	it("unblocks a stale active upload so pending chunks can continue", async () => {

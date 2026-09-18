@@ -12,6 +12,14 @@ import { redactUploadErrorMessage } from "./utils/sanitizeUploadError"
 
 const logger = recordingLogger.namespace("Upload:Chunk")
 
+/** Report one upload lifecycle transition with stable fields for production correlation. */
+const reportUploadLifecycle = (event: string, data: Record<string, unknown>): void => {
+	logger.report({
+		namespace: "recordingUploadLifecycle",
+		data: { event, ...data },
+	})
+}
+
 export interface SessionUploadProgress {
 	total: number
 	pending: number
@@ -238,6 +246,7 @@ export class ChunkUploader {
 	private retryTimers = new Map<string, NodeJS.Timeout>() // chunkId -> timer
 	private sessionCleanupRequested = new Set<string>()
 	private activeUploadCancels = new Map<string, () => void>()
+	private directUploadChunks = new Map<string, StoredAudioChunk>()
 	private activeUploadAttempts = new Map<string, string>()
 	private ignoredUploadAttempts = new Set<string>()
 	private uploadAttemptSeq = 0
@@ -431,13 +440,25 @@ export class ChunkUploader {
 
 		// Add chunk IDs to session queue (avoid duplicates)
 		let addedCount = 0
+		const addedChunks: StoredAudioChunk[] = []
 		for (const chunk of sortedChunks) {
 			const isInQueue = sessionQueue.includes(chunk.id)
 			const isActive = currentActiveChunkId === chunk.id
 			if (!isInQueue && !isActive) {
 				sessionQueue.push(chunk.id)
+				addedChunks.push(chunk)
 				addedCount++
 			}
+		}
+
+		if (addedCount > 0) {
+			reportUploadLifecycle("session_pending_chunks_restored", {
+				sessionId,
+				pendingCount: addedCount,
+				minChunkIndex: addedChunks[0]?.index,
+				maxChunkIndex: addedChunks[addedChunks.length - 1]?.index,
+				restoreSource: "indexeddb",
+			})
 		}
 
 		if (addedCount > 0) {
@@ -541,6 +562,15 @@ export class ChunkUploader {
 			// Add to active uploads
 			this.activeUploads.set(chunkId, chunk)
 			attemptId = this.beginUploadAttempt(chunkId)
+			if (this.getRetryCount(chunk.id) > 0) {
+				reportUploadLifecycle("chunk_retry_started", {
+					sessionId: chunk.sessionId,
+					chunkId: chunk.id,
+					chunkIndex: chunk.index,
+					retryCount: this.getRetryCount(chunk.id),
+					attemptId,
+				})
+			}
 			logger.log("Audio chunk upload started", {
 				sessionId: chunk.sessionId,
 				chunkId: chunk.id,
@@ -1121,10 +1151,15 @@ export class ChunkUploader {
 		// Calculate retry delay with exponential backoff
 		const retryDelay = this.calculateRetryDelay(newRetryCount - 1)
 
-		logger.log(`将分片 ${chunkId} 重新加入会话 ${chunk.sessionId} 的队列等待重试`, {
+		reportUploadLifecycle("chunk_retry_scheduled", {
+			sessionId: chunk.sessionId,
+			chunkId,
+			chunkIndex: chunk.index,
 			retryCount: newRetryCount,
 			retryDelayMs: retryDelay,
 			maxRetries: this.config.maxRetryCount,
+			errorStatus: getUploadErrorDetails(error).status,
+			errorKind: getUploadErrorKind(error),
 		})
 
 		this.cleanupChunkRuntimeState(chunkId, chunk.sessionId)
@@ -1608,7 +1643,7 @@ export class ChunkUploader {
 	clearSessionChunks(sessionId: string, reason: string = "session_cleanup"): Promise<void> {
 		const queueLength = this.sessionQueues.get(sessionId)?.length || 0
 		const activeChunkId = this.sessionActiveUploads.get(sessionId) || null
-		this.stopSessionUploads(sessionId, reason)
+		this.stopSessionUploads(sessionId, reason, true)
 
 		return this.audioChunkDB
 			.deletePendingSessionChunks(sessionId)
@@ -1892,6 +1927,13 @@ export class ChunkUploader {
 	 * 暂停所有上传
 	 */
 	pauseAll(): void {
+		for (const chunk of this.directUploadChunks.values()) {
+			this.invalidateUploadAttempt(chunk.id)
+			this.cancelActiveUpload(chunk.id, chunk.sessionId, "pause_all")
+			this.cleanupChunkRuntimeState(chunk.id, chunk.sessionId)
+			this.directUploadChunks.delete(chunk.id)
+		}
+
 		// Move active uploads back to their session queues
 		this.activeUploads.forEach((chunk, chunkId) => {
 			const sessionQueue = this.sessionQueues.get(chunk.sessionId)
@@ -1990,19 +2032,64 @@ export class ChunkUploader {
 			}
 			this.clearRetryCount(activeChunkId)
 		}
+
+		for (const chunk of this.directUploadChunks.values()) {
+			if (chunk.sessionId !== sessionId) continue
+			const timer = this.retryTimers.get(chunk.id)
+			if (timer) {
+				clearTimeout(timer)
+				this.retryTimers.delete(chunk.id)
+			}
+			this.clearRetryCount(chunk.id)
+		}
 	}
 
 	/**
 	 * Stop a session's queue while preserving IndexedDB chunks for export.
 	 * 服务端结束任务时停止后续上传，但保留 IndexedDB 分片供导出。
 	 */
-	stopSessionUploads(sessionId: string, reason: string = "session_stop"): void {
+	stopSessionUploads(
+		sessionId: string,
+		reason: string = "session_stop",
+		clearIndexedDB = false,
+	): void {
 		this.sessionCleanupRequested.add(sessionId)
-		const queueLength = this.sessionQueues.get(sessionId)?.length || 0
+		const sessionQueue = this.sessionQueues.get(sessionId) ?? []
+		const queueLength = sessionQueue.length
 		const activeChunkId = this.sessionActiveUploads.get(sessionId) || null
+		const directChunkIds = Array.from(this.directUploadChunks.values())
+			.filter((chunk) => chunk.sessionId === sessionId)
+			.map((chunk) => chunk.id)
+		reportUploadLifecycle("session_upload_cleanup", {
+			sessionId,
+			reason,
+			queueLength,
+			activeChunkId,
+			retryTimerCount: this.countSessionRetryTimers(sessionId),
+			clearIndexedDB,
+		})
+		for (const chunkId of [
+			...new Set([...sessionQueue, ...(activeChunkId ? [activeChunkId] : []), ...directChunkIds]),
+		]) {
+			const activeChunk = this.activeUploads.get(chunkId)
+			reportUploadLifecycle("chunk_removed_from_queue", {
+				sessionId,
+				chunkId,
+				chunkIndex: activeChunk?.index ?? null,
+				reason,
+				queueState: chunkId === activeChunkId ? "active" : "queued",
+				uploadStatus: activeChunk?.uploadStatus ?? null,
+			})
+		}
 		if (activeChunkId) {
 			this.invalidateUploadAttempt(activeChunkId)
 			this.cancelActiveUpload(activeChunkId, sessionId, reason)
+		}
+		for (const chunkId of directChunkIds) {
+			this.invalidateUploadAttempt(chunkId)
+			this.cancelActiveUpload(chunkId, sessionId, reason)
+			this.cleanupChunkRuntimeState(chunkId, sessionId)
+			this.directUploadChunks.delete(chunkId)
 		}
 		this.clearSessionRetryInfo(sessionId)
 		if (activeChunkId) {
@@ -2020,6 +2107,106 @@ export class ChunkUploader {
 		})
 	}
 
+	/** Count pending retry timers for one session before cleanup removes them. */
+	private countSessionRetryTimers(sessionId: string): number {
+		const queue = this.sessionQueues.get(sessionId) ?? []
+		const activeChunkId = this.sessionActiveUploads.get(sessionId)
+		const chunkIds = activeChunkId ? [...queue, activeChunkId] : queue
+		const directChunkIds = Array.from(this.directUploadChunks.values())
+			.filter((chunk) => chunk.sessionId === sessionId)
+			.map((chunk) => chunk.id)
+		return [...new Set([...chunkIds, ...directChunkIds])].filter((chunkId) =>
+			this.retryTimers.has(chunkId),
+		).length
+	}
+
+	/** Upload a non-persisted chunk and still register it in the workspace directory. */
+	async uploadChunkAndSave(chunk: StoredAudioChunk): Promise<void> {
+		if (this.sessionCleanupRequested.has(chunk.sessionId)) return
+		this.directUploadChunks.set(chunk.id, chunk)
+		await this.runDirectUpload(chunk)
+	}
+
+	/** Upload a non-persisted chunk through the same retry and cleanup lifecycle as queued work. */
+	private async runDirectUpload(chunk: StoredAudioChunk): Promise<void> {
+		if (this.sessionCleanupRequested.has(chunk.sessionId)) return
+
+		const attemptId = this.beginUploadAttempt(chunk.id)
+		this.activeUploads.set(chunk.id, chunk)
+		this.activeUploadIds.add(chunk.id)
+		if (this.getRetryCount(chunk.id) > 0) {
+			reportUploadLifecycle("chunk_retry_started", {
+				sessionId: chunk.sessionId,
+				chunkId: chunk.id,
+				chunkIndex: chunk.index,
+				retryCount: this.getRetryCount(chunk.id),
+				attemptId,
+			})
+		}
+
+		try {
+			const uploadUrl = await this.uploadChunk(chunk, attemptId)
+			if (
+				this.shouldIgnoreUploadAttempt(chunk.id, attemptId) ||
+				this.sessionCleanupRequested.has(chunk.sessionId)
+			) {
+				return
+			}
+			await this.reportUploadedChunk(chunk, uploadUrl, { requireBatchSave: true })
+			this.cleanupChunkRuntimeState(chunk.id, chunk.sessionId)
+			this.clearRetryCount(chunk.id)
+			this.directUploadChunks.delete(chunk.id)
+		} catch (error) {
+			if (
+				this.shouldIgnoreUploadAttempt(chunk.id, attemptId) ||
+				this.sessionCleanupRequested.has(chunk.sessionId)
+			) {
+				return
+			}
+
+			const currentRetryCount = this.getRetryCount(chunk.id)
+			if (currentRetryCount >= this.config.maxRetryCount) {
+				logger.error({
+					eventKey: "direct_chunk_upload_failed",
+					errorKind: getUploadErrorKind(error),
+					error,
+					message: "IndexedDB fallback chunk upload failed after max retries",
+					context: {
+						sessionId: chunk.sessionId,
+						chunkId: chunk.id,
+						chunkIndex: chunk.index,
+						persisted: false,
+						retryCount: currentRetryCount,
+					},
+				})
+				this.cleanupChunkRuntimeState(chunk.id, chunk.sessionId)
+				this.directUploadChunks.delete(chunk.id)
+				this.clearRetryCount(chunk.id)
+				return
+			}
+
+			const retryCount = this.incrementRetryCount(chunk.id)
+			const retryDelay = this.calculateRetryDelay(retryCount - 1)
+			reportUploadLifecycle("chunk_retry_scheduled", {
+				sessionId: chunk.sessionId,
+				chunkId: chunk.id,
+				chunkIndex: chunk.index,
+				retryCount,
+				retryDelayMs: retryDelay,
+				maxRetries: this.config.maxRetryCount,
+				errorStatus: getUploadErrorDetails(error).status,
+				errorKind: getUploadErrorKind(error),
+			})
+			this.cleanupChunkRuntimeState(chunk.id, chunk.sessionId)
+			const timer = setTimeout(() => {
+				this.retryTimers.delete(chunk.id)
+				if (this.sessionCleanupRequested.has(chunk.sessionId)) return
+				void this.runDirectUpload(chunk)
+			}, retryDelay)
+			this.retryTimers.set(chunk.id, timer)
+		}
+	}
+
 	/**
 	 * Dispose the uploader and cleanup resources
 	 * 释放上传器并清理资源
@@ -2033,6 +2220,7 @@ export class ChunkUploader {
 		this.activeUploadIds.clear()
 		this.activeUploadAttempts.clear()
 		this.ignoredUploadAttempts.clear()
+		this.directUploadChunks.clear()
 		this.sessionTopicMap.clear()
 		this.sessionProjectMap.clear()
 		this.sessionCleanupRequested.clear()
