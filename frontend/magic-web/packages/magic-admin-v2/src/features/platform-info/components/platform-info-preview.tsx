@@ -10,11 +10,14 @@ import {
 	getContentLocaleCompletion,
 	isSafeImageUrl,
 	localeLabels,
+	platformInfoSectionDescriptionKeys,
 	platformInfoSectionTitleKeys,
 	sharedImageFields,
+	showsPlatformInfoContentLocale,
 	type PlatformInfoSectionId,
 } from "@magic-admin-v2/features/platform-info/utils"
 import { PlatformInfoContentLanguageBar, PlatformInfoContentSection } from "./platform-info-shared"
+import { PlatformInfoWatermarkPreview } from "./platform-info-watermark"
 
 export function PlatformInfoPreview({
 	activeSection,
@@ -29,18 +32,12 @@ export function PlatformInfoPreview({
 }) {
 	const { t } = useTranslation()
 	const contentCompletion = getContentLocaleCompletion(value)
-	const showContentLocale = activeSection !== "basic" && activeSection !== "globalSystemPrompt"
+	const showContentLocale = showsPlatformInfoContentLocale(activeSection)
 
 	return (
 		<PlatformInfoContentSection
 			title={t(platformInfoSectionTitleKeys[activeSection])}
-			description={
-				activeSection === "globalSystemPrompt"
-					? t("platformInfo.sectionDesc.globalSystemPrompt")
-					: showContentLocale
-						? t("platformInfo.contentLanguage.description")
-						: t("nav.desc.platformInfo")
-			}
+			description={t(platformInfoSectionDescriptionKeys[activeSection])}
 		>
 			<div className="space-y-6">
 				{showContentLocale ? (
@@ -144,6 +141,9 @@ export function PlatformInfoPreview({
 							[t("platformInfo.field.filingLink"), value.footer.filing.link],
 						]}
 					/>
+				) : null}
+				{activeSection === "watermark" ? (
+					<PlatformInfoWatermarkPreview value={value.watermark} />
 				) : null}
 			</div>
 		</PlatformInfoContentSection>
