@@ -701,11 +701,14 @@ class ResourceShareAppService extends AbstractShareAppService
             ExceptionBuilder::throw(ShareErrorCode::SHARE_OWNER_PERMISSION_REVOKED, 'share.share_owner_permission_revoked', []);
         }
 
-        $this->assertAllowed(
+        // 访问已有分享时，应提示链接失效，而不是让访问者“换一种分享方式”。
+        if (! $this->isShareMethodAllowed(
             MagicUserAuthorization::fromUserEntity($owner),
             $resourceKind,
             $shareEntity->getShareType()
-        );
+        )) {
+            ExceptionBuilder::throw(ShareErrorCode::SHARE_OWNER_PERMISSION_REVOKED, 'share.share_owner_permission_revoked', []);
+        }
     }
 
     public function getShareList(MagicUserAuthorization $userAuthorization, ResourceListRequestDTO $dto): array
@@ -1676,11 +1679,11 @@ class ResourceShareAppService extends AbstractShareAppService
         );
     }
 
-    private function assertAllowed(
+    private function isShareMethodAllowed(
         MagicUserAuthorization $userAuthorization,
         string $resourceKind,
         int $shareType
-    ): void {
+    ): bool {
         $prefix = in_array($resourceKind, ['micro_app', ResourceType::Topic->getBusinessName(), ResourceType::Project->getBusinessName()], true) ? $resourceKind : ResourceType::Project->getBusinessName();
         $shareFunctionCode = match ($shareType) {
             ShareAccessType::TeamShare->value => $prefix . '.share_team',
@@ -1689,12 +1692,20 @@ class ResourceShareAppService extends AbstractShareAppService
             default => null,
         };
 
-        if ($shareFunctionCode !== null
-            && ! $this->functionPermissionAppService->checkPermission($userAuthorization, $shareFunctionCode)) {
+        return $shareFunctionCode === null
+            || $this->functionPermissionAppService->checkPermission($userAuthorization, $shareFunctionCode);
+    }
+
+    private function assertAllowed(
+        MagicUserAuthorization $userAuthorization,
+        string $resourceKind,
+        int $shareType
+    ): void {
+        if (! $this->isShareMethodAllowed($userAuthorization, $resourceKind, $shareType)) {
             ExceptionBuilder::throw(
                 ShareErrorCode::SHARE_METHOD_NOT_ALLOWED,
                 'share.share_method_not_allowed',
-                ['shareType' => (string) $shareType]
+                ['shareType' => ShareAccessType::tryFrom($shareType)?->getI18nKey() ?? (string) $shareType]
             );
         }
     }
