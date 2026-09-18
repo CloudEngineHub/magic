@@ -405,6 +405,9 @@ export async function* iteratePreparedPptxPages(
 			index: sourcePage.index,
 			html,
 			...(sourcePage.key ? { key: sourcePage.key } : {}),
+			...(sourcePage.pageName ? { pageName: sourcePage.pageName } : {}),
+			...(sourcePage.pagePath ? { pagePath: sourcePage.pagePath } : {}),
+			...(sourcePage.pageFileId ? { pageFileId: sourcePage.pageFileId } : {}),
 		}
 		fallbackIndex += 1
 	}

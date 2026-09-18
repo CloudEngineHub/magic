@@ -39,13 +39,27 @@ export interface PrepareHtmlPagesForExportOptions extends Omit<
 	PrepareHtmlForExportOptions,
 	"content"
 > {
-	pages: Iterable<string> | AsyncIterable<string>
+	pages: Iterable<string | PreparedHtmlPageInput> | AsyncIterable<string | PreparedHtmlPageInput>
 	signal?: AbortSignal
+}
+
+/** Optional source identity retained while HTML is prepared for PPT export diagnostics. */
+export interface PreparedHtmlPageInput {
+	html: string
+	index?: number
+	key?: string
+	pageName?: string
+	pagePath?: string
+	pageFileId?: string
 }
 
 export interface PreparedHtmlPage {
 	index: number
 	html: string
+	key?: string
+	pageName?: string
+	pagePath?: string
+	pageFileId?: string
 }
 
 function flattenHtmlExportAttachments(items: HtmlExportAttachment[] = []): HtmlExportAttachment[] {
@@ -280,15 +294,23 @@ export async function* iteratePreparedHtmlPages(
 	let index = 0
 	for await (const page of pages) {
 		throwIfAborted(signal)
+		const sourcePage = typeof page === "string" ? { html: page } : page
 		const html = await waitForAbortable(
 			prepareHtmlForExport({
 				...pageOptions,
-				content: page,
+				content: sourcePage.html,
 			}),
 			signal,
 		)
 		throwIfAborted(signal)
-		yield { index, html }
+		yield {
+			index: sourcePage.index ?? index,
+			html,
+			...(sourcePage.key ? { key: sourcePage.key } : {}),
+			...(sourcePage.pageName ? { pageName: sourcePage.pageName } : {}),
+			...(sourcePage.pagePath ? { pagePath: sourcePage.pagePath } : {}),
+			...(sourcePage.pageFileId ? { pageFileId: sourcePage.pageFileId } : {}),
+		}
 		index += 1
 	}
 }

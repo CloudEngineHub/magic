@@ -221,6 +221,10 @@ async function runDirectStreamingExport(
 	let successCount = 0
 	let outputSlideCount = 0
 	let currentPageIndex: number | undefined
+	let currentPageKey: string | undefined
+	let currentPageName: string | undefined
+	let currentPagePath: string | undefined
+	let currentPageFileId: string | undefined
 
 	try {
 		packager = createPackagerOrThrow(createPackager, {
@@ -232,25 +236,40 @@ async function runDirectStreamingExport(
 			signal: input.signal,
 			workerUrl: input.workerUrl,
 			onProgress: input.onProgress,
-			onResourceError: (error) => reportExportResourceError(input, error),
+			onResourceError: (error) =>
+				reportExportResourceError(input, error, currentPageIndex, {
+					pageKey: currentPageKey,
+					pageName: currentPageName,
+					pagePath: currentPagePath,
+					pageFileId: currentPageFileId,
+				}),
 			// Packaging errors arrive after the Worker commit, so retain only the
 			// primitive page index needed to label that diagnostic.
 			onExportIssue: (issue) =>
 				input.onExportIssue?.({
 					...issue,
 					pageIndex: issue.pageIndex ?? currentPageIndex,
+					pageKey: issue.pageKey ?? currentPageKey,
+					pageName: issue.pageName ?? currentPageName,
+					pagePath: issue.pagePath ?? currentPagePath,
+					pageFileId: issue.pageFileId ?? currentPageFileId,
 				}),
 		})
 		await packager.ready
 		for await (const page of input.pages) {
 			throwIfAborted(input.signal)
+			currentPageIndex = page.index
+			currentPageKey = page.key
+			currentPageName = page.pageName
+			currentPagePath = page.pagePath
+			currentPageFileId = page.pageFileId
 			input.onProgress?.({
 				phase: "prepare-page",
 				pageIndex: page.index,
 				pageCount: input.pageCount,
 			})
 			try {
-				const result = await prepareStreamingPage(input, page.html, page.index)
+				const result = await prepareStreamingPage(input, page)
 				const nodes = serializePptNodes(result.pptNodes)
 				await normalizeNodeMediaSources(nodes)
 				await applyImagePreflight(nodes, input)
@@ -285,7 +304,7 @@ async function runDirectStreamingExport(
 					!input.skipFailedPages
 				)
 					throw error
-				reportPageExportError(input, page.index, error)
+				reportPageExportError(input, page, error)
 			}
 		}
 
@@ -326,6 +345,14 @@ async function runStagedStreamingExport(
 	let exportSucceeded = false
 	let packager: StreamingPresentationPackager | undefined
 	let currentPageIndex: number | undefined
+	let currentPageKey: string | undefined
+	let currentPageName: string | undefined
+	let currentPagePath: string | undefined
+	let currentPageFileId: string | undefined
+	const stagedPageMetadata = new Map<
+		number,
+		Pick<StreamingHtmlPage, "key" | "pageName" | "pagePath" | "pageFileId">
+	>()
 
 	try {
 		const activeStore = await runStagingOperation(input.signal, () =>
@@ -339,13 +366,18 @@ async function runStagedStreamingExport(
 		)
 		for await (const page of input.pages) {
 			throwIfAborted(input.signal)
+			currentPageIndex = page.index
+			currentPageKey = page.key
+			currentPageName = page.pageName
+			currentPagePath = page.pagePath
+			currentPageFileId = page.pageFileId
 			input.onProgress?.({
 				phase: "prepare-page",
 				pageIndex: page.index,
 				pageCount: input.pageCount,
 			})
 			try {
-				const result = await prepareStreamingPage(input, page.html, page.index)
+				const result = await prepareStreamingPage(input, page)
 				if (input.autoSize && result.totalWidth > MAX_PPT_PAGE_PX) {
 					throw new ExportFidelityError(
 						`[exportPPTXStreaming] Page ${page.index + 1} width ${result.totalWidth}px exceeds PowerPoint's ${MAX_PPT_PAGE_PX}px limit.`,
@@ -381,6 +413,12 @@ async function runStagedStreamingExport(
 					mergeUsedFonts(usedFonts, detectFontsFromNodes([outputNodes]))
 					const key = createSlideKey(page.key, page.index, pageOffset)
 					const stageIndex = stagedKeys.length + 1
+					stagedPageMetadata.set(stageIndex, {
+						key: page.key,
+						pageName: page.pageName,
+						pagePath: page.pagePath,
+						pageFileId: page.pageFileId,
+					})
 					await runStagingOperation(
 						input.signal,
 						() =>
@@ -412,7 +450,7 @@ async function runStagedStreamingExport(
 					!input.skipFailedPages
 				)
 					throw error
-				reportPageExportError(input, page.index, error)
+				reportPageExportError(input, page, error)
 			}
 		}
 
@@ -434,11 +472,21 @@ async function runStagedStreamingExport(
 			signal: input.signal,
 			workerUrl: input.workerUrl,
 			onProgress: input.onProgress,
-			onResourceError: (error) => reportExportResourceError(input, error),
+			onResourceError: (error) =>
+				reportExportResourceError(input, error, currentPageIndex, {
+					pageKey: currentPageKey,
+					pageName: currentPageName,
+					pagePath: currentPagePath,
+					pageFileId: currentPageFileId,
+				}),
 			onExportIssue: (issue) =>
 				input.onExportIssue?.({
 					...issue,
 					pageIndex: issue.pageIndex ?? currentPageIndex,
+					pageKey: issue.pageKey ?? currentPageKey,
+					pageName: issue.pageName ?? currentPageName,
+					pagePath: issue.pagePath ?? currentPagePath,
+					pageFileId: issue.pageFileId ?? currentPageFileId,
 				}),
 		})
 		await packager.ready
@@ -446,6 +494,11 @@ async function runStagedStreamingExport(
 		for (let index = 1; index <= stagedKeys.length; index += 1) {
 			throwIfAborted(input.signal)
 			currentPageIndex = index - 1
+			const pageMetadata = stagedPageMetadata.get(index)
+			currentPageKey = pageMetadata?.key
+			currentPageName = pageMetadata?.pageName
+			currentPagePath = pageMetadata?.pagePath
+			currentPageFileId = pageMetadata?.pageFileId
 			const record = await runStagingOperation(
 				input.signal,
 				() => activeStore.getSlideIr<StagedSlideRecord>(index, { signal: input.signal }),
@@ -499,6 +552,7 @@ function reportExportResourceError(
 	input: StreamingExportTaskInput,
 	error: ResourceLoadError,
 	pageIndex?: number,
+	pageIdentity?: Pick<ExportIssue, "pageKey" | "pageName" | "pagePath" | "pageFileId">,
 ): void {
 	try {
 		input.onResourceError?.(error)
@@ -508,6 +562,7 @@ function reportExportResourceError(
 	try {
 		input.onExportIssue?.({
 			pageIndex,
+			...pageIdentity,
 			code: "resource-error",
 			message: error.message || `${error.kind} ${error.reason}`,
 			severity: "warning",
@@ -526,12 +581,16 @@ function reportExportResourceError(
 /** Report a recoverable page failure before the page is skipped. */
 function reportPageExportError(
 	input: StreamingExportTaskInput,
-	pageIndex: number,
+	page: StreamingHtmlPage,
 	error: unknown,
 ): void {
 	try {
 		input.onExportIssue?.({
-			pageIndex,
+			pageIndex: page.index,
+			pageKey: page.key,
+			pageName: page.pageName,
+			pagePath: page.pagePath,
+			pageFileId: page.pageFileId,
 			code: "render-error",
 			message: error instanceof Error ? error.message : String(error),
 			severity: "error",
@@ -542,14 +601,18 @@ function reportPageExportError(
 	}
 }
 
-async function prepareStreamingPage(input: StreamingExportTaskInput, html: string, pageIndex?: number) {
+async function prepareStreamingPage(input: StreamingExportTaskInput, page: StreamingHtmlPage) {
 	const activePrepare = input.pipeline?.prepareSlideNodes ?? prepareSlideNodes
 	return activePrepare({
 		config: input.config,
-		html,
+		html: page.html,
 		sandbox: input.sandbox,
 		signal: input.signal,
-		pageIndex,
+		pageIndex: page.index,
+		pageKey: page.key,
+		pageName: page.pageName,
+		pagePath: page.pagePath,
+		pageFileId: page.pageFileId,
 		onResourceError: input.onResourceError,
 		textMergeMode: DEFAULT_TEXT_MERGE_MODE,
 		onExportIssue: input.onExportIssue,

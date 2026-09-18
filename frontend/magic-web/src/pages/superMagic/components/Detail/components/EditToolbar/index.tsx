@@ -510,11 +510,22 @@ function EditToolbar({
 				(signal) =>
 					iteratePreparedHtmlPages({
 						pages: (async function* iterateSelectedSlides() {
-							for (const slide of selectedSlides) {
+							for (const [index, slide] of selectedSlides.entries()) {
 								if (signal.aborted) return
 								const content = await ensureSlideContent(slide)
 								if (signal.aborted) return
-								yield content
+								const fileId =
+									pptStore.getFileIdByPath(slide.path) ||
+									pptStore.tryExtractAndMapFileId(slide.path)
+								yield {
+									index,
+									html: content,
+									key: slide.path,
+									pageName:
+										slide.title || slide.path.split("/").pop() || slide.path,
+									pagePath: slide.path,
+									pageFileId: fileId,
+								}
 							}
 						})(),
 						signal,

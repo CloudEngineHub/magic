@@ -57,6 +57,31 @@ describe("htmlExportPrepare page sources", () => {
 		expect(mocks.processHtmlContent).toHaveBeenCalledTimes(2)
 	})
 
+	it("retains source page identity for export diagnostics", async () => {
+		const iterator = iteratePreparedHtmlPages({
+			pages: [
+				{
+					html: "first",
+					index: 7,
+					key: "slides/first.html",
+					pageName: "first.html",
+					pagePath: "slides/first.html",
+					pageFileId: "file-1",
+				},
+			],
+		})[Symbol.asyncIterator]()
+
+		await expect(iterator.next()).resolves.toMatchObject({
+			value: {
+				index: 7,
+				key: "slides/first.html",
+				pageName: "first.html",
+				pagePath: "slides/first.html",
+				pageFileId: "file-1",
+			},
+		})
+	})
+
 	it("keeps the compatibility array API bounded to one preparation at a time", async () => {
 		let activePreparations = 0
 		let peakPreparations = 0

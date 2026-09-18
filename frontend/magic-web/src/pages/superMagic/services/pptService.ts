@@ -32,6 +32,9 @@ export interface PreparedExportSlidePage {
 	index: number
 	html: string
 	key?: string
+	pageName?: string
+	pagePath?: string
+	pageFileId?: string
 }
 
 export interface IterateExportSlidesInput extends PrepareExportSlidesInput {
@@ -176,7 +179,14 @@ export async function* iterateSingleExportSlide(
 	const result = await prepareSingleSlideExport(input)
 	throwIfAborted(input.signal)
 	for (let index = 0; index < result.htmlSlides.length; index += 1) {
-		yield { index, html: result.htmlSlides[index] }
+		yield {
+			index,
+			html: result.htmlSlides[index],
+			key: input.fileId,
+			pageName: input.fileName,
+			pagePath: input.fileName,
+			pageFileId: input.fileId,
+		}
 	}
 }
 
@@ -425,7 +435,14 @@ export async function* iterateExportSlides(
 			)
 			throwIfAborted(signal)
 			preparedPageCount += 1
-			yield { index, key: path, html: processed }
+			yield {
+				index,
+				key: path,
+				pageName: fileItem?.file_name || path.split("/").pop() || path,
+				pagePath: path,
+				pageFileId: fileId,
+				html: processed,
+			}
 		} catch (error) {
 			if (signal?.aborted || isAbortError(error)) throw createAbortError(signal, error)
 			console.error(`[pptService] Failed to prepare slide ${index}:`, error)
