@@ -376,7 +376,36 @@ class TopicTaskAppService extends AbstractAppService
                 $task->getSandboxId(),
                 $errMsg
             );
-            $this->topicDomainService->updateTopicStatusAndSandboxId($task->getTopicId(), $task->getId(), $status, $task->getSandboxId());
+            // 任务行里的 sandbox_id 是【建任务那一刻】抄下的话题绑定快照；任务
+            // 结束时，下面会把它写回话题。任务的"结束"由终态消息何时到达决定，
+            // 与沙箱生死完全解耦——任务可能比沙箱活得久（长时间挂起、终态消息
+            // 靠补偿补投），期间话题可能已被换绑多次：
+            //
+            //   时间   话题指针 topics.sandbox_id           pod 状态
+            //   ----   -----------------------------       ------------------
+            //   t0     W0  (建任务, 抄下快照 W0)          W0*
+            //   t1     W1  (预热池 mount 换绑)            W0x W1*
+            //   t2     W2  (又一次换绑)                   W0x W1* W2*
+            //   t3     W0  (任务结束, 无条件写回快照)     W0x W1* W2*
+            //              ^^ 回滚! 指针指向早已销毁的沙箱
+            //   t4     W3  (下个请求探测 W0 失败,再绑)    W0x W1* W2* W3*
+            //
+            //   t3 的回滚 + t4 的"自愈"，让 W1、W2 相继脱离指针视野——每绕开
+            //   一个活 pod 就泄漏一个（*=活, x=死），同 topic-id 的重复沙箱
+            //   就这样跨天滚雪球。因此仅当话题绑定仍是本任务快照指向的沙箱时
+            //   才写回，否则只更新任务状态，不碰 sandbox_id。
+            $currentTopic = $this->topicDomainService->getTopicById($task->getTopicId());
+            if ($currentTopic !== null && $currentTopic->getSandboxId() === $task->getSandboxId()) {
+                $this->topicDomainService->updateTopicStatusAndSandboxId($task->getTopicId(), $task->getId(), $status, $task->getSandboxId());
+            } else {
+                $this->logger->info('Skip writing back stale task sandbox_id to topic', [
+                    'task_id' => $taskId,
+                    'topic_id' => $task->getTopicId(),
+                    'task_sandbox_id' => $task->getSandboxId(),
+                    'topic_sandbox_id' => $currentTopic?->getSandboxId() ?? '',
+                ]);
+                $this->topicDomainService->updateTopicStatus($task->getTopicId(), $task->getId(), $status);
+            }
 
             $this->projectDomainService->updateProjectStatus($task->getProjectId(), $task->getTopicId(), $status);
             // Log success
