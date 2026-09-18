@@ -129,9 +129,12 @@ export class ImageElement extends BaseElement<ImageElementData> {
 	// 渲染相关
 	private isErrorState: boolean = false
 	private contentGroup?: Konva.Group
+	private contentLayoutGroup?: Konva.Group
 	private contentUpdateHandler?: () => void
 	private contentViewportScaleUnsubscribe?: () => void
 	private contentPreviewUnsubscribe?: () => void
+	/** Invalidates async placeholder work when the rendered Konva group is replaced. */
+	private renderToken = 0
 	private effectiveContentId?: string
 	private effectiveContentSrc?: string
 
@@ -457,6 +460,7 @@ export class ImageElement extends BaseElement<ImageElementData> {
 	 * 重新渲染节点（重写以清理监听器）
 	 */
 	override rerender(): Konva.Node | null {
+		this.renderToken += 1
 		// 在重新渲染前清理监听器和装饰器
 		this.removeContentUpdateListener()
 		this.borderDecorator?.destroy()
@@ -470,10 +474,17 @@ export class ImageElement extends BaseElement<ImageElementData> {
 		return super.rerender()
 	}
 
+	override destroyRenderNodeForVisibilityCull(): void {
+		this.renderToken += 1
+		this.removeContentUpdateListener()
+		super.destroyRenderNodeForVisibilityCull()
+	}
+
 	/**
 	 * 销毁元素时清理资源
 	 */
 	override destroy(): void {
+		this.renderToken += 1
 		this.canvas.visibilityManager.unregisterImageElement(this.data.id)
 		this.removeResourceLoadedListener()
 		this.contentPreviewUnsubscribe?.()
@@ -2298,6 +2309,7 @@ export class ImageElement extends BaseElement<ImageElementData> {
 
 		const width = this.data.width
 		const height = this.data.height
+		const renderToken = this.renderToken
 
 		// 重置状态标记
 		this.isErrorState = false
@@ -2316,6 +2328,8 @@ export class ImageElement extends BaseElement<ImageElementData> {
 
 		// 异步加载背景和内容
 		this.imageLoader.loadImage(imageBackgroundUnselected).then((backgroundImage) => {
+			if (!this.isCurrentRender(group, renderToken)) return
+
 			// 创建背景图片节点
 			const backgroundNode = RenderUtils.createBackgroundImage(
 				group,
@@ -2332,8 +2346,12 @@ export class ImageElement extends BaseElement<ImageElementData> {
 				withBackground: false,
 				t: this.canvas.t,
 			}).then((contentGroup) => {
+				if (!this.isCurrentRender(group, renderToken)) {
+					contentGroup.destroy()
+					return
+				}
+
 				this.contentGroup = contentGroup
-				this.setupContentUpdateListener(group)
 			})
 
 			// 创建边框
@@ -2343,6 +2361,7 @@ export class ImageElement extends BaseElement<ImageElementData> {
 		})
 
 		this.finalizeNode(group)
+		this.setupContentUpdateListener(group)
 		return group
 	}
 
@@ -2356,6 +2375,7 @@ export class ImageElement extends BaseElement<ImageElementData> {
 
 		const width = this.data.width
 		const height = this.data.height
+		const renderToken = this.renderToken
 
 		// 标记为生成中状态
 		this.isErrorState = false
@@ -2379,6 +2399,8 @@ export class ImageElement extends BaseElement<ImageElementData> {
 
 		// 异步加载背景和内容
 		this.imageLoader.loadImage(imageBackgroundLoading).then((backgroundImage) => {
+			if (!this.isCurrentRender(group, renderToken)) return
+
 			// 创建背景图片节点
 			RenderUtils.createBackgroundImage(group, width, height, backgroundImage)
 
@@ -2390,8 +2412,12 @@ export class ImageElement extends BaseElement<ImageElementData> {
 				withBackground: true,
 				t: this.canvas.t,
 			}).then((contentGroup) => {
+				if (!this.isCurrentRender(group, renderToken)) {
+					contentGroup.destroy()
+					return
+				}
+
 				this.contentGroup = contentGroup
-				this.setupContentUpdateListener(group)
 			})
 
 			this.createBorder(group, width, height, true)
@@ -2400,6 +2426,7 @@ export class ImageElement extends BaseElement<ImageElementData> {
 		})
 
 		this.finalizeNode(group)
+		this.setupContentUpdateListener(group)
 		return group
 	}
 
@@ -2478,6 +2505,7 @@ export class ImageElement extends BaseElement<ImageElementData> {
 
 		const width = this.data.width
 		const height = this.data.height
+		const renderToken = this.renderToken
 
 		// 标记为加载中状态
 		this.isErrorState = false
@@ -2503,6 +2531,8 @@ export class ImageElement extends BaseElement<ImageElementData> {
 
 		// 异步加载背景和内容
 		this.imageLoader.loadImage(imageBackgroundLoading).then((backgroundImage) => {
+			if (!this.isCurrentRender(group, renderToken)) return
+
 			// 创建背景图片节点
 			RenderUtils.createBackgroundImage(group, width, height, backgroundImage)
 
@@ -2514,8 +2544,12 @@ export class ImageElement extends BaseElement<ImageElementData> {
 				withBackground: true,
 				t: this.canvas.t,
 			}).then((contentGroup) => {
+				if (!this.isCurrentRender(group, renderToken)) {
+					contentGroup.destroy()
+					return
+				}
+
 				this.contentGroup = contentGroup
-				this.setupContentUpdateListener(group)
 			})
 
 			this.createBorder(group, width, height, true)
@@ -2524,6 +2558,7 @@ export class ImageElement extends BaseElement<ImageElementData> {
 		})
 
 		this.finalizeNode(group)
+		this.setupContentUpdateListener(group)
 		return group
 	}
 
@@ -2597,6 +2632,7 @@ export class ImageElement extends BaseElement<ImageElementData> {
 
 		const width = this.data.width
 		const height = this.data.height
+		const renderToken = this.renderToken
 
 		// 标记为错误状态
 		this.isErrorState = true
@@ -2615,6 +2651,8 @@ export class ImageElement extends BaseElement<ImageElementData> {
 
 		// 异步加载背景和内容
 		this.imageLoader.loadImage(imageBackgroundUnselected).then((backgroundImage) => {
+			if (!this.isCurrentRender(group, renderToken)) return
+
 			// 创建背景图片节点
 			const backgroundNode = RenderUtils.createBackgroundImage(
 				group,
@@ -2646,8 +2684,12 @@ export class ImageElement extends BaseElement<ImageElementData> {
 					!this.isRetryEditing && !!this.getActiveContentData().generateImageRequest,
 				canvas: this.canvas,
 			}).then((contentGroup) => {
+				if (!this.isCurrentRender(group, renderToken)) {
+					contentGroup.destroy()
+					return
+				}
+
 				this.contentGroup = contentGroup
-				this.setupContentUpdateListener(group)
 			})
 
 			// 创建边框
@@ -2657,6 +2699,7 @@ export class ImageElement extends BaseElement<ImageElementData> {
 		})
 
 		this.finalizeNode(group)
+		this.setupContentUpdateListener(group)
 		return group
 	}
 
@@ -2795,6 +2838,7 @@ export class ImageElement extends BaseElement<ImageElementData> {
 
 		this.contentUpdateHandler = () => {
 			this.updateContentScale()
+			this.borderDecorator?.updateViewportScaleLayout()
 		}
 
 		this.contentViewportScaleUnsubscribe =
@@ -2802,9 +2846,14 @@ export class ImageElement extends BaseElement<ImageElementData> {
 				this.data.id,
 				this.contentUpdateHandler,
 			)
+		this.contentLayoutGroup = group
 
 		// 监听 Group 的 transform 事件
 		group.on("transform", this.contentUpdateHandler)
+	}
+
+	private isCurrentRender(group: Konva.Group, renderToken: number): boolean {
+		return this.renderToken === renderToken && this.node === group
 	}
 
 	/**
@@ -2814,12 +2863,13 @@ export class ImageElement extends BaseElement<ImageElementData> {
 		this.contentViewportScaleUnsubscribe?.()
 		this.contentViewportScaleUnsubscribe = undefined
 
-		if (this.node instanceof Konva.Group && this.contentUpdateHandler) {
-			this.node.off("transform", this.contentUpdateHandler)
+		if (this.contentLayoutGroup && this.contentUpdateHandler) {
+			this.contentLayoutGroup.off("transform", this.contentUpdateHandler)
 		}
 
 		this.contentUpdateHandler = undefined
 		this.contentGroup = undefined
+		this.contentLayoutGroup = undefined
 	}
 
 	/**

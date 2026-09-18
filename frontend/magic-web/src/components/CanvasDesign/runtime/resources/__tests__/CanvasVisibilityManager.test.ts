@@ -1809,6 +1809,71 @@ describe("CanvasVisibilityManager content layer hit graph suppression", () => {
 	})
 })
 
+describe("CanvasVisibilityManager far visibility drain scheduling", () => {
+	it("cancels a pending far drain when viewport movement resumes", () => {
+		vi.useFakeTimers()
+		try {
+			const { manager } = createConstructedManager()
+			const state = manager as unknown as {
+				markViewportMoving: (currentTime?: number) => void
+				scheduleFarVisibilityDrain: () => void
+				scheduleRefresh: ReturnType<typeof vi.fn>
+			}
+			const scheduleRefresh = vi.fn()
+			state.scheduleRefresh = scheduleRefresh
+
+			state.markViewportMoving(0)
+			state.scheduleFarVisibilityDrain()
+			vi.advanceTimersByTime(2999)
+
+			state.markViewportMoving(1)
+			vi.advanceTimersByTime(3000)
+			expect(scheduleRefresh).not.toHaveBeenCalledWith("visibility:far-drain", true)
+
+			state.scheduleFarVisibilityDrain()
+			vi.advanceTimersByTime(2999)
+			expect(scheduleRefresh).not.toHaveBeenCalledWith("visibility:far-drain", true)
+			vi.advanceTimersByTime(1)
+			expect(scheduleRefresh).toHaveBeenCalledWith("visibility:far-drain", true)
+			manager.destroy()
+		} finally {
+			vi.useRealTimers()
+		}
+	})
+
+	it("defers a far-drain refresh that races with new viewport movement", () => {
+		vi.useFakeTimers()
+		try {
+			const { manager } = createConstructedManager()
+			const state = manager as unknown as {
+				lastViewportMovementAt: number
+				registeredImages: Map<string, { elementId: string; path: string }>
+				refreshVisibility: (reason: string, requiresFullRefresh: boolean) => void
+				scheduleFarVisibilityDrain: () => void
+				canvas: {
+					viewportQueryCoordinator: { getSnapshot: ReturnType<typeof vi.fn> }
+				}
+			}
+			state.registeredImages.set("image-1", {
+				elementId: "image-1",
+				path: "./images/a.png",
+			})
+			state.lastViewportMovementAt = performance.now()
+			const scheduleFarVisibilityDrain = vi
+				.spyOn(state, "scheduleFarVisibilityDrain")
+				.mockImplementation(() => undefined)
+
+			state.refreshVisibility("visibility:far-drain", true)
+
+			expect(scheduleFarVisibilityDrain).toHaveBeenCalledTimes(1)
+			expect(state.canvas.viewportQueryCoordinator.getSnapshot).not.toHaveBeenCalled()
+			manager.destroy()
+		} finally {
+			vi.useRealTimers()
+		}
+	})
+})
+
 describe("CanvasVisibilityManager covered viewport motion reuse", () => {
 	type ViewportRect = { x: number; y: number; width: number; height: number }
 
@@ -1931,8 +1996,10 @@ describe("CanvasVisibilityManager covered viewport motion reuse", () => {
 		).toBe(false)
 	})
 
-	it("returns before requesting a spatial snapshot for covered viewport motion", () => {
-		const getSnapshot = vi.fn()
+	it("refreshes scale eligibility without running the full covered-motion refresh", () => {
+		const viewportSnapshot = createViewportSnapshot(["image-1"])
+		const getSnapshot = vi.fn(() => viewportSnapshot)
+		const replaceViewportScaleLayoutEligibility = vi.fn()
 		const scheduleFarVisibilityDrain = vi.fn()
 		const manager = Object.create(CanvasVisibilityManager.prototype) as unknown as {
 			canvas: Record<string, unknown>
@@ -1959,7 +2026,10 @@ describe("CanvasVisibilityManager covered viewport motion reuse", () => {
 					inner.y + inner.height <= outer.y + outer.height,
 				getRevision: () => 7,
 			},
-			runtimeScheduler: { getViewportScaleLayoutElementCount: () => 0 },
+			runtimeScheduler: {
+				getViewportScaleLayoutElementCount: () => 0,
+				replaceViewportScaleLayoutEligibility,
+			},
 			stage: {
 				getAbsoluteTransform: () => ({
 					copy: () => ({
@@ -1992,7 +2062,8 @@ describe("CanvasVisibilityManager covered viewport motion reuse", () => {
 
 		manager.refreshVisibility("viewport:pan", false)
 
-		expect(getSnapshot).not.toHaveBeenCalled()
+		expect(getSnapshot).toHaveBeenCalledTimes(1)
+		expect(replaceViewportScaleLayoutEligibility).toHaveBeenCalledWith(new Set(["image-1"]))
 		expect(scheduleFarVisibilityDrain).toHaveBeenCalledTimes(1)
 		expect(manager.statsSnapshot.skippedViewportQueryCount).toBe(1)
 	})
@@ -2066,6 +2137,7 @@ describe("CanvasVisibilityManager covered viewport motion reuse", () => {
 			) => {
 				renderElementIds: string[]
 				renderActiveElementIds: Set<string>
+				viewportScaleLayoutElementIds: Set<string>
 				visibleConsumerIds: Set<string>
 				nearConsumerIds: Set<string>
 				visibleImageIds: Set<string>
@@ -2116,6 +2188,15 @@ describe("CanvasVisibilityManager covered viewport motion reuse", () => {
 		expect(getAllElementIds).not.toHaveBeenCalled()
 		expect(mediaOnlyResult.renderElementIds).toEqual([])
 		expect(mediaOnlyResult.renderActiveElementIds.size).toBe(0)
+		expect(mediaOnlyResult.viewportScaleLayoutElementIds).toEqual(
+			new Set([
+				"root-visible",
+				"consumer-visible",
+				"image-visible",
+				"video-visible",
+				"audio-visible",
+			]),
+		)
 
 		const restoreResult = queryViewportElementIds(viewportSnapshot, true)
 		expect(getAllElementIds).not.toHaveBeenCalled()
@@ -2143,6 +2224,15 @@ describe("CanvasVisibilityManager covered viewport motion reuse", () => {
 				"video-visible",
 				"audio-visible",
 				"root-near",
+			]),
+		)
+		expect(result.viewportScaleLayoutElementIds).toEqual(
+			new Set([
+				"root-visible",
+				"consumer-visible",
+				"image-visible",
+				"video-visible",
+				"audio-visible",
 			]),
 		)
 		expect(result.visibleConsumerIds).toEqual(new Set(["consumer-visible"]))
@@ -2181,7 +2271,11 @@ describe("CanvasVisibilityManager covered viewport motion reuse", () => {
 				viewportSnapshot: ReturnType<typeof createViewportSnapshot>,
 				includeRenderVisibility: boolean,
 				includeAllRenderElements?: boolean,
-			) => { renderElementIds: string[]; renderActiveElementIds: Set<string> }
+			) => {
+				renderElementIds: string[]
+				renderActiveElementIds: Set<string>
+				viewportScaleLayoutElementIds: Set<string>
+			}
 		}
 		manager.canvas = {
 			elementManager: {
@@ -2223,7 +2317,134 @@ describe("CanvasVisibilityManager covered viewport motion reuse", () => {
 				"frame-1",
 			]),
 		)
+		expect(result.viewportScaleLayoutElementIds).toEqual(
+			new Set(["image-visible", "selected-far", "hovered-far"]),
+		)
 		expect(findParentIdForElement).toHaveBeenCalledTimes(6)
+	})
+})
+
+describe("CanvasVisibilityManager media candidate reuse", () => {
+	function createCachedCandidates() {
+		const image1 = createImageCandidate("image-1", "visible")
+		const image2 = createImageCandidate("image-2", "near")
+		const video1 = createCandidate("visible")
+		video1.elementId = "video-1"
+		const video2 = createCandidate("near")
+		video2.elementId = "video-2"
+		const audio1 = createAudioCandidate("visible")
+		audio1.elementId = "audio-1"
+		const audio2 = createAudioCandidate("near")
+		audio2.elementId = "audio-2"
+		return {
+			geometryRevision: 7,
+			scaleBand: 3,
+			baselineViewportScale: 1,
+			viewportScale: 1,
+			viewportCenter: { x: 0, y: 0 },
+			imagePresentationPhase: "moving" as const,
+			imageCandidatesByElementId: new Map([
+				["image-1", { visibilityState: "visible" as const, candidate: image1 }],
+				["image-2", { visibilityState: "near" as const, candidate: image2 }],
+			]),
+			videoCandidatesByElementId: new Map([
+				["video-1", { visibilityState: "visible" as const, candidate: video1 }],
+				["video-2", { visibilityState: "near" as const, candidate: video2 }],
+			]),
+			audioCandidatesByElementId: new Map([
+				["audio-1", { visibilityState: "visible" as const, candidate: audio1 }],
+				["audio-2", { visibilityState: "near" as const, candidate: audio2 }],
+			]),
+			visibleCandidates: [image1],
+			lowDetailVisibleCandidates: [],
+			nearCandidates: [image2],
+			visibleVideoCandidates: [],
+			lowDetailVisibleVideoCandidates: [],
+			nearVideoCandidates: [],
+			visibleAudioCandidates: [],
+			nearAudioCandidates: [],
+		}
+	}
+
+	it("reuses candidates only while media membership and motion quality stay stable", () => {
+		const manager = Object.create(CanvasVisibilityManager.prototype) as unknown as {
+			imagePresentationPhase: "moving" | "idle"
+			viewportMediaCandidateCache: ReturnType<typeof createCachedCandidates>
+			getCompatibleViewportMediaCandidates: (options: {
+				geometryRevision: number
+				scaleBand: number
+				viewportScale: number
+			}) => unknown
+		}
+		const cached = createCachedCandidates()
+		manager.imagePresentationPhase = "moving"
+		manager.viewportMediaCandidateCache = cached
+		const getCompatible = manager.getCompatibleViewportMediaCandidates.bind(manager)
+		const options = {
+			geometryRevision: 7,
+			scaleBand: 3,
+			viewportScale: 1.1,
+		}
+
+		expect(getCompatible(options)).toBe(cached)
+		// Membership changes are compatible with the cache; only the changed entries are rebuilt.
+		expect(getCompatible({ ...options, viewportScale: 1.14 })).toBe(cached)
+		// The scale guard is measured from the last complete candidate build, not each incremental step.
+		expect(getCompatible({ ...options, viewportScale: 1.16 })).toBeNull()
+
+		manager.imagePresentationPhase = "idle"
+		expect(getCompatible(options)).toBeNull()
+	})
+
+	it("rebuilds only membership and visibility-state deltas", () => {
+		const manager = Object.create(CanvasVisibilityManager.prototype) as unknown as {
+			updateViewportMediaCandidateEntries: (options: {
+				cachedCandidatesByElementId: ReadonlyMap<
+					string,
+					{ visibilityState: "visible" | "near"; candidate: ImageCandidate | null }
+				>
+				visibleElementIds: ReadonlySet<string>
+				nearElementIds: ReadonlySet<string>
+				scaleRatio: number
+				createCandidate: (
+					elementId: string,
+					visibilityState: "visible" | "near",
+				) => ImageCandidate
+			}) => Map<
+				string,
+				{ visibilityState: "visible" | "near"; candidate: ImageCandidate | null }
+			>
+		}
+		const persistentVisible = createImageCandidate("image-persistent", "visible")
+		const stateChanged = createImageCandidate("image-state-change", "visible")
+		const createCandidate = vi.fn((elementId: string, visibilityState: "visible" | "near") => ({
+			...createImageCandidate(elementId, visibilityState === "near" ? "near" : "visible"),
+			visibilityState,
+		}))
+		const updateCandidates = manager.updateViewportMediaCandidateEntries.bind(manager)
+
+		const next = updateCandidates({
+			cachedCandidatesByElementId: new Map([
+				[
+					persistentVisible.elementId,
+					{ visibilityState: "visible" as const, candidate: persistentVisible },
+				],
+				[
+					stateChanged.elementId,
+					{ visibilityState: "visible" as const, candidate: stateChanged },
+				],
+			]),
+			visibleElementIds: new Set([persistentVisible.elementId, "image-new"]),
+			nearElementIds: new Set([stateChanged.elementId]),
+			scaleRatio: 1.1,
+			createCandidate,
+		})
+
+		expect(createCandidate).toHaveBeenCalledTimes(2)
+		expect(createCandidate).toHaveBeenNthCalledWith(1, "image-new", "visible")
+		expect(createCandidate).toHaveBeenNthCalledWith(2, stateChanged.elementId, "near")
+		expect(next.get(persistentVisible.elementId)?.candidate).toBe(persistentVisible)
+		expect(persistentVisible.screenLongEdge).toBeCloseTo(110)
 	})
 })
 
@@ -2734,6 +2955,141 @@ describe("CanvasVisibilityManager image load priorities", () => {
 				visibilityState: "visible",
 			}),
 		])
+	})
+
+	it("propagates container visibility without walking each media child ancestor chain", () => {
+		const manager = createImageCandidateManager({
+			image: { visible: false },
+			video: {},
+		})
+		const isElementVisibleInDataTree = vi.fn(() => true)
+		manager.canvas.elementManager.isElementVisibleInDataTree = isElementVisibleInDataTree
+		const collectVisibleContainerMediaCandidates =
+			getCollectVisibleContainerMediaCandidates(manager)
+
+		const candidates = collectVisibleContainerMediaCandidates.call(manager, {
+			reason: "viewport:pan",
+			viewportRect: { x: 0, y: 0, width: 500, height: 500 },
+			viewportScale: 1,
+			viewportCenter: { x: 250, y: 250 },
+		})
+
+		expect(candidates.imageCandidates).toEqual([])
+		expect(candidates.videoCandidates).toEqual([
+			expect.objectContaining({ elementId: "video-1", visibilityState: "visible" }),
+		])
+		expect(isElementVisibleInDataTree).toHaveBeenCalledTimes(1)
+		expect(isElementVisibleInDataTree).toHaveBeenCalledWith("frame-1")
+	})
+
+	it("does not promote media below a hidden nested Frame or Group", () => {
+		const imageContentId = "nested-image-content"
+		const image = {
+			id: "nested-image",
+			type: ElementTypeEnum.Image,
+			x: 0,
+			y: 0,
+			width: 120,
+			height: 80,
+			contents: [{ contentId: imageContentId, src: "./images/nested.png" }],
+			activeContentId: imageContentId,
+			mainContentId: imageContentId,
+		} as LayerElement
+		const group = {
+			id: "nested-group",
+			type: ElementTypeEnum.Group,
+			x: 10,
+			y: 10,
+			width: 200,
+			height: 160,
+			visible: false,
+			children: [image],
+			contents: [{ contentId: "nested-group-content" }],
+			activeContentId: "nested-group-content",
+			mainContentId: "nested-group-content",
+		} as LayerElement
+		const frame = {
+			id: "nested-frame",
+			type: ElementTypeEnum.Frame,
+			x: 0,
+			y: 0,
+			width: 400,
+			height: 300,
+			children: [group],
+			contents: [{ contentId: "nested-frame-content" }],
+			activeContentId: "nested-frame-content",
+			mainContentId: "nested-frame-content",
+		} as FrameElement
+		const elements: Record<string, LayerElement> = {
+			[frame.id]: frame,
+			[group.id]: group,
+			[image.id]: image,
+		}
+		const isElementVisibleInDataTree = vi.fn((elementId: string) => elementId === frame.id)
+		const manager = Object.create(
+			CanvasVisibilityManager.prototype,
+		) as CanvasVisibilityManager & {
+			canvas: {
+				elementManager: {
+					getAllElements: () => LayerElement[]
+					getElementData: (elementId: string) => LayerElement | undefined
+					isElementVisibleInDataTree: typeof isElementVisibleInDataTree
+				}
+				geometryCacheManager: {
+					getElementBounds: (elementId: string) => {
+						x: number
+						y: number
+						width: number
+						height: number
+					} | null
+					queryElementIdsByExpandedRect: (
+						rect: { x: number; y: number; width: number; height: number },
+						padding: number,
+						options?: { elementIds?: Iterable<string> },
+					) => string[]
+				}
+			}
+			registeredImages: Map<string, { elementId: string; path: string }>
+			registeredVideos: Map<string, { elementId: string; path: string }>
+			registeredAudios: Map<string, { elementId: string; path: string }>
+			lastContainerDisplayVariant: Map<string, ImageResourceVariant>
+		}
+		manager.canvas = {
+			elementManager: {
+				getAllElements: () => [frame],
+				getElementData: (elementId: string) => elements[elementId],
+				isElementVisibleInDataTree,
+			},
+			geometryCacheManager: {
+				getElementBounds: (elementId: string) =>
+					elementId === frame.id
+						? { x: 0, y: 0, width: 400, height: 300 }
+						: elementId === group.id
+							? { x: 10, y: 10, width: 200, height: 160 }
+							: { x: 10, y: 10, width: 120, height: 80 },
+				queryElementIdsByExpandedRect: (_rect, _padding, options) =>
+					Array.from(options?.elementIds ?? []).filter(
+						(elementId) => elementId === frame.id,
+					),
+			},
+		}
+		manager.registeredImages = new Map([
+			[image.id, { elementId: image.id, path: "./images/nested.png" }],
+		])
+		manager.registeredVideos = new Map()
+		manager.registeredAudios = new Map()
+		manager.lastContainerDisplayVariant = new Map()
+
+		const candidates = getCollectVisibleContainerMediaCandidates(manager).call(manager, {
+			reason: "viewport:pan",
+			viewportRect: { x: 0, y: 0, width: 500, height: 500 },
+			viewportScale: 1,
+			viewportCenter: { x: 250, y: 250 },
+		})
+
+		expect(candidates.imageCandidates).toEqual([])
+		expect(isElementVisibleInDataTree).toHaveBeenCalledTimes(1)
+		expect(isElementVisibleInDataTree).toHaveBeenCalledWith(frame.id)
 	})
 
 	it("still promotes frame descendants that were only found as near images", () => {

@@ -159,6 +159,8 @@ export class ElementManager {
 	private isBatchDeleting = false
 	private pendingBatchDeleteChangeIds: Set<string> = new Set()
 	private isContentLayerDrawDeferred = false
+	/** During full document replacement, geometry is rebuilt once after the whole tree exists. */
+	private isReplacingAll = false
 	private pendingEvents: Array<{
 		type: keyof CanvasEventMap
 		data: CanvasEventMap[keyof CanvasEventMap]
@@ -166,6 +168,12 @@ export class ElementManager {
 	private nodeAdapter: NodeAdapter
 	public zIndexManager: ZIndexManager
 	private documentIndex: CanvasDocumentIndex = new CanvasDocumentIndex()
+	/**
+	 * Visibility is a property of the data-tree path, not of the current viewport. Cache it between
+	 * spatial consumers so one visibility pass does not walk the same nested Frame/Group ancestors
+	 * for every media element.
+	 */
+	private dataTreeVisibilityCache = new Map<string, boolean>()
 
 	// 临时元素按来源分类；不同来源拥有独立的历史和剪贴板策略。
 	private temporaryElements: Map<string, TemporaryElementMetadata> = new Map()
@@ -602,6 +610,7 @@ export class ElementManager {
 	public replaceAll(elementsData: LayerElement[]): void {
 		this.clear()
 		this.lastLoadIssues = []
+		this.isReplacingAll = true
 		this.batchMode = true
 		try {
 			// 规范化 zIndex：按原有顺序排序后，重新分配连续的 zIndex
@@ -632,7 +641,11 @@ export class ElementManager {
 				}
 			})
 		} finally {
+			this.isReplacingAll = false
 			this.batchMode = false
+			// Every element was created from an empty document while ancestor invalidation was deferred.
+			// Drop any bounds/index state produced during rendering before consumers query the new tree.
+			this.canvas.geometryCacheManager.invalidateAll()
 			this.flush()
 			// 重新排列顶层元素的渲染顺序，确保 Konva 节点顺序与 zIndex 一致
 			this.reorderTopLevelElements()
@@ -690,6 +703,8 @@ export class ElementManager {
 	}
 
 	private invalidateGeometryForElement(elementId: string): void {
+		if (this.isReplacingAll) return
+
 		const invalidIds = new Set<string>([elementId])
 		this.collectDescendantGeometryIds(elementId, invalidIds)
 		let currentParent = this.findParentElement(elementId)
@@ -726,6 +741,10 @@ export class ElementManager {
 
 	private updateChangesDocumentTopology(updates: ElementMutationPatch): boolean {
 		return Object.prototype.hasOwnProperty.call(updates, "children")
+	}
+
+	private invalidateDataTreeVisibilityCache(): void {
+		this.dataTreeVisibilityCache.clear()
 	}
 
 	private getElementSrc(data: LayerElement): string | undefined {
@@ -965,6 +984,12 @@ export class ElementManager {
 		const newData = this.mergeElementData(currentData, updates, element.getId())
 		validateElementData(newData)
 		const nameChange = this.buildElementNameChange(currentData, newData)
+		if (
+			Object.prototype.hasOwnProperty.call(updates, "visible") ||
+			this.updateChangesDocumentTopology(updates)
+		) {
+			this.invalidateDataTreeVisibilityCache()
+		}
 
 		// 更新元素的内部数据（不触发 node 更新）
 		element.update(newData)
@@ -1019,6 +1044,7 @@ export class ElementManager {
 		if (node) {
 			this.canvas.contentLayer.add(node as Konva.Shape | Konva.Group)
 			this.elements.set(finalElementData.id, element)
+			this.dataTreeVisibilityCache.delete(finalElementData.id)
 			this.markDocumentIndexDirty()
 
 			// 调用生命周期钩子：节点已挂载到 Layer
@@ -1106,6 +1132,9 @@ export class ElementManager {
 		// 检测 zIndex 是否改变
 		const zIndexChanged = updates.zIndex !== undefined && updates.zIndex !== currentData.zIndex
 		const documentTopologyChanged = this.updateChangesDocumentTopology(updates)
+		if (Object.prototype.hasOwnProperty.call(updates, "visible") || documentTopologyChanged) {
+			this.invalidateDataTreeVisibilityCache()
+		}
 
 		const needsRerender = element.update(newData) || options.forceRerender
 		if (documentTopologyChanged) {
@@ -1281,6 +1310,7 @@ export class ElementManager {
 		// 销毁元素实例
 		element.destroy()
 		this.elements.delete(elementId)
+		this.invalidateDataTreeVisibilityCache()
 		this.markDocumentIndexDirty()
 		this.invalidateGeometryForElement(elementId)
 
@@ -1551,15 +1581,40 @@ export class ElementManager {
 	 * 元素在数据树上是否视为可见：`visible === false` 的节点及其子树不参与适配范围等计算。
 	 */
 	public isElementVisibleInDataTree(elementId: string): boolean {
-		let currentId: string | undefined = elementId
-		while (currentId) {
-			const data = this.getElementData(currentId)
-			if (!data) return false
-			if (data.visible === false) return false
-			const parent = this.findParentElement(currentId)
-			currentId = parent?.getId()
+		if (this.dataTreeVisibilityCache.has(elementId)) {
+			return this.dataTreeVisibilityCache.get(elementId) ?? false
 		}
-		return true
+
+		const path: string[] = []
+		const visited = new Set<string>()
+		let currentId: string | undefined = elementId
+		let visible = true
+		while (currentId) {
+			const cached = this.dataTreeVisibilityCache.get(currentId)
+			if (cached !== undefined) {
+				visible = cached
+				break
+			}
+			if (visited.has(currentId)) {
+				// Malformed cyclic data must not turn a visibility query into an infinite loop.
+				visible = false
+				break
+			}
+			visited.add(currentId)
+
+			const data = this.getElementData(currentId)
+			if (!data || data.visible === false) {
+				visible = false
+				break
+			}
+			path.push(currentId)
+			currentId = this.findParentIdForElement(currentId)
+		}
+
+		path.forEach((pathElementId) => {
+			this.dataTreeVisibilityCache.set(pathElementId, visible)
+		})
+		return visible
 	}
 
 	/**
@@ -1847,6 +1902,11 @@ export class ElementManager {
 		})
 
 		this.markDocumentIndexDirty()
+		if (parentChangedItems.length > 0) {
+			// Reparenting changes the ancestor chain for the moved subtree, so cached visibility
+			// results for the child and every descendant are no longer valid.
+			this.invalidateDataTreeVisibilityCache()
+		}
 		validItems.forEach((item) => {
 			this.invalidateGeometryForElement(item.elementId)
 			if (item.sourceParentId) {
@@ -2164,6 +2224,7 @@ export class ElementManager {
 			if (existingNode.getParent() !== parentNode) {
 				existingNode.remove()
 				parentNode.add(existingNode as Konva.Shape | Konva.Group)
+				this.invalidateDataTreeVisibilityCache()
 				this.invalidateGeometryForElement(childData.id)
 			}
 			return
@@ -2177,6 +2238,7 @@ export class ElementManager {
 
 		parentNode.add(childNode as Konva.Shape | Konva.Group)
 		this.elements.set(childData.id, childElement)
+		this.dataTreeVisibilityCache.delete(childData.id)
 		this.markDocumentIndexDirty()
 		childElement.onMounted()
 		this.invalidateGeometryForElement(childData.id)
@@ -2269,6 +2331,7 @@ export class ElementManager {
 		this.elements.clear()
 		this.temporaryElements.clear()
 		this.documentIndex.clear()
+		this.invalidateDataTreeVisibilityCache()
 
 		// 销毁所有子节点，但保留背景
 		const background = this.canvas.contentLayer.findOne(".canvas-background") as
@@ -2360,12 +2423,19 @@ export class ElementManager {
 						existingNode &&
 						(existingNode instanceof Konva.Shape || existingNode instanceof Konva.Group)
 					) {
+						const previousChildData = existingElement.getData()
 						// 从当前父容器中移除
 						existingNode.remove()
 						// 添加到新的父容器
 						parentNode.add(existingNode)
 						// 更新元素数据（坐标等可能需要更新）
 						existingElement.update(childData)
+						if (
+							previousChildData.visible !== childData.visible ||
+							Object.prototype.hasOwnProperty.call(childData, "children")
+						) {
+							this.invalidateDataTreeVisibilityCache()
+						}
 						this.markDocumentIndexDirty()
 						this.invalidateGeometryForElement(childData.id)
 					}
@@ -2384,6 +2454,7 @@ export class ElementManager {
 				if (childNode) {
 					parentNode.add(childNode as Konva.Shape | Konva.Group)
 					this.elements.set(childData.id, childElement)
+					this.dataTreeVisibilityCache.delete(childData.id)
 					this.markDocumentIndexDirty()
 					this.invalidateGeometryForElement(childData.id)
 					childElement.onMounted()

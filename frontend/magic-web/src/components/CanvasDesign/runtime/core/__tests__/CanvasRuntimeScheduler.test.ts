@@ -140,6 +140,27 @@ describe("CanvasRuntimeScheduler", () => {
 		})
 	})
 
+	it("does not dispatch layouts before the first spatial eligibility result", () => {
+		const { canvas, eventEmitter } = createCanvasStub()
+		const scheduler = new CanvasRuntimeScheduler({ canvas })
+		const callback = vi.fn()
+
+		scheduler.registerViewportScaleLayout("element-1", callback)
+		eventEmitter.emit({ type: "viewport:scale", data: { scale: 2 } })
+
+		expect(callback).not.toHaveBeenCalled()
+		expect(scheduler.getSnapshot().viewportScaleLayouts).toMatchObject({
+			activeElementCount: 0,
+			lastVisitedElementCount: 0,
+			lastCallbackCount: 0,
+		})
+
+		scheduler.replaceViewportScaleLayoutEligibility(new Set(["element-1"]))
+		eventEmitter.emit({ type: "viewport:scale", data: { scale: 2 } })
+
+		expect(callback).toHaveBeenCalledTimes(1)
+	})
+
 	it("synchronizes a layout once when its element enters the active viewport set", () => {
 		const { canvas } = createCanvasStub()
 		const scheduler = new CanvasRuntimeScheduler({ canvas })
