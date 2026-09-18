@@ -751,20 +751,26 @@ class UserMessage:
     # 规范化的多模态内容片段；历史只保存文本和 image_ref，不保存 Provider payload。
     # 放在既有字段之后，避免破坏外部对 UserMessage 的位置参数构造。
     content_parts: Optional[List[UserMessageContentPart]] = None
+    # None 表示未做原生视觉裁剪；False 表示整个 user 消息不进入原生视觉请求。
+    include_in_native_visual: Optional[bool] = None
 
     def __post_init__(self) -> None:
         """规范化内容片段对象，并兼容旧代码传入的历史字典结构。"""
-        if self.content_parts is None:
-            return
-        normalized_parts: List[UserMessageContentPart] = []
-        for part in self.content_parts:
-            if isinstance(part, UserMessageContentPart):
-                normalized_parts.append(part)
-            elif isinstance(part, dict):
-                normalized_parts.append(UserMessageContentPart.from_dict(part))
-            else:
-                raise TypeError(f"Unsupported user message content part: {type(part)!r}")
-        self.content_parts = normalized_parts
+        if self.content_parts is not None:
+            normalized_parts: List[UserMessageContentPart] = []
+            for part in self.content_parts:
+                if isinstance(part, UserMessageContentPart):
+                    normalized_parts.append(part)
+                elif isinstance(part, dict):
+                    normalized_parts.append(UserMessageContentPart.from_dict(part))
+                else:
+                    raise TypeError(f"Unsupported user message content part: {type(part)!r}")
+            self.content_parts = normalized_parts
+        if self.include_in_native_visual is not None and not isinstance(
+            self.include_in_native_visual,
+            bool,
+        ):
+            raise ValueError("include_in_native_visual must be a boolean or None")
 
     def to_dict(self) -> Dict[str, Any]:
         d: Dict[str, Any] = {
@@ -778,6 +784,8 @@ class UserMessage:
             d["source"] = self.source
         if self.content_parts is not None:
             d["content_parts"] = [part.to_dict() for part in self.content_parts]
+        if self.include_in_native_visual is not None:
+            d["include_in_native_visual"] = self.include_in_native_visual
         return d
 
     def to_llm_dict(self) -> Dict[str, Any]:
@@ -801,6 +809,7 @@ class UserMessage:
             created_at=data.get("timestamp", datetime.now().isoformat()),
             source=data.get("source"),
             content_parts=[UserMessageContentPart.from_dict(part) for part in (raw_parts or [])] or None,
+            include_in_native_visual=data.get("include_in_native_visual"),
         )
 
 @dataclass

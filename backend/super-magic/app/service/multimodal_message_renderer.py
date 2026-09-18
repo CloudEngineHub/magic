@@ -41,6 +41,7 @@ class _NativeVisualRuntimeConfig:
     """原生视觉请求与进程内缓存的运行时配置。"""
 
     max_image_refs: int
+    max_history_image_refs: int
     max_image_bytes: int
     cache_max_entries: int
     cache_max_bytes: int
@@ -50,6 +51,7 @@ class _NativeVisualRuntimeConfig:
         cls,
         *,
         default_max_image_refs: int,
+        default_max_history_image_refs: int,
         default_max_image_bytes: int,
         default_cache_max_entries: int,
         default_cache_max_bytes: int,
@@ -59,6 +61,12 @@ class _NativeVisualRuntimeConfig:
             max_image_refs=cls._read_int(
                 "llm.native_visual_max_image_refs",
                 default_max_image_refs,
+                minimum=0,
+                allow_unlimited=True,
+            ),
+            max_history_image_refs=cls._read_int(
+                "llm.native_visual_max_history_image_refs",
+                default_max_history_image_refs,
                 minimum=0,
                 allow_unlimited=True,
             ),
@@ -261,6 +269,8 @@ class LLMMessageRenderer:
 
     # Chat 用户消息首批最多承载 10 张图片，不约束 visual_understanding 追加的原生视觉消息。
     MAX_NATIVE_IMAGE_REFS = 10
+    # 历史加当前合计允许保留的原生视觉图片总数；超过后由 ChatHistory 关掉全部历史原生视觉消息。
+    MAX_HISTORY_NATIVE_IMAGE_REFS = 20
     MAX_NATIVE_IMAGE_BYTES = -1
     # base64 缓存位于 Python 堆内存，扩大后仍保持硬上限，避免长会话无限增长。
     MAX_CACHE_ENTRIES = 32
@@ -273,12 +283,14 @@ class LLMMessageRenderer:
         """初始化消息渲染器，并从统一配置加载原生视觉策略。"""
         runtime_config = _NativeVisualRuntimeConfig.load(
             default_max_image_refs=self.MAX_NATIVE_IMAGE_REFS,
+            default_max_history_image_refs=self.MAX_HISTORY_NATIVE_IMAGE_REFS,
             default_max_image_bytes=self.MAX_NATIVE_IMAGE_BYTES,
             default_cache_max_entries=self.MAX_CACHE_ENTRIES,
             default_cache_max_bytes=self.MAX_CACHE_BYTES,
         )
         self.workspace_dir = Path(workspace_dir or PathManager.get_workspace_dir()).resolve()
         self.max_native_image_refs = runtime_config.max_image_refs
+        self.max_history_image_refs = runtime_config.max_history_image_refs
         self.max_native_image_bytes = runtime_config.max_image_bytes
         self.max_cache_entries = runtime_config.cache_max_entries
         self.max_cache_bytes = runtime_config.cache_max_bytes
@@ -451,6 +463,8 @@ class LLMMessageRenderer:
                 message.show_in_ui and message.source != "compact_summary"
             )
             if not is_tool_native_visual and not is_chat_user_message:
+                continue
+            if message.include_in_native_visual is False:
                 continue
             image_parts = [
                 part

@@ -41,9 +41,13 @@ def _make_retry_event_data(
     request_contains_native_images: bool = True,
     is_context_window_exceeded: bool = False,
     exception: Exception | None = None,
+    chat_history: object | None = None,
 ) -> BeforeLlmRetryEventData:
     return BeforeLlmRetryEventData(
-        agent_context=SimpleNamespace(model_context=model_context),
+        agent_context=SimpleNamespace(
+            model_context=model_context,
+            chat_history=chat_history,
+        ),
         exception=exception or _api_status_error(status_code or 400),
         status_code=status_code,
         model_id="mock-vision-model",
@@ -68,13 +72,20 @@ def _make_succeeded_event_data(model_context: AgentModelContext) -> AfterLlmRequ
 async def test_native_visual_400_threshold_disables_model_after_two_failures(monkeypatch):
     model_context = _make_model_context()
     disabled_models: list[str] = []
+    history = SimpleNamespace(disabled=0)
+
+    async def _disable_native_visual_messages(*, exclude=None):
+        history.disabled += 1
+        return 2
+
+    history.disable_native_visual_messages = _disable_native_visual_messages
     monkeypatch.setattr(model_context, "disable_multimodal_for_model", disabled_models.append)
     monkeypatch.setattr(
         "app.service.agent_event.native_visual_disable_listener_service.config.get",
         lambda key, default=None: 2 if key == "llm.native_visual_400_failure_threshold" else default,
     )
 
-    first = _make_retry_event_data(model_context=model_context)
+    first = _make_retry_event_data(model_context=model_context, chat_history=history)
     await NativeVisualDisableListenerService._handle_before_llm_retry(
         Event(EventType.BEFORE_LLM_RETRY, first)
     )
@@ -83,8 +94,9 @@ async def test_native_visual_400_threshold_disables_model_after_two_failures(mon
     assert first.reason == "native_visual_400_retry"
     assert model_context.native_visual_400_failure_count == 1
     assert disabled_models == []
+    assert history.disabled == 0
 
-    second = _make_retry_event_data(model_context=model_context)
+    second = _make_retry_event_data(model_context=model_context, chat_history=history)
     await NativeVisualDisableListenerService._handle_before_llm_retry(
         Event(EventType.BEFORE_LLM_RETRY, second)
     )
@@ -92,10 +104,58 @@ async def test_native_visual_400_threshold_disables_model_after_two_failures(mon
     assert second.reason == "native_visual_400_fallback"
     assert model_context.native_visual_fallback_applied is True
     assert disabled_models == ["mock-vision-model"]
+    assert history.disabled == 1
 
 
 @pytest.mark.asyncio
-async def test_native_visual_400_counter_resets_after_non_400_failure(monkeypatch):
+async def test_native_visual_4xx_counts_413_and_400_together(monkeypatch):
+    """400 和 413 都计入同一条 4xx 降级路径。"""
+    model_context = _make_model_context()
+    disabled_models: list[str] = []
+    history = SimpleNamespace(disabled=0)
+
+    async def _disable_native_visual_messages(*, exclude=None):
+        history.disabled += 1
+        return 1
+
+    history.disable_native_visual_messages = _disable_native_visual_messages
+    monkeypatch.setattr(model_context, "disable_multimodal_for_model", disabled_models.append)
+    monkeypatch.setattr(
+        "app.service.agent_event.native_visual_disable_listener_service.config.get",
+        lambda key, default=None: 2 if key == "llm.native_visual_400_failure_threshold" else default,
+    )
+
+    first = _make_retry_event_data(
+        model_context=model_context,
+        status_code=413,
+        exception=_api_status_error(413),
+        chat_history=history,
+    )
+    await NativeVisualDisableListenerService._handle_before_llm_retry(
+        Event(EventType.BEFORE_LLM_RETRY, first)
+    )
+    assert first.allow_retry is True
+    assert model_context.native_visual_400_failure_count == 1
+    assert disabled_models == []
+
+    second = _make_retry_event_data(
+        model_context=model_context,
+        status_code=400,
+        exception=_api_status_error(400),
+        chat_history=history,
+    )
+    await NativeVisualDisableListenerService._handle_before_llm_retry(
+        Event(EventType.BEFORE_LLM_RETRY, second)
+    )
+    assert second.allow_retry is True
+    assert second.reason == "native_visual_400_fallback"
+    assert disabled_models == ["mock-vision-model"]
+    assert history.disabled == 1
+
+
+@pytest.mark.asyncio
+async def test_native_visual_400_counter_resets_after_non_4xx_failure(monkeypatch):
+    """5xx 不计入视觉降级，并清零已有的 4xx 计数。"""
     model_context = _make_model_context()
     monkeypatch.setattr(
         "app.service.agent_event.native_visual_disable_listener_service.config.get",
@@ -234,6 +294,20 @@ async def test_retry_loop_honors_native_visual_allow_retry(monkeypatch):
     assert [call["use_stream"] for call in agent.calls] == [True, False, False]
     assert agent.disabled_models == ["mock-vision-model"]
     assert agent.agent_context.model_context.native_visual_fallback_applied is False
+
+
+@pytest.mark.asyncio
+async def test_retry_loop_honors_native_visual_allow_retry_for_413(monkeypatch):
+    monkeypatch.setattr(
+        "app.service.agent_event.native_visual_disable_listener_service.config.get",
+        lambda key, default=None: 2 if key == "llm.native_visual_400_failure_threshold" else default,
+    )
+    agent = _FakeVisionRetryAgent([_api_status_error(413), _api_status_error(413)])
+
+    result = await agent._call_llm_with_retry(AgentLoopState())
+
+    assert result.content == "mock vision retry result"
+    assert agent.disabled_models == ["mock-vision-model"]
 
 
 @pytest.mark.asyncio
