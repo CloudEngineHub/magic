@@ -62,6 +62,7 @@ use App\ErrorCode\SuperMagicErrorCode;
 use App\Infrastructure\Core\Exception\BusinessException;
 use App\Infrastructure\Core\Exception\ExceptionBuilder;
 use App\Infrastructure\SuperMagic\ExternalAPI\SandboxOS\Gateway\Constant\SandboxStatus;
+use App\Infrastructure\SuperMagic\ExternalAPI\SandboxOS\Exception\UserToolCallNotFoundException;
 use App\Infrastructure\SuperMagic\Utils\TaskStatusValidator;
 use App\Infrastructure\SuperMagic\Utils\TaskTerminationUtil;
 use App\Infrastructure\SuperMagic\Utils\ToolProcessor;
@@ -423,27 +424,77 @@ class TopicTaskAppService extends AbstractAppService
             throw new RuntimeException('Task not found: ' . $taskId);
         }
 
-        // 透传给沙盒（沙盒取消定时器 → 加工答复 → 注入历史 → 推送 AFTER_TOOL_CALL → 重启 Agent）
-        $this->agentDomainService->sendUserToolCallFeedback(
-            $dataIsolation,
-            $task->getSandboxId(),
-            $name,
-            $toolCallId,
-            $detail
-        );
+        $detailTaskId = is_string($detail['task_id'] ?? null) ? trim($detail['task_id']) : '';
+        if ($detailTaskId !== '' && $detailTaskId !== $taskId) {
+            $this->logger->warning('HandleUserToolCallReplyStaleTask', [
+                'topic_id' => $chatTopicId,
+                'current_task_id' => $taskId,
+                'detail_task_id' => $detailTaskId,
+                'tool_call_id' => $toolCallId,
+                'idempotency_result' => 'stale_task_ignored',
+            ]);
+            return;
+        }
 
-        // 更新任务状态为运行中
-        $this->updateTaskStatus(
-            dataIsolation: $dataIsolation,
-            task: $task,
-            status: TaskStatus::RUNNING,
-        );
+        $organizationCode = $dataIsolation->getCurrentOrganizationCode() ?: $topicEntity->getUserOrganizationCode();
+        $lockKey = sprintf('user_tool_call_reply:%s:%s:%s', $organizationCode, $chatTopicId, $toolCallId);
+        $lockOwner = IdGenerator::getUniqueId32();
+        $lockAcquired = $this->locker->mutexLock($lockKey, $lockOwner, 86400);
+        if (! $lockAcquired) {
+            $this->logger->info('HandleUserToolCallReplyAlreadyProcessed', [
+                'topic_id' => $chatTopicId,
+                'current_task_id' => $taskId,
+                'detail_task_id' => $detailTaskId,
+                'tool_call_id' => $toolCallId,
+                'idempotency_result' => 'already_processed',
+            ]);
+            return;
+        }
 
-        $this->logger->info('HandleUserToolCallReplyCompleted', [
-            'task_id' => $taskId,
-            'name' => $name,
-            'tool_call_id' => $toolCallId,
-        ]);
+        $forwardedToSandbox = false;
+        try {
+            // 透传给沙盒（沙盒取消定时器 → 加工答复 → 注入历史 → 推送 AFTER_TOOL_CALL → 重启 Agent）
+            $this->agentDomainService->sendUserToolCallFeedback(
+                $dataIsolation,
+                $task->getSandboxId(),
+                $name,
+                $toolCallId,
+                $detail
+            );
+            $forwardedToSandbox = true;
+
+            // 更新任务状态为运行中
+            $this->updateTaskStatus(
+                dataIsolation: $dataIsolation,
+                task: $task,
+                status: TaskStatus::RUNNING,
+            );
+
+            $this->logger->info('HandleUserToolCallReplyCompleted', [
+                'topic_id' => $chatTopicId,
+                'task_id' => $taskId,
+                'detail_task_id' => $detailTaskId,
+                'name' => $name,
+                'tool_call_id' => $toolCallId,
+                'idempotency_result' => 'forwarded',
+            ]);
+        } catch (UserToolCallNotFoundException $e) {
+            // 沙盒已经消费或超时：保留幂等占位，后续旧回执不能再次触达沙盒。
+            $this->logger->warning('HandleUserToolCallReplyExpired', [
+                'topic_id' => $chatTopicId,
+                'current_task_id' => $taskId,
+                'detail_task_id' => $detailTaskId,
+                'tool_call_id' => $toolCallId,
+                'idempotency_result' => 'expired',
+            ]);
+            throw $e;
+        } catch (Throwable $e) {
+            // 仅释放真正的传输/沙盒故障，允许用户在网络恢复后有意重试。
+            if (! $forwardedToSandbox) {
+                $this->locker->release($lockKey, $lockOwner);
+            }
+            throw $e;
+        }
     }
 
     public function handleUserToolCallCancelled(

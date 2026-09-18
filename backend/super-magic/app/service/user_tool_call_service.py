@@ -238,7 +238,11 @@ class UserToolCallService:
         await self._emit_after_tool_call(
             pending,
             content=self.CANCELLED_TOOL_RESULT_CONTENT,
-            extra_info={"status": self.CANCELLED_RESPONSE_STATUS},
+            extra_info={
+                "status": self.CANCELLED_RESPONSE_STATUS,
+                "response_status": self.CANCELLED_RESPONSE_STATUS,
+                "tool_call_id": pending.tool_call_id,
+            },
         )
 
         await self._delete_pending_file(pending.agent_context)

@@ -21,13 +21,30 @@ import {
 	ASK_USER_TOOL,
 	type AskUserResponseStatusValue,
 } from "@/pages/superMagic/components/MessageList/utils/askUserConstants"
+import {
+	buildAskUserReplyStateKey,
+	claimAskUserReply,
+	clearAskUserReply,
+	isTerminalAskUserReplyError,
+	markAskUserReply,
+	readAskUserReplyState,
+	type AskUserReplyState,
+} from "@/pages/superMagic/components/MessageList/utils/askUserReplyState"
 import { sendAskUserToolReply } from "@/pages/superMagic/services/askUserToolReplyService"
 import { clearAskUserV2BrowserNotification } from "@/pages/superMagic/services/askUserBrowserNotificationService"
 import { superMagicStore } from "@/pages/superMagic/stores"
 import { IconLoader2 } from "@tabler/icons-react"
 import { ChevronDown } from "lucide-react"
 import { observer } from "mobx-react-lite"
-import { useCallback, useDeferredValue, useMemo, useRef, useState, type MouseEvent } from "react"
+import {
+	useCallback,
+	useDeferredValue,
+	useEffect,
+	useMemo,
+	useRef,
+	useState,
+	type MouseEvent,
+} from "react"
 import { useTranslation } from "react-i18next"
 import { AskUserForm, type AskUserAnswers } from "./AskUserForm"
 import { extractQuestionsField, parseQuestionsXml, type ParsedQuestion } from "./parse"
@@ -166,6 +183,22 @@ function AskUserToolCall(props: AskUserToolCallProps) {
 		() => normalizeAskUserRemark(detailData?.remark),
 		[detailData?.remark],
 	)
+	const toolId = tool?.id
+	const replyStateKey = useMemo(
+		() =>
+			buildAskUserReplyStateKey({
+				topicId: selectedTopic?.chat_topic_id,
+				toolCallId: toolId,
+			}),
+		[selectedTopic?.chat_topic_id, toolId],
+	)
+	const [replyState, setReplyState] = useState<AskUserReplyState | null>(() =>
+		readAskUserReplyState(replyStateKey),
+	)
+
+	useEffect(() => {
+		setReplyState(readAskUserReplyState(replyStateKey))
+	}, [replyStateKey])
 
 	const toolStatus =
 		(typeof detailData?.status === "string" ? detailData.status : "") ||
@@ -173,9 +206,13 @@ function AskUserToolCall(props: AskUserToolCallProps) {
 	const normalizedAskUserStatus = normalizeAskUserStatus(toolStatus)
 	const isTaskSuspended = isAskUserTaskSuspended(selectedTopic)
 	const askUserStatus =
-		isTaskSuspended && normalizedAskUserStatus === ASK_USER_CARD_STATUS.pending
-			? ASK_USER_CARD_STATUS.cancelled
-			: normalizedAskUserStatus
+		replyState?.status === "answered" || replyState?.status === "skipped"
+			? replyState.status
+			: replyState?.status === "timeout" || replyState?.status === "cancelled"
+				? ASK_USER_CARD_STATUS.cancelled
+				: isTaskSuspended && normalizedAskUserStatus === ASK_USER_CARD_STATUS.pending
+					? ASK_USER_CARD_STATUS.cancelled
+					: normalizedAskUserStatus
 	const isLoading = loading && !isTaskSuspended
 	const isOpen = !!isLoading || open
 	const askUserLocale = resolveAskUserLocaleFromAction(
@@ -187,8 +224,12 @@ function AskUserToolCall(props: AskUserToolCallProps) {
 
 	const allComplete = parsedQuestions.length > 0 && parsedQuestions.every((q) => q.isComplete)
 	const isStreaming = !!isLoading && !allComplete
-	const isFrozen = pendingAction !== null || !isLoading || props.isShare || isShareRoute
-	const toolId = tool?.id
+	const isFrozen =
+		pendingAction !== null ||
+		replyState !== null ||
+		!isLoading ||
+		props.isShare ||
+		isShareRoute
 	const detailQuestionId = detailData?.question_id
 	const resolvedQuestionId =
 		(typeof detailQuestionId === "string" ? detailQuestionId : "") || toolId || ""
@@ -233,14 +274,40 @@ function AskUserToolCall(props: AskUserToolCallProps) {
 				remark: isAnswered ? remark : "",
 			})
 			if (!detail || !toolId) throw new Error("missing_ask_user_task_id")
-			await sendAskUserToolReply({
-				conversationId,
-				topicId,
-				detail,
-				isAnswered,
-				toolCallId: toolId,
-				toolName: ASK_USER_TOOL.name,
-			})
+
+			if (!claimAskUserReply(replyStateKey)) {
+				setReplyState(readAskUserReplyState(replyStateKey))
+				return
+			}
+			setReplyState(readAskUserReplyState(replyStateKey))
+
+			try {
+				await sendAskUserToolReply({
+					conversationId,
+					topicId,
+					detail,
+					isAnswered,
+					toolCallId: toolId,
+					toolName: ASK_USER_TOOL.name,
+				})
+				markAskUserReply(replyStateKey, isAnswered ? "answered" : "skipped")
+				setReplyState(readAskUserReplyState(replyStateKey))
+			} catch (error) {
+				if (isTerminalAskUserReplyError(error)) {
+					markAskUserReply(replyStateKey, "cancelled")
+					setReplyState(readAskUserReplyState(replyStateKey))
+					clearAskUserDraftAnswers(draftCacheKey)
+					clearAskUserV2BrowserNotification({
+						topicId,
+						notificationKey: resolvedQuestionId || toolId,
+					})
+					return
+				}
+
+				clearAskUserReply(replyStateKey)
+				setReplyState(null)
+				throw error
+			}
 			clearAskUserDraftAnswers(draftCacheKey)
 			clearAskUserV2BrowserNotification({
 				topicId,
@@ -250,6 +317,7 @@ function AskUserToolCall(props: AskUserToolCallProps) {
 		[
 			toolId,
 			draftCacheKey,
+			replyStateKey,
 			resolvedQuestionId,
 			selectedTopic?.chat_conversation_id,
 			selectedTopic?.chat_topic_id,
@@ -258,30 +326,32 @@ function AskUserToolCall(props: AskUserToolCallProps) {
 
 	const handleSubmit = useCallback<(answers: AskUserAnswers, remark: string) => void>(
 		async (answers, remark) => {
-			if (pendingAction) return
+			if (pendingAction || replyState?.status === "sending") return
 			try {
 				setPendingAction("submit")
 				await submitReply(ASK_USER_RESPONSE_STATUS.answered, answers, remark)
+				setPendingAction(null)
 			} catch (error) {
 				console.error(error)
 				setPendingAction(null)
 				magicToast.error(t("askUser.status.submitFailed"))
 			}
 		},
-		[pendingAction, submitReply, t],
+		[pendingAction, replyState?.status, submitReply, t],
 	)
 
 	const handleSkip = useCallback<(answers: AskUserAnswers) => void>(async () => {
-		if (pendingAction) return
+		if (pendingAction || replyState?.status === "sending") return
 		try {
 			setPendingAction("skip")
 			await submitReply(ASK_USER_RESPONSE_STATUS.skipped)
+			setPendingAction(null)
 		} catch (error) {
 			console.error(error)
 			setPendingAction(null)
 			magicToast.error(t("askUser.status.submitFailed"))
 		}
-	}, [pendingAction, submitReply, t])
+	}, [pendingAction, replyState?.status, submitReply, t])
 
 	const { renderTooltip } = useToolTooltip({
 		text: tool?.remark,
