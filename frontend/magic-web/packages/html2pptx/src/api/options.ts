@@ -22,7 +22,11 @@ export interface StreamingOptionsBase {
 	fileName?: string
 	/** Slide configuration overrides */
 	config?: Partial<SlideConfig>
-	/** Skip ordinary failed pages and continue; fatal fidelity failures always stop export. */
+	/**
+	 * Continue after page-local failures. Failed pages are represented by a
+	 * diagnostic placeholder slide and reported through onExportIssue. Packaging,
+	 * destination and finalization failures still stop the export.
+	 */
 	skipFailedPages?: boolean
 	/**
 	 * Auto-size mode switch (defaults to `false`, standard PPT mode).
@@ -58,6 +62,13 @@ export interface StreamingOptionsBase {
 
 export interface ExportIssue {
 	pageIndex?: number
+	/** Stable source-page identity used to map diagnostics back to the originating HTML file. */
+	pageKey?: string
+	/** Optional human-readable source page name/path supplied by the host application. */
+	pageName?: string
+	pagePath?: string
+	/** Optional host file id used when creating a structured project-file mention. */
+	pageFileId?: string
 	code: "page-script-error" | "resource-error" | "render-error"
 	message: string
 	severity: "warning" | "error"
@@ -249,6 +260,10 @@ export interface StreamingHtmlPage {
 	html: string
 	/** Optional stable business identity used during planning and replay. */
 	key?: string
+	/** Optional source metadata retained with diagnostics for host UI repair flows. */
+	pageName?: string
+	pagePath?: string
+	pageFileId?: string
 }
 
 export type StreamingHtmlPageInput = string | StreamingHtmlPage

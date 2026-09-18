@@ -1,5 +1,5 @@
 import { logger } from "@/infrastructure/logger"
-import { getPptxExportDiagnostic, type ExternalLogger } from "@magic/html2pptx"
+import { getPptxExportDiagnostic, type ExportIssue, type ExternalLogger } from "@magic/html2pptx"
 
 const pptLogger = logger.createLogger("html2pptx")
 
@@ -73,6 +73,36 @@ export function reportPptxExportError(error: unknown, context?: Record<string, u
 			mediaPolicyMode: diagnostic?.mediaPolicyMode,
 			zipMode: diagnostic?.zipMode,
 			strategyDecision,
+			...context,
+		},
+	})
+}
+
+/**
+ * Report a page-level issue even when the PPTX was successfully produced.
+ * Page failures are intentionally recoverable, so they never reach the outer
+ * export catch where the legacy failure event was emitted.
+ */
+export function reportPptxExportIssue(issue: ExportIssue, context?: Record<string, unknown>): void {
+	const details = issue.details ?? {}
+	pptLogger.error({
+		eventKey: "editable_ppt_export_issue",
+		errorKind: issue.code,
+		error: {
+			name: "PptxExportIssue",
+			message: issue.message,
+			...(typeof details.stack === "string" ? { stack: details.stack.slice(0, 4000) } : {}),
+		},
+		message: "Exported PPT contains a recoverable page issue",
+		context: {
+			tag: "html2pptx",
+			severity: issue.severity,
+			pageIndex: issue.pageIndex,
+			pageKey: issue.pageKey,
+			pageName: issue.pageName,
+			pagePath: issue.pagePath,
+			pageFileId: issue.pageFileId,
+			issueDetails: details,
 			...context,
 		},
 	})
