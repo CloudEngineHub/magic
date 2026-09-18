@@ -79,6 +79,17 @@ export function getMicroAppSharePageMocks() {
 }
 
 vi.mock("@/apis", () => ({
+	// The share-permission hooks read these codes at module scope, so the mock must expose them.
+	FUNCTION_PERMISSION_CODE: {
+		MicroAppSharePassword: "micro_app.share_password",
+		MicroAppSharePublic: "micro_app.share_public",
+		MicroAppShareTeam: "micro_app.share_team",
+		ProjectSharePassword: "project.share_password",
+		ProjectSharePublic: "project.share_public",
+		ProjectShareTeam: "project.share_team",
+		TopicSharePassword: "topic.share_password",
+		TopicSharePublic: "topic.share_public",
+	},
 	SuperMagicApi: {
 		resolvePublishedMicroApp: mocks.resolvePublishedMicroApp,
 		checkShareResourcePassword: mocks.checkShareResourcePassword,

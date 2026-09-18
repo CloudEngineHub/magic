@@ -5996,6 +5996,7 @@
 		"shareMessageWithPassword": "I've shared {{fileName}} via this link. Please click the link and enter the access password to view:",
 		"shareMessageWithoutPassword": "I've shared {{fileName}} via this link. Please click to view:",
 		"shareMethod": "Share Method",
+		"shareMethodRestrictedByAdmin": "The administrator has restricted the available sharing methods, so this cannot be changed",
 		"shareName": "Share Name",
 		"shareNamePlaceholder": "Enter share name (required)",
 		"shareNameRequired": "Please enter share name",

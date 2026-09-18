@@ -109,6 +109,12 @@ vi.mock("antd", () => {
 		notification: mockNotification,
 	})
 
+	// Splitter 上有 Panel 静态子组件，MagicSplitter 会读取它
+	const Splitter = createMockComponent("Splitter") as ReturnType<typeof createMockComponent> & {
+		Panel: ReturnType<typeof createMockComponent>
+	}
+	Splitter.Panel = createMockComponent("SplitterPanel")
+
 	// 创建一个模拟的App组件
 	const App = createMockComponent("App")
 
@@ -121,6 +127,7 @@ vi.mock("antd", () => {
 		Badge: createMockComponent("Badge"),
 		Flex: createMockComponent("Flex"),
 		Tooltip: createMockComponent("Tooltip"),
+		Splitter,
 		message: mockMessage,
 	}
 })

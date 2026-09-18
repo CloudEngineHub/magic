@@ -49,6 +49,7 @@ import { getAppEntryFile } from "@/pages/superMagic/components/MessageList/compo
 import { getFileType } from "@/pages/superMagic/utils/handleFIle"
 import SuperMagicService from "@/pages/superMagic/services"
 import { resolveMobileAudioShareCreatedByBadgeBottom } from "./utils/audio-share-topbar-offset"
+import { resolveShareErrorBackNavigation } from "./utils/share-error-back"
 import usePureShareDocumentFlow from "./hooks/usePureShareDocumentFlow"
 import { FileAccessProvider } from "@/pages/superMagic/fileAccess/FileAccessProvider"
 import { createShareFileAccess } from "@/pages/superMagic/fileAccess/fileAccessContext"
@@ -681,7 +682,9 @@ function Share() {
 			return
 		}
 
-		window.location.href = window.location.origin
+		// 已登录但没有查看权限：直接回到当前端的首页（桌面 /super、移动 /mobile-home），
+		// 不再跳到站点根路由再重定向一次，也避免整页刷新。
+		navigate(resolveShareErrorBackNavigation(isMobile))
 	})
 
 	const handleWorkspaceButtonClick = useMemoizedFn(async () => {

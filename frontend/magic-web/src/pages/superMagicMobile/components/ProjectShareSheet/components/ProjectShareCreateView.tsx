@@ -184,6 +184,8 @@ function AdvancedSwitchRow({
 export default function ProjectShareCreateView({ controller }: ProjectShareCreateViewProps) {
 	const { t } = useTranslation("super")
 	const { formState } = controller
+	// 管理员关闭全部分享方式时，除「分享方式 + 红字提示」外的表单项都是死路，直接不再渲染。
+	const hasNoPermittedShareType = controller.permittedShareTypes?.length === 0
 
 	const typeCards = useMemo(() => {
 		const cards = [
@@ -228,7 +230,7 @@ export default function ProjectShareCreateView({ controller }: ProjectShareCreat
 
 	return (
 		<div className="flex flex-col gap-2.5" data-testid="project-share-sheet-create-view">
-			{controller.enableInlineFileSelection ? (
+			{!hasNoPermittedShareType && controller.enableInlineFileSelection ? (
 				<RecordingShareContentPicker
 					groupedItems={controller.groupedShareItems}
 					selectedFileIds={controller.selectedFileIds}
@@ -236,7 +238,7 @@ export default function ProjectShareCreateView({ controller }: ProjectShareCreat
 					onSetSelectedFileIds={controller.setSelectedFileIds}
 				/>
 			) : null}
-			<SelectedFilesSection controller={controller} />
+			{hasNoPermittedShareType ? null : <SelectedFilesSection controller={controller} />}
 			<div className="space-y-2">
 				<SectionLabel>{t("projectShare.typeLabel")}</SectionLabel>
 				<div className="grid grid-cols-3 gap-2" data-testid="project-share-sheet-type-grid">
@@ -273,225 +275,252 @@ export default function ProjectShareCreateView({ controller }: ProjectShareCreat
 					})}
 				</div>
 				{controller.permittedShareTypes?.length === 0 ? (
-					<p className="px-3.5 text-xs text-destructive" role="alert">
+					<p className="px-3.5 text-sm text-destructive" role="alert">
 						{t("share.noAvailableShareMethods")}
 					</p>
 				) : controller.isSelectedShareTypePermitted === false ? (
-					<p className="px-3.5 text-xs text-destructive" role="alert">
+					<p className="px-3.5 text-sm text-destructive" role="alert">
 						{t("share.currentShareMethodUnavailable")}
 					</p>
 				) : null}
 			</div>
 
-			<div className="space-y-2">
-				<SectionLabel>{t("projectShare.linkNameLabel")}</SectionLabel>
-				<CardGroup>
-					<Input
-						value={formState.shareName}
-						onChange={(event) => controller.setShareName(event.target.value)}
-						placeholder={t("projectShare.linkNamePlaceholder")}
-						className="h-12 rounded-none border-0 bg-white px-3.5 py-0 text-[16px] text-foreground shadow-none placeholder:text-[#8A8A8A] focus-visible:ring-0"
-						data-testid="project-share-sheet-name-input"
-					/>
-				</CardGroup>
-			</div>
-
-			<DefaultOpenFileSection controller={controller} />
-
-			<div className="space-y-2">
-				<SectionLabel>{t("projectShare.expiryLabel")}</SectionLabel>
-				<CardGroup>
-					<button
-						type="button"
-						className="flex h-12 w-full items-center justify-between px-3.5 text-left active:opacity-75"
-						onClick={controller.goToExpiry}
-						data-testid="project-share-sheet-expiry-trigger"
-					>
-						<span className="text-[16px] leading-5 text-foreground">
-							{formState.shareExpiry === null
-								? t("share.expiryPermanent")
-								: t("projectShare.expiryDays", { days: formState.shareExpiry })}
-						</span>
-						<ChevronRight className="h-[18px] w-[18px] text-[#8A8A8A]" />
-					</button>
-				</CardGroup>
-			</div>
-
-			{formState.shareType === ShareType.PasswordProtected ? (
-				<div className="space-y-2">
-					<SectionLabel>{t("share.accessPassword")}</SectionLabel>
-					<CardGroup>
-						<div className="flex h-12 items-center">
+			{hasNoPermittedShareType ? null : (
+				<>
+					<div className="space-y-2">
+						<SectionLabel>{t("projectShare.linkNameLabel")}</SectionLabel>
+						<CardGroup>
 							<Input
-								value={formState.password}
-								onChange={(event) => controller.setPassword(event.target.value)}
-								className="h-12 flex-1 border-0 bg-transparent pl-3.5 pr-2 text-[16px] leading-5 text-foreground shadow-none focus-visible:ring-0"
-								data-testid="project-share-sheet-password-input"
+								value={formState.shareName}
+								onChange={(event) => controller.setShareName(event.target.value)}
+								placeholder={t("projectShare.linkNamePlaceholder")}
+								className="h-12 rounded-none border-0 bg-white px-3.5 py-0 text-[16px] text-foreground shadow-none placeholder:text-[#8A8A8A] focus-visible:ring-0"
+								data-testid="project-share-sheet-name-input"
 							/>
-							<div className="h-5 w-px shrink-0 bg-border" />
+						</CardGroup>
+					</div>
+
+					<DefaultOpenFileSection controller={controller} />
+
+					<div className="space-y-2">
+						<SectionLabel>{t("projectShare.expiryLabel")}</SectionLabel>
+						<CardGroup>
 							<button
 								type="button"
-								onClick={controller.resetPassword}
-								className="flex h-12 w-12 shrink-0 items-center justify-center text-[#8A8A8A] active:opacity-70"
-								data-testid="project-share-sheet-password-reset-button"
+								className="flex h-12 w-full items-center justify-between px-3.5 text-left active:opacity-75"
+								onClick={controller.goToExpiry}
+								data-testid="project-share-sheet-expiry-trigger"
 							>
-								<RefreshCw className="h-[18px] w-[18px]" strokeWidth={1.8} />
+								<span className="text-[16px] leading-5 text-foreground">
+									{formState.shareExpiry === null
+										? t("share.expiryPermanent")
+										: t("projectShare.expiryDays", {
+												days: formState.shareExpiry,
+											})}
+								</span>
+								<ChevronRight className="h-[18px] w-[18px] text-[#8A8A8A]" />
 							</button>
-						</div>
-					</CardGroup>
-				</div>
-			) : null}
+						</CardGroup>
+					</div>
 
-			{formState.shareType === ShareType.Organization ? (
-				<div className="space-y-2">
-					<SectionLabel>{t("projectShare.organizationMembersLabel")}</SectionLabel>
+					{formState.shareType === ShareType.PasswordProtected ? (
+						<div className="space-y-2">
+							<SectionLabel>{t("share.accessPassword")}</SectionLabel>
+							<CardGroup>
+								<div className="flex h-12 items-center">
+									<Input
+										value={formState.password}
+										onChange={(event) =>
+											controller.setPassword(event.target.value)
+										}
+										className="h-12 flex-1 border-0 bg-transparent pl-3.5 pr-2 text-[16px] leading-5 text-foreground shadow-none focus-visible:ring-0"
+										data-testid="project-share-sheet-password-input"
+									/>
+									<div className="h-5 w-px shrink-0 bg-border" />
+									<button
+										type="button"
+										onClick={controller.resetPassword}
+										className="flex h-12 w-12 shrink-0 items-center justify-center text-[#8A8A8A] active:opacity-70"
+										data-testid="project-share-sheet-password-reset-button"
+									>
+										<RefreshCw
+											className="h-[18px] w-[18px]"
+											strokeWidth={1.8}
+										/>
+									</button>
+								</div>
+							</CardGroup>
+						</div>
+					) : null}
+
+					{formState.shareType === ShareType.Organization ? (
+						<div className="space-y-2">
+							<SectionLabel>
+								{t("projectShare.organizationMembersLabel")}
+							</SectionLabel>
+							<CardGroup>
+								<button
+									type="button"
+									onClick={controller.openMemberSelector}
+									className="flex h-12 w-full items-center justify-between px-3.5 active:opacity-75"
+									data-testid="project-share-sheet-member-selector-trigger"
+								>
+									<span className="text-[16px] leading-5 text-foreground">
+										{controller.selectedMemberNodes.length > 0
+											? t("projectShare.selectedMembersCount", {
+													count: controller.selectedMemberNodes.length,
+												})
+											: t("projectShare.selectMembers")}
+									</span>
+									<ChevronRight className="h-[18px] w-[18px] text-[#8A8A8A]" />
+								</button>
+								{controller.selectedMemberNodes.length > 0 ? (
+									<div className="border-t border-border px-3.5 py-2">
+										{controller.selectedMemberNodes.map((item, index) => (
+											<div key={`${item.id}-${index}`}>
+												{index > 0 ? (
+													<div className="h-px bg-border" />
+												) : null}
+												<div className="flex items-center gap-3 py-3">
+													<div className="flex h-8 w-8 items-center justify-center rounded-full bg-[#F3F3F3]">
+														{item.dataType === NodeType.User ? (
+															<Users className="h-4 w-4 text-[#8A8A8A]" />
+														) : (
+															<Building2 className="h-4 w-4 text-[#8A8A8A]" />
+														)}
+													</div>
+													<div className="min-w-0 flex-1 truncate text-[16px] leading-6 text-foreground">
+														{item.name}
+													</div>
+													<button
+														type="button"
+														onClick={() => {
+															const nextNodes =
+																controller.selectedMemberNodes.filter(
+																	(member) =>
+																		member.id !== item.id,
+																)
+															controller.setSelectedMemberNodes(
+																nextNodes,
+															)
+															controller.confirmMemberSelector(
+																nextNodes,
+															)
+														}}
+														className="flex h-7 w-7 items-center justify-center text-[#8A8A8A] active:opacity-70"
+														data-testid="project-share-sheet-member-remove-button"
+													>
+														<X className="h-4 w-4" />
+													</button>
+												</div>
+											</div>
+										))}
+									</div>
+								) : null}
+							</CardGroup>
+						</div>
+					) : null}
+
 					<CardGroup>
 						<button
 							type="button"
-							onClick={controller.openMemberSelector}
+							onClick={() => controller.setAdvancedOpen(!controller.advancedOpen)}
 							className="flex h-12 w-full items-center justify-between px-3.5 active:opacity-75"
-							data-testid="project-share-sheet-member-selector-trigger"
+							data-testid="project-share-sheet-advanced-trigger"
 						>
 							<span className="text-[16px] leading-5 text-foreground">
-								{controller.selectedMemberNodes.length > 0
-									? t("projectShare.selectedMembersCount", {
-											count: controller.selectedMemberNodes.length,
-										})
-									: t("projectShare.selectMembers")}
+								{t("projectShare.advancedSettings")}
 							</span>
-							<ChevronRight className="h-[18px] w-[18px] text-[#8A8A8A]" />
+							{controller.advancedOpen ? (
+								<ChevronUp className="h-[18px] w-[18px] text-[#8A8A8A]" />
+							) : (
+								<ChevronDown className="h-[18px] w-[18px] text-[#8A8A8A]" />
+							)}
 						</button>
-						{controller.selectedMemberNodes.length > 0 ? (
-							<div className="border-t border-border px-3.5 py-2">
-								{controller.selectedMemberNodes.map((item, index) => (
-									<div key={`${item.id}-${index}`}>
-										{index > 0 ? <div className="h-px bg-border" /> : null}
-										<div className="flex items-center gap-3 py-3">
-											<div className="flex h-8 w-8 items-center justify-center rounded-full bg-[#F3F3F3]">
-												{item.dataType === NodeType.User ? (
-													<Users className="h-4 w-4 text-[#8A8A8A]" />
-												) : (
-													<Building2 className="h-4 w-4 text-[#8A8A8A]" />
-												)}
-											</div>
-											<div className="min-w-0 flex-1 truncate text-[16px] leading-6 text-foreground">
-												{item.name}
-											</div>
-											<button
-												type="button"
-												onClick={() => {
-													const nextNodes =
-														controller.selectedMemberNodes.filter(
-															(member) => member.id !== item.id,
-														)
-													controller.setSelectedMemberNodes(nextNodes)
-													controller.confirmMemberSelector(nextNodes)
-												}}
-												className="flex h-7 w-7 items-center justify-center text-[#8A8A8A] active:opacity-70"
-												data-testid="project-share-sheet-member-remove-button"
-											>
-												<X className="h-4 w-4" />
-											</button>
-										</div>
-									</div>
-								))}
+						{controller.advancedOpen ? (
+							<div className="border-t border-border bg-[#FAFAFA] px-2.5 py-2.5">
+								<div className="overflow-hidden rounded-[14px] bg-white">
+									<AdvancedSwitchRow
+										label={t("share.allowCopyFiles")}
+										description={t("share.allowCopyFilesDescription")}
+										checked={formState.advancedSettings.allowCopy ?? true}
+										onCheckedChange={(value) =>
+											controller.setAdvancedSettings({
+												...formState.advancedSettings,
+												allowCopy: value,
+											})
+										}
+										showDivider
+										testId="project-share-sheet-allow-copy-row"
+									/>
+									<AdvancedSwitchRow
+										label={t("share.allowDownloadAndExport")}
+										description={t("share.allowDownloadAndExportDescription")}
+										checked={
+											formState.advancedSettings.allowDownloadProjectFile ??
+											true
+										}
+										onCheckedChange={(value) =>
+											controller.setAdvancedSettings({
+												...formState.advancedSettings,
+												allowDownloadProjectFile: value,
+											})
+										}
+										showDivider
+										testId="project-share-sheet-allow-download-row"
+									/>
+									{!controller.enableInlineFileSelection ? (
+										<AdvancedSwitchRow
+											label={t("share.viewFileList")}
+											description={t("share.viewFileListDescription")}
+											checked={
+												formState.advancedSettings.showFileList ?? true
+											}
+											onCheckedChange={(value) =>
+												controller.setAdvancedSettings({
+													...formState.advancedSettings,
+													showFileList: value,
+												})
+											}
+											showDivider
+											testId="project-share-sheet-show-file-list-row"
+										/>
+									) : null}
+									<AdvancedSwitchRow
+										label={t("share.showOriginalInfo")}
+										description={t("share.showOriginalInfoDescription")}
+										checked={
+											formState.advancedSettings.showOriginalInfo ?? true
+										}
+										onCheckedChange={(value) =>
+											controller.setAdvancedSettings({
+												...formState.advancedSettings,
+												showOriginalInfo: value,
+											})
+										}
+										showDivider
+										testId="project-share-sheet-show-original-row"
+									/>
+									<AdvancedSwitchRow
+										label={t("share.hideCreatorInfo")}
+										description={t("share.hideCreatorInfoDescription")}
+										checked={
+											formState.advancedSettings.hideCreatorInfo ?? false
+										}
+										onCheckedChange={(value) =>
+											controller.setAdvancedSettings({
+												...formState.advancedSettings,
+												hideCreatorInfo: value,
+											})
+										}
+										testId="project-share-sheet-hide-creator-row"
+									/>
+								</div>
 							</div>
 						) : null}
 					</CardGroup>
-				</div>
-			) : null}
-
-			<CardGroup>
-				<button
-					type="button"
-					onClick={() => controller.setAdvancedOpen(!controller.advancedOpen)}
-					className="flex h-12 w-full items-center justify-between px-3.5 active:opacity-75"
-					data-testid="project-share-sheet-advanced-trigger"
-				>
-					<span className="text-[16px] leading-5 text-foreground">
-						{t("projectShare.advancedSettings")}
-					</span>
-					{controller.advancedOpen ? (
-						<ChevronUp className="h-[18px] w-[18px] text-[#8A8A8A]" />
-					) : (
-						<ChevronDown className="h-[18px] w-[18px] text-[#8A8A8A]" />
-					)}
-				</button>
-				{controller.advancedOpen ? (
-					<div className="border-t border-border bg-[#FAFAFA] px-2.5 py-2.5">
-						<div className="overflow-hidden rounded-[14px] bg-white">
-							<AdvancedSwitchRow
-								label={t("share.allowCopyFiles")}
-								description={t("share.allowCopyFilesDescription")}
-								checked={formState.advancedSettings.allowCopy ?? true}
-								onCheckedChange={(value) =>
-									controller.setAdvancedSettings({
-										...formState.advancedSettings,
-										allowCopy: value,
-									})
-								}
-								showDivider
-								testId="project-share-sheet-allow-copy-row"
-							/>
-							<AdvancedSwitchRow
-								label={t("share.allowDownloadAndExport")}
-								description={t("share.allowDownloadAndExportDescription")}
-								checked={
-									formState.advancedSettings.allowDownloadProjectFile ?? true
-								}
-								onCheckedChange={(value) =>
-									controller.setAdvancedSettings({
-										...formState.advancedSettings,
-										allowDownloadProjectFile: value,
-									})
-								}
-								showDivider
-								testId="project-share-sheet-allow-download-row"
-							/>
-							{!controller.enableInlineFileSelection ? (
-								<AdvancedSwitchRow
-									label={t("share.viewFileList")}
-									description={t("share.viewFileListDescription")}
-									checked={formState.advancedSettings.showFileList ?? true}
-									onCheckedChange={(value) =>
-										controller.setAdvancedSettings({
-											...formState.advancedSettings,
-											showFileList: value,
-										})
-									}
-									showDivider
-									testId="project-share-sheet-show-file-list-row"
-								/>
-							) : null}
-							<AdvancedSwitchRow
-								label={t("share.showOriginalInfo")}
-								description={t("share.showOriginalInfoDescription")}
-								checked={formState.advancedSettings.showOriginalInfo ?? true}
-								onCheckedChange={(value) =>
-									controller.setAdvancedSettings({
-										...formState.advancedSettings,
-										showOriginalInfo: value,
-									})
-								}
-								showDivider
-								testId="project-share-sheet-show-original-row"
-							/>
-							<AdvancedSwitchRow
-								label={t("share.hideCreatorInfo")}
-								description={t("share.hideCreatorInfoDescription")}
-								checked={formState.advancedSettings.hideCreatorInfo ?? false}
-								onCheckedChange={(value) =>
-									controller.setAdvancedSettings({
-										...formState.advancedSettings,
-										hideCreatorInfo: value,
-									})
-								}
-								testId="project-share-sheet-hide-creator-row"
-							/>
-						</div>
-					</div>
-				) : null}
-			</CardGroup>
+				</>
+			)}
 
 			<ProjectShareScrollSpacer
 				variant="single"
