@@ -223,6 +223,14 @@ class GenerateImages(AbstractFileTool[GenerateImagesParams], WorkspaceTool[Gener
 - 多张参考图时，按 reference_images 中的顺序引用，如"第一张图"、"第二张图"，并声明每张图贡献的属性
 - 用户给出模糊描述时，扩写为包含主体、构图、光线、色调的完整描述；用户给出精心构建的 prompt 时，保留其原文，仅补充必要参数
 
+**形式选择**
+- 用户已经选择直接生图、网页或 SVG 时，遵循选择，不重复询问
+- 用户要视觉成品但没有指定形式，且多种形式都适用时，简要说明利弊、给出推荐，再让用户选择
+- 直接生图适合少量文字和图文一体的视觉构图；文字与画面一起生成，但修改图片中的文字通常需要再次编辑或生成
+- 网页适合长篇、结构化内容和频繁修改；正文保持为可编辑网页文字，按需生成配图
+- 用户明确要求 SVG 时，这是直接写 SVG 文件的请求，不是生图请求；使用现有文件写入能力创建 `.svg`，不要调用本工具、脚本、代码生成器、位图中间产物或 PNG/JPG 转 SVG
+- 纯配图、背景图或其它纯视觉素材不需要触发形式选择
+
 **语言规则**
 - prompt、name、output_path 全部使用用户所用的语言
 - name 描述这张图的具体内容（主体是谁/什么），不用编号或通用分类
@@ -241,6 +249,14 @@ class GenerateImages(AbstractFileTool[GenerateImagesParams], WorkspaceTool[Gener
 - For image-to-image: separate content from style — state what must be preserved (subject shape, color, surface details) and what can change (background, lighting, color grade)
 - With multiple references, cite them by position in reference_images ("the first image", "the second image") and declare what each contributes
 - User gives a vague idea → expand into a complete visual specification; user provides a crafted prompt → keep their wording, only append missing parameters
+
+**Format selection**
+- If the user already chose direct image generation, HTML, or SVG, follow that choice without asking again
+- If the user wants a visual deliverable but has not chosen a format and multiple formats fit, briefly explain the tradeoffs, recommend one, and let the user choose
+- Direct image generation suits concise copy and integrated visual compositions. Generate requested wording together with the artwork, but changing embedded wording usually requires another image edit or generation
+- HTML suits long or structured content and frequent revisions. Keep the copy as editable page text and generate supporting images only when needed
+- An explicit SVG request is a direct file-authoring request, not an image-generation request. Write the `.svg` file with the existing file-writing capability; do not call this tool, use scripts or code generators, create a raster intermediate, or convert PNG/JPG to SVG
+- Supporting-illustration, background-only, or other pure-image requests do not require this format question
 
 **Language rules**
 - Write prompt, name, and output_path in the same language the user is using
