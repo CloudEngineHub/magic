@@ -337,6 +337,27 @@ class ProjectDomainService
     }
 
     /**
+     * Mark a running fork record as failed.
+     *
+     * Returns false when the record is missing or already in a terminal state, so callers may
+     * invoke it defensively without overwriting a more accurate failure recorded earlier.
+     */
+    public function markForkRecordFailed(int $forkId, string $errMsg): bool
+    {
+        $forkRecord = $this->projectForkRepository->findById($forkId);
+        if ($forkRecord === null || $forkRecord->getStatus() !== ForkStatus::RUNNING) {
+            return false;
+        }
+
+        return $this->projectForkRepository->updateStatus(
+            $forkId,
+            ForkStatus::FAILED->value,
+            $forkRecord->getProgress(),
+            $errMsg
+        );
+    }
+
+    /**
      * Move project to another workspace.
      * @param int $sourceProjectId Source project ID
      * @param null|int $targetWorkspaceId Target workspace ID (null means move to no workspace)

@@ -1293,7 +1293,7 @@ class ProjectAppService extends AbstractAppService
 
             // 7. Skip root directory initialization (fork uses async file migration)
 
-            // Publish fork event for async file migration
+            // Build the fork event for async file migration; it is published after the commit
             $event = new ProjectForkEvent(
                 $requestDTO->getSourceProjectId(),
                 $forkProjectEntity->getId(),
@@ -1301,13 +1301,10 @@ class ProjectAppService extends AbstractAppService
                 $dataIsolation->getCurrentOrganizationCode(),
                 $forkProjectRecordEntity->getId()
             );
-            $publisher = new ProjectForkPublisher($event);
-            $this->producer->produce($publisher);
-            $this->logger->info(sprintf('Published fork event, event ID: %s', $event->getEventId()));
 
             Db::commit();
 
-            return ForkProjectResponseDTO::fromEntity($forkProjectRecordEntity)->toArray();
+            $responseData = ForkProjectResponseDTO::fromEntity($forkProjectRecordEntity)->toArray();
         } catch (EventException $e) {
             Db::rollBack();
             ExceptionBuilder::throw(SuperAgentErrorCode::PROJECT_FORK_ACCESS_DENIED, $e->getMessage());
@@ -1316,6 +1313,12 @@ class ProjectAppService extends AbstractAppService
             $this->logger->error('Fork project failed, error: ' . $e->getMessage(), ['request' => $requestDTO->toArray()]);
             throw $e;
         }
+
+        // The consumer reads the forked project on its own connection, so the event may only be
+        // published once the transaction is committed and those rows are visible to it.
+        $this->publishForkEvent($event);
+
+        return $responseData;
     }
 
     /**
@@ -1379,6 +1382,9 @@ class ProjectAppService extends AbstractAppService
                 $event->getForkRecordId(),
                 $e->getMessage()
             ));
+            // Failures raised before the migration itself starts leave the record untouched,
+            // so give it a terminal state instead of letting the client poll 0% forever.
+            $this->projectDomainService->markForkRecordFailed($event->getForkRecordId(), 'File migration failed');
             throw $e;
         }
     }
@@ -2601,6 +2607,26 @@ class ProjectAppService extends AbstractAppService
         }
 
         return $project;
+    }
+
+    /**
+     * Publish the fork event, marking the fork record as failed when the message cannot be sent,
+     * so the client stops polling a progress that would never advance.
+     */
+    private function publishForkEvent(ProjectForkEvent $event): void
+    {
+        try {
+            $this->producer->produce(new ProjectForkPublisher($event));
+            $this->logger->info(sprintf('Published fork event, event ID: %s', $event->getEventId()));
+        } catch (Throwable $e) {
+            $this->logger->error(sprintf(
+                'Failed to publish fork event, fork record ID: %d, event ID: %s, error: %s',
+                $event->getForkRecordId(),
+                $event->getEventId(),
+                $e->getMessage()
+            ));
+            $this->projectDomainService->markForkRecordFailed($event->getForkRecordId(), 'File migration failed');
+        }
     }
 
     private function deleteMicroAppResources(int $projectId, ?MicroAppEntity $microAppRecord = null): void
