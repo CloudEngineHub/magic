@@ -483,46 +483,6 @@ class AgentDomainService
     }
 
     /**
-     * 话题换绑后，尽力停掉被替换的旧沙箱。
-     *
-     * 换绑只是 UPDATE topics.sandbox_id 这一条 SQL，改的是 MySQL 里的指针，
-     * K8s 里的旧 pod 收不到任何通知：
-     *
-     *     换绑前:  topics.sandbox_id = 'A'      pod A  Running
-     *     换绑后:  topics.sandbox_id = 'B'      pod A  Running   <- SQL 不停它
-     *                                                pod B  Running
-     *     本方法:  gateway.delete('A')  ==>     pod A  消失, 只剩 B
-     *
-     * 若缺了"补一刀"，pod A 就带着同样的 topic-id / agent-code 标签继续
-     * Running，从此无人认领——这是"同 topic-id 多个沙箱"问题的直接成因。
-     *
-     * 尽力而为：旧沙箱可能已被其他流程删除（NOT_FOUND），或停止失败，
-     * 都只记日志，绝不影响新沙箱的初始化。
-     */
-    private function releaseReplacedSandbox(string $previousSandboxId, string $newSandboxId, int $topicId): void
-    {
-        if ($previousSandboxId === '' || $previousSandboxId === $newSandboxId) {
-            return;
-        }
-
-        try {
-            $this->stopSandbox($previousSandboxId);
-            $this->logger->info('[Sandbox][Domain] Stopped sandbox replaced by new binding', [
-                'topic_id' => $topicId,
-                'old_sandbox_id' => $previousSandboxId,
-                'new_sandbox_id' => $newSandboxId,
-            ]);
-        } catch (Throwable $e) {
-            $this->logger->info('[Sandbox][Domain] Skip stopping replaced sandbox', [
-                'topic_id' => $topicId,
-                'old_sandbox_id' => $previousSandboxId,
-                'new_sandbox_id' => $newSandboxId,
-                'reason' => $e->getMessage(),
-            ]);
-        }
-    }
-
-    /**
      * 调用沙箱网关，创建沙箱容器，如果 sandboxId 不存在，系统会默认创建一个.
      */
     public function createSandbox(DataIsolation $dataIsolation, string $projectId, string $sandboxID, string $workDir, string $projectSpaceRootFileId = '', string $userSpaceRootFileId = '', string $topicSpaceRootFileId = '', ?int $topicId = null, ?string $agentCode = null): string
@@ -1502,6 +1462,46 @@ class AgentDomainService
 
         foreach ($projectIds as $projectId) {
             $this->mountSingleReferencedProject($dataIsolation, $sandboxId, $projectId, (string) ($projectRootFileIds[(int) $projectId] ?? $projectRootFileIds[$projectId] ?? ''));
+        }
+    }
+
+    /**
+     * 话题换绑后，尽力停掉被替换的旧沙箱。
+     *
+     * 换绑只是 UPDATE topics.sandbox_id 这一条 SQL，改的是 MySQL 里的指针，
+     * K8s 里的旧 pod 收不到任何通知：
+     *
+     *     换绑前:  topics.sandbox_id = 'A'      pod A  Running
+     *     换绑后:  topics.sandbox_id = 'B'      pod A  Running   <- SQL 不停它
+     *                                                pod B  Running
+     *     本方法:  gateway.delete('A')  ==>     pod A  消失, 只剩 B
+     *
+     * 若缺了"补一刀"，pod A 就带着同样的 topic-id / agent-code 标签继续
+     * Running，从此无人认领——这是"同 topic-id 多个沙箱"问题的直接成因。
+     *
+     * 尽力而为：旧沙箱可能已被其他流程删除（NOT_FOUND），或停止失败，
+     * 都只记日志，绝不影响新沙箱的初始化。
+     */
+    private function releaseReplacedSandbox(string $previousSandboxId, string $newSandboxId, int $topicId): void
+    {
+        if ($previousSandboxId === '' || $previousSandboxId === $newSandboxId) {
+            return;
+        }
+
+        try {
+            $this->stopSandbox($previousSandboxId);
+            $this->logger->info('[Sandbox][Domain] Stopped sandbox replaced by new binding', [
+                'topic_id' => $topicId,
+                'old_sandbox_id' => $previousSandboxId,
+                'new_sandbox_id' => $newSandboxId,
+            ]);
+        } catch (Throwable $e) {
+            $this->logger->info('[Sandbox][Domain] Skip stopping replaced sandbox', [
+                'topic_id' => $topicId,
+                'old_sandbox_id' => $previousSandboxId,
+                'new_sandbox_id' => $newSandboxId,
+                'reason' => $e->getMessage(),
+            ]);
         }
     }
 
