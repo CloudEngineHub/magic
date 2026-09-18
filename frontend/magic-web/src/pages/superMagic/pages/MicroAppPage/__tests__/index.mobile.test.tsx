@@ -377,6 +377,7 @@ describe("MicroAppPageMobile", () => {
 		fireEvent.click(screen.getByTestId("micro-app-mobile-conversation-button"))
 		fireEvent.click(await screen.findByTestId("mobile-conversation-tool"))
 
+		expect(screen.getByTestId("mobile-conversation-popup")).toBeInTheDocument()
 		expect(previewPopupMocks.open).toHaveBeenCalledWith(
 			expect.objectContaining({
 				type: "html",
@@ -395,6 +396,7 @@ describe("MicroAppPageMobile", () => {
 		fireEvent.click(screen.getByTestId("micro-app-mobile-conversation-button"))
 		fireEvent.click(await screen.findByTestId("mobile-conversation-tool"))
 
+		expect(screen.getByTestId("mobile-conversation-popup")).toBeInTheDocument()
 		expect(previewPopupMocks.open).toHaveBeenCalledWith(
 			expect.objectContaining({
 				type: "html",

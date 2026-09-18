@@ -1,13 +1,19 @@
-import { useCallback, useEffect, useRef, type ReactNode } from "react"
+import { useCallback, useEffect, useRef, useState, type ReactNode } from "react"
 
 import { getToolDetailSelectionTarget } from "@/pages/superMagic/components/MessageList/components/Nodes/toolDetailSelection"
+import type { FileManagerContext } from "@/pages/superMagic/components/Detail/components/FilesViewer/types"
 import type { AttachmentItem } from "@/pages/superMagic/components/TopicFilesButton/hooks"
 import type { ProjectListItem, Topic } from "@/pages/superMagic/pages/Workspace/types"
+import type { AttachmentLoadState } from "@/stores/projectFiles/types"
 import PreviewDetailPopup, {
 	type PreviewDetail,
 	type PreviewDetailPopupRef,
 } from "@/pages/superMagicMobile/components/PreviewDetailPopup"
 import pubsub, { PubSubEvents } from "@/utils/pubsub"
+import PublishedMicroAppFileManagerPopup from "../components/PublishedMicroAppFileManagerPopup"
+import { buildRuntimeFilePreviewDetail, resolveRuntimeFileOpen } from "./resolveRuntimeFileOpen"
+
+export { buildRuntimeFilePreviewDetail } from "./resolveRuntimeFileOpen"
 
 interface UsePublishedRuntimePreviewOptions {
 	enabled: boolean
@@ -15,39 +21,7 @@ interface UsePublishedRuntimePreviewOptions {
 	selectedTopic?: Topic | null
 	fileTree: AttachmentItem[]
 	fileList: AttachmentItem[]
-}
-
-export function buildRuntimeFilePreviewDetail(payload: {
-	fileId?: string
-	fileData?: Record<string, unknown>
-}): PreviewDetail | undefined {
-	const fileData = payload.fileData
-	const fileIdValue = fileData?.file_id ?? payload.fileId
-	const fileId =
-		typeof fileIdValue === "number"
-			? String(fileIdValue)
-			: typeof fileIdValue === "string"
-				? fileIdValue
-				: ""
-	if (!fileId) return undefined
-	const fileName =
-		(typeof fileData?.file_name === "string" && fileData.file_name) ||
-		(typeof fileData?.display_filename === "string" && fileData.display_filename) ||
-		""
-	const fileExtension =
-		(typeof fileData?.file_extension === "string" && fileData.file_extension) ||
-		fileName.split(".").pop() ||
-		""
-	return {
-		type: fileExtension || "empty",
-		data: {
-			...fileData,
-			file_id: fileId,
-			file_name: fileName,
-			file_extension: fileExtension,
-		},
-		currentFileId: fileId,
-	} as PreviewDetail
+	attachmentLoadState?: AttachmentLoadState
 }
 
 export function usePublishedRuntimePreview({
@@ -56,13 +30,21 @@ export function usePublishedRuntimePreview({
 	selectedTopic,
 	fileTree,
 	fileList,
+	attachmentLoadState,
 }: UsePublishedRuntimePreviewOptions): {
 	handleSelectDetail: (detail: unknown) => void
 	handleOpenFile: (file?: unknown) => void
 	openPreviewDetail: (detail: unknown) => void
 	previewPopup: ReactNode
+	fileManagerPopup: ReactNode
 } {
 	const previewDetailPopupRef = useRef<PreviewDetailPopupRef>(null)
+	const [fileManagerContext, setFileManagerContext] = useState<FileManagerContext | null>(null)
+	const selectedProjectId = selectedProject?.id
+
+	useEffect(() => {
+		setFileManagerContext(null)
+	}, [enabled, selectedProjectId])
 	const openPreviewDetail = useCallback(
 		(detail: unknown) => {
 			if (!detail || typeof detail !== "object") return
@@ -79,17 +61,12 @@ export function usePublishedRuntimePreview({
 	)
 	const handleOpenFile = useCallback(
 		(file?: unknown) => {
-			if (!file || typeof file !== "object" || Array.isArray(file)) return
-			const fileData = file as Record<string, unknown>
-			const fileIdValue = fileData.file_id
-			const detail = buildRuntimeFilePreviewDetail({
-				fileId:
-					typeof fileIdValue === "string" || typeof fileIdValue === "number"
-						? String(fileIdValue)
-						: undefined,
-				fileData,
-			})
-			if (detail) openPreviewDetail(detail)
+			const result = resolveRuntimeFileOpen(file)
+			if (result.kind === "file-manager") {
+				setFileManagerContext(result.context)
+				return
+			}
+			if (result.kind === "preview") openPreviewDetail(result.detail)
 		},
 		[openPreviewDetail],
 	)
@@ -132,8 +109,28 @@ export function usePublishedRuntimePreview({
 			selectedProject={selectedProject}
 			selectedTopic={selectedTopic}
 			allowEdit
+			// File manager stays at the default 1000; preview must stack above it.
+			zIndex={1100}
 		/>
 	) : null
+	const fileManagerPopup =
+		enabled && fileManagerContext ? (
+			<PublishedMicroAppFileManagerPopup
+				context={fileManagerContext}
+				attachments={fileTree}
+				attachmentLoadState={attachmentLoadState}
+				selectedProject={selectedProject}
+				selectedTopic={selectedTopic}
+				onOpenFile={handleOpenFile}
+				onClose={() => setFileManagerContext(null)}
+			/>
+		) : null
 
-	return { handleSelectDetail, handleOpenFile, openPreviewDetail, previewPopup }
+	return {
+		handleSelectDetail,
+		handleOpenFile,
+		openPreviewDetail,
+		previewPopup,
+		fileManagerPopup,
+	}
 }

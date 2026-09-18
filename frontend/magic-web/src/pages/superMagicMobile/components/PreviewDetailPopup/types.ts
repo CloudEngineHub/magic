@@ -44,4 +44,6 @@ export interface PreviewDetailPopupProps {
 	allowEdit?: boolean
 	onPreviewFileChange?: (fileId: string | null) => void
 	onPreviewFullscreenChange?: (isFullscreen: boolean) => void
+	/** Raise above another open dialog, such as the file manager or conversation sheet. */
+	zIndex?: number
 }

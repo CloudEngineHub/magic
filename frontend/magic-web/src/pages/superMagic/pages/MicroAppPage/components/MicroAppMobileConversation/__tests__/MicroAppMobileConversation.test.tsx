@@ -16,6 +16,7 @@ const topicModeMocks = vi.hoisted(() => ({
 
 const messageListMocks = vi.hoisted(() => ({
 	setSelectedDetail: undefined as ((detail: unknown) => void) | undefined,
+	onFileClick: undefined as ((file?: unknown) => void) | undefined,
 }))
 
 const mentionInsertMocks = vi.hoisted(() => ({
@@ -64,11 +65,14 @@ vi.mock("@/pages/superMagic/components/MessageList", () => ({
 	default: ({
 		fallbackRender,
 		setSelectedDetail,
+		onFileClick,
 	}: {
 		fallbackRender?: ReactNode
 		setSelectedDetail?: (detail: unknown) => void
+		onFileClick?: (file?: unknown) => void
 	}) => {
 		messageListMocks.setSelectedDetail = setSelectedDetail
+		messageListMocks.onFileClick = onFileClick
 		return (
 			<div data-testid="mobile-message-list">
 				{fallbackRender ?? <div data-testid="message-list-fallback" />}
@@ -366,7 +370,7 @@ describe("MicroApp mobile conversation controls", () => {
 		)
 	})
 
-	it("opens tool details through the preview handler instead of the file handler", () => {
+	it("opens tool details without closing the conversation sheet", () => {
 		const onSelectDetail = vi.fn()
 		const onOpenFile = vi.fn()
 		const onOpenChange = vi.fn()
@@ -398,9 +402,42 @@ describe("MicroApp mobile conversation controls", () => {
 
 		messageListMocks.setSelectedDetail?.(detail)
 
-		expect(onOpenChange).toHaveBeenCalledWith(false)
+		expect(onOpenChange).not.toHaveBeenCalled()
 		expect(onSelectDetail).toHaveBeenCalledWith(detail)
 		expect(onOpenFile).not.toHaveBeenCalled()
+	})
+
+	it("keeps the conversation sheet open when a message file is previewed", () => {
+		const onSelectDetail = vi.fn()
+		const onOpenFile = vi.fn()
+		const onOpenChange = vi.fn()
+		const topicStore = {
+			selectedTopic: { id: "topic-1", topic_name: "需求讨论" },
+			topics: [],
+			setSelectedTopic: vi.fn(),
+			updateTopic: vi.fn(),
+		} as never
+		const file = { file_id: "file-1", file_name: "random_content.md" }
+
+		render(
+			<MicroAppMobileConversation
+				open
+				selectedProject={{ id: "project-1", project_name: "微应用" } as never}
+				topicStore={topicStore}
+				mentionPanelStore={mentionPanelStore}
+				projectFilesStore={{} as never}
+				attachments={[]}
+				onSelectDetail={onSelectDetail}
+				onOpenFile={onOpenFile}
+				onOpenChange={onOpenChange}
+			/>,
+		)
+
+		messageListMocks.onFileClick?.(file)
+
+		expect(onOpenChange).not.toHaveBeenCalled()
+		expect(onOpenFile).toHaveBeenCalledWith(file)
+		expect(onSelectDetail).not.toHaveBeenCalled()
 	})
 
 	it("shows the mention hint and pins the current app in preview", () => {

@@ -430,6 +430,7 @@ function MicroAppPageMobileInner({
 							nextAttachmentList,
 						)
 					}}
+					zIndex={1100}
 				/>
 				<PreviewDetailPopup
 					ref={linkPreviewPopupRef}
@@ -437,6 +438,7 @@ function MicroAppPageMobileInner({
 					selectedTopic={selectedTopic}
 					selectedProject={selectedProject}
 					allowEdit={!isReadOnly}
+					zIndex={1100}
 				/>
 				<MicroAppPreviewPopup state={microAppPreviewState} />
 			</FileActionVisibilityProvider>

@@ -136,6 +136,33 @@ vi.mock(
 	}),
 )
 
+vi.mock("@/pages/superMagic/components/UserSpace/UserSpacePanel", () => ({
+	default: function MockUserSpacePanel(props: { projectId?: string }) {
+		return <div data-testid="runtime-user-space" data-project-id={props.projectId} />
+	},
+}))
+
+vi.mock("@/pages/superMagic/components/ShareManagement/ShareManagementPanel", () => ({
+	default: function MockShareManagementPanel(props: { projectId?: string }) {
+		return <div data-testid="runtime-share-management" data-project-id={props.projectId} />
+	},
+}))
+
+vi.mock("@/pages/superMagic/components/TopicFilesButton", () => ({
+	default: function MockTopicFilesButton() {
+		return <div data-testid="runtime-files" />
+	},
+}))
+
+vi.mock("@/routes", () => ({
+	history: { push: vi.fn(), replace: vi.fn() },
+}))
+
+vi.mock("@dtyq/magic-admin-v2", () => ({
+	createRouteObjects: () => [],
+	RuntimeMode: { OpenSource: "open-source" },
+}))
+
 vi.mock("@/models/user", async () => {
 	const { makeAutoObservable } = await import("mobx")
 
@@ -182,6 +209,7 @@ vi.mock("@/pages/share/microApp/hooks/usePublishedRuntimePreview", () => ({
 		handleOpenFile: vi.fn(),
 		openPreviewDetail: vi.fn(),
 		previewPopup: null,
+		fileManagerPopup: null,
 	}),
 }))
 
@@ -367,7 +395,7 @@ describe("PublishedMicroAppConversationProvider", () => {
 				showProjectSidebar: false,
 				showProjectResizeHandle: false,
 				initialConversationPanelCollapsed: true,
-				collapsedConversationPanelWidth: 48,
+				collapsedConversationPanelWidth: 40,
 				persistConversationPanelState: false,
 				conversationResizeHandleGripVariant: "dots",
 				detailResizeHandleClassName: "border-l border-border",
@@ -471,6 +499,9 @@ describe("PublishedMicroAppConversationProvider", () => {
 		fireEvent.change(screen.getByLabelText("draft"), { target: { value: "Unsent message" } })
 		fireEvent.click(screen.getByTestId("published-micro-app-tasks-button"))
 		expect(await screen.findByTestId("runtime-tasks")).toBeVisible()
+		expect(screen.getByTestId("published-micro-app-conversation-header")).not.toHaveTextContent(
+			"scheduleTask.title",
+		)
 		expect(layoutMocks.tasksProps).toMatchObject({
 			selectProjectId: "runtime-project",
 			selectWorkspaceId: "runtime-workspace",
@@ -486,10 +517,32 @@ describe("PublishedMicroAppConversationProvider", () => {
 		expect(screen.getByLabelText("draft")).not.toBeVisible()
 		fireEvent.click(screen.getByTestId("published-micro-app-attachments-button"))
 		expect(screen.getByTestId("published-micro-app-attachments-panel")).toBeVisible()
+		expect(screen.getByTestId("published-micro-app-conversation-header")).not.toHaveTextContent(
+			"attachmentList.projectFiles",
+		)
 		expect(screen.queryByTestId("runtime-tasks")).not.toBeInTheDocument()
 		fireEvent.click(screen.getByTestId("published-micro-app-conversation-button"))
 		expect(screen.getByLabelText("draft")).toBeVisible()
 		expect(screen.getByLabelText("draft")).toHaveValue("Unsent message")
+		expect(screen.getByTestId("published-micro-app-conversation-header")).toHaveTextContent(
+			"microAppPage.conversation.title",
+		)
+		fireEvent.click(screen.getByTestId("published-micro-app-user-space-button"))
+		expect(await screen.findByTestId("runtime-user-space")).toHaveAttribute(
+			"data-project-id",
+			"runtime-project",
+		)
+		expect(screen.getByTestId("published-micro-app-conversation-header")).not.toHaveTextContent(
+			"userSpace.title",
+		)
+		fireEvent.click(screen.getByTestId("published-micro-app-share-button"))
+		expect(await screen.findByTestId("runtime-share-management")).toHaveAttribute(
+			"data-project-id",
+			"runtime-project",
+		)
+		expect(screen.getByTestId("published-micro-app-conversation-header")).not.toHaveTextContent(
+			"shareManagement.title",
+		)
 		expect(SuperMagicApi.ensureMicroAppRuntimeProject).not.toHaveBeenCalled()
 	})
 

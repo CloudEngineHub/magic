@@ -1,4 +1,4 @@
-import { act, render, renderHook } from "@testing-library/react"
+import { act, render, renderHook, screen } from "@testing-library/react"
 import { afterEach, describe, expect, it, vi } from "vitest"
 import { forwardRef, useImperativeHandle } from "react"
 
@@ -11,6 +11,7 @@ import {
 const popupMocks = vi.hoisted(() => ({
 	open: vi.fn(),
 	allowEdit: undefined as boolean | undefined,
+	zIndex: undefined as number | undefined,
 }))
 
 vi.mock("@/pages/superMagic/components/MessageList/components/Nodes/toolDetailSelection", () => ({
@@ -18,11 +19,21 @@ vi.mock("@/pages/superMagic/components/MessageList/components/Nodes/toolDetailSe
 }))
 
 vi.mock("@/pages/superMagicMobile/components/PreviewDetailPopup", () => ({
-	default: forwardRef(function MockPreviewDetailPopup(props: { allowEdit?: boolean }, ref) {
+	default: forwardRef(function MockPreviewDetailPopup(
+		props: { allowEdit?: boolean; zIndex?: number },
+		ref,
+	) {
 		popupMocks.allowEdit = props.allowEdit
+		popupMocks.zIndex = props.zIndex
 		useImperativeHandle(ref, () => ({ open: popupMocks.open }))
 		return <div data-testid="runtime-preview-popup" />
 	}),
+}))
+
+vi.mock("@/pages/share/microApp/components/PublishedMicroAppFileManagerPopup", () => ({
+	default: function MockFileManagerPopup() {
+		return <div data-testid="published-micro-app-file-manager-popup" />
+	},
 }))
 
 describe("usePublishedRuntimePreview", () => {
@@ -30,6 +41,7 @@ describe("usePublishedRuntimePreview", () => {
 		pubsub.clear()
 		popupMocks.open.mockClear()
 		popupMocks.allowEdit = undefined
+		popupMocks.zIndex = undefined
 	})
 
 	it("builds a popup detail from a message file payload", () => {
@@ -70,6 +82,7 @@ describe("usePublishedRuntimePreview", () => {
 		render(result.current.previewPopup)
 
 		expect(popupMocks.allowEdit).toBe(true)
+		expect(popupMocks.zIndex).toBe(1100)
 
 		act(() => {
 			result.current.handleSelectDetail({ type: "shell", data: { command: "pwd" } })
@@ -142,5 +155,103 @@ describe("usePublishedRuntimePreview", () => {
 			[],
 			fileList,
 		)
+	})
+
+	it("opens file manager requests in a dedicated popup", () => {
+		const { result, rerender } = renderHook(() =>
+			usePublishedRuntimePreview({
+				enabled: true,
+				fileTree: [],
+				fileList: [],
+				selectedProject: { id: "runtime-1" } as never,
+			}),
+		)
+		const { rerender: rerenderPopup } = render(
+			<>
+				{result.current.previewPopup}
+				{result.current.fileManagerPopup}
+			</>,
+		)
+		expect(
+			screen.queryByTestId("published-micro-app-file-manager-popup"),
+		).not.toBeInTheDocument()
+
+		act(() => {
+			result.current.handleOpenFile({
+				file_manager: { spaceType: "project", projectId: "runtime-1" },
+			})
+		})
+		rerender()
+		rerenderPopup(
+			<>
+				{result.current.previewPopup}
+				{result.current.fileManagerPopup}
+			</>,
+		)
+		expect(screen.getByTestId("published-micro-app-file-manager-popup")).toBeInTheDocument()
+
+		popupMocks.open.mockClear()
+		act(() => {
+			result.current.handleOpenFile({
+				file_id: "file-2",
+				file_name: "notes.md",
+				file_extension: "md",
+			})
+		})
+		expect(popupMocks.open).toHaveBeenCalledWith(
+			expect.objectContaining({ currentFileId: "file-2" }),
+			[],
+			[],
+		)
+		expect(screen.getByTestId("published-micro-app-file-manager-popup")).toBeInTheDocument()
+	})
+
+	it("closes the file manager when the runtime project changes", () => {
+		const { result, rerender } = renderHook(
+			({ selectedProject }) =>
+				usePublishedRuntimePreview({
+					enabled: true,
+					fileTree: [],
+					fileList: [],
+					selectedProject,
+					attachmentLoadState: selectedProject
+						? { projectId: selectedProject.id, status: "ready" }
+						: undefined,
+				}),
+			{ initialProps: { selectedProject: { id: "runtime-1" } as never } },
+		)
+		const { rerender: rerenderPopup } = render(
+			<>
+				{result.current.previewPopup}
+				{result.current.fileManagerPopup}
+			</>,
+		)
+
+		act(() => {
+			result.current.handleOpenFile({
+				file_manager: { spaceType: "project", projectId: "runtime-1" },
+			})
+		})
+		rerender({ selectedProject: { id: "runtime-1" } as never })
+		rerenderPopup(
+			<>
+				{result.current.previewPopup}
+				{result.current.fileManagerPopup}
+			</>,
+		)
+		expect(screen.getByTestId("published-micro-app-file-manager-popup")).toBeInTheDocument()
+
+		act(() => {
+			rerender({ selectedProject: { id: "runtime-2" } as never })
+		})
+		rerenderPopup(
+			<>
+				{result.current.previewPopup}
+				{result.current.fileManagerPopup}
+			</>,
+		)
+		expect(
+			screen.queryByTestId("published-micro-app-file-manager-popup"),
+		).not.toBeInTheDocument()
 	})
 })

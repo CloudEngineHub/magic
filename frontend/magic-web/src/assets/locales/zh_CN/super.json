@@ -3691,6 +3691,7 @@
 			"totalRows": "{{total}} 条数据",
 			"yes": "是"
 		},
+		"defaultProjectName": "项目",
 		"edit": {
 			"button": "编辑微应用信息",
 			"captureCover": "生成页面封面",
@@ -3720,6 +3721,9 @@
 			"loadFailed": "微应用加载失败，请稍后重试",
 			"permissionDescription": "你可能没有该项目的访问权限，或项目共享范围已发生变化。请返回列表查看可访问的微应用。",
 			"permissionTitle": "无法访问这个微应用"
+		},
+		"fileManagerDialog": {
+			"title": "文件管理器"
 		},
 		"header": {
 			"backToApps": "返回微应用列表",
