@@ -7,6 +7,7 @@ import {
 	createFetchPlugin,
 	createResourcePlugin,
 	createPageDwellPlugin,
+	createStorageQuotaPlugin,
 } from "@/infrastructure/logger/plugins"
 import { recordId } from "@/infrastructure/logger/record"
 
@@ -48,6 +49,7 @@ export class AppLoggerService {
 					}),
 					createResourcePlugin(),
 					createPageDwellPlugin(),
+					createStorageQuotaPlugin(),
 					createDevicePlugin({
 						sha: config?.MAGIC_APP_SHA,
 						version: config?.MAGIC_APP_VERSION,
