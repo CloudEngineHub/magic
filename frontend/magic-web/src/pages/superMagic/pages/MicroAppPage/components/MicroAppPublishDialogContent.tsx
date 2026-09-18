@@ -420,21 +420,17 @@ export default function MicroAppPublishDialogContent({
 				</div>
 			) : null}
 			{mobile ? (
-				<div className="min-h-0">
+				<div className="flex min-h-0 flex-1 flex-col">
+					{/* 移动端弹窗把滚动区和底部操作区拆成独立轨道，避免表单内容撑开 popup。 */}
 					<ScrollArea
-						className={cn("min-h-0", mobile ? "flex-1 px-4" : "h-full")}
+						className="min-h-0 flex-1 px-4"
 						viewportClassName="touch-pan-y [&>div]:!block"
 						data-testid="micro-app-publish-scroll-area"
 					>
-						<div
-							className={cn(
-								"flex flex-col gap-4",
-								mobile ? "pb-5 pt-1" : "grid grid-cols-2 p-5",
-							)}
-						>
+						<div className="flex flex-col gap-4 pb-5 pt-1">
 							{!loading && hasPublished ? (
 								<MicroAppPublishedSection
-									className={!mobile ? "col-span-2" : undefined}
+									className="w-full"
 									mobile={mobile}
 									publishedAtText={publishedAtText}
 									accessUrl={accessUrl}
@@ -551,10 +547,7 @@ export default function MicroAppPublishDialogContent({
 								<>
 									<div
 										id="micro-app-publish-share-settings"
-										className={cn(
-											"space-y-4",
-											!mobile && "col-start-2 row-start-2",
-										)}
+										className="space-y-4"
 									>
 										<ShareTypeField
 											value={formState.shareType as ShareType}
@@ -595,12 +588,7 @@ export default function MicroAppPublishDialogContent({
 									</div>
 
 									{formState.shareType === ShareType.PasswordProtected ? (
-										<div
-											className={cn(
-												"flex flex-col gap-2",
-												!mobile && "col-start-2 row-start-3",
-											)}
-										>
+										<div className="flex flex-col gap-2">
 											<Label htmlFor="micro-app-publish-password">
 												{t("microAppPage.publish.password")}
 											</Label>
@@ -636,12 +624,7 @@ export default function MicroAppPublishDialogContent({
 										</div>
 									) : null}
 
-									<div
-										className={cn(
-											"-mt-4 rounded-b-lg bg-muted/60 p-3",
-											!mobile && "col-start-1 row-start-3",
-										)}
-									>
+									<div className="-mt-4 rounded-b-lg bg-muted/60 p-3">
 										<div className="flex flex-col gap-2">
 											<Label htmlFor="micro-app-default-open-file">
 												{t("microAppPage.publish.defaultOpenFile")}
@@ -748,6 +731,7 @@ export default function MicroAppPublishDialogContent({
 						? "shrink-0 flex-col items-stretch pt-3"
 						: "items-center justify-between",
 				)}
+				data-testid="micro-app-publish-actions"
 			>
 				{hasPublished ? (
 					<Button

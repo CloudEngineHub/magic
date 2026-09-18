@@ -445,7 +445,8 @@ describe("PPTSlide", () => {
 			expect(onRenderReadyChange).toHaveBeenCalledWith(false)
 		})
 		const isolatedProps = mockState.renderedIsolatedProps.mock.calls.at(-1)?.[0] as
-			{ onRenderReady?: () => void } | undefined
+			| { onRenderReady?: () => void }
+			| undefined
 		act(() => isolatedProps?.onRenderReady?.())
 		expect(onRenderReadyChange).toHaveBeenCalledWith(true)
 		onRenderReadyChange.mockClear()
@@ -493,7 +494,8 @@ describe("PPTSlide", () => {
 			expect(onRenderReadyChange).toHaveBeenCalledWith(false)
 		})
 		const isolatedProps = mockState.renderedIsolatedProps.mock.calls.at(-1)?.[0] as
-			{ onRenderReady?: () => void } | undefined
+			| { onRenderReady?: () => void }
+			| undefined
 		act(() => isolatedProps?.onRenderReady?.())
 		expect(onRenderReadyChange).toHaveBeenCalledWith(true)
 		onRenderReadyChange.mockClear()

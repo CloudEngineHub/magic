@@ -287,6 +287,10 @@ describe("MicroApp mobile conversation controls", () => {
 			"data-show-mode-toggle",
 			"true",
 		)
+		expect(screen.getByTestId("mobile-project-input")).toHaveAttribute(
+			"data-show-model-selector",
+			"false",
+		)
 		expect(screen.getByTestId("mobile-project-input")).not.toHaveAttribute(
 			"data-model-topic-mode",
 		)

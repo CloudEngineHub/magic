@@ -115,14 +115,36 @@ vi.mock("@/components/base-mobile/MagicPopup", () => ({
 		visible,
 		position,
 		className,
+		bodyClassName,
+		headerVariant,
+		headerTitle,
+		headerLeadingAction,
 	}: {
 		children: ReactNode
 		visible?: boolean
 		position?: string
 		className?: string
+		bodyClassName?: string
+		headerVariant?: string
+		headerTitle?: ReactNode
+		headerLeadingAction?: { onClick: () => void; testId?: string }
 	}) =>
 		visible ? (
-			<div data-testid="mobile-publish-popup" data-position={position} className={className}>
+			<div
+				data-testid="mobile-publish-popup"
+				data-position={position}
+				data-header-variant={headerVariant}
+				data-body-class-name={bodyClassName}
+				className={className}
+			>
+				{headerLeadingAction ? (
+					<button
+						type="button"
+						data-testid={headerLeadingAction.testId}
+						onClick={headerLeadingAction.onClick}
+					/>
+				) : null}
+				{headerTitle}
 				{children}
 			</div>
 		) : null,

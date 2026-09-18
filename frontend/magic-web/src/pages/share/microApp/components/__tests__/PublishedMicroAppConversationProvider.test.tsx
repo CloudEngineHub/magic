@@ -39,6 +39,8 @@ const layoutMocks = vi.hoisted(() => ({
 	expand: () => {},
 }))
 
+const responsiveMocks = vi.hoisted(() => ({ isMobile: false }))
+
 vi.mock("@/components/base/MagicModal", () => ({
 	default: { confirm: vi.fn(() => ({ destroy: vi.fn() })) },
 }))
@@ -46,6 +48,10 @@ vi.mock("@/components/base/MagicToaster/utils", () => ({
 	default: { error: vi.fn() },
 }))
 vi.mock("@/services/auth/AuthEventBus", () => ({ authEventBus: { emit: vi.fn() } }))
+
+vi.mock("@/hooks/useIsMobile", () => ({
+	useIsMobile: () => responsiveMocks.isMobile,
+}))
 
 vi.mock("react-i18next", () => ({
 	initReactI18next: { type: "3rdParty", init: vi.fn() },
@@ -64,6 +70,18 @@ vi.mock("@/pages/superMagic/pages/MicroAppPage/components/AppConversationPanel",
 				{props.trailingActions as React.ReactNode}
 			</div>
 		)
+	},
+}))
+
+vi.mock("@/pages/superMagic/pages/MicroAppPage/components/MicroAppMobileConversation", () => ({
+	default: function MockMicroAppMobileConversation(props: Record<string, unknown>) {
+		return props.open ? (
+			<div
+				data-testid="published-micro-app-mobile-conversation"
+				data-lock-to-micro-app-mode={String(props.lockToMicroAppMode)}
+				data-file-access={JSON.stringify(useFileAccess())}
+			/>
+		) : null
 	},
 }))
 
@@ -159,6 +177,7 @@ vi.mock("@/pages/superMagic/services/projectAttachmentsLoader", () => ({
 
 describe("PublishedMicroAppConversationProvider", () => {
 	beforeEach(() => {
+		responsiveMocks.isMobile = false
 		vi.mocked(MagicModal.confirm).mockClear()
 		vi.mocked(magicToast.error).mockClear()
 		vi.mocked(authEventBus.emit).mockClear()
@@ -246,6 +265,46 @@ describe("PublishedMicroAppConversationProvider", () => {
 		expect(
 			screen.queryByTestId("published-micro-app-conversation-panel"),
 		).not.toBeInTheDocument()
+	})
+
+	it("uses a mobile floating entry and popup for an authorized runtime project", async () => {
+		responsiveMocks.isMobile = true
+		vi.mocked(SuperMagicApi.getMicroAppRuntimeProject).mockResolvedValue({
+			exists: true,
+			project: { id: "runtime-project-1" },
+		} as never)
+		vi.mocked(SuperMagicApi.getProjectDetail).mockResolvedValue({
+			id: "runtime-project-1",
+		} as never)
+		vi.mocked(SuperMagicApi.getTopicsByProjectId).mockResolvedValue({ list: [] } as never)
+
+		render(
+			<FileAccessProvider
+				value={createShareFileAccess({
+					token: "origin-share-token",
+					projectId: "origin-project",
+				})}
+			>
+				<PublishedMicroAppConversationProvider appId="app-1">
+					<div data-testid="preview-child" />
+				</PublishedMicroAppConversationProvider>
+			</FileAccessProvider>,
+		)
+
+		expect(screen.queryByTestId("topic-desktop-panels")).not.toBeInTheDocument()
+		expect(await screen.findByTestId("micro-app-mobile-conversation-button")).toBeVisible()
+		fireEvent.click(screen.getByTestId("micro-app-mobile-conversation-button"))
+
+		expect(
+			await screen.findByTestId("published-micro-app-mobile-conversation"),
+		).toHaveAttribute("data-lock-to-micro-app-mode", "false")
+		expect(
+			JSON.parse(
+				screen
+					.getByTestId("published-micro-app-mobile-conversation")
+					.getAttribute("data-file-access") ?? "null",
+			),
+		).toEqual({ kind: "session", projectId: "runtime-project-1", topicId: "" })
 	})
 
 	it("uses the shared desktop layout and history panel for a runtime project", async () => {
