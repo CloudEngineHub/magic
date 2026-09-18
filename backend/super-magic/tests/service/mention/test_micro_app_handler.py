@@ -69,6 +69,11 @@ async def test_micro_app_mention_tip_tells_agent_to_read_skills_with_project_id(
     assert "Only load" in tip
     assert "mounted read-only" in tip
     assert "Do not create, edit, delete, move, or rename files" in tip
+    assert "runtime project" in tip
+    assert "first" in tip
+    assert "list_dir" in tip
+    assert "current workspace" in tip
+    assert "omit project_id" in tip
 
 
 @pytest.mark.asyncio
@@ -98,6 +103,8 @@ async def test_micro_app_mention_tip_requires_bound_scope():
     assert "read_skills" in tip
     assert "Only load" in tip
     assert "source project or another writable workspace" in tip
+    assert "runtime project" in tip
+    assert "omit project_id" in tip
 
 
 @pytest.mark.asyncio

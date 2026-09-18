@@ -4,6 +4,7 @@ import { useTranslation } from "react-i18next"
 import { useMemoizedFn, useSize } from "ahooks"
 
 import Detail from "@/pages/superMagic/components/Detail"
+import type { HtmlPermissionManagerHandle } from "@/pages/superMagic/components/Detail/contents/HTML/hooks/useHtmlPermissionManagerBridge"
 import MagicModal from "@/components/base/MagicModal"
 import { getToolDetailSelectionTarget } from "@/pages/superMagic/components/MessageList/components/Nodes/toolDetailSelection"
 import { FileActionVisibilityProvider } from "@/pages/superMagic/providers/file-action-visibility-provider"
@@ -117,6 +118,8 @@ function MicroAppPageInner({
 	} = controller
 	const developmentConversation = store.developmentConversation ?? conversation
 	const [pageMode, setPageMode] = useState<MicroAppPageMode>("development")
+	const [htmlPermissionManager, setHtmlPermissionManager] =
+		useState<HtmlPermissionManagerHandle | null>(null)
 	const pageModeRef = useRef<MicroAppPageMode>("development")
 	const usageConversationRequestedRef = useRef(false)
 	const previewModeRequestRef = useRef<Promise<boolean> | null>(null)
@@ -314,7 +317,9 @@ function MicroAppPageInner({
 		setIsAIEditActive(false)
 		setIsDevConsoleActive(false)
 		setIsDevConsoleAvailable(false)
-	}, [projectId, setIsMessagePanelCollapsed, setPreviewEntryFile])
+		// Clear the previous app's manager before the next preview registers its own handle.
+		setHtmlPermissionManager(null)
+	}, [projectId, setIsMessagePanelCollapsed, setHtmlPermissionManager, setPreviewEntryFile])
 
 	useEffect(() => {
 		if (!isPreviewFullscreen) return undefined
@@ -390,6 +395,8 @@ function MicroAppPageInner({
 						onEdit={handleOpenEditDialog}
 						canManageCollaborators={canManageCollaborators}
 						onManageCollaborators={handleManageCollaborators}
+						canManageHtmlPermissions={Boolean(htmlPermissionManager)}
+						onManageHtmlPermissions={() => htmlPermissionManager?.open()}
 						canUseDevelopment={canUseDevelopment}
 						pageMode={pageMode}
 						onPageModeChange={handlePageModeChange}
@@ -413,6 +420,7 @@ function MicroAppPageInner({
 								sourceOrganizationCode={sourceOrganizationCode}
 								storageMarkerId={defaultEntryFile?.file_id}
 								onOpenFile={handlePreviewOpenFile}
+								onHtmlPermissionManagerChange={setHtmlPermissionManager}
 							/>
 						) : (
 							<>
@@ -549,6 +557,9 @@ function MicroAppPageInner({
 															}
 															onDevConsoleActiveChange={
 																setIsDevConsoleActive
+															}
+															onHtmlPermissionManagerChange={
+																setHtmlPermissionManager
 															}
 															isBuilding={hasRunningTopic}
 														/>

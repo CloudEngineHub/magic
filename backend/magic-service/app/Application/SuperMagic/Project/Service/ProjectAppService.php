@@ -2715,7 +2715,7 @@ class ProjectAppService extends AbstractAppService
                 $dataIsolation->getCurrentOrganizationCode(),
                 '',
                 '',
-                ProjectMode::GENERAL->value
+                ProjectMode::MICRO_APP->value
             );
             $this->logger->info(sprintf('Created micro app project, projectId=%s', $projectEntity->getId()));
 

@@ -1,6 +1,7 @@
 import { act, fireEvent, render, screen, waitFor } from "@testing-library/react"
-import { describe, expect, it, vi } from "vitest"
+import { beforeEach, describe, expect, it, vi } from "vitest"
 import PPTSpeakerNotesPanel from "../PPTSpeakerNotesPanel"
+import { pptNotesPreferenceStore } from "@/stores/layout/PPTNotesPreferenceStore"
 import { unshadow } from "@/utils/shadow"
 
 vi.mock("react-i18next", () => ({
@@ -43,6 +44,11 @@ vi.mock("@/components/tiptap-templates/simple/simple-editor", async () => {
 })
 
 describe("PPTSpeakerNotesPanel", () => {
+	beforeEach(() => {
+		localStorage.clear()
+		pptNotesPreferenceStore.setHeight(144)
+	})
+
 	it("does not apply an AI action to another slide after a pending save", async () => {
 		let finishSave!: (value: boolean) => void
 		const onGenerate = vi.fn()
@@ -250,6 +256,58 @@ describe("PPTSpeakerNotesPanel", () => {
 			key: "ArrowUp",
 		})
 		expect(screen.getByTestId("ppt-speaker-notes-panel")).toHaveStyle({ height: "164px" })
+	})
+
+	it("stays in document flow below the overlay threshold", () => {
+		render(
+			<PPTSpeakerNotesPanel
+				slideIndex={0}
+				rawContent=""
+				fileId="slide-1"
+				allowEdit
+				onSaved={vi.fn()}
+			/>,
+		)
+		expect(screen.getByTestId("ppt-speaker-notes-panel")).not.toHaveAttribute("data-overlay")
+		expect(screen.queryByTestId("ppt-speaker-notes-spacer")).not.toBeInTheDocument()
+	})
+
+	it("overlays the slide after notes exceed the in-flow threshold", () => {
+		pptNotesPreferenceStore.setHeight(300)
+		render(
+			<PPTSpeakerNotesPanel
+				slideIndex={0}
+				rawContent=""
+				fileId="slide-1"
+				allowEdit
+				onSaved={vi.fn()}
+			/>,
+		)
+		const panel = screen.getByTestId("ppt-speaker-notes-panel")
+		expect(panel).toHaveAttribute("data-overlay", "true")
+		expect(panel.className).toContain("absolute")
+		expect(panel.className).toContain("z-[5]")
+		expect(screen.getByTestId("ppt-speaker-notes-spacer")).toHaveStyle({ height: "260px" })
+	})
+
+	it("can grow past the former 40% cap onto the slide", () => {
+		pptNotesPreferenceStore.setHeight(250)
+		render(
+			<PPTSpeakerNotesPanel
+				slideIndex={0}
+				rawContent=""
+				fileId="slide-1"
+				allowEdit
+				onSaved={vi.fn()}
+			/>,
+		)
+		fireEvent.keyDown(screen.getByRole("button", { name: "ppt.speakerNotes.resize" }), {
+			key: "ArrowUp",
+		})
+		const panel = screen.getByTestId("ppt-speaker-notes-panel")
+		expect(panel).toHaveAttribute("data-overlay", "true")
+		expect(panel).toHaveStyle({ height: "270px" })
+		expect(screen.getByTestId("ppt-speaker-notes-spacer")).toHaveStyle({ height: "260px" })
 	})
 
 	it("edits directly and saves on blur while the slide remains outside PPT edit mode", async () => {

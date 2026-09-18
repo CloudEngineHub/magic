@@ -3466,6 +3466,7 @@
 	"microAppPage": {
 		"conversation": {
 			"collapse": "Collapse message panel",
+			"currentAppLink": "You are already viewing this micro app",
 			"defaultAppName": "Micro app",
 			"development": "Development project",
 			"emptyDescription": "Describe it and I’ll update this micro app.",

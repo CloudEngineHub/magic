@@ -22,11 +22,66 @@ _SKILLS_RELATIVE_CANDIDATES = (
 )
 
 REFERENCED_PROJECT_SKILL_TIP = (
-    "To load a companion skill from this referenced project, call "
-    "`read_skills(skill_names=[...], project_id=...)` using the `project_id` "
-    "printed in the mention. Do not invent project_id, and do not load a "
-    "same-named workspace or system skill instead."
+    "Companion skills live only on this referenced source project, not in the "
+    "current workspace (including a micro-app runtime project). Load a companion "
+    "skill with `read_skills(skill_names=[...], project_id=...)` using the "
+    "`project_id` printed in the mention; include project_id on the first "
+    "attempt for that companion skill. Do not invent project_id, do not load a "
+    "same-named workspace or system skill, and do not search the current "
+    "workspace `.magic/skills/` with list_dir, read_files, or a guessed mount "
+    "path. System skills such as `use-magicbase` still omit project_id."
 )
+
+
+async def missing_workspace_skill_hint(skill_name: str) -> str:
+    """Model-facing hint when a workspace/system skill lookup missed."""
+    matching_ids = await _companion_project_ids_for_skill(skill_name)
+    if matching_ids:
+        ids = ", ".join(matching_ids)
+        return (
+            f"Skill '{skill_name}' was not found in workspace or system skills. "
+            f"It is a companion skill on bound project_id {ids}. Retry "
+            f"`read_skills(skill_names=['{skill_name}'], project_id=...)` "
+            "using that id. The current workspace, including a micro-app "
+            "runtime project, is not the companion-skill source. Do not search "
+            "the current workspace `.magic/skills/` with list_dir, read_files, "
+            "or a guessed mount path."
+        )
+    if _bound_micro_app_project_ids():
+        return (
+            f"Skill '{skill_name}' was not found in workspace or system skills. "
+            "If a `@micro_app` or `@project` mention listed this name, retry "
+            f"`read_skills(skill_names=['{skill_name}'], project_id=...)` using "
+            "the printed project_id; do not search the current workspace "
+            "`.magic/skills/`. Otherwise treat this as a missing system or "
+            "workspace skill and do not pass project_id."
+        )
+    return f"Skill '{skill_name}' was not found"
+
+
+def _bound_micro_app_project_ids() -> List[str]:
+    from app.service.mention.utils.micro_app_prompt import get_micro_app_project_scopes
+
+    ids: List[str] = []
+    seen: set[str] = set()
+    for entry in get_micro_app_project_scopes().values():
+        project_id = str(entry.get("project_id") or "").strip()
+        if project_id and project_id not in seen:
+            seen.add(project_id)
+            ids.append(project_id)
+    return ids
+
+
+async def _companion_project_ids_for_skill(skill_name: str) -> List[str]:
+    target = skill_name.strip()
+    if not target:
+        return []
+    matching: List[str] = []
+    for project_id in _bound_micro_app_project_ids():
+        names = await list_referenced_project_skill_names(project_id)
+        if target in names:
+            matching.append(project_id)
+    return matching
 
 
 def normalize_referenced_project_id(project_id: Optional[str]) -> str:

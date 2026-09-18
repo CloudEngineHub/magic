@@ -1,4 +1,13 @@
-import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react"
+import {
+	lazy,
+	useCallback,
+	useEffect,
+	useMemo,
+	useRef,
+	useState,
+	Suspense,
+	type ReactNode,
+} from "react"
 import { observer } from "mobx-react-lite"
 import { useTranslation } from "react-i18next"
 
@@ -22,6 +31,7 @@ import type { ProjectListItem } from "@/pages/superMagic/pages/Workspace/types"
 import { HostConversationProvider } from "@/pages/superMagic/contexts/HostConversationContext"
 import { userStore } from "@/models/user"
 import { loadProjectAttachments } from "@/pages/superMagic/services/projectAttachmentsLoader"
+import { useIsMobile } from "@/hooks/useIsMobile"
 
 import { FileAccessProvider } from "@/pages/superMagic/fileAccess/FileAccessProvider"
 import { createSessionFileAccess } from "@/pages/superMagic/fileAccess/fileAccessContext"
@@ -31,6 +41,15 @@ import { useMicroAppAuthentication } from "../hooks/useMicroAppAuthentication"
 import magicToast from "@/components/base/MagicToaster/utils"
 
 const RUNTIME_PROJECT_LOAD_SUPERSEDED = "Runtime project load superseded"
+
+// Keep the mobile composer out of desktop/share-page bundles until the user opens it.
+const MicroAppMobileConversation = lazy(
+	() => import("@/pages/superMagic/pages/MicroAppPage/components/MicroAppMobileConversation"),
+)
+const MicroAppConversationFloatingButton = lazy(
+	() =>
+		import("@/pages/superMagic/pages/MicroAppPage/components/MicroAppMobileConversation/MicroAppConversationFloatingButton"),
+)
 
 interface PublishedMicroAppConversationProviderProps {
 	appId: string
@@ -59,6 +78,8 @@ const PublishedMicroAppConversationSurface = observer(
 		children,
 	}: PublishedMicroAppConversationSurfaceProps) {
 		const [panel, setPanel] = useState<PublishedMicroAppPanel>("conversation")
+		const [mobileConversationOpen, setMobileConversationOpen] = useState(false)
+		const isMobile = useIsMobile()
 		const appStore = useAppStore()
 		const conversation = preferUsageConversation
 			? appStore.usageConversation
@@ -247,6 +268,53 @@ const PublishedMicroAppConversationSurface = observer(
 					ensurePromiseAppIdRef.current = null
 				}
 			}
+		}
+
+		if (isMobile) {
+			return (
+				<HostConversationProvider
+					selectedProject={runtimeProject}
+					topicStore={conversation.topicStore}
+					ensureConversation={ensureConversation}
+					requireAuthentication={requireAuthentication}
+				>
+					{/* Keep the floating entry anchored to the preview while the conversation lives in a drawer. */}
+					<div
+						className="relative h-full min-h-0 w-full"
+						data-testid="published-micro-app-mobile-surface"
+					>
+						{children}
+						{shouldShowRuntimeSidebar ? (
+							<Suspense fallback={null}>
+								<MicroAppConversationFloatingButton
+									onClick={() => setMobileConversationOpen(true)}
+								/>
+							</Suspense>
+						) : null}
+						{mobileConversationOpen && shouldShowRuntimeSidebar ? (
+							<FileAccessProvider value={runtimeFileAccess}>
+								<Suspense fallback={null}>
+									{/* Published share previews do not mount the editor's mobile detail popup. */}
+									<MicroAppMobileConversation
+										open={mobileConversationOpen}
+										selectedProject={runtimeProject}
+										topicStore={conversation.topicStore}
+										mentionPanelStore={mentionPanelStore}
+										projectFilesStore={projectFilesStore}
+										attachments={projectFilesStore.workspaceFileTree}
+										onSelectDetail={() => undefined}
+										onOpenFile={() => undefined}
+										onOpenChange={setMobileConversationOpen}
+										lockToMicroAppMode={false}
+										microAppId={appId}
+										microAppName={appName}
+									/>
+								</Suspense>
+							</FileAccessProvider>
+						) : null}
+					</div>
+				</HostConversationProvider>
+			)
 		}
 
 		return (

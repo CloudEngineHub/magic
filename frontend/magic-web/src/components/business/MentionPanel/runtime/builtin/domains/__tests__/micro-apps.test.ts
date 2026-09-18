@@ -29,7 +29,7 @@ describe("MentionPanelMicroAppsStore", () => {
 		})
 	})
 
-	it("loads published mention apps from the dedicated endpoint", async () => {
+	it("loads accessible mention apps from the dedicated endpoint", async () => {
 		mocks.getMentionMicroApps.mockResolvedValue({
 			list: [
 				{
@@ -70,6 +70,15 @@ describe("MentionPanelMicroAppsStore", () => {
 				hasChildren: false,
 				isFolder: false,
 				data: { app_id: "owned-1", app_name: "Owned App" },
+			},
+			{
+				id: "draft-1",
+				type: MentionItemType.MICRO_APP,
+				name: "Draft App",
+				icon: "",
+				hasChildren: false,
+				isFolder: false,
+				data: { app_id: "draft-1", app_name: "Draft App" },
 			},
 			{
 				id: "shared-1",

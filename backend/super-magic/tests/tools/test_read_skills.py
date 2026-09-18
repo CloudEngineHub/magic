@@ -178,3 +178,62 @@ async def test_read_skills_does_not_fallback_to_workspace_same_named_skill(
     assert _SKILL_NAME in result.content
     assert result.extra_info["failure_count"] == 1
     assert result.extra_info["success_count"] == 0
+
+
+@pytest.mark.asyncio
+async def test_read_skills_missing_without_project_id_points_to_mention(
+    tmp_path, monkeypatch
+):
+    _mount_referenced_project(tmp_path, monkeypatch, _BOUND_PROJECT_ID, _SKILL_NAME, _SKILL_BODY)
+    _bind_micro_app_scope(monkeypatch, _BOUND_PROJECT_ID)
+
+    async def mock_find_skill(skill_name: str, **kwargs):
+        return None
+
+    monkeypatch.setattr(read_skills_module, "find_skill", mock_find_skill)
+
+    async def mock_sleep(_seconds):
+        return None
+
+    monkeypatch.setattr(read_skills_module.asyncio, "sleep", mock_sleep)
+
+    result = await ReadSkills().execute(
+        ToolContext(tool_name="read_skills", arguments={}),
+        ReadSkillsParams(skill_names=[_SKILL_NAME], check_updates=False),
+    )
+
+    assert result.extra_info["failure_count"] == 1
+    assert result.extra_info["success_count"] == 0
+    assert "project_id" in result.content
+    assert _BOUND_PROJECT_ID in result.content
+    assert "runtime project" in result.content
+    assert "list_dir" in result.content
+    assert "current workspace" in result.content
+
+
+@pytest.mark.asyncio
+async def test_read_skills_missing_unrelated_skill_does_not_force_project_id(
+    tmp_path, monkeypatch
+):
+    _mount_referenced_project(tmp_path, monkeypatch, _BOUND_PROJECT_ID, _SKILL_NAME, _SKILL_BODY)
+    _bind_micro_app_scope(monkeypatch, _BOUND_PROJECT_ID)
+
+    async def mock_find_skill(skill_name: str, **kwargs):
+        return None
+
+    monkeypatch.setattr(read_skills_module, "find_skill", mock_find_skill)
+
+    async def mock_sleep(_seconds):
+        return None
+
+    monkeypatch.setattr(read_skills_module.asyncio, "sleep", mock_sleep)
+
+    result = await ReadSkills().execute(
+        ToolContext(tool_name="read_skills", arguments={}),
+        ReadSkillsParams(skill_names=["creating-slides"], check_updates=False),
+    )
+
+    assert result.extra_info["failure_count"] == 1
+    assert "creating-slides" in result.content
+    assert "bound project_id" not in result.content
+    assert "do not pass project_id" in result.content

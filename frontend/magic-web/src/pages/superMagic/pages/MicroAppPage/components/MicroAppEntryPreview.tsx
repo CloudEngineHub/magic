@@ -4,6 +4,7 @@ import { useTranslation } from "react-i18next"
 
 import type { AttachmentItem } from "@/pages/superMagic/components/TopicFilesButton/hooks"
 import { DetailType } from "@/pages/superMagic/components/Detail/types"
+import type { HtmlPermissionManagerHandle } from "@/pages/superMagic/components/Detail/contents/HTML/hooks/useHtmlPermissionManagerBridge"
 import type { ProjectListItem } from "@/pages/superMagic/pages/Workspace/types"
 import { MicroAppEmptyIllustration } from "@/pages/superMagic/components/MicroAppStateIllustration"
 import MicroAppBuildingPreview from "./MicroAppBuildingPreview"
@@ -31,6 +32,7 @@ export interface MicroAppEntryPreviewProps {
 	onAIEditActiveChange?: (active: boolean) => void
 	onRegisterDevConsoleToggle?: (handler: (() => void) | null) => void
 	onDevConsoleActiveChange?: (active: boolean) => void
+	onHtmlPermissionManagerChange?: (manager: HtmlPermissionManagerHandle | null) => void
 	emptyTestId?: string
 	buildingTestId?: string
 	isBuilding?: boolean
@@ -67,6 +69,7 @@ export default function MicroAppEntryPreview({
 	onAIEditActiveChange,
 	onRegisterDevConsoleToggle,
 	onDevConsoleActiveChange,
+	onHtmlPermissionManagerChange,
 	emptyTestId = "micro-app-preview-empty",
 	buildingTestId = "micro-app-preview-building",
 	isBuilding = false,
@@ -120,6 +123,7 @@ export default function MicroAppEntryPreview({
 			onAIEditActiveChange={onAIEditActiveChange}
 			onRegisterDevConsoleToggle={onRegisterDevConsoleToggle}
 			onDevConsoleActiveChange={onDevConsoleActiveChange}
+			onHtmlPermissionManagerChange={onHtmlPermissionManagerChange}
 			className="h-full min-h-0 w-full"
 		/>
 	)

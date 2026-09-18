@@ -57,6 +57,7 @@ interface MicroAppRepositoryInterface
         string $keyword,
         int $page,
         int $pageSize,
-        bool $publishedOnly = false
+        bool $publishedOnly = false,
+        bool $mentionableOnly = false,
     ): array;
 }

@@ -270,7 +270,9 @@ const MicroAppMobileConversation = observer(function MicroAppMobileConversation(
 							isShowLoadingInit={!isSelectedTopicMessagesReady}
 							showTopicModeExamplePortal={!lockToMicroAppMode}
 							showModeToggle={!lockToMicroAppMode}
-							showModelSelector
+							// Runtime previews use the default selector so the employee list stays available;
+							// its popup still contains the model rows below the employee list.
+							showModelSelector={lockToMicroAppMode}
 							editorRef={editorRef}
 							onSendComplete={({ success, currentProject, currentTopic }) => {
 								if (!success) return

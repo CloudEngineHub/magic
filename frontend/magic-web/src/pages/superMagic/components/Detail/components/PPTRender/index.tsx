@@ -990,9 +990,10 @@ const PPTRenderInner = observer(function PPTRenderInner({
 								</div>
 							)}
 
+							{/* z-0 traps the control bar z-50 so overlay notes can cover it. */}
 							<div
 								data-testid="ppt-render-slide-stage"
-								className="relative min-h-0 w-full flex-1 overflow-hidden"
+								className="relative z-0 min-h-0 w-full flex-1 overflow-hidden"
 							>
 								{/* 调整宽度时覆盖层防止 iframe 拦截鼠标事件 */}
 								{isResizing && (

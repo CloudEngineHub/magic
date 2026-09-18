@@ -13,6 +13,8 @@ use App\Application\SuperMagic\Project\Service\PublishedMicroAppResolver;
 use App\Application\SuperMagic\Task\Service\ReferencedProjectAccessKind;
 use App\Application\SuperMagic\Task\Service\ReferencedProjectCollaborationAccess;
 use App\Domain\SuperMagic\Project\Entity\MicroAppEntity;
+use App\Domain\SuperMagic\Project\Entity\ValueObject\MicroAppPublishStatus;
+use App\Domain\SuperMagic\Project\Repository\Facade\MicroAppRepositoryInterface;
 use App\Infrastructure\Core\DataIsolation\BaseDataIsolation;
 use Hyperf\Logger\LoggerFactory;
 
@@ -27,6 +29,7 @@ class MicroAppMentionNormalizer extends AbstractMentionNormalizer
     public function __construct(
         LoggerFactory $loggerFactory,
         private readonly PublishedMicroAppResolver $publishedMicroAppResolver,
+        private readonly MicroAppRepositoryInterface $microAppRepository,
         private readonly ReferencedProjectCollaborationAccess $collaborationAccess,
         private readonly PublishedMicroAppFileAccessService $publishedFileAccess,
     ) {
@@ -50,14 +53,26 @@ class MicroAppMentionNormalizer extends AbstractMentionNormalizer
         }
 
         $appId = (int) $rawAppId;
+        $userId = $dataIsolation->getCurrentUserId();
+        $organizationCode = $dataIsolation->getCurrentOrganizationCode();
+
         $publishedMicroApp = $this->publishedMicroAppResolver->findPublished($appId);
         if ($publishedMicroApp === null) {
-            return [];
+            $record = $this->microAppRepository->findById($appId);
+            if ($record === null || $record->getPublishStatus() !== MicroAppPublishStatus::Unpublished->value) {
+                return [];
+            }
+            if (! $this->collaborationAccess->canEdit($record->getProjectId(), $userId, $organizationCode)) {
+                return [];
+            }
+
+            return [
+                ...$this->enrichedFields($record, $appId, $item),
+                'access_kind' => ReferencedProjectAccessKind::Collaboration->value,
+            ];
         }
 
         [$record] = $publishedMicroApp;
-        $userId = $dataIsolation->getCurrentUserId();
-        $organizationCode = $dataIsolation->getCurrentOrganizationCode();
 
         $accessKind = ReferencedProjectAccessKind::Collaboration;
         if (! $this->collaborationAccess->canAccess($record->getProjectId(), $userId, $organizationCode)) {

@@ -472,7 +472,8 @@ class MicroAppProjectAppService extends AbstractAppService
             $requestDTO->getKeyword(),
             1,
             self::MENTION_SOURCE_FETCH_LIMIT,
-            true
+            false,
+            true,
         );
         $published = $this->paginateShareAccessiblePublishedApps(
             $authorization,
@@ -630,7 +631,10 @@ class MicroAppProjectAppService extends AbstractAppService
     {
         $filtered = [];
         foreach ($rows as $row) {
-            if ((string) ($row['publish_status'] ?? '') !== MicroAppPublishStatus::Published->value) {
+            if (! in_array((string) ($row['publish_status'] ?? ''), [
+                MicroAppPublishStatus::Published->value,
+                MicroAppPublishStatus::Unpublished->value,
+            ], true)) {
                 continue;
             }
             $appId = (string) ($row['app_id'] ?? '');

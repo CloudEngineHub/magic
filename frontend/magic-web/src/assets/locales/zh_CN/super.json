@@ -3465,6 +3465,7 @@
 	"microAppPage": {
 		"conversation": {
 			"collapse": "收起消息面板",
+			"currentAppLink": "当前已经是该微应用",
 			"defaultAppName": "微应用",
 			"development": "开发项目",
 			"emptyDescription": "描述需求，我会直接修改这个微应用。",

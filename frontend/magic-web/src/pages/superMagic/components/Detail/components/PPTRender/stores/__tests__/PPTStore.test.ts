@@ -160,6 +160,30 @@ describe("PPTStore", () => {
 				}
 			},
 		)
+
+		it("keeps visual load state when only notes change", () => {
+			store.setSlides(
+				[
+					createSlide(0, {
+						rawContent: "<main>Slide</main>",
+						content: "<main>Processed</main>",
+						lastLoadedAt: 100,
+						resourceVersionSignature: "sig-1",
+						thumbnailUrl: "blob:thumb",
+					}),
+				],
+				true,
+			)
+			store.updateSlideNotes(
+				"file1",
+				"<main>Slide</main><template data-magic-slide-notes>Talk</template>",
+			)
+			expect(store.slides[0].lastLoadedAt).toBe(100)
+			expect(store.slides[0].content).toBe("<main>Processed</main>")
+			expect(store.slides[0].resourceVersionSignature).toBe("sig-1")
+			expect(store.slides[0].thumbnailUrl).toBe("blob:thumb")
+			expect(store.isSlideManuallySaved("file1")).toBe(true)
+		})
 	})
 
 	describe("initialization", () => {

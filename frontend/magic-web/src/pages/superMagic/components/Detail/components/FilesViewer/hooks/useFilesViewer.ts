@@ -130,8 +130,7 @@ function normalizeFileItemForTab(fileItem: unknown): {
 	}
 
 	const recordDisplayConfig = sourceRecord.display_config as
-		| FileItem["display_config"]
-		| undefined
+		FileItem["display_config"] | undefined
 	let hiddenPreviewPolicy = recordDisplayConfig
 	if (sourceRecord.is_hidden === true) {
 		hiddenPreviewPolicy = {
@@ -224,7 +223,7 @@ export function useFilesViewer(props: FilesViewerProps) {
 	const { t } = useTranslation("super")
 	const fileApi = useFileApi()
 
-	const { shareParams, isShareRoute } = useShareRoute()
+	const { shareParams, isShareRoute, isMagicShareRoute } = useShareRoute()
 	const [searchParams] = useSearchParams()
 
 	// Prop takes precedence; URL ?showFileHeader=false remains as legacy fallback.
@@ -2190,6 +2189,8 @@ export function useFilesViewer(props: FilesViewerProps) {
 	return {
 		// State
 		tabs: visibleTabs, // 返回包含演示模式tab的完整tabs列表
+		isShareRoute,
+		isMagicShareRoute,
 		activeTab,
 		fileList,
 		loading,

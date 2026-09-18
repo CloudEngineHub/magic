@@ -17,6 +17,7 @@ from app.core.skill_utils.referenced_project_skills import (
     find_referenced_project_skill,
     get_referenced_project_skills_dir,
     is_referenced_project_bound,
+    missing_workspace_skill_hint,
 )
 from app.core.skill_utils.skill_sources import get_personal_skills_dir
 from app.i18n import i18n
@@ -49,8 +50,8 @@ Whether to check for skill version updates. Defaults to true. If the user has ex
 
     project_id: Optional[str] = Field(
         default=None,
-        description="""<!--zh: 可选。已绑定/已挂载的引用项目 ID。传入后只读取该项目 `.magic/skills/`，不回退到当前工作区同名 skill。必须从 @micro_app 或 @project mention 复制，禁止编造。-->
-Optional. The already bound/mounted referenced-project id. When set, read only that project's `.magic/skills/` and never fall back to a same-named workspace skill. Copy this from a `@micro_app` or `@project` mention; do not invent it.""",
+        description="""<!--zh: 读取 @micro_app / @project 业务 skill 时必填。从 mention 复制已绑定/已挂载的引用项目 ID；第一次调用就必须带上。传入后只读取该项目 `.magic/skills/`，不回退到当前工作区（含微应用 runtime project）同名 skill。系统或当前工作区 skill 不要传。禁止编造。-->
+Required when loading a companion skill from a `@micro_app` or `@project` mention: copy the bound/mounted referenced-project id and pass it on the first call. When set, read only that project's `.magic/skills/` and never fall back to a same-named skill in the current workspace, including a micro-app runtime project. Omit this for system or current-workspace skills. Do not invent it.""",
     )
 
     @field_validator("skill_names", mode="before")
@@ -180,7 +181,7 @@ class ReadSkills(BaseTool[ReadSkillsParams]):
                                 "or system skills with the same name."
                             )
                         else:
-                            error_msg = f"Skill '{skill_name}' was not found"
+                            error_msg = await missing_workspace_skill_hint(skill_name)
                         results.append({"skill_name": skill_name, "success": False, "error": error_msg})
                         failure_count += 1
                         failed_skills.append(skill_name)

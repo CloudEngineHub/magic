@@ -16,6 +16,7 @@ use App\Application\SuperMagic\Task\Service\ReferencedProjectMountPlanner;
 use App\Domain\SuperMagic\Common\Share\Constant\ShareAccessType;
 use App\Domain\SuperMagic\Common\Share\Entity\ResourceShareEntity;
 use App\Domain\SuperMagic\Project\Entity\MicroAppEntity;
+use App\Domain\SuperMagic\Project\Repository\Facade\MicroAppRepositoryInterface;
 use App\Infrastructure\Core\DataIsolation\BaseDataIsolation;
 use Hyperf\Logger\LoggerFactory;
 use PHPUnit\Framework\TestCase;
@@ -69,7 +70,13 @@ class MicroAppPasswordMentionMountTest extends TestCase
         $loggerFactory = $this->createMock(LoggerFactory::class);
         $loggerFactory->method('get')->willReturn($this->createMock(LoggerInterface::class));
 
-        $normalizer = new MicroAppMentionNormalizer($loggerFactory, $resolver, $collaborationAccess, $this->createMock(PublishedMicroAppFileAccessService::class));
+        $normalizer = new MicroAppMentionNormalizer(
+            $loggerFactory,
+            $resolver,
+            $this->createMock(MicroAppRepositoryInterface::class),
+            $collaborationAccess,
+            $this->createMock(PublishedMicroAppFileAccessService::class),
+        );
         $dataIsolation = $this->createMock(BaseDataIsolation::class);
         $dataIsolation->method('getCurrentUserId')->willReturn('user-1');
         $dataIsolation->method('getCurrentOrganizationCode')->willReturn('org-1');

@@ -186,9 +186,19 @@ describe("MicroAppPublishDialog", () => {
 
 		const scrollArea = await screen.findByTestId("micro-app-publish-scroll-area")
 		expect(scrollArea).toHaveClass("min-h-0", "flex-1")
+		expect(scrollArea.parentElement).toHaveClass("flex", "flex-1", "flex-col")
 		expect(scrollArea.querySelector("[data-slot='scroll-area-viewport']")).toHaveClass(
 			"touch-pan-y",
 		)
+		const popupActions = screen.getByTestId("micro-app-publish-actions")
+		expect(popupActions).toHaveClass("shrink-0", "flex-col")
+		expect(popupActions.closest("[data-slot='scroll-area-viewport']")).toBeNull()
+		expect(popup).toHaveAttribute("data-header-variant", "actionHeader")
+		expect(popup).toHaveAttribute(
+			"data-body-class-name",
+			"flex min-h-0 flex-1 flex-col overflow-hidden p-0",
+		)
+		expect(screen.getByTestId("micro-app-publish-close")).toBeInTheDocument()
 	})
 
 	it("groups the app name and cover in one settings section", async () => {

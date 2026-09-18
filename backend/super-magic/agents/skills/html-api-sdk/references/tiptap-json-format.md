@@ -3,6 +3,7 @@
 `createTopicAndSend` and `sendMessage` accept tiptap JSON with `@` mention nodes.
 
 ## Structure
+
 ```typescript
 interface TiptapJSONContent {
   type: string;          // "doc", "paragraph", "text", "mention"
@@ -28,6 +29,7 @@ Published micro-app previews automatically receive a leading `micro_app` mention
 The referenced project is mounted read-only for Agent-side companion skills. The host resolves and validates the project; iframe code must not forge this mention.
 
 ### `project_file`
+
 ```javascript
 {type: "mention", attrs: {type: "project_file", data: {
   file_id: "file_abc123",
@@ -38,15 +40,16 @@ The referenced project is mounted read-only for Agent-side companion skills. The
 }}}
 ```
 
-|Field|Required|Description|
-|---|---|---|
-|`file_id`|Yes|File unique ID|
-|`file_name`|Yes|Filename with extension|
-|`file_path`|Yes|Workspace-root-relative path|
-|`file_extension`|Yes|Extension without `.`|
-|`file_size`|No|Bytes|
+| Field            | Required | Description                  |
+| ---------------- | -------- | ---------------------------- |
+| `file_id`        | Yes      | File unique ID               |
+| `file_name`      | Yes      | Filename with extension      |
+| `file_path`      | Yes      | Workspace-root-relative path |
+| `file_extension` | Yes      | Extension without `.`        |
+| `file_size`      | No       | Bytes                        |
 
 ### `project_directory`
+
 ```javascript
 {type: "mention", attrs: {type: "project_directory", data: {
   directory_id: "dir_456",
@@ -56,14 +59,15 @@ The referenced project is mounted read-only for Agent-side companion skills. The
 }}}
 ```
 
-|Field|Required|Description|
-|---|---|---|
-|`directory_id`|Yes|Directory unique ID|
-|`directory_name`|Yes|Directory name|
-|`directory_path`|Yes|Workspace-root-relative path|
-|`directory_metadata`|Yes|Object with `version?`, `type?`, `name?`|
+| Field                | Required | Description                              |
+| -------------------- | -------- | ---------------------------------------- |
+| `directory_id`       | Yes      | Directory unique ID                      |
+| `directory_name`     | Yes      | Directory name                           |
+| `directory_path`     | Yes      | Workspace-root-relative path             |
+| `directory_metadata` | Yes      | Object with `version?`, `type?`, `name?` |
 
 ### `skill`
+
 ```javascript
 {type: "mention", attrs: {type: "skill", data: {
   id: "skill_unique_id",
@@ -74,20 +78,22 @@ The referenced project is mounted read-only for Agent-side companion skills. The
 }}}
 ```
 
-|Field|Required|Description|
-|---|---|---|
-|`id`|Yes|Platform-assigned skill ID|
-|`name`|Yes|Display name|
-|`icon`|Yes|Icon URL|
-|`description`|Yes|Description text|
-|`mention_source`|No|`"system"`, `"agent"`, or `"mine"`|
+| Field            | Required | Description                        |
+| ---------------- | -------- | ---------------------------------- |
+| `id`             | Yes      | Platform-assigned skill ID         |
+| `name`           | Yes      | Display name                       |
+| `icon`           | Yes      | Icon URL                           |
+| `description`    | Yes      | Description text                   |
+| `mention_source` | No       | `"system"`, `"agent"`, or `"mine"` |
 
 ## `@skill` vs `@file .magic/skills/<name>/SKILL.md`
+
 - `@skill` → platform-registered skill, resolved by platform
 - `@file` with `.magic/skills/<name>/SKILL.md` → workspace companion skill, agent reads as instructions
-- Host-prepended `@micro_app` is the identity for published-app tasks; companion skills on the source project are loaded with `read_skills(..., project_id=...)` from that mention, not via `@skill`
+- Host-prepended `@micro_app` is the identity for published-app tasks; companion skills on the source project are loaded with `read_skills(..., project_id=...)` from that mention, not via `@skill` and not from the current runtime-project workspace
 
 ## Example
+
 ```javascript
 const basePath = await window.Magic.getAppBasePath();
 await window.Magic.project.sendMessage({

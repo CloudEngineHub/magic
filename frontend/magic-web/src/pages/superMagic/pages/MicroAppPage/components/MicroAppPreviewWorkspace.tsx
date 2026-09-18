@@ -1,4 +1,5 @@
 import type { AttachmentItem } from "@/pages/superMagic/components/TopicFilesButton/hooks"
+import type { HtmlPermissionManagerHandle } from "@/pages/superMagic/components/Detail/contents/HTML/hooks/useHtmlPermissionManagerBridge"
 import type { ProjectListItem } from "@/pages/superMagic/pages/Workspace/types"
 
 import PublishedMicroAppConversationProvider from "@/pages/share/microApp/components/PublishedMicroAppConversationProvider"
@@ -14,6 +15,7 @@ interface MicroAppPreviewWorkspaceProps {
 	sourceOrganizationCode?: string
 	storageMarkerId?: string
 	onOpenFile?: (fileItem?: unknown) => void
+	onHtmlPermissionManagerChange?: (manager: HtmlPermissionManagerHandle | null) => void
 }
 
 /**
@@ -30,6 +32,7 @@ export default function MicroAppPreviewWorkspace({
 	sourceOrganizationCode,
 	storageMarkerId,
 	onOpenFile,
+	onHtmlPermissionManagerChange,
 }: MicroAppPreviewWorkspaceProps) {
 	return (
 		<PublishedMicroAppConversationProvider
@@ -49,6 +52,7 @@ export default function MicroAppPreviewWorkspace({
 					selectedProject={selectedProject}
 					allowEdit={false}
 					onOpenFile={onOpenFile}
+					onHtmlPermissionManagerChange={onHtmlPermissionManagerChange}
 					storageMarkerId={storageMarkerId}
 					microAppId={appId}
 					microAppName={selectedProject?.project_name}

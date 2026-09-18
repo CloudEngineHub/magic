@@ -2093,9 +2093,13 @@ export class PPTStore {
 		const index = this.slides.findIndex((slide) => this.getSlideFileId(slide) === fileId)
 		const slide = this.slides[index]
 		if (!slide) return
+		// Treat notes save like a local save echo so file-list refresh
+		// does not reload the page or clear its thumbnail.
+		this.markSlideAsManuallySaved(fileId)
 		this.slideManager.updateSlideItem(index, {
 			rawContent,
 			rawRevision: (slide.rawRevision || 0) + 1,
+			resourceVersionSignature: slide.resourceVersionSignature,
 		})
 	}
 

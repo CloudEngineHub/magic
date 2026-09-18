@@ -429,6 +429,100 @@ describe("PPTSlide", () => {
 		expect(screen.queryByTestId("ppt-slide-content-updating")).not.toBeInTheDocument()
 	})
 
+	it("does not blank the preview overlay when only speaker notes change", async () => {
+		const original = "<main>Slide</main><template data-magic-slide-notes>Old note</template>"
+		const updated =
+			"<main>Slide</main><template data-magic-slide-notes>Updated note with more text</template>"
+		const onRenderReadyChange = vi.fn()
+		const view = renderPPTSlide({
+			content: "<main>Processed slide</main>",
+			rawContent: original,
+			renderRevision: "visual-revision-1",
+			onRenderReadyChange,
+		})
+
+		await waitFor(() => {
+			expect(onRenderReadyChange).toHaveBeenCalledWith(false)
+		})
+		const isolatedProps = mockState.renderedIsolatedProps.mock.calls.at(-1)?.[0] as
+			| { onRenderReady?: () => void }
+			| undefined
+		act(() => isolatedProps?.onRenderReady?.())
+		expect(onRenderReadyChange).toHaveBeenCalledWith(true)
+		onRenderReadyChange.mockClear()
+
+		view.rerender(
+			<PPTSlide
+				index={0}
+				isActive={true}
+				content="<main>Processed slide</main>"
+				rawContent={updated}
+				renderRevision="visual-revision-1"
+				isFullscreen={false}
+				fileId="slide-1"
+				filePathMapping={new Map()}
+				openNewTab={vi.fn()}
+				updateSlideContents={vi.fn()}
+				allowEdit={true}
+				loadingState="loaded"
+				attachmentList={[]}
+				saveEditContent={mockState.saveEditContent}
+				onRenderReadyChange={onRenderReadyChange}
+			/>,
+		)
+
+		await waitFor(() => {
+			expect(mockState.renderedIsolatedProps).toHaveBeenLastCalledWith(
+				expect.objectContaining({
+					rawSourceCode: updated,
+				}),
+			)
+		})
+		expect(onRenderReadyChange).not.toHaveBeenCalledWith(false)
+	})
+
+	it("blanks the preview overlay when the visual revision changes", async () => {
+		const onRenderReadyChange = vi.fn()
+		const view = renderPPTSlide({
+			content: "<main>Processed slide</main>",
+			rawContent: "<main>Slide</main>",
+			renderRevision: "visual-revision-1",
+			onRenderReadyChange,
+		})
+
+		await waitFor(() => {
+			expect(onRenderReadyChange).toHaveBeenCalledWith(false)
+		})
+		const isolatedProps = mockState.renderedIsolatedProps.mock.calls.at(-1)?.[0] as
+			| { onRenderReady?: () => void }
+			| undefined
+		act(() => isolatedProps?.onRenderReady?.())
+		expect(onRenderReadyChange).toHaveBeenCalledWith(true)
+		onRenderReadyChange.mockClear()
+
+		view.rerender(
+			<PPTSlide
+				index={0}
+				isActive={true}
+				content="<main>Processed slide</main>"
+				rawContent="<main>Slide</main>"
+				renderRevision="visual-revision-2"
+				isFullscreen={false}
+				fileId="slide-1"
+				filePathMapping={new Map()}
+				openNewTab={vi.fn()}
+				updateSlideContents={vi.fn()}
+				allowEdit={true}
+				loadingState="loaded"
+				attachmentList={[]}
+				saveEditContent={mockState.saveEditContent}
+				onRenderReadyChange={onRenderReadyChange}
+			/>,
+		)
+
+		expect(onRenderReadyChange).toHaveBeenCalledWith(false)
+	})
+
 	it("编辑工具栏显示时，渲染区域只占用剩余高度", () => {
 		renderPPTSlide()
 

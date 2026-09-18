@@ -15,6 +15,7 @@ use App\Application\SuperMagic\Task\Service\ReferencedProjectCollaborationAccess
 use App\Domain\SuperMagic\Common\Share\Constant\ShareAccessType;
 use App\Domain\SuperMagic\Common\Share\Entity\ResourceShareEntity;
 use App\Domain\SuperMagic\Project\Entity\MicroAppEntity;
+use App\Domain\SuperMagic\Project\Repository\Facade\MicroAppRepositoryInterface;
 use App\Infrastructure\Core\DataIsolation\BaseDataIsolation;
 use Hyperf\Logger\LoggerFactory;
 use PHPUnit\Framework\TestCase;
@@ -149,6 +150,35 @@ class MicroAppMentionNormalizerTest extends TestCase
         self::assertArrayNotHasKey('access_kind', $result);
     }
 
+    public function testNormalizeEnrichesUnpublishedAppForEditor(): void
+    {
+        $normalizer = $this->createNormalizer(
+            shareEntity: (new ResourceShareEntity())->setShareType(ShareAccessType::TeamShare->value),
+            projectName: 'Draft App',
+            unpublished: true,
+            canEdit: true,
+        );
+
+        $result = $normalizer->normalize(
+            ['type' => 'micro_app', 'app_id' => '3001', 'app_name' => 'Draft App'],
+            $this->createDataIsolation(),
+        );
+
+        self::assertSame('4001', $result['project_id']);
+        self::assertSame(ReferencedProjectAccessKind::Collaboration->value, $result['access_kind']);
+    }
+
+    public function testNormalizeRejectsUnpublishedAppForViewer(): void
+    {
+        $normalizer = $this->createNormalizer(
+            shareEntity: (new ResourceShareEntity())->setShareType(ShareAccessType::TeamShare->value),
+            unpublished: true,
+        );
+        $item = ['type' => 'micro_app', 'app_id' => '3001', 'app_name' => 'Draft App'];
+
+        self::assertSame($item, $normalizer->normalize($item, $this->createDataIsolation()));
+    }
+
     private function createDataIsolation(): BaseDataIsolation
     {
         $dataIsolation = $this->createMock(BaseDataIsolation::class);
@@ -163,19 +193,25 @@ class MicroAppMentionNormalizerTest extends TestCase
         string $projectName = '',
         bool $canAccessProject = false,
         bool $canReadPublished = false,
+        bool $unpublished = false,
+        bool $canEdit = false,
     ): MicroAppMentionNormalizer {
         $record = (new MicroAppEntity())
             ->setId(3001)
             ->setProjectId(4001)
             ->setResourceId('resource-1')
-            ->setPublishStatus('published');
+            ->setPublishStatus($unpublished ? 'unpublished' : 'published');
 
         $resolver = $this->createMock(PublishedMicroAppResolver::class);
-        $resolver->method('findPublished')->with(3001)->willReturn([$record, $shareEntity]);
+        $resolver->method('findPublished')->with(3001)->willReturn($unpublished ? null : [$record, $shareEntity]);
         $resolver->method('getProjectNameFromRecord')->willReturn($projectName);
+
+        $microAppRepository = $this->createMock(MicroAppRepositoryInterface::class);
+        $microAppRepository->method('findById')->with(3001)->willReturn($unpublished ? $record : null);
 
         $collaborationAccess = $this->createMock(ReferencedProjectCollaborationAccess::class);
         $collaborationAccess->method('canAccess')->willReturn($canAccessProject);
+        $collaborationAccess->method('canEdit')->willReturn($canEdit);
 
         $loggerFactory = $this->createMock(LoggerFactory::class);
         $loggerFactory->method('get')->willReturn($this->createMock(LoggerInterface::class));
@@ -186,6 +222,7 @@ class MicroAppMentionNormalizerTest extends TestCase
         return new MicroAppMentionNormalizer(
             $loggerFactory,
             $resolver,
+            $microAppRepository,
             $collaborationAccess,
             $publishedAccess,
         );

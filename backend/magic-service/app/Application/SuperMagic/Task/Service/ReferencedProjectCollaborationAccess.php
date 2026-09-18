@@ -28,4 +28,14 @@ class ReferencedProjectCollaborationAccess
             return false;
         }
     }
+
+    public function canEdit(int $projectId, string $userId, string $organizationCode): bool
+    {
+        try {
+            $this->microAppProjectAppService->getAccessibleProjectWithEditor($projectId, $userId, $organizationCode);
+            return true;
+        } catch (Throwable) {
+            return false;
+        }
+    }
 }
