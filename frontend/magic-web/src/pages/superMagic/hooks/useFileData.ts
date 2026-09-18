@@ -50,7 +50,10 @@ export const useFileData = ({
 	// Bind the ambient share/session identity once at this boundary; the leaf
 	// download-url calls below must never run without it on share previews.
 	const fileApi = useFileApi()
-	const isShareFilePreview = isShareRoute || isSharePreview
+	// Load strategy follows access kind, not URL. Published runtime uses
+	// session access on /micro-app even though the route is a share page.
+	const isShareFilePreview = isShareFileAccess(fileAccess)
+	const waitingForShareAccess = (isShareRoute || isSharePreview) && !fileAccess
 	const shareAccessKey =
 		fileAccess?.kind === "share"
 			? `${fileAccess.token}:${fileAccess.projectId}:${fileAccess.topicId ?? ""}`
@@ -108,7 +111,7 @@ export const useFileData = ({
 	const changeFileVersion = useMemoizedFn(
 		(file_version: number | undefined, fileVersionsList?: FileHistoryVersion[]) => {
 			if (!enabled || !file_id || (file_version && file_version === fileVersion)) return
-			if (isShareFilePreview && !isShareFileAccess(fileAccess)) return
+			if (waitingForShareAccess) return
 			// 获取文件下载地址
 			fileApi
 				.getTemporaryDownloadUrl({
@@ -228,7 +231,7 @@ export const useFileData = ({
 
 	useDebounceEffect(
 		() => {
-			if (!enabled) return
+			if (!enabled || waitingForShareAccess) return
 			// 如果正在编辑但文件数据还没有加载，需要先加载文件
 			if (
 				isEditing &&
@@ -254,7 +257,16 @@ export const useFileData = ({
 			// 如果用户正在查看历史版本，只更新版本列表，不自动切换到最新版本
 			getFileVersion(file_id, !isViewingHistoryVersion)
 		},
-		[enabled, activeFileId, updatedAt, file_id, isEditing, isShareFilePreview, fileData],
+		[
+			enabled,
+			activeFileId,
+			updatedAt,
+			file_id,
+			isEditing,
+			isShareFilePreview,
+			fileData,
+			waitingForShareAccess,
+		],
 		{
 			wait: 100,
 		},
@@ -267,7 +279,7 @@ export const useFileData = ({
 	/** 针对 分享/工具预览/内容审查 等场景，单独获取文件的最新下载地址 */
 	useEffect(() => {
 		if (!enabled || !file_id) return
-		if (isShareFilePreview && !isShareFileAccess(fileAccess)) {
+		if (waitingForShareAccess) {
 			setLoading(true)
 			return
 		}
@@ -322,7 +334,15 @@ export const useFileData = ({
 				cancelled = true
 			}
 		}
-	}, [enabled, file_id, isShareFilePreview, shareAccessKey, fileApi])
+	}, [
+		activeFileId,
+		enabled,
+		fileApi,
+		file_id,
+		isShareFilePreview,
+		shareAccessKey,
+		waitingForShareAccess,
+	])
 
 	useEffect(() => {
 		if (!enabled) return
@@ -345,14 +365,14 @@ export const useFileData = ({
 	useEffect(() => {
 		if (!enabled) return
 		const unregister = superMagicStore.subscribe("topic.execution.ended", () => {
-			if (isShareFilePreview || activeFileId !== file_id) return
+			if (waitingForShareAccess || isShareFilePreview || activeFileId !== file_id) return
 			getFileVersion(file_id)
 		})
 
 		return () => {
 			unregister()
 		}
-	}, [enabled, activeFileId, file_id, isShareFilePreview])
+	}, [enabled, activeFileId, file_id, isShareFilePreview, waitingForShareAccess])
 
 	return {
 		loading,

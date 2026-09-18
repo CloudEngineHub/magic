@@ -99,6 +99,15 @@ vi.mock("@/pages/superMagic/stores", () => ({
 	},
 }))
 
+vi.mock("@/stores/projectFiles", () => ({
+	default: {
+		workspaceFilesList: [
+			{ file_id: "admin-1", file_name: "admin.html", file_extension: "html" },
+		],
+		currentSelectedProject: { id: "project-1" },
+	},
+}))
+
 vi.mock(
 	"@/pages/superMagic/components/MessageList/components/Nodes/MessageNode/tool-call/ToolCallRenderer",
 	() => ({
@@ -518,9 +527,53 @@ describe("MicroAppPageDesktop", () => {
 		)
 	})
 
+	it("does not open editor files from message events in preview mode", async () => {
+		const file = {
+			file_id: "admin-1",
+			file_name: "admin.html",
+			relative_file_path: "admin.html",
+		}
+
+		render(<MicroAppPageDesktop />)
+		await screen.findByTestId("desktop-entry-preview")
+		const headerProps = headerMocks.render.mock.lastCall?.[0] as {
+			onPageModeChange: (mode: "development" | "preview") => void
+		}
+
+		act(() => headerProps.onPageModeChange("preview"))
+		act(() => {
+			pubsub.publish(PubSubEvents.Open_File_Tab, {
+				fileId: file.file_id,
+				fileData: file,
+			})
+		})
+		act(() => headerProps.onPageModeChange("development"))
+
+		expect(previewPopupMocks.open).not.toHaveBeenCalled()
+		expect(screen.queryByTestId("desktop-files-viewer")).not.toBeInTheDocument()
+		expect(detailMocks.openFileTab).not.toHaveBeenCalled()
+	})
+
+	it("opens tool details in a preview modal over the entry preview", async () => {
+		render(<MicroAppPageDesktop />)
+		await screen.findByTestId("desktop-entry-preview")
+
+		fireEvent.click(screen.getByTestId("desktop-conversation-panel"))
+
+		expect(previewPopupMocks.open).toHaveBeenCalledWith(
+			expect.objectContaining({
+				type: "shell",
+				currentFileId: "tool-1",
+			}),
+			expect.any(Array),
+			expect.any(Array),
+		)
+	})
+
 	it("opens tool details from the conversation panel in a preview modal", async () => {
 		render(<MicroAppPageDesktop />)
 		await screen.findByTestId("desktop-entry-preview")
+		fireEvent.click(screen.getByTestId("micro-app-nav-files"))
 
 		fireEvent.click(screen.getByTestId("desktop-conversation-panel"))
 

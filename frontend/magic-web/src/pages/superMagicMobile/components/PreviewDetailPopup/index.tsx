@@ -69,6 +69,7 @@ function PreviewDetailPopup(props: PreviewDetailPopupProps, ref: Ref<PreviewDeta
 		allowEdit,
 		onPreviewFileChange,
 		onPreviewFullscreenChange,
+		zIndex,
 	} = props
 
 	const isMobile = useIsMobile()
@@ -414,6 +415,7 @@ function PreviewDetailPopup(props: PreviewDetailPopupProps, ref: Ref<PreviewDeta
 				onClose={handleClose}
 				position="bottom"
 				title={displayFileName}
+				zIndex={zIndex}
 				headerVariant={hideHeader ? undefined : "actionHeader"}
 				headerTitle={displayFileName}
 				headerLeadingAction={
@@ -478,6 +480,7 @@ function PreviewDetailPopup(props: PreviewDetailPopupProps, ref: Ref<PreviewDeta
 				effectiveIsFullscreen && PREVIEW_MODAL_FULLSCREEN_CLASSNAME,
 			)}
 			centered={!effectiveIsFullscreen}
+			zIndex={zIndex}
 		>
 			<div className={PREVIEW_MODAL_BODY_WRAPPER_CLASSNAME}>
 				{!!previewDetail && visible && <>{RenderComponent}</>}

@@ -3,7 +3,10 @@ import { renderHook, waitFor } from "@testing-library/react"
 import { beforeEach, describe, expect, it, vi } from "vitest"
 import { SuperMagicApi } from "@/apis"
 import { FileAccessProvider } from "@/pages/superMagic/fileAccess/FileAccessProvider"
-import { createShareFileAccess } from "@/pages/superMagic/fileAccess/fileAccessContext"
+import {
+	createSessionFileAccess,
+	createShareFileAccess,
+} from "@/pages/superMagic/fileAccess/fileAccessContext"
 import { downloadFileContent, getTemporaryDownloadUrl } from "@/pages/superMagic/utils/api"
 import { useFileData } from "../useFileData"
 
@@ -161,6 +164,40 @@ describe("useFileData", () => {
 		await Promise.resolve()
 		expect(getTemporaryDownloadUrlMock).not.toHaveBeenCalled()
 		expect(getFileHistoryVersionsMock).not.toHaveBeenCalled()
+	})
+
+	it("loads session files on a published micro-app share route", async () => {
+		isShareRouteState.current = true
+		const access = createSessionFileAccess({
+			projectId: "runtime-project",
+			topicId: "topic-1",
+		})
+
+		const { result } = renderHook(
+			() =>
+				useFileData({
+					file_id: "file-1",
+					activeFileId: "file-1",
+				}),
+			{
+				wrapper: ({ children }: { children: ReactNode }) =>
+					createElement(FileAccessProvider, { value: access }, children),
+			},
+		)
+
+		await waitFor(() => {
+			expect(getFileHistoryVersionsMock).toHaveBeenCalledWith({
+				file_id: "file-1",
+				page_size: 10,
+			})
+		})
+		await waitFor(() => {
+			expect(result.current.loading).toBe(false)
+		})
+		expect(getTemporaryDownloadUrlMock).toHaveBeenCalledWith({
+			file_ids: ["file-1"],
+			access,
+		})
 	})
 
 	it("requests share file urls once share access arrives", async () => {

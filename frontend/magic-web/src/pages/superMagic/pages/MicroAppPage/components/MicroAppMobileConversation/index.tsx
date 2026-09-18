@@ -72,6 +72,7 @@ function MobileConversationEmpty() {
 /**
  * 微应用移动端独立对话弹层：沿用共享 MessageList 的默认消息节点样式，
  * 仅使用移动端弹层和 MobileComposer 组织交互。
+ * Tool/file preview stacks above this sheet; keep it open.
  */
 const MicroAppMobileConversation = observer(function MicroAppMobileConversation({
 	open,
@@ -169,15 +170,6 @@ const MicroAppMobileConversation = observer(function MicroAppMobileConversation(
 		}
 	})
 
-	const handleFileClick = useMemoizedFn((file?: unknown) => {
-		onOpenChange(false)
-		onOpenFile(file)
-	})
-	const handleSelectDetail = useMemoizedFn((detail: unknown) => {
-		onOpenChange(false)
-		onSelectDetail(detail)
-	})
-
 	const isEmpty =
 		isSelectedTopicMessagesReady && !isMessagesInitialLoading && messages.length === 0
 	const topicName = selectedTopic?.topic_name || t("topic.unnamedTopic")
@@ -233,10 +225,10 @@ const MicroAppMobileConversation = observer(function MicroAppMobileConversation(
 							<MessageList
 								data={messages}
 								selectedTopic={selectedTopic}
-								setSelectedDetail={handleSelectDetail}
+								setSelectedDetail={onSelectDetail}
 								handlePullMoreMessage={handlePullMoreMessage}
 								showLoading={showLoading}
-								onFileClick={handleFileClick}
+								onFileClick={onOpenFile}
 								isEmptyStatus={isEmpty}
 								isMessagesLoading={isMessagesInitialLoading}
 								fallbackRender={
@@ -266,7 +258,7 @@ const MicroAppMobileConversation = observer(function MicroAppMobileConversation(
 							}
 							attachments={attachments}
 							mentionPanelStore={mentionPanelStore}
-							onFileClick={handleFileClick}
+							onFileClick={onOpenFile}
 							isShowLoadingInit={!isSelectedTopicMessagesReady}
 							showTopicModeExamplePortal={!lockToMicroAppMode}
 							showModeToggle={!lockToMicroAppMode}

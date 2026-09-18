@@ -371,7 +371,12 @@ export default function Text(props: any) {
 					onRetry={textFileSession.refresh}
 				/>
 			) : textFileSession && loading ? (
-				<MagicSpin spinning />
+				<div
+					data-testid="text-file-session-loading"
+					className="flex min-h-0 flex-1 items-center justify-center bg-background"
+				>
+					<MagicSpin spinning />
+				</div>
 			) : isEditMode ? (
 				<Input.TextArea
 					ref={textAreaRef}
