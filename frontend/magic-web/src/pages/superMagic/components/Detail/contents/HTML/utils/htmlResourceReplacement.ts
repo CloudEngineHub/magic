@@ -11,7 +11,11 @@ import {
 	injectMediaInterceptorScript,
 	type FileItem,
 } from "./mediaInterceptor"
-import type { HtmlDisplayConfig, HtmlResourceInfo } from "./htmlResourceCollector"
+import type {
+	ExternalCssResource,
+	HtmlDisplayConfig,
+	HtmlResourceInfo,
+} from "./htmlResourceCollector"
 import { resolveCachedResourceUrls } from "./resourceUrlCache"
 
 interface ReplaceHtmlResourceUrlsOptions {
@@ -31,6 +35,7 @@ interface ReplaceHtmlResourceUrlsOptions {
 	relativeFolderPath: string
 	access?: FileAccessContext | null
 	fileApi?: FileApi
+	externalCssResources?: ExternalCssResource[]
 }
 
 interface ReplaceHtmlResourceUrlsResult {
@@ -46,6 +51,12 @@ function escapeHtmlAttributeValue(value: string): string {
 		.replace(/'/g, "&#39;")
 		.replace(/</g, "&lt;")
 		.replace(/>/g, "&gt;")
+}
+
+function replaceCssUrlReference(content: string, path: string, url: string): string {
+	const escapedPath = path.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")
+	const cssUrlRegex = new RegExp(`url\\(\\s*['"]?${escapedPath}['"]?\\s*\\)`, "g")
+	return content.replace(cssUrlRegex, `/*__ORIGINAL_URL__:${path}__*/url('${url}')`)
 }
 
 async function resolveHtmlResourceUrls({
@@ -103,7 +114,10 @@ async function resolveHtmlResourceUrls({
 				)
 				const originalUrls =
 					originalIdsToFetch.length > 0
-						? await getTemporaryDownloadUrl({ file_ids: originalIdsToFetch })
+						? await (fileApi?.getTemporaryDownloadUrl ?? getTemporaryDownloadUrl)({
+								file_ids: originalIdsToFetch,
+								access: access ?? undefined,
+							})
 						: []
 				if (imageIdsToProcess.length === 0)
 					return [...preloadedUrls, ...(originalUrls || [])]
@@ -147,6 +161,7 @@ export async function replaceHtmlResourceUrls({
 	relativeFolderPath,
 	access,
 	fileApi,
+	externalCssResources = [],
 }: ReplaceHtmlResourceUrlsOptions): Promise<ReplaceHtmlResourceUrlsResult> {
 	const urlData = await resolveHtmlResourceUrls({
 		fileIds,
@@ -162,11 +177,55 @@ export async function replaceHtmlResourceUrls({
 	const filePathMapping = new Map<string, string>()
 	const magicProjectConfig: Record<string, unknown> = {}
 	let content = htmlContent
+	const inlinedCssFileIds = new Set(externalCssResources.map((resource) => resource.fileId))
+	const externalCssReferences = new Map<string, string[]>()
+	for (const resource of externalCssResources) {
+		for (const reference of resource.references) {
+			const paths = externalCssReferences.get(reference.fileId) ?? []
+			if (!paths.includes(reference.path)) paths.push(reference.path)
+			externalCssReferences.set(reference.fileId, paths)
+		}
+	}
+
+	// Inline linked stylesheets before replacing their nested URLs. Keeping the CSS in
+	// the processed HTML prevents the sandbox browser from resolving relative paths
+	// against its workspace root before host-side URL mapping has run.
+	for (const resource of externalCssResources) {
+		const escapedPath = resource.htmlPath.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")
+		const linkRegex = new RegExp(
+			`<link\\b(?=[^>]*\\brel=["']stylesheet["'])(?=[^>]*\\bhref=["']${escapedPath}["'])[^>]*>`,
+			"gi",
+		)
+		const hrefRegex = new RegExp(`\\bhref=(["'])${escapedPath}\\1`, "i")
+		const embeddedCss = resource.content.replace(/<\/style/gi, "<\\/style")
+		content = content.replace(linkRegex, (linkTag) => {
+			// Keep an inert copy of the original link so the save cleanup can restore
+			// its href and discard only the runtime-injected stylesheet.
+			const inertLink = linkTag.replace(
+				hrefRegex,
+				`data-original-href="${escapeHtmlAttributeValue(resource.htmlPath)}"`,
+			)
+			return `${inertLink}<style data-injected="true">${embeddedCss}</style>`
+		})
+	}
 
 	urlData.forEach((item) => {
 		const resourceInfo = urlMap.get(item.file_id)
 		filePathMapping.set(item.url || "", filePathMap.get(item.file_id) || "")
-		if (!resourceInfo || !item.url) return
+		if (!item.url) return
+
+		// A single image can be referenced by both HTML attributes and external CSS.
+		// Replace every CSS reference independently instead of letting one urlMap entry
+		// overwrite the other usage site.
+		for (const path of externalCssReferences.get(item.file_id) ?? []) {
+			content = replaceCssUrlReference(content, path, item.url)
+		}
+
+		// The original link is now inert and exists only for save restoration. Do not
+		// let the generic href matcher rewrite the href substring in data-original-href.
+		if (inlinedCssFileIds.has(item.file_id)) return
+
+		if (!resourceInfo) return
 
 		urlMap.set(item.file_id, { ...resourceInfo, url: item.url })
 		const escapedPath = resourceInfo.path.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")
@@ -195,11 +254,7 @@ export async function replaceHtmlResourceUrls({
 		}
 
 		if (resourceInfo.attr === "css-url") {
-			const cssUrlRegex = new RegExp(`url\\(\\s*['"]?${escapedPath}['"]?\\s*\\)`, "g")
-			content = content.replace(
-				cssUrlRegex,
-				`/*__ORIGINAL_URL__:${resourceInfo.path}__*/url('${item.url}')`,
-			)
+			content = replaceCssUrlReference(content, resourceInfo.path, item.url)
 			return
 		}
 
