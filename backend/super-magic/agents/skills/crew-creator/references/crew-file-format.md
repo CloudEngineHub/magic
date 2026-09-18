@@ -11,11 +11,17 @@ YAML header carries agent-level metadata; the body defines the role description.
 
 ### YAML Header Fields
 
-| Field | Description | Maps to |
-|-------|-------------|---------|
-| `name` | Employee name | `AgentProfile.name` |
-| `role` | Employee role | `AgentProfile.role` |
-| `description` | Employee description | `AgentProfile.description` |
+| Field | Description | Maps to | Required |
+|-------|-------------|---------|----------|
+| `name` | Employee name | `AgentProfile.name` | **Yes** |
+| `role` | Employee role | `AgentProfile.role` | **Yes** |
+| `description` | Employee description | `AgentProfile.description` | **Yes** |
+| `icon` | Employee logo path (e.g. `avatars/logo.png`) | `AgentProfile.icon` | Optional |
+
+### Strict Header Rules & Prohibitions
+
+- **Standard fields ONLY**: Use strictly `name`, `role`, `description`, `icon`. No multilingual or translated field variants.
+- **Fixed avatar location**: When `icon` is specified, it must point to `avatars/logo.png`. Never use arbitrary directory paths (e.g., `assets/`) or custom filenames.
 
 ### AgentProfile Rendering Rules
 
@@ -29,6 +35,7 @@ YAML header carries agent-level metadata; the body defines the role description.
 name: Research Assistant
 role: Academic Researcher
 description: A professional research assistant for academic work
+icon: avatars/logo.png
 ---
 
 You are a professional academic research assistant, skilled in

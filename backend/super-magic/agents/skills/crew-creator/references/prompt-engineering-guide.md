@@ -95,7 +95,9 @@ After writing, verify against this checklist:
 ### Employee Initialization (For First-time Creation)
 - [ ] Are definition files (`IDENTITY.md`, `AGENTS.md`, `SOUL.md`) properly created under `.magic/`?
 - [ ] Is the skill decomposition decision explicitly recorded?
-- [ ] Is the employee Logo generated via `generate_images` and saved under `.magic/avatars/` (or existing icon preserved)?
+- [ ] Is the employee Logo generated via `generate_images` and strictly saved as `.magic/avatars/logo.png`?
+- [ ] Does `.magic/IDENTITY.md` include `icon: avatars/logo.png` in its YAML frontmatter?
+- [ ] Are redundant files (`README.md`, `assets/`) and any multilingual field variants strictly avoided?
 
 ## 3. Anti-pattern Detection
 

@@ -78,6 +78,8 @@ def _build_identity(cfg: dict) -> str:
         f"role: {cfg['role']}",
         f"description: {cfg['description']}",
     ]
+    if cfg.get("icon"):
+        header_lines.append(f"icon: {cfg['icon']}")
 
     header_lines.append("---")
     header = "\n".join(header_lines) + "\n"
