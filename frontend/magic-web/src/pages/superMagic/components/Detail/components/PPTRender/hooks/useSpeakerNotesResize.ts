@@ -1,20 +1,42 @@
-import { useEffect, useRef, useState } from "react"
+import { useLayoutEffect, useRef, useState } from "react"
 import type { KeyboardEvent, PointerEvent } from "react"
 import { reaction } from "mobx"
 import { pptNotesPreferenceStore } from "@/stores/layout/PPTNotesPreferenceStore"
+import {
+	clampSpeakerNotesHeight,
+	getSpeakerNotesInFlowHeight,
+	isSpeakerNotesOverlay,
+	SPEAKER_NOTES_FALLBACK_PARENT_HEIGHT,
+} from "../utils/speakerNotesLayout"
 
 export function useSpeakerNotesResize() {
 	const panelRef = useRef<HTMLElement>(null)
 	const dragRef = useRef<{ y: number; height: number } | null>(null)
 	const [height, setHeight] = useState(pptNotesPreferenceStore.height)
+	const [parentHeight, setParentHeight] = useState(SPEAKER_NOTES_FALLBACK_PARENT_HEIGHT)
 	const heightRef = useRef(height)
 
-	useEffect(() => reaction(() => pptNotesPreferenceStore.height, setHeight), [])
+	useLayoutEffect(() => reaction(() => pptNotesPreferenceStore.height, setHeight), [])
+
+	useLayoutEffect(() => {
+		const parent = panelRef.current?.parentElement
+		if (!parent) return
+
+		function syncParentHeight() {
+			if (parent.clientHeight > 0) setParentHeight(parent.clientHeight)
+		}
+
+		syncParentHeight()
+		const observer = new ResizeObserver(syncParentHeight)
+		observer.observe(parent)
+		return () => observer.disconnect()
+	}, [])
 
 	function resize(nextHeight: number) {
-		const parentHeight = panelRef.current?.parentElement?.clientHeight || 650
-		heightRef.current = Math.max(100, Math.min(nextHeight, parentHeight * 0.4))
+		const liveParentHeight = panelRef.current?.parentElement?.clientHeight || parentHeight
+		heightRef.current = clampSpeakerNotesHeight(nextHeight, liveParentHeight)
 		setHeight(heightRef.current)
+		if (liveParentHeight > 0) setParentHeight(liveParentHeight)
 	}
 
 	function finishResize() {
@@ -49,9 +71,13 @@ export function useSpeakerNotesResize() {
 		pptNotesPreferenceStore.setHeight(heightRef.current)
 	}
 
+	const displayHeight = clampSpeakerNotesHeight(height, parentHeight)
+
 	return {
 		panelRef,
-		height,
+		height: displayHeight,
+		overlay: isSpeakerNotesOverlay(displayHeight, parentHeight),
+		inFlowHeight: getSpeakerNotesInFlowHeight(displayHeight, parentHeight),
 		resizeHandleProps: {
 			onPointerDown,
 			onPointerMove,

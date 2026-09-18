@@ -464,6 +464,7 @@ function renderPPTRender(input?: {
 describe("PPTRender", () => {
 	beforeEach(() => {
 		pptNotesPreferenceStore.setVisible(false)
+		pptNotesPreferenceStore.setHeight(144)
 		mockState.confirmConfig = null
 		mockState.lastStoreConfig = null
 		mockState.store.setFullscreen.mockReset()
@@ -596,6 +597,19 @@ describe("PPTRender", () => {
 		expect(screen.getByTestId("ppt-render-slide-content")).toHaveClass(
 			"relative",
 			TAILWIND_Z_INDEX_CLASSES.BASE.SLIDE_CANVAS,
+		)
+	})
+
+	it("keeps overlay speaker notes above the slide control bar", async () => {
+		mockState.isSlideEditing = false
+		pptNotesPreferenceStore.setVisible(true)
+		pptNotesPreferenceStore.setHeight(300)
+		renderPPTRender()
+
+		expect(screen.getByTestId("ppt-render-slide-stage")).toHaveClass("z-0")
+		expect(screen.getByTestId("ppt-speaker-notes-panel")).toHaveAttribute(
+			"data-overlay",
+			"true",
 		)
 	})
 

@@ -66,7 +66,7 @@ function SpeakerNotesEditor({
 	initialDraft,
 	onDraftChange,
 	onDraftSaved,
-	resize: { panelRef, height, resizeHandleProps },
+	resize: { panelRef, height, overlay, inFlowHeight, resizeHandleProps },
 }: PPTSpeakerNotesPanelProps & {
 	initialDraft?: string
 	onDraftChange: (draft: string) => void
@@ -163,87 +163,103 @@ function SpeakerNotesEditor({
 					: null
 
 	return (
-		<section
-			ref={panelRef}
-			data-testid="ppt-speaker-notes-panel"
-			hidden={!visible}
-			style={{ height }}
-			// Keep the editor mounted while collapsed so unsaved or failed drafts survive.
-			className={cn(
-				"max-h-[40%] min-h-0 shrink-0 flex-col overflow-hidden border-t border-border/60 bg-background",
-				visible ? "flex" : "hidden",
-			)}
-		>
-			<button
-				type="button"
-				aria-label={t("ppt.speakerNotes.resize")}
-				className="group flex h-2 w-full shrink-0 cursor-ns-resize touch-none items-center justify-center focus-visible:outline focus-visible:outline-2 focus-visible:outline-ring"
-				{...resizeHandleProps}
+		<>
+			{/* Keep the slide canvas size stable once notes overlay it. */}
+			{visible && overlay ? (
+				<div
+					aria-hidden
+					data-testid="ppt-speaker-notes-spacer"
+					className="pointer-events-none shrink-0"
+					style={{ height: inFlowHeight }}
+				/>
+			) : null}
+			<section
+				ref={panelRef}
+				data-testid="ppt-speaker-notes-panel"
+				data-overlay={overlay ? "true" : undefined}
+				hidden={!visible}
+				style={{ height }}
+				// Keep the editor mounted while collapsed so unsaved or failed drafts survive.
+				className={cn(
+					"min-h-0 flex-col overflow-hidden border-t border-border/60 bg-background",
+					overlay
+						? // Cover the slide without hiding the presentation loading overlay.
+							"absolute inset-x-0 bottom-0 z-[5] shadow-[0_-8px_32px_oklch(0_0_0/0.12)]"
+						: "shrink-0",
+					visible ? "flex" : "hidden",
+				)}
 			>
-				<span className="h-0.5 w-7 rounded-full bg-border transition-colors group-hover:bg-muted-foreground/50" />
-			</button>
-			<div className="flex shrink-0 flex-wrap items-center justify-between gap-2 px-4 pb-2">
-				<div className="flex min-w-0 items-center gap-2">
-					<NotebookPen className="size-4 shrink-0 text-muted-foreground" />
-					<h2 className="truncate text-xs font-normal text-muted-foreground">
-						{t("ppt.speakerNotes.pageTitle", { page: slideIndex + 1 })}
-					</h2>
-					{statusLabel && (
-						<span
-							role="status"
-							className={cn(
-								"text-xs",
-								saveState === "error"
-									? "text-destructive"
-									: "text-muted-foreground",
-							)}
-						>
-							{statusLabel}
-						</span>
-					)}
+				<button
+					type="button"
+					aria-label={t("ppt.speakerNotes.resize")}
+					className="group flex h-2 w-full shrink-0 cursor-ns-resize touch-none items-center justify-center focus-visible:outline focus-visible:outline-2 focus-visible:outline-ring"
+					{...resizeHandleProps}
+				>
+					<span className="h-0.5 w-7 rounded-full bg-border transition-colors group-hover:bg-muted-foreground/50" />
+				</button>
+				<div className="flex shrink-0 flex-wrap items-center justify-between gap-2 px-4 pb-2">
+					<div className="flex min-w-0 items-center gap-2">
+						<NotebookPen className="size-4 shrink-0 text-muted-foreground" />
+						<h2 className="truncate text-xs font-normal text-muted-foreground">
+							{t("ppt.speakerNotes.pageTitle", { page: slideIndex + 1 })}
+						</h2>
+						{statusLabel && (
+							<span
+								role="status"
+								className={cn(
+									"text-xs",
+									saveState === "error"
+										? "text-destructive"
+										: "text-muted-foreground",
+								)}
+							>
+								{statusLabel}
+							</span>
+						)}
+					</div>
+					<div className="flex flex-wrap items-center gap-1">
+						{onGenerate && (
+							<PPTNotesActions
+								hasNotes={Boolean(draft.trim())}
+								disabled={saveState === "saving" || !allowEdit}
+								onAction={async (action) => {
+									if (dirty && !(await saveNotes())) return
+									// A save can finish after navigation; never apply its action to the new page.
+									if (!activeRef.current) return
+									onGenerate(action)
+								}}
+							/>
+						)}
+						{allowEdit && dirty && (
+							<Button
+								type="button"
+								variant="outline"
+								size="sm"
+								disabled={saveState === "saving"}
+								onClick={() => void saveNotes()}
+								className="h-7 px-2 text-xs"
+							>
+								{saveState === "saving" && (
+									<Loader2 className="mr-1.5 size-3.5 animate-spin" />
+								)}
+								{t("ppt.speakerNotes.save")}
+							</Button>
+						)}
+					</div>
 				</div>
-				<div className="flex flex-wrap items-center gap-1">
-					{onGenerate && (
-						<PPTNotesActions
-							hasNotes={Boolean(draft.trim())}
-							disabled={saveState === "saving" || !allowEdit}
-							onAction={async (action) => {
-								if (dirty && !(await saveNotes())) return
-								// A save can finish after navigation; never apply its action to the new page.
-								if (!activeRef.current) return
-								onGenerate(action)
-							}}
-						/>
-					)}
-					{allowEdit && dirty && (
-						<Button
-							type="button"
-							variant="outline"
-							size="sm"
-							disabled={saveState === "saving"}
-							onClick={() => void saveNotes()}
-							className="h-7 px-2 text-xs"
-						>
-							{saveState === "saving" && (
-								<Loader2 className="mr-1.5 size-3.5 animate-spin" />
-							)}
-							{t("ppt.speakerNotes.save")}
-						</Button>
-					)}
-				</div>
-			</div>
 
-			<PPTNotesMarkdown
-				value={isEditing ? draft : notes}
-				readOnly={saveState === "saving" || !allowEdit}
-				onChange={(value) => {
-					setIsEditing(true)
-					setDraft(value)
-					onDraftChange(value)
-					setSaveState("idle")
-				}}
-				onSave={() => void saveNotes()}
-			/>
-		</section>
+				<PPTNotesMarkdown
+					value={isEditing ? draft : notes}
+					readOnly={saveState === "saving" || !allowEdit}
+					onChange={(value) => {
+						setIsEditing(true)
+						setDraft(value)
+						onDraftChange(value)
+						setSaveState("idle")
+					}}
+					onSave={() => void saveNotes()}
+				/>
+			</section>
+		</>
 	)
 }
