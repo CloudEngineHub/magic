@@ -1,6 +1,11 @@
 import { describe, expect, it, vi } from "vitest"
 import pubsub, { PubSubEvents } from "@/utils/pubsub"
-import { openMicroAppTab, parseMicroAppLink } from "../openMicroAppTab"
+import {
+	isCurrentMicroAppLink,
+	normalizeMicroAppHref,
+	openMicroAppTab,
+	parseMicroAppLink,
+} from "../openMicroAppTab"
 
 vi.mock("@/utils/pubsub", () => ({
 	default: {
@@ -26,6 +31,13 @@ describe("openMicroAppTab", () => {
 		expect(parseMicroAppLink("micro_app://app%2F1")).toBeNull()
 		expect(parseMicroAppLink("micro_app://%E0%A4%A")).toBeNull()
 		expect(parseMicroAppLink(undefined)).toBeNull()
+	})
+
+	it("normalizes hrefs and detects the app represented by the current route", () => {
+		expect(normalizeMicroAppHref("micro_app://app-1")).toBe("app-1")
+		expect(normalizeMicroAppHref("https://example.com")).toBe("https://example.com")
+		expect(isCurrentMicroAppLink("app-1", "/super/micro-app/app-1")).toBe(true)
+		expect(isCurrentMicroAppLink("app-1", "/micro_app/app-2")).toBe(false)
 	})
 
 	it("switches to files view and opens a micro-app tab", () => {
