@@ -42,6 +42,7 @@ import { useMicroAppMessageFileOpen } from "./hooks/useMicroAppMessageFileOpen"
 import { useMicroAppPageController } from "./hooks/useMicroAppPageController"
 import { useMicroAppPreviewFiles } from "./hooks/useMicroAppPreviewFiles"
 import * as layout from "./layoutConstants"
+import { shouldOpenMessageFileInFilesWorkspace } from "./utils/microAppPreviewPopup"
 
 function MicroAppPageInner({
 	appId,
@@ -281,9 +282,10 @@ function MicroAppPageInner({
 		if (!detail || typeof detail !== "object") return
 		previewDetailPopupRef.current?.open(detail as PreviewDetail, attachments, attachmentList)
 	})
-	// 文件工具已通过 Open_File_Tab 切换到附件预览区，这里只处理工具详情。
+	// File-target cards publish Open_File_Tab; only tool details use the popup.
 	const handleConversationSelectDetail = useMemoizedFn((detail: unknown) => {
-		if (getToolDetailSelectionTarget(detail) !== "file") setPreviewDetail(detail)
+		if (getToolDetailSelectionTarget(detail) === "file") return
+		setPreviewDetail(detail)
 	})
 	const setLinkPreviewDetail = useMemoizedFn((detail: unknown) => {
 		if (!detail || typeof detail !== "object") return
@@ -300,6 +302,7 @@ function MicroAppPageInner({
 		detailRef,
 		isFilesViewActive: activeView === "files" || activeView === "userSpace",
 		showFilesView,
+		enabled: shouldOpenMessageFileInFilesWorkspace(pageMode),
 	})
 
 	useEffect(() => {

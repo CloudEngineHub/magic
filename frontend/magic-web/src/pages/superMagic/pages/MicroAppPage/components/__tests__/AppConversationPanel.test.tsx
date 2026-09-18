@@ -11,6 +11,7 @@ const scaffoldMocks = vi.hoisted(() => ({
 	messageListProviderValue: null as Record<string, unknown> | null,
 	messageHeaderProps: null as Record<string, unknown> | null,
 	setSelectedDetail: undefined as ((detail: unknown) => void) | undefined,
+	onFileClick: undefined as ((fileItem: unknown) => void) | undefined,
 	enableRevokedUserMessageReedit: false,
 	revokedEditorContext: null as Record<string, unknown> | null,
 }))
@@ -51,6 +52,7 @@ vi.mock("@/pages/superMagic/components/ConversationPanelScaffold", () => ({
 		emptyCompact,
 		messageListProviderValue,
 		setSelectedDetail,
+		onFileClick,
 		enableRevokedUserMessageReedit,
 		revokedEditorContext,
 	}: {
@@ -59,11 +61,13 @@ vi.mock("@/pages/superMagic/components/ConversationPanelScaffold", () => ({
 		emptyCompact: React.ReactNode
 		messageListProviderValue: Record<string, unknown>
 		setSelectedDetail?: (detail: unknown) => void
+		onFileClick?: (fileItem: unknown) => void
 		enableRevokedUserMessageReedit?: boolean
 		revokedEditorContext?: Record<string, unknown>
 	}) => {
 		scaffoldMocks.messageListProviderValue = messageListProviderValue
 		scaffoldMocks.setSelectedDetail = setSelectedDetail
+		scaffoldMocks.onFileClick = onFileClick
 		scaffoldMocks.enableRevokedUserMessageReedit = Boolean(enableRevokedUserMessageReedit)
 		scaffoldMocks.revokedEditorContext = revokedEditorContext ?? null
 		return (
@@ -614,6 +618,27 @@ describe("AppConversationPanel", () => {
 		)
 
 		expect(scaffoldMocks.setSelectedDetail).toBe(onSelectDetail)
+	})
+
+	it("forwards message attachment clicks to the host preview handler", () => {
+		const onFileClick = vi.fn()
+		const topicStore = {
+			selectedTopic: { id: "topic-1", topic_name: "Topic" },
+			setSelectedTopic: vi.fn(),
+			updateTopic: vi.fn(),
+		} as never
+
+		render(
+			<AppConversationPanel
+				selectedProject={{ id: "project-1", project_name: "Micro App" } as never}
+				topicStore={topicStore}
+				mentionPanelStore={mentionPanelStore}
+				projectFilesStore={{} as never}
+				onFileClick={onFileClick}
+			/>,
+		)
+
+		expect(scaffoldMocks.onFileClick).toBe(onFileClick)
 	})
 
 	it("requests an attachment refresh when the topic reaches a terminal status", () => {

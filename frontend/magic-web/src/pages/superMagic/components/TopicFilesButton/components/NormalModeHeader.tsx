@@ -25,6 +25,8 @@ import { MagicDropdown } from "@/components/base/MagicDropdown"
 
 interface NormalModeHeaderProps {
 	title?: string
+	/** Hide the section label; keep search and refresh actions. */
+	showTitle?: boolean
 	isShareRoute: boolean
 	refreshLoading: boolean
 	allowEdit: boolean
@@ -51,6 +53,7 @@ interface NormalModeHeaderProps {
 
 function NormalModeHeader({
 	title,
+	showTitle = true,
 	isShareRoute,
 	refreshLoading,
 	allowEdit,
@@ -264,19 +267,21 @@ function NormalModeHeader({
 					className,
 				)}
 			>
-				<h3
-					className={cn(
-						"min-w-0 flex-1 text-[13px] font-medium leading-5",
-						overflow && "basis-full",
-					)}
-				>
-					<span
-						ref={labelRef}
-						className="inline-block break-words [overflow-wrap:anywhere]"
+				{showTitle ? (
+					<h3
+						className={cn(
+							"min-w-0 flex-1 text-[13px] font-medium leading-5",
+							overflow && "basis-full",
+						)}
 					>
-						{title || t("topicFiles.title")}
-					</span>
-				</h3>
+						<span
+							ref={labelRef}
+							className="inline-block break-words [overflow-wrap:anywhere]"
+						>
+							{title || t("topicFiles.title")}
+						</span>
+					</h3>
+				) : null}
 				{actions}
 			</div>
 		)
@@ -299,11 +304,13 @@ function NormalModeHeader({
 		/>
 	) : (
 		<div ref={rowRef} className={cn("flex h-8 w-full items-center gap-1 pl-4 pr-2", className)}>
-			<p className="min-w-0 flex-1 truncate text-[13px] font-medium leading-5 text-foreground">
-				<span ref={labelRef} className="inline-block whitespace-nowrap">
-					{title || t("topicFiles.title")}
-				</span>
-			</p>
+			{showTitle ? (
+				<p className="min-w-0 flex-1 truncate text-[13px] font-medium leading-5 text-foreground">
+					<span ref={labelRef} className="inline-block whitespace-nowrap">
+						{title || t("topicFiles.title")}
+					</span>
+				</p>
+			) : null}
 			{actions}
 		</div>
 	)

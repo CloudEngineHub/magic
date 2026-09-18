@@ -75,11 +75,12 @@ vi.mock("@/pages/superMagic/pages/MicroAppPage/components/AppConversationPanel",
 
 vi.mock("@/pages/superMagic/pages/MicroAppPage/components/MicroAppMobileConversation", () => ({
 	default: function MockMicroAppMobileConversation(props: Record<string, unknown>) {
+		const fileAccess = useFileAccess()
 		return props.open ? (
 			<div
 				data-testid="published-micro-app-mobile-conversation"
 				data-lock-to-micro-app-mode={String(props.lockToMicroAppMode)}
-				data-file-access={JSON.stringify(useFileAccess())}
+				data-file-access={JSON.stringify(fileAccess)}
 			/>
 		) : null
 	},
@@ -173,6 +174,15 @@ vi.mock("@/apis", () => ({
 
 vi.mock("@/pages/superMagic/services/projectAttachmentsLoader", () => ({
 	loadProjectAttachments: vi.fn().mockResolvedValue({ tree: [], list: [] }),
+}))
+
+vi.mock("@/pages/share/microApp/hooks/usePublishedRuntimePreview", () => ({
+	usePublishedRuntimePreview: () => ({
+		handleSelectDetail: vi.fn(),
+		handleOpenFile: vi.fn(),
+		openPreviewDetail: vi.fn(),
+		previewPopup: null,
+	}),
 }))
 
 describe("PublishedMicroAppConversationProvider", () => {
@@ -371,6 +381,8 @@ describe("PublishedMicroAppConversationProvider", () => {
 			expect.objectContaining({
 				historyTriggerMode: "layout",
 				isConversationPanelCollapsed: true,
+				onSelectDetail: expect.any(Function),
+				onFileClick: expect.any(Function),
 			}),
 		)
 

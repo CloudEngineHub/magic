@@ -23,6 +23,7 @@ interface Props extends ComponentProps<typeof AppConversationPanel> {
 	appName?: string
 	ensureProject: () => Promise<unknown>
 	onCloseHistory: () => void
+	onOpenPreview: (detail: unknown) => void
 }
 
 const PublishedMicroAppSidebar = observer(function PublishedMicroAppSidebar({
@@ -32,6 +33,7 @@ const PublishedMicroAppSidebar = observer(function PublishedMicroAppSidebar({
 	appName,
 	ensureProject,
 	onCloseHistory,
+	onOpenPreview,
 	...conversationProps
 }: Props) {
 	const { t } = useTranslation("super")
@@ -192,6 +194,10 @@ const PublishedMicroAppSidebar = observer(function PublishedMicroAppSidebar({
 				) : panel === "attachments" ? (
 					<PublishedMicroAppAttachmentsPanel
 						attachments={projectFilesStore.workspaceFileTree}
+						projectId={selectedProject.id}
+						selectedProject={selectedProject}
+						selectedTopic={conversationProps.topicStore.selectedTopic}
+						setUserSelectDetail={onOpenPreview}
 					/>
 				) : panel === "tasks" ? (
 					<div className="min-h-0 flex-1" data-testid="published-micro-app-tasks-panel">

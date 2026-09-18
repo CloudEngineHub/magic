@@ -18,6 +18,7 @@ import PreviewDetailPopup, {
 	type PreviewDetailPopupRef,
 } from "@/pages/superMagicMobile/components/PreviewDetailPopup"
 import MicroAppPreviewPopup from "@/pages/superMagic/components/MicroAppPreviewPopup"
+import { getToolDetailSelectionTarget } from "@/pages/superMagic/components/MessageList/components/Nodes/toolDetailSelection"
 import { RouteName } from "@/routes/constants"
 import useNavigate from "@/routes/hooks/useNavigate"
 import { cn } from "@/utils/cn"
@@ -204,6 +205,10 @@ function MicroAppPageMobileInner({
 		if (!detail || typeof detail !== "object") return
 		linkPreviewPopupRef.current?.open(detail as PreviewDetail, attachments, attachmentList)
 	})
+	const handleSelectDetail = useMemoizedFn((detail: unknown) => {
+		if (getToolDetailSelectionTarget(detail) === "file") return
+		setPreviewDetail(detail)
+	})
 	const { handleOpenFile: openFilePreview } = useFileOpen({
 		attachments,
 		setUserSelectDetail: setPreviewDetail,
@@ -214,14 +219,19 @@ function MicroAppPageMobileInner({
 		if (!fileId || fileItem.is_directory) return
 
 		const targetFile = attachmentList.find((item) => item.file_id === fileId) || fileItem
+		if (pageModeRef.current === "development") setActivePanel("files")
 		setPreviewFileId(fileId)
 		openFilePreview(targetFile)
 	})
 
 	useMobileFilePreviewPubSub({
 		attachmentList,
-		setUserSelectDetail: setPreviewDetail,
+		setUserSelectDetail: (detail) => {
+			if (pageModeRef.current === "development") setActivePanel("files")
+			setPreviewDetail(detail)
+		},
 		onFileClick: handlePreviewFile,
+		onPlaybackOpen: setPreviewDetail,
 	})
 	const microAppPreviewState = useMobileMicroAppPreview()
 
@@ -397,7 +407,7 @@ function MicroAppPageMobileInner({
 							mentionPanelStore={store.mentionPanelStore}
 							projectFilesStore={store.projectFilesStore}
 							attachments={attachments}
-							onSelectDetail={setPreviewDetail}
+							onSelectDetail={handleSelectDetail}
 							onTerminalTopicStatusChange={checkAttachmentsNowDebounced}
 							onOpenFile={handlePreviewFile}
 							onOpenChange={setConversationOpen}

@@ -28,6 +28,7 @@ interface UseMicroAppMessageFileOpenOptions {
 	detailRef: RefObject<DetailRef | null>
 	isFilesViewActive: boolean
 	showFilesView: () => void
+	enabled?: boolean
 }
 
 const MICRO_APP_TAB_OPEN_DELAY_MS = 100
@@ -37,6 +38,7 @@ export function useMicroAppMessageFileOpen({
 	detailRef,
 	isFilesViewActive,
 	showFilesView,
+	enabled = true,
 }: UseMicroAppMessageFileOpenOptions) {
 	const pendingFileOpenRef = useRef<PendingFileOpen | null>(null)
 	const pendingMicroAppOpenRef = useRef<PendingMicroAppOpen | null>(null)
@@ -91,6 +93,21 @@ export function useMicroAppMessageFileOpen({
 		showFilesView()
 	})
 
+	const handleOpenFileTabByPath = useMemoizedFn(
+		(payload: { filePath?: string; fileName?: string; action?: "open" | "download" }) => {
+			if (payload.action === "download" || !payload.filePath) return
+			const targetPath = payload.filePath.replace(/^\//, "")
+			const matchedFile = attachmentList.find(
+				(item) => (item.relative_file_path || "").replace(/^\//, "") === targetPath,
+			)
+			if (!matchedFile?.file_id) return
+			handleOpenFileTab({
+				fileId: matchedFile.file_id,
+				fileData: matchedFile,
+			})
+		},
+	)
+
 	const handleOpenMicroAppTab = useMemoizedFn((payload: SuperMagicOpenMicroAppTabPayload) => {
 		const appId = payload.appId?.trim()
 		if (!appId) return
@@ -106,21 +123,36 @@ export function useMicroAppMessageFileOpen({
 	})
 
 	useEffect(() => {
+		if (!enabled) {
+			clearMicroAppOpenTimer()
+			pendingFileOpenRef.current = null
+			pendingMicroAppOpenRef.current = null
+			return
+		}
 		if (!isFilesViewActive) {
 			clearMicroAppOpenTimer()
 			return
 		}
 		openPendingFile()
 		openPendingMicroApp()
-	}, [clearMicroAppOpenTimer, isFilesViewActive, openPendingFile, openPendingMicroApp])
+	}, [clearMicroAppOpenTimer, enabled, isFilesViewActive, openPendingFile, openPendingMicroApp])
 
 	useEffect(() => {
+		if (!enabled) return
 		pubsub.subscribe(PubSubEvents.Open_File_Tab, handleOpenFileTab)
+		pubsub.subscribe(PubSubEvents.Open_File_Tab_By_Path, handleOpenFileTabByPath)
 		pubsub.subscribe(PubSubEvents.Open_Micro_App_Tab, handleOpenMicroAppTab)
 		return () => {
 			pubsub.unsubscribe(PubSubEvents.Open_File_Tab, handleOpenFileTab)
+			pubsub.unsubscribe(PubSubEvents.Open_File_Tab_By_Path, handleOpenFileTabByPath)
 			pubsub.unsubscribe(PubSubEvents.Open_Micro_App_Tab, handleOpenMicroAppTab)
 			clearMicroAppOpenTimer()
 		}
-	}, [clearMicroAppOpenTimer, handleOpenFileTab, handleOpenMicroAppTab])
+	}, [
+		clearMicroAppOpenTimer,
+		enabled,
+		handleOpenFileTab,
+		handleOpenFileTabByPath,
+		handleOpenMicroAppTab,
+	])
 }
