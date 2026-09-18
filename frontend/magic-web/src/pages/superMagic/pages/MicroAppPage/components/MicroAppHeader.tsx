@@ -99,7 +99,7 @@ export default function MicroAppHeader({
 							type="button"
 							variant="outline"
 							size="sm"
-							className="h-8 shrink-0 gap-2"
+							className="h-7 shrink-0 gap-2"
 							aria-label={t("htmlEditor.permissionManager.open")}
 							data-testid="micro-app-permission-manager"
 							onClick={() => onManageHtmlPermissions?.()}
@@ -143,7 +143,7 @@ export default function MicroAppHeader({
 						<Button
 							type="button"
 							size="sm"
-							className="h-8 shrink-0 gap-2"
+							className="h-7 shrink-0 gap-2"
 							onClick={onPublish}
 							data-testid="micro-app-publish-button"
 						>

@@ -45,6 +45,7 @@ describe("MicroAppHeader", () => {
 		fireEvent.click(screen.getByTestId("micro-app-publish-button"))
 
 		expect(onPublish).toHaveBeenCalledTimes(1)
+		expect(screen.getByTestId("micro-app-publish-button")).toHaveClass("h-7")
 	})
 
 	it("does not render publish button without publish permission", () => {
@@ -106,7 +107,7 @@ describe("MicroAppHeader", () => {
 		)
 		const permissionManager = screen.getByTestId("micro-app-permission-manager")
 		const modeSwitcher = screen.getByTestId("micro-app-mode-switcher")
-		expect(permissionManager).toHaveClass("h-8")
+		expect(permissionManager).toHaveClass("h-7")
 		expect(modeSwitcher).toHaveClass("h-8")
 		expect(
 			permissionManager.compareDocumentPosition(modeSwitcher) &
