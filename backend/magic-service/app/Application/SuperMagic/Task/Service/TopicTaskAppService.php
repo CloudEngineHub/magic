@@ -62,6 +62,7 @@ use App\ErrorCode\SuperMagicErrorCode;
 use App\Infrastructure\Core\Exception\BusinessException;
 use App\Infrastructure\Core\Exception\ExceptionBuilder;
 use App\Infrastructure\SuperMagic\ExternalAPI\SandboxOS\Gateway\Constant\SandboxStatus;
+use App\Infrastructure\SuperMagic\ExternalAPI\SandboxOS\Exception\UserToolCallNotFoundException;
 use App\Infrastructure\SuperMagic\Utils\TaskStatusValidator;
 use App\Infrastructure\SuperMagic\Utils\TaskTerminationUtil;
 use App\Infrastructure\SuperMagic\Utils\ToolProcessor;
@@ -376,7 +377,36 @@ class TopicTaskAppService extends AbstractAppService
                 $task->getSandboxId(),
                 $errMsg
             );
-            $this->topicDomainService->updateTopicStatusAndSandboxId($task->getTopicId(), $task->getId(), $status, $task->getSandboxId());
+            // 任务行里的 sandbox_id 是【建任务那一刻】抄下的话题绑定快照；任务
+            // 结束时，下面会把它写回话题。任务的"结束"由终态消息何时到达决定，
+            // 与沙箱生死完全解耦——任务可能比沙箱活得久（长时间挂起、终态消息
+            // 靠补偿补投），期间话题可能已被换绑多次：
+            //
+            //   时间   话题指针 topics.sandbox_id           pod 状态
+            //   ----   -----------------------------       ------------------
+            //   t0     W0  (建任务, 抄下快照 W0)          W0*
+            //   t1     W1  (预热池 mount 换绑)            W0x W1*
+            //   t2     W2  (又一次换绑)                   W0x W1* W2*
+            //   t3     W0  (任务结束, 无条件写回快照)     W0x W1* W2*
+            //              ^^ 回滚! 指针指向早已销毁的沙箱
+            //   t4     W3  (下个请求探测 W0 失败,再绑)    W0x W1* W2* W3*
+            //
+            //   t3 的回滚 + t4 的"自愈"，让 W1、W2 相继脱离指针视野——每绕开
+            //   一个活 pod 就泄漏一个（*=活, x=死），同 topic-id 的重复沙箱
+            //   就这样跨天滚雪球。因此仅当话题绑定仍是本任务快照指向的沙箱时
+            //   才写回，否则只更新任务状态，不碰 sandbox_id。
+            $currentTopic = $this->topicDomainService->getTopicById($task->getTopicId());
+            if ($currentTopic !== null && $currentTopic->getSandboxId() === $task->getSandboxId()) {
+                $this->topicDomainService->updateTopicStatusAndSandboxId($task->getTopicId(), $task->getId(), $status, $task->getSandboxId());
+            } else {
+                $this->logger->info('Skip writing back stale task sandbox_id to topic', [
+                    'task_id' => $taskId,
+                    'topic_id' => $task->getTopicId(),
+                    'task_sandbox_id' => $task->getSandboxId(),
+                    'topic_sandbox_id' => $currentTopic?->getSandboxId() ?? '',
+                ]);
+                $this->topicDomainService->updateTopicStatus($task->getTopicId(), $task->getId(), $status);
+            }
 
             $this->projectDomainService->updateProjectStatus($task->getProjectId(), $task->getTopicId(), $status);
             // Log success
@@ -423,27 +453,77 @@ class TopicTaskAppService extends AbstractAppService
             throw new RuntimeException('Task not found: ' . $taskId);
         }
 
-        // 透传给沙盒（沙盒取消定时器 → 加工答复 → 注入历史 → 推送 AFTER_TOOL_CALL → 重启 Agent）
-        $this->agentDomainService->sendUserToolCallFeedback(
-            $dataIsolation,
-            $task->getSandboxId(),
-            $name,
-            $toolCallId,
-            $detail
-        );
+        $detailTaskId = is_string($detail['task_id'] ?? null) ? trim($detail['task_id']) : '';
+        if ($detailTaskId !== '' && $detailTaskId !== $taskId) {
+            $this->logger->warning('HandleUserToolCallReplyStaleTask', [
+                'topic_id' => $chatTopicId,
+                'current_task_id' => $taskId,
+                'detail_task_id' => $detailTaskId,
+                'tool_call_id' => $toolCallId,
+                'idempotency_result' => 'stale_task_ignored',
+            ]);
+            return;
+        }
 
-        // 更新任务状态为运行中
-        $this->updateTaskStatus(
-            dataIsolation: $dataIsolation,
-            task: $task,
-            status: TaskStatus::RUNNING,
-        );
+        $organizationCode = $dataIsolation->getCurrentOrganizationCode() ?: $topicEntity->getUserOrganizationCode();
+        $lockKey = sprintf('user_tool_call_reply:%s:%s:%s', $organizationCode, $chatTopicId, $toolCallId);
+        $lockOwner = IdGenerator::getUniqueId32();
+        $lockAcquired = $this->locker->mutexLock($lockKey, $lockOwner, 86400);
+        if (! $lockAcquired) {
+            $this->logger->info('HandleUserToolCallReplyAlreadyProcessed', [
+                'topic_id' => $chatTopicId,
+                'current_task_id' => $taskId,
+                'detail_task_id' => $detailTaskId,
+                'tool_call_id' => $toolCallId,
+                'idempotency_result' => 'already_processed',
+            ]);
+            return;
+        }
 
-        $this->logger->info('HandleUserToolCallReplyCompleted', [
-            'task_id' => $taskId,
-            'name' => $name,
-            'tool_call_id' => $toolCallId,
-        ]);
+        $forwardedToSandbox = false;
+        try {
+            // 透传给沙盒（沙盒取消定时器 → 加工答复 → 注入历史 → 推送 AFTER_TOOL_CALL → 重启 Agent）
+            $this->agentDomainService->sendUserToolCallFeedback(
+                $dataIsolation,
+                $task->getSandboxId(),
+                $name,
+                $toolCallId,
+                $detail
+            );
+            $forwardedToSandbox = true;
+
+            // 更新任务状态为运行中
+            $this->updateTaskStatus(
+                dataIsolation: $dataIsolation,
+                task: $task,
+                status: TaskStatus::RUNNING,
+            );
+
+            $this->logger->info('HandleUserToolCallReplyCompleted', [
+                'topic_id' => $chatTopicId,
+                'task_id' => $taskId,
+                'detail_task_id' => $detailTaskId,
+                'name' => $name,
+                'tool_call_id' => $toolCallId,
+                'idempotency_result' => 'forwarded',
+            ]);
+        } catch (UserToolCallNotFoundException $e) {
+            // 沙盒已经消费或超时：保留幂等占位，后续旧回执不能再次触达沙盒。
+            $this->logger->warning('HandleUserToolCallReplyExpired', [
+                'topic_id' => $chatTopicId,
+                'current_task_id' => $taskId,
+                'detail_task_id' => $detailTaskId,
+                'tool_call_id' => $toolCallId,
+                'idempotency_result' => 'expired',
+            ]);
+            throw $e;
+        } catch (Throwable $e) {
+            // 仅释放真正的传输/沙盒故障，允许用户在网络恢复后有意重试。
+            if (! $forwardedToSandbox) {
+                $this->locker->release($lockKey, $lockOwner);
+            }
+            throw $e;
+        }
     }
 
     public function handleUserToolCallCancelled(
@@ -810,11 +890,56 @@ class TopicTaskAppService extends AbstractAppService
         // Check task permission (validates ownership)
         $taskEntity = $this->checkTaskPermission($dataIsolation, $taskId);
 
-        return [
+        $result = [
             'id' => (string) $taskEntity->getId(),
             'task_status' => $taskEntity->getTaskStatus(),
             'err_msg' => $taskEntity->getErrMsg(),
             'updated_at' => $taskEntity->getUpdatedAt(),
+        ];
+
+        if ($taskEntity->getTaskStatus() === TaskStatus::FINISHED->value) {
+            $result['result'] = $this->buildTaskResult(
+                (int) $taskEntity->getTopicId(),
+                (int) $taskEntity->getId(),
+            );
+        }
+
+        return $result;
+    }
+
+    /**
+     * Build the compact result returned by the task status polling API.
+     * The first message for each event is used when duplicate records exist.
+     *
+     * @return array{content: string, attachments: array}
+     */
+    private function buildTaskResult(int $topicId, int $taskId): array
+    {
+        $messages = $this->taskMessageDomainService->findCompletedResultMessages($topicId, $taskId);
+        $content = '';
+        $attachments = [];
+        $contentMessageFound = false;
+        $attachmentsMessageFound = false;
+
+        foreach ($messages as $message) {
+            if ($message->getEvent() === 'after_agent_reply' && ! $contentMessageFound) {
+                $contentMessageFound = true;
+                $rawContent = $message->getRawContent();
+                if ($rawContent !== '' && json_validate($rawContent)) {
+                    $decoded = json_decode($rawContent, true);
+                    $content = (string) ($decoded['super_magic_message']['content'] ?? '');
+                }
+            }
+
+            if ($message->getEvent() === 'after_main_agent_run' && ! $attachmentsMessageFound) {
+                $attachmentsMessageFound = true;
+                $attachments = $message->getAttachments() ?? [];
+            }
+        }
+
+        return [
+            'content' => $content,
+            'attachments' => $attachments,
         ];
     }
 

@@ -721,6 +721,10 @@ class TopicDomainService
         return $this->topicRepository->updateTopicByCondition($conditions, $data);
     }
 
+    /**
+     * @deprecated Use an update that persists sandbox_images instead. Kept
+     * only for backward compatibility with legacy topic rows.
+     */
     public function updateTopicAgentImage(DataIsolation $dataIsolation, int $id, string $agentImage): bool
     {
         $conditions = [

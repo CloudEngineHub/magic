@@ -441,6 +441,29 @@ interface TaskFileRepositoryInterface
     public function countFilesByProjectIds(array $projectIds): array;
 
     /**
+     * 统计项目空间文件数量，最多统计到 $limit 即提前返回（大表场景避免全量 COUNT）.
+     * 返回值为 min(实际数量, $limit)，用于「是否达到阈值」判断。
+     * 口径：project_id + space_type='project' + 未删除（含隐藏文件与目录行）。
+     *
+     * @param int $projectId 项目ID
+     * @param int $limit 统计上限
+     * @return int 文件数量（上限封顶）
+     */
+    public function countProjectFilesWithLimit(int $projectId, int $limit): int;
+
+    /**
+     * 统计用户空间文件数量，最多统计到 $limit 即提前返回（大表场景避免全量 COUNT）.
+     * 返回值为 min(实际数量, $limit)，用于「是否达到阈值」判断。
+     * 口径：user_id + organization_code + space_type='user' + 未删除。
+     *
+     * @param string $userId 用户ID
+     * @param string $organizationCode 组织编码
+     * @param int $limit 统计上限
+     * @return int 文件数量（上限封顶）
+     */
+    public function countUserSpaceFilesWithLimit(string $userId, string $organizationCode, int $limit): int;
+
+    /**
      * Get files by project ID with resume support.
      * Used for fork migration with pagination and resume capability.
      *
@@ -450,6 +473,15 @@ interface TaskFileRepositoryInterface
      * @return TaskFileEntity[] Array of file entities
      */
     public function getFilesByProjectIdWithResume(int $projectId, ?int $lastFileId, int $limit): array;
+
+    /**
+     * Parent map of the project-space files the fork enumeration can see
+     * (space_type=project, visible, not deleted). Used to compute which files
+     * still have a valid ancestor chain up to the project root.
+     *
+     * @return array<int, null|int> [file_id => parent_id]
+     */
+    public function getVisibleProjectFileParentMap(int $projectId): array;
 
     /**
      * Batch update parent_id for multiple files.

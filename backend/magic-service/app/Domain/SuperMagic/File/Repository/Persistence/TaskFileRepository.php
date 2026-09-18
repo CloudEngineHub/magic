@@ -1384,6 +1384,30 @@ class TaskFileRepository implements TaskFileRepositoryInterface
     }
 
     /**
+     * Parent map of the project-space files the fork enumeration can see
+     * (space_type=project, visible, not deleted). Used to compute which files
+     * still have a valid ancestor chain up to the project root.
+     *
+     * @return array<int, null|int> [file_id => parent_id]
+     */
+    public function getVisibleProjectFileParentMap(int $projectId): array
+    {
+        $rows = $this->model::query()
+            ->where('project_id', $projectId)
+            ->where('space_type', FileSpaceType::PROJECT->value)
+            ->where('is_hidden', false)
+            ->whereNull('deleted_at')
+            ->get(['file_id', 'parent_id']);
+
+        $map = [];
+        foreach ($rows as $row) {
+            $map[(int) $row->file_id] = $row->parent_id === null ? null : (int) $row->parent_id;
+        }
+
+        return $map;
+    }
+
+    /**
      * Count attachments by project ID using the V2 list endpoint semantics:
      * workspace storage + not deleted. No is_hidden filter and no root-row
      * trimming. Used by the V2 count endpoint so the returned total matches
@@ -1444,6 +1468,39 @@ class TaskFileRepository implements TaskFileRepositoryInterface
         }
 
         return $countMap;
+    }
+
+    /**
+     * 统计项目空间文件数量，最多统计到 $limit 即提前返回（大表场景避免全量 COUNT）.
+     * 只取 file_id 单列并跳过实体水合；按 space_type='project' 统计，包含隐藏文件与目录行。
+     */
+    public function countProjectFilesWithLimit(int $projectId, int $limit): int
+    {
+        $query = $this->model::query()
+            ->select(['file_id'])
+            ->where('project_id', $projectId)
+            ->where('space_type', FileSpaceType::PROJECT->value)
+            ->whereNull('deleted_at')
+            ->limit($limit);
+
+        return count(Db::select($query->toSql(), $query->getBindings()));
+    }
+
+    /**
+     * 统计用户空间文件数量，最多统计到 $limit 即提前返回（大表场景避免全量 COUNT）.
+     * 只取 file_id 单列并跳过实体水合，依赖 idx_user_id 索引命中即停。
+     */
+    public function countUserSpaceFilesWithLimit(string $userId, string $organizationCode, int $limit): int
+    {
+        $query = $this->model::query()
+            ->select(['file_id'])
+            ->where('user_id', $userId)
+            ->where('organization_code', $organizationCode)
+            ->where('space_type', FileSpaceType::USER->value)
+            ->whereNull('deleted_at')
+            ->limit($limit);
+
+        return count(Db::select($query->toSql(), $query->getBindings()));
     }
 
     /**

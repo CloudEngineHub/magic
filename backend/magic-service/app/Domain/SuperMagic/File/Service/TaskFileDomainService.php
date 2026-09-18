@@ -2927,6 +2927,40 @@ class TaskFileDomainService
             ));
         }
 
+        // 目录删除是单节点语义（不级联子项），已删除目录下的存活文件会变成
+        // 无法回溯到项目根的孤儿数据。分享列表侧用 filterByValidParentChain
+        // 丢弃这类文件，Fork 必须保持同一口径，否则会把它们复制过去并挂到
+        // 目标根目录，等于"复活"已删除的内容。
+        $reachableFileIds = null;
+        if ($sourceRootFile->getSpaceType() === FileSpaceType::PROJECT->value) {
+            $parentMap = $this->taskFileRepository->getVisibleProjectFileParentMap($sourceProjectEntity->getId());
+            // 项目根是父链的固定终点：即使它因过滤条件不在映射里，也必须作为锚点，
+            // 否则整棵树的父链都无法终止，会被整体误判为不可达。
+            $parentMap[(int) $sourceRootFileId] = null;
+            $reachableFileIds = $this->resolveReachableFileIds($parentMap);
+            // 项目根目录不参与复制（copyFileList 会跳过），从可达集合与分母中剔除
+            unset($reachableFileIds[$sourceRootFileId]);
+        }
+        $skippedUnreachableCount = 0;
+
+        // 创建 fork 记录时用的是整项目计数（含孤儿与隐藏节点），与实际可复制
+        // 集合不一致。这里把分母对齐到"枚举真正会取到的集合"，避免进度到不了 100%。
+        if ($reachableFileIds !== null) {
+            $expectedTotalCount = count($fileIdSet === null
+                ? $reachableFileIds
+                : array_intersect_key($fileIdSet, $reachableFileIds));
+            if ($expectedTotalCount !== $totalCount) {
+                $this->logger->info(sprintf(
+                    'Fork record %d: total_files corrected from %d to %d (excluding unreachable/hidden files)',
+                    $forkRecordId,
+                    $totalCount,
+                    $expectedTotalCount
+                ));
+                $this->projectForkRepository->updateTotalFiles($forkRecordId, $expectedTotalCount);
+                $totalCount = $expectedTotalCount;
+            }
+        }
+
         try {
             // 检查是否已经处理完所有文件
             if ($totalCount > 0 && $processedCount >= $totalCount) {
@@ -2945,12 +2979,20 @@ class TaskFileDomainService
                     break;
                 }
                 $lastFileId = end($pageFiles)->getFileId();
-                $sourceFiles = $fileIdSet === null
-                    ? $pageFiles
-                    : array_values(array_filter(
-                        $pageFiles,
-                        static fn (TaskFileEntity $file) => isset($fileIdSet[$file->getFileId()])
-                    ));
+                // 过滤不可达（孤儿）文件；部分分享场景再叠加 fileIds 过滤。
+                // 游标 $lastFileId 始终取自原始页，避免被过滤页卡住而重复读取。
+                $sourceFiles = [];
+                $unreachableInPage = 0;
+                foreach ($pageFiles as $pageFile) {
+                    if ($reachableFileIds !== null && ! isset($reachableFileIds[$pageFile->getFileId()])) {
+                        ++$unreachableInPage;
+                        continue;
+                    }
+                    if ($fileIdSet === null || isset($fileIdSet[$pageFile->getFileId()])) {
+                        $sourceFiles[] = $pageFile;
+                    }
+                }
+                $skippedUnreachableCount += $unreachableInPage;
 
                 if (empty($sourceFiles)) {
                     if ($sourcePage['next_cursor'] === null) {
@@ -2999,6 +3041,14 @@ class TaskFileDomainService
             // 最终更新进度到90%
             $this->projectForkRepository->updateProgress($forkRecordId, $processedCount, 90);
             $this->logger->info(sprintf('Fork record %d: Successfully processed %d/%d files', $forkRecordId, $processedCount, $totalCount));
+
+            if ($skippedUnreachableCount > 0) {
+                $this->logger->warning(sprintf(
+                    'Fork record %d: skipped %d unreachable files (ancestor directory deleted or missing)',
+                    $forkRecordId,
+                    $skippedUnreachableCount
+                ));
+            }
 
             // 兜底逻辑：修复那些parent_id为null的文件
             if ($pendingParentIds !== []) {
@@ -3355,6 +3405,30 @@ class TaskFileDomainService
 
         // 调用 Repository 层统计文件数量
         return $this->taskFileRepository->countFilesByProjectIds($projectIds);
+    }
+
+    /**
+     * 统计项目空间文件数量，最多统计到 $limit 即提前返回.
+     * 返回值为 min(实际数量, $limit)，用于发起沙箱前的「是否达到阈值」判断。
+     */
+    public function countProjectFilesWithLimit(int $projectId, int $limit): int
+    {
+        if ($projectId <= 0 || $limit <= 0) {
+            return 0;
+        }
+        return $this->taskFileRepository->countProjectFilesWithLimit($projectId, $limit);
+    }
+
+    /**
+     * 统计用户空间文件数量，最多统计到 $limit 即提前返回.
+     * 返回值为 min(实际数量, $limit)，用于发起沙箱前的「是否达到阈值」判断。
+     */
+    public function countUserSpaceFilesWithLimit(string $userId, string $organizationCode, int $limit): int
+    {
+        if ($userId === '' || $organizationCode === '' || $limit <= 0) {
+            return 0;
+        }
+        return $this->taskFileRepository->countUserSpaceFilesWithLimit($userId, $organizationCode, $limit);
     }
 
     /**
@@ -4209,6 +4283,67 @@ class TaskFileDomainService
     public function batchInsertWavFiles(DataIsolation $dataIsolation, int $projectId, int $parentId, array $wavFiles): void
     {
         $this->taskFileRepository->batchInsertWavFiles($dataIsolation, $projectId, $parentId, $wavFiles);
+    }
+
+    /**
+     * 计算仍能回溯到项目根的文件（可达集合）。
+     *
+     * 口径与分享列表的 RelativeFilePathUtil::filterByValidParentChain 一致：
+     * 只有父链一路向上能在同一集合内找到、并终止于顶层（parent 为空或 <=0）
+     * 的文件才可达。父目录已被删除的文件属于孤儿数据，不可达，复制时应丢弃。
+     *
+     * @param array<int, null|int> $parentMap [file_id => parent_id]
+     * @return array<int, int> [file_id => file_id] 可达文件ID集合
+     */
+    private function resolveReachableFileIds(array $parentMap): array
+    {
+        $resolved = [];   // file_id => 是否可达（含中间节点缓存）
+        $reachable = [];
+        foreach (array_keys($parentMap) as $fileId) {
+            if (isset($resolved[$fileId])) {
+                if ($resolved[$fileId]) {
+                    $reachable[$fileId] = $fileId;
+                }
+                continue;
+            }
+
+            $chain = [];
+            $seen = [];
+            $cursor = $fileId;
+            $result = false;
+            while (true) {
+                if (isset($resolved[$cursor])) {
+                    $result = $resolved[$cursor];
+                    break;
+                }
+                if (isset($seen[$cursor])) {
+                    // 环，视为不可达
+                    break;
+                }
+                $seen[$cursor] = true;
+                $chain[] = $cursor;
+
+                $parentId = $parentMap[$cursor] ?? null;
+                if ($parentId === null || $parentId <= 0) {
+                    $result = true;
+                    break;
+                }
+                if (! array_key_exists($parentId, $parentMap)) {
+                    // 父节点缺失（例如父目录已删除），不可达
+                    break;
+                }
+                $cursor = $parentId;
+            }
+
+            foreach ($chain as $id) {
+                $resolved[$id] = $result;
+                if ($result) {
+                    $reachable[$id] = $id;
+                }
+            }
+        }
+
+        return $reachable;
     }
 
     private function setPendingNewFileId(array &$pendingParentIds, int $sourceFileId, int $newFileId): void
