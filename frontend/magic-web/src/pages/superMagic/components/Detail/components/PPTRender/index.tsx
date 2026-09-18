@@ -281,6 +281,7 @@ const PPTRenderInner = observer(function PPTRenderInner({
 }: PPTRenderProps) {
 	const { t } = useTranslation("super")
 	const isMobile = useIsMobile()
+	const fileApi = useFileApi()
 	const containerRef = useRef<HTMLDivElement>(null)
 	const { onDownloadRequest, onFullscreenToggle, emitFullscreenStateChange } = usePPTEventBus()
 	const store = usePPTStore()
@@ -1068,6 +1069,7 @@ const PPTRenderInner = observer(function PPTRenderInner({
 											htmlRelativeFolderPath={slideHtmlRelativeFolderPath}
 											selectedProject={selectedProject}
 											attachmentList={attachmentList}
+											fileApi={fileApi}
 											attachments={attachments}
 											updateSlideContents={(
 												newContents: Map<number, string>,

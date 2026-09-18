@@ -244,6 +244,7 @@ export class PPTStore {
 			mainFileId: config.mainFileId,
 			mainFileName: config.mainFileName,
 			displayConfig: config.displayConfig,
+			fileApi: config.fileApi,
 		})
 		this.screenshotService = createScreenshotService()
 		this.logger = createPPTLogger(config.logger)
@@ -2441,6 +2442,7 @@ export class PPTStore {
 			processorConfig.mainFileName = config.mainFileName
 		if (hasOwnConfigField(config, "displayConfig"))
 			processorConfig.displayConfig = config.displayConfig
+		if (hasOwnConfigField(config, "fileApi")) processorConfig.fileApi = config.fileApi
 
 		if (Object.keys(processorConfig).length > 0) {
 			this.processorService.updateConfig(processorConfig)

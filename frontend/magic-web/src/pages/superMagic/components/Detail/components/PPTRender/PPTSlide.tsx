@@ -46,6 +46,7 @@ import useShareRoute from "@/pages/superMagic/hooks/useShareRoute"
 import { AttachmentItem } from "../../../TopicFilesButton/hooks"
 import MagicSpin from "@/components/base/MagicSpin"
 import { stripSlideNotes } from "./utils/slideNotes"
+import type { FileApi } from "@/pages/superMagic/fileAccess/fileApi"
 
 export interface PPTSlideToolbarModel {
 	token: object
@@ -110,6 +111,8 @@ interface PPTSlideProps {
 	mainFileName?: string
 	/** 附件列表 */
 	attachments?: AttachmentItem[]
+	/** File client bound to the current host/share access context. */
+	fileApi?: FileApi
 	manualScale?: number | null
 	onManualScaleChange?: (scale: number | null) => void
 	onScaleRatioChange?: (scale: number) => void
@@ -165,6 +168,7 @@ const PPTSlide = observer(function PPTSlide({
 	mainFileId,
 	mainFileName,
 	attachments,
+	fileApi,
 	allowDownload = true,
 	manualScale,
 	onManualScaleChange,
@@ -265,6 +269,7 @@ const PPTSlide = observer(function PPTSlide({
 				fileName: `slide_${index}.html`,
 				attachmentList: attachmentList,
 				html_relative_path: htmlRelativeFolderPath,
+				fileApi,
 				xMagicImageProcess: HTML_PREVIEW_IMAGE_PROCESS,
 			}
 
