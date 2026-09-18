@@ -66,13 +66,53 @@ function getSelectedWatermarkFields(value: PlatformInfoWatermark) {
 	return platformWatermarkFields.filter((field) => value.fields.includes(field))
 }
 
+/** 未选择任何内容时回退到示例文案，避免预览出现空白画布。 */
+function resolveWatermarkPreviewText(
+	value: PlatformInfoWatermark,
+	fallback: string,
+	fieldSamples: Record<PlatformWatermarkField, string>,
+) {
+	return (
+		buildPlatformWatermarkPreviewText(getSelectedWatermarkFields(value), fieldSamples) ||
+		fallback
+	)
+}
+
+/**
+ * 水印预览面板。只读态与编辑态共用同一个画布实现，编辑时随表单实时更新，
+ * 避免两处预览在口径或视觉上出现差异。
+ */
+export function PlatformWatermarkPreviewPanel({
+	depth,
+	enabled,
+	previewText,
+}: {
+	depth: PlatformWatermarkDepth
+	enabled: boolean
+	previewText: string
+}) {
+	const { t } = useTranslation()
+
+	return (
+		<div className="space-y-2">
+			<p className="text-sm font-medium">{t("platformInfo.watermark.preview.title")}</p>
+			<PlatformWatermarkCanvas depth={depth} enabled={enabled} previewText={previewText} />
+			<p className="text-xs text-muted-foreground">
+				{t("platformInfo.watermark.preview.tip")}
+			</p>
+		</div>
+	)
+}
+
 export function PlatformInfoWatermarkPreview({ value }: { value: PlatformInfoWatermark }) {
 	const { t } = useTranslation()
 	const { depthLabels, fieldLabels, fieldSamples } = usePlatformWatermarkCopy()
 	const selectedFields = getSelectedWatermarkFields(value)
-	const previewText =
-		buildPlatformWatermarkPreviewText(selectedFields, fieldSamples) ||
-		t("platformInfo.watermark.preview.fallback")
+	const previewText = resolveWatermarkPreviewText(
+		value,
+		t("platformInfo.watermark.preview.fallback"),
+		fieldSamples,
+	)
 
 	return (
 		<div className="space-y-6">
@@ -105,14 +145,11 @@ export function PlatformInfoWatermarkPreview({ value }: { value: PlatformInfoWat
 					[t("platformInfo.watermark.field.depth"), depthLabels[value.depth]],
 				]}
 			/>
-			<PlatformWatermarkCanvas
+			<PlatformWatermarkPreviewPanel
+				depth={value.depth}
 				enabled={value.enabled}
 				previewText={previewText}
-				depth={value.depth}
 			/>
-			<p className="text-xs text-muted-foreground">
-				{t("platformInfo.watermark.preview.tip")}
-			</p>
 		</div>
 	)
 }
@@ -127,7 +164,7 @@ export function PlatformInfoWatermarkForm({
 	value: PlatformInfoWatermark
 }) {
 	const { t } = useTranslation()
-	const { depthLabels, fieldLabels } = usePlatformWatermarkCopy()
+	const { depthLabels, fieldLabels, fieldSamples } = usePlatformWatermarkCopy()
 	const [contentError, setContentError] = useState("")
 	// 水印关闭时内容和深浅保留在表单里但不可编辑，避免用户误以为配置已废弃。
 	const isContentDisabled = !value.enabled
@@ -229,6 +266,16 @@ export function PlatformInfoWatermarkForm({
 				]}
 			/>
 			<PlatformWatermarkNotice />
+			{/* 编辑态同样展示预览，随开关、内容与深浅实时变化，方便保存前确认效果。 */}
+			<PlatformWatermarkPreviewPanel
+				depth={value.depth}
+				enabled={value.enabled}
+				previewText={resolveWatermarkPreviewText(
+					value,
+					t("platformInfo.watermark.preview.fallback"),
+					fieldSamples,
+				)}
+			/>
 		</div>
 	)
 }
@@ -253,31 +300,26 @@ function PlatformWatermarkCanvas({
 	enabled: boolean
 	previewText: string
 }) {
-	const { t } = useTranslation()
-
 	return (
-		<div className="space-y-2">
-			<p className="text-sm font-medium">{t("platformInfo.watermark.preview.title")}</p>
-			<div className="relative h-56 overflow-hidden rounded-md border bg-background">
-				{/* 水印层需要超出画布再旋转，否则四角会露出空白；文字颜色由深浅档位决定，
-				 * 属于渲染参数，因此使用内联样式而不是主题色。
-				 * 列宽使用 max-content 而不是 1fr：选择较多内容时文案会变长，
-				 * 零最小宽度的列会让相邻两列文字互相重叠。 */}
-				<div
-					aria-hidden="true"
-					className="absolute -inset-24 grid grid-cols-[repeat(2,minmax(max-content,1fr))] content-around justify-items-start gap-x-6 gap-y-8"
-					style={{
-						color: platformWatermarkDepthTextColors[depth],
-						opacity: enabled ? 1 : 0.35,
-						transform: `rotate(${watermarkPreviewRotate})`,
-					}}
-				>
-					{Array.from({ length: watermarkPreviewRepeatCount }, (_, index) => (
-						<span className="whitespace-nowrap text-lg leading-6" key={index}>
-							{previewText}
-						</span>
-					))}
-				</div>
+		<div className="relative h-56 overflow-hidden rounded-md border bg-background">
+			{/* 水印层需要超出画布再旋转，否则四角会露出空白；文字颜色由深浅档位决定，
+			 * 属于渲染参数，因此使用内联样式而不是主题色。
+			 * 列宽使用 max-content 而不是 1fr：选择较多内容时文案会变长，
+			 * 零最小宽度的列会让相邻两列文字互相重叠。 */}
+			<div
+				aria-hidden="true"
+				className="absolute -inset-24 grid grid-cols-[repeat(2,minmax(max-content,1fr))] content-around justify-items-start gap-x-6 gap-y-8"
+				style={{
+					color: platformWatermarkDepthTextColors[depth],
+					opacity: enabled ? 1 : 0.35,
+					transform: `rotate(${watermarkPreviewRotate})`,
+				}}
+			>
+				{Array.from({ length: watermarkPreviewRepeatCount }, (_, index) => (
+					<span className="whitespace-nowrap text-lg leading-6" key={index}>
+						{previewText}
+					</span>
+				))}
 			</div>
 		</div>
 	)

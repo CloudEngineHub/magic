@@ -176,4 +176,39 @@ describe("platform info watermark form", () => {
 
 		expect(screen.getByText("platformInfo.watermark.defaultTip")).toBeInTheDocument()
 	})
+
+	it("shows the watermark preview while editing", () => {
+		render(
+			<WatermarkFormHarness
+				initialValue={{ enabled: true, fields: ["real_name"], depth: "light" }}
+			/>,
+		)
+
+		expect(screen.getByText("platformInfo.watermark.preview.title")).toBeInTheDocument()
+		expect(screen.getByText("platformInfo.watermark.preview.tip")).toBeInTheDocument()
+		expect(
+			screen.getAllByText("platformInfo.watermark.preview.sample.realName"),
+		).toHaveLength(12)
+	})
+
+	it("updates the editing preview as content and depth change", () => {
+		render(
+			<WatermarkFormHarness
+				initialValue={{ enabled: true, fields: ["real_name"], depth: "light" }}
+			/>,
+		)
+
+		fireEvent.click(screen.getByRole("checkbox", { name: "platformInfo.watermark.field.email" }))
+
+		const previewText =
+			"platformInfo.watermark.preview.sample.realName · platformInfo.watermark.preview.sample.email"
+		const canvas = screen.getAllByText(previewText)
+		expect(canvas).toHaveLength(12)
+
+		fireEvent.click(screen.getByRole("radio", { name: "platformInfo.watermark.depth.strong" }))
+
+		// 深浅档位直接体现在预览画布的文字颜色上。
+		const layer = screen.getAllByText(previewText)[0].parentElement
+		expect(layer).toHaveStyle({ color: "rgba(0, 0, 0, 0.06)" })
+	})
 })
