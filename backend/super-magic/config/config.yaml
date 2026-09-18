@@ -114,11 +114,14 @@ llm:
   # 第二阶梯：非流式退避重试
   non_stream_timeout_seconds: 600          # 非流式请求超时
   backoff_max_retries: 5                   # 最大退避重试次数
-  # 原生视觉请求连续返回 400 后，当前沙箱将当前模型降级为非视觉；2 表示第三次请求使用非视觉。
+  # 原生视觉请求连续返回 4xx 后，当前沙箱将当前模型降级为非视觉；2 表示第三次请求使用非视觉。
   native_visual_400_failure_threshold: ${LLM_NATIVE_VISUAL_400_FAILURE_THRESHOLD:-2}
-  # Chat 用户消息首批原生视觉图片数；不约束 visual_understanding 追加消息，也不限制整个 Agent 轮次累计数量。
+  # Chat 用户消息首批原生视觉图片数；不约束 visual_understanding 追加消息。
   # -1 表示 Chat 首批不限制，0 表示 Chat 图片不直接进入原生视觉。
   native_visual_max_image_refs: ${LLM_NATIVE_VISUAL_MAX_IMAGE_REFS:-10}
+  # 历史加当前合计允许保留的原生视觉图片总数。超过后，历史里的原生视觉 user 消息全部不再带图；当前消息不受影响。
+  # -1 表示不限制，0 表示历史消息都不直接发送原生视觉图片。
+  native_visual_max_history_image_refs: ${LLM_NATIVE_VISUAL_MAX_HISTORY_IMAGE_REFS:-20}
   # 单次原生视觉请求的 Base64 图片总字节数上限；-1 表示不限制。
   native_visual_max_image_bytes: ${LLM_NATIVE_VISUAL_MAX_IMAGE_BYTES:--1}
   # 原生视觉 Base64 进程内缓存的最大条目数。

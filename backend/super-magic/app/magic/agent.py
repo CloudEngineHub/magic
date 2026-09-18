@@ -2804,7 +2804,10 @@ Since your subsequent output will be merged with pre-interruption content and di
         # 压缩可能切换到专属模型，调用前重新解析一次当前文本模型。
         text_model_state = self._resolve_current_text_model()
 
-        # 应用层基于聊天消息元组快照渲染多模态消息，再交由 agentlang 修复通用消息序列。
+        # 历史加当前合计超过上限时，先关掉历史原生视觉消息，再基于快照渲染请求。
+        await self.chat_history.disable_historical_native_visual_if_over_limit(
+            self._message_renderer.max_history_image_refs,
+        )
         message_snapshot = self.chat_history.get_message_snapshot()
         render_result = await self._message_renderer.render_messages_with_horizon_hint(
             message_snapshot,
