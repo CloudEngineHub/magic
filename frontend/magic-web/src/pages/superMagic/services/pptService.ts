@@ -153,6 +153,7 @@ export async function prepareSingleSlideExport(input: {
 		attachmentList: searchScope,
 		mainFileId: fileId,
 		mainFileName: fileName,
+		fileApi,
 	})
 
 	const resourceIds = processorService.collectFileIds(rawContent, 0, relativeFilePath)
@@ -264,6 +265,7 @@ export async function prepareExportSlides(
 		mainFileId,
 		mainFileName,
 		displayConfig,
+		fileApi,
 	})
 
 	const allResourceFileIds = new Set<string>()
@@ -408,6 +410,7 @@ export async function* iterateExportSlides(
 		mainFileId,
 		mainFileName,
 		displayConfig,
+		fileApi,
 	})
 
 	let preparedPageCount = 0

@@ -5,6 +5,7 @@ const mocks = vi.hoisted(() => ({
 	getTemporaryDownloadUrl: vi.fn(),
 	loadSlide: vi.fn(),
 	processSlideWithUrlMapping: vi.fn(),
+	processorConfigs: [] as unknown[],
 }))
 
 vi.mock("@/pages/superMagic/components/Detail/components/PPTRender/services", () => ({
@@ -12,6 +13,9 @@ vi.mock("@/pages/superMagic/components/Detail/components/PPTRender/services", ()
 		loadSlide = mocks.loadSlide
 	},
 	SlideProcessorService: class {
+		constructor(config: unknown) {
+			mocks.processorConfigs.push(config)
+		}
 		collectFileIds = mocks.collectFileIds
 		processSlideWithUrlMapping = mocks.processSlideWithUrlMapping
 	},
@@ -40,6 +44,7 @@ const attachmentList = [
 describe("pptService lazy export providers", () => {
 	beforeEach(() => {
 		vi.clearAllMocks()
+		mocks.processorConfigs.length = 0
 		mocks.collectFileIds.mockReturnValue(new Set())
 		mocks.processSlideWithUrlMapping.mockImplementation(async (html: string) => html)
 		mocks.getTemporaryDownloadUrl.mockImplementation(
@@ -118,5 +123,31 @@ describe("pptService lazy export providers", () => {
 
 		expect(pages).toEqual([{ index: 1, key: secondSlidePath, html: "<main>second</main>" }])
 		expect(consoleError).toHaveBeenCalled()
+	})
+
+	it("passes the bound file API to slide processing during export", async () => {
+		mocks.loadSlide.mockResolvedValue("<main>slide</main>")
+		const fileApi = {
+			identityKey: "share:test",
+			getTemporaryDownloadUrl: vi
+				.fn()
+				.mockResolvedValue([
+					{ file_id: "slide-1", url: "https://share.example.com/slide-1.html" },
+				]),
+			getFileContentById: vi.fn(),
+			getFileContentsByIds: vi.fn(),
+			requestSharedMediaUrls: vi.fn(),
+		}
+
+		const iterator = iterateExportSlides({
+			slidePaths: [slidePath],
+			attachmentList,
+			mainFileId: "main",
+			fileApi,
+		})[Symbol.asyncIterator]()
+
+		await iterator.next()
+
+		expect(mocks.processorConfigs).toContainEqual(expect.objectContaining({ fileApi }))
 	})
 })

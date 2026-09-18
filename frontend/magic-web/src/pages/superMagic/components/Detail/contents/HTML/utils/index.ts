@@ -227,7 +227,7 @@ interface ResourceFileTypeInfo {
 	relative_file_path?: string
 }
 
-function getResourceContentType(file: ResourceFileTypeInfo, fallbackPath: string): string {
+export function getResourceContentType(file: ResourceFileTypeInfo, fallbackPath: string): string {
 	return getContentTypeFromExtension(
 		file.file_extension || file.file_name || file.relative_file_path || fallbackPath,
 	)

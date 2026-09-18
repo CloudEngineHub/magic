@@ -1,7 +1,9 @@
 import { beforeEach, describe, expect, it, vi } from "vitest"
 import { getTemporaryDownloadUrl } from "@/pages/superMagic/utils/api"
+import type { FileApi } from "@/pages/superMagic/fileAccess/fileApi"
 import { processHtmlContent } from "../htmlProcessor"
 import { HTML_PREVIEW_IMAGE_PROCESS } from "../previewImageProcess"
+import { filterInjectedTags } from "../utils"
 
 vi.mock("@/pages/superMagic/utils/api", () => ({
 	getTemporaryDownloadUrl: vi.fn(),
@@ -80,6 +82,171 @@ describe("processHtmlContent image processing", () => {
 		})
 		expect(result.processedContent).toContain("https://oss.example.com/hero.webp")
 		expect(result.processedContent).toContain("https://oss.example.com/app.js")
+	})
+
+	it("uses the bound file API when processing preloaded images", async () => {
+		const fileApi: FileApi = {
+			identityKey: "share:test",
+			getTemporaryDownloadUrl: vi.fn().mockResolvedValue([
+				{
+					file_id: "image-file",
+					url: "https://share.example.com/hero.webp",
+				},
+			]),
+			getFileContentById: vi.fn(),
+			getFileContentsByIds: vi.fn(),
+			requestSharedMediaUrls: vi.fn(),
+		}
+		const attachments = [
+			{
+				file_id: "image-file",
+				file_name: "hero.png",
+				relative_file_path: "deck/hero.png",
+				updated_at: "2026-07-15T00:00:00.000Z",
+			},
+		]
+
+		const result = await processHtmlContent({
+			content: '<img src="hero.png">',
+			attachments,
+			attachmentList: attachments,
+			html_relative_path: "deck/",
+			preloadedUrlMapping: new Map([["image-file", "https://oss.example.com/hero.png"]]),
+			xMagicImageProcess: HTML_PREVIEW_IMAGE_PROCESS,
+			fileApi,
+		})
+
+		expect(fileApi.getTemporaryDownloadUrl).toHaveBeenCalledWith({
+			file_ids: ["image-file"],
+			options: { xMagicImageProcess: HTML_PREVIEW_IMAGE_PROCESS },
+			access: undefined,
+		})
+		expect(getTemporaryDownloadUrl).not.toHaveBeenCalled()
+		expect(result.processedContent).toContain("https://share.example.com/hero.webp")
+	})
+
+	it("inlines external CSS and resolves URLs relative to the CSS directory", async () => {
+		const fileApi: FileApi = {
+			identityKey: "share:test",
+			getTemporaryDownloadUrl: vi.fn().mockResolvedValue([
+				{
+					file_id: "background-file",
+					url: "https://share.example.com/background.webp",
+				},
+			]),
+			getFileContentById: vi
+				.fn()
+				.mockResolvedValue(
+					`.hero { background-image: url("images/background-clinic-teal.webp"); }`,
+				),
+			getFileContentsByIds: vi.fn(),
+			requestSharedMediaUrls: vi.fn(),
+		}
+		const attachments = [
+			{
+				file_id: "html-file",
+				file_name: "slide.html",
+				relative_file_path: "deck/slide.html",
+			},
+			{
+				file_id: "css-file",
+				file_name: "theme.css",
+				relative_file_path: "deck/theme.css",
+			},
+			{
+				file_id: "background-file",
+				file_name: "background-clinic-teal.webp",
+				relative_file_path: "deck/images/background-clinic-teal.webp",
+			},
+		]
+
+		const result = await processHtmlContent({
+			content:
+				'<link rel="stylesheet" href="theme.css"><img src="images/background-clinic-teal.webp"><main class="hero">content</main>',
+			attachments,
+			attachmentList: attachments,
+			fileId: "html-file",
+			html_relative_path: "deck/",
+			xMagicImageProcess: HTML_PREVIEW_IMAGE_PROCESS,
+			preloadedUrlMapping: new Map([["css-file", "https://share.example.com/theme.css"]]),
+			fileApi,
+		})
+
+		expect(fileApi.getFileContentById).toHaveBeenCalledWith("css-file", {
+			responseType: "text",
+			access: undefined,
+		})
+		expect(result.processedContent).toContain("https://share.example.com/background.webp")
+		expect(result.processedContent).toContain('data-original-href="theme.css"')
+		expect(result.processedContent).not.toMatch(/\shref=["']theme\.css/)
+		expect(result.processedContent).not.toContain('url("images/background-clinic-teal.webp")')
+		expect(result.processedContent).not.toContain("url('images/background-clinic-teal.webp')")
+
+		const contentForSave = filterInjectedTags(result.processedContent, result.filePathMapping)
+		expect(contentForSave).toMatch(/\shref=["']theme\.css/)
+		expect(contentForSave).not.toContain("https://share.example.com/background.webp")
+	})
+
+	it("inlines imported CSS and resolves its URLs relative to the imported file", async () => {
+		const fileApi: FileApi = {
+			identityKey: "share:test",
+			getTemporaryDownloadUrl: vi.fn().mockResolvedValue([
+				{
+					file_id: "background-file",
+					url: "https://share.example.com/imported-background.webp",
+				},
+			]),
+			getFileContentById: vi.fn().mockImplementation(async (fileId: string) => {
+				if (fileId === "css-file") return '@import "styles/hero.css";'
+				if (fileId === "imported-css-file")
+					return '.hero { background-image: url("../images/imported-background.webp"); }'
+				return null
+			}),
+			getFileContentsByIds: vi.fn(),
+			requestSharedMediaUrls: vi.fn(),
+		}
+		const attachments = [
+			{
+				file_id: "html-file",
+				file_name: "slide.html",
+				relative_file_path: "deck/slide.html",
+			},
+			{
+				file_id: "css-file",
+				file_name: "theme.css",
+				relative_file_path: "deck/theme.css",
+			},
+			{
+				file_id: "imported-css-file",
+				file_name: "hero.css",
+				relative_file_path: "deck/styles/hero.css",
+			},
+			{
+				file_id: "background-file",
+				file_name: "imported-background.webp",
+				relative_file_path: "deck/images/imported-background.webp",
+			},
+		]
+
+		const result = await processHtmlContent({
+			content: '<link rel="stylesheet" href="theme.css"><main class="hero">content</main>',
+			attachments,
+			attachmentList: attachments,
+			fileId: "html-file",
+			html_relative_path: "deck/",
+			xMagicImageProcess: HTML_PREVIEW_IMAGE_PROCESS,
+			preloadedUrlMapping: new Map([["css-file", "https://share.example.com/theme.css"]]),
+			fileApi,
+		})
+
+		expect(fileApi.getFileContentById).toHaveBeenCalledWith("imported-css-file", {
+			responseType: "text",
+			access: undefined,
+		})
+		expect(result.processedContent).toContain(
+			"https://share.example.com/imported-background.webp",
+		)
+		expect(result.processedContent).not.toContain('@import "styles/hero.css"')
 	})
 
 	it("replaces inline background URLs when the filename contains parentheses", async () => {

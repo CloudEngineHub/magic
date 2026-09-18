@@ -15,7 +15,11 @@ import {
 	type HtmlPreviewBundledTemplateKind,
 } from "./html-preview-bundled-shell"
 import { parseMagicProjectJsContent } from "./utils/magicProjectParser"
-import { collectHtmlResourcePlan } from "./utils/htmlResourceCollector"
+import {
+	collectHtmlResourcePlan,
+	resolveExternalCssResources,
+	type ExternalCssResource,
+} from "./utils/htmlResourceCollector"
 import { replaceHtmlResourceUrls } from "./utils/htmlResourceReplacement"
 
 export type { HtmlPreviewBundledTemplateKind }
@@ -344,6 +348,20 @@ export async function processHtmlContent(
 		imageFileIds,
 		imageProcessingFileIds,
 	} = collectHtmlResourcePlan(newHtmlDoc, allFiles, relativeFolderPath, processingMetadata)
+	const resourcePlan = {
+		fileIdsToFetch: collectedFileIds,
+		urlMap,
+		filePathMap,
+		slidesMap,
+		imageFileIds,
+		imageProcessingFileIds,
+	}
+	const externalCssResources: ExternalCssResource[] = await resolveExternalCssResources({
+		plan: resourcePlan,
+		allFiles,
+		access: input.access,
+		fileApi: input.fileApi,
+	})
 
 	let fileIdsToFetch = collectedFileIds
 	if (previewKind === "dashboard") {
@@ -384,6 +402,7 @@ export async function processHtmlContent(
 				relativeFolderPath,
 				access: input.access,
 				fileApi: input.fileApi,
+				externalCssResources,
 			})
 
 			// 替换 window.location.reload 为 window.Magic.reload
