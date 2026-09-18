@@ -443,7 +443,7 @@ interface TaskFileRepositoryInterface
     /**
      * 统计项目空间文件数量，最多统计到 $limit 即提前返回（大表场景避免全量 COUNT）.
      * 返回值为 min(实际数量, $limit)，用于「是否达到阈值」判断。
-     * 口径：project_id + space_type='project' + 未删除（含隐藏文件与目录行）。
+     * 口径：project_id + space_type='project' + storage_type='workspace' + 未删除（含隐藏文件与目录行）。
      *
      * @param int $projectId 项目ID
      * @param int $limit 统计上限
@@ -454,7 +454,7 @@ interface TaskFileRepositoryInterface
     /**
      * 统计用户空间文件数量，最多统计到 $limit 即提前返回（大表场景避免全量 COUNT）.
      * 返回值为 min(实际数量, $limit)，用于「是否达到阈值」判断。
-     * 口径：user_id + organization_code + space_type='user' + 未删除。
+     * 口径：user_id + organization_code + space_type='user' + storage_type='user' + 未删除。
      *
      * @param string $userId 用户ID
      * @param string $organizationCode 组织编码
