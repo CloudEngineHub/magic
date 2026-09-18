@@ -537,5 +537,45 @@ describe("MicroAppPublishDialog", () => {
 
 		expect(await screen.findByText("share.noAvailableShareMethods")).toBeInTheDocument()
 		expect(screen.getByTestId("micro-app-publish-save")).toBeDisabled()
+		// 只有「分享方式」与提示保留，分享设置里的其它项不再渲染。
+		expect(screen.getByTestId("share-type-field")).toBeInTheDocument()
+		expect(screen.queryByTestId("share-expiry-field")).not.toBeInTheDocument()
+	})
+
+	it("管理员未开放任何分享方式时已发布的密码项也一并收起", async () => {
+		mocks.functionPermissions = {
+			"micro_app.share_password": false,
+			"micro_app.share_public": false,
+			"micro_app.share_team": false,
+		}
+		mocks.getMicroAppProject.mockResolvedValue(createPasswordProtectedDetail())
+
+		renderDialog()
+
+		expect(await screen.findByText("share.noAvailableShareMethods")).toBeInTheDocument()
+		// 已发布的方式本身仍展示，但它对应的设置项不再展示。
+		expect(screen.getByTestId("share-type-field")).toBeInTheDocument()
+		expect(screen.queryByTestId("micro-app-publish-password")).not.toBeInTheDocument()
+		expect(screen.queryByTestId("share-expiry-field")).not.toBeInTheDocument()
+		// 左侧发布表单不受分享管控影响。
+		expect(screen.getByTestId("micro-app-publish-project-name")).toBeInTheDocument()
+		expect(screen.getByTestId("micro-app-cover-upload")).toBeInTheDocument()
+	})
+
+	it("移动端管理员未开放任何分享方式时同样收起分享设置里的其它项", async () => {
+		mocks.functionPermissions = {
+			"micro_app.share_password": false,
+			"micro_app.share_public": false,
+			"micro_app.share_team": false,
+		}
+		mocks.getMicroAppProject.mockResolvedValue(createPasswordProtectedDetail())
+
+		renderDialog({ mobile: true })
+
+		expect(await screen.findByText("share.noAvailableShareMethods")).toBeInTheDocument()
+		expect(screen.getByTestId("share-type-field")).toBeInTheDocument()
+		expect(screen.queryByTestId("micro-app-publish-password")).not.toBeInTheDocument()
+		expect(screen.queryByTestId("share-expiry-field")).not.toBeInTheDocument()
+		expect(screen.getByTestId("micro-app-publish-project-name")).toBeInTheDocument()
 	})
 })

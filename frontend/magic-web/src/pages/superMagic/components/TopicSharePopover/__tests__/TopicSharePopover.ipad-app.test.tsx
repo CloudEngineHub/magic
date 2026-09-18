@@ -33,9 +33,29 @@ vi.mock("@/utils/devices", () => ({
 }))
 
 vi.mock("@/apis", () => ({
+	FUNCTION_PERMISSION_CODE: {
+		MicroAppSharePassword: "micro_app.share_password",
+		MicroAppSharePublic: "micro_app.share_public",
+		MicroAppShareTeam: "micro_app.share_team",
+		ProjectSharePassword: "project.share_password",
+		ProjectSharePublic: "project.share_public",
+		ProjectShareTeam: "project.share_team",
+		TopicSharePassword: "topic.share_password",
+		TopicSharePublic: "topic.share_public",
+	},
 	SuperMagicApi: {
 		getShareInfoByCode: vi.fn().mockResolvedValue(null),
 	},
+}))
+
+// Share methods are unrestricted here; this suite only covers popover dismissal behavior.
+vi.mock("@/hooks/useFunctionPermission", () => ({
+	useFunctionPermissions: () => ({
+		data: undefined,
+		error: undefined,
+		isLoading: true,
+		mutate: vi.fn(),
+	}),
 }))
 
 vi.mock("@/utils/clipboard-helpers", () => ({

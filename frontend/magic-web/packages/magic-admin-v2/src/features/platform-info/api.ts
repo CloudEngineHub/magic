@@ -3,9 +3,16 @@ import type { HttpClient, RequestOptions } from "@magic-admin-v2/api/types";
 import type {
   PlatformInfoDetails,
   PlatformInfoFormState,
+  PlatformInfoWatermark,
   PlatformLocale,
+  PlatformWatermarkDepth,
+  PlatformWatermarkField,
   UpdatePlatformInfoParams,
 } from "@magic-admin-v2/features/platform-info/types";
+import {
+  platformWatermarkDepths,
+  platformWatermarkFields,
+} from "@magic-admin-v2/features/platform-info/utils";
 import { Language } from "@magic-admin-v2/i18n/resources";
 
 const emptyLocalizedText: Record<PlatformLocale, string> = {
@@ -13,8 +20,45 @@ const emptyLocalizedText: Record<PlatformLocale, string> = {
   en_US: "",
 };
 
+/** 与后端 platform_settings 的默认水印配置保持一致。 */
+const defaultWatermark: PlatformInfoWatermark = {
+  enabled: false,
+  fields: ["real_name"],
+  depth: "light",
+};
+
 function normalizeLocale(value: unknown): PlatformLocale {
   return value === Language.EnUS ? Language.EnUS : Language.ZhCN;
+}
+
+function normalizeWatermarkDepth(value?: string): PlatformWatermarkDepth {
+  return platformWatermarkDepths.find((depth) => depth === value) ?? defaultWatermark.depth;
+}
+
+function normalizeWatermarkFields(value?: readonly string[]): PlatformWatermarkField[] {
+  const selected = new Set(value ?? []);
+
+  // 只保留前端能渲染的字段并按固定顺序输出，避免后端返回未知字段或乱序时
+  // 复选框组出现无法取消的脏数据。
+  return platformWatermarkFields.filter((field) => selected.has(field));
+}
+
+/**
+ * 归一化服务端水印配置。缺省字段回退到后端默认值，
+ * 保证预览态、编辑态与提交参数使用同一份结构。
+ */
+export function normalizePlatformWatermark(
+  value?: Partial<PlatformInfoWatermark> | null,
+): PlatformInfoWatermark {
+  if (!value) {
+    return { ...defaultWatermark, fields: [...defaultWatermark.fields] };
+  }
+
+  return {
+    enabled: value.enabled ?? defaultWatermark.enabled,
+    fields: normalizeWatermarkFields(value.fields),
+    depth: normalizeWatermarkDepth(value.depth),
+  };
 }
 
 function normalizeLocalizedText(value?: Partial<Record<PlatformLocale, string>>) {
@@ -38,6 +82,7 @@ export function toPlatformInfoFormState(data: PlatformInfoDetails): PlatformInfo
         link: data.footer?.filing?.link ?? "https://beian.miit.gov.cn/",
       },
     },
+    watermark: normalizePlatformWatermark(data.watermark),
     name_i18n: normalizeLocalizedText(data.name_i18n),
     title_i18n: normalizeLocalizedText(data.title_i18n),
     keywords_i18n: normalizeLocalizedText(data.keywords_i18n),
@@ -62,6 +107,7 @@ export function createEmptyPlatformInfoFormState(): PlatformInfoFormState {
         link: "https://beian.miit.gov.cn/",
       },
     },
+    watermark: normalizePlatformWatermark(),
     name_i18n: { ...emptyLocalizedText },
     title_i18n: { ...emptyLocalizedText },
     keywords_i18n: { ...emptyLocalizedText },
@@ -81,6 +127,7 @@ export function createDefaultPlatformInfoDetails(): PlatformInfoDetails {
     minimal_logo: null,
     default_language: defaults.default_language,
     footer: defaults.footer,
+    watermark: defaults.watermark,
     name_i18n: defaults.name_i18n,
     title_i18n: defaults.title_i18n,
     keywords_i18n: defaults.keywords_i18n,
@@ -101,6 +148,7 @@ export function toUpdatePlatformInfoParams(
     favicon_url: values.favicon,
     default_language: values.default_language,
     footer: values.footer,
+    watermark: values.watermark,
     name_i18n: values.name_i18n,
     title_i18n: values.title_i18n,
     keywords_i18n: values.keywords_i18n,
@@ -126,6 +174,9 @@ export function toChangedPlatformInfoParams(
   if (dirtyFields.favicon) params.favicon_url = values.favicon;
   if (dirtyFields.default_language) params.default_language = values.default_language;
   if (dirtyFields.footer) params.footer = values.footer;
+  // 水印的 enabled、fields、depth 相互依赖（开启时必须有内容），
+  // 因此任一子字段变化都提交完整水印对象，后端按 array_replace 合并。
+  if (dirtyFields.watermark) params.watermark = values.watermark;
   if (dirtyFields.name_i18n) params.name_i18n = values.name_i18n;
   if (dirtyFields.title_i18n) params.title_i18n = values.title_i18n;
   if (dirtyFields.keywords_i18n) params.keywords_i18n = values.keywords_i18n;

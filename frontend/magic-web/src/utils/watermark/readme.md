@@ -21,6 +21,21 @@ import { WATERMARK_CONFIG, watermarkService } from "@/utils/watermark"
 
 默认见 `WATERMARK_CONFIG`。窄屏（宽度 ≤ `768px`）挂载时会合并 `WATERMARK_MOBILE_CONFIG`（更密间距、更小字号），挂载时判定一次，不监听 resize。
 
+### 页面水印的三种策略
+
+站点级水印由 `syncUserWatermark()` 统一挂载，策略由 `resolveUserWatermarkMode()` 决定，
+再经 `resolveUserWatermarkRenderConfig()` 解析出渲染配置与缓存键：
+
+| 策略 `UserWatermarkMode` | 触发条件 | 文字 | 渲染配置 |
+| --- | --- | --- | --- |
+| `platform` | 非个人组织且平台水印已开启 | 组织配置的身份字段 | `WATERMARK_DEPTH_CONFIG[depth]` |
+| `legacy`（个人组织） | 个人组织且 `MAGIC_WATERMARK_ENABLED` 为 `true` | `user_id`（含部署标识） | `USER_ID_WATERMARK_CONFIG`，接近透明 |
+| `legacy`（其他） | 其余组织且 `MAGIC_WATERMARK_ENABLED` 为 `true` | `user_id`（含部署标识） | `WATERMARK_CONFIG` |
+| `disabled` | 其余情况 | — | — |
+
+个人组织版不会应用组织级水印配置，只保留由环境变量开启的 `user_id` 水印，
+且颜色接近透明（`rgba(0, 0, 0, 0.01)`），仅作为隐性溯源标记，不干扰成员阅读。
+
 ### mount
 
 把水印挂到指定容器上。默认水印标识是 `magic-watermark`，也可以传 `id` 自定义。

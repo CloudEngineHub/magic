@@ -24,13 +24,16 @@ import {
 	GLOBAL_SYSTEM_PROMPT_MAX_LENGTH,
 	getContentLocaleCompletion,
 	localeLabels,
+	platformInfoSectionDescriptionKeys,
 	platformInfoSectionTitleKeys,
 	platformLocales,
 	sharedImageFields,
+	showsPlatformInfoContentLocale,
 	type PlatformInfoSectionId,
 } from "@magic-admin-v2/features/platform-info/utils"
 import { PlatformInfoContentLanguageBar, PlatformInfoContentSection } from "./platform-info-shared"
 import { PlatformInfoFieldControl } from "./platform-info-fields"
+import { PlatformInfoWatermarkForm } from "./platform-info-watermark"
 
 type PlatformInfoFormController = UseFormReturn<PlatformInfoFormState>
 
@@ -53,18 +56,12 @@ export function PlatformInfoForm({
 	const contentCompletion = getContentLocaleCompletion(value)
 	const errors = form.formState.errors
 	const setValue = form.setValue
-	const showContentLocale = activeSection !== "basic" && activeSection !== "globalSystemPrompt"
+	const showContentLocale = showsPlatformInfoContentLocale(activeSection)
 
 	return (
 		<PlatformInfoContentSection
 			title={t(platformInfoSectionTitleKeys[activeSection])}
-			description={
-				activeSection === "globalSystemPrompt"
-					? t("platformInfo.sectionDesc.globalSystemPrompt")
-					: showContentLocale
-						? t("platformInfo.contentLanguage.description")
-						: t("nav.desc.platformInfo")
-			}
+			description={t(platformInfoSectionDescriptionKeys[activeSection])}
 		>
 			<Form {...form}>
 				<form className="space-y-8 pb-4" onSubmit={(event) => event.preventDefault()}>
@@ -408,6 +405,16 @@ export function PlatformInfoForm({
 										] as Array<[string, ReactNode, string?]>)
 									: []),
 							]}
+						/>
+					) : null}
+
+					{activeSection === "watermark" ? (
+						<PlatformInfoWatermarkForm
+							error={errors.watermark?.fields?.message}
+							value={value.watermark}
+							onChange={(nextValue) =>
+								setValue("watermark", nextValue, formSetValueOptions)
+							}
 						/>
 					) : null}
 				</form>

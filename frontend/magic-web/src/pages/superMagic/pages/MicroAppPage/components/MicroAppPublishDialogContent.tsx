@@ -129,6 +129,8 @@ export default function MicroAppPublishDialogContent({
 	const { t } = useTranslation("super")
 	const isBusy = saving || unpublishing || coverUploading
 	const htmlEntries = collectRootHtmlFiles(attachmentList)
+	// 全部分享方式被管理员管控关闭时，分享设置里只有方式与提示有意义，其余项不再渲染。
+	const hasNoPermittedShareType = permittedShareTypes?.length === 0
 	const handleCoverPaste: ClipboardEventHandler<HTMLDivElement> = (event) => {
 		if (loading || isBusy) return
 		const target = event.target
@@ -235,7 +237,7 @@ export default function MicroAppPublishDialogContent({
 												{t("microAppPage.publish.coverUpload")}
 											</Button>
 											{formState.coverFileKey !== undefined ||
-											formState.coverUrl ? (
+												formState.coverUrl ? (
 												<Button
 													type="button"
 													variant="ghost"
@@ -359,33 +361,38 @@ export default function MicroAppPublishDialogContent({
 										permittedTypes={permittedShareTypes}
 										preserveCurrentType={hasPublished}
 									/>
-									{permittedShareTypes?.length === 0 ? (
-										<p className="text-xs text-destructive" role="alert">
+									{hasNoPermittedShareType ? (
+										<p className="text-sm text-destructive" role="alert">
 											{t("share.noAvailableShareMethods")}
 										</p>
 									) : !isSelectedShareTypePermitted ? (
-										<p className="text-xs text-destructive" role="alert">
+										<p className="text-sm text-destructive" role="alert">
 											{t("share.currentShareMethodUnavailable")}
 										</p>
 									) : null}
-									{!isPersonalOrganization &&
-									formState.shareType === ShareType.Organization ? (
-										<ShareRangeField
-											value={formState.shareRange}
-											onChange={onShareRangeChange}
-											targets={formState.targets}
-											onTargetsChange={onTargetsChange}
-											resourceId={publishedItem?.resource_id}
-										/>
-									) : null}
-									<div className="mt-4">
-										<ShareExpiryField
-											value={formState.shareExpiry}
-											onChange={onShareExpiryChange}
-										/>
-									</div>
+									{!hasNoPermittedShareType && (
+										<>
+											{!isPersonalOrganization &&
+												formState.shareType === ShareType.Organization ? (
+												<ShareRangeField
+													value={formState.shareRange}
+													onChange={onShareRangeChange}
+													targets={formState.targets}
+													onTargetsChange={onTargetsChange}
+													resourceId={publishedItem?.resource_id}
+												/>
+											) : null}
+											<div className="mt-4">
+												<ShareExpiryField
+													value={formState.shareExpiry}
+													onChange={onShareExpiryChange}
+												/>
+											</div>
+										</>
+									)}
 								</div>
-								{formState.shareType === ShareType.PasswordProtected ? (
+								{!hasNoPermittedShareType &&
+									formState.shareType === ShareType.PasswordProtected ? (
 									<div>
 										<Label htmlFor="micro-app-publish-password">
 											{t("microAppPage.publish.password")}
@@ -497,7 +504,7 @@ export default function MicroAppPublishDialogContent({
 												{t("microAppPage.publish.coverUpload")}
 											</Button>
 											{formState.coverFileKey !== undefined ||
-											formState.coverUrl ? (
+												formState.coverUrl ? (
 												<Button
 													type="button"
 													variant="ghost"
@@ -560,35 +567,45 @@ export default function MicroAppPublishDialogContent({
 											permittedTypes={permittedShareTypes}
 											preserveCurrentType={hasPublished}
 										/>
-										{permittedShareTypes?.length === 0 ? (
-											<p className="text-xs text-destructive" role="alert">
+										{hasNoPermittedShareType ? (
+											<p className="text-sm text-destructive" role="alert">
 												{t("share.noAvailableShareMethods")}
 											</p>
 										) : !isSelectedShareTypePermitted ? (
-											<p className="text-xs text-destructive" role="alert">
+											<p className="text-sm text-destructive" role="alert">
 												{t("share.currentShareMethodUnavailable")}
 											</p>
 										) : null}
 
-										{!isPersonalOrganization &&
-										formState.shareType === ShareType.Organization ? (
-											<ShareRangeField
-												value={formState.shareRange}
-												onChange={onShareRangeChange}
-												targets={formState.targets}
-												onTargetsChange={onTargetsChange}
-												resourceId={publishedItem?.resource_id}
-											/>
-										) : null}
+										{!hasNoPermittedShareType ? (
+											<>
+												{!isPersonalOrganization &&
+													formState.shareType === ShareType.Organization ? (
+													<ShareRangeField
+														value={formState.shareRange}
+														onChange={onShareRangeChange}
+														targets={formState.targets}
+														onTargetsChange={onTargetsChange}
+														resourceId={publishedItem?.resource_id}
+													/>
+												) : null}
 
-										<ShareExpiryField
-											value={formState.shareExpiry}
-											onChange={onShareExpiryChange}
-										/>
+												<ShareExpiryField
+													value={formState.shareExpiry}
+													onChange={onShareExpiryChange}
+												/>
+											</>
+										) : null}
 									</div>
 
-									{formState.shareType === ShareType.PasswordProtected ? (
-										<div className="flex flex-col gap-2">
+									{!hasNoPermittedShareType &&
+										formState.shareType === ShareType.PasswordProtected ? (
+										<div
+											className={cn(
+												"flex flex-col gap-2",
+												!mobile && "col-start-2 row-start-3",
+											)}
+										>
 											<Label htmlFor="micro-app-publish-password">
 												{t("microAppPage.publish.password")}
 											</Label>
