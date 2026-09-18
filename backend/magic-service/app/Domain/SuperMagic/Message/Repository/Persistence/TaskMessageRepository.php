@@ -81,6 +81,12 @@ class TaskMessageRepository implements TaskMessageRepositoryInterface
     public function findCompletedResultMessages(int $topicId, int $taskId): array
     {
         $query = $this->model::query()
+            ->select([
+                'id',
+                'event',
+                'raw_content',
+                'attachments',
+            ])
             ->where('topic_id', $topicId)
             ->where('task_id', (string) $taskId)
             ->where('sender_type', 'assistant')
@@ -88,9 +94,9 @@ class TaskMessageRepository implements TaskMessageRepositoryInterface
             ->whereIn('event', ['after_agent_reply', 'after_main_agent_run'])
             ->orderBy('id', 'asc');
 
-        $result = Db::select($query->toSql(), $query->getBindings());
-
-        return array_map(static fn ($record): TaskMessageEntity => new TaskMessageEntity((array) $record), $result);
+        return $query->get()
+            ->map(static fn (TaskMessageModel $record): TaskMessageEntity => new TaskMessageEntity($record->toArray()))
+            ->all();
     }
 
     /**
