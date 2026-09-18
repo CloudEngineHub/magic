@@ -42,6 +42,7 @@ use App\Domain\SuperMagic\Project\Entity\ValueObject\ProjectMode;
 use App\Domain\SuperMagic\Project\Event\ForkProjectStartEvent;
 use App\Domain\SuperMagic\Project\Event\ProjectForkEvent;
 use App\Domain\SuperMagic\Project\Repository\Facade\ProjectForkRepositoryInterface;
+use App\Domain\SuperMagic\Project\Repository\Facade\MicroAppRepositoryInterface;
 use App\Domain\SuperMagic\Project\Service\ProjectDomainService;
 use App\Domain\SuperMagic\Project\Service\ProjectMemberDomainService;
 use App\Domain\SuperMagic\Task\Service\TaskDomainService;
@@ -129,6 +130,7 @@ class ResourceShareAppService extends AbstractShareAppService
         private readonly ResourceShareAccessLogDomainService $accessLogDomainService,
         private readonly ResourceShareCopyLogDomainService $copyLogDomainService,
         private readonly ProjectForkRepositoryInterface $projectForkRepository,
+        private readonly MicroAppRepositoryInterface $microAppRepository,
         private readonly TaskFileRepositoryInterface $taskFileRepository,
         private readonly ShareUrlBuilder $shareUrlBuilder,
         private readonly RequestInterface $request,
@@ -152,8 +154,8 @@ class ResourceShareAppService extends AbstractShareAppService
 
         // 验证资源类型
         $resourceType = ResourceType::from($dto->resourceType);
-        if ($resourceType === ResourceType::Project) {
-            $this->assertAllowed($userAuthorization, $resourceKind ?? 'project', $dto->shareType);
+        if (in_array($resourceType, [ResourceType::Project, ResourceType::Topic], true)) {
+            $this->assertAllowed($userAuthorization, $resourceKind ?? $resourceType->getBusinessName(), $dto->shareType);
         }
 
         // 统一查询一次已存在的分享（如果存在），避免重复查询
@@ -569,6 +571,8 @@ class ResourceShareAppService extends AbstractShareAppService
             ExceptionBuilder::throw(ShareErrorCode::RESOURCE_NOT_FOUND, 'share.not_found', [$shareCode]);
         }
 
+        $this->assertHistoricalShareOwnerPermission($shareEntity);
+
         // 验证分享访问权限, 支持跨组织访问
         $this->shareDomainService->validateShareAccess(
             $shareEntity,
@@ -596,6 +600,9 @@ class ResourceShareAppService extends AbstractShareAppService
         if (empty($shareEntity)) {
             ExceptionBuilder::throw(ShareErrorCode::RESOURCE_NOT_FOUND, 'share.not_found', [$shareCode]);
         }
+
+        // A link created before a permission change must not bypass the owner's current policy.
+        $this->assertHistoricalShareOwnerPermission($shareEntity);
 
         // 验证分享访问权限
         $this->shareDomainService->validateShareAccess(
@@ -669,6 +676,36 @@ class ResourceShareAppService extends AbstractShareAppService
         }
 
         return $result;
+    }
+
+    private function assertHistoricalShareOwnerPermission(ResourceShareEntity $shareEntity): void
+    {
+        $resourceType = ResourceType::tryFrom($shareEntity->getResourceType());
+        $resourceKind = match ($resourceType) {
+            ResourceType::Topic => ResourceType::Topic->getBusinessName(),
+            ResourceType::Project => $this->microAppRepository->findByResourceIdWithTrashed($shareEntity->getResourceId()) !== null
+                ? 'micro_app'
+                : ResourceType::Project->getBusinessName(),
+            default => null,
+        };
+        if ($resourceKind === null) {
+            return;
+        }
+
+        if ($resourceType === ResourceType::Topic && $shareEntity->getShareType() === ShareAccessType::TeamShare->value) {
+            ExceptionBuilder::throw(ShareErrorCode::SHARE_OWNER_PERMISSION_REVOKED, 'share.share_owner_permission_revoked', []);
+        }
+
+        $owner = $this->magicUserDomainService->getUserById($shareEntity->getCreatedUid());
+        if ($owner === null) {
+            ExceptionBuilder::throw(ShareErrorCode::SHARE_OWNER_PERMISSION_REVOKED, 'share.share_owner_permission_revoked', []);
+        }
+
+        $this->assertAllowed(
+            MagicUserAuthorization::fromUserEntity($owner),
+            $resourceKind,
+            $shareEntity->getShareType()
+        );
     }
 
     public function getShareList(MagicUserAuthorization $userAuthorization, ResourceListRequestDTO $dto): array
@@ -1644,7 +1681,7 @@ class ResourceShareAppService extends AbstractShareAppService
         string $resourceKind,
         int $shareType
     ): void {
-        $prefix = $resourceKind === 'micro_app' ? 'micro_app' : 'project';
+        $prefix = in_array($resourceKind, ['micro_app', ResourceType::Topic->getBusinessName(), ResourceType::Project->getBusinessName()], true) ? $resourceKind : ResourceType::Project->getBusinessName();
         $shareFunctionCode = match ($shareType) {
             ShareAccessType::TeamShare->value => $prefix . '.share_team',
             ShareAccessType::Internet->value => $prefix . '.share_public',

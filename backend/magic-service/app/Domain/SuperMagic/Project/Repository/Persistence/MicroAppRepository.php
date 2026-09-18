@@ -39,6 +39,13 @@ class MicroAppRepository implements MicroAppRepositoryInterface
         return $model instanceof MicroAppModel ? $this->toEntity($model) : null;
     }
 
+    public function findByResourceIdWithTrashed(string $resourceId): ?MicroAppEntity
+    {
+        $model = MicroAppModel::withTrashed()->where('resource_id', $resourceId)->first();
+
+        return $model instanceof MicroAppModel ? $this->toEntity($model) : null;
+    }
+
     public function findByProjectId(int $projectId): ?MicroAppEntity
     {
         $model = MicroAppModel::query()

@@ -111,6 +111,22 @@ final class FunctionPermissionCatalog
                 'description_key' => 'permission.function_permission.functions.project_share_team.description',
                 'default_binding_scope' => ['type' => 'organization_all'],
             ],
+            'topic.share_public' => [
+                'function_code' => 'topic.share_public',
+                'module_code' => 'topic',
+                'function_name_key' => 'permission.function_permission.functions.topic_share_public.name',
+                'module_name_key' => 'permission.function_permission.modules.topic',
+                'description_key' => 'permission.function_permission.functions.topic_share_public.description',
+                'default_binding_scope' => ['type' => 'organization_all'],
+            ],
+            'topic.share_password' => [
+                'function_code' => 'topic.share_password',
+                'module_code' => 'topic',
+                'function_name_key' => 'permission.function_permission.functions.topic_share_password.name',
+                'module_name_key' => 'permission.function_permission.modules.topic',
+                'description_key' => 'permission.function_permission.functions.topic_share_password.description',
+                'default_binding_scope' => ['type' => 'organization_all'],
+            ],
         ];
     }
 
