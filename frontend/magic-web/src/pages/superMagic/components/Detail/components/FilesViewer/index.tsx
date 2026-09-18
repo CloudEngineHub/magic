@@ -151,7 +151,11 @@ const FilesViewer = memo(
 				getTabFileContext,
 				getFileManagerState,
 				updateFileManagerState,
+				isShareRoute,
+				isMagicShareRoute,
 			} = useFilesViewer(props)
+			// Route state covers topic/pure/Magic shares; the prop covers file-share callers during setup.
+			const shouldRenderQuickOpen = !isShareRoute && !isMagicShareRoute && !props.isFileShare
 			const tabsRef = useRef(tabs)
 			tabsRef.current = tabs
 			const closingLeftTabsRef = useRef(false)
@@ -800,12 +804,14 @@ const FilesViewer = memo(
 									{tabs.map(renderTabItem)}
 								</HeadlessHorizontalScroll>
 
-								<WebsitePresetMenu
-									onOpenWebsiteTab={openWebsiteTab}
-									onOpenMicroAppTab={openMicroAppTab}
-									onOpenFileTab={openFileTab}
-									fileAttachments={tabAttachments}
-								/>
+								{shouldRenderQuickOpen ? (
+									<WebsitePresetMenu
+										onOpenWebsiteTab={openWebsiteTab}
+										onOpenMicroAppTab={openMicroAppTab}
+										onOpenFileTab={openFileTab}
+										fileAttachments={tabAttachments}
+									/>
+								) : null}
 
 								{/* 展开按钮 */}
 								<DropdownMenu
