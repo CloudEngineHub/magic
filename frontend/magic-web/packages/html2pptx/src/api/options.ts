@@ -22,7 +22,11 @@ export interface StreamingOptionsBase {
 	fileName?: string
 	/** Slide configuration overrides */
 	config?: Partial<SlideConfig>
-	/** Skip ordinary failed pages and continue; fatal fidelity failures always stop export. */
+	/**
+	 * Continue after page-local failures. Failed pages are represented by a
+	 * diagnostic placeholder slide and reported through onExportIssue. Packaging,
+	 * destination and finalization failures still stop the export.
+	 */
 	skipFailedPages?: boolean
 	/**
 	 * Auto-size mode switch (defaults to `false`, standard PPT mode).
