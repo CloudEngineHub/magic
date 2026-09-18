@@ -19,5 +19,10 @@ describe("platform info fallback", () => {
     assert.equal(fallback.default_language, "zh_CN");
     assert.equal(fallback.global_system_prompt, "");
     assert.equal(fallback.footer?.filing.enabled, false);
+    assert.deepEqual(fallback.watermark, {
+      enabled: false,
+      fields: ["real_name"],
+      depth: "light",
+    });
   });
 });
