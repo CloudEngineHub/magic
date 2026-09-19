@@ -8,10 +8,33 @@ const mocks = vi.hoisted(() => ({
 	),
 }))
 
-vi.mock("@magic/html2pptx", () => ({
-	exportPPTXStreaming: mocks.exportPPTXStreaming,
-	imagePolicyRequiresReplay: mocks.imagePolicyRequiresReplay,
-}))
+vi.mock("@magic/html2pptx", async (importOriginal) => {
+	const actual = await importOriginal<typeof import("@magic/html2pptx")>()
+	const createBufferedPptxSink = () => {
+		const chunks: Uint8Array[] = []
+		let closed = false
+		return {
+			sink: {
+				write: async (chunk: Uint8Array) => chunks.push(chunk.slice()),
+				close: async () => {
+					closed = true
+				},
+				abort: async () => {
+					chunks.length = 0
+				},
+			},
+			getBlob: () => new Blob(closed ? chunks : []),
+			getBytesWritten: () => chunks.reduce((total, chunk) => total + chunk.byteLength, 0),
+		}
+	}
+	return {
+		...actual,
+		createBufferedPptxSink,
+		PPTX_MIME_TYPE: "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+		exportPPTXStreaming: mocks.exportPPTXStreaming,
+		imagePolicyRequiresReplay: mocks.imagePolicyRequiresReplay,
+	}
+})
 
 import {
 	createPptxSlideConfig,
@@ -19,6 +42,7 @@ import {
 } from "@/pages/superMagic/components/Detail/contents/HTML/utils/slide-dimensions"
 import {
 	assertPptxExportAvailable,
+	createPptxBufferedDestinationLease,
 	ensurePptxFileName,
 	formatPptxStreamingProgress,
 	openPptxDestination,
@@ -27,6 +51,7 @@ import {
 	PptxExportUnavailableError,
 	startPptxStreamingExportFromFactory,
 	supportsPptxFileStreaming,
+	supportsPptxExport,
 } from "../pptxStreamingExport"
 
 const originalPicker = Object.getOwnPropertyDescriptor(globalThis, "showSaveFilePicker")
@@ -58,20 +83,38 @@ describe("pptxStreamingExport", () => {
 		expect(ensurePptxFileName("   ")).toBe("export.pptx")
 	})
 
-	it("keeps an unsupported browser distinct from a cancelled picker", async () => {
+	it("uses a buffered download when a browser lacks the file picker", async () => {
 		Reflect.deleteProperty(globalThis, "showSaveFilePicker")
 		expect(supportsPptxFileStreaming()).toBe(false)
-		await expect(openPptxDestination({ suggestedName: "deck" })).resolves.toBeNull()
+		expect(supportsPptxExport()).toBe(true)
+		const createObjectURL = vi.fn(() => "blob:pptx")
+		const revokeObjectURL = vi.fn()
+		vi.spyOn(URL, "createObjectURL").mockImplementation(createObjectURL)
+		vi.spyOn(URL, "revokeObjectURL").mockImplementation(revokeObjectURL)
+		const click = vi
+			.spyOn(HTMLAnchorElement.prototype, "click")
+			.mockImplementation(() => undefined)
+
+		const lease = await openPptxDestination({ suggestedName: "deck" })
+		expect(lease?.route).toBe("buffered-download")
+		const destination = lease?.destination
+		if (!destination || !("kind" in destination) || destination.kind !== "sink-proxy") {
+			throw new Error("Expected a sink-proxy destination")
+		}
+		await destination.sink.write(Uint8Array.of(1, 2, 3))
+		await destination.sink.close()
+		expect(createObjectURL).toHaveBeenCalledOnce()
+		expect(click).toHaveBeenCalledOnce()
 	})
 
-	it("throws a structured unavailable error instead of allowing a memory fallback", () => {
+	it("throws a structured unavailable error when no client download exists", () => {
 		Reflect.deleteProperty(globalThis, "showSaveFilePicker")
 
-		expect(() => assertPptxExportAvailable({ pageCount: 1 })).toThrow(
-			PptxExportUnavailableError,
-		)
+		expect(() =>
+			assertPptxExportAvailable({ pageCount: 1, bufferedDownloadAvailable: false }),
+		).toThrow(PptxExportUnavailableError)
 		try {
-			assertPptxExportAvailable({ pageCount: 1 })
+			assertPptxExportAvailable({ pageCount: 1, bufferedDownloadAvailable: false })
 		} catch (error) {
 			expect(error).toMatchObject({
 				name: "PptxExportUnavailableError",
@@ -81,7 +124,7 @@ describe("pptxStreamingExport", () => {
 		}
 	})
 
-	it("opens one final destination and adapts it to an ACK sink", async () => {
+	it("opens one final file destination and adapts it to an ACK sink", async () => {
 		const write = vi.fn(async () => undefined)
 		const close = vi.fn(async () => undefined)
 		const abort = vi.fn(async () => undefined)
@@ -113,6 +156,19 @@ describe("pptxStreamingExport", () => {
 		expect(write).toHaveBeenCalledWith(chunk)
 		expect(close).toHaveBeenCalledOnce()
 		expect(abort).not.toHaveBeenCalled()
+	})
+
+	it("buffers chunks and aborts without starting a download", async () => {
+		const createObjectURL = vi.fn(() => "blob:pptx")
+		vi.spyOn(URL, "createObjectURL").mockImplementation(createObjectURL)
+		const lease = createPptxBufferedDestinationLease("deck")
+		const destination = lease.destination
+		if (!("kind" in destination) || destination.kind !== "sink-proxy") {
+			throw new Error("Expected a sink-proxy destination")
+		}
+		await destination.sink.write(Uint8Array.of(1, 2, 3))
+		await lease.abort(new Error("cancelled"))
+		expect(createObjectURL).not.toHaveBeenCalled()
 	})
 
 	it("can abort the partial destination after close fails", async () => {

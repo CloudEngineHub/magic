@@ -1,4 +1,9 @@
-import { exportPPTXStreaming, imagePolicyRequiresReplay } from "@magic/html2pptx"
+import {
+	createBufferedPptxSink,
+	exportPPTXStreaming,
+	imagePolicyRequiresReplay,
+	PPTX_MIME_TYPE,
+} from "@magic/html2pptx"
 import type {
 	ExportProgress,
 	LargeExportOptions,
@@ -52,6 +57,7 @@ interface SaveFilePickerGlobal {
 export interface PptxDestinationLease {
 	destination: PptxDestination
 	abort: (reason?: unknown) => Promise<void>
+	route?: "file-stream" | "buffered-download"
 }
 
 type WritablePptxFile = Pick<FileSystemWritableFileStream, "write" | "close" | "abort">
@@ -108,6 +114,11 @@ export function supportsPptxFileStreaming(input: PptxExportStrategyInput = {}): 
 	return getPptxExportStrategy(input).route === "streaming"
 }
 
+/** Whether a client-side PPTX export route is available, including Blob download fallback. */
+export function supportsPptxExport(input: PptxExportStrategyInput = {}): boolean {
+	return getPptxExportStrategy(input).route !== "unavailable"
+}
+
 /** Resolve the current route once so callers can log the reason and avoid unsafe Blob fallback. */
 export function getPptxExportStrategy(
 	input: PptxExportStrategyInput = {},
@@ -138,7 +149,10 @@ export async function openPptxDestination(
 	options: OpenPptxDestinationOptions,
 ): Promise<PptxDestinationLease | null> {
 	const picker = (globalThis as SaveFilePickerGlobal).showSaveFilePicker
-	if (!picker) return null
+	if (!picker) {
+		if (!supportsBufferedPptxDownload()) return null
+		return createPptxBufferedDestinationLease(options.suggestedName)
+	}
 
 	let handle: FileSystemFileHandle
 	try {
@@ -161,6 +175,74 @@ export async function openPptxDestination(
 	}
 
 	return createPptxDestinationLease(await handle.createWritable())
+}
+
+/**
+ * Collect streamed PPTX chunks in the browser and trigger a normal download on close.
+ * This is the Safari-compatible destination used when File System Access is unavailable.
+ */
+export function createPptxBufferedDestinationLease(suggestedName: string): PptxDestinationLease {
+	const fileName = ensurePptxFileName(suggestedName)
+	const buffered = createBufferedPptxSink(PPTX_MIME_TYPE)
+	let settled = false
+
+	const close = async (): Promise<void> => {
+		if (settled) return
+		try {
+			await buffered.sink.close()
+			triggerPptxBlobDownload(buffered.getBlob(), fileName)
+			settled = true
+		} catch (error) {
+			await buffered.sink.abort?.(error)
+			settled = true
+			throw error
+		}
+	}
+
+	const abort = async (): Promise<void> => {
+		if (settled) return
+		settled = true
+		await buffered.sink.abort?.()
+	}
+
+	const sink: PptxOutputSink = {
+		write: async (chunk) => {
+			if (settled) throw new Error("PPTX buffered destination is already closed")
+			await buffered.sink.write(chunk)
+		},
+		close,
+		abort,
+	}
+
+	return {
+		destination: { kind: "sink-proxy", sink },
+		abort,
+		route: "buffered-download",
+	}
+}
+
+function supportsBufferedPptxDownload(): boolean {
+	return (
+		typeof Blob === "function" &&
+		typeof URL !== "undefined" &&
+		typeof URL.createObjectURL === "function" &&
+		typeof document !== "undefined" &&
+		typeof document.createElement === "function"
+	)
+}
+
+function triggerPptxBlobDownload(blob: Blob, fileName: string): void {
+	const url = URL.createObjectURL(blob)
+	const anchor = document.createElement("a")
+	anchor.href = url
+	anchor.download = fileName
+	anchor.rel = "noopener"
+	anchor.style.display = "none"
+	document.body?.appendChild(anchor)
+	anchor.click()
+	anchor.remove()
+	// Keep the object URL alive for the browser's asynchronous download hand-off.
+	setTimeout(() => URL.revokeObjectURL(url), 60_000)
 }
 
 /**
@@ -223,6 +305,7 @@ export function createPptxDestinationLease(writable: WritablePptxFile): PptxDest
 	return {
 		destination: { kind: "sink-proxy", sink },
 		abort,
+		route: "file-stream",
 	}
 }
 

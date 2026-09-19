@@ -13,6 +13,7 @@ import {
 	iteratePreparedPptxPages,
 	openPptxDestination,
 	startPptxStreamingExportFromFactory,
+	supportsPptxExport,
 	supportsPptxFileStreaming,
 	type PptxStreamingPageSourceFactory,
 } from "@/pages/superMagic/services/pptxStreamingExport"
@@ -357,7 +358,7 @@ async function runStreamingPptxBatch(options: {
 	let warnings = 0
 	if (signal?.aborted) return createCancelledBatchResult(successCount, failures, warnings)
 
-	if (targets.length === 1 && supportsPptxFileStreaming()) {
+	if (targets.length === 1 && supportsPptxExport()) {
 		const input = createPptxTargetStreamingInput(targets[0], resolveAttachmentScope(targets[0]))
 		const lease = await openPptxDestination({ suggestedName: input.fileName })
 		if (!lease) {
@@ -382,7 +383,7 @@ async function runStreamingPptxBatch(options: {
 		}
 		onProgress?.(100)
 		return {
-			streamedToDisk: successCount > 0,
+			streamedToDisk: successCount > 0 && supportsPptxFileStreaming(),
 			successCount,
 			failureCount: failures.length,
 			failures,

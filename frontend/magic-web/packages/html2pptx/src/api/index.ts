@@ -34,6 +34,11 @@ export type {
 export { imagePolicyRequiresReplay, preflightPptImage } from "../media/image-preflight"
 export { preflightPptxExport, type PreflightOptions } from "./preflight"
 export {
+	createBufferedPptxSink,
+	PPTX_MIME_TYPE,
+	type BufferedPptxSink,
+} from "../packaging/buffered-sink"
+export {
 	resolveStreamingMediaPolicyMode,
 	type ResolveMediaPolicyModeOptions,
 	type ResolvedMediaPolicyMode,

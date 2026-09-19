@@ -38,6 +38,7 @@ vi.mock("@/pages/superMagic/services/pptxStreamingExport", () => ({
 	iteratePreparedPptxPages: (pages: AsyncIterable<unknown>) => pages,
 	openPptxDestination: mocks.openPptxDestination,
 	startPptxStreamingExportFromFactory: mocks.startFromFactory,
+	supportsPptxExport: mocks.supportsFileStreaming,
 	supportsPptxFileStreaming: mocks.supportsFileStreaming,
 }))
 vi.mock("@/pages/superMagic/components/Detail/contents/HTML/utils/slide-dimensions", () => ({

@@ -82,6 +82,11 @@ export {
 	detectImageContentType,
 	validateImageBlobResponse,
 } from "./media/image-response"
+export {
+	createBufferedPptxSink,
+	PPTX_MIME_TYPE,
+	type BufferedPptxSink,
+} from "./packaging/buffered-sink"
 
 async function runStreamingExportPipeline(
 	content: StreamingExportContent,
