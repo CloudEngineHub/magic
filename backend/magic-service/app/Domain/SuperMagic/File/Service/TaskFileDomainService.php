@@ -3408,6 +3408,46 @@ class TaskFileDomainService
     }
 
     /**
+     * 统计项目空间文件数量，最多统计到 $limit 即提前返回.
+     * 返回值为 min(实际数量, $limit)，用于发起沙箱前的「是否达到阈值」判断。
+     */
+    public function countProjectFilesWithLimit(int $projectId, int $limit): int
+    {
+        if ($projectId <= 0 || $limit <= 0) {
+            return 0;
+        }
+        return $this->taskFileRepository->countProjectFilesWithLimit($projectId, $limit);
+    }
+
+    public function countProjectFiles(int $projectId): int
+    {
+        if ($projectId <= 0) {
+            return 0;
+        }
+        return $this->taskFileRepository->countProjectFiles($projectId);
+    }
+
+    /**
+     * 统计用户空间文件数量，最多统计到 $limit 即提前返回.
+     * 返回值为 min(实际数量, $limit)，用于发起沙箱前的「是否达到阈值」判断。
+     */
+    public function countUserSpaceFilesWithLimit(string $userId, string $organizationCode, int $limit): int
+    {
+        if ($userId === '' || $organizationCode === '' || $limit <= 0) {
+            return 0;
+        }
+        return $this->taskFileRepository->countUserSpaceFilesWithLimit($userId, $organizationCode, $limit);
+    }
+
+    public function countUserSpaceFiles(string $userId, string $organizationCode): int
+    {
+        if ($userId === '' || $organizationCode === '') {
+            return 0;
+        }
+        return $this->taskFileRepository->countUserSpaceFiles($userId, $organizationCode);
+    }
+
+    /**
      * Create a new directory entity.
      * Returns existing directory id when the same parent/name already exists.
      * The file_key is derived from the parent entity's stored file_key to avoid path-string dependency.

@@ -4,6 +4,8 @@ import { createContext, type PropsWithChildren, type ReactNode, useContext } fro
 import defaultProjectFilesStore, { type ProjectFilesStore } from "@/stores/projectFiles"
 
 export interface MessageListContextState {
+	/** 打开当前话题的文件管理器，并显示一次性整理引导。 */
+	onOpenProjectFiles?: () => void
 	/** 仅登录的非分享会话解析当前用户的个人文件引用。 */
 	allowUserFileReferences?: boolean
 	/** 是否允许撤回 */

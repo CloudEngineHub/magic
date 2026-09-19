@@ -409,6 +409,62 @@ class HandleUserMessageAppService extends AbstractAppService
     }
 
     /**
+     * 发起沙箱前校验项目空间与用户空间的文件数量是否达到上限.
+     * 计数使用 LIMIT 早退（最多扫描 $limit 行），达到上限即抛 EventException，
+     * 由订阅者/消费者以温和提醒方式通知用户。
+     */
+    private function assertSpaceFileCountWithinLimit(DataIsolation $dataIsolation, int $projectId): void
+    {
+        $limit = (int) config('super-magic.file_limit.max_count', 5000);
+        if ($limit <= 0) {
+            return;
+        }
+
+        $projectFileCount = $this->taskFileDomainService->countProjectFilesWithLimit($projectId, $limit);
+        if ($projectFileCount >= $limit) {
+            $currentCount = $this->taskFileDomainService->countProjectFiles($projectId);
+            EventExceptionBuilder::throw(
+                EventErrorCode::EVENT_DATA_VALIDATION_FAILED,
+                trans('super_magic.task.project_file_count_exceeded', ['limit' => $limit]),
+                null,
+                [
+                    'reason' => 'project_file_count_exceeded',
+                    'space_type' => 'project',
+                    'current_count' => $currentCount,
+                    'limit' => $limit,
+                    'required_cleanup_count' => max(1, $currentCount - $limit + 1),
+                    'temporary_protection' => true,
+                ]
+            );
+        }
+
+        $userSpaceFileCount = $this->taskFileDomainService->countUserSpaceFilesWithLimit(
+            $dataIsolation->getCurrentUserId(),
+            $dataIsolation->getCurrentOrganizationCode(),
+            $limit
+        );
+        if ($userSpaceFileCount >= $limit) {
+            $currentCount = $this->taskFileDomainService->countUserSpaceFiles(
+                $dataIsolation->getCurrentUserId(),
+                $dataIsolation->getCurrentOrganizationCode()
+            );
+            EventExceptionBuilder::throw(
+                EventErrorCode::EVENT_DATA_VALIDATION_FAILED,
+                trans('super_magic.task.user_space_file_count_exceeded', ['limit' => $limit]),
+                null,
+                [
+                    'reason' => 'user_space_file_count_exceeded',
+                    'space_type' => 'user',
+                    'current_count' => $currentCount,
+                    'limit' => $limit,
+                    'required_cleanup_count' => max(1, $currentCount - $limit + 1),
+                    'temporary_protection' => true,
+                ]
+            );
+        }
+    }
+
+    /**
      * Initialize a brand-new chat task for the topic (fresh / WebSocket flow):
      * handles waiting-for-user cancellation, pre-check event dispatch, task creation
      * and user message persistence.

@@ -2468,6 +2468,8 @@
 			"target": "{{count}} selected · Destination: {{target}}"
 		},
 		"processing": "Processing…",
+		"recent": "Recent",
+		"recentEmpty": "No recent files",
 		"recycle": {
 			"back": "Back to files",
 			"permanentPhrase": "Permanently delete {{count}} items",
@@ -2484,6 +2486,15 @@
 		"type": "Type",
 		"up": "Up one level",
 		"uploadTarget": "Upload to {{target}}"
+	},
+	"fileSpaceLimit": {
+		"cleanupCount": "We recommend removing about {{count}} files you no longer need",
+		"description": "Please organize the file space before continuing so the task can run reliably.",
+		"feedback": "Report a problem",
+		"feedbackDefault": "This task cannot continue because the file space needs cleanup. We recommend removing about {{count}} files you no longer need and trying again.",
+		"openFiles": "Organize files",
+		"temporaryNotice": "We are improving support for larger file spaces.",
+		"title": "File space needs cleanup"
 	},
 	"fileTree": {
 		"collapseAll": "Collapse All",

@@ -14,6 +14,7 @@ import { Ellipsis } from "lucide-react"
 import { MagicDropdown, MagicTooltip } from "@/components/base"
 import { logger as Logger } from "@/infrastructure/logger"
 import { StatusBadge } from "./components/StatusBadge"
+import { FileSpaceLimitCard, getFileSpaceLimitData } from "./components/FileSpaceLimitCard"
 import { useGlobalSuggestion } from "@/components/settings/FollowUpSuggestionItems/hooks"
 import useShareRoute from "@/pages/superMagic/hooks/useShareRoute"
 import superMagicModeService from "@/services/superMagic/SuperMagicModeService"
@@ -51,6 +52,7 @@ export function withAssistantCard<
 			allowConversationCopy,
 			onTopicSwitch,
 			showTaskCompletedBadge = true,
+			onOpenProjectFiles,
 		} = useMessageListContext()
 		const { followUpSuggestions, keepUsedFollowUpSuggestions, setFollowUpSuggestions } =
 			useGlobalSuggestion()
@@ -241,6 +243,13 @@ export function withAssistantCard<
 		})
 
 		const isRevokedMessage = node?.status === MessageStatus.REVOKED
+		const fileSpaceLimitData = useMemo(
+			() =>
+				getFileSpaceLimitData(messageNode?.data) ??
+				getFileSpaceLimitData(messageNode?.extra?.file_space_limit) ??
+				getFileSpaceLimitData(messageNode?.error?.data),
+			[messageNode],
+		)
 
 		const isLastMessage = checkIsLastMessage?.(
 			node?.app_message_id || messageNode?.message_id || "",
@@ -286,7 +295,14 @@ export function withAssistantCard<
 							className="ml-[var(--message-status-offset,0px)] w-fit"
 							data-testid="message-list-status-badge"
 						>
-							<StatusBadge status={messageNode?.status} />
+							{fileSpaceLimitData ? (
+								<FileSpaceLimitCard
+									data={fileSpaceLimitData}
+									onOpenProjectFiles={onOpenProjectFiles}
+								/>
+							) : (
+								<StatusBadge status={messageNode?.status} />
+							)}
 						</div>
 						{messageNode?.status === "finished" && (
 							<div className="mb-[6px] mt-[6px] flex items-center justify-between gap-[4px]">
