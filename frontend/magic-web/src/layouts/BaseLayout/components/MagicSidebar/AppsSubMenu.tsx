@@ -11,6 +11,7 @@ import { getVisibleAppMenuItems, openAppMenuItem, resolveAppMenuName } from "@/u
 
 type AppsSubMenuProps = {
 	children: ReactNode
+	fixedItems?: ReactNode
 	visible?: boolean
 	onOpenChange?: (open: boolean) => void
 }
@@ -32,7 +33,7 @@ function AppMenuIcon({ item, displayName }: { item: AppMenuItem; displayName: st
 }
 
 /** 桌面侧栏 Apps 子菜单继续复用统一 app-menu helper，避免与独立 Apps 页面行为分叉。 */
-function AppsSubMenu({ children, visible = true, onOpenChange }: AppsSubMenuProps) {
+function AppsSubMenu({ children, fixedItems, visible = true, onOpenChange }: AppsSubMenuProps) {
 	const [open, setOpen] = useState(false)
 	useEffect(() => {
 		onOpenChange?.(open)
@@ -58,10 +59,10 @@ function AppsSubMenu({ children, visible = true, onOpenChange }: AppsSubMenuProp
 	}, [visible])
 
 	useEffect(() => {
-		if (!loading && activeMenuItems.length === 0) setOpen(false)
-	}, [activeMenuItems.length, loading])
+		if (!loading && activeMenuItems.length === 0 && !fixedItems) setOpen(false)
+	}, [activeMenuItems.length, fixedItems, loading])
 
-	if (!loading && activeMenuItems.length === 0) return null
+	if (!loading && activeMenuItems.length === 0 && !fixedItems) return null
 
 	const renderPopup = () => (
 		<div
@@ -69,6 +70,10 @@ function AppsSubMenu({ children, visible = true, onOpenChange }: AppsSubMenuProp
 			style={{ boxShadow: "0px 1px 2px 0px rgba(0, 0, 0, 0.05)" }}
 			data-testid="sidebar-apps-submenu-popup"
 		>
+			{fixedItems}
+			{fixedItems && activeMenuItems.length > 0 && (
+				<div className="mx-1 h-px bg-border" data-testid="sidebar-apps-submenu-divider" />
+			)}
 			{loading && (
 				<div
 					className="flex flex-col gap-1 p-1"
@@ -111,6 +116,8 @@ function AppsSubMenu({ children, visible = true, onOpenChange }: AppsSubMenuProp
 			open={open}
 			onOpenChange={setOpen}
 			overlayClassName="p-0"
+			contentRole="panel"
+			keepOpenOnNestedOverlay
 			trigger={["click"]}
 		>
 			<span className="inline-flex w-full" data-testid="sidebar-apps-submenu-trigger">
