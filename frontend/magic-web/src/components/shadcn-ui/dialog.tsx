@@ -148,7 +148,7 @@ const DialogContent = React.forwardRef<
 				}}
 				onLostPointerCapture={(event) => {
 					onLostPointerCapture?.(event)
-					windowInteraction.onPointerCancel(event)
+					// 丢失 capture 不中断拖拽交互，全局 window 监听器会保证平滑跟手直至正常松手
 				}}
 				onEscapeKeyDown={(event) => {
 					// Esc 先取消正在进行的窗口手势，下一次 Esc 才交回原关闭行为。
@@ -157,6 +157,19 @@ const DialogContent = React.forwardRef<
 				}}
 			>
 				{children}
+				{/* 交互期间覆盖透明遮罩，防止 iframe 偷取光标事件、防止文字误选中及按钮误 hover */}
+				{windowOptions && windowInteraction.isInteracting && (
+					<div
+						aria-hidden="true"
+						className="fixed inset-0 z-modal select-none"
+						style={{
+							cursor:
+								windowInteraction.activeGesture === "move"
+									? "grabbing"
+									: `${windowInteraction.activeGesture}-resize`,
+						}}
+					/>
+				)}
 				{windowOptions?.resizable &&
 					Object.entries(resizeHandles).map(([direction, handleClassName]) => (
 						<div

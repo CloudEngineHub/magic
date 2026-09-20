@@ -50,6 +50,7 @@ vi.mock("antd", () => ({
 vi.mock("@/components/shadcn-ui/dialog", () => ({
 	DialogTitle: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
 	DialogDescription: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
+	DialogPortal: ({ children }: { children: React.ReactNode }) => <>{children}</>,
 	Dialog: ({ open, children }: { open: boolean; children: React.ReactNode }) =>
 		open ? <div>{children}</div> : null,
 	DialogContent: ({

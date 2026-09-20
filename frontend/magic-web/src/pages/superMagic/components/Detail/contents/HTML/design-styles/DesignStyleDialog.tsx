@@ -11,6 +11,10 @@ import {
 	DialogTitle,
 } from "@/components/shadcn-ui/dialog"
 import {
+	DialogRestoreSizeButton,
+	DialogWindowDecorations,
+} from "@/pages/superMagic/components/DialogWindow"
+import {
 	Select,
 	SelectTrigger,
 	SelectValue,
@@ -19,6 +23,7 @@ import {
 } from "@/components/shadcn-ui/select"
 import { ScrollArea } from "@/components/shadcn-ui/scroll-area"
 import { Input } from "@/components/shadcn-ui/input"
+import { cn } from "@/utils/cn"
 import { useTranslation } from "react-i18next"
 import DesignStyleCard from "./DesignStyleCard"
 import DesignStyleDetailHeader, { type DesignStyleDetailMode } from "./DesignStyleDetailHeader"
@@ -31,6 +36,7 @@ import {
 	type DesignStyle,
 } from "./catalog"
 import DesignStyleCategoryLabel from "./categoryLabels"
+import { useDesignStyleWindow } from "./useDesignStyleWindow"
 
 interface DesignStyleDialogProps {
 	open: boolean
@@ -46,6 +52,8 @@ export default function DesignStyleDialog({
 	canApply,
 }: DesignStyleDialogProps) {
 	const { t } = useTranslation("super")
+	const frame = useDesignStyleWindow(open)
+	const { windowOptions } = frame
 	const [query, setQuery] = useState("")
 	const [category, setCategory] = useState("featured")
 	const [selectedCode, setSelectedCode] = useState("")
@@ -109,7 +117,16 @@ export default function DesignStyleDialog({
 		<Dialog open={open} onOpenChange={onOpenChange}>
 			<DialogContent
 				showCloseButton={false}
-				className="flex h-[min(820px,calc(100vh-2rem))] w-[calc(100vw-2rem)] max-w-[calc(100vw-2rem)] flex-col gap-0 overflow-hidden p-0 sm:max-w-[1080px]"
+				windowOptions={windowOptions}
+				className={cn(
+					"flex flex-col gap-0 rounded-xl p-0",
+					windowOptions
+						? "overflow-visible data-[state=open]:zoom-in-95 motion-reduce:data-[state=open]:animate-none"
+						: "overflow-hidden",
+					!windowOptions &&
+						"h-[min(820px,calc(100vh-2rem))] w-[calc(100vw-2rem)] max-w-[calc(100vw-2rem)] sm:max-w-[1080px]",
+				)}
+				onInteractOutside={(event) => event.preventDefault()}
 				onEscapeKeyDown={(event) => {
 					if (selectedStyle) {
 						event.preventDefault()
@@ -118,7 +135,15 @@ export default function DesignStyleDialog({
 				}}
 				data-testid="design-style-dialog"
 			>
-				<DialogHeader className="flex-row items-center gap-4 space-y-0 border-b border-border/70 px-6 py-3 text-left">
+				<DialogHeader
+					data-dialog-drag-handle
+					className={cn(
+						"flex-row items-center justify-between gap-4 space-y-0 rounded-t-xl border-b border-border/70 px-6 py-2.5 text-left",
+						windowOptions?.draggable &&
+							"cursor-grab touch-none select-none active:cursor-grabbing",
+					)}
+					data-testid="design-style-dialog-header"
+				>
 					<div className="min-w-0 flex-1">
 						{selectedStyle ? (
 							<DesignStyleDetailHeader
@@ -142,16 +167,23 @@ export default function DesignStyleDialog({
 							</>
 						)}
 					</div>
-					<DialogClose asChild>
-						<Button
-							variant="ghost"
-							size="icon"
-							className="size-8 shrink-0 text-muted-foreground"
-							aria-label={t("common.close")}
-						>
-							<X className="size-4" aria-hidden="true" />
-						</Button>
-					</DialogClose>
+					<div className="flex shrink-0 items-center gap-2">
+						<DialogRestoreSizeButton
+							frame={frame}
+							testId="design-style-restore-size-button"
+						/>
+						<DialogClose asChild>
+							<Button
+								variant="ghost"
+								size="icon"
+								className="size-8 shrink-0 text-muted-foreground"
+								aria-label={t("common.close")}
+								data-testid="design-style-dialog-close-button"
+							>
+								<X className="size-4" aria-hidden="true" />
+							</Button>
+						</DialogClose>
+					</div>
 				</DialogHeader>
 
 				{isLoading ? (
@@ -175,14 +207,19 @@ export default function DesignStyleDialog({
 						</Button>
 					</div>
 				) : (
-					<div className="flex min-h-0 min-w-0 flex-1 flex-col">
+					<div
+						className={cn(
+							"flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden",
+							!selectedStyle && "rounded-b-xl",
+						)}
+					>
 						<section
 							className={
 								selectedStyle ? "hidden" : "flex min-h-0 min-w-0 flex-1 flex-col"
 							}
 							aria-label={t("htmlEditor.designStyle.libraryLabel")}
 						>
-							<div className="flex flex-wrap items-center gap-x-5 gap-y-2 border-b border-border/60 px-6 py-3">
+							<div className="flex shrink-0 flex-wrap items-center gap-x-5 gap-y-2 border-b border-border/60 px-6 py-3">
 								<div className="relative order-3 w-full lg:ml-auto lg:w-60">
 									<Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
 									<Input
@@ -261,12 +298,12 @@ export default function DesignStyleDialog({
 							<ScrollArea
 								viewportRef={galleryRef}
 								viewportProps={{ "data-testid": "design-style-gallery" }}
-								className="min-h-0 flex-1 overflow-hidden"
+								className="min-h-0 flex-1 overflow-hidden [container-type:inline-size]"
 								viewportClassName="px-6 pb-6 [&>div]:!block"
 							>
 								{filteredStyles.length > 0 ? (
 									<div
-										className="grid grid-cols-1 gap-x-6 gap-y-7 pt-5 sm:grid-cols-2 lg:grid-cols-3"
+										className="grid gap-x-6 gap-y-7 pt-5 [grid-template-columns:repeat(auto-fill,minmax(min(100%,280px),1fr))]"
 										data-testid="design-style-grid"
 									>
 										{filteredStyles.map((style) => (
@@ -321,7 +358,7 @@ export default function DesignStyleDialog({
 				)}
 
 				{selectedStyle && (
-					<DialogFooter className="border-t border-border/70 bg-background px-6 py-2.5">
+					<DialogFooter className="shrink-0 rounded-b-xl border-t border-border/70 bg-background px-6 py-2.5">
 						<p className="mr-auto self-center text-xs text-muted-foreground">
 							{t("htmlEditor.designStyle.gallery.applyHint")}
 						</p>
@@ -340,6 +377,12 @@ export default function DesignStyleDialog({
 						</Button>
 					</DialogFooter>
 				)}
+
+				<DialogWindowDecorations
+					frame={frame}
+					guideProps={{ testId: "design-style-resize-guide" }}
+					gripProps={{ testId: "design-style-resize-grip" }}
+				/>
 			</DialogContent>
 		</Dialog>
 	)

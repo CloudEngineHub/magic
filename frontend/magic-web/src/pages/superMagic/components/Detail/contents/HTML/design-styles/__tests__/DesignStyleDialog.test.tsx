@@ -3,8 +3,17 @@ import { describe, expect, it, vi } from "vitest"
 import DesignStyleDialog from "../DesignStyleDialog"
 import { designStyleFixture } from "./fixtures"
 
-vi.mock("react-i18next", () => ({
-	useTranslation: () => ({ i18n: { language: "zh_CN" }, t: (key: string) => key }),
+vi.mock("react-i18next", async (importOriginal) => {
+	const actual = await importOriginal<typeof import("react-i18next")>()
+	return {
+		...actual,
+		useTranslation: () => ({ i18n: { language: "zh_CN" }, t: (key: string) => key }),
+	}
+})
+vi.mock("@/models/user/hooks", () => ({
+	useUserInfo: () => ({
+		userInfo: { organization_code: "org_1", user_id: "user_1" },
+	}),
 }))
 vi.mock("../DesignStyleThumbnail", () => ({ default: () => <div /> }))
 vi.mock("../DesignStylePreview", () => ({
@@ -28,17 +37,18 @@ describe("DesignStyleDialog", () => {
 	it("starts in the featured gallery and applies only the opened detail", async () => {
 		const onApply = vi.fn()
 		render(<DesignStyleDialog open onOpenChange={vi.fn()} onApply={onApply} canApply />)
-		expect(screen.getByTestId("design-style-dialog")).toHaveClass(
-			"h-[min(820px,calc(100vh-2rem))]",
+		expect(screen.getByTestId("design-style-dialog")).toHaveClass("overflow-visible")
+		expect(screen.getByTestId("design-style-dialog-header")).toHaveAttribute(
+			"data-dialog-drag-handle",
 		)
+		expect(screen.getByTestId("design-style-dialog-header")).toHaveClass("cursor-grab")
+		expect(screen.getByTestId("design-style-restore-size-button")).toBeInTheDocument()
+		expect(screen.getByTestId("design-style-resize-grip")).toBeInTheDocument()
 		const card = await screen.findByTestId(`design-style-card-${designStyleFixture.code}`)
-		expect(screen.getByTestId("design-style-grid")).toHaveClass(
-			"grid-cols-1",
-			"sm:grid-cols-2",
-			"lg:grid-cols-3",
-			"gap-x-6",
-			"pt-5",
-		)
+		const grid = screen.getByTestId("design-style-grid")
+		expect(grid).toHaveClass("grid", "gap-x-6", "gap-y-7", "pt-5")
+		expect(grid.className).toContain("repeat(auto-fill,minmax(min(100%,280px),1fr))")
+		expect(grid).not.toHaveClass("lg:grid-cols-3")
 		expect(screen.queryByTestId("design-style-preview")).not.toBeInTheDocument()
 		expect(screen.queryByTestId("design-style-apply-button")).not.toBeInTheDocument()
 		expect(screen.queryByTestId("design-style-card-second-style")).not.toBeInTheDocument()
@@ -93,5 +103,18 @@ describe("DesignStyleDialog", () => {
 		expect(onOpenChange).not.toHaveBeenCalled()
 		fireEvent.keyDown(document, { key: "Escape" })
 		expect(onOpenChange).toHaveBeenCalledWith(false)
+	})
+
+	it("renders resize guide and dismisses it when requested", async () => {
+		render(<DesignStyleDialog open onOpenChange={vi.fn()} onApply={vi.fn()} canApply />)
+		expect(screen.getByTestId("design-style-resize-guide")).toBeInTheDocument()
+		expect(screen.getByText("sidebarPanels.resizeGuideTitle")).toBeInTheDocument()
+		expect(screen.getByText("sidebarPanels.resizeGuideDescription")).toBeInTheDocument()
+
+		const dismissButton = screen.getByRole("button", {
+			name: "sidebarPanels.resizeGuideDismiss",
+		})
+		fireEvent.click(dismissButton)
+		expect(screen.queryByTestId("design-style-resize-guide")).not.toBeInTheDocument()
 	})
 })
