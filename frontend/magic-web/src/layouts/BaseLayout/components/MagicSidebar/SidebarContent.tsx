@@ -25,6 +25,7 @@ import useResourceStatusPolling from "@/pages/superMagic/hooks/useResourceStatus
 import { useNavigateToSuperHome } from "./hooks/useNavigateToSuperHome"
 import { isMagicApp } from "@/utils/devices"
 import { openAudioRecordingsInMagicApp } from "@/layouts/BaseLayout/utils/magicAppNavigation"
+import NewChatSidebarMenuItem from "./NewChatSidebarMenuItem"
 
 function SidebarContent({ collapsed, onBusyChange, onSelect }: SidebarContentProps) {
 	const { t } = useTranslation(["sidebar", "super"])
@@ -35,8 +36,9 @@ function SidebarContent({ collapsed, onBusyChange, onSelect }: SidebarContentPro
 	const sidebarMarketMenuItems = useSidebarMarketMenuItems()
 	const { superRouteUrl, handleNavigateToSuperHome } = useNavigateToSuperHome()
 	const [projectBusy, setProjectBusy] = useState(false)
+	const [chatBusy, setChatBusy] = useState(false)
 	const [appsOpen, setAppsOpen] = useState(false)
-	const busy = projectBusy || appsOpen
+	const busy = projectBusy || chatBusy || appsOpen
 	useEffect(() => {
 		onBusyChange?.(busy)
 	}, [busy, onBusyChange])
@@ -68,31 +70,38 @@ function SidebarContent({ collapsed, onBusyChange, onSelect }: SidebarContentPro
 	return (
 		<SidebarContentLayout
 			home={
-				<SidebarMenuItem key={RouteName.Super}>
-					<SidebarMenuButton
-						asChild
-						tooltip={collapsed ? t("sidebar:home.title") : undefined}
-						data-testid="sidebar-content-home-button"
-						className="text-sidebar-foreground"
-					>
-						<a
-							href={superRouteUrl}
-							onClick={handleNavigateToSuperHome}
-							className="text-current no-underline"
+				<>
+					<SidebarMenuItem key={RouteName.Super}>
+						<SidebarMenuButton
+							asChild
+							tooltip={collapsed ? t("sidebar:home.title") : undefined}
+							data-testid="sidebar-content-home-button"
+							className="text-sidebar-foreground"
 						>
-							<SquarePen className="h-4 w-4 shrink-0" />
-							<span className="flex-1 overflow-hidden text-ellipsis whitespace-nowrap text-left text-sm leading-5">
-								{t("sidebar:home.title")}
-							</span>
-						</a>
-					</SidebarMenuButton>
-				</SidebarMenuItem>
+							<a
+								href={superRouteUrl}
+								onClick={handleNavigateToSuperHome}
+								className="text-current no-underline"
+							>
+								<SquarePen className="h-4 w-4 shrink-0" />
+								<span className="flex-1 overflow-hidden text-ellipsis whitespace-nowrap text-left text-sm leading-5">
+									{t("sidebar:home.title")}
+								</span>
+							</a>
+						</SidebarMenuButton>
+					</SidebarMenuItem>
+					<NewChatSidebarMenuItem
+						collapsed={collapsed}
+						onBusyChange={setChatBusy}
+						onSelect={onSelect}
+					/>
+				</>
 			}
 		>
 			<ProjectNavigation
 				apps={
 					<SidebarGroup
-						className="w-full shrink-0 px-2 pb-1 pt-0"
+						className="w-full shrink-0 px-2 pb-1 pt-1"
 						data-testid="sidebar-content-apps-group"
 					>
 						<SidebarGroupContent>

@@ -27,6 +27,7 @@ import { useChatConversationList } from "@/pages/superMagicMobile/pages/ChatsPag
 import type { ChatConversationListItem } from "@/pages/superMagicMobile/pages/ChatsPage/hooks/useChatConversationList"
 import { useDesktopChatProjectActions } from "@/pages/superMagic/hooks/useDesktopChatProjectActions"
 import magicToast from "@/components/base/MagicToaster/utils"
+import { subscribeChatConversationListInvalidation } from "@/pages/superMagic/services/chatConversationListInvalidation"
 import { Input } from "@/components/shadcn-ui/input"
 import { Button } from "@/components/shadcn-ui/button"
 import { ScrollArea } from "@/components/shadcn-ui/scroll-area"
@@ -169,6 +170,11 @@ const ChatsSubMenu = forwardRef<ChatsSubMenuHandle, ChatsSubMenuProps>(function 
 			setIsRefreshing(false)
 		}
 	})
+	useEffect(() => {
+		return subscribeChatConversationListInvalidation(() => {
+			void handleRefreshList()
+		})
+	}, [handleRefreshList])
 	const { projectActions, projectActionComponents, updateCurrentActionItem, isProjectModalOpen } =
 		useDesktopChatProjectActions({
 			actionContext: "list",
