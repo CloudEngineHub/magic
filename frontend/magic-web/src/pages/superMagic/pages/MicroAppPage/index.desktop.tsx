@@ -4,6 +4,7 @@ import { useTranslation } from "react-i18next"
 import { useMemoizedFn, useSize } from "ahooks"
 
 import Detail from "@/pages/superMagic/components/Detail"
+import type { HtmlPermissionManagerHandle } from "@/pages/superMagic/components/Detail/contents/HTML/hooks/useHtmlPermissionManagerBridge"
 import MagicModal from "@/components/base/MagicModal"
 import { getToolDetailSelectionTarget } from "@/pages/superMagic/components/MessageList/components/Nodes/toolDetailSelection"
 import { FileActionVisibilityProvider } from "@/pages/superMagic/providers/file-action-visibility-provider"
@@ -41,6 +42,7 @@ import { useMicroAppMessageFileOpen } from "./hooks/useMicroAppMessageFileOpen"
 import { useMicroAppPageController } from "./hooks/useMicroAppPageController"
 import { useMicroAppPreviewFiles } from "./hooks/useMicroAppPreviewFiles"
 import * as layout from "./layoutConstants"
+import { shouldOpenMessageFileInFilesWorkspace } from "./utils/microAppPreviewPopup"
 
 function MicroAppPageInner({
 	appId,
@@ -117,6 +119,8 @@ function MicroAppPageInner({
 	} = controller
 	const developmentConversation = store.developmentConversation ?? conversation
 	const [pageMode, setPageMode] = useState<MicroAppPageMode>("development")
+	const [htmlPermissionManager, setHtmlPermissionManager] =
+		useState<HtmlPermissionManagerHandle | null>(null)
 	const pageModeRef = useRef<MicroAppPageMode>("development")
 	const usageConversationRequestedRef = useRef(false)
 	const previewModeRequestRef = useRef<Promise<boolean> | null>(null)
@@ -278,9 +282,10 @@ function MicroAppPageInner({
 		if (!detail || typeof detail !== "object") return
 		previewDetailPopupRef.current?.open(detail as PreviewDetail, attachments, attachmentList)
 	})
-	// 文件工具已通过 Open_File_Tab 切换到附件预览区，这里只处理工具详情。
+	// File-target cards publish Open_File_Tab; only tool details use the popup.
 	const handleConversationSelectDetail = useMemoizedFn((detail: unknown) => {
-		if (getToolDetailSelectionTarget(detail) !== "file") setPreviewDetail(detail)
+		if (getToolDetailSelectionTarget(detail) === "file") return
+		setPreviewDetail(detail)
 	})
 	const setLinkPreviewDetail = useMemoizedFn((detail: unknown) => {
 		if (!detail || typeof detail !== "object") return
@@ -297,6 +302,7 @@ function MicroAppPageInner({
 		detailRef,
 		isFilesViewActive: activeView === "files" || activeView === "userSpace",
 		showFilesView,
+		enabled: shouldOpenMessageFileInFilesWorkspace(pageMode),
 	})
 
 	useEffect(() => {
@@ -314,7 +320,9 @@ function MicroAppPageInner({
 		setIsAIEditActive(false)
 		setIsDevConsoleActive(false)
 		setIsDevConsoleAvailable(false)
-	}, [projectId, setIsMessagePanelCollapsed, setPreviewEntryFile])
+		// Clear the previous app's manager before the next preview registers its own handle.
+		setHtmlPermissionManager(null)
+	}, [projectId, setIsMessagePanelCollapsed, setHtmlPermissionManager, setPreviewEntryFile])
 
 	useEffect(() => {
 		if (!isPreviewFullscreen) return undefined
@@ -390,6 +398,8 @@ function MicroAppPageInner({
 						onEdit={handleOpenEditDialog}
 						canManageCollaborators={canManageCollaborators}
 						onManageCollaborators={handleManageCollaborators}
+						canManageHtmlPermissions={Boolean(htmlPermissionManager)}
+						onManageHtmlPermissions={() => htmlPermissionManager?.open()}
 						canUseDevelopment={canUseDevelopment}
 						pageMode={pageMode}
 						onPageModeChange={handlePageModeChange}
@@ -413,6 +423,7 @@ function MicroAppPageInner({
 								sourceOrganizationCode={sourceOrganizationCode}
 								storageMarkerId={defaultEntryFile?.file_id}
 								onOpenFile={handlePreviewOpenFile}
+								onHtmlPermissionManagerChange={setHtmlPermissionManager}
 							/>
 						) : (
 							<>
@@ -549,6 +560,9 @@ function MicroAppPageInner({
 															}
 															onDevConsoleActiveChange={
 																setIsDevConsoleActive
+															}
+															onHtmlPermissionManagerChange={
+																setHtmlPermissionManager
 															}
 															isBuilding={hasRunningTopic}
 														/>

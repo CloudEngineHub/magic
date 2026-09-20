@@ -523,11 +523,22 @@ function EditToolbar({
 				(signal) =>
 					iteratePreparedHtmlPages({
 						pages: (async function* iterateSelectedSlides() {
-							for (const slide of selectedSlides) {
+							for (const [index, slide] of selectedSlides.entries()) {
 								if (signal.aborted) return
 								const content = await ensureSlideContent(slide)
 								if (signal.aborted) return
-								yield content
+								const fileId =
+									pptStore.getFileIdByPath(slide.path) ||
+									pptStore.tryExtractAndMapFileId(slide.path)
+								yield {
+									index,
+									html: content,
+									key: slide.path,
+									pageName:
+										slide.path.split("/").pop() || slide.title || slide.path,
+									pagePath: slide.path,
+									pageFileId: fileId,
+								}
 							}
 						})(),
 						signal,
@@ -540,7 +551,10 @@ function EditToolbar({
 					config: createPptxSlideConfig(
 						resolvePptScaleContentDimensions(firstPage.html, firstSlide.rawContent),
 					),
-					skipFailedPages: false,
+					// A malformed page script (for example, ECharts targeting a missing container)
+					// is reported through onExportIssue but must not prevent the remaining slides
+					// from being written to the selected PPTX destination.
+					skipFailedPages: true,
 					fontResolver: pptFontResolver,
 					logger: pptxExternalLogger,
 					logLevel: "warn",

@@ -38,6 +38,7 @@ interface ConversationPanelScaffoldProps {
 	messages: Array<SuperMagicMessageItem>
 	selectedTopic: Topic | null
 	setSelectedDetail?: (detail: unknown) => void
+	onFileClick?: (fileItem: unknown) => void
 	isConversationPanelCollapsed?: boolean
 	detailPanelVisible?: boolean
 	showLoading?: boolean
@@ -106,6 +107,7 @@ function ConversationPanelScaffold({
 	messages,
 	selectedTopic,
 	setSelectedDetail,
+	onFileClick,
 	isConversationPanelCollapsed = false,
 	detailPanelVisible = true,
 	showLoading,
@@ -430,6 +432,7 @@ function ConversationPanelScaffold({
 							data={messages}
 							selectedTopic={selectedTopic}
 							setSelectedDetail={setSelectedDetail}
+							onFileClick={onFileClick}
 							handlePullMoreMessage={handlePullMoreMessage}
 							showLoading={showLoading}
 							currentTopicStatus={currentTopicStatus}

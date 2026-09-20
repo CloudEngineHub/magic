@@ -240,7 +240,7 @@ readonly class AgentAppService
      * 批量检查话题沙箱镜像版本，返回每个 topic_id 是否需要升级.
      *
      * @param int[] $topicIds
-     * @return array<int, bool> topicId => needUpgrade
+     * @return array<int, null|bool> topicId => needUpgrade
      */
     public function checkSandboxVersionsByTopicIds(array $topicIds, bool $useCache = true): array
     {

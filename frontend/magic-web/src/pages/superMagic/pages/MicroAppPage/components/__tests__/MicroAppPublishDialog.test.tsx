@@ -7,6 +7,7 @@ import {
 	getPublishDialogMocks,
 	renderDialog,
 	resetPublishDialogMocks,
+	setOrganizationSubscription,
 } from "./MicroAppPublishDialog.testUtils"
 
 const mocks = getPublishDialogMocks()
@@ -537,5 +538,119 @@ describe("MicroAppPublishDialog", () => {
 
 		expect(await screen.findByText("share.noAvailableShareMethods")).toBeInTheDocument()
 		expect(screen.getByTestId("micro-app-publish-save")).toBeDisabled()
+		// 只有「分享方式」与提示保留，分享设置里的其它项不再渲染。
+		expect(screen.getByTestId("share-type-field")).toBeInTheDocument()
+		expect(screen.queryByTestId("share-expiry-field")).not.toBeInTheDocument()
+	})
+
+	it("管理员未开放任何分享方式时已发布的密码项也一并收起", async () => {
+		mocks.functionPermissions = {
+			"micro_app.share_password": false,
+			"micro_app.share_public": false,
+			"micro_app.share_team": false,
+		}
+		mocks.getMicroAppProject.mockResolvedValue(createPasswordProtectedDetail())
+
+		renderDialog()
+
+		expect(await screen.findByText("share.noAvailableShareMethods")).toBeInTheDocument()
+		// 已发布的方式本身仍展示，但它对应的设置项不再展示。
+		expect(screen.getByTestId("share-type-field")).toBeInTheDocument()
+		expect(screen.queryByTestId("micro-app-publish-password")).not.toBeInTheDocument()
+		expect(screen.queryByTestId("share-expiry-field")).not.toBeInTheDocument()
+		// 左侧发布表单不受分享管控影响。
+		expect(screen.getByTestId("micro-app-publish-project-name")).toBeInTheDocument()
+		expect(screen.getByTestId("micro-app-cover-upload")).toBeInTheDocument()
+	})
+
+	it("移动端管理员未开放任何分享方式时同样收起分享设置里的其它项", async () => {
+		mocks.functionPermissions = {
+			"micro_app.share_password": false,
+			"micro_app.share_public": false,
+			"micro_app.share_team": false,
+		}
+		mocks.getMicroAppProject.mockResolvedValue(createPasswordProtectedDetail())
+
+		renderDialog({ mobile: true })
+
+		expect(await screen.findByText("share.noAvailableShareMethods")).toBeInTheDocument()
+		expect(screen.getByTestId("share-type-field")).toBeInTheDocument()
+		expect(screen.queryByTestId("micro-app-publish-password")).not.toBeInTheDocument()
+		expect(screen.queryByTestId("share-expiry-field")).not.toBeInTheDocument()
+		expect(screen.getByTestId("micro-app-publish-project-name")).toBeInTheDocument()
+	})
+
+	// P0-3: `ShareTypeField` hides team sharing for a free plan, so defaulting to it left the dialog
+	// with nothing selected while the publish payload still carried Organization.
+	it("免费计划默认落回公开访问，而不是被隐藏的团队分享", async () => {
+		setOrganizationSubscription(false)
+
+		renderDialog()
+
+		await waitFor(() => {
+			expect(screen.getByTestId("share-type-field")).toHaveAttribute(
+				"data-value",
+				String(ShareType.Public),
+			)
+		})
+	})
+
+	it("免费计划下发布微应用时提交公开访问", async () => {
+		setOrganizationSubscription(false)
+
+		renderDialog()
+
+		fireEvent.click(await screen.findByTestId("micro-app-publish-save"))
+
+		await waitFor(() => {
+			expect(mocks.publishMicroAppProject).toHaveBeenCalledWith(
+				"app-1",
+				expect.objectContaining({ share_type: ShareType.Public }),
+			)
+		})
+	})
+
+	// Backstop: even if a caller sets the state directly, the plan gate must never reach the request.
+	it("免费计划下直接改状态也选不中团队分享", async () => {
+		setOrganizationSubscription(false)
+
+		renderDialog()
+		await screen.findByTestId("share-type-field")
+
+		fireEvent.click(screen.getByTestId("force-share-type-organization"))
+
+		expect(screen.getByTestId("share-type-field")).toHaveAttribute(
+			"data-value",
+			String(ShareType.Public),
+		)
+	})
+
+	// A live share keeps its own method: opening the dialog must not rewrite it just because the
+	// organization is on a free plan.
+	it("免费计划下已发布的团队分享保持不变", async () => {
+		setOrganizationSubscription(false)
+		mocks.getMicroAppProject.mockResolvedValue({
+			app_id: "app-1",
+			project_id: "project-1",
+			project: { id: "project-1", project_name: "Demo App" },
+			publish: {
+				app_id: "app-1",
+				app_name: "Demo App",
+				resource_id: "resource-1",
+				share_code: "share-code-1",
+				share_type: ShareType.Organization,
+				publish_status: "published",
+				access_url: "https://example.com/micro-app/app-1",
+			},
+		})
+
+		renderDialog()
+
+		await waitFor(() => {
+			expect(screen.getByTestId("share-type-field")).toHaveAttribute(
+				"data-value",
+				String(ShareType.Organization),
+			)
+		})
 	})
 })

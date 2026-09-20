@@ -18,6 +18,36 @@ describe("useMicroAppMessageFileOpen", () => {
 		vi.useRealTimers()
 	})
 
+	it("ignores file-tab events when disabled", () => {
+		const openFileTab = vi.fn()
+		const showFilesView = vi.fn()
+		const detailRef = {
+			current: {
+				openFileTab,
+			},
+		}
+
+		renderHook(() =>
+			useMicroAppMessageFileOpen({
+				attachmentList: [{ file_id: "file-1", file_name: "index.html" }],
+				detailRef,
+				isFilesViewActive: false,
+				showFilesView,
+				enabled: false,
+			}),
+		)
+
+		act(() => {
+			pubsub.publish(PubSubEvents.Open_File_Tab, {
+				fileId: "file-1",
+				fileData: { file_id: "file-1", file_name: "index.html" },
+			})
+		})
+
+		expect(showFilesView).not.toHaveBeenCalled()
+		expect(openFileTab).not.toHaveBeenCalled()
+	})
+
 	it("opens a published micro-app tab after switching to files view", () => {
 		const openMicroAppTab = vi.fn()
 		const showFilesView = vi.fn()

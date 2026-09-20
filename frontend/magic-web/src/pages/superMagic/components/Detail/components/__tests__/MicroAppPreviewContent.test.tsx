@@ -61,8 +61,12 @@ vi.mock("@/pages/share/microApp/hooks/useMicroAppSafetyNoticeConfirmation", () =
 }))
 
 vi.mock("@/pages/share/components", () => ({
-	ErrorDisplay: ({ errorMessage }: { errorMessage: string }) => (
-		<div data-testid="micro-app-tab-error">{errorMessage}</div>
+	// 与真实 ErrorDisplay 的契约一致：只有传了 onBack 才会渲染「返回」按钮。
+	ErrorDisplay: ({ errorMessage, onBack }: { errorMessage: string; onBack?: () => void }) => (
+		<div data-testid="micro-app-tab-error">
+			{errorMessage}
+			{onBack ? <button type="button" data-testid="micro-app-tab-error-back" /> : null}
+		</div>
 	),
 	PasswordVerification: () => <div data-testid="micro-app-tab-password" />,
 	ShareEmptyState: () => <div data-testid="micro-app-tab-org-empty" />,
@@ -167,6 +171,8 @@ describe("MicroAppPreviewContent", () => {
 		shareDataState.error = new Error("denied")
 		rerender(<MicroAppPreviewContent appId="app-1" />)
 		expect(screen.getByTestId("micro-app-tab-error")).toBeInTheDocument()
+		// 应用内标签页有自己的外层导航，错误态不该再给一个「返回」。
+		expect(screen.queryByTestId("micro-app-tab-error-back")).not.toBeInTheDocument()
 	})
 
 	it("shows the safety notice before previewing", () => {

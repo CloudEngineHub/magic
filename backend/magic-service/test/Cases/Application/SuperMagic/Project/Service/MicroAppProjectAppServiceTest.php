@@ -359,6 +359,46 @@ class MicroAppProjectAppServiceTest extends TestCase
         self::assertSame(['exists' => false, 'project' => null], $service->getRuntimeProject($requestContext, 1001));
     }
 
+    public function testRuntimeProjectResponsesIncludeCurrentUserRole(): void
+    {
+        [$requestContext, $microAppRepository, $projectRepository, $responseFormatter] = $this->createShowFixtures();
+        $runtimeProject = (new ProjectEntity())
+            ->setId(2001)
+            ->setUserId('user-1')
+            ->setUserOrganizationCode('org-1');
+        $projectAppService = $this->createMock(ProjectAppService::class);
+        $projectAppService->expects(self::once())
+            ->method('findSpecialProject')
+            ->with($requestContext, 'micro-app-runtime_1001')
+            ->willReturn($runtimeProject);
+        $projectAppService->expects(self::once())
+            ->method('ensureMicroAppRuntimeProject')
+            ->with($requestContext, 'micro-app-runtime_1001')
+            ->willReturn(['project' => ['id' => 2001], 'is_existing' => true]);
+        $responseFormatter->expects(self::exactly(2))
+            ->method('formatProject')
+            ->willReturn(['id' => '2001']);
+
+        $service = $this->createService(
+            $microAppRepository,
+            $projectRepository,
+            $this->createMock(ResourceShareAppService::class),
+            $this->createMock(ResourceShareDomainService::class),
+            $this->createMock(ShareUrlBuilder::class),
+            $responseFormatter,
+            projectAppService: $projectAppService,
+        );
+
+        self::assertSame(
+            ['exists' => true, 'project' => ['id' => '2001', 'user_role' => 'owner']],
+            $service->getRuntimeProject($requestContext, 1001),
+        );
+        self::assertSame(
+            ['project' => ['id' => '2001', 'user_role' => 'owner'], 'is_existing' => true],
+            $service->ensureRuntimeProject($requestContext, 1001),
+        );
+    }
+
     public function testRuntimeProjectExplainsPasswordShareForNonMember(): void
     {
         $this->setErrorMessageContainer();
@@ -1177,6 +1217,7 @@ class MicroAppProjectAppServiceTest extends TestCase
         ?PackageFilterInterface $packageFilterService = null,
         bool $denyCollaboration = false,
         ?PublishedMicroAppFileAccessService $publishedFileAccess = null,
+        ?ProjectAppService $projectAppService = null,
     ): MicroAppProjectAppService {
         $class = $denyCollaboration
             ? TestableDeniedCollaborationMicroAppProjectAppService::class
@@ -1190,7 +1231,7 @@ class MicroAppProjectAppServiceTest extends TestCase
             $shareDomainService,
             $shareUrlBuilder,
             $projectDomainService ?? $this->createMock(ProjectDomainService::class),
-            $this->createMock(ProjectAppService::class),
+            $projectAppService ?? $this->createMock(ProjectAppService::class),
             $projectMemberDomainService ?? $this->createMemberService(),
             $departmentUserDomainService ?? new MagicDepartmentUserDomainService(
                 $this->createMock(MagicDepartmentUserRepositoryInterface::class)

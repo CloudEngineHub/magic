@@ -21,6 +21,7 @@ import {
 	useAppStore,
 	useOptionalAppStore,
 } from "@/pages/superMagic/pages/MicroAppPage/context"
+import { COLLAPSED_RAIL_WIDTH_PX } from "@/pages/superMagic/pages/MicroAppPage/layoutConstants"
 import TopicDesktopPanels from "@/pages/superMagic/pages/TopicPage/components/TopicDesktopPanels"
 import {
 	TOPIC_HISTORY_PANEL_OPEN_STORAGE_KEYS,
@@ -35,6 +36,7 @@ import { useIsMobile } from "@/hooks/useIsMobile"
 
 import { FileAccessProvider } from "@/pages/superMagic/fileAccess/FileAccessProvider"
 import { createSessionFileAccess } from "@/pages/superMagic/fileAccess/fileAccessContext"
+import { usePublishedRuntimePreview } from "@/pages/share/microApp/hooks/usePublishedRuntimePreview"
 
 import PublishedMicroAppSidebar, { type PublishedMicroAppPanel } from "./PublishedMicroAppSidebar"
 import { useMicroAppAuthentication } from "../hooks/useMicroAppAuthentication"
@@ -136,6 +138,20 @@ const PublishedMicroAppConversationSurface = observer(
 				isEnabled: runtimeProjectState === "ready",
 				persistOpenState: false,
 			})
+		const {
+			handleSelectDetail,
+			handleOpenFile,
+			openPreviewDetail,
+			previewPopup,
+			fileManagerPopup,
+		} = usePublishedRuntimePreview({
+			enabled: shouldShowRuntimeSidebar,
+			selectedProject: runtimeProject,
+			selectedTopic: conversation.topicStore.selectedTopic,
+			fileTree: projectFilesStore.workspaceFileTree,
+			fileList: projectFilesStore.workspaceFilesList,
+			attachmentLoadState: projectFilesStore.attachmentLoadState,
+		})
 
 		const loadRuntimeProject = useCallback(
 			async (project: Pick<MicroAppRuntimeProject, "id">, isCurrent: () => boolean) => {
@@ -144,6 +160,7 @@ const PublishedMicroAppConversationSurface = observer(
 				const loadedProject = conversation.selectedProject
 				if (!loadedProject) throw new Error("Runtime project could not be loaded")
 				projectFilesStore.setSelectedProject(loadedProject)
+				projectFilesStore.setAttachmentLoadStatus(loadedProject.id, "loading")
 				try {
 					const attachmentResult = await loadProjectAttachments({
 						projectId: loadedProject.id,
@@ -157,11 +174,13 @@ const PublishedMicroAppConversationSurface = observer(
 						list: attachmentResult.list,
 						source: "published-micro-app-runtime",
 					})
+					projectFilesStore.setAttachmentLoadStatus(loadedProject.id, "ready")
 				} catch (error) {
 					if (!isCurrent()) return null
 					// File loading should not hide an otherwise valid runtime conversation.
 					console.error("Failed to load published micro-app attachments:", error)
 					projectFilesStore.setWorkspaceFileTree([])
+					projectFilesStore.setAttachmentLoadStatus(loadedProject.id, "error")
 				}
 				setRuntimeProject(loadedProject)
 				setRuntimeProjectState("ready")
@@ -291,25 +310,28 @@ const PublishedMicroAppConversationSurface = observer(
 								/>
 							</Suspense>
 						) : null}
-						{mobileConversationOpen && shouldShowRuntimeSidebar ? (
+						{shouldShowRuntimeSidebar ? (
 							<FileAccessProvider value={runtimeFileAccess}>
-								<Suspense fallback={null}>
-									{/* Published share previews do not mount the editor's mobile detail popup. */}
-									<MicroAppMobileConversation
-										open={mobileConversationOpen}
-										selectedProject={runtimeProject}
-										topicStore={conversation.topicStore}
-										mentionPanelStore={mentionPanelStore}
-										projectFilesStore={projectFilesStore}
-										attachments={projectFilesStore.workspaceFileTree}
-										onSelectDetail={() => undefined}
-										onOpenFile={() => undefined}
-										onOpenChange={setMobileConversationOpen}
-										lockToMicroAppMode={false}
-										microAppId={appId}
-										microAppName={appName}
-									/>
-								</Suspense>
+								{mobileConversationOpen ? (
+									<Suspense fallback={null}>
+										<MicroAppMobileConversation
+											open={mobileConversationOpen}
+											selectedProject={runtimeProject}
+											topicStore={conversation.topicStore}
+											mentionPanelStore={mentionPanelStore}
+											projectFilesStore={projectFilesStore}
+											attachments={projectFilesStore.workspaceFileTree}
+											onSelectDetail={handleSelectDetail}
+											onOpenFile={handleOpenFile}
+											onOpenChange={setMobileConversationOpen}
+											lockToMicroAppMode={false}
+											microAppId={appId}
+											microAppName={appName}
+										/>
+									</Suspense>
+								) : null}
+								{previewPopup}
+								{fileManagerPopup}
 							</FileAccessProvider>
 						) : null}
 					</div>
@@ -336,7 +358,7 @@ const PublishedMicroAppConversationSurface = observer(
 					showProjectResizeHandle={false}
 					autoExpandConversationWhenDetailVisible={false}
 					initialConversationPanelCollapsed
-					collapsedConversationPanelWidth={48}
+					collapsedConversationPanelWidth={COLLAPSED_RAIL_WIDTH_PX}
 					persistConversationPanelState={false}
 					conversationResizeHandleGripVariant="dots"
 					historyOverlayScope="container"
@@ -392,7 +414,12 @@ const PublishedMicroAppConversationSurface = observer(
 								historyTriggerMode={historyTriggerMode}
 								isHistoryPanelOpen={isHistoryPanelOpen}
 								onToggleHistoryPanel={onToggleHistoryPanel}
+								onSelectDetail={handleSelectDetail}
+								onFileClick={handleOpenFile}
+								onOpenPreview={openPreviewDetail}
 							/>
+							{previewPopup}
+							{fileManagerPopup}
 						</FileAccessProvider>
 					)}
 				/>

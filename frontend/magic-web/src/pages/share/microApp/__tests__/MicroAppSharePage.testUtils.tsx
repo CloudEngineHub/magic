@@ -79,6 +79,17 @@ export function getMicroAppSharePageMocks() {
 }
 
 vi.mock("@/apis", () => ({
+	// The share-permission hooks read these codes at module scope, so the mock must expose them.
+	FUNCTION_PERMISSION_CODE: {
+		MicroAppSharePassword: "micro_app.share_password",
+		MicroAppSharePublic: "micro_app.share_public",
+		MicroAppShareTeam: "micro_app.share_team",
+		ProjectSharePassword: "project.share_password",
+		ProjectSharePublic: "project.share_public",
+		ProjectShareTeam: "project.share_team",
+		TopicSharePassword: "topic.share_password",
+		TopicSharePublic: "topic.share_public",
+	},
 	SuperMagicApi: {
 		resolvePublishedMicroApp: mocks.resolvePublishedMicroApp,
 		checkShareResourcePassword: mocks.checkShareResourcePassword,
@@ -213,16 +224,24 @@ vi.mock("@/pages/share/components/WorkspaceButton", () => ({
 }))
 
 vi.mock("@/pages/share/components", () => ({
+	// 与真实 ErrorDisplay 的契约一致：只有传了 onBack 才会渲染「返回」按钮。
 	ErrorDisplay: ({
 		errorMessage,
 		illustration,
+		onBack,
 	}: {
 		errorMessage?: string
 		illustration?: ReactNode
+		onBack?: () => void
 	}) => (
 		<div data-testid="mock-error-display">
 			{illustration}
 			{errorMessage}
+			{onBack ? (
+				<button type="button" data-testid="error-display-retry-button" onClick={onBack}>
+					back
+				</button>
+			) : null}
 		</div>
 	),
 	PasswordVerification: () => <div data-testid="mock-password-verification" />,

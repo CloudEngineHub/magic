@@ -79,6 +79,23 @@ export const WATERMARK_CONFIG = {
 	color: "rgba(0, 0, 0, 0.05)",
 }
 
+/**
+ * 个人组织版 user_id 水印的文字色：接近透明，肉眼几乎不可见。
+ * 个人组织版只用它做隐性的溯源标记，不应干扰成员正常阅读。
+ */
+const USER_ID_WATERMARK_TEXT_COLOR = "rgba(0, 0, 0, 0.01)"
+
+/**
+ * 个人组织版（由 `MAGIC_WATERMARK_ENABLED` 环境变量开启）使用的 user_id 页面水印。
+ * 与 {@link WATERMARK_CONFIG} 的区别只在文字颜色：个人组织版几乎透明。
+ */
+export const USER_ID_WATERMARK_CONFIG = {
+	...WATERMARK_CONFIG,
+	textColor: USER_ID_WATERMARK_TEXT_COLOR,
+	/** @deprecated 请使用 textColor */
+	color: USER_ID_WATERMARK_TEXT_COLOR,
+}
+
 /** Visual strength used by the organization watermark configuration. */
 const WATERMARK_DEPTH_CONFIG: Record<PlatformWatermarkConfig["depth"], WatermarkDataUrlOptions> = {
 	light: {
@@ -1050,22 +1067,46 @@ export function syncUserWatermark(userInfo: User.UserInfo | null) {
 		return
 	}
 
-	const renderKey = `${usesPlatformWatermark ? (platformWatermarkConfig?.depth ?? "light") : "legacy"}:${text}`
+	const { config, key } = resolveUserWatermarkRenderConfig(watermarkMode)
+	const renderKey = `${key}:${text}`
 	if (currentUserWatermarkRenderKey === renderKey) return
 
 	currentUserWatermarkRenderKey = renderKey
 	watermarkService.mount({
 		container: document.body,
 		text,
-		config: usesPlatformWatermark
-			? {
-					...WATERMARK_DEPTH_CONFIG[platformWatermarkConfig?.depth ?? "light"],
-					...(isMobileWatermarkViewport()
-						? PLATFORM_WATERMARK_LAYOUT_CONFIG.mobile
-						: PLATFORM_WATERMARK_LAYOUT_CONFIG.desktop),
-				}
-			: WATERMARK_CONFIG,
+		config,
 	})
+}
+
+/**
+ * 解析当前策略对应的渲染配置与渲染缓存键。
+ * 渲染键必须带上渲染配置的变体，否则同一用户在两套配置之间切换时
+ * （例如从共享组织切到个人组织）会命中缓存而沿用旧颜色。
+ */
+export function resolveUserWatermarkRenderConfig(mode: UserWatermarkMode): {
+	key: string
+	config: WatermarkDataUrlOptions
+} {
+	if (mode === "platform") {
+		const depth = platformWatermarkConfig?.depth ?? "light"
+		return {
+			key: depth,
+			config: {
+				...WATERMARK_DEPTH_CONFIG[depth],
+				...(isMobileWatermarkViewport()
+					? PLATFORM_WATERMARK_LAYOUT_CONFIG.mobile
+					: PLATFORM_WATERMARK_LAYOUT_CONFIG.desktop),
+			},
+		}
+	}
+
+	// 个人组织版保留环境变量开启的 user_id 水印，颜色接近透明。
+	if (currentIsPersonalOrganization) {
+		return { key: "user-id", config: USER_ID_WATERMARK_CONFIG }
+	}
+
+	return { key: "legacy", config: WATERMARK_CONFIG }
 }
 
 if (typeof window !== "undefined") {

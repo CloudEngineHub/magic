@@ -15,6 +15,7 @@ const detailMocks = vi.hoisted(() => ({
 const previewMocks = vi.hoisted(() => ({
 	aiEdit: vi.fn(),
 	devConsoleToggle: vi.fn(),
+	permissionManagerOpen: vi.fn(),
 	render: vi.fn(),
 }))
 
@@ -95,6 +96,15 @@ vi.mock("@/pages/superMagic/stores", () => ({
 		getToolResponseForRendering: vi.fn(),
 		getStreamState: vi.fn(),
 		getMessageNode: vi.fn(),
+	},
+}))
+
+vi.mock("@/stores/projectFiles", () => ({
+	default: {
+		workspaceFilesList: [
+			{ file_id: "admin-1", file_name: "admin.html", file_extension: "html" },
+		],
+		currentSelectedProject: { id: "project-1" },
 	},
 }))
 
@@ -300,9 +310,11 @@ vi.mock("../components/MicroAppEntryPreview", () => ({
 		onRegisterAIEdit?: (handler: (() => void) | null) => void
 		onRegisterDevConsoleToggle?: (handler: (() => void) | null) => void
 		onDevConsoleActiveChange?: (active: boolean) => void
+		onHtmlPermissionManagerChange?: (manager: { open: () => void } | null) => void
 		onOpenFile?: (fileItem?: unknown) => void
 	}) {
-		const { onRegisterAIEdit, onRegisterDevConsoleToggle } = props
+		const { onRegisterAIEdit, onRegisterDevConsoleToggle, onHtmlPermissionManagerChange } =
+			props
 		const hasEntryFile = Boolean(props.entryFile?.file_id)
 		useEffect(() => {
 			onRegisterAIEdit?.(previewMocks.aiEdit)
@@ -312,6 +324,12 @@ vi.mock("../components/MicroAppEntryPreview", () => ({
 			onRegisterDevConsoleToggle?.(hasEntryFile ? previewMocks.devConsoleToggle : null)
 			return () => onRegisterDevConsoleToggle?.(null)
 		}, [hasEntryFile, onRegisterDevConsoleToggle])
+		useEffect(() => {
+			onHtmlPermissionManagerChange?.(
+				hasEntryFile ? { open: previewMocks.permissionManagerOpen } : null,
+			)
+			return () => onHtmlPermissionManagerChange?.(null)
+		}, [hasEntryFile, onHtmlPermissionManagerChange])
 		previewMocks.render(props)
 		return <div data-testid="desktop-entry-preview" />
 	},
@@ -429,6 +447,7 @@ describe("MicroAppPageDesktop", () => {
 		detailMocks.render.mockClear()
 		previewMocks.aiEdit.mockClear()
 		previewMocks.devConsoleToggle.mockClear()
+		previewMocks.permissionManagerOpen.mockClear()
 		previewMocks.render.mockClear()
 		previewWorkspaceMocks.render.mockClear()
 		headerMocks.render.mockClear()
@@ -475,6 +494,20 @@ describe("MicroAppPageDesktop", () => {
 		)
 	})
 
+	it("wires the HTML permission manager from the preview to the header", async () => {
+		render(<MicroAppPageDesktop />)
+		await screen.findByTestId("desktop-entry-preview")
+
+		const headerProps = headerMocks.render.mock.lastCall?.[0] as {
+			canManageHtmlPermissions: boolean
+			onManageHtmlPermissions: () => void
+		}
+		expect(headerProps.canManageHtmlPermissions).toBe(true)
+
+		act(() => headerProps.onManageHtmlPermissions())
+		expect(previewMocks.permissionManagerOpen).toHaveBeenCalledOnce()
+	})
+
 	it("does not initialize a usage conversation when only switching to preview mode", async () => {
 		render(<MicroAppPageDesktop />)
 		await screen.findByTestId("desktop-entry-preview")
@@ -494,9 +527,53 @@ describe("MicroAppPageDesktop", () => {
 		)
 	})
 
+	it("does not open editor files from message events in preview mode", async () => {
+		const file = {
+			file_id: "admin-1",
+			file_name: "admin.html",
+			relative_file_path: "admin.html",
+		}
+
+		render(<MicroAppPageDesktop />)
+		await screen.findByTestId("desktop-entry-preview")
+		const headerProps = headerMocks.render.mock.lastCall?.[0] as {
+			onPageModeChange: (mode: "development" | "preview") => void
+		}
+
+		act(() => headerProps.onPageModeChange("preview"))
+		act(() => {
+			pubsub.publish(PubSubEvents.Open_File_Tab, {
+				fileId: file.file_id,
+				fileData: file,
+			})
+		})
+		act(() => headerProps.onPageModeChange("development"))
+
+		expect(previewPopupMocks.open).not.toHaveBeenCalled()
+		expect(screen.queryByTestId("desktop-files-viewer")).not.toBeInTheDocument()
+		expect(detailMocks.openFileTab).not.toHaveBeenCalled()
+	})
+
+	it("opens tool details in a preview modal over the entry preview", async () => {
+		render(<MicroAppPageDesktop />)
+		await screen.findByTestId("desktop-entry-preview")
+
+		fireEvent.click(screen.getByTestId("desktop-conversation-panel"))
+
+		expect(previewPopupMocks.open).toHaveBeenCalledWith(
+			expect.objectContaining({
+				type: "shell",
+				currentFileId: "tool-1",
+			}),
+			expect.any(Array),
+			expect.any(Array),
+		)
+	})
+
 	it("opens tool details from the conversation panel in a preview modal", async () => {
 		render(<MicroAppPageDesktop />)
 		await screen.findByTestId("desktop-entry-preview")
+		fireEvent.click(screen.getByTestId("micro-app-nav-files"))
 
 		fireEvent.click(screen.getByTestId("desktop-conversation-panel"))
 

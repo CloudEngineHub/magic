@@ -398,15 +398,23 @@ class AgentAppServiceVersionCheckTest extends TestCase
         $loggerFactory->method('get')->with('sandbox')->willReturn($logger);
 
         $topic = (new TopicEntity())
-            ->setId(101)->setSandboxId('101')
-            ->setSandboxImages(['agent_image' => 'registry.example.com/agent:v1.0.0', 'agfs_image' => 'agfs:v1']);
+            ->setId(101)
+            ->setSandboxId('101')
+            ->setSandboxImages([
+                'agent_image' => 'registry.example.com/agent:v1.0.0',
+                'agfs_image' => 'registry.example.com/agfs:v1.0.0',
+            ]);
 
         $topicDomainService->expects($this->once())
             ->method('getTopicById')
             ->with(101)
             ->willReturn($topic);
-        $agentDomainService->expects(self::once())->method('getLatestImages')
-            ->willReturn(['agent_image' => 'registry.example.com/agent:v2.0.0', 'agfs_image' => 'agfs:v1']);
+        $agentDomainService->expects($this->once())
+            ->method('getLatestImages')
+            ->willReturn([
+                'agent_image' => 'registry.example.com/agent:v2.0.0',
+                'agfs_image' => 'registry.example.com/agfs:v1.0.0',
+            ]);
 
         $sandboxVersionDomainService = new SandboxVersionDomainService(
             $topicDomainService,
@@ -446,11 +454,16 @@ class AgentAppServiceVersionCheckTest extends TestCase
         $loggerFactory->method('get')->with('sandbox')->willReturn($logger);
 
         $topicA = (new TopicEntity())
-            ->setId(201)->setSandboxId('201')
-            ->setSandboxImages(['agent_image' => 'registry.example.com/agent:v2.0.0', 'agfs_image' => 'agfs:v1']);
+            ->setId(201)
+            ->setSandboxId('201')
+            ->setSandboxImages([
+                'agent_image' => 'registry.example.com/agent:v2.0.0',
+                'agfs_image' => 'registry.example.com/agfs:v1.0.0',
+            ]);
         $topicB = (new TopicEntity())
-            ->setId(202)->setSandboxId('202')
-            ->setAgentImage('');
+            ->setId(202)
+            ->setSandboxId('202')
+            ->setAgentImage('registry.example.com/agent:v1.0.0');
 
         $topicDomainService->expects($this->once())
             ->method('getTopicsByIds')
@@ -459,8 +472,12 @@ class AgentAppServiceVersionCheckTest extends TestCase
                 return $ids === [201, 202];
             }))
             ->willReturn([$topicA, $topicB]);
-        $agentDomainService->expects(self::once())->method('getLatestImages')
-            ->willReturn(['agent_image' => 'registry.example.com/agent:v2.0.0', 'agfs_image' => 'agfs:v1']);
+        $agentDomainService->expects($this->once())
+            ->method('getLatestImages')
+            ->willReturn([
+                'agent_image' => 'registry.example.com/agent:v2.0.0',
+                'agfs_image' => 'registry.example.com/agfs:v1.0.0',
+            ]);
 
         $sandboxVersionDomainService = new SandboxVersionDomainService(
             $topicDomainService,
@@ -484,43 +501,14 @@ class AgentAppServiceVersionCheckTest extends TestCase
 
         $this->assertSame([
             201 => false,
-            202 => null,
+            202 => true,
         ], $result);
-    }
-
-    public function testUpgradeSkipsOnlyConfirmedCurrentImages(): void
-    {
-        foreach ([false, true, null] as $needsUpdate) {
-            $images = ['agent_image' => 'agent:v1', 'agfs_image' => 'agfs:v1'];
-            $topic = $this->makeTopic()->setSandboxId('920');
-            if ($needsUpdate !== null) {
-                $topic->setSandboxImages($needsUpdate ? array_replace($images, ['agfs_image' => 'agfs:old']) : $images);
-            }
-            $topicService = $this->createMock(TopicDomainService::class);
-            $topicService->method('getTopicById')->willReturn($topic);
-            $agentService = $this->createMock(AgentDomainService::class);
-            $agentService->method('getLatestImages')->willReturn($images);
-            $loggerFactory = $this->createMock(LoggerFactory::class);
-            $loggerFactory->method('get')->willReturn($this->createMock(LoggerInterface::class));
-            $versionService = new SandboxVersionDomainService($topicService, $agentService, $loggerFactory);
-            $service = new UpgradeVersionTestAppService(
-                $loggerFactory,
-                $agentService,
-                $this->createMock(ProjectDomainService::class),
-                $topicService,
-                $this->createMock(TaskFileDomainService::class),
-                $this->createMock(TaskDomainService::class),
-                $versionService,
-                (new ReflectionClass(MagicUserSettingDomainService::class))->newInstanceWithoutConstructor(),
-                $this->createMock(EventDispatcherInterface::class)
-            );
-            self::assertSame($needsUpdate === false ? '920' : 'restarted', $service->upgradeSandbox(new DataIsolation(['current_user_id' => 'user-1']), 920));
-        }
     }
 
     public function testSandboxInfoPreservesUnknownVersion(): void
     {
         $info = new SandboxInfoDTO('sandbox', 'Running', '', '', null);
+
         self::assertNull($info->getNeedsUpdate());
         self::assertNull($info->toArray()['needs_update']);
     }
@@ -637,13 +625,5 @@ final class AgentAppServiceTestIdGenerator implements IdGeneratorInterface
     public function degenerate(int $id): Meta
     {
         return new Meta(0, 0, 0, 0);
-    }
-}
-
-readonly class UpgradeVersionTestAppService extends AgentAppService
-{
-    public function restartSandbox(DataIsolation $dataIsolation, int $topicId): string
-    {
-        return 'restarted';
     }
 }

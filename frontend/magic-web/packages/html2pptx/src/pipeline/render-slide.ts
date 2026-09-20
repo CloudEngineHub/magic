@@ -21,6 +21,10 @@ export interface PrepareSlideNodesInput {
 	sandbox: SandboxInstance
 	signal: AbortSignal
 	pageIndex?: number
+	pageKey?: string
+	pageName?: string
+	pagePath?: string
+	pageFileId?: string
 	onResourceError?: (error: ResourceLoadError) => void
 	onExportIssue?: (issue: ExportIssue) => void
 	textMergeMode?: TextMergeMode
@@ -50,6 +54,10 @@ export async function prepareSlideNodes({
 	sandbox,
 	signal,
 	pageIndex,
+	pageKey,
+	pageName,
+	pagePath,
+	pageFileId,
 	onResourceError,
 	onExportIssue,
 	textMergeMode = DEFAULT_TEXT_MERGE_MODE,
@@ -60,6 +68,10 @@ export async function prepareSlideNodes({
 		onResourceError?.(error)
 		onExportIssue?.({
 			pageIndex,
+			pageKey,
+			pageName,
+			pagePath,
+			pageFileId,
 			code: "resource-error",
 			message: `${error.kind} ${error.reason}`,
 			severity: "warning",
@@ -69,7 +81,15 @@ export async function prepareSlideNodes({
 	const { iWindow, iDocument, totalWidth, totalHeight } = await sandbox.render(html, {
 		signal,
 		onResourceError: reportResourceError,
-		onExportIssue: (issue) => onExportIssue?.({ ...issue, pageIndex: issue.pageIndex ?? pageIndex }),
+		onExportIssue: (issue) =>
+			onExportIssue?.({
+				...issue,
+				pageIndex: issue.pageIndex ?? pageIndex,
+				pageKey: issue.pageKey ?? pageKey,
+				pageName: issue.pageName ?? pageName,
+				pagePath: issue.pagePath ?? pagePath,
+				pageFileId: issue.pageFileId ?? pageFileId,
+			}),
 	})
 	ensureNotAborted(signal)
 

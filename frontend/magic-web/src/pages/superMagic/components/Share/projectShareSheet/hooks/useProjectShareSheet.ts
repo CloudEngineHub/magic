@@ -51,15 +51,25 @@ import { isAudioProjectMode } from "@/services/audioRecordings/audioProjectMode"
 import { resolveShareDocumentDependencies } from "@/pages/superMagic/components/Share/FileShareModal/hooks/resolveShareDocumentDependencies"
 import { useShareTypePermissions } from "@/pages/superMagic/components/Share/hooks/useShareTypePermissions"
 import { useSharePermissionResource } from "@/pages/superMagic/components/Share/SharePermissionResourceContext"
+import {
+	canCreateShareType,
+	isFreePlanFromSubscription,
+	pickDefaultShareType,
+} from "@/pages/superMagic/components/Share/utils/sharePlanRestrictions"
+import { userStore } from "@/models/user"
 
 /**
  * Constructs the base default values for the share form.
  * `shareName` will be overridden by `buildDefaultShareNameForSheet` when the Sheet opens the creation page.
  */
-function createInitialFormState(isAudioRecordingScene = false): ProjectShareFormState {
+function createInitialFormState(
+	isAudioRecordingScene = false,
+	isFreePlan = false,
+): ProjectShareFormState {
 	return {
 		shareName: "",
-		shareType: ShareType.PasswordProtected,
+		// Password protection is a paid-plan feature, so a free organization must not start on it.
+		shareType: isFreePlan ? ShareType.Public : ShareType.PasswordProtected,
 		shareExpiry: null,
 		password: generateSharePassword(),
 		shareRange: "all",
@@ -486,8 +496,9 @@ export function useProjectShareSheet({
 		text: string
 	} | null>(null)
 	const [canNativeShare] = useState(() => canUseNativeShare())
+	const isFreePlan = isFreePlanFromSubscription(userStore.user.organizationSubscriptionInfo)
 	const [formState, setFormState] = useState<ProjectShareFormState>(() =>
-		createInitialFormState(isAudioRecordingScene),
+		createInitialFormState(isAudioRecordingScene, isFreePlan),
 	)
 	const [selectedFileIds, setSelectedFileIds] = useState<string[]>([])
 	const [recordingDependencyFileIds, setRecordingDependencyFileIds] = useState<string[]>([])
@@ -534,10 +545,20 @@ export function useProjectShareSheet({
 		}
 
 		setFormState((prev) => {
-			if (permittedShareTypes.includes(prev.shareType)) return prev
-			return { ...prev, shareType: permittedShareTypes[0] }
+			// A method the administrator allows but the plan forbids must not survive either: the card
+			// would be hidden or disabled while the submission still carried the method.
+			if (
+				permittedShareTypes.includes(prev.shareType) &&
+				canCreateShareType(prev.shareType, isFreePlan)
+			) {
+				return prev
+			}
+			// Nothing satisfies both gates: keep the current method and let the sheet explain it.
+			const nextShareType = pickDefaultShareType(permittedShareTypes, isFreePlan)
+			if (nextShareType === undefined) return prev
+			return { ...prev, shareType: nextShareType }
 		})
-	}, [editResourceId, formState.shareType, open, permittedShareTypes])
+	}, [editResourceId, formState.shareType, isFreePlan, open, permittedShareTypes])
 
 	useEffect(() => {
 		if (!recordingDependencyAnalysisEnabled || !dependencyAttachments) {
@@ -744,15 +765,15 @@ export function useProjectShareSheet({
 					? initialSelectedShare.file_ids || []
 					: defaultSelectedFileIds || [],
 		)
-		const initialFormState = createInitialFormState(isAudioRecordingScene)
+		const initialFormState = createInitialFormState(isAudioRecordingScene, isFreePlan)
+		// The open-reset effect runs after permission normalization on first mount; apply the
+		// permission- and plan-aware default here so it cannot restore a hidden option. When nothing
+		// satisfies both gates, the plan-aware base default (never password on a free plan) stays.
 		const initialShareType =
-			permittedShareTypes?.length && !permittedShareTypes.includes(initialFormState.shareType)
-				? permittedShareTypes[0]
-				: initialFormState.shareType
+			pickDefaultShareType(permittedShareTypes ?? [], isFreePlan) ??
+			initialFormState.shareType
 		setFormState({
 			...initialFormState,
-			// The open-reset effect runs after permission normalization on first mount;
-			// apply the permission-aware default here so it cannot restore a hidden option.
 			shareType: initialShareType,
 			shareName: initialSelectedShare
 				? ""
@@ -1051,6 +1072,15 @@ export function useProjectShareSheet({
 		const isEditing = Boolean(editResourceId)
 		if (shouldControlShareType && !isSelectedShareTypePermitted) {
 			magicToast.error(t("share.currentShareMethodUnavailable"))
+			return
+		}
+		// Backstop for the paid-plan gate: a new mobile share must never be created with a
+		// plan-disabled method. Editing an existing share keeps that share's own method.
+		if (
+			!isEditing &&
+			shouldControlShareType &&
+			!canCreateShareType(formState.shareType, isFreePlan)
+		) {
 			return
 		}
 		const selectedIdsForSubmission = [...effectiveSelectedFileIds]
@@ -1399,6 +1429,7 @@ export function useProjectShareSheet({
 		shareMode: activeMode === "file" ? ShareMode.File : ShareMode.Project,
 		view,
 		viewStack,
+		isFreePlan,
 		projectName,
 		projectId,
 		formState,

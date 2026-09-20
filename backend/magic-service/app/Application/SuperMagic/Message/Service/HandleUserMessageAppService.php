@@ -255,6 +255,8 @@ class HandleUserMessageAppService extends AbstractAppService
         // 检查项目是否有权限
         $projectEntity = $this->getAccessibleProject($topicEntity->getProjectId(), $dataIsolation->getCurrentUserId(), $dataIsolation->getCurrentOrganizationCode());
 
+        // 发起沙箱前校验项目空间与用户空间的文件数量是否达到上限
+
         // Check if this is the first task for the topic
         // If topic source is COPY, it's not the first task
         $isFirstTask = (empty($topicEntity->getCurrentTaskId()) || empty($topicEntity->getSandboxId()))

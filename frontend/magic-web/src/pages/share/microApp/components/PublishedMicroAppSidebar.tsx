@@ -1,10 +1,12 @@
 import { lazy, Suspense, useEffect, useRef, useState, type ComponentProps } from "react"
 import { observer } from "mobx-react-lite"
-import { CalendarClock, MessageSquare, PanelRightClose, Paperclip } from "lucide-react"
+import { Files, MessageSquare, PanelRightClose, Timer } from "lucide-react"
 import { useTranslation } from "react-i18next"
 import { Button } from "@/components/shadcn-ui/button"
 import MagicTooltip from "@/components/base/MagicTooltip"
+import IconShareCog from "@/enhance/tabler/icons-react/icons/iconShareCog"
 import AppConversationPanel from "@/pages/superMagic/pages/MicroAppPage/components/AppConversationPanel"
+import UserSpaceIcon from "@/pages/superMagic/components/UserSpace/UserSpaceIcon"
 import pubsub, { PubSubEvents } from "@/utils/pubsub"
 import { cn } from "@/utils/cn"
 import PublishedMicroAppAttachmentsPanel from "./PublishedMicroAppAttachmentsPanel"
@@ -13,8 +15,13 @@ const ScheduledTasksPanel = lazy(
 	() =>
 		import("@/pages/superMagic/pages/MicroAppPage/components/MicroAppScheduledTasksPanel/MicroAppScheduledTasksPanel"),
 )
+const UserSpacePanel = lazy(() => import("@/pages/superMagic/components/UserSpace/UserSpacePanel"))
+const ShareManagementPanel = lazy(
+	() => import("@/pages/superMagic/components/ShareManagement/ShareManagementPanel"),
+)
 
-export type PublishedMicroAppPanel = "conversation" | "attachments" | "tasks"
+export type PublishedMicroAppPanel =
+	"conversation" | "attachments" | "tasks" | "userSpace" | "share"
 
 interface Props extends ComponentProps<typeof AppConversationPanel> {
 	panel: PublishedMicroAppPanel
@@ -23,6 +30,7 @@ interface Props extends ComponentProps<typeof AppConversationPanel> {
 	appName?: string
 	ensureProject: () => Promise<unknown>
 	onCloseHistory: () => void
+	onOpenPreview: (detail: unknown) => void
 }
 
 const PublishedMicroAppSidebar = observer(function PublishedMicroAppSidebar({
@@ -32,6 +40,7 @@ const PublishedMicroAppSidebar = observer(function PublishedMicroAppSidebar({
 	appName,
 	ensureProject,
 	onCloseHistory,
+	onOpenPreview,
 	...conversationProps
 }: Props) {
 	const { t } = useTranslation("super")
@@ -83,11 +92,23 @@ const PublishedMicroAppSidebar = observer(function PublishedMicroAppSidebar({
 			label: t("microAppPage.conversation.title"),
 			icon: MessageSquare,
 		},
-		{ value: "attachments" as const, label: t("attachmentList.projectFiles"), icon: Paperclip },
-		{ value: "tasks" as const, label: t("scheduleTask.title"), icon: CalendarClock },
+		{ value: "attachments" as const, label: t("attachmentList.projectFiles"), icon: Files },
+		{ value: "tasks" as const, label: t("scheduleTask.title"), icon: Timer },
+		{
+			value: "userSpace" as const,
+			label: t("userSpace.title"),
+			icon: UserSpaceIcon,
+			testId: "published-micro-app-user-space-button",
+		},
+		{
+			value: "share" as const,
+			label: t("shareManagement.title"),
+			icon: IconShareCog,
+			testId: "published-micro-app-share-button",
+		},
 	]
 	const navigation = (collapsed ? entries.slice(1) : entries).map(
-		({ value, label, icon: Icon }) => (
+		({ value, label, icon: Icon, testId }) => (
 			<MagicTooltip key={value} title={label}>
 				<Button
 					variant="ghost"
@@ -100,9 +121,11 @@ const PublishedMicroAppSidebar = observer(function PublishedMicroAppSidebar({
 						!collapsed && panel === value && "bg-accent text-accent-foreground",
 					)}
 					onClick={() => selectPanel(value)}
-					data-testid={`published-micro-app-${value}-button`}
+					data-testid={testId ?? `published-micro-app-${value}-button`}
 				>
-					<Icon size={16} aria-hidden />
+					<span className="flex size-4 shrink-0 items-center justify-center">
+						<Icon size={16} color="currentColor" aria-hidden />
+					</span>
 				</Button>
 			</MagicTooltip>
 		),
@@ -120,7 +143,7 @@ const PublishedMicroAppSidebar = observer(function PublishedMicroAppSidebar({
 		<aside
 			className={cn(
 				"flex h-full min-h-0 flex-col",
-				// Scope the roomier header controls to this preview rail; other conversation layouts keep their defaults.
+				// Keep 32px icons; the 40px rail only trims leftover horizontal padding.
 				collapsed
 					? "bg-sidebar [--conversation-header-button-size:32px] [--conversation-header-gap:8px] [--conversation-header-padding:8px]"
 					: "bg-background",
@@ -132,9 +155,14 @@ const PublishedMicroAppSidebar = observer(function PublishedMicroAppSidebar({
 					className="flex h-11 shrink-0 items-center justify-between gap-2 border-b border-border px-3"
 					data-testid="published-micro-app-conversation-header"
 				>
-					<span className="min-w-0 truncate text-sm font-medium">
-						{entries.find((entry) => entry.value === panel)?.label}
-					</span>
+					{/* Chrome title is conversation-only; others title themselves. */}
+					{panel === "conversation" ? (
+						<span className="min-w-0 truncate text-sm font-medium">
+							{t("microAppPage.conversation.title")}
+						</span>
+					) : (
+						<span className="min-w-0 flex-1" />
+					)}
 					<div className="flex shrink-0 items-center gap-1">
 						{navigation}
 						<MagicTooltip title={t("microAppPage.conversation.collapse")}>
@@ -192,9 +220,17 @@ const PublishedMicroAppSidebar = observer(function PublishedMicroAppSidebar({
 				) : panel === "attachments" ? (
 					<PublishedMicroAppAttachmentsPanel
 						attachments={projectFilesStore.workspaceFileTree}
+						projectId={selectedProject.id}
+						selectedProject={selectedProject}
+						selectedTopic={conversationProps.topicStore.selectedTopic}
+						setUserSelectDetail={onOpenPreview}
+						onFileClick={conversationProps.onFileClick}
 					/>
 				) : panel === "tasks" ? (
-					<div className="min-h-0 flex-1" data-testid="published-micro-app-tasks-panel">
+					<div
+						className="min-h-0 flex-1 pt-1"
+						data-testid="published-micro-app-tasks-panel"
+					>
 						<Suspense fallback={loading}>
 							<ScheduledTasksPanel
 								key={selectedProject.id}
@@ -206,6 +242,29 @@ const PublishedMicroAppSidebar = observer(function PublishedMicroAppSidebar({
 								microAppName={appName}
 								compact
 							/>
+						</Suspense>
+					</div>
+				) : panel === "userSpace" ? (
+					<div
+						className="min-h-0 flex-1 pt-2"
+						data-testid="published-micro-app-user-space-panel"
+					>
+						<Suspense fallback={loading}>
+							<UserSpacePanel
+								projectId={selectedProject.id}
+								projectName={selectedProject.project_name}
+								topicId={conversationProps.topicStore.selectedTopic?.id}
+								onFileClick={conversationProps.onFileClick}
+							/>
+						</Suspense>
+					</div>
+				) : panel === "share" ? (
+					<div
+						className="min-h-0 flex-1 pt-2"
+						data-testid="published-micro-app-share-panel"
+					>
+						<Suspense fallback={loading}>
+							<ShareManagementPanel projectId={selectedProject.id} />
 						</Suspense>
 					</div>
 				) : null)}

@@ -5,12 +5,10 @@ import { describe, expect, it, vi } from "vitest"
 import MessageQueue from "../index"
 import type { QueuedMessage } from "../../../hooks/useMessageQueue"
 
-vi.mock("../components/CollapsibleText", () => ({
-	default: ({ content }: { content: JSONContent | string }) => (
-		<div data-testid="mock-collapsible-text">
-			{typeof content === "string" ? content : JSON.stringify(content)}
-		</div>
-	),
+// RichText 会挂载 ProseMirror 视图，这里保留真实的 CollapsibleText（折叠盒契约），
+// 只把富文本渲染器换成占位节点。
+vi.mock("@/pages/superMagic/components/MessageList/components/Text/components/RichText", () => ({
+	default: () => <div data-testid="mock-rich-text" />,
 }))
 
 vi.mock("react-i18next", () => ({
@@ -53,6 +51,25 @@ function createQueueItem(id: string, text: string): QueuedMessage {
 		mentionItems: [],
 		timestamp: 1000,
 		status: "pending",
+	}
+}
+
+/** Build an AI 选取元素 document in the serialized form the queue stores. */
+function createInspectorContent(): JSONContent {
+	return {
+		type: "doc",
+		content: [
+			{
+				type: "paragraph",
+				content: [
+					{ type: "text", text: "<magic-selection>" },
+					{ type: "text", text: "Type: html" },
+					{ type: "text", text: "\\nSelector: #app" },
+					{ type: "text", text: "</magic-selection>" },
+					{ type: "text", text: "这个标题的样式对不对" },
+				],
+			},
+		],
 	}
 }
 
@@ -181,12 +198,42 @@ describe("MessageQueue mobile variant", () => {
 			/>,
 		)
 
-		expect(screen.getByTitle("Mock queued task alpha")).toHaveTextContent(
-			"Mock queued task alpha",
+		const rows = screen.getAllByTestId("mobile-message-queue-item")
+		expect(rows).toHaveLength(2)
+		expect(rows[0]).toHaveTextContent("Mock queued task alpha")
+		expect(rows[1]).toHaveTextContent("Mock queued task beta")
+	})
+
+	it("renders the queued preview through the shared rich-text fold", () => {
+		render(
+			<MessageQueue
+				variant="mobile"
+				queue={[
+					{
+						...createQueueItem("queue-item-alpha", ""),
+						content: createInspectorContent(),
+					},
+				]}
+				queueStats={{
+					total: 1,
+					pending: 1,
+					processing: 0,
+					failed: 0,
+				}}
+				onRemoveMessage={vi.fn()}
+				onSendMessage={vi.fn()}
+				onStartEdit={vi.fn()}
+				onWithdraw={vi.fn()}
+				onMove={vi.fn()}
+			/>,
 		)
-		expect(screen.getByTitle("Mock queued task beta")).toHaveTextContent(
-			"Mock queued task beta",
-		)
+
+		// 移动端与桌面共用 CollapsibleText：AI 选取元素、文件提及都需要节点视图，
+		// 只有纯文本摘要会把它们渲染成原始标记。
+		expect(screen.getByTestId("collapsible-text")).toBeInTheDocument()
+		// 纯文本摘要若被直接渲染，正文里会出现 `<magic-selection>` 序列化标记。
+		expect(screen.queryByText(/<magic-selection>/)).toBeNull()
+		expect(screen.getByText(/这个标题的样式对不对/)).toBeInTheDocument()
 	})
 
 	it("disables queue actions while a queue operation is saving", () => {
@@ -246,6 +293,9 @@ describe("MessageQueue mobile variant", () => {
 			/>,
 		)
 
-		expect(screen.getByTitle("@File")).toHaveTextContent("@File")
+		// 可见正文已改走富文本节点（提及渲染成节点视图），这里校验的是预览摘要文案：
+		// mention 没有展示名时必须退化成 @File，不能变成空串（空串会让整行退化成占位符）。
+		const row = screen.getByTestId("mobile-message-queue-item")
+		expect(row.querySelector('[aria-hidden="true"] span')?.textContent).toBe("@File")
 	})
 })

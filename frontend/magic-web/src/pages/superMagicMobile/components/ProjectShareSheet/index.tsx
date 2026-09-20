@@ -41,9 +41,14 @@ export default function ProjectShareSheet(props: ProjectShareSheetProps) {
 		VIEWS_WITHOUT_FOOTER.includes(controller.view) &&
 			"pb-[max(var(--safe-area-inset-bottom),16px)]",
 	)
-	const sheetMinHeight = VIEWS_WITH_STABLE_MIN_HEIGHT.includes(controller.view)
-		? PROJECT_SHARE_SHEET_MIN_HEIGHT
-		: 0
+	/**
+	 * 全部分享方式被管理员关闭时，编辑表单会收起成「分享方式 + 提示」，
+	 * 此时不应再为完整表单预留最小高度，否则弹层底部留下一大片空白。
+	 */
+	const shouldReserveStableMinHeight =
+		VIEWS_WITH_STABLE_MIN_HEIGHT.includes(controller.view) &&
+		!(controller.view === "edit" && controller.permittedShareTypes?.length === 0)
+	const sheetMinHeight = shouldReserveStableMinHeight ? PROJECT_SHARE_SHEET_MIN_HEIGHT : 0
 
 	return (
 		<>

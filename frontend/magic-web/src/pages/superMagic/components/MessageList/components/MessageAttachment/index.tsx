@@ -61,13 +61,13 @@ export const Attachment = observer(function Attachment({
 			: undefined
 		const openTarget = magicProjectResolution?.projectDirectory || item
 
-		if (!isMobile && openTarget.file_id) {
-			openMessageFile(openTarget)
+		if (onFileClick && openTarget.file_id) {
+			onFileClick(openTarget)
 			return
 		}
 
-		if (onFileClick && openTarget.file_id) {
-			onFileClick(openTarget)
+		if (!isMobile && openTarget.file_id) {
+			openMessageFile(openTarget)
 			return
 		}
 
@@ -164,8 +164,7 @@ export const Attachment = observer(function Attachment({
 									<FileResourceIcon
 										presentation={resolveFilePresentation(
 											(magicProjectResolution?.projectDirectory as
-												| AttachmentItem
-												| undefined) ?? {
+												AttachmentItem | undefined) ?? {
 												...item,
 												is_directory: item.is_directory ?? isFolder,
 											},

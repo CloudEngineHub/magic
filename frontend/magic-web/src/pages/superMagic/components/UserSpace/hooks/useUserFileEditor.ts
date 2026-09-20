@@ -3,6 +3,7 @@ import { useMemoizedFn } from "ahooks"
 import { useTranslation } from "react-i18next"
 import magicToast from "@/components/base/MagicToaster/utils"
 import userFilesStore from "@/stores/userFiles"
+import { useFileAccess } from "@/pages/superMagic/fileAccess/FileAccessProvider"
 import { getFileReferenceIdentityKey } from "@/pages/superMagic/services/userFileReferenceResolver"
 import { mergeMemoryContent } from "../../LongTremMemory/services/memoryThreeWayMerge"
 import {
@@ -14,6 +15,7 @@ import {
 export function useUserFileEditor(fileId: string, isEditMode: boolean, identityKey: string | null) {
 	const { t } = useTranslation("super")
 	const { t: memoryT } = useTranslation("super/longMemory")
+	const fileAccess = useFileAccess()
 	const [snapshot, setSnapshot] = useState<UserFileSnapshot | null>(null)
 	const [draft, setDraft] = useState("")
 	const [conflict, setConflict] = useState<UserFileSnapshot | null>(null)
@@ -40,7 +42,11 @@ export function useUserFileEditor(fileId: string, isEditMode: boolean, identityK
 		setLoading(true)
 		setLoadError(false)
 		try {
-			const next = await userSpaceFileService.readStableSnapshot(fileId, controller.signal)
+			const next = await userSpaceFileService.readStableSnapshot(
+				fileId,
+				controller.signal,
+				fileAccess,
+			)
 			if (isCurrent() && !controller.signal.aborted) applySnapshot(next)
 		} catch {
 			if (isCurrent() && !controller.signal.aborted) setLoadError(true)
@@ -95,6 +101,7 @@ export function useUserFileEditor(fileId: string, isEditMode: boolean, identityK
 						const latest = await userSpaceFileService.readStableSnapshot(
 							fileId,
 							requestRef.current?.signal,
+							fileAccess,
 						)
 						if (isCurrent() && requestIdentity === getFileReferenceIdentityKey())
 							setConflict(latest)

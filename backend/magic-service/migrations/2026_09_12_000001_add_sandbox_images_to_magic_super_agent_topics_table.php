@@ -14,7 +14,7 @@ return new class extends Migration {
         Schema::table('magic_super_agent_topics', function (Blueprint $table) {
             if (! Schema::hasColumn('magic_super_agent_topics', 'sandbox_images')) {
                 $table->json('sandbox_images')->nullable()->default(null)
-                    ->comment('Sandbox images recorded from successful gateway operations')
+                    ->comment('Canonical sandbox Agent and AGFS images; replaces legacy agent_image')
                     ->after('agent_image');
             }
         });

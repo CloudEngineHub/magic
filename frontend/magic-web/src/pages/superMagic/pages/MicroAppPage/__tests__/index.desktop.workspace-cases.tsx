@@ -234,8 +234,7 @@ export function registerMicroAppDesktopWorkspaceCases({
 			}),
 		)
 		const latestDetailProps = detailMocks.render.mock.lastCall?.[0] as
-			| Record<string, unknown>
-			| undefined
+			Record<string, unknown> | undefined
 		expect(latestDetailProps).not.toHaveProperty("hideTabBar")
 		expect(latestDetailProps).not.toHaveProperty("nonClosableFileIds")
 
@@ -357,13 +356,21 @@ export function registerMicroAppDesktopWorkspaceCases({
 		})
 	})
 
-	it("opens file tools in the files workspace without a preview modal", async () => {
+	it("does not open file tools in a modal over the entry preview", async () => {
 		render(renderPage())
 		await screen.findByTestId("desktop-entry-preview")
 		fireEvent.click(screen.getByTestId("write-file"))
 
-		expect(screen.getByTestId("micro-app-nav-files")).toHaveAttribute("aria-current", "page")
-		expect(await screen.findByTestId("desktop-files-viewer")).toBeInTheDocument()
 		expect(previewPopupMocks.open).not.toHaveBeenCalled()
+	})
+
+	it("opens file tools in the files workspace instead of a modal", async () => {
+		render(renderPage())
+		await screen.findByTestId("desktop-entry-preview")
+		fireEvent.click(screen.getByTestId("micro-app-nav-files"))
+		fireEvent.click(screen.getByTestId("write-file"))
+
+		expect(previewPopupMocks.open).not.toHaveBeenCalled()
+		expect(screen.getByTestId("desktop-files-viewer")).toBeInTheDocument()
 	})
 }

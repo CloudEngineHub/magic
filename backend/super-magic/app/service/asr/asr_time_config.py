@@ -78,9 +78,25 @@ class AsrTimeConfig:
     FINISH_SHARD_STABLE_SCAN_COUNT: int = int(
         os.getenv("ASR_FINISH_SHARD_STABLE_SCAN_COUNT", "3")
     )
-    # finish 超时后允许自动收敛的尾部分片最大缺失数
+    # finish 超时后允许自动收敛的尾部分片最大缺失数（仅 WAV 增量合并路径使用；
+    # Opus finish 路径的尾部缺片已统一走静音补齐，见下方 FINISH_MAX_MISSING_*）
     FINISH_MAX_TAIL_MISSING_SHARDS: int = int(
         os.getenv("ASR_FINISH_MAX_TAIL_MISSING_SHARDS", "3")
+    )
+    # Opus 缺片（中间/尾部/混合）只能在 finish 超时后用静音补齐。数量与比例同时受限，
+    # 避免把严重丢包伪装成一次正常完成；单个缺片不受比例限制。
+    # env 新名优先，旧的 *_MIDDLE_* 名称仅作兼容兜底。
+    FINISH_MAX_MISSING_SHARDS: int = int(
+        os.getenv(
+            "ASR_FINISH_MAX_MISSING_SHARDS",
+            os.getenv("ASR_FINISH_MAX_MIDDLE_MISSING_SHARDS", "3"),
+        )
+    )
+    FINISH_MAX_MISSING_RATIO: float = float(
+        os.getenv(
+            "ASR_FINISH_MAX_MISSING_RATIO",
+            os.getenv("ASR_FINISH_MAX_MIDDLE_MISSING_RATIO", "0.05"),
+        )
     )
     OPUS_SHARD_SYNC_TIMEOUT: int = int(os.getenv("ASR_OPUS_SHARD_SYNC_TIMEOUT", "900"))
     OPUS_STAGING_UPLOAD_TIMEOUT: int = int(

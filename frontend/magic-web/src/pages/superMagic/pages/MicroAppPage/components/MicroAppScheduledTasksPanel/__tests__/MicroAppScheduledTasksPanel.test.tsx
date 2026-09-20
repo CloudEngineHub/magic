@@ -121,6 +121,7 @@ describe("MicroAppScheduledTasksPanel", () => {
 				},
 			}),
 		)
+		expect(screen.getByRole("heading", { name: "scheduleTask.title" })).toBeVisible()
 		expect(screen.queryByText("scheduleTask.workspaceDescription")).not.toBeInTheDocument()
 	})
 })

@@ -20,7 +20,7 @@ export default function MicroAppModeSwitcher({
 
 	return (
 		<div
-			className="flex items-center gap-0.5 rounded-lg bg-muted/60 p-0.5"
+			className="flex h-8 items-center gap-0.5 rounded-lg bg-muted/60 p-0.5"
 			role="tablist"
 			aria-label={ariaLabel || t("microAppPage.mode.ariaLabel")}
 			data-testid="micro-app-mode-switcher"

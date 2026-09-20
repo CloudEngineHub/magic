@@ -1833,6 +1833,94 @@ class ChatHistory:
         """返回当前全部聊天消息的元组快照，隔离列表结构的后续变更。"""
         return tuple(self.messages)
 
+    @staticmethod
+    def _is_native_visual_user_message(message: ChatMessage) -> bool:
+        """判断是否属于可进入原生视觉请求的 user 消息。"""
+        if not isinstance(message, UserMessage):
+            return False
+        if message.source == "native_visual":
+            return True
+        return bool(message.show_in_ui and message.source != "compact_summary")
+
+    @staticmethod
+    def _native_visual_image_count(message: UserMessage) -> int:
+        """统计 user 消息中的图片引用数量。"""
+        return sum(1 for part in (message.content_parts or []) if part.type == "image_ref")
+
+    def find_current_business_user_message(self) -> Optional[UserMessage]:
+        """定位当前业务用户消息，忽略 Horizon 等系统注入消息。"""
+        for message in reversed(self.messages):
+            if isinstance(message, UserMessage) and self._is_native_visual_user_message(message):
+                return message
+        return None
+
+    async def disable_native_visual_messages(
+        self,
+        *,
+        exclude: Optional[UserMessage] = None,
+    ) -> int:
+        """把原生视觉 user 消息标记为不再进入原生视觉请求。
+
+        | 消息                   | 处理后                         |
+        | 历史原生视觉 user 消息 | include_in_native_visual=False |
+        | exclude 指定的当前消息 | 保持原样                       |
+        | 已经是 False 的消息    | 不重复写入                     |
+        """
+        updated = 0
+        for message in self.messages:
+            if not isinstance(message, UserMessage):
+                continue
+            if exclude is not None and message is exclude:
+                continue
+            if not self._is_native_visual_user_message(message):
+                continue
+            if self._native_visual_image_count(message) <= 0:
+                continue
+            if message.include_in_native_visual is False:
+                continue
+            message.include_in_native_visual = False
+            updated += 1
+        if updated:
+            await self.save()
+        return updated
+
+    async def disable_historical_native_visual_if_over_limit(
+        self,
+        max_history_image_refs: int,
+    ) -> int:
+        """历史加当前的图片合计超过上限时，关掉全部历史原生视觉 user 消息。
+
+        例：上限 20。历史 15 张、当前 10 张，合计 25。
+        历史原生视觉 user 消息全部改为 False，当前 10 张仍可带图。
+        """
+        if max_history_image_refs < 0:
+            return 0
+        current = self.find_current_business_user_message()
+        total_image_count = 0
+        for message in self.messages:
+            if not isinstance(message, UserMessage):
+                continue
+            if not self._is_native_visual_user_message(message):
+                continue
+            if message.include_in_native_visual is False:
+                continue
+            total_image_count += self._native_visual_image_count(message)
+        if total_image_count <= max_history_image_refs:
+            return 0
+        current_image_count = (
+            self._native_visual_image_count(current)
+            if current is not None and current.include_in_native_visual is not False
+            else 0
+        )
+        updated = await self.disable_native_visual_messages(exclude=current)
+        logger.info(
+            f"原生视觉历史图片超限，已关闭历史消息中的原生视觉: "
+            f"total_image_count={total_image_count}, "
+            f"current_image_count={current_image_count}, "
+            f"limit={max_history_image_refs}, updated={updated}"
+        )
+        return updated
+
     def normalize_messages_for_llm(
         self,
         llm_messages: Sequence[Dict[str, Any]],

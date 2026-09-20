@@ -3,6 +3,7 @@ import type { ComponentProps, ReactNode } from "react"
 import { vi } from "vitest"
 import { userStore } from "@/models/user"
 import { ShareType } from "@/pages/superMagic/components/Share/types"
+import { Admin } from "@/types/admin"
 import MicroAppPublishDialog from "../MicroAppPublishDialog"
 
 const mocks = vi.hoisted(() => ({
@@ -251,9 +252,34 @@ export function createPasswordProtectedDetail() {
 	}
 }
 
+/**
+ * The sharing gate only reads `is_paid_plan`; the remaining subscription fields are placeholders so
+ * tests do not repeat a fourteen-field literal. Resetting it to `null` (an unknown plan) keeps the
+ * default suite on the paid path — an unknown plan must never be treated as free.
+ */
+export function setOrganizationSubscription(isPaidPlan: boolean) {
+	userStore.user.setOrganizationSubscriptionInfo({
+		id: "subscription-1",
+		product_id: "product-1",
+		product_sku_id: "sku-1",
+		name: "Test Plan",
+		start_date: "2026-01-01",
+		end_date: "2027-01-01",
+		renewal_type: "auto",
+		payment_cycle: "monthly",
+		level: 1,
+		plan_type: Admin.PlanType.Team,
+		seat_count: 1,
+		is_paid_plan: isPaidPlan,
+		is_recharge_points: false,
+		pending_subscriptions: [],
+	})
+}
+
 export function resetPublishDialogMocks() {
 	vi.clearAllMocks()
 	userStore.user.setIsPersonalOrganization(false)
+	userStore.user.setOrganizationSubscriptionInfo(null)
 	mocks.functionPermissions = {
 		"micro_app.share_password": true,
 		"micro_app.share_public": true,

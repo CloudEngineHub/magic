@@ -69,7 +69,10 @@ class TopicEntity extends AbstractEntity
     protected ?string $sandboxConfig = null;
 
     /**
-     * @var null|string 沙箱网关 create/upgrade 接口返回的 Agent 镜像版本
+     * @var null|string legacy Agent image compatibility value
+     * @deprecated The topic-level `agent_image` column will be retired. Use
+     * `sandbox_images['agent_image']` instead; this value is kept only for
+     * historical rows and backward compatibility during migration.
      */
     protected ?string $agentImage = null;
 
@@ -229,6 +232,7 @@ class TopicEntity extends AbstractEntity
             'chat_conversation_id' => $this->chatConversationId ?? '',
             'sandbox_id' => $this->sandboxId ?? '',
             'sandbox_config' => $this->sandboxConfig,
+            // Deprecated legacy field; prefer sandbox_images for new writes.
             'agent_image' => $this->agentImage,
             'sandbox_images' => $this->sandboxImages,
             'work_dir' => $this->workDir ?? '',
@@ -436,11 +440,19 @@ class TopicEntity extends AbstractEntity
         return $this;
     }
 
+    /**
+     * @deprecated Use getSandboxImages()['agent_image'] instead. Kept for
+     * reading historical rows while the legacy column is being retired.
+     */
     public function getAgentImage(): ?string
     {
         return $this->agentImage;
     }
 
+    /**
+     * @deprecated Use setSandboxImages() instead. This setter only supports
+     * backward-compatible writes to the legacy column.
+     */
     public function setAgentImage(?string $agentImage): self
     {
         $this->agentImage = $agentImage;

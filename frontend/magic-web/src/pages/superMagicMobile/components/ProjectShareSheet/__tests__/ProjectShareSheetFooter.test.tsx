@@ -22,6 +22,7 @@ function createController(
 		viewStack: [],
 		mode: "project",
 		projectMode: "",
+		isFreePlan: false,
 		shareMode: ShareMode.Project,
 		projectName: "Fictional Project",
 		projectId: "fictional-project-1",
