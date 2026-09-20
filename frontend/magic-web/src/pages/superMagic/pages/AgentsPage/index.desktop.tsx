@@ -29,6 +29,7 @@ function AgentsPage() {
 			<Container
 				EditorComponent={isChatHome ? ChatHomeEditor : undefined}
 				editorSessionKey={`${identity}:${isChatHome ? location.key : "task"}`}
+				showRoleSwitcher={!isChatHome}
 			/>
 		</div>
 	)

@@ -3,14 +3,21 @@ import EditorLayout, {
 	type EditorLayoutProps,
 } from "../../../components/MainInputContainer/scenes/EditorLayout"
 import { useChatHomeContext } from "../useChatHomeContext"
+import { resolveDefaultAgentSelection } from "@/services/superMagic/DefaultAgentSelectionService"
 
 /** Only the editor owns a fresh chat session; the surrounding home stays mounted. */
 export default observer(function ChatHomeEditor(props: EditorLayoutProps) {
 	const editorContext = useChatHomeContext()
+	const defaultSelection = resolveDefaultAgentSelection()
 	return (
 		<EditorLayout
 			{...props}
-			editorContext={editorContext}
+			mode={defaultSelection.topicPattern}
+			editorContext={{
+				...editorContext,
+				topicMode: defaultSelection.topicPattern,
+				agentCode: defaultSelection.agentCode,
+			}}
 			inputContainerId={editorContext.sceneInputContainerId}
 		/>
 	)

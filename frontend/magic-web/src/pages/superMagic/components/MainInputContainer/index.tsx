@@ -24,10 +24,12 @@ const Container = observer(function Container({
 	editorContext,
 	EditorComponent = EditorLayout,
 	editorSessionKey,
+	showRoleSwitcher = true,
 }: {
 	editorContext?: Partial<SceneEditorContext>
 	EditorComponent?: ComponentType<EditorLayoutProps>
 	editorSessionKey?: string
+	showRoleSwitcher?: boolean
 }) {
 	const { t } = useTranslation()
 	const { currentRole, setCurrentRole } = roleStore
@@ -88,8 +90,10 @@ const Container = observer(function Container({
 							{/* Welcome Message */}
 							<SloganContainer />
 
-							{/* Quick Action Buttons */}
-							<RoleSwitcher role={currentRole} onActionClick={setCurrentRole} />
+							{/* Task home exposes employee selection; chat home uses the platform default employee. */}
+							{showRoleSwitcher && (
+								<RoleSwitcher role={currentRole} onActionClick={setCurrentRole} />
+							)}
 
 							{headerPortalTarget &&
 								createPortal(
