@@ -322,6 +322,27 @@ class AssetDomainService
     }
 
     /**
+     * 确保本地资产已经同步到第三方，并返回第三方素材 ID。
+     *
+     * 素材库保存接口允许先落本地、后续再同步；视频生成引用这类素材时需要在提交前
+     * 补做同步。已有映射直接复用，没有映射则按本地资产当前文件重新执行同步流程。
+     */
+    public function ensureProviderAssetId(AssetDataIsolation $dataIsolation, AssetEntity $asset): ?string
+    {
+        if ($asset->getAssetKind()->isGroup()) {
+            return null;
+        }
+
+        $providerAssetId = $this->findProviderAssetId($dataIsolation, $asset->getId());
+        if ($providerAssetId !== null && $asset->getSyncStatus()->isSynced()) {
+            return $providerAssetId;
+        }
+
+        $this->syncToProvider($dataIsolation, $asset);
+        return $this->findProviderAssetId($dataIsolation, $asset->getId());
+    }
+
+    /**
      * 复用个人素材后返回第三方素材 ID；素材不存在或同步失败时返回 null。
      * 当已有记录尚未完成合规校验时会先尝试补做校验，确保返回的凭证能够直接使用。
      */

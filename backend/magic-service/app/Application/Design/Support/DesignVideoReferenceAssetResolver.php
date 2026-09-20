@@ -8,6 +8,8 @@ declare(strict_types=1);
 namespace App\Application\Design\Support;
 
 use App\Application\Asset\Service\AssetAppService;
+use App\Domain\Asset\Entity\AssetDataIsolation;
+use App\Domain\Asset\Service\AssetDomainService;
 use App\Domain\Design\Entity\DesignDataIsolation;
 use App\Domain\Design\Entity\DesignGenerationTaskEntity;
 use App\Domain\File\Service\FileDomainService;
@@ -59,6 +61,7 @@ final class DesignVideoReferenceAssetResolver
         private readonly TaskFileDomainService $taskFileDomainService,
         private readonly FileDomainService $fileDomainService,
         private readonly AssetAppService $assetAppService,
+        private readonly AssetDomainService $assetDomainService,
         ?SafeRemoteFileDownloader $remoteFileDownloader = null,
     ) {
         // 下载器默认走显式安全配置；测试可注入 mock 以跳过真实网络下载。
@@ -158,9 +161,40 @@ final class DesignVideoReferenceAssetResolver
         string $userId,
         string $uri,
     ): string {
-        if ($uri === '' || ProviderAssetUri::isValid($uri)) {
+        if ($uri === '') {
             return $uri;
         }
+
+        if (ProviderAssetUri::isLocalAsset($uri)) {
+            $localAssetId = ProviderAssetUri::getLocalAssetId($uri);
+            if ($localAssetId === null) {
+                return $uri;
+            }
+            try {
+                $asset = $this->assetAppService->prepareAssetForProviderSync($dataIsolation, $localAssetId);
+                if ($asset === null) {
+                    return $uri;
+                }
+                $providerAssetId = $this->assetDomainService->ensureProviderAssetId(
+                    AssetDataIsolation::createByBaseDataIsolation($dataIsolation),
+                    $asset,
+                );
+                return $providerAssetId === null || $providerAssetId === ''
+                    ? $uri
+                    : 'asset://' . $providerAssetId;
+            } catch (Throwable $throwable) {
+                di(LoggerInterface::class)->error(__METHOD__ . ':' . $throwable->getMessage(), [
+                    'asset_id' => $localAssetId,
+                ]);
+                return $uri;
+            }
+        }
+
+        // asset://asset-... 已经是火山方舟素材引用，直接透传。
+        if (ProviderAssetUri::isValid($uri)) {
+            return $uri;
+        }
+
         $fileEntity = $this->taskFileDomainService->findEntityByRelativePath($projectId, $uri);
         if (! $fileEntity instanceof TaskFileEntity) {
             return $uri;
@@ -181,7 +215,11 @@ final class DesignVideoReferenceAssetResolver
         }
         try {
             // asset:// 会被网关原样透传给火山，火山只认它自己颁发的素材 ID，故必须用 provider_asset_id。
-            $providerAssetId = $this->assetAppService->findPersonalProviderAssetId($dataIsolation, $userId, $hash);
+            $providerAssetId = $this->assetDomainService->findPersonalProviderAssetId(
+                AssetDataIsolation::createByBaseDataIsolation($dataIsolation),
+                $userId,
+                $hash,
+            );
             if ($providerAssetId !== null && $providerAssetId !== '') {
                 return 'asset://' . $providerAssetId;
             }
@@ -193,7 +231,10 @@ final class DesignVideoReferenceAssetResolver
 
             $asset = $this->assetAppService->createPersonalAsset($dataIsolation, $this->buildCreateDto($uploadFile->getKey(), $fileEntity->getFileName()));
             // 新建素材同步完成后才能拿到第三方素材 ID；取不到则退回原始 uri，保障本次请求可用。
-            $providerAssetId = $this->assetAppService->findProviderAssetId($dataIsolation, $asset->getId());
+            $providerAssetId = $this->assetDomainService->findProviderAssetId(
+                AssetDataIsolation::createByBaseDataIsolation($dataIsolation),
+                $asset->getId(),
+            );
             if ($providerAssetId === null || $providerAssetId === '') {
                 return $uri;
             }

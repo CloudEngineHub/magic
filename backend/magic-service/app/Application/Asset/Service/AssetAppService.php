@@ -118,21 +118,26 @@ class AssetAppService extends AbstractAssetAppService
         return $this->assetDomainService->findPersonalAssetByContentHash($userId, $contentHash);
     }
 
-    public function findProviderAssetId(Authenticatable|BaseDataIsolation $authorization, int|string $assetId): ?string
+    /**
+     * 查询可访问的本地资产并补齐第三方同步所需的临时文件地址。
+     */
+    public function prepareAssetForProviderSync(Authenticatable|BaseDataIsolation $authorization, int|string $assetId): ?AssetEntity
     {
-        return $this->assetDomainService->findProviderAssetId(
-            $this->createAssetDataIsolation($authorization),
+        $dataIsolation = $this->createAssetDataIsolation($authorization);
+        $dataIsolation->setContainOfficialOrganization(true);
+        $assetId = (string) $assetId;
+        $asset = $this->assetDomainService->find(
+            $dataIsolation,
             $assetId,
+            $this->sharedAssetIds($dataIsolation, [$assetId]) !== [],
         );
-    }
+        if ($asset === null) {
+            return null;
+        }
 
-    public function findPersonalProviderAssetId(Authenticatable|BaseDataIsolation $authorization, string $userId, string $contentHash): ?string
-    {
-        return $this->assetDomainService->findPersonalProviderAssetId(
-            $this->createAssetDataIsolation($authorization),
-            $userId,
-            $contentHash,
-        );
+        // 素材库保存时可能只有 file_key，第三方同步需要可访问的临时 file_url。
+        $this->resolveAssetFileUrls([$asset]);
+        return $asset;
     }
 
     /**
