@@ -44,9 +44,9 @@ export default function HomeModeTabs() {
 					else navigate({ name: RouteName.SuperChatHome, viewTransition: false })
 				}}
 				variant="background"
-				className="h-14 w-64 rounded-xl bg-muted p-1.5"
-				buttonClassName="h-11 gap-2 rounded-lg text-base font-medium focus-visible:bg-sidebar-accent focus-visible:ring-1 focus-visible:ring-ring"
-				indicatorClassName="inset-y-1.5 h-11"
+				className="h-14 w-64 rounded-full bg-muted p-1.5"
+				buttonClassName="h-11 gap-2 rounded-full text-base font-medium focus-visible:bg-sidebar-accent focus-visible:ring-1 focus-visible:ring-ring"
+				indicatorClassName="inset-y-1.5 h-11 rounded-full"
 			/>
 		</div>
 	)
