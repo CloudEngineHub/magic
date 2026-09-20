@@ -104,9 +104,7 @@ function cloneDraftEntry(entry: DesignDraftEntry): DesignDraftEntry {
 	return {
 		...entry,
 		designData: cloneDesignData(entry.designData),
-		baseRemoteData: entry.baseRemoteData
-			? cloneDesignData(entry.baseRemoteData)
-			: undefined,
+		baseRemoteData: entry.baseRemoteData ? cloneDesignData(entry.baseRemoteData) : undefined,
 	}
 }
 
@@ -340,6 +338,20 @@ function deleteMemoryDrafts(keys: Set<string>): void {
 	keys.forEach((key) => memoryDrafts.delete(key))
 }
 
+function deleteMemoryDraftCoveredBy(entry: DesignDraftEntry): void {
+	const retained = memoryDrafts.get(entry.key)
+	if (!retained) return
+	// Overlapping writes for one document may settle out of order. An older durable write must not
+	// remove a newer emergency fallback that still exists only in memory.
+	if (
+		retained.localUpdatedAt < entry.localUpdatedAt ||
+		(retained.localUpdatedAt === entry.localUpdatedAt &&
+			retained.localFingerprint === entry.localFingerprint)
+	) {
+		memoryDrafts.delete(entry.key)
+	}
+}
+
 export function writeDesignDraft(
 	entry: Omit<DesignDraftEntry, "key" | "schemaVersion" | "designData" | "baseRemoteData"> & {
 		designData: DesignData
@@ -358,7 +370,12 @@ export function writeDesignDraft(
 
 	if (options.emergency) {
 		const localStorageOk = writeLocalStorageDraftWithFallback(draft, { prune: false })
-		const memoryOk = writeMemoryDraft(draft)
+		// A durable synchronous copy already covers pagehide. Keep a heap copy only when that write
+		// failed, then discard it as soon as IndexedDB confirms the same draft.
+		const memoryOk = localStorageOk ? false : writeMemoryDraft(draft)
+		if (localStorageOk) {
+			deleteMemoryDraftCoveredBy(draft)
+		}
 		const fallbackResult: DesignDraftWriteResult = localStorageOk
 			? { target: "localStorage", durable: true }
 			: memoryOk
@@ -367,7 +384,10 @@ export function writeDesignDraft(
 
 		return trackWrite(
 			writeIndexedDbDraft(draft)
-				.then<DesignDraftWriteResult>(() => ({ target: "indexeddb", durable: true }))
+				.then<DesignDraftWriteResult>(() => {
+					deleteMemoryDraftCoveredBy(draft)
+					return { target: "indexeddb", durable: true }
+				})
 				.catch(() => fallbackResult),
 		)
 	}
@@ -376,9 +396,11 @@ export function writeDesignDraft(
 		(async (): Promise<DesignDraftWriteResult> => {
 			try {
 				await writeIndexedDbDraft(draft)
+				deleteMemoryDraftCoveredBy(draft)
 				return { target: "indexeddb", durable: true }
 			} catch {
 				if (writeLocalStorageDraftWithFallback(draft)) {
+					deleteMemoryDraftCoveredBy(draft)
 					return { target: "localStorage", durable: true }
 				}
 				return memoryResult()
