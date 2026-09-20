@@ -32,10 +32,9 @@ class AssetProviderAssetRepository implements AssetProviderAssetRepositoryInterf
             ['provider_asset_id', 'provider_group_id', 'provider_status', 'metadata', 'updated_at', 'deleted_at']
         );
         /** @var AssetProviderAssetModel $model */
-        $model = $this->providerAssetModel::query()
+        return $this->providerAssetModel::query()
             ->where('organization_code', $organizationCode)->where('asset_id', $providerAsset->getAssetId())
             ->where('provider_code', $providerAsset->getProviderCode())->where('project_name', $providerAsset->getProjectName())->firstOrFail();
-        return $model;
     }
 
     /**
