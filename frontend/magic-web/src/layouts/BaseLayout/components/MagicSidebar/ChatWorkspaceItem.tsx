@@ -94,7 +94,12 @@ const ChatWorkspaceItem = forwardRef<
 				</MagicTooltip>
 			</div>
 			{/* A bounded child viewport keeps the next workspace reachable, as in project lists. */}
-			<div hidden={!expanded} className="pl-6 pt-1">
+			<div hidden={!expanded} className="relative pl-6 pt-1">
+				{/* Match the project list guide without taking width from conversation rows. */}
+				<div
+					aria-hidden="true"
+					className="pointer-events-none absolute bottom-0 left-4 top-0 w-0 border-l border-[#e5e5e5] duration-300 animate-in fade-in dark:border-[#404040]"
+				/>
 				{(visited || (active && expanded)) && (
 					<ChatsSubMenu
 						ref={listRef}

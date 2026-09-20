@@ -6,19 +6,9 @@ import NavigationStatusIcon from "@/pages/superMagic/components/NavigationStatus
 import PinnedTag from "@/pages/superMagic/components/EmptyWorkspacePanel/components/ProjectItem/components/PinnedTag"
 import { ProjectStatus } from "@/pages/superMagic/pages/Workspace/types"
 import type { ChatConversationListItem } from "@/pages/superMagicMobile/pages/ChatsPage/hooks/useChatConversationList"
-import {
-	DropdownMenu,
-	DropdownMenuContent,
-	DropdownMenuItem,
-	DropdownMenuSeparator,
-	DropdownMenuTrigger,
-} from "@/components/shadcn-ui/dropdown-menu"
+import MagicDropdown from "@/components/base/MagicDropdown"
 import { Button } from "@/components/shadcn-ui/button"
-import {
-	ChatConversationActionIcon,
-	chatConversationActionMenuItemClassName,
-	chatConversationActionMenuItemDangerClassName,
-} from "@/pages/superMagic/utils/chat-conversation-action-icon"
+import { ChatConversationActionIcon } from "@/pages/superMagic/utils/chat-conversation-action-icon"
 
 const ROW_CLICK_SUPPRESS_MS = 80
 
@@ -88,10 +78,87 @@ function ChatConversationSubMenuRow({
 
 	/** Match project rows: one line with actions expanding only during interaction. */
 	return (
-		<div className="h-8 w-full rounded-md">
+		<MagicDropdown
+			open={isMenuOpen}
+			onOpenChange={(nextOpen) => {
+				setIsMenuOpen(nextOpen)
+				if (nextOpen) blockRowClickTemporarily()
+				onMenuOpenChange(nextOpen, item)
+			}}
+			trigger={["contextMenu"]}
+			placement="bottomRight"
+			rootClassName="min-w-0 w-full"
+			overlayClassName="w-max min-w-[160px] max-w-[280px] [&_[data-slot=dropdown-menu-item]]:p-2.5 [&_[data-slot=dropdown-menu-item]]:whitespace-nowrap"
+			menu={{
+				items: [
+					{
+						key: "pin",
+						label: (
+							<div
+								className="flex cursor-pointer items-center gap-1 rounded text-sm font-normal leading-5 text-foreground transition-colors hover:bg-muted active:bg-accent [&_svg]:shrink-0"
+								data-testid="sidebar-chats-submenu-action-pin"
+							>
+								<ChatConversationActionIcon
+									actionKey="pinProject"
+									isPinned={item.isPinned}
+								/>
+								<span>{pinLabel}</span>
+							</div>
+						),
+						onClick: onPin,
+					},
+					{ type: "divider" },
+					{
+						key: "rename",
+						label: (
+							<div
+								className="flex cursor-pointer items-center gap-1 rounded text-sm font-normal leading-5 text-foreground transition-colors hover:bg-muted active:bg-accent [&_svg]:shrink-0"
+								data-testid="sidebar-chats-submenu-action-rename"
+							>
+								<ChatConversationActionIcon actionKey="rename" />
+								<span>{renameLabel}</span>
+							</div>
+						),
+						onClick: onRename,
+					},
+					{
+						key: "saveAsProject",
+						label: (
+							<div
+								className="flex cursor-pointer items-center gap-1 rounded text-sm font-normal leading-5 text-foreground transition-colors hover:bg-muted active:bg-accent [&_svg]:shrink-0"
+								data-testid="sidebar-chats-submenu-action-save-as-project"
+							>
+								<ChatConversationActionIcon actionKey="saveAsProject" />
+								<span>{saveAsLabel}</span>
+							</div>
+						),
+						onClick: onSaveAsProject,
+					},
+					{ type: "divider" },
+					{
+						key: "delete",
+						danger: true,
+						label: (
+							<div
+								className="flex cursor-pointer items-center gap-1 rounded text-sm font-normal leading-5 text-red-500 transition-colors [&_svg]:shrink-0"
+								data-testid="sidebar-chats-submenu-action-delete"
+							>
+								<ChatConversationActionIcon
+									actionKey="delete"
+									variant="destructive"
+								/>
+								<span>{deleteLabel}</span>
+							</div>
+						),
+						onClick: onDelete,
+					},
+				],
+				onClick: blockRowClickTemporarily,
+			}}
+		>
 			<div
 				className={cn(
-					"group/project-row flex h-full w-full min-w-0 items-center rounded-md",
+					"group/project-row flex h-8 w-full min-w-0 items-center rounded-md",
 					"focus-within:bg-sidebar-accent hover:bg-sidebar-accent",
 					(isSelected || isMenuOpen) && "bg-sidebar-accent",
 				)}
@@ -146,95 +213,55 @@ function ChatConversationSubMenuRow({
 					</div>
 				</button>
 
-				<DropdownMenu
-					open={isMenuOpen}
-					onOpenChange={(nextOpen) => {
-						setIsMenuOpen(nextOpen)
-						if (nextOpen) blockRowClickTemporarily()
-						onMenuOpenChange(nextOpen, item)
+				{/* Let content fill the row until hover, keyboard focus or an open menu expands actions. */}
+				<Button
+					type="button"
+					variant="ghost"
+					size="icon-sm"
+					aria-label={moreAriaLabel}
+					aria-haspopup="menu"
+					aria-expanded={isMenuOpen}
+					data-state={isMenuOpen ? "open" : "closed"}
+					data-project-more-trigger="true"
+					data-testid={`sidebar-chats-submenu-more-${item.id}`}
+					className={cn(
+						"relative h-7 w-0 shrink-0 overflow-hidden bg-transparent p-0 text-sidebar-foreground transition-[width] before:absolute before:inset-0.5 before:rounded-md before:transition-colors group-focus-within/project-row:w-7 no-hover:w-7",
+						"hover:bg-transparent hover:before:bg-sidebar-foreground/10 focus-visible:ring-0 focus-visible:before:bg-sidebar-foreground/10 active:before:bg-sidebar-foreground/15 dark:hover:bg-transparent",
+						"data-[state=open]:before:bg-sidebar-foreground/10",
+						(isHovered || isMenuOpen) && "w-7",
+					)}
+					onClick={(event) => {
+						blockRowClickTemporarily()
+						event.preventDefault()
+						event.stopPropagation()
+						// Use the project menu's pointer anchor; keyboard clicks anchor to the button.
+						const bounds = event.currentTarget.getBoundingClientRect()
+						event.currentTarget.dispatchEvent(
+							new MouseEvent("contextmenu", {
+								bubbles: true,
+								clientX: event.detail === 0 ? bounds.right : event.clientX,
+								clientY: event.detail === 0 ? bounds.bottom : event.clientY,
+							}),
+						)
+					}}
+					onPointerDown={(event) => {
+						blockRowClickTemporarily()
+						event.stopPropagation()
+					}}
+					onMouseDown={(event) => {
+						blockRowClickTemporarily()
+						event.stopPropagation()
 					}}
 				>
-					<DropdownMenuTrigger asChild>
-						{/* Let content fill the row until hover, keyboard focus or an open menu expands actions. */}
-						<Button
-							type="button"
-							variant="ghost"
-							size="icon-sm"
-							aria-label={moreAriaLabel}
-							aria-haspopup="menu"
-							aria-expanded={isMenuOpen}
-							data-state={isMenuOpen ? "open" : "closed"}
-							data-project-more-trigger="true"
-							data-testid={`sidebar-chats-submenu-more-${item.id}`}
-							className={cn(
-								"relative h-7 w-0 shrink-0 overflow-hidden bg-transparent p-0 text-sidebar-foreground transition-[width] before:absolute before:inset-0.5 before:rounded-md before:transition-colors group-focus-within/project-row:w-7 no-hover:w-7",
-								"hover:bg-transparent hover:before:bg-sidebar-foreground/10 focus-visible:ring-0 focus-visible:before:bg-sidebar-foreground/10 active:before:bg-sidebar-foreground/15 dark:hover:bg-transparent",
-								"data-[state=open]:before:bg-sidebar-foreground/10",
-								(isHovered || isMenuOpen) && "w-7",
-							)}
-							onClick={(event) => {
-								blockRowClickTemporarily()
-								event.stopPropagation()
-							}}
-							onPointerDown={(event) => {
-								blockRowClickTemporarily()
-								event.stopPropagation()
-							}}
-							onMouseDown={(event) => {
-								blockRowClickTemporarily()
-								event.stopPropagation()
-							}}
-						>
-							<Ellipsis
-								className={cn(
-									"relative h-4 w-4 transition-opacity group-focus-within/project-row:opacity-100 no-hover:opacity-100",
-									isHovered || isMenuOpen ? "opacity-100" : "opacity-0",
-								)}
-							/>
-						</Button>
-					</DropdownMenuTrigger>
-					<DropdownMenuContent align="end" className="w-44">
-						<DropdownMenuItem
-							className={chatConversationActionMenuItemClassName}
-							onClick={onPin}
-							data-testid="sidebar-chats-submenu-action-pin"
-						>
-							<ChatConversationActionIcon
-								actionKey="pinProject"
-								isPinned={item.isPinned}
-							/>
-							{pinLabel}
-						</DropdownMenuItem>
-						<DropdownMenuItem
-							className={chatConversationActionMenuItemClassName}
-							onClick={onRename}
-							data-testid="sidebar-chats-submenu-action-rename"
-						>
-							<ChatConversationActionIcon actionKey="rename" />
-							{renameLabel}
-						</DropdownMenuItem>
-						<DropdownMenuItem
-							className={chatConversationActionMenuItemClassName}
-							onClick={onSaveAsProject}
-							data-testid="sidebar-chats-submenu-action-save-as-project"
-						>
-							<ChatConversationActionIcon actionKey="saveAsProject" />
-							{saveAsLabel}
-						</DropdownMenuItem>
-						<DropdownMenuSeparator />
-						<DropdownMenuItem
-							variant="destructive"
-							className={chatConversationActionMenuItemDangerClassName}
-							onClick={onDelete}
-							data-testid="sidebar-chats-submenu-action-delete"
-						>
-							<ChatConversationActionIcon actionKey="delete" variant="destructive" />
-							{deleteLabel}
-						</DropdownMenuItem>
-					</DropdownMenuContent>
-				</DropdownMenu>
+					<Ellipsis
+						className={cn(
+							"relative h-4 w-4 transition-opacity group-focus-within/project-row:opacity-100 no-hover:opacity-100",
+							isHovered || isMenuOpen ? "opacity-100" : "opacity-0",
+						)}
+					/>
+				</Button>
 			</div>
-		</div>
+		</MagicDropdown>
 	)
 }
 
