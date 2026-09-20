@@ -1086,9 +1086,12 @@ class TaskFileRepository implements TaskFileRepositoryInterface
             $now = date('Y-m-d H:i:s');
             $rows = array_map(
                 static function (int $rootFileId) use ($changeBounds, $now): array {
-                    $bounds = $changeBounds->get($rootFileId);
-                    $revision = (int) ($bounds?->revision ?? 0);
-                    $oldestRevision = (int) ($bounds?->oldest_revision ?? 1);
+                    // Array-normalized bounds: `?->` on an array row would
+                    // silently fall back to the default revision instead of
+                    // the persisted one.
+                    $bounds = (array) ($changeBounds->get($rootFileId) ?? []);
+                    $revision = (int) ($bounds['revision'] ?? 0);
+                    $oldestRevision = (int) ($bounds['oldest_revision'] ?? 1);
 
                     return [
                         'root_file_id' => $rootFileId,
@@ -2228,9 +2231,15 @@ class TaskFileRepository implements TaskFileRepositoryInterface
      * could permanently miss mutations.  There is intentionally no fallback
      * to an aggregate scan or the legacy tree endpoint.
      *
+     * The head is returned as an assoc array, never as an object: raw rows are
+     * arrays in this project (App\Listener\FetchModeListener forces
+     * PDO::FETCH_ASSOC), and reading a property off a row silently yields the
+     * default instead of the persisted value.
+     *
      * @param int $rootFileId The immutable file-tree root ID.
+     * @return array{root_file_id:mixed,revision:mixed,oldest_revision:mixed,updated_at:mixed}
      */
-    private function getFileTreeHeadRow(int $rootFileId): object
+    private function getFileTreeHeadRow(int $rootFileId): array
     {
         $row = Db::table(self::FILE_TREE_HEADS_TABLE)
             ->where('root_file_id', $rootFileId)
@@ -2241,7 +2250,7 @@ class TaskFileRepository implements TaskFileRepositoryInterface
             );
         }
 
-        return $row;
+        return (array) $row;
     }
 
     private function requireFileTreeRootId(TaskFileEntity $file, bool $requireRootRow = false): int
@@ -2558,7 +2567,11 @@ class TaskFileRepository implements TaskFileRepositoryInterface
                     ));
                 }
 
-                $persistedRootFileId = (int) $head->root_file_id;
+                // Normalize the locked head to an array before reading it: raw
+                // rows are assoc arrays here, and a property read would raise
+                // "Attempt to read property on array".
+                $head = (array) $head;
+                $persistedRootFileId = (int) ($head['root_file_id'] ?? 0);
                 if ($persistedRootFileId !== $rootFileId) {
                     throw new \RuntimeException(sprintf(
                         'MagicFS file-tree head mismatch: expected root_file_id=%d, found root_file_id=%d',
@@ -2567,7 +2580,7 @@ class TaskFileRepository implements TaskFileRepositoryInterface
                     ));
                 }
 
-                $rootRevision = (int) ($head->revision ?? 0);
+                $rootRevision = (int) ($head['revision'] ?? 0);
                 $rows = [];
                 foreach ($group['events'] as $event) {
                     ++$rootRevision;
@@ -2663,7 +2676,7 @@ class TaskFileRepository implements TaskFileRepositoryInterface
         // entry point still requires the supplied entity to resolve to the
         // physical root row.
         $row = $this->getFileTreeHeadRow($this->requireFileTreeRootId($rootFile));
-        return (int) $row->revision;
+        return (int) $row['revision'];
     }
 
     /**
@@ -2679,8 +2692,8 @@ class TaskFileRepository implements TaskFileRepositoryInterface
         $sinceRevision = max(0, $sinceRevision);
         $rootFileId = $this->requireFileTreeRootId($rootFile, true);
         $headRow = $this->getFileTreeHeadRow($rootFileId);
-        $head = (int) $headRow->revision;
-        $oldest = (int) $headRow->oldest_revision;
+        $head = (int) $headRow['revision'];
+        $oldest = (int) $headRow['oldest_revision'];
 
         $cursorExpired = $oldest > 1 && $sinceRevision < $oldest - 1;
         if ($limit <= 0 || $cursorExpired) {
@@ -2742,7 +2755,9 @@ class TaskFileRepository implements TaskFileRepositoryInterface
             }
 
             foreach ($heads as $headRow) {
-                $rootFileId = (int) $headRow->root_file_id;
+                // Raw rows are assoc arrays here, never objects.
+                $headRow = (array) $headRow;
+                $rootFileId = (int) ($headRow['root_file_id'] ?? 0);
                 $lastRootFileId = $rootFileId;
                 ++$fileTrees;
 
@@ -2808,6 +2823,7 @@ class TaskFileRepository implements TaskFileRepositoryInterface
                 if ($head === null) {
                     return 0;
                 }
+                $head = (array) $head;
 
                 $ids = Db::table(self::FILE_TREE_CHANGES_TABLE)
                     ->where('root_file_id', $rootFileId)
@@ -2826,7 +2842,7 @@ class TaskFileRepository implements TaskFileRepositoryInterface
                 $firstRevision = Db::table(self::FILE_TREE_CHANGES_TABLE)
                     ->where('root_file_id', $rootFileId)
                     ->min('revision');
-                $currentHead = (int) $head->revision;
+                $currentHead = (int) ($head['revision'] ?? 0);
                 $oldest = $firstRevision === null ? $currentHead + 1 : (int) $firstRevision;
                 Db::table(self::FILE_TREE_HEADS_TABLE)
                     ->where('root_file_id', $rootFileId)
