@@ -16,7 +16,7 @@ import {
 import AppsSubMenu from "./AppsSubMenu"
 import useNavigate from "@/routes/hooks/useNavigate"
 import { RouteName } from "@/routes/constants"
-import { routesPathMatch } from "@/routes/history/helpers"
+import { routesMatch, routesPathMatch } from "@/routes/history/helpers"
 import SidebarContentLayout from "./SidebarContentLayout"
 import { useSidebarMarketMenuItems } from "./hooks/useSidebarMarketMenuItems"
 import { getClawBrandTranslationValues } from "@/pages/superMagic/utils/clawBrand"
@@ -38,6 +38,27 @@ function SidebarContent({ collapsed, onBusyChange, onSelect }: SidebarContentPro
 	const [projectBusy, setProjectBusy] = useState(false)
 	const [appsOpen, setAppsOpen] = useState(false)
 	const busy = projectBusy || appsOpen
+	const currentRouteName = routesMatch(location.pathname)?.route?.name
+	const isSidebarMarketRouteActive = sidebarMarketMenuItems.some((item) =>
+		(item.activeRouteNames ?? [item.routeName]).some((routeName) =>
+			routesPathMatch(routeName, location.pathname),
+		),
+	)
+	const isMicroAppRouteActive = [
+		RouteName.MicroApps,
+		RouteName.MicroAppsList,
+		RouteName.MicroApp,
+	].some((routeName) => routesPathMatch(routeName, location.pathname))
+	// Keep the task entry selected throughout the task workspace while excluding chat routes.
+	const isNewTaskActive =
+		[
+			RouteName.Super,
+			RouteName.SuperWorkspaceState,
+			RouteName.SuperWorkspaceProjectState,
+			RouteName.SuperWorkspaceProjectTopicState,
+		].includes(currentRouteName as RouteName) &&
+		!isSidebarMarketRouteActive &&
+		!isMicroAppRouteActive
 	useEffect(() => {
 		onBusyChange?.(busy)
 	}, [busy, onBusyChange])
@@ -76,6 +97,7 @@ function SidebarContent({ collapsed, onBusyChange, onSelect }: SidebarContentPro
 							tooltip={collapsed ? t("sidebar:home.title") : undefined}
 							data-testid="sidebar-content-home-button"
 							className="text-sidebar-foreground"
+							isActive={isNewTaskActive}
 						>
 							<a
 								href={superRouteUrl}
@@ -89,7 +111,11 @@ function SidebarContent({ collapsed, onBusyChange, onSelect }: SidebarContentPro
 							</a>
 						</SidebarMenuButton>
 					</SidebarMenuItem>
-					<NewChatSidebarMenuItem collapsed={collapsed} onSelect={onSelect} />
+					<NewChatSidebarMenuItem
+						collapsed={collapsed}
+						isActive={currentRouteName === RouteName.SuperChatHome}
+						onSelect={onSelect}
+					/>
 				</>
 			}
 		>

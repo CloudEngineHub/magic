@@ -120,6 +120,7 @@ vi.mock("@/routes/constants", () => ({
 
 vi.mock("@/routes/history/helpers", () => ({
 	getRoutePath: () => "/recordings",
+	routesMatch: () => undefined,
 	routesPathMatch: () => false,
 }))
 

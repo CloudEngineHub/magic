@@ -15,8 +15,13 @@ vi.mock("@/components/shadcn-ui/sidebar", () => ({
 	SidebarMenuItem: ({ children }: { children: ReactNode }) => <div>{children}</div>,
 	SidebarMenuButton: ({
 		children,
+		isActive,
 		...props
-	}: { children: ReactNode } & Record<string, unknown>) => <button {...props}>{children}</button>,
+	}: { children: ReactNode; isActive?: boolean } & Record<string, unknown>) => (
+		<button data-active={isActive} {...props}>
+			{children}
+		</button>
+	),
 }))
 
 describe("NewChatSidebarMenuItem", () => {
@@ -30,5 +35,14 @@ describe("NewChatSidebarMenuItem", () => {
 		})
 		expect(createProject).not.toHaveBeenCalled()
 		expect(onSelect).toHaveBeenCalledTimes(1)
+	})
+
+	it("forwards the selected state to the sidebar button", () => {
+		render(<NewChatSidebarMenuItem collapsed={false} isActive />)
+
+		expect(screen.getByTestId("sidebar-content-new-chat-button")).toHaveAttribute(
+			"data-active",
+			"true",
+		)
 	})
 })

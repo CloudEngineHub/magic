@@ -6,12 +6,14 @@ import useNavigate from "@/routes/hooks/useNavigate"
 
 interface NewChatSidebarMenuItemProps {
 	collapsed: boolean
+	isActive?: boolean
 	onSelect?: () => void
 }
 
 /** Open the blank composer; the first send owns conversation creation. */
 export default function NewChatSidebarMenuItem({
 	collapsed,
+	isActive = false,
 	onSelect,
 }: NewChatSidebarMenuItemProps) {
 	const { t } = useTranslation("sidebar")
@@ -24,6 +26,7 @@ export default function NewChatSidebarMenuItem({
 				tooltip={collapsed ? t("chats.newChat") : undefined}
 				data-testid="sidebar-content-new-chat-button"
 				className="text-sidebar-foreground"
+				isActive={isActive}
 				onClick={() => {
 					navigate({ name: RouteName.SuperChatHome, viewTransition: false })
 					onSelect?.()

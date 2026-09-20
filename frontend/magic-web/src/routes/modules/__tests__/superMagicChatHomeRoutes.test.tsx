@@ -29,6 +29,7 @@ describe("desktop chat home routes", () => {
 		["/global/super/chat/project-1", RouteName.SuperChatProjectState],
 		["/global/super/chat/project-1/topic-1", RouteName.SuperChatProjectState],
 		["/global/super/workspace/workspace-1", RouteName.SuperWorkspaceState],
+		["/global/super/slide-templates", RouteName.SuperSlidesTemplates],
 	])("matches %s without confusing home, list and detail routes", (pathname, name) => {
 		expect(routesMatch(pathname)?.route.name).toBe(name)
 	})
