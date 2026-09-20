@@ -122,6 +122,7 @@ interface PPTRenderProps {
 	projectId?: string
 	displayConfig?: any
 	allowDownload?: boolean
+	showRefresh?: boolean
 
 	// ========== 受控状态（可选） ==========
 	/** 初始激活索引（用于缓存恢复） */
@@ -275,6 +276,7 @@ const PPTRenderInner = observer(function PPTRenderInner({
 	onFullscreen: onFileFullscreen,
 	isTabActive,
 	allowDownload,
+	showRefresh = true,
 	onRegisterCheckBeforeClose,
 	onUnregisterCheckBeforeClose,
 	slideStructureAdapter,
@@ -1041,6 +1043,7 @@ const PPTRenderInner = observer(function PPTRenderInner({
 										getHtmlRelativeFolderPath(slideFileItem)
 									return (
 										<PPTSlide
+											showRefresh={showRefresh}
 											key={key}
 											index={index}
 											isActive={index === store.activeIndex}

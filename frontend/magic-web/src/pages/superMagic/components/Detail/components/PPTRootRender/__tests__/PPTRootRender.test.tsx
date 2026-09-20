@@ -53,6 +53,7 @@ vi.mock("../../PPTRender", () => ({
 		attachmentList,
 		mainFileId,
 		isFullscreen,
+		showRefresh,
 		onSortSave,
 		openNewTab,
 		slideStructureAdapter,
@@ -62,12 +63,14 @@ vi.mock("../../PPTRender", () => ({
 		attachmentList?: Array<{ file_id?: string; relative_file_path?: string }>
 		mainFileId?: string
 		isFullscreen?: boolean
+		showRefresh?: boolean
 		onSortSave?: (slidePaths: string[]) => void
 		openNewTab?: (fileId: string, path: string) => void
 		slideStructureAdapter?: unknown
 	}) => (
 		<div
 			data-testid="ppt-render"
+			data-show-refresh={String(showRefresh)}
 			data-slide-paths={JSON.stringify(slidePaths || [])}
 			data-main-relative-path={
 				attachments?.find((item) => item.file_id === mainFileId)?.relative_file_path
@@ -127,7 +130,7 @@ function createDeckFiles(magicUpdatedAt: string) {
 function renderRoot(
 	magicUpdatedAt: string,
 	slides = ["slides/slide-1.html"],
-	options: { isFullscreen?: boolean } = {},
+	options: { isFullscreen?: boolean; showRefresh?: boolean } = {},
 ) {
 	const attachmentList = createDeckFiles(magicUpdatedAt)
 
@@ -144,6 +147,7 @@ function renderRoot(
 				slides,
 			}}
 			isFullscreen={options.isFullscreen}
+			showRefresh={options.showRefresh}
 			activeFileId="index-file"
 		/>,
 	)
@@ -163,6 +167,14 @@ describe("PPTRootRender", () => {
 		mockState.getFileContentById.mockResolvedValue(
 			"window.magicProjectConfig = { slides: ['slides/slide-1.html'] }",
 		)
+	})
+
+	it("forwards showRefresh to PPTRender", async () => {
+		renderRoot("1", ["slides/slide-1.html"], { showRefresh: false })
+
+		await waitFor(() => {
+			expect(screen.getByTestId("ppt-render")).toHaveAttribute("data-show-refresh", "false")
+		})
 	})
 
 	it("keeps FilesViewer fullscreen separate from PPT presentation fullscreen", async () => {

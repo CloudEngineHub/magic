@@ -127,6 +127,37 @@ describe("AppRootStore runtime conversation", () => {
 		expect(store.runtimeProject).toBeNull()
 		expect(store.conversationType).toBe("development")
 	})
+
+	it("clears stale runtime files before ensuring a different app", async () => {
+		const creation = createDeferred<{ project: { id: string } }>()
+		vi.mocked(SuperMagicApi.ensureMicroAppRuntimeProject).mockReturnValue(
+			creation.promise as never,
+		)
+		vi.mocked(SuperMagicApi.getProjectDetail).mockResolvedValue({
+			id: "project-2",
+			project_name: "App 2",
+		} as never)
+		vi.mocked(SuperMagicApi.getTopicsByProjectId).mockResolvedValue({ list: [] } as never)
+
+		const store = new AppRootStore()
+		store.runtimeProjectFilesStore.setWorkspaceFileTree([
+			{
+				file_id: "old-file",
+				file_name: "old.html",
+				file_key: "old.html",
+				type: "file",
+			} as never,
+		])
+		expect(store.runtimeProjectFilesStore.workspaceFilesList).toEqual(
+			expect.arrayContaining([expect.objectContaining({ file_id: "old-file" })]),
+		)
+
+		const pending = store.ensureUsageProject("app-2")
+		expect(store.runtimeProjectFilesStore.workspaceFileTree).toEqual([])
+
+		creation.resolve({ project: { id: "project-2" } })
+		await pending
+	})
 })
 
 function createDeferred<T>() {

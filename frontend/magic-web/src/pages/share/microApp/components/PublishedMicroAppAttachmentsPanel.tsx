@@ -37,6 +37,7 @@ export default function PublishedMicroAppAttachmentsPanel({
 				selectedTopic={selectedTopic}
 				title={t("attachmentList.projectFiles")}
 				allowEdit={canEdit}
+				showRefresh
 				showFileManager
 				onFileClick={onFileClick}
 				setUserSelectDetail={setUserSelectDetail}

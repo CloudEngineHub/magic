@@ -10,7 +10,6 @@ import { getFileType } from "@/pages/superMagic/utils/handleFIle"
 import { IconChevronDown, IconChevronRight, IconDownload } from "@tabler/icons-react"
 import { Button, Input, Tooltip, Typography } from "antd"
 import { useMemo, useState } from "react"
-import { useLocation } from "react-router"
 import { useIsMobile } from "@/hooks/useIsMobile"
 import useStyles from "./style"
 import { SuperMagicApi } from "@/apis"
@@ -61,7 +60,6 @@ export default function AttachmentList({
 }) {
 	const { t } = useTranslation("super")
 	const { styles, cx } = useStyles()
-	const { pathname } = useLocation()
 	const isMobile = useIsMobile()
 	const fileAccess = useFileAccess()
 
@@ -324,12 +322,6 @@ export default function AttachmentList({
 		})
 	}
 
-	const showDownloadAll = useMemo(() => {
-		// 检查是否在分享场景，如果是分享场景则不显示下载全部文件按钮
-		const isShareRoute = pathname.includes("/share/")
-		return attachments?.length > 0 && !isShareRoute
-	}, [attachments, pathname])
-
 	return (
 		<div className={cx(styles.section, isFileListCollapsed && styles.collapsed)}>
 			<div className={styles.header}>
@@ -367,14 +359,7 @@ export default function AttachmentList({
 						/>
 					</div>
 					{!!filteredFiles.length && (
-						<div
-							className={cx(
-								styles.listContainer,
-								showDownloadAll && styles.showDownloadAll,
-							)}
-						>
-							{renderItems(filteredFiles, 0)}
-						</div>
+						<div className={styles.listContainer}>{renderItems(filteredFiles, 0)}</div>
 					)}
 					{!!attachments?.length && !filteredFiles.length && fileSearchText && (
 						<div className={styles.emptyText}>
@@ -398,29 +383,6 @@ export default function AttachmentList({
 							{t("attachmentList.empty")}
 						</div>
 					)}
-					{/* {showDownloadAll && (
-						<div className={styles.batchDownloadLayer}>
-							<button
-								className={styles.batchDownloadButton}
-								onClick={handleDownloadAll}
-								type="button"
-								disabled={allLoading}
-							>
-								{allLoading ? (
-									<Spin
-										size="small"
-										style={{ marginRight: 4, width: 14, height: 14 }}
-									/>
-								) : null}
-								<IconDownload
-									size={14}
-									stroke={1.5}
-									color="rgba(28, 29, 35, 0.8)"
-								/>
-								<span>{t("attachmentList.downloadAll")}</span>
-							</button>
-						</div>
-					)} */}
 				</div>
 			)}
 		</div>

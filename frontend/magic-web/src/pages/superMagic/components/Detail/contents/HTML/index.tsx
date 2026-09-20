@@ -41,7 +41,12 @@ import { Flex, Tour } from "antd"
 import { shadow } from "@/utils/shadow"
 import CodeEditor from "@/components/base/CodeEditor"
 import { scrollToAnchor } from "@/utils/slug"
-import { getHtmlNavigationKey, parseHtmlNavigationRequest } from "./utils/html-navigation"
+import {
+	getHtmlNavigationKey,
+	normalizeHtmlPreviewPath,
+	parseHtmlNavigationRequest,
+	resolveRootHtmlIndexFallback,
+} from "./utils/html-navigation"
 import { HTMLGuideTourElementId, useHTMLGuideTour } from "@/pages/superMagic/hooks/useHTMLGuideTour"
 import pubsub, { PubSubEvents } from "@/utils/pubsub"
 import MagicSpin from "@/components/base/MagicSpin"
@@ -181,6 +186,8 @@ interface HTMLProps {
 	virtualStorageMarkerId?: string
 	/** 分享预览不拉项目文件版本，走分享下载 */
 	isSharePreview?: boolean
+	/** Controls whether the HTML header exposes the manual refresh action. */
+	showRefresh?: boolean
 }
 
 interface HtmlExportActionProps {
@@ -282,6 +289,7 @@ export default memo(function HTML(props: HTMLProps) {
 		microAppName,
 		virtualStorageMarkerId,
 		isSharePreview = false,
+		showRefresh = true,
 	} = props
 	// origin：显式传入的项目，缺省时用当前选中项目
 	const runtimeProjectId = projectId ?? selectedProject?.id
@@ -1229,13 +1237,31 @@ export default memo(function HTML(props: HTMLProps) {
 			return
 		}
 
-		const relativePath = fileItem.relative_file_path.replace(fileItem.file_name, "")
-		const newPath = filePath
-			? filePath.startsWith("/")
-				? filePath.replace(/^\/+/, "")
-				: resolveRelativePath(relativePath, filePath)
+		const requestedPath = filePath ? filePath.replace(/\\/g, "/") : ""
+		const relativePath = normalizeHtmlPreviewPath(
+			fileItem.relative_file_path.replace(fileItem.file_name, ""),
+		)
+		let newPath = requestedPath
+			? requestedPath.startsWith("/")
+				? requestedPath.replace(/^\/+/, "")
+				: resolveRelativePath(relativePath, requestedPath)
 			: fileItem.relative_file_path
-		const item = attachmentList?.find((item: any) => item.relative_file_path === newPath)
+
+		newPath = normalizeHtmlPreviewPath(newPath)
+
+		// Empty or directory paths resolve to the directory's index.html.
+		if (!newPath || newPath.endsWith("/")) {
+			newPath = `${newPath}index.html`
+		}
+
+		let item = attachmentList?.find((attachment: any) => {
+			return normalizeHtmlPreviewPath(attachment.relative_file_path) === newPath
+		})
+
+		if (!item) {
+			item = resolveRootHtmlIndexFallback(newPath, attachmentList)
+		}
+
 		if (item) {
 			openFileTab?.({ ...item, htmlNavigation: navigationTarget }, autoEdit)
 
@@ -1584,7 +1610,7 @@ export default memo(function HTML(props: HTMLProps) {
 		isEditMode,
 		fileVersion: activeHistory.fileVersion,
 		isNewestFileVersion: activeHistory.isNewestVersion,
-		showRefreshButton: true,
+		showRefreshButton: showRefresh,
 		changeFileVersion: activeHistory.changeFileVersion,
 		fileVersionsList: activeHistory.fileVersionsList,
 		handleVersionRollback: activeHistory.handleVersionRollback,

@@ -1108,6 +1108,7 @@ function Topic({
 											title: t("topicFiles.title"),
 											content: (
 												<TopicFilesButton
+													showRefresh={false}
 													attachments={attachments.tree}
 													setUserSelectDetail={(detail: any) => {
 														setUserDetail(detail)

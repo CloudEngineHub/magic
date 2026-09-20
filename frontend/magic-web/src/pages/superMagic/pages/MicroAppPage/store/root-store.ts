@@ -28,12 +28,16 @@ export class AppRootStore {
 	runtimeProjectRequestId = 0
 	readonly projectFilesStore: ProjectFilesStore
 	readonly mentionPanelStore: ReturnType<typeof createMentionPanelStore>
+	readonly runtimeProjectFilesStore: ProjectFilesStore
+	readonly runtimeMentionPanelStore: ReturnType<typeof createMentionPanelStore>
 
 	constructor() {
 		this.developmentConversation = new AppConversationStore()
 		this.usageConversation = new AppConversationStore()
 		this.projectFilesStore = new ProjectFilesStore()
 		this.mentionPanelStore = createMentionPanelStore(this.projectFilesStore)
+		this.runtimeProjectFilesStore = new ProjectFilesStore()
+		this.runtimeMentionPanelStore = createMentionPanelStore(this.runtimeProjectFilesStore)
 
 		makeAutoObservable(
 			this,
@@ -46,6 +50,8 @@ export class AppRootStore {
 				runtimeProjectRequestId: false,
 				projectFilesStore: false,
 				mentionPanelStore: false,
+				runtimeProjectFilesStore: false,
+				runtimeMentionPanelStore: false,
 			},
 			{ autoBind: true },
 		)
@@ -69,6 +75,7 @@ export class AppRootStore {
 		this.runtimeProjectState = "unknown"
 		this.runtimeProjectPromise = null
 		this.runtimeProjectPromiseAppId = null
+		this.runtimeProjectFilesStore.setSelectedProject(null)
 		this.usageConversation.reset()
 		if (this.conversationType === "usage") this.conversationType = "development"
 	}
@@ -82,6 +89,9 @@ export class AppRootStore {
 		this.runtimeProjectAppId = null
 		this.runtimeProjectState = "unknown"
 		this.usageConversation.reset()
+		// Clear stale file attachments immediately so that while the new project's
+		// files are loading, consumers do not see the previous app's file list.
+		this.runtimeProjectFilesStore.setSelectedProject(null)
 		try {
 			const result = await SuperMagicApi.getMicroAppRuntimeProject(appId, {
 				enableErrorMessagePrompt: false,
@@ -135,6 +145,8 @@ export class AppRootStore {
 		this.runtimeProjectAppId = null
 		this.runtimeProjectState = "unknown"
 		this.usageConversation.reset()
+		// Clear stale files before the next runtime project hydrates.
+		this.runtimeProjectFilesStore.setSelectedProject(null)
 		const promise = (async () => {
 			const result = await SuperMagicApi.ensureMicroAppRuntimeProject(appId)
 			if (!isCurrent()) throw new Error(RUNTIME_PROJECT_LOAD_SUPERSEDED)
@@ -205,6 +217,7 @@ export class AppRootStore {
 		this.runtimeProjectPromiseAppId = null
 		this.runtimeProjectRequestId += 1
 		this.projectFilesStore.setSelectedProject(null)
+		this.runtimeProjectFilesStore.setSelectedProject(null)
 	}
 
 	dispose() {
