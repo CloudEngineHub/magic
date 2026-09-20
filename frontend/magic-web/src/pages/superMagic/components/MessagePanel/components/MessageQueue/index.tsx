@@ -2,6 +2,8 @@ import { useState, type RefObject } from "react"
 import { useTranslation } from "react-i18next"
 import { IconChevronUp, IconChevronDown } from "@tabler/icons-react"
 import { cn } from "@/utils/cn"
+import { ScrollArea } from "@/components/shadcn-ui/scroll-area"
+import ConversationInputResizeHandle from "../../../ConversationInputResize/ConversationInputResizeHandle"
 import type { MessageEditorRef } from "../../../MessageEditor/types"
 import type { QueuedMessage } from "../../hooks/useMessageQueue"
 import MobileMessageQueue from "./MobileMessageQueue"
@@ -83,6 +85,21 @@ function MessageQueue({
 
 	return (
 		<div className={cn("relative self-stretch rounded-xl bg-card/80", className)}>
+			{/* 队列顶部只调整列表高度；下方输入框继续使用自己的把手和高度偏好。 */}
+			{canResize && (
+				<ConversationInputResizeHandle
+					label={t("messageQueue.resizeQueueHeight")}
+					positionClassName="-top-2.5"
+					value={queueHeight.height}
+					min={queueHeight.minHeight}
+					max={queueHeight.maxHeight}
+					onResizeStart={queueHeight.startResize}
+					onResize={queueHeight.resize}
+					onResizeEnd={queueHeight.finishResize}
+					onResizeStateChange={queueHeight.onResizeStateChange}
+					onDoubleClick={queueHeight.restoreAutoHeight}
+				/>
+			)}
 			{/* Queue header */}
 			<div className="flex items-center justify-between gap-2.5 p-2.5">
 				<div className="flex flex-1 items-center gap-2.5">
@@ -108,11 +125,12 @@ function MessageQueue({
 
 			{/* Queue content */}
 			{isExpanded && (
-				<div
-					ref={queueHeight.viewportRef}
-					data-message-queue-viewport
-					className="scrollbar-y-thin overflow-y-auto overflow-x-hidden rounded-b-xl px-2.5 pb-2.5"
-					style={{ maxHeight: queueHeight.height }}
+				<ScrollArea
+					viewportRef={queueHeight.viewportRef}
+					viewportProps={{ "data-message-queue-viewport": true }}
+					className="min-h-0 rounded-b-xl"
+					viewportClassName="px-2.5 pb-2.5"
+					viewportStyle={{ maxHeight: queueHeight.height }}
 				>
 					<div ref={queueHeight.contentRef} className="flex flex-col gap-2.5">
 						<MessageQueueItems
@@ -127,7 +145,7 @@ function MessageQueue({
 							variant="default"
 						/>
 					</div>
-				</div>
+				</ScrollArea>
 			)}
 		</div>
 	)
