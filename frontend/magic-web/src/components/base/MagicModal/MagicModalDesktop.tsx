@@ -18,7 +18,6 @@ import { Modal as AntdModal } from "antd"
 import ThemeProvider from "@/providers/ThemeProvider"
 import {
 	acquireOverlayZIndex,
-	getOverlayScopeBaseZIndex,
 	type OverlayZIndexEntry,
 } from "@/utils/overlayZIndex/overlayStackManager"
 
@@ -325,18 +324,13 @@ function createImperativeModal(
 			footerNode = defaultFooterNode
 		}
 
-		// Mobile uses the global overlay stack so nested MagicPopup / Sheet stay ordered.
-		// PC honors the caller zIndex literally so fixed z-dropdown (1000) can sit above modal content.
-		let resolvedContentZIndex: number
-		if (isMobile) {
-			if (!overlayEntry) {
-				overlayEntry = acquireOverlayZIndex({ zIndex })
-			}
-			// DialogContent mirrors style.zIndex onto overlay; contentZIndex keeps mask above lower sheets.
-			resolvedContentZIndex = overlayEntry.contentZIndex
-		} else {
-			resolvedContentZIndex = zIndex ?? getOverlayScopeBaseZIndex("global")
+		// Imperative confirms sit in a new React tree, so they cannot read overlay context.
+		// Acquire from the global stack so they stay above an open file preview.
+		if (!overlayEntry) {
+			overlayEntry = acquireOverlayZIndex({ zIndex })
 		}
+		// DialogContent copies style.zIndex onto the mask; +1 keeps content above it.
+		const resolvedContentZIndex = overlayEntry.contentZIndex
 
 		root.render(
 			<ThemeProvider>
