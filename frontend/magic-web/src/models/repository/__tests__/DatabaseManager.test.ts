@@ -228,6 +228,8 @@ describe("DatabaseManager", () => {
 			// fake-indexeddb 不支持 isOpen()，所以检查表是否存在
 			expect(db.tables.length).toBeGreaterThan(0)
 			expect(db.tables.map((table) => table.name)).toContain("analytics-state")
+			expect(db.table("analytics-state").schema.primKey.name).toBe("id")
+			expect(db.table("analytics-state").schema.indexes).toHaveLength(0)
 		})
 
 		it("应该在重复调用时返回同一实例（Promise 缓存）", async () => {

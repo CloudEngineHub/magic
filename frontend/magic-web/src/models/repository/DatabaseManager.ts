@@ -406,10 +406,9 @@ export class DatabaseManager {
 		// 个人标签按现有账号身份独立保存；其余表沿用前一版本。
 		db.version(7).stores({ "super-user-file-tabs": "&id" })
 
-		// 埋点首触归因与跨刷新创建交接状态独立存储，避免继续占用 Web Storage。
+		// 首次 UTM 归因按固定记录 ID 存储；不再为已移除的创建交接状态维护冗余索引。
 		db.version(8).stores({
-			"analytics-state":
-				"&id, kind, scene, resourceCode, magicId, organizationCode, expiresAt",
+			"analytics-state": "&id",
 		})
 
 		this.globalDatabase = db
