@@ -65,6 +65,7 @@ const RecentProjectRow = observer(function RecentProjectRow({
 			<CollapsedWorkspaceProjectRow
 				project={project}
 				workspaceId={workspace.id}
+				expandActionsOnHover
 				isSelected={projectStore.selectedProject?.id === project.id}
 				dndDisabled
 				tooltipDisabled={actions.isProjectModalOpen}

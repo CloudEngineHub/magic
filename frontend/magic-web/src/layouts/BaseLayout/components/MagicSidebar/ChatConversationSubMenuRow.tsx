@@ -88,6 +88,7 @@ function ChatConversationSubMenuRow({
 		onOpen(item)
 	}
 
+	/** Keep title and last-active time on separate lines, matching the recent-project rows. */
 	return (
 		<div className="h-12 w-full rounded-md">
 			<div
@@ -163,6 +164,7 @@ function ChatConversationSubMenuRow({
 					}}
 				>
 					<DropdownMenuTrigger asChild>
+						{/* Reserve the action area so opening the menu never shifts the conversation text. */}
 						<Button
 							ref={moreButtonRef}
 							type="button"
