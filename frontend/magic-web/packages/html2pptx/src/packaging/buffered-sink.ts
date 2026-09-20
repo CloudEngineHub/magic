@@ -16,15 +16,18 @@ export interface BufferedPptxSink {
  * destination is buffered in memory for a Blob download.
  */
 export function createBufferedPptxSink(contentType = PPTX_MIME_TYPE): BufferedPptxSink {
-	let chunks: Uint8Array[] = []
+	// Allocate owned ArrayBuffers so Blob construction is compatible with the current DOM
+	// typings, which reject Uint8Array<ArrayBufferLike> because it may reference SharedArrayBuffer.
+	let chunks: ArrayBuffer[] = []
 	let bytesWritten = 0
 	let state: "open" | "closed" | "aborted" = "open"
 
 	const sink: PptxOutputSink = {
 		write: async (chunk) => {
 			if (state !== "open") throw new Error("PPTX buffered sink is already closed")
-			const copy = chunk.slice()
-			chunks.push(copy)
+			const copy = new Uint8Array(chunk.byteLength)
+			copy.set(chunk)
+			chunks.push(copy.buffer)
 			bytesWritten += copy.byteLength
 		},
 		close: () => {
