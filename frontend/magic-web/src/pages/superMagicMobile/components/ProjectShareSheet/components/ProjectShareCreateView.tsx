@@ -18,6 +18,11 @@ import { Input } from "@/components/shadcn-ui/input"
 import { Switch } from "@/components/shadcn-ui/switch"
 import { cn } from "@/utils/cn"
 import { ShareType } from "@/pages/superMagic/components/Share/types"
+import {
+	isShareTypePlanDisabled,
+	isShareTypePlanHidden,
+} from "@/pages/superMagic/components/Share/utils/sharePlanRestrictions"
+import VipIcon from "@/pages/superMagic/components/VipIcon"
 import { MobileAttachmentRowIcon } from "@/pages/superMagic/components/TopicFilesButton/components/MobileAttachmentRowIcon"
 import type { AttachmentItem } from "@/pages/superMagic/components/TopicFilesButton/hooks/types"
 import type { ProjectShareSheetController } from "../types"
@@ -186,6 +191,7 @@ export default function ProjectShareCreateView({ controller }: ProjectShareCreat
 	const { formState } = controller
 	// 管理员关闭全部分享方式时，除「分享方式 + 红字提示」外的表单项都是死路，直接不再渲染。
 	const hasNoPermittedShareType = controller.permittedShareTypes?.length === 0
+	const isFreePlan = controller.isFreePlan === true
 
 	const typeCards = useMemo(() => {
 		const cards = [
@@ -205,13 +211,16 @@ export default function ProjectShareCreateView({ controller }: ProjectShareCreat
 				icon: Users,
 			},
 		]
-		return cards.filter(
-			(item) =>
+		return cards.filter((item) => {
+			// 免费计划不提供团队内分享，与 PC 端保持同一口径（整项不渲染，而不是禁用）。
+			if (isShareTypePlanHidden(item.type, isFreePlan)) return false
+			return (
 				controller.permittedShareTypes === undefined ||
 				controller.permittedShareTypes.includes(item.type) ||
-				(controller.isEditing && item.type === formState.shareType),
-		)
-	}, [controller.isEditing, controller.permittedShareTypes, formState.shareType, t])
+				(controller.isEditing && item.type === formState.shareType)
+			)
+		})
+	}, [controller.isEditing, controller.permittedShareTypes, formState.shareType, isFreePlan, t])
 
 	if (controller.view === "edit" && controller.editLoading) {
 		return (
@@ -245,9 +254,12 @@ export default function ProjectShareCreateView({ controller }: ProjectShareCreat
 					{typeCards.map((item) => {
 						const Icon = item.icon
 						const active = formState.shareType === item.type
-						const disabled =
+						// 付费计划禁用与管理员管控禁用是两种原因，前者可升级解开，所以不能互相顶替。
+						const planDisabled = isShareTypePlanDisabled(item.type, isFreePlan)
+						const permissionDisabled =
 							controller.permittedShareTypes !== undefined &&
 							!controller.permittedShareTypes.includes(item.type)
+						const disabled = planDisabled || permissionDisabled
 						return (
 							<button
 								key={item.type}
@@ -263,10 +275,17 @@ export default function ProjectShareCreateView({ controller }: ProjectShareCreat
 								)}
 								data-testid={`project-share-sheet-type-${item.type}`}
 							>
-								<Icon
-									className="h-[22px] w-[22px] text-foreground"
-									strokeWidth={1.8}
-								/>
+								{/* 固定图标槽高度，VIP 标记比图标矮，避免卡片高度被撑变。 */}
+								<div className="flex h-[22px] items-center justify-center">
+									{planDisabled ? (
+										<VipIcon />
+									) : (
+										<Icon
+											className="h-[22px] w-[22px] text-foreground"
+											strokeWidth={1.8}
+										/>
+									)}
+								</div>
 								<div className="text-[13px] font-medium leading-4 text-foreground">
 									{item.label}
 								</div>

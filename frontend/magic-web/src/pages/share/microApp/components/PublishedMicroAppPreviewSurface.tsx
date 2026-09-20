@@ -17,6 +17,11 @@ const NOOP_LEAVE = () => undefined
 export interface PublishedMicroAppPreviewSurfaceProps {
 	preview: UsePublishedMicroAppPreviewReturn
 	onLeave?: () => void
+	/**
+	 * 错误态（无权限、分享失效等）下「返回」按钮的落点。
+	 * 不传则不渲染按钮——应用内的微应用预览标签页正是如此，它有自己的外层导航。
+	 */
+	onErrorBack?: () => void
 	testIdPrefix: "micro-app-tab" | "micro-app-share"
 	rootTestId?: string
 	onHtmlPermissionManagerChange?: (manager: { open: () => void } | null) => void
@@ -48,6 +53,7 @@ function PublishedMicroAppPreviewEmpty({ testId }: { testId: string }) {
 function PublishedMicroAppPreviewSurface({
 	preview,
 	onLeave,
+	onErrorBack,
 	testIdPrefix,
 	rootTestId,
 	onHtmlPermissionManagerChange,
@@ -72,7 +78,6 @@ function PublishedMicroAppPreviewSurface({
 		handleVerifySuccess,
 		getShareData,
 		setError,
-		reload,
 		installFlow,
 		previewMode,
 		setPreviewMode,
@@ -141,7 +146,7 @@ function PublishedMicroAppPreviewSurface({
 				{error && !loading ? (
 					<ErrorDisplay
 						errorMessage={t("microAppShare.errorTitle")}
-						onRetry={reload}
+						onBack={onErrorBack}
 						isFileShare
 						illustration={
 							<MicroAppPermissionIllustration
