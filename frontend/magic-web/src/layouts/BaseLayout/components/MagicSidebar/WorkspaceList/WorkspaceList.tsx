@@ -1,3 +1,4 @@
+import { useChatSidebarSelection } from "../hooks/useChatSidebarSelection"
 import ProjectNavigationToolbar from "../ProjectNavigationToolbar"
 import ChatWorkspaceItem, { type ChatWorkspaceItemHandle } from "../ChatWorkspaceItem"
 import {
@@ -95,7 +96,8 @@ function WorkspaceList({
 	const hasRequestedInitialLoadRef = useRef(false)
 	const isInitialWorkspaceListLoading =
 		workspaceStore.isWorkspaceListLoading && workspaces.length === 0
-	const selectedWorkspaceId = workspaceStore.selectedWorkspace?.id
+	const { isChatRoute } = useChatSidebarSelection()
+	const selectedWorkspaceId = isChatRoute ? undefined : workspaceStore.selectedWorkspace?.id
 	const lastLocatedWorkspace = useRef(
 		sidebarStore.navigationScrollPositions.has("sidebar-scroll:expanded")
 			? selectedWorkspaceId

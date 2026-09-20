@@ -1,3 +1,4 @@
+import { useChatSidebarSelection } from "./hooks/useChatSidebarSelection"
 import recentProjectsStore from "@/pages/superMagic/stores/core/recentProjects"
 import {
 	lazy,
@@ -54,6 +55,7 @@ function ProjectNavigation({
 	const userId = userStore.user.userInfo?.user_id
 	const organizationCode = userStore.user.organizationCode
 	const selectedWorkspace = workspaceStore.selectedWorkspace
+	const { isChatRoute } = useChatSidebarSelection()
 	const recentExpanded = sidebarStore.recentProjectsExpanded
 	const workspacesExpanded = sidebarStore.workspacesExpanded
 	const workspaceIcon = <Box size={16} />
@@ -294,9 +296,12 @@ function ProjectNavigation({
 											<>
 												<SidebarMenuItem>
 													<SidebarMenuButton
-														isActive={isCollaborationWorkspace(
-															selectedWorkspace,
-														)}
+														isActive={
+															!isChatRoute &&
+															isCollaborationWorkspace(
+																selectedWorkspace,
+															)
+														}
 														disabled={workspaceBusy || recentBusy}
 														className="mb-1 text-[13px] font-normal leading-5 data-[active=true]:font-normal"
 														onClick={() =>

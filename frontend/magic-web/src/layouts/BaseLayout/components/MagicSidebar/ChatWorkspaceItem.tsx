@@ -26,7 +26,7 @@ const ChatWorkspaceItem = forwardRef<
 	}
 >(function ChatWorkspaceItem({ active, searchKeyword = "", onBusyChange, onSelect }, ref) {
 	const { t } = useTranslation("sidebar")
-	const { isChatHome, projectId } = useChatSidebarSelection()
+	const { isChatRoute, projectId } = useChatSidebarSelection()
 	const searching = Boolean(searchKeyword.trim())
 	const expanded = searching || sidebarStore.expandedWorkspaces.has(CHAT_WORKSPACE_KEY)
 	const [visited, setVisited] = useState(false)
@@ -64,15 +64,15 @@ const ChatWorkspaceItem = forwardRef<
 			<div
 				className={cn(
 					"group/chat-workspace flex w-full items-center rounded-md focus-within:bg-sidebar-accent hover:bg-sidebar-accent",
-					isChatHome && "bg-sidebar-accent",
+					isChatRoute && "bg-sidebar-accent",
 				)}
 			>
 				<button
 					type="button"
 					className="flex h-8 min-w-0 flex-1 items-center gap-2 rounded-md px-2 text-left text-[13px] font-normal text-sidebar-foreground hover:bg-sidebar-accent focus-visible:bg-sidebar-accent focus-visible:outline-none"
 					aria-expanded={expanded}
-					aria-current={isChatHome ? "page" : undefined}
-					data-active={isChatHome}
+					aria-current={isChatRoute ? "page" : undefined}
+					data-active={isChatRoute}
 					disabled={busy || searching}
 					onClick={() => sidebarStore.toggleWorkspaceExpanded(CHAT_WORKSPACE_KEY)}
 					data-testid="sidebar-my-chats-toggle"

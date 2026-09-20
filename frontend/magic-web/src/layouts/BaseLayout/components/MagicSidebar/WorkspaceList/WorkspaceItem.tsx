@@ -23,6 +23,7 @@ import { shouldIgnoreSelectionAfterWorkspaceRename } from "@/pages/superMagic/ut
 import { baseHistory } from "@/routes/history"
 import { routesMatch } from "@/routes/history/helpers"
 import { RouteName } from "@/routes/constants"
+import { useChatSidebarSelection } from "../hooks/useChatSidebarSelection"
 
 function WorkspaceItem({
 	active,
@@ -49,7 +50,9 @@ function WorkspaceItem({
 		searchProjects !== undefined || sidebarStore.expandedWorkspaces.has(workspace.id)
 	const projects = searchProjects ?? projectStore.getProjectsByWorkspace(workspace.id)
 	const isLoading = searchProjects === undefined && projectStore.isLoadingWorkspace(workspace.id)
-	const isActive = workspaceStore.selectedWorkspace?.id === workspace.id
+	const { isChatRoute } = useChatSidebarSelection()
+	// Keep the task workspace cached, but do not present it as selected on chat pages.
+	const isActive = !isChatRoute && workspaceStore.selectedWorkspace?.id === workspace.id
 	const { openDeleteModal, renderDeleteModal, deleteModalOpen } = useWorkspaceDelete({
 		getDeleteSuccessMessage: () => t("workspace.deleteWorkspaceSuccess"),
 		getFallbackWorkspaceName: () => workspace.name || t("workspace.unnamedWorkspace"),

@@ -43,7 +43,7 @@ describe("ChatWorkspaceItem", () => {
 		vi.clearAllMocks()
 	})
 
-	it("selects my chats only on the blank chat home", () => {
+	it("selects my chats on chat home and clears it on task pages", () => {
 		locationState.pathname = "/global/super/chat"
 		const { rerender } = render(<ChatWorkspaceItem active />)
 		expect(screen.getByTestId("sidebar-my-chats-toggle")).toHaveAttribute(
@@ -60,7 +60,7 @@ describe("ChatWorkspaceItem", () => {
 		render(<ChatWorkspaceItem active />)
 		const toggle = screen.getByTestId("sidebar-my-chats-toggle")
 		expect(toggle).toHaveAttribute("aria-expanded", "true")
-		expect(toggle).not.toHaveAttribute("aria-current")
+		expect(toggle).toHaveAttribute("aria-current", "page")
 		fireEvent.click(toggle)
 		expect(toggle).toHaveAttribute("aria-expanded", "false")
 	})

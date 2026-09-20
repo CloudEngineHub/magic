@@ -24,6 +24,11 @@ const {
 	},
 }))
 
+const locationState = vi.hoisted(() => ({ pathname: "/global/super" }))
+vi.mock("react-router", async (importOriginal) => ({
+	...(await importOriginal<typeof import("react-router")>()),
+	useLocation: () => locationState,
+}))
 vi.mock("mobx-react-lite", () => ({
 	observer: (component: unknown) => component,
 }))
@@ -131,6 +136,7 @@ vi.mock("@/utils/testid", () => ({
  */
 describe("WorkspaceList", () => {
 	beforeEach(() => {
+		locationState.pathname = "/global/super"
 		vi.clearAllMocks()
 		workspaceStoreMock.workspaces = [
 			{
@@ -151,6 +157,24 @@ describe("WorkspaceList", () => {
 		vi.stubGlobal("cancelAnimationFrame", vi.fn())
 	})
 
+	it.each(["/global/super/chat", "/global/super/chat/project-1"])(
+		"does not auto-expand the cached workspace on %s",
+		async (pathname) => {
+			locationState.pathname = pathname
+			const { default: WorkspaceList } = await import("../WorkspaceList")
+			const { sidebarStore } = await import("@/stores/layout")
+			render(
+				<WorkspaceList
+					scrollRef={createRef()}
+					scrollAreaRef={createRef()}
+					onOpenManager={vi.fn()}
+				/>,
+			)
+			expect(sidebarStore.setActiveWorkspace).not.toHaveBeenCalled()
+			expect(sidebarStore.setWorkspaceExpanded).not.toHaveBeenCalled()
+			expect(workspaceStoreMock.selectedWorkspace).toEqual({ id: "workspace-1" })
+		},
+	)
 	it("refresh button refreshes both sidebar caches and conversations", async () => {
 		const { default: WorkspaceList } = await import("../WorkspaceList")
 

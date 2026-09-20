@@ -5,8 +5,10 @@ import { RoutePath } from "@/constants/routes"
 export function useChatSidebarSelection() {
 	const { pathname } = useLocation()
 	const detail = matchPath(`/:clusterCode${RoutePath.SuperChatProjectState}`, pathname)
+	const isChatHome = Boolean(matchPath(`/:clusterCode${RoutePath.SuperChatHome}`, pathname))
 	return {
-		isChatHome: Boolean(matchPath(`/:clusterCode${RoutePath.SuperChatHome}`, pathname)),
+		isChatHome,
+		isChatRoute: isChatHome || Boolean(detail),
 		projectId: detail?.params.projectId,
 	}
 }

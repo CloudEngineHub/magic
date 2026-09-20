@@ -23,7 +23,7 @@ export default function CollapsedWorkspaceChatItem({
 	keepPopoverOpen = false,
 }: CollapsedWorkspaceChatItemProps) {
 	const { t } = useTranslation(["sidebar", "super"])
-	const { isChatHome } = useChatSidebarSelection()
+	const { isChatRoute } = useChatSidebarSelection()
 	const [busy, setBusy] = useState(false)
 	const [searchInput, setSearchInput] = useState("")
 	const [searchKeyword, setSearchKeyword] = useState("")
@@ -54,9 +54,9 @@ export default function CollapsedWorkspaceChatItem({
 		>
 			<PopoverTrigger asChild>
 				<Button
-					variant={isChatHome ? "secondary" : "ghost"}
-					aria-current={isChatHome ? "page" : undefined}
-					data-active={isChatHome}
+					variant={isChatRoute ? "secondary" : "ghost"}
+					aria-current={isChatRoute ? "page" : undefined}
+					data-active={isChatRoute}
 					size="sm"
 					className="h-8 w-full justify-start gap-2 px-2 font-normal text-sidebar-foreground hover:bg-sidebar-accent/50 focus-visible:bg-sidebar-accent focus-visible:ring-0 data-[state=open]:bg-sidebar-accent"
 					data-testid="sidebar-collapsed-my-chats"

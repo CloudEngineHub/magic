@@ -1,3 +1,4 @@
+import { useChatSidebarSelection } from "./hooks/useChatSidebarSelection"
 import { useCallback, useEffect, useRef, useState, type ReactNode } from "react"
 import { useRequest } from "ahooks"
 import { CirclePlus, Loader2, UsersRound } from "lucide-react"
@@ -63,7 +64,8 @@ const CollapsedWorkspaceMenu = observer(function CollapsedWorkspaceMenu({
 
 	const selectedWorkspace = workspaceStore.selectedWorkspace
 	const workspaces = workspaceStore.workspaces
-	const isShareWorkspaceActive = isCollaborationWorkspace(selectedWorkspace)
+	const { isChatRoute } = useChatSidebarSelection()
+	const isShareWorkspaceActive = !isChatRoute && isCollaborationWorkspace(selectedWorkspace)
 	const { requestConfirmation, confirmationDialog, isConfirmationOpen } =
 		useProjectPinBoundaryConfirmation()
 	const { rootRef: dndRootRef } = useCollapsedWorkspaceDnd({
@@ -191,7 +193,7 @@ const CollapsedWorkspaceMenu = observer(function CollapsedWorkspaceMenu({
 
 	const renderWorkspaceItems = () =>
 		workspaces.map((workspace) => {
-			const isActive = selectedWorkspace?.id === workspace.id
+			const isActive = !isChatRoute && selectedWorkspace?.id === workspace.id
 			return (
 				<CollapsedWorkspaceMenuWorkspaceItem
 					key={workspace.id}

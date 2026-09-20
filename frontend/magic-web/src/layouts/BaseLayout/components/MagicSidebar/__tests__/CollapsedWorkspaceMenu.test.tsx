@@ -12,7 +12,10 @@ import type { CollapsedWorkspaceMenuWorkspaceItemProps } from "../CollapsedWorks
 
 const { createChat, workspaceStore } = vi.hoisted(() => ({
 	createChat: vi.fn(),
-	workspaceStore: { selectedWorkspace: null, workspaces: [{ id: "alpha", name: "Alpha" }] },
+	workspaceStore: {
+		selectedWorkspace: null as { id: string } | null,
+		workspaces: [{ id: "alpha", name: "Alpha" }],
+	},
 }))
 const locationState = vi.hoisted(() => ({ pathname: "/global/super" }))
 vi.mock("react-router", async (importOriginal) => ({
@@ -91,11 +94,13 @@ vi.mock("@/components/shadcn-ui/popover", async () => {
 vi.mock("../CollapsedWorkspaceMenuWorkspaceItem", () => ({
 	default: ({
 		workspace,
+		isActive,
 		openProjectMenuId,
 		onProjectMenuChange,
 	}: CollapsedWorkspaceMenuWorkspaceItemProps) => (
 		<button
 			data-testid="ordinary-workspace"
+			data-active={isActive}
 			data-open={openProjectMenuId === workspace.id}
 			onClick={() => onProjectMenuChange(workspace.id)}
 		>
@@ -138,17 +143,36 @@ function Harness() {
 describe("CollapsedWorkspaceMenu conversation submenu", () => {
 	beforeEach(() => {
 		locationState.pathname = "/global/super"
+		workspaceStore.selectedWorkspace = null
 		vi.clearAllMocks()
 	})
 
-	it("selects my chats on the blank chat home in the collapsed menu", () => {
-		locationState.pathname = "/global/super/chat"
+	it.each(["/global/super/chat", "/global/super/chat/project-1/topic-1"])(
+		"does not select the cached workspace on %s",
+		(pathname) => {
+			workspaceStore.selectedWorkspace = { id: "alpha" }
+			locationState.pathname = pathname
+			render(<Harness />)
+			expect(screen.getByTestId("ordinary-workspace")).toHaveAttribute("data-active", "false")
+			expect(workspaceStore.selectedWorkspace).toEqual({ id: "alpha" })
+		},
+	)
+	it("restores the cached workspace selection on task pages", () => {
+		workspaceStore.selectedWorkspace = { id: "alpha" }
 		render(<Harness />)
-		expect(screen.getByTestId("sidebar-collapsed-my-chats")).toHaveAttribute(
-			"aria-current",
-			"page",
-		)
+		expect(screen.getByTestId("ordinary-workspace")).toHaveAttribute("data-active", "true")
 	})
+	it.each(["/global/super/chat", "/global/super/chat/project-1/topic-1"])(
+		"selects my chats in the collapsed menu on %s",
+		(pathname) => {
+			locationState.pathname = pathname
+			render(<Harness />)
+			expect(screen.getByTestId("sidebar-collapsed-my-chats")).toHaveAttribute(
+				"aria-current",
+				"page",
+			)
+		},
+	)
 
 	it("orders shared workspace and chats before ordinary workspaces without loading chats", () => {
 		render(<Harness />)
