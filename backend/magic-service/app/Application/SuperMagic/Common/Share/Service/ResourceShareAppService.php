@@ -1755,7 +1755,6 @@ class ResourceShareAppService extends AbstractShareAppService
     private function formatShareCursorRow(array $row, string $organizationCode): array
     {
         $fileKey = (string) ($row['file_key'] ?? '');
-        $links = $this->fileDomainService->getLinks($organizationCode, [$fileKey], StorageBucketType::Public);
         return [
             'file_id' => (string) ($row['file_id'] ?? ''),
             'task_id' => (string) ($row['task_id'] ?? ''),
@@ -1767,7 +1766,7 @@ class ResourceShareAppService extends AbstractShareAppService
             'file_extension' => (string) ($row['file_extension'] ?? ''),
             'file_key' => $fileKey,
             'file_size' => (int) ($row['file_size'] ?? 0),
-            'file_url' => $links[$fileKey]?->getUrl() ?? '',
+            'file_url' => '',
             'is_hidden' => (bool) ($row['is_hidden'] ?? false),
             'is_directory' => (bool) ($row['is_directory'] ?? false),
             'sort' => (int) ($row['sort'] ?? 0),
