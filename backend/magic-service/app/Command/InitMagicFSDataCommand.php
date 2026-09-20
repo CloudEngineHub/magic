@@ -7,6 +7,7 @@ declare(strict_types=1);
 
 namespace App\Command;
 
+use App\Domain\SuperMagic\File\Repository\Facade\TaskFileRepositoryInterface;
 use Hyperf\Command\Annotation\Command;
 use Hyperf\Command\Command as HyperfCommand;
 use Hyperf\Contract\StdoutLoggerInterface;
@@ -21,6 +22,7 @@ class InitMagicFSDataCommand extends HyperfCommand
     public function __construct(
         protected ContainerInterface $container,
         protected StdoutLoggerInterface $logger,
+        protected TaskFileRepositoryInterface $taskFileRepository,
     ) {
         parent::__construct('init:magicfs-data');
     }
@@ -77,31 +79,11 @@ class InitMagicFSDataCommand extends HyperfCommand
             $this->logger->info("发现 {$needUpdateCount} 条记录需要更新");
             $this->logger->info("批处理大小: {$batchSize}");
 
-            $totalProcessed = 0;
-            $batchCount = 0;
-
-            while (true) {
-                $affectedRows = Db::update(
-                    'UPDATE magic_super_agent_task_files 
-                     SET metadata_version = latest_version 
-                     WHERE metadata_version = 1 
-                     AND latest_version > 1
-                     AND deleted_at IS NULL
-                     LIMIT ?',
-                    [$batchSize]
-                );
-
-                if ($affectedRows === 0) {
-                    break;
-                }
-
-                $totalProcessed += $affectedRows;
-                ++$batchCount;
-
-                $this->logger->info("  批次 {$batchCount}：更新了 {$affectedRows} 条记录（累计: {$totalProcessed}）");
-
-                usleep(100000); // 100ms
-            }
+            // The repository owns the file mutation + namespace-head lock +
+            // precise journal append transaction.  A direct UPDATE here would
+            // leave every mounted lazy tree permanently unaware of the new
+            // metadata version and would also desynchronise aggregate stats.
+            $totalProcessed = $this->taskFileRepository->backfillMagicFSMetadataVersions($batchSize);
 
             $this->logger->info("✅ 元数据版本号初始化完成！共更新 {$totalProcessed} 条记录");
             return 0;

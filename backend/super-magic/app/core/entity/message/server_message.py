@@ -115,6 +115,8 @@ class FileTreeContent(BaseModel):
     total_dirs: int  # 总目录数
     total_size: int  # 总大小（字节）
     tree: List[FileTreeNode]  # 文件树结构
+    truncated: bool = False
+    truncated_reason: Optional[str] = None
 
 
 class CodeContent(BaseModel):

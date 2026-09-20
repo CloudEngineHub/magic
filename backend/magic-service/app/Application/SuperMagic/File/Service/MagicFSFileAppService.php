@@ -26,13 +26,18 @@ use App\Infrastructure\SuperMagic\Utils\FileTreeBuilder;
 use App\Interfaces\Authorization\Web\MagicUserAuthorization;
 use App\Interfaces\SuperMagic\File\MagicFS\DTO\Request\CreateFileRequestDTO;
 use App\Interfaces\SuperMagic\File\MagicFS\DTO\Request\GetFileTreeRequestDTO;
+use App\Interfaces\SuperMagic\File\MagicFS\DTO\Request\GetFileTreeChangesRequestDTO;
 use App\Interfaces\SuperMagic\File\MagicFS\DTO\Request\GetFileVersionsRequestDTO;
 use App\Interfaces\SuperMagic\File\MagicFS\DTO\Request\ListFilesRequestDTO;
+use App\Interfaces\SuperMagic\File\MagicFS\DTO\Request\ListChildrenPageRequestDTO;
 use App\Interfaces\SuperMagic\File\MagicFS\DTO\Request\UpdateFileRequestDTO;
 use App\Interfaces\SuperMagic\File\MagicFS\DTO\Response\FileInfoResponseDTO;
 use App\Interfaces\SuperMagic\File\MagicFS\DTO\Response\FileVersionResponseDTO;
 use App\Interfaces\SuperMagic\File\MagicFS\DTO\Response\FileVersionsResponseDTO;
 use App\Interfaces\SuperMagic\File\MagicFS\DTO\Response\ListFilesResponseDTO;
+use App\Interfaces\SuperMagic\File\MagicFS\DTO\Response\ListChildrenPageResponseDTO;
+use App\Interfaces\SuperMagic\File\MagicFS\DTO\Response\GetFileTreeChangesResponseDTO;
+use App\Interfaces\SuperMagic\File\MagicFS\DTO\Response\FileTreeChangeDTO;
 use App\Interfaces\SuperMagic\File\MagicFS\DTO\Response\MagicFSFileDTO;
 use Hyperf\Logger\LoggerFactory;
 use Psr\EventDispatcher\EventDispatcherInterface;
@@ -80,6 +85,125 @@ class MagicFSFileAppService extends AbstractAppService
     }
 
     /**
+     * Return a bounded page of direct children for a mounted directory.
+     *
+     * The cursor is opaque to callers and encodes the stable `(sort,file_id)`
+     * position.  No recursive entity/tree builder is involved in this path.
+     */
+    public function listChildrenPage(
+        MagicUserAuthorization $authorization,
+        string $parentId,
+        ListChildrenPageRequestDTO $requestDTO
+    ): ListChildrenPageResponseDTO {
+        $parentEntity = $this->assertFileAccessible($parentId, $authorization, MemberRole::VIEWER);
+        if (! $parentEntity->getIsDirectory()) {
+            ExceptionBuilder::throw(MagicFSErrorCode::PARENT_NOT_DIRECTORY, 'magicfs.parent_not_directory');
+        }
+
+        // The durable root head is the only revision that every writer
+        // advances. Using the directory's metadata_version here made a page
+        // cursor silently stale when a mutation path changed the child rows
+        // without bumping that particular parent chain.
+        $listingRevision = $this->magicFSFileDomainService->getFileTreeRevision($parentEntity);
+        $responseDTO = new ListChildrenPageResponseDTO();
+        $responseDTO->listing_revision = $listingRevision;
+
+        // A caller that already has this directory revision can avoid both the
+        // row query and all DTO/entity work.  A cursor always wins over this
+        // optimisation because it represents a continuation position.
+        if ($requestDTO->cursor === null
+            && $requestDTO->if_revision !== null
+            && $requestDTO->if_revision === $listingRevision) {
+            $responseDTO->not_modified = true;
+            return $responseDTO;
+        }
+
+        [$afterSort, $afterFileId] = $this->decodeChildrenCursor(
+            $requestDTO->cursor,
+            $parentId
+        );
+        $page = $this->magicFSFileDomainService->listFilesPageByParentId(
+            $parentId,
+            $afterSort,
+            $afterFileId,
+            $requestDTO->limit,
+            $requestDTO->file_name,
+        );
+
+        /** @var TaskFileEntity[] $items */
+        $items = $page['items'];
+        // The parent authorization check above and the repository's scoped
+        // file-tree predicates are the security boundary for this endpoint.
+        // Re-running the published-grant/project-policy check once per child
+        // turns a bounded page into N authorization queries, which defeats
+        // the purpose of keyset pagination for very large directories.
+        $responseDTO->files = array_map(
+            static fn (TaskFileEntity $entity): MagicFSFileDTO => MagicFSFileDTO::fromTaskFileEntity($entity),
+            $items
+        );
+        $responseDTO->has_more = $page['has_more'];
+
+        if ($responseDTO->has_more && $items !== []) {
+            $last = $items[array_key_last($items)];
+            $responseDTO->next_cursor = $this->encodeChildrenCursor(
+                $parentId,
+                $listingRevision,
+                $last->getSort(),
+                $last->getFileId(),
+            );
+        }
+
+        return $responseDTO;
+    }
+
+    /** @return array{0: ?int, 1: ?int} */
+    protected function decodeChildrenCursor(?string $cursor, string $parentId): array
+    {
+        if ($cursor === null || $cursor === '') {
+            return [null, null];
+        }
+
+        $padding = strlen($cursor) % 4;
+        if ($padding > 0) {
+            $cursor .= str_repeat('=', 4 - $padding);
+        }
+        $decoded = base64_decode(strtr($cursor, '-_', '+/'), true);
+        $payload = $decoded === false ? null : json_decode($decoded, true);
+        if (! is_array($payload)
+            || ! isset($payload['sort'], $payload['file_id'])
+            || ! is_numeric($payload['sort'])
+            || ! is_numeric($payload['file_id'])
+            || (int) $payload['file_id'] <= 0) {
+            ExceptionBuilder::throw(
+                MagicFSErrorCode::INVALID_CURSOR,
+                'magicfs.invalid_cursor'
+            );
+        }
+        // Cursors are opaque, but binding them to the parent prevents a
+        // continuation token copied from one directory from silently skipping
+        // rows in another. The parent binding is part of the final protocol.
+        if (! isset($payload['parent_id']) || (string) $payload['parent_id'] !== $parentId) {
+            ExceptionBuilder::throw(
+                MagicFSErrorCode::INVALID_CURSOR,
+                'magicfs.invalid_cursor'
+            );
+        }
+
+        return [(int) $payload['sort'], (int) $payload['file_id']];
+    }
+
+    protected function encodeChildrenCursor(string $parentId, int $revision, int $sort, int $fileId): string
+    {
+        $raw = json_encode([
+            'parent_id' => $parentId,
+            'revision' => $revision,
+            'sort' => $sort,
+            'file_id' => $fileId,
+        ], JSON_THROW_ON_ERROR);
+        return rtrim(strtr(base64_encode($raw), '+/', '-_'), '=');
+    }
+
+    /**
      * 获取文件信息.
      */
     public function getFileInfo(MagicUserAuthorization $authorization, string $fileId): FileInfoResponseDTO
@@ -103,6 +227,46 @@ class MagicFSFileAppService extends AbstractAppService
         // 转换为 DTO，返回元数据版本号
         $responseDTO = new FileVersionResponseDTO();
         $responseDTO->version = $fileEntity->getMetadataVersion();
+
+        return $responseDTO;
+    }
+
+    /**
+     * Read precise file-tree changes after a durable cursor.
+     */
+    public function getFileTreeChanges(
+        MagicUserAuthorization $authorization,
+        string $rootFileId,
+        GetFileTreeChangesRequestDTO $requestDTO
+    ): GetFileTreeChangesResponseDTO {
+        // Authorize the root once. Every journal row is keyed by this
+        // root_file_id; the repository validates the file-tree identity.
+        $this->assertFileAccessible($rootFileId, $authorization, MemberRole::VIEWER);
+        $result = $this->magicFSFileDomainService->getFileTreeChanges(
+            $rootFileId,
+            $requestDTO->since_revision,
+            $requestDTO->limit
+        );
+
+        $responseDTO = new GetFileTreeChangesResponseDTO();
+        $responseDTO->revision = $result['revision'];
+        $responseDTO->has_more = $result['has_more'];
+        $responseDTO->cursor_expired = $result['cursor_expired'];
+        foreach ($result['rows'] as $row) {
+            $responseDTO->changes[] = FileTreeChangeDTO::fromRow((array) $row);
+        }
+
+        if ($responseDTO->changes !== []) {
+            $last = $responseDTO->changes[array_key_last($responseDTO->changes)];
+            $responseDTO->next_revision = $last->revision;
+        } elseif ($responseDTO->cursor_expired) {
+            // The server has compacted rows before the requested cursor. The
+            // client must invalidate resident directories and resume at the
+            // current head; replaying from the stale cursor is impossible.
+            $responseDTO->next_revision = $responseDTO->revision;
+        } else {
+            $responseDTO->next_revision = $requestDTO->since_revision;
+        }
 
         return $responseDTO;
     }
@@ -321,7 +485,9 @@ class MagicFSFileAppService extends AbstractAppService
             $fileId,
             $requestDTO->depth,
             0,
-            $fileEntity->getSpaceType()
+            $fileEntity->getSpaceType(),
+            $requestDTO->max_nodes,
+            $requestDTO->max_bytes
         );
 
         // 2. 获取根文件和子节点列表
@@ -351,6 +517,9 @@ class MagicFSFileAppService extends AbstractAppService
         // 5. 创建响应 DTO（复用 FileInfoResponseDTO）
         $responseDTO = new FileInfoResponseDTO();
         $responseDTO->file = $rootDTO;
+        $responseDTO->truncated = (bool) ($treeData['truncated'] ?? false);
+        $responseDTO->truncated_reason = $treeData['truncated_reason'] ?? null;
+        $responseDTO->returned_nodes = (int) ($treeData['returned_nodes'] ?? count($children));
 
         // 6. 记录日志
         $this->logger->info('[TREE] File tree generated', [
@@ -358,6 +527,10 @@ class MagicFSFileAppService extends AbstractAppService
             'depth' => $requestDTO->depth,
             'root_name' => $rootFile->getFileName(),
             'total_children' => count($children),
+            'truncated' => $responseDTO->truncated,
+            'truncated_reason' => $responseDTO->truncated_reason,
+            'max_nodes' => $requestDTO->max_nodes,
+            'max_bytes' => $requestDTO->max_bytes,
         ]);
 
         return $responseDTO;
@@ -435,7 +608,7 @@ class MagicFSFileAppService extends AbstractAppService
     protected function assertFileEntitiesAccessible(array $files, MagicUserAuthorization $authorization, MemberRole $requiredRole): void
     {
         $checkedProjects = [];
-        $checkedUserScopes = [];
+        $checkedUserAccessKeys = [];
         $publishedContext = ['files' => []];
         foreach ($files as $file) {
             $publishedContext['files'][$file->getFileId()] = $file;
@@ -444,12 +617,12 @@ class MagicFSFileAppService extends AbstractAppService
             $this->assertMountableSpaceFile($fileEntity);
             $projectId = $fileEntity->getProjectId();
             if ($projectId <= 0) {
-                $scopeKey = $fileEntity->getOrganizationCode() . '|' . $fileEntity->getUserId();
-                if (isset($checkedUserScopes[$scopeKey])) {
+                $userAccessKey = $fileEntity->getOrganizationCode() . '|' . $fileEntity->getUserId();
+                if (isset($checkedUserAccessKeys[$userAccessKey])) {
                     continue;
                 }
                 $this->assertUserSpaceFileAccessible($fileEntity, $authorization);
-                $checkedUserScopes[$scopeKey] = true;
+                $checkedUserAccessKeys[$userAccessKey] = true;
                 continue;
             }
             if (isset($checkedProjects[$projectId])) {
@@ -489,11 +662,11 @@ class MagicFSFileAppService extends AbstractAppService
     }
 
     /**
-     * MagicFS 只承载文件系统命名空间（project/user/topic）的文件；
-     * 消息内容、快照等内部资源不属于文件系统命名空间。
+     * MagicFS 只承载文件树（project/user/topic）的文件；
+     * 消息内容、快照等内部资源不属于文件树。
      *
      * 判据使用 space_type：storage_type 是历史遗留的物理存储归类字段（已标记废弃，
-     * 后续废除），与文件系统命名空间并非一一对应，不再作为命名空间校验依据。
+     * 后续废除），与文件树并非一一对应，不再作为文件树校验依据。
      * 过渡期由 FileSpaceType::toStorageType() 建立映射：user→user、topic→topic、
      * 其余（project）→workspace，保证新写入两字段一致，但鉴权仍以 space_type 为准。
      */
@@ -555,10 +728,10 @@ class MagicFSFileAppService extends AbstractAppService
      * 他人任务/话题，从而在受害者附件视图中注入文件。
      *
      * 校验规则：
-     *   - task 非空 → task 必须与父目录同 scope（user 空间比对 userId，
+     *   - task 非空 → task 必须与父目录同文件树（user 空间比对 userId，
      *     project 空间比对 projectId）；若请求同时携带 topic_id 且与 task.topicId
      *     不一致则拒绝；task 命中即覆盖 topic，结束。
-     *   - task 未命中但 topic_id 非空 → topic 必须与父目录同 scope。
+     *   - task 未命中但 topic_id 非空 → topic 必须与父目录同文件树。
      *   - task 未命中但 task.topicId 为 0 且请求 topic_id 非空 → 落入 Domain
      *     的 fallback 路径，因此仍需独立校验请求 topic_id 的归属。
      */

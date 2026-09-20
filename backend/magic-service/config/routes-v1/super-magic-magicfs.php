@@ -34,6 +34,10 @@ Router::addGroup(
             // 获取文件信息
             Router::post('/{id}/queries', [MagicFSApi::class, 'getFileInfo']);
 
+            // 按直接子项分页读取目录。挂载端必须使用此接口，禁止通过
+            // tree 接口把整个项目元数据加载进单个请求。
+            Router::post('/{id}/children', [MagicFSApi::class, 'listChildrenPage']);
+
             // 创建文件或目录
             Router::post('', [MagicFSApi::class, 'createFile']);
 
@@ -43,11 +47,17 @@ Router::addGroup(
             // 删除文件或目录
             Router::delete('/{id}', [MagicFSApi::class, 'deleteFile']);
 
-            // 获取文件树
+            // Legacy/export tree API. It is strictly bounded by depth,
+            // max_nodes and max_bytes; mount/FUSE code must use children
+            // pages plus the change feed instead.
             Router::post('/{id}/tree', [MagicFSApi::class, 'getFileTree']);
 
             // 获取单个文件版本号
             Router::get('/{id}/version', [MagicFSApi::class, 'getFileVersion']);
+
+            // 按持久化游标读取精准变更；挂载同步使用该接口，不再因根
+            // 版本变化而重新下载整棵树。
+            Router::get('/{id}/changes', [MagicFSApi::class, 'getFileTreeChanges']);
         });
     },
     ['middleware' => [SandboxUserAuthMiddleware::class]]

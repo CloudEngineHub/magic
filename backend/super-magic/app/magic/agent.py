@@ -288,6 +288,7 @@ class Agent(BaseAgent):
         self._active_run_task: asyncio.Task[object] | None = None
         self._tool_preflight_failures: Dict[str, str] = {}
         self._workspace_snapshot: WorkspaceSnapshot | None = None
+        self._workspace_snapshot_signature: tuple[int, int] | None = None
         # 当前最近一次真实 LLM 请求是否包含原生图片输入。
         self._last_llm_request_contains_native_images = False
         # 同一轮只注入一次相同的原生视觉 Horizon 状态，避免工具循环重复提示。
@@ -685,6 +686,18 @@ class Agent(BaseAgent):
 
     async def _get_workspace_snapshot(self) -> WorkspaceSnapshot:
         """扫描工作区文件树并生成快照。"""
+        workspace_root = Path(self.agent_context._workspace_dir)
+        try:
+            root_stat = workspace_root.stat()
+            signature = (root_stat.st_mtime_ns, root_stat.st_ino)
+        except OSError:
+            signature = None
+        # Horizon asks for a snapshot before every context build.  Reuse the
+        # last bounded snapshot while the mount's root revision is unchanged;
+        # this removes repeated full depth-limited walks from tool loops.
+        if self._workspace_snapshot is not None and signature == self._workspace_snapshot_signature:
+            return self._workspace_snapshot
+
         logger.info("扫描工作区文件树")
         list_dir_tool = ListDir()
         content = await list_dir_tool.get_file_tree_async(
@@ -698,8 +711,14 @@ class Agent(BaseAgent):
             max_chars=WORKSPACE_FILES_DISPLAY_MAX_CHARS,
             scan_depth=WORKSPACE_TREE_SCAN_DEPTH,
         )
+        if content.truncated:
+            # The agent calls the structured scanner directly (rather than
+            # ListDir.execute), so preserve the bounded-scan signal in the
+            # workspace context as well as in the interactive tool output.
+            display += "\n[TRUNCATED] Workspace discovery reached its bounded budget; inspect a narrower path for more entries.\n"
         snapshot = WorkspaceSnapshot(display=display, entries=entries)
         self._workspace_snapshot = snapshot
+        self._workspace_snapshot_signature = signature
         return snapshot
 
     async def _get_memory_directory_snapshot(self) -> MemoryDirectorySnapshot | None:

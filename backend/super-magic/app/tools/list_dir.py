@@ -1,5 +1,6 @@
 from app.i18n import i18n
 import asyncio
+import os
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 from datetime import datetime
@@ -17,6 +18,9 @@ from agentlang.utils.file import (
 )
 
 logger = get_logger(__name__)
+
+LIST_DIR_MAX_NODES = 5000
+LIST_DIR_MAX_BYTES = 2 * 1024 * 1024
 
 
 class ListDirParams(BaseToolParams):
@@ -160,12 +164,25 @@ class ListDir(WorkspaceTool[ListDirParams]):
                 total_files=0,
                 total_dirs=0,
                 total_size=0,
-                tree=[]
+                tree=[],
+                truncated=False,
             )
 
         try:
             # 统计信息
-            stats = {"total_files": 0, "total_dirs": 0, "total_size": 0}
+            stats = {
+                "total_files": 0,
+                "total_dirs": 0,
+                "total_size": 0,
+                "nodes": 0,
+                # This is an estimate of the serialized tree metadata, not
+                # the contents of the files.  Capping on total file bytes
+                # would truncate a project after encountering one large
+                # binary/source file even though the directory response is
+                # still tiny.
+                "response_bytes": 0,
+                "truncated": False,
+            }
 
             # 递归构建文件树
             tree = self._build_file_tree(target_path, relative_workspace_path, 1, level, filter_binary, stats)
@@ -177,7 +194,9 @@ class ListDir(WorkspaceTool[ListDirParams]):
                 total_files=stats["total_files"],
                 total_dirs=stats["total_dirs"],
                 total_size=stats["total_size"],
-                tree=tree
+                tree=tree,
+                truncated=bool(stats["truncated"]),
+                truncated_reason=("node_or_bytes_budget" if stats["truncated"] else None),
             )
 
         except Exception as e:
@@ -190,7 +209,9 @@ class ListDir(WorkspaceTool[ListDirParams]):
                 total_files=0,
                 total_dirs=0,
                 total_size=0,
-                tree=[]
+                tree=[],
+                truncated=True,
+                truncated_reason="scan_error",
             )
 
     def _get_string_result(self, relative_workspace_path: str, file_tree_content: FileTreeContent) -> str:
@@ -204,7 +225,10 @@ class ListDir(WorkspaceTool[ListDirParams]):
                 return f"错误：路径不是目录: {target_path}"
 
                 # 从结构化数据生成字符串表示
-        return self._convert_file_tree_to_string(file_tree_content)
+        result = self._convert_file_tree_to_string(file_tree_content)
+        if file_tree_content.truncated:
+            result += "\n[TRUNCATED] Directory discovery reached its bounded budget; narrow the path to inspect more.\n"
+        return result
 
     def _is_text_file(self, file_path: Path) -> bool:
         """判断文件是否为文本/代码文件"""
@@ -291,21 +315,33 @@ class ListDir(WorkspaceTool[ListDirParams]):
         )
 
     def _build_file_tree(self, current_path: Path, relative_path: str, current_level: int,
-                        max_level: int, filter_binary: bool, stats: Dict[str, int]) -> List[FileTreeNode]:
-        """递归构建文件树结构"""
-        if current_level > max_level:
+                        max_level: int, filter_binary: bool, stats: Dict[str, Any]) -> List[FileTreeNode]:
+        """Build a depth-limited tree with explicit node/byte budgets."""
+        if current_level > max_level or stats["nodes"] >= LIST_DIR_MAX_NODES:
+            stats["truncated"] = True
             return []
 
-        # 文件系统读取
         try:
-            items = sorted(
-                list(current_path.iterdir()),
-                key=lambda x: (not x.is_dir(), x.name.lower())
-            )
-
+            entries: list[tuple[os.DirEntry[str], bool]] = []
+            # scandir yields entries incrementally.  We stop at the budget
+            # while reading, instead of first materialising an unbounded list.
+            with os.scandir(current_path) as scanner:
+                for entry in scanner:
+                    if entry.name.startswith('.') and entry.name != '.magic':
+                        continue
+                    try:
+                        is_dir = entry.is_dir(follow_symlinks=False)
+                    except OSError:
+                        continue
+                    if filter_binary and not is_dir and not self._is_text_file(Path(entry.path)):
+                        continue
+                    if stats["nodes"] >= LIST_DIR_MAX_NODES:
+                        stats["truncated"] = True
+                        break
+                    stats["nodes"] += 1
+                    entries.append((entry, is_dir))
         except PermissionError:
-            # 创建权限错误节点
-            error_node = FileTreeNode(
+            return [FileTreeNode(
                 file_name="Permission denied",
                 relative_file_path=f"{relative_path}/[ERROR]",
                 is_directory=False,
@@ -313,86 +349,71 @@ class ListDir(WorkspaceTool[ListDirParams]):
                 updated_at="",
                 children=None,
                 type=FileTreeNodeType.FILE,
-                error="Permission denied"
-            )
-            return [error_node]
-        except Exception as e:
-            # 创建访问错误节点
-            error_node = FileTreeNode(
-                file_name=f"Cannot access: {e!s}",
+                error="Permission denied",
+            )]
+        except Exception as error:
+            return [FileTreeNode(
+                file_name=f"Cannot access: {error!s}",
                 relative_file_path=f"{relative_path}/[ERROR]",
                 is_directory=False,
                 file_size=None,
                 updated_at="",
                 children=None,
                 type=FileTreeNodeType.FILE,
-                error=f"Cannot access: {e!s}"
-            )
-            return [error_node]
+                error=f"Cannot access: {error!s}",
+            )]
 
-        # 过滤隐藏文件，但允许 .magic 目录
-        _ALLOWED_HIDDEN = {".magic"}
-        items = [item for item in items if not item.name.startswith('.') or item.name in _ALLOWED_HIDDEN]
-
-        # 过滤二进制文件
-        if filter_binary:
-            items = [item for item in items if item.is_dir() or self._is_text_file(item)]
-
-        tree_nodes = []
-
-        for item in items:
+        entries.sort(key=lambda pair: (not pair[1], pair[0].name.lower()))
+        tree_nodes: list[FileTreeNode] = []
+        for entry, is_dir in entries:
             try:
-                # 计算相对路径
-                if relative_path == ".":
-                    item_relative_path = item.name
-                else:
-                    item_relative_path = f"{relative_path}/{item.name}"
-
-                if item.is_dir():
-                    # 处理目录
+                item_relative_path = (
+                    entry.name if relative_path == "."
+                    else f"{relative_path}/{entry.name}"
+                )
+                stat_result = entry.stat(follow_symlinks=False)
+                # Bound the metadata response itself.  Do not use
+                # stat_result.st_size here: the tree contains file metadata,
+                # not file contents, so a multi-gigabyte file should not by
+                # itself consume the discovery budget.
+                estimated_node_bytes = (
+                    len(item_relative_path.encode("utf-8", errors="ignore"))
+                    + len(entry.name.encode("utf-8", errors="ignore"))
+                    + 128
+                )
+                if stats["response_bytes"] + estimated_node_bytes > LIST_DIR_MAX_BYTES:
+                    stats["truncated"] = True
+                    break
+                stats["response_bytes"] += estimated_node_bytes
+                if is_dir:
                     stats["total_dirs"] += 1
-
-                    # 递归获取子节点
-                    children = []
-                    if current_level < max_level:
-                        children = self._build_file_tree(
-                            item, item_relative_path, current_level + 1,
-                            max_level, filter_binary, stats
-                        )
-
-                    node = FileTreeNode(
-                        file_name=item.name,
+                    children = self._build_file_tree(
+                        Path(entry.path), item_relative_path, current_level + 1,
+                        max_level, filter_binary, stats
+                    ) if current_level < max_level else []
+                    tree_nodes.append(FileTreeNode(
+                        file_name=entry.name,
                         relative_file_path=item_relative_path,
                         is_directory=True,
                         file_size=None,
-                        updated_at=self._format_timestamp(item.stat().st_mtime),
+                        updated_at=self._format_timestamp(stat_result.st_mtime),
                         children=children if children else None,
-                        type=FileTreeNodeType.DIRECTORY
-                    )
-                    tree_nodes.append(node)
-
+                        type=FileTreeNodeType.DIRECTORY,
+                    ))
                 else:
-                    # 处理文件
                     stats["total_files"] += 1
-                    stat_result = item.stat()
-                    file_size = stat_result.st_size
-                    stats["total_size"] += file_size
-
-                    node = FileTreeNode(
-                        file_name=item.name,
+                    stats["total_size"] += stat_result.st_size
+                    tree_nodes.append(FileTreeNode(
+                        file_name=entry.name,
                         relative_file_path=item_relative_path,
                         is_directory=False,
-                        file_size=file_size,
+                        file_size=stat_result.st_size,
                         updated_at=self._format_timestamp(stat_result.st_mtime),
                         children=None,
-                        type=FileTreeNodeType.FILE
-                    )
-                    tree_nodes.append(node)
-
-            except Exception as e:
-                logger.warning(f"Error processing {item}: {e}")
-                continue
-
+                        type=FileTreeNodeType.FILE,
+                    ))
+            except Exception as error:
+                logger.warning(f"Error processing {entry.path}: {error}")
         return tree_nodes
 
     def _convert_file_tree_to_string(self, file_tree_content: FileTreeContent) -> str:
