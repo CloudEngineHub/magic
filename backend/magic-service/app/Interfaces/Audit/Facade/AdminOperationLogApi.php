@@ -11,6 +11,9 @@ use App\Application\Audit\ModelCall\Service\AuditService as ModelAuditService;
 use App\Application\Audit\Service\AdminOperationLogAppService;
 use App\Application\Kernel\Enum\MagicOperationEnum;
 use App\Application\Kernel\Enum\MagicResourceEnum;
+use App\Domain\Provider\Entity\ValueObject\ProviderVirtualIdentity;
+use App\ErrorCode\GenericErrorCode;
+use App\Infrastructure\Core\Exception\ExceptionBuilder;
 use App\Infrastructure\Util\OfficialOrganizationUtil;
 use App\Infrastructure\Util\Permission\Annotation\CheckPermission;
 use App\Interfaces\Audit\Assembler\AdminOperationLogAssembler;
@@ -123,7 +126,9 @@ class AdminOperationLogApi extends AbstractPermissionApi
         if ($providerName !== '') {
             $filters['provider_name'] = $providerName;
         }
-        if ($serviceProviderConfigId !== '') {
+        if ($serviceProviderConfigId !== ''
+            && ! ProviderVirtualIdentity::isPlatformOfficialId($serviceProviderConfigId)
+        ) {
             $filters['service_provider_config_id'] = $serviceProviderConfigId;
         }
         if ($userId !== '') {
@@ -144,8 +149,8 @@ class AdminOperationLogApi extends AbstractPermissionApi
         if ($isOfficialOrganization && $organizationCode !== '') {
             $filters['organization_code'] = $organizationCode;
         }
-        $startDateMs = $this->parseDateToMs($startDate, '00:00:00');
-        $endDateMs = $this->parseDateToMs($endDate, '23:59:59');
+        $startDateMs = $this->parseListDateToMs($startDate, '00:00:00');
+        $endDateMs = $this->parseListDateToMs($endDate, '23:59:59');
         if ($startDateMs !== null) {
             $filters['start_operation_time'] = $startDateMs;
         }
@@ -185,13 +190,19 @@ class AdminOperationLogApi extends AbstractPermissionApi
         $accessScope = trim((string) $this->request->input('access_scope', ''));
         $organizationCode = trim((string) $this->request->input('organization_code', ''));
 
-        $startMs = $this->parseDateTimeToMs($startDate);
-        $endMs = $this->parseDateTimeToMs($endDate);
+        if (($startDate === '') !== ($endDate === '')) {
+            ExceptionBuilder::throw(
+                GenericErrorCode::ParameterValidationFailed,
+                'start_date and end_date must be provided together'
+            );
+        }
 
-        if ($startMs === null && $endMs === null) {
+        if ($startDate === '' && $endDate === '') {
             $tz = new DateTimeZone((string) config('app.default_timezone', 'Asia/Shanghai'));
             $startMs = (new DateTimeImmutable('today', $tz))->setTime(0, 0, 0)->getTimestamp() * 1000;
-            $endMs = (new DateTimeImmutable('today', $tz))->setTime(23, 59, 59)->getTimestamp() * 1000 + 999;
+            $endMs = (new DateTimeImmutable('tomorrow', $tz))->setTime(0, 0, 0)->getTimestamp() * 1000;
+        } else {
+            [$startMs, $endMs] = $this->parseStatisticsRange($startDate, $endDate);
         }
 
         $filters = [
@@ -219,34 +230,61 @@ class AdminOperationLogApi extends AbstractPermissionApi
         );
     }
 
-    private function parseDateTimeToMs(string $dateTime): ?int
+    /** @return array{0: int, 1: int} */
+    private function parseStatisticsRange(string $startDate, string $endDate): array
     {
-        if ($dateTime === '') {
-            return null;
+        $timezone = new DateTimeZone((string) config('app.default_timezone', 'Asia/Shanghai'));
+        $isDateRange = preg_match('/^\d{4}-\d{2}-\d{2}$/', $startDate) === 1
+            && preg_match('/^\d{4}-\d{2}-\d{2}$/', $endDate) === 1;
+        $isHourRange = preg_match('/^\d{4}-\d{2}-\d{2} \d{2}:00:00$/', $startDate) === 1
+            && preg_match('/^\d{4}-\d{2}-\d{2} \d{2}:00:00$/', $endDate) === 1;
+        if (! $isDateRange && ! $isHourRange) {
+            ExceptionBuilder::throw(
+                GenericErrorCode::ParameterValidationFailed,
+                'start_date and end_date must both be natural dates or whole hours'
+            );
         }
 
-        $dt = DateTimeImmutable::createFromFormat('Y-m-d H:i:s', $dateTime);
-        if (! $dt) {
-            return null;
+        $format = $isDateRange ? '!Y-m-d' : '!Y-m-d H:i:s';
+        $start = DateTimeImmutable::createFromFormat($format, $startDate, $timezone);
+        $startErrors = DateTimeImmutable::getLastErrors();
+        $end = DateTimeImmutable::createFromFormat($format, $endDate, $timezone);
+        $endErrors = DateTimeImmutable::getLastErrors();
+        if (! $start || ! $end
+            || ($startErrors !== false && ($startErrors['warning_count'] > 0 || $startErrors['error_count'] > 0))
+            || ($endErrors !== false && ($endErrors['warning_count'] > 0 || $endErrors['error_count'] > 0))
+            || $start->format($isDateRange ? 'Y-m-d' : 'Y-m-d H:i:s') !== $startDate
+            || $end->format($isDateRange ? 'Y-m-d' : 'Y-m-d H:i:s') !== $endDate
+            || $start > $end
+        ) {
+            ExceptionBuilder::throw(GenericErrorCode::ParameterValidationFailed, 'invalid statistics time range');
         }
 
-        return $dt->getTimestamp() * 1000;
+        $exclusiveEnd = $end->modify($isDateRange ? '+1 day' : '+1 hour');
+        $tomorrowStart = new DateTimeImmutable('tomorrow', $timezone);
+        if ($exclusiveEnd > $tomorrowStart) {
+            ExceptionBuilder::throw(
+                GenericErrorCode::ParameterValidationFailed,
+                'end_date cannot be later than today'
+            );
+        }
+        return [$start->getTimestamp() * 1000, $exclusiveEnd->getTimestamp() * 1000];
     }
 
-    private function parseDateToMs(string $date, string $defaultTime): ?int
+    private function parseListDateToMs(string $date, string $defaultTime): ?int
     {
         if ($date === '') {
             return null;
         }
 
-        $dateTime = DateTimeImmutable::createFromFormat('Y-m-d H:i:s', $date);
-        if (! $dateTime) {
-            $dateTime = DateTimeImmutable::createFromFormat(
-                'Y-m-d H:i:s',
-                $date . ' ' . $defaultTime
-            );
-        }
-        if (! $dateTime) {
+        $timezone = new DateTimeZone((string) config('app.default_timezone', 'Asia/Shanghai'));
+        $value = strlen($date) === 10 ? $date . ' ' . $defaultTime : $date;
+        $dateTime = DateTimeImmutable::createFromFormat('!Y-m-d H:i:s', $value, $timezone);
+        $errors = DateTimeImmutable::getLastErrors();
+        if (! $dateTime
+            || ($errors !== false && ($errors['warning_count'] > 0 || $errors['error_count'] > 0))
+            || $dateTime->format('Y-m-d H:i:s') !== $value
+        ) {
             return null;
         }
 

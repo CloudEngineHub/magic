@@ -8,6 +8,7 @@ declare(strict_types=1);
 namespace App\Interfaces\Provider\DTO;
 
 use App\Domain\Provider\Entity\ValueObject\ProviderConfigSearchField;
+use App\Domain\Provider\Entity\ValueObject\ProviderVirtualIdentity;
 use App\ErrorCode\GenericErrorCode;
 use App\Infrastructure\Core\AbstractDTO;
 use App\Infrastructure\Core\Exception\ExceptionBuilder;
@@ -35,7 +36,10 @@ class ProviderConfigSearchRequest extends AbstractDTO
         if ($this->keyword === '') {
             ExceptionBuilder::throw(GenericErrorCode::ParameterValidationFailed, 'common.empty', ['label' => 'keyword']);
         }
-        if ($this->searchType === ProviderConfigSearchField::ConfigId && ! ctype_digit($this->keyword)) {
+        if ($this->searchType === ProviderConfigSearchField::ConfigId
+            && ! ctype_digit($this->keyword)
+            && ! ProviderVirtualIdentity::isPlatformOfficialId($this->keyword)
+        ) {
             ExceptionBuilder::throw(GenericErrorCode::ParameterValidationFailed, 'common.invalid', ['label' => 'keyword']);
         }
     }

@@ -34,6 +34,7 @@ use App\Domain\Provider\Entity\ValueObject\NaturalLanguageProcessing;
 use App\Domain\Provider\Entity\ValueObject\ProviderCode;
 use App\Domain\Provider\Entity\ValueObject\ProviderConfigSearchField;
 use App\Domain\Provider\Entity\ValueObject\ProviderDataIsolation;
+use App\Domain\Provider\Entity\ValueObject\ProviderVirtualIdentity;
 use App\Domain\Provider\Entity\ValueObject\Query\ProviderModelQuery;
 use App\Domain\Provider\Entity\ValueObject\Status;
 use App\Domain\Provider\Event\ProviderConfigCreatedEvent;
@@ -120,6 +121,15 @@ readonly class AdminProviderAppService
             $authorization->getOrganizationCode(),
             $authorization->getId(),
         );
+
+        if (ProviderVirtualIdentity::matchesPlatformOfficialSearch($searchField, $keyword)) {
+            return [
+                'total' => 1,
+                'list' => $page->getPage() === 1
+                    ? [ProviderVirtualIdentity::platformOfficialSelectorItem()]
+                    : [],
+            ];
+        }
 
         return $this->providerConfigDomainService->searchProviderConfigs(
             $dataIsolation,

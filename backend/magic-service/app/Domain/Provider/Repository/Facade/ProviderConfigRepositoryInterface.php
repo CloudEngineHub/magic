@@ -41,6 +41,17 @@ interface ProviderConfigRepositoryInterface
         string $keyword
     ): array;
 
+    /**
+     * 获取服务商配置的身份元数据，不读取配置密钥内容。
+     *
+     * @param array<int> $ids
+     * @return array<int, array{service_provider_config_id: string, organization_code: string, provider_name: string, provider_alias: string}>
+     */
+    public function getProviderConfigIdentityMetadataByIds(array $ids): array;
+
+    /** @return array<int> */
+    public function getOfficialOrganizationConfigIds(): array;
+
     public function save(ProviderDataIsolation $dataIsolation, ProviderConfigEntity $providerConfigEntity): ProviderConfigEntity;
 
     public function updateProviderCode(ProviderDataIsolation $dataIsolation, string $id, string $providerCode): void;

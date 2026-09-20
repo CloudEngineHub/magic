@@ -131,9 +131,11 @@ class ProviderConfigRepository extends AbstractModelRepository implements Provid
             ->join('service_provider as provider', 'provider.id', '=', 'service_provider_configs.service_provider_id')
             ->whereNull('provider.deleted_at');
 
-        if (! $dataIsolation->isOfficialOrganization()) {
+        $isOfficialOrganization = $dataIsolation->isOfficialOrganization();
+        $currentOrganizationCode = $dataIsolation->getCurrentOrganizationCode();
+        if (! $isOfficialOrganization) {
             $query
-                ->where('service_provider_configs.organization_code', $dataIsolation->getCurrentOrganizationCode())
+                ->where('service_provider_configs.organization_code', $currentOrganizationCode)
                 ->where('provider.provider_type', '!=', ProviderType::Official->value);
         }
 
@@ -151,7 +153,6 @@ class ProviderConfigRepository extends AbstractModelRepository implements Provid
                 'service_provider_configs.service_provider_id',
                 'provider.name as provider_name',
                 'service_provider_configs.alias as provider_alias',
-                'provider.provider_type',
             ])
             ->orderBy('service_provider_configs.sort', 'desc')
             ->orderBy('service_provider_configs.id', 'asc')
@@ -161,12 +162,64 @@ class ProviderConfigRepository extends AbstractModelRepository implements Provid
 
         return [
             'total' => $total,
-            'list' => array_map(static function (object $row): array {
-                $providerConfig = (array) $row;
-                unset($providerConfig['provider_type']);
-                return $providerConfig;
-            }, $rows),
+            'list' => array_map(static fn (object $providerConfig): array => (array) $providerConfig, $rows),
         ];
+    }
+
+    public function getOfficialOrganizationConfigIds(): array
+    {
+        $officialOrganizationCode = OfficialOrganizationUtil::getOfficialOrganizationCode();
+        if ($officialOrganizationCode === '') {
+            return [];
+        }
+
+        return $this->createConfigQuery()
+            ->join('service_provider as provider', 'provider.id', '=', 'service_provider_configs.service_provider_id')
+            ->whereNull('provider.deleted_at')
+            ->where('service_provider_configs.organization_code', $officialOrganizationCode)
+            ->pluck('service_provider_configs.id')
+            ->map(static fn ($id): int => (int) $id)
+            ->filter(static fn (int $id): bool => $id > 0)
+            ->values()
+            ->toArray();
+    }
+
+    public function getProviderConfigIdentityMetadataByIds(array $ids): array
+    {
+        $ids = array_values(array_unique(array_map('intval', $ids)));
+        if ($ids === []) {
+            return [];
+        }
+
+        $rows = $this->createConfigQuery()
+            ->join('service_provider as provider', 'provider.id', '=', 'service_provider_configs.service_provider_id')
+            ->whereNull('provider.deleted_at')
+            ->whereIn('service_provider_configs.id', $ids)
+            ->select([
+                'service_provider_configs.id as service_provider_config_id',
+                'service_provider_configs.organization_code',
+                'service_provider_configs.alias as provider_alias',
+                'provider.name as provider_name',
+            ])
+            ->get()
+            ->toArray();
+
+        $result = [];
+        foreach ($rows as $row) {
+            $row = (array) $row;
+            $configId = (int) ($row['service_provider_config_id'] ?? 0);
+            if ($configId <= 0) {
+                continue;
+            }
+            $result[$configId] = [
+                'service_provider_config_id' => (string) $configId,
+                'organization_code' => (string) ($row['organization_code'] ?? ''),
+                'provider_name' => (string) ($row['provider_name'] ?? ''),
+                'provider_alias' => (string) ($row['provider_alias'] ?? ''),
+            ];
+        }
+
+        return $result;
     }
 
     public function save(ProviderDataIsolation $dataIsolation, ProviderConfigEntity $providerConfigEntity): ProviderConfigEntity

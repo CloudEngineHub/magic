@@ -14,7 +14,6 @@ use App\Domain\Provider\Entity\ProviderEntity;
 use App\Domain\Provider\Entity\ValueObject\ProviderCode;
 use App\Domain\Provider\Entity\ValueObject\ProviderConfigSearchField;
 use App\Domain\Provider\Entity\ValueObject\ProviderDataIsolation;
-use App\Domain\Provider\Entity\ValueObject\ProviderType;
 use App\Domain\Provider\Entity\ValueObject\Query\ProviderConfigQuery;
 use App\Domain\Provider\Entity\ValueObject\Status;
 use App\Domain\Provider\Repository\Facade\ProviderConfigRepositoryInterface;
@@ -160,10 +159,6 @@ class ProviderConfigDomainService
             ExceptionBuilder::throw(ServiceProviderErrorCode::ServiceProviderNotFound);
         }
 
-        //        if ($provider->getProviderType() === ProviderType::Official) {
-        //            ExceptionBuilder::throw(ServiceProviderErrorCode::SystemError);
-        //        }
-
         $providerConfigEntity->setStatus(Status::Enabled);
 
         return $this->serviceProviderConfigRepository->save($dataIsolation, $providerConfigEntity);
@@ -209,6 +204,21 @@ class ProviderConfigDomainService
     public function getConfigByIdsWithoutOrganizationFilter(array $ids): array
     {
         return $this->serviceProviderConfigRepository->getByIdsWithoutOrganizationFilter($ids);
+    }
+
+    /**
+     * @param array<int> $ids
+     * @return array<int, array{service_provider_config_id: string, organization_code: string, provider_name: string, provider_alias: string}>
+     */
+    public function getProviderConfigIdentityMetadataByIds(array $ids): array
+    {
+        return $this->serviceProviderConfigRepository->getProviderConfigIdentityMetadataByIds($ids);
+    }
+
+    /** @return array<int> */
+    public function getOfficialOrganizationConfigIds(): array
+    {
+        return $this->serviceProviderConfigRepository->getOfficialOrganizationConfigIds();
     }
 
     /**
@@ -388,11 +398,6 @@ class ProviderConfigDomainService
         if ($provider === null) {
             ExceptionBuilder::throw(ServiceProviderErrorCode::ServiceProviderNotFound);
         }
-
-        // 支持修改官方服务商
-        /*if ($provider->getProviderType() === ProviderType::Official) {
-            ExceptionBuilder::throw(ServiceProviderErrorCode::SystemError);
-        }*/
 
         // 使用统一的配置更新逻辑
         return $this->updateProviderConfigData($dataIsolation, $existingConfigEntity, $providerConfigEntity);
