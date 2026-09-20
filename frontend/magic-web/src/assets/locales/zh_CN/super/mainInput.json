@@ -21,6 +21,11 @@
 	"attachments": {
 		"removeAriaLabel": "移除 {{fileName}}"
 	},
+	"chatHome": {
+		"placeholder": "描述你的需求或上传文件，我会和你一起找到答案。\nEnter 发送；Shift + Enter 换行",
+		"subtitle": "让 AI 帮你梳理思路、解决问题",
+		"title": "从一个问题开始吧"
+	},
 	"chatInput": {
 		"helpText": "按 Enter 发送；Shift + Enter 换行",
 		"mobilePlaceholder": "点击输入任务需求",

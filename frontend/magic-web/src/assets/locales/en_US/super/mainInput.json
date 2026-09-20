@@ -21,6 +21,11 @@
 	"attachments": {
 		"removeAriaLabel": "Remove {{fileName}}"
 	},
+	"chatHome": {
+		"placeholder": "Describe what you need or upload a file, and we'll find the answer together.\nEnter to send; Shift + Enter for a new line",
+		"subtitle": "Let AI help you organize your thoughts and solve problems",
+		"title": "Start with a question"
+	},
 	"chatInput": {
 		"helpText": "Press Enter to send ; Shift + Enter for a new line",
 		"mobilePlaceholder": "Click to input task requirements",

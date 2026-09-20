@@ -25,11 +25,13 @@ const Container = observer(function Container({
 	EditorComponent = EditorLayout,
 	editorSessionKey,
 	showRoleSwitcher = true,
+	homeVariant = "task",
 }: {
 	editorContext?: Partial<SceneEditorContext>
 	EditorComponent?: ComponentType<EditorLayoutProps>
 	editorSessionKey?: string
 	showRoleSwitcher?: boolean
+	homeVariant?: "chat" | "task"
 }) {
 	const { t } = useTranslation()
 	const { currentRole, setCurrentRole } = roleStore
@@ -88,7 +90,7 @@ const Container = observer(function Container({
 							<HomeModeTabs />
 
 							{/* Welcome Message */}
-							<SloganContainer />
+							<SloganContainer variant={homeVariant} />
 
 							{/* Task home exposes employee selection; chat home uses the platform default employee. */}
 							{showRoleSwitcher && (
