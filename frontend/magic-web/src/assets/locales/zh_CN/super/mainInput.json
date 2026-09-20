@@ -23,8 +23,8 @@
 	},
 	"chatHome": {
 		"placeholder": "描述你的需求或上传文件，我会和你一起找到答案。\nEnter 发送；Shift + Enter 换行",
-		"subtitle": "让 AI 帮你梳理思路、解决问题",
-		"title": "从一个问题开始吧"
+		"subtitle": "和 AI 一起想一想",
+		"title": "今天有什么问题，我们一起聊聊？"
 	},
 	"chatInput": {
 		"helpText": "按 Enter 发送；Shift + Enter 换行",
