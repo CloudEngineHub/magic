@@ -885,6 +885,45 @@ describe("IsolatedHTMLRenderer iframe injection", () => {
 		expect(openNewTab).not.toHaveBeenCalled()
 	})
 
+	it("opens a tab when iframe navigation points to index.html", async () => {
+		const openNewTab = vi.fn()
+		const iframeProps = { ...defaultProps, openNewTab, fileId: "detail-file" }
+		renderIsolated(<IsolatedHTMLRenderer {...iframeProps} />)
+
+		const iframe = screen.getByTestId("isolated-html-content-iframe") as HTMLIFrameElement
+		dispatchIframeMessage(iframe, "linkClicked", window.location.origin, {
+			href: "index.html",
+		})
+		await flushReactEffects()
+
+		expect(openNewTab).toHaveBeenCalledWith("detail-file", "index.html", false)
+	})
+
+	it("opens a tab when iframe navigation points to index.html with an external index.html shell", async () => {
+		envMock.mockReturnValue("https://husky.example/index.html")
+		const openNewTab = vi.fn()
+		const iframeProps = { ...defaultProps, openNewTab, fileId: "detail-file" }
+		renderIsolated(<IsolatedHTMLRenderer {...iframeProps} />)
+
+		const iframe = screen.getByTestId("isolated-html-content-iframe") as HTMLIFrameElement
+		dispatchIframeMessage(iframe, "iframeReady", "https://husky.example")
+		await flushReactEffects()
+
+		dispatchIframeMessage(iframe, "linkClicked", "https://husky.example", {
+			href: "index.html",
+		})
+		await flushReactEffects()
+
+		expect(openNewTab).toHaveBeenCalledWith("detail-file", "index.html", false)
+
+		dispatchIframeMessage(iframe, "linkClicked", "https://husky.example", {
+			href: "./index.html",
+		})
+		await flushReactEffects()
+
+		expect(openNewTab).toHaveBeenCalledWith("detail-file", "./index.html", false)
+	})
+
 	it("keeps the renderer file identity when a link message contains a forged fileId", async () => {
 		const openNewTab = vi.fn()
 		const iframeProps = { ...defaultProps, openNewTab, fileId: "current-file" }

@@ -91,4 +91,12 @@ describe("isHtmlPreviewShellNavigation", () => {
 			isHtmlPreviewShellNavigation("slides/husky.html", "https://husky.example/index.html"),
 		).toBe(false)
 	})
+
+	it("does not block project index.html links when using an external index.html shell", () => {
+		const shell = "https://husky.example/index.html"
+		expect(isHtmlPreviewShellNavigation("index.html", shell)).toBe(false)
+		expect(isHtmlPreviewShellNavigation("./index.html", shell)).toBe(false)
+		expect(isHtmlPreviewShellNavigation("/index.html", shell)).toBe(false)
+		expect(isHtmlPreviewShellNavigation("https://other.example/index.html", shell)).toBe(false)
+	})
 })

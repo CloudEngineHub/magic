@@ -111,7 +111,40 @@ function getNavigationFilePath(value: string): string {
 export function isHtmlPreviewShellNavigation(href: string, shellUrl = "/husky.html"): boolean {
 	if (typeof href !== "string" || !href.trim()) return false
 
-	const hrefPath = getNavigationFilePath(href)
-	const shellPath = getNavigationFilePath(shellUrl)
+	const trimmedHref = href.trim()
+	const trimmedShell = (shellUrl || "").trim()
+	if (!trimmedShell) return false
+
+	const isShellAbsolute = /^[a-z][a-z\d+.-]*:/i.test(trimmedShell)
+	const isHrefAbsolute = /^[a-z][a-z\d+.-]*:/i.test(trimmedHref)
+
+	// When shellUrl is a full absolute URL (e.g. cross-origin sandbox https://husky.pages.letsmagic.space/index.html):
+	// A shell rewrite will always be the shell's own absolute URL.
+	// Any relative link in a project (such as "index.html", "./index.html", "/index.html")
+	// is a project file navigation and must never be blocked as a shell rewrite.
+	if (isShellAbsolute) {
+		if (!isHrefAbsolute) {
+			return false
+		}
+		try {
+			const shellUrlObj = new URL(trimmedShell)
+			const hrefUrlObj = new URL(trimmedHref)
+			return (
+				shellUrlObj.origin === hrefUrlObj.origin &&
+				shellUrlObj.pathname.replace(/\/+$/, "") === hrefUrlObj.pathname.replace(/\/+$/, "")
+			)
+		} catch {
+			return false
+		}
+	}
+
+	// For same-origin shell (default /husky.html or husky.html):
+	// Do not treat explicit relative paths (e.g. "./husky.html", "slides/husky.html") as the shell.
+	if (trimmedHref.startsWith("./")) {
+		return false
+	}
+
+	const hrefPath = getNavigationFilePath(trimmedHref)
+	const shellPath = getNavigationFilePath(trimmedShell)
 	return Boolean(hrefPath && shellPath && hrefPath === shellPath)
 }

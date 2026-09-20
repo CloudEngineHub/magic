@@ -1230,12 +1230,35 @@ export default memo(function HTML(props: HTMLProps) {
 		}
 
 		const relativePath = fileItem.relative_file_path.replace(fileItem.file_name, "")
-		const newPath = filePath
+		let newPath = filePath
 			? filePath.startsWith("/")
 				? filePath.replace(/^\/+/, "")
 				: resolveRelativePath(relativePath, filePath)
 			: fileItem.relative_file_path
-		const item = attachmentList?.find((item: any) => item.relative_file_path === newPath)
+
+		// 标准化路径：移除前导 / 和 ./
+		newPath = (newPath || "").replace(/^\/+/, "").replace(/^\.\//, "")
+
+		// 根路径或空路径 fallback 到 index.html
+		if (!newPath || newPath.endsWith("/")) {
+			newPath = `${newPath}index.html`
+		}
+
+		let item = attachmentList?.find((attachment: any) => {
+			const candidatePath = (attachment.relative_file_path || "")
+				.replace(/^\/+/, "")
+				.replace(/^\.\//, "")
+			return candidatePath === newPath
+		})
+
+		// 若未直接匹配且目标为 index.html，进行文件名兜底查找
+		if (!item && /^index\.html?$/i.test(newPath)) {
+			item = attachmentList?.find((attachment: any) => {
+				const name = attachment.file_name || attachment.name || ""
+				return /^index\.html?$/i.test(name)
+			})
+		}
+
 		if (item) {
 			openFileTab?.({ ...item, htmlNavigation: navigationTarget }, autoEdit)
 
