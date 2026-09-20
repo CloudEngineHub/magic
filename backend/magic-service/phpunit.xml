@@ -46,6 +46,7 @@
     </testsuite>
     <testsuite name="超级麦吉文件测试">
       <directory suffix="Test.php">test/Cases/Domain/SuperMagic</directory>
+      <directory suffix="Test.php">test/Cases/Interfaces/SuperMagic/File</directory>
     </testsuite>
   </testsuites>
 
