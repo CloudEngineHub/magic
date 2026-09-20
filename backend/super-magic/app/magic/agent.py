@@ -116,6 +116,11 @@ from app.service.native_visual_overflow_hint_builder import (
 
 logger = get_logger(__name__)
 
+# 是否在每轮上下文准备时递归遍历工作区、把目录树快照注入模型上下文。
+# 关闭时 _get_workspace_snapshot 直接返回空快照，不产生任何目录读取；
+# 详见该方法 docstring 里的成本说明与恢复注意事项。
+WORKSPACE_SNAPSHOT_SCAN_ENABLED = False
+
 
 # Agent Loop Context Objects for clean parameter passing and state management
 @dataclass
@@ -685,7 +690,21 @@ class Agent(BaseAgent):
         return variables
 
     async def _get_workspace_snapshot(self) -> WorkspaceSnapshot:
-        """扫描工作区文件树并生成快照。"""
+        """
+        获取工作区文件树快照。
+
+        扫描默认关闭（WORKSPACE_SNAPSHOT_SCAN_ENABLED=False），此时直接返回空快照，
+        不读取任何目录：在挂载的元数据服务上，列出目录的成本是"每个目录一次 readdir
+        往返"（实测每个目录约 0.2 秒），大项目单次遍历要数分钟，而且它跑在每轮上下文
+        准备的关键路径上。模型需要目录内容时用 list_dir 工具按需查看，文件级变化另有
+        文件事件通道，因此不再预置这份目录索引。
+
+        需要恢复时把 WORKSPACE_SNAPSHOT_SCAN_ENABLED 改回 True；恢复前建议先给扫描
+        补上时间预算与取消检查，避免又变成数分钟的全量遍历。
+        """
+        if not WORKSPACE_SNAPSHOT_SCAN_ENABLED:
+            return WorkspaceSnapshot(display="", entries=[])
+
         workspace_root = Path(self.agent_context._workspace_dir)
         try:
             root_stat = workspace_root.stat()
