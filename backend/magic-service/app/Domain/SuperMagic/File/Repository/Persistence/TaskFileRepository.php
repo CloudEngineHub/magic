@@ -928,18 +928,25 @@ class TaskFileRepository implements TaskFileRepositoryInterface
             $entity->setCreatedAt($date);
             $entity->setUpdatedAt($date);
 
-            $model = $this->model::query()->create($entity->toArray());
-
-            // Keep the generated primary key on the entity for callers that
-            // supplied an empty ID. Most MagicFS writers provide one already,
-            // but imports and legacy callers do not.
-            if (! empty($model->file_id)) {
-                $entity->setFileId((int) $model->file_id);
-            }
+            $this->ensureFileId($entity);
+            $this->model::query()->create($entity->toArray());
 
             $this->recordFileTreeMutation(null, $entity, 'create');
             return $entity;
         });
+    }
+
+    /**
+     * file_id 由调用方显式赋雪花 ID，不依赖数据库自增（见 TaskFileModel::$incrementing）。
+     *
+     * 导入、历史调用方可能不带 ID，这里在 PHP 侧补齐：交给数据库自增拿不到生成值，
+     * 实体仍带着 0，响应、change journal 和后续按 file_id 的查询都会指向不存在的 ID。
+     */
+    private function ensureFileId(TaskFileEntity $entity): void
+    {
+        if ($entity->getFileId() <= 0) {
+            $entity->setFileId(IdGenerator::getSnowId());
+        }
     }
 
     /**
@@ -960,6 +967,7 @@ class TaskFileRepository implements TaskFileRepositoryInterface
             $date = date('Y-m-d H:i:s');
             $entity->setCreatedAt($date);
             $entity->setUpdatedAt($date);
+            $this->ensureFileId($entity);
             $this->model::query()->create($entity->toArray());
             $this->recordFileTreeMutation(null, $entity, 'create');
             return $entity;
@@ -2655,7 +2663,12 @@ class TaskFileRepository implements TaskFileRepositoryInterface
             'is_directory' => $file->getIsDirectory(),
             'size' => $file->getFileSize(),
             'mode' => $mode,
-            'file_metadata' => $fileMetadata,
+            // 空 map 必须序列化成 {}：json_encode 会把空 PHP 数组写成 []，
+            // Go 侧 json.Unmarshal 到 map[string]string 会整页解码失败
+            // （"cannot unmarshal array into ... file_metadata"），change feed
+            // 会一直停在原地、挂载端再也同步不到任何变更。
+            // 与 MagicFSFileDTO::toArray() 对同一字段的处理保持一致。
+            'file_metadata' => $fileMetadata === [] ? (object) [] : $fileMetadata,
             's3_info' => ['object_key' => $file->getFileKey()],
             'created_at' => $file->getCreatedAt(),
             'updated_at' => $file->getUpdatedAt(),
