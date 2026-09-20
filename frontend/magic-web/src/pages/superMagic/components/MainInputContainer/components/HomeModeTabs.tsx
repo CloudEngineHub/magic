@@ -1,7 +1,7 @@
 import { MessageCircle, SquarePen } from "lucide-react"
 import { useTranslation } from "react-i18next"
 import { matchPath, useLocation } from "react-router"
-import { Tabs, TabsList, TabsTrigger } from "@/components/shadcn-ui/tabs"
+import { SmoothTabs } from "@/components/shadcn-ui/smooth-tabs"
 import { RoutePath } from "@/constants/routes"
 import { useNavigateToSuperHome } from "@/layouts/BaseLayout/components/MagicSidebar/hooks/useNavigateToSuperHome"
 import { RouteName } from "@/routes/constants"
@@ -19,33 +19,35 @@ export default function HomeModeTabs() {
 
 	// The input container is shared with other scenes; only the two creation homes show tabs.
 	if (!isChatHome && !isTaskHome) return null
+	const activeMode = isChatHome ? "chat" : "task"
 
 	return (
-		<Tabs
-			value={isChatHome ? "chat" : "task"}
-			activationMode="manual"
-			onValueChange={(value) => {
-				// Reuse sidebar navigation so task workspace restoration stays identical.
-				if (value === "task") navigateToSuperHome()
-				else navigate({ name: RouteName.SuperChatHome, viewTransition: false })
-			}}
-		>
-			<TabsList aria-label={t("homeMode.label")} className="h-14 w-64 rounded-xl p-1.5">
-				<TabsTrigger
-					value="chat"
-					className="gap-2 rounded-lg text-base font-medium text-muted-foreground hover:text-foreground data-[state=active]:text-foreground"
-				>
-					<MessageCircle className="size-4" />
-					{t("homeMode.chat")}
-				</TabsTrigger>
-				<TabsTrigger
-					value="task"
-					className="gap-2 rounded-lg text-base font-medium text-muted-foreground hover:text-foreground data-[state=active]:text-foreground"
-				>
-					<SquarePen className="size-4" />
-					{t("homeMode.task")}
-				</TabsTrigger>
-			</TabsList>
-		</Tabs>
+		<div role="group" aria-label={t("homeMode.label")}>
+			<SmoothTabs<"chat" | "task">
+				tabs={[
+					{
+						value: "chat",
+						label: t("homeMode.chat"),
+						icon: <MessageCircle className="size-4" />,
+					},
+					{
+						value: "task",
+						label: t("homeMode.task"),
+						icon: <SquarePen className="size-4" />,
+					},
+				]}
+				value={activeMode}
+				onChange={(value) => {
+					if (value === activeMode) return
+					// Reuse sidebar navigation so task workspace restoration stays identical.
+					if (value === "task") navigateToSuperHome()
+					else navigate({ name: RouteName.SuperChatHome, viewTransition: false })
+				}}
+				variant="background"
+				className="h-14 w-64 rounded-xl bg-muted p-1.5"
+				buttonClassName="h-11 gap-2 rounded-lg text-base font-medium focus-visible:bg-sidebar-accent focus-visible:ring-1 focus-visible:ring-ring"
+				indicatorClassName="inset-y-1.5 h-11"
+			/>
+		</div>
 	)
 }
