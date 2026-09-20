@@ -77,8 +77,14 @@ export default function DefaultMessageEditorContainer(props: DefaultMessageEdito
 		[mentionPanelStore],
 	)
 
-	const selectedProject = editorContext?.selectedProject ?? projectStore.selectedProject
-	const selectedTopic = editorContext?.selectedTopic ?? _topicStore.selectedTopic
+	const selectedProject =
+		editorContext?.selectedProject !== undefined
+			? editorContext.selectedProject
+			: projectStore.selectedProject
+	const selectedTopic =
+		editorContext?.selectedTopic !== undefined
+			? editorContext.selectedTopic
+			: _topicStore.selectedTopic
 	const effectiveTopicMode = editorContext?.topicMode ?? roleStore.currentRole
 	const effectiveSetTopicMode = editorContext?.setTopicMode ?? roleStore.setCurrentRole
 	const effectiveSetSelectedWorkspace =
@@ -284,12 +290,12 @@ export default function DefaultMessageEditorContainer(props: DefaultMessageEdito
 		}
 
 		const selectedWorkspace =
-			editorContext?.selectedWorkspace ??
-			workspaceStore.selectedWorkspace ??
-			workspaceStore.firstWorkspace
+			editorContext?.selectedWorkspace !== undefined
+				? editorContext.selectedWorkspace
+				: (workspaceStore.selectedWorkspace ?? workspaceStore.firstWorkspace)
 
 		if (
-			!editorContext?.selectedWorkspace &&
+			editorContext?.selectedWorkspace === undefined &&
 			!workspaceStore.selectedWorkspace &&
 			selectedWorkspace
 		) {
@@ -392,11 +398,13 @@ export default function DefaultMessageEditorContainer(props: DefaultMessageEdito
 	})
 
 	const selectedWorkspace =
-		editorContext?.selectedWorkspace ??
-		workspaceStore.selectedWorkspace ??
-		workspaceStore.firstWorkspace
+		editorContext?.selectedWorkspace !== undefined
+			? editorContext.selectedWorkspace
+			: (workspaceStore.selectedWorkspace ?? workspaceStore.firstWorkspace)
 
 	const handleEnsureProject = useMemoizedFn(async () => {
+		// Long pasted text uses the same temporary upload flow as normal attachments here.
+		if (editorContext?.deferProjectCreationUntilSend) return selectedProject ?? null
 		const ensuredProject = await ensureProjectForMessageContext({
 			context: {
 				selectedProject,

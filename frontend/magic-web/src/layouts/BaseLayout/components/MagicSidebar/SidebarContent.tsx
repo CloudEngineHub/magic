@@ -36,9 +36,8 @@ function SidebarContent({ collapsed, onBusyChange, onSelect }: SidebarContentPro
 	const sidebarMarketMenuItems = useSidebarMarketMenuItems()
 	const { superRouteUrl, handleNavigateToSuperHome } = useNavigateToSuperHome()
 	const [projectBusy, setProjectBusy] = useState(false)
-	const [chatBusy, setChatBusy] = useState(false)
 	const [appsOpen, setAppsOpen] = useState(false)
-	const busy = projectBusy || chatBusy || appsOpen
+	const busy = projectBusy || appsOpen
 	useEffect(() => {
 		onBusyChange?.(busy)
 	}, [busy, onBusyChange])
@@ -90,11 +89,7 @@ function SidebarContent({ collapsed, onBusyChange, onSelect }: SidebarContentPro
 							</a>
 						</SidebarMenuButton>
 					</SidebarMenuItem>
-					<NewChatSidebarMenuItem
-						collapsed={collapsed}
-						onBusyChange={setChatBusy}
-						onSelect={onSelect}
-					/>
+					<NewChatSidebarMenuItem collapsed={collapsed} onSelect={onSelect} />
 				</>
 			}
 		>

@@ -6,7 +6,7 @@ import MainInputHeaderSlot from "@/pages/superMagic/components/MainInputContaine
 import SloganContainer from "./components/SloganContainer"
 import { TopicMode } from "../../pages/Workspace/TopicMode"
 import { createPortal } from "react-dom"
-import { AGENT_INPUT_CONTAINER_HEADER_ID } from "./constants"
+import { AGENT_INPUT_CONTAINER_HEADER_ID, SCENE_INPUT_IDS } from "./constants"
 import usePortalTarget from "@/hooks/usePortalTarget"
 import RoleSwitcher from "./components/RoleSwitcher"
 import EditorLayout from "./scenes/EditorLayout"
@@ -17,8 +17,13 @@ import { cn } from "@/utils/cn"
 import { createSceneStateStore } from "./stores"
 import { useMemoizedFn } from "ahooks"
 import useAgentCodeModeFromSearch from "../../hooks/useAgentCodeModeFromSearch"
+import type { SceneEditorContext } from "./components/editors/types"
 
-const Container = observer(function Container() {
+const Container = observer(function Container({
+	editorContext,
+}: {
+	editorContext?: Partial<SceneEditorContext>
+}) {
 	const { t } = useTranslation()
 	const { currentRole, setCurrentRole } = roleStore
 	const [sceneStateStore] = useState(() => createSceneStateStore())
@@ -91,6 +96,11 @@ const Container = observer(function Container() {
 						</div>
 
 						<EditorLayout
+							editorContext={editorContext}
+							inputContainerId={
+								editorContext?.sceneInputContainerId ??
+								SCENE_INPUT_IDS.INPUT_CONTAINER
+							}
 							mode={currentRole}
 							sceneStateStore={sceneStateStore}
 							autoFocus={shouldAutoFocusEditor}

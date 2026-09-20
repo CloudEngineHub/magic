@@ -16,14 +16,19 @@ interface GeneralInputContainerProps extends ScenePanelComponentBaseProps {
 	scenes: SceneItem[] | undefined
 }
 
-function GeneralInputContainer({ scenes, editorContext, editorNodes }: GeneralInputContainerProps) {
+function GeneralInputContainer({
+	scenes,
+	editorContext,
+	editorNodes,
+	inputContainerId,
+}: GeneralInputContainerProps) {
 	const sceneStateStore = useSceneStateStore()
 	const variant = useOptionalScenePanelVariant()
 	const inputLayout = useConversationInputLayout()
 	// Propagate the resized conversation height through the general scene wrappers.
 	const shouldFillHeight = Boolean(inputLayout?.fillHeight)
 	const editorPortalTarget = usePortalTarget({
-		portalId: SCENE_INPUT_IDS.INPUT_CONTAINER,
+		portalId: inputContainerId ?? SCENE_INPUT_IDS.INPUT_CONTAINER,
 	})
 
 	const scenesSwitcherPortalTarget = usePortalTarget({

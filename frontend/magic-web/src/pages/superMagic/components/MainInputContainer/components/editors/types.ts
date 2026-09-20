@@ -51,6 +51,10 @@ export interface SceneEditorContext {
 	/** Optional rotating examples shown while the editor is empty */
 	promptCarousel?: EditorPromptCarouselConfig
 	draftKey?: DraftKey
+	/** Portal target for the scene editor; blank chat uses its own target during route transitions. */
+	sceneInputContainerId?: string
+	/** Blank composers upload temporary attachments without creating a project before send. */
+	deferProjectCreationUntilSend?: boolean
 	selectedTopic: Topic | null
 	selectedProject: ProjectListItem | null
 	selectedWorkspace?: Workspace | null

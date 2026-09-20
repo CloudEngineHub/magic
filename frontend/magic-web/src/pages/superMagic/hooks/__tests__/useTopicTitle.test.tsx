@@ -65,6 +65,12 @@ const t = (key: string) => {
 }
 
 describe("resolveSuperPageDocumentTitle", () => {
+	it("uses the blank composer title even with an old global selection", () => {
+		pathnameState.current = "/cluster/super/chat"
+		workspaceStoreState.selectedProject = { project_name: "old project" }
+		renderHook(useProjectTitle)
+		expect(setMetaMock).toHaveBeenLastCalledWith({ title: "chatList.newChat" })
+	})
 	it("uses conversation name only for chat workspace projects", () => {
 		expect(
 			resolveSuperPageDocumentTitle({

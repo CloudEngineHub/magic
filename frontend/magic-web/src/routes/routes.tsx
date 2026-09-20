@@ -99,6 +99,7 @@ const SuperMagicCommonLayout = lazy(() => import("@/pages/superMagic/layouts/Mai
 const ProjectPage = lazy(() => import("@/pages/superMagic/lazy/ProjectPage"))
 /** 超级麦吉 - 会话详情页面 */
 const ChatProjectPage = lazy(() => import("@/pages/superMagic/lazy/ChatProjectPage"))
+const ChatHomePage = lazy(() => import("@/pages/superMagic/lazy/ChatHomePage"))
 /** 移动端 - 个人中心 */
 const Profile = lazy(() => import("@/pages/user/pages/my/lazy/Profile"))
 /** 移动端 - 个人中心 - 个人信息 */
@@ -479,6 +480,11 @@ export function registerRoutes(config: RouteConfig = {}): Array<RouteObject> {
 						element: <WorkspacePage />,
 					},
 					...superMagicMicroAppRoutes,
+					{
+						name: RouteName.SuperChatHome,
+						path: `/:clusterCode${RoutePath.SuperChatHome}`,
+						element: <ChatHomePage />,
+					},
 					{
 						name: RouteName.SuperChatProjectState,
 						path: `/:clusterCode${RoutePath.SuperChatProjectState}`,
