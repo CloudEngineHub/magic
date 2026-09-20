@@ -270,7 +270,9 @@ describe("ElementInspectorHandler", () => {
 			.mockImplementation((callback) => {
 				callback(new Blob(["cropped"], { type: "image/png" }))
 			})
-		const toDataURL = vi.spyOn(HTMLCanvasElement.prototype, "toDataURL")
+		const toDataURL = vi
+			.spyOn(HTMLCanvasElement.prototype, "toDataURL")
+			.mockReturnValue("data:image/png;base64,QQ==")
 		const toCanvas = vi.fn().mockResolvedValue(
 			Object.assign(document.createElement("canvas"), {
 				width: 80,
@@ -303,8 +305,8 @@ describe("ElementInspectorHandler", () => {
 		expect(response.blob).toBeInstanceOf(Blob)
 		expect(toCanvas).toHaveBeenCalledOnce()
 		expect(toBlob).not.toHaveBeenCalled()
-		expect(encodeToBlob).toHaveBeenCalledWith(expect.any(Function), "image/png")
-		expect(toDataURL).not.toHaveBeenCalled()
+		expect(encodeToBlob).not.toHaveBeenCalled()
+		expect(toDataURL).toHaveBeenCalledWith("image/png")
 		expect(snapdom).toHaveBeenCalledWith(
 			container.ownerDocument.body,
 			expect.objectContaining({

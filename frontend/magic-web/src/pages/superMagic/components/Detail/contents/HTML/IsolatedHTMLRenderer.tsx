@@ -574,10 +574,13 @@ const IsolatedHTMLRendererInner = forwardRef<IsolatedHTMLRendererRef, IsolatedHT
 		useEffect(() => {
 			syncDeviceScrollbars()
 		}, [devicePreviewEnabled, supportsDevicePreview, sandboxType, syncDeviceScrollbars])
-		const inspectorCapturePrewarmRef = useRef<(() => void) | null>(null)
-		const registerInspectorCapturePrewarm = useCallback((prewarm: (() => void) | null) => {
-			inspectorCapturePrewarmRef.current = prewarm
-		}, [])
+		const inspectorCapturePrewarmRef = useRef<(() => Promise<boolean>) | null>(null)
+		const registerInspectorCapturePrewarm = useCallback(
+			(prewarm: (() => Promise<boolean>) | null) => {
+				inspectorCapturePrewarmRef.current = prewarm
+			},
+			[],
+		)
 		// Keep the editor bridge ref above callbacks and effects that reference it.
 		// Declaring it later would put those dependency arrays in the temporal dead zone.
 		const editorRef = useRef<HTMLEditorV2Ref>(null)
@@ -1804,11 +1807,20 @@ const IsolatedHTMLRendererInner = forwardRef<IsolatedHTMLRendererRef, IsolatedHT
 					resetInspectorSelection()
 				},
 				startInspectorAppend: () => {
-					inspectorCapturePrewarmRef.current?.()
-					startInAppendMode()
+					void (async () => {
+						const prepare = inspectorCapturePrewarmRef.current
+						const ready = prepare ? await prepare() : true
+						if (!ready) return
+						startInAppendMode()
+					})()
 				},
 				startInspectorQuickSelect: () => {
-					startInQuickSelectionMode()
+					void (async () => {
+						const prepare = inspectorCapturePrewarmRef.current
+						const ready = prepare ? await prepare() : true
+						if (!ready) return
+						startInQuickSelectionMode()
+					})()
 				},
 			}),
 			[

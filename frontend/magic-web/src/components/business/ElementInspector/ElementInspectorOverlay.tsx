@@ -11,7 +11,15 @@
  * already-transformed visual bounds so the picker is not scaled twice.
  */
 
-import { Fragment, useRef, useEffect, useState, useCallback, useMemo } from "react"
+import {
+	Fragment,
+	useRef,
+	useEffect,
+	useState,
+	useCallback,
+	useMemo,
+	useSyncExternalStore,
+} from "react"
 import { createPortal } from "react-dom"
 import type { JSONContent } from "@/infrastructure/editors/tiptap/react"
 import { useTranslation } from "react-i18next"
@@ -40,11 +48,9 @@ import {
 	ScreenshotSelectionOverlay,
 	type ScreenshotCapturePhase,
 } from "./ScreenshotSelectionOverlay"
+import { createInspectorCaptureStore } from "./inspectorCaptureStore"
 import {
 	captureIframeRegion,
-	createCurrentTabCaptureSession,
-	type CurrentTabCaptureAuthorizationContext,
-	type CurrentTabCaptureSession,
 	supportsCurrentTabCapture,
 	toRenderedSelection,
 	waitForNextAnimationFrame,
@@ -132,7 +138,7 @@ interface ElementInspectorOverlayProps {
 		documentRect?: InspectedElementRect,
 	) => void
 	onCaptureElementScreenshot?: (selector: string, screenshot: HtmlSelectionScreenshot) => void
-	onCapturePrewarmReady?: (prewarm: (() => void) | null) => void
+	onCapturePrewarmReady?: (prewarm: (() => Promise<boolean>) | null) => void
 	/** Exact origin used by the cross-origin iframe screenshot bridge. */
 	iframeTargetOrigin?: string
 	onExitMultiSelection?: () => void
@@ -196,48 +202,20 @@ export function ElementInspectorOverlay({
 	const [screenshotCapturePhase, setScreenshotCapturePhase] =
 		useState<ScreenshotCapturePhase>("idle")
 	const [captureUsesCurrentTab, setCaptureUsesCurrentTab] = useState(false)
-	const [captureAuthorization, setCaptureAuthorization] =
-		useState<CurrentTabCaptureAuthorizationContext | null>(null)
-	const captureAuthorizationResolverRef = useRef<{
-		startCapture: () => Promise<string>
-		resolve: (dataUrl: string | null) => void
-		reject: (error: unknown) => void
-	} | null>(null)
-	const requestCurrentTabCaptureAuthorization = useCallback(
-		(context: CurrentTabCaptureAuthorizationContext, startCapture: () => Promise<string>) =>
-			new Promise<string | null>((resolve, reject) => {
-				captureAuthorizationResolverRef.current?.resolve(null)
-				captureAuthorizationResolverRef.current = { startCapture, resolve, reject }
-				setCaptureAuthorization(context)
-			}),
-		[],
+	const [captureStore] = useState(() => createInspectorCaptureStore())
+	const captureSnapshot = useSyncExternalStore(
+		captureStore.subscribe,
+		captureStore.getSnapshot,
+		captureStore.getSnapshot,
 	)
-	const resolveCaptureAuthorization = useCallback((authorized: boolean) => {
-		const pending = captureAuthorizationResolverRef.current
-		captureAuthorizationResolverRef.current = null
-		setCaptureAuthorization(null)
-		if (!pending) return
-		if (!authorized) {
-			pending.resolve(null)
-			return
-		}
-		void pending.startCapture().then(pending.resolve, pending.reject)
-	}, [])
+	const requestCurrentTabCaptureAuthorization = captureStore.requestAuthorization
+	const resolveCaptureAuthorization = captureStore.resolveAuthorization
 
-	useEffect(() => {
-		return () => {
-			captureAuthorizationResolverRef.current?.resolve(null)
-			captureAuthorizationResolverRef.current = null
-		}
-	}, [])
+	useEffect(() => () => captureStore.dispose(), [captureStore])
 	const [panelPortalHost, setPanelPortalHost] = useState<HTMLDivElement | null>(null)
 	const effectiveSelectionMode = screenshotSupported ? selectionMode : "element"
 	const iframeRectFrameRef = useRef<number | null>(null)
 	const scrollFrameRef = useRef<number | null>(null)
-	const currentTabCaptureSessionRef = useRef<CurrentTabCaptureSession | null>(null)
-	if (!currentTabCaptureSessionRef.current) {
-		currentTabCaptureSessionRef.current = createCurrentTabCaptureSession()
-	}
 
 	useEffect(() => {
 		if (!screenshotSupported && selectionMode === "screenshot") {
@@ -246,13 +224,23 @@ export function ElementInspectorOverlay({
 	}, [onSelectionModeChange, screenshotSupported, selectionMode])
 
 	useEffect(() => {
-		return () => currentTabCaptureSessionRef.current?.release()
-	}, [])
-
-	useEffect(() => {
-		if (active || selectedElement || activeTarget || pendingTargets.length > 0) return
-		currentTabCaptureSessionRef.current?.release()
-	}, [active, activeTarget, pendingTargets.length, selectedElement])
+		const isInspecting = Boolean(
+			active ||
+			selectedElement ||
+			activeTarget ||
+			pendingTargets.length > 0 ||
+			multiSelectionActive,
+		)
+		captureStore.releaseIfIdle(isInspecting)
+	}, [
+		active,
+		activeTarget,
+		captureSnapshot.isBusy,
+		captureStore,
+		multiSelectionActive,
+		pendingTargets.length,
+		selectedElement,
+	])
 
 	// The inspector overlay remains over the scaled content for accurate element geometry,
 	// while the collection bar is mounted in the unscaled canvas viewport.
@@ -457,6 +445,7 @@ export function ElementInspectorOverlay({
 		async (
 			overlayRect: InspectedElementRect,
 			beforeCurrentTabCapture?: () => Promise<void>,
+			selector?: string,
 		) => {
 			const iframe = iframeRef.current
 			if (!iframe) throw new Error("HTML screenshot capture is unavailable")
@@ -489,8 +478,9 @@ export function ElementInspectorOverlay({
 				viewportSelection,
 				iframeTargetOrigin,
 				beforeCurrentTabCapture,
-				currentTabSession: currentTabCaptureSessionRef.current ?? undefined,
+				currentTabSession: captureStore.session,
 				requestCurrentTabCaptureAuthorization,
+				selector,
 			})
 			const displaySize = {
 				width: viewportSelection.width,
@@ -503,7 +493,13 @@ export function ElementInspectorOverlay({
 				documentRect: documentSelection,
 			}
 		},
-		[getOverlayGeometry, iframeRef, iframeTargetOrigin, requestCurrentTabCaptureAuthorization],
+		[
+			captureStore.session,
+			getOverlayGeometry,
+			iframeRef,
+			iframeTargetOrigin,
+			requestCurrentTabCaptureAuthorization,
+		],
 	)
 	const handleCaptureScreenshot = useCallback(
 		async (
@@ -524,13 +520,17 @@ export function ElementInspectorOverlay({
 		[captureRegion, onCaptureScreenshot],
 	)
 	const captureElementPreview = useCallback(
-		async (overlayRect: InspectedElementRect) => {
+		async (overlayRect: InspectedElementRect, selector?: string) => {
 			setScreenshotCapturePhase("loading")
 			try {
-				return await captureRegion(overlayRect, async () => {
-					setScreenshotCapturePhase("capturing")
-					await waitForNextAnimationFrame()
-				})
+				return await captureRegion(
+					overlayRect,
+					async () => {
+						setScreenshotCapturePhase("capturing")
+						await waitForNextAnimationFrame()
+					},
+					selector,
+				)
 			} finally {
 				setScreenshotCapturePhase("idle")
 			}
@@ -559,7 +559,7 @@ export function ElementInspectorOverlay({
 		const selector = selectedElement.selector
 		elementScreenshotSelectorRef.current = captureKey
 		let cancelled = false
-		void captureElementPreview(selectBox)
+		void captureElementPreview(selectBox, selector)
 			.then((result) => {
 				if (cancelled || elementScreenshotSelectorRef.current !== captureKey) return
 				onCaptureElementScreenshot(selector, {
@@ -645,15 +645,13 @@ export function ElementInspectorOverlay({
 		},
 		[iframeScrollOffset, reportedIframeScrollOffset, trackedRects],
 	)
-	const prewarmCurrentTabCapture = useCallback(async () => {
-		// Keep this callback for the host API, but never trigger a browser permission
-		// prompt before the user has confirmed a screenshot rectangle.
-	}, [])
+	const prewarmCurrentTabCapture = useCallback(() => {
+		if (!screenshotSupported) return Promise.resolve(true)
+		return captureStore.prepare(iframeRef.current, iframeTargetOrigin)
+	}, [captureStore, iframeRef, iframeTargetOrigin, screenshotSupported])
 
 	useEffect(() => {
-		onCapturePrewarmReady?.(() => {
-			void prewarmCurrentTabCapture()
-		})
+		onCapturePrewarmReady?.(prewarmCurrentTabCapture)
 		return () => onCapturePrewarmReady?.(null)
 	}, [onCapturePrewarmReady, prewarmCurrentTabCapture])
 
@@ -674,7 +672,8 @@ export function ElementInspectorOverlay({
 		!selectedElement &&
 		!activeTarget &&
 		pendingTargets.length === 0 &&
-		!multiSelectionActive
+		!multiSelectionActive &&
+		!captureSnapshot.isBusy
 	)
 		return null
 	const overlayScale = getOverlayScale()
@@ -1001,7 +1000,7 @@ export function ElementInspectorOverlay({
 
 			{pendingPanelContent}
 			<AiEditingCaptureAuthorizationDialog
-				open={captureAuthorization !== null}
+				open={captureSnapshot.authorization !== null}
 				title={t("stylePanel.inspector.aiEditingCaptureAuthorizationTitle")}
 				description={t("stylePanel.inspector.aiEditingCaptureAuthorizationDescription")}
 				allowText={t("stylePanel.inspector.aiEditingCaptureAuthorizationAllow")}

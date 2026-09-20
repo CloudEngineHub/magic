@@ -24,10 +24,10 @@ vi.mock("../screenshot", async (importOriginal) => ({
 	createCurrentTabCaptureSession: vi.fn(() => ({
 		acquire: captureAcquire,
 		release: captureRelease,
+		hasLiveStream: () => false,
 	})),
 	suppressCaptureCursor,
 	supportsCurrentTabCapture: vi.fn(() => true),
-	shouldPrewarmCurrentTabCapture: vi.fn(() => true),
 }))
 
 function createInfo(): InspectedElementInfo {
@@ -427,6 +427,9 @@ describe("ElementInspectorOverlay", () => {
 			)
 
 			await waitFor(() => expect(captureIframeRegion).toHaveBeenCalledOnce())
+			expect(captureIframeRegion).toHaveBeenCalledWith(
+				expect.objectContaining({ selector: ".row-item.ai" }),
+			)
 			expect(suppressCaptureCursor).not.toHaveBeenCalled()
 		} finally {
 			HTMLIFrameElement.prototype.getBoundingClientRect = originalGetBoundingClientRect
@@ -477,7 +480,7 @@ describe("ElementInspectorOverlay", () => {
 	it("does not prewarm current-tab capture before a screenshot is confirmed", async () => {
 		captureAcquire.mockClear()
 		const iframeRef = { current: null as HTMLIFrameElement | null }
-		let prewarm: (() => void) | null = null
+		let prewarm: (() => Promise<boolean>) | null = null
 		render(
 			<div>
 				<iframe ref={iframeRef} />
@@ -498,9 +501,47 @@ describe("ElementInspectorOverlay", () => {
 		await waitFor(() => {
 			expect(prewarm).toEqual(expect.any(Function))
 		})
-		prewarm?.()
-		await Promise.resolve()
+		await expect(prewarm?.()).resolves.toBe(true)
 		expect(captureAcquire).not.toHaveBeenCalled()
+	})
+
+	it("does not force tab capture when preparing a cross-origin iframe", async () => {
+		captureAcquire.mockClear()
+		const iframeRef = { current: null as HTMLIFrameElement | null }
+		let prewarm: (() => Promise<boolean>) | null = null
+		render(
+			<div>
+				<iframe ref={iframeRef} />
+				<ElementInspectorOverlay
+					active={false}
+					iframeRef={iframeRef}
+					hoveredElement={null}
+					selectedElement={null}
+					onClearSelection={vi.fn()}
+					multiSelectionActive
+					onCaptureElementScreenshot={vi.fn()}
+					onCapturePrewarmReady={(callback) => {
+						prewarm = callback
+					}}
+				/>
+			</div>,
+		)
+
+		await waitFor(() => {
+			expect(iframeRef.current).not.toBeNull()
+			expect(prewarm).toEqual(expect.any(Function))
+		})
+		Object.defineProperty(iframeRef.current as HTMLIFrameElement, "contentDocument", {
+			configurable: true,
+			get() {
+				throw new DOMException("Blocked a frame", "SecurityError")
+			},
+		})
+		await expect(prewarm?.()).resolves.toBe(true)
+		expect(captureAcquire).not.toHaveBeenCalled()
+		expect(
+			screen.queryByTestId("ai-editing-capture-authorization-dialog"),
+		).not.toBeInTheDocument()
 	})
 
 	it("does not capture selected elements when screenshot capture is unsupported", async () => {
