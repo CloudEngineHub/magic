@@ -43,6 +43,11 @@
 		},
 		"title": "Select Your Crew"
 	},
+	"homeMode": {
+		"chat": "Chat",
+		"label": "Switch between chat and task",
+		"task": "Task"
+	},
 	"pluginTips": {
 		"connectTools": "Connect your tools"
 	},

@@ -43,6 +43,11 @@
 		},
 		"title": "选择你的数字员工"
 	},
+	"homeMode": {
+		"chat": "对话",
+		"label": "切换对话或任务",
+		"task": "任务"
+	},
 	"pluginTips": {
 		"connectTools": "连接你的工具"
 	},
