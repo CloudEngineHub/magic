@@ -182,6 +182,11 @@ const PublishedMicroAppConversationSurface = observer(
 					return
 				}
 				if (payload.projectId && payload.projectId !== pid) {
+					// The event targets a different project; this subscriber is not
+					// responsible for it. Still invoke the callback so the publisher
+					// is not left waiting indefinitely (e.g. holding a lock or a
+					// loading indicator) when the matching subscriber is absent.
+					payload.callback?.()
 					return
 				}
 				loadProjectAttachments({

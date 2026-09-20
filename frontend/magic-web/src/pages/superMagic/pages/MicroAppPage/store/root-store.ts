@@ -89,6 +89,9 @@ export class AppRootStore {
 		this.runtimeProjectAppId = null
 		this.runtimeProjectState = "unknown"
 		this.usageConversation.reset()
+		// Clear stale file attachments immediately so that while the new project's
+		// files are loading, consumers do not see the previous app's file list.
+		this.runtimeProjectFilesStore.setSelectedProject(null)
 		try {
 			const result = await SuperMagicApi.getMicroAppRuntimeProject(appId, {
 				enableErrorMessagePrompt: false,

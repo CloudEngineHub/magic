@@ -53,13 +53,10 @@ type AttachmentItem = FileItem | FolderItem
 export default function AttachmentList({
 	attachments,
 	setUserSelectDetail,
-	showDownloadAll = true,
 }: {
 	attachments: any[]
 	topicId?: string
 	setUserSelectDetail?: (detail: any) => void
-	/** Explicitly controls whether the download-all action is shown. */
-	showDownloadAll?: boolean
 }) {
 	const { t } = useTranslation("super")
 	const { styles, cx } = useStyles()
@@ -325,8 +322,6 @@ export default function AttachmentList({
 		})
 	}
 
-	const shouldShowDownloadAll = Boolean(attachments?.length && showDownloadAll)
-
 	return (
 		<div className={cx(styles.section, isFileListCollapsed && styles.collapsed)}>
 			<div className={styles.header}>
@@ -364,14 +359,7 @@ export default function AttachmentList({
 						/>
 					</div>
 					{!!filteredFiles.length && (
-						<div
-							className={cx(
-								styles.listContainer,
-								shouldShowDownloadAll && styles.showDownloadAll,
-							)}
-						>
-							{renderItems(filteredFiles, 0)}
-						</div>
+						<div className={styles.listContainer}>{renderItems(filteredFiles, 0)}</div>
 					)}
 					{!!attachments?.length && !filteredFiles.length && fileSearchText && (
 						<div className={styles.emptyText}>
@@ -395,29 +383,6 @@ export default function AttachmentList({
 							{t("attachmentList.empty")}
 						</div>
 					)}
-					{/* {showDownloadAll && (
-						<div className={styles.batchDownloadLayer}>
-							<button
-								className={styles.batchDownloadButton}
-								onClick={handleDownloadAll}
-								type="button"
-								disabled={allLoading}
-							>
-								{allLoading ? (
-									<Spin
-										size="small"
-										style={{ marginRight: 4, width: 14, height: 14 }}
-									/>
-								) : null}
-								<IconDownload
-									size={14}
-									stroke={1.5}
-									color="rgba(28, 29, 35, 0.8)"
-								/>
-								<span>{t("attachmentList.downloadAll")}</span>
-							</button>
-						</div>
-					)} */}
 				</div>
 			)}
 		</div>
