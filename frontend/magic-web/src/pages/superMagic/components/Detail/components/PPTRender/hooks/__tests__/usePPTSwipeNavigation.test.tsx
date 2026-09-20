@@ -78,15 +78,15 @@ describe("usePPTSwipeNavigation", () => {
 		const onSwipe = vi.fn()
 		document.body.appendChild(iframe)
 		renderHook(
-		({ activationKey }: { activationKey: number }) =>
-			usePPTSwipeNavigation({
-				containerRef: { current: container },
-				iframe,
-				enabled: true,
-				activationKey,
-				onSwipe,
-			}),
-		{ initialProps: { activationKey: 1 } },
+			({ activationKey }: { activationKey: number }) =>
+				usePPTSwipeNavigation({
+					containerRef: { current: container },
+					iframe,
+					enabled: true,
+					activationKey,
+					onSwipe,
+				}),
+			{ initialProps: { activationKey: 1 } },
 		)
 
 		act(() => {

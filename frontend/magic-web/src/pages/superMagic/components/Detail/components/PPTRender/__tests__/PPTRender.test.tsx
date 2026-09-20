@@ -65,6 +65,7 @@ const mockState = vi.hoisted(() => ({
 	toolbarUnmounted: vi.fn(),
 	sidebarPreviewEffect: vi.fn(),
 	nativeIsFullscreen: false,
+	nativeIsPresenterView: false,
 	isSlideEditing: true,
 }))
 
@@ -345,6 +346,7 @@ vi.mock("../hooks", () => ({
 	}),
 	useFullscreen: () => ({
 		isFullscreen: mockState.nativeIsFullscreen,
+		isPresenterView: mockState.nativeIsPresenterView,
 		toggleFullscreen: vi.fn(),
 	}),
 	useSlideFileLocator: () => undefined,
@@ -490,6 +492,7 @@ describe("PPTRender", () => {
 		mockState.toolbarUnmounted.mockReset()
 		mockState.sidebarPreviewEffect.mockReset()
 		mockState.nativeIsFullscreen = false
+		mockState.nativeIsPresenterView = false
 		mockState.isSlideEditing = true
 		mockState.navigateSaveHandler.mockReset()
 		mockState.navigateSaveHandler.mockResolvedValue(true)
@@ -597,6 +600,29 @@ describe("PPTRender", () => {
 		expect(screen.getByTestId("ppt-render-slide-content")).toHaveClass(
 			"relative",
 			TAILWIND_Z_INDEX_CLASSES.BASE.SLIDE_CANVAS,
+		)
+	})
+
+	it("keeps notes and navigation visible while the slide stage presents externally", async () => {
+		mockState.isSlideEditing = false
+		mockState.nativeIsFullscreen = true
+		mockState.nativeIsPresenterView = true
+		pptNotesPreferenceStore.setVisible(false)
+
+		renderPPTRender()
+
+		await waitFor(() => {
+			expect(mockState.store.setFullscreen).toHaveBeenCalledWith(true)
+			expect(mockState.sidebarPreviewEffect).toHaveBeenCalledWith(true)
+		})
+		expect(screen.getByTestId("ppt-render-container")).not.toHaveClass("fixed")
+		expect(screen.getByTestId("ppt-render-sidebar")).toHaveStyle({ width: "200px" })
+		expect(screen.getByTestId("ppt-render-sidebar-resize-handle")).toBeInTheDocument()
+		expect(screen.getByTestId("ppt-speaker-notes-panel")).toBeVisible()
+		expect(screen.queryByTestId("ppt-control-bar")).toBeNull()
+		expect(screen.getByTestId("ppt-render-slide-stage")).toHaveClass("bg-black")
+		expect(mockState.pptSlideProps).toHaveBeenLastCalledWith(
+			expect.objectContaining({ isFullscreen: true }),
 		)
 	})
 

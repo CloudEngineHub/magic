@@ -1,23 +1,61 @@
-import { useState, useEffect, useCallback, RefObject } from "react"
+import { type RefObject, useCallback, useEffect, useRef, useState } from "react"
 import { useMemoizedFn } from "ahooks"
 import { isMagicApp } from "@/utils/devices"
 
 interface UseFullscreenOptions {
 	containerRef: RefObject<HTMLElement>
+	presenterTargetRef?: RefObject<HTMLElement>
+	presenterEnabled?: boolean
 }
 
 interface UseFullscreenReturn {
 	isFullscreen: boolean
+	isPresenterView: boolean
 	toggleFullscreen: () => Promise<void>
 	exitFullscreen: () => Promise<void>
 }
+
+type PresenterAttemptResult = "entered" | "skipped" | "target-failed"
 
 type FullscreenDocument = Document & {
 	webkitFullscreenElement?: Element | null
 	webkitExitFullscreen?: () => Promise<void> | void
 }
 
+interface WindowManagementScreen {
+	left?: number
+	top?: number
+	width?: number
+	height?: number
+}
+
+interface ScreenDetailsLike {
+	currentScreen: WindowManagementScreen
+	screens: WindowManagementScreen[]
+}
+
+type WindowWithScreenDetails = Window & {
+	getScreenDetails?: () => Promise<ScreenDetailsLike>
+}
+
+type ScreenWithExtensionState = Screen & {
+	isExtended?: boolean
+}
+
+type WindowManagementPermissionDescriptor = PermissionDescriptor & {
+	name: "window-management"
+}
+
+interface NavigatorWithWindowManagementPermission {
+	permissions?: {
+		query: (descriptor: WindowManagementPermissionDescriptor) => Promise<PermissionStatus>
+	}
+}
+
 type FullscreenElement = HTMLElement & {
+	requestFullscreen?: (
+		options?: FullscreenOptions & { screen?: WindowManagementScreen },
+	) => Promise<void>
 	webkitRequestFullscreen?: () => Promise<void> | void
 }
 
@@ -29,6 +67,22 @@ type ScreenOrientationWithLock = ScreenOrientation & {
 function getFullscreenElement(): Element | null {
 	const fullscreenDocument = document as FullscreenDocument
 	return document.fullscreenElement || fullscreenDocument.webkitFullscreenElement || null
+}
+
+function hasSameBounds(left: WindowManagementScreen, right: WindowManagementScreen) {
+	return (
+		left.left === right.left &&
+		left.top === right.top &&
+		left.width === right.width &&
+		left.height === right.height
+	)
+}
+
+function findExternalScreen(details: ScreenDetailsLike) {
+	return details.screens.find(
+		(screen) =>
+			screen !== details.currentScreen && !hasSameBounds(screen, details.currentScreen),
+	)
 }
 
 async function lockLandscapeOrientation() {
@@ -48,19 +102,110 @@ function unlockScreenOrientation() {
 }
 
 /**
- * Custom hook for managing fullscreen functionality
- * Handles fullscreen state, keyboard events, and fullscreen-related iframe messages
+ * Manages ordinary PPT fullscreen and the Window Management API presenter mode.
+ * Presenter mode fullscreens only the slide stage on an external display; the
+ * original window remains on the current display with notes and controls.
  */
-export function useFullscreen({ containerRef }: UseFullscreenOptions): UseFullscreenReturn {
+export function useFullscreen({
+	containerRef,
+	presenterTargetRef,
+	presenterEnabled = false,
+}: UseFullscreenOptions): UseFullscreenReturn {
 	const [isFullscreen, setIsFullscreen] = useState(false)
+	const [isPresenterView, setIsPresenterView] = useState(false)
+	const skipPresenterAttemptRef = useRef(false)
+	const resetPresenterSkipOnExitRef = useRef(false)
 
-	// Toggle fullscreen mode
+	const exitNativeFullscreen = useMemoizedFn(async () => {
+		const fullscreenDocument = document as FullscreenDocument
+		const exitDocumentFullscreen =
+			document.exitFullscreen || fullscreenDocument.webkitExitFullscreen
+		if (!exitDocumentFullscreen) return
+		await exitDocumentFullscreen.call(document)
+	})
+
+	const exitFullscreen = useMemoizedFn(async () => {
+		try {
+			if (isMagicApp) {
+				setIsFullscreen(false)
+				setIsPresenterView(false)
+				unlockScreenOrientation()
+				return
+			}
+			const fullscreenElement = getFullscreenElement()
+			if (
+				fullscreenElement === containerRef.current ||
+				fullscreenElement === presenterTargetRef?.current
+			) {
+				await exitNativeFullscreen()
+			}
+			setIsFullscreen(false)
+			setIsPresenterView(false)
+			unlockScreenOrientation()
+		} catch (error) {
+			console.error("Exit fullscreen error:", error)
+		}
+	})
+
+	const tryEnterPresenterView = useMemoizedFn(async (): Promise<PresenterAttemptResult> => {
+		const screenWindow = window as WindowWithScreenDetails
+		const target = presenterTargetRef?.current as FullscreenElement | null | undefined
+		if (
+			skipPresenterAttemptRef.current ||
+			isMagicApp ||
+			!presenterEnabled ||
+			!screenWindow.getScreenDetails ||
+			!target?.requestFullscreen
+		) {
+			return "skipped"
+		}
+		const screen = window.screen as ScreenWithExtensionState
+		if (screen.isExtended === false) return "skipped"
+		try {
+			const permissionApi = (navigator as unknown as NavigatorWithWindowManagementPermission)
+				.permissions
+			const permission = await permissionApi?.query({
+				name: "window-management",
+			} as WindowManagementPermissionDescriptor)
+			if (permission?.state === "denied") return "skipped"
+		} catch {
+			// Older Chromium builds expose getScreenDetails without recognizing the
+			// permission descriptor. Let the API itself decide in that case.
+		}
+
+		let screenDetails: ScreenDetailsLike
+		try {
+			// This follows the Window Management API's projected-presentation flow:
+			// screen enumeration and targeted fullscreen stay in the same user gesture.
+			screenDetails = await screenWindow.getScreenDetails()
+		} catch {
+			return "skipped"
+		}
+		const externalScreen = findExternalScreen(screenDetails)
+		if (!externalScreen) return "skipped"
+
+		try {
+			await target.requestFullscreen({ screen: externalScreen })
+			skipPresenterAttemptRef.current = false
+			setIsFullscreen(true)
+			setIsPresenterView(true)
+			return "entered"
+		} catch {
+			// requestFullscreen may consume transient activation before rejecting. Keep
+			// today's ordinary fallback, but skip presenter negotiation on the next click
+			// so that gesture goes directly to the stable single-window path.
+			skipPresenterAttemptRef.current = true
+			return "target-failed"
+		}
+	})
+
 	const toggleFullscreen = useCallback(async () => {
 		try {
 			// Native fullscreen is unreliable inside the mobile app WebView; its fixed layout is the
 			// fullscreen surface, so only the local CSS state needs to change there.
 			if (isMagicApp) {
 				setIsFullscreen((current) => !current)
+				setIsPresenterView(false)
 				if (isFullscreen) unlockScreenOrientation()
 				else void lockLandscapeOrientation()
 				return
@@ -70,10 +215,16 @@ export function useFullscreen({ containerRef }: UseFullscreenOptions): UseFullsc
 				// CSS fullscreen fallback (WebView and browsers without Fullscreen API).
 				if (isFullscreen) {
 					setIsFullscreen(false)
+					setIsPresenterView(false)
 					unlockScreenOrientation()
 					return
 				}
-				// Enter fullscreen for the container
+				const presenterAttempt = await tryEnterPresenterView()
+				if (presenterAttempt === "entered") return
+				const isPresenterFallbackRecovery =
+					presenterAttempt === "skipped" && skipPresenterAttemptRef.current
+
+				// Existing single-window fullscreen is the compatibility fallback.
 				if (containerRef.current) {
 					const fullscreenContainer = containerRef.current as FullscreenElement
 					const requestFullscreen =
@@ -84,21 +235,23 @@ export function useFullscreen({ containerRef }: UseFullscreenOptions): UseFullsc
 							window.matchMedia?.("(pointer: coarse)")?.matches ?? false
 						if (isCoarsePointer) {
 							setIsFullscreen(true)
+							setIsPresenterView(false)
 							await lockLandscapeOrientation()
 						}
 						return
 					}
 					await requestFullscreen.call(fullscreenContainer)
+					// A direct fallback that succeeds after the presenter breaker was opened
+					// restores presenter negotiation only after this fullscreen session exits.
+					resetPresenterSkipOnExitRef.current = isPresenterFallbackRecovery
 					setIsFullscreen(true)
+					setIsPresenterView(false)
 					await lockLandscapeOrientation()
 				}
 			} else {
-				const fullscreenDocument = document as FullscreenDocument
-				const exitDocumentFullscreen =
-					document.exitFullscreen || fullscreenDocument.webkitExitFullscreen
-				if (!exitDocumentFullscreen) return
-				await exitDocumentFullscreen.call(document)
+				await exitNativeFullscreen()
 				setIsFullscreen(false)
+				setIsPresenterView(false)
 				unlockScreenOrientation()
 			}
 		} catch (error) {
@@ -109,46 +262,26 @@ export function useFullscreen({ containerRef }: UseFullscreenOptions): UseFullsc
 			const isCoarsePointer = window.matchMedia?.("(pointer: coarse)")?.matches ?? false
 			if (isCoarsePointer) {
 				setIsFullscreen(true)
+				setIsPresenterView(false)
 				await lockLandscapeOrientation()
 			}
 		}
-	}, [containerRef, isFullscreen])
+	}, [containerRef, exitNativeFullscreen, isFullscreen, tryEnterPresenterView])
 
-	// Exit fullscreen mode
-	const exitFullscreen = useMemoizedFn(async () => {
-		try {
-			if (isMagicApp) {
-				setIsFullscreen(false)
-				unlockScreenOrientation()
-				return
-			}
-			// Check if the current container is in fullscreen
-			if (getFullscreenElement() === containerRef.current) {
-				const fullscreenDocument = document as FullscreenDocument
-				const exitDocumentFullscreen =
-					document.exitFullscreen || fullscreenDocument.webkitExitFullscreen
-				if (!exitDocumentFullscreen) return
-				await exitDocumentFullscreen.call(document)
-				setIsFullscreen(false)
-				unlockScreenOrientation()
-				return
-			}
-			if (isFullscreen) {
-				setIsFullscreen(false)
-				unlockScreenOrientation()
-			}
-		} catch (error) {
-			console.error("Exit fullscreen error:", error)
-		}
-	})
-
-	// Listen for fullscreen state changes
 	useEffect(() => {
 		function handleFullscreenChange() {
-			// Check if the current container is in fullscreen
-			const isContainerFullscreen = getFullscreenElement() === containerRef.current
-			setIsFullscreen(isContainerFullscreen)
-			if (!isContainerFullscreen) unlockScreenOrientation()
+			const fullscreenElement = getFullscreenElement()
+			const containerFullscreen = fullscreenElement === containerRef.current
+			const presenterFullscreen = fullscreenElement === presenterTargetRef?.current
+			setIsFullscreen(containerFullscreen || presenterFullscreen)
+			setIsPresenterView(presenterFullscreen)
+			if (!containerFullscreen && !presenterFullscreen) {
+				if (resetPresenterSkipOnExitRef.current) {
+					resetPresenterSkipOnExitRef.current = false
+					skipPresenterAttemptRef.current = false
+				}
+				unlockScreenOrientation()
+			}
 		}
 
 		document.addEventListener("fullscreenchange", handleFullscreenChange)
@@ -157,7 +290,7 @@ export function useFullscreen({ containerRef }: UseFullscreenOptions): UseFullsc
 			document.removeEventListener("fullscreenchange", handleFullscreenChange)
 			document.removeEventListener("webkitfullscreenchange", handleFullscreenChange)
 		}
-	}, [containerRef])
+	}, [containerRef, presenterTargetRef])
 
 	useEffect(() => () => unlockScreenOrientation(), [])
 
@@ -172,13 +305,7 @@ export function useFullscreen({ containerRef }: UseFullscreenOptions): UseFullsc
 						toggleFullscreen()
 						break
 					case "escape":
-						// Exit fullscreen if the container is in fullscreen mode
-						if (
-							isFullscreen &&
-							(isMagicApp || getFullscreenElement() === containerRef.current)
-						) {
-							exitFullscreen()
-						}
+						if (isFullscreen) exitFullscreen()
 						break
 				}
 			}
@@ -186,20 +313,13 @@ export function useFullscreen({ containerRef }: UseFullscreenOptions): UseFullsc
 
 		window.addEventListener("message", handleMessage)
 		return () => window.removeEventListener("message", handleMessage)
-	}, [toggleFullscreen, exitFullscreen, isFullscreen, containerRef])
+	}, [toggleFullscreen, exitFullscreen, isFullscreen])
 
-	// Handle keyboard events
 	useEffect(() => {
 		function handleKeyDown(event: KeyboardEvent) {
 			switch (event.key) {
 				case "Escape":
-					// Exit fullscreen if the container is in fullscreen mode
-					if (
-						isFullscreen &&
-						(isMagicApp || getFullscreenElement() === containerRef.current)
-					) {
-						exitFullscreen()
-					}
+					if (isFullscreen) exitFullscreen()
 					break
 				case "F11":
 					event.preventDefault()
@@ -210,10 +330,11 @@ export function useFullscreen({ containerRef }: UseFullscreenOptions): UseFullsc
 
 		window.addEventListener("keydown", handleKeyDown)
 		return () => window.removeEventListener("keydown", handleKeyDown)
-	}, [isFullscreen, toggleFullscreen, exitFullscreen, containerRef])
+	}, [isFullscreen, toggleFullscreen, exitFullscreen])
 
 	return {
 		isFullscreen,
+		isPresenterView,
 		toggleFullscreen,
 		exitFullscreen,
 	}

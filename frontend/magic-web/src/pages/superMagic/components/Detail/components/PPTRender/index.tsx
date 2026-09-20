@@ -285,6 +285,7 @@ const PPTRenderInner = observer(function PPTRenderInner({
 	const isMobile = useIsMobile()
 	const fileApi = useFileApi()
 	const containerRef = useRef<HTMLDivElement>(null)
+	const presentationStageRef = useRef<HTMLDivElement>(null)
 	const { onDownloadRequest, onFullscreenToggle, emitFullscreenStateChange } = usePPTEventBus()
 	const store = usePPTStore()
 
@@ -353,11 +354,23 @@ const PPTRenderInner = observer(function PPTRenderInner({
 	// 在文件树中定位活动幻灯片；缩略图滚动由虚拟侧边栏自身负责。
 	useSlideFileLocator({ store })
 
+	// Presenter controls reuse the same guarded slide navigation as the main window.
+	const { changeSlide, goToFirstSlide, handleJumpToPage } = useSlideNavigation({
+		store,
+		checkBeforeNavigate,
+	})
 	// 这里只表示 PPT 放映全屏。外层 FilesViewer 全屏只放大完整查看界面，不能隐藏侧栏和工具栏。
 	const {
 		isFullscreen: isPresentationFullscreen,
+		isPresenterView,
 		toggleFullscreen: togglePresentationFullscreen,
-	} = useFullscreen({ containerRef })
+	} = useFullscreen({
+		containerRef,
+		presenterTargetRef: presentationStageRef,
+		presenterEnabled: !isMobile && !isPlaybackMode,
+	})
+	const isSingleWindowFullscreen = isPresentationFullscreen && !isPresenterView
+	const isSidebarEffectivelyCollapsed = isSidebarCollapsed && !isPresenterView
 
 	// 先于子组件的被动 effect 同步，避免退出全屏时侧栏恢复请求仍被旧状态丢弃。
 	useLayoutEffect(() => {
@@ -495,12 +508,6 @@ const PPTRenderInner = observer(function PPTRenderInner({
 		}
 
 		openNewTab?.(fileId, path)
-	})
-
-	// 导航函数（上一张/下一张/跳转）
-	const { changeSlide, goToFirstSlide, handleJumpToPage } = useSlideNavigation({
-		store,
-		checkBeforeNavigate,
 	})
 
 	// 键盘导航 - 依赖 usePPTSidebar 返回的 isDeleteModalOpen
@@ -838,10 +845,10 @@ const PPTRenderInner = observer(function PPTRenderInner({
 				ref={containerRef}
 				data-testid="ppt-render-container"
 				data-mobile-fullscreen={
-					isMobile && isPresentationFullscreen ? "landscape" : undefined
+					isMobile && isSingleWindowFullscreen ? "landscape" : undefined
 				}
 				className={
-					isPresentationFullscreen
+					isSingleWindowFullscreen
 						? `fixed inset-0 ${TAILWIND_Z_INDEX_CLASSES.FULLSCREEN.CONTAINER} flex flex-row bg-black`
 						: "relative h-full w-full overflow-hidden"
 				}
@@ -859,7 +866,7 @@ const PPTRenderInner = observer(function PPTRenderInner({
 						<Minimize className="h-4 w-4" />
 					</Button>
 				)}
-				{isSidebarCollapsed && !isPresentationFullscreen && (
+				{isSidebarEffectivelyCollapsed && !isSingleWindowFullscreen && (
 					<MagicTooltip title={t("fileViewer.expandSidebar")}>
 						<Button
 							variant="ghost"
@@ -889,14 +896,14 @@ const PPTRenderInner = observer(function PPTRenderInner({
 							"shrink-0 overflow-hidden",
 							!isResizing && "transition-all duration-300 ease-in-out",
 							isMobile
-								? isSidebarCollapsed || isPresentationFullscreen
+								? isSidebarEffectivelyCollapsed || isSingleWindowFullscreen
 									? "h-0"
 									: "h-[140px]"
 								: "",
 						)}
 						style={{
 							width: !isMobile
-								? isSidebarCollapsed || isPresentationFullscreen
+								? isSidebarEffectivelyCollapsed || isSingleWindowFullscreen
 									? 0
 									: sidebarWidth
 								: undefined,
@@ -926,9 +933,9 @@ const PPTRenderInner = observer(function PPTRenderInner({
 								allowEdit={effectiveAllowEdit}
 								canReplaceTemplate={canReplaceTemplate}
 								onReplaceSlideTemplate={handleOpenSlideTemplateReplacement}
-								isCollapsed={isSidebarCollapsed}
+								isCollapsed={isSidebarEffectivelyCollapsed}
 								isPreviewLoadingEnabled={
-									!isSidebarCollapsed && !isPresentationFullscreen
+									!isSidebarEffectivelyCollapsed && !isSingleWindowFullscreen
 								}
 								onCollapsedChange={handleSidebarCollapsedChange}
 							/>
@@ -936,7 +943,7 @@ const PPTRenderInner = observer(function PPTRenderInner({
 					</div>
 
 					{/* Width handle stays below the canvas stacking context. */}
-					{!isMobile && !isSidebarCollapsed && !isPresentationFullscreen && (
+					{!isMobile && !isSidebarEffectivelyCollapsed && !isSingleWindowFullscreen && (
 						<div
 							data-testid="ppt-render-sidebar-resize-handle"
 							className={cn(
@@ -954,8 +961,8 @@ const PPTRenderInner = observer(function PPTRenderInner({
 						data-testid="ppt-render-slide-content"
 						className={cn(
 							"min-h-0 min-w-0 flex-1",
-							!isSidebarCollapsed &&
-								!isPresentationFullscreen &&
+							!isSidebarEffectivelyCollapsed &&
+								!isSingleWindowFullscreen &&
 								`relative ${TAILWIND_Z_INDEX_CLASSES.BASE.SLIDE_CANVAS}`,
 						)}
 					>
@@ -1011,8 +1018,12 @@ const PPTRenderInner = observer(function PPTRenderInner({
 
 							{/* z-0 traps the control bar z-50 so overlay notes can cover it. */}
 							<div
+								ref={presentationStageRef}
 								data-testid="ppt-render-slide-stage"
-								className="relative z-0 min-h-0 w-full flex-1 overflow-hidden"
+								className={cn(
+									"relative z-0 min-h-0 w-full flex-1 overflow-hidden",
+									isPresenterView && "bg-black",
+								)}
 							>
 								{/* 调整宽度时覆盖层防止 iframe 拦截鼠标事件 */}
 								{isResizing && (
@@ -1180,13 +1191,13 @@ const PPTRenderInner = observer(function PPTRenderInner({
 									)}
 							</div>
 
-							{!isPresentationFullscreen &&
+							{!isSingleWindowFullscreen &&
 								!isPlaybackMode &&
 								store.isReady &&
 								hasSlides &&
 								store.currentSlide && (
 									<PPTSpeakerNotesPanel
-										visible={pptNotesPreferenceStore.visible}
+										visible={isPresenterView || pptNotesPreferenceStore.visible}
 										slideIndex={activeSlideIndex}
 										rawContent={store.currentSlide.rawContent || ""}
 										fileId={
