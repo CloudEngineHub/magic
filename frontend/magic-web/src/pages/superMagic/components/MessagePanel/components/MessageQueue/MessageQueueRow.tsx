@@ -1,4 +1,4 @@
-import { useLayoutEffect, useRef, useState } from "react"
+import { useLayoutEffect, useMemo, useRef, useState } from "react"
 import { useTranslation } from "react-i18next"
 import { useSortable } from "@dnd-kit/sortable"
 import { CSS } from "@dnd-kit/utilities"
@@ -59,8 +59,10 @@ export default function MessageQueueRow({
 		message.isSendingLoading ||
 		message.isEditingLoading,
 	)
-	const previewText =
-		normalizeQueuePreviewText(message.content) || t("messageQueue.mobile.emptyContent")
+	// 摘要文本只用于「内容需要多宽」的测量与空内容兜底；实际渲染走富文本，
+	// 保证 AI 选取元素、文件提及这些需要节点视图的内容不会退化成原始标记。
+	const previewText = useMemo(() => normalizeQueuePreviewText(message.content), [message.content])
+	const previewLabel = previewText || t("messageQueue.mobile.emptyContent")
 	const actions: QueueAction[] = [
 		{
 			label: t("messageQueue.edit"),
@@ -126,7 +128,7 @@ export default function MessageQueueRow({
 		observer.observe(text)
 		measure()
 		return () => observer.disconnect()
-	}, [labels, previewText, mobile])
+	}, [labels, previewLabel, mobile])
 
 	return (
 		<div
@@ -163,14 +165,16 @@ export default function MessageQueueRow({
 				className={cn(
 					"min-w-0 flex-1",
 					mobile
-						? "text-sm leading-5"
-						: "text-xs leading-4 [&_.magic-mention]:!text-[10px] [&_p]:!text-xs [&_p]:!leading-4",
+						? "text-sm"
+						: // 桌面队列不再覆盖 <p> 行高：折叠盒由浏览器按真实行盒裁剪，
+							// AI 选取元素这类高内联节点会把行盒撑高，折叠高度自动跟随。
+							"text-xs [&_.magic-mention]:!text-[10px] [&_p]:!text-xs",
 				)}
 			>
-				{mobile ? (
-					<p className="truncate" title={previewText}>
-						{previewText}
-					</p>
+				{/* 移动端与桌面走同一条富文本路径：AI 选取元素需要节点视图渲染成标签，
+				    纯文本摘要会把 <magic-selection> 序列化标记直接吐出来。 */}
+				{mobile && !previewText ? (
+					<p className="truncate">{previewLabel}</p>
 				) : (
 					<CollapsibleText content={trimQueueContent(message.content)} maxLines={1} />
 				)}
@@ -218,7 +222,7 @@ export default function MessageQueueRow({
 						mobile ? "text-sm" : "text-xs",
 					)}
 				>
-					{previewText}
+					{previewLabel}
 				</span>
 				<div ref={actionsMeasureRef} className="absolute flex w-max items-center gap-1">
 					{actions.map(({ label, icon: Icon, testId }) => (

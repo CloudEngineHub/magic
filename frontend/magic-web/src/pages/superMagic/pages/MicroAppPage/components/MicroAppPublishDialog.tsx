@@ -17,6 +17,11 @@ import type { AttachmentItem } from "@/pages/superMagic/components/TopicFilesBut
 import { ShareType } from "@/pages/superMagic/components/Share/types"
 import { generateSharePassword } from "@/pages/superMagic/components/Share/utils"
 import { useShareTypePermissions } from "@/pages/superMagic/components/Share/hooks/useShareTypePermissions"
+import {
+	canCreateShareType,
+	isFreePlanFromSubscription,
+	pickDefaultShareType,
+} from "@/pages/superMagic/components/Share/utils/sharePlanRestrictions"
 import { clipboard } from "@/utils/clipboard-helpers"
 import { isMicroAppPublished } from "../utils/microAppPublish"
 import {
@@ -69,9 +74,10 @@ function MicroAppPublishDialog({
 }: MicroAppPublishDialogProps) {
 	const { t } = useTranslation("super")
 	const isPersonalOrganization = userStore.user.isPersonalOrganization
+	const isFreePlan = isFreePlanFromSubscription(userStore.user.organizationSubscriptionInfo)
 	const microAppSharePermissions = useShareTypePermissions("microApp")
 	const [formState, setFormState] = useState<MicroAppPublishFormState>(() =>
-		createDefaultFormState("", isPersonalOrganization),
+		createDefaultFormState("", isPersonalOrganization, isFreePlan),
 	)
 	const [publishedItem, setPublishedItem] = useState<PublishedMicroAppProjectItem | null>(null)
 	const [publishedFormState, setPublishedFormState] = useState<MicroAppPublishFormState | null>(
@@ -151,6 +157,7 @@ function MicroAppPublishDialog({
 					nextItem,
 					detail.project?.project_name || projectName,
 					isPersonalOrganization,
+					isFreePlan,
 				)
 				const nextPublishedFormState = nextItem
 					? createFormStateFromPublishedItem(
@@ -178,7 +185,9 @@ function MicroAppPublishDialog({
 				if (ignore) return
 				console.error("Failed to load micro app publish info:", error)
 				setPublishedItem(null)
-				setFormState(createDefaultFormState(projectName, isPersonalOrganization))
+				setFormState(
+					createDefaultFormState(projectName, isPersonalOrganization, isFreePlan),
+				)
 				setPublishedFormState(null)
 				magicToast.error(t("microAppPage.publish.loadFailed"))
 			} finally {
@@ -191,7 +200,7 @@ function MicroAppPublishDialog({
 		return () => {
 			ignore = true
 		}
-	}, [appId, clearCoverUploadError, isPersonalOrganization, open, projectName, t])
+	}, [appId, clearCoverUploadError, isFreePlan, isPersonalOrganization, open, projectName, t])
 
 	useEffect(() => {
 		if (open) return
@@ -220,8 +229,17 @@ function MicroAppPublishDialog({
 		}
 
 		setFormState((prev) => {
-			if (permittedMicroAppShareTypes.includes(prev.shareType)) return prev
-			const nextShareType = permittedMicroAppShareTypes[0]
+			// A method the administrator allows but the plan forbids must not survive here: the row
+			// would be hidden by `ShareTypeField` while the payload still carried it.
+			if (
+				permittedMicroAppShareTypes.includes(prev.shareType) &&
+				canCreateShareType(prev.shareType, isFreePlan)
+			) {
+				return prev
+			}
+			// Nothing satisfies both gates: keep the current method and let the dialog explain it.
+			const nextShareType = pickDefaultShareType(permittedMicroAppShareTypes, isFreePlan)
+			if (nextShareType === undefined) return prev
 			return {
 				...prev,
 				shareType: nextShareType,
@@ -231,13 +249,15 @@ function MicroAppPublishDialog({
 						: prev.password,
 			}
 		})
-	}, [formState.shareType, hasPublished, open, permittedMicroAppShareTypes])
+	}, [formState.shareType, hasPublished, isFreePlan, open, permittedMicroAppShareTypes])
 
 	const handleShareTypeChange = useCallback(
 		(shareType: ShareType) => {
 			if (permittedMicroAppShareTypes && !permittedMicroAppShareTypes.includes(shareType)) {
 				return
 			}
+			// `ShareTypeField` already refuses the click; this keeps the handler safe on its own.
+			if (!canCreateShareType(shareType, isFreePlan)) return
 			setFormState((prev) => {
 				const nextShareType = normalizeMicroAppPublishShareType(
 					shareType as MicroAppPublishShareType,
@@ -253,7 +273,7 @@ function MicroAppPublishDialog({
 				}
 			})
 		},
-		[isPersonalOrganization, permittedMicroAppShareTypes],
+		[isFreePlan, isPersonalOrganization, permittedMicroAppShareTypes],
 	)
 
 	const handleAppNameChange = useCallback((event: React.ChangeEvent<HTMLInputElement>) => {
@@ -348,6 +368,9 @@ function MicroAppPublishDialog({
 			magicToast.error(t("share.currentShareMethodUnavailable"))
 			return
 		}
+		// Backstop for the paid-plan gate: a micro app that is not published yet must never be
+		// published with a method the plan forbids. An already published app keeps its own method.
+		if (!hasPublished && !canCreateShareType(formState.shareType, isFreePlan)) return
 		const nextValidationError = getMicroAppPublishValidationError(formState)
 		if (nextValidationError) {
 			magicToast.error(t(`microAppPage.publish.${nextValidationError}`))
@@ -424,6 +447,8 @@ function MicroAppPublishDialog({
 		coverUploadError,
 		coverUploading,
 		formState,
+		hasPublished,
+		isFreePlan,
 		isPersonalOrganization,
 		isSelectedShareTypePermitted,
 		onProjectNameChange,
@@ -448,7 +473,7 @@ function MicroAppPublishDialog({
 					setPublishedItem(null)
 					setPublishedFormState(null)
 					setFormState((prev) => ({
-						...createDefaultFormState(prev.appName, isPersonalOrganization),
+						...createDefaultFormState(prev.appName, isPersonalOrganization, isFreePlan),
 						coverFileKey: prev.coverFileKey,
 						coverUrl: prev.coverUrl,
 					}))
@@ -462,7 +487,7 @@ function MicroAppPublishDialog({
 				}
 			},
 		})
-	}, [appId, isPersonalOrganization, onPublishStatusChange, t, unpublishing])
+	}, [appId, isFreePlan, isPersonalOrganization, onPublishStatusChange, t, unpublishing])
 
 	const closeDialog = () => onOpenChange(false)
 	const isBusy = saving || unpublishing || coverUploading

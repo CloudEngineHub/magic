@@ -43,6 +43,11 @@ import { mergeRecordingShareFileIds } from "@/pages/superMagic/pages/AudioRecord
 import FileShareDocumentDependenciesOption from "./FileShareDocumentDependenciesOption"
 import { useFileShareDocumentDependencies } from "./hooks/useFileShareDocumentDependencies"
 import { useShareTypePermissions } from "../hooks/useShareTypePermissions"
+import {
+	canCreateShareType,
+	isFreePlanFromSubscription,
+	pickDefaultShareType,
+} from "../utils/sharePlanRestrictions"
 import { useSharePermissionResource } from "../SharePermissionResourceContext"
 
 interface FileShareModalProps {
@@ -107,7 +112,7 @@ export default memo(function FileShareModal(props: FileShareModalProps) {
 	const { t } = useTranslation("super")
 	const isMobile = useIsMobile()
 
-	const isFreePlan = userStore.user.organizationSubscriptionInfo?.is_paid_plan === false
+	const isFreePlan = isFreePlanFromSubscription(userStore.user.organizationSubscriptionInfo)
 	const sharePermissionResource = useSharePermissionResource()
 	const shareTypePermissions = useShareTypePermissions(sharePermissionResource)
 	// Project and child-file shares inherit the permission group injected by their owning page.
@@ -456,9 +461,9 @@ export default memo(function FileShareModal(props: FileShareModalProps) {
 		}
 
 		// New resource shares start on the first option allowed by both function permission and plan.
-		const nextType = permittedShareTypes.find(
-			(type) => !isFreePlan || type === ShareType.Public,
-		)
+		// When nothing satisfies both gates the current type is kept: switching to another forbidden
+		// method would only trade one unusable option for another.
+		const nextType = pickDefaultShareType(permittedShareTypes, isFreePlan)
 		if (nextType !== undefined) commitShareType(nextType)
 	}, [commitShareType, externalResourceId, isFreePlan, permittedShareTypes, shareType])
 
@@ -740,6 +745,17 @@ export default memo(function FileShareModal(props: FileShareModalProps) {
 			return
 		}
 
+		// Backstop for the paid-plan gate. `ShareTypeField` already refuses to select a plan-disabled
+		// method and an existing share keeps its own one, so this only fires if some future caller
+		// sets the state directly — and it must never reach the create/update request.
+		if (
+			shouldControlShareType &&
+			!externalResourceId &&
+			!canCreateShareType(shareType, isFreePlan)
+		) {
+			return
+		}
+
 		// Validation: resource_name is required
 		if (!shareName || shareName.trim() === "") {
 			magicToast.error(t("share.shareNameRequired"))
@@ -900,6 +916,7 @@ export default memo(function FileShareModal(props: FileShareModalProps) {
 		shareTargets,
 		documentDependencyAnalysisError,
 		isSelectedShareTypePermitted,
+		isFreePlan,
 		shouldControlShareType,
 		extraData.passwordEnabled,
 		extraData.password,
