@@ -28,6 +28,7 @@ import {
 	useSlideSync,
 	useSlideNavigation,
 	useSlideHandlers,
+	usePPTPresenterWindow,
 } from "./hooks"
 import { getLiveRenderSlideKey, usePPTLiveRenderCache } from "./hooks/usePPTLiveRenderCache"
 import MagicSpin from "@/components/base/MagicSpin"
@@ -367,7 +368,38 @@ const PPTRenderInner = observer(function PPTRenderInner({
 	} = useFullscreen({
 		containerRef,
 		presenterTargetRef: presentationStageRef,
-		presenterEnabled: !isMobile && !isPlaybackMode,
+		presenterEnabled: false,
+	})
+	const {
+		isOpen: isPresenterWindowOpen,
+		isFallbackOnly: isPresenterFallbackOnly,
+		screens: presenterScreens,
+		selectedScreen: selectedPresenterScreen,
+		open: openPresenterWindow,
+		post: postPresenterSlide,
+		close: closePresenterWindow,
+		moveToScreen: movePresenterToScreen,
+	} = usePPTPresenterWindow()
+	useEffect(() => {
+		if (!isPresenterWindowOpen || !store.currentSlide?.content) return
+		postPresenterSlide({
+			index: store.activeIndex,
+			html: store.currentSlide.content,
+		})
+	}, [isPresenterWindowOpen, postPresenterSlide, store, store.activeIndex, store.currentSlide])
+	const togglePresenter = useMemoizedFn(async () => {
+		if (isPresenterWindowOpen) {
+			closePresenterWindow()
+			return
+		}
+		if (!isPresenterFallbackOnly && !isMobile && store.currentSlide?.content) {
+			const openResult = await openPresenterWindow({
+				index: store.activeIndex,
+				html: store.currentSlide.content,
+			})
+			if (openResult !== "fallback") return
+		}
+		await togglePresentationFullscreen()
 	})
 	const isSingleWindowFullscreen = isPresentationFullscreen && !isPresenterView
 	const isSidebarEffectivelyCollapsed = isSidebarCollapsed && !isPresenterView
@@ -389,10 +421,10 @@ const PPTRenderInner = observer(function PPTRenderInner({
 	useEffect(() => {
 		const unsubscribe = onFullscreenToggle(() => {
 			if (onFileFullscreen) onFileFullscreen()
-			else togglePresentationFullscreen()
+			else void togglePresenter()
 		})
 		return unsubscribe
-	}, [onFileFullscreen, togglePresentationFullscreen, onFullscreenToggle])
+	}, [onFileFullscreen, onFullscreenToggle, togglePresenter])
 
 	// 发出全屏状态变化事件
 	useEffect(() => {
@@ -1151,9 +1183,13 @@ const PPTRenderInner = observer(function PPTRenderInner({
 									store.isReady &&
 									hasSlides && (
 										<PPTControlBar
-											notesVisible={pptNotesPreferenceStore.visible}
+											notesVisible={
+												isPresenterView ||
+												isPresenterWindowOpen ||
+												pptNotesPreferenceStore.visible
+											}
 											onToggleNotes={
-												!isPlaybackMode && store.currentSlide
+												store.currentSlide
 													? pptNotesPreferenceStore.toggle
 													: undefined
 											}
@@ -1161,7 +1197,9 @@ const PPTRenderInner = observer(function PPTRenderInner({
 											totalSlides={store.slideUrls.length}
 											isTransitioning={store.isTransitioning}
 											isMobile={isMobile}
-											isFullscreen={isPresentationFullscreen}
+											isFullscreen={
+												isPresentationFullscreen || isPresenterWindowOpen
+											}
 											onPrevSlide={() => changeSlide("prev")}
 											onNextSlide={() => changeSlide("next")}
 											onGoToFirstSlide={goToFirstSlide}
@@ -1176,7 +1214,14 @@ const PPTRenderInner = observer(function PPTRenderInner({
 												presentedToolbarModel?.props.isRefreshing,
 											)}
 											onJumpToPage={handleJumpToPage}
-											onToggleFullscreen={togglePresentationFullscreen}
+											onToggleFullscreen={togglePresenter}
+											presenterScreens={
+												isPresenterWindowOpen ? presenterScreens : undefined
+											}
+											selectedPresenterScreen={selectedPresenterScreen}
+											onSelectPresenterScreen={(index) => {
+												void movePresenterToScreen(index)
+											}}
 											onReplaceTemplate={
 												canReplaceTemplate
 													? handleOpenTemplateReplacement
@@ -1192,12 +1237,15 @@ const PPTRenderInner = observer(function PPTRenderInner({
 							</div>
 
 							{!isSingleWindowFullscreen &&
-								!isPlaybackMode &&
 								store.isReady &&
 								hasSlides &&
 								store.currentSlide && (
 									<PPTSpeakerNotesPanel
-										visible={isPresenterView || pptNotesPreferenceStore.visible}
+										visible={
+											isPresenterView ||
+											isPresenterWindowOpen ||
+											pptNotesPreferenceStore.visible
+										}
 										slideIndex={activeSlideIndex}
 										rawContent={store.currentSlide.rawContent || ""}
 										fileId={
@@ -1209,7 +1257,7 @@ const PPTRenderInner = observer(function PPTRenderInner({
 													store.getFileIdByPath(slide.path) === fileId,
 											)?.rawContent || ""
 										}
-										allowEdit={effectiveAllowEdit}
+										allowEdit={effectiveAllowEdit && !isPlaybackMode}
 										saveEditContent={saveEditContent}
 										onSaved={(nextContent, fileId) =>
 											Promise.resolve(

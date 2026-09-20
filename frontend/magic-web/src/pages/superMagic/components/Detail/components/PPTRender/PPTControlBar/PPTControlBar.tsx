@@ -11,12 +11,14 @@ import {
 	RotateCw,
 	PanelsTopLeft,
 	NotebookPen,
+	Monitor,
+	Check,
 } from "lucide-react"
 import type { PPTControlBarProps } from "./types"
 import { PPTZoomControl } from "./PPTZoomControl"
 import { cn } from "@/utils/cn"
 import { Button } from "@/components/shadcn-ui/button"
-import { MagicTooltip } from "@/components/base"
+import { MagicDropdown, MagicTooltip } from "@/components/base"
 
 export function PPTControlBar({
 	activeIndex,
@@ -32,6 +34,9 @@ export function PPTControlBar({
 	isRefreshingCurrentSlide,
 	onJumpToPage,
 	onToggleFullscreen,
+	presenterScreens,
+	selectedPresenterScreen,
+	onSelectPresenterScreen,
 	onReplaceTemplate,
 	notesVisible,
 	onToggleNotes,
@@ -328,6 +333,45 @@ export function PPTControlBar({
 						</span>
 					</MagicTooltip>
 				)}
+				{!isMobile && presenterScreens?.length && onSelectPresenterScreen ? (
+					<MagicDropdown
+						placement="topRight"
+						getPopupContainer={() => portalContainer || document.body}
+						menu={{
+							items: presenterScreens.map((screen, index) => ({
+								key: String(index),
+								label: (
+									<div className="flex min-w-40 items-center justify-between gap-3">
+										<span>
+											{screen.label ||
+												t("ppt.presenter.screenOption", {
+													index: index + 1,
+												})}
+											{screen.isPrimary
+												? t("ppt.presenter.primarySuffix")
+												: ""}
+										</span>
+										{selectedPresenterScreen === index && (
+											<Check className="size-4" />
+										)}
+									</div>
+								),
+							})),
+							onClick: ({ key }) => onSelectPresenterScreen(Number(key)),
+						}}
+					>
+						<Button
+							variant="ghost"
+							size="sm"
+							data-testid="ppt-control-bar-presenter-screen-button"
+							className="h-7 gap-[5px] px-[7px] text-[13px] font-normal"
+							aria-label={t("ppt.presenter.selectScreen")}
+						>
+							<Monitor className="size-4" />
+							{t("ppt.presenter.screen")}
+						</Button>
+					</MagicDropdown>
+				) : null}
 			</div>
 			{(!isMobile || onToggleNotes) && (
 				<div

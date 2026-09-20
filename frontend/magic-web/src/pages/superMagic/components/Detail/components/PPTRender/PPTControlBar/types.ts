@@ -12,6 +12,9 @@ export interface PPTControlBarProps {
 	onRefreshSlides: () => void
 	onJumpToPage: (index: number) => void
 	onToggleFullscreen: () => void
+	presenterScreens?: ReadonlyArray<{ label?: string; isPrimary?: boolean }>
+	selectedPresenterScreen?: number | null
+	onSelectPresenterScreen?: (index: number) => void
 	onReplaceTemplate?: () => void
 	notesVisible?: boolean
 	onToggleNotes?: () => void

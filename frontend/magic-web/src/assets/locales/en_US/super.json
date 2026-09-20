@@ -4750,6 +4750,16 @@
 		"noSlidesAvailable": "No PPT pages available",
 		"pageNumber": "Page {{page}}",
 		"pleaseSelectSlides": "Please select at least one slide",
+		"presenter": {
+			"enterFullscreen": "Enter fullscreen",
+			"frameTitle": "PPT presentation",
+			"primarySuffix": " (Primary)",
+			"screen": "Presenter display",
+			"screenOption": "Display {{index}}",
+			"selectScreen": "Select presenter display",
+			"slideTitle": "Slide {{page}} · Presenter",
+			"title": "Presenter"
+		},
 		"refreshCurrentSlide": "Refresh",
 		"reloadAllSlides": "Reload all",
 		"reloadCurrentSlide": "Reload current",

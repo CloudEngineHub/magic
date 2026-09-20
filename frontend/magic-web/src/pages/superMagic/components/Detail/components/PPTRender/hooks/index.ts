@@ -1,4 +1,5 @@
 export { useFullscreen } from "./useFullscreen"
+export { usePPTPresenterWindow } from "./usePPTPresenterWindow"
 export { usePPTSidebar } from "./usePPTSidebar"
 export { useResizeDrag } from "./useResizeDrag"
 export { useSlideFileLocator } from "./useSlideFileLocator"

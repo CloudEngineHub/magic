@@ -4750,6 +4750,16 @@
 		"noSlidesAvailable": "暂无 PPT 页面",
 		"pageNumber": "第 {{page}} 页",
 		"pleaseSelectSlides": "请选择至少一页幻灯片",
+		"presenter": {
+			"enterFullscreen": "进入全屏",
+			"frameTitle": "PPT 放映画面",
+			"primarySuffix": "（主屏幕）",
+			"screen": "放映屏幕",
+			"screenOption": "屏幕 {{index}}",
+			"selectScreen": "选择放映屏幕",
+			"slideTitle": "第 {{page}} 页 · 演示者放映",
+			"title": "演示者放映"
+		},
 		"refreshCurrentSlide": "刷新",
 		"reloadAllSlides": "重载全部",
 		"reloadCurrentSlide": "重载当前",
