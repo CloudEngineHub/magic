@@ -404,9 +404,21 @@ function MicroAppPageMobileInner({
 							open={conversationOpen}
 							selectedProject={panelSelectedProject}
 							topicStore={conversation.topicStore}
-							mentionPanelStore={store.mentionPanelStore}
-							projectFilesStore={store.projectFilesStore}
-							attachments={attachments}
+							mentionPanelStore={
+								conversationType === "usage"
+									? store.runtimeMentionPanelStore
+									: store.mentionPanelStore
+							}
+							projectFilesStore={
+								conversationType === "usage"
+									? store.runtimeProjectFilesStore
+									: store.projectFilesStore
+							}
+							attachments={
+								conversationType === "usage"
+									? store.runtimeProjectFilesStore.workspaceFileTree
+									: attachments
+							}
 							onSelectDetail={handleSelectDetail}
 							onTerminalTopicStatusChange={checkAttachmentsNowDebounced}
 							onOpenFile={handlePreviewFile}

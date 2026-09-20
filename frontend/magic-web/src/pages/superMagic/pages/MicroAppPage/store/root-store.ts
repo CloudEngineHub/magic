@@ -28,12 +28,16 @@ export class AppRootStore {
 	runtimeProjectRequestId = 0
 	readonly projectFilesStore: ProjectFilesStore
 	readonly mentionPanelStore: ReturnType<typeof createMentionPanelStore>
+	readonly runtimeProjectFilesStore: ProjectFilesStore
+	readonly runtimeMentionPanelStore: ReturnType<typeof createMentionPanelStore>
 
 	constructor() {
 		this.developmentConversation = new AppConversationStore()
 		this.usageConversation = new AppConversationStore()
 		this.projectFilesStore = new ProjectFilesStore()
 		this.mentionPanelStore = createMentionPanelStore(this.projectFilesStore)
+		this.runtimeProjectFilesStore = new ProjectFilesStore()
+		this.runtimeMentionPanelStore = createMentionPanelStore(this.runtimeProjectFilesStore)
 
 		makeAutoObservable(
 			this,
@@ -46,6 +50,8 @@ export class AppRootStore {
 				runtimeProjectRequestId: false,
 				projectFilesStore: false,
 				mentionPanelStore: false,
+				runtimeProjectFilesStore: false,
+				runtimeMentionPanelStore: false,
 			},
 			{ autoBind: true },
 		)
@@ -69,6 +75,7 @@ export class AppRootStore {
 		this.runtimeProjectState = "unknown"
 		this.runtimeProjectPromise = null
 		this.runtimeProjectPromiseAppId = null
+		this.runtimeProjectFilesStore.setSelectedProject(null)
 		this.usageConversation.reset()
 		if (this.conversationType === "usage") this.conversationType = "development"
 	}
@@ -205,6 +212,7 @@ export class AppRootStore {
 		this.runtimeProjectPromiseAppId = null
 		this.runtimeProjectRequestId += 1
 		this.projectFilesStore.setSelectedProject(null)
+		this.runtimeProjectFilesStore.setSelectedProject(null)
 	}
 
 	dispose() {
