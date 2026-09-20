@@ -48,6 +48,8 @@ export interface ProjectPageInputContainerProps {
 	topicModeLogic?: TopicModeLogic
 	/** 模型选择器使用的模式目录，不改变实际发送时的话题模式。 */
 	modelTopicMode?: SceneEditorContext["modelTopicMode"]
+	/** 覆盖编辑器发送和场景配置使用的员工；用于锁定对话详情的默认员工。 */
+	agentCode?: string | null
 	/**
 	 * 是否启用通过内容发送消息
 	 */

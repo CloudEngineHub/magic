@@ -60,6 +60,7 @@ const ProjectPageInputContainerComponent: React.FC<ProjectPageInputContainerProp
 	allowRecordingMode,
 	topicModeLogic: topicModeLogicProps,
 	modelTopicMode,
+	agentCode,
 	size = "small",
 	enableMessageSendByContent = true,
 	editorLayoutConfig,
@@ -115,6 +116,9 @@ const ProjectPageInputContainerComponent: React.FC<ProjectPageInputContainerProp
 	const topicMode = topicModeLogicProps?.topicMode ?? innerTopicMode
 	const setTopicMode = topicModeLogicProps?.setTopicMode ?? innerSetTopicMode
 	const recoverTopicMode = topicModeLogicProps?.recoverTopicMode ?? innerRecoverTopicMode
+	// An explicit null clears a historical topic employee; omitted keeps the task detail fallback.
+	const effectiveAgentCode =
+		agentCode !== undefined ? (agentCode ?? undefined) : selectedTopic?.agent_code
 
 	const { handleInterrupt } = useTaskInterrupt({
 		selectedTopic: selectedTopic ?? null,
@@ -129,7 +133,7 @@ const ProjectPageInputContainerComponent: React.FC<ProjectPageInputContainerProp
 		editorRef,
 		projectId: selectedProject?.id,
 		topicId: selectedTopic?.id,
-		agentCode: selectedTopic?.agent_code,
+		agentCode: effectiveAgentCode,
 		isTaskRunning: showLoading,
 		isWaitingForUser: isTopicWaitingForUser(selectedTopic),
 		isEmptyStatus,
@@ -145,13 +149,13 @@ const ProjectPageInputContainerComponent: React.FC<ProjectPageInputContainerProp
 			buildTopicInputScopeKey(
 				String(topicMode),
 				selectedTopic?.id ?? "",
-				selectedTopic?.agent_code ?? "",
+				effectiveAgentCode ?? "",
 			),
 		)
 	}, [
 		topicMode,
 		selectedTopic?.id,
-		selectedTopic?.agent_code,
+		effectiveAgentCode,
 		sceneStateStore,
 		organizationCode,
 		userId,
@@ -211,7 +215,7 @@ const ProjectPageInputContainerComponent: React.FC<ProjectPageInputContainerProp
 			setSelectedProject,
 			topicMode: topicMode,
 			modelTopicMode,
-			agentCode: selectedTopic?.agent_code,
+			agentCode: effectiveAgentCode,
 			setTopicMode: setTopicMode,
 			recoverTopicMode,
 			topicExamplesMode: tabPattern,
@@ -266,6 +270,7 @@ const ProjectPageInputContainerComponent: React.FC<ProjectPageInputContainerProp
 		setSelectedProject,
 		topicMode,
 		modelTopicMode,
+		effectiveAgentCode,
 		setTopicMode,
 		recoverTopicMode,
 		tabPattern,
