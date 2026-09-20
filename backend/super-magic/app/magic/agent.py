@@ -696,14 +696,24 @@ class Agent(BaseAgent):
         # last bounded snapshot while the mount's root revision is unchanged;
         # this removes repeated full depth-limited walks from tool loops.
         if self._workspace_snapshot is not None and signature == self._workspace_snapshot_signature:
+            logger.debug("工作区树快照命中缓存，跳过扫描")
             return self._workspace_snapshot
 
         logger.info("扫描工作区文件树")
+        scan_started = time.monotonic()
         list_dir_tool = ListDir()
         content = await list_dir_tool.get_file_tree_async(
             relative_workspace_path=".",
             level=WORKSPACE_TREE_SCAN_DEPTH,
             filter_binary=False,
+        )
+        # The scan costs one readdir round trip per directory, so its duration
+        # scales with the tree's breadth and cannot be inferred from the node
+        # budget alone.  Log the measured numbers: they are what tells a real
+        # full walk apart from a budget-truncated one.
+        logger.info(
+            f"工作区树扫描完成: dirs={content.total_dirs}, files={content.total_files}, "
+            f"truncated={content.truncated}, elapsed={time.monotonic() - scan_started:.2f}s"
         )
         entries = extract_workspace_entries(content.tree)
         display = build_workspace_tree_display_text(
