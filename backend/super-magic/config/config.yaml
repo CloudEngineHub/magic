@@ -587,6 +587,15 @@ runtime_cleanup:
     max_total_size: 16MB
     target_total_size: 12MB
 
+  # 原生视觉图片 Base64 的跨 run 复用缓存。
+  # 一个缓存项最大约 512KB（data URL 上限）+ JSON 开销，512 项与 256MB 高水位大致对应。
+  native_visual_cache:
+    max_age_days: 7
+    max_file_count: 512
+    target_file_count: 384
+    max_total_size: 256MB
+    target_total_size: 192MB
+
   llm_request:
     max_file_count: 10
 
