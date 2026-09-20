@@ -9,7 +9,6 @@ import {
 	type RefObject,
 	type CSSProperties,
 } from "react"
-import { useLocation } from "react-router"
 import { useTranslation } from "react-i18next"
 import { useMemoizedFn } from "ahooks"
 import { observer } from "mobx-react-lite"
@@ -17,9 +16,6 @@ import { Loader2, MessageCirclePlus, RefreshCw, Search } from "lucide-react"
 import { MagicDropdown } from "@/components/base"
 import SuperMagicService from "@/pages/superMagic/services"
 import { roleStore } from "@/pages/superMagic/stores"
-import projectStore from "@/pages/superMagic/stores/core/project"
-import { RouteName } from "@/routes/constants"
-import { routesPathMatch } from "@/routes/history/helpers"
 import { resolveProjectModeForCreate } from "@/services/superMagic/DefaultAgentSelectionService"
 import { useChatWorkspace } from "@/pages/superMagic/hooks/useChatWorkspace"
 import { useAutoLoadMoreSentinel } from "@/pages/superMagic/hooks/useAutoLoadMoreSentinel"
@@ -39,6 +35,7 @@ import {
 } from "./chats-submenu-config"
 import ChatConversationSubMenuRow from "./ChatConversationSubMenuRow"
 import ProjectNavigationToolbar from "./ProjectNavigationToolbar"
+import { useChatSidebarSelection } from "./hooks/useChatSidebarSelection"
 
 type ChatsSubMenuProps = {
 	viewportMaxHeight?: CSSProperties["maxHeight"]
@@ -102,7 +99,7 @@ const ChatsSubMenu = forwardRef<ChatsSubMenuHandle, ChatsSubMenuProps>(function 
 	ref,
 ) {
 	const { t } = useTranslation(["sidebar", "super", "common", "interface"])
-	const location = useLocation()
+	const { projectId: activeConversationProjectId } = useChatSidebarSelection()
 	const [open, setOpen] = useState(false)
 	const [isSearchMode, setIsSearchMode] = useState(false)
 	// Keep IME text local until the shared toolbar commits a complete search value.
@@ -136,12 +133,6 @@ const ChatsSubMenu = forwardRef<ChatsSubMenuHandle, ChatsSubMenuProps>(function 
 	useEffect(() => {
 		if (searchKeyword !== undefined) setSearchValue(searchKeyword)
 	}, [searchKeyword, setSearchValue])
-
-	/** Highlight the open chat only on the chat detail route; avoid stale selection on other pages. */
-	const isChatRouteActive = routesPathMatch(RouteName.SuperChatProjectState, location.pathname)
-	const activeConversationProjectId = isChatRouteActive
-		? projectStore.selectedProject?.id
-		: undefined
 
 	/** Mirror mobile InfiniteScroll: append the next page when the sentinel enters view. */
 	const handleAutoLoadMore = useMemoizedFn(() => {

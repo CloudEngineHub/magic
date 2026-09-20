@@ -22,8 +22,10 @@ const {
 	switchChatProjectMock: vi.fn().mockResolvedValue(undefined),
 }))
 
-vi.mock("react-router", () => ({
-	useLocation: () => ({ pathname: "/mock-super-chat" }),
+const locationState = vi.hoisted(() => ({ pathname: "/global/super/chat/project-mock-existing" }))
+vi.mock("react-router", async (importOriginal) => ({
+	...(await importOriginal<typeof import("react-router")>()),
+	useLocation: () => locationState,
 }))
 
 vi.mock("@/routes/constants", () => ({
@@ -171,11 +173,18 @@ vi.mock("../ChatConversationSubMenuRow", () => ({
 	default: ({
 		item,
 		onOpen,
+		isSelected,
 	}: {
+		isSelected: boolean
 		item: { id: string; title: string }
 		onOpen: (item: { id: string; title: string }) => void
 	}) => (
-		<button type="button" data-testid={`mock-chat-row-${item.id}`} onClick={() => onOpen(item)}>
+		<button
+			type="button"
+			data-selected={isSelected}
+			data-testid={`mock-chat-row-${item.id}`}
+			onClick={() => onOpen(item)}
+		>
 			{item.title}
 		</button>
 	),
@@ -196,6 +205,7 @@ function renderStandaloneChatsSubMenu() {
 
 describe("ChatsSubMenu", () => {
 	beforeEach(() => {
+		locationState.pathname = "/global/super/chat/project-mock-existing"
 		collapseIfNarrowMock.mockClear()
 		reloadMock.mockClear()
 		setSearchValueMock.mockClear()
@@ -204,6 +214,17 @@ describe("ChatsSubMenu", () => {
 		switchChatProjectMock.mockClear()
 	})
 
+	it("selects the routed conversation and clears it on chat home", () => {
+		const { rerender } = render(<ChatsSubMenu standalone workspace active />)
+		const row = screen.getByTestId("mock-chat-row-project-mock-existing")
+		expect(row).toHaveAttribute("data-selected", "true")
+		locationState.pathname = "/global/super/chat"
+		rerender(<ChatsSubMenu standalone workspace active />)
+		expect(row).toHaveAttribute("data-selected", "false")
+		locationState.pathname = "/global/super/chat/another-project/topic-1"
+		rerender(<ChatsSubMenu standalone workspace active />)
+		expect(row).toHaveAttribute("data-selected", "false")
+	})
 	it.each([false, true])(
 		"switches an existing chat without collapsing (standalone=%s)",
 		async (standalone) => {

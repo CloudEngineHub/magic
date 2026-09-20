@@ -10,6 +10,11 @@ const { mountList, createChat, refreshChats } = vi.hoisted(() => ({
 	refreshChats: vi.fn().mockResolvedValue(undefined),
 }))
 
+const locationState = vi.hoisted(() => ({ pathname: "/global/super" }))
+vi.mock("react-router", async (importOriginal) => ({
+	...(await importOriginal<typeof import("react-router")>()),
+	useLocation: () => locationState,
+}))
 vi.mock("react-i18next", () => ({
 	useTranslation: () => ({ t: (key: string) => key }),
 }))
@@ -33,10 +38,32 @@ vi.mock("@/components/base/MagicTooltip", () => ({
 
 describe("ChatWorkspaceItem", () => {
 	beforeEach(() => {
+		locationState.pathname = "/global/super"
 		sidebarStore.setWorkspaceExpanded("sidebar-my-chats", false)
 		vi.clearAllMocks()
 	})
 
+	it("selects my chats only on the blank chat home", () => {
+		locationState.pathname = "/global/super/chat"
+		const { rerender } = render(<ChatWorkspaceItem active />)
+		expect(screen.getByTestId("sidebar-my-chats-toggle")).toHaveAttribute(
+			"aria-current",
+			"page",
+		)
+		locationState.pathname = "/global/super"
+		// The location mock has no context subscription; change a prop to rerender the observer.
+		rerender(<ChatWorkspaceItem active={false} />)
+		expect(screen.getByTestId("sidebar-my-chats-toggle")).not.toHaveAttribute("aria-current")
+	})
+	it("reveals a routed conversation and permits manual collapse", () => {
+		locationState.pathname = "/global/super/chat/project-1/topic-1"
+		render(<ChatWorkspaceItem active />)
+		const toggle = screen.getByTestId("sidebar-my-chats-toggle")
+		expect(toggle).toHaveAttribute("aria-expanded", "true")
+		expect(toggle).not.toHaveAttribute("aria-current")
+		fireEvent.click(toggle)
+		expect(toggle).toHaveAttribute("aria-expanded", "false")
+	})
 	it("loads on first expansion and keeps the same list when reopened", () => {
 		render(<ChatWorkspaceItem active />)
 		expect(mountList).not.toHaveBeenCalled()

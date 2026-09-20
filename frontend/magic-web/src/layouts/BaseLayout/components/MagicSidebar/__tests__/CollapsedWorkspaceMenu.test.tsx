@@ -14,6 +14,11 @@ const { createChat, workspaceStore } = vi.hoisted(() => ({
 	createChat: vi.fn(),
 	workspaceStore: { selectedWorkspace: null, workspaces: [{ id: "alpha", name: "Alpha" }] },
 }))
+const locationState = vi.hoisted(() => ({ pathname: "/global/super" }))
+vi.mock("react-router", async (importOriginal) => ({
+	...(await importOriginal<typeof import("react-router")>()),
+	useLocation: () => locationState,
+}))
 vi.mock("react-i18next", () => ({ useTranslation: () => ({ t: (key: string) => key }) }))
 vi.mock("@/pages/superMagic/stores/core/workspace", () => ({ default: workspaceStore }))
 vi.mock("@/pages/superMagic/stores/core/project", () => ({ default: {} }))
@@ -132,7 +137,17 @@ function Harness() {
 
 describe("CollapsedWorkspaceMenu conversation submenu", () => {
 	beforeEach(() => {
+		locationState.pathname = "/global/super"
 		vi.clearAllMocks()
+	})
+
+	it("selects my chats on the blank chat home in the collapsed menu", () => {
+		locationState.pathname = "/global/super/chat"
+		render(<Harness />)
+		expect(screen.getByTestId("sidebar-collapsed-my-chats")).toHaveAttribute(
+			"aria-current",
+			"page",
+		)
 	})
 
 	it("orders shared workspace and chats before ordinary workspaces without loading chats", () => {
