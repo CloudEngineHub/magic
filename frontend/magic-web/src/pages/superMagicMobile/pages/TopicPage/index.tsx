@@ -125,6 +125,7 @@ function TopicPage({
 	onInitialMessagesReadyChange,
 }: TopicPageProps = {}) {
 	const { t } = useTranslation("super")
+	const { t: tMainInput } = useTranslation("super/mainInput")
 	const { styles, cx } = useStyles()
 	const isMobile = useIsMobile()
 	const location = useLocation()
@@ -647,6 +648,7 @@ function TopicPage({
 							// Conversation details keep the default employee fixed; only the message editor remains.
 							showModeToggle={false}
 							showModelSelector={false}
+							placeholder={tMainInput("chatHome.placeholder")}
 							attachments={attachments}
 							isShowLoadingInit={isShowLoadingInit}
 							enableReEditMessageFromPubSub

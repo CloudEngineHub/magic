@@ -50,6 +50,8 @@ export interface ProjectPageInputContainerProps {
 	modelTopicMode?: SceneEditorContext["modelTopicMode"]
 	/** 覆盖编辑器发送和场景配置使用的员工；用于锁定对话详情的默认员工。 */
 	agentCode?: string | null
+	/** 输入框提示文案覆盖，用于让移动端对话详情与对话首页保持一致。 */
+	placeholder?: SceneEditorContext["placeholder"]
 	/**
 	 * 是否启用通过内容发送消息
 	 */
