@@ -27,6 +27,7 @@ import { WorkspaceList } from "./WorkspaceList"
 import CollapsedWorkspaceMenu from "./CollapsedWorkspaceMenu"
 import RecentProjects from "./RecentProjects"
 import ProjectNavigationTabs from "./ProjectNavigationTabs"
+import ChatsSubMenu from "./ChatsSubMenu"
 
 const WorkspaceProjectsPanel = lazy(
 	() => import("@/pages/superMagic/components/WorkspacesMenu/components/WorkspaceProjectsPanel"),
@@ -49,19 +50,23 @@ function ProjectNavigation({
 	const [popover, setPopover] = useState<"recent" | "workspaces" | null>(null)
 	const [workspaceBusy, setWorkspaceBusy] = useState(false)
 	const [recentBusy, setRecentBusy] = useState(false)
+	const [chatBusy, setChatBusy] = useState(false)
 	const [recentVisited, setRecentVisited] = useState(false)
+	const [chatVisited, setChatVisited] = useState(false)
 	const [createProject, setCreateProject] = useState(false)
 	const userId = userStore.user.userInfo?.user_id
 	const organizationCode = userStore.user.organizationCode
 	const selectedWorkspace = workspaceStore.selectedWorkspace
 	const recentExpanded = sidebarStore.recentProjectsExpanded
+	const workspacesExpanded = sidebarStore.workspacesExpanded
+	const chatsExpanded = sidebarStore.expandedNavigationSection === "chats"
 	const workspaceIcon = <Box size={16} />
 	const recentIcon = <Clock3 size={16} />
 	const managerIcon = <AppWindow size={16} />
 	const scrollRef = useRef<HTMLDivElement>(null)
 	const scrollAreaRef = useRef<HTMLDivElement>(null)
 	const navigationRef = useRef<HTMLDivElement>(null)
-	const scrollKey = `sidebar-scroll:${collapsed ? "collapsed" : "expanded"}`
+	const scrollKey = `sidebar-scroll:${collapsed ? "collapsed" : chatsExpanded ? "chats" : "expanded"}`
 	useLayoutEffect(() => {
 		const navigation = navigationRef.current
 		if (collapsed || !navigation) return
@@ -88,7 +93,7 @@ function ProjectNavigation({
 			navigation.style.removeProperty("--project-navigation-tabs-height")
 			navigation.style.removeProperty("--workspace-list-sticky-top")
 		}
-	}, [collapsed, recentExpanded, userId, organizationCode])
+	}, [collapsed, recentExpanded, chatsExpanded, userId, organizationCode])
 	useLayoutEffect(() => {
 		sidebarStore.setNavigationIdentity(userId, organizationCode)
 		recentProjectsStore.setIdentity(userId, organizationCode)
@@ -103,13 +108,19 @@ function ProjectNavigation({
 		setPopover(null)
 		setWorkspaceBusy(false)
 		setRecentBusy(false)
+		setChatBusy(false)
 	}, [collapsed, userId, organizationCode])
 	useEffect(() => {
 		if (recentExpanded) setRecentVisited(true)
 	}, [recentExpanded])
 	useEffect(() => {
-		onBusyChange?.(workspaceBusy || recentBusy || source !== null || popover !== null)
-	}, [workspaceBusy, recentBusy, source, popover, onBusyChange])
+		if (chatsExpanded) setChatVisited(true)
+	}, [chatsExpanded])
+	useEffect(() => {
+		onBusyChange?.(
+			workspaceBusy || recentBusy || chatBusy || source !== null || popover !== null,
+		)
+	}, [workspaceBusy, recentBusy, chatBusy, source, popover, onBusyChange])
 	useEffect(() => () => onBusyChange?.(false), [onBusyChange])
 	const closePopover = useCallback(() => setPopover(null), [])
 	const openManager = (next?: ProjectBrowserSource, creating = false) => {
@@ -140,7 +151,8 @@ function ProjectNavigation({
 					downLabel: t("projectNavigation.scrollDown"),
 				}}
 				viewportProps={{
-					"data-workspaces-scroll-container": !collapsed && !recentExpanded,
+					"data-workspaces-scroll-container":
+						!collapsed && !recentExpanded && !chatsExpanded,
 					onScroll: (event) =>
 						sidebarStore.navigationScrollPositions.set(
 							scrollKey,
@@ -199,7 +211,7 @@ function ProjectNavigation({
 												aria-label={t(
 													"projectNavigation.openRecentManager",
 												)}
-												disabled={workspaceBusy || recentBusy}
+												disabled={workspaceBusy || recentBusy || chatBusy}
 												onClick={() => openManager({ type: "recent" })}
 											>
 												<SquareArrowUpRight size={16} />
@@ -234,7 +246,7 @@ function ProjectNavigation({
 									<span>
 										<SidebarMenuButton
 											aria-label={t("sidebarPanels.projectManager")}
-											disabled={workspaceBusy || recentBusy}
+											disabled={workspaceBusy || recentBusy || chatBusy}
 											onClick={() => openManager()}
 											data-testid="sidebar-project-manager-icon"
 										>
@@ -247,16 +259,17 @@ function ProjectNavigation({
 					) : (
 						<>
 							<ProjectNavigationTabs
-								disabled={workspaceBusy || recentBusy}
+								disabled={workspaceBusy || recentBusy || chatBusy}
 								onOpenManager={() => openManager()}
 							/>
-							{/* Overlap both lists so hiding one cannot clamp the shared tree. */}
+							{/* Recent and spaces keep their shared tree height; chats use a separate scroll position and must not enlarge the hidden tree. */}
 							<div className="grid grid-cols-1 grid-rows-1">
 								<div
 									aria-hidden={!recentExpanded}
 									className={cn(
 										"col-start-1 row-start-1",
 										!recentExpanded && "invisible",
+										chatsExpanded && "hidden",
 									)}
 									{...(!recentExpanded ? { inert: "" as const } : {})}
 								>
@@ -272,12 +285,13 @@ function ProjectNavigation({
 									)}
 								</div>
 								<div
-									aria-hidden={recentExpanded}
+									aria-hidden={!workspacesExpanded}
 									className={cn(
 										"col-start-1 row-start-1",
-										recentExpanded && "invisible",
+										!workspacesExpanded && "invisible",
+										chatsExpanded && "hidden",
 									)}
-									{...(recentExpanded ? { inert: "" as const } : {})}
+									{...(!workspacesExpanded ? { inert: "" as const } : {})}
 								>
 									<WorkspaceList
 										scrollRef={scrollRef}
@@ -293,7 +307,9 @@ function ProjectNavigation({
 													isActive={isCollaborationWorkspace(
 														selectedWorkspace,
 													)}
-													disabled={workspaceBusy || recentBusy}
+													disabled={
+														workspaceBusy || recentBusy || chatBusy
+													}
 													className="mb-1 text-[13px] font-normal leading-5 data-[active=true]:font-normal"
 													onClick={() =>
 														openManager({ type: "collaboration" })
@@ -309,6 +325,25 @@ function ProjectNavigation({
 											</SidebarMenuItem>
 										}
 									/>
+								</div>
+								<div
+									aria-hidden={!chatsExpanded}
+									className={cn(
+										"col-start-1 row-start-1",
+										!chatsExpanded && "hidden",
+									)}
+									{...(!chatsExpanded ? { inert: "" as const } : {})}
+								>
+									{(chatVisited || chatsExpanded) && (
+										<ChatsSubMenu
+											key={JSON.stringify([userId, organizationCode])}
+											standalone
+											active={chatsExpanded}
+											externalScrollRef={scrollRef}
+											onSelect={onSelect}
+											onBusyChange={setChatBusy}
+										/>
+									)}
 								</div>
 							</div>
 						</>

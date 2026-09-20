@@ -101,11 +101,11 @@ describe("ProjectNavigationTabs", () => {
 		expect(tabs).toHaveAttribute("data-value", "workspaces")
 		expect(tabs).toHaveAttribute(
 			"data-class-name",
-			"h-auto w-full bg-muted p-[3px] [@container_project-navigation-tabs_(max-width:190px)]:[&>button>span:last-child]:hidden",
+			"h-auto w-full bg-muted p-[3px] [@container_project-navigation-tabs_(max-width:240px)]:[&>button>span:has(svg)]:hidden",
 		)
 		expect(tabs).toHaveAttribute(
 			"data-button-class-name",
-			"h-[28px] py-0 text-[13px] font-normal",
+			"h-[28px] min-w-0 px-1 py-0 text-[13px] font-normal focus-visible:bg-sidebar-accent focus-visible:ring-1",
 		)
 		expect(tabs).toHaveAttribute("data-indicator-class-name", "inset-y-[3px] h-[28px]")
 
@@ -114,6 +114,9 @@ describe("ProjectNavigationTabs", () => {
 
 		fireEvent.click(screen.getByTestId("sidebar-workspaces-toggle"))
 		expect(selectNavigationSection).toHaveBeenCalledWith("workspaces")
+
+		fireEvent.click(screen.getByTestId("sidebar-chats-toggle"))
+		expect(selectNavigationSection).toHaveBeenCalledWith("chats")
 
 		const managerButton = screen.getByTestId("sidebar-project-manager")
 		expect(managerButton).toHaveClass("!size-[34px]", "!rounded-[10px]", "!bg-muted")

@@ -35,8 +35,8 @@ export class SidebarStore {
 	// Workspace expanded state (for lazy loading)
 	expandedWorkspaces: Set<string> = new Set()
 
-	// 分类始终二选一，重复点击保留当前选择；偏好按账号和组织保存，窄栏浮层不改写偏好。
-	expandedNavigationSection: "recent" | "workspaces" = "workspaces"
+	// 分类始终保留一个选中项，重复点击保留当前选择；偏好按账号和组织保存，窄栏浮层不改写偏好。
+	expandedNavigationSection: "recent" | "workspaces" | "chats" = "workspaces"
 
 	get recentProjectsExpanded() {
 		return this.expandedNavigationSection === "recent"
@@ -64,7 +64,9 @@ export class SidebarStore {
 			if (!saved || typeof saved !== "object") return
 			if (
 				"expandedSection" in saved &&
-				(saved.expandedSection === "recent" || saved.expandedSection === "workspaces")
+				(saved.expandedSection === "recent" ||
+					saved.expandedSection === "workspaces" ||
+					saved.expandedSection === "chats")
 			)
 				this.expandedNavigationSection = saved.expandedSection
 		} catch {
@@ -72,7 +74,7 @@ export class SidebarStore {
 		}
 	}
 
-	selectNavigationSection(section: "recent" | "workspaces") {
+	selectNavigationSection(section: "recent" | "workspaces" | "chats") {
 		if (this.expandedNavigationSection === section) return
 		this.expandedNavigationSection = section
 		this.saveNavigationPreferences()

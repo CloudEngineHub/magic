@@ -1,4 +1,4 @@
-import { AppWindow, Box, Clock3 } from "lucide-react"
+import { AppWindow, Box, Clock3, MessageCircle } from "lucide-react"
 import { observer } from "mobx-react-lite"
 import { useTranslation } from "react-i18next"
 import { Button } from "@/components/shadcn-ui/button"
@@ -6,7 +6,7 @@ import { SmoothTabs, type Tab } from "@/components/shadcn-ui/smooth-tabs"
 import MagicTooltip from "@/components/base/MagicTooltip"
 import { sidebarStore } from "@/stores/layout/SidebarStore"
 
-type NavigationSection = "recent" | "workspaces"
+type NavigationSection = "recent" | "workspaces" | "chats"
 
 /** 分类始终保留一个选中项；固定短名称为右侧管理器预留空间，完整名称仍用于无障碍说明。 */
 function ProjectNavigationTabs({
@@ -16,9 +16,10 @@ function ProjectNavigationTabs({
 	disabled: boolean
 	onOpenManager: () => void
 }) {
-	const { t } = useTranslation("super")
+	const { t } = useTranslation(["super", "sidebar"])
 	const recent = t("projectNavigation.recent")
 	const workspaces = t("projectNavigation.workspaces")
+	const chats = t("sidebar:chats.title")
 	const tabs: Tab<NavigationSection>[] = [
 		{
 			value: "recent",
@@ -34,27 +35,34 @@ function ProjectNavigationTabs({
 			tooltip: workspaces,
 			testId: "sidebar-workspaces-toggle",
 		},
+		{
+			value: "chats",
+			label: chats,
+			icon: <MessageCircle size={16} />,
+			testId: "sidebar-chats-toggle",
+		},
 	]
 	return (
 		<div
 			className="sticky top-0 z-20 flex items-center gap-2 bg-sidebar px-2"
 			data-sidebar-navigation-header="tabs"
 		>
-			{/* Native fieldset disabling preserves the existing busy-state behavior for both tab buttons. */}
+			{/* Native fieldset disabling preserves the existing busy-state behavior for all tab buttons. */}
 			<fieldset
 				disabled={disabled}
 				role="group"
 				aria-label={t("sidebarPanels.projectManager")}
 				className="m-0 min-w-0 flex-1 border-0 p-0 [container-name:project-navigation-tabs] [container-type:inline-size]"
 			>
+				{/* Keep all three labels readable at the default width; narrow tabs omit decorative icons. */}
 				<div className="w-full min-w-0">
 					<SmoothTabs
 						tabs={tabs}
 						value={sidebarStore.expandedNavigationSection}
 						onChange={sidebarStore.selectNavigationSection}
 						variant="background"
-						className="h-auto w-full bg-muted p-[3px] [@container_project-navigation-tabs_(max-width:190px)]:[&>button>span:last-child]:hidden"
-						buttonClassName="h-[28px] py-0 text-[13px] font-normal"
+						className="h-auto w-full bg-muted p-[3px] [@container_project-navigation-tabs_(max-width:240px)]:[&>button>span:has(svg)]:hidden"
+						buttonClassName="h-[28px] min-w-0 px-1 py-0 text-[13px] font-normal focus-visible:bg-sidebar-accent focus-visible:ring-1"
 						indicatorClassName="inset-y-[3px] h-[28px]"
 						data-testid="sidebar-navigation-tabs"
 					/>

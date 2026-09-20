@@ -6,6 +6,7 @@ import { cn } from "@/utils/cn"
 
 interface ProjectNavigationToolbarProps {
 	recent?: boolean
+	chats?: boolean
 	disabled?: boolean
 	isSearchMode: boolean
 	searchValue: string
@@ -22,6 +23,7 @@ interface ProjectNavigationToolbarProps {
 /** 复用原搜索、刷新和创建按钮；查询与创建状态仍归各列表，不与栏目切换绑定。 */
 export default function ProjectNavigationToolbar({
 	recent = false,
+	chats = false,
 	disabled = false,
 	isSearchMode,
 	searchValue,
@@ -35,15 +37,21 @@ export default function ProjectNavigationToolbar({
 	handleStartCreateWorkspace,
 }: ProjectNavigationToolbarProps) {
 	const { t } = useTranslation()
-	const searchLabel = recent
-		? t("super:projectNavigation.searchRecent")
-		: t("super:workspace.searchWorkspace")
+	const searchLabel = chats
+		? t("super:chatList.searchPlaceholder")
+		: recent
+			? t("super:projectNavigation.searchRecent")
+			: t("super:workspace.searchWorkspace")
 	return (
 		<div
 			className="sticky top-[var(--project-navigation-tabs-height,0px)] z-20 shrink-0 bg-sidebar"
 			data-sidebar-navigation-header="toolbar"
 			data-testid={
-				recent ? "sidebar-recent-projects-toolbar" : "sidebar-workspace-list-sticky-header"
+				chats
+					? "sidebar-chats-toolbar"
+					: recent
+						? "sidebar-recent-projects-toolbar"
+						: "sidebar-workspace-list-sticky-header"
 			}
 		>
 			{isSearchMode ? (
@@ -58,6 +66,7 @@ export default function ProjectNavigationToolbar({
 						<InputGroupInput
 							className="h-6"
 							placeholder={searchLabel}
+							aria-label={searchLabel}
 							disabled={disabled}
 							value={searchValue}
 							onChange={(event) => onSearchValueChange(event.target.value)}
@@ -88,9 +97,11 @@ export default function ProjectNavigationToolbar({
 			) : (
 				<div className="flex h-8 shrink-0 items-center justify-between gap-2 px-2">
 					<span className="min-w-0 flex-1 truncate text-xs leading-4 text-sidebar-foreground/70">
-						{recent
-							? t("super:projectNavigation.recentScope")
-							: t("super:projectNavigation.workspaceScope")}
+						{chats
+							? t("sidebar:chats.title")
+							: recent
+								? t("super:projectNavigation.recentScope")
+								: t("super:projectNavigation.workspaceScope")}
 					</span>
 					<div
 						className={cn(
@@ -119,7 +130,9 @@ export default function ProjectNavigationToolbar({
 						)}
 						<button
 							type="button"
-							aria-label={t("sidebar:workspace.refresh")}
+							aria-label={
+								chats ? t("sidebar:chats.refresh") : t("sidebar:workspace.refresh")
+							}
 							data-testid="sidebar-workspace-list-refresh"
 							disabled={disabled || isRefreshing}
 							className={cn(
@@ -133,9 +146,11 @@ export default function ProjectNavigationToolbar({
 						<button
 							type="button"
 							aria-label={
-								recent
-									? t("super:sidebarPanels.createProject")
-									: t("sidebar:workspace.add")
+								chats
+									? t("sidebar:chats.newChat")
+									: recent
+										? t("super:sidebarPanels.createProject")
+										: t("sidebar:workspace.add")
 							}
 							disabled={disabled}
 							data-testid="sidebar-workspace-list-add"

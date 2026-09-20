@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState, type ReactNode } from "react"
+import { useEffect, useMemo, useRef, useState, type ReactNode, type RefObject } from "react"
 import { useLocation } from "react-router"
 import { useTranslation } from "react-i18next"
 import { useMemoizedFn } from "ahooks"
@@ -27,11 +27,18 @@ import {
 	DESKTOP_CHATS_SUBMENU_POPUP_WIDTH_PX,
 } from "./chats-submenu-config"
 import ChatConversationSubMenuRow from "./ChatConversationSubMenuRow"
+import ProjectNavigationToolbar from "./ProjectNavigationToolbar"
 
 type ChatsSubMenuProps = {
-	children: ReactNode
+	children?: ReactNode
 	visible?: boolean
 	onOpenChange?: (open: boolean) => void
+	/** Reuse the popup data/actions in the navigation tab without a dropdown shell. */
+	standalone?: boolean
+	active?: boolean
+	onBusyChange?: (busy: boolean) => void
+	onSelect?: () => void
+	externalScrollRef?: RefObject<HTMLDivElement | null>
 }
 
 const CHAT_SUBMENU_SKELETON_WIDTHS = ["w-[82%]", "w-[68%]", "w-[74%]", "w-[58%]", "w-[88%]"]
@@ -53,17 +60,30 @@ function renderChatSubMenuSkeletonRow(widthClassName: string, index: number) {
 	)
 }
 
-/** Desktop sidebar chat list popup; shell and rows align with workspace/project nested popovers. */
-function ChatsSubMenu({ children, visible = true, onOpenChange }: ChatsSubMenuProps) {
+/** Shared desktop conversation list for the legacy popup and the navigation tab. */
+function ChatsSubMenu({
+	children,
+	visible = true,
+	onOpenChange,
+	standalone = false,
+	active = false,
+	onBusyChange,
+	onSelect,
+	externalScrollRef,
+}: ChatsSubMenuProps) {
 	const { t } = useTranslation(["sidebar", "super", "common", "interface"])
 	const location = useLocation()
 	const [open, setOpen] = useState(false)
+	const [isSearchMode, setIsSearchMode] = useState(false)
+	// Keep IME text local until the shared toolbar commits a complete search value.
+	const [searchInput, setSearchInput] = useState("")
 	useEffect(() => {
 		onOpenChange?.(open)
 	}, [open, onOpenChange])
 	useEffect(() => () => onOpenChange?.(false), [onOpenChange])
 	const [isCreatingChat, setIsCreatingChat] = useState(false)
 	const [isRefreshing, setIsRefreshing] = useState(false)
+
 	const isCreatingChatRef = useRef(false)
 	const isRefreshingRef = useRef(false)
 	const listScrollViewportRef = useRef<HTMLDivElement | null>(null)
@@ -76,6 +96,7 @@ function ChatsSubMenu({ children, visible = true, onOpenChange }: ChatsSubMenuPr
 		searchValue,
 		setSearchValue,
 		isEmpty,
+		isSearchEmpty,
 		hasMore,
 		loadMore,
 		reload,
@@ -93,8 +114,8 @@ function ChatsSubMenu({ children, visible = true, onOpenChange }: ChatsSubMenuPr
 		void loadMore()
 	})
 	const loadMoreSentinelRef = useAutoLoadMoreSentinel({
-		rootRef: listScrollViewportRef,
-		disabled: !hasMore || isLoadingMore || items.length === 0,
+		rootRef: externalScrollRef ?? listScrollViewportRef,
+		disabled: (standalone && !active) || !hasMore || isLoadingMore || items.length === 0,
 		onLoadMore: handleAutoLoadMore,
 	})
 
@@ -118,12 +139,22 @@ function ChatsSubMenu({ children, visible = true, onOpenChange }: ChatsSubMenuPr
 			setIsRefreshing(false)
 		}
 	})
-	const { projectActions, projectActionComponents, updateCurrentActionItem } =
+	const { projectActions, projectActionComponents, updateCurrentActionItem, isProjectModalOpen } =
 		useDesktopChatProjectActions({
 			actionContext: "list",
 			onProjectPinStateChanged: optimisticUpdatePin,
 			onProjectChanged: () => reload({ silent: true }),
 		})
+	const [rowMenuOpen, setRowMenuOpen] = useState(false)
+	useEffect(() => {
+		onBusyChange?.(isCreatingChat || isRefreshing || rowMenuOpen || Boolean(isProjectModalOpen))
+	}, [isCreatingChat, isRefreshing, rowMenuOpen, isProjectModalOpen, onBusyChange])
+	useEffect(() => () => onBusyChange?.(false), [onBusyChange])
+	// Refresh when returning from another section; keep the current search and cached rows.
+	const refreshActivePanel = useMemoizedFn(() => void reload({ silent: true }))
+	useEffect(() => {
+		if (standalone && active) refreshActivePanel()
+	}, [standalone, active, refreshActivePanel])
 	const projectActionMap = useMemo(
 		() => new Map(projectActions.map((action) => [action.key, action])),
 		[projectActions],
@@ -140,6 +171,7 @@ function ChatsSubMenu({ children, visible = true, onOpenChange }: ChatsSubMenuPr
 		await SuperMagicService.switchChatProject(item.project, null, {
 			chatWorkspace: resolvedChatWorkspace,
 		})
+		onSelect?.()
 	})
 
 	/** Create a new chat project with the current home role/mode selection. */
@@ -169,6 +201,7 @@ function ChatsSubMenu({ children, visible = true, onOpenChange }: ChatsSubMenuPr
 					chatWorkspace: resolvedChatWorkspace,
 				},
 			)
+			onSelect?.()
 		} catch {
 			magicToast.error(t("super:hierarchicalWorkspacePopup.createProjectFailed"))
 		} finally {
@@ -186,6 +219,7 @@ function ChatsSubMenu({ children, visible = true, onOpenChange }: ChatsSubMenuPr
 
 	const handleRowMenuOpenChange = useMemoizedFn(
 		(nextOpen: boolean, item: ChatConversationListItem) => {
+			setRowMenuOpen(nextOpen)
 			if (nextOpen) updateCurrentActionItem(item.project)
 		},
 	)
@@ -199,7 +233,7 @@ function ChatsSubMenu({ children, visible = true, onOpenChange }: ChatsSubMenuPr
 				</div>
 			) : null}
 
-			{!isInitialChatListLoading && isEmpty ? (
+			{!isInitialChatListLoading && (isEmpty || isSearchEmpty) ? (
 				<div
 					className="px-2 py-6 text-center text-sm text-muted-foreground"
 					data-testid="sidebar-chats-submenu-empty"
@@ -254,76 +288,111 @@ function ChatsSubMenu({ children, visible = true, onOpenChange }: ChatsSubMenuPr
 	/** Compose the fixed popup chrome around a separately scrollable conversation list. */
 	const renderPopup = () => (
 		<div
-			className="flex flex-col gap-1 rounded-md border border-border bg-popover p-1 shadow-xs"
-			style={{ width: DESKTOP_CHATS_SUBMENU_POPUP_WIDTH_PX }}
-			data-testid="sidebar-chats-submenu-popup"
+			className={cn(
+				"flex flex-col gap-1",
+				standalone
+					? "w-full bg-transparent p-0"
+					: "rounded-md border border-border bg-popover p-1 shadow-xs",
+			)}
+			style={standalone ? undefined : { width: DESKTOP_CHATS_SUBMENU_POPUP_WIDTH_PX }}
+			data-testid={standalone ? "sidebar-chats-panel" : "sidebar-chats-submenu-popup"}
 		>
-			{/* Header + search stay fixed; only the list below scrolls. */}
-			<div className="flex shrink-0 flex-col gap-1">
-				<div className="flex items-center justify-between gap-2 rounded-md px-2 py-0.5">
-					<span className="min-w-0 truncate text-sm font-normal leading-5 text-sidebar-foreground">
-						{t("sidebar:chats.title")}
-					</span>
-					<div className="flex shrink-0 items-center gap-0.5">
-						<Button
-							type="button"
-							variant="ghost"
-							size="icon-sm"
-							className="!size-7 shrink-0"
-							onClick={() => void handleRefreshList()}
-							disabled={isRefreshing}
-							aria-label={t("sidebar:chats.refresh")}
-							data-testid="sidebar-chats-submenu-refresh-button"
-						>
-							<RefreshCw className={cn("size-4", isRefreshing && "animate-spin")} />
-						</Button>
-						<Button
-							type="button"
-							variant="ghost"
-							size="icon-sm"
-							className="!size-7 shrink-0"
-							onClick={() => void handleCreateChat()}
-							disabled={isCreatingChat}
-							aria-label={t("sidebar:chats.newChat")}
-							data-testid="sidebar-chats-submenu-new-chat-button"
-						>
-							{isCreatingChat ? (
-								<Loader2 className="size-4 animate-spin" />
-							) : (
-								<MessageCirclePlus className="size-4" />
-							)}
-						</Button>
+			{standalone ? (
+				<ProjectNavigationToolbar
+					chats
+					disabled={isCreatingChat || rowMenuOpen || Boolean(isProjectModalOpen)}
+					isSearchMode={isSearchMode}
+					searchValue={searchInput}
+					isInitialWorkspaceListLoading={isInitialChatListLoading}
+					isRefreshing={isRefreshing}
+					onSearchValueChange={setSearchInput}
+					searchWorkspaces={setSearchValue}
+					handleSearchOpen={() => setIsSearchMode(true)}
+					handleSearchClose={() => {
+						setSearchInput("")
+						setSearchValue("")
+						setIsSearchMode(false)
+					}}
+					handleRefresh={handleRefreshList}
+					handleStartCreateWorkspace={() => void handleCreateChat()}
+				/>
+			) : (
+				<div className="flex shrink-0 flex-col gap-1">
+					<div className="flex items-center justify-between gap-2 rounded-md px-2 py-0.5">
+						<span className="min-w-0 truncate text-sm font-normal leading-5 text-sidebar-foreground">
+							{t("sidebar:chats.title")}
+						</span>
+						<div className="flex shrink-0 items-center gap-0.5">
+							<Button
+								type="button"
+								variant="ghost"
+								size="icon-sm"
+								className="!size-7 shrink-0"
+								onClick={() => void handleRefreshList()}
+								disabled={isRefreshing}
+								aria-label={t("sidebar:chats.refresh")}
+								data-testid="sidebar-chats-submenu-refresh-button"
+							>
+								<RefreshCw
+									className={cn("size-4", isRefreshing && "animate-spin")}
+								/>
+							</Button>
+							<Button
+								type="button"
+								variant="ghost"
+								size="icon-sm"
+								className="!size-7 shrink-0"
+								onClick={() => void handleCreateChat()}
+								disabled={isCreatingChat}
+								aria-label={t("sidebar:chats.newChat")}
+								data-testid="sidebar-chats-submenu-new-chat-button"
+							>
+								{isCreatingChat ? (
+									<Loader2 className="size-4 animate-spin" />
+								) : (
+									<MessageCirclePlus className="size-4" />
+								)}
+							</Button>
+						</div>
+					</div>
+
+					<div className="pb-1 pl-1 pr-2">
+						<div className="relative w-full">
+							<Search className="pointer-events-none absolute left-2 top-1/2 size-3.5 -translate-y-1/2 text-muted-foreground" />
+							<Input
+								value={searchValue}
+								onChange={(event) => setSearchValue(event.target.value)}
+								placeholder={t("super:chatList.searchPlaceholder")}
+								aria-label={t("super:chatList.searchPlaceholder")}
+								className="h-8 w-full pl-7 text-sm"
+								data-testid="sidebar-chats-submenu-search-input"
+							/>
+						</div>
 					</div>
 				</div>
+			)}
 
-				<div className="pb-1 pl-1 pr-2">
-					<div className="relative w-full">
-						<Search className="pointer-events-none absolute left-2 top-1/2 size-3.5 -translate-y-1/2 text-muted-foreground" />
-						<Input
-							value={searchValue}
-							onChange={(event) => setSearchValue(event.target.value)}
-							placeholder={t("super:chatList.searchPlaceholder")}
-							className="h-8 w-full pl-7 text-sm"
-							data-testid="sidebar-chats-submenu-search-input"
-						/>
-					</div>
-				</div>
-			</div>
-
-			<ScrollArea
-				viewportRef={listScrollViewportRef}
-				className="w-full shrink-0 [&_[data-slot='scroll-area-scrollbar']]:-mr-1 [&_[data-slot='scroll-area-viewport']>div]:!block [&_[data-slot='scroll-area-viewport']>div]:pr-2"
-				style={{
-					height: `min(${DESKTOP_CHATS_SUBMENU_LIST_MAX_HEIGHT_PX}px, calc(100vh - 140px))`,
-					maxHeight: `min(${DESKTOP_CHATS_SUBMENU_LIST_MAX_HEIGHT_PX}px, calc(100vh - 140px))`,
-				}}
-			>
-				{renderListContent()}
-			</ScrollArea>
+			{/* Tabs share the sidebar viewport; popups retain their own bounded viewport. */}
+			{standalone ? (
+				renderListContent()
+			) : (
+				<ScrollArea
+					viewportRef={listScrollViewportRef}
+					className="w-full shrink-0 [&_[data-slot='scroll-area-scrollbar']]:-mr-1 [&_[data-slot='scroll-area-viewport']>div]:!block [&_[data-slot='scroll-area-viewport']>div]:pr-2"
+					style={{
+						height: `min(${DESKTOP_CHATS_SUBMENU_LIST_MAX_HEIGHT_PX}px, calc(100vh - 140px))`,
+						maxHeight: `min(${DESKTOP_CHATS_SUBMENU_LIST_MAX_HEIGHT_PX}px, calc(100vh - 140px))`,
+					}}
+				>
+					{renderListContent()}
+				</ScrollArea>
+			)}
 
 			{projectActionComponents}
 		</div>
 	)
+
+	if (standalone) return renderPopup()
 
 	return (
 		<MagicDropdown
