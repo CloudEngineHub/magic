@@ -1,7 +1,7 @@
 import type Dexie from "dexie"
 import type { Table } from "dexie"
 import { GlobalBaseRepository } from "@/models/repository/GlobalBaseRepository"
-import { isQuotaExceeded, reportCaughtStorageFailure } from "@/infrastructure/logger/storageFailure"
+import { isQuotaExceeded, reportCaughtStorageFailure } from "@/app/services/logger/storageFailure"
 
 export const PPT_THUMBNAIL_CACHE_POLICY = {
 	maxBytes: 100 * 1024 * 1024,

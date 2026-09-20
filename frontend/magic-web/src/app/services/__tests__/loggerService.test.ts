@@ -28,8 +28,10 @@ vi.mock("@/infrastructure/logger/plugins", () => ({
 	createFetchPlugin: () => ({ name: "fetch", setup: () => undefined }),
 	createResourcePlugin: () => ({ name: "resource", setup: () => undefined }),
 	createPageDwellPlugin: () => ({ name: "pageDwell", setup: () => undefined }),
-	createStorageQuotaPlugin: () => ({ name: "storageQuota", setup: () => undefined }),
 	createDevicePlugin: () => ({ name: "device", setup: () => undefined }),
+}))
+vi.mock("../logger/plugins/storageQuota", () => ({
+	createStorageQuotaPlugin: () => ({ name: "storageQuota", setup: () => undefined }),
 }))
 
 let service: AppLoggerService

@@ -1,5 +1,5 @@
 import { IStorageAdapter } from "./IStorageAdapter"
-import { reportCaughtStorageFailure } from "@/infrastructure/logger/storageFailure"
+import { reportCaughtStorageFailure } from "@/app/services/logger/storageFailure"
 
 /**
  * LocalStorage adapter for Web platform.

@@ -1,4 +1,4 @@
-import { reportCaughtStorageFailure } from "@/infrastructure/logger/storageFailure"
+import { reportCaughtStorageFailure } from "@/app/services/logger/storageFailure"
 
 /** Small Web Storage helper for optional product flags; writes must never throw into callers. */
 export default {

@@ -1,4 +1,7 @@
 import { logger } from "@/infrastructure/logger"
+import { isQuotaExceeded } from "@/infrastructure/logger/storage/quota"
+
+export { isQuotaExceeded } from "@/infrastructure/logger/storage/quota"
 
 /** Query this eventKey for every origin-quota-exceeded signal. */
 export const STORAGE_QUOTA_EXCEEDED_EVENT_KEY = "storage_quota_exceeded"
@@ -8,10 +11,6 @@ export const STORAGE_QUOTA_EXCEEDED_ERROR_KIND = "quota"
 export const STORAGE_QUOTA_REPORT_COOLDOWN_MS = 3 * 60 * 60 * 1000
 /** sessionStorage flag prefix; value is a timestamp only, never usage or keys. */
 export const STORAGE_QUOTA_REPORT_SESSION_KEY_PREFIX = "mw.sq."
-/** Legacy DOMException.code for quota errors (WebKit / older browsers). */
-const LEGACY_QUOTA_ERROR_CODE = 22
-/** Firefox nsresult mapped onto DOMException.code for quota errors. */
-const FIREFOX_QUOTA_ERROR_CODE = 1014
 /** Page-local gate for quota-exceeded reports emitted from storage wrappers. */
 const wrapperQuotaReportsThisPage = new Set<string>()
 
@@ -23,19 +22,6 @@ export interface CaughtStorageFailure {
 	message: string
 	/** Product storage key name only; never the stored value. */
 	key?: string
-}
-
-/** Identify QuotaExceededError across Chromium, legacy WebKit codes, and Firefox names. */
-export function isQuotaExceeded(error: unknown): boolean {
-	if (!error || typeof error !== "object") return false
-	const name = "name" in error ? String(error.name) : ""
-	const code = "code" in error ? Number(error.code) : Number.NaN
-	return (
-		name === "QuotaExceededError" ||
-		name === "NS_ERROR_DOM_QUOTA_REACHED" ||
-		code === LEGACY_QUOTA_ERROR_CODE ||
-		code === FIREFOX_QUOTA_ERROR_CODE
-	)
 }
 
 /**

@@ -5,7 +5,7 @@ const { reportCaughtStorageFailure } = vi.hoisted(() => ({
 	reportCaughtStorageFailure: vi.fn(),
 }))
 
-vi.mock("@/infrastructure/logger/storageFailure", () => ({
+vi.mock("@/app/services/logger/storageFailure", () => ({
 	reportCaughtStorageFailure,
 }))
 

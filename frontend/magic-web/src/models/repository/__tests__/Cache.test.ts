@@ -11,7 +11,7 @@ vi.mock("@/utils/storage", () => ({
 vi.mock("@/opensource/utils/storage", () => ({
 	platformKey: (key: string) => `mock-platform-${key}`,
 }))
-vi.mock("@/infrastructure/logger/storageFailure", () => ({
+vi.mock("@/app/services/logger/storageFailure", () => ({
 	reportCaughtStorageFailure: reportCaughtStorageFailureMock,
 }))
 

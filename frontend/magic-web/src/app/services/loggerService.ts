@@ -7,8 +7,8 @@ import {
 	createFetchPlugin,
 	createResourcePlugin,
 	createPageDwellPlugin,
-	createStorageQuotaPlugin,
 } from "@/infrastructure/logger/plugins"
+import { createStorageQuotaPlugin } from "./logger/plugins/storageQuota"
 import { recordId } from "@/infrastructure/logger/record"
 
 type AppLogConfig = typeof window.CONFIG
