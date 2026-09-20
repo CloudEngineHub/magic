@@ -41,8 +41,8 @@ use App\Domain\SuperMagic\Project\Entity\ValueObject\MemberRole;
 use App\Domain\SuperMagic\Project\Entity\ValueObject\ProjectMode;
 use App\Domain\SuperMagic\Project\Event\ForkProjectStartEvent;
 use App\Domain\SuperMagic\Project\Event\ProjectForkEvent;
-use App\Domain\SuperMagic\Project\Repository\Facade\ProjectForkRepositoryInterface;
 use App\Domain\SuperMagic\Project\Repository\Facade\MicroAppRepositoryInterface;
+use App\Domain\SuperMagic\Project\Repository\Facade\ProjectForkRepositoryInterface;
 use App\Domain\SuperMagic\Project\Service\ProjectDomainService;
 use App\Domain\SuperMagic\Project\Service\ProjectMemberDomainService;
 use App\Domain\SuperMagic\Task\Service\TaskDomainService;
@@ -73,6 +73,7 @@ use App\Interfaces\SuperMagic\Common\Share\DTO\Request\GetFilesByIdsRequestDTO;
 use App\Interfaces\SuperMagic\Common\Share\DTO\Request\GetShareCopyLogsRequestDTO;
 use App\Interfaces\SuperMagic\Common\Share\DTO\Request\GetShareDetailDTO;
 use App\Interfaces\SuperMagic\Common\Share\DTO\Request\GetShareFilesRequestDTO;
+use App\Interfaces\SuperMagic\Common\Share\DTO\Request\GetShareFilesV2RequestDTO;
 use App\Interfaces\SuperMagic\Common\Share\DTO\Request\GetShareStatisticsRequestDTO;
 use App\Interfaces\SuperMagic\Common\Share\DTO\Request\ResourceListRequestDTO;
 use App\Interfaces\SuperMagic\Common\Share\DTO\Response\CopyResourceFilesResponseDTO;
@@ -678,39 +679,6 @@ class ResourceShareAppService extends AbstractShareAppService
         return $result;
     }
 
-    private function assertHistoricalShareOwnerPermission(ResourceShareEntity $shareEntity): void
-    {
-        $resourceType = ResourceType::tryFrom($shareEntity->getResourceType());
-        $resourceKind = match ($resourceType) {
-            ResourceType::Topic => ResourceType::Topic->getBusinessName(),
-            ResourceType::Project => $this->microAppRepository->findByResourceIdWithTrashed($shareEntity->getResourceId()) !== null
-                ? 'micro_app'
-                : ResourceType::Project->getBusinessName(),
-            default => null,
-        };
-        if ($resourceKind === null) {
-            return;
-        }
-
-        if ($resourceType === ResourceType::Topic && $shareEntity->getShareType() === ShareAccessType::TeamShare->value) {
-            ExceptionBuilder::throw(ShareErrorCode::SHARE_OWNER_PERMISSION_REVOKED, 'share.share_owner_permission_revoked', []);
-        }
-
-        $owner = $this->magicUserDomainService->getUserById($shareEntity->getCreatedUid());
-        if ($owner === null) {
-            ExceptionBuilder::throw(ShareErrorCode::SHARE_OWNER_PERMISSION_REVOKED, 'share.share_owner_permission_revoked', []);
-        }
-
-        // 访问已有分享时，应提示链接失效，而不是让访问者“换一种分享方式”。
-        if (! $this->isShareMethodAllowed(
-            MagicUserAuthorization::fromUserEntity($owner),
-            $resourceKind,
-            $shareEntity->getShareType()
-        )) {
-            ExceptionBuilder::throw(ShareErrorCode::SHARE_OWNER_PERMISSION_REVOKED, 'share.share_owner_permission_revoked', []);
-        }
-    }
-
     public function getShareList(MagicUserAuthorization $userAuthorization, ResourceListRequestDTO $dto): array
     {
         $statusFilters = $dto->getResourceTypes() === [ResourceType::Topic->value]
@@ -929,6 +897,78 @@ class ResourceShareAppService extends AbstractShareAppService
         }
 
         return $this->getFilesFromProject($projectId, $organizationCode, $dataIsolation, $dto, $workDir);
+    }
+
+    /** Cursor-paginated share files. Keeps share validation and scope semantics separate from project attachments V2. */
+    public function getShareFilesV2(?MagicUserAuthorization $userAuthorization, string $shareCode, GetShareFilesV2RequestDTO $dto): array
+    {
+        $shareEntity = $this->shareDomainService->getValidShareByCode($shareCode);
+        if (! $shareEntity) {
+            ExceptionBuilder::throw(ShareErrorCode::RESOURCE_NOT_FOUND, 'share.not_found', [$shareCode]);
+        }
+        $this->shareDomainService->validateShareAccess(
+            $shareEntity,
+            $userAuthorization?->getId(),
+            $userAuthorization?->getOrganizationCode(),
+            $shareCode
+        );
+        if (! empty($shareEntity->getPassword()) && $dto->password !== PasswordCrypt::decrypt($shareEntity->getPassword())) {
+            ExceptionBuilder::throw(ShareErrorCode::PASSWORD_ERROR, 'share.password_error', [$shareCode]);
+        }
+
+        $type = ResourceType::tryFrom($shareEntity->getResourceType());
+        if ($type !== ResourceType::Project) {
+            // Preserve the existing resource-specific semantics until their cursor queries are added.
+            $legacy = new GetShareFilesRequestDTO();
+            $legacy->setPassword($dto->password)->setPage(1)->setPageSize($dto->pageSize);
+            return $this->getShareFiles($userAuthorization, $shareCode, $legacy);
+        }
+        $projectId = (int) $shareEntity->getProjectId();
+        $organizationCode = $shareEntity->getOrganizationCode();
+        $root = $this->taskFileDomainService->getRootFile($projectId);
+        if (! $root) {
+            return ['list' => [], 'next_parent_ids' => [], 'has_more' => false];
+        }
+        $queue = $dto->nextParentIds;
+        $list = [];
+        if (empty($queue)) {
+            $queue[] = ['parent_id' => (string) $root->getFileId(), 'after_sort' => null, 'after_file_id' => null];
+        }
+        while (count($list) < $dto->pageSize && $queue) {
+            $state = array_shift($queue);
+            $rows = $this->taskFileDomainService->getProjectFileChildrenByParentCursor(
+                $projectId,
+                (int) $state['parent_id'],
+                StorageType::WORKSPACE->value,
+                $state['after_sort'],
+                $state['after_file_id'] !== null ? (int) $state['after_file_id'] : null,
+                $dto->pageSize - count($list) + 1,
+                [],
+                true
+            );
+            $emitted = 0;
+            $last = null;
+            foreach ($rows as $row) {
+                if ($emitted >= $dto->pageSize - count($list)) {
+                    break;
+                }
+                $last = (array) $row;
+                $list[] = $this->formatShareCursorRow($last, $organizationCode);
+                ++$emitted;
+                if ((bool) ($last['is_directory'] ?? false)) {
+                    $queue[] = ['parent_id' => (string) $last['file_id'], 'after_sort' => null, 'after_file_id' => null];
+                }
+            }
+            if ($last !== null && count($rows) > $emitted) {
+                array_unshift($queue, [
+                    'parent_id' => (string) $state['parent_id'],
+                    'after_sort' => (int) ($last['sort'] ?? 0),
+                    'after_file_id' => (string) $last['file_id'],
+                ]);
+                break;
+            }
+        }
+        return ['list' => $list, 'next_parent_ids' => array_values($queue), 'has_more' => ! empty($queue)];
     }
 
     /**
@@ -1677,6 +1717,65 @@ class ResourceShareAppService extends AbstractShareAppService
             MemberRole::EDITOR,
             false,
         );
+    }
+
+    private function assertHistoricalShareOwnerPermission(ResourceShareEntity $shareEntity): void
+    {
+        $resourceType = ResourceType::tryFrom($shareEntity->getResourceType());
+        $resourceKind = match ($resourceType) {
+            ResourceType::Topic => ResourceType::Topic->getBusinessName(),
+            ResourceType::Project => $this->microAppRepository->findByResourceIdWithTrashed($shareEntity->getResourceId()) !== null
+                ? 'micro_app'
+                : ResourceType::Project->getBusinessName(),
+            default => null,
+        };
+        if ($resourceKind === null) {
+            return;
+        }
+
+        if ($resourceType === ResourceType::Topic && $shareEntity->getShareType() === ShareAccessType::TeamShare->value) {
+            ExceptionBuilder::throw(ShareErrorCode::SHARE_OWNER_PERMISSION_REVOKED, 'share.share_owner_permission_revoked', []);
+        }
+
+        $owner = $this->magicUserDomainService->getUserById($shareEntity->getCreatedUid());
+        if ($owner === null) {
+            ExceptionBuilder::throw(ShareErrorCode::SHARE_OWNER_PERMISSION_REVOKED, 'share.share_owner_permission_revoked', []);
+        }
+
+        // 访问已有分享时，应提示链接失效，而不是让访问者“换一种分享方式”。
+        if (! $this->isShareMethodAllowed(
+            MagicUserAuthorization::fromUserEntity($owner),
+            $resourceKind,
+            $shareEntity->getShareType()
+        )) {
+            ExceptionBuilder::throw(ShareErrorCode::SHARE_OWNER_PERMISSION_REVOKED, 'share.share_owner_permission_revoked', []);
+        }
+    }
+
+    private function formatShareCursorRow(array $row, string $organizationCode): array
+    {
+        $fileKey = (string) ($row['file_key'] ?? '');
+        $links = $this->fileDomainService->getLinks($organizationCode, [$fileKey], StorageBucketType::Public);
+        return [
+            'file_id' => (string) ($row['file_id'] ?? ''),
+            'task_id' => (string) ($row['task_id'] ?? ''),
+            'project_id' => (string) ($row['project_id'] ?? ''),
+            'topic_id' => (string) ($row['topic_id'] ?? ''),
+            'parent_id' => (string) ($row['parent_id'] ?? ''),
+            'file_type' => (string) ($row['file_type'] ?? ''),
+            'file_name' => (string) ($row['file_name'] ?? ''),
+            'file_extension' => (string) ($row['file_extension'] ?? ''),
+            'file_key' => $fileKey,
+            'file_size' => (int) ($row['file_size'] ?? 0),
+            'file_url' => $links[$fileKey]?->getUrl() ?? '',
+            'is_hidden' => (bool) ($row['is_hidden'] ?? false),
+            'is_directory' => (bool) ($row['is_directory'] ?? false),
+            'sort' => (int) ($row['sort'] ?? 0),
+            'source' => (int) ($row['source'] ?? 0),
+            'updated_at' => (string) ($row['updated_at'] ?? ''),
+            'display_config' => FileMetadataUtil::decodeJsonObject($row['display_config'] ?? null),
+            'metadata' => FileMetadataUtil::decodeJsonObject($row['metadata'] ?? null),
+        ];
     }
 
     private function isShareMethodAllowed(

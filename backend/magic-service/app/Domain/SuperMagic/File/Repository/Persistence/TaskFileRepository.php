@@ -526,7 +526,8 @@ class TaskFileRepository implements TaskFileRepositoryInterface
         ?int $afterSort,
         ?int $afterFileId,
         int $limit,
-        array $fileTypes = []
+        array $fileTypes = [],
+        bool $excludeHidden = false
     ): array {
         $query = $this->model::query()
             ->select([
@@ -542,6 +543,9 @@ class TaskFileRepository implements TaskFileRepositoryInterface
 
         if ($storageType !== '') {
             $query->where('storage_type', $storageType);
+        }
+        if ($excludeHidden) {
+            $query->where('is_hidden', false);
         }
 
         if (! empty($fileTypes)) {

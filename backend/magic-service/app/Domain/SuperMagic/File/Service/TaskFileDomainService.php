@@ -599,7 +599,8 @@ class TaskFileDomainService
         ?int $afterSort,
         ?int $afterFileId,
         int $limit,
-        array $fileTypes = []
+        array $fileTypes = [],
+        bool $excludeHidden = false
     ): array {
         return $this->taskFileRepository->getProjectFileChildrenByParentCursor(
             $projectId,
@@ -608,7 +609,8 @@ class TaskFileDomainService
             $afterSort,
             $afterFileId,
             $limit,
-            $fileTypes
+            $fileTypes,
+            $excludeHidden
         );
     }
 

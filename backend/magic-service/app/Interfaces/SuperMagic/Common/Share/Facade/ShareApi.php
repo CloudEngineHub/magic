@@ -22,6 +22,7 @@ use App\Interfaces\SuperMagic\Common\Share\DTO\Request\GetShareCopyLogsRequestDT
 use App\Interfaces\SuperMagic\Common\Share\DTO\Request\GetShareDetailDTO;
 use App\Interfaces\SuperMagic\Common\Share\DTO\Request\GetSharedProjectsTreeRequestDTO;
 use App\Interfaces\SuperMagic\Common\Share\DTO\Request\GetShareFilesRequestDTO;
+use App\Interfaces\SuperMagic\Common\Share\DTO\Request\GetShareFilesV2RequestDTO;
 use App\Interfaces\SuperMagic\Common\Share\DTO\Request\GetShareStatisticsRequestDTO;
 use App\Interfaces\SuperMagic\Common\Share\DTO\Request\ResourceListRequestDTO;
 use App\Interfaces\SuperMagic\Common\Share\DTO\Response\GenerateResourceIdResponseDTO;
@@ -174,6 +175,20 @@ class ShareApi extends AbstractApi
         $dto = GetShareFilesRequestDTO::fromRequest($this->request);
 
         return $this->shareAppService->getShareFiles($userAuthorization, $shareCode, $dto);
+    }
+
+    public function getShareFilesV2(string $shareCode): array
+    {
+        try {
+            $userAuthorization = $this->getAuthorization();
+        } catch (Exception) {
+            $userAuthorization = null;
+        }
+        return $this->shareAppService->getShareFilesV2(
+            $userAuthorization,
+            $shareCode,
+            GetShareFilesV2RequestDTO::fromRequest($this->request)
+        );
     }
 
     public function getShareList(RequestContext $requestContext): array

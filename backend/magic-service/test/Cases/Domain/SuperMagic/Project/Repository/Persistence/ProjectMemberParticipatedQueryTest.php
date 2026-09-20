@@ -14,6 +14,7 @@ use Hyperf\Database\Query\Builder;
 use Hyperf\Database\Query\Grammars\MySqlGrammar;
 use Hyperf\Database\Query\Processors\Processor;
 use PHPUnit\Framework\TestCase;
+use ReflectionClass;
 use ReflectionMethod;
 
 /**
@@ -27,7 +28,7 @@ final class ProjectMemberParticipatedQueryTest extends TestCase
         $query = (new Builder($connection, new MySqlGrammar(), new Processor()))
             ->from('magic_super_agent_project as p');
 
-        $repository = (new \ReflectionClass(ProjectMemberRepository::class))
+        $repository = (new ReflectionClass(ProjectMemberRepository::class))
             ->newInstanceWithoutConstructor();
         $method = new ReflectionMethod(ProjectMemberRepository::class, 'applyProjectListBaseFilters');
         $method->invoke($repository, $query, null, false);
