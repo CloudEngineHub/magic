@@ -818,7 +818,8 @@ function DesignViewer(props: DesignViewerProps) {
 
 	// 注入 Manager 依赖（getCanvasElements、methods、pubsub 等）
 	useEffect(() => {
-		markerManager.updateDependencies({
+		if (!designProjectId) return undefined
+		return markerManager.registerDependencies(designProjectId, {
 			getCanvasElements: (id) =>
 				id === designProjectId ? { elements: designData.canvas?.elements } : null,
 			getElementImageInfo: (elementId: string) => {
