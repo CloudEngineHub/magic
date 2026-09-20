@@ -24,7 +24,7 @@
 	"chatHome": {
 		"placeholder": "Describe what you need or upload a file, and we'll find the answer together.\nEnter to send; Shift + Enter for a new line",
 		"subtitle": "Think it through with AI",
-		"title": "What's on your mind today? Let's talk it through."
+		"title": "What's on your mind today?"
 	},
 	"chatInput": {
 		"helpText": "Press Enter to send ; Shift + Enter for a new line",
