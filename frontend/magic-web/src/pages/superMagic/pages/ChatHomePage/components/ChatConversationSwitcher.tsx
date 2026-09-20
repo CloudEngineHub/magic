@@ -7,7 +7,7 @@ export default function ChatConversationSwitcher() {
 	const { t } = useTranslation(["sidebar", "super"])
 
 	return (
-		<ChatsSubMenu placement="leftTop">
+		<ChatsSubMenu placement="bottomLeft">
 			<button
 				type="button"
 				className="flex h-8 max-w-full items-center justify-center gap-2 rounded-md bg-secondary px-3 text-sm leading-5 text-secondary-foreground shadow-xs"
