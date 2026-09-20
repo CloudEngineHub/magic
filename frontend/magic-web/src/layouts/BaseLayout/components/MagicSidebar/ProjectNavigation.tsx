@@ -27,7 +27,6 @@ import { WorkspaceList } from "./WorkspaceList"
 import CollapsedWorkspaceMenu from "./CollapsedWorkspaceMenu"
 import RecentProjects from "./RecentProjects"
 import ProjectNavigationTabs from "./ProjectNavigationTabs"
-import ChatWorkspaceItem from "./ChatWorkspaceItem"
 
 const WorkspaceProjectsPanel = lazy(
 	() => import("@/pages/superMagic/components/WorkspacesMenu/components/WorkspaceProjectsPanel"),
@@ -50,7 +49,6 @@ function ProjectNavigation({
 	const [popover, setPopover] = useState<"recent" | "workspaces" | null>(null)
 	const [workspaceBusy, setWorkspaceBusy] = useState(false)
 	const [recentBusy, setRecentBusy] = useState(false)
-	const [chatBusy, setChatBusy] = useState(false)
 	const [recentVisited, setRecentVisited] = useState(false)
 	const [createProject, setCreateProject] = useState(false)
 	const userId = userStore.user.userInfo?.user_id
@@ -106,16 +104,13 @@ function ProjectNavigation({
 		setPopover(null)
 		setWorkspaceBusy(false)
 		setRecentBusy(false)
-		setChatBusy(false)
 	}, [collapsed, userId, organizationCode])
 	useEffect(() => {
 		if (recentExpanded) setRecentVisited(true)
 	}, [recentExpanded])
 	useEffect(() => {
-		onBusyChange?.(
-			workspaceBusy || recentBusy || chatBusy || source !== null || popover !== null,
-		)
-	}, [workspaceBusy, recentBusy, chatBusy, source, popover, onBusyChange])
+		onBusyChange?.(workspaceBusy || recentBusy || source !== null || popover !== null)
+	}, [workspaceBusy, recentBusy, source, popover, onBusyChange])
 	useEffect(() => () => onBusyChange?.(false), [onBusyChange])
 	const closePopover = useCallback(() => setPopover(null), [])
 	const openManager = (next?: ProjectBrowserSource, creating = false) => {
@@ -205,7 +200,7 @@ function ProjectNavigation({
 												aria-label={t(
 													"projectNavigation.openRecentManager",
 												)}
-												disabled={workspaceBusy || recentBusy || chatBusy}
+												disabled={workspaceBusy || recentBusy}
 												onClick={() => openManager({ type: "recent" })}
 											>
 												<SquareArrowUpRight size={16} />
@@ -241,7 +236,7 @@ function ProjectNavigation({
 									<span>
 										<SidebarMenuButton
 											aria-label={t("sidebarPanels.projectManager")}
-											disabled={workspaceBusy || recentBusy || chatBusy}
+											disabled={workspaceBusy || recentBusy}
 											onClick={() => openManager()}
 											data-testid="sidebar-project-manager-icon"
 										>
@@ -254,7 +249,7 @@ function ProjectNavigation({
 					) : (
 						<>
 							<ProjectNavigationTabs
-								disabled={workspaceBusy || recentBusy || chatBusy}
+								disabled={workspaceBusy || recentBusy}
 								onOpenManager={() => openManager()}
 							/>
 							{/* Preserve both trees in flow so switching sections keeps the shared scroll height. */}
@@ -287,6 +282,7 @@ function ProjectNavigation({
 									{...(!workspacesExpanded ? { inert: "" as const } : {})}
 								>
 									<WorkspaceList
+										onSelect={onSelect}
 										scrollRef={scrollRef}
 										scrollAreaRef={scrollAreaRef}
 										key={JSON.stringify([userId, organizationCode])}
@@ -301,9 +297,7 @@ function ProjectNavigation({
 														isActive={isCollaborationWorkspace(
 															selectedWorkspace,
 														)}
-														disabled={
-															workspaceBusy || recentBusy || chatBusy
-														}
+														disabled={workspaceBusy || recentBusy}
 														className="mb-1 text-[13px] font-normal leading-5 data-[active=true]:font-normal"
 														onClick={() =>
 															openManager({ type: "collaboration" })
@@ -319,11 +313,6 @@ function ProjectNavigation({
 														</span>
 													</SidebarMenuButton>
 												</SidebarMenuItem>
-												<ChatWorkspaceItem
-													active={workspacesExpanded}
-													onBusyChange={setChatBusy}
-													onSelect={onSelect}
-												/>
 											</>
 										}
 									/>

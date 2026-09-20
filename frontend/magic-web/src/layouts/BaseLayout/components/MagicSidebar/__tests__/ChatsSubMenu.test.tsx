@@ -1,7 +1,7 @@
-import { fireEvent, render, screen, waitFor, within } from "@testing-library/react"
+import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react"
 import { describe, expect, it, vi, beforeEach } from "vitest"
-import type { ReactNode } from "react"
-import ChatsSubMenu from "../ChatsSubMenu"
+import { createRef, type ReactNode } from "react"
+import ChatsSubMenu, { type ChatsSubMenuHandle } from "../ChatsSubMenu"
 
 const {
 	collapseIfNarrowMock,
@@ -287,15 +287,26 @@ describe("ChatsSubMenu", () => {
 	})
 
 	it("preserves loaded workspace pages on collapse and re-expansion", async () => {
-		const { rerender } = render(<ChatsSubMenu standalone workspace active />)
-		rerender(<ChatsSubMenu standalone workspace active={false} />)
-		rerender(<ChatsSubMenu standalone workspace active />)
+		const ref = createRef<ChatsSubMenuHandle>()
+		const { rerender } = render(<ChatsSubMenu ref={ref} standalone workspace active />)
+		rerender(<ChatsSubMenu ref={ref} standalone workspace active={false} />)
+		rerender(<ChatsSubMenu ref={ref} standalone workspace active />)
 		expect(reloadMock).not.toHaveBeenCalled()
-		fireEvent.click(screen.getByTestId("sidebar-workspace-list-refresh"))
+		await act(async () => {
+			await ref.current?.refresh()
+		})
 		expect(reloadMock).toHaveBeenCalledWith({ silent: true })
-		await waitFor(() =>
-			expect(screen.getByTestId("sidebar-workspace-list-refresh")).not.toBeDisabled(),
+		expect(screen.queryByTestId("sidebar-chats-toolbar")).not.toBeInTheDocument()
+	})
+
+	it("uses the shared search keyword and clears it when search closes", () => {
+		const { rerender } = render(
+			<ChatsSubMenu standalone workspace active searchKeyword="plan" />,
 		)
+		expect(setSearchValueMock).toHaveBeenLastCalledWith("plan")
+		rerender(<ChatsSubMenu standalone workspace active searchKeyword="" />)
+		expect(setSearchValueMock).toHaveBeenLastCalledWith("")
+		expect(screen.queryByRole("textbox")).not.toBeInTheDocument()
 	})
 
 	it("uses the workspace toolbar search interaction, including IME and Escape", () => {

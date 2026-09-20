@@ -19,7 +19,6 @@ import {
 	chatConversationActionMenuItemClassName,
 	chatConversationActionMenuItemDangerClassName,
 } from "@/pages/superMagic/utils/chat-conversation-action-icon"
-import { DESKTOP_CHATS_SUBMENU_SHOW_TIME_LABEL } from "./chats-submenu-config"
 
 const ROW_CLICK_SUPPRESS_MS = 80
 
@@ -60,7 +59,6 @@ function ChatConversationSubMenuRow({
 	const [isHovered, setIsHovered] = useState(false)
 	const suppressRowClickRef = useRef(false)
 	const suppressRowClickTimeoutRef = useRef<number | null>(null)
-	const moreButtonRef = useRef<HTMLButtonElement | null>(null)
 
 	useEffect(() => {
 		/** Clear the delayed reset so list reorders or route switches never leave orphan callbacks behind. */
@@ -88,9 +86,9 @@ function ChatConversationSubMenuRow({
 		onOpen(item)
 	}
 
-	/** Keep title and last-active time on separate lines, matching the recent-project rows. */
+	/** Match project rows: one line with actions expanding only during interaction. */
 	return (
-		<div className="h-12 w-full rounded-md">
+		<div className="h-8 w-full rounded-md">
 			<div
 				className={cn(
 					"group/project-row flex h-full w-full min-w-0 items-center rounded-md",
@@ -110,25 +108,6 @@ function ChatConversationSubMenuRow({
 					)}
 					onClick={handleRowClick}
 				>
-					{item.isRunning ? (
-						<span
-							className="flex shrink-0"
-							aria-label={t("accountPanel.timedTasks.running")}
-							aria-busy
-							data-testid={`sidebar-chats-submenu-item-running-${item.id}`}
-						>
-							<NavigationStatusIcon
-								itemType="project"
-								status={ProjectStatus.RUNNING}
-								showDefaultIcon={false}
-								className={
-									isSelected
-										? "text-sidebar-accent-foreground"
-										: "text-sidebar-foreground"
-								}
-							/>
-						</span>
-					) : null}
 					<div className="min-w-0 flex-1">
 						<div className="flex min-w-0 max-w-full items-center gap-1.5">
 							<span
@@ -141,13 +120,29 @@ function ChatConversationSubMenuRow({
 							>
 								{item.title}
 							</span>
-							{item.isPinned ? <PinnedTag /> : null}
+							{item.isRunning ? (
+								<span
+									className="flex shrink-0"
+									aria-label={t("accountPanel.timedTasks.running")}
+									aria-busy
+									data-testid={`sidebar-chats-submenu-item-running-${item.id}`}
+								>
+									<NavigationStatusIcon
+										itemType="project"
+										status={ProjectStatus.RUNNING}
+										showDefaultIcon={false}
+										className={
+											isSelected
+												? "text-sidebar-accent-foreground"
+												: "text-sidebar-foreground"
+										}
+									/>
+								</span>
+							) : null}
+							{item.isPinned ? (
+								<PinnedTag className="h-3 w-3 border-0 bg-transparent p-0" />
+							) : null}
 						</div>
-						{DESKTOP_CHATS_SUBMENU_SHOW_TIME_LABEL ? (
-							<div className="mt-0.5 min-w-0 truncate text-[11px] leading-4 text-muted-foreground">
-								<time>{item.timeLabel}</time>
-							</div>
-						) : null}
 					</div>
 				</button>
 
@@ -156,17 +151,12 @@ function ChatConversationSubMenuRow({
 					onOpenChange={(nextOpen) => {
 						setIsMenuOpen(nextOpen)
 						if (nextOpen) blockRowClickTemporarily()
-						// Blur the trigger after the menu closes so the ellipsis button does not keep a focused circle.
-						if (!nextOpen) {
-							moreButtonRef.current?.blur()
-						}
 						onMenuOpenChange(nextOpen, item)
 					}}
 				>
 					<DropdownMenuTrigger asChild>
-						{/* Reserve the action area so opening the menu never shifts the conversation text. */}
+						{/* Let content fill the row until hover, keyboard focus or an open menu expands actions. */}
 						<Button
-							ref={moreButtonRef}
 							type="button"
 							variant="ghost"
 							size="icon-sm"
@@ -177,13 +167,10 @@ function ChatConversationSubMenuRow({
 							data-project-more-trigger="true"
 							data-testid={`sidebar-chats-submenu-more-${item.id}`}
 							className={cn(
-								"relative size-8 shrink-0 bg-transparent p-0 text-sidebar-foreground opacity-0 transition-opacity [-webkit-tap-highlight-color:transparent] before:absolute before:inset-0.5 before:rounded-md before:transition-colors",
-								"hover:bg-transparent hover:before:bg-sidebar-foreground/10 focus:bg-transparent focus:outline-none focus:ring-0 focus-visible:outline-none focus-visible:ring-0 focus-visible:before:bg-sidebar-foreground/10 active:bg-transparent active:before:bg-sidebar-foreground/15",
-								"group-focus-within/project-row:pointer-events-auto group-focus-within/project-row:opacity-100 no-hover:pointer-events-auto no-hover:opacity-100",
-								isSelected
-									? "text-sidebar-accent-foreground"
-									: "text-sidebar-foreground",
-								(isHovered || isMenuOpen) && "pointer-events-auto opacity-100",
+								"relative h-7 w-0 shrink-0 overflow-hidden bg-transparent p-0 text-sidebar-foreground transition-[width] before:absolute before:inset-0.5 before:rounded-md before:transition-colors group-focus-within/project-row:w-7 no-hover:w-7",
+								"hover:bg-transparent hover:before:bg-sidebar-foreground/10 focus-visible:ring-0 focus-visible:before:bg-sidebar-foreground/10 active:before:bg-sidebar-foreground/15 dark:hover:bg-transparent",
+								"data-[state=open]:before:bg-sidebar-foreground/10",
+								(isHovered || isMenuOpen) && "w-7",
 							)}
 							onClick={(event) => {
 								blockRowClickTemporarily()
@@ -198,7 +185,12 @@ function ChatConversationSubMenuRow({
 								event.stopPropagation()
 							}}
 						>
-							<Ellipsis className="relative h-4 w-4" />
+							<Ellipsis
+								className={cn(
+									"relative h-4 w-4 transition-opacity group-focus-within/project-row:opacity-100 no-hover:opacity-100",
+									isHovered || isMenuOpen ? "opacity-100" : "opacity-0",
+								)}
+							/>
 						</Button>
 					</DropdownMenuTrigger>
 					<DropdownMenuContent align="end" className="w-44">

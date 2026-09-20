@@ -7,7 +7,6 @@ import { cn } from "@/utils/cn"
 interface ProjectNavigationToolbarProps {
 	recent?: boolean
 	chats?: boolean
-	embedded?: boolean
 	disabled?: boolean
 	isSearchMode: boolean
 	searchValue: string
@@ -25,7 +24,6 @@ interface ProjectNavigationToolbarProps {
 export default function ProjectNavigationToolbar({
 	recent = false,
 	chats = false,
-	embedded = false,
 	disabled = false,
 	isSearchMode,
 	searchValue,
@@ -46,11 +44,8 @@ export default function ProjectNavigationToolbar({
 			: t("super:workspace.searchWorkspace")
 	return (
 		<div
-			className={cn(
-				"shrink-0 bg-sidebar",
-				!embedded && "sticky top-[var(--project-navigation-tabs-height,0px)] z-20",
-			)}
-			data-sidebar-navigation-header={embedded ? undefined : "toolbar"}
+			className="sticky top-[var(--project-navigation-tabs-height,0px)] z-20 shrink-0 bg-sidebar"
+			data-sidebar-navigation-header="toolbar"
 			data-testid={
 				chats
 					? "sidebar-chats-toolbar"
@@ -102,13 +97,11 @@ export default function ProjectNavigationToolbar({
 			) : (
 				<div className="flex h-8 shrink-0 items-center justify-between gap-2 px-2">
 					<span className="min-w-0 flex-1 truncate text-xs leading-4 text-sidebar-foreground/70">
-						{embedded
-							? null
-							: chats
-								? t("sidebar:chats.title")
-								: recent
-									? t("super:projectNavigation.recentScope")
-									: t("super:projectNavigation.workspaceScope")}
+						{chats
+							? t("sidebar:chats.title")
+							: recent
+								? t("super:projectNavigation.recentScope")
+								: t("super:projectNavigation.workspaceScope")}
 					</span>
 					<div
 						className={cn(

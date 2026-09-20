@@ -95,10 +95,10 @@ describe("ChatConversationSubMenuRow", () => {
 		expect(screen.getByTestId("project-item-pinned-tag")).toBeInTheDocument()
 	})
 
-	it("renders the conversation update time below its title", () => {
+	it("renders only the title without the conversation update time", () => {
 		render(<ChatConversationSubMenuRow item={createListItem()} {...defaultRowProps} />)
 
-		expect(screen.getByText("2 minutes ago")).toBeInTheDocument()
+		expect(screen.queryByText("2 minutes ago")).not.toBeInTheDocument()
 	})
 
 	it("keeps more actions from opening the conversation row", () => {
@@ -116,16 +116,14 @@ describe("ChatConversationSubMenuRow", () => {
 		expect(onOpen).not.toHaveBeenCalled()
 	})
 
-	it("clears focus styling hooks on the more trigger button", () => {
+	it("uses the workspace action hover and keyboard-focus treatment", () => {
 		render(<ChatConversationSubMenuRow item={createListItem()} {...defaultRowProps} />)
 
 		expect(screen.getByTestId("sidebar-chats-submenu-more-chat-project-alpha")).toHaveClass(
-			"focus:bg-transparent",
-			"focus:outline-none",
-			"focus:ring-0",
-			"focus-visible:outline-none",
+			"hover:before:bg-sidebar-foreground/10",
+			"focus-visible:before:bg-sidebar-foreground/10",
 			"focus-visible:ring-0",
-			"active:bg-transparent",
+			"group-focus-within/project-row:w-7",
 		)
 	})
 
@@ -133,8 +131,7 @@ describe("ChatConversationSubMenuRow", () => {
 		render(<ChatConversationSubMenuRow item={createListItem()} {...defaultRowProps} />)
 
 		expect(screen.getByTestId("sidebar-chats-submenu-more-chat-project-alpha")).toHaveClass(
-			"no-hover:pointer-events-auto",
-			"no-hover:opacity-100",
+			"no-hover:w-7",
 		)
 	})
 

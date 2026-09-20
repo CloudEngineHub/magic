@@ -1,4 +1,13 @@
-import { useEffect, useMemo, useRef, useState, type ReactNode, type RefObject } from "react"
+import {
+	forwardRef,
+	useImperativeHandle,
+	useEffect,
+	useMemo,
+	useRef,
+	useState,
+	type ReactNode,
+	type RefObject,
+} from "react"
 import { useLocation } from "react-router"
 import { useTranslation } from "react-i18next"
 import { useMemoizedFn } from "ahooks"
@@ -30,6 +39,7 @@ import ChatConversationSubMenuRow from "./ChatConversationSubMenuRow"
 import ProjectNavigationToolbar from "./ProjectNavigationToolbar"
 
 type ChatsSubMenuProps = {
+	searchKeyword?: string
 	children?: ReactNode
 	visible?: boolean
 	onOpenChange?: (open: boolean) => void
@@ -43,6 +53,11 @@ type ChatsSubMenuProps = {
 	externalScrollRef?: RefObject<HTMLDivElement | null>
 }
 
+export interface ChatsSubMenuHandle {
+	create: () => Promise<void>
+	refresh: () => Promise<void>
+}
+
 const CHAT_SUBMENU_SKELETON_WIDTHS = ["w-[82%]", "w-[68%]", "w-[74%]", "w-[58%]", "w-[88%]"]
 
 /** Renders one loading row with staggered widths so the chat list skeleton resembles real titles. */
@@ -50,33 +65,35 @@ function renderChatSubMenuSkeletonRow(widthClassName: string, index: number) {
 	return (
 		<div
 			key={widthClassName}
-			className="flex h-12 w-full items-center gap-2 rounded-md px-2"
+			className="flex h-8 w-full items-center rounded-md px-2"
 			data-testid="sidebar-chats-submenu-skeleton-item"
 		>
-			<Skeleton className="size-4 shrink-0 rounded-full" />
 			<div className="min-w-0 flex-1 space-y-1">
 				<Skeleton
 					className={cn("h-4 rounded-sm", widthClassName)}
 					style={{ animationDelay: `${index * 80}ms` }}
 				/>
-				<Skeleton className="h-3 w-1/3 rounded-sm" />
 			</div>
 		</div>
 	)
 }
 
 /** Shared desktop conversation list for the legacy popup and the navigation tab. */
-function ChatsSubMenu({
-	children,
-	visible = true,
-	onOpenChange,
-	standalone = false,
-	workspace = false,
-	active = false,
-	onBusyChange,
-	onSelect,
-	externalScrollRef,
-}: ChatsSubMenuProps) {
+const ChatsSubMenu = forwardRef<ChatsSubMenuHandle, ChatsSubMenuProps>(function ChatsSubMenu(
+	{
+		children,
+		visible = true,
+		onOpenChange,
+		standalone = false,
+		workspace = false,
+		active = false,
+		onBusyChange,
+		onSelect,
+		externalScrollRef,
+		searchKeyword,
+	},
+	ref,
+) {
 	const { t } = useTranslation(["sidebar", "super", "common", "interface"])
 	const location = useLocation()
 	const [open, setOpen] = useState(false)
@@ -108,6 +125,10 @@ function ChatsSubMenu({
 		reload,
 		optimisticUpdatePin,
 	} = useChatConversationList()
+	// The workspace toolbar commits IME input; the shared list hook retains its server debounce.
+	useEffect(() => {
+		if (searchKeyword !== undefined) setSearchValue(searchKeyword)
+	}, [searchKeyword, setSearchValue])
 
 	/** Highlight the open chat only on the chat detail route; avoid stale selection on other pages. */
 	const isChatRouteActive = routesPathMatch(RouteName.SuperChatProjectState, location.pathname)
@@ -216,6 +237,11 @@ function ChatsSubMenu({
 		}
 	})
 
+	useImperativeHandle(ref, () => ({ create: handleCreateChat, refresh: handleRefreshList }), [
+		handleCreateChat,
+		handleRefreshList,
+	])
+
 	/** Sync project context then run the mapped sidebar list action. */
 	const runProjectAction = useMemoizedFn(
 		(actionKey: "pinProject" | "rename" | "saveAsProject" | "delete") => {
@@ -232,7 +258,7 @@ function ChatsSubMenu({
 
 	/** Render loading, empty, loaded rows, and the infinite-scroll sentinel in one scroll viewport. */
 	const renderListContent = () => (
-		<div className="mx-1 box-border w-full space-y-1 pr-1">
+		<div className={cn("box-border w-full space-y-1", !workspace && "mx-1 pr-1")}>
 			{isInitialChatListLoading ? (
 				<div className="flex flex-col gap-1" data-testid="sidebar-chats-submenu-skeleton">
 					{CHAT_SUBMENU_SKELETON_WIDTHS.map(renderChatSubMenuSkeletonRow)}
@@ -303,10 +329,9 @@ function ChatsSubMenu({
 			style={standalone ? undefined : { width: DESKTOP_CHATS_SUBMENU_POPUP_WIDTH_PX }}
 			data-testid={standalone ? "sidebar-chats-panel" : "sidebar-chats-submenu-popup"}
 		>
-			{standalone ? (
+			{workspace ? null : standalone ? (
 				<ProjectNavigationToolbar
 					chats
-					embedded={workspace}
 					disabled={isCreatingChat || rowMenuOpen || Boolean(isProjectModalOpen)}
 					isSearchMode={isSearchMode}
 					searchValue={searchInput}
@@ -385,7 +410,13 @@ function ChatsSubMenu({
 			) : (
 				<ScrollArea
 					viewportRef={listScrollViewportRef}
-					className="w-full shrink-0 [&_[data-slot='scroll-area-scrollbar']]:-mr-1 [&_[data-slot='scroll-area-viewport']>div]:!block [&_[data-slot='scroll-area-viewport']>div]:pr-2"
+					className={cn(
+						"w-full shrink-0",
+						workspace
+							? "[&>[data-slot=scroll-area-scrollbar]]:w-[2px] [&>[data-slot=scroll-area-scrollbar]]:border-0 [&>[data-slot=scroll-area-scrollbar]]:p-0"
+							: "[&_[data-slot='scroll-area-scrollbar']]:-mr-1 [&_[data-slot='scroll-area-viewport']>div]:pr-2",
+					)}
+					viewportClassName="overscroll-x-contain overscroll-y-auto [&>div]:!block"
 					viewportStyle={workspace ? { maxHeight: "min(40dvh, 400px)" } : undefined}
 					style={
 						workspace
@@ -420,6 +451,6 @@ function ChatsSubMenu({
 			</span>
 		</MagicDropdown>
 	)
-}
+})
 
 export default observer(ChatsSubMenu)
