@@ -27,7 +27,7 @@ describe("NormalModeHeader", () => {
 		render(
 			<NormalModeHeader
 				title="项目文件"
-				isShareRoute={false}
+				showRefresh
 				refreshLoading={false}
 				allowEdit={false}
 				onRefresh={vi.fn()}
@@ -44,7 +44,7 @@ describe("NormalModeHeader", () => {
 	it("只读时保留搜索和刷新，隐藏所有写操作入口", () => {
 		render(
 			<NormalModeHeader
-				isShareRoute={false}
+				showRefresh
 				refreshLoading={false}
 				allowEdit={false}
 				onRefresh={vi.fn()}

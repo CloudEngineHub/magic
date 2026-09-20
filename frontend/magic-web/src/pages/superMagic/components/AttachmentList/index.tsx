@@ -10,7 +10,6 @@ import { getFileType } from "@/pages/superMagic/utils/handleFIle"
 import { IconChevronDown, IconChevronRight, IconDownload } from "@tabler/icons-react"
 import { Button, Input, Tooltip, Typography } from "antd"
 import { useMemo, useState } from "react"
-import { useLocation } from "react-router"
 import { useIsMobile } from "@/hooks/useIsMobile"
 import useStyles from "./style"
 import { SuperMagicApi } from "@/apis"
@@ -54,14 +53,16 @@ type AttachmentItem = FileItem | FolderItem
 export default function AttachmentList({
 	attachments,
 	setUserSelectDetail,
+	showDownloadAll = true,
 }: {
 	attachments: any[]
 	topicId?: string
 	setUserSelectDetail?: (detail: any) => void
+	/** Explicitly controls whether the download-all action is shown. */
+	showDownloadAll?: boolean
 }) {
 	const { t } = useTranslation("super")
 	const { styles, cx } = useStyles()
-	const { pathname } = useLocation()
 	const isMobile = useIsMobile()
 	const fileAccess = useFileAccess()
 
@@ -324,11 +325,7 @@ export default function AttachmentList({
 		})
 	}
 
-	const showDownloadAll = useMemo(() => {
-		// 检查是否在分享场景，如果是分享场景则不显示下载全部文件按钮
-		const isShareRoute = pathname.includes("/share/")
-		return attachments?.length > 0 && !isShareRoute
-	}, [attachments, pathname])
+	const shouldShowDownloadAll = Boolean(attachments?.length && showDownloadAll)
 
 	return (
 		<div className={cx(styles.section, isFileListCollapsed && styles.collapsed)}>
@@ -370,7 +367,7 @@ export default function AttachmentList({
 						<div
 							className={cx(
 								styles.listContainer,
-								showDownloadAll && styles.showDownloadAll,
+								shouldShowDownloadAll && styles.showDownloadAll,
 							)}
 						>
 							{renderItems(filteredFiles, 0)}
