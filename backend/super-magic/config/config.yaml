@@ -523,6 +523,10 @@ pdf_understanding:
 audio_understanding:
   api_key: "${VOICE_UNDERSTANDING_API_KEY}"
   api_base_url: "${VOICE_UNDERSTANDING_API_BASE_URL}"
+  format_preparation_enabled: true
+  duration_validation_enabled: true
+  canonical_fallback_enabled: true
+  max_fallback_attempts: 1
 
 # Checkpoint管理配置
 checkpoint:

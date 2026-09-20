@@ -5337,6 +5337,26 @@
         "zh_CN": "音频文件 {{file_name}} 已损坏，无法转录。可能是录制或上传过程中断导致文件不完整，请重新导出或重新录制后再试。具体细节：{{reason}}",
         "en_US": "Audio file {{file_name}} is corrupted and cannot be transcribed. The recording or upload was likely interrupted, leaving the file incomplete. Please re-export or re-record and try again. Details: {{reason}}"
     },
+    "audio_understanding.format_preparation_failed": {
+        "zh_CN": "音频格式检测或转换失败，请上传标准 WAV 或 MP3 音频后重试。",
+        "en_US": "Audio format detection or conversion failed. Please upload a standard WAV or MP3 file and try again."
+    },
+    "audio_understanding.result_mismatch": {
+        "zh_CN": "转写结果与音频实际时长不一致，系统已停止生成文字稿。请上传标准 WAV 或 MP3 音频后重试。",
+        "en_US": "The transcription duration does not match the actual audio. Transcript generation was stopped. Please upload a standard WAV or MP3 file and try again."
+    },
+    "audio_understanding.no_valid_utterance": {
+        "zh_CN": "转写结果中的时间标记全部超出音频实际时长，系统已停止生成文字稿。",
+        "en_US": "All transcription timestamps exceed the actual audio duration, so transcript generation was stopped."
+    },
+    "audio_understanding.timeline_trimmed": {
+        "zh_CN": "文字稿已生成。音频末尾有 {{count}} 条时间标记超出实际时长，这部分内容已移除，保留内容截止 {{retained_end}}。",
+        "en_US": "Transcript generated. {{count}} timestamped utterances beyond the audio end were removed; retained content ends at {{retained_end}}."
+    },
+    "audio_understanding.canonical_fallback_succeeded": {
+        "zh_CN": "音频格式已识别，但原始编码与语音转写服务不兼容，系统已转换为兼容格式后完成转写。",
+        "en_US": "The source encoding was incompatible with the transcription service, so it was converted to a compatible format before transcription."
+    },
     "create_self_media_project.success": {
         "zh_CN": "自媒体项目 {{project_name}} 创建成功（平台：{{platform}}，文章 {{posts_count}} 篇）",
         "en_US": "Self-media project {{project_name}} created (platform: {{platform}}, posts: {{posts_count}})"
