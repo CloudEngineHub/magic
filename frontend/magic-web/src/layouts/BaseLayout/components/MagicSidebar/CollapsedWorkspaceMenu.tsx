@@ -13,12 +13,13 @@ import { isCollaborationWorkspace } from "@/pages/superMagic/constants"
 import type { ProjectBrowserSource } from "@/pages/superMagic/components/WorkspacesMenu/components/WorkspaceProjectsPanel"
 import SidebarCreateInput from "./components/SidebarCreateInput"
 import CollapsedWorkspaceMenuWorkspaceItem from "./CollapsedWorkspaceMenuWorkspaceItem"
-import ChatWorkspaceItem from "./ChatWorkspaceItem"
+import CollapsedWorkspaceChatItem from "./CollapsedWorkspaceChatItem"
 import { SidebarMenuButton } from "@/components/shadcn-ui/sidebar"
 import { useCollapsedWorkspaceDnd } from "./useCollapsedWorkspaceDnd"
 import { useProjectPinBoundaryConfirmation } from "./WorkspaceList/ProjectPinBoundaryConfirmDialog"
 
 const WORKSPACE_PAGE_SIZE = 20
+const CHAT_MENU_ID = "sidebar-my-chats"
 
 interface CollapsedWorkspaceMenuProps {
 	open: boolean
@@ -52,7 +53,7 @@ const CollapsedWorkspaceMenu = observer(function CollapsedWorkspaceMenu({
 		})
 	}, [])
 	const handleProjectMenuChange = (workspaceId: string | null) => {
-		if (busyWorkspaceIds.size > 0 && workspaceId !== openProjectMenuId) return
+		if ((chatBusy || busyWorkspaceIds.size > 0) && workspaceId !== openProjectMenuId) return
 		setOpenProjectMenuId(workspaceId)
 	}
 
@@ -130,7 +131,7 @@ const CollapsedWorkspaceMenu = observer(function CollapsedWorkspaceMenu({
 		if (!scrollElement) return
 
 		const handleScroll = () => {
-			if (openProjectMenuId && busyWorkspaceIds.size === 0) {
+			if (openProjectMenuId && !chatBusy && busyWorkspaceIds.size === 0) {
 				setOpenProjectMenuId(null)
 			}
 			if (
@@ -147,6 +148,7 @@ const CollapsedWorkspaceMenu = observer(function CollapsedWorkspaceMenu({
 		return () => scrollElement.removeEventListener("scroll", handleScroll)
 	}, [
 		isOpen,
+		chatBusy,
 		busyWorkspaceIds,
 		fetchWorkspacePage,
 		hasMoreWorkspaces,
@@ -286,61 +288,55 @@ const CollapsedWorkspaceMenu = observer(function CollapsedWorkspaceMenu({
 								/>
 							</div>
 						)}
-						{workspaces.length > 0 ? (
-							workspaces.length > 10 ? (
-								<ScrollArea
-									ref={workspaceScrollRef}
-									className="h-[60vh] max-h-[500px] min-h-0 w-full [&_[data-slot='scroll-area-viewport']>div]:!block"
-								>
-									<div
-										ref={dndRootRef}
-										className="space-y-1"
-										data-collapsed-sidebar-dnd-workspace-list
-									>
-										{renderWorkspaceItems()}
-										{isLoadingMoreWorkspaces && (
-											<div className="flex h-6 items-center justify-center">
-												<Loader2 className="size-4 animate-spin text-muted-foreground" />
-											</div>
-										)}
-									</div>
-								</ScrollArea>
-							) : (
-								<div
-									ref={dndRootRef}
-									className="min-h-0 space-y-1 overflow-y-auto"
-									data-collapsed-sidebar-dnd-workspace-list
-								>
-									{renderWorkspaceItems()}
-								</div>
-							)
-						) : (
+						{/* Shared entries scroll together with ordinary workspaces, in the same order as the expanded sidebar. */}
+						<ScrollArea
+							ref={workspaceScrollRef}
+							className="min-h-0 w-full [&_[data-slot='scroll-area-viewport']>div]:!block"
+							viewportStyle={{ maxHeight: "min(60vh, 500px)" }}
+						>
 							<div
-								className="px-2 py-1 text-sm leading-none text-[#a3a3a3]"
-								data-testid="sidebar-collapsed-workspace-empty"
+								ref={dndRootRef}
+								className="space-y-1"
+								data-collapsed-sidebar-dnd-workspace-list
 							>
-								{t("super:workspace.noWorkspaces")}
+								<Button
+									variant={isShareWorkspaceActive ? "secondary" : "ghost"}
+									size="sm"
+									className="h-8 w-full justify-start gap-2 px-2 font-normal text-sidebar-foreground"
+									data-testid="sidebar-collapsed-workspace-share"
+									onClick={() => openProjectManager({ type: "collaboration" })}
+								>
+									<UsersRound size={16} className="shrink-0" />
+									<span className="truncate">
+										{t("super:workspace.shareWorkspaceName")}
+									</span>
+								</Button>
+								<CollapsedWorkspaceChatItem
+									open={isOpen && openProjectMenuId === CHAT_MENU_ID}
+									onOpenChange={(open) =>
+										handleProjectMenuChange(open ? CHAT_MENU_ID : null)
+									}
+									onBusyChange={setChatBusy}
+									onSelect={handleCloseAllPopovers}
+									keepPopoverOpen={isConfirmationOpen}
+								/>
+								{workspaces.length > 0 ? (
+									renderWorkspaceItems()
+								) : (
+									<div
+										className="px-2 py-1 text-sm leading-none text-[#a3a3a3]"
+										data-testid="sidebar-collapsed-workspace-empty"
+									>
+										{t("super:workspace.noWorkspaces")}
+									</div>
+								)}
+								{isLoadingMoreWorkspaces && (
+									<div className="flex h-6 items-center justify-center">
+										<Loader2 className="size-4 animate-spin text-muted-foreground" />
+									</div>
+								)}
 							</div>
-						)}
-						<div className="mt-1 shrink-0 border-t border-sidebar-border pt-1">
-							<Button
-								variant={isShareWorkspaceActive ? "secondary" : "ghost"}
-								size="sm"
-								className="h-8 w-full justify-start gap-2 px-2 font-normal text-sidebar-foreground"
-								data-testid="sidebar-collapsed-workspace-share"
-								onClick={() => openProjectManager({ type: "collaboration" })}
-							>
-								<UsersRound size={16} className="shrink-0" />
-								<span className="truncate">
-									{t("super:workspace.shareWorkspaceName")}
-								</span>
-							</Button>
-							<ChatWorkspaceItem
-								active={isOpen}
-								onBusyChange={setChatBusy}
-								onSelect={handleCloseAllPopovers}
-							/>
-						</div>
+						</ScrollArea>
 					</PopoverContent>
 				</Popover>
 			</div>

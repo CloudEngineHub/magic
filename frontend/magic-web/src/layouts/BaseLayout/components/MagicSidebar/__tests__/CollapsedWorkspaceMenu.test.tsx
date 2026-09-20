@@ -1,0 +1,185 @@
+import { fireEvent, render, screen } from "@testing-library/react"
+import {
+	forwardRef,
+	useImperativeHandle,
+	useState,
+	type ReactNode,
+	type HTMLAttributes,
+} from "react"
+import { beforeEach, describe, expect, it, vi } from "vitest"
+import CollapsedWorkspaceMenu from "../CollapsedWorkspaceMenu"
+import type { CollapsedWorkspaceMenuWorkspaceItemProps } from "../CollapsedWorkspaceMenuWorkspaceItem"
+
+const { createChat, workspaceStore } = vi.hoisted(() => ({
+	createChat: vi.fn(),
+	workspaceStore: { selectedWorkspace: null, workspaces: [{ id: "alpha", name: "Alpha" }] },
+}))
+vi.mock("react-i18next", () => ({ useTranslation: () => ({ t: (key: string) => key }) }))
+vi.mock("@/pages/superMagic/stores/core/workspace", () => ({ default: workspaceStore }))
+vi.mock("@/pages/superMagic/stores/core/project", () => ({ default: {} }))
+vi.mock("@/pages/superMagic/services", () => ({
+	default: { workspace: { fetchWorkspaces: vi.fn().mockResolvedValue([]) } },
+}))
+vi.mock("../useCollapsedWorkspaceDnd", () => ({ useCollapsedWorkspaceDnd: () => ({}) }))
+vi.mock("../WorkspaceList/ProjectPinBoundaryConfirmDialog", () => ({
+	useProjectPinBoundaryConfirmation: () => ({}),
+}))
+vi.mock("../components/SidebarCreateInput", () => ({ default: () => null }))
+vi.mock("@/components/base/MagicTooltip", () => ({
+	default: ({ children }: { children: ReactNode }) => children,
+}))
+vi.mock("@/components/shadcn-ui/sidebar", () => ({
+	SidebarMenuButton: ({ children }: { children: ReactNode }) => <button>{children}</button>,
+}))
+vi.mock("@/components/shadcn-ui/scroll-area", () => ({
+	ScrollArea: forwardRef<HTMLDivElement, { children: ReactNode }>(function ScrollArea(
+		{ children },
+		ref,
+	) {
+		return (
+			<div ref={ref}>
+				<div data-slot="scroll-area-viewport">{children}</div>
+			</div>
+		)
+	}),
+}))
+// Keep tests focused on submenu lifecycle and coordination, independent of browser portal geometry.
+vi.mock("@/components/shadcn-ui/popover", async () => {
+	const { createContext, useContext } = await import("react")
+	const State = createContext<{ open: boolean; onOpenChange: (open: boolean) => void }>({
+		open: false,
+		onOpenChange: vi.fn(),
+	})
+	return {
+		Popover: ({
+			children,
+			open,
+			onOpenChange,
+		}: {
+			children: ReactNode
+			open: boolean
+			onOpenChange: (open: boolean) => void
+		}) => <State.Provider value={{ open, onOpenChange }}>{children}</State.Provider>,
+		PopoverTrigger: ({ children }: { children: ReactNode }) => {
+			const { open, onOpenChange } = useContext(State)
+			return <div onClick={() => onOpenChange(!open)}>{children}</div>
+		},
+		PopoverContent: ({
+			children,
+			side,
+			align,
+			...props
+		}: HTMLAttributes<HTMLDivElement> & {
+			side: string
+			align: string
+			"data-testid"?: string
+		}) => {
+			const { open } = useContext(State)
+			return open ? (
+				<div data-testid={props["data-testid"]} data-side={side} data-align={align}>
+					{children}
+				</div>
+			) : null
+		},
+	}
+})
+vi.mock("../CollapsedWorkspaceMenuWorkspaceItem", () => ({
+	default: ({
+		workspace,
+		openProjectMenuId,
+		onProjectMenuChange,
+	}: CollapsedWorkspaceMenuWorkspaceItemProps) => (
+		<button
+			data-testid="ordinary-workspace"
+			data-open={openProjectMenuId === workspace.id}
+			onClick={() => onProjectMenuChange(workspace.id)}
+		>
+			{workspace.name}
+		</button>
+	),
+}))
+vi.mock("../ChatsSubMenu", () => ({
+	default: forwardRef(function Chats(
+		{ onSelect, onBusyChange }: { onSelect: () => void; onBusyChange: (busy: boolean) => void },
+		ref,
+	) {
+		useImperativeHandle(ref, () => ({ create: createChat }), [])
+		return (
+			<div data-testid="chat-list">
+				<button onClick={onSelect}>select-chat</button>
+				<button onClick={() => onBusyChange(true)}>open-chat-action</button>
+			</div>
+		)
+	}),
+}))
+
+function Harness() {
+	const [open, setOpen] = useState(true)
+	return (
+		<CollapsedWorkspaceMenu
+			open={open}
+			onOpenChange={setOpen}
+			onOpenManager={vi.fn()}
+			onBusyChange={vi.fn()}
+			icon={<span>spaces</span>}
+		/>
+	)
+}
+
+describe("CollapsedWorkspaceMenu conversation submenu", () => {
+	beforeEach(() => {
+		vi.clearAllMocks()
+	})
+
+	it("orders shared workspace and chats before ordinary workspaces without loading chats", () => {
+		render(<Harness />)
+		const shared = screen.getByTestId("sidebar-collapsed-workspace-share")
+		const chats = screen.getByTestId("sidebar-collapsed-my-chats")
+		const workspace = screen.getByTestId("ordinary-workspace")
+		expect(
+			shared.compareDocumentPosition(chats) & Node.DOCUMENT_POSITION_FOLLOWING,
+		).toBeTruthy()
+		expect(
+			chats.compareDocumentPosition(workspace) & Node.DOCUMENT_POSITION_FOLLOWING,
+		).toBeTruthy()
+		expect(screen.queryByTestId("chat-list")).not.toBeInTheDocument()
+	})
+
+	it("opens chats to the right and switches exclusively between workspace submenus", () => {
+		render(<Harness />)
+		fireEvent.click(screen.getByTestId("sidebar-collapsed-my-chats"))
+		expect(screen.getByTestId("chat-list")).toBeInTheDocument()
+		expect(screen.getByTestId("sidebar-collapsed-my-chats-popover")).toHaveAttribute(
+			"data-side",
+			"right",
+		)
+		expect(screen.getByTestId("sidebar-collapsed-my-chats-popover")).toHaveAttribute(
+			"data-align",
+			"center",
+		)
+		fireEvent.click(screen.getByTestId("ordinary-workspace"))
+		expect(screen.queryByTestId("chat-list")).not.toBeInTheDocument()
+		expect(screen.getByTestId("ordinary-workspace")).toHaveAttribute("data-open", "true")
+		fireEvent.click(screen.getByTestId("sidebar-collapsed-my-chats"))
+		expect(screen.getByTestId("ordinary-workspace")).toHaveAttribute("data-open", "false")
+	})
+
+	it("creates from the submenu title and closes both levels when selecting a chat", () => {
+		render(<Harness />)
+		fireEvent.click(screen.getByTestId("sidebar-collapsed-my-chats"))
+		fireEvent.click(screen.getByTestId("sidebar-collapsed-my-chats-add"))
+		expect(createChat).toHaveBeenCalledTimes(1)
+		fireEvent.click(screen.getByText("select-chat"))
+		expect(screen.queryByTestId("sidebar-collapsed-workspace-popover")).not.toBeInTheDocument()
+	})
+
+	it("keeps the chat submenu open while a conversation action is active", () => {
+		render(<Harness />)
+		fireEvent.click(screen.getByTestId("sidebar-collapsed-my-chats"))
+		fireEvent.click(screen.getByText("open-chat-action"))
+		fireEvent.click(screen.getByTestId("ordinary-workspace"))
+		fireEvent.click(screen.getByTestId("sidebar-collapsed-my-chats"))
+		expect(screen.getByTestId("chat-list")).toBeInTheDocument()
+		expect(screen.getByTestId("ordinary-workspace")).toHaveAttribute("data-open", "false")
+	})
+})

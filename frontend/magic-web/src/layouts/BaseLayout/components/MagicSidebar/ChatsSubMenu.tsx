@@ -7,6 +7,7 @@ import {
 	useState,
 	type ReactNode,
 	type RefObject,
+	type CSSProperties,
 } from "react"
 import { useLocation } from "react-router"
 import { useTranslation } from "react-i18next"
@@ -39,6 +40,7 @@ import ChatConversationSubMenuRow from "./ChatConversationSubMenuRow"
 import ProjectNavigationToolbar from "./ProjectNavigationToolbar"
 
 type ChatsSubMenuProps = {
+	viewportMaxHeight?: CSSProperties["maxHeight"]
 	searchKeyword?: string
 	children?: ReactNode
 	visible?: boolean
@@ -91,6 +93,7 @@ const ChatsSubMenu = forwardRef<ChatsSubMenuHandle, ChatsSubMenuProps>(function 
 		onSelect,
 		externalScrollRef,
 		searchKeyword,
+		viewportMaxHeight,
 	},
 	ref,
 ) {
@@ -417,7 +420,11 @@ const ChatsSubMenu = forwardRef<ChatsSubMenuHandle, ChatsSubMenuProps>(function 
 							: "[&_[data-slot='scroll-area-scrollbar']]:-mr-1 [&_[data-slot='scroll-area-viewport']>div]:pr-2",
 					)}
 					viewportClassName="overscroll-x-contain overscroll-y-auto [&>div]:!block"
-					viewportStyle={workspace ? { maxHeight: "min(40dvh, 400px)" } : undefined}
+					viewportStyle={
+						workspace
+							? { maxHeight: viewportMaxHeight ?? "min(40dvh, 400px)" }
+							: undefined
+					}
 					style={
 						workspace
 							? undefined
