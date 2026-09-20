@@ -273,6 +273,7 @@ const ProjectPageInputContainerComponent: React.FC<ProjectPageInputContainerProp
 		topicMode,
 		modelTopicMode,
 		effectiveAgentCode,
+		placeholder,
 		setTopicMode,
 		recoverTopicMode,
 		tabPattern,

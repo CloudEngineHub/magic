@@ -131,6 +131,7 @@ function TopicPage({
 	const location = useLocation()
 	const routeName = routesMatch(location.pathname)?.route.name as RouteName | undefined
 	const resolvedPageKind = pageKind ?? resolveMobileTopicPageKind(routeName)
+	const isSingleTopicChat = resolvedPageKind === MobileTopicPageKind.SingleTopicChat
 	const capabilities = getMobileTopicPageCapabilities(resolvedPageKind)
 	const isStandaloneProjectTopicPage = routeName === RouteName.SuperWorkspaceProjectTopicState
 	// 独立项目话题子页由壳层头部承载返回与标题，避免与页内 ChatHeader 叠成双头部。
@@ -645,10 +646,14 @@ function TopicPage({
 							setSelectedTopic={topicStore.setSelectedTopic}
 							onFileClick={onFileClick}
 							selectedWorkspace={selectedWorkspace}
-							// Conversation details keep the default employee fixed; only the message editor remains.
-							showModeToggle={false}
-							showModelSelector={false}
-							placeholder={tMainInput("chatHome.placeholder")}
+							// Only chat details hide employee controls; project topics retain their existing defaults.
+							showModeToggle={isSingleTopicChat ? false : undefined}
+							showModelSelector={isSingleTopicChat ? false : undefined}
+							placeholder={
+								isSingleTopicChat
+									? tMainInput("mobileHome.chatPlaceholder")
+									: undefined
+							}
 							attachments={attachments}
 							isShowLoadingInit={isShowLoadingInit}
 							enableReEditMessageFromPubSub
