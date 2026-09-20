@@ -285,12 +285,20 @@ interface TaskFileRepositoryInterface
     ): TaskFileEntity;
 
     /**
+     * Initialize one durable change-feed head for every active file-tree root.
+     * The operation is bounded and idempotent so it can be safely resumed.
+     *
+     * @return array{discovered_file_trees:int, initialized_file_trees:int}
+     */
+    public function initializeFileTreeHeads(int $batchSize = 1000): array;
+
+    /**
      * Backfill metadata_version in bounded transactions while publishing the
      * same precise file-tree update events as an online mutation.
      *
      * This is intentionally a repository operation rather than a command
-     * writing the task-file table directly: the file row, root head,
-     * aggregate counters and journal snapshot must commit together.
+     * writing the task-file table directly: the file row, root head and
+     * journal snapshot must commit together.
      */
     public function backfillMagicFSMetadataVersions(int $batchSize = 1000): int;
 

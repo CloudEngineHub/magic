@@ -1040,6 +1040,77 @@ class TaskFileRepository implements TaskFileRepositoryInterface
     }
 
     /**
+     * Initialize the durable cursor row for every existing file-tree root.
+     *
+     * Root IDs are read with keyset pagination, and each bounded insert uses
+     * insert-or-ignore. Existing journal bounds are used when a head is
+     * missing, so late initialization cannot reset a root that already has
+     * changes. A concurrent root creation can win the race without having its
+     * already-advanced revision overwritten by this backfill. Existing heads
+     * are never modified.
+     *
+     * @return array{discovered_file_trees:int, initialized_file_trees:int}
+     */
+    public function initializeFileTreeHeads(int $batchSize = 1000): array
+    {
+        $batchSize = max(1, min($batchSize, 10000));
+        $lastRootFileId = 0;
+        $discoveredFileTrees = 0;
+        $initializedFileTrees = 0;
+
+        while (true) {
+            $rootFileIds = $this->model::query()
+                ->where('file_id', '>', $lastRootFileId)
+                ->where(static function ($query): void {
+                    $query->whereNull('parent_id')->orWhere('parent_id', 0);
+                })
+                ->where('is_directory', true)
+                ->whereNull('deleted_at')
+                ->orderBy('file_id', 'ASC')
+                ->limit($batchSize)
+                ->pluck('file_id')
+                ->map(static fn ($fileId): int => (int) $fileId)
+                ->all();
+            if ($rootFileIds === []) {
+                break;
+            }
+
+            $lastRootFileId = $rootFileIds[array_key_last($rootFileIds)];
+            $changeBounds = Db::table(self::FILE_TREE_CHANGES_TABLE)
+                ->select('root_file_id')
+                ->selectRaw('MAX(revision) AS revision, MIN(revision) AS oldest_revision')
+                ->whereIn('root_file_id', $rootFileIds)
+                ->groupBy('root_file_id')
+                ->get()
+                ->keyBy('root_file_id');
+            $now = date('Y-m-d H:i:s');
+            $rows = array_map(
+                static function (int $rootFileId) use ($changeBounds, $now): array {
+                    $bounds = $changeBounds->get($rootFileId);
+                    $revision = (int) ($bounds?->revision ?? 0);
+                    $oldestRevision = (int) ($bounds?->oldest_revision ?? 1);
+
+                    return [
+                        'root_file_id' => $rootFileId,
+                        'revision' => max(0, $revision),
+                        'oldest_revision' => max(1, $oldestRevision),
+                        'updated_at' => $now,
+                    ];
+                },
+                $rootFileIds
+            );
+
+            $discoveredFileTrees += count($rootFileIds);
+            $initializedFileTrees += Db::table(self::FILE_TREE_HEADS_TABLE)->insertOrIgnore($rows);
+        }
+
+        return [
+            'discovered_file_trees' => $discoveredFileTrees,
+            'initialized_file_trees' => $initializedFileTrees,
+        ];
+    }
+
+    /**
      * Backfill metadata_version in bounded transactions while keeping the
      * file mutation, root head and durable journal atomic.
      *
