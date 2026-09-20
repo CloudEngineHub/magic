@@ -21,9 +21,20 @@ interface AssetProviderAssetRepositoryInterface
     public function findMapping(AssetDataIsolation $dataIsolation, int|string $assetId, string $providerCode, string $projectName = ''): ?AssetProviderAssetModel;
 
     /**
+     * @param array<int, int|string> $assetIds
+     * @return array<string, ProviderAssetEntity>
+     */
+    public function findMappings(
+        AssetDataIsolation $dataIsolation,
+        array $assetIds,
+        string $providerCode,
+        string $projectName = '',
+    ): array;
+
+    /**
      * 在这些本地素材的映射里找一条可复用的第三方凭证（同一份内容要不要重复上传的判据）。
      *
-     * 优先返回已 ACTIVE 的凭证（合规结论可直接复用）；只有审核中的凭证时才退而取之
+     * 优先返回已 PASS 的凭证（合规结论可直接复用）；只有审核中的凭证时才退而取之
      * （同一张图并发上传时，后者应当跟着前者一起等审核，而不是再传一份）；
      * 已 FAILED 的凭证不返回——那条内容在第三方永远走不到可用状态。
      *

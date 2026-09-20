@@ -11,7 +11,6 @@ use App\Domain\Asset\Contract\AssetProviderInterface;
 use App\Domain\Asset\Entity\AssetDataIsolation;
 use App\Domain\Asset\Entity\AssetEntity;
 use App\Domain\Asset\Entity\ProviderAssetEntity;
-use App\Domain\Asset\Entity\ValueObject\AssetSyncStatus;
 use App\Domain\Asset\Entity\ValueObject\ProviderAssetStatus;
 use App\Domain\Asset\Entity\ValueObject\Query\AssetQuery;
 use App\Domain\Asset\Repository\Facade\AssetAgreementRepositoryInterface;
@@ -26,10 +25,12 @@ use App\Infrastructure\ExternalAPI\VolcengineArk\Assets\VolcengineArkAssetProvid
 use Hyperf\Coroutine\Coroutine;
 use Hyperf\DbConnection\Db;
 use Psr\Log\LoggerInterface;
+use RuntimeException;
 use Throwable;
 
 /**
- * 负责资产的本地生命周期管理，以及与第三方素材服务的同步。
+ * 资产领域服务：先落库取得主键，再同步第三方，确保凭证可追溯。
+ * 素材组仅保留本地层级；每个素材在第三方使用独立素材组。
  */
 class AssetDomainService
 {
@@ -37,27 +38,19 @@ class AssetDomainService
 
     private const string DEFAULT_PROJECT_NAME = 'default';
 
-    /**
-     * 第三方合规轮询的最长等待时间。
-     */
-    private const int COMPLIANCE_TIMEOUT_SECONDS = 120;
+    /** 第三方合规轮询的最长等待时间。 */
+    private const int COMPLIANCE_TIMEOUT_SECONDS = 1800;
 
-    /**
-     * 第三方合规状态轮询间隔。
-     */
+    private const string COMPLIANCE_TIMEOUT_REASON = '同步失败，请重试';
+
+    /** 第三方合规状态轮询间隔。 */
     private const float COMPLIANCE_POLL_INTERVAL_SECONDS = 1.0;
 
-    /**
-     * 同步失败原因的最大存储长度。
-     */
+    /** 同步失败原因的最大存储长度。 */
     private const int FAILED_REASON_MAX_LENGTH = 512;
 
     private readonly AssetProviderInterface $provider;
 
-    /**
-     * 初始化仓储、日志和第三方资产提供方。
-     * 服务实例创建后即可处理本地资产和第三方素材之间的同步流程。
-     */
     public function __construct(
         private readonly AssetRepositoryInterface $assets,
         private readonly AssetProviderAssetRepositoryInterface $providerAssets,
@@ -66,81 +59,38 @@ class AssetDomainService
         private readonly AiAbilityDomainService $abilityDomainService,
         private readonly AssetSearchTextBuilder $searchTextBuilder,
     ) {
-        $this->provider = new VolcengineArkAssetProvider($this->logger, $this->abilityDomainService->getProviderConfig(AiAbilityCode::VolcengineArkAssets));
+        $this->provider = new VolcengineArkAssetProvider(
+            $this->logger,
+            $this->abilityDomainService->getProviderConfig(AiAbilityCode::VolcengineArkAssets),
+        );
     }
 
-    /**
-     * 创建个人素材；同一用户已上传相同内容时复用原记录，并补做未完成的合规校验。
-     * 未签署资产协议时直接抛出异常，未命中可复用记录时才创建新的本地和远程素材。
-     */
     public function createPersonal(AssetDataIsolation $dataIsolation, AssetEntity $asset): AssetEntity
     {
         if (! $this->agreements->hasAccepted($dataIsolation)) {
             ExceptionBuilder::throw(AssetErrorCode::AGREEMENT_REQUIRED);
         }
         $asset->setUserId($dataIsolation->getCurrentUserId());
-
-        // 复用相同内容的已有记录；未完成校验时继续执行校验。
-        $existing = $this->reusePersonalByContentHash(
-            $dataIsolation,
-            $dataIsolation->getCurrentUserId(),
-            $asset->getContentHash(),
-            $asset->getFileUrl(),
-        );
-
-        if ($existing !== null) {
-            $this->logger->info('命中本人已存在的同内容素材，跳过重复落库', [
-                'asset_id' => $existing->getId(),
-                'sync_status' => $existing->getSyncStatus()->value,
-            ]);
-            return $existing;
+        $this->assertParentGroupExists($dataIsolation, $asset);
+        $saved = $this->saveLocal($dataIsolation, $asset);
+        if (! $saved->getAssetKind()->isGroup()) {
+            $this->markProviderStatus($dataIsolation, $saved, ProviderAssetStatus::UNVERIFIED);
         }
-
-        return $this->create($dataIsolation, $asset);
+        return $saved;
     }
 
     /**
-     * 按用户和内容指纹查找个人素材；记录已同步时直接返回，否则继续执行第三方校验。
-     * 内容指纹为空或用户标识为空时不查询数据库，找不到记录时返回 null，避免重复落库。
-     */
-    public function reusePersonalByContentHash(
-        AssetDataIsolation $dataIsolation,
-        string $userId,
-        ?string $contentHash,
-        ?string $fileUrl = null,
-    ): ?AssetEntity {
-        $contentHash = trim((string) $contentHash);
-        if ($contentHash === '' || $userId === '') {
-            return null;
-        }
-        // 使用最新记录，保证补校验作用于当前状态。
-        $existing = $this->assets->findPersonalAssetByContentHash($userId, $contentHash, anySyncStatus: true);
-        if ($existing === null) {
-            return null;
-        }
-        // 数据库记录不含临时文件地址，补校验时使用本次请求的地址。
-        if ($fileUrl !== null && $fileUrl !== '') {
-            $existing->setFileUrl($fileUrl);
-        }
-        return $existing->getSyncStatus()->isSynced()
-            ? $existing
-            : $this->syncToProvider($dataIsolation, $existing);
-    }
-
-    /**
-     * 仅保存素材到个人库，不创建第三方素材或触发合规校验。
-     * 该方法用于用户收藏或暂存素材，记录会保留待同步状态供后续流程继续处理。
+     * 保存到「我的素材库」：只落本地库，不创建 Provider 映射。
+     *
+     * 与 createPersonal 的区别：不校验素材协议、不做第三方合规同步（无凭证、无轮询），
+     * 因此落库即为终态，立即可对外展示。
      */
     public function saveToLibrary(AssetDataIsolation $dataIsolation, AssetEntity $asset): AssetEntity
     {
         $asset->setUserId($dataIsolation->getCurrentUserId());
-        return $this->saveLocal($dataIsolation, $asset, AssetSyncStatus::PENDING);
+        return $this->saveLocal($dataIsolation, $asset);
     }
 
-    /**
-     * 签署资产服务协议；已签署时不重复写入。
-     * 协议状态按当前数据隔离范围保存，重复调用保持幂等，不会产生重复协议记录。
-     */
     public function signAgreement(AssetDataIsolation $dataIsolation): void
     {
         if ($this->agreements->hasAccepted($dataIsolation)) {
@@ -149,16 +99,11 @@ class AssetDomainService
         $this->agreements->markAccepted($dataIsolation);
     }
 
-    /** 查询当前数据隔离范围是否已签署素材协议。 */
     public function hasSignedAgreement(AssetDataIsolation $dataIsolation): bool
     {
         return $this->agreements->hasAccepted($dataIsolation);
     }
 
-    /**
-     * 创建不归属于任何用户的公共素材，并同步到第三方。
-     * 公共素材不设置用户标识，仍会先保存本地记录，再创建第三方凭证并执行合规校验。
-     */
     public function createPublic(AssetDataIsolation $dataIsolation, AssetEntity $asset): AssetEntity
     {
         $asset->setUserId(null);
@@ -166,8 +111,10 @@ class AssetDomainService
     }
 
     /**
-     * 删除当前用户创建的资产；目标不存在时返回错误，他人创建的资产禁止删除。
-     * 删除动作会同步处理第三方映射，只有确认不存在其他引用时才回收远程素材资源。
+     * 删除本人创建的资产。
+     *
+     * 团队分享等他人创建的素材不归本人处置，直接拒绝；不可见/不存在的资产按不存在返回，
+     * 避免通过删除接口探测别人资产是否存在。
      */
     public function deletePersonal(AssetDataIsolation $dataIsolation, int|string $assetId): bool
     {
@@ -175,7 +122,7 @@ class AssetDomainService
         if ($existing === null) {
             ExceptionBuilder::throw(AssetErrorCode::NOT_FOUND);
         }
-        if (($existing->getOwnerUid() ?: $existing->getUserId()) !== $dataIsolation->getCurrentUserId()) {
+        if (! $existing->isOwnedBy($dataIsolation->getCurrentOrganizationCode(), $dataIsolation->getCurrentUserId())) {
             ExceptionBuilder::throw(AssetErrorCode::DELETE_DENIED);
         }
         return $this->deleteAssetWithProvider($dataIsolation, $existing);
@@ -191,17 +138,17 @@ class AssetDomainService
         $assets = [];
         foreach ($assetIds as $assetId) {
             $asset = $this->assets->findById($dataIsolation, $assetId);
-            if ($asset === null || ($asset->getOwnerUid() ?: $asset->getUserId()) !== $dataIsolation->getCurrentUserId()) {
+            if ($asset === null || ! $asset->isOwnedBy($dataIsolation->getCurrentOrganizationCode(), $dataIsolation->getCurrentUserId())) {
                 ExceptionBuilder::throw(AssetErrorCode::DELETE_DENIED);
             }
             $asset->setOwnerUid($ownerUid);
             $assets[] = $asset;
         }
-        Db::transaction(function () use ($dataIsolation, $assets): void {
+        Db::transaction(function () use ($dataIsolation, $assets, $ownerUid): void {
             $this->assets->batchUpdateOwner(
                 $dataIsolation,
                 array_map(static fn (AssetEntity $asset): ?int => $asset->getId(), $assets),
-                (string) $assets[0]->getOwnerUid(),
+                $ownerUid,
             );
         });
         return $assets;
@@ -219,10 +166,6 @@ class AssetDomainService
         return $this->assets->findOwnerUidsByIds($dataIsolation, $assetIds);
     }
 
-    /**
-     * 删除公共素材；目标不存在或不是公共素材时返回 false。
-     * 公共素材删除同样会检查第三方引用关系，避免误删仍被其他本地资产共享的远程资源。
-     */
     public function deletePublic(AssetDataIsolation $dataIsolation, int|string $assetId): bool
     {
         $existing = $this->assets->findById($dataIsolation, $assetId);
@@ -232,19 +175,11 @@ class AssetDomainService
         return $this->deleteAssetWithProvider($dataIsolation, $existing);
     }
 
-    /**
-     * 更新素材属性。
-     * 方法只更新本地资产的可变字段，不负责重新上传文件或改变第三方素材的合规状态。
-     */
     public function update(AssetDataIsolation $dataIsolation, AssetEntity $asset): ?AssetEntity
     {
         return $this->updateAttributes($dataIsolation, $asset);
     }
 
-    /**
-     * 更新公共素材属性；目标不存在或不是公共素材时返回 null。
-     * 通过重新查询确认目标类型后才执行更新，避免调用方越权修改个人素材记录。
-     */
     public function updatePublic(AssetDataIsolation $dataIsolation, AssetEntity $asset): ?AssetEntity
     {
         if ($asset->getId() === null) {
@@ -258,8 +193,10 @@ class AssetDomainService
     }
 
     /**
-     * 查询资产；未授权时仅返回当前用户可见的个人或公共资产。
-     * granted 为 true 表示上层已完成权限判断，此时跳过重复的可见性计算并直接返回记录。
+     * 单个资产对当前用户可见性判定。
+     *
+     * $granted 表示可见性授权已确认当前用户（本人、其所属部门或本组织）在范围内——
+     * 这类「团队分享」素材同样允许查看详情，否则列表里点进去会拿不到数据。
      */
     public function find(AssetDataIsolation $dataIsolation, int|string $assetId, bool $granted = false): ?AssetEntity
     {
@@ -270,40 +207,64 @@ class AssetDomainService
         if ($granted) {
             return $existing;
         }
-        $isPersonal = $existing->getOrganizationCode() === $dataIsolation->getCurrentOrganizationCode()
-            && $existing->getUserId() === $dataIsolation->getCurrentUserId();
-        $isOfficial = in_array($existing->getOrganizationCode(), $dataIsolation->getOfficialOrganizationCodes(), true)
-            && $existing->getUserId() === null
+        $isPersonal = $existing->isOwnedBy(
+            $dataIsolation->getCurrentOrganizationCode(),
+            $dataIsolation->getCurrentUserId(),
+        );
+        $isOfficial = $existing->isOfficial($dataIsolation->getOfficialOrganizationCodes())
             && $existing->getStatus()->isEnabled();
         return $isPersonal || $isOfficial ? $existing : null;
     }
 
-    /**
-     * 查询公共素材；目标不存在或属于个人时返回 null。
-     * 该方法只按公共素材条件筛选，不负责判断素材是否已完成第三方同步或合规审核。
-     */
+    /** @param array<int, int|string> $assetIds @param array<string> $sharedAssetIds @return AssetEntity[] */
+    public function findByIds(
+        AssetDataIsolation $dataIsolation,
+        array $assetIds,
+        array $sharedAssetIds = [],
+    ): array {
+        $sharedAssetIds = array_map('strval', $sharedAssetIds);
+        $assets = $this->assets->findByIds($dataIsolation, $assetIds);
+        $accessible = [];
+        foreach ($assets as $asset) {
+            $assetId = (string) $asset->getId();
+            $isPersonal = $asset->isOwnedBy(
+                $dataIsolation->getCurrentOrganizationCode(),
+                $dataIsolation->getCurrentUserId(),
+            );
+            $isOfficial = $asset->isOfficial($dataIsolation->getOfficialOrganizationCodes())
+                && $asset->getStatus()->isEnabled();
+            if ($isPersonal || $isOfficial || in_array($assetId, $sharedAssetIds, true)) {
+                $accessible[$assetId] = $asset;
+            }
+        }
+
+        $ordered = [];
+        foreach ($assetIds as $assetId) {
+            $asset = $accessible[(string) $assetId] ?? null;
+            if ($asset !== null) {
+                $ordered[(string) $assetId] = $asset;
+            }
+        }
+        return array_values($ordered);
+    }
+
     public function findPublic(AssetDataIsolation $dataIsolation, int|string $assetId): ?AssetEntity
     {
         $existing = $this->assets->findById($dataIsolation, $assetId);
         return $existing !== null && $existing->getUserId() === null ? $existing : null;
     }
 
-    /**
-     * 按用户和内容指纹查询个人素材；未找到时返回 null。
-     * 查询结果用于读取已有本地记录，不会触发补校验、远程同步或其他写入操作。
-     */
-    /** 按用户和内容哈希查询个人资产，可选择包含未完成同步的记录。 */
-    public function findPersonalAssetByContentHash(
-        string $userId,
-        string $contentHash,
-        bool $anySyncStatus = false,
-    ): ?AssetEntity {
+    /** 查当前用户自己的同内容资产。 */
+    public function findPersonalAssetByContentHash(string $userId, string $contentHash, bool $anySyncStatus = false): ?AssetEntity
+    {
         return $this->assets->findPersonalAssetByContentHash($userId, $contentHash, $anySyncStatus);
     }
 
     /**
-     * 查询本地素材对应的第三方素材 ID；没有映射或 ID 为空时返回 null。
-     * 返回值是第三方服务签发的标识，不是本地资产主键，调用方可据此生成远程素材引用。
+     * 取素材在第三方服务商侧的素材 ID（provider_asset_id）。
+     *
+     * asset:// URI 会被网关原样透传给服务商，而服务商只认它自己颁发的素材 ID，
+     * 因此材质化改写时必须使用 provider_asset_id，不能用本地 magic_assets 主键。
      */
     public function findProviderAssetId(AssetDataIsolation $dataIsolation, int|string $assetId): ?string
     {
@@ -316,49 +277,53 @@ class AssetDomainService
         if ($mapping === null) {
             return null;
         }
-        // 先转换为实体，再读取第三方素材 ID。
-        $providerAssetId = (new ProviderAssetEntity($mapping->toArray()))->getProviderAssetId();
+        // 只有 Provider 已通过审核时才允许生成链路使用。
+        $providerAsset = new ProviderAssetEntity($mapping->toArray());
+        if (! $providerAsset->getProviderStatus()->isPassed()) {
+            return null;
+        }
+        $providerAssetId = $providerAsset->getProviderAssetId();
+        return $providerAssetId === '' ? null : $providerAssetId;
+    }
+
+    public function ensureProviderAssetId(AssetDataIsolation $dataIsolation, AssetEntity $asset): ?string
+    {
+        if ($asset->getAssetKind()->isGroup() || $asset->getId() === null) {
+            return null;
+        }
+        $providerAssetId = $this->findProviderAssetId($dataIsolation, $asset->getId());
+        if ($providerAssetId !== null) {
+            return $providerAssetId;
+        }
+        $mapping = $this->syncPersonalAsset($dataIsolation, $asset->getId(), $asset->getFileUrl());
+        return $mapping->getProviderStatus()->isPassed() && $mapping->getProviderAssetId() !== ''
+            ? $mapping->getProviderAssetId()
+            : null;
+    }
+
+    /**
+     * 命中本人已同步个人资产时，直接返回其在第三方服务商侧的素材 ID（provider_asset_id），
+     * 供视频生成材质化拼成 asset:// 透传给服务商；未命中或取不到第三方 ID 时返回 null。
+     */
+    public function findPersonalProviderAssetId(AssetDataIsolation $dataIsolation, string $userId, string $contentHash): ?string
+    {
+        $asset = $this->assets->findPersonalAssetByContentHash($userId, $contentHash);
+        if ($asset === null) {
+            return null;
+        }
+        $mapping = $this->providerAssets->findReusableMappingByAssetIds(
+            $this->assets->findIdsByContentHash($contentHash),
+            $this->provider->getProviderCode(),
+            self::DEFAULT_PROJECT_NAME,
+        );
+        if ($mapping === null || ! $mapping->getProviderStatus()->isPassed()) {
+            return null;
+        }
+        $providerAssetId = trim($mapping->getProviderAssetId());
         return $providerAssetId === '' ? null : $providerAssetId;
     }
 
     /**
-     * 确保本地资产已经同步到第三方，并返回第三方素材 ID。
-     *
-     * 素材库保存接口允许先落本地、后续再同步；视频生成引用这类素材时需要在提交前
-     * 补做同步。已有映射直接复用，没有映射则按本地资产当前文件重新执行同步流程。
-     */
-    public function ensureProviderAssetId(AssetDataIsolation $dataIsolation, AssetEntity $asset): ?string
-    {
-        if ($asset->getAssetKind()->isGroup()) {
-            return null;
-        }
-
-        $providerAssetId = $this->findProviderAssetId($dataIsolation, $asset->getId());
-        if ($providerAssetId !== null && $asset->getSyncStatus()->isSynced()) {
-            return $providerAssetId;
-        }
-
-        $this->syncToProvider($dataIsolation, $asset);
-        return $this->findProviderAssetId($dataIsolation, $asset->getId());
-    }
-
-    /**
-     * 复用个人素材后返回第三方素材 ID；素材不存在或同步失败时返回 null。
-     * 当已有记录尚未完成合规校验时会先尝试补做校验，确保返回的凭证能够直接使用。
-     */
-    public function findPersonalProviderAssetId(AssetDataIsolation $dataIsolation, string $userId, string $contentHash): ?string
-    {
-        $asset = $this->reusePersonalByContentHash($dataIsolation, $userId, $contentHash);
-        if ($asset === null) {
-            return null;
-        }
-        return $this->findProviderAssetId($dataIsolation, $asset->getId());
-    }
-
-    /**
-     * 按查询条件分页返回当前数据隔离范围内的资产列表和总数。
-     * 仓储负责处理筛选、排序及分页细节，返回结构保持统一以便接口层直接使用。
-     *
      * @return array{total: int, list: AssetEntity[]}
      */
     public function queries(AssetDataIsolation $dataIsolation, AssetQuery $query, Page $page): array
@@ -367,8 +332,84 @@ class AssetDomainService
     }
 
     /**
-     * 返回合规轮询超时时间。
-     * 单独封装该配置便于测试环境缩短等待时间，同时保证生产流程使用统一的超时上限。
+     * 异步同步当前用户的个人素材到默认 Provider。
+     */
+    public function syncPersonalAsset(
+        AssetDataIsolation $dataIsolation,
+        int|string $assetId,
+        ?string $fileUrl,
+    ): ProviderAssetEntity {
+        $asset = $this->assets->findById($dataIsolation, $assetId);
+        if ($asset === null || ! $asset->isOwnedBy(
+            $dataIsolation->getCurrentOrganizationCode(),
+            $dataIsolation->getCurrentUserId(),
+        )) {
+            ExceptionBuilder::throw(AssetErrorCode::NOT_FOUND);
+        }
+        $mapping = $this->providerAssets->findMapping(
+            $dataIsolation,
+            $assetId,
+            $this->provider->getProviderCode(),
+            self::DEFAULT_PROJECT_NAME,
+        );
+        if ($mapping !== null) {
+            $providerAsset = new ProviderAssetEntity($mapping->toArray());
+            if ($providerAsset->getProviderStatus()->isPassed() || $providerAsset->getProviderStatus() === ProviderAssetStatus::FAILED) {
+                return $providerAsset;
+            }
+        }
+        $asset->setFileUrl($fileUrl);
+        return $this->syncToProvider($dataIsolation, $asset);
+    }
+
+    /**
+     * @param array<int, int|string> $assetIds
+     * @return array<string, ProviderAssetEntity>
+     */
+    public function findProviderAssets(AssetDataIsolation $dataIsolation, array $assetIds): array
+    {
+        return $this->providerAssets->findMappings(
+            $dataIsolation,
+            $assetIds,
+            $this->provider->getProviderCode(),
+            self::DEFAULT_PROJECT_NAME,
+        );
+    }
+
+    public function getComplianceStatus(
+        AssetDataIsolation $dataIsolation,
+        int|string $assetId,
+    ): ?ProviderAssetEntity {
+        $asset = $this->assets->findById($dataIsolation, $assetId);
+        if ($asset === null || ! $asset->isOwnedBy(
+            $dataIsolation->getCurrentOrganizationCode(),
+            $dataIsolation->getCurrentUserId(),
+        )) {
+            ExceptionBuilder::throw(AssetErrorCode::NOT_FOUND);
+        }
+        $mapping = $this->providerAssets->findMapping(
+            $dataIsolation,
+            $assetId,
+            $this->provider->getProviderCode(),
+            self::DEFAULT_PROJECT_NAME,
+        );
+        if ($mapping === null) {
+            return null;
+        }
+        $providerAsset = new ProviderAssetEntity($mapping->toArray());
+        if ($providerAsset->getProviderStatus()->isProcessing() && $this->isComplianceExpired($asset)) {
+            return $this->markProviderStatus(
+                $dataIsolation,
+                $asset,
+                ProviderAssetStatus::FAILED,
+                self::COMPLIANCE_TIMEOUT_REASON,
+            );
+        }
+        return $providerAsset;
+    }
+
+    /**
+     * 返回合规轮询等待上限。
      */
     protected function complianceTimeoutSeconds(): int
     {
@@ -377,7 +418,6 @@ class AssetDomainService
 
     /**
      * 判断合规轮询是否超时。
-     * 当前时间达到截止时间即返回 true，调用方据此终止轮询并记录合规超时状态。
      */
     protected function isComplianceWaitExpired(float $deadline): bool
     {
@@ -385,8 +425,7 @@ class AssetDomainService
     }
 
     /**
-     * 等待下一次合规状态查询。
-     * 使用固定轮询间隔降低第三方接口调用频率，避免在审核尚未完成时持续发送请求。
+     * 等待下一次合规状态轮询。
      */
     protected function waitBeforeNextCompliancePoll(): void
     {
@@ -394,8 +433,14 @@ class AssetDomainService
     }
 
     /**
-     * 删除本地资产；第三方资源仍有引用时保留资源，否则回收资源并删除映射。
-     * 素材组必须先确认没有子素材，普通素材则在本地删除后根据引用数量决定是否远程回收。
+     * 删除一个资产，并在无引用时回收第三方资源。
+     *
+     * 素材组只有本地层级（没有第三方资源），但删之前必须确认它已空，
+     * 否则组下的子素材会落成找不到父级的孤儿记录。
+     *
+     * 素材：软删本地行之后再看「同一份第三方素材/素材组」是否还被别的本地素材引用。
+     * 还有人引用就只删本地、保留远程（共享资源不该因一个引用消失而被回收）；
+     * 没人引用才调第三方删除并软删映射行，行软删保留以备查账。
      */
     private function deleteAssetWithProvider(AssetDataIsolation $dataIsolation, AssetEntity $asset): bool
     {
@@ -403,7 +448,7 @@ class AssetDomainService
             if ($this->assets->hasChildren($dataIsolation, $asset->getId())) {
                 ExceptionBuilder::throw(AssetErrorCode::GROUP_NOT_EMPTY);
             }
-            // 素材组只存在于本地。
+            // 素材组无第三方资源，仅删除本地记录。
             return $this->assets->delete($dataIsolation, $asset);
         }
 
@@ -413,14 +458,14 @@ class AssetDomainService
             $this->provider->getProviderCode(),
             self::DEFAULT_PROJECT_NAME,
         );
-        // 没有第三方映射时只删除本地记录。
+        // 未同步到第三方，直接删除本地记录。
         if ($mappingModel === null) {
             return $this->assets->delete($dataIsolation, $asset);
         }
 
         $mapping = new ProviderAssetEntity($mappingModel->toArray());
 
-        // 先删除本地记录，再判断远程资源是否仍被引用。
+        // 先删除本地记录，再根据映射判断远程资源是否仍被引用。
         $deletedLocally = $this->assets->delete($dataIsolation, $asset);
 
         // 仍有其他引用时保留远程资源。
@@ -432,7 +477,7 @@ class AssetDomainService
             return $deletedLocally;
         }
 
-        // 无其他引用时回收远程资源，并删除映射记录。
+        // 无其他引用时回收远程资源，成功后删除映射记录。
         if ($this->reclaimProviderAsset($mapping)) {
             $this->providerAssets->deleteMapping(
                 $dataIsolation,
@@ -445,8 +490,10 @@ class AssetDomainService
     }
 
     /**
-     * 幂等回收第三方素材及素材组；任一资源回收失败时保留映射供后续重试。
-     * 空凭证视为已完成回收，只有素材或素材组删除均成功时才允许调用方清理本地映射记录。
+     * 幂等回收第三方素材与其专属素材组。
+     *
+     * 回收成功（或本就没有可回收的远程资源）返回 true；只要素材或组回收失败就返回 false，
+     * 调用方据此保留映射行，交给补偿任务重试，避免远程资源与本地记录彻底失联。
      */
     private function reclaimProviderAsset(ProviderAssetEntity $mapping): bool
     {
@@ -468,27 +515,26 @@ class AssetDomainService
         return true;
     }
 
-    /**
-     * 先保存本地记录，再同步非素材组资产；素材组仅用于本地层级管理。
-     * 本地保存失败不会触发第三方调用，远程同步失败则保留本地记录和状态供后续补偿处理。
-     */
+    /** 创建公开资产：管理端仍同步等待，个人端由应用层调度协程。 */
     private function create(AssetDataIsolation $dataIsolation, AssetEntity $asset): AssetEntity
     {
         $this->assertParentGroupExists($dataIsolation, $asset);
         $assetEntity = $this->saveLocal($dataIsolation, $asset);
         if ($assetEntity->getAssetKind()->isGroup()) {
-            // 素材组只用于本地层级管理。
+            // 素材组仅用于本地层级管理。
             return $assetEntity;
         }
         $assetEntity->setFileUrl($asset->getFileUrl());
-        return $this->syncToProvider($dataIsolation, $assetEntity);
+        $this->syncToProvider($dataIsolation, $assetEntity);
+        return $assetEntity;
     }
 
     /**
-     * 保存本地资产记录；未指定状态时，素材组标记为已同步，其余资产标记为待同步。
-     * 保存时补充当前组织编码，并记录日志，确保后续同步能够通过本地主键追踪资产归属。
+     * 第一段：纯本地落库，不碰第三方。
+     *
+     * Provider 状态只保存在 magic_asset_provider_assets，资产主表不感知第三方生命周期。
      */
-    private function saveLocal(AssetDataIsolation $dataIsolation, AssetEntity $asset, ?AssetSyncStatus $syncStatus = null): AssetEntity
+    private function saveLocal(AssetDataIsolation $dataIsolation, AssetEntity $asset): AssetEntity
     {
         $asset->setOrganizationCode($dataIsolation->getCurrentOrganizationCode());
         if ($asset->getOwnerUid() === null && $asset->getUserId() !== null) {
@@ -497,87 +543,56 @@ class AssetDomainService
         if ($asset->getSearchText() === null || trim($asset->getSearchText()) === '') {
             $asset->setSearchText($this->searchTextBuilder->build($asset));
         }
-        $asset->setSyncStatus($syncStatus ?? ($asset->getAssetKind()->isGroup() ? AssetSyncStatus::PASSED : AssetSyncStatus::PENDING));
         $saved = $this->assets->save($dataIsolation, $asset);
-        $this->logger->info(
-            $saved->getSyncStatus()->isSynced() ? '资产已落库，无需同步第三方' : '资产已落库，等待同步第三方',
-            ['asset_id' => $saved->getId()],
-        );
+        $this->logger->info('资产已落库', ['asset_id' => $saved->getId()]);
         return $saved;
     }
 
     /**
-     * 同步素材到第三方；优先续用处理中或已通过审核的凭证，否则创建新素材并轮询合规状态。
-     * 任意远程操作抛出异常都会回写失败状态，但不会删除映射，便于重试、审计和人工处置。
+     * 第二段：同步第三方（只处理素材）。
+     *
+     * 同一份内容（content_hash 相同）若已有可复用的第三方素材，直接挂上已审核通过的凭证，
+     * 不再重复上传——这是「同一张图片只上传一次」的核心。没有可复用的素材才走新建流程。
+     *
+     * 失败只回写 Provider 映射状态，不回收远程资源：凭证可查、可重试、可人工处置。
      */
-    private function syncToProvider(AssetDataIsolation $dataIsolation, AssetEntity $asset): AssetEntity
+    private function syncToProvider(AssetDataIsolation $dataIsolation, AssetEntity $asset): ProviderAssetEntity
     {
-        $this->markSyncStatus($dataIsolation, $asset, AssetSyncStatus::SYNCING);
+        $this->markProviderStatus($dataIsolation, $asset, ProviderAssetStatus::PROCESSING);
         try {
-            // 优先续用已提交但尚无结论的凭证。
-            $resumable = $this->findResumableProviderAsset($dataIsolation, $asset);
-            if ($resumable !== null) {
-                $this->logger->info('续用已提交的第三方素材凭证，继续等待合规结论', [
-                    'asset_id' => $asset->getId(),
-                    'provider_asset_id' => $resumable->getProviderAssetId(),
-                ]);
-                $this->awaitProviderAssetActive($dataIsolation, $resumable);
-                return $this->markSyncStatus($dataIsolation, $asset, AssetSyncStatus::PASSED);
-            }
-
-            // 命中已审核通过的相同内容时复用第三方凭证。
+            // 命中可复用凭证时跳过上传和合规轮询。
             $reusable = $this->findReusableProviderAsset($asset);
             if ($reusable !== null) {
-                $this->persistReusedMapping($dataIsolation, $asset, $reusable);
+                $providerAsset = $this->persistReusedMapping($dataIsolation, $asset, $reusable);
                 $this->logger->info('复用已存在的第三方素材，跳过上传', [
                     'asset_id' => $asset->getId(),
                     'provider_asset_id' => $reusable->getProviderAssetId(),
                 ]);
-                return $this->markSyncStatus($dataIsolation, $asset, AssetSyncStatus::PASSED);
+                if (! $providerAsset->getProviderStatus()->isPassed()) {
+                    $this->awaitProviderAssetPassed($dataIsolation, $asset, $providerAsset);
+                }
+                return $providerAsset;
             }
 
-            // 创建专属素材组后提交素材。
+            // 为素材创建专属第三方素材组，满足 GroupId 必填约束。
             $providerGroupId = $this->createProviderAssetGroup($this->resolveProviderGroupName($asset));
             $this->persistGroupMapping($dataIsolation, $asset, $providerGroupId);
             $providerAssetEntity = $this->createProviderAsset($dataIsolation, $asset, $providerGroupId);
-            $this->awaitProviderAssetActive($dataIsolation, $providerAssetEntity);
+            $this->awaitProviderAssetPassed($dataIsolation, $asset, $providerAssetEntity);
         } catch (Throwable $throwable) {
-            $this->markSyncStatus($dataIsolation, $asset, AssetSyncStatus::FAILED, $throwable->getMessage());
+            $this->markProviderStatus(
+                $dataIsolation,
+                $asset,
+                ProviderAssetStatus::FAILED,
+                $throwable->getMessage(),
+            );
             throw $throwable;
         }
-        return $this->markSyncStatus($dataIsolation, $asset, AssetSyncStatus::PASSED);
+        return $providerAssetEntity;
     }
 
     /**
-     * 查询当前素材的处理中映射，用于恢复中断的合规轮询。
-     * 仅返回具有第三方素材 ID 且状态仍为处理中的映射，已完成或无凭证的记录不会被续用。
-     */
-    private function findResumableProviderAsset(AssetDataIsolation $dataIsolation, AssetEntity $asset): ?ProviderAssetEntity
-    {
-        $assetId = $asset->getId();
-        if ($assetId === null) {
-            return null;
-        }
-        $mappingModel = $this->providerAssets->findMapping(
-            $dataIsolation,
-            $assetId,
-            $this->provider->getProviderCode(),
-            self::DEFAULT_PROJECT_NAME,
-        );
-        if ($mappingModel === null) {
-            return null;
-        }
-        // 映射模型需转换为实体后读取状态。
-        $mapping = new ProviderAssetEntity($mappingModel->toArray());
-        if (trim($mapping->getProviderAssetId()) === '') {
-            return null;
-        }
-        return $mapping->getProviderStatus()->isProcessing() ? $mapping : null;
-    }
-
-    /**
-     * 按内容指纹查找其他本地素材中已通过审核、可跨组织复用的第三方凭证。
-     * 当前素材自身会从候选 ID 中排除，内容指纹为空或没有其他候选记录时直接返回 null。
+     * 按内容指纹查找可跨组织复用的第三方凭证。
      */
     private function findReusableProviderAsset(AssetEntity $asset): ?ProviderAssetEntity
     {
@@ -601,14 +616,13 @@ class AssetDomainService
     }
 
     /**
-     * 将已复用的第三方素材凭证写入当前素材的映射记录。
-     * 新映射继承第三方素材组、状态和元数据，保证当前本地资产可以继续使用同一远程凭证。
+     * 将复用的第三方凭证写入当前素材映射。
      */
     private function persistReusedMapping(
         AssetDataIsolation $dataIsolation,
         AssetEntity $asset,
         ProviderAssetEntity $reusable,
-    ): void {
+    ): ProviderAssetEntity {
         $providerAssetEntity = new ProviderAssetEntity([
             'asset_id' => $asset->getId(),
             'organization_code' => $dataIsolation->getCurrentOrganizationCode(),
@@ -620,44 +634,54 @@ class AssetDomainService
             'metadata' => $reusable->getMetadata(),
         ]);
         $this->providerAssets->saveMapping($dataIsolation, $providerAssetEntity);
+        return $providerAssetEntity;
     }
 
-    /**
-     * 更新本地同步状态；失败时同时保存规范化后的失败原因。
-     * 状态写回失败只记录错误并返回传入实体，避免数据库异常覆盖原始同步异常信息。
-     */
-    private function markSyncStatus(
+    /** 更新当前默认 Provider 的状态与失败原因。 */
+    private function markProviderStatus(
         AssetDataIsolation $dataIsolation,
         AssetEntity $asset,
-        AssetSyncStatus $status,
+        ProviderAssetStatus $status,
         ?string $failedReason = null,
-    ): AssetEntity {
-        $asset->setSyncStatus($status);
-        $asset->setSyncFailedReason($status->isFailed() ? $this->normalizeFailedReason($failedReason) : null);
-        $updated = $this->assets->update($dataIsolation, $asset);
-        if ($updated === null) {
-            $this->logger->error('资产同步状态回写失败', [
+    ): ProviderAssetEntity {
+        $mapping = $this->providerAssets->findMapping(
+            $dataIsolation,
+            (int) $asset->getId(),
+            $this->provider->getProviderCode(),
+            self::DEFAULT_PROJECT_NAME,
+        );
+        $providerAsset = $mapping === null
+            ? new ProviderAssetEntity([
                 'asset_id' => $asset->getId(),
-                'sync_status' => $status->value,
-            ]);
-            return $asset;
-        }
-        return $updated;
+                'provider_code' => $this->provider->getProviderCode(),
+                'project_name' => self::DEFAULT_PROJECT_NAME,
+            ])
+            : new ProviderAssetEntity($mapping->toArray());
+        $providerAsset->setProviderStatus($status);
+        $providerAsset->setProviderFailedReason(
+            $status === ProviderAssetStatus::FAILED ? $this->normalizeFailedReason($failedReason) : null,
+        );
+        $this->providerAssets->saveMapping($dataIsolation, $providerAsset);
+        return $providerAsset;
     }
 
-    /**
-     * 清理并截断同步失败原因。
-     * 空白原因统一转换为 null，非空原因限制在数据库允许的长度内，避免写入超长文本。
-     */
     private function normalizeFailedReason(?string $reason): ?string
     {
         $reason = trim((string) $reason);
         return $reason === '' ? null : mb_substr($reason, 0, self::FAILED_REASON_MAX_LENGTH);
     }
 
+    private function isComplianceExpired(AssetEntity $asset): bool
+    {
+        $createdAt = strtotime((string) $asset->getCreatedAt());
+        return $createdAt !== false && time() - $createdAt >= self::COMPLIANCE_TIMEOUT_SECONDS;
+    }
+
     /**
-     * 校验父级存在且为素材组，避免创建无效的层级关系。
-     * 父级为空表示资产位于根层级；指定父级但查不到或类型错误时抛出资源不存在异常。
+     * 父级只表达本地层级，第三方不再参与校验；但本地父组必须真实存在，
+     * 否则素材会落成一条在列表里永远挂不上父组的孤儿记录。
+     *
+     * 注意这里刻意早于落库：本地校验失败没有「远程已建」的残留，直接拒绝比留下失败记录干净。
      */
     private function assertParentGroupExists(AssetDataIsolation $dataIsolation, AssetEntity $asset): void
     {
@@ -672,20 +696,22 @@ class AssetDomainService
     }
 
     /**
-     * 保存第三方素材组凭证，待素材创建后在同一映射中补充素材凭证。
-     * 远程素材组创建成功后立即落本地映射，即使后续素材创建失败也能追踪和补偿回收资源。
+     * 记录素材专属素材组的凭证：远程一旦建出来，凭证就必须在本地可查。
+     *
+     * 写在素材自己的映射行上，随后的 createProviderAsset 会 upsert 同一行补上素材凭证。
      */
     private function persistGroupMapping(
         AssetDataIsolation $dataIsolation,
         AssetEntity $asset,
         string $providerGroupId,
     ): void {
-        // 素材尚未创建，此处只记录素材组凭证。
+        // 素材尚未创建，映射状态保持处理中。
         $providerAssetGroupEntity = new ProviderAssetEntity([
             'asset_id' => (int) $asset->getId(),
             'provider_code' => $this->provider->getProviderCode(),
             'project_name' => self::DEFAULT_PROJECT_NAME,
             'provider_group_id' => $providerGroupId,
+            'provider_status' => ProviderAssetStatus::PROCESSING->value,
         ]);
         $this->providerAssets->saveMapping($dataIsolation, $providerAssetGroupEntity);
         $this->logger->info('第三方素材组凭证已落库', [
@@ -695,8 +721,7 @@ class AssetDomainService
     }
 
     /**
-     * 调用第三方创建素材组并返回素材组 ID。
-     * 第三方响应缺少有效组 ID 时视为无效响应并抛出异常，禁止继续创建无法关联的素材。
+     * 调用第三方创建素材组，返回素材组 ID。
      */
     private function createProviderAssetGroup(string $groupName): string
     {
@@ -716,8 +741,7 @@ class AssetDomainService
     }
 
     /**
-     * 创建第三方素材，并将第三方返回的素材和组凭证保存到本地映射。
-     * 同时保存第三方状态和原始元数据，用于后续合规轮询、失败原因提取及问题审计。
+     * 创建第三方素材并保存返回的凭证。
      */
     private function createProviderAsset(
         AssetDataIsolation $dataIsolation,
@@ -737,7 +761,7 @@ class AssetDomainService
         ]);
         $providerAssetId = (string) ($response['provider_asset_id'] ?? $response['asset_id'] ?? $response['id'] ?? '');
         if ($providerAssetId === '') {
-            // 缺少第三方素材 ID，无法建立映射。
+            // 缺少第三方素材 ID 时无法建立映射。
             ExceptionBuilder::throw(AssetErrorCode::PROVIDER_RESPONSE_INVALID);
         }
         $providerAssetEntity = new ProviderAssetEntity([
@@ -749,7 +773,7 @@ class AssetDomainService
             'provider_status' => ProviderAssetStatus::fromValue(
                 $response['provider_status'] ?? $response['status'] ?? ProviderAssetStatus::PROCESSING->value,
             )->value,
-            // 保存第三方原始响应，用于审计和提取失败原因。
+            // 仅保存第三方返回的扩展 metadata。
             'metadata' => is_array($response['metadata'] ?? null) ? $response['metadata'] : null,
         ]);
         $this->providerAssets->saveMapping($dataIsolation, $providerAssetEntity);
@@ -757,54 +781,50 @@ class AssetDomainService
     }
 
     /**
-     * 轮询第三方合规状态，直到通过、失败或达到超时时间。
-     * 审核失败会保存失败状态和原因，审核超时则保留远程凭证，不主动中断第三方审核流程。
+     * 等第三方给出合规结论：审核中就一直回查，到达上限即判失败。
+     *
+     * 超时不回收——素材可能仍在第三方审核，删除会打断审核流程。
+     * 凭证已在映射表里，留给人工或后续补偿处置。
      */
-    private function awaitProviderAssetActive(
+    private function awaitProviderAssetPassed(
         AssetDataIsolation $dataIsolation,
+        AssetEntity $asset,
         ProviderAssetEntity $providerAssetEntity,
     ): void {
-        $deadline = microtime(true) + $this->complianceTimeoutSeconds();
+        $createdAt = strtotime((string) $asset->getCreatedAt());
+        $deadline = (float) (($createdAt === false ? time() : $createdAt) + $this->complianceTimeoutSeconds());
         $status = $providerAssetEntity->getProviderStatus();
-        // 保存最近一次响应，用于提取合规失败原因。
-        $metadata = $providerAssetEntity->getMetadata() ?? [];
 
-        while (! $status->isActive()) {
+        while (! $status->isPassed()) {
             if (! $status->isProcessing()) {
-                $reason = $this->provider->extractComplianceFailedReason($metadata, $status->value);
                 $this->logger->error('第三方素材合规未通过', [
                     'provider_asset_id' => $providerAssetEntity->getProviderAssetId(),
                     'provider_status' => $status->value,
-                    'reason' => $reason,
                 ]);
                 $this->persistProviderStatus($dataIsolation, $providerAssetEntity, $status);
-                ExceptionBuilder::throw(AssetErrorCode::COMPLIANCE_FAILED, $reason);
+                ExceptionBuilder::throw(AssetErrorCode::COMPLIANCE_FAILED);
             }
             if ($this->isComplianceWaitExpired($deadline)) {
                 $this->logger->error('第三方素材合规回查超时', [
                     'provider_asset_id' => $providerAssetEntity->getProviderAssetId(),
                     'timeout_seconds' => self::COMPLIANCE_TIMEOUT_SECONDS,
                 ]);
-                ExceptionBuilder::throw(
-                    AssetErrorCode::COMPLIANCE_TIMEOUT,
-                    sprintf('第三方素材合规回查超时（%d 秒内未返回结论）', self::COMPLIANCE_TIMEOUT_SECONDS),
-                );
+                throw new RuntimeException(self::COMPLIANCE_TIMEOUT_REASON);
             }
             $this->waitBeforeNextCompliancePoll();
-            [$status, $metadata] = $this->fetchProviderStatus($providerAssetEntity);
+            $status = $this->fetchProviderStatus($providerAssetEntity);
         }
 
-        // 轮询后再写入最终状态，避免重复更新。
-        if (! $providerAssetEntity->getProviderStatus()->isActive()) {
+        // 仅在轮询后更新最终状态，避免重复写入。
+        if (! $providerAssetEntity->getProviderStatus()->isPassed()) {
             $this->persistProviderStatus($dataIsolation, $providerAssetEntity, $status);
         }
     }
 
     /**
-     * 查询一次第三方状态；请求异常时保留处理中状态，交由下一轮继续查询。
-     * 正常响应同时提取状态和元数据，调用方可使用最新元数据分析审核失败的具体原因。
+     * 查询一次第三方状态；异常时按处理中返回。
      */
-    private function fetchProviderStatus(ProviderAssetEntity $providerAssetEntity): array
+    private function fetchProviderStatus(ProviderAssetEntity $providerAssetEntity): ProviderAssetStatus
     {
         try {
             $state = $this->provider->getAssetStatus($providerAssetEntity->getProviderAssetId());
@@ -814,19 +834,15 @@ class AssetDomainService
                 'exception' => $throwable::class,
                 'message' => $throwable->getMessage(),
             ]);
-            return [ProviderAssetStatus::PROCESSING, []];
+            return ProviderAssetStatus::PROCESSING;
         }
-        return [
-            ProviderAssetStatus::fromValue(
-                $state['provider_status'] ?? $state['status'] ?? ProviderAssetStatus::PROCESSING->value,
-            ),
-            is_array($state['metadata'] ?? null) ? $state['metadata'] : [],
-        ];
+        return ProviderAssetStatus::fromValue(
+            $state['provider_status'] ?? $state['status'] ?? ProviderAssetStatus::PROCESSING->value,
+        );
     }
 
     /**
-     * 将第三方状态写回映射表；写回失败时仅记录日志。
-     * 状态持久化异常不再阻断主流程，保留当前内存状态并通过日志交给后续补偿任务处理。
+     * 将第三方状态写回映射表，失败时仅记录日志。
      */
     private function persistProviderStatus(
         AssetDataIsolation $dataIsolation,
@@ -835,6 +851,9 @@ class AssetDomainService
     ): void {
         try {
             $providerAssetEntity->setProviderStatus($status);
+            if ($status !== ProviderAssetStatus::FAILED) {
+                $providerAssetEntity->setProviderFailedReason(null);
+            }
             $this->providerAssets->saveMapping($dataIsolation, $providerAssetEntity);
         } catch (Throwable $throwable) {
             $this->logger->error('第三方素材状态回写失败', [
@@ -845,21 +864,17 @@ class AssetDomainService
         }
     }
 
-    /**
-     * 更新素材的可变属性。
-     * 没有本地资产 ID 时无法执行更新并返回 null，否则将更新请求交给资产仓储处理。
-     */
     private function updateAttributes(AssetDataIsolation $dataIsolation, AssetEntity $asset): ?AssetEntity
     {
         if ($asset->getId() === null) {
             return null;
         }
+        $asset->setSearchText($this->searchTextBuilder->build($asset));
         return $this->assets->update($dataIsolation, $asset);
     }
 
     /**
      * 根据素材名称生成第三方素材组名称。
-     * 优先使用默认语言名称，名称为空或仅包含空白字符时使用统一的未命名素材组名称。
      */
     private function resolveProviderGroupName(AssetEntity $asset): string
     {

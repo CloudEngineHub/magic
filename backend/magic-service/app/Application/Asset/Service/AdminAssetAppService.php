@@ -10,6 +10,7 @@ namespace App\Application\Asset\Service;
 use App\Domain\Asset\Entity\AssetDataIsolation;
 use App\Domain\Asset\Entity\AssetEntity;
 use App\Domain\Asset\Entity\AssetTagEntity;
+use App\Domain\Asset\Entity\ProviderAssetEntity;
 use App\Domain\Asset\Entity\ValueObject\AssetScope;
 use App\Domain\Asset\Entity\ValueObject\AssetTagNodeType;
 use App\Domain\Asset\Entity\ValueObject\AssetVisibility;
@@ -90,7 +91,20 @@ class AdminAssetAppService extends AbstractAssetAppService
         );
         $result = $this->assetDomainService->queries($dataIsolation, $this->createQuery($requestDTO), $page);
         $this->resolveAssetFileUrls($result['list']);
+        $result['provider_assets'] = $this->assetDomainService->findProviderAssets(
+            $dataIsolation,
+            array_values(array_filter(array_map(
+                static fn (AssetEntity $asset): ?int => $asset->getId(),
+                $result['list'],
+            ))),
+        );
         return $result;
+    }
+
+    public function providerAsset(Authenticatable|BaseDataIsolation $authorization, int|string $assetId): ?ProviderAssetEntity
+    {
+        $dataIsolation = $this->officialDataIsolation($authorization);
+        return $this->assetDomainService->findProviderAssets($dataIsolation, [$assetId])[(string) $assetId] ?? null;
     }
 
     public function updatePublicAsset(

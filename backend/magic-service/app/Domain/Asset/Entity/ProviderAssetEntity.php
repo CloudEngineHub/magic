@@ -26,7 +26,9 @@ class ProviderAssetEntity extends AbstractEntity
 
     protected ?string $providerGroupId = null;
 
-    protected ProviderAssetStatus $providerStatus = ProviderAssetStatus::UNKNOWN;
+    protected ProviderAssetStatus $providerStatus = ProviderAssetStatus::UNVERIFIED;
+
+    protected ?string $providerFailedReason = null;
 
     protected ?array $metadata = null;
 
@@ -43,6 +45,16 @@ class ProviderAssetEntity extends AbstractEntity
     public function getProviderAssetId(): string
     {
         return $this->providerAssetId;
+    }
+
+    public function getProviderFailedReason(): ?string
+    {
+        return $this->providerFailedReason;
+    }
+
+    public function setProviderFailedReason(?string $value): void
+    {
+        $this->providerFailedReason = $value;
     }
 
     public function getProviderGroupId(): ?string

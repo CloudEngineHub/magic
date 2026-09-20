@@ -8,6 +8,7 @@ declare(strict_types=1);
 namespace App\Domain\Asset\Entity\ValueObject\Query;
 
 use App\Domain\Asset\Entity\ValueObject\AssetScope;
+use App\Domain\Asset\Entity\ValueObject\ProviderAssetStatus;
 
 /**
  * 资产列表查询条件。
@@ -26,7 +27,7 @@ class AssetQuery
 
     private ?int $status = null;
 
-    private ?bool $isVerified = null;
+    private ?ProviderAssetStatus $complianceStatus = null;
 
     /** @var string[] */
     private array $ownerUids = [];
@@ -113,14 +114,16 @@ class AssetQuery
         $this->status = $status;
     }
 
-    public function isVerified(): ?bool
+    public function getComplianceStatus(): ?ProviderAssetStatus
     {
-        return $this->isVerified;
+        return $this->complianceStatus;
     }
 
-    public function setIsVerified(?bool $isVerified): void
+    public function setComplianceStatus(?string $complianceStatus): void
     {
-        $this->isVerified = $isVerified;
+        $this->complianceStatus = $complianceStatus === null
+            ? null
+            : ProviderAssetStatus::fromValue($complianceStatus);
     }
 
     public function getOwnerUids(): array

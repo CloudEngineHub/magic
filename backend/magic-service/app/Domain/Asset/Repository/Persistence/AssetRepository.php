@@ -10,7 +10,7 @@ namespace App\Domain\Asset\Repository\Persistence;
 use App\Domain\Asset\Entity\AssetDataIsolation;
 use App\Domain\Asset\Entity\AssetEntity;
 use App\Domain\Asset\Entity\ValueObject\AssetScope;
-use App\Domain\Asset\Entity\ValueObject\AssetSyncStatus;
+use App\Domain\Asset\Entity\ValueObject\ProviderAssetStatus;
 use App\Domain\Asset\Entity\ValueObject\Query\AssetQuery;
 use App\Domain\Asset\Repository\Facade\AssetRepositoryInterface;
 use App\Domain\Asset\Repository\Persistence\Model\AssetModel;
@@ -20,6 +20,8 @@ use Hyperf\Database\Model\Builder;
 
 class AssetRepository implements AssetRepositoryInterface
 {
+    private const string DEFAULT_PROVIDER_CODE = 'VolcengineArk';
+
     public function __construct(protected AssetModel $assetModel)
     {
     }
@@ -82,8 +84,16 @@ class AssetRepository implements AssetRepositoryInterface
         if ($query->getStatus() !== null) {
             $builder->where('status', $query->getStatus());
         }
-        if ($query->isVerified() === true) {
-            $builder->where('sync_status', AssetSyncStatus::PASSED->value);
+        if ($query->getComplianceStatus() !== null) {
+            $complianceStatus = $query->getComplianceStatus();
+            $builder->whereExists(static function ($subQuery) use ($complianceStatus): void {
+                $subQuery->selectRaw('1')
+                    ->from('magic_asset_provider_assets')
+                    ->whereColumn('magic_asset_provider_assets.asset_id', 'magic_assets.id')
+                    ->where('magic_asset_provider_assets.provider_code', self::DEFAULT_PROVIDER_CODE)
+                    ->where('magic_asset_provider_assets.provider_status', $complianceStatus->value)
+                    ->whereNull('magic_asset_provider_assets.deleted_at');
+            });
         }
         if ($query->getOwnerUids() !== []) {
             $builder->whereIn('owner_uid', $query->getOwnerUids());
@@ -125,6 +135,25 @@ class AssetRepository implements AssetRepositoryInterface
             ->where('id', $id);
         $model = $builder->first();
         return $model === null ? null : new AssetEntity($model->toArray());
+    }
+
+    public function findByIds(AssetDataIsolation $dataIsolation, array $ids): array
+    {
+        $ids = array_values(array_unique(array_filter(
+            array_map(static fn (mixed $id): string => (string) $id, $ids),
+            static fn (string $id): bool => $id !== '',
+        )));
+        if ($ids === []) {
+            return [];
+        }
+        return array_map(
+            static fn (AssetModel $model): AssetEntity => new AssetEntity($model->toArray()),
+            $this->assetModel::query()
+                ->whereIn('organization_code', $dataIsolation->getOrganizationCodes())
+                ->whereIn('id', $ids)
+                ->get()
+                ->all(),
+        );
     }
 
     public function findOwnerUidsByIds(AssetDataIsolation $dataIsolation, array $assetIds): array
@@ -199,9 +228,6 @@ class AssetRepository implements AssetRepositoryInterface
             ->where('user_id', $userId)
             ->where('content_hash', $contentHash)
             ->whereNull('deleted_at');
-        if (! $anySyncStatus) {
-            $builder->where('sync_status', AssetSyncStatus::PASSED->value);
-        }
         $model = $builder->orderBy('id', $anySyncStatus ? 'desc' : 'asc')->first();
         return $model === null ? null : new AssetEntity($model->toArray());
     }

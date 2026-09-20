@@ -11,6 +11,7 @@ use App\Application\Asset\Support\ProjectFileMaterializer;
 use App\Domain\Asset\Entity\AssetDataIsolation;
 use App\Domain\Asset\Entity\AssetEntity;
 use App\Domain\Asset\Entity\AssetTagEntity;
+use App\Domain\Asset\Entity\ProviderAssetEntity;
 use App\Domain\Asset\Entity\ValueObject\AssetScope;
 use App\Domain\Asset\Entity\ValueObject\AssetTagNodeType;
 use App\Domain\Asset\Entity\ValueObject\AssetVisibility;
@@ -25,11 +26,15 @@ use App\ErrorCode\AssetErrorCode;
 use App\Infrastructure\Core\DataIsolation\BaseDataIsolation;
 use App\Infrastructure\Core\Exception\ExceptionBuilder;
 use App\Infrastructure\Core\ValueObject\Page;
+use App\Infrastructure\Util\Context\CoContext;
 use App\Interfaces\Asset\DTO\Request\CreateAssetRequestDTO;
 use App\Interfaces\Asset\DTO\Request\QueryAssetRequestDTO;
 use App\Interfaces\Asset\DTO\Request\SaveAssetToLibraryRequestDTO;
 use Hyperf\DbConnection\Db;
+use Hyperf\Coroutine\Coroutine;
+use Psr\Log\LoggerInterface;
 use Qbhy\HyperfAuth\Authenticatable;
+use Throwable;
 
 class AssetAppService extends AbstractAssetAppService
 {
@@ -39,6 +44,7 @@ class AssetAppService extends AbstractAssetAppService
         private readonly ProjectFileMaterializer $projectFileMaterializer,
         private readonly AssetTagDomainService $assetTagDomainService,
         private readonly MagicUserDomainService $userDomainService,
+        private readonly LoggerInterface $logger,
     ) {
         parent::__construct($resourceVisibilityDomainService);
     }
@@ -59,11 +65,13 @@ class AssetAppService extends AbstractAssetAppService
         // 记录内容指纹：既用于复用已同步的第三方素材，也用于「同一份内容不重复落库」的判重。
         $asset->setContentHash($contentHash ?? $this->resolveContentHash($asset));
 
+        $fileUrl = $asset->getFileUrl();
         $asset = $this->assetDomainService->createPersonal($dataIsolation, $asset);
         $this->grantAssetVisibility($dataIsolation, $asset, AssetVisibility::personal());
         $dataIsolation->setContainOfficialOrganization(true);
         $this->assetTagDomainService->syncAssetTags($dataIsolation, $asset, $requestDTO->getTagIds());
-        $this->resolveAssetFileUrls([$asset]);
+        $asset->setFileUrl($fileUrl);
+        $this->dispatchPersonalAssetSync($dataIsolation, $asset, $fileUrl);
         return $asset;
     }
 
@@ -141,7 +149,7 @@ class AssetAppService extends AbstractAssetAppService
     }
 
     /**
-     * @return array{total: int, list: AssetEntity[]}
+     * @return array{total: int, list: AssetEntity[], provider_assets: array<string, ProviderAssetEntity>}
      */
     public function list(
         Authenticatable|BaseDataIsolation $authorization,
@@ -162,6 +170,7 @@ class AssetAppService extends AbstractAssetAppService
         );
         $this->enrichAssets($dataIsolation, $result['list'], $requestDTO->getScope()->value);
         $this->resolveAssetFileUrls($result['list']);
+        $result['provider_assets'] = $this->providerAssetsByEntities($dataIsolation, $result['list']);
         return $result;
     }
 
@@ -179,6 +188,45 @@ class AssetAppService extends AbstractAssetAppService
             $this->resolveAssetFileUrls([$asset]);
         }
         return $asset;
+    }
+
+    /** @param array<int, int|string> $assetIds @return AssetEntity[] */
+    public function findByIds(Authenticatable|BaseDataIsolation $authorization, array $assetIds): array
+    {
+        $dataIsolation = $this->createAssetDataIsolation($authorization);
+        $dataIsolation->setContainOfficialOrganization(true);
+        $assetIds = array_values(array_unique(array_map('strval', $assetIds)));
+        $assets = $this->assetDomainService->findByIds(
+            $dataIsolation,
+            $assetIds,
+            $this->sharedAssetIds($dataIsolation, $assetIds),
+        );
+        $this->enrichAssets($dataIsolation, $assets, AssetScope::ALL->value);
+        $this->resolveAssetFileUrls($assets);
+        return $assets;
+    }
+
+    public function providerAsset(Authenticatable|BaseDataIsolation $authorization, int|string $assetId): ?ProviderAssetEntity
+    {
+        $dataIsolation = $this->createAssetDataIsolation($authorization);
+        $dataIsolation->setContainOfficialOrganization(true);
+        return $this->assetDomainService->findProviderAssets($dataIsolation, [$assetId])[(string) $assetId] ?? null;
+    }
+
+    /** @param array<int, int|string> $assetIds @return array<string, ProviderAssetEntity> */
+    public function findProviderAssets(Authenticatable|BaseDataIsolation $authorization, array $assetIds): array
+    {
+        $dataIsolation = $this->createAssetDataIsolation($authorization);
+        $dataIsolation->setContainOfficialOrganization(true);
+        return $this->assetDomainService->findProviderAssets($dataIsolation, $assetIds);
+    }
+
+    public function compliance(Authenticatable|BaseDataIsolation $authorization, int|string $assetId): ?ProviderAssetEntity
+    {
+        return $this->assetDomainService->getComplianceStatus(
+            $this->createAssetDataIsolation($authorization),
+            $assetId,
+        );
     }
 
     public function deletePersonalAsset(
@@ -309,6 +357,31 @@ class AssetAppService extends AbstractAssetAppService
         return $materialized['content_hash'] ?? null;
     }
 
+    private function dispatchPersonalAssetSync(
+        AssetDataIsolation $dataIsolation,
+        AssetEntity $asset,
+        ?string $fileUrl,
+    ): void {
+        if ($asset->getAssetKind()->isGroup() || $asset->getId() === null) {
+            return;
+        }
+
+        $assetId = $asset->getId();
+        $coroutineId = Coroutine::id();
+        Coroutine::create(function () use ($dataIsolation, $assetId, $fileUrl, $coroutineId): void {
+            CoContext::copy($coroutineId);
+            try {
+                $this->assetDomainService->syncPersonalAsset($dataIsolation, $assetId, $fileUrl);
+            } catch (Throwable $throwable) {
+                $this->logger->error('个人素材异步同步失败', [
+                    'asset_id' => $assetId,
+                    'exception' => $throwable::class,
+                    'message' => $throwable->getMessage(),
+                ]);
+            }
+        });
+    }
+
     /**
      * 组装列表查询条件；团队分享与全部范围需要先解析出已授权给当前用户的资产主键。
      */
@@ -331,7 +404,7 @@ class AssetAppService extends AbstractAssetAppService
         $query->setAssetMediaType($requestDTO->getAssetMediaType());
         $query->setKeyword($requestDTO->getKeyword());
         $query->setStatus($requestDTO->getStatus() ?? 1);
-        $query->setIsVerified($requestDTO->getIsVerified());
+        $query->setComplianceStatus($requestDTO->getComplianceStatus());
         $query->setOwnerUids($requestDTO->getOwnerUids());
         $query->setTagIds($requestDTO->getTagIds());
         $query->setTagMatch($requestDTO->getTagMatch());
@@ -346,7 +419,9 @@ class AssetAppService extends AbstractAssetAppService
             if ($ownerId !== null) {
                 $ownerIds[] = $ownerId;
             }
-            $asset->setSource($ownerId === $isolation->getCurrentUserId() ? 'PERSONAL' : (in_array($scope, ['TEAM', 'ALL'], true) ? 'TEAM' : 'PUBLIC'));
+            $asset->setSource($ownerId === $isolation->getCurrentUserId()
+                ? 'PERSONAL'
+                : ($asset->isOfficial($isolation->getOfficialOrganizationCodes()) ? 'PUBLIC' : 'TEAM'));
             $asset->setTags(array_map(static fn ($tag): array => [
                 'id' => (string) $tag->getId(),
                 'name' => (string) ($tag->getNameI18n()['default'] ?? ''),
@@ -361,5 +436,17 @@ class AssetAppService extends AbstractAssetAppService
             $info = $infos[$ownerId] ?? [];
             $asset->setOwnerName((string) ($info['nickname'] ?? ''));
         }
+    }
+
+    /** @param AssetEntity[] $assets @return array<string, ProviderAssetEntity> */
+    private function providerAssetsByEntities(AssetDataIsolation $dataIsolation, array $assets): array
+    {
+        return $this->assetDomainService->findProviderAssets(
+            $dataIsolation,
+            array_values(array_filter(array_map(
+                static fn (AssetEntity $asset): ?int => $asset->getId(),
+                $assets,
+            ))),
+        );
     }
 }

@@ -19,7 +19,8 @@ return new class extends Migration {
             $table->string('project_name', 128)->default('')->comment('Provider 项目名称');
             $table->string('provider_asset_id', 128)->nullable()->comment('第三方资产 ID，组映射可为空');
             $table->string('provider_group_id', 128)->nullable()->comment('第三方资产组 ID');
-            $table->string('provider_status', 32)->nullable()->comment('第三方状态');
+            $table->string('provider_status', 32)->default('UNVERIFIED')->comment('第三方状态：UNVERIFIED未校验 PROCESSING处理中 PASS通过 FAILED失败');
+            $table->string('provider_failed_reason', 512)->nullable()->comment('第三方同步或合规失败原因');
             $table->json('metadata')->nullable()->comment('第三方扩展元数据');
             $table->dateTime('created_at');
             $table->dateTime('updated_at');

@@ -33,8 +33,8 @@ class AssetDTO extends AbstractDTO
 
     public ?string $fileUrl = null;
 
-    /** 合规校验结论：UNVERIFIED（未校验）/ PASSED（校验通过）/ FAILED（校验未通过）。 */
-    public ?string $complianceStatus = null;
+    /** 合规校验结论：UNVERIFIED / PROCESSING / PASS / FAILED。 */
+    public ?string $complianceStatus = 'UNVERIFIED';
 
     /** 合规校验未通过的原因；只有 FAILED 时有值。 */
     public ?string $complianceFailedReason = null;

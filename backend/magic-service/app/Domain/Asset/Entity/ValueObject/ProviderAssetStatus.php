@@ -9,23 +9,23 @@ namespace App\Domain\Asset\Entity\ValueObject;
 
 enum ProviderAssetStatus: string
 {
+    case UNVERIFIED = 'UNVERIFIED';
     case PROCESSING = 'PROCESSING';
-    case ACTIVE = 'ACTIVE';
+    case PASS = 'PASS';
     case FAILED = 'FAILED';
-    case UNKNOWN = 'UNKNOWN';
 
     public static function fromValue(mixed $value): self
     {
-        return self::tryFrom(strtoupper((string) $value)) ?? self::UNKNOWN;
+        return self::from(strtoupper(trim((string) $value)));
     }
 
-    public function isActive(): bool
+    public function isPassed(): bool
     {
-        return $this === self::ACTIVE;
+        return $this === self::PASS;
     }
 
     public function isProcessing(): bool
     {
-        return $this === self::PROCESSING || $this === self::UNKNOWN;
+        return $this === self::UNVERIFIED || $this === self::PROCESSING;
     }
 }

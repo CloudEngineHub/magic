@@ -17,6 +17,8 @@ Router::addGroup('/api/v1', static function (): void {
         Router::post('/library', [AssetApi::class, 'saveToLibrary']);
         // 查询资产列表。
         Router::post('/queries', [AssetApi::class, 'list']);
+        // 按素材 ID 批量查询并刷新动态文件链接。
+        Router::post('/batch-get', [AssetApi::class, 'batchGet']);
         // 查询标签树。
         Router::get('/tags', [AssetApi::class, 'tags']);
         // 创建标签。
@@ -32,6 +34,8 @@ Router::addGroup('/api/v1', static function (): void {
         // 批量转移素材归属人。
         Router::post('/transfer-owner', [AssetApi::class, 'transferOwner']);
         // 查询资产详情。
+        // 查询第三方合规状态。
+        Router::get('/{assetId:\d+}/compliance', [AssetApi::class, 'compliance']);
         Router::get('/{assetId:\d+}', [AssetApi::class, 'detail']);
         // 删除个人资产。
         Router::delete('/{assetId:\d+}', [AssetApi::class, 'delete']);

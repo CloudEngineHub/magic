@@ -9,7 +9,8 @@ namespace App\Interfaces\Asset\Assembler;
 
 use App\Domain\Asset\Entity\AssetEntity;
 use App\Domain\Asset\Entity\AssetTagEntity;
-use App\Domain\Asset\Entity\ValueObject\AssetComplianceStatus;
+use App\Domain\Asset\Entity\ProviderAssetEntity;
+use App\Domain\Asset\Entity\ValueObject\ProviderAssetStatus;
 use App\Domain\Asset\Repository\Persistence\Model\AssetModel;
 use App\Infrastructure\Core\ValueObject\Page;
 use App\Infrastructure\Util\Context\CoContext;
@@ -51,8 +52,12 @@ class AssetAssembler
         ], $owners);
     }
 
-    public static function createItem(AssetEntity|AssetModel $asset, ?FileLink $fileLink = null, bool $admin = false): AdminAssetDTO|AssetDTO
-    {
+    public static function createItem(
+        AssetEntity|AssetModel $asset,
+        ?FileLink $fileLink = null,
+        bool $admin = false,
+        ?ProviderAssetEntity $providerAsset = null,
+    ): AdminAssetDTO|AssetDTO {
         $entity = $asset instanceof AssetEntity ? $asset : new AssetEntity($asset->toArray());
         $dto = $admin ? new AdminAssetDTO() : new AssetDTO();
         $dto->setAssetId($entity->getId());
@@ -63,10 +68,8 @@ class AssetAssembler
         $dto->setName($entity->getI18nName(self::language()));
         $dto->setDescription($entity->getI18nDescription(self::language()));
         $dto->setFileUrl($fileLink?->getUrl() ?? $entity->getFileUrl());
-        // 合规结论对用户端与管理端都要给；失败原因只在未通过时回填，通过/未校验时保持为空。
-        $complianceStatus = AssetComplianceStatus::forAsset($entity->getAssetKind(), $entity->getSyncStatus());
-        $dto->setComplianceStatus($complianceStatus->value);
-        $dto->setComplianceFailedReason($complianceStatus->isFailed() ? $entity->getSyncFailedReason() : null);
+        $dto->setComplianceStatus(($providerAsset?->getProviderStatus() ?? ProviderAssetStatus::UNVERIFIED)->value);
+        $dto->setComplianceFailedReason($providerAsset?->getProviderFailedReason());
         $ownerUid = $entity->getOwnerUid() ?: $entity->getUserId();
         $dto->setOwner($ownerUid, $entity->getOwnerName());
         $dto->setOwnerUid($ownerUid);
@@ -79,15 +82,26 @@ class AssetAssembler
         return $dto;
     }
 
-    public static function createList(array $assets, Page $page, int $total, array $fileLinks = [], bool $admin = false): AssetListDTO
-    {
+    public static function createList(
+        array $assets,
+        Page $page,
+        int $total,
+        array $fileLinks = [],
+        bool $admin = false,
+        array $providerAssets = [],
+    ): AssetListDTO {
         $items = [];
         foreach ($assets as $asset) {
             if (! $asset instanceof AssetModel && ! $asset instanceof AssetEntity) {
                 continue;
             }
             $assetId = $asset instanceof AssetEntity ? $asset->getId() : $asset->getKey();
-            $items[] = self::createItem($asset, $fileLinks[(string) $assetId] ?? null, $admin);
+            $items[] = self::createItem(
+                $asset,
+                $fileLinks[(string) $assetId] ?? null,
+                $admin,
+                $providerAssets[(string) $assetId] ?? null,
+            );
         }
         return new AssetListDTO($page->getPage(), $page->getPageNum(), $total, $items);
     }

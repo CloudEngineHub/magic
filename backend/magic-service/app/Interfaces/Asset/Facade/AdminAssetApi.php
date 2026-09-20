@@ -44,7 +44,12 @@ class AdminAssetApi extends AbstractApi
             $authorization,
             $requestDTO,
         );
-        return AssetAssembler::createItem($asset, null, true)->toArray();
+        return AssetAssembler::createItem(
+            $asset,
+            null,
+            true,
+            $this->assetAppService->providerAsset($authorization, (int) $asset->getId()),
+        )->toArray();
     }
 
     #[CheckPermission([MagicResourceEnum::PLATFORM_ASSET], MagicOperationEnum::QUERY)]
@@ -61,7 +66,14 @@ class AdminAssetApi extends AbstractApi
             $requestDTO->getPage(),
             $requestDTO->getPageSize(),
         );
-        return AssetAssembler::createList($result['list'], $page, $result['total'], [], true)->toArray();
+        return AssetAssembler::createList(
+            $result['list'],
+            $page,
+            $result['total'],
+            [],
+            true,
+            $result['provider_assets'],
+        )->toArray();
     }
 
     #[CheckPermission([MagicResourceEnum::PLATFORM_ASSET], MagicOperationEnum::EDIT)]
@@ -78,7 +90,12 @@ class AdminAssetApi extends AbstractApi
         if ($asset === null) {
             ExceptionBuilder::throw(AssetErrorCode::NOT_FOUND);
         }
-        return AssetAssembler::createItem($asset, null, true)->toArray();
+        return AssetAssembler::createItem(
+            $asset,
+            null,
+            true,
+            $this->assetAppService->providerAsset($authorization, $assetId),
+        )->toArray();
     }
 
     #[CheckPermission([MagicResourceEnum::PLATFORM_ASSET], MagicOperationEnum::EDIT)]

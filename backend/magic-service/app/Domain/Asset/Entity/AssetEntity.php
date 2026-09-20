@@ -10,7 +10,6 @@ namespace App\Domain\Asset\Entity;
 use App\Domain\Asset\Entity\ValueObject\AssetKind;
 use App\Domain\Asset\Entity\ValueObject\AssetMediaType;
 use App\Domain\Asset\Entity\ValueObject\AssetStatus;
-use App\Domain\Asset\Entity\ValueObject\AssetSyncStatus;
 use App\Domain\SuperMagic\Common\Entity\ResolvesI18nText;
 use App\Infrastructure\Core\AbstractEntity;
 
@@ -52,12 +51,6 @@ class AssetEntity extends AbstractEntity
     protected ?string $contentHash = null;
 
     protected AssetStatus $status = AssetStatus::ENABLED;
-
-    /** 与第三方素材服务的同步状态；只有已同步的资产才对外展示。 */
-    protected AssetSyncStatus $syncStatus = AssetSyncStatus::PENDING;
-
-    /** 同步失败原因，仅用于排查，不对外返回给普通用户。 */
-    protected ?string $syncFailedReason = null;
 
     protected ?array $metadata = null;
 
@@ -103,6 +96,18 @@ class AssetEntity extends AbstractEntity
     public function getUserId(): ?string
     {
         return $this->userId;
+    }
+
+    public function isOwnedBy(string $organizationCode, string $userId): bool
+    {
+        return $this->organizationCode === $organizationCode
+            && ($this->ownerUid ?: $this->userId) === $userId;
+    }
+
+    /** @param array<string> $organizationCodes */
+    public function isOfficial(array $organizationCodes): bool
+    {
+        return in_array($this->organizationCode, $organizationCodes, true);
     }
 
     public function setUserId(?string $value): void
@@ -270,28 +275,6 @@ class AssetEntity extends AbstractEntity
         $this->status = $value instanceof AssetStatus ? $value : AssetStatus::from((int) $value);
     }
 
-    public function getSyncStatus(): AssetSyncStatus
-    {
-        return $this->syncStatus;
-    }
-
-    public function setSyncStatus(null|AssetSyncStatus|int|string $value): void
-    {
-        $this->syncStatus = $value === null
-            ? AssetSyncStatus::PENDING
-            : ($value instanceof AssetSyncStatus ? $value : AssetSyncStatus::fromValue($value));
-    }
-
-    public function getSyncFailedReason(): ?string
-    {
-        return $this->syncFailedReason;
-    }
-
-    public function setSyncFailedReason(?string $value): void
-    {
-        $this->syncFailedReason = $value;
-    }
-
     public function getMetadata(): ?array
     {
         return $this->metadata;
@@ -335,8 +318,6 @@ class AssetEntity extends AbstractEntity
             'file_url' => $this->fileUrl,
             'content_hash' => $this->contentHash,
             'status' => $this->status->value,
-            'sync_status' => $this->syncStatus->value,
-            'sync_failed_reason' => $this->syncFailedReason,
             'metadata' => $this->metadata,
             'created_at' => $this->createdAt,
             'updated_at' => $this->updatedAt,

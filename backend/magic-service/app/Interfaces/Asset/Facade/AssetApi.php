@@ -8,16 +8,19 @@ declare(strict_types=1);
 namespace App\Interfaces\Asset\Facade;
 
 use App\Application\Asset\Service\AssetAppService;
+use App\Domain\Asset\Entity\AssetEntity;
 use App\ErrorCode\AssetErrorCode;
 use App\Infrastructure\Core\AbstractApi;
 use App\Infrastructure\Core\Exception\ExceptionBuilder;
 use App\Infrastructure\Core\ValueObject\Page;
 use App\Interfaces\Asset\Assembler\AssetAssembler;
+use App\Interfaces\Asset\DTO\Request\BatchGetAssetsRequestDTO;
 use App\Interfaces\Asset\DTO\Request\CreateAssetRequestDTO;
 use App\Interfaces\Asset\DTO\Request\QueryAssetRequestDTO;
 use App\Interfaces\Asset\DTO\Request\SaveAssetTagRequestDTO;
 use App\Interfaces\Asset\DTO\Request\SaveAssetToLibraryRequestDTO;
 use App\Interfaces\Asset\DTO\Request\TransferAssetOwnerRequestDTO;
+use App\Interfaces\Asset\DTO\Response\AssetComplianceDTO;
 use Dtyq\ApiResponse\Annotation\ApiResponse;
 use Hyperf\HttpServer\Contract\RequestInterface;
 
@@ -39,7 +42,12 @@ class AssetApi extends AbstractApi
             $authorization,
             $requestDTO,
         );
-        return AssetAssembler::createItem($asset)->toArray();
+        return AssetAssembler::createItem(
+            $asset,
+            null,
+            false,
+            $this->assetAppService->providerAsset($authorization, (int) $asset->getId()),
+        )->toArray();
     }
 
     public function signAgreement(): array
@@ -79,7 +87,14 @@ class AssetApi extends AbstractApi
             $requestDTO->getPage(),
             $requestDTO->getPageSize(),
         );
-        return AssetAssembler::createList($result['list'], $page, $result['total'])->toArray();
+        return AssetAssembler::createList(
+            $result['list'],
+            $page,
+            $result['total'],
+            [],
+            false,
+            $result['provider_assets'],
+        )->toArray();
     }
 
     public function detail(int|string $assetId): array
@@ -89,7 +104,43 @@ class AssetApi extends AbstractApi
         if ($asset === null) {
             ExceptionBuilder::throw(AssetErrorCode::NOT_FOUND);
         }
-        return AssetAssembler::createItem($asset)->toArray();
+        return AssetAssembler::createItem(
+            $asset,
+            null,
+            false,
+            $this->assetAppService->providerAsset($authorization, $assetId),
+        )->toArray();
+    }
+
+    public function batchGet(): array
+    {
+        $requestDTO = BatchGetAssetsRequestDTO::fromRequest($this->request);
+        $authorization = $this->getAuthorization();
+        $assets = $this->assetAppService->findByIds(
+            $authorization,
+            $requestDTO->getAssetIds(),
+        );
+        $providerAssets = $this->assetAppService->findProviderAssets(
+            $authorization,
+            $requestDTO->getAssetIds(),
+        );
+        return array_map(
+            static fn (AssetEntity $asset): array => AssetAssembler::createItem(
+                $asset,
+                null,
+                false,
+                $providerAssets[(string) $asset->getId()] ?? null,
+            )->toArray(),
+            $assets,
+        );
+    }
+
+    public function compliance(int|string $assetId): array
+    {
+        return (new AssetComplianceDTO(
+            $assetId,
+            $this->assetAppService->compliance($this->getAuthorization(), $assetId),
+        ))->toArray();
     }
 
     public function delete(int|string $assetId): array

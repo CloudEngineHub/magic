@@ -29,12 +29,13 @@ class AssetProviderAssetRepository implements AssetProviderAssetRepositoryInterf
         $this->providerAssetModel::query()->upsert(
             [$values],
             ['organization_code', 'asset_id', 'provider_code', 'project_name'],
-            ['provider_asset_id', 'provider_group_id', 'provider_status', 'metadata', 'updated_at', 'deleted_at']
+            ['provider_asset_id', 'provider_group_id', 'provider_status', 'provider_failed_reason', 'metadata', 'updated_at', 'deleted_at']
         );
         /** @var AssetProviderAssetModel $model */
-        return $this->providerAssetModel::query()
+        $model = $this->providerAssetModel::query()
             ->where('organization_code', $organizationCode)->where('asset_id', $providerAsset->getAssetId())
             ->where('provider_code', $providerAsset->getProviderCode())->where('project_name', $providerAsset->getProjectName())->firstOrFail();
+        return $model;
     }
 
     /**
@@ -52,6 +53,7 @@ class AssetProviderAssetRepository implements AssetProviderAssetRepositoryInterf
             'project_name' => $providerAsset->getProjectName(),
             'provider_group_id' => $providerAsset->getProviderGroupId(),
             'provider_status' => $providerAsset->getProviderStatus()->value,
+            'provider_failed_reason' => $providerAsset->getProviderFailedReason(),
             'metadata' => self::encodeMetadata($providerAsset->getMetadata()),
             'created_at' => $now,
             'updated_at' => $now,
@@ -65,6 +67,29 @@ class AssetProviderAssetRepository implements AssetProviderAssetRepositoryInterf
         return $this->providerAssetModel::query()
             ->where('organization_code', $organizationCode)->where('asset_id', $assetId)
             ->where('provider_code', $providerCode)->where('project_name', $projectName)->first();
+    }
+
+    public function findMappings(
+        AssetDataIsolation $dataIsolation,
+        array $assetIds,
+        string $providerCode,
+        string $projectName = '',
+    ): array {
+        if ($assetIds === []) {
+            return [];
+        }
+        $models = $this->providerAssetModel::query()
+            ->whereIn('organization_code', $dataIsolation->getOrganizationCodes())
+            ->whereIn('asset_id', $assetIds)
+            ->where('provider_code', $providerCode)
+            ->where('project_name', $projectName)
+            ->get();
+        $result = [];
+        foreach ($models as $model) {
+            $entity = new ProviderAssetEntity($model->toArray());
+            $result[(string) $entity->getAssetId()] = $entity;
+        }
+        return $result;
     }
 
     /**
@@ -87,7 +112,7 @@ class AssetProviderAssetRepository implements AssetProviderAssetRepositoryInterf
         $pending = null;
         foreach ($models as $model) {
             $mapping = new ProviderAssetEntity($model->toArray());
-            if ($mapping->getProviderStatus()->isActive()) {
+            if ($mapping->getProviderStatus()->isPassed()) {
                 return $mapping;
             }
             if (! $mapping->getProviderStatus()->isProcessing() || $pending !== null) {

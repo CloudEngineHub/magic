@@ -42,6 +42,9 @@ interface AssetRepositoryInterface
      */
     public function findById(AssetDataIsolation $dataIsolation, int|string $id): ?AssetEntity;
 
+    /** @param array<int, int|string> $ids @return AssetEntity[] */
+    public function findByIds(AssetDataIsolation $dataIsolation, array $ids): array;
+
     /** @return array<string> */
     public function findOwnerUidsByIds(AssetDataIsolation $dataIsolation, array $assetIds): array;
 

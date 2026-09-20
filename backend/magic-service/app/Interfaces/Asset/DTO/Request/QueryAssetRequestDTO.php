@@ -30,7 +30,7 @@ class QueryAssetRequestDTO extends AbstractRequestDTO
 
     public ?int $status = null;
 
-    public ?bool $isVerified = null;
+    public ?string $complianceStatus = null;
 
     /** @var string[] */
     public array $ownerUids = [];
@@ -85,9 +85,9 @@ class QueryAssetRequestDTO extends AbstractRequestDTO
         return $this->pageSize;
     }
 
-    public function getIsVerified(): ?bool
+    public function getComplianceStatus(): ?string
     {
-        return $this->isVerified;
+        return $this->complianceStatus;
     }
 
     public function getOwnerUids(): array
@@ -150,9 +150,9 @@ class QueryAssetRequestDTO extends AbstractRequestDTO
         $this->status = $value === null || $value === '' ? null : (int) $value;
     }
 
-    public function setIsVerified(mixed $value): void
+    public function setComplianceStatus(mixed $value): void
     {
-        $this->isVerified = $value === null || $value === '' ? null : filter_var($value, FILTER_VALIDATE_BOOLEAN, FILTER_NULL_ON_FAILURE);
+        $this->complianceStatus = $value === null || $value === '' ? null : strtoupper((string) $value);
     }
 
     public function setOwnerUids(mixed $value): void
@@ -187,7 +187,7 @@ class QueryAssetRequestDTO extends AbstractRequestDTO
             'page' => 'nullable|integer|min:1',
             'page_size' => 'nullable|integer|min:1|max:200',
             'status' => 'nullable|integer|in:0,1',
-            'is_verified' => 'nullable|boolean',
+            'compliance_status' => 'nullable|string|in:PASS',
             'owner_uids' => 'nullable|array',
             'owner_uids.*' => 'string|max:64',
             'tag_ids' => 'nullable',

@@ -278,16 +278,21 @@ final class VolcengineArkAssetProvider implements AssetProviderInterface
     {
         $result = $this->extractResult($response);
         $id = $result['Id'] ?? $result['ID'] ?? $result['id'] ?? '';
-        $status = strtoupper((string) ($result['Status'] ?? $result['status'] ?? 'UNKNOWN'));
+        $status = strtoupper((string) ($result['Status'] ?? $result['status'] ?? ''));
         return [
             'provider_asset_id' => (string) $id,
-            'provider_status' => in_array($status, ['PROCESSING', 'ACTIVE', 'FAILED'], true) ? $status : 'UNKNOWN',
+            'provider_status' => match ($status) {
+                'ACTIVE' => 'PASS',
+                'PROCESSING' => 'PROCESSING',
+                'FAILED' => 'FAILED',
+                default => 'UNVERIFIED',
+            },
             'metadata' => $response,
         ];
     }
 
     /**
-     * 素材组创建后即可直接挂载素材，因此固定按 ACTIVE 返回。
+     * 素材组创建后即可直接挂载素材，因此固定按 PASS 返回。
      */
     private function mapGroupResponse(array $response): array
     {
@@ -295,7 +300,7 @@ final class VolcengineArkAssetProvider implements AssetProviderInterface
         $id = $result['Id'] ?? $result['ID'] ?? $result['id'] ?? '';
         return [
             'provider_group_id' => (string) $id,
-            'provider_status' => 'ACTIVE',
+            'provider_status' => 'PASS',
             'metadata' => $response,
         ];
     }
