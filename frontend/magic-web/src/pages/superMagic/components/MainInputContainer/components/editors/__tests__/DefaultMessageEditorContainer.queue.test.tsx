@@ -405,3 +405,41 @@ it.each(["queue-1", undefined])(
 		expect(mocks.setContent).not.toHaveBeenCalled()
 	},
 )
+
+it("queues a message while the topic remains running after loading briefly clears", async () => {
+	render(
+		<DefaultMessageEditorContainer
+			editorContext={{
+				selectedProject: { id: "project-1" } as never,
+				selectedTopic: { id: "topic-1", task_status: "running" } as never,
+				topicMode: TopicMode.Default,
+				showLoading: false,
+				isTaskRunning: true,
+				queueContext: {
+					editorRef: { current: null },
+					editingQueueItem: null,
+					queueDraft: null,
+					cancelEditQueueItem: vi.fn(async () => undefined),
+					onEditorReady: vi.fn(),
+					retryQueueDraftRemoval: vi.fn(async () => undefined),
+					isQueueOperationPending: false,
+					addToQueue: mocks.addToQueue,
+					finishEditQueueItem: vi.fn(),
+				},
+				onMessageSendReady: (send) => {
+					mocks.handleSend = send as typeof mocks.handleSend
+				},
+			}}
+		/>,
+	)
+
+	await act(async () => {
+		await mocks.handleSend?.({
+			value: { type: "doc" },
+			mentionItems: [],
+			topicMode: TopicMode.Default,
+		})
+	})
+
+	expect(mocks.addToQueue).toHaveBeenCalled()
+})

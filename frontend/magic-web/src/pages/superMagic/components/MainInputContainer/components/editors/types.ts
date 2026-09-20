@@ -70,7 +70,7 @@ export interface SceneEditorContext {
 	agentCode?: string
 	setTopicMode?: (mode: TopicMode) => void
 	/** Runtime recovery that must not persist user preferences. */
-	recoverTopicMode?: (mode: TopicMode) => void
+	recoverTopicMode?: (mode: TopicMode, agentCode?: string | null) => void
 	topicExamplesMode?: TopicMode
 	size?: MessageEditorSize
 	className?: string

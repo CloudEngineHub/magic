@@ -53,6 +53,7 @@ interface GetSidebarTopicsByProjectIdParams {
 interface SyncTopicFrontendModePatchParams {
 	topic?: Topic | null
 	mode: TopicMode
+	agentCode?: string | null
 }
 
 const FRONTEND_MODE_PATCH_TTL_MS = 30 * 60 * 1000
@@ -285,10 +286,10 @@ class TopicService {
 		}
 	}
 
-	syncTopicFrontendModePatch({ topic, mode }: SyncTopicFrontendModePatchParams) {
+	syncTopicFrontendModePatch({ topic, mode, agentCode }: SyncTopicFrontendModePatchParams) {
 		if (!topic?.id || !mode) return
 
-		const patchSource = this.resolveManualFrontendModeSource(topic, mode)
+		const patchSource = this.resolveManualFrontendModeSource(topic, mode, agentCode)
 		this.rememberFrontendModePatch(topic.id, patchSource)
 		const currentAgentCode = topic.agent_code?.trim() || undefined
 		if (
@@ -308,8 +309,20 @@ class TopicService {
 	private resolveManualFrontendModeSource(
 		topic: Topic,
 		mode: TopicMode,
+		agentCode?: string | null,
 	): Pick<Topic, "project_id" | "topic_mode" | "agent_code"> {
 		const modeIdentifier = String(mode).trim()
+		const normalizedAgentCode = agentCode?.trim() || undefined
+
+		// Queue drafts store the mode and custom employee code separately. Prefer the
+		// explicit code so restoring `custom_agent` does not clear the employee.
+		if (modeIdentifier === TopicMode.CustomAgent && normalizedAgentCode) {
+			return {
+				project_id: topic.project_id,
+				topic_mode: TopicMode.CustomAgent,
+				agent_code: normalizedAgentCode,
+			}
+		}
 
 		// Only legacy SMA crews use custom_agent; other identifiers are plain topic_mode.
 		if (modeIdentifier.startsWith("SMA")) {
