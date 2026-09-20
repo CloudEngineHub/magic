@@ -13,7 +13,7 @@ import {
 import { useMemoizedFn } from "ahooks"
 import { useTranslation } from "react-i18next"
 import { observer } from "mobx-react-lite"
-import { ChevronDown, PanelLeftOpen, Presentation, Plus } from "lucide-react"
+import { ChevronDown, Minimize, PanelLeftOpen, Presentation, Plus } from "lucide-react"
 import PPTSlide, { type PPTSlideToolbarModel } from "./PPTSlide"
 import PPTSidebar from "./PPTSidebar/index"
 import { PPTControlBar } from "./PPTControlBar"
@@ -837,12 +837,28 @@ const PPTRenderInner = observer(function PPTRenderInner({
 			<div
 				ref={containerRef}
 				data-testid="ppt-render-container"
+				data-mobile-fullscreen={
+					isMobile && isPresentationFullscreen ? "landscape" : undefined
+				}
 				className={
 					isPresentationFullscreen
-						? `fixed inset-0 ${TAILWIND_Z_INDEX_CLASSES.FULLSCREEN.CONTAINER} flex flex-row`
+						? `fixed inset-0 ${TAILWIND_Z_INDEX_CLASSES.FULLSCREEN.CONTAINER} flex flex-row bg-black`
 						: "relative h-full w-full overflow-hidden"
 				}
 			>
+				{/* Fullscreen hides the regular bar; keep an always-visible exit target on touch screens. */}
+				{isPresentationFullscreen && (
+					<Button
+						variant="ghost"
+						size="icon"
+						data-testid="ppt-render-fullscreen-exit-button"
+						className="absolute right-3 top-3 z-50 h-9 w-9 bg-black/45 text-white hover:bg-black/65 hover:text-white"
+						onClick={() => void togglePresentationFullscreen()}
+						aria-label={t("fileViewer.exitFullscreen")}
+					>
+						<Minimize className="h-4 w-4" />
+					</Button>
+				)}
 				{isSidebarCollapsed && !isPresentationFullscreen && (
 					<MagicTooltip title={t("fileViewer.expandSidebar")}>
 						<Button
@@ -1110,6 +1126,9 @@ const PPTRenderInner = observer(function PPTRenderInner({
 											mainFileId={mainFileId}
 											mainFileName={mainFileName}
 											allowDownload={allowDownload}
+											onSwipe={(direction) => {
+												void changeSlide(direction)
+											}}
 										/>
 									)
 								})}

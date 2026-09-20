@@ -50,6 +50,11 @@ describe("useFullscreen", () => {
 
 	it("uses CSS fullscreen state in Magic App WebView without calling native fullscreen", async () => {
 		appEnv.isMagicApp = true
+		const lock = vi.fn(async () => undefined)
+		Object.defineProperty(window.screen, "orientation", {
+			configurable: true,
+			value: { lock, unlock: vi.fn() },
+		})
 		const container = document.createElement("div") as FullscreenElement
 		container.requestFullscreen = vi.fn(async () => undefined)
 
@@ -61,6 +66,7 @@ describe("useFullscreen", () => {
 
 		expect(container.requestFullscreen).not.toHaveBeenCalled()
 		expect(result.current.isFullscreen).toBe(true)
+		expect(lock).toHaveBeenCalledWith("landscape")
 
 		await act(async () => {
 			await result.current.exitFullscreen()
@@ -107,5 +113,44 @@ describe("useFullscreen", () => {
 		})
 
 		expect(result.current.isFullscreen).toBe(true)
+	})
+
+	it("falls back to CSS fullscreen and requests landscape when native API is unavailable", async () => {
+		Object.defineProperty(window, "matchMedia", {
+			configurable: true,
+			value: () => ({ matches: true }),
+		})
+		const lock = vi.fn(async () => undefined)
+		Object.defineProperty(window.screen, "orientation", {
+			configurable: true,
+			value: { lock, unlock: vi.fn() },
+		})
+		const container = document.createElement("div") as FullscreenElement
+		const { result } = renderFullscreenHook(container)
+
+		await act(async () => {
+			await result.current.toggleFullscreen()
+		})
+
+		expect(result.current.isFullscreen).toBe(true)
+		expect(lock).toHaveBeenCalledWith("landscape")
+	})
+
+	it("does not report desktop fullscreen when the native request is rejected", async () => {
+		Object.defineProperty(window, "matchMedia", {
+			configurable: true,
+			value: () => ({ matches: false }),
+		})
+		const container = document.createElement("div") as FullscreenElement
+		container.requestFullscreen = vi.fn(async () => {
+			throw new Error("permission denied")
+		})
+		const { result } = renderFullscreenHook(container)
+
+		await act(async () => {
+			await result.current.toggleFullscreen()
+		})
+
+		expect(result.current.isFullscreen).toBe(false)
 	})
 })

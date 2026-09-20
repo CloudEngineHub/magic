@@ -9,6 +9,7 @@ export { usePPTStore, usePPTContext } from "../contexts/PPTContext"
 export { useSyncActiveState } from "./useSyncActiveState"
 export { useSlideSync } from "./useSlideSync"
 export { useSlideNavigation } from "./useSlideNavigation"
+export { usePPTSwipeNavigation } from "./usePPTSwipeNavigation"
 export { useSlideHandlers } from "./useSlideHandlers"
 export {
 	usePPTLiveRenderCache,

@@ -21,9 +21,30 @@ type FullscreenElement = HTMLElement & {
 	webkitRequestFullscreen?: () => Promise<void> | void
 }
 
+type ScreenOrientationWithLock = ScreenOrientation & {
+	lock?: (orientation: "landscape" | "portrait") => Promise<void>
+	unlock?: () => void
+}
+
 function getFullscreenElement(): Element | null {
 	const fullscreenDocument = document as FullscreenDocument
 	return document.fullscreenElement || fullscreenDocument.webkitFullscreenElement || null
+}
+
+async function lockLandscapeOrientation() {
+	const orientation = window.screen?.orientation as ScreenOrientationWithLock | undefined
+	if (!orientation?.lock) return
+	try {
+		await orientation.lock("landscape")
+	} catch {
+		// Orientation lock requires an installed/PWA or platform permission in some
+		// browsers; fullscreen remains useful when the optional capability is denied.
+	}
+}
+
+function unlockScreenOrientation() {
+	const orientation = window.screen?.orientation as ScreenOrientationWithLock | undefined
+	orientation?.unlock?.()
 }
 
 /**
@@ -40,19 +61,36 @@ export function useFullscreen({ containerRef }: UseFullscreenOptions): UseFullsc
 			// fullscreen surface, so only the local CSS state needs to change there.
 			if (isMagicApp) {
 				setIsFullscreen((current) => !current)
+				if (isFullscreen) unlockScreenOrientation()
+				else void lockLandscapeOrientation()
 				return
 			}
 
 			if (!getFullscreenElement()) {
+				// CSS fullscreen fallback (WebView and browsers without Fullscreen API).
+				if (isFullscreen) {
+					setIsFullscreen(false)
+					unlockScreenOrientation()
+					return
+				}
 				// Enter fullscreen for the container
 				if (containerRef.current) {
 					const fullscreenContainer = containerRef.current as FullscreenElement
 					const requestFullscreen =
 						fullscreenContainer.requestFullscreen ||
 						fullscreenContainer.webkitRequestFullscreen
-					if (!requestFullscreen) return
+					if (!requestFullscreen) {
+						const isCoarsePointer =
+							window.matchMedia?.("(pointer: coarse)")?.matches ?? false
+						if (isCoarsePointer) {
+							setIsFullscreen(true)
+							await lockLandscapeOrientation()
+						}
+						return
+					}
 					await requestFullscreen.call(fullscreenContainer)
 					setIsFullscreen(true)
+					await lockLandscapeOrientation()
 				}
 			} else {
 				const fullscreenDocument = document as FullscreenDocument
@@ -61,17 +99,27 @@ export function useFullscreen({ containerRef }: UseFullscreenOptions): UseFullsc
 				if (!exitDocumentFullscreen) return
 				await exitDocumentFullscreen.call(document)
 				setIsFullscreen(false)
+				unlockScreenOrientation()
 			}
 		} catch (error) {
 			console.error("Fullscreen error:", error)
+			// Some mobile WebViews expose requestFullscreen but reject it at runtime.
+			// Keep the CSS fallback limited to coarse-pointer devices; desktop permission
+			// failures must remain visible instead of being reported as fullscreen.
+			const isCoarsePointer = window.matchMedia?.("(pointer: coarse)")?.matches ?? false
+			if (isCoarsePointer) {
+				setIsFullscreen(true)
+				await lockLandscapeOrientation()
+			}
 		}
-	}, [containerRef])
+	}, [containerRef, isFullscreen])
 
 	// Exit fullscreen mode
 	const exitFullscreen = useMemoizedFn(async () => {
 		try {
 			if (isMagicApp) {
 				setIsFullscreen(false)
+				unlockScreenOrientation()
 				return
 			}
 			// Check if the current container is in fullscreen
@@ -82,6 +130,12 @@ export function useFullscreen({ containerRef }: UseFullscreenOptions): UseFullsc
 				if (!exitDocumentFullscreen) return
 				await exitDocumentFullscreen.call(document)
 				setIsFullscreen(false)
+				unlockScreenOrientation()
+				return
+			}
+			if (isFullscreen) {
+				setIsFullscreen(false)
+				unlockScreenOrientation()
 			}
 		} catch (error) {
 			console.error("Exit fullscreen error:", error)
@@ -94,6 +148,7 @@ export function useFullscreen({ containerRef }: UseFullscreenOptions): UseFullsc
 			// Check if the current container is in fullscreen
 			const isContainerFullscreen = getFullscreenElement() === containerRef.current
 			setIsFullscreen(isContainerFullscreen)
+			if (!isContainerFullscreen) unlockScreenOrientation()
 		}
 
 		document.addEventListener("fullscreenchange", handleFullscreenChange)
@@ -103,6 +158,8 @@ export function useFullscreen({ containerRef }: UseFullscreenOptions): UseFullsc
 			document.removeEventListener("webkitfullscreenchange", handleFullscreenChange)
 		}
 	}, [containerRef])
+
+	useEffect(() => () => unlockScreenOrientation(), [])
 
 	// Listen for fullscreen-related keyboard events from iframe
 	useEffect(() => {
