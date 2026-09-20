@@ -2,7 +2,8 @@ import { Laptop, Smartphone, Tablet } from "lucide-react"
 import { useTranslation } from "react-i18next"
 import type { DesignStyle } from "./catalog"
 import DesignStyleSectionHeader from "./DesignStyleSectionHeader"
-import DesignStyleScene, { type SceneViewport } from "./DesignStyleScene"
+import DesignStyleHtmlPreview from "./DesignStyleHtmlPreview"
+import type { SceneViewport } from "./DesignStyleScene"
 
 const WIDTHS: Record<SceneViewport, string> = {
 	desktop: "100%",
@@ -90,7 +91,7 @@ export default function DesignStylePageCanvas({ style, viewport }: DesignStylePa
 					data-testid="design-style-scene-viewport"
 					data-viewport={viewport}
 				>
-					<DesignStyleScene style={style} viewport={viewport} />
+					<DesignStyleHtmlPreview style={style} viewport={viewport} />
 				</div>
 			</div>
 		</section>

@@ -8,6 +8,9 @@ interface SceneProps {
 	compact: boolean
 	narrow: boolean
 	layout: StyleLayout
+	/** Optional content extracted from the selected DESIGN.md catalog entry. */
+	title?: string
+	description?: string
 }
 
 function WithNavigation({
@@ -34,12 +37,15 @@ export function EditorialScene({
 	compact,
 	narrow,
 	layout,
+	title: styleTitle,
+	description: styleDescription,
 }: SceneProps & { scene: StyleScene }) {
 	const copy = useSceneCopy()
 	const [subscribed, setSubscribed] = useState(false)
-	const title = scene === "portfolio" ? copy.portfolioTitle : copy.editorialTitle
+	const title = styleTitle || (scene === "portfolio" ? copy.portfolioTitle : copy.editorialTitle)
 	const description =
-		scene === "portfolio" ? copy.portfolioDescription : copy.editorialDescription
+		styleDescription ||
+		(scene === "portfolio" ? copy.portfolioDescription : copy.editorialDescription)
 	const gridLayout = layout === "grid"
 	return (
 		<WithNavigation compact={compact} narrow={narrow} layout={layout}>
@@ -93,11 +99,15 @@ export function EditorialScene({
 							<label className="text-[10px] font-semibold">{copy.newsletter}</label>
 							<div className="mt-2 flex">
 								<input
+									type="email"
 									aria-label={copy.email}
 									className="min-w-0 flex-1 border border-[var(--scene-line)] bg-transparent px-2 text-[10px] outline-none focus:border-[var(--scene-primary)]"
 									placeholder={copy.email}
 								/>
-								<button className="bg-[var(--scene-primary)] px-3 py-2 text-[10px] font-semibold text-[var(--scene-on-primary)]">
+								<button
+									type="submit"
+									className="bg-[var(--scene-primary)] px-3 py-2 text-[10px] font-semibold text-[var(--scene-on-primary)]"
+								>
 									{subscribed ? copy.subscribed : copy.subscribe}
 								</button>
 							</div>
@@ -109,10 +119,18 @@ export function EditorialScene({
 	)
 }
 
-export function CommerceScene({ compact, narrow, layout }: SceneProps) {
+export function CommerceScene({
+	compact,
+	narrow,
+	layout,
+	title: styleTitle,
+	description: styleDescription,
+}: SceneProps) {
 	const copy = useSceneCopy()
 	const [saved, setSaved] = useState(false)
 	const centered = layout === "centered"
+	const title = styleTitle || copy.commerceTitle
+	const description = styleDescription || copy.commerceDescription
 	return (
 		<WithNavigation compact={compact} narrow={narrow} layout={layout}>
 			<main className={`${compact ? "p-4" : "p-6"} min-w-0 flex-1`}>
@@ -126,12 +144,12 @@ export function CommerceScene({ compact, narrow, layout }: SceneProps) {
 						<h2
 							className={`${compact ? "mt-2 text-2xl" : "mt-3 [font-size:var(--scene-title-size)]"} max-w-[13ch] leading-[.98] tracking-[-0.05em] [font-weight:var(--scene-weight)]`}
 						>
-							{copy.commerceTitle}
+							{title}
 						</h2>
 						{!compact && (
 							<>
 								<p className="mt-4 max-w-md text-xs leading-6 text-[var(--scene-muted)]">
-									{copy.commerceDescription}
+									{description}
 								</p>
 								<div
 									className={`mt-5 flex gap-2 ${centered ? "justify-center" : ""}`}
@@ -193,10 +211,14 @@ export function LandingScene({
 	compact,
 	narrow,
 	layout,
+	title: styleTitle,
+	description: styleDescription,
 }: SceneProps & { scene: StyleScene }) {
 	const copy = useSceneCopy()
-	const title = scene === "terminal" ? copy.terminalTitle : copy.landingTitle
-	const description = scene === "terminal" ? copy.terminalDescription : copy.landingDescription
+	const title = styleTitle || (scene === "terminal" ? copy.terminalTitle : copy.landingTitle)
+	const description =
+		styleDescription ||
+		(scene === "terminal" ? copy.terminalDescription : copy.landingDescription)
 	const centered = layout === "centered"
 	const reverse = layout === "magazine"
 	return (

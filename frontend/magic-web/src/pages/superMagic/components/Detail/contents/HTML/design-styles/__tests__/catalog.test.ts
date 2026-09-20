@@ -57,4 +57,23 @@ describe("HTML design style catalog", () => {
 		await expect(loadDesignStyleCatalog()).rejects.toThrow("Invalid HTML design style catalog")
 		vi.unstubAllGlobals()
 	})
+
+	it("rejects section values that cannot be rendered as preview text", async () => {
+		resetDesignStyleCatalogCache()
+		const invalidStyle = {
+			...designStyleFixture,
+			design: { ...designStyleFixture.design, sections: { Overview: 42 } },
+		}
+		vi.stubGlobal(
+			"fetch",
+			vi.fn().mockResolvedValue(
+				new Response(JSON.stringify({ ...catalog, styles: [invalidStyle] }), {
+					status: 200,
+				}),
+			),
+		)
+
+		await expect(loadDesignStyleCatalog()).rejects.toThrow("Invalid HTML design style catalog")
+		vi.unstubAllGlobals()
+	})
 })

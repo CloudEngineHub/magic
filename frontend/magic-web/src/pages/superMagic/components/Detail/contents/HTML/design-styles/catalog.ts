@@ -95,7 +95,8 @@ function isDesignStyle(value: unknown): value is DesignStyle {
 		Array.isArray(design.spacing) &&
 		Array.isArray(design.rounded) &&
 		Array.isArray(design.components) &&
-		isRecord(design.sections)
+		isRecord(design.sections) &&
+		Object.values(design.sections).every((section) => typeof section === "string")
 	)
 }
 

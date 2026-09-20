@@ -50,6 +50,7 @@ export function SceneHeader({ compact, narrow = false }: { compact: boolean; nar
 				<nav
 					className="flex items-center gap-5 text-[10px] text-[var(--scene-muted)]"
 					aria-label={copy.navigation}
+					aria-hidden="true"
 				>
 					<span>{copy.overview}</span>
 					<span>{copy.projects}</span>
@@ -65,7 +66,7 @@ export function SceneSidebar({ active = 0 }: { active?: number }) {
 	return (
 		<aside className="w-40 shrink-0 border-r border-[var(--scene-line)] p-4">
 			<Logo label={copy.brand} />
-			<nav className="mt-7 space-y-1.5" aria-label={copy.navigation}>
+			<nav className="mt-7 space-y-1.5" aria-label={copy.navigation} aria-hidden="true">
 				{[copy.overview, copy.projects, copy.activity, copy.settings].map(
 					(label, index) => (
 						<div

@@ -26,6 +26,7 @@ export function useSceneCopy() {
 		save: t("htmlEditor.designStyle.scene.save"),
 		saved: t("htmlEditor.designStyle.scene.saved"),
 		collection: t("htmlEditor.designStyle.scene.collection"),
+		components: t("htmlEditor.designStyle.scene.components"),
 		latest: t("htmlEditor.designStyle.scene.latest"),
 		all: t("htmlEditor.designStyle.scene.all"),
 		active: t("htmlEditor.designStyle.scene.active"),

@@ -290,19 +290,6 @@ export const STYLE_PROFILES_A_F = [
 		fontFamily: "Bugatti Display",
 	},
 	{
-		code: "bugatti-2",
-		name: { zh: "Bugatti 经典版", en: "Bugatti Classic" },
-		description: {
-			zh: "以黑白和全幅车型画面呈现极简奢华。",
-			en: "Minimal automotive luxury expressed through black, white, and full-bleed vehicle imagery.",
-		},
-		scene: "commerce",
-		layout: "split",
-		theme: "dark",
-		features: ["photo-led", "oversized-type", "sharp-corners"],
-		sourceSection: "Overview",
-	},
-	{
 		code: "bullseye-red",
 		name: { zh: "红色靶心零售", en: "Bullseye Red" },
 		description: {

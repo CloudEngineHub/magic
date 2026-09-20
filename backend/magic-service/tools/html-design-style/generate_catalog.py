@@ -54,20 +54,42 @@ CATEGORY_KEYWORDS = {
     "scenario": ("dashboard", "landing", "health", "wellness", "saas", "app", "workspace"),
 }
 
-FEATURED = {
-    "apple",
-    "claude",
-    "cursor",
-    "figma",
-    "linear.app",
-    "notion",
-    "stripe",
-    "vercel",
-    "airbnb",
-    "enterprise-saas",
-    "creative-agency",
-    "fintech-dashboard-clean",
-}
+STYLE_ORDER = [
+    # Tier 1: Featured (36 styles) - Top visually stunning, famous flagships
+    "apple", "linear.app", "stripe", "vercel", "figma", "notion", "ferrari", "airbnb",
+    "claude", "cursor", "warp", "framer", "spotify", "raycast", "nvidia", "runwayml",
+    "supabase", "theverge", "wired", "broadsheet", "tesla", "spacex", "bugatti", "bmw-m",
+    "nike", "playstation", "superhuman", "resend", "mintlify", "binance", "wise", "revolut",
+    "luxcart", "creative-agency", "rawblock", "dell-1996",
+
+    # Tier 2: Major Brand & Flagships (45 styles)
+    "aurora-gl", "pureform", "owl-green", "clickhouse", "starbucks", "shopify", "streamflix", "meta",
+    "slack", "cal", "miro", "posthog", "hashicorp", "coinbase", "kraken", "mastercard",
+    "bmw", "lamborghini", "webflow", "airtable", "clay", "uber", "pinterest", "ibm",
+    "x.ai", "mistral.ai", "together.ai", "cohere", "elevenlabs", "ollama", "replicate",
+    "expo", "sentry", "sanity", "mongodb", "intercom", "zapier", "hp", "renault",
+    "nintendo-2001", "vodafone", "flip7-card-game", "lovable", "opencode.ai", "octo-code",
+
+    # Tier 3: Modern Tech, Media, Analytics & Commerce (45 styles)
+    "apivault", "security-diagnostics", "voltagent", "docuforge", "adminforge",
+    "crypto-dashboard", "crypto-blue", "green-trade", "fintech-dashboard-clean", "fintech-dashboard-pro", "vaultline",
+    "healhub", "health-wellness", "pharmflow", "wellpath", "tavily-web-access-layer-for-ai-agents", "composio", "minimax",
+    "vertex-digital-infrastructure", "vertex", "enterprise-saas", "saas-dashboard", "saas-landing",
+    "portfolio-creative", "agency-landing", "createspace", "neural-synthesis", "magspread", "marblecrest", "red-broadcast", "serif-journal", "media-editorial",
+    "shopvibe", "e-commerce-minimal", "lime-commerce", "spark-mart", "auction-quad", "farmtable",
+    "blurple-guild", "chatbubble", "green-chat", "feedloop", "voicebox", "teamsync", "thoughtstream",
+
+    # Tier 4: Operations, Logistics, Hardware, Systems & Decks (45 styles)
+    "autonomous-traffic-vectors", "supplygrid", "propertyvue", "bookingflow", "insureshield", "hrflow",
+    "command-center", "genesis", "metric-flow", "navystack", "threadweave",
+    "galaxycore-ppt", "green-deck", "skylearn", "doodlepad", "nomadkit", "urbanloft",
+    "aurelia-systems-grid", "design-tokens", "generium-design-kit", "validata-design-system", "journey-ui", "utility-app", "softro-saas",
+    "design-md-sistema-de-monitoreo-el-ctrico-wattvision", "heyalpha-ai-kiosk-design-system-v1-2", "ibox-3-0", "midnight-debt-payoff-and-income-injection-tracker", "mise", "mountain-view-bright",
+    "blue-grid", "bullseye-red", "channel-palette", "dark-green-interface", "pink-shot", "swoosh-bold",
+    "abugo-design-system-and-vizu-ln-identita", "african-mobile-first", "design-system-tra-o-feito-sinal", "ifraldas-design-system", "dokturek-ui-kit-copy-design-guidelines", "ks-tools-france", "realsee-homeui-design-system-v2", "verdana-health-design-system", "al-razi-hub-design-system",
+]
+
+FEATURED = set(STYLE_ORDER[:36])
 
 AI_CODES = {
     "claude",
@@ -500,6 +522,9 @@ def main() -> None:
     codes = [style["code"] for style in styles]
     if len(codes) != len(set(codes)):
         raise SystemExit("style codes must be unique")
+
+    order_index = {code: i for i, code in enumerate(STYLE_ORDER)}
+    styles.sort(key=lambda s: order_index.get(s["code"], 9999))
 
     catalog = {
         "format": "design-md",

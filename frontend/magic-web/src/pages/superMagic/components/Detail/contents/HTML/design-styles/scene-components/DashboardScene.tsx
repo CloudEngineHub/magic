@@ -8,14 +8,25 @@ interface DashboardSceneProps {
 	compact: boolean
 	narrow: boolean
 	layout: StyleLayout
+	/** Optional content extracted from the selected DESIGN.md catalog entry. */
+	title?: string
+	description?: string
 }
 
-export default function DashboardScene({ compact, narrow, layout }: DashboardSceneProps) {
+export default function DashboardScene({
+	compact,
+	narrow,
+	layout,
+	title: styleTitle,
+	description: styleDescription,
+}: DashboardSceneProps) {
 	const copy = useSceneCopy()
 	const [activeTab, setActiveTab] = useState(0)
 	const [ascending, setAscending] = useState(false)
 	const rows = copy.projectNames.map((name, index) => ({ name, value: [64, 82, 47][index] }))
 	const centered = layout === "centered"
+	const title = styleTitle || copy.dashboardTitle
+	const description = styleDescription || copy.dashboardDescription
 	const content = (
 		<div className={`${compact ? "p-4" : "p-6"} min-w-0 flex-1`}>
 			<div
@@ -28,7 +39,7 @@ export default function DashboardScene({ compact, narrow, layout }: DashboardSce
 					<h2
 						className={`${compact ? "mt-1 text-xl" : "mt-2 text-3xl"} max-w-[18ch] leading-[1.02] tracking-[-0.045em] [font-weight:var(--scene-weight)]`}
 					>
-						{copy.dashboardTitle}
+						{title}
 					</h2>
 				</div>
 				{!compact && !centered && <SceneButton>{copy.explore}</SceneButton>}
@@ -37,7 +48,7 @@ export default function DashboardScene({ compact, narrow, layout }: DashboardSce
 				<p
 					className={`mt-3 max-w-xl text-xs leading-5 text-[var(--scene-muted)] ${centered ? "mx-auto text-center" : ""}`}
 				>
-					{copy.dashboardDescription}
+					{description}
 				</p>
 			)}
 			<div

@@ -84,19 +84,6 @@ export const STYLE_PROFILES_N_S = [
 		fontFamily: "Notion Sans",
 	},
 	{
-		code: "notion-2",
-		name: { zh: "Notion 产品界面", en: "Notion Product" },
-		description: {
-			zh: "以文档结构、柔和卡片和清晰导航呈现的工作空间界面。",
-			en: "A workspace interface built from document structure, soft cards, and clear navigation.",
-		},
-		scene: "dashboard",
-		layout: "sidebar",
-		theme: "light",
-		features: ["dense-data", "compact-controls", "muted-surfaces", "rounded-cards"],
-		sourceSection: "Overview",
-	},
-	{
 		code: "nvidia",
 		name: { zh: "NVIDIA", en: "NVIDIA" },
 		description: {
@@ -217,19 +204,6 @@ export const STYLE_PROFILES_N_S = [
 		features: ["photo-led", "color-blocks", "oversized-type", "generous-space"],
 		sourceSection: "Overview",
 		fontFamily: "PlayStation SST",
-	},
-	{
-		code: "playstation-2",
-		name: { zh: "PlayStation 产品版", en: "PlayStation Product" },
-		description: {
-			zh: "以设备、游戏卡片和分层蓝色区块组织的娱乐商品页。",
-			en: "Entertainment commerce organized around hardware, game cards, and layered blue sections.",
-		},
-		scene: "commerce",
-		layout: "grid",
-		theme: "mixed",
-		features: ["photo-led", "rounded-cards", "layered-panels", "color-blocks"],
-		sourceSection: "Overview",
 	},
 	{
 		code: "portfolio-creative",
@@ -649,19 +623,6 @@ export const STYLE_PROFILES_N_S = [
 		features: ["mono-type", "hairline-grid", "layered-panels", "accent-line"],
 		sourceSection: "Overview",
 		fontFamily: "Circular",
-	},
-	{
-		code: "supabase-2",
-		name: { zh: "Supabase 深色控制台", en: "Supabase Dark Console" },
-		description: {
-			zh: "深色中性阶、绿色信号和紧凑数据组成的数据库控制台。",
-			en: "A database console with dark neutral layers, green signals, and compact data.",
-		},
-		scene: "terminal",
-		layout: "sidebar",
-		theme: "dark",
-		features: ["mono-type", "dense-data", "compact-controls", "hairline-grid"],
-		sourceSection: "1. Visual Theme & Atmosphere",
 	},
 	{
 		code: "superhuman",

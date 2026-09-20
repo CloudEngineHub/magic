@@ -230,19 +230,6 @@ export const STYLE_PROFILES_T_Z = [
 		fontFamily: "Vodafone",
 	},
 	{
-		code: "vodafone-2",
-		name: { zh: "Vodafone 服务版", en: "Vodafone Services" },
-		description: {
-			zh: "红白品牌区与清晰服务卡片组成的通信产品商城。",
-			en: "Telecom commerce built from red-white brand sections and clear service cards.",
-		},
-		scene: "commerce",
-		layout: "grid",
-		theme: "light",
-		features: ["color-blocks", "rounded-cards", "photo-led", "compact-controls"],
-		sourceSection: "1. Visual Theme & Atmosphere",
-	},
-	{
 		code: "voicebox",
 		name: { zh: "声音内容台", en: "VoiceBox" },
 		description: {
