@@ -3,7 +3,7 @@ import { useMemoizedFn } from "ahooks"
 import { useTranslation } from "react-i18next"
 import { SuperMagicApi } from "@/apis"
 import magicToast from "@/components/base/MagicToaster/utils"
-import { trackProjectCreated } from "@/pages/superMagic/services/trackCreatedEntities"
+import { analyticsService } from "@/services/analytics"
 import { SHARE_WORKSPACE_ID } from "@/pages/superMagic/constants"
 import type { ProjectListItem } from "@/pages/superMagic/pages/Workspace/types"
 
@@ -97,6 +97,7 @@ export function useProjects(workspaceId?: string) {
 					return null
 				}
 
+				analyticsService.report("project_create_attempted", { workspaceId })
 				const response = await SuperMagicApi.createProject({
 					workspace_id: workspaceId,
 					project_name: projectName || "",
@@ -105,7 +106,6 @@ export function useProjects(workspaceId?: string) {
 				})
 
 				if (response?.project) {
-					trackProjectCreated(response, workspaceId)
 					fetchProjects(1)
 				}
 				return response.project

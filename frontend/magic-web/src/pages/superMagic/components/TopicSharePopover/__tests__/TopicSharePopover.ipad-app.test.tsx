@@ -33,7 +33,7 @@ vi.mock("@/utils/devices", () => ({
 }))
 
 vi.mock("@/services/analytics", () => ({
-	track: vi.fn(),
+	analyticsService: { report: vi.fn() },
 }))
 
 vi.mock("@/apis", () => ({

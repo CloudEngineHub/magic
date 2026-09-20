@@ -9,7 +9,7 @@ import { TopicStore } from "@/pages/superMagic/stores/core/topic"
 import { normalizeTopicHistoryItem } from "@/pages/superMagic/utils/topicHistory"
 import type { AttachmentItem } from "@/pages/superMagic/components/TopicFilesButton/hooks"
 import { ProjectFilesStore } from "@/stores/projectFiles"
-import { trackTopicCreated } from "@/pages/superMagic/services/trackCreatedEntities"
+import { analyticsService } from "@/services/analytics"
 
 interface UseRecordingProjectChatInput {
 	projectId: string
@@ -83,6 +83,11 @@ export function useRecordingProjectChat({
 				) as Topic[]
 
 				if (nextTopics.length === 0) {
+					analyticsService.report("topic_create_attempted", {
+						projectId,
+						workspaceId: nextProject.workspace_id,
+						sceneOverride: "ai_recording",
+					})
 					const createdTopic = await SuperMagicApi.createTopic({
 						project_id: projectId,
 						topic_name: "",
@@ -90,11 +95,6 @@ export function useRecordingProjectChat({
 					})
 					const resolvedCreatedTopic = await resolveTopic(createdTopic as Topic)
 					if (resolvedCreatedTopic) {
-						trackTopicCreated(resolvedCreatedTopic, {
-							projectId,
-							workspaceId: nextProject.workspace_id,
-							scene: "ai_recording",
-						})
 						nextTopics = [resolvedCreatedTopic]
 					}
 				}
@@ -167,6 +167,11 @@ export function useRecordingProjectChat({
 	const createTopic = useMemoizedFn(async () => {
 		if (!project?.id) return
 
+		analyticsService.report("topic_create_attempted", {
+			projectId: project.id,
+			workspaceId: project.workspace_id,
+			sceneOverride: "ai_recording",
+		})
 		const response = await SuperMagicApi.createTopic({
 			project_id: project.id,
 			topic_name: "",
@@ -174,12 +179,6 @@ export function useRecordingProjectChat({
 		})
 		const createdTopic = await resolveTopic(response as Topic)
 		if (!createdTopic) return
-		trackTopicCreated(createdTopic, {
-			projectId: project.id,
-			workspaceId: project.workspace_id,
-			scene: "ai_recording",
-		})
-
 		topicStore.setTopics([
 			createdTopic,
 			...topicStore.topics.filter((topic) => topic.id !== createdTopic.id),

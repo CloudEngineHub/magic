@@ -11,13 +11,13 @@ import useGeistFont from "@/styles/fonts/geist"
 import { getClawBrandTranslationValues } from "@/pages/superMagic/utils/clawBrand"
 import { useNamedPageTitle } from "@/pages/superMagic/hooks/useNamedPageTitle"
 import GuideTourWrapper from "@/pages/superMagic/components/LazyGuideTour"
+import { analyticsService } from "@/services/analytics"
 import { MagiClawCreatedSection } from "./MagiClawCreatedSection"
 import { MagiClawCreateDialog, type MagiClawCreatePayload } from "./MagiClawCreateDialog"
 import { EMPTY_MAGIC_CLAW_LIST, MAGI_CLAW_LIST_POLLING_INTERVAL } from "./constants"
 import { MagiClawFeatures } from "./MagiClawFeatures"
 import { MagiClawHeader } from "./MagiClawHeader"
 import { MagiClawHero } from "./MagiClawHero"
-import { markMagicClawCreationPending } from "./magicClawCreationAnalytics"
 
 export default function MagiClawDesktopPage() {
 	const { t } = useTranslation("sidebar")
@@ -66,6 +66,9 @@ export default function MagiClawDesktopPage() {
 	async function handleCreateClaw({ name, icon, template_code }: MagiClawCreatePayload) {
 		setIsCreating(true)
 		try {
+			analyticsService.report("project_create_attempted", {
+				sceneOverride: "magic_claw",
+			})
 			const created = await MagicClawApi.createMagicClaw({
 				name,
 				template_code,
@@ -75,7 +78,6 @@ export default function MagiClawDesktopPage() {
 				toast.error(t("superLobster.created.createFailed", clawBrandValues))
 				return
 			}
-			await markMagicClawCreationPending(created.code)
 			setIsCreateDialogOpen(false)
 			void refreshClawList()
 			handleOpenClawPlayground(created.code)

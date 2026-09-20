@@ -24,7 +24,9 @@ import type { MethodOption } from "@dtyq/magic-flow/dist/MagicExpressionWidget/t
 import type { ServiceHttpClient } from "@/infrastructure/network/http/clients"
 import type { MCPOAuthStatus } from "@/components/Agent/MCP/service/MCPOAuthService"
 import type { IMCPItem } from "@/components/Agent/MCP"
-import { track, type ConnectorType } from "@/services/analytics"
+import { analyticsService } from "@/services/analytics"
+
+type ConnectorType = "sse" | "external_sse" | "external_http" | "external_stdio"
 
 const connectorTypes = new Set<ConnectorType>([
 	"sse",
@@ -436,18 +438,14 @@ export const generateFlowApi = (fetch: ServiceHttpClient) => ({
 
 	/** 创建 / 更新 MCP */
 	async saveMcp(params: Flow.Mcp.SaveParams) {
-		const response = await fetch.post<Flow.Mcp.Detail>("/api/v1/mcp/server", params)
-
-		// The same endpoint handles create, edit and enable toggles. Only a request without
-		// an existing id is a creation, and the event must use the id returned by the server.
-		const connectorId = response?.id?.trim()
-		if (!params.id?.trim() && connectorId && isConnectorType(params.type)) {
-			track("connector_created", {
-				connector_id: connectorId,
+		// This endpoint also handles edits. Only a request without an existing id is a
+		// user creation attempt; server-generated connector_id is intentionally absent.
+		if (!params.id?.trim() && isConnectorType(params.type)) {
+			analyticsService.report("connector_create_attempted", {
 				connector_type: params.type,
 			})
 		}
-
+		const response = await fetch.post<Flow.Mcp.Detail>("/api/v1/mcp/server", params)
 		return response
 	},
 

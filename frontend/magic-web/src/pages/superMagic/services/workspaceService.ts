@@ -8,7 +8,7 @@ import type { RequestConfig } from "@/infrastructure/network/http/clients"
 import { getInsertIndexByAnchors, isSameOrder } from "./orderUtils"
 import { createOrderRequestOptions, reportOrderApiError } from "./orderErrorReporter"
 import { invalidateWorkspaceSearchResults } from "./workspaceListSearchInvalidation"
-import { trackWorkspaceCreated } from "./trackCreatedEntities"
+import { analyticsService } from "@/services/analytics"
 
 export interface FetchWorkspacesParams {
 	isAutoSelect?: boolean
@@ -87,12 +87,12 @@ class WorkspaceService {
 	}
 
 	createWorkspace = async (name: string = ""): Promise<Workspace | null> => {
+		analyticsService.report("workspace_create_attempted", {})
 		const res = await SuperMagicApi.createWorkspace({
 			workspace_name: name,
 		})
 		const workspaceId = res?.id?.trim()
 		if (workspaceId) {
-			trackWorkspaceCreated(res)
 			return res
 		}
 		return null

@@ -1,6 +1,6 @@
 import { useEffect } from "react"
 import { TopicMode } from "../../Workspace/TopicMode"
-import { registerConversationTopicModeOverride } from "@/pages/superMagic/services/trackConversationMessageSent"
+import { registerConversationTopicModeOverride } from "@/pages/superMagic/services/conversationTopicModeOverride"
 
 /**
  * The Claw editor keeps its model-picker mode as `default`, while every

@@ -47,11 +47,6 @@ import type {
 } from "@/components/business/MentionPanel/tiptap-plugin"
 import AiCompletionService from "@/services/chat/editor/AiCompletionService"
 import pubsub, { PubSubEvents } from "@/utils/pubsub"
-import {
-	getRememberedConversationContext,
-	rememberConversationContext,
-	trackConversationMessageSent,
-} from "@/pages/superMagic/services/trackConversationMessageSent"
 import { resetDocumentScrollPosition } from "@/utils/scroll"
 import {
 	checkMCPOAuth,
@@ -163,50 +158,6 @@ export const MessageEditorContainer = observer(
 			const topBarIconSize = TOP_BAR_ICON_SIZE_MAP[size]
 
 			const { config: providerConfig } = useMessageEditorProvider()
-
-			useEffect(() => {
-				rememberConversationContext({
-					topic: selectedTopic,
-					project: selectedProject,
-					workspace: selectedWorkspace,
-					topicMode: selectedTopic?.topic_mode ?? topicMode,
-				})
-			}, [selectedProject, selectedTopic, selectedWorkspace, topicMode])
-
-			useEffect(() => {
-				/**
-				 * Queue consumption is acknowledged by an intermediate event, not by
-				 * the enqueue request. Listen here so queued sends are tracked only
-				 * after the backend has actually consumed them.
-				 */
-				const handleQueueConsumed = (message?: {
-					project_id: string
-					topic_id: string
-					message_id: string
-				}) => {
-					if (!message?.message_id) return
-					const context = getRememberedConversationContext(
-						message.project_id,
-						message.topic_id,
-					)
-					if (!context) return
-
-					trackConversationMessageSent({
-						messageId: message.message_id,
-						topic: context.topic,
-						project: context.project,
-						workspace: context.workspace,
-						topicMode: context.topicMode,
-					})
-				}
-
-				pubsub.subscribe(PubSubEvents.SuperMagicMessageQueueConsumed, handleQueueConsumed)
-				return () =>
-					pubsub.unsubscribe(
-						PubSubEvents.SuperMagicMessageQueueConsumed,
-						handleQueueConsumed,
-					)
-			}, [])
 
 			const effectiveLayoutConfig = useMemo(
 				() => ({

@@ -1,7 +1,7 @@
 import { fireEvent, render, screen, waitFor } from "@testing-library/react"
 import { beforeEach, describe, expect, it, vi } from "vitest"
 import TopicSharePopover from "../index"
-import { ShareType } from "../../Share/types"
+import { ResourceType, ShareType } from "../../Share/types"
 
 const trackMock = vi.hoisted(() => vi.fn())
 const translateMock = vi.hoisted(() => vi.fn((key: string) => key))
@@ -32,7 +32,7 @@ vi.mock("@/utils/devices", () => ({
 }))
 
 vi.mock("@/services/analytics", () => ({
-	track: trackMock,
+	analyticsService: { report: trackMock },
 }))
 
 vi.mock("@/apis", () => ({
@@ -181,7 +181,7 @@ async function enableShare() {
 	})
 }
 
-describe("TopicSharePopover content_shared", () => {
+describe("TopicSharePopover content_share_attempted", () => {
 	beforeEach(() => {
 		vi.clearAllMocks()
 		apiMocks.getShareInfoByCode.mockResolvedValue(null)
@@ -189,15 +189,14 @@ describe("TopicSharePopover content_shared", () => {
 		apiMocks.createOrUpdateShareResource.mockResolvedValue({ code: 1000 })
 	})
 
-	it("首次开启话题分享成功后上报 content_shared", async () => {
+	it("首次开启话题分享时上报 content_share_attempted", async () => {
 		renderPopover()
 		await enableShare()
 
 		expect(apiMocks.createShareTopic).toHaveBeenCalledTimes(1)
 		expect(trackMock).toHaveBeenCalledTimes(1)
-		expect(trackMock).toHaveBeenCalledWith("content_shared", {
-			content_type: "topic",
-			content_id: "topic-desktop",
+		expect(trackMock).toHaveBeenCalledWith("content_share_attempted", {
+			resourceType: ResourceType.Topic,
 		})
 	})
 
@@ -220,7 +219,7 @@ describe("TopicSharePopover content_shared", () => {
 		expect(trackMock).toHaveBeenCalledTimes(1)
 	})
 
-	it("开启话题分享失败时不上报 content_shared", async () => {
+	it("开启话题分享失败时仍上报 content_share_attempted", async () => {
 		apiMocks.createShareTopic.mockRejectedValue(new Error("create failed"))
 		renderPopover()
 
@@ -233,11 +232,13 @@ describe("TopicSharePopover content_shared", () => {
 		await waitFor(() => {
 			expect(apiMocks.createShareTopic).toHaveBeenCalled()
 		})
-		expect(trackMock).not.toHaveBeenCalled()
+		expect(trackMock).toHaveBeenCalledWith("content_share_attempted", {
+			resourceType: ResourceType.Topic,
+		})
 		expect(screen.queryByTestId("topic-share-password-switch")).not.toBeInTheDocument()
 	})
 
-	it("已有分享处于关闭状态时再次开启仍上报 content_shared", async () => {
+	it("已有分享处于关闭状态时再次开启仍上报 content_share_attempted", async () => {
 		apiMocks.getShareInfoByCode.mockResolvedValue({
 			resource_id: "topic-desktop",
 			share_type: ShareType.None,
@@ -250,13 +251,12 @@ describe("TopicSharePopover content_shared", () => {
 
 		await waitFor(() => expect(apiMocks.createShareTopic).toHaveBeenCalled())
 		expect(trackMock).toHaveBeenCalledTimes(1)
-		expect(trackMock).toHaveBeenCalledWith("content_shared", {
-			content_type: "topic",
-			content_id: "topic-desktop",
+		expect(trackMock).toHaveBeenCalledWith("content_share_attempted", {
+			resourceType: ResourceType.Topic,
 		})
 	})
 
-	it("已开启的话题分享改密码不上报 content_shared", async () => {
+	it("已开启的话题分享改密码不上报 content_share_attempted", async () => {
 		apiMocks.getShareInfoByCode.mockResolvedValue({
 			resource_id: "topic-desktop",
 			share_type: ShareType.PasswordProtected,

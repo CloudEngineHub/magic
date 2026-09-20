@@ -7,6 +7,7 @@ import { useConfirmDialog } from "@/components/shadcn-composed/confirm-dialog"
 import { useFunctionPermission } from "@/hooks/useFunctionPermission"
 import { getClawBrandTranslationValues } from "@/pages/superMagic/utils/clawBrand"
 import { useNamedPageTitle } from "@/pages/superMagic/hooks/useNamedPageTitle"
+import { analyticsService } from "@/services/analytics"
 import { RouteName } from "@/routes/constants"
 import useNavigate from "@/routes/hooks/useNavigate"
 import { usePoppinsFont } from "@/styles/font"
@@ -16,7 +17,6 @@ import { EMPTY_MAGIC_CLAW_LIST, MAGI_CLAW_LIST_POLLING_INTERVAL } from "./consta
 import type { MagiClawCreatePayload } from "./MagiClawCreateDialog"
 import { confirmMagiClawSandboxUpgrade } from "./magiClawSandboxUpgradeConfirm"
 import { useMagiClawCreatedSectionActions } from "./useMagiClawCreatedSectionActions"
-import { markMagicClawCreationPending } from "./magicClawCreationAnalytics"
 
 export interface MagiClawContextMenuAnchorRect {
 	top: number
@@ -209,6 +209,9 @@ export function useMagiClawMobilePage() {
 	async function handleCreateClaw(payload: MagiClawCreatePayload) {
 		setIsCreating(true)
 		try {
+			analyticsService.report("project_create_attempted", {
+				sceneOverride: "magic_claw",
+			})
 			const createdClaw = await MagicClawApi.createMagicClaw({
 				name: payload.name,
 				template_code: payload.template_code,
@@ -218,8 +221,6 @@ export function useMagiClawMobilePage() {
 				toast.error(t("superLobster.created.createFailed", clawBrandValues))
 				return
 			}
-			await markMagicClawCreationPending(createdClaw.code)
-
 			setIsCreateDialogOpen(false)
 			await refreshClawListAsync()
 			handleOpenClawPlayground(createdClaw.code)

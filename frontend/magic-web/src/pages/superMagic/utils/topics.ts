@@ -11,7 +11,7 @@ import i18n from "i18next"
 import projectFilesStore from "@/stores/projectFiles"
 import { createFileReferenceMention } from "@/components/business/MentionPanel/utils/fileReferenceMention"
 import { getFileReferenceIdentityKey } from "@/pages/superMagic/services/userFileReferenceResolver"
-import { trackTopicCreated } from "@/pages/superMagic/services/trackCreatedEntities"
+import { analyticsService } from "@/services/analytics"
 
 interface CreateTopicOptions {
 	selectedWorkspace?: { id: string }
@@ -75,6 +75,11 @@ export function handleNewTopic(options: CreateTopicOptions): Promise<any> {
 		return Promise.reject(new Error("Missing required parameters"))
 	}
 
+	analyticsService.report("topic_create_attempted", {
+		projectId: selectedProject.id,
+		workspaceId: selectedWorkspace.id,
+		mode: selectedProject.project_mode,
+	})
 	return SuperMagicApi.createTopic({
 		topic_name: "",
 		// workspace_id: selectedWorkspace.id,
@@ -89,11 +94,6 @@ export function handleNewTopic(options: CreateTopicOptions): Promise<any> {
 			})
 				.then((topicsRes: any) => {
 					const newTopic = topicsRes?.list.find((topic: Topic) => topic?.id === res?.id)
-					trackTopicCreated(newTopic ?? res, {
-						projectId: selectedProject.id,
-						workspaceId: selectedWorkspace.id,
-						mode: selectedProject.project_mode,
-					})
 					if (newTopic) {
 						setSelectedTopic(newTopic)
 					}

@@ -16,7 +16,6 @@ const mocks = vi.hoisted(() => ({
 	functionPermissions: {} as Record<string, boolean>,
 	isMobile: false,
 	track: vi.fn(),
-	trackContentSharedIfCreated: vi.fn(),
 }))
 
 vi.hoisted(() => {
@@ -40,15 +39,7 @@ vi.hoisted(() => {
 })
 
 vi.mock("@/services/analytics", () => ({
-	track: mocks.track,
-}))
-
-vi.mock("../../utils/trackContentShared", () => ({
-	trackContentSharedIfCreated: mocks.trackContentSharedIfCreated,
-}))
-
-vi.mock("@/pages/superMagic/components/Share/utils/trackContentShared", () => ({
-	trackContentSharedIfCreated: mocks.trackContentSharedIfCreated,
+	analyticsService: { report: mocks.track },
 }))
 
 vi.mock("@/routes/history", () => ({
@@ -642,7 +633,7 @@ describe("FileShareModal", () => {
 		expect(screen.getByTestId("save-share")).toBeDisabled()
 	})
 
-	it("新建文件分享成功后上报 content_shared，再次保存不重复上报", async () => {
+	it("新建文件分享尝试时上报 content_share_attempted，再次保存不重复上报", async () => {
 		render(
 			<FileShareModal
 				types={[ShareType.PasswordProtected]}
@@ -665,11 +656,9 @@ describe("FileShareModal", () => {
 		fireEvent.click(screen.getByTestId("save-share"))
 
 		await waitFor(() => {
-			expect(mocks.trackContentSharedIfCreated).toHaveBeenCalledTimes(1)
+			expect(mocks.track).toHaveBeenCalledTimes(1)
 		})
-		expect(mocks.trackContentSharedIfCreated).toHaveBeenCalledWith({
-			created: true,
-			resourceId: "share-1",
+		expect(mocks.track).toHaveBeenCalledWith("content_share_attempted", {
 			resourceType: ResourceType.FileCollection,
 			shareProject: false,
 		})
@@ -679,15 +668,10 @@ describe("FileShareModal", () => {
 		await waitFor(() => {
 			expect(mocks.createOrUpdateShareResource).toHaveBeenCalledTimes(2)
 		})
-		expect(mocks.trackContentSharedIfCreated).toHaveBeenNthCalledWith(2, {
-			created: false,
-			resourceId: "share-1",
-			resourceType: ResourceType.FileCollection,
-			shareProject: false,
-		})
+		expect(mocks.track).toHaveBeenCalledTimes(1)
 	})
 
-	it("新建项目分享成功后上报 project", async () => {
+	it("新建项目分享尝试时上报 shareProject", async () => {
 		render(
 			<FileShareModal
 				types={[ShareType.PasswordProtected]}
@@ -711,16 +695,14 @@ describe("FileShareModal", () => {
 		fireEvent.click(screen.getByTestId("save-share"))
 
 		await waitFor(() => {
-			expect(mocks.trackContentSharedIfCreated).toHaveBeenCalledWith({
-				created: true,
-				resourceId: "share-1",
+			expect(mocks.track).toHaveBeenCalledWith("content_share_attempted", {
 				resourceType: ResourceType.FileCollection,
 				shareProject: true,
 			})
 		})
 	})
 
-	it("编辑已有分享保存时不上报 content_shared", async () => {
+	it("编辑已有分享保存时不上报 content_share_attempted", async () => {
 		mocks.getShareInfoByCode.mockResolvedValue({
 			project_id: "project-1",
 			resource_name: "Existing File Share",
@@ -763,16 +745,10 @@ describe("FileShareModal", () => {
 		await waitFor(() => {
 			expect(mocks.createOrUpdateShareResource).toHaveBeenCalled()
 		})
-		expect(mocks.trackContentSharedIfCreated).toHaveBeenCalledTimes(1)
-		expect(mocks.trackContentSharedIfCreated).toHaveBeenCalledWith({
-			created: false,
-			resourceId: "share-existing",
-			resourceType: ResourceType.FileCollection,
-			shareProject: false,
-		})
+		expect(mocks.track).not.toHaveBeenCalled()
 	})
 
-	it("新建分享失败时不上报 content_shared", async () => {
+	it("新建分享失败时仍上报 content_share_attempted", async () => {
 		mocks.createOrUpdateShareResource.mockRejectedValue(new Error("create failed"))
 
 		render(
@@ -799,6 +775,9 @@ describe("FileShareModal", () => {
 		await waitFor(() => {
 			expect(mocks.errorToast).toHaveBeenCalled()
 		})
-		expect(mocks.trackContentSharedIfCreated).not.toHaveBeenCalled()
+		expect(mocks.track).toHaveBeenCalledWith("content_share_attempted", {
+			resourceType: ResourceType.FileCollection,
+			shareProject: false,
+		})
 	})
 })

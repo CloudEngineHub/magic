@@ -5,7 +5,7 @@ import { useMemoizedFn } from "ahooks"
 import { useTranslation } from "react-i18next"
 import type { CopyProjectModalProps, WorkspaceOption } from "./types"
 import { SuperMagicApi } from "@/apis"
-import { trackWorkspaceCreated } from "@/pages/superMagic/services/trackCreatedEntities"
+import { analyticsService } from "@/services/analytics"
 import folderIcon from "@/pages/share/components/CopyProjectModal/assets/folder.svg"
 import magicToast from "@/components/base/MagicToaster/utils"
 import { cn } from "@/utils/cn"
@@ -94,11 +94,11 @@ function CopyProjectModal({ open, onCancel, projectData, onCopySuccess }: CopyPr
 		if (!newWorkspaceName.trim()) return
 
 		try {
+			analyticsService.report("workspace_create_attempted", {})
 			const response = await SuperMagicApi.createWorkspace({
 				workspace_name: newWorkspaceName.trim(),
 			})
 			if (response?.id) {
-				trackWorkspaceCreated(response)
 				const newWorkspace: WorkspaceOption = {
 					id: response.id,
 					name: newWorkspaceName.trim(),

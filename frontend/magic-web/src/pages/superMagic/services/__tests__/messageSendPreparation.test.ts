@@ -23,7 +23,7 @@ vi.mock("@/apis", () => ({
 }))
 
 vi.mock("@/services/analytics", () => ({
-	track: analyticsTrackMock,
+	analyticsService: { report: analyticsTrackMock },
 }))
 
 vi.mock("@/components/Agent/MCP/service/MCPStorageService", () => ({
@@ -137,19 +137,11 @@ describe("messageSendPreparation", () => {
 
 		await context.createProject({ projectMode: "SMA-agent" as TopicMode })
 
-		expect(analyticsTrackMock).toHaveBeenCalledWith("workspace_project_created", {
-			project_id: "project-workspace",
-			workspace_id: "workspace-1",
+		expect(analyticsTrackMock).toHaveBeenCalledWith("project_create_attempted", {
+			workspaceId: "workspace-1",
+			sceneOverride: "workspace",
+			mode: "SMA-agent",
 		})
-		expect(analyticsTrackMock).toHaveBeenCalledWith("workspace_topic_created", {
-			topic_id: "topic-workspace",
-			project_id: "project-workspace",
-			workspace_id: "workspace-1",
-		})
-		expect(analyticsTrackMock).not.toHaveBeenCalledWith(
-			"crew_project_created",
-			expect.anything(),
-		)
 	})
 
 	it("normalizes the configured non-SMA default employee for topic state and send params", async () => {

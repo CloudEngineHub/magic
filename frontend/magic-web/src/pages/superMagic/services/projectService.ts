@@ -22,11 +22,7 @@ import { topicStore, workspaceStore } from "../stores/core"
 import { getInsertIndexByAnchors, isSameOrder } from "./orderUtils"
 import { createOrderRequestOptions, reportOrderApiError } from "./orderErrorReporter"
 import { invalidateWorkspaceSearchResults } from "./workspaceListSearchInvalidation"
-import {
-	resolveCreationScene,
-	trackProjectCreated,
-	type CreationScene,
-} from "./trackCreatedEntities"
+import { analyticsService } from "@/services/analytics"
 
 export interface FetchProjectsParams {
 	workspaceId: string
@@ -376,7 +372,7 @@ class ProjectService {
 		workdir?: string
 		projectName?: string
 		/** The product entry that initiated creation; independent from the selected agent mode. */
-		creationScene?: CreationScene
+		creationScene?: string
 	}): Promise<CreatedProject | null> => {
 		const requestKey = this.getRequestKey("createProject", {
 			workspaceId,
@@ -388,6 +384,13 @@ class ProjectService {
 
 		return this.getOrCreateRequest(requestKey, async () => {
 			try {
+				// Report after local de-duplication accepts the action but before the request,
+				// so failed requests still count as creation attempts.
+				analyticsService.report("project_create_attempted", {
+					workspaceId,
+					sceneOverride: creationScene,
+					mode: projectMode,
+				})
 				const res = await SuperMagicApi.createProject({
 					workspace_id: workspaceId,
 					project_name: projectName || "",
@@ -397,13 +400,6 @@ class ProjectService {
 				})
 
 				if (res) {
-					// Entry scene and agent mode are separate dimensions: e.g. a recording
-					// expert selected inside Chat still belongs to the Chat creation funnel.
-					trackProjectCreated(
-						res,
-						workspaceId,
-						creationScene ?? resolveCreationScene(projectMode),
-					)
 					// Update project list with the new project
 					runInAction(() => {
 						projectStore.setProjects([res.project, ...projectStore.projects])

@@ -8,7 +8,7 @@ import {
 } from "@/pages/superMagic/components/Share/utils/nativeShare"
 import { clipboard } from "@/utils/clipboard-helpers"
 import MobileTopicShare from "../MobileTopicShare"
-import { ShareType } from "../types"
+import { ResourceType, ShareType } from "../types"
 
 vi.mock("react-i18next", () => ({
 	useTranslation: () => ({
@@ -62,7 +62,7 @@ vi.mock("@/pages/superMagic/components/Share/utils/nativeShare", () => ({
 const trackMock = vi.hoisted(() => vi.fn())
 
 vi.mock("@/services/analytics", () => ({
-	track: trackMock,
+	analyticsService: { report: trackMock },
 }))
 
 vi.mock("@/apis", () => ({
@@ -561,7 +561,7 @@ describe("MobileTopicShare", () => {
 		)
 	})
 
-	it("首次开启话题分享成功后上报 content_shared", async () => {
+	it("首次开启话题分享时上报 content_share_attempted", async () => {
 		vi.mocked(SuperMagicApi.createOrUpdateShareResource).mockResolvedValue({} as never)
 
 		render(
@@ -578,13 +578,12 @@ describe("MobileTopicShare", () => {
 		await waitFor(() => {
 			expect(trackMock).toHaveBeenCalledTimes(1)
 		})
-		expect(trackMock).toHaveBeenCalledWith("content_shared", {
-			content_type: "topic",
-			content_id: "topic-new",
+		expect(trackMock).toHaveBeenCalledWith("content_share_attempted", {
+			resourceType: ResourceType.Topic,
 		})
 	})
 
-	it("更新密码保护时不上报 content_shared", async () => {
+	it("更新密码保护时不上报 content_share_attempted", async () => {
 		vi.mocked(SuperMagicApi.createOrUpdateShareResource).mockResolvedValue({} as never)
 
 		render(
@@ -604,7 +603,7 @@ describe("MobileTopicShare", () => {
 		expect(trackMock).not.toHaveBeenCalled()
 	})
 
-	it("开启话题分享失败时不上报 content_shared", async () => {
+	it("开启话题分享失败时仍上报 content_share_attempted", async () => {
 		vi.mocked(SuperMagicApi.createOrUpdateShareResource).mockRejectedValue(new Error("fail"))
 
 		render(
@@ -621,10 +620,12 @@ describe("MobileTopicShare", () => {
 		await waitFor(() => {
 			expect(magicToast.error).toHaveBeenCalledWith("share.createFailed")
 		})
-		expect(trackMock).not.toHaveBeenCalled()
+		expect(trackMock).toHaveBeenCalledWith("content_share_attempted", {
+			resourceType: ResourceType.Topic,
+		})
 	})
 
-	it("关闭后重新开启分享会再次上报 content_shared", async () => {
+	it("关闭后重新开启分享会再次上报 content_share_attempted", async () => {
 		vi.mocked(SuperMagicApi.createOrUpdateShareResource).mockResolvedValue({} as never)
 		vi.mocked(SuperMagicApi.cancelShareResource).mockResolvedValue(undefined as never)
 

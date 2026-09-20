@@ -6,7 +6,7 @@ import type { ProjectListItem, Topic } from "@/pages/superMagic/pages/Workspace/
 import type { TopicStore } from "@/pages/superMagic/stores/core/topic"
 import { normalizeTopicHistoryItem } from "@/pages/superMagic/utils/topicHistory"
 import { renameTopicWithChatSync } from "@/pages/superMagic/services/chatConversationNameSync"
-import { trackTopicCreated } from "@/pages/superMagic/services/trackCreatedEntities"
+import { analyticsService } from "@/services/analytics"
 
 interface UseScopedMessageHeaderTopicActionsParams {
 	selectedProject: ProjectListItem | null
@@ -22,6 +22,11 @@ export function useScopedMessageHeaderTopicActions({
 	const createTopic = useMemoizedFn(async () => {
 		if (!selectedProject?.id) return
 
+		analyticsService.report("topic_create_attempted", {
+			projectId: selectedProject.id,
+			workspaceId: selectedProject.workspace_id,
+			mode: selectedProject.project_mode,
+		})
 		const newTopic = await SuperMagicApi.createTopic({
 			project_id: selectedProject.id,
 			topic_name: "",
@@ -37,12 +42,6 @@ export function useScopedMessageHeaderTopicActions({
 		const updatedTopics = Array.isArray(topicsRes?.list) ? topicsRes.list : []
 		const targetTopic =
 			updatedTopics.find((topic: Topic) => topic.id === newTopic.id) || newTopic
-		trackTopicCreated(targetTopic, {
-			projectId: selectedProject.id,
-			workspaceId: selectedProject.workspace_id,
-			mode: selectedProject.project_mode,
-		})
-
 		topicStore.setTopics(updatedTopics)
 		topicStore.setSelectedTopic(targetTopic)
 	})

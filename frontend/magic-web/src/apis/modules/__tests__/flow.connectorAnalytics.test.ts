@@ -3,54 +3,24 @@ import type { ServiceHttpClient } from "@/infrastructure/network/http/clients"
 import { generateFlowApi } from "../flow"
 
 const { track } = vi.hoisted(() => ({ track: vi.fn() }))
+vi.mock("@/services/analytics", () => ({ analyticsService: { report: track } }))
 
-vi.mock("@/services/analytics", () => ({ track }))
+describe("FlowApi connector attempt analytics", () => {
+	beforeEach(() => track.mockReset())
 
-describe("FlowApi.saveMcp connector_created analytics", () => {
-	beforeEach(() => {
-		track.mockReset()
-	})
-
-	it("tracks a successful connector creation exactly once with the server id", async () => {
-		const post = vi.fn().mockResolvedValue({ id: "connector-server-id" })
-		const api = generateFlowApi({ post } as unknown as ServiceHttpClient)
-
-		await api.saveMcp({ name: "New connector", type: "external_http" })
-
-		expect(track).toHaveBeenCalledTimes(1)
-		expect(track).toHaveBeenCalledWith("connector_created", {
-			connector_id: "connector-server-id",
-			connector_type: "external_http",
-		})
-	})
-
-	it("does not track edits of an existing connector", async () => {
-		const post = vi.fn().mockResolvedValue({ id: "connector-existing" })
-		const api = generateFlowApi({ post } as unknown as ServiceHttpClient)
-
-		await api.saveMcp({
-			id: "connector-existing",
-			name: "Edited connector",
-			type: "external_sse",
-		})
-
-		expect(track).not.toHaveBeenCalled()
-	})
-
-	it("does not track a failed creation", async () => {
+	it("reports before creation and therefore also survives request failure", async () => {
 		const post = vi.fn().mockRejectedValue(new Error("request failed"))
 		const api = generateFlowApi({ post } as unknown as ServiceHttpClient)
-
 		await expect(api.saveMcp({ type: "external_stdio" })).rejects.toThrow("request failed")
-		expect(track).not.toHaveBeenCalled()
+		expect(track).toHaveBeenCalledWith("connector_create_attempted", {
+			connector_type: "external_stdio",
+		})
 	})
 
-	it("does not track when the successful response has no connector id", async () => {
-		const post = vi.fn().mockResolvedValue({ id: "  " })
+	it("does not report edits", async () => {
+		const post = vi.fn().mockResolvedValue({ id: "connector-existing" })
 		const api = generateFlowApi({ post } as unknown as ServiceHttpClient)
-
-		await api.saveMcp({ type: "sse" })
-
+		await api.saveMcp({ id: "connector-existing", type: "external_sse" })
 		expect(track).not.toHaveBeenCalled()
 	})
 })

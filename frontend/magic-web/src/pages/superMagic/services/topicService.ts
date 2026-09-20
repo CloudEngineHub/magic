@@ -9,7 +9,7 @@ import type { RequestConfig } from "@/infrastructure/network/http/clients"
 import { normalizeTopicHistoryItem } from "@/pages/superMagic/utils/topicHistory"
 import { interfaceStore } from "@/stores/interface"
 import superMagicModeService from "@/services/superMagic/SuperMagicModeService"
-import { trackTopicCreated as reportTopicCreated } from "./trackCreatedEntities"
+import { analyticsService } from "@/services/analytics"
 
 export interface FetchTopicsParams {
 	projectId: string
@@ -250,27 +250,15 @@ class TopicService {
 		sourceTopic,
 	}: CreateTopicParams): Promise<Topic | null> {
 		try {
+			analyticsService.report("topic_create_attempted", {
+				projectId,
+				workspaceId: sourceTopic?.workspace_id,
+				mode: sourceTopic?.topic_mode,
+			})
 			const newTopic = await SuperMagicApi.createTopic({
 				topic_name: topicName,
 				project_id: projectId,
 			})
-
-			let didTrackCreated = false
-			const trackTopicCreated = (topic?: Topic | null) => {
-				if (didTrackCreated) return
-				const topicId = topic?.id?.trim()
-				const resolvedProjectId = topic?.project_id?.trim() || projectId.trim()
-				const resolvedWorkspaceId = topic?.workspace_id?.trim()
-				if (!topicId || !resolvedProjectId || !resolvedWorkspaceId) return
-				didTrackCreated = true
-				reportTopicCreated(topic, {
-					projectId: resolvedProjectId,
-					workspaceId: resolvedWorkspaceId,
-					mode: sourceTopic?.topic_mode,
-				})
-			}
-			// Prefer the create-API payload so a later list-refresh failure still reports once.
-			trackTopicCreated(newTopic)
 
 			// 创建后按当前端形态重新拉取项目话题列表，避免移动端被旧接口结果覆盖。
 			const topicsRes = await this.getTopicsForCurrentInterface(projectId, 1)
@@ -295,8 +283,6 @@ class TopicService {
 					this.topicStore.setSelectedTopic(selectedTopic)
 				}
 			})
-			trackTopicCreated(selectedTopic)
-
 			return selectedTopic
 		} catch (error) {
 			console.error("创建话题失败:", error)

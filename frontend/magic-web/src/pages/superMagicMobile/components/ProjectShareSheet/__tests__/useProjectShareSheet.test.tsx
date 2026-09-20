@@ -52,7 +52,7 @@ vi.hoisted(() => {
 })
 
 vi.mock("@/services/analytics", () => ({
-	track: mocks.track,
+	analyticsService: { report: mocks.track },
 }))
 
 vi.mock("@/apis", () => ({
@@ -646,9 +646,9 @@ describe("useProjectShareSheet", () => {
 		expect(result.current.view).toBe("linkDetail")
 		expect(result.current.viewStack).toEqual([])
 		expect(mocks.track).toHaveBeenCalledTimes(1)
-		expect(mocks.track).toHaveBeenCalledWith("content_shared", {
-			content_type: "project",
-			content_id: "share-1",
+		expect(mocks.track).toHaveBeenCalledWith("content_share_attempted", {
+			resourceType: ResourceType.FileCollection,
+			shareProject: true,
 		})
 	})
 
@@ -804,9 +804,9 @@ describe("useProjectShareSheet", () => {
 		])
 		expect(result.current.view).toBe("linkDetail")
 		expect(mocks.track).toHaveBeenCalledTimes(1)
-		expect(mocks.track).toHaveBeenCalledWith("content_shared", {
-			content_type: "file",
-			content_id: "share-1",
+		expect(mocks.track).toHaveBeenCalledWith("content_share_attempted", {
+			resourceType: ResourceType.FileCollection,
+			shareProject: false,
 		})
 	})
 
@@ -1547,7 +1547,7 @@ describe("useProjectShareSheet", () => {
 		expect(result.current.selectedFileIds).toEqual(["file-mobile-a"])
 	})
 
-	it("新建项目分享成功后上报 content_shared 且 content_type 为 project", async () => {
+	it("新建项目分享尝试时上报 content_share_attempted 且 shareProject 为 true", async () => {
 		const { result } = renderHook(() =>
 			useProjectShareSheet({
 				open: true,
@@ -1568,9 +1568,9 @@ describe("useProjectShareSheet", () => {
 		})
 
 		expect(mocks.track).toHaveBeenCalledTimes(1)
-		expect(mocks.track).toHaveBeenCalledWith("content_shared", {
-			content_type: "project",
-			content_id: "share-1",
+		expect(mocks.track).toHaveBeenCalledWith("content_share_attempted", {
+			resourceType: ResourceType.FileCollection,
+			shareProject: true,
 		})
 	})
 
@@ -1596,13 +1596,13 @@ describe("useProjectShareSheet", () => {
 		})
 
 		expect(mocks.track).toHaveBeenCalledTimes(1)
-		expect(mocks.track).toHaveBeenCalledWith("content_shared", {
-			content_type: "file",
-			content_id: "share-1",
+		expect(mocks.track).toHaveBeenCalledWith("content_share_attempted", {
+			resourceType: ResourceType.FileCollection,
+			shareProject: false,
 		})
 	})
 
-	it("编辑已有分享保存时不上报 content_shared", async () => {
+	it("编辑已有分享保存时不上报 content_share_attempted", async () => {
 		mocks.fileShareData = [
 			{
 				resource_id: "existing-file-share",
@@ -1652,7 +1652,7 @@ describe("useProjectShareSheet", () => {
 		expect(mocks.track).not.toHaveBeenCalled()
 	})
 
-	it("新建分享失败时不上报 content_shared", async () => {
+	it("新建分享失败时仍上报 content_share_attempted", async () => {
 		mocks.createOrUpdateShareResource.mockRejectedValue(new Error("create failed"))
 
 		const { result } = renderHook(() =>
@@ -1675,6 +1675,9 @@ describe("useProjectShareSheet", () => {
 		})
 
 		expect(mocks.errorToast).toHaveBeenCalled()
-		expect(mocks.track).not.toHaveBeenCalled()
+		expect(mocks.track).toHaveBeenCalledWith("content_share_attempted", {
+			resourceType: ResourceType.FileCollection,
+			shareProject: true,
+		})
 	})
 })

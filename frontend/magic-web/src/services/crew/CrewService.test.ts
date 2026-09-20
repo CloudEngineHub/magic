@@ -3,11 +3,9 @@ import { CrewApi } from "@/apis"
 import { CrewService } from "./CrewService"
 
 const trackMock = vi.hoisted(() => vi.fn())
-const markPendingMock = vi.hoisted(() => vi.fn().mockResolvedValue(undefined))
 
 vi.mock("@/services/analytics", () => ({
-	track: trackMock,
-	markPendingEntityCreation: markPendingMock,
+	analyticsService: { report: trackMock },
 }))
 
 vi.mock("@/apis", () => ({
@@ -38,12 +36,12 @@ describe("CrewService.checkAgentAccess", () => {
 	})
 })
 
-describe("CrewService.agent_created analytics", () => {
+describe("CrewService creation-attempt analytics", () => {
 	beforeEach(() => {
 		vi.clearAllMocks()
 	})
 
-	it("reports agent_id from the create response", async () => {
+	it("reports the agent and backing project/topic attempts before creation", async () => {
 		vi.mocked(CrewApi.createAgent).mockResolvedValue({
 			id: "agent-9",
 			code: "SMA-9",
@@ -52,25 +50,13 @@ describe("CrewService.agent_created analytics", () => {
 
 		await service.createAgent({ name_i18n: { zh_CN: "", en_US: "" } } as never)
 
-		expect(trackMock).toHaveBeenCalledTimes(1)
-		expect(trackMock).toHaveBeenCalledWith("agent_created", { agent_id: "agent-9" })
-		expect(markPendingMock).toHaveBeenCalledWith({ scene: "crew", resourceCode: "SMA-9" })
-	})
-
-	it("persists the pending entity marker after creation", async () => {
-		vi.mocked(CrewApi.createAgent).mockResolvedValue({
-			id: "agent-pending",
-			code: "SMA-pending",
-		})
-		await new CrewService().createAgent({ name_i18n: { zh_CN: "", en_US: "" } } as never)
-
-		expect(markPendingMock).toHaveBeenCalledWith({
-			scene: "crew",
-			resourceCode: "SMA-pending",
+		expect(trackMock).toHaveBeenNthCalledWith(1, "agent_create_attempted", {})
+		expect(trackMock).toHaveBeenNthCalledWith(2, "project_create_attempted", {
+			sceneOverride: "crew",
 		})
 	})
 
-	it("createDefaultAgent reports once through createAgent", async () => {
+	it("createDefaultAgent uses the same attempt path", async () => {
 		vi.mocked(CrewApi.createAgent).mockResolvedValue({
 			id: "agent-default",
 			code: "SMA-default",
@@ -79,41 +65,16 @@ describe("CrewService.agent_created analytics", () => {
 
 		await service.createDefaultAgent()
 
-		expect(trackMock).toHaveBeenCalledTimes(1)
-		expect(trackMock).toHaveBeenCalledWith("agent_created", { agent_id: "agent-default" })
+		expect(trackMock).toHaveBeenCalledWith("agent_create_attempted", {})
 	})
 
-	it("does not report when the create response has no id", async () => {
-		vi.mocked(CrewApi.createAgent).mockResolvedValue({
-			id: "",
-			code: "SMA-empty",
-		})
-		const service = new CrewService()
-
-		await service.createAgent({ name_i18n: { zh_CN: "", en_US: "" } } as never)
-
-		expect(trackMock).not.toHaveBeenCalled()
-	})
-
-	it("does not report when the create response id is blank", async () => {
-		vi.mocked(CrewApi.createAgent).mockResolvedValue({
-			id: "   ",
-			code: "SMA-blank",
-		})
-		const service = new CrewService()
-
-		await service.createAgent({ name_i18n: { zh_CN: "", en_US: "" } } as never)
-
-		expect(trackMock).not.toHaveBeenCalled()
-	})
-
-	it("does not report when createAgent fails", async () => {
+	it("keeps the attempt when createAgent fails", async () => {
 		vi.mocked(CrewApi.createAgent).mockRejectedValue(new Error("create-failed"))
 		const service = new CrewService()
 
 		await expect(
 			service.createAgent({ name_i18n: { zh_CN: "", en_US: "" } } as never),
 		).rejects.toThrow("create-failed")
-		expect(trackMock).not.toHaveBeenCalled()
+		expect(trackMock).toHaveBeenCalledWith("agent_create_attempted", {})
 	})
 })

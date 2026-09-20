@@ -46,7 +46,8 @@ import { shouldSyncChatConversationName, syncChatProjectNameOnly } from "./chatC
 import { shouldClearEditorAfterSend } from "./messageSendEditorPolicy"
 import { startMessageSendRenameTask, trackProjectRenameTask } from "./messageSendRenameTask"
 import { projectVisibleMessagesByRevokedTail } from "../utils/project-visible-messages-by-revoked-tail"
-import { trackConversationMessageSent } from "./trackConversationMessageSent"
+import { analyticsService } from "@/services/analytics"
+import { getConversationTopicModeOverride } from "./conversationTopicModeOverride"
 
 const logger = Logger.createLogger("messageSendService")
 
@@ -100,6 +101,8 @@ export interface DispatchMessageParams {
 	options?: SendMessageOptions
 	/** Editor surface classification used only by analytics, never serialized to chat payloads. */
 	analyticsTopicMode?: TopicMode
+	/** Queue replay was already counted when the user enqueued the message. */
+	shouldTrackAttempt?: boolean
 	showLoading: boolean
 	selectedProject?: ProjectListItem | null
 	selectedTopic?: Topic | null
@@ -188,6 +191,7 @@ class MessageSendService {
 		showLoading,
 		options,
 		analyticsTopicMode,
+		shouldTrackAttempt = true,
 		selectedProject,
 		selectedTopic,
 		context,
@@ -345,19 +349,6 @@ class MessageSendService {
 					// 响应成功后替换 superMagicStore 中对应数据
 					this.deps.superMagicStore.replaceUserMessage(chat_topic_id, responseSeq)
 					optimisticMessageStore.confirm({ chat_topic_id, app_message_id: messageId })
-					try {
-						trackConversationMessageSent({
-							messageId,
-							topic: currentTopic,
-							project: currentProject,
-							workspace: context?.selectedWorkspace,
-							workspaceId: context?.workspaceId,
-							options: sendOptions,
-							topicMode: analyticsTopicMode,
-						})
-					} catch {
-						// Analytics must never fail the send path.
-					}
 				})
 				.catch((error) => {
 					console.log("error", error)
@@ -375,6 +366,26 @@ class MessageSendService {
 			if (!isConfirmed) return false
 		}
 
+		if (shouldTrackAttempt) {
+			try {
+				analyticsService.report("conversation_message_send_attempted", {
+					topicId: currentTopic.id,
+					projectId: currentProject?.id,
+					workspaceId:
+						context?.selectedWorkspace?.id ??
+						context?.workspaceId ??
+						currentProject?.workspace_id,
+					topicMode:
+						getConversationTopicModeOverride(currentTopic.id) ??
+						analyticsTopicMode ??
+						readTopicPattern(sendOptions) ??
+						currentTopic.topic_mode,
+					workspaceType: context?.selectedWorkspace?.workspace_type,
+				})
+			} catch {
+				// Analytics must never fail the send path.
+			}
+		}
 		markLocalExecutionStarted()
 		sendMessage()
 		if (context?.refreshProjectAfterTopicRename && currentProject && renameTask) {
@@ -434,6 +445,7 @@ class MessageSendService {
 				selectedTopic: currentTopic,
 				context,
 				analyticsTopicMode: params.topicMode ?? tabPattern,
+				shouldTrackAttempt: !params.isFromQueue,
 			})
 			if (!isDispatched) return
 			this.deps.pubsub.publish(PubSubEvents.Message_Scroll_To_Bottom, { time: 1000 })
@@ -615,6 +627,11 @@ function generateUniqueId(): string {
 	const timestamp = Date.now().toString(36)
 	const randomPart = Math.random().toString(36).substring(2, 15)
 	return `${timestamp}-${randomPart}`
+}
+
+function readTopicPattern(options?: SendMessageOptions): string | undefined {
+	const topicPattern = options?.extra?.super_agent?.topic_pattern
+	return typeof topicPattern === "string" ? topicPattern : undefined
 }
 
 function stripTempOptions(options?: SendMessageOptions): SendMessageOptions | undefined {

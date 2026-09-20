@@ -42,7 +42,7 @@ import {
 import usePaginatedTopics from "@/pages/superMagic/hooks/usePaginatedTopics"
 import TopicService from "@/pages/superMagic/services/topicService"
 import { useFileActionVisibility } from "@/pages/superMagic/providers/file-action-visibility-provider"
-import { trackTopicCreated } from "@/pages/superMagic/services/trackCreatedEntities"
+import { analyticsService } from "@/services/analytics"
 
 interface MessageHeaderProps {
 	isConversationPanelCollapsed?: boolean
@@ -298,16 +298,16 @@ function MessageHeader({
 		if (isConversationPanelCollapsed) {
 			onExpandConversationPanel?.()
 		}
+		analyticsService.report("topic_create_attempted", {
+			projectId: selectedProject?.id,
+			workspaceId: selectedProject?.workspace_id,
+			sceneOverride: "crew",
+		})
 		SuperMagicApi.createTopic({
 			project_id: selectedProject?.id || "",
 			topic_name: "",
 		}).then((res) => {
 			if (!res) return
-			trackTopicCreated(res, {
-				projectId: selectedProject?.id,
-				workspaceId: selectedProject?.workspace_id,
-				scene: "crew",
-			})
 			topicStore.setSelectedTopic(res)
 		})
 	})

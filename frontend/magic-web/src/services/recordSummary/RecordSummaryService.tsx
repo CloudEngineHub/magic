@@ -63,10 +63,7 @@ import { imageMigrationService } from "./ImageMigrationService"
 import { RecordingStatusReporter, RecordingSummaryStatus } from "./RecordingStatusReporter"
 import MagicModal from "@/components/base/MagicModal"
 import { SuperMagicApi } from "@/apis"
-import {
-	trackProjectCreated,
-	trackTopicCreated,
-} from "@/pages/superMagic/services/trackCreatedEntities"
+import { analyticsService } from "@/services/analytics"
 import VoiceTimeoutChecker from "./VoiceTimeoutChecker"
 import SilenceDetector from "./SilenceDetector"
 import { DurationTracker } from "./DurationTracker"
@@ -4885,6 +4882,11 @@ class RecordSummaryService {
 		// Create a project only when a real workspace is available; ungrouped
 		// recordings must already carry a project created at start.
 		if (!session.project && workspaceId) {
+			analyticsService.report("project_create_attempted", {
+				workspaceId,
+				sceneOverride: "ai_recording",
+				mode: options?.topicMode || TopicMode.RecordSummary,
+			})
 			const res = await SuperMagicApi.createProject({
 				workspace_id: workspaceId,
 				project_name: "",
@@ -4894,12 +4896,14 @@ class RecordSummaryService {
 			})
 			session.project = res.project
 			session.topic = res.topic
-			// This legacy recording bootstrap bypasses ProjectService, so report the
-			// recording-specific project/topic pair at its authoritative success point.
-			trackProjectCreated(res, workspaceId, "ai_recording")
 		}
 		// Topic creation only needs project_id; allow null workspace (ungrouped).
 		else if (session.project && !session.topic) {
+			analyticsService.report("topic_create_attempted", {
+				projectId: session.project.id,
+				workspaceId: session.project.workspace_id || workspaceId,
+				sceneOverride: "ai_recording",
+			})
 			const res = await SuperMagicApi.createTopic({
 				// workspace_id: workspaceId,
 				project_id: session.project.id,
@@ -4907,11 +4911,6 @@ class RecordSummaryService {
 				project_mode: TopicMode.RecordSummary,
 			})
 			session.topic = res
-			trackTopicCreated(res, {
-				projectId: session.project.id,
-				workspaceId: session.project.workspace_id || workspaceId,
-				scene: "ai_recording",
-			})
 		}
 
 		if (!session.project || !session.topic) {

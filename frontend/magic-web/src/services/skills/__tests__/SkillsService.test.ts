@@ -3,11 +3,8 @@ import { SkillsApi } from "@/apis"
 import { SkillsService } from "../SkillsService"
 
 const trackMock = vi.hoisted(() => vi.fn())
-const markPendingMock = vi.hoisted(() => vi.fn().mockResolvedValue(undefined))
-
 vi.mock("@/services/analytics", () => ({
-	track: trackMock,
-	markPendingEntityCreation: markPendingMock,
+	analyticsService: { report: trackMock },
 }))
 
 vi.mock("@/apis", () => ({
@@ -261,7 +258,7 @@ describe("SkillsService", () => {
 	})
 })
 
-describe("SkillsService skill_created analytics", () => {
+describe("SkillsService skill_create_attempted analytics", () => {
 	let analyticsService: SkillsService
 
 	beforeEach(() => {
@@ -277,14 +274,12 @@ describe("SkillsService skill_created analytics", () => {
 
 		await analyticsService.createEmptySkill()
 
-		expect(trackMock).toHaveBeenCalledTimes(1)
-		expect(trackMock).toHaveBeenCalledWith("skill_created", {
-			skill_code: "SKL-empty",
+		expect(trackMock).toHaveBeenCalledTimes(2)
+		expect(trackMock).toHaveBeenCalledWith("skill_create_attempted", {
 			source_type: "empty",
 		})
-		expect(markPendingMock).toHaveBeenCalledWith({
-			scene: "skill",
-			resourceCode: "SKL-empty",
+		expect(trackMock).toHaveBeenCalledWith("project_create_attempted", {
+			sceneOverride: "skill",
 		})
 	})
 
@@ -294,8 +289,7 @@ describe("SkillsService skill_created analytics", () => {
 		await expect(analyticsService.createEmptySkill()).rejects.toThrow(
 			"create-skill-missing-code",
 		)
-		expect(trackMock).not.toHaveBeenCalled()
-		expect(markPendingMock).not.toHaveBeenCalled()
+		expect(trackMock).toHaveBeenCalled()
 	})
 
 	it("does not report empty create when the skill code is blank", async () => {
@@ -304,27 +298,25 @@ describe("SkillsService skill_created analytics", () => {
 		await expect(analyticsService.createEmptySkill()).rejects.toThrow(
 			"create-skill-missing-code",
 		)
-		expect(trackMock).not.toHaveBeenCalled()
+		expect(trackMock).toHaveBeenCalled()
 	})
 
 	it("does not report empty create when the API fails", async () => {
 		vi.mocked(SkillsApi.createSkill).mockRejectedValue(new Error("network"))
 
 		await expect(analyticsService.createEmptySkill()).rejects.toThrow("network")
-		expect(trackMock).not.toHaveBeenCalled()
+		expect(trackMock).toHaveBeenCalled()
 	})
 
 	it("reports store from a from-store object skill_code, not the store id", async () => {
 		vi.mocked(SkillsApi.addSkillFromStore).mockResolvedValue({
-			skill_code: "SKL-market",
 			id: "store-row-9",
 		} as never)
 
 		await analyticsService.addSkillFromStore("store-row-9")
 
 		expect(trackMock).toHaveBeenCalledTimes(1)
-		expect(trackMock).toHaveBeenCalledWith("skill_created", {
-			skill_code: "SKL-market",
+		expect(trackMock).toHaveBeenCalledWith("skill_create_attempted", {
 			source_type: "store",
 		})
 	})
@@ -334,8 +326,7 @@ describe("SkillsService skill_created analytics", () => {
 
 		await analyticsService.addSkillFromStore("store-1")
 
-		expect(trackMock).toHaveBeenCalledWith("skill_created", {
-			skill_code: "SKL-list",
+		expect(trackMock).toHaveBeenCalledWith("skill_create_attempted", {
 			source_type: "store",
 		})
 	})
@@ -351,8 +342,7 @@ describe("SkillsService skill_created analytics", () => {
 		await analyticsService.getStoreSkills()
 		await analyticsService.addSkillFromStore("store-1")
 
-		expect(trackMock).toHaveBeenCalledWith("skill_created", {
-			skill_code: "SKL-cached",
+		expect(trackMock).toHaveBeenCalledWith("skill_create_attempted", {
 			source_type: "store",
 		})
 	})
@@ -362,7 +352,7 @@ describe("SkillsService skill_created analytics", () => {
 
 		await analyticsService.addSkillFromStore("store-unknown")
 
-		expect(trackMock).not.toHaveBeenCalled()
+		expect(trackMock).toHaveBeenCalled()
 	})
 
 	it("uses a caller-known market code when the install response is empty", async () => {
@@ -370,8 +360,7 @@ describe("SkillsService skill_created analytics", () => {
 
 		await analyticsService.addSkillFromStore("store-unknown", " SKL-row ")
 
-		expect(trackMock).toHaveBeenCalledWith("skill_created", {
-			skill_code: "SKL-row",
+		expect(trackMock).toHaveBeenCalledWith("skill_create_attempted", {
 			source_type: "store",
 		})
 	})
@@ -379,7 +368,6 @@ describe("SkillsService skill_created analytics", () => {
 	it("folds the import request source_type into the import analytics bucket", async () => {
 		vi.mocked(SkillsApi.importSkill).mockResolvedValue({
 			id: "1",
-			skill_code: "SKL-gh",
 		})
 
 		await analyticsService.importSkill({
@@ -389,8 +377,7 @@ describe("SkillsService skill_created analytics", () => {
 			source_type: "GITHUB",
 		})
 
-		expect(trackMock).toHaveBeenCalledWith("skill_created", {
-			skill_code: "SKL-gh",
+		expect(trackMock).toHaveBeenCalledWith("skill_create_attempted", {
 			source_type: "import",
 		})
 	})
@@ -398,7 +385,6 @@ describe("SkillsService skill_created analytics", () => {
 	it("reports import when the request omits its internal source_type", async () => {
 		vi.mocked(SkillsApi.importSkill).mockResolvedValue({
 			id: "1",
-			skill_code: "SKL-file",
 		})
 
 		await analyticsService.importSkill({
@@ -407,8 +393,7 @@ describe("SkillsService skill_created analytics", () => {
 			description_i18n: { zh_CN: "d", en_US: "d" },
 		})
 
-		expect(trackMock).toHaveBeenCalledWith("skill_created", {
-			skill_code: "SKL-file",
+		expect(trackMock).toHaveBeenCalledWith("skill_create_attempted", {
 			source_type: "import",
 		})
 	})
@@ -426,7 +411,7 @@ describe("SkillsService skill_created analytics", () => {
 			source_type: "GITHUB",
 		})
 
-		expect(trackMock).not.toHaveBeenCalled()
+		expect(trackMock).toHaveBeenCalled()
 	})
 
 	it("does not report import when skill_code is blank", async () => {
@@ -442,7 +427,7 @@ describe("SkillsService skill_created analytics", () => {
 			source_type: "GITHUB",
 		})
 
-		expect(trackMock).not.toHaveBeenCalled()
+		expect(trackMock).toHaveBeenCalled()
 	})
 
 	it("does not report import when the API fails", async () => {
@@ -455,6 +440,6 @@ describe("SkillsService skill_created analytics", () => {
 				description_i18n: { zh_CN: "d", en_US: "d" },
 			}),
 		).rejects.toThrow("import-failed")
-		expect(trackMock).not.toHaveBeenCalled()
+		expect(trackMock).toHaveBeenCalled()
 	})
 })

@@ -40,7 +40,6 @@ import useTopicModel from "@/pages/superMagic/components/MessageEditor/hooks/use
 import { useRefreshTopicDetailOnTaskComplete } from "@/pages/superMagic/hooks/useRefreshTopicDetailOnTaskComplete"
 import { useScopedTopicReadProgress } from "@/pages/superMagic/hooks/useScopedTopicReadProgress"
 import { applyOptimisticTopicRunningState } from "@/pages/superMagic/services/topicStatusSyncService"
-import { reportPendingSkillCreatedEntities } from "../store/services/report-skill-created-entities"
 
 interface ConversationPanelProps {
 	selectedProject: ProjectListItem | null
@@ -71,8 +70,7 @@ function ConversationPanel({
 	projectFilesStore,
 	onTerminalTopicStatusChange,
 }: ConversationPanelProps) {
-	const skillEditStore = useSkillEditStore()
-	const { conversation } = skillEditStore
+	const { conversation } = useSkillEditStore()
 	const selectedTopic = topicStore.selectedTopic
 	const attachments = projectFilesStore.workspaceFileTree
 
@@ -83,7 +81,7 @@ function ConversationPanel({
 		onTopicDetailLoaded: topicStore.updateTopic,
 	})
 
-	const { topicModelStore } = useTopicModel({
+	useTopicModel({
 		selectedTopic,
 		selectedProject,
 		topicMode: TopicMode.Default,
@@ -188,16 +186,6 @@ function ConversationPanel({
 				const resolvedTopic = currentTopic ?? topicStore.selectedTopic
 				if (!success) return
 
-				if (skillEditStore.currentSkillCode && resolvedProject && resolvedTopic) {
-					// A new Skill may not receive its backing project/topic until the first message.
-					// Complete the pending report only after the send flow exposes their real ids.
-					void reportPendingSkillCreatedEntities({
-						skillCode: skillEditStore.currentSkillCode,
-						project: resolvedProject,
-						topics: [resolvedTopic],
-					})
-				}
-
 				applyOptimisticTopicRunningState({
 					topicStore,
 					topic: resolvedTopic,
@@ -224,7 +212,6 @@ function ConversationPanel({
 		showLoading,
 		messageQueue,
 		detailPanelVisible,
-		skillEditStore,
 	])
 
 	const messageListProviderValue = useMemo(() => {

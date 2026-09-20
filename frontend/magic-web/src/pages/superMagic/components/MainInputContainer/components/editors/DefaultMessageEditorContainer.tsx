@@ -34,6 +34,8 @@ import QueueDraftNotice from "../../../MessagePanel/components/MessageQueue/Queu
 import { buildQueueMessageInput } from "./messageParams"
 import { resolveAgentSelection } from "@/services/superMagic/DefaultAgentSelectionService"
 import { useConversationInputLayout } from "../../../ConversationInputResize/context"
+import { analyticsService } from "@/services/analytics"
+import { getConversationTopicModeOverride } from "@/pages/superMagic/services/conversationTopicModeOverride"
 
 const ERR_QUEUE_ADD_FAILED = "queue_add_failed"
 
@@ -267,6 +269,24 @@ export default function DefaultMessageEditorContainer(props: DefaultMessageEdito
 			// Programmatic requests have their own content and must preserve the current draft.
 			const shouldClearDraft = params.shouldClearEditorAfterSend !== false
 			if (shouldClearDraft) tiptapEditorRef.current?.clearContentAfterSend()
+			try {
+				const workspace =
+					editorContext?.selectedWorkspace ??
+					workspaceStore.selectedWorkspace ??
+					workspaceStore.firstWorkspace
+				analyticsService.report("conversation_message_send_attempted", {
+					topicId: selectedTopic?.id,
+					projectId: selectedProject?.id,
+					workspaceId: workspace?.id ?? selectedProject?.workspace_id,
+					topicMode:
+						getConversationTopicModeOverride(selectedTopic?.id) ??
+						effectiveTopicMode ??
+						selectedTopic?.topic_mode,
+					workspaceType: workspace?.workspace_type,
+				})
+			} catch {
+				// Analytics must never fail the queue path.
+			}
 			const queueId = await queueContext.addToQueue(
 				buildQueueMessageInput(finalParams, params.value),
 			)

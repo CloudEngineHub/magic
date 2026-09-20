@@ -39,7 +39,7 @@ import magicToast from "@/components/base/MagicToaster/utils"
 import { projectStore } from "@/pages/superMagic/stores/core"
 import { userStore } from "@/models/user"
 import { generateShareMessageText } from "../utils/generateShareMessageText"
-import { trackContentSharedIfCreated } from "../utils/trackContentShared"
+import { analyticsService } from "@/services/analytics"
 import { mergeRecordingShareFileIds } from "@/pages/superMagic/pages/AudioRecordings/utils/build-recording-share-selection"
 import FileShareDocumentDependenciesOption from "./FileShareDocumentDependenciesOption"
 import { useFileShareDocumentDependencies } from "./hooks/useFileShareDocumentDependencies"
@@ -776,6 +776,12 @@ export default memo(function FileShareModal(props: FileShareModalProps) {
 		setIsSaving(true)
 		// Capture create vs edit before the API; the first successful save marks the resource created.
 		const isNewShare = !hasResourceIdCreated.current
+		if (isNewShare) {
+			analyticsService.report("content_share_attempted", {
+				resourceType: ResourceType.FileCollection,
+				shareProject: effectiveShareProject,
+			})
+		}
 
 		try {
 			let currentResourceId = resourceId
@@ -825,13 +831,6 @@ export default memo(function FileShareModal(props: FileShareModalProps) {
 					pure_mode: extraData.pureMode ?? false,
 				},
 				project_id: projectId, // 传递项目ID
-			})
-
-			trackContentSharedIfCreated({
-				created: isNewShare,
-				resourceId: currentResourceId,
-				resourceType: ResourceType.FileCollection,
-				shareProject: effectiveShareProject,
 			})
 
 			// Mark as created after successful API call

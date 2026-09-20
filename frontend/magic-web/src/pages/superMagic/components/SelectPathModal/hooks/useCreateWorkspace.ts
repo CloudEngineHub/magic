@@ -5,7 +5,7 @@ import { SuperMagicApi } from "@/apis"
 import { validateFilename } from "@/utils/filename-validator"
 import type { Workspace } from "@/pages/superMagic/pages/Workspace/types"
 import magicToast from "@/components/base/MagicToaster/utils"
-import { trackWorkspaceCreated } from "@/pages/superMagic/services/trackCreatedEntities"
+import { analyticsService } from "@/services/analytics"
 
 interface UseCreateWorkspaceOptions {
 	workspaces: Workspace[]
@@ -64,12 +64,12 @@ export function useCreateWorkspace(options: UseCreateWorkspaceOptions) {
 		setLoading(true)
 
 		try {
+			analyticsService.report("workspace_create_attempted", {})
 			const response = await SuperMagicApi.createWorkspace({
 				workspace_name: normalizedName,
 			})
 
 			if (response?.id) {
-				trackWorkspaceCreated(response)
 				magicToast.success(t("selectPathModal.createdSuccessfully"))
 
 				// 刷新工作区列表

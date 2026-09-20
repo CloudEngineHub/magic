@@ -31,7 +31,7 @@ vi.mock("@/apis", () => ({
 
 const trackMock = vi.hoisted(() => vi.fn())
 vi.mock("@/services/analytics", () => ({
-	track: trackMock,
+	analyticsService: { report: trackMock },
 }))
 
 vi.mock("@/models/user", () => ({
@@ -788,10 +788,10 @@ describe("TopicService scene topic-created analytics", () => {
 		await topicService.createTopic({ projectId: "project-1", topicName: "New" })
 
 		expect(trackMock).toHaveBeenCalledTimes(1)
-		expect(trackMock).toHaveBeenCalledWith("workspace_topic_created", {
-			topic_id: "topic-new",
-			project_id: "project-1",
-			workspace_id: "workspace-1",
+		expect(trackMock).toHaveBeenCalledWith("topic_create_attempted", {
+			projectId: "project-1",
+			workspaceId: undefined,
+			mode: undefined,
 		})
 	})
 
@@ -810,10 +810,10 @@ describe("TopicService scene topic-created analytics", () => {
 		).resolves.toBeNull()
 
 		expect(trackMock).toHaveBeenCalledTimes(1)
-		expect(trackMock).toHaveBeenCalledWith("workspace_topic_created", {
-			topic_id: "topic-new",
-			project_id: "project-1",
-			workspace_id: "workspace-1",
+		expect(trackMock).toHaveBeenCalledWith("topic_create_attempted", {
+			projectId: "project-1",
+			workspaceId: undefined,
+			mode: undefined,
 		})
 	})
 
@@ -839,10 +839,10 @@ describe("TopicService scene topic-created analytics", () => {
 		await topicService.createTopic({ projectId: "project-1", topicName: "New" })
 
 		expect(trackMock).toHaveBeenCalledTimes(1)
-		expect(trackMock).toHaveBeenCalledWith("workspace_topic_created", {
-			topic_id: "topic-new",
-			project_id: "project-1",
-			workspace_id: "workspace-from-list",
+		expect(trackMock).toHaveBeenCalledWith("topic_create_attempted", {
+			projectId: "project-1",
+			workspaceId: undefined,
+			mode: undefined,
 		})
 	})
 
@@ -867,7 +867,7 @@ describe("TopicService scene topic-created analytics", () => {
 
 		await topicService.createTopic({ projectId: "project-1", topicName: "New" })
 
-		expect(trackMock).not.toHaveBeenCalled()
+		expect(trackMock).toHaveBeenCalledTimes(1)
 	})
 
 	it("does not report when the created topic id is blank", async () => {
@@ -885,7 +885,7 @@ describe("TopicService scene topic-created analytics", () => {
 
 		await topicService.createTopic({ projectId: "project-1", topicName: "New" })
 
-		expect(trackMock).not.toHaveBeenCalled()
+		expect(trackMock).toHaveBeenCalledTimes(1)
 	})
 
 	it("does not report when createTopic fails", async () => {
@@ -895,6 +895,6 @@ describe("TopicService scene topic-created analytics", () => {
 			topicService.createTopic({ projectId: "project-1", topicName: "New" }),
 		).resolves.toBeNull()
 
-		expect(trackMock).not.toHaveBeenCalled()
+		expect(trackMock).toHaveBeenCalledTimes(1)
 	})
 })

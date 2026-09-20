@@ -40,7 +40,7 @@ import {
 	type PlaybookConfig,
 	normalizeCrewI18nArrayValue,
 } from "@/apis/modules/crew"
-import { markPendingEntityCreation, track } from "@/services/analytics"
+import { analyticsService } from "@/services/analytics"
 
 // ======================== View Models ========================
 
@@ -294,17 +294,12 @@ export class CrewService {
 		})
 	}
 
-	/**
-	 * Create an agent and remember that its lazily provisioned project/topic still
-	 * need reporting after the edit page resolves their real ids.
-	 */
 	async createAgent(params: CreateAgentParams): Promise<{ id: string; code: string }> {
+		analyticsService.report("agent_create_attempted", {})
+		// A Crew creation also requests its backing project and default topic. Their
+		// server-generated ids do not exist yet, so only the attempt itself is reported.
+		analyticsService.report("project_create_attempted", { sceneOverride: "crew" })
 		const data = await CrewApi.createAgent(params)
-		const agentId = data?.id?.trim()
-		if (agentId) {
-			track("agent_created", { agent_id: agentId })
-		}
-		await markPendingEntityCreation({ scene: "crew", resourceCode: data?.code ?? "" })
 		return { id: data.id, code: data.code }
 	}
 

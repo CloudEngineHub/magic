@@ -25,12 +25,7 @@ import TopicService from "./topicService"
 import SuperMagicService from "./index"
 import type { CreatedProject, ProjectListItem, Topic, Workspace } from "../pages/Workspace/types"
 import type { TopicMode } from "../pages/Workspace/TopicMode"
-import {
-	resolveCreationScene,
-	trackProjectCreated,
-	trackTopicCreated,
-	type CreationScene,
-} from "./trackCreatedEntities"
+import { analyticsService } from "@/services/analytics"
 
 interface CreateProjectParams {
 	projectMode: TopicMode
@@ -46,7 +41,7 @@ export interface MessageSendPreparationContext {
 	selectedTopic?: Topic | null
 	selectedWorkspace?: Workspace | null
 	/** Explicit business entry for creation analytics, independent of the selected agent mode. */
-	creationScene?: CreationScene
+	creationScene?: string
 	setSelectedProject?: (project: ProjectListItem | null) => void
 	setSelectedTopic?: (topic: Topic | null) => void
 	setSelectedWorkspace?: (workspace: Workspace | null) => void
@@ -395,7 +390,7 @@ async function createProjectForContext({
 }: {
 	params: CreateProjectParams
 	selectedWorkspace: Workspace | null
-	creationScene?: CreationScene
+	creationScene?: string
 	setSelectedProject: (project: ProjectListItem | null) => void
 	setSelectedTopic: (topic: Topic | null) => void
 }): Promise<CreatedProject | null> {
@@ -403,6 +398,11 @@ async function createProjectForContext({
 		return null
 	}
 
+	analyticsService.report("project_create_attempted", {
+		workspaceId: selectedWorkspace.id,
+		sceneOverride: creationScene,
+		mode: params.projectMode,
+	})
 	const createdProject = await SuperMagicApi.createProject({
 		workspace_id: selectedWorkspace.id,
 		project_name: "",
@@ -414,13 +414,6 @@ async function createProjectForContext({
 	if (!createdProject?.project || !createdProject.topic) {
 		return null
 	}
-	// Only the direct fallback reports here; injected createProject services own their own success event.
-	trackProjectCreated(
-		createdProject,
-		selectedWorkspace.id,
-		creationScene ?? resolveCreationScene(params.projectMode),
-	)
-
 	await copyGlobalModelConfiguration({
 		projectMode: params.projectMode,
 		createdProject,
@@ -461,17 +454,17 @@ async function createTopicForContext({
 		})
 	}
 
+	analyticsService.report("topic_create_attempted", {
+		projectId: selectedProject.id,
+		workspaceId: selectedProject.workspace_id,
+		mode: selectedProject.project_mode,
+	})
 	const newTopic = await SuperMagicApi.createTopic({
 		project_id: selectedProject.id,
 		topic_name: "",
 	})
 
 	if (newTopic?.id) {
-		trackTopicCreated(newTopic, {
-			projectId: selectedProject.id,
-			workspaceId: selectedProject.workspace_id,
-			mode: selectedProject.project_mode,
-		})
 		SuperMagicApi.preWarmSandbox({
 			topic_id: newTopic.id,
 		})

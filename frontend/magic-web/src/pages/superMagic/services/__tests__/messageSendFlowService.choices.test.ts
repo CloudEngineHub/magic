@@ -2,6 +2,10 @@ import { beforeEach, describe, expect, it, vi } from "vitest"
 import type { Topic } from "@/pages/superMagic/pages/Workspace/types"
 import { TopicMode } from "@/pages/superMagic/pages/Workspace/TopicMode"
 import { createMessageSendService } from "@/pages/superMagic/services/messageSendFlowService"
+import {
+	registerConversationTopicModeOverride,
+	resetConversationTopicModeOverridesForTests,
+} from "@/pages/superMagic/services/conversationTopicModeOverride"
 
 const { track } = vi.hoisted(() => ({ track: vi.fn() }))
 
@@ -69,7 +73,7 @@ vi.mock("@/pages/superMagic/services/topicRename", () => ({
 	smartRenameTopicIfUnnamed: vi.fn(async () => null),
 }))
 
-vi.mock("@/services/analytics", () => ({ track }))
+vi.mock("@/services/analytics", () => ({ analyticsService: { report: track } }))
 
 vi.mock("@/pages/superMagic/utils/isChatWorkspaceProject", () => ({
 	isCachedChatWorkspaceProject: (project?: { workspace_id?: string } | null) =>
@@ -348,9 +352,10 @@ describe("MessageSendService / SuperMagic 单候选请求", () => {
 	})
 })
 
-describe("MessageSendService / conversation_message_sent", () => {
+describe("MessageSendService / conversation_message_send_attempted", () => {
 	beforeEach(() => {
 		vi.mocked(track).mockReset()
+		resetConversationTopicModeOverridesForTests()
 	})
 
 	function createService(chat: ReturnType<typeof vi.fn>) {
@@ -405,17 +410,18 @@ describe("MessageSendService / conversation_message_sent", () => {
 
 		await vi.waitFor(() => expect(track).toHaveBeenCalledTimes(1))
 		expect(track).toHaveBeenCalledWith(
-			"conversation_message_sent",
+			"conversation_message_send_attempted",
 			expect.objectContaining({
-				conversation_type: "task",
-				topic_id: "topic-1",
-				workspace_id: "ws-1",
-				project_id: "project-1",
+				topicId: "topic-1",
+				workspaceId: "ws-1",
+				projectId: "project-1",
+				topicMode: TopicMode.General,
+				workspaceType: "default",
 			}),
 		)
 	})
 
-	it("does not track when chat fails", async () => {
+	it("tracks the attempt when chat fails", async () => {
 		const chat = vi.fn().mockRejectedValue(new Error("request failed"))
 		const service = createService(chat)
 
@@ -430,10 +436,10 @@ describe("MessageSendService / conversation_message_sent", () => {
 		})
 
 		await vi.waitFor(() => expect(chat).toHaveBeenCalledTimes(1))
-		expect(track).not.toHaveBeenCalled()
+		expect(track).toHaveBeenCalledTimes(1)
 	})
 
-	it("does not track when chat returns no message payload", async () => {
+	it("tracks the attempt when chat returns no message payload", async () => {
 		const chat = vi.fn().mockResolvedValue({})
 		const service = createService(chat)
 
@@ -448,7 +454,7 @@ describe("MessageSendService / conversation_message_sent", () => {
 		})
 
 		await vi.waitFor(() => expect(chat).toHaveBeenCalledTimes(1))
-		expect(track).not.toHaveBeenCalled()
+		expect(track).toHaveBeenCalledTimes(1)
 	})
 
 	it("does not duplicate when two real sends succeed (queue flush is another dispatch)", async () => {
@@ -470,7 +476,7 @@ describe("MessageSendService / conversation_message_sent", () => {
 		await vi.waitFor(() => expect(track).toHaveBeenCalledTimes(2))
 	})
 
-	it("tracks MicroApp sends as micro_app", async () => {
+	it("tracks MicroApp sends with the MicroApp topic mode", async () => {
 		const chat = vi.fn().mockResolvedValue(successResponse)
 		const service = createService(chat)
 
@@ -488,20 +494,54 @@ describe("MessageSendService / conversation_message_sent", () => {
 		await vi.waitFor(() => expect(chat).toHaveBeenCalledTimes(1))
 		await vi.waitFor(() =>
 			expect(track).toHaveBeenCalledWith(
-				"conversation_message_sent",
+				"conversation_message_send_attempted",
 				expect.objectContaining({
-					conversation_type: "micro_app",
-					topic_mode: TopicMode.MicroApp,
+					topicId: "topic-1",
+					topicMode: TopicMode.MicroApp,
 				}),
 			),
 		)
 	})
 
-	it.each([
-		[TopicMode.MagiClaw, "magic_claw"],
-		[TopicMode.CrewCreator, "crew_edit"],
-		[TopicMode.SkillCreator, "skill_edit"],
-	] as const)("maps %s send options to %s", async (topicPattern, conversationType) => {
+	it.each([TopicMode.MagiClaw, TopicMode.CrewCreator, TopicMode.SkillCreator] as const)(
+		"forwards %s send options as topicMode",
+		async (topicPattern) => {
+			const chat = vi.fn().mockResolvedValue(successResponse)
+			const service = createService(chat)
+
+			await service.dispatchMessage({
+				content: "hello",
+				showLoading: false,
+				selectedProject: { id: "project-1", workspace_id: "chat-workspace" } as never,
+				selectedTopic: {
+					id: "topic-1",
+					chat_topic_id: "chat-topic-1",
+					chat_conversation_id: "conversation-1",
+					topic_mode: TopicMode.General,
+				} as Topic,
+				context: {
+					selectedWorkspace: {
+						id: "chat-workspace",
+						workspace_type: "chat",
+					} as never,
+				},
+				options: {
+					extra: { super_agent: { topic_pattern: topicPattern } },
+				},
+			})
+
+			await vi.waitFor(() => expect(track).toHaveBeenCalledTimes(1))
+			expect(track).toHaveBeenCalledWith(
+				"conversation_message_send_attempted",
+				expect.objectContaining({
+					topicMode: topicPattern,
+					workspaceType: "chat",
+				}),
+			)
+		},
+	)
+
+	it("forwards chat workspace type for a regular topic", async () => {
 		const chat = vi.fn().mockResolvedValue(successResponse)
 		const service = createService(chat)
 
@@ -521,47 +561,35 @@ describe("MessageSendService / conversation_message_sent", () => {
 					workspace_type: "chat",
 				} as never,
 			},
-			options: {
-				extra: { super_agent: { topic_pattern: topicPattern } },
-			},
 		})
 
 		await vi.waitFor(() => expect(track).toHaveBeenCalledTimes(1))
 		expect(track).toHaveBeenCalledWith(
-			"conversation_message_sent",
-			expect.objectContaining({
-				conversation_type: conversationType,
-				topic_mode: topicPattern,
-			}),
+			"conversation_message_send_attempted",
+			expect.objectContaining({ workspaceType: "chat", topicMode: TopicMode.General }),
 		)
 	})
 
-	it("maps chat workspace to chat for a regular topic", async () => {
+	it("prefers a registered Claw outbound topic mode over the topic record", async () => {
+		registerConversationTopicModeOverride("topic-1", TopicMode.MagiClaw)
 		const chat = vi.fn().mockResolvedValue(successResponse)
 		const service = createService(chat)
 
 		await service.dispatchMessage({
 			content: "hello",
 			showLoading: false,
-			selectedProject: { id: "project-1", workspace_id: "chat-workspace" } as never,
 			selectedTopic: {
 				id: "topic-1",
 				chat_topic_id: "chat-topic-1",
 				chat_conversation_id: "conversation-1",
 				topic_mode: TopicMode.General,
 			} as Topic,
-			context: {
-				selectedWorkspace: {
-					id: "chat-workspace",
-					workspace_type: "chat",
-				} as never,
-			},
 		})
 
 		await vi.waitFor(() => expect(track).toHaveBeenCalledTimes(1))
 		expect(track).toHaveBeenCalledWith(
-			"conversation_message_sent",
-			expect.objectContaining({ conversation_type: "chat" }),
+			"conversation_message_send_attempted",
+			expect.objectContaining({ topicMode: TopicMode.MagiClaw }),
 		)
 	})
 })

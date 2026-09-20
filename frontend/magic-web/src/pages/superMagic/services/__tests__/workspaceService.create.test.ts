@@ -2,17 +2,8 @@ import { beforeEach, describe, expect, it, vi } from "vitest"
 import { SuperMagicApi } from "@/apis"
 
 const trackMock = vi.hoisted(() => vi.fn())
-
-vi.mock("@/apis", () => ({
-	SuperMagicApi: {
-		createWorkspace: vi.fn(),
-	},
-}))
-
-vi.mock("@/services/analytics", () => ({
-	track: trackMock,
-}))
-
+vi.mock("@/apis", () => ({ SuperMagicApi: { createWorkspace: vi.fn() } }))
+vi.mock("@/services/analytics", () => ({ analyticsService: { report: trackMock } }))
 vi.mock("@/pages/superMagic/stores/core/workspace", () => ({
 	default: {
 		beginWorkspaceListFetch: vi.fn(),
@@ -23,78 +14,29 @@ vi.mock("@/pages/superMagic/stores/core/workspace", () => ({
 		getWorkspaceById: vi.fn(),
 	},
 }))
-
 vi.mock("@/pages/superMagic/stores/core/project", () => ({
-	default: {
-		selectedProject: null,
-		setSelectedProject: vi.fn(),
-	},
+	default: { selectedProject: null, setSelectedProject: vi.fn() },
 }))
-
 vi.mock("@/pages/superMagic/services/orderUtils", () => ({
 	getInsertIndexByAnchors: vi.fn(),
 	isSameOrder: vi.fn(),
 }))
-
 vi.mock("@/pages/superMagic/services/orderErrorReporter", () => ({
 	createOrderRequestOptions: vi.fn(),
 	reportOrderApiError: vi.fn(),
 }))
-
 vi.mock("@/pages/superMagic/services/workspaceListSearchInvalidation", () => ({
 	invalidateWorkspaceSearchResults: vi.fn(),
 }))
 
 import WorkspaceService from "../workspaceService"
 
-describe("WorkspaceService workspace_created analytics", () => {
-	let workspaceService: InstanceType<typeof WorkspaceService>
+describe("WorkspaceService attempt analytics", () => {
+	beforeEach(() => vi.clearAllMocks())
 
-	beforeEach(() => {
-		vi.clearAllMocks()
-		workspaceService = new WorkspaceService()
-	})
-
-	it("reports workspace_id from the create response", async () => {
-		vi.mocked(SuperMagicApi.createWorkspace).mockResolvedValue({
-			id: "workspace-9",
-			name: "New",
-		} as never)
-
-		await expect(workspaceService.createWorkspace("New")).resolves.toMatchObject({
-			id: "workspace-9",
-		})
-
-		expect(trackMock).toHaveBeenCalledTimes(1)
-		expect(trackMock).toHaveBeenCalledWith("workspace_created", {
-			workspace_id: "workspace-9",
-		})
-	})
-
-	it("does not report when the response has no id", async () => {
-		vi.mocked(SuperMagicApi.createWorkspace).mockResolvedValue({
-			id: "",
-			name: "New",
-		} as never)
-
-		await expect(workspaceService.createWorkspace("New")).resolves.toBeNull()
-		expect(trackMock).not.toHaveBeenCalled()
-	})
-
-	it("does not report when the response id is blank", async () => {
-		vi.mocked(SuperMagicApi.createWorkspace).mockResolvedValue({
-			id: "   ",
-			name: "New",
-		} as never)
-
-		await expect(workspaceService.createWorkspace("New")).resolves.toBeNull()
-		expect(trackMock).not.toHaveBeenCalled()
-	})
-
-	it("does not report when createWorkspace fails", async () => {
+	it("reports before a failed request", async () => {
 		vi.mocked(SuperMagicApi.createWorkspace).mockRejectedValue(new Error("create-failed"))
-
-		await expect(workspaceService.createWorkspace("New")).rejects.toThrow("create-failed")
-		expect(trackMock).not.toHaveBeenCalled()
+		await expect(new WorkspaceService().createWorkspace("New")).rejects.toThrow("create-failed")
+		expect(trackMock).toHaveBeenCalledWith("workspace_create_attempted", {})
 	})
 })

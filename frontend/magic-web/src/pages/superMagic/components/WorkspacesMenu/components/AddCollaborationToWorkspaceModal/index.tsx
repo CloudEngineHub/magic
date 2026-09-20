@@ -12,7 +12,7 @@ import { useIsMobile } from "@/hooks/useIsMobile"
 import MagicPopup from "@/components/base-mobile/MagicPopup"
 import { SuperMagicApi } from "@/apis"
 import magicToast from "@/components/base/MagicToaster/utils"
-import { trackWorkspaceCreated } from "@/pages/superMagic/services/trackCreatedEntities"
+import { analyticsService } from "@/services/analytics"
 
 interface AddCollaborationToWorkspaceModalProps {
 	workspaces: Workspace[]
@@ -94,11 +94,11 @@ export function AddCollaborationToWorkspaceModal({
 			const trimmedName = newWorkspaceName.trim()
 			if (trimmedName) {
 				setIsCreatingWorkspaceLoading(true)
+				analyticsService.report("workspace_create_attempted", {})
 				const res = await SuperMagicApi.createWorkspace({
 					workspace_name: trimmedName,
 				})
 				if (res?.id) {
-					trackWorkspaceCreated(res)
 					fetchWorkspaces({
 						isAutoSelect: false,
 						isSelectLast: false,

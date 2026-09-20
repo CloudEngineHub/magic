@@ -31,7 +31,7 @@ import type {
 	StoreSkillItem,
 	UpdateSkillInfoParams,
 } from "@/apis/modules/skills"
-import { markPendingEntityCreation, track } from "@/services/analytics"
+import { analyticsService } from "@/services/analytics"
 
 export type { SkillDetailResponse }
 
@@ -182,11 +182,12 @@ export class SkillsService {
 	}
 
 	async createEmptySkill(): Promise<{ id?: string; code: string }> {
+		analyticsService.report("skill_create_attempted", { source_type: "empty" })
+		// An empty Skill also provisions its project and default topic asynchronously.
+		analyticsService.report("project_create_attempted", { sceneOverride: "skill" })
 		const data = await SkillsApi.createSkill()
 		const code = this.resolveCreatedSkillCode(data)
 		if (!code) throw new Error("create-skill-missing-code")
-		track("skill_created", { skill_code: code, source_type: "empty" })
-		await markPendingEntityCreation({ scene: "skill", resourceCode: code })
 		return {
 			id: data.id,
 			code,
@@ -194,14 +195,13 @@ export class SkillsService {
 	}
 
 	async addSkillFromStore(storeSkillId: string, knownSkillCode?: string) {
+		analyticsService.report("skill_create_attempted", { source_type: "store" })
 		const result = await SkillsApi.addSkillFromStore({ store_skill_id: storeSkillId })
 		const skillCode =
 			this.resolveSkillCodeFromUnknown(result) ??
 			this.storeSkillCodes.get(String(storeSkillId)) ??
 			knownSkillCode?.trim()
-		if (skillCode) {
-			track("skill_created", { skill_code: skillCode, source_type: "store" })
-		}
+		void skillCode
 		return result
 	}
 
@@ -222,16 +222,8 @@ export class SkillsService {
 	}
 
 	async importSkill(params: ImportSkillParams): Promise<ImportSkillResponse> {
+		analyticsService.report("skill_create_attempted", { source_type: "import" })
 		const result = await SkillsApi.importSkill(params)
-		const skillCode = result?.skill_code?.trim()
-		if (skillCode) {
-			track("skill_created", {
-				skill_code: skillCode,
-				// The API distinguishes GitHub/local/etc.; analytics intentionally folds
-				// every non-empty creation path into the PRD's single `import` bucket.
-				source_type: "import",
-			})
-		}
 		return result
 	}
 

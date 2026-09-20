@@ -6,11 +6,6 @@ import { createMentionPanelStore } from "@/components/business/MentionPanel/buil
 import { TopicStore } from "@/pages/superMagic/stores/core/topic"
 import { ProjectFilesStore } from "@/stores/projectFiles"
 import type { ProjectListItem, TaskStatus, Workspace } from "../../Workspace/types"
-import {
-	trackProjectCreated,
-	trackTopicCreated,
-} from "@/pages/superMagic/services/trackCreatedEntities"
-import { takeMagicClawCreationPending } from "@/pages/superMagic/pages/MagiClawPage/magicClawCreationAnalytics"
 
 const SANDBOX_VERSION_CHECK_POLL_INTERVAL_MS = 10 * 60 * 1000
 const VALID_MAGIC_CLAW_STATUS_SET = new Set<MagicClawStatus>(Object.values(MAGIC_CLAW_STATUS))
@@ -356,34 +351,12 @@ export class ClawPlaygroundRootStore {
 			let topics = response.list ?? []
 			let selectedTopic =
 				topics.find((topic) => topic.id === project.current_topic_id) ?? topics[0] ?? null
-			let createdFallbackTopic = false
-
 			if (!selectedTopic) {
 				selectedTopic = await SuperMagicApi.createTopic({
 					project_id: project.id,
 					topic_name: "",
 				})
-				createdFallbackTopic = Boolean(selectedTopic)
 				topics = selectedTopic ? [selectedTopic] : []
-			}
-
-			// The playground is the first point where the authoritative project/topic
-			// pair is guaranteed; the creation page hands off by stable claw code.
-			const isNewMagicClaw = selectedTopic
-				? await takeMagicClawCreationPending(clawCode)
-				: false
-			if (selectedTopic && isNewMagicClaw) {
-				trackProjectCreated(
-					{ project, topic: selectedTopic },
-					project.workspace_id,
-					"magic_claw",
-				)
-			} else if (selectedTopic && createdFallbackTopic) {
-				trackTopicCreated(selectedTopic, {
-					projectId: project.id,
-					workspaceId: project.workspace_id,
-					scene: "magic_claw",
-				})
 			}
 
 			let mergedMagicClaw: MagicClawItem = magicClaw

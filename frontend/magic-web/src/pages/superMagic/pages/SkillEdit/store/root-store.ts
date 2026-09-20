@@ -19,7 +19,6 @@ import {
 	SKILL_CONFIG_RELATIVE_PATH,
 	buildSkillMdRelativePath,
 } from "../utils/skill-workspace-manifest"
-import { reportPendingSkillCreatedEntities } from "./services/report-skill-created-entities"
 
 export class SkillEditRootStore {
 	skill: SkillEditSkillInfo | null = null
@@ -98,11 +97,6 @@ export class SkillEditRootStore {
 
 			if (projectId) {
 				await this.conversation.loadProjectContext(projectId)
-				await reportPendingSkillCreatedEntities({
-					skillCode: code,
-					project: this.conversation.selectedProject,
-					topics: this.conversation.topicStore.topics,
-				})
 			}
 
 			runInAction(() => {

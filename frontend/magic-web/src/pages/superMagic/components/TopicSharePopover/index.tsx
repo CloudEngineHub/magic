@@ -20,7 +20,7 @@ import {
 	useTopicShareTypePermissions,
 } from "../Share/hooks/useTopicShareTypePermissions"
 import { generateSharePassword, generateTopicShareMessageText } from "../Share/utils"
-import { trackContentShared } from "../Share/utils/trackContentShared"
+import { analyticsService } from "@/services/analytics"
 import { SharePasswordField } from "../Share/ShareFields"
 import { useStyles } from "./styles"
 import { cn } from "@/utils/cn"
@@ -260,6 +260,9 @@ function TopicSharePopoverContent({
 					const password = passwordEnabled
 						? settings.password || generateSharePassword()
 						: ""
+					analyticsService.report("content_share_attempted", {
+						resourceType: ResourceType.Topic,
+					})
 					await SuperMagicApi.createShareTopic({
 						resource_id: topicId,
 						resource_type: ResourceType.Topic,
@@ -270,12 +273,6 @@ function TopicSharePopoverContent({
 							view_file_list: settings.showFileList,
 						},
 					})
-					// Re-enabling an existing topic share is a new user share action as well.
-					trackContentShared({
-						resourceId: topicId,
-						resourceType: ResourceType.Topic,
-					})
-
 					const shareUrl = `${window.location.origin}/share/topic/${topicId}`
 					const finalShareUrl = password ? `${shareUrl}?password=${password}` : shareUrl
 					setSettings((prev) => ({

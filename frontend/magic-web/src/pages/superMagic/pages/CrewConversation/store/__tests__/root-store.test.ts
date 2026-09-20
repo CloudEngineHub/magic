@@ -46,7 +46,7 @@ vi.mock("@/services/superMagic/SuperMagicModeService", () => ({
 }))
 
 vi.mock("@/services/analytics", () => ({
-	track: analyticsTrackMock,
+	analyticsService: { report: analyticsTrackMock },
 }))
 
 vi.mock("@/components/business/MentionPanel/builtin-store", () => ({
@@ -359,15 +359,8 @@ describe("CrewConversationStore", () => {
 		expect(SuperMagicApi.getSpecialProject).toHaveBeenCalledWith({ key: "agent-id-1" })
 		expect(store.selectedProject?.id).toBe("project-1")
 		expect(store.selectedTopic?.id).toBe("topic-1")
-		expect(analyticsTrackMock).toHaveBeenCalledWith("crew_project_created", {
-			project_id: "project-1",
-			workspace_id: "workspace-1",
-		})
-		expect(analyticsTrackMock).toHaveBeenCalledWith("crew_topic_created", {
-			topic_id: "topic-1",
-			project_id: "project-1",
-			workspace_id: "workspace-1",
-		})
+		// Bootstrapping a lazily provisioned Crew project is not a user create attempt.
+		expect(analyticsTrackMock).not.toHaveBeenCalled()
 	})
 
 	it("does not report entity creation when the employee special project already exists", async () => {
@@ -388,10 +381,9 @@ describe("CrewConversationStore", () => {
 
 		expect(store.status).toBe("ready")
 		expect(analyticsTrackMock).not.toHaveBeenCalledWith(
-			"crew_project_created",
+			"project_create_attempted",
 			expect.anything(),
 		)
-		expect(analyticsTrackMock).not.toHaveBeenCalledWith("crew_topic_created", expect.anything())
 	})
 
 	it("uses the validated employee id to create the special project", async () => {
