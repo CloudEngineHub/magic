@@ -508,7 +508,7 @@ describe("createStorageQuotaPlugin", () => {
 			namespace: "storageQuota",
 			data: {
 				eventKey: "storage_quota_exceeded",
-				errorKind: "quota_exceeded",
+				errorKind: "quota",
 			},
 		})
 		vi.advanceTimersByTime(REPORT_COOLDOWN_MS)

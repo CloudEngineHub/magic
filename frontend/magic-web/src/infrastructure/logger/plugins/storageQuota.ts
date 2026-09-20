@@ -1,4 +1,12 @@
 import type { LoggerPlugin } from "../types"
+import {
+	STORAGE_QUOTA_EXCEEDED_ERROR_KIND,
+	STORAGE_QUOTA_EXCEEDED_EVENT_KEY,
+	claimStorageQuotaReport,
+	isQuotaExceeded,
+} from "../storageFailure"
+
+export { isQuotaExceeded } from "../storageFailure"
 
 /** Usage ratio that, together with the 1 GiB floor, marks a high-fill origin. */
 const QUOTA_RATIO_THRESHOLD = 0.7
@@ -8,14 +16,6 @@ const QUOTA_RATIO_MIN_USAGE_BYTES = 1 * 1024 ** 3
 const QUOTA_ABSOLUTE_USAGE_BYTES = 2 * 1024 ** 3
 /** Wait this long after a refresh before taking the one-shot snapshot. */
 const SNAPSHOT_DELAY_MS = 30 * 1000
-/** Same tab, same event: at most one cloud report inside this window. */
-const REPORT_COOLDOWN_MS = 3 * 60 * 60 * 1000
-/** sessionStorage flag prefix; value is a timestamp only, never usage or keys. */
-const REPORT_SESSION_KEY_PREFIX = "mw.sq."
-/** Legacy DOMException.code for quota errors (WebKit / older browsers). */
-const LEGACY_QUOTA_ERROR_CODE = 22
-/** Firefox nsresult mapped onto DOMException.code for quota errors. */
-const FIREFOX_QUOTA_ERROR_CODE = 1014
 /** Counts, bytes, and timings below this are noise and are omitted from cloud logs. */
 const MIN_REPORTABLE_NUMBER = 50
 
@@ -65,19 +65,6 @@ export interface StorageQuotaHighReportData {
 	indexedDB?: IndexedDBReportCount[]
 	cacheCountDurationMs?: number
 	indexedDBCountDurationMs?: number
-}
-
-/** Identify QuotaExceededError across Chromium, legacy WebKit codes, and Firefox names. */
-export function isQuotaExceeded(error: unknown): boolean {
-	if (!error || typeof error !== "object") return false
-	const name = "name" in error ? String(error.name) : ""
-	const code = "code" in error ? Number(error.code) : Number.NaN
-	return (
-		name === "QuotaExceededError" ||
-		name === "NS_ERROR_DOM_QUOTA_REACHED" ||
-		code === LEGACY_QUOTA_ERROR_CODE ||
-		code === FIREFOX_QUOTA_ERROR_CODE
-	)
 }
 
 /**
@@ -359,29 +346,6 @@ function scheduleIdle(run: () => void): () => void {
 	return () => clearTimeout(timer)
 }
 
-/**
- * Allow one report per event per page, and at most one per tab inside 3 hours.
- * A later refresh can report again only after the cooldown has elapsed.
- */
-function shouldReportEvent(eventKey: string, reportedThisPage: Set<string>): boolean {
-	if (reportedThisPage.has(eventKey)) return false
-	const storageKey = `${REPORT_SESSION_KEY_PREFIX}${eventKey}`
-	const now = Date.now()
-	try {
-		const last = Number(sessionStorage.getItem(storageKey))
-		if (Number.isFinite(last) && last > 0 && now - last < REPORT_COOLDOWN_MS) return false
-	} catch {
-		// sessionStorage unavailable: still gate to once per page via reportedThisPage.
-	}
-	reportedThisPage.add(eventKey)
-	try {
-		sessionStorage.setItem(storageKey, String(now))
-	} catch {
-		// Ignore write failures; the in-memory gate already recorded this page.
-	}
-	return true
-}
-
 /** Keep a numeric log field only when it is large enough to be diagnostically useful. */
 function isReportableNumber(value: number): boolean {
 	return value >= MIN_REPORTABLE_NUMBER
@@ -456,12 +420,13 @@ export function createStorageQuotaPlugin(): LoggerPlugin {
 			}
 			const reportQuotaError = (error: unknown) => {
 				if (!isQuotaExceeded(error)) return
-				if (!shouldReportEvent("storage_quota_exceeded", reportedThisPage)) return
+				if (!claimStorageQuotaReport(STORAGE_QUOTA_EXCEEDED_EVENT_KEY, reportedThisPage))
+					return
 				logger.report({
 					namespace: "storageQuota",
 					data: {
-						eventKey: "storage_quota_exceeded",
-						errorKind: "quota_exceeded",
+						eventKey: STORAGE_QUOTA_EXCEEDED_EVENT_KEY,
+						errorKind: STORAGE_QUOTA_EXCEEDED_ERROR_KIND,
 					},
 				})
 			}
@@ -473,7 +438,7 @@ export function createStorageQuotaPlugin(): LoggerPlugin {
 				const snapshot = await collectStorageSnapshot(noteFault)
 				if (signal.aborted || !snapshot || !isHighQuota(snapshot.usage, snapshot.quota))
 					return
-				if (!shouldReportEvent("storage_quota_high", reportedThisPage)) return
+				if (!claimStorageQuotaReport("storage_quota_high", reportedThisPage)) return
 				logger.report({
 					namespace: "storageQuota",
 					data: toReadableHighQuotaData(snapshot),
