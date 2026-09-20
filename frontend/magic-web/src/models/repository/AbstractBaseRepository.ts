@@ -1,7 +1,7 @@
 import type { IndexableType, Table, UpdateSpec } from "dexie"
 import type Dexie from "dexie"
 import { logger as Logger } from "@/infrastructure/logger"
-import { isQuotaExceeded, reportCaughtStorageFailure } from "@/app/services/logger/storageFailure"
+import { isQuotaExceeded, reportCaughtStorageFailure } from "@/app/services/storage/storageFailure"
 
 const logger = Logger.createLogger("repository")
 

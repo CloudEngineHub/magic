@@ -4,7 +4,7 @@ import { logger as Logger } from "@/infrastructure/logger"
 import {
 	STORAGE_QUOTA_EXCEEDED_ERROR_KIND,
 	STORAGE_QUOTA_EXCEEDED_EVENT_KEY,
-} from "@/app/services/logger/storageFailure"
+} from "@/app/services/storage/storageFailure"
 
 const logger = Logger.createLogger("database")
 

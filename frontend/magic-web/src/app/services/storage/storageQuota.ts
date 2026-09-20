@@ -1,16 +1,16 @@
 import type { LoggerPlugin } from "@/infrastructure/logger/types"
-import { isQuotaExceeded } from "@/infrastructure/logger/storage/quota"
+import { isQuotaExceeded } from "./quota"
 import {
 	collectStorageSnapshot,
 	type CacheBucketCount,
 	type IndexedDBDatabaseCount,
 	type StorageQuotaSnapshot,
-} from "@/infrastructure/logger/storage/snapshot"
+} from "./snapshot"
 import {
 	STORAGE_QUOTA_EXCEEDED_ERROR_KIND,
 	STORAGE_QUOTA_EXCEEDED_EVENT_KEY,
 	claimStorageQuotaReport,
-} from "../storageFailure"
+} from "./storageFailure"
 
 /** Usage ratio that, together with the 1 GiB floor, marks a high-fill origin. */
 const QUOTA_RATIO_THRESHOLD = 0.7

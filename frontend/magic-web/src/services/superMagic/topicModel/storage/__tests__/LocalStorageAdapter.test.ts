@@ -1,12 +1,12 @@
 import { describe, expect, it, beforeEach, afterEach, vi } from "vitest"
 import { LocalStorageAdapter } from "../LocalStorageAdapter"
-import { reportCaughtStorageFailure } from "@/app/services/logger/storageFailure"
+import { reportCaughtStorageFailure } from "@/app/services/storage/storageFailure"
 
 const { reportCaughtStorageFailure: reportCaughtStorageFailureMock } = vi.hoisted(() => ({
 	reportCaughtStorageFailure: vi.fn(),
 }))
 
-vi.mock("@/app/services/logger/storageFailure", () => ({
+vi.mock("@/app/services/storage/storageFailure", () => ({
 	reportCaughtStorageFailure: reportCaughtStorageFailureMock,
 }))
 

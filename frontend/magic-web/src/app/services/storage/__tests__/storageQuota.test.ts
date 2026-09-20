@@ -6,7 +6,7 @@ import {
 	formatByteSize,
 	formatRatioPercent,
 	toReadableHighQuotaData,
-} from "../plugins/storageQuota"
+} from "../storageQuota"
 
 const ONE_GIB = 1024 ** 3
 const TWO_GIB = 2 * 1024 ** 3

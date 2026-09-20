@@ -1,5 +1,5 @@
 import { platformKey } from "@/utils/storage"
-import { reportCaughtStorageFailure } from "@/app/services/logger/storageFailure"
+import { reportCaughtStorageFailure } from "@/app/services/storage/storageFailure"
 
 /** Resolve the current localStorage object at call time so tests can stub it. */
 function webStorage(): globalThis.Storage {

@@ -1,7 +1,7 @@
 import { logger } from "@/infrastructure/logger"
-import { isQuotaExceeded } from "@/infrastructure/logger/storage/quota"
+import { isQuotaExceeded } from "./quota"
 
-export { isQuotaExceeded } from "@/infrastructure/logger/storage/quota"
+export { isQuotaExceeded } from "./quota"
 
 /** Query this eventKey for every origin-quota-exceeded signal. */
 export const STORAGE_QUOTA_EXCEEDED_EVENT_KEY = "storage_quota_exceeded"

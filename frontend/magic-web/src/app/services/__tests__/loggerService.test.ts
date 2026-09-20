@@ -30,7 +30,7 @@ vi.mock("@/infrastructure/logger/plugins", () => ({
 	createPageDwellPlugin: () => ({ name: "pageDwell", setup: () => undefined }),
 	createDevicePlugin: () => ({ name: "device", setup: () => undefined }),
 }))
-vi.mock("../logger/plugins/storageQuota", () => ({
+vi.mock("../storage/storageQuota", () => ({
 	createStorageQuotaPlugin: () => ({ name: "storageQuota", setup: () => undefined }),
 }))
 

@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { afterEach, describe, expect, it, vi } from "vitest"
-import { isQuotaExceeded } from "../storage/quota"
-import { countAllCaches, countIndexedDBRecords, measureWebStorageBytes } from "../storage/snapshot"
+import { isQuotaExceeded } from "../quota"
+import { countAllCaches, countIndexedDBRecords, measureWebStorageBytes } from "../snapshot"
 
 afterEach(() => {
 	vi.restoreAllMocks()
