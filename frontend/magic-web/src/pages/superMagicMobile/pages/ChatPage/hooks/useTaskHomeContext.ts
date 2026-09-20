@@ -6,6 +6,7 @@ import magicToast from "@/components/base/MagicToaster/utils"
 import { platformKey } from "@/utils/storage"
 import SuperMagicService from "@/pages/superMagic/services"
 import { TopicStore } from "@/pages/superMagic/stores/core/topic"
+import { workspaceStore } from "@/pages/superMagic/stores/core"
 import type {
 	CreatedProject,
 	ProjectListItem,
@@ -160,6 +161,9 @@ export function useTaskHomeContext(
 		beforeSend: validateWorkspace,
 		onSendSuccess: ({ currentProject, currentTopic }) => {
 			if (!mountedRef.current || !currentProject || !currentTopic) return
+			// switchProjectInMobile can navigate straight to the new topic only when the
+			// destination workspace is already available in the global route context.
+			if (workspace) workspaceStore.setSelectedWorkspace(workspace)
 			void SuperMagicService.switchProjectInMobile(currentProject, currentTopic.id)
 		},
 		// Destination changes preserve the same task draft; chat has a separate draft scope.

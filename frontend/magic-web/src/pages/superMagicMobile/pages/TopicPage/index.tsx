@@ -644,6 +644,9 @@ function TopicPage({
 							setSelectedTopic={topicStore.setSelectedTopic}
 							onFileClick={onFileClick}
 							selectedWorkspace={selectedWorkspace}
+							// Conversation details keep the default employee fixed; only the message editor remains.
+							showModeToggle={false}
+							showModelSelector={false}
 							attachments={attachments}
 							isShowLoadingInit={isShowLoadingInit}
 							enableReEditMessageFromPubSub

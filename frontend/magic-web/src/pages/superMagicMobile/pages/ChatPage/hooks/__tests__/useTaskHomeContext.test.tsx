@@ -21,6 +21,9 @@ vi.mock("@/pages/superMagic/services", () => ({
 		switchProjectInMobile: mocks.navigate,
 	},
 }))
+vi.mock("@/pages/superMagic/stores/core", () => ({
+	workspaceStore: { setSelectedWorkspace: vi.fn() },
+}))
 
 const workspace = (id: string, type = "default") =>
 	({ id, name: id, workspace_type: type, is_archived: 0 }) as Workspace
@@ -157,5 +160,20 @@ describe("mobile task home destination", () => {
 		unmount()
 		await act(async () => finish({ list: [workspace("old-account")] }))
 		expect(localStorage.getItem("MAGIC:mobile-task-workspace:org:user")).toBeNull()
+	})
+
+	it("opens the newly created topic instead of stopping at the project list", async () => {
+		const { result } = renderHook(() => useTaskHomeContext("org:user", null))
+		await waitFor(() => expect(result.current.workspace?.id).toBe("personal"))
+		act(() =>
+			result.current.context.onSendSuccess?.({
+				currentProject: { id: "project", workspace_id: "personal" } as never,
+				currentTopic: { id: "topic", project_id: "project" } as never,
+			}),
+		)
+		expect(mocks.navigate).toHaveBeenCalledWith(
+			expect.objectContaining({ id: "project" }),
+			"topic",
+		)
 	})
 })
