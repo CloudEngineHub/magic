@@ -127,7 +127,7 @@ const TopicFilesButton = forwardRef<TopicFilesButtonRef, TopicFilesButtonProps>(
 			filterBatchDownloadLayerMenuItems,
 			allowDownload,
 			allowCopyTo = false,
-			showRefresh = true,
+			showRefresh,
 			resolveTopicFileRowDecoration,
 			fileHelpContext,
 			mobileViewVariant = "default",

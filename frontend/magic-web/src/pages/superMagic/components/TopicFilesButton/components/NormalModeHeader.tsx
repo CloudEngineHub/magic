@@ -32,6 +32,8 @@ interface NormalModeHeaderProps {
 	/** Hide the section label; keep search and refresh actions. */
 	showTitle?: boolean
 	isShareRoute: boolean
+	/** Explicit refresh visibility; defaults to hidden on share routes. */
+	showRefresh?: boolean
 	refreshLoading: boolean
 	allowEdit: boolean
 	showMobileActions?: boolean
@@ -59,6 +61,7 @@ function NormalModeHeader({
 	title,
 	showTitle = true,
 	isShareRoute,
+	showRefresh,
 	refreshLoading,
 	allowEdit,
 	showMobileActions = false,
@@ -88,6 +91,7 @@ function NormalModeHeader({
 	const toggleAllFoldersLabel = allFoldersExpanded
 		? t("fileTree.collapseAll")
 		: (expandAllLabel ?? t("fileTree.expandAll"))
+	const shouldShowRefresh = showRefresh ?? !isShareRoute
 
 	const actions = (
 		<div
@@ -188,7 +192,7 @@ function NormalModeHeader({
 					</MagicTooltip>
 				</div>
 			)}
-			{!isShareRoute && (
+			{shouldShowRefresh && (
 				<MagicTooltip title={t("topicFiles.refreshList")}>
 					<button
 						className="flex h-6 w-6 items-center justify-center rounded-md bg-transparent transition-colors hover:bg-accent"

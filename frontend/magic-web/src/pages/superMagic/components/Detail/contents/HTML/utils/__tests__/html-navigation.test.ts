@@ -2,7 +2,9 @@ import { describe, expect, it } from "vitest"
 import {
 	getHtmlNavigationKey,
 	isHtmlPreviewShellNavigation,
+	normalizeHtmlPreviewPath,
 	parseHtmlNavigationRequest,
+	resolveRootHtmlIndexFallback,
 } from "../html-navigation"
 
 describe("parseHtmlNavigationRequest", () => {
@@ -98,5 +100,35 @@ describe("isHtmlPreviewShellNavigation", () => {
 		expect(isHtmlPreviewShellNavigation("./index.html", shell)).toBe(false)
 		expect(isHtmlPreviewShellNavigation("/index.html", shell)).toBe(false)
 		expect(isHtmlPreviewShellNavigation("https://other.example/index.html", shell)).toBe(false)
+	})
+})
+
+describe("html preview path matching", () => {
+	it("normalizes slashes, leading dots, and repeated relative prefixes", () => {
+		expect(normalizeHtmlPreviewPath("\\index.html")).toBe("index.html")
+		expect(normalizeHtmlPreviewPath("././index.html")).toBe("index.html")
+		expect(normalizeHtmlPreviewPath("/admin/index.html")).toBe("admin/index.html")
+	})
+
+	it("only falls back to a unique root index.html path", () => {
+		const nested = {
+			file_id: "nested",
+			file_name: "index.html",
+			relative_file_path: "admin/index.html",
+		}
+		const emptyPath = {
+			file_id: "empty",
+			file_name: "index.html",
+			relative_file_path: "",
+		}
+		const root = {
+			file_id: "root",
+			file_name: "index.html",
+			relative_file_path: "index.html",
+		}
+
+		expect(resolveRootHtmlIndexFallback("index.html", [nested, emptyPath])).toBeUndefined()
+		expect(resolveRootHtmlIndexFallback("index.html", [nested, emptyPath, root])).toEqual(root)
+		expect(resolveRootHtmlIndexFallback("pages/home.html", [root])).toBeUndefined()
 	})
 })

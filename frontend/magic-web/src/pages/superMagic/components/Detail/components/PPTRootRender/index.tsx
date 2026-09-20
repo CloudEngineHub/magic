@@ -137,6 +137,7 @@ export default memo(function PPTRootRender(props: PPTRootRenderProps) {
 		onUnregisterCheckBeforeClose,
 		slideStructureAdapter,
 		disableMagicProjectLookup = false,
+		showRefresh,
 	} = props
 
 	const [filePathMapping, setFilePathMapping] = useState<Map<string, string>>(new Map())
@@ -498,6 +499,7 @@ export default memo(function PPTRootRender(props: PPTRootRenderProps) {
 					}}
 					isTabActive={props.isTabActive}
 					allowDownload={allowDownload}
+					showRefresh={showRefresh}
 					onRegisterCheckBeforeClose={onRegisterCheckBeforeClose}
 					onUnregisterCheckBeforeClose={onUnregisterCheckBeforeClose}
 					slideStructureAdapter={slideStructureAdapter}

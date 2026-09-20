@@ -172,6 +172,7 @@ const PublishedMicroAppConversationSurface = observer(
 		})
 
 		useEffect(() => {
+			let cancelled = false
 			const handleUpdateAttachments = (
 				payloadOrCallback?: SuperMagicUpdateAttachmentsRequest,
 			) => {
@@ -182,11 +183,7 @@ const PublishedMicroAppConversationSurface = observer(
 					return
 				}
 				if (payload.projectId && payload.projectId !== pid) {
-					// The event targets a different project; this subscriber is not
-					// responsible for it. Still invoke the callback so the publisher
-					// is not left waiting indefinitely (e.g. holding a lock or a
-					// loading indicator) when the matching subscriber is absent.
-					payload.callback?.()
+					// Another subscriber owns this project; do not complete its wait.
 					return
 				}
 				loadProjectAttachments({
@@ -194,7 +191,9 @@ const PublishedMicroAppConversationSurface = observer(
 					enableErrorMessagePrompt: false,
 				})
 					.then((attachmentResult) => {
-						handleAttachmentsChange(attachmentResult)
+						if (!cancelled) {
+							handleAttachmentsChange(attachmentResult)
+						}
 						payload.callback?.()
 					})
 					.catch((error) => {
@@ -205,6 +204,7 @@ const PublishedMicroAppConversationSurface = observer(
 
 			pubsub.subscribe(PubSubEvents.Update_Attachments, handleUpdateAttachments)
 			return () => {
+				cancelled = true
 				pubsub.unsubscribe(PubSubEvents.Update_Attachments, handleUpdateAttachments)
 			}
 		}, [handleAttachmentsChange, runtimeProject?.id])

@@ -1163,6 +1163,95 @@ describe("PublishedMicroAppConversationProvider", () => {
 			expect.arrayContaining([expect.objectContaining({ file_id: "file-99" })]),
 		)
 	})
+
+	it("does not invoke the update callback when the event targets another project", async () => {
+		vi.mocked(SuperMagicApi.getMicroAppRuntimeProject).mockResolvedValue({
+			exists: true,
+			project: { id: "runtime-project-1" },
+		} as never)
+		vi.mocked(SuperMagicApi.getProjectDetail).mockResolvedValue({
+			id: "runtime-project-1",
+		} as never)
+		vi.mocked(SuperMagicApi.getTopicsByProjectId).mockResolvedValue({ list: [] } as never)
+		vi.mocked(loadProjectAttachments).mockResolvedValue({
+			tree: [],
+			list: [],
+		} as never)
+
+		render(
+			<PublishedMicroAppConversationProvider appId="app-1">
+				<div />
+			</PublishedMicroAppConversationProvider>,
+		)
+
+		await waitFor(() => {
+			expect(layoutMocks.messagePanelProps?.selectedProject).toMatchObject({
+				id: "runtime-project-1",
+			})
+		})
+
+		const loadCount = vi.mocked(loadProjectAttachments).mock.calls.length
+		const callback = vi.fn()
+
+		await act(async () => {
+			pubsub.publish(PubSubEvents.Update_Attachments, {
+				projectId: "other-project",
+				callback,
+			})
+		})
+
+		expect(callback).not.toHaveBeenCalled()
+		expect(vi.mocked(loadProjectAttachments)).toHaveBeenCalledTimes(loadCount)
+	})
+
+	it("ignores stale attachment refreshes after unmount", async () => {
+		const refresh = createDeferred<{ tree: unknown[]; list: unknown[] }>()
+		vi.mocked(SuperMagicApi.getMicroAppRuntimeProject).mockResolvedValue({
+			exists: true,
+			project: { id: "runtime-project-1" },
+		} as never)
+		vi.mocked(SuperMagicApi.getProjectDetail).mockResolvedValue({
+			id: "runtime-project-1",
+		} as never)
+		vi.mocked(SuperMagicApi.getTopicsByProjectId).mockResolvedValue({ list: [] } as never)
+		vi.mocked(loadProjectAttachments)
+			.mockResolvedValueOnce({
+				tree: [{ file_id: "file-1", file_name: "index.html", type: "file" }],
+				list: [{ file_id: "file-1", file_name: "index.html", type: "file" }],
+			} as never)
+			.mockReturnValueOnce(refresh.promise as never)
+
+		const view = render(
+			<PublishedMicroAppConversationProvider appId="app-1">
+				<div />
+			</PublishedMicroAppConversationProvider>,
+		)
+
+		await waitFor(() => {
+			expect(layoutMocks.messagePanelProps?.selectedProject).toMatchObject({
+				id: "runtime-project-1",
+			})
+		})
+
+		const filesStore = layoutMocks.messagePanelProps?.projectFilesStore as ProjectFilesStore
+
+		await act(async () => {
+			pubsub.publish(PubSubEvents.Update_Attachments, { projectId: "runtime-project-1" })
+		})
+
+		view.unmount()
+		await act(async () => {
+			refresh.resolve({
+				tree: [{ file_id: "stale-file", file_name: "stale.html", type: "file" }],
+				list: [{ file_id: "stale-file", file_name: "stale.html", type: "file" }],
+			})
+			await refresh.promise
+		})
+
+		expect(filesStore.workspaceFilesList).not.toEqual(
+			expect.arrayContaining([expect.objectContaining({ file_id: "stale-file" })]),
+		)
+	})
 })
 
 function createDeferred<T>() {

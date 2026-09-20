@@ -145,6 +145,8 @@ export class AppRootStore {
 		this.runtimeProjectAppId = null
 		this.runtimeProjectState = "unknown"
 		this.usageConversation.reset()
+		// Clear stale files before the next runtime project hydrates.
+		this.runtimeProjectFilesStore.setSelectedProject(null)
 		const promise = (async () => {
 			const result = await SuperMagicApi.ensureMicroAppRuntimeProject(appId)
 			if (!isCurrent()) throw new Error(RUNTIME_PROJECT_LOAD_SUPERSEDED)

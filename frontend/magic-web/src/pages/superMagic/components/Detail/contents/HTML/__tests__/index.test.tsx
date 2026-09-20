@@ -524,7 +524,10 @@ vi.mock("../../../components/CommonHeaderV2", () => ({
 		}
 
 		return (
-			<div data-testid="common-header">
+			<div
+				data-testid="common-header"
+				data-show-refresh={String(Boolean(props.showRefreshButton))}
+			>
 				{props.actionConfig?.customActions
 					?.filter((action) => {
 						if (typeof action.visible === "function") return action.visible(context)
@@ -838,7 +841,7 @@ describe("HTML", () => {
 		)
 	})
 
-	it("safely falls back to root candidate with missing relative_file_path while ignoring nested files", async () => {
+	it("does not fall back to an index.html with an empty relative path", async () => {
 		const openFileTab = vi.fn()
 		const currentFile = {
 			file_id: "file-1",
@@ -867,10 +870,18 @@ describe("HTML", () => {
 		await waitFor(() => expect(mockIsolatedHTMLRendererProps).toHaveBeenCalled())
 		const props = mockIsolatedHTMLRendererProps.mock.lastCall?.[0]
 		act(() => props.openNewTab("file-1", "/index.html", false))
-		expect(openFileTab).toHaveBeenCalledWith(
-			expect.objectContaining({ file_id: "root-without-path" }),
-			false,
-		)
+		expect(openFileTab).not.toHaveBeenCalled()
+	})
+
+	it("hides the HTML refresh action when showRefresh is false", async () => {
+		render(<HTML {...baseProps} viewMode="desktop" isEditMode={false} showRefresh={false} />)
+
+		await waitFor(() => {
+			expect(screen.getByTestId("common-header")).toHaveAttribute(
+				"data-show-refresh",
+				"false",
+			)
+		})
 	})
 
 	it("does not fall back to nested entry even with backslash paths", async () => {

@@ -41,7 +41,12 @@ import { Flex, Tour } from "antd"
 import { shadow } from "@/utils/shadow"
 import CodeEditor from "@/components/base/CodeEditor"
 import { scrollToAnchor } from "@/utils/slug"
-import { getHtmlNavigationKey, parseHtmlNavigationRequest } from "./utils/html-navigation"
+import {
+	getHtmlNavigationKey,
+	normalizeHtmlPreviewPath,
+	parseHtmlNavigationRequest,
+	resolveRootHtmlIndexFallback,
+} from "./utils/html-navigation"
 import { HTMLGuideTourElementId, useHTMLGuideTour } from "@/pages/superMagic/hooks/useHTMLGuideTour"
 import pubsub, { PubSubEvents } from "@/utils/pubsub"
 import MagicSpin from "@/components/base/MagicSpin"
@@ -181,6 +186,8 @@ interface HTMLProps {
 	virtualStorageMarkerId?: string
 	/** 分享预览不拉项目文件版本，走分享下载 */
 	isSharePreview?: boolean
+	/** Controls whether the HTML header exposes the manual refresh action. */
+	showRefresh?: boolean
 }
 
 interface HtmlExportActionProps {
@@ -282,6 +289,7 @@ export default memo(function HTML(props: HTMLProps) {
 		microAppName,
 		virtualStorageMarkerId,
 		isSharePreview = false,
+		showRefresh = true,
 	} = props
 	// origin：显式传入的项目，缺省时用当前选中项目
 	const runtimeProjectId = projectId ?? selectedProject?.id
@@ -1229,56 +1237,29 @@ export default memo(function HTML(props: HTMLProps) {
 			return
 		}
 
-		const normalizePath = (p?: string) =>
-			(p || "").replace(/\\/g, "/").replace(/^\/+/, "").replace(/^\.\//, "")
-
-		const relativePath = fileItem.relative_file_path.replace(fileItem.file_name, "")
-		let newPath = filePath
-			? filePath.startsWith("/")
-				? filePath.replace(/^\/+/, "")
-				: resolveRelativePath(relativePath, filePath)
+		const requestedPath = filePath ? filePath.replace(/\\/g, "/") : ""
+		const relativePath = normalizeHtmlPreviewPath(
+			fileItem.relative_file_path.replace(fileItem.file_name, ""),
+		)
+		let newPath = requestedPath
+			? requestedPath.startsWith("/")
+				? requestedPath.replace(/^\/+/, "")
+				: resolveRelativePath(relativePath, requestedPath)
 			: fileItem.relative_file_path
 
-		// 标准化路径：统一斜杠、移除前导 / 和 ./
-		newPath = normalizePath(newPath)
+		newPath = normalizeHtmlPreviewPath(newPath)
 
-		// 根路径或空路径 fallback 到 index.html
+		// Empty or directory paths resolve to the directory's index.html.
 		if (!newPath || newPath.endsWith("/")) {
 			newPath = `${newPath}index.html`
 		}
 
 		let item = attachmentList?.find((attachment: any) => {
-			return normalizePath(attachment.relative_file_path) === newPath
+			return normalizeHtmlPreviewPath(attachment.relative_file_path) === newPath
 		})
 
-		// 若未直接匹配且目标为根 index.html，仅在候选文件明确位于项目根目录时进行兜底查找
-		if (!item && /^index\.html?$/i.test(newPath)) {
-			const rootCandidates = attachmentList?.filter((attachment: any) => {
-				const name = attachment.file_name || attachment.name || ""
-				if (!/^index\.html?$/i.test(name)) return false
-
-				const candidatePath = normalizePath(attachment.relative_file_path)
-				// 若包含子目录路径分隔符，则明确为嵌套入口，排除兜底
-				if (candidatePath.includes("/")) return false
-
-				// 仅允许路径未指定、为空、或正好等于根 index.html/index.htm
-				return !candidatePath || /^index\.html?$/i.test(candidatePath)
-			})
-
-			if (rootCandidates && rootCandidates.length > 0) {
-				if (rootCandidates.length === 1) {
-					item = rootCandidates[0]
-				} else {
-					// 存在多个候选时，优先选择与 newPath 文件名精确一致的根目录候选
-					const exactNameCandidates = rootCandidates.filter((attachment: any) => {
-						const name = (attachment.file_name || attachment.name || "").toLowerCase()
-						return name === newPath.toLowerCase()
-					})
-					if (exactNameCandidates.length === 1) {
-						item = exactNameCandidates[0]
-					}
-				}
-			}
+		if (!item) {
+			item = resolveRootHtmlIndexFallback(newPath, attachmentList)
 		}
 
 		if (item) {
@@ -1629,7 +1610,7 @@ export default memo(function HTML(props: HTMLProps) {
 		isEditMode,
 		fileVersion: activeHistory.fileVersion,
 		isNewestFileVersion: activeHistory.isNewestVersion,
-		showRefreshButton: true,
+		showRefreshButton: showRefresh,
 		changeFileVersion: activeHistory.changeFileVersion,
 		fileVersionsList: activeHistory.fileVersionsList,
 		handleVersionRollback: activeHistory.handleVersionRollback,
