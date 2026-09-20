@@ -1505,8 +1505,18 @@ class AgentContext(BaseAgentContext):
             pass
 
     def get_streaming_sinks(self) -> list:
-        """返回当前所有额外流式推送目标列表。"""
-        return self.shared_context.get_field("streaming_sinks") or []
+        """返回当前所有额外流式推送目标列表。
+
+        本地 /subscribe 是进程级单例：子 Agent 不继承 streaming_sinks，
+        但只要调试面板连着，主 / 子请求都要把 chunk 抄过去。
+        """
+        sinks = list(self.shared_context.get_field("streaming_sinks") or [])
+        from app.streaming.local_subscribe_driver import get_local_subscribe_driver
+
+        local_driver = get_local_subscribe_driver()
+        if local_driver.has_subscribers() and local_driver not in sinks:
+            sinks.append(local_driver)
+        return sinks
 
     # ====== 消息版本协商 ======
 
