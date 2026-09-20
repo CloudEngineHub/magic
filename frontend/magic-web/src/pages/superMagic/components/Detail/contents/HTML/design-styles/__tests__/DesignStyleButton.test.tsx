@@ -5,8 +5,16 @@ import { designStyleFixture } from "./fixtures"
 
 const { publish } = vi.hoisted(() => ({ publish: vi.fn() }))
 
-vi.mock("react-i18next", () => ({
-	useTranslation: () => ({ t: (key: string) => key }),
+vi.mock("react-i18next", async (importOriginal) => {
+	const actual = await importOriginal<typeof import("react-i18next")>()
+	return {
+		...actual,
+		useTranslation: () => ({ t: (key: string) => key }),
+	}
+})
+
+vi.mock("@/pages/superMagic/components/Detail/components/EditToolbar/ConditionalTooltip", () => ({
+	default: ({ children }: { children: React.ReactNode }) => children,
 }))
 
 vi.mock("@/utils/pubsub", () => ({
@@ -51,5 +59,43 @@ describe("DesignStyleButton", () => {
 			"Set_Input_Message",
 			expect.objectContaining({ type: "doc" }),
 		)
+	})
+
+	it("renders button label when showButtonText is true", () => {
+		render(
+			<DesignStyleButton
+				fileInfo={{
+					fileId: "file-1",
+					fileName: "index.html",
+					filePath: "pages/index.html",
+				}}
+				showButtonText={true}
+			/>,
+		)
+
+		const button = screen.getByRole("button", { name: "htmlEditor.designStyle.open" })
+		expect(button).toBeInTheDocument()
+		expect(button).toHaveTextContent("htmlEditor.designStyle.open")
+		expect(button.className).toContain("px-3")
+		expect(button.className).toContain("gap-1.5")
+	})
+
+	it("hides button label and uses compact padding when showButtonText is false", () => {
+		render(
+			<DesignStyleButton
+				fileInfo={{
+					fileId: "file-1",
+					fileName: "index.html",
+					filePath: "pages/index.html",
+				}}
+				showButtonText={false}
+			/>,
+		)
+
+		const button = screen.getByRole("button", { name: "htmlEditor.designStyle.open" })
+		expect(button).toBeInTheDocument()
+		expect(button).not.toHaveTextContent("htmlEditor.designStyle.open")
+		expect(button.className).toContain("px-1.5")
+		expect(button.className).not.toContain("gap-1.5")
 	})
 })

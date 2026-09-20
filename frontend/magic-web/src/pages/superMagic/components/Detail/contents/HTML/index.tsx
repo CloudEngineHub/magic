@@ -50,7 +50,9 @@ import { inlineDashboardDataJs } from "./dashboard/resourceVersioning"
 import { useDashboardVersioning } from "./dashboard/useDashboardVersioning"
 import { useAIEditMenuItems } from "@/pages/superMagic/components/Detail/components/EditToolbar/useAIEditMenuItems"
 import FileEditButtons from "@/pages/superMagic/components/Detail/components/EditToolbar/FileEditButtons"
+import ConditionalTooltip from "@/pages/superMagic/components/Detail/components/EditToolbar/ConditionalTooltip"
 import ActionButton from "@/pages/superMagic/components/Detail/components/CommonHeader/components/ActionButton"
+import { cn } from "@/utils/cn"
 import { ProjectListItem } from "@/pages/superMagic/pages/Workspace/types"
 import CommonFooter from "../../components/CommonFooter"
 import { useIsMobile } from "@/hooks/useIsMobile"
@@ -1471,38 +1473,50 @@ export default memo(function HTML(props: HTMLProps) {
 											"",
 									}}
 									showButtonText={context.showButtonText}
+									getPopupContainer={context.getPopupContainer}
 									testId={
 										htmlTestIdsEnabled ? "html-design-style-button" : undefined
 									}
 								/>
 							)}
 							{showAIOptimizationButton && !isEditMode && (
-								<Button
-									variant="outline"
-									size="sm"
-									onClick={() => void handleQuickSelection()}
-									aria-pressed={isQuickSelecting}
-									aria-label={quickSelectionLabel}
+								<ConditionalTooltip
+									showText={Boolean(context.showButtonText)}
 									title={quickSelectionTitle}
-									className="h-6 gap-1.5 rounded-[8px] px-3 py-0 text-xs font-normal text-foreground shadow-xs"
-									data-testid={
-										htmlTestIdsEnabled ? "html-ai-pick-button" : undefined
-									}
+									getPopupContainer={context.getPopupContainer}
 								>
-									<Crosshair
-										size={16}
-										className={isQuickSelecting ? "text-primary" : undefined}
-									/>
-									{context.showButtonText && (
-										<span
+									<Button
+										variant="outline"
+										size="sm"
+										onClick={() => void handleQuickSelection()}
+										aria-pressed={isQuickSelecting}
+										aria-label={quickSelectionLabel}
+										title={quickSelectionTitle}
+										className={cn(
+											"h-6 rounded-[8px] py-0 text-xs font-normal text-foreground shadow-xs",
+											context.showButtonText ? "gap-1.5 px-3" : "px-1.5",
+										)}
+										data-testid={
+											htmlTestIdsEnabled ? "html-ai-pick-button" : undefined
+										}
+									>
+										<Crosshair
+											size={16}
 											className={
 												isQuickSelecting ? "text-primary" : undefined
 											}
-										>
-											{quickSelectionLabel}
-										</span>
-									)}
-								</Button>
+										/>
+										{context.showButtonText && (
+											<span
+												className={
+													isQuickSelecting ? "text-primary" : undefined
+												}
+											>
+												{quickSelectionLabel}
+											</span>
+										)}
+									</Button>
+								</ConditionalTooltip>
 							)}
 							{effectiveShowFileEditButton && (
 								<FileEditButtons
@@ -1519,6 +1533,7 @@ export default memo(function HTML(props: HTMLProps) {
 									onSave={handleSave}
 									onSaveAndExit={handleSaveAndExit}
 									onCancel={handleCancel}
+									getPopupContainer={context.getPopupContainer}
 								/>
 							)}
 						</div>

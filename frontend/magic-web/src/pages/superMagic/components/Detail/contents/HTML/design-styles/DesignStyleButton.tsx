@@ -4,6 +4,8 @@ import { Button } from "@/components/shadcn-ui/button"
 import { useTranslation } from "react-i18next"
 import pubsub, { PubSubEvents } from "@/utils/pubsub"
 import type { JSONContent } from "@/infrastructure/editors/tiptap/react"
+import { cn } from "@/utils/cn"
+import ConditionalTooltip from "@/pages/superMagic/components/Detail/components/EditToolbar/ConditionalTooltip"
 import DesignStyleDialog from "./DesignStyleDialog"
 import { buildDesignStylePromptContent } from "./designStylePrompt"
 import type { DesignStyle } from "./catalog"
@@ -17,13 +19,15 @@ interface DesignStyleButtonProps {
 	showButtonText?: boolean
 	disabled?: boolean
 	testId?: string
+	getPopupContainer?: () => HTMLElement | null
 }
 
 export default function DesignStyleButton({
 	fileInfo,
-	showButtonText = true,
+	showButtonText = false,
 	disabled = false,
 	testId,
+	getPopupContainer,
 }: DesignStyleButtonProps) {
 	const { t } = useTranslation("super")
 	const [open, setOpen] = useState(false)
@@ -56,21 +60,32 @@ export default function DesignStyleButton({
 		[fileInfo.fileId, fileInfo.fileName, fileInfo.filePath],
 	)
 
+	const label = t("htmlEditor.designStyle.open")
+
 	return (
 		<>
-			<Button
-				variant="outline"
-				size="sm"
-				disabled={disabled}
-				onClick={() => setOpen(true)}
-				className="h-6 gap-1.5 rounded-[8px] px-3 py-0 text-xs font-normal shadow-xs"
-				title={t("htmlEditor.designStyle.open")}
-				aria-label={t("htmlEditor.designStyle.open")}
-				data-testid={testId}
+			<ConditionalTooltip
+				showText={Boolean(showButtonText)}
+				title={label}
+				getPopupContainer={getPopupContainer}
 			>
-				<Palette className="size-4" />
-				{showButtonText && <span>{t("htmlEditor.designStyle.open")}</span>}
-			</Button>
+				<Button
+					variant="outline"
+					size="sm"
+					disabled={disabled}
+					onClick={() => setOpen(true)}
+					className={cn(
+						"h-6 rounded-[8px] py-0 text-xs font-normal shadow-xs",
+						showButtonText ? "gap-1.5 px-3" : "gap-0 px-1.5",
+					)}
+					title={label}
+					aria-label={label}
+					data-testid={testId}
+				>
+					<Palette className="size-4" />
+					{showButtonText && <span>{label}</span>}
+				</Button>
+			</ConditionalTooltip>
 			<DesignStyleDialog
 				open={open}
 				onOpenChange={handleOpenChange}
