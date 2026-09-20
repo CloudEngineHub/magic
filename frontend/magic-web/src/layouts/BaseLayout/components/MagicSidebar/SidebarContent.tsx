@@ -1,6 +1,6 @@
 import { useEffect, useState, type MouseEvent } from "react"
 import { useLocation } from "react-router"
-import { ChevronRight, Home, LayoutGrid, MessageCircle } from "lucide-react"
+import { ChevronRight, LayoutGrid, MessageCircle, SquarePen } from "lucide-react"
 import { useTranslation } from "react-i18next"
 import ProjectNavigation from "./ProjectNavigation"
 import { MicroAppsSidebarMenuItem } from "./MicroAppsSidebarMenuItem"
@@ -82,7 +82,7 @@ function SidebarContent({ collapsed, onBusyChange, onSelect }: SidebarContentPro
 							onClick={handleNavigateToSuperHome}
 							className="text-current no-underline"
 						>
-							<Home className="h-4 w-4 shrink-0" />
+							<SquarePen className="h-4 w-4 shrink-0" />
 							<span className="flex-1 overflow-hidden text-ellipsis whitespace-nowrap text-left text-sm leading-5">
 								{t("sidebar:home.title")}
 							</span>
