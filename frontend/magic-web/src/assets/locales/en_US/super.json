@@ -294,6 +294,7 @@
 		"emptyTitle": "No conversations yet",
 		"minutesAgo": "{{count}} minutes ago",
 		"newChat": "New chat",
+		"newConversation": "New conversation",
 		"searchPlaceholder": "Search",
 		"swipeDelete": "Delete",
 		"swipeMore": "More",

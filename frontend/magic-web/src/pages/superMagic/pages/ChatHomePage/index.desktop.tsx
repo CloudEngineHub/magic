@@ -1,20 +1,19 @@
 import { observer } from "mobx-react-lite"
 import { useLocation } from "react-router"
-import { useTranslation } from "react-i18next"
 import { userStore } from "@/models/user"
 import Container from "../../components/MainInputContainer"
 import { useFeaturedModeListRefreshOnAgentsPageMount } from "../../hooks/useFeaturedModeListRefresh"
 import { useChatHomeContext } from "./useChatHomeContext"
+import ChatConversationSwitcher from "./components/ChatConversationSwitcher"
 
 const ChatHomeComposer = observer(function ChatHomeComposer() {
-	const { t } = useTranslation("sidebar")
 	const editorContext = useChatHomeContext()
 	useFeaturedModeListRefreshOnAgentsPageMount()
 
 	return (
 		<div className="flex flex-1 flex-col items-center overflow-hidden rounded-xl border border-border bg-background">
-			<div className="flex h-12 w-full shrink-0 items-center px-3 text-sm font-medium">
-				{t("chats.newChat")}
+			<div className="flex h-12 w-full shrink-0 items-center px-3">
+				<ChatConversationSwitcher />
 			</div>
 			<Container editorContext={editorContext} />
 		</div>

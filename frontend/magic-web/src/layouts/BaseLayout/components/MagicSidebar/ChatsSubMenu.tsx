@@ -50,6 +50,8 @@ type ChatsSubMenuProps = {
 	standalone?: boolean
 	/** Embedded workspace lists retain loaded pages and use a bounded child viewport. */
 	workspace?: boolean
+	/** Allow page-level callers to place the same list beside their own trigger. */
+	placement?: string
 	active?: boolean
 	onBusyChange?: (busy: boolean) => void
 	onSelect?: () => void
@@ -89,6 +91,7 @@ const ChatsSubMenu = forwardRef<ChatsSubMenuHandle, ChatsSubMenuProps>(function 
 		onOpenChange,
 		standalone = false,
 		workspace = false,
+		placement = "rightTop",
 		active = false,
 		onBusyChange,
 		onSelect,
@@ -452,7 +455,7 @@ const ChatsSubMenu = forwardRef<ChatsSubMenuHandle, ChatsSubMenuProps>(function 
 
 	return (
 		<MagicDropdown
-			placement="rightTop"
+			placement={placement}
 			popupRender={renderPopup}
 			open={open}
 			onOpenChange={handleSubMenuOpenChange}
