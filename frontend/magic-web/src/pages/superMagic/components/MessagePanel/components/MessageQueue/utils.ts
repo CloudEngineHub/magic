@@ -1,6 +1,10 @@
 import type { JSONContent } from "@/infrastructure/editors/tiptap/core"
 import i18n from "i18next"
 import type { QueuedMessage } from "../../hooks/useMessageQueue"
+import { INSPECTOR_DETAIL_TYPE } from "@/pages/superMagic/components/MessageEditor/extensions/inspector-detail/const"
+import { getInspectorDetailHeaderLabel } from "@/pages/superMagic/components/MessageEditor/extensions/inspector-detail/display"
+import { transformInspectorContent } from "@/pages/superMagic/components/MessageEditor/extensions/inspector-detail/transform"
+import type { InspectorDetailAttrs } from "@/pages/superMagic/components/MessageEditor/extensions/inspector-detail/types"
 
 const MENTION_PREVIEW_FALLBACKS: Record<string, string> = {
 	agent: "Agent",
@@ -40,10 +44,30 @@ function getMentionPreviewText(node: JSONContent) {
 	return `@${displayName}`
 }
 
-/** Walk TipTap JSON content so mobile previews avoid importing the full editor runtime. */
+/**
+ * 队列预览（拖拽浮层、删除确认、正文宽度测量）不在 React 上下文里，
+ * 标签文案固定走 "super" 命名空间。
+ *
+ * 这里的 key 是 display.ts / ElementInspector 里的字面量转交过来的（静态扫描仍可命中），
+ * 只能这样透传：既要拿到「已选取的元素」这类兜底文案，又不能依赖 useTranslation。
+ * 用 i18n.t 而不是 i18n.getFixedT：i18next 未初始化时前者原样返回 key，后者会抛错。
+ */
+function getInspectorLabelText(key: string) {
+	return i18n.t(key, { ns: "super" })
+}
+
+/** 序列化文本还原出来的选取元素节点，预览里取其标签文案。 */
+function getInspectorPreviewText(node: JSONContent) {
+	const attrs = node.attrs as InspectorDetailAttrs | undefined
+	if (!attrs) return ""
+	return getInspectorDetailHeaderLabel(getInspectorLabelText, attrs.textContent, attrs.tagName)
+}
+
+/** Walk TipTap JSON content into plain text; mentions and inspector chips keep their label. */
 function collectTextFromContent(node: JSONContent): string {
 	if (typeof node.text === "string") return node.text
 	if (node.type === "mention") return getMentionPreviewText(node)
+	if (node.type === INSPECTOR_DETAIL_TYPE) return getInspectorPreviewText(node)
 	if (!Array.isArray(node.content)) return ""
 
 	return node.content.map(collectTextFromContent).filter(Boolean).join(" ")
@@ -51,7 +75,11 @@ function collectTextFromContent(node: JSONContent): string {
 
 /** Normalize rich queue content into the one-line preview used by the mobile queue card. */
 export function normalizeQueuePreviewText(content: QueuedMessage["content"]) {
-	return collectTextFromContent(content).replace(/\s+/g, " ").trim()
+	// 队列里存的是 `<magic-selection>` 序列化文本，先按渲染路径还原成节点，
+	// 否则纯文本摘要会把原始标记（Type/File/Selector…）当成正文吐出来。
+	// 传副本：预览会在渲染期被调用，而 transform 的旧格式分支会就地改写节点。
+	const restored = transformInspectorContent(trimQueueContent(content))
+	return collectTextFromContent(restored).replace(/\s+/g, " ").trim()
 }
 
 /** Trim leading/trailing whitespace while preserving rich-text nodes and mentions. */
