@@ -100,13 +100,13 @@ class ServiceProviderApi extends AbstractApi
     public function searchProviderConfigs(RequestInterface $request): array
     {
         $authorization = $this->getAuthorization();
-        $searchRequest = new ProviderConfigSearchRequest($request->all());
+        $searchRequest = ProviderConfigSearchRequest::fromRequest($request);
         $page = $searchRequest->toPage();
         $result = $this->adminProviderAppService->searchProviderConfigs(
             $authorization,
             $page,
-            $searchRequest->getSearchType(),
-            $searchRequest->getKeyword()
+            $searchRequest->searchField,
+            $searchRequest->keyword
         );
 
         return ProviderConfigAssembler::toSearchPage($result, $page);

@@ -13,85 +13,46 @@ use App\ErrorCode\GenericErrorCode;
 use App\Infrastructure\Core\AbstractDTO;
 use App\Infrastructure\Core\Exception\ExceptionBuilder;
 use App\Infrastructure\Core\ValueObject\Page;
+use Hyperf\HttpServer\Contract\RequestInterface;
 
 /**
  * 服务商配置搜索请求。
  */
 class ProviderConfigSearchRequest extends AbstractDTO
 {
-    protected ?ProviderConfigSearchField $searchType = null;
+    public ProviderConfigSearchField $searchField;
 
-    protected string $keyword = '';
+    public string $keyword;
 
-    protected int $page = 1;
+    public int $page = 1;
 
-    protected int $pageSize = 20;
+    /** 单页最多 50 条。 */
+    public int $pageSize = 20;
 
-    public function __construct(array $data = [])
+    public static function fromRequest(RequestInterface $request): self
     {
-        parent::__construct($data);
-        if ($this->searchType === null) {
+        $dto = new self();
+        $searchField = ProviderConfigSearchField::tryFrom(trim((string) $request->input('search_type', '')));
+        if ($searchField === null) {
             ExceptionBuilder::throw(GenericErrorCode::ParameterValidationFailed, 'common.invalid', ['label' => 'search_type']);
         }
-        if ($this->keyword === '') {
+        $dto->searchField = $searchField;
+        $dto->keyword = trim((string) $request->input('keyword', ''));
+        if ($dto->keyword === '') {
             ExceptionBuilder::throw(GenericErrorCode::ParameterValidationFailed, 'common.empty', ['label' => 'keyword']);
         }
-        if ($this->searchType === ProviderConfigSearchField::ConfigId
-            && ! ctype_digit($this->keyword)
-            && ! ProviderVirtualIdentity::isPlatformOfficialId($this->keyword)
+        if ($searchField === ProviderConfigSearchField::ConfigId
+            && ! ctype_digit($dto->keyword)
+            && ! ProviderVirtualIdentity::isPlatformOfficialId($dto->keyword)
         ) {
             ExceptionBuilder::throw(GenericErrorCode::ParameterValidationFailed, 'common.invalid', ['label' => 'keyword']);
         }
-    }
 
-    public function getSearchType(): ProviderConfigSearchField
-    {
-        return $this->searchType;
-    }
+        $dto->page = max(1, (int) $request->input('page', 1));
+        $pageSize = (int) $request->input('page_size', 20);
+        $dto->pageSize = $pageSize <= 0 ? 20 : min($pageSize, 50);
 
-    public function setSearchType(null|ProviderConfigSearchField|string $searchType): void
-    {
-        if ($searchType instanceof ProviderConfigSearchField) {
-            $this->searchType = $searchType;
-            return;
-        }
-
-        $this->searchType = ProviderConfigSearchField::tryFrom(trim((string) $searchType));
-    }
-
-    public function getKeyword(): string
-    {
-        return $this->keyword;
-    }
-
-    public function setKeyword(null|int|string $keyword): void
-    {
-        $keyword = trim((string) $keyword);
-        if ($keyword === '') {
-            ExceptionBuilder::throw(GenericErrorCode::ParameterValidationFailed, 'common.empty', ['label' => 'keyword']);
-        }
-        $this->keyword = $keyword;
-    }
-
-    public function getPage(): int
-    {
-        return $this->page;
-    }
-
-    public function setPage(null|int|string $page): void
-    {
-        $this->page = max(1, (int) $page);
-    }
-
-    public function getPageSize(): int
-    {
-        return $this->pageSize;
-    }
-
-    public function setPageSize(null|int|string $pageSize): void
-    {
-        $pageSize = (int) $pageSize;
-        $this->pageSize = $pageSize > 0 ? min($pageSize, 50) : 20;
+        return $dto;
     }
 
     public function toPage(): Page

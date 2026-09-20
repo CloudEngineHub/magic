@@ -65,7 +65,7 @@ final class ModelCallAuditArchiveService
     }
 
     /**
-     * @return array{source_count: int, target_count: int, source_start_id: string, source_end_id: string, completed_bucket_count: int}
+     * @return array{request_count: int, row_count: int, bucket_count: int}
      */
     public function archiveDate(string $statDate): array
     {
@@ -77,13 +77,11 @@ final class ModelCallAuditArchiveService
             $this->archiveTaskRecordDomainService->complete(
                 self::ARCHIVE_TYPE,
                 $statDate,
-                $result['target_count'],
-                $result['source_start_id'],
-                $result['source_end_id'],
-                [
-                    'source_count' => $result['source_count'],
-                    'target_count' => $result['target_count'],
-                    'completed_bucket_count' => $result['completed_bucket_count'],
+                $result['row_count'],
+                extra: [
+                    'request_count' => $result['request_count'],
+                    'row_count' => $result['row_count'],
+                    'bucket_count' => $result['bucket_count'],
                 ]
             );
             return $result;

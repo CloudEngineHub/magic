@@ -48,6 +48,7 @@ class AuditService
         string $direction = 'next'
     ): array {
         $pageSize = ($pageSize <= 0 || $pageSize > 100) ? 20 : $pageSize;
+        $filters = $this->normalizeProviderFilters($filters);
         $result = $this->modelCallAuditDomainService->queries(
             $pageSize,
             $filters,
@@ -104,53 +105,117 @@ class AuditService
         $startMs = (int) ($filters['start_operation_time'] ?? 0);
         $endMs = (int) ($filters['end_operation_time'] ?? 0);
         $timezone = $this->statisticsDisplayTimezone();
+        $window = $this->splitStatisticsWindow($startMs, $endMs, $timezone);
+
+        $historyRaw = $this->loadHistoryFromHourly(
+            $filters,
+            $window,
+            $timezone,
+            $currentOrganizationCode,
+            $isOfficialOrganization
+        );
+        $todayRaw = $this->loadTodayFromLogs(
+            $filters,
+            $window,
+            $timezone,
+            $currentOrganizationCode,
+            $isOfficialOrganization
+        );
+
+        if ($historyRaw === null) {
+            if ($todayRaw === null) {
+                return $this->mergeStatisticsRaw(null, null, $startMs, $endMs, $window['byHour']);
+            }
+            $todayRaw['trend']['start_ms'] = $startMs;
+            $todayRaw['trend']['end_ms'] = $endMs;
+
+            return $todayRaw;
+        }
+
+        return $this->mergeStatisticsRaw($historyRaw, $todayRaw, $startMs, $endMs, $window['byHour']);
+    }
+
+    /**
+     * @return array{
+     *     byHour: bool,
+     *     historyStartMs: ?int,
+     *     historyEndMs: ?int,
+     *     todayStartMs: ?int,
+     *     todayEndMs: ?int
+     * }
+     */
+    private function splitStatisticsWindow(int $startMs, int $endMs, DateTimeZone $timezone): array
+    {
         $todayStart = (new DateTimeImmutable('today', $timezone))->getTimestamp() * 1000;
         $tomorrowStart = (new DateTimeImmutable('tomorrow', $timezone))->getTimestamp() * 1000;
-        $hourly = ($endMs - $startMs) <= 86400000;
-
-        if ($startMs >= $todayStart) {
-            $todayFilters = $filters;
-            $todayFilters['start_operation_time'] = $startMs;
-            $todayFilters['end_operation_time'] = min($endMs, $tomorrowStart);
-            return $this->modelCallAuditDomainService->statistics(
-                $todayFilters,
-                $currentOrganizationCode,
-                $isOfficialOrganization
-            );
-        }
-
         $historyEndMs = min($endMs, $todayStart);
-        $historyRaw = null;
-        if ($startMs < $historyEndMs) {
-            $historyFilters = $filters;
-            $historyFilters['start_bucket_at'] = $this->formatDateTime($startMs, $timezone);
-            $historyFilters['end_bucket_at'] = $this->formatDateTime($historyEndMs, $timezone);
-            $historyRaw = $this->modelCallAuditDomainService->statisticsFromHourlyRecords(
-                $historyFilters,
-                $currentOrganizationCode,
-                $isOfficialOrganization,
-                $hourly
-            );
-        }
-
-        $todayRaw = null;
         $todayStartMs = max($startMs, $todayStart);
         $todayEndMs = min($endMs, $tomorrowStart);
-        if ($todayStartMs < $todayEndMs) {
-            $todayFilters = $filters;
-            $todayFilters['start_operation_time'] = $todayStartMs;
-            $todayFilters['end_operation_time'] = $todayEndMs;
-            $todayRaw = $this->modelCallAuditDomainService->statistics(
-                $todayFilters,
-                $currentOrganizationCode,
-                $isOfficialOrganization
-            );
-            if (! $hourly) {
-                $todayRaw = $this->normalizeRawTrendToDay($todayRaw, $timezone);
-            }
+
+        return [
+            'byHour' => ($endMs - $startMs) <= 86400000,
+            'historyStartMs' => $startMs < $historyEndMs ? $startMs : null,
+            'historyEndMs' => $startMs < $historyEndMs ? $historyEndMs : null,
+            'todayStartMs' => $todayStartMs < $todayEndMs ? $todayStartMs : null,
+            'todayEndMs' => $todayStartMs < $todayEndMs ? $todayEndMs : null,
+        ];
+    }
+
+    /**
+     * @param array<string, mixed> $filters
+     * @param array{byHour: bool, historyStartMs: ?int, historyEndMs: ?int, todayStartMs: ?int, todayEndMs: ?int} $window
+     */
+    private function loadHistoryFromHourly(
+        array $filters,
+        array $window,
+        DateTimeZone $timezone,
+        string $currentOrganizationCode,
+        bool $isOfficialOrganization
+    ): ?array {
+        if ($window['historyStartMs'] === null || $window['historyEndMs'] === null) {
+            return null;
         }
 
-        return $this->mergeStatisticsRaw($historyRaw, $todayRaw, $startMs, $endMs, $hourly);
+        $historyFilters = $filters;
+        $historyFilters['start_bucket_at'] = $this->formatDateTime($window['historyStartMs'], $timezone);
+        $historyFilters['end_bucket_at'] = $this->formatDateTime($window['historyEndMs'], $timezone);
+
+        return $this->modelCallAuditDomainService->statisticsFromHourlyRecords(
+            $historyFilters,
+            $currentOrganizationCode,
+            $isOfficialOrganization,
+            $window['byHour']
+        );
+    }
+
+    /**
+     * @param array<string, mixed> $filters
+     * @param array{byHour: bool, historyStartMs: ?int, historyEndMs: ?int, todayStartMs: ?int, todayEndMs: ?int} $window
+     */
+    private function loadTodayFromLogs(
+        array $filters,
+        array $window,
+        DateTimeZone $timezone,
+        string $currentOrganizationCode,
+        bool $isOfficialOrganization
+    ): ?array {
+        if ($window['todayStartMs'] === null || $window['todayEndMs'] === null) {
+            return null;
+        }
+
+        $todayFilters = $filters;
+        $todayFilters['start_operation_time'] = $window['todayStartMs'];
+        $todayFilters['end_operation_time'] = $window['todayEndMs'];
+        $todayRaw = $this->modelCallAuditDomainService->statistics(
+            $todayFilters,
+            $currentOrganizationCode,
+            $isOfficialOrganization
+        );
+        if ($window['byHour']) {
+            return $todayRaw;
+        }
+
+        return $this->normalizeRawTrendToDay($todayRaw, $timezone);
     }
 
     private function formatDateTime(int $timestampMs, DateTimeZone $timezone): string
@@ -190,9 +255,8 @@ class AuditService
         ?array $right,
         int $startMs,
         int $endMs,
-        bool $hourly
-    ): array
-    {
+        bool $byHour
+    ): array {
         $summary = [
             'total' => 0,
             'error' => 0,
@@ -211,7 +275,7 @@ class AuditService
                 $summary[$key] += (int) ($raw['summary'][$key] ?? 0);
             }
             foreach ($raw['trend']['rows'] ?? [] as $row) {
-                $key = $hourly
+                $key = $byHour
                     ? (int) ($row['bucket_ms'] ?? 0)
                     : (string) ($row['bucket_day'] ?? '');
                 if (! isset($trend[$key])) {
@@ -244,7 +308,7 @@ class AuditService
 
         ksort($trend);
         $trendRows = array_map(
-            static fn (int|string $bucket, array $value): array => $hourly
+            static fn (int|string $bucket, array $value): array => $byHour
                 ? ['bucket_ms' => (int) $bucket, 'requests' => $value['requests'], 'errors' => $value['errors']]
                 : ['bucket_day' => (string) $bucket, 'requests' => $value['requests'], 'errors' => $value['errors']],
             array_keys($trend),
@@ -254,7 +318,7 @@ class AuditService
         return [
             'summary' => $summary,
             'trend' => [
-                'bucket_type' => $hourly ? 'hour' : 'day',
+                'bucket_type' => $byHour ? 'hour' : 'day',
                 'rows' => $trendRows,
                 'start_ms' => $startMs,
                 'end_ms' => $endMs,

@@ -19,6 +19,8 @@ use Hyperf\Database\Model\Builder;
 
 class AuditLogRepository extends AbstractRepository implements AuditLogRepositoryInterface
 {
+    use AuditStatisticsQuery;
+
     public function create(AuditLogEntity $entity): void
     {
         $model = new AuditLogModel();
@@ -99,20 +101,10 @@ class AuditLogRepository extends AbstractRepository implements AuditLogRepositor
         if (! empty($filters['status'])) {
             $builder->where('status', (string) $filters['status']);
         }
-        if (! empty($filters['product_code'])) {
-            $keyword = addcslashes((string) $filters['product_code'], '%_') . '%';
-            $builder->where('product_code', 'like', $keyword);
-        }
-        if (! empty($filters['model_version'])) {
-            $keyword = addcslashes((string) $filters['model_version'], '%_') . '%';
-            $builder->where('model_version', 'like', $keyword);
-        }
-        if (! empty($filters['provider_name'])) {
-            $builder->where('provider_name', (string) $filters['provider_name']);
-        }
-        if (! empty($filters['service_provider_config_id'])) {
-            $builder->where('service_provider_config_id', (int) $filters['service_provider_config_id']);
-        }
+        $this->applyIndexedPrefixLike($builder, 'product_code', $filters);
+        $this->applyIndexedPrefixLike($builder, 'model_version', $filters);
+        $this->applyIndexedPrefixLike($builder, 'provider_name', $filters);
+        $this->applyServiceProviderConfigFilter($builder, $filters);
         if (! empty($filters['user_id'])) {
             $builder->where('user_id', (string) $filters['user_id']);
         }
@@ -291,9 +283,7 @@ class AuditLogRepository extends AbstractRepository implements AuditLogRepositor
         $builder->whereNotIn('type', $this->excludedStatisticsTypes());
 
         $this->applyServiceProviderConfigFilter($builder, $filters);
-        if (! empty($filters['product_code'])) {
-            $builder->where('product_code', (string) $filters['product_code']);
-        }
+        $this->applyIndexedPrefixLike($builder, 'product_code', $filters);
         if (! empty($filters['access_scope'])) {
             $builder->where('access_scope', (string) $filters['access_scope']);
         }
@@ -319,16 +309,9 @@ class AuditLogRepository extends AbstractRepository implements AuditLogRepositor
             "? + FLOOR((operation_time - ?) / 3600000) * 3600000 as bucket_key,
              CAST(service_provider_config_id AS CHAR) as service_provider_config_id,
              product_code,
-             COUNT(*) as cnt,
-             SUM(CASE WHEN status = ? THEN 1 ELSE 0 END) as err_cnt,
-             SUM(COALESCE(CAST(JSON_EXTRACT(`usage`, '$.prompt_tokens') AS UNSIGNED), 0)) as input_tokens,
-             SUM(COALESCE(CAST(JSON_EXTRACT(`usage`, '$.completion_tokens') AS UNSIGNED), 0)) as output_tokens,
-             SUM(COALESCE(
-                  CAST(JSON_EXTRACT(`usage`, '$.total_tokens') AS UNSIGNED),
-                  COALESCE(CAST(JSON_EXTRACT(`usage`, '$.prompt_tokens') AS UNSIGNED), 0)
-                      + COALESCE(CAST(JSON_EXTRACT(`usage`, '$.completion_tokens') AS UNSIGNED), 0),
-                  0
-              )) as total_tokens",
+             COUNT(*) as requests,
+             SUM(CASE WHEN status = ? THEN 1 ELSE 0 END) as errors,
+             " . $this->usageTokenSumSql(),
             [$startMs, $startMs, AuditStatus::FAIL->value]
         )
             ->groupBy('bucket_key', 'service_provider_config_id', 'product_code')
@@ -346,14 +329,14 @@ class AuditLogRepository extends AbstractRepository implements AuditLogRepositor
 
         foreach ($rows as $r) {
             $r = (array) $r;
-            $cnt = (int) ($r['cnt'] ?? 0);
-            $errCnt = (int) ($r['err_cnt'] ?? 0);
+            $requests = (int) ($r['requests'] ?? 0);
+            $errors = (int) ($r['errors'] ?? 0);
             $inTok = (int) ($r['input_tokens'] ?? 0);
             $outTok = (int) ($r['output_tokens'] ?? 0);
             $totTok = (int) ($r['total_tokens'] ?? 0);
 
-            $summaryTotal += $cnt;
-            $summaryError += $errCnt;
+            $summaryTotal += $requests;
+            $summaryError += $errors;
             $summaryInputTokens += $inTok;
             $summaryOutputTokens += $outTok;
             $summaryTotalTokens += $totTok;
@@ -362,8 +345,8 @@ class AuditLogRepository extends AbstractRepository implements AuditLogRepositor
             if (! isset($trendMap[$bucketKey])) {
                 $trendMap[$bucketKey] = ['requests' => 0, 'errors' => 0];
             }
-            $trendMap[$bucketKey]['requests'] += $cnt;
-            $trendMap[$bucketKey]['errors'] += $errCnt;
+            $trendMap[$bucketKey]['requests'] += $requests;
+            $trendMap[$bucketKey]['errors'] += $errors;
 
             $bKey = ($r['service_provider_config_id'] ?? '') . '||' . ($r['product_code'] ?? '');
             if (! isset($breakdownMap[$bKey])) {
@@ -374,8 +357,8 @@ class AuditLogRepository extends AbstractRepository implements AuditLogRepositor
                     'error_requests' => 0,
                 ];
             }
-            $breakdownMap[$bKey]['total_requests'] += $cnt;
-            $breakdownMap[$bKey]['error_requests'] += $errCnt;
+            $breakdownMap[$bKey]['total_requests'] += $requests;
+            $breakdownMap[$bKey]['error_requests'] += $errors;
         }
 
         $breakdown = array_values($breakdownMap);
@@ -416,24 +399,6 @@ class AuditLogRepository extends AbstractRepository implements AuditLogRepositor
             AuditType::WEB_SCRAPE->value,
             AuditType::SLIDES_TEMPLATE->value,
         ];
-    }
-
-    private function applyServiceProviderConfigFilter(Builder $builder, array $filters): void
-    {
-        if (! array_key_exists('service_provider_config_ids', $filters)) {
-            return;
-        }
-
-        $rawConfigIds = $filters['service_provider_config_ids'];
-        $configIds = is_array($rawConfigIds) ? array_values(array_unique(array_filter(
-            array_map('intval', $rawConfigIds),
-            static fn (int $id): bool => $id > 0
-        ))) : [];
-        if ($configIds === []) {
-            $builder->whereRaw('1 = 0');
-            return;
-        }
-        $builder->whereIn('service_provider_config_id', $configIds);
     }
 
 }

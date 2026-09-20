@@ -46,31 +46,6 @@ final class ArchiveTaskRecordRepository implements ArchiveTaskRecordRepositoryIn
         string $sourceEndId,
         array $extra
     ): void {
-        $record = ArchiveTaskRecordModel::query()
-            ->where('archive_type', $archiveType)
-            ->where('stat_date', $statDate)
-            ->first();
-
-        if ($record !== null
-            && $record->archive_mode === ArchiveMode::Incremental->value
-        ) {
-            if ($status === ArchiveStatus::Success) {
-                $archivedCount += (int) $record->archived_count;
-                $sourceStartId = $this->minId(
-                    (string) $record->source_start_id,
-                    $sourceStartId
-                );
-                $sourceEndId = $this->maxId(
-                    (string) $record->source_end_id,
-                    $sourceEndId
-                );
-            } else {
-                $archivedCount = (int) $record->archived_count;
-                $sourceStartId = (string) $record->source_start_id;
-                $sourceEndId = (string) $record->source_end_id;
-            }
-        }
-
         ArchiveTaskRecordModel::query()->updateOrCreate(
             ['archive_type' => $archiveType, 'stat_date' => $statDate],
             [
@@ -82,38 +57,5 @@ final class ArchiveTaskRecordRepository implements ArchiveTaskRecordRepositoryIn
                 'finished_at' => date('Y-m-d H:i:s'),
             ]
         );
-    }
-
-    private function minId(string $left, string $right): string
-    {
-        if ($left === '') {
-            return $right;
-        }
-        if ($right === '') {
-            return $left;
-        }
-        return $this->compareIds($left, $right) <= 0 ? $left : $right;
-    }
-
-    private function maxId(string $left, string $right): string
-    {
-        if ($left === '') {
-            return $right;
-        }
-        if ($right === '') {
-            return $left;
-        }
-        return $this->compareIds($left, $right) >= 0 ? $left : $right;
-    }
-
-    private function compareIds(string $left, string $right): int
-    {
-        if (ctype_digit($left) && ctype_digit($right)) {
-            $left = ltrim($left, '0') ?: '0';
-            $right = ltrim($right, '0') ?: '0';
-            return strlen($left) <=> strlen($right) ?: strcmp($left, $right);
-        }
-
-        return strcmp($left, $right);
     }
 }

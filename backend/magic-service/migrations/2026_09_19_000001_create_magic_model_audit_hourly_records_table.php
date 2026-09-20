@@ -35,8 +35,20 @@ return new class extends Migration {
                 ['organization_code', 'bucket_start_at', 'access_scope', 'service_provider_config_id', 'product_code'],
                 'uk_model_audit_hourly_dimensions'
             );
-            $table->index('bucket_start_at', 'idx_model_audit_hourly_bucket');
+            // 官方未带组织：统计 WHERE 只剩 bucket 范围
+            $table->index(['bucket_start_at', 'organization_code'], 'idx_model_audit_hourly_bucket_org');
+            // deleteDate / summarizeDate：WHERE stat_date = ?
             $table->index('stat_date', 'idx_model_audit_hourly_date');
+            // 统计接口 service_provider_config_id：工作区必有 org，等值 IN + 时间范围
+            $table->index(
+                ['organization_code', 'service_provider_config_id', 'bucket_start_at'],
+                'idx_model_audit_hourly_org_sp_bucket'
+            );
+            // 统计接口 product_code：前缀 LIKE 'x%' + 时间范围
+            $table->index(
+                ['organization_code', 'product_code', 'bucket_start_at'],
+                'idx_model_audit_hourly_org_product_bucket'
+            );
         });
     }
 

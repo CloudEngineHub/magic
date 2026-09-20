@@ -82,7 +82,7 @@ readonly class ModelCallAuditDomainService
     }
 
     /**
-     * @return array{source_count: int, target_count: int, source_start_id: string, source_end_id: string, completed_bucket_count: int}
+     * @return array{request_count: int, row_count: int, bucket_count: int}
      */
     public function rebuildHourlyDate(string $statDate): array
     {
@@ -95,7 +95,7 @@ readonly class ModelCallAuditDomainService
 
         $this->auditHourlyRecordRepository->deleteDate($statDate);
 
-        $completedBucketCount = 0;
+        $bucketCount = 0;
         for ($cursor = $dayStart; $cursor < $dayEnd; $cursor = $cursor->modify('+1 hour')) {
             $next = $cursor->modify('+1 hour');
             $this->auditHourlyRecordRepository->insertHour(
@@ -104,17 +104,15 @@ readonly class ModelCallAuditDomainService
                 $cursor->getTimestamp() * 1000,
                 $next->getTimestamp() * 1000
             );
-            ++$completedBucketCount;
+            ++$bucketCount;
         }
 
         $summary = $this->auditHourlyRecordRepository->summarizeDate($statDate);
 
         return [
-            'source_count' => $summary['source_count'],
-            'target_count' => $summary['target_count'],
-            'source_start_id' => '',
-            'source_end_id' => '',
-            'completed_bucket_count' => $completedBucketCount,
+            'request_count' => $summary['request_count'],
+            'row_count' => $summary['row_count'],
+            'bucket_count' => $bucketCount,
         ];
     }
 
@@ -126,38 +124,41 @@ readonly class ModelCallAuditDomainService
         array $filters,
         string $currentOrganizationCode,
         bool $isOfficialOrganization,
-        bool $hourly
+        bool $byHour
     ): array {
-        $trend = $this->auditHourlyRecordRepository->trend(
+        $trendRows = $this->auditHourlyRecordRepository->trend(
             $filters,
             $currentOrganizationCode,
             $isOfficialOrganization,
-            $hourly
+            $byHour
         );
         $summary = ['total' => 0, 'error' => 0, 'input_tokens' => 0, 'output_tokens' => 0, 'total_tokens' => 0];
-        $timezone = $hourly ? new DateTimeZone((string) config('app.default_timezone', 'Asia/Shanghai')) : null;
-        foreach ($trend as &$row) {
+        $timezone = $byHour ? new DateTimeZone((string) config('app.default_timezone', 'Asia/Shanghai')) : null;
+        $rows = [];
+        foreach ($trendRows as $row) {
             $summary['total'] += (int) ($row['requests'] ?? 0);
             $summary['error'] += (int) ($row['errors'] ?? 0);
             $summary['input_tokens'] += (int) ($row['input_tokens'] ?? 0);
             $summary['output_tokens'] += (int) ($row['output_tokens'] ?? 0);
             $summary['total_tokens'] += (int) ($row['total_tokens'] ?? 0);
-            unset($row['input_tokens'], $row['output_tokens'], $row['total_tokens']);
-            if ($hourly) {
-                $bucket = new DateTimeImmutable((string) $row['bucket_value'], $timezone);
-                $row['bucket_ms'] = $bucket->getTimestamp() * 1000;
-                unset($row['bucket_value']);
+            $point = [
+                'requests' => (int) ($row['requests'] ?? 0),
+                'errors' => (int) ($row['errors'] ?? 0),
+            ];
+            if ($byHour) {
+                $bucket = new DateTimeImmutable((string) $row['bucket_start_at'], $timezone);
+                $point['bucket_ms'] = $bucket->getTimestamp() * 1000;
+            } else {
+                $point['bucket_day'] = (string) ($row['bucket_day'] ?? '');
             }
+            $rows[] = $point;
         }
-        unset($row);
 
         return [
             'summary' => $summary,
             'trend' => [
-                'bucket_type' => $hourly ? 'hour' : 'day',
-                'rows' => $trend,
-                'start_ms' => (int) $filters['start_operation_time'],
-                'end_ms' => (int) $filters['end_operation_time'],
+                'bucket_type' => $byHour ? 'hour' : 'day',
+                'rows' => $rows,
             ],
             'breakdown' => $this->auditHourlyRecordRepository->breakdown(
                 $filters,

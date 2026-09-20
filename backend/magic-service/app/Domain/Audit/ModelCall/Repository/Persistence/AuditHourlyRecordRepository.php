@@ -17,6 +17,8 @@ use Hyperf\DbConnection\Db;
 
 final class AuditHourlyRecordRepository implements AuditHourlyRecordRepositoryInterface
 {
+    use AuditStatisticsQuery;
+
     public function deleteDate(string $statDate): void
     {
         AuditHourlyRecordModel::query()->where('stat_date', $statDate)->delete();
@@ -41,13 +43,9 @@ final class AuditHourlyRecordRepository implements AuditHourlyRecordRepositoryIn
                  COALESCE(product_code, '') as product_code,
                  COUNT(*) as request_count,
                  SUM(CASE WHEN status = ? THEN 1 ELSE 0 END) as error_count,
-                 SUM(COALESCE(CAST(JSON_EXTRACT(`usage`, '$.prompt_tokens') AS UNSIGNED), 0)) as input_tokens,
-                 SUM(COALESCE(CAST(JSON_EXTRACT(`usage`, '$.completion_tokens') AS UNSIGNED), 0)) as output_tokens,
-                 SUM(COALESCE(CAST(JSON_EXTRACT(`usage`, '$.total_tokens') AS UNSIGNED),
-                     COALESCE(CAST(JSON_EXTRACT(`usage`, '$.prompt_tokens') AS UNSIGNED), 0)
-                         + COALESCE(CAST(JSON_EXTRACT(`usage`, '$.completion_tokens') AS UNSIGNED), 0), 0)) as total_tokens,
+                 " . $this->usageTokenSumSql() . ',
                  NOW() as created_at,
-                 NOW() as updated_at",
+                 NOW() as updated_at',
                 [$statDate, $bucketStartAt, AuditStatus::FAIL->value]
             )
             ->groupByRaw(
@@ -78,12 +76,12 @@ final class AuditHourlyRecordRepository implements AuditHourlyRecordRepositoryIn
     {
         $row = AuditHourlyRecordModel::query()
             ->where('stat_date', $statDate)
-            ->selectRaw('COALESCE(SUM(request_count), 0) as source_count, COUNT(*) as target_count')
+            ->selectRaw('COALESCE(SUM(request_count), 0) as request_count, COUNT(*) as row_count')
             ->first();
 
         return [
-            'source_count' => (int) ($row?->source_count ?? 0),
-            'target_count' => (int) ($row?->target_count ?? 0),
+            'request_count' => (int) ($row?->request_count ?? 0),
+            'row_count' => (int) ($row?->row_count ?? 0),
         ];
     }
 
@@ -91,36 +89,23 @@ final class AuditHourlyRecordRepository implements AuditHourlyRecordRepositoryIn
         array $filters,
         string $currentOrganizationCode,
         bool $isOfficialOrganization,
-        bool $hourly
+        bool $byHour
     ): array {
         $builder = $this->createStatisticsBuilder($filters, $currentOrganizationCode, $isOfficialOrganization);
-        if ($hourly) {
-            return $builder
-                ->selectRaw(
-                    'bucket_start_at as bucket_value,
-                     SUM(request_count) as requests,
-                     SUM(error_count) as errors,
-                     SUM(input_tokens) as input_tokens,
-                     SUM(output_tokens) as output_tokens,
-                     SUM(total_tokens) as total_tokens'
-                )
-                ->groupBy('bucket_start_at')
-                ->orderBy('bucket_start_at')
-                ->get()
-                ->toArray();
-        }
+        $bucketColumn = $byHour ? 'bucket_start_at' : 'stat_date';
+        $bucketAlias = $byHour ? 'bucket_start_at' : 'bucket_day';
 
         return $builder
             ->selectRaw(
-                'stat_date as bucket_day,
+                $bucketColumn . ' as ' . $bucketAlias . ',
                  SUM(request_count) as requests,
                  SUM(error_count) as errors,
                  SUM(input_tokens) as input_tokens,
                  SUM(output_tokens) as output_tokens,
                  SUM(total_tokens) as total_tokens'
             )
-            ->groupBy('stat_date')
-            ->orderBy('stat_date')
+            ->groupBy($bucketColumn)
+            ->orderBy($bucketColumn)
             ->get()
             ->toArray();
     }
@@ -167,31 +152,11 @@ final class AuditHourlyRecordRepository implements AuditHourlyRecordRepositoryIn
             $builder->where('organization_code', $organizationCode);
         }
         $this->applyServiceProviderConfigFilter($builder, $filters);
-        if (! empty($filters['product_code'])) {
-            $builder->where('product_code', (string) $filters['product_code']);
-        }
+        $this->applyIndexedPrefixLike($builder, 'product_code', $filters);
         if (! empty($filters['access_scope'])) {
             $builder->where('access_scope', (string) $filters['access_scope']);
         }
 
         return $builder;
-    }
-
-    private function applyServiceProviderConfigFilter(Builder $builder, array $filters): void
-    {
-        if (! array_key_exists('service_provider_config_ids', $filters)) {
-            return;
-        }
-
-        $rawConfigIds = $filters['service_provider_config_ids'];
-        $configIds = is_array($rawConfigIds) ? array_values(array_unique(array_filter(
-            array_map('intval', $rawConfigIds),
-            static fn (int $id): bool => $id > 0
-        ))) : [];
-        if ($configIds === []) {
-            $builder->whereRaw('1 = 0');
-            return;
-        }
-        $builder->whereIn('service_provider_config_id', $configIds);
     }
 }

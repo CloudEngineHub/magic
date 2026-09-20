@@ -13,11 +13,11 @@ interface AuditHourlyRecordRepositoryInterface
 
     public function insertHour(string $statDate, string $bucketStartAt, int $startMs, int $endMs): void;
 
-    /** @return array{source_count: int, target_count: int} */
+    /** @return array{request_count: int, row_count: int} */
     public function summarizeDate(string $statDate): array;
 
     /** @param array<string, mixed> $filters */
-    public function trend(array $filters, string $currentOrganizationCode, bool $isOfficialOrganization, bool $hourly): array;
+    public function trend(array $filters, string $currentOrganizationCode, bool $isOfficialOrganization, bool $byHour): array;
 
     /** @param array<string, mixed> $filters */
     public function breakdown(array $filters, string $currentOrganizationCode, bool $isOfficialOrganization): array;
