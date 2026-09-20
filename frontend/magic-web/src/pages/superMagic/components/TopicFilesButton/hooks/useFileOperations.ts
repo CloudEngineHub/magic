@@ -118,8 +118,7 @@ const findParentSlideFolder = (
 			// 检查目标文件是否是该文件夹的直接子项
 			if (item.children.some((child) => child.file_id === targetFileId)) {
 				const config = (item.display_config || item.metadata) as
-					| { type?: string; [key: string]: unknown }
-					| undefined
+					{ type?: string; [key: string]: unknown } | undefined
 				if (config?.type === "slide") {
 					return item
 				}
@@ -1013,11 +1012,9 @@ export function useFileOperations(options: UseFileOperationsOptions = {}) {
 			const toastId = createRandomUuidV4()
 			const resourceErrors = documentExporter.createResourceErrorCollector(t)
 			const displayConfig = item.display_config as
-				| { type?: string; slides?: string[]; [key: string]: unknown }
-				| undefined
+				{ type?: string; slides?: string[]; [key: string]: unknown } | undefined
 			const metadata = item.metadata as
-				| { type?: string; slides?: string[]; [key: string]: unknown }
-				| undefined
+				{ type?: string; slides?: string[]; [key: string]: unknown } | undefined
 			let mergedDisplayConfig = displayConfig || metadata
 			let slidePaths: string[] = Array.isArray(mergedDisplayConfig?.slides)
 				? mergedDisplayConfig.slides
@@ -1030,8 +1027,7 @@ export function useFileOperations(options: UseFileOperationsOptions = {}) {
 				if (parentFolder) {
 					isSlideFolder = true
 					const parentConfig = (parentFolder.display_config || parentFolder.metadata) as
-						| { type?: string; slides?: string[]; [key: string]: unknown }
-						| undefined
+						{ type?: string; slides?: string[]; [key: string]: unknown } | undefined
 					mergedDisplayConfig = parentConfig
 					slidePaths = [] // 单文件，不走多 slide 路径
 				}
@@ -1211,18 +1207,28 @@ export function useFileOperations(options: UseFileOperationsOptions = {}) {
 
 			const toastId = createRandomUuidV4()
 			const displayConfig = item.display_config as
-				| { type?: string; slides?: string[]; [key: string]: unknown }
-				| undefined
+				{ type?: string; slides?: string[]; [key: string]: unknown } | undefined
 			const metadata = item.metadata as
-				| { type?: string; slides?: string[]; [key: string]: unknown }
-				| undefined
+				{ type?: string; slides?: string[]; [key: string]: unknown } | undefined
 			const mergedDisplayConfig = displayConfig || metadata
 			const slidePaths: string[] = Array.isArray(mergedDisplayConfig?.slides)
 				? mergedDisplayConfig.slides
 				: []
+			const isSlideProject = mergedDisplayConfig?.type === "slide" || slidePaths.length > 0
 			const isSingleFile = !slidePaths.length
 			const autoSize = !hasPPTMetadata(item)
-			const fileId = item.file_id || ""
+			const attachmentScope = folderChildren?.length
+				? folderChildren
+				: item.children?.length
+					? item.children
+					: (attachments ?? [])
+			// A slide folder owns display_config, but its entry HTML owns the readable file id.
+			// Preserve both instead of replacing the project with index.html and losing slidePaths.
+			const entryFile = isSlideProject
+				? getAppEntryFile(attachmentScope, mergedDisplayConfig)
+				: item
+			const fileId = entryFile?.file_id || ""
+			const sourceFileName = String(entryFile?.file_name || item.file_name || "index.html")
 			const fileName = String(
 				mergedDisplayConfig?.name || item.file_name || "export",
 			).replace(/\.html?$/i, "")
@@ -1250,6 +1256,10 @@ export function useFileOperations(options: UseFileOperationsOptions = {}) {
 			setExportingFiles((prev) => new Set(prev).add(item.file_id || ""))
 
 			try {
+				if (!fileId) {
+					magicToast.error(t("topicFiles.entryFileNotFound"))
+					return
+				}
 				assertPptxExportAvailable({ pageCount: isSingleFile ? 1 : slidePaths.length })
 				destinationLease = await openPptxDestination({
 					suggestedName: String(
@@ -1265,9 +1275,6 @@ export function useFileOperations(options: UseFileOperationsOptions = {}) {
 				})
 
 				{
-					const attachmentScope = folderChildren?.length
-						? folderChildren
-						: (attachments ?? [])
 					const pptFontResolver = documentExportService.get()?.getPptFontResolver?.()
 					const destination = destinationLease.destination
 					const streamingHandle = startPptxStreamingExportFromFactory(
@@ -1275,7 +1282,7 @@ export function useFileOperations(options: UseFileOperationsOptions = {}) {
 							const source = isSingleFile
 								? iterateSingleExportSlide({
 										fileId,
-										fileName: item.file_name,
+										fileName: sourceFileName,
 										attachmentList: attachments ?? [],
 										signal,
 									})
@@ -1283,14 +1290,14 @@ export function useFileOperations(options: UseFileOperationsOptions = {}) {
 										slidePaths,
 										attachmentList: attachmentScope,
 										mainFileId: fileId,
-										mainFileName: item.file_name,
+										mainFileName: sourceFileName,
 										displayConfig: mergedDisplayConfig,
 										signal,
 									})
 							return iteratePreparedPptxPages(source, {
 								attachments: attachments ?? [],
 								fileId,
-								fileName: item.file_name,
+								fileName: sourceFileName,
 								attachmentList: attachments ?? [],
 								displayConfig: mergedDisplayConfig,
 								signal,
