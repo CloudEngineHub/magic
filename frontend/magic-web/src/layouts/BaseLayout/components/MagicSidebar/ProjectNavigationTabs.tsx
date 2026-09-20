@@ -1,4 +1,4 @@
-import { AppWindow, Box, Clock3, MessageCircle } from "lucide-react"
+import { AppWindow, Box, Clock3 } from "lucide-react"
 import { observer } from "mobx-react-lite"
 import { useTranslation } from "react-i18next"
 import { Button } from "@/components/shadcn-ui/button"
@@ -6,7 +6,7 @@ import { SmoothTabs, type Tab } from "@/components/shadcn-ui/smooth-tabs"
 import MagicTooltip from "@/components/base/MagicTooltip"
 import { sidebarStore } from "@/stores/layout/SidebarStore"
 
-type NavigationSection = "recent" | "workspaces" | "chats"
+type NavigationSection = "recent" | "workspaces"
 
 /** 分类始终保留一个选中项；固定短名称为右侧管理器预留空间，完整名称仍用于无障碍说明。 */
 function ProjectNavigationTabs({
@@ -19,7 +19,6 @@ function ProjectNavigationTabs({
 	const { t } = useTranslation(["super", "sidebar"])
 	const recent = t("projectNavigation.recent")
 	const workspaces = t("projectNavigation.workspaces")
-	const chats = t("sidebar:chats.title")
 	const tabs: Tab<NavigationSection>[] = [
 		{
 			value: "recent",
@@ -35,12 +34,6 @@ function ProjectNavigationTabs({
 			tooltip: workspaces,
 			testId: "sidebar-workspaces-toggle",
 		},
-		{
-			value: "chats",
-			label: chats,
-			icon: <MessageCircle size={16} />,
-			testId: "sidebar-chats-toggle",
-		},
 	]
 	return (
 		<div
@@ -54,7 +47,7 @@ function ProjectNavigationTabs({
 				aria-label={t("sidebarPanels.projectManager")}
 				className="m-0 min-w-0 flex-1 border-0 p-0 [container-name:project-navigation-tabs] [container-type:inline-size]"
 			>
-				{/* Keep all three labels readable at the default width; narrow tabs omit decorative icons. */}
+				{/* Narrow tabs omit decorative icons to keep their labels readable. */}
 				<div className="w-full min-w-0">
 					<SmoothTabs
 						tabs={tabs}

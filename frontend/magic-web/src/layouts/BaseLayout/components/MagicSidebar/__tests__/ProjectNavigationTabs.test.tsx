@@ -115,8 +115,7 @@ describe("ProjectNavigationTabs", () => {
 		fireEvent.click(screen.getByTestId("sidebar-workspaces-toggle"))
 		expect(selectNavigationSection).toHaveBeenCalledWith("workspaces")
 
-		fireEvent.click(screen.getByTestId("sidebar-chats-toggle"))
-		expect(selectNavigationSection).toHaveBeenCalledWith("chats")
+		expect(screen.queryByTestId("sidebar-chats-toggle")).not.toBeInTheDocument()
 
 		const managerButton = screen.getByTestId("sidebar-project-manager")
 		expect(managerButton).toHaveClass("!size-[34px]", "!rounded-[10px]", "!bg-muted")

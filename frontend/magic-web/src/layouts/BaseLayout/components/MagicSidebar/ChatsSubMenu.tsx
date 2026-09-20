@@ -35,6 +35,8 @@ type ChatsSubMenuProps = {
 	onOpenChange?: (open: boolean) => void
 	/** Reuse the popup data/actions in the navigation tab without a dropdown shell. */
 	standalone?: boolean
+	/** Embedded workspace lists retain loaded pages and use a bounded child viewport. */
+	workspace?: boolean
 	active?: boolean
 	onBusyChange?: (busy: boolean) => void
 	onSelect?: () => void
@@ -69,6 +71,7 @@ function ChatsSubMenu({
 	visible = true,
 	onOpenChange,
 	standalone = false,
+	workspace = false,
 	active = false,
 	onBusyChange,
 	onSelect,
@@ -156,8 +159,8 @@ function ChatsSubMenu({
 	// Refresh when returning from another section; keep the current search and cached rows.
 	const refreshActivePanel = useMemoizedFn(() => void reload({ silent: true }))
 	useEffect(() => {
-		if (standalone && active) refreshActivePanel()
-	}, [standalone, active, refreshActivePanel])
+		if (standalone && active && !workspace) refreshActivePanel()
+	}, [standalone, active, workspace, refreshActivePanel])
 	const projectActionMap = useMemo(
 		() => new Map(projectActions.map((action) => [action.key, action])),
 		[projectActions],
@@ -303,6 +306,7 @@ function ChatsSubMenu({
 			{standalone ? (
 				<ProjectNavigationToolbar
 					chats
+					embedded={workspace}
 					disabled={isCreatingChat || rowMenuOpen || Boolean(isProjectModalOpen)}
 					isSearchMode={isSearchMode}
 					searchValue={searchInput}
@@ -376,16 +380,21 @@ function ChatsSubMenu({
 			)}
 
 			{/* Tabs share the sidebar viewport; popups retain their own bounded viewport. */}
-			{standalone ? (
+			{standalone && !workspace ? (
 				renderListContent()
 			) : (
 				<ScrollArea
 					viewportRef={listScrollViewportRef}
 					className="w-full shrink-0 [&_[data-slot='scroll-area-scrollbar']]:-mr-1 [&_[data-slot='scroll-area-viewport']>div]:!block [&_[data-slot='scroll-area-viewport']>div]:pr-2"
-					style={{
-						height: `min(${DESKTOP_CHATS_SUBMENU_LIST_MAX_HEIGHT_PX}px, calc(100vh - 140px))`,
-						maxHeight: `min(${DESKTOP_CHATS_SUBMENU_LIST_MAX_HEIGHT_PX}px, calc(100vh - 140px))`,
-					}}
+					viewportStyle={workspace ? { maxHeight: "min(40dvh, 400px)" } : undefined}
+					style={
+						workspace
+							? undefined
+							: {
+									height: `min(${DESKTOP_CHATS_SUBMENU_LIST_MAX_HEIGHT_PX}px, calc(100vh - 140px))`,
+									maxHeight: `min(${DESKTOP_CHATS_SUBMENU_LIST_MAX_HEIGHT_PX}px, calc(100vh - 140px))`,
+								}
+					}
 				>
 					{renderListContent()}
 				</ScrollArea>

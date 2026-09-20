@@ -15,6 +15,7 @@
 	},
 	"chats": {
 		"empty": "No conversations",
+		"myChats": "My chats",
 		"newChat": "New chat",
 		"refresh": "Refresh conversations",
 		"title": "Chats"

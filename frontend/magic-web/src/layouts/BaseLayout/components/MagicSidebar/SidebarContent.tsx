@@ -1,6 +1,6 @@
 import { useEffect, useState, type MouseEvent } from "react"
 import { useLocation } from "react-router"
-import { ChevronRight, LayoutGrid, MessageCircle, SquarePen } from "lucide-react"
+import { ChevronRight, LayoutGrid, SquarePen } from "lucide-react"
 import { useTranslation } from "react-i18next"
 import ProjectNavigation from "./ProjectNavigation"
 import { MicroAppsSidebarMenuItem } from "./MicroAppsSidebarMenuItem"
@@ -14,7 +14,6 @@ import {
 	SidebarMenuItem,
 } from "@/components/shadcn-ui/sidebar"
 import AppsSubMenu from "./AppsSubMenu"
-import ChatsSubMenu from "./ChatsSubMenu"
 import useNavigate from "@/routes/hooks/useNavigate"
 import { RouteName } from "@/routes/constants"
 import { routesPathMatch } from "@/routes/history/helpers"
@@ -37,8 +36,7 @@ function SidebarContent({ collapsed, onBusyChange, onSelect }: SidebarContentPro
 	const { superRouteUrl, handleNavigateToSuperHome } = useNavigateToSuperHome()
 	const [projectBusy, setProjectBusy] = useState(false)
 	const [appsOpen, setAppsOpen] = useState(false)
-	const [chatsOpen, setChatsOpen] = useState(false)
-	const busy = projectBusy || appsOpen || chatsOpen
+	const busy = projectBusy || appsOpen
 	useEffect(() => {
 		onBusyChange?.(busy)
 	}, [busy, onBusyChange])
@@ -99,25 +97,6 @@ function SidebarContent({ collapsed, onBusyChange, onSelect }: SidebarContentPro
 					>
 						<SidebarGroupContent>
 							<SidebarMenu>
-								<SidebarMenuItem>
-									<ChatsSubMenu onOpenChange={setChatsOpen}>
-										<SidebarMenuButton
-											tooltip={
-												collapsed ? t("sidebar:chats.title") : undefined
-											}
-											data-testid="sidebar-content-chats-button"
-											className="text-sidebar-foreground"
-										>
-											<MessageCircle className="h-4 w-4 shrink-0" />
-											<span className="flex-1 overflow-hidden text-ellipsis whitespace-nowrap text-left text-sm leading-5">
-												{t("sidebar:chats.title")}
-											</span>
-											{!collapsed && (
-												<ChevronRight className="h-4 w-4 shrink-0 text-sidebar-foreground" />
-											)}
-										</SidebarMenuButton>
-									</ChatsSubMenu>
-								</SidebarMenuItem>
 								{sidebarMarketMenuItems.map((item) => {
 									const title =
 										item.titleKey === "sidebar:superLobster.title"

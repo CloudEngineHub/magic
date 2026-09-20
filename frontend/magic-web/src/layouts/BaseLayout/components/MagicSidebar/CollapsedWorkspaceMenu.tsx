@@ -13,6 +13,7 @@ import { isCollaborationWorkspace } from "@/pages/superMagic/constants"
 import type { ProjectBrowserSource } from "@/pages/superMagic/components/WorkspacesMenu/components/WorkspaceProjectsPanel"
 import SidebarCreateInput from "./components/SidebarCreateInput"
 import CollapsedWorkspaceMenuWorkspaceItem from "./CollapsedWorkspaceMenuWorkspaceItem"
+import ChatWorkspaceItem from "./ChatWorkspaceItem"
 import { SidebarMenuButton } from "@/components/shadcn-ui/sidebar"
 import { useCollapsedWorkspaceDnd } from "./useCollapsedWorkspaceDnd"
 import { useProjectPinBoundaryConfirmation } from "./WorkspaceList/ProjectPinBoundaryConfirmDialog"
@@ -36,6 +37,7 @@ const CollapsedWorkspaceMenu = observer(function CollapsedWorkspaceMenu({
 }: CollapsedWorkspaceMenuProps) {
 	const { t } = useTranslation()
 	const [isCreatingWorkspace, setIsCreatingWorkspace] = useState(false)
+	const [chatBusy, setChatBusy] = useState(false)
 	const [workspaceName, setWorkspaceName] = useState("")
 	const [isSubmittingWorkspace, setIsSubmittingWorkspace] = useState(false)
 	const [openProjectMenuId, setOpenProjectMenuId] = useState<string | null>(null)
@@ -86,14 +88,17 @@ const CollapsedWorkspaceMenu = observer(function CollapsedWorkspaceMenu({
 	}
 
 	function openProjectManager(source?: ProjectBrowserSource) {
-		if (isConfirmationOpen || isCreatingWorkspace || busyWorkspaceIds.size > 0) return
+		if (isConfirmationOpen || isCreatingWorkspace || chatBusy || busyWorkspaceIds.size > 0)
+			return
 		handleCloseAllPopovers()
 		onOpenManager(source)
 	}
 
 	useEffect(() => {
-		onBusyChange(isConfirmationOpen || isCreatingWorkspace || busyWorkspaceIds.size > 0)
-	}, [isConfirmationOpen, isCreatingWorkspace, busyWorkspaceIds, onBusyChange])
+		onBusyChange(
+			isConfirmationOpen || isCreatingWorkspace || chatBusy || busyWorkspaceIds.size > 0,
+		)
+	}, [isConfirmationOpen, isCreatingWorkspace, chatBusy, busyWorkspaceIds, onBusyChange])
 	useEffect(() => () => onBusyChange(false), [onBusyChange])
 	useEffect(() => {
 		if (!isOpen) setOpenProjectMenuId(null)
@@ -213,7 +218,10 @@ const CollapsedWorkspaceMenu = observer(function CollapsedWorkspaceMenu({
 					onOpenChange={(open) => {
 						if (
 							!open &&
-							(isConfirmationOpen || isCreatingWorkspace || busyWorkspaceIds.size > 0)
+							(isConfirmationOpen ||
+								isCreatingWorkspace ||
+								chatBusy ||
+								busyWorkspaceIds.size > 0)
 						)
 							return
 						handleWorkspacePopoverOpenChange(open)
@@ -327,6 +335,11 @@ const CollapsedWorkspaceMenu = observer(function CollapsedWorkspaceMenu({
 									{t("super:workspace.shareWorkspaceName")}
 								</span>
 							</Button>
+							<ChatWorkspaceItem
+								active={isOpen}
+								onBusyChange={setChatBusy}
+								onSelect={handleCloseAllPopovers}
+							/>
 						</div>
 					</PopoverContent>
 				</Popover>

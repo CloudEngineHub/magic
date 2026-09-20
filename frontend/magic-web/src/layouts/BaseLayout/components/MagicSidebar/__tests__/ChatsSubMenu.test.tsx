@@ -286,6 +286,18 @@ describe("ChatsSubMenu", () => {
 		expect(reloadMock).toHaveBeenCalledWith({ silent: true })
 	})
 
+	it("preserves loaded workspace pages on collapse and re-expansion", async () => {
+		const { rerender } = render(<ChatsSubMenu standalone workspace active />)
+		rerender(<ChatsSubMenu standalone workspace active={false} />)
+		rerender(<ChatsSubMenu standalone workspace active />)
+		expect(reloadMock).not.toHaveBeenCalled()
+		fireEvent.click(screen.getByTestId("sidebar-workspace-list-refresh"))
+		expect(reloadMock).toHaveBeenCalledWith({ silent: true })
+		await waitFor(() =>
+			expect(screen.getByTestId("sidebar-workspace-list-refresh")).not.toBeDisabled(),
+		)
+	})
+
 	it("uses the workspace toolbar search interaction, including IME and Escape", () => {
 		renderStandaloneChatsSubMenu()
 		const toolbar = within(screen.getByTestId("sidebar-chats-toolbar"))
