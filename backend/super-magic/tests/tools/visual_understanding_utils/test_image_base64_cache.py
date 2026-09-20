@@ -2,11 +2,14 @@ from __future__ import annotations
 
 import json
 import os
+import random
+from pathlib import Path
 
 import pytest
 from PIL import Image
 
 from app.path_manager import PathManager
+from app.tools.visual_understanding_utils import image_compression_service
 from app.tools.visual_understanding_utils.image_base64_cache import (
     CACHE_DIRECTORY_NAME,
     CACHE_VERSION,
@@ -197,27 +200,89 @@ async def test_get_base64_recompresses_after_source_changes(runtime_root, tmp_pa
 
 
 @pytest.mark.asyncio
-async def test_rgba_search_failure_falls_back_to_flattened_image(runtime_root, tmp_path, monkeypatch):
-    """保留透明无法达标时，第二次搜索必须基于白底展平后的图像。"""
+async def test_rgba_search_failure_falls_back_to_flattened_image(runtime_root, tmp_path):
+    """保留透明无法达标时，最终结果必须来自白底展平后的图像。"""
     source = tmp_path / "transparent.png"
     image = Image.new("RGBA", (64, 64), color=(255, 0, 0, 128))
     image.save(source, format="PNG")
     image.close()
 
-    observed_modes: list[str] = []
-    original_search = ImageCompressionService._search_webp
-
-    async def _search(self, target, **kwargs):
-        observed_modes.append(target.mode)
-        if len(observed_modes) == 1:
-            return None
-        return await original_search(self, target, **kwargs)
-
-    monkeypatch.setattr(ImageCompressionService, "_search_webp", _search)
-
     data_url = await ImageCompressionService(
         base64_cache=ImageBase64Cache(runtime_root / CACHE_DIRECTORY_NAME)
     ).get_base64(source)
 
-    assert observed_modes == ["RGBA", "RGB"]
     assert data_url.startswith("data:image/webp;base64,")
+
+
+def _write_alpha_dominated_png(path: Path, size: int = 512) -> None:
+    """构造一张 alpha 平面自身无法压到预算内的抠图 PNG。
+
+    RGB 是纯白（展平后只剩一片白，极易压缩），alpha 是随机噪声（不可压缩）。
+    实测这种构造下 lossy WebP 的 alpha 平面完全主导体积，q90 和 q1 输出
+    字节数完全相同（512×512 均为 262700 字节），所以靠降质量永远无法达标；
+    而白底展平后只有几百字节。真实抠图 PNG 的 alpha 平面同理。
+    """
+    rng = random.Random(20260920)
+    image = Image.new("RGB", (size, size), color=(255, 255, 255))
+    image.putalpha(Image.frombytes("L", (size, size), rng.randbytes(size * size)))
+    image.save(path, format="PNG")
+    image.close()
+
+
+@pytest.mark.asyncio
+async def test_alpha_dominated_image_encodes_few_times_at_full_resolution(
+    runtime_root, tmp_path, monkeypatch
+):
+    """alpha 超预算时应尽早改走白底展平，而不是把质量档位试穿、再一路缩小。
+
+    这是"首次处理 28 次编码、占满一个核心"的回归测试：保留透明的版本在原始尺寸下
+    任何质量都不达标，改造前要把 10 档质量 × 多个尺寸全试一遍；现在连续失败两次就
+    探底，探底失败立刻换展平版本，因此编码次数受控且保住原分辨率。
+    """
+    source = tmp_path / "alpha-noise.png"
+    _write_alpha_dominated_png(source)
+
+    qualities: list[int] = []
+    original_encode = image_compression_service._encode_webp_sync
+
+    def counting_encode(candidate: Image.Image, webp_quality: int) -> bytes:
+        qualities.append(webp_quality)
+        return original_encode(candidate, webp_quality)
+
+    monkeypatch.setattr(image_compression_service, "_encode_webp_sync", counting_encode)
+
+    result = await ImageCompressionService(
+        base64_cache=ImageBase64Cache(runtime_root / CACHE_DIRECTORY_NAME)
+    ).compress_to_webp(source, tmp_path / "out", max_size_bytes=16 * 1024)
+
+    # 预期 4 次：RGBA q90 失败、q80 失败、q1 探底失败 → 展平 q90 命中。
+    assert len(qualities) == 4, f"编码次数应受控，实际 {len(qualities)} 次: {qualities}"
+    # 展平后能达标，就不该拿分辨率换透明。
+    assert (result.width, result.height) == (512, 512)
+    assert result.output_size <= 16 * 1024
+
+
+@pytest.mark.asyncio
+async def test_compressible_image_hits_preferred_quality_in_one_encode(
+    runtime_root, tmp_path, monkeypatch
+):
+    """普通可压缩图片应一次命中首选质量，不产生额外编码。"""
+    source = tmp_path / "plain.png"
+    image = Image.new("RGB", (120, 80), color="red")
+    image.save(source, format="PNG")
+    image.close()
+
+    qualities: list[int] = []
+    original_encode = image_compression_service._encode_webp_sync
+
+    def counting_encode(candidate: Image.Image, webp_quality: int) -> bytes:
+        qualities.append(webp_quality)
+        return original_encode(candidate, webp_quality)
+
+    monkeypatch.setattr(image_compression_service, "_encode_webp_sync", counting_encode)
+
+    await ImageCompressionService(
+        base64_cache=ImageBase64Cache(runtime_root / CACHE_DIRECTORY_NAME)
+    ).compress_to_webp(source, tmp_path / "out")
+
+    assert qualities == [90]

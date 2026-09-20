@@ -115,7 +115,7 @@ class ImageBase64Cache:
             self._cache_dir = Path(PathManager.get_runtime_dir()) / CACHE_DIRECTORY_NAME
         except Exception as error:
             # `.runtime` 不可用时整体关闭缓存，调用方退化为每次重新压缩。
-            logger.warning("图片 Base64 缓存不可用，已关闭: %s", error)
+            logger.warning(f"图片 Base64 缓存不可用，已关闭: {error}")
             self._cache_dir = None
 
     @property
@@ -180,7 +180,7 @@ class ImageBase64Cache:
             )
             await async_chmod(path, CACHE_FILE_MODE)
         except Exception as error:
-            logger.warning("写入图片 Base64 缓存失败: %s", error)
+            logger.warning(f"写入图片 Base64 缓存失败: {error}")
             return
 
         trigger_opportunistic_cleanup(CACHE_CLEANUP_KEY, self.evict_expired_entries)

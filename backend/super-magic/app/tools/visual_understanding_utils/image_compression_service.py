@@ -46,6 +46,20 @@ WEBP_ENCODE_METHOD = 5
 # 例如 alpha 平面本身超过目标体积时，搜索要一路缩到很小才可能命中。
 WEBP_SEARCH_MAX_SECONDS = 60.0
 
+# 单次压缩搜索的编码次数上限，与时间预算互为兜底。
+# 改造前是"每个缩小尺寸都把 10 档质量全试一遍"，实测那张 1280×1706 的抠图 PNG
+# 用了 28 次编码（其中只有 1 次有效）；现在正常图片 1 次命中，需要降质或降尺寸的
+# 图片也在十几次以内，48 次足以覆盖合法路径，同时给病态输入兜住 CPU。
+WEBP_SEARCH_MAX_ATTEMPTS = 48
+
+# 连续失败多少次质量试探后，插一次"最低质量"试探。
+# 体积对质量单调递减，所以最低质量失败就等价于"该尺寸下任何质量都无法达标"。
+# 抠图类 PNG 的 alpha 平面独立压缩、基本不随 quality 变化，正是这种情况：
+# 实测一张 1280×1706 的抠图 PNG，在原尺寸下 10 个质量全部超标，
+# 提前探底可以把 10 次无效编码压到 3 次。设成 2 是为了不拖慢
+# "只是稍微超标、降一两档就够"的常见图片。
+WEBP_QUALITY_FEASIBILITY_PROBE_AFTER = 2
+
 
 @dataclass(frozen=True)
 class WebPCompressionResult:
@@ -65,6 +79,18 @@ class _WebpCandidate:
     width: int
     height: int
     attempts: int
+
+
+@dataclass
+class _SearchBudget:
+    """一次 WebP 搜索的时间预算与尝试计数，透明降级重试共用同一份预算。"""
+
+    deadline: float
+    attempts: int = 0
+
+
+class _SearchBudgetExceeded(Exception):
+    """搜索超出时间预算，由调用方决定是否降级。"""
 
 
 def _build_data_url(content_type: str, content: bytes) -> str:
@@ -200,22 +226,17 @@ class ImageCompressionService:
 
             file_content = await async_read_bytes(str(processing_path))
             image = await asyncio.to_thread(_decode_image_sync, file_content)
+            # 时间预算和编码次数在整次搜索内共享，避免"保留 alpha + 白底展平"
+            # 两轮各自计时导致实际耗时翻倍。
+            budget = _SearchBudget(deadline=time.monotonic() + WEBP_SEARCH_MAX_SECONDS)
             candidate = await self._search_webp(
                 image,
                 quality=quality,
                 max_dimension=max_dimension,
                 max_size_bytes=max_size_bytes,
                 source_label=str(source_path),
+                budget=budget,
             )
-            # 保留透明无法达标时降级为白底展平，保证有结果可用。
-            if candidate is None and image.mode == "RGBA":
-                candidate = await self._search_flattened_webp(
-                    image,
-                    quality=quality,
-                    max_dimension=max_dimension,
-                    max_size_bytes=max_size_bytes,
-                    source_label=str(source_path),
-                )
             if candidate is None:
                 raise ValueError(f"image cannot be compressed below {max_size_bytes} bytes")
 
@@ -245,6 +266,95 @@ class ImageCompressionService:
             if staging_path is not None:
                 await asyncio.to_thread(staging_path.unlink, missing_ok=True)
 
+    async def _encode_candidate(
+        self,
+        image: Image.Image,
+        webp_quality: int,
+        *,
+        budget: _SearchBudget,
+        source_label: str,
+        variant: str,
+    ) -> tuple[bytes, int]:
+        """在预算内编码一次，返回 (WebP 内容, Data URL 大小)。
+
+        超出预算时抛 `_SearchBudgetExceeded`，由搜索入口统一转成"找不到可行结果"。
+        每次编码单独交给工作线程，事件循环在两次尝试之间可以处理取消信号。
+        """
+        if budget.attempts >= WEBP_SEARCH_MAX_ATTEMPTS or time.monotonic() >= budget.deadline:
+            raise _SearchBudgetExceeded
+
+        content = await asyncio.to_thread(_encode_webp_sync, image, webp_quality)
+        budget.attempts += 1
+        data_url_size = _data_url_size("image/webp", content)
+        logger.debug(
+            f"WebP 候选: source={source_label} variant={variant} "
+            f"dimensions={image.width}x{image.height} quality={webp_quality} "
+            f"raw_size={len(content)} data_url_size={data_url_size} attempts={budget.attempts}"
+        )
+        return content, data_url_size
+
+    async def _search_at_dimension(
+        self,
+        image: Image.Image,
+        *,
+        quality: int,
+        max_size_bytes: int,
+        budget: _SearchBudget,
+        source_label: str,
+        variant: str,
+    ) -> _WebpCandidate | None:
+        """固定尺寸下从高到低试质量，返回第一个满足体积上限的编码结果。
+
+        体积对质量单调递减，所以命中后就不必再试更低的质量；反过来，
+        连续失败 `WEBP_QUALITY_FEASIBILITY_PROBE_AFTER` 次后插一次最低质量试探，
+        用来尽早判定"该尺寸下没有任何质量可用"，避免把 10 档质量白试一遍。
+        """
+        ladder = _quality_candidates(quality)
+        lowest = ladder[-1]
+        failures_in_a_row = 0
+        probed_lowest = False
+
+        for candidate_quality in ladder:
+            content, data_url_size = await self._encode_candidate(
+                image,
+                candidate_quality,
+                budget=budget,
+                source_label=source_label,
+                variant=variant,
+            )
+            if data_url_size <= max_size_bytes:
+                return _WebpCandidate(
+                    content=content,
+                    width=int(image.width),
+                    height=int(image.height),
+                    attempts=budget.attempts,
+                )
+
+            failures_in_a_row += 1
+            if probed_lowest or failures_in_a_row < WEBP_QUALITY_FEASIBILITY_PROBE_AFTER:
+                continue
+            if candidate_quality == lowest:
+                break
+
+            # 最低质量也不达标，说明这个尺寸已经无解，不必再试中间的质量档位。
+            probed_lowest = True
+            _, lowest_size = await self._encode_candidate(
+                image,
+                lowest,
+                budget=budget,
+                source_label=source_label,
+                variant=variant,
+            )
+            if lowest_size > max_size_bytes:
+                logger.debug(
+                    f"WebP 尺寸判定无解: source={source_label} variant={variant} "
+                    f"dimensions={image.width}x{image.height} lowest_quality={lowest} "
+                    f"data_url_size={lowest_size} attempts={budget.attempts}"
+                )
+                return None
+
+        return None
+
     async def _search_webp(
         self,
         image: Image.Image,
@@ -253,74 +363,76 @@ class ImageCompressionService:
         max_dimension: int,
         max_size_bytes: int,
         source_label: str,
+        budget: _SearchBudget,
     ) -> _WebpCandidate | None:
-        """按"先降质量、再降尺寸"的顺序搜索满足体积上限的编码结果。
+        """搜索满足体积上限的编码结果，按"尺寸优先、必要时才丢透明"的顺序。
 
-        返回 None 表示在时间预算内没有找到可行结果，由调用方决定是否降级。
-        每次编码单独交给工作线程，事件循环在两次尝试之间可以处理取消信号。
+        每个尺寸先试保留 alpha 的版本，再试白底展平的版本，最后才缩小尺寸。
+        之所以把展平提到缩小之前：lossy WebP 的 alpha 平面独立压缩，`quality`
+        对它几乎无效，抠图 PNG 的 alpha 平面本身就可能超过目标体积；这种情况下
+        一路缩小只是拿分辨率换透明，而展平能保住原分辨率（模型看到的只是背景
+        由透明变成白色）。实测那张 1280×1706 的抠图 PNG，改造前要缩到 1091px
+        并降到 q20 才达标，改造后原尺寸展平 q90 直接命中。
+
+        返回 None 表示预算内没有可行结果，由调用方决定如何收场。
         """
-        deadline = time.monotonic() + WEBP_SEARCH_MAX_SECONDS
-        attempts = 0
         # 先把原图限制到 max_dimension，再从这里继续往下缩。
         initial_image = await asyncio.to_thread(_resize_for_max_dimension, image, max_dimension)
+        flattened_image = (
+            await asyncio.to_thread(_flatten_alpha_sync, initial_image)
+            if initial_image.mode == "RGBA"
+            else None
+        )
         dimension = max(initial_image.size)
 
-        while dimension >= 1:
-            candidate_image = await asyncio.to_thread(_resize_for_max_dimension, initial_image, dimension)
-            for candidate_quality in _quality_candidates(quality):
-                if time.monotonic() >= deadline:
-                    logger.warning(
-                        f"WebP 搜索超出时间预算: source={source_label} attempts={attempts} "
-                        f"dimension={dimension} budget_s={WEBP_SEARCH_MAX_SECONDS}"
-                    )
-                    return None
-
-                content = await asyncio.to_thread(_encode_webp_sync, candidate_image, candidate_quality)
-                attempts += 1
-                data_url_size = _data_url_size("image/webp", content)
-                logger.debug(
-                    f"WebP 候选: source={source_label} dimension={dimension} "
-                    f"quality={candidate_quality} raw_size={len(content)} "
-                    f"data_url_size={data_url_size} attempts={attempts}"
+        try:
+            while dimension >= 1:
+                candidate_image = await asyncio.to_thread(
+                    _resize_for_max_dimension, initial_image, dimension
                 )
-                if data_url_size <= max_size_bytes:
-                    return _WebpCandidate(
-                        content=content,
-                        width=int(candidate_image.width),
-                        height=int(candidate_image.height),
-                        attempts=attempts,
-                    )
+                candidate = await self._search_at_dimension(
+                    candidate_image,
+                    quality=quality,
+                    max_size_bytes=max_size_bytes,
+                    budget=budget,
+                    source_label=source_label,
+                    variant="rgba" if flattened_image is not None else "rgb",
+                )
+                if candidate is not None:
+                    return candidate
 
-            if dimension == 1:
-                break
-            dimension = max(1, int(dimension * 0.8))
+                if flattened_image is not None:
+                    flattened_candidate_image = await asyncio.to_thread(
+                        _resize_for_max_dimension, flattened_image, dimension
+                    )
+                    candidate = await self._search_at_dimension(
+                        flattened_candidate_image,
+                        quality=quality,
+                        max_size_bytes=max_size_bytes,
+                        budget=budget,
+                        source_label=source_label,
+                        variant="flattened",
+                    )
+                    if candidate is not None:
+                        logger.info(
+                            f"保留透明无法满足体积上限，改用白底展平: source={source_label} "
+                            f"dimensions={candidate.width}x{candidate.height} "
+                            f"attempts={candidate.attempts}"
+                        )
+                        return candidate
+
+                if dimension == 1:
+                    break
+                dimension = max(1, int(dimension * 0.8))
+        except _SearchBudgetExceeded:
+            logger.warning(
+                f"WebP 搜索超出预算: source={source_label} attempts={budget.attempts} "
+                f"dimension={dimension} max_attempts={WEBP_SEARCH_MAX_ATTEMPTS} "
+                f"budget_s={WEBP_SEARCH_MAX_SECONDS}"
+            )
+            return None
 
         return None
-
-    async def _search_flattened_webp(
-        self,
-        image: Image.Image,
-        *,
-        quality: int,
-        max_dimension: int,
-        max_size_bytes: int,
-        source_label: str,
-    ) -> _WebpCandidate | None:
-        """保留透明无法达标时，改用白底展平再搜一次。
-
-        lossy WebP 的 alpha 平面独立压缩，`quality` 基本不生效；抠图类 PNG 的 alpha
-        平面本身可能就超过目标体积，此时保留透明永远无法达标。降级会丢失透明信息，
-        但保证有可用结果——模型看到的只是背景由透明变成白色。
-        """
-        logger.info(f"保留透明无法满足体积上限，改用白底展平重试: source={source_label}")
-        flattened = await asyncio.to_thread(_flatten_alpha_sync, image)
-        return await self._search_webp(
-            flattened,
-            quality=quality,
-            max_dimension=max_dimension,
-            max_size_bytes=max_size_bytes,
-            source_label=f"{source_label}#flattened",
-        )
 
     async def _build_cache_key(
         self,
