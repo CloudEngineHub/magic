@@ -100,12 +100,16 @@ vi.mock("../CollapsedWorkspaceMenuWorkspaceItem", () => ({
 }))
 vi.mock("../ChatsSubMenu", () => ({
 	default: forwardRef(function Chats(
-		{ onSelect, onBusyChange }: { onSelect: () => void; onBusyChange: (busy: boolean) => void },
+		{
+			onSelect,
+			onBusyChange,
+			searchKeyword,
+		}: { onSelect: () => void; onBusyChange: (busy: boolean) => void; searchKeyword?: string },
 		ref,
 	) {
 		useImperativeHandle(ref, () => ({ create: createChat }), [])
 		return (
-			<div data-testid="chat-list">
+			<div data-testid="chat-list" data-search={searchKeyword}>
 				<button onClick={onSelect}>select-chat</button>
 				<button onClick={() => onBusyChange(true)}>open-chat-action</button>
 			</div>
@@ -164,13 +168,32 @@ describe("CollapsedWorkspaceMenu conversation submenu", () => {
 		expect(screen.getByTestId("ordinary-workspace")).toHaveAttribute("data-open", "false")
 	})
 
-	it("creates from the submenu title and closes both levels when selecting a chat", () => {
+	it("creates from the submenu action and closes both levels when selecting a chat", () => {
 		render(<Harness />)
 		fireEvent.click(screen.getByTestId("sidebar-collapsed-my-chats"))
 		fireEvent.click(screen.getByTestId("sidebar-collapsed-my-chats-add"))
 		expect(createChat).toHaveBeenCalledTimes(1)
 		fireEvent.click(screen.getByText("select-chat"))
 		expect(screen.queryByTestId("sidebar-collapsed-workspace-popover")).not.toBeInTheDocument()
+	})
+
+	it("searches committed input, clears with Escape and resets on reopening", () => {
+		render(<Harness />)
+		fireEvent.click(screen.getByTestId("sidebar-collapsed-my-chats"))
+		const input = screen.getByTestId("sidebar-collapsed-my-chats-search")
+		fireEvent.compositionStart(input)
+		fireEvent.change(input, { target: { value: "计划" } })
+		expect(screen.getByTestId("chat-list")).toHaveAttribute("data-search", "")
+		fireEvent.compositionEnd(input)
+		expect(screen.getByTestId("chat-list")).toHaveAttribute("data-search", "计划")
+		fireEvent.keyDown(input, { key: "Escape" })
+		expect(input).toHaveValue("")
+		expect(screen.getByTestId("chat-list")).toHaveAttribute("data-search", "")
+		fireEvent.change(input, { target: { value: "draft" } })
+		fireEvent.click(screen.getByTestId("ordinary-workspace"))
+		fireEvent.click(screen.getByTestId("sidebar-collapsed-my-chats"))
+		expect(screen.getByTestId("sidebar-collapsed-my-chats-search")).toHaveValue("")
+		expect(screen.getByTestId("chat-list")).toHaveAttribute("data-search", "")
 	})
 
 	it("keeps the chat submenu open while a conversation action is active", () => {
