@@ -53,6 +53,7 @@ Router::addGroup('/api/v1/admin', static function () {
         Router::post('/connectivity-test', [ServiceProviderApi::class, 'connectivityTest']);
         Router::post('/connectivity-tests/config-based', [ServiceProviderApi::class, 'connectivityTestByConfig']);
         Router::post('/by-category', [ServiceProviderApi::class, 'getOrganizationProvidersByCategory']);
+        Router::post('/search', [ServiceProviderApi::class, 'searchProviderConfigs']);
         Router::get('/office-info', [ServiceProviderApi::class, 'isCurrentOrganizationOfficial']);
         Router::get('/templates/queries', [ServiceProviderApi::class, 'queriesServiceProviderTemplates']);
         Router::get('/model-pricing-templates/queries', [ServiceProviderApi::class, 'queriesProviderModelPricingTemplates']);
@@ -132,9 +133,15 @@ Router::addGroup('/api/v1/admin', static function () {
         Router::post('/statistics', [AdminOperationLogApi::class, 'modelAuditStatistics']);
     }, ['middleware' => [RequestContextMiddleware::class]]);
 
+    // 用户搜索
+    Router::addGroup('/users', static function () {
+        Router::post('/search', [PlatformUserApi::class, 'search']);
+    }, ['middleware' => [RequestContextMiddleware::class]]);
+
     // 组织列表
     Router::addGroup('/organizations', static function () {
         Router::get('', [OrganizationApi::class, 'queries']);
+        Router::post('/search', [OrganizationApi::class, 'search']);
     }, ['middleware' => [RequestContextMiddleware::class]]);
 
     // 平台用户列表

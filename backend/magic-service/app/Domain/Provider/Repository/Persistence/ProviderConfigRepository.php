@@ -11,7 +11,9 @@ use App\Domain\Provider\DTO\ProviderConfigDTO;
 use App\Domain\Provider\Entity\ProviderConfigEntity;
 use App\Domain\Provider\Entity\ValueObject\Category;
 use App\Domain\Provider\Entity\ValueObject\ProviderCode;
+use App\Domain\Provider\Entity\ValueObject\ProviderConfigSearchField;
 use App\Domain\Provider\Entity\ValueObject\ProviderDataIsolation;
+use App\Domain\Provider\Entity\ValueObject\ProviderType;
 use App\Domain\Provider\Entity\ValueObject\Query\ProviderConfigQuery;
 use App\Domain\Provider\Entity\ValueObject\Status;
 use App\Domain\Provider\Repository\Facade\ProviderConfigRepositoryInterface;
@@ -111,6 +113,60 @@ class ProviderConfigRepository extends AbstractModelRepository implements Provid
         $result['list'] = $list;
 
         return $result;
+    }
+
+    /**
+     * 按指定字段搜索服务商配置。
+     *
+     * @param ProviderDataIsolation $dataIsolation 数据隔离上下文
+     * @return array{total: int, list: array<int, array<string, mixed>>}
+     */
+    public function searchProviderConfigs(
+        ProviderDataIsolation $dataIsolation,
+        Page $page,
+        ProviderConfigSearchField $searchField,
+        string $keyword
+    ): array {
+        $query = $this->createConfigQuery()
+            ->join('service_provider as provider', 'provider.id', '=', 'service_provider_configs.service_provider_id')
+            ->whereNull('provider.deleted_at');
+
+        if (! $dataIsolation->isOfficialOrganization()) {
+            $query
+                ->where('service_provider_configs.organization_code', $dataIsolation->getCurrentOrganizationCode())
+                ->where('provider.provider_type', '!=', ProviderType::Official->value);
+        }
+
+        match ($searchField) {
+            ProviderConfigSearchField::ConfigId => $query->where('service_provider_configs.id', (int) $keyword),
+            ProviderConfigSearchField::ProviderName => $query->where('provider.name', 'like', '%' . $keyword . '%'),
+            ProviderConfigSearchField::ProviderAlias => $query->where('service_provider_configs.alias', 'like', '%' . $keyword . '%'),
+        };
+
+        $total = (clone $query)->count('service_provider_configs.id');
+        $listQuery = clone $query;
+        $listQuery
+            ->select([
+                'service_provider_configs.id as service_provider_config_id',
+                'service_provider_configs.service_provider_id',
+                'provider.name as provider_name',
+                'service_provider_configs.alias as provider_alias',
+                'provider.provider_type',
+            ])
+            ->orderBy('service_provider_configs.sort', 'desc')
+            ->orderBy('service_provider_configs.id', 'asc')
+            ->forPage($page->getPage(), $page->getPageNum());
+
+        $rows = Db::select($listQuery->toSql(), $listQuery->getBindings());
+
+        return [
+            'total' => $total,
+            'list' => array_map(static function (object $row): array {
+                $providerConfig = (array) $row;
+                unset($providerConfig['provider_type']);
+                return $providerConfig;
+            }, $rows),
+        ];
     }
 
     public function save(ProviderDataIsolation $dataIsolation, ProviderConfigEntity $providerConfigEntity): ProviderConfigEntity

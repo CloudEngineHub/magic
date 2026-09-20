@@ -12,8 +12,11 @@ use App\Application\Kernel\Enum\MagicOperationEnum;
 use App\Application\Kernel\Enum\MagicResourceEnum;
 use App\Infrastructure\Core\AbstractApi;
 use App\Infrastructure\Core\ValueObject\Page;
+use App\Infrastructure\Util\OfficialOrganizationUtil;
 use App\Infrastructure\Util\Permission\Annotation\CheckPermission;
+use App\Interfaces\Contact\Assembler\UserSearchAssembler;
 use App\Interfaces\Contact\DTO\PlatformUserListRequestDTO;
+use App\Interfaces\Contact\DTO\UserSearchRequestDTO;
 use Dtyq\ApiResponse\Annotation\ApiResponse;
 use Hyperf\Di\Annotation\Inject;
 
@@ -36,5 +39,34 @@ class PlatformUserApi extends AbstractApi
             'page' => $page->getPage(),
             'page_size' => $page->getPageNum(),
         ];
+    }
+
+    /**
+     * 按指定字段搜索用户。
+     */
+    #[CheckPermission(
+        [
+            MagicResourceEnum::PLATFORM_USER_LIST,
+            MagicResourceEnum::PLATFORM_AI_MODEL_AUDIT_LOG,
+            MagicResourceEnum::WORKSPACE_AI_MODEL_AUDIT_LOG,
+        ],
+        MagicOperationEnum::QUERY
+    )]
+    public function search(): array
+    {
+        $authorization = $this->getAuthorization();
+        $organizationCode = (string) $authorization->getOrganizationCode();
+        $requestDTO = UserSearchRequestDTO::fromRequest($this->request);
+        $page = new Page($requestDTO->page, $requestDTO->pageSize);
+        $isOfficialOrganization = OfficialOrganizationUtil::isOfficialOrganization($organizationCode);
+
+        $result = $this->platformUserAppService->searchUsers(
+            $page,
+            $requestDTO->searchField,
+            $requestDTO->keyword,
+            $isOfficialOrganization ? null : $organizationCode
+        );
+
+        return UserSearchAssembler::createPageResponse($result, $page);
     }
 }

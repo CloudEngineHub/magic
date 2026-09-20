@@ -12,6 +12,7 @@ use App\Domain\Provider\DTO\ProviderConfigModelsDTO;
 use App\Domain\Provider\Entity\ProviderConfigEntity;
 use App\Domain\Provider\Entity\ProviderEntity;
 use App\Domain\Provider\Entity\ValueObject\ProviderCode;
+use App\Domain\Provider\Entity\ValueObject\ProviderConfigSearchField;
 use App\Domain\Provider\Entity\ValueObject\ProviderDataIsolation;
 use App\Domain\Provider\Entity\ValueObject\ProviderType;
 use App\Domain\Provider\Entity\ValueObject\Query\ProviderConfigQuery;
@@ -258,6 +259,21 @@ class ProviderConfigDomainService
     public function queries(ProviderDataIsolation $providerDataIsolation, ProviderConfigQuery $query, Page $createNoPage): array
     {
         return $this->serviceProviderConfigRepository->queries($providerDataIsolation, $query, $createNoPage);
+    }
+
+    /**
+     * 按指定字段搜索服务商配置。
+     *
+     * @param ProviderDataIsolation $dataIsolation 数据隔离上下文
+     * @return array{total: int, list: array<int, array<string, mixed>>}
+     */
+    public function searchProviderConfigs(
+        ProviderDataIsolation $dataIsolation,
+        Page $page,
+        ProviderConfigSearchField $searchField,
+        string $keyword
+    ): array {
+        return $this->serviceProviderConfigRepository->searchProviderConfigs($dataIsolation, $page, $searchField, $keyword);
     }
 
     /**

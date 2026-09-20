@@ -8,6 +8,7 @@ declare(strict_types=1);
 namespace App\Domain\Provider\Repository\Facade;
 
 use App\Domain\Provider\Entity\ProviderConfigEntity;
+use App\Domain\Provider\Entity\ValueObject\ProviderConfigSearchField;
 use App\Domain\Provider\Entity\ValueObject\ProviderDataIsolation;
 use App\Domain\Provider\Entity\ValueObject\Query\ProviderConfigQuery;
 use App\Infrastructure\Core\ValueObject\Page;
@@ -26,6 +27,19 @@ interface ProviderConfigRepositoryInterface
      * @return array{total: int, list: array<ProviderConfigEntity>}
      */
     public function queries(ProviderDataIsolation $dataIsolation, ProviderConfigQuery $query, Page $page): array;
+
+    /**
+     * 按指定字段搜索服务商配置。
+     *
+     * @param ProviderDataIsolation $dataIsolation 数据隔离上下文
+     * @return array{total: int, list: array<int, array<string, mixed>>}
+     */
+    public function searchProviderConfigs(
+        ProviderDataIsolation $dataIsolation,
+        Page $page,
+        ProviderConfigSearchField $searchField,
+        string $keyword
+    ): array;
 
     public function save(ProviderDataIsolation $dataIsolation, ProviderConfigEntity $providerConfigEntity): ProviderConfigEntity;
 
