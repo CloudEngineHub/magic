@@ -14,7 +14,7 @@ use App\Domain\Archive\Repository\Persistence\Model\ArchiveTaskRecordModel;
 
 final class ArchiveTaskRecordRepository implements ArchiveTaskRecordRepositoryInterface
 {
-    public function markRunning(string $archiveType, string $statDate, ArchiveMode $archiveMode): void
+    public function updateRunning(string $archiveType, string $statDate, ArchiveMode $archiveMode): void
     {
         $attributes = [
             'archive_mode' => $archiveMode->value,
@@ -37,7 +37,7 @@ final class ArchiveTaskRecordRepository implements ArchiveTaskRecordRepositoryIn
         );
     }
 
-    public function markFinished(
+    public function updateFinished(
         string $archiveType,
         string $statDate,
         ArchiveStatus $status,

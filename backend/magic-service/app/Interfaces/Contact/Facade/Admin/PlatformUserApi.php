@@ -14,7 +14,6 @@ use App\Infrastructure\Core\AbstractApi;
 use App\Infrastructure\Core\ValueObject\Page;
 use App\Infrastructure\Util\OfficialOrganizationUtil;
 use App\Infrastructure\Util\Permission\Annotation\CheckPermission;
-use App\Interfaces\Contact\Assembler\UserSearchAssembler;
 use App\Interfaces\Contact\DTO\PlatformUserListRequestDTO;
 use App\Interfaces\Contact\DTO\UserSearchRequestDTO;
 use Dtyq\ApiResponse\Annotation\ApiResponse;
@@ -67,6 +66,20 @@ class PlatformUserApi extends AbstractApi
             $isOfficialOrganization ? null : $organizationCode
         );
 
-        return UserSearchAssembler::createPageResponse($result, $page);
+        return [
+            'page' => $page->getPage(),
+            'page_size' => $page->getPageNum(),
+            'total' => (string) $result['total'],
+            'list' => array_map(static function (array $user): array {
+                return [
+                    'user_id' => (string) ($user['user_id'] ?? ''),
+                    'nickname' => (string) ($user['nickname'] ?? ''),
+                    'real_name' => (string) ($user['real_name'] ?? ''),
+                    'phone' => (string) ($user['phone'] ?? ''),
+                    'organization_code' => (string) ($user['organization_code'] ?? ''),
+                    'organization_name' => (string) ($user['organization_name'] ?? ''),
+                ];
+            }, $result['list']),
+        ];
     }
 }

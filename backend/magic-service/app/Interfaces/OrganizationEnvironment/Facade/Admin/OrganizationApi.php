@@ -15,7 +15,6 @@ use App\Infrastructure\Core\ValueObject\Page;
 use App\Infrastructure\Util\OfficialOrganizationUtil;
 use App\Infrastructure\Util\Permission\Annotation\CheckPermission;
 use App\Interfaces\OrganizationEnvironment\Assembler\OrganizationAssembler;
-use App\Interfaces\OrganizationEnvironment\Assembler\OrganizationSearchAssembler;
 use App\Interfaces\OrganizationEnvironment\DTO\OrganizationCreatorResponseDTO;
 use App\Interfaces\OrganizationEnvironment\DTO\OrganizationListRequestDTO;
 use App\Interfaces\OrganizationEnvironment\DTO\OrganizationSearchRequestDTO;
@@ -91,6 +90,6 @@ class OrganizationApi extends AbstractApi
             $isOfficialOrganization ? null : $organizationCode
         );
 
-        return OrganizationSearchAssembler::createPageResponse($result, $page);
+        return OrganizationAssembler::assembleSearchPage($result, $page);
     }
 }

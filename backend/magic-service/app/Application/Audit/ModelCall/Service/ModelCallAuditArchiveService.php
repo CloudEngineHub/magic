@@ -7,8 +7,9 @@ declare(strict_types=1);
 
 namespace App\Application\Audit\ModelCall\Service;
 
+use App\Domain\Archive\Entity\ValueObject\ArchiveMode;
 use App\Domain\Archive\Service\ArchiveTaskRecordDomainService;
-use App\Domain\Audit\ModelCall\Service\AuditHourlyRecordDomainService;
+use App\Domain\Audit\ModelCall\Service\ModelCallAuditDomainService;
 use App\Infrastructure\Core\Traits\HasLogger;
 use DateTimeImmutable;
 use DateTimeZone;
@@ -18,14 +19,14 @@ use Throwable;
 
 use function Hyperf\Config\config;
 
-final class ModelAuditHourlyArchiveService
+final class ModelCallAuditArchiveService
 {
     use HasLogger;
 
-    private const ARCHIVE_TYPE = 'model_audit_hourly';
+    public const string ARCHIVE_TYPE = 'model_audit_hourly';
 
     public function __construct(
-        private readonly AuditHourlyRecordDomainService $auditHourlyRecordDomainService,
+        private readonly ModelCallAuditDomainService $modelCallAuditDomainService,
         private readonly ArchiveTaskRecordDomainService $archiveTaskRecordDomainService,
     ) {
     }
@@ -51,7 +52,7 @@ final class ModelAuditHourlyArchiveService
             $statDate = $date->format('Y-m-d');
             ++$result['total'];
             try {
-                $archiveResult = $this->archiveDate($statDate);
+                $this->archiveDate($statDate);
                 ++$result['success'];
             } catch (Throwable $throwable) {
                 ++$result['failed'];
@@ -69,11 +70,22 @@ final class ModelAuditHourlyArchiveService
     public function archiveDate(string $statDate): array
     {
         $this->parseDate($statDate);
-        $this->archiveTaskRecordDomainService->startFullArchive(self::ARCHIVE_TYPE, $statDate);
+        $this->archiveTaskRecordDomainService->start(self::ARCHIVE_TYPE, $statDate, ArchiveMode::Full);
 
         return Db::transaction(function () use ($statDate): array {
-            $result = $this->auditHourlyRecordDomainService->rebuildDate($statDate);
-            $this->archiveTaskRecordDomainService->complete(self::ARCHIVE_TYPE, $statDate, $result);
+            $result = $this->modelCallAuditDomainService->rebuildHourlyDate($statDate);
+            $this->archiveTaskRecordDomainService->complete(
+                self::ARCHIVE_TYPE,
+                $statDate,
+                $result['target_count'],
+                $result['source_start_id'],
+                $result['source_end_id'],
+                [
+                    'source_count' => $result['source_count'],
+                    'target_count' => $result['target_count'],
+                    'completed_bucket_count' => $result['completed_bucket_count'],
+                ]
+            );
             return $result;
         });
     }

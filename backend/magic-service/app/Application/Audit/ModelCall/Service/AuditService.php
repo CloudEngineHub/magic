@@ -7,9 +7,11 @@ declare(strict_types=1);
 
 namespace App\Application\Audit\ModelCall\Service;
 
-use App\Domain\Audit\ModelCall\Service\AuditHourlyRecordDomainService;
 use App\Domain\Audit\ModelCall\Service\ModelCallAuditDomainService;
 use App\Domain\Contact\Service\MagicUserDomainService;
+use App\Domain\Provider\Entity\ValueObject\ProviderVirtualIdentity;
+use App\Domain\Provider\Service\ProviderConfigDomainService;
+use App\Infrastructure\Util\OfficialOrganizationUtil;
 use App\Infrastructure\Util\StringMaskUtil;
 use App\Interfaces\Chat\DTO\UserDetailDTO;
 use DateTimeImmutable;
@@ -25,9 +27,8 @@ class AuditService
     public function __construct(
         LoggerFactory $loggerFactory,
         private readonly ModelCallAuditDomainService $modelCallAuditDomainService,
-        private readonly AuditHourlyRecordDomainService $auditHourlyRecordDomainService,
         private readonly MagicUserDomainService $magicUserDomainService,
-        private readonly AuditStatisticsProviderService $auditStatisticsProviderService,
+        private readonly ProviderConfigDomainService $providerConfigDomainService,
     ) {
         $this->logger = $loggerFactory->get(static::class);
     }
@@ -77,7 +78,7 @@ class AuditService
         string $currentOrganizationCode,
         bool $isOfficialOrganization
     ): array {
-        $filters = $this->auditStatisticsProviderService->normalizeFilters($filters);
+        $filters = $this->normalizeProviderFilters($filters);
         $raw = $this->queryStatistics(
             $filters,
             $currentOrganizationCode,
@@ -85,7 +86,7 @@ class AuditService
         );
 
         $breakdown = $this->buildBreakdown($raw['breakdown']);
-        $breakdown = $this->auditStatisticsProviderService->fillNames($breakdown, $isOfficialOrganization);
+        $breakdown = $this->fillProviderNames($breakdown, $isOfficialOrganization);
 
         return [
             'summary' => $this->buildSummary($raw['summary']),
@@ -124,7 +125,7 @@ class AuditService
             $historyFilters = $filters;
             $historyFilters['start_bucket_at'] = $this->formatDateTime($startMs, $timezone);
             $historyFilters['end_bucket_at'] = $this->formatDateTime($historyEndMs, $timezone);
-            $historyRaw = $this->auditHourlyRecordDomainService->statistics(
+            $historyRaw = $this->modelCallAuditDomainService->statisticsFromHourlyRecords(
                 $historyFilters,
                 $currentOrganizationCode,
                 $isOfficialOrganization,
@@ -477,5 +478,84 @@ class AuditService
     private function statisticsDisplayTimezone(): DateTimeZone
     {
         return new DateTimeZone((string) config('app.default_timezone', 'Asia/Shanghai'));
+    }
+
+    /**
+     * @param array<string, mixed> $filters
+     * @return array<string, mixed>
+     */
+    private function normalizeProviderFilters(array $filters): array
+    {
+        $configId = trim((string) ($filters['service_provider_config_id'] ?? ''));
+        $hasVirtualId = ProviderVirtualIdentity::isPlatformOfficialId($configId);
+
+        unset($filters['service_provider_config_id']);
+
+        if ($configId === '') {
+            return $filters;
+        }
+
+        $filters['service_provider_config_ids'] = $hasVirtualId
+            ? $this->providerConfigDomainService->getOfficialOrganizationConfigIds()
+            : ($this->isPositiveConfigId($configId) ? [(int) $configId] : []);
+
+        return $filters;
+    }
+
+    /**
+     * @param array<int, array<string, mixed>> $breakdown
+     * @return array<int, array<string, mixed>>
+     */
+    private function fillProviderNames(array $breakdown, bool $isOfficialOrganization): array
+    {
+        $configIds = [];
+        foreach ($breakdown as $row) {
+            $configId = (string) ($row['service_provider_config_id'] ?? '');
+            if ($configId !== '' && ctype_digit($configId)) {
+                $configIds[] = (int) $configId;
+            }
+        }
+
+        $configIds = array_values(array_unique($configIds));
+        if ($configIds === []) {
+            foreach ($breakdown as &$row) {
+                $row['provider_name'] = '';
+                $row['provider_alias'] = '';
+            }
+            unset($row);
+            return $breakdown;
+        }
+
+        $identityMetadata = $this->providerConfigDomainService->getProviderConfigIdentityMetadataByIds($configIds);
+        $officialOrganizationCode = OfficialOrganizationUtil::getOfficialOrganizationCode();
+
+        foreach ($breakdown as &$row) {
+            $configId = (int) ($row['service_provider_config_id'] ?? 0);
+            $metadata = $identityMetadata[$configId] ?? null;
+            if ($metadata === null) {
+                $row['provider_name'] = '';
+                $row['provider_alias'] = '';
+                continue;
+            }
+
+            if (! $isOfficialOrganization
+                && $metadata['organization_code'] === $officialOrganizationCode
+            ) {
+                $row['provider_name'] = ProviderVirtualIdentity::PLATFORM_OFFICIAL_NAME;
+                $row['provider_alias'] = ProviderVirtualIdentity::PLATFORM_OFFICIAL_NAME;
+                continue;
+            }
+
+            $row['provider_name'] = $metadata['provider_name'];
+            $row['provider_alias'] = $metadata['provider_alias'];
+        }
+        unset($row);
+
+        return $breakdown;
+    }
+
+    private function isPositiveConfigId(string $configId): bool
+    {
+        return ctype_digit($configId) && (int) $configId > 0;
     }
 }

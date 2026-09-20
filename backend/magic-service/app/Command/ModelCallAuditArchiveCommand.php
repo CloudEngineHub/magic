@@ -7,7 +7,7 @@ declare(strict_types=1);
 
 namespace App\Command;
 
-use App\Application\Audit\ModelCall\Service\ModelAuditHourlyArchiveService;
+use App\Application\Audit\ModelCall\Service\ModelCallAuditArchiveService;
 use Hyperf\Command\Annotation\Command;
 use Hyperf\Command\Command as HyperfCommand;
 use Psr\Container\ContainerInterface;
@@ -15,12 +15,12 @@ use Symfony\Component\Console\Input\InputOption;
 use Throwable;
 
 #[Command]
-final class ModelAuditHourlyArchiveCommand extends HyperfCommand
+final class ModelCallAuditArchiveCommand extends HyperfCommand
 {
     public function __construct(
         private readonly ContainerInterface $container,
     ) {
-        parent::__construct('model-audit:hourly-archive');
+        parent::__construct('model-audit:archive');
     }
 
     public function configure(): void
@@ -38,7 +38,7 @@ final class ModelAuditHourlyArchiveCommand extends HyperfCommand
 
         try {
             $result = $this->container
-                ->get(ModelAuditHourlyArchiveService::class)
+                ->get(ModelCallAuditArchiveService::class)
                 ->archiveRange($startDate, $endDate);
             $this->info(sprintf(
                 'Archive finished: total=%d, success=%d, failed=%d',

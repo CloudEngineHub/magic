@@ -18,34 +18,34 @@ final readonly class ArchiveTaskRecordDomainService
     ) {
     }
 
-    public function startFullArchive(string $archiveType, string $statDate): void
+    public function start(string $archiveType, string $statDate, ArchiveMode $mode): void
     {
-        $this->repository->markRunning($archiveType, $statDate, ArchiveMode::Full);
+        $this->repository->updateRunning($archiveType, $statDate, $mode);
     }
 
-    /**
-     * @param array{source_count: int, target_count: int, source_start_id: string, source_end_id: string, completed_bucket_count: int} $result
-     */
-    public function complete(string $archiveType, string $statDate, array $result): void
-    {
-        $this->repository->markFinished(
+    /** @param array<string, mixed> $extra */
+    public function complete(
+        string $archiveType,
+        string $statDate,
+        int $archivedCount,
+        string $sourceStartId = '',
+        string $sourceEndId = '',
+        array $extra = [],
+    ): void {
+        $this->repository->updateFinished(
             $archiveType,
             $statDate,
             ArchiveStatus::Success,
-            $result['target_count'],
-            $result['source_start_id'],
-            $result['source_end_id'],
-            [
-                'source_count' => $result['source_count'],
-                'target_count' => $result['target_count'],
-                'completed_bucket_count' => $result['completed_bucket_count'],
-            ]
+            $archivedCount,
+            $sourceStartId,
+            $sourceEndId,
+            $extra
         );
     }
 
     public function fail(string $archiveType, string $statDate, string $errorMessage): void
     {
-        $this->repository->markFinished(
+        $this->repository->updateFinished(
             $archiveType,
             $statDate,
             ArchiveStatus::Failed,
@@ -55,5 +55,4 @@ final readonly class ArchiveTaskRecordDomainService
             ['error_message' => $errorMessage]
         );
     }
-
 }

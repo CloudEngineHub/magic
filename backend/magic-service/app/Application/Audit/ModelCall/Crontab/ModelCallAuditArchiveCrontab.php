@@ -7,7 +7,7 @@ declare(strict_types=1);
 
 namespace App\Application\Audit\ModelCall\Crontab;
 
-use App\Application\Audit\ModelCall\Service\ModelAuditHourlyArchiveService;
+use App\Application\Audit\ModelCall\Service\ModelCallAuditArchiveService;
 use App\Infrastructure\Core\Traits\HasLogger;
 use DateTimeImmutable;
 use DateTimeZone;
@@ -18,19 +18,19 @@ use function Hyperf\Config\config;
 
 #[Crontab(
     rule: '30 0 * * *',
-    name: 'ModelAuditHourlyArchiveCrontab',
+    name: 'ModelCallAuditArchiveCrontab',
     singleton: true,
     mutexExpires: 3600,
     onOneServer: true,
     callback: 'execute',
     memo: '模型审计日志小时聚合归档'
 )]
-final class ModelAuditHourlyArchiveCrontab
+final class ModelCallAuditArchiveCrontab
 {
     use HasLogger;
 
     public function __construct(
-        private readonly ModelAuditHourlyArchiveService $archiveService,
+        private readonly ModelCallAuditArchiveService $archiveService,
     ) {
     }
 

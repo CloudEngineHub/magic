@@ -29,7 +29,7 @@ use App\Infrastructure\Util\Permission\Annotation\CheckPermission;
 use App\Infrastructure\Util\Permission\Annotation\CheckProviderModelPermission;
 use App\Interfaces\Authorization\Web\MagicUserAuthorization;
 use App\Interfaces\Provider\Assembler\AdminProviderModelAssembler;
-use App\Interfaces\Provider\Assembler\ProviderConfigSearchAssembler;
+use App\Interfaces\Provider\Assembler\ProviderConfigAssembler;
 use App\Interfaces\Provider\DTO\ConnectivityTestByConfigRequest;
 use App\Interfaces\Provider\DTO\ProviderConfigSearchRequest;
 use App\Interfaces\Provider\DTO\ProviderModelQueryRequest;
@@ -109,7 +109,7 @@ class ServiceProviderApi extends AbstractApi
             $searchRequest->getKeyword()
         );
 
-        return ProviderConfigSearchAssembler::createPageResponse($result, $page);
+        return ProviderConfigAssembler::toSearchPage($result, $page);
     }
 
     // 获取服务商和模型列表

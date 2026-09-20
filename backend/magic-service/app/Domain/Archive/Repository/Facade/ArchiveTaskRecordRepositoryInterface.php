@@ -12,10 +12,10 @@ use App\Domain\Archive\Entity\ValueObject\ArchiveStatus;
 
 interface ArchiveTaskRecordRepositoryInterface
 {
-    public function markRunning(string $archiveType, string $statDate, ArchiveMode $archiveMode): void;
+    public function updateRunning(string $archiveType, string $statDate, ArchiveMode $archiveMode): void;
 
     /** @param array<string, mixed> $extra */
-    public function markFinished(
+    public function updateFinished(
         string $archiveType,
         string $statDate,
         ArchiveStatus $status,
