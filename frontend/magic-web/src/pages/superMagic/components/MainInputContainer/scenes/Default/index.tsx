@@ -67,6 +67,7 @@ function DefaultInputContainer({
 
 	const editorPortalTarget = usePortalTarget({
 		portalId: inputContainerId ?? SCENE_INPUT_IDS.INPUT_CONTAINER,
+		resolveBeforePaint: variant === ScenePanelVariant.HomePage && !isMobile,
 	})
 
 	const handleTemplateSelect = (template: OptionItem | null) => {

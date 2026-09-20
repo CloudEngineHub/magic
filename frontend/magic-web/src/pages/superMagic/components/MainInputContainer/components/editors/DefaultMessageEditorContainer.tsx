@@ -110,7 +110,11 @@ export default function DefaultMessageEditorContainer(props: DefaultMessageEdito
 			const editor = tiptapEditorRef.current?.editor
 			if (editor && !editor.isDestroyed) {
 				try {
-					tiptapEditorRef.current?.focus?.({ enableWhenIsMobile: true })
+					tiptapEditorRef.current?.focus?.({
+						enableWhenIsMobile: true,
+						// Desktop chat-home autofocus must not scroll the tabs out of position.
+						preventScroll: !isMobile && editorContext?.deferProjectCreationUntilSend,
+					})
 					return
 				} catch {
 					// view not mounted yet, fall through to retry
@@ -127,7 +131,12 @@ export default function DefaultMessageEditorContainer(props: DefaultMessageEdito
 		return () => {
 			if (focusTimer != null) window.clearTimeout(focusTimer)
 		}
-	}, [editorContext?.autoFocus, tiptapEditorRef])
+	}, [
+		editorContext?.autoFocus,
+		editorContext?.deferProjectCreationUntilSend,
+		isMobile,
+		tiptapEditorRef,
+	])
 
 	useEffect(() => {
 		if (!editorContext?.initialContent) return

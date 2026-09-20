@@ -29,7 +29,7 @@ import SuperMagicService from "../../../services"
 import { createMessageEditorDraftKey } from "@/pages/superMagic/components/MessageEditor/utils/draftKey"
 import { userStore } from "@/models/user"
 
-interface EditorLayoutProps {
+export interface EditorLayoutProps {
 	editorContext?: Partial<SceneEditorContext>
 	inputContainerId?: string
 	mode?: TopicMode

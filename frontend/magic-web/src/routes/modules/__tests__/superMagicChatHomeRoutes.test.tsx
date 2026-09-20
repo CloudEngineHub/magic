@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from "vitest"
 import { getRoutePath, routesMatch } from "@/routes/history/helpers"
 import { RouteName } from "@/routes/constants"
+import { isValidElement } from "react"
 
 vi.mock("@/routes/modules/admin/routes", () => ({ default: [] }))
 vi.mock("@dtyq/magic-admin-v2", () => ({ createRouteObjects: () => [], RuntimeMode: {} }))
@@ -16,6 +17,11 @@ vi.mock("antd", async (importOriginal) => {
 })
 
 describe("desktop chat home routes", () => {
+	it("shares the lazy home component so switching modes does not remount the page", () => {
+		const chat = routesMatch("/global/super/chat")?.route.element
+		const task = routesMatch("/global/super/workspace/workspace-1")?.route.element
+		expect(isValidElement(chat) && isValidElement(task) && chat.type === task.type).toBe(true)
+	})
 	it("builds a directly addressable blank composer URL", () => {
 		expect(
 			getRoutePath({ name: RouteName.SuperChatHome, params: { clusterCode: "global" } }),

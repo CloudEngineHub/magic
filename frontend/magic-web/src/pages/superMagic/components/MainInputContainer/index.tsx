@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react"
+import { useEffect, useRef, useState, type ComponentType } from "react"
 import { ArrowUp } from "lucide-react"
 import { ScrollArea } from "@/components/shadcn-ui/scroll-area"
 import { Button } from "@/components/shadcn-ui/button"
@@ -10,7 +10,7 @@ import { createPortal } from "react-dom"
 import { AGENT_INPUT_CONTAINER_HEADER_ID, SCENE_INPUT_IDS } from "./constants"
 import usePortalTarget from "@/hooks/usePortalTarget"
 import RoleSwitcher from "./components/RoleSwitcher"
-import EditorLayout from "./scenes/EditorLayout"
+import EditorLayout, { type EditorLayoutProps } from "./scenes/EditorLayout"
 import { roleStore } from "../../stores"
 import { observer } from "mobx-react-lite"
 import { useTranslation } from "react-i18next"
@@ -22,8 +22,12 @@ import type { SceneEditorContext } from "./components/editors/types"
 
 const Container = observer(function Container({
 	editorContext,
+	EditorComponent = EditorLayout,
+	editorSessionKey,
 }: {
 	editorContext?: Partial<SceneEditorContext>
+	EditorComponent?: ComponentType<EditorLayoutProps>
+	editorSessionKey?: string
 }) {
 	const { t } = useTranslation()
 	const { currentRole, setCurrentRole } = roleStore
@@ -97,7 +101,9 @@ const Container = observer(function Container({
 								)}
 						</div>
 
-						<EditorLayout
+						{/* Reset the editor session without remounting the home navigation and layout. */}
+						<EditorComponent
+							key={editorSessionKey}
 							editorContext={editorContext}
 							inputContainerId={
 								editorContext?.sceneInputContainerId ??
