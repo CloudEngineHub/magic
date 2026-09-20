@@ -24,7 +24,10 @@ import type { MentionSelectContext } from "@/components/business/MentionPanel/ty
 import type { TiptapMentionAttributes } from "@/components/business/MentionPanel/tiptap-plugin"
 import { cn } from "@/utils/cn"
 import At from "@/pages/superMagic/components/MessageEditor/components/At"
-import { sceneStateStore } from "@/pages/superMagic/components/MainInputContainer/stores"
+import {
+	sceneStateStore as globalSceneStateStore,
+	useOptionalSceneStateStore,
+} from "@/pages/superMagic/components/MainInputContainer/stores"
 import { internetSearchManager } from "@/pages/superMagic/components/MessageEditor/services/InternetSearchManager"
 import type { MessageEditorModules } from "@/pages/superMagic/components/MessageEditor/types"
 import type { ProjectListItem, Topic } from "@/pages/superMagic/pages/Workspace/types"
@@ -163,6 +166,7 @@ function MobileComposerAddSheet({
 	const [isWebSearchEnabled, setIsWebSearchEnabled] = useState(true)
 	const mentionTriggerRef = useRef<HTMLDivElement>(null)
 	const pluginTriggerRef = useRef<HTMLDivElement>(null)
+	const sceneStateStore = useOptionalSceneStateStore() ?? globalSceneStateStore
 	const selectedScene = sceneStateStore.currentScene
 	const selectedSkillCount = selectedScene ? 1 : 0
 

@@ -105,6 +105,8 @@ export interface SceneEditorContext {
 		content: JSONContent | undefined
 		mentionItems: MentionListItem[]
 	}) => void
+	/** Validate the destination before preparing a new mobile home message, including retries. */
+	beforeSend?: () => Promise<boolean>
 	onSendComplete?: (params: {
 		success: boolean
 		currentProject: ProjectListItem | null

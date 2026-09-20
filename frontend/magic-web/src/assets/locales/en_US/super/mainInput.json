@@ -53,6 +53,18 @@
 		"label": "Switch between chat and task",
 		"task": "Task"
 	},
+	"mobileHome": {
+		"chatPlaceholder": "Describe what you need or upload a file, and we'll find the answer together.",
+		"chooseWorkspace": "Choose a workspace",
+		"createWorkspace": "New workspace",
+		"destination": "Create in: {{name}}",
+		"loadMore": "Load more",
+		"loading": "Loading…",
+		"noWorkspaces": "No workspaces found",
+		"retry": "Retry",
+		"searchWorkspaces": "Search workspaces",
+		"workspaceUnavailable": "Workspace unavailable. Choose another."
+	},
 	"pluginTips": {
 		"connectTools": "Connect your tools"
 	},

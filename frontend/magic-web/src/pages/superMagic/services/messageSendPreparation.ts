@@ -36,6 +36,8 @@ interface CreateTopicParams {
 }
 
 export interface MessageSendPreparationContext {
+	/** Consume only the active composer's temporary uploads when creating its project. */
+	getTemporaryWorkdir?: () => string | undefined
 	selectedProject?: ProjectListItem | null
 	selectedTopic?: Topic | null
 	selectedWorkspace?: Workspace | null
@@ -216,7 +218,10 @@ export async function preparePanelSend({
 	if (!currentProject?.id) {
 		const createdProject = await resolvedContext.createProject({
 			projectMode: tabPattern,
-			workdir: superMagicUploadTokenService.getLastWorkDir(),
+			workdir: (
+				context?.getTemporaryWorkdir ??
+				(() => superMagicUploadTokenService.getLastWorkDir())
+			)(),
 		})
 
 		if (!createdProject?.project || !createdProject.topic) {

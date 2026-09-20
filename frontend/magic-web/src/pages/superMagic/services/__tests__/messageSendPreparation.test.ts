@@ -106,6 +106,7 @@ describe("messageSendPreparation", () => {
 			const result = await preparePanelSend({
 				params: { value: { type: "doc" }, mentionItems: [] },
 				context: {
+					getTemporaryWorkdir: () => "chat-home-files",
 					selectedProject: null,
 					selectedTopic: null,
 					selectedWorkspace: null,
@@ -117,7 +118,10 @@ describe("messageSendPreparation", () => {
 				tabPattern: TopicMode.General,
 				messagesLength: 0,
 			})
-			expect(createProject).toHaveBeenCalledTimes(1)
+			expect(createProject).toHaveBeenCalledExactlyOnceWith({
+				projectMode: TopicMode.General,
+				workdir: "chat-home-files",
+			})
 			expect(result?.currentProject?.id).toBe("new-chat")
 			expect(result?.currentTopic?.id).toBe("new-topic")
 			expect(result?.context.workspaceId).toBe("chat-workspace")

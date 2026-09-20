@@ -157,8 +157,15 @@ export default function useMobileComposerLogic({
 		topicModelStore: editorContext.topicModelStore,
 	})
 
-	const selectedProject = editorContext.selectedProject ?? projectStore.selectedProject
-	const selectedTopic = editorContext.selectedTopic ?? topicStore.selectedTopic
+	// Explicit null denotes a blank home composer, not the last visited global conversation.
+	const selectedProject =
+		editorContext.selectedProject !== undefined
+			? editorContext.selectedProject
+			: projectStore.selectedProject
+	const selectedTopic =
+		editorContext.selectedTopic !== undefined
+			? editorContext.selectedTopic
+			: topicStore.selectedTopic
 	const draftKey = editorContext.draftKey
 	const appliedDraftModeRef = useRef<string>()
 	useEffect(() => {
@@ -187,9 +194,9 @@ export default function useMobileComposerLogic({
 	const effectiveSetSelectedWorkspace =
 		editorContext.setSelectedWorkspace ?? workspaceStore.setSelectedWorkspace
 	const selectedWorkspace =
-		editorContext.selectedWorkspace ??
-		workspaceStore.selectedWorkspace ??
-		workspaceStore.firstWorkspace
+		editorContext.selectedWorkspace !== undefined
+			? editorContext.selectedWorkspace
+			: (workspaceStore.selectedWorkspace ?? workspaceStore.firstWorkspace)
 	const modePlaceholder =
 		lt(editorContext.placeholder) ??
 		superMagicModeService.getModePlaceholderWithLegacy(
@@ -412,8 +419,18 @@ export default function useMobileComposerLogic({
 
 		isPreparingSendRef.current = true
 		setIsPreparingSend(true)
+		let completion: Parameters<NonNullable<SceneEditorContext["onSendComplete"]>>[0] = {
+			success: false,
+			currentProject: null,
+			currentTopic: null,
+		}
 
 		try {
+			editorContext.onSendStart?.({
+				content: params.value,
+				mentionItems: params.mentionItems ?? [],
+			})
+			if (editorContext.beforeSend && !(await editorContext.beforeSend())) return
 			const isWaitingForUser = selectedTopic?.task_status === TaskStatus.WAITING_FOR_USER
 			const showLoading = editorContext.showLoading ?? false
 			const defaultParams: HandleSendParams = {
@@ -455,7 +472,7 @@ export default function useMobileComposerLogic({
 			}
 
 			if (
-				!editorContext.selectedWorkspace &&
+				editorContext.selectedWorkspace === undefined &&
 				!workspaceStore.selectedWorkspace &&
 				selectedWorkspace
 			) {
@@ -465,6 +482,7 @@ export default function useMobileComposerLogic({
 			const preparedSend = await preparePanelSend({
 				params: finalParams,
 				context: {
+					getTemporaryWorkdir: store.fileUploadStore.getTemporaryWorkdir,
 					selectedProject,
 					selectedTopic,
 					selectedWorkspace,
@@ -474,6 +492,7 @@ export default function useMobileComposerLogic({
 					topicStore: editorContext.topicStore ?? topicStore,
 					createTopic: editorContext.createTopic,
 					createProject: editorContext.createProject,
+					refreshProjectAfterTopicRename: editorContext.refreshProjectAfterTopicRename,
 				},
 				tabPattern: effectiveTopicMode,
 				editorRef: tiptapEditorRef.current,
@@ -498,17 +517,22 @@ export default function useMobileComposerLogic({
 				messagesLength: editorContext.messagesLength ?? 0,
 			})
 
-			if (sendResult) sceneStateStore?.incrementSendCount()
-			editorContext.onSendSuccess?.({
-				currentProject: sendResult?.currentProject ?? null,
-				currentTopic: sendResult?.currentTopic ?? null,
-			})
-			editorContext.onSendComplete?.({
+			if (sendResult) {
+				sceneStateStore?.incrementSendCount()
+				editorContext.onSendSuccess?.({
+					currentProject: sendResult.currentProject,
+					currentTopic: sendResult.currentTopic,
+				})
+			}
+			completion = {
 				success: Boolean(sendResult),
 				currentProject: sendResult?.currentProject ?? null,
 				currentTopic: sendResult?.currentTopic ?? null,
-			})
+			}
+			return Boolean(sendResult)
 		} finally {
+			// Release home controls even when preparation or destination validation fails.
+			editorContext.onSendComplete?.(completion)
 			isPreparingSendRef.current = false
 			setIsPreparingSend(false)
 		}
@@ -523,6 +547,7 @@ export default function useMobileComposerLogic({
 		store,
 		t,
 		onSend: handleSendToServer,
+		awaitSendSuccess: editorContext.deferProjectCreationUntilSend,
 		topicMode: effectiveTopicMode,
 		collectMentionItemsFromEditor,
 		isMountedRef,

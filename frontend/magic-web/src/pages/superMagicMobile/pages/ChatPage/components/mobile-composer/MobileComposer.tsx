@@ -13,7 +13,10 @@ import type {
 } from "@/pages/superMagic/components/MainInputContainer/components/editors/types"
 import { useSceneSelection } from "@/pages/superMagic/components/MainInputContainer/hooks"
 import { useCurrentSceneConfig } from "@/pages/superMagic/components/MainInputContainer/hooks/useCurrentSceneConfig"
-import { sceneStateStore } from "@/pages/superMagic/components/MainInputContainer/stores"
+import {
+	sceneStateStore as globalSceneStateStore,
+	useOptionalSceneStateStore,
+} from "@/pages/superMagic/components/MainInputContainer/stores"
 import SuperMagicVoiceInput from "@/pages/superMagic/components/MessageEditor/components/VoiceInput"
 import { MessageEditorStoreProvider } from "@/pages/superMagic/components/MessageEditor/stores"
 import { TopicMode } from "@/pages/superMagic/pages/Workspace/TopicMode"
@@ -216,6 +219,7 @@ function MobileComposerComponent({
 	scenes,
 	enableReEditMessageFromPubSub = false,
 }: MobileComposerProps) {
+	const sceneStateStore = useOptionalSceneStateStore() ?? globalSceneStateStore
 	const { isActive, InvalidModeFallback, onCreateTopic } =
 		useInvalidTopicModeFallback(editorContext)
 	const [isAddSheetOpen, setIsAddSheetOpen] = useState(false)
@@ -232,7 +236,9 @@ function MobileComposerComponent({
 		editorContext,
 		enableReEditMessageFromPubSub,
 	})
-	const isRecordSummaryMode = editorContext.topicMode === TopicMode.RecordSummary
+	const isRecordSummaryMode =
+		editorContext.topicMode === TopicMode.RecordSummary &&
+		!editorContext.deferProjectCreationUntilSend
 	const effectiveScenes =
 		scenes ??
 		superMagicModeService.getModeConfigWithLegacy(
