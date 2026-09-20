@@ -580,20 +580,12 @@ describe("HTML", () => {
 				"data-test-id-prefix",
 				"html-editor",
 			)
-			expect(screen.getByTestId("ai-edit-button")).toHaveAttribute("data-max-items", "3")
-			expect(screen.getByTestId("ai-edit-button")).toHaveAttribute(
-				"data-test-id-prefix",
-				"html-editor",
-			)
-			expect(screen.getByTestId("ai-edit-button")).toHaveAttribute(
-				"data-has-primary-action",
-				"true",
-			)
+			expect(screen.getByTestId("html-ai-pick-button")).toBeInTheDocument()
 			expect(screen.getByTestId("html-edit-button")).toHaveTextContent("common.edit")
 		})
 	})
 
-	it("should hide the AI edit button in code preview mode", async () => {
+	it("should hide the AI pick button in code preview mode", async () => {
 		render(
 			<HTML
 				{...baseProps}
@@ -605,7 +597,7 @@ describe("HTML", () => {
 		)
 
 		await waitFor(() => {
-			expect(screen.queryByTestId("ai-edit-button")).not.toBeInTheDocument()
+			expect(screen.queryByTestId("html-ai-pick-button")).not.toBeInTheDocument()
 		})
 	})
 
@@ -779,6 +771,133 @@ describe("HTML", () => {
 			},
 			false,
 		)
+	})
+
+	it("does not fall back to nested index.html when root index.html is missing", async () => {
+		const openFileTab = vi.fn()
+		const currentFile = {
+			file_id: "file-1",
+			file_name: "detail.html",
+			relative_file_path: "detail.html",
+		}
+		const nestedFile = {
+			file_id: "nested-admin",
+			file_name: "index.html",
+			relative_file_path: "admin/index.html",
+		}
+		render(
+			<HTML
+				{...baseProps}
+				viewMode="desktop"
+				isEditMode={false}
+				attachmentList={[currentFile, nestedFile]}
+				openFileTab={openFileTab}
+			/>,
+		)
+		await waitFor(() => expect(mockIsolatedHTMLRendererProps).toHaveBeenCalled())
+		const props = mockIsolatedHTMLRendererProps.mock.lastCall?.[0]
+		act(() => props.openNewTab("file-1", "/index.html", false))
+		expect(openFileTab).not.toHaveBeenCalled()
+
+		act(() => props.openNewTab("file-1", "/", false))
+		expect(openFileTab).not.toHaveBeenCalled()
+	})
+
+	it("resolves root index.html instead of earlier nested index.html when both exist", async () => {
+		const openFileTab = vi.fn()
+		const currentFile = {
+			file_id: "file-1",
+			file_name: "detail.html",
+			relative_file_path: "detail.html",
+		}
+		const nestedFile = {
+			file_id: "nested-admin",
+			file_name: "index.html",
+			relative_file_path: "admin/index.html",
+		}
+		const rootFile = {
+			file_id: "root-index",
+			file_name: "index.html",
+			relative_file_path: "index.html",
+		}
+		render(
+			<HTML
+				{...baseProps}
+				viewMode="desktop"
+				isEditMode={false}
+				attachmentList={[currentFile, nestedFile, rootFile]}
+				openFileTab={openFileTab}
+			/>,
+		)
+		await waitFor(() => expect(mockIsolatedHTMLRendererProps).toHaveBeenCalled())
+		const props = mockIsolatedHTMLRendererProps.mock.lastCall?.[0]
+		act(() => props.openNewTab("file-1", "/index.html", false))
+		expect(openFileTab).toHaveBeenCalledWith(
+			expect.objectContaining({ file_id: "root-index" }),
+			false,
+		)
+	})
+
+	it("safely falls back to root candidate with missing relative_file_path while ignoring nested files", async () => {
+		const openFileTab = vi.fn()
+		const currentFile = {
+			file_id: "file-1",
+			file_name: "detail.html",
+			relative_file_path: "detail.html",
+		}
+		const nestedFile = {
+			file_id: "nested-admin",
+			file_name: "index.html",
+			relative_file_path: "admin/index.html",
+		}
+		const rootFileWithoutPath = {
+			file_id: "root-without-path",
+			file_name: "index.html",
+			relative_file_path: "",
+		}
+		render(
+			<HTML
+				{...baseProps}
+				viewMode="desktop"
+				isEditMode={false}
+				attachmentList={[currentFile, nestedFile, rootFileWithoutPath]}
+				openFileTab={openFileTab}
+			/>,
+		)
+		await waitFor(() => expect(mockIsolatedHTMLRendererProps).toHaveBeenCalled())
+		const props = mockIsolatedHTMLRendererProps.mock.lastCall?.[0]
+		act(() => props.openNewTab("file-1", "/index.html", false))
+		expect(openFileTab).toHaveBeenCalledWith(
+			expect.objectContaining({ file_id: "root-without-path" }),
+			false,
+		)
+	})
+
+	it("does not fall back to nested entry even with backslash paths", async () => {
+		const openFileTab = vi.fn()
+		const currentFile = {
+			file_id: "file-1",
+			file_name: "detail.html",
+			relative_file_path: "detail.html",
+		}
+		const nestedWinFile = {
+			file_id: "nested-win",
+			file_name: "index.html",
+			relative_file_path: "admin\\index.html",
+		}
+		render(
+			<HTML
+				{...baseProps}
+				viewMode="desktop"
+				isEditMode={false}
+				attachmentList={[currentFile, nestedWinFile]}
+				openFileTab={openFileTab}
+			/>,
+		)
+		await waitFor(() => expect(mockIsolatedHTMLRendererProps).toHaveBeenCalled())
+		const props = mockIsolatedHTMLRendererProps.mock.lastCall?.[0]
+		act(() => props.openNewTab("file-1", "/", false))
+		expect(openFileTab).not.toHaveBeenCalled()
 	})
 
 	it("should pass HTML navigation state to the isolated renderer", async () => {

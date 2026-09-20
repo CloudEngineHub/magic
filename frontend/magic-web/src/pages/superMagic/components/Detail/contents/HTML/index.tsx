@@ -1229,6 +1229,9 @@ export default memo(function HTML(props: HTMLProps) {
 			return
 		}
 
+		const normalizePath = (p?: string) =>
+			(p || "").replace(/\\/g, "/").replace(/^\/+/, "").replace(/^\.\//, "")
+
 		const relativePath = fileItem.relative_file_path.replace(fileItem.file_name, "")
 		let newPath = filePath
 			? filePath.startsWith("/")
@@ -1236,8 +1239,8 @@ export default memo(function HTML(props: HTMLProps) {
 				: resolveRelativePath(relativePath, filePath)
 			: fileItem.relative_file_path
 
-		// 标准化路径：移除前导 / 和 ./
-		newPath = (newPath || "").replace(/^\/+/, "").replace(/^\.\//, "")
+		// 标准化路径：统一斜杠、移除前导 / 和 ./
+		newPath = normalizePath(newPath)
 
 		// 根路径或空路径 fallback 到 index.html
 		if (!newPath || newPath.endsWith("/")) {
@@ -1245,18 +1248,37 @@ export default memo(function HTML(props: HTMLProps) {
 		}
 
 		let item = attachmentList?.find((attachment: any) => {
-			const candidatePath = (attachment.relative_file_path || "")
-				.replace(/^\/+/, "")
-				.replace(/^\.\//, "")
-			return candidatePath === newPath
+			return normalizePath(attachment.relative_file_path) === newPath
 		})
 
-		// 若未直接匹配且目标为 index.html，进行文件名兜底查找
+		// 若未直接匹配且目标为根 index.html，仅在候选文件明确位于项目根目录时进行兜底查找
 		if (!item && /^index\.html?$/i.test(newPath)) {
-			item = attachmentList?.find((attachment: any) => {
+			const rootCandidates = attachmentList?.filter((attachment: any) => {
 				const name = attachment.file_name || attachment.name || ""
-				return /^index\.html?$/i.test(name)
+				if (!/^index\.html?$/i.test(name)) return false
+
+				const candidatePath = normalizePath(attachment.relative_file_path)
+				// 若包含子目录路径分隔符，则明确为嵌套入口，排除兜底
+				if (candidatePath.includes("/")) return false
+
+				// 仅允许路径未指定、为空、或正好等于根 index.html/index.htm
+				return !candidatePath || /^index\.html?$/i.test(candidatePath)
 			})
+
+			if (rootCandidates && rootCandidates.length > 0) {
+				if (rootCandidates.length === 1) {
+					item = rootCandidates[0]
+				} else {
+					// 存在多个候选时，优先选择与 newPath 文件名精确一致的根目录候选
+					const exactNameCandidates = rootCandidates.filter((attachment: any) => {
+						const name = (attachment.file_name || attachment.name || "").toLowerCase()
+						return name === newPath.toLowerCase()
+					})
+					if (exactNameCandidates.length === 1) {
+						item = exactNameCandidates[0]
+					}
+				}
+			}
 		}
 
 		if (item) {
