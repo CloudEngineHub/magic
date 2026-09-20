@@ -1,8 +1,13 @@
 import { fireEvent, render, screen, waitFor } from "@testing-library/react"
-import { useEffect, useState, type ComponentType } from "react"
+import { useEffect, useState, type ComponentType, ReactNode } from "react"
 import { MemoryRouter, Route, Routes, useNavigate } from "react-router"
 import { describe, expect, it, vi } from "vitest"
 import Home from "../index.desktop"
+import { useKeepAlive } from "@/hooks/router/useKeepAlive"
+
+vi.mock("@/components/fallback/LoadingFallback", () => ({
+	default: ({ children }: { children: ReactNode }) => <>{children}</>,
+}))
 
 const { homeMount, homeUnmount } = vi.hoisted(() => ({
 	homeMount: vi.fn(),
@@ -65,14 +70,25 @@ function Navigation() {
 	)
 }
 
+function CachedLayout() {
+	// Exercise the real outer route cache; an incorrectly cached home creates a second editor.
+	const { Content } = useKeepAlive()
+	return Content
+}
+
 describe("desktop creation home navigation", () => {
 	it("preserves the home DOM across route changes while isolating editor sessions", async () => {
 		render(
 			<MemoryRouter initialEntries={["/global/super/workspace/workspace-1"]}>
 				<Navigation />
 				<Routes>
-					<Route path="/:clusterCode/super/workspace/:workspaceId" element={<Home />} />
-					<Route path="/:clusterCode/super/chat" element={<Home />} />
+					<Route element={<CachedLayout />}>
+						<Route
+							path="/:clusterCode/super/workspace/:workspaceId"
+							element={<Home />}
+						/>
+						<Route path="/:clusterCode/super/chat" element={<Home />} />
+					</Route>
 				</Routes>
 			</MemoryRouter>,
 		)
