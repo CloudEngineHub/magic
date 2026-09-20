@@ -48,14 +48,17 @@ function renderChatSubMenuSkeletonRow(widthClassName: string, index: number) {
 	return (
 		<div
 			key={widthClassName}
-			className="flex h-8 w-full items-center gap-2 rounded-md px-2"
+			className="flex h-12 w-full items-center gap-2 rounded-md px-2"
 			data-testid="sidebar-chats-submenu-skeleton-item"
 		>
 			<Skeleton className="size-4 shrink-0 rounded-full" />
-			<Skeleton
-				className={cn("h-4 rounded-sm", widthClassName)}
-				style={{ animationDelay: `${index * 80}ms` }}
-			/>
+			<div className="min-w-0 flex-1 space-y-1">
+				<Skeleton
+					className={cn("h-4 rounded-sm", widthClassName)}
+					style={{ animationDelay: `${index * 80}ms` }}
+				/>
+				<Skeleton className="h-3 w-1/3 rounded-sm" />
+			</div>
 		</div>
 	)
 }

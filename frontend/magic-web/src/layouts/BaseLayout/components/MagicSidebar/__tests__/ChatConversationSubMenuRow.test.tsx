@@ -95,6 +95,27 @@ describe("ChatConversationSubMenuRow", () => {
 		expect(screen.getByTestId("project-item-pinned-tag")).toBeInTheDocument()
 	})
 
+	it("renders the conversation update time below its title", () => {
+		render(<ChatConversationSubMenuRow item={createListItem()} {...defaultRowProps} />)
+
+		expect(screen.getByText("2 minutes ago")).toBeInTheDocument()
+	})
+
+	it("keeps more actions from opening the conversation row", () => {
+		const onOpen = vi.fn()
+		render(
+			<ChatConversationSubMenuRow
+				item={createListItem()}
+				{...defaultRowProps}
+				onOpen={onOpen}
+			/>,
+		)
+
+		fireEvent.click(screen.getByTestId("sidebar-chats-submenu-more-chat-project-alpha"))
+
+		expect(onOpen).not.toHaveBeenCalled()
+	})
+
 	it("clears focus styling hooks on the more trigger button", () => {
 		render(<ChatConversationSubMenuRow item={createListItem()} {...defaultRowProps} />)
 

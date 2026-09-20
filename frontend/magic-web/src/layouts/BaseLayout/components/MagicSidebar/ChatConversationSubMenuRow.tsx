@@ -13,6 +13,7 @@ import {
 	DropdownMenuSeparator,
 	DropdownMenuTrigger,
 } from "@/components/shadcn-ui/dropdown-menu"
+import { Button } from "@/components/shadcn-ui/button"
 import {
 	ChatConversationActionIcon,
 	chatConversationActionMenuItemClassName,
@@ -56,6 +57,7 @@ function ChatConversationSubMenuRow({
 }: ChatConversationSubMenuRowProps) {
 	const { t } = useTranslation("interface")
 	const [isMenuOpen, setIsMenuOpen] = useState(false)
+	const [isHovered, setIsHovered] = useState(false)
 	const suppressRowClickRef = useRef(false)
 	const suppressRowClickTimeoutRef = useRef<number | null>(null)
 	const moreButtonRef = useRef<HTMLButtonElement | null>(null)
@@ -87,19 +89,24 @@ function ChatConversationSubMenuRow({
 	}
 
 	return (
-		<div className={cn("h-8 w-full rounded-md")}>
+		<div className="h-12 w-full rounded-md">
 			<div
 				className={cn(
-					"group inline-flex h-full w-full items-center gap-2 rounded-md px-2",
-					!isSelected && "hover:bg-sidebar-accent",
-					isSelected && "bg-sidebar-accent",
+					"group/project-row flex h-full w-full min-w-0 items-center rounded-md",
+					"focus-within:bg-sidebar-accent hover:bg-sidebar-accent",
+					(isSelected || isMenuOpen) && "bg-sidebar-accent",
 				)}
 				data-selected={isSelected}
 				data-testid={`sidebar-chats-submenu-item-${item.id}`}
+				onMouseEnter={() => setIsHovered(true)}
+				onMouseLeave={() => setIsHovered(false)}
 			>
 				<button
 					type="button"
-					className="flex min-w-0 flex-1 items-center gap-2 rounded-md text-left text-sm font-normal leading-5 outline-none [-webkit-tap-highlight-color:transparent]"
+					className={cn(
+						"flex h-full min-w-0 flex-1 items-center gap-2 rounded-md px-2 text-left text-sm font-normal leading-5 outline-none [-webkit-tap-highlight-color:transparent]",
+						"hover:bg-sidebar-accent focus-visible:bg-sidebar-accent focus-visible:outline-none",
+					)}
 					onClick={handleRowClick}
 				>
 					{item.isRunning ? (
@@ -125,7 +132,7 @@ function ChatConversationSubMenuRow({
 						<div className="flex min-w-0 max-w-full items-center gap-1.5">
 							<span
 								className={cn(
-									"min-w-0 max-w-full truncate text-left",
+									"min-w-0 max-w-full truncate text-left text-[13px] leading-[18px]",
 									isSelected
 										? "text-sidebar-accent-foreground"
 										: "text-sidebar-foreground",
@@ -135,12 +142,12 @@ function ChatConversationSubMenuRow({
 							</span>
 							{item.isPinned ? <PinnedTag /> : null}
 						</div>
+						{DESKTOP_CHATS_SUBMENU_SHOW_TIME_LABEL ? (
+							<div className="mt-0.5 min-w-0 truncate text-[11px] leading-4 text-muted-foreground">
+								<time>{item.timeLabel}</time>
+							</div>
+						) : null}
 					</div>
-					{DESKTOP_CHATS_SUBMENU_SHOW_TIME_LABEL ? (
-						<span className="shrink-0 text-xs text-muted-foreground">
-							{item.timeLabel}
-						</span>
-					) : null}
 				</button>
 
 				<DropdownMenu
@@ -156,20 +163,25 @@ function ChatConversationSubMenuRow({
 					}}
 				>
 					<DropdownMenuTrigger asChild>
-						<button
+						<Button
 							ref={moreButtonRef}
 							type="button"
+							variant="ghost"
+							size="icon-sm"
 							aria-label={moreAriaLabel}
+							aria-haspopup="menu"
+							aria-expanded={isMenuOpen}
+							data-state={isMenuOpen ? "open" : "closed"}
+							data-project-more-trigger="true"
 							data-testid={`sidebar-chats-submenu-more-${item.id}`}
 							className={cn(
-								"flex h-4 w-4 shrink-0 cursor-pointer items-center justify-center rounded-full border-0 bg-transparent p-0 outline-none ring-0 transition-opacity [-webkit-tap-highlight-color:transparent] hover:bg-sidebar-accent focus:bg-transparent focus:outline-none focus:ring-0 focus-visible:outline-none focus-visible:ring-0 active:bg-transparent",
+								"relative size-8 shrink-0 bg-transparent p-0 text-sidebar-foreground opacity-0 transition-opacity [-webkit-tap-highlight-color:transparent] before:absolute before:inset-0.5 before:rounded-md before:transition-colors",
+								"hover:bg-transparent hover:before:bg-sidebar-foreground/10 focus:bg-transparent focus:outline-none focus:ring-0 focus-visible:outline-none focus-visible:ring-0 focus-visible:before:bg-sidebar-foreground/10 active:bg-transparent active:before:bg-sidebar-foreground/15",
+								"group-focus-within/project-row:pointer-events-auto group-focus-within/project-row:opacity-100 no-hover:pointer-events-auto no-hover:opacity-100",
 								isSelected
 									? "text-sidebar-accent-foreground"
 									: "text-sidebar-foreground",
-								// Use CSS hover instead of local state so optimistic reordering does not carry the visible menu trigger to the new row position.
-								isMenuOpen
-									? "opacity-100"
-									: "pointer-events-none opacity-0 group-hover:pointer-events-auto group-hover:opacity-100 no-hover:pointer-events-auto no-hover:opacity-100",
+								(isHovered || isMenuOpen) && "pointer-events-auto opacity-100",
 							)}
 							onClick={(event) => {
 								blockRowClickTemporarily()
@@ -184,8 +196,8 @@ function ChatConversationSubMenuRow({
 								event.stopPropagation()
 							}}
 						>
-							<Ellipsis className="h-4 w-4" />
-						</button>
+							<Ellipsis className="relative h-4 w-4" />
+						</Button>
 					</DropdownMenuTrigger>
 					<DropdownMenuContent align="end" className="w-44">
 						<DropdownMenuItem
