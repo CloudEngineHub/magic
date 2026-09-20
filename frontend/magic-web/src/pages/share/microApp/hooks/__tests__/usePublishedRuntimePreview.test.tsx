@@ -83,7 +83,7 @@ describe("usePublishedRuntimePreview", () => {
 		render(result.current.previewPopup)
 
 		expect(popupMocks.allowEdit).toBe(true)
-		expect(popupMocks.zIndex).toBe(1100)
+		expect(popupMocks.zIndex).toBeUndefined()
 
 		act(() => {
 			result.current.handleSelectDetail({ type: "shell", data: { command: "pwd" } })

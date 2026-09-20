@@ -42,7 +42,6 @@ import { HTML_PREVIEW_IMAGE_PROCESS } from "../../contents/HTML/previewImageProc
 import { resolvePptScaleContentDimensions } from "../../contents/HTML/utils/slide-dimensions"
 import { usePPTVersionManager } from "./hooks/usePPTVersionManager"
 import { cn } from "@/utils/cn"
-import useShareRoute from "@/pages/superMagic/hooks/useShareRoute"
 import { AttachmentItem } from "../../../TopicFilesButton/hooks"
 import MagicSpin from "@/components/base/MagicSpin"
 import { stripSlideNotes } from "./utils/slideNotes"
@@ -55,6 +54,7 @@ export interface PPTSlideToolbarModel {
 
 interface PPTSlideProps {
 	allowDownload?: boolean
+	showRefresh?: boolean
 	index: number
 	isActive: boolean
 	/** The slide currently painted in the main canvas. May differ from isActive while preparing. */
@@ -170,6 +170,7 @@ const PPTSlide = observer(function PPTSlide({
 	attachments,
 	fileApi,
 	allowDownload = true,
+	showRefresh = true,
 	manualScale,
 	onManualScaleChange,
 	onScaleRatioChange,
@@ -210,8 +211,6 @@ const PPTSlide = observer(function PPTSlide({
 		content: string
 		usesIframe: boolean
 	} | null>(null)
-
-	const { isShareRoute } = useShareRoute()
 
 	// Use specialized PPT version manager hook
 	const {
@@ -942,7 +941,7 @@ const PPTSlide = observer(function PPTSlide({
 				onCompareVersion: handleCompareVersion,
 				fetchFileVersions,
 				shouldShowButtonText: showButtonText,
-				showRefresh: !isShareRoute,
+				showRefresh,
 				onRefresh: handleRefresh,
 				isRefreshing,
 				currentFile,
@@ -982,7 +981,7 @@ const PPTSlide = observer(function PPTSlide({
 		isNewestVersion,
 		isRefreshing,
 		isSaving,
-		isShareRoute,
+		showRefresh,
 		mainFileId,
 		projectId,
 		selectedProject?.id,

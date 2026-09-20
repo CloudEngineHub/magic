@@ -49,7 +49,7 @@ export function getMicroAppPreviewPath(item: AttachmentItem | null): string {
 	const relativePath = item.relative_file_path || fileName
 	const normalizedPath = relativePath.replace(/^\/+/, "")
 
-	return /^index\.html?$/i.test(normalizedPath) ? "/" : `/${normalizedPath}`
+	return normalizedPath ? `/${normalizedPath}` : "/index.html"
 }
 
 export function isHtmlFile(item: AttachmentItem): boolean {

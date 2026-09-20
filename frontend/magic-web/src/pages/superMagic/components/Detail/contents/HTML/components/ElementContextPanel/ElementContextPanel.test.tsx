@@ -1,7 +1,9 @@
 import { createRef, type ReactNode } from "react"
 import { render } from "@testing-library/react"
-import { describe, expect, it, vi } from "vitest"
+import { beforeEach, describe, expect, it, vi } from "vitest"
 import { TAILWIND_Z_INDEX_CLASSES } from "../../constants/z-index"
+import { OverlayZIndexProvider } from "@/utils/overlayZIndex"
+import { resetOverlayStackForTest } from "@/utils/overlayZIndex/overlayStackManager"
 import { ElementContextPanel } from "./ElementContextPanel"
 
 vi.mock("react-i18next", () => ({
@@ -29,6 +31,10 @@ vi.mock("../StylePanel", () => ({
 }))
 
 describe("ElementContextPanel", () => {
+	beforeEach(() => {
+		resetOverlayStackForTest()
+	})
+
 	it("renders a compact bottom-toolbar surface", () => {
 		const boundaryRef = createRef<HTMLDivElement>()
 
@@ -115,6 +121,26 @@ describe("ElementContextPanel", () => {
 		expect(document.querySelector("[data-testid='mock-style-panel']")).toHaveAttribute(
 			"data-available-width",
 			"680",
+		)
+	})
+
+	it("elevates z-index when rendered inside an OverlayZIndexProvider (e.g. preview modal)", () => {
+		render(
+			<OverlayZIndexProvider value={1010}>
+				<ElementContextPanel
+					editorRef={{ current: null }}
+					anchor={{ top: 80, left: 80, width: 120, height: 40 }}
+					selector="section.hero"
+				/>
+			</OverlayZIndexProvider>,
+		)
+
+		const panel = document.querySelector("[data-html-context-panel]") as HTMLElement
+		if (!panel) throw new Error("context panel was not rendered")
+
+		expect(panel.style.zIndex).toBe("1020")
+		expect(panel.className).not.toContain(
+			TAILWIND_Z_INDEX_CLASSES.EDITOR_FLOATING.CONTEXT_PANEL,
 		)
 	})
 })

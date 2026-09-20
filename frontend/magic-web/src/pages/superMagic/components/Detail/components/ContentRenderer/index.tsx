@@ -63,6 +63,8 @@ function ContentRenderer({ type, data, commonProps }: ContentRendererProps) {
 	commonProps = {
 		...commonProps,
 		showFileHeader,
+		// Keep legacy share callers hidden while allowing runtime surfaces to opt in explicitly.
+		showRefresh: commonProps.showRefresh ?? !commonProps.isShareRoute,
 	}
 
 	if (data?.space_type === "user" || data?.file_reference?.space_type === "user") {

@@ -111,8 +111,6 @@ export function usePublishedRuntimePreview({
 			selectedProject={selectedProject}
 			selectedTopic={selectedTopic}
 			allowEdit={canEdit}
-			// File manager stays at the default 1000; preview must stack above it.
-			zIndex={1100}
 		/>
 	) : null
 	const fileManagerPopup =

@@ -143,6 +143,14 @@ const getVitestBaseConfig = () => {
 					find: "@dtyq/x-markdown",
 					replacement: resolve(__dirname, "packages/x-markdown/src/index.ts"),
 				},
+				{
+					find: "@magic-admin-v2",
+					replacement: resolve(__dirname, "packages/magic-admin-v2/src"),
+				},
+				{
+					find: "@dtyq/magic-admin-v2",
+					replacement: resolve(__dirname, "packages/magic-admin-v2/src/index.ts"),
+				},
 			],
 		},
 		test: {
