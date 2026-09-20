@@ -256,7 +256,6 @@ class HandleUserMessageAppService extends AbstractAppService
         $projectEntity = $this->getAccessibleProject($topicEntity->getProjectId(), $dataIsolation->getCurrentUserId(), $dataIsolation->getCurrentOrganizationCode());
 
         // 发起沙箱前校验项目空间与用户空间的文件数量是否达到上限
-        $this->assertSpaceFileCountWithinLimit($dataIsolation, $projectEntity->getId());
 
         // Check if this is the first task for the topic
         // If topic source is COPY, it's not the first task
@@ -406,39 +405,6 @@ class HandleUserMessageAppService extends AbstractAppService
                 'reason' => $e->getMessage(),
             ]);
             EventExceptionBuilder::throw(EventErrorCode::EVENT_USER_TOOL_CALL_EXPIRED, trans('super_magic.task.question_expired'));
-        }
-    }
-
-    /**
-     * 发起沙箱前校验项目空间与用户空间的文件数量是否达到上限.
-     * 计数使用 LIMIT 早退（最多扫描 $limit 行），达到上限即抛 EventException，
-     * 由订阅者/消费者以温和提醒方式通知用户。
-     */
-    private function assertSpaceFileCountWithinLimit(DataIsolation $dataIsolation, int $projectId): void
-    {
-        $limit = (int) config('super-magic.file_limit.max_count', 5000);
-        if ($limit <= 0) {
-            return;
-        }
-
-        $projectFileCount = $this->taskFileDomainService->countProjectFilesWithLimit($projectId, $limit);
-        if ($projectFileCount >= $limit) {
-            EventExceptionBuilder::throw(
-                EventErrorCode::EVENT_DATA_VALIDATION_FAILED,
-                trans('super_magic.task.project_file_count_exceeded', ['limit' => $limit])
-            );
-        }
-
-        $userSpaceFileCount = $this->taskFileDomainService->countUserSpaceFilesWithLimit(
-            $dataIsolation->getCurrentUserId(),
-            $dataIsolation->getCurrentOrganizationCode(),
-            $limit
-        );
-        if ($userSpaceFileCount >= $limit) {
-            EventExceptionBuilder::throw(
-                EventErrorCode::EVENT_DATA_VALIDATION_FAILED,
-                trans('super_magic.task.user_space_file_count_exceeded', ['limit' => $limit])
-            );
         }
     }
 
