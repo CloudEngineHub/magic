@@ -32,9 +32,12 @@ vi.mock("../../context", () => ({
 	}),
 }))
 
-vi.mock("../../utils/microAppModelMode", () => ({
-	resolveMicroAppModelSelectionMode: () => "default",
+const modelModeMocks = vi.hoisted(() => ({
+	resolveMicroAppModelSelectionMode: vi.fn(() => "default"),
+	resolveMicroAppRuntimeModelSelectionMode: vi.fn((mode: string) => mode),
 }))
+
+vi.mock("../../utils/microAppModelMode", () => modelModeMocks)
 
 const topicModeMocks = vi.hoisted(() => ({
 	useCreateTopicListener: vi.fn(),
@@ -383,7 +386,15 @@ describe("AppConversationPanel", () => {
 			"custom_agent",
 		)
 		expect(screen.getByTestId("web-micro-app-editor")).toHaveAttribute(
+			"data-model-topic-mode",
+			"custom_agent",
+		)
+		expect(screen.getByTestId("web-micro-app-editor")).toHaveAttribute(
 			"data-agent-code",
+			"SMA123",
+		)
+		expect(modelModeMocks.resolveMicroAppRuntimeModelSelectionMode).toHaveBeenCalledWith(
+			"custom_agent",
 			"SMA123",
 		)
 		expect(screen.getByTestId("web-micro-app-editor")).not.toHaveAttribute(
@@ -391,6 +402,43 @@ describe("AppConversationPanel", () => {
 		)
 		expect(screen.getByTestId("runtime-mode-toggle")).toBeInTheDocument()
 		expect(scaffoldMocks.messageHeaderProps?.hideTopicListModeIcon).toBe(false)
+	})
+
+	it("falls back to the default catalog when a custom employee has no models", () => {
+		modelModeMocks.resolveMicroAppRuntimeModelSelectionMode.mockReturnValueOnce("default")
+		const topicStore = {
+			selectedTopic: {
+				id: "topic-1",
+				topic_name: "Topic",
+				topic_mode: "custom_agent",
+				agent_code: "SMA123",
+			},
+			setSelectedTopic: vi.fn(),
+			updateTopic: vi.fn(),
+		} as never
+
+		render(
+			<AppConversationPanel
+				selectedProject={{ id: "project-1", project_name: "Micro App" } as never}
+				topicStore={topicStore}
+				mentionPanelStore={mentionPanelStore}
+				projectFilesStore={{} as never}
+				lockToMicroAppMode={false}
+			/>,
+		)
+
+		expect(screen.getByTestId("web-micro-app-editor")).toHaveAttribute(
+			"data-topic-mode",
+			"custom_agent",
+		)
+		expect(screen.getByTestId("web-micro-app-editor")).toHaveAttribute(
+			"data-model-topic-mode",
+			"default",
+		)
+		expect(screen.getByTestId("web-micro-app-editor")).toHaveAttribute(
+			"data-agent-code",
+			"SMA123",
+		)
 	})
 
 	it("binds create-topic events to the visible conversation store", () => {

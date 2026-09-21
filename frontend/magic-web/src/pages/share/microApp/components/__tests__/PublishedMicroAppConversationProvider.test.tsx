@@ -14,6 +14,7 @@ import { AppStoreProvider, useAppStore } from "@/pages/superMagic/pages/MicroApp
 import pubsub, { PubSubEvents } from "@/utils/pubsub"
 import type { ProjectFilesStore } from "@/stores/projectFiles"
 import BasePublishedMicroAppConversationProvider from "../PublishedMicroAppConversationProvider"
+import { useDefaultModeModelListRefreshOnMount } from "@/pages/superMagic/hooks/useFeaturedModeListRefresh"
 
 function PublishedMicroAppConversationProvider(
 	props: Omit<
@@ -116,6 +117,10 @@ vi.mock("@/pages/superMagic/pages/TopicPage/components/TopicDesktopPanels", () =
 
 vi.mock("@/pages/superMagic/hooks/useScopedMessageHeaderTopicActions", () => ({
 	useScopedMessageHeaderTopicActions: () => ({}),
+}))
+
+vi.mock("@/pages/superMagic/hooks/useFeaturedModeListRefresh", () => ({
+	useDefaultModeModelListRefreshOnMount: vi.fn(),
 }))
 
 vi.mock("@/pages/superMagic/components/MessageHeader", () => ({
@@ -248,6 +253,7 @@ describe("PublishedMicroAppConversationProvider", () => {
 		vi.mocked(SuperMagicApi.getProjectDetail).mockReset()
 		vi.mocked(SuperMagicApi.getTopicsByProjectId).mockReset()
 		vi.mocked(SuperMagicApi.getMicroAppRuntimeProject).mockResolvedValue({ exists: false })
+		vi.mocked(useDefaultModeModelListRefreshOnMount).mockClear()
 	})
 
 	it("does not crash while legacy share data has no source organization", () => {
@@ -274,6 +280,19 @@ describe("PublishedMicroAppConversationProvider", () => {
 
 		expect(screen.getByTestId("preview-child")).toBeInTheDocument()
 		expect(screen.queryByTestId("topic-desktop-panels")).not.toBeInTheDocument()
+	})
+
+	it("prefetches the default model catalog for the runtime conversation", async () => {
+		render(
+			<PublishedMicroAppConversationProvider appId="app-1">
+				<div data-testid="preview-child" />
+			</PublishedMicroAppConversationProvider>,
+		)
+
+		expect(useDefaultModeModelListRefreshOnMount).toHaveBeenCalled()
+		await waitFor(() => {
+			expect(SuperMagicApi.getMicroAppRuntimeProject).toHaveBeenCalled()
+		})
 	})
 
 	it("hides the sidebar when the runtime project does not exist", async () => {
