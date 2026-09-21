@@ -16,6 +16,10 @@ export type {
 	StagingPolicy,
 	StreamingExportContent,
 	StreamingExportHandle,
+	LegacyExportHandle,
+	LegacyExportOptions,
+	LegacyExportSummary,
+	StreamingOptionsBase,
 	StreamingHtmlPage,
 	StreamingHtmlPageInput,
 	ZipMode,
@@ -38,6 +42,7 @@ export {
 	PPTX_MIME_TYPE,
 	type BufferedPptxSink,
 } from "../packaging/buffered-sink"
+export { createPptxLegacyExporter, exportPPTXLegacy } from "../pipeline/legacy-export"
 export {
 	resolveStreamingMediaPolicyMode,
 	type ResolveMediaPolicyModeOptions,
