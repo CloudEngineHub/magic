@@ -8,10 +8,11 @@ declare(strict_types=1);
 namespace App\Application\Audit\ModelCall\Crontab;
 
 use App\Application\Audit\ModelCall\Service\ModelCallAuditArchiveService;
-use App\Infrastructure\Core\Traits\HasLogger;
 use DateTimeImmutable;
 use DateTimeZone;
 use Hyperf\Crontab\Annotation\Crontab;
+use Hyperf\Logger\LoggerFactory;
+use Psr\Log\LoggerInterface;
 use RuntimeException;
 use Throwable;
 
@@ -28,11 +29,13 @@ use function Hyperf\Config\config;
 )]
 final class ModelCallAuditArchiveCrontab
 {
-    use HasLogger;
+    private LoggerInterface $logger;
 
     public function __construct(
+        LoggerFactory $loggerFactory,
         private readonly ModelCallAuditArchiveService $archiveService,
     ) {
+        $this->logger = $loggerFactory->get(static::class);
     }
 
     public function execute(): void

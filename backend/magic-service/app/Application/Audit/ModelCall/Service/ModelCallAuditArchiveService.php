@@ -10,25 +10,28 @@ namespace App\Application\Audit\ModelCall\Service;
 use App\Domain\Archive\Entity\ValueObject\ArchiveMode;
 use App\Domain\Archive\Service\ArchiveTaskRecordDomainService;
 use App\Domain\Audit\ModelCall\Service\ModelCallAuditDomainService;
-use App\Infrastructure\Core\Traits\HasLogger;
 use DateTimeImmutable;
 use DateTimeZone;
 use Hyperf\DbConnection\Db;
+use Hyperf\Logger\LoggerFactory;
 use InvalidArgumentException;
+use Psr\Log\LoggerInterface;
 use Throwable;
 
 use function Hyperf\Config\config;
 
 final class ModelCallAuditArchiveService
 {
-    use HasLogger;
-
     public const string ARCHIVE_TYPE = 'model_audit_hourly';
 
+    private LoggerInterface $logger;
+
     public function __construct(
+        LoggerFactory $loggerFactory,
         private readonly ModelCallAuditDomainService $modelCallAuditDomainService,
         private readonly ArchiveTaskRecordDomainService $archiveTaskRecordDomainService,
     ) {
+        $this->logger = $loggerFactory->get(static::class);
     }
 
     /**
