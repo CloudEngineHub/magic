@@ -646,9 +646,9 @@ function TopicPage({
 							setSelectedTopic={topicStore.setSelectedTopic}
 							onFileClick={onFileClick}
 							selectedWorkspace={selectedWorkspace}
-							// Only chat details hide employee controls; project topics retain their existing defaults.
+							// Chat details use the same model-only selector as the chat home.
 							showModeToggle={isSingleTopicChat ? false : undefined}
-							showModelSelector={isSingleTopicChat ? false : undefined}
+							showModelSelector={isSingleTopicChat ? true : undefined}
 							placeholder={
 								isSingleTopicChat
 									? tMainInput("mobileHome.chatPlaceholder")
