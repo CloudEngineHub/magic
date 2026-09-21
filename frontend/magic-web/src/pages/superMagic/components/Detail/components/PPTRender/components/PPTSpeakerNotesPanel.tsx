@@ -11,6 +11,7 @@ import PPTNotesActions, { type PPTNotesAction } from "./PPTNotesActions"
 
 interface PPTSpeakerNotesPanelProps {
 	visible?: boolean
+	layout?: "default" | "presenter"
 	slideIndex: number
 	rawContent: string
 	fileId: string
@@ -55,6 +56,7 @@ export default function PPTSpeakerNotesPanel(props: PPTSpeakerNotesPanelProps) {
 
 function SpeakerNotesEditor({
 	visible = true,
+	layout = "default",
 	slideIndex,
 	rawContent,
 	fileId,
@@ -165,7 +167,7 @@ function SpeakerNotesEditor({
 	return (
 		<>
 			{/* Keep the slide canvas size stable once notes overlay it. */}
-			{visible && overlay ? (
+			{layout === "default" && visible && overlay ? (
 				<div
 					aria-hidden
 					data-testid="ppt-speaker-notes-spacer"
@@ -176,28 +178,33 @@ function SpeakerNotesEditor({
 			<section
 				ref={panelRef}
 				data-testid="ppt-speaker-notes-panel"
-				data-overlay={overlay ? "true" : undefined}
+				data-layout={layout}
+				data-overlay={layout === "default" && overlay ? "true" : undefined}
 				hidden={!visible}
-				style={{ height }}
+				style={layout === "default" ? { height } : undefined}
 				// Keep the editor mounted while collapsed so unsaved or failed drafts survive.
 				className={cn(
-					"min-h-0 flex-col overflow-hidden border-t border-border/60 bg-background",
-					overlay
-						? // Cover the slide without hiding the presentation loading overlay.
-							"absolute inset-x-0 bottom-0 z-[5] shadow-[0_-8px_32px_oklch(0_0_0/0.12)]"
-						: "shrink-0",
+					"min-h-0 flex-col overflow-hidden border-border/60 bg-background",
+					layout === "presenter"
+						? "h-full min-h-0 min-w-0 flex-1 rounded-xl border bg-card"
+						: overlay
+							? // Cover the slide without hiding the presentation loading overlay.
+								"absolute inset-x-0 bottom-0 z-[5] shadow-[0_-8px_32px_oklch(0_0_0/0.12)]"
+							: "shrink-0",
 					visible ? "flex" : "hidden",
 				)}
 			>
-				<button
-					type="button"
-					aria-label={t("ppt.speakerNotes.resize")}
-					className="group flex h-2 w-full shrink-0 cursor-ns-resize touch-none items-center justify-center focus-visible:outline focus-visible:outline-2 focus-visible:outline-ring"
-					{...resizeHandleProps}
-				>
-					<span className="h-0.5 w-7 rounded-full bg-border transition-colors group-hover:bg-muted-foreground/50" />
-				</button>
-				<div className="flex shrink-0 flex-wrap items-center justify-between gap-2 px-4 pb-2">
+				{layout === "default" && (
+					<button
+						type="button"
+						aria-label={t("ppt.speakerNotes.resize")}
+						className="group flex h-2 w-full shrink-0 cursor-ns-resize touch-none items-center justify-center focus-visible:outline focus-visible:outline-2 focus-visible:outline-ring"
+						{...resizeHandleProps}
+					>
+						<span className="h-0.5 w-7 rounded-full bg-border transition-colors group-hover:bg-muted-foreground/50" />
+					</button>
+				)}
+				<div className="flex shrink-0 flex-wrap items-center justify-between gap-2 px-4 pb-2 pt-3">
 					<div className="flex min-w-0 items-center gap-2">
 						<NotebookPen className="size-4 shrink-0 text-muted-foreground" />
 						<h2 className="truncate text-xs font-normal text-muted-foreground">

@@ -62,6 +62,7 @@ import type { PPTSlideStructureAdapter } from "./types"
 import { getPPTLiveRenderCacheSize } from "./PPTSidebar/utils/devicePerformance"
 import EditToolbar from "../EditToolbar"
 import PPTSpeakerNotesPanel from "./components/PPTSpeakerNotesPanel"
+import PPTPresenterConsoleControls from "./components/PPTPresenterConsoleControls"
 import type { PPTNotesAction } from "./components/PPTNotesActions"
 import { pptNotesPreferenceStore } from "@/stores/layout/PPTNotesPreferenceStore"
 import { runGuardedAction } from "../../utils/actionGuard"
@@ -71,6 +72,7 @@ import {
 	type SlidesTemplateReplacementTarget,
 } from "@/pages/superMagic/utils/slidesTemplateReplacementActions"
 import pubsub, { PubSubEvents } from "@/utils/pubsub"
+import { resolvePptScaleContentDimensions } from "../../contents/HTML/utils/slide-dimensions"
 
 const SlidesTemplateReplacementDialog = lazy(() => import("./SlidesTemplateReplacementDialog"))
 
@@ -380,28 +382,42 @@ const PPTRenderInner = observer(function PPTRenderInner({
 		close: closePresenterWindow,
 		moveToScreen: movePresenterToScreen,
 	} = usePPTPresenterWindow()
+	const presenterSlideDimensions = useMemo(
+		() =>
+			resolvePptScaleContentDimensions(
+				store.currentSlide?.content,
+				store.currentSlide?.rawContent,
+			),
+		[store.currentSlide?.content, store.currentSlide?.rawContent],
+	)
+	const presenterPayload = useMemo(
+		() =>
+			(store.currentSlide?.content
+				? {
+						index: store.activeIndex,
+						html: store.currentSlide.content,
+						dimensions: presenterSlideDimensions,
+					}
+				: null) as Parameters<typeof openPresenterWindow>[0] | null,
+		[presenterSlideDimensions, store, store.activeIndex, store.currentSlide?.content],
+	)
 	useEffect(() => {
-		if (!isPresenterWindowOpen || !store.currentSlide?.content) return
-		postPresenterSlide({
-			index: store.activeIndex,
-			html: store.currentSlide.content,
-		})
-	}, [isPresenterWindowOpen, postPresenterSlide, store, store.activeIndex, store.currentSlide])
+		if (!isPresenterWindowOpen || !presenterPayload) return
+		postPresenterSlide(presenterPayload)
+	}, [isPresenterWindowOpen, postPresenterSlide, presenterPayload])
 	const togglePresenter = useMemoizedFn(async () => {
 		if (isPresenterWindowOpen) {
 			closePresenterWindow()
 			return
 		}
-		if (!isPresenterFallbackOnly && !isMobile && store.currentSlide?.content) {
-			const openResult = await openPresenterWindow({
-				index: store.activeIndex,
-				html: store.currentSlide.content,
-			})
+		if (!isPresenterFallbackOnly && !isMobile && presenterPayload) {
+			const openResult = await openPresenterWindow(presenterPayload)
 			if (openResult !== "fallback") return
 		}
 		await togglePresentationFullscreen()
 	})
 	const isSingleWindowFullscreen = isPresentationFullscreen && !isPresenterView
+	const isPresenterConsole = isPresenterWindowOpen
 	const isSidebarEffectivelyCollapsed = isSidebarCollapsed && !isPresenterView
 
 	// 先于子组件的被动 effect 同步，避免退出全屏时侧栏恢复请求仍被旧状态丢弃。
@@ -876,17 +892,18 @@ const PPTRenderInner = observer(function PPTRenderInner({
 			<div
 				ref={containerRef}
 				data-testid="ppt-render-container"
+				data-presenter-console={isPresenterConsole ? "true" : undefined}
 				data-mobile-fullscreen={
 					isMobile && isSingleWindowFullscreen ? "landscape" : undefined
 				}
 				className={
-					isSingleWindowFullscreen
+					isSingleWindowFullscreen || isPresenterConsole
 						? `fixed inset-0 ${TAILWIND_Z_INDEX_CLASSES.FULLSCREEN.CONTAINER} flex flex-row bg-black`
 						: "relative h-full w-full overflow-hidden"
 				}
 			>
 				{/* Fullscreen hides the regular bar; keep an always-visible exit target on touch screens. */}
-				{isPresentationFullscreen && (
+				{isPresentationFullscreen && !isPresenterConsole && (
 					<Button
 						variant="ghost"
 						size="icon"
@@ -898,22 +915,24 @@ const PPTRenderInner = observer(function PPTRenderInner({
 						<Minimize className="h-4 w-4" />
 					</Button>
 				)}
-				{isSidebarEffectivelyCollapsed && !isSingleWindowFullscreen && (
-					<MagicTooltip title={t("fileViewer.expandSidebar")}>
-						<Button
-							variant="ghost"
-							size="icon"
-							data-testid="ppt-render-expand-sidebar-button"
-							className={cn(
-								"absolute z-10 h-8 w-8 shrink-0 border border-border bg-white text-foreground shadow-sm dark:bg-card",
-								isMobile ? "bottom-2 left-2" : "left-2 top-2",
-							)}
-							onClick={() => setIsSidebarCollapsed(false)}
-						>
-							<PanelLeftOpen className="h-4 w-4" />
-						</Button>
-					</MagicTooltip>
-				)}
+				{isSidebarEffectivelyCollapsed &&
+					!isSingleWindowFullscreen &&
+					!isPresenterConsole && (
+						<MagicTooltip title={t("fileViewer.expandSidebar")}>
+							<Button
+								variant="ghost"
+								size="icon"
+								data-testid="ppt-render-expand-sidebar-button"
+								className={cn(
+									"absolute z-10 h-8 w-8 shrink-0 border border-border bg-white text-foreground shadow-sm dark:bg-card",
+									isMobile ? "bottom-2 left-2" : "left-2 top-2",
+								)}
+								onClick={() => setIsSidebarCollapsed(false)}
+							>
+								<PanelLeftOpen className="h-4 w-4" />
+							</Button>
+						</MagicTooltip>
+					)}
 
 				<div
 					className={cn(
@@ -922,70 +941,83 @@ const PPTRenderInner = observer(function PPTRenderInner({
 					)}
 				>
 					{/* 侧边栏 - 桌面端在左侧，移动端在顶部 */}
-					<div
-						data-testid="ppt-render-sidebar"
-						className={cn(
-							"shrink-0 overflow-hidden",
-							!isResizing && "transition-all duration-300 ease-in-out",
-							isMobile
-								? isSidebarEffectivelyCollapsed || isSingleWindowFullscreen
-									? "h-0"
-									: "h-[140px]"
-								: "",
-						)}
-						style={{
-							width: !isMobile
-								? isSidebarEffectivelyCollapsed || isSingleWindowFullscreen
-									? 0
-									: sidebarWidth
-								: undefined,
-						}}
-					>
+					{!isPresenterConsole && (
 						<div
+							data-testid="ppt-render-sidebar"
+							className={cn(
+								"shrink-0 overflow-hidden",
+								!isResizing && "transition-all duration-300 ease-in-out",
+								isMobile
+									? isSidebarEffectivelyCollapsed || isSingleWindowFullscreen
+										? "h-0"
+										: "h-[140px]"
+									: "",
+							)}
 							style={{
-								width: isMobile ? "100%" : sidebarWidth,
-								height: isMobile ? "140px" : "100%",
+								width: !isMobile
+									? isSidebarEffectivelyCollapsed || isSingleWindowFullscreen
+										? 0
+										: sidebarWidth
+									: undefined,
 							}}
 						>
-							<PPTSidebar
-								onSlideClick={handleSlideClick}
-								onSortChange={effectiveAllowEdit ? handleSortChange : undefined}
-								onInsertSlide={effectiveAllowEdit ? handleInsertSlide : undefined}
-								onDuplicateSlide={
-									effectiveAllowEdit ? handleDuplicateSlide : undefined
-								}
-								onDeleteSlide={effectiveAllowEdit ? handleDeleteSlide : undefined}
-								onRenameSlide={effectiveAllowEdit ? handleRenameSlide : undefined}
-								onRefreshSlide={effectiveAllowEdit ? handleRefreshSlide : undefined}
-								onRegenerateScreenshot={handleRegenerateScreenshot}
-								onAddToCurrentChat={handleAddToCurrentChat}
-								onAddToNewChat={handleAddToNewChat}
-								isMobile={isMobile}
-								sidebarWidth={sidebarWidth}
-								allowEdit={effectiveAllowEdit}
-								canReplaceTemplate={canReplaceTemplate}
-								onReplaceSlideTemplate={handleOpenSlideTemplateReplacement}
-								isCollapsed={isSidebarEffectivelyCollapsed}
-								isPreviewLoadingEnabled={
-									!isSidebarEffectivelyCollapsed && !isSingleWindowFullscreen
-								}
-								onCollapsedChange={handleSidebarCollapsedChange}
-							/>
+							<div
+								style={{
+									width: isMobile ? "100%" : sidebarWidth,
+									height: isMobile ? "140px" : "100%",
+								}}
+							>
+								<PPTSidebar
+									onSlideClick={handleSlideClick}
+									onSortChange={effectiveAllowEdit ? handleSortChange : undefined}
+									onInsertSlide={
+										effectiveAllowEdit ? handleInsertSlide : undefined
+									}
+									onDuplicateSlide={
+										effectiveAllowEdit ? handleDuplicateSlide : undefined
+									}
+									onDeleteSlide={
+										effectiveAllowEdit ? handleDeleteSlide : undefined
+									}
+									onRenameSlide={
+										effectiveAllowEdit ? handleRenameSlide : undefined
+									}
+									onRefreshSlide={
+										effectiveAllowEdit ? handleRefreshSlide : undefined
+									}
+									onRegenerateScreenshot={handleRegenerateScreenshot}
+									onAddToCurrentChat={handleAddToCurrentChat}
+									onAddToNewChat={handleAddToNewChat}
+									isMobile={isMobile}
+									sidebarWidth={sidebarWidth}
+									allowEdit={effectiveAllowEdit}
+									canReplaceTemplate={canReplaceTemplate}
+									onReplaceSlideTemplate={handleOpenSlideTemplateReplacement}
+									isCollapsed={isSidebarEffectivelyCollapsed}
+									isPreviewLoadingEnabled={
+										!isSidebarEffectivelyCollapsed && !isSingleWindowFullscreen
+									}
+									onCollapsedChange={handleSidebarCollapsedChange}
+								/>
+							</div>
 						</div>
-					</div>
+					)}
 
 					{/* Width handle stays below the canvas stacking context. */}
-					{!isMobile && !isSidebarEffectivelyCollapsed && !isSingleWindowFullscreen && (
-						<div
-							data-testid="ppt-render-sidebar-resize-handle"
-							className={cn(
-								"absolute bottom-0 top-0 w-4 -translate-x-1/2 cursor-col-resize bg-transparent",
-								TAILWIND_Z_INDEX_CLASSES.BASE.SIDEBAR_RESIZE,
-							)}
-							style={{ left: sidebarWidth }}
-							onMouseDown={handleResizeStart}
-						/>
-					)}
+					{!isPresenterConsole &&
+						!isMobile &&
+						!isSidebarEffectivelyCollapsed &&
+						!isSingleWindowFullscreen && (
+							<div
+								data-testid="ppt-render-sidebar-resize-handle"
+								className={cn(
+									"absolute bottom-0 top-0 w-4 -translate-x-1/2 cursor-col-resize bg-transparent",
+									TAILWIND_Z_INDEX_CLASSES.BASE.SIDEBAR_RESIZE,
+								)}
+								style={{ left: sidebarWidth }}
+								onMouseDown={handleResizeStart}
+							/>
+						)}
 
 					{/* 主内容区 - flex-1 占据剩余空间 */}
 					<div
@@ -993,13 +1025,17 @@ const PPTRenderInner = observer(function PPTRenderInner({
 						data-testid="ppt-render-slide-content"
 						className={cn(
 							"min-h-0 min-w-0 flex-1",
+							isPresenterConsole && "bg-muted/30 p-4",
 							!isSidebarEffectivelyCollapsed &&
 								!isSingleWindowFullscreen &&
 								`relative ${TAILWIND_Z_INDEX_CLASSES.BASE.SLIDE_CANVAS}`,
 						)}
 					>
 						<div
-							className="relative flex h-full w-full flex-col overflow-hidden"
+							className={cn(
+								"relative flex h-full w-full flex-col overflow-hidden",
+								isPresenterConsole && "flex-row gap-4",
+							)}
 							tabIndex={0}
 							aria-label={
 								hasSlides
@@ -1029,7 +1065,7 @@ const PPTRenderInner = observer(function PPTRenderInner({
 								</div>
 							)}
 
-							{presentedToolbarModel && (
+							{presentedToolbarModel && !isPresenterConsole && (
 								<div
 									ref={toolbarHostRef}
 									data-testid="ppt-render-edit-toolbar"
@@ -1054,6 +1090,8 @@ const PPTRenderInner = observer(function PPTRenderInner({
 								data-testid="ppt-render-slide-stage"
 								className={cn(
 									"relative z-0 min-h-0 w-full flex-1 overflow-hidden",
+									isPresenterConsole &&
+										"w-[42%] min-w-[320px] shrink-0 rounded-xl border border-border/60 bg-black",
 									isPresenterView && "bg-black",
 								)}
 							>
@@ -1116,7 +1154,7 @@ const PPTRenderInner = observer(function PPTRenderInner({
 											loadingState={slide.loadingState}
 											loadingError={slide.loadingError}
 											isFullscreen={isPresentationFullscreen}
-											isPlaybackMode={isPlaybackMode}
+											isPlaybackMode={isPlaybackMode || isPresenterConsole}
 											manualScale={manualScale}
 											onManualScaleChange={handleManualScaleChange}
 											onScaleRatioChange={setActiveSlideScaleRatio}
@@ -1138,7 +1176,7 @@ const PPTRenderInner = observer(function PPTRenderInner({
 											) => {
 												store.updateSlideContents(newContents)
 											}}
-											allowEdit={effectiveAllowEdit}
+											allowEdit={effectiveAllowEdit && !isPresenterConsole}
 											showButtonText={shouldShowButtonText}
 											onEditModeChange={(isEditing) =>
 												handleEditModeChange(slideFileId, isEditing)
@@ -1176,8 +1214,26 @@ const PPTRenderInner = observer(function PPTRenderInner({
 									)
 								})}
 
+								{isPresenterConsole && store.isReady && hasSlides && (
+									<PPTPresenterConsoleControls
+										activeIndex={store.activeIndex}
+										totalSlides={store.slideUrls.length}
+										isTransitioning={store.isTransitioning}
+										screens={presenterScreens}
+										selectedScreen={selectedPresenterScreen}
+										onPrevSlide={() => void changeSlide("prev")}
+										onNextSlide={() => void changeSlide("next")}
+										onJumpToPage={handleJumpToPage}
+										onSelectScreen={(index) => {
+											void movePresenterToScreen(index)
+										}}
+										onExit={closePresenterWindow}
+									/>
+								)}
+
 								{/* 控制栏只覆盖幻灯片画布，不覆盖画布下方的备注区域。 */}
-								{!isAnySlideEditing &&
+								{!isPresenterConsole &&
+									!isAnySlideEditing &&
 									!isPresentationFullscreen &&
 									presentedToolbarModel?.props.viewMode !== "code" &&
 									store.isReady &&
@@ -1241,6 +1297,7 @@ const PPTRenderInner = observer(function PPTRenderInner({
 								hasSlides &&
 								store.currentSlide && (
 									<PPTSpeakerNotesPanel
+										layout={isPresenterConsole ? "presenter" : "default"}
 										visible={
 											isPresenterView ||
 											isPresenterWindowOpen ||
@@ -1257,7 +1314,11 @@ const PPTRenderInner = observer(function PPTRenderInner({
 													store.getFileIdByPath(slide.path) === fileId,
 											)?.rawContent || ""
 										}
-										allowEdit={effectiveAllowEdit && !isPlaybackMode}
+										allowEdit={
+											effectiveAllowEdit &&
+											!isPlaybackMode &&
+											!isPresenterConsole
+										}
 										saveEditContent={saveEditContent}
 										onSaved={(nextContent, fileId) =>
 											Promise.resolve(

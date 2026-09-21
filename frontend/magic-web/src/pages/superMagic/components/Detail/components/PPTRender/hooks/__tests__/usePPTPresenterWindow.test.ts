@@ -51,8 +51,11 @@ function createPopup() {
 	const frame = document.createElement("iframe")
 	const fullscreenButton = document.createElement("button")
 	const documentListeners = new Map<string, EventListener>()
+	const windowListeners = new Map<string, EventListener>()
 	return {
 		closed: false,
+		innerWidth: 1280,
+		innerHeight: 800,
 		document: {
 			title: "",
 			open: vi.fn(),
@@ -74,15 +77,21 @@ function createPopup() {
 		moveTo: vi.fn(),
 		resizeTo: vi.fn(),
 		close: vi.fn(),
-		addEventListener: vi.fn(),
-		removeEventListener: vi.fn(),
+		addEventListener: vi.fn((type: string, listener: EventListener) => {
+			windowListeners.set(type, listener)
+		}),
+		removeEventListener: vi.fn((type: string) => {
+			windowListeners.delete(type)
+		}),
 		__frame: frame,
 		__fullscreenButton: fullscreenButton,
 		__documentListeners: documentListeners,
+		__windowListeners: windowListeners,
 	} as unknown as Window & {
 		__frame: HTMLIFrameElement
 		__fullscreenButton: HTMLButtonElement
 		__documentListeners: Map<string, EventListener>
+		__windowListeners: Map<string, EventListener>
 	}
 }
 
@@ -192,6 +201,34 @@ describe("usePPTPresenterWindow", () => {
 		expect(popup.document.documentElement.requestFullscreen).not.toHaveBeenCalled()
 		expect(popup.__fullscreenButton.hidden).toBe(false)
 		expect(result.current.selectedScreen).toBe(0)
+	})
+
+	it("contains the canonical slide canvas and recalculates on popup resize", async () => {
+		const popup = createPopup()
+		Object.assign(popup, { innerWidth: 1280, innerHeight: 800 })
+		vi.spyOn(window, "open").mockReturnValue(popup)
+		const { result } = renderHook(() => usePPTPresenterWindow())
+
+		await act(async () => {
+			await result.current.open({
+				index: 0,
+				html: "<main>Slide</main>",
+				dimensions: { width: 1920, height: 1080 },
+			})
+		})
+
+		expect(popup.__frame.style.width).toBe("1920px")
+		expect(popup.__frame.style.height).toBe("1080px")
+		expect(popup.__frame.style.transform).toBe("translate(0px, 40px) scale(0.6666666666666666)")
+
+		Object.assign(popup, { innerWidth: 1000, innerHeight: 700 })
+		act(() => popup.__windowListeners.get("resize")?.(new Event("resize")))
+
+		expect(popup.__frame.style.transform).toBe(
+			"translate(0px, 68.75px) scale(0.5208333333333334)",
+		)
+		act(() => result.current.close())
+		expect(popup.__windowListeners.has("resize")).toBe(false)
 	})
 
 	it("enters fullscreen from the popup CTA and tracks fullscreen changes", async () => {

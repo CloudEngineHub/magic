@@ -358,6 +358,30 @@ describe("PPTSpeakerNotesPanel", () => {
 		expect(screen.queryByTestId("ppt-speaker-notes-editor")).not.toBeInTheDocument()
 	})
 
+	it("fills the dedicated presenter panel without resize or overlay behavior", () => {
+		pptNotesPreferenceStore.setHeight(300)
+		render(
+			<PPTSpeakerNotesPanel
+				layout="presenter"
+				slideIndex={0}
+				rawContent="<template data-magic-slide-notes>Presenter notes</template>"
+				fileId="slide-1"
+				allowEdit={false}
+				onSaved={vi.fn().mockResolvedValue(undefined)}
+			/>,
+		)
+
+		const panel = screen.getByTestId("ppt-speaker-notes-panel")
+		expect(panel).toHaveAttribute("data-layout", "presenter")
+		expect(panel).toHaveClass("h-full", "flex-1")
+		expect(panel).not.toHaveAttribute("data-overlay")
+		expect(panel).not.toHaveAttribute("style")
+		expect(
+			screen.queryByRole("button", { name: "ppt.speakerNotes.resize" }),
+		).not.toBeInTheDocument()
+		expect(screen.queryByTestId("ppt-speaker-notes-spacer")).not.toBeInTheDocument()
+	})
+
 	it("merges notes into the latest slide HTML before saving", async () => {
 		const saveEditContent = vi.fn().mockResolvedValue(true)
 		const onSaved = vi.fn().mockResolvedValue(undefined)

@@ -695,17 +695,54 @@ describe("PPTRender", () => {
 		expect(mockState.toggleFullscreen).not.toHaveBeenCalled()
 	})
 
-	it("keeps notes expanded while the popup presenter is open", () => {
+	it("switches the main window to a fullscreen presenter console while the popup is open", () => {
 		mockState.isSlideEditing = false
 		mockState.presenterIsOpen = true
 
 		renderPPTRender()
 
-		expect(screen.getByTestId("ppt-speaker-notes-panel")).toBeVisible()
-		expect(screen.getByRole("button", { name: "toggle notes" })).toHaveAttribute(
-			"aria-expanded",
+		expect(screen.getByTestId("ppt-render-container")).toHaveClass("fixed", "inset-0")
+		expect(screen.getByTestId("ppt-render-container")).toHaveAttribute(
+			"data-presenter-console",
 			"true",
 		)
+		expect(screen.queryByTestId("ppt-render-sidebar")).not.toBeInTheDocument()
+		expect(screen.queryByTestId("ppt-render-edit-toolbar")).not.toBeInTheDocument()
+		expect(screen.queryByTestId("ppt-control-bar")).not.toBeInTheDocument()
+		expect(screen.getByTestId("ppt-presenter-console-controls")).toBeInTheDocument()
+		expect(screen.getByTestId("ppt-speaker-notes-panel")).toBeVisible()
+		expect(screen.getByTestId("ppt-speaker-notes-panel")).toHaveAttribute(
+			"data-layout",
+			"presenter",
+		)
+		expect(mockState.pptSlideProps).toHaveBeenLastCalledWith(
+			expect.objectContaining({ isFullscreen: false }),
+		)
+
+		fireEvent.click(screen.getByTestId("ppt-presenter-console-exit-button"))
+		expect(mockState.presenterClose).toHaveBeenCalledTimes(1)
+	})
+
+	it("passes canonical slide dimensions to the presenter popup", async () => {
+		mockState.isSlideEditing = false
+		mockState.store.slides[0] = {
+			...mockState.store.slides[0],
+			content:
+				'<main class="slide-container" data-width="1600" data-height="900">slide</main>',
+			rawContent:
+				'<main class="slide-container" data-width="1600" data-height="900">slide</main>',
+		}
+
+		renderPPTRender()
+		fireEvent.click(screen.getByRole("button", { name: "present" }))
+
+		await waitFor(() => {
+			expect(mockState.presenterOpen).toHaveBeenCalledWith({
+				index: 0,
+				html: expect.stringContaining('data-width="1600"'),
+				dimensions: { width: 1600, height: 900 },
+			})
+		})
 	})
 
 	it("keeps presenter controls and notes available in read-only playback mode", () => {

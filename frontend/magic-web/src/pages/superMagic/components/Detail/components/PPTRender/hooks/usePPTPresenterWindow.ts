@@ -4,6 +4,12 @@ import { useTranslation } from "react-i18next"
 export interface PPTPresenterSlidePayload {
 	index: number
 	html: string
+	dimensions?: PPTPresenterDimensions
+}
+
+export interface PPTPresenterDimensions {
+	width: number
+	height: number
 }
 
 export type PPTPresenterOpenResult = "opened" | "fallback" | "cancelled"
@@ -48,7 +54,7 @@ let presenterWindowSequence = 0
  * The shell contains no executable script or visible copy. The opener fills
  * translated labels through DOM APIs and sends slide HTML only to srcdoc.
  */
-const POPUP_SHELL = `<!doctype html><html><head><meta charset="utf-8"><title></title><style>html,body,#ppt-presenter-root{margin:0;width:100%;height:100%;overflow:hidden;background:#000}iframe{display:block;width:100%;height:100%;border:0}#ppt-presenter-fullscreen{position:fixed;right:24px;bottom:24px;z-index:2;border:1px solid rgba(255,255,255,.35);border-radius:8px;background:rgba(20,20,20,.82);color:#fff;padding:10px 16px;font:500 14px/20px system-ui,sans-serif;cursor:pointer;box-shadow:0 4px 16px rgba(0,0,0,.25)}#ppt-presenter-fullscreen:hover{background:rgba(40,40,40,.9)}#ppt-presenter-fullscreen:focus-visible{outline:2px solid #fff;outline-offset:2px}#ppt-presenter-fullscreen[hidden]{display:none}</style></head><body><main id="ppt-presenter-root"><iframe id="ppt-presenter-frame" title="" sandbox="allow-scripts"></iframe><button id="ppt-presenter-fullscreen" type="button"></button></main></body></html>`
+const POPUP_SHELL = `<!doctype html><html><head><meta charset="utf-8"><title></title><style>html,body,#ppt-presenter-root{margin:0;width:100%;height:100%;overflow:hidden;background:#000}#ppt-presenter-root{position:relative}iframe{display:block;width:100%;height:100%;border:0;transform-origin:top left}#ppt-presenter-fullscreen{position:fixed;right:24px;bottom:24px;z-index:2;border:1px solid rgba(255,255,255,.35);border-radius:8px;background:rgba(20,20,20,.82);color:#fff;padding:10px 16px;font:500 14px/20px system-ui,sans-serif;cursor:pointer;box-shadow:0 4px 16px rgba(0,0,0,.25)}#ppt-presenter-fullscreen:hover{background:rgba(40,40,40,.9)}#ppt-presenter-fullscreen:focus-visible{outline:2px solid #fff;outline-offset:2px}#ppt-presenter-fullscreen[hidden]{display:none}</style></head><body><main id="ppt-presenter-root"><iframe id="ppt-presenter-frame" title="" sandbox="allow-scripts"></iframe><button id="ppt-presenter-fullscreen" type="button"></button></main></body></html>`
 
 function toMessage(payload: PPTPresenterSlidePayload) {
 	return { type: "ppt-presenter:slide", payload }
@@ -73,12 +79,56 @@ function sameScreen(left: PPTPresenterScreen, right: PPTPresenterScreen) {
 	return a.left === b.left && a.top === b.top && a.width === b.width && a.height === b.height
 }
 
+function isValidDimensions(
+	dimensions?: PPTPresenterDimensions,
+): dimensions is PPTPresenterDimensions {
+	return Boolean(
+		dimensions &&
+		Number.isFinite(dimensions.width) &&
+		dimensions.width > 0 &&
+		Number.isFinite(dimensions.height) &&
+		dimensions.height > 0,
+	)
+}
+
+/**
+ * Keep the fixed-size slide canvas intact, then contain it inside the popup
+ * viewport so a non-16:9 deck cannot be cropped by the browser window chrome.
+ */
+function applySlideLayout(
+	popup: Window,
+	frame: HTMLIFrameElement,
+	dimensions?: PPTPresenterDimensions,
+) {
+	if (!isValidDimensions(dimensions)) return
+
+	const documentElement = popup.document.documentElement
+	const viewportWidth = popup.innerWidth || documentElement.clientWidth || dimensions.width
+	const viewportHeight = popup.innerHeight || documentElement.clientHeight || dimensions.height
+	const scale = Math.min(viewportWidth / dimensions.width, viewportHeight / dimensions.height)
+	const rawOffsetX = (viewportWidth - dimensions.width * scale) / 2
+	const rawOffsetY = (viewportHeight - dimensions.height * scale) / 2
+	// Avoid serializing a tiny negative zero caused by floating-point rounding.
+	const offsetX = Math.abs(rawOffsetX) < 0.001 ? 0 : rawOffsetX
+	const offsetY = Math.abs(rawOffsetY) < 0.001 ? 0 : rawOffsetY
+
+	frame.style.position = "absolute"
+	frame.style.left = "0"
+	frame.style.top = "0"
+	frame.style.width = `${dimensions.width}px`
+	frame.style.height = `${dimensions.height}px`
+	frame.style.transformOrigin = "top left"
+	frame.style.transform = `translate(${offsetX}px, ${offsetY}px) scale(${scale})`
+}
+
 export function usePPTPresenterWindow() {
 	const { t } = useTranslation("super")
 	const popupRef = useRef<Window | null>(null)
 	const pollRef = useRef<number | undefined>(undefined)
 	const popupCleanupRef = useRef<(() => void) | null>(null)
 	const fullscreenButtonRef = useRef<HTMLButtonElement | null>(null)
+	const frameRef = useRef<HTMLIFrameElement | null>(null)
+	const slideDimensionsRef = useRef<PPTPresenterDimensions | undefined>(undefined)
 	const popupNameRef = useRef("")
 	if (!popupNameRef.current) {
 		popupNameRef.current = `magic-ppt-presenter-${++presenterWindowSequence}`
@@ -109,6 +159,8 @@ export function usePPTPresenterWindow() {
 		popupCleanupRef.current?.()
 		popupCleanupRef.current = null
 		fullscreenButtonRef.current = null
+		frameRef.current = null
+		slideDimensionsRef.current = undefined
 		popupRef.current = null
 		setIsOpen(false)
 	}, [])
@@ -120,6 +172,8 @@ export function usePPTPresenterWindow() {
 				clearPopup()
 				return false
 			}
+			slideDimensionsRef.current = payload.dimensions
+			if (frameRef.current) applySlideLayout(popup, frameRef.current, payload.dimensions)
 			popup.postMessage(toMessage(payload), window.location.origin)
 			return true
 		},
@@ -267,6 +321,7 @@ export function usePPTPresenterWindow() {
 					return "fallback"
 				}
 				fullscreenButtonRef.current = fullscreenButton
+				frameRef.current = frame
 				presenterPopup.document.title = t("ppt.presenter.title")
 				frame.title = t("ppt.presenter.frameTitle")
 				fullscreenButton.textContent = t("ppt.presenter.enterFullscreen")
@@ -288,6 +343,8 @@ export function usePPTPresenterWindow() {
 						!Number.isInteger(nextPayload.index)
 					)
 						return
+					slideDimensionsRef.current = nextPayload.dimensions
+					applySlideLayout(presenterPopup, frame, nextPayload.dimensions)
 					frame.srcdoc = nextPayload.html
 					presenterPopup.document.title = t("ppt.presenter.slideTitle", {
 						page: nextPayload.index + 1,
@@ -308,13 +365,17 @@ export function usePPTPresenterWindow() {
 						setFullscreenButtonVisible(true)
 					}
 				}
+				const handlePopupResize = () =>
+					applySlideLayout(presenterPopup, frame, slideDimensionsRef.current)
 				presenterPopup.addEventListener("message", handleSlideMessage)
 				popupDocument.addEventListener("fullscreenchange", syncFullscreenButton)
 				fullscreenButton.addEventListener("click", handleLocalFullscreen)
+				presenterPopup.addEventListener("resize", handlePopupResize)
 				popupCleanupRef.current = () => {
 					presenterPopup.removeEventListener("message", handleSlideMessage)
 					popupDocument.removeEventListener("fullscreenchange", syncFullscreenButton)
 					fullscreenButton.removeEventListener("click", handleLocalFullscreen)
+					presenterPopup.removeEventListener("resize", handlePopupResize)
 				}
 				setIsOpen(true)
 				pollRef.current = window.setInterval(() => {
