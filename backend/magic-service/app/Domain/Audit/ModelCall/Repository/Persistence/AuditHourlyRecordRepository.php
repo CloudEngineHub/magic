@@ -26,7 +26,7 @@ final class AuditHourlyRecordRepository implements AuditHourlyRecordRepositoryIn
 
     public function insertHour(string $statDate, string $bucketStartAt, int $startMs, int $endMs): void
     {
-        $source = AuditLogModel::query()
+        $rows = AuditLogModel::query()
             ->where('operation_time', '>=', $startMs)
             ->where('operation_time', '<', $endMs)
             ->whereNotIn('type', [
@@ -35,41 +35,51 @@ final class AuditHourlyRecordRepository implements AuditHourlyRecordRepositoryIn
                 AuditType::SLIDES_TEMPLATE->value,
             ])
             ->selectRaw(
-                "? as stat_date,
-                 ? as bucket_start_at,
-                 organization_code,
+                "organization_code,
                  COALESCE(access_scope, '') as access_scope,
                  COALESCE(service_provider_config_id, 0) as service_provider_config_id,
                  COALESCE(product_code, '') as product_code,
                  COUNT(*) as request_count,
                  SUM(CASE WHEN status = ? THEN 1 ELSE 0 END) as error_count,
-                 " . $this->usageTokenSumSql() . ',
-                 NOW() as created_at,
-                 NOW() as updated_at',
-                [$statDate, $bucketStartAt, AuditStatus::FAIL->value]
+                 " . $this->usageTokenSumSql(),
+                [AuditStatus::FAIL->value]
             )
-            ->groupByRaw(
-                "organization_code,
-                 COALESCE(access_scope, ''),
-                 COALESCE(service_provider_config_id, 0),
-                 COALESCE(product_code, '')"
-            );
+            ->groupBy(
+                'organization_code',
+                Db::raw("COALESCE(access_scope, '')"),
+                Db::raw('COALESCE(service_provider_config_id, 0)'),
+                Db::raw("COALESCE(product_code, '')"),
+            )
+            ->get()
+            ->toArray();
 
-        Db::table('magic_model_audit_hourly_records')->insertUsing([
-            'stat_date',
-            'bucket_start_at',
-            'organization_code',
-            'access_scope',
-            'service_provider_config_id',
-            'product_code',
-            'request_count',
-            'error_count',
-            'input_tokens',
-            'output_tokens',
-            'total_tokens',
-            'created_at',
-            'updated_at',
-        ], $source);
+        if ($rows === []) {
+            return;
+        }
+
+        $now = date('Y-m-d H:i:s');
+        $payload = [];
+        foreach ($rows as $row) {
+            $payload[] = [
+                'stat_date' => $statDate,
+                'bucket_start_at' => $bucketStartAt,
+                'organization_code' => (string) ($row['organization_code'] ?? ''),
+                'access_scope' => (string) ($row['access_scope'] ?? ''),
+                'service_provider_config_id' => (int) ($row['service_provider_config_id'] ?? 0),
+                'product_code' => (string) ($row['product_code'] ?? ''),
+                'request_count' => (int) ($row['request_count'] ?? 0),
+                'error_count' => (int) ($row['error_count'] ?? 0),
+                'input_tokens' => (int) ($row['input_tokens'] ?? 0),
+                'output_tokens' => (int) ($row['output_tokens'] ?? 0),
+                'total_tokens' => (int) ($row['total_tokens'] ?? 0),
+                'created_at' => $now,
+                'updated_at' => $now,
+            ];
+        }
+
+        foreach (array_chunk($payload, 100) as $chunk) {
+            AuditHourlyRecordModel::query()->insert($chunk);
+        }
     }
 
     public function summarizeDate(string $statDate): array

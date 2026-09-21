@@ -16,6 +16,7 @@ use App\Domain\ModelGateway\Repository\Persistence\AbstractRepository;
 use App\Infrastructure\Core\AbstractEntity;
 use Hyperf\Database\Exception\QueryException;
 use Hyperf\Database\Model\Builder;
+use Hyperf\DbConnection\Db;
 
 class AuditLogRepository extends AbstractRepository implements AuditLogRepositoryInterface
 {
@@ -305,16 +306,17 @@ class AuditLogRepository extends AbstractRepository implements AuditLogRepositor
         $builder = AuditLogModel::query();
         $this->applyStatisticsFilters($builder, $filters, $organizationCode);
 
+        $bucketExpr = $startMs . ' + FLOOR((operation_time - ' . $startMs . ') / 3600000) * 3600000';
         $rows = $builder->selectRaw(
-            "? + FLOOR((operation_time - ?) / 3600000) * 3600000 as bucket_key,
+            $bucketExpr . ' as bucket_key,
              CAST(service_provider_config_id AS CHAR) as service_provider_config_id,
              product_code,
              COUNT(*) as requests,
              SUM(CASE WHEN status = ? THEN 1 ELSE 0 END) as errors,
-             " . $this->usageTokenSumSql(),
-            [$startMs, $startMs, AuditStatus::FAIL->value]
+             ' . $this->usageTokenSumSql(),
+            [AuditStatus::FAIL->value]
         )
-            ->groupBy('bucket_key', 'service_provider_config_id', 'product_code')
+            ->groupBy(Db::raw($bucketExpr), 'service_provider_config_id', 'product_code')
             ->get()
             ->toArray();
 

@@ -12,6 +12,8 @@ use DateTimeImmutable;
 use DateTimeZone;
 use Hyperf\HttpServer\Contract\RequestInterface;
 
+use function Hyperf\Config\config;
+
 /**
  * 模型调用审计列表请求.
  */

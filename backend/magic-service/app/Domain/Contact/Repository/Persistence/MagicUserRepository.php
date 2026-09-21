@@ -587,21 +587,15 @@ readonly class MagicUserRepository implements MagicUserRepositoryInterface
         }
 
         $total = (clone $query)->count();
-        $rows = (clone $query)
-            ->select([
-                'u.user_id',
-                'u.nickname',
-                'a.real_name',
-                'u.organization_code',
-                'o.name as organization_name',
-                'a.phone',
-            ])
+        $listQuery = (clone $query)
+            ->select(['u.user_id'])
             ->orderBy('u.id', 'desc')
             ->forPage($page->getPage(), $page->getPageNum());
+        $rows = Db::select($listQuery->toSql(), $listQuery->getBindings());
 
         return [
             'total' => $total,
-            'list' => array_map(static fn (object $row): array => (array) $row, Db::select($rows->toSql(), $rows->getBindings())),
+            'list' => $rows,
         ];
     }
 

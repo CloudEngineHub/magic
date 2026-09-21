@@ -12,6 +12,7 @@ use App\Infrastructure\Core\Traits\HasLogger;
 use DateTimeImmutable;
 use DateTimeZone;
 use Hyperf\Crontab\Annotation\Crontab;
+use RuntimeException;
 use Throwable;
 
 use function Hyperf\Config\config;
@@ -42,15 +43,19 @@ final class ModelCallAuditArchiveCrontab
             $result = $this->archiveService->archiveRange($yesterday, $yesterday);
             if ($result['failed'] > 0) {
                 $this->logger->error('Model audit hourly archive finished with failures', $result);
-            } else {
-                $this->logger->info('Model audit hourly archive finished', $result);
+                throw new RuntimeException(sprintf(
+                    'Model audit hourly archive failed for dates: %s',
+                    implode(', ', $result['failed_dates'])
+                ));
             }
+            $this->logger->info('Model audit hourly archive finished', $result);
         } catch (Throwable $throwable) {
             $this->logger->error('Model audit hourly archive failed', [
                 'stat_date' => $yesterday,
                 'error' => $throwable->getMessage(),
                 'trace' => $throwable->getTraceAsString(),
             ]);
+            throw $throwable;
         }
     }
 }

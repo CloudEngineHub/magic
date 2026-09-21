@@ -73,11 +73,6 @@ class PlatformUserApi extends AbstractApi
             'list' => array_map(static function (array $user): array {
                 return [
                     'user_id' => (string) ($user['user_id'] ?? ''),
-                    'nickname' => (string) ($user['nickname'] ?? ''),
-                    'real_name' => (string) ($user['real_name'] ?? ''),
-                    'phone' => (string) ($user['phone'] ?? ''),
-                    'organization_code' => (string) ($user['organization_code'] ?? ''),
-                    'organization_name' => (string) ($user['organization_name'] ?? ''),
                 ];
             }, $result['list']),
         ];

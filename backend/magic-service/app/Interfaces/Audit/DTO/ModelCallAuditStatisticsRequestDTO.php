@@ -14,6 +14,8 @@ use DateTimeImmutable;
 use DateTimeZone;
 use Hyperf\HttpServer\Contract\RequestInterface;
 
+use function Hyperf\Config\config;
+
 /**
  * 模型调用审计统计请求.
  */
@@ -57,9 +59,8 @@ class ModelCallAuditStatisticsRequestDTO extends AbstractDTO
     public function toFilters(): array
     {
         if ($this->startDate === '' && $this->endDate === '') {
-            $timezone = $this->displayTimezone();
-            $startMs = (new DateTimeImmutable('today', $timezone))->setTime(0, 0, 0)->getTimestamp() * 1000;
-            $endMs = (new DateTimeImmutable('tomorrow', $timezone))->setTime(0, 0, 0)->getTimestamp() * 1000;
+            $today = (new DateTimeImmutable('today', $this->displayTimezone()))->format('Y-m-d');
+            [$startMs, $endMs] = $this->parseRange($today . ' 00:00:00', $today . ' 23:59:59');
         } else {
             [$startMs, $endMs] = $this->parseRange($this->startDate, $this->endDate);
         }
@@ -88,33 +89,30 @@ class ModelCallAuditStatisticsRequestDTO extends AbstractDTO
     private function parseRange(string $startDate, string $endDate): array
     {
         $timezone = $this->displayTimezone();
-        $isDateRange = preg_match('/^\d{4}-\d{2}-\d{2}$/', $startDate) === 1
-            && preg_match('/^\d{4}-\d{2}-\d{2}$/', $endDate) === 1;
-        $isHourRange = preg_match('/^\d{4}-\d{2}-\d{2} \d{2}:00:00$/', $startDate) === 1
-            && preg_match('/^\d{4}-\d{2}-\d{2} \d{2}:00:00$/', $endDate) === 1;
-        if (! $isDateRange && ! $isHourRange) {
+        $isHourStart = preg_match('/^\d{4}-\d{2}-\d{2} \d{2}:00:00$/', $startDate) === 1;
+        $isHourEnd = preg_match('/^\d{4}-\d{2}-\d{2} \d{2}:59:59$/', $endDate) === 1;
+        if (! $isHourStart || ! $isHourEnd) {
             ExceptionBuilder::throw(
                 GenericErrorCode::ParameterValidationFailed,
-                'start_date and end_date must both be natural dates or whole hours'
+                'start_date must be Y-m-d H:00:00 and end_date must be Y-m-d H:59:59'
             );
         }
 
-        $format = $isDateRange ? '!Y-m-d' : '!Y-m-d H:i:s';
-        $start = DateTimeImmutable::createFromFormat($format, $startDate, $timezone);
+        $start = DateTimeImmutable::createFromFormat('!Y-m-d H:i:s', $startDate, $timezone);
         $startErrors = DateTimeImmutable::getLastErrors();
-        $end = DateTimeImmutable::createFromFormat($format, $endDate, $timezone);
+        $end = DateTimeImmutable::createFromFormat('!Y-m-d H:i:s', $endDate, $timezone);
         $endErrors = DateTimeImmutable::getLastErrors();
         if (! $start || ! $end
             || ($startErrors !== false && ($startErrors['warning_count'] > 0 || $startErrors['error_count'] > 0))
             || ($endErrors !== false && ($endErrors['warning_count'] > 0 || $endErrors['error_count'] > 0))
-            || $start->format($isDateRange ? 'Y-m-d' : 'Y-m-d H:i:s') !== $startDate
-            || $end->format($isDateRange ? 'Y-m-d' : 'Y-m-d H:i:s') !== $endDate
+            || $start->format('Y-m-d H:i:s') !== $startDate
+            || $end->format('Y-m-d H:i:s') !== $endDate
             || $start > $end
         ) {
             ExceptionBuilder::throw(GenericErrorCode::ParameterValidationFailed, 'invalid statistics time range');
         }
 
-        $exclusiveEnd = $end->modify($isDateRange ? '+1 day' : '+1 hour');
+        $exclusiveEnd = $end->setTime((int) $end->format('H'), 0, 0)->modify('+1 hour');
         $tomorrowStart = new DateTimeImmutable('tomorrow', $timezone);
         if ($exclusiveEnd > $tomorrowStart) {
             ExceptionBuilder::throw(

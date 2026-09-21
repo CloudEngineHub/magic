@@ -162,7 +162,7 @@ class ProviderConfigRepository extends AbstractModelRepository implements Provid
 
         return [
             'total' => $total,
-            'list' => array_map(static fn (object $providerConfig): array => (array) $providerConfig, $rows),
+            'list' => $rows,
         ];
     }
 
@@ -173,11 +173,10 @@ class ProviderConfigRepository extends AbstractModelRepository implements Provid
             return [];
         }
 
-        return $this->createConfigQuery()
-            ->join('service_provider as provider', 'provider.id', '=', 'service_provider_configs.service_provider_id')
-            ->whereNull('provider.deleted_at')
-            ->where('service_provider_configs.organization_code', $officialOrganizationCode)
-            ->pluck('service_provider_configs.id')
+        // 审计查询要覆盖历史上用过的官方配置，不能用选择器那套未删除过滤
+        return ProviderConfigModel::query()
+            ->where('organization_code', $officialOrganizationCode)
+            ->pluck('id')
             ->map(static fn ($id): int => (int) $id)
             ->filter(static fn (int $id): bool => $id > 0)
             ->values()
@@ -191,9 +190,9 @@ class ProviderConfigRepository extends AbstractModelRepository implements Provid
             return [];
         }
 
-        $rows = $this->createConfigQuery()
+        // 统计 breakdown 按历史配置 ID 补名称，已软删配置仍要能展示
+        $rows = ProviderConfigModel::query()
             ->join('service_provider as provider', 'provider.id', '=', 'service_provider_configs.service_provider_id')
-            ->whereNull('provider.deleted_at')
             ->whereIn('service_provider_configs.id', $ids)
             ->select([
                 'service_provider_configs.id as service_provider_config_id',
@@ -462,11 +461,12 @@ class ProviderConfigRepository extends AbstractModelRepository implements Provid
 
     /**
      * 准备移除软删相关功能，临时这样写。创建带有软删除过滤的 ProviderConfigModel 查询构建器.
+     * 必须带表名：本仓储会 join service_provider，两边都有 deleted_at。
      */
     protected function createConfigQuery(): Builder
     {
         /* @phpstan-ignore-next-line */
-        return ProviderConfigModel::query()->whereNull('deleted_at');
+        return ProviderConfigModel::query()->whereNull('service_provider_configs.deleted_at');
     }
 
     /**
