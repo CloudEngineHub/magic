@@ -155,14 +155,19 @@ function WorkspaceList({
 		const scrollArea = scrollAreaRef.current
 		const list = workspaceListRef.current
 		if (!isExpanded || !scrollArea || !list) return
-		const items = Array.from(
-			list.querySelectorAll<HTMLElement>("[data-sidebar-workspace-root]"),
-		)
-		// Skip the overlapping hidden tab's toolbar; it still has layout boxes.
-		const navigationHeaders = Array.from(
-			scrollArea.querySelectorAll<HTMLElement>("[data-sidebar-navigation-header]"),
-		).filter((header) => getComputedStyle(header).visibility !== "hidden")
+		const layoutContainer = scrollArea.closest<HTMLElement>("[data-sidebar-project-navigation]")
 		const measure = () => {
+			// A Sheet portal can mount before its flex layout has a usable height. Keep the
+			// previous measurement until the next layout signal instead of disabling virtualization.
+			if (scrollArea.clientHeight <= 0) return
+			const items = Array.from(
+				list.querySelectorAll<HTMLElement>("[data-sidebar-workspace-root]"),
+			)
+			// Re-read visibility after the floating sidebar settles; the overlapping tab keeps
+			// its toolbar mounted even while hidden.
+			const navigationHeaders = Array.from(
+				scrollArea.querySelectorAll<HTMLElement>("[data-sidebar-navigation-header]"),
+			).filter((header) => getComputedStyle(header).visibility !== "hidden")
 			// 高度预算扣除双向提示的最大占位；提示显隐不再反过来改变项目高度和溢出状态。
 			// 分类和操作栏吸顶后持续占位，项目列表与下一组标题使用剩余高度。
 			const stickyHeight = navigationHeaders.reduce(
@@ -209,12 +214,24 @@ function WorkspaceList({
 		measure()
 		const observer = new ResizeObserver(measure)
 		observer.observe(scrollArea)
+		if (layoutContainer && layoutContainer !== scrollArea) observer.observe(layoutContainer)
+		const items = Array.from(
+			list.querySelectorAll<HTMLElement>("[data-sidebar-workspace-root]"),
+		)
+		const navigationHeaders = Array.from(
+			scrollArea.querySelectorAll<HTMLElement>("[data-sidebar-navigation-header]"),
+		)
 		navigationHeaders.forEach((header) => observer.observe(header))
 		items.forEach((item) => {
 			const header = item.querySelector("[data-sidebar-workspace-header]")
 			if (header) observer.observe(header)
 		})
-		return () => observer.disconnect()
+		// The first frame runs after Sheet has committed its portal and flex dimensions.
+		const frameId = window.requestAnimationFrame(measure)
+		return () => {
+			window.cancelAnimationFrame(frameId)
+			observer.disconnect()
+		}
 	}, [workspaceLayoutKey, isExpanded, scrollAreaRef])
 	const { requestConfirmation, confirmationDialog } = useProjectPinBoundaryConfirmation()
 	const {
