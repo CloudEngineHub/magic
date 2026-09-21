@@ -13,7 +13,7 @@ describe("WorkspaceList floating layout measurement", () => {
 		)
 
 		// Protect the lifecycle contract without importing the sidebar's application-wide stores.
-		expect(source).toContain("if (scrollArea.clientHeight <= 0) return")
+		expect(source).toContain("containerHeight")
 		expect(source).toContain("window.requestAnimationFrame(measure)")
 		expect(source).toContain(
 			'scrollArea.closest<HTMLElement>("[data-sidebar-project-navigation]")',

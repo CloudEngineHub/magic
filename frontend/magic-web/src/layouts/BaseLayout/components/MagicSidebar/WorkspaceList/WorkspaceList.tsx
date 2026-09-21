@@ -157,9 +157,15 @@ function WorkspaceList({
 		if (!isExpanded || !scrollArea || !list) return
 		const layoutContainer = scrollArea.closest<HTMLElement>("[data-sidebar-project-navigation]")
 		const measure = () => {
-			// A Sheet portal can mount before its flex layout has a usable height. Keep the
-			// previous measurement until the next layout signal instead of disabling virtualization.
-			if (scrollArea.clientHeight <= 0) return
+			// A Sheet portal can mount before its flex layout has a usable height.
+			// Fall back to window height so virtualization is never blocked with 0 or undefined height.
+			const containerHeight =
+				scrollArea.clientHeight > 0
+					? scrollArea.clientHeight
+					: typeof window !== "undefined"
+						? Math.max(200, window.innerHeight - 180)
+						: 0
+			if (containerHeight <= 0) return
 			const items = Array.from(
 				list.querySelectorAll<HTMLElement>("[data-sidebar-workspace-root]"),
 			)
@@ -176,7 +182,7 @@ function WorkspaceList({
 			)
 			const availableHeight = Math.max(
 				0,
-				scrollArea.clientHeight -
+				containerHeight -
 					SCROLL_HINT_HEIGHTS.top -
 					SCROLL_HINT_HEIGHTS.bottom -
 					stickyHeight,
