@@ -78,9 +78,45 @@ describe("ConversationPanelScaffold input resizing", () => {
 		expect(screen.getByTestId("test-conversation-editor-layout")).toHaveStyle({
 			height: "320px",
 		})
+		expect(screen.queryByTestId("test-conversation-composer-shell")).not.toBeInTheDocument()
 
 		fireEvent.doubleClick(screen.getByTestId("conversation-input-resize-handle"))
 		expect(scaffoldMocks.restoreAutoHeight).toHaveBeenCalledTimes(1)
+	})
+
+	it("keeps the message queue inside the desktop composer shell", () => {
+		render(
+			<ConversationPanelScaffold
+				scope="test-conversation"
+				emptyHero={<EmptyState />}
+				emptyCompact={<div />}
+				editor={<LayoutConsumer />}
+				editorNodes={{
+					messageQueueNode: <div data-testid="queued-message-node" />,
+				}}
+				desktopComposerShell
+				messageListProviderValue={{} as never}
+				messages={[{ id: "message-1", role: "assistant" }] as never}
+				selectedTopic={{ id: "topic-1" } as never}
+			/>,
+		)
+
+		const composerShell = screen.getByTestId("test-conversation-composer-shell")
+		expect(composerShell).toHaveClass(
+			"gap-1.5",
+			"rounded-2xl",
+			"border-border",
+			"bg-sidebar",
+			"p-2",
+		)
+		expect(composerShell).toContainElement(screen.getByTestId("queued-message-node"))
+		expect(composerShell).toContainElement(screen.getByTestId("layout-consumer"))
+		expect(
+			screen
+				.getByTestId("queued-message-node")
+				.compareDocumentPosition(screen.getByTestId("conversation-input-resize-handle")) &
+				Node.DOCUMENT_POSITION_FOLLOWING,
+		).toBeTruthy()
 	})
 
 	/** Verifies that a page-specific handle offset is applied without changing the scaffold contract. */
@@ -136,10 +172,12 @@ describe("ConversationPanelScaffold input resizing", () => {
 				messageListProviderValue={{} as never}
 				messages={[{ id: "message-1", role: "assistant" }] as never}
 				selectedTopic={{ id: "topic-1" } as never}
+				desktopComposerShell
 			/>,
 		)
 
 		expect(screen.queryByTestId("conversation-input-resize-handle")).not.toBeInTheDocument()
+		expect(screen.queryByTestId("test-conversation-composer-shell")).not.toBeInTheDocument()
 
 		scaffoldMocks.isMobile = false
 		rerender(
