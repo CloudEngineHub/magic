@@ -10,7 +10,6 @@ import {
 	createCheckIsLastMessage,
 } from "@/pages/superMagic/components/MessageList/helpers"
 import { MessageListProvider } from "@/pages/superMagic/components/MessageList/context"
-import { useIsMobile } from "@/hooks/useIsMobile"
 import type { ProjectFilesStore } from "@/stores/projectFiles"
 import { buildVirtualMessageProjection } from "@/pages/superMagic/components/MessageList/virtual-message-items"
 import { VirtualMessageList } from "@/pages/superMagic/components/MessageList/components/VirtualMessageList"
@@ -56,7 +55,6 @@ function MessageList({
 }) {
 	const { styles } = useStyles()
 	const { t } = useTranslation("super")
-	const isMobile = useIsMobile()
 
 	const messages = messageList
 
@@ -88,15 +86,9 @@ function MessageList({
 		<MessageListProvider value={value}>
 			<MessageViewStateProvider topicKey={topicId}>
 				<div className="relative flex flex-col gap-2">
-					{/* Topic shares keep mobile positioning while reusing the desktop sticky mask. */}
 					<VirtualMessageList
 						items={virtualProjection.items}
 						userIndices={virtualProjection.userIndices}
-						isMobile={isMobile}
-						useMobileStickyOverlay={false}
-						// The share shell has no header over its scroll viewport, so the pinned
-						// turn parks flush with the top instead of below the workspace's line.
-						stickyTopOffset={0}
 						getScrollElement={getScrollElement}
 						virtualizerRef={virtualizerRef}
 						onVirtualizerChange={handleVirtualizerChange}

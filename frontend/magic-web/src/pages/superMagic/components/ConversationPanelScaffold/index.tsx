@@ -429,6 +429,14 @@ function ConversationPanelScaffold({
 				>
 					<MessageListProvider value={messageListProviderValue}>
 						<MessageList
+							// The scaffold owns responsive spacing and its panel surface.
+							className={
+								isMobile
+									? "[--message-list-surface:rgb(var(--mobile-background-rgb))] [--message-list-sticky-fade-height:0px]"
+									: "[--message-list-surface:rgb(var(--sidebar-rgb))]"
+							}
+							classNames={{ content: isMobile ? "px-4 pt-[10px]" : "pl-2 pt-[10px]" }}
+							scrollEdgeFade={isMobile}
 							data={messages}
 							selectedTopic={selectedTopic}
 							setSelectedDetail={setSelectedDetail}

@@ -80,8 +80,7 @@ function resolveRetrySendParams(
 ): HandleSendParams {
 	// Failed retry must go through the first-layer send entry, so we restore rich_text extra back to editor send params.
 	const superAgent = retryPayload.options?.extra?.super_agent as
-		| RetrySendSuperAgentExtra
-		| undefined
+		RetrySendSuperAgentExtra | undefined
 
 	return {
 		value: retryPayload.content,
@@ -315,6 +314,8 @@ function TopicMessagePanel({
 	const messageListNode = (
 		<MessageListProvider value={value}>
 			<MessageList
+				className="[--message-list-surface:rgb(var(--sidebar-rgb))]"
+				classNames={{ content: "pl-2 pt-[10px]" }}
 				data={messagesWithOptimisticMeta as SuperMagicMessageItem[]}
 				setSelectedDetail={setUserSelectDetail}
 				selectedTopic={selectedTopic}

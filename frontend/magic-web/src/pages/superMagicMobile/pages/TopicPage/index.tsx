@@ -606,7 +606,12 @@ function TopicPage({
 							data={messages as any}
 							setSelectedDetail={setUserSelectDetail}
 							selectedTopic={selectedTopic}
-							className={cx(messageListClassName)}
+							className={cx(
+								"[--message-list-surface:rgb(var(--mobile-background-rgb))] [--message-list-sticky-fade-height:0px]",
+								messageListClassName,
+							)}
+							classNames={{ content: "px-4 pt-[10px]" }}
+							scrollEdgeFade
 							handlePullMoreMessage={handlePullMoreMessage}
 							showLoading={showLoading}
 							onFileClick={onFileClick}

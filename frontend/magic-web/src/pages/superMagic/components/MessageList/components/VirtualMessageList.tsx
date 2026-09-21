@@ -20,10 +20,8 @@ import { observer } from "mobx-react-lite"
 import MessageRenderErrorBoundary from "./MessageRenderErrorBoundary"
 import {
 	ASSISTANT_MESSAGE_ROW_CLASS,
-	getStickyMessageTopOffset,
 	USER_MESSAGE_ROW_CLASS,
 	USER_MESSAGE_STICKY_MASK_CLASS,
-	USER_MESSAGE_STICKY_OVERLAY_CLASS_MOBILE,
 } from "../sticky-message-classes"
 import {
 	findActiveStickyIndex,
@@ -34,6 +32,7 @@ import {
 import type { MessageListScrollAdapter } from "../message-list-scroll-adapter"
 import { MessageViewStateScopeProvider } from "../view-state/MessageViewStateContext"
 import { useMemoizedFn } from "ahooks"
+import { useVirtualListStartMargin } from "../hooks/useVirtualListStartMargin"
 
 const terminalToolStatuses = new Set(["completed", "failed", "error", "finished", "suspended"])
 const FOOTER_ROW_KEY = "__message-list-footer__"
@@ -61,20 +60,11 @@ export interface VirtualMessageListProps {
 	footer?: ReactNode
 	/** Indices of User rows in `items`; drives which row is pinned while scrolling. */
 	userIndices?: Array<number>
-	isMobile: boolean
 	getScrollElement: () => HTMLDivElement | null
-	/** Height of whatever the caller renders between the scroll container and this list. */
-	startMargin?: number
-	/**
-	 * Distance from the viewport top at which the pinned User turn parks. Defaults to the
-	 * workspace's header line, so a shell that has no such header must state its own — before
-	 * virtualization this was the caller's `top-*` class on the sticky row itself.
-	 */
+	/** Explicit inset for a host with an overlapping header; normal layouts pin at zero. */
 	stickyTopOffset?: number
 	renderNode: (args: { item: VirtualMessageItem }) => ReactNode
 	stickyMessageClassName?: string
-	/** Disable the shared mobile mask when a caller needs the desktop mask appearance. */
-	useMobileStickyOverlay?: boolean
 	exportMode?: boolean
 	selectedKeys?: ReadonlySet<string>
 	onToggleSelect?: (key: string) => void
@@ -243,7 +233,6 @@ function VirtualMessageRow({
 	rowHeights,
 	renderNode,
 	stickyMessageClassName,
-	useMobileStickyOverlay,
 	exportMode,
 	selectedKeys,
 	onToggleSelect,
@@ -254,7 +243,6 @@ function VirtualMessageRow({
 	rowHeights: Map<string, number>
 	renderNode: VirtualMessageListProps["renderNode"]
 	stickyMessageClassName?: string
-	useMobileStickyOverlay: boolean
 	exportMode?: boolean
 	selectedKeys?: ReadonlySet<string>
 	onToggleSelect?: (key: string) => void
@@ -348,7 +336,6 @@ function VirtualMessageRow({
 							className={cn(
 								"relative",
 								USER_MESSAGE_STICKY_MASK_CLASS,
-								useMobileStickyOverlay && USER_MESSAGE_STICKY_OVERLAY_CLASS_MOBILE,
 								stickyMessageClassName,
 							)}
 						>
@@ -375,13 +362,10 @@ function VirtualMessageListInner({
 	items,
 	footer = null,
 	userIndices = EMPTY_USER_INDICES,
-	isMobile,
 	getScrollElement,
-	startMargin = 0,
-	stickyTopOffset: stickyTopOffsetProp,
+	stickyTopOffset = 0,
 	renderNode,
 	stickyMessageClassName,
-	useMobileStickyOverlay = true,
 	exportMode,
 	selectedKeys,
 	onToggleSelect,
@@ -414,7 +398,6 @@ function VirtualMessageListInner({
 	const virtualizerChangeFrameRef = useRef<number | null>(null)
 	const [activeStickyIndex, setActiveStickyIndex] = useState(NO_STICKY_INDEX)
 
-	const stickyTopOffset = stickyTopOffsetProp ?? getStickyMessageTopOffset(isMobile)
 	// Callers may hand over a plain ref that is only populated once their own scroll element
 	// commits, which happens after this subtree. Re-read it every commit so the virtualizer
 	// mounts on the very next render instead of silently rendering nothing.
@@ -429,6 +412,9 @@ function VirtualMessageListInner({
 		})
 	})
 	if (scrollRef.current !== viewport) scrollRef.current = viewport
+
+	const startMargin = useVirtualListStartMargin(viewport, canvasRef)
+	const previousLayoutRef = useRef({ startMargin, stickyTopOffset })
 
 	const rowCount = items.length + (footer ? 1 : 0)
 	const rowCountRef = useRef(rowCount)
@@ -810,6 +796,16 @@ function VirtualMessageListInner({
 		syncSticky()
 	}, [stickySequenceSignature, syncSticky])
 
+	useLayoutEffect(() => {
+		const previous = previousLayoutRef.current
+		if (previous.startMargin === startMargin && previous.stickyTopOffset === stickyTopOffset)
+			return
+		previousLayoutRef.current = { startMargin, stickyTopOffset }
+		// A layout change needs a fresh pin even in static shares, without replaying initial sync.
+		trailingSpaceRef.current = null
+		syncSticky()
+	}, [startMargin, stickyTopOffset, syncSticky])
+
 	/**
 	 * virtua clamps its own render range to the item count but takes `keepMounted` verbatim, so an
 	 * index left over from a longer list resolves to no child and throws while rendering. The
@@ -833,7 +829,6 @@ function VirtualMessageListInner({
 				rowHeights={heightCache.rows}
 				renderNode={renderNode}
 				stickyMessageClassName={stickyMessageClassName}
-				useMobileStickyOverlay={isMobile && useMobileStickyOverlay}
 				exportMode={exportMode}
 				selectedKeys={selectedKeys}
 				onToggleSelect={onToggleSelect}
@@ -856,7 +851,6 @@ function VirtualMessageListInner({
 		exportMode,
 		footer,
 		heightCache,
-		isMobile,
 		items,
 		limitReached,
 		onToggleSelect,
@@ -864,7 +858,6 @@ function VirtualMessageListInner({
 		selectedKeys,
 		stickyMessageClassName,
 		topicId,
-		useMobileStickyOverlay,
 	])
 
 	/**

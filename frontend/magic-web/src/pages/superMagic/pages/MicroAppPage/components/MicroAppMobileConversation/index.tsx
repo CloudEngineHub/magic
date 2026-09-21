@@ -246,7 +246,9 @@ const MicroAppMobileConversation = observer(function MicroAppMobileConversation(
 								fallbackRender={
 									lockToMicroAppMode ? <MobileConversationEmpty /> : undefined
 								}
-								className="bg-mobile-background"
+								className="bg-mobile-background [--message-list-surface:rgb(var(--mobile-background-rgb))] [--message-list-sticky-fade-height:0px]"
+								classNames={{ content: "px-4 pt-[10px]" }}
+								scrollEdgeFade
 							/>
 						</MessageListProvider>
 					</div>

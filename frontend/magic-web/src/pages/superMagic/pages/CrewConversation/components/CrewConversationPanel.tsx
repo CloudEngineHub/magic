@@ -318,12 +318,14 @@ function CrewConversationPanel({
 				{selectedTopic ? (
 					<div
 						className={cn(
-							"flex h-full w-full flex-col",
+							"flex min-h-0 w-full flex-1 flex-col",
 							isConversationPanelCollapsed && "invisible",
 						)}
 					>
 						<MessageListProvider value={messageListProviderValue}>
 							<MessageList
+								className="[--message-list-surface:rgb(var(--sidebar-rgb))]"
+								classNames={{ content: "pl-2 pt-[10px]" }}
 								data={messages as SuperMagicMessageItem[]}
 								setSelectedDetail={onFileClick}
 								selectedTopic={selectedTopic}

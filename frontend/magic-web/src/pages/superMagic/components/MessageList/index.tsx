@@ -68,7 +68,6 @@ import { MessageViewStateProvider } from "./view-state/MessageViewStateContext"
 import type { RevokedMessageEditorContext } from "./revoked-editor-context"
 import type { MessageListScrollAdapter } from "./message-list-scroll-adapter"
 import { useStableArrayReference } from "./hooks/useStableArrayReference"
-import { useConversationCompactMode } from "./hooks/useConversationCompactMode"
 
 export { MessageListProvider }
 
@@ -82,10 +81,12 @@ interface MessageListProps {
 	data: Array<SuperMagicMessageItem>
 	isShare?: boolean
 	setSelectedDetail?: (detail: any) => void
+	/** Host surface and fade tail: --message-list-surface / --message-list-sticky-fade-height. */
 	className?: string
 
 	classNames?: {
-		scrollWrapper?: string
+		/** Classes on the content column; its actual offset is measured by the virtualizer. */
+		content?: string
 	}
 	isEmptyStatus?: boolean
 	selectedTopic: Topic | null
@@ -100,26 +101,6 @@ interface MessageListProps {
 	onFileClick?: (fileItem: any) => void
 	/** Extra classes; set [--sticky-message-mask-bg] / [--sticky-message-mask-fade-from] to tune mask */
 	stickyMessageClassName?: string
-	/**
-	 * Pinned user-turn distance from the scrollport top, in px.
-	 * Defaults to the workspace header line. Headerless panels pass 0.
-	 */
-	stickyTopOffset?: number
-	/**
-	 * Gap between the scrollport and the virtualizer, in px.
-	 * Must match the column padding-top or sticky handoff is wrong.
-	 */
-	startMargin?: number
-	/**
-	 * Keep pinning below the compact-height threshold.
-	 * Side panels have no header, so the user turn still parks at the top.
-	 */
-	keepStickyWhenCompact?: boolean
-	/**
-	 * Mobile page gray mask. Turn off when the list sits on a white sheet
-	 * so the pinned user turn does not pick up #fafafa.
-	 */
-	useMobileStickyOverlay?: boolean
 	/** True while the initial message fetch is in-flight; suppresses the empty fallback */
 	isMessagesLoading?: boolean
 	fallbackRender?: ReactNode
@@ -139,8 +120,7 @@ interface MessageListProps {
 	/** Distance from the top at which a fresh upward gesture may load one history page. */
 	historyLoadThresholdPx?: number
 	/**
-	 * Top/bottom scroll edge fade on mobile (prototype ChatScreen).
-	 * Pass `false` to disable; default enables on mobile when not share.
+	 * Opt-in scroll edge fade. Uses the host surface unless a color token is supplied.
 	 */
 	scrollEdgeFade?: boolean | { fadeColor?: ScrollEdgeFadeColor }
 }
@@ -176,7 +156,6 @@ const revokedActionButton = cn(
 
 /** Collapsed revoked preview keeps a bounded virtual slice before the user expands it. */
 const REVOKED_COLLAPSED_ITEM_LIMIT = 6
-const NO_STICKY_USER_INDICES: Array<number> = []
 
 const MessageList = observer(
 	({
@@ -192,10 +171,6 @@ const MessageList = observer(
 		currentTopicStatus,
 		onFileClick,
 		stickyMessageClassName,
-		stickyTopOffset,
-		startMargin,
-		keepStickyWhenCompact = false,
-		useMobileStickyOverlay,
 		children,
 		backToLatestButtonClassName,
 		enableRevokedUserMessageReedit = false,
@@ -211,9 +186,6 @@ const MessageList = observer(
 	}: MessageListProps) => {
 		const { t } = useTranslation("super")
 		const isMobile = useIsMobile()
-		const isCompactMode = useConversationCompactMode({
-			enabled: !isMobile && !keepStickyWhenCompact,
-		})
 
 		const exportStore = useExportSelectionStore()
 
@@ -225,18 +197,11 @@ const MessageList = observer(
 		 */
 		const [scrollViewport, setScrollViewport] = useState<HTMLDivElement | null>(null)
 		const virtualizerRef = useRef<MessageListScrollAdapter | null>(null)
-		/** Scroll edge fade is mobile-only; desktop TopicMessagePanel / share pages stay unchanged. */
+		// Edge treatment is chosen by the containing panel, independently of device detection.
 		const scrollEdgeFadeConfig = useMemo(() => {
-			if (!isMobile || isShare) return null
-			if (scrollEdgeFade === false) return null
-			if (typeof scrollEdgeFade === "object") {
-				return {
-					fadeColor:
-						scrollEdgeFade.fadeColor ?? ("mobile-background" as ScrollEdgeFadeColor),
-				}
-			}
-			return { fadeColor: "mobile-background" as ScrollEdgeFadeColor }
-		}, [scrollEdgeFade, isMobile, isShare])
+			if (!scrollEdgeFade) return null
+			return typeof scrollEdgeFade === "object" ? scrollEdgeFade : {}
+		}, [scrollEdgeFade])
 
 		const renderedMessageKeysRef = useRef<Set<string>>(new Set())
 		const projectionCachesRef = useRef({
@@ -904,7 +869,7 @@ const MessageList = observer(
 				<MessageViewStateProvider topicKey={currentTopicKey}>
 					<div
 						className={cn(
-							"relative flex h-full w-full flex-1 flex-col overflow-hidden",
+							"relative flex h-full min-h-0 w-full flex-1 flex-col overflow-hidden",
 							"message-list-container",
 							className,
 						)}
@@ -947,22 +912,15 @@ const MessageList = observer(
 									// viewport, but a growing list can push this column past it so
 									// the virtualizer canvas inside keeps its measurable height.
 									"mx-auto block min-h-full min-w-[unset] max-w-3xl pb-2",
-									isMobile ? "px-4 pt-[10px]" : "pl-2 pt-[50px]",
-									classNames?.scrollWrapper,
+									classNames?.content,
 								)}
 							>
 								{visibleData.length > 0 || !isEmptyStatus ? (
 									<VirtualMessageList
 										topicId={currentTopicKey}
 										items={virtualMessageItems}
-										userIndices={
-											isCompactMode ? NO_STICKY_USER_INDICES : userIndices
-										}
-										isMobile={isMobile}
+										userIndices={userIndices}
 										getScrollElement={getScrollElement}
-										startMargin={startMargin ?? (isMobile ? 10 : 50)}
-										stickyTopOffset={stickyTopOffset}
-										useMobileStickyOverlay={useMobileStickyOverlay}
 										footer={messageListFooter}
 										stickyMessageClassName={stickyMessageClassName}
 										renderNode={renderVirtualMessageNode}
@@ -986,7 +944,12 @@ const MessageList = observer(
 						</div>
 						{scrollEdgeFadeConfig ? (
 							<ScrollEdgeFadeOverlays
-								fadeColor={scrollEdgeFadeConfig.fadeColor}
+								fadeColor={scrollEdgeFadeConfig.fadeColor ?? "background"}
+								surfaceColor={
+									scrollEdgeFadeConfig.fadeColor
+										? undefined
+										: "var(--message-list-surface, rgb(var(--background-rgb)))"
+								}
 								showTopMask={showTopMask}
 								showBottomMask={showBottomMask}
 							/>
