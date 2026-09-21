@@ -152,9 +152,13 @@ function WorkspaceList({
 		)
 		.join("|")
 	useLayoutEffect(() => {
-		const scrollArea = scrollAreaRef.current
 		const list = workspaceListRef.current
-		if (!isExpanded || !scrollArea || !list) return
+		if (!isExpanded || !list) return
+		// When mounted in Sheet/portal without StrictMode, scrollAreaRef.current might not yet be
+		// populated during the child layout pass. Fall back to finding the enclosing scroll area in DOM.
+		const scrollArea =
+			scrollAreaRef.current ?? list.closest<HTMLElement>("[data-slot=scroll-area]")
+		if (!scrollArea) return
 		const layoutContainer = scrollArea.closest<HTMLElement>("[data-sidebar-project-navigation]")
 		const measure = () => {
 			// A Sheet portal can mount before its flex layout has a usable height.
@@ -165,7 +169,6 @@ function WorkspaceList({
 					: typeof window !== "undefined"
 						? Math.max(200, window.innerHeight - 180)
 						: 0
-			if (containerHeight <= 0) return
 			const items = Array.from(
 				list.querySelectorAll<HTMLElement>("[data-sidebar-workspace-root]"),
 			)
