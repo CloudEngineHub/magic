@@ -31,8 +31,8 @@ describe("PPTX export strategy", () => {
 				bufferedDownloadAvailable: true,
 			}),
 		).toMatchObject({
-			route: "legacy-blob",
-			reasonCode: "legacy-blob",
+			route: "buffered",
+			reasonCode: "buffered-download",
 			isLargeExport: false,
 		})
 	})

@@ -78,10 +78,10 @@ export function createPptxStreamingExporter(runtime: Html2PptxStreamingRuntime =
 /** Export an AsyncIterable page source to a caller-selected streaming destination. */
 export const exportPPTXStreaming = createPptxStreamingExporter()
 
-/** Compatibility Blob exporter for browsers without File System Access/OPFS. */
-export { createPptxLegacyExporter, exportPPTXLegacy } from "./pipeline/legacy-export"
-
-export { detectImageContentType, validateImageBlobResponse } from "./media/image-response"
+export {
+	detectImageContentType,
+	validateImageBlobResponse,
+} from "./media/image-response"
 export {
 	createBufferedPptxSink,
 	PPTX_MIME_TYPE,
@@ -296,10 +296,6 @@ export type {
 	StagingPolicy,
 	StreamingExportContent,
 	StreamingExportHandle,
-	LegacyExportHandle,
-	LegacyExportOptions,
-	LegacyExportSummary,
-	StreamingOptionsBase,
 	StreamingHtmlPage,
 	StreamingHtmlPageInput,
 	ZipMode,

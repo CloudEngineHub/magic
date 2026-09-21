@@ -29,10 +29,10 @@ export const PPTX_EXPORT_ROUTING_LIMITS = {
 
 export type PptxMediaSourceReliability = "local" | "stable-url" | "signed-url" | "unknown"
 
-export type PptxExportRoute = "streaming" | "legacy-blob" | "unavailable"
+export type PptxExportRoute = "streaming" | "buffered" | "unavailable"
 export type PptxExportStrategyReasonCode =
 	| "streaming"
-	| "legacy-blob"
+	| "buffered-download"
 	| "streaming-disabled"
 	| "zipjs-disabled"
 	| "zip64-disabled"
@@ -104,8 +104,8 @@ export function resolvePptxExportFeatureFlags(
 /**
  * Decide whether an export may use the new streaming path.
  *
- * When File System Access is unavailable, supported browsers use the independent legacy Blob
- * exporter instead of entering the streaming/OPFS pipeline.
+ * When File System Access is unavailable, supported browsers use the client-side buffered route
+ * instead of failing before rendering. The route still uses the same Worker/package pipeline.
  */
 export function resolvePptxExportStrategy(
 	input: PptxExportStrategyInput = {},
@@ -164,9 +164,9 @@ export function resolvePptxExportStrategy(
 	if (!fileStreamingAvailable) {
 		if (bufferedDownloadAvailable) {
 			return createDecision({
-				route: "legacy-blob",
-				reasonCode: "legacy-blob",
-				reason: "This browser uses the compatibility Blob exporter for PPTX export.",
+				route: "buffered",
+				reasonCode: "buffered-download",
+				reason: "This browser uses a client-side Blob download for PPTX export.",
 				isLargeExport,
 				requiresZip64,
 				mediaPolicyMode,
@@ -201,7 +201,7 @@ export function resolvePptxExportStrategy(
 }
 
 function unavailableDecision(
-	reasonCode: Exclude<PptxExportStrategyReasonCode, "streaming" | "legacy-blob">,
+	reasonCode: Exclude<PptxExportStrategyReasonCode, "streaming" | "buffered-download">,
 	reason: string,
 	isLargeExport: boolean,
 	requiresZip64: boolean,

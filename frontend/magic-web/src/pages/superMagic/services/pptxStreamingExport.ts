@@ -1,9 +1,7 @@
 import {
 	createBufferedPptxSink,
-	exportPPTXLegacy,
 	exportPPTXStreaming,
 	imagePolicyRequiresReplay,
-	isOpfsUnavailableError,
 	PPTX_MIME_TYPE,
 } from "@magic/html2pptx"
 import type {
@@ -59,14 +57,10 @@ interface SaveFilePickerGlobal {
 export interface PptxDestinationLease {
 	destination: PptxDestination
 	abort: (reason?: unknown) => Promise<void>
-	route?: "file-stream" | "buffered-download" | "legacy-blob"
+	route?: "file-stream" | "buffered-download"
 }
 
 type WritablePptxFile = Pick<FileSystemWritableFileStream, "write" | "close" | "abort">
-
-const legacyPptxDestinations = new WeakSet<object>()
-let opfsCapability: boolean | undefined
-let opfsProbePromise: Promise<boolean> | null = null
 
 export interface OpenPptxDestinationOptions {
 	suggestedName: string
@@ -120,12 +114,12 @@ export function supportsPptxFileStreaming(input: PptxExportStrategyInput = {}): 
 	return getPptxExportStrategy(input).route === "streaming"
 }
 
-/** Whether a client-side PPTX export route is available, including the legacy Blob fallback. */
+/** Whether a client-side PPTX export route is available, including Blob download fallback. */
 export function supportsPptxExport(input: PptxExportStrategyInput = {}): boolean {
 	return getPptxExportStrategy(input).route !== "unavailable"
 }
 
-/** Resolve the current route once so callers can log the reason and avoid an unsafe route. */
+/** Resolve the current route once so callers can log the reason and avoid unsafe Blob fallback. */
 export function getPptxExportStrategy(
 	input: PptxExportStrategyInput = {},
 ): PptxExportStrategyDecision {
@@ -155,14 +149,10 @@ export async function openPptxDestination(
 	options: OpenPptxDestinationOptions,
 ): Promise<PptxDestinationLease | null> {
 	const picker = (globalThis as SaveFilePickerGlobal).showSaveFilePicker
-	if (!picker || opfsCapability === false) {
+	if (!picker) {
 		if (!supportsBufferedPptxDownload()) return null
-		return createPptxLegacyDestinationLease()
+		return createPptxBufferedDestinationLease(options.suggestedName)
 	}
-	// Never await an unknown capability probe before opening the picker: doing so
-	// can consume the user-activation required by File System Access. The probe is
-	// warmed when this module loads and runtime OPFS errors still retry via legacy.
-	if (opfsCapability === undefined && hasOpfsApi()) void supportsOpfsStaging()
 
 	let handle: FileSystemFileHandle
 	try {
@@ -189,8 +179,7 @@ export async function openPptxDestination(
 
 /**
  * Collect streamed PPTX chunks in the browser and trigger a normal download on close.
- * Kept for callers that explicitly need a buffered sink; automatic browser fallback uses
- * `createPptxLegacyDestinationLease` so it never enters the streaming/OPFS pipeline.
+ * This is the Safari-compatible destination used when File System Access is unavailable.
  */
 export function createPptxBufferedDestinationLease(suggestedName: string): PptxDestinationLease {
 	const fileName = ensurePptxFileName(suggestedName)
@@ -230,69 +219,6 @@ export function createPptxBufferedDestinationLease(suggestedName: string): PptxD
 		abort,
 		route: "buffered-download",
 	}
-}
-
-/** Marker destination used to select the true legacy Blob engine. */
-function createPptxLegacyDestinationLease(): PptxDestinationLease {
-	const sink: PptxOutputSink = {
-		write: () => undefined,
-		close: () => undefined,
-		abort: () => undefined,
-	}
-	const destination = { kind: "sink-proxy" as const, sink, legacy: true }
-	legacyPptxDestinations.add(destination)
-	return {
-		destination,
-		abort: async () => undefined,
-		route: "legacy-blob",
-	}
-}
-
-function isLegacyPptxDestination(destination: PptxDestination): boolean {
-	return (
-		typeof destination === "object" &&
-		destination !== null &&
-		legacyPptxDestinations.has(destination as object)
-	)
-}
-
-/** Probe OPFS once per tab. Presence of the API alone is insufficient in Safari/private contexts. */
-async function supportsOpfsStaging(): Promise<boolean> {
-	if (opfsCapability !== undefined) return opfsCapability
-	if (opfsProbePromise) return opfsProbePromise
-	opfsProbePromise = (async () => {
-		let root: FileSystemDirectoryHandle | undefined
-		let directoryName: string | undefined
-		try {
-			const storage = (globalThis as { navigator?: Navigator }).navigator?.storage as
-				| (StorageManager & { getDirectory?: () => Promise<FileSystemDirectoryHandle> })
-				| undefined
-			if (!storage || typeof storage.getDirectory !== "function") return false
-			root = await storage.getDirectory()
-			directoryName = `magic-pptx-probe-${Math.random().toString(36).slice(2)}`
-			const directory = await root.getDirectoryHandle(directoryName, { create: true })
-			const file = await directory.getFileHandle("probe", { create: true })
-			const writable = await file.createWritable()
-			await writable.write(new Uint8Array([1]))
-			await writable.close()
-			return true
-		} catch {
-			return false
-		} finally {
-			if (root && directoryName) {
-				await root.removeEntry(directoryName, { recursive: true }).catch(() => undefined)
-			}
-			opfsProbePromise = null
-		}
-	})()
-	opfsCapability = await opfsProbePromise
-	return opfsCapability
-}
-
-function hasOpfsApi(): boolean {
-	const storage = (globalThis as { navigator?: Navigator }).navigator?.storage as
-		{ getDirectory?: unknown } | undefined
-	return typeof storage?.getDirectory === "function"
 }
 
 function supportsBufferedPptxDownload(): boolean {
@@ -392,24 +318,6 @@ export function startPptxStreamingExport(
 	content: StreamingExportContent,
 	options: LargeExportOptions,
 ): StreamingExportHandle {
-	if (isLegacyPptxDestination(options.destination)) {
-		const controller = new AbortController()
-		const handle = startLegacyBlobExport(
-			normalizeStreamingPages(
-				typeof content === "string" ? [content] : content,
-				controller.signal,
-			),
-			options,
-			controller.signal,
-		)
-		return {
-			promise: handle.promise,
-			cancel: () => {
-				controller.abort(createPptxAbortError())
-				handle.cancel()
-			},
-		}
-	}
 	return exportPPTXStreaming(content, withResolvedMediaPolicy(options))
 }
 
@@ -456,36 +364,9 @@ export function startPptxStreamingExportFromFactory(
 			// Do not retain a second business-layer reference for the remainder of the export.
 			throwIfAborted(sourceController.signal)
 
-			if (isLegacyPptxDestination(options.destination)) {
-				activeHandle = startLegacyBlobExport(pages, options, sourceController.signal)
-			} else {
-				activeHandle = exportPPTXStreaming(pages, withResolvedMediaPolicy(options))
-			}
+			activeHandle = exportPPTXStreaming(pages, withResolvedMediaPolicy(options))
 			if (sourceController.signal.aborted) activeHandle.cancel()
-			try {
-				return await activeHandle.promise
-			} catch (error) {
-				if (
-					isLegacyPptxDestination(options.destination) ||
-					!isOpfsUnavailableError(error)
-				) {
-					throw error
-				}
-				// Capability probes can race with privacy/storage policy changes. Recreate
-				// the source and retry once with the independent legacy engine.
-				opfsCapability = false
-				await close(error).catch(() => undefined)
-				const fallbackPages = normalizeStreamingPages(
-					createPages(sourceController.signal),
-					sourceController.signal,
-				)
-				activeHandle = startLegacyBlobExport(
-					fallbackPages,
-					options,
-					sourceController.signal,
-				)
-				return await activeHandle.promise
-			}
+			return await activeHandle.promise
 		} finally {
 			firstPage = null
 			await close(sourceController.signal.reason).catch(() => undefined)
@@ -501,45 +382,6 @@ export function startPptxStreamingExportFromFactory(
 			activeHandle?.cancel()
 		},
 	}
-}
-
-function startLegacyBlobExport(
-	pages: AsyncIterable<StreamingHtmlPage>,
-	options: LargeExportOptions,
-	signal: AbortSignal,
-): StreamingExportHandle {
-	const handle = exportPPTXLegacy(pages, {
-		fileName: options.fileName,
-		config: options.config,
-		autoSize: options.autoSize,
-		skipFailedPages: options.skipFailedPages,
-		fontResolver: options.fontResolver,
-		fontMissPolicy: options.fontMissPolicy,
-		logger: options.logger,
-		logLevel: options.logLevel,
-		onResourceLoadError: options.onResourceLoadError,
-		onExportIssue: options.onExportIssue,
-		onProgress: options.onProgress,
-	})
-	const promise = handle.promise.then((result) => {
-		triggerPptxBlobDownload(result.data, result.fileName)
-		return {
-			fileName: result.fileName,
-			pageCount: result.pageCount,
-			mediaPartCount: 0,
-			bytesWritten: result.bytesWritten,
-			durationMs: 0,
-			execution: {
-				outputPolicy: "file-stream" as const,
-				mediaPolicyMode: "direct-stream" as const,
-				zipMode: "classic" as const,
-				pipeline: "direct" as const,
-			},
-		}
-	})
-	if (signal.aborted) handle.cancel()
-	else signal.addEventListener("abort", () => handle.cancel(), { once: true })
-	return { promise, cancel: handle.cancel }
 }
 
 /** Peek the first normalized page while preserving it in the returned single-use replay source. */
@@ -655,7 +497,7 @@ export async function* iteratePreparedPptxPages(
 }
 
 async function* normalizeStreamingPages(
-	source: Iterable<StreamingHtmlPageInput> | AsyncIterable<StreamingHtmlPageInput>,
+	source: AsyncIterable<StreamingHtmlPageInput>,
 	signal: AbortSignal,
 ): AsyncIterable<StreamingHtmlPage> {
 	let fallbackIndex = 0
@@ -779,6 +621,3 @@ function withResolvedMediaPolicy(options: LargeExportOptions): LargeExportOption
 function hasFileStreamingCapability(): boolean {
 	return typeof (globalThis as SaveFilePickerGlobal).showSaveFilePicker === "function"
 }
-
-// Warm the real OPFS probe long before a user clicks export, preserving picker activation.
-if (hasFileStreamingCapability()) void supportsOpfsStaging()
