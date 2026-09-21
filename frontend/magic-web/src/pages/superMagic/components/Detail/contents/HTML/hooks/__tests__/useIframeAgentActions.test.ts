@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest"
 import { TopicMode } from "@/pages/superMagic/pages/Workspace/TopicMode"
 import type { Topic } from "@/pages/superMagic/pages/Workspace/types"
 import type { TopicStore } from "@/pages/superMagic/stores/core/topic"
+import superMagicModeService from "@/services/superMagic/SuperMagicModeService"
 import { useIframeAgentActions } from "../useIframeAgentActions"
 
 const mocks = vi.hoisted(() => ({
@@ -173,6 +174,74 @@ describe("useIframeAgentActions", () => {
 		})
 		expect(mocks.dispatchMessage).toHaveBeenCalled()
 		expect(mocks.publish).not.toHaveBeenCalled()
+	})
+
+	it("selects a custom employee before topic detail includes one", async () => {
+		const modeList = superMagicModeService._modeList as Array<{
+			agent: { type: number }
+			mode: { identifier: string; name: string }
+		}>
+		modeList.push({
+			agent: { type: 2 },
+			mode: { identifier: "SMA-preview", name: "Preview employee" },
+		})
+		try {
+			const topicStore = {
+				topics: [],
+				setTopics: mocks.setScopedTopics,
+				setSelectedTopic: mocks.setScopedSelectedTopic,
+			} as any
+			const { result } = renderHook(() =>
+				useIframeAgentActions("project-from-preview", topicStore, {
+					id: "project-current",
+				} as any),
+			)
+
+			await act(async () => {
+				await result.current.createTopicAndSend({
+					message: "hello",
+					agentId: "SMA-preview",
+				})
+			})
+
+			expect(mocks.setScopedSelectedTopic).toHaveBeenCalledWith(
+				expect.objectContaining({
+					id: "topic-1",
+					topic_mode: TopicMode.CustomAgent,
+					agent_code: "SMA-preview",
+				}),
+			)
+		} finally {
+			modeList.pop()
+		}
+	})
+
+	it("selects a built-in employee as topic mode without an agent code", async () => {
+		const topicStore = {
+			topics: [],
+			setTopics: mocks.setScopedTopics,
+			setSelectedTopic: mocks.setScopedSelectedTopic,
+		} as any
+		const { result } = renderHook(() =>
+			useIframeAgentActions("project-from-preview", topicStore, {
+				id: "project-current",
+			} as any),
+		)
+
+		await act(async () => {
+			await result.current.createTopicAndSend({
+				message: "hello",
+				agentId: TopicMode.General,
+			})
+		})
+
+		expect(mocks.setScopedSelectedTopic).toHaveBeenCalledWith(
+			expect.objectContaining({
+				id: "topic-1",
+				topic_mode: TopicMode.General,
+				agent_code: undefined,
+			}),
+		)
 	})
 
 	it("prepends the published micro-app mention to Agent messages", async () => {

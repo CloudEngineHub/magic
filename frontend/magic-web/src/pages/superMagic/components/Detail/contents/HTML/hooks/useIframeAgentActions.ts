@@ -234,10 +234,16 @@ export function useIframeAgentActions(
 				throw new Error("Created topic is missing conversation context")
 			}
 
-			const topicWithAgent =
-				isCustomAgent && requestedAgentId
-					? { ...newTopic, agent_code: requestedAgentId }
-					: newTopic
+			// Detail is still an empty topic. The selector reads topic_mode.
+			const topicWithAgent = requestedAgentId
+				? {
+						...newTopic,
+						topic_mode: isCustomAgent
+							? TopicMode.CustomAgent
+							: (requestedAgentId as TopicMode),
+						agent_code: isCustomAgent ? requestedAgentId : undefined,
+					}
+				: newTopic
 			activeTopicStore.setTopics([
 				topicWithAgent,
 				...activeTopicStore.topics.filter((item) => item.id !== topicWithAgent.id),
