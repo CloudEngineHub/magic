@@ -20,6 +20,7 @@ from .processor_config import ProcessorConfig
 from .streaming_context import StreamProcessContext
 from .streaming_handler import StreamResponseHandler
 from agentlang.logger import get_logger
+from agentlang.streaming.driver_types import DriverType
 from agentlang.streaming.interface import StreamingInterface
 from agentlang.streaming.manager import create_driver
 
@@ -200,7 +201,9 @@ class StreamingCallProcessor:
         primary = None
         try:
             driver_config = processor_config.get_effective_streaming_config()
-            streaming_driver = create_driver(streaming_push_mode, driver_config)
+            streaming_driver = StreamingCallProcessor._create_primary_driver(
+                streaming_push_mode, driver_config
+            )
             if streaming_driver:
                 init_result = await streaming_driver.initialize()
                 if init_result.success:
@@ -241,3 +244,16 @@ class StreamingCallProcessor:
             )
             return extra[0] if len(extra) == 1 else BroadcastStreamingDriver(extra)
         return None
+
+    @staticmethod
+    def _create_primary_driver(streaming_push_mode, driver_config):
+        """Socket.IO 走进程级复用；其它类型仍按次新建。"""
+        if streaming_push_mode == DriverType.SOCKETIO:
+            from agentlang.streaming.drivers.socketio.config import SocketIODriverConfig
+            from agentlang.streaming.drivers.socketio.driver import get_shared_socketio_driver
+
+            config = SocketIODriverConfig.create_default()
+            if driver_config:
+                config.update_from_dict(driver_config)
+            return get_shared_socketio_driver(config)
+        return create_driver(streaming_push_mode, driver_config)

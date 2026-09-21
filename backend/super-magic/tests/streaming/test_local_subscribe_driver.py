@@ -132,7 +132,7 @@ async def test_initialize_streaming_driver_uses_sink_when_primary_fails(monkeypa
     sink.register_stream(stream)
 
     monkeypatch.setattr(
-        "agentlang.llms.processors.streaming_call_processor.create_driver",
+        "agentlang.llms.processors.streaming_call_processor.StreamingCallProcessor._create_primary_driver",
         lambda mode, config: _FailingPrimary(),
     )
 
@@ -152,7 +152,7 @@ async def test_initialize_streaming_driver_broadcasts_primary_and_sink(monkeypat
     primary = _OkPrimary()
     sink = LocalSubscribeStreamingDriver()
     monkeypatch.setattr(
-        "agentlang.llms.processors.streaming_call_processor.create_driver",
+        "agentlang.llms.processors.streaming_call_processor.StreamingCallProcessor._create_primary_driver",
         lambda mode, config: primary,
     )
 
