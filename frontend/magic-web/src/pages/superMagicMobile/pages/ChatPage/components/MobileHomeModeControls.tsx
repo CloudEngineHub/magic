@@ -46,8 +46,10 @@ export default function MobileHomeModeControls({
 				onChange={onModeChange}
 				variant="background"
 				className="h-14 w-64 rounded-full bg-muted p-1.5"
-				buttonClassName="h-11 gap-2 rounded-full text-base font-medium focus-visible:bg-accent focus-visible:ring-1 focus-visible:ring-ring"
+				// Keep inactive tabs transparent after switching; keyboard users still get the focus ring.
+				buttonClassName="h-11 gap-2 rounded-full text-base font-medium focus-visible:ring-1 focus-visible:ring-ring"
 				indicatorClassName="inset-y-1.5 h-11 rounded-full"
+				enableHoverBackground={false}
 			/>
 			{/* Reserve the destination row in both modes so the hero and input stay in place. */}
 			<div className="flex h-10 w-full min-w-0 justify-center">
