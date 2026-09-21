@@ -586,6 +586,9 @@ const LiveRecordingAiChat = observer(function LiveRecordingAiChat(props: AiChatP
 						stickyTopOffset={0}
 						startMargin={10}
 						keepStickyWhenCompact
+						// White sheet: skip the mobile page-gray mask and edge fade.
+						useMobileStickyOverlay={false}
+						scrollEdgeFade={false}
 						// Padding stays inside the mask so the timestamp is not flush.
 						stickyMessageClassName="pt-2 [--sticky-message-mask-bg:rgb(255_255_255)] [--sticky-message-mask-fade-from:rgb(255_255_255)]"
 					/>

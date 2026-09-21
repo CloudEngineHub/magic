@@ -15,6 +15,7 @@ const storeState = vi.hoisted(() => ({
 				stickyTopOffset?: number
 				startMargin?: number
 				userIndices?: number[]
+				useMobileStickyOverlay?: boolean
 		  }
 		| undefined,
 	isMobile: true,
@@ -73,6 +74,7 @@ vi.mock("@/pages/superMagic/components/MessageList/components/VirtualMessageList
 		stickyTopOffset,
 		startMargin,
 		userIndices,
+		useMobileStickyOverlay,
 	}: {
 		items: Array<{ key: string }>
 		renderNode: (args: { item: any }) => ReactNode
@@ -80,9 +82,15 @@ vi.mock("@/pages/superMagic/components/MessageList/components/VirtualMessageList
 		stickyTopOffset?: number
 		startMargin?: number
 		userIndices?: number[]
+		useMobileStickyOverlay?: boolean
 	}) => {
 		storeState.virtualItems = items
-		storeState.virtualListProps = { stickyTopOffset, startMargin, userIndices }
+		storeState.virtualListProps = {
+			stickyTopOffset,
+			startMargin,
+			userIndices,
+			useMobileStickyOverlay,
+		}
 		return (
 			<div data-testid="virtual-message-stream">
 				{items.map((item) => (
@@ -263,12 +271,14 @@ describe("MessageList bottom loading", () => {
 					stickyTopOffset={0}
 					startMargin={10}
 					keepStickyWhenCompact
+					useMobileStickyOverlay={false}
 				/>,
 			)
 
 			expect(storeState.virtualListProps?.stickyTopOffset).toBe(0)
 			expect(storeState.virtualListProps?.startMargin).toBe(10)
 			expect(storeState.virtualListProps?.userIndices).toEqual([0])
+			expect(storeState.virtualListProps?.useMobileStickyOverlay).toBe(false)
 		} finally {
 			Object.defineProperty(window, "innerHeight", {
 				configurable: true,

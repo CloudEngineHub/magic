@@ -115,6 +115,11 @@ interface MessageListProps {
 	 * Side panels have no header, so the user turn still parks at the top.
 	 */
 	keepStickyWhenCompact?: boolean
+	/**
+	 * Mobile page gray mask. Turn off when the list sits on a white sheet
+	 * so the pinned user turn does not pick up #fafafa.
+	 */
+	useMobileStickyOverlay?: boolean
 	/** True while the initial message fetch is in-flight; suppresses the empty fallback */
 	isMessagesLoading?: boolean
 	fallbackRender?: ReactNode
@@ -190,6 +195,7 @@ const MessageList = observer(
 		stickyTopOffset,
 		startMargin,
 		keepStickyWhenCompact = false,
+		useMobileStickyOverlay,
 		children,
 		backToLatestButtonClassName,
 		enableRevokedUserMessageReedit = false,
@@ -956,6 +962,7 @@ const MessageList = observer(
 										getScrollElement={getScrollElement}
 										startMargin={startMargin ?? (isMobile ? 10 : 50)}
 										stickyTopOffset={stickyTopOffset}
+										useMobileStickyOverlay={useMobileStickyOverlay}
 										footer={messageListFooter}
 										stickyMessageClassName={stickyMessageClassName}
 										renderNode={renderVirtualMessageNode}
