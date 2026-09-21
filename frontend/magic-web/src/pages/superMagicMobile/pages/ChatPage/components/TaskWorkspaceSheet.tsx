@@ -6,7 +6,9 @@ import { Input } from "@/components/shadcn-ui/input"
 import { Button } from "@/components/shadcn-ui/button"
 import { ScrollArea } from "@/components/shadcn-ui/scroll-area"
 import SuperMagicService from "@/pages/superMagic/services"
+import WorkspaceIcon from "@/pages/superMagicMobile/components/HierarchicalWorkspacePopup/components/WorkspaceIcon"
 import type { Workspace } from "@/pages/superMagic/pages/Workspace/types"
+import { cn } from "@/utils/cn"
 import { CreateWorkspaceSheet } from "../../WorkspacesPage/components/CreateWorkspaceSheet"
 import { useTaskWorkspaceOptions } from "../hooks/useTaskWorkspaceOptions"
 
@@ -57,7 +59,8 @@ export default function TaskWorkspaceSheet({
 				</div>
 				<ScrollArea className="h-[45dvh] min-h-0" viewportClassName="overscroll-contain">
 					<div
-						className="flex flex-col gap-1"
+						// Match the sidebar rows: the body keeps padding for controls, while rows reach the same edge.
+						className="-mx-4 flex flex-col gap-1"
 						role="listbox"
 						aria-label={t("mobileHome.chooseWorkspace")}
 					>
@@ -67,13 +70,19 @@ export default function TaskWorkspaceSheet({
 								type="button"
 								role="option"
 								aria-selected={workspace.id === selectedId}
-								className="flex min-h-12 items-center gap-3 rounded-lg px-3 text-left text-sm hover:bg-accent focus-visible:bg-accent focus-visible:outline-none"
+								className={cn(
+									"flex min-h-12 w-full items-center gap-2 rounded-lg px-4 py-2.5 text-left text-sm transition-colors hover:bg-accent focus-visible:bg-accent focus-visible:outline-none",
+									workspace.id === selectedId && "bg-primary/10",
+								)}
 								onClick={() => {
 									onSelect(workspace)
 									onClose()
 								}}
 							>
-								<span className="min-w-0 flex-1 truncate">{workspace.name}</span>
+								<WorkspaceIcon />
+								<span className="min-w-0 flex-1 truncate text-sm text-foreground">
+									{workspace.name}
+								</span>
 								{workspace.id === selectedId && (
 									<Check className="size-4 shrink-0 text-primary" />
 								)}
