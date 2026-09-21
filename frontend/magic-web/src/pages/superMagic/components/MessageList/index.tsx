@@ -100,6 +100,26 @@ interface MessageListProps {
 	onFileClick?: (fileItem: any) => void
 	/** Extra classes; set [--sticky-message-mask-bg] / [--sticky-message-mask-fade-from] to tune mask */
 	stickyMessageClassName?: string
+	/**
+	 * Pinned user-turn distance from the scrollport top, in px.
+	 * Defaults to the workspace header line. Headerless panels pass 0.
+	 */
+	stickyTopOffset?: number
+	/**
+	 * Gap between the scrollport and the virtualizer, in px.
+	 * Must match the column padding-top or sticky handoff is wrong.
+	 */
+	startMargin?: number
+	/**
+	 * Keep pinning below the compact-height threshold.
+	 * Side panels have no header, so the user turn still parks at the top.
+	 */
+	keepStickyWhenCompact?: boolean
+	/**
+	 * Mobile page gray mask. Turn off when the list sits on a white sheet
+	 * so the pinned user turn does not pick up #fafafa.
+	 */
+	useMobileStickyOverlay?: boolean
 	/** True while the initial message fetch is in-flight; suppresses the empty fallback */
 	isMessagesLoading?: boolean
 	fallbackRender?: ReactNode
@@ -172,6 +192,10 @@ const MessageList = observer(
 		currentTopicStatus,
 		onFileClick,
 		stickyMessageClassName,
+		stickyTopOffset,
+		startMargin,
+		keepStickyWhenCompact = false,
+		useMobileStickyOverlay,
 		children,
 		backToLatestButtonClassName,
 		enableRevokedUserMessageReedit = false,
@@ -187,7 +211,9 @@ const MessageList = observer(
 	}: MessageListProps) => {
 		const { t } = useTranslation("super")
 		const isMobile = useIsMobile()
-		const isCompactMode = useConversationCompactMode({ enabled: !isMobile })
+		const isCompactMode = useConversationCompactMode({
+			enabled: !isMobile && !keepStickyWhenCompact,
+		})
 
 		const exportStore = useExportSelectionStore()
 
@@ -363,8 +389,7 @@ const MessageList = observer(
 		const isLastMessageError = useMemo(() => {
 			const lastNode = mainDisplayData?.[mainDisplayData?.length - 1]
 			const n = superMagicStore.getMessageNode(lastNode?.super_message_id) as
-				| { status?: TaskStatus }
-				| undefined
+				{ status?: TaskStatus } | undefined
 			return n?.status === TaskStatus.ERROR
 		}, [mainDisplayData])
 
@@ -935,7 +960,9 @@ const MessageList = observer(
 										}
 										isMobile={isMobile}
 										getScrollElement={getScrollElement}
-										startMargin={isMobile ? 10 : 50}
+										startMargin={startMargin ?? (isMobile ? 10 : 50)}
+										stickyTopOffset={stickyTopOffset}
+										useMobileStickyOverlay={useMobileStickyOverlay}
 										footer={messageListFooter}
 										stickyMessageClassName={stickyMessageClassName}
 										renderNode={renderVirtualMessageNode}

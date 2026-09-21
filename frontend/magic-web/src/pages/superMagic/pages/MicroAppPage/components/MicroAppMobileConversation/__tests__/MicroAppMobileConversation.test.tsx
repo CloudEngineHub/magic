@@ -25,6 +25,13 @@ const mentionInsertMocks = vi.hoisted(() => ({
 
 vi.mock("../../../utils/insertCurrentMicroAppMention", () => mentionInsertMocks)
 
+const modelModeMocks = vi.hoisted(() => ({
+	resolveMicroAppModelSelectionMode: vi.fn(() => "default"),
+	resolveMicroAppRuntimeModelSelectionMode: vi.fn((mode: string) => mode),
+}))
+
+vi.mock("../../../utils/microAppModelMode", () => modelModeMocks)
+
 vi.mock("react-i18next", () => ({
 	initReactI18next: { type: "3rdParty", init: vi.fn() },
 	useTranslation: () => ({
@@ -117,6 +124,14 @@ vi.mock("@/pages/superMagic/hooks/useTopicMessages", () => ({
 		handlePullMoreMessage: vi.fn(),
 		isMessagesInitialLoading: false,
 		isSelectedTopicMessagesReady: true,
+	}),
+}))
+
+vi.mock("@/pages/superMagic/hooks/useTopicMode", () => ({
+	default: ({ selectedTopic }: { selectedTopic?: { topic_mode?: string } }) => ({
+		topicMode: selectedTopic?.topic_mode ?? "general",
+		setTopicMode: vi.fn(),
+		recoverTopicMode: vi.fn(),
 	}),
 }))
 
@@ -295,8 +310,13 @@ describe("MicroApp mobile conversation controls", () => {
 			"data-show-model-selector",
 			"false",
 		)
-		expect(screen.getByTestId("mobile-project-input")).not.toHaveAttribute(
+		expect(screen.getByTestId("mobile-project-input")).toHaveAttribute(
 			"data-model-topic-mode",
+			"custom_agent",
+		)
+		expect(modelModeMocks.resolveMicroAppRuntimeModelSelectionMode).toHaveBeenCalledWith(
+			"custom_agent",
+			"SMA123",
 		)
 		expect(screen.getByTestId("mobile-project-input")).toHaveAttribute(
 			"data-show-topic-mode-example-portal",

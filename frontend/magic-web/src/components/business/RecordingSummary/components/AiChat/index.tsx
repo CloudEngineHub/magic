@@ -578,10 +578,19 @@ const LiveRecordingAiChat = observer(function LiveRecordingAiChat(props: AiChatP
 						handleSendMsg={handleSendMsg}
 						className={`${styles.messageList} min-h-0 flex-1`}
 						classNames={{
+							// 10px top padding; startMargin below must stay equal.
 							scrollWrapper: "pt-[10px] pr-2",
 						}}
 						onFileClick={onFileClick}
-						stickyMessageClassName="top-0 [--sticky-message-mask-bg:rgb(255_255_255)] [--sticky-message-mask-fade-from:rgb(255_255_255)]"
+						// No workspace header: pin the user turn on the panel top.
+						stickyTopOffset={0}
+						startMargin={10}
+						keepStickyWhenCompact
+						// White sheet: skip the mobile page-gray mask and edge fade.
+						useMobileStickyOverlay={false}
+						scrollEdgeFade={false}
+						// Padding stays inside the mask so the timestamp is not flush.
+						stickyMessageClassName="pt-2 [--sticky-message-mask-bg:rgb(255_255_255)] [--sticky-message-mask-fade-from:rgb(255_255_255)]"
 					/>
 				)}
 			</MessageListProvider>

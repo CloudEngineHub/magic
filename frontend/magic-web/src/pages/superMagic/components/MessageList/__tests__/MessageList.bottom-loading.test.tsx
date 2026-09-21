@@ -10,6 +10,15 @@ const storeState = vi.hoisted(() => ({
 	messageNodesById: new Map<string, Record<string, unknown>>(),
 	streamStatesByTopicAndId: new Map<string, Record<string, unknown>>(),
 	virtualItems: undefined as Array<{ key: string }> | undefined,
+	virtualListProps: undefined as
+		| {
+				stickyTopOffset?: number
+				startMargin?: number
+				userIndices?: number[]
+				useMobileStickyOverlay?: boolean
+		  }
+		| undefined,
+	isMobile: true,
 }))
 
 vi.mock("mobx-react-lite", () => ({
@@ -22,7 +31,7 @@ vi.mock("react-i18next", () => ({
 }))
 
 vi.mock("@/hooks/useIsMobile", () => ({
-	useIsMobile: () => true,
+	useIsMobile: () => storeState.isMobile,
 }))
 
 vi.mock("@/components/base-mobile/ScrollEdgeFade", () => ({
@@ -62,12 +71,26 @@ vi.mock("@/pages/superMagic/components/MessageList/components/VirtualMessageList
 		items,
 		renderNode,
 		footer,
+		stickyTopOffset,
+		startMargin,
+		userIndices,
+		useMobileStickyOverlay,
 	}: {
 		items: Array<{ key: string }>
 		renderNode: (args: { item: any }) => ReactNode
 		footer?: ReactNode
+		stickyTopOffset?: number
+		startMargin?: number
+		userIndices?: number[]
+		useMobileStickyOverlay?: boolean
 	}) => {
 		storeState.virtualItems = items
+		storeState.virtualListProps = {
+			stickyTopOffset,
+			startMargin,
+			userIndices,
+			useMobileStickyOverlay,
+		}
 		return (
 			<div data-testid="virtual-message-stream">
 				{items.map((item) => (
@@ -221,9 +244,49 @@ afterEach(() => {
 	storeState.messageNodesById.clear()
 	storeState.streamStatesByTopicAndId.clear()
 	storeState.virtualItems = undefined
+	storeState.virtualListProps = undefined
+	storeState.isMobile = true
 })
 
 describe("MessageList bottom loading", () => {
+	it("parks a headerless panel flush with the top even in a short window", () => {
+		const originalHeight = window.innerHeight
+		storeState.isMobile = false
+		Object.defineProperty(window, "innerHeight", {
+			configurable: true,
+			value: 700,
+		})
+
+		try {
+			render(
+				<MessageList
+					data={[
+						userMessage,
+						createMessage({
+							appMessageId: "assistant-sticky",
+							role: "assistant",
+						}),
+					]}
+					selectedTopic={topicA}
+					stickyTopOffset={0}
+					startMargin={10}
+					keepStickyWhenCompact
+					useMobileStickyOverlay={false}
+				/>,
+			)
+
+			expect(storeState.virtualListProps?.stickyTopOffset).toBe(0)
+			expect(storeState.virtualListProps?.startMargin).toBe(10)
+			expect(storeState.virtualListProps?.userIndices).toEqual([0])
+			expect(storeState.virtualListProps?.useMobileStickyOverlay).toBe(false)
+		} finally {
+			Object.defineProperty(window, "innerHeight", {
+				configurable: true,
+				value: originalHeight,
+			})
+		}
+	})
+
 	it("routes every converted top-level message through the virtual list", () => {
 		render(
 			<MessageList

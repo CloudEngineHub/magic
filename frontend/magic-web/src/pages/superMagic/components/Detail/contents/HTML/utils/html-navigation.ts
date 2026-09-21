@@ -151,9 +151,22 @@ export function isHtmlPreviewShellNavigation(href: string, shellUrl = "/husky.ht
 
 const ROOT_INDEX_NAME = /^index\.html?$/i
 
+/**
+ * URL.pathname percent-encodes UTF-8. Project paths stay Unicode.
+ * decodeURI leaves "/" "?" "#" encoded, so %2F is not a new segment.
+ */
+function decodeHtmlPreviewPath(path: string): string {
+	if (!path.includes("%")) return path
+	try {
+		return decodeURI(path)
+	} catch {
+		return path
+	}
+}
+
 /** Normalize preview paths: slashes, leading /, and repeated ./ prefixes. */
 export function normalizeHtmlPreviewPath(path?: string): string {
-	let value = (path || "").replace(/\\/g, "/")
+	let value = decodeHtmlPreviewPath(path || "").replace(/\\/g, "/")
 	while (value.startsWith("./")) {
 		value = value.slice(2)
 	}
