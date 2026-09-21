@@ -94,10 +94,16 @@ function isRecoverablePageError(error: unknown): boolean {
 	)
 		return false
 
-	if (isExportFidelityError(error)) return true
+	// Capture/script/readiness fidelity failures indicate missing or incomplete content and
+	// remain fatal. A page-size limit is different: the page can be represented by the
+	// diagnostic placeholder when the host explicitly opted into skipFailedPages.
+	if (isExportFidelityError(error)) return error.kind === "page-size"
 	if (!isPptxExportError(error)) return true
 
 	const diagnostic = error.diagnostic
+	if (isExportFidelityError(error.sourceError)) {
+		return error.sourceError.kind === "page-size"
+	}
 	if (
 		[
 			"worker-failed",
