@@ -944,7 +944,7 @@ class ResourceShareAppService extends AbstractShareAppService
                 $state['after_file_id'] !== null ? (int) $state['after_file_id'] : null,
                 $dto->pageSize - count($list) + 1,
                 [],
-                true
+                excludeHidden: true
             );
             $emitted = 0;
             $last = null;
