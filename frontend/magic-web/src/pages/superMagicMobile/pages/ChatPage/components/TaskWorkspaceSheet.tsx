@@ -6,7 +6,7 @@ import { Input } from "@/components/shadcn-ui/input"
 import { Button } from "@/components/shadcn-ui/button"
 import { ScrollArea } from "@/components/shadcn-ui/scroll-area"
 import SuperMagicService from "@/pages/superMagic/services"
-import WorkspaceIcon from "@/pages/superMagicMobile/components/HierarchicalWorkspacePopup/components/WorkspaceIcon"
+import { MobileResourceTypeIcon } from "@/pages/superMagicMobile/components/icons/mobile-resource-type-icon"
 import type { Workspace } from "@/pages/superMagic/pages/Workspace/types"
 import { cn } from "@/utils/cn"
 import { CreateWorkspaceSheet } from "../../WorkspacesPage/components/CreateWorkspaceSheet"
@@ -71,7 +71,7 @@ export default function TaskWorkspaceSheet({
 								role="option"
 								aria-selected={workspace.id === selectedId}
 								className={cn(
-									"flex min-h-12 w-full items-center gap-2 rounded-lg px-4 py-2.5 text-left text-sm transition-colors hover:bg-accent focus-visible:bg-accent focus-visible:outline-none",
+									"flex h-16 w-full shrink-0 items-center gap-2 rounded-lg px-4 text-left text-sm transition-colors hover:bg-accent focus-visible:bg-accent focus-visible:outline-none",
 									workspace.id === selectedId && "bg-primary/10",
 								)}
 								onClick={() => {
@@ -79,10 +79,17 @@ export default function TaskWorkspaceSheet({
 									onClose()
 								}}
 							>
-								<WorkspaceIcon />
-								<span className="min-w-0 flex-1 truncate text-sm text-foreground">
-									{workspace.name}
-								</span>
+								<MobileResourceTypeIcon type="workspace" loaderSizeClass="size-6" />
+								<div className="flex min-w-0 flex-1 flex-col items-start">
+									<p className="truncate text-[16px] font-medium leading-6 text-foreground">
+										{workspace.name}
+									</p>
+									<p className="truncate text-[12px] font-light leading-4 text-muted-foreground">
+										{t("workspace.projectCount", {
+											count: workspace.cooperate_project_count ?? 0,
+										})}
+									</p>
+								</div>
 								{workspace.id === selectedId && (
 									<Check className="size-4 shrink-0 text-primary" />
 								)}
