@@ -7,6 +7,10 @@
         "zh_CN": "搜索文件",
         "en_US": "Search files"
     },
+    "find_file_range": {
+        "zh_CN": "查找文件范围",
+        "en_US": "Find file range"
+    },
     "grep_search": {
         "zh_CN": "内容搜索",
         "en_US": "Content search"
@@ -32,10 +36,6 @@
         "en_US": "Edit file"
     },
     "multi_edit_file": {
-        "zh_CN": "编辑文件",
-        "en_US": "Edit file"
-    },
-    "multi_edit_file_range": {
         "zh_CN": "编辑文件",
         "en_US": "Edit file"
     },

@@ -122,6 +122,7 @@ tools:
   - shell_exec
   - write_file
   - edit_file
+  - find_file_range
   - edit_file_range
   - delete_files
 ---

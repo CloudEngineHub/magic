@@ -7428,6 +7428,7 @@
 		"edit_file": "编辑文件",
 		"edit_file_range": "按范围编辑文件",
 		"file_search": "文件搜索",
+		"find_file_range": "查找文件范围",
 		"generate_canvas_images": "画布生成图片",
 		"generate_canvas_videos": "画布生成视频",
 		"generate_image": "生成图片",

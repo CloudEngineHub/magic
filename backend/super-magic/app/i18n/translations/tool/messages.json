@@ -503,6 +503,22 @@
         "zh_CN": "抱歉，找不到这个文件",
         "en_US": "Sorry, couldn't find this file"
     },
+    "edit_file.error_range_unavailable": {
+        "zh_CN": "编辑范围已失效，请重新查找",
+        "en_US": "The edit range is no longer available; find it again"
+    },
+    "edit_file.error_range_used": {
+        "zh_CN": "编辑范围已经使用过，请重新查找",
+        "en_US": "The edit range was already used; find it again"
+    },
+    "edit_file.error_replacement_unavailable": {
+        "zh_CN": "替换内容已失效，请重新生成",
+        "en_US": "The saved replacement is no longer available; generate it again"
+    },
+    "find_file_range.error": {
+        "zh_CN": "查找文件范围时出错",
+        "en_US": "Error finding a file range"
+    },
     "shell_exec.error": {
         "zh_CN": "Shell命令执行失败: {{error}}",
         "en_US": "Shell command execution failed: {{error}}"

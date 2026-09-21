@@ -33,8 +33,8 @@ from app.tools.download_from_url import DownloadFromUrl
 from app.tools.download_from_urls import DownloadFromUrls
 from app.tools.edit_file import EditFile
 from app.tools.edit_file_range import EditFileRange
+from app.tools.find_file_range import FindFileRange
 from app.tools.multi_edit_file import MultiEditFile
-from app.tools.multi_edit_file_range import MultiEditFileRange
 from app.tools.file_search import FileSearch
 from app.tools.get_js_cdn_address import GetJsCdnAddress
 from app.tools.get_sandbox_info import GetSandboxInfo
@@ -348,8 +348,8 @@ __all__ = [
     "DownloadFromUrls",
     "EditFile",
     "EditFileRange",
+    "FindFileRange",
     "MultiEditFile",
-    "MultiEditFileRange",
     "FileSearch",
     "GetJsCdnAddress",
     "GetSandboxInfo",

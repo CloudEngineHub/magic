@@ -545,6 +545,11 @@ diagnostic_retention:
   llm_failed_max_count: 3
   memory_after_run_max_count: 3
 
+# 两阶段范围编辑返回给模型的命中片段上限。
+file_edit:
+  range_preview_max_tokens: 2000
+  range_preview_context_lines: 3
+
 # .runtime 清理默认值。
 # 容量字段支持 MB、MiB、KB、KiB 等写法；本项目的 MB 和 MiB 都按 1024 进制换算。
 runtime_cleanup:
@@ -595,6 +600,14 @@ runtime_cleanup:
     target_file_count: 384
     max_total_size: 256MB
     target_total_size: 192MB
+
+  # 两阶段文件编辑的短期范围和失败内容，绑定当前 AgentContext。
+  file_edits:
+    max_age_days: 7
+    max_file_count: 128
+    target_file_count: 96
+    max_total_size: 256MiB
+    target_total_size: 192MiB
 
   llm_request:
     max_file_count: 10
