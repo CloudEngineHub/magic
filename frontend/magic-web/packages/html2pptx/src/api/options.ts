@@ -232,7 +232,13 @@ export type PptxDestination =
 	| { kind: "transferable-stream"; writable: WritableStream<Uint8Array> }
 	| { kind: "writable-stream"; writable: WritableStream<Uint8Array> }
 	| { kind: "node-writable"; writable: NodeWritable }
-	| { kind: "sink-proxy"; sink: PptxOutputSink; ackWindow?: number }
+	| {
+			kind: "sink-proxy"
+			sink: PptxOutputSink
+			ackWindow?: number
+			/** Whether this host-owned buffered sink may use in-memory replay staging. */
+			replayPolicy?: "buffered" | "opfs-required"
+	  }
 
 /**
  * How media should be read or staged before it is committed to the package.

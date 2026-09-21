@@ -78,15 +78,14 @@ export function createPptxStreamingExporter(runtime: Html2PptxStreamingRuntime =
 /** Export an AsyncIterable page source to a caller-selected streaming destination. */
 export const exportPPTXStreaming = createPptxStreamingExporter()
 
-export {
-	detectImageContentType,
-	validateImageBlobResponse,
-} from "./media/image-response"
+export { detectImageContentType, validateImageBlobResponse } from "./media/image-response"
 export {
 	createBufferedPptxSink,
 	PPTX_MIME_TYPE,
 	type BufferedPptxSink,
 } from "./packaging/buffered-sink"
+export { createInMemoryStreamingStagingStore } from "./packaging/in-memory-staging-store"
+export type { InMemoryStreamingStagingStoreOptions } from "./packaging/in-memory-staging-store"
 
 async function runStreamingExportPipeline(
 	content: StreamingExportContent,

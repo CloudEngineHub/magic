@@ -119,7 +119,7 @@ export function supportsPptxExport(input: PptxExportStrategyInput = {}): boolean
 	return getPptxExportStrategy(input).route !== "unavailable"
 }
 
-/** Resolve the current route once so callers can log the reason and avoid unsafe Blob fallback. */
+/** Resolve the current route once so callers can log the selected destination capability. */
 export function getPptxExportStrategy(
 	input: PptxExportStrategyInput = {},
 ): PptxExportStrategyDecision {
@@ -174,7 +174,17 @@ export async function openPptxDestination(
 		throw error
 	}
 
-	return createPptxDestinationLease(await handle.createWritable())
+	try {
+		return createPptxDestinationLease(await handle.createWritable())
+	} catch (error) {
+		// Some browser shells expose the picker but reject createWritable(). Keep the
+		// same Worker/media pipeline and fall back to a normal Blob download instead
+		// of routing the export through a renderer that bypasses enterprise hooks.
+		if (supportsBufferedPptxDownload()) {
+			return createPptxBufferedDestinationLease(options.suggestedName)
+		}
+		throw error
+	}
 }
 
 /**
@@ -185,29 +195,52 @@ export function createPptxBufferedDestinationLease(suggestedName: string): PptxD
 	const fileName = ensurePptxFileName(suggestedName)
 	const buffered = createBufferedPptxSink(PPTX_MIME_TYPE)
 	let settled = false
+	let closeOperation: Promise<void> | null = null
+	let abortOperation: Promise<void> | null = null
 
-	const close = async (): Promise<void> => {
-		if (settled) return
-		try {
-			await buffered.sink.close()
-			triggerPptxBlobDownload(buffered.getBlob(), fileName)
-			settled = true
-		} catch (error) {
-			await buffered.sink.abort?.(error)
-			settled = true
-			throw error
-		}
+	const close = (): Promise<void> => {
+		if (settled) return Promise.resolve()
+		if (abortOperation) return abortOperation
+		if (closeOperation) return closeOperation
+
+		const operation = (async () => {
+			try {
+				await buffered.sink.close()
+				triggerPptxBlobDownload(buffered.getBlob(), fileName)
+				settled = true
+			} catch (error) {
+				await buffered.sink.abort?.(error)
+				settled = true
+				throw error
+			} finally {
+				closeOperation = null
+			}
+		})()
+		closeOperation = operation
+		return operation
 	}
 
-	const abort = async (): Promise<void> => {
-		if (settled) return
-		settled = true
-		await buffered.sink.abort?.()
+	const abort = (reason?: unknown): Promise<void> => {
+		if (settled) return Promise.resolve()
+		if (abortOperation) return abortOperation
+
+		const operation = (async () => {
+			try {
+				await buffered.sink.abort?.(reason)
+				settled = true
+			} finally {
+				abortOperation = null
+			}
+		})()
+		abortOperation = operation
+		return operation
 	}
 
 	const sink: PptxOutputSink = {
 		write: async (chunk) => {
-			if (settled) throw new Error("PPTX buffered destination is already closed")
+			if (settled || closeOperation || abortOperation) {
+				throw new Error("PPTX buffered destination is already closing or closed")
+			}
 			await buffered.sink.write(chunk)
 		},
 		close,
@@ -215,7 +248,7 @@ export function createPptxBufferedDestinationLease(suggestedName: string): PptxD
 	}
 
 	return {
-		destination: { kind: "sink-proxy", sink },
+		destination: { kind: "sink-proxy", sink, replayPolicy: "buffered" },
 		abort,
 		route: "buffered-download",
 	}
@@ -303,7 +336,7 @@ export function createPptxDestinationLease(writable: WritablePptxFile): PptxDest
 	}
 
 	return {
-		destination: { kind: "sink-proxy", sink },
+		destination: { kind: "sink-proxy", sink, replayPolicy: "opfs-required" },
 		abort,
 		route: "file-stream",
 	}

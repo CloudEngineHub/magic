@@ -107,6 +107,58 @@ describe("pptxStreamingExport", () => {
 		expect(click).toHaveBeenCalledOnce()
 	})
 
+	it("keeps the streaming exporter on the buffered compatibility route", async () => {
+		Reflect.deleteProperty(globalThis, "showSaveFilePicker")
+		mocks.exportPPTXStreaming.mockReturnValue({
+			cancel: vi.fn(),
+			promise: Promise.resolve({
+				fileName: "deck.pptx",
+				pageCount: 1,
+				mediaPartCount: 0,
+				bytesWritten: 0,
+				durationMs: 0,
+			}),
+		})
+		const lease = await openPptxDestination({ suggestedName: "deck" })
+		if (!lease) throw new Error("Expected a buffered destination")
+
+		const handle = startPptxStreamingExportFromFactory(
+			async function* () {
+				yield "<main>buffered</main>"
+			},
+			{
+				fileName: "deck",
+				destination: lease.destination,
+				outputPolicy: "file-stream",
+				autoSize: true,
+			},
+		)
+		await handle.promise
+
+		expect(mocks.exportPPTXStreaming).toHaveBeenCalledOnce()
+		expect(mocks.exportPPTXStreaming.mock.calls[0][1]).toEqual(
+			expect.objectContaining({
+				destination: lease.destination,
+				mediaPolicy: expect.objectContaining({ mode: "rolling-stage" }),
+			}),
+		)
+	})
+
+	it("falls back to a buffered destination when createWritable is rejected", async () => {
+		const createWritable = vi.fn(async () => {
+			throw new DOMException("unsupported", "NotSupportedError")
+		})
+		Object.defineProperty(globalThis, "showSaveFilePicker", {
+			configurable: true,
+			value: vi.fn(async () => ({ createWritable })),
+		})
+
+		const lease = await openPptxDestination({ suggestedName: "fallback" })
+
+		expect(createWritable).toHaveBeenCalledOnce()
+		expect(lease?.route).toBe("buffered-download")
+	})
+
 	it("throws a structured unavailable error when no client download exists", () => {
 		Reflect.deleteProperty(globalThis, "showSaveFilePicker")
 

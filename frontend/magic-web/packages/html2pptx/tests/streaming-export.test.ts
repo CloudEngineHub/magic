@@ -29,6 +29,7 @@ function createSinkDestination() {
 	return {
 		kind: "sink-proxy" as const,
 		sink: { write: vi.fn(), close: vi.fn(), abort: vi.fn() },
+		replayPolicy: "buffered" as const,
 	}
 }
 
@@ -233,6 +234,64 @@ class FailingCleanupStagingStore extends FakeStagingStore {
 }
 
 describe("runStreamingExport", () => {
+	it("uses the in-memory replay store for a sink-proxy when OPFS is unavailable", async () => {
+		vi.stubGlobal("navigator", {})
+		const { factory, packager } = createPackagerFactory({})
+		const input = createBaseInput({
+			autoSize: true,
+			pipeline: {
+				prepareSlideNodes: vi.fn(async () => ({
+					pptNodes: [createShapeNode()],
+					totalWidth: 1280,
+					totalHeight: 720,
+					bodyBackground: null,
+				})),
+				createStreamingPresentationPackager: factory,
+			},
+		})
+
+		await expect(runStreamingExport(input)).resolves.toMatchObject({ pageCount: 1 })
+		expect(factory).toHaveBeenCalledOnce()
+		expect(packager.commitSlide).toHaveBeenCalledOnce()
+		expect(input.destination).toBeDefined()
+	})
+
+	it("does not use an unbounded memory fallback for a raw writable stream", async () => {
+		vi.stubGlobal("navigator", {})
+		const factory = vi.fn()
+		const writable = new WritableStream<Uint8Array>()
+		const input = createBaseInput({
+			autoSize: true,
+			destination: { kind: "writable-stream", writable },
+			pipeline: { createStreamingPresentationPackager: factory },
+		})
+
+		await expect(runStreamingExport(input)).rejects.toMatchObject({
+			name: "PptxExportError",
+			code: "opfs-unavailable",
+		})
+		expect(factory).not.toHaveBeenCalled()
+	})
+
+	it("requires an explicit buffered replay policy for a sink-proxy", async () => {
+		vi.stubGlobal("navigator", {})
+		const factory = vi.fn()
+		const input = createBaseInput({
+			autoSize: true,
+			destination: {
+				kind: "sink-proxy",
+				sink: { write: vi.fn(), close: vi.fn(), abort: vi.fn() },
+			},
+			pipeline: { createStreamingPresentationPackager: factory },
+		})
+
+		await expect(runStreamingExport(input)).rejects.toMatchObject({
+			name: "PptxExportError",
+			code: "opfs-unavailable",
+		})
+		expect(factory).not.toHaveBeenCalled()
+	})
+
 	it("rolling-stages URL media by default during two-pass SlideIR collection", async () => {
 		const store = new FakeStagingStore()
 		const source: MediaSourceDescriptor = {
