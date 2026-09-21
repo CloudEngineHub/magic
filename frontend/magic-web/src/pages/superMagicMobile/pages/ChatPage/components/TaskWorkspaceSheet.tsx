@@ -8,7 +8,6 @@ import { ScrollArea } from "@/components/shadcn-ui/scroll-area"
 import SuperMagicService from "@/pages/superMagic/services"
 import { MobileResourceTypeIcon } from "@/pages/superMagicMobile/components/icons/mobile-resource-type-icon"
 import type { Workspace } from "@/pages/superMagic/pages/Workspace/types"
-import { cn } from "@/utils/cn"
 import { CreateWorkspaceSheet } from "../../WorkspacesPage/components/CreateWorkspaceSheet"
 import { useTaskWorkspaceOptions } from "../hooks/useTaskWorkspaceOptions"
 
@@ -24,6 +23,7 @@ export default function TaskWorkspaceSheet({
 	onSelect: (workspace: Workspace) => void
 }) {
 	const { t } = useTranslation("super/mainInput")
+	const { t: tSuper } = useTranslation("super")
 	const options = useTaskWorkspaceOptions(open)
 	const [creating, setCreating] = useState(false)
 	const [saving, setSaving] = useState(false)
@@ -70,10 +70,7 @@ export default function TaskWorkspaceSheet({
 								type="button"
 								role="option"
 								aria-selected={workspace.id === selectedId}
-								className={cn(
-									"flex h-16 w-full shrink-0 items-center gap-2 rounded-lg px-4 text-left text-sm transition-colors hover:bg-accent focus-visible:bg-accent focus-visible:outline-none",
-									workspace.id === selectedId && "bg-primary/10",
-								)}
+								className="flex h-16 w-full shrink-0 items-center gap-2 rounded-lg px-4 text-left text-sm transition-colors hover:bg-accent focus-visible:bg-accent focus-visible:outline-none"
 								onClick={() => {
 									onSelect(workspace)
 									onClose()
@@ -85,8 +82,11 @@ export default function TaskWorkspaceSheet({
 										{workspace.name}
 									</p>
 									<p className="truncate text-[12px] font-light leading-4 text-muted-foreground">
-										{t("workspace.projectCount", {
-											count: workspace.cooperate_project_count ?? 0,
+										{tSuper("workspace.projectCount", {
+											count:
+												workspace.project_count ??
+												workspace.cooperate_project_count ??
+												0,
 										})}
 									</p>
 								</div>
