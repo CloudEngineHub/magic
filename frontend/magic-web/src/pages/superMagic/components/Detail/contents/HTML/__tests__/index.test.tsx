@@ -738,6 +738,104 @@ describe("HTML", () => {
 		)
 	})
 
+	it("opens UTF-8 encoded paths from a Chinese folder", async () => {
+		const openFileTab = vi.fn()
+		const currentFile = {
+			file_id: "file-1",
+			file_name: "index.html",
+			relative_file_path: "中文场景/index.html",
+		}
+		const targetFile = {
+			file_id: "file-2",
+			file_name: "目标页面.html",
+			relative_file_path: "中文场景/目标页面.html",
+		}
+		const nestedFile = {
+			file_id: "file-3",
+			file_name: "深层页面.html",
+			relative_file_path: "中文场景/子文件夹/深层页面.html",
+		}
+		const rootDetail = {
+			file_id: "file-4",
+			file_name: "detail.html",
+			relative_file_path: "detail.html",
+		}
+		const rootIndex = {
+			file_id: "file-5",
+			file_name: "index.html",
+			relative_file_path: "index.html",
+		}
+		render(
+			<HTML
+				{...baseProps}
+				viewMode="desktop"
+				isEditMode={false}
+				attachmentList={[currentFile, targetFile, nestedFile, rootDetail, rootIndex]}
+				openFileTab={openFileTab}
+			/>,
+		)
+		await waitFor(() => expect(mockIsolatedHTMLRendererProps).toHaveBeenCalled())
+		const props = mockIsolatedHTMLRendererProps.mock.lastCall?.[0]
+		const encodedTarget =
+			"/%E4%B8%AD%E6%96%87%E5%9C%BA%E6%99%AF/%E7%9B%AE%E6%A0%87%E9%A1%B5%E9%9D%A2.html?keyword=%E6%B5%8B%E8%AF%95#section-a"
+
+		act(() => props.openNewTab("file-1", encodedTarget, false))
+		expect(openFileTab).toHaveBeenCalledWith(
+			{
+				...targetFile,
+				htmlNavigation: {
+					filePath:
+						"/%E4%B8%AD%E6%96%87%E5%9C%BA%E6%99%AF/%E7%9B%AE%E6%A0%87%E9%A1%B5%E9%9D%A2.html",
+					search: "?keyword=%E6%B5%8B%E8%AF%95",
+					hash: "#section-a",
+					anchor: "section-a",
+				},
+			},
+			false,
+		)
+
+		act(() =>
+			props.openNewTab(
+				"file-1",
+				"/%E4%B8%AD%E6%96%87%E5%9C%BA%E6%99%AF/%E5%AD%90%E6%96%87%E4%BB%B6%E5%A4%B9/%E6%B7%B1%E5%B1%82%E9%A1%B5%E9%9D%A2.html",
+				false,
+			),
+		)
+		expect(openFileTab).toHaveBeenLastCalledWith(
+			expect.objectContaining({ file_id: "file-3" }),
+			false,
+		)
+
+		act(() => props.openNewTab("file-1", "/detail.html", false))
+		expect(openFileTab).toHaveBeenLastCalledWith(
+			expect.objectContaining({ file_id: "file-4" }),
+			false,
+		)
+
+		act(() => props.openNewTab("file-3", "/index.html", false))
+		expect(openFileTab).toHaveBeenLastCalledWith(
+			expect.objectContaining({ file_id: "file-5" }),
+			false,
+		)
+
+		act(() =>
+			props.openNewTab(
+				"file-1",
+				"/%E4%B8%AD%E6%96%87%E5%9C%BA%E6%99%AF/index.html?from=chinese-folder",
+				false,
+			),
+		)
+		expect(openFileTab).toHaveBeenLastCalledWith(
+			expect.objectContaining({
+				file_id: "file-1",
+				htmlNavigation: expect.objectContaining({
+					search: "?from=chinese-folder",
+				}),
+			}),
+			false,
+		)
+	})
+
 	it("opens the resolved file through the host callback with query and hash intact", async () => {
 		const openFileTab = vi.fn()
 		const currentFile = {
