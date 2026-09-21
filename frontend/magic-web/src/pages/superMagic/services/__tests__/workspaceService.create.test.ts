@@ -37,6 +37,6 @@ describe("WorkspaceService attempt analytics", () => {
 	it("reports before a failed request", async () => {
 		vi.mocked(SuperMagicApi.createWorkspace).mockRejectedValue(new Error("create-failed"))
 		await expect(new WorkspaceService().createWorkspace("New")).rejects.toThrow("create-failed")
-		expect(trackMock).toHaveBeenCalledWith("workspace_create_attempted", {})
+		expect(trackMock).toHaveBeenCalledWith("workspace_create_attempted")
 	})
 })

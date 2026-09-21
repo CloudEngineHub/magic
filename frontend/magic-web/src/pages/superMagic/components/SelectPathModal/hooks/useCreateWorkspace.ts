@@ -64,7 +64,7 @@ export function useCreateWorkspace(options: UseCreateWorkspaceOptions) {
 		setLoading(true)
 
 		try {
-			analyticsService.report("workspace_create_attempted", {})
+			analyticsService.report("workspace_create_attempted")
 			const response = await SuperMagicApi.createWorkspace({
 				workspace_name: normalizedName,
 			})

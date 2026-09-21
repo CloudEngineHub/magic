@@ -39,7 +39,7 @@ export function useWorkspace() {
 
 	const handleAddWorkspace = useMemoizedFn(async (workspaceName: string) => {
 		try {
-			analyticsService.report("workspace_create_attempted", {})
+			analyticsService.report("workspace_create_attempted")
 			const response = await SuperMagicApi.createWorkspace({
 				workspace_name: workspaceName || "",
 			})

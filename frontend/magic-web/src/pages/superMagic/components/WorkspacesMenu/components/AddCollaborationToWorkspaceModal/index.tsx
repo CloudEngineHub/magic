@@ -94,7 +94,7 @@ export function AddCollaborationToWorkspaceModal({
 			const trimmedName = newWorkspaceName.trim()
 			if (trimmedName) {
 				setIsCreatingWorkspaceLoading(true)
-				analyticsService.report("workspace_create_attempted", {})
+				analyticsService.report("workspace_create_attempted")
 				const res = await SuperMagicApi.createWorkspace({
 					workspace_name: trimmedName,
 				})

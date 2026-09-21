@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest"
 import { CrewApi } from "@/apis"
-import { CrewService } from "./CrewService"
+import { CrewService } from "../CrewService"
 
 const trackMock = vi.hoisted(() => vi.fn())
 
@@ -50,7 +50,7 @@ describe("CrewService creation-attempt analytics", () => {
 
 		await service.createAgent({ name_i18n: { zh_CN: "", en_US: "" } } as never)
 
-		expect(trackMock).toHaveBeenNthCalledWith(1, "agent_create_attempted", {})
+		expect(trackMock).toHaveBeenNthCalledWith(1, "agent_create_attempted")
 		expect(trackMock).toHaveBeenNthCalledWith(2, "project_create_attempted", {
 			sceneOverride: "crew",
 		})
@@ -65,7 +65,7 @@ describe("CrewService creation-attempt analytics", () => {
 
 		await service.createDefaultAgent()
 
-		expect(trackMock).toHaveBeenCalledWith("agent_create_attempted", {})
+		expect(trackMock).toHaveBeenCalledWith("agent_create_attempted")
 	})
 
 	it("keeps the attempt when createAgent fails", async () => {
@@ -75,6 +75,6 @@ describe("CrewService creation-attempt analytics", () => {
 		await expect(
 			service.createAgent({ name_i18n: { zh_CN: "", en_US: "" } } as never),
 		).rejects.toThrow("create-failed")
-		expect(trackMock).toHaveBeenCalledWith("agent_create_attempted", {})
+		expect(trackMock).toHaveBeenCalledWith("agent_create_attempted")
 	})
 })

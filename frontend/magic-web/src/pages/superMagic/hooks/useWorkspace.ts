@@ -175,7 +175,7 @@ export function useWorkspace({
 		async (workspaceName: string) => {
 			try {
 				const defaultWorkspaceName = ""
-				analyticsService.report("workspace_create_attempted", {})
+				analyticsService.report("workspace_create_attempted")
 				const res = await SuperMagicApi.createWorkspace({
 					workspace_name: workspaceName || defaultWorkspaceName,
 				})

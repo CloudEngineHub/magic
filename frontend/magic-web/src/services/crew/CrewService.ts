@@ -295,7 +295,7 @@ export class CrewService {
 	}
 
 	async createAgent(params: CreateAgentParams): Promise<{ id: string; code: string }> {
-		analyticsService.report("agent_create_attempted", {})
+		analyticsService.report("agent_create_attempted")
 		// A Crew creation also requests its backing project and default topic. Their
 		// server-generated ids do not exist yet, so only the attempt itself is reported.
 		analyticsService.report("project_create_attempted", { sceneOverride: "crew" })

@@ -94,7 +94,7 @@ function CopyProjectModal({ open, onCancel, projectData, onCopySuccess }: CopyPr
 		if (!newWorkspaceName.trim()) return
 
 		try {
-			analyticsService.report("workspace_create_attempted", {})
+			analyticsService.report("workspace_create_attempted")
 			const response = await SuperMagicApi.createWorkspace({
 				workspace_name: newWorkspaceName.trim(),
 			})

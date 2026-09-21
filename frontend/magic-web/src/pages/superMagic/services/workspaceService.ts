@@ -87,7 +87,7 @@ class WorkspaceService {
 	}
 
 	createWorkspace = async (name: string = ""): Promise<Workspace | null> => {
-		analyticsService.report("workspace_create_attempted", {})
+		analyticsService.report("workspace_create_attempted")
 		const res = await SuperMagicApi.createWorkspace({
 			workspace_name: name,
 		})
