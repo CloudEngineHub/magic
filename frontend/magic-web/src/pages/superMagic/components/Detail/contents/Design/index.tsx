@@ -278,6 +278,9 @@ interface DesignViewerProps {
 	isTabActive?: boolean
 	isFullscreen?: boolean
 	onFullscreen?: () => void
+	onRegisterSaveHandler?: (handler: (() => Promise<void>) | null) => void
+	onRegisterCloseCleanup?: (fileId: string, callback: () => void) => void
+	onUnregisterCloseCleanup?: (fileId: string) => void
 	data?: {
 		project_path?: string
 		elements?: LayerElement[]
@@ -299,6 +302,9 @@ function DesignViewer(props: DesignViewerProps) {
 		isTabActive,
 		isFullscreen,
 		onFullscreen,
+		onRegisterSaveHandler,
+		onRegisterCloseCleanup,
+		onUnregisterCloseCleanup,
 	} = props
 	// Prefer the topic project, then standalone preview, then the selected project.
 	const projectId = selectedTopic?.project_id || projectIdProp || selectedProject?.id
@@ -510,9 +516,25 @@ function DesignViewer(props: DesignViewerProps) {
 		resolveBlockingConflictWithRemote,
 		resolveBlockingConflictWithLocal,
 		resolveEditedElementConflictsWithLocal,
+		manualSave,
 	} = designProjectManager
 
-	const { isProcessingRevoke, revokeType } = designProjectManager
+	const { isProcessingRevoke, revokeType, clearLocalDraftOnClose } = designProjectManager
+	const isExplicitCloseRef = useRef(false)
+
+	useEffect(() => {
+		const fileId = currentFile?.id
+		if (!fileId || !onRegisterCloseCleanup) return
+
+		onRegisterCloseCleanup(fileId, () => {
+			// The unmount handler normally persists drafts. Mark deliberate tab close first so
+			// that lifecycle cleanup cannot recreate the draft after it was deleted.
+			isExplicitCloseRef.current = true
+			clearLocalDraftOnClose()
+		})
+		return () => onUnregisterCloseCleanup?.(fileId)
+	}, [currentFile?.id, clearLocalDraftOnClose, onRegisterCloseCleanup, onUnregisterCloseCleanup])
+
 	const latestDesignDataRef = useRef(designData)
 	const isInitialLoadingRef = useRef(isInitialLoading)
 	const [isVersionActionLoading, setIsVersionActionLoading] = useState(false)
@@ -1006,10 +1028,15 @@ function DesignViewer(props: DesignViewerProps) {
 	)
 
 	const persistCurrentCanvasDraftImmediatelyRef = useRef(persistCurrentCanvasDraftImmediately)
+	const manualSaveRef = useRef(manualSave)
 
 	useEffect(() => {
 		persistCurrentCanvasDraftImmediatelyRef.current = persistCurrentCanvasDraftImmediately
 	}, [persistCurrentCanvasDraftImmediately])
+
+	useEffect(() => {
+		manualSaveRef.current = manualSave
+	}, [manualSave])
 
 	// 重新初始化页面（用于刷新按钮）
 	const handleReinitialize = useCallback(async () => {
@@ -1173,7 +1200,7 @@ function DesignViewer(props: DesignViewerProps) {
 		window.addEventListener("pagehide", handlePageLeave)
 		window.addEventListener("beforeunload", handlePageLeave)
 		return () => {
-			handlePageLeave()
+			if (!isExplicitCloseRef.current) handlePageLeave()
 			window.removeEventListener("pagehide", handlePageLeave)
 			window.removeEventListener("beforeunload", handlePageLeave)
 		}
@@ -1461,6 +1488,28 @@ function DesignViewer(props: DesignViewerProps) {
 		!!conflictState && !hasUnresolvedElementConflicts && !hasUnresolvedConnectionConflicts
 	const shouldShowCanvasConflictNotice = shouldBlockCanvasForConflict && !!conflictNoticeText
 	const canvasAccessMode: CanvasAccessMode = accessMode
+
+	useEffect(() => {
+		if (!onRegisterSaveHandler) return
+		if (canvasAccessMode !== "edit" || isInitialLoading) {
+			onRegisterSaveHandler(null)
+			return
+		}
+
+		const saveCanvasBeforeClose = async () => {
+			// Export the runtime document again because the last Canvas interaction may not
+			// have reached the host change callback before the user closes the tab.
+			persistCurrentCanvasDraftImmediatelyRef.current("manual-refresh")
+			const didSave = await manualSaveRef.current()
+			if (!didSave) {
+				throw new Error("Canvas document could not be saved before closing")
+			}
+		}
+
+		onRegisterSaveHandler(saveCanvasBeforeClose)
+		return () => onRegisterSaveHandler(null)
+	}, [canvasAccessMode, isInitialLoading, onRegisterSaveHandler])
+
 	const canvasCapabilities = useMemo<Partial<Record<CanvasCapability, boolean>>>(() => {
 		const runtimeWriteBlocked =
 			isUpgradeBlockingCanvas || isBlockingDesignLoadIssue || shouldBlockCanvasForConflict

@@ -434,8 +434,14 @@ export function deleteDesignDraft(identity: DesignDraftIdentity): Promise<void> 
 	}
 	deleteLocalStorageDrafts(keys)
 	deleteMemoryDrafts(keys)
+	const writesToAwait = Array.from(pendingWrites)
 	return trackWrite(
 		(async () => {
+			// A close can race an IndexedDB write that already left the manager debounce queue.
+			// Delete again after those writes settle so no fallback can recreate the closed draft.
+			await Promise.allSettled(writesToAwait)
+			deleteLocalStorageDrafts(keys)
+			deleteMemoryDrafts(keys)
 			const db = await getDatabase()
 			await db.entries.bulkDelete(Array.from(keys))
 		})(),

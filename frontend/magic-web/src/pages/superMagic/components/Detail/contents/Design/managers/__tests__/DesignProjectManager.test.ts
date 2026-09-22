@@ -181,6 +181,14 @@ describe("DesignProjectManager conflict boundaries", () => {
 		vi.mocked(deleteDesignDraft).mockResolvedValue(undefined)
 	})
 
+	it("clears the current draft when the Canvas tab is explicitly closed", () => {
+		const { manager } = createManager()
+
+		manager.clearLocalDraftOnClose()
+
+		expect(deleteDesignDraft).toHaveBeenCalledTimes(1)
+	})
+
 	it("does not clear an active conflict while syncing design data", () => {
 		const localData = createDesignData("local")
 		const remoteData = createDesignData("remote")

@@ -222,7 +222,10 @@ function useEditMode({
 	// Check before close - returns 'close', 'save', or 'cancel'
 	const checkBeforeClose = useMemoizedFn(
 		async (onSave?: () => Promise<void>): Promise<"close" | "save" | "cancel"> => {
-			if (!isEditMode) return "close"
+			// Some editors, such as Canvas, persist their own document without entering the
+			// generic file editing presence mode. A registered save handler still needs the
+			// close confirmation so the user can choose save-and-close or discard explicitly.
+			if (!isEditMode && !onSave) return "close"
 
 			return new Promise((resolve) => {
 				const modal = MagicModal.confirm({

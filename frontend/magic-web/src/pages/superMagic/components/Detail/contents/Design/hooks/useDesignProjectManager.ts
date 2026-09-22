@@ -43,6 +43,7 @@ export interface UseDesignProjectManagerReturn {
 
 	scheduleAutoSave: (metadata?: DesignSaveMetadata) => void
 	cancelAutoSave: () => void
+	clearLocalDraftOnClose: () => void
 	persistLocalDraft: (
 		designData: DesignData,
 		options?: { immediate?: boolean; reason?: DesignDraftReason },
@@ -323,6 +324,7 @@ export function useDesignProjectManager(
 
 		scheduleAutoSave: (metadata) => manager.scheduleAutoSave(metadata),
 		cancelAutoSave: () => manager.cancelAutoSave(),
+		clearLocalDraftOnClose: () => manager.clearLocalDraftOnClose(),
 		persistLocalDraft: (data, persistOptions) =>
 			manager.persistLocalDraft(data, persistOptions),
 		manualSave: () => manager.manualSave(),

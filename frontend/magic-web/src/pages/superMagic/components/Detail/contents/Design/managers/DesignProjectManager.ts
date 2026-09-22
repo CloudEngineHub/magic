@@ -108,6 +108,7 @@ export interface DesignProjectManagerAPI {
 
 	scheduleAutoSave: (metadata?: DesignSaveMetadata) => void
 	cancelAutoSave: () => void
+	clearLocalDraftOnClose: () => void
 	canUpdateCurrentDesignData: () => boolean
 	persistLocalDraft: (
 		designData: DesignData,
@@ -1428,6 +1429,16 @@ export class DesignProjectManager implements DesignProjectManagerAPI {
 
 	cancelAutoSave(): void {
 		this.saveManager.cancelAutoSave()
+	}
+
+	/**
+	 * Explicitly closing a Canvas tab is the one UI action that discards its recoverable draft.
+	 * Browser lifecycle events use persistLocalDraft instead, so refresh and navigation remain
+	 * recoverable while a deliberate tab close releases every draft storage fallback.
+	 */
+	clearLocalDraftOnClose(): void {
+		this.cancelAutoSave()
+		this.clearLocalDraft()
 	}
 
 	private getDraftIdentity(): DesignDraftIdentity {

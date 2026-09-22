@@ -114,6 +114,8 @@ export default function Render(props: any) {
 		// Register/unregister checkBeforeClose callback
 		onRegisterCheckBeforeClose,
 		onUnregisterCheckBeforeClose,
+		onRegisterCloseCleanup,
+		onUnregisterCloseCleanup,
 		projectId,
 		browserAttachments,
 		allowDownload,
@@ -792,6 +794,8 @@ export default function Render(props: any) {
 		allowEdit,
 		// Register save handler from content component
 		onRegisterSaveHandler: registerSaveHandler,
+		onRegisterCloseCleanup,
+		onUnregisterCloseCleanup,
 		// New props for ActionButtons functionality
 		viewMode,
 		onViewModeChange,
