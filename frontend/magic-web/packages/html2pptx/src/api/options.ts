@@ -60,6 +60,32 @@ export interface StreamingOptionsBase {
 	fontMissPolicy?: FontMissPolicy
 }
 
+/**
+ * Options for the compatibility exporter used when a browser cannot provide
+ * the File System Access/OPFS primitives required by the streaming pipeline.
+ *
+ * This is deliberately separate from `LargeExportOptions`: legacy export
+ * creates a complete Blob in memory and never stages data in OPFS.
+ */
+export interface LegacyExportOptions extends StreamingOptionsBase {
+	/** Export progress is reported with the same phases as the streaming API. */
+	onProgress?: (progress: ExportProgress) => void
+}
+
+/** Result returned by the compatibility exporter before the host downloads it. */
+export interface LegacyExportSummary {
+	fileName: string
+	pageCount: number
+	bytesWritten: number
+	data: Blob
+}
+
+/** Cancellable handle returned by the compatibility exporter. */
+export interface LegacyExportHandle {
+	promise: Promise<LegacyExportSummary>
+	cancel: () => void
+}
+
 export interface ExportIssue {
 	pageIndex?: number
 	/** Stable source-page identity used to map diagnostics back to the originating HTML file. */
@@ -232,7 +258,13 @@ export type PptxDestination =
 	| { kind: "transferable-stream"; writable: WritableStream<Uint8Array> }
 	| { kind: "writable-stream"; writable: WritableStream<Uint8Array> }
 	| { kind: "node-writable"; writable: NodeWritable }
-	| { kind: "sink-proxy"; sink: PptxOutputSink; ackWindow?: number }
+	| {
+			kind: "sink-proxy"
+			sink: PptxOutputSink
+			ackWindow?: number
+			/** Whether this host-owned buffered sink may use in-memory replay staging. */
+			replayPolicy?: "buffered" | "opfs-required"
+	  }
 
 /**
  * How media should be read or staged before it is committed to the package.

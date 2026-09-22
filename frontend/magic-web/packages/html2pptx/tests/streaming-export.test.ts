@@ -6,6 +6,7 @@ import type { CreateStreamingPresentationPackagerInput } from "../src/packaging/
 import type { StreamingStagingStore } from "../src/runtime"
 import { runStreamingExport } from "../src/pipeline/streaming-export"
 import type { StreamingExportTaskInput } from "../src"
+import { ExportFidelityError } from "../src/errors"
 import { MAX_PPT_PAGE_PX } from "../src/shared/unit"
 
 const config = {
@@ -29,6 +30,7 @@ function createSinkDestination() {
 	return {
 		kind: "sink-proxy" as const,
 		sink: { write: vi.fn(), close: vi.fn(), abort: vi.fn() },
+		replayPolicy: "buffered" as const,
 	}
 }
 
@@ -233,6 +235,64 @@ class FailingCleanupStagingStore extends FakeStagingStore {
 }
 
 describe("runStreamingExport", () => {
+	it("uses the in-memory replay store for a sink-proxy when OPFS is unavailable", async () => {
+		vi.stubGlobal("navigator", {})
+		const { factory, packager } = createPackagerFactory({})
+		const input = createBaseInput({
+			autoSize: true,
+			pipeline: {
+				prepareSlideNodes: vi.fn(async () => ({
+					pptNodes: [createShapeNode()],
+					totalWidth: 1280,
+					totalHeight: 720,
+					bodyBackground: null,
+				})),
+				createStreamingPresentationPackager: factory,
+			},
+		})
+
+		await expect(runStreamingExport(input)).resolves.toMatchObject({ pageCount: 1 })
+		expect(factory).toHaveBeenCalledOnce()
+		expect(packager.commitSlide).toHaveBeenCalledOnce()
+		expect(input.destination).toBeDefined()
+	})
+
+	it("does not use an unbounded memory fallback for a raw writable stream", async () => {
+		vi.stubGlobal("navigator", {})
+		const factory = vi.fn()
+		const writable = new WritableStream<Uint8Array>()
+		const input = createBaseInput({
+			autoSize: true,
+			destination: { kind: "writable-stream", writable },
+			pipeline: { createStreamingPresentationPackager: factory },
+		})
+
+		await expect(runStreamingExport(input)).rejects.toMatchObject({
+			name: "PptxExportError",
+			code: "opfs-unavailable",
+		})
+		expect(factory).not.toHaveBeenCalled()
+	})
+
+	it("requires an explicit buffered replay policy for a sink-proxy", async () => {
+		vi.stubGlobal("navigator", {})
+		const factory = vi.fn()
+		const input = createBaseInput({
+			autoSize: true,
+			destination: {
+				kind: "sink-proxy",
+				sink: { write: vi.fn(), close: vi.fn(), abort: vi.fn() },
+			},
+			pipeline: { createStreamingPresentationPackager: factory },
+		})
+
+		await expect(runStreamingExport(input)).rejects.toMatchObject({
+			name: "PptxExportError",
+			code: "opfs-unavailable",
+		})
+		expect(factory).not.toHaveBeenCalled()
+	})
+
 	it("rolling-stages URL media by default during two-pass SlideIR collection", async () => {
 		const store = new FakeStagingStore()
 		const source: MediaSourceDescriptor = {
@@ -822,6 +882,54 @@ describe("runStreamingExport", () => {
 		expect(destination.sink.abort).not.toHaveBeenCalled()
 		expect(store.cleanupCalls).toHaveLength(1)
 	})
+
+	it.each(["script", "render-timeout", "capture"] as const)(
+		"keeps exporting when a page has a %s fidelity failure",
+		async (kind) => {
+			const destination = createSinkDestination()
+			const issues: unknown[] = []
+			const { factory, packager } = createPackagerFactory({})
+			const input = createBaseInput({
+				pageCount: 2,
+				pages: (async function* () {
+					yield { index: 0, html: "broken-page" }
+					yield { index: 1, html: "valid-page" }
+				})(),
+				skipFailedPages: true,
+				destination,
+				pipeline: {
+					prepareSlideNodes: vi.fn(async ({ html }: { html: string }) => {
+						if (html === "broken-page") {
+							throw new ExportFidelityError(
+								`page failed during ${kind}`,
+								kind,
+							)
+						}
+						return {
+							pptNodes: [createShapeNode()],
+							totalWidth: 1280,
+							totalHeight: 720,
+							bodyBackground: null,
+						}
+					}),
+					createStreamingPresentationPackager: factory,
+				},
+				onExportIssue: (issue) => issues.push(issue),
+			})
+
+			await expect(runStreamingExport(input)).resolves.toMatchObject({ pageCount: 2 })
+			expect(packager.commitSlide).toHaveBeenCalledTimes(2)
+			expect(packager.abort).not.toHaveBeenCalled()
+			expect(destination.sink.abort).not.toHaveBeenCalled()
+			expect(issues).toEqual([
+				expect.objectContaining({
+					code: "render-error",
+					pageIndex: 0,
+					message: `page failed during ${kind}`,
+				}),
+			])
+		},
+	)
 
 	it("aborts the destination when the staging store cannot be created", async () => {
 		const destination = createSinkDestination()

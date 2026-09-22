@@ -73,6 +73,30 @@ describe("pptService lazy export providers", () => {
 		await expect(nextPage).rejects.toMatchObject({ name: "AbortError" })
 	})
 
+	it("exports a single HTML file when no cancellation signal is provided", async () => {
+		mocks.loadSlide.mockResolvedValue("<main>single</main>")
+
+		const pages = []
+		for await (const page of iterateSingleExportSlide({
+			fileId: "slide-1",
+			fileName: "slide-1.html",
+			attachmentList,
+		})) {
+			pages.push(page)
+		}
+
+		expect(pages).toEqual([
+			{
+				index: 0,
+				html: "<main>single</main>",
+				key: "slide-1",
+				pageName: "slide-1.html",
+				pagePath: "slide-1.html",
+				pageFileId: "slide-1",
+			},
+		])
+	})
+
 	it("does not convert an AbortError from a multi-slide loader into an empty page", async () => {
 		mocks.loadSlide.mockRejectedValue(new DOMException("cancelled", "AbortError"))
 		const iterator = iterateExportSlides({
@@ -121,7 +145,16 @@ describe("pptService lazy export providers", () => {
 			pages.push(page)
 		}
 
-		expect(pages).toEqual([{ index: 1, key: secondSlidePath, html: "<main>second</main>" }])
+		expect(pages).toEqual([
+			{
+				index: 1,
+				key: secondSlidePath,
+				html: "<main>second</main>",
+				pageName: "slide-2.html",
+				pagePath: secondSlidePath,
+				pageFileId: "slide-2",
+			},
+		])
 		expect(consoleError).toHaveBeenCalled()
 	})
 
