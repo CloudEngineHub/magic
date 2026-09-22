@@ -45,6 +45,15 @@ export interface IterateExportSlidesInput extends PrepareExportSlidesInput {
 	signal?: AbortSignal
 }
 
+export interface PrepareSingleSlideExportInput {
+	fileId: string
+	fileName?: string
+	attachmentList: AttachmentItem[]
+	access?: FileAccessContext
+	fileApi?: FileApi
+	signal?: AbortSignal
+}
+
 function resolveRelativePath(basePath: string, relativePath: string): string {
 	if (!basePath || !relativePath) return relativePath || ""
 
@@ -122,15 +131,14 @@ function extractFileIdFromPath(
  * Prepare a single HTML file for PPTX export.
  * Skips path resolution since we already have the fileId.
  */
-export async function prepareSingleSlideExport(input: {
-	fileId: string
-	fileName?: string
-	attachmentList: AttachmentItem[]
-	access?: FileAccessContext
-	fileApi?: FileApi
-	signal?: AbortSignal
-}): Promise<PrepareExportSlidesOutput> {
-	const { fileId, fileName, attachmentList, access, fileApi, signal } = input
+export async function prepareSingleSlideExport({
+	fileId,
+	fileName,
+	attachmentList,
+	access,
+	fileApi,
+	signal,
+}: PrepareSingleSlideExportInput): Promise<PrepareExportSlidesOutput> {
 	throwIfAborted(signal)
 
 	const searchScope = flattenAttachments(attachmentList)
@@ -194,7 +202,7 @@ export async function prepareSingleSlideExport(input: {
 
 /** Lazy adapter for the one-page service so business entry points can share one provider shape. */
 export async function* iterateSingleExportSlide(
-	input: Parameters<typeof prepareSingleSlideExport>[0],
+	input: PrepareSingleSlideExportInput,
 ): AsyncIterable<PreparedExportSlidePage> {
 	const result = await prepareSingleSlideExport(input)
 	throwIfAborted(input.signal)

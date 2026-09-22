@@ -87,7 +87,9 @@ export function buildSingleFileDownloadMenu({
 				onClick: () => {
 					const children = item.children || []
 					const appEntryFile = getAppEntryFile(children, item.display_config)
-					if (appEntryFile) handleDownloadPptx(appEntryFile, children)
+					// Keep the slide folder as the logical export item: its display_config owns the
+					// ordered slide list, while the entry HTML is resolved by the export handler.
+					if (appEntryFile) handleDownloadPptx(item, children)
 					else message.error(t("topicFiles.entryFileNotFound"))
 				},
 			},

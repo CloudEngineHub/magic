@@ -55,7 +55,7 @@ import {
 	formatPptxStreamingProgress,
 	openPptxDestination,
 	PptxExportUnavailableError,
-	supportsPptxFileStreaming,
+	supportsPptxExport,
 	startPptxStreamingExportFromFactory,
 } from "@/pages/superMagic/services/pptxStreamingExport"
 import type { BeforeAction } from "../../utils/actionGuard"
@@ -873,7 +873,7 @@ function EditToolbar({
 						<ExportDropdown
 							showText={shouldShowButtonText}
 							isExporting={isExporting || isEditableExporting}
-							supportPptx={supportsPptxFileStreaming()}
+							supportPptx={supportsPptxExport()}
 							beforeAction={beforeAction}
 							supportSpecificPages={!!pptStore}
 							slides={pptStore?.slides}
