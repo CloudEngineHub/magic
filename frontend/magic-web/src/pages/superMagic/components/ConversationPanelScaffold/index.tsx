@@ -1,5 +1,9 @@
 import { useIsMobile } from "@/hooks/useIsMobile"
 import { cn } from "@/utils/cn"
+import {
+	CONVERSATION_INPUT_HEIGHT_CONFIG,
+	DEFAULT_COMPOSER_MIN_INPUT_HEIGHT,
+} from "@/pages/superMagic/components/ConversationInputResize/constants"
 import { INPUT_CONTAINER_MIN_HEIGHT } from "@/pages/superMagic/components/MainInputContainer/constants"
 import MessageList, { MessageListProvider } from "@/pages/superMagic/components/MessageList"
 import type { MessageListContextState } from "@/pages/superMagic/components/MessageList/context"
@@ -22,7 +26,6 @@ import {
 } from "react"
 import ConversationInputResizeHandle from "@/pages/superMagic/components/ConversationInputResize/ConversationInputResizeHandle"
 import { ConversationInputLayoutProvider } from "@/pages/superMagic/components/ConversationInputResize/context"
-import { CONVERSATION_INPUT_HEIGHT_CONFIG } from "@/pages/superMagic/components/ConversationInputResize/constants"
 import { useConversationInputHeight } from "@/pages/superMagic/components/ConversationInputResize/useConversationInputHeight"
 
 /** Reuse the project composer chrome with a slightly tighter toolbar rhythm for opt-in panels. */
@@ -39,6 +42,7 @@ interface ConversationPanelScaffoldProps {
 	messages: Array<SuperMagicMessageItem>
 	selectedTopic: Topic | null
 	setSelectedDetail?: (detail: unknown) => void
+	onFileClick?: (fileItem: unknown) => void
 	isConversationPanelCollapsed?: boolean
 	detailPanelVisible?: boolean
 	showLoading?: boolean
@@ -109,6 +113,7 @@ function ConversationPanelScaffold({
 	messages,
 	selectedTopic,
 	setSelectedDetail,
+	onFileClick,
 	isConversationPanelCollapsed = false,
 	detailPanelVisible = true,
 	showLoading,
@@ -164,14 +169,16 @@ function ConversationPanelScaffold({
 	const editorLayoutRef = useRef<HTMLDivElement>(null)
 	const isCenteredEmptyStateVisible =
 		shouldShowCenteredEmptyState || shouldPreserveCenteredEmptyState
+	const inputEnabled = !isMobile && !isConversationPanelCollapsed && !isCenteredEmptyStateVisible
 	const inputHeight = useConversationInputHeight({
 		scope,
-		enabled: !isMobile && !isConversationPanelCollapsed && !isCenteredEmptyStateVisible,
+		enabled: inputEnabled,
 		containerRef: editorLayoutRef,
 		availableRef: bodyRef,
+		minHeight: DEFAULT_COMPOSER_MIN_INPUT_HEIGHT,
 		...CONVERSATION_INPUT_HEIGHT_CONFIG,
 	})
-	const effectiveInputMinHeight = inputHeight.minHeight ?? 200
+	const effectiveInputMinHeight = inputHeight.minHeight ?? DEFAULT_COMPOSER_MIN_INPUT_HEIGHT
 	const inputLayoutContext = useMemo(
 		() => ({
 			fillHeight: inputHeight.fillHeight,
@@ -429,9 +436,18 @@ function ConversationPanelScaffold({
 				>
 					<MessageListProvider value={messageListProviderValue}>
 						<MessageList
+							// The scaffold owns responsive spacing and its panel surface.
+							className={
+								isMobile
+									? "[--message-list-surface:rgb(var(--mobile-background-rgb))] [--message-list-sticky-fade-height:0px]"
+									: "[--message-list-surface:rgb(var(--sidebar-rgb))]"
+							}
+							classNames={{ content: isMobile ? "px-4 pt-[10px]" : "pl-2 pt-[10px]" }}
+							scrollEdgeFade={isMobile}
 							data={messages}
 							selectedTopic={selectedTopic}
 							setSelectedDetail={setSelectedDetail}
+							onFileClick={onFileClick}
 							handlePullMoreMessage={handlePullMoreMessage}
 							showLoading={showLoading}
 							currentTopicStatus={currentTopicStatus}

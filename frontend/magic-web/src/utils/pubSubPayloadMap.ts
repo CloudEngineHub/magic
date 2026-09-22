@@ -37,6 +37,7 @@ import type {
 	SuperMagicSetContentWhenSlideAddedArgs,
 	SuperMagicSetDemoTextToInputArgs,
 	SuperMagicSetInputMessageArgs,
+	SuperMagicPptxExportIssuesPayload,
 	SuperMagicStreamMessageArgs,
 	SuperMagicSyncMarkersToChatPayload,
 	SuperMagicWidgetEditorCommandPayload,
@@ -50,6 +51,7 @@ import type {
 	SuperMagicOpenFileTabPayload,
 	SuperMagicOpenFileTabByPathPayload,
 	SuperMagicOpenKnowledgeBaseTabPayload,
+	SuperMagicOpenMicroAppTabPayload,
 } from "@/pages/superMagic/events/openFileTab"
 import type { SuperMagicOpenPlaybackTabPayload } from "@/pages/superMagic/events/openPlaybackTab"
 import type {
@@ -134,6 +136,8 @@ export interface PubSubTypedPayloadMap {
 	[PubSubEvents.Open_File_Tab_By_Path]: SuperMagicOpenFileTabByPathPayload
 	/** 打开知识库文件预览 tab：由引用点击触发，携带知识库 ID 与文档 code 或文件 key。 */
 	[PubSubEvents.Open_Knowledge_Base_Tab]: SuperMagicOpenKnowledgeBaseTabPayload
+	/** Open a micro-app preview tab from a mention click. */
+	[PubSubEvents.Open_Micro_App_Tab]: SuperMagicOpenMicroAppTabPayload
 	/** 打开 playback tab：当前保留历史透传 payload。 */
 	[PubSubEvents.Open_Playback_Tab]: SuperMagicOpenPlaybackTabPayload
 	/** 展开话题对话面板：无参数。 */
@@ -174,6 +178,8 @@ export interface PubSubTypedPayloadMap {
 	[PubSubEvents.Receive_RecordSummary_Audio_File]: SuperMagicReceiveRecordSummaryAudioFileArgs
 	/** 设置输入框文本：传入字符串消息。 */
 	[PubSubEvents.Set_Input_Message]: SuperMagicSetInputMessageArgs
+	/** PPT 导出问题：供商业化层展示并触发 AI 修复。 */
+	[PubSubEvents.Pptx_Export_Issues]: SuperMagicPptxExportIssuesPayload
 	/** Executes Widget-only append, clear, or read operations against the active editor. */
 	[PubSubEvents.Magic_Widget_Editor_Command]: SuperMagicWidgetEditorCommandPayload
 	/** 添加内容到聊天框：传入可选内容与额外信息。 */

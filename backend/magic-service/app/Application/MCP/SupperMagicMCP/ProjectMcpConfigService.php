@@ -187,5 +187,4 @@ readonly class ProjectMcpConfigService
         return $serviceConfig instanceof ExternalSSEServiceConfig
             && $serviceConfig->getAuthType() === ServiceConfigAuthType::MCP_AUTHORIZATION;
     }
-
 }

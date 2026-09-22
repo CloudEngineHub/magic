@@ -26,6 +26,15 @@ vi.mock("@/components/business/MemberDepartmentSelector", () => ({
 }))
 
 vi.mock(
+	"@/pages/superMagic/pages/AudioRecordings/components/recording-share/RecordingShareContentPicker",
+	() => ({
+		RecordingShareContentPicker: () => (
+			<div data-testid="mock-recording-share-content-picker" />
+		),
+	}),
+)
+
+vi.mock(
 	"@/pages/superMagic/components/TopicFilesButton/components/MobileAttachmentRowIcon",
 	() => ({
 		MobileAttachmentRowIcon: ({
@@ -376,5 +385,140 @@ describe("ProjectShareCreateView", () => {
 		fireEvent.click(trigger)
 
 		expect(openDefaultOpenFilePicker).toHaveBeenCalledTimes(1)
+	})
+
+	it("项目分享只展示管理员允许的分享方式", () => {
+		render(
+			<ProjectShareCreateView
+				controller={createController({
+					permittedShareTypes: [ShareType.Public],
+					isSelectedShareTypePermitted: true,
+				})}
+			/>,
+		)
+
+		expect(
+			screen.getByTestId(`project-share-sheet-type-${ShareType.Public}`),
+		).toBeInTheDocument()
+		expect(
+			screen.queryByTestId(`project-share-sheet-type-${ShareType.PasswordProtected}`),
+		).not.toBeInTheDocument()
+		expect(
+			screen.queryByTestId(`project-share-sheet-type-${ShareType.Organization}`),
+		).not.toBeInTheDocument()
+	})
+
+	it("编辑时保留但禁用已经失权的当前分享方式", () => {
+		render(
+			<ProjectShareCreateView
+				controller={createController({
+					view: "edit",
+					isEditing: true,
+					formState: {
+						...createController().formState,
+						shareType: ShareType.PasswordProtected,
+					},
+					permittedShareTypes: [ShareType.Public],
+					isSelectedShareTypePermitted: false,
+				})}
+			/>,
+		)
+
+		expect(
+			screen.getByTestId(`project-share-sheet-type-${ShareType.PasswordProtected}`),
+		).toBeDisabled()
+		expect(screen.getByText("share.currentShareMethodUnavailable")).toBeInTheDocument()
+	})
+
+	it("管理员未开放任何项目分享方式时显示提示并收起其余表单项", () => {
+		render(
+			<ProjectShareCreateView
+				controller={createController({
+					mode: "file",
+					advancedOpen: true,
+					selectedFileCount: 2,
+					selectedFileItems: [
+						{ file_id: "file-1", name: "fictional-a.md", is_directory: false },
+					],
+					selectedFileHierarchy: [
+						{
+							id: "file-1",
+							name: "fictional-a.md",
+							isDirectory: false,
+							children: [],
+						},
+					],
+					defaultOpenFileId: "file-1",
+					defaultOpenFileItem: {
+						file_id: "file-1",
+						name: "fictional-a.md",
+						file_name: "fictional-a.md",
+						file_extension: "md",
+						is_directory: false,
+					},
+					defaultOpenFileCandidates: [
+						{
+							file_id: "file-1",
+							name: "fictional-a.md",
+							file_extension: "md",
+							is_directory: false,
+						},
+					],
+					permittedShareTypes: [],
+					isSelectedShareTypePermitted: false,
+				})}
+			/>,
+		)
+
+		expect(screen.getByText("share.noAvailableShareMethods")).toBeInTheDocument()
+		// 全部分享方式被管控后，除「分享方式 + 红字提示」外的附属内容对用户没有意义，不再渲染。
+		expect(screen.getByTestId("project-share-sheet-type-grid")).toBeInTheDocument()
+		expect(screen.queryByTestId("project-share-sheet-name-input")).not.toBeInTheDocument()
+		expect(
+			screen.queryByTestId("project-share-sheet-default-open-file-trigger"),
+		).not.toBeInTheDocument()
+		expect(screen.queryByTestId("project-share-sheet-expiry-trigger")).not.toBeInTheDocument()
+		expect(screen.queryByTestId("project-share-sheet-password-input")).not.toBeInTheDocument()
+		expect(screen.queryByTestId("project-share-sheet-advanced-trigger")).not.toBeInTheDocument()
+		expect(
+			screen.queryByTestId("project-share-sheet-selected-files-trigger"),
+		).not.toBeInTheDocument()
+		expect(screen.queryByText("projectShare.typePublic")).not.toBeInTheDocument()
+		// 底部占位仍保留，避免固定底栏盖住内容。
+		expect(
+			screen.getByTestId("project-share-sheet-create-floating-bar-scroll-spacer"),
+		).toBeInTheDocument()
+	})
+
+	it("内联文件选择模式下管理员未开放分享方式时同样收起内容选择器", () => {
+		const { unmount } = render(
+			<ProjectShareCreateView
+				controller={createController({
+					mode: "file",
+					enableInlineFileSelection: true,
+					permittedShareTypes: [ShareType.Public],
+					isSelectedShareTypePermitted: true,
+				})}
+			/>,
+		)
+
+		// 对照组：有可用分享方式时内容选择器正常展示，确保下面的隐藏断言不是假绿。
+		expect(screen.getByTestId("mock-recording-share-content-picker")).toBeInTheDocument()
+
+		unmount()
+
+		render(
+			<ProjectShareCreateView
+				controller={createController({
+					mode: "file",
+					enableInlineFileSelection: true,
+					permittedShareTypes: [],
+					isSelectedShareTypePermitted: false,
+				})}
+			/>,
+		)
+
+		expect(screen.queryByTestId("mock-recording-share-content-picker")).not.toBeInTheDocument()
+		expect(screen.getByText("share.noAvailableShareMethods")).toBeInTheDocument()
 	})
 })

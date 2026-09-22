@@ -3,6 +3,7 @@ import type { AttachmentItem } from "@/pages/superMagic/components/TopicFilesBut
 import {
 	collectHtmlFiles,
 	collectRootHtmlFiles,
+	getMicroAppPreviewPath,
 	isSamePreviewEntryFile,
 	resolveDefaultHtmlEntry,
 	resolveSelectedHtmlEntry,
@@ -97,6 +98,34 @@ describe("microAppFiles", () => {
 		expect(selected?.file_id).toBe("second")
 	})
 
+	it("matches persisted numeric and string file ids", () => {
+		const selected = resolveSelectedHtmlEntry({
+			selectedFileId: "42",
+			items: [
+				file({ file_id: 42 as unknown as string, file_name: "custom.html" }),
+				file({ file_id: "index", file_name: "index.html" }),
+			],
+		})
+
+		expect(selected?.file_id).toBe(42)
+	})
+
+	it("falls back when the persisted entry is missing or no longer valid", () => {
+		const selected = resolveSelectedHtmlEntry({
+			selectedFileId: "missing",
+			items: [
+				file({
+					file_id: "nested",
+					file_name: "nested.html",
+					relative_file_path: "pages/nested.html",
+				}),
+				file({ file_id: "fallback", file_name: "fallback.htm" }),
+			],
+		})
+
+		expect(selected?.file_id).toBe("fallback")
+	})
+
 	it("compares preview entries by file id and update time", () => {
 		expect(
 			isSamePreviewEntryFile(
@@ -110,5 +139,24 @@ describe("microAppFiles", () => {
 				file({ file_id: "entry", updated_at: "2026-08-03T05:31:00Z" }),
 			),
 		).toBe(false)
+	})
+
+	it("returns full normalized paths for navigation bar preview path", () => {
+		expect(getMicroAppPreviewPath(null)).toBe("/")
+		expect(
+			getMicroAppPreviewPath(
+				file({ file_name: "index.html", relative_file_path: "index.html" }),
+			),
+		).toBe("/index.html")
+		expect(
+			getMicroAppPreviewPath(
+				file({ file_name: "index.htm", relative_file_path: "index.htm" }),
+			),
+		).toBe("/index.htm")
+		expect(
+			getMicroAppPreviewPath(
+				file({ file_name: "admin.html", relative_file_path: "pages/admin.html" }),
+			),
+		).toBe("/pages/admin.html")
 	})
 })

@@ -3,7 +3,8 @@ import { useMemoizedFn } from "ahooks"
 import { useTranslation } from "react-i18next"
 import { SuperMagicApi } from "@/apis"
 import { FileHistoryVersion } from "@/pages/superMagic/pages/Workspace/types"
-import { downloadFileContent, getTemporaryDownloadUrl } from "@/pages/superMagic/utils/api"
+import { downloadFileContent } from "@/pages/superMagic/utils/api"
+import { useFileApi } from "@/pages/superMagic/fileAccess/fileApi"
 import magicToast from "@/components/base/MagicToaster/utils"
 
 interface UsePPTVersionManagerProps {
@@ -40,6 +41,8 @@ export function usePPTVersionManager({
 	fileId,
 }: UsePPTVersionManagerProps): UsePPTVersionManagerReturn {
 	const { t } = useTranslation("super")
+	// Bound to the ambient FileAccessProvider identity so share previews send their share access.
+	const fileApi = useFileApi()
 
 	// 状态管理
 	const [fileVersion, setFileVersion] = useState<number | undefined>(undefined)
@@ -94,7 +97,7 @@ export function usePPTVersionManager({
 				setIsLoadingVersion(true)
 
 				// 获取版本的临时下载 URL
-				const urlRes = await getTemporaryDownloadUrl({
+				const urlRes = await fileApi.getTemporaryDownloadUrl({
 					file_ids: [fileId],
 					file_versions: targetVersion ? { [fileId]: targetVersion } : undefined,
 				})
@@ -115,7 +118,7 @@ export function usePPTVersionManager({
 				setIsLoadingVersion(false)
 			}
 		},
-		[fileId, t],
+		[fileApi, fileId, t],
 	)
 
 	/**

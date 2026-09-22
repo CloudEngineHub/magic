@@ -119,12 +119,17 @@ describe("image editing manager lifecycle", () => {
 		const internalManager = manager as unknown as { erasingElementId: string | null }
 		internalManager.erasingElementId = "image-1"
 
-		const firstStroke = { radius: 16, points: [{ x: 10, y: 10 }] }
-		const secondStroke = { radius: 20, points: [{ x: 20, y: 20 }] }
-		const replacementStroke = { radius: 24, points: [{ x: 30, y: 30 }] }
+		const firstStroke = { mode: "erase" as const, radius: 16, points: [{ x: 10, y: 10 }] }
+		const secondStroke = { mode: "restore" as const, radius: 20, points: [{ x: 20, y: 20 }] }
+		const replacementStroke = {
+			mode: "restore" as const,
+			radius: 24,
+			points: [{ x: 30, y: 30 }],
+		}
 
 		manager.pushStroke(firstStroke)
 		manager.pushStroke(secondStroke)
+		expect(manager.getMode()).toBe("erase")
 		expect(manager.getStrokes()).toEqual([firstStroke, secondStroke])
 		expect(manager.canUndo()).toBe(true)
 		expect(manager.canRedo()).toBe(false)
@@ -145,6 +150,39 @@ describe("image editing manager lifecycle", () => {
 		manager.exitEraserMode(true)
 		expect(manager.canUndo()).toBe(false)
 		expect(manager.canRedo()).toBe(false)
+		manager.destroy()
+	})
+
+	it("resets the active mode with the eraser session", () => {
+		const { canvas } = createCanvasWithoutRenderedImage()
+		const manager = new EraserManager({ canvas })
+		const internalManager = manager as unknown as { erasingElementId: string | null }
+		internalManager.erasingElementId = "image-1"
+
+		manager.setMode("restore")
+		expect(manager.getMode()).toBe("restore")
+		manager.exitEraserMode(true)
+		expect(manager.getMode()).toBe("erase")
+	})
+
+	it("locks the stroke mode when a stroke begins", () => {
+		const { canvas } = createCanvasWithoutRenderedImage()
+		const manager = new EraserManager({ canvas })
+		const internalManager = manager as unknown as { erasingElementId: string | null }
+		internalManager.erasingElementId = "image-1"
+		const renderer = new EraserRenderer({ canvas, elementId: "image-1", manager })
+		const internalRenderer = renderer as unknown as { overlayGroup: Konva.Group }
+		internalRenderer.overlayGroup = new Konva.Group()
+
+		manager.setMode("restore")
+		renderer.beginStroke({ x: 10, y: 10 })
+		manager.setMode("erase")
+		renderer.finishStroke()
+
+		expect(manager.getStrokes()).toEqual([
+			{ mode: "restore", radius: manager.getRadius(), points: [{ x: 10, y: 10 }] },
+		])
+		renderer.destroy()
 		manager.destroy()
 	})
 

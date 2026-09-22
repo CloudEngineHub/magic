@@ -78,7 +78,8 @@ class SkillSandboxApi extends AbstractSuperMagicSandboxApi
             skillEntities: $result['list'],
             page: $page->getPage(),
             pageSize: $page->getPageNum(),
-            total: $result['total']
+            total: $result['total'],
+            includeI18n: true,
         );
     }
 

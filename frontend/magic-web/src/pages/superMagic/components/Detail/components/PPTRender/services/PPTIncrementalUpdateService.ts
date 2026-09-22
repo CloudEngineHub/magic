@@ -428,9 +428,21 @@ export class PPTIncrementalUpdateService {
 			}
 		})
 
+		const clearManualSaveMarks = () => {
+			if (!context.clearManualSaveMark || manuallySavedFileIds.size === 0) return
+			manuallySavedFileIds.forEach((fileId) => {
+				context.clearManualSaveMark?.(fileId)
+				this.logger.info("清除手动保存标记", {
+					operation: "handleFileUpdates",
+					metadata: { fileId },
+				})
+			})
+		}
+
 		// Fetch new URLs for all updated files (including editing slides)
 		const allFileIdsToFetch = [...fileIdsToFetch, ...editingSlides.map((s) => s.fileId)]
 		if (allFileIdsToFetch.length === 0) {
+			clearManualSaveMarks()
 			return
 		}
 
@@ -558,16 +570,7 @@ export class PPTIncrementalUpdateService {
 		}
 		if (!this.isContextCurrent(context)) return
 
-		// Clear manual save marks for skipped slides
-		if (context.clearManualSaveMark && manuallySavedFileIds.size > 0) {
-			manuallySavedFileIds.forEach((fileId) => {
-				context.clearManualSaveMark?.(fileId)
-				this.logger.info("清除手动保存标记", {
-					operation: "handleFileUpdates",
-					metadata: { fileId },
-				})
-			})
-		}
+		clearManualSaveMarks()
 	}
 
 	/**

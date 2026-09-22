@@ -34,6 +34,7 @@ import MagicSpin from "@/components/base/MagicSpin"
 import { useResizableSidebar } from "./hooks/useResizableSidebar"
 import { useIsMobile } from "@/hooks/useIsMobile"
 import { useOrganization } from "@/models/user/hooks/useOrganization"
+import { useFileApi } from "@/pages/superMagic/fileAccess/fileApi"
 import { userStore } from "@/models/user"
 import { configStore } from "@/models/config"
 import {
@@ -59,6 +60,9 @@ import type { MenuProps } from "antd"
 import type { PPTSlideStructureAdapter } from "./types"
 import { getPPTLiveRenderCacheSize } from "./PPTSidebar/utils/devicePerformance"
 import EditToolbar from "../EditToolbar"
+import PPTSpeakerNotesPanel from "./components/PPTSpeakerNotesPanel"
+import type { PPTNotesAction } from "./components/PPTNotesActions"
+import { pptNotesPreferenceStore } from "@/stores/layout/PPTNotesPreferenceStore"
 import { runGuardedAction } from "../../utils/actionGuard"
 import type { OptionItem } from "@/pages/superMagic/components/MainInputContainer/panels/types"
 import {
@@ -118,6 +122,7 @@ interface PPTRenderProps {
 	projectId?: string
 	displayConfig?: any
 	allowDownload?: boolean
+	showRefresh?: boolean
 
 	// ========== 受控状态（可选） ==========
 	/** 初始激活索引（用于缓存恢复） */
@@ -145,7 +150,7 @@ interface PPTRenderProps {
 	}: {
 		fileId: string
 		fileVersion?: number
-		type?: "file" | "pdf" | "ppt"
+		type?: "file" | "pdf" | "pptx"
 	}) => void
 	onFullscreen?: () => void
 	isTabActive?: boolean
@@ -173,6 +178,7 @@ const PPTRender = observer(function PPTRender(props: PPTRenderProps) {
 	} = props
 
 	const { organizationCode } = useOrganization()
+	const fileApi = useFileApi()
 	const resolvedProjectId = selectedProject?.id || projectId
 	const userId = userStore.user.userInfo?.user_id
 	const clusterCode = configStore.cluster.clusterCode
@@ -220,6 +226,7 @@ const PPTRender = observer(function PPTRender(props: PPTRenderProps) {
 			selectedProjectId: selectedProject?.id,
 			enableCache: true,
 			allowDownload,
+			fileApi,
 		}),
 		[
 			thumbnailCacheScope,
@@ -234,6 +241,7 @@ const PPTRender = observer(function PPTRender(props: PPTRenderProps) {
 			organizationCode,
 			selectedProject?.id,
 			allowDownload,
+			fileApi,
 		],
 	)
 
@@ -268,12 +276,14 @@ const PPTRenderInner = observer(function PPTRenderInner({
 	onFullscreen: onFileFullscreen,
 	isTabActive,
 	allowDownload,
+	showRefresh = true,
 	onRegisterCheckBeforeClose,
 	onUnregisterCheckBeforeClose,
 	slideStructureAdapter,
 }: PPTRenderProps) {
 	const { t } = useTranslation("super")
 	const isMobile = useIsMobile()
+	const fileApi = useFileApi()
 	const containerRef = useRef<HTMLDivElement>(null)
 	const { onDownloadRequest, onFullscreenToggle, emitFullscreenStateChange } = usePPTEventBus()
 	const store = usePPTStore()
@@ -422,6 +432,51 @@ const PPTRenderInner = observer(function PPTRenderInner({
 		store,
 		isAnySlideEditing,
 		slideStructureAdapter,
+	})
+
+	const handleGenerateSpeakerNotes = useMemoizedFn((action: PPTNotesAction) => {
+		const prompts = {
+			generate: t("ppt.speakerNotes.generatePrompt"),
+			polish: t("ppt.speakerNotes.polishPrompt"),
+			shorten: t("ppt.speakerNotes.shortenPrompt"),
+		}
+		const slide = store.currentSlide
+		if (!slide) return
+
+		const fileId = store.getFileIdByPath(slide.path)
+		const file = attachmentList?.find((item: any) => item.file_id === fileId)
+		if (!fileId || !file) return
+
+		pubsub.publish(PubSubEvents.Add_Content_To_Chat, {
+			content: {
+				type: "doc",
+				content: [
+					{
+						type: "paragraph",
+						content: [
+							{ type: "text", text: prompts[action] },
+							{
+								type: "mention",
+								attrs: {
+									id: null,
+									label: null,
+									mentionSuggestionChar: "@",
+									type: "project_file",
+									data: {
+										file_id: fileId,
+										file_name: file.file_name,
+										file_path: file.relative_file_path,
+										file_extension: file.file_extension,
+									},
+								},
+							},
+							{ type: "text", text: t("ppt.speakerNotes.generatePromptSuffix") },
+						],
+					},
+				],
+			},
+			extraData: { hasInput: true },
+		})
 	})
 
 	const handleOpenNewTab = useMemoizedFn((fileId: string, path: string) => {
@@ -647,6 +702,7 @@ const PPTRenderInner = observer(function PPTRenderInner({
 	}, [isPresentationFullscreen, store, store.isAutomaticLoadingEnabled, warmSlideIndices])
 
 	const hasSlides = store.slideUrls.length > 0
+	const activeSlideIndex = store.activeIndex
 
 	// 识别“待初始化窗口”：slidePaths 已就绪，但 store 还未灌入 slides
 	// 这个窗口出现在首帧渲染到 useDeepCompareEffect 触发之间
@@ -937,9 +993,10 @@ const PPTRenderInner = observer(function PPTRenderInner({
 								</div>
 							)}
 
+							{/* z-0 traps the control bar z-50 so overlay notes can cover it. */}
 							<div
 								data-testid="ppt-render-slide-stage"
-								className="relative min-h-0 w-full flex-1 overflow-hidden"
+								className="relative z-0 min-h-0 w-full flex-1 overflow-hidden"
 							>
 								{/* 调整宽度时覆盖层防止 iframe 拦截鼠标事件 */}
 								{isResizing && (
@@ -986,6 +1043,7 @@ const PPTRenderInner = observer(function PPTRenderInner({
 										getHtmlRelativeFolderPath(slideFileItem)
 									return (
 										<PPTSlide
+											showRefresh={showRefresh}
 											key={key}
 											index={index}
 											isActive={index === store.activeIndex}
@@ -1014,6 +1072,7 @@ const PPTRenderInner = observer(function PPTRenderInner({
 											htmlRelativeFolderPath={slideHtmlRelativeFolderPath}
 											selectedProject={selectedProject}
 											attachmentList={attachmentList}
+											fileApi={fileApi}
 											attachments={attachments}
 											updateSlideContents={(
 												newContents: Map<number, string>,
@@ -1054,44 +1113,84 @@ const PPTRenderInner = observer(function PPTRenderInner({
 										/>
 									)
 								})}
+
+								{/* 控制栏只覆盖幻灯片画布，不覆盖画布下方的备注区域。 */}
+								{!isAnySlideEditing &&
+									!isPresentationFullscreen &&
+									presentedToolbarModel?.props.viewMode !== "code" &&
+									store.isReady &&
+									hasSlides && (
+										<PPTControlBar
+											notesVisible={pptNotesPreferenceStore.visible}
+											onToggleNotes={
+												!isPlaybackMode && store.currentSlide
+													? pptNotesPreferenceStore.toggle
+													: undefined
+											}
+											activeIndex={store.activeIndex}
+											totalSlides={store.slideUrls.length}
+											isTransitioning={store.isTransitioning}
+											isMobile={isMobile}
+											isFullscreen={isPresentationFullscreen}
+											onPrevSlide={() => changeSlide("prev")}
+											onNextSlide={() => changeSlide("next")}
+											onGoToFirstSlide={goToFirstSlide}
+											onRefreshSlides={handleRefreshAllSlides}
+											onRefreshCurrentSlide={
+												!pendingKey &&
+												presentedToolbarModel?.props.showRefresh
+													? handleRefreshCurrentSlide
+													: undefined
+											}
+											isRefreshingCurrentSlide={Boolean(
+												presentedToolbarModel?.props.isRefreshing,
+											)}
+											onJumpToPage={handleJumpToPage}
+											onToggleFullscreen={togglePresentationFullscreen}
+											onReplaceTemplate={
+												canReplaceTemplate
+													? handleOpenTemplateReplacement
+													: undefined
+											}
+											scaleRatio={activeSlideScaleRatio}
+											isAutoScale={manualScale === null}
+											portalContainer={containerRef.current}
+											onScaleChange={handleManualScaleChange}
+											onResetScale={() => handleManualScaleChange(null)}
+										/>
+									)}
 							</div>
 
-							{/* 控制栏 - 在编辑模式和全屏模式下隐藏 */}
-							{!isAnySlideEditing &&
-								!isPresentationFullscreen &&
-								presentedToolbarModel?.props.viewMode !== "code" &&
+							{!isPresentationFullscreen &&
+								!isPlaybackMode &&
 								store.isReady &&
-								hasSlides && (
-									<PPTControlBar
-										activeIndex={store.activeIndex}
-										totalSlides={store.slideUrls.length}
-										isTransitioning={store.isTransitioning}
-										isMobile={isMobile}
-										isFullscreen={isPresentationFullscreen}
-										onPrevSlide={() => changeSlide("prev")}
-										onNextSlide={() => changeSlide("next")}
-										onGoToFirstSlide={goToFirstSlide}
-										onRefreshSlides={handleRefreshAllSlides}
-										onRefreshCurrentSlide={
-											!pendingKey && presentedToolbarModel?.props.showRefresh
-												? handleRefreshCurrentSlide
+								hasSlides &&
+								store.currentSlide && (
+									<PPTSpeakerNotesPanel
+										visible={pptNotesPreferenceStore.visible}
+										slideIndex={activeSlideIndex}
+										rawContent={store.currentSlide.rawContent || ""}
+										fileId={
+											store.getFileIdByPath(store.currentSlide.path) || ""
+										}
+										getLatestRawContent={(fileId) =>
+											store.slides.find(
+												(slide) =>
+													store.getFileIdByPath(slide.path) === fileId,
+											)?.rawContent || ""
+										}
+										allowEdit={effectiveAllowEdit}
+										saveEditContent={saveEditContent}
+										onSaved={(nextContent, fileId) =>
+											Promise.resolve(
+												store.updateSlideNotes(fileId, nextContent),
+											).then(() => undefined)
+										}
+										onGenerate={
+											effectiveAllowEdit
+												? handleGenerateSpeakerNotes
 												: undefined
 										}
-										isRefreshingCurrentSlide={Boolean(
-											presentedToolbarModel?.props.isRefreshing,
-										)}
-										onJumpToPage={handleJumpToPage}
-										onToggleFullscreen={togglePresentationFullscreen}
-										onReplaceTemplate={
-											canReplaceTemplate
-												? handleOpenTemplateReplacement
-												: undefined
-										}
-										scaleRatio={activeSlideScaleRatio}
-										isAutoScale={manualScale === null}
-										portalContainer={containerRef.current}
-										onScaleChange={handleManualScaleChange}
-										onResetScale={() => handleManualScaleChange(null)}
 									/>
 								)}
 						</div>

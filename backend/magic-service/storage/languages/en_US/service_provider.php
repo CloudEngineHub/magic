@@ -86,6 +86,9 @@ return [
         'support_multi_modal' => [
             'boolean' => 'The multimodal support flag must be a boolean',
         ],
+        'support_function' => [
+            'boolean' => 'The function call support flag must be a boolean',
+        ],
     ],
     'api_key_empty' => 'Value is required',
     'model_id_required' => 'Value is required',

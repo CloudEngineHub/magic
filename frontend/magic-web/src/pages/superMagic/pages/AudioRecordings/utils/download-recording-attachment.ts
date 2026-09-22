@@ -1,10 +1,11 @@
-import { getTemporaryDownloadUrl } from "@/pages/superMagic/utils/api"
+import { createFileApi, type FileApi } from "@/pages/superMagic/fileAccess/fileApi"
 import { downloadFileWithAnchor } from "@/pages/superMagic/utils/handleFIle"
 import { DownloadImageMode } from "@/pages/superMagic/pages/Workspace/types"
 
 interface DownloadRecordingAttachmentParams {
 	fileId: string
 	fileName?: string
+	fileApi?: Pick<FileApi, "getTemporaryDownloadUrl">
 }
 
 /**
@@ -13,11 +14,12 @@ interface DownloadRecordingAttachmentParams {
 export async function downloadRecordingAttachmentFile({
 	fileId,
 	fileName,
+	fileApi = createFileApi(),
 }: DownloadRecordingAttachmentParams): Promise<boolean> {
 	if (!fileId) return false
 
 	try {
-		const [urlItem] = await getTemporaryDownloadUrl({
+		const [urlItem] = await fileApi.getTemporaryDownloadUrl({
 			file_ids: [fileId],
 			is_download: true,
 			download_mode: DownloadImageMode.Download,

@@ -85,4 +85,5 @@ export interface ProjectPageInputContainerProps {
 	}) => void
 	/** Optional override for send-time topic creation (e.g. project entry with detail backfill). */
 	createTopic?: SceneEditorContext["createTopic"]
+	editorRef?: SceneEditorContext["editorRef"]
 }

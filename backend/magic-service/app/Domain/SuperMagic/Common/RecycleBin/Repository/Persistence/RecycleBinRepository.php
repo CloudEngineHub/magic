@@ -196,8 +196,7 @@ class RecycleBinRepository extends AbstractRepository implements RecycleBinRepos
     public function getCountsByTypeVisibleToUser(string $userId, ?string $keyword = null, ?int $projectId = null): array
     {
         if ($projectId !== null) {
-            return [RecycleBinResourceType::File->value =>
-                $this->buildOwnerVisibleQuery($userId, RecycleBinResourceType::File->value, null, $projectId)->count()
+            return [RecycleBinResourceType::File->value => $this->buildOwnerVisibleQuery($userId, RecycleBinResourceType::File->value, null, $projectId)->count()
                 + $this->buildCollaborativeFileQuery($userId, null, $projectId)->count(),
             ];
         }
@@ -621,6 +620,7 @@ class RecycleBinRepository extends AbstractRepository implements RecycleBinRepos
         $hasMore = $rows->count() > $pageSize;
         $models = $this->model::query()->hydrate($rows->take($pageSize)->map(static fn ($row) => (array) $row)->all());
         $entities = [];
+        /** @var null|RecycleBinModel $model */
         foreach ($models as $model) {
             $entities[] = $this->modelToEntity($model);
         }

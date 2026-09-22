@@ -143,25 +143,21 @@ export const useStyles = createStyles(({ css, token, isDarkMode }) => {
 		`,
 
 		closeButton: css`
-			background-color: ${
-				isDarkMode ? macDarkColors.titleBarButtons.close : macColors.titleBarButtons.close
-			};
+			background-color: ${isDarkMode
+				? macDarkColors.titleBarButtons.close
+				: macColors.titleBarButtons.close};
 		`,
 
 		minimizeButton: css`
-			background-color: ${
-				isDarkMode
-					? macDarkColors.titleBarButtons.minimize
-					: macColors.titleBarButtons.minimize
-			};
+			background-color: ${isDarkMode
+				? macDarkColors.titleBarButtons.minimize
+				: macColors.titleBarButtons.minimize};
 		`,
 
 		maximizeButton: css`
-			background-color: ${
-				isDarkMode
-					? macDarkColors.titleBarButtons.maximize
-					: macColors.titleBarButtons.maximize
-			};
+			background-color: ${isDarkMode
+				? macDarkColors.titleBarButtons.maximize
+				: macColors.titleBarButtons.maximize};
 		`,
 
 		titleText: css`

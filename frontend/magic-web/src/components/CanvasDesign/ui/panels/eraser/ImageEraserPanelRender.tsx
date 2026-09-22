@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react"
+import { useCallback, useEffect, useId, useMemo, useState } from "react"
 import { Redo2, Undo2 } from "lucide-react"
 import {
 	getEraserRadiusDefault,
@@ -29,7 +29,9 @@ import useElementPositionEffect from "../../../app/hooks/layout/useElementPositi
 import { useCanvasEvent } from "../../../app/hooks/canvas"
 import { useFloatingComponent } from "../../../app/hooks/layout/useFloatingComponent"
 import { Button } from "../../primitives/shadcn/button"
+import { Checkbox } from "../../primitives/shadcn/checkbox"
 import { Slider } from "../../primitives/shadcn/slider"
+import type { EraserStrokeMode } from "../../../runtime/interaction/eraser/EraserRenderer"
 import styles from "./index.module.css"
 
 function noop() {
@@ -47,7 +49,11 @@ export default function ImageEraserPanelRender() {
 	)
 	const [canUndo, setCanUndo] = useState(() => canvas?.eraserManager.canUndo() ?? false)
 	const [canRedo, setCanRedo] = useState(() => canvas?.eraserManager.canRedo() ?? false)
+	const [mode, setMode] = useState<EraserStrokeMode>(
+		() => canvas?.eraserManager.getMode() ?? "erase",
+	)
 	const [isSubmitting, setIsSubmitting] = useState(false)
+	const invertEraseId = useId()
 
 	const radiusRange = useMemo(() => {
 		return canvas?.eraserManager.getRadiusRange() ?? { min: MIN_RADIUS, max: MAX_RADIUS }
@@ -74,11 +80,13 @@ export default function ImageEraserPanelRender() {
 		if (!canvas || !erasingElementId) {
 			setCanUndo(false)
 			setCanRedo(false)
+			setMode("erase")
 			return
 		}
 		setRadius(canvas.eraserManager.getRadius())
 		setCanUndo(canvas.eraserManager.canUndo())
 		setCanRedo(canvas.eraserManager.canRedo())
+		setMode(canvas.eraserManager.getMode())
 	}, [canvas, erasingElementId])
 
 	useCanvasEvent(
@@ -88,6 +96,7 @@ export default function ImageEraserPanelRender() {
 			setRadius(data.radius)
 			setCanUndo(data.canUndo)
 			setCanRedo(data.canRedo)
+			setMode(data.mode)
 		},
 		[erasingElementId],
 	)
@@ -134,6 +143,15 @@ export default function ImageEraserPanelRender() {
 	const handleRedo = useCallback(() => {
 		canvas?.eraserManager.redoLastStroke()
 	}, [canvas])
+
+	const handleModeChange = useCallback(
+		(checked: boolean | "indeterminate") => {
+			const nextMode: EraserStrokeMode = checked === true ? "restore" : "erase"
+			setMode(nextMode)
+			canvas?.eraserManager.setMode(nextMode)
+		},
+		[canvas],
+	)
 
 	const handleCancel = useCallback(() => {
 		if (isSubmitting) return
@@ -377,6 +395,22 @@ export default function ImageEraserPanelRender() {
 					disabled={isSubmitting}
 					onValueChange={handleRadiusChange}
 				/>
+			</div>
+			<div className={`${styles.section} ${styles.invertSection}`}>
+				<div className={styles.invertCheckboxRow} data-disabled={isSubmitting}>
+					<Checkbox
+						id={invertEraseId}
+						checked={mode === "restore"}
+						disabled={isSubmitting}
+						onCheckedChange={handleModeChange}
+					/>
+					<label htmlFor={invertEraseId}>
+						{t("elementTools.imageEraser.invertErase", "反向擦除")}{" "}
+						<span className={styles.invertShortcut}>
+							{t("elementTools.imageEraser.invertEraseShortcut", "(Option/Alt)")}
+						</span>
+					</label>
+				</div>
 			</div>
 			<div className={styles.buttons}>
 				<Button

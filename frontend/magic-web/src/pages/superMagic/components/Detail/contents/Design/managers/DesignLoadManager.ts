@@ -131,7 +131,11 @@ export class DesignLoadManager {
 		}
 
 		return {
-			identityKey: JSON.stringify([projectId ?? null, actualCurrentFile.id]),
+			identityKey: JSON.stringify([
+				projectId ?? null,
+				actualCurrentFile.id,
+				this.options.fileApi?.identityKey ?? "none",
+			]),
 			options: this.options,
 			currentFile: actualCurrentFile,
 		}
@@ -172,6 +176,7 @@ export class DesignLoadManager {
 				attachments,
 				currentFileId,
 				currentFileName,
+				fileApi: this.options.fileApi,
 			})
 			if (!this.isCurrentLoadRequest(request)) {
 				return { didLoad: false, pendingUpgrade: null, sidecarStatus }
@@ -199,6 +204,7 @@ export class DesignLoadManager {
 					flatAttachments,
 					mainFileId: result.fileId,
 					projectId: projectId ?? undefined,
+					fileApi: request.options.fileApi,
 				},
 				pathContext: {
 					projectBasePath: dslBase,

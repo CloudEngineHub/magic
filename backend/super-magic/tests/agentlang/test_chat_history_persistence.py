@@ -132,3 +132,89 @@ async def test_chat_history_appends_normalized_agent_run_request(tmp_path):
         UserMessageContentPart.text_part("Inspect image"),
         UserMessageContentPart.image_ref("images/mock.png"),
     ]
+
+
+@pytest.mark.asyncio
+async def test_chat_history_persists_message_level_native_visual_flag(tmp_path):
+    """消息级原生视觉配置随历史落盘，未设置时不写入多余字段。"""
+    history_dir = tmp_path / "chat_history"
+    history = ChatHistory("test-agent", "agent-1", str(history_dir), _EventDispatcher())
+    history.messages = [
+        UserMessage(
+            content="question",
+            created_at="2026-07-24 00:00:01",
+            content_parts=[UserMessageContentPart.image_ref("a.png")],
+            include_in_native_visual=False,
+        ),
+        UserMessage(content="plain", created_at="2026-07-24 00:00:02"),
+    ]
+
+    await history.save()
+
+    document = await async_read_json(history._history_file_path)
+    assert document[0]["include_in_native_visual"] is False
+    assert "include_in_native_visual" not in document[1]
+
+    loaded = ChatHistory("test-agent", "agent-1", str(history_dir), _EventDispatcher())
+    await loaded.load()
+    assert loaded.messages[0].include_in_native_visual is False
+    assert loaded.messages[1].include_in_native_visual is None
+
+
+@pytest.mark.asyncio
+async def test_chat_history_native_visual_disable_is_idempotent(tmp_path):
+    """重复关闭同一批原生视觉消息无副作用，纯文本消息不受影响。"""
+    history_dir = tmp_path / "chat_history"
+    history = ChatHistory("test-agent", "agent-1", str(history_dir), _EventDispatcher())
+    image_message = UserMessage(
+        content="question",
+        created_at="2026-07-24 00:00:01",
+        content_parts=[UserMessageContentPart.image_ref("a.png")],
+    )
+    text_message = UserMessage(content="plain", created_at="2026-07-24 00:00:02")
+    history.messages = [image_message, text_message]
+
+    assert await history.disable_native_visual_messages() == 1
+    assert image_message.include_in_native_visual is False
+    assert text_message.include_in_native_visual is None
+    assert await history.disable_native_visual_messages() == 0
+
+
+@pytest.mark.asyncio
+async def test_chat_history_disables_historical_native_visual_when_over_limit(tmp_path):
+    """历史加当前合计超过上限时关掉全部历史原生视觉消息，当前消息仍可带图。"""
+    history_dir = tmp_path / "chat_history"
+    history = ChatHistory("test-agent", "agent-1", str(history_dir), _EventDispatcher())
+    old_one = UserMessage(
+        content="old-1",
+        created_at="2026-07-24 00:00:01",
+        content_parts=[
+            UserMessageContentPart.image_ref("old-1a.png"),
+            UserMessageContentPart.image_ref("old-1b.png"),
+        ],
+    )
+    old_two = UserMessage(
+        content="old-2",
+        created_at="2026-07-24 00:00:02",
+        content_parts=[UserMessageContentPart.image_ref("old-2.png")],
+    )
+    current = UserMessage(
+        content="current",
+        created_at="2026-07-24 00:00:03",
+        content_parts=[UserMessageContentPart.image_ref("current.png")],
+    )
+    history.messages = [old_one, old_two, current]
+
+    # 历史 3 张、当前 1 张，合计 4。上限 3 时只看历史不会清，合计后会清掉历史。
+    assert await history.disable_historical_native_visual_if_over_limit(3) == 2
+    assert old_one.include_in_native_visual is False
+    assert old_two.include_in_native_visual is False
+    assert current.include_in_native_visual is None
+
+    history.messages = [old_one, old_two, current]
+    old_one.include_in_native_visual = None
+    old_two.include_in_native_visual = None
+    assert await history.disable_historical_native_visual_if_over_limit(4) == 0
+    assert old_one.include_in_native_visual is None
+    assert old_two.include_in_native_visual is None
+    assert current.include_in_native_visual is None

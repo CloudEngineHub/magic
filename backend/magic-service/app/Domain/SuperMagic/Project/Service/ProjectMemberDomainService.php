@@ -17,6 +17,7 @@ use App\Domain\SuperMagic\Project\Repository\Facade\ProjectMemberRepositoryInter
 use App\Domain\SuperMagic\Project\Repository\Facade\ProjectMemberSettingRepositoryInterface;
 use App\Domain\SuperMagic\Project\Repository\Facade\ProjectRepositoryInterface;
 use Hyperf\DbConnection\Db;
+use RuntimeException;
 
 /**
  * 项目成员领域服务
@@ -267,7 +268,7 @@ class ProjectMemberDomainService
         $this->projectMemberSettingRepository->batchEnsureSettings($userId, [$projectId], $organizationCode);
         $setting = $this->projectMemberSettingRepository->findByUserAndProject($userId, $projectId);
         if ($setting === null) {
-            throw new \RuntimeException('Project visit settings were not persisted');
+            throw new RuntimeException('Project visit settings were not persisted');
         }
 
         return $setting->getLastActiveAt();

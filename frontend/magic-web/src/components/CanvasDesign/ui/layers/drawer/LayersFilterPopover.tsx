@@ -5,6 +5,7 @@ import type { CanvasLayersFilterState } from "../../../public/magic-types"
 import { useEffect, useRef, useState } from "react"
 import { useCanvasDesignI18n } from "../../../app/providers/I18nProvider"
 import { Checkbox } from "../../primitives/shadcn/checkbox"
+import { Popover, PopoverContent, PopoverTrigger } from "../../primitives/shadcn/popover"
 import { RadioGroup, RadioGroupItem } from "../../../../shadcn-ui/radio-group"
 import styles from "./index.module.css"
 
@@ -35,31 +36,53 @@ interface LayersFilterPopoverProps {
 		key: K,
 		value: CanvasLayersFilterState[K],
 	) => void
+	onReset: () => void
 }
 
 export default function LayersFilterPopover(props: LayersFilterPopoverProps) {
-	const { isActive, isOpen, onOpenChange } = props
+	const { filter, isActive, isOpen, onOpenChange, onFilterChange, onReset } = props
 	const { t } = useCanvasDesignI18n()
 
 	return (
-		<button
-			type="button"
-			className={cn(styles.layersFilterTrigger, isActive && styles.layersFilterTriggerActive)}
-			aria-label={t("layers.filter.open", "筛选图层")}
-			aria-pressed={isActive}
-			aria-expanded={isOpen}
-			onClick={() => onOpenChange(!isOpen)}
-		>
-			<Filter size={14} />
-			{isActive && <span className={styles.layersFilterActiveDot} />}
-		</button>
+		<Popover open={isOpen} onOpenChange={onOpenChange}>
+			<PopoverTrigger asChild>
+				<button
+					type="button"
+					className={cn(
+						styles.layersFilterTrigger,
+						isActive && styles.layersFilterTriggerActive,
+					)}
+					aria-label={t("layers.filter.open", "筛选图层")}
+					aria-pressed={isActive}
+				>
+					<Filter size={14} />
+					{isActive && <span className={styles.layersFilterActiveDot} />}
+				</button>
+			</PopoverTrigger>
+			<PopoverContent
+				side="right"
+				align="start"
+				sideOffset={6}
+				className={styles.layersFilterPopoverContent}
+				onOpenAutoFocus={(event) => event.preventDefault()}
+			>
+				<LayersFilterForm
+					filter={filter}
+					isActive={isActive}
+					onFilterChange={onFilterChange}
+					onReset={onReset}
+				/>
+			</PopoverContent>
+		</Popover>
 	)
 }
 
 export function LayersFilterForm({
 	filter,
+	isActive = false,
 	onFilterChange,
-}: Omit<LayersFilterPopoverProps, "isOpen" | "onOpenChange" | "isActive">) {
+	onReset,
+}: Omit<LayersFilterPopoverProps, "isOpen" | "onOpenChange">) {
 	const { t } = useCanvasDesignI18n()
 	const [isTypeSelectOpen, setIsTypeSelectOpen] = useState(false)
 	const typeSelectRef = useRef<HTMLDivElement>(null)
@@ -92,6 +115,21 @@ export function LayersFilterForm({
 
 	return (
 		<div className={styles.layersFilterPanel}>
+			<div className={styles.layersFilterPanelHeader}>
+				<span className={styles.layersFilterPanelTitle}>
+					{t("layers.filter.title", "筛选")}
+				</span>
+				{onReset ? (
+					<button
+						type="button"
+						className={styles.layersFilterReset}
+						disabled={!isActive}
+						onClick={onReset}
+					>
+						{t("layers.filter.reset", "重置")}
+					</button>
+				) : null}
+			</div>
 			<FilterSegmentSection
 				title={t("layers.filter.visibility.label", "可见状态")}
 				value={filter.visibility}

@@ -31,6 +31,10 @@ class FileDeletionPolicyResolver
             return FileDeletionPolicy::PhysicalDelete;
         }
 
+        if ($file->isProjectFile() && $context?->isUnderRootHiddenDirectory((int) $file->getFileId())) {
+            return FileDeletionPolicy::PhysicalDelete;
+        }
+
         if (! $file->isProjectFile() || $file->getTopicId() <= 0 || $file->getTaskId() <= 0) {
             return FileDeletionPolicy::RecycleBin;
         }

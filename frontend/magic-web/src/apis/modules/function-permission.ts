@@ -9,6 +9,15 @@ export const FUNCTION_PERMISSION_CODE = {
 	AgentPublish: "agent.publish_team",
 	MagicClawAccess: "magic_claw.access",
 	MagicClawCreate: "magic_claw.create",
+	MicroAppSharePublic: "micro_app.share_public",
+	MicroAppSharePassword: "micro_app.share_password",
+	MicroAppShareTeam: "micro_app.share_team",
+	ProjectSharePublic: "project.share_public",
+	ProjectSharePassword: "project.share_password",
+	ProjectShareTeam: "project.share_team",
+	/** Topic shares are governed on their own, and have no team share method. */
+	TopicSharePublic: "topic.share_public",
+	TopicSharePassword: "topic.share_password",
 } as const
 
 /** Platform-level permission group used by super administrators. */

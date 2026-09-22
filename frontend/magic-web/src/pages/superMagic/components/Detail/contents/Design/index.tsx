@@ -9,6 +9,9 @@ import MagicSpin from "@/components/base/MagicSpin"
 import MagicToaster from "@/components/base/MagicToaster"
 import { useTranslation } from "react-i18next"
 import useShareRoute from "@/pages/superMagic/hooks/useShareRoute"
+import { useFileAccess } from "@/pages/superMagic/fileAccess/FileAccessProvider"
+import { shouldWaitForShareAccess } from "@/pages/superMagic/fileAccess/fileAccessContext"
+import { useFileApi } from "@/pages/superMagic/fileAccess/fileApi"
 import { useIsMobile } from "@/hooks/useIsMobile"
 import { useDesignMethods } from "./hooks/useDesignMethods"
 import { useDesignMarker } from "./hooks/useDesignMarker"
@@ -341,6 +344,8 @@ function DesignViewer(props: DesignViewerProps) {
 
 	// 检测是否是分享场景
 	const { isShareRoute } = useShareRoute()
+	const fileAccess = useFileAccess()
+	const fileApi = useFileApi()
 
 	// 检测是否是移动端
 	const isMobile = useIsMobile()
@@ -424,7 +429,7 @@ function DesignViewer(props: DesignViewerProps) {
 
 	// 初始加载按项目/画布身份去重；同一实例切换画布时，旧请求不能阻止新画布加载。
 	const initialLoadIdentity = currentFile?.id
-		? JSON.stringify([projectId ?? null, currentFile.id])
+		? JSON.stringify([projectId ?? null, currentFile.id, fileApi.identityKey])
 		: null
 	const currentInitialLoadIdentityRef = useRef(initialLoadIdentity)
 	const loadedInitialLoadIdentityRef = useRef<string | null>(null)
@@ -1243,6 +1248,10 @@ function DesignViewer(props: DesignViewerProps) {
 			return
 		}
 
+		if (shouldWaitForShareAccess(fileAccess)) {
+			return
+		}
+
 		const requestIdentity = initialLoadIdentity
 		void (async () => {
 			try {
@@ -1280,6 +1289,7 @@ function DesignViewer(props: DesignViewerProps) {
 		attachmentsReady,
 		currentFile?.id,
 		currentFile?.name,
+		fileAccess,
 		flatAttachments,
 		initialLoadIdentity,
 		isMobile,

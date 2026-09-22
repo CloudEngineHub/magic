@@ -18,6 +18,8 @@ import { useIsMobile } from "@/hooks/useIsMobile"
 import { superMagicUploadTokenService } from "@/pages/superMagic/components/MessageEditor/services/UploadTokenService"
 import { genFileData } from "@/pages/chatNew/components/MessageEditor/components/InputFiles/utils"
 import { useUpload } from "@/hooks/useUploadFiles"
+import { useFileAccess } from "@/pages/superMagic/fileAccess/FileAccessProvider"
+import { useFileApi } from "@/pages/superMagic/fileAccess/fileApi"
 import { useTranslation } from "react-i18next"
 import { addContentToChat } from "@/pages/superMagic/components/Detail/components/AIOptimization/utils"
 import { decodeHTMLEntities, getFullContent } from "./utils/full-content"
@@ -199,7 +201,7 @@ import { ContactApi } from "@/apis"
 import MagicModal from "@/components/base/MagicModal"
 import type { HtmlNavigationRequest } from "./utils/html-navigation"
 import type { HtmlPermissionScope } from "./iframe-api/types"
-import type { TopicStore } from "@/pages/superMagic/stores/core/topic"
+import { useHostConversation } from "@/pages/superMagic/contexts/HostConversationContext"
 
 const ignoreDevicePreviewChange = () => undefined
 
@@ -236,11 +238,11 @@ interface IsolatedHTMLRendererProps {
 	/** 当前 HTML 所在目录，用于相对资源解析、上传默认目录等历史逻辑。 */
 	htmlRelativeFolderPath?: string
 	openNewTab: (fileId: string, path: string, autoEdit?: boolean) => void
-	selectedProject?: any
-	/** Host project ID passed by preview or share pages. */
+	/** origin 项目 ID：文件/库所在项目。host 来自 HostConversationProvider。 */
 	projectId?: string
-	/** 微应用编辑页的独立话题 store；未传时回退到全局 store。 */
-	topicStore?: TopicStore
+	/** 发布微应用身份，由宿主注入，用于自动添加可信 @micro_app mention。 */
+	microAppId?: string
+	microAppName?: string
 	attachmentList?: any[]
 	setSlideContents?: (slideContents: Map<number, string>) => void
 	slideIndex?: number
@@ -438,6 +440,9 @@ function getContextUserName(user: MagicContextUser): string {
 // Internal component that uses the StylePanelStore context
 const IsolatedHTMLRendererInner = forwardRef<IsolatedHTMLRendererRef, IsolatedHTMLRendererProps>(
 	(props, ref) => {
+		const fileAccess = useFileAccess()
+		const fileApi = useFileApi()
+		const getFileAccess = useMemoizedFn(() => fileAccess)
 		const {
 			devicePreview,
 			onDeviceContentScaledChange,
@@ -459,9 +464,9 @@ const IsolatedHTMLRendererInner = forwardRef<IsolatedHTMLRendererRef, IsolatedHT
 			filePathMapping,
 			openNewTab,
 			htmlRelativeFolderPath,
-			selectedProject,
 			projectId,
-			topicStore: scopedTopicStore,
+			microAppId,
+			microAppName,
 			attachmentList,
 			isPlaybackMode,
 			toolbarClassName,
@@ -491,7 +496,15 @@ const IsolatedHTMLRendererInner = forwardRef<IsolatedHTMLRendererRef, IsolatedHT
 			enableInlineInspectorFallback = false,
 			permissionController,
 		} = props
-		// Share pages inject project_id on window when props omit it.
+		// host：用户当前所在项目；发布页通过 Provider 按需创建运行项目。
+		const {
+			selectedProject,
+			topicStore: scopedTopicStore,
+			ensureConversation,
+			requestPreviewMode,
+			requireAuthentication,
+		} = useHostConversation()
+		// origin：文件/库所在项目。发布预览传微应用原项目，普通预览回落到 host。
 		const runtimeProjectId = projectId ?? selectedProject?.id
 		const externalRenderSiteUrl = useMemo(() => env("MAGIC_HTML_SANDBOX_URL"), [])
 		// The shared shell can load the runtime bundle built by this host deployment.
@@ -1246,7 +1259,14 @@ const IsolatedHTMLRendererInner = forwardRef<IsolatedHTMLRendererRef, IsolatedHT
 		const { htmlAppConfig, authorizeHtmlPermission, authorizeHtmlPermissions } =
 			permissionController || fallbackPermissionController
 		const projectContextUnavailableError = t("htmlEditor.projectContextUnavailable")
+		const previewModeCancelledError = t("microAppPage.conversation.switchToPreviewCancelled")
 		const authorizeProjectPermission = useMemoizedFn(async (scope: HtmlPermissionScope) => {
+			// Login confirmation precedes app permissions and never creates a runtime project.
+			if (scope === "project.message.write") await requireAuthentication?.()
+			if (scope === "project.message.write" && requestPreviewMode) {
+				if (!(await requestPreviewMode())) throw new Error(previewModeCancelledError)
+				return true
+			}
 			// 分享页没有可授权的项目上下文，先返回明确原因，避免先弹授权再失败。
 			if (!runtimeProjectId && isProjectScopedPermission(scope)) {
 				throw new Error(projectContextUnavailableError)
@@ -1331,6 +1351,7 @@ const IsolatedHTMLRendererInner = forwardRef<IsolatedHTMLRendererRef, IsolatedHT
 						})
 					}),
 			),
+			getFileAccess,
 		})
 
 		const { handleLLMMessage } = useIframeLLM({
@@ -1348,14 +1369,19 @@ const IsolatedHTMLRendererInner = forwardRef<IsolatedHTMLRendererRef, IsolatedHT
 			projectContextUnavailableError: !runtimeProjectId
 				? projectContextUnavailableError
 				: undefined,
+			getFileAccess,
 		})
 
+		// origin + 传入的 store + host 项目；hook 内不再读全局 store
 		const { getAgentList, createTopicAndSend, sendMessage } = useIframeAgentActions(
 			runtimeProjectId,
 			scopedTopicStore,
 			selectedProject,
+			{ microAppId, microAppName },
+			ensureConversation,
 		)
 
+		// 会话写操作按 host 鉴权：分享页没有当前项目时不可发消息
 		const { handleAgentMessage } = useIframeAgent({
 			iframeRef,
 			targetOrigin: iframeTargetOrigin,
@@ -1363,10 +1389,11 @@ const IsolatedHTMLRendererInner = forwardRef<IsolatedHTMLRendererRef, IsolatedHT
 			createTopicAndSend,
 			sendMessage,
 			enableWriteOperations: true,
-			projectId: runtimeProjectId,
-			projectContextUnavailableError: !runtimeProjectId
-				? projectContextUnavailableError
-				: undefined,
+			projectId: selectedProject?.id || (ensureConversation ? "runtime-pending" : undefined),
+			projectContextUnavailableError:
+				!selectedProject?.id && !ensureConversation
+					? projectContextUnavailableError
+					: undefined,
 			authorizePermission: authorizeProjectPermission,
 		})
 
@@ -1405,6 +1432,7 @@ const IsolatedHTMLRendererInner = forwardRef<IsolatedHTMLRendererRef, IsolatedHT
 			}
 		}, [fileId, isDynamicInterceptionEnabled, postMessageTargetStrategy])
 
+		// upload/download 走 origin；addFilesToMessage 走 host + 传入的 store
 		const { handleMagicUploadFiles, handleMagicAddFilesToMessage, handleMagicDownloadFiles } =
 			useMagicFiles({
 				iframeRef,
@@ -1415,6 +1443,7 @@ const IsolatedHTMLRendererInner = forwardRef<IsolatedHTMLRendererRef, IsolatedHT
 					? projectContextUnavailableError
 					: undefined,
 				topicStore: scopedTopicStore,
+				ensureConversation,
 				attachmentList,
 				htmlRelativeFolderPath,
 				uploadImageFileToProject,
@@ -1461,12 +1490,12 @@ const IsolatedHTMLRendererInner = forwardRef<IsolatedHTMLRendererRef, IsolatedHT
 		})
 		const getStorageMarkerId = useMemoizedFn(() => virtualStorageMarkerId || getMarkerId())
 
+		// 虚拟存储按 project + file 隔离，不按话题隔离：切换/新建话题不应重建沙箱存储。
 		useEffect(() => {
 			let cancelled = false
 			const markerId = getStorageMarkerId()
 			const namespace = buildHtmlVirtualStorageNamespace({
 				projectId: runtimeProjectId,
-				topicId: scopedTopicStore?.selectedTopic?.id ?? selectedProject?.current_topic_id,
 				fileId: markerId || fileId,
 			})
 
@@ -1485,8 +1514,6 @@ const IsolatedHTMLRendererInner = forwardRef<IsolatedHTMLRendererRef, IsolatedHT
 			// attachmentList,
 			fileId,
 			getStorageMarkerId,
-			selectedProject?.current_topic_id,
-			scopedTopicStore?.selectedTopic?.id,
 			runtimeProjectId,
 			virtualStorageMarkerId,
 		])
@@ -1584,6 +1611,7 @@ const IsolatedHTMLRendererInner = forwardRef<IsolatedHTMLRendererRef, IsolatedHT
 				locationSearch: htmlNavigation?.search || "",
 				locationAnchor: htmlNavigation?.hash || "",
 				navigationRequestId,
+				navigationBasePath: htmlEntryFilePath,
 			})
 			const request = {
 				requestId: navigationRequestId,
@@ -1723,6 +1751,7 @@ const IsolatedHTMLRendererInner = forwardRef<IsolatedHTMLRendererRef, IsolatedHT
 						locationSearch: htmlNavigation?.search || "",
 						locationAnchor: htmlNavigation?.hash || "",
 						navigationRequestId,
+						navigationBasePath: htmlEntryFilePath,
 					})
 					const request = {
 						requestId: navigationRequestId,
@@ -2316,7 +2345,12 @@ const IsolatedHTMLRendererInner = forwardRef<IsolatedHTMLRendererRef, IsolatedHT
 					event.data.type === MEDIA_MESSAGE_TYPES.IMAGE_URL_REQUEST
 				) {
 					// 处理marked.js图片路径解析请求
-					await handleMediaImageUrlRequest(event, attachmentList || [], fileId || "")
+					await handleMediaImageUrlRequest(
+						event,
+						attachmentList || [],
+						fileId || "",
+						fileApi,
+					)
 				} else if (event.data?.type?.startsWith("MAGIC_FS_")) {
 					// 处理 window.Magic.fs.* 请求
 					await handleFSMessage(event.data.type, event.data)

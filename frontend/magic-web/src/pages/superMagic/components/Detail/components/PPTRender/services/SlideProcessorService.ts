@@ -7,6 +7,7 @@ import type {
 	ProcessHtmlContentInput,
 	ProcessHtmlContentOutput,
 } from "@/pages/superMagic/components/Detail/contents/HTML/htmlProcessor"
+import type { FileApi } from "@/pages/superMagic/fileAccess/fileApi"
 
 /**
  * Configuration for processing slides
@@ -17,6 +18,8 @@ export interface SlideProcessorConfig {
 	mainFileId?: string
 	mainFileName?: string
 	displayConfig?: any
+	/** File client bound to the current host/share access context. */
+	fileApi?: FileApi
 }
 
 /** 内容与资源摘要必须来自同一次处理，不能把编辑后的内容与旧摘要配对。 */
@@ -61,6 +64,7 @@ export class SlideProcessorService {
 				attachmentList: this.config.attachmentList,
 				html_relative_path: relativeFilePath,
 				displayConfig: this.config.displayConfig,
+				fileApi: this.config.fileApi,
 				xMagicImageProcess: HTML_PREVIEW_IMAGE_PROCESS,
 			}
 
@@ -134,6 +138,7 @@ export class SlideProcessorService {
 				html_relative_path: relativeFilePath,
 				displayConfig: this.config.displayConfig,
 				preloadedUrlMapping: urlMapping, // Pass the pre-fetched URL mapping
+				fileApi: this.config.fileApi,
 				xMagicImageProcess: HTML_PREVIEW_IMAGE_PROCESS,
 			}
 

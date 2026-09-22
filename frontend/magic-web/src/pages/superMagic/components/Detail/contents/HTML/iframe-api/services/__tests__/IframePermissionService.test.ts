@@ -119,7 +119,7 @@ describe("IframePermissionService", () => {
 		expect(grantStore.getAppGrants).toHaveBeenCalled()
 	})
 
-	it("prompts legacy apps with bounded ttl options", async () => {
+	it("prompts legacy apps with permanent access as an available ttl option", async () => {
 		const { service, confirmPermission } = createService({
 			appConfigState: { status: "absent" },
 		})
@@ -139,6 +139,7 @@ describe("IframePermissionService", () => {
 			60 * 60 * 1000,
 			8 * 60 * 60 * 1000,
 			24 * 60 * 60 * 1000,
+			null,
 		])
 		expect(request.defaultTtlMs).toBe(60 * 60 * 1000)
 	})
@@ -173,6 +174,7 @@ describe("IframePermissionService", () => {
 		expect(request.ttlOptions.map((option) => option.ttlMs)).toEqual([
 			60 * 60 * 1000,
 			8 * 60 * 60 * 1000,
+			null,
 		])
 		expect(request.defaultTtlMs).toBe(60 * 60 * 1000)
 	})

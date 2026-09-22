@@ -46,5 +46,8 @@ return [
         'support_multi_modal' => [
             'boolean' => 'Penanda sokongan multimodal mestilah nilai boolean',
         ],
+        'support_function' => [
+            'boolean' => 'Penanda sokongan panggilan fungsi mestilah nilai boolean',
+        ],
     ],
 ];

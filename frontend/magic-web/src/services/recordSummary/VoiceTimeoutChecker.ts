@@ -86,7 +86,8 @@ class VoiceTimeoutChecker {
 
 		if (timeSinceLastResult >= this.timeoutMs) {
 			logger.warn(
-				`Voice recognition service timeout: no results received for ${this.timeoutMs / 1000
+				`Voice recognition service timeout: no results received for ${
+					this.timeoutMs / 1000
 				} seconds`,
 			)
 

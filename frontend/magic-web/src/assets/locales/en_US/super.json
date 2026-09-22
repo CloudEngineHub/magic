@@ -2681,6 +2681,7 @@
 		"waitForPreviousOperation": "Please wait for the previous operation to complete",
 		"website": {
 			"add": "Open website",
+			"clearSearch": "Clear search",
 			"closeLoadFallback": "Close loading notice",
 			"commonAddTitle": "Save common link",
 			"commonAlreadyExists": "This link is already saved",
@@ -2701,8 +2702,17 @@
 			"loadFallbackDescription": "If the page is not fully visible, the site may restrict iframe embedding or the network may be loading slowly.",
 			"loadFallbackTitle": "This page is taking longer to load",
 			"menuTitle": "Common websites",
+			"microApps": {
+				"empty": "No micro apps available",
+				"loading": "Loading micro apps...",
+				"loadingMore": "Loading more...",
+				"searchPlaceholder": "Search micro apps",
+				"title": "Micro apps"
+			},
+			"noResults": "No matching results",
 			"openCustom": "Open",
 			"openExternal": "Open externally",
+			"openUrl": "Open {{url}}",
 			"presets": {
 				"baiduImages": {
 					"description": "Image search and visual references",
@@ -2733,8 +2743,17 @@
 					"title": "ZCOOL"
 				}
 			},
+			"quickOpen": "Quick open",
+			"quickOpenDescription": "Search files, websites, or micro apps",
 			"refresh": "Refresh",
-			"removeCommon": "Remove common link"
+			"removeCommon": "Remove common link",
+			"searchAllPlaceholder": "Search files, websites, or micro apps, or enter a URL",
+			"sections": {
+				"all": "All",
+				"files": "Files",
+				"label": "Content categories",
+				"websites": "Websites"
+			}
 		}
 	},
 	"filenameValidator": {
@@ -3110,6 +3129,7 @@
 			},
 			"title": "Confirm Project File {{operation}}"
 		},
+		"specifiedAgentUnavailable": "This conversation cannot use the specified agent. Using the current one.",
 		"userInfoAuthorizationConfirm": {
 			"allow": "Allow",
 			"appConfigUnavailableContent": "This HTML micro-app's app.json is temporarily unavailable and is requesting access to: {{fields}} through the legacy flow.",
@@ -3445,8 +3465,26 @@
 	},
 	"microAppPage": {
 		"conversation": {
+			"collapse": "Collapse message panel",
+			"currentAppLink": "You are already viewing this micro app",
+			"defaultAppName": "Micro app",
+			"development": "Development project",
 			"emptyDescription": "Describe it and I’ll update this micro app.",
-			"emptyTitle": "What would you like to change?"
+			"emptyTitle": "What would you like to change?",
+			"expand": "Expand message panel",
+			"loadFailed": "Failed to load the project. Please try again.",
+			"mentionAppHintAction": "@ the current app first.",
+			"mentionAppHintHoverAction": "click to add this micro app",
+			"mentionAppHintPrefix": "To edit this micro app's data, ",
+			"switchToPreviewCancel": "Cancel",
+			"switchToPreviewCancelled": "Action cancelled",
+			"switchToPreviewConfirm": "Switch",
+			"switchToPreviewDescription": "Creating topics and sending messages require Preview mode. Switch now?",
+			"switchToPreviewTitle": "Switch to Preview mode",
+			"title": "Chat",
+			"usage": "Usage project",
+			"usageEmptyDescription": "Messages will appear here after you run the micro-app.",
+			"usageEmptyTitle": "No usage project yet"
 		},
 		"databasePanel": {
 			"accessPermissions": "Access permissions",
@@ -3654,6 +3692,7 @@
 			"totalRows": "{{total}} records",
 			"yes": "Yes"
 		},
+		"defaultProjectName": "Project",
 		"edit": {
 			"button": "Edit micro app details",
 			"captureCover": "Generate page cover",
@@ -3683,6 +3722,9 @@
 			"loadFailed": "Unable to load this micro app. Please try again later.",
 			"permissionDescription": "You may not have access to this project, or its sharing settings may have changed. Return to the list to view available micro apps.",
 			"permissionTitle": "You can’t access this micro app"
+		},
+		"fileManagerDialog": {
+			"title": "File manager"
 		},
 		"header": {
 			"backToApps": "Back to micro apps",
@@ -3725,6 +3767,11 @@
 			"files": "Files",
 			"preview": "Preview"
 		},
+		"mode": {
+			"ariaLabel": "Micro-app work mode",
+			"development": "Development mode",
+			"preview": "Preview mode"
+		},
 		"navigation": {
 			"ariaLabel": "Micro app editor",
 			"database": "Data",
@@ -3732,7 +3779,8 @@
 			"longMemory": "Long-term memory",
 			"preview": "Preview",
 			"scheduledTasks": "Scheduled tasks",
-			"shareManagement": "Share management"
+			"shareManagement": "Share management",
+			"skills": "Skills"
 		},
 		"preview": {
 			"buildingDescription": "The preview will appear here as soon as the page is ready.",
@@ -3778,6 +3826,9 @@
 			"coverTooLarge": "Cover image must be 10 MB or smaller",
 			"coverUpload": "Upload cover",
 			"coverUploadFailed": "Cover upload failed. Please try again.",
+			"defaultOpenFile": "Default entry",
+			"defaultOpenFileAuto": "Auto select",
+			"defaultOpenFileDescription": "Only HTML files in the project root are shown. Invalid entries fall back automatically.",
 			"description": "After you configure access, others can use this micro app through the published link.",
 			"displaySettings": "Advanced options",
 			"fullScreen": "Fullscreen",
@@ -3810,10 +3861,39 @@
 			"unpublishFailed": "Failed to unpublish. Please retry.",
 			"unpublishSuccess": "Micro app unpublished",
 			"update": "Save settings"
+		},
+		"skills": {
+			"addToConversation": "Add to conversation",
+			"cancel": "Cancel",
+			"contentEmpty": "This skill has no SKILL.md content",
+			"create": "Create skill",
+			"createDescription": "Describe what the skill should do. The request will be sent to the current conversation.",
+			"createFailed": "Could not send the creation request. Please try again.",
+			"createPrompt": "Create a skill in the current project for the following requirements:\n\n{{requirement}}\n\nConsider existing project features and check existing skills to avoid overwriting or duplicating them. Write .magic/skills/<skill-directory>/SKILL.md with name and description metadata, use cases, trigger conditions, inputs, steps, and expected outputs. Add supporting scripts or references only when needed. Explain what the skill does and how to use it when finished.",
+			"createSubmit": "Create",
+			"detailEmpty": "Select a skill to view its SKILL.md",
+			"edit": "Edit",
+			"empty": "No skills in this project",
+			"loadFailed": "Failed to load skills. Please try again.",
+			"loading": "Loading skills...",
+			"noDescription": "No description",
+			"requirement": "Skill requirements",
+			"requirementPlaceholder": "For example: find industry trends, suggest topics, and organize them in the content calendar.",
+			"save": "Save",
+			"saveFailed": "Failed to save skill. Please try again.",
+			"saveSuccess": "Skill saved",
+			"saving": "Saving...",
+			"subtitle": "Choose a skill to add it to the current conversation editor.",
+			"title": "Project skills",
+			"trigger": "Skills",
+			"use": "Use",
+			"usePrompt": "Use the {{skill}} skill",
+			"workspaceSubtitle": "Browse project skills and their SKILL.md files"
 		}
 	},
 	"microAppShare": {
 		"copyLink": "Copy link",
+		"crossOrganizationConversationUnsupported": "Micro app conversations across organizations are not supported yet",
 		"errorTitle": "Micro app unavailable",
 		"install": "Install to desktop",
 		"installConfirm": "Continue installation",
@@ -3827,6 +3907,9 @@
 		"installWebViewTitle": "Use your system browser",
 		"linkCopied": "Link copied",
 		"login": "Log in",
+		"loginRequiredConfirm": "Sign in",
+		"loginRequiredDescription": "This action requires an account. Would you like to sign in?",
+		"loginRequiredTitle": "Sign in to continue",
 		"noEntryDescription": "The published content does not include a runnable root HTML file.",
 		"noEntryTitle": "No entry HTML found",
 		"openInBrowser": "Open in system browser",
@@ -3852,6 +3935,7 @@
 		"user": "Signed-in user"
 	},
 	"microAppsPage": {
+		"accessTitle": "Open apps",
 		"actions": {
 			"collaboratorsFailed": "Failed to load collaborator information. Please retry.",
 			"collaboratorsNoPermission": "You do not have permission to manage collaborators for this app.",
@@ -3873,8 +3957,14 @@
 			"renaming": "Saving..."
 		},
 		"backToCreate": "Back to create a micro app",
+		"clearSearch": "Clear search",
+		"continueDevelopment": "Continue development",
+		"createApp": "Create app",
+		"createBlankApp": "Create blank app",
 		"createProject": "New Project",
 		"createProjectFailed": "Failed to create the project. Please retry.",
+		"creating": "Creating…",
+		"developmentTitle": "Continue building",
 		"draftBadge": "In progress",
 		"emptyDescription": "Describe your idea above to create your first micro app.",
 		"emptyTitle": "No micro app projects",
@@ -3899,16 +3989,27 @@
 		"heroTitleProduct": "Micro App",
 		"heroTitleProductHint": "",
 		"loadMore": "Load more",
+		"loadMoreFailed": "Could not load more. You can still use the apps shown.",
+		"loadedCount": "Showing {{count}} of {{total}} apps",
 		"noSearchResults": "No matching micro apps",
 		"noSearchResultsDescription": "Try a different keyword.",
+		"openApp": "Open app",
 		"openGallery": "View micro app list",
 		"publishedEmptyDescription": "Micro apps shared with you will appear here.",
 		"publishedEmptyTitle": "No accessible micro apps",
+		"recentEmptyDescription": "Apps you visit will appear here so you can easily return to them.",
+		"recentEmptyTitle": "No recent apps",
 		"refresh": "Refresh",
+		"resizePanels": "Resize development and access panels",
+		"retryLoadMore": "Retry loading",
+		"scopeAccessible": "Accessible",
 		"scopeAll": "All",
 		"scopeCollaborated": "Collaborated",
 		"scopeCreated": "Created by me",
+		"scopeRecent": "Recently visited",
+		"searchLoadedCount": "Showing {{count}} apps",
 		"searchPlaceholder": "Search micro apps",
+		"searchResultsTitle": "Search results",
 		"shareType": {
 			"organization": "Team visible",
 			"password": "Password access",
@@ -3921,7 +4022,8 @@
 		"tabPublished": "Published Apps",
 		"title": "Micro Apps",
 		"unnamedApp": "Untitled micro app",
-		"updatedAt": "Updated {{date}}"
+		"updatedAt": "Updated {{date}}",
+		"viewProject": "View project"
 	},
 	"mobile": {
 		"apps": {
@@ -4667,6 +4769,24 @@
 		"slideIdleDescription": "Slide {{index}} is waiting to load",
 		"slideLoadError": "Failed to load slide {{index}}",
 		"slideLoading": "Loading slide {{index}}...",
+		"speakerNotes": {
+			"empty": "No notes yet.",
+			"generate": "Write script",
+			"generatePrompt": "Generate speaker notes for this slide that I can use during the presentation.",
+			"generatePromptSuffix": "Use Markdown for the speaker notes (paragraphs, lists, and emphasis as needed). Write the result into the existing data-magic-slide-notes area using its current storage format. Do not change the slide’s visual content.",
+			"pageTitle": "Slide {{page}} · Notes",
+			"placeholder": "Click here to add what you want to say on this slide, or choose “Write script” to get a first draft from AI.",
+			"polish": "Polish",
+			"polishPrompt": "Polish this slide’s existing speaker notes for natural spoken delivery. Preserve their meaning, facts, and figures.",
+			"resize": "Resize notes panel",
+			"save": "Save",
+			"saveFailed": "Save failed. Try again.",
+			"saved": "Saved",
+			"saving": "Saving",
+			"shorten": "Shorten",
+			"shortenPrompt": "Shorten this slide’s existing speaker notes. Keep the main points and key figures, removing repetition and unnecessary wording.",
+			"title": "Notes"
+		},
 		"templateReplacement": {
 			"button": "Change Template",
 			"confirm": "Use Template",
@@ -5711,6 +5831,7 @@
 			"suffix": ""
 		},
 		"createdDate": "Created",
+		"currentShareMethodUnavailable": "The current sharing method has been disabled by the administrator. Select another method",
 		"days": "days",
 		"departmentOrMemberFileShare": "Specified members can access the file",
 		"departmentOrMemberFileShareDescription": "Specified members can access the file: {{fileName}}",
@@ -5799,6 +5920,7 @@
 		"newProjectDescription": "By default, the copied project will retain the same name as the original. If you need to distinguish between different projects more clearly, you can also customize the name as needed.",
 		"newProjectName": "New project name",
 		"newProjectWorkspaceDescription": "Please select the workspace to store the copied project, or select the workspace to store the copied project",
+		"noAvailableShareMethods": "The administrator has not enabled any sharing methods",
 		"noPermission": "No permission to view replay",
 		"noPermissionToView": "No permission to view",
 		"noPreviewSupport": "Preview not supported, please download the file",
@@ -5878,6 +6000,7 @@
 		"shareMessageWithPassword": "I've shared {{fileName}} via this link. Please click the link and enter the access password to view:",
 		"shareMessageWithoutPassword": "I've shared {{fileName}} via this link. Please click to view:",
 		"shareMethod": "Share Method",
+		"shareMethodRestrictedByAdmin": "The administrator has restricted the available sharing methods, so this cannot be changed",
 		"shareName": "Share Name",
 		"shareNamePlaceholder": "Enter share name (required)",
 		"shareNameRequired": "Please enter share name",
@@ -6129,7 +6252,11 @@
 		"releaseToCollapse": "Release to collapse",
 		"renameCancel": "Cancel (Esc)",
 		"renameSave": "Save (Enter)",
+		"resizeGuideDescription": "Drag an edge or the bottom-right corner to adjust the width and height. Your preferred size will be remembered.",
+		"resizeGuideDismiss": "Got it",
+		"resizeGuideTitle": "You can resize this window",
 		"resizeSidebar": "Resize sidebar",
+		"restoreRecommendedSize": "Restore recommended size",
 		"retry": "Retry",
 		"updatedTime": "Updated",
 		"workspacesLoadFailed": "Could not load workspaces"
@@ -7677,13 +7804,20 @@
 		"exportImage": "Download Image Format",
 		"exportImageJpeg": "JPEG Format",
 		"exportImagePng": "PNG Format",
+		"exportIssueCompletedWithIssuesTitle": "Export completed with page issues",
+		"exportIssueFailedTitle": "PPT export failed",
+		"exportIssuePage": "Page {{page}}",
+		"exportIssuePageUnknown": "Unknown page",
+		"exportIssuePromptItem": "{{page}}: {{message}}",
+		"exportIssueRepair": "Ask AI to fix",
+		"exportIssueRepairPrompt": "Please fix the following PPT export issues. Check the HTML containers, element IDs, script initialization timing, and resource references while preserving other working content:",
 		"exportPdf": "Download PDF Format",
 		"exportPdfFullPage": "Full Page",
 		"exportPdfPaginated": "Paginated",
 		"exportPdfPaginationTitle": "Choose PDF Export Mode",
 		"exportPdfRaster": "Download PDF Format (Screenshot)",
 		"exportPpt": "Download PPTX Format",
-		"exportPptx": "Download PPT Format (Editable)",
+		"exportPptx": "Download PPTX Format (Editable)",
 		"exportSource": "Download Original File",
 		"exportSuccess": "Export successful",
 		"exporting": "Exporting",

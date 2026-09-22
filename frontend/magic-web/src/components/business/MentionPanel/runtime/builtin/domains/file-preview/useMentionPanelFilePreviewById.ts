@@ -10,6 +10,7 @@ import {
 	type MentionFilePreviewSourceRow,
 } from "./preview-utils"
 import { getCachedMentionPreviewUrls, requestMentionPreviewUrls } from "./preview-url-cache"
+import { useFileApi } from "@/pages/superMagic/fileAccess/fileApi"
 
 const EMPTY_FILE_PREVIEW_BY_ID: Readonly<Record<string, string>> = {}
 const EMPTY_PREVIEW_ROWS: readonly MentionFilePreviewSourceRow[] = []
@@ -63,6 +64,9 @@ export function useMentionPanelFilePreviewById(
 	items: MentionItem[],
 ): Readonly<Record<string, string>> {
 	const hasProjectImageItems = useMemo(() => hasMentionPanelImagePreviewItems(items), [items])
+	// The mention panel renders on share pages too; its thumbnail requests must
+	// carry the ambient identity or the leaf guard returns an empty list.
+	const fileApi = useFileApi()
 
 	const workspaceRows = hasProjectImageItems
 		? (projectFilesStore.workspaceFilesList as readonly MentionFilePreviewSourceRow[])
@@ -121,6 +125,7 @@ export function useMentionPanelFilePreviewById(
 			fileUpdatedAtMap: batchPlan.fileUpdatedAtMap,
 			fileResourceVersionMap: batchPlan.fileResourceVersionMap,
 			fileVersions: batchPlan.fileVersions,
+			fileApi,
 		})
 		const cachedMap = cached.reduce(
 			(prev, current) => {
@@ -138,6 +143,7 @@ export function useMentionPanelFilePreviewById(
 			fileUpdatedAtMap: batchPlan.fileUpdatedAtMap,
 			fileResourceVersionMap: batchPlan.fileResourceVersionMap,
 			fileVersions: batchPlan.fileVersions,
+			fileApi,
 		})
 			.then((res) => {
 				if (cancelled) return
@@ -156,7 +162,7 @@ export function useMentionPanelFilePreviewById(
 		return () => {
 			cancelled = true
 		}
-	}, [batchPlan, hasProjectImageItems])
+	}, [batchPlan, fileApi, hasProjectImageItems])
 
 	return filePreviewById
 }

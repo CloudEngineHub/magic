@@ -217,21 +217,26 @@ describe("FileManagerItem rename", () => {
 		expect(root?.className).toContain("min-w-0")
 	})
 
-	it("sizes the grid rename editor from one line up to two", () => {
+	it("sizes the grid rename editor from one line up to two without scrolling", () => {
 		render(
 			<FileManagerItem
 				{...itemProps}
 				view="grid"
-				rename={createRenameMock({ renameValue: "mock-folder" })}
+				rename={createRenameMock({
+					renameValue: "mock-very-long-filename-that-wraps-to-two-lines.docx",
+				})}
 				menuItems={[{ key: "rename", label: "Rename" }]}
 			/>,
 		)
 
-		const input = screen.getByTestId("file-manager-rename-input")
+		const input = screen.getByTestId("file-manager-rename-input") as HTMLTextAreaElement
 		expect(input.tagName).toBe("TEXTAREA")
 		expect(input.getAttribute("rows")).toBe("1")
-		expect((input as HTMLTextAreaElement).style.minHeight).toBe("19px")
-		expect((input as HTMLTextAreaElement).style.maxHeight).toBe("36px")
+		// 17px line + 1px padding + 1px border on each side, so two lines fit inside border-box.
+		expect(input.style.minHeight).toBe("21px")
+		expect(input.style.maxHeight).toBe("38px")
+		expect(input.style.overflowY).toBe("hidden")
+		expect(input.style.overflowX).toBe("hidden")
 	})
 
 	it("does not cancel when blur moves focus to the row trigger ancestor", () => {

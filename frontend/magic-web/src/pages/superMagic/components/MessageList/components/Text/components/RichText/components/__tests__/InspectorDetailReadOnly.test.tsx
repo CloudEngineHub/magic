@@ -73,8 +73,11 @@ describe("InspectorDetailReadOnly", () => {
 			"relative",
 			"top-[1px]",
 			"!align-baseline",
-			"max-w-[min(220px,100%)]",
+			// 宽度上限扣掉标签自身的外边距：折叠预览在窄容器里按 padding box 裁剪，
+			// 只写 100% 会让行内盒连边距溢出 4px，右侧边框被切掉。
+			"max-w-[min(220px,calc(100%_-_8px))]",
 		)
+		expect(wrapper).not.toHaveClass("max-w-[min(220px,100%)]")
 		expect(button).toHaveClass("min-w-0")
 		expect(wrapper).not.toHaveClass("border", "border-border/60")
 		expect(button).toHaveClass(

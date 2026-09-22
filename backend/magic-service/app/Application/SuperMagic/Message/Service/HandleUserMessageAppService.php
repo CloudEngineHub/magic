@@ -16,6 +16,8 @@ use App\Application\SuperMagic\Message\DTO\TaskMessageDTO;
 use App\Application\SuperMagic\Message\DTO\UserMessageDTO;
 use App\Application\SuperMagic\Task\DTO\InterruptClientNotification;
 use App\Application\SuperMagic\Task\Service\AgentAppService;
+use App\Application\SuperMagic\Task\Service\ReferencedProjectMountPlanner;
+use App\Application\SuperMagic\Task\Service\ReferencedProjectMountService;
 use App\Application\SuperMagic\Task\Service\TaskContextMentionsResolver;
 use App\Application\SuperMagic\Task\Service\TopicTaskAppService;
 use App\Application\SuperMagic\Topic\Service\TopicAgentConfigResolver;
@@ -54,6 +56,7 @@ use App\Infrastructure\Core\Exception\BusinessException;
 use App\Infrastructure\Core\Exception\EventExceptionBuilder;
 use App\Infrastructure\Core\Exception\ExceptionBuilder;
 use App\Infrastructure\SuperMagic\ExternalAPI\SandboxOS\Exception\SandboxOperationException;
+use App\Infrastructure\SuperMagic\ExternalAPI\SandboxOS\Exception\UserToolCallNotFoundException;
 use App\Infrastructure\SuperMagic\ExternalAPI\SandboxOS\Gateway\Constant\SandboxStatus;
 use App\Infrastructure\SuperMagic\Utils\TaskTerminationUtil;
 use App\Infrastructure\Util\IdGenerator\IdGenerator;
@@ -65,7 +68,6 @@ use Hyperf\Odin\Message\Role;
 use Hyperf\Redis\Redis;
 use Hyperf\Server\Exception\ServerException;
 use Psr\Log\LoggerInterface;
-use RuntimeException;
 use Throwable;
 
 use function event_dispatch;
@@ -93,6 +95,8 @@ class HandleUserMessageAppService extends AbstractAppService
         private readonly TaskFileDomainService $taskFileDomainService,
         private readonly ProjectMcpConfigService $projectMcpConfigService,
         private readonly SuperMagicAgentAccessAppService $superMagicAgentAccessAppService,
+        private readonly ReferencedProjectMountPlanner $referencedProjectMountPlanner,
+        private readonly ReferencedProjectMountService $referencedProjectMountService,
         private readonly Redis $redis,
         LoggerFactory $loggerFactory
     ) {
@@ -251,6 +255,8 @@ class HandleUserMessageAppService extends AbstractAppService
         // 检查项目是否有权限
         $projectEntity = $this->getAccessibleProject($topicEntity->getProjectId(), $dataIsolation->getCurrentUserId(), $dataIsolation->getCurrentOrganizationCode());
 
+        // 发起沙箱前校验项目空间与用户空间的文件数量是否达到上限
+
         // Check if this is the first task for the topic
         // If topic source is COPY, it's not the first task
         $isFirstTask = (empty($topicEntity->getCurrentTaskId()) || empty($topicEntity->getSandboxId()))
@@ -381,13 +387,25 @@ class HandleUserMessageAppService extends AbstractAppService
         UserMessageDTO $userMessageDTO,
         UserToolCallMessage $userToolCallMessage,
     ): void {
-        $this->topicTaskAppService->handleUserToolCallReply(
-            dataIsolation: $dataIsolation,
-            chatTopicId: $userMessageDTO->getChatTopicId(),
-            name: $userToolCallMessage->getName(),
-            toolCallId: $userToolCallMessage->getToolCallId(),
-            detail: $userToolCallMessage->getDetail() ?? [],
-        );
+        try {
+            $this->topicTaskAppService->handleUserToolCallReply(
+                dataIsolation: $dataIsolation,
+                chatTopicId: $userMessageDTO->getChatTopicId(),
+                name: $userToolCallMessage->getName(),
+                toolCallId: $userToolCallMessage->getToolCallId(),
+                detail: $userToolCallMessage->getDetail() ?? [],
+            );
+        } catch (UserToolCallNotFoundException $e) {
+            // 问题已被超时消费或重复提交：任务本身仍由沙箱侧超时恢复流程正常推进，
+            // 只提醒用户回答未送达，不作为任务错误处理。
+            $this->logger->warning('User tool call question expired or already consumed, answer dropped', [
+                'chat_topic_id' => $userMessageDTO->getChatTopicId(),
+                'tool_call_id' => $userToolCallMessage->getToolCallId(),
+                'name' => $userToolCallMessage->getName(),
+                'reason' => $e->getMessage(),
+            ]);
+            EventExceptionBuilder::throw(EventErrorCode::EVENT_USER_TOOL_CALL_EXPIRED, trans('super_magic.task.question_expired'));
+        }
     }
 
     /**
@@ -547,8 +565,11 @@ class HandleUserMessageAppService extends AbstractAppService
         $updateSandboxIds = array_diff($sandboxIds, $runningSandboxIds);
         // Update topic status
         $this->topicDomainService->updateTopicStatusBySandboxIds($updateSandboxIds, TaskStatus::ERROR);
-        // Update task status
-        $this->taskDomainService->updateTaskStatusBySandboxIds($updateSandboxIds, TaskStatus::ERROR, 'Synchronize sandbox status');
+        // Update task status (via topic_id: task table is indexed by topic_id, not sandbox_id)
+        $updateTopicIds = array_values(array_intersect_key($sandboxIdToTopicId, array_flip($updateSandboxIds)));
+        if ($updateTopicIds !== []) {
+            $this->taskDomainService->updateTaskStatusByTopicIds($updateTopicIds, TaskStatus::ERROR, 'Synchronize sandbox status');
+        }
 
         // Collect running topic IDs
         $runningTopicIds = [];
@@ -630,17 +651,14 @@ class HandleUserMessageAppService extends AbstractAppService
 
         // 挂载引用项目（全有或全无——任一失败则中止）
         $mentions = Json::decode($taskContext->getTask()->getMentions() ?: '[]') ?: [];
-        $crossProjectIds = $this->extractCrossProjectIds($mentions, $projectEntity->getId());
-        if (! empty($crossProjectIds)) {
-            $this->mountReferencedProjectsWithAccessControl(
-                $dataIsolation,
-                $sandboxId,
-                $crossProjectIds
-            );
-        }
-
-        // 发送消息到 agent
-        $this->agentAppService->sendChatMessage($dataIsolation, $taskContext);
+        $crossProjectMounts = $this->referencedProjectMountPlanner->plan($mentions, $projectEntity->getId());
+        $this->referencedProjectMountService->prepareAndSend(
+            $dataIsolation,
+            $sandboxId,
+            $crossProjectMounts,
+            fn (): bool => TaskTerminationUtil::isTaskTerminated($this->redis, $this->logger, $taskId),
+            fn () => $this->agentAppService->sendChatMessage($dataIsolation, $taskContext),
+        );
 
         return $sandboxId;
     }
@@ -929,81 +947,5 @@ class HandleUserMessageAppService extends AbstractAppService
         }
 
         return '';
-    }
-
-    /**
-     * Extract unique cross-project IDs from mentions that differ from the
-     * current project.
-     *
-     * @return string[]
-     */
-    private function extractCrossProjectIds(array $mentions, int $currentProjectId): array
-    {
-        $ids = [];
-        foreach ($mentions as $mention) {
-            if (! is_array($mention) || ! in_array($mention['type'] ?? '', ['project', 'project_file', 'project_directory'], true)) {
-                continue;
-            }
-            $pid = $mention['project_id'] ?? null;
-            if ((! is_string($pid) && ! is_int($pid)) || ! preg_match('/^[1-9][0-9]*$/D', (string) $pid)) {
-                continue;
-            }
-            $pidStr = (string) $pid;
-            if ((string) (int) $pidStr === $pidStr && $pidStr !== (string) $currentProjectId) {
-                $ids[$pidStr] = true;
-            }
-        }
-        return array_map('strval', array_keys($ids));
-    }
-
-    /**
-     * Mount referenced projects with access control — all-or-nothing.
-     *
-     * Phase 1: validate whether the current user can access ALL target projects.
-     * Phase 2: delegate to Domain layer to mount every validated project.
-     *
-     * A single denied access or mount failure aborts the entire operation with
-     * a RuntimeException, which is caught by handleChatMessage() to notify the
-     * user and prevent the message from reaching the agent.
-     *
-     * @param string[] $projectIds
-     * @throws RuntimeException
-     */
-    private function mountReferencedProjectsWithAccessControl(
-        DataIsolation $dataIsolation,
-        string $sandboxId,
-        array $projectIds
-    ): void {
-        // Phase 1: validate access for all target projects
-        $denied = [];
-        foreach ($projectIds as $projectId) {
-            try {
-                $this->getAccessibleProject(
-                    (int) $projectId,
-                    $dataIsolation->getCurrentUserId(),
-                    $dataIsolation->getCurrentOrganizationCode()
-                );
-            } catch (Throwable) {
-                $denied[] = $projectId;
-            }
-        }
-        if (! empty($denied)) {
-            throw new RuntimeException(sprintf(
-                'Cannot mount referenced projects [%s]: access denied',
-                implode(', ', $denied)
-            ));
-        }
-
-        // Phase 2: mount validated projects
-        $projectRootFileIds = [];
-        foreach ($projectIds as $projectId) {
-            $projectRootFileIds[(int) $projectId] = (string) $this->taskFileDomainService->getProjectRootFileId((int) $projectId);
-        }
-        $this->agentDomainService->mountReferencedProjects(
-            $dataIsolation,
-            $sandboxId,
-            $projectIds,
-            $projectRootFileIds
-        );
     }
 }

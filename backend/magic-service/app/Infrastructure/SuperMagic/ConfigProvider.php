@@ -76,6 +76,7 @@ use App\Domain\SuperMagic\Message\Repository\Persistence\TaskMessageRepository;
 use App\Domain\SuperMagic\Message\Repository\Persistence\TokenUsageRecordRepository;
 use App\Domain\SuperMagic\Message\Service\MessageScheduleDomainService;
 use App\Domain\SuperMagic\Project\Repository\Facade\MicroAppRepositoryInterface;
+use App\Domain\SuperMagic\Project\Repository\Facade\MicroAppVisitRepositoryInterface;
 use App\Domain\SuperMagic\Project\Repository\Facade\ProjectForkRepositoryInterface;
 use App\Domain\SuperMagic\Project\Repository\Facade\ProjectMemberRepositoryInterface;
 use App\Domain\SuperMagic\Project\Repository\Facade\ProjectMemberSettingRepositoryInterface;
@@ -83,6 +84,7 @@ use App\Domain\SuperMagic\Project\Repository\Facade\ProjectOperationLogRepositor
 use App\Domain\SuperMagic\Project\Repository\Facade\ProjectRepositoryInterface;
 use App\Domain\SuperMagic\Project\Repository\Facade\TransferLogRepositoryInterface;
 use App\Domain\SuperMagic\Project\Repository\Persistence\MicroAppRepository;
+use App\Domain\SuperMagic\Project\Repository\Persistence\MicroAppVisitRepository;
 use App\Domain\SuperMagic\Project\Repository\Persistence\ProjectForkRepository;
 use App\Domain\SuperMagic\Project\Repository\Persistence\ProjectMemberRepository;
 use App\Domain\SuperMagic\Project\Repository\Persistence\ProjectMemberSettingRepository;
@@ -209,6 +211,7 @@ class ConfigProvider
                 AudioMarkerRepositoryInterface::class => AudioMarkerRepository::class,
                 AudioProjectRepositoryInterface::class => AudioProjectRepository::class,
                 MicroAppRepositoryInterface::class => MicroAppRepository::class,
+                MicroAppVisitRepositoryInterface::class => MicroAppVisitRepository::class,
 
                 // Skill 相关 Repository
                 SkillRepositoryInterface::class => SkillRepository::class,

@@ -366,12 +366,12 @@ function AudioRecordingsDesktop({ scrollViewportRef }: AudioRecordingsDesktopPro
 			className="mt-5 flex w-full min-w-0 flex-col gap-5 sm:gap-6"
 			data-testid="audio-recordings-desktop"
 		>
-			<div className="flex min-w-0 flex-wrap items-start justify-between gap-3">
-				<div className="flex min-w-0 flex-col gap-2">
-					<h1 className="break-words bg-gradient-to-br from-foreground via-foreground/90 to-muted-foreground bg-clip-text text-2xl font-bold leading-tight text-transparent sm:text-3xl lg:text-4xl">
+			<div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+				<div className="flex min-w-0 flex-1 flex-col gap-2">
+					<h1 className="h-8 break-words bg-gradient-to-br from-foreground via-foreground/90 to-muted-foreground bg-clip-text text-lg font-semibold leading-8 text-transparent sm:h-9 sm:text-xl sm:leading-9 lg:h-10 lg:text-2xl lg:leading-10">
 						{t("pageTitle")}
 					</h1>
-					<p className="hidden max-w-2xl break-words text-sm text-muted-foreground">
+					<p className="max-w-2xl break-words text-sm text-muted-foreground">
 						{t("subtitle")}
 					</p>
 				</div>

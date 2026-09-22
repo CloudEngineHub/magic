@@ -81,6 +81,20 @@ describe("EditorBody code source content", () => {
 		)
 	})
 
+	it("keeps the loading surface attached to the flex content region", () => {
+		render(
+			<EditorBody
+				isLoading
+				viewMode="desktop"
+				content="# Loading document"
+				className="min-h-0 flex-1"
+			/>,
+		)
+
+		expect(screen.queryByTestId("simple-editor")).not.toBeInTheDocument()
+		expect(screen.getByTestId("editor-body-loading")).toHaveClass("min-h-0", "flex-1")
+	})
+
 	it("keeps small markdown documents in SimpleEditor in read-only mode", () => {
 		render(<EditorBody isLoading={false} viewMode="desktop" content="# Small document" />)
 

@@ -49,4 +49,9 @@ return [
 
     'share_project_only_for_file_collection' => 'Share project only for file collection',
     'target_ids_required' => 'Value is required',
+    'share_method_team' => 'Organization internal access',
+    'share_method_public' => 'Public access',
+    'share_method_password' => 'Password protected',
+    'share_method_not_allowed' => 'The current sharing method ":shareType" has been disabled by the administrator',
+    'share_owner_permission_revoked' => 'This share link is no longer available because the owner no longer has permission to use this share method.',
 ];

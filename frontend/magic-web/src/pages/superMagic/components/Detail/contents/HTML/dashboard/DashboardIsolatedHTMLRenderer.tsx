@@ -13,6 +13,7 @@ import {
 	type DashboardCard,
 	type DataJsFileInfo,
 } from "./utils"
+import { useFileApi } from "@/pages/superMagic/fileAccess/fileApi"
 import { decodeHTMLEntities } from "../utils/full-content"
 import { getHtmlSandboxRuntimeUrl } from "../utils/html-sandbox-runtime-url"
 import {
@@ -44,7 +45,6 @@ interface IsolatedHTMLRendererProps {
 	currentFileId?: string
 	currentFileName?: string
 	projectId?: string
-	topicId?: string
 }
 
 const useStyles = createStyles(({ css }) => ({
@@ -80,9 +80,9 @@ function IsolatedHTMLRenderer({
 	currentFileId,
 	currentFileName,
 	projectId,
-	topicId,
 }: IsolatedHTMLRendererProps) {
 	const { styles, cx } = useStyles()
+	const fileApi = useFileApi()
 	const externalRenderSiteUrl = useMemo(() => env("MAGIC_HTML_SANDBOX_URL"), [])
 	const htmlSandboxRuntimeUrl = useMemo(() => getHtmlSandboxRuntimeUrl(), [])
 	const htmlSandboxShellUrl = useMemo(
@@ -147,7 +147,6 @@ function IsolatedHTMLRenderer({
 		let cancelled = false
 		const namespace = buildHtmlVirtualStorageNamespace({
 			projectId,
-			topicId,
 			fileId: currentFileId,
 		})
 
@@ -162,7 +161,7 @@ function IsolatedHTMLRenderer({
 		return () => {
 			cancelled = true
 		}
-	}, [currentFileId, projectId, topicId])
+	}, [currentFileId, projectId])
 
 	useEffect(() => {
 		if (!virtualStorageContext) return
@@ -191,6 +190,7 @@ function IsolatedHTMLRenderer({
 				attachmentList,
 				currentFileId,
 				currentFileName,
+				fileApi,
 			})
 
 			if (fileInfo) {
@@ -241,7 +241,7 @@ function IsolatedHTMLRenderer({
 	useEffect(() => {
 		void loadDataJsFile()
 		// eslint-disable-next-line react-hooks/exhaustive-deps
-	}, [attachments, attachmentList, currentFileId, currentFileName])
+	}, [attachments, attachmentList, currentFileId, currentFileName, fileApi])
 
 	// 初始化 iframe 入口：同源与跨域都先加载 sandbox shell，再通过 setContent 注入业务 HTML。
 	useEffect(() => {

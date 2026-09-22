@@ -264,13 +264,24 @@ export const FileManagerItem = memo(function FileManagerItem({
 const GRID_NAME_LINE_HEIGHT = 17
 const GRID_NAME_MAX_LINES = 2
 const GRID_RENAME_PADDING_Y = 1
-const GRID_RENAME_MIN_HEIGHT = GRID_NAME_LINE_HEIGHT + GRID_RENAME_PADDING_Y * 2
+/** 1px border on each side. Tailwind preflight uses border-box, so height must include it. */
+const GRID_RENAME_BORDER_Y = 1
+const GRID_RENAME_MIN_HEIGHT =
+	GRID_NAME_LINE_HEIGHT + GRID_RENAME_PADDING_Y * 2 + GRID_RENAME_BORDER_Y * 2
 const GRID_RENAME_MAX_HEIGHT =
-	GRID_NAME_LINE_HEIGHT * GRID_NAME_MAX_LINES + GRID_RENAME_PADDING_Y * 2
+	GRID_NAME_LINE_HEIGHT * GRID_NAME_MAX_LINES +
+	GRID_RENAME_PADDING_Y * 2 +
+	GRID_RENAME_BORDER_Y * 2
 
-/** Grow with wrapped text from one line up to the filename's two-line cap. */
+/**
+ * Grow with wrapped text from one line up to the filename's two-line cap.
+ * scrollHeight includes padding but not border; add borders so two 17px lines actually fit.
+ */
 function clampGridRenameHeight(scrollHeight: number) {
-	return Math.min(GRID_RENAME_MAX_HEIGHT, Math.max(GRID_RENAME_MIN_HEIGHT, scrollHeight))
+	return Math.min(
+		GRID_RENAME_MAX_HEIGHT,
+		Math.max(GRID_RENAME_MIN_HEIGHT, scrollHeight + GRID_RENAME_BORDER_Y * 2),
+	)
 }
 
 /** Deferred cancel timers keyed by the shared rename input ref. */
@@ -390,7 +401,7 @@ function FileManagerNameInput({
 			aria-label={t("userSpace.rename")}
 			readOnly={rename.renamePending}
 			rows={1}
-			className="w-full min-w-0 max-w-full rounded-[5px] border border-input bg-transparent outline-none"
+			className="box-border w-full min-w-0 max-w-full rounded-[5px] border border-input bg-transparent outline-none"
 			style={{
 				cursor: "text",
 				textAlign: "center",
@@ -406,8 +417,9 @@ function FileManagerNameInput({
 				minWidth: 0,
 				maxWidth: "100%",
 				resize: "none",
+				// Clip overflow instead of scrolling: a scrollbar steals width and reflows a 2-line name.
 				overflowX: "hidden",
-				overflowY: gridHeight >= GRID_RENAME_MAX_HEIGHT ? "auto" : "hidden",
+				overflowY: "hidden",
 				overflowWrap: "anywhere",
 				whiteSpace: "pre-wrap",
 			}}

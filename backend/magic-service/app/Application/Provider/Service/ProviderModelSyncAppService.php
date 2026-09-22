@@ -372,6 +372,7 @@ class ProviderModelSyncAppService
             'max_tokens' => $modelData['info']['options']['max_tokens'] ?? 200000,
             'max_output_tokens' => $modelData['info']['options']['max_output_tokens'] ?? 8192,
             'support_deep_think' => false,
+            'chat_api' => $modelData['info']['options']['chat_api'] ?? null,
         ]);
 
         // 设置category

@@ -36,6 +36,7 @@ class PathManager(BasePathManager):
             memory_after_run/ ← 运行后记忆整理临时上下文
             llm_requests/   ← LLM 调试日志
             slide-template-maker/ ← 幻灯片模板作者中间文件
+            micro-app/      ← 累积 @micro_app MagicBase 范围
         app/i18n/            ← 语言翻译（源码只读目录）
         .checkpoints/        ← 检查点（getter 内按需创建）
         .workspace/          ← MagicFS 云端持久工作区（父类管理）
@@ -682,6 +683,13 @@ class PathManager(BasePathManager):
         """获取通用沙箱任务状态目录（project_root/.runtime/sandbox_tasks，按需创建）。"""
         cls._ensure_app_initialization()
         return cls.get_runtime_dir() / cls._runtime_sandbox_tasks_dir_name
+
+    @classmethod
+    def get_im_uploads_dir(cls, channel: str) -> Path:
+        """统一入站附件目录，渠道值来自内部注册标识。"""
+        if channel not in {"wechat", "wecom", "dingtalk", "lark"}:
+            raise ValueError(f"Unknown IM channel: {channel}")
+        return cls.get_workspace_dir() / "uploads" / "im-channels" / channel
 
     @classmethod
     def get_wechat_im_uploads_dir(cls) -> Path:

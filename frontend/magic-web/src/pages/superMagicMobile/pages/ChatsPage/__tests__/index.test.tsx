@@ -123,7 +123,7 @@ vi.mock("../hooks/useChatConversationList", () => ({
 				},
 			},
 		],
-		isLoading: false,
+		isInitialChatListLoading: false,
 		searchValue: "",
 		setSearchValue: vi.fn(),
 		debouncedSearchValue: "",

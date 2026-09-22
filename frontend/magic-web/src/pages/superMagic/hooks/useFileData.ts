@@ -1,4 +1,7 @@
-import { downloadFileContent, getTemporaryDownloadUrl } from "@/pages/superMagic/utils/api"
+import { useFileAccess } from "@/pages/superMagic/fileAccess/FileAccessProvider"
+import { useFileApi } from "@/pages/superMagic/fileAccess/fileApi"
+import { isShareFileAccess } from "@/pages/superMagic/fileAccess/fileAccessContext"
+import { downloadFileContent } from "@/pages/superMagic/utils/api"
 import { useEffect, useMemo, useRef, useState } from "react"
 import { useDebounceEffect, useMemoizedFn } from "ahooks"
 import { FileHistoryVersion, Topic } from "@/pages/superMagic/pages/Workspace/types"
@@ -25,6 +28,7 @@ export const useFileData = ({
 	isFromNode = false,
 	content,
 	disabledUrlCache = false,
+	isSharePreview = false,
 	enabled = true,
 }: {
 	file_id: string
@@ -35,11 +39,25 @@ export const useFileData = ({
 	isFromNode?: boolean
 	content?: string
 	disabledUrlCache?: boolean
+	/** 分享预览不拉项目文件版本，走分享下载 */
+	isSharePreview?: boolean
 	/** 外部编辑会话供数时关闭读取、历史版本与事件订阅。 */
 	enabled?: boolean
 }) => {
 	const { t } = useTranslation("super")
 	const { isShareRoute } = useShareRoute()
+	const fileAccess = useFileAccess()
+	// Bind the ambient share/session identity once at this boundary; the leaf
+	// download-url calls below must never run without it on share previews.
+	const fileApi = useFileApi()
+	// Load strategy follows access kind, not URL. Published runtime uses
+	// session access on /micro-app even though the route is a share page.
+	const isShareFilePreview = isShareFileAccess(fileAccess)
+	const waitingForShareAccess = (isShareRoute || isSharePreview) && !fileAccess
+	const shareAccessKey =
+		fileAccess?.kind === "share"
+			? `${fileAccess.token}:${fileAccess.projectId}:${fileAccess.topicId ?? ""}`
+			: ""
 
 	/** 文件 URL 缓存 - 存储文件 ID 对应的 URL 和更新时间 */
 	const fileUrlCacheRef = useRef<Record<string, FileUrlCache>>({})
@@ -56,6 +74,8 @@ export const useFileData = ({
 	const [loading, setLoading] = useState(enabled && isNil(content))
 	/** 是否是删除的文件 */
 	const [isDeleted, setIsDeleted] = useState(false)
+	/** Keep preview mounted across share-token refresh for the same file. */
+	const hasLoadedShareContentRef = useRef(false)
 
 	/** 智能更新文件 URL - 只有当更新时间或版本变化时才更新 */
 	const updateFileUrlIfNeeded = useMemoizedFn(
@@ -91,11 +111,13 @@ export const useFileData = ({
 	const changeFileVersion = useMemoizedFn(
 		(file_version: number | undefined, fileVersionsList?: FileHistoryVersion[]) => {
 			if (!enabled || !file_id || (file_version && file_version === fileVersion)) return
+			if (waitingForShareAccess) return
 			// 获取文件下载地址
-			getTemporaryDownloadUrl({
-				file_ids: [file_id],
-				file_versions: file_version ? { [file_id]: file_version } : undefined,
-			})
+			fileApi
+				.getTemporaryDownloadUrl({
+					file_ids: [file_id],
+					file_versions: file_version ? { [file_id]: file_version } : undefined,
+				})
 				.then((res: any) => {
 					if (res[0]?.url) {
 						setIsDeleted(false)
@@ -209,37 +231,73 @@ export const useFileData = ({
 
 	useDebounceEffect(
 		() => {
-			if (!enabled) return
+			if (!enabled || waitingForShareAccess) return
 			// 如果正在编辑但文件数据还没有加载，需要先加载文件
-			if (isEditing && !fileData && file_id && activeFileId === file_id && !isShareRoute) {
+			if (
+				isEditing &&
+				!fileData &&
+				file_id &&
+				activeFileId === file_id &&
+				!isShareFilePreview
+			) {
 				getFileVersion(file_id)
 				return
 			}
 			// 非编辑模式下的正常逻辑
-			if (!file_id || isEditing || !activeFileId || activeFileId !== file_id || isShareRoute)
+			if (
+				!file_id ||
+				isEditing ||
+				!activeFileId ||
+				activeFileId !== file_id ||
+				isShareFilePreview
+			)
 				return
 			// 是否正在查看历史版本
 			const isViewingHistoryVersion = fileVersion !== undefined
 			// 如果用户正在查看历史版本，只更新版本列表，不自动切换到最新版本
 			getFileVersion(file_id, !isViewingHistoryVersion)
 		},
-		[enabled, activeFileId, updatedAt, file_id, isEditing, isShareRoute, fileData],
+		[
+			enabled,
+			activeFileId,
+			updatedAt,
+			file_id,
+			isEditing,
+			isShareFilePreview,
+			fileData,
+			waitingForShareAccess,
+		],
 		{
 			wait: 100,
 		},
 	)
 
+	useEffect(() => {
+		hasLoadedShareContentRef.current = false
+	}, [file_id])
+
 	/** 针对 分享/工具预览/内容审查 等场景，单独获取文件的最新下载地址 */
 	useEffect(() => {
 		if (!enabled || !file_id) return
-		if (isShareRoute || !activeFileId || activeFileId !== file_id) {
+		if (waitingForShareAccess) {
 			setLoading(true)
-			setFileData(null)
+			return
+		}
+		if (isShareFilePreview || !activeFileId || activeFileId !== file_id) {
+			// Soft refresh on share-token rotation: keep iframe mounted.
+			const keepExistingPreview = hasLoadedShareContentRef.current
+			if (!keepExistingPreview) {
+				setLoading(true)
+				setFileData(null)
+			}
+			let cancelled = false
 			// 获取文件下载地址
-			getTemporaryDownloadUrl({
-				file_ids: [file_id],
-			})
+			fileApi
+				.getTemporaryDownloadUrl({
+					file_ids: [file_id],
+				})
 				.then((res: any) => {
+					if (cancelled) return
 					// 使用智能更新函数
 					const urlUpdated = updateFileUrlIfNeeded(
 						res[0]?.url,
@@ -252,23 +310,39 @@ export const useFileData = ({
 						setIsDeleted(false)
 						// 只有 URL 更新时才重新下载文件内容
 						if (urlUpdated) {
-							downloadFileContent(res[0]?.url, { responseType }).then((data: any) => {
-								setLoading(false)
-								setFileData(data)
-							})
-						} else {
-							setLoading(false)
+							return downloadFileContent(res[0]?.url, { responseType }).then(
+								(data: any) => {
+									if (cancelled) return
+									hasLoadedShareContentRef.current = true
+									setLoading(false)
+									setFileData(data)
+								},
+							)
 						}
+						hasLoadedShareContentRef.current = true
+						setLoading(false)
 					} else {
 						setLoading(false)
 						setIsDeleted(true)
 					}
 				})
 				.catch(() => {
+					if (cancelled) return
 					setLoading(false)
 				})
+			return () => {
+				cancelled = true
+			}
 		}
-	}, [enabled, file_id])
+	}, [
+		activeFileId,
+		enabled,
+		fileApi,
+		file_id,
+		isShareFilePreview,
+		shareAccessKey,
+		waitingForShareAccess,
+	])
 
 	useEffect(() => {
 		if (!enabled) return
@@ -291,14 +365,14 @@ export const useFileData = ({
 	useEffect(() => {
 		if (!enabled) return
 		const unregister = superMagicStore.subscribe("topic.execution.ended", () => {
-			if (activeFileId !== file_id) return
+			if (waitingForShareAccess || isShareFilePreview || activeFileId !== file_id) return
 			getFileVersion(file_id)
 		})
 
 		return () => {
 			unregister()
 		}
-	}, [enabled, activeFileId])
+	}, [enabled, activeFileId, file_id, isShareFilePreview, waitingForShareAccess])
 
 	return {
 		loading,

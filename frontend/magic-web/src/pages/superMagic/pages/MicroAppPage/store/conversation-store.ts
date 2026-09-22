@@ -14,6 +14,10 @@ interface ConversationHydration {
 	selectedTopicId?: string | null
 }
 
+interface LoadProjectContextOptions {
+	isCurrent?: () => boolean
+}
+
 export class AppConversationStore {
 	selectedProject: ProjectListItem | null = null
 	topicStore: TopicStore = new TopicStore()
@@ -38,8 +42,12 @@ export class AppConversationStore {
 		this.selectedProject = project
 	}
 
-	async loadProjectContext(projectId: string): Promise<void> {
+	async loadProjectContext(
+		projectId: string,
+		{ isCurrent = () => true }: LoadProjectContextOptions = {},
+	): Promise<void> {
 		const project = await SuperMagicApi.getProjectDetail({ id: projectId })
+		if (!isCurrent()) return
 		if (!project) {
 			this.reset()
 			return
@@ -50,6 +58,8 @@ export class AppConversationStore {
 			page: 1,
 			page_size: 999,
 		})
+		// Hydration mutates the shared conversation, so validate immediately before committing it.
+		if (!isCurrent()) return
 
 		this.hydrate({
 			project,
@@ -58,18 +68,19 @@ export class AppConversationStore {
 		})
 
 		const pendingRename = takeProjectRenameTask(projectId)
-		if (pendingRename) {
-			void this.refreshProjectAfterRename(projectId, pendingRename)
+		if (pendingRename && isCurrent()) {
+			void this.refreshProjectAfterRename(projectId, pendingRename, isCurrent)
 		}
 	}
 
 	private async refreshProjectAfterRename(
 		projectId: string,
 		pendingRename: Promise<MessageSendRenameResult | null>,
+		isCurrent: () => boolean = () => true,
 	) {
 		try {
 			const renameResult = await pendingRename
-			if (!renameResult || this.selectedProject?.id !== projectId) return
+			if (!isCurrent() || !renameResult || this.selectedProject?.id !== projectId) return
 
 			this.topicStore.updateTopicName(renameResult.topicId, renameResult.topicName)
 
@@ -77,7 +88,7 @@ export class AppConversationStore {
 				{ id: projectId },
 				{ enableErrorMessagePrompt: false },
 			)
-			if (!refreshedProject || this.selectedProject?.id !== projectId) return
+			if (!isCurrent() || !refreshedProject || this.selectedProject?.id !== projectId) return
 
 			this.setSelectedProject(refreshedProject)
 		} catch (error) {

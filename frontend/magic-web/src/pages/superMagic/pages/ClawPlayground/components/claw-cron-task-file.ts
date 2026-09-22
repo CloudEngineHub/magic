@@ -537,10 +537,8 @@ export function parseClawCronTaskMarkdown(params: {
 }
 
 async function getProjectAttachments(projectId: string) {
-	const temporaryToken = (window as Window & { temporary_token?: string }).temporary_token || ""
 	return loadProjectAttachments({
 		projectId,
-		temporaryToken,
 	})
 }
 

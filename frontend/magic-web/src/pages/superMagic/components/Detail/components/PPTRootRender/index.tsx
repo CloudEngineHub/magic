@@ -11,7 +11,9 @@ import type { PPTRootRenderProps } from "./types"
 import { flattenAttachments } from "../../contents/HTML/utils"
 import { isHtmlPreviewShellNavigation } from "../../contents/HTML/utils/html-navigation"
 import { cn } from "@/utils/cn"
-import { getFileContentById } from "@/pages/superMagic/utils/api"
+import { useFileApi } from "@/pages/superMagic/fileAccess/fileApi"
+import { useFileAccess } from "@/pages/superMagic/fileAccess/FileAccessProvider"
+import { shouldWaitForShareAccess } from "@/pages/superMagic/fileAccess/fileAccessContext"
 
 const MAGIC_PROJECT_FILE_NAME = "magic.project.js"
 
@@ -128,16 +130,21 @@ export default memo(function PPTRootRender(props: PPTRootRenderProps) {
 		isPlaybackMode,
 		exportFile,
 		exportPdf,
-		exportPpt,
+		exportPptx,
 		allowDownload,
 		projectId,
 		onRegisterCheckBeforeClose,
 		onUnregisterCheckBeforeClose,
 		slideStructureAdapter,
 		disableMagicProjectLookup = false,
+		showRefresh,
 	} = props
 
 	const [filePathMapping, setFilePathMapping] = useState<Map<string, string>>(new Map())
+	// PPT directory preview appears on share pages; bind the ambient identity so
+	// the magic.project.js read is not blocked by the share guard.
+	const fileApi = useFileApi()
+	const fileAccess = useFileAccess()
 	const [originalSlidesPaths, setOriginalSlidesPaths] = useState<string[]>([])
 	const [renderKey] = useState(0)
 	const [entryFileData, setEntryFileData] = useState<any>({})
@@ -249,9 +256,14 @@ export default memo(function PPTRootRender(props: PPTRootRenderProps) {
 		}
 
 		let cancelled = false
+		if (shouldWaitForShareAccess(fileAccess)) {
+			setMagicProjectLoading(true)
+			return
+		}
 		setMagicProjectLoading(true)
 
-		getFileContentById(fileId, { responseType: "text" })
+		fileApi
+			.getFileContentById(fileId, { responseType: "text" })
 			.then((content) => {
 				if (cancelled) return
 				const nextContent = typeof content === "string" ? content : ""
@@ -269,7 +281,7 @@ export default memo(function PPTRootRender(props: PPTRootRenderProps) {
 		return () => {
 			cancelled = true
 		}
-	}, [magicProjectFile?.file_id, magicProjectFile?.updated_at])
+	}, [magicProjectFile?.file_id, magicProjectFile?.updated_at, fileApi, fileAccess])
 
 	/** Update HTML file data content */
 	const updateDataContent = useMemoizedFn((fileData: any) => {
@@ -288,6 +300,7 @@ export default memo(function PPTRootRender(props: PPTRootRenderProps) {
 
 	// Create message handler and register/remove listener
 	useEffect(() => {
+		if (shouldWaitForShareAccess(fileAccess)) return
 		let htmlRelativeFolderPath = "/"
 		const currentFileId = displayData?.file_id
 		if (currentFileId && pptAttachmentList.length > 0) {
@@ -306,12 +319,15 @@ export default memo(function PPTRootRender(props: PPTRootRenderProps) {
 			allFiles,
 			htmlRelativeFolderPath,
 			currentFileId || "",
+			undefined,
+			fileAccess,
+			fileApi,
 		)
 		window.addEventListener("message", messageHandler)
 		return () => {
 			window.removeEventListener("message", messageHandler)
 		}
-	}, [pptAttachmentList, displayData?.file_id])
+	}, [pptAttachmentList, displayData?.file_id, fileAccess, fileApi])
 
 	const processContent = useMemoizedFn(async () => {
 		try {
@@ -328,6 +344,7 @@ export default memo(function PPTRootRender(props: PPTRootRenderProps) {
 					: entryFileData?.file_name,
 				attachmentList: pptAttachmentList,
 				displayConfig,
+				fileApi,
 			})
 
 			if (shouldUseMagicProject && pendingLocalSlidePathsRef.current) {
@@ -394,14 +411,14 @@ export default memo(function PPTRootRender(props: PPTRootRenderProps) {
 		}: {
 			fileId: string
 			fileVersion?: number
-			type?: "file" | "pdf" | "ppt"
+			type?: "file" | "pdf" | "pptx"
 		}) => {
 			if (type === "file") {
 				exportFile?.(fileId, fileVersion)
 			} else if (type === "pdf") {
 				exportPdf?.(fileId)
-			} else if (type === "ppt") {
-				exportPpt?.(fileId)
+			} else if (type === "pptx") {
+				exportPptx?.(fileId)
 			}
 		},
 	)
@@ -482,6 +499,7 @@ export default memo(function PPTRootRender(props: PPTRootRenderProps) {
 					}}
 					isTabActive={props.isTabActive}
 					allowDownload={allowDownload}
+					showRefresh={showRefresh}
 					onRegisterCheckBeforeClose={onRegisterCheckBeforeClose}
 					onUnregisterCheckBeforeClose={onUnregisterCheckBeforeClose}
 					slideStructureAdapter={slideStructureAdapter}

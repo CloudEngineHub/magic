@@ -20,6 +20,7 @@ import type { DesignLoadIssue, DesignSidecarStatus } from "../utils/designDataLo
 import type { DesignVersionLoadResult } from "../managers/DesignVersionManager"
 import type { CanvasAccessMode } from "@/components/CanvasDesign/public/props"
 import { resolveDesignAccessMode } from "../managers/types"
+import { useFileApi } from "@/pages/superMagic/fileAccess/fileApi"
 
 export type UseDesignProjectManagerOptions = DesignProjectManagerOptions
 
@@ -112,6 +113,9 @@ export function useDesignProjectManager(
 	options: UseDesignProjectManagerOptions,
 ): UseDesignProjectManagerReturn {
 	const { t } = useTranslation("super")
+	// Bind the ambient file identity once here; managers live outside React and
+	// receive this closure instead of each helper sprouting an `access` param.
+	const fileApi = useFileApi()
 
 	const [magicProjectJsFileId, setMagicProjectJsFileId] = useState<string | null>(null)
 	const [designData, updateDesignData] = useImmer<DesignData>(INITIAL_DESIGN_DATA)
@@ -234,6 +238,7 @@ export function useDesignProjectManager(
 				accessMode: resolveDesignAccessMode(options),
 				isOffline: options.isOffline,
 				getT: () => t,
+				fileApi,
 			},
 			getFileVersionsList: () => fileVersionsListRef.current,
 			getFileVersion: () => fileVersionRef.current,
@@ -248,8 +253,9 @@ export function useDesignProjectManager(
 			accessMode: resolveDesignAccessMode(options),
 			isOffline: options.isOffline,
 			getT: () => t,
+			fileApi,
 		})
-	}, [manager, options, t])
+	}, [manager, options, t, fileApi])
 
 	useEffect(() => {
 		if (options.isShareRoute || !magicProjectJsFileId) return

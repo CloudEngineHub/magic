@@ -1,4 +1,5 @@
 import { getFileContentById } from "@/pages/superMagic/utils/api"
+import type { FileApi } from "@/pages/superMagic/fileAccess/fileApi"
 import { parseMagicProjectConfigContent } from "@/pages/superMagic/utils/magicProjectConfigParser"
 import { flattenAttachments, findMatchingFile } from "../../HTML/utils"
 import type { FileItem } from "@/pages/superMagic/components/Detail/components/FilesViewer/types"
@@ -83,21 +84,30 @@ export async function loadMagicProjectJsContent(
 	fileId: string,
 	options?: {
 		file_versions?: Record<string, number>
+		/** Bound file client; omitted callers keep the host-session default (unbound leaf). */
+		fileApi?: FileApi
 	},
 ): Promise<string> {
 	if (!fileId) {
 		throw new Error(t("design.errors.fileIdRequired", { ns: "super" }))
 	}
 
+	const fileApi = options?.fileApi
+	const fileVersions = options?.file_versions
 	const maxRetries = 1
 	let content: string | null = null
 	let retryCount = 0
 
 	while (retryCount <= maxRetries) {
-		content = (await getFileContentById(fileId, {
-			responseType: "text",
-			file_versions: options?.file_versions,
-		})) as string | null
+		content = (await (fileApi
+			? fileApi.getFileContentById(fileId, {
+					responseType: "text",
+					file_versions: fileVersions,
+				})
+			: getFileContentById(fileId, {
+					responseType: "text",
+					file_versions: fileVersions,
+				}))) as string | null
 
 		// 检查内容是否为空
 		const isEmpty = !content || (typeof content === "string" && content.trim().length === 0)
@@ -167,11 +177,7 @@ export function generateMagicProjectJsContent(
 }
 
 export type MagicProjectCanvasStatus =
-	| "valid-empty"
-	| "valid-non-empty"
-	| "missing"
-	| "invalid"
-	| "decompress-failed"
+	"valid-empty" | "valid-non-empty" | "missing" | "invalid" | "decompress-failed"
 
 export interface MagicProjectJsParseDiagnostics {
 	data: DesignData | null
@@ -325,8 +331,7 @@ export function parseMagicProjectJsContent(content: string): DesignData | null {
 			connections = getConnectionsFromCanvasObject(canvasObj)
 		} else {
 			const canvasObj = canvasField as
-				| { elements?: LayerElement[]; connections?: unknown }
-				| undefined
+				{ elements?: LayerElement[]; connections?: unknown } | undefined
 			elements = canvasObj?.elements || []
 			connections = getConnectionsFromCanvasObject(canvasObj ?? null)
 		}
@@ -598,9 +603,7 @@ export function replaceNameInMagicProjectJsContent(
 		const rawCanvas = config.canvas
 		const canvasCompressed = isCompressedCanvas(rawCanvas)
 		const canvasObj = (canvasCompressed ? decompressCanvasData(rawCanvas) : rawCanvas) as
-			| { elements?: LayerElement[] }
-			| null
-			| undefined
+			{ elements?: LayerElement[] } | null | undefined
 
 		if (canvasObj?.elements && Array.isArray(canvasObj.elements)) {
 			for (let i = 0; i < canvasObj.elements.length; i++) {
@@ -720,8 +723,10 @@ export async function findMagicProjectJsFile(params: {
 	attachments: FileItem[]
 	currentFileId: string
 	currentFileName: string
+	/** Bound file client threaded from the Design boundary (share-aware). */
+	fileApi?: FileApi
 }): Promise<MagicProjectJsFileInfo | null> {
-	const { attachments, currentFileId, currentFileName } = params
+	const { attachments, currentFileId, currentFileName, fileApi } = params
 
 	if (!attachments || !currentFileId || !currentFileName) {
 		return null
@@ -852,7 +857,7 @@ export async function findMagicProjectJsFile(params: {
 		}
 
 		// 使用统一的读取函数获取文件内容（带重试机制）
-		const content = await loadMagicProjectJsContent(magicProjectJsFile.file_id)
+		const content = await loadMagicProjectJsContent(magicProjectJsFile.file_id, { fileApi })
 
 		return {
 			fileId: magicProjectJsFile.file_id,
@@ -1551,6 +1556,8 @@ export interface PackDownloadFileEntriesOptions {
 	signal?: AbortSignal
 	onProgress?: (progress: number) => void
 	retryCount?: number
+	/** Bound file client; when present its captured access rides the download URL requests. */
+	fileApi?: FileApi
 }
 
 export interface PackDownloadFilesResult {
@@ -1644,6 +1651,10 @@ export async function packAndDownloadFileEntries(
 	const { loadJSZip } = await import("@/infrastructure/vendors/jszip")
 	const { getTemporaryDownloadUrl } = await import("@/pages/superMagic/utils/api")
 	const { downloadFileWithAnchor } = await import("@/pages/superMagic/utils/handleFIle")
+	// Prefer the boundary-bound client so share downloads carry their access token;
+	// host-only callers keep the unbound leaf.
+	const resolveTemporaryDownloadUrl =
+		options.fileApi?.getTemporaryDownloadUrl ?? getTemporaryDownloadUrl
 	const JSZip = await loadJSZip()
 	const zip = new JSZip()
 	const fileNames = makePackEntryFileNames(entries)
@@ -1661,7 +1672,7 @@ export async function packAndDownloadFileEntries(
 		try {
 			const downloadUrls = await retryDownloadTask(
 				() =>
-					getTemporaryDownloadUrl({
+					resolveTemporaryDownloadUrl({
 						file_ids: unprocessedFileIds,
 						download_mode: downloadMode,
 						is_download: true,
@@ -1690,7 +1701,7 @@ export async function packAndDownloadFileEntries(
 				if (!downloadUrl) {
 					downloadUrl = await retryDownloadTask(
 						async () => {
-							const downloadUrls = await getTemporaryDownloadUrl({
+							const downloadUrls = await resolveTemporaryDownloadUrl({
 								file_ids: [entry.file.file_id],
 								download_mode: downloadMode,
 								is_download: true,
@@ -1762,6 +1773,7 @@ export async function packAndDownloadFiles(
 	downloadMode?: import("@/pages/superMagic/pages/Workspace/types").DownloadImageMode,
 	zipFileName = "design-images.zip",
 	xMagicImageProcessByFileId?: Record<string, ImageProcessOptions>,
+	fileApi?: FileApi,
 ): Promise<PackDownloadFilesResult> {
 	return packAndDownloadFileEntries(
 		imageFiles.map((file, index) => ({
@@ -1771,6 +1783,7 @@ export async function packAndDownloadFiles(
 		})),
 		downloadMode,
 		zipFileName,
+		{ fileApi },
 	)
 }
 

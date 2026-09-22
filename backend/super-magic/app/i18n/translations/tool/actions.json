@@ -555,9 +555,21 @@
         "zh_CN": "查询数据记录",
         "en_US": "Query rows"
     },
+    "batch_get_magicbase_rows": {
+        "zh_CN": "批量查看数据记录",
+        "en_US": "Batch view rows"
+    },
+    "get_magicbase_row": {
+        "zh_CN": "查看数据记录",
+        "en_US": "View row"
+    },
     "create_magicbase_row": {
         "zh_CN": "新增数据记录",
         "en_US": "Create row"
+    },
+    "update_magicbase_row": {
+        "zh_CN": "更新数据记录",
+        "en_US": "Update row"
     },
     "batch_create_magicbase_rows": {
         "zh_CN": "批量新增数据记录",

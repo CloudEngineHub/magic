@@ -62,6 +62,18 @@ When user has no explicit requirements, follow these defaults:
 - **Static fixed page**: Same effect on any device size, no adaptation, responsive design prohibited
 - **Must include** `<script src="slide-bridge.js"></script>` at bottom of page for inter-page communication
 
+### Speaker notes contract
+
+Every generated slide must contain one inert speaker-notes block outside the visual slide DOM:
+
+```html
+<template data-magic-slide-notes data-format="plain-text" data-version="1">
+Speaker notes for this page.
+</template>
+```
+
+Generate concise, presentation-ready notes from the page purpose, visible content, audience, and narrative flow. Keep the block outside the rendered canvas. When editing an existing slide, preserve the block and update it whenever the page's message changes. Do not place speaker notes in visible slide elements or remove an existing block unless the user explicitly asks to clear it.
+
 ### Inter-slide Links
 
 - Use a normal `<a>` element with a path relative to the current slide HTML file's directory. For example, when the current page is `slides/slide-1.html`, use `<a href="slide-2.html">查看第二页</a>`; use `../` when crossing directories.
@@ -521,14 +533,14 @@ print(search_result.content)
 | `max_width`          | Yes      | number | Expected max width (usually 1920)                                                 |
 | `max_height`         | Yes      | number | Expected max height (usually 1080)                                                |
 | `analysis_js`        | Yes      | string | Layout analysis JavaScript function body (without function declaration)           |
-| `insert_after_slide` | Yes      | string | Insert position: `""` for first page, filename to insert after that file          |
+| `insert_after_slide` | Yes      | string | New slide position: `""` for first page, filename to insert after; ignored for existing slides |
 
 **Tool Functions:**
 
 - Write HTML file
 - Load via browser and execute `analysis_js` for quality check
 - Detect layout issues, height overflow, image stretch, small fonts
-- Auto-update slides array based on `insert_after_slide`
+- Register new slides based on `insert_after_slide`; preserve existing slide order on content updates
 
 **analysis_js Instructions:**
 
@@ -540,7 +552,7 @@ print(search_result.content)
 **insert_after_slide Instructions:**
 
 - `""` for first page, filename to insert after
-- Auto-updates slides array
+- Applies only to slides not yet in the slides array. Updating an existing slide preserves its position.
 
 ### image_search - Batch Search Images
 

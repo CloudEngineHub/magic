@@ -1,13 +1,12 @@
-import { useState, useCallback } from "react"
+import { createElement, useState, useCallback } from "react"
 import { useTranslation } from "react-i18next"
 import type { AttachmentItem } from "./types"
 import { createShareHandler } from "../utils/createShareHandler"
-import { getTemporaryDownloadUrl, downloadFileContent } from "../../../utils/api"
+import { downloadFileContent } from "../../../utils/api"
 import { UploadSource, useFileUpload } from "../../MessageEditor/hooks/useFileUpload"
 import { handleShareFunction } from "../../../utils/share"
 import { ShareType, ResourceType } from "../../Share/types"
 import { downloadFileWithAnchor } from "../../../utils/handleFIle"
-import { exportSingleFileToPpt } from "../utils/exportSingleFile"
 import { prepareHtmlPagesForExport } from "@/utils/htmlExportPrepare"
 import { isMarkdownFileName } from "@/utils/pdfFileType"
 import { ROOT_FILE_ID } from "../constant"
@@ -21,13 +20,19 @@ import { useDuplicateFileHandler } from "./useDuplicateFileHandler"
 import { useMemoizedFn } from "ahooks"
 import magicToast from "@/components/base/MagicToaster/utils"
 import { uploadLogger } from "../utils/uploadLogger"
-import { exportPPTX } from "@magic/html2pptx"
 import {
 	prepareExportSlides,
+	iterateExportSlides,
+	iterateSingleExportSlide,
 	prepareSingleSlideExport,
 } from "@/pages/superMagic/services/pptService"
 import { pptxExternalLogger, reportPptxExportError } from "@/pages/superMagic/utils/pptxLogger"
 import { createPptxResourceErrorCollector } from "@/pages/superMagic/utils/pptxResourceErrors"
+import {
+	publishPptxExportFailure,
+	publishPptxExportIssues,
+} from "@/pages/superMagic/utils/pptxExportIssues"
+import type { ExportIssue } from "@magic/html2pptx"
 import { createRandomUuidV4 } from "@/utils/create-random-uuid-v4"
 import { hasPPTMetadata } from "@/pages/superMagic/components/Detail/utils/file"
 import {
@@ -47,12 +52,26 @@ import {
 	type DocumentExport,
 } from "@/pages/superMagic/services/documentExport"
 import type { DownloadProgressController } from "@/pages/superMagic/hooks/useDownloadProgress"
+import { Button } from "antd"
+import {
+	assertPptxExportAvailable,
+	formatPptxStreamingProgress,
+	iteratePreparedPptxPages,
+	openPptxDestination,
+	PptxExportUnavailableError,
+	startPptxStreamingExportFromFactory,
+} from "@/pages/superMagic/services/pptxStreamingExport"
 import {
 	mergeStaticDependencyFileIds,
 	resolveSingleDocumentStaticDependencies,
 	supportsStaticDependencies,
 } from "@/pages/superMagic/utils/staticDependencies"
 import type { FileScope } from "@/apis/modules/fileScope"
+import type { FileAccessContext } from "@/pages/superMagic/fileAccess/fileAccessContext"
+import { getShareAccessToken } from "@/pages/superMagic/fileAccess/fileAccessContext"
+import { useFileAccess } from "@/pages/superMagic/fileAccess/FileAccessProvider"
+import { useFileApi } from "@/pages/superMagic/fileAccess/fileApi"
+import type { FileApi } from "@/pages/superMagic/fileAccess/fileApi"
 import { checkDuplicateFileName } from "../utils/checkDuplicateFileName"
 import { toUserAttachment } from "../../UserSpace/services/userSpaceFileService"
 
@@ -183,13 +202,16 @@ const downloadOnlyOfficeFile = async (
 	fileId: string,
 	fileExtension: string,
 	attachments: AttachmentItem[] | undefined,
-	mode?: DownloadImageMode,
+	mode: DownloadImageMode | undefined,
+	access: FileAccessContext | null | undefined,
+	fileApi: FileApi,
 ): Promise<void> => {
-	// 获取文件下载 URL
-	const res = await getTemporaryDownloadUrl({
+	// 获取文件下载 URL；fileApi 已绑定环境身份，access 仍作为逐次调用覆盖保留
+	const res = await fileApi.getTemporaryDownloadUrl({
 		file_ids: [fileId],
 		download_mode: mode,
 		is_download: true,
+		access: access ?? undefined,
 	})
 	if (!res[0]?.url) {
 		throw new Error("无法获取文件下载地址")
@@ -280,6 +302,11 @@ export function useFileOperations(options: UseFileOperationsOptions = {}) {
 		downloadProgress,
 	} = options
 	const { t } = useTranslation("super")
+	const fileAccess = useFileAccess()
+	// Bind the ambient share/session identity for the download-url leaves; the
+	// export services below still receive the legacy `access` override.
+	const fileApi = useFileApi()
+	const shareToken = getShareAccessToken(fileAccess)
 	const waitForAttachmentMutation = useMemoizedFn(
 		(options: {
 			fileIds?: string[]
@@ -1110,6 +1137,8 @@ export function useFileOperations(options: UseFileOperationsOptions = {}) {
 								fileId: entryFileId,
 								fileName: entryFileName,
 								attachmentList: attachments ?? [],
+								access: fileAccess ?? undefined,
+								fileApi,
 							})
 						: await prepareExportSlides({
 								slidePaths,
@@ -1117,6 +1146,8 @@ export function useFileOperations(options: UseFileOperationsOptions = {}) {
 								mainFileId: entryFileId,
 								mainFileName: entryFileName,
 								displayConfig: mergedDisplayConfig,
+								access: fileAccess ?? undefined,
+								fileApi,
 							})
 
 					if (!result.htmlSlides.some(Boolean)) {
@@ -1135,6 +1166,8 @@ export function useFileOperations(options: UseFileOperationsOptions = {}) {
 						fileName: entryFileName,
 						attachmentList: attachments ?? [],
 						displayConfig: mergedDisplayConfig,
+						access: fileAccess ?? undefined,
+						fileApi,
 					})
 
 					const handle = documentExporter.exportPages(preparedHtmlSlides, {
@@ -1180,6 +1213,8 @@ export function useFileOperations(options: UseFileOperationsOptions = {}) {
 							fileId: item.file_id,
 							fileName: item.file_name,
 							attachmentList: attachments ?? [],
+							access: fileAccess ?? undefined,
+							fileApi,
 						})
 
 						if (!result.htmlSlides.some(Boolean)) {
@@ -1198,6 +1233,8 @@ export function useFileOperations(options: UseFileOperationsOptions = {}) {
 							fileName: item.file_name,
 							attachmentList: attachments ?? [],
 							displayConfig: mergedDisplayConfig,
+							access: fileAccess ?? undefined,
+							fileApi,
 						})
 
 						await documentExporter.exportPages(preparedHtmlSlides, {
@@ -1253,34 +1290,7 @@ export function useFileOperations(options: UseFileOperationsOptions = {}) {
 		[t, attachments],
 	)
 
-	// 下载PPT格式
-	const handleDownloadPpt = useCallback(
-		(item: AttachmentItem) => {
-			if (item.file_id) {
-				const onStart = () => {
-					setExportingFiles((prev) => new Set(prev).add(item.file_id || ""))
-				}
-				const onEnd = () => {
-					setExportingFiles((prev) => {
-						const newSet = new Set(prev)
-						newSet.delete(item.file_id || "")
-						return newSet
-					})
-				}
-				exportSingleFileToPpt({
-					fileId: item.file_id,
-					projectId,
-					t,
-					onStart,
-					onEnd,
-					onError: onEnd,
-				})
-			}
-		},
-		[projectId, t],
-	)
-
-	// 导出可编辑PPTX（前端 html2pptx，通过 prepareExportSlides 服务准备数据）
+	// 导出 PPTX（前端 html2pptx streaming-only）
 	const handleDownloadPptx = useCallback(
 		async (item: AttachmentItem, folderChildren?: AttachmentItem[]) => {
 			if (!item.file_id) return
@@ -1296,83 +1306,125 @@ export function useFileOperations(options: UseFileOperationsOptions = {}) {
 				: []
 			const isSingleFile = !slidePaths.length
 			const autoSize = !hasPPTMetadata(item)
+			const fileId = item.file_id || ""
+			const fileName = String(
+				mergedDisplayConfig?.name || item.file_name || "export",
+			).replace(/\.html?$/i, "")
+			let destinationLease: Awaited<ReturnType<typeof openPptxDestination>> = null
 
-			let exportHandle: ReturnType<typeof exportPPTX> | null = null
+			let cancelExport: (() => void) | null = null
 			const resourceErrors = createPptxResourceErrorCollector(t)
+			const exportIssues: ExportIssue[] = []
+			const getExportToastContent = (progressText: string) =>
+				createElement(
+					"div",
+					{ style: { display: "flex", alignItems: "center", gap: 8 } },
+					createElement("span", null, progressText),
+					createElement(
+						Button,
+						{
+							type: "default",
+							size: "small",
+							danger: true,
+							onClick: () => cancelExport?.(),
+						},
+						t("topicFiles.exportCancel"),
+					),
+				)
 			setExportingFiles((prev) => new Set(prev).add(item.file_id || ""))
 
 			try {
+				assertPptxExportAvailable({ pageCount: isSingleFile ? 1 : slidePaths.length })
+				destinationLease = await openPptxDestination({
+					suggestedName: String(
+						mergedDisplayConfig?.name || item.file_name || "export",
+					).replace(/\.html?$/i, ""),
+				})
+				if (!destinationLease) return
+
 				magicToast.loading({
 					key: toastId,
-					content: t("topicFiles.exporting"),
+					content: getExportToastContent(t("topicFiles.exporting")),
 					duration: 0,
 				})
 
-				const result = isSingleFile
-					? await prepareSingleSlideExport({
-							fileId: item.file_id,
-							fileName: item.file_name,
-							attachmentList: attachments ?? [],
-						})
-					: await prepareExportSlides({
-							slidePaths,
-							attachmentList: folderChildren?.length
-								? folderChildren
-								: (attachments ?? []),
-							mainFileId: item.file_id,
-							mainFileName: item.file_name,
-							displayConfig: mergedDisplayConfig,
-						})
-
-				if (!result.htmlSlides.some(Boolean)) {
-					magicToast.error({
+				{
+					const attachmentScope = folderChildren?.length
+						? folderChildren
+						: (attachments ?? [])
+					const pptFontResolver = documentExportService.get()?.getPptFontResolver?.()
+					const destination = destinationLease.destination
+					const streamingHandle = startPptxStreamingExportFromFactory(
+						(signal) => {
+							const source = isSingleFile
+								? iterateSingleExportSlide({
+										fileId,
+										fileName: item.file_name,
+										attachmentList: attachments ?? [],
+										access: fileAccess ?? undefined,
+										fileApi,
+										signal,
+									})
+								: iterateExportSlides({
+										slidePaths,
+										attachmentList: attachmentScope,
+										mainFileId: fileId,
+										mainFileName: item.file_name,
+										displayConfig: mergedDisplayConfig,
+										access: fileAccess ?? undefined,
+										fileApi,
+										signal,
+									})
+							return iteratePreparedPptxPages(source, {
+								attachments: attachments ?? [],
+								fileId,
+								fileName: item.file_name,
+								attachmentList: attachments ?? [],
+								displayConfig: mergedDisplayConfig,
+								signal,
+							})
+						},
+						(firstPage) => ({
+							fileName,
+							destination,
+							outputPolicy: "file-stream",
+							pageCount: isSingleFile ? 1 : slidePaths.length,
+							autoSize,
+							config: createPptxSlideConfig(
+								resolvePptScaleContentDimensions(firstPage.html),
+							),
+							skipFailedPages: true,
+							fontResolver: pptFontResolver,
+							logger: pptxExternalLogger,
+							logLevel: "warn",
+							onResourceLoadError: resourceErrors.onResourceLoadError,
+							onExportIssue: (issue) => exportIssues.push(issue),
+							onProgress: (progress) => {
+								magicToast.loading({
+									key: toastId,
+									content: getExportToastContent(
+										formatPptxStreamingProgress(
+											t("topicFiles.exporting"),
+											progress,
+										),
+									),
+									duration: 0,
+								})
+							},
+						}),
+					)
+					cancelExport = streamingHandle.cancel
+					await streamingHandle.promise
+					publishPptxExportIssues(exportIssues, { fileId, fileName })
+					magicToast.success({
 						key: toastId,
-						content: t("topicFiles.contextMenu.fileExport.exportFailed"),
+						content: t("topicFiles.exportSuccess"),
 						duration: 1000,
 					})
 					return
 				}
-
-				const preparedHtmlSlides = await prepareHtmlPagesForExport({
-					pages: result.htmlSlides,
-					attachments: attachments ?? [],
-					fileId: item.file_id,
-					fileName: item.file_name,
-					attachmentList: attachments ?? [],
-					displayConfig: mergedDisplayConfig,
-				})
-				const pptFontResolver = documentExportService.get()?.getPptFontResolver?.()
-				const pptxConfig = createPptxSlideConfig(
-					resolvePptScaleContentDimensions(preparedHtmlSlides[0]),
-				)
-
-				exportHandle = exportPPTX(preparedHtmlSlides, {
-					fileName: result.fileName,
-					skipFailedPages: true,
-					autoSize,
-					config: pptxConfig,
-					fontResolver: pptFontResolver,
-					logger: pptxExternalLogger,
-					logLevel: "warn",
-					onResourceLoadError: resourceErrors.onResourceLoadError,
-					onSlideProgress: ({ index, total }) => {
-						const progress = total > 1 ? ` (${index + 1}/${total})` : ""
-						magicToast.loading({
-							key: toastId,
-							content: `${t("topicFiles.exporting")}${progress}`,
-							duration: 0,
-						})
-					},
-				})
-
-				await exportHandle.promise
-
-				magicToast.success({
-					key: toastId,
-					content: t("topicFiles.exportSuccess"),
-					duration: 1000,
-				})
 			} catch (error: unknown) {
+				await destinationLease?.abort(error).catch(() => undefined)
 				const isAbort = (error as { name?: string } | null)?.name === "AbortError"
 				if (isAbort) {
 					magicToast.info({
@@ -1381,10 +1433,14 @@ export function useFileOperations(options: UseFileOperationsOptions = {}) {
 						duration: 1000,
 					})
 				} else {
+					publishPptxExportFailure(exportIssues, error, { fileId, fileName })
 					magicToast.error({
 						key: toastId,
-						content: t("topicFiles.contextMenu.fileExport.exportFailed"),
-						duration: 1000,
+						content:
+							error instanceof PptxExportUnavailableError
+								? error.message
+								: t("topicFiles.contextMenu.fileExport.exportFailed"),
+						duration: error instanceof PptxExportUnavailableError ? 3000 : 1000,
 					})
 					reportPptxExportError(error, {
 						fileId: item.file_id,
@@ -1423,7 +1479,9 @@ export function useFileOperations(options: UseFileOperationsOptions = {}) {
 				if (!isHtml) {
 					// 文本类文件（md, txt, code）使用 exportTextToImage
 					const [urlItem] =
-						(await getTemporaryDownloadUrl({ file_ids: [item.file_id] })) ?? []
+						(await fileApi.getTemporaryDownloadUrl({
+							file_ids: [item.file_id],
+						})) ?? []
 					if (!urlItem?.url) {
 						magicToast.error({
 							key: toastId,
@@ -1468,6 +1526,8 @@ export function useFileOperations(options: UseFileOperationsOptions = {}) {
 						fileId: item.file_id,
 						fileName: item.file_name,
 						attachmentList: attachments ?? [],
+						access: fileAccess ?? undefined,
+						fileApi,
 					})
 
 					if (!result.htmlSlides.some(Boolean)) {
@@ -1485,6 +1545,8 @@ export function useFileOperations(options: UseFileOperationsOptions = {}) {
 						fileId: item.file_id,
 						fileName: item.file_name,
 						attachmentList: attachments ?? [],
+						access: fileAccess ?? undefined,
+						fileApi,
 					})
 
 					await exportHtmlToImage({
@@ -1531,7 +1593,7 @@ export function useFileOperations(options: UseFileOperationsOptions = {}) {
 				})
 			}
 		},
-		[t, attachments],
+		[t, attachments, fileApi],
 	)
 
 	// 文件下载功能 - 支持单个文件或多个文件
@@ -1566,12 +1628,19 @@ export function useFileOperations(options: UseFileOperationsOptions = {}) {
 
 					// 如果是 OnlyOffice 文件，使用专门的下载方法
 					if (isOnlyOfficeFile) {
-						await downloadOnlyOfficeFile(fileIds[0], ext, attachments, mode)
+						await downloadOnlyOfficeFile(
+							fileIds[0],
+							ext,
+							attachments,
+							mode,
+							fileAccess,
+							fileApi,
+						)
 						return
 					}
 
 					// 非 OnlyOffice 文件，使用原来的下载方式
-					const res = await getTemporaryDownloadUrl({
+					const res = await fileApi.getTemporaryDownloadUrl({
 						file_ids: fileIds,
 						download_mode: mode,
 						is_download: true,
@@ -1624,6 +1693,7 @@ export function useFileOperations(options: UseFileOperationsOptions = {}) {
 					SuperMagicApi.createBatchDownload({
 						project_id: projectId,
 						file_ids: fileIds,
+						token: shareToken || undefined,
 					})
 						.then((data) => {
 							if (data.status === "ready" && data.download_url) {
@@ -1646,6 +1716,7 @@ export function useFileOperations(options: UseFileOperationsOptions = {}) {
 										const checkData =
 											await SuperMagicApi.checkBatchDownloadStatus(
 												data.batch_key,
+												shareToken || undefined,
 											)
 										if (checkData?.status === "ready") {
 											clearInterval(timer)
@@ -1722,6 +1793,7 @@ export function useFileOperations(options: UseFileOperationsOptions = {}) {
 			const result = await resolveSingleDocumentStaticDependencies({
 				fileIds: [item.file_id],
 				attachments: attachments || [],
+				fileApi,
 			})
 			const effectiveFileIds = mergeStaticDependencyFileIds(
 				[item.file_id],
@@ -1883,7 +1955,6 @@ export function useFileOperations(options: UseFileOperationsOptions = {}) {
 		handleDeleteItem,
 		handleDownloadOriginal,
 		handleDownloadPdf,
-		handleDownloadPpt,
 		handleDownloadPptx,
 		handleDownloadImage,
 		handleDownloadFile,

@@ -11,6 +11,8 @@
  * - AI_OPTIMIZATION_ACTION, DashboardCardsChange
  */
 
+import type { FileAccessContext } from "@/pages/superMagic/fileAccess/fileAccessContext"
+import type { FileApi } from "@/pages/superMagic/fileAccess/fileApi"
 import { getTemporaryDownloadUrl } from "@/pages/superMagic/utils/api"
 import { env } from "@/utils/env"
 import { rewriteHtmlCdnWithHost } from "./index"
@@ -544,6 +546,8 @@ export type OnFetchIntercepted = (
  * @param htmlRelativeFolderPath HTML文件的相对文件夹路径
  * @param fileId 文件ID，用于验证请求来源
  * @param onFetchIntercepted 拦截记录回调函数，用于记录拦截的相对路径和文件信息
+ * @param access legacy share/session override; prefer `fileApi` when available
+ * @param fileApi bound file client closed over at the React/iframe boundary
  * @returns 消息处理函数
  */
 export function createParentMessageHandler(
@@ -551,6 +555,8 @@ export function createParentMessageHandler(
 	htmlRelativeFolderPath: string,
 	fileId: string,
 	onFetchIntercepted?: OnFetchIntercepted,
+	access?: FileAccessContext | null,
+	fileApi?: Pick<FileApi, "getTemporaryDownloadUrl">,
 ) {
 	return async (event: MessageEvent) => {
 		// 验证消息来源和类型
@@ -575,7 +581,11 @@ export function createParentMessageHandler(
 
 			if (matchedFile) {
 				// 使用 getTemporaryDownloadUrl 获取OSS URL
-				const response = await getTemporaryDownloadUrl({ file_ids: [matchedFile.file_id] })
+				const fetchUrls = fileApi?.getTemporaryDownloadUrl ?? getTemporaryDownloadUrl
+				const response = await fetchUrls({
+					file_ids: [matchedFile.file_id],
+					access: access ?? undefined,
+				})
 
 				if (response && response.length > 0 && response[0].url) {
 					const ossUrl = response[0].url

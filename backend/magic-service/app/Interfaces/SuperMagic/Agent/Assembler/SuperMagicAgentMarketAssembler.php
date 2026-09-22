@@ -174,9 +174,17 @@ class SuperMagicAgentMarketAssembler
      */
     private static function resolveLocalizedText(?array $i18n, string $fallback, string $language): string
     {
-        $localizedValue = $i18n[$language] ?? $i18n[LanguageEnum::DEFAULT->value] ?? null;
-        if (is_string($localizedValue) && $localizedValue !== '') {
-            return $localizedValue;
+        foreach ([$language, LanguageEnum::DEFAULT->value, 'en_US', 'zh_CN'] as $key) {
+            $localizedValue = $i18n[$key] ?? null;
+            if (is_string($localizedValue) && $localizedValue !== '') {
+                return $localizedValue;
+            }
+        }
+
+        foreach ($i18n ?? [] as $localizedValue) {
+            if (is_string($localizedValue) && $localizedValue !== '') {
+                return $localizedValue;
+            }
         }
 
         return $fallback;
@@ -189,13 +197,50 @@ class SuperMagicAgentMarketAssembler
      */
     private static function resolveLocalizedList(?array $i18n, string $language): array
     {
-        $localizedValue = $i18n[$language] ?? $i18n[LanguageEnum::DEFAULT->value] ?? [];
-        if (! is_array($localizedValue)) {
+        if ($i18n === null) {
             return [];
         }
 
+        $preferredKeys = [$language, LanguageEnum::DEFAULT->value, 'en_US', 'zh_CN'];
+        foreach ($preferredKeys as $key) {
+            $localizedValue = $i18n[$key] ?? null;
+            if (! is_array($localizedValue)) {
+                continue;
+            }
+
+            $resolved = self::filterLocalizedList($localizedValue);
+            if ($resolved !== []) {
+                return $resolved;
+            }
+        }
+
+        foreach ($i18n as $localizedValue) {
+            if (! is_array($localizedValue)) {
+                continue;
+            }
+
+            $resolved = self::filterLocalizedList($localizedValue);
+            if ($resolved !== []) {
+                return $resolved;
+            }
+        }
+
+        return [];
+    }
+
+    private static function resolveLocalizedRole(?array $i18n, string $language): string
+    {
+        return implode(', ', self::resolveLocalizedList($i18n, $language));
+    }
+
+    /**
+     * @param array<mixed> $values
+     * @return array<int, string>
+     */
+    private static function filterLocalizedList(array $values): array
+    {
         return array_values(array_filter(
-            $localizedValue,
+            $values,
             static fn ($item) => is_string($item) && $item !== ''
         ));
     }

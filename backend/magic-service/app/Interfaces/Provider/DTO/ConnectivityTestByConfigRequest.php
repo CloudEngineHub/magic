@@ -27,6 +27,8 @@ class ConnectivityTestByConfigRequest extends AbstractRequestDTO
 
     protected ?bool $supportMultiModal = null;
 
+    protected ?bool $supportFunction = null;
+
     public static function getHyperfValidationRules(): array
     {
         return [
@@ -36,6 +38,7 @@ class ConnectivityTestByConfigRequest extends AbstractRequestDTO
             'category' => 'string|nullable',
             'model_version' => 'required|string',
             'support_multi_modal' => 'nullable|boolean',
+            'support_function' => 'nullable|boolean',
         ];
     }
 
@@ -51,6 +54,7 @@ class ConnectivityTestByConfigRequest extends AbstractRequestDTO
             'model_version.required' => __('service_provider.provider.model_version.required'),
             'model_version.string' => __('service_provider.provider.model_version.string'),
             'support_multi_modal.boolean' => __('service_provider.provider.support_multi_modal.boolean'),
+            'support_function.boolean' => __('service_provider.provider.support_function.boolean'),
         ];
     }
 
@@ -128,6 +132,21 @@ class ConnectivityTestByConfigRequest extends AbstractRequestDTO
         }
 
         $this->supportMultiModal = filter_var($supportMultiModal, FILTER_VALIDATE_BOOL, FILTER_NULL_ON_FAILURE) ?? false;
+    }
+
+    public function getSupportFunction(): ?bool
+    {
+        return $this->supportFunction;
+    }
+
+    public function setSupportFunction(null|bool|int|string $supportFunction): void
+    {
+        if ($supportFunction === null) {
+            $this->supportFunction = null;
+            return;
+        }
+
+        $this->supportFunction = filter_var($supportFunction, FILTER_VALIDATE_BOOL, FILTER_NULL_ON_FAILURE) ?? false;
     }
 
     public function getCategory(): ?string

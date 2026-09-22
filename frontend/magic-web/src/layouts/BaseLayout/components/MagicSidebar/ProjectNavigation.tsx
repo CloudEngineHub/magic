@@ -150,7 +150,7 @@ function ProjectNavigation({
 				data-testid="sidebar-content-root"
 			>
 				{apps}
-				<div className="mx-2 my-1 h-px bg-sidebar-border/40" />
+				<div className="mx-2 mb-2 mt-1 h-px bg-sidebar-border/40" />
 				<div
 					ref={navigationRef}
 					className={

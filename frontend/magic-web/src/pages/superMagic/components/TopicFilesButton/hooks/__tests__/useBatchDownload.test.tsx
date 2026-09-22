@@ -112,8 +112,6 @@ vi.mock("@/apis", () => ({
 		deleteFiles: vi.fn(),
 		createBatchDownload: vi.fn(),
 		checkBatchDownloadStatus: vi.fn(),
-		exportPdfOrPpt: vi.fn(),
-		checkExportPdfOrPptStatus: vi.fn(),
 	},
 }))
 

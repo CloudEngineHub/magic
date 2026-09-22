@@ -4,10 +4,14 @@ import type { ReactNode } from "react"
 import PPTRender, { reconcilePPTSlideToolbarModels } from "../index"
 import { TAILWIND_Z_INDEX_CLASSES } from "../../../contents/HTML/constants/z-index"
 import type { PPTSlideStructureAdapter } from "../types"
+import { pptNotesPreferenceStore } from "@/stores/layout/PPTNotesPreferenceStore"
 
 const mockState = vi.hoisted(() => ({
 	store: {
 		activeIndex: 0,
+		get currentSlide() {
+			return this.slides[this.activeIndex]
+		},
 		slidePaths: ["slide-1.html"],
 		slideUrls: ["slide-1.html"],
 		slides: [
@@ -45,6 +49,7 @@ const mockState = vi.hoisted(() => ({
 		getSlideServerUpdate: vi.fn(() => undefined),
 		clearSlideServerUpdate: vi.fn(),
 		updateSlideContent: vi.fn(),
+		updateSlideNotes: vi.fn(),
 		generateSlideScreenshot: vi.fn(),
 		markSlideAsManuallySaved: vi.fn(),
 		updateSlideContents: vi.fn(),
@@ -63,14 +68,11 @@ const mockState = vi.hoisted(() => ({
 	isSlideEditing: true,
 }))
 
-vi.mock("react-i18next", () => ({
+vi.mock("react-i18next", async (importOriginal) => ({
+	...(await importOriginal<typeof import("react-i18next")>()),
 	useTranslation: () => ({
 		t: (key: string) => key,
 	}),
-}))
-
-vi.mock("mobx-react-lite", () => ({
-	observer: <T,>(component: T) => component,
 }))
 
 vi.mock("ahooks", () => ({
@@ -154,14 +156,21 @@ vi.mock("../PPTControlBar", () => ({
 		scaleRatio,
 		onScaleChange,
 		onReplaceTemplate,
+		notesVisible,
+		onToggleNotes,
 	}: {
 		scaleRatio: number
 		onScaleChange: (scale: number) => void
 		onReplaceTemplate?: () => void
+		notesVisible?: boolean
+		onToggleNotes?: () => void
 	}) => {
 		mockState.pptControlBarProps({ scaleRatio, onScaleChange, onReplaceTemplate })
 		return (
 			<div data-testid="ppt-control-bar">
+				<button onClick={onToggleNotes} aria-expanded={notesVisible}>
+					toggle notes
+				</button>
 				<span data-testid="ppt-control-bar-scale">{scaleRatio}</span>
 				<button type="button" onClick={() => onScaleChange(0.44)}>
 					change scale
@@ -454,6 +463,8 @@ function renderPPTRender(input?: {
 
 describe("PPTRender", () => {
 	beforeEach(() => {
+		pptNotesPreferenceStore.setVisible(false)
+		pptNotesPreferenceStore.setHeight(144)
 		mockState.confirmConfig = null
 		mockState.lastStoreConfig = null
 		mockState.store.setFullscreen.mockReset()
@@ -516,6 +527,20 @@ describe("PPTRender", () => {
 		expect(afterStaleCleanup.get(ownerKey)).toBe(newModel)
 	})
 
+	it("connects the toolbar toggle to notes visibility and preserves the choice on remount", async () => {
+		mockState.isSlideEditing = false
+		const { unmount } = renderPPTRender()
+		expect(screen.getByTestId("ppt-speaker-notes-panel")).not.toBeVisible()
+		fireEvent.click(screen.getByText("toggle notes"))
+		expect(screen.getByTestId("ppt-speaker-notes-panel")).toBeVisible()
+		expect(screen.getByText("toggle notes")).toHaveAttribute("aria-expanded", "true")
+		unmount()
+		renderPPTRender()
+		expect(screen.getByTestId("ppt-speaker-notes-panel")).toBeVisible()
+		fireEvent.click(screen.getByText("toggle notes"))
+		expect(screen.getByTestId("ppt-speaker-notes-panel")).not.toBeVisible()
+	})
+
 	it("uses only PPT presentation fullscreen to hide viewer controls", async () => {
 		mockState.isSlideEditing = false
 		mockState.nativeIsFullscreen = true
@@ -561,6 +586,10 @@ describe("PPTRender", () => {
 		expect(screen.getByTestId("ppt-render-sidebar")).toHaveStyle({ width: "200px" })
 		expect(screen.getByTestId("ppt-render-sidebar-resize-handle")).toBeInTheDocument()
 		expect(screen.getByTestId("ppt-control-bar")).toBeInTheDocument()
+		expect(screen.getByTestId("ppt-control-bar").parentElement).toHaveAttribute(
+			"data-testid",
+			"ppt-render-slide-stage",
+		)
 		expect(mockState.pptSlideProps).toHaveBeenLastCalledWith(
 			expect.objectContaining({ isFullscreen: false }),
 		)
@@ -568,6 +597,19 @@ describe("PPTRender", () => {
 		expect(screen.getByTestId("ppt-render-slide-content")).toHaveClass(
 			"relative",
 			TAILWIND_Z_INDEX_CLASSES.BASE.SLIDE_CANVAS,
+		)
+	})
+
+	it("keeps overlay speaker notes above the slide control bar", async () => {
+		mockState.isSlideEditing = false
+		pptNotesPreferenceStore.setVisible(true)
+		pptNotesPreferenceStore.setHeight(300)
+		renderPPTRender()
+
+		expect(screen.getByTestId("ppt-render-slide-stage")).toHaveClass("z-0")
+		expect(screen.getByTestId("ppt-speaker-notes-panel")).toHaveAttribute(
+			"data-overlay",
+			"true",
 		)
 	})
 

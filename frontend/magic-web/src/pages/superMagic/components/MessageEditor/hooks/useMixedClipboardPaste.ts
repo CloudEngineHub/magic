@@ -104,6 +104,7 @@ export function useMixedClipboardPaste({
 		const text = data.getData("text/plain")
 		const html = data.getData("text/html")
 		let textReadFailed = false
+		const textFromClipboardApi = !text && !html
 		// 必须在 paste 的用户手势内发起读取，不能等目录弹窗或上一批上传结束后再读剪贴板。
 		const textPromise =
 			text || html
@@ -123,7 +124,9 @@ export function useMixedClipboardPaste({
 		const operation = queue.current.then(async () => {
 			const resolvedText = await textPromise
 			if (!isCurrent()) return
-			const content = parseMixedClipboard(resolvedText, html, files)
+			const content = parseMixedClipboard(resolvedText, html, files, {
+				textFromClipboardApi,
+			})
 			const filesOnly =
 				!html &&
 				content.parts.every((part) =>

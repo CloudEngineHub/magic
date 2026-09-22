@@ -5,13 +5,10 @@ import {
 	type PointerEvent as ReactPointerEvent,
 } from "react"
 import ReactDOM from "react-dom"
+import { ResizeGrip } from "@/pages/superMagic/components/ResizeGrip/ResizeGrip"
 import { useTranslation } from "react-i18next"
 import { cn } from "@/utils/cn"
-import {
-	ResizableCollapseFeedback,
-	ResizeGrip,
-	resizeGlowClassName,
-} from "@/components/shadcn-ui/resizable"
+import { ResizableCollapseFeedback, resizeGlowClassName } from "@/components/shadcn-ui/resizable"
 
 interface TopicResizeHandleProps {
 	className?: string
@@ -70,6 +67,7 @@ function TopicResizeHandle({
 			<div
 				style={style}
 				data-slot="resizable-handle"
+				data-resizing={isDragging ? "true" : undefined}
 				data-dragging={isDragging}
 				onPointerDown={handlePointerDown}
 				className={cn(
@@ -81,7 +79,8 @@ function TopicResizeHandle({
 					gripVariant === "dots" && isDragging && "before:opacity-100",
 					"data-[panel-group-direction=vertical]:!h-2 data-[panel-group-direction=vertical]:!w-full",
 					"data-[panel-group-direction=vertical]:before:bg-gradient-to-r",
-					disabled && "pointer-events-none opacity-0",
+					disabled && "pointer-events-none",
+					disabled && "opacity-0",
 					className,
 				)}
 				data-testid="handle-mouse-down"

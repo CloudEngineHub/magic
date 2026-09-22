@@ -84,6 +84,8 @@ return [
         'prompt_length_exceeded' => 'Văn bản nhập vào quá dài. Vui lòng tải lên dưới dạng tệp và tham chiếu trong hộp thoại.',
         'sandbox_init_failed' => 'Môi trường chạy gặp lỗi. Vui lòng thử lại sau.',
         'chat_task_start_failed' => 'Không thể bắt đầu tác vụ. Vui lòng thử lại sau.',
+        'project_file_count_exceeded' => 'Không gian dự án hiện tại đã đạt giới hạn :limit tệp, không thể tiếp tục tác vụ. Vui lòng liên hệ quản trị viên.',
+        'user_space_file_count_exceeded' => 'Không gian người dùng hiện tại đã đạt giới hạn :limit tệp, không thể tiếp tục tác vụ. Vui lòng liên hệ quản trị viên.',
     ],
     'magic_claw' => [
         'create_system_error' => 'Đã xảy ra lỗi hệ thống. Vui lòng thử lại sau.',

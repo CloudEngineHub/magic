@@ -50,6 +50,7 @@ export const zhCN: I18nTexts = {
 		digitalEmployees: "数字员工",
 		flows: "流程",
 		agents: "智能体",
+		microApps: "微应用",
 		skills: "技能",
 		tools: "工具",
 		canvasElements: "画布元素",

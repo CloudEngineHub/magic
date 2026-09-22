@@ -548,7 +548,15 @@ declare global {
 			project?: {
 				uploadFiles?: (files: unknown[]) => Promise<unknown>
 				downloadFiles?: (filePaths: string[]) => Promise<unknown>
+				/**
+				 * 将文件附加到消息输入框。
+				 * 单话题宿主（龙虾/对话）复用当前话题，忽略 agentMode。
+				 */
 				addFilesToMessage?: (files: unknown[], agentMode?: string) => Promise<unknown>
+				/**
+				 * 发送消息。多话题宿主会新建话题。
+				 * 单话题宿主（龙虾/对话）复用当前话题，忽略 agentId。
+				 */
 				createTopicAndSend?: (
 					message: string | TiptapJSONContent,
 					options?: { agentId?: string; model?: string },
@@ -586,7 +594,10 @@ declare global {
 			uploadFiles?: (files: unknown[]) => Promise<unknown>
 			/** @deprecated 使用 window.Magic.project.downloadFiles */
 			downloadFiles?: (filePaths: string[]) => Promise<unknown>
-			/** @deprecated 使用 window.Magic.project.addFilesToMessage */
+			/**
+			 * @deprecated 使用 window.Magic.project.addFilesToMessage
+			 * 单话题宿主会忽略 agentMode，沿用当前会话。
+			 */
 			addFilesToMessage?: (files: unknown[], agentMode?: string) => Promise<unknown>
 			/** @deprecated 使用 window.Magic.agent.getAgents */
 			getAgents?: () => Promise<
@@ -598,7 +609,10 @@ declare global {
 					type: "official" | "custom" | "public"
 				}>
 			>
-			/** @deprecated 使用 window.Magic.project.createTopicAndSend */
+			/**
+			 * @deprecated 使用 window.Magic.project.createTopicAndSend
+			 * 单话题宿主会忽略 agentId，沿用当前会话。
+			 */
 			createTopicAndSend?: (
 				message: string | TiptapJSONContent,
 				options?: { agentId?: string; model?: string },

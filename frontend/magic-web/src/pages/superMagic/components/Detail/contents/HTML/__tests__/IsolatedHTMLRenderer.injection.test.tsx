@@ -1,9 +1,11 @@
 import { act, render, screen } from "@testing-library/react"
-import { createRef, type ReactNode } from "react"
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
+import { createRef, type ReactElement, type ReactNode } from "react"
+import { afterEach, beforeEach, describe, expect, it, vi, type MockInstance } from "vitest"
 import type { TopicStore } from "@/pages/superMagic/stores/core/topic"
+import { HostConversationProvider } from "@/pages/superMagic/contexts/HostConversationContext"
 import pubsub, { PubSubEvents } from "@/utils/pubsub"
 import IsolatedHTMLRenderer, { type IsolatedHTMLRendererRef } from "../IsolatedHTMLRenderer"
+import type { UseIframeAgentOptions } from "../iframe-api/hooks/useIframeAgent"
 
 const hookState = vi.hoisted(() => ({
 	editorContentInjectedValues: [] as boolean[],
@@ -40,6 +42,8 @@ const iframeMessageMocks = vi.hoisted(() => ({
 
 const agentActionMocks = vi.hoisted(() => ({
 	useIframeAgentActions: vi.fn(),
+	agentOptions: null as UseIframeAgentOptions | null,
+	authorizeHtmlPermission: vi.fn(async () => true),
 }))
 
 vi.mock("react-i18next", () => ({
@@ -314,7 +318,7 @@ vi.mock("../hooks/useHtmlAppPermissions", () => ({
 		htmlAppConfig: null,
 		htmlAppConfigState: { loading: false, error: null },
 		htmlAppInstanceKey: "test-app",
-		authorizeHtmlPermission: vi.fn(async () => true),
+		authorizeHtmlPermission: agentActionMocks.authorizeHtmlPermission,
 	}),
 }))
 
@@ -331,9 +335,10 @@ vi.mock("../iframe-api/hooks/useIframeLLM", () => ({
 }))
 
 vi.mock("../iframe-api/hooks/useIframeAgent", () => ({
-	useIframeAgent: () => ({
-		handleAgentMessage: iframeMessageMocks.handleAgentMessage,
-	}),
+	useIframeAgent: (options: UseIframeAgentOptions) => {
+		agentActionMocks.agentOptions = options
+		return { handleAgentMessage: iframeMessageMocks.handleAgentMessage }
+	},
 }))
 
 vi.mock("../iframe-api/hooks/useIframeUserInfo", () => ({
@@ -385,17 +390,45 @@ vi.mock("../components/DevConsole", () => ({
 	DevConsolePanel: () => null,
 }))
 
+const defaultHostProject = { id: "project-1" }
+
 const defaultProps = {
 	content: "<html><body>history</body></html>",
 	filePathMapping: new Map<string, string>(),
 	openNewTab: vi.fn(),
 	fileId: "history-file",
 	attachmentList: [],
-	selectedProject: { id: "project-1" },
 	isVisible: true,
 }
 
-function getSetContentCalls(postMessage: ReturnType<typeof vi.fn>) {
+function renderIsolated(
+	ui: ReactElement,
+	host: {
+		selectedProject?: { id: string; current_topic_id?: string } | null
+		topicStore?: TopicStore
+	} | null = {},
+) {
+	if (host === null) {
+		return render(ui)
+	}
+
+	function Wrapper({ children }: { children: ReactNode }) {
+		return (
+			<HostConversationProvider
+				selectedProject={
+					"selectedProject" in host ? host.selectedProject : defaultHostProject
+				}
+				topicStore={host.topicStore}
+			>
+				{children}
+			</HostConversationProvider>
+		)
+	}
+
+	return render(ui, { wrapper: Wrapper })
+}
+
+function getSetContentCalls(postMessage: MockInstance<typeof window.postMessage>) {
 	return postMessage.mock.calls.filter(([message]) => message?.type === "setContent")
 }
 
@@ -445,7 +478,7 @@ describe("IsolatedHTMLRenderer iframe injection", () => {
 	})
 
 	it("enables presentation and low-risk media capabilities for HTML previews", async () => {
-		render(<IsolatedHTMLRenderer {...defaultProps} />)
+		renderIsolated(<IsolatedHTMLRenderer {...defaultProps} />)
 		await flushReactEffects()
 
 		const iframe = screen.getByTestId("isolated-html-content-iframe")
@@ -473,7 +506,7 @@ describe("IsolatedHTMLRenderer iframe injection", () => {
 	})
 
 	it("does not expose fixed editor test ids from an inactive cached preview", async () => {
-		render(<IsolatedHTMLRenderer {...defaultProps} isVisible={false} isEditMode />)
+		renderIsolated(<IsolatedHTMLRenderer {...defaultProps} isVisible={false} isEditMode />)
 		await flushReactEffects()
 
 		expect(screen.queryByTestId("html-editor-canvas")).not.toBeInTheDocument()
@@ -481,7 +514,7 @@ describe("IsolatedHTMLRenderer iframe injection", () => {
 	})
 
 	it("unmounts the portaled context toolbar when the cached tab is inactive", async () => {
-		const { rerender } = render(
+		const { rerender } = renderIsolated(
 			<IsolatedHTMLRenderer {...defaultProps} isEditMode isVisible isTabActive />,
 		)
 		await flushReactEffects()
@@ -500,7 +533,7 @@ describe("IsolatedHTMLRenderer iframe injection", () => {
 		hookState.isManualZoom = true
 		hookState.shouldApplyScaling = true
 
-		const { container, rerender } = render(
+		const { container, rerender } = renderIsolated(
 			<IsolatedHTMLRenderer {...defaultProps} isPptRender manualScale={1.2} />,
 		)
 
@@ -516,12 +549,11 @@ describe("IsolatedHTMLRenderer iframe injection", () => {
 	})
 
 	it("uses the MicroApp entry marker for storage across html file switches", async () => {
-		render(
+		renderIsolated(
 			<IsolatedHTMLRenderer
 				{...defaultProps}
 				fileId="student-file"
 				virtualStorageMarkerId="index-file"
-				selectedProject={{ id: "project-1", current_topic_id: "topic-1" }}
 			/>,
 		)
 
@@ -529,7 +561,6 @@ describe("IsolatedHTMLRenderer iframe injection", () => {
 
 		expect(virtualStorageMocks.buildNamespace).toHaveBeenCalledWith({
 			projectId: "project-1",
-			topicId: "topic-1",
 			fileId: "index-file",
 		})
 
@@ -545,51 +576,108 @@ describe("IsolatedHTMLRenderer iframe injection", () => {
 		)
 	})
 
-	it("uses the scoped selected topic for virtual storage", async () => {
-		const scopedTopicStore = { selectedTopic: { id: "topic-from-micro-app" } }
+	it("does not rebuild virtual storage or re-inject content when the selected topic changes", async () => {
+		const firstTopicStore = { selectedTopic: { id: "topic-a" } }
+		const secondTopicStore = { selectedTopic: { id: "topic-b" } }
 
-		render(
-			<IsolatedHTMLRenderer
-				{...defaultProps}
-				selectedProject={{ id: "project-1", current_topic_id: "old-topic" }}
-				topicStore={scopedTopicStore as unknown as TopicStore}
-			/>,
+		const { rerender } = render(
+			<HostConversationProvider
+				selectedProject={{ id: "project-1", current_topic_id: "topic-a" }}
+				topicStore={firstTopicStore as unknown as TopicStore}
+			>
+				<IsolatedHTMLRenderer {...defaultProps} />
+			</HostConversationProvider>,
 		)
 		await flushReactEffects()
 
-		expect(virtualStorageMocks.buildNamespace).toHaveBeenCalledWith({
-			projectId: "project-1",
-			topicId: "topic-from-micro-app",
-			fileId: "history-file",
-		})
+		const iframe = screen.getByTestId("isolated-html-content-iframe") as HTMLIFrameElement
+		const postMessage = vi
+			.spyOn(iframe.contentWindow as Window, "postMessage")
+			.mockImplementation(vi.fn())
+		dispatchIframeMessage(iframe, "iframeReady")
+		await flushReactEffects()
+
+		expect(getSetContentCalls(postMessage)).toHaveLength(1)
+		const namespaceCallsBefore = virtualStorageMocks.buildNamespace.mock.calls.length
+		const contextCallsBefore = virtualStorageMocks.createContext.mock.calls.length
+
+		// 模拟微应用编辑页「新建话题」：仅当前话题变化，入口文件与项目不变。
+		rerender(
+			<HostConversationProvider
+				selectedProject={{ id: "project-1", current_topic_id: "topic-b" }}
+				topicStore={secondTopicStore as unknown as TopicStore}
+			>
+				<IsolatedHTMLRenderer {...defaultProps} />
+			</HostConversationProvider>,
+		)
+		await flushReactEffects()
+		await flushReactEffects()
+
+		expect(virtualStorageMocks.buildNamespace.mock.calls).toHaveLength(namespaceCallsBefore)
+		expect(virtualStorageMocks.createContext.mock.calls).toHaveLength(contextCallsBefore)
+		// 不该因话题切换而再次向 iframe 注入内容。
+		expect(getSetContentCalls(postMessage)).toHaveLength(1)
 	})
 
 	it("passes the explicit projectId to Agent actions", async () => {
-		render(<IsolatedHTMLRenderer {...defaultProps} projectId="project-from-preview" />)
+		renderIsolated(<IsolatedHTMLRenderer {...defaultProps} projectId="project-from-preview" />)
 		await flushReactEffects()
 
 		expect(agentActionMocks.useIframeAgentActions).toHaveBeenCalledWith(
 			"project-from-preview",
 			undefined,
-			defaultProps.selectedProject,
+			defaultHostProject,
+			{ microAppId: undefined, microAppName: undefined },
+			undefined,
 		)
+	})
+
+	it("asks for authentication before message permissions without creating the runtime project", async () => {
+		const requireAuthentication = vi
+			.fn()
+			.mockRejectedValue(new Error("Authentication required"))
+		const ensureConversation = vi.fn()
+		render(
+			<HostConversationProvider
+				requireAuthentication={requireAuthentication}
+				ensureConversation={ensureConversation}
+			>
+				<IsolatedHTMLRenderer {...defaultProps} projectId="published-origin" />
+			</HostConversationProvider>,
+		)
+		await flushReactEffects()
+		expect(requireAuthentication).not.toHaveBeenCalled()
+		expect(ensureConversation).not.toHaveBeenCalled()
+		await expect(
+			agentActionMocks.agentOptions?.authorizePermission?.("project.message.write"),
+		).rejects.toThrow("Authentication required")
+		expect(requireAuthentication).toHaveBeenCalledTimes(1)
+		expect(agentActionMocks.authorizeHtmlPermission).not.toHaveBeenCalled()
+		expect(ensureConversation).not.toHaveBeenCalled()
+
+		requireAuthentication.mockResolvedValue(undefined)
+		await expect(
+			agentActionMocks.agentOptions?.authorizePermission?.("project.message.write"),
+		).resolves.toBe(true)
+		expect(agentActionMocks.authorizeHtmlPermission).toHaveBeenCalledWith(
+			"project.message.write",
+		)
+		expect(ensureConversation).not.toHaveBeenCalled()
 	})
 
 	it("does not read window.project_id when host props omit projectId", async () => {
 		;(window as Window & { project_id?: string }).project_id = "share-window-project"
 
-		render(
-			<IsolatedHTMLRenderer
-				{...defaultProps}
-				selectedProject={undefined}
-				projectId={undefined}
-			/>,
-		)
+		renderIsolated(<IsolatedHTMLRenderer {...defaultProps} projectId={undefined} />, {
+			selectedProject: undefined,
+		})
 		await flushReactEffects()
 
 		expect(agentActionMocks.useIframeAgentActions).toHaveBeenCalledWith(
 			undefined,
 			undefined,
+			undefined,
+			{ microAppId: undefined, microAppName: undefined },
 			undefined,
 		)
 	})
@@ -597,24 +685,25 @@ describe("IsolatedHTMLRenderer iframe injection", () => {
 	it("passes the scoped topic store to Agent actions", async () => {
 		const scopedTopicStore = { selectedTopic: { id: "topic-from-micro-app" } }
 
-		render(
-			<IsolatedHTMLRenderer
-				{...defaultProps}
-				projectId="project-from-preview"
-				topicStore={scopedTopicStore as unknown as TopicStore}
-			/>,
+		renderIsolated(
+			<IsolatedHTMLRenderer {...defaultProps} projectId="project-from-preview" />,
+			{
+				topicStore: scopedTopicStore as unknown as TopicStore,
+			},
 		)
 		await flushReactEffects()
 
 		expect(agentActionMocks.useIframeAgentActions).toHaveBeenCalledWith(
 			"project-from-preview",
 			scopedTopicStore,
-			defaultProps.selectedProject,
+			defaultHostProject,
+			{ microAppId: undefined, microAppName: undefined },
+			undefined,
 		)
 	})
 
 	it("does not inject content into a sibling iframe from another iframeReady message", async () => {
-		render(
+		renderIsolated(
 			<>
 				<IsolatedHTMLRenderer
 					{...defaultProps}
@@ -655,7 +744,7 @@ describe("IsolatedHTMLRenderer iframe injection", () => {
 	})
 
 	it("does not send content twice for iframeReady and pageLoaded", async () => {
-		render(<IsolatedHTMLRenderer {...defaultProps} />)
+		renderIsolated(<IsolatedHTMLRenderer {...defaultProps} />)
 		const iframe = screen.getByTestId("isolated-html-content-iframe") as HTMLIFrameElement
 		const postMessage = vi
 			.spyOn(iframe.contentWindow as Window, "postMessage")
@@ -670,7 +759,7 @@ describe("IsolatedHTMLRenderer iframe injection", () => {
 
 	it("reloads the original content when resetContent is called", async () => {
 		const rendererRef = createRef<IsolatedHTMLRendererRef>()
-		render(<IsolatedHTMLRenderer {...defaultProps} ref={rendererRef} />)
+		renderIsolated(<IsolatedHTMLRenderer {...defaultProps} ref={rendererRef} />)
 		const iframe = screen.getByTestId("isolated-html-content-iframe") as HTMLIFrameElement
 		const postMessage = vi
 			.spyOn(iframe.contentWindow as Window, "postMessage")
@@ -704,7 +793,7 @@ describe("IsolatedHTMLRenderer iframe injection", () => {
 			search: "?value=456",
 		}
 
-		const { rerender } = render(
+		const { rerender } = renderIsolated(
 			<IsolatedHTMLRenderer {...defaultProps} htmlNavigation={firstNavigation} />,
 		)
 		const iframe = screen.getByTestId("isolated-html-content-iframe") as HTMLIFrameElement
@@ -751,7 +840,7 @@ describe("IsolatedHTMLRenderer iframe injection", () => {
 			anchor: "",
 		}
 		const secondNavigation = { ...firstNavigation, search: "?value=456" }
-		const { rerender } = render(
+		const { rerender } = renderIsolated(
 			<IsolatedHTMLRenderer {...defaultProps} htmlNavigation={firstNavigation} />,
 		)
 		const iframe = screen.getByTestId("isolated-html-content-iframe") as HTMLIFrameElement
@@ -785,7 +874,7 @@ describe("IsolatedHTMLRenderer iframe injection", () => {
 	it("does not open a tab when iframe navigation points at the preview shell", async () => {
 		const openNewTab = vi.fn()
 		const iframeProps = { ...defaultProps, openNewTab, fileId: "cover-file" }
-		render(<IsolatedHTMLRenderer {...iframeProps} />)
+		renderIsolated(<IsolatedHTMLRenderer {...iframeProps} />)
 
 		const iframe = screen.getByTestId("isolated-html-content-iframe") as HTMLIFrameElement
 		dispatchIframeMessage(iframe, "linkClicked", window.location.origin, {
@@ -796,10 +885,49 @@ describe("IsolatedHTMLRenderer iframe injection", () => {
 		expect(openNewTab).not.toHaveBeenCalled()
 	})
 
+	it("opens a tab when iframe navigation points to index.html", async () => {
+		const openNewTab = vi.fn()
+		const iframeProps = { ...defaultProps, openNewTab, fileId: "detail-file" }
+		renderIsolated(<IsolatedHTMLRenderer {...iframeProps} />)
+
+		const iframe = screen.getByTestId("isolated-html-content-iframe") as HTMLIFrameElement
+		dispatchIframeMessage(iframe, "linkClicked", window.location.origin, {
+			href: "index.html",
+		})
+		await flushReactEffects()
+
+		expect(openNewTab).toHaveBeenCalledWith("detail-file", "index.html", false)
+	})
+
+	it("opens a tab when iframe navigation points to index.html with an external index.html shell", async () => {
+		envMock.mockReturnValue("https://husky.example/index.html")
+		const openNewTab = vi.fn()
+		const iframeProps = { ...defaultProps, openNewTab, fileId: "detail-file" }
+		renderIsolated(<IsolatedHTMLRenderer {...iframeProps} />)
+
+		const iframe = screen.getByTestId("isolated-html-content-iframe") as HTMLIFrameElement
+		dispatchIframeMessage(iframe, "iframeReady", "https://husky.example")
+		await flushReactEffects()
+
+		dispatchIframeMessage(iframe, "linkClicked", "https://husky.example", {
+			href: "index.html",
+		})
+		await flushReactEffects()
+
+		expect(openNewTab).toHaveBeenCalledWith("detail-file", "index.html", false)
+
+		dispatchIframeMessage(iframe, "linkClicked", "https://husky.example", {
+			href: "./index.html",
+		})
+		await flushReactEffects()
+
+		expect(openNewTab).toHaveBeenCalledWith("detail-file", "./index.html", false)
+	})
+
 	it("keeps the renderer file identity when a link message contains a forged fileId", async () => {
 		const openNewTab = vi.fn()
 		const iframeProps = { ...defaultProps, openNewTab, fileId: "current-file" }
-		render(<IsolatedHTMLRenderer {...iframeProps} />)
+		renderIsolated(<IsolatedHTMLRenderer {...iframeProps} />)
 
 		const iframe = screen.getByTestId("isolated-html-content-iframe") as HTMLIFrameElement
 		dispatchIframeMessage(iframe, "linkClicked", window.location.origin, {
@@ -814,7 +942,7 @@ describe("IsolatedHTMLRenderer iframe injection", () => {
 
 	it("accepts same-origin link messages from a nested iframe of the current preview", async () => {
 		const openNewTab = vi.fn()
-		render(<IsolatedHTMLRenderer {...defaultProps} openNewTab={openNewTab} />)
+		renderIsolated(<IsolatedHTMLRenderer {...defaultProps} openNewTab={openNewTab} />)
 
 		const iframe = screen.getByTestId("isolated-html-content-iframe") as HTMLIFrameElement
 		const nestedSource = {} as Window
@@ -836,7 +964,7 @@ describe("IsolatedHTMLRenderer iframe injection", () => {
 
 	it("ignores same-origin link messages from an unrelated source", async () => {
 		const openNewTab = vi.fn()
-		render(<IsolatedHTMLRenderer {...defaultProps} openNewTab={openNewTab} />)
+		renderIsolated(<IsolatedHTMLRenderer {...defaultProps} openNewTab={openNewTab} />)
 
 		const iframe = screen.getByTestId("isolated-html-content-iframe") as HTMLIFrameElement
 		dispatchIframeMessage(
@@ -853,7 +981,7 @@ describe("IsolatedHTMLRenderer iframe injection", () => {
 
 	it("ignores link messages from an unexpected origin", async () => {
 		const openNewTab = vi.fn()
-		render(<IsolatedHTMLRenderer {...defaultProps} openNewTab={openNewTab} />)
+		renderIsolated(<IsolatedHTMLRenderer {...defaultProps} openNewTab={openNewTab} />)
 
 		const iframe = screen.getByTestId("isolated-html-content-iframe") as HTMLIFrameElement
 		dispatchIframeMessage(iframe, "linkClicked", "https://untrusted.example", {
@@ -866,7 +994,7 @@ describe("IsolatedHTMLRenderer iframe injection", () => {
 
 	it("ignores input messages from an unexpected source", async () => {
 		const publish = vi.spyOn(pubsub, "publish")
-		render(<IsolatedHTMLRenderer {...defaultProps} />)
+		renderIsolated(<IsolatedHTMLRenderer {...defaultProps} />)
 
 		const iframe = screen.getByTestId("isolated-html-content-iframe") as HTMLIFrameElement
 		dispatchIframeMessage(
@@ -883,7 +1011,7 @@ describe("IsolatedHTMLRenderer iframe injection", () => {
 
 	it("accepts input messages from the current iframe source", async () => {
 		const publish = vi.spyOn(pubsub, "publish")
-		render(<IsolatedHTMLRenderer {...defaultProps} />)
+		renderIsolated(<IsolatedHTMLRenderer {...defaultProps} />)
 
 		const iframe = screen.getByTestId("isolated-html-content-iframe") as HTMLIFrameElement
 		dispatchIframeMessage(iframe, "MAGIC_SET_INPUT_MESSAGE", window.location.origin, {
@@ -897,7 +1025,7 @@ describe("IsolatedHTMLRenderer iframe injection", () => {
 	it("ignores privileged legacy messages from an unexpected source", async () => {
 		const saveEditContent = vi.fn()
 		const publish = vi.spyOn(pubsub, "publish")
-		render(
+		renderIsolated(
 			<IsolatedHTMLRenderer {...defaultProps} isEditMode saveEditContent={saveEditContent} />,
 		)
 

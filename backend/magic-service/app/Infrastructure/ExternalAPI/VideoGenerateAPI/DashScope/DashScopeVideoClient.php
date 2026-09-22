@@ -136,32 +136,6 @@ readonly class DashScopeVideoClient
             throw new ProviderVideoException(VideoGenerateErrorCode::GENERAL_ERROR, VideoGenerateErrorCode::GENERAL_ERROR->getMessage(), $throwable);
         }
 
-        if (! is_array($data)) {
-            throw new ProviderVideoException(VideoGenerateErrorCode::RESPONSE_FORMAT_ERROR, VideoGenerateErrorCode::RESPONSE_FORMAT_ERROR->getMessage());
-        }
-
-        $this->assertProviderSuccess($data);
-
         return $data;
-    }
-
-    private function assertProviderSuccess(array $data): void
-    {
-        $output = is_array($data['output'] ?? null) ? $data['output'] : [];
-        $error = is_array($data['error'] ?? null) ? $data['error'] : [];
-        $outputError = is_array($output['error'] ?? null) ? $output['error'] : [];
-        $code = $data['code'] ?? $error['code'] ?? $output['code'] ?? $outputError['code'] ?? null;
-        if ($code === null) {
-            return;
-        }
-        if ($code === 0 || $code === '0' || $code === '') {
-            return;
-        }
-
-        $errorCode = ProviderVideoErrorMapper::resolveDashScope(null, $data);
-        throw new ProviderVideoException(
-            $errorCode,
-            $errorCode->getMessage(),
-        );
     }
 }

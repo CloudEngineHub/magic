@@ -7,6 +7,8 @@ import {
 	type GetTemporaryDownloadUrlItem,
 } from "@/pages/superMagic/utils/api"
 import type { AttachmentItem } from "@/pages/superMagic/components/TopicFilesButton/hooks/types"
+import type { FileAccessContext } from "@/pages/superMagic/fileAccess/fileAccessContext"
+import type { FileApi } from "@/pages/superMagic/fileAccess/fileApi"
 
 interface SlideMetadata {
 	name?: string
@@ -20,11 +22,27 @@ export interface PrepareExportSlidesInput {
 	mainFileId: string
 	mainFileName?: string
 	displayConfig?: SlideMetadata
+	access?: FileAccessContext
+	fileApi?: FileApi
 }
 
 export interface PrepareExportSlidesOutput {
 	htmlSlides: string[]
 	fileName: string
+}
+
+/** A lazily prepared page used by the large, forward-only PPTX export path. */
+export interface PreparedExportSlidePage {
+	index: number
+	html: string
+	key?: string
+	pageName?: string
+	pagePath?: string
+	pageFileId?: string
+}
+
+export interface IterateExportSlidesInput extends PrepareExportSlidesInput {
+	signal?: AbortSignal
 }
 
 function resolveRelativePath(basePath: string, relativePath: string): string {
@@ -75,6 +93,17 @@ function ensureFlatScope(attachmentList: AttachmentItem[], mainFileId: string): 
 	return flattenAttachments(attachmentList)
 }
 
+function fetchTemporaryDownloadUrls(
+	fileIds: string[],
+	fileApi?: FileApi,
+	access?: FileAccessContext,
+) {
+	return (fileApi?.getTemporaryDownloadUrl ?? getTemporaryDownloadUrl)({
+		file_ids: fileIds,
+		access,
+	})
+}
+
 function extractFileIdFromPath(
 	path: string,
 	searchScope: AttachmentItem[],
@@ -97,16 +126,23 @@ export async function prepareSingleSlideExport(input: {
 	fileId: string
 	fileName?: string
 	attachmentList: AttachmentItem[]
+	access?: FileAccessContext
+	fileApi?: FileApi
+	signal?: AbortSignal
 }): Promise<PrepareExportSlidesOutput> {
-	const { fileId, fileName, attachmentList } = input
+	const { fileId, fileName, attachmentList, access, fileApi, signal } = input
+	throwIfAborted(signal)
 
 	const searchScope = flattenAttachments(attachmentList)
 
-	const [urlItem] = (await getTemporaryDownloadUrl({ file_ids: [fileId] })) ?? []
+	const [urlItem] =
+		(await waitForAbortable(fetchTemporaryDownloadUrls([fileId], fileApi, access), signal)) ??
+		[]
 	if (!urlItem?.url) return { htmlSlides: [], fileName: fileName ?? "slide" }
 
 	const loaderService = new SlideLoaderService()
-	const rawContent = await loaderService.loadSlide(urlItem.url)
+	const rawContent = await waitForAbortable(loaderService.loadSlide(urlItem.url), signal)
+	throwIfAborted(signal)
 	if (!rawContent) return { htmlSlides: [], fileName: fileName ?? "slide" }
 
 	const fileItem = searchScope.find((item) => item.file_id === fileId)
@@ -117,6 +153,7 @@ export async function prepareSingleSlideExport(input: {
 		attachmentList: searchScope,
 		mainFileId: fileId,
 		mainFileName: fileName,
+		fileApi,
 	})
 
 	const resourceIds = processorService.collectFileIds(rawContent, 0, relativeFilePath)
@@ -125,25 +162,51 @@ export async function prepareSingleSlideExport(input: {
 	if (resourceIds.size > 0) {
 		const resourceUrlMapping = new Map<string, string>()
 		try {
-			const response = await getTemporaryDownloadUrl({ file_ids: Array.from(resourceIds) })
+			const response = await waitForAbortable(
+				fetchTemporaryDownloadUrls(Array.from(resourceIds), fileApi, access),
+				signal,
+			)
 			response?.forEach((item: GetTemporaryDownloadUrlItem) => {
 				if (item.file_id && item.url) resourceUrlMapping.set(item.file_id, item.url)
 			})
 		} catch (error) {
+			if (signal?.aborted || isAbortError(error)) throw createAbortError(signal, error)
 			console.error("[pptService] Failed to fetch resource URLs:", error)
 		}
-		const processedSlide = await processorService.processSlideWithUrlMapping(
-			rawContent,
-			0,
-			relativeFilePath,
-			resourceUrlMapping,
+		const processedSlide = await waitForAbortable(
+			processorService.processSlideWithUrlMapping(
+				rawContent,
+				0,
+				relativeFilePath,
+				resourceUrlMapping,
+			),
+			signal,
 		)
-		processed = processedSlide.content
+		processed = typeof processedSlide === "string" ? processedSlide : processedSlide.content
 	}
+	throwIfAborted(signal)
 
 	return {
 		htmlSlides: [processed],
 		fileName: fileName?.replace(/\.html?$/i, "") ?? "slide",
+	}
+}
+
+/** Lazy adapter for the one-page service so business entry points can share one provider shape. */
+export async function* iterateSingleExportSlide(
+	input: Parameters<typeof prepareSingleSlideExport>[0],
+): AsyncIterable<PreparedExportSlidePage> {
+	const result = await prepareSingleSlideExport(input)
+	throwIfAborted(input.signal)
+	for (let index = 0; index < result.htmlSlides.length; index += 1) {
+		yield {
+			index,
+			html: result.htmlSlides[index],
+			key: input.fileId,
+			pageName: input.fileName,
+			pagePath: input.fileName,
+			pageFileId: input.fileId,
+		}
 	}
 }
 
@@ -157,7 +220,8 @@ export async function prepareSingleSlideExport(input: {
 export async function prepareExportSlides(
 	input: PrepareExportSlidesInput,
 ): Promise<PrepareExportSlidesOutput> {
-	const { slidePaths, attachmentList, mainFileId, mainFileName, displayConfig } = input
+	const { slidePaths, attachmentList, mainFileId, mainFileName, displayConfig, access, fileApi } =
+		input
 	const fileName = displayConfig?.name || mainFileName || "slides"
 	if (!slidePaths.length) return { htmlSlides: [], fileName }
 
@@ -179,7 +243,7 @@ export async function prepareExportSlides(
 
 	if (fileIds.length > 0) {
 		try {
-			const response = await getTemporaryDownloadUrl({ file_ids: fileIds })
+			const response = await fetchTemporaryDownloadUrls(fileIds, fileApi, access)
 			response?.forEach((item: GetTemporaryDownloadUrlItem) => {
 				if (!item.file_id || !item.url) return
 				pathToFileId.forEach((fid, path) => {
@@ -201,6 +265,7 @@ export async function prepareExportSlides(
 		mainFileId,
 		mainFileName,
 		displayConfig,
+		fileApi,
 	})
 
 	const allResourceFileIds = new Set<string>()
@@ -244,9 +309,11 @@ export async function prepareExportSlides(
 
 	if (allResourceFileIds.size > 0) {
 		try {
-			const response = await getTemporaryDownloadUrl({
-				file_ids: Array.from(allResourceFileIds),
-			})
+			const response = await fetchTemporaryDownloadUrls(
+				Array.from(allResourceFileIds),
+				fileApi,
+				access,
+			)
 			response?.forEach((item: GetTemporaryDownloadUrlItem) => {
 				if (item.file_id && item.url) {
 					resourceUrlMapping.set(item.file_id, item.url)
@@ -282,4 +349,211 @@ export async function prepareExportSlides(
 		htmlSlides,
 		fileName,
 	}
+}
+
+/**
+ * Prepare multi-page slides one at a time.
+ *
+ * `prepareExportSlides()` remains the compatibility API for callers that need an array. Large
+ * PPTX exports should use this provider so raw HTML, resource URL maps, and processed HTML from
+ * an already committed page can be released before the next page is fetched.
+ */
+export async function* iterateExportSlides(
+	input: IterateExportSlidesInput,
+): AsyncIterable<PreparedExportSlidePage> {
+	const {
+		slidePaths,
+		attachmentList,
+		mainFileId,
+		mainFileName,
+		displayConfig,
+		access,
+		fileApi,
+		signal,
+	} = input
+	if (!slidePaths.length) return
+
+	const searchScope = ensureFlatScope(attachmentList, mainFileId)
+	const pathToFileId = new Map<string, string>()
+	const fileIds: string[] = []
+
+	for (const path of slidePaths) {
+		const fileId = extractFileIdFromPath(path, searchScope, mainFileId)
+		if (!fileId) continue
+		pathToFileId.set(path, fileId)
+		fileIds.push(fileId)
+	}
+
+	const pathToUrl = new Map<string, string>()
+	if (fileIds.length > 0) {
+		try {
+			const response = await waitForAbortable(
+				fetchTemporaryDownloadUrls(fileIds, fileApi, access),
+				signal,
+			)
+			response?.forEach((item: GetTemporaryDownloadUrlItem) => {
+				if (!item.file_id || !item.url) return
+				pathToFileId.forEach((fileId, path) => {
+					if (fileId === item.file_id) pathToUrl.set(path, item.url)
+				})
+			})
+		} catch (error) {
+			if (signal?.aborted || isAbortError(error)) throw createAbortError(signal, error)
+			console.error("[pptService] Failed to fetch slide download URLs:", error)
+		}
+	}
+
+	const loaderService = new SlideLoaderService()
+	const processorService = new SlideProcessorService({
+		attachments: searchScope,
+		attachmentList: searchScope,
+		mainFileId,
+		mainFileName,
+		displayConfig,
+		fileApi,
+	})
+
+	let preparedPageCount = 0
+	let skippedPageCount = 0
+	for (let index = 0; index < slidePaths.length; index += 1) {
+		throwIfAborted(signal)
+		const path = slidePaths[index]
+		const url = pathToUrl.get(path)
+		if (!url) {
+			skippedPageCount += 1
+			console.error(`[pptService] No download URL was available for slide ${index}:`, path)
+			continue
+		}
+
+		try {
+			const rawContent = await waitForAbortable(loaderService.loadSlide(url), signal)
+			throwIfAborted(signal)
+			const fileId = pathToFileId.get(path)
+			const fileItem = searchScope.find((item) => item.file_id === fileId)
+			const relativeFilePath = fileItem?.relative_file_path?.replace(
+				fileItem?.file_name || "",
+				"",
+			)
+
+			const resourceIds = processorService.collectFileIds(rawContent, index, relativeFilePath)
+			const resourceUrlMapping = new Map<string, string>()
+			if (resourceIds.size > 0) {
+				try {
+					const response = await waitForAbortable(
+						fetchTemporaryDownloadUrls(Array.from(resourceIds), fileApi, access),
+						signal,
+					)
+					response?.forEach((item: GetTemporaryDownloadUrlItem) => {
+						if (item.file_id && item.url) resourceUrlMapping.set(item.file_id, item.url)
+					})
+				} catch (error) {
+					if (signal?.aborted || isAbortError(error))
+						throw createAbortError(signal, error)
+					console.error(
+						`[pptService] Failed to fetch resources for slide ${index}:`,
+						error,
+					)
+				}
+			}
+
+			const processed = await waitForAbortable(
+				processorService.processSlideWithUrlMapping(
+					rawContent,
+					index,
+					relativeFilePath,
+					resourceUrlMapping,
+				),
+				signal,
+			)
+			throwIfAborted(signal)
+			preparedPageCount += 1
+			yield {
+				index,
+				key: path,
+				html: typeof processed === "string" ? processed : processed.content,
+				pageName: fileItem?.file_name || path.split("/").pop() || path,
+				pagePath: path,
+				pageFileId: fileId,
+			}
+		} catch (error) {
+			if (signal?.aborted || isAbortError(error)) throw createAbortError(signal, error)
+			console.error(`[pptService] Failed to prepare slide ${index}:`, error)
+			skippedPageCount += 1
+		}
+	}
+
+	if (preparedPageCount === 0 && skippedPageCount > 0) {
+		throw new Error("No exportable slides could be prepared")
+	}
+}
+
+function throwIfAborted(signal?: AbortSignal): void {
+	if (!signal?.aborted) return
+	throw createAbortError(signal)
+}
+
+function waitForAbortable<T>(promise: PromiseLike<T>, signal?: AbortSignal): Promise<T> {
+	if (!signal) return Promise.resolve(promise)
+	if (signal.aborted) return Promise.reject(createAbortError(signal))
+
+	return new Promise<T>((resolve, reject) => {
+		let settled = false
+		const onAbort = () => {
+			if (settled) return
+			settled = true
+			signal.removeEventListener("abort", onAbort)
+			reject(createAbortError(signal))
+		}
+		signal.addEventListener("abort", onAbort, { once: true })
+		Promise.resolve(promise).then(
+			(value) => {
+				if (settled) return
+				settled = true
+				signal.removeEventListener("abort", onAbort)
+				resolve(value)
+			},
+			(error) => {
+				if (settled) return
+				settled = true
+				signal.removeEventListener("abort", onAbort)
+				reject(error)
+			},
+		)
+	})
+}
+
+function isAbortError(error: unknown): boolean {
+	return (
+		(typeof DOMException !== "undefined" &&
+			error instanceof DOMException &&
+			error.name === "AbortError") ||
+		(typeof error === "object" &&
+			error !== null &&
+			"name" in error &&
+			(error as { name?: unknown }).name === "AbortError")
+	)
+}
+
+function createAbortError(signal?: AbortSignal, cause?: unknown): Error {
+	const reason = signal?.reason
+	if (reason instanceof Error && reason.name === "AbortError") return reason
+	if (typeof DOMException !== "undefined") {
+		return new DOMException(
+			reason === undefined
+				? cause instanceof Error
+					? cause.message
+					: "The operation was aborted"
+				: String(reason),
+			"AbortError",
+		)
+	}
+	const error = new Error(
+		reason === undefined
+			? cause instanceof Error
+				? cause.message
+				: "The operation was aborted"
+			: String(reason),
+	)
+	error.name = "AbortError"
+	return error
 }

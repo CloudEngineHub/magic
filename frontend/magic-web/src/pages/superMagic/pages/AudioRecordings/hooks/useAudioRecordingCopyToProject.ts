@@ -113,7 +113,6 @@ export function useAudioRecordingCopyToProject(
 	const loadCopyAttachments = useCallback(async (projectId: string) => {
 		const result = await loadProjectAttachments({
 			projectId,
-			temporaryToken: (window as Window & { temporary_token?: string }).temporary_token || "",
 		})
 		return result?.tree || []
 	}, [])

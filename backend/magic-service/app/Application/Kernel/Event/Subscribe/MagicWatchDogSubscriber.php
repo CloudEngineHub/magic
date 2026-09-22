@@ -58,12 +58,14 @@ readonly class MagicWatchDogSubscriber implements ListenerInterface
             static $blockingStateMap;
             $blockingStateMap ??= new WeakMap();
             $coroutine = Coroutine::getCurrent();
-            $now = hrtime(true);
+            // hrtime(true) 在静态分析中为 int|float，显式收敛为 int，保证与状态数组声明的类型一致。
+            $now = (int) hrtime(true);
             $state = $blockingStateMap[$coroutine] ?? null;
             $isNewEpisode = $state === null
                 || $state['type'] !== $blockingType
                 || $now - $state['lastAt'] > 2_000_000_000;
             if ($isNewEpisode) {
+                // 一次性给出全部字段，避免局部赋值使状态数组退化为 array<string, float|int|string>。
                 $state = [
                     'type' => $blockingType,
                     'count' => 0,

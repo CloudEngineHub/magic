@@ -104,8 +104,7 @@ export function withAssistantCard<
 
 			const resolveModel = (
 				modelData:
-					| { model_id?: string; model_name?: string; model_icon?: string }
-					| undefined,
+					{ model_id?: string; model_name?: string; model_icon?: string } | undefined,
 				getModelList: () => ModelItem[],
 			) => {
 				if (!modelData?.model_id) return

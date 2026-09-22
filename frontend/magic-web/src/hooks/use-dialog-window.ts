@@ -15,6 +15,10 @@ export interface DialogWindowOptions {
 	minSize: DialogWindowSize
 	sizeStorageKey?: string
 	dragHandleSelector?: string
+	/** 递增时恢复默认尺寸；初次挂载和存储身份变化不会清除已有偏好。 */
+	resetSizeKey?: number
+	/** 仅实际改变宽高且未取消的手势完成时调用。 */
+	onResizeEnd?: (size: DialogWindowSize) => void
 }
 
 export type DialogResizeDirection = "n" | "s" | "e" | "w" | "ne" | "nw" | "se" | "sw"
@@ -96,6 +100,8 @@ export function useDialogWindow(options?: DialogWindowOptions) {
 	const lastStorageKeyRef = useRef(options?.sizeStorageKey)
 	const open = options?.open ?? false
 	const storageKey = options?.sizeStorageKey
+	const resetSizeKey = options?.resetSizeKey
+	const lastResetRequestRef = useRef({ storageKey, resetSizeKey })
 
 	const cancelFrame = useMemoizedFn(() => {
 		if (frameRef.current === null) return
@@ -121,6 +127,7 @@ export function useDialogWindow(options?: DialogWindowOptions) {
 		const gesture = gestureRef.current
 		if (!gesture) return false
 		gestureRef.current = null
+		let resizedSize: DialogWindowSize | undefined
 		if (cancel) {
 			if (options) rectRef.current = constrainRect(gesture.start, options.minSize)
 		} else if (
@@ -132,6 +139,7 @@ export function useDialogWindow(options?: DialogWindowOptions) {
 			const { width, height } = rectRef.current
 			const size = { width, height }
 			preferredSizeRef.current = size
+			resizedSize = size
 			if (storageKey) {
 				try {
 					localStorage.setItem(storageKey, JSON.stringify(size))
@@ -144,14 +152,24 @@ export function useDialogWindow(options?: DialogWindowOptions) {
 		if (render) setRect(rectRef.current)
 		if (gesture.target.hasPointerCapture(gesture.pointerId))
 			gesture.target.releasePointerCapture(gesture.pointerId)
+		if (resizedSize) options?.onResizeEnd?.(resizedSize)
 		return true
 	})
 
-	const resetWindow = useMemoizedFn(() => {
+	const resetWindow = useMemoizedFn((restoreDefault = false) => {
 		if (!options) return
 		if (lastStorageKeyRef.current !== storageKey) preferredSizeRef.current = null
 		lastStorageKeyRef.current = storageKey
-		const size = readSize(storageKey, preferredSizeRef.current ?? options.defaultSize)
+		if (restoreDefault && storageKey) {
+			try {
+				localStorage.removeItem(storageKey)
+			} catch {
+				// 本地存储不可用时仍立即恢复窗口，本次挂载不再沿用旧尺寸。
+			}
+		}
+		const size = restoreDefault
+			? options.defaultSize
+			: readSize(storageKey, preferredSizeRef.current ?? options.defaultSize)
 		preferredSizeRef.current = size
 		const viewport = getViewport()
 		const next = constrainRect(
@@ -186,6 +204,21 @@ export function useDialogWindow(options?: DialogWindowOptions) {
 		// 配置对象每次 render 可重新创建；仅开关和存储身份改变时重置位置。
 		// eslint-disable-next-line react-hooks/exhaustive-deps
 	}, [open, storageKey])
+
+	useLayoutEffect(() => {
+		const previous = lastResetRequestRef.current
+		lastResetRequestRef.current = { storageKey, resetSizeKey }
+		if (
+			!open ||
+			resetSizeKey === undefined ||
+			previous.storageKey !== storageKey ||
+			previous.resetSizeKey === resetSizeKey
+		)
+			return
+		// 显式恢复只更新几何和尺寸偏好，不重挂窗口内的搜索、列表及业务状态。
+		endGesture(true)
+		resetWindow(true)
+	}, [endGesture, open, resetSizeKey, resetWindow, storageKey])
 
 	const startGesture = useMemoizedFn(
 		(event: PointerEvent<HTMLElement>, direction: WindowGesture) => {

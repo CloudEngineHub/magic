@@ -44,6 +44,9 @@
     <testsuite name="管理后台测试">
       <directory suffix="Test.php">test/Cases/Api/Admin</directory>
     </testsuite>
+    <testsuite name="超级麦吉文件测试">
+      <directory suffix="Test.php">test/Cases/Domain/SuperMagic</directory>
+    </testsuite>
   </testsuites>
 
   <!-- 覆盖率统计的目录配置，不是执行单测的目录 -->

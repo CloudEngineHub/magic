@@ -6,6 +6,7 @@
  * 纯 class，不依赖 React，由 useIframeFS hook 持有实例。
  */
 
+import type { FileAccessContext } from "@/pages/superMagic/fileAccess/fileAccessContext"
 import { getIframeDownloadUrl } from "../iframeApi"
 import {
 	FS_MESSAGE_TYPES,
@@ -156,6 +157,7 @@ export interface IframeFSConfig {
 	 * 删除 appRoot 外的 project-scope 文件/目录前，让宿主弹出二次确认。
 	 */
 	confirmProjectDeleteFn?: ConfirmProjectDeleteFn
+	getFileAccess?: () => FileAccessContext | null
 	/** 执行高风险能力前的授权检查。未提供时保持旧行为。 */
 	authorizePermission?: (scope: HtmlPermissionScope) => Promise<boolean>
 }
@@ -304,7 +306,10 @@ export class IframeFSService {
 				})
 			}
 
-			const urls = await getIframeDownloadUrl([item.file_id])
+			const urls = await getIframeDownloadUrl(
+				[item.file_id],
+				this.cfg.getFileAccess?.() ?? null,
+			)
 			const url = urls?.[0]?.url
 			if (!url) throw new Error("Failed to get download URL")
 
@@ -560,7 +565,10 @@ export class IframeFSService {
 				})
 			}
 
-			const urls = await getIframeDownloadUrl([item.file_id])
+			const urls = await getIframeDownloadUrl(
+				[item.file_id],
+				this.cfg.getFileAccess?.() ?? null,
+			)
 			const url = urls?.[0]?.url
 			if (!url) throw new Error("Failed to get file URL")
 
