@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 import type { PptxDestination } from "@magic/html2pptx"
 
 const mocks = vi.hoisted(() => ({
+	exportPPTXLegacy: vi.fn(),
 	exportPPTXStreaming: vi.fn(),
 	imagePolicyRequiresReplay: vi.fn(
 		(policy: { maxPixels?: number } | undefined) => policy?.maxPixels !== undefined,
@@ -31,6 +32,7 @@ vi.mock("@magic/html2pptx", async (importOriginal) => {
 		...actual,
 		createBufferedPptxSink,
 		PPTX_MIME_TYPE: "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+		exportPPTXLegacy: mocks.exportPPTXLegacy,
 		exportPPTXStreaming: mocks.exportPPTXStreaming,
 		imagePolicyRequiresReplay: mocks.imagePolicyRequiresReplay,
 	}
@@ -64,6 +66,7 @@ function createDestination(): PptxDestination {
 }
 
 beforeEach(() => {
+	mocks.exportPPTXLegacy.mockReset()
 	mocks.exportPPTXStreaming.mockReset()
 })
 
@@ -83,7 +86,7 @@ describe("pptxStreamingExport", () => {
 		expect(ensurePptxFileName("   ")).toBe("export.pptx")
 	})
 
-	it("uses a buffered download when a browser lacks the file picker", async () => {
+	it("selects the legacy route when a browser lacks the file picker", async () => {
 		Reflect.deleteProperty(globalThis, "showSaveFilePicker")
 		expect(supportsPptxFileStreaming()).toBe(false)
 		expect(supportsPptxExport()).toBe(true)
@@ -96,14 +99,44 @@ describe("pptxStreamingExport", () => {
 			.mockImplementation(() => undefined)
 
 		const lease = await openPptxDestination({ suggestedName: "deck" })
-		expect(lease?.route).toBe("buffered-download")
-		const destination = lease?.destination
-		if (!destination || !("kind" in destination) || destination.kind !== "sink-proxy") {
-			throw new Error("Expected a sink-proxy destination")
-		}
-		await destination.sink.write(Uint8Array.of(1, 2, 3))
-		await destination.sink.close()
-		expect(createObjectURL).toHaveBeenCalledOnce()
+		expect(lease?.route).toBe("legacy-blob")
+		expect(createObjectURL).not.toHaveBeenCalled()
+		expect(click).not.toHaveBeenCalled()
+	})
+
+	it("routes browsers without a picker through the independent legacy exporter", async () => {
+		Reflect.deleteProperty(globalThis, "showSaveFilePicker")
+		vi.spyOn(URL, "createObjectURL").mockReturnValue("blob:legacy-pptx")
+		vi.spyOn(URL, "revokeObjectURL").mockImplementation(() => undefined)
+		const click = vi
+			.spyOn(HTMLAnchorElement.prototype, "click")
+			.mockImplementation(() => undefined)
+		mocks.exportPPTXLegacy.mockReturnValue({
+			cancel: vi.fn(),
+			promise: Promise.resolve({
+				data: new Blob([new Uint8Array([1, 2, 3])]),
+				fileName: "legacy.pptx",
+				pageCount: 1,
+				bytesWritten: 3,
+			}),
+		})
+		const lease = await openPptxDestination({ suggestedName: "legacy" })
+		if (!lease) throw new Error("Expected a legacy destination")
+
+		const handle = startPptxStreamingExportFromFactory(
+			async function* () {
+				yield "<main>legacy</main>"
+			},
+			{
+				fileName: "legacy",
+				destination: lease.destination,
+				outputPolicy: "file-stream",
+			},
+		)
+		await handle.promise
+
+		expect(mocks.exportPPTXLegacy).toHaveBeenCalledOnce()
+		expect(mocks.exportPPTXStreaming).not.toHaveBeenCalled()
 		expect(click).toHaveBeenCalledOnce()
 	})
 
