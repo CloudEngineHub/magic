@@ -140,16 +140,15 @@ describe("pptxStreamingExport", () => {
 		expect(click).toHaveBeenCalledOnce()
 	})
 
-	it("keeps the streaming exporter on the buffered compatibility route", async () => {
+	it("uses the legacy exporter when the browser lacks a file picker", async () => {
 		Reflect.deleteProperty(globalThis, "showSaveFilePicker")
-		mocks.exportPPTXStreaming.mockReturnValue({
+		mocks.exportPPTXLegacy.mockReturnValue({
 			cancel: vi.fn(),
 			promise: Promise.resolve({
+				data: new Blob([new Uint8Array([1, 2, 3])]),
 				fileName: "deck.pptx",
 				pageCount: 1,
-				mediaPartCount: 0,
 				bytesWritten: 0,
-				durationMs: 0,
 			}),
 		})
 		const lease = await openPptxDestination({ suggestedName: "deck" })
@@ -168,13 +167,8 @@ describe("pptxStreamingExport", () => {
 		)
 		await handle.promise
 
-		expect(mocks.exportPPTXStreaming).toHaveBeenCalledOnce()
-		expect(mocks.exportPPTXStreaming.mock.calls[0][1]).toEqual(
-			expect.objectContaining({
-				destination: lease.destination,
-				mediaPolicy: expect.objectContaining({ mode: "rolling-stage" }),
-			}),
-		)
+		expect(mocks.exportPPTXLegacy).toHaveBeenCalledOnce()
+		expect(mocks.exportPPTXStreaming).not.toHaveBeenCalled()
 	})
 
 	it("falls back to a buffered destination when createWritable is rejected", async () => {
