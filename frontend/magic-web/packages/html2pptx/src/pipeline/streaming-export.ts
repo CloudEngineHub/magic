@@ -71,6 +71,8 @@ interface CreatedStagingStore {
 	allowsOpfsDescriptors: boolean
 }
 
+type StagedPageMetadata = Pick<StreamingHtmlPage, "key" | "pageName" | "pagePath" | "pageFileId">
+
 interface ExportDiagnosticState {
 	phase: ExportFailurePhase
 	pageIndex?: number
@@ -478,10 +480,7 @@ async function runStagedStreamingExport(
 	let currentPageName: string | undefined
 	let currentPagePath: string | undefined
 	let currentPageFileId: string | undefined
-	const stagedPageMetadata = new Map<
-		number,
-		Pick<StreamingHtmlPage, "key" | "pageName" | "pagePath" | "pageFileId">
-	>()
+	const stagedPageMetadata = new Map<number, StagedPageMetadata>()
 
 	try {
 		const createdStore = await runStagingOperation(input.signal, () =>
@@ -535,7 +534,8 @@ async function runStagedStreamingExport(
 				pageIndex: page.index,
 				pageCount: input.pageCount,
 			})
-			let stagingWriteStarted = false
+			const pageStageStart = stagedKeys.length
+			let stagingWriteInFlight = false
 			try {
 				const result = await prepareStreamingPage(input, page)
 				if (input.autoSize && result.totalWidth > MAX_PPT_PAGE_PX) {
@@ -580,7 +580,7 @@ async function runStagedStreamingExport(
 						pagePath: page.pagePath,
 						pageFileId: page.pageFileId,
 					})
-					stagingWriteStarted = true
+					stagingWriteInFlight = true
 					await runStagingOperation(
 						input.signal,
 						() =>
@@ -595,6 +595,7 @@ async function runStagedStreamingExport(
 							),
 						usesDefaultOpfsStore ? { operation: "putSlideIr" } : undefined,
 					)
+					stagingWriteInFlight = false
 					outputNodes.length = 0
 					stagedKeys.push(key)
 				}
@@ -606,8 +607,16 @@ async function runStagedStreamingExport(
 				})
 			} catch (error) {
 				if (input.signal.aborted) throw createAbortError()
-				if (stagingWriteStarted || !input.skipFailedPages || !isRecoverablePageError(error))
+				if (stagingWriteInFlight || !input.skipFailedPages || !isRecoverablePageError(error))
 					throw error
+				await discardStagedPageRecords(
+					activeStore,
+					stagedKeys,
+					stagedPageMetadata,
+					pageStageStart,
+					input.signal,
+					usesDefaultOpfsStore,
+				)
 				reportPageExportError(input, page, error)
 				const placeholderIndex = stagedKeys.length + 1
 				const placeholderKey = createSlideKey(page.key, page.index, 0)
@@ -727,6 +736,34 @@ async function runStagedStreamingExport(
 		if (store && shouldCleanupStaging(input.stagingPolicy?.cleanup, exportSucceeded)) {
 			await cleanupStagingSession(store, sessionId)
 		}
+	}
+}
+
+/**
+ * Remove SlideIR records already staged for the current page before replacing that page with a
+ * diagnostic placeholder. Staged records are appended in order, so only the tail can belong to
+ * the page currently being prepared.
+ */
+async function discardStagedPageRecords(
+	store: StreamingStagingStore,
+	stagedKeys: string[],
+	stagedPageMetadata: Map<number, StagedPageMetadata>,
+	pageStageStart: number,
+	signal: AbortSignal,
+	usesDefaultOpfsStore: boolean,
+): Promise<void> {
+	const deleteSlideIr = store.deleteSlideIr
+	while (stagedKeys.length > pageStageStart) {
+		const index = stagedKeys.length
+		if (deleteSlideIr) {
+			await runStagingOperation(
+				signal,
+				() => deleteSlideIr.call(store, index, { signal }),
+				usesDefaultOpfsStore ? { operation: "deleteSlideIr" } : undefined,
+			)
+		}
+		stagedPageMetadata.delete(index)
+		stagedKeys.pop()
 	}
 }
 
