@@ -94,16 +94,16 @@ function isRecoverablePageError(error: unknown): boolean {
 	)
 		return false
 
-	// Capture/script/readiness fidelity failures indicate missing or incomplete content and
-	// remain fatal. A page-size limit is different: the page can be represented by the
-	// diagnostic placeholder when the host explicitly opted into skipFailedPages.
-	if (isExportFidelityError(error)) return error.kind === "page-size"
+	// Fidelity failures are still page-local when they are raised while preparing the current
+	// page. With skipFailedPages enabled, preserve the rest of the deck by replacing that page
+	// with a diagnostic placeholder and forwarding the original issue to the host/AI repair flow.
+	// Destination, Worker, ZIP, and finalization failures are not raised through this helper and
+	// therefore remain terminal for the whole export.
+	if (isExportFidelityError(error)) return true
 	if (!isPptxExportError(error)) return true
 
 	const diagnostic = error.diagnostic
-	if (isExportFidelityError(error.sourceError)) {
-		return error.sourceError.kind === "page-size"
-	}
+	if (isExportFidelityError(error.sourceError)) return true
 	if (
 		[
 			"worker-failed",
