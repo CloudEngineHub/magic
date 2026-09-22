@@ -588,14 +588,24 @@ readonly class MagicUserRepository implements MagicUserRepositoryInterface
 
         $total = (clone $query)->count();
         $listQuery = (clone $query)
-            ->select(['u.user_id'])
+            ->select([
+                'u.user_id',
+                Db::raw("CASE WHEN a.real_name IS NOT NULL AND a.real_name <> '' THEN a.real_name ELSE u.nickname END AS user_name"),
+                'a.phone',
+                'u.organization_code',
+                'o.name as organization_name',
+            ])
             ->orderBy('u.id', 'desc')
             ->forPage($page->getPage(), $page->getPageNum());
         $rows = Db::select($listQuery->toSql(), $listQuery->getBindings());
+        $list = [];
+        foreach ($rows as $row) {
+            $list[] = (array) $row;
+        }
 
         return [
             'total' => $total,
-            'list' => $rows,
+            'list' => $list,
         ];
     }
 
