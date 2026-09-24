@@ -46,6 +46,7 @@ use App\Domain\SuperMagic\Task\Constant\AgentConstant;
 use App\Domain\SuperMagic\Task\Constant\AgentEventEnum;
 use App\Domain\SuperMagic\Task\Entity\TaskEntity;
 use App\Domain\SuperMagic\Task\Entity\ValueObject\TaskStatus;
+use App\Domain\SuperMagic\Task\Event\FirstTaskCompletedEvent;
 use App\Domain\SuperMagic\Task\Event\RunTaskAfterEvent;
 use App\Domain\SuperMagic\Task\Event\RunTaskBeforeEvent;
 use App\Domain\SuperMagic\Task\Event\RunTaskCallbackEvent;
@@ -409,6 +410,17 @@ class TopicTaskAppService extends AbstractAppService
             }
 
             $this->projectDomainService->updateProjectStatus($task->getProjectId(), $task->getTopicId(), $status);
+
+            // 首次成功完成任务：派发事件供 OpenPanel 属性同步（是否首次由属性首次写入幂等保证）
+            if ($status === TaskStatus::FINISHED) {
+                AsyncEventUtil::dispatch(new FirstTaskCompletedEvent(
+                    $dataIsolation->getCurrentUserId(),
+                    $dataIsolation->getCurrentOrganizationCode(),
+                    (int) $task->getId(),
+                    date('Y-m-d H:i:s')
+                ));
+            }
+
             // Log success
             $this->logger->debug('Task status update completed', [
                 'task_id' => $taskId,
