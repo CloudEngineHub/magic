@@ -218,6 +218,31 @@ describe("createMagicWidgetController", () => {
 		expect((trigger as HTMLElement).hidden).toBe(false)
 	})
 
+	it("does not render an outer inline close button", () => {
+		const widget = createMagicWidgetController()
+		const target = document.createElement("div")
+		document.body.append(target)
+		appendWidgetScript("https://widget-inline.example.invalid/sdk/magic-widget.js")
+
+		widget.mount({
+			page: { type: "crew", crewId: "crew-mock-inline-close" },
+			target,
+			config: { layout: "desktop", window: { closable: true } },
+		})
+
+		const root = document.querySelector("[data-magic-widget-root]") as HTMLElement
+		const layer = root.shadowRoot?.querySelector(
+			"[data-magic-widget-panel-layer]",
+		) as HTMLElement
+
+		expect(layer.getAttribute("data-render-mode")).toBe("inline")
+		expect(layer.hidden).toBe(false)
+		expect(root.shadowRoot?.querySelector(".magic-widget-close")).toBeNull()
+		widget.close()
+		expect(layer.hidden).toBe(true)
+		widget.destroy()
+	})
+
 	it("drags the panel on desktop", () => {
 		const widget = createMagicWidgetController()
 		appendWidgetScript()
@@ -364,8 +389,8 @@ describe("createMagicWidgetController", () => {
 					{
 						type: "mention",
 						mention: {
-								type: "text",
-								data: { label: "Chart Mock", text: "chart id: mock-chart" },
+							type: "text",
+							data: { label: "Chart Mock", text: "chart id: mock-chart" },
 						},
 					},
 				],

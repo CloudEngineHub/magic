@@ -17,6 +17,7 @@ const PROTOCOL = "magic-widget"
 const VERSION = 1
 const AGENT_READY_TIMEOUT_MS = 20_000
 const EDITOR_COMMAND_TIMEOUT_MS = 2_000
+const HEADER_ACTION_TIMEOUT_MS = 10_000
 const CAPABILITIES = [
 	"setInput",
 	"appendInput",
@@ -40,6 +41,12 @@ interface AgentReadyWaiter {
 	timer: number
 }
 
+interface HeaderActionWaiter {
+	resolve: (handled: boolean) => void
+	reject: (error: Error) => void
+	timer: number
+}
+
 interface UseMagicWidgetBridgeOptions {
 	context: WidgetContext | null
 	createNewConversation: () => Promise<Topic | null>
@@ -47,6 +54,10 @@ interface UseMagicWidgetBridgeOptions {
 
 export interface MagicWidgetBridgeController {
 	notifyAgentReady: () => void
+	requestHeaderAction: (
+		action: MagicWidget.HeaderActionName,
+		context?: Omit<MagicWidget.HeaderActionContext, "action">,
+	) => Promise<boolean>
 }
 
 /** Converts public text into the internal plain-text TipTap document contract. */
@@ -153,6 +164,8 @@ export function useMagicWidgetBridge({
 	const readyWaitersRef = useRef(new Set<AgentReadyWaiter>())
 	const readyAfterWindowLoadRef = useRef(false)
 	const pendingWindowLoadListenerRef = useRef<(() => void) | null>(null)
+	const headerActionSequenceRef = useRef(0)
+	const headerActionWaitersRef = useRef(new Map<string, HeaderActionWaiter>())
 
 	/** Resolves once an editor ready notification newer than the provided sequence arrives. */
 	const waitForAgentReadyAfter = useMemoizedFn(
@@ -239,6 +252,38 @@ export function useMagicWidgetBridge({
 						resolve(result)
 					},
 				})
+			})
+		},
+	)
+
+	/** Notifies the host of a header action and returns the ownership ack. The iframe does not fall back. */
+	const requestHeaderAction = useMemoizedFn(
+		(
+			action: MagicWidget.HeaderActionName,
+			actionContext?: Omit<MagicWidget.HeaderActionContext, "action">,
+		): Promise<boolean> => {
+			if (!context || window.parent === window) return Promise.resolve(false)
+			headerActionSequenceRef.current += 1
+			const requestId = `header-action-${headerActionSequenceRef.current}`
+			return new Promise((resolve, reject) => {
+				const waiter: HeaderActionWaiter = { resolve, reject, timer: 0 }
+				waiter.timer = window.setTimeout(() => {
+					headerActionWaitersRef.current.delete(requestId)
+					reject(new Error("Magic widget header action timed out"))
+				}, HEADER_ACTION_TIMEOUT_MS)
+				headerActionWaitersRef.current.set(requestId, waiter)
+				window.parent.postMessage(
+					{
+						protocol: PROTOCOL,
+						version: VERSION,
+						instanceId: context.instanceId,
+						requestId,
+						type: "header_action",
+						action,
+						context: { action, ...actionContext },
+					},
+					context.hostOrigin,
+				)
 			})
 		},
 	)
@@ -372,7 +417,27 @@ export function useMagicWidgetBridge({
 				!event.data ||
 				event.data.protocol !== PROTOCOL ||
 				event.data.version !== VERSION ||
-				event.data.instanceId !== context.instanceId ||
+				event.data.instanceId !== context.instanceId
+			) {
+				return
+			}
+
+			if (event.data.type === "response" && typeof event.data.requestId === "string") {
+				const waiter = headerActionWaitersRef.current.get(event.data.requestId)
+				if (!waiter) return
+				window.clearTimeout(waiter.timer)
+				headerActionWaitersRef.current.delete(event.data.requestId)
+				if (event.data.ok) {
+					waiter.resolve(event.data.result?.headerActionHandled === true)
+				} else {
+					waiter.reject(
+						new Error(event.data.error?.message ?? "Magic widget header action failed"),
+					)
+				}
+				return
+			}
+
+			if (
 				event.data.type !== "command" ||
 				typeof event.data.requestId !== "string" ||
 				!CAPABILITIES.includes(event.data.command)
@@ -394,6 +459,7 @@ export function useMagicWidgetBridge({
 
 	useEffect(() => {
 		const readyWaiters = readyWaitersRef.current
+		const headerActionWaiters = headerActionWaitersRef.current
 		return () => {
 			if (pendingWindowLoadListenerRef.current) {
 				window.removeEventListener("load", pendingWindowLoadListenerRef.current)
@@ -406,8 +472,13 @@ export function useMagicWidgetBridge({
 				waiter.reject(error)
 			})
 			readyWaiters.clear()
+			headerActionWaiters.forEach((waiter) => {
+				window.clearTimeout(waiter.timer)
+				waiter.reject(error)
+			})
+			headerActionWaiters.clear()
 		}
 	}, [])
 
-	return { notifyAgentReady }
+	return { notifyAgentReady, requestHeaderAction }
 }

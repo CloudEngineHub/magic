@@ -7,14 +7,14 @@ import {
 	MAGIC_WIDGET_DISMISS_PREVIEW_EVENT,
 	MAGIC_WIDGET_PROTOCOL,
 	MAGIC_WIDGET_PROTOCOL_VERSION,
-	normalizeMagicWidgetConfig,
+	acceptMagicWidgetConfig,
 } from "./config"
 import type { MagicWidgetContextValue, MagicWidgetEmbedContext } from "./types"
 import { MagicWidgetContextProvider } from "./context"
 
 export { useMagicWidgetConfig } from "./context"
 
-/** Owns one document-scoped embed identity and validates all runtime configuration updates. */
+/** Owns one document-scoped embed identity and applies host configuration without rechecking fields. */
 export function MagicWidgetProvider({ children }: PropsWithChildren) {
 	const { search } = useLocation()
 	// Protected embed metadata is immutable for one iframe document and is re-read after reload.
@@ -67,7 +67,7 @@ export function MagicWidgetProvider({ children }: PropsWithChildren) {
 			if (event.data.type !== "config" || typeof event.data.requestId !== "string") return
 
 			try {
-				const nextConfig = normalizeMagicWidgetConfig(event.data.config)
+				const nextConfig = acceptMagicWidgetConfig(event.data.config)
 				// Commit the new snapshot before acknowledging it so updateConfig resolves after UI state changes.
 				flushSync(() => setConfig(nextConfig))
 				respond(embedContext, event.data.requestId, true)

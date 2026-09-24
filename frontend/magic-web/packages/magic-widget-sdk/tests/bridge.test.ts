@@ -185,6 +185,113 @@ describe("WidgetBridge", () => {
 		expect(await inputPromise).toEqual({ content: "mock input" })
 	})
 
+	it("runs a host header action handler and acknowledges successful ownership", async () => {
+		const { iframe, postMessage } = createTestIframe()
+		const handler = vi.fn().mockResolvedValue(undefined)
+		const bridge = new WidgetBridge(iframe, TEST_ORIGIN, TEST_INSTANCE_ID, { pin: handler })
+		const request = {
+			protocol: WIDGET_PROTOCOL,
+			version: WIDGET_PROTOCOL_VERSION,
+			instanceId: TEST_INSTANCE_ID,
+			requestId: "header-action-mock-pin",
+			type: "header_action",
+			action: "pin",
+			context: { action: "pin", topicId: "topic-mock-pin" },
+		}
+
+		window.dispatchEvent(
+			new MessageEvent("message", {
+				origin: TEST_ORIGIN,
+				source: iframe.contentWindow,
+				data: request,
+			}),
+		)
+		await vi.waitFor(() => expect(handler).toHaveBeenCalledWith(request.context))
+		expect(postMessage).toHaveBeenCalledWith(
+			expect.objectContaining({
+				type: "response",
+				requestId: request.requestId,
+				ok: true,
+				result: { headerActionHandled: true },
+			}),
+			TEST_ORIGIN,
+		)
+		bridge.destroy()
+	})
+
+	it("acknowledges that no host handler owned the action", async () => {
+		const { iframe, postMessage } = createTestIframe()
+		const bridge = new WidgetBridge(iframe, TEST_ORIGIN, TEST_INSTANCE_ID)
+		const request = {
+			protocol: WIDGET_PROTOCOL,
+			version: WIDGET_PROTOCOL_VERSION,
+			instanceId: TEST_INSTANCE_ID,
+			requestId: "header-action-mock-missing",
+			type: "header_action",
+			action: "pin",
+		}
+
+		window.dispatchEvent(
+			new MessageEvent("message", {
+				origin: TEST_ORIGIN,
+				source: iframe.contentWindow,
+				data: request,
+			}),
+		)
+
+		await vi.waitFor(() =>
+			expect(postMessage).toHaveBeenCalledWith(
+				expect.objectContaining({
+					type: "response",
+					requestId: request.requestId,
+					ok: true,
+					result: { headerActionHandled: false },
+				}),
+				TEST_ORIGIN,
+			),
+		)
+		bridge.destroy()
+	})
+
+	it("reports a failed host header action to the iframe", async () => {
+		const { iframe, postMessage } = createTestIframe()
+		const handler = vi.fn().mockRejectedValue(new Error("Mock header action failed"))
+		const bridge = new WidgetBridge(iframe, TEST_ORIGIN, TEST_INSTANCE_ID, { pin: handler })
+		const request = {
+			protocol: WIDGET_PROTOCOL,
+			version: WIDGET_PROTOCOL_VERSION,
+			instanceId: TEST_INSTANCE_ID,
+			requestId: "header-action-mock-failed",
+			type: "header_action",
+			action: "pin",
+			context: { action: "pin" },
+		}
+
+		window.dispatchEvent(
+			new MessageEvent("message", {
+				origin: TEST_ORIGIN,
+				source: iframe.contentWindow,
+				data: request,
+			}),
+		)
+
+		await vi.waitFor(() =>
+			expect(postMessage).toHaveBeenCalledWith(
+				expect.objectContaining({
+					type: "response",
+					requestId: request.requestId,
+					ok: false,
+					error: {
+						code: "HEADER_ACTION_FAILED",
+						message: "Mock header action failed",
+					},
+				}),
+				TEST_ORIGIN,
+			),
+		)
+		bridge.destroy()
+	})
+
 	it("preserves structured command payloads and supports payload-free sendMessage", async () => {
 		const { iframe, postMessage } = createTestIframe()
 		const bridge = new WidgetBridge(iframe, TEST_ORIGIN, TEST_INSTANCE_ID)

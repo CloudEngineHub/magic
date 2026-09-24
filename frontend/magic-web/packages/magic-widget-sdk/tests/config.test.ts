@@ -1,9 +1,5 @@
 import { describe, expect, it } from "vitest"
-import {
-	mergeWidgetConfig,
-	normalizeWidgetConfig,
-	resolveInitialWidgetConfig,
-} from "../src/config"
+import { mergeWidgetConfig, normalizeWidgetConfig, resolveInitialWidgetConfig } from "../src/config"
 
 describe("Widget config", () => {
 	it("uses the legacy mobile layout and viewport semantics as initial defaults", () => {
@@ -108,5 +104,99 @@ describe("Widget config", () => {
 		expect(() => normalizeWidgetConfig({ responsive: { breakpoint: 640 } })).toThrow(
 			/breakpoint/,
 		)
+		expect(() => normalizeWidgetConfig({ header: { topicName: { mode: "static" } } })).toThrow(
+			/topicName.text/,
+		)
+		expect(() => normalizeWidgetConfig({ header: { title: "   " } })).toThrow(/header\.title/)
+		expect(() => normalizeWidgetConfig({ panel: { agents: false } })).toThrow(/panel\.agents/)
+		expect(() =>
+			normalizeWidgetConfig({ header: { topicName: { mode: "static", text: "   " } } }),
+		).toThrow(/topicName\.text/)
+		expect(() => normalizeWidgetConfig({ bottom: { upload: { enabled: "yes" } } })).toThrow(
+			/upload.enabled/,
+		)
+		expect(() => normalizeWidgetConfig({ bottom: { model: { enabled: false } } })).toThrow(
+			/bottom\.model\.enabled/,
+		)
+	})
+
+	it("normalizes Widget customization and merges nested updates", () => {
+		const initial = normalizeWidgetConfig({
+			header: {
+				visible: true,
+				title: "Mock Assistant",
+				topicName: { mode: "current" },
+				actions: { fullscreen: true, share: false, close: false },
+			},
+			panel: {
+				projectFiles: false,
+				uploadFiles: false,
+				otherProjectFiles: false,
+				digitalEmployees: false,
+				microApps: false,
+				workflows: false,
+				connectors: false,
+				skills: false,
+				canvasElements: false,
+			},
+			bottom: {
+				internetSearch: { enabled: true, buttonVisible: false },
+				upload: { enabled: false, buttonVisible: false },
+				model: { buttonVisible: false },
+			},
+			window: { closable: false },
+		})
+
+		expect(initial.header?.title).toBe("Mock Assistant")
+		expect(
+			normalizeWidgetConfig({ header: { title: "  Mock Assistant  " } }).header?.title,
+		).toBe("Mock Assistant")
+		expect(initial.header?.actions).toEqual({ fullscreen: true, share: false, close: false })
+		expect(initial.panel).toEqual({
+			projectFiles: false,
+			uploadFiles: false,
+			otherProjectFiles: false,
+			digitalEmployees: false,
+			microApps: false,
+			workflows: false,
+			connectors: false,
+			skills: false,
+			canvasElements: false,
+		})
+		expect(initial.bottom?.internetSearch).toEqual({ enabled: true, buttonVisible: false })
+		expect(initial.bottom?.model).toEqual({ buttonVisible: false })
+		expect(initial.window).toEqual({ closable: false })
+
+		expect(
+			mergeWidgetConfig(initial, {
+				panel: { workflows: false },
+				header: { actions: { more: false } },
+				bottom: { upload: { buttonVisible: true } },
+			}),
+		).toEqual({
+			header: {
+				visible: true,
+				title: "Mock Assistant",
+				topicName: { mode: "current" },
+				actions: { fullscreen: true, share: false, close: false, more: false },
+			},
+			panel: {
+				projectFiles: false,
+				uploadFiles: false,
+				otherProjectFiles: false,
+				digitalEmployees: false,
+				microApps: false,
+				workflows: false,
+				connectors: false,
+				skills: false,
+				canvasElements: false,
+			},
+			bottom: {
+				internetSearch: { enabled: true, buttonVisible: false },
+				upload: { enabled: false, buttonVisible: true },
+				model: { buttonVisible: false },
+			},
+			window: { closable: false },
+		})
 	})
 })

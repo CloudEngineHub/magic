@@ -312,6 +312,7 @@ function CrewConversationDesktop({
 				}) => (
 					<CrewConversationPanel
 						widgetContext={widgetContext}
+						widgetConfig={widgetConfig}
 						variant="desktop"
 						isConversationPanelCollapsed={isConversationPanelCollapsed}
 						onToggleConversationPanel={onToggleConversationPanel}

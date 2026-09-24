@@ -34,6 +34,54 @@ const validOptions: MagicWidget.MountOptions = {
 		shell: { appSidebar: false },
 		conversation: { projectFiles: false, topicHistory: true, autoHire: false },
 		responsive: { mobileDetection: "device-and-viewport" },
+		header: {
+			visible: true,
+			title: "Mock Assistant",
+			topicName: { mode: "current" },
+			actions: {
+				fullscreen: true,
+				pin: true,
+				newTopic: true,
+				history: true,
+				share: false,
+				more: true,
+				close: true,
+			},
+		},
+		panel: {
+			projectFiles: false,
+			uploadFiles: false,
+			otherProjectFiles: false,
+			digitalEmployees: false,
+			microApps: false,
+			workflows: false,
+			connectors: false,
+			skills: false,
+			canvasElements: false,
+		},
+		bottom: {
+			internetSearch: { enabled: true, buttonVisible: false },
+			plugin: { enabled: false, buttonVisible: false },
+			upload: { enabled: false, buttonVisible: false },
+			voice: { enabled: true, buttonVisible: true },
+			model: { buttonVisible: false },
+		},
+		window: { closable: false },
+	},
+	headerActions: {
+		fullscreen: async ({ action }) => {
+			void action
+		},
+		pin: async ({ topicId }) => {
+			void topicId
+		},
+		newTopic: async ({ topicName }) => {
+			void topicName
+		},
+		close: async ({ topicId, topicName }) => {
+			void topicId
+			void topicName
+		},
 	},
 }
 

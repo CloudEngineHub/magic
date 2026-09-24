@@ -206,6 +206,21 @@ on(event: "agent_ready", listener: () => void): () => void
 
 ```ts
 namespace MagicWidget {
+	type HeaderActionName =
+		| "fullscreen"
+		| "pin"
+		| "newTopic"
+		| "history"
+		| "share"
+		| "more"
+		| "close"
+
+	interface HeaderActionContext {
+		action: HeaderActionName
+		topicId?: string
+		topicName?: string
+	}
+
 	interface MountOptions {
 		page: PageOptions
 		auth?: AuthOptions
@@ -213,6 +228,7 @@ namespace MagicWidget {
 		iframe?: IframeOptions
 		modal?: ModalOptions
 		target?: HTMLElement
+		headerActions?: Partial<Record<HeaderActionName, (context: HeaderActionContext) => void | Promise<void>>>
 	}
 }
 ```
@@ -328,11 +344,11 @@ await window.MagicWidget.setInput("新对话中的虚构内容")
 await window.MagicWidget.sendMessage("发送新对话中的虚构内容")
 ```
 
-宿主必须为容器设置非零宽高。内联模式不创建悬浮球、遮罩和 SDK 头部，`mount` 后默认可见；仍可使用 `open`、`close` 和 `destroy`。SDK 保持单例语义，后续 `mount` 会替换旧实例。
+宿主必须为容器设置非零宽高。内联模式不创建悬浮球、遮罩或 iframe 外层关闭按钮，`mount` 后默认展开；标准头部内的关闭按钮由 `config.window.closable` 控制，但 `close()` 始终可由宿主程序化调用。SDK 保持单例语义，后续 `mount` 会替换旧实例。
 
 所有输入、发送、新建对话和配置更新方法均返回 Promise。失败时错误对象包含稳定的 `code`，例如 `NOT_MOUNTED`、`INVALID_INPUT`、`INVALID_CONFIG`、`IFRAME_NOT_READY` 或 `COMMAND_FAILED`。SDK 只在首次加载或重新加载期间等待 iframe 文档完成加载，不等待 `agent_ready`；命令结果以 iframe response 为准。
 
-跨域通信使用版本化 `postMessage` 协议，并同时限制为 SDK 推导出的 Magic Origin 和当前 iframe 窗口。调用方不应传递密钥或完成任务不需要的业务数据。本阶段不开放宿主自定义 `@` 候选列表和 Agent→宿主动作回调。
+跨域通信使用版本化 `postMessage` 协议，并同时限制为 SDK 推导出的 Magic Origin 和当前 iframe 窗口。调用方不应传递密钥或完成任务不需要的业务数据。本阶段不开放宿主自定义 `@` 候选列表和动态内容注入。
 
 ### `config`
 
@@ -356,6 +372,27 @@ namespace MagicWidget {
 			autoHire?: boolean
 			previewMode?: "split" | "fullscreen" | "switchable"
 		}
+		header?: {
+			visible?: boolean
+			title?: string
+			topicName?: { mode?: "current" | "hidden" | "static"; text?: string }
+			actions?: Partial<Record<"fullscreen" | "pin" | "newTopic" | "history" | "share" | "more" | "close", boolean>>
+		}
+		panel?: {
+			projectFiles?: boolean; uploadFiles?: boolean
+			otherProjectFiles?: boolean; digitalEmployees?: boolean
+			microApps?: boolean; workflows?: boolean
+			connectors?: boolean; skills?: boolean
+			canvasElements?: boolean
+		}
+		bottom?: {
+			internetSearch?: { enabled?: boolean; buttonVisible?: boolean }
+			plugin?: { enabled?: boolean; buttonVisible?: boolean }
+			upload?: { enabled?: boolean; buttonVisible?: boolean }
+			voice?: { enabled?: boolean; buttonVisible?: boolean }
+			model?: { buttonVisible?: boolean }
+		}
+		window?: { closable?: boolean }
 	}
 }
 ```
@@ -369,6 +406,12 @@ namespace MagicWidget {
 | `conversation.topicHistory`  | 启用或关闭桌面版历史话题入口和面板。                  | 仅由桌面版 Crew 对话布局消费。                                                                              |
 | `conversation.autoHire`      | 直开员工不可执行时是否自动尝试雇佣，默认开启。        | 仅在合法 SDK 嵌入中生效；普通 Magic Web Crew 页面不会自动雇佣。                                             |
 | `conversation.previewMode`   | 选择 `split`、`fullscreen` 或 `switchable` 预览策略。 | 桌面 SDK 嵌入默认 `switchable`；普通 Magic Web 页面继续使用现有并排布局。                                   |
+| `header.visible`             | 显示或隐藏 inline 标准头部。                         | 仅桌面 inline 生效；隐藏后宿主可自行绘制头部。                                                       |
+| `header.title` / `topicName` | 配置头部上行标题和下行话题文案。                     | `topicName.mode` 支持 `current`、`hidden`、`static`；默认使用当前话题名。                              |
+| `header.actions`             | 控制头部每个操作是否显示。                           | 未配置的操作保持显示；显式 `false` 隐藏。`fullscreen` 和 `pin` 没有组件内行为：要么注册对应的 `headerActions`，要么设为 `false`。只省略不注册仍会画出按钮，点击没有效果。`header.visible=false` 时整体不生效。 |
+| `panel.*`                    | 分别控制 `@` 提及面板根层的当前项目文件、上传文件、其它项目/文件、数字员工、流程、微应用、连接器、技能和画布元素行。 | 每个字段只影响对应的 Mention 行；流程下的智能体和工具子行沿用现有行为。未配置保持当前行为。 |
+| `bottom.*`                   | 分别控制联网搜索、连接器、上传、语音的能力和按钮，以及模型选择按钮。 | 底部配置与 Mention 行相互独立。上传能力关闭会同步阻断拖拽/粘贴/图片；仅隐藏按钮仍保留能力。`internetSearch.enabled: false` 会隐藏按钮，并在发送时强制 `enable_web_search` 为 false。模型选择只有按钮显隐。 |
+| `window.closable`            | 控制 iframe 标准头部内的关闭按钮是否显示。           | `false` 只隐藏入口，宿主仍可调用 `close()`。                                                            |
 
 `split` 让展开的对话与预览并排展示；`fullscreen` 只在当前宿主控制的 Widget 容器内展示预览，退出时直接关闭预览；只有宿主同步放大 Widget 容器时，预览才会覆盖宿主视口；`switchable` 将预览保持在 Widget 内部布局中，新预览会话开始时自动收起对话，并允许用户展开或再次收起对话而不重建预览。用户仍可手动进入宿主全屏，退出后恢复进入前的对话布局。宿主控制器始终保持同一个 iframe 挂载，因此文件 Tab、工具回放状态、输入内容和已加载预览数据不会被重建。运行时更新配置只影响下一次预览激活，不会强制改变当前布局。
 
@@ -384,6 +427,36 @@ await window.MagicWidget.updateConfig({
 		topicHistory: false,
 		autoHire: false,
 		previewMode: "split",
+	},
+	header: { title: "自定义助手", topicName: { mode: "current" } },
+	bottom: {
+		upload: { enabled: false, buttonVisible: false },
+		internetSearch: { enabled: true, buttonVisible: false },
+	},
+	window: { closable: false },
+})
+```
+
+`headerActions` 在 inline 头部原有行为完成之后通知宿主，回调不能取消该行为。`newTopic` 在话题创建成功后上报，`share`、`history`、`more` 在对应界面触发后上报。`fullscreen` 和 `pin` 没有组件内行为，回调会直接执行。`headerActionHandled: false` 只是所有权回执，iframe 不会回退。没有 handler 的宿主动作必须隐藏。下面的示例实现了 `pin` 和 `close`，因此把 `fullscreen` 设为 `false`。`close` 会先关闭 Widget，再执行 `headerActions.close`；回调失败不会把 Widget 重新打开：
+
+```js
+window.MagicWidget.mount({
+	page: { type: "crew", crewId: "crew-demo" },
+	target: document.querySelector("#agent-slot"),
+	config: {
+		header: {
+			actions: {
+				fullscreen: false,
+			},
+		},
+	},
+	headerActions: {
+		pin: async ({ topicId }) => {
+			await hostWindowApi.pinAgent({ topicId })
+		},
+		close: async ({ topicId }) => {
+			await hostWindowApi.afterCloseAgent({ topicId })
+		},
 	},
 })
 ```

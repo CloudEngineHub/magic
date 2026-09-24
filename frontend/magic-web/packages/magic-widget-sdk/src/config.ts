@@ -1,6 +1,15 @@
 import type { MagicWidget } from "./types"
 
-const CONFIG_KEYS = new Set(["layout", "shell", "conversation", "responsive"])
+const CONFIG_KEYS = new Set([
+	"layout",
+	"shell",
+	"conversation",
+	"responsive",
+	"header",
+	"panel",
+	"bottom",
+	"window",
+])
 const SHELL_CONFIG_KEYS = new Set(["appSidebar"])
 const CONVERSATION_CONFIG_KEYS = new Set([
 	"projectFiles",
@@ -9,6 +18,40 @@ const CONVERSATION_CONFIG_KEYS = new Set([
 	"previewMode",
 ])
 const RESPONSIVE_CONFIG_KEYS = new Set(["mobileDetection"])
+const HEADER_CONFIG_KEYS = new Set(["visible", "title", "topicName", "actions"])
+const HEADER_TOPIC_NAME_KEYS = new Set(["mode", "text"])
+const HEADER_ACTION_NAME_FLAGS = {
+	fullscreen: true,
+	pin: true,
+	newTopic: true,
+	history: true,
+	share: true,
+	more: true,
+	close: true,
+} as const satisfies Record<MagicWidget.HeaderActionName, true>
+
+/** Header action names shared by protocol checks, config validation, and the iframe shell. */
+export const WIDGET_HEADER_ACTION_NAMES = Object.keys(
+	HEADER_ACTION_NAME_FLAGS,
+) as MagicWidget.HeaderActionName[]
+
+const HEADER_ACTION_KEYS = new Set<MagicWidget.HeaderActionName>(WIDGET_HEADER_ACTION_NAMES)
+const PANEL_CONFIG_KEYS = new Set([
+	"projectFiles",
+	"uploadFiles",
+	"otherProjectFiles",
+	"digitalEmployees",
+	"microApps",
+	"workflows",
+	"connectors",
+	"skills",
+	"canvasElements",
+])
+const BOTTOM_CAPABILITY_KEYS = new Set(["internetSearch", "plugin", "upload", "voice"])
+const BOTTOM_CONFIG_KEYS = new Set([...BOTTOM_CAPABILITY_KEYS, "model"])
+const CAPABILITY_CONFIG_KEYS = new Set(["enabled", "buttonVisible"])
+const MODEL_BUTTON_KEYS = new Set(["buttonVisible"])
+const WINDOW_CONFIG_KEYS = new Set(["closable"])
 const PREVIEW_MODES = new Set<MagicWidget.PreviewMode>(["split", "fullscreen", "switchable"])
 const MOBILE_DETECTION_MODES = new Set<MagicWidget.MobileDetection>([
 	"viewport",
@@ -91,6 +134,146 @@ function readOptionalMobileDetection(
 	return field as MagicWidget.MobileDetection
 }
 
+/** Copies a bounded optional text value used by host-visible Widget labels. */
+function readOptionalText(
+	value: Record<string, unknown>,
+	key: string,
+	label: string,
+	maxLength = 512,
+): string | undefined {
+	const field = value[key]
+	if (field === undefined) return undefined
+	if (typeof field !== "string" || field.length > maxLength) {
+		throw createInvalidConfigError(
+			`Magic widget ${label}.${key} must be a string of at most ${maxLength} characters`,
+		)
+	}
+	return field
+}
+
+/** Trims a visible label and rejects whitespace so callers do not see a later silent fallback. */
+function readOptionalDisplayText(
+	value: Record<string, unknown>,
+	key: string,
+	label: string,
+	maxLength = 512,
+): string | undefined {
+	const field = readOptionalText(value, key, label, maxLength)
+	if (field === undefined) return undefined
+	const trimmed = field.trim()
+	if (!trimmed) {
+		throw createInvalidConfigError(`Magic widget ${label}.${key} must not be blank`)
+	}
+	return trimmed
+}
+
+/** Normalizes the optional two-line header labels without coupling them to React rendering. */
+function normalizeHeaderConfig(value: unknown): MagicWidget.HeaderConfig | undefined {
+	if (value === undefined) return undefined
+	const record = requirePlainObject(value, "config.header")
+	assertKnownKeys(record, HEADER_CONFIG_KEYS, "config.header")
+	const visible = readOptionalBoolean(record, "visible", "config.header")
+	const title = readOptionalDisplayText(record, "title", "config.header")
+	let actions: MagicWidget.HeaderConfig["actions"]
+	if (record.actions !== undefined) {
+		const actionRecord = requirePlainObject(record.actions, "config.header.actions")
+		assertKnownKeys(actionRecord, HEADER_ACTION_KEYS, "config.header.actions")
+		actions = Object.fromEntries(
+			Array.from(HEADER_ACTION_KEYS)
+				.map((key) => [
+					key,
+					readOptionalBoolean(actionRecord, key, "config.header.actions"),
+				])
+				.filter(([, field]) => field !== undefined),
+		) as MagicWidget.HeaderConfig["actions"]
+	}
+	let topicName: MagicWidget.HeaderConfig["topicName"]
+	if (record.topicName !== undefined) {
+		const topicRecord = requirePlainObject(record.topicName, "config.header.topicName")
+		assertKnownKeys(topicRecord, HEADER_TOPIC_NAME_KEYS, "config.header.topicName")
+		const mode = topicRecord.mode
+		if (mode !== undefined && mode !== "current" && mode !== "hidden" && mode !== "static") {
+			throw createInvalidConfigError(
+				"Magic widget config.header.topicName.mode must be current, hidden, or static",
+			)
+		}
+		const text = readOptionalDisplayText(topicRecord, "text", "config.header.topicName")
+		if (mode === "static" && text === undefined) {
+			throw createInvalidConfigError(
+				"Magic widget config.header.topicName.text is required for static mode",
+			)
+		}
+		topicName = {
+			...(mode === undefined ? {} : { mode }),
+			...(text === undefined ? {} : { text }),
+		}
+	}
+	return {
+		...(visible === undefined ? {} : { visible }),
+		...(title === undefined ? {} : { title }),
+		...(actions === undefined ? {} : { actions }),
+		...(topicName === undefined ? {} : { topicName }),
+	}
+}
+
+/** Normalizes business panel visibility without exposing technical component names. */
+function normalizePanelConfig(value: unknown): MagicWidget.WidgetPanelConfig | undefined {
+	if (value === undefined) return undefined
+	const record = requirePlainObject(value, "config.panel")
+	assertKnownKeys(record, PANEL_CONFIG_KEYS, "config.panel")
+	return Object.fromEntries(
+		Array.from(PANEL_CONFIG_KEYS)
+			.map((key) => [key, readOptionalBoolean(record, key, "config.panel")])
+			.filter(([, field]) => field !== undefined),
+	) as MagicWidget.WidgetPanelConfig
+}
+
+/** Normalizes one bottom capability and its independent button visibility. */
+function normalizeCapabilityConfig(value: unknown, label: string): MagicWidget.CapabilityConfig {
+	const record = requirePlainObject(value, label)
+	assertKnownKeys(record, CAPABILITY_CONFIG_KEYS, label)
+	const enabled = readOptionalBoolean(record, "enabled", label)
+	const buttonVisible = readOptionalBoolean(record, "buttonVisible", label)
+	return {
+		...(enabled === undefined ? {} : { enabled }),
+		...(buttonVisible === undefined ? {} : { buttonVisible }),
+	}
+}
+
+/** Normalizes model-picker visibility separately from mention-panel agent entries. */
+function normalizeModelButtonConfig(value: unknown): MagicWidget.ModelButtonConfig {
+	const record = requirePlainObject(value, "config.bottom.model")
+	assertKnownKeys(record, MODEL_BUTTON_KEYS, "config.bottom.model")
+	const buttonVisible = readOptionalBoolean(record, "buttonVisible", "config.bottom.model")
+	return buttonVisible === undefined ? {} : { buttonVisible }
+}
+
+/** Normalizes all bottom capabilities while keeping omitted entries backward compatible. */
+function normalizeBottomConfig(value: unknown): MagicWidget.WidgetBottomConfig | undefined {
+	if (value === undefined) return undefined
+	const record = requirePlainObject(value, "config.bottom")
+	assertKnownKeys(record, BOTTOM_CONFIG_KEYS, "config.bottom")
+	return Object.fromEntries(
+		Array.from(BOTTOM_CONFIG_KEYS)
+			.filter((key) => record[key] !== undefined)
+			.map((key) => [
+				key,
+				key === "model"
+					? normalizeModelButtonConfig(record[key])
+					: normalizeCapabilityConfig(record[key], `config.bottom.${key}`),
+			]),
+	) as MagicWidget.WidgetBottomConfig
+}
+
+/** Normalizes inline close-button visibility independently from floating lifecycle controls. */
+function normalizeWindowConfig(value: unknown): MagicWidget.WidgetWindowConfig | undefined {
+	if (value === undefined) return undefined
+	const record = requirePlainObject(value, "config.window")
+	assertKnownKeys(record, WINDOW_CONFIG_KEYS, "config.window")
+	const closable = readOptionalBoolean(record, "closable", "config.window")
+	return closable === undefined ? {} : { closable }
+}
+
 /** Normalizes the shell section into an immutable SDK-owned snapshot. */
 function normalizeShellConfig(value: unknown): MagicWidget.ShellConfig | undefined {
 	if (value === undefined) return undefined
@@ -146,11 +329,19 @@ export function normalizeWidgetConfig(value: unknown): MagicWidget.WidgetConfig 
 	const shell = normalizeShellConfig(record.shell)
 	const conversation = normalizeConversationConfig(record.conversation)
 	const responsive = normalizeResponsiveConfig(record.responsive)
+	const header = normalizeHeaderConfig(record.header)
+	const panel = normalizePanelConfig(record.panel)
+	const bottom = normalizeBottomConfig(record.bottom)
+	const windowConfig = normalizeWindowConfig(record.window)
 	return {
 		...(layout === undefined ? {} : { layout }),
 		...(shell === undefined ? {} : { shell }),
 		...(conversation === undefined ? {} : { conversation }),
 		...(responsive === undefined ? {} : { responsive }),
+		...(header === undefined ? {} : { header }),
+		...(panel === undefined ? {} : { panel }),
+		...(bottom === undefined ? {} : { bottom }),
+		...(windowConfig === undefined ? {} : { window: windowConfig }),
 	}
 }
 
@@ -184,6 +375,55 @@ export function mergeWidgetConfig(
 			: {}),
 		...(normalizedUpdate.responsive
 			? { responsive: { ...current.responsive, ...normalizedUpdate.responsive } }
+			: {}),
+		...(normalizedUpdate.header
+			? {
+					header: {
+						...current.header,
+						...normalizedUpdate.header,
+						...(normalizedUpdate.header.topicName
+							? {
+									topicName: {
+										...current.header?.topicName,
+										...normalizedUpdate.header.topicName,
+									},
+								}
+							: {}),
+						...(normalizedUpdate.header.actions
+							? {
+									actions: {
+										...current.header?.actions,
+										...normalizedUpdate.header.actions,
+									},
+								}
+							: {}),
+					},
+				}
+			: {}),
+		...(normalizedUpdate.panel
+			? { panel: { ...current.panel, ...normalizedUpdate.panel } }
+			: {}),
+		...(normalizedUpdate.bottom
+			? {
+					bottom: {
+						...current.bottom,
+						...normalizedUpdate.bottom,
+						...Object.fromEntries(
+							Object.entries(normalizedUpdate.bottom).map(([key, value]) => [
+								key,
+								{
+									...(current.bottom?.[
+										key as keyof MagicWidget.WidgetBottomConfig
+									] ?? {}),
+									...value,
+								},
+							]),
+						),
+					},
+				}
+			: {}),
+		...(normalizedUpdate.window
+			? { window: { ...current.window, ...normalizedUpdate.window } }
 			: {}),
 	}
 }

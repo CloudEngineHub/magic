@@ -62,9 +62,68 @@ export class WidgetBridge {
 		private readonly iframe: HTMLIFrameElement,
 		private readonly targetOrigin: string,
 		private readonly instanceId: string,
+		private readonly headerActions: Partial<
+			Record<MagicWidget.HeaderActionName, MagicWidget.HeaderActionHandler>
+		> = {},
 	) {
 		window.addEventListener("message", this.handleMessage)
 		this.iframe.addEventListener("load", this.handleIframeLoad)
+	}
+
+	/** Runs a host header handler and reports whether the host owned that action. The iframe does not fall back. */
+	private handleHeaderAction = async (message: {
+		requestId: string
+		action: MagicWidget.HeaderActionName
+		context?: MagicWidget.HeaderActionContext
+	}) => {
+		const handler = this.headerActions[message.action]
+		if (!handler) {
+			this.iframe.contentWindow?.postMessage(
+				{
+					protocol: WIDGET_PROTOCOL,
+					version: WIDGET_PROTOCOL_VERSION,
+					instanceId: this.instanceId,
+					requestId: message.requestId,
+					type: "response",
+					ok: true,
+					result: { headerActionHandled: false },
+				},
+				this.targetOrigin,
+			)
+			return
+		}
+
+		try {
+			await handler(message.context ?? { action: message.action })
+			this.iframe.contentWindow?.postMessage(
+				{
+					protocol: WIDGET_PROTOCOL,
+					version: WIDGET_PROTOCOL_VERSION,
+					instanceId: this.instanceId,
+					requestId: message.requestId,
+					type: "response",
+					ok: true,
+					result: { headerActionHandled: true },
+				},
+				this.targetOrigin,
+			)
+		} catch (error) {
+			this.iframe.contentWindow?.postMessage(
+				{
+					protocol: WIDGET_PROTOCOL,
+					version: WIDGET_PROTOCOL_VERSION,
+					instanceId: this.instanceId,
+					requestId: message.requestId,
+					type: "response",
+					ok: false,
+					error: {
+						code: "HEADER_ACTION_FAILED",
+						message: error instanceof Error ? error.message : "Header action failed",
+					},
+				},
+				this.targetOrigin,
+			)
+		}
 	}
 
 	/** Reports whether the iframe has announced that its agent editor is ready. */
@@ -305,6 +364,10 @@ export class WidgetBridge {
 			!isWidgetProtocolMessage(event.data) ||
 			event.data.instanceId !== this.instanceId
 		) {
+			return
+		}
+		if (event.data.type === "header_action") {
+			void this.handleHeaderAction(event.data)
 			return
 		}
 

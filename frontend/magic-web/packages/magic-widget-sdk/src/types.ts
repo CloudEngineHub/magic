@@ -52,6 +52,67 @@ export declare namespace MagicWidget {
 		mobileDetection?: MobileDetection
 	}
 
+	export type HeaderActionName =
+		| "fullscreen"
+		| "pin"
+		| "newTopic"
+		| "history"
+		| "share"
+		| "more"
+		| "close"
+
+	export interface HeaderConfig {
+		visible?: boolean
+		title?: string
+		topicName?: { mode?: "current" | "hidden" | "static"; text?: string }
+		/**
+		 * Visibility flags. Omitted actions stay visible.
+		 * Hide unimplemented host-owned `fullscreen` / `pin` with `false`.
+		 */
+		actions?: Partial<Record<HeaderActionName, boolean>>
+	}
+
+	export interface WidgetPanelConfig {
+		/** Shows or hides the current project files row in the Mention panel. */
+		projectFiles?: boolean
+		/** Shows or hides the upload files row in the Mention panel. */
+		uploadFiles?: boolean
+		/** Shows or hides the other project files row in the Mention panel. */
+		otherProjectFiles?: boolean
+		/** Shows or hides the digital employees row in the Mention panel. */
+		digitalEmployees?: boolean
+		microApps?: boolean
+		workflows?: boolean
+		connectors?: boolean
+		/** Shows or hides the skills row in the Mention panel. */
+		skills?: boolean
+		/** Shows or hides the canvas elements row when the current project provides it. */
+		canvasElements?: boolean
+	}
+
+	export interface CapabilityConfig {
+		enabled?: boolean
+		buttonVisible?: boolean
+	}
+
+	/** Shows or hides the editor model picker without affecting mention-panel agents. */
+	export interface ModelButtonConfig {
+		buttonVisible?: boolean
+	}
+
+	export interface WidgetBottomConfig {
+		internetSearch?: CapabilityConfig
+		plugin?: CapabilityConfig
+		upload?: CapabilityConfig
+		voice?: CapabilityConfig
+		model?: ModelButtonConfig
+	}
+
+	export interface WidgetWindowConfig {
+		/** Hides the close button inside the iframe header. The floating shell close button stays available. */
+		closable?: boolean
+	}
+
 	/** Controls how Agent previews share the desktop viewport with the conversation. */
 	export type PreviewMode = "split" | "fullscreen" | "switchable"
 
@@ -69,7 +130,19 @@ export declare namespace MagicWidget {
 		shell?: ShellConfig
 		conversation?: ConversationConfig
 		responsive?: ResponsiveConfig
+		header?: HeaderConfig
+		panel?: WidgetPanelConfig
+		bottom?: WidgetBottomConfig
+		window?: WidgetWindowConfig
 	}
+
+	export interface HeaderActionContext {
+		action: HeaderActionName
+		topicId?: string
+		topicName?: string
+	}
+
+	export type HeaderActionHandler = (context: HeaderActionContext) => void | Promise<void>
 
 	export interface CrewPageOptions {
 		type: "crew"
@@ -102,6 +175,12 @@ export declare namespace MagicWidget {
 		iframe?: IframeOptions
 		modal?: ModalOptions
 		target?: HTMLElement
+		/**
+		 * Notifies the host after a header action completes.
+		 * Built-in actions still run first. Close dismisses the widget before this callback.
+		 * `headerActionHandled` is an ownership ack; the iframe does not fall back when it is false.
+		 */
+		headerActions?: Partial<Record<HeaderActionName, HeaderActionHandler>>
 	}
 
 	export type CommandErrorCode =

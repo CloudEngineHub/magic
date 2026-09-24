@@ -206,6 +206,21 @@ on(event: "agent_ready", listener: () => void): () => void
 
 ```ts
 namespace MagicWidget {
+	type HeaderActionName =
+		| "fullscreen"
+		| "pin"
+		| "newTopic"
+		| "history"
+		| "share"
+		| "more"
+		| "close"
+
+	interface HeaderActionContext {
+		action: HeaderActionName
+		topicId?: string
+		topicName?: string
+	}
+
 	interface MountOptions {
 		page: PageOptions
 		auth?: AuthOptions
@@ -213,6 +228,7 @@ namespace MagicWidget {
 		iframe?: IframeOptions
 		modal?: ModalOptions
 		target?: HTMLElement
+		headerActions?: Partial<Record<HeaderActionName, (context: HeaderActionContext) => void | Promise<void>>>
 	}
 }
 ```
@@ -328,7 +344,7 @@ await window.MagicWidget.setInput("Fictional content in the new conversation")
 await window.MagicWidget.sendMessage("Send fictional content in the new conversation")
 ```
 
-The host must give the container a non-zero width and height. Inline mode has no floating button, mask, or SDK header; it is visible after `mount`, while `open`, `close`, and `destroy` remain available. The SDK is a single-instance API, so a later `mount` replaces the previous instance.
+The host must give the container a non-zero width and height. Inline mode has no floating button, mask, or close control outside the iframe and is expanded after `mount`. The standard header close button is controlled by `config.window.closable`, while `close()` always remains available for programmatic lifecycle control. The SDK is a single-instance API, so a later `mount` replaces the previous instance.
 
 All input, send, conversation, and configuration methods return a Promise. They reject with an error containing `code` values such as `NOT_MOUNTED`, `INVALID_INPUT`, `INVALID_CONFIG`, `IFRAME_NOT_READY`, or `COMMAND_FAILED`. The SDK waits only for the iframe document to load during initial navigation or reload, not for `agent_ready`; command results follow the iframe response.
 
@@ -356,6 +372,27 @@ namespace MagicWidget {
 			autoHire?: boolean
 			previewMode?: "split" | "fullscreen" | "switchable"
 		}
+		header?: {
+			visible?: boolean
+			title?: string
+			topicName?: { mode?: "current" | "hidden" | "static"; text?: string }
+			actions?: Partial<Record<"fullscreen" | "pin" | "newTopic" | "history" | "share" | "more" | "close", boolean>>
+		}
+		panel?: {
+			projectFiles?: boolean; uploadFiles?: boolean
+			otherProjectFiles?: boolean; digitalEmployees?: boolean
+			microApps?: boolean; workflows?: boolean
+			connectors?: boolean; skills?: boolean
+			canvasElements?: boolean
+		}
+		bottom?: {
+			internetSearch?: { enabled?: boolean; buttonVisible?: boolean }
+			plugin?: { enabled?: boolean; buttonVisible?: boolean }
+			upload?: { enabled?: boolean; buttonVisible?: boolean }
+			voice?: { enabled?: boolean; buttonVisible?: boolean }
+			model?: { buttonVisible?: boolean }
+		}
+		window?: { closable?: boolean }
 	}
 }
 ```
@@ -369,6 +406,12 @@ namespace MagicWidget {
 | `conversation.topicHistory`  | Enables or disables the desktop topic-history entry and panel. | Applied only by the desktop Crew conversation layout.                                                                                                                    |
 | `conversation.autoHire`      | Automatically attempts to hire an unusable Crew member.        | Enabled by default only for valid SDK embeds; ordinary Magic Web Crew pages never auto-hire.                                                                             |
 | `conversation.previewMode`   | Selects `split`, `fullscreen`, or `switchable` presentation.   | Desktop SDK embeds default to `switchable`; ordinary Magic Web pages keep their existing split layout.                                                                   |
+| `header.visible`             | Shows or hides the inline standard header.                     | Applies to desktop inline only; the host may draw its own header when hidden.                                                                                           |
+| `header.title` / `topicName` | Configures the first-line title and second-line topic text.    | `topicName.mode` supports `current`, `hidden`, and `static`; current topic name is the default.                                                                        |
+| `header.actions`             | Controls visibility of each standard header action.             | Omitted actions stay visible; set an action to `false` to hide it. `fullscreen` and `pin` have no in-widget behavior: register the matching `headerActions` handler, or set that flag to `false`. Omitting them without a handler still renders the button, and the click does nothing. `header.visible=false` hides the whole header. |
+| `panel.*`                    | Controls each fixed root row in the `@` mention panel: project files, upload files, other project files, digital employees, flows, micro-apps, connectors, skills, and canvas elements. | Each field only affects the matching Mention row. Flow child rows such as agents and tools keep their existing behavior. Omitted values preserve current behavior. |
+| `bottom.*`                   | Controls capability and button visibility for search, connector, upload, and voice, plus the model picker button. | Bottom settings are independent from Mention rows. Disabling upload also blocks drag/drop, paste, and image paths; hiding only the button preserves capability. `internetSearch.enabled: false` hides the button and forces `enable_web_search` off on send. The model picker has button visibility only. |
+| `window.closable`            | Controls visibility of the close button inside the iframe standard header. | `false` hides only the entry; the host can still call `close()`.                                                                                              |
 
 `split` keeps the expanded conversation and preview side by side. `fullscreen` shows only the preview in the current host-controlled Widget container and closes the preview when the user exits; it covers the host viewport only when the host resizes the Widget container accordingly. `switchable` keeps the preview inside the Widget layout, collapses the conversation when a new preview session starts, and lets the user expand or collapse the conversation without recreating the preview. Manual fullscreen remains available and returns to the previous conversation layout when the user exits. The controller keeps the same iframe mounted, so file tabs, playback state, editor content, and loaded preview data remain intact. A runtime configuration update affects the next preview activation and does not force the current layout to change.
 
@@ -384,6 +427,36 @@ await window.MagicWidget.updateConfig({
 		topicHistory: false,
 		autoHire: false,
 		previewMode: "split",
+	},
+	header: { title: "Custom Assistant", topicName: { mode: "current" } },
+	bottom: {
+		upload: { enabled: false, buttonVisible: false },
+		internetSearch: { enabled: true, buttonVisible: false },
+	},
+	window: { closable: false },
+})
+```
+
+Use `headerActions` to observe inline header actions after their built-in behavior completes. A callback cannot cancel that behavior. `newTopic` is reported after the topic is created, and `share`, `history`, and `more` are reported after their UI is triggered. `fullscreen` and `pin` have no in-widget behavior, so their callbacks run directly. `headerActionHandled: false` is only an ownership ack; the iframe does not fall back. Hide any host-owned action that has no handler. This example implements `pin` and `close`, so it hides `fullscreen`. `close` dismisses the Widget first and then runs `headerActions.close`; a rejection does not reopen it:
+
+```js
+window.MagicWidget.mount({
+	page: { type: "crew", crewId: "crew-demo" },
+	target: document.querySelector("#agent-slot"),
+	config: {
+		header: {
+			actions: {
+				fullscreen: false,
+			},
+		},
+	},
+	headerActions: {
+		pin: async ({ topicId }) => {
+			await hostWindowApi.pinAgent({ topicId })
+		},
+		close: async ({ topicId }) => {
+			await hostWindowApi.afterCloseAgent({ topicId })
+		},
 	},
 })
 ```

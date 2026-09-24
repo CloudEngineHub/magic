@@ -1,3 +1,4 @@
+import { WIDGET_HEADER_ACTION_NAMES } from "./config"
 import type { MagicWidget } from "./types"
 
 export const WIDGET_PROTOCOL = "magic-widget"
@@ -8,6 +9,7 @@ export const WIDGET_QUERY_PROTOCOL_VERSION = "magicWidgetProtocolVersion"
 export const WIDGET_QUERY_HOST_ORIGIN = "magicWidgetHostOrigin"
 export const WIDGET_QUERY_DEPLOYMENT_CODE = "magicWidgetDeploymentCode"
 export const WIDGET_QUERY_CONFIG = "magicWidgetConfig"
+const HEADER_ACTIONS = new Set<MagicWidget.HeaderActionName>(WIDGET_HEADER_ACTION_NAMES)
 
 export type WidgetCommandName =
 	"setInput" | "appendInput" | "clearInput" | "getInput" | "sendMessage" | "newConversation"
@@ -37,8 +39,20 @@ export interface WidgetResponseMessage {
 	requestId: string
 	type: "response"
 	ok: boolean
-	result?: { content?: string }
+	/** Command payload, or `headerActionHandled` as an ownership ack that does not trigger iframe fallback. */
+	result?: { content?: string; headerActionHandled?: boolean }
 	error?: { code: string; message: string }
+}
+
+/** Notifies the host after a header action. Built-in iframe behavior already completed; headerActionHandled is an ownership ack. */
+export interface WidgetHeaderActionMessage {
+	protocol: typeof WIDGET_PROTOCOL
+	version: typeof WIDGET_PROTOCOL_VERSION
+	instanceId: string
+	requestId: string
+	type: "header_action"
+	action: MagicWidget.HeaderActionName
+	context?: MagicWidget.HeaderActionContext
 }
 
 export interface WidgetConfigMessage {
@@ -92,6 +106,7 @@ export type WidgetProtocolMessage =
 	| WidgetUiStateMessage
 	| WidgetUiCommandMessage
 	| WidgetRuntimeEventMessage
+	| WidgetHeaderActionMessage
 	| WidgetResponseMessage
 
 /** Checks that mention data has the object-shaped container required by the bridge. */
@@ -158,6 +173,10 @@ export function isWidgetProtocolMessage(value: unknown): value is WidgetProtocol
 		message.type === "ui_state" ||
 		message.type === "ui_command" ||
 		message.type === "response" ||
+		(message.type === "header_action" &&
+			typeof message.requestId === "string" &&
+			typeof message.action === "string" &&
+			HEADER_ACTIONS.has(message.action as MagicWidget.HeaderActionName)) ||
 		(message.type === "event" && isRuntimeEvent(message.event))
 	return (
 		message.protocol === WIDGET_PROTOCOL &&

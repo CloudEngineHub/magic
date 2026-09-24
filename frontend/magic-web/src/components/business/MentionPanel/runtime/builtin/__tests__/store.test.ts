@@ -307,6 +307,7 @@ describe("MentionPanelStore Sorting Algorithm", () => {
 		mentionPanelStore.setCurrentTabs([])
 		mentionPanelStore.clearActiveCanvasElementsContext()
 		mentionPanelStore.setPinnedCurrentMicroApp(null)
+		mentionPanelStore.setBuiltinVisibility({})
 
 		vi.mocked(CrewApi.getMentionSkills).mockResolvedValue([])
 
@@ -367,6 +368,54 @@ describe("MentionPanelStore Sorting Algorithm", () => {
 				name: "Todo App",
 				data: { app_id: "app-1", app_name: "Todo App" },
 			})
+		})
+
+		it("filters disabled business roots and pinned micro apps", async () => {
+			projectFilesStore.setSelectedProject(createTestProject("test-project"))
+			mentionPanelStore.setPinnedCurrentMicroApp({
+				appId: "app-hidden",
+				appName: "Hidden App",
+			})
+			mentionPanelStore.setBuiltinVisibility({
+				projectFiles: false,
+				uploadFiles: false,
+				otherProjectFiles: false,
+				digitalEmployees: false,
+				microApps: false,
+				connectors: false,
+				workflows: false,
+				skills: false,
+				canvasElements: false,
+			})
+
+			const items = await getDefaultItems()
+			expect(items.some((item) => item.id === "app-hidden")).toBe(false)
+			expect(items.some((item) => item.id === "project-files")).toBe(false)
+			expect(items.some((item) => item.id === "other-project-files")).toBe(false)
+			expect(items.some((item) => item.id === "upload-files")).toBe(false)
+			expect(items.some((item) => item.id === "mcp-extensions")).toBe(false)
+			expect(items.some((item) => item.id === "digital-employees")).toBe(false)
+			expect(items.some((item) => item.id === "flows")).toBe(false)
+			expect(items.some((item) => item.id === "skills")).toBe(false)
+
+			const connectorItems = await mentionPanelStore.dispatch({
+				kind: "catalog",
+				catalogId: MentionPanelCatalogId.MCP_EXTENSIONS,
+			})
+			expect(connectorItems.items).toEqual([])
+		})
+
+		it("keeps flow child rows outside the root visibility configuration", async () => {
+			mentionPanelStore.setBuiltinVisibility({ digitalEmployees: false })
+
+			const items = await getDefaultItems()
+			expect(items.some((item) => item.id === "digital-employees")).toBe(false)
+
+			const flowItems = await mentionPanelStore.dispatch({
+				kind: "catalog",
+				catalogId: MentionPanelCatalogId.FLOWS,
+			})
+			expect(flowItems.items?.map((item) => item.id)).toEqual(["agents", "tools"])
 		})
 	})
 

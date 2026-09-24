@@ -189,6 +189,16 @@ describe("MagicWidgetProvider", () => {
 				shell: { appSidebar: false },
 				conversation: { projectFiles: false, autoHire: false, previewMode: "switchable" },
 				responsive: { mobileDetection: "viewport" },
+				header: {
+					title: "Mock Assistant",
+					topicName: { mode: "static", text: "Mock Topic" },
+				},
+				panel: { connectors: false, digitalEmployees: false },
+				bottom: {
+					upload: { enabled: false, buttonVisible: false },
+					internetSearch: { enabled: true, buttonVisible: false },
+				},
+				window: { closable: false },
 			}),
 		)
 
@@ -199,6 +209,9 @@ describe("MagicWidgetProvider", () => {
 		expect(screen.getByTestId("widget-config")).toHaveTextContent(
 			'"mobileDetection":"viewport"',
 		)
+		expect(screen.getByTestId("widget-config")).toHaveTextContent('"title":"Mock Assistant"')
+		expect(screen.getByTestId("widget-config")).toHaveTextContent('"connectors":false')
+		expect(screen.getByTestId("widget-config")).toHaveTextContent('"closable":false')
 		expect(postMessage).toHaveBeenCalledWith(
 			expect.objectContaining({
 				type: "config_ready",
@@ -248,7 +261,7 @@ describe("MagicWidgetProvider", () => {
 		)
 	})
 
-	it("rejects invalid config without replacing the last valid snapshot", () => {
+	it("applies a host config snapshot without rechecking field values", () => {
 		Object.defineProperty(window, "parent", {
 			configurable: true,
 			value: parentWindow,
@@ -264,36 +277,37 @@ describe("MagicWidgetProvider", () => {
 						protocol: "magic-widget",
 						version: 1,
 						instanceId: INSTANCE_ID,
-						requestId: "request-mock-provider-invalid",
+						requestId: "request-mock-provider-unvalidated",
 						type: "config",
-						config: { conversation: { projectFiles: "invalid" } },
+						config: {
+							layout: "desktop",
+							conversation: { projectFiles: "invalid" },
+							responsive: { mobileDetection: "device-only" },
+						},
 					},
 				}),
 			)
 		})
 
-		expect(screen.getByTestId("widget-config")).toHaveTextContent('{"layout":"desktop"}')
+		expect(screen.getByTestId("widget-config")).toHaveTextContent('"projectFiles":"invalid"')
+		expect(screen.getByTestId("widget-config")).toHaveTextContent(
+			'"mobileDetection":"device-only"',
+		)
 		expect(postMessage).toHaveBeenCalledWith(
 			expect.objectContaining({
-				requestId: "request-mock-provider-invalid",
-				ok: false,
-				error: expect.objectContaining({ code: "INVALID_CONFIG" }),
+				requestId: "request-mock-provider-unvalidated",
+				ok: true,
 			}),
 			HOST_ORIGIN,
 		)
 	})
 
-	it("rejects invalid responsive detection without replacing the last valid snapshot", () => {
+	it("drops a non-object config without replacing the last snapshot", () => {
 		Object.defineProperty(window, "parent", {
 			configurable: true,
 			value: parentWindow,
 		})
-		renderProvider(
-			createWidgetSearch({
-				layout: "desktop",
-				responsive: { mobileDetection: "viewport" },
-			}),
-		)
+		renderProvider(createWidgetSearch({ layout: "desktop" }))
 
 		act(() => {
 			window.dispatchEvent(
@@ -304,20 +318,18 @@ describe("MagicWidgetProvider", () => {
 						protocol: "magic-widget",
 						version: 1,
 						instanceId: INSTANCE_ID,
-						requestId: "request-mock-provider-invalid-responsive",
+						requestId: "request-mock-provider-non-object",
 						type: "config",
-						config: { responsive: { mobileDetection: "device-only" } },
+						config: null,
 					},
 				}),
 			)
 		})
 
-		expect(screen.getByTestId("widget-config")).toHaveTextContent(
-			'"mobileDetection":"viewport"',
-		)
+		expect(screen.getByTestId("widget-config")).toHaveTextContent('{"layout":"desktop"}')
 		expect(postMessage).toHaveBeenCalledWith(
 			expect.objectContaining({
-				requestId: "request-mock-provider-invalid-responsive",
+				requestId: "request-mock-provider-non-object",
 				ok: false,
 				error: expect.objectContaining({ code: "INVALID_CONFIG" }),
 			}),

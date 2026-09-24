@@ -15,17 +15,28 @@ const mockHistoryControl = vi.fn(
 		historyTriggerMode,
 		isHistoryButtonActive,
 		onToggleHistoryPanel,
+		onTriggerAction,
 	}: {
 		historyTriggerMode: "dropdown" | "layout"
 		isHistoryButtonActive: boolean
 		onToggleHistoryPanel?: () => void
+		onTriggerAction?: () => Promise<void> | void
 	}) => (
 		<div>
 			<button
 				type="button"
 				data-testid="message-header-history-button"
 				className={isHistoryButtonActive ? "bg-accent" : ""}
-				onClick={historyTriggerMode === "layout" ? onToggleHistoryPanel : undefined}
+				onClick={
+					historyTriggerMode === "layout"
+						? () => {
+								onToggleHistoryPanel?.()
+								void onTriggerAction?.()
+							}
+						: () => {
+								void onTriggerAction?.()
+							}
+				}
 			>
 				history
 			</button>
@@ -184,6 +195,9 @@ vi.mock("lucide-react", () => {
 		PenLine: createIcon("pen-line"),
 		WandSparkles: createIcon("wand-sparkles"),
 		Trash2: createIcon("trash-2"),
+		Maximize2: createIcon("maximize-2"),
+		Pin: createIcon("pin"),
+		X: createIcon("x"),
 	}
 })
 
@@ -347,6 +361,21 @@ vi.mock("@/pages/superMagic/pages/Workspace/types", () => ({
 	},
 }))
 
+/** Builds the topic action bag used by header interaction tests. */
+function createTopicActions(createTopic = vi.fn()) {
+	return {
+		createTopic,
+		selectTopic: vi.fn(),
+		renameTopic: vi.fn(),
+		deleteTopic: vi.fn(),
+		updateTopicName: vi.fn(),
+		pinTopic: vi.fn(),
+		unpinTopic: vi.fn(),
+		archiveTopic: vi.fn(),
+		unarchiveTopic: vi.fn(),
+	}
+}
+
 function renderComponent(overrides: Record<string, unknown> = {}) {
 	const selectedTopic = {
 		id: "topic-1",
@@ -461,6 +490,151 @@ describe("MessageHeader", () => {
 			"shadow-md",
 		)
 		expect(screen.getByTestId("icon-folder-tree")).toBeInTheDocument()
+	})
+
+	it("keeps the single-line title and built-in new topic action without header slots", () => {
+		const createTopic = vi.fn()
+		renderComponent({
+			topicActions: createTopicActions(createTopic),
+		})
+
+		expect(screen.getByTestId("message-header-topic-name").tagName).toBe("SPAN")
+		expect(screen.queryByTestId("message-header-fullscreen-button")).not.toBeInTheDocument()
+		expect(screen.queryByTestId("message-header-pin-window-button")).not.toBeInTheDocument()
+		expect(screen.queryByTestId("message-header-close-button")).not.toBeInTheDocument()
+
+		fireEvent.click(screen.getByTestId("message-header-new-topic-button"))
+		expect(createTopic).toHaveBeenCalledTimes(1)
+	})
+
+	it("renders a fixed title without entering topic rename", () => {
+		renderComponent({
+			titlePresentation: {
+				primary: "Mock Assistant",
+				secondaryMode: "fixed",
+				secondaryText: "Mock Topic",
+				renameEnabled: false,
+			},
+		})
+
+		expect(screen.getByTestId("message-header-topic-name").tagName).toBe("DIV")
+		expect(screen.getByText("Mock Assistant")).toBeInTheDocument()
+		expect(screen.getByText("Mock Topic")).toBeInTheDocument()
+
+		fireEvent.click(screen.getByTestId("message-header-topic-name"))
+		expect(screen.queryByTestId("message-header-rename-input")).not.toBeInTheDocument()
+	})
+
+	it("hides built-in actions in both expanded and collapsed layouts", () => {
+		const hideTopicActions = (action: string) => action !== "newTopic" && action !== "history"
+
+		const { unmount } = renderComponent({
+			isBuiltinActionVisible: hideTopicActions,
+		})
+		expect(screen.queryByTestId("message-header-new-topic-button")).not.toBeInTheDocument()
+		expect(screen.queryByTestId("message-header-history-button")).not.toBeInTheDocument()
+		unmount()
+
+		renderComponent({
+			isConversationPanelCollapsed: true,
+			isBuiltinActionVisible: hideTopicActions,
+		})
+		expect(screen.queryByTestId("message-header-new-topic-button")).not.toBeInTheDocument()
+		expect(screen.queryByTestId("message-header-history-button")).not.toBeInTheDocument()
+		expect(
+			screen.getByTestId("message-header-toggle-conversation-panel-button"),
+		).toBeInTheDocument()
+	})
+
+	it("keeps collapsed history visible when topic history is disabled", () => {
+		const { unmount } = renderComponent({
+			isConversationPanelCollapsed: true,
+			showTopicHistory: false,
+		})
+
+		expect(screen.getByTestId("message-header-history-button")).toBeInTheDocument()
+		expect(screen.getByTestId("message-header-new-topic-button")).toBeInTheDocument()
+		unmount()
+
+		renderComponent({ showTopicHistory: false })
+
+		expect(screen.queryByTestId("message-header-history-button")).not.toBeInTheDocument()
+		expect(screen.getByTestId("message-header-new-topic-button")).toBeInTheDocument()
+	})
+
+	it("notifies the caller after a topic is created", async () => {
+		const order: string[] = []
+		const createTopic = vi.fn(async () => {
+			order.push("create")
+		})
+		const onBuiltinAction = vi.fn(() => {
+			order.push("notify")
+		})
+		renderComponent({
+			topicActions: createTopicActions(createTopic),
+			onBuiltinAction,
+		})
+
+		fireEvent.click(screen.getByTestId("message-header-new-topic-button"))
+
+		await vi.waitFor(() => {
+			expect(onBuiltinAction).toHaveBeenCalledWith("newTopic")
+		})
+		expect(createTopic).toHaveBeenCalledTimes(1)
+		expect(order).toEqual(["create", "notify"])
+	})
+
+	it("does not notify the caller when topic creation fails", async () => {
+		const createTopic = vi.fn().mockRejectedValue(new Error("create failed"))
+		const onBuiltinAction = vi.fn()
+		renderComponent({
+			topicActions: createTopicActions(createTopic),
+			onBuiltinAction,
+		})
+
+		fireEvent.click(screen.getByTestId("message-header-new-topic-button"))
+
+		await vi.waitFor(() => {
+			expect(createTopic).toHaveBeenCalledTimes(1)
+		})
+		expect(onBuiltinAction).not.toHaveBeenCalled()
+	})
+
+	it("toggles history and then notifies the caller", async () => {
+		const order: string[] = []
+		const onToggleHistoryPanel = vi.fn(() => {
+			order.push("toggle")
+		})
+		const onBuiltinAction = vi.fn(() => {
+			order.push("notify")
+		})
+		renderComponent({
+			historyTriggerMode: "layout",
+			onToggleHistoryPanel,
+			onBuiltinAction,
+		})
+
+		fireEvent.click(screen.getByTestId("message-header-history-button"))
+
+		await vi.waitFor(() => {
+			expect(onBuiltinAction).toHaveBeenCalledWith("history")
+		})
+		expect(onToggleHistoryPanel).toHaveBeenCalledTimes(1)
+		expect(order).toEqual(["toggle", "notify"])
+	})
+
+	it("notifies the caller when dropdown history is opened", async () => {
+		const onBuiltinAction = vi.fn()
+		renderComponent({
+			historyTriggerMode: "dropdown",
+			onBuiltinAction,
+		})
+
+		fireEvent.click(screen.getByTestId("message-header-history-button"))
+
+		await vi.waitFor(() => {
+			expect(onBuiltinAction).toHaveBeenCalledWith("history")
+		})
 	})
 
 	it("collapses the history panel together when collapsing the conversation panel", () => {

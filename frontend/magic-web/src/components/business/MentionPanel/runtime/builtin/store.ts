@@ -46,6 +46,31 @@ import { resolveFolderWorkspaceEntryFromTab } from "../../utils/projectReference
 
 export type { WorkspaceFile, WorkspaceFolder }
 
+/** Describes host-controlled visibility for fixed root rows in the Mention panel. */
+export interface MentionPanelBuiltinVisibility {
+	projectFiles?: boolean
+	uploadFiles?: boolean
+	otherProjectFiles?: boolean
+	digitalEmployees?: boolean
+	microApps?: boolean
+	workflows?: boolean
+	connectors?: boolean
+	skills?: boolean
+	canvasElements?: boolean
+}
+
+const BUILTIN_VISIBILITY_IDS: Record<keyof MentionPanelBuiltinVisibility, string[]> = {
+	projectFiles: [BuiltinItemId.PROJECT_FILES],
+	uploadFiles: [BuiltinItemId.UPLOAD_FILES],
+	otherProjectFiles: [BuiltinItemId.OTHER_PROJECT_FILES],
+	digitalEmployees: [BuiltinItemId.DIGITAL_EMPLOYEES],
+	microApps: [BuiltinItemId.MICRO_APPS],
+	workflows: [BuiltinItemId.FLOWS],
+	connectors: [BuiltinItemId.MCP_EXTENSIONS],
+	skills: [BuiltinItemId.SKILLS],
+	canvasElements: [BuiltinItemId.CANVAS_ELEMENTS],
+}
+
 export class MentionPanelStore {
 	private readonly projectFilesStore: ProjectFilesStore
 	private readonly mcpStore: MentionPanelMcpStore
@@ -60,6 +85,7 @@ export class MentionPanelStore {
 	private readonly historyStore: MentionPanelHistoryStore
 	private readonly canvasElementsStore: MentionPanelCanvasElementsStore
 	pinnedRootItems: MentionItem[] = []
+	private builtinVisibility: MentionPanelBuiltinVisibility = {}
 
 	constructor(projectFilesStore: ProjectFilesStore) {
 		this.projectFilesStore = projectFilesStore
@@ -161,6 +187,32 @@ export class MentionPanelStore {
 		this.pinnedRootItems = item ? [item] : []
 	}
 
+	/** Applies host-level business entry visibility to every Mention panel result. */
+	setBuiltinVisibility(visibility: MentionPanelBuiltinVisibility = {}) {
+		this.builtinVisibility = visibility
+	}
+
+	/** Filters disabled roots and pinned micro-app items without changing catalog data. */
+	private filterVisibleItems(items: MentionItem[]): MentionItem[] {
+		const hiddenIds = new Set(
+			Object.entries(BUILTIN_VISIBILITY_IDS).flatMap(([key, ids]) =>
+				this.builtinVisibility[key as keyof MentionPanelBuiltinVisibility] === false
+					? ids
+					: [],
+			),
+		)
+		return items.filter((item) => {
+			if (hiddenIds.has(item.id)) return false
+			if (
+				this.builtinVisibility.microApps === false &&
+				item.type === MentionItemType.MICRO_APP
+			) {
+				return false
+			}
+			return true
+		})
+	}
+
 	setSkillQueryContext(topicMode?: string, agentCode?: string) {
 		// On the home page custom employees are represented directly by their
 		// identifier in `topicMode`; inside a topic the code is carried separately.
@@ -229,12 +281,12 @@ export class MentionPanelStore {
 		switch (request.kind) {
 			case "default":
 				return {
-					items: this.buildDefaultItems(request.options.t),
+					items: this.filterVisibleItems(this.buildDefaultItems(request.options.t)),
 				}
 			case "search":
 				return this.searchMentionItems(request.query, request.scopeFolderId).then(
 					(items) => ({
-						items,
+						items: this.filterVisibleItems(items),
 					}),
 				)
 			case "children":
@@ -257,6 +309,12 @@ export class MentionPanelStore {
 	private resolveCatalogItems(
 		request: CatalogRequest,
 	): Promise<MentionStoreResult> | MentionStoreResult {
+		const catalogEnabled = !Object.entries(BUILTIN_VISIBILITY_IDS).some(
+			([key, ids]) =>
+				this.builtinVisibility[key as keyof MentionPanelBuiltinVisibility] === false &&
+				ids.includes(request.catalogId),
+		)
+		if (!catalogEnabled) return { items: [] }
 		const catalogPlugin = mentionPanelCatalogPluginMap.get(request.catalogId)
 		if (!catalogPlugin) {
 			return {
@@ -267,7 +325,7 @@ export class MentionPanelStore {
 		return Promise.resolve(
 			catalogPlugin.resolveCatalog({ store: this.getPluginHost(), request }),
 		).then((items) => ({
-			items,
+			items: this.filterVisibleItems(items),
 		}))
 	}
 

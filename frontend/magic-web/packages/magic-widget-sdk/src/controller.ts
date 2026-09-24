@@ -845,6 +845,7 @@ export function createMagicWidgetController(): MagicWidget.Controller {
 
 		const closeButton = document.createElement("button")
 		closeButton.type = "button"
+		// window.closable only hides the iframe header button. This shell control stays in floating mode.
 		closeButton.className = "magic-widget-close"
 		closeButton.setAttribute("aria-label", "Close Magic")
 		closeButton.append(createCloseIcon())
@@ -879,7 +880,16 @@ export function createMagicWidgetController(): MagicWidget.Controller {
 		else shadowRoot.append(style, modal)
 		// Mount the widget root directly into the host target; fullscreen layout is controlled by the host.
 		;(nextOptions.target ?? document.body).append(root)
-		bridge = new WidgetBridge(iframe, appOrigin, instanceId)
+		const configuredHeaderActions = nextOptions.headerActions ?? {}
+		const headerActions = {
+			...configuredHeaderActions,
+			// Dismiss first, then notify. A callback failure must not keep the widget open.
+			close: async (context: MagicWidget.HeaderActionContext) => {
+				close()
+				await configuredHeaderActions.close?.(context)
+			},
+		}
+		bridge = new WidgetBridge(iframe, appOrigin, instanceId, headerActions)
 		bridge.onAgentReady(notifyAgentReady)
 		bridge.onPreviewFullscreenChange(setPreviewFullscreen)
 		bridge.onRuntimeEvent(notifyRuntimeEvent)
