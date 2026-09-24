@@ -106,9 +106,13 @@
 			"skipForwardAria": "前进 15 秒",
 			"waveformSeekAria": "波形播放进度，拖动或使用方向键跳转"
 		},
+		"pullConversationToCancel": "向左拖动取消收起",
+		"pullConversationToCollapse": "向右拖动收起对话",
 		"pullTranscriptToCancel": "向右拖动取消收起",
 		"pullTranscriptToCollapse": "向左拖动收起转写",
 		"relatedDialogue": "关联对话",
+		"releaseConversationToCollapse": "松手收起对话",
+		"releaseConversationToKeepOpen": "松手保持展开",
 		"releaseTranscriptToCollapse": "松手收起转写",
 		"releaseTranscriptToKeepOpen": "松手保持展开",
 		"searchContent": "搜索内容",

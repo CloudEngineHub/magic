@@ -106,9 +106,13 @@
 			"skipForwardAria": "Skip forward 15 seconds",
 			"waveformSeekAria": "Playback progress on waveform; drag or use arrow keys to seek"
 		},
+		"pullConversationToCancel": "Drag left to cancel",
+		"pullConversationToCollapse": "Drag right to collapse conversation",
 		"pullTranscriptToCancel": "Drag right to cancel",
 		"pullTranscriptToCollapse": "Drag left to collapse transcript",
 		"relatedDialogue": "Related dialogue",
+		"releaseConversationToCollapse": "Release to collapse conversation",
+		"releaseConversationToKeepOpen": "Release to keep open",
 		"releaseTranscriptToCollapse": "Release to collapse transcript",
 		"releaseTranscriptToKeepOpen": "Release to keep open",
 		"searchContent": "Search content",

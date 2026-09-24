@@ -62,11 +62,12 @@ import type { AttachmentFile } from "@/pages/superMagic/utils/image-url-resolver
 import { useRecordingProjectChat } from "./hooks/useRecordingProjectChat"
 import { useRecordingDetailConversationPanelState } from "./hooks/useRecordingDetailConversationPanelState"
 import { useRecordingDetailTranscriptPanelState } from "./hooks/useRecordingDetailTranscriptPanelState"
+import { RecordingDetailConversationResizeHandle } from "./components/recording-detail/RecordingDetailConversationResizeHandle"
 import {
 	RECORDING_CHAT_COLLAPSED_WIDTH,
-	RECORDING_CHAT_EXPANDED_WIDTH,
 	RECORDING_CHAT_HISTORY_WIDTH,
 } from "./components/recording-detail/recording-detail-layout"
+import type { ConversationPanelDragCommit } from "./stores/RecordingConversationPanelDragStore"
 
 const MobileAudioRecordingDetailPage = lazy(
 	() => import("@/pages/superMagicMobile/pages/AudioRecordingDetail"),
@@ -123,8 +124,15 @@ function AudioRecordingDetailPageDesktop() {
 	const [groups, setGroups] = useState<AudioRecordingGroup[]>([])
 	const [ungroupedCount, setUngroupedCount] = useState(0)
 	const [chatHistoryOpen, setChatHistoryOpen] = useState(false)
-	const { isConversationPanelCollapsed, toggleConversationPanel, expandConversationPanel } =
-		useRecordingDetailConversationPanelState()
+	const {
+		isConversationPanelCollapsed,
+		conversationPanelWidth,
+		conversationPanelRef,
+		toggleConversationPanel,
+		expandConversationPanel,
+		collapseConversationPanel,
+		setConversationPanelWidth,
+	} = useRecordingDetailConversationPanelState()
 	const chat = useRecordingProjectChat({
 		projectId,
 		attachmentsLoading: loading,
@@ -173,6 +181,22 @@ function AudioRecordingDetailPageDesktop() {
 	const handleExpandConversationPanel = useCallback(() => {
 		expandConversationPanel()
 	}, [expandConversationPanel])
+
+	/**
+	 * Persists a finished conversation drag. Collapse closes topic history first and keeps the
+	 * pre-drag conversation width; a normal release only updates that width.
+	 */
+	const handleConversationDragCommit = useCallback(
+		(result: ConversationPanelDragCommit) => {
+			if (result.collapsed) {
+				setChatHistoryOpen(false)
+				collapseConversationPanel()
+				return
+			}
+			setConversationPanelWidth(result.width)
+		},
+		[collapseConversationPanel, setConversationPanelWidth],
+	)
 
 	useEffect(() => {
 		setSpeakerNameOverrides(fileMap?.magicProjectConfig?.metadata?.speakers ?? {})
@@ -411,11 +435,13 @@ function AudioRecordingDetailPageDesktop() {
 		}
 	}
 
-	const conversationPanelWidth = isConversationPanelCollapsed
+	// Collapsed is the 24px rail. Expanded width is the persisted conversation surface; history adds 240 on top.
+	const conversationRailWidth = isConversationPanelCollapsed
 		? RECORDING_CHAT_COLLAPSED_WIDTH
-		: RECORDING_CHAT_EXPANDED_WIDTH
+		: conversationPanelWidth
 	const chatPanelWidth =
-		conversationPanelWidth + (chatHistoryOpen ? RECORDING_CHAT_HISTORY_WIDTH : 0)
+		conversationRailWidth +
+		(!isConversationPanelCollapsed && chatHistoryOpen ? RECORDING_CHAT_HISTORY_WIDTH : 0)
 
 	return (
 		<RecordingDetailProvider capabilities={OWNER_RECORDING_DETAIL_CAPABILITIES}>
@@ -539,30 +565,47 @@ function AudioRecordingDetailPageDesktop() {
 					{/* Mount chat as soon as the page is not fatal; detail attachment loading must not unmount it. */}
 					{!error && !detailUnavailable ? (
 						<div
-							className="h-full min-h-0 max-w-full shrink-0 overflow-hidden bg-sidebar transition-[width,min-width] duration-300"
+							ref={conversationPanelRef}
+							className="relative h-full min-h-0 max-w-full shrink-0 bg-sidebar transition-[width,min-width] duration-300 data-[resizing=true]:select-none [&[data-resizing=true]>div]:pointer-events-none [&[data-resizing=true]_[data-slot=resizable-handle]]:pointer-events-auto"
 							style={{ width: chatPanelWidth, minWidth: chatPanelWidth }}
 							data-testid="recording-detail-chat-rail"
 							data-collapsed={String(isConversationPanelCollapsed)}
 						>
-							{/* Keep the conversation mounted while only its sibling rail width changes. */}
-							<RecordingDetailChatPanel
-								isConversationPanelCollapsed={isConversationPanelCollapsed}
-								historyOpen={chatHistoryOpen}
-								onToggleConversationPanel={handleToggleConversationPanel}
-								onExpandConversationPanel={handleExpandConversationPanel}
-								onToggleHistory={() => setChatHistoryOpen((current) => !current)}
-								topicsLoading={chat.topicsLoading}
-								topicStore={chat.topicStore}
-								topicActions={chat.topicActions}
-								selectedTopic={chat.selectedTopic}
-								project={chat.project}
-								workspace={chat.workspace}
-								setSelectedTopic={chat.topicStore.setSelectedTopic}
-								projectFilesStore={chat.projectFilesStore}
-								mentionPanelStore={chat.mentionPanelStore}
-								attachments={chat.projectFilesStore.workspaceFileTree}
-								attachmentList={chat.projectFilesStore.workspaceFilesList}
-							/>
+							{/* Keep the handle outside the clipped chat so it can sit in the page gap. */}
+							{isConversationPanelCollapsed ? null : (
+								<RecordingDetailConversationResizeHandle
+									panelRef={conversationPanelRef}
+									conversationWidth={conversationPanelWidth}
+									historyOffset={
+										chatHistoryOpen ? RECORDING_CHAT_HISTORY_WIDTH : 0
+									}
+									onCommit={handleConversationDragCommit}
+								/>
+							)}
+							{/* Clip chat independently so collapse still hides overflowing messages. */}
+							<div className="h-full min-h-0 overflow-hidden">
+								{/* Keep the conversation mounted while only its sibling rail width changes. */}
+								<RecordingDetailChatPanel
+									isConversationPanelCollapsed={isConversationPanelCollapsed}
+									historyOpen={chatHistoryOpen}
+									onToggleConversationPanel={handleToggleConversationPanel}
+									onExpandConversationPanel={handleExpandConversationPanel}
+									onToggleHistory={() =>
+										setChatHistoryOpen((current) => !current)
+									}
+									topicsLoading={chat.topicsLoading}
+									topicStore={chat.topicStore}
+									topicActions={chat.topicActions}
+									selectedTopic={chat.selectedTopic}
+									project={chat.project}
+									workspace={chat.workspace}
+									setSelectedTopic={chat.topicStore.setSelectedTopic}
+									projectFilesStore={chat.projectFilesStore}
+									mentionPanelStore={chat.mentionPanelStore}
+									attachments={chat.projectFilesStore.workspaceFileTree}
+									attachmentList={chat.projectFilesStore.workspaceFilesList}
+								/>
+							</div>
 						</div>
 					) : null}
 				</div>

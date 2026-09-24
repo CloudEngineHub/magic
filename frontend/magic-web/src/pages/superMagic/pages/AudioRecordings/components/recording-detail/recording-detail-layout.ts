@@ -36,7 +36,13 @@ export const RECORDING_DETAIL_WORKBENCH_MIN_WIDTH_COLLAPSED =
 /** Width of the project-detail style icon rail after the recording chat is collapsed. */
 export const RECORDING_CHAT_COLLAPSED_WIDTH = 24
 
-/** Default width of the recording conversation surface. */
+/** Narrowest expanded conversation surface; dragging past this can arm collapse. */
+export const RECORDING_CHAT_MIN_WIDTH = 320
+
+/** Widest expanded conversation surface. Narrow windows do not lower this cap. */
+export const RECORDING_CHAT_MAX_WIDTH = 560
+
+/** Default width of the recording conversation surface when no width has been stored. */
 export const RECORDING_CHAT_EXPANDED_WIDTH = 380
 
 /** Compact history width reserved for the constrained recording-detail workspace. */

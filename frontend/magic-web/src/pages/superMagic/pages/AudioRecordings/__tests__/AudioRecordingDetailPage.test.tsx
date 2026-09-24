@@ -566,15 +566,26 @@ describe("AudioRecordingDetailPage", () => {
 			minWidth: "24px",
 		})
 
+		expect(
+			screen.queryByTestId("recording-detail-conversation-resize-handle"),
+		).not.toBeInTheDocument()
+
 		fireEvent.click(screen.getByTestId("recording-detail-toggle-chat"))
 		expect(storageMock.setItem).toHaveBeenCalledWith(
 			RECORDING_DETAIL_CONVERSATION_PANEL_COLLAPSED_STORAGE_KEY,
-			"false",
+			JSON.stringify({ collapsed: false, width: RECORDING_CHAT_EXPANDED_WIDTH }),
 		)
 		expect(screen.getByTestId("recording-detail-chat-rail")).toHaveStyle({
 			width: `${RECORDING_CHAT_EXPANDED_WIDTH}px`,
 			minWidth: `${RECORDING_CHAT_EXPANDED_WIDTH}px`,
 		})
+		expect(
+			screen.getByTestId("recording-detail-conversation-resize-handle"),
+		).toBeInTheDocument()
+		expect(
+			screen.getByTestId("recording-detail-conversation-resize-handle").className,
+		).toContain("-translate-x-full")
+		expect(screen.getByTestId("recording-detail-chat-rail")).not.toHaveClass("overflow-hidden")
 	})
 
 	it("restores an expanded preference for the detail rail while attachments are still loading", () => {
@@ -764,6 +775,26 @@ describe("AudioRecordingDetailPage", () => {
 		expect(detailCard).not.toContainElement(chatRail)
 		expect(chatRail).toHaveClass("h-full", "shrink-0", "bg-sidebar")
 		expect(chatRail).not.toHaveClass("fixed", "shadow-2xl", "xl:static")
+	})
+
+	it("uses a persisted conversation width and keeps history at its fixed width", () => {
+		storageMock.getItem.mockImplementation((key: string) =>
+			key === RECORDING_DETAIL_CONVERSATION_PANEL_COLLAPSED_STORAGE_KEY
+				? JSON.stringify({ collapsed: false, width: 420 })
+				: null,
+		)
+
+		render(<AudioRecordingDetailPage />)
+
+		expect(screen.getByTestId("recording-detail-chat-rail")).toHaveStyle({
+			width: "420px",
+			minWidth: "420px",
+		})
+		fireEvent.click(screen.getByTestId("recording-detail-toggle-history"))
+		expect(screen.getByTestId("recording-detail-chat-rail")).toHaveStyle({
+			width: `${420 + RECORDING_CHAT_HISTORY_WIDTH}px`,
+			minWidth: `${420 + RECORDING_CHAT_HISTORY_WIDTH}px`,
+		})
 	})
 
 	it("closes topic history before collapsing to the project-detail narrow rail", () => {
