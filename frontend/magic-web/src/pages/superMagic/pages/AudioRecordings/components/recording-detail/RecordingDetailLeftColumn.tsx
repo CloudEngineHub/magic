@@ -74,7 +74,7 @@ export function RecordingDetailLeftColumn({
 	)
 
 	return (
-		<>
+		<div className="flex h-full min-h-0 flex-col gap-4">
 			<RecordingDetailAudioPlayer
 				audioRef={audioRef}
 				audioUrl={audioUrl}
@@ -108,6 +108,6 @@ export function RecordingDetailLeftColumn({
 				onOpenSpeakerSettings={onOpenSpeakerSettings}
 				isSummarizing={isSummarizing}
 			/>
-		</>
+		</div>
 	)
 }

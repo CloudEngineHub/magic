@@ -24,6 +24,7 @@ import {
 import { saveMediaSpeakersAndMagicProjectJs } from "@/pages/superMagic/components/Detail/contents/HTML/media/utils"
 import { collectSpeakerIdsFromText } from "./utils/markdown-time-links"
 import { normalizeSpeakerSelection } from "./utils/speaker-filter"
+import { hasRecordingDetailTabStrip } from "./utils/recording-detail-files"
 import { useRecordingDetailData } from "./hooks/useRecordingDetailData"
 import { useRecordingAudioPlayer } from "./hooks/useRecordingAudioPlayer"
 import { useRecordingPlayerCurrentSec } from "./hooks/useRecordingPlayerCurrentSec"
@@ -60,6 +61,7 @@ import { useAudioRecordingCopyToProject } from "./hooks/useAudioRecordingCopyToP
 import type { AttachmentFile } from "@/pages/superMagic/utils/image-url-resolver"
 import { useRecordingProjectChat } from "./hooks/useRecordingProjectChat"
 import { useRecordingDetailConversationPanelState } from "./hooks/useRecordingDetailConversationPanelState"
+import { useRecordingDetailTranscriptPanelState } from "./hooks/useRecordingDetailTranscriptPanelState"
 import {
 	RECORDING_CHAT_COLLAPSED_WIDTH,
 	RECORDING_CHAT_EXPANDED_WIDTH,
@@ -225,6 +227,27 @@ function AudioRecordingDetailPageDesktop() {
 		summaryReady ||
 		(Boolean(resolvedItem && isAudioProjectSummarizing(resolvedItem)) &&
 			Boolean(fileMap?.magicProject && fileMap.magicProjectConfig))
+
+	// A collapsed transcript column needs a tab-strip expand entry, so collapse only when the summary is ready.
+	const canCollapseTranscript =
+		summaryPreviewAvailable && hasRecordingDetailTabStrip(fileMap, true)
+	const {
+		isTranscriptPanelCollapsed,
+		transcriptPanelWidth,
+		workbenchGridRef,
+		expandTranscriptPanel,
+		collapseTranscriptPanel,
+		setTranscriptPanelWidth,
+	} = useRecordingDetailTranscriptPanelState()
+
+	/** Routes a finished transcript drag to the matching persisted transition. */
+	const handleTranscriptDragCommit = useCallback(
+		(result: { collapsed: boolean; width: number }) => {
+			if (result.collapsed) collapseTranscriptPanel()
+			else setTranscriptPanelWidth(result.width)
+		},
+		[collapseTranscriptPanel, setTranscriptPanelWidth],
+	)
 
 	const detailSummaryState = useMemo(
 		() =>
@@ -454,6 +477,11 @@ function AudioRecordingDetailPageDesktop() {
 
 						{!loading && !error && !detailUnavailable ? (
 							<RecordingDetailWorkbench
+								transcriptCollapsed={isTranscriptPanelCollapsed}
+								transcriptWidth={transcriptPanelWidth}
+								canCollapseTranscript={canCollapseTranscript}
+								onTranscriptDragCommit={handleTranscriptDragCommit}
+								gridRef={workbenchGridRef}
 								left={
 									<RecordingDetailLeftColumn
 										searchScopeKey={projectId}
@@ -500,6 +528,8 @@ function AudioRecordingDetailPageDesktop() {
 										onTimeClick={handleSummaryTimeClick}
 										onGenerateSummary={handleSummaryAction}
 										summarySubmitting={actions.summarySubmitting}
+										transcriptCollapsed={isTranscriptPanelCollapsed}
+										onExpandTranscript={expandTranscriptPanel}
 									/>
 								}
 							/>

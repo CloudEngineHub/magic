@@ -9,6 +9,14 @@ vi.mock("react-i18next", () => ({
 	}),
 }))
 
+// The base barrel re-exports editor components that initialize the i18n store at module load,
+// which this suite's minimal react-i18next mock cannot satisfy. Mock the barrel so only the
+// pass-through MagicTooltip remains; the TabStrip is already mocked below, so the leading
+// expand action never reaches a real render.
+vi.mock("@/components/base", () => ({
+	MagicTooltip: ({ children }: { children: ReactNode }) => <>{children}</>,
+}))
+
 vi.mock("@/components/base-mobile/ScrollEdgeFade", () => ({
 	ScrollEdgeFadeContainer: ({ children }: { children: ReactNode }) => <div>{children}</div>,
 }))

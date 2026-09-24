@@ -1,5 +1,7 @@
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { useTranslation } from "react-i18next"
+import { PanelLeftOpen } from "lucide-react"
+import { MagicTooltip } from "@/components/base"
 import type { AttachmentItem } from "@/pages/superMagic/components/TopicFilesButton/hooks/types"
 import type { AttachmentFile } from "@/pages/superMagic/utils/image-url-resolver"
 import type { RecordingDetailFileMap, RecordingDetailFileRef } from "../../types/recording-detail"
@@ -35,6 +37,9 @@ interface RecordingDetailRightPanelProps {
 	activeKey?: string
 	/** Reports the resolved content tab so external toolbars can follow its file context. */
 	onActiveKeyChange?: (activeKey: string) => void
+	/** When the transcript column is collapsed, shows an expand action in the tab strip. */
+	transcriptCollapsed?: boolean
+	onExpandTranscript?: () => void
 }
 
 /** Builds the dynamic right-panel tabs and renders summary/notes content or state placeholders. */
@@ -56,6 +61,8 @@ export const RecordingDetailRightPanel = memo(function RecordingDetailRightPanel
 	showNotesTab = true,
 	activeKey: controlledActiveKey,
 	onActiveKeyChange,
+	transcriptCollapsed = false,
+	onExpandTranscript,
 }: RecordingDetailRightPanelProps) {
 	const { t } = useTranslation("audioRecordings")
 	const tabs = useMemo(
@@ -133,6 +140,24 @@ export const RecordingDetailRightPanel = memo(function RecordingDetailRightPanel
 				tabs={tabs}
 				activeKey={resolvedActiveKey}
 				onChange={handleActiveKeyChange}
+				leading={
+					transcriptCollapsed ? (
+						<MagicTooltip
+							title={t("detail.expandTranscriptPanelAria")}
+							placement="bottom"
+						>
+							<button
+								type="button"
+								aria-label={t("detail.expandTranscriptPanelAria")}
+								onClick={onExpandTranscript}
+								className="flex size-7 shrink-0 items-center justify-center rounded-full bg-accent shadow-sm transition-colors duration-200 hover:bg-accent/80 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+								data-testid="recording-detail-expand-transcript"
+							>
+								<PanelLeftOpen size={16} className="shrink-0 text-foreground" />
+							</button>
+						</MagicTooltip>
+					) : undefined
+				}
 			/>
 
 			{activeTab?.kind === "metrics" || activeTab?.file.type === "mindmap" ? (

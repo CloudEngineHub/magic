@@ -8,17 +8,30 @@ export const RECORDING_DESKTOP_CONTENT_INSET_CLASS = "w-full px-[10%]"
 export const RECORDING_DESKTOP_MD_CONTENT_CLASS = `${RECORDING_DESKTOP_CONTENT_INSET_CLASS} pb-8`
 
 /** Minimum readable width of the desktop transcript column. */
-export const RECORDING_DETAIL_TRANSCRIPT_MIN_WIDTH = 360
+export const RECORDING_DETAIL_TRANSCRIPT_MIN_WIDTH = 300
 
 /** Maximum width reserved for the desktop transcript column. */
 export const RECORDING_DETAIL_TRANSCRIPT_MAX_WIDTH = 440
 
+/** Default expanded transcript width used when no persisted preference exists. */
+export const RECORDING_DETAIL_TRANSCRIPT_DEFAULT_WIDTH = 440
+
+/** Width of the drag handle column that separates transcript from summary in the expanded layout. */
+export const RECORDING_DETAIL_TRANSCRIPT_HANDLE_WIDTH = 24
+
 /** Minimum readable width of the desktop summary and notes column. */
 export const RECORDING_DETAIL_SUMMARY_MIN_WIDTH = 480
 
-/** Minimum width of both detail columns including the 24px gap and 32px side insets. */
+/** Minimum width of both detail columns including the 24px handle and 32px side insets. */
 export const RECORDING_DETAIL_WORKBENCH_MIN_WIDTH =
-	RECORDING_DETAIL_TRANSCRIPT_MIN_WIDTH + RECORDING_DETAIL_SUMMARY_MIN_WIDTH + 24 + 64
+	RECORDING_DETAIL_TRANSCRIPT_MIN_WIDTH +
+	RECORDING_DETAIL_TRANSCRIPT_HANDLE_WIDTH +
+	RECORDING_DETAIL_SUMMARY_MIN_WIDTH +
+	64
+
+/** Minimum workbench width when the transcript column is fully collapsed and only summary remains. */
+export const RECORDING_DETAIL_WORKBENCH_MIN_WIDTH_COLLAPSED =
+	RECORDING_DETAIL_SUMMARY_MIN_WIDTH + 64
 
 /** Width of the project-detail style icon rail after the recording chat is collapsed. */
 export const RECORDING_CHAT_COLLAPSED_WIDTH = 24
