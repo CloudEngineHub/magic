@@ -374,6 +374,30 @@ describe("PPTSpeakerNotesPanel", () => {
 		expect(screen.queryByTestId("ppt-speaker-notes-editor")).not.toBeInTheDocument()
 	})
 
+	it("fills the dedicated presenter panel without resize or overlay behavior", () => {
+		pptNotesPreferenceStore.setHeight(300)
+		render(
+			<PPTSpeakerNotesPanel
+				layout="presenter"
+				slideIndex={0}
+				rawContent="<template data-magic-slide-notes>Presenter notes</template>"
+				fileId="slide-1"
+				allowEdit={false}
+				onSaved={vi.fn().mockResolvedValue(undefined)}
+			/>,
+		)
+
+		const panel = screen.getByTestId("ppt-speaker-notes-panel")
+		expect(panel).toHaveAttribute("data-layout", "presenter")
+		expect(panel).toHaveClass("h-full", "col-start-2", "row-start-2")
+		expect(panel).not.toHaveAttribute("data-overlay")
+		expect(panel).not.toHaveAttribute("style")
+		expect(
+			screen.queryByRole("button", { name: "ppt.speakerNotes.resize" }),
+		).not.toBeInTheDocument()
+		expect(screen.queryByTestId("ppt-speaker-notes-spacer")).not.toBeInTheDocument()
+	})
+
 	it("merges notes into the latest slide HTML before saving", async () => {
 		const saveEditContent = vi.fn().mockResolvedValue(true)
 		const onSaved = vi.fn().mockResolvedValue(undefined)
@@ -552,6 +576,28 @@ describe("all-slide notes", () => {
 		fireEvent.keyDown(handle, { key: "ArrowDown" })
 		expect(panel).toHaveStyle({ height: "250px" })
 		expect(panel).not.toHaveAttribute("data-overlay")
+	})
+
+	it("restores overview and unsaved drafts after leaving presenter layout", () => {
+		const input = props()
+		const { rerender } = render(<PPTSpeakerNotesPanel {...input} />)
+		openAll()
+		const editors = screen.getAllByTestId("ppt-speaker-notes-editor")
+		fireEvent.change(editors[1], { target: { value: "Retain this draft" } })
+		rerender(<PPTSpeakerNotesPanel {...input} layout="presenter" allowEdit={false} />)
+		expect(
+			screen.queryByRole("button", { name: "ppt.speakerNotes.allPages" }),
+		).not.toBeInTheDocument()
+		expect(editors[1]).not.toBeVisible()
+		rerender(<PPTSpeakerNotesPanel {...input} />)
+		expect(screen.getByRole("button", { name: "ppt.speakerNotes.allPages" })).toHaveAttribute(
+			"aria-pressed",
+			"true",
+		)
+		expect(screen.getAllByTestId("ppt-speaker-notes-editor")[1]).toBeVisible()
+		expect(screen.getAllByTestId("ppt-speaker-notes-editor")[1]).toHaveValue(
+			"Retain this draft",
+		)
 	})
 
 	it("reports silent save progress in the fixed header and keeps success after content sync", async () => {

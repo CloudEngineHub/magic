@@ -13,7 +13,9 @@ import type { PPTSpeakerNotesPanelProps } from "./pptNotesTypes"
 export default function PPTSpeakerNotesPanel(props: PPTSpeakerNotesPanelProps) {
 	const { t } = useTranslation("super")
 	const drafts = useRef(new Map<string, string>())
-	const [showAll, setShowAll] = useState(false)
+	const [overviewSelected, setShowAll] = useState(false)
+	const isPresenter = props.layout === "presenter"
+	const showAll = overviewSelected && !isPresenter
 	const [openedAll, setOpenedAll] = useState(false)
 	const { panelRef, height, overlay, inFlowHeight, resizeHandleProps } = useSpeakerNotesResize()
 	const visible = props.visible !== false
@@ -28,7 +30,7 @@ export default function PPTSpeakerNotesPanel(props: PPTSpeakerNotesPanelProps) {
 	}
 	// Once opened, retain editors while hidden: changing views must not discard failed saves.
 	const slides = openedAll && props.slides ? props.slides : [currentSlide]
-	const isOverlay = overlay
+	const isOverlay = overlay && !isPresenter
 	const [saveStates, setSaveStates] = useState<Record<string, SaveState>>({})
 	// Only aggregate files still in this deck; a removed page cannot leave a stale status.
 	const states = (props.slides ?? [currentSlide]).map((slide) => saveStates[slide.key])
@@ -66,30 +68,34 @@ export default function PPTSpeakerNotesPanel(props: PPTSpeakerNotesPanelProps) {
 			<section
 				ref={panelRef}
 				data-testid="ppt-speaker-notes-panel"
+				data-layout={props.layout ?? "default"}
 				data-overlay={isOverlay ? "true" : undefined}
 				hidden={!visible}
-				style={{ height }}
+				style={isPresenter ? undefined : { height }}
 				className={cn(
 					"min-h-0 flex-col overflow-hidden border-t border-border/60 bg-background",
 					// The overview uses the existing stage as its boundary, including embedded previews.
 					isOverlay
 						? "absolute inset-x-0 bottom-0 z-[5] shadow-[0_-8px_32px_oklch(0_0_0/0.12)]"
 						: "shrink-0",
+					isPresenter && "col-start-2 row-start-2 h-full min-w-0 rounded-xl border",
 					visible ? "flex" : "hidden",
 				)}
 			>
 				{/* Both views share the saved panel height and the same resize controls. */}
-				<button
-					type="button"
-					aria-label={t("ppt.speakerNotes.resize")}
-					className="group flex h-2 w-full shrink-0 cursor-ns-resize touch-none items-center justify-center focus-visible:outline focus-visible:outline-2 focus-visible:outline-ring"
-					{...resizeHandleProps}
-				>
-					<span className="h-0.5 w-7 rounded-full bg-border transition-colors group-hover:bg-muted-foreground/50" />
-				</button>
-				{((props.slides && props.slides.length > 1) || statusLabel) && (
+				{!isPresenter && (
+					<button
+						type="button"
+						aria-label={t("ppt.speakerNotes.resize")}
+						className="group flex h-2 w-full shrink-0 cursor-ns-resize touch-none items-center justify-center focus-visible:outline focus-visible:outline-2 focus-visible:outline-ring"
+						{...resizeHandleProps}
+					>
+						<span className="h-0.5 w-7 rounded-full bg-border transition-colors group-hover:bg-muted-foreground/50" />
+					</button>
+				)}
+				{((!isPresenter && props.slides && props.slides.length > 1) || statusLabel) && (
 					<div className="flex shrink-0 items-center gap-1 border-b border-border/60 px-3 py-1">
-						{props.slides && props.slides.length > 1 && (
+						{!isPresenter && props.slides && props.slides.length > 1 && (
 							<>
 								<Button
 									variant={showAll ? "ghost" : "secondary"}
@@ -154,6 +160,7 @@ export default function PPTSpeakerNotesPanel(props: PPTSpeakerNotesPanelProps) {
 							{slide.rawContent === undefined ? (
 								<PPTNotesSlideLoading
 									slide={slide}
+									isCurrentPage={slide.key === currentSlide.key}
 									onLoad={props.onLoadSlide}
 									enabled={showAll && visible}
 								/>
@@ -161,6 +168,7 @@ export default function PPTSpeakerNotesPanel(props: PPTSpeakerNotesPanelProps) {
 								<SpeakerNotesEditor
 									{...props}
 									overview={showAll}
+									isCurrentPage={slide.key === currentSlide.key}
 									onSaveStateChange={(state) =>
 										setSaveStates((previous) => {
 											if (previous[slide.key] === state) return previous

@@ -26,10 +26,12 @@ export default function SpeakerNotesEditor({
 	onDraftChange,
 	onDraftSaved,
 	overview = false,
+	isCurrentPage,
 	onSaveStateChange,
 }: PPTSpeakerNotesPanelProps & {
 	onSaveStateChange: (state: SaveState | undefined) => void
 	overview?: boolean
+	isCurrentPage: boolean
 	initialDraft?: string
 	onDraftChange: (draft: string) => void
 	onDraftSaved: (draft: string) => void
@@ -130,7 +132,9 @@ export default function SpeakerNotesEditor({
 				<div className="flex min-w-0 items-center gap-2">
 					<NotebookPen className="size-4 shrink-0 text-muted-foreground" />
 					<h2 className="truncate text-xs font-normal text-muted-foreground">
-						{t("ppt.speakerNotes.pageTitle", { page: slideIndex + 1 })}
+						{isCurrentPage
+							? t("ppt.speakerNotes.currentPageTitle")
+							: t("ppt.speakerNotes.pageTitle", { page: slideIndex + 1 })}
 					</h2>
 				</div>
 				<div className="flex flex-wrap items-center gap-1">

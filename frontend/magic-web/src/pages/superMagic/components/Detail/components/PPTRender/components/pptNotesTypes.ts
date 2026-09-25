@@ -10,6 +10,7 @@ export interface PPTNotesSlide {
 
 export interface PPTSpeakerNotesPanelProps {
 	visible?: boolean
+	layout?: "default" | "presenter"
 	slides?: PPTNotesSlide[]
 	onLoadSlide?: (key: string) => Promise<boolean>
 	slideIndex: number

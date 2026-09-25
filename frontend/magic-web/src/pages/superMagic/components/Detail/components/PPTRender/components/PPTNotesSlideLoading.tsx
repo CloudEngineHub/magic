@@ -7,10 +7,12 @@ import type { PPTNotesSlide } from "./pptNotesTypes"
 
 export default function PPTNotesSlideLoading({
 	slide,
+	isCurrentPage,
 	onLoad,
 	enabled,
 }: {
 	slide: PPTNotesSlide
+	isCurrentPage: boolean
 	onLoad?: (key: string) => Promise<boolean>
 	enabled: boolean
 }) {
@@ -35,7 +37,11 @@ export default function PPTNotesSlideLoading({
 	const hasError = !loading && (failed || slide.loadingError)
 	return (
 		<div className="flex h-full flex-col gap-3 p-4 text-xs text-muted-foreground">
-			<h2>{t("ppt.speakerNotes.pageTitle", { page: slide.slideIndex + 1 })}</h2>
+			<h2>
+				{isCurrentPage
+					? t("ppt.speakerNotes.currentPageTitle")
+					: t("ppt.speakerNotes.pageTitle", { page: slide.slideIndex + 1 })}
+			</h2>
 			<div role="status" className="flex flex-1 items-center justify-center gap-2">
 				{hasError ? (
 					<>
