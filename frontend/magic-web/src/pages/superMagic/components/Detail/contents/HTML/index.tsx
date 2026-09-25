@@ -1748,7 +1748,7 @@ export default memo(function HTML(props: HTMLProps) {
 									className={
 										isImmersiveLayout
 											? undefined
-											: "!bg-[#e9edf2] dark:!bg-[#262b34]"
+											: "!bg-[#eeeeee] dark:!bg-[#2b2b2b]"
 									}
 									devicePreview={{
 										...devicePreview,

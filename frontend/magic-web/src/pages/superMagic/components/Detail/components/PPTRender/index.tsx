@@ -1124,7 +1124,7 @@ const PPTRenderInner = observer(function PPTRenderInner({
 									"relative z-0 min-h-0 w-full flex-1 overflow-hidden",
 									!isPresenterView &&
 										!isPresenterConsole &&
-										"bg-[#e9edf2] dark:bg-[#262b34]",
+										"bg-[#eeeeee] dark:bg-[#2b2b2b]",
 									isPresenterConsole &&
 										"col-start-1 row-span-2 rounded-xl border border-border/60 bg-black",
 									isPresenterView && "bg-black",
