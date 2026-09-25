@@ -2,6 +2,7 @@ import { act, renderHook, waitFor } from "@testing-library/react"
 import { beforeEach, describe, expect, it, vi } from "vitest"
 import type { PPTStore } from "../../stores/PPTStore"
 import { usePPTDeckTools } from "../usePPTDeckTools"
+import { PPTSlideManager } from "../../stores/PPTSlideManager"
 
 const mocks = vi.hoisted(() => ({
 	fileApi: { identityKey: "session:project:topic" },
@@ -118,6 +119,57 @@ describe("usePPTDeckTools", () => {
 		})
 		mocks.initialize.mockResolvedValue({ revision: 2 })
 		mocks.save.mockResolvedValue({ revision: 2 })
+	})
+
+	it.each([true, false])("preserves loaded slides when setting hidden to %s", async (hidden) => {
+		const options = makeOptions(hidden ? [] : ["a.html"])
+		mocks.read.mockResolvedValue({
+			fileId: "manifest",
+			revision: 1,
+			content: JSON.stringify({
+				slides: ["a.html", "b.html"],
+				hidden_slides: hidden ? [] : ["a.html"],
+			}),
+		})
+		const logger = { debug: vi.fn(), info: vi.fn(), warn: vi.fn(), error: vi.fn() }
+		const manager = new PPTSlideManager(
+			logger as ConstructorParameters<typeof PPTSlideManager>[0],
+			options.store.pathMappingService,
+			{} as ConstructorParameters<typeof PPTSlideManager>[2],
+			false,
+		)
+		manager.setSlides(
+			["a.html", "b.html"].map((path, index) => ({
+				id: path,
+				path,
+				index,
+				url: `https://example.com/${path}`,
+				content: `<main>${path}</main>`,
+				rawContent: `<main>${path}</main>`,
+				thumbnailUrl: `blob:${path}`,
+				loadingState: "loaded" as const,
+			})),
+			true,
+		)
+		manager.setActiveIndex(1)
+		const before = manager.slides.slice()
+		Object.defineProperty(options.store, "slides", { get: () => manager.slides })
+		Object.defineProperty(options.store, "currentSlide", { get: () => manager.currentSlide })
+		options.store.setSlides = manager.setSlides
+		options.store.setActiveIndex = manager.setActiveIndex
+		const { result, unmount } = renderHook(() => usePPTDeckTools(options))
+		await act(async () => result.current.setHidden(hidden, new Set(["a"])))
+		expect(mocks.save).toHaveBeenCalledOnce()
+		expect(options.store.updateConfig).toHaveBeenCalledWith({
+			displayConfig: {
+				slides: ["a.html", "b.html"],
+				hidden_slides: hidden ? ["a.html"] : [],
+			},
+		})
+		manager.slides.forEach((slide, index) => expect(slide).toBe(before[index]))
+		expect(manager.activeIndex).toBe(1)
+		unmount()
+		manager.syncManager.reset()
 	})
 
 	it("does not lock the editor until its unsaved changes are resolved", async () => {

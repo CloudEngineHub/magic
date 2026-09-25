@@ -138,9 +138,11 @@ vi.mock("../contexts/PPTContext", () => ({
 vi.mock("../PPTSidebar/index", async () => {
 	const React = await import("react")
 	function MockPPTSidebar({
+		allowEdit,
 		isPreviewLoadingEnabled,
 		onCollapsedChange,
 	}: {
+		allowEdit?: boolean
 		isPreviewLoadingEnabled?: boolean
 		onCollapsedChange?: (collapsed: boolean) => void
 	}) {
@@ -148,7 +150,7 @@ vi.mock("../PPTSidebar/index", async () => {
 			mockState.sidebarPreviewEffect(isPreviewLoadingEnabled)
 		}, [isPreviewLoadingEnabled])
 		return (
-			<div data-testid="ppt-sidebar">
+			<div data-testid="ppt-sidebar" data-allow-edit={String(allowEdit)}>
 				<button
 					type="button"
 					data-testid="ppt-sidebar-collapse-button"
@@ -221,7 +223,11 @@ vi.mock("../../EditToolbar", async () => {
 				data-file-id={fileId}
 				data-interaction-disabled={String(Boolean(interactionDisabled))}
 				data-test-ids-enabled={String(testIdsEnabled !== false)}
-			/>
+			>
+				<button type="button" data-testid="mock-toolbar-action">
+					Edit
+				</button>
+			</div>
 		)
 	}
 
@@ -235,6 +241,7 @@ vi.mock("../PPTSlide", async () => {
 
 	function MockPPTSlide({
 		fileId,
+		allowEdit,
 		isActive,
 		isPresented,
 		isFullscreen,
@@ -250,6 +257,7 @@ vi.mock("../PPTSlide", async () => {
 		onToolbarModelChange,
 	}: {
 		fileId?: string
+		allowEdit?: boolean
 		isActive?: boolean
 		isPresented?: boolean
 		isFullscreen?: boolean
@@ -288,7 +296,14 @@ vi.mock("../PPTSlide", async () => {
 			[fileId, isFullscreen, toolbarToken],
 		)
 
-		mockState.pptSlideProps({ fileId, isActive, isPresented, manualScale, isFullscreen })
+		mockState.pptSlideProps({
+			allowEdit,
+			fileId,
+			isActive,
+			isPresented,
+			manualScale,
+			isFullscreen,
+		})
 
 		React.useLayoutEffect(() => {
 			if (!toolbarOwnerKey || !onToolbarModelChange) return
@@ -638,6 +653,24 @@ describe("PPTRender", () => {
 		renderPPTRender()
 		await waitFor(() => expect(mockState.presenterClose).toHaveBeenCalled())
 		expect(mockState.presenterPost).not.toHaveBeenCalled()
+	})
+
+	it.each([true, false])("keeps toolbar actions visible with busy=%s", async (busy) => {
+		mockState.isSlideEditing = false
+		mockState.deckBusy = busy
+		renderPPTRender()
+		const action = await screen.findByTestId("mock-toolbar-action")
+		expect(action).toBeVisible()
+		if (busy) expect(action).toBeDisabled()
+		else expect(action).toBeEnabled()
+		expect(screen.getByTestId("ppt-edit-toolbar")).toHaveAttribute(
+			"data-interaction-disabled",
+			String(busy),
+		)
+		expect(mockState.pptSlideProps).toHaveBeenLastCalledWith(
+			expect.objectContaining({ allowEdit: true }),
+		)
+		expect(screen.getByTestId("ppt-sidebar")).toHaveAttribute("data-allow-edit", "true")
 	})
 
 	it.each(["notes", "busy"])(

@@ -1207,7 +1207,7 @@ const PPTRenderInner = observer(function PPTRenderInner({
 									onAddToNewChat={handleAddToNewChat}
 									isMobile={isMobile}
 									sidebarWidth={sidebarWidth}
-									allowEdit={effectiveAllowEdit && !deckTools.busy}
+									allowEdit={effectiveAllowEdit}
 									canReplaceTemplate={canReplaceTemplate}
 									onReplaceSlideTemplate={handleOpenSlideTemplateReplacement}
 									isCollapsed={isSidebarEffectivelyCollapsed}
@@ -1288,17 +1288,28 @@ const PPTRenderInner = observer(function PPTRenderInner({
 									ref={toolbarHostRef}
 									data-testid="ppt-render-edit-toolbar"
 									data-toolbar-owner={scopedPresentedKey || undefined}
-									aria-busy={Boolean(pendingKey)}
+									aria-busy={Boolean(pendingKey) || deckTools.busy}
 									className="min-w-0 flex-shrink-0"
-									style={{ pointerEvents: pendingKey ? "none" : "auto" }}
+									style={{
+										pointerEvents:
+											pendingKey || deckTools.busy ? "none" : "auto",
+									}}
 								>
-									<EditToolbar
-										key={liveRenderScopeKey}
-										{...presentedToolbarModel.props}
-										getPopupContainer={() => containerRef.current}
-										interactionDisabled={Boolean(pendingKey)}
-										testIdsEnabled={isTabActive !== false}
-									/>
+									{/* Keep permission-based actions mounted while a deck write locks interaction. */}
+									<fieldset
+										disabled={deckTools.busy}
+										className="min-w-0 border-0 p-0 disabled:opacity-50"
+									>
+										<EditToolbar
+											key={liveRenderScopeKey}
+											{...presentedToolbarModel.props}
+											getPopupContainer={() => containerRef.current}
+											interactionDisabled={
+												Boolean(pendingKey) || deckTools.busy
+											}
+											testIdsEnabled={isTabActive !== false}
+										/>
+									</fieldset>
 								</div>
 							)}
 
@@ -1405,11 +1416,7 @@ const PPTRenderInner = observer(function PPTRenderInner({
 											) => {
 												store.updateSlideContents(newContents)
 											}}
-											allowEdit={
-												effectiveAllowEdit &&
-												!deckTools.busy &&
-												!isPresenterConsole
-											}
+											allowEdit={effectiveAllowEdit && !isPresenterConsole}
 											showButtonText={shouldShowButtonText}
 											onEditModeChange={(isEditing) =>
 												handleEditModeChange(slideFileId, isEditing)

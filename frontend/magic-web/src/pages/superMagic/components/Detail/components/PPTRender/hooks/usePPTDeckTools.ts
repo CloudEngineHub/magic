@@ -212,9 +212,17 @@ export function usePPTDeckTools(options: Options) {
 		if (!isActive()) return false
 		// Apply only a confirmed result, preserving the current page by its path.
 		const activePath = store.currentSlide?.path
-		store.setSlides(paths, true)
-		if (activePath && paths.includes(activePath))
-			store.setActiveIndex(paths.indexOf(activePath))
+		const currentPaths = store.slidePaths
+		const structureChanged =
+			paths.length !== currentPaths.length ||
+			paths.some((path, index) => path !== currentPaths[index])
+		// Visibility only changes manifest metadata; rebuilding slides discards loaded HTML
+		// and thumbnails and forces every preview to load again.
+		if (structureChanged) {
+			store.setSlides(paths, true)
+			if (activePath && paths.includes(activePath))
+				store.setActiveIndex(paths.indexOf(activePath))
+		}
 		onDeckConfigSaved?.(config)
 		await store.updateConfig({
 			displayConfig: { ...store.getConfigForExport().displayConfig, ...config },
