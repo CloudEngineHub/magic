@@ -42,6 +42,7 @@ async function materializeLegacyPptImageNode(
 	signal?: AbortSignal,
 ): Promise<void> {
 	const source = node.source
+	if (!source) throw new TypeError("Image node must provide a source descriptor")
 	const blob = await loadLegacyImageBlob(source, signal)
 	throwIfAborted(signal)
 	const actualMime = detectImageContentType(
