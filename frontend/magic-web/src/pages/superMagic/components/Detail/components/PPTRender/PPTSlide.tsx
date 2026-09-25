@@ -1140,7 +1140,11 @@ const PPTSlide = observer(function PPTSlide({
 					setSlideContents={updateSlideContents}
 					slideIndex={index}
 					isPlaybackMode={isPlaybackMode}
-					className="h-full !bg-[#eeeeee] dark:!bg-[#2b2b2b]"
+					className={cn(
+						"h-full",
+						// Preserve the backdrop owned by fullscreen and presenter layouts.
+						!isFullscreen && !isPlaybackMode && "!bg-[#eeeeee] dark:!bg-[#2b2b2b]",
+					)}
 					autoFitVerticalPadding={64}
 					manualScale={manualScale}
 					onManualScaleChange={isEditMode ? undefined : onManualScaleChange}
