@@ -141,6 +141,8 @@ interface PPTRenderProps {
 		enable_shadow?: boolean,
 		fetchFileVersions?: (fileId: string) => void,
 		isPPTEditMode?: boolean,
+		shouldExitEditMode?: boolean,
+		options?: { silent?: boolean },
 	) => Promise<boolean | void>
 	onSortSave?: (newSlidesUrls: string[]) => void
 	openNewTab?: (fileId: string, path: string) => void
@@ -434,50 +436,54 @@ const PPTRenderInner = observer(function PPTRenderInner({
 		slideStructureAdapter,
 	})
 
-	const handleGenerateSpeakerNotes = useMemoizedFn((action: PPTNotesAction) => {
-		const prompts = {
-			generate: t("ppt.speakerNotes.generatePrompt"),
-			polish: t("ppt.speakerNotes.polishPrompt"),
-			shorten: t("ppt.speakerNotes.shortenPrompt"),
-		}
-		const slide = store.currentSlide
-		if (!slide) return
+	const handleGenerateSpeakerNotes = useMemoizedFn(
+		(action: PPTNotesAction, targetFileId: string) => {
+			const prompts = {
+				generate: t("ppt.speakerNotes.generatePrompt"),
+				polish: t("ppt.speakerNotes.polishPrompt"),
+				shorten: t("ppt.speakerNotes.shortenPrompt"),
+			}
+			const slide = store.slides.find(
+				(item) => store.getFileIdByPath(item.path) === targetFileId,
+			)
+			if (!slide) return
 
-		const fileId = store.getFileIdByPath(slide.path)
-		const file = attachmentList?.find((item: any) => item.file_id === fileId)
-		if (!fileId || !file) return
+			const fileId = store.getFileIdByPath(slide.path)
+			const file = attachmentList?.find((item: any) => item.file_id === fileId)
+			if (!fileId || !file) return
 
-		pubsub.publish(PubSubEvents.Add_Content_To_Chat, {
-			content: {
-				type: "doc",
-				content: [
-					{
-						type: "paragraph",
-						content: [
-							{ type: "text", text: prompts[action] },
-							{
-								type: "mention",
-								attrs: {
-									id: null,
-									label: null,
-									mentionSuggestionChar: "@",
-									type: "project_file",
-									data: {
-										file_id: fileId,
-										file_name: file.file_name,
-										file_path: file.relative_file_path,
-										file_extension: file.file_extension,
+			pubsub.publish(PubSubEvents.Add_Content_To_Chat, {
+				content: {
+					type: "doc",
+					content: [
+						{
+							type: "paragraph",
+							content: [
+								{ type: "text", text: prompts[action] },
+								{
+									type: "mention",
+									attrs: {
+										id: null,
+										label: null,
+										mentionSuggestionChar: "@",
+										type: "project_file",
+										data: {
+											file_id: fileId,
+											file_name: file.file_name,
+											file_path: file.relative_file_path,
+											file_extension: file.file_extension,
+										},
 									},
 								},
-							},
-							{ type: "text", text: t("ppt.speakerNotes.generatePromptSuffix") },
-						],
-					},
-				],
-			},
-			extraData: { hasInput: true },
-		})
-	})
+								{ type: "text", text: t("ppt.speakerNotes.generatePromptSuffix") },
+							],
+						},
+					],
+				},
+				extraData: { hasInput: true },
+			})
+		},
+	)
 
 	const handleOpenNewTab = useMemoizedFn((fileId: string, path: string) => {
 		const currentSlide =
@@ -1168,6 +1174,21 @@ const PPTRenderInner = observer(function PPTRenderInner({
 								store.currentSlide && (
 									<PPTSpeakerNotesPanel
 										visible={pptNotesPreferenceStore.visible}
+										slides={store.slides.map((slide, slideIndex) => ({
+											key: store.getFileIdByPath(slide.path) || slide.path,
+											fileId: store.getFileIdByPath(slide.path) || "",
+											slideIndex,
+											rawContent: slide.rawContent,
+											loadingError: slide.loadingState === "error",
+										}))}
+										onLoadSlide={(key) => {
+											const index = store.slides.findIndex(
+												(slide) =>
+													(store.getFileIdByPath(slide.path) ||
+														slide.path) === key,
+											)
+											return store.ensureSlideContent(index)
+										}}
 										slideIndex={activeSlideIndex}
 										rawContent={store.currentSlide.rawContent || ""}
 										fileId={
