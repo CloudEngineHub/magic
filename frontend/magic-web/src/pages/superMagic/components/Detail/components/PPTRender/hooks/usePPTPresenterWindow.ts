@@ -286,6 +286,12 @@ export function usePPTPresenterWindow() {
 		): Promise<PPTPresenterOpenResult> => {
 			const operationGeneration = ++operationGenerationRef.current
 			if (fallbackOnlyRef.current) return "fallback"
+			// Opening a popup consumes the click activation needed by native fullscreen.
+			// Query the synchronous capability first; a single display must never open a
+			// throwaway window. Do not latch this fallback: displays can be connected later.
+			if ((window.screen as Screen & { isExtended?: boolean }).isExtended !== true)
+				return "fallback"
+
 			// Unsupported browsers immediately use the existing single-window fullscreen.
 			if (!(window as WindowWithManagement).getScreenDetails) {
 				tripFallbackBreaker()

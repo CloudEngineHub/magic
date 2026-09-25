@@ -105,6 +105,7 @@ function createDeferred<T>() {
 
 describe("usePPTPresenterWindow", () => {
 	beforeEach(() => {
+		Object.defineProperty(window.screen, "isExtended", { configurable: true, value: true })
 		vi.spyOn(window, "focus").mockImplementation(() => undefined)
 		;(window as WindowWithManagement).getScreenDetails = vi.fn(async () => ({
 			currentScreen,
@@ -114,7 +115,56 @@ describe("usePPTPresenterWindow", () => {
 
 	afterEach(() => {
 		delete (window as WindowWithManagement).getScreenDetails
+		Reflect.deleteProperty(window.screen, "isExtended")
 		vi.restoreAllMocks()
+	})
+
+	it.each([false, undefined])(
+		"preserves first-click fullscreen activation when isExtended is %s",
+		async (isExtended) => {
+			Object.defineProperty(window.screen, "isExtended", {
+				configurable: true,
+				value: isExtended,
+			})
+			let activationAvailable = true
+			const popup = createPopup()
+			const openWindow = vi.spyOn(window, "open").mockImplementation(() => {
+				activationAvailable = false
+				return popup
+			})
+			const getScreenDetails = vi.fn(async () => ({
+				currentScreen,
+				screens: [currentScreen],
+			}))
+			;(window as WindowWithManagement).getScreenDetails = getScreenDetails
+			const { result } = renderHook(() => usePPTPresenterWindow())
+			await act(async () => {
+				expect(await result.current.open({ index: 0, html: "<main>Slide</main>" })).toBe(
+					"fallback",
+				)
+				// The caller requests native fullscreen immediately on this fallback.
+				expect(activationAvailable).toBe(true)
+			})
+			expect(openWindow).not.toHaveBeenCalled()
+			expect(getScreenDetails).not.toHaveBeenCalled()
+			expect(result.current.isOpen).toBe(false)
+			expect(result.current.isFallbackOnly).toBe(false)
+		},
+	)
+
+	it("can open a presenter after an external display is connected", async () => {
+		Object.defineProperty(window.screen, "isExtended", { configurable: true, value: false })
+		const openWindow = vi.spyOn(window, "open").mockReturnValue(createPopup())
+		const { result } = renderHook(() => usePPTPresenterWindow())
+		await act(async () => {
+			expect(await result.current.open({ index: 0, html: "Slide" })).toBe("fallback")
+		})
+		expect(openWindow).not.toHaveBeenCalled()
+		Object.defineProperty(window.screen, "isExtended", { configurable: true, value: true })
+		await act(async () => {
+			expect(await result.current.open({ index: 0, html: "Slide" })).toBe("opened")
+		})
+		expect(openWindow).toHaveBeenCalledTimes(1)
 	})
 
 	it("opens synchronously, writes a fixed shell, and posts structured slide data", async () => {
