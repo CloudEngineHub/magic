@@ -5,6 +5,7 @@ import { Button } from "@/components/shadcn-ui/button"
 import { ScrollArea } from "@/components/shadcn-ui/scroll-area"
 import { cn } from "@/utils/cn"
 import { useSpeakerNotesResize } from "../hooks/useSpeakerNotesResize"
+import { useNotesOverviewScroll } from "../hooks/useNotesOverviewScroll"
 import SpeakerNotesEditor, { type SaveState } from "./SpeakerNotesEditor"
 import PPTNotesSlideLoading from "./PPTNotesSlideLoading"
 import type { PPTSpeakerNotesPanelProps } from "./pptNotesTypes"
@@ -28,6 +29,11 @@ export default function PPTSpeakerNotesPanel(props: PPTSpeakerNotesPanelProps) {
 		slideIndex: props.slideIndex,
 		rawContent: props.rawContent,
 	}
+	const { viewportRef, currentNoteRef } = useNotesOverviewScroll(
+		showAll && visible,
+		currentSlide.key,
+		currentSlide.slideIndex,
+	)
 	// Once opened, retain editors while hidden: changing views must not discard failed saves.
 	const slides = openedAll && props.slides ? props.slides : [currentSlide]
 	const isOverlay = overlay && !isPresenter
@@ -157,12 +163,14 @@ export default function PPTSpeakerNotesPanel(props: PPTSpeakerNotesPanelProps) {
 					</div>
 				)}
 				<ScrollArea
+					viewportRef={viewportRef}
 					className="min-h-0 flex-1"
 					viewportClassName={showAll ? undefined : "[&>div]:!h-full"}
 				>
 					{slides.map((slide) => (
 						<div
 							key={slide.key}
+							ref={slide.key === currentSlide.key ? currentNoteRef : undefined}
 							hidden={!showAll && slide.key !== currentSlide.key}
 							className={cn(
 								showAll ? "border-b border-border/60 last:border-b-0" : "h-full",
