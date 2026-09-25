@@ -35,6 +35,7 @@ import { Button } from "@/components/shadcn-ui/button"
 import type { SortableSlideItemProps } from "./types"
 import { observer } from "mobx-react-lite"
 import SmartTooltip from "@/components/other/SmartTooltip"
+import MagicTooltip from "@/components/base/MagicTooltip"
 import { useScreenshotRetry } from "./hooks/useScreenshotRetry"
 import { handlePPTSlideDragStart } from "../../../../MessageEditor/utils/drag"
 import { resolvePptScaleContentDimensions } from "../../../contents/HTML/utils/slide-dimensions"
@@ -186,6 +187,23 @@ function SortableSlideItem({
 	}
 
 	const isLastSlide = totalSlides === 1
+	const quickActions = [
+		{
+			label: t("fileViewer.addToCurrentChat"),
+			icon: MessageSquare,
+			onClick: onAddToCurrentChat,
+		},
+		{
+			label: t("fileViewer.insertBelow"),
+			icon: ArrowDown,
+			onClick: onInsertBelow,
+		},
+		{
+			label: t("fileViewer.duplicateSlide"),
+			icon: Copy,
+			onClick: onDuplicate,
+		},
+	].filter((action) => action.onClick)
 
 	// Extract current file name from path (without extension)
 	const getCurrentFileName = () => {
@@ -220,7 +238,7 @@ function SortableSlideItem({
 			data-slide-id={item.id}
 			data-slide-index={item.index}
 			className={cn(
-				"group relative rounded transition-[background-color,box-shadow]",
+				"group/slide group relative rounded transition-[background-color,box-shadow]",
 				isMobile
 					? // Mobile: vertical layout with thumbnail first, no drag cursor
 						"flex h-full w-[140px] shrink-0 cursor-pointer !flex-col gap-1.5"
@@ -277,6 +295,34 @@ function SortableSlideItem({
 				style={{ aspectRatio: `${slideDimensions.width} / ${slideDimensions.height}` }}
 			>
 				{renderThumbnail()}
+				{allowEdit && !isMobile && quickActions.length > 0 && (
+					// Overlay the preview without changing its size; keep actions reachable by keyboard.
+					<div
+						className="pointer-events-none absolute bottom-1.5 right-1.5 flex gap-0.5 rounded-md border border-white/30 bg-background/70 p-0.5 opacity-0 shadow-sm backdrop-blur-md transition-opacity group-focus-within/slide:pointer-events-auto group-focus-within/slide:opacity-100 group-hover/slide:pointer-events-auto group-hover/slide:opacity-100 dark:border-white/10"
+						onClick={(event) => event.stopPropagation()}
+						// Own and cancel native drag starts so buttons cannot drag the slide.
+						draggable
+						onDragStart={(event) => {
+							event.preventDefault()
+							event.stopPropagation()
+						}}
+					>
+						{quickActions.map(({ label, icon: Icon, onClick: onActionClick }) => (
+							<MagicTooltip key={label} title={label}>
+								<Button
+									type="button"
+									variant="ghost"
+									size="icon-sm"
+									className="size-6 rounded-sm text-foreground/80 hover:bg-background/60 hover:text-foreground"
+									aria-label={label}
+									onClick={onActionClick}
+								>
+									<Icon className="size-3.5" />
+								</Button>
+							</MagicTooltip>
+						))}
+					</div>
+				)}
 			</div>
 		</div>
 	)

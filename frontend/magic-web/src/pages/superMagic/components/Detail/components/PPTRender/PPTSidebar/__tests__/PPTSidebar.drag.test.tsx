@@ -77,6 +77,10 @@ vi.mock("@/components/shadcn-ui/tooltip", () => ({
 	TooltipTrigger: ({ children }: { children?: ReactNode }) => <>{children}</>,
 }))
 
+vi.mock("@/components/base/MagicTooltip", () => ({
+	default: ({ children }: { children: ReactNode }) => <>{children}</>,
+}))
+
 vi.mock("@/components/shadcn-ui/button", () => ({
 	Button: ({ children, ...props }: { children?: ReactNode; [key: string]: unknown }) => (
 		<button {...props}>{children}</button>
