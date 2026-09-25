@@ -58,6 +58,35 @@ describe("PPTSpeakerNotesPanel", () => {
 		pptNotesPreferenceStore.setHeight(144)
 	})
 
+	it("keeps inactive drafts pending and clears protection when the user restores original notes", async () => {
+		const onPendingChangesChange = vi.fn()
+		const props = {
+			slideIndex: 0,
+			fileId: "first",
+			rawContent: "",
+			allowEdit: true,
+			onSaved: vi.fn(),
+			onPendingChangesChange,
+			slides: [
+				{ key: "first", fileId: "first", slideIndex: 0, rawContent: "" },
+				{ key: "second", fileId: "second", slideIndex: 1, rawContent: "" },
+			],
+		}
+		const { rerender } = render(<PPTSpeakerNotesPanel {...props} />)
+		fireEvent.change(await screen.findByTestId("ppt-speaker-notes-editor"), {
+			target: { value: "Draft on first page" },
+		})
+		await waitFor(() => expect(onPendingChangesChange).toHaveBeenLastCalledWith(true))
+		rerender(<PPTSpeakerNotesPanel {...props} fileId="second" slideIndex={1} />)
+		await waitFor(() => expect(screen.getByTestId("ppt-speaker-notes-editor")).toHaveValue(""))
+		expect(onPendingChangesChange).toHaveBeenLastCalledWith(true)
+		rerender(<PPTSpeakerNotesPanel {...props} />)
+		fireEvent.change(await screen.findByTestId("ppt-speaker-notes-editor"), {
+			target: { value: "" },
+		})
+		await waitFor(() => expect(onPendingChangesChange).toHaveBeenLastCalledWith(false))
+	})
+
 	it("does not apply an AI action to another slide after a pending save", async () => {
 		let finishSave!: (value: boolean) => void
 		const onGenerate = vi.fn()

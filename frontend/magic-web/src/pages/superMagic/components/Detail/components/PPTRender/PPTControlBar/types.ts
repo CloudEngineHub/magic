@@ -1,6 +1,8 @@
 export interface PPTControlBarProps {
 	activeIndex: number
 	totalSlides: number
+	canGoPrevious?: boolean
+	canGoNext?: boolean
 	isTransitioning: boolean
 	isMobile: boolean
 	isFullscreen: boolean

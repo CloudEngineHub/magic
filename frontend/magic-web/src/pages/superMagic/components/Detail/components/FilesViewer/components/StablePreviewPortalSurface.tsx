@@ -1,7 +1,8 @@
 import type { ReactNode } from "react"
-import { useCallback, useLayoutEffect, useRef } from "react"
+import { useCallback, useLayoutEffect, useRef, useState } from "react"
 import { createPortal } from "react-dom"
-import { HTML_EDITOR_Z_INDEX } from "../../../contents/HTML/constants/z-index"
+import { APP_MODAL_Z_INDEX, HTML_EDITOR_Z_INDEX } from "../../../contents/HTML/constants/z-index"
+import { OverlayZIndexProvider, useCurrentOverlayZIndex } from "@/utils/overlayZIndex"
 
 const PPT_VIEWPORT_SELECTOR =
 	'[data-presenter-console="true"], [data-mobile-fullscreen="landscape"]'
@@ -47,6 +48,8 @@ export default function StablePreviewPortalSurface({
 	isPpt = false,
 	visible,
 }: StablePreviewPortalSurfaceProps) {
+	const parentOverlayZIndex = useCurrentOverlayZIndex()
+	const [fullscreenZIndex, setFullscreenZIndex] = useState(APP_MODAL_Z_INDEX)
 	const hostRef = useRef<HTMLDivElement | null>(null)
 	if (!hostRef.current && typeof document !== "undefined") {
 		const host = document.createElement("div")
@@ -116,6 +119,17 @@ export default function StablePreviewPortalSurface({
 			: usesViewport
 				? String(HTML_EDITOR_Z_INDEX.FULLSCREEN.CONTAINER)
 				: "10"
+		if (isFullscreen) {
+			// Body-portaled editor controls need the same base as this surface,
+			// otherwise their ordinary editor layer is hidden behind fullscreen.
+			const fullscreenBase = Number.parseInt(
+				window.getComputedStyle(host).getPropertyValue("--z-index-detail-fullscreen"),
+				10,
+			)
+			setFullscreenZIndex(
+				Number.isFinite(fullscreenBase) ? fullscreenBase + 1 : APP_MODAL_Z_INDEX,
+			)
+		}
 
 		if (!isVisible || !rect) return
 
@@ -200,5 +214,19 @@ export default function StablePreviewPortalSurface({
 		}
 	}, [anchor, enabled, host, syncSurface, visible])
 
-	return enabled && host ? createPortal(children, host, "files-viewer-stable-preview") : null
+	return enabled && host
+		? createPortal(
+				<OverlayZIndexProvider
+					value={
+						isFullscreen
+							? Math.max(fullscreenZIndex, parentOverlayZIndex ?? 0)
+							: parentOverlayZIndex
+					}
+				>
+					{children}
+				</OverlayZIndexProvider>,
+				host,
+				"files-viewer-stable-preview",
+			)
+		: null
 }

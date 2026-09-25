@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest"
 const mocks = vi.hoisted(() => ({
 	collectFileIds: vi.fn(),
 	getTemporaryDownloadUrl: vi.fn(),
+	getFileContentById: vi.fn(),
 	loadSlide: vi.fn(),
 	processSlideWithUrlMapping: vi.fn(),
 	processorConfigs: [] as unknown[],
@@ -23,9 +24,15 @@ vi.mock("@/pages/superMagic/components/Detail/components/PPTRender/services", ()
 
 vi.mock("@/pages/superMagic/utils/api", () => ({
 	getTemporaryDownloadUrl: mocks.getTemporaryDownloadUrl,
+	getFileContentById: mocks.getFileContentById,
 }))
 
-import { iterateExportSlides, iterateSingleExportSlide } from "../pptService"
+import {
+	iterateExportSlides,
+	iterateSingleExportSlide,
+	prepareExportSlides,
+	resolvePptExportSlides,
+} from "../pptService"
 
 const slidePath = "./slides/slide-1.html"
 const attachmentList = [
@@ -182,5 +189,67 @@ describe("pptService lazy export providers", () => {
 		await iterator.next()
 
 		expect(mocks.processorConfigs).toContainEqual(expect.objectContaining({ fileApi }))
+	})
+})
+
+describe("PPT export hidden configuration", () => {
+	const configFile = {
+		file_id: "config",
+		file_name: "magic.project.js",
+		relative_file_path: "/deck/magic.project.js",
+	}
+	it("reads canonical hidden paths with the bound file identity before requesting pages", async () => {
+		const getFileContentById = vi
+			.fn()
+			.mockResolvedValue(
+				`window.magicProjectConfig = { slides: ['${slidePath}'], hidden_slides: ['slides/slide-1.html'] };`,
+			)
+		const getTemporaryDownloadUrl = vi.fn()
+		const fileApi = { getFileContentById, getTemporaryDownloadUrl } as any
+		const input = {
+			slidePaths: [slidePath],
+			attachmentList: [...attachmentList, configFile],
+			mainFileId: "main",
+			fileApi,
+		}
+		expect((await prepareExportSlides(input)).htmlSlides).toEqual([])
+		const pages = []
+		for await (const page of iterateExportSlides(input)) pages.push(page)
+		expect(pages).toEqual([])
+		expect(getFileContentById).toHaveBeenCalledWith("config", {
+			responseType: "text",
+			access: undefined,
+		})
+		expect(getTemporaryDownloadUrl).not.toHaveBeenCalled()
+	})
+
+	it("does not revive stale metadata hidden pages when the source omits hidden_slides", async () => {
+		const getFileContentById = vi
+			.fn()
+			.mockResolvedValue(`window.magicProjectConfig = { slides: ['${slidePath}'] };`)
+		const resolved = await resolvePptExportSlides({
+			slidePaths: [slidePath],
+			displayConfig: { hidden_slides: [slidePath] },
+			attachmentList: [...attachmentList, configFile],
+			mainFileId: "main",
+			fileApi: { getFileContentById } as any,
+		})
+		expect(resolved.slidePaths).toEqual([slidePath])
+	})
+
+	it("does not read a different deck's configuration by filename alone", async () => {
+		const getFileContentById = vi.fn()
+		const resolved = await resolvePptExportSlides({
+			slidePaths: [slidePath],
+			displayConfig: { hidden_slides: [slidePath] },
+			attachmentList: [
+				...attachmentList,
+				{ ...configFile, relative_file_path: "/other/magic.project.js" },
+			],
+			mainFileId: "main",
+			fileApi: { getFileContentById } as any,
+		})
+		expect(resolved.slidePaths).toEqual([])
+		expect(getFileContentById).not.toHaveBeenCalled()
 	})
 })

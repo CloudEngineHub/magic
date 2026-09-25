@@ -33,7 +33,7 @@ export default function SpeakerNotesEditor({
 	overview?: boolean
 	isCurrentPage: boolean
 	initialDraft?: string
-	onDraftChange: (draft: string) => void
+	onDraftChange: (draft: string | undefined) => void
 	onDraftSaved: (draft: string) => void
 }) {
 	const { t } = useTranslation("super")
@@ -187,7 +187,7 @@ export default function SpeakerNotesEditor({
 					if (savingRef.current || !allowEdit || value === draft) return
 					setIsEditing(true)
 					setDraft(value)
-					onDraftChange(value)
+					onDraftChange(value === notes ? undefined : value)
 					setSaveState("idle")
 				}}
 				onSave={() => void saveNotes()}

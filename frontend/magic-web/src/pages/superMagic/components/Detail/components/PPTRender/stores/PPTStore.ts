@@ -1,5 +1,5 @@
 import type { AttachmentLoadState } from "@/stores/projectFiles/types"
-import { makeAutoObservable, reaction, runInAction } from "mobx"
+import { makeAutoObservable, observable, reaction, runInAction } from "mobx"
 import {
 	SlideLoaderService,
 	SlideProcessorService,
@@ -153,6 +153,8 @@ export class PPTStore {
 
 	// ==================== Service Instances ====================
 	private config: PPTStoreConfig
+	/** Only visibility needs reactive config reads; attachments remain outside MobX conversion. */
+	private hiddenSlidePaths: unknown
 	private loaderService: SlideLoaderService
 	private processorService: SlideProcessorService
 	private readonly screenshotService: SlideScreenshotService
@@ -217,6 +219,7 @@ export class PPTStore {
 
 	constructor(config: PPTStoreConfig) {
 		this.config = config
+		this.hiddenSlidePaths = config.displayConfig?.hidden_slides
 		this.attachmentListSnapshot = this.snapshotAttachmentList(config.attachmentList)
 		this.fileUpdateDebounceMs = Math.max(
 			0,
@@ -289,6 +292,7 @@ export class PPTStore {
 			this,
 			{
 				config: false,
+				hiddenSlidePaths: observable.ref,
 				attachmentListSnapshot: false,
 				initializingPromise: false,
 				initializingKey: false,
@@ -306,7 +310,7 @@ export class PPTStore {
 				activeIndexAutoSaveDisposer: false,
 				disposed: false,
 				normalRenderWindowSize: false,
-			} as Record<string, false>,
+			} as Record<string, false | typeof observable.ref>,
 			{ autoBind: true },
 		)
 
@@ -786,7 +790,13 @@ export class PPTStore {
 	}
 
 	getConfigForExport(): PPTExportConfig {
-		return { ...this.config }
+		const hiddenSlidePaths = this.hiddenSlidePaths
+		return {
+			...this.config,
+			displayConfig: this.config.displayConfig
+				? { ...this.config.displayConfig, hidden_slides: hiddenSlidePaths }
+				: this.config.displayConfig,
+		}
 	}
 
 	/** Get sync manager for unified state synchronization */
@@ -2417,6 +2427,9 @@ export class PPTStore {
 		}
 
 		this.config = { ...this.config, ...config }
+		if (hasOwnConfigField(config, "displayConfig")) {
+			this.hiddenSlidePaths = config.displayConfig?.hidden_slides
+		}
 		const hasCacheConfigUpdate =
 			hasOwnConfigField(config, "organizationCode") ||
 			hasOwnConfigField(config, "selectedProjectId") ||

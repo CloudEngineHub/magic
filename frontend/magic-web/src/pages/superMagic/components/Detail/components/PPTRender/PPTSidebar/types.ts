@@ -1,9 +1,13 @@
 /**
  * Slide loading state
  */
+import type { PPTDeckTools } from "../hooks/usePPTDeckTools"
+
 export type SlideLoadingState = "idle" | "loading" | "loaded" | "error"
 
 export interface PPTSidebarProps {
+	tools?: PPTDeckTools
+	hiddenPaths?: ReadonlySet<string>
 	onOpenFile?: (fileId: string, path: string) => void
 	onSlideClick: (index: number) => void
 	onSortChange?: (newSlides: SlideItem[]) => void
@@ -57,7 +61,14 @@ export interface SlideScreenshot {
 export interface SortableSlideItemProps {
 	item: SlideItem
 	isActive: boolean
-	onClick: () => void
+	onClick: (
+		event?: React.MouseEvent<HTMLDivElement> | React.KeyboardEvent<HTMLDivElement>,
+	) => void
+	isSelected?: boolean
+	selectionMode?: boolean
+	onSelect?: (range: boolean) => void
+	isHidden?: boolean
+	removeOnly?: boolean
 	screenshot?: SlideScreenshot
 	totalSlides: number
 	onInsertAbove?: () => void

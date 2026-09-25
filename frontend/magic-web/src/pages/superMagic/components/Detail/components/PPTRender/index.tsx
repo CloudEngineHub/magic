@@ -75,6 +75,13 @@ import {
 import pubsub, { PubSubEvents } from "@/utils/pubsub"
 import { resolvePptScaleContentDimensions } from "../../contents/HTML/utils/slide-dimensions"
 
+import { usePPTDeckTools } from "./hooks/usePPTDeckTools"
+import {
+	normalizeHiddenSlides,
+	getPptVisibleSlideIndices,
+} from "@/pages/superMagic/utils/pptHiddenSlides"
+import magicToast from "@/components/base/MagicToaster/utils"
+const PPTSearchPanel = lazy(() => import("./components/PPTSearchPanel"))
 const SlidesTemplateReplacementDialog = lazy(() => import("./SlidesTemplateReplacementDialog"))
 
 interface ManualSaveResult {
@@ -114,6 +121,7 @@ function getHtmlRelativeFolderPath(fileItem?: { relative_file_path?: string; fil
 }
 
 interface PPTRenderProps {
+	onDeckConfigSaved?: (config: Record<string, unknown>) => void
 	attachmentLoadState?: AttachmentLoadState
 	// ========== 外部依赖（必需） ==========
 	slidePaths: string[]
@@ -286,6 +294,7 @@ const PPTRenderInner = observer(function PPTRenderInner({
 	onRegisterCheckBeforeClose,
 	onUnregisterCheckBeforeClose,
 	slideStructureAdapter,
+	onDeckConfigSaved,
 }: PPTRenderProps) {
 	const { t } = useTranslation("super")
 	const isMobile = useIsMobile()
@@ -296,6 +305,7 @@ const PPTRenderInner = observer(function PPTRenderInner({
 	const store = usePPTStore()
 
 	const [isAnySlideEditing, setIsAnySlideEditing] = useState(false)
+	const [notesPending, setNotesPending] = useState(false)
 	const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false)
 	const [manualScale, setManualScale] = useState<number | null>(null)
 	const [activeSlideScaleRatio, setActiveSlideScaleRatio] = useState(1)
@@ -320,7 +330,7 @@ const PPTRenderInner = observer(function PPTRenderInner({
 	})
 
 	const {
-		checkBeforeNavigate,
+		checkBeforeNavigate: checkBeforeNavigateGuard,
 		registerSaveHandler,
 		registerDiscardHandler: registerDiscardHandlerForNavigation,
 		showNavigationDialog,
@@ -337,6 +347,14 @@ const PPTRenderInner = observer(function PPTRenderInner({
 		activeIndex: store.activeIndex,
 	})
 
+	const navigationFocusRef = useRef<HTMLElement | null>(null)
+	const checkBeforeNavigate = useMemoizedFn(
+		(type: "prev" | "next" | "first" | "jump", targetIndex?: number) => {
+			navigationFocusRef.current =
+				document.activeElement instanceof HTMLElement ? document.activeElement : null
+			return checkBeforeNavigateGuard(type, targetIndex)
+		},
+	)
 	// 幻灯片初始化与增量同步
 	useSlideSync({
 		store,
@@ -361,10 +379,17 @@ const PPTRenderInner = observer(function PPTRenderInner({
 	useSlideFileLocator({ store })
 
 	// Presenter controls reuse the same guarded slide navigation as the main window.
-	const { changeSlide, goToFirstSlide, handleJumpToPage } = useSlideNavigation({
-		store,
-		checkBeforeNavigate,
-	})
+	const { changeSlide, goToFirstSlide, handleJumpToPage, preparePresentation } =
+		useSlideNavigation({
+			store,
+			checkBeforeNavigate,
+			isPresenting: () =>
+				isPresentationFullscreen || isPresenterWindowOpen || Boolean(isPlaybackMode),
+			getHiddenSlidePaths: () => store.getConfigForExport().displayConfig?.hidden_slides,
+			hasPendingNavigationGuard: () => isAnySlideEditing || activeInspectorPickingRef.current,
+			onHiddenSlide: () => magicToast.info(t("ppt.hiddenPageSkipped")),
+			onNoVisibleSlides: () => magicToast.info(t("ppt.noVisibleSlides")),
+		})
 	// 这里只表示 PPT 放映全屏。外层 FilesViewer 全屏只放大完整查看界面，不能隐藏侧栏和工具栏。
 	const {
 		isFullscreen: isPresentationFullscreen,
@@ -374,6 +399,17 @@ const PPTRenderInner = observer(function PPTRenderInner({
 		containerRef,
 		presenterTargetRef: presentationStageRef,
 		presenterEnabled: false,
+		beforeEnter: () => {
+			if (deckTools.busy) return false
+			if (notesPending) {
+				magicToast.warning(t("ppt.batch.saveNotesFirst"))
+				return false
+			}
+			const prepared = preparePresentation()
+			return prepared instanceof Promise
+				? prepared.then((index) => index !== null)
+				: prepared !== null
+		},
 	})
 	const {
 		isOpen: isPresenterWindowOpen,
@@ -404,27 +440,87 @@ const PPTRenderInner = observer(function PPTRenderInner({
 				: null) as Parameters<typeof openPresenterWindow>[0] | null,
 		[presenterSlideDimensions, store, store.activeIndex, store.currentSlide?.content],
 	)
-	useEffect(() => {
-		if (!isPresenterWindowOpen || !presenterPayload) return
-		postPresenterSlide(presenterPayload)
-	}, [isPresenterWindowOpen, postPresenterSlide, presenterPayload])
 	const togglePresenter = useMemoizedFn(async () => {
 		if (isPresenterWindowOpen) {
 			closePresenterWindow()
 			return
 		}
-		if (!isPresenterFallbackOnly && !isMobile && presenterPayload) {
-			const openResult = await openPresenterWindow(presenterPayload)
-			if (openResult !== "fallback") return
+		if (deckTools.busy) return
+		if (notesPending) {
+			magicToast.warning(t("ppt.batch.saveNotesFirst"))
+			return
+		}
+		const prepared = preparePresentation()
+		const index = prepared instanceof Promise ? await prepared : prepared
+		if (index === null) return
+		// Read after the guard, which may have skipped a hidden starting page.
+		const slide = store.slides[index]
+		if (!isPresenterFallbackOnly && !isMobile && slide?.content) {
+			const result = await openPresenterWindow({
+				index,
+				html: slide.content,
+				dimensions: resolvePptScaleContentDimensions(slide.content, slide.rawContent),
+			})
+			if (result !== "fallback") return
 		}
 		await togglePresentationFullscreen()
 	})
 	const isSingleWindowFullscreen = isPresentationFullscreen && !isPresenterView
 	const isPresenterConsole = isPresenterWindowOpen
+	const visibleSlideIndices = getPptVisibleSlideIndices(
+		store.slides,
+		store.getConfigForExport().displayConfig?.hidden_slides,
+	)
+	const nextVisibleIndex = visibleSlideIndices.find((index) => index > store.activeIndex) ?? -1
+	const visibilityKey = visibleSlideIndices.join(",")
 	useEffect(() => {
-		if (isPresenterConsole && store.activeIndex + 1 < store.slideUrls.length)
-			void store.ensureSlideContent(store.activeIndex + 1)
-	}, [isPresenterConsole, store, store.activeIndex, store.slideUrls.length])
+		if (!isPresenterWindowOpen) return
+		const indices = visibilityKey ? visibilityKey.split(",").map(Number) : []
+		if (!indices.includes(store.activeIndex)) {
+			// Clear the audience frame while the next visible slide loads.
+			if (indices.length)
+				postPresenterSlide({
+					index: store.activeIndex,
+					html: '<!doctype html><html><body style="margin:0;background:#000"></body></html>',
+					dimensions: presenterSlideDimensions,
+				})
+			else closePresenterWindow()
+			return
+		}
+		if (presenterPayload) postPresenterSlide(presenterPayload)
+	}, [
+		isPresenterWindowOpen,
+		visibilityKey,
+		store,
+		store.activeIndex,
+		closePresenterWindow,
+		postPresenterSlide,
+		presenterPayload,
+		presenterSlideDimensions,
+	])
+	useEffect(() => {
+		if (!(isPresentationFullscreen || isPresenterWindowOpen || isPlaybackMode)) return
+		const indices = visibilityKey ? visibilityKey.split(",").map(Number) : []
+		if (!indices.length) {
+			if (isPresenterWindowOpen) closePresenterWindow()
+			if (isPresentationFullscreen) void togglePresentationFullscreen()
+			return
+		}
+		if (!indices.includes(store.activeIndex)) void preparePresentation()
+	}, [
+		visibilityKey,
+		store.activeIndex,
+		isPlaybackMode,
+		isPresentationFullscreen,
+		isPresenterWindowOpen,
+		closePresenterWindow,
+		togglePresentationFullscreen,
+		preparePresentation,
+	])
+	useEffect(() => {
+		if (isPresenterConsole && nextVisibleIndex >= 0)
+			void store.ensureSlideContent(nextVisibleIndex)
+	}, [isPresenterConsole, store, nextVisibleIndex])
 
 	const isSidebarEffectivelyCollapsed = isSidebarCollapsed && !isPresenterView
 
@@ -460,6 +556,30 @@ const PPTRenderInner = observer(function PPTRenderInner({
 
 	// 获取用于创建新幻灯片的项目 ID 和父级 ID
 	const resolvedProjectId = selectedProject?.id || projectId
+	const hiddenPaths = new Set(
+		normalizeHiddenSlides(
+			store.slidePaths,
+			store.getConfigForExport().displayConfig?.hidden_slides,
+		),
+	)
+	const deckTools = usePPTDeckTools({
+		store,
+		mainFileId,
+		mainFileName,
+		attachmentList,
+		projectId: resolvedProjectId,
+		allowEdit:
+			effectiveAllowEdit && !slideStructureAdapter && !isPlaybackMode && !isPresenterConsole,
+		onDeckConfigSaved,
+		beforeWrite: async () => {
+			// Draft notes must be resolved before a structure write can unmount their editor.
+			if (notesPending) {
+				magicToast.warning(t("ppt.batch.saveNotesFirst"))
+				return false
+			}
+			return checkBeforeNavigate("jump", store.activeIndex)
+		},
+	})
 	const parentId = useMemo(() => {
 		if (!attachmentList?.length || !store.slidePaths.length) return undefined
 
@@ -490,12 +610,7 @@ const PPTRenderInner = observer(function PPTRenderInner({
 		mainFileName,
 		projectId: resolvedProjectId,
 		parentId,
-		setActiveIndex: async (index) => {
-			const canNavigate = await checkBeforeNavigate("jump", index)
-			if (!canNavigate) return
-
-			store.setActiveIndex(index)
-		},
+		setActiveIndex: handleJumpToPage,
 		setIsTransitioning: (value) => store.setIsTransitioning(value),
 		onSortSave,
 		store,
@@ -503,6 +618,37 @@ const PPTRenderInner = observer(function PPTRenderInner({
 		slideStructureAdapter,
 	})
 
+	// Ordinary decks share a revision-checked writer; adapters retain their contract.
+	const insertSlide = slideStructureAdapter ? handleInsertSlide : deckTools.insert
+	const duplicateSlide = slideStructureAdapter
+		? handleDuplicateSlide
+		: (index: number) => {
+				const id = store.getFileIdByPath(store.slides[index]?.path || "")
+				if (id) void deckTools.duplicate(new Set([id]))
+			}
+	const removeSlide = slideStructureAdapter
+		? handleDeleteSlide
+		: (index: number) => {
+				const id = store.getFileIdByPath(store.slides[index]?.path || "")
+				if (!id || deckTools.busy) return
+				MagicModal.confirm({
+					title: t("ppt.batch.removeTitle", { count: 1 }),
+					content: t("ppt.batch.removeDescription"),
+					variant: "destructive",
+					onOk: () => deckTools.remove(new Set([id])),
+				})
+			}
+	const renameSlide = (index: number, name: string) => {
+		if (slideStructureAdapter) return handleRenameSlide(index, name)
+		const fileId = store.getFileIdByPath(store.slides[index]?.path || "")
+		return deckTools.run(async () => {
+			// Editor confirmation can outlive a reorder; resolve the original file again.
+			const currentIndex = store.slides.findIndex(
+				(slide) => fileId && store.getFileIdByPath(slide.path) === fileId,
+			)
+			if (currentIndex >= 0) await handleRenameSlide(currentIndex, name)
+		})
+	}
 	const handleGenerateSpeakerNotes = useMemoizedFn(
 		(action: PPTNotesAction, targetFileId: string) => {
 			const prompts = {
@@ -561,9 +707,7 @@ const PPTRenderInner = observer(function PPTRenderInner({
 			: -1
 
 		if (targetIndex >= 0) {
-			void checkBeforeNavigate("jump", targetIndex).then((canNavigate) => {
-				if (canNavigate) store.setActiveIndex(targetIndex)
-			})
+			void handleJumpToPage(targetIndex)
 			return
 		}
 
@@ -586,7 +730,8 @@ const PPTRenderInner = observer(function PPTRenderInner({
 				return
 			}
 
-			if (isAnySlideEditing || isDeleteModalOpen) return
+			if (isAnySlideEditing || isDeleteModalOpen || deckTools.busy || deckTools.searchOpen)
+				return
 
 			switch (event.key) {
 				case "ArrowLeft":
@@ -620,13 +765,22 @@ const PPTRenderInner = observer(function PPTRenderInner({
 		closePresenterWindow,
 		isAnySlideEditing,
 		isDeleteModalOpen,
+		deckTools.busy,
+		deckTools.searchOpen,
 	])
 
 	// iframe postMessage 导航 - 依赖 usePPTSidebar 返回的 isDeleteModalOpen
 	useEffect(() => {
 		function handleMessage(event: MessageEvent) {
 			if (!event.data || event.data.type !== "keyboardEvent") return
-			if (isAnySlideEditing || store.isTransitioning || isDeleteModalOpen) return
+			if (
+				isAnySlideEditing ||
+				store.isTransitioning ||
+				isDeleteModalOpen ||
+				deckTools.busy ||
+				deckTools.searchOpen
+			)
+				return
 
 			const { direction } = event.data
 			switch (direction) {
@@ -646,7 +800,15 @@ const PPTRenderInner = observer(function PPTRenderInner({
 
 		window.addEventListener("message", handleMessage)
 		return () => window.removeEventListener("message", handleMessage)
-	}, [changeSlide, goToFirstSlide, store.isTransitioning, isAnySlideEditing, isDeleteModalOpen])
+	}, [
+		changeSlide,
+		goToFirstSlide,
+		store.isTransitioning,
+		isAnySlideEditing,
+		isDeleteModalOpen,
+		deckTools.busy,
+		deckTools.searchOpen,
+	])
 
 	const slideContainerRef = useRef<HTMLDivElement>(null)
 	const shouldShowButtonText = useContainerShowButtonText(slideContainerRef, 700)
@@ -704,6 +866,7 @@ const PPTRenderInner = observer(function PPTRenderInner({
 	const canReplaceTemplate =
 		!isSlidesTemplateProject &&
 		effectiveAllowEdit &&
+		!deckTools.busy &&
 		(presentedToolbarModel?.props.isNewestVersion ?? true)
 
 	const handleOpenTemplateReplacement = useMemoizedFn(() => {
@@ -799,16 +962,18 @@ const PPTRenderInner = observer(function PPTRenderInner({
 	const isNoSlidesFallbackVisible = store.isReady && !isPendingInit && !hasSlides
 
 	// 手动保存处理函数 - 使用 useMemoizedFn 避免每次渲染重新创建
-	const handleManualSave = useMemoizedFn(async (saveResult: ManualSaveResult, index: number) => {
-		if (!saveResult) return
-		const cleanContent = saveResult.cleanContent || ""
+	const handleManualSave = useMemoizedFn(
+		async (saveResult: ManualSaveResult | undefined, index: number) => {
+			if (!saveResult) return
+			const cleanContent = saveResult.cleanContent || ""
 
-		if (saveResult.fileId) store.markSlideAsManuallySaved(saveResult.fileId)
-		// 保存后的原始 HTML 需要先经过 PPT 资源路径处理，否则缩略图会用未解析的背景资源截图。
-		const processedContent = await store.updateSlideContent(index, cleanContent)
-		const thumbnailContent = processedContent || cleanContent
-		await store.generateSlideScreenshot(index, thumbnailContent)
-	})
+			if (saveResult.fileId) store.markSlideAsManuallySaved(saveResult.fileId)
+			// 保存后的原始 HTML 需要先经过 PPT 资源路径处理，否则缩略图会用未解析的背景资源截图。
+			const processedContent = await store.updateSlideContent(index, cleanContent)
+			const thumbnailContent = processedContent || cleanContent
+			await store.generateSlideScreenshot(index, thumbnailContent)
+		},
+	)
 
 	const registerCloseSaveHandler = useMemoizedFn((handler: (() => Promise<boolean>) | null) => {
 		activeSlideCloseSaveHandlerRef.current = handler
@@ -1000,19 +1165,39 @@ const PPTRenderInner = observer(function PPTRenderInner({
 							>
 								<PPTSidebar
 									onOpenFile={openNewTab}
+									tools={slideStructureAdapter ? undefined : deckTools}
+									hiddenPaths={hiddenPaths}
 									onSlideClick={handleSlideClick}
-									onSortChange={effectiveAllowEdit ? handleSortChange : undefined}
+									onSortChange={
+										effectiveAllowEdit && !deckTools.busy
+											? slideStructureAdapter
+												? handleSortChange
+												: (slides) => {
+														void deckTools.reorder(
+															slides.map((slide) => slide.path),
+														)
+													}
+											: undefined
+									}
 									onInsertSlide={
-										effectiveAllowEdit ? handleInsertSlide : undefined
+										effectiveAllowEdit && !deckTools.busy
+											? insertSlide
+											: undefined
 									}
 									onDuplicateSlide={
-										effectiveAllowEdit ? handleDuplicateSlide : undefined
+										effectiveAllowEdit && !deckTools.busy
+											? duplicateSlide
+											: undefined
 									}
 									onDeleteSlide={
-										effectiveAllowEdit ? handleDeleteSlide : undefined
+										effectiveAllowEdit && !deckTools.busy
+											? removeSlide
+											: undefined
 									}
 									onRenameSlide={
-										effectiveAllowEdit ? handleRenameSlide : undefined
+										effectiveAllowEdit && !deckTools.busy
+											? renameSlide
+											: undefined
 									}
 									onRefreshSlide={
 										effectiveAllowEdit ? handleRefreshSlide : undefined
@@ -1022,7 +1207,7 @@ const PPTRenderInner = observer(function PPTRenderInner({
 									onAddToNewChat={handleAddToNewChat}
 									isMobile={isMobile}
 									sidebarWidth={sidebarWidth}
-									allowEdit={effectiveAllowEdit}
+									allowEdit={effectiveAllowEdit && !deckTools.busy}
 									canReplaceTemplate={canReplaceTemplate}
 									onReplaceSlideTemplate={handleOpenSlideTemplateReplacement}
 									isCollapsed={isSidebarEffectivelyCollapsed}
@@ -1156,7 +1341,7 @@ const PPTRenderInner = observer(function PPTRenderInner({
 										{effectiveAllowEdit && (
 											<Button
 												data-testid="ppt-render-create-first-slide-button"
-												onClick={() => handleInsertSlide(0, "after")}
+												onClick={() => insertSlide(0, "after")}
 												className="gap-2"
 												size="lg"
 											>
@@ -1180,7 +1365,15 @@ const PPTRenderInner = observer(function PPTRenderInner({
 											key={key}
 											index={index}
 											isActive={index === store.activeIndex}
-											isPresented={key === presentedKey}
+											isPresented={
+												key === presentedKey &&
+												(!(
+													isPresentationFullscreen ||
+													isPresenterWindowOpen ||
+													isPlaybackMode
+												) ||
+													!hiddenPaths.has(slide.path))
+											}
 											isTabActive={isTabActive}
 											toolbarOwnerKey={key}
 											onToolbarModelChange={handleToolbarModelChange}
@@ -1212,7 +1405,11 @@ const PPTRenderInner = observer(function PPTRenderInner({
 											) => {
 												store.updateSlideContents(newContents)
 											}}
-											allowEdit={effectiveAllowEdit && !isPresenterConsole}
+											allowEdit={
+												effectiveAllowEdit &&
+												!deckTools.busy &&
+												!isPresenterConsole
+											}
 											showButtonText={shouldShowButtonText}
 											onEditModeChange={(isEditing) =>
 												handleEditModeChange(slideFileId, isEditing)
@@ -1258,6 +1455,18 @@ const PPTRenderInner = observer(function PPTRenderInner({
 									store.isReady &&
 									hasSlides && (
 										<PPTControlBar
+											canGoPrevious={
+												isPresentationFullscreen || isPlaybackMode
+													? visibleSlideIndices.some(
+															(index) => index < store.activeIndex,
+														)
+													: undefined
+											}
+											canGoNext={
+												isPresentationFullscreen || isPlaybackMode
+													? nextVisibleIndex >= 0
+													: undefined
+											}
 											notesVisible={
 												isPresenterView ||
 												isPresenterWindowOpen ||
@@ -1313,21 +1522,22 @@ const PPTRenderInner = observer(function PPTRenderInner({
 
 							{isPresenterConsole && (
 								<PPTPresenterNextSlide
-									content={store.slides[store.activeIndex + 1]?.content}
+									content={store.slides[nextVisibleIndex]?.content}
 									loadingError={
-										store.slides[store.activeIndex + 1]?.loadingState ===
-										"error"
+										store.slides[nextVisibleIndex]?.loadingState === "error"
 									}
-									onRetry={() =>
-										void store.ensureSlideContent(store.activeIndex + 1)
-									}
-									rawContent={store.slides[store.activeIndex + 1]?.rawContent}
-									isLastSlide={store.activeIndex >= store.slideUrls.length - 1}
+									onRetry={() => void store.ensureSlideContent(nextVisibleIndex)}
+									rawContent={store.slides[nextVisibleIndex]?.rawContent}
+									isLastSlide={nextVisibleIndex < 0}
 								/>
 							)}
 
 							{isPresenterConsole && store.isReady && hasSlides && (
 								<PPTPresenterConsoleControls
+									canGoPrevious={visibleSlideIndices.some(
+										(index) => index < store.activeIndex,
+									)}
+									canGoNext={nextVisibleIndex >= 0}
 									activeIndex={store.activeIndex}
 									totalSlides={store.slideUrls.length}
 									isTransitioning={store.isTransitioning}
@@ -1347,6 +1557,7 @@ const PPTRenderInner = observer(function PPTRenderInner({
 								hasSlides &&
 								store.currentSlide && (
 									<PPTSpeakerNotesPanel
+										onPendingChangesChange={setNotesPending}
 										layout={isPresenterConsole ? "presenter" : "default"}
 										visible={
 											isPresenterConsole ||
@@ -1382,6 +1593,7 @@ const PPTRenderInner = observer(function PPTRenderInner({
 										}
 										allowEdit={
 											effectiveAllowEdit &&
+											!deckTools.busy &&
 											!isPlaybackMode &&
 											!isPresenterConsole
 										}
@@ -1404,6 +1616,21 @@ const PPTRenderInner = observer(function PPTRenderInner({
 			</div>
 
 			<Suspense fallback={null}>
+				{!slideStructureAdapter && deckTools.searchOpen && (
+					<PPTSearchPanel
+						open={deckTools.searchOpen}
+						onOpenChange={deckTools.setSearchOpen}
+						deckKey={mainFileId || mainFileName || ""}
+						store={store}
+						selectedIds={deckTools.selected}
+						hiddenPaths={hiddenPaths}
+						allowEdit={effectiveAllowEdit && !isPlaybackMode && !isPresenterConsole}
+						busy={deckTools.busy}
+						client={deckTools.client}
+						runWrite={deckTools.run}
+						onNavigate={handleJumpToPage}
+					/>
+				)}
 				<SlidesTemplateReplacementDialog
 					open={templateReplacementTarget !== null}
 					target={templateReplacementTarget}
@@ -1416,7 +1643,15 @@ const PPTRenderInner = observer(function PPTRenderInner({
 
 			{/* 导航确认对话框 */}
 			<AlertDialog open={showNavigationDialog} onOpenChange={setShowNavigationDialog}>
-				<AlertDialogContent data-testid="ppt-render-navigation-dialog">
+				<AlertDialogContent
+					data-testid="ppt-render-navigation-dialog"
+					onCloseAutoFocus={(event) => {
+						// A controlled confirmation has no Trigger; return focus to its initiating control.
+						event.preventDefault()
+						if (navigationFocusRef.current?.isConnected)
+							navigationFocusRef.current.focus()
+					}}
+				>
 					<AlertDialogHeader>
 						<AlertDialogTitle>{t("ppt.navigationConfirmTitle")}</AlertDialogTitle>
 						<AlertDialogDescription>

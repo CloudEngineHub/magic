@@ -1,5 +1,5 @@
 import { Loader2, Check, AlertCircle } from "lucide-react"
-import { useRef, useState } from "react"
+import { useEffect, useRef, useState } from "react"
 import { useTranslation } from "react-i18next"
 import { Button } from "@/components/shadcn-ui/button"
 import { ScrollArea } from "@/components/shadcn-ui/scroll-area"
@@ -34,11 +34,14 @@ export default function PPTSpeakerNotesPanel(props: PPTSpeakerNotesPanelProps) {
 	const [saveStates, setSaveStates] = useState<Record<string, SaveState>>({})
 	// Only aggregate files still in this deck; a removed page cannot leave a stale status.
 	const states = (props.slides ?? [currentSlide]).map((slide) => saveStates[slide.key])
+	const hasDrafts = (props.slides ?? [currentSlide]).some((slide) =>
+		drafts.current.has(slide.key),
+	)
 	const status = states.includes("saving")
 		? "saving"
 		: states.includes("error")
 			? "error"
-			: states.includes("unsaved")
+			: states.includes("unsaved") || hasDrafts
 				? "unsaved"
 				: states.includes("saved")
 					? "saved"
@@ -54,6 +57,14 @@ export default function PPTSpeakerNotesPanel(props: PPTSpeakerNotesPanelProps) {
 						? t("ppt.speakerNotes.saved")
 						: null
 	const StatusIcon = status === "saving" ? Loader2 : status === "error" ? AlertCircle : Check
+	const { onPendingChangesChange } = props
+	// Single-page mode unmounts the old editor, but its draft remains in this panel's cache.
+	// Keep it protected even after that editor's transient save status is removed.
+	const pendingChanges =
+		hasDrafts || status === "saving" || status === "error" || status === "unsaved"
+	useEffect(() => {
+		onPendingChangesChange?.(pendingChanges)
+	}, [pendingChanges, onPendingChangesChange])
 
 	return (
 		<>
@@ -195,7 +206,10 @@ export default function PPTSpeakerNotesPanel(props: PPTSpeakerNotesPanelProps) {
 											: undefined
 									}
 									initialDraft={drafts.current.get(slide.key)}
-									onDraftChange={(draft) => drafts.current.set(slide.key, draft)}
+									onDraftChange={(draft) => {
+										if (draft === undefined) drafts.current.delete(slide.key)
+										else drafts.current.set(slide.key, draft)
+									}}
 									onDraftSaved={(draft) => {
 										if (drafts.current.get(slide.key) === draft)
 											drafts.current.delete(slide.key)

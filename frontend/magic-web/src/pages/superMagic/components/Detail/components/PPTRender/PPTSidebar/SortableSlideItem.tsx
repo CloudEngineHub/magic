@@ -13,6 +13,7 @@ import {
 	RefreshCw,
 	Copy,
 	LayoutTemplate,
+	EyeOff,
 } from "lucide-react"
 import { useTranslation } from "react-i18next"
 import { cn } from "@/utils/cn"
@@ -33,6 +34,7 @@ import {
 } from "@/components/shadcn-ui/dialog"
 import { Input } from "@/components/shadcn-ui/input"
 import { Button } from "@/components/shadcn-ui/button"
+import { Checkbox } from "@/components/shadcn-ui/checkbox"
 import type { SortableSlideItemProps } from "./types"
 import { observer } from "mobx-react-lite"
 import SmartTooltip from "@/components/other/SmartTooltip"
@@ -45,6 +47,11 @@ function SortableSlideItem({
 	item,
 	isActive,
 	onClick,
+	isSelected = false,
+	selectionMode = false,
+	onSelect,
+	isHidden = false,
+	removeOnly = false,
 	screenshot,
 	totalSlides,
 	onInsertAbove,
@@ -237,10 +244,15 @@ function SortableSlideItem({
 	const main = (
 		<div
 			data-testid={`ppt-sidebar-slide-item-${item.id}`}
+			data-selected={isSelected}
+			role="group"
+			tabIndex={0}
+			aria-label={t("ppt.batch.page", { page: item.index + 1 })}
 			data-slide-id={item.id}
 			data-slide-index={item.index}
 			className={cn(
-				"group/slide group relative rounded transition-[background-color,box-shadow]",
+				"group/slide group relative rounded transition-[background-color,box-shadow] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+				isSelected && "bg-accent ring-1 ring-primary/40",
 				isMobile
 					? // Mobile: vertical layout with thumbnail first, no drag cursor
 						"flex h-full w-[140px] shrink-0 cursor-pointer !flex-col gap-1.5"
@@ -249,6 +261,15 @@ function SortableSlideItem({
 				className,
 			)}
 			onClick={onClick}
+			onKeyDown={(event) => {
+				if (
+					event.target !== event.currentTarget ||
+					(event.key !== "Enter" && event.key !== " ")
+				)
+					return
+				event.preventDefault()
+				onClick(event)
+			}}
 			draggable={allowEdit && !isMobile}
 			onDragStart={(e) => {
 				// 1. Set data for MessageEditor drag-to-insert
@@ -274,6 +295,21 @@ function SortableSlideItem({
 					isMobile ? "justify-center" : "justify-start",
 				)}
 			>
+				{selectionMode ? (
+					<Checkbox
+						checked={isSelected}
+						disabled={!slideFileId || !onSelect}
+						aria-label={t("ppt.batch.selectPage", { page: item.index + 1 })}
+						onClick={(event) => {
+							event.stopPropagation()
+							onSelect?.(event.shiftKey)
+						}}
+						onDragStart={(event) => {
+							event.preventDefault()
+							event.stopPropagation()
+						}}
+					/>
+				) : null}
 				<span className="shrink-0 text-sm font-medium">{item.index + 1}</span>
 				<div className="min-w-0 flex-1">
 					<SmartTooltip
@@ -297,6 +333,12 @@ function SortableSlideItem({
 				style={{ aspectRatio: `${slideDimensions.width} / ${slideDimensions.height}` }}
 			>
 				{renderThumbnail()}
+				{isHidden ? (
+					<span className="absolute right-1 top-1 flex items-center gap-1 rounded bg-background/90 px-1.5 py-0.5 text-xs text-muted-foreground">
+						<EyeOff className="size-4" />
+						{t("ppt.batch.hidden")}
+					</span>
+				) : null}
 				{allowEdit && !isMobile && quickActions.length > 0 && (
 					// Overlay the preview without changing its size; keep actions reachable by keyboard.
 					<div
@@ -475,7 +517,7 @@ function SortableSlideItem({
 						}}
 					>
 						<Trash2 className="mr-2 size-4 text-destructive" />
-						{t("fileViewer.deleteSlide")}
+						{removeOnly ? t("ppt.batch.remove") : t("fileViewer.deleteSlide")}
 					</ContextMenuItem>
 				</ContextMenuContent>
 			</ContextMenu>

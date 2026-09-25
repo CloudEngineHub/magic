@@ -23,6 +23,8 @@ import { MagicDropdown, MagicTooltip } from "@/components/base"
 export function PPTControlBar({
 	activeIndex,
 	totalSlides,
+	canGoPrevious = activeIndex > 0,
+	canGoNext = activeIndex < totalSlides - 1,
 	isTransitioning,
 	isMobile,
 	isFullscreen,
@@ -147,7 +149,7 @@ export function PPTControlBar({
 									onPrevSlide()
 								}}
 								aria-label={t("fileViewer.previousPage")}
-								disabled={activeIndex === 0 || isTransitioning}
+								disabled={!canGoPrevious || isTransitioning}
 							>
 								<ChevronLeft className="h-4 w-4" />
 							</Button>
@@ -226,7 +228,7 @@ export function PPTControlBar({
 									onNextSlide()
 								}}
 								aria-label={t("fileViewer.nextPage")}
-								disabled={activeIndex >= totalSlides - 1 || isTransitioning}
+								disabled={!canGoNext || isTransitioning}
 							>
 								<ChevronRight className="h-4 w-4" />
 							</Button>
@@ -247,7 +249,7 @@ export function PPTControlBar({
 									onGoToFirstSlide()
 								}}
 								aria-label={t("detail.goToFirstPage")}
-								disabled={activeIndex === 0 || isTransitioning}
+								disabled={!canGoPrevious || isTransitioning}
 							>
 								<Home className="h-4 w-4" />
 							</Button>

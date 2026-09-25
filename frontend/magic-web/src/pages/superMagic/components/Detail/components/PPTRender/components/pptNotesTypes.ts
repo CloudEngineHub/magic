@@ -9,6 +9,7 @@ export interface PPTNotesSlide {
 }
 
 export interface PPTSpeakerNotesPanelProps {
+	onPendingChangesChange?: (pending: boolean) => void
 	visible?: boolean
 	layout?: "default" | "presenter"
 	slides?: PPTNotesSlide[]

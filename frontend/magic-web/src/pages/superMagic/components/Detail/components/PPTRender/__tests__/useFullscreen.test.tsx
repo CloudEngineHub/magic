@@ -45,7 +45,11 @@ function defineFullscreenState(
 
 function renderFullscreenHook(
 	container: FullscreenElement,
-	options?: { presenterTarget?: FullscreenElement; presenterEnabled?: boolean },
+	options?: {
+		presenterTarget?: FullscreenElement
+		presenterEnabled?: boolean
+		beforeEnter?: () => boolean | Promise<boolean>
+	},
 ) {
 	return renderHook(() =>
 		useFullscreen({
@@ -54,6 +58,7 @@ function renderFullscreenHook(
 				? { current: options.presenterTarget }
 				: undefined,
 			presenterEnabled: options?.presenterEnabled,
+			beforeEnter: options?.beforeEnter,
 		}),
 	)
 }
@@ -74,6 +79,38 @@ describe("useFullscreen", () => {
 			value: undefined,
 		})
 		vi.restoreAllMocks()
+	})
+
+	it("guards keyboard and iframe entry when the deck has no visible slides", async () => {
+		const container = document.createElement("div") as FullscreenElement
+		container.requestFullscreen = vi.fn(async () => undefined)
+		const beforeEnter = vi.fn(() => false)
+		const { result } = renderFullscreenHook(container, { beforeEnter })
+		await act(async () => {
+			window.dispatchEvent(new KeyboardEvent("keydown", { key: "F11" }))
+			window.dispatchEvent(
+				new MessageEvent("message", {
+					data: { type: "keyboardEvent", direction: "fullscreen" },
+				}),
+			)
+		})
+		expect(beforeEnter).toHaveBeenCalledTimes(2)
+		expect(container.requestFullscreen).not.toHaveBeenCalled()
+		expect(result.current.isFullscreen).toBe(false)
+	})
+
+	it("does not fall back to mobile fullscreen when the entry guard rejects", async () => {
+		appEnv.isMagicApp = true
+		const container = document.createElement("div") as FullscreenElement
+		const error = vi.spyOn(console, "error").mockImplementation(() => undefined)
+		const { result } = renderFullscreenHook(container, {
+			beforeEnter: () => Promise.reject(new Error("invalid config")),
+		})
+		await act(async () => {
+			await result.current.toggleFullscreen()
+		})
+		expect(result.current.isFullscreen).toBe(false)
+		error.mockRestore()
 	})
 
 	it("uses CSS fullscreen state in Magic App WebView without calling native fullscreen", async () => {

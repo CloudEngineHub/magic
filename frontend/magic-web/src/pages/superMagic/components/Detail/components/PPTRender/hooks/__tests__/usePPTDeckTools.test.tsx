@@ -1,0 +1,329 @@
+import { act, renderHook, waitFor } from "@testing-library/react"
+import { beforeEach, describe, expect, it, vi } from "vitest"
+import type { PPTStore } from "../../stores/PPTStore"
+import { usePPTDeckTools } from "../usePPTDeckTools"
+
+const mocks = vi.hoisted(() => ({
+	fileApi: { identityKey: "session:project:topic" },
+	sharePage: false,
+	createFileApi: vi.fn(),
+	boundIdentities: [] as string[],
+	read: vi.fn(),
+	save: vi.fn(),
+	initialize: vi.fn(),
+	create: vi.fn(),
+	getInfo: vi.fn(),
+	findManifest: vi.fn(),
+	addFile: vi.fn(),
+	toast: vi.fn(),
+	checks: [] as Array<() => boolean>,
+}))
+vi.mock("@/apis", () => ({
+	SuperMagicApi: { createFile: mocks.create },
+	MagicFSApi: { getFileInfo: mocks.getInfo },
+}))
+vi.mock("@/stores/projectFiles", () => ({ default: { addWorkspaceFile: mocks.addFile } }))
+vi.mock("@/components/base/MagicToaster/utils", () => ({
+	default: { success: mocks.toast, error: mocks.toast, info: mocks.toast },
+}))
+vi.mock("@/pages/superMagic/fileAccess/fileApi", () => ({
+	useFileApi: () => mocks.fileApi,
+	createFileApi: mocks.createFileApi,
+}))
+vi.mock("@/pages/superMagic/fileAccess/fileAccessContext", () => ({
+	isSharePageLocation: () => mocks.sharePage,
+	createSessionFileAccess: (params: { projectId?: string }) => ({ kind: "session", ...params }),
+}))
+vi.mock("@/pages/superMagic/services/attachmentsTopicSync", () => ({
+	requestProjectAttachmentsFullRefresh: vi.fn(),
+}))
+vi.mock("@/pages/superMagic/components/Detail/contents/HTML/utils/magicProjectFileFinder", () => ({
+	findMagicProjectJsFile: mocks.findManifest,
+}))
+vi.mock("@/pages/superMagic/components/Detail/contents/HTML/utils/magicProjectUpdater", () => ({
+	parseMagicProjectJs: (content: string) => {
+		const config = JSON.parse(content)
+		return { slides: config.slides, config }
+	},
+	generateUpdatedMagicProjectJs: (config: unknown) => JSON.stringify(config),
+	generateBlankSlideContent: () => "<html>blank</html>",
+}))
+vi.mock("../../services/pptFileMutation", () => ({
+	PPTFileMutationError: class extends Error {
+		constructor(public readonly kind: string) {
+			super(kind)
+		}
+	},
+	createPPTFileMutationClient: (
+		api: { identityKey: string },
+		options: { isCurrent: () => boolean },
+	) => {
+		mocks.boundIdentities.push(api.identityKey)
+		mocks.checks.push(options.isCurrent)
+		return { read: mocks.read, save: mocks.save, initializeCreatedFile: mocks.initialize }
+	},
+}))
+vi.mock("react-i18next", () => ({ useTranslation: () => ({ t: (key: string) => key }) }))
+
+function makeOptions(hidden: string[] = []) {
+	const store = {
+		slides: [{ path: "a.html" }, { path: "b.html" }],
+		slidePaths: ["a.html", "b.html"],
+		currentSlide: { path: "a.html" },
+		getFileIdByPath: (path: string) => (path === "a.html" ? "a" : "b"),
+		getConfigForExport: () => ({ displayConfig: { hidden_slides: hidden } }),
+		syncManager: { waitForCompletion: vi.fn().mockResolvedValue(undefined) },
+		setSlides: vi.fn(),
+		setActiveIndex: vi.fn(),
+		updateConfig: vi.fn().mockResolvedValue(undefined),
+		pathMappingService: { setPathFileIdMapping: vi.fn() },
+	}
+	return {
+		store: store as unknown as PPTStore,
+		allowEdit: true,
+		mainFileId: "deck",
+		projectId: "project",
+		beforeWrite: vi.fn().mockResolvedValue(true),
+		attachmentList: [
+			{ file_id: "a", file_name: "a.html", parent_id: "folder" },
+			{ file_id: "b", file_name: "b.html", parent_id: "folder" },
+		],
+	}
+}
+
+describe("usePPTDeckTools", () => {
+	beforeEach(() => {
+		vi.clearAllMocks()
+		mocks.fileApi.identityKey = "session:project:topic"
+		mocks.sharePage = false
+		mocks.boundIdentities.length = 0
+		mocks.createFileApi.mockImplementation((access: { projectId?: string }) => ({
+			identityKey: `session:${access.projectId}:`,
+		}))
+		mocks.checks.length = 0
+		mocks.findManifest.mockResolvedValue({ fileId: "manifest" })
+		mocks.getInfo.mockResolvedValue({ file: { id: "manifest", parent_id: "manifest-folder" } })
+		mocks.read.mockImplementation(async (fileId: string) => ({
+			fileId,
+			revision: 1,
+			content:
+				fileId === "manifest"
+					? JSON.stringify({ slides: ["a.html", "b.html"] })
+					: "<html>source</html>",
+		}))
+		mocks.create.mockResolvedValue({
+			file_id: "copy",
+			file_name: "a (1).html",
+			parent_id: "folder",
+		})
+		mocks.initialize.mockResolvedValue({ revision: 2 })
+		mocks.save.mockResolvedValue({ revision: 2 })
+	})
+
+	it("does not lock the editor until its unsaved changes are resolved", async () => {
+		const props = makeOptions()
+		let resolve: (value: boolean) => void = () => undefined
+		props.beforeWrite.mockImplementation(
+			() =>
+				new Promise((done) => {
+					resolve = done
+				}),
+		)
+		const { result } = renderHook(() => usePPTDeckTools(props))
+		let task: Promise<void> | undefined
+		act(() => {
+			task = result.current.remove(new Set(["a"]))
+		})
+		expect(result.current.busy).toBe(false)
+		expect(mocks.read).not.toHaveBeenCalled()
+		await act(async () => {
+			resolve(false)
+			await task
+		})
+		expect(mocks.save).not.toHaveBeenCalled()
+	})
+
+	it("binds a known ordinary project session when no access provider exists", async () => {
+		mocks.fileApi.identityKey = "none"
+		const props = makeOptions()
+		const { result } = renderHook(() => usePPTDeckTools(props))
+		await act(async () => {
+			await result.current.remove(new Set(["a"]))
+		})
+		expect(mocks.createFileApi).toHaveBeenCalledWith({ kind: "session", projectId: "project" })
+		expect(mocks.boundIdentities).toEqual(["session:project:"])
+		expect(mocks.save).toHaveBeenCalledTimes(1)
+	})
+
+	it.each(["none", "share:token:project:"])(
+		"does not borrow session access on a share page with %s",
+		async (identity) => {
+			mocks.fileApi.identityKey = identity
+			mocks.sharePage = true
+			const props = makeOptions()
+			const { result } = renderHook(() => usePPTDeckTools(props))
+			await act(async () => {
+				await result.current.remove(new Set(["a"]))
+			})
+			expect(mocks.createFileApi).not.toHaveBeenCalled()
+			expect(mocks.boundIdentities).toEqual([identity])
+			expect(mocks.read).not.toHaveBeenCalled()
+			expect(mocks.save).not.toHaveBeenCalled()
+		},
+	)
+
+	it("invalidates the old client and queued intent on a deck switch", async () => {
+		const props = makeOptions()
+		let resolve: (value: boolean) => void = () => undefined
+		props.beforeWrite.mockImplementation(
+			() =>
+				new Promise((done) => {
+					resolve = done
+				}),
+		)
+		const { result, rerender } = renderHook((options) => usePPTDeckTools(options), {
+			initialProps: props,
+		})
+		let task: Promise<void> | undefined
+		act(() => {
+			task = result.current.remove(new Set(["a"]))
+		})
+		const oldCheck = mocks.checks[0]
+		rerender({ ...props, mainFileId: "next-deck" })
+		expect(oldCheck()).toBe(false)
+		await act(async () => {
+			resolve(true)
+			await task
+		})
+		expect(mocks.read).not.toHaveBeenCalled()
+		expect(mocks.save).not.toHaveBeenCalled()
+	})
+
+	it.each(["order", "hidden"])(
+		"rejects remote %s changes received during the unsaved-edit guard",
+		async (change) => {
+			const hidden: string[] = []
+			const props = makeOptions(hidden)
+			let resolve: (value: boolean) => void = () => undefined
+			props.beforeWrite.mockImplementation(
+				() =>
+					new Promise((done) => {
+						resolve = done
+					}),
+			)
+			const { result } = renderHook(() => usePPTDeckTools(props))
+			let task: Promise<void> | undefined
+			act(() => {
+				task = result.current.reorder(["b.html", "a.html"])
+			})
+			if (change === "order")
+				Object.defineProperty(props.store, "slidePaths", { value: ["b.html", "a.html"] })
+			else hidden.push("a.html")
+			await act(async () => {
+				resolve(true)
+				await task
+			})
+			expect(mocks.read).not.toHaveBeenCalled()
+			expect(mocks.save).not.toHaveBeenCalled()
+			expect(mocks.toast).toHaveBeenCalledWith("ppt.batch.operationConflict")
+		},
+	)
+
+	it("initializes the copy before committing one new manifest", async () => {
+		const props = makeOptions()
+		const { result } = renderHook(() => usePPTDeckTools(props))
+		await act(async () => {
+			await result.current.duplicate(new Set(["a"]))
+		})
+		expect(mocks.create).toHaveBeenCalledWith(
+			expect.objectContaining({ parent_id: "folder", ignore_duplicate: false }),
+		)
+		expect(mocks.initialize).toHaveBeenCalledWith("copy", "<html>source</html>")
+		expect(mocks.read).not.toHaveBeenCalledWith("copy")
+		expect(mocks.save).toHaveBeenCalledTimes(1)
+		expect(result.current.selected).toEqual(new Set(["copy"]))
+	})
+
+	it("does not register a copy when its body initialization fails", async () => {
+		const props = makeOptions()
+		const { result } = renderHook(() => usePPTDeckTools(props))
+		mocks.initialize.mockRejectedValueOnce(new Error("failed"))
+		await act(async () => {
+			await result.current.duplicate(new Set(["a"]))
+		})
+		expect(mocks.save).not.toHaveBeenCalled()
+		expect(mocks.addFile).not.toHaveBeenCalled()
+		expect(mocks.toast).toHaveBeenCalledWith("ppt.batch.filesRetained")
+	})
+
+	it("does not apply a completed write to a different deck", async () => {
+		const props = makeOptions()
+		const { result, rerender } = renderHook((options) => usePPTDeckTools(options), {
+			initialProps: props,
+		})
+		let complete: (value: { revision: number }) => void = () => undefined
+		mocks.save.mockImplementationOnce(
+			() =>
+				new Promise((resolve) => {
+					complete = resolve
+				}),
+		)
+		let task: Promise<void> | undefined
+		act(() => {
+			task = result.current.remove(new Set(["a"]))
+		})
+		await waitFor(() => expect(mocks.save).toHaveBeenCalledTimes(1))
+		rerender({ ...props, mainFileId: "other-deck" })
+		await act(async () => {
+			complete({ revision: 2 })
+			await task
+		})
+		expect(props.store.setSlides).not.toHaveBeenCalled()
+	})
+
+	it("creates the first page beside the manifest when the deck is empty", async () => {
+		const props = makeOptions()
+		Object.defineProperty(props.store, "slides", { value: [] })
+		Object.defineProperty(props.store, "slidePaths", { value: [] })
+		props.attachmentList = []
+		mocks.read.mockResolvedValue({
+			fileId: "manifest",
+			revision: 1,
+			content: JSON.stringify({ slides: [] }),
+		})
+		const { result } = renderHook(() => usePPTDeckTools(props))
+		await act(async () => {
+			await result.current.insert(0, "after")
+		})
+		expect(mocks.create).toHaveBeenCalledWith(
+			expect.objectContaining({
+				parent_id: "manifest-folder",
+				file_name: "slide (1).html",
+				ignore_duplicate: false,
+			}),
+		)
+		expect(mocks.initialize).toHaveBeenCalledWith("copy", "<html>blank</html>")
+		expect(mocks.save).toHaveBeenCalledWith(
+			expect.anything(),
+			JSON.stringify({ slides: ["slide (1).html"], hidden_slides: [] }),
+		)
+		expect(props.store.setActiveIndex).toHaveBeenLastCalledWith(0)
+	})
+
+	it("does not inherit a hidden page or its subdirectory for a new blank page", async () => {
+		const props = makeOptions(["a.html"])
+		mocks.read.mockResolvedValue({
+			fileId: "manifest",
+			revision: 1,
+			content: JSON.stringify({ slides: ["a.html", "b.html"], hidden_slides: ["a.html"] }),
+		})
+		const { result } = renderHook(() => usePPTDeckTools(props))
+		await act(async () => {
+			await result.current.insert(0, "after")
+		})
+		expect(mocks.create).toHaveBeenCalledWith(
+			expect.objectContaining({ parent_id: "manifest-folder" }),
+		)
+		expect(JSON.parse(mocks.save.mock.calls[0][1]).hidden_slides).toEqual(["a.html"])
+	})
+})

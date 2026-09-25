@@ -8,7 +8,8 @@ import { isMarkdownFileName } from "@/utils/pdfFileType"
 import {
 	iterateExportSlides,
 	iterateSingleExportSlide,
-	prepareSingleSlideExport,
+	prepareFileExportSlides,
+	resolvePptExportSlides,
 } from "@/pages/superMagic/services/pptService"
 import { downloadFileWithAnchor } from "@/pages/superMagic/utils/handleFIle"
 import { DownloadImageMode } from "../../../pages/Workspace/types"
@@ -284,7 +285,7 @@ function useFileExport({
 					},
 				}).promise
 			} else {
-				const result = await prepareSingleSlideExport({
+				const result = await prepareFileExportSlides({
 					fileId,
 					fileName,
 					attachmentList: (attachments ?? []) as any[],
@@ -331,8 +332,9 @@ function useFileExport({
 		).replace(/\.html?$/i, "")
 		const displayConfig = ((file as any)?.display_config || (file as any)?.metadata) as
 			{ type?: string; slides?: string[]; name?: string } | undefined
-		const slidePaths = Array.isArray(displayConfig?.slides) ? displayConfig.slides : []
-		const pageCount = slidePaths.length || 1
+		let slidePaths = Array.isArray(displayConfig?.slides) ? displayConfig.slides : []
+		const isDeck = slidePaths.length > 0
+		let pageCount = slidePaths.length || 1
 		let destinationLease: Awaited<ReturnType<typeof openPptxDestination>> = null
 		const resourceErrors = createPptxResourceErrorCollector(t)
 		const exportIssues: ExportIssue[] = []
@@ -344,6 +346,19 @@ function useFileExport({
 			})
 			if (!destinationLease) return
 
+			if (isDeck) {
+				const resolved = await resolvePptExportSlides({
+					slidePaths,
+					displayConfig,
+					attachmentList: (attachments ?? []) as any,
+					mainFileId: fileId,
+					fileApi,
+					access: fileAccess ?? undefined,
+				})
+				slidePaths = resolved.slidePaths
+				pageCount = slidePaths.length
+				if (!pageCount) throw new Error("No visible slides to export")
+			}
 			startExport()
 			const destination = destinationLease.destination
 			const fontResolver = documentExportService.get()?.getPptFontResolver?.()
@@ -352,6 +367,7 @@ function useFileExport({
 					const source = slidePaths.length
 						? iterateExportSlides({
 								slidePaths,
+								configResolved: true,
 								attachmentList: (attachments ?? []) as any,
 								mainFileId: fileId,
 								mainFileName: fileName,
@@ -435,7 +451,7 @@ function useFileExport({
 
 		startExport()
 		try {
-			const result = await prepareSingleSlideExport({
+			const result = await prepareFileExportSlides({
 				fileId,
 				fileName,
 				attachmentList: (attachments ?? []) as any[],

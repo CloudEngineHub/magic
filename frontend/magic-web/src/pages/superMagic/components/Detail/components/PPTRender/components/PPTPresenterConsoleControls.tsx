@@ -18,6 +18,8 @@ interface PresenterScreenOption {
 interface PPTPresenterConsoleControlsProps {
 	activeIndex: number
 	totalSlides: number
+	canGoPrevious?: boolean
+	canGoNext?: boolean
 	isTransitioning: boolean
 	screens: ReadonlyArray<PresenterScreenOption>
 	selectedScreen: number | null
@@ -32,6 +34,8 @@ interface PPTPresenterConsoleControlsProps {
 export default function PPTPresenterConsoleControls({
 	activeIndex,
 	totalSlides,
+	canGoPrevious = activeIndex > 0,
+	canGoNext = activeIndex < totalSlides - 1,
 	isTransitioning,
 	screens,
 	selectedScreen,
@@ -80,7 +84,7 @@ export default function PPTPresenterConsoleControls({
 				size="icon"
 				data-testid="ppt-presenter-console-prev-button"
 				className="size-8 text-white hover:bg-white/15 hover:text-white"
-				disabled={activeIndex <= 0 || isTransitioning}
+				disabled={!canGoPrevious || isTransitioning}
 				onClick={onPrevSlide}
 				aria-label={t("fileViewer.previousPage")}
 			>
@@ -124,7 +128,7 @@ export default function PPTPresenterConsoleControls({
 				size="icon"
 				data-testid="ppt-presenter-console-next-button"
 				className="size-8 text-white hover:bg-white/15 hover:text-white"
-				disabled={activeIndex >= totalSlides - 1 || isTransitioning}
+				disabled={!canGoNext || isTransitioning}
 				onClick={onNextSlide}
 				aria-label={t("fileViewer.nextPage")}
 			>

@@ -1,10 +1,17 @@
 import { act, cleanup, render, screen } from "@testing-library/react"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 import StablePreviewPortalSurface from "../StablePreviewPortalSurface"
+import { ElementContextPanel } from "../../../../contents/HTML/components/ElementContextPanel"
+import { resetOverlayStackForTest } from "@/utils/overlayZIndex/overlayStackManager"
+
+vi.mock("../../../../contents/HTML/components/StylePanel", () => ({
+	StylePanel: () => <div>Style controls</div>,
+}))
 
 describe("StablePreviewPortalSurface PPT viewport", () => {
 	let anchor: HTMLDivElement
 	beforeEach(() => {
+		resetOverlayStackForTest()
 		vi.stubGlobal(
 			"ResizeObserver",
 			class {
@@ -22,6 +29,38 @@ describe("StablePreviewPortalSurface PPT viewport", () => {
 			height: 400,
 		} as DOMRect)
 	})
+
+	it.each([false, true])(
+		"keeps an open editor toolbar above fullscreen and restores it on exit (initial fullscreen=%s)",
+		(initialFullscreen) => {
+			const view = (isFullscreen: boolean) => (
+				<StablePreviewPortalSurface
+					anchor={anchor}
+					enabled
+					visible
+					isPpt
+					isFullscreen={isFullscreen}
+				>
+					<iframe title="editable-slide" />
+					<ElementContextPanel
+						editorRef={{ current: null }}
+						anchor={{ top: 80, left: 80, width: 120, height: 40 }}
+						selector="h1"
+					/>
+				</StablePreviewPortalSurface>
+			)
+			const { rerender } = render(view(initialFullscreen))
+			const frame = screen.getByTitle("editable-slide")
+			const panel = screen.getByTestId("html-editor-context-panel")
+			rerender(view(true))
+			expect(Number(panel.style.zIndex)).toBeGreaterThan(1000)
+			expect(panel.className).not.toContain("!z-[920]")
+			rerender(view(false))
+			expect(panel.style.zIndex).toBe("920")
+			expect(screen.getByTestId("html-editor-context-panel")).toBe(panel)
+			expect(screen.getByTitle("editable-slide")).toBe(frame)
+		},
+	)
 	afterEach(async () => {
 		cleanup()
 		await Promise.resolve()

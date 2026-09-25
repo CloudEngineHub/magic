@@ -4,6 +4,9 @@ import type { VirtualItem } from "@tanstack/react-virtual"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 import PPTSidebar from "../index"
 import type { SlideItem } from "../types"
+import type { PPTDeckTools } from "../../hooks/usePPTDeckTools"
+
+vi.mock("../PPTDeckToolbar", () => ({ default: () => null }))
 
 interface ScrollAreaMockProps extends HTMLAttributes<HTMLDivElement> {
 	children?: ReactNode
@@ -290,6 +293,19 @@ function installRafController() {
 	}
 }
 
+function makeTools(overrides: Partial<PPTDeckTools> = {}): PPTDeckTools {
+	return {
+		selected: new Set<string>(),
+		selecting: false,
+		busy: false,
+		select: vi.fn(),
+		selectAll: vi.fn(),
+		clearSelection: vi.fn(),
+		reorder: vi.fn().mockResolvedValue(undefined),
+		...overrides,
+	} as unknown as PPTDeckTools
+}
+
 describe("PPTSidebar drag sorting", () => {
 	let rafController: ReturnType<typeof installRafController>
 
@@ -313,6 +329,112 @@ describe("PPTSidebar drag sorting", () => {
 	afterEach(() => {
 		vi.restoreAllMocks()
 		vi.unstubAllGlobals()
+	})
+
+	it("uses file identities for modifier selection and keeps plain clicks as navigation", () => {
+		const tools = makeTools()
+		const onSlideClick = vi.fn()
+		render(<PPTSidebar allowEdit tools={tools} onSlideClick={onSlideClick} />)
+		fireEvent.click(screen.getByTestId("ppt-sidebar-slide-item-slide-1"))
+		expect(onSlideClick).toHaveBeenCalledExactlyOnceWith(0)
+		fireEvent.click(screen.getByTestId("ppt-sidebar-slide-item-slide-2"), { ctrlKey: true })
+		fireEvent.click(screen.getByTestId("ppt-sidebar-slide-item-slide-3"), { shiftKey: true })
+		expect(tools.select).toHaveBeenNthCalledWith(1, "file-slide-2.html", false)
+		expect(tools.select).toHaveBeenNthCalledWith(2, "file-slide-3.html", true)
+		expect(onSlideClick).toHaveBeenCalledTimes(1)
+	})
+
+	it("shows selection separately from the active slide and scopes keyboard shortcuts to the sidebar", () => {
+		const tools = makeTools({ selecting: true, selected: new Set(["file-slide-2.html"]) })
+		const onSlideClick = vi.fn()
+		render(
+			<PPTSidebar
+				allowEdit
+				tools={tools}
+				hiddenPaths={new Set(["slide-2.html"])}
+				onSlideClick={onSlideClick}
+			/>,
+		)
+		expect(screen.getByTestId("ppt-sidebar-slide-item-slide-2")).toHaveAttribute(
+			"data-selected",
+			"true",
+		)
+		expect(screen.getByText("ppt.batch.hidden")).toBeInTheDocument()
+		fireEvent.click(screen.getAllByRole("checkbox")[0])
+		expect(tools.select).toHaveBeenCalledWith("file-slide-1.html", false)
+		expect(onSlideClick).not.toHaveBeenCalled()
+		const sidebar = screen.getByTestId("ppt-sidebar")
+		fireEvent.keyDown(sidebar, { key: "a", metaKey: true })
+		expect(tools.selectAll).toHaveBeenCalledTimes(1)
+		fireEvent.keyDown(sidebar, { key: "Escape" })
+		expect(tools.clearSelection).toHaveBeenCalledTimes(1)
+		const input = document.createElement("input")
+		sidebar.append(input)
+		fireEvent.keyDown(input, { key: "a", ctrlKey: true })
+		expect(tools.selectAll).toHaveBeenCalledTimes(1)
+	})
+
+	it("moves the selected group in original order and waits for confirmed store changes", async () => {
+		const tools = makeTools({ selected: new Set(["file-slide-1.html", "file-slide-2.html"]) })
+		const onSortChange = vi.fn()
+		render(
+			<PPTSidebar
+				allowEdit
+				tools={tools}
+				onSlideClick={vi.fn()}
+				onSortChange={onSortChange}
+			/>,
+		)
+		installViewportMetrics(getViewport())
+		const list = screen.getByTestId("ppt-sidebar-slides-list")
+		fireEvent.dragStart(screen.getByTestId("ppt-sidebar-slide-item-slide-1"), {
+			dataTransfer: { effectAllowed: "", setData: vi.fn() },
+		})
+		act(() => {
+			list.dispatchEvent(createNativeDragEvent("dragover", 480))
+		})
+		fireEvent.drop(list)
+		expect(tools.reorder).toHaveBeenCalledExactlyOnceWith([
+			"slide-3.html",
+			"slide-1.html",
+			"slide-2.html",
+		])
+		expect(onSortChange).not.toHaveBeenCalled()
+		expect(
+			screen
+				.getAllByTestId(/^ppt-sidebar-slide-item-/)
+				.map((element) => element.dataset.slideId),
+		).toEqual(["slide-1", "slide-2", "slide-3"])
+	})
+
+	it("prevents drag writes while a batch is busy", () => {
+		const tools = makeTools({ busy: true })
+		render(<PPTSidebar allowEdit tools={tools} onSlideClick={vi.fn()} />)
+		expect(screen.getByTestId("ppt-sidebar-slide-item-slide-1")).toHaveAttribute(
+			"draggable",
+			"false",
+		)
+		fireEvent.dragStart(screen.getByTestId("ppt-sidebar-slide-item-slide-1"), {
+			dataTransfer: { effectAllowed: "", setData: vi.fn() },
+		})
+		fireEvent.drop(screen.getByTestId("ppt-sidebar-slides-list"))
+		expect(tools.reorder).not.toHaveBeenCalled()
+	})
+
+	it("cancels a drop if a path resolves to a different file after drag start", () => {
+		const tools = makeTools({ selected: new Set(["file-slide-1.html", "file-slide-2.html"]) })
+		render(<PPTSidebar allowEdit tools={tools} onSlideClick={vi.fn()} />)
+		installViewportMetrics(getViewport())
+		const list = screen.getByTestId("ppt-sidebar-slides-list")
+		fireEvent.dragStart(screen.getByTestId("ppt-sidebar-slide-item-slide-1"), {
+			dataTransfer: { effectAllowed: "", setData: vi.fn() },
+		})
+		act(() => {
+			list.dispatchEvent(createNativeDragEvent("dragover", 480))
+		})
+		mockState.store.getFileIdByPath.mockReturnValueOnce("replaced-file")
+		fireEvent.drop(list)
+		expect(tools.reorder).not.toHaveBeenCalled()
 	})
 
 	it("sorts into whitespace between two virtual rows", async () => {

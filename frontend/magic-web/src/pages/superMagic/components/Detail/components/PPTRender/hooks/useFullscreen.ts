@@ -6,6 +6,8 @@ interface UseFullscreenOptions {
 	containerRef: RefObject<HTMLElement>
 	presenterTargetRef?: RefObject<HTMLElement>
 	presenterEnabled?: boolean
+	/** Runs for every entry path, including F11 and iframe shortcuts; exiting stays unconditional. */
+	beforeEnter?: () => boolean | Promise<boolean>
 }
 
 interface UseFullscreenReturn {
@@ -110,6 +112,7 @@ export function useFullscreen({
 	containerRef,
 	presenterTargetRef,
 	presenterEnabled = false,
+	beforeEnter,
 }: UseFullscreenOptions): UseFullscreenReturn {
 	const [isFullscreen, setIsFullscreen] = useState(false)
 	const [isPresenterView, setIsPresenterView] = useState(false)
@@ -200,6 +203,16 @@ export function useFullscreen({
 	})
 
 	const toggleFullscreen = useCallback(async () => {
+		if (!isFullscreen && !getFullscreenElement() && beforeEnter) {
+			try {
+				const result = beforeEnter()
+				// A clean visible slide must enter in the original user gesture, without a microtask.
+				if (typeof result === "boolean" ? !result : !(await result)) return
+			} catch (error) {
+				console.error("Presentation entry guard failed:", error)
+				return
+			}
+		}
 		try {
 			// Native fullscreen is unreliable inside the mobile app WebView; its fixed layout is the
 			// fullscreen surface, so only the local CSS state needs to change there.
@@ -266,7 +279,7 @@ export function useFullscreen({
 				await lockLandscapeOrientation()
 			}
 		}
-	}, [containerRef, exitNativeFullscreen, isFullscreen, tryEnterPresenterView])
+	}, [beforeEnter, containerRef, exitNativeFullscreen, isFullscreen, tryEnterPresenterView])
 
 	useEffect(() => {
 		function handleFullscreenChange() {
