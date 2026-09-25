@@ -14,6 +14,7 @@ import {
 	Copy,
 	LayoutTemplate,
 	EyeOff,
+	Eye,
 } from "lucide-react"
 import { useTranslation } from "react-i18next"
 import { cn } from "@/utils/cn"
@@ -51,6 +52,7 @@ function SortableSlideItem({
 	selectionMode = false,
 	onSelect,
 	isHidden = false,
+	onToggleHidden,
 	removeOnly = false,
 	screenshot,
 	totalSlides,
@@ -481,6 +483,16 @@ function SortableSlideItem({
 						{t("fileViewer.duplicateSlide")}
 					</ContextMenuItem>
 					<ContextMenuSeparator />
+					{onToggleHidden && (
+						<ContextMenuItem onSelect={onToggleHidden}>
+							{isHidden ? (
+								<Eye className="mr-2 size-4" />
+							) : (
+								<EyeOff className="mr-2 size-4" />
+							)}
+							{isHidden ? t("ppt.batch.show") : t("ppt.batch.hide")}
+						</ContextMenuItem>
+					)}
 					{onReplaceTemplate && (
 						<>
 							<ContextMenuItem

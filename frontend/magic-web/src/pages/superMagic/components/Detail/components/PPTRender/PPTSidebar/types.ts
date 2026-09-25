@@ -68,6 +68,7 @@ export interface SortableSlideItemProps {
 	selectionMode?: boolean
 	onSelect?: (range: boolean) => void
 	isHidden?: boolean
+	onToggleHidden?: () => void
 	removeOnly?: boolean
 	screenshot?: SlideScreenshot
 	totalSlides: number

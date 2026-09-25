@@ -652,6 +652,21 @@ function PPTSidebar({
 													: undefined
 											}
 											isHidden={hiddenPaths?.has(item.path)}
+											onToggleHidden={
+												tools && allowEdit && !tools.busy
+													? () => {
+															const fileId = store.getFileIdByPath(
+																item.path,
+															)
+															if (fileId)
+																void tools.setHidden(
+																	!hiddenPaths?.has(item.path),
+																	new Set([fileId]),
+																)
+														}
+													: undefined
+											}
+
 											totalSlides={items.length}
 											slideFileId={store.getFileIdByPath(item.path)}
 											slideFullRelativePath={store.getFullRelativePath(
