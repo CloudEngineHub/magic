@@ -999,6 +999,7 @@ const PPTRenderInner = observer(function PPTRenderInner({
 								}}
 							>
 								<PPTSidebar
+									onOpenFile={openNewTab}
 									onSlideClick={handleSlideClick}
 									onSortChange={effectiveAllowEdit ? handleSortChange : undefined}
 									onInsertSlide={

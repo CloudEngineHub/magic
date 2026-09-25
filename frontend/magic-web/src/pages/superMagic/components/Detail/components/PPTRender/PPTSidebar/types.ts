@@ -4,6 +4,7 @@
 export type SlideLoadingState = "idle" | "loading" | "loaded" | "error"
 
 export interface PPTSidebarProps {
+	onOpenFile?: (fileId: string, path: string) => void
 	onSlideClick: (index: number) => void
 	onSortChange?: (newSlides: SlideItem[]) => void
 	onInsertSlide?: (position: number, direction: "before" | "after") => void
@@ -67,6 +68,7 @@ export interface SortableSlideItemProps {
 	onAddToCurrentChat?: () => void
 	onAddToNewChat?: () => void
 	onReplaceTemplate?: () => void
+	onOpenFile?: (fileId: string, path: string) => void
 	onLocateFile?: () => void // Callback to locate file in file tree
 	onRefresh?: () => void // Callback to refresh slide content
 	onRegenerateScreenshot?: () => void // Callback to regenerate screenshot only

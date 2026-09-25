@@ -9,6 +9,7 @@ import {
 	MessageSquarePlus,
 	MessageSquare,
 	FileSearch,
+	FileSymlink,
 	RefreshCw,
 	Copy,
 	LayoutTemplate,
@@ -55,6 +56,7 @@ function SortableSlideItem({
 	onAddToNewChat,
 	onReplaceTemplate,
 	onLocateFile,
+	onOpenFile,
 	onRefresh,
 	onRegenerateScreenshot,
 	className,
@@ -383,6 +385,21 @@ function SortableSlideItem({
 						<FileSearch className="mr-2 size-4" />
 						{t("fileViewer.locateFile")}
 					</ContextMenuItem>
+					{onOpenFile && (
+						<ContextMenuItem
+							disabled={!slideFileId || !slideFullRelativePath}
+							onClick={(event) => {
+								event.stopPropagation()
+								if (slideFileId && slideFullRelativePath) {
+									// Open the source file instead of navigating within the deck.
+									onOpenFile(slideFileId, slideFullRelativePath)
+								}
+							}}
+						>
+							<FileSymlink className="mr-2 size-4" />
+							{t("fileViewer.openCorrespondingFile")}
+						</ContextMenuItem>
+					)}
 					<ContextMenuSeparator />
 					<ContextMenuItem
 						onClick={(e) => {

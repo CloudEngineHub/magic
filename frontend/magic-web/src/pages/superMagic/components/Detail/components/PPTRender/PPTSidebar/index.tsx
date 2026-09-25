@@ -38,6 +38,7 @@ const DRAG_AUTO_SCROLL_EDGE_SIZE = 56
 const DRAG_AUTO_SCROLL_MAX_SPEED = 20
 
 function PPTSidebar({
+	onOpenFile,
 	onSlideClick,
 	onSortChange,
 	onInsertSlide,
@@ -577,6 +578,7 @@ function PPTSidebar({
 													? () => onReplaceSlideTemplate(item.index)
 													: undefined
 											}
+											onOpenFile={onOpenFile}
 											onLocateFile={() => handleLocateFile(item.index)}
 											isMobile={isMobile}
 											className={cn(
