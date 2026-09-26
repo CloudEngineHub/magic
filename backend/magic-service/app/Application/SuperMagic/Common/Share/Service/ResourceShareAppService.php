@@ -33,6 +33,7 @@ use App\Domain\SuperMagic\Common\Share\Service\ResourceShareAccessLogDomainServi
 use App\Domain\SuperMagic\Common\Share\Service\ResourceShareCopyLogDomainService;
 use App\Domain\SuperMagic\Common\Share\Service\ResourceShareDomainService;
 use App\Domain\SuperMagic\File\Entity\TaskFileEntity;
+use App\Domain\SuperMagic\File\Entity\ValueObject\FileSpaceType;
 use App\Domain\SuperMagic\File\Repository\Facade\TaskFileRepositoryInterface;
 use App\Domain\SuperMagic\File\Service\AudioProjectDomainService;
 use App\Domain\SuperMagic\File\Service\FileCollectionDomainService;
@@ -1979,7 +1980,14 @@ class ResourceShareAppService extends AbstractShareAppService
                 }
                 $visited[$currentId] = true;
                 $path[] = $currentId;
-                if ($entityMap[$currentId]->getIsHidden()) {
+                // The project root is a tree boundary, not a user-visible
+                // content node. Historical data may mark it hidden; that
+                // flag must not hide every descendant in the shared tree.
+                $isProjectRoot = $entityMap[$currentId]->getParentId() === null
+                    && $entityMap[$currentId]->getIsDirectory()
+                    && $entityMap[$currentId]->getSpaceType() === FileSpaceType::PROJECT->value
+                    && $entityMap[$currentId]->getFileName() === '/';
+                if ($entityMap[$currentId]->getIsHidden() && ! $isProjectRoot) {
                     $hasHiddenAncestor = true;
                 }
                 $parentId = $entityMap[$currentId]->getParentId();
