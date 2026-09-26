@@ -140,6 +140,8 @@ tools:
 - YAML `exclude_builtin_tools` list → removes specific tools from the builtin baseline
 - No TOOLS.md provided → uses default tool set from `crew.template.agent`
 
+Range editing uses `find_file_range` and `edit_file_range` together. Excluding either removes both from the builtin baseline. Explicit entries in `tools` are added after exclusions: `edit_file_range` includes its required finder, while `find_file_range` alone remains read-only.
+
 ### Notes
 
 - Tool names must exactly match registered tools in the project
