@@ -349,7 +349,9 @@ export const useFileData = ({
 			)
 				return
 			// 是否正在查看历史版本
-			const isViewingHistoryVersion = fileVersion !== undefined
+			const isViewingHistoryVersion = selectedVersionRef.current !== undefined
+			// 历史版本读取可能在标签切换时被取消，回到活跃标签后仍需接管正文读取。
+			if (isViewingHistoryVersion) loadFile(selectedVersionRef.current)
 			// 如果用户正在查看历史版本，只更新版本列表，不自动切换到最新版本
 			getFileVersion(file_id, !isViewingHistoryVersion)
 		},
@@ -363,6 +365,7 @@ export const useFileData = ({
 			fileData,
 			fileApi,
 			responseType,
+			loadFile,
 			reloadRevision,
 			disabledUrlCache,
 			waitingForShareAccess,
