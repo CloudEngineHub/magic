@@ -303,6 +303,14 @@ class TaskFileDomainService
     }
 
     /**
+     * Get topic files using a stable file id cursor.
+     */
+    public function getTopicFilesByCursor(int $topicId, int $rootFileId, ?int $afterFileId, int $limit): array
+    {
+        return $this->taskFileRepository->getTopicFilesByCursor($topicId, $rootFileId, $afterFileId, $limit);
+    }
+
+    /**
      * Get a topic file tree page without creating directories.
      *
      * @return array{list: TaskFileEntity[], total: int, next_cursor: ?int}

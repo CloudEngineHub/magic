@@ -7,12 +7,12 @@ declare(strict_types=1);
 
 namespace App\Infrastructure\Util\Tiptap;
 
-use JsonException;
 use App\Infrastructure\Util\Tiptap\CustomExtension\HardBreakTextNode;
 use App\Infrastructure\Util\Tiptap\CustomExtension\ImageNode;
 use App\Infrastructure\Util\Tiptap\CustomExtension\MagicEmojiNode;
 use App\Infrastructure\Util\Tiptap\CustomExtension\MentionNode;
 use App\Infrastructure\Util\Tiptap\CustomExtension\QuickInstruction\QuickInstructionNode;
+use JsonException;
 use Tiptap\Editor;
 
 class TiptapUtil
@@ -67,19 +67,6 @@ class TiptapUtil
             ->getDocument();
     }
 
-    private static function getEditor(): Editor
-    {
-        return new Editor([
-            'extensions' => [
-                new QuickInstructionNode(),
-                new MentionNode(),
-                new ImageNode(),
-                new MagicEmojiNode(),
-                new HardBreakTextNode(),
-            ],
-        ]);
-    }
-
     /**
      * Normalize rich-text JSON before handing it to Tiptap.
      *
@@ -102,11 +89,24 @@ class TiptapUtil
         return $content;
     }
 
+    private static function getEditor(): Editor
+    {
+        return new Editor([
+            'extensions' => [
+                new QuickInstructionNode(),
+                new MentionNode(),
+                new ImageNode(),
+                new MagicEmojiNode(),
+                new HardBreakTextNode(),
+            ],
+        ]);
+    }
+
     private static function normalizeSurrogateEscapes(string $content): string
     {
         $pairs = [];
         $content = preg_replace_callback(
-            '/\\\\u([dD][89aAbB][0-9a-fA-F]{2})\\\\u([dD][c-fC-F][0-9a-fA-F]{2})/',
+            '/\\\u([dD][89aAbB][0-9a-fA-F]{2})\\\u([dD][c-fC-F][0-9a-fA-F]{2})/',
             static function (array $matches) use (&$pairs): string {
                 $placeholder = '__MAGIC_SURROGATE_PAIR_' . count($pairs) . '__';
                 $pairs[$placeholder] = $matches[0];
@@ -121,8 +121,8 @@ class TiptapUtil
 
         $content = preg_replace(
             [
-                '/\\\\u[dD][89aAbB][0-9a-fA-F]{2}/',
-                '/\\\\u[dD][c-fC-F][0-9a-fA-F]{2}/',
+                '/\\\u[dD][89aAbB][0-9a-fA-F]{2}/',
+                '/\\\u[dD][c-fC-F][0-9a-fA-F]{2}/',
             ],
             '',
             $content

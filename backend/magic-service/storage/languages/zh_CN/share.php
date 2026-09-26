@@ -59,4 +59,5 @@ return [
     'share_method_password' => '密码保护',
     'share_method_not_allowed' => '当前分享方式「:shareType」已被管理员关闭',
     'share_owner_permission_revoked' => '该分享链接已失效：分享者当前没有使用此分享方式的权限。',
+    'scope_version_expired' => '分享范围已变化，请重新加载',
 ];
