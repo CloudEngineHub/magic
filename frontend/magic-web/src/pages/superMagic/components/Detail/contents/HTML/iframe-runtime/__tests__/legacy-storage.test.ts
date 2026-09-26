@@ -11,12 +11,14 @@ describe("standalone legacy storage installer", () => {
 		if (sessionDescriptor) Object.defineProperty(window, "sessionStorage", sessionDescriptor)
 	}
 	beforeEach(() => {
+		Reflect.deleteProperty(window, "__MAGIC_LEGACY_STORAGE_FACTORY__")
 		nativeLocal.clear()
 		nativeSession.clear()
 	})
 	afterEach(() => {
 		vi.unstubAllGlobals()
 		restoreNativeStorage()
+		Reflect.deleteProperty(window, "__MAGIC_LEGACY_STORAGE_FACTORY__")
 		nativeLocal.clear()
 		nativeSession.clear()
 		vi.restoreAllMocks()
@@ -46,11 +48,9 @@ describe("standalone legacy storage installer", () => {
 	it("isolates document markers while preserving saved values for a later document", () => {
 		install({ markerId: "a" })
 		window.localStorage.setItem("item", "a-value")
-		restoreNativeStorage()
 		install({ markerId: "b" })
 		expect(window.localStorage.getItem("item")).toBeNull()
 		window.localStorage.setItem("item", "b-value")
-		restoreNativeStorage()
 		install({ markerId: "a" })
 		expect(window.localStorage.getItem("item")).toBe("a-value")
 	})

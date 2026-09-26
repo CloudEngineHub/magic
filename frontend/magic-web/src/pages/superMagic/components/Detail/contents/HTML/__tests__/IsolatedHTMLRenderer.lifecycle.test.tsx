@@ -102,7 +102,7 @@ describe("IsolatedHTMLRenderer lifecycle", () => {
 		},
 	)
 
-	it("updates the mounted document and rejects completion/metrics from the previous request", async () => {
+	it("restarts the preview document and rejects completion/metrics from the previous window", async () => {
 		const onRenderReady = vi.fn()
 		const onContentMetrics = vi.fn()
 		const props = { ...defaultProps, onRenderReady, onContentMetrics }
@@ -121,12 +121,20 @@ describe("IsolatedHTMLRenderer lifecycle", () => {
 
 		rerender(<IsolatedHTMLRenderer {...props} content="<html><body>updated</body></html>" />)
 		await flushReactEffects()
-		expect(screen.getByTestId("isolated-html-content-iframe")).toBe(iframe)
-		const calls = getSetContentCalls(postMessage)
-		expect(calls).toHaveLength(2)
-		const currentRequest = calls[1][0].navigationRequestId
+		const nextIframe = screen.getByTestId("isolated-html-content-iframe") as HTMLIFrameElement
+		expect(nextIframe).not.toBe(iframe)
+		expect(nextIframe.contentWindow).not.toBe(iframe.contentWindow)
+		const nextPostMessage = vi
+			.spyOn(nextIframe.contentWindow as Window, "postMessage")
+			.mockImplementation(vi.fn())
+		expect(getSetContentCalls(nextPostMessage)).toHaveLength(0)
+		dispatchIframeMessage(nextIframe, "iframeReady")
+		await flushReactEffects()
+		const calls = getSetContentCalls(nextPostMessage)
+		expect(calls).toHaveLength(1)
+		const currentRequest = calls[0][0].navigationRequestId
 		expect(currentRequest).not.toBe(previousRequest)
-		expect(calls[1][0].content).toContain("updated")
+		expect(calls[0][0].content).toContain("updated")
 		const metrics = { contentWidth: 800, contentHeight: 600, phase: "settled" }
 		for (const type of ["renderComplete", "pageFullyLoaded", "contentMetrics"]) {
 			dispatchIframeMessage(iframe, type, window.location.origin, {
@@ -136,11 +144,11 @@ describe("IsolatedHTMLRenderer lifecycle", () => {
 		}
 		expect(onRenderReady).toHaveBeenCalledTimes(1)
 		expect(onContentMetrics).not.toHaveBeenCalled()
-		dispatchIframeMessage(iframe, "contentMetrics", window.location.origin, {
+		dispatchIframeMessage(nextIframe, "contentMetrics", window.location.origin, {
 			...metrics,
 			navigationRequestId: currentRequest,
 		})
-		dispatchIframeMessage(iframe, "renderComplete", window.location.origin, {
+		dispatchIframeMessage(nextIframe, "renderComplete", window.location.origin, {
 			navigationRequestId: currentRequest,
 		})
 		expect(onContentMetrics).toHaveBeenCalledWith(expect.objectContaining(metrics))

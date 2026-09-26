@@ -9,11 +9,7 @@ import {
 import { getNestedIframeInterceptorScript } from "./nested-iframe-content"
 import { getDevicePreviewScrollbarsScript } from "./device-preview-scrollbars"
 import { rewriteHtmlLocationHref } from "./location-href-rewrite"
-import {
-	createEphemeralVirtualStorageContext,
-	getVirtualStorageBridgeScript,
-	type VirtualStorageRuntimeContext,
-} from "./virtual-storage"
+import { getVirtualStorageBridgeScript, type VirtualStorageRuntimeContext } from "./virtual-storage"
 import { INSPECTABLE_TEXT_CONTENT_SCRIPT } from "@dtyq/html-sandbox/utils/inspectableTextContent"
 import { configStore } from "@/models/config"
 import { normalizeLocale } from "@/utils/locale"
@@ -1062,7 +1058,9 @@ const getDynamicResourceInterceptorScript = (options: DynamicResourceInterceptor
 			installDeferredResourceUrlHooks();
 
 			function replaceStyleText(styleText, applyResult) {
-				if (!styleText || shouldSkipUrl(styleText)) return;
+				// A style may contain resolved rules plus newly appended relative URLs.
+				// Inspect each URL; absolute replacements naturally stop the observer loop.
+				if (!styleText) return;
 
 				var urlRegex = /url\\(\\s*(['"]?)([^'")]+)\\1\\s*\\)/gi;
 				var match = null;
@@ -1112,7 +1110,9 @@ const getDynamicResourceInterceptorScript = (options: DynamicResourceInterceptor
 				if (!element || !element.getAttribute) return;
 				var styleText = element.getAttribute("style");
 				replaceStyleText(styleText, function(nextStyle) {
-					nativeElementSetAttribute.call(element, "style", nextStyle);
+					if (element.getAttribute("style") === styleText) {
+						nativeElementSetAttribute.call(element, "style", nextStyle);
+					}
 				});
 			}
 
@@ -1120,7 +1120,8 @@ const getDynamicResourceInterceptorScript = (options: DynamicResourceInterceptor
 				if (!element) return;
 				var styleText = element.textContent || "";
 				replaceStyleText(styleText, function(nextStyle) {
-					element.textContent = nextStyle;
+					// URL responses may arrive out of order after authored CSS changes.
+					if (element.textContent === styleText) element.textContent = nextStyle;
 				});
 			}
 
@@ -1217,6 +1218,15 @@ const getDynamicResourceInterceptorScript = (options: DynamicResourceInterceptor
 					if (!isEnabled) return;
 
 					mutations.forEach(function(mutation) {
+						// textContent replaces Text children; Text.data emits characterData.
+						// Reprocess only their STYLE owner. Rewritten absolute URLs do not
+						// schedule another lookup when this write triggers the observer.
+						var styleOwner = mutation.type === "characterData"
+							? mutation.target.parentElement
+							: mutation.type === "childList" ? mutation.target : null;
+						if (styleOwner && styleOwner.tagName === "STYLE") {
+							replaceStyleTag(styleOwner);
+						}
 						if (mutation.type === "childList") {
 							mutation.addedNodes.forEach(function(node) {
 								processNodeTree(node);
@@ -1243,6 +1253,7 @@ const getDynamicResourceInterceptorScript = (options: DynamicResourceInterceptor
 
 				observer.observe(document.documentElement, {
 					childList: true,
+					characterData: true,
 					subtree: true,
 					attributes: true,
 					attributeFilter: [
@@ -1628,8 +1639,7 @@ export const getFullContent = (
 		options.postMessageTargetStrategy ??
 		dynamicInterceptionOptions.postMessageTargetStrategy ??
 		POST_MESSAGE_TARGET_STRATEGIES.SAME_ORIGIN_ANCESTOR
-	const virtualStorageContext =
-		options.virtualStorage ?? createEphemeralVirtualStorageContext(markerId || "default")
+	const virtualStorageContext = options.virtualStorage
 	// Explicit host contexts use the virtual storage bridge. Installing legacy
 	// cookie/IndexedDB mocks afterward would overwrite that bridge and lose writes.
 	// Keep legacy mocks for standalone callers using marker-based isolation.
@@ -1697,7 +1707,7 @@ export const getFullContent = (
 	scriptElement.textContent = `
 		${getSandboxTelemetryScript(dynamicInterceptionOptions.fileId || markerId)}
 		${getPostMessageTargetBootstrapScript(postMessageTargetStrategy)}
-		${getVirtualStorageBridgeScript(virtualStorageContext)}
+		${virtualStorageContext ? getVirtualStorageBridgeScript(virtualStorageContext) : ""}
 		${shouldInjectLegacyStorageMock ? getCookieMockScript() : ""}
 		${shouldInjectLegacyStorageMock ? getStorageMockScript(markerId) : ""}
 		${shouldInjectLegacyStorageMock ? getIndexedDBMockScript() : ""}
@@ -1712,7 +1722,7 @@ export const getFullContent = (
 					)
 				: ""
 		}
-		${getDynamicResourceInterceptorScript(dynamicInterceptionOptions)}
+		${getDynamicResourceInterceptorScript({ ...dynamicInterceptionOptions, postMessageTargetStrategy })}
 		${getInlineInspectorFallbackScript(options.enableInlineInspectorFallback === true)}
 		${
 			typeof options.devicePreviewScrollbars === "boolean"

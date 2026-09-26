@@ -2,13 +2,46 @@ export interface LegacyStorageOptions {
 	markerId?: string
 }
 
+type StoragePair = { localStorage: Storage; sessionStorage: Storage }
+type StorageFactory = (markerId?: string) => StoragePair
+type StorageWindow = Window & { __MAGIC_LEGACY_STORAGE_FACTORY__?: StorageFactory }
+
 /** Namespace the native stores for standalone HTML, preserving the legacy key format. */
 export default function install({ markerId }: LegacyStorageOptions): void {
-	const storageKey = `MAGIC:iframe:storage:${markerId || "default"}`
-	const globalStorageKey = "MAGIC:iframe:storage:global"
 	try {
-		const originalLocalStorage = window.localStorage
-		const originalSessionStorage = window.sessionStorage
+		const storageWindow = window as StorageWindow
+		if (!storageWindow.__MAGIC_LEGACY_STORAGE_FACTORY__) {
+			// A new document can reuse this Window. Keep native references in the closure,
+			// not on a public property, so reinstalling never wraps the previous facade.
+			storageWindow.__MAGIC_LEGACY_STORAGE_FACTORY__ = createStorageFactory(
+				window.localStorage,
+				window.sessionStorage,
+			)
+		}
+		const { localStorage, sessionStorage } =
+			storageWindow.__MAGIC_LEGACY_STORAGE_FACTORY__(markerId)
+		Object.defineProperty(window, "sessionStorage", {
+			value: sessionStorage,
+			writable: false,
+			configurable: true,
+		})
+		Object.defineProperty(window, "localStorage", {
+			value: localStorage,
+			writable: false,
+			configurable: true,
+		})
+	} catch (error) {
+		console.warn("Storage mock skipped:", error instanceof Error ? error.message : undefined)
+	}
+}
+
+function createStorageFactory(
+	originalLocalStorage: Storage,
+	originalSessionStorage: Storage,
+): StorageFactory {
+	return (markerId) => {
+		const storageKey = `MAGIC:iframe:storage:${markerId || "default"}`
+		const globalStorageKey = "MAGIC:iframe:storage:global"
 
 		const createStorageProxy = (storage: Storage): Storage => {
 			const read = (): Record<string, string> =>
@@ -61,20 +94,9 @@ export default function install({ markerId }: LegacyStorageOptions): void {
 			}
 		}
 
-		// Capture both native references before replacing either property, as before.
-		const localStorage = createStorageProxy(originalLocalStorage)
-		const sessionStorage = createStorageProxy(originalSessionStorage)
-		Object.defineProperty(window, "sessionStorage", {
-			value: sessionStorage,
-			writable: false,
-			configurable: true,
-		})
-		Object.defineProperty(window, "localStorage", {
-			value: localStorage,
-			writable: false,
-			configurable: true,
-		})
-	} catch (error) {
-		console.warn("Storage mock skipped:", error instanceof Error ? error.message : undefined)
+		return {
+			localStorage: createStorageProxy(originalLocalStorage),
+			sessionStorage: createStorageProxy(originalSessionStorage),
+		}
 	}
 }

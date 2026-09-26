@@ -321,11 +321,16 @@ describe("IsolatedHTMLRenderer iframe injection", () => {
 			await Promise.resolve()
 		})
 
-		const setContentCalls = getSetContentCalls(postMessage)
-		expect(setContentCalls).toHaveLength(2)
-		expect(setContentCalls[1][0]).toMatchObject({
-			content: setContentCalls[0][0].content,
-		})
+		const nextIframe = screen.getByTestId("isolated-html-content-iframe") as HTMLIFrameElement
+		expect(nextIframe).not.toBe(iframe)
+		const nextPostMessage = vi
+			.spyOn(nextIframe.contentWindow as Window, "postMessage")
+			.mockImplementation(vi.fn())
+		dispatchIframeMessage(nextIframe, "iframeReady")
+		await flushReactEffects()
+		const setContentCalls = getSetContentCalls(nextPostMessage)
+		expect(setContentCalls).toHaveLength(1)
+		expect(setContentCalls[0][0].content).toBe(getSetContentCalls(postMessage)[0][0].content)
 	})
 
 	it("updates location query when the same HTML navigation changes", async () => {

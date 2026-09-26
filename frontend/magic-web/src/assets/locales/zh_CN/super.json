@@ -3112,6 +3112,10 @@
 			"updateDurationSuccess": "授权时长已更新",
 			"version": "应用版本"
 		},
+		"previewRefreshFailed": "预览未能更新，当前内容可能不是最新版本。",
+		"previewRefreshTooltip": "重新加载最新内容，并重新运行页面。",
+		"previewRetry": "重试",
+		"previewUpdating": "正在更新预览…",
 		"projectContextUnavailable": "分享场景下，该功能暂不支持，可尝试通过协作的方式进行分享。",
 		"projectFileOperationConfirm": {
 			"cancel": "取消",
@@ -3129,6 +3133,7 @@
 			},
 			"title": "确认{{operation}}项目文件"
 		},
+		"serverUpdateTooltip": "服务端已有新内容。先比较版本，当前未保存的编辑会保留。",
 		"specifiedAgentUnavailable": "当前无法使用指定员工，已沿用本会话员工",
 		"userInfoAuthorizationConfirm": {
 			"allow": "允许",

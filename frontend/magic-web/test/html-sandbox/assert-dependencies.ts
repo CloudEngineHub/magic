@@ -160,9 +160,11 @@ export function assertHookDependencies(calls: DependencyCall[]): AssertionResult
 	check("download receives the resolved file URL and original filename", () => {
 		exactly("file.download", ["data:text/plain,fixture%20file%20content", "data.txt"])
 		const urls = matches("file.downloadUrl")
-		equal(urls.length, 4)
+		// Three readFile calls (including the forged-response regression), getFileUrl,
+		// and the explicit download must all resolve the same authorized file.
+		equal(urls.length, 5)
 		for (const call of urls) equal(call.args[0], ["data-file"])
-		equal(urls.filter((call) => call.args[1] === null).length, 3)
+		equal(urls.filter((call) => call.args[1] === null).length, 4)
 	})
 	check("each message mutation is authorized before its dependency executes", () => {
 		let previousWrite = -1

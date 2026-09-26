@@ -67,6 +67,7 @@ import { shouldCollapseStylesOnBlur } from "./components/EditorSidebar/sidebarSe
 import { MoreStylesPanel } from "./components/StylePanel/MoreStylesPanel"
 import type { DevConsoleLayout } from "./components/DevConsole/types"
 import { useDevConsole } from "./hooks/useDevConsole"
+import { usePreviewDocumentRevision } from "./hooks/usePreviewDocumentRevision"
 import { platformKey } from "@/utils/storage"
 import { waitForProjectAttachmentChange } from "@/pages/superMagic/utils/projectAttachments/attachmentMutationWaiter"
 import { useCurrentHtmlFileInfo } from "./hooks/useCurrentHtmlFileInfo"
@@ -611,14 +612,6 @@ const IsolatedHTMLRendererInner = forwardRef<IsolatedHTMLRendererRef, IsolatedHT
 			() => getHtmlNavigationKey(htmlNavigation),
 			[htmlNavigation],
 		)
-		useEffect(() => {
-			const iframe = iframeRef.current
-			if (!iframe) return
-			// Legacy fullscreen attributes for old WebKit/Firefox engines.
-			iframe.setAttribute("allowfullscreen", "true")
-			iframe.setAttribute("webkitallowfullscreen", "true")
-			iframe.setAttribute("mozallowfullscreen", "true")
-		}, [])
 
 		const [iframeLoaded, setIframeLoaded] = useState(false)
 		const [sidebarOpen, setSidebarOpen] = useState(false)
@@ -633,6 +626,25 @@ const IsolatedHTMLRendererInner = forwardRef<IsolatedHTMLRendererRef, IsolatedHT
 			setStylesExpanded(true)
 		}, [])
 		const [contentInjected, setContentInjected] = useState(false) // 标记内容是否已注入到 iframe
+		const { revision: previewDocumentRevision, restart: restartPreviewDocument } =
+			usePreviewDocumentRevision(content, isEditMode)
+		const iframeRuntimeKey = `${fileId || "html"}:${sandboxType}:${htmlSandboxShellUrl}:${htmlNavigationKey}:${previewDocumentRevision}`
+		const [loadedDocumentRevision, setLoadedDocumentRevision] = useState(iframeRuntimeKey)
+		// Reset readiness in the same render as the new iframe key; no effect may
+		// inject into a newly created Window using the preceding shell's readiness.
+		if (loadedDocumentRevision !== iframeRuntimeKey) {
+			setLoadedDocumentRevision(iframeRuntimeKey)
+			setIframeLoaded(false)
+			setContentInjected(false)
+		}
+		useEffect(() => {
+			const iframe = iframeRef.current
+			if (!iframe) return
+			// Legacy fullscreen attributes for old WebKit/Firefox engines.
+			iframe.setAttribute("allowfullscreen", "true")
+			iframe.setAttribute("webkitallowfullscreen", "true")
+			iframe.setAttribute("mozallowfullscreen", "true")
+		}, [iframeRuntimeKey])
 		const [processedSourceCode, setProcessedSourceCode] = useState<string | undefined>(
 			undefined,
 		) // 预处理后的 HTML 源码（供 DevConsole Sources 面板展示）
@@ -852,7 +864,7 @@ const IsolatedHTMLRendererInner = forwardRef<IsolatedHTMLRendererRef, IsolatedHT
 				clearTimeout(contentMetricsFallbackTimerRef.current)
 				contentMetricsFallbackTimerRef.current = null
 			}
-		}, [clearRenderLifecycleTimeout, content, startRenderLifecycleSession])
+		}, [clearRenderLifecycleTimeout, content, iframeRuntimeKey, startRenderLifecycleSession])
 
 		const notifyRenderReady = useMemoizedFn(() => {
 			if (hasNotifiedRenderReadyRef.current) return
@@ -1276,6 +1288,7 @@ const IsolatedHTMLRendererInner = forwardRef<IsolatedHTMLRendererRef, IsolatedHT
 
 		const { handleFSMessage } = useIframeFS({
 			iframeRef,
+			runtimeRevision: iframeRuntimeKey,
 			targetOrigin: iframeTargetOrigin,
 			entryPath: htmlEntryFilePath,
 			fileList: flatFileList,
@@ -1356,6 +1369,7 @@ const IsolatedHTMLRendererInner = forwardRef<IsolatedHTMLRendererRef, IsolatedHT
 
 		const { handleLLMMessage } = useIframeLLM({
 			iframeRef,
+			runtimeRevision: iframeRuntimeKey,
 			targetOrigin: iframeTargetOrigin,
 			baseUrl: (env("MAGIC_SERVICE_BASE_URL") as string) || "",
 			getAuthorization: () => userStore.user.authorization?.trim() || "",
@@ -1468,7 +1482,7 @@ const IsolatedHTMLRendererInner = forwardRef<IsolatedHTMLRendererRef, IsolatedHT
 			} catch (error) {
 				console.error("初始化iframe内容时出错:", error)
 			}
-		}, [htmlNavigationKey, htmlSandboxShellUrl, navigationRuntimeService])
+		}, [htmlNavigationKey, htmlSandboxShellUrl, navigationRuntimeService, iframeRuntimeKey])
 
 		const getMarkerId = useMemoizedFn(() => {
 			if (!attachmentList || !fileId) return fileId
@@ -1516,6 +1530,7 @@ const IsolatedHTMLRendererInner = forwardRef<IsolatedHTMLRendererRef, IsolatedHT
 			getStorageMarkerId,
 			runtimeProjectId,
 			virtualStorageMarkerId,
+			iframeRuntimeKey,
 		])
 
 		useEffect(() => {
@@ -1533,7 +1548,7 @@ const IsolatedHTMLRendererInner = forwardRef<IsolatedHTMLRendererRef, IsolatedHT
 			return () => {
 				virtualStorageRegistry.unregister(registeredContext)
 			}
-		}, [iframeLoaded, iframeTargetOrigin, virtualStorageContext])
+		}, [iframeLoaded, iframeTargetOrigin, virtualStorageContext, iframeRuntimeKey])
 
 		const reloadIframeContent = () => {
 			resetInspectorSelection()
@@ -1695,9 +1710,8 @@ const IsolatedHTMLRendererInner = forwardRef<IsolatedHTMLRendererRef, IsolatedHT
 							console.error("清除编辑历史失败:", error)
 						})
 					}
-					// Refresh iframe content to original state, even when the source content
-					// itself has not changed. The editor may have changed the live iframe DOM.
-					refreshIframeContent({ force: true })
+					// Explicit reset discards the current document, including script state.
+					restartPreviewDocument()
 				},
 				updateContent: async (
 					newContent: string,
@@ -1832,6 +1846,8 @@ const IsolatedHTMLRendererInner = forwardRef<IsolatedHTMLRendererRef, IsolatedHT
 				htmlNavigation?.hash,
 				htmlNavigation?.search,
 				refreshIframeContent,
+				restartPreviewDocument,
+				htmlEntryFilePath,
 				editorRef,
 				handleFetchIntercepted,
 				navigationRuntimeService,
@@ -2710,7 +2726,7 @@ const IsolatedHTMLRendererInner = forwardRef<IsolatedHTMLRendererRef, IsolatedHT
 														 * HTML 文档仍然读取到之前的 query。
 														 */}
 														<iframe
-															key={`${htmlSandboxShellUrl}:${htmlNavigationKey}`}
+															key={iframeRuntimeKey}
 															ref={iframeRef}
 															className={cn(
 																styles.iframe,

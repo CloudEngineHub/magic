@@ -13,6 +13,7 @@ import {
 import type { FileApi } from "../../src/pages/superMagic/fileAccess/fileApi"
 import { mountHookHost } from "./hook-host"
 import { assertHookDependencies } from "./assert-dependencies"
+import { runRefreshExample } from "./refresh-host"
 import type { ConsoleEntry } from "../../packages/html-sandbox/src/features/ConsoleProxy"
 import type { NetworkEntry } from "../../packages/html-sandbox/src/features/NetworkInterceptor"
 import type { ApiCallEntry } from "../../packages/html-sandbox/src/features/ApiCallProxy"
@@ -38,7 +39,14 @@ const status = requiredElement("#status")
 const list = requiredElement("#results")
 const button = requiredElement<HTMLButtonElement>("#run")
 const scenarioSelect = requiredElement<HTMLSelectElement>("#scenario")
-const resourceNames = ["resource.json", "resource.js", "resource.css", "resource.svg"]
+const resourceNames = [
+	"resource.json",
+	"resource.js",
+	"resource.css",
+	"resource.svg",
+	"resource-xhr.json",
+	"resource-abort.json",
+]
 
 function report(result: Result) {
 	results.push(result)
@@ -244,6 +252,12 @@ async function runExample(name: string, crossOrigin: boolean) {
 					snapshot.cookies.fixtureCookie === "hello",
 			})
 			report({
+				name: label + " · host snapshot excludes expired cookies and aborted writes",
+				passed:
+					snapshot.cookies.shortLived === undefined &&
+					!JSON.stringify(snapshot.indexedDB).includes('"discard"'),
+			})
+			report({
 				name: label + " · storage operations reached real host handler",
 				passed:
 					outgoing.includes("HTML_SANDBOX_STORAGE_OP") &&
@@ -361,13 +375,14 @@ window.runFixtures = async () => {
 	try {
 		const names =
 			scenarioSelect.value === "all"
-				? ["api", "resources", "storage", "devtools"]
+				? ["api", "resources", "storage", "devtools", "refresh"]
 				: [scenarioSelect.value]
 		for (const name of names) {
 			for (const crossOrigin of [false, true]) {
 				status.textContent = `Running ${name} · ${crossOrigin ? "cross-origin" : "same-origin"}`
 				try {
-					await runExample(name, crossOrigin)
+					if (name === "refresh") await runRefreshExample(frames, crossOrigin, report)
+					else await runExample(name, crossOrigin)
 				} catch (error) {
 					report({ name: status.textContent, passed: false, error: String(error) })
 				}

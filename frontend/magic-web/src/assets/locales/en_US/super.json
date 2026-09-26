@@ -3112,6 +3112,10 @@
 			"updateDurationSuccess": "Authorization duration updated",
 			"version": "App version"
 		},
+		"previewRefreshFailed": "The preview could not update. The displayed content may be out of date.",
+		"previewRefreshTooltip": "Load the latest content and restart the page.",
+		"previewRetry": "Retry",
+		"previewUpdating": "Updating preview…",
 		"projectContextUnavailable": "This feature is not supported in share mode. Try sharing through collaboration instead.",
 		"projectFileOperationConfirm": {
 			"cancel": "Cancel",
@@ -3129,6 +3133,7 @@
 			},
 			"title": "Confirm Project File {{operation}}"
 		},
+		"serverUpdateTooltip": "New content is available on the server. Compare versions while keeping your unsaved edits.",
 		"specifiedAgentUnavailable": "This conversation cannot use the specified agent. Using the current one.",
 		"userInfoAuthorizationConfirm": {
 			"allow": "Allow",

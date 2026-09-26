@@ -6,6 +6,7 @@ import { buildFixtures, outputRoot } from "./build-fixtures"
 
 export async function serveFixtures() {
 	await buildFixtures()
+	const resourceRequests: string[] = []
 	const mime: Record<string, string> = {
 		".html": "text/html; charset=utf-8",
 		".js": "text/javascript",
@@ -20,6 +21,43 @@ export async function serveFixtures() {
 			// if an old generated resource remains from a previous fixture build.
 			if (/^\/resource\./.test(path)) {
 				res.writeHead(404).end("Resource requires host URL resolution")
+				return
+			}
+			if (
+				path === "/resolved-assets/resource-xhr.json" ||
+				path === "/resolved-assets/resource-abort.json" ||
+				path === "/resource-test-state"
+			) {
+				res.setHeader("Access-Control-Allow-Origin", "*")
+				res.setHeader(
+					"Access-Control-Allow-Headers",
+					"x-fixture-id, x-fixture-values, content-type",
+				)
+				res.setHeader("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
+				res.setHeader("Cache-Control", "no-store")
+				if (req.method === "OPTIONS") {
+					res.writeHead(204).end()
+					return
+				}
+				res.setHeader("Content-Type", "application/json")
+				if (path === "/resource-test-state") {
+					const prefix =
+						new URL(req.url || "/", "http://localhost").searchParams.get("prefix") || ""
+					res.end(JSON.stringify(resourceRequests.filter((id) => id.startsWith(prefix))))
+					return
+				}
+				const marker = String(req.headers["x-fixture-id"] || "")
+				resourceRequests.push(marker)
+				let body = ""
+				for await (const chunk of req) body += chunk
+				res.end(
+					JSON.stringify({
+						method: req.method,
+						body,
+						marker,
+						values: req.headers["x-fixture-values"] || "",
+					}),
+				)
 				return
 			}
 			// LLM service remains real, including token exchange and SSE parsing.

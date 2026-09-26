@@ -100,6 +100,7 @@ describe("MagicI18nApi", () => {
 					results: { lang: "en-US" },
 				},
 				source: window.parent,
+				origin: window.location.origin,
 			}),
 		)
 
@@ -121,6 +122,7 @@ describe("MagicI18nApi", () => {
 					results: { lang: "en-US" },
 				},
 				source: window.parent,
+				origin: window.location.origin,
 			}),
 		)
 
@@ -142,6 +144,7 @@ describe("MagicI18nApi", () => {
 					results: { lang: "en-US" },
 				},
 				source: window.parent,
+				origin: window.location.origin,
 			}),
 		)
 
@@ -158,6 +161,7 @@ describe("MagicI18nApi", () => {
 			new MessageEvent("message", {
 				data: { type: "OTHER_MESSAGE", success: true, results: { lang: "en-US" } },
 				source: window.parent,
+				origin: window.location.origin,
 			}),
 		)
 
@@ -180,6 +184,7 @@ describe("MagicI18nApi", () => {
 					results: { lang: "en-US" },
 				},
 				source: window.parent,
+				origin: window.location.origin,
 			}),
 		)
 
@@ -200,6 +205,7 @@ describe("MagicI18nApi", () => {
 					results: { lang: "en-US" },
 				},
 				source: window.parent,
+				origin: window.location.origin,
 			}),
 		)
 

@@ -10,6 +10,10 @@ import HTML from "../index"
 
 const mockIsolatedHTMLRendererProps = vi.hoisted(() => vi.fn())
 const mockResetContent = vi.hoisted(() => vi.fn())
+const fileLoadState = vi.hoisted(() => ({
+	status: undefined as undefined | "loading" | "ready" | "error",
+	revision: 0,
+}))
 
 const mockGetFileContentById = vi.fn()
 const mockProcessHtmlContent = vi.fn(async ({ content }: { content?: string }) => ({
@@ -114,6 +118,10 @@ vi.mock("../styles", () => ({
 vi.mock("@/pages/superMagic/hooks/useFileData", () => ({
 	useFileData: ({ file_id, content }: { file_id?: string; content?: string }) => ({
 		fileData: file_id ? "<html><body>base</body></html>" : content || "",
+		refreshFile: vi.fn(),
+		loadStatus: fileLoadState.status,
+		loadRevision: fileLoadState.revision,
+		loadError: fileLoadState.status === "error" ? "offline" : null,
 		fileVersion: 1,
 		changeFileVersion: vi.fn(),
 		loading: false,
@@ -558,10 +566,187 @@ const baseProps = {
 
 describe("HTML", () => {
 	beforeEach(() => {
+		fileLoadState.status = undefined
+		fileLoadState.revision = 0
 		mockGetFileContentById.mockReset()
 		mockProcessHtmlContent.mockClear()
 		mockIsolatedHTMLRendererProps.mockClear()
 		mockResetContent.mockClear()
+	})
+
+	it("keeps the last working preview on processing failure and retries explicitly", async () => {
+		const data = {
+			...baseProps.data,
+			content: "<html>working</html>",
+			display_config: { previewPolicy: { keepLocalContent: true } },
+		}
+		const { rerender } = render(
+			<HTML {...baseProps} data={data} viewMode="desktop" isEditMode={false} />,
+		)
+		await waitFor(() =>
+			expect(mockIsolatedHTMLRendererProps.mock.lastCall?.[0].content).toContain("working"),
+		)
+		act(() => mockIsolatedHTMLRendererProps.mock.lastCall?.[0].onRenderReady())
+		const originalProcessor = mockProcessHtmlContent.getMockImplementation()
+		if (!originalProcessor) throw new Error("Missing HTML processor fixture")
+		mockProcessHtmlContent.mockRejectedValue(new Error("resource unavailable"))
+		rerender(
+			<HTML
+				{...baseProps}
+				data={{ ...data, content: "<html>newest</html>" }}
+				viewMode="desktop"
+				isEditMode={false}
+			/>,
+		)
+		await waitFor(() =>
+			expect(screen.getByRole("status")).toHaveTextContent("htmlEditor.previewRefreshFailed"),
+		)
+		expect(mockIsolatedHTMLRendererProps.mock.lastCall?.[0].content).toContain("working")
+		mockProcessHtmlContent.mockImplementation(originalProcessor)
+		fireEvent.click(screen.getByRole("button", { name: "htmlEditor.previewRetry" }))
+		await waitFor(() =>
+			expect(mockIsolatedHTMLRendererProps.mock.lastCall?.[0].content).toContain("newest"),
+		)
+		act(() => mockIsolatedHTMLRendererProps.mock.lastCall?.[0].onRenderReady())
+		expect(screen.queryByRole("status")).toBeNull()
+	})
+
+	it("ignores slow processing from an older file update", async () => {
+		const originalProcessor = mockProcessHtmlContent.getMockImplementation()
+		if (!originalProcessor) throw new Error("Missing HTML processor fixture")
+		const finishSlow: Array<() => void> = []
+		mockProcessHtmlContent.mockImplementation((input) => {
+			if (input.content?.includes("slow"))
+				return new Promise((resolve) => {
+					finishSlow.push(() => {
+						void originalProcessor(input).then(resolve)
+					})
+				})
+			return originalProcessor(input)
+		})
+		const data = {
+			...baseProps.data,
+			content: "<html>slow</html>",
+			display_config: { previewPolicy: { keepLocalContent: true } },
+		}
+		const { rerender } = render(
+			<HTML {...baseProps} data={data} viewMode="desktop" isEditMode={false} />,
+		)
+		await waitFor(() => expect(finishSlow.length).toBeGreaterThan(0))
+		rerender(
+			<HTML
+				{...baseProps}
+				data={{ ...data, content: "<html>latest</html>" }}
+				viewMode="desktop"
+				isEditMode={false}
+			/>,
+		)
+		await waitFor(() =>
+			expect(mockIsolatedHTMLRendererProps.mock.lastCall?.[0].content).toContain("latest"),
+		)
+		await act(async () => {
+			finishSlow.forEach((finish) => finish())
+		})
+		expect(mockIsolatedHTMLRendererProps.mock.lastCall?.[0].content).toContain("latest")
+		mockProcessHtmlContent.mockImplementation(originalProcessor)
+	})
+
+	it("clears a previously rendered preview when the accepted file becomes empty", async () => {
+		const data = {
+			...baseProps.data,
+			content: "<html>previous</html>",
+			display_config: { previewPolicy: { keepLocalContent: true } },
+		}
+		const { rerender } = render(
+			<HTML {...baseProps} data={data} viewMode="desktop" isEditMode={false} />,
+		)
+		await waitFor(() =>
+			expect(mockIsolatedHTMLRendererProps.mock.lastCall?.[0].content).toContain("previous"),
+		)
+		rerender(
+			<HTML
+				{...baseProps}
+				data={{ ...data, content: "" }}
+				viewMode="desktop"
+				isEditMode={false}
+			/>,
+		)
+		await waitFor(() =>
+			expect(mockIsolatedHTMLRendererProps.mock.lastCall?.[0].content).toBe(""),
+		)
+		expect(screen.queryByTestId("magic-spin")).toBeNull()
+		expect(screen.queryByRole("status")).toBeNull()
+	})
+
+	it("keeps the editing baseline when remote props change during editing", async () => {
+		const data = {
+			...baseProps.data,
+			content: "<html>editing baseline</html>",
+			display_config: { previewPolicy: { keepLocalContent: true } },
+		}
+		const { rerender } = render(
+			<HTML {...baseProps} data={data} viewMode="desktop" isEditMode />,
+		)
+		await waitFor(() =>
+			expect(mockIsolatedHTMLRendererProps.mock.lastCall?.[0].content).toContain(
+				"editing baseline",
+			),
+		)
+		rerender(
+			<HTML
+				{...baseProps}
+				data={{ ...data, content: "<html>remote update</html>" }}
+				viewMode="desktop"
+				isEditMode
+			/>,
+		)
+		await act(async () => {
+			await Promise.resolve()
+		})
+		expect(mockIsolatedHTMLRendererProps.mock.lastCall?.[0].content).toContain(
+			"editing baseline",
+		)
+	})
+
+	it("shows a remote load failure even if attachment metadata changed during the request", async () => {
+		const props = { ...baseProps, viewMode: "desktop" as const, isEditMode: false }
+		const { rerender } = render(<HTML {...props} />)
+		await waitFor(() =>
+			expect(mockIsolatedHTMLRendererProps.mock.lastCall?.[0].content).toContain("base"),
+		)
+		act(() => mockIsolatedHTMLRendererProps.mock.lastCall?.[0].onRenderReady())
+		fileLoadState.status = "loading"
+		const attachments = [
+			{ file_id: "resource", relative_file_path: "data.json", updated_at: "new" },
+		]
+		rerender(<HTML {...props} attachmentList={attachments} updatedAt="new" />)
+		await act(async () => {
+			await Promise.resolve()
+		})
+		fileLoadState.status = "error"
+		rerender(<HTML {...props} attachmentList={attachments} updatedAt="new" />)
+		await waitFor(() =>
+			expect(screen.getByRole("status")).toHaveTextContent("htmlEditor.previewRefreshFailed"),
+		)
+		expect(mockIsolatedHTMLRendererProps.mock.lastCall?.[0].content).toContain("base")
+	})
+
+	it("waits for the new file acknowledgement even when its content matches the previous file", async () => {
+		const props = { ...baseProps, viewMode: "desktop" as const, isEditMode: false }
+		const { rerender } = render(<HTML {...props} />)
+		await waitFor(() =>
+			expect(mockIsolatedHTMLRendererProps.mock.lastCall?.[0].content).toContain("base"),
+		)
+		const previousReady = mockIsolatedHTMLRendererProps.mock.lastCall?.[0].onRenderReady
+		act(() => previousReady())
+		rerender(<HTML {...props} data={{ ...props.data, file_id: "different-file" }} />)
+		await waitFor(() =>
+			expect(mockIsolatedHTMLRendererProps.mock.lastCall?.[0].fileId).toBe("different-file"),
+		)
+		act(() => previousReady())
+		expect(screen.getByTestId("magic-spin")).toBeInTheDocument()
+		act(() => mockIsolatedHTMLRendererProps.mock.lastCall?.[0].onRenderReady())
+		expect(screen.queryByTestId("magic-spin")).toBeNull()
 	})
 
 	it("should use the HTML-specific edit label and show only three AI edit items", async () => {

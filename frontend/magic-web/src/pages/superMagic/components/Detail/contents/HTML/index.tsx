@@ -17,6 +17,9 @@ import { createVirtualStorageMessageHandler } from "./utils/virtual-storage"
 import { HTML_IFRAME_RENDER_LIFECYCLE_EVENT } from "./telemetry/iframeRenderLifecycle"
 import type { SaveResult } from "./iframe-bridge/types"
 import { useStyles } from "./styles"
+import MagicTooltip from "@/components/base/MagicTooltip"
+import { useHtmlPreviewFreshness } from "./hooks/useHtmlPreviewFreshness"
+import { HtmlPreviewFreshness } from "./components/HtmlPreviewFreshness"
 import { useFileAccess } from "@/pages/superMagic/fileAccess/FileAccessProvider"
 import { useFileApi } from "@/pages/superMagic/fileAccess/fileApi"
 import {
@@ -319,6 +322,22 @@ export default memo(function HTML(props: HTMLProps) {
 	// 跨域 shell 渲染下，数据加载完成 ≠ iframe 内容已画出来；
 	// 用 iframe 上报的渲染就绪信号来控制预览 loading 收起时机，避免"loading 没了但页面空白"。
 	const [isPreviewRenderReady, setIsPreviewRenderReady] = useState(false)
+	const previewFreshness = useHtmlPreviewFreshness(displayData?.file_id)
+	const {
+		begin: beginPreviewUpdate,
+		ready: acknowledgePreview,
+		isCurrent: isCurrentPreview,
+		fail: failPreview,
+		rendering: markPreviewRendering,
+	} = previewFreshness
+	const [previewRenderGeneration, setPreviewRenderGeneration] = useState(0)
+	const forcePreviewRestartRef = useRef(false)
+	const readyPreviewContentRef = useRef<string | null>(null)
+	useEffect(() => {
+		readyPreviewContentRef.current = null
+		forcePreviewRestartRef.current = false
+		setIsPreviewRenderReady(false)
+	}, [displayData?.file_id])
 	const [documentFlowContentHeight, setDocumentFlowContentHeight] = useState(0)
 	const [saveFunction, setSaveFunction] = useState<
 		(() => Promise<SaveResult | undefined>) | (() => void) | null
@@ -349,6 +368,10 @@ export default memo(function HTML(props: HTMLProps) {
 
 	const {
 		fileData: htmlFileData,
+		refreshFile,
+		loadStatus,
+		loadRevision,
+		loadError,
 		fileVersion: htmlFileVersion,
 		changeFileVersion: changeHtmlFileVersion,
 		loading,
@@ -402,6 +425,14 @@ export default memo(function HTML(props: HTMLProps) {
 		const isCurrentTabActive =
 			isTabActive === undefined ? activeFileId === displayData.file_id : isTabActive
 		if (!isCurrentTabActive) return
+
+		// Refreshing must never replace an editing draft. The existing compare flow
+		// remains the only path for accepting remote content while editing.
+		if (isEditMode) return
+		if (!isDataAnalysis) {
+			await refreshHtmlPreview()
+			return
+		}
 
 		const htmlFileId = displayData.file_id
 		const prevHtmlNewest = htmlFileVersionsList[0]?.version
@@ -502,16 +533,18 @@ export default memo(function HTML(props: HTMLProps) {
 
 	/** 更新HTML文件的数据内容 */
 	const updateDataContent = useMemoizedFn((fileData: any) => {
+		// Remote props must not replace the current editing baseline or draft.
+		if (isEditMode && data.content !== undefined) return
 		const newData = {
 			...displayData,
-			content: fileData || displayData?.content,
+			content: fileData ?? displayData?.content,
 		}
 		const contentChanged = data.content !== newData.content
 		const navigationChanged =
 			getHtmlNavigationKey(data?.htmlNavigation) !==
 			getHtmlNavigationKey(newData?.htmlNavigation)
 
-		if (contentChanged || navigationChanged) {
+		if (contentChanged || navigationChanged || data?.file_id !== newData?.file_id) {
 			setData(newData)
 		}
 	})
@@ -530,7 +563,7 @@ export default memo(function HTML(props: HTMLProps) {
 		if (viewMode === "code") {
 			const newData = {
 				...displayData,
-				content: htmlFileData || displayData?.content,
+				content: htmlFileData ?? displayData?.content,
 			}
 			setData(newData)
 		} else {
@@ -920,13 +953,27 @@ export default memo(function HTML(props: HTMLProps) {
 		// eslint-disable-next-line react-hooks/exhaustive-deps
 	}, [attachmentList, displayData?.file_id, runtimeProjectId, fileApi, fileAccess])
 
-	const processContent = useMemoizedFn(async () => {
+	const processContent = useMemoizedFn(async (sourceContent = data?.content) => {
+		// Resource metadata can change before a newer file finishes downloading.
+		// Processing the previous bytes must not acknowledge that remote update.
+		if (!isEditMode && !isDataAnalysis && (loadStatus === "loading" || loadStatus === "error"))
+			return
 		if (isSharePreview && !isShareFileAccess(fileAccess)) return
 		if (isDataAnalysis && !activeHistory.isPreviewReady) return
+		const request = beginPreviewUpdate(!isDataAnalysis)
+		if (sourceContent === "") {
+			forcePreviewRestartRef.current = false
+			readyPreviewContentRef.current = ""
+			setProcessedContent("")
+			setFilePathMapping(new Map())
+			setIsPreviewRenderReady(true)
+			acknowledgePreview(request)
+			return
+		}
 
 		try {
 			const result = await processHtmlContent({
-				content: data?.content,
+				content: sourceContent,
 				attachments,
 				fileId: displayData?.file_id,
 				fileName: data?.file_name,
@@ -958,18 +1005,67 @@ export default memo(function HTML(props: HTMLProps) {
 				finalProcessedContent = injectKeyboardInterceptorScript(finalProcessedContent)
 			}
 
+			if (!isCurrentPreview(request)) return
+			const shouldRestart = forcePreviewRestartRef.current
+			forcePreviewRestartRef.current = false
+			setPreviewRenderGeneration(request)
+			if (!isDataAnalysis) markPreviewRendering(request)
+			if (
+				isDataAnalysis ||
+				(finalProcessedContent === readyPreviewContentRef.current && !shouldRestart)
+			) {
+				acknowledgePreview(request)
+			} else {
+				setIsPreviewRenderReady(false)
+			}
+			if (shouldRestart) {
+				readyPreviewContentRef.current = null
+				setRenderKey((current) => current + 1)
+			}
 			setProcessedContent(finalProcessedContent)
 			setFilePathMapping(result.filePathMapping)
 		} catch (error) {
 			console.error("Error processing HTML content:", error)
-			setProcessedContent(data?.content || "")
+			// Keep the last working preview when resource processing fails.
+			if (!isDataAnalysis) failPreview(request)
 		}
 	})
+
+	const refreshHtmlPreview = useMemoizedFn(async () => {
+		if (isEditMode || isDataAnalysis) return
+		forcePreviewRestartRef.current = true
+		if (remoteHtmlFileId) {
+			await refreshFile()
+		} else {
+			await processContent()
+		}
+	})
+
+	// The file loader can fail before processing starts, or finish with identical
+	// bytes. Observe both outcomes so an unchanged file never becomes falsely stale.
+	const handleRemoteLoadStatus = useMemoizedFn(() => {
+		if (isEditMode || isDataAnalysis) return
+		if (loadStatus === "loading") {
+			beginPreviewUpdate()
+		} else if (loadStatus === "error") {
+			failPreview(beginPreviewUpdate())
+		} else if (loadStatus === "ready" && htmlFileData === data?.content) {
+			void processContent()
+		}
+	})
+	useEffect(handleRemoteLoadStatus, [
+		handleRemoteLoadStatus,
+		loadStatus,
+		loadRevision,
+		loadError,
+		isEditMode,
+		isDataAnalysis,
+	])
 
 	const shouldReprocessOnEditMode = !isDataAnalysis && Boolean(isEditMode)
 
 	useDeepCompareEffect(() => {
-		if (!data?.content) return
+		if (typeof data?.content !== "string") return
 		if (isSharePreview && !isShareFileAccess(fileAccess)) return
 		if (isDataAnalysis && !activeHistory.isPreviewReady) return
 		processContent()
@@ -990,7 +1086,7 @@ export default memo(function HTML(props: HTMLProps) {
 	// 进而打断未保存编辑；因此仅在非编辑态响应 attachmentList 变化。
 	useDeepCompareEffect(() => {
 		if (isEditMode) return
-		if (!data?.content) return
+		if (typeof data?.content !== "string") return
 		if (isSharePreview && !isShareFileAccess(fileAccess)) return
 		if (isDataAnalysis && !activeHistory.isPreviewReady) return
 		processContent()
@@ -1176,27 +1272,12 @@ export default memo(function HTML(props: HTMLProps) {
 		[],
 	)
 
-	const handlePreviewRenderReady = useMemoizedFn(() => {
+	const handlePreviewRenderReady = useCallback(() => {
+		if (!isCurrentPreview(previewRenderGeneration)) return
+		readyPreviewContentRef.current = processedContent
 		setIsPreviewRenderReady(true)
-	})
-
-	// 待渲染内容变化（切换文件 / 内容更新 / 重新挂载）时重置渲染就绪态，重新显示 loading；
-	// 同时设置兜底定时器，避免极端情况下 iframe 未上报就绪信号导致 loading 永久卡住。
-	useEffect(() => {
-		setIsPreviewRenderReady(false)
-		// 空文件没有可写入 iframe 的内容，也不会触发 onRenderReady。
-		// 此时预览本身已经完成（展示空白区域），应立即收起 loading。
-		if (!processedContent) {
-			setIsPreviewRenderReady(true)
-			return
-		}
-		const fallbackTimer = window.setTimeout(() => {
-			setIsPreviewRenderReady(true)
-		}, 4000)
-		return () => {
-			window.clearTimeout(fallbackTimer)
-		}
-	}, [processedContent, renderKey])
+		acknowledgePreview(previewRenderGeneration)
+	}, [isCurrentPreview, acknowledgePreview, previewRenderGeneration, processedContent])
 
 	// 当 viewMode 变化时，退出编辑模式
 	useEffect(() => {
@@ -1418,6 +1499,17 @@ export default memo(function HTML(props: HTMLProps) {
 
 	const headerActionConfig = useMemo<HeaderActionConfig>(
 		() => ({
+			overrides: {
+				refresh: {
+					disabled: Boolean(
+						isEditMode ||
+						(!isDataAnalysis &&
+							(previewFreshness.phase === "updating" ||
+								previewFreshness.phase === "rendering")),
+					),
+					tooltip: t("htmlEditor.previewRefreshTooltip"),
+				},
+			},
 			hideDefaults: isReadonlyPreview
 				? ["refresh", "download", "share", "versionMenu", "more"]
 				: [],
@@ -1428,20 +1520,25 @@ export default memo(function HTML(props: HTMLProps) {
 					before: "refresh",
 					visible: () => Boolean(isEditMode && hasServerUpdate),
 					render: (context) => (
-						<Button
-							variant="secondary"
-							size="sm"
-							onClick={() =>
-								void runGuardedAction(context.beforeAction, handleViewServerUpdate)
-							}
-							className="h-6 gap-1.5 rounded-md px-3 text-xs font-normal shadow-xs"
-							data-testid={
-								htmlTestIdsEnabled ? "html-server-update-button" : undefined
-							}
-						>
-							<AlertTriangle size={16} className="text-amber-600" />
-							<span>{t("ppt.serverUpdateAvailable")}</span>
-						</Button>
+						<MagicTooltip title={t("htmlEditor.serverUpdateTooltip")}>
+							<Button
+								variant="secondary"
+								size="sm"
+								onClick={() =>
+									void runGuardedAction(
+										context.beforeAction,
+										handleViewServerUpdate,
+									)
+								}
+								className="h-6 gap-1.5 rounded-md px-3 text-xs font-normal shadow-xs"
+								data-testid={
+									htmlTestIdsEnabled ? "html-server-update-button" : undefined
+								}
+							>
+								<AlertTriangle size={16} className="text-amber-600" />
+								<span>{t("ppt.serverUpdateAvailable")}</span>
+							</Button>
+						</MagicTooltip>
 					),
 				},
 				{
@@ -1566,6 +1663,7 @@ export default memo(function HTML(props: HTMLProps) {
 			handleSaveAndExit,
 			handleViewServerUpdate,
 			hasServerUpdate,
+			previewFreshness.phase,
 			htmlTestIdsEnabled,
 			isExporting,
 			isEditMode,
@@ -1653,6 +1751,13 @@ export default memo(function HTML(props: HTMLProps) {
 			data-edit-mode={isEditMode ? "true" : "false"}
 		>
 			{showFileHeader && <CommonHeaderV2 {...headerContext} />}
+			{!isEditMode && !isDataAnalysis && (
+				<HtmlPreviewFreshness
+					phase={previewFreshness.phase}
+					hasRendered={previewFreshness.hasRendered}
+					onRetry={() => void refreshHtmlPreview()}
+				/>
+			)}
 			{devicePreviewEnabled && (
 				<DevicePreviewToolbar
 					{...devicePreview}
@@ -1799,18 +1904,23 @@ export default memo(function HTML(props: HTMLProps) {
 									onQuickSelectionChange={setIsQuickSelecting}
 								/>
 								{/* 跨域 shell 渲染期间用 loading 覆盖层填补"数据已就绪但 iframe 内容未画出"的空窗 */}
-								{!isPreviewRenderReady && !documentFlowFullscreen && (
-									<Flex
-										data-testid={
-											htmlTestIdsEnabled ? "html-preview-loading" : undefined
-										}
-										justify="center"
-										align="center"
-										className="absolute inset-0 z-10 bg-white dark:bg-[#1c1c1c]"
-									>
-										<MagicSpin spinning />
-									</Flex>
-								)}
+								{Boolean(processedContent) &&
+									!isPreviewRenderReady &&
+									previewFreshness.phase !== "failed" &&
+									!documentFlowFullscreen && (
+										<Flex
+											data-testid={
+												htmlTestIdsEnabled
+													? "html-preview-loading"
+													: undefined
+											}
+											justify="center"
+											align="center"
+											className="absolute inset-0 z-10 bg-white dark:bg-[#1c1c1c]"
+										>
+											<MagicSpin spinning />
+										</Flex>
+									)}
 							</>
 						)}
 					</div>

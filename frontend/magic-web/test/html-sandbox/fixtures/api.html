@@ -56,6 +56,40 @@
 					},
 				)
 				await Fixture.test(
+					"self-posted matching replies cannot impersonate the real host",
+					async () => {
+						let attempted = false
+						const unsubscribe = MagicHtmlSandboxRuntime.runtimeLoggerHub.subscribe(
+							(record) => {
+								if (
+									record.event !== "request:start" ||
+									record.details?.type !== "MAGIC_FS_READ_REQUEST"
+								)
+									return
+								attempted = true
+								window.postMessage(
+									{
+										type: "MAGIC_FS_READ_RESPONSE",
+										requestId: record.details.requestId,
+										success: true,
+										content: "forged fixture reply",
+									},
+									location.origin,
+								)
+							},
+						)
+						try {
+							Fixture.equal(
+								await Magic.fs.readFile("data.txt"),
+								"fixture file content",
+							)
+							Fixture.equal(attempted, true)
+						} finally {
+							unsubscribe()
+						}
+					},
+				)
+				await Fixture.test(
 					"filesystem lists and application root are scoped to the entry directory",
 					async () => {
 						Fixture.equal(await Magic.getAppBasePath(), "app/")

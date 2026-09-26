@@ -19,34 +19,35 @@ describe("service worker compatibility runtime", () => {
 	})
 
 	it.each(["DingTalk", "AliApp(DingTalk/1)", "wxwork", "WeCom", "Feishu", "Lark"])(
-		"supplies registration behavior for %s in auto mode",
+		"reports unavailable registration honestly for %s in auto mode",
 		async (userAgent) => {
 			vi.stubGlobal("navigator", { userAgent })
 			install({ mode: "auto" })
 			const container = navigator.serviceWorker
-			const registration = await container.register("/worker.js", { scope: "/app/" })
-			expect(registration.scope).toBe("/app/")
-			expect(registration.active?.state).toBe("activated")
-			expect(registration.installing).toBeNull()
-			expect(registration.waiting).toBeNull()
-			await expect(registration.update()).resolves.toBeUndefined()
-			await expect(registration.unregister()).resolves.toBe(true)
-			await expect(container.getRegistration()).resolves.toBeNull()
+			await expect(
+				container.register("/worker.js", { scope: "/app/" }),
+			).rejects.toMatchObject({ name: "NotSupportedError" })
+			await expect(container.getRegistration()).resolves.toBeUndefined()
 			await expect(container.getRegistrations()).resolves.toEqual([])
 			expect(container.controller).toBeNull()
 			expect(container.dispatchEvent(new Event("message"))).toBe(true)
 		},
 	)
 
-	it("forced mode exposes ready and default scope without replacing an existing container", async () => {
+	it("ready stays pending without a worker and repeated installation preserves the container", async () => {
 		install({ mode: "on" })
 		const container = navigator.serviceWorker
-		const registration = await container.register("/worker.js")
-		expect(registration.scope).toBe("/")
-		const ready = await container.ready
-		expect(ready.scope).toBe("/")
-		expect(ready.active?.state).toBe("activated")
-		await expect(ready.unregister()).resolves.toBe(true)
+		const ready = vi.fn()
+		void container.ready.then(ready, ready)
+		await Promise.resolve()
+		expect(ready).not.toHaveBeenCalled()
+		const listener = vi.fn()
+		container.addEventListener("message", listener)
+		container.dispatchEvent(new Event("message"))
+		expect(listener).toHaveBeenCalledTimes(1)
+		container.removeEventListener("message", listener)
+		container.dispatchEvent(new Event("message"))
+		expect(listener).toHaveBeenCalledTimes(1)
 		install({ mode: "on" })
 		expect(navigator.serviceWorker).toBe(container)
 		expect(Object.getOwnPropertyDescriptor(navigator, "serviceWorker")).toMatchObject({

@@ -9,6 +9,7 @@ const hookState = vi.hoisted(() => ({
 	editorContentInjectedValues: [] as boolean[],
 	isManualZoom: false,
 	shouldApplyScaling: false,
+	realAPIHooks: false,
 }))
 
 const envMock = vi.hoisted(() => vi.fn(() => ""))
@@ -177,6 +178,9 @@ vi.mock("../iframe-api/iframeApi", () => ({
 	moveIframeFile: vi.fn(),
 	renameIframeFile: vi.fn(),
 	getIframeFileInfo: vi.fn(),
+	getIframeDownloadUrl: vi.fn(async () => [
+		{ file_id: "source-file", url: "https://files.example/source" },
+	]),
 }))
 
 vi.mock("../iframe-bridge/contexts/StylePanelContext", () => ({
@@ -322,11 +326,17 @@ vi.mock("../hooks/useHtmlAppPermissions", () => ({
 	}),
 }))
 
-vi.mock("../iframe-api/hooks/useIframeFS", () => ({
-	useIframeFS: () => ({
-		handleFSMessage: vi.fn(async () => false),
-	}),
-}))
+vi.mock("../iframe-api/hooks/useIframeFS", async (importOriginal) => {
+	const actual = await importOriginal<typeof import("../iframe-api/hooks/useIframeFS")>()
+	return {
+		useIframeFS: (options: Parameters<typeof actual.useIframeFS>[0]) => {
+			const useFS = hookState.realAPIHooks
+				? actual.useIframeFS
+				: () => ({ handleFSMessage: vi.fn(async () => false) })
+			return useFS(options)
+		},
+	}
+})
 
 vi.mock("../iframe-api/hooks/useIframeLLM", () => ({
 	useIframeLLM: () => ({
@@ -334,21 +344,29 @@ vi.mock("../iframe-api/hooks/useIframeLLM", () => ({
 	}),
 }))
 
-vi.mock("../iframe-api/hooks/useIframeAgent", () => ({
-	useIframeAgent: (options: UseIframeAgentOptions) => {
-		agentActionMocks.agentOptions = options
-		return { handleAgentMessage: iframeMessageMocks.handleAgentMessage }
-	},
-}))
+vi.mock("../iframe-api/hooks/useIframeAgent", async (importOriginal) => {
+	const actual = await importOriginal<typeof import("../iframe-api/hooks/useIframeAgent")>()
+	return {
+		useIframeAgent: (options: UseIframeAgentOptions) => {
+			agentActionMocks.agentOptions = options
+			const useAgent = hookState.realAPIHooks
+				? actual.useIframeAgent
+				: () => ({ handleAgentMessage: iframeMessageMocks.handleAgentMessage })
+			return useAgent(options)
+		},
+	}
+})
 
 vi.mock("../hooks/useIframeAgentActions", () => ({
 	useIframeAgentActions: (...args: [string | undefined, unknown?]) => {
-		agentActionMocks.useIframeAgentActions(...args)
-		return {
-			getAgentList: vi.fn(),
-			createTopicAndSend: vi.fn(),
-			sendMessage: vi.fn(),
-		}
+		const realActions = agentActionMocks.useIframeAgentActions(...args)
+		return (
+			realActions ?? {
+				getAgentList: vi.fn(),
+				createTopicAndSend: vi.fn(),
+				sendMessage: vi.fn(),
+			}
+		)
 	},
 }))
 
@@ -463,7 +481,8 @@ export function useRendererTestSetup() {
 		hookState.editorContentInjectedValues = []
 		hookState.isManualZoom = false
 		hookState.shouldApplyScaling = false
-		agentActionMocks.useIframeAgentActions.mockClear()
+		hookState.realAPIHooks = false
+		agentActionMocks.useIframeAgentActions.mockReset()
 	})
 
 	afterEach(() => {

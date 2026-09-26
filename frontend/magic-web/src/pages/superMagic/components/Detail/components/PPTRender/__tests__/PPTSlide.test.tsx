@@ -370,6 +370,13 @@ describe("PPTSlide", () => {
 		mockState.isLoadingVersion = false
 	})
 
+	it("preserves the source project for a shared slide without a conversation host", () => {
+		renderPPTSlide({ projectId: "shared-source", selectedProject: undefined, allowEdit: false })
+		expect(mockState.renderedIsolatedProps).toHaveBeenCalledWith(
+			expect.objectContaining({ projectId: "shared-source", isPptRender: true }),
+		)
+	})
+
 	it("向 HTML renderer 传入 PPT 固定缩放尺寸", () => {
 		renderPPTSlide({
 			content: '<div class="slide-container" data-width="1600" data-height="900"></div>',
@@ -445,8 +452,7 @@ describe("PPTSlide", () => {
 			expect(onRenderReadyChange).toHaveBeenCalledWith(false)
 		})
 		const isolatedProps = mockState.renderedIsolatedProps.mock.calls.at(-1)?.[0] as
-			| { onRenderReady?: () => void }
-			| undefined
+			{ onRenderReady?: () => void } | undefined
 		act(() => isolatedProps?.onRenderReady?.())
 		expect(onRenderReadyChange).toHaveBeenCalledWith(true)
 		onRenderReadyChange.mockClear()
@@ -494,8 +500,7 @@ describe("PPTSlide", () => {
 			expect(onRenderReadyChange).toHaveBeenCalledWith(false)
 		})
 		const isolatedProps = mockState.renderedIsolatedProps.mock.calls.at(-1)?.[0] as
-			| { onRenderReady?: () => void }
-			| undefined
+			{ onRenderReady?: () => void } | undefined
 		act(() => isolatedProps?.onRenderReady?.())
 		expect(onRenderReadyChange).toHaveBeenCalledWith(true)
 		onRenderReadyChange.mockClear()

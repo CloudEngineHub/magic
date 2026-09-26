@@ -39,6 +39,7 @@ CI 需预装 Chrome 或 Puppeteer 对应浏览器。未安装时命令明确失�
 | `fixtures/storage.html`   | localStorage/sessionStorage/cookie、IndexedDB 升级/事务/读写、父端持久化及宿主隔离                                                              |
 | `fixtures/devtools.html`  | 真正启用全部 DevTools 代理后执行网络和 API，transfer-list 二进制传输，关闭恢复，再次启用与防循环                                                |
 | `fixtures/nested.html`    | 经真实 nested handler、HTML processor 和 srcdoc 执行的子文档                                                                                    |
+| `fixtures/refresh.html`   | 新内容/同内容手动刷新重新执行 JS、旧定时器停止、普通重渲染/编辑不重启、跨文档存储保留                                                           |
 
 这些文件是放进 Magic 沙箱的业务 HTML，不是独立 SDK 宿主页；直接双击 `api.html`
 不会产生 `window.Magic`。通过本地实例页运行，才能验证真实的安装顺序与父子窗口通信。
@@ -63,11 +64,21 @@ HTML → production Magic prelude → native postMessage
 - `host-dependencies.ts` 保存输入，`assert-dependencies.ts` 核对完整参数、真实 File 字节、项目/表/行身份、消息内容、权限时序和刷新归属。
 - LLM token、模型、chat、SSE 使用真实 fetch 和解析器。静态 fixture 服务核对 HTTP method、授权、组织、模型及消息内容后才返回成功数据。
 - runtime shell 使用包内生产构建脚本；prelude 使用生产 Vite 插件；full-content/fetch/nested/storage 使用源码，不替换成手写复制实现或空 prelude。
+- API prelude 与 sandbox runtime 必须作为匹配版本构建/交付；本轮宿主消息校验复用 runtime 基类，不能仅更新 prelude 而保留旧的远端 shell。
 - `IsolatedHTMLRenderer*.test.tsx` 另外验证真实组件（内部 Inner 通过公共包装组件调用）的握手、过期响应、来源检查、兄弟隔离、preview/edit/PPT、隐藏、reload、卸载，以及真实 UserInfo/Database 路由。与浏览器 fixture 的 hooks 宿主互补。
 
 The browser host is intentionally small and does not mount the whole application renderer.
 Component integration runs in jsdom; native frame isolation, injected code and real hook
 round-trips run in Chrome. Neither proves live backend authorization or a deployed application.
+
+刷新实例使用正式 Renderer 的 `usePreviewDocumentRevision`、生产 shell 和虚拟存储桥。
+它实际等待旧定时器运行，再验证旧 Window 被销毁；不会仅过滤旧消息来冒充定时器清理。
+文件获取/预处理竞争、真实 Renderer 握手、刷新反馈与草稿保护另外由组件和 hook 测试覆盖。
+
+非编辑预览接收新文件内容后自动重建 iframe，重新执行脚本；手动刷新强制读取最新文件，
+即使内容相同也重启页面。更新过程有状态提示，读取或渲染失败提供重试，不用超时冒充完成。
+编辑中的未保存内容不会自动覆盖，仍通过现有服务端更新比较流程接受新内容。
+新文档会等待宿主已接收的存储写入完成；尚未发送的消息或未提交事务不保证跨刷新保存。
 
 ## 用例维护 / Adding a contract
 
@@ -92,7 +103,40 @@ DevTools 分别核对首次启用、关闭、再次启用时的 console/network/
 fetch、DOM 资源代理、嵌套 iframe、完整虚拟存储桥等复杂字符串模块仍待后续逐步迁移；
 先补相应失败与恢复测试，再沿用同一编译入口，不能同时改变协议和断言来迁就重构。
 
-仍需单独设计的已知契约问题：通用 API 响应基类当前按 requestId/type 匹配，
-未统一校验 source/origin；FS mutation 的声明返回 void 与运行时响应对象不一致；
-部分旧文档订阅靠版本抑制而非主动卸载。本轮未改变这些协议。
+第三阶段补充真实宿主 source/origin 校验（请求、FS watch、语言订阅和 LLM stream），
+fetch 取消、XHR 请求头/认证重放及取消事件、动态 STYLE 文本更新、Cookie 到期、
+IndexedDB 普通事务的只读/整组提交/取消/冲突保护。失败或取消不能报告提交成功。
+独立 HTML 不再同时安装虚拟桥与 legacy 存储；重复注入保留原生存储引用。
+缺少原生 Service Worker 时 register 明确拒绝，不虚报 worker 已激活；ready 保持等待。
+原生 ready 只在真正存在活跃 worker 时完成，参见 [ServiceWorker ready](https://developer.mozilla.org/en-US/docs/Web/API/ServiceWorkerContainer/ready)。
+
+### 入口上下文 / Entry contexts
+
+| 场景          | 已验证的实际组合                                           | 证据层                         |
+| ------------- | ---------------------------------------------------------- | ------------------------------ |
+| 普通 HTML     | 当前项目文件读取、DB、当前会话写入                         | Renderer + 真实 hooks/services |
+| 微应用预览    | 源项目文件/DB 与会话宿主分离；预览取消阻止发消息           | Renderer + 真实 hooks/services |
+| 发布微应用    | 只读 API 不创建会话；写操作惰性取得宿主；登录失败不发送    | Renderer + 真实 hooks/services |
+| 普通分享      | 源项目与 share access 传到底层；无会话宿主拒绝消息写入     | Renderer + 真实 hooks/services |
+| 分享 PPT      | PPTSlide 将源 projectId 传入 Renderer，保持文件/存储作用域 | 实际消费者 + Renderer          |
+| 同源/跨源沙箱 | 真正 HTML、生产脚本、原生 postMessage、资源与存储          | Chrome 可执行实例              |
+
+`allowEdit=false` 是编辑 UI 控制，不是所有 Magic API 的统一只读权限。
+文件来源与会话宿主分别传递，真实授权仍由相应权限流程和后端决定。
+当前 worktree 没有企业/customer 对应覆盖层，不能据此宣称这些版本完成验证。
+The matrix checks actual renderer composition in jsdom and actual iframe execution in Chrome;
+it does not replace a full product navigation test with authenticated providers.
+
+### 原生差异与后续范围 / Native gaps
+
+- `Request` 构造后 URL 已绝对化，无法可靠推断原始输入是否相对路径；保持原生透传，不能改写所有绝对 URL。
+- XHR 相对路径需异步向宿主解析；同步 XHR、解析失败的旧 synthetic 404 状态机还不等价于原生实现。
+- IndexedDB 普通事务采用乐观提交，同库竞争返回 AbortError 以防覆盖；不同于原生排队调度。升级事务、完整游标/索引与错误冒泡仍不是完整 IndexedDB 实现。
+- 请求/游标的 `onsuccess` 属性回调异常会取消事务；`addEventListener` 回调异常仍未完整模拟原生回滚。
+- Cookie 提供 namespace 内键值与到期行为，不模拟完整 domain/path/SameSite/HttpOnly HTTP cookie jar。
+- `srcset` 混入 data URL、Worker、模块 import 与表单提交没有完整资源桥契约；MutationObserver 事后改写也不能保证阻止所有首次原生加载。
+- FS mutation 的声明返回 void 与运行时响应对象不一致，部分旧文档订阅靠版本抑制而非主动卸载，仍需独立契约评估。
+
+优先明确这些能力的业务契约与失败反馈，再补可执行回归；不要用无条件成功的 mock 扩大“支持范围”。
+后续复杂脚本迁移沿用已有 TS 编译入口，避免再次维护手工生成代码。
 目前浏览器证据只覆盖 Chrome；真实 WebView、Firefox/Safari、线上后端与实际权限弹窗未验收。

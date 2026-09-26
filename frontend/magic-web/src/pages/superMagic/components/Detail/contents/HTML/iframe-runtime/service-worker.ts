@@ -7,38 +7,27 @@ function isTargetWebView(): boolean {
 	)
 }
 
-/** Supply the existing no-op API only to selected WebViews that lack a native implementation. */
+/** Keep the compatibility surface without claiming that an unexecuted worker is active. */
 export default function install({ mode }: { mode: ServiceWorkerMockMode }): void {
 	if (mode === "off") return
 	try {
 		if (mode !== "on" && !isTargetWebView()) return
 		if ("serviceWorker" in navigator && navigator.serviceWorker) return
-		const noop = () => undefined
-		const unregister = () => Promise.resolve(true)
-		const container = {
-			register: (_scriptURL: string | URL, options?: { scope?: string }) =>
-				Promise.resolve({
-					scope: options?.scope || "/",
-					active: {
-						state: "activated",
-						addEventListener: noop,
-						removeEventListener: noop,
-					},
-					installing: null,
-					waiting: null,
-					update: () => Promise.resolve(),
-					unregister,
-					addEventListener: noop,
-					removeEventListener: noop,
-				}),
-			getRegistration: () => Promise.resolve(null),
+		const container = Object.assign(new EventTarget(), {
+			register: (_scriptURL: string | URL, _options?: RegistrationOptions) =>
+				Promise.reject(
+					new DOMException(
+						"Service workers are unavailable in this preview",
+						"NotSupportedError",
+					),
+				),
+			getRegistration: () => Promise.resolve(undefined),
 			getRegistrations: () => Promise.resolve([]),
 			controller: null,
-			ready: Promise.resolve({ scope: "/", active: { state: "activated" }, unregister }),
-			addEventListener: noop,
-			removeEventListener: noop,
-			dispatchEvent: () => true,
-		}
+			// Native ready never rejects and only resolves after a real worker activates.
+			ready: new Promise<ServiceWorkerRegistration>(() => undefined),
+			startMessages: () => undefined,
+		})
 		Object.defineProperty(navigator, "serviceWorker", {
 			value: container,
 			writable: false,

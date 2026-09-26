@@ -23,6 +23,22 @@ class TestBridgeApi extends BaseRuntimeBridgeApiPlugin {
 describe("BaseRuntimeBridgeApiPlugin", () => {
 	afterEach(() => {
 		vi.restoreAllMocks()
+		vi.useRealTimers()
+	})
+
+	it("cleans the listener and timer when structured cloning fails during send", async () => {
+		vi.useFakeTimers()
+		const add = vi.spyOn(window, "addEventListener")
+		const remove = vi.spyOn(window, "removeEventListener")
+		const error = new DOMException("Cannot clone function", "DataCloneError")
+		vi.spyOn(window.parent, "postMessage").mockImplementation(() => {
+			throw error
+		})
+		await expect(new TestBridgeApi().query()).rejects.toBe(error)
+		const listener = add.mock.calls.find(([type]) => type === "message")?.[1]
+		expect(listener).toBeDefined()
+		expect(remove).toHaveBeenCalledWith("message", listener)
+		expect(vi.getTimerCount()).toBe(0)
 	})
 
 	it("includes the extracted response in the success runtime log", async () => {
@@ -34,6 +50,8 @@ describe("BaseRuntimeBridgeApiPlugin", () => {
 			const request = message as { type: string; requestId: string }
 			window.dispatchEvent(
 				new MessageEvent("message", {
+					source: window.parent,
+					origin: window.location.origin,
 					data: {
 						type: request.type.replace(/_REQUEST$/, "_RESPONSE"),
 						requestId: request.requestId,
@@ -60,6 +78,8 @@ describe("BaseRuntimeBridgeApiPlugin", () => {
 			const request = message as { type: string; requestId: string }
 			window.dispatchEvent(
 				new MessageEvent("message", {
+					source: window.parent,
+					origin: window.location.origin,
 					data: {
 						type: request.type.replace(/_REQUEST$/, "_RESPONSE"),
 						requestId: request.requestId,
