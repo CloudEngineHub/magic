@@ -12,6 +12,9 @@ export default mergeConfig(
 			include: [
 				`${html}/__tests__/IsolatedHTMLRenderer*.test.tsx`,
 				`${html}/iframe-api/**/__tests__/*.test.ts`,
+				`${html}/iframe-runtime/__tests__/*.test.ts`,
+				"plugins/__tests__/vite-plugin-iframe-runtime.test.ts",
+				"test/html-sandbox/__tests__/*.test.ts",
 				`${html}/utils/__tests__/{fetchInterceptor,full-content,virtual-storage,html-navigation-runtime,html-navigation,location-href-navigation,html-sandbox-runtime-url}.test.ts`,
 				"packages/html-sandbox/src/features/__tests__/{MessageProxy*,NetworkInterceptor*,ConsoleProxy*,ApiCallProxy*,StorageInspector*,DevToolsCollector*}.test.ts",
 				"packages/html-sandbox/src/runtime/__tests__/{RuntimePlugin,BaseRuntimeBridgeApiPlugin}.test.ts",

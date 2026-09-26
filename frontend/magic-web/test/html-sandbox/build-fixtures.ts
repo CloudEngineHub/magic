@@ -5,6 +5,7 @@ import { cp, mkdir, readFile, writeFile } from "node:fs/promises"
 import { dirname, resolve } from "node:path"
 import { fileURLToPath } from "node:url"
 import magicApiPlugin from "../../plugins/vite-plugin-magic-api"
+import { compileIframeRuntime } from "../../plugins/vite-plugin-iframe-runtime"
 
 export const fixtureRoot = dirname(fileURLToPath(import.meta.url))
 export const projectRoot = resolve(fixtureRoot, "../..")
@@ -28,6 +29,7 @@ export async function buildFixtures() {
 	if (!load) throw new Error("Magic API plugin has no loader")
 	const preludeModule = await load.call({} as never, "\0virtual:magic-api")
 	if (typeof preludeModule !== "string") throw new Error("Missing production prelude")
+	const iframeRuntime = await compileIframeRuntime(projectRoot)
 	await build({
 		entryPoints: [resolve(fixtureRoot, "host.ts")],
 		outfile: resolve(outputRoot, "host.js"),
@@ -77,6 +79,7 @@ export async function buildFixtures() {
 					// virtual storage, runtime, APIs and proxy implementations stay real.
 					const stubs: Record<string, string> = {
 						"virtual:magic-api": preludeModule,
+						"virtual:magic-iframe-runtime": `export default ${JSON.stringify(iframeRuntime.scripts)}`,
 						"@/models/config":
 							'export const configStore = { i18n: { language: "en_US" } }',
 						"@/models/config/utils": "export const languageHelper = {}",

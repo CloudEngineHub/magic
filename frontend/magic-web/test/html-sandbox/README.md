@@ -9,13 +9,14 @@ pnpm install --frozen-lockfile
 pnpm test:html-sandbox
 ```
 
+- `pnpm test:html-sandbox:types`：仅检查已提取 iframe runtime 模块的严格类型。
 - `pnpm test:html-sandbox:unit`：API、hooks/services、Renderer、代理和注入脚本定向测试。
 - `pnpm test:html-sandbox:unit -t readFile`：单独运行匹配名称的方法测试。
 - `pnpm test:html-sandbox:unit --coverage`：生成该范围的覆盖报告；不把行覆盖率当作浏览器验证。
 - `pnpm test:html-sandbox:browser`：构建真实 runtime/prelude，启动临时静态 fixture 服务，用独立无头 Chrome 跑同源及跨源实例，返回非零状态表示失败，结束自动关闭服务和浏览器。
 - `pnpm test:html-sandbox:examples`：打印本地地址，浏览器打开后选择实例并点击运行。修改 HTML 后重启此命令重新构建。结束按 Ctrl+C。
 
-The default command runs focused unit/integration tests followed by real-browser examples.
+The default command checks the typed iframe installers, then runs focused unit/integration tests and real-browser examples.
 The examples command leaves a loopback-only static server open for manual inspection.
 It does not start the Magic application, require login, or call production APIs.
 
@@ -26,8 +27,8 @@ HTML_SANDBOX_CHROME="/absolute/path/to/chrome" pnpm test:html-sandbox:browser
 ```
 
 CI 需预装 Chrome 或 Puppeteer 对应浏览器。未安装时命令明确失败，不跳过浏览器层。
-生成的 shell、bundle 和 `browser-results.json`（逐项结果、浏览器错误、消息 trace）位于
-`node_modules/.cache/html-sandbox-fixtures/`，不提交。
+生成的 shell、bundle 和 `browser-results.json`（本轮 ID/状态、逐项结果、浏览器错误、消息 trace）位于
+`node_modules/.cache/html-sandbox-fixtures/`，不提交。报告在运行前重置，构建、启动、超时或清理失败也会写入本轮失败状态。
 
 ## 可运行 HTML / Executable examples
 
@@ -80,12 +81,16 @@ round-trips run in Chrome. Neither proves live backend authorization or a deploy
 
 真实用例已暴露并修复：虚拟存储桥被旧 Cookie/IndexedDB mock 覆盖；
 StorageInspector 读取受限 getter 时整次快照异常；MessageProxy 对原生 getter 使用错误 receiver。
-保持无显式虚拟存储上下文的旧 standalone 行为，本次不实施 TS SDK 重构。
+保持无显式虚拟存储上下文的旧 standalone 行为。
 
-后续 SDK 设计应以这些测试为行为基线，先评估 full-content、fetchInterceptor、
-nested-iframe-content、virtual-storage 中的字符串注入，考虑独立 TS entry、
-编译 IIFE、结构化初始化参数、统一 teardown。先迁移单一模块，再运行同一测试，
-不要在重构时把 assertions 改成新实现的镜像。
+第二阶段已把 telemetry、content metrics、ServiceWorker fallback、navigation bootstrap
+及三个 legacy storage fallback 提取为 `HTML/iframe-runtime` 中的 TypeScript installer。
+生产与测试共用构建器生成独立 IIFE，通过转义后的 JSON 参数调用，产物不手工维护。
+模块类型、行为、参数转义、全局隔离及传递依赖修改后的重编译均有独立测试。
+DevTools 分别核对首次启用、关闭、再次启用时的 console/network/API 记录，避免首次记录掩盖再次启用失效。
+
+fetch、DOM 资源代理、嵌套 iframe、完整虚拟存储桥等复杂字符串模块仍待后续逐步迁移；
+先补相应失败与恢复测试，再沿用同一编译入口，不能同时改变协议和断言来迁就重构。
 
 仍需单独设计的已知契约问题：通用 API 响应基类当前按 requestId/type 匹配，
 未统一校验 source/origin；FS mutation 的声明返回 void 与运行时响应对象不一致；
