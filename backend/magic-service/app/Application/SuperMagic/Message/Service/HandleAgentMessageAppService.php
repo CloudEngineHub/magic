@@ -541,6 +541,7 @@ class HandleAgentMessageAppService extends AbstractAppService
             'correlationId' => $correlationId,
             'parentCorrelationId' => $parentCorrelationId,
             'contentType' => $contentType,
+            'rawContent' => $payload->getRawContent(),
         ];
     }
 
@@ -668,7 +669,8 @@ class HandleAgentMessageAppService extends AbstractAppService
             messageId: $messageData['messageId'],
             correlationId: $messageData['correlationId'] ?? null,
             parentCorrelationId: $messageData['parentCorrelationId'] ?? null,
-            contentType: $messageData['contentType'] ?? null
+            contentType: $messageData['contentType'] ?? null,
+            rawContent: $messageData['rawContent'] ?? null
         );
 
         $taskMessageEntity = TaskMessageEntity::taskMessageDTOToTaskMessageEntity($taskMessageDTO);

@@ -1,7 +1,13 @@
 """IM channel ServerMessage reply content extraction."""
 from __future__ import annotations
 
+import re
 from typing import Any
+
+
+def is_no_reply(content: str) -> bool:
+    """仅识别完整控制回复；渠道与投递成功条件由调用方判断。"""
+    return re.fullmatch(r"<no_reply\s*/?>", content.strip()) is not None
 
 
 def extract_v1_reply_content(payload: dict[str, Any]) -> str:

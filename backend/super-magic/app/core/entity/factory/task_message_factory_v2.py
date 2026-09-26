@@ -38,7 +38,7 @@ from app.core.entity.event.event import (
     AfterMcpInitEventData,
     BeforeMcpInitEventData,
 )
-from app.core.entity.event.event_context import EventContext
+from app.core.entity.event.event_context import EventContext, OutboundMessageRecord
 from app.core.entity.factory.task_message_factory_protocol import TaskMessageFactoryProtocol
 from app.core.entity.final_task_state import FinalTaskState, render_final_task_state_message
 from app.core.entity.message.message import MessageType
@@ -155,6 +155,22 @@ class TaskMessageFactoryV2(TaskMessageFactoryProtocol):
             if v is not None:
                 msg[k] = v
         return msg
+
+    @classmethod
+    def create_channel_outbound_message(
+        cls, agent_context: AgentContext, record: OutboundMessageRecord,
+    ) -> ServerMessage:
+        inner = cls._build_inner_message(
+            agent_context, role="assistant", correlation_id=record.delivery_id,
+            content=record.content,
+            attachments=[attachment.model_dump(mode="json") for attachment in record.attachments],
+        )
+        return cls._build_and_send(
+            agent_context, inner, status=TaskStatus.RUNNING,
+            event_type=EventType.AFTER_TOOL_CALL, correlation_id=record.delivery_id,
+            content=record.content, content_type="content", attachments=record.attachments,
+            message_id=record.message_id or None,
+        )
 
     @classmethod
     def _build_and_send(

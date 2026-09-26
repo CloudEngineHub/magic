@@ -44,7 +44,7 @@ from app.core.entity.message.server_message import (
 from agentlang.event.event import Event, EventType
 from agentlang.llms.token_usage.models import TokenUsageCollection
 from agentlang.logger import get_logger
-from app.core.entity.event.event_context import EventContext
+from app.core.entity.event.event_context import EventContext, OutboundMessageRecord
 from app.core.entity.factory.task_message_factory_protocol import TaskMessageFactoryProtocol
 from app.utils.attachment_sorter import AttachmentSorter
 from app.service.tool_detail_persistence_service import ToolDetailPersistenceService
@@ -59,6 +59,21 @@ class TaskMessageFactory(TaskMessageFactoryProtocol):
     """
     V1 任务消息工厂类，用于创建不同类型的TaskMessage对象。
     """
+
+    @classmethod
+    def create_channel_outbound_message(
+        cls, agent_context: AgentContext, record: OutboundMessageRecord,
+    ) -> ServerMessage:
+        payload = ServerMessagePayload.create(
+            task_id=agent_context.get_task_id() or "",
+            sandbox_id=agent_context.get_sandbox_id(),
+            message_type=MessageType.AGENT_REPLY,
+            status=TaskStatus.RUNNING, content=record.content, content_type="content",
+            event=EventType.AFTER_TOOL_CALL, show_in_ui=True,
+            seq_id=agent_context.get_next_seq_id(), correlation_id=record.delivery_id,
+            attachments=record.attachments,
+        )
+        return ServerMessage.create(metadata=agent_context.get_metadata(), payload=payload)
 
     @classmethod
     def create_error_message(

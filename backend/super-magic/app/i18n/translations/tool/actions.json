@@ -1,4 +1,8 @@
 {
+    "send_wechat_message": {
+        "zh_CN": "发送微信消息",
+        "en_US": "Send WeChat messages"
+    },
     "list_dir": {
         "zh_CN": "查看目录",
         "en_US": "List directory"

@@ -8,6 +8,11 @@
 # 4. 此文件会被提交到Git，不要在此文件中暴露任何敏感信息
 # =====================================================
 
+wechat:
+  # 本地保守正文预算，超出后交由 Agent 分段，不是服务端官方限制。
+  text_max_bytes: 4000
+  text_file_max_bytes: 1048576
+
 browser:
   # 浏览器后端：local_playwright、remote_playwright 或 chrome_extension。
   # 未配置时，本地环境使用 local_playwright，其他环境使用 remote_playwright。
@@ -353,6 +358,8 @@ model_profiles:
       currency: "USD"
 
 agent:
+  im_progress_initial_seconds: 60
+  im_progress_max_seconds: 240
   # 只限制最终模型正文；预览先取前几行，再限制估算 token，单行也受限。
   tool_result:
     max_inline_tokens: 20000
