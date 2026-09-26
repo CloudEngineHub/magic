@@ -1,0 +1,94 @@
+<!doctype html>
+<html>
+	<head>
+		<meta charset="utf-8" />
+		<title>Resource and navigation interception</title>
+		<script data-fixture-helper></script>
+	</head>
+	<body>
+		<h2>Resources, nested iframe and navigation</h2>
+		<div id="resource-target">CSS target</div>
+		<script>
+			;(async function () {
+				await Fixture.test(
+					"relative fetch resolves through the host and returns a real response",
+					async () => {
+						const response = await fetch("./resource.json")
+						Fixture.equal(response.ok, true)
+						Fixture.equal(await response.json(), { message: "real resource" })
+					},
+				)
+				await Fixture.test("XHR uses the same resource mapping", async () => {
+					const value = await new Promise((resolve, reject) => {
+						const xhr = new XMLHttpRequest()
+						xhr.open("GET", "./resource.json")
+						xhr.onload = () => {
+							try {
+								resolve(JSON.parse(xhr.responseText))
+							} catch (error) {
+								reject(error)
+							}
+						}
+						xhr.onerror = () => reject(Error("XHR failed"))
+						xhr.send()
+					})
+					Fixture.equal(value, { message: "real resource" })
+				})
+				await Fixture.test("dynamic script executes after URL resolution", async () => {
+					const script = document.createElement("script")
+					script.src = "./resource.js"
+					document.body.appendChild(script)
+					await Fixture.waitFor(() => window.dynamicResourceLoaded === true)
+				})
+				await Fixture.test("dynamic stylesheet applies after URL resolution", async () => {
+					const link = document.createElement("link")
+					link.rel = "stylesheet"
+					link.setAttribute("href", "./resource.css")
+					document.head.appendChild(link)
+					await Fixture.waitFor(
+						() =>
+							getComputedStyle(document.getElementById("resource-target")).color ===
+							"rgb(1, 2, 3)",
+					)
+				})
+				await Fixture.test("dynamic image loads with native dimensions", async () => {
+					const image = document.createElement("img")
+					image.src = "./resource.svg"
+					document.body.appendChild(image)
+					await Fixture.waitFor(() => image.complete && image.naturalWidth === 4)
+				})
+				await Fixture.test(
+					"nested relative HTML becomes srcdoc and executes its own script",
+					async () => {
+						const nested = document.createElement("iframe")
+						nested.src = "./nested.html"
+						document.body.appendChild(nested)
+						await Fixture.waitFor(
+							() => nested.contentDocument?.body?.dataset.nested === "executed",
+						)
+						if (!nested.srcdoc)
+							throw Error("Nested HTML bypassed the content interceptor")
+					},
+				)
+				await Fixture.test(
+					"links, window.open and location.href route to the host without unloading",
+					async () => {
+						const anchor = document.createElement("a")
+						anchor.href = "./next.html?via=anchor"
+						anchor.textContent = "Open"
+						document.body.appendChild(anchor)
+						anchor.click()
+						window.open("./next.html?via=open", "_blank")
+						window.location.href = "./next.html?via=location"
+						Fixture.equal(document.title, "Resource and navigation interception")
+					},
+				)
+				await Fixture.test("hash navigation stays inside the document", async () => {
+					window.location.href = "#section"
+					Fixture.equal(location.hash, "#section")
+				})
+				Fixture.done()
+			})()
+		</script>
+	</body>
+</html>

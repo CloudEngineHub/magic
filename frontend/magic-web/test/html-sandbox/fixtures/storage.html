@@ -1,0 +1,70 @@
+<!doctype html>
+<html>
+	<head>
+		<meta charset="utf-8" />
+		<title>Virtual storage example</title>
+		<script data-fixture-helper></script>
+	</head>
+	<body>
+		<h2>Virtual storage backed by the real parent handler</h2>
+		<script>
+			;(async function () {
+				await Fixture.test(
+					"each document starts with its own storage snapshot",
+					async () => {
+						Fixture.equal(localStorage.getItem("fixture-value"), null)
+						Fixture.equal(sessionStorage.getItem("fixture-value"), null)
+					},
+				)
+				await Fixture.test("localStorage implements set/get/key/remove/clear", async () => {
+					localStorage.setItem("fixture-value", "hello")
+					Fixture.equal(localStorage.getItem("fixture-value"), "hello")
+					Fixture.equal(localStorage.key(0), "fixture-value")
+					localStorage.removeItem("fixture-value")
+					Fixture.equal(localStorage.getItem("fixture-value"), null)
+					localStorage.setItem("temporary", "clear me")
+					localStorage.clear()
+					Fixture.equal(localStorage.length, 0)
+					Fixture.equal(localStorage.getItem("temporary"), null)
+					localStorage.setItem("fixture-value", "persisted")
+				})
+				await Fixture.test("sessionStorage and cookies remain usable", async () => {
+					sessionStorage.setItem("fixture-value", "session")
+					Fixture.equal(sessionStorage.getItem("fixture-value"), "session")
+					document.cookie = "fixtureCookie=hello; path=/"
+					if (!document.cookie.includes("fixtureCookie=hello"))
+						throw Error("Cookie write was lost")
+				})
+				await Fixture.test(
+					"IndexedDB opens, writes and reads through the host bridge",
+					async () => {
+						const db = await new Promise((resolve, reject) => {
+							const request = indexedDB.open("fixture-db", 1)
+							request.onupgradeneeded = () =>
+								request.result.createObjectStore("items")
+							request.onsuccess = () => resolve(request.result)
+							request.onerror = () => reject(request.error)
+						})
+						await new Promise((resolve, reject) => {
+							const transaction = db.transaction("items", "readwrite")
+							transaction.objectStore("items").put({ answer: 42 }, "row")
+							transaction.oncomplete = resolve
+							transaction.onerror = () => reject(transaction.error)
+						})
+						const row = await new Promise((resolve, reject) => {
+							const request = db
+								.transaction("items", "readonly")
+								.objectStore("items")
+								.get("row")
+							request.onsuccess = () => resolve(request.result)
+							request.onerror = () => reject(request.error)
+						})
+						Fixture.equal(row, { answer: 42 })
+						db.close()
+					},
+				)
+				Fixture.done()
+			})()
+		</script>
+	</body>
+</html>

@@ -38,7 +38,7 @@ describe("MagicUserApi", () => {
 			scopes: ["user.profile.display", "user.profile.identity"],
 			reason: "Render the profile card",
 		})
-		expect(origin).toBe("*")
+		expect(origin).toBe(window.location.origin)
 
 		window.dispatchEvent(
 			new MessageEvent("message", {

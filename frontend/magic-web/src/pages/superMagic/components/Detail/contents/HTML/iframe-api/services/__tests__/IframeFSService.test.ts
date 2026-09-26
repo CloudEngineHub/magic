@@ -58,7 +58,7 @@ describe("IframeFSService", () => {
 			path: "./assets/image.png",
 		})
 
-		expect(getIframeDownloadUrl).toHaveBeenCalledWith(["image-id"])
+		expect(getIframeDownloadUrl).toHaveBeenCalledWith(["image-id"], null)
 		expect(postToIframe).toHaveBeenCalledWith({
 			type: FS_MESSAGE_TYPES.GET_FILE_URL_RESPONSE,
 			requestId: "req-get-url",

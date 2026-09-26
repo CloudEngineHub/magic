@@ -53,7 +53,7 @@ describe("MagicI18nApi", () => {
 		expect(postMessageSpy).toHaveBeenCalledOnce()
 		const [message, origin] = postMessageSpy.mock.calls[0]
 		expect(message.type).toBe("MAGIC_I18N_LANG_SUBSCRIBE")
-		expect(origin).toBe("*")
+		expect(origin).toBe(window.location.origin)
 	})
 
 	it("subscribe() 返回取消订阅函数", () => {
