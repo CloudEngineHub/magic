@@ -13,6 +13,9 @@ import {
 import type { FileApi } from "../../src/pages/superMagic/fileAccess/fileApi"
 import { mountHookHost } from "./hook-host"
 import { assertHookDependencies } from "./assert-dependencies"
+import type { ConsoleEntry } from "../../packages/html-sandbox/src/features/ConsoleProxy"
+import type { NetworkEntry } from "../../packages/html-sandbox/src/features/NetworkInterceptor"
+import type { ApiCallEntry } from "../../packages/html-sandbox/src/features/ApiCallProxy"
 
 type Result = { name: string; passed: boolean; error?: string }
 declare global {
@@ -150,7 +153,10 @@ async function runExample(name: string, crossOrigin: boolean) {
 		const navigation: string[] = []
 		const outgoing: string[] = []
 		const transferred: number[][] = []
-		const consolePayloads: string[] = []
+		let devToolsPhase = "before"
+		const consoleEntries: Array<{ phase: string; entry: ConsoleEntry }> = []
+		const networkEntries: Array<{ phase: string; entry: NetworkEntry }> = []
+		const apiEntries: Array<{ phase: string; entry: ApiCallEntry }> = []
 		await new Promise<void>((resolve, reject) => {
 			timeout = setTimeout(() => reject(Error("Example timed out (45s)")), 45000)
 			handler = (event) => {
@@ -179,6 +185,10 @@ async function runExample(name: string, crossOrigin: boolean) {
 				}
 				if (message.type === "linkClicked") navigation.push(message.href)
 				if (message.type === "FIXTURE_DEVTOOLS") {
+					// Stage changes arrive before the toggle ACK and subsequent entries from
+					// this frame, so first-enable traffic cannot satisfy re-enable checks.
+					if (["first", "disabled", "second"].includes(message.phase))
+						devToolsPhase = message.phase
 					frameWindow.postMessage(
 						{ type: "MAGIC_DEVTOOLS_TOGGLE", enabled: message.enabled },
 						targetOrigin,
@@ -188,7 +198,11 @@ async function runExample(name: string, crossOrigin: boolean) {
 				if (message.type === "FIXTURE_TRANSFER")
 					transferred.push(Array.from(new Uint8Array(message.bytes)))
 				if (message.type === "MAGIC_DEVTOOLS_CONSOLE_ENTRY")
-					consolePayloads.push(JSON.stringify(message.payload))
+					consoleEntries.push({ phase: devToolsPhase, entry: message.payload })
+				if (message.type === "MAGIC_DEVTOOLS_NETWORK_ENTRY")
+					networkEntries.push({ phase: devToolsPhase, entry: message.payload })
+				if (message.type === "MAGIC_DEVTOOLS_API_CALL_ENTRY")
+					apiEntries.push({ phase: devToolsPhase, entry: message.payload })
 				if (message.type === "MAGIC_I18N_LANG_SUBSCRIBE")
 					frameWindow.postMessage(
 						{ type: message.type, success: true, results: { lang: "zh_CN" } },
@@ -263,12 +277,65 @@ async function runExample(name: string, crossOrigin: boolean) {
 				name: label + " · transferred buffer arrived intact",
 				passed: JSON.stringify(transferred) === "[[10,20]]",
 			})
-			report({
-				name: label + " · disabled console calls are not intercepted",
-				passed: !consolePayloads.some((payload) =>
-					payload.includes("fixture disabled console entry"),
-				),
-			})
+			for (const phase of ["first", "disabled", "second"]) {
+				const expectedCount = phase === "disabled" ? 0 : 1
+				const consoleMatches = consoleEntries.filter(({ entry }) =>
+					entry.args.includes(`fixture ${phase} console entry`),
+				)
+				const networkMatches = networkEntries.filter(
+					(item) => item.phase === phase && item.entry.url.includes("resource.json"),
+				)
+				const apiMatches = apiEntries.filter((item) => item.phase === phase)
+				const expectedApiType =
+					phase === "second" ? "MAGIC_GET_AGENTS_REQUEST" : "MAGIC_FS_READ_REQUEST"
+				// getAgents emits its own operation log before the correlated request;
+				// require that log too instead of confusing it with a duplicate lifecycle.
+				const expectedApiEvents =
+					phase === "disabled"
+						? []
+						: phase === "second"
+							? ["getAgents:start", "request:start", "request:success"]
+							: ["request:start", "request:success"]
+				const requestEntries = apiMatches.filter(
+					({ entry }) => entry.details?.type === expectedApiType,
+				)
+				const apiPassed =
+					JSON.stringify(apiMatches.map(({ entry }) => entry.event)) ===
+						JSON.stringify(expectedApiEvents) &&
+					(expectedCount === 0
+						? apiMatches.length === 0
+						: requestEntries.length === 2 &&
+							requestEntries[0].entry.status === "pending" &&
+							requestEntries[1].entry.status === "success" &&
+							requestEntries[0].entry.id === requestEntries[1].entry.id)
+				report({
+					name: label + ` · ${phase} console capture count`,
+					passed:
+						consoleMatches.length === expectedCount &&
+						consoleMatches.every((item) => item.phase === phase),
+				})
+				report({
+					name: label + ` · ${phase} network capture count and response`,
+					passed:
+						networkMatches.length === expectedCount &&
+						networkMatches.every(
+							({ entry }) =>
+								entry.status === 200 &&
+								entry.responseBody === JSON.stringify({ message: "real resource" }),
+						),
+				})
+				report({
+					name: label + ` · ${phase} API lifecycle capture`,
+					passed: apiPassed,
+					error: apiPassed
+						? undefined
+						: JSON.stringify({
+								expectedApiEvents,
+								expectedApiType,
+								entries: apiMatches,
+							}),
+				})
+			}
 			report({
 				name: label + " · proxy messages stay bounded",
 				passed: outgoing.length < 200,

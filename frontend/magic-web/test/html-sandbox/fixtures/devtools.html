@@ -14,7 +14,7 @@
 				const originalLog = console.log
 				let enabledFetch
 				let enabledLog
-				async function toggle(enabled) {
+				async function toggle(enabled, phase) {
 					await new Promise((resolve) => {
 						function listener(event) {
 							if (event.data?.type !== "FIXTURE_DEVTOOLS_ACK") return
@@ -22,18 +22,18 @@
 							resolve()
 						}
 						addEventListener("message", listener)
-						parent.postMessage({ type: "FIXTURE_DEVTOOLS", enabled }, "*")
+						parent.postMessage({ type: "FIXTURE_DEVTOOLS", enabled, phase }, "*")
 					})
 				}
 				await Fixture.test(
 					"enable all proxies without breaking window.Magic or fetch",
 					async () => {
-						await toggle(true)
+						await toggle(true, "first")
 						Fixture.equal(fetch === originalFetch, false)
 						Fixture.equal(console.log === originalLog, false)
 						enabledFetch = fetch
 						enabledLog = console.log
-						console.log("fixture console entry")
+						console.log("fixture first console entry")
 						Fixture.equal(await Magic.fs.readFile("data.txt"), "fixture file content")
 						Fixture.equal(await (await fetch("./resource.json")).json(), {
 							message: "real resource",
@@ -54,7 +54,7 @@
 				await Fixture.test(
 					"disable restores parent, console and fetch and keeps APIs usable",
 					async () => {
-						await toggle(false)
+						await toggle(false, "disabled")
 						Fixture.equal(parent === originalParent, true)
 						// Restoring a bound native function may produce a new identity. Assert
 						// that interception stops and real calls still work instead.
@@ -70,8 +70,11 @@
 				await Fixture.test(
 					"re-enable starts a fresh proxy session without recursive messages",
 					async () => {
-						await toggle(true)
+						await toggle(true, "second")
 						console.log("fixture second console entry")
+						Fixture.equal(await (await fetch("./resource.json")).json(), {
+							message: "real resource",
+						})
 						Fixture.equal((await Magic.agent.getAgents())[0].id, "fixture-agent")
 						await toggle(false)
 					},
