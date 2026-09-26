@@ -545,7 +545,7 @@ class TaskFileRepository implements TaskFileRepositoryInterface
             $query->where('storage_type', $storageType);
         }
         if ($excludeHidden) {
-            $query->where('is_hidden', false);
+            $query->where('is_hidden', 0);
         }
 
         if (! empty($fileTypes)) {

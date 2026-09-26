@@ -1954,6 +1954,17 @@ class ResourceShareAppService extends AbstractShareAppService
         foreach ($entities as $entity) {
             $entityMap[(string) $entity->getFileId()] = $entity;
         }
+        // The child query and the parent-chain query must describe the same
+        // snapshot. If a content row disappears between them (deleted,
+        // moved to another project, or filtered by a scope condition), do not
+        // silently turn a non-empty page into an empty successful response.
+        $missingContentIds = array_values(array_filter(
+            $contentIds,
+            static fn (int $contentId): bool => ! array_key_exists((string) $contentId, $entityMap)
+        ));
+        if ($missingContentIds !== []) {
+            throw new InvalidArgumentException('share file content is missing');
+        }
         $requiredAncestorIds = [];
         $visibleContentIds = [];
         foreach ($contentIds as $contentId) {
