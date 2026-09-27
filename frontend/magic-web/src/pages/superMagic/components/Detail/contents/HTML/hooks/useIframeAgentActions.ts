@@ -9,6 +9,7 @@ import { useMemoizedFn } from "ahooks"
 import pubsub, { PubSubEvents } from "@/utils/pubsub"
 import {
 	AgentType,
+	TaskStatus,
 	type ProjectListItem,
 	type Topic,
 } from "@/pages/superMagic/pages/Workspace/types"
@@ -18,6 +19,10 @@ import { SuperMagicApi } from "@/apis"
 import type { TopicStore } from "@/pages/superMagic/stores/core/topic"
 import { superMagicTopicModelService } from "@/services/superMagic/topicModel"
 import type { AgentInfo, TiptapJSONContent } from "../iframe-api/types"
+import { serializeMessageContent } from "@/pages/superMagic/services/messageQueueSerialization"
+import { resolveTopicConversationLoadingState } from "@/pages/superMagic/hooks/topic-conversation-loading"
+import { superMagicStore } from "@/pages/superMagic/stores"
+import { optimisticMessageStore } from "@/pages/superMagic/stores/optimisticMessageStore"
 import { messageSendService } from "@/pages/superMagic/services/messageSendFlowService"
 import {
 	processMessageMentions,
@@ -104,13 +109,15 @@ export function useIframeAgentActions(
 			const activeHostProjectId = activeProject?.id
 			if (!activeTopicStore || !activeHostProjectId) return false
 
+			// Capture before any async work; all preparation and delivery use this topic.
+			const capturedTopic = targetTopic ?? activeTopicStore.selectedTopic
 			const messageContent = prependMicroAppMention(jsonContent, microAppContext)
 			const screenshotMentions = collectMentionItemsFromContent(messageContent as JSONContent)
 			// mention / 截图解析走 origin：文件仍在原微应用项目
 			const processedJsonContent = (await processMessageMentions(
 				messageContent as JSONContent,
 				originProjectId ?? activeHostProjectId,
-				targetTopic?.id ?? activeTopicStore.selectedTopic?.id,
+				capturedTopic?.id,
 			)) as TiptapJSONContent
 			const superAgentExtra = {
 				mentions: [],
@@ -123,6 +130,59 @@ export function useIframeAgentActions(
 				...(topicMode ? { topic_pattern: topicMode } : {}),
 			}
 
+			// Re-read only the captured topic after async mention preparation. Switching the
+			// visible topic must never redirect this request to a different conversation.
+			const latestTopic =
+				activeTopicStore.selectedTopic?.id === capturedTopic?.id
+					? activeTopicStore.selectedTopic
+					: (activeTopicStore.topics.find((topic) => topic.id === capturedTopic?.id) ??
+						capturedTopic)
+			const status = latestTopic?.task_status ?? latestTopic?.status
+			const chatTopicId = capturedTopic?.chat_topic_id
+			const isLoading = chatTopicId
+				? resolveTopicConversationLoadingState({
+						topicMessages: superMagicStore.messages.get(chatTopicId) ?? [],
+						getMessageNode: (id) => superMagicStore.getMessageNode(id),
+						getOptimisticStatus: (message) =>
+							optimisticMessageStore.getStatus(chatTopicId, message?.app_message_id),
+					}).isLoading
+				: false
+			if (
+				capturedTopic?.id &&
+				status !== TaskStatus.WAITING_FOR_USER &&
+				(status === TaskStatus.RUNNING || isLoading)
+			) {
+				const queuedContent = serializeMessageContent(
+					processedJsonContent as JSONContent,
+					collectMentionItemsFromContent(processedJsonContent as JSONContent),
+					undefined,
+					undefined,
+					undefined,
+					topicMode ?? capturedTopic.topic_mode,
+					capturedTopic.agent_code,
+				)
+				// An omitted model keeps the host topic's default, just like a direct send.
+				const queued = await SuperMagicApi.addMessageToQueue({
+					project_id: activeHostProjectId,
+					topic_id: capturedTopic.id,
+					message_type: "rich_text",
+					message_content: {
+						...queuedContent,
+						extra: {
+							super_agent: {
+								...queuedContent.extra.super_agent,
+								model: model ? { model_id: model } : undefined,
+							},
+						},
+					},
+				})
+				if (!queued?.queue_id) throw new Error("Failed to queue message")
+				// Existing queue subscribers refresh from the server on this update event.
+				pubsub.publish(PubSubEvents.SuperMagicMessageQueueConsumed)
+				releaseHtmlScreenshotsAfterSend(screenshotMentions)
+				return true
+			}
+
 			// 用传入的 store 直发，不走全局输入框 pubsub，避免发到错误会话
 			const success = await messageSendService.dispatchMessage({
 				jsonContent: processedJsonContent,
@@ -131,7 +191,7 @@ export function useIframeAgentActions(
 				context: resolveMessageSendContext({
 					selectedProject:
 						activeProject ?? ({ id: activeHostProjectId } as ProjectListItem),
-					selectedTopic: targetTopic ?? activeTopicStore.selectedTopic,
+					selectedTopic: capturedTopic,
 					topicStore: activeTopicStore,
 				}),
 			})
