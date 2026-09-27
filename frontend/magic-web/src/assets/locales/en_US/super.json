@@ -2385,6 +2385,9 @@
 	"fileManager": {
 		"back": "Back",
 		"browseFolder": "Browse folder",
+		"checkItem": "Select {{name}}",
+		"checkSelectionHint": "Check files; expand folders to keep selecting",
+		"clearSelection": "Clear all",
 		"clipboard": {
 			"copied": "Copied {{count}} items. Go to the destination to paste.",
 			"cut": "Cut {{count}} items. Paste to review and confirm the move.",
@@ -2474,7 +2477,11 @@
 			"scope": "Deleted files you can access across projects and personal space. This list is not limited to the current project.",
 			"title": "File trash"
 		},
+		"removeSelected": "Remove {{name}}",
 		"restoredDirectoryUnavailable": "The previous folder is unavailable. Opened the nearest available folder.",
+		"selectedFiles": "Selected files",
+		"selectionEmpty": "No files selected",
+		"selectionEmptyHint": "Check files on the left to add them here",
 		"selectionHint": "Click to select, double-click to open",
 		"sort": "Sort",
 		"sortModified": "By modified date",

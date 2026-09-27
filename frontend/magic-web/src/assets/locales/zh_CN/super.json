@@ -2385,6 +2385,9 @@
 	"fileManager": {
 		"back": "后退",
 		"browseFolder": "浏览文件夹",
+		"checkItem": "选择 {{name}}",
+		"checkSelectionHint": "勾选文件，展开目录可继续选择",
+		"clearSelection": "清空",
 		"clipboard": {
 			"copied": "已复制 {{count}} 项，可前往目标位置粘贴",
 			"cut": "已剪切 {{count}} 项，粘贴后确认移动",
@@ -2474,7 +2477,11 @@
 			"scope": "所有可访问文件的回收记录，包含其他项目和个人空间；此处不按当前项目筛选。",
 			"title": "文件回收站"
 		},
+		"removeSelected": "移除 {{name}}",
 		"restoredDirectoryUnavailable": "上次浏览的目录已不可用，已打开最近的可用目录。",
+		"selectedFiles": "已选文件",
+		"selectionEmpty": "还没有选择文件",
+		"selectionEmptyHint": "勾选左侧文件，已选内容会显示在这里",
 		"selectionHint": "单击选择，双击打开",
 		"sort": "排序",
 		"sortModified": "按修改时间",

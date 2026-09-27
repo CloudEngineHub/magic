@@ -50,7 +50,7 @@ export interface FileManagerPathItem {
 	name: string
 }
 
-export interface FileManagerProps {
+interface FileManagerBaseProps {
 	hidePlaces?: boolean
 	defaultView?: FileManagerView
 	defaultWritePath?: string
@@ -86,6 +86,22 @@ export interface FileManagerProps {
 	spaceConfig?: TopicFilesSpaceConfig
 	isItemMutable?: (file: AttachmentItem) => boolean
 }
+
+export interface FileManagerCheckChange {
+	added: AttachmentItem[]
+	removedIds: string[]
+}
+
+export type FileManagerProps = FileManagerBaseProps &
+	(
+		| { mode?: "manage"; checkedIds?: never; onCheckChange?: never }
+		| {
+				mode: "select"
+				/** 调用方持有当前项目的完整勾选集，目录折叠、搜索和导航不能删除它。 */
+				checkedIds: ReadonlySet<string>
+				onCheckChange: (change: FileManagerCheckChange) => void
+		  }
+	)
 
 /** 内容布局同时用于虚拟行和框选命中，不能从已挂载的 DOM 推断完整选择范围。 */
 export interface FileManagerLayout {
