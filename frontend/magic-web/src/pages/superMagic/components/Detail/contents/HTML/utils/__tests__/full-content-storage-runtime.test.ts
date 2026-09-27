@@ -3,7 +3,8 @@ import { afterEach, describe, expect, it, vi } from "vitest"
 
 vi.mock("../nested-iframe-content", () => ({ getNestedIframeInterceptorScript: () => "" }))
 vi.mock("virtual:magic-api", () => ({ default: "" }))
-vi.mock("@/models/config", () => ({ configStore: { i18n: { language: "en_US" } } }))
+const language = vi.hoisted(() => ({ language: "en_US", displayLanguage: "zh_CN" }))
+vi.mock("@/models/config", () => ({ configStore: { i18n: language } }))
 vi.mock("@/pages/superMagic/utils/api", () => ({ getTemporaryDownloadUrl: vi.fn() }))
 vi.mock("@/utils/env", () => ({ env: () => "https://cdn.example.test" }))
 vi.mock("../index", () => ({
@@ -30,6 +31,16 @@ describe("full content storage installation order", () => {
 		if (!script || !dom) throw new Error("Missing fixture script or window")
 		dom.window.eval(script)
 	}
+
+	it("boots with the effective display language, including session overrides", () => {
+		dom = new JSDOM("", { url: "https://sandbox.example/", runScripts: "outside-only" })
+		const html = getFullContent("<html><body></body></html>", "language")
+		const parsed = new DOMParser().parseFromString(html, "text/html")
+		const script = parsed.querySelector('script[data-injected="magic-lang"]')?.textContent
+		if (!script) throw Error("Missing language bootstrap")
+		dom.window.eval(script)
+		expect(Reflect.get(dom.window, "__MAGIC_INITIAL_LANG__")).toBe("zh_CN")
+	})
 
 	it("uses native marker backing once and preserves both areas across A → B → A reinjection", () => {
 		dom = new JSDOM("", { url: "https://standalone.example/", runScripts: "outside-only" })

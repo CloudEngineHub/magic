@@ -46,6 +46,13 @@ const agentActionMocks = vi.hoisted(() => ({
 	authorizeHtmlPermissions: vi.fn(async () => true),
 }))
 
+const i18nState = vi.hoisted(() => ({
+	language: "zh-CN",
+	resolvedLanguage: "zh-CN",
+	on: vi.fn(),
+	off: vi.fn(),
+}))
+
 vi.mock("react-i18next", () => ({
 	initReactI18next: {
 		type: "3rdParty",
@@ -53,12 +60,7 @@ vi.mock("react-i18next", () => ({
 	},
 	useTranslation: () => ({
 		t: (key: string) => key,
-		i18n: {
-			language: "zh-CN",
-			resolvedLanguage: "zh-CN",
-			on: vi.fn(),
-			off: vi.fn(),
-		},
+		i18n: i18nState,
 	}),
 }))
 
@@ -475,6 +477,8 @@ export function useRendererTestSetup() {
 	beforeEach(() => {
 		vi.useFakeTimers()
 		vi.clearAllMocks()
+		i18nState.language = "zh-CN"
+		i18nState.resolvedLanguage = "zh-CN"
 		envMock.mockReturnValue("")
 		userState.user.userInfo = null
 		agentActionMocks.authorizeHtmlPermissions.mockResolvedValue(true)
@@ -496,6 +500,7 @@ export function useRendererTestSetup() {
 }
 
 export {
+	i18nState,
 	hookState,
 	envMock,
 	virtualStorageMocks,

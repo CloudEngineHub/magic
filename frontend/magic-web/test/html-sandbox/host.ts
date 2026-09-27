@@ -211,11 +211,6 @@ async function runExample(name: string, crossOrigin: boolean) {
 					networkEntries.push({ phase: devToolsPhase, entry: message.payload })
 				if (message.type === "MAGIC_DEVTOOLS_API_CALL_ENTRY")
 					apiEntries.push({ phase: devToolsPhase, entry: message.payload })
-				if (message.type === "MAGIC_I18N_LANG_SUBSCRIBE")
-					frameWindow.postMessage(
-						{ type: message.type, success: true, results: { lang: "zh_CN" } },
-						targetOrigin,
-					)
 				void fetchHandler(event).catch(reject)
 				void nestedHandler(event).catch(reject)
 				void storageHandler(event).catch(reject)

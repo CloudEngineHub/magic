@@ -1665,7 +1665,9 @@ export const getFullContent = (
 		doc.documentElement.appendChild(body)
 	}
 
-	const initialLang = normalizeLocale(configStore.i18n.language)
+	const initialLang = normalizeLocale(
+		configStore.i18n.displayLanguage || configStore.i18n.language,
+	)
 	const firstHeadChild = doc.head.firstChild
 	const injectedHeadFragment = doc.createDocumentFragment()
 	const locationSearch = options.locationSearch || ""

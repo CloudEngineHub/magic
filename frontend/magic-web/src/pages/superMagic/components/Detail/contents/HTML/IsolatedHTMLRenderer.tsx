@@ -175,6 +175,7 @@ import {
 	HtmlNavigationRuntimeService,
 	type HtmlNavigationRuntimeRequest,
 } from "./utils/html-navigation-runtime"
+import { useIframeI18n } from "./iframe-api/hooks/useIframeI18n"
 import { useIframeFS } from "./iframe-api/hooks/useIframeFS"
 import { useIframeLLM } from "./iframe-api/hooks/useIframeLLM"
 import { useIframeDatabase } from "./iframe-api/hooks/useIframeDatabase"
@@ -652,7 +653,6 @@ const IsolatedHTMLRendererInner = forwardRef<IsolatedHTMLRendererRef, IsolatedHT
 			useState<VirtualStorageRuntimeContext | null>(null)
 		const hasRenderedOnceRef = useRef(false) // 跟踪 iframe 是否至少已渲染一次
 		const hasNotifiedRenderReadyRef = useRef(false)
-		const hasIframeI18nSubscriberRef = useRef(false)
 		const renderLifecycleRef = useRef(createIframeRenderLifecycleState())
 		// Fallback timer: unblocks scaling when sandbox never sends contentMetrics
 		const contentMetricsFallbackTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
@@ -1555,25 +1555,12 @@ const IsolatedHTMLRendererInner = forwardRef<IsolatedHTMLRendererRef, IsolatedHT
 			pubsub.publish(PubSubEvents.Super_Magic_Detail_Refresh)
 		}
 
-		const notifyIframeI18nLang = useMemoizedFn(
-			(source: "subscribe_ack" | "language_changed", requestId?: string) => {
-				const currentLang = i18n.resolvedLanguage || i18n.language || "zh-CN"
-				if (!iframeRef.current?.contentWindow) return
-
-				iframeRef.current.contentWindow.postMessage(
-					{
-						type: "MAGIC_I18N_LANG_SUBSCRIBE",
-						requestId,
-						success: true,
-						results: {
-							lang: currentLang,
-							source,
-						},
-					},
-					iframeTargetOrigin,
-				)
-			},
-		)
+		const notifyIframeI18nLang = useIframeI18n({
+			iframeRef,
+			targetOrigin: iframeTargetOrigin,
+			i18n,
+			enabled: sandboxType === "iframe",
+		})
 
 		const handleIframeElementLoad = useMemoizedFn(() => {
 			reportRenderLifecycleStage("shell_loaded")
@@ -1587,7 +1574,6 @@ const IsolatedHTMLRendererInner = forwardRef<IsolatedHTMLRendererRef, IsolatedHT
 
 		const refreshIframeContent = useMemoizedFn((options?: { force?: boolean }) => {
 			if (!virtualStorageContext) return
-			hasIframeI18nSubscriberRef.current = false
 			// 解码HTML实体
 			let decodedContent = decodeHTMLEntities(content)
 
@@ -1720,7 +1706,6 @@ const IsolatedHTMLRendererInner = forwardRef<IsolatedHTMLRendererRef, IsolatedHT
 						restoreSelectionMode?: boolean
 					},
 				) => {
-					hasIframeI18nSubscriberRef.current = false
 					// Save current edit mode state before updating content
 					const wasInEditMode = isEditMode
 					// 默认恢复；仅显式传 false 时不恢复
@@ -2410,7 +2395,6 @@ const IsolatedHTMLRendererInner = forwardRef<IsolatedHTMLRendererRef, IsolatedHT
 				} else if (event.data && event.data.type === "MAGIC_I18N_LANG_SUBSCRIBE") {
 					// 处理 window.Magic.i18n.subscribe() 请求
 					const payload = event.data as MagicI18nLangSubscribeRequest
-					hasIframeI18nSubscriberRef.current = true
 					notifyIframeI18nLang("subscribe_ack", payload.requestId)
 				}
 
@@ -2512,20 +2496,6 @@ const IsolatedHTMLRendererInner = forwardRef<IsolatedHTMLRendererRef, IsolatedHT
 				iframeTargetOrigin,
 			)
 		}, [contentInjected, iframeTargetOrigin, isPptRender, isVisible, sandboxType])
-
-		useEffect(() => {
-			if (sandboxType !== "iframe") return
-
-			const handleLanguageChanged = () => {
-				if (!hasIframeI18nSubscriberRef.current) return
-				notifyIframeI18nLang("language_changed")
-			}
-
-			i18n.on("languageChanged", handleLanguageChanged)
-			return () => {
-				i18n.off("languageChanged", handleLanguageChanged)
-			}
-		}, [i18n, notifyIframeI18nLang, sandboxType])
 
 		useLayoutEffect(() => {
 			window.addEventListener("message", handleMessage, true)

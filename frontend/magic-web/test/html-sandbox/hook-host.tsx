@@ -1,3 +1,5 @@
+import { createInstance } from "i18next"
+import { useIframeI18n } from "../../src/pages/superMagic/components/Detail/contents/HTML/iframe-api/hooks/useIframeI18n"
 import { createElement, useEffect, useRef } from "react"
 import { createRoot } from "react-dom/client"
 import { useIframeFS } from "../../src/pages/superMagic/components/Detail/contents/HTML/iframe-api/hooks/useIframeFS"
@@ -64,6 +66,12 @@ interface HookHostOptions {
 }
 
 export async function mountHookHost(iframe: HTMLIFrameElement, options: HookHostOptions) {
+	const language = createInstance()
+	await language.init({
+		lng: "zh_CN",
+		fallbackLng: false,
+		resources: { zh_CN: { translation: {} }, en_US: { translation: {} } },
+	})
 	const container = document.createElement("div")
 	container.hidden = true
 	document.body.append(container)
@@ -81,6 +89,11 @@ export async function mountHookHost(iframe: HTMLIFrameElement, options: HookHost
 			)
 			function HookHost() {
 				const iframeRef = useRef(iframe)
+				const notifyLanguage = useIframeI18n({
+					iframeRef,
+					targetOrigin: options.targetOrigin,
+					i18n: language,
+				})
 				const fs = useIframeFS({
 					iframeRef,
 					targetOrigin: options.targetOrigin,
@@ -152,7 +165,16 @@ export async function mountHookHost(iframe: HTMLIFrameElement, options: HookHost
 						const payload = event.data
 						const type = payload?.type
 						if (typeof type !== "string") return
-						if (type.startsWith("MAGIC_FS_")) await fs.handleFSMessage(type, payload)
+						if (type === "MAGIC_I18N_LANG_SUBSCRIBE")
+							notifyLanguage("subscribe_ack", payload.requestId)
+						else if (type === "FIXTURE_CHANGE_LANGUAGE") {
+							await language.changeLanguage(payload.lang)
+							iframe.contentWindow?.postMessage(
+								{ type: "FIXTURE_LANGUAGE_CHANGED" },
+								options.targetOrigin,
+							)
+						} else if (type.startsWith("MAGIC_FS_"))
+							await fs.handleFSMessage(type, payload)
 						else if (type.startsWith("MAGIC_LLM_"))
 							await llm.handleLLMMessage(type, payload)
 						else if (type.startsWith("MAGIC_DB_"))
@@ -174,7 +196,7 @@ export async function mountHookHost(iframe: HTMLIFrameElement, options: HookHost
 					disposeListener = () => window.removeEventListener("message", handleMessage)
 					resolve()
 					return disposeListener
-				}, [agent, database, files, fs, llm, user])
+				}, [agent, database, files, fs, llm, user, notifyLanguage])
 				return null
 			}
 			root.render(createElement(HookHost))

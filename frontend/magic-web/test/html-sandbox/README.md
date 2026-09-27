@@ -60,7 +60,7 @@ HTML → production Magic prelude → native postMessage
      → fixture external dependency → real response → HTML assertion
 ```
 
-- `hook-host.tsx` 挂载真实 hooks 和 service。只替换后端适配器、登录态、上传下载副作用及用户授权界面。真实授权请求的 scope/reason 和顺序仍有断言。
+- `hook-host.tsx` 挂载真实 hooks 和 service。语言用例通过真实 i18next `changeLanguage` → `useIframeI18n` → iframe `Magic.i18n` 验证 lang、文案更新与两种取消订阅方式，并断言输入草稿保留。只替换后端适配器、登录态、上传下载副作用及用户授权界面。真实授权请求的 scope/reason 和顺序仍有断言。
 - `host-dependencies.ts` 保存输入，`assert-dependencies.ts` 核对完整参数、真实 File 字节、项目/表/行身份、消息内容、权限时序和刷新归属。
 - LLM token、模型、chat、SSE 使用真实 fetch 和解析器。静态 fixture 服务核对 HTTP method、授权、组织、模型及消息内容后才返回成功数据。
 - runtime shell 使用包内生产构建脚本；prelude 使用生产 Vite 插件；full-content/fetch/nested/storage 使用源码，不替换成手写复制实现或空 prelude。
@@ -140,3 +140,5 @@ it does not replace a full product navigation test with authenticated providers.
 优先明确这些能力的业务契约与失败反馈，再补可执行回归；不要用无条件成功的 mock 扩大“支持范围”。
 后续复杂脚本迁移沿用已有 TS 编译入口，避免再次维护手工生成代码。
 目前浏览器证据只覆盖 Chrome；真实 WebView、Firefox/Safari、线上后端与实际权限弹窗未验收。
+
+语言切换通过订阅通知更新，不重载 iframe。`Magic.i18n.lang` 始终同步最新语言（`zh_CN` / `en_US`）；页面需在 `subscribe(({ lang }) => …)` 中更新自己的文案。可调用返回的取消函数，或 `unsubscribe` 传入原回调引用；取消后 lang 仍会更新。

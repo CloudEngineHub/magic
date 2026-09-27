@@ -350,16 +350,79 @@
 						Fixture.equal(finished.sort(), ["agents", "file"])
 					},
 				)
+				async function changeHostLanguage(lang) {
+					await new Promise((resolve) => {
+						const handler = (event) => {
+							if (
+								event.source !== parent ||
+								event.data?.type !== "FIXTURE_LANGUAGE_CHANGED"
+							)
+								return
+							window.removeEventListener("message", handler)
+							resolve()
+						}
+						window.addEventListener("message", handler)
+						parent.postMessage({ type: "FIXTURE_CHANGE_LANGUAGE", lang }, "*")
+					})
+				}
 				await Fixture.test(
-					"language subscription receives host state and can unsubscribe",
+					"lang follows real host language changes without subscribers",
 					async () => {
-						let unsubscribe
-						const result = await new Promise((resolve) => {
-							unsubscribe = Magic.i18n.subscribe(resolve)
-						})
-						Fixture.equal(result.lang, "zh_CN")
+						await changeHostLanguage("zh_CN")
 						Fixture.equal(Magic.i18n.lang, "zh_CN")
-						unsubscribe()
+					},
+				)
+				await Fixture.test(
+					"language callbacks update DOM without losing page state",
+					async () => {
+						const input = document.createElement("input")
+						input.value = "unsaved draft"
+						const label = document.createElement("span")
+						document.body.append(input, label)
+						const seen = []
+						const callback = ({ lang }) => {
+							Fixture.equal(Magic.i18n.lang, lang)
+							label.textContent = lang === "en_US" ? "Hello" : "你好"
+							seen.push(lang)
+						}
+						const dispose = Magic.i18n.subscribe(callback)
+						await Fixture.waitFor(() => seen.length === 1)
+						Fixture.equal(label.textContent, "你好")
+						await changeHostLanguage("en_US")
+						Fixture.equal(seen, ["zh_CN", "en_US"])
+						Fixture.equal(label.textContent, "Hello")
+						Fixture.equal(input.isConnected && input.value, "unsaved draft")
+						Magic.i18n.unsubscribe(callback)
+						await changeHostLanguage("zh_CN")
+						Fixture.equal(Magic.i18n.lang, "zh_CN")
+						Fixture.equal(seen, ["zh_CN", "en_US"])
+						dispose()
+						input.remove()
+						label.remove()
+					},
+				)
+				await Fixture.test(
+					"returned disposer removes only its callback; resubscribe gets current language",
+					async () => {
+						const first = [],
+							second = []
+						const off = Magic.i18n.subscribe(({ lang }) => first.push(lang))
+						await Fixture.waitFor(() => first.length === 1)
+						const cb = ({ lang }) => second.push(lang)
+						Magic.i18n.subscribe(cb)
+						await Fixture.waitFor(() => second.length === 1)
+						off()
+						const previous = first.slice()
+						await changeHostLanguage("en_US")
+						Fixture.equal(first, previous)
+						Fixture.equal(second, ["zh_CN", "en_US"])
+						Magic.i18n.unsubscribe(cb)
+						let current
+						const stop = Magic.i18n.subscribe(({ lang }) => {
+							current = lang
+						})
+						await Fixture.waitFor(() => current === "en_US")
+						stop()
 					},
 				)
 				await Fixture.test(
