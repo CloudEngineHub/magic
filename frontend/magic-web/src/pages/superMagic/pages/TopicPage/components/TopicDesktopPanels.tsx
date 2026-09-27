@@ -49,8 +49,7 @@ interface TopicDesktopPanelsProps {
 	detailPanelClassName: string
 	isDetailPanelFullscreen: boolean
 	sidebar:
-		| ReactNode
-		| ((controller: { onCollapse?: () => void; isCollapsed: boolean }) => ReactNode)
+		ReactNode | ((controller: { onCollapse?: () => void; isCollapsed: boolean }) => ReactNode)
 	enableProjectCollapse?: boolean
 	detailPanel: ReactNode | ((control?: FileSidebarControl) => ReactNode)
 	isReadOnly: boolean
@@ -63,7 +62,6 @@ interface TopicDesktopPanelsProps {
 	/** Embedding pages can reserve horizontal padding around the collapsed navigation. */
 	collapsedConversationPanelWidth?: number
 	conversationResizeHandleClassName?: string
-	conversationResizeHandleGripVariant?: "default" | "dots"
 	/** Keep overlays inside an embedding page instead of anchoring them to the viewport. */
 	historyOverlayScope?: "viewport" | "container"
 	historyLayout?: TopicDesktopPanelsHistoryLayout
@@ -100,7 +98,6 @@ function TopicDesktopPanels({
 	initialConversationPanelCollapsed = false,
 	collapsedConversationPanelWidth,
 	conversationResizeHandleClassName,
-	conversationResizeHandleGripVariant = "default",
 	historyOverlayScope = "viewport",
 	historyLayout,
 	shouldShowDetailPanel,
@@ -519,7 +516,6 @@ function TopicDesktopPanels({
 
 				{shouldShowProjectResizeHandle && (
 					<TopicResizeHandle
-						gripVariant="dots"
 						dragging={isDraggingProjectSider}
 						collapseProgress={isDraggingProjectSider ? collapseProgress : 0}
 						collapseArmed={isDraggingProjectSider && isCollapseArmed}
@@ -654,7 +650,6 @@ function TopicDesktopPanels({
 									isCollapseArmed
 								}
 								disabled={isConversationPanelCollapsed || !shouldShowDetailPanel}
-								gripVariant={conversationResizeHandleGripVariant}
 								onResizeStart={(clientX) => {
 									startDragMessagePanel(
 										clientX,

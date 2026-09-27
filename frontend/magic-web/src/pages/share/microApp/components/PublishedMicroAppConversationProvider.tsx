@@ -452,7 +452,6 @@ const PublishedMicroAppConversationSurface = observer(
 					initialConversationPanelCollapsed
 					collapsedConversationPanelWidth={COLLAPSED_RAIL_WIDTH_PX}
 					persistConversationPanelState={false}
-					conversationResizeHandleGripVariant="dots"
 					historyOverlayScope="container"
 					historyLayout={{
 						isOpen: isTopicHistoryPanelOpen,
