@@ -24,17 +24,23 @@ function isHtmlSandboxRuntimeRequest(pathname) {
 	return pathname === MAGIC_HTML_SANDBOX_RUNTIME_PATH
 }
 
-/**
- * Only for the public, credential-free /husky-runtime.js static artifact.
- * The sandbox URL may be supplied by remote config.js, absent from Node's env.
- * Gating this file by that env silently blocks the current runtime and causes
- * shared shells to fall back to an incompatible inline runtime. This grants no
- * API access; source/origin checks on iframe messages remain independent.
- */
-function setHtmlSandboxRuntimeCorsHeaders(res) {
-	res.setHeader("Access-Control-Allow-Origin", "*")
+function setHtmlSandboxRuntimeCorsHeaders(res, requestOrigin, allowedOrigins) {
+	const varyHeader = res.getHeader?.("Vary")
+	const varyValues = String(varyHeader || "")
+		.split(",")
+		.map((value) => value.trim())
+		.filter(Boolean)
+	if (!varyValues.some((value) => value.toLowerCase() === "origin")) {
+		res.setHeader("Vary", [...varyValues, "Origin"].join(", "))
+	}
+
+	if (requestOrigin && allowedOrigins.includes(requestOrigin)) {
+		res.setHeader("Access-Control-Allow-Origin", requestOrigin)
+		return
+	}
+
 	if (typeof res.removeHeader === "function") {
-		res.removeHeader("Access-Control-Allow-Credentials")
+		res.removeHeader("Access-Control-Allow-Origin")
 	}
 }
 

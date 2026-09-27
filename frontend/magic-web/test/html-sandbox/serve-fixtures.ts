@@ -8,12 +8,17 @@ import { buildFixtures, outputRoot } from "./build-fixtures"
 const { setHtmlSandboxRuntimeCorsHeaders } = createRequire(import.meta.url)(
 	"../../server/utils/htmlSandboxRuntimeCors.cjs",
 ) as {
-	setHtmlSandboxRuntimeCorsHeaders: (response: import("node:http").ServerResponse) => void
+	setHtmlSandboxRuntimeCorsHeaders: (
+		response: import("node:http").ServerResponse,
+		requestOrigin: string | undefined,
+		allowedOrigins: string[],
+	) => void
 }
 
 export async function serveFixtures() {
 	await buildFixtures()
 	const resourceRequests: string[] = []
+	const runtimeAllowedOrigins: string[] = []
 	const mime: Record<string, string> = {
 		".html": "text/html; charset=utf-8",
 		".js": "text/javascript",
@@ -132,7 +137,8 @@ export async function serveFixtures() {
 				return
 			}
 			res.setHeader("Content-Type", mime[extname(file)] || "application/octet-stream")
-			if (path === "/husky-runtime.js") setHtmlSandboxRuntimeCorsHeaders(res)
+			if (path === "/husky-runtime.js")
+				setHtmlSandboxRuntimeCorsHeaders(res, req.headers.origin, runtimeAllowedOrigins)
 			else res.setHeader("Access-Control-Allow-Origin", "*")
 			res.setHeader("Cache-Control", "no-store")
 			res.end(await readFile(file))
@@ -147,6 +153,11 @@ export async function serveFixtures() {
 	})
 	const address = server.address()
 	if (!address || typeof address === "string") throw new Error("No fixture server port")
+	// Match production allowlist semantics with only this run's two loopback origins.
+	runtimeAllowedOrigins.push(
+		`http://127.0.0.1:${address.port}`,
+		`http://localhost:${address.port}`,
+	)
 	return { server, url: `http://127.0.0.1:${address.port}` }
 }
 

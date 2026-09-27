@@ -9,11 +9,15 @@ const { getHtmlSandboxAllowedOrigins, setHtmlSandboxRuntimeCorsHeaders } = requi
 	"../server/utils/htmlSandboxRuntimeCors.cjs",
 ) as {
 	getHtmlSandboxAllowedOrigins: (env?: NodeJS.ProcessEnv) => string[]
-	setHtmlSandboxRuntimeCorsHeaders: (response: {
-		getHeader(name: string): number | string | string[] | undefined
-		removeHeader(name: string): void
-		setHeader(name: string, value: number | string | readonly string[]): void
-	}) => void
+	setHtmlSandboxRuntimeCorsHeaders: (
+		response: {
+			getHeader(name: string): number | string | string[] | undefined
+			removeHeader(name: string): void
+			setHeader(name: string, value: number | string | readonly string[]): void
+		},
+		requestOrigin: string | undefined,
+		allowedOrigins: string[],
+	) => void
 }
 
 export default function createHtmlSandboxRuntimePlugin(
@@ -52,7 +56,10 @@ export default function createHtmlSandboxRuntimePlugin(
 					const runtimeSource = await readFile(
 						resolve(__dirname, "../public/husky-runtime.js"),
 					)
-					setHtmlSandboxRuntimeCorsHeaders(res)
+					const requestOrigin = Array.isArray(req.headers.origin)
+						? req.headers.origin[0]
+						: req.headers.origin
+					setHtmlSandboxRuntimeCorsHeaders(res, requestOrigin, allowedOrigins)
 					res.statusCode = 200
 					res.setHeader("Cache-Control", "no-cache")
 					res.setHeader("Content-Type", "text/javascript; charset=utf-8")

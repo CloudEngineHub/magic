@@ -60,21 +60,53 @@ test("deduplicates origins and ignores invalid or unsupported URLs", () => {
 	)
 })
 
-test("public runtime CORS is cache-independent and preserves other headers", () => {
+test("echoes an allowed request origin and preserves existing Vary values", () => {
 	const response = createHeaderRecorder({ Vary: "Accept-Encoding" })
-	setHtmlSandboxRuntimeCorsHeaders(response)
-	assert.equal(response.getHeader("Access-Control-Allow-Origin"), "*")
-	assert.equal(response.getHeader("Vary"), "Accept-Encoding")
+
+	setHtmlSandboxRuntimeCorsHeaders(response, "https://husky.example.com", [
+		"https://magic.example.com",
+		"https://husky.example.com",
+	])
+
+	assert.equal(response.getHeader("Access-Control-Allow-Origin"), "https://husky.example.com")
+	assert.equal(response.getHeader("Vary"), "Accept-Encoding, Origin")
 })
 
-test("public runtime remains readable when the sandbox URL exists only in config.js", () => {
-	const response = createHeaderRecorder({ "Access-Control-Allow-Credentials": "true" })
-	setHtmlSandboxRuntimeCorsHeaders(response, "https://husky.pages.letsmagic.space", [])
-	assert.equal(response.getHeader("Access-Control-Allow-Origin"), "*")
+test("removes a wildcard header for origins outside the allowlist", () => {
+	const response = createHeaderRecorder({ "Access-Control-Allow-Origin": "*" })
+
+	setHtmlSandboxRuntimeCorsHeaders(response, "https://untrusted.example.com", [
+		"https://magic.example.com",
+	])
+
+	assert.equal(response.getHeader("Access-Control-Allow-Origin"), undefined)
+	assert.equal(response.getHeader("Vary"), "Origin")
+})
+
+test("runtime CORS rejects missing, null, unconfigured and lookalike origins", () => {
+	for (const requestOrigin of [undefined, "null", "https://husky.example.com.attacker.test"]) {
+		const response = createHeaderRecorder({
+			"Access-Control-Allow-Origin": "*",
+			Vary: "Origin",
+		})
+		setHtmlSandboxRuntimeCorsHeaders(response, requestOrigin, ["https://husky.example.com"])
+		assert.equal(response.getHeader("Access-Control-Allow-Origin"), undefined)
+		assert.equal(response.getHeader("Vary"), "Origin")
+	}
+	const response = createHeaderRecorder()
+	setHtmlSandboxRuntimeCorsHeaders(response, "https://husky.example.com", [])
+	assert.equal(response.getHeader("Access-Control-Allow-Origin"), undefined)
+})
+
+test("runtime CORS does not enable credentialed requests", () => {
+	const response = createHeaderRecorder()
+	setHtmlSandboxRuntimeCorsHeaders(response, "https://husky.example.com", [
+		"https://husky.example.com",
+	])
 	assert.equal(response.getHeader("Access-Control-Allow-Credentials"), undefined)
 })
 
-test("public CORS policy is scoped to the runtime asset, never API or config routes", () => {
+test("runtime CORS policy is scoped to the runtime asset, never API or config routes", () => {
 	assert.equal(isHtmlSandboxRuntimeRequest("/husky-runtime.js"), true)
 	for (const path of ["/api/v1/user", "/config.js", "/other.js", "/husky-runtime.js/extra"]) {
 		assert.equal(isHtmlSandboxRuntimeRequest(path), false)

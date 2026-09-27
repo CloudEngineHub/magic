@@ -143,4 +143,4 @@ it does not replace a full product navigation test with authenticated providers.
 
 语言切换通过订阅通知更新，不重载 iframe。`Magic.i18n.lang` 始终同步最新语言（`zh_CN` / `en_US`）；页面需在 `subscribe(({ lang }) => …)` 中更新自己的文案。可调用返回的取消函数，或 `unsubscribe` 传入原回调引用；取消后 lang 仍会更新。
 
-浏览器用例通过 `setContent.runtimeUrl` 加载宿主生成的 `husky-runtime.js`，使用生产 CORS 响应函数；另有加载标记断言，避免 shell 内置 runtime 回退掩盖加载失败。该公开静态 JS 使用无凭据 CORS，不依赖可能仅存在于远端 config.js 的沙箱域名；API 授权与 postMessage 来源检查不变。
+浏览器用例通过 `setContent.runtimeUrl` 加载宿主生成的 `husky-runtime.js`，使用生产 CORS 响应函数；另有加载标记断言，避免 shell 内置 runtime 回退掩盖加载失败。正式服务仅允许配置中的明确来源，并返回 `Vary: Origin`；测试仅加入当前运行的两个 loopback 来源，不使用 runtime 通配授权。本地 pre 域名映射应在本地代理精确匹配 `/husky-runtime.js` 的 GET/HEAD 请求，返回当前 Worktree 的 runtime，并仅允许配置中的沙箱 Origin；这不应扩大正式服务的 CORS 范围。API 授权与 postMessage 来源检查不变。

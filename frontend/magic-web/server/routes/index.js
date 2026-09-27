@@ -20,6 +20,7 @@ const cors = require("cors")
 const { rootPath } = require("../config")
 const noIndexMiddleware = require("../middleware/noIndexMiddleware")
 const {
+	getHtmlSandboxAllowedOrigins,
 	isHtmlSandboxRuntimeRequest,
 	setHtmlSandboxRuntimeCorsHeaders,
 } = require("../utils/htmlSandboxRuntimeCors.cjs")
@@ -42,9 +43,10 @@ const configureRoutes = (app) => {
 	app.use(noIndexMiddleware)
 	// CORS 开启
 	app.use(cors())
+	const htmlSandboxAllowedOrigins = getHtmlSandboxAllowedOrigins()
 	app.use((req, res, next) => {
 		if (isHtmlSandboxRuntimeRequest(req.path)) {
-			setHtmlSandboxRuntimeCorsHeaders(res)
+			setHtmlSandboxRuntimeCorsHeaders(res, req.headers.origin, htmlSandboxAllowedOrigins)
 		}
 		next()
 	})
