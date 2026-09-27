@@ -201,7 +201,11 @@ import { env } from "@/utils/env"
 import { userStore } from "@/models/user"
 import { ContactApi } from "@/apis"
 import MagicModal from "@/components/base/MagicModal"
-import type { HtmlNavigationRequest } from "./utils/html-navigation"
+import {
+	getHtmlNavigationIntent,
+	type HtmlNavigationIntent,
+	type HtmlNavigationRequest,
+} from "./utils/html-navigation"
 import type { HtmlPermissionScope } from "./iframe-api/types"
 import { useHostConversation } from "@/pages/superMagic/contexts/HostConversationContext"
 
@@ -239,7 +243,12 @@ interface IsolatedHTMLRendererProps {
 	filePathMapping: Map<string, string>
 	/** 当前 HTML 所在目录，用于相对资源解析、上传默认目录等历史逻辑。 */
 	htmlRelativeFolderPath?: string
-	openNewTab: (fileId: string, path: string, autoEdit?: boolean) => void
+	openNewTab: (
+		fileId: string,
+		path: string,
+		autoEdit?: boolean,
+		intent?: HtmlNavigationIntent,
+	) => void
 	/** origin 项目 ID：文件/库所在项目。host 来自 HostConversationProvider。 */
 	projectId?: string
 	/** 发布微应用身份，由宿主注入，用于自动添加可信 @micro_app mention。 */
@@ -2273,7 +2282,12 @@ const IsolatedHTMLRendererInner = forwardRef<IsolatedHTMLRendererRef, IsolatedHT
 						return
 					}
 					try {
-						openNewTab(fileId || "", href, autoEdit)
+						openNewTab(
+							fileId || "",
+							href,
+							autoEdit,
+							getHtmlNavigationIntent(event.data),
+						)
 					} catch (error) {
 						logger.error({
 							eventKey: "process_iframe_failed",

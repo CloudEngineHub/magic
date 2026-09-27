@@ -523,7 +523,11 @@ describe("IsolatedHTMLRenderer iframe injection", () => {
 		})
 		await flushReactEffects()
 
-		expect(openNewTab).toHaveBeenCalledWith("detail-file", "index.html", false)
+		expect(openNewTab).toHaveBeenCalledWith("detail-file", "index.html", false, {
+			target: "_self",
+			background: false,
+			history: "push",
+		})
 	})
 
 	it("opens a tab when iframe navigation points to index.html with an external index.html shell", async () => {
@@ -541,14 +545,22 @@ describe("IsolatedHTMLRenderer iframe injection", () => {
 		})
 		await flushReactEffects()
 
-		expect(openNewTab).toHaveBeenCalledWith("detail-file", "index.html", false)
+		expect(openNewTab).toHaveBeenCalledWith("detail-file", "index.html", false, {
+			target: "_self",
+			background: false,
+			history: "push",
+		})
 
 		dispatchIframeMessage(iframe, "linkClicked", "https://husky.example", {
 			href: "./index.html",
 		})
 		await flushReactEffects()
 
-		expect(openNewTab).toHaveBeenCalledWith("detail-file", "./index.html", false)
+		expect(openNewTab).toHaveBeenCalledWith("detail-file", "./index.html", false, {
+			target: "_self",
+			background: false,
+			history: "push",
+		})
 	})
 
 	it("keeps the renderer file identity when a link message contains a forged fileId", async () => {
@@ -564,7 +576,11 @@ describe("IsolatedHTMLRenderer iframe injection", () => {
 		})
 		await flushReactEffects()
 
-		expect(openNewTab).toHaveBeenCalledWith("current-file", "/target.html", true)
+		expect(openNewTab).toHaveBeenCalledWith("current-file", "/target.html", true, {
+			target: "_self",
+			background: false,
+			history: "push",
+		})
 	})
 
 	it("accepts same-origin link messages from a nested iframe of the current preview", async () => {
@@ -586,7 +602,41 @@ describe("IsolatedHTMLRenderer iframe injection", () => {
 		)
 		await flushReactEffects()
 
-		expect(openNewTab).toHaveBeenCalledWith("history-file", "/nested-target.html", false)
+		expect(openNewTab).toHaveBeenCalledWith("history-file", "/nested-target.html", false, {
+			target: "_self",
+			background: false,
+			history: "push",
+		})
+	})
+
+	it("forwards named targets, background and history while normalizing invalid intent fields", async () => {
+		const openNewTab = vi.fn()
+		renderIsolated(<IsolatedHTMLRenderer {...defaultProps} openNewTab={openNewTab} />)
+		const iframe = screen.getByTestId("isolated-html-content-iframe") as HTMLIFrameElement
+		dispatchIframeMessage(iframe, "linkClicked", window.location.origin, {
+			href: "/target.html",
+			target: "report",
+			background: true,
+			history: "replace",
+		})
+		await flushReactEffects()
+		expect(openNewTab).toHaveBeenLastCalledWith("history-file", "/target.html", false, {
+			target: "report",
+			background: true,
+			history: "replace",
+		})
+		dispatchIframeMessage(iframe, "linkClicked", window.location.origin, {
+			href: "/target.html",
+			target: {},
+			background: "true",
+			history: "traverse",
+		})
+		await flushReactEffects()
+		expect(openNewTab).toHaveBeenLastCalledWith("history-file", "/target.html", false, {
+			target: "_self",
+			background: false,
+			history: "push",
+		})
 	})
 
 	it("ignores same-origin link messages from an unrelated source", async () => {

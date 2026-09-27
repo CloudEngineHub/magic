@@ -30,6 +30,8 @@ import MicroAppPreviewWorkspace from "./components/MicroAppPreviewWorkspace"
 import MicroAppHeader from "./components/MicroAppHeader"
 import MicroAppDesktopRoute from "./components/MicroAppDesktopRoute"
 import MicroAppEntryPreview from "./components/MicroAppEntryPreview"
+import MicroAppPreviewPages from "./components/MicroAppPreviewPages"
+import MicroAppNoOpenPages from "./components/MicroAppNoOpenPages"
 import MicroAppFallbackState from "./components/MicroAppFallbackState"
 import MicroAppPageOverlays from "./components/MicroAppPageOverlays"
 import MicroAppPageLoadingState from "./components/MicroAppPageLoadingState"
@@ -61,7 +63,6 @@ function MicroAppPageInner({
 	const fileDetailVisited = useRef(false)
 	if (activeView !== "preview") fileDetailVisited.current = true
 	const [previewMode, setPreviewMode] = useState<"desktop" | "phone">("desktop")
-	const [previewRefreshKey, setPreviewRefreshKey] = useState(0)
 	const [isPreviewFullscreen, setIsPreviewFullscreen] = useState(false)
 	const [isAIEditActive, setIsAIEditActive] = useState(false)
 	const [isDevConsoleActive, setIsDevConsoleActive] = useState(false)
@@ -138,14 +139,13 @@ function MicroAppPageInner({
 		}
 	}, [canUseDevelopment, selectedProject?.id])
 
-	const {
-		previewEntryFile,
-		setPreviewEntryFile,
-		previewFileOptions,
-		activePreviewFileId,
-		handlePreviewFileChange,
-		handlePreviewOpenFile,
-	} = useMicroAppPreviewFiles({ attachmentList, defaultEntryFile })
+	const previewBrowser = useMicroAppPreviewFiles({
+		attachmentList,
+		defaultEntryFile,
+		scopeKey: projectId,
+		allowCloseLastTab: true,
+	})
+	const { previewEntryFile } = previewBrowser
 
 	const topicActions = useScopedMessageHeaderTopicActions({
 		selectedProject: panelSelectedProject,
@@ -261,7 +261,6 @@ function MicroAppPageInner({
 
 		setActiveView(nextView)
 		if (nextView === "preview" && defaultEntryFile) {
-			setPreviewEntryFile(defaultEntryFile)
 			detailRef.current?.openFileTab(defaultEntryFile)
 		}
 	})
@@ -313,16 +312,20 @@ function MicroAppPageInner({
 		pageModeRef.current = "development"
 		usageConversationRequestedRef.current = false
 		setPageMode("development")
-		setPreviewEntryFile(null)
 		setPreviewMode("desktop")
-		setPreviewRefreshKey(0)
 		setIsPreviewFullscreen(false)
+	}, [projectId, setIsMessagePanelCollapsed])
+
+	useEffect(() => {
+		if (previewBrowser.activePreviewTabId) return
+		// An empty editor has no document-owned toolbar actions or permission panel.
+		aiEditHandlerRef.current = null
+		devConsoleToggleHandlerRef.current = null
 		setIsAIEditActive(false)
 		setIsDevConsoleActive(false)
 		setIsDevConsoleAvailable(false)
-		// Clear the previous app's manager before the next preview registers its own handle.
 		setHtmlPermissionManager(null)
-	}, [projectId, setIsMessagePanelCollapsed, setHtmlPermissionManager, setPreviewEntryFile])
+	}, [previewBrowser.activePreviewTabId])
 
 	useEffect(() => {
 		if (!isPreviewFullscreen) return undefined
@@ -415,14 +418,13 @@ function MicroAppPageInner({
 						{pageMode === "preview" ? (
 							<MicroAppPreviewWorkspace
 								appId={appId}
-								entryFile={previewEntryFile}
+								entryFile={defaultEntryFile}
 								attachments={attachments}
 								attachmentList={attachmentList}
 								projectId={projectId}
 								selectedProject={selectedProject}
 								sourceOrganizationCode={sourceOrganizationCode}
 								storageMarkerId={defaultEntryFile?.file_id}
-								onOpenFile={handlePreviewOpenFile}
 								onHtmlPermissionManagerChange={setHtmlPermissionManager}
 							/>
 						) : (
@@ -509,66 +511,95 @@ function MicroAppPageInner({
 										) : null}
 
 										<div className="flex h-full min-w-0 flex-1 flex-col overflow-hidden">
-											{activeView === "preview" ? (
-												<>
-													<MicroAppPreviewToolbar
-														viewMode={previewMode}
-														activeFileId={activePreviewFileId}
-														htmlFiles={previewFileOptions}
-														allowEdit={
-															!isReadOnly && Boolean(previewEntryFile)
-														}
-														aiEditActive={isAIEditActive}
-														devConsoleActive={isDevConsoleActive}
-														devConsoleAvailable={isDevConsoleAvailable}
-														isFullscreen={isPreviewFullscreen}
-														onViewModeChange={setPreviewMode}
-														onFileChange={handlePreviewFileChange}
-														onRefresh={() =>
-															setPreviewRefreshKey((key) => key + 1)
-														}
-														onAIEdit={() =>
-															aiEditHandlerRef.current?.()
-														}
-														onDevConsoleToggle={() =>
-															devConsoleToggleHandlerRef.current?.()
-														}
-														onFullscreenToggle={() =>
-															setIsPreviewFullscreen(
-																(previous) => !previous,
-															)
-														}
-													/>
-													<div className="min-h-0 flex-1 overflow-hidden">
-														<MicroAppEntryPreview
-															entryFile={previewEntryFile}
-															attachments={attachments}
-															attachmentList={attachmentList}
-															projectId={projectId}
-															selectedProject={selectedProject}
-															allowEdit={!isReadOnly}
-															onOpenFile={handlePreviewOpenFile}
-															viewMode={previewMode}
-															refreshKey={previewRefreshKey}
-															storageMarkerId={
-																defaultEntryFile?.file_id
-															}
-															onRegisterAIEdit={handleRegisterAIEdit}
-															onAIEditActiveChange={setIsAIEditActive}
-															onRegisterDevConsoleToggle={
-																handleRegisterDevConsoleToggle
-															}
-															onDevConsoleActiveChange={
-																setIsDevConsoleActive
-															}
-															onHtmlPermissionManagerChange={
-																setHtmlPermissionManager
-															}
-															isBuilding={hasRunningTopic}
-														/>
-													</div>
-												</>
-											) : null}
+											{/* Keep preview documents alive when visiting files, skills, or database panels. */}
+											<div
+												className={cn(
+													"flex h-full min-h-0 flex-col",
+													activeView !== "preview" && "hidden",
+												)}
+											>
+												<MicroAppPreviewToolbar
+													viewMode={previewMode}
+													browser={previewBrowser}
+													allowEdit={
+														!isReadOnly && Boolean(previewEntryFile)
+													}
+													aiEditActive={isAIEditActive}
+													devConsoleActive={isDevConsoleActive}
+													devConsoleAvailable={isDevConsoleAvailable}
+													isFullscreen={isPreviewFullscreen}
+													onViewModeChange={setPreviewMode}
+													onRefresh={previewBrowser.handlePreviewRefresh}
+													onAIEdit={() => aiEditHandlerRef.current?.()}
+													onDevConsoleToggle={() =>
+														devConsoleToggleHandlerRef.current?.()
+													}
+													onFullscreenToggle={() =>
+														setIsPreviewFullscreen(
+															(previous) => !previous,
+														)
+													}
+												/>
+												<div className="min-h-0 flex-1 overflow-hidden">
+													<MicroAppPreviewPages browser={previewBrowser}>
+														{({ tab, active, onOpenFile }) => (
+															<MicroAppEntryPreview
+																entryFile={tab.file}
+																onOpenFile={onOpenFile}
+																attachments={attachments}
+																attachmentList={attachmentList}
+																projectId={projectId}
+																selectedProject={selectedProject}
+																allowEdit={!isReadOnly}
+																viewMode={previewMode}
+																refreshKey={tab.revision}
+																storageMarkerId={
+																	defaultEntryFile?.file_id
+																}
+																onRegisterAIEdit={
+																	active
+																		? handleRegisterAIEdit
+																		: undefined
+																}
+																onAIEditActiveChange={
+																	active
+																		? setIsAIEditActive
+																		: undefined
+																}
+																onRegisterDevConsoleToggle={
+																	active
+																		? handleRegisterDevConsoleToggle
+																		: undefined
+																}
+																onDevConsoleActiveChange={
+																	active
+																		? setIsDevConsoleActive
+																		: undefined
+																}
+																onHtmlPermissionManagerChange={
+																	active
+																		? setHtmlPermissionManager
+																		: undefined
+																}
+																isBuilding={hasRunningTopic}
+															/>
+														)}
+													</MicroAppPreviewPages>
+													{!previewBrowser.previewTabs.length &&
+														defaultEntryFile && <MicroAppNoOpenPages />}
+													{!previewBrowser.previewTabs.length &&
+														!defaultEntryFile && (
+															<MicroAppEntryPreview
+																entryFile={null}
+																attachments={attachments}
+																attachmentList={attachmentList}
+																selectedProject={selectedProject}
+																allowEdit={!isReadOnly}
+																isBuilding={hasRunningTopic}
+															/>
+														)}
+												</div>
+											</div>
 											{fileDetailVisited.current && (
 												<div
 													className={cn(

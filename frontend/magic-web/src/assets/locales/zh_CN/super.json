@@ -3804,6 +3804,7 @@
 		"previewToolbar": {
 			"address": "当前预览地址",
 			"aiEdit": "AI 编辑",
+			"closePage": "关闭页面",
 			"desktop": "电脑端预览",
 			"disableDebug": "关闭调试",
 			"enableDebug": "开启调试",
@@ -3811,6 +3812,10 @@
 			"fullscreen": "全屏预览",
 			"more": "更多",
 			"noHtml": "暂无可预览的 HTML 文件",
+			"noOpenPages": "未打开页面",
+			"openPage": "打开 HTML 页面",
+			"openPageHint": "使用顶部的 + 选择 HTML 页面进行预览。",
+			"pages": "已打开页面",
 			"phone": "手机端预览",
 			"refresh": "刷新预览",
 			"title": "预览"

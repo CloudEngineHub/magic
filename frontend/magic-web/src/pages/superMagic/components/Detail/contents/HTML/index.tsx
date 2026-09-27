@@ -49,6 +49,8 @@ import {
 	normalizeHtmlPreviewPath,
 	parseHtmlNavigationRequest,
 	resolveRootHtmlIndexFallback,
+	getHtmlNavigationIntent,
+	type HtmlNavigationIntent,
 } from "./utils/html-navigation"
 import { HTMLGuideTourElementId, useHTMLGuideTour } from "@/pages/superMagic/hooks/useHTMLGuideTour"
 import pubsub, { PubSubEvents } from "@/utils/pubsub"
@@ -1289,7 +1291,12 @@ export default memo(function HTML(props: HTMLProps) {
 		// eslint-disable-next-line react-hooks/exhaustive-deps
 	}, [viewMode])
 
-	const openNewTab = (fileId: string, path: string, autoEdit?: boolean) => {
+	const openNewTab = (
+		fileId: string,
+		path: string,
+		autoEdit?: boolean,
+		intent?: HtmlNavigationIntent,
+	) => {
 		// 防护检查：fileId 不能为空
 		if (!fileId) {
 			console.warn("openNewTab: fileId is empty, cannot open new tab")
@@ -1300,9 +1307,12 @@ export default memo(function HTML(props: HTMLProps) {
 		if (!navigationTarget) return
 
 		const { filePath, anchor } = navigationTarget
+		const targetsCurrentContext = ["_self", "_parent", "_top"].includes(
+			(intent?.target || "_self").toLowerCase(),
+		)
 
 		// Handle pure anchor link (navigation within current document)
-		if (!filePath && !navigationTarget.search && anchor) {
+		if (!filePath && !navigationTarget.search && anchor && targetsCurrentContext) {
 			scrollToAnchor(anchor, 80) // 80px offset for fixed headers
 			return
 		}
@@ -1344,10 +1354,19 @@ export default memo(function HTML(props: HTMLProps) {
 		}
 
 		if (item) {
-			openFileTab?.({ ...item, htmlNavigation: navigationTarget }, autoEdit)
+			openFileTab?.(
+				{
+					...item,
+					htmlNavigation: {
+						...navigationTarget,
+						...getHtmlNavigationIntent(intent || {}),
+					},
+				},
+				autoEdit,
+			)
 
-			// If there's an anchor, scroll to it after document loads
-			if (anchor) {
+			// A new tab owns its anchor; never scroll the preserved opener underneath it.
+			if (anchor && targetsCurrentContext && !intent?.background) {
 				// Wait for document to render before scrolling
 				setTimeout(() => {
 					scrollToAnchor(anchor, 80)

@@ -276,50 +276,7 @@ const getDOMContentLoadedScript = (disableParentClickBridge = false) => {
 			handleImageError();
 			handleCssImageErrors();
 
-		// 给所有链接添加target属性
-		document.querySelectorAll("a").forEach(link => {
-			const href = link.getAttribute("href");
-			// 检查是否为锚点链接（以#开头）
-			if (href && href.startsWith("#")) {
-				// 为锚点链接添加点击事件处理
-				link.addEventListener("click", function(e) {
-					// 动态检查当前的href值，因为可能被JavaScript修改
-					const currentHref = this.getAttribute("href");
-					// 只有当前仍然是锚点链接时才阻止默认行为
-					if (currentHref && currentHref.startsWith("#")) {
-						e.preventDefault();
-						e.stopPropagation();
-						const targetId = currentHref.substring(1);
-						const targetElement = document.getElementById(targetId);
-						if (targetElement) {
-							// 滚动到目标元素
-							targetElement.scrollIntoView({ behavior: "smooth" });
-							// 替换历史记录
-							if (window.history && window.history.replaceState) {
-								window.history.replaceState(null, "", currentHref);
-							} else {
-								window.location.hash = currentHref;
-							}
-						} else {
-							if (!targetId) {
-								const scrollContainer = document.scrollingElement || document.documentElement || document.body;
-								if (typeof scrollContainer.scrollTo === "function") {
-									scrollContainer.scrollTo({ top: 0, left: 0, behavior: "smooth" });
-								} else {
-									scrollContainer.scrollTop = 0;
-									scrollContainer.scrollLeft = 0;
-								}
-							}
-						}
-					}
-					// 如果href已被修改为其他值（如http://），则不阻止，让浏览器正常处理
-				});
-			} else {
-				// 非锚点链接在新窗口打开
-				link.setAttribute("target", "_blank");
-				link.setAttribute("rel", "noopener noreferrer");
-			}
-		});
+		// Link and hash navigation is handled centrally by the navigation runtime.
 
 			// 捕获并处理脚本错误
 			window.onerror = function(message, source, lineno, colno, error) {
@@ -364,6 +321,7 @@ export const getLinkHandlingScript = (navigationBasePath = "") => {
 						try {
 							var basePath = "/" + currentBasePath.replace(/^\\/+/, "");
 							var baseUrl = new URL(basePath, "https://magic-html.invalid/");
+							if (raw.indexOf("#") === 0) baseUrl.search = window.location.search;
 							var targetUrl = new URL(raw, baseUrl);
 							return targetUrl.pathname + targetUrl.search + targetUrl.hash;
 						} catch (error) {
@@ -401,13 +359,15 @@ export const getLinkHandlingScript = (navigationBasePath = "") => {
 					}
 				}
 
-				function postHtmlNavigation(href, originalHref, target, autoEdit, text) {
+				function postHtmlNavigation(href, originalHref, target, autoEdit, text, background, history) {
 					__magicGetFetchPostMessageTarget().postMessage({
 						type: "linkClicked",
 						href: href,
 						originalHref: originalHref,
 						text: text || "",
 						target: target || "_self",
+						background: background === true,
+						history: history === "replace" ? "replace" : "push",
 						autoEdit: autoEdit === true
 					}, "*");
 				}
@@ -417,28 +377,44 @@ export const getLinkHandlingScript = (navigationBasePath = "") => {
 					return { committed: completed, finished: completed };
 				}
 
-				// Location.href is unforgeable. Rewritten assignments use this adapter;
-				// the identity check preserves locally shadowed window/location objects.
+				// Native Location members cannot be redefined. Rewritten code delegates
+				// here; retaining native methods also avoids recursive fallback calls.
+				var nativeAssign = window.location.assign.bind(window.location);
+				var nativeReplace = window.location.replace.bind(window.location);
+				function navigateLocation(value, history) {
+					var raw = String(value);
+					if (raw.trim().indexOf("#") === 0) {
+						if (history === "replace") {
+							var current = new URL(window.location.href);
+							current.hash = raw.trim();
+							return nativeReplace(current.href);
+						}
+						// srcdoc resolves href against its parent; hash keeps this document alive.
+						window.location.hash = raw.trim();
+						return;
+					}
+					var href = getInternalNavigationHref(raw);
+					if (href) {
+						postHtmlNavigation(href, raw, "_self", false, "", false, history);
+					} else if (history === "replace") {
+						nativeReplace(raw);
+					} else {
+						nativeAssign(raw);
+					}
+				}
 				var hostLocation = {
 					get href() { return window.location.href; },
-					set href(value) {
-						var raw = String(value);
-						// Setting href="#..." in srcdoc resolves against the parent's base URL.
-						// Set hash directly to keep the current document and its hash router alive.
-						if (raw.trim().indexOf("#") === 0) {
-							window.location.hash = raw.trim();
-							return;
-						}
-						var href = getInternalNavigationHref(raw);
-						if (href) {
-							postHtmlNavigation(href, raw, "_self", false, "");
-						} else {
-							window.location.href = raw;
-						}
-					}
+					set href(value) { navigateLocation(value, "push"); },
+					assign: function(value) { navigateLocation(value, "push"); },
+					replace: function(value) { navigateLocation(value, "replace"); }
+				};
+				var hostWindow = {
+					get location() { return window.location; },
+					set location(value) { navigateLocation(value, "push"); }
 				};
 
 				navigationRuntime = {
+					getWindow: function(value) { return value === window || value === document ? hostWindow : value; },
 					getLocation: function(location) { return location === window.location ? hostLocation : location; },
 					getInternalNavigationHref: getInternalNavigationHref,
 					postHtmlNavigation: postHtmlNavigation,
@@ -450,9 +426,10 @@ export const getLinkHandlingScript = (navigationBasePath = "") => {
 					var nativeNavigationNavigate = window.navigation.navigate.bind(window.navigation);
 					try {
 						window.navigation.navigate = function(url, options) {
+							if (String(url).trim().indexOf("#") === 0) return nativeNavigationNavigate(url, options);
 							var href = navigationRuntime.getInternalNavigationHref(url);
 							if (href) {
-								navigationRuntime.postHtmlNavigation(href, String(url), "_self", false, "");
+								navigationRuntime.postHtmlNavigation(href, String(url), "_self", false, "", false, options && options.history);
 								return navigationRuntime.createNavigationResult();
 							}
 							return nativeNavigationNavigate(url, options);
@@ -462,6 +439,11 @@ export const getLinkHandlingScript = (navigationBasePath = "") => {
 					}
 
 					window.navigation.addEventListener("navigate", function(e) {
+						// History API / SPA routing, downloads and cancelled actions stay native.
+						if (e.defaultPrevented || e.cancelable === false || e.hashChange || e.formData ||
+							e.navigationType === "traverse" || e.downloadRequest != null ||
+							(e.sourceElement && (e.sourceElement.tagName === "FORM" || e.sourceElement.form)) ||
+							(e.destination && e.destination.sameDocument)) return;
 						var url = e.destination && e.destination.url;
 						if (!url) return;
 						try {
@@ -487,33 +469,18 @@ export const getLinkHandlingScript = (navigationBasePath = "") => {
 						if (!href) return;
 						e.preventDefault();
 						try {
-							navigationRuntime.postHtmlNavigation(href, url, "_self", false, "");
+							navigationRuntime.postHtmlNavigation(href, url, "_self", false, "", false, e.navigationType);
 						} catch (err) { console.warn("linkClicked postMessage failed", err); }
 					});
 				}
 
-				function patchLocationMethod(methodName) {
-					try {
-						var nativeMethod = window.location[methodName].bind(window.location);
-						window.location[methodName] = function(url) {
-							var href = navigationRuntime.getInternalNavigationHref(url);
-							if (href) {
-								navigationRuntime.postHtmlNavigation(href, String(url), "_self", false, "");
-								return;
-							}
-							return nativeMethod(url);
-						};
-					} catch (error) {
-						console.warn("Location navigation hook installation failed", methodName, error);
-					}
-				}
-
-				patchLocationMethod("assign");
-				patchLocationMethod("replace");
-
 				// Install window.open before user-authored head scripts execute.
 				var nativeWindowOpen = window.open;
 				window.open = function(url, target, features) {
+					if (String(target).toLowerCase() === "_self" && String(url).trim().indexOf("#") === 0) {
+						if (!(window.slideSelector && window.slideSelector.isEditMode)) window.location.hash = String(url).trim();
+						return null;
+					}
 					var href = navigationRuntime.getInternalNavigationHref(url);
 					if (href) {
 						if (window.slideSelector && window.slideSelector.isEditMode) {
@@ -537,54 +504,86 @@ export const getLinkHandlingScript = (navigationBasePath = "") => {
 			// setContent reuses the window/runtime while changing the preview file.
 			navigationRuntime.navigationBasePath = navigationBasePath;
 
-			// document is replaced by setContent, so this listener must be installed for each document.
-			document.addEventListener("DOMContentLoaded", function() {
-			// 监听所有 a 标签的点击事件
-			document.addEventListener("click", function(event) {
-				// 检查点击的元素是否是 a 标签或其子元素
-				let linkElement = event.target.closest("a");
-
-				if (linkElement && linkElement.href) {
-					const originalHref = linkElement.getAttribute("href");
-
-					// 检查是否为锚点链接（以#开头）
-					if (originalHref && originalHref.startsWith("#")) {
-						return;
+			// Listen after document handlers so preventDefault from routers is respected.
+			// Old listeners are removed when setContent replaces the document.
+			if (navigationRuntime.linkHandler) {
+				window.removeEventListener("click", navigationRuntime.linkHandler);
+				window.removeEventListener("auxclick", navigationRuntime.linkHandler);
+			}
+			if (navigationRuntime.submitHandler) {
+				window.removeEventListener("submit", navigationRuntime.submitHandler);
+			}
+			navigationRuntime.linkHandler = function(event) {
+				if (event.defaultPrevented || event.altKey) return;
+				var isMiddle = event.type === "auxclick" && event.button === 1;
+				if (!isMiddle && (event.type !== "click" || event.button !== 0)) return;
+				var element = event.target && (event.target.nodeType === 3 ? event.target.parentElement : event.target);
+				var link = element && typeof element.closest === "function" ? element.closest("a[href]") : null;
+				if (!link || link.hasAttribute("download")) return;
+				var raw = link.getAttribute("href");
+				var base = document.querySelector("base[target]");
+				var target = link.getAttribute("target") || (base && base.getAttribute("target")) || "_self";
+				var newTab = isMiddle || event.ctrlKey || event.metaKey || event.shiftKey;
+				if (newTab) target = "_blank";
+				var href = navigationRuntime.getInternalNavigationHref(raw);
+				if (!href) {
+					// Native external navigation remains inside the sandbox for _self.
+					// Explicit new contexts retain opener isolation without changing target.
+					if (target.toLowerCase() === "_blank") {
+						link.relList.add("noopener", "noreferrer");
 					}
-
-					const href = navigationRuntime.getInternalNavigationHref(
-						originalHref || linkElement.href,
-					);
-					if (href) {
-						// 阻止默认行为
-						event.preventDefault();
-						event.stopPropagation();
-
-						// 如果当前是编辑模式，不触发通信
-						if (window.slideSelector && window.slideSelector.isEditMode) {
-							console.log('编辑模式下不触发链接通信');
-							return;
-						}
-
-						// 检查是否有 data-auto-edit 属性
-					const autoEdit = linkElement.getAttribute("data-auto-edit") === "true";
-
-						// 通过 postMessage 通知主窗口
-						try {
-							navigationRuntime.postHtmlNavigation(
-								href,
-							linkElement.href,
-							linkElement.target || "",
-							autoEdit,
-							linkElement.textContent || linkElement.innerText || ""
-						);
-					} catch (error) {
-						console.error("发送链接点击消息时出错:", error);
-					}
-					}
+					return;
 				}
-					});
-				});
+				event.preventDefault();
+				if (window.slideSelector && window.slideSelector.isEditMode) return;
+				if (raw && raw.trim().indexOf("#") === 0 && target.toLowerCase() === "_self") {
+					window.location.hash = raw.trim();
+					return;
+				}
+				navigationRuntime.postHtmlNavigation(
+					href, link.href, target, link.getAttribute("data-auto-edit") === "true",
+					link.textContent || "", !!(isMiddle || event.ctrlKey || event.metaKey) && !event.shiftKey, "push"
+				);
+			};
+			window.addEventListener("click", navigationRuntime.linkHandler);
+			window.addEventListener("auxclick", navigationRuntime.linkHandler);
+			navigationRuntime.submitHandler = function(event) {
+				if (event.defaultPrevented) return;
+				var form = event.target;
+				if (!form || form.tagName !== "FORM") return;
+				var submitter = event.submitter;
+				function attribute(name, fallback) {
+					return submitter && submitter.hasAttribute("form" + name)
+						? submitter.getAttribute("form" + name)
+						: form.getAttribute(name) || fallback;
+				}
+				// POST must retain its body; dialog and image-coordinate submissions stay native.
+				if (attribute("method", "get").toLowerCase() !== "get" ||
+					(submitter && submitter.type === "image")) return;
+				var action = attribute("action", "");
+				var href = navigationRuntime.getInternalNavigationHref(action ||
+					(navigationRuntime.navigationBasePath ? "/" + navigationRuntime.navigationBasePath.replace(/^\\/+/, "") : window.location.href));
+				if (!href) return;
+				var base = document.querySelector("base[target]");
+				var target = attribute("target", "") || (base && base.getAttribute("target")) || "_self";
+				try {
+					var data = new FormData(form, submitter || undefined);
+					var query = new URLSearchParams();
+					data.forEach(function(value, name) { query.append(name, typeof value === "string" ? value : value.name); });
+					var destination = new URL(href, "https://magic-html.invalid/");
+					// GET submission replaces the action query rather than appending stale values.
+					destination.search = query.toString();
+					event.preventDefault();
+					if (window.slideSelector && window.slideSelector.isEditMode) return;
+					navigationRuntime.postHtmlNavigation(destination.pathname + destination.search + destination.hash,
+						action, target, false, "", false, "push");
+				} catch (error) {
+					// Unsupported FormData/submitter handling must not turn a form into a GET link.
+					console.warn("HTML form navigation could not be serialized", error);
+				}
+			};
+			window.addEventListener("submit", navigationRuntime.submitHandler);
+
 			})();
 		`
 }

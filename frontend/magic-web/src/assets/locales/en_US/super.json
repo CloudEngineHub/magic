@@ -3805,6 +3805,7 @@
 		"previewToolbar": {
 			"address": "Current preview address",
 			"aiEdit": "AI Edit",
+			"closePage": "Close page",
 			"desktop": "Desktop preview",
 			"disableDebug": "Disable debugging",
 			"enableDebug": "Enable debugging",
@@ -3812,6 +3813,10 @@
 			"fullscreen": "Fullscreen preview",
 			"more": "More",
 			"noHtml": "No previewable HTML files",
+			"noOpenPages": "No open pages",
+			"openPage": "Open HTML page",
+			"openPageHint": "Use + above to choose an HTML page to preview.",
+			"pages": "Open pages",
 			"phone": "Mobile preview",
 			"refresh": "Refresh preview",
 			"title": "Preview"

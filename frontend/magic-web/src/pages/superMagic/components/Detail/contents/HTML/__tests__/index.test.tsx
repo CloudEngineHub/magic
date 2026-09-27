@@ -974,6 +974,9 @@ describe("HTML", () => {
 					search: "?keyword=%E6%B5%8B%E8%AF%95",
 					hash: "#section-a",
 					anchor: "section-a",
+					target: "_self",
+					background: false,
+					history: "push",
 				},
 			},
 			false,
@@ -1044,7 +1047,13 @@ describe("HTML", () => {
 		)
 		await waitFor(() => expect(mockIsolatedHTMLRendererProps).toHaveBeenCalled())
 		const props = mockIsolatedHTMLRendererProps.mock.lastCall?.[0]
-		act(() => props.openNewTab("file-1", "/detail.html?mode=preview#summary", false))
+		act(() =>
+			props.openNewTab("file-1", "/detail.html?mode=preview#summary", false, {
+				target: "report",
+				background: true,
+				history: "replace",
+			}),
+		)
 		expect(openFileTab).toHaveBeenCalledExactlyOnceWith(
 			{
 				...targetFile,
@@ -1053,10 +1062,56 @@ describe("HTML", () => {
 					search: "?mode=preview",
 					hash: "#summary",
 					anchor: "summary",
+					target: "report",
+					background: true,
+					history: "replace",
 				},
 			},
 			false,
 		)
+	})
+
+	it("does not scroll the opener when an anchored page opens in a new context", async () => {
+		const { scrollToAnchor } = await import("@/utils/slug")
+		const openFileTab = vi.fn()
+		render(
+			<HTML
+				{...baseProps}
+				viewMode="desktop"
+				isEditMode={false}
+				attachmentList={[
+					{
+						file_id: "file-1",
+						file_name: "index.html",
+						relative_file_path: "index.html",
+					},
+					{
+						file_id: "file-2",
+						file_name: "detail.html",
+						relative_file_path: "detail.html",
+					},
+				]}
+				openFileTab={openFileTab}
+			/>,
+		)
+		await waitFor(() => expect(mockIsolatedHTMLRendererProps).toHaveBeenCalled())
+		vi.useFakeTimers()
+		try {
+			vi.mocked(scrollToAnchor).mockClear()
+			act(() =>
+				mockIsolatedHTMLRendererProps.mock.lastCall?.[0].openNewTab(
+					"file-1",
+					"/detail.html#summary",
+					false,
+					{ target: "report" },
+				),
+			)
+			act(() => vi.advanceTimersByTime(300))
+			expect(openFileTab).toHaveBeenCalledOnce()
+			expect(scrollToAnchor).not.toHaveBeenCalled()
+		} finally {
+			vi.useRealTimers()
+		}
 	})
 
 	it("does not fall back to nested index.html when root index.html is missing", async () => {
@@ -1200,6 +1255,9 @@ describe("HTML", () => {
 			search: "?name=%E5%BC%A0%E4%B8%89&mode=preview",
 			hash: "#summary",
 			anchor: "summary",
+			target: "report",
+			background: true,
+			history: "replace",
 		}
 
 		render(
