@@ -1226,6 +1226,8 @@ const IsolatedHTMLRendererInner = forwardRef<IsolatedHTMLRendererRef, IsolatedHT
 				}
 
 				return {
+					file_id: saveRes.file_id,
+					relative_file_path: saveRes.relative_file_path,
 					uploadedRelativeFilePath: saveRes.relative_file_path,
 					storedRelativeFilePath: toStoredRelativePath(saveRes.relative_file_path),
 				}
