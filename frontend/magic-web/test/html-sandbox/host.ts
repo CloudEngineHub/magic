@@ -176,7 +176,12 @@ async function runExample(name: string, crossOrigin: boolean) {
 				if (message.type === "iframeReady" && !injected) {
 					injected = true
 					frameWindow.postMessage(
-						{ type: "setContent", content, locationSearch: "?fixture=" + name },
+						{
+							type: "setContent",
+							content,
+							locationSearch: "?fixture=" + name,
+							runtimeUrl: window.location.origin + "/husky-runtime.js",
+						},
 						targetOrigin,
 					)
 				}

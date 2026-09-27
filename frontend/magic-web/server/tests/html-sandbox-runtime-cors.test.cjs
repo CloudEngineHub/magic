@@ -2,6 +2,7 @@ const assert = require("node:assert/strict")
 const test = require("node:test")
 const {
 	getHtmlSandboxAllowedOrigins,
+	isHtmlSandboxRuntimeRequest,
 	setHtmlSandboxRuntimeCorsHeaders,
 } = require("../utils/htmlSandboxRuntimeCors.cjs")
 
@@ -59,25 +60,23 @@ test("deduplicates origins and ignores invalid or unsupported URLs", () => {
 	)
 })
 
-test("echoes an allowed request origin and preserves existing Vary values", () => {
+test("public runtime CORS is cache-independent and preserves other headers", () => {
 	const response = createHeaderRecorder({ Vary: "Accept-Encoding" })
-
-	setHtmlSandboxRuntimeCorsHeaders(response, "https://husky.example.com", [
-		"https://magic.example.com",
-		"https://husky.example.com",
-	])
-
-	assert.equal(response.getHeader("Access-Control-Allow-Origin"), "https://husky.example.com")
-	assert.equal(response.getHeader("Vary"), "Accept-Encoding, Origin")
+	setHtmlSandboxRuntimeCorsHeaders(response)
+	assert.equal(response.getHeader("Access-Control-Allow-Origin"), "*")
+	assert.equal(response.getHeader("Vary"), "Accept-Encoding")
 })
 
-test("removes a wildcard header for origins outside the allowlist", () => {
-	const response = createHeaderRecorder({ "Access-Control-Allow-Origin": "*" })
+test("public runtime remains readable when the sandbox URL exists only in config.js", () => {
+	const response = createHeaderRecorder({ "Access-Control-Allow-Credentials": "true" })
+	setHtmlSandboxRuntimeCorsHeaders(response, "https://husky.pages.letsmagic.space", [])
+	assert.equal(response.getHeader("Access-Control-Allow-Origin"), "*")
+	assert.equal(response.getHeader("Access-Control-Allow-Credentials"), undefined)
+})
 
-	setHtmlSandboxRuntimeCorsHeaders(response, "https://untrusted.example.com", [
-		"https://magic.example.com",
-	])
-
-	assert.equal(response.getHeader("Access-Control-Allow-Origin"), undefined)
-	assert.equal(response.getHeader("Vary"), "Origin")
+test("public CORS policy is scoped to the runtime asset, never API or config routes", () => {
+	assert.equal(isHtmlSandboxRuntimeRequest("/husky-runtime.js"), true)
+	for (const path of ["/api/v1/user", "/config.js", "/other.js", "/husky-runtime.js/extra"]) {
+		assert.equal(isHtmlSandboxRuntimeRequest(path), false)
+	}
 })

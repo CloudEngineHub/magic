@@ -1,7 +1,7 @@
 import { build } from "esbuild"
 import { execFileSync } from "node:child_process"
 import { existsSync } from "node:fs"
-import { cp, mkdir, readFile, writeFile } from "node:fs/promises"
+import { appendFile, cp, mkdir, readFile, writeFile } from "node:fs/promises"
 import { dirname, resolve } from "node:path"
 import { fileURLToPath } from "node:url"
 import magicApiPlugin from "../../plugins/vite-plugin-magic-api"
@@ -21,8 +21,15 @@ export async function buildFixtures() {
 			resolve(projectRoot, "packages/html-sandbox/scripts/build.cjs"),
 			"--out-file",
 			resolve(outputRoot, "shell.html"),
+			"--runtime-out-file",
+			resolve(outputRoot, "husky-runtime.js"),
 		],
 		{ cwd: projectRoot, stdio: "inherit" },
+	)
+	// A loaded shell fallback must not masquerade as a successful host runtime load.
+	await appendFile(
+		resolve(outputRoot, "husky-runtime.js"),
+		"\nwindow.__FIXTURE_HOST_RUNTIME_LOADED__ = true;\n",
 	)
 	const plugin = magicApiPlugin({ projectRoot })
 	const load = typeof plugin.load === "function" ? plugin.load : plugin.load?.handler

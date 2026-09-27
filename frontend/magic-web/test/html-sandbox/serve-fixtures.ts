@@ -1,8 +1,15 @@
+import { createRequire } from "node:module"
 import { createServer } from "node:http"
 import { readFile } from "node:fs/promises"
 import { extname, resolve, sep } from "node:path"
 import { fileURLToPath } from "node:url"
 import { buildFixtures, outputRoot } from "./build-fixtures"
+
+const { setHtmlSandboxRuntimeCorsHeaders } = createRequire(import.meta.url)(
+	"../../server/utils/htmlSandboxRuntimeCors.cjs",
+) as {
+	setHtmlSandboxRuntimeCorsHeaders: (response: import("node:http").ServerResponse) => void
+}
 
 export async function serveFixtures() {
 	await buildFixtures()
@@ -125,7 +132,8 @@ export async function serveFixtures() {
 				return
 			}
 			res.setHeader("Content-Type", mime[extname(file)] || "application/octet-stream")
-			res.setHeader("Access-Control-Allow-Origin", "*")
+			if (path === "/husky-runtime.js") setHtmlSandboxRuntimeCorsHeaders(res)
+			else res.setHeader("Access-Control-Allow-Origin", "*")
 			res.setHeader("Cache-Control", "no-store")
 			res.end(await readFile(file))
 		} catch {

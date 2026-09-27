@@ -21,6 +21,17 @@
 						throw Error("Unexpected rejection: " + error.message)
 				}
 				await Fixture.test(
+					"host runtime loads across origins without falling back to the shell",
+					async () => {
+						Fixture.equal(window.__FIXTURE_HOST_RUNTIME_LOADED__, true)
+						Fixture.equal(
+							typeof MagicHtmlSandboxRuntime.BaseRuntimeBridgeApiPlugin.prototype
+								.isHostMessage,
+							"function",
+						)
+					},
+				)
+				await Fixture.test(
 					"all ten API plugins install their namespaces and legacy aliases",
 					async () => {
 						for (const name of [

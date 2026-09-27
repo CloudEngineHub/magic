@@ -79,6 +79,7 @@ export async function runRefreshExample(
 					source.postMessage(
 						{
 							type: "setContent",
+							runtimeUrl: window.location.origin + "/husky-runtime.js",
 							content: getFullContent(content, "refresh", {
 								virtualStorage: context,
 								postMessageTargetStrategy: "cross-origin-parent",

@@ -142,3 +142,5 @@ it does not replace a full product navigation test with authenticated providers.
 目前浏览器证据只覆盖 Chrome；真实 WebView、Firefox/Safari、线上后端与实际权限弹窗未验收。
 
 语言切换通过订阅通知更新，不重载 iframe。`Magic.i18n.lang` 始终同步最新语言（`zh_CN` / `en_US`）；页面需在 `subscribe(({ lang }) => …)` 中更新自己的文案。可调用返回的取消函数，或 `unsubscribe` 传入原回调引用；取消后 lang 仍会更新。
+
+浏览器用例通过 `setContent.runtimeUrl` 加载宿主生成的 `husky-runtime.js`，使用生产 CORS 响应函数；另有加载标记断言，避免 shell 内置 runtime 回退掩盖加载失败。该公开静态 JS 使用无凭据 CORS，不依赖可能仅存在于远端 config.js 的沙箱域名；API 授权与 postMessage 来源检查不变。
