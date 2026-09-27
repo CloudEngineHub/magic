@@ -86,6 +86,24 @@ describe("useFileData", () => {
 		downloadFileContentMock.mockResolvedValue("<html></html>")
 	})
 
+	it.each(["<html></html>", ""])(
+		"keeps loaded content %j when switching to another file and back",
+		async (content) => {
+			downloadFileContentMock.mockResolvedValue(content)
+			const { result, rerender } = renderHook(
+				({ activeFileId }) => useFileData({ file_id: "file-1", activeFileId }),
+				{ initialProps: { activeFileId: "file-1" } },
+			)
+			await waitFor(() => expect(result.current.fileData).toBe(content))
+			rerender({ activeFileId: "other.js" })
+			await waitFor(() => expect(result.current.loadStatus).toBe("ready"))
+			rerender({ activeFileId: "file-1" })
+			await waitFor(() => expect(result.current.loadStatus).toBe("ready"))
+			expect(result.current.fileData).toBe(content)
+			expect(downloadFileContentMock).toHaveBeenCalledTimes(1)
+		},
+	)
+
 	it("reports failures, keeps the preview, and downloads again when retrying the same version", async () => {
 		const { result } = renderHook(() => useFileData({ file_id: "file-1" }))
 		await waitFor(() => expect(result.current.loadStatus).toBe("ready"))

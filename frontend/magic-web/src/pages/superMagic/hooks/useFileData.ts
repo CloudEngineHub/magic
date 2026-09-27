@@ -74,8 +74,8 @@ export const useFileData = ({
 	const [loading, setLoading] = useState(enabled && isNil(content))
 	/** 是否是删除的文件 */
 	const [isDeleted, setIsDeleted] = useState(false)
-	/** Keep preview mounted across share-token refresh for the same file. */
-	const hasLoadedShareContentRef = useRef(false)
+	/** Track successfully loaded bytes across tab switches and share-token refreshes. */
+	const loadedContentFileIdRef = useRef<string | null>(null)
 	const [loadRevision, setLoadRevision] = useState(0)
 	const [loadStatus, setLoadStatus] = useState<"idle" | "loading" | "ready" | "error">("idle")
 	const [loadError, setLoadError] = useState<unknown>(null)
@@ -134,6 +134,8 @@ export const useFileData = ({
 			// 检查是否需要更新：没有缓存数据、更新时间不同、版本不同
 			const shouldUpdate =
 				!cachedData ||
+				loadedContentFileIdRef.current !== fileId ||
+				isNil(fileData) ||
 				cachedData.updatedAt !== currentUpdatedAt ||
 				cachedData.version !== newVersion
 
@@ -190,6 +192,7 @@ export const useFileData = ({
 								(data: any) => {
 									if (!isCurrentLoad(request)) return
 									// Only successful bytes may satisfy a later cache hit.
+									loadedContentFileIdRef.current = file_id
 									fileUrlCacheRef.current[file_id] = {
 										url: res[0].url,
 										updatedAt: updatedAt || "",
@@ -348,9 +351,9 @@ export const useFileData = ({
 		},
 	)
 
-	useEffect(() => {
-		hasLoadedShareContentRef.current = false
-	}, [file_id])
+	const hasLoadedCurrentContent = useMemoizedFn(
+		() => loadedContentFileIdRef.current === file_id && !isNil(fileData),
+	)
 
 	/** 针对 分享/工具预览/内容审查 等场景，单独获取文件的最新下载地址 */
 	useEffect(() => {
@@ -360,8 +363,9 @@ export const useFileData = ({
 			return
 		}
 		if (isShareFilePreview || !activeFileId || activeFileId !== file_id) {
-			// Soft refresh on share-token rotation: keep iframe mounted.
-			const keepExistingPreview = hasLoadedShareContentRef.current
+			// Both active and background loaders own the same bytes. Preserve them
+			// when changing tabs; a cached URL alone cannot restore cleared content.
+			const keepExistingPreview = hasLoadedCurrentContent()
 			if (!keepExistingPreview) {
 				setLoading(true)
 				setFileData(null)
@@ -390,7 +394,7 @@ export const useFileData = ({
 							return downloadFileContent(res[0]?.url, { responseType }).then(
 								(data: any) => {
 									if (cancelled || !isCurrentLoad(request)) return
-									hasLoadedShareContentRef.current = true
+									loadedContentFileIdRef.current = file_id
 									fileUrlCacheRef.current[file_id] = {
 										url: res[0].url,
 										updatedAt: updatedAt || "",
@@ -401,7 +405,7 @@ export const useFileData = ({
 								},
 							)
 						}
-						hasLoadedShareContentRef.current = true
+						loadedContentFileIdRef.current = file_id
 						finishLoad()
 					} else {
 						failLoad(new Error("File URL is unavailable"))
@@ -418,6 +422,7 @@ export const useFileData = ({
 		}
 	}, [
 		activeFileId,
+		hasLoadedCurrentContent,
 		enabled,
 		fileApi,
 		file_id,
