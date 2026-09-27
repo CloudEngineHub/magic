@@ -1,5 +1,5 @@
 import { useTranslation } from "react-i18next"
-import { Files, X } from "lucide-react"
+import { Files, FolderOpen, LocateFixed, X } from "lucide-react"
 import { Button } from "@/components/shadcn-ui/button"
 import { ScrollArea } from "@/components/shadcn-ui/scroll-area"
 import MagicTooltip from "@/components/base/MagicTooltip"
@@ -24,10 +24,11 @@ interface Props {
 export function MentionSelectionPanel({ items, onRemove, onClear, onNavigate }: Props) {
 	const { t } = useTranslation("super")
 	const renderLocation = (key: string, label: string, target: "project" | "file") => {
+		const Icon = target === "project" ? FolderOpen : LocateFixed
 		const content = (
 			<SmartTooltip
 				elementType="span"
-				className="block truncate text-[11px] text-muted-foreground"
+				className="block min-w-0 flex-1 truncate text-[11px] text-muted-foreground"
 			>
 				{label}
 			</SmartTooltip>
@@ -35,7 +36,7 @@ export function MentionSelectionPanel({ items, onRemove, onClear, onNavigate }: 
 		return onNavigate ? (
 			<Button
 				variant="link"
-				className="block h-auto w-full rounded-sm p-0 text-left font-normal"
+				className="flex h-auto w-full justify-start gap-1.5 rounded-sm p-0 text-left font-normal text-muted-foreground"
 				aria-label={
 					target === "project"
 						? t("fileManager.openSelectedProject", { name: label })
@@ -43,6 +44,7 @@ export function MentionSelectionPanel({ items, onRemove, onClear, onNavigate }: 
 				}
 				onClick={() => onNavigate(key, target)}
 			>
+				<Icon size={16} aria-hidden="true" className="shrink-0" />
 				{content}
 			</Button>
 		) : (
