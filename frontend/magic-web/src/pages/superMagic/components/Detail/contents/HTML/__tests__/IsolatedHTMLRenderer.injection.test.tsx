@@ -304,6 +304,81 @@ describe("IsolatedHTMLRenderer iframe injection", () => {
 		expect(getSetContentCalls(postMessage)).toHaveLength(1)
 	})
 
+	it("reloads unchanged content in a fresh iframe and preserves navigation", async () => {
+		const publish = vi.spyOn(pubsub, "publish")
+		renderIsolated(
+			<IsolatedHTMLRenderer
+				{...defaultProps}
+				htmlNavigation={{
+					filePath: "index.html",
+					search: "?page=2",
+					hash: "#details",
+					anchor: "details",
+				}}
+			/>,
+		)
+		await flushReactEffects()
+		let iframe = screen.getByTestId("isolated-html-content-iframe") as HTMLIFrameElement
+		const originalContextCalls = virtualStorageMocks.createContext.mock.calls.length
+		for (let reload = 0; reload < 2; reload += 1) {
+			vi.spyOn(iframe.contentWindow as Window, "postMessage").mockImplementation(vi.fn())
+			dispatchIframeMessage(iframe, "iframeReady")
+			await flushReactEffects()
+			const oldIframe = iframe
+			dispatchIframeMessage(oldIframe, "MAGIC_RELOAD_REQUEST")
+			await flushReactEffects()
+			iframe = screen.getByTestId("isolated-html-content-iframe") as HTMLIFrameElement
+			expect(iframe).not.toBe(oldIframe)
+			const postMessage = vi
+				.spyOn(iframe.contentWindow as Window, "postMessage")
+				.mockImplementation(vi.fn())
+			dispatchIframeMessage(iframe, "iframeReady")
+			await flushReactEffects()
+			expect(getSetContentCalls(postMessage)).toHaveLength(1)
+			expect(getSetContentCalls(postMessage)[0][0]).toMatchObject({
+				content: `<!doctype html>${defaultProps.content}`,
+				locationSearch: "?page=2",
+				locationAnchor: "#details",
+			})
+		}
+		expect(virtualStorageMocks.createContext).toHaveBeenCalledTimes(originalContextCalls + 2)
+		expect(publish).not.toHaveBeenCalledWith(PubSubEvents.Super_Magic_Detail_Refresh)
+	})
+
+	it("reloads only the requesting iframe and rejects foreign or stale reload messages", async () => {
+		renderIsolated(
+			<>
+				<IsolatedHTMLRenderer {...defaultProps} fileId="file-a" />
+				<IsolatedHTMLRenderer {...defaultProps} fileId="file-b" />
+			</>,
+		)
+		await flushReactEffects()
+		const [iframeA, iframeB] = screen.getAllByTestId(
+			"isolated-html-content-iframe",
+		) as HTMLIFrameElement[]
+		const oldWindow = iframeA.contentWindow
+		dispatchIframeMessage(iframeA, "MAGIC_RELOAD_REQUEST", "https://untrusted.example")
+		dispatchIframeMessage(iframeA, "MAGIC_RELOAD_REQUEST", window.location.origin, {}, window)
+		await flushReactEffects()
+		expect(screen.getAllByTestId("isolated-html-content-iframe")).toEqual([iframeA, iframeB])
+		dispatchIframeMessage(iframeA, "MAGIC_RELOAD_REQUEST")
+		await flushReactEffects()
+		const [reloadedA, unchangedB] = screen.getAllByTestId(
+			"isolated-html-content-iframe",
+		) as HTMLIFrameElement[]
+		expect(reloadedA).not.toBe(iframeA)
+		expect(unchangedB).toBe(iframeB)
+		dispatchIframeMessage(
+			reloadedA,
+			"MAGIC_RELOAD_REQUEST",
+			window.location.origin,
+			{},
+			oldWindow,
+		)
+		await flushReactEffects()
+		expect(screen.getAllByTestId("isolated-html-content-iframe")).toEqual([reloadedA, iframeB])
+	})
+
 	it("reloads the original content when resetContent is called", async () => {
 		const rendererRef = createRef<IsolatedHTMLRendererRef>()
 		renderIsolated(<IsolatedHTMLRenderer {...defaultProps} ref={rendererRef} />)

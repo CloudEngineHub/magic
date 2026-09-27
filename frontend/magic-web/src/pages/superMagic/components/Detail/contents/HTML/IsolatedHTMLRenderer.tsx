@@ -2375,8 +2375,10 @@ const IsolatedHTMLRendererInner = forwardRef<IsolatedHTMLRendererRef, IsolatedHT
 					// 处理 window.Magic.user.getInfo() 请求
 					await handleUserInfoMessage(event.data.type, event.data)
 				} else if (event.data && event.data.type === "MAGIC_RELOAD_REQUEST") {
-					// 处理 window.Magic.reload() 请求
-					reloadIframeContent()
+					// Reload only the requesting document, even when its source is unchanged.
+					// Reuse the fresh-Window lifecycle instead of refreshing unrelated file tabs.
+					resetInspectorSelection()
+					restartPreviewDocument()
 				} else if (event.data && event.data.type === "MAGIC_SET_INPUT_MESSAGE") {
 					// 处理 window.Magic.setInputMessage() 请求
 					const message = event.data.message
