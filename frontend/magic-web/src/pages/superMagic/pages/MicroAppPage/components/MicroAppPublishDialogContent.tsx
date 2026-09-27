@@ -8,13 +8,6 @@ import { Button } from "@/components/shadcn-ui/button"
 import { Input } from "@/components/shadcn-ui/input"
 import { Label } from "@/components/shadcn-ui/label"
 import { ScrollArea } from "@/components/shadcn-ui/scroll-area"
-import {
-	Select,
-	SelectContent,
-	SelectItem,
-	SelectTrigger,
-	SelectValue,
-} from "@/components/shadcn-ui/select"
 import { Separator } from "@/components/shadcn-ui/separator"
 import { Switch } from "@/components/shadcn-ui/switch"
 import { cn } from "@/utils/cn"
@@ -26,7 +19,7 @@ import {
 	type ShareTarget,
 } from "@/pages/superMagic/components/Share/ShareFields"
 import { ShareType } from "@/pages/superMagic/components/Share/types"
-import { collectRootHtmlFiles, getAttachmentId } from "../utils/microAppFiles"
+import MicroAppEntryFileSelect from "./MicroAppEntryFileSelect"
 
 import type {
 	MicroAppPublishFormState,
@@ -83,7 +76,6 @@ const MICRO_APP_PUBLISH_TYPES = [
 const PERSONAL_MICRO_APP_PUBLISH_TYPES = MICRO_APP_PUBLISH_TYPES.filter(
 	(type) => type !== ShareType.Organization,
 )
-const AUTO_DEFAULT_OPEN_FILE_VALUE = "__auto__"
 
 /** 发布表单展示层，桌面弹窗和移动端底部弹窗共用同一份字段与操作。 */
 export default function MicroAppPublishDialogContent({
@@ -128,7 +120,6 @@ export default function MicroAppPublishDialogContent({
 }: MicroAppPublishDialogContentProps) {
 	const { t } = useTranslation("super")
 	const isBusy = saving || unpublishing || coverUploading
-	const htmlEntries = collectRootHtmlFiles(attachmentList)
 	// 全部分享方式被管理员管控关闭时，分享设置里只有方式与提示有意义，其余项不再渲染。
 	const hasNoPermittedShareType = permittedShareTypes?.length === 0
 	const handleCoverPaste: ClipboardEventHandler<HTMLDivElement> = (event) => {
@@ -283,43 +274,13 @@ export default function MicroAppPublishDialogContent({
 									<Label htmlFor="micro-app-default-open-file">
 										{t("microAppPage.publish.defaultOpenFile")}
 									</Label>
-									<Select
-										value={
-											formState.defaultOpenFileId ??
-											AUTO_DEFAULT_OPEN_FILE_VALUE
-										}
-										onValueChange={(value) =>
-											onDefaultOpenFileChange(
-												value === AUTO_DEFAULT_OPEN_FILE_VALUE
-													? null
-													: value,
-											)
-										}
-									>
-										<SelectTrigger
-											id="micro-app-default-open-file"
-											data-testid="micro-app-default-open-file"
-											className="mt-2 h-9 w-full bg-background"
-										>
-											<SelectValue />
-										</SelectTrigger>
-										<SelectContent align="start" className="max-h-72">
-											<SelectItem value={AUTO_DEFAULT_OPEN_FILE_VALUE}>
-												{t("microAppPage.publish.defaultOpenFileAuto")}
-											</SelectItem>
-											{htmlEntries.map((item) => {
-												const id = String(getAttachmentId(item))
-												return (
-													<SelectItem key={id} value={id}>
-														{item.file_name ||
-															item.filename ||
-															item.name ||
-															id}
-													</SelectItem>
-												)
-											})}
-										</SelectContent>
-									</Select>
+									<MicroAppEntryFileSelect
+										attachmentList={attachmentList}
+										value={formState.defaultOpenFileId}
+										onChange={onDefaultOpenFileChange}
+										disabled={isBusy || loading}
+										mobile={mobile}
+									/>
 									<p className="mt-1 text-xs text-muted-foreground">
 										{t("microAppPage.publish.defaultOpenFileDescription")}
 									</p>
@@ -654,53 +615,13 @@ export default function MicroAppPublishDialogContent({
 											<Label htmlFor="micro-app-default-open-file">
 												{t("microAppPage.publish.defaultOpenFile")}
 											</Label>
-											<Select
-												value={
-													formState.defaultOpenFileId ??
-													AUTO_DEFAULT_OPEN_FILE_VALUE
-												}
-												onValueChange={(value) =>
-													onDefaultOpenFileChange(
-														value === AUTO_DEFAULT_OPEN_FILE_VALUE
-															? null
-															: value,
-													)
-												}
+											<MicroAppEntryFileSelect
+												attachmentList={attachmentList}
+												value={formState.defaultOpenFileId}
+												onChange={onDefaultOpenFileChange}
 												disabled={isBusy || loading}
-											>
-												<SelectTrigger
-													id="micro-app-default-open-file"
-													className={cn(
-														"w-full bg-background",
-														mobile ? "h-11" : "h-9",
-													)}
-													data-testid="micro-app-default-open-file"
-												>
-													<SelectValue />
-												</SelectTrigger>
-												<SelectContent align="start" className="max-h-72">
-													<SelectItem
-														value={AUTO_DEFAULT_OPEN_FILE_VALUE}
-													>
-														{t(
-															"microAppPage.publish.defaultOpenFileAuto",
-														)}
-													</SelectItem>
-													{htmlEntries.map((item) => {
-														const id = String(getAttachmentId(item))
-														const name =
-															item.file_name ||
-															item.filename ||
-															item.name ||
-															id
-														return (
-															<SelectItem key={id} value={id}>
-																{name}
-															</SelectItem>
-														)
-													})}
-												</SelectContent>
-											</Select>
+												mobile={mobile}
+											/>
 											<p className="mt-1 text-xs text-muted-foreground">
 												{t(
 													"microAppPage.publish.defaultOpenFileDescription",
