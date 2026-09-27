@@ -24,7 +24,7 @@ import { FileManagerToolbar } from "./FileManagerToolbar"
 import { FileManagerPlaces } from "./FileManagerPlaces"
 import { FileManagerContent } from "./FileManagerContent"
 import { FileManagerManagement, type FileManagerManagementState } from "./FileManagerManagement"
-import type { FileManagerProps, FileManagerSort } from "./types"
+import type { FileManagerProps, FileManagerRevealRequest, FileManagerSort } from "./types"
 import type { FileManagerLocationSnapshot } from "@/models/config/repositories/SuperProjectStateTypes"
 import magicToast from "@/components/base/MagicToaster/utils"
 
@@ -81,6 +81,43 @@ export function FileManager(props: FileManagerProps) {
 	const { location } = navigation
 	const view = selecting ? "list" : navigation.view
 	const index = useMemo(() => buildAttachmentIndex(props.attachments), [props.attachments])
+	const handledReveal = useRef<number>()
+	const [pendingReveal, setPendingReveal] = useState<FileManagerRevealRequest>()
+	const setLocation = navigation.setLocation
+	const reveal = useMemoizedFn(() => {
+		const request = props.revealRequest
+		if (
+			!request ||
+			handledReveal.current === request.requestId ||
+			!props.isActive ||
+			props.dataReady === false ||
+			props.loading ||
+			props.error ||
+			props.rootId === null
+		)
+			return
+		handledReveal.current = request.requestId
+		if (!index.getItemById(request.fileId)) {
+			magicToast.info(t("fileManager.locateUnavailable"))
+			return
+		}
+		// 从清单定位进入父目录，避免目录折叠或旧搜索隐藏目标；勾选集合仍由调用方保留。
+		const parentId = index.getParentItemById(request.fileId)?.file_id ?? props.rootId
+		setRecycle(false)
+		navigation.navigate(parentId)
+		setLocation((current) => ({ ...current, query: "" }))
+		setPendingReveal(request)
+	})
+	useEffect(reveal, [
+		props.revealRequest,
+		props.isActive,
+		props.dataReady,
+		props.loading,
+		props.error,
+		props.rootId,
+		index,
+		reveal,
+	])
 	const presentationIndex = useMemo(
 		() => getFilePresentationIndex(props.attachments),
 		[props.attachments],
@@ -517,6 +554,7 @@ export function FileManager(props: FileManagerProps) {
 							items={items}
 							view={view}
 							selection={selection}
+							revealRequest={pendingReveal}
 							initialScrollTop={location.scrollTop}
 							initialScrollLeft={location.scrollLeft}
 							restoreReady={!expandedError}

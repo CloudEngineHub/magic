@@ -23,6 +23,7 @@ import { FileManagerListHeader } from "./FileManagerListHeader"
 import { FileManagerItem } from "./FileManagerItem"
 import type {
 	FileManagerActions,
+	FileManagerRevealRequest,
 	FileManagerLayout,
 	FileManagerView,
 	FileManagerTreeRow,
@@ -44,6 +45,7 @@ interface Props {
 	items: FilePresentation[]
 	view: FileManagerView
 	selection: ReturnType<typeof useFileManagerSelection>
+	revealRequest?: FileManagerRevealRequest
 	initialScrollTop: number
 	initialScrollLeft: number
 	restoreReady: boolean
@@ -151,6 +153,48 @@ export function FileManagerContent(props: Props) {
 		width,
 		props.items.length,
 		restoreScroll,
+	])
+	const revealed = useRef<number>()
+	useLayoutEffect(() => {
+		const request = props.revealRequest
+		if (
+			!request ||
+			revealed.current === request.requestId ||
+			props.loading ||
+			props.error ||
+			!props.restoreReady ||
+			!props.isActive ||
+			props.query ||
+			!width ||
+			!viewport.current?.clientHeight ||
+			restoredDirectory.current !== props.directoryId
+		)
+			return
+		const position = props.selection.positions.get(request.fileId)
+		if (position === undefined) return
+		// 复用虚拟器定位尚未挂载的行；只响应显式请求，普通滚动和重新渲染不重复定位。
+		revealed.current = request.requestId
+		virtualizer.scrollToIndex(Math.floor(position / columns), { align: "center" })
+		props.selection.select(
+			request.fileId,
+			{ shiftKey: false, metaKey: false, ctrlKey: false },
+			true,
+		)
+		setKeyboardFocus(true)
+		viewport.current.focus({ preventScroll: true })
+	}, [
+		props.revealRequest,
+		props.loading,
+		props.error,
+		props.restoreReady,
+		props.isActive,
+		props.query,
+		props.directoryId,
+		props.selection,
+		width,
+		columns,
+		viewport,
+		virtualizer,
 	])
 	const onScroll = () => {
 		if (

@@ -2447,6 +2447,8 @@
 		"files": "Files",
 		"forward": "Forward",
 		"itemCount": "{{count}} items",
+		"locateSelectedFile": "Locate file: {{path}}",
+		"locateUnavailable": "This file cannot be located. It may have been deleted or is no longer accessible.",
 		"memory": {
 			"current": "Current",
 			"noMatches": "No matching projects",
@@ -2459,6 +2461,7 @@
 		"name": "Name",
 		"newFolder": "New folder",
 		"noMatches": "No matching files in this folder",
+		"openSelectedProject": "Go to project: {{name}}",
 		"operationProgress": "Processing {{progress}}%",
 		"paste": "Paste",
 		"path": "File path",

@@ -2447,6 +2447,8 @@
 		"files": "文件",
 		"forward": "前进",
 		"itemCount": "{{count}} 项",
+		"locateSelectedFile": "定位文件：{{path}}",
+		"locateUnavailable": "无法定位此文件，可能已删除或无权访问",
 		"memory": {
 			"current": "当前",
 			"noMatches": "没有匹配的项目",
@@ -2459,6 +2461,7 @@
 		"name": "名称",
 		"newFolder": "新建文件夹",
 		"noMatches": "此文件夹中没有匹配的文件",
+		"openSelectedProject": "返回项目：{{name}}",
 		"operationProgress": "处理中 {{progress}}%",
 		"paste": "粘贴",
 		"path": "文件路径",

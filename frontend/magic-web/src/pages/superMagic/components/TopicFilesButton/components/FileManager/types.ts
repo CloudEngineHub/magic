@@ -50,6 +50,12 @@ export interface FileManagerPathItem {
 	name: string
 }
 
+export interface FileManagerRevealRequest {
+	fileId: string
+	/** 每次显式定位递增；重复点击同一文件也应重新滚动到该行。 */
+	requestId: number
+}
+
 interface FileManagerBaseProps {
 	hidePlaces?: boolean
 	defaultView?: FileManagerView
@@ -62,6 +68,7 @@ interface FileManagerBaseProps {
 	rootName: string
 	initialDirectoryId?: string
 	initialState?: FileManagerLocationSnapshot
+	revealRequest?: FileManagerRevealRequest
 	onStateChange?: (
 		state: FileManagerLocationSnapshot,
 		options?: FileManagerStateChangeOptions,

@@ -17,11 +17,38 @@ interface Props {
 	items: readonly MentionSelectionItem[]
 	onRemove: (key: string) => void
 	onClear: () => void
+	onNavigate?: (key: string, target: "project" | "file") => void
 }
 
 /** 清单展示由调用方持有的引用；文件管理器的当前目录、搜索结果不决定清单内容。 */
-export function MentionSelectionPanel({ items, onRemove, onClear }: Props) {
+export function MentionSelectionPanel({ items, onRemove, onClear, onNavigate }: Props) {
 	const { t } = useTranslation("super")
+	const renderLocation = (key: string, label: string, target: "project" | "file") => {
+		const content = (
+			<SmartTooltip
+				elementType="span"
+				className="block truncate text-[11px] text-muted-foreground"
+			>
+				{label}
+			</SmartTooltip>
+		)
+		return onNavigate ? (
+			<Button
+				variant="link"
+				className="block h-auto w-full rounded-sm p-0 text-left font-normal"
+				aria-label={
+					target === "project"
+						? t("fileManager.openSelectedProject", { name: label })
+						: t("fileManager.locateSelectedFile", { path: label })
+				}
+				onClick={() => onNavigate(key, target)}
+			>
+				{content}
+			</Button>
+		) : (
+			content
+		)
+	}
 	return (
 		<aside
 			aria-label={t("fileManager.selectedFiles")}
@@ -70,18 +97,8 @@ export function MentionSelectionPanel({ items, onRemove, onClear }: Props) {
 									>
 										{presentation.name}
 									</SmartTooltip>
-									<SmartTooltip
-										elementType="div"
-										className="truncate text-[11px] text-muted-foreground"
-									>
-										{sourceName}
-									</SmartTooltip>
-									<SmartTooltip
-										elementType="div"
-										className="truncate text-[11px] text-muted-foreground"
-									>
-										{presentation.path}
-									</SmartTooltip>
+									{renderLocation(key, sourceName, "project")}
+									{renderLocation(key, presentation.path, "file")}
 								</div>
 								<MagicTooltip
 									title={t("fileManager.removeSelected", {
