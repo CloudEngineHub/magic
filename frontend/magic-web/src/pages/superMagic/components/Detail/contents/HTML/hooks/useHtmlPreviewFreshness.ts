@@ -39,9 +39,15 @@ export function useHtmlPreviewFreshness(fileId: string | undefined) {
 	)
 	const rendering = useCallback(
 		(request: number) => {
-			if (isCurrent(request)) setPhase("rendering")
+			if (!isCurrent(request)) return
+			clearTimer()
+			setPhase("rendering")
+			// Background resource checks only start a timeout once a new document is sent.
+			timer.current = setTimeout(() => {
+				if (isCurrent(request)) setPhase("failed")
+			}, HTML_PREVIEW_READY_TIMEOUT)
 		},
-		[isCurrent],
+		[clearTimer, isCurrent],
 	)
 	const fail = useCallback(
 		(request: number) => {

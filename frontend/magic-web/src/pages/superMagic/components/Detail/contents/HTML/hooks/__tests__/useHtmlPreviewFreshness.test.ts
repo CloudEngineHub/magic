@@ -3,6 +3,18 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 import { HTML_PREVIEW_READY_TIMEOUT, useHtmlPreviewFreshness } from "../useHtmlPreviewFreshness"
 
 describe("HTML preview freshness", () => {
+	it("keeps background checks quiet but times out an actual render", () => {
+		const { result } = renderHook(() => useHtmlPreviewFreshness("file-a"))
+		let request = 0
+		act(() => {
+			request = result.current.begin(false)
+		})
+		act(() => vi.advanceTimersByTime(HTML_PREVIEW_READY_TIMEOUT))
+		expect(result.current.phase).toBe("idle")
+		act(() => result.current.rendering(request))
+		act(() => vi.advanceTimersByTime(HTML_PREVIEW_READY_TIMEOUT))
+		expect(result.current.phase).toBe("failed")
+	})
 	beforeEach(() => vi.useFakeTimers())
 	afterEach(() => vi.useRealTimers())
 	it("keeps later work pending when an earlier refresh succeeds or fails", () => {

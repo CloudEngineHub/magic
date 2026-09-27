@@ -958,83 +958,89 @@ export default memo(function HTML(props: HTMLProps) {
 		// eslint-disable-next-line react-hooks/exhaustive-deps
 	}, [attachmentList, displayData?.file_id, runtimeProjectId, fileApi, fileAccess])
 
-	const processContent = useMemoizedFn(async (sourceContent = data?.content) => {
-		// Resource metadata can change before a newer file finishes downloading.
-		// Processing the previous bytes must not acknowledge that remote update.
-		if (!isEditMode && !isDataAnalysis && (loadStatus === "loading" || loadStatus === "error"))
-			return
-		if (isSharePreview && !isShareFileAccess(fileAccess)) return
-		if (isDataAnalysis && !activeHistory.isPreviewReady) return
-		const request = beginPreviewUpdate(!isDataAnalysis)
-		if (sourceContent === "") {
-			forcePreviewRestartRef.current = false
-			readyPreviewContentRef.current = ""
-			setProcessedContent("")
-			setFilePathMapping(new Map())
-			setIsPreviewRenderReady(true)
-			acknowledgePreview(request)
-			return
-		}
-
-		try {
-			const result = await processHtmlContent({
-				content: sourceContent,
-				attachments,
-				fileId: displayData?.file_id,
-				fileName: data?.file_name,
-				attachmentList,
-				displayConfig,
-				resourceFileVersions,
-				htmlPreviewBundledTemplate,
-				xMagicImageProcess: HTML_PREVIEW_IMAGE_PROCESS,
-				access: fileAccess,
-				fileApi,
-			})
-
-			let finalProcessedContent = result.processedContent
-			finalProcessedContent = inlineDashboardDataJs({
-				html: finalProcessedContent,
-				dataJsContent: dashboardDataJsContent,
-			})
-
-			// 注入fetch拦截器脚本（默认启用）
-			// 注意：media拦截器现在在htmlProcessor中根据display_config.type自动注入
-			finalProcessedContent = injectFetchInterceptorScript(finalProcessedContent, {
-				fileId: displayData?.file_id || "",
-				postMessageTargetStrategy,
-			})
-
-			// dashboard 通过 postMessage 驱动编辑态，不需要额外注入键盘拦截器；
-			// 否则会导致内容指纹变化并触发 iframe 二次重写。
-			if (isEditMode && !isDataAnalysis) {
-				finalProcessedContent = injectKeyboardInterceptorScript(finalProcessedContent)
-			}
-
-			if (!isCurrentPreview(request)) return
-			const shouldRestart = forcePreviewRestartRef.current
-			forcePreviewRestartRef.current = false
-			setPreviewRenderGeneration(request)
-			if (!isDataAnalysis) markPreviewRendering(request)
+	const processContent = useMemoizedFn(
+		async (sourceContent = data?.content, background = false) => {
+			// Resource metadata can change before a newer file finishes downloading.
+			// Processing the previous bytes must not acknowledge that remote update.
 			if (
-				isDataAnalysis ||
-				(finalProcessedContent === readyPreviewContentRef.current && !shouldRestart)
-			) {
+				!isEditMode &&
+				!isDataAnalysis &&
+				(loadStatus === "loading" || loadStatus === "error")
+			)
+				return
+			if (isSharePreview && !isShareFileAccess(fileAccess)) return
+			if (isDataAnalysis && !activeHistory.isPreviewReady) return
+			const request = beginPreviewUpdate(!isDataAnalysis && !background)
+			if (sourceContent === "") {
+				forcePreviewRestartRef.current = false
+				readyPreviewContentRef.current = ""
+				setProcessedContent("")
+				setFilePathMapping(new Map())
+				setIsPreviewRenderReady(true)
 				acknowledgePreview(request)
-			} else {
-				setIsPreviewRenderReady(false)
+				return
 			}
-			if (shouldRestart) {
-				readyPreviewContentRef.current = null
-				setRenderKey((current) => current + 1)
+
+			try {
+				const result = await processHtmlContent({
+					content: sourceContent,
+					attachments,
+					fileId: displayData?.file_id,
+					fileName: data?.file_name,
+					attachmentList,
+					displayConfig,
+					resourceFileVersions,
+					htmlPreviewBundledTemplate,
+					xMagicImageProcess: HTML_PREVIEW_IMAGE_PROCESS,
+					access: fileAccess,
+					fileApi,
+				})
+
+				let finalProcessedContent = result.processedContent
+				finalProcessedContent = inlineDashboardDataJs({
+					html: finalProcessedContent,
+					dataJsContent: dashboardDataJsContent,
+				})
+
+				// 注入fetch拦截器脚本（默认启用）
+				// 注意：media拦截器现在在htmlProcessor中根据display_config.type自动注入
+				finalProcessedContent = injectFetchInterceptorScript(finalProcessedContent, {
+					fileId: displayData?.file_id || "",
+					postMessageTargetStrategy,
+				})
+
+				// dashboard 通过 postMessage 驱动编辑态，不需要额外注入键盘拦截器；
+				// 否则会导致内容指纹变化并触发 iframe 二次重写。
+				if (isEditMode && !isDataAnalysis) {
+					finalProcessedContent = injectKeyboardInterceptorScript(finalProcessedContent)
+				}
+
+				if (!isCurrentPreview(request)) return
+				const shouldRestart = forcePreviewRestartRef.current
+				forcePreviewRestartRef.current = false
+				setPreviewRenderGeneration(request)
+				if (
+					isDataAnalysis ||
+					(finalProcessedContent === readyPreviewContentRef.current && !shouldRestart)
+				) {
+					acknowledgePreview(request)
+				} else {
+					if (!isDataAnalysis) markPreviewRendering(request)
+					setIsPreviewRenderReady(false)
+				}
+				if (shouldRestart) {
+					readyPreviewContentRef.current = null
+					setRenderKey((current) => current + 1)
+				}
+				setProcessedContent(finalProcessedContent)
+				setFilePathMapping(result.filePathMapping)
+			} catch (error) {
+				console.error("Error processing HTML content:", error)
+				// Keep the last working preview when resource processing fails.
+				if (!isDataAnalysis) failPreview(request)
 			}
-			setProcessedContent(finalProcessedContent)
-			setFilePathMapping(result.filePathMapping)
-		} catch (error) {
-			console.error("Error processing HTML content:", error)
-			// Keep the last working preview when resource processing fails.
-			if (!isDataAnalysis) failPreview(request)
-		}
-	})
+		},
+	)
 
 	const refreshHtmlPreview = useMemoizedFn(async () => {
 		if (isEditMode || isDataAnalysis) return
@@ -1094,7 +1100,9 @@ export default memo(function HTML(props: HTMLProps) {
 		if (typeof data?.content !== "string") return
 		if (isSharePreview && !isShareFileAccess(fileAccess)) return
 		if (isDataAnalysis && !activeHistory.isPreviewReady) return
-		processContent()
+		// Attachment changes often come from runtime data writes. Only show feedback
+		// if processing actually produces a different document.
+		processContent(undefined, true)
 	}, [
 		attachmentList,
 		htmlPreviewBundledTemplate,
@@ -1774,13 +1782,6 @@ export default memo(function HTML(props: HTMLProps) {
 			data-edit-mode={isEditMode ? "true" : "false"}
 		>
 			{showFileHeader && <CommonHeaderV2 {...headerContext} />}
-			{!isEditMode && !isDataAnalysis && (
-				<HtmlPreviewFreshness
-					phase={previewFreshness.phase}
-					hasRendered={previewFreshness.hasRendered}
-					onRetry={() => void refreshHtmlPreview()}
-				/>
-			)}
 			{devicePreviewEnabled && (
 				<DevicePreviewToolbar
 					{...devicePreview}
@@ -1839,6 +1840,14 @@ export default memo(function HTML(props: HTMLProps) {
 							[styles.documentFlowPreviewInner]: documentFlowFullscreen,
 						})}
 					>
+						{!isEditMode && !isDataAnalysis && (
+							<HtmlPreviewFreshness
+								key={displayData?.file_id}
+								phase={previewFreshness.phase}
+								hasRendered={previewFreshness.hasRendered}
+								onRetry={() => void refreshHtmlPreview()}
+							/>
+						)}
 						{isDataAnalysis ? (
 							<DevicePreviewViewport
 								{...devicePreview}

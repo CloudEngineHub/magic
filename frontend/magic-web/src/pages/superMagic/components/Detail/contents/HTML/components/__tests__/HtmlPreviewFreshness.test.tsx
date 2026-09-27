@@ -5,6 +5,20 @@ import { HtmlPreviewFreshness } from "../HtmlPreviewFreshness"
 vi.mock("react-i18next", () => ({ useTranslation: () => ({ t: (key: string) => key }) }))
 
 describe("HTML preview refresh feedback", () => {
+	it("dismisses the floating notice for the current cycle", () => {
+		const { rerender } = render(
+			<HtmlPreviewFreshness phase="updating" hasRendered onRetry={vi.fn()} />,
+		)
+		expect(screen.getByRole("status")).toHaveClass("absolute", "right-3", "top-3")
+		fireEvent.click(screen.getByRole("button", { name: "common.close" }))
+		rerender(<HtmlPreviewFreshness phase="rendering" hasRendered onRetry={vi.fn()} />)
+		expect(screen.queryByRole("status")).toBeNull()
+		rerender(<HtmlPreviewFreshness phase="failed" hasRendered onRetry={vi.fn()} />)
+		expect(screen.queryByRole("status")).toBeNull()
+		rerender(<HtmlPreviewFreshness phase="idle" hasRendered onRetry={vi.fn()} />)
+		rerender(<HtmlPreviewFreshness phase="updating" hasRendered onRetry={vi.fn()} />)
+		expect(screen.getByRole("status")).toBeInTheDocument()
+	})
 	it("keeps the status quiet until an existing preview is updating", () => {
 		const { rerender } = render(
 			<HtmlPreviewFreshness phase="rendering" hasRendered={false} onRetry={vi.fn()} />,

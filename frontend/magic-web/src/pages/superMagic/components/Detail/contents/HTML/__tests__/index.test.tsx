@@ -619,6 +619,41 @@ describe("HTML", () => {
 		)
 	})
 
+	it("checks unrelated attachments without showing loading or replacing the preview", async () => {
+		const props = { ...baseProps, viewMode: "desktop" as const, isEditMode: false }
+		const { rerender } = render(<HTML {...props} />)
+		await waitFor(() =>
+			expect(mockIsolatedHTMLRendererProps.mock.lastCall?.[0].content).toContain("base"),
+		)
+		act(() => mockIsolatedHTMLRendererProps.mock.lastCall?.[0].onRenderReady())
+		const originalProcessor = mockProcessHtmlContent.getMockImplementation()
+		if (!originalProcessor) throw new Error("Missing HTML processor fixture")
+		let finish = () => {
+			throw new Error("Processing did not start")
+		}
+		mockProcessHtmlContent.mockImplementation(
+			(input) =>
+				new Promise((resolve) => {
+					finish = () => {
+						void originalProcessor(input).then(resolve)
+					}
+				}),
+		)
+		rerender(
+			<HTML
+				{...props}
+				attachmentList={[
+					{ file_id: "test-data", relative_file_path: "test.txt", updated_at: "new" },
+				]}
+			/>,
+		)
+		expect(screen.queryByRole("status")).toBeNull()
+		await act(async () => finish())
+		expect(screen.queryByRole("status")).toBeNull()
+		expect(mockIsolatedHTMLRendererProps.mock.lastCall?.[0].content).toContain("base")
+		mockProcessHtmlContent.mockImplementation(originalProcessor)
+	})
+
 	it("keeps the last working preview on processing failure and retries explicitly", async () => {
 		const data = {
 			...baseProps.data,
