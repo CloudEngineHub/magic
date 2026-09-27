@@ -95,14 +95,31 @@ describe("useFileData", () => {
 				{ initialProps: { activeFileId: "file-1" } },
 			)
 			await waitFor(() => expect(result.current.fileData).toBe(content))
+			const urlRequests = getTemporaryDownloadUrlMock.mock.calls.length
+			const historyRequests = getFileHistoryVersionsMock.mock.calls.length
 			rerender({ activeFileId: "other.js" })
 			await waitFor(() => expect(result.current.loadStatus).toBe("ready"))
 			rerender({ activeFileId: "file-1" })
 			await waitFor(() => expect(result.current.loadStatus).toBe("ready"))
 			expect(result.current.fileData).toBe(content)
 			expect(downloadFileContentMock).toHaveBeenCalledTimes(1)
+			expect(getTemporaryDownloadUrlMock).toHaveBeenCalledTimes(urlRequests)
+			expect(getFileHistoryVersionsMock).toHaveBeenCalledTimes(historyRequests)
 		},
 	)
+
+	it("refreshes cached content when the file revision changes", async () => {
+		const { result, rerender } = renderHook(
+			({ updatedAt }) =>
+				useFileData({ file_id: "file-1", activeFileId: "file-1", updatedAt }),
+			{ initialProps: { updatedAt: "first" } },
+		)
+		await waitFor(() => expect(result.current.fileData).toBe("<html></html>"))
+		downloadFileContentMock.mockResolvedValue("<html>updated</html>")
+		rerender({ updatedAt: "second" })
+		await waitFor(() => expect(result.current.fileData).toBe("<html>updated</html>"))
+		expect(result.current.loadStatus).toBe("ready")
+	})
 
 	it("reports failures, keeps the preview, and downloads again when retrying the same version", async () => {
 		const { result } = renderHook(() => useFileData({ file_id: "file-1" }))

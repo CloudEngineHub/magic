@@ -88,6 +88,7 @@ export const useFileData = ({
 		() => ({ file_id, fileApi, updatedAt, isEditing, enabled }),
 		[file_id, fileApi, updatedAt, isEditing, enabled],
 	)
+	const successfulLoadScope = useRef<typeof requestScope | null>(null)
 	const currentScope = useRef(requestScope)
 	currentScope.current = requestScope
 	useEffect(
@@ -109,6 +110,7 @@ export const useFileData = ({
 			request.sequence === requestSequence.current && request.scope === currentScope.current,
 	)
 	const finishLoad = useMemoizedFn(() => {
+		successfulLoadScope.current = requestScope
 		setLoadStatus("ready")
 		setLoadError(null)
 		setLoadRevision((revision) => revision + 1)
@@ -308,9 +310,24 @@ export const useFileData = ({
 		fetchFileVersions(file_id, isSelectNewest)
 	})
 
+	// Tab activation is not a refresh. Reuse bytes only for the same access scope,
+	// file revision and selected version; explicit refresh bypasses this guard.
+	const hasReusableContent = useMemoizedFn(() => {
+		const cached = fileUrlCacheRef.current[file_id]
+		return (
+			!disabledUrlCache &&
+			successfulLoadScope.current === requestScope &&
+			loadedContentFileIdRef.current === file_id &&
+			!isNil(fileData) &&
+			cached?.updatedAt === (updatedAt || "") &&
+			cached?.version === fileVersion
+		)
+	})
+
 	useDebounceEffect(
 		() => {
 			if (!enabled || waitingForShareAccess) return
+			if (hasReusableContent()) return
 			// 如果正在编辑但文件数据还没有加载，需要先加载文件
 			if (
 				isEditing &&
@@ -338,12 +355,14 @@ export const useFileData = ({
 		},
 		[
 			enabled,
+			fileApi,
 			activeFileId,
 			updatedAt,
 			file_id,
 			isEditing,
 			isShareFilePreview,
 			fileData,
+			hasReusableContent,
 			waitingForShareAccess,
 		],
 		{
@@ -362,6 +381,7 @@ export const useFileData = ({
 			setLoading(true)
 			return
 		}
+		if (hasReusableContent()) return
 		if (isShareFilePreview || !activeFileId || activeFileId !== file_id) {
 			// Both active and background loaders own the same bytes. Preserve them
 			// when changing tabs; a cached URL alone cannot restore cleared content.
@@ -423,6 +443,7 @@ export const useFileData = ({
 	}, [
 		activeFileId,
 		hasLoadedCurrentContent,
+		hasReusableContent,
 		enabled,
 		fileApi,
 		file_id,

@@ -18,6 +18,27 @@ import pubsub, { PubSubEvents } from "@/utils/pubsub"
 describe("IsolatedHTMLRenderer lifecycle", () => {
 	useRendererTestSetup()
 
+	it("keeps the iframe document and runtime when switching tabs away and back", async () => {
+		const { rerender } = renderIsolated(
+			<IsolatedHTMLRenderer {...defaultProps} isVisible isTabActive />,
+		)
+		const iframe = screen.getByTestId("isolated-html-content-iframe") as HTMLIFrameElement
+		const postMessage = vi
+			.spyOn(iframe.contentWindow as Window, "postMessage")
+			.mockImplementation(vi.fn())
+		await flushReactEffects()
+		dispatchIframeMessage(iframe, "iframeReady")
+		await flushReactEffects()
+		const initialCalls = getSetContentCalls(postMessage).length
+		expect(initialCalls).toBe(1)
+		rerender(<IsolatedHTMLRenderer {...defaultProps} isVisible={false} isTabActive={false} />)
+		await flushReactEffects()
+		rerender(<IsolatedHTMLRenderer {...defaultProps} isVisible isTabActive />)
+		await flushReactEffects()
+		expect(screen.getByTestId("isolated-html-content-iframe")).toBe(iframe)
+		expect(getSetContentCalls(postMessage)).toHaveLength(initialCalls)
+	})
+
 	it.each([
 		["preview", false, false],
 		["editor", true, false],
@@ -181,7 +202,7 @@ describe("IsolatedHTMLRenderer lifecycle", () => {
 		expect(getSetContentCalls(postMessage)).toHaveLength(1)
 	})
 
-	it("dispatches reload to the host and removes its message listener on unmount", async () => {
+	it("reloads only its own document and removes its message listener on unmount", async () => {
 		const onRefresh = vi.fn()
 		pubsub.subscribe(PubSubEvents.Super_Magic_Detail_Refresh, onRefresh)
 		const onRenderReady = vi.fn()
@@ -191,8 +212,10 @@ describe("IsolatedHTMLRenderer lifecycle", () => {
 		const iframe = screen.getByTestId("isolated-html-content-iframe") as HTMLIFrameElement
 		const source = iframe.contentWindow
 		try {
-			dispatchIframeMessage(iframe, "MAGIC_RELOAD_REQUEST")
-			expect(onRefresh).toHaveBeenCalledTimes(1)
+			act(() => dispatchIframeMessage(iframe, "MAGIC_RELOAD_REQUEST"))
+			await flushReactEffects()
+			expect(screen.getByTestId("isolated-html-content-iframe")).not.toBe(iframe)
+			expect(onRefresh).not.toHaveBeenCalled()
 			unmount()
 			dispatchIframeMessage(
 				iframe,
@@ -204,7 +227,7 @@ describe("IsolatedHTMLRenderer lifecycle", () => {
 			dispatchIframeMessage(iframe, "renderComplete", window.location.origin, {}, source)
 			await flushReactEffects()
 			expect(iframe).not.toBeInTheDocument()
-			expect(onRefresh).toHaveBeenCalledTimes(1)
+			expect(onRefresh).not.toHaveBeenCalled()
 			expect(onRenderReady).not.toHaveBeenCalled()
 		} finally {
 			pubsub.unsubscribe(PubSubEvents.Super_Magic_Detail_Refresh, onRefresh)
