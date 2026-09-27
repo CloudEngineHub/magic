@@ -1,3 +1,8 @@
+import { HtmlAppPermissionContext } from "../hooks/HtmlAppPermissionContext"
+import {
+	useHtmlAppPermissions,
+	type HtmlAppPermissionController,
+} from "../hooks/useHtmlAppPermissions"
 import { act, fireEvent, render, screen, waitFor } from "@testing-library/react"
 import type { ButtonHTMLAttributes, ReactNode } from "react"
 import { beforeEach, describe, expect, it, vi } from "vitest"
@@ -572,6 +577,46 @@ describe("HTML", () => {
 		mockProcessHtmlContent.mockClear()
 		mockIsolatedHTMLRendererProps.mockClear()
 		mockResetContent.mockClear()
+	})
+
+	it("reuses MicroApp permissions while hiding the file toolbar manager", async () => {
+		let shared: HtmlAppPermissionController
+		const permissionFiles: [] = []
+		function SharedPermissions({ children }: { children: ReactNode }) {
+			const controller = useHtmlAppPermissions({
+				content: "",
+				projectId: "app-project",
+				relativeFilePath: "index.html",
+				fileList: permissionFiles,
+				enabled: false,
+			})
+			shared = { ...controller, hasHtmlPermissionDeclarations: true }
+			return (
+				<HtmlAppPermissionContext.Provider value={shared}>
+					{children}
+				</HtmlAppPermissionContext.Provider>
+			)
+		}
+		const onManagerChange = vi.fn()
+		render(
+			<SharedPermissions>
+				<HTML
+					{...baseProps}
+					viewMode="desktop"
+					isEditMode={false}
+					onHtmlPermissionManagerChange={onManagerChange}
+				/>
+			</SharedPermissions>,
+		)
+		await waitFor(() =>
+			expect(mockIsolatedHTMLRendererProps.mock.lastCall?.[0].permissionController).toBe(
+				shared,
+			),
+		)
+		expect(screen.queryByText("htmlEditor.permissionManager.open")).not.toBeInTheDocument()
+		expect(onManagerChange).toHaveBeenCalledWith(
+			expect.objectContaining({ open: expect.any(Function) }),
+		)
 	})
 
 	it("keeps the last working preview on processing failure and retries explicitly", async () => {

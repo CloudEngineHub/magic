@@ -1,3 +1,4 @@
+import { useSharedHtmlAppPermissions } from "./hooks/HtmlAppPermissionContext"
 import { lazy, memo, Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { isConvertibleFile } from "../../utils/file"
 import IsolatedHTMLRenderer, {
@@ -475,14 +476,16 @@ export default memo(function HTML(props: HTMLProps) {
 		fileId: displayData?.file_id,
 		fallbackFileName: data?.file_name || displayData?.file_name,
 	})
-	const htmlPermissionController = useHtmlAppPermissions({
+	const sharedHtmlPermissionController = useSharedHtmlAppPermissions()
+	const localHtmlPermissionController = useHtmlAppPermissions({
 		content: processedContent,
 		rawSourceCode: data?.content,
 		relativeFilePath: currentHtmlFileInfo.relativeFilePath,
 		projectId: runtimeProjectId,
 		fileList: flattenedAttachmentList,
-		enabled: !isDataAnalysis && !htmlIsDeleted,
+		enabled: !sharedHtmlPermissionController && !isDataAnalysis && !htmlIsDeleted,
 	})
+	const htmlPermissionController = sharedHtmlPermissionController ?? localHtmlPermissionController
 	const {
 		hasHtmlPermissionDeclarations,
 		activeHtmlPermissionGrantCount,
@@ -1624,7 +1627,7 @@ export default memo(function HTML(props: HTMLProps) {
 					key: "html-permission-manager",
 					zone: "secondary",
 					before: "refresh",
-					visible: () => canManageHtmlPermissions,
+					visible: () => canManageHtmlPermissions && !sharedHtmlPermissionController,
 					render: (context) => (
 						<ActionButton
 							icon={<ShieldCheck size={16} />}
@@ -1696,6 +1699,7 @@ export default memo(function HTML(props: HTMLProps) {
 			quickSelectionLabel,
 			quickSelectionTitle,
 			canManageHtmlPermissions,
+			sharedHtmlPermissionController,
 			handleOpenHtmlPermissionManager,
 			isDataAnalysis,
 			htmlIsDeleted,
