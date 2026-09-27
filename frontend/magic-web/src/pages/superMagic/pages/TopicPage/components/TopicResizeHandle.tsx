@@ -15,6 +15,7 @@ import {
 
 interface TopicResizeHandleProps {
 	className?: string
+	withDivider?: boolean
 	disabled?: boolean
 	onResizeStart: (clientX: number) => void
 	style?: CSSProperties
@@ -27,6 +28,7 @@ interface TopicResizeHandleProps {
 /** Keeps the layout divider narrow while exposing a wider pointer target for reliable resizing. */
 function TopicResizeHandle({
 	className,
+	withDivider = false,
 	disabled = false,
 	onResizeStart,
 	style,
@@ -86,6 +88,14 @@ function TopicResizeHandle({
 				data-testid="handle-mouse-down"
 				data-pointer-testid="handle-pointer-down"
 			>
+				{/* Keep the visible divider on the grip axis, independent of the wider drag target. */}
+				{withDivider && (
+					<span
+						aria-hidden="true"
+						data-slot="resize-divider"
+						className="pointer-events-none absolute inset-y-0 left-1/2 w-px -translate-x-1/2 bg-border"
+					/>
+				)}
 				<div
 					className="absolute inset-y-0 left-1/2 z-20 w-4 -translate-x-1/2 cursor-col-resize touch-none"
 					data-testid="resize-handle-hit-area"

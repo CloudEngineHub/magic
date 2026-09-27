@@ -472,7 +472,7 @@ function MicroAppPageInner({
 											activeView === "userSpace" ? (
 												<>
 													<aside
-														className="flex h-full shrink-0 flex-col overflow-hidden border-r border-border bg-background"
+														className="flex h-full shrink-0 flex-col overflow-hidden bg-background"
 														style={{ width: sidebarWidthPx }}
 														data-testid="micro-app-file-sidebar"
 													>
@@ -503,6 +503,7 @@ function MicroAppPageInner({
 														</div>
 													</aside>
 													<TopicResizeHandle
+														withDivider
 														onResizeStart={onSidebarResizeStart}
 														className={
 															isDraggingSidebar
