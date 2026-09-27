@@ -363,11 +363,12 @@ export function FileManagerContent(props: Props) {
 			)
 		}
 	}
+	// 仅限制纵向滚动越界；横向手势需要传递给外层字段视口，不能被内层列表截断。
 	const content = (
 		<ScrollArea
 			viewportRef={viewport}
 			className="min-h-0 flex-1"
-			viewportClassName="relative overscroll-contain outline-none [&>div]:!block"
+			viewportClassName="relative overscroll-y-contain outline-none [&>div]:!block"
 			scrollShadows
 			viewportProps={{
 				role: "listbox",
