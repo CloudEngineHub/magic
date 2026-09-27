@@ -108,7 +108,9 @@ export default function MicroAppPreviewToolbar({
 					{...browser}
 					onLastTabClose={() => openPageButton.current?.focus()}
 				/>
-				<MicroAppOpenPageMenu browser={browser} triggerRef={openPageButton} />
+				{browser.previewFileOptions.length > 0 && (
+					<MicroAppOpenPageMenu browser={browser} triggerRef={openPageButton} />
+				)}
 			</div>
 
 			<div className="flex items-center gap-2 justify-self-end">
