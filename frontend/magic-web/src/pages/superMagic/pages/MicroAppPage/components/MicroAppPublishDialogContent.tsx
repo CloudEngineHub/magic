@@ -160,7 +160,8 @@ export default function MicroAppPublishDialogContent({
 			className={cn(
 				mobile
 					? "flex min-h-0 flex-1 flex-col overflow-hidden"
-					: "grid h-[80dvh] max-h-[80dvh] min-h-0 grid-rows-[minmax(0,1fr)_auto_auto] overflow-hidden",
+					: "grid max-h-[80dvh] min-h-0 grid-rows-[minmax(0,1fr)_auto_auto] overflow-hidden",
+				!mobile && (loading || hasPublished) && "h-[80dvh]",
 			)}
 			data-testid="micro-app-publish-dialog"
 			data-mobile={mobile ? "true" : undefined}
@@ -168,7 +169,14 @@ export default function MicroAppPublishDialogContent({
 		>
 			{/* 顶部发布状态和下方设置共用单列轨道，避免跨列元素生成隐式空白列。 */}
 			{!mobile ? (
-				<div className="grid h-full min-h-0 min-w-0 grid-cols-1 grid-rows-[auto_minmax(0,1fr)] gap-4 p-5">
+				<div
+					className={cn(
+						"grid min-h-0 min-w-0 grid-cols-1 gap-4 p-5",
+						loading || hasPublished
+							? "grid-rows-[auto_minmax(0,1fr)]"
+							: "grid-rows-[minmax(0,1fr)]",
+					)}
+				>
 					{loading ? (
 						<div
 							className="h-[156px] rounded-lg border border-emerald-200/70 bg-emerald-50/40"
@@ -185,10 +193,10 @@ export default function MicroAppPublishDialogContent({
 						/>
 					) : null}
 					<div
-						className="grid h-full min-h-0 min-w-0 grid-cols-2 items-start gap-4"
+						className="grid min-h-0 min-w-0 grid-cols-2 items-start gap-4"
 						data-testid="micro-app-publish-basic-settings"
 					>
-						{/* 两个面板共享固定轨道高度，内容只在各自 ScrollArea 内滚动，避免遮挡底部操作区。 */}
+						{/* 两个面板共享受限轨道高度，内容只在各自 ScrollArea 内滚动，避免遮挡底部操作区。 */}
 						<ScrollArea
 							className="h-full min-h-0 min-w-0 self-stretch rounded-lg bg-muted/60"
 							data-testid="micro-app-publish-scroll-area"
@@ -237,7 +245,7 @@ export default function MicroAppPublishDialogContent({
 												{t("microAppPage.publish.coverUpload")}
 											</Button>
 											{formState.coverFileKey !== undefined ||
-												formState.coverUrl ? (
+											formState.coverUrl ? (
 												<Button
 													type="button"
 													variant="ghost"
@@ -373,7 +381,7 @@ export default function MicroAppPublishDialogContent({
 									{!hasNoPermittedShareType && (
 										<>
 											{!isPersonalOrganization &&
-												formState.shareType === ShareType.Organization ? (
+											formState.shareType === ShareType.Organization ? (
 												<ShareRangeField
 													value={formState.shareRange}
 													onChange={onShareRangeChange}
@@ -392,7 +400,7 @@ export default function MicroAppPublishDialogContent({
 									)}
 								</div>
 								{!hasNoPermittedShareType &&
-									formState.shareType === ShareType.PasswordProtected ? (
+								formState.shareType === ShareType.PasswordProtected ? (
 									<div>
 										<Label htmlFor="micro-app-publish-password">
 											{t("microAppPage.publish.password")}
@@ -504,7 +512,7 @@ export default function MicroAppPublishDialogContent({
 												{t("microAppPage.publish.coverUpload")}
 											</Button>
 											{formState.coverFileKey !== undefined ||
-												formState.coverUrl ? (
+											formState.coverUrl ? (
 												<Button
 													type="button"
 													variant="ghost"
@@ -580,7 +588,7 @@ export default function MicroAppPublishDialogContent({
 										{!hasNoPermittedShareType ? (
 											<>
 												{!isPersonalOrganization &&
-													formState.shareType === ShareType.Organization ? (
+												formState.shareType === ShareType.Organization ? (
 													<ShareRangeField
 														value={formState.shareRange}
 														onChange={onShareRangeChange}
@@ -599,7 +607,7 @@ export default function MicroAppPublishDialogContent({
 									</div>
 
 									{!hasNoPermittedShareType &&
-										formState.shareType === ShareType.PasswordProtected ? (
+									formState.shareType === ShareType.PasswordProtected ? (
 										<div
 											className={cn(
 												"flex flex-col gap-2",
