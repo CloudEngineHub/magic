@@ -275,7 +275,9 @@ export function PPTControlBar({
 						<RotateCw
 							className={cn("size-4", isRefreshingCurrentSlide && "animate-spin")}
 						/>
-						{t("ppt.reloadCurrentSlide")}
+						<span className={isMobile ? "sr-only" : undefined}>
+							{t("ppt.reloadCurrentSlide")}
+						</span>
 					</Button>
 					{/* Refresh slides button */}
 					<MagicTooltip title={isMobile ? undefined : t("ppt.reloadAllSlides")}>
@@ -294,48 +296,48 @@ export function PPTControlBar({
 								disabled={isTransitioning}
 							>
 								<RefreshCw className="h-4 w-4" />
-								{t("ppt.reloadAllSlides")}
+								<span className={isMobile ? "sr-only" : undefined}>
+									{t("ppt.reloadAllSlides")}
+								</span>
 							</Button>
 						</span>
 					</MagicTooltip>
 				</div>
 
-				{/* Fullscreen button */}
-				{!isMobile && (
-					<MagicTooltip
-						title={
-							isFullscreen ? t("fileViewer.exitFullscreen") : t("ppt.startSlideshow")
-						}
-					>
-						<span>
-							<Button
-								variant="ghost"
-								size="sm"
-								data-testid="ppt-control-bar-fullscreen-button"
-								className="h-7 gap-[5px] px-[7px] text-[13px] font-normal text-foreground"
-								onClick={(e) => {
-									e.stopPropagation()
-									e.currentTarget.blur()
-									onToggleFullscreen()
-								}}
-								aria-label={
-									isFullscreen
-										? t("fileViewer.exitFullscreen")
-										: t("ppt.startSlideshow")
-								}
-							>
-								{isFullscreen ? (
-									<Minimize className="h-4 w-4" />
-								) : (
-									<Maximize className="h-4 w-4" />
-								)}
+				{/* Reuse the same fullscreen action on phones; icon labels stay accessible. */}
+				<MagicTooltip
+					title={isFullscreen ? t("fileViewer.exitFullscreen") : t("ppt.startSlideshow")}
+				>
+					<span>
+						<Button
+							variant="ghost"
+							size="sm"
+							data-testid="ppt-control-bar-fullscreen-button"
+							className="h-7 gap-[5px] px-[7px] text-[13px] font-normal text-foreground"
+							onClick={(e) => {
+								e.stopPropagation()
+								e.currentTarget.blur()
+								onToggleFullscreen()
+							}}
+							aria-label={
+								isFullscreen
+									? t("fileViewer.exitFullscreen")
+									: t("ppt.startSlideshow")
+							}
+						>
+							{isFullscreen ? (
+								<Minimize className="h-4 w-4" />
+							) : (
+								<Maximize className="h-4 w-4" />
+							)}
+							<span className={isMobile ? "sr-only" : undefined}>
 								{isFullscreen
 									? t("fileViewer.exitFullscreen")
 									: t("ppt.startSlideshow")}
-							</Button>
-						</span>
-					</MagicTooltip>
-				)}
+							</span>
+						</Button>
+					</span>
+				</MagicTooltip>
 				{!isMobile && presenterScreens?.length && onSelectPresenterScreen ? (
 					<MagicDropdown
 						placement="topRight"
