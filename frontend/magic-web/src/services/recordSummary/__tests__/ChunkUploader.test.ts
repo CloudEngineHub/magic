@@ -247,7 +247,9 @@ describe("ChunkUploader", () => {
 		await uploader.uploadSession("session-1", "topic-1", "project-1")
 		await vi.waitFor(() => expect(testState.uploadCalls).toHaveLength(1))
 		await vi.advanceTimersByTimeAsync(2_000)
-		await vi.waitFor(() => expect(testState.chunks.get(chunk.id)?.uploadStatus).toBe("uploaded"))
+		await vi.waitFor(() =>
+			expect(testState.chunks.get(chunk.id)?.uploadStatus).toBe("uploaded"),
+		)
 
 		const lifecycleEvents = testState.loggerReports
 			.map((args) => args[0])
@@ -567,11 +569,17 @@ describe("ChunkUploader", () => {
 		const cleanupEvent = testState.loggerReports
 			.map((args) => args[0])
 			.find(
-				(value): value is { namespace: string; data: { event: string; clearIndexedDB: boolean } } =>
+				(
+					value,
+				): value is {
+					namespace: string
+					data: { event: string; clearIndexedDB: boolean }
+				} =>
 					typeof value === "object" &&
 					value !== null &&
 					(value as { namespace?: unknown }).namespace === "recordingUploadLifecycle" &&
-					(value as { data?: { event?: unknown } }).data?.event === "session_upload_cleanup",
+					(value as { data?: { event?: unknown } }).data?.event ===
+						"session_upload_cleanup",
 			)
 		expect(cleanupEvent?.data.clearIndexedDB).toBe(true)
 	})

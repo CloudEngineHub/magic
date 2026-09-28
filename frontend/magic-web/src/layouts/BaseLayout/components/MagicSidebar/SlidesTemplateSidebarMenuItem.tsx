@@ -16,6 +16,7 @@ interface SlidesTemplateSidebarMenuItemProps {
 	Icon: LucideIcon
 	href: string
 	collapsed: boolean
+	isActive?: boolean
 	onClick: MouseEventHandler<HTMLAnchorElement>
 }
 
@@ -25,6 +26,7 @@ export function SlidesTemplateSidebarMenuItem({
 	Icon,
 	href,
 	collapsed,
+	isActive = false,
 	onClick,
 }: SlidesTemplateSidebarMenuItemProps) {
 	const { t } = useTranslation("sidebar")
@@ -80,6 +82,7 @@ export function SlidesTemplateSidebarMenuItem({
 				asChild
 				tooltip={tooltip}
 				data-testid={testId}
+				isActive={isActive}
 				className={cn(
 					collapsed
 						? "!text-[#ff6a1f] hover:!bg-[#fff2ec] hover:!text-[#ff6a1f]"

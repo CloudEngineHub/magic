@@ -480,6 +480,11 @@ export function registerRoutes(config: RouteConfig = {}): Array<RouteObject> {
 					},
 					...superMagicMicroAppRoutes,
 					{
+						name: RouteName.SuperChatHome,
+						path: `/:clusterCode${RoutePath.SuperChatHome}`,
+						element: <WorkspacePage />,
+					},
+					{
 						name: RouteName.SuperChatProjectState,
 						path: `/:clusterCode${RoutePath.SuperChatProjectState}`,
 						element: <ChatProjectPage />,

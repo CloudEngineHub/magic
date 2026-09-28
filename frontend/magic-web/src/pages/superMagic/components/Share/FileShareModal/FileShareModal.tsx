@@ -801,9 +801,9 @@ export default memo(function FileShareModal(props: FileShareModalProps) {
 				target_ids:
 					shareType === ShareType.Organization && shareRange === "designated"
 						? shareTargets.map((t) => ({
-							target_type: t.target_type,
-							target_id: t.target_id,
-						}))
+								target_type: t.target_type,
+								target_id: t.target_id,
+							}))
 						: undefined,
 				...(shareType === ShareType.Organization
 					? {}
@@ -839,7 +839,7 @@ export default memo(function FileShareModal(props: FileShareModalProps) {
 			// Step 3: Generate share message and copy to clipboard (silently, no toast)
 			try {
 				const fileIds = apiResult?.file_ids || submittedFileIds
-				let fileDisplayConfig: { type?: string;[key: string]: unknown } | undefined =
+				let fileDisplayConfig: { type?: string; [key: string]: unknown } | undefined =
 					undefined
 
 				// 如果是单文件分享，获取文件详情
@@ -1327,21 +1327,21 @@ function applyShareDisplayNames<T extends { file_id?: string; children?: T[] }>(
 	return items.map((item) => ({
 		...item,
 		...((item.file_id && displayNameByFileId[item.file_id]) ||
-			getShareDisplayNameByFileName(item, displayNameByFileName)
+		getShareDisplayNameByFileName(item, displayNameByFileName)
 			? {
-				share_display_name:
-					displayNameByFileId[item.file_id || ""] ||
-					getShareDisplayNameByFileName(item, displayNameByFileName),
-			}
+					share_display_name:
+						displayNameByFileId[item.file_id || ""] ||
+						getShareDisplayNameByFileName(item, displayNameByFileName),
+				}
 			: {}),
 		...(item.children
 			? {
-				children: applyShareDisplayNames(
-					item.children,
-					displayNameByFileId,
-					displayNameByFileName,
-				),
-			}
+					children: applyShareDisplayNames(
+						item.children,
+						displayNameByFileId,
+						displayNameByFileName,
+					),
+				}
 			: {}),
 	}))
 }

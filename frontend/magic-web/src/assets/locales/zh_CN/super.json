@@ -293,6 +293,7 @@
 		"emptyTitle": "暂无对话",
 		"minutesAgo": "{{count}} 分钟前",
 		"newChat": "新建对话",
+		"newConversation": "新的对话",
 		"searchPlaceholder": "搜索",
 		"swipeDelete": "删除",
 		"swipeMore": "更多",

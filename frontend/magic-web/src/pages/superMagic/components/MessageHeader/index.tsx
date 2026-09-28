@@ -564,7 +564,7 @@ function MessageHeader({
 			<div
 				className={cn(
 					// Expanded headers own their height; message viewports begin below them.
-					"relative z-[30] flex h-10 shrink-0 w-full items-center justify-between gap-2 px-1.5 py-2",
+					"relative z-[30] flex h-10 w-full shrink-0 items-center justify-between gap-2 px-1.5 py-2",
 					"bg-sidebar",
 					// 两侧各预留一个恢复按钮和原有间距，内容列保持居中且不会与入口重叠。
 					alignWithContent &&

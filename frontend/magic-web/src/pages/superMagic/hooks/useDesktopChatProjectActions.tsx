@@ -291,6 +291,7 @@ export function useDesktopChatProjectActions({
 	)
 
 	return {
+		isProjectModalOpen: renameDialogOpen || saveAsModalOpen || deleteModalOpen,
 		currentActionItem,
 		updateCurrentActionItem,
 		projectActions,
