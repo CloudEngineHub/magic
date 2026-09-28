@@ -36,3 +36,32 @@ it("searches paths across folders and selects the matching HTML file", () => {
 	fireEvent.click(screen.getByRole("option", { name: "pages/index.html" }))
 	expect(onChange).toHaveBeenCalledWith("nested")
 })
+
+it("keeps the mobile file menu inside its drawer and closes after selection", () => {
+	const onChange = vi.fn()
+	const { container } = render(
+		<div data-slot="drawer-content">
+			<MicroAppEntryFileSelect
+				mobile
+				value={null}
+				onChange={onChange}
+				attachmentList={[
+					{
+						file_id: "mobile",
+						file_name: "mobile.html",
+						relative_file_path: "mobile.html",
+					},
+				]}
+			/>
+		</div>,
+	)
+	fireEvent.click(screen.getByTestId("micro-app-default-open-file"))
+	const option = screen.getByRole("option", { name: "mobile.html" })
+	expect(option.closest('[data-slot="drawer-content"]')).toBe(container.firstChild)
+	fireEvent.click(option)
+	expect(onChange).toHaveBeenCalledWith("mobile")
+	expect(screen.getByTestId("micro-app-default-open-file")).toHaveAttribute(
+		"aria-expanded",
+		"false",
+	)
+})

@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react"
+import { useMemo, useRef, useState } from "react"
 import { Check, ChevronDown } from "lucide-react"
 import { useTranslation } from "react-i18next"
 import { Button } from "@/components/shadcn-ui/button"
@@ -33,6 +33,8 @@ export default function MicroAppEntryFileSelect({
 }: Props) {
 	const { t } = useTranslation("super")
 	const [open, setOpen] = useState(false)
+	const triggerRef = useRef<HTMLButtonElement>(null)
+	const [portalContainer, setPortalContainer] = useState<HTMLElement | null>(null)
 	const files = useMemo(
 		() =>
 			collectHtmlFiles(attachmentList).map((file) => ({
@@ -43,9 +45,24 @@ export default function MicroAppEntryFileSelect({
 	)
 	const options = [{ id: null, label: t("microAppPage.publish.defaultOpenFileAuto") }, ...files]
 	return (
-		<Popover open={open} onOpenChange={setOpen}>
+		<Popover
+			open={open}
+			onOpenChange={(nextOpen) => {
+				// Keep the menu inside the mobile drawer's stacking and focus boundary.
+				if (nextOpen)
+					setPortalContainer(
+						mobile
+							? (triggerRef.current?.closest<HTMLElement>(
+									'[data-slot="drawer-content"]',
+								) ?? null)
+							: null,
+					)
+				setOpen(nextOpen)
+			}}
+		>
 			<PopoverTrigger asChild>
 				<Button
+					ref={triggerRef}
 					id="micro-app-default-open-file"
 					data-testid="micro-app-default-open-file"
 					variant="outline"
@@ -64,7 +81,11 @@ export default function MicroAppEntryFileSelect({
 					<ChevronDown className="size-4 shrink-0 text-muted-foreground" />
 				</Button>
 			</PopoverTrigger>
-			<PopoverContent align="start" className="w-[var(--radix-popover-trigger-width)] p-0">
+			<PopoverContent
+				container={portalContainer}
+				align="start"
+				className="w-[var(--radix-popover-trigger-width)] p-0"
+			>
 				<Command
 					filter={(_value, search, keywords) =>
 						(keywords?.join(" ") ?? "")
