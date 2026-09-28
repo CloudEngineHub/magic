@@ -44,6 +44,7 @@ export async function getIframeDownloadUrl(
 			access,
 			workspaceState?.projectId || superIdState?.projectId || "",
 		),
+		download_mode: "download",
 	})
 }
 
