@@ -212,22 +212,15 @@ export function usePPTDeckTools(options: Options) {
 		if (!isActive()) return false
 		// Apply only a confirmed result, preserving the current page by its path.
 		const activePath = store.currentSlide?.path
-		const currentPaths = store.slidePaths
-		const structureChanged =
-			paths.length !== currentPaths.length ||
-			paths.some((path, index) => path !== currentPaths[index])
-		// Visibility only changes manifest metadata; rebuilding slides discards loaded HTML
-		// and thumbnails and forces every preview to load again.
-		if (structureChanged) {
-			store.setSlides(paths, true)
-			if (activePath && paths.includes(activePath))
-				store.setActiveIndex(paths.indexOf(activePath))
-		}
+		// Reconcile through the store so surviving pages retain their HTML, thumbnails,
+		// and renderer identity. setSlides(string[]) rebuilds them by their old indices.
 		onDeckConfigSaved?.(config)
 		await store.updateConfig({
 			displayConfig: { ...store.getConfigForExport().displayConfig, ...config },
 		})
 		if (!isActive()) return false
+		const activeIndex = store.slides.findIndex((slide) => slide.path === activePath)
+		if (activeIndex >= 0 && activeIndex !== store.activeIndex) store.setActiveIndex(activeIndex)
 		if (projectId)
 			requestProjectAttachmentsFullRefresh({ projectId, reason: "ppt-deck-operation" })
 		magicToast.success(t("ppt.batch.saved"))

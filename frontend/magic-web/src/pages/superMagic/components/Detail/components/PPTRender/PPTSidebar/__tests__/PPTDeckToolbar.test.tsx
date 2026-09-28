@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, within } from "@testing-library/react"
+import { act, fireEvent, render, screen, within } from "@testing-library/react"
 import type { ReactNode } from "react"
 import { describe, expect, it, vi } from "vitest"
 import PPTDeckToolbar from "../PPTDeckToolbar"
@@ -52,8 +52,14 @@ function makeTools() {
 }
 
 describe("PPTDeckToolbar", () => {
-	it("requires confirmation to remove a frozen set of files and explains source retention", () => {
+	it("requires confirmation to remove a frozen set of files and explains source retention", async () => {
 		const tools = makeTools()
+		let finish!: () => void
+		vi.mocked(tools.remove).mockReturnValue(
+			new Promise<void>((resolve) => {
+				finish = resolve
+			}),
+		)
 		const { rerender } = render(
 			<PPTDeckToolbar tools={tools} allowEdit slideCount={3} isMobile={false} />,
 		)
@@ -64,6 +70,14 @@ describe("PPTDeckToolbar", () => {
 		rerender(<PPTDeckToolbar tools={tools} allowEdit slideCount={3} isMobile={false} />)
 		fireEvent.click(within(screen.getByRole("dialog")).getByText("ppt.batch.remove"))
 		expect(tools.remove).toHaveBeenCalledWith(new Set(["first"]))
+		const confirm = within(screen.getByRole("dialog")).getByText("ppt.batch.remove")
+		expect(confirm).toBeDisabled()
+		expect(confirm).toHaveAttribute("aria-busy", "true")
+		expect(confirm.querySelector(".animate-spin")).not.toBeNull()
+		fireEvent.click(confirm)
+		expect(tools.remove).toHaveBeenCalledOnce()
+		await act(async () => finish())
+		expect(screen.queryByRole("dialog")).not.toBeInTheDocument()
 	})
 
 	it("exposes search while keeping all write actions absent in a read-only deck", () => {

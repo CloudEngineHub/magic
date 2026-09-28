@@ -1,4 +1,4 @@
-import { act, fireEvent, render, screen, waitFor } from "@testing-library/react"
+import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react"
 import type { HTMLAttributes, ReactNode, Ref } from "react"
 import type { VirtualItem } from "@tanstack/react-virtual"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
@@ -465,13 +465,66 @@ describe("PPTSidebar drag sorting", () => {
 		])
 	})
 
-	it("exposes duplicate page in the editable context menu", () => {
+	it("exposes duplicate page in the editable context menu", async () => {
 		const onDuplicateSlide = vi.fn()
 		render(<PPTSidebar allowEdit onSlideClick={vi.fn()} onDuplicateSlide={onDuplicateSlide} />)
 
-		fireEvent.click(screen.getAllByText("fileViewer.duplicateSlide")[0])
+		await act(async () => fireEvent.click(screen.getAllByText("fileViewer.duplicateSlide")[0]))
 
 		expect(onDuplicateSlide).toHaveBeenCalledWith(0)
+	})
+
+	it.each([
+		["onDuplicateSlide", "fileViewer.duplicateSlide"],
+		["onInsertSlide", "fileViewer.insertAbove"],
+		["onRefreshSlide", "fileViewer.refreshSlide"],
+	] as const)("tracks the full %s promise and prevents repeated actions", async (prop, label) => {
+		let finish!: () => void
+		const action = vi.fn(
+			() =>
+				new Promise<void>((resolve) => {
+					finish = resolve
+				}),
+		)
+		const callbacks = { [prop]: action }
+		const { rerender } = render(<PPTSidebar allowEdit onSlideClick={vi.fn()} {...callbacks} />)
+		const slide = within(screen.getByTestId("ppt-sidebar-slide-item-slide-1"))
+		fireEvent.click(screen.getAllByRole("button", { name: label })[0])
+		expect(slide.getByRole("status")).toHaveTextContent(label)
+		expect(slide.getByRole("status").querySelector(".animate-spin")).not.toBeNull()
+		fireEvent.click(screen.getAllByRole("button", { name: label })[0])
+		expect(action).toHaveBeenCalledOnce()
+		// A deck write disables edit entry points; its existing progress must remain visible.
+		rerender(<PPTSidebar allowEdit={false} onSlideClick={vi.fn()} {...callbacks} />)
+		expect(screen.getByRole("status")).toHaveTextContent(label)
+		await act(async () => finish())
+		expect(screen.queryByRole("status")).not.toBeInTheDocument()
+	})
+
+	it.each([true, false])("keeps rename input until its result is %s", async (success) => {
+		let finish!: (result: boolean) => void
+		const onRenameSlide = vi.fn(
+			() =>
+				new Promise<boolean>((resolve) => {
+					finish = resolve
+				}),
+		)
+		render(<PPTSidebar allowEdit onSlideClick={vi.fn()} onRenameSlide={onRenameSlide} />)
+		fireEvent.click(screen.getAllByRole("button", { name: "fileViewer.renameSlide" })[0])
+		fireEvent.change(screen.getAllByTestId("ppt-sidebar-rename-dialog-input")[0], {
+			target: { value: "renamed" },
+		})
+		const confirm = screen.getAllByTestId("ppt-sidebar-rename-dialog-confirm")[0]
+		fireEvent.click(confirm)
+		expect(confirm).toBeDisabled()
+		expect(confirm).toHaveAttribute("aria-busy", "true")
+		fireEvent.click(confirm)
+		expect(onRenameSlide).toHaveBeenCalledOnce()
+		await act(async () => finish(success))
+		expect(confirm).toHaveAttribute("aria-busy", "false")
+		expect(screen.getAllByTestId("ppt-sidebar-rename-dialog-input")[0]).toHaveValue(
+			success ? "" : "renamed",
+		)
 	})
 
 	it("sorts into whitespace below the final virtual row", async () => {

@@ -399,12 +399,12 @@ function PPTSidebar({
 	// Handle insert slide
 	function handleInsertSlide(position: number, direction: "before" | "after") {
 		if (!onInsertSlide) return
-		onInsertSlide(position, direction)
+		return onInsertSlide(position, direction)
 	}
 
 	function handleDuplicateSlide(index: number) {
 		if (!onDuplicateSlide) return
-		onDuplicateSlide(index)
+		return onDuplicateSlide(index)
 	}
 
 	// Handle delete slide
@@ -420,13 +420,13 @@ function PPTSidebar({
 	// Handle rename slide
 	function handleRenameSlide(index: number, newFileName: string) {
 		if (!onRenameSlide) return
-		onRenameSlide(index, newFileName)
+		return onRenameSlide(index, newFileName)
 	}
 
 	// Handle refresh slide
 	function handleRefreshSlide(index: number) {
 		if (!onRefreshSlide) return
-		onRefreshSlide(index)
+		return onRefreshSlide(index)
 	}
 
 	// Handle regenerate screenshot only
@@ -659,7 +659,7 @@ function PPTSidebar({
 																item.path,
 															)
 															if (fileId)
-																void tools.setHidden(
+																return tools.setHidden(
 																	!hiddenPaths?.has(item.path),
 																	new Set([fileId]),
 																)

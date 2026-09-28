@@ -1,6 +1,6 @@
 import { act, renderHook, waitFor } from "@testing-library/react"
 import { beforeEach, describe, expect, it, vi } from "vitest"
-import type { PPTStore } from "../../stores/PPTStore"
+import { PPTStore } from "../../stores/PPTStore"
 import { usePPTDeckTools } from "../usePPTDeckTools"
 import { PPTSlideManager } from "../../stores/PPTSlideManager"
 
@@ -18,6 +18,30 @@ const mocks = vi.hoisted(() => ({
 	addFile: vi.fn(),
 	toast: vi.fn(),
 	checks: [] as Array<() => boolean>,
+	download: vi.fn(),
+	getUrls: vi.fn(),
+}))
+vi.mock("@/pages/superMagic/utils/api", () => ({
+	downloadFileContent: mocks.download,
+	getTemporaryDownloadUrl: mocks.getUrls,
+}))
+vi.mock("@/pages/superMagic/components/Detail/contents/HTML/htmlProcessor", () => ({
+	processHtmlContent: async ({ content }: { content: string }) => ({ processedContent: content }),
+	collectFileIdsFromHtml: () => new Set(),
+}))
+vi.mock("../../../../contents/HTML/utils/full-content", () => ({
+	decodeHTMLEntities: (content: string) => content,
+	fallbackImageBase64: "data:image/png;base64,",
+	getFullContent: (content: string) => content,
+}))
+vi.mock("@/infrastructure/logger", () => ({
+	logger: { createLogger: () => ({ warn: vi.fn(), error: vi.fn() }) },
+}))
+vi.mock("@/assets/locales/locale-adapters", () => ({
+	getLocaleModules: () => ({}),
+	getAdminLocaleModules: () => ({}),
+	loadFallbackLocale: vi.fn(),
+	loadMagicFlowLocale: vi.fn(),
 }))
 vi.mock("@/apis", () => ({
 	SuperMagicApi: { createFile: mocks.create },
@@ -119,7 +143,116 @@ describe("usePPTDeckTools", () => {
 		})
 		mocks.initialize.mockResolvedValue({ revision: 2 })
 		mocks.save.mockResolvedValue({ revision: 2 })
+		mocks.download.mockResolvedValue("<main>new page</main>")
+		mocks.getUrls.mockImplementation(async ({ file_ids }: { file_ids: string[] }) =>
+			file_ids.map((file_id) => ({ file_id, url: `https://example.com/${file_id}.html` })),
+		)
 	})
+
+	it.each([
+		{
+			operation: "remove middle",
+			active: 2,
+			paths: ["a.html", "c.html"],
+			activePath: "c.html",
+		},
+		{
+			operation: "remove active",
+			active: 1,
+			paths: ["a.html", "c.html"],
+			activePath: "c.html",
+		},
+		{ operation: "remove last", active: 2, paths: ["a.html", "b.html"], activePath: "b.html" },
+		{
+			operation: "reorder",
+			active: 2,
+			paths: ["c.html", "a.html", "b.html"],
+			activePath: "c.html",
+		},
+		{
+			operation: "duplicate",
+			active: 2,
+			paths: ["a.html", "a (1).html", "b.html", "c.html"],
+			activePath: "a (1).html",
+		},
+		{
+			operation: "insert",
+			active: 2,
+			paths: ["a.html", "slide (1).html", "b.html", "c.html"],
+			activePath: "slide (1).html",
+		},
+	])(
+		"preserves retained previews after $operation",
+		async ({ operation, active, paths, activePath }) => {
+			const originalPaths = ["a.html", "b.html", "c.html"]
+			const options = makeOptions()
+			const store = new PPTStore({
+				attachments: [],
+				attachmentList: options.attachmentList,
+				mainFileId: "deck",
+				displayConfig: { slides: originalPaths },
+				autoLoadAndGenerate: false,
+				logger: { enabled: false },
+			})
+			options.store = store
+			originalPaths.forEach((path) =>
+				store.pathMappingService.setPathFileIdMapping(path, path[0]),
+			)
+			store.setSlides(
+				originalPaths.map((path, index) => ({
+					id: path,
+					path,
+					index,
+					url: `https://example.com/${path}`,
+					content: `<main>${path}</main>`,
+					rawContent: `<main>${path}</main>`,
+					thumbnailUrl: `blob:${path}`,
+					loadingState: "loaded" as const,
+					lastLoadedAt: Date.now(),
+				})),
+				true,
+			)
+			store.setActiveIndex(active)
+			const before = new Map(store.slides.map((slide) => [slide.path, { ...slide }]))
+			mocks.read.mockImplementation(async (fileId: string) => ({
+				fileId,
+				revision: 1,
+				content:
+					fileId === "manifest"
+						? JSON.stringify({ slides: originalPaths })
+						: "<html>source</html>",
+			}))
+			const { result, unmount } = renderHook(() => usePPTDeckTools(options))
+			try {
+				await act(async () => {
+					if (operation === "reorder") await result.current.reorder(paths)
+					else if (operation === "duplicate")
+						await result.current.duplicate(new Set(["a"]))
+					else if (operation === "insert") await result.current.insert(0, "after")
+					else
+						await result.current.remove(
+							new Set([operation === "remove last" ? "c" : "b"]),
+						)
+				})
+				expect(mocks.save).toHaveBeenCalledOnce()
+				expect(store.slidePaths).toEqual(paths)
+				store.slides.forEach((slide, index) => {
+					const previous = before.get(slide.path)
+					if (previous) expect(slide).toEqual({ ...previous, index })
+				})
+				expect(store.currentSlide?.path).toBe(activePath)
+				const survivingUrls = paths
+					.filter((path) => before.has(path))
+					.map((path) => before.get(path)?.url)
+				expect(mocks.download.mock.calls.some(([url]) => survivingUrls.includes(url))).toBe(
+					false,
+				)
+			} finally {
+				unmount()
+				store.dispose()
+			}
+		},
+	)
 
 	it.each([true, false])("preserves loaded slides when setting hidden to %s", async (hidden) => {
 		const options = makeOptions(hidden ? [] : ["a.html"])

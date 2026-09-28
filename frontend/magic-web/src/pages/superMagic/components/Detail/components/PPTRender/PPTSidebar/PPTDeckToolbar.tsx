@@ -1,4 +1,4 @@
-import { useState } from "react"
+import { useRef, useState } from "react"
 import { useTranslation } from "react-i18next"
 import { CheckSquare, Search, MoreHorizontal, Loader2 } from "lucide-react"
 import { Button } from "@/components/shadcn-ui/button"
@@ -33,6 +33,21 @@ export default function PPTDeckToolbar({
 }) {
 	const { t } = useTranslation("super")
 	const [removeTargets, setRemoveTargets] = useState<ReadonlySet<string> | null>(null)
+	const [removing, setRemoving] = useState(false)
+	const removingRef = useRef(false)
+	const confirmRemove = async () => {
+		if (!removeTargets || removingRef.current) return
+		// Include the unsaved-edit prompt in the lock, before tools.busy becomes true.
+		removingRef.current = true
+		setRemoving(true)
+		try {
+			await tools.remove(removeTargets)
+			setRemoveTargets(null)
+		} finally {
+			removingRef.current = false
+			setRemoving(false)
+		}
+	}
 	const selectedCount = tools.selected.size
 	return (
 		<div
@@ -148,10 +163,10 @@ export default function PPTDeckToolbar({
 			<Dialog
 				open={removeTargets !== null}
 				onOpenChange={(open) => {
-					if (!open) setRemoveTargets(null)
+					if (!open && !removingRef.current) setRemoveTargets(null)
 				}}
 			>
-				<DialogContent>
+				<DialogContent showCloseButton={!removing}>
 					<DialogHeader>
 						<DialogTitle>
 							{t("ppt.batch.removeTitle", { count: removeTargets?.size || 0 })}
@@ -159,17 +174,22 @@ export default function PPTDeckToolbar({
 						<DialogDescription>{t("ppt.batch.removeDescription")}</DialogDescription>
 					</DialogHeader>
 					<DialogFooter>
-						<Button variant="outline" onClick={() => setRemoveTargets(null)}>
+						<Button
+							variant="outline"
+							disabled={removing}
+							onClick={() => setRemoveTargets(null)}
+						>
 							{t("ppt.batch.cancel")}
 						</Button>
 						<Button
 							variant="destructive"
-							disabled={tools.busy || !allowEdit || !removeTargets?.size}
-							onClick={() => {
-								if (removeTargets) void tools.remove(removeTargets)
-								setRemoveTargets(null)
-							}}
+							disabled={removing || tools.busy || !allowEdit || !removeTargets?.size}
+							aria-busy={removing}
+							onClick={confirmRemove}
 						>
+							{removing && (
+								<Loader2 className="size-4 animate-spin" aria-hidden="true" />
+							)}
 							{t("ppt.batch.remove")}
 						</Button>
 					</DialogFooter>

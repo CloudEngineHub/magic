@@ -584,7 +584,7 @@ const PPTRenderInner = observer(function PPTRenderInner({
 		? handleDuplicateSlide
 		: (index: number) => {
 				const id = store.getFileIdByPath(store.slides[index]?.path || "")
-				if (id) void deckTools.duplicate(new Set([id]))
+				if (id) return deckTools.duplicate(new Set([id]))
 			}
 	const removeSlide = slideStructureAdapter
 		? handleDeleteSlide
@@ -598,16 +598,18 @@ const PPTRenderInner = observer(function PPTRenderInner({
 					onOk: () => deckTools.remove(new Set([id])),
 				})
 			}
-	const renameSlide = (index: number, name: string) => {
+	const renameSlide = async (index: number, name: string) => {
 		if (slideStructureAdapter) return handleRenameSlide(index, name)
 		const fileId = store.getFileIdByPath(store.slides[index]?.path || "")
-		return deckTools.run(async () => {
+		let renamed = false
+		await deckTools.run(async () => {
 			// Editor confirmation can outlive a reorder; resolve the original file again.
 			const currentIndex = store.slides.findIndex(
 				(slide) => fileId && store.getFileIdByPath(slide.path) === fileId,
 			)
-			if (currentIndex >= 0) await handleRenameSlide(currentIndex, name)
+			if (currentIndex >= 0) renamed = await handleRenameSlide(currentIndex, name)
 		})
+		return renamed
 	}
 	const handleGenerateSpeakerNotes = useMemoizedFn(
 		(action: PPTNotesAction, targetFileId: string) => {

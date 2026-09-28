@@ -1,4 +1,4 @@
-import { useState, useMemo, useEffect } from "react"
+import { useState, useMemo, useEffect, useRef } from "react"
 import {
 	Image,
 	Loader2,
@@ -79,6 +79,23 @@ function SortableSlideItem({
 	const { t } = useTranslation("super")
 	const [isRenameDialogOpen, setIsRenameDialogOpen] = useState(false)
 	const [renameValue, setRenameValue] = useState("")
+	const [pendingAction, setPendingAction] = useState<string | null>(null)
+	const actionPendingRef = useRef(false)
+	// Keep feedback on the thumbnail when the menu closes, and lock before the first await.
+	const runAction = async (label: string, action?: () => void | Promise<void | boolean>) => {
+		if (!action || actionPendingRef.current) return false
+		actionPendingRef.current = true
+		setPendingAction(label)
+		try {
+			return (await action()) !== false
+		} catch (error) {
+			console.error("PPT slide action failed", error)
+			return false
+		} finally {
+			actionPendingRef.current = false
+			setPendingAction(null)
+		}
+	}
 	const [imageLoadError, setImageLoadError] = useState(false)
 	const addToCurrentChatShortcut = useMemo(() => {
 		const isMac =
@@ -228,17 +245,18 @@ function SortableSlideItem({
 		setIsRenameDialogOpen(true)
 	}
 
-	// Handle rename confirm
-	const handleRenameConfirm = () => {
-		if (renameValue.trim() && onRename) {
-			onRename(renameValue.trim())
+	// Keep the dialog mounted until the rename finishes, including its unsaved-edit guard.
+	const handleRenameConfirm = async () => {
+		if (!renameValue.trim() || !onRename) return
+		if (await runAction(t("fileViewer.renameSlide"), () => onRename(renameValue.trim()))) {
+			setIsRenameDialogOpen(false)
+			setRenameValue("")
 		}
-		setIsRenameDialogOpen(false)
-		setRenameValue("")
 	}
 
 	// Handle rename cancel
 	const handleRenameCancel = () => {
+		if (actionPendingRef.current) return
 		setIsRenameDialogOpen(false)
 		setRenameValue("")
 	}
@@ -247,6 +265,7 @@ function SortableSlideItem({
 		<div
 			data-testid={`ppt-sidebar-slide-item-${item.id}`}
 			data-selected={isSelected}
+			aria-busy={Boolean(pendingAction)}
 			role="group"
 			tabIndex={0}
 			aria-label={t("ppt.batch.page", { page: item.index + 1 })}
@@ -335,6 +354,15 @@ function SortableSlideItem({
 				style={{ aspectRatio: `${slideDimensions.width} / ${slideDimensions.height}` }}
 			>
 				{renderThumbnail()}
+				{pendingAction && (
+					<div
+						role="status"
+						className="absolute inset-0 z-10 flex items-center justify-center gap-1 rounded-md bg-background/80 p-2 text-xs"
+					>
+						<Loader2 className="size-4 shrink-0 animate-spin" aria-hidden="true" />
+						<span>{pendingAction}</span>
+					</div>
+				)}
 				{isHidden ? (
 					<span className="absolute right-1 top-1 flex items-center gap-1 rounded bg-background/90 px-1.5 py-0.5 text-xs text-muted-foreground">
 						<EyeOff className="size-4" />
@@ -361,7 +389,8 @@ function SortableSlideItem({
 									size="icon-sm"
 									className="size-6 rounded-sm text-foreground/80 hover:bg-background/60 hover:text-foreground"
 									aria-label={label}
-									onClick={onActionClick}
+									disabled={Boolean(pendingAction)}
+									onClick={() => void runAction(label, onActionClick)}
 								>
 									<Icon className="size-3.5" />
 								</Button>
@@ -373,7 +402,7 @@ function SortableSlideItem({
 		</div>
 	)
 
-	if (!allowEdit) {
+	if (!allowEdit && !pendingAction) {
 		return main
 	}
 
@@ -387,6 +416,7 @@ function SortableSlideItem({
 				{/* Context menu */}
 				<ContextMenuContent className="w-56">
 					<ContextMenuItem
+						disabled={Boolean(pendingAction)}
 						onClick={(e) => {
 							e.stopPropagation()
 							onAddToCurrentChat?.()
@@ -411,9 +441,10 @@ function SortableSlideItem({
 						)}
 					</ContextMenuItem>
 					<ContextMenuItem
+						disabled={Boolean(pendingAction)}
 						onClick={(e) => {
 							e.stopPropagation()
-							onAddToNewChat?.()
+							void runAction(t("fileViewer.addToNewChat"), onAddToNewChat)
 						}}
 					>
 						<MessageSquarePlus className="mr-2 size-4" />
@@ -421,6 +452,7 @@ function SortableSlideItem({
 					</ContextMenuItem>
 					<ContextMenuSeparator />
 					<ContextMenuItem
+						disabled={Boolean(pendingAction)}
 						onClick={(e) => {
 							e.stopPropagation()
 							onLocateFile?.()
@@ -431,7 +463,9 @@ function SortableSlideItem({
 					</ContextMenuItem>
 					{onOpenFile && (
 						<ContextMenuItem
-							disabled={!slideFileId || !slideFullRelativePath}
+							disabled={
+								Boolean(pendingAction) || !slideFileId || !slideFullRelativePath
+							}
 							onClick={(event) => {
 								event.stopPropagation()
 								if (slideFileId && slideFullRelativePath) {
@@ -446,9 +480,10 @@ function SortableSlideItem({
 					)}
 					<ContextMenuSeparator />
 					<ContextMenuItem
+						disabled={Boolean(pendingAction)}
 						onClick={(e) => {
 							e.stopPropagation()
-							onRefresh?.()
+							void runAction(t("fileViewer.refreshSlide"), onRefresh)
 						}}
 					>
 						<RefreshCw className="mr-2 size-4" />
@@ -456,27 +491,30 @@ function SortableSlideItem({
 					</ContextMenuItem>
 					<ContextMenuSeparator />
 					<ContextMenuItem
+						disabled={Boolean(pendingAction)}
 						onClick={(e) => {
 							e.stopPropagation()
-							onInsertAbove?.()
+							void runAction(t("fileViewer.insertAbove"), onInsertAbove)
 						}}
 					>
 						<ArrowUp className="mr-2 size-4" />
 						{t("fileViewer.insertAbove")}
 					</ContextMenuItem>
 					<ContextMenuItem
+						disabled={Boolean(pendingAction)}
 						onClick={(e) => {
 							e.stopPropagation()
-							onInsertBelow?.()
+							void runAction(t("fileViewer.insertBelow"), onInsertBelow)
 						}}
 					>
 						<ArrowDown className="mr-2 size-4" />
 						{t("fileViewer.insertBelow")}
 					</ContextMenuItem>
 					<ContextMenuItem
+						disabled={Boolean(pendingAction)}
 						onClick={(e) => {
 							e.stopPropagation()
-							onDuplicate?.()
+							void runAction(t("fileViewer.duplicateSlide"), onDuplicate)
 						}}
 					>
 						<Copy className="mr-2 size-4" />
@@ -484,7 +522,15 @@ function SortableSlideItem({
 					</ContextMenuItem>
 					<ContextMenuSeparator />
 					{onToggleHidden && (
-						<ContextMenuItem onSelect={onToggleHidden}>
+						<ContextMenuItem
+							disabled={Boolean(pendingAction)}
+							onSelect={() =>
+								void runAction(
+									isHidden ? t("ppt.batch.show") : t("ppt.batch.hide"),
+									onToggleHidden,
+								)
+							}
+						>
 							{isHidden ? (
 								<Eye className="mr-2 size-4" />
 							) : (
@@ -496,6 +542,7 @@ function SortableSlideItem({
 					{onReplaceTemplate && (
 						<>
 							<ContextMenuItem
+								disabled={Boolean(pendingAction)}
 								data-testid="ppt-template-replacement-slide-menu-item"
 								onClick={(e) => {
 									e.stopPropagation()
@@ -509,6 +556,7 @@ function SortableSlideItem({
 						</>
 					)}
 					<ContextMenuItem
+						disabled={Boolean(pendingAction)}
 						onClick={(e) => {
 							e.stopPropagation()
 							handleOpenRenameDialog()
@@ -520,7 +568,7 @@ function SortableSlideItem({
 					<ContextMenuSeparator />
 					<ContextMenuItem
 						variant="destructive"
-						disabled={isLastSlide}
+						disabled={Boolean(pendingAction) || isLastSlide}
 						onClick={(e) => {
 							e.stopPropagation()
 							if (!isLastSlide) {
@@ -535,8 +583,17 @@ function SortableSlideItem({
 			</ContextMenu>
 
 			{/* Rename Dialog */}
-			<Dialog open={isRenameDialogOpen} onOpenChange={setIsRenameDialogOpen}>
-				<DialogContent className="sm:max-w-[425px]" data-testid="ppt-sidebar-rename-dialog">
+			<Dialog
+				open={isRenameDialogOpen}
+				onOpenChange={(open) => {
+					if (!actionPendingRef.current) setIsRenameDialogOpen(open)
+				}}
+			>
+				<DialogContent
+					showCloseButton={!pendingAction}
+					className="sm:max-w-[425px]"
+					data-testid="ppt-sidebar-rename-dialog"
+				>
 					<DialogHeader>
 						<DialogTitle>{t("fileViewer.renameSlideDialogTitle")}</DialogTitle>
 						<DialogDescription>
@@ -546,6 +603,7 @@ function SortableSlideItem({
 					<div className="grid gap-4 py-4">
 						<Input
 							data-testid="ppt-sidebar-rename-dialog-input"
+							disabled={Boolean(pendingAction)}
 							value={renameValue}
 							onChange={(e) => setRenameValue(e.target.value)}
 							placeholder={t("fileViewer.renameSlideDialogPlaceholder")}
@@ -563,6 +621,7 @@ function SortableSlideItem({
 						<Button
 							variant="outline"
 							data-testid="ppt-sidebar-rename-dialog-cancel"
+							disabled={Boolean(pendingAction)}
 							onClick={handleRenameCancel}
 						>
 							{t("fileViewer.renameSlideDialogCancel")}
@@ -570,8 +629,12 @@ function SortableSlideItem({
 						<Button
 							data-testid="ppt-sidebar-rename-dialog-confirm"
 							onClick={handleRenameConfirm}
-							disabled={!renameValue.trim()}
+							disabled={Boolean(pendingAction) || !renameValue.trim()}
+							aria-busy={Boolean(pendingAction)}
 						>
+							{pendingAction && (
+								<Loader2 className="size-4 animate-spin" aria-hidden="true" />
+							)}
 							{t("fileViewer.renameSlideDialogConfirm")}
 						</Button>
 					</DialogFooter>
