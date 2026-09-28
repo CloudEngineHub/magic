@@ -3,6 +3,7 @@ import type { ProjectListItem } from "@/pages/superMagic/pages/Workspace/types"
 import MicroAppEntryPreview from "./MicroAppEntryPreview"
 import MicroAppPreviewPages from "./MicroAppPreviewPages"
 import MicroAppPreviewTabs from "./MicroAppPreviewTabs"
+import MicroAppOpenPageMenu from "./MicroAppOpenPageMenu"
 import { useMicroAppPreviewFiles } from "../hooks/useMicroAppPreviewFiles"
 
 interface MicroAppMobileEntryPreviewProps {
@@ -15,6 +16,7 @@ interface MicroAppMobileEntryPreviewProps {
 	selectedProject: ProjectListItem | null
 	allowEdit: boolean
 	isBuilding?: boolean
+	showOpenPageMenu?: boolean
 }
 
 function MicroAppMobileEntryPreview({
@@ -27,6 +29,7 @@ function MicroAppMobileEntryPreview({
 	selectedProject,
 	allowEdit,
 	isBuilding = false,
+	showOpenPageMenu = false,
 }: MicroAppMobileEntryPreviewProps) {
 	// Use the desktop browsing contexts instead of routing iframe navigation to a file modal.
 	const browser = useMicroAppPreviewFiles({
@@ -50,9 +53,10 @@ function MicroAppMobileEntryPreview({
 	}
 	return (
 		<div className="flex h-full min-h-0 min-w-0 flex-col overflow-hidden">
-			{browser.previewTabs.length > 0 && (
-				<div className="flex shrink-0 border-b border-border">
+			{(browser.previewTabs.length > 0 || showOpenPageMenu) && (
+				<div className="flex shrink-0 items-center border-b border-border">
 					<MicroAppPreviewTabs {...browser} />
+					{showOpenPageMenu && <MicroAppOpenPageMenu browser={browser} />}
 				</div>
 			)}
 			<div className="min-h-0 flex-1">
