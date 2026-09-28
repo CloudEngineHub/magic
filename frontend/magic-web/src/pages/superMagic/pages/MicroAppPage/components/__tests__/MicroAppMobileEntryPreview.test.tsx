@@ -217,3 +217,19 @@ it.each([true, false])(
 		expect(htmlPreviewMocks.props?.activeFileId).toBe("home")
 	},
 )
+
+it.each([true, false])("only shows the add-page action in development (enabled=%s)", (enabled) => {
+	render(
+		<MicroAppMobileEntryPreview
+			entryFile={null}
+			attachments={[]}
+			attachmentList={[]}
+			selectedProject={null}
+			allowEdit={false}
+			showOpenPageMenu={enabled}
+		/>,
+	)
+	const button = screen.queryByRole("button", { name: "microAppPage.previewToolbar.openPage" })
+	if (enabled) expect(button).toBeDisabled()
+	else expect(button).not.toBeInTheDocument()
+})

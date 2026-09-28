@@ -337,6 +337,7 @@ function MicroAppPageMobileInner({
 									>
 										<Suspense fallback={null}>
 											<MicroAppMobileEntryPreview
+												showOpenPageMenu
 												microAppId={appId}
 												microAppName={selectedProject?.project_name}
 												entryFile={defaultEntryFile}
