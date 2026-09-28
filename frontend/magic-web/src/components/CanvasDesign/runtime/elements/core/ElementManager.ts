@@ -138,6 +138,18 @@ type ElementMutationPatch = ElementUpdatePatch & {
 	type?: ElementType
 }
 
+function getElementChildIds(element: LayerElement): string[] {
+	if (!("children" in element) || !Array.isArray(element.children)) return []
+	return element.children.map((child) => child.id)
+}
+
+function hasSameElementChildOrder(left: LayerElement, right: LayerElement): boolean {
+	const leftChildIds = getElementChildIds(left)
+	const rightChildIds = getElementChildIds(right)
+	if (leftChildIds.length !== rightChildIds.length) return false
+	return leftChildIds.every((childId, index) => childId === rightChildIds[index])
+}
+
 /**
  * 元素管理器 - 管理画布上的所有元素实例
  * 职责：
@@ -735,12 +747,19 @@ export class ElementManager {
 		})
 	}
 
-	private markDocumentIndexDirty(): void {
+	private markDocumentIndexDirty(options?: { topology?: boolean }): void {
+		if (options?.topology) {
+			this.documentIndex.markTopologyDirty()
+			return
+		}
 		this.documentIndex.markDirty()
 	}
 
-	private updateChangesDocumentTopology(updates: ElementMutationPatch): boolean {
-		return Object.prototype.hasOwnProperty.call(updates, "children")
+	private updateChangesDocumentTopology(
+		currentData: LayerElement,
+		nextData: LayerElement,
+	): boolean {
+		return !hasSameElementChildOrder(currentData, nextData)
 	}
 
 	private invalidateDataTreeVisibilityCache(): void {
@@ -984,17 +1003,15 @@ export class ElementManager {
 		const newData = this.mergeElementData(currentData, updates, element.getId())
 		validateElementData(newData)
 		const nameChange = this.buildElementNameChange(currentData, newData)
-		if (
-			Object.prototype.hasOwnProperty.call(updates, "visible") ||
-			this.updateChangesDocumentTopology(updates)
-		) {
+		const documentTopologyChanged = this.updateChangesDocumentTopology(currentData, newData)
+		if (Object.prototype.hasOwnProperty.call(updates, "visible") || documentTopologyChanged) {
 			this.invalidateDataTreeVisibilityCache()
 		}
 
 		// 更新元素的内部数据（不触发 node 更新）
 		element.update(newData)
-		if (this.updateChangesDocumentTopology(updates)) {
-			this.markDocumentIndexDirty()
+		if (documentTopologyChanged) {
+			this.markDocumentIndexDirty({ topology: true })
 		}
 		this.invalidateGeometryForElement(element.getId())
 
@@ -1045,7 +1062,7 @@ export class ElementManager {
 			this.canvas.contentLayer.add(node as Konva.Shape | Konva.Group)
 			this.elements.set(finalElementData.id, element)
 			this.dataTreeVisibilityCache.delete(finalElementData.id)
-			this.markDocumentIndexDirty()
+			this.markDocumentIndexDirty({ topology: true })
 
 			// 调用生命周期钩子：节点已挂载到 Layer
 			element.onMounted()
@@ -1131,14 +1148,14 @@ export class ElementManager {
 
 		// 检测 zIndex 是否改变
 		const zIndexChanged = updates.zIndex !== undefined && updates.zIndex !== currentData.zIndex
-		const documentTopologyChanged = this.updateChangesDocumentTopology(updates)
+		const documentTopologyChanged = this.updateChangesDocumentTopology(currentData, newData)
 		if (Object.prototype.hasOwnProperty.call(updates, "visible") || documentTopologyChanged) {
 			this.invalidateDataTreeVisibilityCache()
 		}
 
 		const needsRerender = element.update(newData) || options.forceRerender
 		if (documentTopologyChanged) {
-			this.markDocumentIndexDirty()
+			this.markDocumentIndexDirty({ topology: true })
 		}
 		if (needsRerender) {
 			element.rerenderWhenTransformIdle()
@@ -1311,7 +1328,7 @@ export class ElementManager {
 		element.destroy()
 		this.elements.delete(elementId)
 		this.invalidateDataTreeVisibilityCache()
-		this.markDocumentIndexDirty()
+		this.markDocumentIndexDirty({ topology: true })
 		this.invalidateGeometryForElement(elementId)
 
 		this.scheduleContentLayerDraw()
@@ -1707,6 +1724,14 @@ export class ElementManager {
 		return Array.from(this.elements.keys())
 	}
 
+	/**
+	 * Returns the revision for parent/child topology changes. Geometry and content updates keep this
+	 * revision stable so render visibility can use an incremental workset diff.
+	 */
+	public getDocumentTopologyRevision(): number {
+		return this.documentIndex.getTopologyRevision()
+	}
+
 	public getElementCount(): number {
 		return this.elements.size
 	}
@@ -1901,8 +1926,8 @@ export class ElementManager {
 			item.element.update(nextDataById.get(item.elementId) as LayerElement)
 		})
 
-		this.markDocumentIndexDirty()
 		if (parentChangedItems.length > 0) {
+			this.markDocumentIndexDirty({ topology: true })
 			// Reparenting changes the ancestor chain for the moved subtree, so cached visibility
 			// results for the child and every descendant are no longer valid.
 			this.invalidateDataTreeVisibilityCache()
@@ -2221,11 +2246,13 @@ export class ElementManager {
 		const existingElement = this.elements.get(childData.id)
 		const existingNode = existingElement?.getNode()
 		if (existingElement && existingNode) {
-			if (existingNode.getParent() !== parentNode) {
+			const parentChanged = existingNode.getParent() !== parentNode
+			if (parentChanged) {
 				existingNode.remove()
 				parentNode.add(existingNode as Konva.Shape | Konva.Group)
 				this.invalidateDataTreeVisibilityCache()
 				this.invalidateGeometryForElement(childData.id)
+				this.markDocumentIndexDirty({ topology: true })
 			}
 			return
 		}
@@ -2239,7 +2266,9 @@ export class ElementManager {
 		parentNode.add(childNode as Konva.Shape | Konva.Group)
 		this.elements.set(childData.id, childElement)
 		this.dataTreeVisibilityCache.delete(childData.id)
-		this.markDocumentIndexDirty()
+		if (!existingElement) {
+			this.markDocumentIndexDirty({ topology: true })
+		}
 		childElement.onMounted()
 		this.invalidateGeometryForElement(childData.id)
 
@@ -2424,19 +2453,25 @@ export class ElementManager {
 						(existingNode instanceof Konva.Shape || existingNode instanceof Konva.Group)
 					) {
 						const previousChildData = existingElement.getData()
+						const parentChanged = existingNode.getParent() !== parentNode
 						// 从当前父容器中移除
 						existingNode.remove()
 						// 添加到新的父容器
 						parentNode.add(existingNode)
 						// 更新元素数据（坐标等可能需要更新）
 						existingElement.update(childData)
+						const documentTopologyChanged =
+							parentChanged ||
+							this.updateChangesDocumentTopology(previousChildData, childData)
 						if (
 							previousChildData.visible !== childData.visible ||
-							Object.prototype.hasOwnProperty.call(childData, "children")
+							documentTopologyChanged
 						) {
 							this.invalidateDataTreeVisibilityCache()
 						}
-						this.markDocumentIndexDirty()
+						if (documentTopologyChanged) {
+							this.markDocumentIndexDirty({ topology: true })
+						}
 						this.invalidateGeometryForElement(childData.id)
 					}
 					return
@@ -2455,7 +2490,7 @@ export class ElementManager {
 					parentNode.add(childNode as Konva.Shape | Konva.Group)
 					this.elements.set(childData.id, childElement)
 					this.dataTreeVisibilityCache.delete(childData.id)
-					this.markDocumentIndexDirty()
+					this.markDocumentIndexDirty({ topology: true })
 					this.invalidateGeometryForElement(childData.id)
 					childElement.onMounted()
 

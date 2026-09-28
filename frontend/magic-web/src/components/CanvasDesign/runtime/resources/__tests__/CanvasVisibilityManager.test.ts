@@ -1996,6 +1996,55 @@ describe("CanvasVisibilityManager covered viewport motion reuse", () => {
 		).toBe(false)
 	})
 
+	it("uses incremental render reconciliation after bootstrap and full reconciliation for topology changes", () => {
+		const controller = {
+			hasBootstrappedRenderWorkset: vi.fn(() => false),
+			getLastTopologyRevision: vi.fn(() => null as number | null),
+		}
+		const manager = Object.create(CanvasVisibilityManager.prototype) as unknown as {
+			renderVisibilityController: typeof controller
+			getRenderVisibilitySyncPlan: (
+				farDrainReady: boolean,
+				topologyRevision: number,
+			) => {
+				shouldSync: boolean
+				fullReconcile: boolean
+				allowCullFar: boolean
+			}
+		}
+		manager.renderVisibilityController = controller
+		const getPlan = manager.getRenderVisibilitySyncPlan.bind(manager)
+
+		expect(getPlan(false, 1)).toEqual({
+			shouldSync: false,
+			fullReconcile: false,
+			allowCullFar: false,
+		})
+		expect(getPlan(true, 1)).toEqual({
+			shouldSync: true,
+			fullReconcile: true,
+			allowCullFar: true,
+		})
+
+		controller.hasBootstrappedRenderWorkset.mockReturnValue(true)
+		controller.getLastTopologyRevision.mockReturnValue(1)
+		expect(getPlan(false, 1)).toEqual({
+			shouldSync: true,
+			fullReconcile: false,
+			allowCullFar: false,
+		})
+		expect(getPlan(true, 1)).toEqual({
+			shouldSync: true,
+			fullReconcile: false,
+			allowCullFar: true,
+		})
+		expect(getPlan(false, 2)).toEqual({
+			shouldSync: true,
+			fullReconcile: true,
+			allowCullFar: true,
+		})
+	})
+
 	it("skips covered pan and scale eligibility work without registered layouts", () => {
 		const viewportSnapshot = createViewportSnapshot(["image-1"])
 		const getSnapshot = vi.fn(() => viewportSnapshot)

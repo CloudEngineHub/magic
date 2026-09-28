@@ -2009,6 +2009,32 @@ export class CanvasVisibilityManager {
 		return activeElementIds
 	}
 
+	private getRenderVisibilitySyncPlan(
+		farDrainReady: boolean,
+		topologyRevision: number,
+	): {
+		shouldSync: boolean
+		fullReconcile: boolean
+		allowCullFar: boolean
+	} {
+		if (!this.renderVisibilityController) {
+			return { shouldSync: false, fullReconcile: false, allowCullFar: false }
+		}
+		const hasBootstrapped = this.renderVisibilityController.hasBootstrappedRenderWorkset()
+		const topologyChanged =
+			hasBootstrapped &&
+			this.renderVisibilityController.getLastTopologyRevision() !== topologyRevision
+		const bootstrap = !hasBootstrapped && farDrainReady
+
+		return {
+			shouldSync: hasBootstrapped || bootstrap || topologyChanged,
+			fullReconcile: bootstrap || topologyChanged,
+			// A topology change after bootstrap must hide a newly added far node immediately. Normal
+			// motion still waits for the existing delayed drain before removing admitted nodes.
+			allowCullFar: farDrainReady || topologyChanged,
+		}
+	}
+
 	private refreshVisibility(reason: string, requiresFullRefresh: boolean): void {
 		if (
 			this.destroyed ||
@@ -2030,6 +2056,14 @@ export class CanvasVisibilityManager {
 			this.scheduleFarVisibilityDrain()
 			return
 		}
+		const farDrainReady =
+			(reason === "visibility:drain" || reason === FAR_VISIBILITY_DRAIN_REFRESH_REASON) &&
+			startedAt - this.lastViewportMovementAt >= FAR_VISIBILITY_DRAIN_GRACE_MS
+		const topologyRevision = this.canvas.elementManager?.getDocumentTopologyRevision?.() ?? 0
+		const renderVisibilitySyncPlan = this.getRenderVisibilitySyncPlan(
+			farDrainReady,
+			topologyRevision,
+		)
 
 		const currentViewportRect = getViewportCanvasRect(this.canvas)
 		const currentViewportScale = this.canvas.stage.scaleX() || 1
@@ -2038,7 +2072,7 @@ export class CanvasVisibilityManager {
 		if (
 			this.shouldReuseCoveredViewportState({
 				reason,
-				requiresFullRefresh,
+				requiresFullRefresh: requiresFullRefresh || renderVisibilitySyncPlan.fullReconcile,
 				viewportRect: currentViewportRect,
 				viewportScale: currentViewportScale,
 				scaleBand: currentScaleBand,
@@ -2063,11 +2097,6 @@ export class CanvasVisibilityManager {
 		const viewportSnapshot = this.canvas.viewportQueryCoordinator.getSnapshot()
 		const { viewportRect, viewportScale } = viewportSnapshot
 		const scaleBand = getScaleBand(viewportScale)
-		const farDrainReady =
-			(reason === "visibility:drain" || reason === FAR_VISIBILITY_DRAIN_REFRESH_REASON) &&
-			startedAt - this.lastViewportMovementAt >= FAR_VISIBILITY_DRAIN_GRACE_MS
-		const needsRenderVisibilitySync =
-			farDrainReady || this.renderVisibilityController.getCulledCount() > 0
 
 		this.lastQueryCoverRect = viewportSnapshot.nearRect
 		this.lastQueryLayoutRect = viewportSnapshot.layoutRect
@@ -2086,7 +2115,11 @@ export class CanvasVisibilityManager {
 			nearVideoIds,
 			visibleAudioIds,
 			nearAudioIds,
-		} = this.queryViewportElementIds(viewportSnapshot, needsRenderVisibilitySync, farDrainReady)
+		} = this.queryViewportElementIds(
+			viewportSnapshot,
+			renderVisibilitySyncPlan.shouldSync,
+			renderVisibilitySyncPlan.fullReconcile,
+		)
 		this.canvas.runtimeScheduler.replaceViewportScaleLayoutEligibility(
 			viewportScaleLayoutElementIds,
 		)
@@ -2276,11 +2309,13 @@ export class CanvasVisibilityManager {
 		if (isViewportMovementReason(reason)) {
 			this.scheduleFarVisibilityDrain()
 		}
-		if (needsRenderVisibilitySync) {
+		if (renderVisibilitySyncPlan.shouldSync) {
 			this.renderVisibilityController.sync({
 				activeElementIds: renderActiveElementIds,
 				allElementIds: renderElementIds,
-				allowCullFar: farDrainReady,
+				allowCullFar: renderVisibilitySyncPlan.allowCullFar,
+				mode: renderVisibilitySyncPlan.fullReconcile ? "bootstrap" : "incremental",
+				topologyRevision,
 			})
 		}
 		const farCount = this.replaceMediaVisibilityStates(
