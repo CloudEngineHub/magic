@@ -134,8 +134,8 @@ export function FileManagerToolbar(props: Props) {
 				"relative min-w-24 shrink-0 transition-[width,flex-basis] duration-200",
 				props.compact
 					? searchFocused
-						? "w-64 max-w-[18rem] flex-[1_1_16rem]"
-						: "w-40 flex-[0_1_10rem]"
+						? "w-64 max-w-[18rem] flex-[0_0_16rem]"
+						: "w-40 flex-[0_0_10rem]"
 					: "w-40 flex-[0_1_10rem]",
 			)}
 		>
