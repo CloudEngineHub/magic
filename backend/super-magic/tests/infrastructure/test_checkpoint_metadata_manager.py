@@ -103,10 +103,10 @@ async def test_load_checkpoint_info_aggregates_space_operations(tmp_path: Path):
         json.dumps({
             "checkpoint_id": checkpoint_id,
             "file_snapshots": [
-                {"file_id": "1", "file_path": "/mnt/agfs/magicfs/project/a.txt",
+                {"file_id": "1", "file_path": "/mnt/agfs-vol/agfs/magicfs/project/a.txt",
                  "modified_time": "2026-08-27 15:10:36", "operation": "updated",
                  "file_type": "file", "space": "project"},
-                {"file_id": "2", "file_path": "/mnt/agfs/magicfs/project/b.txt",
+                {"file_id": "2", "file_path": "/mnt/agfs-vol/agfs/magicfs/project/b.txt",
                  "modified_time": "2026-08-27 15:10:37", "operation": "created",
                  "file_type": "file", "space": "project"},
             ],
@@ -119,7 +119,7 @@ async def test_load_checkpoint_info_aggregates_space_operations(tmp_path: Path):
         json.dumps({
             "checkpoint_id": checkpoint_id,
             "file_snapshots": [
-                {"file_id": "3", "file_path": "/mnt/agfs/magicfs/topic/chat_history/m.json",
+                {"file_id": "3", "file_path": "/mnt/agfs-vol/agfs/magicfs/topic/chat_history/m.json",
                  "modified_time": "2026-08-27 15:10:40", "operation": "updated",
                  "file_type": "file", "space": "topic"},
             ],

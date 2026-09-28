@@ -4,7 +4,6 @@ import ctypes
 import gc
 import html
 import json
-import os
 import platform
 import random
 import string
@@ -96,6 +95,7 @@ from app.tools.core import AutoMount
 from app.tools.core.app_tool_validator import AppToolValidator
 from app.tools.core.tool_factory import tool_factory
 from app.tools.list_dir import ListDir
+from app.utils.agfs_mount_path import get_agfs_fuse_mount_root
 from app.utils.file_utils import (
     WorkspaceSnapshot,
     extract_workspace_entries,
@@ -678,7 +678,7 @@ class Agent(BaseAgent):
             "workspace_skills_dir": str(get_workspace_skills_dir().relative_to(PathManager.get_workspace_dir())),
             "project_root": str(PathManager.get_project_root()),
             "memory_root": str(PathManager.get_memory_root_dir()),
-            "agfs_fuse_mount_path": os.getenv("AGFS_FUSE_MOUNT_PATH", "/mnt/agfs"),
+            "agfs_fuse_mount_path": str(get_agfs_fuse_mount_root()),
             "cwd": self.agent_context._workspace_dir,
             "python_version": sys.version,
             "nodejs_version": subprocess.check_output(["node", "--version"]).decode("utf-8").strip(),

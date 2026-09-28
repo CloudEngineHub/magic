@@ -9,11 +9,11 @@ from typing import List, Optional
 from agentlang.logger import get_logger
 from agentlang.skills import SkillManager
 from agentlang.skills.models import SkillMetadata
+from app.utils.agfs_mount_path import get_referenced_project_mount_base
 from app.utils.async_file_utils import async_is_dir, async_is_file, async_iterdir
 
 logger = get_logger(__name__)
 
-DEFAULT_REFERENCED_PROJECT_MOUNT_BASE_PATH = "/mnt/agfs/magicfs/referenced-projects"
 _SKILL_MD_FILENAME = "SKILL.md"
 _MAX_NEST_DEPTH = 3
 _SKILLS_RELATIVE_CANDIDATES = (
@@ -90,17 +90,6 @@ def normalize_referenced_project_id(project_id: Optional[str]) -> str:
     if not value or value in {".", ".."} or "/" in value or "\\" in value or "\0" in value:
         return ""
     return value
-
-
-def get_referenced_project_mount_base() -> Path:
-    raw = (
-        os.getenv(
-            "AGENT_REFERENCED_PROJECT_MOUNT_BASE_PATH",
-            DEFAULT_REFERENCED_PROJECT_MOUNT_BASE_PATH,
-        ).strip()
-        or DEFAULT_REFERENCED_PROJECT_MOUNT_BASE_PATH
-    )
-    return Path(os.path.normpath(raw))
 
 
 def get_referenced_project_mount_root(project_id: str) -> Optional[Path]:

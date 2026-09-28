@@ -126,7 +126,7 @@ class TopicPersistenceManager:
         """Remove a target directory's contents in place, keeping the directory itself.
 
         运行期聊天历史目录在沙箱内是指向 localfs 挂载的 symlink
-        （/app/.chat_history -> /mnt/agfs/localfs/chat_history），恢复
+        （/app/.chat_history -> <AGFS FUSE 挂载根>/localfs/chat_history），恢复
         不能再用「备份 + rename 整目录替换」的原子替换（staging 在容器
         overlay 上、目标是 FUSE，跨设备 rename 会得到 EXDEV），而是解析
         symlink 后原地清空再拷入。恢复是幂等的全量替换，中途失败的半份

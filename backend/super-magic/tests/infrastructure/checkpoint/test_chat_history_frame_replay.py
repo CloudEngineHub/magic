@@ -29,9 +29,9 @@ from app.infrastructure.checkpoint.rollback_executor import RollbackExecutor
 from app.path_manager import PathManager
 
 
-PROJECT_ROOT_PREFIX = "/mnt/agfs/magicfs/project"
-TOPIC_ROOT_PREFIX = "/mnt/agfs/magicfs/topic"
-CHAT_HISTORY_ROOT_PREFIX = "/mnt/agfs/localfs/chat_history"
+PROJECT_ROOT_PREFIX = "/mnt/agfs-vol/agfs/magicfs/project"
+TOPIC_ROOT_PREFIX = "/mnt/agfs-vol/agfs/magicfs/topic"
+CHAT_HISTORY_ROOT_PREFIX = "/mnt/agfs-vol/agfs/localfs/chat_history"
 
 
 def _make_snapshot(
@@ -134,12 +134,12 @@ def world(tmp_path, monkeypatch):
     def fake_resolve(self, file_path: str) -> Path:
         p = Path(file_path)
         # 把协议前缀映射到临时目录，等价于沙箱内的真实布局
-        if p.is_absolute() and str(p).startswith("/mnt/agfs/magicfs/"):
-            parts = p.relative_to("/mnt/agfs/magicfs").parts
+        if p.is_absolute() and str(p).startswith("/mnt/agfs-vol/agfs/magicfs/"):
+            parts = p.relative_to("/mnt/agfs-vol/agfs/magicfs").parts
             base = w.project_root if parts[0] == "project" else w.topic_root
             return base.joinpath(*parts[1:])
-        if p.is_absolute() and str(p).startswith("/mnt/agfs/localfs/"):
-            parts = p.relative_to("/mnt/agfs/localfs").parts
+        if p.is_absolute() and str(p).startswith("/mnt/agfs-vol/agfs/localfs/"):
+            parts = p.relative_to("/mnt/agfs-vol/agfs/localfs").parts
             return w.chat_history_root.joinpath(*parts[1:])
         return real_resolve(self, file_path)
 
