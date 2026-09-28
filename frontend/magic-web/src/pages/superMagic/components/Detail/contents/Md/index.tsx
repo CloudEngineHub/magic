@@ -221,7 +221,9 @@ export default memo(function TextEditor(props: TextEditorProps) {
 		isNewestVersion,
 		isDeleted,
 	} = useFileData({
-		enabled: !textFileSession,
+		enabled: true,
+		loadContent: !textFileSession,
+		isTabActive,
 		file_id: displayData?.file_id || "",
 		updatedAt,
 		isEditing: isEditMode,
@@ -252,7 +254,9 @@ export default memo(function TextEditor(props: TextEditorProps) {
 
 	// 计算当前的内容源 - savedContent 优先于 fileData 和 displayData?.content
 	const currentContent =
-		textFileSession?.content ?? (savedContent || displayData?.content || fileData || "")
+		fileVersion !== undefined
+			? (fileData ?? textFileSession?.content ?? "")
+			: (textFileSession?.content ?? (savedContent || displayData?.content || fileData || ""))
 	const isLargeMarkdown = useMemo(() => isLargeMarkdownContent(currentContent), [currentContent])
 	const wasEditingLargeMarkdownRef = useRef(false)
 
@@ -328,9 +332,9 @@ export default memo(function TextEditor(props: TextEditorProps) {
 	const data = useMemo(() => {
 		return {
 			...displayData,
-			content: displayData?.content || fileData,
+			content: currentContent,
 		}
-	}, [displayData, fileData])
+	}, [displayData, currentContent])
 
 	const [sourceSnapshot, setSourceSnapshot] = useState<MarkdownSourceSnapshot | null>(null)
 	const processedContent = sourceSnapshot?.content ?? ""
