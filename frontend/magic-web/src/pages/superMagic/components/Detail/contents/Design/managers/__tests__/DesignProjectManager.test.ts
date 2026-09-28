@@ -319,6 +319,33 @@ describe("DesignProjectManager conflict boundaries", () => {
 		)
 	})
 
+	it("waits for an immediate local draft write when closing", async () => {
+		const draftData = createDesignData("close-draft", [rect("close-element")])
+		const { manager } = createManager()
+
+		await expect(
+			manager.persistLocalDraftAndWait(draftData, {
+				immediate: true,
+				reason: "manual-refresh",
+			}),
+		).resolves.toEqual({ target: "memory", durable: false })
+		expect(writeDesignDraft).toHaveBeenCalledWith(
+			expect.objectContaining({ designData: draftData }),
+			{ emergency: true },
+		)
+	})
+
+	it("detects whether an explicit close snapshot differs from the remote base", () => {
+		const remoteData = createDesignData("remote")
+		const localData = createDesignData("local")
+		const { manager } = createManager(remoteData)
+
+		manager.syncDesignData(remoteData)
+
+		expect(manager.hasUnsavedChanges(remoteData)).toBe(false)
+		expect(manager.hasUnsavedChanges(localData)).toBe(true)
+	})
+
 	it("force reloads remote data while preserving local draft recovery", async () => {
 		const { manager } = createManager()
 		const managerInternals = manager as unknown as {
@@ -1058,6 +1085,25 @@ describe("DesignProjectManager conflict boundaries", () => {
 		await manager.saveToRemote()
 
 		expect(managerInternals.saveManager.commitSave).not.toHaveBeenCalled()
+	})
+
+	it("passes an explicit close snapshot to the remote save manager", async () => {
+		const currentData = createDesignData("current")
+		const closeSnapshot = createDesignData("close-snapshot")
+		const { manager } = createManager(currentData)
+		const managerInternals = manager as unknown as {
+			saveManager: {
+				manualSave: (data?: DesignData) => Promise<unknown>
+			}
+		}
+		managerInternals.saveManager.manualSave = vi.fn().mockResolvedValue({
+			ok: false,
+			reason: "error",
+		})
+
+		await manager.manualSave(closeSnapshot)
+
+		expect(managerInternals.saveManager.manualSave).toHaveBeenCalledWith(closeSnapshot)
 	})
 
 	it("merges incoming remote data when local and remote changed different elements", () => {

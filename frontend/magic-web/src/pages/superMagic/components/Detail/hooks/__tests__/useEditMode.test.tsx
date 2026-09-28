@@ -102,4 +102,32 @@ describe("useEditMode", () => {
 		expect(save).toHaveBeenCalledTimes(1)
 		expect(mockState.confirm).not.toHaveBeenCalled()
 	})
+
+	it("does not wait for editing presence release during a silent close", async () => {
+		let resolveLeave: (() => void) | undefined
+		mockState.getFileEditCount.mockResolvedValue({ editing_user_count: 0 })
+		mockState.joinFileEdit.mockResolvedValue(undefined)
+		mockState.leaveFileEdit.mockImplementation(
+			() =>
+				new Promise<void>((resolve) => {
+					resolveLeave = resolve
+				}),
+		)
+
+		const { result } = renderHook(() =>
+			useEditMode({
+				fileId: "canvas-file",
+				editingPresenceEnabled: true,
+				silentClose: true,
+			}),
+		)
+		await act(async () => result.current.setIsEditMode(true))
+
+		await expect(result.current.checkBeforeClose()).resolves.toBe("close")
+		expect(mockState.leaveFileEdit).toHaveBeenCalledWith("canvas-file")
+
+		await act(async () => {
+			resolveLeave?.()
+		})
+	})
 })

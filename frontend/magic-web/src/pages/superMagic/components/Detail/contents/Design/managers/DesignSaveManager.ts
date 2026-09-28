@@ -178,10 +178,14 @@ export class DesignSaveManager {
 		this.stateBag.setters.setIsSaving(false)
 	}
 
-	async manualSave(): Promise<DesignSaveResult> {
+	async manualSave(designData?: DesignData): Promise<DesignSaveResult> {
 		this.cancelAutoSave()
 		this.stateBag.setters.setIsSaving(true)
-		return this.commitSave({ allowRemoteConflict: true, source: "manual-save" })
+		return this.commitSave({
+			allowRemoteConflict: true,
+			designData,
+			source: "manual-save",
+		})
 	}
 
 	syncDesignData(newDesignData: DesignData): void {

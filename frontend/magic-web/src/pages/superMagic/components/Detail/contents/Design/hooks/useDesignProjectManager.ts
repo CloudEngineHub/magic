@@ -14,7 +14,7 @@ import {
 	type DesignSaveMetadata,
 } from "../managers"
 import { MAGIC_PROJECT_VERSION_V3 } from "../utils/magicProjectCompression"
-import type { DesignDraftReason } from "../utils/designDraftStorage"
+import type { DesignDraftReason, DesignDraftWriteResult } from "../utils/designDraftStorage"
 import type { ElementDetailsProvenance } from "@/components/CanvasDesign/runtime/document"
 import type { DesignLoadIssue, DesignSidecarStatus } from "../utils/designDataLoader"
 import type { DesignVersionLoadResult } from "../managers/DesignVersionManager"
@@ -47,7 +47,12 @@ export interface UseDesignProjectManagerReturn {
 		designData: DesignData,
 		options?: { immediate?: boolean; reason?: DesignDraftReason },
 	) => void
-	manualSave: () => Promise<boolean>
+	persistLocalDraftAndWait: (
+		designData: DesignData,
+		options?: { immediate?: boolean; reason?: DesignDraftReason },
+	) => Promise<DesignDraftWriteResult | null>
+	hasUnsavedChanges: (designData?: DesignData) => boolean
+	manualSave: (designData?: DesignData) => Promise<boolean>
 	syncDesignData: (newDesignData: DesignData) => void
 	persistPendingDesignUpgrade: () => Promise<boolean>
 
@@ -325,7 +330,10 @@ export function useDesignProjectManager(
 		cancelAutoSave: () => manager.cancelAutoSave(),
 		persistLocalDraft: (data, persistOptions) =>
 			manager.persistLocalDraft(data, persistOptions),
-		manualSave: () => manager.manualSave(),
+		persistLocalDraftAndWait: (data, persistOptions) =>
+			manager.persistLocalDraftAndWait(data, persistOptions),
+		hasUnsavedChanges: (data) => manager.hasUnsavedChanges(data),
+		manualSave: (data) => manager.manualSave(data),
 		syncDesignData: (data) => manager.syncDesignData(data),
 		persistPendingDesignUpgrade: () => manager.persistPendingDesignUpgrade(),
 
