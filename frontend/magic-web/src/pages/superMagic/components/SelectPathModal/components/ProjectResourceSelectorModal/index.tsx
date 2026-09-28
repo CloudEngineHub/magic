@@ -88,6 +88,7 @@ import { loadProjectAttachments } from "@/pages/superMagic/services"
 import { useSingleDocumentStaticDependencies } from "@/pages/superMagic/hooks/useSingleDocumentStaticDependencies"
 import { skillsService, type UserSkillView } from "@/services/skills/SkillsService"
 import { crewService, type MyCrewView } from "@/services/crew/CrewService"
+import { PreserveParentPathChoice } from "./PreserveParentPathChoice"
 
 const FIXED_WORKSPACE_IDS = new Set<string>([SHARE_WORKSPACE_ID, MY_CLAW_WORKSPACE_ID])
 const RESOURCE_WORKSPACE_IDS = new Set<string>([MY_SKILLS_WORKSPACE_ID, MY_AGENTS_WORKSPACE_ID])
@@ -105,86 +106,6 @@ function EmptyStateBox({ children }: { children: React.ReactNode }) {
 		<div className="flex w-full flex-1 flex-col items-center justify-center gap-1">
 			<div className="flex h-[320px] w-full flex-col items-center justify-center gap-6 rounded-[10px] border border-dashed border-border bg-card p-6">
 				{children}
-			</div>
-		</div>
-	)
-}
-
-function PreserveParentPathChoice({
-	onChange,
-	labels,
-}: {
-	onChange: (value: boolean) => void
-	labels: Record<
-		| "examples"
-		| "keepDescription"
-		| "flatDescription"
-		| "keepTitle"
-		| "flatTitle"
-		| "folder"
-		| "file",
-		string
-	>
-}) {
-	const [preserve, setPreserve] = useState(false)
-	const select = (value: boolean) => {
-		setPreserve(value)
-		onChange(value)
-	}
-	const cardClass = (active: boolean) =>
-		cn(
-			"cursor-pointer rounded-lg border p-2.5 transition-colors",
-			active ? "border-primary bg-primary/5" : "border-border bg-muted/30",
-		)
-	return (
-		<div className="flex flex-col gap-3">
-			<div className="text-sm leading-5 text-muted-foreground">
-				{preserve ? labels.keepDescription : labels.flatDescription}
-			</div>
-			<div className="grid grid-cols-2 gap-2" aria-label={labels.examples}>
-				<div
-					className={cardClass(preserve)}
-					onClick={() => select(true)}
-					role="button"
-					tabIndex={0}
-					onKeyDown={(event) => {
-						if (event.key === "Enter" || event.key === " ") select(true)
-					}}
-				>
-					<div className="mb-2 flex items-center justify-between text-xs font-medium text-foreground">
-						<span>{labels.keepTitle}</span>
-						{preserve && <IconCheck size={14} className="text-primary" />}
-					</div>
-					<div className="space-y-1 text-xs text-muted-foreground">
-						<div className="flex items-center gap-1">
-							<IconFolder size={14} className="text-primary" />
-							<span>{labels.folder}</span>
-						</div>
-						<div className="ml-4 flex items-center gap-1">
-							<span className="text-muted-foreground/60">└</span>
-							<IconFileSearch size={14} />
-							<span>{labels.file}</span>
-						</div>
-					</div>
-				</div>
-				<div
-					className={cardClass(!preserve)}
-					onClick={() => select(false)}
-					role="button"
-					tabIndex={0}
-					onKeyDown={(event) => {
-						if (event.key === "Enter" || event.key === " ") select(false)
-					}}
-				>
-					<div className="mb-2 flex items-center justify-between text-xs font-medium text-foreground">
-						<span>{labels.flatTitle}</span>
-						{!preserve && <IconCheck size={14} className="text-primary" />}
-					</div>
-					<div className="flex items-center gap-1 text-xs text-muted-foreground">
-						<IconFileSearch size={14} />
-						<span>{labels.file}</span>
-					</div>
-				</div>
 			</div>
 		</div>
 	)
@@ -332,8 +253,12 @@ function ProjectResourceSelectorModal({
 				let shouldPreserveParentPath = false
 				MagicModal.confirm({
 					title: t("selectPathModal.preserveParentPathConfirmTitle"),
+					// The preview mirrors the file tree and may contain several ancestor levels.
+					width: 560,
 					content: (
 						<PreserveParentPathChoice
+							fileIds={fileIds}
+							attachmentById={sourceAttachmentById}
 							onChange={(value) => {
 								shouldPreserveParentPath = value
 							}}
@@ -347,8 +272,6 @@ function ProjectResourceSelectorModal({
 								),
 								keepTitle: t("selectPathModal.preserveParentPathKeepTitle"),
 								flatTitle: t("selectPathModal.preserveParentPathFlatTitle"),
-								folder: t("selectPathModal.preserveParentPathFolder"),
-								file: t("selectPathModal.preserveParentPathFile"),
 							}}
 						/>
 					),
