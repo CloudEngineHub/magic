@@ -822,6 +822,31 @@ class SuperMagicAgentAppService extends AbstractSuperMagicAppService
     }
 
     /**
+     * Resolve employee dependency access only after checking use/edit permission.
+     *
+     * @return string[]
+     */
+    public function getDownloadableBoundSkillCodes(Authenticatable $authorization, string $code, bool $draft = false): array
+    {
+        $dataIsolation = $this->createSuperMagicDataIsolation($authorization);
+        if ($draft) {
+            // Unpublished dependencies are only available to employee editors.
+            $this->assertAgentEditable($dataIsolation, $code);
+            $dataIsolation->disabled();
+            $bindings = $this->superMagicAgentSkillDomainService->getByAgentCodeForCurrentVersion($dataIsolation, $code);
+        } else {
+            $this->assertAgentUsable($dataIsolation, $code);
+            // Authorization above is mandatory before crossing organization boundaries.
+            $dataIsolation->disabled();
+            $versions = $this->superMagicAgentVersionDomainService->getLatestPublishedByCodes($dataIsolation, [$code]);
+            $version = $versions[$code] ?? null;
+            $bindings = $version?->getId() === null ? [] : $this->superMagicAgentSkillDomainService->getByAgentVersionId($dataIsolation, (int) $version->getId());
+        }
+
+        return array_values(array_unique(array_map(static fn (AgentSkillEntity $binding): string => $binding->getSkillCode(), $bindings)));
+    }
+
+    /**
      * 新增员工绑定的技能（增量添加）.
      */
     public function addAgentSkills(Authenticatable $authorization, string $code, array $skillCodes): void
@@ -952,12 +977,7 @@ class SuperMagicAgentAppService extends AbstractSuperMagicAppService
         if ($projectEntity === null) {
             ExceptionBuilder::throw(SuperMagicErrorCode::OperationFailed, 'project.project_not_found');
         }
-        $this->skillsMdSyncService->syncSkillsMd(
-            $projectId,
-            $projectEntity,
-            $dataIsolation->getCurrentOrganizationCode(),
-            $projectEntity->getUserOrganizationCode()
-        );
+        [$excludePaths, $skillsMdHash] = $this->preparePublishSkillReferences($dataIsolation, $code, $projectId, $projectEntity);
         $sourcePath = $this->resolvePublishExportSourcePath($projectId);
         $this->validateIdentityMdExists($projectId);
 
@@ -1023,7 +1043,9 @@ class SuperMagicAgentAppService extends AbstractSuperMagicAppService
                 $sandboxId,
                 $sourcePath ?? '',
                 $code . '_' . $taskId . '.zip',
-                $taskKey
+                $taskKey,
+                $excludePaths,
+                $skillsMdHash
             );
             $this->publishAsyncStatusManager->update($taskId, ['sandbox_id' => $sandboxId, 'task_key' => $taskKey]);
             if (($result['status'] ?? '') === 'FAILED' || (($result['code'] ?? 1000) !== 1000 && ($result['code'] ?? -1) !== 4000)) {
@@ -2454,7 +2476,9 @@ class SuperMagicAgentAppService extends AbstractSuperMagicAppService
         Authenticatable $authorization,
         string $code,
         int $projectId,
-        ?string $sourcePath = null
+        ?string $sourcePath = null,
+        array $excludePaths = [],
+        ?string $skillsMdHash = null
     ): array {
         $dataIsolation = $this->createSuperMagicDataIsolation($authorization);
 
@@ -2475,7 +2499,9 @@ class SuperMagicAgentAppService extends AbstractSuperMagicAppService
             $projectId,
             $fullWorkdir,
             $sandboxId,
-            $sourcePath
+            $sourcePath,
+            $excludePaths,
+            $skillsMdHash
         );
         $exportResult['sandbox_id'] = $sandboxId;
 
@@ -2908,6 +2934,37 @@ class SuperMagicAgentAppService extends AbstractSuperMagicAppService
         return $list;
     }
 
+    /** @return array{0: array, 1: ?string} */
+    private function preparePublishSkillReferences(SuperMagicAgentDataIsolation $dataIsolation, string $code, int $projectId, ProjectEntity $projectEntity): array
+    {
+        try {
+            $bound = $this->skillsMdSyncService->getBoundSkills($dataIsolation, $code);
+            $skillsMdHash = $this->skillsMdSyncService->syncSkillsMd(
+                $projectId,
+                $projectEntity,
+                $dataIsolation->getCurrentOrganizationCode(),
+                $projectEntity->getUserOrganizationCode(),
+                [],
+                SkillsMdSyncService::OPERATION_SYNC,
+                $bound['system_skills'],
+                $bound['market_skills'],
+                true
+            );
+        } catch (RuntimeException $e) {
+            // 发布前的严格重建失败（绑定技能无可用版本/包名冲突/SKILLS.md 读写失败等）必须中止发布，
+            // 但要以业务异常码暴露给用户，不能裸抛 RuntimeException 变成 500 + 英文原文
+            ExceptionBuilder::throw(
+                SuperAgentErrorCode::PUBLISH_SKILLS_SYNC_FAILED,
+                'super_magic.agent.publish.skills_sync_failed',
+                ['reason' => $e->getMessage()],
+                null,
+                $e
+            );
+        }
+        $excludePaths = array_map(static fn (array $entry): string => 'skills/' . $entry['name'], $bound['market_skills']);
+        return [$excludePaths, $skillsMdHash];
+    }
+
     /**
      * 发布准备智能体版本.
      */
@@ -2923,18 +2980,14 @@ class SuperMagicAgentAppService extends AbstractSuperMagicAppService
         if ($shouldExportFile) {
             $projectId = $agentEntity->getProjectId();
             $projectEntity = $this->projectDomainService->getProjectNotUserId($projectId);
-            if ($projectEntity !== null) {
-                $this->skillsMdSyncService->syncSkillsMd(
-                    $projectId,
-                    $projectEntity,
-                    $dataIsolation->getCurrentOrganizationCode(),
-                    $projectEntity->getUserOrganizationCode()
-                );
+            if ($projectEntity === null) {
+                ExceptionBuilder::throw(SuperAgentErrorCode::PROJECT_NOT_FOUND, 'project.project_not_found');
             }
+            [$excludePaths, $skillsMdHash] = $this->preparePublishSkillReferences($dataIsolation, $code, $projectId, $projectEntity);
 
             $sourcePath = $this->resolvePublishExportSourcePath($agentEntity->getProjectId());
             $this->validateIdentityMdExists($agentEntity->getProjectId());
-            $fileMetadata = $this->exportFileFromProject($authorization, $code, $agentEntity->getProjectId(), $sourcePath);
+            $fileMetadata = $this->exportFileFromProject($authorization, $code, $agentEntity->getProjectId(), $sourcePath, $excludePaths, $skillsMdHash);
             $sandboxId = $fileMetadata['sandbox_id'];
             $agentEntity->setFileKey($fileMetadata['file_key']);
         } else {
