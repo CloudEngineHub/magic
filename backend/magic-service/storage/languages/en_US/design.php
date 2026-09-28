@@ -82,6 +82,7 @@ return [
         'area' => 'Area',
         'area_coordinate' => 'Area coordinate',
         'image_generation_config' => 'Image generation config',
+        'extra' => 'Extra params',
         'number' => 'Number',
         'resolution' => 'Resolution',
         'type' => 'Type',
