@@ -16,7 +16,7 @@ import {
 	IconFolder,
 	IconFileSearch,
 } from "@tabler/icons-react"
-import { Bot, Box, Loader2, UsersRound, Wrench } from "lucide-react"
+import { Bot, Box, Boxes, Loader2, UsersRound, Wrench } from "lucide-react"
 import { isEmpty, last } from "lodash-es"
 import { useTranslation } from "react-i18next"
 import { useMatch } from "react-router"
@@ -37,7 +37,6 @@ import FoldIcon from "@/pages/superMagic/assets/svg/file-folder.svg"
 import EmptyFilesIcon from "@/pages/superMagic/assets/svg/empty-files.svg"
 import { InputWithError } from "@/pages/superMagic/components/TopicFilesButton/components"
 import IconProject from "../../../icons/IconProject"
-import MicroAppIcon from "@/components/business/MentionPanel/components/icons/MicroAppIcon"
 import { FileResourceIcon } from "@/pages/superMagic/components/TopicFilesButton/components/FileResourceIcon"
 import PinnedTag from "@/pages/superMagic/components/EmptyWorkspacePanel/components/ProjectItem/components/PinnedTag"
 import CollaborationProjectTag from "@/pages/superMagic/components/CollaborationProjectTag"
@@ -125,7 +124,7 @@ function isFixedWorkspace(workspace: Workspace) {
 }
 
 function renderWorkspaceIcon(workspaceId: string) {
-	if (workspaceId === MICRO_APPS_WORKSPACE_ID) return <MicroAppIcon />
+	if (workspaceId === MICRO_APPS_WORKSPACE_ID) return <Boxes className="size-4 text-current" />
 	if (workspaceId === MY_SKILLS_WORKSPACE_ID) return <Wrench className="size-4 text-current" />
 	if (workspaceId === MY_AGENTS_WORKSPACE_ID) return <Bot className="size-4 text-current" />
 	if (workspaceId === SHARE_WORKSPACE_ID) return <UsersRound className="size-4 text-current" />
@@ -135,7 +134,8 @@ function renderWorkspaceIcon(workspaceId: string) {
 }
 
 function renderProjectIcon(project: ProjectListItem) {
-	if (project.project_mode === TopicMode.MicroApp) return <MicroAppIcon />
+	if (project.project_mode === TopicMode.MicroApp)
+		return <Boxes className="size-4 text-current" />
 	const resourceType = (project as ResourceProject).resourceType
 	if (resourceType === "skill") return <Wrench className="size-4" />
 	if (resourceType === "agent") return <Bot className="size-4" />
@@ -1666,9 +1666,9 @@ function ProjectResourceSelectorModal({
 		}
 
 		return (
-			<div className="flex h-full min-h-0 flex-col">
+			<div className="flex flex-col">
 				<div
-					className="scrollbar-y-thin min-h-0 flex-1 overflow-y-auto overflow-x-hidden"
+					className="shrink-0"
 					data-testid="project-resource-selector-regular-workspaces"
 				>
 					{createWorkspaceHook.createWorkspaceShown && (
@@ -2212,9 +2212,8 @@ function ProjectResourceSelectorModal({
 		"inline-flex size-9 shrink-0 items-center justify-center rounded-md border border-border bg-card text-foreground shadow-sm hover:bg-fill active:bg-fill-secondary focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:pointer-events-none disabled:opacity-50 [&_svg]:text-foreground"
 	const breadcrumbItemBase =
 		"relative flex max-w-[150px] cursor-pointer items-center rounded-[4px] text-foreground transition-colors hover:not(.disable):not(.current):text-primary [&.disable]:cursor-not-allowed [&.disable]:opacity-50"
-	// Constrain the list to the modal's remaining height so Radix can scroll overflowing rows.
-	// Workspace keeps its separate regular and fixed sections with their own scrolling.
-	const ListContainer = effectiveViewMode === "workspace" ? "div" : ScrollArea
+	// Scroll workspace groups together so fixed entries cannot squeeze regular rows
+	// when dependency options or a short viewport reduce the available height.
 	const modalContent = (
 		<div
 			className={cn(
@@ -2225,7 +2224,7 @@ function ProjectResourceSelectorModal({
 			{documentStaticDependencies.fileType &&
 				documentStaticDependencies.dependencyFileIds.length > 0 && (
 					<label
-						className="mb-3 flex cursor-pointer items-start gap-2.5 rounded-lg border border-border px-3 py-2.5"
+						className="mb-3 flex shrink-0 cursor-pointer items-start gap-2.5 rounded-lg border border-border px-3 py-2.5"
 						data-testid="cross-project-file-document-dependencies-option"
 					>
 						<Checkbox
@@ -2252,7 +2251,7 @@ function ProjectResourceSelectorModal({
 					</label>
 				)}
 			<div
-				className="flex items-center justify-start gap-2.5 p-0"
+				className="flex shrink-0 items-center justify-start gap-2.5 p-0"
 				data-testid="cross-project-file-modal-toolbar"
 			>
 				{!isSearchOpen && (
@@ -2450,26 +2449,11 @@ function ProjectResourceSelectorModal({
 					</>
 				)}
 			</div>
-			<ListContainer
-				className={cn(
-					"mt-2.5 h-[360px] min-h-0 w-full md:h-auto md:flex-1",
-					effectiveViewMode === "workspace"
-						? "overflow-hidden"
-						: "[&_[data-slot='scroll-area-viewport']>div]:!block",
-				)}
+			<ScrollArea
+				className="mt-2.5 h-[360px] min-h-0 w-full md:h-auto md:flex-1"
+				viewportClassName="[&>div]:!block"
 			>
-				{/* MagicSpin 会额外生成一层内容容器；工作区视图必须把高度和 min-h-0 传递到该层，内部滚动区才不会按内容撑开。 */}
-				<MagicSpin
-					spinning={shouldBlockPanelForLoading}
-					className={
-						effectiveViewMode === "workspace" ? "h-full min-h-0 w-full" : "w-full"
-					}
-					innerClassName={
-						effectiveViewMode === "workspace"
-							? "h-full min-h-0 overflow-hidden"
-							: undefined
-					}
-				>
+				<MagicSpin spinning={shouldBlockPanelForLoading} className="w-full">
 					{effectiveViewMode === "workspace" &&
 						(!shouldBlockPanelForLoading ? (
 							renderWorkspaceList()
@@ -2528,7 +2512,7 @@ function ProjectResourceSelectorModal({
 						</>
 					)}
 				</MagicSpin>
-			</ListContainer>
+			</ScrollArea>
 		</div>
 	)
 
@@ -2585,6 +2569,8 @@ function ProjectResourceSelectorModal({
 		<BaseModal
 			visible={visible}
 			title={title}
+			// Leave room for workspace rows while keeping the dialog inside short viewports.
+			className="h-[min(720px,calc(100dvh-2rem))]"
 			content={modalContent}
 			footer={footerConfig}
 			onClose={onClose}
