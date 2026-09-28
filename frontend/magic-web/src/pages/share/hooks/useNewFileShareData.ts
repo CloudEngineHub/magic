@@ -1,8 +1,8 @@
-import { useState, useCallback, useRef } from "react"
+import { useState, useCallback, useEffect, useRef } from "react"
 import { SuperMagicApi } from "@/apis"
-import { AttachmentDataProcessor } from "../../superMagic/utils/attachmentDataProcessor"
 import { createShareFileAccess } from "@/pages/superMagic/fileAccess/fileAccessContext"
 import { loadProjectAttachments } from "@/pages/superMagic/services"
+import { loadShareFilesV2 } from "../services/shareFilesLoader"
 
 interface UseNewFileShareDataReturn {
 	attachments: any
@@ -10,7 +10,6 @@ interface UseNewFileShareDataReturn {
 	error: Error | null
 	isProjectShare: boolean
 	getShareData: (params: { resource_id: string; password?: string }) => Promise<any>
-	getShareResourceFiles: (params: { resource_id: string; password?: string }) => Promise<any>
 	updateAttachments: (params: {
 		projectId?: string
 		resource_id?: string
@@ -19,20 +18,29 @@ interface UseNewFileShareDataReturn {
 	}) => void
 }
 
+function isAbortError(error: unknown) {
+	return (error as { name?: string } | null | undefined)?.name === "AbortError"
+}
+
 /**
  * Hook for handling new file share data fetching
  * New format: /share/files/{resourceId}
  * - Gets share data using resourceId
  * - Gets project_id from share settings
  * - Gets attachments using project_id
- * - Gets shared files list using getShareResourceFiles
+ * - Gets the complete shared file tree through V2 cursor pagination
  */
 export default function useNewFileShareData(): UseNewFileShareDataReturn {
 	const [attachments, setAttachments] = useState<any>({})
 	const [loading, setLoading] = useState(false)
 	const [error, setError] = useState<Error | null>(null)
-	const [isProjectShare, setIsProjectShare] = useState(true)
+	const [isProjectShare, setIsProjectShare] = useState(false)
 	const fetchPageCountRef = useRef(0)
+	const attachmentsAbortControllerRef = useRef<AbortController | null>(null)
+
+	useEffect(() => {
+		return () => attachmentsAbortControllerRef.current?.abort()
+	}, [])
 
 	const getShareData = useCallback(
 		({ resource_id, password }: { resource_id: string; password?: string }) => {
@@ -49,6 +57,9 @@ export default function useNewFileShareData(): UseNewFileShareDataReturn {
 							password,
 							page,
 						})
+						if (page === 1) {
+							setIsProjectShare(res.share_project === true)
+						}
 						// Merge data
 						if (page === 1) {
 							// Keep all the metadata from first response
@@ -98,16 +109,6 @@ export default function useNewFileShareData(): UseNewFileShareDataReturn {
 		[],
 	)
 
-	const getShareResourceFiles = useCallback(
-		({ resource_id, password }: { resource_id: string; password?: string }) => {
-			return SuperMagicApi.getShareResourceFiles({
-				resource_id,
-				password,
-			})
-		},
-		[],
-	)
-
 	const updateAttachments = useCallback(
 		(params: {
 			projectId?: string
@@ -116,28 +117,59 @@ export default function useNewFileShareData(): UseNewFileShareDataReturn {
 			temporaryToken?: string
 		}) => {
 			const { projectId, resource_id, password, temporaryToken } = params
+			attachmentsAbortControllerRef.current?.abort()
+			const abortController = new AbortController()
+			attachmentsAbortControllerRef.current = abortController
+			setLoading(true)
+			setError(null)
+
+			const commitAttachments = (nextAttachments: any) => {
+				if (attachmentsAbortControllerRef.current !== abortController) return
+				setAttachments(nextAttachments)
+			}
+
+			const handleFailure = (reason: unknown) => {
+				if (
+					isAbortError(reason) ||
+					attachmentsAbortControllerRef.current !== abortController
+				) {
+					return
+				}
+				setError(reason instanceof Error ? reason : new Error(String(reason)))
+			}
+
+			const finishLoading = () => {
+				if (attachmentsAbortControllerRef.current !== abortController) return
+				setLoading(false)
+			}
 
 			// 优先使用 resource_id（新格式文件分享）
 			if (resource_id) {
-				getShareResourceFiles({ resource_id, password }).then((res: any) => {
-					// getShareResourceFiles returns a project-attachment-compatible shape.
-					// 统一处理 metadata，包括 index.html 文件的特殊逻辑
-					const processedData = AttachmentDataProcessor.processAttachmentData(res)
-					setAttachments(processedData)
+				loadShareFilesV2({
+					resourceId: resource_id,
+					password,
+					signal: abortController.signal,
 				})
+					.then(commitAttachments)
+					.catch(handleFailure)
+					.finally(finishLoading)
 			} else if (projectId) {
 				// 使用 projectId（旧格式或话题分享）
 				loadProjectAttachments({
 					projectId,
+					signal: abortController.signal,
 					access: temporaryToken
 						? createShareFileAccess({ token: temporaryToken, projectId })
 						: undefined,
-				}).then((res) => {
-					setAttachments(res)
 				})
+					.then(commitAttachments)
+					.catch(handleFailure)
+					.finally(finishLoading)
+			} else {
+				finishLoading()
 			}
 		},
-		[getShareResourceFiles],
+		[],
 	)
 
 	return {
@@ -146,7 +178,6 @@ export default function useNewFileShareData(): UseNewFileShareDataReturn {
 		error,
 		isProjectShare,
 		getShareData,
-		getShareResourceFiles,
 		updateAttachments,
 	}
 }
