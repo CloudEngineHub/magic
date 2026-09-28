@@ -1,6 +1,5 @@
-import { render, screen, waitFor } from "@testing-library/react"
+import { render, screen, waitFor, fireEvent } from "@testing-library/react"
 import { forwardRef, useImperativeHandle, useState } from "react"
-import { fireEvent } from "@testing-library/react"
 import { beforeEach, describe, expect, it, vi } from "vitest"
 import type { SimpleEditorRef } from "./types"
 import { LazySimpleEditor } from "./lazy-simple-editor"

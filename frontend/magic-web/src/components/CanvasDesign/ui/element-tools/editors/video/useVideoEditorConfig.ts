@@ -2263,7 +2263,8 @@ export function useVideoEditorConfig(options: UseVideoEditorConfigOptions): Vide
 			const requestToRestore = sessionSnapshot?.request ?? currentRequest
 			const rootStorage = canvas.magicConfigManager.config?.methods?.getRootStorage?.()
 			const defaultConfig = rootStorage?.defaultGenerateVideoConfig as
-				DefaultGenerateVideoConfig | undefined
+				| DefaultGenerateVideoConfig
+				| undefined
 			const quickEditPreferredModelId = selectedModelId || savedRequest?.model_id
 			const quickEditModel = isQuickEdit
 				? resolveVideoReferenceVideoModel(videoModelList, quickEditPreferredModelId)

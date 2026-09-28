@@ -69,7 +69,11 @@ export function supportsCurrentTabCapture(): boolean {
 }
 
 export type CurrentTabCaptureErrorCode =
-	"unsupported" | "permission-denied" | "cancelled" | "wrong-surface" | "no-video"
+	| "unsupported"
+	| "permission-denied"
+	| "cancelled"
+	| "wrong-surface"
+	| "no-video"
 
 export class CurrentTabCaptureError extends Error {
 	readonly code: CurrentTabCaptureErrorCode

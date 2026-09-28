@@ -237,3 +237,52 @@ async def test_read_skills_missing_unrelated_skill_does_not_force_project_id(
     assert "creating-slides" in result.content
     assert "bound project_id" not in result.content
     assert "do not pass project_id" in result.content
+
+
+@pytest.mark.asyncio
+async def test_read_skills_loads_after_lazy_install(tmp_path, monkeypatch):
+    from unittest.mock import AsyncMock
+    from app.core.skill_utils import skill_references
+
+    skill_file = tmp_path / "lazy-skill" / "SKILL.md"
+    skill_file.parent.mkdir()
+    skill_file.write_text("# lazy skill\n", encoding="utf-8")
+    installed_skill = MockSkill("lazy-skill")
+    installed_skill.skill_file = skill_file
+    installed_skill.skill_dir = skill_file.parent
+    find = AsyncMock(side_effect=[None, None, installed_skill])
+    monkeypatch.setattr(read_skills_module, "find_skill", find)
+    monkeypatch.setattr(read_skills_module.asyncio, "sleep", AsyncMock())
+    install = AsyncMock(return_value=True)
+    monkeypatch.setattr(skill_references, "install_market_reference", install)
+
+    result = await ReadSkills().execute(
+        None, ReadSkillsParams(skill_names=["lazy-skill"], check_updates=False)
+    )
+
+    assert result.ok
+    assert '<skill_content name="lazy-skill">' in result.content
+    install.assert_awaited_once()
+    assert find.await_count == 3
+
+
+@pytest.mark.asyncio
+async def test_read_skills_reports_declared_fetch_failure(monkeypatch):
+    from unittest.mock import AsyncMock
+    from app.core.skill_utils import skill_references
+
+    monkeypatch.setattr(read_skills_module, "find_skill", AsyncMock(return_value=None))
+    monkeypatch.setattr(read_skills_module.asyncio, "sleep", AsyncMock())
+    monkeypatch.setattr(
+        skill_references,
+        "install_market_reference",
+        AsyncMock(side_effect=RuntimeError("internal URL must not leak")),
+    )
+
+    result = await ReadSkills().execute(
+        None, ReadSkillsParams(skill_names=["private-skill"], check_updates=False)
+    )
+
+    assert not result.ok
+    assert "declared but could not be fetched" in result.content
+    assert "internal URL" not in result.content

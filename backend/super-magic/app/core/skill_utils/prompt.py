@@ -99,11 +99,14 @@ async def resolve_skills_metadata(skills_config: SkillsConfig, agent_name: str) 
     保留原有来源顺序和目录容错，供日常 preload 和后台 reference 选择同一份 Skill。
     preload 补载发生在最终过滤之前，防止已排除或地区不可用的 Skill 被补载重新放回。
     """
+    from app.core.skill_utils.skill_references import load_market_references
+
+    references = await load_market_references(agent_name)
     personal_skills = await discover_skills_in_personal()
 
     # Personal Skills are an independent source. Keep the prompt when they exist even if
     # the Agent frontmatter does not explicitly configure system, Crew, or workspace Skills.
-    if skills_config.is_empty() and not personal_skills:
+    if skills_config.is_empty() and not personal_skills and not references:
         return SkillSources([], [])
 
     if agent_name:
@@ -198,6 +201,26 @@ async def resolve_skills_metadata(skills_config: SkillsConfig, agent_name: str) 
             loaded_names.add(personal_skill.name)
             logger.info(f"Scanned and appended personal skill: {personal_skill.name}")
 
+    # Ignore stale market-reference downloads and expose declared references so
+    # ReadSkills can install a missing skill on first use.
+    from app.core.skill_utils.skill_references import is_current_reference_skill
+
+    skills_metadata = [
+        skill for skill in skills_metadata
+        if await is_current_reference_skill(skill, agent_name)
+    ]
+    loaded_names = {skill.name for skill in skills_metadata}
+    loaded_name_keys = {name.casefold() for name in loaded_names}
+    for name, reference in references.items():
+        if name.casefold() in loaded_name_keys:
+            continue
+        disk_skill = await find_skill(name, agent_name=agent_name)
+        skills_metadata.append(
+            disk_skill or SkillMetadata(name=name, description=reference.description)
+        )
+        loaded_names.add(name)
+        loaded_name_keys.add(name.casefold())
+
     """
     ── 3e. Load skills referenced by preload but not loaded from any source. ──────────────────────
     Preloaded skills do not need duplicate system_skills declarations; this is the fallback load.
@@ -229,6 +252,16 @@ async def resolve_skills_metadata(skills_config: SkillsConfig, agent_name: str) 
         actually_excluded = excluded_names & before_names
         if actually_excluded:
             logger.info(f"Excluded {len(actually_excluded)} system skills: {actually_excluded}")
+
+    # Context compaction relies on this fallback skill even when an agent omits
+    # it from frontmatter, so keep it discoverable after normal exclusions.
+    always_mount = "compact-chat-history"
+    if always_mount not in {skill.name for skill in skills_metadata}:
+        compact_skill = await skill_manager.get_skill(always_mount, search_path=system_skills_dir)
+        if compact_skill:
+            skills_metadata.append(compact_skill)
+            loaded_names.add(always_mount)
+            logger.info(f"Always mounted compact skill: {always_mount}")
 
     if not skills_metadata:
         logger.warning("No skills were loaded")
