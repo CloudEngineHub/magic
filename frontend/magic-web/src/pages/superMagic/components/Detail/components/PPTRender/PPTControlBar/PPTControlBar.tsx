@@ -256,53 +256,57 @@ export function PPTControlBar({
 						</span>
 					</MagicTooltip>
 				</div>
-				<div className="flex items-center gap-1 before:mx-[3px] before:h-4 before:w-px before:shrink-0 before:bg-[#e8ebf0] dark:before:bg-[#424650]">
-					<Button
-						variant="ghost"
-						size="sm"
-						data-testid="ppt-control-bar-refresh-current-button"
-						className="h-7 gap-[5px] px-[7px] text-[13px] font-normal"
-						onClick={(event) => {
-							event.stopPropagation()
-							event.currentTarget.blur()
-							onRefreshCurrentSlide?.()
-						}}
-						disabled={
-							isTransitioning || isRefreshingCurrentSlide || !onRefreshCurrentSlide
-						}
-						aria-busy={isRefreshingCurrentSlide}
-					>
-						<RotateCw
-							className={cn("size-4", isRefreshingCurrentSlide && "animate-spin")}
-						/>
-						<span className={isMobile ? "sr-only" : undefined}>
-							{t("ppt.reloadCurrentSlide")}
-						</span>
-					</Button>
-					{/* Refresh slides button */}
-					<MagicTooltip title={isMobile ? undefined : t("ppt.reloadAllSlides")}>
-						<span>
-							<Button
-								variant="ghost"
-								size="sm"
-								data-testid="ppt-control-bar-refresh-button"
-								className="h-7 gap-[5px] px-[7px] text-[13px] font-normal text-foreground"
-								onClick={(e) => {
-									e.stopPropagation()
-									e.currentTarget.blur()
-									onRefreshSlides()
-								}}
-								aria-label={t("ppt.reloadAllSlides")}
-								disabled={isTransitioning}
-							>
-								<RefreshCw className="h-4 w-4" />
-								<span className={isMobile ? "sr-only" : undefined}>
-									{t("ppt.reloadAllSlides")}
-								</span>
-							</Button>
-						</span>
-					</MagicTooltip>
-				</div>
+				{!isMobile && (
+					<div className="flex items-center gap-1 before:mx-[3px] before:h-4 before:w-px before:shrink-0 before:bg-[#e8ebf0] dark:before:bg-[#424650]">
+						<Button
+							variant="ghost"
+							size="sm"
+							data-testid="ppt-control-bar-refresh-current-button"
+							className="h-7 gap-[5px] px-[7px] text-[13px] font-normal"
+							onClick={(event) => {
+								event.stopPropagation()
+								event.currentTarget.blur()
+								onRefreshCurrentSlide?.()
+							}}
+							disabled={
+								isTransitioning ||
+								isRefreshingCurrentSlide ||
+								!onRefreshCurrentSlide
+							}
+							aria-busy={isRefreshingCurrentSlide}
+						>
+							<RotateCw
+								className={cn("size-4", isRefreshingCurrentSlide && "animate-spin")}
+							/>
+							<span className={isMobile ? "sr-only" : undefined}>
+								{t("ppt.reloadCurrentSlide")}
+							</span>
+						</Button>
+						{/* Refresh slides button */}
+						<MagicTooltip title={isMobile ? undefined : t("ppt.reloadAllSlides")}>
+							<span>
+								<Button
+									variant="ghost"
+									size="sm"
+									data-testid="ppt-control-bar-refresh-button"
+									className="h-7 gap-[5px] px-[7px] text-[13px] font-normal text-foreground"
+									onClick={(e) => {
+										e.stopPropagation()
+										e.currentTarget.blur()
+										onRefreshSlides()
+									}}
+									aria-label={t("ppt.reloadAllSlides")}
+									disabled={isTransitioning}
+								>
+									<RefreshCw className="h-4 w-4" />
+									<span className={isMobile ? "sr-only" : undefined}>
+										{t("ppt.reloadAllSlides")}
+									</span>
+								</Button>
+							</span>
+						</MagicTooltip>
+					</div>
+				)}
 
 				{/* Reuse the same fullscreen action on phones; icon labels stay accessible. */}
 				<MagicTooltip
