@@ -36,6 +36,7 @@ from agentlang.config.config import config
 from app.magic.agent import Agent
 from app.service.agent_service import AgentService
 from app.service.agent_event.file_storage_listener_service import FileStorageListenerService
+from app.service.follow_up_suggestion.listener import FollowUpSuggestionListener
 
 from app.service.agent_event.rag_listener_service import RagListenerService
 from app.service.agent_event.resource_cleanup_listener_service import ResourceCleanupListenerService
@@ -174,6 +175,7 @@ class AgentDispatcher(Base):
         ChannelStartupListenerService.register_standard_listeners(self.agent_context)
         UserToolCallListenerService.register_standard_listeners(self.agent_context)
         ThirdPartyMessageListenerService.register_standard_listeners(self.agent_context)
+        FollowUpSuggestionListener.register_standard_listeners(self.agent_context)
 
         # 注册工具监控监听器（非侵入式）
         install_tool_monitoring_listener(self.agent_context)

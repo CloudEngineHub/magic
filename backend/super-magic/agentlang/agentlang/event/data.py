@@ -1,3 +1,4 @@
+from enum import Enum
 from typing import Dict, List, Optional, Any
 
 from openai.types.chat import ChatCompletionMessage, ChatCompletionMessageToolCall, ChatCompletion
@@ -196,6 +197,43 @@ class AfterMainAgentRunEventData(BaseEventData):
     agent_name: str
     agent_state: str
     query: str
+
+
+class AgentLoopOutcome(str, Enum):
+    """单轮主循环的结果。只有 normal 计入追加问题的有效轮数。"""
+
+    NORMAL = "normal"
+    MAINTENANCE = "maintenance"
+    RESTORED = "restored"
+    WAITING_FOR_USER = "waiting_for_user"
+    ERROR = "error"
+    CANCELLED = "cancelled"
+
+
+def resolve_completed_loop_outcome(
+    *,
+    restored: bool,
+    waiting_for_user: bool,
+    maintenance: bool,
+) -> AgentLoopOutcome:
+    """根据本轮已完成的路径确定结果。等待用户优先于维护和恢复。"""
+    if waiting_for_user:
+        return AgentLoopOutcome.WAITING_FOR_USER
+    if maintenance:
+        return AgentLoopOutcome.MAINTENANCE
+    if restored:
+        return AgentLoopOutcome.RESTORED
+    return AgentLoopOutcome.NORMAL
+
+
+class AfterAgentLoopEventData(BaseEventData):
+    """每一轮 agent loop 结束后的事件数据。"""
+
+    agent_context: AgentContextInterface
+    agent_name: str
+    loop_index: int
+    effective_loop_count: int
+    outcome: AgentLoopOutcome
 
 
 class ChatHistoryChangedEventData(BaseEventData):

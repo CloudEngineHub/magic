@@ -12,6 +12,7 @@ use App\Domain\Chat\Entity\ValueObject\GeneratedSuggestionStatus;
 use App\Domain\Chat\Repository\Facade\MagicGeneratedSuggestionRepositoryInterface;
 use App\Domain\Chat\Repository\Persistence\Model\MagicGeneratedSuggestionModel;
 use App\Infrastructure\Util\IdGenerator\IdGenerator;
+use Hyperf\Database\Exception\QueryException;
 
 class MagicGeneratedSuggestionRepository implements MagicGeneratedSuggestionRepositoryInterface
 {
@@ -20,33 +21,33 @@ class MagicGeneratedSuggestionRepository implements MagicGeneratedSuggestionRepo
     ) {
     }
 
-    public function createGenerating(
+    /**
+     * @param string[] $suggestions
+     */
+    public function saveReport(
         int $type,
-        int|string $relationId,
-        array $params = [],
-        null|int|string $createdUid = null,
-    ): array {
+        string $relationId,
+        GeneratedSuggestionStatus $status,
+        array $suggestions,
+        ?string $createdUid,
+    ): MagicGeneratedSuggestionEntity {
         $relationId = $this->normalizeKey($relationId);
-
-        $entity = $this->findLatestEntityByTypeAndRelationId($type, $relationId);
-        if ($entity !== null) {
-            return $entity->toArray();
+        $existing = $this->findLatestEntityByTypeAndRelationId($type, $relationId);
+        if ($existing === null) {
+            try {
+                return $this->insertReport($type, $relationId, $status, $suggestions, $createdUid);
+            } catch (QueryException $exception) {
+                if ((int) ($exception->errorInfo[1] ?? 0) !== 1062) {
+                    throw $exception;
+                }
+                $existing = $this->findLatestEntityByTypeAndRelationId($type, $relationId);
+                if ($existing === null) {
+                    throw $exception;
+                }
+            }
         }
 
-        $now = date('Y-m-d H:i:s');
-        $record = $this->model::query()->create([
-            'id' => IdGenerator::getSnowId(),
-            'type' => $type,
-            'relation_id' => $relationId,
-            'params' => $params === [] ? null : $params,
-            'suggestions' => null,
-            'status' => GeneratedSuggestionStatus::Generating->value,
-            'created_uid' => $this->normalizeNullableKey($createdUid),
-            'created_at' => $now,
-            'updated_at' => $now,
-        ]);
-
-        return $record->toArray();
+        return $this->updateGeneratingReport($type, $relationId, $existing, $status, $suggestions);
     }
 
     public function findLatestEntityByTypeAndRelationId(int $type, int|string $relationId): ?MagicGeneratedSuggestionEntity
@@ -62,28 +63,66 @@ class MagicGeneratedSuggestionRepository implements MagicGeneratedSuggestionRepo
     }
 
     /**
+     * 首次写入。suggestions 只在完成态保存，查询构建器更新不会走模型 cast。
+     *
      * @param string[] $suggestions
      */
-    public function updateStatus(
+    private function insertReport(
         int $type,
-        int|string $relationId,
+        string $relationId,
         GeneratedSuggestionStatus $status,
-        array $suggestions = [],
-    ): void {
-        $record = $this->model::query()
-            ->where('type', $type)
-            ->where('relation_id', $this->normalizeKey($relationId))
-            ->first();
-        if ($record === null) {
-            return;
+        array $suggestions,
+        ?string $createdUid,
+    ): MagicGeneratedSuggestionEntity {
+        $now = date('Y-m-d H:i:s');
+        $record = $this->model::query()->create([
+            'id' => IdGenerator::getSnowId(),
+            'type' => $type,
+            'relation_id' => $relationId,
+            'params' => null,
+            'suggestions' => $status === GeneratedSuggestionStatus::Done ? array_values($suggestions) : null,
+            'status' => $status->value,
+            'created_uid' => $this->normalizeNullableKey($createdUid),
+            'created_at' => $now,
+            'updated_at' => $now,
+        ]);
+
+        return new MagicGeneratedSuggestionEntity($record->toArray());
+    }
+
+    /**
+     * 生成中可以进入终态；终态和重复的生成中保持已存结果。
+     *
+     * @param string[] $suggestions
+     */
+    private function updateGeneratingReport(
+        int $type,
+        string $relationId,
+        MagicGeneratedSuggestionEntity $existing,
+        GeneratedSuggestionStatus $status,
+        array $suggestions,
+    ): MagicGeneratedSuggestionEntity {
+        $current = $existing->getStatus();
+        if ($current !== GeneratedSuggestionStatus::Generating || $status === GeneratedSuggestionStatus::Generating) {
+            return $existing;
         }
 
-        $record->status = $status->value;
-        $record->updated_at = date('Y-m-d H:i:s');
-        if ($status === GeneratedSuggestionStatus::Done) {
-            $record->suggestions = array_values($suggestions);
+        $updated = $this->model::query()
+            ->where('type', $type)
+            ->where('relation_id', $relationId)
+            ->where('status', GeneratedSuggestionStatus::Generating->value)
+            ->update([
+                'status' => $status->value,
+                'suggestions' => $status === GeneratedSuggestionStatus::Done
+                    ? json_encode(array_values($suggestions), JSON_UNESCAPED_UNICODE)
+                    : null,
+                'updated_at' => date('Y-m-d H:i:s'),
+            ]);
+        if ($updated === 0) {
+            return $this->findLatestEntityByTypeAndRelationId($type, $relationId) ?? $existing;
         }
-        $record->save();
+
+        return $this->findLatestEntityByTypeAndRelationId($type, $relationId) ?? $existing;
     }
 
     private function normalizeKey(null|int|string $value): string

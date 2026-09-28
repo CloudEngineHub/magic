@@ -243,7 +243,6 @@ class LLMFactory:
         if extra_body is not None:
             request_params["extra_body"] = extra_body
 
-        # 动态设置最新的 metadata 到请求头（每次调用都获取最新值）
         extra_headers = MetadataUtil.get_llm_request_headers()
         if llm_config.headers:
             extra_headers = {**extra_headers, **llm_config.headers}

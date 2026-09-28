@@ -12,22 +12,18 @@ use App\Domain\Chat\Entity\ValueObject\GeneratedSuggestionStatus;
 
 interface MagicGeneratedSuggestionRepositoryInterface
 {
-    public function createGenerating(
-        int $type,
-        int|string $relationId,
-        array $params = [],
-        null|int|string $createdUid = null,
-    ): array;
-
     public function findLatestEntityByTypeAndRelationId(int $type, int|string $relationId): ?MagicGeneratedSuggestionEntity;
 
     /**
+     * 按唯一键写入追加问题状态。已有终态不被后到的上报覆盖。
+     *
      * @param string[] $suggestions
      */
-    public function updateStatus(
+    public function saveReport(
         int $type,
-        int|string $relationId,
+        string $relationId,
         GeneratedSuggestionStatus $status,
-        array $suggestions = [],
-    ): void;
+        array $suggestions,
+        ?string $createdUid,
+    ): MagicGeneratedSuggestionEntity;
 }

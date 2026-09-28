@@ -25,6 +25,7 @@ class EventType(str, Enum):
     AFTER_TOOL_CALL = "after_tool_call"  # 工具调用后的事件
     AGENT_SUSPENDED = "agent_suspended"  # agent终止事件
     BEFORE_MAIN_AGENT_RUN = "before_main_agent_run"  # 主 agent 运行前的事件
+    AFTER_AGENT_LOOP = "after_agent_loop"  # 主循环每一轮结束后的事件
     AFTER_MAIN_AGENT_RUN = "after_main_agent_run"  # 主 agent 运行后的事件
 
     # 工具调用子事件
