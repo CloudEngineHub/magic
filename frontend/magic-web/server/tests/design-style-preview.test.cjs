@@ -108,3 +108,29 @@ test("leaves unrelated routes alone and revalidates the stable catalog URL", () 
 	setStaticAssetCacheHeaders(res, "/app/dist/index.html")
 	assert.equal(headers.get("cache-control"), "no-cache, no-store, must-revalidate")
 })
+
+test("protects case variants on case-insensitive filesystems", () => {
+	for (const path of [
+		"/HTML-DESIGN-STYLE/PREVIEWS/vercel.html",
+		"/Html-Design-Style/Previews/vercel.html",
+		"/%48TML-DESIGN-STYLE/%50REVIEWS/vercel.html",
+	]) {
+		const rejected = invoke({ path, dest: "document" })
+		assert.equal(rejected.allowed, false, path)
+		assert.equal(rejected.res.statusCode, 403, path)
+		assert.equal(rejected.headers.get("cache-control"), "no-store")
+		assert.match(rejected.headers.get("content-security-policy"), /sandbox/)
+		const allowed = invoke({ path })
+		assert.equal(allowed.allowed, true, path)
+		assert.equal(allowed.headers.get("x-content-type-options"), "nosniff")
+		assert.deepEqual(allowed.headers.get("vary"), ["Sec-Fetch-Dest", "Sec-Fetch-Site"])
+	}
+	for (const path of [
+		"/app/dist/HTML-DESIGN-STYLE/PREVIEWS/vercel.html",
+		"C:\\app\\dist\\Html-Design-Style\\Previews\\vercel.html",
+	]) {
+		const { res, headers } = invoke({ path: "/index.html" })
+		setStaticAssetCacheHeaders(res, path)
+		assert.equal(headers.get("cache-control"), "private, no-cache", path)
+	}
+})

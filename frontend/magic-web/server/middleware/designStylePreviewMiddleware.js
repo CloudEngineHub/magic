@@ -1,9 +1,11 @@
 const path = require("node:path")
 
 function isDesignStylePreviewPath(pathname) {
-	// Match the resolved static path, including encoded separators and dot segments.
+	// Match static resolution on case-insensitive filesystems as well as Linux.
+	// Callers supply decoded URL paths or absolute filesystem paths.
 	return path.posix
 		.normalize(pathname.replace(/\\/g, "/"))
+		.toLowerCase()
 		.includes("/html-design-style/previews/")
 }
 
