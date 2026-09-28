@@ -218,7 +218,7 @@ describe("ChatsSubMenu", () => {
 		const { rerender } = render(<ChatsSubMenu standalone workspace active />)
 		const row = screen.getByTestId("mock-chat-row-project-mock-existing")
 		expect(row).toHaveAttribute("data-selected", "true")
-		locationState.pathname = "/global/super/chat"
+		locationState.pathname = "/global/super/new-chat"
 		rerender(<ChatsSubMenu standalone workspace active />)
 		expect(row).toHaveAttribute("data-selected", "false")
 		locationState.pathname = "/global/super/chat/another-project/topic-1"

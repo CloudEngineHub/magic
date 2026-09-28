@@ -66,7 +66,7 @@ const t = (key: string) => {
 
 describe("resolveSuperPageDocumentTitle", () => {
 	it("uses the blank composer title even with an old global selection", () => {
-		pathnameState.current = "/cluster/super/chat"
+		pathnameState.current = "/cluster/super/new-chat"
 		workspaceStoreState.selectedProject = { project_name: "old project" }
 		renderHook(useProjectTitle)
 		expect(setMetaMock).toHaveBeenLastCalledWith({ title: "chatList.newChat" })

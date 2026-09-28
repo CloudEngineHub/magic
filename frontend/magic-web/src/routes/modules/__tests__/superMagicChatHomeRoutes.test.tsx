@@ -18,19 +18,19 @@ vi.mock("antd", async (importOriginal) => {
 
 describe("desktop chat home routes", () => {
 	it("shares the lazy home component so switching modes does not remount the page", () => {
-		const chat = routesMatch("/global/super/chat")?.route.element
+		const chat = routesMatch("/global/super/new-chat")?.route.element
 		const task = routesMatch("/global/super/workspace/workspace-1")?.route.element
 		expect(isValidElement(chat) && isValidElement(task) && chat.type === task.type).toBe(true)
 	})
 	it("builds a directly addressable blank composer URL", () => {
 		expect(
 			getRoutePath({ name: RouteName.SuperChatHome, params: { clusterCode: "global" } }),
-		).toBe("/global/super/chat")
+		).toBe("/global/super/new-chat")
 	})
 
 	it.each([
-		["/global/super/chat", RouteName.SuperChatHome],
-		["/global/super/chat/", RouteName.SuperChatHome],
+		["/global/super/new-chat", RouteName.SuperChatHome],
+		["/global/super/new-chat/", RouteName.SuperChatHome],
 		["/global/super/chats", RouteName.SuperChatsList],
 		["/global/super/chat/project-1", RouteName.SuperChatProjectState],
 		["/global/super/chat/project-1/topic-1", RouteName.SuperChatProjectState],

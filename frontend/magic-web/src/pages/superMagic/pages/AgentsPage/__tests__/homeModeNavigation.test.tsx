@@ -63,7 +63,7 @@ function Navigation() {
 	const navigate = useNavigate()
 	return (
 		<>
-			<button onClick={() => navigate("/global/super/chat")}>chat</button>
+			<button onClick={() => navigate("/global/super/new-chat")}>chat</button>
 			<button onClick={() => navigate("/global/super/workspace/workspace-1")}>task</button>
 			<button onClick={() => navigate(-1)}>back</button>
 		</>
@@ -87,7 +87,7 @@ describe("desktop creation home navigation", () => {
 							path="/:clusterCode/super/workspace/:workspaceId"
 							element={<Home />}
 						/>
-						<Route path="/:clusterCode/super/chat" element={<Home />} />
+						<Route path="/:clusterCode/super/new-chat" element={<Home />} />
 					</Route>
 				</Routes>
 			</MemoryRouter>,

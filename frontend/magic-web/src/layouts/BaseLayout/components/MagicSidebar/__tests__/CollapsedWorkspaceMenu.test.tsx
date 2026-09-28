@@ -147,7 +147,7 @@ describe("CollapsedWorkspaceMenu conversation submenu", () => {
 		vi.clearAllMocks()
 	})
 
-	it.each(["/global/super/chat", "/global/super/chat/project-1/topic-1"])(
+	it.each(["/global/super/new-chat", "/global/super/chat/project-1/topic-1"])(
 		"does not select the cached workspace on %s",
 		(pathname) => {
 			workspaceStore.selectedWorkspace = { id: "alpha" }
@@ -162,7 +162,7 @@ describe("CollapsedWorkspaceMenu conversation submenu", () => {
 		render(<Harness />)
 		expect(screen.getByTestId("ordinary-workspace")).toHaveAttribute("data-active", "true")
 	})
-	it.each(["/global/super/chat", "/global/super/chat/project-1/topic-1"])(
+	it.each(["/global/super/new-chat", "/global/super/chat/project-1/topic-1"])(
 		"selects my chats in the collapsed menu on %s",
 		(pathname) => {
 			locationState.pathname = pathname

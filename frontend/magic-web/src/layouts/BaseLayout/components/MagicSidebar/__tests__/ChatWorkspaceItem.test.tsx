@@ -44,7 +44,7 @@ describe("ChatWorkspaceItem", () => {
 	})
 
 	it("selects my chats on chat home and clears it on task pages", () => {
-		locationState.pathname = "/global/super/chat"
+		locationState.pathname = "/global/super/new-chat"
 		const { rerender } = render(<ChatWorkspaceItem active />)
 		expect(screen.getByTestId("sidebar-my-chats-toggle")).toHaveAttribute(
 			"aria-current",

@@ -157,7 +157,7 @@ describe("WorkspaceList", () => {
 		vi.stubGlobal("cancelAnimationFrame", vi.fn())
 	})
 
-	it.each(["/global/super/chat", "/global/super/chat/project-1"])(
+	it.each(["/global/super/new-chat", "/global/super/chat/project-1"])(
 		"does not auto-expand the cached workspace on %s",
 		async (pathname) => {
 			locationState.pathname = pathname

@@ -96,7 +96,7 @@ export const enum RoutePath {
 	SuperSlidesTemplatesLegacy = "/super/slides-templates",
 	MobileHome = "/mobile-home",
 	SuperChatsList = "/super/chats",
-	SuperChatHome = "/super/chat",
+	SuperChatHome = "/super/new-chat",
 	SuperApps = "/apps",
 	SuperWorkspacesList = "/super/workspaces",
 	SuperSharedWorkspace = "/super/shared-workspace",

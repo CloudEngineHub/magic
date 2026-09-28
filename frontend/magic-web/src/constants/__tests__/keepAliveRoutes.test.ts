@@ -8,8 +8,8 @@ describe("keep-alive route boundaries", () => {
 	)
 
 	it.each([
-		"/global/super/chat",
-		"/global/super/chat/",
+		"/global/super/new-chat",
+		"/global/super/new-chat/",
 		"/global/super/chat/project/topic",
 		"/global/super/workspace/workspace-1",
 		"/global/nested/super/assistant",

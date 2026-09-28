@@ -6,8 +6,8 @@ import { useChatSidebarSelection } from "../useChatSidebarSelection"
 
 describe("chat sidebar route selection", () => {
 	it.each([
-		["/global/super/chat", true, true, undefined],
-		["/global/super/chat/", true, true, undefined],
+		["/global/super/new-chat", true, true, undefined],
+		["/global/super/new-chat/", true, true, undefined],
 		["/global/super/chat/project-1", true, false, "project-1"],
 		["/global/super/chat/project-1/topic-1", true, false, "project-1"],
 		["/global/super/workspace/workspace-1", false, false, undefined],
