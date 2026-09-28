@@ -60,11 +60,8 @@ const ChatPagePanel = observer(function ChatPagePanel() {
 	const [busy, setBusy] = useState(false)
 	const [workspaceSheetOpen, setWorkspaceSheetOpen] = useState(false)
 	const query = new URLSearchParams(location.search)
-	const homeMode: MobileHomeMode =
-		query.get("homeMode") === "task" ||
-		(!query.has("homeMode") && (query.has("agentCode") || query.has("workspaceId")))
-			? "task"
-			: "chat"
+	// Tasks are the default homepage entry; explicit chat links keep their existing destination.
+	const homeMode: MobileHomeMode = query.get("homeMode") === "chat" ? "chat" : "task"
 	const isChat = homeMode === "chat"
 	const [homepageModeOverride, setHomepageModeOverride] = useState<TopicMode | null>(null)
 	const wasHomepageEmptyRef = useRef(false)

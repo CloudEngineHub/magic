@@ -418,23 +418,21 @@ describe("MobileHomePage", () => {
 		expect(screen.queryByTestId("mobile-header-primary-button")).not.toBeInTheDocument()
 	})
 
-	it("defaults to chat with the featured employee and no employee picker", () => {
+	it("defaults to task mode with workspace selection", () => {
 		refreshFeaturedModeListMock.mockResolvedValue([])
 		render(<MobileHomePage />)
-		expect(screen.getByRole("tab", { name: "homeMode.chat" })).toHaveAttribute(
+		expect(screen.getByRole("tab", { name: "homeMode.task" })).toHaveAttribute(
 			"aria-selected",
 			"true",
 		)
-		expect(homeState.context).toMatchObject({
-			showModeToggle: false,
-			agentCode: "SMA-default",
-			topicMode: "custom_agent",
-		})
-		expect(screen.queryByTestId("mobile-home-workspace")).toBeNull()
+		expect(homeState.context?.showModeToggle).toBe(true)
+		expect(homeState.context?.showModelSelector).toBe(false)
+		expect(screen.getByTestId("mobile-home-workspace")).toBeInTheDocument()
 	})
 
 	it("switches mode without a page transition and shows task workspace separately", () => {
 		refreshFeaturedModeListMock.mockResolvedValue([])
+		homeState.search = "?homeMode=chat"
 		const view = render(<MobileHomePage />)
 		fireEvent.click(screen.getByRole("tab", { name: "homeMode.task" }))
 		expect(homeState.navigate).toHaveBeenCalledWith(
