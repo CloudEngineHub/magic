@@ -116,11 +116,6 @@ from app.service.native_visual_overflow_hint_builder import (
 
 logger = get_logger(__name__)
 
-# 是否在每轮上下文准备时递归遍历工作区、把目录树快照注入模型上下文。
-# 关闭时 _get_workspace_snapshot 直接返回空快照，不产生任何目录读取；
-# 详见该方法 docstring 里的成本说明与恢复注意事项。
-WORKSPACE_SNAPSHOT_SCAN_ENABLED = False
-
 
 # Agent Loop Context Objects for clean parameter passing and state management
 @dataclass
@@ -693,18 +688,17 @@ class Agent(BaseAgent):
         """
         获取工作区文件树快照。
 
-        扫描默认关闭（WORKSPACE_SNAPSHOT_SCAN_ENABLED=False），此时直接返回空快照，
-        不读取任何目录：在挂载的元数据服务上，列出目录的成本是"每个目录一次 readdir
-        往返"（实测每个目录约 0.2 秒），大项目单次遍历要数分钟，而且它跑在每轮上下文
-        准备的关键路径上。模型需要目录内容时用 list_dir 工具按需查看，文件级变化另有
-        文件事件通道，因此不再预置这份目录索引。
+        调用时机是每轮上下文准备（见 _refresh_directory_snapshots），成本必须按
+        "每个目录一次 readdir 往返"来算：工作区挂在网络文件系统上，大项目单次
+        受预算限制的遍历也要数秒到数分钟，因此不能每轮都真扫一遍。
 
-        需要恢复时把 WORKSPACE_SNAPSHOT_SCAN_ENABLED 改回 True；恢复前建议先给扫描
-        补上时间预算与取消检查，避免又变成数分钟的全量遍历。
+        用挂载根的修订号做缓存：FUSE 侧只要文件树版本推进就会更新根目录 mtime
+        （agfs-server 的 touchRootMtimeLocked），所以 (st_mtime_ns, st_ino) 不变
+        就说明树没动，直接复用上次快照，每轮只付一次根目录 stat。
+
+        例：一轮对话里连续多次工具调用，中间没有创建/删除/改名文件 → 只有第一
+        次真扫；某次工具写入了文件 → 根 mtime 变化 → 下一次重新扫描。
         """
-        if not WORKSPACE_SNAPSHOT_SCAN_ENABLED:
-            return WorkspaceSnapshot(display="", entries=[])
-
         workspace_root = Path(self.agent_context._workspace_dir)
         try:
             root_stat = workspace_root.stat()
