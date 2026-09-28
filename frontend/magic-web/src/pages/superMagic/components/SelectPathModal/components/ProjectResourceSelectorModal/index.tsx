@@ -25,6 +25,7 @@ import { cn } from "@/utils/cn"
 import { RoutePath } from "@/constants/routes"
 import { Button } from "@/components/shadcn-ui/button"
 import { Input } from "@/components/shadcn-ui/input"
+import { ScrollArea } from "@/components/shadcn-ui/scroll-area"
 import BaseModal from "../BaseModal"
 import MagicModal from "@/components/base/MagicModal"
 import MobileFilesMoveSheet from "../SelectDirectoryModal/MobileFilesMoveSheet"
@@ -2169,6 +2170,9 @@ function ProjectResourceSelectorModal({
 		"inline-flex size-9 shrink-0 items-center justify-center rounded-md border border-border bg-card text-foreground shadow-sm hover:bg-fill active:bg-fill-secondary focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:pointer-events-none disabled:opacity-50 [&_svg]:text-foreground"
 	const breadcrumbItemBase =
 		"relative flex max-w-[150px] cursor-pointer items-center rounded-[4px] text-foreground transition-colors hover:not(.disable):not(.current):text-primary [&.disable]:cursor-not-allowed [&.disable]:opacity-50"
+	// Constrain the list to the modal's remaining height so Radix can scroll overflowing rows.
+	// Workspace keeps its separate regular and fixed sections with their own scrolling.
+	const ListContainer = effectiveViewMode === "workspace" ? "div" : ScrollArea
 	const modalContent = (
 		<div
 			className={cn(
@@ -2404,18 +2408,20 @@ function ProjectResourceSelectorModal({
 					</>
 				)}
 			</div>
-			<div
+			<ListContainer
 				className={cn(
-					"mt-2.5 h-[360px] w-full overflow-x-hidden md:h-auto",
+					"mt-2.5 h-[360px] min-h-0 w-full md:h-auto md:flex-1",
 					effectiveViewMode === "workspace"
-						? "min-h-0 overflow-hidden md:flex-1"
-						: "scrollbar-y-thin overflow-y-auto",
+						? "overflow-hidden"
+						: "[&_[data-slot='scroll-area-viewport']>div]:!block",
 				)}
 			>
 				{/* MagicSpin 会额外生成一层内容容器；工作区视图必须把高度和 min-h-0 传递到该层，内部滚动区才不会按内容撑开。 */}
 				<MagicSpin
 					spinning={shouldBlockPanelForLoading}
-					className="h-full min-h-0 w-full"
+					className={
+						effectiveViewMode === "workspace" ? "h-full min-h-0 w-full" : "w-full"
+					}
 					innerClassName={
 						effectiveViewMode === "workspace"
 							? "h-full min-h-0 overflow-hidden"
@@ -2480,7 +2486,7 @@ function ProjectResourceSelectorModal({
 						</>
 					)}
 				</MagicSpin>
-			</div>
+			</ListContainer>
 		</div>
 	)
 
