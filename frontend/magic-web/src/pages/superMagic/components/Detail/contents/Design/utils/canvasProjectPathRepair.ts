@@ -136,6 +136,7 @@ interface ResourceLookup {
 }
 
 const MAGIC_PROJECT_FILE_NAME = "magic.project.js"
+const DESIGN_CANVAS_DISPLAY_TYPE = "design"
 const CANVAS_RESOURCE_DIRS = new Set(["images", "videos", "audios"])
 const DIRECT_PATH_KEYS = new Set(["src", "file_dir", "file_path", "uri", "audio", "video", "mask"])
 const PATH_ARRAY_KEYS = new Set([
@@ -158,6 +159,24 @@ function normalizePath(value: unknown): string {
 
 function itemName(item: AttachmentItem): string {
 	return item.file_name || item.filename || item.display_filename || item.name || ""
+}
+
+/** Path repair rewrites Design canvas DSL only — not slide/PPT or other magic.project.js types. */
+function isDesignCanvasProjectRoot(root: AttachmentItem | undefined): boolean {
+	if (!root?.is_directory) return false
+	return root.display_config?.type === DESIGN_CANVAS_DISPLAY_TYPE
+}
+
+export function resolveCanvasOperationConfirmTitleKey(options: {
+	requiresCanvasRisk: boolean
+	hasPathRepairFailures: boolean
+}):
+	| "topicFiles.canvasOperationRisk.title"
+	| "topicFiles.canvasOperationRisk.pathRepairFailureTitle" {
+	if (options.requiresCanvasRisk) return "topicFiles.canvasOperationRisk.title"
+	if (options.hasPathRepairFailures)
+		return "topicFiles.canvasOperationRisk.pathRepairFailureTitle"
+	return "topicFiles.canvasOperationRisk.title"
 }
 
 function itemPath(
@@ -232,6 +251,7 @@ function collectCanvasProjects(items: AttachmentItem[], projectId?: string): Can
 		if (!isAttachmentPathConsistent(item, items)) continue
 		const parent = findParentItem(items, item)
 		if (!parent?.is_directory) continue
+		if (!isDesignCanvasProjectRoot(parent)) continue
 		if (!isAttachmentPathConsistent(parent, items)) continue
 		if (
 			projectId &&
@@ -415,6 +435,7 @@ function collectAffectedProjectsWithIndex(
 	const projects = new Map<string, CanvasProjectInfo>()
 
 	const maybeAddProject = (root: AttachmentItem, mainFile: AttachmentItem) => {
+		if (!isDesignCanvasProjectRoot(root)) return
 		if (
 			projectId &&
 			[root, mainFile].some(

@@ -7204,6 +7204,7 @@
 			"moveMixedContent": "This operation affects the canvas project entry file and data or resources required by the canvas content. The canvas may fail to open or lose visible content. Continue?",
 			"moveOpenFailureContent": "This operation will move the canvas project entry file. The canvas may fail to open. Continue?",
 			"pathRepairFailureContent": "Some canvas resource paths could not be repaired before this operation:\n{{failures}}\nContinue anyway?",
+			"pathRepairFailureTitle": "Canvas Path Preflight",
 			"pathRepairSaveFailed": "Canvas path repair failed. Please try again.",
 			"renameContentLossContent": "This operation will rename data or resources required by the canvas content. Some canvas content may disappear. Continue?",
 			"renameMixedContent": "This operation affects the canvas project entry file and data or resources required by the canvas content. The canvas may fail to open or lose visible content. Continue?",
