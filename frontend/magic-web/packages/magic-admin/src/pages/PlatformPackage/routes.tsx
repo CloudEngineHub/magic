@@ -34,6 +34,7 @@ export default {
 	path: RoutePath.Platform,
 	element: <PlatformPackageLayout />,
 	title: "nav.platform",
+	validateOrganization: ({ isOfficialOrg }) => isOfficialOrg,
 	meta: {
 		title: "nav.platform",
 	},
@@ -338,6 +339,7 @@ export default {
 				{
 					name: RouteName.AdminPlatformProviderAccess,
 					path: RoutePath.PlatformProviderAccess,
+					validateEnvironment: (env) => env.MAGIC_APP_ENV?.startsWith("saas") ?? false,
 					title: "nav.platformSubMenu.providerAccess",
 					element: <ProviderAccessPage />,
 					validate: (permissions: string[], isSuperAdmin?: boolean) => {
