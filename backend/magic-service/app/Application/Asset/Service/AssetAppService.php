@@ -168,6 +168,8 @@ class AssetAppService extends AbstractAssetAppService
             $this->createQuery($requestDTO, $dataIsolation),
             $page,
         );
+        // 标签可能来自官方组织；资产范围查询完成后再扩展隔离范围，避免影响资产本身的列表边界。
+        $dataIsolation->setContainOfficialOrganization(true);
         $this->enrichAssets($dataIsolation, $result['list'], $requestDTO->getScope()->value);
         $this->resolveAssetFileUrls($result['list']);
         $result['provider_assets'] = $this->providerAssetsByEntities($dataIsolation, $result['list']);
