@@ -314,7 +314,7 @@ export function PPTControlBar({
 								variant="ghost"
 								size="sm"
 								data-testid="ppt-control-bar-fullscreen-button"
-								className="h-7 w-7 p-0 text-foreground"
+								className="h-7 gap-[5px] px-[7px] text-[13px] font-normal text-foreground"
 								onClick={(e) => {
 									e.stopPropagation()
 									e.currentTarget.blur()
@@ -331,6 +331,9 @@ export function PPTControlBar({
 								) : (
 									<Maximize className="h-4 w-4" />
 								)}
+								{isFullscreen
+									? t("fileViewer.exitFullscreen")
+									: t("fileViewer.fullscreen")}
 							</Button>
 						</span>
 					</MagicTooltip>

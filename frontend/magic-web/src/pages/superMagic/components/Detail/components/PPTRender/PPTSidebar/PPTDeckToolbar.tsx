@@ -1,4 +1,4 @@
-import { useId, useRef, useState } from "react"
+import { useEffect, useId, useRef, useState } from "react"
 import { useTranslation } from "react-i18next"
 import { CheckSquare, MoreHorizontal, Loader2 } from "lucide-react"
 import { Button } from "@/components/shadcn-ui/button"
@@ -50,6 +50,12 @@ export default function PPTDeckToolbar({
 		}
 	}
 	const selectedCount = tools.selected.size
+	const actionsDisabled = !selectedCount || tools.busy
+	const [actionsOpen, setActionsOpen] = useState(false)
+	useEffect(() => {
+		// Do not reopen a stale menu when selection or editing becomes available again.
+		if (actionsDisabled || !tools.selecting || !allowEdit) setActionsOpen(false)
+	}, [actionsDisabled, tools.selecting, allowEdit])
 	const selectAllId = useId()
 	return (
 		<div
@@ -73,13 +79,16 @@ export default function PPTDeckToolbar({
 					{t("ppt.batch.select")}
 				</Button>
 				{tools.selecting && allowEdit ? (
-					<DropdownMenu>
-						<DropdownMenuTrigger asChild>
+					<DropdownMenu
+						open={actionsOpen && !actionsDisabled}
+						onOpenChange={(open) => setActionsOpen(open && !actionsDisabled)}
+					>
+						<DropdownMenuTrigger asChild disabled={actionsDisabled}>
 							<Button
 								size="sm"
 								variant="ghost"
 								className="h-6 gap-1 px-1.5 text-xs"
-								disabled={!selectedCount || tools.busy}
+								disabled={actionsDisabled}
 							>
 								<MoreHorizontal className="size-4" />
 								{t("ppt.batch.actions")}

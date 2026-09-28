@@ -1,5 +1,5 @@
 import PPTPresenterTimer from "./PPTPresenterTimer"
-import { useRef, useState } from "react"
+import { useEffect, useRef, useState } from "react"
 import { useTranslation } from "react-i18next"
 import { ChevronLeft, ChevronRight, Check, LogOut, Monitor } from "lucide-react"
 import { Button } from "@/components/shadcn-ui/button"
@@ -48,6 +48,43 @@ export default function PPTPresenterConsoleControls({
 }: PPTPresenterConsoleControlsProps) {
 	const { t } = useTranslation("super")
 	const controlsRef = useRef<HTMLDivElement>(null)
+	const screenTriggerRef = useRef<HTMLButtonElement>(null)
+	const [isScreenMenuOpen, setIsScreenMenuOpen] = useState(false)
+	useEffect(() => {
+		if (!isScreenMenuOpen) return
+		const ownerDocument = controlsRef.current?.ownerDocument
+		const ownerWindow = ownerDocument?.defaultView
+		if (!ownerDocument || !ownerWindow) return
+
+		// The console lives in a companion window; global document listeners miss its events.
+		const dismissOutside = (event: Event) => {
+			const target = event.target as Node | null
+			const menu = ownerDocument.getElementById(
+				screenTriggerRef.current?.getAttribute("aria-controls") || "",
+			)
+			if (target && !screenTriggerRef.current?.contains(target) && !menu?.contains(target))
+				setIsScreenMenuOpen(false)
+		}
+		const dismissOnEscape = (event: KeyboardEvent) => {
+			if (event.key === "Escape") {
+				event.stopPropagation()
+				setIsScreenMenuOpen(false)
+				screenTriggerRef.current?.focus()
+			}
+		}
+		// Clicks inside a slide iframe do not bubble to the console document.
+		const dismissOnBlur = () => setIsScreenMenuOpen(false)
+		ownerDocument.addEventListener("pointerdown", dismissOutside, true)
+		ownerDocument.addEventListener("focusin", dismissOutside)
+		ownerDocument.addEventListener("keydown", dismissOnEscape, true)
+		ownerWindow.addEventListener("blur", dismissOnBlur)
+		return () => {
+			ownerDocument.removeEventListener("pointerdown", dismissOutside, true)
+			ownerDocument.removeEventListener("focusin", dismissOutside)
+			ownerDocument.removeEventListener("keydown", dismissOnEscape, true)
+			ownerWindow.removeEventListener("blur", dismissOnBlur)
+		}
+	}, [isScreenMenuOpen])
 	const [isPageInputVisible, setIsPageInputVisible] = useState(false)
 	const [pageInput, setPageInput] = useState("")
 
@@ -121,12 +158,17 @@ export default function PPTPresenterConsoleControls({
 				<ChevronRight className="size-4" />
 			</Button>
 			{screens.length > 0 && (
-				<DropdownMenu>
+				<DropdownMenu
+					modal={false}
+					open={isScreenMenuOpen}
+					onOpenChange={setIsScreenMenuOpen}
+				>
 					<DropdownMenuTrigger asChild>
 						<Button
 							variant="ghost"
 							size="sm"
 							data-testid="ppt-presenter-console-screen-button"
+							ref={screenTriggerRef}
 							className="h-8 gap-1.5 text-white hover:bg-white/15 hover:text-white"
 							aria-label={t("ppt.presenter.selectScreen")}
 						>

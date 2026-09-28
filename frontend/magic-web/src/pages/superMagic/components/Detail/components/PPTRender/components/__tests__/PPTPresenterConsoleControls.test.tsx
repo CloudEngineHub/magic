@@ -9,6 +9,39 @@ vi.mock("react-i18next", () => ({
 }))
 
 describe("PPTPresenterConsoleControls", () => {
+	it("dismisses the screen menu outside, on window blur, and on Escape", () => {
+		render(
+			<PPTPresenterConsoleControls
+				activeIndex={0}
+				totalSlides={4}
+				isTransitioning={false}
+				screens={[{ label: "External display" }]}
+				selectedScreen={0}
+				onPrevSlide={vi.fn()}
+				onNextSlide={vi.fn()}
+				onJumpToPage={vi.fn()}
+				onSelectScreen={vi.fn()}
+				onExit={vi.fn()}
+			/>,
+		)
+		const trigger = screen.getByTestId("ppt-presenter-console-screen-button")
+		const open = () => {
+			fireEvent.keyDown(trigger, { key: "Enter" })
+			expect(trigger).toHaveAttribute("aria-expanded", "true")
+		}
+		open()
+		fireEvent.pointerDown(screen.getByRole("menu"))
+		expect(trigger).toHaveAttribute("aria-expanded", "true")
+		fireEvent.pointerDown(document.body)
+		expect(trigger).toHaveAttribute("aria-expanded", "false")
+		open()
+		fireEvent.blur(window)
+		expect(trigger).toHaveAttribute("aria-expanded", "false")
+		open()
+		fireEvent.keyDown(document.body, { key: "Escape" })
+		expect(trigger).toHaveAttribute("aria-expanded", "false")
+	})
+
 	it("exposes local navigation and exit actions", () => {
 		const onPrevSlide = vi.fn()
 		const onNextSlide = vi.fn()
