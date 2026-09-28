@@ -87,7 +87,9 @@ export default function CodeViewer(props: any) {
 		isDeleted,
 		loading: fileLoading,
 	} = useFileData({
-		enabled: !textFileSession,
+		enabled: true,
+		loadContent: !textFileSession,
+		isTabActive,
 		file_id,
 		updatedAt,
 		isEditing: isEditMode,
@@ -97,7 +99,10 @@ export default function CodeViewer(props: any) {
 	})
 
 	const [localContent, setContent] = useState<string>("")
-	const content = textFileSession?.content ?? localContent
+	const content =
+		fileVersion !== undefined
+			? (fileData ?? textFileSession?.content ?? "")
+			: (textFileSession?.content ?? localContent)
 	const loading = textFileSession?.loading ?? fileLoading
 	const [localDraft, setLocalDraft] = useState<string>("")
 	const editingCodeContent = textFileSession?.draft ?? localDraft

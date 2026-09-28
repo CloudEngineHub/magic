@@ -10,7 +10,7 @@ export const USER_FILE_PREVIEW_POLICY: Readonly<FilePreviewPolicy> = {
 	standalone: true,
 	editingPresence: false,
 	allowShare: false,
-	allowVersionHistory: false,
+	allowVersionHistory: true,
 	fileScope: "user",
 	syncWithAttachments: false,
 	persistTab: true,

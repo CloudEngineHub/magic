@@ -100,6 +100,40 @@ describe("useFileData", () => {
 		})
 	})
 
+	it("loads history versions without downloading content for an external text session", async () => {
+		renderHook(() =>
+			useFileData({
+				file_id: "file-1",
+				activeFileId: "stale-file",
+				isTabActive: true,
+				enabled: true,
+				loadContent: false,
+				content: "session content",
+			}),
+		)
+
+		await waitFor(() => {
+			expect(getFileHistoryVersionsMock).toHaveBeenCalledWith({
+				file_id: "file-1",
+				page_size: 10,
+			})
+		})
+		expect(getTemporaryDownloadUrlMock).not.toHaveBeenCalled()
+		expect(downloadFileContentMock).not.toHaveBeenCalled()
+	})
+
+	it("does not load history versions for an inactive cached tab", async () => {
+		renderHook(() =>
+			useFileData({
+				file_id: "file-1",
+				activeFileId: "file-1",
+				isTabActive: false,
+			}),
+		)
+
+		expect(getFileHistoryVersionsMock).not.toHaveBeenCalled()
+	})
+
 	it("does not read a share file while an external session supplies its content", async () => {
 		const access = createShareFileAccess({ token: "share-token", projectId: "origin-project" })
 		const { result, rerender } = renderHook(
