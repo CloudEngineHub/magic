@@ -595,6 +595,7 @@ export function FileManager(props: FileManagerProps) {
 					<div className="flex min-h-0 min-w-0 flex-1 flex-col">
 						<FileManagerToolbar
 							toolbarLeading={props.toolbarLeading}
+							compact={selecting}
 							management={
 								operations && commands
 									? {

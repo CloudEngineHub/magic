@@ -2,6 +2,9 @@ import {
 	ArrowLeft,
 	ArrowRight,
 	ArrowUp,
+	ArrowDown,
+	ArrowDownUp,
+	Check,
 	ChevronRight,
 	ChevronDown,
 	Copy,
@@ -18,6 +21,7 @@ import {
 import { Fragment, type ComponentProps, type ReactNode } from "react"
 import { useTranslation } from "react-i18next"
 import MagicTooltip from "@/components/base/MagicTooltip"
+import MagicDropdown from "@/components/base/MagicDropdown"
 import { Button } from "@/components/shadcn-ui/button"
 import { Input } from "@/components/shadcn-ui/input"
 import { cn } from "@/utils/cn"
@@ -40,6 +44,8 @@ interface Props {
 		actions: FileManagerActions
 	}
 	toolbarLeading?: ReactNode
+	/** 选择模式将路径、排序、搜索和刷新放到同一条可自适应工具栏。 */
+	compact?: boolean
 	path: FileManagerPathItem[]
 	canBack: boolean
 	canForward: boolean
@@ -84,64 +90,143 @@ export function FileManagerToolbar(props: Props) {
 		{ command: "copy", label: t("fileManager.copy"), Icon: Copy },
 		{ command: "paste", label: t("fileManager.paste"), Icon: ClipboardPaste },
 	] as const
+	const sortEntries = Object.entries(props.sortOptions) as [FileManagerSort, string][]
+	const sortSelector = (
+		<MagicDropdown
+			menu={{
+				items: sortEntries.map(([id, label]) => ({
+					key: id,
+					label: (
+						<div className="flex items-center justify-between gap-3">
+							<span className="truncate">{label}</span>
+							{props.sort === id && (
+								<Check size={14} className="shrink-0 text-primary" />
+							)}
+						</div>
+					),
+				})),
+				onClick: ({ key }) => props.onSort(key as FileManagerSort),
+			}}
+			getPopupContainer={() => props.getPopupContainer() ?? document.body}
+		>
+			<button
+				type="button"
+				aria-label={t("fileManager.sort")}
+				className="flex h-7 min-w-0 shrink-0 cursor-pointer items-center gap-1 rounded-md px-2 text-xs text-muted-foreground transition-colors hover:bg-muted"
+			>
+				<ArrowDownUp size={14} className="shrink-0" />
+				<span className="max-w-20 truncate">{props.sortOptions[props.sort]}</span>
+				{props.sortDirection === "ascending" ? (
+					<ArrowUp size={12} className="shrink-0" />
+				) : (
+					<ArrowDown size={12} className="shrink-0" />
+				)}
+				<ChevronDown size={12} className="shrink-0" />
+			</button>
+		</MagicDropdown>
+	)
+	const search = (
+		<div className="relative w-40 min-w-24 flex-[0_1_10rem]">
+			<Search
+				size={16}
+				className="pointer-events-none absolute left-2 top-1.5 text-muted-foreground"
+			/>
+			<Input
+				value={props.query}
+				onChange={(event) => props.onQuery(event.target.value)}
+				placeholder={
+					!management
+						? t("fileManager.searchProjectFiles")
+						: t("userSpace.searchDirectory")
+				}
+				aria-label={
+					!management
+						? t("fileManager.searchProjectFiles")
+						: t("userSpace.searchDirectory")
+				}
+				className="h-7 cursor-text rounded-md bg-muted/30 pl-8 text-xs"
+			/>
+		</div>
+	)
+	const refresh = (
+		<MagicTooltip
+			title={t("fileViewer.tabs.refresh")}
+			getPopupContainer={props.getPopupContainer}
+		>
+			<Button
+				variant="ghost"
+				size="icon"
+				className="size-7 cursor-pointer disabled:pointer-events-auto disabled:cursor-not-allowed"
+				aria-label={t("fileViewer.tabs.refresh")}
+				onClick={props.onRefresh}
+				disabled={props.loading}
+			>
+				<RefreshCw size={16} />
+			</Button>
+		</MagicTooltip>
+	)
+	const navigationButtons = navigation.map(({ label, Icon, run, disabled }) => (
+		<MagicTooltip key={label} title={label} getPopupContainer={props.getPopupContainer}>
+			<Button
+				variant="ghost"
+				size="icon"
+				className="size-7 cursor-pointer disabled:pointer-events-auto disabled:cursor-not-allowed"
+				aria-label={label}
+				onClick={run}
+				disabled={disabled}
+			>
+				<Icon size={16} />
+			</Button>
+		</MagicTooltip>
+	))
+	const pathNavigation = (
+		<nav
+			aria-label={t("fileManager.path")}
+			className="flex min-w-0 flex-[1_1_14rem] items-center overflow-x-auto"
+		>
+			{props.path.map((part, index) => (
+				<div key={part.id ?? "root"} className="flex min-w-0 shrink-0 items-center">
+					{index > 0 && (
+						<ChevronRight size={16} className="shrink-0 text-muted-foreground" />
+					)}
+					<MagicTooltip title={part.name} getPopupContainer={props.getPopupContainer}>
+						<Button
+							variant="ghost"
+							size="sm"
+							className={cn(
+								"h-7 max-w-44 cursor-pointer truncate px-2 text-xs font-normal disabled:pointer-events-auto disabled:cursor-not-allowed",
+								"data-[manager-drop-target=true]:bg-blue-500/10 data-[manager-drop-target=true]:ring-1 data-[manager-drop-target=true]:ring-inset data-[manager-drop-target=true]:ring-blue-500",
+							)}
+							aria-current={index === props.path.length - 1 ? "page" : undefined}
+							disabled={part.id === null}
+							onClick={() => part.id !== null && props.onNavigate(part.id)}
+							data-manager-target={part.id ?? undefined}
+						>
+							{part.name}
+						</Button>
+					</MagicTooltip>
+				</div>
+			))}
+		</nav>
+	)
+	if (props.compact) {
+		return (
+			<div className="flex min-w-0 shrink-0 flex-wrap items-center gap-1 border-b border-border/60 px-3 py-2">
+				{props.toolbarLeading}
+				{navigationButtons}
+				{pathNavigation}
+				{sortSelector}
+				{search}
+				{refresh}
+			</div>
+		)
+	}
 	return (
 		<>
 			<div className="flex shrink-0 flex-wrap items-center gap-1 px-3 pb-1 pt-2">
 				{props.toolbarLeading}
-				{navigation.map(({ label, Icon, run, disabled }) => (
-					<MagicTooltip
-						key={label}
-						title={label}
-						getPopupContainer={props.getPopupContainer}
-					>
-						<Button
-							variant="ghost"
-							size="icon"
-							className="size-7 cursor-pointer disabled:pointer-events-auto disabled:cursor-not-allowed"
-							aria-label={label}
-							onClick={run}
-							disabled={disabled}
-						>
-							<Icon size={16} />
-						</Button>
-					</MagicTooltip>
-				))}
-				<nav
-					aria-label={t("fileManager.path")}
-					className="flex min-w-0 flex-1 items-center overflow-x-auto"
-				>
-					{props.path.map((part, index) => (
-						<div key={part.id ?? "root"} className="flex min-w-0 shrink-0 items-center">
-							{index > 0 && (
-								<ChevronRight
-									size={16}
-									className="shrink-0 text-muted-foreground"
-								/>
-							)}
-							<MagicTooltip
-								title={part.name}
-								getPopupContainer={props.getPopupContainer}
-							>
-								<Button
-									variant="ghost"
-									size="sm"
-									className={cn(
-										"h-7 max-w-44 cursor-pointer truncate px-2 text-xs font-normal disabled:pointer-events-auto disabled:cursor-not-allowed",
-										"data-[manager-drop-target=true]:bg-blue-500/10 data-[manager-drop-target=true]:ring-1 data-[manager-drop-target=true]:ring-inset data-[manager-drop-target=true]:ring-blue-500",
-									)}
-									aria-current={
-										index === props.path.length - 1 ? "page" : undefined
-									}
-									disabled={part.id === null}
-									onClick={() => part.id !== null && props.onNavigate(part.id)}
-									data-manager-target={part.id ?? undefined}
-								>
-									{part.name}
-								</Button>
-							</MagicTooltip>
-						</div>
-					))}
-				</nav>
+				{navigationButtons}
+				{pathNavigation}
 				{management && (
 					<Button
 						variant="ghost"
@@ -229,23 +314,7 @@ export function FileManagerToolbar(props: Props) {
 					</>
 				)}
 				<div className="flex-1" />
-				<select
-					aria-label={t("fileManager.sort")}
-					className="h-7 max-w-28 cursor-pointer rounded-md bg-background px-2 text-xs outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:pointer-events-auto disabled:cursor-not-allowed"
-					value={props.sort}
-					onChange={(event) => props.onSort(event.target.value as FileManagerSort)}
-				>
-					{Object.entries(props.sortOptions).map(([id, label]) => (
-						<option key={id} value={id}>
-							{label}
-							{props.sort === id
-								? props.sortDirection === "ascending"
-									? " ↑"
-									: " ↓"
-								: ""}
-						</option>
-					))}
-				</select>
+				{sortSelector}
 				{management && (
 					<div className="flex items-center gap-0.5 rounded-lg bg-muted/60 p-0.5">
 						{(
@@ -277,42 +346,8 @@ export function FileManagerToolbar(props: Props) {
 						))}
 					</div>
 				)}
-				<div className="relative w-40 min-w-24">
-					<Search
-						size={16}
-						className="pointer-events-none absolute left-2 top-1.5 text-muted-foreground"
-					/>
-					<Input
-						value={props.query}
-						onChange={(event) => props.onQuery(event.target.value)}
-						placeholder={
-							!management
-								? t("fileManager.searchProjectFiles")
-								: t("userSpace.searchDirectory")
-						}
-						aria-label={
-							!management
-								? t("fileManager.searchProjectFiles")
-								: t("userSpace.searchDirectory")
-						}
-						className="h-7 cursor-text rounded-md bg-muted/30 pl-8 text-xs"
-					/>
-				</div>
-				<MagicTooltip
-					title={t("fileViewer.tabs.refresh")}
-					getPopupContainer={props.getPopupContainer}
-				>
-					<Button
-						variant="ghost"
-						size="icon"
-						className="size-7 cursor-pointer disabled:pointer-events-auto disabled:cursor-not-allowed"
-						aria-label={t("fileViewer.tabs.refresh")}
-						onClick={props.onRefresh}
-						disabled={props.loading}
-					>
-						<RefreshCw size={16} />
-					</Button>
-				</MagicTooltip>
+				{search}
+				{refresh}
 			</div>
 		</>
 	)
