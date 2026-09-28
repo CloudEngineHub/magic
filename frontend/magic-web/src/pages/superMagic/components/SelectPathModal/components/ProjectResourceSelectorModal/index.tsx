@@ -37,6 +37,7 @@ import FoldIcon from "@/pages/superMagic/assets/svg/file-folder.svg"
 import EmptyFilesIcon from "@/pages/superMagic/assets/svg/empty-files.svg"
 import { InputWithError } from "@/pages/superMagic/components/TopicFilesButton/components"
 import IconProject from "../../../icons/IconProject"
+import MicroAppIcon from "@/components/business/MentionPanel/components/icons/MicroAppIcon"
 import { FileResourceIcon } from "@/pages/superMagic/components/TopicFilesButton/components/FileResourceIcon"
 import PinnedTag from "@/pages/superMagic/components/EmptyWorkspacePanel/components/ProjectItem/components/PinnedTag"
 import CollaborationProjectTag from "@/pages/superMagic/components/CollaborationProjectTag"
@@ -134,8 +135,7 @@ function renderWorkspaceIcon(workspaceId: string) {
 }
 
 function renderProjectIcon(project: ProjectListItem) {
-	if (project.project_mode === TopicMode.MicroApp)
-		return <Boxes className="size-4 text-current" />
+	if (project.project_mode === TopicMode.MicroApp) return <MicroAppIcon />
 	const resourceType = (project as ResourceProject).resourceType
 	if (resourceType === "skill") return <Wrench className="size-4" />
 	if (resourceType === "agent") return <Bot className="size-4" />
@@ -1666,9 +1666,11 @@ function ProjectResourceSelectorModal({
 		}
 
 		return (
-			<div className="flex flex-col">
-				<div
-					className="shrink-0"
+			<div className="flex h-full min-h-0 flex-col">
+				{/* Reserve visible workspace rows; keep resource entries anchored below. */}
+				<ScrollArea
+					className="min-h-20 flex-1"
+					viewportClassName="[&>div]:!block"
 					data-testid="project-resource-selector-regular-workspaces"
 				>
 					{createWorkspaceHook.createWorkspaceShown && (
@@ -1724,10 +1726,11 @@ function ProjectResourceSelectorModal({
 							</div>
 						</div>
 					)}
-				</div>
+				</ScrollArea>
 				{fixedWorkspaces.length > 0 && (
-					<div
-						className="shrink-0 bg-card"
+					<ScrollArea
+						className="min-h-0 shrink bg-card"
+						viewportClassName="[&>div]:!block"
 						data-testid="project-resource-selector-fixed-workspaces"
 					>
 						{shouldSeparateFixedChannels && (
@@ -1737,7 +1740,7 @@ function ProjectResourceSelectorModal({
 							/>
 						)}
 						{fixedWorkspaces.map(renderWorkspaceItem)}
-					</div>
+					</ScrollArea>
 				)}
 			</div>
 		)
@@ -2212,8 +2215,8 @@ function ProjectResourceSelectorModal({
 		"inline-flex size-9 shrink-0 items-center justify-center rounded-md border border-border bg-card text-foreground shadow-sm hover:bg-fill active:bg-fill-secondary focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:pointer-events-none disabled:opacity-50 [&_svg]:text-foreground"
 	const breadcrumbItemBase =
 		"relative flex max-w-[150px] cursor-pointer items-center rounded-[4px] text-foreground transition-colors hover:not(.disable):not(.current):text-primary [&.disable]:cursor-not-allowed [&.disable]:opacity-50"
-	// Scroll workspace groups together so fixed entries cannot squeeze regular rows
-	// when dependency options or a short viewport reduce the available height.
+	// Workspace groups have independent scrolling so resource entries stay at the bottom.
+	const ListContainer = effectiveViewMode === "workspace" ? "div" : ScrollArea
 	const modalContent = (
 		<div
 			className={cn(
@@ -2449,11 +2452,19 @@ function ProjectResourceSelectorModal({
 					</>
 				)}
 			</div>
-			<ScrollArea
-				className="mt-2.5 h-[360px] min-h-0 w-full md:h-auto md:flex-1"
-				viewportClassName="[&>div]:!block"
-			>
-				<MagicSpin spinning={shouldBlockPanelForLoading} className="w-full">
+			<ListContainer className="mt-2.5 h-[360px] min-h-0 w-full overflow-hidden md:h-auto md:flex-1 [&_[data-slot='scroll-area-viewport']>div]:!block">
+				{/* Pass the available height through the spinner to the two workspace sections. */}
+				<MagicSpin
+					spinning={shouldBlockPanelForLoading}
+					className={
+						effectiveViewMode === "workspace" ? "h-full min-h-0 w-full" : "w-full"
+					}
+					innerClassName={
+						effectiveViewMode === "workspace"
+							? "h-full min-h-0 overflow-hidden"
+							: undefined
+					}
+				>
 					{effectiveViewMode === "workspace" &&
 						(!shouldBlockPanelForLoading ? (
 							renderWorkspaceList()
@@ -2512,7 +2523,7 @@ function ProjectResourceSelectorModal({
 						</>
 					)}
 				</MagicSpin>
-			</ScrollArea>
+			</ListContainer>
 		</div>
 	)
 
