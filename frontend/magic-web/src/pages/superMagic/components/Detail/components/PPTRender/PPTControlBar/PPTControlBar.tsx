@@ -112,11 +112,12 @@ export function PPTControlBar({
 			ref={containerRef}
 			data-testid="ppt-control-bar"
 			className={cn(
-				"pointer-events-none absolute inset-x-2 bottom-[18px] z-50 grid items-center justify-center gap-2",
+				"pointer-events-none absolute inset-x-2 bottom-[18px] z-50 items-center justify-center gap-2",
 				separateRows || !onReplaceTemplate
 					? "grid-cols-[auto_auto]"
 					: "grid-cols-[auto_auto_auto]",
-				isMobile ? "bottom-[20px]" : "",
+				// Keep mobile navigation and notes side by side, wrapping only when needed.
+				isMobile ? "bottom-[20px] flex flex-wrap" : "grid",
 				className,
 			)}
 		>
