@@ -159,8 +159,8 @@ export function FileManagerToolbar(props: Props) {
 				onFocus={() => {
 					if (props.compact) setSearchFocused(true)
 				}}
-				onBlur={() => {
-					if (props.compact && !props.query) setSearchFocused(false)
+				onBlur={(event) => {
+					if (props.compact && !event.currentTarget.value) setSearchFocused(false)
 				}}
 				className="h-7 cursor-text rounded-md bg-muted/30 pl-8 text-xs"
 			/>
