@@ -546,7 +546,8 @@ function PPTSidebar({
 					</div>
 				)}
 
-				{tools ? (
+				{/* Mobile keeps the thumbnail strip without the selection toolbar's column. */}
+				{tools && !isMobile ? (
 					<PPTDeckToolbar
 						tools={tools}
 						allowEdit={allowEdit}
