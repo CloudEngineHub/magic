@@ -57,7 +57,7 @@ export function MentionSelectionPanel({ items, onRemove, onClear, onNavigate }: 
 	return (
 		<aside
 			aria-label={t("fileManager.selectedFiles")}
-			className="flex min-h-0 w-64 shrink-0 flex-col border-l bg-muted/20"
+			className="flex min-h-0 w-60 shrink-0 flex-col border-l bg-muted/20"
 		>
 			<div className="flex h-11 shrink-0 items-center justify-between gap-2 border-b px-3">
 				<h3 className="flex items-center gap-2 text-sm font-medium">

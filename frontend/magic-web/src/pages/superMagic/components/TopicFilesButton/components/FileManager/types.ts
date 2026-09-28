@@ -59,6 +59,8 @@ export interface FileManagerRevealRequest {
 interface FileManagerBaseProps {
 	hidePlaces?: boolean
 	defaultView?: FileManagerView
+	/** 选择模式下显示在文件导航工具栏最左侧的返回入口。 */
+	toolbarLeading?: ReactNode
 	defaultWritePath?: string
 	/** 包含用户、组织与空间；身份变化时由入口以此 key 重新创建管理器。 */
 	scopeKey: string

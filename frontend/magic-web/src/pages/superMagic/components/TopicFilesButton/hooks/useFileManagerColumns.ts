@@ -15,6 +15,10 @@ interface ColumnDefinition {
 	min: number
 }
 
+interface Options {
+	defaultNameWidth?: number
+}
+
 const columns: ColumnDefinition[] = [
 	{ id: "name", width: 260, min: 160 },
 	{ id: "size", width: 90, min: 72 },
@@ -26,7 +30,7 @@ const columns: ColumnDefinition[] = [
 ]
 
 /** 列宽只属于当前管理器。指针移动只更新共同 CSS，结束时再提交小型 React 状态。 */
-export function useFileManagerColumns(saved?: FileManagerColumnsSnapshot) {
+export function useFileManagerColumns(saved?: FileManagerColumnsSnapshot, options?: Options) {
 	const { t } = useTranslation("super")
 	const containerRef = useRef<HTMLDivElement>(null)
 	const [visibleIds, setVisibleIds] = useState<FileManagerSort[]>(() =>
@@ -66,7 +70,7 @@ export function useFileManagerColumns(saved?: FileManagerColumnsSnapshot) {
 			visible
 				.map((column) =>
 					column.id === "name" && values.name === undefined
-						? `minmax(${column.width}px, 1fr)`
+						? `minmax(${options?.defaultNameWidth ?? column.width}px, 1fr)`
 						: `${values[column.id] ?? column.width}px`,
 				)
 				.join(" "),
@@ -77,7 +81,10 @@ export function useFileManagerColumns(saved?: FileManagerColumnsSnapshot) {
 			`${visible.reduce((sum, column) => sum + (values[column.id] ?? column.width), 44)}px`,
 		)
 	})
-	useLayoutEffect(() => applyWidths(widths), [widths, visibleIds, applyWidths])
+	useLayoutEffect(
+		() => applyWidths(widths),
+		[widths, visibleIds, options?.defaultNameWidth, applyWidths],
+	)
 	const clampWidth = (id: FileManagerSort, width: number) => {
 		const column = columns.find((entry) => entry.id === id)
 		if (!column) throw new Error(`Unknown file manager column: ${id}`)
@@ -114,6 +121,19 @@ export function useFileManagerColumns(saved?: FileManagerColumnsSnapshot) {
 		clampWidth,
 		toggle,
 	}
+}
+
+/**
+ * 选择器名称列按当前目录的常见名称长度估算：取 80 分位，避免少数超长名称把常用列撑开。
+ * 220—280px 保留缩进、复选框、图标和文件标签的空间；超长名称继续由 SmartTooltip 展示完整内容。
+ */
+export function getCompactNameColumnWidth(names: readonly string[]): number {
+	const lengths = names
+		.map((name) => [...name.trim()].length)
+		.filter((length) => length > 0)
+		.sort((a, b) => a - b)
+	const typicalLength = lengths[Math.floor(Math.max(0, lengths.length - 1) * 0.8)] ?? 8
+	return Math.max(220, Math.min(280, 136 + typicalLength * 11))
 }
 
 export function getFileManagerColumnValue(

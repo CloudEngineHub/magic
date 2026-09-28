@@ -43,6 +43,7 @@ export function MentionSourceSidebar({
 				key={workspace.id}
 				label={workspace.name || t("workspace.unnamedWorkspace")}
 				labelVariant="navigation"
+				labelClassName="text-xs"
 				leading={<Icon size={16} />}
 				hideChevron
 				testId={`picker-source-${workspace.id}`}
@@ -58,7 +59,7 @@ export function MentionSourceSidebar({
 	return (
 		<nav
 			aria-label={t("selectPathModal.workspace")}
-			className="flex min-h-0 w-44 shrink-0 flex-col border-r bg-muted/20 p-2"
+			className="flex min-h-0 w-40 shrink-0 flex-col border-r bg-muted/20 p-2"
 		>
 			<div className="shrink-0 px-2 py-2 text-xs font-medium text-muted-foreground">
 				{t("selectPathModal.workspace")}

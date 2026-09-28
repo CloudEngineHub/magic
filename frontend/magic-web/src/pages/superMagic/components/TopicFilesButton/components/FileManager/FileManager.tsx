@@ -16,6 +16,7 @@ import {
 	useFileManagerColumns,
 	getFileManagerColumnText,
 	getFileManagerColumnValue,
+	getCompactNameColumnWidth,
 } from "../../hooks/useFileManagerColumns"
 import { useFileManagerNavigation } from "../../hooks/useFileManagerNavigation"
 import { useFileManagerSelection } from "../../hooks/useFileManagerSelection"
@@ -59,7 +60,28 @@ export function FileManager(props: FileManagerProps) {
 	const activeProps = { ...props, isActive: props.isActive && !recycle }
 	const container = useRef<HTMLDivElement>(null)
 	const viewport = useRef<HTMLDivElement>(null)
-	const listColumns = useFileManagerColumns(initialState?.columns)
+	const compactNameWidth = useMemo(
+		() =>
+			selecting
+				? getCompactNameColumnWidth(
+						props.attachments
+							.slice(0, 256)
+							.map((item) =>
+								String(
+									item.display_filename ||
+										item.file_name ||
+										item.filename ||
+										item.name ||
+										"",
+								),
+							),
+					)
+				: undefined,
+		[props.attachments, selecting],
+	)
+	const listColumns = useFileManagerColumns(initialState?.columns, {
+		defaultNameWidth: compactNameWidth,
+	})
 	const getColumnText = useMemoizedFn((file: FilePresentation, column: FileManagerSort) =>
 		getFileManagerColumnText(file, column, i18n.language, props.rootName),
 	)
@@ -572,6 +594,7 @@ export function FileManager(props: FileManagerProps) {
 						)}
 					<div className="flex min-h-0 min-w-0 flex-1 flex-col">
 						<FileManagerToolbar
+							toolbarLeading={props.toolbarLeading}
 							management={
 								operations && commands
 									? {

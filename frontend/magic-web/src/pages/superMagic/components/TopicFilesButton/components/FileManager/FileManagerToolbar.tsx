@@ -15,7 +15,7 @@ import {
 	RefreshCw,
 	Trash2,
 } from "lucide-react"
-import { Fragment, type ComponentProps } from "react"
+import { Fragment, type ComponentProps, type ReactNode } from "react"
 import { useTranslation } from "react-i18next"
 import MagicTooltip from "@/components/base/MagicTooltip"
 import { Button } from "@/components/shadcn-ui/button"
@@ -39,6 +39,7 @@ interface Props {
 		uploadMenu: Omit<ComponentProps<typeof UploadMenuDropdown>, "children">
 		actions: FileManagerActions
 	}
+	toolbarLeading?: ReactNode
 	path: FileManagerPathItem[]
 	canBack: boolean
 	canForward: boolean
@@ -86,6 +87,7 @@ export function FileManagerToolbar(props: Props) {
 	return (
 		<>
 			<div className="flex shrink-0 flex-wrap items-center gap-1 px-3 pb-1 pt-2">
+				{props.toolbarLeading}
 				{navigation.map(({ label, Icon, run, disabled }) => (
 					<MagicTooltip
 						key={label}

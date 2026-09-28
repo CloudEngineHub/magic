@@ -3,7 +3,6 @@ import { useTranslation } from "react-i18next"
 import { ArrowLeft, FolderSearch } from "lucide-react"
 import { Button } from "@/components/shadcn-ui/button"
 import { Input } from "@/components/shadcn-ui/input"
-import { Popover, PopoverContent, PopoverTrigger } from "@/components/shadcn-ui/popover"
 import { useUserInfo } from "@/models/user/hooks"
 import { useOverlayZIndex } from "@/hooks/useOverlayZIndex"
 import type { FileManagerLocationSnapshot } from "@/models/config/repositories/SuperProjectStateTypes"
@@ -82,13 +81,12 @@ export function MentionDesktopPicker(props: Props) {
 	const identity = `${userInfo?.organization_code ?? ""}/${userInfo?.user_id ?? ""}`
 	const frame = useProjectManagerWindow(true, {
 		preferenceKey: "file_picker",
-		recommendedSize: { width: 1380, height: 800 },
+		recommendedSize: { width: 1160, height: 740 },
 		minSize: { width: 960, height: 560 },
 	})
 	const [query, setQuery] = useState("")
 	const [reveal, setReveal] = useState<FileManagerRevealRequest>()
 	const [rootVisit, setRootVisit] = useState(0)
-	const [cartOpen, setCartOpen] = useState(false)
 	const revealId = useRef(0)
 	const locations = useRef(new Map<string, FileManagerLocationSnapshot>())
 	const { viewMode = ViewMode.LIST, setViewMode } = useViewTogglePersistValue({
@@ -182,7 +180,6 @@ export function MentionDesktopPicker(props: Props) {
 		const selection = props.selections.find((item) => selectionKey(item) === key)
 		if (!selection) return
 		setQuery("")
-		setCartOpen(false)
 		if (target === "file" && selection.level === "attachment") {
 			setReveal({
 				fileId: resolveAttachmentId(selection.attachment) ?? "",
@@ -236,19 +233,6 @@ export function MentionDesktopPicker(props: Props) {
 					<div className="flex min-h-0 min-w-0 flex-1 flex-col">
 						{props.project && props.workspace ? (
 							<>
-								<div className="flex min-h-11 shrink-0 items-center border-b px-3">
-									<Button
-										variant="ghost"
-										size="sm"
-										onClick={() => {
-											setReveal(undefined)
-											props.onBack()
-										}}
-									>
-										<ArrowLeft size={16} />
-										{props.workspace.name}
-									</Button>
-								</div>
 								<div className="min-h-0 flex-1">
 									<FileManager
 										key={`${identity}:${props.project.id}:${rootVisit}`}
@@ -278,6 +262,20 @@ export function MentionDesktopPicker(props: Props) {
 												locations.current.set(props.project.id, snapshot)
 										}}
 										revealRequest={reveal}
+										toolbarLeading={
+											<Button
+												variant="ghost"
+												size="sm"
+												className="h-7 shrink-0 gap-1 px-1.5 text-xs font-normal"
+												onClick={() => {
+													setReveal(undefined)
+													props.onBack()
+												}}
+											>
+												<ArrowLeft size={16} />
+												{props.workspace.name}
+											</Button>
+										}
 									/>
 								</div>
 							</>
@@ -332,31 +330,13 @@ export function MentionDesktopPicker(props: Props) {
 							</>
 						)}
 					</div>
-					<div className="hidden min-h-0 [@container_(min-width:1050px)]:flex">
-						{panel}
-					</div>
+					<div className="flex min-h-0 w-60 shrink-0">{panel}</div>
 				</div>
 				<div className="flex min-h-14 shrink-0 items-center justify-between gap-3 border-t px-4">
 					<span className="text-xs text-muted-foreground">
 						{t("fileManager.selectedCount", { count: props.selections.length })}
 					</span>
 					<div className="flex items-center gap-2">
-						<Popover open={cartOpen} onOpenChange={setCartOpen}>
-							<PopoverTrigger asChild>
-								<Button
-									variant="outline"
-									className="[@container_(min-width:1050px)]:hidden"
-								>
-									{t("fileManager.selectedFiles")} ({props.selections.length})
-								</Button>
-							</PopoverTrigger>
-							<PopoverContent
-								align="end"
-								className="flex h-[min(480px,65dvh)] w-64 overflow-hidden p-0"
-							>
-								{panel}
-							</PopoverContent>
-						</Popover>
 						<Button variant="outline" onClick={props.onClose}>
 							{t("common.cancel")}
 						</Button>
