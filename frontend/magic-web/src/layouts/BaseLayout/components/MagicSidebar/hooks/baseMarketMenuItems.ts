@@ -1,7 +1,6 @@
-import { Bot, Mic, Presentation, type LucideIcon } from "lucide-react"
+import { Mic, Presentation, type LucideIcon } from "lucide-react"
 import { MagiClaw, Skills } from "@/enhance/lucide-react"
 import { RouteName } from "@/routes/constants"
-import { isPrivateDeployment } from "@/utils/env"
 import type { SidebarMarketMenuItem } from "@/layouts/BaseLayout/components/MagicSidebar/hooks/useSidebarMarketMenuItems.types"
 
 export const BASE_MARKET_MENU_ITEMS: SidebarMarketMenuItem[] = [
@@ -20,19 +19,6 @@ export const BASE_MARKET_MENU_ITEMS: SidebarMarketMenuItem[] = [
 		Icon: Mic,
 	},
 	{
-		titleKey: "sidebar:crewMarket.title",
-		routeName: RouteName.CrewMarket,
-		activeRouteNames: [
-			RouteName.CrewMarket,
-			RouteName.CrewMarketCrew,
-			RouteName.CrewEdit,
-			RouteName.MyCrew,
-			RouteName.CrewConversation,
-		],
-		testId: "sidebar-content-crew-market-button",
-		Icon: Bot,
-	},
-	{
 		titleKey: "sidebar:superLobster.title",
 		routeName: RouteName.MagiClaw,
 		activeRouteNames: [RouteName.MagiClaw, RouteName.ClawPlayground],
@@ -41,12 +27,17 @@ export const BASE_MARKET_MENU_ITEMS: SidebarMarketMenuItem[] = [
 	},
 	{
 		titleKey: "sidebar:skillsLibrary.title",
-		routeName: RouteName.CrewMarketSkills,
+		routeName: RouteName.CrewMarketCrew,
 		activeRouteNames: [
+			RouteName.CrewMarket,
+			RouteName.CrewMarketCrew,
 			RouteName.CrewMarketSkills,
 			RouteName.CrewMarketMcp,
+			RouteName.CrewEdit,
 			RouteName.SkillEdit,
 			RouteName.MySkills,
+			RouteName.MyCrew,
+			RouteName.CrewConversation,
 		],
 		testId: "sidebar-content-skills-library-button",
 		Icon: Skills as LucideIcon,
