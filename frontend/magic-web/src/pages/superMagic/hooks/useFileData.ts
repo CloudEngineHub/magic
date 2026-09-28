@@ -24,12 +24,14 @@ export const useFileData = ({
 	responseType = "text",
 	isEditing = false,
 	updatedAt,
-	activeFileId,
+	activeFileId: providedActiveFileId,
 	isFromNode = false,
 	content,
 	disabledUrlCache = false,
 	isSharePreview = false,
 	enabled = true,
+	loadContent = true,
+	isTabActive,
 }: {
 	file_id: string
 	responseType?: "text" | "arrayBuffer" | "blob"
@@ -43,6 +45,10 @@ export const useFileData = ({
 	isSharePreview?: boolean
 	/** 外部编辑会话供数时关闭读取、历史版本与事件订阅。 */
 	enabled?: boolean
+	/** Load the file body through this hook. Version metadata can be loaded independently. */
+	loadContent?: boolean
+	/** Whether this renderer is the active file tab. */
+	isTabActive?: boolean
 }) => {
 	const { t } = useTranslation("super")
 	const { isShareRoute } = useShareRoute()
@@ -71,11 +77,13 @@ export const useFileData = ({
 	/** 版本列表 */
 	const [fileVersionsList, setFileVersionsList] = useState<FileHistoryVersion[]>([])
 	/** 是否正在加载 */
-	const [loading, setLoading] = useState(enabled && isNil(content))
+	const [loading, setLoading] = useState(enabled && loadContent && isNil(content))
 	/** 是否是删除的文件 */
 	const [isDeleted, setIsDeleted] = useState(false)
 	/** Keep preview mounted across share-token refresh for the same file. */
 	const hasLoadedShareContentRef = useRef(false)
+	const activeFileId =
+		isTabActive === undefined ? providedActiveFileId : isTabActive ? file_id : null
 
 	/** 智能更新文件 URL - 只有当更新时间或版本变化时才更新 */
 	const updateFileUrlIfNeeded = useMemoizedFn(
@@ -178,7 +186,7 @@ export const useFileData = ({
 				page_size: 10,
 			})
 			if (res && res.list) {
-				if (isSelectNewest) {
+				if (isSelectNewest && loadContent) {
 					changeFileVersion(undefined, res.list)
 				} else {
 					setFileVersionsList(res.list)
@@ -278,8 +286,8 @@ export const useFileData = ({
 
 	/** 针对 分享/工具预览/内容审查 等场景，单独获取文件的最新下载地址 */
 	useEffect(() => {
-		if (!enabled || !file_id) return
-		if (waitingForShareAccess) {
+		if (!enabled || !loadContent || !file_id) return
+		if (waitingForShareAccess || (isShareFilePreview && !isShareFileAccess(fileAccess))) {
 			setLoading(true)
 			return
 		}
@@ -340,8 +348,10 @@ export const useFileData = ({
 		fileApi,
 		file_id,
 		isShareFilePreview,
+		loadContent,
 		shareAccessKey,
 		waitingForShareAccess,
+		fileAccess,
 	])
 
 	useEffect(() => {

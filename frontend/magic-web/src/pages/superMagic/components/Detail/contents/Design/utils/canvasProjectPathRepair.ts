@@ -622,6 +622,116 @@ function buildResourceLookup(
 	}
 }
 
+/**
+ * Builds the same lookup directly from the session index. The legacy array
+ * implementation resolves every parent with `items.find`, which becomes
+ * quadratic when a large attachment tree omits explicit relative paths.
+ */
+function buildResourceLookupFromIndex(
+	attachmentIndex: AttachmentIndex,
+	rootPath: string,
+	isComplete: boolean,
+): ResourceLookup {
+	const pathCache = new Map<string, string>()
+
+	const getPath = (item: AttachmentItem): string => {
+		const itemId = String(item.file_id || "")
+		if (itemId && pathCache.has(itemId)) return pathCache.get(itemId) || ""
+		const explicitPath = normalizePath(item.relative_file_path || item.path)
+		const parent = itemId ? attachmentIndex.getParentItemById(itemId) : null
+		// Preserve the legacy consistency guard without an O(n) parent lookup:
+		// explicit paths are trusted only when they agree with the indexed parent.
+		if (item.parent_id !== undefined && item.parent_id !== null && !parent) {
+			if (itemId) pathCache.set(itemId, "")
+			return ""
+		}
+		const parentPathValue = parent ? getPath(parent) : ""
+		if (explicitPath) {
+			if (parent && explicitPath !== `${parentPathValue}/${normalizePath(itemName(item))}`) {
+				if (itemId) pathCache.set(itemId, "")
+				return ""
+			}
+			if (itemId) pathCache.set(itemId, explicitPath)
+			return explicitPath
+		}
+		const path = parentPathValue
+			? `${parentPathValue}/${normalizePath(itemName(item))}`
+			: normalizePath(itemName(item))
+		if (itemId) pathCache.set(itemId, path)
+		return path
+	}
+
+	const fileIdsByPath = new Map<string, Set<string>>()
+	const directoryIdsByPath = new Map<string, Set<string>>()
+	const workspaceFileIdsByPath = new Map<string, Set<string>>()
+	const workspaceDirectoryIdsByPath = new Map<string, Set<string>>()
+	for (const key of attachmentIndex.allKeys) {
+		const item = attachmentIndex.getItemByKey(key)
+		if (!item) continue
+		if (!item.file_id) continue
+		const path = getPath(item)
+		if (!path) continue
+		const id = String(item.file_id)
+		const workspacePaths = item.is_directory
+			? workspaceDirectoryIdsByPath
+			: workspaceFileIdsByPath
+		const workspaceIds = workspacePaths.get(path)
+		if (workspaceIds) workspaceIds.add(id)
+		else workspacePaths.set(path, new Set([id]))
+
+		const relative = resourceRelativePath(rootPath, path)
+		if (!relative) continue
+		const pathIds = item.is_directory ? directoryIdsByPath : fileIdsByPath
+		const ids = pathIds.get(relative)
+		if (ids) ids.add(id)
+		else pathIds.set(relative, new Set([id]))
+	}
+
+	const toUniquePaths = (paths: Map<string, Set<string>>) => {
+		const unique = new Map<string, string>()
+		for (const [relative, ids] of paths)
+			if (ids.size === 1) unique.set(relative, `./${relative}`)
+		return unique
+	}
+	const toUniqueWorkspacePaths = (paths: Map<string, Set<string>>) => {
+		const unique = new Map<string, string>()
+		for (const [workspacePath, ids] of paths)
+			if (ids.size === 1) unique.set(workspacePath, `/${workspacePath}`)
+		return unique
+	}
+	const collectAmbiguousBarePaths = (
+		canvasPaths: Map<string, Set<string>>,
+		workspacePaths: Map<string, Set<string>>,
+	) => {
+		const ambiguous = new Set<string>()
+		for (const [workspacePath, ids] of workspacePaths)
+			if (ids.size > 1) ambiguous.add(workspacePath)
+		for (const [relative, canvasIds] of canvasPaths) {
+			const workspaceIds = workspacePaths.get(relative)
+			if (workspaceIds && new Set([...canvasIds, ...workspaceIds]).size > 1)
+				ambiguous.add(relative)
+		}
+		return ambiguous
+	}
+
+	return {
+		isComplete,
+		allFilePaths: new Set(fileIdsByPath.keys()),
+		uniqueFilePaths: toUniquePaths(fileIdsByPath),
+		allDirectoryPaths: new Set(directoryIdsByPath.keys()),
+		uniqueDirectoryPaths: toUniquePaths(directoryIdsByPath),
+		allWorkspaceFilePaths: new Set(workspaceFileIdsByPath.keys()),
+		uniqueWorkspaceFilePaths: toUniqueWorkspacePaths(workspaceFileIdsByPath),
+		allWorkspaceDirectoryPaths: new Set(workspaceDirectoryIdsByPath.keys()),
+		uniqueWorkspaceDirectoryPaths: toUniqueWorkspacePaths(workspaceDirectoryIdsByPath),
+		ambiguousBareFilePaths: collectAmbiguousBarePaths(fileIdsByPath, workspaceFileIdsByPath),
+		ambiguousBareDirectoryPaths: collectAmbiguousBarePaths(
+			directoryIdsByPath,
+			workspaceDirectoryIdsByPath,
+		),
+	}
+}
+
 function resolveCanvasRelativePath(
 	value: string,
 	rootPath: string,
@@ -1013,7 +1123,7 @@ export async function planCanvasProjectsBeforeFileOperation(
 		}
 	}
 
-	const flatItems = resolveFlatAttachmentItems(options)
+	const flatItems = options.attachmentIndex ? [] : resolveFlatAttachmentItems(options)
 
 	const mainFileIds = projects.map((project) => String(project.mainFile.file_id))
 	const mainContents = await getFileContentsByIds(mainFileIds, {
@@ -1024,11 +1134,17 @@ export async function planCanvasProjectsBeforeFileOperation(
 
 	const checkedProjects: ProjectCheckState[] = projects.map((project) => ({
 		project,
-		resourceLookup: buildResourceLookup(
-			flatItems,
-			project.rootPath,
-			options.attachmentSnapshotComplete === true,
-		),
+		resourceLookup: options.attachmentIndex
+			? buildResourceLookupFromIndex(
+					options.attachmentIndex,
+					project.rootPath,
+					options.attachmentSnapshotComplete === true,
+				)
+			: buildResourceLookup(
+					flatItems,
+					project.rootPath,
+					options.attachmentSnapshotComplete === true,
+				),
 		projectResult: {
 			projectName: project.projectName,
 			rootPath: project.rootPath,
