@@ -2045,14 +2045,10 @@ export class CanvasVisibilityManager {
 				geometryRevision: currentGeometryRevision,
 			})
 		) {
-			// Covered motion skips media admission and render-tree work, but scale-dependent controls
-			// still need the exact current visible set so an element entering the viewport is synced
-			// before the next scale dispatch. The coordinator reuses its spatial coverage here; this is
-			// much narrower than running the full visibility refresh below.
-			const viewportSnapshot = this.canvas.viewportQueryCoordinator.getSnapshot()
-			this.canvas.runtimeScheduler.replaceViewportScaleLayoutEligibility(
-				this.getViewportScaleLayoutElementIds(viewportSnapshot),
-			)
+			// The current viewport remains inside the previous layout window, so its visible elements
+			// are already eligible for scale-dependent layout work. Reusing that result keeps covered
+			// pan/scale frames out of the spatial query and eligibility rebuild hot path; crossing the
+			// window or another invalidation condition above still runs a complete refresh.
 			this.scheduleFarVisibilityDrain()
 			this.statsSnapshot.skippedViewportQueryCount += 1
 			return

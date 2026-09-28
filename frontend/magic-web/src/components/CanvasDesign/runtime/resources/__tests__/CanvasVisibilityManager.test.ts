@@ -1996,7 +1996,7 @@ describe("CanvasVisibilityManager covered viewport motion reuse", () => {
 		).toBe(false)
 	})
 
-	it("refreshes scale eligibility without running the full covered-motion refresh", () => {
+	it("skips covered pan and scale eligibility work", () => {
 		const viewportSnapshot = createViewportSnapshot(["image-1"])
 		const getSnapshot = vi.fn(() => viewportSnapshot)
 		const replaceViewportScaleLayoutEligibility = vi.fn()
@@ -2062,10 +2062,17 @@ describe("CanvasVisibilityManager covered viewport motion reuse", () => {
 
 		manager.refreshVisibility("viewport:pan", false)
 
-		expect(getSnapshot).toHaveBeenCalledTimes(1)
-		expect(replaceViewportScaleLayoutEligibility).toHaveBeenCalledWith(new Set(["image-1"]))
+		expect(getSnapshot).not.toHaveBeenCalled()
+		expect(replaceViewportScaleLayoutEligibility).not.toHaveBeenCalled()
 		expect(scheduleFarVisibilityDrain).toHaveBeenCalledTimes(1)
 		expect(manager.statsSnapshot.skippedViewportQueryCount).toBe(1)
+
+		manager.refreshVisibility("viewport:scale", false)
+
+		expect(getSnapshot).not.toHaveBeenCalled()
+		expect(replaceViewportScaleLayoutEligibility).not.toHaveBeenCalled()
+		expect(scheduleFarVisibilityDrain).toHaveBeenCalledTimes(2)
+		expect(manager.statsSnapshot.skippedViewportQueryCount).toBe(2)
 	})
 
 	it("keeps a coalesced non-viewport reason as a full refresh", () => {
