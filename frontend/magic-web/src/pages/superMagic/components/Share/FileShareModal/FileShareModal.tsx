@@ -43,6 +43,11 @@ import { mergeRecordingShareFileIds } from "@/pages/superMagic/pages/AudioRecord
 import FileShareDocumentDependenciesOption from "./FileShareDocumentDependenciesOption"
 import { useFileShareDocumentDependencies } from "./hooks/useFileShareDocumentDependencies"
 import { useShareTypePermissions } from "../hooks/useShareTypePermissions"
+import {
+	canCreateShareType,
+	isFreePlanFromSubscription,
+	pickDefaultShareType,
+} from "../utils/sharePlanRestrictions"
 import { useSharePermissionResource } from "../SharePermissionResourceContext"
 
 interface FileShareModalProps {
@@ -107,7 +112,7 @@ export default memo(function FileShareModal(props: FileShareModalProps) {
 	const { t } = useTranslation("super")
 	const isMobile = useIsMobile()
 
-	const isFreePlan = userStore.user.organizationSubscriptionInfo?.is_paid_plan === false
+	const isFreePlan = isFreePlanFromSubscription(userStore.user.organizationSubscriptionInfo)
 	const sharePermissionResource = useSharePermissionResource()
 	const shareTypePermissions = useShareTypePermissions(sharePermissionResource)
 	// Project and child-file shares inherit the permission group injected by their owning page.
@@ -456,9 +461,9 @@ export default memo(function FileShareModal(props: FileShareModalProps) {
 		}
 
 		// New resource shares start on the first option allowed by both function permission and plan.
-		const nextType = permittedShareTypes.find(
-			(type) => !isFreePlan || type === ShareType.Public,
-		)
+		// When nothing satisfies both gates the current type is kept: switching to another forbidden
+		// method would only trade one unusable option for another.
+		const nextType = pickDefaultShareType(permittedShareTypes, isFreePlan)
 		if (nextType !== undefined) commitShareType(nextType)
 	}, [commitShareType, externalResourceId, isFreePlan, permittedShareTypes, shareType])
 
@@ -740,6 +745,17 @@ export default memo(function FileShareModal(props: FileShareModalProps) {
 			return
 		}
 
+		// Backstop for the paid-plan gate. `ShareTypeField` already refuses to select a plan-disabled
+		// method and an existing share keeps its own one, so this only fires if some future caller
+		// sets the state directly — and it must never reach the create/update request.
+		if (
+			shouldControlShareType &&
+			!externalResourceId &&
+			!canCreateShareType(shareType, isFreePlan)
+		) {
+			return
+		}
+
 		// Validation: resource_name is required
 		if (!shareName || shareName.trim() === "") {
 			magicToast.error(t("share.shareNameRequired"))
@@ -785,9 +801,9 @@ export default memo(function FileShareModal(props: FileShareModalProps) {
 				target_ids:
 					shareType === ShareType.Organization && shareRange === "designated"
 						? shareTargets.map((t) => ({
-							target_type: t.target_type,
-							target_id: t.target_id,
-						}))
+								target_type: t.target_type,
+								target_id: t.target_id,
+							}))
 						: undefined,
 				...(shareType === ShareType.Organization
 					? {}
@@ -823,7 +839,7 @@ export default memo(function FileShareModal(props: FileShareModalProps) {
 			// Step 3: Generate share message and copy to clipboard (silently, no toast)
 			try {
 				const fileIds = apiResult?.file_ids || submittedFileIds
-				let fileDisplayConfig: { type?: string;[key: string]: unknown } | undefined =
+				let fileDisplayConfig: { type?: string; [key: string]: unknown } | undefined =
 					undefined
 
 				// 如果是单文件分享，获取文件详情
@@ -900,6 +916,7 @@ export default memo(function FileShareModal(props: FileShareModalProps) {
 		shareTargets,
 		documentDependencyAnalysisError,
 		isSelectedShareTypePermitted,
+		isFreePlan,
 		shouldControlShareType,
 		extraData.passwordEnabled,
 		extraData.password,
@@ -1310,21 +1327,21 @@ function applyShareDisplayNames<T extends { file_id?: string; children?: T[] }>(
 	return items.map((item) => ({
 		...item,
 		...((item.file_id && displayNameByFileId[item.file_id]) ||
-			getShareDisplayNameByFileName(item, displayNameByFileName)
+		getShareDisplayNameByFileName(item, displayNameByFileName)
 			? {
-				share_display_name:
-					displayNameByFileId[item.file_id || ""] ||
-					getShareDisplayNameByFileName(item, displayNameByFileName),
-			}
+					share_display_name:
+						displayNameByFileId[item.file_id || ""] ||
+						getShareDisplayNameByFileName(item, displayNameByFileName),
+				}
 			: {}),
 		...(item.children
 			? {
-				children: applyShareDisplayNames(
-					item.children,
-					displayNameByFileId,
-					displayNameByFileName,
-				),
-			}
+					children: applyShareDisplayNames(
+						item.children,
+						displayNameByFileId,
+						displayNameByFileName,
+					),
+				}
 			: {}),
 	}))
 }

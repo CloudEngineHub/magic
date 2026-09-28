@@ -155,10 +155,14 @@ export interface StoreAgentItem {
 	agent_code: string
 	user_code?: string | null
 	is_featured?: boolean
-	/** Resolved display fields returned by the market query endpoint. */
-	name: string
-	role: string
-	description: string
+	/** Resolved display fields returned by newer market query responses. */
+	name?: string
+	role?: string
+	description?: string
+	/** Localized fields returned by older/current API deployments. */
+	name_i18n?: CrewI18nText
+	role_i18n?: CrewI18nArrayText | null
+	description_i18n?: CrewI18nText | null
 	/** Agent icon object (url, type, color) */
 	icon: CrewIconObject | null
 	/** Icon type: 1=icon, 2=image */
@@ -229,12 +233,14 @@ export interface AgentItem {
 	/** Crew unique code (magic_super_magic_agents.code) */
 	code: string
 	user_role?: CollaboratorPermission
-	/** Display name returned by agent query list endpoints. */
-	name: string
-	/** Resolved role returned by agent query list endpoints. */
-	role: string
-	/** Display description returned by agent query list endpoints. */
-	description: string
+	/** Display fields returned by newer agent query responses. */
+	name?: string
+	role?: string
+	description?: string
+	/** Localized fields returned by older/current API deployments. */
+	name_i18n?: CrewI18nText
+	role_i18n?: CrewI18nArrayText | null
+	description_i18n?: CrewI18nText | null
 	/** Agent icon object (url, type, color) */
 	icon: CrewIconObject | null
 	/** Icon type: 1=icon, 2=image */

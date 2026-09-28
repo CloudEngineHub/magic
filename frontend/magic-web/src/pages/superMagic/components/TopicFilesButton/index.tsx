@@ -73,6 +73,8 @@ export interface TopicFilesButtonProps {
 	allowDownload?: boolean
 	// 是否允许只读场景复制文件到当前用户的项目
 	allowCopyTo?: boolean
+	/** Controls whether this file surface exposes the manual refresh action. */
+	showRefresh?: boolean
 	resolveTopicFileRowDecoration?: TopicFileRowDecorationResolver
 	mobileViewVariant?: "default" | "project-detail" | "chat-sheet"
 	refreshAttachments?: () => Promise<void> | void
@@ -125,6 +127,7 @@ const TopicFilesButton = forwardRef<TopicFilesButtonRef, TopicFilesButtonProps>(
 			filterBatchDownloadLayerMenuItems,
 			allowDownload,
 			allowCopyTo = false,
+			showRefresh,
 			resolveTopicFileRowDecoration,
 			fileHelpContext,
 			mobileViewVariant = "default",
@@ -284,6 +287,7 @@ const TopicFilesButton = forwardRef<TopicFilesButtonRef, TopicFilesButtonProps>(
 					filterBatchDownloadLayerMenuItems={filterBatchDownloadLayerMenuItems}
 					allowDownload={effectiveAllowDownload}
 					allowCopyTo={allowCopyTo}
+					showRefresh={showRefresh}
 					resolveTopicFileRowDecoration={resolveTopicFileRowDecoration}
 					fileHelpContext={fileHelpContext}
 					mobileViewVariant={mobileViewVariant}

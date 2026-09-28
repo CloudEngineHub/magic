@@ -73,6 +73,8 @@ export interface ProjectShareSheetController {
 	permittedShareTypes?: ShareType[]
 	shareTypePermissionLoading?: boolean
 	isSelectedShareTypePermitted?: boolean
+	/** Whether the organization is on a free plan, i.e. the paid-plan sharing gate applies. */
+	isFreePlan?: boolean
 	advancedOpen: boolean
 	defaultSelectedFileIds: string[]
 	selectedFileIds: string[]

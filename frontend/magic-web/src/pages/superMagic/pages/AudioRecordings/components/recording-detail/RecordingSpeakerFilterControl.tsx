@@ -222,6 +222,7 @@ function MobileSpeakerFilterSheet({
 					icon: <X />,
 					ariaLabel: t("actions.cancel"),
 					onClick: () => setOpen(false),
+					testId: "recording-detail-speaker-filter-close",
 				}}
 				headerTrailingAction={
 					filterActive
@@ -229,6 +230,7 @@ function MobileSpeakerFilterSheet({
 								icon: <RotateCcw />,
 								ariaLabel: t("detail.speakerFilterReset"),
 								onClick: onReset,
+								testId: "recording-detail-speaker-filter-reset",
 							}
 						: undefined
 				}

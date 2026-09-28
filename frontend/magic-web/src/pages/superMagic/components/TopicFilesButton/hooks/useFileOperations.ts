@@ -1304,9 +1304,21 @@ export function useFileOperations(options: UseFileOperationsOptions = {}) {
 			const slidePaths: string[] = Array.isArray(mergedDisplayConfig?.slides)
 				? mergedDisplayConfig.slides
 				: []
+			const isSlideProject = mergedDisplayConfig?.type === "slide" || slidePaths.length > 0
 			const isSingleFile = !slidePaths.length
 			const autoSize = !hasPPTMetadata(item)
-			const fileId = item.file_id || ""
+			const attachmentScope = folderChildren?.length
+				? folderChildren
+				: item.children?.length
+					? item.children
+					: (attachments ?? [])
+			// A slide folder owns display_config, but its entry HTML owns the readable file id.
+			// Preserve both instead of replacing the project with index.html and losing slidePaths.
+			const entryFile = isSlideProject
+				? getAppEntryFile(attachmentScope, mergedDisplayConfig)
+				: item
+			const fileId = entryFile?.file_id || ""
+			const sourceFileName = String(entryFile?.file_name || item.file_name || "index.html")
 			const fileName = String(
 				mergedDisplayConfig?.name || item.file_name || "export",
 			).replace(/\.html?$/i, "")
@@ -1334,6 +1346,10 @@ export function useFileOperations(options: UseFileOperationsOptions = {}) {
 			setExportingFiles((prev) => new Set(prev).add(item.file_id || ""))
 
 			try {
+				if (!fileId) {
+					magicToast.error(t("topicFiles.entryFileNotFound"))
+					return
+				}
 				assertPptxExportAvailable({ pageCount: isSingleFile ? 1 : slidePaths.length })
 				destinationLease = await openPptxDestination({
 					suggestedName: String(
@@ -1349,9 +1365,6 @@ export function useFileOperations(options: UseFileOperationsOptions = {}) {
 				})
 
 				{
-					const attachmentScope = folderChildren?.length
-						? folderChildren
-						: (attachments ?? [])
 					const pptFontResolver = documentExportService.get()?.getPptFontResolver?.()
 					const destination = destinationLease.destination
 					const streamingHandle = startPptxStreamingExportFromFactory(
@@ -1359,7 +1372,7 @@ export function useFileOperations(options: UseFileOperationsOptions = {}) {
 							const source = isSingleFile
 								? iterateSingleExportSlide({
 										fileId,
-										fileName: item.file_name,
+										fileName: sourceFileName,
 										attachmentList: attachments ?? [],
 										access: fileAccess ?? undefined,
 										fileApi,
@@ -1369,7 +1382,7 @@ export function useFileOperations(options: UseFileOperationsOptions = {}) {
 										slidePaths,
 										attachmentList: attachmentScope,
 										mainFileId: fileId,
-										mainFileName: item.file_name,
+										mainFileName: sourceFileName,
 										displayConfig: mergedDisplayConfig,
 										access: fileAccess ?? undefined,
 										fileApi,
@@ -1378,7 +1391,7 @@ export function useFileOperations(options: UseFileOperationsOptions = {}) {
 							return iteratePreparedPptxPages(source, {
 								attachments: attachments ?? [],
 								fileId,
-								fileName: item.file_name,
+								fileName: sourceFileName,
 								attachmentList: attachments ?? [],
 								displayConfig: mergedDisplayConfig,
 								signal,

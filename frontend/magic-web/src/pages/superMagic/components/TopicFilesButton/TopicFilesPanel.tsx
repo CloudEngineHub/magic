@@ -108,6 +108,8 @@ interface TopicFilesPanelProps {
 	contentBefore?: ReactNode
 	/** 宿主已有空状态或错误说明时，隐藏默认空文件提示，仍保留文件树与工具栏。 */
 	showEmptyState?: boolean
+	/** Controls whether this file surface exposes the manual refresh action. */
+	showRefresh?: boolean
 	/** 文件树所属空间及其能力配置。 */
 	spaceConfig?: TopicFilesSpaceConfig
 	/** 判断节点是否允许参与移动和多选等变更操作。 */
@@ -177,6 +179,7 @@ const TopicFilesPanel = forwardRef<TopicFilesPanelRef, TopicFilesPanelProps>(
 			headerLayout = "inline",
 			contentBefore,
 			showEmptyState = true,
+			showRefresh,
 			spaceConfig,
 			isItemSelectable,
 			operationRoot,
@@ -202,6 +205,7 @@ const TopicFilesPanel = forwardRef<TopicFilesPanelRef, TopicFilesPanelProps>(
 		const capabilities = resolveTopicFilesCapabilities(spaceConfig?.capabilities)
 		const isChatProject = isCachedChatWorkspaceProject(selectedProject)
 		const { isShareRoute } = useShareRoute()
+		const shouldShowRefresh = showRefresh ?? !isShareRoute
 		const [fileFilters] = useState({
 			documents: true,
 			multimedia: true,
@@ -670,6 +674,7 @@ const TopicFilesPanel = forwardRef<TopicFilesPanelRef, TopicFilesPanelProps>(
 				key="normal-header"
 				title={resolvedTitle}
 				isShareRoute={isShareRoute}
+				showRefresh={shouldShowRefresh}
 				refreshLoading={loading || refreshLoading}
 				allowEdit={allowEdit}
 				showMobileActions={showMobileActions}

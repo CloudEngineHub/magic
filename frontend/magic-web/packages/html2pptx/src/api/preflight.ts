@@ -17,6 +17,8 @@ export interface PreflightOptions {
 	stagingPolicy?: StagingPolicy
 	hasInjectedPackager?: boolean
 	hasInjectedStagingStore?: boolean
+	/** True when the caller explicitly provides an in-memory replay route. */
+	hasInMemoryStagingStore?: boolean
 }
 
 /** Capability gate for the large-file path; no cumulative media-size limit is imposed. */
@@ -46,7 +48,12 @@ export function preflightPptxExport(options: PreflightOptions = {}): ExportPrefl
 			severity: "error",
 		})
 	}
-	if (requiresOpfs && !options.hasInjectedStagingStore && !hasOpfs()) {
+	if (
+		requiresOpfs &&
+		!options.hasInjectedStagingStore &&
+		!options.hasInMemoryStagingStore &&
+		!hasOpfs()
+	) {
 		errors.push({
 			code: "opfs-unavailable",
 			message:

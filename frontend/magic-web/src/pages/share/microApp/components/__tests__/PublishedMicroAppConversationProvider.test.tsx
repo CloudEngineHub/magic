@@ -11,7 +11,10 @@ import { FileAccessProvider, useFileAccess } from "@/pages/superMagic/fileAccess
 import { createShareFileAccess } from "@/pages/superMagic/fileAccess/fileAccessContext"
 import { useHostConversation } from "@/pages/superMagic/contexts/HostConversationContext"
 import { AppStoreProvider, useAppStore } from "@/pages/superMagic/pages/MicroAppPage/context"
+import pubsub, { PubSubEvents } from "@/utils/pubsub"
+import type { ProjectFilesStore } from "@/stores/projectFiles"
 import BasePublishedMicroAppConversationProvider from "../PublishedMicroAppConversationProvider"
+import { useDefaultModeModelListRefreshOnMount } from "@/pages/superMagic/hooks/useFeaturedModeListRefresh"
 
 function PublishedMicroAppConversationProvider(
 	props: Omit<
@@ -34,9 +37,10 @@ interface TestLayoutProps extends Record<string, unknown> {
 const layoutMocks = vi.hoisted(() => ({
 	props: null as TestLayoutProps | null,
 	messagePanelProps: null as Record<string, unknown> | null,
+	mobileProps: null as Record<string, unknown> | null,
 	historyPanelProps: null as Record<string, unknown> | null,
 	tasksProps: null as Record<string, unknown> | null,
-	expand: () => {},
+	expand: () => undefined,
 }))
 
 const responsiveMocks = vi.hoisted(() => ({ isMobile: false }))
@@ -75,6 +79,7 @@ vi.mock("@/pages/superMagic/pages/MicroAppPage/components/AppConversationPanel",
 
 vi.mock("@/pages/superMagic/pages/MicroAppPage/components/MicroAppMobileConversation", () => ({
 	default: function MockMicroAppMobileConversation(props: Record<string, unknown>) {
+		layoutMocks.mobileProps = props
 		const fileAccess = useFileAccess()
 		return props.open ? (
 			<div
@@ -112,6 +117,10 @@ vi.mock("@/pages/superMagic/pages/TopicPage/components/TopicDesktopPanels", () =
 
 vi.mock("@/pages/superMagic/hooks/useScopedMessageHeaderTopicActions", () => ({
 	useScopedMessageHeaderTopicActions: () => ({}),
+}))
+
+vi.mock("@/pages/superMagic/hooks/useFeaturedModeListRefresh", () => ({
+	useDefaultModeModelListRefreshOnMount: vi.fn(),
 }))
 
 vi.mock("@/pages/superMagic/components/MessageHeader", () => ({
@@ -162,6 +171,18 @@ vi.mock("@dtyq/magic-admin-v2", () => ({
 	createRouteObjects: () => [],
 	RuntimeMode: { OpenSource: "open-source" },
 }))
+vi.mock("@dtyq/magic-admin", () => ({
+	RouteName: {
+		Admin: "admin",
+		AdminPlatformAIModel: "admin-platform-ai-model",
+	},
+	PlatformPackageRoutes: {},
+	AiManageRoutes: {},
+	EnterpriseManageRoutes: {},
+	otherRoutes: [],
+}))
+vi.mock("@dtyq/magic-admin/components", () => ({}))
+vi.mock("@dtyq/magic-admin/provider", () => ({}))
 
 vi.mock("@/models/user", async () => {
 	const { makeAutoObservable } = await import("mobx")
@@ -224,6 +245,7 @@ describe("PublishedMicroAppConversationProvider", () => {
 		layoutMocks.tasksProps = null
 		layoutMocks.props = null
 		layoutMocks.messagePanelProps = null
+		layoutMocks.mobileProps = null
 		layoutMocks.historyPanelProps = null
 		vi.mocked(loadProjectAttachments).mockClear()
 		vi.mocked(SuperMagicApi.getMicroAppRuntimeProject).mockReset()
@@ -231,6 +253,7 @@ describe("PublishedMicroAppConversationProvider", () => {
 		vi.mocked(SuperMagicApi.getProjectDetail).mockReset()
 		vi.mocked(SuperMagicApi.getTopicsByProjectId).mockReset()
 		vi.mocked(SuperMagicApi.getMicroAppRuntimeProject).mockResolvedValue({ exists: false })
+		vi.mocked(useDefaultModeModelListRefreshOnMount).mockClear()
 	})
 
 	it("does not crash while legacy share data has no source organization", () => {
@@ -257,6 +280,19 @@ describe("PublishedMicroAppConversationProvider", () => {
 
 		expect(screen.getByTestId("preview-child")).toBeInTheDocument()
 		expect(screen.queryByTestId("topic-desktop-panels")).not.toBeInTheDocument()
+	})
+
+	it("prefetches the default model catalog for the runtime conversation", async () => {
+		render(
+			<PublishedMicroAppConversationProvider appId="app-1">
+				<div data-testid="preview-child" />
+			</PublishedMicroAppConversationProvider>,
+		)
+
+		expect(useDefaultModeModelListRefreshOnMount).toHaveBeenCalled()
+		await waitFor(() => {
+			expect(SuperMagicApi.getMicroAppRuntimeProject).toHaveBeenCalled()
+		})
 	})
 
 	it("hides the sidebar when the runtime project does not exist", async () => {
@@ -991,6 +1027,249 @@ describe("PublishedMicroAppConversationProvider", () => {
 			})
 		})
 		expect(layoutMocks.messagePanelProps?.topicStore).toBe(usageTopicStore)
+	})
+
+	it("provides onTerminalTopicStatusChange and updates projectFilesStore on attachment changes", async () => {
+		const initialFile = {
+			file_id: "file-1",
+			file_name: "index.html",
+			file_key: "index.html",
+			type: "file",
+		}
+		const generatedFile = {
+			file_id: "file-2",
+			file_name: "result.xlsx",
+			file_key: "output/result.xlsx",
+			type: "file",
+		}
+
+		vi.mocked(SuperMagicApi.getMicroAppRuntimeProject).mockResolvedValue({
+			exists: true,
+			project: { id: "runtime-project-1" },
+		} as never)
+		vi.mocked(SuperMagicApi.getProjectDetail).mockResolvedValue({
+			id: "runtime-project-1",
+		} as never)
+		vi.mocked(SuperMagicApi.getTopicsByProjectId).mockResolvedValue({ list: [] } as never)
+		vi.mocked(loadProjectAttachments).mockResolvedValue({
+			tree: [initialFile],
+			list: [initialFile],
+		} as never)
+
+		render(
+			<PublishedMicroAppConversationProvider appId="app-1">
+				<div />
+			</PublishedMicroAppConversationProvider>,
+		)
+
+		await waitFor(() => {
+			expect(layoutMocks.messagePanelProps?.selectedProject).toMatchObject({
+				id: "runtime-project-1",
+			})
+		})
+
+		const filesStore = layoutMocks.messagePanelProps?.projectFilesStore as ProjectFilesStore
+		expect(filesStore).toBeDefined()
+		expect(filesStore.workspaceFilesList).toEqual(
+			expect.arrayContaining([expect.objectContaining({ file_id: "file-1" })]),
+		)
+		expect(layoutMocks.messagePanelProps?.onTerminalTopicStatusChange).toBeTypeOf("function")
+
+		// Simulate new files generated and Update_Attachments event published
+		vi.mocked(loadProjectAttachments).mockResolvedValue({
+			tree: [initialFile, generatedFile],
+			list: [initialFile, generatedFile],
+		} as never)
+
+		await act(async () => {
+			pubsub.publish(PubSubEvents.Update_Attachments, { projectId: "runtime-project-1" })
+		})
+
+		await waitFor(() => {
+			expect(filesStore.workspaceFilesList).toEqual(
+				expect.arrayContaining([
+					expect.objectContaining({ file_id: "file-1" }),
+					expect.objectContaining({ file_id: "file-2", file_name: "result.xlsx" }),
+				]),
+			)
+		})
+	})
+
+	it("forwards onTerminalTopicStatusChange and projectFilesStore to mobile conversation", async () => {
+		responsiveMocks.isMobile = true
+		vi.mocked(SuperMagicApi.getMicroAppRuntimeProject).mockResolvedValue({
+			exists: true,
+			project: { id: "runtime-project-1" },
+		} as never)
+		vi.mocked(SuperMagicApi.getProjectDetail).mockResolvedValue({
+			id: "runtime-project-1",
+		} as never)
+		vi.mocked(SuperMagicApi.getTopicsByProjectId).mockResolvedValue({ list: [] } as never)
+		vi.mocked(loadProjectAttachments).mockResolvedValue({
+			tree: [],
+			list: [],
+		} as never)
+
+		render(
+			<PublishedMicroAppConversationProvider appId="app-1">
+				<div />
+			</PublishedMicroAppConversationProvider>,
+		)
+
+		await waitFor(() => {
+			expect(screen.getByTestId("published-micro-app-mobile-surface")).toBeInTheDocument()
+		})
+
+		// Open mobile conversation drawer
+		fireEvent.click(screen.getByRole("button"))
+
+		await waitFor(() => {
+			expect(layoutMocks.mobileProps?.open).toBe(true)
+		})
+
+		expect(layoutMocks.mobileProps?.onTerminalTopicStatusChange).toBeTypeOf("function")
+		expect(layoutMocks.mobileProps?.projectFilesStore).toBeDefined()
+	})
+
+	it("syncs attachments to appStore.runtimeProjectFilesStore in editor preview mode", async () => {
+		const generatedFile = {
+			file_id: "file-99",
+			file_name: "export.csv",
+			file_key: "export.csv",
+			type: "file",
+		}
+
+		vi.mocked(SuperMagicApi.getMicroAppRuntimeProject).mockResolvedValue({
+			exists: true,
+			project: { id: "runtime-project-1" },
+		} as never)
+		vi.mocked(SuperMagicApi.getProjectDetail).mockResolvedValue({
+			id: "runtime-project-1",
+		} as never)
+		vi.mocked(SuperMagicApi.getTopicsByProjectId).mockResolvedValue({ list: [] } as never)
+		vi.mocked(loadProjectAttachments).mockResolvedValue({
+			tree: [generatedFile],
+			list: [generatedFile],
+		} as never)
+
+		let rootStore: ReturnType<typeof useAppStore> | undefined
+		function EditorPreviewHarness() {
+			const store = useAppStore()
+			rootStore = store
+			return (
+				<PublishedMicroAppConversationProvider appId="app-1">
+					<div />
+				</PublishedMicroAppConversationProvider>
+			)
+		}
+
+		render(
+			<AppStoreProvider>
+				<EditorPreviewHarness />
+			</AppStoreProvider>,
+		)
+
+		await waitFor(() => {
+			expect(layoutMocks.messagePanelProps?.selectedProject).toMatchObject({
+				id: "runtime-project-1",
+			})
+		})
+
+		expect(layoutMocks.messagePanelProps?.projectFilesStore).toBe(
+			rootStore?.runtimeProjectFilesStore,
+		)
+		expect(rootStore?.runtimeProjectFilesStore.workspaceFilesList).toEqual(
+			expect.arrayContaining([expect.objectContaining({ file_id: "file-99" })]),
+		)
+	})
+
+	it("does not invoke the update callback when the event targets another project", async () => {
+		vi.mocked(SuperMagicApi.getMicroAppRuntimeProject).mockResolvedValue({
+			exists: true,
+			project: { id: "runtime-project-1" },
+		} as never)
+		vi.mocked(SuperMagicApi.getProjectDetail).mockResolvedValue({
+			id: "runtime-project-1",
+		} as never)
+		vi.mocked(SuperMagicApi.getTopicsByProjectId).mockResolvedValue({ list: [] } as never)
+		vi.mocked(loadProjectAttachments).mockResolvedValue({
+			tree: [],
+			list: [],
+		} as never)
+
+		render(
+			<PublishedMicroAppConversationProvider appId="app-1">
+				<div />
+			</PublishedMicroAppConversationProvider>,
+		)
+
+		await waitFor(() => {
+			expect(layoutMocks.messagePanelProps?.selectedProject).toMatchObject({
+				id: "runtime-project-1",
+			})
+		})
+
+		const loadCount = vi.mocked(loadProjectAttachments).mock.calls.length
+		const callback = vi.fn()
+
+		await act(async () => {
+			pubsub.publish(PubSubEvents.Update_Attachments, {
+				projectId: "other-project",
+				callback,
+			})
+		})
+
+		expect(callback).not.toHaveBeenCalled()
+		expect(vi.mocked(loadProjectAttachments)).toHaveBeenCalledTimes(loadCount)
+	})
+
+	it("ignores stale attachment refreshes after unmount", async () => {
+		const refresh = createDeferred<{ tree: unknown[]; list: unknown[] }>()
+		vi.mocked(SuperMagicApi.getMicroAppRuntimeProject).mockResolvedValue({
+			exists: true,
+			project: { id: "runtime-project-1" },
+		} as never)
+		vi.mocked(SuperMagicApi.getProjectDetail).mockResolvedValue({
+			id: "runtime-project-1",
+		} as never)
+		vi.mocked(SuperMagicApi.getTopicsByProjectId).mockResolvedValue({ list: [] } as never)
+		vi.mocked(loadProjectAttachments)
+			.mockResolvedValueOnce({
+				tree: [{ file_id: "file-1", file_name: "index.html", type: "file" }],
+				list: [{ file_id: "file-1", file_name: "index.html", type: "file" }],
+			} as never)
+			.mockReturnValueOnce(refresh.promise as never)
+
+		const view = render(
+			<PublishedMicroAppConversationProvider appId="app-1">
+				<div />
+			</PublishedMicroAppConversationProvider>,
+		)
+
+		await waitFor(() => {
+			expect(layoutMocks.messagePanelProps?.selectedProject).toMatchObject({
+				id: "runtime-project-1",
+			})
+		})
+
+		const filesStore = layoutMocks.messagePanelProps?.projectFilesStore as ProjectFilesStore
+
+		await act(async () => {
+			pubsub.publish(PubSubEvents.Update_Attachments, { projectId: "runtime-project-1" })
+		})
+
+		view.unmount()
+		await act(async () => {
+			refresh.resolve({
+				tree: [{ file_id: "stale-file", file_name: "stale.html", type: "file" }],
+				list: [{ file_id: "stale-file", file_name: "stale.html", type: "file" }],
+			})
+			await refresh.promise
+		})
+
+		expect(filesStore.workspaceFilesList).not.toEqual(
+			expect.arrayContaining([expect.objectContaining({ file_id: "stale-file" })]),
+		)
 	})
 })
 

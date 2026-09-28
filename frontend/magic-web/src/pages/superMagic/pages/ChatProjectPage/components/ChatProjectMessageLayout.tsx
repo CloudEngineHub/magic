@@ -63,7 +63,7 @@ export default function ChatProjectMessageLayout({
 	return (
 		<div
 			ref={layoutRef}
-			className="h-full min-h-0 w-full"
+			className="min-h-0 w-full flex-1"
 			data-testid="chat-project-message-layout"
 		>
 			{/* Keep the Ant bar hidden because the shared handle owns the visible resize interaction. */}

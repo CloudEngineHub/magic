@@ -3879,8 +3879,8 @@ class RecordSummaryService {
 		if (indexdbSaveSuccess) {
 			this.triggerPeriodicUpload()
 		} else {
-			// 如果保存失败，则直接上传分片
-			this.chunkUploader.uploadChunk(storedChunk)
+			// Keep the fallback chunk registered in the workspace even when local persistence fails.
+			this.chunkUploader.uploadChunkAndSave(storedChunk).catch(() => undefined)
 		}
 	}
 

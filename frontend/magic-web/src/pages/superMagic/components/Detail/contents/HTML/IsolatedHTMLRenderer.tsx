@@ -1611,6 +1611,7 @@ const IsolatedHTMLRendererInner = forwardRef<IsolatedHTMLRendererRef, IsolatedHT
 				locationSearch: htmlNavigation?.search || "",
 				locationAnchor: htmlNavigation?.hash || "",
 				navigationRequestId,
+				navigationBasePath: htmlEntryFilePath,
 			})
 			const request = {
 				requestId: navigationRequestId,
@@ -1750,6 +1751,7 @@ const IsolatedHTMLRendererInner = forwardRef<IsolatedHTMLRendererRef, IsolatedHT
 						locationSearch: htmlNavigation?.search || "",
 						locationAnchor: htmlNavigation?.hash || "",
 						navigationRequestId,
+						navigationBasePath: htmlEntryFilePath,
 					})
 					const request = {
 						requestId: navigationRequestId,

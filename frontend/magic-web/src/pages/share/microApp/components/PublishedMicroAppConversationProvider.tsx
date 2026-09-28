@@ -33,6 +33,7 @@ import { HostConversationProvider } from "@/pages/superMagic/contexts/HostConver
 import { userStore } from "@/models/user"
 import { loadProjectAttachments } from "@/pages/superMagic/services/projectAttachmentsLoader"
 import { useIsMobile } from "@/hooks/useIsMobile"
+import { useDefaultModeModelListRefreshOnMount } from "@/pages/superMagic/hooks/useFeaturedModeListRefresh"
 
 import { FileAccessProvider } from "@/pages/superMagic/fileAccess/FileAccessProvider"
 import { createSessionFileAccess } from "@/pages/superMagic/fileAccess/fileAccessContext"
@@ -41,6 +42,16 @@ import { usePublishedRuntimePreview } from "@/pages/share/microApp/hooks/usePubl
 import PublishedMicroAppSidebar, { type PublishedMicroAppPanel } from "./PublishedMicroAppSidebar"
 import { useMicroAppAuthentication } from "../hooks/useMicroAppAuthentication"
 import magicToast from "@/components/base/MagicToaster/utils"
+import { useMemoizedFn } from "ahooks"
+import { useProjectAttachmentsChangeRealtime } from "@/pages/superMagic/hooks/useProjectAttachmentsChangeRealtime"
+import { useAttachmentsPolling } from "@/pages/superMagic/hooks/useAttachmentsPolling"
+import { AttachmentDataProcessor } from "@/pages/superMagic/utils/attachmentDataProcessor"
+import type { AttachmentItem } from "@/pages/superMagic/components/TopicFilesButton/hooks"
+import pubsub, { PubSubEvents } from "@/utils/pubsub"
+import {
+	normalizeUpdateAttachmentsPayload,
+	type SuperMagicUpdateAttachmentsRequest,
+} from "@/pages/superMagic/services/attachmentsTopicSync"
 
 const RUNTIME_PROJECT_LOAD_SUPERSEDED = "Runtime project load superseded"
 
@@ -113,11 +124,92 @@ const PublishedMicroAppConversationSurface = observer(
 			topicStore: typeof conversation.topicStore
 		}> | null>(null)
 		const ensurePromiseAppIdRef = useRef<string | null>(null)
-		const projectFilesStore = useMemo(() => new ProjectFilesStore(), [])
-		const mentionPanelStore = useMemo(
-			() => createMentionPanelStore(projectFilesStore),
+		const ownProjectFilesStore = useMemo(() => new ProjectFilesStore(), [])
+		const projectFilesStore = preferUsageConversation
+			? appStore.runtimeProjectFilesStore
+			: ownProjectFilesStore
+		const ownMentionPanelStore = useMemo(
+			() => createMentionPanelStore(ownProjectFilesStore),
+			[ownProjectFilesStore],
+		)
+		const mentionPanelStore = preferUsageConversation
+			? appStore.runtimeMentionPanelStore
+			: ownMentionPanelStore
+
+		// Synchronize runtime project attachments across realtime WebSocket updates,
+		// task completion polling, and pubsub events. This ensures MarkdownLink components
+		// in the message list stay enabled when files are generated or modified.
+		const handleAttachmentsChange = useCallback(
+			({ tree, list }: { tree: AttachmentItem[]; list: AttachmentItem[] }) => {
+				const processedData = AttachmentDataProcessor.processAttachmentData(
+					{ tree, list },
+					{ preserveList: true },
+				)
+				projectFilesStore.setWorkspaceFileTree(processedData.tree, {
+					list: processedData.list,
+					source: "PublishedMicroApp.attachmentsChange",
+				})
+			},
 			[projectFilesStore],
 		)
+
+		const { checkNowDebounced: checkAttachmentsNowDebounced } = useAttachmentsPolling({
+			projectId: runtimeProject?.id,
+			store: projectFilesStore,
+			autoStart: false,
+			onAttachmentsChange: handleAttachmentsChange,
+			onError: useMemoizedFn((error: unknown) => {
+				console.error("Failed to poll published micro-app attachments:", error)
+			}),
+		})
+
+		useProjectAttachmentsChangeRealtime({
+			projectId: runtimeProject?.id,
+			store: projectFilesStore,
+			onAttachmentsChange: handleAttachmentsChange,
+			onFallbackError: useMemoizedFn((error: unknown) => {
+				console.error("Failed to refresh realtime published micro-app attachments:", error)
+			}),
+		})
+
+		useEffect(() => {
+			let cancelled = false
+			const handleUpdateAttachments = (
+				payloadOrCallback?: SuperMagicUpdateAttachmentsRequest,
+			) => {
+				const payload = normalizeUpdateAttachmentsPayload(payloadOrCallback)
+				const pid = runtimeProject?.id
+				if (!pid) {
+					payload.callback?.()
+					return
+				}
+				if (payload.projectId && payload.projectId !== pid) {
+					// Another subscriber owns this project; do not complete its wait.
+					return
+				}
+				loadProjectAttachments({
+					projectId: pid,
+					enableErrorMessagePrompt: false,
+				})
+					.then((attachmentResult) => {
+						if (!cancelled) {
+							handleAttachmentsChange(attachmentResult)
+						}
+						payload.callback?.()
+					})
+					.catch((error) => {
+						console.error("Failed to refresh published micro-app attachments:", error)
+						payload.callback?.()
+					})
+			}
+
+			pubsub.subscribe(PubSubEvents.Update_Attachments, handleUpdateAttachments)
+			return () => {
+				cancelled = true
+				pubsub.unsubscribe(PubSubEvents.Update_Attachments, handleUpdateAttachments)
+			}
+		}, [handleAttachmentsChange, runtimeProject?.id])
+
 		// Runtime attachments belong to the current user, independently of the source share.
 		const runtimeFileAccess = useMemo(
 			() =>
@@ -170,10 +262,7 @@ const PublishedMicroAppConversationSurface = observer(
 						enableErrorMessagePrompt: false,
 					})
 					if (!isCurrent()) return null
-					projectFilesStore.setWorkspaceFileTree(attachmentResult.tree, {
-						list: attachmentResult.list,
-						source: "published-micro-app-runtime",
-					})
+					handleAttachmentsChange(attachmentResult)
 					projectFilesStore.setAttachmentLoadStatus(loadedProject.id, "ready")
 				} catch (error) {
 					if (!isCurrent()) return null
@@ -186,7 +275,7 @@ const PublishedMicroAppConversationSurface = observer(
 				setRuntimeProjectState("ready")
 				return loadedProject
 			},
-			[conversation, projectFilesStore],
+			[conversation, handleAttachmentsChange, projectFilesStore],
 		)
 
 		useEffect(() => {
@@ -324,6 +413,9 @@ const PublishedMicroAppConversationSurface = observer(
 											onSelectDetail={handleSelectDetail}
 											onOpenFile={handleOpenFile}
 											onOpenChange={setMobileConversationOpen}
+											onTerminalTopicStatusChange={
+												checkAttachmentsNowDebounced
+											}
 											lockToMicroAppMode={false}
 											microAppId={appId}
 											microAppName={appName}
@@ -411,6 +503,7 @@ const PublishedMicroAppConversationSurface = observer(
 								isConversationPanelCollapsed={isConversationPanelCollapsed}
 								onToggleConversationPanel={onToggleConversationPanel}
 								onExpandConversationPanel={onExpandConversationPanel}
+								onTerminalTopicStatusChange={checkAttachmentsNowDebounced}
 								historyTriggerMode={historyTriggerMode}
 								isHistoryPanelOpen={isHistoryPanelOpen}
 								onToggleHistoryPanel={onToggleHistoryPanel}
@@ -449,7 +542,18 @@ function PublishedMicroAppConversationProvider({
 		</PublishedMicroAppConversationSurface>
 	)
 	if (existingStore) return surface
-	return <AppStoreProvider>{surface}</AppStoreProvider>
+	// Share page has no MicroAppPageController; prefetch default models here.
+	return (
+		<AppStoreProvider>
+			<PublishedMicroAppDefaultModelPrefetch />
+			{surface}
+		</AppStoreProvider>
+	)
+}
+
+function PublishedMicroAppDefaultModelPrefetch() {
+	useDefaultModeModelListRefreshOnMount()
+	return null
 }
 
 export default PublishedMicroAppConversationProvider

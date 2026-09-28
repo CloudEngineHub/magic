@@ -363,12 +363,14 @@ export function useTopicListActions({
 					icon: <X />,
 					ariaLabel: t("common.cancel"),
 					onClick: () => setDeleteModalVisible(false),
+					testId: "topic-delete-popup-close",
 				}}
 				headerTrailingAction={{
 					icon: <Check />,
 					ariaLabel: t("common.confirm"),
 					onClick: handleDeleteConfirm,
 					tone: "destructive",
+					testId: "topic-delete-popup-confirm",
 				}}
 				bodyClassName="max-h-[80dvh] p-0"
 				zIndex={1021}

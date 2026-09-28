@@ -524,7 +524,10 @@ vi.mock("../../../components/CommonHeaderV2", () => ({
 		}
 
 		return (
-			<div data-testid="common-header">
+			<div
+				data-testid="common-header"
+				data-show-refresh={String(Boolean(props.showRefreshButton))}
+			>
 				{props.actionConfig?.customActions
 					?.filter((action) => {
 						if (typeof action.visible === "function") return action.visible(context)
@@ -580,20 +583,12 @@ describe("HTML", () => {
 				"data-test-id-prefix",
 				"html-editor",
 			)
-			expect(screen.getByTestId("ai-edit-button")).toHaveAttribute("data-max-items", "3")
-			expect(screen.getByTestId("ai-edit-button")).toHaveAttribute(
-				"data-test-id-prefix",
-				"html-editor",
-			)
-			expect(screen.getByTestId("ai-edit-button")).toHaveAttribute(
-				"data-has-primary-action",
-				"true",
-			)
+			expect(screen.getByTestId("html-ai-pick-button")).toBeInTheDocument()
 			expect(screen.getByTestId("html-edit-button")).toHaveTextContent("common.edit")
 		})
 	})
 
-	it("should hide the AI edit button in code preview mode", async () => {
+	it("should hide the AI pick button in code preview mode", async () => {
 		render(
 			<HTML
 				{...baseProps}
@@ -605,7 +600,7 @@ describe("HTML", () => {
 		)
 
 		await waitFor(() => {
-			expect(screen.queryByTestId("ai-edit-button")).not.toBeInTheDocument()
+			expect(screen.queryByTestId("html-ai-pick-button")).not.toBeInTheDocument()
 		})
 	})
 
@@ -743,6 +738,104 @@ describe("HTML", () => {
 		)
 	})
 
+	it("opens UTF-8 encoded paths from a Chinese folder", async () => {
+		const openFileTab = vi.fn()
+		const currentFile = {
+			file_id: "file-1",
+			file_name: "index.html",
+			relative_file_path: "中文场景/index.html",
+		}
+		const targetFile = {
+			file_id: "file-2",
+			file_name: "目标页面.html",
+			relative_file_path: "中文场景/目标页面.html",
+		}
+		const nestedFile = {
+			file_id: "file-3",
+			file_name: "深层页面.html",
+			relative_file_path: "中文场景/子文件夹/深层页面.html",
+		}
+		const rootDetail = {
+			file_id: "file-4",
+			file_name: "detail.html",
+			relative_file_path: "detail.html",
+		}
+		const rootIndex = {
+			file_id: "file-5",
+			file_name: "index.html",
+			relative_file_path: "index.html",
+		}
+		render(
+			<HTML
+				{...baseProps}
+				viewMode="desktop"
+				isEditMode={false}
+				attachmentList={[currentFile, targetFile, nestedFile, rootDetail, rootIndex]}
+				openFileTab={openFileTab}
+			/>,
+		)
+		await waitFor(() => expect(mockIsolatedHTMLRendererProps).toHaveBeenCalled())
+		const props = mockIsolatedHTMLRendererProps.mock.lastCall?.[0]
+		const encodedTarget =
+			"/%E4%B8%AD%E6%96%87%E5%9C%BA%E6%99%AF/%E7%9B%AE%E6%A0%87%E9%A1%B5%E9%9D%A2.html?keyword=%E6%B5%8B%E8%AF%95#section-a"
+
+		act(() => props.openNewTab("file-1", encodedTarget, false))
+		expect(openFileTab).toHaveBeenCalledWith(
+			{
+				...targetFile,
+				htmlNavigation: {
+					filePath:
+						"/%E4%B8%AD%E6%96%87%E5%9C%BA%E6%99%AF/%E7%9B%AE%E6%A0%87%E9%A1%B5%E9%9D%A2.html",
+					search: "?keyword=%E6%B5%8B%E8%AF%95",
+					hash: "#section-a",
+					anchor: "section-a",
+				},
+			},
+			false,
+		)
+
+		act(() =>
+			props.openNewTab(
+				"file-1",
+				"/%E4%B8%AD%E6%96%87%E5%9C%BA%E6%99%AF/%E5%AD%90%E6%96%87%E4%BB%B6%E5%A4%B9/%E6%B7%B1%E5%B1%82%E9%A1%B5%E9%9D%A2.html",
+				false,
+			),
+		)
+		expect(openFileTab).toHaveBeenLastCalledWith(
+			expect.objectContaining({ file_id: "file-3" }),
+			false,
+		)
+
+		act(() => props.openNewTab("file-1", "/detail.html", false))
+		expect(openFileTab).toHaveBeenLastCalledWith(
+			expect.objectContaining({ file_id: "file-4" }),
+			false,
+		)
+
+		act(() => props.openNewTab("file-3", "/index.html", false))
+		expect(openFileTab).toHaveBeenLastCalledWith(
+			expect.objectContaining({ file_id: "file-5" }),
+			false,
+		)
+
+		act(() =>
+			props.openNewTab(
+				"file-1",
+				"/%E4%B8%AD%E6%96%87%E5%9C%BA%E6%99%AF/index.html?from=chinese-folder",
+				false,
+			),
+		)
+		expect(openFileTab).toHaveBeenLastCalledWith(
+			expect.objectContaining({
+				file_id: "file-1",
+				htmlNavigation: expect.objectContaining({
+					search: "?from=chinese-folder",
+				}),
+			}),
+			false,
+		)
+	})
+
 	it("opens the resolved file through the host callback with query and hash intact", async () => {
 		const openFileTab = vi.fn()
 		const currentFile = {
@@ -779,6 +872,141 @@ describe("HTML", () => {
 			},
 			false,
 		)
+	})
+
+	it("does not fall back to nested index.html when root index.html is missing", async () => {
+		const openFileTab = vi.fn()
+		const currentFile = {
+			file_id: "file-1",
+			file_name: "detail.html",
+			relative_file_path: "detail.html",
+		}
+		const nestedFile = {
+			file_id: "nested-admin",
+			file_name: "index.html",
+			relative_file_path: "admin/index.html",
+		}
+		render(
+			<HTML
+				{...baseProps}
+				viewMode="desktop"
+				isEditMode={false}
+				attachmentList={[currentFile, nestedFile]}
+				openFileTab={openFileTab}
+			/>,
+		)
+		await waitFor(() => expect(mockIsolatedHTMLRendererProps).toHaveBeenCalled())
+		const props = mockIsolatedHTMLRendererProps.mock.lastCall?.[0]
+		act(() => props.openNewTab("file-1", "/index.html", false))
+		expect(openFileTab).not.toHaveBeenCalled()
+
+		act(() => props.openNewTab("file-1", "/", false))
+		expect(openFileTab).not.toHaveBeenCalled()
+	})
+
+	it("resolves root index.html instead of earlier nested index.html when both exist", async () => {
+		const openFileTab = vi.fn()
+		const currentFile = {
+			file_id: "file-1",
+			file_name: "detail.html",
+			relative_file_path: "detail.html",
+		}
+		const nestedFile = {
+			file_id: "nested-admin",
+			file_name: "index.html",
+			relative_file_path: "admin/index.html",
+		}
+		const rootFile = {
+			file_id: "root-index",
+			file_name: "index.html",
+			relative_file_path: "index.html",
+		}
+		render(
+			<HTML
+				{...baseProps}
+				viewMode="desktop"
+				isEditMode={false}
+				attachmentList={[currentFile, nestedFile, rootFile]}
+				openFileTab={openFileTab}
+			/>,
+		)
+		await waitFor(() => expect(mockIsolatedHTMLRendererProps).toHaveBeenCalled())
+		const props = mockIsolatedHTMLRendererProps.mock.lastCall?.[0]
+		act(() => props.openNewTab("file-1", "/index.html", false))
+		expect(openFileTab).toHaveBeenCalledWith(
+			expect.objectContaining({ file_id: "root-index" }),
+			false,
+		)
+	})
+
+	it("does not fall back to an index.html with an empty relative path", async () => {
+		const openFileTab = vi.fn()
+		const currentFile = {
+			file_id: "file-1",
+			file_name: "detail.html",
+			relative_file_path: "detail.html",
+		}
+		const nestedFile = {
+			file_id: "nested-admin",
+			file_name: "index.html",
+			relative_file_path: "admin/index.html",
+		}
+		const rootFileWithoutPath = {
+			file_id: "root-without-path",
+			file_name: "index.html",
+			relative_file_path: "",
+		}
+		render(
+			<HTML
+				{...baseProps}
+				viewMode="desktop"
+				isEditMode={false}
+				attachmentList={[currentFile, nestedFile, rootFileWithoutPath]}
+				openFileTab={openFileTab}
+			/>,
+		)
+		await waitFor(() => expect(mockIsolatedHTMLRendererProps).toHaveBeenCalled())
+		const props = mockIsolatedHTMLRendererProps.mock.lastCall?.[0]
+		act(() => props.openNewTab("file-1", "/index.html", false))
+		expect(openFileTab).not.toHaveBeenCalled()
+	})
+
+	it("hides the HTML refresh action when showRefresh is false", async () => {
+		render(<HTML {...baseProps} viewMode="desktop" isEditMode={false} showRefresh={false} />)
+
+		await waitFor(() => {
+			expect(screen.getByTestId("common-header")).toHaveAttribute(
+				"data-show-refresh",
+				"false",
+			)
+		})
+	})
+
+	it("does not fall back to nested entry even with backslash paths", async () => {
+		const openFileTab = vi.fn()
+		const currentFile = {
+			file_id: "file-1",
+			file_name: "detail.html",
+			relative_file_path: "detail.html",
+		}
+		const nestedWinFile = {
+			file_id: "nested-win",
+			file_name: "index.html",
+			relative_file_path: "admin\\index.html",
+		}
+		render(
+			<HTML
+				{...baseProps}
+				viewMode="desktop"
+				isEditMode={false}
+				attachmentList={[currentFile, nestedWinFile]}
+				openFileTab={openFileTab}
+			/>,
+		)
+		await waitFor(() => expect(mockIsolatedHTMLRendererProps).toHaveBeenCalled())
+		const props = mockIsolatedHTMLRendererProps.mock.lastCall?.[0]
+		act(() => props.openNewTab("file-1", "/", false))
+		expect(openFileTab).not.toHaveBeenCalled()
 	})
 
 	it("should pass HTML navigation state to the isolated renderer", async () => {

@@ -276,9 +276,10 @@ export function useWorkspacePage(): UseWorkspacePageReturn {
 
 	/**
 	 * 新建项目时仅刷新当前工作区列表，让用户继续停留在当前页完成后续操作。
+	 * Bind create to the route workspace so this page does not inherit a stale store selection.
 	 */
 	const handleCreateProject = useMemoizedFn(async (projectName: string) => {
-		if (!selectedWorkspace) return
+		if (!activeWorkspaceId) return
 		const normalizedProjectName = projectName.trim()
 		if (!normalizedProjectName) return
 
@@ -287,6 +288,7 @@ export function useWorkspacePage(): UseWorkspacePageReturn {
 				projectMode: TopicMode.Empty,
 				isAutoSelect: false,
 				projectName: normalizedProjectName,
+				workspaceId: activeWorkspaceId,
 			})
 
 			if (!result?.project) {

@@ -1,6 +1,7 @@
 import type Dexie from "dexie"
 import type { Table } from "dexie"
 import { GlobalBaseRepository } from "@/models/repository/GlobalBaseRepository"
+import { isQuotaExceeded, reportCaughtStorageFailure } from "@/app/services/storage/storageFailure"
 
 export const PPT_THUMBNAIL_CACHE_POLICY = {
 	maxBytes: 100 * 1024 * 1024,
@@ -56,12 +57,11 @@ function isValidBody(
 	)
 }
 
+/** Dexie may wrap QuotaExceededError; unwrap one level before the shared detector. */
 function isQuotaError(error: unknown): boolean {
-	if (!error || typeof error !== "object") return false
-	return (
-		("name" in error && error.name === "QuotaExceededError") ||
-		("inner" in error && isQuotaError(error.inner))
-	)
+	if (isQuotaExceeded(error)) return true
+	if (!error || typeof error !== "object" || !("inner" in error)) return false
+	return isQuotaExceeded(error.inner)
 }
 
 /** 只管理可重建的 PPT 图片；容量统计读元数据，不把所有图片体加载进内存。 */
@@ -158,6 +158,12 @@ export class PPTThumbnailCacheRepository extends GlobalBaseRepository<ThumbnailM
 				} catch (error) {
 					// 在公共 Repository 包装错误前识别配额；恢复只淘汰本缓存，最多重试一次。
 					if (!isQuotaError(error) || !shouldCommit()) throw error
+					reportCaughtStorageFailure({
+						eventKey: "ppt_thumbnail_cache_set_failed",
+						error,
+						message: "Failed to persist PPT thumbnail cache",
+						key: PPTThumbnailCacheRepository.tableName,
+					})
 					await db.transaction("rw", tables.metadata, tables.bodies, () =>
 						this.pruneTables(
 							tables,

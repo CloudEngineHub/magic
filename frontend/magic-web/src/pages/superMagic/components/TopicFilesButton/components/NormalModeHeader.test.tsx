@@ -64,4 +64,43 @@ describe("NormalModeHeader", () => {
 		expect(screen.queryByTestId("file-header-upload-button")).not.toBeInTheDocument()
 		expect(screen.queryByTestId("file-header-select-mode-button")).not.toBeInTheDocument()
 	})
+
+	it("hides refresh on share routes unless explicitly enabled", () => {
+		const { rerender } = render(
+			<NormalModeHeader
+				isShareRoute
+				refreshLoading={false}
+				allowEdit={false}
+				onRefresh={vi.fn()}
+			/>,
+		)
+
+		expect(screen.queryByTestId("file-header-refresh-button")).not.toBeInTheDocument()
+
+		rerender(
+			<NormalModeHeader
+				isShareRoute
+				showRefresh
+				refreshLoading={false}
+				allowEdit={false}
+				onRefresh={vi.fn()}
+			/>,
+		)
+
+		expect(screen.getByTestId("file-header-refresh-button")).toBeInTheDocument()
+	})
+
+	it("hides refresh when showRefresh is false even off share routes", () => {
+		render(
+			<NormalModeHeader
+				isShareRoute={false}
+				showRefresh={false}
+				refreshLoading={false}
+				allowEdit={false}
+				onRefresh={vi.fn()}
+			/>,
+		)
+
+		expect(screen.queryByTestId("file-header-refresh-button")).not.toBeInTheDocument()
+	})
 })

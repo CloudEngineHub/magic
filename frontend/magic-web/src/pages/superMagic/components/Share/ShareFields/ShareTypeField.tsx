@@ -7,6 +7,11 @@ import publicIcon from "../svg/public.svg"
 import protectedIcon from "../svg/protected.svg"
 import teamIcon from "../svg/team.svg"
 import { ShareType } from "../types"
+import {
+	isFreePlanFromSubscription,
+	isShareTypePlanDisabled,
+	isShareTypePlanHidden,
+} from "../utils/sharePlanRestrictions"
 import VipIcon from "@/pages/superMagic/components/VipIcon"
 import type { ShareTypeFieldProps } from "./types"
 
@@ -16,7 +21,7 @@ export default memo(function ShareTypeField(props: ShareTypeFieldProps) {
 	const { t } = useTranslation("super")
 	const [hoveredType, setHoveredType] = useState<ShareType | null>(null)
 
-	const isFreePlan = userStore.user.organizationSubscriptionInfo?.is_paid_plan === false
+	const isFreePlan = isFreePlanFromSubscription(userStore.user.organizationSubscriptionInfo)
 
 	const normalizedValue = useMemo(() => {
 		return value
@@ -47,7 +52,7 @@ export default memo(function ShareTypeField(props: ShareTypeFieldProps) {
 
 		return list.filter((item) => {
 			// 免费用户不显示团队可访问选项
-			if (isFreePlan && item.type === ShareType.Organization) {
+			if (isShareTypePlanHidden(item.type, isFreePlan)) {
 				return false
 			}
 			// If Internet is in allowed types, show both Public and PasswordProtected
@@ -67,6 +72,10 @@ export default memo(function ShareTypeField(props: ShareTypeFieldProps) {
 
 	// Handle type change
 	const handleTypeChange = (newType: ShareType) => {
+		// A plan-disabled method is a real gate, not decoration: without this guard a free
+		// organization could still select it and submit it, because the backend only validates
+		// the function permission and never `is_paid_plan`.
+		if (isShareTypePlanDisabled(newType, isFreePlan)) return
 		if (permittedTypes && !permittedTypes.includes(newType)) return
 		onChange(newType)
 	}
@@ -82,14 +91,16 @@ export default memo(function ShareTypeField(props: ShareTypeFieldProps) {
 			<div className="flex flex-col gap-1" data-testid="share-type-list">
 				{shareTypeList.map((item) => {
 					const isActive = item.type === normalizedValue
-					const isPasswordProtected = item.type === ShareType.PasswordProtected
 					const isPermissionDisabled =
 						permittedTypes !== undefined && !permittedTypes.includes(item.type)
-
 					// 免费用户，密码保护为禁用状态
-					const isDisabled = (isFreePlan && isPasswordProtected) || isPermissionDisabled
+					const isPlanDisabled = isShareTypePlanDisabled(item.type, isFreePlan)
 
-					// 禁用状态始终显示 VIP Badge，否则在选中或悬浮时显示 Checkbox
+					// The two gates look the same when disabled but must never be explained the same
+					// way: a plan gate can be lifted by upgrading, a permission gate cannot.
+					const isDisabled = isPlanDisabled || isPermissionDisabled
+
+					// 禁用状态始终显示右侧标识，否则在选中或悬浮时显示 Checkbox
 					const showCheckbox = isDisabled || isActive || hoveredType === item.type
 
 					return (
@@ -110,6 +121,7 @@ export default memo(function ShareTypeField(props: ShareTypeFieldProps) {
 								onClick={() => handleTypeChange(item.type)}
 								aria-disabled={isDisabled}
 								data-testid="handle-type-change"
+								data-share-type={item.type}
 							>
 								<div className="h-6 w-6 flex-shrink-0">
 									<img
@@ -144,7 +156,10 @@ export default memo(function ShareTypeField(props: ShareTypeFieldProps) {
 										showCheckbox ? "opacity-100" : "opacity-0",
 									)}
 								>
-									{isDisabled ? (
+									{/* Only the plan gate earns the VIP crown; a permission-disabled row keeps a
+								    plain checkbox so nobody is sent to the upgrade page for a lock that
+								    upgrading cannot open. */}
+									{isPlanDisabled ? (
 										<VipIcon />
 									) : (
 										<Checkbox

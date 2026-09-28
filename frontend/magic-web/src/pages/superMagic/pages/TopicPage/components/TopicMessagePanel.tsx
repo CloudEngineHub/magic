@@ -327,6 +327,8 @@ function TopicMessagePanel({
 	const messageListNode = (
 		<MessageListProvider value={value}>
 			<MessageList
+				className="[--message-list-surface:rgb(var(--sidebar-rgb))]"
+				classNames={{ content: "pl-2 pt-[10px]" }}
 				data={messagesWithOptimisticMeta as SuperMagicMessageItem[]}
 				setSelectedDetail={setUserSelectDetail}
 				selectedTopic={selectedTopic}

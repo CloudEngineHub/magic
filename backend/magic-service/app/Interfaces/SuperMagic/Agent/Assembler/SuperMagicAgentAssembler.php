@@ -515,11 +515,10 @@ class SuperMagicAgentAssembler
         ?string $scope = null,
         ?array $organizationInfo = null
     ): AgentListItemDTO {
-        $language = CoContext::getLanguage();
         $features = [];
         foreach ($playbooks as $playbook) {
             $features[] = [
-                'name' => $playbook->getI18nName($language),
+                'name_i18n' => $playbook->getNameI18n(),
                 'icon' => $playbook->getIcon(),
                 'theme_color' => $playbook->getThemeColor(),
             ];
@@ -538,9 +537,9 @@ class SuperMagicAgentAssembler
             id: $agent->getId(),
             code: $agent->getCode(),
             projectId: $agent->getProjectId() === null ? null : (string) $agent->getProjectId(),
-            name: $agent->getI18nName($language),
-            role: $agent->getI18nRole($language),
-            description: $agent->getI18nDescription($language),
+            nameI18n: $agent->getNameI18n() ?? [],
+            roleI18n: $agent->getRoleI18n() ?? [],
+            descriptionI18n: $agent->getDescriptionI18n() ?? [],
             icon: $agent->getIcon(),
             iconType: $agent->getIconType(),
             playbooks: $features,

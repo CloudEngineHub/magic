@@ -7,6 +7,7 @@ vi.mock("@/models/config", () => ({
 }))
 
 import { getFullContent, getLinkHandlingScript } from "../full-content"
+import { normalizeHtmlPreviewPath, parseHtmlNavigationRequest } from "../html-navigation"
 import { filterInjectedTags } from "../index"
 import { rewriteLocationHref } from "../location-href-rewrite"
 import { restoreLocationHref } from "../location-href-restore"
@@ -120,6 +121,71 @@ previewwindow.location.href = 'other.html';`
 		expect(runtime.run(getUserScript(`return ${code}`))).toBe("local")
 		expect(runtime.postMessage).not.toHaveBeenCalled()
 		expect(runtime.nativeNavigate).not.toHaveBeenCalled()
+	})
+
+	it("resolves UTF-8 paths from a Chinese folder to project files", () => {
+		const runtime = createRuntime()
+		runtime.run(getLinkHandlingScript("中文场景/index.html"))
+
+		function postedPath(source: string) {
+			runtime.postMessage.mockClear()
+			runtime.run(getUserScript(source))
+			const href = runtime.postMessage.mock.calls[0]?.[0]?.href as string
+			const parsed = parseHtmlNavigationRequest(href)
+			return {
+				filePath: normalizeHtmlPreviewPath(parsed?.filePath),
+				search: parsed?.search,
+				hash: parsed?.hash,
+			}
+		}
+
+		expect(postedPath("location.href = './目标页面.html'")).toEqual({
+			filePath: "中文场景/目标页面.html",
+			search: "",
+			hash: "",
+		})
+		expect(postedPath("location.href = './目标页面.html?keyword=测试#section-a'")).toEqual({
+			filePath: "中文场景/目标页面.html",
+			search: "?keyword=%E6%B5%8B%E8%AF%95",
+			hash: "#section-a",
+		})
+		expect(postedPath("location.href = './子文件夹/深层页面.html'")).toEqual({
+			filePath: "中文场景/子文件夹/深层页面.html",
+			search: "",
+			hash: "",
+		})
+		expect(postedPath("location.href = '../detail.html'")).toEqual({
+			filePath: "detail.html",
+			search: "",
+			hash: "",
+		})
+		expect(postedPath("location.href = '?from=chinese-folder'")).toEqual({
+			filePath: "中文场景/index.html",
+			search: "?from=chinese-folder",
+			hash: "",
+		})
+		expect(postedPath("window.open('./目标页面.html')")).toEqual({
+			filePath: "中文场景/目标页面.html",
+			search: "",
+			hash: "",
+		})
+		expect(postedPath("location.replace('./目标页面.html')")).toEqual({
+			filePath: "中文场景/目标页面.html",
+			search: "",
+			hash: "",
+		})
+		expect(postedPath("location.assign('./目标页面.html')")).toEqual({
+			filePath: "中文场景/目标页面.html",
+			search: "",
+			hash: "",
+		})
+
+		runtime.run(getLinkHandlingScript("中文场景/子文件夹/深层页面.html"))
+		expect(postedPath("location.href = '../../index.html'")).toEqual({
+			filePath: "index.html",
+			search: "",
+			hash: "",
+		})
 	})
 
 	it("uses the new file directory when the same preview window is reused", () => {

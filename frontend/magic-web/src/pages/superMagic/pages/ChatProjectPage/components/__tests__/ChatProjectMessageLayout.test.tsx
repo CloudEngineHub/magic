@@ -2,6 +2,7 @@ import { fireEvent, render, screen } from "@testing-library/react"
 import type { PropsWithChildren } from "react"
 import { beforeEach, describe, expect, it, vi } from "vitest"
 import { useConversationInputLayout } from "@/pages/superMagic/components/ConversationInputResize/context"
+import { DEFAULT_COMPOSER_MIN_INPUT_HEIGHT } from "@/pages/superMagic/components/ConversationInputResize/constants"
 
 const inputHeightMocks = vi.hoisted(() => ({
 	useConversationInputHeight: vi.fn(),
@@ -123,14 +124,14 @@ describe("ChatProjectMessageLayout", () => {
 		const panels = screen.getAllByTestId("splitter-panel")
 		expect(panels).toHaveLength(2)
 		expect(panels[1]).toHaveAttribute("data-size", "240")
-		expect(panels[1]).toHaveAttribute("data-min", "244")
+		expect(panels[1]).toHaveAttribute("data-min", String(DEFAULT_COMPOSER_MIN_INPUT_HEIGHT))
 		expect(panels[1]).toHaveAttribute("data-max", "400")
 		expect(panels[1]).toHaveAttribute("data-resizable", "true")
 		// Keep the grip above shortcut chips without changing the shared handle default.
 		expect(screen.getByTestId("conversation-input-resize-handle")).toHaveClass("-top-2.5")
 		expect(inputHeightMocks.useConversationInputHeight).toHaveBeenCalledWith(
 			expect.objectContaining({
-				minHeight: 244,
+				minHeight: DEFAULT_COMPOSER_MIN_INPUT_HEIGHT,
 				maxRatio: 0.5,
 				manualMaxRatio: 0.7,
 				manualMinAvailableHeight: 240,
@@ -138,7 +139,7 @@ describe("ChatProjectMessageLayout", () => {
 		)
 		expect(screen.getByTestId("conversation-input-resize-handle")).toHaveAttribute(
 			"aria-valuemin",
-			"244",
+			String(DEFAULT_COMPOSER_MIN_INPUT_HEIGHT),
 		)
 
 		fireEvent.click(screen.getByRole("button", { name: "resize-start" }))
