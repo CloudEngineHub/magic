@@ -302,7 +302,6 @@ function MicroAppPageMobileInner({
 										projectId={projectId}
 										selectedProject={selectedProject}
 										allowEdit={false}
-										onOpenFile={handlePreviewFile}
 										isBuilding={false}
 									/>
 								</Suspense>
@@ -346,7 +345,6 @@ function MicroAppPageMobileInner({
 												projectId={projectId}
 												selectedProject={selectedProject}
 												allowEdit={!isReadOnly}
-												onOpenFile={handlePreviewFile}
 												isBuilding={hasRunningTopic}
 											/>
 										</Suspense>
