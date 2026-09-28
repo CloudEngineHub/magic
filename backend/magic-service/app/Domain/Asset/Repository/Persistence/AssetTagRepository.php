@@ -55,6 +55,21 @@ class AssetTagRepository implements AssetTagRepositoryInterface
         return $model ? AssetTagFactory::modelToEntity($model) : null;
     }
 
+    public function findOfficialByName(AssetDataIsolation $dataIsolation, array $nameI18n, string $nodeType, int $parentId): ?AssetTagEntity
+    {
+        $model = AssetTagModel::query()
+            ->where('organization_code', $dataIsolation->getCurrentOrganizationCode())
+            ->whereNull('owner_uid')
+            ->where('node_type', $nodeType)
+            ->where('parent_id', $parentId)
+            ->where(static function ($query) use ($nameI18n): void {
+                $query->where('name_i18n->zh_CN', $nameI18n['zh_CN'])
+                    ->orWhere('name_i18n->default', $nameI18n['zh_CN']);
+            })
+            ->first();
+        return $model ? AssetTagFactory::modelToEntity($model) : null;
+    }
+
     public function save(AssetDataIsolation $dataIsolation, AssetTagEntity $entity): AssetTagEntity
     {
         $entity->setOrganizationCode($entity->getOrganizationCode() ?: $dataIsolation->getCurrentOrganizationCode());

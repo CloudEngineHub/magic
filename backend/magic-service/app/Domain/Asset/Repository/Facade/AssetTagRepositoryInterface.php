@@ -20,6 +20,8 @@ interface AssetTagRepositoryInterface
 
     public function findById(AssetDataIsolation $dataIsolation, int|string $id): ?AssetTagEntity;
 
+    public function findOfficialByName(AssetDataIsolation $dataIsolation, array $nameI18n, string $nodeType, int $parentId): ?AssetTagEntity;
+
     public function save(AssetDataIsolation $dataIsolation, AssetTagEntity $entity): AssetTagEntity;
 
     public function delete(AssetDataIsolation $dataIsolation, int|string $id, ?string $ownerUid = null): bool;

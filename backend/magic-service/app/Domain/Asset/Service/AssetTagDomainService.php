@@ -34,6 +34,52 @@ class AssetTagDomainService
         return $this->tags->queryVisibleTree($dataIsolation, $dataIsolation->getCurrentUserId());
     }
 
+    /** @param array<int, array{name_i18n: array{default: string, zh_CN: string, en_US: string}, tags: array<int, array{default: string, zh_CN: string, en_US: string}>}> $groups */
+    public function initializeSystemTags(AssetDataIsolation $dataIsolation, array $groups): array
+    {
+        $groupCount = count($groups);
+        $tagCount = 0;
+        Db::transaction(function () use ($dataIsolation, $groups, $groupCount, &$tagCount): void {
+            foreach ($groups as $groupIndex => $group) {
+                $groupEntity = $this->saveSystemTag(
+                    $dataIsolation,
+                    $group['name_i18n'],
+                    AssetTagNodeType::Group,
+                    0,
+                    ($groupCount - $groupIndex) * 100,
+                );
+                $childCount = count($group['tags']);
+                foreach ($group['tags'] as $tagIndex => $tagNameI18n) {
+                    $this->saveSystemTag(
+                        $dataIsolation,
+                        $tagNameI18n,
+                        AssetTagNodeType::Tag,
+                        (int) $groupEntity->getId(),
+                        ($childCount - $tagIndex) * 100,
+                    );
+                    ++$tagCount;
+                }
+            }
+        });
+        return ['groups' => $groupCount, 'tags' => $tagCount];
+    }
+
+    private function saveSystemTag(AssetDataIsolation $dataIsolation, array $nameI18n, AssetTagNodeType $nodeType, int $parentId, int $sort): AssetTagEntity
+    {
+        $entity = $this->tags->findOfficialByName($dataIsolation, $nameI18n, $nodeType->value, $parentId)
+            ?? new AssetTagEntity();
+        $entity->setOrganizationCode($dataIsolation->getCurrentOrganizationCode())
+            ->setParentId($parentId)
+            ->setNodeType($nodeType)
+            ->setNameI18n($nameI18n)
+            ->setStatus(1)
+            ->setSort($sort)
+            ->setOwnerUid(null)
+            ->setCreatedUid($entity->getCreatedUid() ?? 'system')
+            ->setUpdatedUid('system');
+        return $this->tags->save($dataIsolation, $entity);
+    }
+
     public function create(AssetDataIsolation $dataIsolation, string $name, AssetTagNodeType $nodeType, int $parentId): AssetTagEntity
     {
         $this->assertStructure($dataIsolation, $nodeType, $parentId);
