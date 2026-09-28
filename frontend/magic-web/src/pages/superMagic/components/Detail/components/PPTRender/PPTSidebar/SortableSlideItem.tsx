@@ -369,7 +369,7 @@ function SortableSlideItem({
 						{t("ppt.batch.hidden")}
 					</span>
 				) : null}
-				{allowEdit && !isMobile && quickActions.length > 0 && (
+				{allowEdit && !selectionMode && !isMobile && quickActions.length > 0 && (
 					// Overlay the preview without changing its size; keep actions reachable by keyboard.
 					<div
 						className="pointer-events-none absolute bottom-1.5 right-1.5 flex gap-0.5 rounded-md border border-white/30 bg-background/70 p-0.5 opacity-0 shadow-sm backdrop-blur-md transition-opacity group-focus-within/slide:pointer-events-auto group-focus-within/slide:opacity-100 group-hover/slide:pointer-events-auto group-hover/slide:opacity-100 dark:border-white/10"
@@ -402,7 +402,7 @@ function SortableSlideItem({
 		</div>
 	)
 
-	if (!allowEdit && !pendingAction) {
+	if ((!allowEdit && !pendingAction) || selectionMode) {
 		return main
 	}
 

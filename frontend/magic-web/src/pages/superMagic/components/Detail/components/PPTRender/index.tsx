@@ -81,7 +81,6 @@ import {
 	getPptVisibleSlideIndices,
 } from "@/pages/superMagic/utils/pptHiddenSlides"
 import magicToast from "@/components/base/MagicToaster/utils"
-const PPTSearchPanel = lazy(() => import("./components/PPTSearchPanel"))
 const SlidesTemplateReplacementDialog = lazy(() => import("./SlidesTemplateReplacementDialog"))
 
 interface ManualSaveResult {
@@ -694,8 +693,7 @@ const PPTRenderInner = observer(function PPTRenderInner({
 				return
 			}
 
-			if (isAnySlideEditing || isDeleteModalOpen || deckTools.busy || deckTools.searchOpen)
-				return
+			if (isAnySlideEditing || isDeleteModalOpen || deckTools.busy) return
 
 			switch (event.key) {
 				case "ArrowLeft":
@@ -736,20 +734,13 @@ const PPTRenderInner = observer(function PPTRenderInner({
 		isAnySlideEditing,
 		isDeleteModalOpen,
 		deckTools.busy,
-		deckTools.searchOpen,
 	])
 
 	// iframe postMessage 导航 - 依赖 usePPTSidebar 返回的 isDeleteModalOpen
 	useEffect(() => {
 		function handleMessage(event: MessageEvent) {
 			if (!event.data || event.data.type !== "keyboardEvent") return
-			if (
-				isAnySlideEditing ||
-				store.isTransitioning ||
-				isDeleteModalOpen ||
-				deckTools.busy ||
-				deckTools.searchOpen
-			)
+			if (isAnySlideEditing || store.isTransitioning || isDeleteModalOpen || deckTools.busy)
 				return
 
 			const { direction } = event.data
@@ -777,7 +768,6 @@ const PPTRenderInner = observer(function PPTRenderInner({
 		isAnySlideEditing,
 		isDeleteModalOpen,
 		deckTools.busy,
-		deckTools.searchOpen,
 	])
 
 	const slideContainerRef = useRef<HTMLDivElement>(null)
@@ -1619,21 +1609,6 @@ const PPTRenderInner = observer(function PPTRenderInner({
 			</div>
 
 			<Suspense fallback={null}>
-				{!slideStructureAdapter && deckTools.searchOpen && (
-					<PPTSearchPanel
-						open={deckTools.searchOpen}
-						onOpenChange={deckTools.setSearchOpen}
-						deckKey={mainFileId || mainFileName || ""}
-						store={store}
-						selectedIds={deckTools.selected}
-						hiddenPaths={hiddenPaths}
-						allowEdit={effectiveAllowEdit && !isPlaybackMode && !isPresenterConsole}
-						busy={deckTools.busy}
-						client={deckTools.client}
-						runWrite={deckTools.run}
-						onNavigate={handleJumpToPage}
-					/>
-				)}
 				<SlidesTemplateReplacementDialog
 					open={templateReplacementTarget !== null}
 					target={templateReplacementTarget}

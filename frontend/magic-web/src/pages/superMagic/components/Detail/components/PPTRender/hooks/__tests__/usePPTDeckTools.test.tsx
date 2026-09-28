@@ -117,6 +117,18 @@ function makeOptions(hidden: string[] = []) {
 }
 
 describe("usePPTDeckTools", () => {
+	it("deselects all pages without exiting selection mode", () => {
+		const options = makeOptions()
+		const { result } = renderHook(() => usePPTDeckTools(options))
+		expect(result.current.isAllSelected).toBe(false)
+		act(() => result.current.selectAll())
+		expect(result.current.isAllSelected).toBe(true)
+		act(() => result.current.deselectAll())
+		expect(result.current.selected.size).toBe(0)
+		expect(result.current.isAllSelected).toBe(false)
+		expect(result.current.selecting).toBe(true)
+	})
+
 	beforeEach(() => {
 		vi.clearAllMocks()
 		mocks.fileApi.identityKey = "session:project:topic"

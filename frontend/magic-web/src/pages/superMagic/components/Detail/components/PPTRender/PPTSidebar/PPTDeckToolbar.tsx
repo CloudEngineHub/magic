@@ -1,7 +1,8 @@
-import { useRef, useState } from "react"
+import { useId, useRef, useState } from "react"
 import { useTranslation } from "react-i18next"
-import { CheckSquare, Search, MoreHorizontal, Loader2 } from "lucide-react"
+import { CheckSquare, MoreHorizontal, Loader2 } from "lucide-react"
 import { Button } from "@/components/shadcn-ui/button"
+import { Checkbox } from "@/components/shadcn-ui/checkbox"
 import {
 	Dialog,
 	DialogContent,
@@ -49,26 +50,17 @@ export default function PPTDeckToolbar({
 		}
 	}
 	const selectedCount = tools.selected.size
+	const selectAllId = useId()
 	return (
 		<div
 			className={cn(
-				"shrink-0 space-y-2 border-border p-2",
+				"shrink-0 space-y-1 border-border px-2 py-1",
 				isMobile ? "w-36 border-r" : "border-b",
 			)}
 		>
-			<div className="flex gap-1">
+			<div className="flex flex-wrap items-center justify-between gap-1">
 				<Button
-					className="min-w-0 flex-1 px-1 text-xs"
-					size="sm"
-					variant="ghost"
-					disabled={tools.busy}
-					onClick={() => tools.setSearchOpen(true)}
-				>
-					<Search className="mr-1 size-4" />
-					{t("ppt.batch.search")}
-				</Button>
-				<Button
-					className="min-w-0 flex-1 px-1 text-xs"
+					className="h-6 gap-1 px-1.5 text-xs"
 					size="sm"
 					variant={tools.selecting ? "secondary" : "ghost"}
 					aria-pressed={tools.selecting}
@@ -77,83 +69,85 @@ export default function PPTDeckToolbar({
 						tools.selecting ? tools.clearSelection() : tools.setSelecting(true)
 					}
 				>
-					<CheckSquare className="mr-1 size-4" />
+					<CheckSquare className="size-4" />
 					{t("ppt.batch.select")}
 				</Button>
+				{tools.selecting && allowEdit ? (
+					<DropdownMenu>
+						<DropdownMenuTrigger asChild>
+							<Button
+								size="sm"
+								variant="ghost"
+								className="h-6 gap-1 px-1.5 text-xs"
+								disabled={!selectedCount || tools.busy}
+							>
+								<MoreHorizontal className="size-4" />
+								{t("ppt.batch.actions")}
+							</Button>
+						</DropdownMenuTrigger>
+						<DropdownMenuContent align="end">
+							<DropdownMenuItem onSelect={() => void tools.duplicate()}>
+								{t("ppt.batch.copy")}
+							</DropdownMenuItem>
+							<DropdownMenuItem onSelect={() => void tools.setHidden(true)}>
+								{t("ppt.batch.hide")}
+							</DropdownMenuItem>
+							<DropdownMenuItem onSelect={() => void tools.setHidden(false)}>
+								{t("ppt.batch.show")}
+							</DropdownMenuItem>
+							<DropdownMenuSeparator />
+							<DropdownMenuItem onSelect={() => void tools.move(0)}>
+								{t("ppt.batch.moveFirst")}
+							</DropdownMenuItem>
+							<DropdownMenuItem onSelect={() => void tools.move(slideCount)}>
+								{t("ppt.batch.moveLast")}
+							</DropdownMenuItem>
+							<DropdownMenuSeparator />
+							<DropdownMenuItem
+								className="text-destructive"
+								disabled={selectedCount >= slideCount}
+								onSelect={() => setRemoveTargets(new Set(tools.selected))}
+							>
+								{t("ppt.batch.remove")}
+							</DropdownMenuItem>
+						</DropdownMenuContent>
+					</DropdownMenu>
+				) : null}
 			</div>
 			{tools.selecting ? (
-				<>
-					<p className="text-xs text-muted-foreground" role="status">
+				<div className="flex items-center justify-between gap-1">
+					<p className="min-w-0 text-xs text-muted-foreground" role="status">
 						{t("ppt.batch.selectedCount", { count: selectedCount })}
 					</p>
-					<div className="flex flex-wrap gap-1">
-						<Button
-							size="sm"
-							variant="ghost"
-							className="h-7 px-2 text-xs"
+					<div className="flex h-6 shrink-0 items-center gap-1.5 px-1.5">
+						<Checkbox
+							id={selectAllId}
+							checked={
+								tools.isAllSelected
+									? true
+									: selectedCount > 0
+										? "indeterminate"
+										: false
+							}
 							disabled={tools.busy}
-							onClick={tools.selectAll}
+							onCheckedChange={
+								tools.isAllSelected ? tools.deselectAll : tools.selectAll
+							}
+						/>
+						<label
+							htmlFor={selectAllId}
+							className="cursor-pointer text-xs peer-disabled:cursor-not-allowed peer-disabled:opacity-50"
 						>
-							{t("ppt.batch.selectAll")}
-						</Button>
-						<Button
-							size="sm"
-							variant="ghost"
-							className="h-7 px-2 text-xs"
-							disabled={tools.busy}
-							onClick={tools.clearSelection}
-						>
-							{t("ppt.batch.clear")}
-						</Button>
+							{tools.isAllSelected ? t("ppt.deselectAll") : t("ppt.batch.selectAll")}
+						</label>
 					</div>
-					{allowEdit ? (
-						<DropdownMenu>
-							<DropdownMenuTrigger asChild>
-								<Button
-									size="sm"
-									variant="outline"
-									className="w-full text-xs"
-									disabled={!selectedCount || tools.busy}
-								>
-									<MoreHorizontal className="mr-1 size-4" />
-									{t("ppt.batch.actions")}
-								</Button>
-							</DropdownMenuTrigger>
-							<DropdownMenuContent align="start">
-								<DropdownMenuItem onSelect={() => void tools.duplicate()}>
-									{t("ppt.batch.copy")}
-								</DropdownMenuItem>
-								<DropdownMenuItem onSelect={() => void tools.setHidden(true)}>
-									{t("ppt.batch.hide")}
-								</DropdownMenuItem>
-								<DropdownMenuItem onSelect={() => void tools.setHidden(false)}>
-									{t("ppt.batch.show")}
-								</DropdownMenuItem>
-								<DropdownMenuSeparator />
-								<DropdownMenuItem onSelect={() => void tools.move(0)}>
-									{t("ppt.batch.moveFirst")}
-								</DropdownMenuItem>
-								<DropdownMenuItem onSelect={() => void tools.move(slideCount)}>
-									{t("ppt.batch.moveLast")}
-								</DropdownMenuItem>
-								<DropdownMenuSeparator />
-								<DropdownMenuItem
-									className="text-destructive"
-									disabled={selectedCount >= slideCount}
-									onSelect={() => setRemoveTargets(new Set(tools.selected))}
-								>
-									{t("ppt.batch.remove")}
-								</DropdownMenuItem>
-							</DropdownMenuContent>
-						</DropdownMenu>
-					) : null}
-				</>
+				</div>
 			) : null}
 			{tools.busy ? (
 				<Button
 					variant="outline"
 					size="sm"
-					className="w-full text-xs"
+					className="h-6 w-full text-xs"
 					onClick={tools.cancel}
 				>
 					<Loader2 className="mr-1 size-4 animate-spin" />

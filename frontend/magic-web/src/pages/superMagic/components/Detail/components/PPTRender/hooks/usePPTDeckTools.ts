@@ -91,11 +91,9 @@ export function usePPTDeckTools(options: Options) {
 	const retainedCreatedFiles = useRef(new Set<string>())
 	const [busy, setBusy] = useState(false)
 	const cancelRequested = useRef(false)
-	const [searchOpen, setSearchOpen] = useState(false)
 	useEffect(() => {
 		setSelected(new Set())
 		setSelecting(false)
-		setSearchOpen(false)
 		anchor.current = ""
 	}, [scope])
 	const ids = store.slides.map((slide) => store.getFileIdByPath(slide.path) || "")
@@ -355,12 +353,12 @@ export function usePPTDeckTools(options: Options) {
 		})
 	return {
 		selected,
+		isAllSelected: selected.size > 0 && ids.every((id) => !id || selected.has(id)),
+		deselectAll: () => setSelected(new Set()),
 		selecting,
 		setSelecting,
 		select,
 		busy,
-		searchOpen,
-		setSearchOpen,
 		client,
 		clearSelection: () => {
 			setSelected(new Set())

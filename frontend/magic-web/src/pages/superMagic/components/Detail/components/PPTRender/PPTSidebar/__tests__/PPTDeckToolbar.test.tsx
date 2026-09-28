@@ -39,10 +39,11 @@ function makeTools() {
 		selected: new Set(["first"]),
 		selecting: true,
 		busy: false,
-		setSearchOpen: vi.fn(),
 		setSelecting: vi.fn(),
 		clearSelection: vi.fn(),
 		selectAll: vi.fn(),
+		deselectAll: vi.fn(),
+		isAllSelected: false,
 		duplicate: vi.fn(),
 		setHidden: vi.fn(),
 		move: vi.fn(),
@@ -52,6 +53,31 @@ function makeTools() {
 }
 
 describe("PPTDeckToolbar", () => {
+	it("switches between select all and deselect all without a clear button", () => {
+		const tools = makeTools()
+		const { rerender } = render(
+			<PPTDeckToolbar tools={tools} allowEdit slideCount={3} isMobile={false} />,
+		)
+		expect(screen.queryByText("ppt.batch.clear")).not.toBeInTheDocument()
+		expect(screen.getByRole("checkbox", { name: "ppt.batch.selectAll" })).toHaveAttribute(
+			"aria-checked",
+			"mixed",
+		)
+		fireEvent.click(screen.getByText("ppt.batch.selectAll"))
+		expect(tools.selectAll).toHaveBeenCalledOnce()
+		tools.isAllSelected = true
+		rerender(<PPTDeckToolbar tools={tools} allowEdit slideCount={3} isMobile={false} />)
+		expect(screen.queryByText("ppt.batch.selectAll")).not.toBeInTheDocument()
+		expect(screen.getByRole("checkbox", { name: "ppt.deselectAll" })).toBeChecked()
+		fireEvent.click(screen.getByText("ppt.deselectAll"))
+		expect(tools.deselectAll).toHaveBeenCalledOnce()
+		expect(tools.clearSelection).not.toHaveBeenCalled()
+		tools.isAllSelected = false
+		tools.selected = new Set()
+		rerender(<PPTDeckToolbar tools={tools} allowEdit slideCount={3} isMobile={false} />)
+		expect(screen.getByRole("checkbox", { name: "ppt.batch.selectAll" })).not.toBeChecked()
+	})
+
 	it("requires confirmation to remove a frozen set of files and explains source retention", async () => {
 		const tools = makeTools()
 		let finish!: () => void
@@ -80,11 +106,10 @@ describe("PPTDeckToolbar", () => {
 		expect(screen.queryByRole("dialog")).not.toBeInTheDocument()
 	})
 
-	it("exposes search while keeping all write actions absent in a read-only deck", () => {
+	it("keeps search and write actions absent in a read-only deck", () => {
 		const tools = makeTools()
 		render(<PPTDeckToolbar tools={tools} allowEdit={false} slideCount={3} isMobile={false} />)
-		fireEvent.click(screen.getByText("ppt.batch.search"))
-		expect(tools.setSearchOpen).toHaveBeenCalledWith(true)
+		expect(screen.queryByText("ppt.batch.search")).not.toBeInTheDocument()
 		expect(screen.queryByText("ppt.batch.copy")).not.toBeInTheDocument()
 		expect(screen.queryByText("ppt.batch.remove")).not.toBeInTheDocument()
 	})
