@@ -16,7 +16,7 @@ import {
 	IconFolder,
 	IconFileSearch,
 } from "@tabler/icons-react"
-import { Bot, Box, Loader2, UsersRound, Wrench } from "lucide-react"
+import { AppWindow, Bot, Box, Loader2, UsersRound, Wrench } from "lucide-react"
 import { isEmpty, last } from "lodash-es"
 import { useTranslation } from "react-i18next"
 import { useMatch } from "react-router"
@@ -30,6 +30,7 @@ import MagicModal from "@/components/base/MagicModal"
 import MobileFilesMoveSheet from "../SelectDirectoryModal/MobileFilesMoveSheet"
 import MagicSpin from "@/components/base/MagicSpin"
 import { SuperMagicApi } from "@/apis"
+import type { MicroAppListItem } from "@/apis/modules/superMagic"
 import { AttachmentItem } from "../../../TopicFilesButton/hooks"
 import FoldIcon from "@/pages/superMagic/assets/svg/file-folder.svg"
 import EmptyFilesIcon from "@/pages/superMagic/assets/svg/empty-files.svg"
@@ -63,6 +64,8 @@ import {
 	MY_AGENTS_WORKSPACE_ID,
 	MY_SKILLS_WORKSPACE_DATA,
 	MY_AGENTS_WORKSPACE_DATA,
+	MICRO_APPS_WORKSPACE_ID,
+	MICRO_APPS_WORKSPACE_DATA,
 	isCollaborationWorkspace,
 	isCollaborationProject,
 	isWorkspaceShortcutProject,
@@ -89,7 +92,11 @@ import { useSingleDocumentStaticDependencies } from "@/pages/superMagic/hooks/us
 import { skillsService, type UserSkillView } from "@/services/skills/SkillsService"
 import { crewService, type MyCrewView } from "@/services/crew/CrewService"
 
-const FIXED_WORKSPACE_IDS = new Set<string>([SHARE_WORKSPACE_ID, MY_CLAW_WORKSPACE_ID])
+const FIXED_WORKSPACE_IDS = new Set<string>([
+	SHARE_WORKSPACE_ID,
+	MY_CLAW_WORKSPACE_ID,
+	MICRO_APPS_WORKSPACE_ID,
+])
 const RESOURCE_WORKSPACE_IDS = new Set<string>([MY_SKILLS_WORKSPACE_ID, MY_AGENTS_WORKSPACE_ID])
 /** Align with MySkills / MyCrew list page size; selector loads more on demand. */
 const RESOURCE_PROJECTS_PAGE_SIZE = 20
@@ -115,6 +122,8 @@ function isFixedWorkspace(workspace: Workspace) {
 }
 
 function renderWorkspaceIcon(workspaceId: string) {
+	if (workspaceId === MICRO_APPS_WORKSPACE_ID)
+		return <AppWindow className="size-4 text-current" />
 	if (workspaceId === MY_SKILLS_WORKSPACE_ID) return <Wrench className="size-4 text-current" />
 	if (workspaceId === MY_AGENTS_WORKSPACE_ID) return <Bot className="size-4 text-current" />
 	if (workspaceId === SHARE_WORKSPACE_ID) return <UsersRound className="size-4 text-current" />
@@ -186,6 +195,9 @@ function ProjectResourceSelectorModal({
 	const [hasMoreResourceProjects, setHasMoreResourceProjects] = useState(false)
 	const loadingMoreResourcesRef = useRef(false)
 	const [currentWorkspace, setCurrentWorkspace] = useState<Workspace | null>(null)
+	const [microAppScope, setMicroAppScope] = useState<"created" | "collaborated">("created")
+	const [microAppWorkspaceId, setMicroAppWorkspaceId] = useState("")
+	const microAppRequestId = useRef(0)
 	const [currentProject, setCurrentProject] = useState<ProjectListItem | null>(null)
 	const [availableWorkspaces, setAvailableWorkspaces] = useState<Workspace[]>(workspaces)
 	const [availableProjects, setAvailableProjects] = useState<ProjectListItem[]>([])
@@ -310,7 +322,10 @@ function ProjectResourceSelectorModal({
 			)
 		} else if (effectiveViewMode === "project" && currentWorkspace) {
 			// Only regular workspaces allow creating projects.
-			return !isCollaborationWorkspace(currentWorkspace)
+			return (
+				!isCollaborationWorkspace(currentWorkspace) &&
+				currentWorkspace.id !== MICRO_APPS_WORKSPACE_ID
+			)
 		} else if (effectiveViewMode === "workspace") {
 			// Workspace view allows creating workspaces.
 			return true
@@ -323,9 +338,13 @@ function ProjectResourceSelectorModal({
 		return availableProjects.filter(
 			(project) =>
 				!excludeProjectIds.includes(project.id) &&
-				(isMentionMode || hasEditPermission(project.user_role)),
+				(isMentionMode ||
+					(currentWorkspace?.id === MICRO_APPS_WORKSPACE_ID
+						? (microAppScope === "created" || !!project.user_role) &&
+							hasEditPermission(project.user_role)
+						: hasEditPermission(project.user_role))),
 		)
-	}, [availableProjects, excludeProjectIds, isMentionMode])
+	}, [availableProjects, excludeProjectIds, isMentionMode, currentWorkspace, microAppScope])
 	const shouldBlockPanelForLoading =
 		loading &&
 		((effectiveViewMode === "workspace" && availableWorkspaces.length === 0) ||
@@ -370,6 +389,56 @@ function ProjectResourceSelectorModal({
 			setAvailableProjects([])
 		}
 		setLoading(false)
+	})
+
+	const fetchMicroAppProjects = useMemoizedFn(async (scope: "created" | "collaborated") => {
+		const requestId = ++microAppRequestId.current
+		setLoading(true)
+		try {
+			const projects: ProjectListItem[] = []
+			let page = 1
+			let total = 0
+			let fetchedCount = 0
+			// The micro-app API is paginated; collect every project before applying local search.
+			do {
+				const response = await SuperMagicApi.getMicroApps({
+					scope,
+					page,
+					page_size: 99,
+				})
+				total = response.total
+				fetchedCount += response.list.length
+				projects.push(
+					...response.list
+						.filter((item: MicroAppListItem) => Boolean(item.project_id))
+						.map((item: MicroAppListItem) => ({
+							id: item.project_id!,
+							project_status: ProjectStatus.WAITING,
+							project_mode: TopicMode.MicroApp,
+							workspace_id: MICRO_APPS_WORKSPACE_ID,
+							work_dir: "",
+							workspace_name: t("selectPathModal.microApps"),
+							project_name: item.app_name,
+							current_topic_id: "",
+							current_topic_status: "",
+							created_at: "",
+							updated_at: item.updated_at || "",
+							user_role: item.user_role,
+							tag: "" as const,
+						})),
+				)
+				if (response.list.length === 0) break
+				page += 1
+			} while (fetchedCount < total)
+			if (requestId === microAppRequestId.current) setAvailableProjects(projects)
+		} catch (error) {
+			if (requestId !== microAppRequestId.current) return
+			console.error("Failed to fetch micro apps:", error)
+			magicToast.error(t("selectPathModal.fetchProjectsFailed"))
+			setAvailableProjects([])
+		} finally {
+			if (requestId === microAppRequestId.current) setLoading(false)
+		}
 	})
 
 	// 获取龙虾列表并转换为项目格式
@@ -495,6 +564,11 @@ function ProjectResourceSelectorModal({
 
 	// 获取工作区的项目列表
 	const fetchProjectsByWorkspace = useMemoizedFn(async (workspaceId: string) => {
+		if (workspaceId === MICRO_APPS_WORKSPACE_ID) {
+			await fetchMicroAppProjects(microAppScope)
+			return
+		}
+		microAppRequestId.current += 1
 		if (RESOURCE_WORKSPACE_IDS.has(workspaceId)) {
 			await fetchResourceProjects(workspaceId, 1)
 			return
@@ -526,6 +600,13 @@ function ProjectResourceSelectorModal({
 
 	// 工作区选择处理
 	const handleWorkspaceClick = useMemoizedFn(async (workspace: Workspace) => {
+		if (workspace.id === MICRO_APPS_WORKSPACE_ID) {
+			setMicroAppScope("created")
+			setMicroAppWorkspaceId("")
+			void SuperMagicApi.getMicroAppWorkspace()
+				.then((actualWorkspace) => setMicroAppWorkspaceId(actualWorkspace.id))
+				.catch(() => magicToast.error(t("selectPathModal.fetchProjectsFailed")))
+		}
 		setCurrentWorkspace(workspace)
 		setViewMode("project")
 		setCurrentProject(null)
@@ -538,7 +619,8 @@ function ProjectResourceSelectorModal({
 		createDirectoryHook.cancelCreateDirectory()
 		createWorkspaceHook.cancelCreateWorkspace()
 		createProjectHook.cancelCreateProject()
-		await fetchProjectsByWorkspace(workspace.id)
+		if (workspace.id === MICRO_APPS_WORKSPACE_ID) await fetchMicroAppProjects("created")
+		else await fetchProjectsByWorkspace(workspace.id)
 	})
 
 	// 刷新工作区列表
@@ -1180,7 +1262,10 @@ function ProjectResourceSelectorModal({
 			if (!firstSelection) return
 			onSubmit({
 				targetProjectId: firstSelection.project.id,
-				targetWorkspaceId: firstSelection.workspace.id,
+				targetWorkspaceId:
+					firstSelection.workspace.id === MICRO_APPS_WORKSPACE_ID
+						? microAppWorkspaceId
+						: firstSelection.workspace.id,
 				targetProject: firstSelection.project,
 				targetPath: path,
 				targetAttachments: attachments,
@@ -1212,7 +1297,10 @@ function ProjectResourceSelectorModal({
 		onSubmit &&
 			onSubmit({
 				targetProjectId: currentProject?.id || "",
-				targetWorkspaceId: currentWorkspace?.id,
+				targetWorkspaceId:
+					currentWorkspace.id === MICRO_APPS_WORKSPACE_ID
+						? microAppWorkspaceId
+						: currentWorkspace.id,
 				targetProject: currentProject ?? undefined,
 				targetPath,
 				targetAttachments,
@@ -1226,9 +1314,16 @@ function ProjectResourceSelectorModal({
 
 	// Workspace-level submit is opt-in; default file operations still require a target project.
 	const canSubmit = useMemo(() => {
-		if (isMentionMode) return selectedResources.length > 0
+		if (isMentionMode)
+			return (
+				selectedResources.length > 0 &&
+				(selectedResources[0]?.workspace.id !== MICRO_APPS_WORKSPACE_ID ||
+					!!microAppWorkspaceId)
+			)
 		return (
 			currentWorkspace !== null &&
+			(currentWorkspace.id !== MICRO_APPS_WORKSPACE_ID ||
+				(!!microAppWorkspaceId && !!currentProject)) &&
 			(currentProject !== null ||
 				(allowWorkspaceRootSubmit && effectiveViewMode === "project"))
 		)
@@ -1237,6 +1332,7 @@ function ProjectResourceSelectorModal({
 		selectedResources.length,
 		allowWorkspaceRootSubmit,
 		currentWorkspace,
+		microAppWorkspaceId,
 		currentProject,
 		effectiveViewMode,
 	])
@@ -1437,7 +1533,11 @@ function ProjectResourceSelectorModal({
 		const shareWorkspace = SHARE_WORKSPACE_DATA(t)
 		// 创建我的龙虾工作区对象
 		const myClawWorkspace = MY_CLAW_WORKSPACE_DATA(t)
-		const resourceWorkspaces = [MY_SKILLS_WORKSPACE_DATA(t), MY_AGENTS_WORKSPACE_DATA(t)]
+		const resourceWorkspaces = [
+			MY_SKILLS_WORKSPACE_DATA(t),
+			MY_AGENTS_WORKSPACE_DATA(t),
+			MICRO_APPS_WORKSPACE_DATA(t),
+		]
 		// 合并工作区列表和底部固定频道：共享工作区、我的龙虾
 		const allWorkspaces = availableWorkspaces
 
@@ -1608,6 +1708,28 @@ function ProjectResourceSelectorModal({
 
 		return (
 			<>
+				{currentWorkspace?.id === MICRO_APPS_WORKSPACE_ID && (
+					<div className="mb-3 flex gap-2 border-b border-border pb-2">
+						{(["created", "collaborated"] as const).map((scope) => (
+							<Button
+								key={scope}
+								variant={microAppScope === scope ? "secondary" : "ghost"}
+								size="sm"
+								aria-pressed={microAppScope === scope}
+								onClick={() => {
+									setMicroAppScope(scope)
+									setCurrentProject(null)
+									setAvailableProjects([])
+									void fetchMicroAppProjects(scope)
+								}}
+							>
+								{scope === "created"
+									? t("selectPathModal.createdMicroApps")
+									: t("selectPathModal.collaboratedMicroApps")}
+							</Button>
+						))}
+					</div>
+				)}
 				{canEdit && createProjectHook.createProjectShown && (
 					<div className={textFolderItemClass}>
 						<div className={folderIconClass}>
