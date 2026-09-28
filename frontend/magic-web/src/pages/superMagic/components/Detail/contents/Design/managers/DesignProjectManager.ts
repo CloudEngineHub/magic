@@ -108,7 +108,6 @@ export interface DesignProjectManagerAPI {
 
 	scheduleAutoSave: (metadata?: DesignSaveMetadata) => void
 	cancelAutoSave: () => void
-	clearLocalDraftOnClose: () => void
 	canUpdateCurrentDesignData: () => boolean
 	persistLocalDraft: (
 		designData: DesignData,
@@ -244,17 +243,13 @@ export class DesignProjectManager implements DesignProjectManagerAPI {
 			onSaveStart: () => this.remoteListener?.beginLocalSave() ?? null,
 			onSaveEnd: async (saveToken, didSave, savedUpdatedAt) => {
 				await this.remoteListener?.endLocalSave(saveToken, didSave, savedUpdatedAt)
-				if (
-					didSave &&
-					this.saveManager.wasLastSaveFullyPersisted() &&
-					!this.hasUnresolvedMergeConflicts()
-				) {
-					this.clearLocalDraftAfterFullyPersistedSave()
-				}
 			},
 			onAutoSaveResult: async (saveResult) => {
 				if (saveResult.ok) {
 					this.handleSuccessfulSaveResult(saveResult)
+					if (saveResult.fullyPersisted && !this.hasUnresolvedMergeConflicts()) {
+						this.clearLocalDraftAfterFullyPersistedSave(saveResult.savedFingerprint)
+					}
 					return
 				}
 				await this.handleSaveResultConflict(saveResult)
@@ -1431,16 +1426,6 @@ export class DesignProjectManager implements DesignProjectManagerAPI {
 		this.saveManager.cancelAutoSave()
 	}
 
-	/**
-	 * Explicitly closing a Canvas tab is the one UI action that discards its recoverable draft.
-	 * Browser lifecycle events use persistLocalDraft instead, so refresh and navigation remain
-	 * recoverable while a deliberate tab close releases every draft storage fallback.
-	 */
-	clearLocalDraftOnClose(): void {
-		this.cancelAutoSave()
-		this.clearLocalDraft()
-	}
-
 	private getDraftIdentity(): DesignDraftIdentity {
 		return {
 			projectId: this.options.projectId,
@@ -1598,8 +1583,8 @@ export class DesignProjectManager implements DesignProjectManagerAPI {
 		void deleteDesignDraft(this.getDraftIdentity())
 	}
 
-	private clearLocalDraftAfterFullyPersistedSave(): void {
-		this.clearLocalDraft()
+	private clearLocalDraftAfterFullyPersistedSave(expectedLocalFingerprint: string): void {
+		void deleteDesignDraft(this.getDraftIdentity(), expectedLocalFingerprint)
 	}
 
 	private clearLocalDraftBecauseAlreadySynced(): void {
@@ -1987,7 +1972,7 @@ export class DesignProjectManager implements DesignProjectManagerAPI {
 				this.saveManager.wasLastSaveFullyPersisted() &&
 				!this.hasUnresolvedMergeConflicts()
 			) {
-				this.clearLocalDraftAfterFullyPersistedSave()
+				this.clearLocalDraftAfterFullyPersistedSave(saveResult.savedFingerprint)
 			}
 			this.pendingRemoteDesignData = null
 			return true
@@ -2150,7 +2135,7 @@ export class DesignProjectManager implements DesignProjectManagerAPI {
 		}
 
 		if (!this.hasUnresolvedMergeConflicts()) {
-			this.clearLocalDraftAfterFullyPersistedSave()
+			this.clearLocalDraftAfterFullyPersistedSave(saveResult.savedFingerprint)
 		}
 		this.pendingRemoteDesignData = null
 		this.stateBag.setters.setPendingDesignUpgrade?.(null)
@@ -2200,7 +2185,7 @@ export class DesignProjectManager implements DesignProjectManagerAPI {
 				this.saveManager.wasLastSaveFullyPersisted() &&
 				!this.hasUnresolvedMergeConflicts()
 			) {
-				this.clearLocalDraftAfterFullyPersistedSave()
+				this.clearLocalDraftAfterFullyPersistedSave(saveResult.savedFingerprint)
 			}
 			this.pendingRemoteDesignData = null
 			return
@@ -2480,7 +2465,7 @@ export class DesignProjectManager implements DesignProjectManagerAPI {
 				this.saveManager.wasLastSaveFullyPersisted() &&
 				!this.hasUnresolvedMergeConflicts()
 			) {
-				this.clearLocalDraftAfterFullyPersistedSave()
+				this.clearLocalDraftAfterFullyPersistedSave(saveResult.savedFingerprint)
 			}
 			return true
 		}
@@ -2764,7 +2749,7 @@ export class DesignProjectManager implements DesignProjectManagerAPI {
 				this.saveManager.wasLastSaveFullyPersisted() &&
 				!this.hasUnresolvedMergeConflicts()
 			) {
-				this.clearLocalDraftAfterFullyPersistedSave()
+				this.clearLocalDraftAfterFullyPersistedSave(saveResult.savedFingerprint)
 			}
 			return true
 		}

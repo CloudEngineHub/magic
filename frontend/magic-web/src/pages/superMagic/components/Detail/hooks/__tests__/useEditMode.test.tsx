@@ -86,4 +86,20 @@ describe("useEditMode", () => {
 		await expect(result.current.checkBeforeClose()).resolves.toBe("close")
 		expect(mockState.confirm).not.toHaveBeenCalled()
 	})
+
+	it("silently saves and closes without showing the confirmation dialog", async () => {
+		const { result } = renderHook(() =>
+			useEditMode({
+				fileId: "canvas-file",
+				editingPresenceEnabled: false,
+				silentClose: true,
+			}),
+		)
+		const save = vi.fn().mockResolvedValue(undefined)
+
+		await expect(result.current.checkBeforeClose(save)).resolves.toBe("save")
+
+		expect(save).toHaveBeenCalledTimes(1)
+		expect(mockState.confirm).not.toHaveBeenCalled()
+	})
 })

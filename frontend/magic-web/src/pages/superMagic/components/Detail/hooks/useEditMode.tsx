@@ -16,10 +16,12 @@ function useEditMode({
 	fileId,
 	fileName,
 	editingPresenceEnabled = true,
+	silentClose = false,
 }: {
 	fileId?: string
 	fileName?: string
 	editingPresenceEnabled?: boolean
+	silentClose?: boolean
 }) {
 	const [isEditMode, _setIsEditMode] = useState(false)
 	const { t } = useTranslation("super")
@@ -75,7 +77,7 @@ function useEditMode({
 
 	// Best-effort cleanup on page close
 	useEffect(() => {
-		if (!isEditMode || !fileId) return
+		if (silentClose || !isEditMode || !fileId) return
 
 		beforeUnloadRef.current = (e) => {
 			// Prevent page close and show browser's default confirmation dialog
@@ -107,7 +109,7 @@ function useEditMode({
 				window.removeEventListener("beforeunload", beforeUnloadRef.current)
 		}
 		// eslint-disable-next-line react-hooks/exhaustive-deps
-	}, [editingPresenceEnabled, isEditMode, fileId])
+	}, [editingPresenceEnabled, isEditMode, fileId, silentClose])
 
 	const joinEdit = useMemoizedFn(async (fileId: string) => {
 		if (!fileId) {
@@ -222,6 +224,18 @@ function useEditMode({
 	// Check before close - returns 'close', 'save', or 'cancel'
 	const checkBeforeClose = useMemoizedFn(
 		async (onSave?: () => Promise<void>): Promise<"close" | "save" | "cancel"> => {
+			if (silentClose) {
+				try {
+					await onSave?.()
+					if (fileId) await leaveEdit(fileId)
+					return onSave ? "save" : "close"
+				} catch {
+					// Canvas keeps its local draft when the remote request fails, so closing remains
+					// safe without blocking the user on a confirmation dialog.
+					return "close"
+				}
+			}
+
 			// Some editors, such as Canvas, persist their own document without entering the
 			// generic file editing presence mode. A registered save handler still needs the
 			// close confirmation so the user can choose save-and-close or discard explicitly.

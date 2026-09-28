@@ -114,8 +114,6 @@ export default function Render(props: any) {
 		// Register/unregister checkBeforeClose callback
 		onRegisterCheckBeforeClose,
 		onUnregisterCheckBeforeClose,
-		onRegisterCloseCleanup,
-		onUnregisterCloseCleanup,
 		projectId,
 		browserAttachments,
 		allowDownload,
@@ -159,6 +157,7 @@ export default function Render(props: any) {
 		fileId: data?.file_id,
 		fileName: data?.file_name || data?.display_filename || data?.filename,
 		editingPresenceEnabled,
+		silentClose: type === DetailType.Design,
 	})
 
 	// Use hook to manage save handler registration and wrapped checkBeforeClose
@@ -794,8 +793,6 @@ export default function Render(props: any) {
 		allowEdit,
 		// Register save handler from content component
 		onRegisterSaveHandler: registerSaveHandler,
-		onRegisterCloseCleanup,
-		onUnregisterCloseCleanup,
 		// New props for ActionButtons functionality
 		viewMode,
 		onViewModeChange,

@@ -279,8 +279,6 @@ interface DesignViewerProps {
 	isFullscreen?: boolean
 	onFullscreen?: () => void
 	onRegisterSaveHandler?: (handler: (() => Promise<void>) | null) => void
-	onRegisterCloseCleanup?: (fileId: string, callback: () => void) => void
-	onUnregisterCloseCleanup?: (fileId: string) => void
 	data?: {
 		project_path?: string
 		elements?: LayerElement[]
@@ -303,8 +301,6 @@ function DesignViewer(props: DesignViewerProps) {
 		isFullscreen,
 		onFullscreen,
 		onRegisterSaveHandler,
-		onRegisterCloseCleanup,
-		onUnregisterCloseCleanup,
 	} = props
 	// Prefer the topic project, then standalone preview, then the selected project.
 	const projectId = selectedTopic?.project_id || projectIdProp || selectedProject?.id
@@ -519,21 +515,7 @@ function DesignViewer(props: DesignViewerProps) {
 		manualSave,
 	} = designProjectManager
 
-	const { isProcessingRevoke, revokeType, clearLocalDraftOnClose } = designProjectManager
-	const isExplicitCloseRef = useRef(false)
-
-	useEffect(() => {
-		const fileId = currentFile?.id
-		if (!fileId || !onRegisterCloseCleanup) return
-
-		onRegisterCloseCleanup(fileId, () => {
-			// The unmount handler normally persists drafts. Mark deliberate tab close first so
-			// that lifecycle cleanup cannot recreate the draft after it was deleted.
-			isExplicitCloseRef.current = true
-			clearLocalDraftOnClose()
-		})
-		return () => onUnregisterCloseCleanup?.(fileId)
-	}, [currentFile?.id, clearLocalDraftOnClose, onRegisterCloseCleanup, onUnregisterCloseCleanup])
+	const { isProcessingRevoke, revokeType } = designProjectManager
 
 	const latestDesignDataRef = useRef(designData)
 	const isInitialLoadingRef = useRef(isInitialLoading)
@@ -1200,7 +1182,7 @@ function DesignViewer(props: DesignViewerProps) {
 		window.addEventListener("pagehide", handlePageLeave)
 		window.addEventListener("beforeunload", handlePageLeave)
 		return () => {
-			if (!isExplicitCloseRef.current) handlePageLeave()
+			handlePageLeave()
 			window.removeEventListener("pagehide", handlePageLeave)
 			window.removeEventListener("beforeunload", handlePageLeave)
 		}
@@ -1500,10 +1482,9 @@ function DesignViewer(props: DesignViewerProps) {
 			// Export the runtime document again because the last Canvas interaction may not
 			// have reached the host change callback before the user closes the tab.
 			persistCurrentCanvasDraftImmediatelyRef.current("manual-refresh")
-			const didSave = await manualSaveRef.current()
-			if (!didSave) {
-				throw new Error("Canvas document could not be saved before closing")
-			}
+			// A failed remote save keeps the IndexedDB draft as the recovery source; closing the
+			// Canvas must not turn a transient network failure into data loss.
+			await manualSaveRef.current()
 		}
 
 		onRegisterSaveHandler(saveCanvasBeforeClose)

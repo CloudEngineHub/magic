@@ -226,8 +226,6 @@ export function useFilesViewer(props: FilesViewerProps) {
 
 	// Store checkBeforeClose functions for each file
 	const checkBeforeCloseMapRef = useRef<Map<string, () => Promise<boolean>>>(new Map())
-	// Content owners register cleanup that runs only after an explicit close is confirmed.
-	const closeCleanupMapRef = useRef<Map<string, () => void>>(new Map())
 
 	// State
 	const [tabs, restoreTabs] = useReducer(tabReducer, [])
@@ -1465,10 +1463,6 @@ export function useFilesViewer(props: FilesViewerProps) {
 				if (!userTabs.some((tab) => tab.fileData.file_id === id))
 					checkBeforeCloseMapRef.current.delete(id)
 			}
-			for (const id of closeCleanupMapRef.current.keys()) {
-				if (!userTabs.some((tab) => tab.fileData.file_id === id))
-					closeCleanupMapRef.current.delete(id)
-			}
 			setFullscreenFileId(null)
 			setCacheLoaded(false) // Reset cache loaded state
 			dispatchTabs({ type: TabActionType.SYNC_TABS_DATA, payload: { tabs: userTabs } })
@@ -2249,12 +2243,6 @@ export function useFilesViewer(props: FilesViewerProps) {
 					if (tab.fileData.space_type === "user")
 						userFilesStore.unregisterFileGuard(fileId)
 				},
-				onRegisterCloseCleanup: (fileId: string, callback: () => void) => {
-					closeCleanupMapRef.current.set(fileId, callback)
-				},
-				onUnregisterCloseCleanup: (fileId: string) => {
-					closeCleanupMapRef.current.delete(fileId)
-				},
 				allowDownload: props.allowDownload,
 			}
 		},
@@ -2263,9 +2251,6 @@ export function useFilesViewer(props: FilesViewerProps) {
 		updateFileManagerState,
 		getCheckBeforeClose: (fileId: string) => {
 			return checkBeforeCloseMapRef.current.get(fileId)
-		},
-		getCloseCleanup: (fileId: string) => {
-			return closeCleanupMapRef.current.get(fileId)
 		},
 	}
 }

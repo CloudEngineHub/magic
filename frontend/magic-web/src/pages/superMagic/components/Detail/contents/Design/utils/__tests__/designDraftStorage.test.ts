@@ -3,6 +3,7 @@ import type { DesignData } from "../../types"
 import {
 	buildDesignDraftKey,
 	deleteDesignDraft,
+	deleteDesignDraftIfMatches,
 	readDesignDraft,
 	writeDesignDraft,
 	type DesignDraftIdentity,
@@ -155,5 +156,22 @@ describe("designDraftStorage fallback", () => {
 		})
 
 		expect(result).toEqual({ target: "none", durable: false })
+	})
+
+	it("keeps a newer draft when an older save response is acknowledged", async () => {
+		await writeDesignDraft(draftInput("saved", 500))
+		await writeDesignDraft(draftInput("newer", 600))
+
+		await deleteDesignDraftIfMatches(identity, "local-fp-saved")
+
+		expect((await readDesignDraft(identity))?.designData.name).toBe("newer")
+	})
+
+	it("clears the acknowledged draft when no newer revision exists", async () => {
+		await writeDesignDraft(draftInput("saved", 500))
+
+		await deleteDesignDraftIfMatches(identity, "local-fp-saved")
+
+		expect(await readDesignDraft(identity)).toBeNull()
 	})
 })

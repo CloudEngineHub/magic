@@ -146,7 +146,6 @@ const FilesViewer = memo(
 				enterPreviewFullscreen,
 				exitPreviewFullscreen,
 				getCheckBeforeClose,
-				getCloseCleanup,
 				getTabFileContext,
 				getFileManagerState,
 				updateFileManagerState,
@@ -233,12 +232,6 @@ const FilesViewer = memo(
 				return true
 			}
 
-			const clearDraftsForTabs = (tabIds: string[]) => {
-				for (const tabId of tabIds) {
-					getCloseCleanup(tabId)?.()
-				}
-			}
-
 			const runConfirmedTabClose = async (options: {
 				tabIds: string[]
 				close: () => void
@@ -251,7 +244,6 @@ const FilesViewer = memo(
 					if (!(await confirmTabClosures(options.tabIds))) return false
 					if (options.isStillValid && !options.isStillValid()) return false
 
-					clearDraftsForTabs(options.tabIds)
 					options.close()
 					if (options.clearCacheAfter) clearCache()
 					return true
