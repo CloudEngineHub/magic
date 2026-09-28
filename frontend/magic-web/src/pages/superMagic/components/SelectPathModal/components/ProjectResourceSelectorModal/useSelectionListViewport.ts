@@ -1,13 +1,12 @@
-import { useLayoutEffect, useRef, useState } from "react"
+import { useLayoutEffect, useState } from "react"
 
 /** 用真实行距裁出下一行的一半；容器负责可用高度，viewport 负责滚动，避免测量自身导致反复缩小。 */
 export function useSelectionListViewport(rowSelector: string, itemCount: number, layout?: string) {
-	const containerRef = useRef<HTMLDivElement>(null)
-	const viewportRef = useRef<HTMLDivElement>(null)
+	// Dialog Portal 可能晚于父组件 effect 挂载，跟随真实节点建立观察，首次打开也能测量。
+	const [container, containerRef] = useState<HTMLDivElement | null>(null)
+	const [viewport, viewportRef] = useState<HTMLDivElement | null>(null)
 	const [height, setHeight] = useState<number>()
 	useLayoutEffect(() => {
-		const container = containerRef.current
-		const viewport = viewportRef.current
 		if (!container || !viewport) return
 		const measure = () => {
 			const available = container.clientHeight
@@ -41,6 +40,6 @@ export function useSelectionListViewport(rowSelector: string, itemCount: number,
 		if (viewport.firstElementChild) observer.observe(viewport.firstElementChild)
 		measure()
 		return () => observer.disconnect()
-	}, [rowSelector, itemCount, layout])
+	}, [container, viewport, rowSelector, itemCount, layout])
 	return { containerRef, viewportRef, height }
 }
