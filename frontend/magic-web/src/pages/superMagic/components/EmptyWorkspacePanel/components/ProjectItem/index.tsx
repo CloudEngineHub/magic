@@ -5,6 +5,7 @@ import { useHover, useMemoizedFn } from "ahooks"
 import { useMemo, useRef } from "react"
 import useProjectRename from "@/pages/superMagic/hooks/useProjectRename"
 import { Input } from "antd"
+import { Checkbox } from "@/components/shadcn-ui/checkbox"
 import SmartTooltip from "@/components/other/SmartTooltip"
 import { useTranslation } from "react-i18next"
 import {
@@ -54,6 +55,7 @@ interface ProjectItemProps<T extends ProjectListItem | CollaborationProjectListI
 	onShortcutNavigateToWorkspace?: (project: T) => void
 	onMouseEnter?: () => void
 	locationName?: string
+	selection?: { checked: boolean; onCheck: () => void }
 	relativeActiveTime?: boolean
 }
 
@@ -92,6 +94,7 @@ function ProjectItem<T extends ProjectListItem | CollaborationProjectListItem>({
 	onMouseEnter,
 	locationName,
 	relativeActiveTime = false,
+	selection,
 }: ProjectItemProps<T>) {
 	const ref = useRef<HTMLDivElement>(null)
 	const isHover = useHover(ref)
@@ -155,7 +158,7 @@ function ProjectItem<T extends ProjectListItem | CollaborationProjectListItem>({
 
 	const showCollaborators =
 		(isCompact || !isListMode) && isCollaborationProjectStatus && inCollaborationPanel
-	const copyLinkButton = isSelfCollaborationProjectStatus && (
+	const copyLinkButton = !selection && isSelfCollaborationProjectStatus && (
 		<MagicButton
 			className={cn(
 				"flex h-7 items-center gap-1 rounded-lg border border-border px-2 py-1.5",
@@ -224,6 +227,202 @@ function ProjectItem<T extends ProjectListItem | CollaborationProjectListItem>({
 		t,
 	])
 
+	const renderProject = ({
+		open,
+		triggerContextMenu,
+	}: {
+		open: boolean
+		triggerContextMenu?: React.MouseEventHandler<HTMLButtonElement>
+	}) => (
+		<div
+			ref={ref}
+			className={cn(
+				"relative flex w-full min-w-0 cursor-pointer flex-col gap-2.5 rounded-lg border border-border bg-card p-2.5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring",
+				!isCompact && "h-[183px]",
+				!isCompact && !!WithCollaborators && "h-[222px] w-full",
+				!isCompact &&
+					isListMode &&
+					"h-14 w-full flex-row items-center justify-start [&_.project-item-actions]:right-2 [&_.project-item-actions]:top-2 [&_.project-item-actions]:border-none [&_.project-item-actions]:bg-muted [&_.project-item-actions]:text-foreground [&_.project-item-content]:max-w-[calc(100%-50px)] [&_.project-item-content]:flex-1 [&_.project-item-icon]:h-10 [&_.project-item-icon]:w-10 [&_.project-item-icon]:flex-none [&_.project-item-title]:pr-5 [&_.project-item-updated-at]:overflow-hidden [&_.project-item-updated-at]:text-ellipsis [&_.project-item-updated-at]:whitespace-nowrap",
+				isCompact &&
+					"grid grid-cols-[16px_minmax(0,1fr)_24px] items-center gap-x-3 gap-y-1 px-3 py-2 hover:bg-accent/50",
+				isCompact && !isListMode && "min-h-[88px]",
+				isCompactList &&
+					"min-h-12 grid-cols-[16px_minmax(0,1fr)_auto] rounded-none border-0 border-b bg-transparent [@container_(min-width:800px)]:[grid-template-columns:var(--project-list-columns)]",
+				isRecentLayout && "items-start",
+			)}
+			onClick={() => onClick(item)}
+			role={selection ? "button" : undefined}
+			tabIndex={selection ? 0 : undefined}
+			onKeyDown={
+				selection
+					? (event) => {
+							if (event.target !== event.currentTarget) return
+							if (event.key === "Enter") onClick(item)
+							if (event.key === " ") {
+								event.preventDefault()
+								selection.onCheck()
+							}
+						}
+					: undefined
+			}
+			onMouseEnter={onMouseEnter}
+			data-testid="project-item"
+			data-index={index}
+			data-view-mode={viewMode}
+			data-variant={variant}
+			data-pinned={item.is_pinned}
+			data-collaboration={isCollaborationProjectStatus}
+			data-workspace-shortcut={isWorkspaceShortcutProjectStatus}
+			data-project-name={item.project_name || t("project.unnamedProject")}
+		>
+			<div
+				className={cn(
+					"project-item-icon relative flex flex-1 items-center justify-center rounded px-2 py-2",
+					isCompact && "col-start-1 row-start-1 size-4 flex-none p-0",
+					isRecentLayout && "h-5 self-start",
+				)}
+				data-testid="project-item-icon"
+			>
+				{selection ? (
+					<Checkbox
+						checked={selection.checked}
+						aria-label={t("selectPathModal.selectProject", { name: item.project_name })}
+						onClick={(event) => event.stopPropagation()}
+						onCheckedChange={selection.onCheck}
+					/>
+				) : (
+					<IconWorkspaceProjectFolder
+						isHovered={isHover}
+						wasHovered={!isHover}
+						size={isCompact ? 16 : isListMode ? 30 : 60}
+					/>
+				)}
+			</div>
+			<div
+				className={cn(
+					"project-item-content flex max-w-full flex-col gap-1",
+					isCompact && "col-start-2 row-start-1 min-w-0 gap-0.5",
+					isCompactList && "contents",
+				)}
+				data-testid="project-item-content"
+			>
+				<div
+					className={cn(
+						"contents",
+						isRecentLayout && "col-start-2 row-start-1 flex min-w-0 flex-col gap-0.5",
+					)}
+				>
+					{/* 编辑时，只允许编辑非工作区快捷项目 */}
+					{isEditing && !isWorkspaceShortcutProjectStatus && onRenameProject ? (
+						<Input
+							autoFocus
+							className={cn("h-5", isCompactList && "col-start-2 row-start-1")}
+							onClick={(e) => e.stopPropagation()}
+							value={editingProjectName}
+							onChange={handleProjectNameChange}
+							onKeyDown={handleProjectNameKeyDown}
+							onBlur={handleProjectNameBlur}
+							data-testid="project-item-rename-input"
+						/>
+					) : (
+						<FlexBox
+							align="center"
+							gap={isRecentLayout ? 6 : 4}
+							className={cn(
+								"min-w-0",
+								isRecentLayout && "min-h-5",
+								isCompactList && "col-start-2 row-start-1",
+							)}
+							data-testid="project-item-title-wrapper"
+						>
+							{selection && (
+								<IconWorkspaceProjectFolder size={16} isHovered={isHover} />
+							)}
+							{!isRecentLayout && projectTags}
+							<SmartTooltip
+								className={cn(
+									"project-item-title min-w-0 flex-1 rounded text-sm font-semibold leading-5 text-foreground",
+									!onRenameProject && "hover:bg-transparent",
+									isListMode && "cursor-pointer",
+									!isListMode && "cursor-text",
+									isCompact && "cursor-pointer text-[13px] font-medium",
+									isRecentLayout && "flex-initial",
+								)}
+								onClick={isListMode || isCompact ? undefined : handleNameClick}
+								data-testid="project-item-title"
+								data-editable={!isListMode && !isCompact && !!onRenameProject}
+							>
+								{item.project_name || t("project.unnamedProject")}
+								{locationName && !isRecentLayout && (
+									<span className="block truncate text-xs font-normal text-muted-foreground">
+										{locationName}
+									</span>
+								)}
+							</SmartTooltip>
+							{isRecentLayout && projectTags}
+						</FlexBox>
+					)}
+					{isRecentLayout && locationName && (
+						<SmartTooltip
+							className="min-w-0 text-xs font-normal leading-4 text-muted-foreground"
+							data-testid="project-item-location"
+						>
+							{locationName}
+						</SmartTooltip>
+					)}
+				</div>
+				<SmartTooltip
+					className={cn(
+						"project-item-updated-at text-[10px] font-normal leading-[13px] text-muted-foreground",
+						isCompact && "truncate text-xs leading-4",
+						isCompactList &&
+							"col-start-2 row-start-2 [@container_(min-width:800px)]:col-start-[time] [@container_(min-width:800px)]:row-start-1",
+						isRecentLayout && isCompactList && "leading-5",
+					)}
+					data-testid="project-item-time"
+					data-sort-type={sortType}
+				>
+					{isCompactList ? time.value : time.label}
+				</SmartTooltip>
+			</div>
+
+			<div
+				className={cn(
+					isCompactList
+						? "col-start-3 row-span-2 row-start-1 flex items-center justify-end gap-2 [@container_(min-width:800px)]:col-start-[actions] [@container_(min-width:800px)]:row-span-1"
+						: "contents",
+					isRecentLayout && "self-start",
+				)}
+			>
+				{isCompactList && showCollaborators && copyLinkButton}
+				{!selection && (
+					<button
+						type="button"
+						aria-label={t("common.moreActions")}
+						className={cn(
+							"project-item-actions absolute right-5 top-5 flex h-6 w-6 cursor-pointer items-center justify-center rounded-lg border border-border bg-black/50 text-white",
+							isListMode && "right-2 top-2 border-none bg-muted text-foreground",
+							isCompact &&
+								"static col-start-3 row-start-1 rounded-md border-none bg-transparent text-muted-foreground hover:bg-accent hover:text-foreground",
+							isRecentLayout && "h-5 self-start",
+						)}
+						style={{
+							opacity: (isCompact || isHover || open) && !isEditing ? 1 : 0,
+							visibility:
+								(isCompact || isHover || open) && !isEditing ? "visible" : "hidden",
+						}}
+						onClick={triggerContextMenu}
+						data-testid="project-item-more-button"
+						data-visible={isHover || open}
+					>
+						<IconDots size={16} />
+					</button>
+				)}
+			</div>
+			{WithCollaborators}
+		</div>
+	)
+	if (selection) return renderProject({ open: false })
 	return (
 		<>
 			<ProjectActionsDropdown
@@ -243,183 +442,7 @@ function ProjectItem<T extends ProjectListItem | CollaborationProjectListItem>({
 				onCancelWorkspaceShortcut={onCancelWorkspaceShortcut}
 				onShortcutNavigateToWorkspace={onShortcutNavigateToWorkspace}
 			>
-				{({ open, triggerContextMenu }) => (
-					<div
-						ref={ref}
-						className={cn(
-							"relative flex w-full min-w-0 cursor-pointer flex-col gap-2.5 rounded-lg border border-border bg-card p-2.5",
-							!isCompact && "h-[183px]",
-							!isCompact && !!WithCollaborators && "h-[222px] w-full",
-							!isCompact &&
-								isListMode &&
-								"h-14 w-full flex-row items-center justify-start [&_.project-item-actions]:right-2 [&_.project-item-actions]:top-2 [&_.project-item-actions]:border-none [&_.project-item-actions]:bg-muted [&_.project-item-actions]:text-foreground [&_.project-item-content]:max-w-[calc(100%-50px)] [&_.project-item-content]:flex-1 [&_.project-item-icon]:h-10 [&_.project-item-icon]:w-10 [&_.project-item-icon]:flex-none [&_.project-item-title]:pr-5 [&_.project-item-updated-at]:overflow-hidden [&_.project-item-updated-at]:text-ellipsis [&_.project-item-updated-at]:whitespace-nowrap",
-							isCompact &&
-								"grid grid-cols-[16px_minmax(0,1fr)_24px] items-center gap-x-3 gap-y-1 px-3 py-2 hover:bg-accent/50",
-							isCompact && !isListMode && "min-h-[88px]",
-							isCompactList &&
-								"min-h-12 grid-cols-[16px_minmax(0,1fr)_auto] rounded-none border-0 border-b bg-transparent [@container_(min-width:800px)]:[grid-template-columns:var(--project-list-columns)]",
-							isRecentLayout && "items-start",
-						)}
-						onClick={() => onClick(item)}
-						onMouseEnter={onMouseEnter}
-						data-testid="project-item"
-						data-index={index}
-						data-view-mode={viewMode}
-						data-variant={variant}
-						data-pinned={item.is_pinned}
-						data-collaboration={isCollaborationProjectStatus}
-						data-workspace-shortcut={isWorkspaceShortcutProjectStatus}
-						data-project-name={item.project_name || t("project.unnamedProject")}
-					>
-						<div
-							className={cn(
-								"project-item-icon relative flex flex-1 items-center justify-center rounded px-2 py-2",
-								isCompact && "col-start-1 row-start-1 size-4 flex-none p-0",
-								isRecentLayout && "h-5 self-start",
-							)}
-							data-testid="project-item-icon"
-						>
-							<IconWorkspaceProjectFolder
-								isHovered={isHover}
-								wasHovered={!isHover}
-								size={isCompact ? 16 : isListMode ? 30 : 60}
-							/>
-						</div>
-						<div
-							className={cn(
-								"project-item-content flex max-w-full flex-col gap-1",
-								isCompact && "col-start-2 row-start-1 min-w-0 gap-0.5",
-								isCompactList && "contents",
-							)}
-							data-testid="project-item-content"
-						>
-							<div
-								className={cn(
-									"contents",
-									isRecentLayout &&
-										"col-start-2 row-start-1 flex min-w-0 flex-col gap-0.5",
-								)}
-							>
-								{/* 编辑时，只允许编辑非工作区快捷项目 */}
-								{isEditing &&
-								!isWorkspaceShortcutProjectStatus &&
-								onRenameProject ? (
-									<Input
-										autoFocus
-										className={cn(
-											"h-5",
-											isCompactList && "col-start-2 row-start-1",
-										)}
-										onClick={(e) => e.stopPropagation()}
-										value={editingProjectName}
-										onChange={handleProjectNameChange}
-										onKeyDown={handleProjectNameKeyDown}
-										onBlur={handleProjectNameBlur}
-										data-testid="project-item-rename-input"
-									/>
-								) : (
-									<FlexBox
-										align="center"
-										gap={isRecentLayout ? 6 : 4}
-										className={cn(
-											"min-w-0",
-											isRecentLayout && "min-h-5",
-											isCompactList && "col-start-2 row-start-1",
-										)}
-										data-testid="project-item-title-wrapper"
-									>
-										{!isRecentLayout && projectTags}
-										<SmartTooltip
-											className={cn(
-												"project-item-title min-w-0 flex-1 rounded text-sm font-semibold leading-5 text-foreground",
-												!onRenameProject && "hover:bg-transparent",
-												isListMode && "cursor-pointer",
-												!isListMode && "cursor-text",
-												isCompact &&
-													"cursor-pointer text-[13px] font-medium",
-												isRecentLayout && "flex-initial",
-											)}
-											onClick={
-												isListMode || isCompact
-													? undefined
-													: handleNameClick
-											}
-											data-testid="project-item-title"
-											data-editable={
-												!isListMode && !isCompact && !!onRenameProject
-											}
-										>
-											{item.project_name || t("project.unnamedProject")}
-											{locationName && !isRecentLayout && (
-												<span className="block truncate text-xs font-normal text-muted-foreground">
-													{locationName}
-												</span>
-											)}
-										</SmartTooltip>
-										{isRecentLayout && projectTags}
-									</FlexBox>
-								)}
-								{isRecentLayout && locationName && (
-									<SmartTooltip
-										className="min-w-0 text-xs font-normal leading-4 text-muted-foreground"
-										data-testid="project-item-location"
-									>
-										{locationName}
-									</SmartTooltip>
-								)}
-							</div>
-							<SmartTooltip
-								className={cn(
-									"project-item-updated-at text-[10px] font-normal leading-[13px] text-muted-foreground",
-									isCompact && "truncate text-xs leading-4",
-									isCompactList &&
-										"col-start-2 row-start-2 [@container_(min-width:800px)]:col-start-[time] [@container_(min-width:800px)]:row-start-1",
-									isRecentLayout && isCompactList && "leading-5",
-								)}
-								data-testid="project-item-time"
-								data-sort-type={sortType}
-							>
-								{isCompactList ? time.value : time.label}
-							</SmartTooltip>
-						</div>
-
-						<div
-							className={cn(
-								isCompactList
-									? "col-start-3 row-span-2 row-start-1 flex items-center justify-end gap-2 [@container_(min-width:800px)]:col-start-[actions] [@container_(min-width:800px)]:row-span-1"
-									: "contents",
-								isRecentLayout && "self-start",
-							)}
-						>
-							{isCompactList && showCollaborators && copyLinkButton}
-							<button
-								type="button"
-								aria-label={t("common.moreActions")}
-								className={cn(
-									"project-item-actions absolute right-5 top-5 flex h-6 w-6 cursor-pointer items-center justify-center rounded-lg border border-border bg-black/50 text-white",
-									isListMode &&
-										"right-2 top-2 border-none bg-muted text-foreground",
-									isCompact &&
-										"static col-start-3 row-start-1 rounded-md border-none bg-transparent text-muted-foreground hover:bg-accent hover:text-foreground",
-									isRecentLayout && "h-5 self-start",
-								)}
-								style={{
-									opacity: (isCompact || isHover || open) && !isEditing ? 1 : 0,
-									visibility:
-										(isCompact || isHover || open) && !isEditing
-											? "visible"
-											: "hidden",
-								}}
-								onClick={triggerContextMenu}
-								data-testid="project-item-more-button"
-								data-visible={isHover || open}
-							>
-								<IconDots size={16} />
-							</button>
-						</div>
-						{WithCollaborators}
-					</div>
-				)}
+				{renderProject}
 			</ProjectActionsDropdown>
 		</>
 	)

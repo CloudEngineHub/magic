@@ -131,7 +131,8 @@ export interface ProjectResourceSelectorModalProps extends Omit<
 	excludeProjectIds?: string[]
 	emptyDirectoryDescription?: string
 	emptyDirectoryActionLabel?: string | null
-	onSubmit: (data: ProjectResourceSelectorSubmitData) => void
+	submitting?: boolean
+	onSubmit: (data: ProjectResourceSelectorSubmitData) => void | Promise<void>
 }
 
 export interface ImportFromOtherProjectModalProps {

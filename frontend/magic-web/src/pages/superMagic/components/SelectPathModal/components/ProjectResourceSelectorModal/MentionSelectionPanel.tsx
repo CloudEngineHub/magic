@@ -6,12 +6,15 @@ import MagicTooltip from "@/components/base/MagicTooltip"
 import SmartTooltip from "@/components/other/SmartTooltip"
 import { FileResourceIcon } from "../../../TopicFilesButton/components/FileResourceIcon"
 import type { FilePresentation } from "../../../TopicFilesButton/utils/file-presentation"
+import IconProject from "../../../icons/IconProject"
 
-export interface MentionSelectionItem {
+export type MentionSelectionItem = {
 	key: string
 	sourceName: string
-	presentation: FilePresentation
-}
+} & (
+	| { presentation: FilePresentation; projectName?: never }
+	| { projectName: string; presentation?: never }
+)
 
 interface Props {
 	items: readonly MentionSelectionItem[]
@@ -83,13 +86,17 @@ export function MentionSelectionPanel({ items, onRemove, onClear, onNavigate }: 
 					scrollShadows
 				>
 					<ul className="space-y-1 p-2">
-						{items.map(({ key, sourceName, presentation }) => (
+						{items.map(({ key, sourceName, presentation, projectName }) => (
 							<li
 								key={key}
 								className="group flex min-w-0 items-start gap-2 rounded-md border border-border/60 bg-background p-2"
 							>
 								<div className="shrink-0 pt-0.5">
-									<FileResourceIcon presentation={presentation} size={18} />
+									{presentation ? (
+										<FileResourceIcon presentation={presentation} size={18} />
+									) : (
+										<IconProject />
+									)}
 								</div>
 								<div className="min-w-0 flex-1 space-y-1">
 									<SmartTooltip
@@ -97,14 +104,14 @@ export function MentionSelectionPanel({ items, onRemove, onClear, onNavigate }: 
 										elementType="div"
 										className="truncate text-xs font-medium"
 									>
-										{presentation.name}
+										{presentation?.name ?? projectName}
 									</SmartTooltip>
 									{renderLocation(key, sourceName, "project")}
-									{renderLocation(key, presentation.path, "file")}
+									{presentation && renderLocation(key, presentation.path, "file")}
 								</div>
 								<MagicTooltip
 									title={t("fileManager.removeSelected", {
-										name: presentation.name,
+										name: presentation?.name ?? projectName,
 									})}
 								>
 									<Button
@@ -112,7 +119,7 @@ export function MentionSelectionPanel({ items, onRemove, onClear, onNavigate }: 
 										size="icon"
 										className="size-6 shrink-0 text-muted-foreground"
 										aria-label={t("fileManager.removeSelected", {
-											name: presentation.name,
+											name: presentation?.name ?? projectName,
 										})}
 										onClick={() => onRemove(key)}
 									>

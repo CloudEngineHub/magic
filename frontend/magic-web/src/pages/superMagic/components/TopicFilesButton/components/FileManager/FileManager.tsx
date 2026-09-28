@@ -4,7 +4,7 @@ import { Button } from "@/components/shadcn-ui/button"
 import { cn } from "@/utils/cn"
 import { useTranslation } from "react-i18next"
 import { useMemoizedFn } from "ahooks"
-import { buildAttachmentIndex } from "../../utils/attachmentIndex"
+import { buildAttachmentIndex, resolveAttachmentId } from "../../utils/attachmentIndex"
 import {
 	getFilePresentationIndex,
 	resolveFilePresentation,
@@ -102,7 +102,8 @@ export function FileManager(props: FileManagerProps) {
 			return
 		}
 		// 从清单定位进入父目录，避免目录折叠或旧搜索隐藏目标；勾选集合仍由调用方保留。
-		const parentId = index.getParentItemById(request.fileId)?.file_id ?? props.rootId
+		const parent = index.getParentItemById(request.fileId)
+		const parentId = (parent && resolveAttachmentId(parent)) ?? props.rootId
 		setRecycle(false)
 		navigation.navigate(parentId)
 		setLocation((current) => ({ ...current, query: "" }))
@@ -143,10 +144,12 @@ export function FileManager(props: FileManagerProps) {
 		directory?.directoryLoadState === "unloaded",
 	)
 	const [expandedKeys, setExpandedKeys] = useState<React.Key[]>(initialState?.expandedIds ?? [])
+	const [searchExpandedKeys, setSearchExpandedKeys] = useState<React.Key[]>([])
+	const searchingProject = selecting && Boolean(query)
 	const listTree = useTreeUI({
 		enableCache: false,
-		expandedKeys,
-		onExpandedKeysChange: setExpandedKeys,
+		expandedKeys: searchingProject ? searchExpandedKeys : expandedKeys,
+		onExpandedKeysChange: searchingProject ? setSearchExpandedKeys : setExpandedKeys,
 	})
 	const contentLoading =
 		loading ||
@@ -175,12 +178,16 @@ export function FileManager(props: FileManagerProps) {
 		const children = new Map<string, AttachmentItem[]>()
 		const sortChildren = (files: AttachmentItem[]) =>
 			files
-				.filter((item) => !item.is_hidden && item.file_id)
-				.map((item) =>
-					item.is_directory
-						? { ...item, children: children.get(item.file_id ?? "") ?? [] }
-						: item,
+				.filter(
+					(item) =>
+						!item.is_hidden && (selecting ? resolveAttachmentId(item) : item.file_id),
 				)
+				.map((item) => {
+					const id = selecting ? resolveAttachmentId(item) : item.file_id
+					if (item.is_directory)
+						return { ...item, file_id: id, children: children.get(id ?? "") ?? [] }
+					return item.file_id === id ? item : { ...item, file_id: id }
+				})
 				.sort((a, b) => {
 					if (Boolean(a.is_directory) !== Boolean(b.is_directory))
 						return a.is_directory ? -1 : 1
@@ -212,8 +219,8 @@ export function FileManager(props: FileManagerProps) {
 		// 后代先排序，一次生成展示投影；展开和选择只计算可见行，不重新扫描全部附件。
 		for (const key of [...index.allKeys].reverse()) {
 			const file = index.getItemByKey(key)
-			if (file?.is_directory && file.file_id)
-				children.set(file.file_id, sortChildren(file.children ?? []))
+			const id = file && (selecting ? resolveAttachmentId(file) : file.file_id)
+			if (file?.is_directory && id) children.set(id, sortChildren(file.children ?? []))
 		}
 		return { roots: sortChildren(props.attachments), children }
 	}, [
@@ -224,8 +231,60 @@ export function FileManager(props: FileManagerProps) {
 		navigation.sort,
 		navigation.sortDirection,
 		i18n.language,
+		selecting,
 	])
+	const searchTree = useMemo(() => {
+		if (!searchingProject) return null
+		const included = new Set<string>()
+		const expanded: string[] = []
+		const children = new Map<string, AttachmentItem[]>()
+		const locale = i18n.language.replaceAll("_", "-")
+		// 后序传播命中节点到祖先，只投影必要目录；清空搜索后恢复原来的展开集合。
+		for (const key of [...index.allKeys].reverse()) {
+			const entry = index.getEntryByKey(key)
+			if (!entry) continue
+			const presentation = resolveFilePresentation(entry.item, {
+				context: props.context,
+				index: presentationIndex,
+			})
+			if (
+				presentation.name.toLocaleLowerCase(locale).includes(query) ||
+				(entry.item.relative_file_path ?? "").toLocaleLowerCase(locale).includes(query)
+			)
+				included.add(key)
+			if (included.has(key) && entry.parentKey) included.add(entry.parentKey)
+			const id = resolveAttachmentId(entry.item)
+			if (entry.item.is_directory && id) {
+				const matches = (sorted.children.get(id) ?? []).filter((item) =>
+					included.has(item.file_id ?? ""),
+				)
+				children.set(
+					id,
+					matches.map((item) =>
+						item.is_directory
+							? { ...item, children: children.get(item.file_id ?? "") ?? [] }
+							: item,
+					),
+				)
+				if (matches.length) expanded.push(id)
+			}
+		}
+		return {
+			roots: sorted.roots
+				.filter((item) => included.has(item.file_id ?? ""))
+				.map((item) =>
+					item.is_directory
+						? { ...item, children: children.get(item.file_id ?? "") ?? [] }
+						: item,
+				),
+			expanded,
+		}
+	}, [searchingProject, query, index, sorted, presentationIndex, props.context, i18n.language])
+	useEffect(() => {
+		setSearchExpandedKeys(searchTree?.expanded ?? [])
+	}, [searchTree])
 	const currentChildren = useMemo(() => {
+		if (searchTree) return searchTree.roots
 		const children =
 			location.directoryId === null
 				? []
@@ -242,10 +301,21 @@ export function FileManager(props: FileManagerProps) {
 						.includes(query),
 				)
 			: children
-	}, [location.directoryId, props.rootId, sorted, query, props.context, presentationIndex])
+	}, [
+		location.directoryId,
+		props.rootId,
+		sorted,
+		query,
+		props.context,
+		presentationIndex,
+		searchTree,
+	])
 	const visible = useVisibleTreeRows({
 		attachmentTree: currentChildren,
-		expandedKeys: view === "list" && !query ? listTree.expandedKeys : noExpandedKeys,
+		expandedKeys:
+			view === "list" && (!query || searchingProject)
+				? listTree.expandedKeys
+				: noExpandedKeys,
 	})
 	const items = useMemo(
 		() =>
@@ -318,7 +388,9 @@ export function FileManager(props: FileManagerProps) {
 							props.onCheckChange({
 								added: addedIds.flatMap((id) => {
 									const item = index.getItemById(id)
-									return item ? [item] : []
+									return item
+										? [item.file_id ? item : { ...item, file_id: id }]
+										: []
 								}),
 								removedIds,
 							}),
@@ -336,9 +408,12 @@ export function FileManager(props: FileManagerProps) {
 				? [...index.getParentItemsById(location.directoryId), directory]
 				: []
 			)
-				.filter((file) => file.file_id && file.file_id !== props.rootId)
+				.filter(
+					(file) =>
+						resolveAttachmentId(file) && resolveAttachmentId(file) !== props.rootId,
+				)
 				.map((file) => ({
-					id: file.file_id ?? "",
+					id: resolveAttachmentId(file) ?? "",
 					name: resolveFilePresentation(file, {
 						context: props.context,
 						index: presentationIndex,

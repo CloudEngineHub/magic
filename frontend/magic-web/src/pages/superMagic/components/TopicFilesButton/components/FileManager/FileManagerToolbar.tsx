@@ -283,8 +283,16 @@ export function FileManagerToolbar(props: Props) {
 					<Input
 						value={props.query}
 						onChange={(event) => props.onQuery(event.target.value)}
-						placeholder={t("userSpace.searchDirectory")}
-						aria-label={t("userSpace.searchDirectory")}
+						placeholder={
+							!management
+								? t("fileManager.searchProjectFiles")
+								: t("userSpace.searchDirectory")
+						}
+						aria-label={
+							!management
+								? t("fileManager.searchProjectFiles")
+								: t("userSpace.searchDirectory")
+						}
 						className="h-7 cursor-text rounded-md bg-muted/30 pl-8 text-xs"
 					/>
 				</div>

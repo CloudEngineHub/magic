@@ -9,6 +9,7 @@ import {
 	ChevronRight,
 	Home,
 	LibraryBig,
+	LayoutGrid,
 	MessageCircle,
 	Search,
 	Share2,
@@ -24,6 +25,7 @@ import { cn } from "@/utils/cn"
 import magicToast from "@/components/base/MagicToaster/utils"
 import {
 	MY_CLAW_WORKSPACE_ID,
+	MY_MICRO_APPS_WORKSPACE_ID,
 	SHARE_WORKSPACE_DATA,
 	SHARE_WORKSPACE_ID,
 	isCollaborationProject,
@@ -39,9 +41,12 @@ import { FileResourceIcon } from "@/pages/superMagic/components/TopicFilesButton
 import { getDirectoriesFromPath, getItemId, getItemName } from "../../utils/attachmentUtils"
 import type { MobileCrossProjectConfig, SelectDirectorySubmitParams } from "./types"
 import { MAX_MENTION_PROJECT_COUNT, type ProjectResourceSelection } from "../../types"
+import { isMicroAppEnabled } from "@/services/microAppFeature"
+import { loadMicroAppProjectPage } from "../../utils/microAppProjects"
 
 interface MobileFilesMoveSheetProps {
 	visible: boolean
+	submitting?: boolean
 	title: string
 	attachments: AttachmentItem[]
 	defaultPath?: AttachmentItem[]
@@ -74,7 +79,7 @@ interface BreadcrumbSegment {
 	onClick: () => void
 }
 
-type WorkspaceEntryType = "workspace" | "shared" | "chats"
+type WorkspaceEntryType = "workspace" | "shared" | "chats" | "micro-app"
 
 interface WorkspaceBrowseItem {
 	id: string
@@ -343,10 +348,20 @@ function WorkspaceRow({
 	const isSharedWorkspace = workspace.entryType === "shared"
 	const isChatsWorkspace = workspace.entryType === "chats"
 	const workspaceName = getWorkspaceDisplayName(workspace, t)
-	const subtitle = isChatsWorkspace
-		? t("selectPathModal.chatCount", { count: workspace.project_count })
-		: t("workspace.projectCount", { count: workspace.project_count })
-	const Icon = isSharedWorkspace ? Share2 : isChatsWorkspace ? MessageCircle : Box
+	const subtitle =
+		workspace.entryType === "micro-app"
+			? t("selectPathModal.microAppSourceFiles")
+			: isChatsWorkspace
+				? t("selectPathModal.chatCount", { count: workspace.project_count })
+				: t("workspace.projectCount", { count: workspace.project_count })
+	const Icon =
+		workspace.entryType === "micro-app"
+			? LayoutGrid
+			: isSharedWorkspace
+				? Share2
+				: isChatsWorkspace
+					? MessageCircle
+					: Box
 
 	return (
 		<button
@@ -530,6 +545,7 @@ function DirectoryRow({
  */
 function MobileFilesMoveSheet({
 	visible,
+	submitting = false,
 	title,
 	attachments,
 	defaultPath = [],
@@ -604,8 +620,16 @@ function MobileFilesMoveSheet({
 	const [query, setQuery] = useState("")
 	const [isLoading, setIsLoading] = useState(false)
 	const chatWorkspaceRef = useRef<Workspace | null>(null)
+	const microAppWorkspaceRef = useRef<Workspace | null>(null)
+	const projectRequestRef = useRef<AbortController | null>(null)
 	const openStateResetRef = useRef(false)
 	const initialWorkspaceLoadRef = useRef(false)
+	useEffect(() => {
+		return () => {
+			projectRequestRef.current?.abort()
+			microAppWorkspaceRef.current = null
+		}
+	}, [visible])
 
 	useEffect(() => {
 		if (!visible) {
@@ -727,6 +751,16 @@ function MobileFilesMoveSheet({
 					project_count: chatProjectsTotal,
 					entryType: "chats",
 				},
+				...(isMentionMode && isMicroAppEnabled()
+					? [
+							{
+								id: MY_MICRO_APPS_WORKSPACE_ID,
+								name: t("selectPathModal.myMicroApps"),
+								project_count: 0,
+								entryType: "micro-app" as const,
+							},
+						]
+					: []),
 				...regularWorkspaces.map((workspace) => ({
 					id: workspace.id,
 					name: workspace.name,
@@ -740,17 +774,49 @@ function MobileFilesMoveSheet({
 		} finally {
 			setIsLoading(false)
 		}
-	}, [ensureChatWorkspace, includeSpecialWorkspaces, mobileCrossProjectConfig?.workspaces, t])
+	}, [
+		ensureChatWorkspace,
+		includeSpecialWorkspaces,
+		isMentionMode,
+		mobileCrossProjectConfig?.workspaces,
+		t,
+	])
 
 	const loadProjects = useCallback(
 		async (workspace: BrowsingWorkspace) => {
+			projectRequestRef.current?.abort()
+			const request = new AbortController()
+			projectRequestRef.current = request
 			setIsLoading(true)
 			try {
+				if (workspace.entryType === "micro-app" && isMentionMode && isMicroAppEnabled()) {
+					const microWorkspace = await SuperMagicApi.getMicroAppWorkspace()
+					request.signal.throwIfAborted()
+					microAppWorkspaceRef.current = microWorkspace
+					const projects: ProjectListItem[] = []
+					let page = 1
+					// H5 保留原列表交互；逐页读取项目元数据，不预取任何项目附件。
+					while (!request.signal.aborted) {
+						const result = await loadMicroAppProjectPage({
+							workspace: microWorkspace,
+							page,
+							pageSize: 100,
+							signal: request.signal,
+						})
+						projects.push(...result.list)
+						if (projects.length >= result.total || result.list.length === 0) break
+						page += 1
+					}
+					request.signal.throwIfAborted()
+					setProjectItems(projects)
+					return
+				}
 				if (workspace.entryType === "shared") {
 					const response = await SuperMagicApi.getCollaborationProjects({
 						page: 1,
 						page_size: 100,
 					})
+					request.signal.throwIfAborted()
 					setProjectItems(
 						(response?.list || []).map((project) => ({
 							...project,
@@ -762,6 +828,7 @@ function MobileFilesMoveSheet({
 
 				if (workspace.entryType === "chats") {
 					const chatWorkspace = await ensureChatWorkspace()
+					request.signal.throwIfAborted()
 					if (!chatWorkspace?.id) {
 						setProjectItems([])
 						return
@@ -772,6 +839,7 @@ function MobileFilesMoveSheet({
 						page: 1,
 						page_size: 99,
 					})
+					request.signal.throwIfAborted()
 					setProjectItems(response?.list || [])
 					return
 				}
@@ -781,15 +849,18 @@ function MobileFilesMoveSheet({
 					page: 1,
 					page_size: 99,
 				})
+				request.signal.throwIfAborted()
 				setProjectItems(response?.list || [])
 			} catch (error) {
+				if (request.signal.aborted) return
 				console.error("Failed to fetch projects:", error)
 				setProjectItems([])
+				magicToast.error(t("selectPathModal.fetchProjectsFailed"))
 			} finally {
-				setIsLoading(false)
+				if (!request.signal.aborted) setIsLoading(false)
 			}
 		},
-		[ensureChatWorkspace],
+		[ensureChatWorkspace, isMentionMode, t],
 	)
 
 	useEffect(() => {
@@ -1023,6 +1094,10 @@ function MobileFilesMoveSheet({
 		project?: Pick<ProjectListItem, "workspace_id">,
 	): Workspace | null {
 		if (!browsingWorkspace) return null
+		if (browsingWorkspace.entryType === "micro-app") {
+			const workspace = microAppWorkspaceRef.current
+			return workspace ? { ...workspace, name: browsingWorkspace.name } : null
+		}
 		const workspaceId = project?.workspace_id || browsingWorkspace.id
 
 		const configuredWorkspace = mobileCrossProjectConfig?.workspaces?.find(
@@ -1265,7 +1340,7 @@ function MobileFilesMoveSheet({
 					<button
 						type="button"
 						onClick={handleConfirm}
-						disabled={!canConfirm}
+						disabled={!canConfirm || submitting}
 						className={cn(
 							HEADER_BUTTON_CLASS,
 							"right-[10px] bg-primary text-primary-foreground active:opacity-80 disabled:opacity-40",

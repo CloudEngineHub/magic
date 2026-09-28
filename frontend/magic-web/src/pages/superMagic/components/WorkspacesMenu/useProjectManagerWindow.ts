@@ -21,7 +21,14 @@ interface ProjectManagerWindow {
 	restoreRecommendedSize: () => void
 }
 
-export function useProjectManagerWindow(open: boolean): ProjectManagerWindow {
+export function useProjectManagerWindow(
+	open: boolean,
+	options?: {
+		preferenceKey: string
+		recommendedSize: DialogWindowSize
+		minSize: DialogWindowSize
+	},
+): ProjectManagerWindow {
 	const { userInfo } = useUserInfo()
 	const identity =
 		userInfo?.organization_code && userInfo.user_id
@@ -29,10 +36,12 @@ export function useProjectManagerWindow(open: boolean): ProjectManagerWindow {
 			: undefined
 	// 所有项目入口共用尺寸偏好；账号未就绪时不使用 undefined 组成共享键。
 	const sizeStorageKey = identity
-		? platformKey(`super_magic/project_manager_size/${identity}`)
+		? platformKey(`super_magic/${options?.preferenceKey ?? "project_manager"}_size/${identity}`)
 		: undefined
 	const guideStorageKey = identity
-		? platformKey(`super_magic/project_manager_resize_guide/${identity}`)
+		? platformKey(
+				`super_magic/${options?.preferenceKey ?? "project_manager"}_resize_guide/${identity}`,
+			)
 		: undefined
 	const [resetSizeKey, setResetSizeKey] = useState(0)
 	const [guide, setGuide] = useState<ResizeGuideState>({ visible: false })
@@ -71,15 +80,15 @@ export function useProjectManagerWindow(open: boolean): ProjectManagerWindow {
 		resizable: true,
 		defaultSize: {
 			width: Math.min(
-				RECOMMENDED_SIZE.width,
+				(options?.recommendedSize ?? RECOMMENDED_SIZE).width,
 				(viewport?.width ?? window.innerWidth) * VIEWPORT_RATIO.width,
 			),
 			height: Math.min(
-				RECOMMENDED_SIZE.height,
+				(options?.recommendedSize ?? RECOMMENDED_SIZE).height,
 				(viewport?.height ?? window.innerHeight) * VIEWPORT_RATIO.height,
 			),
 		},
-		minSize: MIN_SIZE,
+		minSize: options?.minSize ?? MIN_SIZE,
 		sizeStorageKey,
 		resetSizeKey,
 		onResizeEnd: dismissResizeGuide,
