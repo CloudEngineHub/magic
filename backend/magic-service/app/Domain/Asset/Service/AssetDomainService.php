@@ -363,6 +363,26 @@ class AssetDomainService
     }
 
     /**
+     * 在启动异步同步前建立可轮询的初始映射。
+     *
+     * 合规接口以 Provider 映射为唯一状态来源；先写入 PENDING，避免创建接口返回后
+     * 协程尚未开始时被误判为 UNVERIFIED。
+     */
+    public function ensureProviderAssetPending(
+        AssetDataIsolation $dataIsolation,
+        int|string $assetId,
+    ): ProviderAssetEntity {
+        $asset = $this->assets->findById($dataIsolation, $assetId);
+        if ($asset === null || ! $asset->isOwnedBy(
+            $dataIsolation->getCurrentOrganizationCode(),
+            $dataIsolation->getCurrentUserId(),
+        )) {
+            ExceptionBuilder::throw(AssetErrorCode::NOT_FOUND);
+        }
+        return $this->markProviderStatus($dataIsolation, $asset, ProviderAssetStatus::PENDING);
+    }
+
+    /**
      * @param array<int, int|string> $assetIds
      * @return array<string, ProviderAssetEntity>
      */

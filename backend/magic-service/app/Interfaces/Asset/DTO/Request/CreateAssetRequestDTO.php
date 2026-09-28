@@ -32,6 +32,12 @@ class CreateAssetRequestDTO extends AbstractRequestDTO
     /** @var array<int, int|string> */
     public array $tagIds = [];
 
+    /**
+     * 兼容前端以 tags 传递选中标签 ID 的请求格式；标准字段仍为 tag_ids。
+     * @var array<int, int|string|array<string, mixed>>
+     */
+    public array $tags = [];
+
     public function getAssetKind(): string
     {
         return $this->assetKind;
@@ -74,7 +80,16 @@ class CreateAssetRequestDTO extends AbstractRequestDTO
 
     public function getTagIds(): array
     {
-        return $this->tagIds;
+        $values = $this->tagIds !== [] ? $this->tagIds : $this->tags;
+        return array_values(array_unique(array_filter(array_map(
+            static function (mixed $value): string {
+                if (is_array($value)) {
+                    $value = $value['id'] ?? $value['tag_id'] ?? '';
+                }
+                return is_scalar($value) ? (string) $value : '';
+            },
+            $values,
+        ), static fn (string $id): bool => $id !== '')));
     }
 
     public function setAssetKind(mixed $value): void
@@ -131,6 +146,11 @@ class CreateAssetRequestDTO extends AbstractRequestDTO
         ), static fn (string $id): bool => $id !== '')));
     }
 
+    public function setTags(mixed $value): void
+    {
+        $this->tags = is_string($value) ? explode(',', $value) : (array) $value;
+    }
+
     protected static function getHyperfValidationRules(): array
     {
         return [
@@ -144,6 +164,7 @@ class CreateAssetRequestDTO extends AbstractRequestDTO
             'project_file_path' => 'nullable|string|max:1024|required_with:project_id',
             'status' => 'nullable|integer|in:0,1',
             'tag_ids' => 'nullable',
+            'tags' => 'nullable',
         ];
     }
 

@@ -367,6 +367,8 @@ class AssetAppService extends AbstractAssetAppService
         }
 
         $assetId = $asset->getId();
+        // 先落 Provider 初始状态，再启动协程，保证前端立即轮询时至少得到 PROCESSING。
+        $this->assetDomainService->ensureProviderAssetPending($dataIsolation, $assetId);
         $coroutineId = Coroutine::id();
         Coroutine::create(function () use ($dataIsolation, $assetId, $fileUrl, $coroutineId): void {
             CoContext::copy($coroutineId);
