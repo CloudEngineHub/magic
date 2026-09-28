@@ -1,19 +1,24 @@
 /**
  * Slide loading state
  */
+import type { PPTDeckTools } from "../hooks/usePPTDeckTools"
+
 export type SlideLoadingState = "idle" | "loading" | "loaded" | "error"
 
 export interface PPTSidebarProps {
+	tools?: PPTDeckTools
+	hiddenPaths?: ReadonlySet<string>
+	onOpenFile?: (fileId: string, path: string) => void
 	onSlideClick: (index: number) => void
 	onSortChange?: (newSlides: SlideItem[]) => void
-	onInsertSlide?: (position: number, direction: "before" | "after") => void
-	onDuplicateSlide?: (index: number) => void
+	onInsertSlide?: (position: number, direction: "before" | "after") => void | Promise<void>
+	onDuplicateSlide?: (index: number) => void | Promise<void>
 	onDeleteSlide?: (index: number) => void
-	onRenameSlide?: (index: number, newFileName: string) => void
-	onRefreshSlide?: (index: number) => void
+	onRenameSlide?: (index: number, newFileName: string) => void | Promise<void | boolean>
+	onRefreshSlide?: (index: number) => void | Promise<void>
 	onRegenerateScreenshot?: (index: number) => void // Regenerate screenshot only without reloading content
 	onAddToCurrentChat?: (index: number) => void
-	onAddToNewChat?: (index: number) => void
+	onAddToNewChat?: (index: number) => void | Promise<void>
 	onReplaceSlideTemplate?: (index: number) => void
 	isMobile?: boolean
 	sidebarWidth?: number
@@ -56,19 +61,28 @@ export interface SlideScreenshot {
 export interface SortableSlideItemProps {
 	item: SlideItem
 	isActive: boolean
-	onClick: () => void
+	onClick: (
+		event?: React.MouseEvent<HTMLDivElement> | React.KeyboardEvent<HTMLDivElement>,
+	) => void
+	isSelected?: boolean
+	selectionMode?: boolean
+	onSelect?: (range: boolean) => void
+	isHidden?: boolean
+	onToggleHidden?: () => void | Promise<void>
+	removeOnly?: boolean
 	screenshot?: SlideScreenshot
 	totalSlides: number
-	onInsertAbove?: () => void
-	onInsertBelow?: () => void
-	onDuplicate?: () => void
+	onInsertAbove?: () => void | Promise<void>
+	onInsertBelow?: () => void | Promise<void>
+	onDuplicate?: () => void | Promise<void>
 	onDelete?: () => void
-	onRename?: (newFileName: string) => void
+	onRename?: (newFileName: string) => void | Promise<void | boolean>
 	onAddToCurrentChat?: () => void
-	onAddToNewChat?: () => void
+	onAddToNewChat?: () => void | Promise<void>
 	onReplaceTemplate?: () => void
+	onOpenFile?: (fileId: string, path: string) => void
 	onLocateFile?: () => void // Callback to locate file in file tree
-	onRefresh?: () => void // Callback to refresh slide content
+	onRefresh?: () => void | Promise<void> // Callback to refresh slide content
 	onRegenerateScreenshot?: () => void // Callback to regenerate screenshot only
 	className?: string
 	isMobile?: boolean

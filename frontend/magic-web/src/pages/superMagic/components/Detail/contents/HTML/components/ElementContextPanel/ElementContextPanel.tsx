@@ -94,6 +94,9 @@ export function ElementContextPanel({
 			? parentOverlayZIndex + 10
 			: HTML_EDITOR_Z_INDEX.EDITOR_FLOATING.CONTEXT_PANEL,
 	})
+	// Fullscreen can change the parent layer while this toolbar stays mounted.
+	// Release its old allocation before the hook registers the new layer.
+	useEffect(() => releaseOverlayZIndex, [releaseOverlayZIndex])
 
 	useEffect(() => {
 		if (shouldRender) return

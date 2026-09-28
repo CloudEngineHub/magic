@@ -4,15 +4,19 @@ import {
 } from "@/pages/superMagic/components/Detail/components/PPTRender/services"
 import {
 	getTemporaryDownloadUrl,
+	getFileContentById,
 	type GetTemporaryDownloadUrlItem,
 } from "@/pages/superMagic/utils/api"
 import type { AttachmentItem } from "@/pages/superMagic/components/TopicFilesButton/hooks/types"
 import type { FileAccessContext } from "@/pages/superMagic/fileAccess/fileAccessContext"
 import type { FileApi } from "@/pages/superMagic/fileAccess/fileApi"
+import { parseMagicProjectConfigContent } from "@/pages/superMagic/utils/magicProjectConfigParser"
+import { filterPptSlidePaths } from "@/pages/superMagic/utils/pptHiddenSlides"
 
 interface SlideMetadata {
 	name?: string
 	slides?: string[]
+	hidden_slides?: unknown
 	[key: string]: unknown
 }
 
@@ -24,6 +28,9 @@ export interface PrepareExportSlidesInput {
 	displayConfig?: SlideMetadata
 	access?: FileAccessContext
 	fileApi?: FileApi
+	includeHiddenSlides?: boolean
+	/** Internal marker: this export already captured its canonical configuration. */
+	configResolved?: boolean
 }
 
 export interface PrepareExportSlidesOutput {
@@ -52,6 +59,7 @@ export interface PrepareSingleSlideExportInput {
 	access?: FileAccessContext
 	fileApi?: FileApi
 	signal?: AbortSignal
+	displayConfig?: SlideMetadata
 }
 
 function resolveRelativePath(basePath: string, relativePath: string): string {
@@ -98,7 +106,11 @@ function flattenAttachments(items: AttachmentItem[]): AttachmentItem[] {
  * Otherwise flatten the tree to handle nested structures.
  */
 function ensureFlatScope(attachmentList: AttachmentItem[], mainFileId: string): AttachmentItem[] {
-	if (attachmentList.some((item) => item.file_id === mainFileId)) return attachmentList
+	if (
+		attachmentList.some((item) => item.file_id === mainFileId) &&
+		attachmentList.every((item) => !item.children?.length)
+	)
+		return attachmentList
 	return flattenAttachments(attachmentList)
 }
 
@@ -121,10 +133,69 @@ function extractFileIdFromPath(
 	const mainFile = searchScope.find((item) => item.file_id === mainFileId)
 	if (!mainFile?.relative_file_path || !mainFile?.file_name) return undefined
 
-	const baseFolderPath = mainFile.relative_file_path.replace(mainFile.file_name, "")
+	const baseFolderPath = mainFile.is_directory
+		? mainFile.relative_file_path
+		: mainFile.relative_file_path.slice(0, mainFile.relative_file_path.lastIndexOf("/") + 1)
 	const absolutePath = resolveRelativePath(baseFolderPath, path)
 
 	return searchScope.find((item) => item.relative_file_path === absolutePath)?.file_id
+}
+
+/** Capture the source configuration once per export, using the same bound access as page reads. */
+export async function resolvePptExportSlides(
+	input: PrepareExportSlidesInput,
+): Promise<PrepareExportSlidesInput> {
+	if (input.configResolved) return input
+	const scope = flattenAttachments(input.attachmentList)
+	const main = scope.find((item) => item.file_id === input.mainFileId)
+	const basePath = main?.relative_file_path
+		? main.is_directory
+			? main.relative_file_path.replace(/\/?$/, "/")
+			: main.relative_file_path.slice(0, main.relative_file_path.lastIndexOf("/") + 1)
+		: undefined
+	const configFile = scope.find((item) =>
+		basePath !== undefined
+			? item.relative_file_path === `${basePath}magic.project.js`
+			: Boolean(
+					main?.parent_id &&
+					item.parent_id === main.parent_id &&
+					item.file_name === "magic.project.js",
+				),
+	)
+	let displayConfig = input.displayConfig
+	let slidePaths = input.slidePaths
+	if (configFile?.file_id) {
+		const readContent = input.fileApi?.getFileContentById ?? getFileContentById
+		const content = await readContent(configFile.file_id, {
+			responseType: "text",
+			access: input.access,
+		})
+		const parsed = parseMagicProjectConfigContent(String(content))
+		if (
+			!parsed ||
+			!Array.isArray(parsed.slides) ||
+			parsed.slides.some((path) => typeof path !== "string")
+		) {
+			throw new Error("Invalid PPT project configuration")
+		}
+		displayConfig = {
+			...displayConfig,
+			...parsed,
+			slides: parsed.slides as string[],
+			hidden_slides: parsed.hidden_slides,
+		}
+		slidePaths = parsed.slides as string[]
+	}
+	return {
+		...input,
+		displayConfig,
+		slidePaths: filterPptSlidePaths(
+			slidePaths,
+			displayConfig?.hidden_slides,
+			input.includeHiddenSlides,
+		),
+		configResolved: true,
+	}
 }
 
 /**
@@ -142,6 +213,7 @@ export async function prepareSingleSlideExport({
 	throwIfAborted(signal)
 
 	const searchScope = flattenAttachments(attachmentList)
+	const fileItem = searchScope.find((item) => item.file_id === fileId)
 
 	const [urlItem] =
 		(await waitForAbortable(fetchTemporaryDownloadUrls([fileId], fileApi, access), signal)) ??
@@ -153,7 +225,6 @@ export async function prepareSingleSlideExport({
 	throwIfAborted(signal)
 	if (!rawContent) return { htmlSlides: [], fileName: fileName ?? "slide" }
 
-	const fileItem = searchScope.find((item) => item.file_id === fileId)
 	const relativeFilePath = fileItem?.relative_file_path?.replace(fileItem?.file_name || "", "")
 
 	const processorService = new SlideProcessorService({
@@ -200,6 +271,30 @@ export async function prepareSingleSlideExport({
 	}
 }
 
+/** A file-menu selection can represent either a whole deck or one standalone HTML file. */
+export async function prepareFileExportSlides(
+	input: PrepareSingleSlideExportInput,
+): Promise<PrepareExportSlidesOutput> {
+	const file = flattenAttachments(input.attachmentList).find(
+		(item) => item.file_id === input.fileId,
+	)
+	const displayConfig =
+		input.displayConfig ||
+		((file?.display_config ?? file?.metadata) as SlideMetadata | undefined)
+	if (Array.isArray(displayConfig?.slides) && displayConfig.slides.length > 0) {
+		return prepareExportSlides({
+			slidePaths: displayConfig.slides,
+			displayConfig,
+			attachmentList: input.attachmentList,
+			mainFileId: input.fileId,
+			mainFileName: input.fileName,
+			fileApi: input.fileApi,
+			access: input.access,
+		})
+	}
+	return prepareSingleSlideExport(input)
+}
+
 /** Lazy adapter for the one-page service so business entry points can share one provider shape. */
 export async function* iterateSingleExportSlide(
 	input: PrepareSingleSlideExportInput,
@@ -229,7 +324,7 @@ export async function prepareExportSlides(
 	input: PrepareExportSlidesInput,
 ): Promise<PrepareExportSlidesOutput> {
 	const { slidePaths, attachmentList, mainFileId, mainFileName, displayConfig, access, fileApi } =
-		input
+		await resolvePptExportSlides(input)
 	const fileName = displayConfig?.name || mainFileName || "slides"
 	if (!slidePaths.length) return { htmlSlides: [], fileName }
 
@@ -369,16 +464,9 @@ export async function prepareExportSlides(
 export async function* iterateExportSlides(
 	input: IterateExportSlidesInput,
 ): AsyncIterable<PreparedExportSlidePage> {
-	const {
-		slidePaths,
-		attachmentList,
-		mainFileId,
-		mainFileName,
-		displayConfig,
-		access,
-		fileApi,
-		signal,
-	} = input
+	const { signal } = input
+	const { slidePaths, attachmentList, mainFileId, mainFileName, displayConfig, access, fileApi } =
+		await resolvePptExportSlides(input)
 	if (!slidePaths.length) return
 
 	const searchScope = ensureFlatScope(attachmentList, mainFileId)

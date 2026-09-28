@@ -127,6 +127,7 @@ vi.mock("../../../contents/HTML/IsolatedHTMLRenderer", async () => {
 				updateContent: mockState.updateContent,
 				resetContent: mockState.resetContent,
 				getContent: mockState.getContent,
+				getIframeElement: () => null,
 			}))
 
 			React.useEffect(() => {
@@ -445,8 +446,7 @@ describe("PPTSlide", () => {
 			expect(onRenderReadyChange).toHaveBeenCalledWith(false)
 		})
 		const isolatedProps = mockState.renderedIsolatedProps.mock.calls.at(-1)?.[0] as
-			| { onRenderReady?: () => void }
-			| undefined
+			{ onRenderReady?: () => void } | undefined
 		act(() => isolatedProps?.onRenderReady?.())
 		expect(onRenderReadyChange).toHaveBeenCalledWith(true)
 		onRenderReadyChange.mockClear()
@@ -494,8 +494,7 @@ describe("PPTSlide", () => {
 			expect(onRenderReadyChange).toHaveBeenCalledWith(false)
 		})
 		const isolatedProps = mockState.renderedIsolatedProps.mock.calls.at(-1)?.[0] as
-			| { onRenderReady?: () => void }
-			| undefined
+			{ onRenderReady?: () => void } | undefined
 		act(() => isolatedProps?.onRenderReady?.())
 		expect(onRenderReadyChange).toHaveBeenCalledWith(true)
 		onRenderReadyChange.mockClear()
@@ -530,7 +529,7 @@ describe("PPTSlide", () => {
 		expect(screen.getByTestId("ppt-slide-render-content")).toHaveClass("min-h-0", "flex-1")
 		expect(mockState.renderedIsolatedProps).toHaveBeenCalledWith(
 			expect.objectContaining({
-				className: "h-full",
+				className: expect.stringContaining("h-full"),
 			}),
 		)
 	})

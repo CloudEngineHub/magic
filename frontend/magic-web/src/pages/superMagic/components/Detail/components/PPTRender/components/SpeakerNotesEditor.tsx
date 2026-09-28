@@ -1,0 +1,226 @@
+import { useEffect, useRef, useState } from "react"
+import { useMemoizedFn } from "ahooks"
+import { useTranslation } from "react-i18next"
+import { Loader2, NotebookPen, AArrowDown, AArrowUp } from "lucide-react"
+import { Button } from "@/components/shadcn-ui/button"
+import { cn } from "@/utils/cn"
+import { shadow } from "@/utils/shadow"
+import { extractSlideNotes, upsertSlideNotes } from "../utils/slideNotes"
+import PPTNotesMarkdown from "./PPTNotesMarkdown"
+import PPTNotesActions from "./PPTNotesActions"
+import type { PPTSpeakerNotesPanelProps } from "./pptNotesTypes"
+
+export type SaveState = "idle" | "saving" | "saved" | "error" | "unsaved"
+const MAX_NOTE_SAVE_REBASES = 3
+
+export default function SpeakerNotesEditor({
+	slideIndex,
+	rawContent,
+	fileId,
+	getLatestRawContent,
+	allowEdit,
+	saveEditContent,
+	onSaved,
+	onGenerate,
+	initialDraft,
+	onDraftChange,
+	onDraftSaved,
+	overview = false,
+	fontSize = 13,
+	onFontSizeChange,
+	isCurrentPage,
+	onSaveStateChange,
+}: PPTSpeakerNotesPanelProps & {
+	onSaveStateChange: (state: SaveState | undefined) => void
+	overview?: boolean
+	fontSize?: number
+	onFontSizeChange?: (size: number) => void
+	isCurrentPage: boolean
+	initialDraft?: string
+	onDraftChange: (draft: string | undefined) => void
+	onDraftSaved: (draft: string) => void
+}) {
+	const { t } = useTranslation("super")
+	const savingRef = useRef(false)
+	const activeRef = useRef(true)
+	const lastSyncedRawContentRef = useRef(rawContent)
+	const [notes, setNotes] = useState(() => extractSlideNotes(rawContent))
+	const [draft, setDraft] = useState(initialDraft ?? notes)
+	const [isEditing, setIsEditing] = useState(initialDraft !== undefined && initialDraft !== notes)
+	const [saveState, setSaveState] = useState<SaveState>("idle")
+	const dirty = draft !== notes
+	const reportSaveState = useMemoizedFn(onSaveStateChange)
+	useEffect(() => {
+		reportSaveState(saveState === "idle" && dirty ? "unsaved" : saveState)
+	}, [saveState, dirty, reportSaveState])
+	useEffect(() => () => reportSaveState(undefined), [reportSaveState])
+
+	useEffect(() => {
+		activeRef.current = true
+		return () => {
+			activeRef.current = false
+		}
+	}, [])
+
+	useEffect(() => {
+		if (isEditing && dirty) return
+		const nextNotes = extractSlideNotes(rawContent)
+		// The parent may update the slide content asynchronously after save. Do not
+		// let the still-stale prop overwrite the locally saved notes in that window.
+		if (rawContent === lastSyncedRawContentRef.current && nextNotes !== notes) return
+		lastSyncedRawContentRef.current = rawContent
+		setNotes(nextNotes)
+		setDraft(nextNotes)
+		if (nextNotes !== notes) setSaveState("idle")
+	}, [dirty, isEditing, notes, rawContent])
+
+	const saveNotes = async () => {
+		if (!dirty) {
+			setIsEditing(false)
+			return true
+		}
+		if (!allowEdit || !saveEditContent || !fileId) return false
+		if (savingRef.current) return false
+
+		savingRef.current = true
+		setSaveState("saving")
+		try {
+			let latestRawContent = getLatestRawContent?.(fileId) || rawContent
+			let nextContent = upsertSlideNotes(latestRawContent, draft)
+			for (let attempt = 0; attempt <= MAX_NOTE_SAVE_REBASES; attempt += 1) {
+				const result = await saveEditContent(
+					shadow(nextContent),
+					fileId,
+					true,
+					undefined,
+					true,
+					false,
+					{ silent: true },
+				)
+				// Navigation invalidates this editor, including retries against the latest HTML.
+				if (!activeRef.current) return false
+				if (result === false) throw new Error("Failed to save speaker notes")
+
+				const currentRawContent = getLatestRawContent?.(fileId) || latestRawContent
+				if (currentRawContent === latestRawContent || currentRawContent === nextContent)
+					break
+				if (attempt === MAX_NOTE_SAVE_REBASES) {
+					throw new Error("Slide changed repeatedly while saving speaker notes")
+				}
+				latestRawContent = currentRawContent
+				nextContent = upsertSlideNotes(latestRawContent, draft)
+			}
+
+			await onSaved(nextContent, fileId)
+			if (!activeRef.current) return false
+			onDraftSaved(draft)
+			setNotes(draft)
+			setIsEditing(false)
+			setSaveState("saved")
+			return true
+		} catch (error) {
+			console.error("Failed to save speaker notes:", error)
+			if (activeRef.current) setSaveState("error")
+			return false
+		} finally {
+			savingRef.current = false
+		}
+	}
+
+	return (
+		<section data-notes-editor className="group/notes flex min-h-0 flex-col">
+			{/* Each page's toolbar stays above its notes until the next page takes over. */}
+			<div className="sticky top-0 z-10 flex shrink-0 flex-wrap items-center justify-between gap-2 bg-background px-4 py-2">
+				<div className="flex min-w-0 items-center gap-2">
+					<NotebookPen className="size-4 shrink-0 text-muted-foreground" />
+					<h2 className="truncate text-xs font-normal text-muted-foreground">
+						{isCurrentPage
+							? t("ppt.speakerNotes.currentPageTitle")
+							: t("ppt.speakerNotes.pageTitle", { page: slideIndex + 1 })}
+					</h2>
+				</div>
+				<div className="flex flex-wrap items-center gap-1">
+					{onFontSizeChange && (
+						<>
+							<Button
+								type="button"
+								variant="ghost"
+								size="icon"
+								className="size-7 text-muted-foreground"
+								aria-label={t("ppt.speakerNotes.decreaseFontSize")}
+								disabled={fontSize <= 11}
+								onClick={() => onFontSizeChange(Math.max(11, fontSize - 2))}
+							>
+								<AArrowDown size={16} />
+							</Button>
+							<Button
+								type="button"
+								variant="ghost"
+								size="icon"
+								className="size-7 text-muted-foreground"
+								aria-label={t("ppt.speakerNotes.increaseFontSize")}
+								disabled={fontSize >= 31}
+								onClick={() => onFontSizeChange(Math.min(31, fontSize + 2))}
+							>
+								<AArrowUp size={16} />
+							</Button>
+						</>
+					)}
+					{onGenerate && (
+						<div
+							className={cn(
+								"flex items-center gap-1",
+								overview &&
+									"pointer-events-none opacity-0 group-focus-within/notes:pointer-events-auto group-focus-within/notes:opacity-100 group-hover/notes:pointer-events-auto group-hover/notes:opacity-100 [@media(hover:none)]:pointer-events-auto [@media(hover:none)]:opacity-100",
+							)}
+						>
+							{/* Keep controls in the tab order; focusing a note or action reveals the group. */}
+							<PPTNotesActions
+								hasNotes={Boolean(draft.trim())}
+								disabled={saveState === "saving" || !allowEdit}
+								onAction={async (action) => {
+									if (dirty && !(await saveNotes())) return
+									// A save can finish after navigation; never apply its action to the new page.
+									if (!activeRef.current) return
+									onGenerate(action, fileId)
+								}}
+							/>
+						</div>
+					)}
+					{allowEdit && dirty && (
+						<Button
+							type="button"
+							variant="outline"
+							size="sm"
+							disabled={saveState === "saving"}
+							onClick={() => void saveNotes()}
+							className="h-7 px-2 text-xs"
+						>
+							{saveState === "saving" && (
+								<Loader2 className="mr-1.5 size-3.5 animate-spin" />
+							)}
+							{t("ppt.speakerNotes.save")}
+						</Button>
+					)}
+				</div>
+			</div>
+
+			<PPTNotesMarkdown
+				fontSize={fontSize}
+				overview={overview}
+				value={isEditing ? draft : notes}
+				readOnly={saveState === "saving" || !allowEdit}
+				onChange={(value) => {
+					// Tiptap emits update when setEditable changes, even without a text edit.
+					// Saving temporarily makes it read-only; that callback must not reset save status.
+					if (savingRef.current || !allowEdit || value === draft) return
+					setIsEditing(true)
+					setDraft(value)
+					onDraftChange(value === notes ? undefined : value)
+					setSaveState("idle")
+				}}
+				onSave={() => void saveNotes()}
+			/>
+		</section>
+	)
+}

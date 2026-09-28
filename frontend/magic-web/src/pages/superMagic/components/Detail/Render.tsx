@@ -218,6 +218,7 @@ export default function Render(props: any) {
 		isPPTEditMode?: boolean,
 		// 是否在保存后退出编辑模式，默认为 false（保持编辑状态）
 		shouldExitEditMode: boolean = false,
+		options?: { silent?: boolean },
 	): Promise<boolean> => {
 		const targetFileId = fileId || data.file_id
 		if (!editingPresenceEnabled) {
@@ -227,6 +228,7 @@ export default function Render(props: any) {
 				enable_shadow,
 				fetchFileVersions,
 				shouldExitEditMode,
+				options,
 			)
 		}
 		const { editing_user_count } = await SuperMagicApi.getFileEditCount(targetFileId)
@@ -249,6 +251,7 @@ export default function Render(props: any) {
 							enable_shadow,
 							undefined,
 							shouldExitEditMode,
+							options,
 						)
 						if (didSave) modal.destroy()
 						resolve(didSave)
@@ -266,6 +269,7 @@ export default function Render(props: any) {
 			enable_shadow,
 			fetchFileVersions,
 			shouldExitEditMode,
+			options,
 		)
 	}
 
@@ -280,12 +284,14 @@ export default function Render(props: any) {
 			isSelectNewest?: boolean,
 		) => void,
 		shouldExitEditMode: boolean = false,
+		options?: { silent?: boolean },
 	): Promise<boolean> {
 		const key = `save-${targetFileId}`
-		magicToast.loading({
-			content: t("common.saving"),
-			key,
-		})
+		if (!options?.silent)
+			magicToast.loading({
+				content: t("common.saving"),
+				key,
+			})
 		try {
 			try {
 				await syncCustomProjectFolderNameBeforeSave(targetFileId, newContent)
@@ -334,28 +340,31 @@ export default function Render(props: any) {
 					},
 				])
 				if (!res?.success_files?.length) {
-					magicToast.error({
-						content: t("common.saveFailed"),
-						key,
-					})
+					if (!options?.silent)
+						magicToast.error({
+							content: t("common.saveFailed"),
+							key,
+						})
 					return false
 				}
 			}
 
 			await fetchFileVersions?.(targetFileId, 10, undefined, true)
-			magicToast.success({
-				content: t("common.saveSuccess"),
-				key,
-			})
+			if (!options?.silent)
+				magicToast.success({
+					content: t("common.saveSuccess"),
+					key,
+				})
 			if (shouldExitEditMode) {
 				setIsEditMode(false)
 			}
 			return true
 		} catch (err) {
-			magicToast.error({
-				content: t("common.saveFailed"),
-				key,
-			})
+			if (!options?.silent)
+				magicToast.error({
+					content: t("common.saveFailed"),
+					key,
+				})
 			return false
 		}
 	}

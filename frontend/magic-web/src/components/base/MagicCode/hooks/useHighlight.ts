@@ -7,6 +7,7 @@ import { FALLBACK_LANG } from "@/utils/markdown"
 import { themeConfig } from "../configs/theme"
 
 import languageMap from "../configs/languageMap"
+import { escapeCodeHtml } from "../search-highlights"
 
 const FALLBACK_LANGS = [FALLBACK_LANG]
 
@@ -54,7 +55,7 @@ export const useHighlight = (text: string, lang: string = FALLBACK_LANG, isDarkM
 				})
 				return html
 			} catch {
-				return `<pre><code>${text}</code></pre>`
+				return `<pre><code>${escapeCodeHtml(text)}</code></pre>`
 			}
 		},
 		{ revalidateOnFocus: false },

@@ -1745,6 +1745,11 @@ export default memo(function HTML(props: HTMLProps) {
 							<>
 								<IsolatedHTMLRenderer
 									ref={htmlRendererRef}
+									className={
+										isImmersiveLayout
+											? undefined
+											: "!bg-[#eeeeee] dark:!bg-[#2b2b2b]"
+									}
 									devicePreview={{
 										...devicePreview,
 										active: htmlTestIdsEnabled,

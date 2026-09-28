@@ -53,8 +53,11 @@ vi.mock("../../PPTRender", () => ({
 		attachmentList,
 		mainFileId,
 		isFullscreen,
+		isFileFullscreen,
 		showRefresh,
 		onSortSave,
+		onDeckConfigSaved,
+		displayConfig,
 		openNewTab,
 		slideStructureAdapter,
 	}: {
@@ -63,13 +66,17 @@ vi.mock("../../PPTRender", () => ({
 		attachmentList?: Array<{ file_id?: string; relative_file_path?: string }>
 		mainFileId?: string
 		isFullscreen?: boolean
+		isFileFullscreen?: boolean
 		showRefresh?: boolean
 		onSortSave?: (slidePaths: string[]) => void
+		onDeckConfigSaved?: (config: Record<string, unknown>) => void
+		displayConfig?: { hidden_slides?: string[] }
 		openNewTab?: (fileId: string, path: string) => void
 		slideStructureAdapter?: unknown
 	}) => (
 		<div
 			data-testid="ppt-render"
+			data-hidden-slides={JSON.stringify(displayConfig?.hidden_slides)}
 			data-show-refresh={String(showRefresh)}
 			data-slide-paths={JSON.stringify(slidePaths || [])}
 			data-main-relative-path={
@@ -83,7 +90,17 @@ vi.mock("../../PPTRender", () => ({
 			)}
 			data-has-structure-adapter={String(Boolean(slideStructureAdapter))}
 			data-is-fullscreen={String(Boolean(isFullscreen))}
+			data-is-file-fullscreen={String(Boolean(isFileFullscreen))}
 		>
+			<button
+				data-testid="local-hide"
+				onClick={() =>
+					onDeckConfigSaved?.({
+						slides: ["slides/slide-1.html"],
+						hidden_slides: ["slides/slide-1.html"],
+					})
+				}
+			/>
 			<button
 				type="button"
 				data-testid="local-insert"
@@ -130,7 +147,7 @@ function createDeckFiles(magicUpdatedAt: string) {
 function renderRoot(
 	magicUpdatedAt: string,
 	slides = ["slides/slide-1.html"],
-	options: { isFullscreen?: boolean; showRefresh?: boolean } = {},
+	options: { isFullscreen?: boolean; showRefresh?: boolean; hiddenSlides?: string[] } = {},
 ) {
 	const attachmentList = createDeckFiles(magicUpdatedAt)
 
@@ -144,6 +161,7 @@ function renderRoot(
 			attachments={attachmentList}
 			displayConfig={{
 				type: "slide",
+				hidden_slides: options.hiddenSlides,
 				slides,
 			}}
 			isFullscreen={options.isFullscreen}
@@ -169,6 +187,27 @@ describe("PPTRootRender", () => {
 		)
 	})
 
+	it("takes hidden pages from canonical config and clears stale display metadata", async () => {
+		renderRoot("1", ["slides/slide-1.html"], { hiddenSlides: ["slides/slide-1.html"] })
+		await waitFor(() =>
+			expect(screen.getByTestId("ppt-render")).toHaveAttribute("data-hidden-slides", "[]"),
+		)
+	})
+
+	it("publishes locally confirmed hidden config immediately without old source overwrite", async () => {
+		renderRoot("1")
+		await waitFor(() =>
+			expect(screen.getByTestId("ppt-render")).toHaveAttribute("data-hidden-slides", "[]"),
+		)
+		fireEvent.click(screen.getByTestId("local-hide"))
+		await waitFor(() =>
+			expect(screen.getByTestId("ppt-render")).toHaveAttribute(
+				"data-hidden-slides",
+				'["slides/slide-1.html"]',
+			),
+		)
+	})
+
 	it("forwards showRefresh to PPTRender", async () => {
 		renderRoot("1", ["slides/slide-1.html"], { showRefresh: false })
 
@@ -183,6 +222,10 @@ describe("PPTRootRender", () => {
 		expect(screen.getByTestId("ppt-project-preview")).toBeInTheDocument()
 		await waitFor(() => {
 			expect(screen.getByTestId("ppt-render")).toHaveAttribute("data-is-fullscreen", "false")
+			expect(screen.getByTestId("ppt-render")).toHaveAttribute(
+				"data-is-file-fullscreen",
+				"true",
+			)
 		})
 	})
 
