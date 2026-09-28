@@ -60,7 +60,6 @@ export async function loadShareFilesV2({
 }: LoadShareFilesOptions) {
 	const builder = createProjectAttachmentsV2Builder()
 	const seenCursorKeys = new Set<string>()
-	let virtualRootInjected = false
 	let nextParentIds: ShareFilesV2NextParentState[] = []
 	let shouldContinue = true
 	let pageIndex = 0
@@ -95,35 +94,7 @@ export async function loadShareFilesV2({
 			})
 			throwIfAborted(signal)
 
-			const rows = Array.isArray(response.list) ? [...response.list] : []
-			if (!virtualRootInjected && rows.length > 0) {
-				const rootParentId = rows.find((row) => row.parent_id !== undefined)?.parent_id
-				if (
-					rootParentId !== undefined &&
-					rootParentId !== null &&
-					String(rootParentId) !== ""
-				) {
-					const firstRow = rows[0]
-					rows.unshift({
-						file_id: String(rootParentId),
-						parent_id: "0",
-						project_id: firstRow.project_id,
-						file_type: "root",
-						file_name: "",
-						file_extension: "",
-						file_key: "",
-						file_size: 0,
-						file_url: "",
-						is_hidden: false,
-						is_directory: true,
-						sort: 0,
-						display_config: {},
-						metadata: {},
-						children: [],
-					})
-					virtualRootInjected = true
-				}
-			}
+			const rows = Array.isArray(response.list) ? response.list : []
 			builder.mergeBatch(rows)
 
 			const responseCursor = normalizeNextParentIds(response.next_parent_ids)

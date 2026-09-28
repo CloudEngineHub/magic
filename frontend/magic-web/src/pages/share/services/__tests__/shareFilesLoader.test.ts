@@ -55,7 +55,7 @@ describe("loadShareFilesV2", () => {
 				list: [
 					attachment({
 						file_id: "folder-1",
-						parent_id: "workspace-root",
+						parent_id: "0",
 						file_name: "Docs",
 						is_directory: true,
 					}),
@@ -122,7 +122,7 @@ describe("loadShareFilesV2", () => {
 				list: [
 					attachment({
 						file_id: "folder-1",
-						parent_id: "workspace-root",
+						parent_id: "0",
 						file_name: "Docs",
 						is_directory: true,
 					}),
@@ -174,7 +174,7 @@ describe("loadShareFilesV2", () => {
 					list: [
 						attachment({
 							file_id: "folder-1",
-							parent_id: "workspace-root",
+							parent_id: "0",
 							file_name: "Docs",
 							is_directory: true,
 						}),
