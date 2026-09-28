@@ -1739,7 +1739,6 @@ class ResourceShareAppService extends AbstractShareAppService
                 $state['after_file_id'] === null ? null : (int) $state['after_file_id'],
                 $remaining + 1,
                 [],
-                excludeHidden: true
             );
             $take = array_slice($rows, 0, $remaining);
             $last = null;
@@ -1819,7 +1818,7 @@ class ResourceShareAppService extends AbstractShareAppService
                     ++$scanned;
                     $lastItem = $item;
                     $entity = $entitiesById[$item->getFileId()] ?? null;
-                    if ($entity === null || $entity->getIsHidden()) {
+                    if ($entity === null) {
                         continue;
                     }
                     $list[] = $this->formatShareCursorRow($entity->toArray(), $shareEntity->getOrganizationCode());
@@ -1856,7 +1855,6 @@ class ResourceShareAppService extends AbstractShareAppService
                 $state['after_file_id'] === null ? null : (int) $state['after_file_id'],
                 $remaining + 1,
                 [],
-                excludeHidden: true
             );
             $take = array_slice($rows, 0, $remaining);
             $last = null;
@@ -1928,7 +1926,8 @@ class ResourceShareAppService extends AbstractShareAppService
         return $this->appendShareV2Ancestors(
             ['list' => $list, 'next_parent_ids' => array_values($queue), 'has_more' => $queue !== []],
             $projectId,
-            $shareEntity->getOrganizationCode()
+            $shareEntity->getOrganizationCode(),
+            true
         );
     }
 
@@ -1942,7 +1941,12 @@ class ResourceShareAppService extends AbstractShareAppService
         return $this->fileCollectionDomainService->getFilesByCollectionIdAndFileIds($collectionId, $chainIds) !== [];
     }
 
-    private function appendShareV2Ancestors(array $result, int $projectId, string $organizationCode): array
+    private function appendShareV2Ancestors(
+        array $result,
+        int $projectId,
+        string $organizationCode,
+        bool $filterHidden = false
+    ): array
     {
         $this->assertShareV2QueueSize($result['next_parent_ids'] ?? []);
         $rows = $result['list'] ?? [];
@@ -1987,7 +1991,7 @@ class ResourceShareAppService extends AbstractShareAppService
                     && $entityMap[$currentId]->getIsDirectory()
                     && $entityMap[$currentId]->getSpaceType() === FileSpaceType::PROJECT->value
                     && $entityMap[$currentId]->getFileName() === '/';
-                if ($entityMap[$currentId]->getIsHidden() && ! $isProjectRoot) {
+                if ($filterHidden && $entityMap[$currentId]->getIsHidden() && ! $isProjectRoot) {
                     $hasHiddenAncestor = true;
                 }
                 $parentId = $entityMap[$currentId]->getParentId();
@@ -2020,7 +2024,13 @@ class ResourceShareAppService extends AbstractShareAppService
         $ancestorCount = 0;
         foreach ($entities as $entity) {
             $entityId = (string) $entity->getFileId();
-            if (! isset($requiredAncestorIds[$entityId]) || $entity->getIsHidden() || isset($existing[$entityId])) {
+            $isProjectRoot = $entity->getParentId() === null
+                && $entity->getIsDirectory()
+                && $entity->getSpaceType() === FileSpaceType::PROJECT->value
+                && $entity->getFileName() === '/';
+            if (! isset($requiredAncestorIds[$entityId])
+                || ($filterHidden && $entity->getIsHidden() && ! $isProjectRoot)
+                || isset($existing[$entityId])) {
                 continue;
             }
             if (++$ancestorCount > min(count($visibleContentIds) * 15, 5000)) {
