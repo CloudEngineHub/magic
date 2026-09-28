@@ -179,12 +179,7 @@ vi.mock("../CollapsedWorkspaceMenu", () => ({
 
 vi.mock("../AppsSubMenu", () => ({
 	__esModule: true,
-	default: ({ children, fixedItems }: { children: ReactNode; fixedItems?: ReactNode }) => (
-		<div data-testid="mock-apps-submenu">
-			{fixedItems}
-			{children}
-		</div>
-	),
+	default: ({ children }: { children: ReactNode }) => <div>{children}</div>,
 }))
 
 vi.mock("../ChatsSubMenu", () => ({
@@ -281,16 +276,6 @@ describe("SidebarContent audio recordings entry", () => {
 			bottomTabHeight: 0,
 		})
 		expect(navigateMock).not.toHaveBeenCalled()
-	})
-})
-
-describe("SidebarContent chats entry", () => {
-	it("renders the chat entry inside the more menu", () => {
-		renderSidebarContent()
-
-		const appsSubMenu = screen.getByTestId("mock-apps-submenu")
-		expect(appsSubMenu).toContainElement(screen.getByTestId("sidebar-content-chats-button"))
-		expect(screen.getByTestId("sidebar-content-apps-button")).toBeVisible()
 	})
 })
 

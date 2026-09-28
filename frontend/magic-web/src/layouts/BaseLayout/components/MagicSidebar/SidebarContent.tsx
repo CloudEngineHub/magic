@@ -99,6 +99,25 @@ function SidebarContent({ collapsed, onBusyChange, onSelect }: SidebarContentPro
 					>
 						<SidebarGroupContent>
 							<SidebarMenu>
+								<SidebarMenuItem>
+									<ChatsSubMenu onOpenChange={setChatsOpen}>
+										<SidebarMenuButton
+											tooltip={
+												collapsed ? t("sidebar:chats.title") : undefined
+											}
+											data-testid="sidebar-content-chats-button"
+											className="text-sidebar-foreground"
+										>
+											<MessageCircle className="h-4 w-4 shrink-0" />
+											<span className="flex-1 overflow-hidden text-ellipsis whitespace-nowrap text-left text-sm leading-5">
+												{t("sidebar:chats.title")}
+											</span>
+											{!collapsed && (
+												<ChevronRight className="h-4 w-4 shrink-0 text-sidebar-foreground" />
+											)}
+										</SidebarMenuButton>
+									</ChatsSubMenu>
+								</SidebarMenuItem>
 								{sidebarMarketMenuItems.map((item) => {
 									const title =
 										item.titleKey === "sidebar:superLobster.title"
@@ -117,28 +136,7 @@ function SidebarContent({ collapsed, onBusyChange, onSelect }: SidebarContentPro
 								})}
 								<MicroAppsSidebarMenuItem collapsed={collapsed} />
 								<SidebarMenuItem>
-									<AppsSubMenu
-										onOpenChange={setAppsOpen}
-										fixedItems={
-											<ChatsSubMenu onOpenChange={setChatsOpen}>
-												<SidebarMenuButton
-													tooltip={
-														collapsed
-															? t("sidebar:chats.title")
-															: undefined
-													}
-													data-testid="sidebar-content-chats-button"
-													className="text-sidebar-foreground"
-												>
-													<MessageCircle className="h-4 w-4 shrink-0" />
-													<span className="flex-1 overflow-hidden text-ellipsis whitespace-nowrap text-left text-sm leading-5">
-														{t("sidebar:chats.title")}
-													</span>
-													<ChevronRight className="h-4 w-4 shrink-0 text-sidebar-foreground" />
-												</SidebarMenuButton>
-											</ChatsSubMenu>
-										}
-									>
+									<AppsSubMenu onOpenChange={setAppsOpen}>
 										<SidebarMenuButton
 											tooltip={collapsed ? t("appsMenu.more") : undefined}
 											data-testid="sidebar-content-apps-button"
