@@ -48,14 +48,12 @@ export default function MicroAppEntryFileSelect({
 		<Popover
 			open={open}
 			onOpenChange={(nextOpen) => {
-				// Keep the menu inside the mobile drawer's stacking and focus boundary.
+				// Keep the menu inside its desktop dialog or mobile drawer stacking and focus boundary.
 				if (nextOpen)
 					setPortalContainer(
-						mobile
-							? (triggerRef.current?.closest<HTMLElement>(
-									'[data-slot="drawer-content"]',
-								) ?? null)
-							: null,
+						triggerRef.current?.closest<HTMLElement>(
+							'[data-slot="drawer-content"], [role="dialog"]',
+						) ?? null,
 					)
 				setOpen(nextOpen)
 			}}

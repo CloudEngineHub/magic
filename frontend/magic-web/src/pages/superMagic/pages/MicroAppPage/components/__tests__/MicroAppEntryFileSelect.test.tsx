@@ -37,12 +37,12 @@ it("searches paths across folders and selects the matching HTML file", () => {
 	expect(onChange).toHaveBeenCalledWith("nested")
 })
 
-it("keeps the mobile file menu inside its drawer and closes after selection", () => {
+it.each([false, true])("keeps the file menu inside its overlay (mobile=%s)", (mobile) => {
 	const onChange = vi.fn()
 	const { container } = render(
-		<div data-slot="drawer-content">
+		<div role="dialog" data-slot={mobile ? "drawer-content" : undefined}>
 			<MicroAppEntryFileSelect
-				mobile
+				mobile={mobile}
 				value={null}
 				onChange={onChange}
 				attachmentList={[
@@ -57,7 +57,7 @@ it("keeps the mobile file menu inside its drawer and closes after selection", ()
 	)
 	fireEvent.click(screen.getByTestId("micro-app-default-open-file"))
 	const option = screen.getByRole("option", { name: "mobile.html" })
-	expect(option.closest('[data-slot="drawer-content"]')).toBe(container.firstChild)
+	expect(container.firstChild).toContainElement(option)
 	fireEvent.click(option)
 	expect(onChange).toHaveBeenCalledWith("mobile")
 	expect(screen.getByTestId("micro-app-default-open-file")).toHaveAttribute(
