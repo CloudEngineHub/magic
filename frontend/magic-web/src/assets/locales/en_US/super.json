@@ -4796,7 +4796,7 @@
 			"resizeColumns": "Resize columns",
 			"resizeFilmstrip": "Resize preview and thumbnails",
 			"resizeNotes": "Resize next slide and notes",
-			"retryFullscreen": "Presenter mode could not open. Click Fullscreen again to present in this window.",
+			"retryFullscreen": "Presenter mode could not open. Click Start slideshow again to present in this window.",
 			"screen": "Switch display",
 			"screenOption": "Display {{index}}",
 			"scrollNext": "Scroll to later slides",
@@ -4808,8 +4808,8 @@
 			"title": "Presenter"
 		},
 		"refreshCurrentSlide": "Refresh",
-		"reloadAllSlides": "Reload all",
-		"reloadCurrentSlide": "Reload current",
+		"reloadAllSlides": "Refresh all",
+		"reloadCurrentSlide": "Refresh",
 		"saveAndNavigate": "Save",
 		"saveChanges": "Save Changes",
 		"saveWithServerUpdate": "A new server version has been detected. Saving will overwrite the latest server version. Continue?",
@@ -4897,6 +4897,7 @@
 			"title": "Notes",
 			"unsaved": "Unsaved"
 		},
+		"startSlideshow": "Start slideshow",
 		"templateReplacement": {
 			"button": "Change Template",
 			"confirm": "Use Template",

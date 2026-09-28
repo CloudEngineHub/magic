@@ -304,9 +304,7 @@ export function PPTControlBar({
 				{!isMobile && (
 					<MagicTooltip
 						title={
-							isFullscreen
-								? t("fileViewer.exitFullscreen")
-								: t("fileViewer.fullscreen")
+							isFullscreen ? t("fileViewer.exitFullscreen") : t("ppt.startSlideshow")
 						}
 					>
 						<span>
@@ -323,7 +321,7 @@ export function PPTControlBar({
 								aria-label={
 									isFullscreen
 										? t("fileViewer.exitFullscreen")
-										: t("fileViewer.fullscreen")
+										: t("ppt.startSlideshow")
 								}
 							>
 								{isFullscreen ? (
@@ -333,7 +331,7 @@ export function PPTControlBar({
 								)}
 								{isFullscreen
 									? t("fileViewer.exitFullscreen")
-									: t("fileViewer.fullscreen")}
+									: t("ppt.startSlideshow")}
 							</Button>
 						</span>
 					</MagicTooltip>
