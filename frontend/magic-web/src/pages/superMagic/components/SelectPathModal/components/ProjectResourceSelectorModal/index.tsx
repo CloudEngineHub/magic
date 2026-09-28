@@ -110,6 +110,86 @@ function EmptyStateBox({ children }: { children: React.ReactNode }) {
 	)
 }
 
+function PreserveParentPathChoice({
+	onChange,
+	labels,
+}: {
+	onChange: (value: boolean) => void
+	labels: Record<
+		| "examples"
+		| "keepDescription"
+		| "flatDescription"
+		| "keepTitle"
+		| "flatTitle"
+		| "folder"
+		| "file",
+		string
+	>
+}) {
+	const [preserve, setPreserve] = useState(false)
+	const select = (value: boolean) => {
+		setPreserve(value)
+		onChange(value)
+	}
+	const cardClass = (active: boolean) =>
+		cn(
+			"cursor-pointer rounded-lg border p-2.5 transition-colors",
+			active ? "border-primary bg-primary/5" : "border-border bg-muted/30",
+		)
+	return (
+		<div className="flex flex-col gap-3">
+			<div className="text-sm leading-5 text-muted-foreground">
+				{preserve ? labels.keepDescription : labels.flatDescription}
+			</div>
+			<div className="grid grid-cols-2 gap-2" aria-label={labels.examples}>
+				<div
+					className={cardClass(preserve)}
+					onClick={() => select(true)}
+					role="button"
+					tabIndex={0}
+					onKeyDown={(event) => {
+						if (event.key === "Enter" || event.key === " ") select(true)
+					}}
+				>
+					<div className="mb-2 flex items-center justify-between text-xs font-medium text-foreground">
+						<span>{labels.keepTitle}</span>
+						{preserve && <IconCheck size={14} className="text-primary" />}
+					</div>
+					<div className="space-y-1 text-xs text-muted-foreground">
+						<div className="flex items-center gap-1">
+							<IconFolder size={14} className="text-primary" />
+							<span>{labels.folder}</span>
+						</div>
+						<div className="ml-4 flex items-center gap-1">
+							<span className="text-muted-foreground/60">└</span>
+							<IconFileSearch size={14} />
+							<span>{labels.file}</span>
+						</div>
+					</div>
+				</div>
+				<div
+					className={cardClass(!preserve)}
+					onClick={() => select(false)}
+					role="button"
+					tabIndex={0}
+					onKeyDown={(event) => {
+						if (event.key === "Enter" || event.key === " ") select(false)
+					}}
+				>
+					<div className="mb-2 flex items-center justify-between text-xs font-medium text-foreground">
+						<span>{labels.flatTitle}</span>
+						{!preserve && <IconCheck size={14} className="text-primary" />}
+					</div>
+					<div className="flex items-center gap-1 text-xs text-muted-foreground">
+						<IconFileSearch size={14} />
+						<span>{labels.file}</span>
+					</div>
+				</div>
+			</div>
+		</div>
+	)
+}
+
 function isFixedWorkspace(workspace: Workspace) {
 	return FIXED_WORKSPACE_IDS.has(workspace.id)
 }
@@ -194,11 +274,56 @@ function ProjectResourceSelectorModal({
 	const [directories, setDirectories] = useState<AttachmentItem[]>([])
 	const [selectedResources, setSelectedResources] = useState<ProjectResourceSelection[]>([])
 	const isMentionMode = selectionMode === "mention"
+	const sourceAttachmentById = useMemo(() => {
+		const index = new Map<string, AttachmentItem>()
+		const pending = [...sourceAttachments]
+		while (pending.length > 0) {
+			const attachment = pending.pop()
+			if (!attachment) continue
+			if (attachment.file_id) index.set(attachment.file_id, attachment)
+			if (attachment.children?.length) pending.push(...attachment.children)
+		}
+		return index
+	}, [sourceAttachments])
+	const rootParentIds = useMemo(() => {
+		const rootIds = new Set<string>()
+		for (const attachment of sourceAttachmentById.values()) {
+			const filePath =
+				attachment.relative_file_path || attachment.file_path || attachment.path
+			if (!attachment.parent_id || !filePath) continue
+			const parent = sourceAttachmentById.get(String(attachment.parent_id))
+			// A path containing only the item name is still nested when its parent
+			// directory is present in the loaded attachment index.
+			if (parent?.is_directory) continue
+			if (filePath.split("/").filter(Boolean).length <= 1) {
+				rootIds.add(String(attachment.parent_id))
+			}
+		}
+		return rootIds
+	}, [sourceAttachmentById])
+	const hasSelectedParentPath = useMemo(() => {
+		if (fileIds.length < 2) return false
+		return fileIds.some((fileId) => {
+			const attachment = sourceAttachmentById.get(fileId)
+			if (!attachment) return false
+			// A non-root path is the authoritative indication that keeping the
+			// original parent folders changes the destination layout. Some API
+			// responses expose this as file_path instead of relative_file_path.
+			const filePath =
+				attachment.relative_file_path || attachment.file_path || attachment.path
+			if (filePath) {
+				return filePath.split("/").filter(Boolean).length > 1
+			}
+			// The parent folder can be omitted from a lazily loaded attachment list,
+			// so do not require parent_id to be present in sourceAttachmentById.
+			return !rootParentIds.has(String(attachment.parent_id || ""))
+		})
+	}, [fileIds, rootParentIds, sourceAttachmentById])
 	// This option only applies to multi-file transfers into another project; same-project
 	// operations retain their existing flat target-directory semantics.
 	const showPreserveParentPathOption =
 		!isMentionMode &&
-		fileIds.length > 1 &&
+		hasSelectedParentPath &&
 		currentProject !== null &&
 		currentProject.id !== (selectedProject?.id || sourceAttachments[0]?.project_id)
 	const confirmPreserveParentPath = useMemoizedFn(
@@ -208,22 +333,24 @@ function ProjectResourceSelectorModal({
 				MagicModal.confirm({
 					title: t("selectPathModal.preserveParentPathConfirmTitle"),
 					content: (
-						<div className="flex flex-col gap-3">
-							<div className="text-sm leading-5 text-muted-foreground">
-								{t("selectPathModal.preserveParentPathDescription")}
-							</div>
-							<label
-								className="flex cursor-pointer items-center gap-2 text-sm text-foreground"
-								data-testid="cross-project-file-preserve-parent-path-option"
-							>
-								<Checkbox
-									onChange={(event) => {
-										shouldPreserveParentPath = event.target.checked
-									}}
-								/>
-								<span>{t("selectPathModal.preserveParentPath")}</span>
-							</label>
-						</div>
+						<PreserveParentPathChoice
+							onChange={(value) => {
+								shouldPreserveParentPath = value
+							}}
+							labels={{
+								examples: t("selectPathModal.preserveParentPathExamples"),
+								keepDescription: t(
+									"selectPathModal.preserveParentPathKeepDescription",
+								),
+								flatDescription: t(
+									"selectPathModal.preserveParentPathFlatDescription",
+								),
+								keepTitle: t("selectPathModal.preserveParentPathKeepTitle"),
+								flatTitle: t("selectPathModal.preserveParentPathFlatTitle"),
+								folder: t("selectPathModal.preserveParentPathFolder"),
+								file: t("selectPathModal.preserveParentPathFile"),
+							}}
+						/>
 					),
 					okText: t("selectPathModal.confirm"),
 					cancelText: t("common.cancel"),
