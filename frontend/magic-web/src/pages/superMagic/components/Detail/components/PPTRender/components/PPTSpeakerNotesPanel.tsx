@@ -165,16 +165,15 @@ export default function PPTSpeakerNotesPanel(props: PPTSpeakerNotesPanelProps) {
 				<ScrollArea
 					viewportRef={viewportRef}
 					className="min-h-0 flex-1"
-					viewportClassName={showAll ? undefined : "[&>div]:!h-full"}
+					// Let notes determine their content height; this viewport owns scrolling in every view.
+					viewportClassName="overscroll-contain"
 				>
 					{slides.map((slide) => (
 						<div
 							key={slide.key}
 							ref={slide.key === currentSlide.key ? currentNoteRef : undefined}
 							hidden={!showAll && slide.key !== currentSlide.key}
-							className={cn(
-								showAll ? "border-b border-border/60 last:border-b-0" : "h-full",
-							)}
+							className={cn(showAll && "border-b border-border/60 last:border-b-0")}
 						>
 							{slide.rawContent === undefined ? (
 								<PPTNotesSlideLoading

@@ -2,7 +2,6 @@ import { useEffect, useRef } from "react"
 import { useTranslation } from "react-i18next"
 import { SimpleEditor } from "@/components/tiptap-templates/simple/simple-editor"
 import type { SimpleEditorRef } from "@/components/tiptap-templates/simple/types"
-import { cn } from "@/utils/cn"
 
 interface PPTNotesMarkdownProps {
 	overview?: boolean
@@ -36,10 +35,7 @@ export default function PPTNotesMarkdown({
 	return (
 		<div
 			data-testid="ppt-speaker-notes-content"
-			className={cn(
-				"relative mx-3 mb-3 rounded-lg bg-muted/40 text-[13px] leading-6 text-foreground focus-within:ring-1 focus-within:ring-ring/40",
-				overview ? "min-h-20" : "min-h-0 flex-1 overflow-hidden",
-			)}
+			className="relative mx-3 mb-3 min-h-20 rounded-lg bg-muted/40 text-[13px] leading-6 text-foreground focus-within:ring-1 focus-within:ring-ring/40"
 			onKeyDown={(event) => {
 				// Notes own the arrow keys and save shortcut; do not navigate the slide behind them.
 				event.stopPropagation()
@@ -81,13 +77,8 @@ export default function PPTNotesMarkdown({
 				}
 				onContentChange={onChange}
 				onSave={onSave}
-				className={cn(
-					"!bg-transparent [&_.is-editor-empty]:before:!content-none [&_.tiptap.ProseMirror.simple-editor]:!px-3 [&_.tiptap.ProseMirror.simple-editor]:!py-2 [&_.tiptap.ProseMirror.simple-editor]:!text-[13px] [&_.tiptap.ProseMirror.simple-editor]:!leading-6",
-					// In the overview, only the outer ScrollArea owns vertical scrolling.
-					// Reset both editor scroll containers so wheel input over text reaches the list.
-					overview &&
-						"!h-auto !overflow-visible !overscroll-auto [&_.simple-editor-content]:!h-auto [&_.simple-editor-content]:!flex-none [&_.simple-editor-content]:!overflow-visible [&_.tiptap.ProseMirror.simple-editor]:min-h-20",
-				)}
+				// Reset both editor scroll containers so wheel input reaches the panel's ScrollArea.
+				className="!h-auto !overflow-visible !overscroll-auto !bg-transparent [&_.is-editor-empty]:before:!content-none [&_.simple-editor-content]:!h-auto [&_.simple-editor-content]:!flex-none [&_.simple-editor-content]:!overflow-visible [&_.tiptap.ProseMirror.simple-editor]:min-h-20 [&_.tiptap.ProseMirror.simple-editor]:!px-3 [&_.tiptap.ProseMirror.simple-editor]:!py-2 [&_.tiptap.ProseMirror.simple-editor]:!text-[13px] [&_.tiptap.ProseMirror.simple-editor]:!leading-6"
 			/>
 		</div>
 	)
