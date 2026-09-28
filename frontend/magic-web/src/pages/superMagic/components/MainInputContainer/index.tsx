@@ -4,7 +4,7 @@ import { ScrollArea } from "@/components/shadcn-ui/scroll-area"
 import { Button } from "@/components/shadcn-ui/button"
 import MainInputHeaderSlot from "@/pages/superMagic/components/MainInputContainer/components/MainInputHeaderSlot/index"
 import SloganContainer from "./components/SloganContainer"
-import HomeModeTabs from "./components/HomeModeTabs"
+// import HomeModeTabs from "./components/HomeModeTabs"
 import { TopicMode } from "../../pages/Workspace/TopicMode"
 import { createPortal } from "react-dom"
 import { AGENT_INPUT_CONTAINER_HEADER_ID, SCENE_INPUT_IDS } from "./constants"
@@ -87,7 +87,8 @@ const Container = observer(function Container({
 					<div className="my-auto flex w-full flex-col items-center gap-8 pb-10 pt-10">
 						<div className="flex w-full max-w-4xl flex-col items-center gap-8">
 							<MainInputHeaderSlot />
-							<HomeModeTabs />
+							{/* Temporarily hidden on Web; switch between chat and task from the global sidebar. */}
+							{/* <HomeModeTabs /> */}
 
 							{/* Welcome Message */}
 							<SloganContainer variant={homeVariant} />
