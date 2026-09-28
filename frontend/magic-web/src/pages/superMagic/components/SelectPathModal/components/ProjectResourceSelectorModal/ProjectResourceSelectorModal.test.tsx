@@ -184,6 +184,12 @@ describe("ProjectResourceSelectorModal micro apps", () => {
 		renderModal()
 		fireEvent.click(screen.getByText("selectPathModal.microApps"))
 		await waitFor(() => expect(screen.getByText("created app")).toBeInTheDocument())
+		expect(
+			screen
+				.getByText("created app")
+				.closest('[data-testid="handle-project-click"]')
+				?.querySelector('svg[viewBox="0 0 16 16"]'),
+		).toBeInTheDocument()
 		fireEvent.click(screen.getByText("selectPathModal.collaboratedMicroApps"))
 		await waitFor(() => expect(screen.getByText("collaborated app")).toBeInTheDocument())
 		expect(screen.queryByText("created app")).not.toBeInTheDocument()

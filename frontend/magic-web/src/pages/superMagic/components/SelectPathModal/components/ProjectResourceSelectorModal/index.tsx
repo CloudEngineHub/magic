@@ -16,7 +16,7 @@ import {
 	IconFolder,
 	IconFileSearch,
 } from "@tabler/icons-react"
-import { AppWindow, Bot, Box, Loader2, UsersRound, Wrench } from "lucide-react"
+import { Bot, Box, Loader2, UsersRound, Wrench } from "lucide-react"
 import { isEmpty, last } from "lodash-es"
 import { useTranslation } from "react-i18next"
 import { useMatch } from "react-router"
@@ -37,6 +37,7 @@ import FoldIcon from "@/pages/superMagic/assets/svg/file-folder.svg"
 import EmptyFilesIcon from "@/pages/superMagic/assets/svg/empty-files.svg"
 import { InputWithError } from "@/pages/superMagic/components/TopicFilesButton/components"
 import IconProject from "../../../icons/IconProject"
+import MicroAppIcon from "@/components/business/MentionPanel/components/icons/MicroAppIcon"
 import { FileResourceIcon } from "@/pages/superMagic/components/TopicFilesButton/components/FileResourceIcon"
 import PinnedTag from "@/pages/superMagic/components/EmptyWorkspacePanel/components/ProjectItem/components/PinnedTag"
 import CollaborationProjectTag from "@/pages/superMagic/components/CollaborationProjectTag"
@@ -123,14 +124,21 @@ function isFixedWorkspace(workspace: Workspace) {
 }
 
 function renderWorkspaceIcon(workspaceId: string) {
-	if (workspaceId === MICRO_APPS_WORKSPACE_ID)
-		return <AppWindow className="size-4 text-current" />
+	if (workspaceId === MICRO_APPS_WORKSPACE_ID) return <MicroAppIcon />
 	if (workspaceId === MY_SKILLS_WORKSPACE_ID) return <Wrench className="size-4 text-current" />
 	if (workspaceId === MY_AGENTS_WORKSPACE_ID) return <Bot className="size-4 text-current" />
 	if (workspaceId === SHARE_WORKSPACE_ID) return <UsersRound className="size-4 text-current" />
 	if (workspaceId === MY_CLAW_WORKSPACE_ID)
 		return <MagiClaw className="size-4 text-current" strokeWidth={1.25} />
 	return <Box className="size-4 text-current" />
+}
+
+function renderProjectIcon(project: ProjectListItem) {
+	if (project.project_mode === TopicMode.MicroApp) return <MicroAppIcon />
+	const resourceType = (project as ResourceProject).resourceType
+	if (resourceType === "skill") return <Wrench className="size-4" />
+	if (resourceType === "agent") return <Bot className="size-4" />
+	return <IconProject />
 }
 
 function ProjectResourceSelectorModal({
@@ -1791,15 +1799,7 @@ function ProjectResourceSelectorModal({
 											showDefaultIcon={false}
 										/>
 										<div className={folderIconClass}>
-											{(project as ResourceProject).resourceType ===
-											"skill" ? (
-												<Wrench className="size-4" />
-											) : (project as ResourceProject).resourceType ===
-											  "agent" ? (
-												<Bot className="size-4" />
-											) : (
-												<IconProject />
-											)}
+											{renderProjectIcon(project)}
 										</div>
 										<MagicEllipseWithTooltip
 											title={getProjectDisplayName(project)}
@@ -1850,7 +1850,7 @@ function ProjectResourceSelectorModal({
 								>
 									<div className="flex min-w-0 flex-1 items-center gap-1">
 										<div className={folderIconClass}>
-											<IconProject />
+											{renderProjectIcon(project)}
 										</div>
 										<MagicEllipseWithTooltip
 											title={getProjectDisplayName(project)}
@@ -1886,15 +1886,7 @@ function ProjectResourceSelectorModal({
 								<div className="flex w-full flex-1 items-center justify-between gap-2.5">
 									<div className="flex flex-1 items-center gap-1">
 										<div className={folderIconClass}>
-											{(project as ResourceProject).resourceType ===
-											"skill" ? (
-												<Wrench className="size-4" />
-											) : (project as ResourceProject).resourceType ===
-											  "agent" ? (
-												<Bot className="size-4" />
-											) : (
-												<IconProject />
-											)}
+											{renderProjectIcon(project)}
 										</div>
 										<MagicEllipseWithTooltip
 											title={getProjectDisplayName(project)}
