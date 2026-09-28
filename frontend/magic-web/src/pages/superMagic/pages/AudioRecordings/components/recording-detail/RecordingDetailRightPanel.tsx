@@ -242,5 +242,8 @@ function buildRightPanelTabs(
 		content: undefined,
 	}
 
-	return [...summaryTabs, notesTab]
+	// Keep summary as the landing tab and slot notes right after it, matching the legacy HTML order
+	// where notes led the analysis panels. Without a summary tab, notes becomes the only entry.
+	const [leadingSummary, ...remainingSummaryTabs] = summaryTabs
+	return leadingSummary ? [leadingSummary, notesTab, ...remainingSummaryTabs] : [notesTab]
 }

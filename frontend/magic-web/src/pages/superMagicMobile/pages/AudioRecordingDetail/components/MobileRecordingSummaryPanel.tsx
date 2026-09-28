@@ -449,21 +449,33 @@ function TopicsContent({
 		<div className="flex flex-col gap-4" data-testid="mobile-recording-topics-content">
 			<div className="-mx-4 overflow-x-auto px-4">
 				<div className="flex w-max gap-2">
-					{topics.map((topic) => (
-						<button
-							key={topic.id}
-							type="button"
-							className={cn(
-								"h-8 rounded-full border px-4 text-[14px] font-medium leading-none transition-colors",
-								topic.id === activeTopic.id
-									? "border-foreground bg-foreground text-background"
-									: "border-border bg-card/70 text-muted-foreground",
-							)}
-							onClick={() => setActiveTopicId(topic.id)}
-						>
-							{topic.name}
-						</button>
-					))}
+					{topics.map((topic) => {
+						const isActive = topic.id === activeTopic.id
+						return (
+							<button
+								key={topic.id}
+								type="button"
+								className={cn(
+									"inline-flex h-8 shrink-0 items-center gap-1.5 rounded-full border px-4 text-[14px] font-medium leading-none transition-colors",
+									isActive
+										? "border-foreground bg-foreground text-background"
+										: "border-border bg-card/70 text-muted-foreground",
+								)}
+								onClick={() => setActiveTopicId(topic.id)}
+							>
+								{/* Chapter color dot reuses the per-topic color so tabs stay visually distinct, matching the legacy HTML tab dots. */}
+								<span
+									aria-hidden
+									className={cn(
+										"size-2 shrink-0 rounded-full ring-1 ring-inset ring-black/15 dark:ring-white/25",
+										isActive && "ring-white/40 dark:ring-black/30",
+									)}
+									style={{ backgroundColor: topic.color }}
+								/>
+								{topic.name}
+							</button>
+						)
+					})}
 				</div>
 			</div>
 

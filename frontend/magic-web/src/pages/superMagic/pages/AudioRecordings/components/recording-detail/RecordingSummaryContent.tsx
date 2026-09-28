@@ -183,14 +183,14 @@ function MindmapContent({
 		[content, speakerNameMap],
 	)
 	const canvasClassName = isDesktop
-		? "!h-full min-h-0 bg-muted [&_svg]:bg-muted [&_svg]:[background-image:none]"
-		: "h-full min-h-[480px] bg-muted [&_svg]:bg-muted [&_svg]:[background-image:none]"
+		? "!h-full min-h-0 bg-white [&_svg]:bg-white [&_svg]:[background-image:none]"
+		: "h-full min-h-[480px] bg-white [&_svg]:bg-white [&_svg]:[background-image:none]"
 
 	if (isDesktop) {
 		return (
 			<div className="relative h-full min-h-0" data-testid="recording-detail-mindmap">
 				{viewMode === "map" ? (
-					<div className="absolute inset-0 overflow-hidden rounded-xl bg-muted">
+					<div className="absolute inset-0 overflow-hidden rounded-xl bg-white">
 						<MagicMarkmap
 							data={mindmapCanvasContent}
 							fullScreen
@@ -220,7 +220,7 @@ function MindmapContent({
 	return (
 		<div className="relative min-h-[480px]" data-testid="recording-detail-mindmap">
 			{viewMode === "map" ? (
-				<div className="relative h-[min(560px,calc(100vh-280px))] min-h-[480px] overflow-hidden rounded-xl bg-muted">
+				<div className="relative h-[min(560px,calc(100vh-280px))] min-h-[480px] overflow-hidden rounded-xl bg-white">
 					<MagicMarkmap
 						data={mindmapCanvasContent}
 						fullScreen
@@ -357,25 +357,37 @@ function TopicsContent({
 					data-testid="recording-detail-topics-scroll"
 				>
 					<div className="flex w-max flex-nowrap gap-2">
-						{topics.map((topic) => (
-							<button
-								key={topic.id}
-								ref={(element) => {
-									topicRefs.current[topic.id] = element ?? undefined
-								}}
-								type="button"
-								className={cn(
-									"h-8 shrink-0 rounded-full border px-4 text-[14px] font-medium leading-none transition-colors",
-									topic.id === activeTopic.id
-										? "border-foreground bg-foreground text-background"
-										: "border-border bg-card/70 text-muted-foreground",
-								)}
-								onClick={() => setActiveTopicId(topic.id)}
-								data-testid={`recording-detail-topic-pill-${topic.id}`}
-							>
-								{topic.name}
-							</button>
-						))}
+						{topics.map((topic) => {
+							const isActive = topic.id === activeTopic.id
+							return (
+								<button
+									key={topic.id}
+									ref={(element) => {
+										topicRefs.current[topic.id] = element ?? undefined
+									}}
+									type="button"
+									className={cn(
+										"inline-flex h-8 shrink-0 items-center gap-1.5 rounded-full border px-4 text-[14px] font-medium leading-none transition-colors",
+										isActive
+											? "border-foreground bg-foreground text-background"
+											: "border-border bg-card/70 text-muted-foreground",
+									)}
+									onClick={() => setActiveTopicId(topic.id)}
+									data-testid={`recording-detail-topic-pill-${topic.id}`}
+								>
+									{/* Chapter color dot reuses the per-topic color so tabs stay visually distinct, matching the legacy HTML tab dots. */}
+									<span
+										aria-hidden
+										className={cn(
+											"size-2 shrink-0 rounded-full ring-1 ring-inset ring-black/15 dark:ring-white/25",
+											isActive && "ring-white/40 dark:ring-black/30",
+										)}
+										style={{ backgroundColor: topic.color }}
+									/>
+									{topic.name}
+								</button>
+							)
+						})}
 					</div>
 				</div>
 

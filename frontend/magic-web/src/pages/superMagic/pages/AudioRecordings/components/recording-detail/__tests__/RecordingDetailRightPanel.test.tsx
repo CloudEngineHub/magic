@@ -165,6 +165,39 @@ describe("RecordingDetailRightPanel responsive height", () => {
 		expect(screen.queryByTestId("summary-tab-notes")).not.toBeInTheDocument()
 	})
 
+	it("places notes right after the leading summary tab", () => {
+		render(
+			<RecordingDetailRightPanel
+				{...baseProps}
+				summaryReady
+				fileMap={{
+					summaryFiles: [
+						{
+							type: "summary",
+							fileName: "summary.md",
+							file: { file_id: "mock-summary-file", file_name: "summary.md" },
+						},
+						{
+							type: "topics",
+							fileName: "topics.md",
+							file: { file_id: "mock-topics-file", file_name: "topics.md" },
+						},
+					],
+					notes: { file_id: "mock-notes-file", file_name: "mock-notes.md" },
+					magicProjectConfig: { files: { notes: "notes/mock-notes.md" } },
+				}}
+				summaryContent={{ summary: "content", topics: "content" }}
+			/>,
+		)
+
+		// TabStrip is mocked to render buttons in the exact order the panel passes them.
+		const tabKeys = screen
+			.getAllByTestId(/summary-tab-/)
+			.map((tab) => tab.getAttribute("data-testid")?.replace("summary-tab-", ""))
+
+		expect(tabKeys).toEqual(["summary", "notes", "topics"])
+	})
+
 	it("keeps the share visibility gate in addition to the bundle config", () => {
 		render(
 			<RecordingDetailRightPanel
