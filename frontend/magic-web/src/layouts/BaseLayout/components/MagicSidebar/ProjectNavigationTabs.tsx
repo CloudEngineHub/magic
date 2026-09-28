@@ -37,7 +37,7 @@ function ProjectNavigationTabs({
 	]
 	return (
 		<div
-			className="sticky top-0 z-20 flex items-center gap-2 bg-sidebar px-2"
+			className="sticky top-0 z-30 flex h-9 items-center gap-2 bg-sidebar px-2 pb-1"
 			data-sidebar-navigation-header="tabs"
 		>
 			{/* Native fieldset disabling preserves the existing busy-state behavior for both tab buttons. */}

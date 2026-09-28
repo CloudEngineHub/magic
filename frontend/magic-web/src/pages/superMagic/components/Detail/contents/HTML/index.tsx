@@ -61,7 +61,9 @@ import { inlineDashboardDataJs } from "./dashboard/resourceVersioning"
 import { useDashboardVersioning } from "./dashboard/useDashboardVersioning"
 import { useAIEditMenuItems } from "@/pages/superMagic/components/Detail/components/EditToolbar/useAIEditMenuItems"
 import FileEditButtons from "@/pages/superMagic/components/Detail/components/EditToolbar/FileEditButtons"
+import ConditionalTooltip from "@/pages/superMagic/components/Detail/components/EditToolbar/ConditionalTooltip"
 import ActionButton from "@/pages/superMagic/components/Detail/components/CommonHeader/components/ActionButton"
+import { cn } from "@/utils/cn"
 import { ProjectListItem } from "@/pages/superMagic/pages/Workspace/types"
 import CommonFooter from "../../components/CommonFooter"
 import { useIsMobile } from "@/hooks/useIsMobile"
@@ -102,6 +104,7 @@ import {
 	useHtmlAppPermissions,
 } from "./hooks/useHtmlAppPermissions"
 import { useHtmlDevConsoleState } from "./hooks/useHtmlDevConsoleState"
+import DesignStyleButton from "./design-styles/DesignStyleButton"
 import {
 	type HtmlPermissionManagerHandle,
 	useHtmlPermissionManagerBridge,
@@ -1483,6 +1486,30 @@ export default memo(function HTML(props: HTMLProps) {
 		writeCachedHtmlEditButton(fileIdForEditCache, showFileEditButton)
 	}, [editButtonStateReady, fileIdForEditCache, showFileEditButton])
 
+	const showDesignStyleButton = useMemo(
+		() =>
+			Boolean(
+				!isReadonlyPreview &&
+				!isEditMode &&
+				allowEdit &&
+				!isDataAnalysis &&
+				!isMediaScenario &&
+				displayData?.file_id &&
+				currentHtmlFileInfo.fileName &&
+				(currentHtmlFileInfo.relativeFilePath || currentHtmlFileInfo.fileName),
+			),
+		[
+			allowEdit,
+			currentHtmlFileInfo.fileName,
+			currentHtmlFileInfo.relativeFilePath,
+			displayData?.file_id,
+			isDataAnalysis,
+			isEditMode,
+			isMediaScenario,
+			isReadonlyPreview,
+		],
+	)
+
 	/** 使用分享按钮可见性控制 Hook */
 	const { showDownloadButton, showExportButton } = useShareButtonVisibility({
 		allowDownload,
@@ -1575,7 +1602,12 @@ export default memo(function HTML(props: HTMLProps) {
 					key: "html-toolbar-actions",
 					zone: "secondary",
 					before: "refresh",
-					visible: () => Boolean(showAIOptimizationButton || effectiveShowFileEditButton),
+					visible: () =>
+						Boolean(
+							showAIOptimizationButton ||
+							effectiveShowFileEditButton ||
+							showDesignStyleButton,
+						),
 					render: (context) => (
 						<div
 							className="flex items-center gap-1"
@@ -1583,33 +1615,61 @@ export default memo(function HTML(props: HTMLProps) {
 								htmlTestIdsEnabled ? "html-editor-toolbar-actions" : undefined
 							}
 						>
-							{showAIOptimizationButton && !isEditMode && (
-								<Button
-									variant="outline"
-									size="sm"
-									onClick={() => void handleQuickSelection()}
-									aria-pressed={isQuickSelecting}
-									aria-label={quickSelectionLabel}
-									title={quickSelectionTitle}
-									className="h-6 gap-1.5 rounded-[8px] px-3 py-0 text-xs font-normal text-foreground shadow-xs"
-									data-testid={
-										htmlTestIdsEnabled ? "html-ai-pick-button" : undefined
+							{showDesignStyleButton && (
+								<DesignStyleButton
+									fileInfo={{
+										fileId: displayData?.file_id ?? "",
+										fileName: currentHtmlFileInfo.fileName,
+										filePath:
+											currentHtmlFileInfo.relativeFilePath ??
+											currentHtmlFileInfo.fileName ??
+											"",
+									}}
+									showButtonText={context.showButtonText}
+									getPopupContainer={context.getPopupContainer}
+									testId={
+										htmlTestIdsEnabled ? "html-design-style-button" : undefined
 									}
+								/>
+							)}
+							{showAIOptimizationButton && !isEditMode && (
+								<ConditionalTooltip
+									showText={Boolean(context.showButtonText)}
+									title={quickSelectionTitle}
+									getPopupContainer={context.getPopupContainer}
 								>
-									<Crosshair
-										size={16}
-										className={isQuickSelecting ? "text-primary" : undefined}
-									/>
-									{context.showButtonText && (
-										<span
+									<Button
+										variant="outline"
+										size="sm"
+										onClick={() => void handleQuickSelection()}
+										aria-pressed={isQuickSelecting}
+										aria-label={quickSelectionLabel}
+										title={quickSelectionTitle}
+										className={cn(
+											"h-6 rounded-[8px] py-0 text-xs font-normal text-foreground shadow-xs",
+											context.showButtonText ? "gap-1.5 px-3" : "px-1.5",
+										)}
+										data-testid={
+											htmlTestIdsEnabled ? "html-ai-pick-button" : undefined
+										}
+									>
+										<Crosshair
+											size={16}
 											className={
 												isQuickSelecting ? "text-primary" : undefined
 											}
-										>
-											{quickSelectionLabel}
-										</span>
-									)}
-								</Button>
+										/>
+										{context.showButtonText && (
+											<span
+												className={
+													isQuickSelecting ? "text-primary" : undefined
+												}
+											>
+												{quickSelectionLabel}
+											</span>
+										)}
+									</Button>
+								</ConditionalTooltip>
 							)}
 							{effectiveShowFileEditButton && (
 								<FileEditButtons
@@ -1626,6 +1686,7 @@ export default memo(function HTML(props: HTMLProps) {
 									onSave={handleSave}
 									onSaveAndExit={handleSaveAndExit}
 									onCancel={handleCancel}
+									getPopupContainer={context.getPopupContainer}
 								/>
 							)}
 						</div>
@@ -1679,7 +1740,9 @@ export default memo(function HTML(props: HTMLProps) {
 		}),
 		[
 			attachmentList,
-			displayData?.file_id,
+			currentHtmlFileInfo.fileName,
+			currentHtmlFileInfo.relativeFilePath,
+			displayData,
 			handleCancel,
 			handleAIEdit,
 			handleQuickSelection,
@@ -1700,6 +1763,7 @@ export default memo(function HTML(props: HTMLProps) {
 			isInPPTMode,
 			isReadonlyPreview,
 			showAIOptimizationButton,
+			showDesignStyleButton,
 			showExportButton,
 			effectiveShowFileEditButton,
 			isAppendPicking,
@@ -1709,9 +1773,6 @@ export default memo(function HTML(props: HTMLProps) {
 			canManageHtmlPermissions,
 			sharedHtmlPermissionController,
 			handleOpenHtmlPermissionManager,
-			isDataAnalysis,
-			htmlIsDeleted,
-			hasHtmlPermissionDeclarations,
 			t,
 		],
 	)

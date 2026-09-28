@@ -844,6 +844,7 @@ describe("HTML", () => {
 			expect(screen.getByTestId("html-preview")).toHaveAttribute("data-edit-mode", "false")
 			expect(screen.getByTestId("html-preview-container")).toBeInTheDocument()
 			expect(screen.getByTestId("html-preview-content")).toBeInTheDocument()
+			expect(screen.getByTestId("html-design-style-button")).toBeInTheDocument()
 			expect(screen.getByTestId("file-edit-buttons")).toHaveAttribute(
 				"data-test-id-prefix",
 				"html-editor",
