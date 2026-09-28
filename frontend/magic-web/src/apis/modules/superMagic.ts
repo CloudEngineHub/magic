@@ -1772,7 +1772,7 @@ export const generateSuperMagicApi = (fetch: ServiceHttpClient) => ({
 	},
 
 	/**
-	 * @description 通过服务端目录游标分页获取分享资源的文件列表
+	 * @description get share resource files v2 page
 	 */
 	getShareResourceFilesV2Page(
 		params: GetShareResourceFilesV2Params,
