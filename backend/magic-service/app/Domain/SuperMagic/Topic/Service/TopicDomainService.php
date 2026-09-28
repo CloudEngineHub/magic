@@ -163,7 +163,10 @@ class TopicDomainService
             return null;
         }
 
-        return $result['list'][0];
+        $topic = $result['list'][0];
+        $this->logger->info('chat_topic_id 查询命中');
+
+        return $topic;
     }
 
     public function getTopicMode(DataIsolation $dataIsolation, int $topicId): string
@@ -212,7 +215,18 @@ class TopicDomainService
             return null;
         }
 
-        return $result['list'][0];
+        // Temporary observation log: this lookup has no user scoping and no index on
+        // chat_topic_id (full table scan). Record every hit with the caller trace so the
+        // dependency can be migrated before the chat_topic_id lookup path is removed.
+        $topic = $result['list'][0];
+        $this->logger->warning('chat_topic_id 查询命中（仅 chat_topic_id 无用户隔离，观察日志，调用方迁移后移除）', [
+            'method' => __METHOD__,
+            'chat_topic_id' => $chatTopicId,
+            'found_topic_id' => $topic->getId(),
+            'trace' => (new Exception())->getTraceAsString(),
+        ]);
+
+        return $topic;
     }
 
     public function updateTopicWhereUpdatedAt(TopicEntity $topicEntity, string $updatedAt): bool

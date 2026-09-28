@@ -70,6 +70,9 @@ class TopicRepository implements TopicRepositoryInterface
         }
 
         // 如果都没找到，记录详细的调试日志
+        // Temporary observation log: the chat_topic_id fallback is planned for removal.
+        // The trace identifies which callers still reach the fallback when it misses,
+        // complementing the error log above that fires on a fallback hit.
         $this->logger->warning('TopicRepository getTopicById 未找到话题', [
             'search_id' => $id,
             'search_id_type' => gettype($id),
@@ -77,6 +80,7 @@ class TopicRepository implements TopicRepositoryInterface
                 'query_by_id' => "SELECT * FROM magic_super_agent_topics WHERE deleted_at IS NULL AND id = {$id}",
                 'query_by_chat_topic_id' => "SELECT * FROM magic_super_agent_topics WHERE deleted_at IS NULL AND chat_topic_id = '{$id}'",
             ],
+            'trace' => (new Exception())->getTraceAsString(),
         ]);
 
         return null;
