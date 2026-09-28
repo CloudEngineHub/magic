@@ -183,28 +183,21 @@ class MagicFSFileDomainService
      *                                 以保证外链引用的 file_id 在撤回/取消撤回前后保持稳定
      * @return TaskFileEntity 创建的文件实体
      */
-    public function createFile(string $name, string $parentId, bool $isDirectory, ?string $superMagicTaskId = null, ?int $sortValue = null, ?FileType $fileType = null, ?TaskFileSource $source = null, ?array $fileMetadata = null, bool $reuseDeletedFileId = false, int $topicId = 0, ?string $requestedSpaceType = null): TaskFileEntity
+    public function createFile(string $name, string $parentId, bool $isDirectory, ?string $superMagicTaskId = null, ?int $sortValue = null, ?FileType $fileType = null, ?TaskFileSource $source = null, ?array $fileMetadata = null, bool $reuseDeletedFileId = false, int $topicId = 0, ?string $requestedSpaceType = null, ?TaskFileEntity $knownParentFile = null): TaskFileEntity
     {
-        // 1. 获取 project_id、user_id 和 organization_code（从父文件或认证信息）
-        $parentInfo = $this->getParentFileInfo($parentId);
+        // 1. Resolve the parent once. The application service may provide the
+        // already-authorized entity so this hot path does not read it again.
+        $parentInfo = $this->getParentFileInfo($parentId, $knownParentFile);
         $projectId = $parentInfo['project_id'];
         $userId = $parentInfo['user_id'];
         $organizationCode = $parentInfo['organization_code'];
+        $parentFile = $parentInfo['parent_file'];
 
         // 转换 parent_id
         $parentIdInt = $parentId === '' ? null : (int) $parentId;
 
         // 2. 检查父目录是否存在并且是目录（如果指定了 parent_id）
-        if ($parentId !== '' && $parentId !== '0') {
-            $parentFile = $this->taskFileRepository->getFileTreeFileById((int) $parentId);
-            if ($parentFile === null) {
-                ExceptionBuilder::throw(
-                    MagicFSErrorCode::PARENT_DIRECTORY_NOT_FOUND,
-                    'magicfs.parent_directory_not_found',
-                    ['parent_id' => $parentId]
-                );
-            }
-
+        if ($parentFile !== null) {
             // 确保父级是目录
             if (! $parentFile->getIsDirectory()) {
                 ExceptionBuilder::throw(
@@ -239,7 +232,7 @@ class MagicFSFileDomainService
         //     没有 UNIQUE 约束，旧的软删除记录留着不会阻塞新 insert；
         //     S3 侧的清理由独立的 GC 通道负责，本接口不承担回收责任。
         $existing = $parentIdInt !== null
-            ? $this->taskFileRepository->getFileTreeChildByParentAndName($parentIdInt, $name, true)
+            ? $this->getExistingChildInParent($parentIdInt, $name, $parentFile, $userId, $organizationCode, true)
             : $this->taskFileRepository->getBySpaceParentAndName(
                 $parentSpaceType ?? ($requestedSpaceType ?? FileSpaceType::PROJECT->value),
                 $projectId,
@@ -412,7 +405,7 @@ class MagicFSFileDomainService
          * is an external side effect and is handled by the existing retry/GC
          * path, while database visibility is still atomic.
          */
-        $entity = Db::transaction(function () use ($entity, $parentId): TaskFileEntity {
+        return Db::transaction(function () use ($entity, $parentId): TaskFileEntity {
             $entity = $this->taskFileRepository->insert($entity);
 
             // Creating a child changes the direct listing of every ancestor.
@@ -424,7 +417,6 @@ class MagicFSFileDomainService
         });
 
         // Event dispatching is handled by the application layer after this method returns.
-        return $entity;
     }
 
     /**
@@ -471,9 +463,9 @@ class MagicFSFileDomainService
      * @param array $updates 更新数据（支持 name, parent_id, mode, size）
      * @return TaskFileEntity 更新后的文件实体
      */
-    public function updateFile(string $fileId, array $updates): TaskFileEntity
+    public function updateFile(string $fileId, array $updates, ?TaskFileEntity $knownFile = null): TaskFileEntity
     {
-        $file = $this->getFileById($fileId);
+        $file = $knownFile ?? $this->getFileById($fileId);
         $originalName = $file->getFileName();
         $originalExtension = strtolower($file->getFileExtension());
 
@@ -521,7 +513,13 @@ class MagicFSFileDomainService
         // 文件系统语义：name 或 parent 变化时，覆盖目标位置的同名文件
         if ($targetName !== '' && ($targetName !== $file->getFileName() || $targetParentIdInt !== $file->getParentId())) {
             $existingTarget = $targetParentIdInt !== null
-                ? $this->taskFileRepository->getFileTreeChildByParentAndName($targetParentIdInt, $targetName)
+                ? $this->getExistingChildInParent(
+                    $targetParentIdInt,
+                    $targetName,
+                    $targetContext,
+                    $targetContext->getUserId(),
+                    $targetContext->getOrganizationCode()
+                )
                 : $this->taskFileRepository->getBySpaceParentAndName(
                     $targetContext->getSpaceType(),
                     $targetContext->getProjectId(),
@@ -915,11 +913,11 @@ class MagicFSFileDomainService
      * duplicate feed revisions) and lets callers suppress the target's
      * intermediate update event in favour of one final move/restore event.
      *
-     * @param array<int|string|null> $fileIds Seed IDs whose ancestor chains
-     *                                        should be included.
+     * @param array<null|int|string> $fileIds seed IDs whose ancestor chains
+     *                                        should be included
      * @param array<int|string> $excludeJournalIds IDs that are still bumped
-     *                                              but whose event is published
-     *                                              by the caller afterwards.
+     *                                             but whose event is published
+     *                                             by the caller afterwards
      */
     public function incrementVersionChains(array $fileIds, array $excludeJournalIds = []): void
     {
@@ -991,8 +989,7 @@ class MagicFSFileDomainService
         ?string $spaceType = null,
         int $maxNodes = 10000,
         int $maxBytes = 8 * 1024 * 1024
-    ): array
-    {
+    ): array {
         // 1. 获取根文件/目录
         $rootFile = $this->getFileById($fileId);
 
@@ -1036,111 +1033,6 @@ class MagicFSFileDomainService
             'truncated' => $bounded['truncated'],
             'truncated_reason' => $bounded['truncated_reason'],
             'returned_nodes' => count($bounded['items']),
-        ];
-    }
-
-    /**
-     * Bounded breadth-first traversal for the legacy tree endpoint.
-     *
-     * The method intentionally does not call getAllDescendantIds(): that
-     * helper is useful for internal batch operations but would materialise
-     * every descendant before the response budget could be enforced.
-     *
-     * @return array{items:TaskFileEntity[],truncated:bool,truncated_reason:?string}
-     */
-    protected function getBoundedChildrenForTree(
-        int $rootId,
-        int $projectId,
-        int $topicId,
-        string $userId,
-        string $organizationCode,
-        int $maxDepth,
-        int $currentDepth,
-        ?string $spaceType,
-        int $maxNodes,
-        int $maxBytes
-    ): array {
-        $maxNodes = max(1, min($maxNodes, 100000));
-        $maxBytes = max(1024, min($maxBytes, 32 * 1024 * 1024));
-        $items = [];
-        $estimatedBytes = 0;
-        $truncated = false;
-        $reason = null;
-
-        // queue entries are [parent_id, depth]. A depth of maxDepth means
-        // that parent has reached the requested boundary and is not expanded.
-        $queue = [[$rootId, $currentDepth]];
-        $queueIndex = 0;
-        while ($queueIndex < count($queue)) {
-            [$parentId, $parentDepth] = $queue[$queueIndex++];
-            if ($maxDepth !== -1 && $parentDepth >= $maxDepth) {
-                continue;
-            }
-
-            $cursorSort = null;
-            $cursorFileId = null;
-            do {
-                $remaining = $maxNodes - count($items);
-                if ($remaining <= 0) {
-                    $truncated = true;
-                    $reason = 'max_nodes';
-                    break 2;
-                }
-
-                // One extra row is enough to detect that this parent still
-                // has children after the global budget is exhausted.
-                $rows = $this->taskFileRepository->getFileTreeChildrenByParentCursor(
-                    $parentId,
-                    '',
-                    $cursorSort,
-                    $cursorFileId,
-                    min($remaining + 1, 1001),
-                    [],
-                    ''
-                );
-                if ($rows === []) {
-                    break;
-                }
-
-                foreach ($rows as $row) {
-                    $entity = TaskFileEntity::fromRow((array) $row);
-                    // Account for the metadata that will be serialized in
-                    // the tree response. The JSON estimate is deterministic
-                    // and is itself bounded by maxBytes.
-                    $estimate = strlen((string) json_encode($entity->toArray(), JSON_UNESCAPED_UNICODE));
-                    if ($estimatedBytes + $estimate > $maxBytes) {
-                        $truncated = true;
-                        $reason = 'max_bytes';
-                        break 3;
-                    }
-                    $items[] = $entity;
-                    $estimatedBytes += $estimate;
-
-                    if ($entity->getIsDirectory()) {
-                        $queue[] = [$entity->getFileId(), $parentDepth + 1];
-                    }
-                    if (count($items) >= $maxNodes) {
-                        $truncated = true;
-                        $reason = 'max_nodes';
-                        break 3;
-                    }
-                }
-
-                $last = $rows[array_key_last($rows)];
-                $cursorSort = (int) (($last['sort'] ?? 0));
-                $cursorFileId = (int) (($last['file_id'] ?? 0));
-                // A short page is the end of this parent. The repository
-                // deliberately returns at most the requested page size.
-                if (count($rows) < min($remaining + 1, 1001)) {
-                    break;
-                }
-            } while (true);
-        }
-
-        return [
-            'items' => $items,
-            'truncated' => $truncated,
-            'truncated_reason' => $reason,
         ];
     }
 
@@ -1208,6 +1100,111 @@ class MagicFSFileDomainService
             $this->taskFileRepository->appendFileTreeMutation($before, $restored, 'restore');
             return $restored;
         });
+    }
+
+    /**
+     * Bounded breadth-first traversal for the legacy tree endpoint.
+     *
+     * The method intentionally does not call getAllDescendantIds(): that
+     * helper is useful for internal batch operations but would materialise
+     * every descendant before the response budget could be enforced.
+     *
+     * @return array{items:TaskFileEntity[],truncated:bool,truncated_reason:?string}
+     */
+    protected function getBoundedChildrenForTree(
+        int $rootId,
+        int $projectId,
+        int $topicId,
+        string $userId,
+        string $organizationCode,
+        int $maxDepth,
+        int $currentDepth,
+        ?string $spaceType,
+        int $maxNodes,
+        int $maxBytes
+    ): array {
+        $maxNodes = max(1, min($maxNodes, 100000));
+        $maxBytes = max(1024, min($maxBytes, 32 * 1024 * 1024));
+        $items = [];
+        $estimatedBytes = 0;
+        $truncated = false;
+        $reason = null;
+
+        // queue entries are [parent_id, depth]. A depth of maxDepth means
+        // that parent has reached the requested boundary and is not expanded.
+        $queue = [[$rootId, $currentDepth]];
+        $queueIndex = 0;
+        while ($queueIndex < count($queue)) {
+            [$parentId, $parentDepth] = $queue[$queueIndex++];
+            if ($maxDepth !== -1 && $parentDepth >= $maxDepth) {
+                continue;
+            }
+
+            $cursorSort = null;
+            $cursorFileId = null;
+            while (true) {
+                $remaining = $maxNodes - count($items);
+                if ($remaining <= 0) {
+                    $truncated = true;
+                    $reason = 'max_nodes';
+                    break 2;
+                }
+
+                // One extra row is enough to detect that this parent still
+                // has children after the global budget is exhausted.
+                $rows = $this->taskFileRepository->getFileTreeChildrenByParentCursor(
+                    $parentId,
+                    '',
+                    $cursorSort,
+                    $cursorFileId,
+                    min($remaining + 1, 1001),
+                    [],
+                    ''
+                );
+                if ($rows === []) {
+                    break;
+                }
+
+                foreach ($rows as $row) {
+                    $entity = TaskFileEntity::fromRow((array) $row);
+                    // Account for the metadata that will be serialized in
+                    // the tree response. The JSON estimate is deterministic
+                    // and is itself bounded by maxBytes.
+                    $estimate = strlen((string) json_encode($entity->toArray(), JSON_UNESCAPED_UNICODE));
+                    if ($estimatedBytes + $estimate > $maxBytes) {
+                        $truncated = true;
+                        $reason = 'max_bytes';
+                        break 3;
+                    }
+                    $items[] = $entity;
+                    $estimatedBytes += $estimate;
+
+                    if ($entity->getIsDirectory()) {
+                        $queue[] = [$entity->getFileId(), $parentDepth + 1];
+                    }
+                    if (count($items) >= $maxNodes) {
+                        $truncated = true;
+                        $reason = 'max_nodes';
+                        break 3;
+                    }
+                }
+
+                $last = $rows[array_key_last($rows)];
+                $cursorSort = (int) ($last['sort'] ?? 0);
+                $cursorFileId = (int) ($last['file_id'] ?? 0);
+                // A short page is the end of this parent. The repository
+                // deliberately returns at most the requested page size.
+                if (count($rows) < min($remaining + 1, 1001)) {
+                    break;
+                }
+            }
+        }
+
+        return [
+            'items' => $items,
+            'truncated' => $truncated,
+            'truncated_reason' => $reason,
+        ];
     }
 
     /**
@@ -1280,22 +1277,25 @@ class MagicFSFileDomainService
     }
 
     /**
-     * 根据 parent_id 获取 project_id、user_id 和 organization_code.
+     * Resolve the parent and the denormalized context needed for file creation.
+     *
+     * @return array{parent_file: ?TaskFileEntity, project_id: int, user_id: string, organization_code: string}
      */
-    protected function getParentFileInfo(string $parentId): array
+    protected function getParentFileInfo(string $parentId, ?TaskFileEntity $knownParentFile = null): array
     {
         if ($parentId === '' || $parentId === '0') {
             // 根目录，返回默认值
             // TODO: 从认证信息或上下文获取这些值
             return [
+                'parent_file' => null,
                 'project_id' => 0,
                 'user_id' => '',
                 'organization_code' => '',
             ];
         }
 
-        // 从父文件获取
-        $parentFile = $this->taskFileRepository->getFileTreeFileById((int) $parentId);
+        // Reuse the caller's authorized entity when available.
+        $parentFile = $knownParentFile ?? $this->taskFileRepository->getFileTreeFileById((int) $parentId);
         if ($parentFile === null) {
             ExceptionBuilder::throw(
                 MagicFSErrorCode::PARENT_DIRECTORY_NOT_FOUND,
@@ -1305,6 +1305,7 @@ class MagicFSFileDomainService
         }
 
         return [
+            'parent_file' => $parentFile,
             'project_id' => $parentFile->getProjectId(),
             'user_id' => $parentFile->getUserId(),
             'organization_code' => $parentFile->getOrganizationCode(),
@@ -1343,6 +1344,32 @@ class MagicFSFileDomainService
             $descendantIds,
             $projectId,
             $spaceType
+        );
+    }
+
+    private function getExistingChildInParent(
+        int $parentId,
+        string $fileName,
+        ?TaskFileEntity $parentContext,
+        string $userId,
+        string $organizationCode,
+        bool $withTrash = false
+    ): ?TaskFileEntity {
+        if ($parentContext?->getSpaceType() === FileSpaceType::USER->value) {
+            return $this->taskFileRepository->getUserFileTreeChildByParentAndName(
+                $parentId,
+                $fileName,
+                $userId,
+                $organizationCode,
+                $withTrash
+            );
+        }
+
+        return $this->taskFileRepository->getFileTreeChildByParentAndName(
+            $parentId,
+            $fileName,
+            $withTrash,
+            $parentContext
         );
     }
 

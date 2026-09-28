@@ -25,19 +25,19 @@ use App\Infrastructure\Core\Exception\ExceptionBuilder;
 use App\Infrastructure\SuperMagic\Utils\FileTreeBuilder;
 use App\Interfaces\Authorization\Web\MagicUserAuthorization;
 use App\Interfaces\SuperMagic\File\MagicFS\DTO\Request\CreateFileRequestDTO;
-use App\Interfaces\SuperMagic\File\MagicFS\DTO\Request\GetFileTreeRequestDTO;
 use App\Interfaces\SuperMagic\File\MagicFS\DTO\Request\GetFileTreeChangesRequestDTO;
+use App\Interfaces\SuperMagic\File\MagicFS\DTO\Request\GetFileTreeRequestDTO;
 use App\Interfaces\SuperMagic\File\MagicFS\DTO\Request\GetFileVersionsRequestDTO;
-use App\Interfaces\SuperMagic\File\MagicFS\DTO\Request\ListFilesRequestDTO;
 use App\Interfaces\SuperMagic\File\MagicFS\DTO\Request\ListChildrenPageRequestDTO;
+use App\Interfaces\SuperMagic\File\MagicFS\DTO\Request\ListFilesRequestDTO;
 use App\Interfaces\SuperMagic\File\MagicFS\DTO\Request\UpdateFileRequestDTO;
 use App\Interfaces\SuperMagic\File\MagicFS\DTO\Response\FileInfoResponseDTO;
+use App\Interfaces\SuperMagic\File\MagicFS\DTO\Response\FileTreeChangeDTO;
 use App\Interfaces\SuperMagic\File\MagicFS\DTO\Response\FileVersionResponseDTO;
 use App\Interfaces\SuperMagic\File\MagicFS\DTO\Response\FileVersionsResponseDTO;
-use App\Interfaces\SuperMagic\File\MagicFS\DTO\Response\ListFilesResponseDTO;
-use App\Interfaces\SuperMagic\File\MagicFS\DTO\Response\ListChildrenPageResponseDTO;
 use App\Interfaces\SuperMagic\File\MagicFS\DTO\Response\GetFileTreeChangesResponseDTO;
-use App\Interfaces\SuperMagic\File\MagicFS\DTO\Response\FileTreeChangeDTO;
+use App\Interfaces\SuperMagic\File\MagicFS\DTO\Response\ListChildrenPageResponseDTO;
+use App\Interfaces\SuperMagic\File\MagicFS\DTO\Response\ListFilesResponseDTO;
 use App\Interfaces\SuperMagic\File\MagicFS\DTO\Response\MagicFSFileDTO;
 use Hyperf\Logger\LoggerFactory;
 use Psr\EventDispatcher\EventDispatcherInterface;
@@ -154,53 +154,6 @@ class MagicFSFileAppService extends AbstractAppService
         }
 
         return $responseDTO;
-    }
-
-    /** @return array{0: ?int, 1: ?int} */
-    protected function decodeChildrenCursor(?string $cursor, string $parentId): array
-    {
-        if ($cursor === null || $cursor === '') {
-            return [null, null];
-        }
-
-        $padding = strlen($cursor) % 4;
-        if ($padding > 0) {
-            $cursor .= str_repeat('=', 4 - $padding);
-        }
-        $decoded = base64_decode(strtr($cursor, '-_', '+/'), true);
-        $payload = $decoded === false ? null : json_decode($decoded, true);
-        if (! is_array($payload)
-            || ! isset($payload['sort'], $payload['file_id'])
-            || ! is_numeric($payload['sort'])
-            || ! is_numeric($payload['file_id'])
-            || (int) $payload['file_id'] <= 0) {
-            ExceptionBuilder::throw(
-                MagicFSErrorCode::INVALID_CURSOR,
-                'magicfs.invalid_cursor'
-            );
-        }
-        // Cursors are opaque, but binding them to the parent prevents a
-        // continuation token copied from one directory from silently skipping
-        // rows in another. The parent binding is part of the final protocol.
-        if (! isset($payload['parent_id']) || (string) $payload['parent_id'] !== $parentId) {
-            ExceptionBuilder::throw(
-                MagicFSErrorCode::INVALID_CURSOR,
-                'magicfs.invalid_cursor'
-            );
-        }
-
-        return [(int) $payload['sort'], (int) $payload['file_id']];
-    }
-
-    protected function encodeChildrenCursor(string $parentId, int $revision, int $sort, int $fileId): string
-    {
-        $raw = json_encode([
-            'parent_id' => $parentId,
-            'revision' => $revision,
-            'sort' => $sort,
-            'file_id' => $fileId,
-        ], JSON_THROW_ON_ERROR);
-        return rtrim(strtr(base64_encode($raw), '+/', '-_'), '=');
     }
 
     /**
@@ -353,7 +306,8 @@ class MagicFSFileAppService extends AbstractAppService
             $requestDTO->getFileMetadata(),          // 持久化的插件 flag，如 local_shadow
             $requestDTO->getReuseDeletedFileId(),    // rollback 重放时请求复用已软删除同名的 file_id
             (int) $messageMetadata->getTopicId(),    // 直接透传 topic_id，作为 task 查不到时的 fallback
-            $requestDTO->getSpaceType()
+            $requestDTO->getSpaceType(),
+            $parentEntity
         );
 
         // Dispatch file uploaded event so downstream subscribers are notified
@@ -385,7 +339,7 @@ class MagicFSFileAppService extends AbstractAppService
      */
     public function updateFile(MagicUserAuthorization $authorization, string $fileId, UpdateFileRequestDTO $requestDTO): FileInfoResponseDTO
     {
-        $this->assertFileAccessible($fileId, $authorization, MemberRole::EDITOR);
+        $fileEntity = $this->assertFileAccessible($fileId, $authorization, MemberRole::EDITOR);
 
         // 转换为 updates 数组
         $updates = $requestDTO->toUpdates();
@@ -404,7 +358,7 @@ class MagicFSFileAppService extends AbstractAppService
         unset($messageMetadata); // 当前 domain 层未使用；保留读取以便 DTO 校验
 
         // 调用领域服务更新文件（文件系统语义：同名自动覆盖）
-        $fileEntity = $this->magicFSFileDomainService->updateFile($fileId, $updates);
+        $fileEntity = $this->magicFSFileDomainService->updateFile($fileId, $updates, $fileEntity);
 
         // Dispatch file content saved event so downstream subscribers are notified of the metadata update
         $this->eventDispatcher->dispatch(new FileContentSavedEvent(
@@ -534,6 +488,53 @@ class MagicFSFileAppService extends AbstractAppService
         ]);
 
         return $responseDTO;
+    }
+
+    /** @return array{0: ?int, 1: ?int} */
+    protected function decodeChildrenCursor(?string $cursor, string $parentId): array
+    {
+        if ($cursor === null || $cursor === '') {
+            return [null, null];
+        }
+
+        $padding = strlen($cursor) % 4;
+        if ($padding > 0) {
+            $cursor .= str_repeat('=', 4 - $padding);
+        }
+        $decoded = base64_decode(strtr($cursor, '-_', '+/'), true);
+        $payload = $decoded === false ? null : json_decode($decoded, true);
+        if (! is_array($payload)
+            || ! isset($payload['sort'], $payload['file_id'])
+            || ! is_numeric($payload['sort'])
+            || ! is_numeric($payload['file_id'])
+            || (int) $payload['file_id'] <= 0) {
+            ExceptionBuilder::throw(
+                MagicFSErrorCode::INVALID_CURSOR,
+                'magicfs.invalid_cursor'
+            );
+        }
+        // Cursors are opaque, but binding them to the parent prevents a
+        // continuation token copied from one directory from silently skipping
+        // rows in another. The parent binding is part of the final protocol.
+        if (! isset($payload['parent_id']) || (string) $payload['parent_id'] !== $parentId) {
+            ExceptionBuilder::throw(
+                MagicFSErrorCode::INVALID_CURSOR,
+                'magicfs.invalid_cursor'
+            );
+        }
+
+        return [(int) $payload['sort'], (int) $payload['file_id']];
+    }
+
+    protected function encodeChildrenCursor(string $parentId, int $revision, int $sort, int $fileId): string
+    {
+        $raw = json_encode([
+            'parent_id' => $parentId,
+            'revision' => $revision,
+            'sort' => $sort,
+            'file_id' => $fileId,
+        ], JSON_THROW_ON_ERROR);
+        return rtrim(strtr(base64_encode($raw), '+/', '-_'), '=');
     }
 
     /**

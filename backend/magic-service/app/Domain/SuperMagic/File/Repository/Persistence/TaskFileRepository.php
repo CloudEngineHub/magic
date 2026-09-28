@@ -15,12 +15,15 @@ use App\Domain\SuperMagic\File\Repository\Facade\TaskFileRepositoryInterface;
 use App\Domain\SuperMagic\File\Repository\Model\TaskFileModel;
 use App\Infrastructure\Util\IdGenerator\IdGenerator;
 use Hyperf\DbConnection\Db;
+use RuntimeException;
 
 class TaskFileRepository implements TaskFileRepositoryInterface
 {
     private const FILE_TREE_CHANGES_TABLE = 'magic_super_agent_task_file_tree_changes';
 
     private const FILE_TREE_HEADS_TABLE = 'magic_fs_file_tree_heads';
+
+    private const MAX_FILE_TREE_DEPTH = 256;
 
     public function __construct(protected TaskFileModel $model)
     {
@@ -48,7 +51,7 @@ class TaskFileRepository implements TaskFileRepositoryInterface
         // columns would make the result depend on stale denormalized data.
         try {
             $rootFileId = $this->resolveRootIdFromParentChain($file);
-        } catch (\RuntimeException $exception) {
+        } catch (RuntimeException $exception) {
             // Non-MagicFS task attachments may not have a valid file-tree
             // parent chain. Preserve the legacy lookup result for those rows;
             // a caller that requires MagicFS access will reject its space type.
@@ -388,7 +391,8 @@ class TaskFileRepository implements TaskFileRepositoryInterface
     public function getFileTreeChildByParentAndName(
         int $parentId,
         string $fileName,
-        bool $withTrash = false
+        bool $withTrash = false,
+        ?TaskFileEntity $parentContext = null
     ): ?TaskFileEntity {
         $query = $withTrash ? $this->model::withTrashed() : $this->model::query();
         $model = $query
@@ -403,10 +407,38 @@ class TaskFileRepository implements TaskFileRepositoryInterface
 
         $entity = new TaskFileEntity($model->toArray());
         if ($entity->getDeletedAt() === null) {
+            if ($parentContext !== null) {
+                $entity->setProjectId($parentContext->getProjectId());
+                $entity->setUserId($parentContext->getUserId());
+                $entity->setOrganizationCode($parentContext->getOrganizationCode());
+                $entity->setSpaceType($parentContext->getSpaceType());
+                $entity->setTopicId($parentContext->getTopicId());
+                return $entity;
+            }
             return $this->getFileTreeFileById($entity->getFileId()) ?? $entity;
         }
 
         return $entity;
+    }
+
+    public function getUserFileTreeChildByParentAndName(
+        int $parentId,
+        string $fileName,
+        string $userId,
+        string $organizationCode,
+        bool $withTrash = false
+    ): ?TaskFileEntity {
+        $query = $withTrash ? $this->model::withTrashed() : $this->model::query();
+        $model = $query
+            ->where('user_id', $userId)
+            ->where('organization_code', $organizationCode)
+            ->where('space_type', FileSpaceType::USER->value)
+            ->where('parent_id', $parentId)
+            ->where('file_name', $fileName)
+            ->orderBy('file_id')
+            ->first();
+
+        return $model ? new TaskFileEntity($model->toArray()) : null;
     }
 
     /**
@@ -806,121 +838,6 @@ class TaskFileRepository implements TaskFileRepositoryInterface
         ];
     }
 
-    private const MAX_FILE_TREE_DEPTH = 256;
-
-    /**
-     * Resolve a file's current file-tree root by following parent_id links.
-     * This is intentionally an ancestor-only query: moving a directory never
-     * requires touching or scanning its descendants.
-     */
-    private function resolveFileTreeRootId(TaskFileEntity $file): int
-    {
-        if (! $this->shouldJournalFileTree($file)) {
-            throw new \RuntimeException(sprintf(
-                'File %d does not belong to a journaled file tree',
-                $file->getFileId()
-            ));
-        }
-
-        return $this->resolveRootIdFromParentChain($file);
-    }
-
-    /**
-     * Resolve the physical root using parent_id only.
-     *
-     * This helper deliberately does not inspect the row's denormalized space
-     * columns.  They are useful for legacy queries, but are not a stable tree
-     * identity after a directory is moved between projects or spaces.
-     */
-    private function resolveRootIdFromParentChain(TaskFileEntity $file): int
-    {
-        $parentId = $file->getParentId();
-        if ($parentId === null || $parentId <= 0) {
-            if (! $file->getIsDirectory()) {
-                throw new \RuntimeException(sprintf(
-                    'File-tree entry %d has no parent and is not a directory root',
-                    $file->getFileId()
-                ));
-            }
-            return $file->getFileId();
-        }
-
-        return $this->resolveParentChainRootId($parentId);
-    }
-
-    /**
-     * Resolve a root from an existing parent row using one recursive CTE.
-     * Deleted ancestors are included because delete/restore mutations must
-     * retain the root that was valid at the time of the mutation.
-     */
-    private function resolveParentChainRootId(int $parentId): int
-    {
-        $rows = Db::select(
-            sprintf(
-                'WITH RECURSIVE file_tree_ancestors AS ('
-                . ' SELECT file_id, parent_id, is_directory, space_type, project_id, topic_id, user_id, organization_code, 0 AS depth'
-                . ' FROM magic_super_agent_task_files WHERE file_id = ?'
-                . ' UNION ALL'
-                . ' SELECT parent.file_id, parent.parent_id, parent.is_directory, parent.space_type, parent.project_id, parent.topic_id, parent.user_id, parent.organization_code, ancestors.depth + 1'
-                . ' FROM magic_super_agent_task_files parent'
-                . ' INNER JOIN file_tree_ancestors ancestors ON parent.file_id = ancestors.parent_id'
-                . ' WHERE ancestors.depth < %d'
-                . ') SELECT file_id, parent_id, is_directory, space_type, project_id, topic_id, user_id, organization_code, depth'
-                . ' FROM file_tree_ancestors ORDER BY depth DESC',
-                self::MAX_FILE_TREE_DEPTH
-            ),
-            [$parentId]
-        );
-
-        if ($rows === []) {
-            throw new \RuntimeException(sprintf(
-                'Parent file %d does not exist while resolving its file-tree root',
-                $parentId
-            ));
-        }
-
-        foreach ($rows as $row) {
-            $row = (array) $row;
-            $ancestorParentId = $row['parent_id'] ?? null;
-            if ($ancestorParentId !== null && (int) $ancestorParentId !== 0) {
-                continue;
-            }
-            if (! (bool) ($row['is_directory'] ?? false)) {
-                throw new \RuntimeException(sprintf(
-                    'File-tree root %d is not a directory',
-                    (int) $row['file_id']
-                ));
-            }
-            return (int) $row['file_id'];
-        }
-
-        throw new \RuntimeException(sprintf(
-            'File-tree parent chain for %d is cyclic or exceeds depth %d',
-            $parentId,
-            self::MAX_FILE_TREE_DEPTH
-        ));
-    }
-
-    private function isFileTreeRoot(TaskFileEntity $file): bool
-    {
-        return $this->shouldJournalFileTree($file)
-            && $file->getIsDirectory()
-            && ($file->getParentId() === null || $file->getParentId() <= 0);
-    }
-
-    private function findProjectFileTreeRootId(int $projectId): int
-    {
-        return (int) ($this->model::query()
-            ->where('project_id', $projectId)
-            ->where('topic_id', 0)
-            ->where('space_type', FileSpaceType::PROJECT->value)
-            ->whereNull('parent_id')
-            ->whereNull('deleted_at')
-            ->where('is_directory', true)
-            ->orderBy('file_id', 'asc')
-            ->value('file_id') ?? 0);
-    }
-
     public function insert(TaskFileEntity $entity): TaskFileEntity
     {
         return Db::transaction(function () use ($entity): TaskFileEntity {
@@ -934,19 +851,6 @@ class TaskFileRepository implements TaskFileRepositoryInterface
             $this->recordFileTreeMutation(null, $entity, 'create');
             return $entity;
         });
-    }
-
-    /**
-     * file_id 由调用方显式赋雪花 ID，不依赖数据库自增（见 TaskFileModel::$incrementing）。
-     *
-     * 导入、历史调用方可能不带 ID，这里在 PHP 侧补齐：交给数据库自增拿不到生成值，
-     * 实体仍带着 0，响应、change journal 和后续按 file_id 的查询都会指向不存在的 ID。
-     */
-    private function ensureFileId(TaskFileEntity $entity): void
-    {
-        if ($entity->getFileId() <= 0) {
-            $entity->setFileId(IdGenerator::getSnowId());
-        }
     }
 
     /**
@@ -1020,8 +924,7 @@ class TaskFileRepository implements TaskFileRepositoryInterface
         TaskFileEntity $entity,
         ?string $journalOperation = null,
         bool $emitJournal = true
-    ): TaskFileEntity
-    {
+    ): TaskFileEntity {
         return Db::transaction(function () use ($entity, $journalOperation, $emitJournal): TaskFileEntity {
             $beforeModel = $this->model::query()
                 ->where('file_id', $entity->getFileId())
@@ -1204,7 +1107,7 @@ class TaskFileRepository implements TaskFileRepositoryInterface
      * migration are accepted; arbitrary command input must not become a
      * second write API with different file-tree semantics.
      *
-     * @param array<int, array{file_id:int,file_key?:string,parent_id?:int|null,updated_at?:string}> $updates
+     * @param array<int, array{file_id:int,file_key?:string,parent_id?:null|int,updated_at?:string}> $updates
      */
     public function applyMagicFSBackfillUpdates(array $updates): int
     {
@@ -1550,7 +1453,7 @@ class TaskFileRepository implements TaskFileRepositoryInterface
 
         $rootFileId = $this->findProjectFileTreeRootId($projectId);
         if ($rootFileId <= 0) {
-            throw new \RuntimeException(sprintf(
+            throw new RuntimeException(sprintf(
                 'Cannot batch insert project files: file-tree root is unavailable for project_id=%d',
                 $projectId
             ));
@@ -2233,202 +2136,6 @@ class TaskFileRepository implements TaskFileRepositoryInterface
     }
 
     /**
-     * Read the durable root head, failing closed when the final MagicFS
-     * schema/backfill has not been installed.  Returning an all-zero head is
-     * unsafe: a mount would look like an empty project and its change cursor
-     * could permanently miss mutations.  There is intentionally no fallback
-     * to an aggregate scan or the legacy tree endpoint.
-     *
-     * The head is returned as an assoc array, never as an object: raw rows are
-     * arrays in this project (App\Listener\FetchModeListener forces
-     * PDO::FETCH_ASSOC), and reading a property off a row silently yields the
-     * default instead of the persisted value.
-     *
-     * @param int $rootFileId The immutable file-tree root ID.
-     * @return array{root_file_id:mixed,revision:mixed,oldest_revision:mixed,updated_at:mixed}
-     */
-    private function getFileTreeHeadRow(int $rootFileId): array
-    {
-        $row = Db::table(self::FILE_TREE_HEADS_TABLE)
-            ->where('root_file_id', $rootFileId)
-            ->first();
-        if ($row === null) {
-            throw new \RuntimeException(
-                sprintf('MagicFS root head is not initialized for root_file_id=%d', $rootFileId)
-            );
-        }
-
-        return (array) $row;
-    }
-
-    private function requireFileTreeRootId(TaskFileEntity $file, bool $requireRootRow = false): int
-    {
-        $rootFileId = $this->resolveFileTreeRootId($file);
-        if ($requireRootRow && $rootFileId !== $file->getFileId()) {
-            throw new \RuntimeException(sprintf(
-                'File %d is not a file-tree root (root_file_id=%d)',
-                $file->getFileId(),
-                $rootFileId
-            ));
-        }
-        return $rootFileId;
-    }
-
-    /**
-     * Only rows that can belong to a mounted MagicFS file tree are journaled.
-     * Task-file storage also contains transient task attachments; recording
-     * those under a synthetic project=0 file tree would grow the feed without
-     * helping any mount and could make unrelated cursors appear active.
-     */
-    private function shouldJournalFileTree(TaskFileEntity $entity): bool
-    {
-        return match ($entity->getSpaceType()) {
-            FileSpaceType::PROJECT->value => $entity->getProjectId() > 0 && $entity->getTopicId() === 0,
-            FileSpaceType::TOPIC->value => $entity->getProjectId() > 0 && $entity->getTopicId() > 0,
-            FileSpaceType::USER->value => $entity->getProjectId() === 0
-                && $entity->getUserId() !== ''
-                && $entity->getOrganizationCode() !== ''
-                && $entity->getTopicId() === 0,
-            default => false,
-        };
-    }
-
-    /**
-     * Compare a row before/after a repository mutation and emit the smallest
-     * precise event. Moving across logical roots is represented as
-     * delete+create because a root-local cursor cannot cross that boundary
-     * safely.
-     */
-    private function recordFileTreeMutation(
-        ?TaskFileEntity $before,
-        ?TaskFileEntity $after,
-        ?string $operation = null,
-        ?int $oldParentId = null,
-        ?string $oldName = null,
-        ?array &$pending = null,
-        ?int $beforeRootFileId = null,
-        ?int $afterRootFileId = null
-    ): void {
-        if ($before !== null && ! $this->shouldJournalFileTree($before)) {
-            $before = null;
-        }
-        if ($after !== null && ! $this->shouldJournalFileTree($after)) {
-            $after = null;
-        }
-        if ($before === null && $after === null) {
-            return;
-        }
-
-        $beforeActive = $before !== null && $before->getDeletedAt() === null;
-        $afterActive = $after !== null && $after->getDeletedAt() === null;
-
-        // A physical purge of an already soft-deleted row, or an update that
-        // leaves a row deleted, does not change any mounted file tree. Do not
-        // advance the cursor for either case.
-        if (! $beforeActive && ! $afterActive) {
-            return;
-        }
-
-        $beforeRootFileId ??= $before === null ? null : $this->resolveFileTreeRootId($before);
-        $afterRootFileId ??= $after === null ? null : $this->resolveFileTreeRootId($after);
-
-        if ($beforeActive && $afterActive && $before !== null && $after !== null
-            && $this->isFileTreeRoot($before)
-            && $before->getParentId() !== $after->getParentId()) {
-            throw new \RuntimeException(sprintf(
-                'MagicFS file-tree root %d cannot be moved',
-                $before->getFileId()
-            ));
-        }
-
-        // A file-tree crossing is represented as delete+create. This branch
-        // is reached only for active images; deleted rows were handled above.
-        if ($beforeActive && $afterActive
-            && $before !== null && $after !== null
-            && $beforeRootFileId !== $afterRootFileId) {
-            $this->queueFileTreeMutationEvent(
-                $pending,
-                $before,
-                (int) $beforeRootFileId,
-                'delete',
-                $before->getParentId(),
-                $before->getFileName()
-            );
-            $this->queueFileTreeMutationEvent($pending, $after, (int) $afterRootFileId, 'create');
-            return;
-        }
-
-        // For a soft-delete update, publish the last active image rather than
-        // the deleted row.  For a restore, publish the newly active image.
-        $file = $afterActive ? $after : $before;
-        if ($file === null) {
-            return;
-        }
-
-        $rootFileId = $afterActive ? $afterRootFileId : $beforeRootFileId;
-        if ($rootFileId === null || $rootFileId <= 0) {
-            throw new \RuntimeException(sprintf(
-                'Cannot journal file %d without a file-tree root',
-                $file->getFileId()
-            ));
-        }
-
-        if (! $beforeActive && $afterActive) {
-            // A null before-image is a newly-created row, not a restore.  The
-            // distinction is observable by the durable feed consumers (and
-            // affects their counter/reconciliation semantics), so only an
-            // existing soft-deleted row may produce a restore event.
-            $operation = $before === null ? 'create' : 'restore';
-        } elseif (! $afterActive) {
-            $operation = 'delete';
-        } elseif ($operation === null) {
-            if ($before->getParentId() !== $after->getParentId()
-                || $before->getFileName() !== $after->getFileName()) {
-                $operation = 'move';
-            } else {
-                $operation = 'update';
-            }
-        }
-
-        $this->queueFileTreeMutationEvent(
-            $pending,
-            $file,
-            $rootFileId,
-            $operation,
-            $oldParentId ?? ($beforeActive ? $before?->getParentId() : null),
-            $oldName ?? ($beforeActive ? $before?->getFileName() : null)
-        );
-    }
-
-    /**
-     * Queue an event for a surrounding bulk mutation, or persist it
-     * immediately for the ordinary single-row path.
-     *
-     * @param null|array<int, array{root_file_id:int,file:TaskFileEntity,operation:string,old_parent_id:?int,old_name:?string}> $pending
-     */
-    private function queueFileTreeMutationEvent(
-        ?array &$pending,
-        TaskFileEntity $file,
-        int $rootFileId,
-        string $operation,
-        ?int $oldParentId = null,
-        ?string $oldName = null
-    ): void {
-        if ($pending !== null) {
-            $pending[] = [
-                'root_file_id' => $rootFileId,
-                'file' => $file,
-                'operation' => $operation,
-                'old_parent_id' => $oldParentId,
-                'old_name' => $oldName,
-            ];
-            return;
-        }
-
-        $this->appendFileTreeChange($file, $operation, $oldParentId, $oldName, $rootFileId);
-    }
-
-    /**
      * Append the smallest event for a completed before/after mutation.
      *
      * This public seam is intentionally tiny: callers that perform related
@@ -2460,221 +2167,6 @@ class TaskFileRepository implements TaskFileRepositoryInterface
         ]]);
 
         return (int) ($revisions[0] ?? 0);
-    }
-
-    /**
-     * Allocate and insert several root-local events in one transaction.
-     *
-     * Batch file imports/deletes can contain tens of thousands of rows. The
-     * old per-row path locked and updated the file-tree head for every event,
-     * turning journal bookkeeping into the dominant cost. Events are grouped
-     * by logical root here, each head is locked once, and journal rows are
-     * bulk inserted in bounded chunks. Revisions remain strictly ordered
-     * within a root_file_id and the returned list preserves event order.
-     *
-     * @param array<int, array{root_file_id?:int,file:TaskFileEntity,operation:string,old_parent_id:?int,old_name:?string}> $events
-     * @return array<int, int> revisions keyed by input event index
-     */
-    private function appendFileTreeChanges(array $events): array
-    {
-        if ($events === []) {
-            return [];
-        }
-
-        /*
-         * Allocate and persist the event in the caller's transaction when one
-         * is already active.  Starting a savepoint for every row in a batch
-         * mutation is needlessly expensive and, more importantly, makes a
-         * large import spend most of its time in transaction bookkeeping.
-         * Direct callers still get a transaction around the head bump and
-         * journal insert.
-         */
-        $write = function () use ($events): array {
-            /** @var array<int, array{events:array<int,array{index:int,file:TaskFileEntity,operation:string,old_parent_id:?int,old_name:?string}>}> $groups */
-            $groups = [];
-            foreach ($events as $index => $event) {
-                $file = $event['file'];
-                $rootFileId = (int) ($event['root_file_id'] ?? $this->resolveFileTreeRootId($file));
-                if ($rootFileId <= 0) {
-                    throw new \RuntimeException(sprintf(
-                        'Cannot append file-tree change for file %d without a root_file_id',
-                        $file->getFileId()
-                    ));
-                }
-                if (! isset($groups[$rootFileId])) {
-                    $groups[$rootFileId] = ['events' => []];
-                }
-                $groups[$rootFileId]['events'][] = [
-                    'index' => $index,
-                    'root_file_id' => $rootFileId,
-                    'file' => $file,
-                    'operation' => $event['operation'],
-                    'old_parent_id' => $event['old_parent_id'],
-                    'old_name' => $event['old_name'],
-                ];
-            }
-
-            // Deterministic lock order prevents two cross-root bulk mutations
-            // from deadlocking while they allocate their heads.
-            ksort($groups, SORT_NUMERIC);
-            $revisions = [];
-            foreach ($groups as $rootFileId => $group) {
-                $rootFileId = (int) $rootFileId;
-                $now = date('Y-m-d H:i:s');
-
-                foreach ($group['events'] as $event) {
-                    if ($this->isFileTreeRoot($event['file'])
-                        && $event['file']->getFileId() !== $rootFileId) {
-                        throw new \RuntimeException(sprintf(
-                            'MagicFS logical root is immutable: expected root_file_id=%d, got root_file_id=%d',
-                            $rootFileId,
-                            $event['file']->getFileId()
-                        ));
-                    }
-                }
-
-                // root_file_id is the sole durable file-tree identity.  Heads
-                // are never discovered through a project/user/topic tuple.
-                $head = Db::table(self::FILE_TREE_HEADS_TABLE)
-                    ->where('root_file_id', $rootFileId)
-                    ->lockForUpdate()
-                    ->first();
-                if ($head === null) {
-                    $rootFile = null;
-                    foreach ($group['events'] as $event) {
-                        if (in_array($event['operation'], ['create', 'restore'], true)
-                            && $this->isFileTreeRoot($event['file'])) {
-                            $rootFile = $event['file'];
-                            break;
-                        }
-                    }
-                    if ($rootFile === null) {
-                        throw new \RuntimeException(sprintf(
-                            'MagicFS file-tree head is not initialized for root_file_id=%d',
-                            $rootFileId
-                        ));
-                    }
-
-                    // insertOrIgnore closes the first-writer race. The root
-                    // primary key is the only uniqueness constraint needed.
-                    Db::table(self::FILE_TREE_HEADS_TABLE)->insertOrIgnore([
-                        'root_file_id' => $rootFileId,
-                        'revision' => 0,
-                        'oldest_revision' => 1,
-                        'updated_at' => $now,
-                    ]);
-                    $head = Db::table(self::FILE_TREE_HEADS_TABLE)
-                        ->where('root_file_id', $rootFileId)
-                        ->lockForUpdate()
-                        ->first();
-                }
-                if ($head === null) {
-                    throw new \RuntimeException(sprintf(
-                        'MagicFS root head could not be locked for root_file_id=%d',
-                        $rootFileId
-                    ));
-                }
-
-                // Normalize the locked head to an array before reading it: raw
-                // rows are assoc arrays here, and a property read would raise
-                // "Attempt to read property on array".
-                $head = (array) $head;
-                $persistedRootFileId = (int) ($head['root_file_id'] ?? 0);
-                if ($persistedRootFileId !== $rootFileId) {
-                    throw new \RuntimeException(sprintf(
-                        'MagicFS file-tree head mismatch: expected root_file_id=%d, found root_file_id=%d',
-                        $rootFileId,
-                        $persistedRootFileId
-                    ));
-                }
-
-                $rootRevision = (int) ($head['revision'] ?? 0);
-                $rows = [];
-                foreach ($group['events'] as $event) {
-                    ++$rootRevision;
-                    $revisions[$event['index']] = $rootRevision;
-                    $file = $event['file'];
-                    $rows[] = [
-                        'root_file_id' => $rootFileId,
-                        'revision' => $rootRevision,
-                        'file_id' => $file->getFileId(),
-                        'parent_id' => $file->getParentId(),
-                        'old_parent_id' => $event['old_parent_id'],
-                        'name' => $file->getFileName(),
-                        'old_name' => $event['old_name'],
-                        'operation' => $event['operation'],
-                        'file_version' => $file->getMetadataVersion(),
-                        'file_snapshot' => json_encode($this->fileTreeChangeSnapshot($file), JSON_THROW_ON_ERROR),
-                        'created_at' => $now,
-                    ];
-                }
-
-                Db::table(self::FILE_TREE_HEADS_TABLE)
-                    ->where('root_file_id', $rootFileId)
-                    ->update([
-                        'revision' => $rootRevision,
-                        'updated_at' => $now,
-                    ]);
-
-                // Keep INSERT packet size bounded for large imports.
-                foreach (array_chunk($rows, 500) as $chunk) {
-                    Db::table(self::FILE_TREE_CHANGES_TABLE)->insert($chunk);
-                }
-            }
-
-            ksort($revisions);
-            return $revisions;
-        };
-
-        return Db::transactionLevel() > 0 ? $write() : Db::transaction($write);
-    }
-
-    /** @return array<string, mixed> */
-    private function fileTreeChangeSnapshot(TaskFileEntity $file): array
-    {
-        $metadata = [];
-        if ($file->getMetadata() !== null && $file->getMetadata() !== '') {
-            $decoded = json_decode($file->getMetadata(), true);
-            if (is_array($decoded)) {
-                $metadata = $decoded;
-            }
-        }
-        $mode = isset($metadata['mode'])
-            ? (int) $metadata['mode']
-            : ($file->getIsDirectory() ? 0755 : 0644);
-        unset($metadata['mode']);
-
-        // FileMetadata is a string-to-string extension bag in the MagicFS
-        // wire contract.  Task-file metadata may be written by other flows,
-        // so discard nested/non-scalar values instead of emitting a snapshot
-        // that cannot be decoded by the Go client.
-        $fileMetadata = [];
-        foreach ($metadata as $key => $value) {
-            if (! is_string($key) || $key === '' || (! is_scalar($value) && $value !== null)) {
-                continue;
-            }
-            $fileMetadata[$key] = $value === null ? '' : (string) $value;
-        }
-
-        return [
-            'id' => (string) $file->getFileId(),
-            'name' => $file->getFileName(),
-            'parent_id' => (string) ($file->getParentId() ?? ''),
-            'is_directory' => $file->getIsDirectory(),
-            'size' => $file->getFileSize(),
-            'mode' => $mode,
-            // 空 map 必须序列化成 {}：json_encode 会把空 PHP 数组写成 []，
-            // Go 侧 json.Unmarshal 到 map[string]string 会整页解码失败
-            // （"cannot unmarshal array into ... file_metadata"），change feed
-            // 会一直停在原地、挂载端再也同步不到任何变更。
-            // 与 MagicFSFileDTO::toArray() 对同一字段的处理保持一致。
-            'file_metadata' => $fileMetadata === [] ? (object) [] : $fileMetadata,
-            's3_info' => ['object_key' => $file->getFileKey()],
-            'created_at' => $file->getCreatedAt(),
-            'updated_at' => $file->getUpdatedAt(),
-            'version' => $file->getMetadataVersion(),
-            'latest_version' => $file->getLatestVersion(),
-        ];
     }
 
     public function getFileTreeChanges(TaskFileEntity $rootFile, int $sinceRevision, int $limit): array
@@ -2792,105 +2284,6 @@ class TaskFileRepository implements TaskFileRepositoryInterface
             'deleted_rows' => $deletedRows,
             'expired_file_trees' => $expiredFileTrees,
         ];
-    }
-
-    /**
-     * @return array{deleted_rows:int,cursor_expired:bool}
-     */
-    private function compactFileTree(
-        int $rootFileId,
-        int $keepRevisions,
-        int $batchSize,
-        bool $dryRun
-    ): array {
-        $headRevision = (int) (Db::table(self::FILE_TREE_HEADS_TABLE)
-            ->where('root_file_id', $rootFileId)
-            ->value('revision') ?? 0);
-        $cutoff = $headRevision - $keepRevisions;
-        if ($cutoff <= 0) {
-            return ['deleted_rows' => 0, 'cursor_expired' => false];
-        }
-
-        if ($dryRun) {
-            $eligible = (int) Db::table(self::FILE_TREE_CHANGES_TABLE)
-                ->where('root_file_id', $rootFileId)
-                ->where('revision', '<=', $cutoff)
-                ->count();
-            return [
-                'deleted_rows' => $eligible,
-                'cursor_expired' => $eligible > 0,
-            ];
-        }
-
-        $deleted = 0;
-        while (true) {
-            // Commit every bounded batch separately. Writers in the same
-            // file tree are serialized only while one small prefix is removed;
-            // they can proceed between batches, and unrelated file trees never
-            // contend on this head row.
-            $deleteBatch = function () use ($rootFileId, $cutoff, $batchSize): int {
-                $head = Db::table(self::FILE_TREE_HEADS_TABLE)
-                    ->where('root_file_id', $rootFileId)
-                    ->lockForUpdate()
-                    ->first();
-                if ($head === null) {
-                    return 0;
-                }
-                $head = (array) $head;
-
-                $ids = Db::table(self::FILE_TREE_CHANGES_TABLE)
-                    ->where('root_file_id', $rootFileId)
-                    ->where('revision', '<=', $cutoff)
-                    ->orderBy('revision', 'ASC')
-                    ->limit($batchSize)
-                    ->pluck('change_id')
-                    ->all();
-                if ($ids === []) {
-                    return 0;
-                }
-
-                $batchDeleted = Db::table(self::FILE_TREE_CHANGES_TABLE)
-                    ->whereIn('change_id', $ids)
-                    ->delete();
-                $firstRevision = Db::table(self::FILE_TREE_CHANGES_TABLE)
-                    ->where('root_file_id', $rootFileId)
-                    ->min('revision');
-                $currentHead = (int) ($head['revision'] ?? 0);
-                $oldest = $firstRevision === null ? $currentHead + 1 : (int) $firstRevision;
-                Db::table(self::FILE_TREE_HEADS_TABLE)
-                    ->where('root_file_id', $rootFileId)
-                    ->update([
-                        'oldest_revision' => $oldest,
-                        'updated_at' => date('Y-m-d H:i:s'),
-                    ]);
-
-                return $batchDeleted;
-            };
-
-            $batchDeleted = Db::transactionLevel() > 0
-                ? $deleteBatch()
-                : Db::transaction($deleteBatch);
-            if ($batchDeleted === 0) {
-                break;
-            }
-            $deleted += $batchDeleted;
-        }
-
-        return [
-            'deleted_rows' => $deleted,
-            'cursor_expired' => $deleted > 0,
-        ];
-    }
-
-    /**
-     * Build the root predicate shared by the change-feed queries. The explicit
-     * root_file_id predicate is indexed and makes a cursor's directory tree
-     * immediately visible in SQL logs.
-     */
-    private function buildFileTreeChangeQuery(int $rootFileId)
-    {
-        return Db::table(self::FILE_TREE_CHANGES_TABLE)
-            ->where('root_file_id', $rootFileId);
     }
 
     /**
@@ -3682,5 +3075,641 @@ class TaskFileRepository implements TaskFileRepositoryInterface
             }
             $this->appendFileTreeChanges($pending);
         });
+    }
+
+    /**
+     * Resolve a file's current file-tree root by following parent_id links.
+     * This is intentionally an ancestor-only query: moving a directory never
+     * requires touching or scanning its descendants.
+     */
+    private function resolveFileTreeRootId(TaskFileEntity $file): int
+    {
+        if (! $this->shouldJournalFileTree($file)) {
+            throw new RuntimeException(sprintf(
+                'File %d does not belong to a journaled file tree',
+                $file->getFileId()
+            ));
+        }
+
+        return $this->resolveRootIdFromParentChain($file);
+    }
+
+    /**
+     * Resolve the physical root using parent_id only.
+     *
+     * This helper deliberately does not inspect the row's denormalized space
+     * columns.  They are useful for legacy queries, but are not a stable tree
+     * identity after a directory is moved between projects or spaces.
+     */
+    private function resolveRootIdFromParentChain(TaskFileEntity $file): int
+    {
+        $parentId = $file->getParentId();
+        if ($parentId === null || $parentId <= 0) {
+            if (! $file->getIsDirectory()) {
+                throw new RuntimeException(sprintf(
+                    'File-tree entry %d has no parent and is not a directory root',
+                    $file->getFileId()
+                ));
+            }
+            return $file->getFileId();
+        }
+
+        return $this->resolveParentChainRootId($parentId);
+    }
+
+    /**
+     * Resolve a root from an existing parent row using one recursive CTE.
+     * Deleted ancestors are included because delete/restore mutations must
+     * retain the root that was valid at the time of the mutation.
+     */
+    private function resolveParentChainRootId(int $parentId): int
+    {
+        $rows = Db::select(
+            sprintf(
+                'WITH RECURSIVE file_tree_ancestors AS ('
+                . ' SELECT file_id, parent_id, is_directory, space_type, project_id, topic_id, user_id, organization_code, 0 AS depth'
+                . ' FROM magic_super_agent_task_files WHERE file_id = ?'
+                . ' UNION ALL'
+                . ' SELECT parent.file_id, parent.parent_id, parent.is_directory, parent.space_type, parent.project_id, parent.topic_id, parent.user_id, parent.organization_code, ancestors.depth + 1'
+                . ' FROM magic_super_agent_task_files parent'
+                . ' INNER JOIN file_tree_ancestors ancestors ON parent.file_id = ancestors.parent_id'
+                . ' WHERE ancestors.depth < %d'
+                . ') SELECT file_id, parent_id, is_directory, space_type, project_id, topic_id, user_id, organization_code, depth'
+                . ' FROM file_tree_ancestors ORDER BY depth DESC',
+                self::MAX_FILE_TREE_DEPTH
+            ),
+            [$parentId]
+        );
+
+        if ($rows === []) {
+            throw new RuntimeException(sprintf(
+                'Parent file %d does not exist while resolving its file-tree root',
+                $parentId
+            ));
+        }
+
+        foreach ($rows as $row) {
+            $row = (array) $row;
+            $ancestorParentId = $row['parent_id'] ?? null;
+            if ($ancestorParentId !== null && (int) $ancestorParentId !== 0) {
+                continue;
+            }
+            if (! (bool) ($row['is_directory'] ?? false)) {
+                throw new RuntimeException(sprintf(
+                    'File-tree root %d is not a directory',
+                    (int) $row['file_id']
+                ));
+            }
+            return (int) $row['file_id'];
+        }
+
+        throw new RuntimeException(sprintf(
+            'File-tree parent chain for %d is cyclic or exceeds depth %d',
+            $parentId,
+            self::MAX_FILE_TREE_DEPTH
+        ));
+    }
+
+    private function isFileTreeRoot(TaskFileEntity $file): bool
+    {
+        return $this->shouldJournalFileTree($file)
+            && $file->getIsDirectory()
+            && ($file->getParentId() === null || $file->getParentId() <= 0);
+    }
+
+    private function findProjectFileTreeRootId(int $projectId): int
+    {
+        return (int) ($this->model::query()
+            ->where('project_id', $projectId)
+            ->where('topic_id', 0)
+            ->where('space_type', FileSpaceType::PROJECT->value)
+            ->whereNull('parent_id')
+            ->whereNull('deleted_at')
+            ->where('is_directory', true)
+            ->orderBy('file_id', 'asc')
+            ->value('file_id') ?? 0);
+    }
+
+    /**
+     * file_id 由调用方显式赋雪花 ID，不依赖数据库自增（见 TaskFileModel::$incrementing）。
+     *
+     * 导入、历史调用方可能不带 ID，这里在 PHP 侧补齐：交给数据库自增拿不到生成值，
+     * 实体仍带着 0，响应、change journal 和后续按 file_id 的查询都会指向不存在的 ID。
+     */
+    private function ensureFileId(TaskFileEntity $entity): void
+    {
+        if ($entity->getFileId() <= 0) {
+            $entity->setFileId(IdGenerator::getSnowId());
+        }
+    }
+
+    /**
+     * Read the durable root head, failing closed when the final MagicFS
+     * schema/backfill has not been installed.  Returning an all-zero head is
+     * unsafe: a mount would look like an empty project and its change cursor
+     * could permanently miss mutations.  There is intentionally no fallback
+     * to an aggregate scan or the legacy tree endpoint.
+     *
+     * The head is returned as an assoc array, never as an object: raw rows are
+     * arrays in this project (App\Listener\FetchModeListener forces
+     * PDO::FETCH_ASSOC), and reading a property off a row silently yields the
+     * default instead of the persisted value.
+     *
+     * @param int $rootFileId the immutable file-tree root ID
+     * @return array{root_file_id:mixed,revision:mixed,oldest_revision:mixed,updated_at:mixed}
+     */
+    private function getFileTreeHeadRow(int $rootFileId): array
+    {
+        $row = Db::table(self::FILE_TREE_HEADS_TABLE)
+            ->where('root_file_id', $rootFileId)
+            ->first();
+        if ($row === null) {
+            throw new RuntimeException(
+                sprintf('MagicFS root head is not initialized for root_file_id=%d', $rootFileId)
+            );
+        }
+
+        return (array) $row;
+    }
+
+    private function requireFileTreeRootId(TaskFileEntity $file, bool $requireRootRow = false): int
+    {
+        $rootFileId = $this->resolveFileTreeRootId($file);
+        if ($requireRootRow && $rootFileId !== $file->getFileId()) {
+            throw new RuntimeException(sprintf(
+                'File %d is not a file-tree root (root_file_id=%d)',
+                $file->getFileId(),
+                $rootFileId
+            ));
+        }
+        return $rootFileId;
+    }
+
+    /**
+     * Only rows that can belong to a mounted MagicFS file tree are journaled.
+     * Task-file storage also contains transient task attachments; recording
+     * those under a synthetic project=0 file tree would grow the feed without
+     * helping any mount and could make unrelated cursors appear active.
+     */
+    private function shouldJournalFileTree(TaskFileEntity $entity): bool
+    {
+        return match ($entity->getSpaceType()) {
+            FileSpaceType::PROJECT->value => $entity->getProjectId() > 0 && $entity->getTopicId() === 0,
+            FileSpaceType::TOPIC->value => $entity->getProjectId() > 0 && $entity->getTopicId() > 0,
+            FileSpaceType::USER->value => $entity->getProjectId() === 0
+                && $entity->getUserId() !== ''
+                && $entity->getOrganizationCode() !== ''
+                && $entity->getTopicId() === 0,
+            default => false,
+        };
+    }
+
+    /**
+     * Compare a row before/after a repository mutation and emit the smallest
+     * precise event. Moving across logical roots is represented as
+     * delete+create because a root-local cursor cannot cross that boundary
+     * safely.
+     */
+    private function recordFileTreeMutation(
+        ?TaskFileEntity $before,
+        ?TaskFileEntity $after,
+        ?string $operation = null,
+        ?int $oldParentId = null,
+        ?string $oldName = null,
+        ?array &$pending = null,
+        ?int $beforeRootFileId = null,
+        ?int $afterRootFileId = null
+    ): void {
+        if ($before !== null && ! $this->shouldJournalFileTree($before)) {
+            $before = null;
+        }
+        if ($after !== null && ! $this->shouldJournalFileTree($after)) {
+            $after = null;
+        }
+        if ($before === null && $after === null) {
+            return;
+        }
+
+        $beforeActive = $before !== null && $before->getDeletedAt() === null;
+        $afterActive = $after !== null && $after->getDeletedAt() === null;
+
+        // A physical purge of an already soft-deleted row, or an update that
+        // leaves a row deleted, does not change any mounted file tree. Do not
+        // advance the cursor for either case.
+        if (! $beforeActive && ! $afterActive) {
+            return;
+        }
+
+        $beforeRootFileId ??= $before === null ? null : $this->resolveFileTreeRootId($before);
+        $afterRootFileId ??= $after === null ? null : $this->resolveFileTreeRootId($after);
+
+        if ($beforeActive && $afterActive && $before !== null && $after !== null
+            && $this->isFileTreeRoot($before)
+            && $before->getParentId() !== $after->getParentId()) {
+            throw new RuntimeException(sprintf(
+                'MagicFS file-tree root %d cannot be moved',
+                $before->getFileId()
+            ));
+        }
+
+        // A file-tree crossing is represented as delete+create. This branch
+        // is reached only for active images; deleted rows were handled above.
+        if ($beforeActive && $afterActive
+            && $before !== null && $after !== null
+            && $beforeRootFileId !== $afterRootFileId) {
+            $this->queueFileTreeMutationEvent(
+                $pending,
+                $before,
+                (int) $beforeRootFileId,
+                'delete',
+                $before->getParentId(),
+                $before->getFileName()
+            );
+            $this->queueFileTreeMutationEvent($pending, $after, (int) $afterRootFileId, 'create');
+            return;
+        }
+
+        // For a soft-delete update, publish the last active image rather than
+        // the deleted row.  For a restore, publish the newly active image.
+        $file = $afterActive ? $after : $before;
+        if ($file === null) {
+            return;
+        }
+
+        $rootFileId = $afterActive ? $afterRootFileId : $beforeRootFileId;
+        if ($rootFileId === null || $rootFileId <= 0) {
+            throw new RuntimeException(sprintf(
+                'Cannot journal file %d without a file-tree root',
+                $file->getFileId()
+            ));
+        }
+
+        if (! $beforeActive && $afterActive) {
+            // A null before-image is a newly-created row, not a restore.  The
+            // distinction is observable by the durable feed consumers (and
+            // affects their counter/reconciliation semantics), so only an
+            // existing soft-deleted row may produce a restore event.
+            $operation = $before === null ? 'create' : 'restore';
+        } elseif (! $afterActive) {
+            $operation = 'delete';
+        } elseif ($operation === null) {
+            if ($before->getParentId() !== $after->getParentId()
+                || $before->getFileName() !== $after->getFileName()) {
+                $operation = 'move';
+            } else {
+                $operation = 'update';
+            }
+        }
+
+        $this->queueFileTreeMutationEvent(
+            $pending,
+            $file,
+            $rootFileId,
+            $operation,
+            $oldParentId ?? ($beforeActive ? $before?->getParentId() : null),
+            $oldName ?? ($beforeActive ? $before?->getFileName() : null)
+        );
+    }
+
+    /**
+     * Queue an event for a surrounding bulk mutation, or persist it
+     * immediately for the ordinary single-row path.
+     *
+     * @param null|array<int, array{root_file_id:int,file:TaskFileEntity,operation:string,old_parent_id:?int,old_name:?string}> $pending
+     */
+    private function queueFileTreeMutationEvent(
+        ?array &$pending,
+        TaskFileEntity $file,
+        int $rootFileId,
+        string $operation,
+        ?int $oldParentId = null,
+        ?string $oldName = null
+    ): void {
+        if ($pending !== null) {
+            $pending[] = [
+                'root_file_id' => $rootFileId,
+                'file' => $file,
+                'operation' => $operation,
+                'old_parent_id' => $oldParentId,
+                'old_name' => $oldName,
+            ];
+            return;
+        }
+
+        $this->appendFileTreeChange($file, $operation, $oldParentId, $oldName, $rootFileId);
+    }
+
+    /**
+     * Allocate and insert several root-local events in one transaction.
+     *
+     * Batch file imports/deletes can contain tens of thousands of rows. The
+     * old per-row path locked and updated the file-tree head for every event,
+     * turning journal bookkeeping into the dominant cost. Events are grouped
+     * by logical root here, each head is locked once, and journal rows are
+     * bulk inserted in bounded chunks. Revisions remain strictly ordered
+     * within a root_file_id and the returned list preserves event order.
+     *
+     * @param array<int, array{root_file_id?:int,file:TaskFileEntity,operation:string,old_parent_id:?int,old_name:?string}> $events
+     * @return array<int, int> revisions keyed by input event index
+     */
+    private function appendFileTreeChanges(array $events): array
+    {
+        if ($events === []) {
+            return [];
+        }
+
+        /*
+         * Allocate and persist the event in the caller's transaction when one
+         * is already active.  Starting a savepoint for every row in a batch
+         * mutation is needlessly expensive and, more importantly, makes a
+         * large import spend most of its time in transaction bookkeeping.
+         * Direct callers still get a transaction around the head bump and
+         * journal insert.
+         */
+        $write = function () use ($events): array {
+            /** @var array<int, array{events:array<int,array{index:int,file:TaskFileEntity,operation:string,old_parent_id:?int,old_name:?string}>}> $groups */
+            $groups = [];
+            foreach ($events as $index => $event) {
+                $file = $event['file'];
+                $rootFileId = (int) ($event['root_file_id'] ?? $this->resolveFileTreeRootId($file));
+                if ($rootFileId <= 0) {
+                    throw new RuntimeException(sprintf(
+                        'Cannot append file-tree change for file %d without a root_file_id',
+                        $file->getFileId()
+                    ));
+                }
+                if (! isset($groups[$rootFileId])) {
+                    $groups[$rootFileId] = ['events' => []];
+                }
+                $groups[$rootFileId]['events'][] = [
+                    'index' => $index,
+                    'root_file_id' => $rootFileId,
+                    'file' => $file,
+                    'operation' => $event['operation'],
+                    'old_parent_id' => $event['old_parent_id'],
+                    'old_name' => $event['old_name'],
+                ];
+            }
+
+            // Deterministic lock order prevents two cross-root bulk mutations
+            // from deadlocking while they allocate their heads.
+            ksort($groups, SORT_NUMERIC);
+            $revisions = [];
+            foreach ($groups as $rootFileId => $group) {
+                $rootFileId = (int) $rootFileId;
+                $now = date('Y-m-d H:i:s');
+
+                foreach ($group['events'] as $event) {
+                    if ($this->isFileTreeRoot($event['file'])
+                        && $event['file']->getFileId() !== $rootFileId) {
+                        throw new RuntimeException(sprintf(
+                            'MagicFS logical root is immutable: expected root_file_id=%d, got root_file_id=%d',
+                            $rootFileId,
+                            $event['file']->getFileId()
+                        ));
+                    }
+                }
+
+                // root_file_id is the sole durable file-tree identity.  Heads
+                // are never discovered through a project/user/topic tuple.
+                $head = Db::table(self::FILE_TREE_HEADS_TABLE)
+                    ->where('root_file_id', $rootFileId)
+                    ->lockForUpdate()
+                    ->first();
+                if ($head === null) {
+                    $rootFile = null;
+                    foreach ($group['events'] as $event) {
+                        if (in_array($event['operation'], ['create', 'restore'], true)
+                            && $this->isFileTreeRoot($event['file'])) {
+                            $rootFile = $event['file'];
+                            break;
+                        }
+                    }
+                    if ($rootFile === null) {
+                        throw new RuntimeException(sprintf(
+                            'MagicFS file-tree head is not initialized for root_file_id=%d',
+                            $rootFileId
+                        ));
+                    }
+
+                    // insertOrIgnore closes the first-writer race. The root
+                    // primary key is the only uniqueness constraint needed.
+                    Db::table(self::FILE_TREE_HEADS_TABLE)->insertOrIgnore([
+                        'root_file_id' => $rootFileId,
+                        'revision' => 0,
+                        'oldest_revision' => 1,
+                        'updated_at' => $now,
+                    ]);
+                    $head = Db::table(self::FILE_TREE_HEADS_TABLE)
+                        ->where('root_file_id', $rootFileId)
+                        ->lockForUpdate()
+                        ->first();
+                }
+                if ($head === null) {
+                    throw new RuntimeException(sprintf(
+                        'MagicFS root head could not be locked for root_file_id=%d',
+                        $rootFileId
+                    ));
+                }
+
+                // Normalize the locked head to an array before reading it: raw
+                // rows are assoc arrays here, and a property read would raise
+                // "Attempt to read property on array".
+                $head = (array) $head;
+                $persistedRootFileId = (int) ($head['root_file_id'] ?? 0);
+                if ($persistedRootFileId !== $rootFileId) {
+                    throw new RuntimeException(sprintf(
+                        'MagicFS file-tree head mismatch: expected root_file_id=%d, found root_file_id=%d',
+                        $rootFileId,
+                        $persistedRootFileId
+                    ));
+                }
+
+                $rootRevision = (int) ($head['revision'] ?? 0);
+                $rows = [];
+                foreach ($group['events'] as $event) {
+                    ++$rootRevision;
+                    $revisions[$event['index']] = $rootRevision;
+                    $file = $event['file'];
+                    $rows[] = [
+                        'root_file_id' => $rootFileId,
+                        'revision' => $rootRevision,
+                        'file_id' => $file->getFileId(),
+                        'parent_id' => $file->getParentId(),
+                        'old_parent_id' => $event['old_parent_id'],
+                        'name' => $file->getFileName(),
+                        'old_name' => $event['old_name'],
+                        'operation' => $event['operation'],
+                        'file_version' => $file->getMetadataVersion(),
+                        'file_snapshot' => json_encode($this->fileTreeChangeSnapshot($file), JSON_THROW_ON_ERROR),
+                        'created_at' => $now,
+                    ];
+                }
+
+                Db::table(self::FILE_TREE_HEADS_TABLE)
+                    ->where('root_file_id', $rootFileId)
+                    ->update([
+                        'revision' => $rootRevision,
+                        'updated_at' => $now,
+                    ]);
+
+                // Keep INSERT packet size bounded for large imports.
+                foreach (array_chunk($rows, 500) as $chunk) {
+                    Db::table(self::FILE_TREE_CHANGES_TABLE)->insert($chunk);
+                }
+            }
+
+            ksort($revisions);
+            return $revisions;
+        };
+
+        return Db::transactionLevel() > 0 ? $write() : Db::transaction($write);
+    }
+
+    /** @return array<string, mixed> */
+    private function fileTreeChangeSnapshot(TaskFileEntity $file): array
+    {
+        $metadata = [];
+        if ($file->getMetadata() !== null && $file->getMetadata() !== '') {
+            $decoded = json_decode($file->getMetadata(), true);
+            if (is_array($decoded)) {
+                $metadata = $decoded;
+            }
+        }
+        $mode = isset($metadata['mode'])
+            ? (int) $metadata['mode']
+            : ($file->getIsDirectory() ? 0755 : 0644);
+        unset($metadata['mode']);
+
+        // FileMetadata is a string-to-string extension bag in the MagicFS
+        // wire contract.  Task-file metadata may be written by other flows,
+        // so discard nested/non-scalar values instead of emitting a snapshot
+        // that cannot be decoded by the Go client.
+        $fileMetadata = [];
+        foreach ($metadata as $key => $value) {
+            if (! is_string($key) || $key === '' || (! is_scalar($value) && $value !== null)) {
+                continue;
+            }
+            $fileMetadata[$key] = $value === null ? '' : (string) $value;
+        }
+
+        return [
+            'id' => (string) $file->getFileId(),
+            'name' => $file->getFileName(),
+            'parent_id' => (string) ($file->getParentId() ?? ''),
+            'is_directory' => $file->getIsDirectory(),
+            'size' => $file->getFileSize(),
+            'mode' => $mode,
+            // 空 map 必须序列化成 {}：json_encode 会把空 PHP 数组写成 []，
+            // Go 侧 json.Unmarshal 到 map[string]string 会整页解码失败
+            // （"cannot unmarshal array into ... file_metadata"），change feed
+            // 会一直停在原地、挂载端再也同步不到任何变更。
+            // 与 MagicFSFileDTO::toArray() 对同一字段的处理保持一致。
+            'file_metadata' => $fileMetadata === [] ? (object) [] : $fileMetadata,
+            's3_info' => ['object_key' => $file->getFileKey()],
+            'created_at' => $file->getCreatedAt(),
+            'updated_at' => $file->getUpdatedAt(),
+            'version' => $file->getMetadataVersion(),
+            'latest_version' => $file->getLatestVersion(),
+        ];
+    }
+
+    /**
+     * @return array{deleted_rows:int,cursor_expired:bool}
+     */
+    private function compactFileTree(
+        int $rootFileId,
+        int $keepRevisions,
+        int $batchSize,
+        bool $dryRun
+    ): array {
+        $headRevision = (int) (Db::table(self::FILE_TREE_HEADS_TABLE)
+            ->where('root_file_id', $rootFileId)
+            ->value('revision') ?? 0);
+        $cutoff = $headRevision - $keepRevisions;
+        if ($cutoff <= 0) {
+            return ['deleted_rows' => 0, 'cursor_expired' => false];
+        }
+
+        if ($dryRun) {
+            $eligible = (int) Db::table(self::FILE_TREE_CHANGES_TABLE)
+                ->where('root_file_id', $rootFileId)
+                ->where('revision', '<=', $cutoff)
+                ->count();
+            return [
+                'deleted_rows' => $eligible,
+                'cursor_expired' => $eligible > 0,
+            ];
+        }
+
+        $deleted = 0;
+        while (true) {
+            // Commit every bounded batch separately. Writers in the same
+            // file tree are serialized only while one small prefix is removed;
+            // they can proceed between batches, and unrelated file trees never
+            // contend on this head row.
+            $deleteBatch = function () use ($rootFileId, $cutoff, $batchSize): int {
+                $head = Db::table(self::FILE_TREE_HEADS_TABLE)
+                    ->where('root_file_id', $rootFileId)
+                    ->lockForUpdate()
+                    ->first();
+                if ($head === null) {
+                    return 0;
+                }
+                $head = (array) $head;
+
+                $ids = Db::table(self::FILE_TREE_CHANGES_TABLE)
+                    ->where('root_file_id', $rootFileId)
+                    ->where('revision', '<=', $cutoff)
+                    ->orderBy('revision', 'ASC')
+                    ->limit($batchSize)
+                    ->pluck('change_id')
+                    ->all();
+                if ($ids === []) {
+                    return 0;
+                }
+
+                $batchDeleted = Db::table(self::FILE_TREE_CHANGES_TABLE)
+                    ->whereIn('change_id', $ids)
+                    ->delete();
+                $firstRevision = Db::table(self::FILE_TREE_CHANGES_TABLE)
+                    ->where('root_file_id', $rootFileId)
+                    ->min('revision');
+                $currentHead = (int) ($head['revision'] ?? 0);
+                $oldest = $firstRevision === null ? $currentHead + 1 : (int) $firstRevision;
+                Db::table(self::FILE_TREE_HEADS_TABLE)
+                    ->where('root_file_id', $rootFileId)
+                    ->update([
+                        'oldest_revision' => $oldest,
+                        'updated_at' => date('Y-m-d H:i:s'),
+                    ]);
+
+                return $batchDeleted;
+            };
+
+            $batchDeleted = Db::transactionLevel() > 0
+                ? $deleteBatch()
+                : Db::transaction($deleteBatch);
+            if ($batchDeleted === 0) {
+                break;
+            }
+            $deleted += $batchDeleted;
+        }
+
+        return [
+            'deleted_rows' => $deleted,
+            'cursor_expired' => $deleted > 0,
+        ];
+    }
+
+    /**
+     * Build the root predicate shared by the change-feed queries. The explicit
+     * root_file_id predicate is indexed and makes a cursor's directory tree
+     * immediately visible in SQL logs.
+     */
+    private function buildFileTreeChangeQuery(int $rootFileId)
+    {
+        return Db::table(self::FILE_TREE_CHANGES_TABLE)
+            ->where('root_file_id', $rootFileId);
     }
 }

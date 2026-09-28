@@ -124,6 +124,22 @@ interface TaskFileRepositoryInterface
     public function getFileTreeChildByParentAndName(
         int $parentId,
         string $fileName,
+        bool $withTrash = false,
+        ?TaskFileEntity $parentContext = null
+    ): ?TaskFileEntity;
+
+    /**
+     * Find a direct child in a user-owned file tree.
+     *
+     * User-space identity is scoped by user, organization and space type;
+     * project_id=0 is only a storage value and must not be used as a lookup
+     * boundary on the large task-files table.
+     */
+    public function getUserFileTreeChildByParentAndName(
+        int $parentId,
+        string $fileName,
+        string $userId,
+        string $organizationCode,
         bool $withTrash = false
     ): ?TaskFileEntity;
 
@@ -306,7 +322,7 @@ interface TaskFileRepositoryInterface
      * Apply heterogeneous maintenance updates to active task-file rows in one
      * bounded transaction and append one precise event per changed row.
      *
-     * @param array<int, array{file_id:int,file_key?:string,parent_id?:int|null,updated_at?:string}> $updates
+     * @param array<int, array{file_id:int,file_key?:string,parent_id?:null|int,updated_at?:string}> $updates
      */
     public function applyMagicFSBackfillUpdates(array $updates): int;
 
@@ -681,9 +697,9 @@ interface TaskFileRepositoryInterface
      * revision and journal rows are committed in the caller's transaction.
      *
      * @param int[] $fileIds
-     * @param int[] $excludeJournalIds Rows that are still bumped but whose
+     * @param int[] $excludeJournalIds rows that are still bumped but whose
      *                                 final mutation event will be published
-     *                                 by the caller after all related writes.
+     *                                 by the caller after all related writes
      */
     public function incrementMetadataVersionByIdsWithJournal(
         array $fileIds,
