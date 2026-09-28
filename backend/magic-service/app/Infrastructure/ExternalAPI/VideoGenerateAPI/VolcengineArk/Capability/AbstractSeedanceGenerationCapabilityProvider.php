@@ -136,6 +136,17 @@ abstract readonly class AbstractSeedanceGenerationCapabilityProvider
     }
 
     /**
+     * 是否支持样片模式（draft）。目前只有 Seedance 2.5 支持：先以 480p 出样片，
+     * 确认后再以正式分辨率出片，两次出片分别计费。
+     *
+     * 仅能力层内部使用，决定 generation 里是否声明 draft 开关。
+     */
+    protected function supportsDraft(): bool
+    {
+        return false;
+    }
+
+    /**
      * 该家族的分辨率、时长区间与参考素材上限。
      *
      * @return array{
@@ -159,7 +170,7 @@ abstract readonly class AbstractSeedanceGenerationCapabilityProvider
      */
     private function buildGeneration(array $profile): array
     {
-        return [
+        $generation = [
             'aspect_ratios' => self::SUPPORTED_ASPECT_RATIOS,
             'duration_type' => 'range',
             'durations' => $profile['durations'],
@@ -183,6 +194,18 @@ abstract readonly class AbstractSeedanceGenerationCapabilityProvider
             'resolutions' => $profile['resolutions'],
             'sizes' => $this->filterSizesByResolution($profile['resolutions']),
         ];
+
+        // 样片模式目前只有 Seedance 2.5 支持，因此只在该家族的 generation 里声明开关。
+        if ($this->supportsDraft()) {
+            $generation['draft'] = [
+                'type' => 'switch',
+                'default' => false,
+                'name' => __('video.generation.draft.name'),
+                'description' => __('video.generation.draft.description'),
+            ];
+        }
+
+        return $generation;
     }
 
     /**
@@ -229,10 +252,12 @@ abstract readonly class AbstractSeedanceGenerationCapabilityProvider
                     ],
                 ]],
             ],
+            // 首帧/首尾帧：输出比例强制跟随首帧图片，因此该模式不支持选择比例。
             'keyframe_guided' => [
                 'description' => $this->translateInputMode('keyframe_guided.start_end'),
                 'supported_fields' => ['frames'],
                 'frame_roles' => ['start', 'end'],
+                'generation_constraints' => ['aspect_ratios' => []],
             ],
             // 视频编辑：至少一个参考视频，可搭配参考图片；时长与比例跟随待编辑视频，不暴露给前端。
             VideoInputMode::VideoEdit->value => array_merge(

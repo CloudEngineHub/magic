@@ -144,6 +144,9 @@ final class VolcengineArkVideoAdapterRouterTest extends TestCase
     }
 
     /**
+     * 拆分后在能力声明上做了两处有意增强（样片模式开关、首尾帧比例约束），
+     * 比对前先剔除，其余结构仍必须与回滚位逐字一致（含键顺序）。
+     *
      * @dataProvider seedanceFamilyProvider
      */
     public function testGenerationConfigMatchesMonolithForEachFamily(string $model, string $family): void
@@ -153,7 +156,10 @@ final class VolcengineArkVideoAdapterRouterTest extends TestCase
 
         $this->assertNotNull($monolithConfig);
         $this->assertNotNull($familyConfig);
-        $this->assertSame($monolithConfig->toArray(), $familyConfig->toArray());
+        $this->assertSame(
+            $monolithConfig->toArray(),
+            $this->stripIntentionalEnhancements($familyConfig->toArray()),
+        );
     }
 
     /**
@@ -173,6 +179,55 @@ final class VolcengineArkVideoAdapterRouterTest extends TestCase
     }
 
     /**
+     * 首帧内容映射仍与回滚位逐字一致；该请求不带比例，因此不触碰有意差异点。
+     *
+     * @dataProvider seedanceFamilyProvider
+     */
+    public function testKeyframePayloadMatchesMonolithForEachFamily(string $model, string $family): void
+    {
+        $this->assertPayloadMatchesMonolith($model, $family, $this->keyframeRequest($model));
+    }
+
+    /**
+     * 需求二：只要请求带首帧就不下发 ratio，并把调用方传入的比例记为未生效。
+     *
+     * 回滚位仍会无条件下发 ratio，这正是线上 400 InvalidParameter.TaskTypeConstraint 的成因，
+     * 这里把两者的差异显式固化下来。
+     *
+     * @dataProvider seedanceFamilyProvider
+     */
+    public function testFirstFrameSuppressesAspectRatioForEachFamily(string $model, string $family): void
+    {
+        $familyOperation = $this->createOperation($model, $this->keyframeWithAspectRatioRequest($model));
+        $familyPayload = $this->createFamilyAdapter($family)->buildProviderPayload($familyOperation);
+
+        $this->assertArrayNotHasKey('ratio', $familyPayload);
+        $this->assertContains('generation.aspect_ratio', $familyOperation->getIgnoredParams());
+        $this->assertNotContains('generation.aspect_ratio', $familyOperation->getAcceptedParams());
+
+        $monolithPayload = $this->createMonolithAdapter()->buildProviderPayload(
+            $this->createOperation($model, $this->keyframeWithAspectRatioRequest($model)),
+        );
+        $this->assertSame('16:9', $monolithPayload['ratio']);
+    }
+
+    /**
+     * 需求二：keyframe_guided 模式声明不支持比例，前端据此隐藏比例分区。
+     *
+     * @dataProvider seedanceFamilyProvider
+     */
+    public function testKeyframeGuidedDeclaresNoAspectRatioForEachFamily(string $model, string $family): void
+    {
+        $config = $this->createFamilyAdapter($family)->resolveGenerationConfig($model, $model);
+
+        $this->assertNotNull($config);
+        $this->assertSame(
+            [],
+            $config->toArray()['input_modes']['keyframe_guided']['generation_constraints']['aspect_ratios'],
+        );
+    }
+
+    /**
      * @return array<string, array{0: string, 1: string}>
      */
     public static function seedanceFamilyProvider(): array
@@ -182,6 +237,49 @@ final class VolcengineArkVideoAdapterRouterTest extends TestCase
             '2.0' => [self::TWO_MODEL, 'two'],
             '2.5' => [self::TWO_FIVE_MODEL, 'two_five'],
         ];
+    }
+
+    /**
+     * 需求一：只有 Seedance 2.5 声明样片模式开关，其余家族不出现该键。
+     */
+    public function testOnlyTwoPointFiveDeclaresDraftSwitch(): void
+    {
+        $draftSwitch = $this->createFamilyAdapter('two_five')
+            ->resolveGenerationConfig(self::TWO_FIVE_MODEL, self::TWO_FIVE_MODEL)
+            ?->toArray()['generation']['draft'];
+
+        $this->assertIsArray($draftSwitch);
+        $this->assertSame('switch', $draftSwitch['type']);
+        $this->assertFalse($draftSwitch['default']);
+        $this->assertNotSame('', $draftSwitch['name']);
+        $this->assertNotSame('', $draftSwitch['description']);
+
+        $others = ['mini_fast' => self::MINI_FAST_MODEL, 'two' => self::TWO_MODEL];
+        foreach ($others as $family => $model) {
+            $config = $this->createFamilyAdapter($family)->resolveGenerationConfig($model, $model);
+
+            $this->assertNotNull($config);
+            $this->assertArrayNotHasKey('draft', $config->toArray()['generation']);
+        }
+    }
+
+    /**
+     * 需求一：draft 映射到方舟顶层 draft 布尔位，且不再被当成未处理参数；
+     * 未传时不出现该键。非 2.5 家族的裁剪发生在领域层，见 VideoQueueDomainServiceTest。
+     */
+    public function testDraftIsMappedIntoPayloadOnlyWhenRequested(): void
+    {
+        $adapter = $this->createFamilyAdapter('two_five');
+
+        $withDraft = $this->createOperation(self::TWO_FIVE_MODEL, $this->draftRequest(self::TWO_FIVE_MODEL));
+        $payload = $adapter->buildProviderPayload($withDraft);
+
+        $this->assertTrue($payload['draft']);
+        $this->assertContains('generation.draft', $withDraft->getAcceptedParams());
+        $this->assertNotContains('generation.draft', $withDraft->getIgnoredParams());
+
+        $withoutDraft = $this->createOperation(self::TWO_FIVE_MODEL, $this->generateRequest(self::TWO_FIVE_MODEL));
+        $this->assertArrayNotHasKey('draft', $adapter->buildProviderPayload($withoutDraft));
     }
 
     /**
@@ -198,6 +296,22 @@ final class VolcengineArkVideoAdapterRouterTest extends TestCase
         $this->assertSame($monolithPayload, $familyPayload);
         $this->assertSame($monolithOperation->getAcceptedParams(), $familyOperation->getAcceptedParams());
         $this->assertSame($monolithOperation->getIgnoredParams(), $familyOperation->getIgnoredParams());
+    }
+
+    /**
+     * 剔除拆分后有意新增的两处能力声明，使其余结构可以与回滚位逐字比对。
+     *
+     * @param array<string, mixed> $config
+     * @return array<string, mixed>
+     */
+    private function stripIntentionalEnhancements(array $config): array
+    {
+        unset(
+            $config['generation']['draft'],
+            $config['input_modes']['keyframe_guided']['generation_constraints'],
+        );
+
+        return $config;
     }
 
     private function createRouter(?ClientFactory $clientFactory = null): VolcengineArkVideoAdapterRouter
@@ -271,7 +385,10 @@ final class VolcengineArkVideoAdapterRouterTest extends TestCase
     }
 
     /**
-     * 覆盖首尾帧 + 各类参考素材 + 执行参数的完整生成请求。
+     * 覆盖各类参考素材、比例与执行参数的完整生成请求。
+     *
+     * 这里刻意不带 frames：首帧存在时不下发 ratio 是拆分后与回滚位的有意差异，
+     * 会让逐字比对失去意义；帧相关行为改由 keyframeRequest() 与专门用例覆盖。
      *
      * @return array<string, mixed>
      */
@@ -282,10 +399,6 @@ final class VolcengineArkVideoAdapterRouterTest extends TestCase
             'task' => 'generate',
             'prompt' => '{{image_1}} 跟随 {{video_1}}，再配合 {{audio_1}} 替换天空为晚霞',
             'inputs' => [
-                'frames' => [
-                    'start' => ['uri' => 'https://example.com/first.png'],
-                    'end' => ['uri' => 'https://example.com/last.png'],
-                ],
                 'reference_images' => [
                     ['uri' => 'https://example.com/ref.png'],
                 ],
@@ -345,5 +458,54 @@ final class VolcengineArkVideoAdapterRouterTest extends TestCase
     private function config(): QueueExecutorConfig
     {
         return new QueueExecutorConfig('https://ark.cn-beijing.volces.com/api/v3', 'secret', 3, 20);
+    }
+
+    /**
+     * 首尾帧生成请求：frames 用领域层归一化后的形态（role + uri 的列表），不带比例，
+     * 用于比对帧内容映射的等价性。
+     *
+     * @return array<string, mixed>
+     */
+    private function keyframeRequest(string $model): array
+    {
+        return [
+            'model_id' => $model,
+            'task' => 'generate',
+            'prompt' => 'animate these frames',
+            'inputs' => [
+                'frames' => [
+                    ['role' => 'start', 'uri' => 'https://example.com/start.png'],
+                    ['role' => 'end', 'uri' => 'https://example.com/end.png'],
+                ],
+            ],
+            'generation' => [
+                'duration_seconds' => 5,
+                'resolution' => '720p',
+            ],
+        ];
+    }
+
+    /**
+     * 首帧 + 显式比例：需求二要修的场景。
+     *
+     * @return array<string, mixed>
+     */
+    private function keyframeWithAspectRatioRequest(string $model): array
+    {
+        $request = $this->keyframeRequest($model);
+        $request['generation']['aspect_ratio'] = '16:9';
+
+        return $request;
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    private function draftRequest(string $model): array
+    {
+        $request = $this->generateRequest($model);
+        $request['generation']['draft'] = true;
+
+        return $request;
     }
 }

@@ -508,6 +508,7 @@ readonly class VideoQueueDomainService
             'camera_fixed' => $this->normalizeOptionalBool($requestData['generation']['camera_fixed'] ?? null),
             'return_last_frame' => $this->normalizeOptionalBool($requestData['generation']['return_last_frame'] ?? null),
             'web_search' => $this->normalizeOptionalBool($requestData['generation']['web_search'] ?? null),
+            'draft' => $this->normalizeOptionalBool($requestData['generation']['draft'] ?? null),
         ], static fn (mixed $value): bool => $value !== null && $value !== '');
         $generation = $this->normalizeProviderSpecificGeneration(
             $generation,
@@ -686,6 +687,11 @@ readonly class VideoQueueDomainService
         $webSearchConfig = is_array($configGeneration['web_search'] ?? null) ? $configGeneration['web_search'] : null;
         if ($webSearchConfig === null) {
             unset($generation['web_search']);
+        }
+        // 样片模式只有声明了 draft 开关的能力才接受，其余模型一律裁剪掉。
+        $draftConfig = is_array($configGeneration['draft'] ?? null) ? $configGeneration['draft'] : null;
+        if ($draftConfig === null) {
+            unset($generation['draft']);
         }
         if (! ($configGeneration['supports_enhance_prompt'] ?? false)) {
             unset($generation['enhance_prompt']);

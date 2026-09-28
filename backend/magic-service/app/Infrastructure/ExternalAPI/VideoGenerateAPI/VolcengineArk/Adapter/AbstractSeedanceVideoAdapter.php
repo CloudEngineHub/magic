@@ -192,14 +192,20 @@ abstract readonly class AbstractSeedanceVideoAdapter implements VideoGenerationC
             $generationConfig['default_duration_seconds'],
         );
 
-        $aspectRatio = $this->resolveAspectRatio(
-            $generation,
-            $acceptedParams,
-            $ignoredParams,
-            $generationConfig['aspect_ratios'],
-        );
-        if ($aspectRatio !== null) {
-            $payload['ratio'] = $aspectRatio;
+        // 首帧/首尾帧生成：方舟规定输出比例跟随首帧图片，显式下发 ratio 会被判为非法参数，
+        // 因此只要检测到首帧就不下发，并把调用方传入的比例记为未生效。
+        if ($startFrameUri === null) {
+            $aspectRatio = $this->resolveAspectRatio(
+                $generation,
+                $acceptedParams,
+                $ignoredParams,
+                $generationConfig['aspect_ratios'],
+            );
+            if ($aspectRatio !== null) {
+                $payload['ratio'] = $aspectRatio;
+            }
+        } elseif (array_key_exists('aspect_ratio', $generation)) {
+            $ignoredParams[] = 'generation.aspect_ratio';
         }
 
         $seed = $this->resolveSeed($generation, $acceptedParams, $ignoredParams);
@@ -249,6 +255,11 @@ abstract readonly class AbstractSeedanceVideoAdapter implements VideoGenerationC
             $payload['watermark'] = (bool) $generation['watermark'];
             $acceptedParams[] = 'generation.watermark';
         }
+        // 样片模式：方舟顶层布尔位，仅 Seedance 2.5 声明该能力，领域层已按能力裁剪过。
+        if (array_key_exists('draft', $generation)) {
+            $payload['draft'] = (bool) $generation['draft'];
+            $acceptedParams[] = 'generation.draft';
+        }
 
         // 视频编辑任务：时长与宽高比必须跟随待编辑视频，这里统一替换为固定值，
         // 并把调用方传入的对应参数记为未生效，避免同时出现在 accepted 列表里。
@@ -279,6 +290,7 @@ abstract readonly class AbstractSeedanceVideoAdapter implements VideoGenerationC
                 'web_search',
                 'watermark',
                 'enhance_prompt',
+                'draft',
             ], true)) {
                 continue;
             }

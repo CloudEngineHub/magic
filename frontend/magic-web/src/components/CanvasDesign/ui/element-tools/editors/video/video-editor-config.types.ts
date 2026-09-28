@@ -194,6 +194,8 @@ export interface VideoEditorConfig {
 	durationDraftSeconds: number | undefined
 	selectedGenerateAudio: boolean | undefined
 	selectedWebSearch: boolean | undefined
+	/** 样片模式开关当前值；模型未声明 draft 能力时为 undefined */
+	selectedDraft: boolean | undefined
 	selectedCompressionQuality: string | undefined
 	currentSelectValue: string | undefined
 	ratioOption:
@@ -231,6 +233,7 @@ export interface VideoEditorConfig {
 		handleDurationPopoverOpenChange: (open: boolean) => void
 		handleGenerateAudioChange: (value: boolean) => void
 		handleWebSearchChange: (value: boolean) => void
+		handleDraftChange: (value: boolean) => void
 		handleCompressionQualityChange: (value: string) => void
 		handleInputModeChange: (value: VideoInputMode) => void
 		/** 切换首尾帧 / 参考图 Tab，仅切换 UI 展示 */

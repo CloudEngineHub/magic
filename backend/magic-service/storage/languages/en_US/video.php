@@ -14,6 +14,10 @@ return [
             'name' => 'Web search',
             'description' => 'Whether to enable web search',
         ],
+        'draft' => [
+            'name' => 'Draft mode',
+            'description' => 'Generate a quick 480p draft first, then render at the final resolution once approved. The two renders are billed separately.',
+        ],
     ],
     'input_modes' => [
         'standard' => 'Standard text-to-video mode without any reference assets.',
