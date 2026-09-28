@@ -12,8 +12,6 @@ vi.mock("react-i18next", () => ({
 					return "Add to My Skills"
 				case "skillsLibrary.added":
 					return "Added"
-				case "skillsLibrary.upgrade":
-					return "Upgrade"
 				case "skillsLibrary.updatedAt":
 					return `Updated ${params?.dateTime ?? ""}`.trim()
 				case "skillsLibrary.updatedAtLabel":
@@ -98,7 +96,7 @@ describe("StoreSkillCardMobile", () => {
 		expect(screen.getByTestId("skills-library-mobile-card-action")).toBeDisabled()
 	})
 
-	it("keeps the upgrade action when an added skill still needs upgrade", () => {
+	it("keeps added skills unavailable even when an older version is detected", () => {
 		const skill = createSkill({
 			status: "added",
 			needUpgrade: true,
@@ -106,8 +104,8 @@ describe("StoreSkillCardMobile", () => {
 
 		render(<StoreSkillCardMobile skill={skill} language="en_US" />)
 
-		expect(screen.getByTestId("skills-library-mobile-card-action")).toHaveTextContent("Upgrade")
-		expect(screen.getByTestId("skills-library-mobile-card-action")).not.toBeDisabled()
+		expect(screen.getByTestId("skills-library-mobile-card-action")).toHaveTextContent("Added")
+		expect(screen.getByTestId("skills-library-mobile-card-action")).toBeDisabled()
 	})
 
 	it("does not open detail when action button is clicked", () => {
