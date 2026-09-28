@@ -128,6 +128,21 @@ final class VolcengineArkVideoAdapterRouterTest extends TestCase
         $router->testConnection($this->config(), self::UNKNOWN_MODEL);
     }
 
+    public function testResolveHasAudioOutputDelegatesAndFallsBackForUnknownModel(): void
+    {
+        $router = $this->createRouter();
+        $request = $this->generateRequest(self::TWO_FIVE_MODEL);
+
+        foreach ([self::MINI_FAST_MODEL, self::TWO_MODEL, self::TWO_FIVE_MODEL] as $model) {
+            $this->assertTrue($router->resolveHasAudioOutput($model, $model, $request));
+        }
+
+        // 三族内与保留的单体类一致（单体类无条件返回 true）；
+        // 未命中三族时按 DashScope / Gemini 两个 router 的既有惯例回落 false，不再声称支持。
+        $this->assertTrue($this->createMonolithAdapter()->resolveHasAudioOutput(self::UNKNOWN_MODEL, '', []));
+        $this->assertFalse($router->resolveHasAudioOutput(self::UNKNOWN_MODEL, '', []));
+    }
+
     /**
      * @dataProvider seedanceFamilyProvider
      */
