@@ -59,7 +59,7 @@ class DesignVideoPollConsumer extends ConsumerMessage
         private readonly ProjectDomainService $projectDomainService,
         private readonly DesignGeneratedVideoFileNameTool $generatedVideoFileNameTool,
         private readonly LoggerInterface $logger,
-        private readonly ?DesignVideoSubmissionDomainService $submissionDomainService = null,
+        private readonly DesignVideoSubmissionDomainService $submissionDomainService,
     ) {
     }
 
@@ -132,7 +132,7 @@ class DesignVideoPollConsumer extends ConsumerMessage
 
         try {
             $result = $entity->isCanvasComposition()
-                ? ($this->submissionDomainService ?? di(DesignVideoSubmissionDomainService::class))->query($dataIsolation, $entity)
+                ? $this->submissionDomainService->query($dataIsolation, $entity)
                 : $this->videoGatewayClient->queryVideo($operationId, [
                     'organization_code' => $entity->getOrganizationCode(),
                     'user_id' => $entity->getUserId(),
