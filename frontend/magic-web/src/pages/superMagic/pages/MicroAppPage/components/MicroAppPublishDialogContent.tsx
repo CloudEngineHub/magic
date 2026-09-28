@@ -20,6 +20,7 @@ import {
 } from "@/pages/superMagic/components/Share/ShareFields"
 import { ShareType } from "@/pages/superMagic/components/Share/types"
 import MicroAppEntryFileSelect from "./MicroAppEntryFileSelect"
+import MicroAppMobileExpiryField from "./MicroAppMobileExpiryField"
 
 import type {
 	MicroAppPublishFormState,
@@ -559,7 +560,7 @@ export default function MicroAppPublishDialogContent({
 													/>
 												) : null}
 
-												<ShareExpiryField
+												<MicroAppMobileExpiryField
 													value={formState.shareExpiry}
 													onChange={onShareExpiryChange}
 												/>

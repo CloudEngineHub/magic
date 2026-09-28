@@ -12,6 +12,42 @@ function touchEvent(type: "touchstart" | "touchend", x: number, y: number) {
 }
 
 describe("usePPTSwipeNavigation", () => {
+	it("accepts a swipe from the active cross-origin iframe only", () => {
+		const iframe = document.createElement("iframe")
+		iframe.src = "https://preview.example.test/shell"
+		document.body.appendChild(iframe)
+		const onSwipe = vi.fn()
+		const { rerender } = renderHook(
+			({ enabled }) =>
+				usePPTSwipeNavigation({
+					containerRef: { current: document.createElement("div") },
+					iframe,
+					enabled,
+					onSwipe,
+				}),
+			{ initialProps: { enabled: true } },
+		)
+		const send = (source: MessageEventSource | null, origin: string) =>
+			window.dispatchEvent(
+				new MessageEvent("message", {
+					source,
+					origin,
+					data: { type: "ppt-slide-swipe", direction: "next" },
+				}),
+			)
+		act(() => {
+			send(window, "https://preview.example.test")
+			send(iframe.contentWindow, "https://untrusted.example.test")
+		})
+		expect(onSwipe).not.toHaveBeenCalled()
+		act(() => send(iframe.contentWindow, "https://preview.example.test"))
+		expect(onSwipe).toHaveBeenCalledExactlyOnceWith("next")
+		rerender({ enabled: false })
+		act(() => send(iframe.contentWindow, "https://preview.example.test"))
+		expect(onSwipe).toHaveBeenCalledTimes(1)
+		iframe.remove()
+	})
+
 	it("reports a horizontal swipe as the matching slide direction", () => {
 		const container = document.createElement("div")
 		const onSwipe = vi.fn()

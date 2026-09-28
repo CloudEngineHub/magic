@@ -1383,17 +1383,12 @@ class ResourceShareAppService extends AbstractShareAppService
         string $resourceId,
         DataIsolation $dataIsolation
     ): ShareMembersResponseDTO {
-        // 1. 获取分享信息
-        $shareEntity = $this->shareDomainService->getShareByResourceId($resourceId);
-
-        if ($shareEntity === null) {
-            ExceptionBuilder::throw(ShareErrorCode::NOT_FOUND, 'share.not_found', [$resourceId]);
-        }
-
-        // 2. 权限验证：只有分享创建者可以查看成员列表
-        if ($shareEntity->getCreatedUid() !== $userAuthorization->getId()) {
-            ExceptionBuilder::throw(ShareErrorCode::PERMISSION_DENIED, 'share.permission_denied', [$resourceId]);
-        }
+        // 取消分享后仍需回显成员配置；与分享设置复用创建者和组织权限校验。
+        $shareEntity = $this->validateSharePermission(
+            $userAuthorization,
+            $resourceId,
+            'share.permission_denied'
+        );
 
         // 3. 获取 target_ids
         $targetIds = $shareEntity->getTargetIdsArray();

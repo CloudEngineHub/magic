@@ -302,7 +302,6 @@ function MicroAppPageMobileInner({
 										projectId={projectId}
 										selectedProject={selectedProject}
 										allowEdit={false}
-										onOpenFile={handlePreviewFile}
 										isBuilding={false}
 									/>
 								</Suspense>
@@ -338,6 +337,7 @@ function MicroAppPageMobileInner({
 									>
 										<Suspense fallback={null}>
 											<MicroAppMobileEntryPreview
+												showOpenPageMenu
 												microAppId={appId}
 												microAppName={selectedProject?.project_name}
 												entryFile={defaultEntryFile}
@@ -346,7 +346,6 @@ function MicroAppPageMobileInner({
 												projectId={projectId}
 												selectedProject={selectedProject}
 												allowEdit={!isReadOnly}
-												onOpenFile={handlePreviewFile}
 												isBuilding={hasRunningTopic}
 											/>
 										</Suspense>

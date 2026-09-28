@@ -244,6 +244,7 @@ vi.mock("../PPTSlide", async () => {
 
 	function MockPPTSlide({
 		fileId,
+		onSwipe,
 		allowEdit,
 		isActive,
 		isPresented,
@@ -260,6 +261,7 @@ vi.mock("../PPTSlide", async () => {
 		onToolbarModelChange,
 	}: {
 		fileId?: string
+		onSwipe?: (direction: "prev" | "next") => void
 		allowEdit?: boolean
 		isActive?: boolean
 		isPresented?: boolean
@@ -340,6 +342,7 @@ vi.mock("../PPTSlide", async () => {
 			<button
 				type="button"
 				data-testid={fileId ? `ppt-slide-${fileId}` : "ppt-slide-manual-save"}
+				onTouchEnd={() => onSwipe?.("next")}
 				data-active={String(Boolean(isActive))}
 				data-presented={String(Boolean(isPresented))}
 				onClick={() => {
@@ -555,6 +558,12 @@ function renderPPTRender(input?: {
 }
 
 describe("PPTRender", () => {
+	it("connects slide swipes to deck navigation", () => {
+		renderPPTRender()
+		fireEvent.touchEnd(screen.getByTestId("ppt-slide-slide-file-id"))
+		expect(mockState.changeSlide).toHaveBeenCalledWith("next")
+	})
+
 	beforeEach(() => {
 		mockState.presenterContainer?.remove()
 		mockState.presenterContainer = document.createElement("div")

@@ -36,3 +36,39 @@ it("searches paths across folders and selects the matching HTML file", () => {
 	fireEvent.click(screen.getByRole("option", { name: "pages/index.html" }))
 	expect(onChange).toHaveBeenCalledWith("nested")
 })
+
+it.each([false, true])("keeps the file menu inside its overlay (mobile=%s)", (mobile) => {
+	const onChange = vi.fn()
+	const { container } = render(
+		<div role="dialog" data-slot={mobile ? "drawer-content" : undefined}>
+			<MicroAppEntryFileSelect
+				mobile={mobile}
+				value={null}
+				onChange={onChange}
+				attachmentList={[
+					{
+						file_id: "mobile",
+						file_name: "mobile.html",
+						relative_file_path: "mobile.html",
+					},
+				]}
+			/>
+		</div>,
+	)
+	fireEvent.click(screen.getByTestId("micro-app-default-open-file"))
+	const option = screen.getByRole("option", { name: "mobile.html" })
+	if (mobile) {
+		expect(
+			screen.getByRole("dialog", { name: "microAppPage.publish.defaultOpenFile" }),
+		).toContainElement(option)
+		expect(container.firstChild).not.toContainElement(option)
+	} else {
+		expect(container.firstChild).toContainElement(option)
+	}
+	fireEvent.click(option)
+	expect(onChange).toHaveBeenCalledWith("mobile")
+	expect(screen.getByTestId("micro-app-default-open-file")).toHaveAttribute(
+		"aria-expanded",
+		"false",
+	)
+})
