@@ -100,7 +100,14 @@ export function FileManagerToolbar(props: Props) {
 						<div className="flex items-center justify-between gap-3">
 							<span className="truncate">{label}</span>
 							{props.sort === id && (
-								<Check size={14} className="shrink-0 text-primary" />
+								<span className="flex shrink-0 items-center gap-1 text-primary">
+									{props.sortDirection === "ascending" ? (
+										<ArrowUp size={12} />
+									) : (
+										<ArrowDown size={12} />
+									)}
+									<Check size={14} />
+								</span>
 							)}
 						</div>
 					),
@@ -116,11 +123,6 @@ export function FileManagerToolbar(props: Props) {
 			>
 				<ArrowDownUp size={14} className="shrink-0" />
 				<span className="max-w-20 truncate">{props.sortOptions[props.sort]}</span>
-				{props.sortDirection === "ascending" ? (
-					<ArrowUp size={12} className="shrink-0" />
-				) : (
-					<ArrowDown size={12} className="shrink-0" />
-				)}
 				<ChevronDown size={12} className="shrink-0" />
 			</button>
 		</MagicDropdown>
