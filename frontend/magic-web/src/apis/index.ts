@@ -26,6 +26,7 @@ import { generateFunctionPermissionApi } from "./modules/function-permission"
 import { generateMagicFSApi } from "./modules/magicFS"
 import { generateMagicBaseApi } from "./modules/magicBase"
 import { generateSlidesTemplateUploadApi } from "./modules/slidesTemplateUpload"
+import { generateAssetsApi } from "./modules/assets"
 
 /** 重置服务 */
 export const UserApi = generateUserApi(magicClient)
@@ -69,6 +70,7 @@ export const FunctionPermissionApi = generateFunctionPermissionApi(magicClient)
 export const MagicFSApi = generateMagicFSApi(magicClient)
 /** MagicBase */
 export const MagicBaseApi = generateMagicBaseApi(magicClient)
+export const AssetsApi = generateAssetsApi(magicClient)
 
 export { MAGIC_CLAW_STATUS } from "./modules/magicClaw"
 export {
@@ -100,6 +102,43 @@ export type {
 	MagicFSFileResponse,
 } from "./modules/magicFS"
 export type { FileScope } from "./modules/fileScope"
+export type {
+	AssetAgreementStatusResponse,
+	AssetBusinessType,
+	AssetComplianceResponse,
+	AssetComplianceStatus,
+	AssetFileSourceParams,
+	AssetItem,
+	AssetKind,
+	AssetMediaType,
+	AssetOwner,
+	AssetOwnerItem,
+	AssetQueryParams,
+	AssetQueryResponse,
+	AssetScope,
+	AssetSource,
+	AssetTag,
+	AssetTagGroupItem,
+	AssetTagItem,
+	AssetTagListResponse,
+	AssetTagMatch,
+	AssetTagMutationResponse,
+	AssetTagNodeType,
+	BatchGetAssetsParams,
+	CreateAssetParams,
+	CreateAssetTagParams,
+	DeleteAssetResponse,
+	PrivateUploadTokenCredentials,
+	PrivateUploadTokenData,
+	PrivateUploadTokenParams,
+	SaveAssetToLibraryParams,
+	SaveAssetVisibility,
+	TransferAssetOwnerParams,
+	TransferAssetOwnerResponse,
+	UpdateAssetTagParams,
+	UpdateAssetTagsParams,
+	UpdateAssetTagsResponse,
+} from "./modules/assets"
 export type {
 	MagicBaseColumn,
 	MagicBaseQueryRowsRequest,

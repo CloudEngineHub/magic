@@ -9,6 +9,7 @@ import {
 	isImageElementContent,
 } from "@/components/CanvasDesign/runtime/document/elementContent"
 import type {
+	CanvasAssetResourceInfo,
 	IdentifyImageMarkRequest,
 	IdentifyImageMarkResponse,
 	UploadPrivateFile,
@@ -129,6 +130,8 @@ export interface SuperMagicMarkerManagerDependencies {
 	uploadPrivateFiles?: (files: UploadPrivateFile[]) => Promise<UploadPrivateFileResponse[]>
 	/** getFileInfo API */
 	getFileInfo?: (path: string) => Promise<{ src?: string }>
+	/** 素材库详情 API；离画布合成 asset:// 图片时使用。 */
+	getAssetResourceInfo?: (assetId: string) => Promise<CanvasAssetResourceInfo>
 	/** 发布事件到 MessageEditor */
 	publishToMessageEditor?: (
 		event: MarkerManagerPublishEvent,
@@ -507,11 +510,12 @@ export class SuperMagicMarkerManager {
 			getCanvasElements,
 			getElementImageInfo,
 			getFileInfo,
+			getAssetResourceInfo,
 			uploadPrivateFiles,
 			identifyImageMark,
 			projectId,
 		} = this.dependencies
-		if (!getFileInfo || !uploadPrivateFiles || !identifyImageMark) return
+		if (!uploadPrivateFiles || !identifyImageMark) return
 
 		const requestId = options?.requestId ?? this.getNextMarkerRequestId(markerId)
 		const controller = new AbortController()
@@ -581,6 +585,7 @@ export class SuperMagicMarkerManager {
 		try {
 			const methods: MarkerCompositorMethods = {
 				getFileInfo,
+				getAssetResourceInfo,
 				uploadPrivateFiles:
 					uploadPrivateFiles as MarkerCompositorMethods["uploadPrivateFiles"],
 				identifyImageMark:

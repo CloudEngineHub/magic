@@ -39,6 +39,7 @@ interface ProjectFileData {
 	file_name?: string
 	file_path?: string
 	file_extension?: string
+	media_type?: "image" | "video" | "audio"
 	project_id?: string
 	source_project_id?: string
 	source_file_id?: string
@@ -228,6 +229,7 @@ export function getContentFromString(
 						file_extension: fileName.includes(".")
 							? (fileName.split(".").pop() ?? "")
 							: "",
+						...(matchedItem.assetType ? { media_type: matchedItem.assetType } : {}),
 						...(bindingMatches && binding.projectId
 							? { project_id: binding.projectId }
 							: {}),

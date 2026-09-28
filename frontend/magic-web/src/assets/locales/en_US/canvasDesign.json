@@ -1,4 +1,72 @@
 {
+	"assets": {
+		"actions": "Asset actions",
+		"agreementRequired": "Sign the Seedance model use commitment before verification",
+		"allAssets": "All assets",
+		"allOwners": "All owners",
+		"apply": "Apply to Canvas",
+		"applying": "Applying...",
+		"assetId": "Asset ID",
+		"closePreview": "Close preview",
+		"complianceFailed": "Compliance check failed",
+		"compliancePassed": "Compliance verified",
+		"complianceProcessing": "Compliance checking",
+		"complianceUnverified": "Not verified",
+		"confirmFailed": "Failed to select asset. Please try again.",
+		"confirming": "Confirming...",
+		"copyAssetId": "Copy asset ID",
+		"delete": "Delete asset",
+		"deleteFailed": "Failed to delete the asset. Please try again.",
+		"deleteSuccess": "Asset deleted",
+		"edit": "Edit asset",
+		"editUnavailable": "This asset cannot be edited right now",
+		"empty": "No assets",
+		"loadFailed": "Failed to load assets. Please try again.",
+		"loading": "Loading...",
+		"mediaAudio": "Audio",
+		"mediaImage": "Image",
+		"mediaType": "Asset type",
+		"mediaTypeAll": "All",
+		"mediaTypeImage": "Images",
+		"mediaTypeVideo": "Videos",
+		"mediaVideo": "Video",
+		"owner": "Owner",
+		"personalAssets": "Visible to me",
+		"personalVisible": "Visible to me",
+		"preview": "Enlarge preview",
+		"publicVisible": "Public",
+		"refresh": "Refresh assets",
+		"search": "Search asset name or tag",
+		"selectAsset": "Select an asset",
+		"selectAssets": "Select assets",
+		"selectedAsset": "Selected: {{name}}",
+		"selectedCount": "Selected {{count}} / {{max}}",
+		"teamAssets": "Visible to team",
+		"teamVisible": "Visible to team",
+		"transferAction": "Transfer",
+		"transferCurrentOwner": "Current owner",
+		"transferFailed": "Failed to transfer the owner. Please try again.",
+		"transferHint": "After the transfer, the current owner will no longer be able to edit or manage this asset.",
+		"transferMemberRequired": "Select one member",
+		"transferOwner": "Transfer owner",
+		"transferSelectMember": "Select a member",
+		"transferSelectedAsset": "Selected asset",
+		"transferSuccess": "Asset owner transferred",
+		"transferTarget": "New owner",
+		"transferTitle": "Transfer asset owner",
+		"unknownOwner": "Unknown owner",
+		"unsupportedFile": "This file type is not supported",
+		"upload": "Upload asset",
+		"uploadAndVerify": "Upload and verify",
+		"uploadDescription": "Add an image or video",
+		"uploadFailed": "Failed to upload the asset. Please try again.",
+		"uploadFormatsImage": "Images: jpeg, png, webp, bmp, tiff, gif, heic, heif",
+		"uploadFormatsVideo": "Videos: mp4, mov",
+		"uploadTitle": "Upload asset",
+		"uploading": "Uploading...",
+		"verified": "Compliance verified",
+		"verifiedOnly": "Verified only"
+	},
 	"audio": {
 		"add": "Add Audio",
 		"adding": "Adding",
@@ -77,6 +145,11 @@
 		"title": "Choose a version to keep",
 		"useLocal": "Keep mine",
 		"useRemote": "Use new"
+	},
+	"elementMediaCompliance": {
+		"failedHint": "Please replace the image and re-verify",
+		"failedHintVideo": "Please replace the video and re-verify",
+		"failedTag": "Compliance check failed"
 	},
 	"elementTools": {
 		"audioReplace": {
@@ -386,6 +459,8 @@
 		"pasteUseShortcutHint": "System files please use Ctrl/Cmd+V to paste",
 		"removeFrame": "Remove Frame",
 		"rename": "Rename",
+		"saveToAssets": "Save to Assets",
+		"seedanceCompliance": "Seedance 2.0 Compliance Check",
 		"show": "Show",
 		"unlock": "Unlock"
 	},
@@ -409,9 +484,19 @@
 		"defaultName": "Rectangle"
 	},
 	"referenceAssets": {
+		"assets": "Assets",
 		"localUpload": "Upload from local",
 		"projectFilesRoot": "Current Project Files",
 		"projectSelect": "Select from project"
+	},
+	"seedanceCompliance": {
+		"failed": "Compliance check failed",
+		"failedWithReason": "Compliance check failed: {{reason}}",
+		"passed": "Seedance 2.0 compliance check passed",
+		"processing": "Compliance check in progress",
+		"started": "Seedance 2.0 compliance check started",
+		"unavailable": "This media cannot start a compliance check",
+		"unverified": "This asset has not started a compliance check"
 	},
 	"shortcuts": {
 		"align": {
@@ -629,6 +714,7 @@
 		"unavailable": "Content optimization is currently unavailable"
 	},
 	"tools": {
+		"assets": "Assets",
 		"audioGenerator": "Audio Generator",
 		"frame": "Frame",
 		"hand": "Hand Tool",

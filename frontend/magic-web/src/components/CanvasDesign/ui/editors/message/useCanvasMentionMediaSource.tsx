@@ -11,6 +11,7 @@ import { useReferenceImageUrls } from "../../../app/hooks/resources/useReference
 import { getMediaResourcePathKind } from "../../../runtime/resources/media-common/mediaResourcePathKind"
 import { useReferenceAudioSrc } from "../../previews/reference-media/useReferenceAudioSrc"
 import { useReferenceVideoPoster } from "../../previews/reference-media/useReferenceVideoPoster"
+import type { CanvasAssetMediaType } from "../../../public/magic-types"
 
 interface CanvasPosterProps {
 	poster: HTMLCanvasElement
@@ -39,13 +40,19 @@ interface UseCanvasMentionMediaSourceOptions {
 	path?: string
 	fileName: string
 	fileExtension?: string
+	mediaType?: CanvasAssetMediaType | null
 	enabled?: boolean
 }
 
-function getMediaKind(path: string | undefined, fileName: string, fileExtension?: string) {
+function getMediaKind(
+	path: string | undefined,
+	fileName: string,
+	fileExtension?: string,
+	mediaType?: CanvasAssetMediaType | null,
+) {
 	const extension = fileExtension?.replace(/^\./, "")
 	const probe = path || (extension ? `${fileName}.${extension}` : fileName)
-	return getMediaResourcePathKind(probe)
+	return getMediaResourcePathKind(probe, { mediaType })
 }
 
 /**
@@ -56,9 +63,9 @@ function getMediaKind(path: string | undefined, fileName: string, fileExtension?
 export function useCanvasMentionMediaSource(
 	options: UseCanvasMentionMediaSourceOptions,
 ): MediaPreviewSource | null {
-	const { path, fileName, fileExtension, enabled = true } = options
+	const { path, fileName, fileExtension, mediaType, enabled = true } = options
 	const canvas = useOptionalCanvas()
-	const mediaKind = getMediaKind(path, fileName, fileExtension)
+	const mediaKind = getMediaKind(path, fileName, fileExtension, mediaType)
 	const resourcePath = path || ""
 	const resourceEnabled = enabled && Boolean(canvas)
 	const image = useReferenceImageUrls(resourcePath, {

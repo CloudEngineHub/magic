@@ -45,6 +45,10 @@ const CONTENT_FIELDS_BY_TYPE: Partial<Record<string, readonly string[]>> = {
 	[ElementTypeEnum.Image]: [
 		"visualUnderstanding",
 		"src",
+		"assetId",
+		"complianceStatus",
+		"complianceFailedReason",
+		"complianceCheckId",
 		"status",
 		"errorMessage",
 		"generateImageRequest",
@@ -54,13 +58,17 @@ const CONTENT_FIELDS_BY_TYPE: Partial<Record<string, readonly string[]>> = {
 	[ElementTypeEnum.Video]: [
 		"visualUnderstanding",
 		"src",
+		"assetId",
+		"complianceStatus",
+		"complianceFailedReason",
+		"complianceCheckId",
 		"status",
 		"errorMessage",
 		"generateVideoRequest",
 		"videoEditorDraft",
 		"videoGenerationResultMeta",
 	],
-	[ElementTypeEnum.Audio]: ["src"],
+	[ElementTypeEnum.Audio]: ["src", "assetId"],
 	[ElementTypeEnum.Text]: ["content", "defaultStyle"],
 	[ElementTypeEnum.Rectangle]: ["fill", "stroke", "strokeWidth", "cornerRadius"],
 	[ElementTypeEnum.Ellipse]: ["fill", "stroke", "strokeWidth"],
@@ -493,12 +501,21 @@ export function deleteActiveImageContent(element: ImageElement): DeleteImageCont
 	)
 }
 
+/** 替换图片或视频资源时清掉元素自有合规记录，避免旧检查结果跟到新文件上。 */
+export const CLEARED_MEDIA_COMPLIANCE_PATCH = {
+	complianceStatus: undefined,
+	complianceFailedReason: undefined,
+	complianceCheckId: undefined,
+} as const
+
 export function replaceImageContentFields(
 	element: ImageElement,
 	fields: ImageContentFields,
 ): ImageElement {
 	const cleared: Partial<ImageContentFields> = {
 		src: undefined,
+		assetId: undefined,
+		...CLEARED_MEDIA_COMPLIANCE_PATCH,
 		status: undefined,
 		errorMessage: undefined,
 		generateImageRequest: undefined,

@@ -65,6 +65,7 @@ import {
 	ElementCornerActionsDecorator,
 	type ElementCornerActionConfig,
 } from "../decorators/ElementCornerActionsDecorator"
+import { MediaComplianceFailedTagDecorator } from "../decorators/MediaComplianceFailedTagDecorator"
 import { MediaMainVersionTagDecorator } from "../decorators/MediaMainVersionTagDecorator"
 import { ImagePollingManager } from "../../resources/polling/ImagePollingManager"
 import { DECORATOR_COLORS, DECORATOR_CONFIG } from "../decorators/DecoratorConfig"
@@ -110,6 +111,7 @@ export class ImageElement extends BaseElement<ImageElementData> {
 	private borderDecorator?: BorderDecorator
 	private cornerActionsDecorator?: ElementCornerActionsDecorator
 	private mainVersionTagDecorator?: MediaMainVersionTagDecorator
+	private complianceFailedTagDecorator?: MediaComplianceFailedTagDecorator
 
 	// 生成相关：Runtime manager 是并发状态的唯一事实来源；legacy 标记只兼容
 	// 尚未建立 Runtime target 的测试和初始化生命周期。
@@ -465,6 +467,8 @@ export class ImageElement extends BaseElement<ImageElementData> {
 		this.cornerActionsDecorator = undefined
 		this.mainVersionTagDecorator?.destroy()
 		this.mainVersionTagDecorator = undefined
+		this.complianceFailedTagDecorator?.destroy()
+		this.complianceFailedTagDecorator = undefined
 
 		// 调用父类的 rerender
 		return super.rerender()
@@ -488,6 +492,7 @@ export class ImageElement extends BaseElement<ImageElementData> {
 		this.borderDecorator?.destroy()
 		this.cornerActionsDecorator?.destroy()
 		this.mainVersionTagDecorator?.destroy()
+		this.complianceFailedTagDecorator?.destroy()
 		this.removeContentUpdateListener()
 		// 清理缓存的图片对象
 		this.clearLoadedImageReference()
@@ -684,6 +689,7 @@ export class ImageElement extends BaseElement<ImageElementData> {
 	override onMounted(): void {
 		super.onMounted()
 		this.mainVersionTagDecorator?.refreshLayout()
+		this.complianceFailedTagDecorator?.refreshLayout()
 		const src = this.getActiveContentData().src
 		if (src) {
 			this.canvas.visibilityManager.registerImageElement(this.data.id, src)
@@ -2275,6 +2281,13 @@ export class ImageElement extends BaseElement<ImageElementData> {
 			return true
 		}
 
+		if (
+			currentContent.complianceStatus !== nextContent.complianceStatus &&
+			this.node instanceof Konva.Group
+		) {
+			this.complianceFailedTagDecorator?.updateConfig({ data: this.data })
+		}
+
 		// 更新基础属性
 		if (this.node instanceof Konva.Group) {
 			this.updateBaseProps(this.node, newData)
@@ -2339,7 +2352,7 @@ export class ImageElement extends BaseElement<ImageElementData> {
 			// 创建边框
 			this.createBorder(group, width, height, false, backgroundNode)
 			this.createCornerActions(group, width, height)
-			this.createMainVersionTag(group, width, height)
+			this.createMediaStatusTags(group, width, height)
 		})
 
 		this.finalizeNode(group)
@@ -2396,7 +2409,7 @@ export class ImageElement extends BaseElement<ImageElementData> {
 
 			this.createBorder(group, width, height, true)
 			this.createCornerActions(group, width, height)
-			this.createMainVersionTag(group, width, height)
+			this.createMediaStatusTags(group, width, height)
 		})
 
 		this.finalizeNode(group)
@@ -2520,7 +2533,7 @@ export class ImageElement extends BaseElement<ImageElementData> {
 
 			this.createBorder(group, width, height, true)
 			this.createCornerActions(group, width, height)
-			this.createMainVersionTag(group, width, height)
+			this.createMediaStatusTags(group, width, height)
 		})
 
 		this.finalizeNode(group)
@@ -2555,7 +2568,7 @@ export class ImageElement extends BaseElement<ImageElementData> {
 
 		// 使用预加载好的图片对象
 		if (!this.loadedImage) {
-			this.createMainVersionTag(group, width, height)
+			this.createMediaStatusTags(group, width, height)
 			this.finalizeNode(group)
 			return group
 		}
@@ -2581,7 +2594,7 @@ export class ImageElement extends BaseElement<ImageElementData> {
 		this.createBorder(group, width, height, false)
 
 		this.createCornerActions(group, width, height, { fullscreen: true })
-		this.createMainVersionTag(group, width, height)
+		this.createMediaStatusTags(group, width, height)
 
 		this.finalizeNode(group)
 		return group
@@ -2653,7 +2666,7 @@ export class ImageElement extends BaseElement<ImageElementData> {
 			// 创建边框
 			this.createBorder(group, width, height, false, backgroundNode)
 			this.createCornerActions(group, width, height)
-			this.createMainVersionTag(group, width, height)
+			this.createMediaStatusTags(group, width, height)
 		})
 
 		this.finalizeNode(group)
@@ -2727,6 +2740,11 @@ export class ImageElement extends BaseElement<ImageElementData> {
 		return !!this.getActiveGenerateImageRequest()
 	}
 
+	private createMediaStatusTags(group: Konva.Group, width: number, height: number): void {
+		this.createMainVersionTag(group, width, height)
+		this.createComplianceFailedTag(group, width, height)
+	}
+
 	private createMainVersionTag(group: Konva.Group, width: number, height: number): void {
 		this.mainVersionTagDecorator = new MediaMainVersionTagDecorator(group, {
 			canvas: this.canvas,
@@ -2735,6 +2753,16 @@ export class ImageElement extends BaseElement<ImageElementData> {
 			data: this.data,
 		})
 		this.mainVersionTagDecorator.create()
+	}
+
+	private createComplianceFailedTag(group: Konva.Group, width: number, height: number): void {
+		this.complianceFailedTagDecorator = new MediaComplianceFailedTagDecorator(group, {
+			canvas: this.canvas,
+			width,
+			height,
+			data: this.data,
+		})
+		this.complianceFailedTagDecorator.create()
 	}
 
 	private shouldShowFullscreenButton(): boolean {
@@ -2781,8 +2809,17 @@ export class ImageElement extends BaseElement<ImageElementData> {
 		this.borderDecorator?.updateSize(width, height)
 		this.cornerActionsDecorator?.updateConfig({ width, height })
 		this.mainVersionTagDecorator?.updateConfig({ width, height, data: this.data })
+		this.complianceFailedTagDecorator?.updateConfig({ width, height, data: this.data })
 		this.updateClipRegion(width, height)
 		this.node.getLayer()?.batchDraw()
+	}
+
+	public refreshComplianceFailedTag(): void {
+		this.complianceFailedTagDecorator?.updateConfig({
+			width: this.data.width,
+			height: this.data.height,
+			data: this.data,
+		})
 	}
 
 	/**

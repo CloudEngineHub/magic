@@ -680,6 +680,7 @@ export function useImageEditorConfig(options: UseImageEditorConfigOptions): Imag
 							sourceFileId: normalizedInfo.source_file_id,
 							sourceProjectId: normalizedInfo.source_project_id,
 							projectId: normalizedInfo.project_id,
+							mediaType: "image",
 						},
 					),
 				)

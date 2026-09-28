@@ -51,6 +51,11 @@ import { VideoCompositionManager } from "../resources/video-composition/VideoCom
 import { AudioResourceManager } from "../resources/audio/AudioResourceManager"
 import { AudioPlaybackManager } from "../resources/audio/AudioPlaybackManager"
 import { AudioWaveformManager } from "../resources/audio/AudioWaveformManager"
+import { CanvasAssetResourceManager } from "../resources/asset/CanvasAssetResourceManager"
+import { CanvasAssetImportManager } from "../resources/asset/CanvasAssetImportManager"
+import { CanvasAssetCompliancePollingManager } from "../resources/asset/CanvasAssetCompliancePollingManager"
+import { CanvasAssetComplianceTaskManager } from "../resources/asset/CanvasAssetComplianceTaskManager"
+import { reconcileUnverifiedComplianceInDocument } from "../resources/asset/canvasAssetDocumentReconcile"
 import { AudioReplaceController } from "../interaction/audio/AudioReplaceController"
 import { ImageReplaceController } from "../interaction/image/ImageReplaceController"
 import { MediaReplaceController } from "../interaction/media/MediaReplaceController"
@@ -232,6 +237,10 @@ export class Canvas {
 	public audioResourceManager: AudioResourceManager
 	public audioPlaybackManager: AudioPlaybackManager
 	public audioWaveformManager: AudioWaveformManager
+	public assetResourceManager: CanvasAssetResourceManager
+	public assetCompliancePollingManager: CanvasAssetCompliancePollingManager
+	public assetComplianceTaskManager: CanvasAssetComplianceTaskManager
+	public assetImportManager: CanvasAssetImportManager
 	public audioReplaceController: AudioReplaceController
 	public imageReplaceController: ImageReplaceController
 	public mediaReplaceController: MediaReplaceController
@@ -381,6 +390,11 @@ export class Canvas {
 			canvas: this,
 			config: options.magic,
 		})
+		// asset:// paths resolve through the asset service and must stay separate from
+		// workspace attachment resolution and its persistent media cache.
+		this.assetResourceManager = new CanvasAssetResourceManager(this)
+		this.assetCompliancePollingManager = new CanvasAssetCompliancePollingManager(this)
+		this.assetComplianceTaskManager = new CanvasAssetComplianceTaskManager(this)
 
 		// 初始化 CanvasFileUploadManager（全局文件上传管理器）
 		this.canvasFileUploadManager = new CanvasFileUploadManager({
@@ -473,6 +487,7 @@ export class Canvas {
 		this.connectionAssociationSeedManager = new ConnectionAssociationSeedManager({
 			canvas: this,
 		})
+		this.assetImportManager = new CanvasAssetImportManager(this)
 
 		// 初始化 SelectionManager（使用 Content Layer 用于查询节点）
 		this.selectionManager = new SelectionManager({
@@ -1121,6 +1136,13 @@ export class Canvas {
 	): void {
 		this.clearPreviewContent()
 		const normalizedDoc = normalizeStoryboardDocument(doc)
+		// Start the asset batch request before URL warmup so legacy asset:// entries
+		// can share the same Canvas-level detail request instead of issuing one call
+		// per media element.
+		void this.assetResourceManager.preloadDocumentAssets(normalizedDoc).finally(() => {
+			this.assetComplianceTaskManager.resumeDocumentCompliancePolling()
+			this.refreshMediaComplianceFailedTags()
+		})
 		this.resourceUrlWarmupManager.warmupDocument(normalizedDoc, "loadDocument")
 		this.elementDetailsRuntimeManager.replace(options?.elementDetailsProvenance)
 
@@ -1134,6 +1156,8 @@ export class Canvas {
 			// 即使某个加载阶段出现未预期异常，也不能让历史记录永久保持禁用。
 			this.historyManager.enable()
 		}
+
+		reconcileUnverifiedComplianceInDocument(this)
 
 		// 记录初始状态
 		this.historyManager.recordHistoryImmediate()
@@ -1158,6 +1182,10 @@ export class Canvas {
 	): void {
 		this.clearPreviewContent()
 		const normalizedDoc = normalizeStoryboardDocument(doc)
+		void this.assetResourceManager.preloadDocumentAssets(normalizedDoc).finally(() => {
+			this.assetComplianceTaskManager.resumeDocumentCompliancePolling()
+			this.refreshMediaComplianceFailedTags()
+		})
 		this.resourceUrlWarmupManager.warmupDocument(normalizedDoc, "loadDocumentSmart")
 		if (options?.elementDetailsProvenance) {
 			this.elementDetailsRuntimeManager.replace(options.elementDetailsProvenance)
@@ -1181,6 +1209,15 @@ export class Canvas {
 			getCanvasConnectionComparable(nextConnections)
 		if (!didEmitDocumentRestored && (didChangeElements || didChangeConnections)) {
 			this.eventEmitter.emit({ type: "document:restored", data: undefined })
+		}
+		reconcileUnverifiedComplianceInDocument(this)
+	}
+
+	public refreshMediaComplianceFailedTags(): void {
+		for (const element of this.elementManager.getAllElements()) {
+			const instance = this.elementManager.getElementInstance(element.id) as
+				{ refreshComplianceFailedTag?: () => void } | undefined
+			instance?.refreshComplianceFailedTag?.()
 		}
 	}
 
@@ -1707,6 +1744,8 @@ export class Canvas {
 		this.storyboardInteractionManager.destroy()
 		this.videoEditInteractionManager.destroy()
 		this.videoContinuationManager.destroy()
+		this.assetCompliancePollingManager.destroy()
+		this.assetImportManager.destroy()
 
 		// 清理所有事件监听器, 切断 Manager 之间的通信
 		this.eventEmitter.removeAllListeners()
@@ -1750,6 +1789,7 @@ export class Canvas {
 		this.videoPlaybackManager.destroy()
 		this.videoResourceManager.destroy()
 		this.audioResourceManager.destroy()
+		this.assetResourceManager.destroy()
 		this.mediaResourceOfflineCacheManager.destroy()
 		this.pluginManager.destroy()
 		this.stage.destroy()

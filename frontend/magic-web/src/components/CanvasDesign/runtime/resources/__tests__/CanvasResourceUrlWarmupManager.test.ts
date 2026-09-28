@@ -43,6 +43,7 @@ function createCanvasMock(
 	elements: Record<string, LayerElement>,
 	getFileInfo = vi.fn(),
 	resolveResourceReference: ResolveCanvasResourceReference = createTestResourceReferenceResolver(),
+	getAssetResourceInfo = vi.fn(),
 ) {
 	const eventEmitter = new EventEmitter()
 	const imageResourceManager = {
@@ -68,6 +69,9 @@ function createCanvasMock(
 					resolveResourceReference,
 				},
 			},
+		},
+		assetResourceManager: {
+			getResource: getAssetResourceInfo,
 		},
 		imageResourceManager,
 		resourceScheduler: {
@@ -153,6 +157,36 @@ describe("CanvasResourceUrlWarmupManager", () => {
 			registeredElementCount: 0,
 			trackedPathCount: 0,
 		})
+		manager.destroy()
+	})
+
+	it("warms valid asset paths through the asset manager without calling getFileInfo", async () => {
+		const getFileInfo = vi.fn()
+		const getAssetResourceInfo = vi.fn().mockResolvedValue({
+			assetId: "asset-image",
+			mediaType: "image",
+			fileUrl: "https://assets.test/image.png",
+		})
+		const elements = {
+			image: createImage("image", "asset://asset-image"),
+		}
+		const manager = new CanvasResourceUrlWarmupManager({
+			canvas: createCanvasMock(
+				elements,
+				getFileInfo,
+				createTestResourceReferenceResolver(),
+				getAssetResourceInfo,
+			) as unknown as Canvas,
+		})
+
+		manager.warmupCurrentDocument("asset")
+		await flushWarmupTimer()
+
+		expect(getAssetResourceInfo).toHaveBeenCalledWith("asset-image", {
+			priority: "background",
+		})
+		expect(getFileInfo).not.toHaveBeenCalled()
+		expect(manager.getSnapshot()).toMatchObject({ readyCount: 1, successCount: 1 })
 		manager.destroy()
 	})
 

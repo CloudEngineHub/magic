@@ -591,7 +591,7 @@ export default function ImageEditorSurface(props: ImageEditorSurfaceProps) {
 							const item = createReferenceResourcePanelItemFromPath(
 								asset.reference.path,
 								asset.reference.fileName,
-								{ fileId: asset.reference.fileId },
+								{ fileId: asset.reference.fileId, mediaType: asset.type },
 							)
 							if (selectedSlotForPaste && pastedAssetIndex === 0) {
 								clipboardHandlersRef.current.replaceReferenceFileAt(

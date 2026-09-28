@@ -6,6 +6,10 @@ import {
 	isImageElementContent,
 	updateImageContent,
 } from "../../document/elementContent"
+import {
+	finalizeMediaSourceReplacement,
+	mergeMediaSourceReplacementFields,
+} from "../../document/mediaSourceReplacement"
 import { GenerationStatus, type GetImageGenerationResultParams } from "../../../public/magic-types"
 import { IMAGE_CONFIG } from "../../elements/image/ImageElement.config"
 import {
@@ -336,14 +340,6 @@ export class ImagePollingManager {
 							result.file_name,
 						)
 					: undefined
-			const contentPatch = {
-				...getGenerationResultStatusPatch(
-					result.status,
-					result.error_message,
-					Boolean(storagePath),
-				),
-				...(storagePath ? { src: storagePath } : {}),
-			}
 			if (storagePath && result.file_name) {
 				this.primeGeneratedImageResource(storagePath, result.file_url, result.file_name)
 			}
@@ -352,6 +348,14 @@ export class ImagePollingManager {
 			if (!isImageElementContent(currentElement)) return
 			const currentContent = getImageContentById(currentElement, target.contentId)
 			if (!currentContent) return
+			const contentPatch = mergeMediaSourceReplacementFields(currentContent, {
+				...getGenerationResultStatusPatch(
+					result.status,
+					result.error_message,
+					Boolean(storagePath),
+				),
+				...(storagePath ? { src: storagePath } : {}),
+			})
 			const shouldActivate =
 				result.status === GenerationStatus.Completed &&
 				Boolean(storagePath) &&
@@ -377,6 +381,13 @@ export class ImagePollingManager {
 					},
 					{ silent: false, historyPolicy: "exclude" },
 				)
+				if (storagePath) {
+					finalizeMediaSourceReplacement(this.config.canvas, {
+						previousSrc: currentContent.src,
+						nextSrc: storagePath,
+						previousComplianceCheckId: currentContent.complianceCheckId,
+					})
+				}
 			}
 
 			if (didUpdateElement) {
@@ -458,16 +469,28 @@ export class ImagePollingManager {
 				)
 				const currentElement = this.config.getElementData()
 				if (!isImageElementContent(currentElement)) return
-				const nextElement = updateImageContent(currentElement, target.contentId, {
+				const currentContent = getImageContentById(currentElement, target.contentId)
+				if (!currentContent) return
+				const recoveryPatch = mergeMediaSourceReplacementFields(currentContent, {
 					src: persistedPath,
 					status: GenerationStatus.Completed,
 					errorMessage: undefined,
 				})
+				const nextElement = updateImageContent(
+					currentElement,
+					target.contentId,
+					recoveryPatch,
+				)
 				this.config.canvas.elementManager.update(
 					this.config.elementId,
 					{ contents: nextElement.contents },
 					{ silent: false, historyPolicy: "exclude" },
 				)
+				finalizeMediaSourceReplacement(this.config.canvas, {
+					previousSrc: currentContent.src,
+					nextSrc: persistedPath,
+					previousComplianceCheckId: currentContent.complianceCheckId,
+				})
 				this.config.canvas.eventEmitter.emit({
 					type: "element:image:resultUpdated",
 					data: { elementId: this.config.elementId },

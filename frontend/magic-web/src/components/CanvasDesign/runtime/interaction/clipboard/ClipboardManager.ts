@@ -15,12 +15,18 @@ import {
 	createContentId,
 	getActiveContent,
 	getActiveImageContent,
+	getContentById,
 	isImageElementContent,
 	mapContents,
 	updateContent,
 	updateImageContent,
 } from "../../document/elementContent"
-import { GenerationStatus, type UploadFileResponse } from "../../../public/magic-types"
+import { mergeMediaSourceReplacementFields } from "../../document/mediaSourceReplacement"
+import {
+	GenerationStatus,
+	type CanvasAssetMediaType,
+	type UploadFileResponse,
+} from "../../../public/magic-types"
 import { toast } from "sonner"
 import {
 	getMediaDimensions,
@@ -34,7 +40,12 @@ import {
 import { AUDIO_CONFIG } from "../../elements/audio/AudioElement.config"
 import { filterRedundantElements, getCanvasCenter } from "../../shared/placement/elementUtils"
 import { resolveGridPlacements } from "../../shared/placement/placementEngine"
-import { getCanvasResourceFileName } from "../../shared/path/canvasResourcePath"
+import {
+	buildAssetResourcePath,
+	getCanvasResourceFileName,
+	isAssetResourceScheme,
+	parseAssetResourcePath,
+} from "../../shared/path/canvasResourcePath"
 import {
 	CanvasElementClipboard,
 	type CanvasElementClipboardBrowserOptions,
@@ -423,6 +434,23 @@ export class ClipboardManager {
 		return extension ? (extensionMimeTypeMap[extension] ?? fallback) : fallback
 	}
 
+	private getMimeTypeFromAssetMediaType(mediaType: CanvasAssetMediaType): string {
+		switch (mediaType) {
+			case "image":
+				return DEFAULT_IMAGE_MIME_TYPE
+			case "video":
+				return DEFAULT_VIDEO_MIME_TYPE
+			case "audio":
+				return DEFAULT_AUDIO_MIME_TYPE
+		}
+	}
+
+	private getAssetFallbackFilename(filename: string, mediaType: CanvasAssetMediaType): string {
+		if (/\.[^/.]+$/.test(filename)) return filename
+		const extension = mediaType === "image" ? "png" : mediaType === "video" ? "mp4" : "mp3"
+		return `${filename}.${extension}`
+	}
+
 	/**
 	 * 获取原始未压缩资源信息。
 	 *
@@ -433,18 +461,41 @@ export class ClipboardManager {
 		src: string
 		fallbackFilename: string
 		fallbackMimeType: string
+		mediaType?: CanvasAssetMediaType
 	}): Promise<{
 		filename: string
 		mimeType: string
 		fileSize: number
 		sourceRef: CanvasElementClipboardFileMetadata["sourceRef"]
 	} | null> {
-		const getFileInfo = this.canvas.magicConfigManager.config?.methods?.getFileInfo
-		if (!getFileInfo) {
-			return null
-		}
-
 		try {
+			const assetId = parseAssetResourcePath(options.src)
+			if (assetId !== undefined) {
+				// Asset URLs are stable logical references. Resolve their current URL and
+				// media type through the Canvas asset manager instead of sending the
+				// opaque URI to the workspace file resolver.
+				const asset = await this.canvas.assetResourceManager.getResource(assetId)
+				if (!asset.fileUrl || !asset.mediaType) return null
+				if (options.mediaType && asset.mediaType !== options.mediaType) return null
+
+				const filename = this.getAssetFallbackFilename(
+					asset.fileName || options.fallbackFilename,
+					asset.mediaType,
+				)
+				return {
+					filename,
+					mimeType: this.getMimeTypeFromAssetMediaType(asset.mediaType),
+					fileSize: 0,
+					sourceRef: {
+						src: buildAssetResourcePath(assetId),
+						ossUrl: asset.fileUrl,
+					},
+				}
+			}
+			if (isAssetResourceScheme(options.src)) return null
+
+			const getFileInfo = this.canvas.magicConfigManager.config?.methods?.getFileInfo
+			if (!getFileInfo) return null
 			let fileInfo = await getFileInfo(options.src, { useImageProcess: false })
 			if (isOssExpiring(fileInfo?.expires_at)) {
 				// A clipboard payload can be consumed after this interaction finishes.
@@ -487,6 +538,7 @@ export class ClipboardManager {
 		src: string
 		fallbackFilename: string
 		fallbackMimeType: string
+		mediaType?: CanvasAssetMediaType
 	}): Promise<OriginalFileBlobData | null> {
 		const metadata = await this.fetchOriginalFileMetadata(options)
 		if (!metadata?.sourceRef?.ossUrl) {
@@ -907,6 +959,7 @@ export class ClipboardManager {
 			src,
 			fallbackFilename: `${element.name || "image"}.png`,
 			fallbackMimeType: DEFAULT_IMAGE_MIME_TYPE,
+			mediaType: "image",
 		})
 		if (!originalFile) {
 			return null
@@ -938,6 +991,7 @@ export class ClipboardManager {
 			src,
 			fallbackFilename: `${element.name || "image"}.png`,
 			fallbackMimeType: DEFAULT_IMAGE_MIME_TYPE,
+			mediaType: "image",
 		})
 
 		return metadata ? { element, ...metadata } : null
@@ -953,6 +1007,7 @@ export class ClipboardManager {
 			src,
 			fallbackFilename: `${element.name || "video"}.mp4`,
 			fallbackMimeType: DEFAULT_VIDEO_MIME_TYPE,
+			mediaType: "video",
 		})
 
 		return metadata ? { element, ...metadata } : null
@@ -967,6 +1022,7 @@ export class ClipboardManager {
 				(element.name ? `${element.name}.mp3` : getCanvasResourceFileName(src)) ||
 				"audio.mp3",
 			fallbackMimeType: DEFAULT_AUDIO_MIME_TYPE,
+			mediaType: "audio",
 		})
 		return metadata ? { element, ...metadata } : null
 	}
@@ -1418,29 +1474,45 @@ export class ClipboardManager {
 		uploadResult: UploadFileResponse,
 		targetContentId: string,
 	): CanvasFileElement {
+		const currentContent = getContentById(finalElement, targetContentId)
 		if (finalElement.type === ElementTypeEnum.Audio) {
+			const patch = currentContent
+				? mergeMediaSourceReplacementFields(currentContent, { src: uploadResult.path })
+				: { src: uploadResult.path }
 			return {
-				...updateContent(finalElement, targetContentId, {
-					src: uploadResult.path,
-				}),
+				...updateContent(finalElement, targetContentId, patch),
 				visible: true,
 			} as CanvasFileElement
 		}
 		if (finalElement.type === ElementTypeEnum.Image && isImageElementContent(finalElement)) {
+			const patch = currentContent
+				? mergeMediaSourceReplacementFields(currentContent, {
+						src: uploadResult.path,
+						status: GenerationStatus.Completed,
+						errorMessage: undefined,
+					})
+				: {
+						src: uploadResult.path,
+						status: GenerationStatus.Completed,
+						errorMessage: undefined,
+					}
 			return this.stripMediaGenerationTaskIdentity(
-				updateImageContent(finalElement, targetContentId, {
+				updateImageContent(finalElement, targetContentId, patch),
+			) as CanvasFileElement
+		}
+		const patch = currentContent
+			? mergeMediaSourceReplacementFields(currentContent, {
 					src: uploadResult.path,
 					status: GenerationStatus.Completed,
 					errorMessage: undefined,
-				}),
-			) as CanvasFileElement
-		}
+				})
+			: {
+					src: uploadResult.path,
+					status: GenerationStatus.Completed,
+					errorMessage: undefined,
+				}
 		return this.stripMediaGenerationTaskIdentity(
-			updateContent(finalElement, targetContentId, {
-				src: uploadResult.path,
-				status: GenerationStatus.Completed,
-				errorMessage: undefined,
-			}),
+			updateContent(finalElement, targetContentId, patch),
 		)
 	}
 

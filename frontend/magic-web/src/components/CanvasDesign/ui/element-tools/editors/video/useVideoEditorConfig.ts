@@ -229,7 +229,7 @@ export function useVideoEditorConfig(options: UseVideoEditorConfigOptions): Vide
 	const scheduleReferenceMentionInserts = useCallback(
 		(
 			refs: VideoReferenceAssetInfo[],
-			insertOpts?: { placement?: "cursor" | "documentEnd" },
+			insertOpts?: { placement?: "cursor" | "documentEnd"; force?: boolean },
 		) => {
 			if (!refs.length || !messageEditorRef) return
 			const placement = insertOpts?.placement ?? "cursor"
@@ -237,7 +237,9 @@ export function useVideoEditorConfig(options: UseVideoEditorConfigOptions): Vide
 				const editor = messageEditorRef.current
 				if (!editor) return
 				const latestPrompt = editor.getCurrentPrompt()
-				const toInsert = selectRefsMissingMentions(latestPrompt, refs)
+				const toInsert = insertOpts?.force
+					? refs
+					: selectRefsMissingMentions(latestPrompt, refs)
 				if (!toInsert.length) return
 				editor.insertMentionItems(
 					toInsert.map((r) =>
@@ -246,6 +248,7 @@ export function useVideoEditorConfig(options: UseVideoEditorConfigOptions): Vide
 							sourceFileId: r.source_file_id,
 							sourceProjectId: r.source_project_id,
 							projectId: r.project_id,
+							mediaType: r.assetType,
 						}),
 					),
 					placement === "documentEnd" ? { placement: "documentEnd" } : {},
@@ -1060,6 +1063,8 @@ export function useVideoEditorConfig(options: UseVideoEditorConfigOptions): Vide
 				/** 默认 cursor；仅少数场景（如需文末追加）可传 documentEnd */
 				mentionPlacement?: "cursor" | "documentEnd"
 				suppressPromptMention?: boolean
+				/** 用户显式选择已有资源时，重复选择仍需补齐编辑器 @mention。 */
+				ensurePromptMention?: boolean
 			},
 		) => {
 			const latestReferenceImageInfos = referenceImageInfosRef.current
@@ -1103,7 +1108,7 @@ export function useVideoEditorConfig(options: UseVideoEditorConfigOptions): Vide
 					resolveResourceReference,
 				),
 			)
-			if (
+			const isDuplicateReference =
 				Boolean(
 					previousInfo?.path &&
 					areCanvasResourceReferencesSame(
@@ -1121,7 +1126,13 @@ export function useVideoEditorConfig(options: UseVideoEditorConfigOptions): Vide
 							resolveResourceReference,
 						),
 				)
-			) {
+			if (isDuplicateReference) {
+				if (options?.ensurePromptMention && !options.suppressPromptMention) {
+					scheduleReferenceMentionInserts([normalizedFileInfo], {
+						placement: options.mentionPlacement ?? "cursor",
+						force: true,
+					})
+				}
 				if (!options?.retainResourceSlot) {
 					resetSelectedResourceSlot()
 				}
@@ -1200,6 +1211,7 @@ export function useVideoEditorConfig(options: UseVideoEditorConfigOptions): Vide
 							sourceFileId: normalizedFileInfo.source_file_id,
 							sourceProjectId: normalizedFileInfo.source_project_id,
 							projectId: normalizedFileInfo.project_id,
+							mediaType: normalizedFileInfo.assetType,
 						},
 					),
 				)
@@ -1217,6 +1229,7 @@ export function useVideoEditorConfig(options: UseVideoEditorConfigOptions): Vide
 			) {
 				scheduleReferenceMentionInserts([normalizedFileInfo], {
 					placement: options?.mentionPlacement ?? "cursor",
+					force: options?.ensurePromptMention === true,
 				})
 			}
 			activeInputTabRef.current = "reference"

@@ -15,6 +15,8 @@ import {
 	MessageSquarePlus,
 	MessageSquareReply,
 	Pencil,
+	FolderPlus,
+	ShieldCheck,
 	Trash2,
 } from "lucide-react"
 import { FrameDotted, VIPTag } from "../../primitives/icons/index"
@@ -35,6 +37,16 @@ interface RenameMenuConfig {
 	canRenameElement?: (elementId: string, source: MenuSource | null) => boolean
 }
 
+interface SaveAssetMenuConfig {
+	onSaveAsset?: (elementId: string) => void
+	canSaveAsset?: (elementId: string) => boolean
+}
+
+interface SeedanceComplianceMenuConfig {
+	onCheckCompliance?: (elementId: string) => void
+	canCheckCompliance?: (elementId: string) => boolean
+}
+
 export interface GetMenuItemsParams {
 	canvas: Canvas
 	selectedIds: string[]
@@ -43,6 +55,8 @@ export interface GetMenuItemsParams {
 	/** 由 resolveCanvasDownloadMenuContext(canvas) 得到；省略时不出 AI 子菜单（预计算菜单项数量等场景） */
 	downloadMenuContext?: CanvasDownloadMenuContext | null
 	renameMenuConfig?: RenameMenuConfig
+	saveAssetMenuConfig?: SaveAssetMenuConfig
+	complianceMenuConfig?: SeedanceComplianceMenuConfig
 	permissions?: MagicPermissions
 }
 
@@ -54,6 +68,8 @@ export function getMenuItems({
 	t,
 	downloadMenuContext,
 	renameMenuConfig,
+	saveAssetMenuConfig,
+	complianceMenuConfig,
 	permissions,
 }: GetMenuItemsParams): MenuItem[] {
 	const canWrite = canvas.permissionManager.can("document.write")
@@ -265,6 +281,52 @@ export function getMenuItems({
 		},
 	}
 
+	const saveToAssetsMenuItem: MenuItem = {
+		id: "save-to-assets",
+		label: translate("menu.saveToAssets", "保存到素材库"),
+		icon: FolderPlus,
+		onClick: () => {
+			if (!currentElementId) return
+			saveAssetMenuConfig?.onSaveAsset?.(currentElementId)
+		},
+		visible: () => {
+			const selectedType = selectedElements[0]?.type
+			if (
+				isMultiSelect ||
+				selectedElements.length !== 1 ||
+				(selectedType !== ElementTypeEnum.Image &&
+					selectedType !== ElementTypeEnum.Video) ||
+				!currentElementId
+			) {
+				return false
+			}
+			return saveAssetMenuConfig?.canSaveAsset?.(currentElementId) === true
+		},
+	}
+
+	const seedanceComplianceMenuItem: MenuItem = {
+		id: "seedance-compliance",
+		label: translate("menu.seedanceCompliance", "Seedance 2.0 合规校验"),
+		icon: ShieldCheck,
+		onClick: () => {
+			if (!currentElementId) return
+			complianceMenuConfig?.onCheckCompliance?.(currentElementId)
+		},
+		visible: () => {
+			const selectedType = selectedElements[0]?.type
+			if (
+				isMultiSelect ||
+				selectedElements.length !== 1 ||
+				(selectedType !== ElementTypeEnum.Image &&
+					selectedType !== ElementTypeEnum.Video) ||
+				!currentElementId
+			) {
+				return false
+			}
+			return complianceMenuConfig?.canCheckCompliance?.(currentElementId) === true
+		},
+	}
+
 	// 无文档写能力时只提供会话/外部操作；具体能力仍由 UserActionRegistry 控制。
 	if (!canWrite) {
 		if (!includeConversationMenuItems) {
@@ -274,6 +336,9 @@ export function getMenuItems({
 				{ type: "separator" },
 				downloadMenuItem,
 				locateProjectFileMenuItem,
+				{ type: "separator" },
+				saveToAssetsMenuItem,
+				seedanceComplianceMenuItem,
 			]
 		}
 		return [
@@ -285,6 +350,9 @@ export function getMenuItems({
 			{ type: "separator" },
 			downloadMenuItem,
 			locateProjectFileMenuItem,
+			{ type: "separator" },
+			saveToAssetsMenuItem,
+			seedanceComplianceMenuItem,
 		]
 	}
 
@@ -433,6 +501,9 @@ export function getMenuItems({
 		...conversationBlock,
 		downloadMenuItem,
 		locateProjectFileMenuItem,
+		{ type: "separator" },
+		saveToAssetsMenuItem,
+		seedanceComplianceMenuItem,
 		{ type: "separator" },
 		{
 			id: "delete",

@@ -112,6 +112,7 @@ const CanvasProjectFileMentionNodeView: CanvasMentionNodeViewRenderer = (props) 
 		path: fileData?.file_path,
 		fileName,
 		fileExtension: fileType,
+		mediaType: fileData?.media_type,
 		enabled: Boolean(fileData?.file_path) && !isDeleted && !attrs.pending,
 	})
 	const renderVisual = (thumbnail: ReactNode) =>
@@ -258,6 +259,7 @@ export function useCanvasReferenceMention(options?: UseCanvasReferenceMentionOpt
 				src: item.path || "",
 				fileName: item.name,
 				path: item.path || "",
+				...(item.assetType ? { assetType: item.assetType } : {}),
 			})),
 		[externalMatchableItems],
 	)

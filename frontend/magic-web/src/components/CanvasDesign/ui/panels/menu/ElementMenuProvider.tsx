@@ -29,8 +29,16 @@ import {
 	type CanvasDownloadMenuContext,
 } from "./resolveCanvasDownloadMenuContext"
 import { getLoadedImageElements } from "../../../runtime/shared/ids"
-import { getActiveImageContent } from "../../../runtime/document/elementContent"
+import { getActiveContent } from "../../../runtime/document/elementContent"
 import { getCreateElementMenuItems, type CreateElementMenuKind } from "./createElementMenuItems"
+import { useSeedanceComplianceAction } from "./useSeedanceComplianceAction"
+import { ElementTypeEnum } from "../../../runtime/document/types"
+import type { CanvasOpenSaveAssetDialogParams } from "../../../public/magic-types"
+import {
+	getCanvasResourceFileName,
+	parseAssetResourcePath,
+	resolveCanvasStorageResourceReference,
+} from "../../../runtime/shared/path/canvasResourcePath"
 
 export function ElementMenuProvider(props: PropsWithChildren<unknown>) {
 	const { children } = props
@@ -57,11 +65,88 @@ export function ElementMenuProvider(props: PropsWithChildren<unknown>) {
 	const triggerRef = useRef<HTMLDivElement>(null)
 
 	const { canvas } = useCanvas()
-	const { imageModelList, permissions, videoModelList } = useMagic()
+	const { imageModelList, methods, permissions, videoModelList } = useMagic()
 	const { selectedElementIds, setLayerRenamingElementId, setCanvasRenamingElementId } =
 		useCanvasUI()
 
 	const MENU_WIDTH = 220
+
+	const getSaveAssetDialogParams = useCallback(
+		(elementId: string): CanvasOpenSaveAssetDialogParams | undefined => {
+			if (!canvas || !methods?.resolveResourceReference) return undefined
+			const element = canvas.elementManager.getElementData(elementId)
+			if (
+				!element ||
+				(element.type !== ElementTypeEnum.Image && element.type !== ElementTypeEnum.Video)
+			) {
+				return undefined
+			}
+
+			const effectiveContent =
+				typeof canvas.getEffectiveContent === "function"
+					? canvas.getEffectiveContent<{
+							contentId: string
+							src?: string
+							assetId?: string
+						}>(element.id)
+					: undefined
+			const content = effectiveContent ?? getActiveContent(element)
+			const path = content?.src
+			if (!content || !path) return undefined
+			// 已绑定素材库的 Content（包括旧 asset:// 数据）不能再次保存为新素材。
+			if (content.assetId?.trim() || parseAssetResourcePath(path)) return undefined
+
+			const resolution = resolveCanvasStorageResourceReference(
+				path,
+				methods.resolveResourceReference,
+			)
+			if (
+				resolution.status !== "resolved" ||
+				resolution.resourceKind !== "workspace-file" ||
+				!resolution.workspacePath
+			) {
+				return undefined
+			}
+
+			const fileName = getCanvasResourceFileName(resolution.workspacePath)
+			return {
+				elementId: element.id,
+				contentId: content.contentId,
+				path,
+				name: element.name || fileName.replace(/\.[^.]+$/, "") || undefined,
+			}
+		},
+		[canvas, methods],
+	)
+
+	const handleSaveAsset = useCallback(
+		(elementId: string) => {
+			const params = getSaveAssetDialogParams(elementId)
+			if (params) methods?.openSaveAssetToLibraryDialog?.(params)
+		},
+		[getSaveAssetDialogParams, methods],
+	)
+
+	const saveAssetMenuConfig = useMemo(
+		() => ({
+			onSaveAsset: handleSaveAsset,
+			canSaveAsset: (elementId: string) =>
+				Boolean(
+					methods?.openSaveAssetToLibraryDialog && getSaveAssetDialogParams(elementId),
+				),
+		}),
+		[getSaveAssetDialogParams, handleSaveAsset, methods],
+	)
+	const { canCheckCompliance, checkCompliance } = useSeedanceComplianceAction()
+	const complianceMenuConfig = useMemo(
+		() => ({
+			onCheckCompliance: (elementId: string) => {
+				void checkCompliance(elementId)
+			},
+			canCheckCompliance,
+		}),
+		[canCheckCompliance, checkCompliance],
+	)
 
 	// 菜单打开时触发未换链图片的 loadResource；resource:image:loaded 后刷新下载子菜单
 	useLayoutEffect(() => {
@@ -288,6 +373,8 @@ export function ElementMenuProvider(props: PropsWithChildren<unknown>) {
 						onRenameElement: handleRenameElement,
 						canRenameElement,
 					},
+					saveAssetMenuConfig,
+					complianceMenuConfig,
 					permissions,
 				}),
 			).length
@@ -299,6 +386,8 @@ export function ElementMenuProvider(props: PropsWithChildren<unknown>) {
 			fileInfoEpoch,
 			handleRenameElement,
 			canRenameElement,
+			saveAssetMenuConfig,
+			complianceMenuConfig,
 			permissions,
 		],
 	)
@@ -442,6 +531,8 @@ export function ElementMenuProvider(props: PropsWithChildren<unknown>) {
 				onRenameElement: handleRenameElement,
 				canRenameElement,
 			},
+			saveAssetMenuConfig,
+			complianceMenuConfig,
 			permissions,
 		})
 		return cleanMenuItems(items)
@@ -457,6 +548,8 @@ export function ElementMenuProvider(props: PropsWithChildren<unknown>) {
 		fileInfoEpoch,
 		handleRenameElement,
 		canRenameElement,
+		saveAssetMenuConfig,
+		complianceMenuConfig,
 		permissions,
 		downloadMenuContext,
 	])

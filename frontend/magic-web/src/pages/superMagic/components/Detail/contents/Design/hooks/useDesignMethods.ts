@@ -3,12 +3,22 @@ import { useTranslation } from "react-i18next"
 import MagicModal, { type ModalFuncProps } from "@/components/base/MagicModal"
 import type { Topic, Workspace, ProjectListItem } from "@/pages/superMagic/pages/Workspace/types"
 import type {
+	CanvasAssetResourceInfo,
+	CanvasAssetMediaType,
+	CanvasAssetComplianceState,
 	CanvasDesignMethods,
+	CanvasOpenEditAssetDialogParams,
+	CanvasOpenSaveAssetDialogParams,
+	CanvasOpenSaveLocalAssetDialogParams,
+	CanvasSaveAssetToLibraryParams,
+	CanvasSaveLocalAssetToLibraryParams,
+	CanvasStartWorkspaceMediaComplianceParams,
 	EraserRequest,
 	GenerateExtendedImageRequest,
 	IdentifyImageMarkRequest,
 	RemoveBackgroundRequest,
 } from "@/components/CanvasDesign/public/magic-types"
+import { UploadSubDir } from "@/components/CanvasDesign/public/magic-types"
 import type { CanvasFileElement } from "@/components/CanvasDesign/runtime/document/types"
 import type {
 	CanvasResourceReferenceResolverSnapshot,
@@ -17,7 +27,13 @@ import type {
 import type { GenerateHightImageResponse as ApiGenerateHightImageResponse } from "@/apis/modules/superMagic"
 import type { FileItem } from "@/pages/superMagic/components/Detail/components/FilesViewer/types"
 import type { DesignAttachmentIndex } from "../utils/designAttachmentIndex"
-import { SuperMagicApi } from "@/apis"
+import { AssetsApi, SuperMagicApi } from "@/apis"
+import {
+	normalizeAssetComplianceStatus,
+	type AssetComplianceResponse,
+	type AssetItem,
+	type AssetMediaType,
+} from "@/apis/modules/assets"
 import { useGetOrCreateImagesDir } from "./useGetOrCreateImagesDir"
 import { useImageGeneration } from "./useImageGeneration"
 import { useImagePromptCompletion } from "./useImagePromptCompletion"
@@ -37,7 +53,11 @@ import {
 	buildReferenceImageOptions,
 	getReferenceImageCrop,
 } from "@/components/CanvasDesign/runtime/resources/image/imageCropUtils"
-import { resolveCanvasStorageResourceReference } from "@/components/CanvasDesign/runtime/shared/path/canvasResourcePath"
+import {
+	isAssetResourceScheme,
+	parseAssetResourcePath,
+	resolveCanvasStorageResourceReference,
+} from "@/components/CanvasDesign/runtime/shared/path/canvasResourcePath"
 import { clipboard } from "@/utils/clipboard-helpers"
 import { isOssExpiring } from "@/components/CanvasDesign/runtime/resources/offline-cache/ossExpiryUtils"
 import type { UseDesignDownloadPolicyResult } from "./useDesignDownloadPolicy"
@@ -47,6 +67,8 @@ import {
 	buildDesignResourceReferenceResolverRevision,
 	resolveDesignResourceReference,
 } from "../utils/designResourceReferenceResolver"
+import { assetLibrarySessionStore } from "@/components/CanvasDesign/runtime/resources/asset/AssetLibrarySessionStore"
+import { resolveUploadAssetMediaType } from "@/components/CanvasDesign/ui/toolbar/asset-library/assetLibraryMedia"
 
 interface UseDesignMethodsOptions {
 	/** 将元素投影到当前 Canvas 会话的 effective Content（只读预览时不写回文档） */
@@ -80,7 +102,48 @@ interface UseDesignMethodsOptions {
 	updateAttachments: () => void
 	/** 下载策略（企业版可覆盖） */
 	downloadPolicy: UseDesignDownloadPolicyResult
+	/** 请求打开素材保存弹窗；提交动作仍由弹窗显式触发。 */
+	openSaveAssetToLibraryDialog?: (params: CanvasOpenSaveAssetDialogParams) => void
+	openSaveLocalAssetDialog?: (params: CanvasOpenSaveLocalAssetDialogParams) => void
+	openEditAssetDialog?: (params: CanvasOpenEditAssetDialogParams) => void
+	ensureAssetAgreementSigned?: (options?: { onSigned?: () => void }) => Promise<boolean>
 }
+
+function toCanvasAssetMediaType(mediaType: AssetMediaType | null): CanvasAssetMediaType | null {
+	switch (mediaType) {
+		case "IMAGE":
+			return "image"
+		case "VIDEO":
+			return "video"
+		case "AUDIO":
+			return "audio"
+		default:
+			return null
+	}
+}
+
+function toCanvasAssetResourceInfo(asset: AssetItem): CanvasAssetResourceInfo {
+	return {
+		assetId: asset.asset_id,
+		mediaType: toCanvasAssetMediaType(asset.asset_media_type),
+		fileUrl: asset.file_url,
+		fileName: asset.name || undefined,
+		complianceStatus: normalizeAssetComplianceStatus(asset.compliance_status),
+		complianceFailedReason: asset.compliance_failed_reason,
+	}
+}
+
+function toCanvasAssetComplianceState(
+	response: AssetComplianceResponse,
+): CanvasAssetComplianceState {
+	return {
+		assetId: response.asset_id,
+		status: normalizeAssetComplianceStatus(response.compliance_status),
+		failedReason: response.compliance_failed_reason,
+	}
+}
+
+const ASSET_BATCH_GET_SIZE = 200
 
 /**
  * Canvas Design Methods 聚合器 Hook
@@ -111,6 +174,10 @@ export function useDesignMethods(options: UseDesignMethodsOptions): CanvasDesign
 		onExitFullscreen,
 		updateAttachments,
 		downloadPolicy,
+		openSaveAssetToLibraryDialog,
+		openSaveLocalAssetDialog,
+		openEditAssetDialog,
+		ensureAssetAgreementSigned,
 	} = options
 
 	const { t } = useTranslation("super")
@@ -133,6 +200,36 @@ export function useDesignMethods(options: UseDesignMethodsOptions): CanvasDesign
 			designProjectId,
 			attachmentIndex,
 		})
+
+	const getAssetResourceInfo: NonNullable<CanvasDesignMethods["getAssetResourceInfo"]> =
+		useCallback(async (assetId: string): Promise<CanvasAssetResourceInfo> => {
+			const asset = await AssetsApi.getAsset(assetId)
+			return toCanvasAssetResourceInfo(asset)
+		}, [])
+
+	const getAssetResourceInfos: NonNullable<CanvasDesignMethods["getAssetResourceInfos"]> =
+		useCallback(async (assetIds: string[]): Promise<CanvasAssetResourceInfo[]> => {
+			const normalizedAssetIds = Array.from(
+				new Set(assetIds.map((assetId) => assetId.trim()).filter(Boolean)),
+			)
+			if (normalizedAssetIds.length === 0) return []
+
+			const chunks: string[][] = []
+			for (let index = 0; index < normalizedAssetIds.length; index += ASSET_BATCH_GET_SIZE) {
+				chunks.push(normalizedAssetIds.slice(index, index + ASSET_BATCH_GET_SIZE))
+			}
+
+			const responses = await Promise.all(
+				chunks.map((chunk) => AssetsApi.batchGetAssets({ asset_ids: chunk })),
+			)
+			return responses.flat().map(toCanvasAssetResourceInfo)
+		}, [])
+
+	const getAssetComplianceStatus: NonNullable<CanvasDesignMethods["getAssetComplianceStatus"]> =
+		useCallback(async (assetId: string): Promise<CanvasAssetComplianceState> => {
+			const response = await AssetsApi.getAssetCompliance(assetId)
+			return toCanvasAssetComplianceState(response)
+		}, [])
 
 	const getOrCreateImagesDir = useGetOrCreateImagesDir({
 		currentFile,
@@ -273,6 +370,158 @@ export function useDesignMethods(options: UseDesignMethodsOptions): CanvasDesign
 		}),
 		[resolveResourceReference, resourceReferenceResolverRevision],
 	)
+
+	const saveAssetToLibrary: NonNullable<CanvasDesignMethods["saveAssetToLibrary"]> = useCallback(
+		async (params: CanvasSaveAssetToLibraryParams): Promise<CanvasAssetResourceInfo> => {
+			if (!projectId) {
+				throw new Error(t("assetLibrarySave.projectUnavailable"))
+			}
+
+			const resolution = resolveCanvasStorageResourceReference(
+				params.path,
+				resolveResourceReference,
+			)
+			if (
+				resolution.status !== "resolved" ||
+				resolution.resourceKind !== "workspace-file" ||
+				!resolution.workspacePath
+			) {
+				throw new Error(t("assetLibrarySave.sourceUnavailable"))
+			}
+
+			const asset = await AssetsApi.saveAssetToLibrary({
+				name: params.name,
+				description: params.description,
+				project_id: projectId,
+				project_file_path: resolution.workspacePath,
+				visibility:
+					params.userIds?.length || params.departmentIds?.length
+						? {
+								user_ids: params.userIds,
+								department_ids: params.departmentIds,
+							}
+						: undefined,
+				tag_ids: params.tagIds,
+			})
+			assetLibrarySessionStore.invalidateCurrentScope()
+
+			return toCanvasAssetResourceInfo(asset)
+		},
+		[projectId, resolveResourceReference, t],
+	)
+
+	const startWorkspaceMediaCompliance: NonNullable<
+		CanvasDesignMethods["startWorkspaceMediaCompliance"]
+	> = useCallback(
+		async (
+			params: CanvasStartWorkspaceMediaComplianceParams,
+		): Promise<CanvasAssetResourceInfo> => {
+			if (!projectId) {
+				throw new Error(t("assetLibrarySave.projectUnavailable"))
+			}
+			const name = params.name.trim()
+			if (!name) {
+				throw new Error(t("assetLibrarySave.sourceUnavailable"))
+			}
+
+			const resolution = resolveCanvasStorageResourceReference(
+				params.path,
+				resolveResourceReference,
+			)
+			if (
+				resolution.status !== "resolved" ||
+				resolution.resourceKind !== "workspace-file" ||
+				!resolution.workspacePath
+			) {
+				throw new Error(t("assetLibrarySave.sourceUnavailable"))
+			}
+
+			const asset = await AssetsApi.createAsset({
+				asset_kind: "ASSET",
+				name,
+				project_id: projectId,
+				project_file_path: resolution.workspacePath,
+			})
+			assetLibrarySessionStore.invalidateCurrentScope()
+			return toCanvasAssetResourceInfo(asset)
+		},
+		[projectId, resolveResourceReference, t],
+	)
+
+	const saveLocalAssetToLibrary: NonNullable<CanvasDesignMethods["saveLocalAssetToLibrary"]> =
+		useCallback(
+			async (
+				params: CanvasSaveLocalAssetToLibraryParams,
+			): Promise<CanvasAssetResourceInfo> => {
+				if (!projectId) {
+					throw new Error(t("assetLibrarySave.projectUnavailable"))
+				}
+				const mediaType = resolveUploadAssetMediaType(params.file.name, ["IMAGE", "VIDEO"])
+				if (!mediaType) {
+					throw new Error(t("assetLibrarySave.unsupportedFile"))
+				}
+
+				const [uploaded] = await uploadFiles(
+					[
+						{
+							file: params.file,
+							uploadSubDir:
+								mediaType === "VIDEO" ? UploadSubDir.Videos : UploadSubDir.Images,
+							overwrite: false,
+							onUploadComplete: () => undefined,
+							onUploadFailed: () => undefined,
+						},
+					],
+					undefined,
+					{ showSuccessToast: false },
+				)
+				if (!uploaded?.path) {
+					throw new Error(t("assetLibrarySave.saveFailed"))
+				}
+
+				const resolution = resolveCanvasStorageResourceReference(
+					uploaded.path,
+					resolveResourceReference,
+				)
+				if (
+					resolution.status !== "resolved" ||
+					resolution.resourceKind !== "workspace-file" ||
+					!resolution.workspacePath
+				) {
+					throw new Error(t("assetLibrarySave.sourceUnavailable"))
+				}
+
+				const visibility =
+					params.userIds?.length || params.departmentIds?.length
+						? {
+								user_ids: params.userIds,
+								department_ids: params.departmentIds,
+							}
+						: undefined
+				const asset =
+					params.mode === "verify"
+						? await AssetsApi.createAsset({
+								asset_kind: "ASSET",
+								name: params.name,
+								description: params.description,
+								project_id: projectId,
+								project_file_path: resolution.workspacePath,
+								tag_ids: params.tagIds,
+								visibility,
+							})
+						: await AssetsApi.saveAssetToLibrary({
+								name: params.name,
+								description: params.description,
+								project_id: projectId,
+								project_file_path: resolution.workspacePath,
+								visibility,
+								tag_ids: params.tagIds,
+							})
+				assetLibrarySessionStore.invalidateCurrentScope()
+				return toCanvasAssetResourceInfo(asset)
+			},
+			[projectId, resolveResourceReference, t, uploadFiles],
+		)
 
 	const locateProjectFile: NonNullable<CanvasDesignMethods["locateProjectFile"]> = useCallback(
 		(params) => {
@@ -618,6 +867,19 @@ export function useDesignMethods(options: UseDesignMethodsOptions): CanvasDesign
 			CanvasDesignMethods["materializeCanvasClipboardAsset"]
 		> = async (input) => {
 			try {
+				const assetPathCandidates = [input.sourcePath, input.sourceRef?.src].filter(
+					(candidate): candidate is string => Boolean(candidate),
+				)
+				const assetPath = assetPathCandidates.find(
+					(candidate) => parseAssetResourcePath(candidate) !== undefined,
+				)
+				const assetId = assetPath ? parseAssetResourcePath(assetPath) : undefined
+				if (
+					assetId === undefined &&
+					assetPathCandidates.some((candidate) => isAssetResourceScheme(candidate))
+				) {
+					return null
+				}
 				const sourceCanvasId = input.sourceCanvasId?.trim()
 				const targetCanvasId = designProjectId?.trim()
 				const isSameCanvas = Boolean(
@@ -635,10 +897,30 @@ export function useDesignMethods(options: UseDesignMethodsOptions): CanvasDesign
 							? input.sourcePath
 							: undefined)
 				let sourceUrlIsExpiring = isOssExpiring(input.sourceRef?.expiresAt)
+				if (assetId !== undefined) {
+					// Asset references are organization-scoped logical IDs rather than
+					// canvas-relative files, so they remain resolvable across canvases.
+					// Always ask the asset service for the current signed URL and media
+					// type instead of trusting a serialized temporary URL.
+					const asset = await getAssetResourceInfo(assetId, {
+						forceRefresh: sourceUrlIsExpiring,
+					})
+					if (
+						asset.assetId !== assetId ||
+						!asset.fileUrl ||
+						!asset.mediaType ||
+						!input.mimeType.toLowerCase().startsWith(`${asset.mediaType}/`)
+					) {
+						return null
+					}
+					sourceUrl = asset.fileUrl
+					sourceUrlIsExpiring = false
+				}
 				if (
 					(!sourceUrl || sourceUrlIsExpiring) &&
 					input.sourcePath &&
-					canResolveCurrentCanvasPath
+					canResolveCurrentCanvasPath &&
+					assetId === undefined
 				) {
 					const refreshed = await getFileInfo(input.sourcePath, {
 						useImageProcess: false,
@@ -686,6 +968,16 @@ export function useDesignMethods(options: UseDesignMethodsOptions): CanvasDesign
 			uploadFiles,
 			getFileInfo,
 			getFileResourceMeta,
+			getAssetResourceInfo,
+			getAssetResourceInfos,
+			getAssetComplianceStatus,
+			openSaveAssetToLibraryDialog,
+			openSaveLocalAssetDialog,
+			openEditAssetDialog,
+			saveLocalAssetToLibrary,
+			ensureAssetAgreementSigned,
+			saveAssetToLibrary,
+			startWorkspaceMediaCompliance,
 			resolveResourceReference: resourceReferenceResolverSnapshot.resolve,
 			resourceReferenceResolverSnapshot,
 			resourceReferenceResolverVersion: resourceReferenceResolverSnapshot.revision,
@@ -741,6 +1033,16 @@ export function useDesignMethods(options: UseDesignMethodsOptions): CanvasDesign
 		uploadFiles,
 		getFileInfo,
 		getFileResourceMeta,
+		getAssetResourceInfo,
+		getAssetResourceInfos,
+		getAssetComplianceStatus,
+		openSaveAssetToLibraryDialog,
+		openSaveLocalAssetDialog,
+		openEditAssetDialog,
+		saveLocalAssetToLibrary,
+		ensureAssetAgreementSigned,
+		saveAssetToLibrary,
+		startWorkspaceMediaCompliance,
 		designProjectId,
 		resourceReferenceResolverSnapshot,
 		getVirtualResourceScope,

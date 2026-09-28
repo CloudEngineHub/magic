@@ -25,6 +25,7 @@ import { syncCropConfigOnResize } from "../../resources/image/imageCropUtils"
 import { normalizeFrameCreationSize, normalizeSize } from "../../shared/normalize/normalizeUtils"
 import { sanitizeCanvasDocument } from "../../document/temporaryElementUtils"
 import { CanvasDocumentIndex } from "./CanvasDocumentIndex"
+import { resumeDocumentAssetCompliancePolling } from "../../resources/asset/CanvasAssetComplianceTaskManager"
 import { resumeImageBatchPollingManagers } from "../../resources/polling/resumeImageBatchPolling"
 import {
 	getActiveImageContent,
@@ -1985,6 +1986,7 @@ export class ElementManager {
 		const docCopy = sanitizeCanvasDocument(JSON.parse(JSON.stringify(doc)) as CanvasDocument)
 		this.replaceAll(docCopy.elements || [])
 		resumeImageBatchPollingManagers(this.canvas)
+		resumeDocumentAssetCompliancePolling(this.canvas)
 	}
 
 	/**
@@ -2105,6 +2107,7 @@ export class ElementManager {
 			this.batchMode = false
 			this.flush()
 			resumeImageBatchPollingManagers(this.canvas)
+			resumeDocumentAssetCompliancePolling(this.canvas)
 		}
 
 		// 由 Canvas 在元素与连接都恢复完成后统一发出 document:restored。

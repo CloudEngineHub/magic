@@ -275,6 +275,7 @@ export default function ImageEditorControls(props: ImageEditorControlsProps) {
 				slotIndex: index,
 				resourcePath: info.path,
 				resourceFileName: info.fileName,
+				resourceMediaType: "image",
 				removeResourceAriaLabel: t("imageEditor.removeReferenceResource", "移除该参考资源"),
 				onRemoveResource: () => {
 					;(onReferenceFileRemove ?? handlers.handleReferenceFileRemove)(info.path)

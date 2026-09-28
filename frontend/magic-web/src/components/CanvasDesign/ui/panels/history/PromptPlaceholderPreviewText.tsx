@@ -79,7 +79,7 @@ export function PromptPlaceholderPreviewText(props: PromptPlaceholderPreviewText
 			}
 
 			const path = placeholderPaths[match.kind]?.[match.index - 1]
-			const previewItem = path ? buildPreviewMediaResourceItem(path) : null
+			const previewItem = path ? buildPreviewMediaResourceItem(path, match.kind) : null
 			const availability = getCanvasResourceAvailability(path, resolveResourceReference)
 			nextSegments.push({
 				key: `placeholder:${match.start}`,

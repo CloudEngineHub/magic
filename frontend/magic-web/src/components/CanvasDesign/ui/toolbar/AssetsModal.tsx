@@ -1,0 +1,700 @@
+import {
+	AssetsApi,
+	type AssetComplianceStatus,
+	type AssetItem,
+	type AssetMediaType,
+	type AssetScope,
+} from "@/apis"
+import { Button } from "@/components/shadcn-ui/button"
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/shadcn-ui/dialog"
+import { Input } from "@/components/shadcn-ui/input"
+import { ScrollArea } from "@/components/shadcn-ui/scroll-area"
+import {
+	Select,
+	SelectContent,
+	SelectItem,
+	SelectTrigger,
+	SelectValue,
+} from "@/components/shadcn-ui/select"
+import { Switch } from "@/components/shadcn-ui/switch"
+import { useUserInfo } from "@/models/user/hooks"
+import { cn } from "@/utils/cn"
+import { LoaderCircle, RefreshCw, Search } from "lucide-react"
+import { toast } from "sonner"
+import { useCallback, useEffect, useMemo, useRef, useState } from "react"
+import { useOptionalCanvas } from "../../app/providers/CanvasProvider"
+import { useCanvasDesignI18n } from "../../app/providers/I18nProvider"
+import type { CanvasAssetResourceInfo } from "../../public/magic-types"
+import {
+	assetLibrarySessionStore,
+	type AssetLibraryQuery,
+} from "../../runtime/resources/asset/AssetLibrarySessionStore"
+import { resolveAssetComplianceTaskManager } from "../../runtime/resources/asset/assetCompliancePollingHost"
+import { reconcileDeletedAssetOnCanvas } from "../../runtime/resources/asset/canvasAssetDocumentReconcile"
+import { useAssetLibrarySession } from "../../runtime/resources/asset/useAssetLibrarySession"
+import MediaResourceFullscreenPreview, {
+	type MediaResourceFullscreenPreviewItem,
+} from "../fullscreen/media-resource/index"
+import { AssetLibraryAssetCard } from "./asset-library/AssetLibraryAssetCard"
+import { AssetLibraryTransferOwnerDialog } from "./asset-library/AssetLibraryTransferOwnerDialog"
+import { AssetLibraryUploadCard } from "./asset-library/AssetLibraryUploadCard"
+import {
+	canFilterAssetLibraryMedia,
+	canUploadAssetLibraryMedia,
+	resolveAssetLibraryQueryMediaTypes,
+	toAssetLibraryFullscreenPreviewItem,
+	type AssetLibraryMediaFilter,
+	type AssetLibraryUploadMode,
+} from "./asset-library/assetLibraryMedia"
+
+export interface AssetsModalProps {
+	open: boolean
+	onClose: () => void
+	/** 返回用户确认的资产；具体落图或加入编辑器由调用方决定。 */
+	onConfirm?: (asset: AssetItem) => void | Promise<void>
+	/** 多选模式下返回全部已选资产；单选入口继续使用 onConfirm。 */
+	onConfirmMultiple?: (assets: AssetItem[]) => void | Promise<void>
+	/** 当前入口允许选择的媒体类型；接口仅支持单类型查询，弹窗负责合并结果。 */
+	mediaTypes?: readonly AssetMediaType[]
+	/** 需要合规素材的入口只查询 PASS 素材；普通素材入口展示全部状态。 */
+	requiresCompliance?: boolean
+	/** 是否允许多选；不传时保持单选行为。 */
+	multiple?: boolean
+	/** 当前入口最多可确认的数量；未传时多选不设置业务数量上限。 */
+	maxCount?: number
+}
+
+type AssetsScope = Extract<AssetScope, "ALL" | "PERSONAL" | "TEAM">
+
+interface AssetQueryState {
+	scope: AssetsScope
+	keyword: string
+	ownerUid: string
+}
+
+const DEFAULT_QUERY: AssetQueryState = {
+	scope: "ALL",
+	keyword: "",
+	ownerUid: "",
+}
+
+const DEFAULT_MEDIA_TYPES: readonly AssetMediaType[] = ["IMAGE"]
+
+const SCOPE_OPTIONS: Array<{ value: AssetsScope; key: string; fallback: string }> = [
+	{ value: "ALL", key: "assets.allAssets", fallback: "全部素材" },
+	{ value: "PERSONAL", key: "assets.personalAssets", fallback: "仅自己可见" },
+	{ value: "TEAM", key: "assets.teamAssets", fallback: "团队可见" },
+]
+
+/**
+ * 素材库弹窗只负责选择资产。
+ * file_url 只作为当前列表的预览地址；调用方根据 asset_id 决定复用或导入当前画布。
+ */
+export default function AssetsModal({
+	open,
+	onClose,
+	onConfirm,
+	onConfirmMultiple,
+	mediaTypes = DEFAULT_MEDIA_TYPES,
+	requiresCompliance = false,
+	multiple = false,
+	maxCount,
+}: AssetsModalProps) {
+	const { t } = useCanvasDesignI18n()
+	const canvas = useOptionalCanvas()
+	const { userInfo } = useUserInfo()
+	const currentUserId = userInfo?.user_id?.trim() || ""
+	const [hostDialogOpen, setHostDialogOpen] = useState(false)
+	const [cardMenuOpen, setCardMenuOpen] = useState(false)
+	const [transferAsset, setTransferAsset] = useState<AssetItem | null>(null)
+	const mediaTypesKey = mediaTypes.join("|")
+	const requestedMediaTypes = useMemo(() => {
+		const normalized = Array.from(new Set(mediaTypes))
+		return normalized.length > 0 ? normalized : [...DEFAULT_MEDIA_TYPES]
+		// mediaTypesKey stabilizes semantically identical arrays supplied by slot renders.
+		// eslint-disable-next-line react-hooks/exhaustive-deps
+	}, [mediaTypesKey])
+	const [query, setQuery] = useState(DEFAULT_QUERY)
+	const [mediaFilter, setMediaFilter] = useState<AssetLibraryMediaFilter>("ALL")
+	const [verifiedOnly, setVerifiedOnly] = useState(false)
+	const [selectedAssetIds, setSelectedAssetIds] = useState<string[]>([])
+	const [confirming, setConfirming] = useState(false)
+	const [confirmError, setConfirmError] = useState(false)
+	const [previewResource, setPreviewResource] =
+		useState<MediaResourceFullscreenPreviewItem | null>(null)
+	const pendingListRefreshRef = useRef(false)
+	const complianceTaskManager = useMemo(() => resolveAssetComplianceTaskManager(canvas), [canvas])
+	const selectionLimit =
+		maxCount === undefined
+			? multiple
+				? Number.POSITIVE_INFINITY
+				: 1
+			: Math.max(0, Math.floor(maxCount))
+	const showSelectionCount = Number.isFinite(selectionLimit) && selectionLimit > 1
+	const showMediaFilter = canFilterAssetLibraryMedia(requestedMediaTypes)
+	const canUpload = canUploadAssetLibraryMedia(requestedMediaTypes)
+	const complianceRequired = requiresCompliance || verifiedOnly
+	const assetQuery = useMemo<AssetLibraryQuery>(
+		() => ({
+			mediaTypes: resolveAssetLibraryQueryMediaTypes(
+				requestedMediaTypes,
+				showMediaFilter ? mediaFilter : "ALL",
+			),
+			scope: query.scope,
+			keyword: query.keyword,
+			ownerUid: query.ownerUid,
+			requiresCompliance: complianceRequired,
+		}),
+		[complianceRequired, mediaFilter, query, requestedMediaTypes, showMediaFilter],
+	)
+	const { assets, owners, loading, refreshing, error, refreshAssets } = useAssetLibrarySession(
+		assetQuery,
+		open,
+	)
+
+	const selectedAssets = useMemo(
+		() => assets.filter((asset) => selectedAssetIds.includes(asset.asset_id)),
+		[assets, selectedAssetIds],
+	)
+
+	useEffect(() => {
+		if (!open) {
+			setPreviewResource(null)
+			return
+		}
+		setSelectedAssetIds([])
+		setConfirmError(false)
+		setPreviewResource(null)
+	}, [open])
+
+	useEffect(() => {
+		if (!pendingListRefreshRef.current) return
+		pendingListRefreshRef.current = false
+		void refreshAssets().catch(() => undefined)
+	}, [assetQuery, refreshAssets])
+
+	const handleComplianceSettled = useCallback(() => {
+		assetLibrarySessionStore.invalidateCurrentScope()
+		void refreshAssets().catch(() => undefined)
+	}, [refreshAssets])
+
+	const processingAssetIds = useMemo(
+		() =>
+			assets
+				.filter((asset) => asset.compliance_status === "PROCESSING")
+				.map((asset) => asset.asset_id),
+		[assets],
+	)
+	const processingAssetIdsKey = processingAssetIds.join("|")
+
+	useEffect(() => {
+		if (!open || processingAssetIds.length === 0) return
+		return complianceTaskManager.resumeLibraryComplianceChecks(
+			processingAssetIds,
+			handleComplianceSettled,
+		)
+	}, [
+		complianceTaskManager,
+		handleComplianceSettled,
+		open,
+		processingAssetIds,
+		processingAssetIdsKey,
+	])
+
+	useEffect(() => {
+		setSelectedAssetIds((currentIds) => {
+			const availableIds = new Set(assets.map((asset) => asset.asset_id))
+			const nextIds = currentIds
+				.filter((assetId) => availableIds.has(assetId))
+				.slice(0, selectionLimit)
+			return nextIds.length === currentIds.length &&
+				nextIds.every((id, index) => id === currentIds[index])
+				? currentIds
+				: nextIds
+		})
+	}, [assets, selectionLimit])
+
+	const handleAssetToggle = (assetId: string) => {
+		setSelectedAssetIds((currentIds) => {
+			if (currentIds.includes(assetId)) {
+				return currentIds.filter((currentId) => currentId !== assetId)
+			}
+			if (currentIds.length >= selectionLimit) return currentIds
+			return multiple ? [...currentIds, assetId] : [assetId]
+		})
+	}
+
+	const handleUploaded = (
+		asset: {
+			asset_id: string
+			asset_media_type: AssetMediaType | null
+			compliance_status: AssetComplianceStatus
+		},
+		mode: AssetLibraryUploadMode,
+	) => {
+		assetLibrarySessionStore.invalidateCurrentScope()
+		const uploadedMediaType = asset.asset_media_type
+		const shouldSwitchFilter =
+			showMediaFilter &&
+			(uploadedMediaType === "IMAGE" || uploadedMediaType === "VIDEO") &&
+			mediaFilter !== "ALL" &&
+			mediaFilter !== uploadedMediaType
+		if (shouldSwitchFilter) {
+			pendingListRefreshRef.current = true
+			setMediaFilter(uploadedMediaType)
+		} else {
+			void refreshAssets().catch(() => undefined)
+		}
+		if (mode === "verify" && asset.asset_id) {
+			complianceTaskManager.watchLibraryComplianceChecks(
+				[asset.asset_id],
+				handleComplianceSettled,
+			)
+		}
+	}
+
+	const refreshLibrary = () => {
+		assetLibrarySessionStore.invalidateCurrentScope()
+		void refreshAssets().catch(() => undefined)
+		void assetLibrarySessionStore.refreshOwners().catch(() => undefined)
+	}
+
+	const handleEditAsset = (asset: AssetItem) => {
+		const openEditAssetDialog = canvas?.magicConfigManager.config?.methods?.openEditAssetDialog
+		if (!openEditAssetDialog) {
+			toast.error(t("assets.editUnavailable", "当前无法编辑素材"))
+			return
+		}
+		setHostDialogOpen(true)
+		openEditAssetDialog({
+			asset: {
+				assetId: asset.asset_id,
+				name: asset.name,
+				description: asset.description,
+				fileUrl: asset.file_url,
+				mediaType:
+					asset.asset_media_type === "VIDEO"
+						? "video"
+						: asset.asset_media_type === "AUDIO"
+							? "audio"
+							: asset.asset_media_type === "IMAGE"
+								? "image"
+								: null,
+				visibility: asset.source === "TEAM" ? "team" : "private",
+				tagIds: asset.tags.map((tag) => tag.id),
+			},
+			onUpdated: refreshLibrary,
+			onClosed: () => setHostDialogOpen(false),
+		})
+	}
+
+	const handleDeleteAsset = async (asset: AssetItem) => {
+		try {
+			await AssetsApi.deleteAsset(asset.asset_id)
+			if (canvas) {
+				reconcileDeletedAssetOnCanvas(canvas, asset.asset_id)
+			}
+			setSelectedAssetIds((currentIds) => currentIds.filter((id) => id !== asset.asset_id))
+			refreshLibrary()
+			toast.success(t("assets.deleteSuccess", "素材已删除"))
+		} catch (error) {
+			toast.error(
+				error instanceof Error
+					? error.message
+					: t("assets.deleteFailed", "删除素材失败，请重试"),
+			)
+		}
+	}
+
+	const handleLocalFileSelected = (file: File, mode: AssetLibraryUploadMode) => {
+		const openSaveLocalAssetDialog =
+			canvas?.magicConfigManager.config?.methods?.openSaveLocalAssetDialog
+		if (!openSaveLocalAssetDialog) {
+			toast.error(t("assets.uploadFailed", "上传素材失败，请重试"))
+			return
+		}
+		setHostDialogOpen(true)
+		openSaveLocalAssetDialog({
+			file,
+			mode,
+			onSaved: (asset: CanvasAssetResourceInfo) => {
+				handleUploaded(
+					{
+						asset_id: asset.assetId,
+						asset_media_type:
+							asset.mediaType === "video"
+								? "VIDEO"
+								: asset.mediaType === "audio"
+									? "AUDIO"
+									: asset.mediaType === "image"
+										? "IMAGE"
+										: null,
+						compliance_status: asset.complianceStatus ?? "UNVERIFIED",
+					},
+					mode,
+				)
+			},
+			onClosed: () => setHostDialogOpen(false),
+		})
+	}
+
+	const handleConfirm = async () => {
+		if (selectedAssets.length === 0 || confirming) return
+
+		setConfirming(true)
+		setConfirmError(false)
+		try {
+			if (multiple) {
+				if (onConfirmMultiple) {
+					await onConfirmMultiple(selectedAssets)
+				} else if (onConfirm) {
+					await Promise.all(selectedAssets.map((asset) => onConfirm(asset)))
+				}
+			} else {
+				await onConfirm?.(selectedAssets[0])
+			}
+			onClose()
+		} catch {
+			setConfirmError(true)
+		} finally {
+			setConfirming(false)
+		}
+	}
+
+	const blockLibraryDismiss = hostDialogOpen || cardMenuOpen || Boolean(transferAsset)
+
+	return (
+		<>
+			<Dialog
+				open={open}
+				onOpenChange={(nextOpen) => {
+					if (!nextOpen && !blockLibraryDismiss) onClose()
+				}}
+			>
+				<DialogContent
+					className="flex h-[min(760px,calc(100vh-64px))] max-h-[calc(100vh-64px)] w-[min(1120px,calc(100vw-32px))] !max-w-[1120px] flex-col gap-0 overflow-hidden p-0"
+					data-testid="assets-modal"
+					onOpenAutoFocus={(event) => event.preventDefault()}
+					onPointerDownOutside={(event) => {
+						if (blockLibraryDismiss) event.preventDefault()
+					}}
+					onInteractOutside={(event) => {
+						if (blockLibraryDismiss) event.preventDefault()
+					}}
+					onFocusOutside={(event) => {
+						if (blockLibraryDismiss) event.preventDefault()
+					}}
+					onEscapeKeyDown={(event) => {
+						if (blockLibraryDismiss) event.preventDefault()
+					}}
+				>
+					<div className="flex min-h-0 flex-1 flex-col overflow-hidden">
+						<DialogHeader className="shrink-0 border-b px-5 py-3 pr-12 text-left">
+							<DialogTitle className="text-base font-semibold leading-6">
+								{t("tools.assets", "素材库")}
+							</DialogTitle>
+						</DialogHeader>
+
+						<div className="flex min-h-0 flex-1 flex-col px-5">
+							<div
+								className="flex shrink-0 flex-wrap items-center gap-3 border-b py-4"
+								role="toolbar"
+							>
+								<div
+									className="inline-flex shrink-0 gap-0.5 rounded-lg bg-muted p-0.5"
+									role="tablist"
+								>
+									{SCOPE_OPTIONS.map((option) => (
+										<button
+											key={option.value}
+											type="button"
+											role="tab"
+											aria-selected={query.scope === option.value}
+											className={cn(
+												"rounded-md px-3.5 py-1.5 text-sm leading-5 text-muted-foreground transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+												query.scope === option.value &&
+													"bg-background text-primary shadow-sm",
+											)}
+											onClick={() =>
+												setQuery((current) => ({
+													...current,
+													scope: option.value,
+												}))
+											}
+										>
+											{t(option.key, option.fallback)}
+										</button>
+									))}
+								</div>
+
+								<div className="flex shrink-0 items-center gap-2 text-sm text-muted-foreground">
+									<span>{t("assets.owner", "归属人")}</span>
+									<Select
+										value={query.ownerUid || "all"}
+										onValueChange={(value) =>
+											setQuery((current) => ({
+												...current,
+												ownerUid: value === "all" ? "" : value,
+											}))
+										}
+									>
+										<SelectTrigger
+											className="w-[140px] bg-background text-foreground"
+											aria-label={t("assets.owner", "归属人")}
+										>
+											<SelectValue
+												placeholder={t("assets.allOwners", "全部归属人")}
+											/>
+										</SelectTrigger>
+										<SelectContent>
+											<SelectItem value="all">
+												{t("assets.allOwners", "全部归属人")}
+											</SelectItem>
+											{owners.map((owner) => (
+												<SelectItem key={owner.id} value={owner.id}>
+													{owner.name}
+												</SelectItem>
+											))}
+										</SelectContent>
+									</Select>
+								</div>
+
+								<label className="inline-flex shrink-0 items-center gap-2 text-sm text-foreground">
+									<Switch
+										checked={complianceRequired}
+										disabled={requiresCompliance}
+										aria-label={t("assets.verifiedOnly", "仅看已认证")}
+										onCheckedChange={setVerifiedOnly}
+									/>
+									<span>{t("assets.verifiedOnly", "仅看已认证")}</span>
+								</label>
+								<Button
+									type="button"
+									variant="ghost"
+									size="icon"
+									className="size-8 shrink-0"
+									disabled={loading || refreshing}
+									aria-label={t("assets.refresh", "刷新素材")}
+									title={t("assets.refresh", "刷新素材")}
+									onClick={() => void refreshAssets().catch(() => undefined)}
+								>
+									<RefreshCw
+										className={cn("size-4", refreshing && "animate-spin")}
+										aria-hidden="true"
+									/>
+								</Button>
+
+								<label className="relative ml-auto flex min-w-[220px] flex-1 items-center sm:max-w-[320px]">
+									<Search
+										className="pointer-events-none absolute left-3 size-4 text-muted-foreground"
+										aria-hidden="true"
+									/>
+									<Input
+										className="pl-9"
+										value={query.keyword}
+										aria-label={t("assets.search", "搜索素材名称或标签")}
+										placeholder={t("assets.search", "搜索素材名称或标签")}
+										onChange={(event) =>
+											setQuery((current) => ({
+												...current,
+												keyword: event.target.value,
+											}))
+										}
+									/>
+								</label>
+							</div>
+
+							{showMediaFilter ? (
+								<div className="flex shrink-0 items-center gap-3 border-b py-3">
+									<span className="text-sm text-muted-foreground">
+										{t("assets.mediaType", "素材类型")}
+									</span>
+									<div
+										className="inline-flex gap-0.5 rounded-lg bg-muted p-0.5"
+										role="tablist"
+										aria-label={t("assets.mediaType", "素材类型")}
+									>
+										<button
+											type="button"
+											role="tab"
+											aria-selected={mediaFilter === "ALL"}
+											className={cn(
+												"rounded-md px-3 py-1 text-sm leading-5 text-muted-foreground transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+												mediaFilter === "ALL" &&
+													"bg-background text-primary shadow-sm",
+											)}
+											onClick={() => setMediaFilter("ALL")}
+										>
+											{t("assets.mediaTypeAll", "全部")}
+										</button>
+										<button
+											type="button"
+											role="tab"
+											aria-selected={mediaFilter === "IMAGE"}
+											className={cn(
+												"rounded-md px-3 py-1 text-sm leading-5 text-muted-foreground transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+												mediaFilter === "IMAGE" &&
+													"bg-background text-primary shadow-sm",
+											)}
+											onClick={() => setMediaFilter("IMAGE")}
+										>
+											{t("assets.mediaTypeImage", "图片")}
+										</button>
+										<button
+											type="button"
+											role="tab"
+											aria-selected={mediaFilter === "VIDEO"}
+											className={cn(
+												"rounded-md px-3 py-1 text-sm leading-5 text-muted-foreground transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+												mediaFilter === "VIDEO" &&
+													"bg-background text-primary shadow-sm",
+											)}
+											onClick={() => setMediaFilter("VIDEO")}
+										>
+											{t("assets.mediaTypeVideo", "视频")}
+										</button>
+									</div>
+								</div>
+							) : null}
+
+							{error !== null && (assets.length > 0 || canUpload) && (
+								<div
+									className="shrink-0 border-b bg-destructive/5 px-3 py-2 text-sm text-destructive"
+									role="alert"
+								>
+									{t("assets.loadFailed", "素材库加载失败，请重试")}
+								</div>
+							)}
+
+							<ScrollArea className="min-h-0 flex-1" viewportClassName="h-full">
+								{loading ? (
+									<div
+										className="flex h-full min-h-[300px] flex-col items-center justify-center gap-3 text-sm text-muted-foreground"
+										role="status"
+									>
+										<LoaderCircle className="size-5 animate-spin" />
+										<span>{t("assets.loading", "加载中...")}</span>
+									</div>
+								) : error !== null && assets.length === 0 && !canUpload ? (
+									<div
+										className="flex h-full min-h-[300px] flex-col items-center justify-center gap-3 text-sm text-muted-foreground"
+										role="alert"
+									>
+										<span>
+											{t("assets.loadFailed", "素材库加载失败，请重试")}
+										</span>
+										<Button
+											type="button"
+											variant="outline"
+											size="sm"
+											onClick={() =>
+												void refreshAssets().catch(() => undefined)
+											}
+										>
+											{t("common.retry", "重试")}
+										</Button>
+									</div>
+								) : assets.length === 0 && !canUpload ? (
+									<div className="flex h-full min-h-[300px] items-center justify-center text-sm text-muted-foreground">
+										<span>{t("assets.empty", "暂无素材")}</span>
+									</div>
+								) : (
+									<div className="grid grid-cols-2 gap-4 py-5 sm:grid-cols-3 lg:grid-cols-4">
+										{canUpload ? (
+											<AssetLibraryUploadCard
+												allowedMediaTypes={requestedMediaTypes}
+												t={t}
+												ensureAssetAgreementSigned={
+													canvas?.magicConfigManager.config?.methods
+														?.ensureAssetAgreementSigned
+												}
+												onAgreementActivityChange={setHostDialogOpen}
+												onFileSelected={handleLocalFileSelected}
+											/>
+										) : null}
+										{assets.map((asset) => {
+											const selected = selectedAssetIds.includes(
+												asset.asset_id,
+											)
+											return (
+												<AssetLibraryAssetCard
+													key={asset.asset_id}
+													asset={asset}
+													selected={selected}
+													selectionBlocked={
+														!selected &&
+														selectedAssetIds.length >= selectionLimit
+													}
+													t={t}
+													manageable={Boolean(
+														currentUserId &&
+														asset.owner_uid === currentUserId,
+													)}
+													onMenuOpenChange={setCardMenuOpen}
+													onEdit={handleEditAsset}
+													onTransferOwner={setTransferAsset}
+													onDelete={(item) =>
+														void handleDeleteAsset(item)
+													}
+													onToggle={handleAssetToggle}
+													onPreview={(asset) => {
+														setPreviewResource(
+															toAssetLibraryFullscreenPreviewItem(
+																asset,
+															),
+														)
+													}}
+												/>
+											)
+										})}
+									</div>
+								)}
+							</ScrollArea>
+
+							<div className="flex shrink-0 items-center justify-between gap-4 border-t py-3 text-sm text-muted-foreground">
+								{confirmError || showSelectionCount ? (
+									<span
+										className={cn(confirmError && "text-destructive")}
+										role={confirmError ? "alert" : undefined}
+									>
+										{confirmError
+											? t("assets.confirmFailed", "素材选择失败，请重试")
+											: t("assets.selectedCount", {
+													defaultValue: "已选择 {{count}} / {{max}} 项",
+													count: selectedAssets.length,
+													max: selectionLimit,
+												})}
+									</span>
+								) : (
+									<span />
+								)}
+								<Button
+									type="button"
+									className="min-w-28"
+									disabled={selectedAssets.length === 0 || confirming}
+									onClick={() => void handleConfirm()}
+								>
+									{confirming
+										? t("assets.confirming", "确认中...")
+										: t("common.confirm", "确认")}
+								</Button>
+							</div>
+						</div>
+					</div>
+				</DialogContent>
+			</Dialog>
+			<AssetLibraryTransferOwnerDialog
+				asset={transferAsset}
+				t={t}
+				onClose={() => setTransferAsset(null)}
+				onTransferred={refreshLibrary}
+			/>
+			{previewResource ? (
+				<MediaResourceFullscreenPreview
+					resource={previewResource}
+					onClose={() => setPreviewResource(null)}
+				/>
+			) : null}
+		</>
+	)
+}

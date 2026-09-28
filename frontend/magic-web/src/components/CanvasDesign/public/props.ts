@@ -2,7 +2,7 @@ import type { Node as TiptapNode } from "@/infrastructure/editors/tiptap/core"
 import type { ComponentType, RefObject } from "react"
 import type { ModifierAlias } from "../runtime/interaction/shortcuts/types"
 import type { Canvas } from "../runtime/core/Canvas"
-import type { MagicConfig } from "./magic-types"
+import type { CanvasAssetMediaType, MagicConfig } from "./magic-types"
 import type { ResolveCanvasResourceReference } from "./resource-reference"
 import type {
 	CanvasDeviceInfo,
@@ -89,6 +89,8 @@ export interface ReferenceResourcePanelFileData {
 	file_name: string
 	file_path: string
 	file_extension: string
+	/** 资产 URI 不携带扩展名时的显式媒体类型。 */
+	media_type?: CanvasAssetMediaType | null
 	file_size?: number
 	project_id?: string
 	source_project_id?: string

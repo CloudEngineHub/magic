@@ -835,6 +835,9 @@ export interface GetConvertHightConfigResponse {
 /** 获取 AI 能力可用性响应数据 */
 export interface AiAbilityAvailabilityResponse {
 	abilities: {
+		volcengine_ark_assets?: {
+			enabled?: boolean
+		}
 		image_convert_high: GetConvertHightConfigResponse
 		image_remove_background: {
 			enabled: boolean

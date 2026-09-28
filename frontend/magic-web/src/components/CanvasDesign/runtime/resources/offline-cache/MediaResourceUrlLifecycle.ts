@@ -10,7 +10,13 @@ import type {
 	MediaResourceOfflineCacheMediaType,
 } from "./MediaResourceOfflineCacheManager"
 import { parseExpiresAt, isOssExpired } from "./ossExpiryUtils"
-import { getCanvasHostResourceReferenceIdentity } from "../../shared/path/canvasResourcePath"
+import {
+	getCanvasHostResourceReferenceIdentity,
+	isAssetResourcePath,
+	isAssetResourceScheme,
+	parseAssetResourcePath,
+} from "../../shared/path/canvasResourcePath"
+import { CanvasAssetResourceError } from "../asset/CanvasAssetResourceManager"
 import {
 	getFailureReasonFromGetFileInfoError,
 	type ResourceLoadFailureReason,
@@ -107,6 +113,7 @@ export class MediaResourceUrlLifecycle<TEntry extends MediaResourceUrlEntry> {
 	}
 
 	public applyVirtualResourceBypass(entry: TEntry): void {
+		if (isAssetResourcePath(entry.referencePath)) return
 		const offlineCache = this.options.canvas.mediaResourceOfflineCacheManager
 		if (
 			!entry.ossSrc ||
@@ -195,6 +202,7 @@ export class MediaResourceUrlLifecycle<TEntry extends MediaResourceUrlEntry> {
 			if (
 				!options?.allowCachedFallback ||
 				options?.forceRefresh ||
+				isAssetResourcePath(path) ||
 				entry.lastFailureReason === "not-found" ||
 				this.options.canvas.mediaResourceOfflineCacheManager.shouldBypassVirtualResource()
 			) {
@@ -238,6 +246,14 @@ export class MediaResourceUrlLifecycle<TEntry extends MediaResourceUrlEntry> {
 		},
 	): Promise<ExchangeResult> {
 		if (this.isDestroyed()) return null
+		const assetId = parseAssetResourcePath(path)
+		if (assetId !== undefined) {
+			return this.exchangeAssetOssSrcInternal(assetId, entry, options)
+		}
+		if (isAssetResourceScheme(path)) {
+			this.options.setFailureReason(entry, "load-error")
+			return null
+		}
 		const getFileInfo = this.options.canvas.magicConfigManager.config?.methods?.getFileInfo
 		if (!getFileInfo) {
 			this.options.setFailureReason(entry, "load-error")
@@ -339,12 +355,79 @@ export class MediaResourceUrlLifecycle<TEntry extends MediaResourceUrlEntry> {
 		}
 	}
 
+	private async exchangeAssetOssSrcInternal(
+		assetId: string,
+		entry: TEntry,
+		options?: {
+			forceRefresh?: boolean
+			priority?: FileUrlRequestPriority
+		},
+	): Promise<ExchangeResult> {
+		if (entry.exchangePromise && !options?.forceRefresh) return entry.exchangePromise
+
+		const exchangeToken = Symbol(`asset-resource-exchange:${assetId}`)
+		entry.exchangeToken = exchangeToken
+		const isCurrentExchange = () => entry.exchangeToken === exchangeToken
+		const promise = (async () => {
+			try {
+				const info = await this.options.canvas.assetResourceManager.getResource(assetId, {
+					forceRefresh: options?.forceRefresh,
+					priority: options?.priority,
+				})
+				if (this.isDestroyed()) return null
+				if (!isCurrentExchange()) return SUPERSEDED_RESOURCE_REQUEST
+				if (!info.fileUrl) {
+					this.options.setFailureReason(entry, "not-found")
+					return null
+				}
+				if (info.mediaType !== this.options.mediaType) {
+					this.options.setFailureReason(entry, "load-error")
+					return null
+				}
+
+				const previousSourceUrl = entry.sourceUrl
+				entry.sourceUrl = info.fileUrl
+				entry.ossSrc = info.fileUrl
+				entry.ossSrcFromCachedFallback = false
+				entry.expiresAt = null
+				entry.source = undefined
+				entry.fileName = info.fileName
+				entry.resourceVersion = null
+				entry.sourceUpdatedAt = null
+				entry.contentLength = null
+				this.options.setFailureReason(entry, null)
+				if (!previousSourceUrl) {
+					this.options.onResourceMetadataHydrated?.(entry.resourceIdentity, entry)
+				}
+				return info.fileUrl
+			} catch (error) {
+				if (!isCurrentExchange()) return SUPERSEDED_RESOURCE_REQUEST
+				this.options.setFailureReason(
+					entry,
+					error instanceof CanvasAssetResourceError ? error.reason : "load-error",
+				)
+				return null
+			}
+		})()
+
+		entry.exchangePromise = promise
+		try {
+			return await promise
+		} finally {
+			if (isCurrentExchange()) {
+				entry.exchangePromise = null
+				entry.exchangeToken = undefined
+			}
+		}
+	}
+
 	public triggerBackgroundMetadataRefresh(
 		path: string,
 		resourceIdentity: string,
 		entry: TEntry,
 	): void {
 		if (this.isDestroyed()) return
+		if (isAssetResourcePath(path)) return
 		if (entry.backgroundRefreshPromise) {
 			this.options.incrementDiagnostic("backgroundRefreshDedupedCount")
 			return
@@ -379,6 +462,9 @@ export class MediaResourceUrlLifecycle<TEntry extends MediaResourceUrlEntry> {
 		entry: TEntry,
 	): Promise<void> {
 		if (this.isDestroyed()) return
+		// Asset URLs have no workspace resource version or offline metadata contract.
+		// They are refreshed only after a media load failure through forceRefresh.
+		if (isAssetResourcePath(path)) return
 		// 前台换链已在进行时不启动低优先级 metadata 探测，避免后台请求成为更新的一代。
 		if (entry.exchangePromise) {
 			this.options.incrementDiagnostic("backgroundRefreshDedupedCount")
@@ -489,6 +575,7 @@ export class MediaResourceUrlLifecycle<TEntry extends MediaResourceUrlEntry> {
 		entry: TEntry,
 	): Promise<CachedMediaResource | null> {
 		if (this.isDestroyed()) return null
+		if (isAssetResourcePath(path)) return null
 		try {
 			const offlineCache = this.options.canvas.mediaResourceOfflineCacheManager
 			if (offlineCache.shouldBypassVirtualResource()) {
@@ -541,6 +628,18 @@ export class MediaResourceUrlLifecycle<TEntry extends MediaResourceUrlEntry> {
 		retryCount: number,
 	): Promise<string | null> {
 		if (this.isDestroyed()) return null
+		if (isAssetResourcePath(path)) {
+			// Asset file_url values are signed and are not persisted in the offline
+			// cache. A failed media request gets one fresh detail lookup instead.
+			if (retryCount > 0) return null
+			entry.ossSrc = null
+			entry.ossSrcFromCachedFallback = false
+			entry.expiresAt = null
+			return this.exchangeOssSrc(path, entry, {
+				forceRefresh: true,
+				priority: "critical",
+			})
+		}
 		const offlineCache = this.options.canvas.mediaResourceOfflineCacheManager
 		if (retryCount > 0 || !offlineCache.isVirtualResourceUrl(ossSrc)) {
 			return null
@@ -576,6 +675,7 @@ export class MediaResourceUrlLifecycle<TEntry extends MediaResourceUrlEntry> {
 			| "content_length"
 		>,
 	): void {
+		if (isAssetResourcePath(path)) return
 		// 上传/生成结果是当前资源的新一代；任何尚未完成的旧 exchange 只能返回自身结果，
 		// 不能在 finally/resolve 时覆盖刚写入的 URL 与 metadata。
 		const previousResourceVersion = entry.resourceVersion

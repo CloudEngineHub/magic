@@ -70,13 +70,15 @@ interface ImageFullscreenOverlayProps {
 	path: string
 	fileName?: string
 	crop?: CropConfig
+	/** 直接可用的预览 URL；传入后跳过画布 ImageResourceManager 解析。 */
+	src?: string
 	isOpen: boolean
 	onClose: () => void
 	closeAriaLabel?: string
 }
 
 export default function ImageFullscreenOverlay(props: ImageFullscreenOverlayProps) {
-	const { path, fileName, crop, isOpen, onClose, closeAriaLabel } = props
+	const { path, fileName, crop, src: previewSrc, isOpen, onClose, closeAriaLabel } = props
 	const { t } = useCanvasDesignI18n()
 
 	const hideChromeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
@@ -98,8 +100,9 @@ export default function ImageFullscreenOverlay(props: ImageFullscreenOverlayProp
 
 	const { fullUrl, lowUrl, imageInfo, isLoading } = useReferenceImageUrls(path, {
 		eagerFullUrl: true,
+		enabled: !previewSrc,
 	})
-	const src = fullUrl ?? lowUrl
+	const src = previewSrc ?? fullUrl ?? lowUrl
 	const sourceSize = useMemo(() => {
 		if (imageInfo?.naturalWidth && imageInfo.naturalHeight) {
 			return {
@@ -113,7 +116,7 @@ export default function ImageFullscreenOverlay(props: ImageFullscreenOverlayProp
 	useEffect(() => {
 		setNaturalSize(null)
 		setHasError(false)
-	}, [path])
+	}, [path, previewSrc])
 
 	useEffect(() => {
 		setViewMode(hasCrop ? "cropped" : "original")

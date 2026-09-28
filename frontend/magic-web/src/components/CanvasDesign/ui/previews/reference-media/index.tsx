@@ -8,7 +8,10 @@ import type { ReferenceMediaPreviewProps } from "./types"
 export type { ReferenceMediaPreviewProps } from "./types"
 
 export default function ReferenceMediaPreview(props: ReferenceMediaPreviewProps) {
-	const fileType = useMemo(() => getMediaResourcePathKind(props.path), [props.path])
+	const fileType = useMemo(
+		() => getMediaResourcePathKind(props.path, { mediaType: props.mediaType }),
+		[props.mediaType, props.path],
+	)
 
 	if (fileType === "video") {
 		return (

@@ -1,4 +1,72 @@
 {
+	"assets": {
+		"actions": "素材操作",
+		"agreementRequired": "请先签署 Seedance 系列模型使用承诺书",
+		"allAssets": "全部素材",
+		"allOwners": "全部归属人",
+		"apply": "应用至画布",
+		"applying": "应用中...",
+		"assetId": "Asset ID",
+		"closePreview": "关闭预览",
+		"complianceFailed": "合规校验失败",
+		"compliancePassed": "已通过合规检查",
+		"complianceProcessing": "合规校验中",
+		"complianceUnverified": "未校验",
+		"confirmFailed": "素材选择失败，请重试",
+		"confirming": "确认中...",
+		"copyAssetId": "复制资产 ID",
+		"delete": "删除素材",
+		"deleteFailed": "删除素材失败，请重试",
+		"deleteSuccess": "素材已删除",
+		"edit": "编辑素材",
+		"editUnavailable": "当前无法编辑素材",
+		"empty": "暂无素材",
+		"loadFailed": "素材库加载失败，请重试",
+		"loading": "加载中...",
+		"mediaAudio": "音频",
+		"mediaImage": "图片",
+		"mediaType": "素材类型",
+		"mediaTypeAll": "全部",
+		"mediaTypeImage": "图片",
+		"mediaTypeVideo": "视频",
+		"mediaVideo": "视频",
+		"owner": "归属人",
+		"personalAssets": "仅自己可见",
+		"personalVisible": "仅自己可见",
+		"preview": "放大预览",
+		"publicVisible": "官方公开",
+		"refresh": "刷新素材",
+		"search": "搜索素材名称或标签",
+		"selectAsset": "请选择一个素材",
+		"selectAssets": "请选择素材",
+		"selectedAsset": "已选择：{{name}}",
+		"selectedCount": "已选择 {{count}} / {{max}} 项",
+		"teamAssets": "团队可见",
+		"teamVisible": "团队可见",
+		"transferAction": "转移",
+		"transferCurrentOwner": "当前归属人",
+		"transferFailed": "转移归属人失败，请重试",
+		"transferHint": "转移后，当前归属人将不再拥有该素材的编辑和管理权限。",
+		"transferMemberRequired": "请选择一名成员",
+		"transferOwner": "转移归属人",
+		"transferSelectMember": "选择成员",
+		"transferSelectedAsset": "已选择素材",
+		"transferSuccess": "素材归属人已转移",
+		"transferTarget": "目标归属人",
+		"transferTitle": "转移素材归属人",
+		"unknownOwner": "未知归属人",
+		"unsupportedFile": "暂不支持该文件类型",
+		"upload": "上传素材",
+		"uploadAndVerify": "上传素材并认证",
+		"uploadDescription": "新增图片或视频记录",
+		"uploadFailed": "上传素材失败，请重试",
+		"uploadFormatsImage": "图片：jpeg、png、webp、bmp、tiff、gif、heic、heif",
+		"uploadFormatsVideo": "视频：mp4、mov",
+		"uploadTitle": "上传素材",
+		"uploading": "上传中...",
+		"verified": "已通过合规检查",
+		"verifiedOnly": "仅看已认证"
+	},
 	"audio": {
 		"add": "添加音频",
 		"adding": "添加中",
@@ -77,6 +145,11 @@
 		"title": "请选择保留的版本",
 		"useLocal": "保留我的",
 		"useRemote": "使用新的"
+	},
+	"elementMediaCompliance": {
+		"failedHint": "请更换图片后重新认证",
+		"failedHintVideo": "请更换视频后重新认证",
+		"failedTag": "合规校验未通过"
 	},
 	"elementTools": {
 		"audioReplace": {
@@ -386,6 +459,8 @@
 		"pasteUseShortcutHint": "系统文件请使用 Ctrl/Cmd+V 粘贴",
 		"removeFrame": "取消画框",
 		"rename": "重命名",
+		"saveToAssets": "保存到素材库",
+		"seedanceCompliance": "Seedance 2.0 合规校验",
 		"show": "显示",
 		"unlock": "解锁"
 	},
@@ -409,9 +484,19 @@
 		"defaultName": "矩形"
 	},
 	"referenceAssets": {
+		"assets": "素材库",
 		"localUpload": "从本地上传",
 		"projectFilesRoot": "当前项目文件",
 		"projectSelect": "从项目选择"
+	},
+	"seedanceCompliance": {
+		"failed": "合规校验未通过",
+		"failedWithReason": "合规校验未通过：{{reason}}",
+		"passed": "已通过 Seedance 2.0 合规校验",
+		"processing": "合规校验进行中",
+		"started": "已发起 Seedance 2.0 合规校验",
+		"unavailable": "当前媒体无法发起合规校验",
+		"unverified": "该素材尚未开始合规校验"
 	},
 	"shortcuts": {
 		"align": {
@@ -630,6 +715,7 @@
 		"unavailable": "内容优化能力暂不可用"
 	},
 	"tools": {
+		"assets": "素材库",
 		"audioGenerator": "音频生成",
 		"frame": "画框",
 		"hand": "抓手工具",
