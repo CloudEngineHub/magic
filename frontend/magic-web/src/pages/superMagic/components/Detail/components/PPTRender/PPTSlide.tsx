@@ -1135,6 +1135,7 @@ const PPTSlide = observer(function PPTSlide({
 					filePathMapping={filePathMapping}
 					openNewTab={openNewTab}
 					htmlRelativeFolderPath={htmlRelativeFolderPath}
+					projectId={projectId}
 					selectedProject={selectedProject}
 					attachmentList={attachmentList}
 					setSlideContents={updateSlideContents}

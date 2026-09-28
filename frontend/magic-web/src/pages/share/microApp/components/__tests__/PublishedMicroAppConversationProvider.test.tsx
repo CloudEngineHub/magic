@@ -433,7 +433,6 @@ describe("PublishedMicroAppConversationProvider", () => {
 				initialConversationPanelCollapsed: true,
 				collapsedConversationPanelWidth: 40,
 				persistConversationPanelState: false,
-				conversationResizeHandleGripVariant: "dots",
 				detailResizeHandleClassName: "border-l border-border",
 				historyOverlayScope: "container",
 				shouldShowDetailPanel: true,

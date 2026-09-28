@@ -371,6 +371,13 @@ describe("PPTSlide", () => {
 		mockState.isLoadingVersion = false
 	})
 
+	it("preserves the source project for a shared slide without a conversation host", () => {
+		renderPPTSlide({ projectId: "shared-source", selectedProject: undefined, allowEdit: false })
+		expect(mockState.renderedIsolatedProps).toHaveBeenCalledWith(
+			expect.objectContaining({ projectId: "shared-source", isPptRender: true }),
+		)
+	})
+
 	it("向 HTML renderer 传入 PPT 固定缩放尺寸", () => {
 		renderPPTSlide({
 			content: '<div class="slide-container" data-width="1600" data-height="900"></div>',

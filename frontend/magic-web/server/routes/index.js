@@ -61,12 +61,7 @@ const configureRoutes = (app) => {
 	app.get("/startupz", k8sOnlyMiddleware, configRoutes.startup)
 	app.get("/heartbeat", configRoutes.heartbeat)
 	// JSON 解析中间件只用于需要的路由
-	app.post(
-		"/log-report",
-		throttleMiddleware,
-		logReportBody,
-		logsRoutes.report.bind(logsRoutes),
-	)
+	app.post("/log-report", throttleMiddleware, logReportBody, logsRoutes.report.bind(logsRoutes))
 	app.get("/sw.js", serviceWorkerMiddleware)
 	app.get(
 		"/micro-app/:appId/manifest.webmanifest",

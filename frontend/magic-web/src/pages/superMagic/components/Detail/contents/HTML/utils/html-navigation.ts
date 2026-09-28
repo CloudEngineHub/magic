@@ -1,6 +1,10 @@
 import { slugify } from "@/utils/slug"
 
 export interface HtmlNavigationRequest {
+	/** Browser target intent; the host owns tab reuse and activation. */
+	target?: string
+	background?: boolean
+	history?: "push" | "replace"
 	/** Path used for attachment matching. It never contains query or hash. */
 	filePath: string
 	/** Complete query string, including the leading `?` when present. */
@@ -9,6 +13,17 @@ export interface HtmlNavigationRequest {
 	hash: string
 	/** Normalized anchor used by the existing scroll implementation. */
 	anchor: string
+}
+
+export type HtmlNavigationIntent = Pick<HtmlNavigationRequest, "target" | "background" | "history">
+
+/** Message payloads are untrusted even after the iframe source/origin checks. */
+export function getHtmlNavigationIntent(value: Record<string, unknown>): HtmlNavigationIntent {
+	return {
+		target: typeof value.target === "string" && value.target ? value.target : "_self",
+		background: value.background === true,
+		history: value.history === "replace" ? "replace" : "push",
+	}
 }
 
 /**

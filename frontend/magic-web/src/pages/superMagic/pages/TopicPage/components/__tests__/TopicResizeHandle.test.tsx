@@ -11,12 +11,14 @@ describe("TopicResizeHandle", () => {
 
 		expect(handle).toHaveClass("!w-2", "overflow-visible")
 		expect(hitArea).toHaveClass("absolute", "w-4")
+		const grip = screen.getByTestId("resize-grip")
+		expect(grip).toHaveClass("rounded-md", "border", "bg-white", "px-0.5", "py-1")
+		expect(grip.children).toHaveLength(3)
 	})
 
 	it("supports the shared grip on a gray divider with a left border", () => {
 		render(
 			<TopicResizeHandle
-				gripVariant="dots"
 				className="border-l border-border !bg-sidebar"
 				onResizeStart={vi.fn()}
 			/>,

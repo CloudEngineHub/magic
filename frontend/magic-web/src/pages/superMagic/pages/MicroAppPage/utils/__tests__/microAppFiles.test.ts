@@ -86,6 +86,13 @@ describe("microAppFiles", () => {
 		).toBe("first")
 	})
 
+	it("collects nested children without duplicating flat entries and resolves a nested homepage", () => {
+		const nested = file({ file_id: "nested", relative_file_path: "pages/index.html" })
+		const items = [file({ file_id: "folder", type: "directory", children: [nested] }), nested]
+		expect(collectHtmlFiles(items)).toEqual([nested])
+		expect(resolveSelectedHtmlEntry({ items, selectedFileId: "nested" })).toBe(nested)
+	})
+
 	it("keeps a valid selected entry", () => {
 		const selected = resolveSelectedHtmlEntry({
 			selectedFileId: "second",

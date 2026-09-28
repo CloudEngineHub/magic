@@ -3113,6 +3113,10 @@
 			"updateDurationSuccess": "Authorization duration updated",
 			"version": "App version"
 		},
+		"previewRefreshFailed": "The preview could not update. The displayed content may be out of date.",
+		"previewRefreshTooltip": "Load the latest content and restart the page.",
+		"previewRetry": "Retry",
+		"previewUpdating": "Updating preview…",
 		"projectContextUnavailable": "This feature is not supported in share mode. Try sharing through collaboration instead.",
 		"projectFileOperationConfirm": {
 			"cancel": "Cancel",
@@ -3130,6 +3134,7 @@
 			},
 			"title": "Confirm Project File {{operation}}"
 		},
+		"serverUpdateTooltip": "New content is available on the server. Compare versions while keeping your unsaved edits.",
 		"specifiedAgentUnavailable": "This conversation cannot use the specified agent. Using the current one.",
 		"userInfoAuthorizationConfirm": {
 			"allow": "Allow",
@@ -3801,6 +3806,7 @@
 		"previewToolbar": {
 			"address": "Current preview address",
 			"aiEdit": "AI Edit",
+			"closePage": "Close page",
 			"desktop": "Desktop preview",
 			"disableDebug": "Disable debugging",
 			"enableDebug": "Enable debugging",
@@ -3808,6 +3814,10 @@
 			"fullscreen": "Fullscreen preview",
 			"more": "More",
 			"noHtml": "No previewable HTML files",
+			"noOpenPages": "No open pages",
+			"openPage": "Open HTML page",
+			"openPageHint": "Use + above to choose an HTML page to preview.",
+			"pages": "Open pages",
 			"phone": "Mobile preview",
 			"refresh": "Refresh preview",
 			"title": "Preview"
@@ -3829,7 +3839,9 @@
 			"coverUploadFailed": "Cover upload failed. Please try again.",
 			"defaultOpenFile": "Default entry",
 			"defaultOpenFileAuto": "Auto select",
-			"defaultOpenFileDescription": "Only HTML files in the project root are shown. Invalid entries fall back automatically.",
+			"defaultOpenFileDescription": "Choose an HTML file from any project folder. Invalid entries fall back automatically.",
+			"defaultOpenFileEmpty": "No matching HTML files",
+			"defaultOpenFileSearch": "Search file name or path",
 			"description": "After you configure access, others can use this micro app through the published link.",
 			"displaySettings": "Advanced options",
 			"fullScreen": "Fullscreen",
@@ -5792,8 +5804,10 @@
 		"all": "All",
 		"cannotSelectCurrentFolder": "Cannot select the currently selected folder as move target",
 		"chatCount": "{{count}} chats",
+		"collaboratedMicroApps": "Collaborating",
 		"completeFolderCreation": "Complete Folder Creation",
 		"confirm": "Confirm",
+		"createdMicroApps": "Created by me",
 		"createdSuccessfully": "Created Successfully",
 		"defaultFolderName": "New Folder",
 		"defaultProjectName": "New Project",
@@ -5820,6 +5834,7 @@
 		"mentionEmptyProject": "This project has no files",
 		"mentionOtherProjectFiles": "Select Other Project/File",
 		"mentionProjectLimit": "You can select projects or files from up to 10 different projects",
+		"microApps": "Micro apps",
 		"myAgents": "My Digital Employees",
 		"mySkills": "My Skills",
 		"myWorkspaces": "My Workspaces",

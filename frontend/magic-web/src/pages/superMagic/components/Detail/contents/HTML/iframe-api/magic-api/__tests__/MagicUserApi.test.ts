@@ -38,7 +38,7 @@ describe("MagicUserApi", () => {
 			scopes: ["user.profile.display", "user.profile.identity"],
 			reason: "Render the profile card",
 		})
-		expect(origin).toBe("*")
+		expect(origin).toBe(window.location.origin)
 
 		window.dispatchEvent(
 			new MessageEvent("message", {
@@ -49,6 +49,7 @@ describe("MagicUserApi", () => {
 					userInfo: { name: "Ada", avatar: "https://example.test/ada.png" },
 				},
 				source: window.parent,
+				origin: window.location.origin,
 			}),
 		)
 
@@ -71,6 +72,7 @@ describe("MagicUserApi", () => {
 					error: "Permission denied",
 				},
 				source: window.parent,
+				origin: window.location.origin,
 			}),
 		)
 

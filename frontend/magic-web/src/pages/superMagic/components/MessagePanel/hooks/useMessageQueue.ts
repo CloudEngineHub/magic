@@ -18,7 +18,6 @@ import pubsub, { PubSubEvents } from "@/utils/pubsub"
 import { useMemoizedFn, useDeepCompareEffect, useUpdateEffect } from "ahooks"
 import chatWebSocket from "@/apis/clients/chatWebSocket"
 import recordSummaryStore from "@/stores/recordingSummary"
-import { transformMentions } from "../../MessageEditor/utils/mention"
 import magicToast from "@/components/base/MagicToaster/utils"
 import MagicModal from "@/components/base/MagicModal"
 import { normalizeQueuePreviewText } from "../components/MessageQueue/utils"
@@ -27,7 +26,7 @@ import { platformKey } from "@/utils/storage"
 import { userStore } from "@/models/user"
 import { getNetworkMonitor } from "@/services/recordSummary/NetworkMonitor"
 import useQueueDraft from "./useQueueDraft"
-import { resolveAgentSelection } from "@/services/superMagic/DefaultAgentSelectionService"
+import { serializeMessageContent } from "@/pages/superMagic/services/messageQueueSerialization"
 
 // Local queue only stores items that cannot be submitted to the server while offline; the server queue remains the source of truth after reconnect.
 const CLIENT_MESSAGE_QUEUE_STORAGE_ROOT = "super_magic/message_queue/client"
@@ -346,8 +345,7 @@ function useMessageQueue({
 					const clientSyncId = messageContent.extra?.super_agent?.client_queue_sync_id
 					const dynamicParams = messageContent.extra?.super_agent?.dynamic_params
 					const topicPattern = messageContent.extra?.super_agent?.topic_pattern as
-						| TopicMode
-						| undefined
+						TopicMode | undefined
 
 					return {
 						content: jsonContent,
@@ -610,71 +608,6 @@ function useMessageQueue({
 			if (unsubscribe) unsubscribe()
 		}
 	}, [fetchQueueList, isFloatPanelLoaded])
-
-	// 将消息信息序列化为新的API格式
-	const serializeMessageContent = (
-		content: JSONContent,
-		mentionItems: MentionListItem[],
-		selectedModel?: ModelItem | null,
-		selectedImageModel?: ModelItem | null,
-		selectedVideoModel?: ModelItem | null,
-		topicMode?: TopicMode,
-		agentCode?: string,
-		inputMode?: string,
-		clientSyncId?: string,
-		dynamicParams?: Record<string, unknown>,
-	) => {
-		const modelObj = selectedModel
-			? {
-					model_id: selectedModel.model_id,
-					model_name: selectedModel.model_name,
-					model_icon: selectedModel.model_icon,
-				}
-			: { model_id: "auto" }
-
-		const imageModelObj = selectedImageModel?.model_id
-			? {
-					model_id: selectedImageModel.model_id,
-					model_name: selectedImageModel.model_name,
-					model_icon: selectedImageModel.model_icon,
-				}
-			: undefined
-		const videoModelObj = selectedVideoModel?.model_id
-			? {
-					model_id: selectedVideoModel.model_id,
-					model_name: selectedVideoModel.model_name,
-					model_icon: selectedVideoModel.model_icon,
-				}
-			: undefined
-
-		// 转换 mention items，自定义发送给 agent 的内容
-		const transformedMentionItems = transformMentions(mentionItems)
-		const sendSelection = resolveAgentSelection(topicMode, agentCode)
-
-		return {
-			instructs: [
-				{
-					value: inputMode || "plan",
-					instruction: null,
-				},
-			],
-			extra: {
-				super_agent: {
-					mentions: transformedMentionItems,
-					input_mode: inputMode || "plan",
-					chat_mode: "normal",
-					topic_pattern: sendSelection.topicPattern,
-					...(sendSelection.agentCode && { agent_code: sendSelection.agentCode }),
-					...(clientSyncId && { client_queue_sync_id: clientSyncId }),
-					...(dynamicParams && { dynamic_params: dynamicParams }),
-					model: modelObj,
-					...(imageModelObj && { image_model: imageModelObj }),
-					...(videoModelObj && { video_model: videoModelObj }),
-				},
-			},
-			content: JSON.stringify(content),
-		}
-	}
 
 	const syncLocalQueueMessageToServer = useMemoizedFn(
 		async (
@@ -1315,6 +1248,8 @@ function useMessageQueue({
 
 	useEffect(() => {
 		const handler = () => {
+			// External enqueue/consume updates supersede any list request already in flight.
+			queueVersionRef.current += 1
 			fetchQueueList?.()
 		}
 		pubsub.subscribe(PubSubEvents.SuperMagicMessageQueueConsumed, handler)

@@ -3113,6 +3113,10 @@
 			"updateDurationSuccess": "授权时长已更新",
 			"version": "应用版本"
 		},
+		"previewRefreshFailed": "预览未能更新，当前内容可能不是最新版本。",
+		"previewRefreshTooltip": "重新加载最新内容，并重新运行页面。",
+		"previewRetry": "重试",
+		"previewUpdating": "正在更新预览…",
 		"projectContextUnavailable": "分享场景下，该功能暂不支持，可尝试通过协作的方式进行分享。",
 		"projectFileOperationConfirm": {
 			"cancel": "取消",
@@ -3130,6 +3134,7 @@
 			},
 			"title": "确认{{operation}}项目文件"
 		},
+		"serverUpdateTooltip": "服务端已有新内容。先比较版本，当前未保存的编辑会保留。",
 		"specifiedAgentUnavailable": "当前无法使用指定员工，已沿用本会话员工",
 		"userInfoAuthorizationConfirm": {
 			"allow": "允许",
@@ -3800,6 +3805,7 @@
 		"previewToolbar": {
 			"address": "当前预览地址",
 			"aiEdit": "AI 编辑",
+			"closePage": "关闭页面",
 			"desktop": "电脑端预览",
 			"disableDebug": "关闭调试",
 			"enableDebug": "开启调试",
@@ -3807,6 +3813,10 @@
 			"fullscreen": "全屏预览",
 			"more": "更多",
 			"noHtml": "暂无可预览的 HTML 文件",
+			"noOpenPages": "未打开页面",
+			"openPage": "打开 HTML 页面",
+			"openPageHint": "使用顶部的 + 选择 HTML 页面进行预览。",
+			"pages": "已打开页面",
 			"phone": "手机端预览",
 			"refresh": "刷新预览",
 			"title": "预览"
@@ -3828,7 +3838,9 @@
 			"coverUploadFailed": "封面上传失败，请重试",
 			"defaultOpenFile": "默认入口",
 			"defaultOpenFileAuto": "自动选择",
-			"defaultOpenFileDescription": "仅显示项目根目录下的 HTML 文件。文件失效后会自动回退。",
+			"defaultOpenFileDescription": "可选择项目中任意目录的 HTML 文件。文件失效后会自动回退。",
+			"defaultOpenFileEmpty": "未找到匹配的 HTML 文件",
+			"defaultOpenFileSearch": "搜索文件名或路径",
 			"description": "配置访问范围后，其他人可以通过发布链接使用这个微应用。",
 			"displaySettings": "高级选项",
 			"fullScreen": "全屏显示",
@@ -5791,8 +5803,10 @@
 		"all": "全部",
 		"cannotSelectCurrentFolder": "不能选择当前已选中的文件夹作为移动目标",
 		"chatCount": "{{count}} 个对话",
+		"collaboratedMicroApps": "我协作的",
 		"completeFolderCreation": "请完成文件夹创建",
 		"confirm": "确认",
+		"createdMicroApps": "我创建的",
 		"createdSuccessfully": "创建成功",
 		"defaultFolderName": "新建文件夹",
 		"defaultProjectName": "新建项目",
@@ -5819,6 +5833,7 @@
 		"mentionEmptyProject": "当前项目暂无文件",
 		"mentionOtherProjectFiles": "选择其它项目/文件",
 		"mentionProjectLimit": "最多只能选择 10 个不同项目中的项目或文件",
+		"microApps": "微应用",
 		"myAgents": "我的数字员工",
 		"mySkills": "我的技能",
 		"myWorkspaces": "我的工作区",

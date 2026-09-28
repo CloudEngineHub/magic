@@ -1,3 +1,5 @@
+import MicroAppPreviewTabs from "@/pages/superMagic/pages/MicroAppPage/components/MicroAppPreviewTabs"
+import MicroAppPreviewPages from "@/pages/superMagic/pages/MicroAppPage/components/MicroAppPreviewPages"
 import { useMemo } from "react"
 import { FileCode2, Loader2 } from "lucide-react"
 import { useTranslation } from "react-i18next"
@@ -81,7 +83,7 @@ function PublishedMicroAppPreviewSurface({
 		installFlow,
 		previewMode,
 		setPreviewMode,
-		handleOpenFileTab,
+		browser,
 		attachmentsTree,
 		attachmentList,
 		shareMeta,
@@ -192,29 +194,40 @@ function PublishedMicroAppPreviewSurface({
 										/>
 									</header>
 								) : null}
+								{browser.previewTabs.length > 1 && (
+									<div className="flex shrink-0 border-b border-border bg-muted/10">
+										<MicroAppPreviewTabs {...browser} />
+									</div>
+								)}
 								<div className="min-h-0 flex-1 overflow-hidden">
-									<HtmlPreviewContent
-										key={previewFile.file_id || previewFile.relative_file_path}
-										data={buildPreviewFile(previewFile)}
-										attachments={attachmentsTree}
-										attachmentList={attachmentList}
-										allowEdit={false}
-										showFileHeader={false}
-										showFooter={false}
-										viewMode={previewMode}
-										onViewModeChange={setPreviewMode}
-										activeFileId={previewFile.file_id}
-										projectId={shareMeta.projectId}
-										microAppId={appId}
-										microAppName={displayAppName}
-										virtualStorageMarkerId={defaultEntryFile?.file_id}
-										openFileTab={handleOpenFileTab}
-										onHtmlPermissionManagerChange={
-											onHtmlPermissionManagerChange
-										}
-										isSharePreview
-										className="h-full"
-									/>
+									<MicroAppPreviewPages browser={browser}>
+										{({ tab, active, onOpenFile }) => (
+											<HtmlPreviewContent
+												key={`${tab.id}:${tab.revision}`}
+												data={buildPreviewFile(tab.file)}
+												attachments={attachmentsTree}
+												attachmentList={attachmentList}
+												allowEdit={false}
+												showFileHeader={false}
+												showFooter={false}
+												viewMode={previewMode}
+												onViewModeChange={setPreviewMode}
+												activeFileId={tab.file.file_id}
+												projectId={shareMeta.projectId}
+												microAppId={appId}
+												microAppName={displayAppName}
+												virtualStorageMarkerId={defaultEntryFile?.file_id}
+												openFileTab={onOpenFile}
+												onHtmlPermissionManagerChange={
+													active
+														? onHtmlPermissionManagerChange
+														: undefined
+												}
+												isSharePreview
+												className="h-full"
+											/>
+										)}
+									</MicroAppPreviewPages>
 								</div>
 							</div>
 						</PublishedMicroAppConversationProvider>

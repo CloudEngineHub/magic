@@ -885,13 +885,9 @@ class MicroAppProjectAppService extends AbstractAppService
         }
 
         $file = $this->taskFileRepository->getFilesByIds([(int) $fileId], $projectId)[0] ?? null;
-        $root = $this->taskFileRepository->findRootDirectoryByProjectId($projectId);
-        $rootId = $root?->getFileId();
-        $isRootChild = $file?->getParentId() === null || $file?->getParentId() === $rootId;
         if ($file === null
             || $file->getProjectId() !== $projectId
             || $file->getDeletedAt() !== null
-            || ! $isRootChild
             || $file->getIsHidden()
             || $file->getIsDirectory()
             || ! in_array(strtolower($file->getFileExtension()), ['html', 'htm'], true)) {
