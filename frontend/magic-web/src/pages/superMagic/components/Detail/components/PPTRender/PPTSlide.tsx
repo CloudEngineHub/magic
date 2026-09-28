@@ -46,6 +46,7 @@ import { AttachmentItem } from "../../../TopicFilesButton/hooks"
 import MagicSpin from "@/components/base/MagicSpin"
 import { stripSlideNotes } from "./utils/slideNotes"
 import type { FileApi } from "@/pages/superMagic/fileAccess/fileApi"
+import { injectPPTSwipeBridge } from "./utils/pptSwipeBridge"
 import { usePPTSwipeNavigation, type PPTSwipeDirection } from "./hooks/usePPTSwipeNavigation"
 
 export interface PPTSlideToolbarModel {
@@ -219,7 +220,7 @@ const PPTSlide = observer(function PPTSlide({
 	usePPTSwipeNavigation({
 		containerRef: slideWrapperRef,
 		iframe: iframeElement,
-		enabled: isMobile && isInteractive && !isEditMode && Boolean(onSwipe),
+		enabled: (isMobile || isFullscreen) && isInteractive && !isEditMode && Boolean(onSwipe),
 		activationKey: `${renderRevision ?? ""}:${isSlideRenderReady}`,
 		onSwipe: onSwipe ?? (() => undefined),
 	})
@@ -247,6 +248,16 @@ const PPTSlide = observer(function PPTSlide({
 		rawContent: rawContent,
 		sourceVersion: undefined,
 	})
+	// Keep runtime gesture code out of raw source and saved slide content.
+	const hasSwipeNavigation = Boolean(onSwipe)
+	const swipeEnabledContent = useMemo(
+		() =>
+			hasSwipeNavigation
+				? injectPPTSwipeBridge(displayContent.content, window.location.origin)
+				: displayContent.content,
+		[displayContent.content, hasSwipeNavigation],
+	)
+
 	const isDisplayContentCurrent =
 		fileVersion === undefined
 			? displayContent.sourceVersion === undefined &&
@@ -1119,7 +1130,7 @@ const PPTSlide = observer(function PPTSlide({
 				<IsolatedHTMLRenderer
 					key={`${renderRevision || `${fileId}:${content.length}`}:${displayContent.sourceVersion ?? "latest"}`}
 					ref={rendererRef as React.RefObject<IsolatedHTMLRendererRef>}
-					content={displayContent.content}
+					content={swipeEnabledContent}
 					rawSourceCode={displayContent.rawContent}
 					sandboxType="iframe"
 					isPptRender
@@ -1146,7 +1157,7 @@ const PPTSlide = observer(function PPTSlide({
 						// Preserve the backdrop owned by fullscreen and presenter layouts.
 						!isFullscreen && !isPlaybackMode && "!bg-[#eeeeee] dark:!bg-[#2b2b2b]",
 					)}
-					autoFitVerticalPadding={64}
+					autoFitVerticalPadding={isFullscreen ? 0 : 64}
 					manualScale={manualScale}
 					onManualScaleChange={isEditMode ? undefined : onManualScaleChange}
 					onScaleRatioChange={effectiveIsPresented ? onScaleRatioChange : undefined}

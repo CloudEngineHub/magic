@@ -185,6 +185,40 @@ describe("useIframeScaling", () => {
 		})
 	})
 
+	it.each([
+		[740, 375],
+		[1920, 1080],
+		[375, 740],
+	])(
+		"fills the available fullscreen bounds at %s x %s without cropping",
+		async (width, height) => {
+			const container = document.createElement("div")
+			Object.defineProperties(container, {
+				offsetWidth: { value: width },
+				offsetHeight: { value: height },
+			})
+			const { result } = renderHook(() =>
+				useIframeScaling({
+					containerRef: { current: container },
+					iframeRef: createRef<HTMLIFrameElement>(),
+					isPptRender: true,
+					isFullscreen: true,
+					iframeLoaded: true,
+					contentInjected: true,
+					autoFitVerticalPadding: 0,
+					manualScale: 0.5,
+					scaleContentDimensions: { width: 1920, height: 1080 },
+				}),
+			)
+			await waitFor(() =>
+				expect(result.current.scaleRatio).toBeCloseTo(
+					Math.min(width / 1920, height / 1080),
+					5,
+				),
+			)
+		},
+	)
+
 	it("auto-fits PPT fullscreen regardless of the shared manual scale", async () => {
 		const container = document.createElement("div")
 		Object.defineProperties(container, {

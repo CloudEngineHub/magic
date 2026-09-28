@@ -347,6 +347,13 @@ function renderPPTSlide(overrides: Partial<React.ComponentProps<typeof PPTSlide>
 }
 
 describe("PPTSlide", () => {
+	it("removes preview spacing from fullscreen on every device", () => {
+		renderPPTSlide({ isFullscreen: true })
+		expect(mockState.renderedIsolatedProps).toHaveBeenLastCalledWith(
+			expect.objectContaining({ autoFitVerticalPadding: 0 }),
+		)
+	})
+
 	beforeEach(() => {
 		mockState.triggerSave.mockReset()
 		mockState.triggerSave.mockResolvedValue({

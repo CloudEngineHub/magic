@@ -37,11 +37,21 @@ export function usePPTSwipeNavigation({
 			try {
 				if (iframe.contentDocument) targets.push(iframe.contentDocument)
 			} catch {
-				// Cross-origin previews cannot expose their document; the iframe element
-				// listener still provides the best-effort gesture fallback.
+				// Cross-origin previews report gestures through the preview-only message bridge.
 			}
 		}
 
+		const handleMessage = (event: MessageEvent) => {
+			if (!iframe?.contentWindow || event.source !== iframe.contentWindow) return
+			const origin = new URL(iframe.src || window.location.href, window.location.href).origin
+			if (event.origin !== origin || event.data?.type !== "ppt-slide-swipe") return
+			if (event.data.direction === "prev" || event.data.direction === "next")
+				onSwipe(event.data.direction)
+		}
+		window.addEventListener("message", handleMessage)
+		const handleTouchCancel = () => {
+			startRef.current = null
+		}
 		const handleTouchStart = (event: Event) => {
 			const touchEvent = event as TouchEvent
 			if (touchEvent.touches.length !== 1) {
@@ -67,11 +77,15 @@ export function usePPTSwipeNavigation({
 		for (const target of targets) {
 			target.addEventListener("touchstart", handleTouchStart, { passive: true })
 			target.addEventListener("touchend", handleTouchEnd, { passive: true })
+			target.addEventListener("touchcancel", handleTouchCancel, { passive: true })
 		}
 		return () => {
+			window.removeEventListener("message", handleMessage)
+			startRef.current = null
 			for (const target of targets) {
 				target.removeEventListener("touchstart", handleTouchStart)
 				target.removeEventListener("touchend", handleTouchEnd)
+				target.removeEventListener("touchcancel", handleTouchCancel)
 			}
 		}
 	}, [activationKey, containerRef, enabled, iframe, onSwipe])
