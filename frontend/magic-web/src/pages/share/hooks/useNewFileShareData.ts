@@ -145,12 +145,23 @@ export default function useNewFileShareData(): UseNewFileShareDataReturn {
 
 			// 优先使用 resource_id（新格式文件分享）
 			if (resource_id) {
+				// Reuse TopicPage's first/middle/final batch commits so paginated loads do not
+				// setState on every cursor page.
+				let didCommitFinalSnapshot = false
 				loadShareFilesV2({
 					resourceId: resource_id,
 					password,
 					signal: abortController.signal,
+					onBatchSnapshot: ({ tree, list, isFinal }) => {
+						if (attachmentsAbortControllerRef.current !== abortController) return
+						commitAttachments({ tree, list })
+						if (isFinal) didCommitFinalSnapshot = true
+					},
 				})
-					.then(commitAttachments)
+					.then((result) => {
+						if (didCommitFinalSnapshot) return
+						commitAttachments(result)
+					})
 					.catch(handleFailure)
 					.finally(finishLoading)
 			} else if (projectId) {

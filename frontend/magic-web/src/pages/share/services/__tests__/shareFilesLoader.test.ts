@@ -15,10 +15,12 @@ vi.mock("@/utils/manualPerfLogger", () => ({
 	manualPerfLogger: {
 		now: vi.fn(() => 100),
 		isEnabled: vi.fn(() => false),
+		ensureSession: vi.fn(),
 		recordDuration: vi.fn(),
 		logError: vi.fn(),
 		count: vi.fn(),
 		recordMetric: vi.fn(),
+		snapshotHeap: vi.fn(),
 	},
 }))
 
@@ -53,6 +55,7 @@ describe("loadShareFilesV2", () => {
 				list: [
 					attachment({
 						file_id: "folder-1",
+						parent_id: "workspace-root",
 						file_name: "Docs",
 						is_directory: true,
 					}),
@@ -111,6 +114,118 @@ describe("loadShareFilesV2", () => {
 			},
 		])
 		expect(result.list.map((item) => item.file_id)).toEqual(["folder-1", "file-1"])
+	})
+
+	it("reuses project batch scheduling: first paints immediately, final commits complete tree", async () => {
+		mocks.getShareResourceFilesV2Page
+			.mockResolvedValueOnce({
+				list: [
+					attachment({
+						file_id: "folder-1",
+						parent_id: "workspace-root",
+						file_name: "Docs",
+						is_directory: true,
+					}),
+				],
+				next_parent_ids: [
+					{ parent_id: "folder-1", after_sort: 0, after_file_id: "file-1" },
+				],
+				has_more: true,
+			})
+			.mockResolvedValueOnce({
+				list: [
+					attachment({
+						file_id: "file-1",
+						parent_id: "folder-1",
+						file_name: "README.md",
+					}),
+				],
+				next_parent_ids: [],
+				has_more: false,
+			})
+
+		const onBatchSnapshot = vi.fn()
+		const result = await loadShareFilesV2({
+			resourceId: "share-1",
+			onBatchSnapshot,
+		})
+
+		expect(onBatchSnapshot).toHaveBeenCalledTimes(2)
+		expect(onBatchSnapshot.mock.calls[0][0]).toMatchObject({
+			phase: "first",
+			isFinal: false,
+			list: [{ file_id: "folder-1" }],
+		})
+		expect(onBatchSnapshot.mock.calls[1][0]).toMatchObject({
+			phase: "final",
+			isFinal: true,
+		})
+		expect(
+			onBatchSnapshot.mock.calls[1][0].list.map((item: { file_id: string }) => item.file_id),
+		).toEqual(["folder-1", "file-1"])
+		expect(result.list.map((item) => item.file_id)).toEqual(["folder-1", "file-1"])
+	})
+
+	it("coalesces middle pages instead of committing every cursor page", async () => {
+		vi.useFakeTimers()
+		try {
+			mocks.getShareResourceFilesV2Page
+				.mockResolvedValueOnce({
+					list: [
+						attachment({
+							file_id: "folder-1",
+							parent_id: "workspace-root",
+							file_name: "Docs",
+							is_directory: true,
+						}),
+					],
+					next_parent_ids: [{ parent_id: "a", after_sort: 0, after_file_id: "1" }],
+					has_more: true,
+				})
+				.mockResolvedValueOnce({
+					list: [
+						attachment({
+							file_id: "file-1",
+							parent_id: "folder-1",
+							file_name: "a.md",
+						}),
+					],
+					next_parent_ids: [{ parent_id: "b", after_sort: 0, after_file_id: "2" }],
+					has_more: true,
+				})
+				.mockResolvedValueOnce({
+					list: [
+						attachment({
+							file_id: "file-2",
+							parent_id: "folder-1",
+							file_name: "b.md",
+						}),
+					],
+					next_parent_ids: [],
+					has_more: false,
+				})
+
+			const onBatchSnapshot = vi.fn()
+			const resultPromise = loadShareFilesV2({
+				resourceId: "share-1",
+				onBatchSnapshot,
+			})
+			const result = await resultPromise
+
+			// First + final only: the middle page is cancelled by commitFinal before idle flush.
+			expect(onBatchSnapshot).toHaveBeenCalledTimes(2)
+			expect(onBatchSnapshot.mock.calls.map((call) => call[0].phase)).toEqual([
+				"first",
+				"final",
+			])
+			expect(result.list.map((item) => item.file_id)).toEqual([
+				"folder-1",
+				"file-1",
+				"file-2",
+			])
+		} finally {
+			vi.useRealTimers()
+		}
 	})
 
 	it("rejects has_more without a next cursor", async () => {

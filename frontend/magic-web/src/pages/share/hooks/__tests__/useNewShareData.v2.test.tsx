@@ -52,6 +52,7 @@ describe.each([
 			resourceId: "share-1",
 			password: "secret",
 			signal: expect.any(AbortSignal),
+			onBatchSnapshot: expect.any(Function),
 		})
 		expect(mocks.loadProjectAttachments).not.toHaveBeenCalled()
 	})
