@@ -115,7 +115,8 @@ function AppsSubMenu({ children, fixedItems, visible = true, onOpenChange }: App
 			popupRender={renderPopup}
 			open={open}
 			onOpenChange={setOpen}
-			overlayClassName="p-0"
+			// 自定义面板已经提供边框、背景和阴影，外层只保留定位容器，避免出现双层边框。
+			overlayClassName="!w-auto !border-0 !bg-transparent p-0 !shadow-none"
 			contentRole="panel"
 			keepOpenOnNestedOverlay
 			trigger={["click"]}
