@@ -33,6 +33,9 @@ class AssetDTO extends AbstractDTO
 
     public ?string $fileUrl = null;
 
+    /** 原始素材文件键，前端可据此重新解析最新 file_url。 */
+    public ?string $fileKey = null;
+
     /** 合规校验结论：UNVERIFIED / PROCESSING / PASS / FAILED。 */
     public ?string $complianceStatus = 'UNVERIFIED';
 
@@ -128,6 +131,16 @@ class AssetDTO extends AbstractDTO
     public function setFileUrl(?string $fileUrl): void
     {
         $this->fileUrl = $fileUrl;
+    }
+
+    public function getFileKey(): ?string
+    {
+        return $this->fileKey;
+    }
+
+    public function setFileKey(?string $fileKey): void
+    {
+        $this->fileKey = $fileKey;
     }
 
     public function getComplianceStatus(): ?string

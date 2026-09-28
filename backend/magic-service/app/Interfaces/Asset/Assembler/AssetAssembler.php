@@ -68,6 +68,7 @@ class AssetAssembler
         $dto->setName($entity->getI18nName(self::language()));
         $dto->setDescription($entity->getI18nDescription(self::language()));
         $dto->setFileUrl($fileLink?->getUrl() ?? $entity->getFileUrl());
+        $dto->setFileKey($entity->getFileKey());
         $dto->setComplianceStatus(($providerAsset?->getProviderStatus() ?? ProviderAssetStatus::UNVERIFIED)->value);
         $dto->setComplianceFailedReason($providerAsset?->getProviderFailedReason());
         $ownerUid = $entity->getOwnerUid() ?: $entity->getUserId();
@@ -77,7 +78,6 @@ class AssetAssembler
         $dto->setTags($entity->getTags());
         if ($admin) {
             $dto->setStatus($entity->getStatus()->value);
-            $dto->setFileKey($entity->getFileKey());
         }
         return $dto;
     }
