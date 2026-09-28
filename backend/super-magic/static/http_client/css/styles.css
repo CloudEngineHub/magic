@@ -1020,6 +1020,39 @@ input[type="checkbox"] {
     -webkit-backdrop-filter: blur(18px);
 }
 
+.message.follow-up-suggestions {
+    align-self: flex-start;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    max-width: min(78%, 820px);
+    padding: 4px 2px 8px;
+}
+
+.follow-up-suggestions-title {
+    color: var(--wechat-text-gray);
+    font-size: 12px;
+}
+
+.follow-up-suggestion-item {
+    width: fit-content;
+    max-width: 100%;
+    text-align: left;
+    border: 1px solid rgba(60, 60, 67, 0.12);
+    border-radius: 999px;
+    background: rgba(255, 255, 255, 0.92);
+    color: var(--wechat-text-dark);
+    padding: 6px 12px;
+    font-size: 13px;
+    line-height: 1.4;
+    cursor: pointer;
+}
+
+.follow-up-suggestion-item:hover {
+    border-color: rgba(0, 102, 204, 0.35);
+    background: rgba(0, 122, 255, 0.06);
+}
+
 .message.ai .ai-header {
     display: flex;
     align-items: center;

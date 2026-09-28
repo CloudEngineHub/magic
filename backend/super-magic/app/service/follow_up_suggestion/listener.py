@@ -92,21 +92,18 @@ class FollowUpSuggestionListener:
         try:
             job = self._build_job(context, reason)
         except Exception as error:
+            category = error.category if isinstance(error, FollowUpGenerationError) else error.__class__.__name__
             logger.info(
-                "追加问题快照失败 task_id=%s reason=%s category=%s",
-                self._task_id,
-                reason,
-                error.__class__.__name__,
+                f"追加问题快照失败 task_id={self._task_id} reason={reason} category={category}"
             )
             return
         self._background_task = asyncio.create_task(self._service.generate(job))
         self._background_task.add_done_callback(self._release_background)
 
     def _build_job(self, context: Any, reason: str) -> FollowUpGenerationJob:
-        message = context.get_chat_client_message()
-        metadata = None if message is None else message.metadata
-        if metadata is None or not metadata.user_id or not metadata.organization_code or not metadata.authorization:
-            raise FollowUpGenerationError("identity_incomplete")
+        # 调试客户端的 CHAT 只带任务 ID 和个人偏好，身份在初始化消息里。
+        # 聊天消息里的非空值优先；缺哪一项就用初始化消息补哪一项。
+        user_id, organization_code, authorization = self._identity(context)
         history = getattr(context, "chat_history", None)
         if history is None or not hasattr(history, "get_messages_for_llm"):
             raise FollowUpGenerationError("history_missing")
@@ -117,9 +114,9 @@ class FollowUpSuggestionListener:
             trigger_reason=reason,
             messages=messages,
             auth_config=MagicServiceAuthConfig(
-                user_id=str(metadata.user_id),
-                organization_code=str(metadata.organization_code),
-                user_authorization=str(metadata.authorization),
+                user_id=user_id,
+                organization_code=organization_code,
+                user_authorization=authorization,
             ),
             llm_config=llm_config,
             model_timeout_seconds=self._timeout("model_timeout_seconds", 60),
@@ -186,7 +183,46 @@ class FollowUpSuggestionListener:
         except asyncio.CancelledError:
             return
         except Exception as error:
-            logger.info("追加问题后台任务结束 category=%s", error.__class__.__name__)
+            logger.info(f"追加问题后台任务结束 category={error.__class__.__name__}")
+
+    @staticmethod
+    def _identity(context: Any) -> tuple[str, str, str]:
+        chat_metadata = FollowUpSuggestionListener._chat_metadata(context)
+        init_metadata = FollowUpSuggestionListener._init_metadata(context)
+        user_id = FollowUpSuggestionListener._metadata_text(chat_metadata, "user_id") or (
+            FollowUpSuggestionListener._metadata_text(init_metadata, "user_id")
+        )
+        organization_code = FollowUpSuggestionListener._metadata_text(chat_metadata, "organization_code") or (
+            FollowUpSuggestionListener._metadata_text(init_metadata, "organization_code")
+        )
+        authorization = FollowUpSuggestionListener._metadata_text(chat_metadata, "authorization") or (
+            FollowUpSuggestionListener._metadata_text(init_metadata, "authorization")
+        )
+        if user_id == "" or organization_code == "" or authorization == "":
+            raise FollowUpGenerationError("identity_incomplete")
+        return user_id, organization_code, authorization
+
+    @staticmethod
+    def _chat_metadata(context: Any):
+        message = context.get_chat_client_message()
+        return None if message is None else message.metadata
+
+    @staticmethod
+    def _init_metadata(context: Any):
+        getter = getattr(context, "get_init_client_message_metadata", None)
+        if not callable(getter):
+            return None
+        try:
+            return getter()
+        except Exception:
+            return None
+
+    @staticmethod
+    def _metadata_text(metadata: Any, field: str) -> str:
+        if metadata is None:
+            return ""
+        value = getattr(metadata, field, None)
+        return "" if value is None else str(value).strip()
 
     @staticmethod
     def _is_main_agent(context: Any) -> bool:

@@ -385,6 +385,7 @@ function renderClientEntry(entry, options = {}) {
 const serverUrlInput = document.getElementById('serverUrl');
 const authTokenInput = document.getElementById('authToken');
 const longTermMemoryToggle = document.getElementById('longTermMemoryToggle');
+const followUpSuggestionsToggle = document.getElementById('followUpSuggestionsToggle');
 const messageInput = document.getElementById('messageInput');
 const sendBtn = document.getElementById('sendBtn');
 const interruptBtn = document.getElementById('interruptBtn');
@@ -436,6 +437,12 @@ const messageInputPanel = document.getElementById('messageInputPanel');
 const INIT_CONFIG_PANEL_OPEN_KEY = 'httpClient.initConfigPanelOpen';
 const MCP_CONFIG_PANEL_OPEN_KEY = 'httpClient.mcpConfigPanelOpen';
 const LONG_TERM_MEMORY_ENABLED_KEY = 'httpClient.longTermMemoryEnabled';
+const FOLLOW_UP_SUGGESTIONS_ENABLED_KEY = 'httpClient.followUpSuggestionsEnabled';
+const SUGGESTION_STATUS_PENDING = 0;
+const SUGGESTION_STATUS_FAILED = 2;
+const SUGGESTION_RELATION_TYPE_TASK = 1;
+const SUGGESTION_MAX_RETRY_COUNT = 3;
+const SUGGESTION_RETRY_DELAY_MS = 3000;
 const TOKEN_CONTEXT_DEFAULT_LIMIT = 200_000;
 const TOKEN_CONTEXT_WARNING_THRESHOLD = 0.7;
 const TOKEN_CONTEXT_RING_CIRCUMFERENCE = 42.41;
@@ -1644,6 +1651,13 @@ document.addEventListener('DOMContentLoaded', () => {
             localStorage.setItem(LONG_TERM_MEMORY_ENABLED_KEY, String(longTermMemoryToggle.checked));
         });
     }
+    if (followUpSuggestionsToggle) {
+        const savedFollowUpSuggestionsEnabled = localStorage.getItem(FOLLOW_UP_SUGGESTIONS_ENABLED_KEY);
+        followUpSuggestionsToggle.checked = savedFollowUpSuggestionsEnabled !== 'false';
+        followUpSuggestionsToggle.addEventListener('change', () => {
+            localStorage.setItem(FOLLOW_UP_SUGGESTIONS_ENABLED_KEY, String(followUpSuggestionsToggle.checked));
+        });
+    }
     if (imChannelSelect) {
         imChannelSelect.addEventListener('change', () => {
             currentImChannel = imChannelSelect.value;
@@ -2046,6 +2060,7 @@ async function sendHttpMessage(messageData) {
     try {
         injectDebugTaskId(messageData);
         injectLongTermMemoryPreference(messageData);
+        injectFollowUpPreference(messageData);
         applyLocalDebugOptions(messageData);
         const response = await fetch(`${serverUrl}/api/v1/messages/chat`, {
             method: 'POST',
@@ -2081,12 +2096,16 @@ async function sendHttpMessage(messageData) {
  * 为调试面板发送的普通聊天消息注入新的任务 ID.
  * 初始化消息和中断消息不切换任务，避免影响当前运行中的任务状态.
  */
+let currentDebugTaskId = '';
+let followUpPollToken = 0;
+
 function injectDebugTaskId(messageData) {
     if (!messageData || messageData.type !== MessageType.CHAT) return;
     if (messageData.context_type === ContextType.INTERRUPT) return;
 
     messageData.metadata = messageData.metadata || {};
     messageData.metadata.super_magic_task_id = generateDebugTaskId();
+    currentDebugTaskId = messageData.metadata.super_magic_task_id;
 }
 
 /**
@@ -2101,6 +2120,22 @@ function injectLongTermMemoryPreference(messageData) {
         ...(messageData.metadata.personal_preferences || {}),
         long_term_memory_enabled: longTermMemoryToggle
             ? longTermMemoryToggle.checked
+            : true,
+    };
+}
+
+/**
+ * 将调试面板中的追加问题开关注入每次 CHAT metadata。
+ * 关闭后本次主任务不生成追加问题，本页也不再查询。
+ */
+function injectFollowUpPreference(messageData) {
+    if (!messageData || messageData.type !== MessageType.CHAT) return;
+
+    messageData.metadata = messageData.metadata || {};
+    messageData.metadata.personal_preferences = {
+        ...(messageData.metadata.personal_preferences || {}),
+        show_follow_up_suggestions: followUpSuggestionsToggle
+            ? followUpSuggestionsToggle.checked
             : true,
     };
 }
@@ -4506,8 +4541,90 @@ function handleSuperMagicMessage(smsg, payload) {
     }
     if (isMainAgentFinished(payload)) {
         hideAssistantActivity();
+        void pollFollowUpSuggestions(currentDebugTaskId);
     }
     return hasVisibleContent;
+}
+
+function isFollowUpSuggestionsEnabled() {
+    return !followUpSuggestionsToggle || followUpSuggestionsToggle.checked;
+}
+
+function delayFollowUpRetry(ms) {
+    return new Promise((resolve) => {
+        window.setTimeout(resolve, ms);
+    });
+}
+
+/**
+ * 主任务正常结束后，按前端同样的节奏查询追加问题。
+ * status 为 0 时最多再等 3 次，每次 3 秒；完成且有内容才展示，失败或超时不展示。
+ */
+async function pollFollowUpSuggestions(taskId) {
+    if (!taskId || !isFollowUpSuggestionsEnabled()) return;
+    const token = ++followUpPollToken;
+    const serverUrl = (serverUrlInput.value.trim() || 'http://127.0.0.1:8002').replace(/\/+$/, '');
+
+    for (let retryCount = 0; retryCount <= SUGGESTION_MAX_RETRY_COUNT; retryCount += 1) {
+        if (token !== followUpPollToken || !isFollowUpSuggestionsEnabled()) return;
+        let meta = null;
+        try {
+            const response = await fetch(`${serverUrl}/api/v1/debug/follow-up-suggestions`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    type: SUGGESTION_RELATION_TYPE_TASK,
+                    relation_id: taskId,
+                }),
+            });
+            const json = await response.json().catch(() => null);
+            if (!response.ok || !json || json.code !== 1000) return;
+            meta = json.data || null;
+        } catch (error) {
+            console.warn('查询追加问题失败:', error);
+            return;
+        }
+        if (token !== followUpPollToken) return;
+        if (!meta || meta.status === SUGGESTION_STATUS_PENDING) {
+            if (retryCount >= SUGGESTION_MAX_RETRY_COUNT) return;
+            await delayFollowUpRetry(SUGGESTION_RETRY_DELAY_MS);
+            continue;
+        }
+        if (meta.status === SUGGESTION_STATUS_FAILED) return;
+        renderFollowUpSuggestions(taskId, Array.isArray(meta.suggestions) ? meta.suggestions : []);
+        return;
+    }
+}
+
+function renderFollowUpSuggestions(taskId, suggestions) {
+    const items = suggestions.filter((item) => typeof item === 'string' && item.trim());
+    if (!items.length || !messageList) return;
+    const existing = messageList.querySelector(`[data-follow-up-task-id="${taskId}"]`);
+    if (existing) existing.remove();
+
+    const wrapper = document.createElement('div');
+    wrapper.className = 'message follow-up-suggestions';
+    wrapper.dataset.followUpTaskId = taskId;
+
+    const title = document.createElement('div');
+    title.className = 'follow-up-suggestions-title';
+    title.textContent = '追加问题';
+    wrapper.appendChild(title);
+
+    items.forEach((item) => {
+        const button = document.createElement('button');
+        button.type = 'button';
+        button.className = 'follow-up-suggestion-item';
+        button.textContent = item;
+        button.addEventListener('click', () => {
+            if (!messageInput || messageInput.disabled) return;
+            messageInput.value = item;
+            messageInput.dispatchEvent(new Event('input', { bubbles: true }));
+            messageInput.focus();
+        });
+        wrapper.appendChild(button);
+    });
+    appendMessageNode(wrapper);
 }
 
 function isMainAgentFinished(payload) {

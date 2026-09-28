@@ -609,6 +609,12 @@ runtime_cleanup:
     max_age_days: 3
     max_directory_count: 16
 
+  # 追加问题的本地查询副本。产品查询仍走 magic-service。
+  follow_up_suggestions:
+    max_age_days: 7
+    max_file_count: 64
+    target_file_count: 48
+
 # Horizon 的展示额度与 5 MiB 文件扫描保护相互独立。
 # 例：普通文件每份最多 4K，重要规则文件每份最多 16K；所有文件变化合计仍受 24K 约束。
 # 整条通知还包含目录、浏览器和运行时事实，最后统一受 context_max_tokens 约束。

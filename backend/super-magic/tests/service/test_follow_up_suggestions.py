@@ -5,6 +5,8 @@ from types import SimpleNamespace
 
 import pytest
 
+from app.path_manager import PathManager
+
 from agentlang.event.data import (
     AfterAgentLoopEventData,
     AfterMainAgentRunEventData,
@@ -25,12 +27,32 @@ from app.service.follow_up_suggestion.service import (
     STATUS_DONE,
     STATUS_FAILED,
     STATUS_GENERATING,
+    FollowUpGenerationError,
     FollowUpGenerationJob,
     FollowUpSuggestionService,
     parse_follow_up_arguments,
 )
+from app.service.follow_up_suggestion.store import (
+    STATUS_DONE as STORE_STATUS_DONE,
+    STATUS_FAILED as STORE_STATUS_FAILED,
+    STATUS_GENERATING as STORE_STATUS_GENERATING,
+    FollowUpSuggestionStore,
+)
 from app.infrastructure.sdk.magic_service.kernel.magic_service_parameter import MagicServiceAuthConfig
 from app.infrastructure.sdk.magic_service.result.follow_up_suggestion_result import FollowUpSuggestionResult
+
+
+@pytest.fixture(autouse=True)
+def isolate_follow_up_runtime(monkeypatch, tmp_path):
+    """避免单测把追加问题写进项目自己的 .runtime。"""
+    runtime = tmp_path / ".runtime"
+    runtime.mkdir()
+    monkeypatch.setattr(PathManager, "get_runtime_dir", classmethod(lambda cls: runtime))
+    monkeypatch.setattr(
+        "app.service.follow_up_suggestion.store.trigger_opportunistic_cleanup",
+        lambda *_args, **_kwargs: None,
+    )
+    return runtime
 
 
 def test_explicit_false_follow_up_preference_is_preserved():
@@ -215,6 +237,61 @@ def test_listener_finished_before_threshold_submits_and_waiting_does_not():
     assert service.reasons == ["finished"]
 
 
+def test_build_job_fills_missing_chat_identity_from_init_message():
+    listener = FollowUpSuggestionListener()
+    listener._snapshot_model = lambda: SimpleNamespace()
+    context = _context()
+    context.get_chat_client_message = lambda: SimpleNamespace(metadata=SimpleNamespace(
+        user_id="",
+        organization_code=None,
+        authorization=None,
+    ))
+    context.get_init_client_message_metadata = lambda: SimpleNamespace(
+        user_id="init-user",
+        organization_code="init-org",
+        authorization="init-token",
+    )
+
+    job = listener._build_job(context, "finished")
+
+    assert job.auth_config.user_id == "init-user"
+    assert job.auth_config.organization_code == "init-org"
+    assert job.auth_config.user_authorization == "init-token"
+
+
+def test_build_job_keeps_chat_identity_when_present():
+    listener = FollowUpSuggestionListener()
+    listener._snapshot_model = lambda: SimpleNamespace()
+    context = _context()
+    context.get_init_client_message_metadata = lambda: SimpleNamespace(
+        user_id="init-user",
+        organization_code="init-org",
+        authorization="init-token",
+    )
+
+    job = listener._build_job(context, "finished")
+
+    assert job.auth_config.user_id == "user-1"
+    assert job.auth_config.organization_code == "org-1"
+    assert job.auth_config.user_authorization == "secret-token"
+
+
+def test_build_job_still_fails_when_both_identities_are_missing():
+    listener = FollowUpSuggestionListener()
+    context = _context()
+    context.get_chat_client_message = lambda: SimpleNamespace(metadata=SimpleNamespace(
+        user_id="",
+        organization_code="",
+        authorization="",
+    ))
+    context.get_init_client_message_metadata = lambda: None
+
+    with pytest.raises(FollowUpGenerationError) as error:
+        listener._build_job(context, "finished")
+
+    assert error.value.category == "identity_incomplete"
+
+
 def test_listener_disabled_preference_does_not_submit():
     service = _RecordingService()
     listener = FollowUpSuggestionListener(service)
@@ -348,4 +425,165 @@ def test_service_skips_model_when_storage_is_already_terminal(monkeypatch):
 
     asyncio.run(FollowUpSuggestionService().generate(_job()))
 
+    record = asyncio.run(FollowUpSuggestionStore().load("100"))
     assert calls == []
+    assert record is not None
+    assert record.status == STATUS_DONE
+    assert record.suggestions == ["已有"]
+
+
+def test_store_status_matches_report_status():
+    assert STORE_STATUS_GENERATING == STATUS_GENERATING
+    assert STORE_STATUS_DONE == STATUS_DONE
+    assert STORE_STATUS_FAILED == STATUS_FAILED
+
+
+def test_store_keeps_terminal_file_and_query_waits_when_missing(isolate_follow_up_runtime):
+    store = FollowUpSuggestionStore()
+
+    async def scenario():
+        missing = await store.query("100")
+        assert missing == {"status": STATUS_GENERATING, "suggestions": []}
+        assert await store.query("../100") is None
+        saved = await store.save("100", STATUS_DONE, ["已有"])
+        kept = await store.save("100", STATUS_GENERATING, ["新的"])
+        loaded = await store.load("100")
+        return saved, kept, loaded
+
+    saved, kept, loaded = asyncio.run(scenario())
+    assert saved is not None and saved.suggestions == ["已有"]
+    assert kept is not None and kept.status == STATUS_DONE and kept.suggestions == ["已有"]
+    assert loaded is not None and loaded.suggestions == ["已有"]
+    assert (isolate_follow_up_runtime / "follow_up_suggestions" / "100.json").is_file()
+
+
+def test_service_writes_local_file_and_still_reports(monkeypatch, isolate_follow_up_runtime):
+    reports = []
+
+    async def fake_call(**_kwargs):
+        return _completion('{"suggestions":["下一步"]}')
+
+    class FakeApi:
+        async def report_async(self, parameter):
+            reports.append(parameter.to_body())
+            return FollowUpSuggestionResult({
+                "type": 1,
+                "relation_id": "100",
+                "status": STATUS_GENERATING if parameter.status == STATUS_GENERATING else parameter.status,
+                "suggestions": parameter.suggestions or [],
+            })
+
+    monkeypatch.setattr(LLMFactory, "call_with_tool_support", fake_call)
+    monkeypatch.setattr(
+        "app.service.follow_up_suggestion.service.create_magic_service_sdk",
+        lambda **kwargs: SimpleNamespace(follow_up_suggestion=FakeApi()),
+    )
+    monkeypatch.setattr(
+        "app.service.follow_up_suggestion.service.is_local_debug_mode_enabled",
+        lambda: False,
+    )
+
+    asyncio.run(FollowUpSuggestionService().generate(_job()))
+
+    record = asyncio.run(FollowUpSuggestionStore().load("100"))
+    assert [item["status"] for item in reports] == [STATUS_GENERATING, STATUS_DONE]
+    assert record is not None
+    assert record.status == STATUS_DONE
+    assert record.suggestions == ["下一步"]
+    assert isolate_follow_up_runtime == PathManager.get_runtime_dir()
+
+
+def test_report_done_failure_log_keeps_elapsed_and_count(monkeypatch):
+    messages = []
+
+    async def fake_call(**_kwargs):
+        return _completion('{"suggestions":["本地问题"]}')
+
+    class FakeApi:
+        async def report_async(self, parameter):
+            if parameter.status == STATUS_DONE:
+                raise RuntimeError("magic-service unavailable")
+            return FollowUpSuggestionResult({
+                "type": 1,
+                "relation_id": "100",
+                "status": STATUS_GENERATING,
+                "suggestions": [],
+            })
+
+    monkeypatch.setattr(LLMFactory, "call_with_tool_support", fake_call)
+    monkeypatch.setattr(
+        "app.service.follow_up_suggestion.service.create_magic_service_sdk",
+        lambda **kwargs: SimpleNamespace(follow_up_suggestion=FakeApi()),
+    )
+    monkeypatch.setattr(
+        "app.service.follow_up_suggestion.service.logger.info",
+        lambda message: messages.append(message),
+    )
+
+    asyncio.run(FollowUpSuggestionService().generate(_job()))
+
+    done_logs = [message for message in messages if "state=report_done_failed" in message]
+    assert len(done_logs) == 1
+    assert "status=1" in done_logs[0]
+    assert "count=1" in done_logs[0]
+    assert "elapsed=" in done_logs[0]
+    assert "elapsed=0.000" not in done_logs[0]
+    assert "category=RuntimeError" in done_logs[0]
+
+
+def test_local_debug_still_generates_when_report_fails(monkeypatch):
+    calls = []
+
+    async def fake_call(**_kwargs):
+        calls.append(1)
+        return _completion('{"suggestions":["本地问题"]}')
+
+    class FakeApi:
+        async def report_async(self, _parameter):
+            raise RuntimeError("magic-service unavailable")
+
+    monkeypatch.setattr(LLMFactory, "call_with_tool_support", fake_call)
+    monkeypatch.setattr(
+        "app.service.follow_up_suggestion.service.create_magic_service_sdk",
+        lambda **kwargs: SimpleNamespace(follow_up_suggestion=FakeApi()),
+    )
+    monkeypatch.setattr(
+        "app.service.follow_up_suggestion.service.is_local_debug_mode_enabled",
+        lambda: True,
+    )
+
+    asyncio.run(FollowUpSuggestionService().generate(_job()))
+
+    record = asyncio.run(FollowUpSuggestionStore().load("100"))
+    assert calls == [1]
+    assert record is not None
+    assert record.status == STATUS_DONE
+    assert record.suggestions == ["本地问题"]
+
+
+def test_production_report_failure_does_not_call_model(monkeypatch):
+    calls = []
+
+    async def fake_call(**_kwargs):
+        calls.append(1)
+        return _completion('{"suggestions":["不该出现"]}')
+
+    class FakeApi:
+        async def report_async(self, _parameter):
+            raise RuntimeError("magic-service unavailable")
+
+    monkeypatch.setattr(LLMFactory, "call_with_tool_support", fake_call)
+    monkeypatch.setattr(
+        "app.service.follow_up_suggestion.service.create_magic_service_sdk",
+        lambda **kwargs: SimpleNamespace(follow_up_suggestion=FakeApi()),
+    )
+    monkeypatch.setattr(
+        "app.service.follow_up_suggestion.service.is_local_debug_mode_enabled",
+        lambda: False,
+    )
+
+    asyncio.run(FollowUpSuggestionService().generate(_job()))
+
+    record = asyncio.run(FollowUpSuggestionStore().load("100"))
+    assert calls == []
+    assert record is None
