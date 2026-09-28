@@ -1779,7 +1779,7 @@ export const generateSuperMagicApi = (fetch: ServiceHttpClient) => ({
 		requestConfig?: Omit<RequestConfig, "url" | "body">,
 	) {
 		return fetch.post<GetShareResourceFilesV2Response>(
-			`/api/v1/share/resources/${params.resourceId}/files/queries/v2`,
+			`/api/v2/share/resources/${params.resourceId}/files/queries`,
 			{
 				page_size: params.pageSize ?? 1000,
 				...(params.password !== undefined ? { pwd: params.password } : {}),
