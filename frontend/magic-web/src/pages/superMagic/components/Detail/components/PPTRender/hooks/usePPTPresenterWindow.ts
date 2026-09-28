@@ -147,10 +147,8 @@ export function usePPTPresenterWindow(targetRef: RefObject<HTMLElement>) {
 					padding: "16px",
 					boxSizing: "border-box",
 					background: "#333",
-					display: "grid",
-					gap: "16px",
-					gridTemplateColumns: "minmax(0,3fr) minmax(0,2fr)",
-					gridTemplateRows: "minmax(0,1fr) minmax(0,1fr) auto",
+					display: "flex",
+					flexDirection: "column",
 				})
 				setConsoleContainer(root)
 				popup.focus()

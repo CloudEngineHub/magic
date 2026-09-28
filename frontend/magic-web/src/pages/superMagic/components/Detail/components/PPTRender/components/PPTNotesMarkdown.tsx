@@ -5,6 +5,7 @@ import type { SimpleEditorRef } from "@/components/tiptap-templates/simple/types
 
 interface PPTNotesMarkdownProps {
 	overview?: boolean
+	fontSize?: number
 	value: string
 	readOnly: boolean
 	onChange: (value: string) => void
@@ -18,6 +19,7 @@ export default function PPTNotesMarkdown({
 	onChange,
 	onSave,
 	overview = false,
+	fontSize = 13,
 }: PPTNotesMarkdownProps) {
 	const { t } = useTranslation("super")
 	const editorRef = useRef<SimpleEditorRef>(null)
@@ -35,6 +37,9 @@ export default function PPTNotesMarkdown({
 	return (
 		<div
 			data-testid="ppt-speaker-notes-content"
+			// Scale the rendered Markdown uniformly, including headings with their own font sizes.
+			// CSS zoom participates in layout so the panel scrollbar tracks the larger text.
+			style={{ zoom: fontSize / 13 }}
 			className="relative mx-3 mb-3 min-h-20 rounded-lg bg-muted/40 text-[13px] leading-6 text-foreground focus-within:ring-1 focus-within:ring-ring/40"
 			onKeyDown={(event) => {
 				// Notes own the arrow keys and save shortcut; do not navigate the slide behind them.

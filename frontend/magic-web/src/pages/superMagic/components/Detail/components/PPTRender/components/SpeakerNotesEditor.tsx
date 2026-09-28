@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react"
 import { useMemoizedFn } from "ahooks"
 import { useTranslation } from "react-i18next"
-import { Loader2, NotebookPen } from "lucide-react"
+import { Loader2, NotebookPen, AArrowDown, AArrowUp } from "lucide-react"
 import { Button } from "@/components/shadcn-ui/button"
 import { cn } from "@/utils/cn"
 import { shadow } from "@/utils/shadow"
@@ -26,11 +26,15 @@ export default function SpeakerNotesEditor({
 	onDraftChange,
 	onDraftSaved,
 	overview = false,
+	fontSize = 13,
+	onFontSizeChange,
 	isCurrentPage,
 	onSaveStateChange,
 }: PPTSpeakerNotesPanelProps & {
 	onSaveStateChange: (state: SaveState | undefined) => void
 	overview?: boolean
+	fontSize?: number
+	onFontSizeChange?: (size: number) => void
 	isCurrentPage: boolean
 	initialDraft?: string
 	onDraftChange: (draft: string | undefined) => void
@@ -136,6 +140,32 @@ export default function SpeakerNotesEditor({
 					</h2>
 				</div>
 				<div className="flex flex-wrap items-center gap-1">
+					{onFontSizeChange && (
+						<>
+							<Button
+								type="button"
+								variant="ghost"
+								size="icon"
+								className="size-7 text-muted-foreground"
+								aria-label={t("ppt.speakerNotes.decreaseFontSize")}
+								disabled={fontSize <= 11}
+								onClick={() => onFontSizeChange(Math.max(11, fontSize - 2))}
+							>
+								<AArrowDown size={16} />
+							</Button>
+							<Button
+								type="button"
+								variant="ghost"
+								size="icon"
+								className="size-7 text-muted-foreground"
+								aria-label={t("ppt.speakerNotes.increaseFontSize")}
+								disabled={fontSize >= 31}
+								onClick={() => onFontSizeChange(Math.min(31, fontSize + 2))}
+							>
+								<AArrowUp size={16} />
+							</Button>
+						</>
+					)}
 					{onGenerate && (
 						<div
 							className={cn(
@@ -176,6 +206,7 @@ export default function SpeakerNotesEditor({
 			</div>
 
 			<PPTNotesMarkdown
+				fontSize={fontSize}
 				overview={overview}
 				value={isEditing ? draft : notes}
 				readOnly={saveState === "saving" || !allowEdit}

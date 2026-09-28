@@ -403,6 +403,29 @@ describe("PPTSpeakerNotesPanel", () => {
 		expect(screen.queryByTestId("ppt-speaker-notes-editor")).not.toBeInTheDocument()
 	})
 
+	it("keeps presenter reading size across slides without saving note content", () => {
+		const saveEditContent = vi.fn()
+		const props = {
+			layout: "presenter" as const,
+			slideIndex: 0,
+			fileId: "one",
+			rawContent: "<template data-magic-slide-notes>Notes</template>",
+			allowEdit: false,
+			onSaved: vi.fn(),
+			saveEditContent,
+		}
+		const view = render(<PPTSpeakerNotesPanel {...props} />)
+		fireEvent.click(screen.getByLabelText("ppt.speakerNotes.increaseFontSize"))
+		const zoom = screen.getByTestId("ppt-speaker-notes-content").style.zoom
+		expect(Number(zoom)).toBeGreaterThan(1)
+		view.rerender(<PPTSpeakerNotesPanel {...props} slideIndex={1} fileId="two" />)
+		expect(screen.getByTestId("ppt-speaker-notes-content").style.zoom).toBe(zoom)
+		for (let i = 0; i < 20; i++)
+			fireEvent.click(screen.getByLabelText("ppt.speakerNotes.decreaseFontSize"))
+		expect(screen.getByLabelText("ppt.speakerNotes.decreaseFontSize")).toBeDisabled()
+		expect(saveEditContent).not.toHaveBeenCalled()
+	})
+
 	it("fills the dedicated presenter panel without resize or overlay behavior", () => {
 		pptNotesPreferenceStore.setHeight(300)
 		render(

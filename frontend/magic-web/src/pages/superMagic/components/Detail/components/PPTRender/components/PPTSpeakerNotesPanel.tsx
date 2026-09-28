@@ -16,6 +16,7 @@ export default function PPTSpeakerNotesPanel(props: PPTSpeakerNotesPanelProps) {
 	const drafts = useRef(new Map<string, string>())
 	const [overviewSelected, setShowAll] = useState(false)
 	const isPresenter = props.layout === "presenter"
+	const [notesFontSize, setNotesFontSize] = useState(13)
 	const showAll = overviewSelected && !isPresenter
 	const [openedAll, setOpenedAll] = useState(false)
 	const { panelRef, height, overlay, inFlowHeight, resizeHandleProps } = useSpeakerNotesResize()
@@ -186,6 +187,8 @@ export default function PPTSpeakerNotesPanel(props: PPTSpeakerNotesPanelProps) {
 								<SpeakerNotesEditor
 									{...props}
 									overview={showAll}
+									fontSize={isPresenter ? notesFontSize : 13}
+									onFontSizeChange={isPresenter ? setNotesFontSize : undefined}
 									isCurrentPage={slide.key === currentSlide.key}
 									onSaveStateChange={(state) =>
 										setSaveStates((previous) => {

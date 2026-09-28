@@ -65,6 +65,8 @@ import EditToolbar from "../EditToolbar"
 import PPTSpeakerNotesPanel from "./components/PPTSpeakerNotesPanel"
 import PPTPresenterNextSlide from "./components/PPTPresenterNextSlide"
 import PPTPresenterConsoleControls from "./components/PPTPresenterConsoleControls"
+import PPTPresenterLayout from "./components/PPTPresenterLayout"
+import PPTPresenterFilmstrip from "./components/PPTPresenterFilmstrip"
 import type { PPTNotesAction } from "./components/PPTNotesActions"
 import { pptNotesPreferenceStore } from "@/stores/layout/PPTNotesPreferenceStore"
 import { runGuardedAction } from "../../utils/actionGuard"
@@ -1540,14 +1542,16 @@ const PPTRenderInner = observer(function PPTRenderInner({
 
 							{presenterConsoleContainer ? (
 								createPortal(
-									<>
-										<PPTPresenterNextSlide
-											current
-											content={store.currentSlide?.content}
-											rawContent={store.currentSlide?.rawContent}
-											isLastSlide={false}
-										/>
-										{isPresenterConsole && (
+									<PPTPresenterLayout
+										current={
+											<PPTPresenterNextSlide
+												current
+												content={store.currentSlide?.content}
+												rawContent={store.currentSlide?.rawContent}
+												isLastSlide={false}
+											/>
+										}
+										next={
 											<PPTPresenterNextSlide
 												content={store.slides[nextVisibleIndex]?.content}
 												loadingError={
@@ -1562,36 +1566,47 @@ const PPTRenderInner = observer(function PPTRenderInner({
 												}
 												isLastSlide={nextVisibleIndex < 0}
 											/>
-										)}
+										}
 
-										{isPresenterConsole && store.isReady && hasSlides && (
-											<PPTPresenterConsoleControls
-												canGoPrevious={visibleSlideIndices.some(
-													(index) => index < store.activeIndex,
-												)}
-												canGoNext={nextVisibleIndex >= 0}
-												activeIndex={store.activeIndex}
-												totalSlides={store.slideUrls.length}
-												isTransitioning={store.isTransitioning}
-												screens={presenterScreens}
-												selectedScreen={selectedPresenterScreen}
-												onPrevSlide={() => void changeSlide("prev")}
-												onNextSlide={() => void changeSlide("next")}
-												onJumpToPage={handleJumpToPage}
-												onSelectScreen={(index) => {
-													// The companion delegates activation from its own click listener.
-													if (!presenterConsoleContainer)
-														void movePresenterToScreen(index)
-												}}
-												onExit={closePresenterWindow}
-											/>
-										)}
-										{!isSingleWindowFullscreen &&
+										controls={
 											store.isReady &&
-											hasSlides &&
-											store.currentSlide &&
-											speakerNotesPanel}
-									</>,
+											hasSlides && (
+												<PPTPresenterConsoleControls
+													canGoPrevious={visibleSlideIndices.some(
+														(index) => index < store.activeIndex,
+													)}
+													canGoNext={nextVisibleIndex >= 0}
+													activeIndex={store.activeIndex}
+													totalSlides={store.slideUrls.length}
+													isTransitioning={store.isTransitioning}
+													screens={presenterScreens}
+													selectedScreen={selectedPresenterScreen}
+													onPrevSlide={() => void changeSlide("prev")}
+													onNextSlide={() => void changeSlide("next")}
+													onJumpToPage={handleJumpToPage}
+													onSelectScreen={(index) => {
+														// The companion delegates activation from its own click listener.
+														if (!presenterConsoleContainer)
+															void movePresenterToScreen(index)
+													}}
+													onExit={closePresenterWindow}
+												/>
+											)
+										}
+										notes={speakerNotesPanel}
+										filmstrip={
+											<PPTPresenterFilmstrip
+												slides={store.slides}
+												indices={visibleSlideIndices}
+												activeIndex={store.activeIndex}
+												disabled={store.isTransitioning}
+												onSelect={handleJumpToPage}
+												onLoad={(index) =>
+													void store.ensureSlideContent(index)
+												}
+											/>
+										}
+									/>,
 									presenterConsoleContainer,
 								)
 							) : (

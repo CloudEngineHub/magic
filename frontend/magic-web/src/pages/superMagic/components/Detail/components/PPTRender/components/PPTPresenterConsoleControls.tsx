@@ -1,4 +1,5 @@
-import { useEffect, useRef, useState } from "react"
+import PPTPresenterTimer from "./PPTPresenterTimer"
+import { useRef, useState } from "react"
 import { useTranslation } from "react-i18next"
 import { ChevronLeft, ChevronRight, Check, LogOut, Monitor } from "lucide-react"
 import { Button } from "@/components/shadcn-ui/button"
@@ -49,18 +50,6 @@ export default function PPTPresenterConsoleControls({
 	const controlsRef = useRef<HTMLDivElement>(null)
 	const [isPageInputVisible, setIsPageInputVisible] = useState(false)
 	const [pageInput, setPageInput] = useState("")
-	const [elapsedSeconds, setElapsedSeconds] = useState(0)
-	useEffect(() => {
-		const startedAt = Date.now()
-		const timer = window.setInterval(() => {
-			// Derive elapsed time from the clock so background timer throttling does not lose time.
-			setElapsedSeconds(Math.floor((Date.now() - startedAt) / 1000))
-		}, 1000)
-		return () => window.clearInterval(timer)
-	}, [])
-	const elapsed = `${Math.floor(elapsedSeconds / 60)
-		.toString()
-		.padStart(2, "0")}:${(elapsedSeconds % 60).toString().padStart(2, "0")}`
 
 	const submitPage = () => {
 		const page = Number(pageInput)
@@ -73,14 +62,9 @@ export default function PPTPresenterConsoleControls({
 		<div
 			ref={controlsRef}
 			data-testid="ppt-presenter-console-controls"
-			className="col-span-2 row-start-3 flex min-w-0 flex-wrap items-center justify-center gap-1 rounded-xl border border-white/15 bg-black/75 p-1.5 text-white"
+			className="flex min-w-0 shrink-0 flex-wrap items-center justify-center gap-1 rounded-xl border border-white/15 bg-black/75 p-1.5 text-white"
 		>
-			<span
-				className="mr-auto px-2 text-sm tabular-nums text-white/70"
-				aria-label={t("ppt.presenter.elapsedTime")}
-			>
-				{elapsed}
-			</span>
+			<PPTPresenterTimer />
 			<Button
 				variant="ghost"
 				size="icon"
