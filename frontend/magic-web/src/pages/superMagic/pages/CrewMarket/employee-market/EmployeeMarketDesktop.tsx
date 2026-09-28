@@ -253,7 +253,7 @@ function EmployeeMarketDesktop({ scrollViewportRef }: EmployeeMarketDesktopProps
 			{dialog}
 			<div className="flex min-w-0 flex-col pt-5 sm:pt-6">
 				<div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
-					<div className="flex min-w-0 flex-1 flex-col gap-2">
+					<div className="flex min-w-0 flex-1 flex-col gap-2.5">
 						<SkillMarketTabs
 							value={SKILL_MARKET_TAB_VALUES.crew}
 							onValueChange={(value) => {
