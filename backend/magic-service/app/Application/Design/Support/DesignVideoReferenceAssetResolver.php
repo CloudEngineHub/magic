@@ -234,7 +234,12 @@ final class DesignVideoReferenceAssetResolver
             );
             $this->fileDomainService->uploadByCredential($organizationCode, $uploadFile);
 
-            $asset = $this->assetAppService->createPersonalAsset($dataIsolation, $this->buildCreateDto($uploadFile->getKey(), $fileEntity->getFileName()));
+            // 视频生成链路必须立即拿到 provider_asset_id，因此这里使用同步创建；普通素材创建接口仍保持异步。
+            $asset = $this->assetAppService->createPersonalAsset(
+                $dataIsolation,
+                $this->buildCreateDto($uploadFile->getKey(), $fileEntity->getFileName()),
+                true,
+            );
             // 新建素材同步完成后才能拿到第三方素材 ID；取不到则退回原始 uri，保障本次请求可用。
             $providerAssetId = $this->assetDomainService->findProviderAssetId(
                 AssetDataIsolation::createByBaseDataIsolation($dataIsolation),

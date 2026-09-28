@@ -340,6 +340,7 @@ class AssetDomainService
         AssetDataIsolation $dataIsolation,
         int|string $assetId,
         ?string $fileUrl,
+        bool $skipProviderReview = false,
     ): ProviderAssetEntity {
         $asset = $this->assets->findById($dataIsolation, $assetId);
         if ($asset === null || ! $asset->isOwnedBy(
@@ -361,13 +362,13 @@ class AssetDomainService
             }
         }
         $asset->setFileUrl($fileUrl);
-        return $this->syncToProvider($dataIsolation, $asset);
+        return $this->syncToProvider($dataIsolation, $asset, $skipProviderReview);
     }
 
     /**
      * 在启动异步同步前建立可轮询的初始映射。
      *
-     * 合规接口以 Provider 映射为唯一状态来源；先写入 PENDING，避免创建接口返回后
+     * 合规接口以 Provider 映射为唯一状态来源；先写入 UNVERIFIED，避免创建接口返回后
      * 协程尚未开始时被误判为 UNVERIFIED。
      */
     public function ensureProviderAssetPending(
@@ -381,7 +382,7 @@ class AssetDomainService
         )) {
             ExceptionBuilder::throw(AssetErrorCode::NOT_FOUND);
         }
-        return $this->markProviderStatus($dataIsolation, $asset, ProviderAssetStatus::PENDING);
+        return $this->markProviderStatus($dataIsolation, $asset, ProviderAssetStatus::UNVERIFIED);
     }
 
     /**
@@ -578,7 +579,11 @@ class AssetDomainService
      *
      * 失败只回写 Provider 映射状态，不回收远程资源：凭证可查、可重试、可人工处置。
      */
-    private function syncToProvider(AssetDataIsolation $dataIsolation, AssetEntity $asset): ProviderAssetEntity
+    private function syncToProvider(
+        AssetDataIsolation $dataIsolation,
+        AssetEntity $asset,
+        bool $skipProviderReview = false,
+    ): ProviderAssetEntity
     {
         $this->markProviderStatus($dataIsolation, $asset, ProviderAssetStatus::PROCESSING);
         try {
@@ -600,7 +605,13 @@ class AssetDomainService
             $providerGroupId = $this->createProviderAssetGroup($this->resolveProviderGroupName($asset));
             $this->persistGroupMapping($dataIsolation, $asset, $providerGroupId);
             $providerAssetEntity = $this->createProviderAsset($dataIsolation, $asset, $providerGroupId);
-            $this->awaitProviderAssetPassed($dataIsolation, $asset, $providerAssetEntity);
+            if (! $skipProviderReview) {
+                $this->awaitProviderAssetPassed($dataIsolation, $asset, $providerAssetEntity);
+            } else {
+                $providerAssetEntity->setProviderStatus(ProviderAssetStatus::PASS);
+                $providerAssetEntity->setProviderFailedReason(null);
+                $this->providerAssets->saveMapping($dataIsolation, $providerAssetEntity);
+            }
         } catch (Throwable $throwable) {
             $this->markProviderStatus(
                 $dataIsolation,

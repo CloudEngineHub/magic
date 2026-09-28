@@ -8,6 +8,7 @@ declare(strict_types=1);
 namespace App\Application\Asset\Service;
 
 use App\Application\Asset\Support\ProjectFileMaterializer;
+use App\Application\ModelGateway\Service\LLMAppService;
 use App\Domain\Asset\Entity\AssetDataIsolation;
 use App\Domain\Asset\Entity\AssetEntity;
 use App\Domain\Asset\Entity\AssetTagEntity;
@@ -22,6 +23,11 @@ use App\Domain\Contact\Service\MagicUserDomainService;
 use App\Domain\Permission\Entity\ValueObject\ResourceVisibility\PrincipalType;
 use App\Domain\Permission\Entity\ValueObject\ResourceVisibility\ResourceType;
 use App\Domain\Permission\Service\ResourceVisibilityDomainService;
+use App\Domain\ModelGateway\Entity\Dto\CompletionDTO;
+use App\Domain\ModelGateway\Entity\ValueObject\SourceId;
+use App\Domain\Provider\Entity\ValueObject\AiAbilityCode;
+use App\Domain\Provider\Entity\ValueObject\ProviderDataIsolation;
+use App\Domain\Provider\Service\AiAbilityDomainService;
 use App\ErrorCode\AssetErrorCode;
 use App\Infrastructure\Core\DataIsolation\BaseDataIsolation;
 use App\Infrastructure\Core\Exception\ExceptionBuilder;
@@ -32,6 +38,7 @@ use App\Interfaces\Asset\DTO\Request\QueryAssetRequestDTO;
 use App\Interfaces\Asset\DTO\Request\SaveAssetToLibraryRequestDTO;
 use Hyperf\DbConnection\Db;
 use Hyperf\Coroutine\Coroutine;
+use Hyperf\Odin\Api\Response\ChatCompletionResponse;
 use Psr\Log\LoggerInterface;
 use Qbhy\HyperfAuth\Authenticatable;
 use Throwable;
@@ -45,6 +52,8 @@ class AssetAppService extends AbstractAssetAppService
         private readonly AssetTagDomainService $assetTagDomainService,
         private readonly MagicUserDomainService $userDomainService,
         private readonly LoggerInterface $logger,
+        private readonly AiAbilityDomainService $abilityDomainService,
+        private readonly LLMAppService $llmAppService,
     ) {
         parent::__construct($resourceVisibilityDomainService);
     }
@@ -52,6 +61,7 @@ class AssetAppService extends AbstractAssetAppService
     public function createPersonalAsset(
         Authenticatable|BaseDataIsolation $authorization,
         CreateAssetRequestDTO $requestDTO,
+        bool $synchronous = false,
     ): AssetEntity {
         $dataIsolation = $this->createAssetDataIsolation($authorization);
         $contentHash = null;
@@ -71,7 +81,16 @@ class AssetAppService extends AbstractAssetAppService
         $dataIsolation->setContainOfficialOrganization(true);
         $this->assetTagDomainService->syncAssetTags($dataIsolation, $asset, $requestDTO->getTagIds());
         $asset->setFileUrl($fileUrl);
-        $this->dispatchPersonalAssetSync($dataIsolation, $asset, $fileUrl);
+        if ($synchronous) {
+            $this->assetDomainService->syncPersonalAsset(
+                $dataIsolation,
+                $asset->getId(),
+                $fileUrl,
+                $this->shouldSkipProviderReview($dataIsolation, $asset, $fileUrl),
+            );
+        } else {
+            $this->dispatchPersonalAssetSync($dataIsolation, $asset, $fileUrl);
+        }
         return $asset;
     }
 
@@ -375,7 +394,16 @@ class AssetAppService extends AbstractAssetAppService
         Coroutine::create(function () use ($dataIsolation, $assetId, $fileUrl, $coroutineId): void {
             CoContext::copy($coroutineId);
             try {
-                $this->assetDomainService->syncPersonalAsset($dataIsolation, $assetId, $fileUrl);
+                $asset = $this->assetDomainService->find($dataIsolation, $assetId, true);
+                if ($asset === null) {
+                    return;
+                }
+                $this->assetDomainService->syncPersonalAsset(
+                    $dataIsolation,
+                    $assetId,
+                    $fileUrl,
+                    $this->shouldSkipProviderReview($dataIsolation, $asset, $fileUrl),
+                );
             } catch (Throwable $throwable) {
                 $this->logger->error('个人素材异步同步失败', [
                     'asset_id' => $assetId,
@@ -384,6 +412,69 @@ class AssetAppService extends AbstractAssetAppService
                 ]);
             }
         });
+    }
+
+    /**
+     * 视觉理解只负责做一个安全的「无人像」预检；任何不确定结果都降级到火山合规审核。
+     */
+    private function shouldSkipProviderReview(
+        AssetDataIsolation $dataIsolation,
+        AssetEntity $asset,
+        ?string $fileUrl,
+    ): bool {
+        if ($asset->getAssetMediaType()?->value !== 'IMAGE' || trim((string) $fileUrl) === '') {
+            return false;
+        }
+
+        try {
+            $ability = $this->abilityDomainService->getByCode(
+                ProviderDataIsolation::create()->disabled(),
+                AiAbilityCode::VisualUnderstanding,
+            );
+            $modelId = trim((string) ($ability?->getConfig()['model_id'] ?? ''));
+            if ($ability === null || ! $ability->isEnabled() || $modelId === '') {
+                return false;
+            }
+
+            $request = new CompletionDTO();
+            if (defined('MAGIC_ACCESS_TOKEN')) {
+                $request->setAccessToken(MAGIC_ACCESS_TOKEN);
+            }
+            $request->setModel($modelId);
+            $request->setMaxTokens(128);
+            $request->setTemperature(0.0);
+            $request->setBusinessParams([
+                'organization_id' => $dataIsolation->getCurrentOrganizationCode(),
+                'user_id' => $dataIsolation->getCurrentUserId(),
+                'source_id' => SourceId::ASSET_COMPLIANCE_PRECHECK,
+            ]);
+            $request->setMessages([[
+                'role' => 'user',
+                'content' => [
+                    ['type' => 'text', 'text' => '判断图片中是否有人像。仅返回 JSON：{"has_person":true或false,"confidence":0到1之间的小数}。无法确定时返回 has_person=true。'],
+                    ['type' => 'image_url', 'image_url' => ['url' => $fileUrl]],
+                ],
+            ]]);
+
+            $response = $this->llmAppService->chatCompletion($request);
+            if (! $response instanceof ChatCompletionResponse) {
+                return false;
+            }
+            $content = $response->getFirstChoice()?->getMessage()?->getContent();
+            if (! is_string($content)) {
+                return false;
+            }
+            $content = trim(preg_replace('/^```(?:json)?|```$/i', '', $content) ?? '');
+            $result = json_decode($content, true);
+            $confidence = (float) ($result['confidence'] ?? 0);
+            return ($result['has_person'] ?? true) === false && $confidence >= 0.8;
+        } catch (Throwable $throwable) {
+            $this->logger->warning('素材视觉理解预检失败，降级火山合规审核', [
+                'asset_id' => $asset->getId(),
+                'message' => $throwable->getMessage(),
+            ]);
+            return false;
+        }
     }
 
     /**
