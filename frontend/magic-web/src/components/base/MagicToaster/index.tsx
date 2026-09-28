@@ -50,8 +50,10 @@ export default function MagicToaster({
 			}}
 			toastOptions={{ closeButtonAriaLabel: t("common.close"), ...toastOptions }}
 			className={cn(
+				// Sonner 默认层级会绕过项目层级令牌；统一根层级后，Tooltip 等浮层按项目规则正常叠放。
+				"!z-[var(--z-index-popup)]",
 				// 只调整表面和内部布局，Sonner 的堆叠、拖拽 transform 与计时仍由原组件管理。
-				"[&_[data-sonner-toast][data-styled=true]]:w-fit [&_[data-sonner-toast][data-styled=true]]:max-w-[min(360px,calc(100vw-24px))] [&_[data-sonner-toast][data-styled=true]]:items-start [&_[data-sonner-toast][data-styled=true]]:gap-2.5 [&_[data-sonner-toast][data-styled=true]]:whitespace-normal [&_[data-sonner-toast][data-styled=true]]:rounded-xl [&_[data-sonner-toast][data-styled=true]]:px-3 [&_[data-sonner-toast][data-styled=true]]:py-2 [&_[data-sonner-toast][data-styled=true]]:shadow-md [&_[data-sonner-toast][data-styled=true]]:[overflow-wrap:anywhere]",
+				"[&_[data-sonner-toast][data-styled=true]]:w-fit [&_[data-sonner-toast][data-styled=true]]:max-w-[min(360px,calc(100vw-24px))] [&_[data-sonner-toast][data-styled=true]]:items-center [&_[data-sonner-toast][data-styled=true]]:gap-2.5 [&_[data-sonner-toast][data-styled=true]]:whitespace-normal [&_[data-sonner-toast][data-styled=true]]:rounded-xl [&_[data-sonner-toast][data-styled=true]]:px-3 [&_[data-sonner-toast][data-styled=true]]:py-2 [&_[data-sonner-toast][data-styled=true]]:shadow-md [&_[data-sonner-toast][data-styled=true]]:[overflow-wrap:anywhere]",
 				"[&_[data-sonner-toast]:has([data-description])_[data-title]]:font-medium [&_[data-sonner-toast][data-styled=true]:has([data-description])]:p-3",
 				"[&_[data-sonner-toast]_[data-content]]:gap-1 [&_[data-sonner-toast]_[data-description]]:text-xs [&_[data-sonner-toast]_[data-description]]:leading-[19px] [&_[data-sonner-toast]_[data-description]]:text-muted-foreground [&_[data-sonner-toast]_[data-title]]:text-[13px] [&_[data-sonner-toast]_[data-title]]:font-normal [&_[data-sonner-toast]_[data-title]]:leading-[21px]",
 				"[&_[data-sonner-toast]_.sonner-loader]:static [&_[data-sonner-toast]_.sonner-loader]:translate-x-0 [&_[data-sonner-toast]_.sonner-loader]:translate-y-0 [&_[data-sonner-toast]_[data-icon]]:m-0 [&_[data-sonner-toast]_[data-icon]]:size-5 [&_[data-sonner-toast]_[data-icon]_svg]:m-0",
