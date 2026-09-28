@@ -1996,11 +1996,12 @@ describe("CanvasVisibilityManager covered viewport motion reuse", () => {
 		).toBe(false)
 	})
 
-	it("skips covered pan and scale eligibility work", () => {
+	it("skips covered pan and scale eligibility work without registered layouts", () => {
 		const viewportSnapshot = createViewportSnapshot(["image-1"])
 		const getSnapshot = vi.fn(() => viewportSnapshot)
 		const replaceViewportScaleLayoutEligibility = vi.fn()
 		const scheduleFarVisibilityDrain = vi.fn()
+		let viewportScaleLayoutElementCount = 0
 		const manager = Object.create(CanvasVisibilityManager.prototype) as unknown as {
 			canvas: Record<string, unknown>
 			destroyed: boolean
@@ -2027,7 +2028,7 @@ describe("CanvasVisibilityManager covered viewport motion reuse", () => {
 				getRevision: () => 7,
 			},
 			runtimeScheduler: {
-				getViewportScaleLayoutElementCount: () => 0,
+				getViewportScaleLayoutElementCount: () => viewportScaleLayoutElementCount,
 				replaceViewportScaleLayoutEligibility,
 			},
 			stage: {
@@ -2073,6 +2074,13 @@ describe("CanvasVisibilityManager covered viewport motion reuse", () => {
 		expect(replaceViewportScaleLayoutEligibility).not.toHaveBeenCalled()
 		expect(scheduleFarVisibilityDrain).toHaveBeenCalledTimes(2)
 		expect(manager.statsSnapshot.skippedViewportQueryCount).toBe(2)
+
+		viewportScaleLayoutElementCount = 1
+		getSnapshot.mockReturnValue(createViewportSnapshot(["image-2"]))
+		manager.refreshVisibility("viewport:pan", false)
+
+		expect(getSnapshot).toHaveBeenCalledTimes(1)
+		expect(replaceViewportScaleLayoutEligibility).toHaveBeenCalledWith(new Set(["image-2"]))
 	})
 
 	it("keeps a coalesced non-viewport reason as a full refresh", () => {

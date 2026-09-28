@@ -2045,10 +2045,16 @@ export class CanvasVisibilityManager {
 				geometryRevision: currentGeometryRevision,
 			})
 		) {
-			// The current viewport remains inside the previous layout window, so its visible elements
-			// are already eligible for scale-dependent layout work. Reusing that result keeps covered
-			// pan/scale frames out of the spatial query and eligibility rebuild hot path; crossing the
-			// window or another invalidation condition above still runs a complete refresh.
+			// A Canvas without registered scale layouts has no eligibility set to refresh. Keep those
+			// covered media-only frames out of the coordinator snapshot path; when scale layouts exist,
+			// reclassify the cached coverage because exact visible membership can change inside the layout
+			// window even though the spatial coverage itself remains valid.
+			if (this.canvas.runtimeScheduler.getViewportScaleLayoutElementCount() > 0) {
+				const viewportSnapshot = this.canvas.viewportQueryCoordinator.getSnapshot()
+				this.canvas.runtimeScheduler.replaceViewportScaleLayoutEligibility(
+					this.getViewportScaleLayoutElementIds(viewportSnapshot),
+				)
+			}
 			this.scheduleFarVisibilityDrain()
 			this.statsSnapshot.skippedViewportQueryCount += 1
 			return
