@@ -2069,7 +2069,11 @@ export class ChunkUploader {
 			clearIndexedDB,
 		})
 		for (const chunkId of [
-			...new Set([...sessionQueue, ...(activeChunkId ? [activeChunkId] : []), ...directChunkIds]),
+			...new Set([
+				...sessionQueue,
+				...(activeChunkId ? [activeChunkId] : []),
+				...directChunkIds,
+			]),
 		]) {
 			const activeChunk = this.activeUploads.get(chunkId)
 			reportUploadLifecycle("chunk_removed_from_queue", {

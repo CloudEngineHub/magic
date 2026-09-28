@@ -1,4 +1,6 @@
+import { useChatSidebarSelection } from "../hooks/useChatSidebarSelection"
 import ProjectNavigationToolbar from "../ProjectNavigationToolbar"
+import ChatWorkspaceItem, { type ChatWorkspaceItemHandle } from "../ChatWorkspaceItem"
 import {
 	useCallback,
 	useEffect,
@@ -41,11 +43,13 @@ interface WorkspaceListProps {
 	scrollAreaRef: RefObject<HTMLDivElement>
 	onBusyChange?: (busy: boolean) => void
 	beforeItems?: ReactNode
+	onSelect?: () => void
 	onOpenManager: (workspace: Workspace) => void
 }
 
 function WorkspaceList({
 	beforeItems,
+	onSelect,
 	onOpenManager,
 	onBusyChange,
 	scrollRef,
@@ -56,6 +60,8 @@ function WorkspaceList({
 	const [isCreatingWorkspace, setIsCreatingWorkspace] = useState(false)
 	const [isRefreshing, setIsRefreshing] = useState(false)
 	const [isSearchMode, setIsSearchMode] = useState(false)
+	const [chatSearchKeyword, setChatSearchKeyword] = useState("")
+	const chatWorkspaceRef = useRef<ChatWorkspaceItemHandle>(null)
 	const [busyWorkspaces, setBusyWorkspaces] = useState<Set<string>>(new Set())
 	const onWorkspaceBusyChange = useCallback((id: string, busy: boolean) => {
 		setBusyWorkspaces((previous) => {
@@ -66,6 +72,10 @@ function WorkspaceList({
 			return next
 		})
 	}, [])
+	const onChatBusyChange = useCallback(
+		(busy: boolean) => onWorkspaceBusyChange("sidebar-my-chats", busy),
+		[onWorkspaceBusyChange],
+	)
 	useEffect(() => {
 		onBusyChange?.(isCreatingWorkspace || busyWorkspaces.size > 0)
 	}, [isCreatingWorkspace, busyWorkspaces, onBusyChange])
@@ -86,7 +96,8 @@ function WorkspaceList({
 	const hasRequestedInitialLoadRef = useRef(false)
 	const isInitialWorkspaceListLoading =
 		workspaceStore.isWorkspaceListLoading && workspaces.length === 0
-	const selectedWorkspaceId = workspaceStore.selectedWorkspace?.id
+	const { isChatRoute } = useChatSidebarSelection()
+	const selectedWorkspaceId = isChatRoute ? undefined : workspaceStore.selectedWorkspace?.id
 	const lastLocatedWorkspace = useRef(
 		sidebarStore.navigationScrollPositions.has("sidebar-scroll:expanded")
 			? selectedWorkspaceId
@@ -298,7 +309,11 @@ function WorkspaceList({
 		try {
 			// Keep manual refresh focused on sidebar data caches so the action
 			// updates visible workspace/project lists without issuing extra status-only requests.
-			await superMagicService.silentRefreshSidebarLoadedCaches()
+			await Promise.all([
+				superMagicService.silentRefreshSidebarLoadedCaches(),
+				chatWorkspaceRef.current?.refresh(),
+			])
+			if (isSearchMode) searchWorkspaces(searchState.value)
 			setWorkspacePage(1)
 			setHasMoreWorkspaces(true)
 		} finally {
@@ -408,6 +423,7 @@ function WorkspaceList({
 
 	const searchWorkspaces = useCallback(
 		(workspaceName: string) => {
+			setChatSearchKeyword(workspaceName)
 			if (!workspaceName.trim()) {
 				cancelSearch()
 				isSearchPendingRef.current = false
@@ -505,6 +521,7 @@ function WorkspaceList({
 	}, [updateSearchState, workspaces])
 
 	const handleSearchClose = useCallback(() => {
+		setChatSearchKeyword("")
 		cancelSearch()
 		isSearchPendingRef.current = false
 		updateSearchState((draft) => {
@@ -609,6 +626,13 @@ function WorkspaceList({
 				<SidebarMenu>
 					<div className="w-full">
 						{beforeItems}
+						<ChatWorkspaceItem
+							ref={chatWorkspaceRef}
+							active={isExpanded}
+							searchKeyword={chatSearchKeyword}
+							onBusyChange={onChatBusyChange}
+							onSelect={onSelect}
+						/>
 						<div ref={workspaceListRef}>
 							{isCreatingWorkspace && (
 								<div className="w-full duration-150 animate-in fade-in slide-in-from-top-2">

@@ -1,3 +1,8 @@
+import {
+	filterPptSlidePaths,
+	normalizeHiddenSlides,
+} from "@/pages/superMagic/utils/pptHiddenSlides"
+import { ScrollArea } from "@/components/shadcn-ui/scroll-area"
 import { useState, useEffect, useRef } from "react"
 import { useTranslation } from "react-i18next"
 import {
@@ -20,7 +25,7 @@ import { TSIcon } from "@/components/base"
 import FileSlicesIcon from "./FileSlicesIcon"
 import { resolvePptScaleContentDimensions } from "../../contents/HTML/utils/slide-dimensions"
 
-import { Image as ImageIcon } from "lucide-react"
+import { Image as ImageIcon, Square, SquareCheck } from "lucide-react"
 
 export type ExportFormat = "source" | "pdf" | "pptx" | "image_png" | "image_jpeg"
 
@@ -31,8 +36,9 @@ interface SlideSelectionDialogProps {
 	onOpenChange: (open: boolean) => void
 	/** 所有幻灯片列表 */
 	slides: SlideItem[]
+	hiddenSlides?: unknown
 	/** 确认导出回调，传递选中的 filePaths 和导出格式 */
-	onConfirm: (filePaths: string[], format: ExportFormat) => void
+	onConfirm: (filePaths: string[], format: ExportFormat, includeHiddenSlides?: boolean) => void
 	/** 是否正在导出 */
 	isExporting?: boolean
 	/** 生成截图回调 */
@@ -45,12 +51,14 @@ function SlideSelectionDialog({
 	open,
 	onOpenChange,
 	slides,
+	hiddenSlides,
 	onConfirm,
 	isExporting = false,
 	onGenerateScreenshot,
 	supportPptx = true,
 }: SlideSelectionDialogProps) {
 	const { t } = useTranslation("super")
+	const [includeHiddenSlides, setIncludeHiddenSlides] = useState(false)
 	const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
 	const [exportFormat, setExportFormat] = useState<ExportFormat>(supportPptx ? "pptx" : "pdf")
 	// 延后渲染列表，先让对话框壳出现，减轻首屏卡顿
@@ -73,6 +81,7 @@ function SlideSelectionDialog({
 	const prevOpenRef = useRef(false)
 	useEffect(() => {
 		if (open && !prevOpenRef.current) {
+			setIncludeHiddenSlides(false)
 			setSelectedIds(
 				new Set(
 					slides
@@ -107,7 +116,25 @@ function SlideSelectionDialog({
 	}, [open, contentReady, slides, onGenerateScreenshot])
 
 	// 已加载完成的幻灯片（不使用 useMemo，让 MobX observer 能追踪 observable 属性变化）
-	const loadedSlides = slides.filter((slide) => slide.loadingState === "loaded")
+	const hiddenPaths = new Set(
+		normalizeHiddenSlides(
+			slides.map((slide) => slide.path),
+			hiddenSlides,
+		),
+	)
+	const eligiblePaths = new Set(
+		filterPptSlidePaths(
+			slides.map((slide) => slide.path),
+			hiddenSlides,
+			includeHiddenSlides || exportFormat === "source",
+		),
+	)
+	const loadedSlides = slides.filter(
+		(slide) => slide.loadingState === "loaded" && eligiblePaths.has(slide.path),
+	)
+	const selectedPaths = loadedSlides
+		.filter((slide) => selectedIds.has(slide.path))
+		.map((slide) => slide.path)
 
 	// 计算是否全选（基于已加载的幻灯片）
 	const isAllSelected =
@@ -137,12 +164,12 @@ function SlideSelectionDialog({
 
 	// 确认导出
 	function handleConfirm() {
-		const fileIds = Array.from(selectedIds)
+		const fileIds = selectedPaths
 		if (fileIds.length === 0) {
 			// 提示用户至少选择一页
 			return
 		}
-		onConfirm(fileIds, exportFormat)
+		onConfirm(fileIds, exportFormat, includeHiddenSlides)
 	}
 
 	// 重置选择并关闭
@@ -158,8 +185,8 @@ function SlideSelectionDialog({
 				<DialogHeader>
 					<DialogTitle>{t("ppt.selectSlidesToExport")}</DialogTitle>
 					<DialogDescription>
-						{selectedIds.size > 0
-							? t("ppt.selectedCount", { count: selectedIds.size })
+						{selectedPaths.length > 0
+							? t("ppt.selectedCount", { count: selectedPaths.length })
 							: t("ppt.pleaseSelectSlides")}
 					</DialogDescription>
 				</DialogHeader>
@@ -170,12 +197,10 @@ function SlideSelectionDialog({
 						variant="outline"
 						size="sm"
 						onClick={toggleSelectAll}
+						aria-pressed={isAllSelected}
 						className="h-8 text-sm"
 					>
-						<Checkbox
-							checked={isAllSelected}
-							className="pointer-events-none shadow-sm data-[state=unchecked]:bg-white"
-						/>
+						{isAllSelected ? <SquareCheck size={16} /> : <Square size={16} />}
 						{isAllSelected ? t("ppt.deselectAll") : t("ppt.selectAll")}
 					</Button>
 					<span className="text-sm text-muted-foreground">
@@ -183,8 +208,17 @@ function SlideSelectionDialog({
 					</span>
 				</div>
 
+				{hiddenPaths.size > 0 && exportFormat !== "source" && (
+					<Label className="flex items-center gap-2 text-sm">
+						<Checkbox
+							checked={includeHiddenSlides}
+							onCheckedChange={(checked) => setIncludeHiddenSlides(checked === true)}
+						/>
+						{t("ppt.includeHiddenSlides")}
+					</Label>
+				)}
 				{/* 幻灯片网格：延后渲染，先出壳再出列表 */}
-				<div className="min-h-0 flex-1 overflow-y-auto px-1">
+				<ScrollArea className="min-h-0 flex-1" viewportClassName="px-1">
 					{!contentReady ? (
 						<div className="grid grid-cols-[repeat(auto-fill,minmax(160px,1fr))] gap-4 py-2">
 							{Array.from({ length: 8 }).map((_, i) => (
@@ -206,8 +240,10 @@ function SlideSelectionDialog({
 					) : (
 						<div className="grid grid-cols-[repeat(auto-fill,minmax(160px,1fr))] gap-4 py-2">
 							{slides.map((slide, index) => {
-								const isSelected = selectedIds.has(slide.path)
-								const isLoaded = slide.loadingState === "loaded"
+								const isSelected =
+									selectedIds.has(slide.path) && eligiblePaths.has(slide.path)
+								const isLoaded =
+									slide.loadingState === "loaded" && eligiblePaths.has(slide.path)
 								const slideDimensions = resolvePptScaleContentDimensions(
 									slide.content,
 									slide.rawContent,
@@ -231,6 +267,7 @@ function SlideSelectionDialog({
 										<div className="absolute left-2 top-2 z-10">
 											<Checkbox
 												checked={isSelected}
+												onClick={(event) => event.stopPropagation()}
 												disabled={!isLoaded}
 												onCheckedChange={() =>
 													isLoaded && toggleSlide(slide.path)
@@ -268,6 +305,11 @@ function SlideSelectionDialog({
 											</div>
 											<div className="text-xs text-muted-foreground">
 												{t("ppt.pageNumber", { page: index + 1 })}
+												{hiddenPaths.has(slide.path) && (
+													<span className="ml-2">
+														{t("ppt.hiddenSlide")}
+													</span>
+												)}
 											</div>
 										</div>
 									</div>
@@ -275,7 +317,7 @@ function SlideSelectionDialog({
 							})}
 						</div>
 					)}
-				</div>
+				</ScrollArea>
 
 				{/* 导出格式选择 */}
 				<div className="border-b px-4 py-3">
@@ -348,11 +390,11 @@ function SlideSelectionDialog({
 					</Button>
 					<Button
 						onClick={handleConfirm}
-						disabled={selectedIds.size === 0 || isExporting}
+						disabled={selectedPaths.length === 0 || isExporting}
 					>
 						{isExporting
 							? t("topicFiles.exporting")
-							: t("ppt.exportSelected") + ` (${selectedIds.size})`}
+							: t("ppt.exportSelected") + ` (${selectedPaths.length})`}
 					</Button>
 				</DialogFooter>
 			</DialogContent>

@@ -246,6 +246,31 @@ describe("useElementInspector", () => {
 		}
 	})
 
+	it("keeps inspection active when a pointer starts on capture authorization UI", () => {
+		const iframe = document.createElement("iframe")
+		document.body.appendChild(iframe)
+		const iframeRef = { current: iframe }
+
+		try {
+			const { result } = renderHook(() => useElementInspector({ iframeRef }))
+			render(
+				<div
+					data-element-inspector-capture-authorization="true"
+					data-testid="ai-editing-capture-authorization-dialog"
+				>
+					<button type="button">Allow</button>
+				</div>,
+			)
+
+			act(() => result.current.start())
+			fireEvent.mouseDown(screen.getByRole("button", { name: "Allow" }))
+
+			expect(result.current.active).toBe(true)
+		} finally {
+			iframe.remove()
+		}
+	})
+
 	it("keeps inspection active when a pointer starts on the portaled panel", () => {
 		const iframe = document.createElement("iframe")
 		document.body.appendChild(iframe)

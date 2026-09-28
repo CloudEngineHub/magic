@@ -1,4 +1,4 @@
-import { lazy, Suspense, useEffect, useMemo, useRef, useState } from "react"
+import { useEffect, useRef, useState } from "react"
 import { observer } from "mobx-react-lite"
 import { useTranslation } from "react-i18next"
 import {
@@ -7,29 +7,22 @@ import {
 } from "@/pages/superMagicMobile/components/MobileShell"
 import ChatPageHeader from "./components/ChatPageHeader"
 import SloganSection from "./components/SloganSection"
-import type { HierarchicalWorkspacePopupRef } from "@/pages/superMagicMobile/components/HierarchicalWorkspacePopup/types"
-import { useMemoizedFn, useMount } from "ahooks"
-import { TaskStatus } from "@/pages/superMagic/pages/Workspace/types"
+import { useMemoizedFn } from "ahooks"
 import { TopicMode } from "@/pages/superMagic/pages/Workspace/TopicMode"
 import { roleStore } from "@/pages/superMagic/stores/RoleStore"
-import MobileInputContainer, {
-	type MobileInputContainerRef,
-} from "./components/MobileInputContainer"
+import MobileInputContainer from "./components/MobileInputContainer"
 import { MOBILE_LAYOUT_CONFIG } from "@/pages/superMagic/components/MainInputContainer/components/editors/constant"
-import { topicStore, projectStore, workspaceStore } from "@/pages/superMagic/stores/core"
-import { superMagicStore } from "@/pages/superMagic/stores"
 import { SceneEditorContext } from "@/pages/superMagic/components/MainInputContainer/components/editors/types"
 import { userStore } from "@/models/user"
-import { useTaskInterrupt } from "@/pages/superMagic/hooks/useTaskInterrupt"
-import { useChatWorkspace } from "@/pages/superMagic/hooks/useChatWorkspace"
-import SuperMagicService from "@/pages/superMagic/services"
 import useAgentCodeModeFromSearch from "@/pages/superMagic/hooks/useAgentCodeModeFromSearch"
 import useTopicMode from "@/pages/superMagic/hooks/useTopicMode"
 import { refreshFeaturedModeList } from "@/pages/superMagic/hooks/useFeaturedModeListRefresh"
-import { applyOptimisticTopicRunningState } from "@/pages/superMagic/services/topicStatusSyncService"
 import superMagicModeService from "@/services/superMagic/SuperMagicModeService"
 import ProjectTopicService from "@/services/superMagic/ProjectTopicService"
-import { getFallbackTopicModeIdentifier } from "@/services/superMagic/DefaultAgentSelectionService"
+import {
+	getFallbackTopicModeIdentifier,
+	resolveDefaultAgentSelection,
+} from "@/services/superMagic/DefaultAgentSelectionService"
 import { useLocation } from "react-router"
 import { MobileTabParam } from "@/pages/mobileTabs/constants"
 import { routesPathMatch } from "@/routes/history/helpers"
@@ -38,9 +31,22 @@ import { MobileOnlyRoute } from "@/routes/components/ViewportRouteGuard"
 import { shouldClearResolvedAgentCodeFromUrl } from "./agentCodeRoutePolicy"
 import { resolveHomepageDisplayTopicMode } from "./homepageModeState"
 
-const HierarchicalWorkspacePopup = lazy(
-	() => import("@/pages/superMagicMobile/components/HierarchicalWorkspacePopup"),
-)
+import { useChatHomeContext } from "@/pages/superMagic/pages/ChatHomePage/useChatHomeContext"
+import {
+	MessageEditorStore,
+	MessageEditorStoreProvider,
+} from "@/pages/superMagic/components/MessageEditor/stores"
+import {
+	createSceneStateStore,
+	SceneStateProvider,
+} from "@/pages/superMagic/components/MainInputContainer/stores"
+import useNavigate from "@/routes/hooks/useNavigate"
+import { useTaskHomeContext } from "./hooks/useTaskHomeContext"
+import MobileHomeModeControls, { type MobileHomeMode } from "./components/MobileHomeModeControls"
+import TaskWorkspaceSheet from "./components/TaskWorkspaceSheet"
+import { applyOptimisticTopicRunningState } from "@/pages/superMagic/services/topicStatusSyncService"
+import { ScrollArea } from "@/components/shadcn-ui/scroll-area"
+import { UploadTokenService } from "@/pages/superMagic/components/MessageEditor/services/UploadTokenService"
 
 /**
  * 首页面板继续复用既有欢迎区与输入区逻辑，但顶部菜单入口改由共享 MobileShell 注入。
@@ -49,12 +55,15 @@ const ChatPagePanel = observer(function ChatPagePanel() {
 	const location = useLocation()
 	const shellOutlet = useOptionalSuperMobileShellOutlet()
 	const openSidebar = shellOutlet?.openSidebar ?? (() => undefined)
-	const [stopEventLoading, setStopEventLoading] = useState(false)
-	const [isHierarchicalWorkspacePopupInitialized, setIsHierarchicalWorkspacePopupInitialized] =
-		useState(false)
+	const { t } = useTranslation("super/mainInput")
+	const navigate = useNavigate()
+	const [busy, setBusy] = useState(false)
+	const [workspaceSheetOpen, setWorkspaceSheetOpen] = useState(false)
+	const query = new URLSearchParams(location.search)
+	// Tasks are the default homepage entry; explicit chat links keep their existing destination.
+	const homeMode: MobileHomeMode = query.get("homeMode") === "chat" ? "chat" : "task"
+	const isChat = homeMode === "chat"
 	const [homepageModeOverride, setHomepageModeOverride] = useState<TopicMode | null>(null)
-	const hierarchicalWorkspacePopupRef = useRef<HierarchicalWorkspacePopupRef>(null)
-	const mobileInputContainerRef = useRef<MobileInputContainerRef>(null)
 	const wasHomepageEmptyRef = useRef(false)
 	// Track the account context used for the last homepage mode refresh so an organization switch
 	// cannot reuse the previous organization's runtime fallback while the homepage stays empty.
@@ -69,38 +78,38 @@ const ChatPagePanel = observer(function ChatPagePanel() {
 		(routesPathMatch(RouteName.MobileTabs, location.pathname) &&
 			activeTab === MobileTabParam.Super) ||
 		isMobileHomeRoute
-	const { chatWorkspace, createProjectInChatWorkspace } = useChatWorkspace({
-		projectPageSize: 100,
-	})
-
-	const currentRole = roleStore.currentRole
-
-	const initializeHierarchicalWorkspacePopup = useMemoizedFn(() => {
-		setIsHierarchicalWorkspacePopupInitialized((initialized) => initialized || true)
-	})
-
-	useMount(() => {
-		const initialize = () => {
-			initializeHierarchicalWorkspacePopup()
-		}
-
-		if ("requestIdleCallback" in window) {
-			requestIdleCallback(() => {
-				initialize()
-			})
-			return
-		}
-
-		setTimeout(initialize, 0)
-	})
-
-	// editor state
-	const selectedTopic = topicStore.selectedTopic
-	const selectedProject = projectStore.selectedProject
 	const organizationCode = userStore.user.organizationCode
 	const userId = userStore.user.userInfo?.user_id
-	const isHomepageEmpty = isOnHomepage && !selectedProject && !selectedTopic
 	const homepageContextKey = `${organizationCode ?? ""}:${userId ?? ""}`
+	const chatContext = useChatHomeContext()
+	const taskHome = useTaskHomeContext(homepageContextKey, query.get("workspaceId"), !isChat)
+	const selectedTopic = taskHome.context.selectedTopic ?? null
+	const selectedProject = taskHome.context.selectedProject ?? null
+	const isHomepageEmpty = isOnHomepage && !selectedProject && !selectedTopic
+	const currentRole = roleStore.currentRole
+	// Retain each mode's store while rendering only one editor, including uploaded attachments.
+	const [modeStores] = useState(() => ({
+		chat: {
+			editor: new MessageEditorStore({ uploadTokenService: new UploadTokenService() }),
+			scene: createSceneStateStore(),
+			ready: false,
+		},
+		task: {
+			editor: new MessageEditorStore({ uploadTokenService: new UploadTokenService() }),
+			scene: createSceneStateStore(),
+			ready: false,
+		},
+	}))
+	const activeStores = modeStores[homeMode]
+	// Upload callbacks belong to the mounted editor; finish uploads before switching its mode.
+	const controlsBusy = busy || !activeStores.editor.fileUploadStore.isAllFilesUploaded
+	useEffect(
+		() => () => {
+			modeStores.chat.editor.dispose()
+			modeStores.task.editor.dispose()
+		},
+		[modeStores],
+	)
 
 	const {
 		topicMode,
@@ -198,78 +207,54 @@ const ChatPagePanel = observer(function ChatPagePanel() {
 			isMobileHomeRoute ? RouteName.MobileHome : RouteName.MobileTabs,
 		),
 		currentMode: displayTopicMode,
-		enabled: isOnHomepage,
+		enabled: isOnHomepage && !isChat,
 		onModeResolved: setTopicMode,
 	})
 
-	const chatTopicId = selectedTopic?.chat_topic_id
-	const threadMessageCount =
-		chatTopicId != null ? (superMagicStore.messages?.get(chatTopicId) ?? []).length : 0
-	const isTaskRunning = selectedTopic?.task_status === TaskStatus.RUNNING
-
-	const { handleInterrupt } = useTaskInterrupt({
-		selectedTopic,
-		userId,
-		isStopping: stopEventLoading,
-		setIsStopping: setStopEventLoading,
-		canInterrupt: isTaskRunning,
-	})
-
-	const editorContext = useMemo<SceneEditorContext>(
-		() => ({
-			selectedTopic,
-			selectedProject,
-			selectedWorkspace: chatWorkspace,
-			setSelectedTopic: topicStore.setSelectedTopic,
-			setSelectedProject: projectStore.setSelectedProject,
-			setSelectedWorkspace: workspaceStore.setSelectedWorkspace,
-			createProject: createProjectInChatWorkspace,
-			topicMode: displayTopicMode,
-			agentCode: selectedTopic?.agent_code,
-			setTopicMode,
-			recoverTopicMode,
-			topicExamplesMode: currentRole,
-			messagesLength: threadMessageCount,
-			layoutConfig: MOBILE_LAYOUT_CONFIG,
-			showLoading: isTaskRunning,
-			isTaskRunning,
-			stopEventLoading,
-			isChatPageHomepage: isOnHomepage,
-			useChatTerminology: true,
-			handleInterrupt,
-			onSendComplete: ({ success, currentProject, currentTopic }) => {
-				if (!success) return
-
-				applyOptimisticTopicRunningState({
-					topicStore,
-					topic: currentTopic ?? topicStore.selectedTopic,
-					project: currentProject ?? projectStore.selectedProject,
-					workspace: chatWorkspace,
-				})
-			},
-			onSendSuccess: ({ currentProject, currentTopic }) => {
-				if (!chatWorkspace || !currentProject || !currentTopic) return
-				mobileInputContainerRef.current?.closeRealInput()
-				void SuperMagicService.switchChatProject(currentProject, currentTopic)
-			},
-			autoFocus: true,
-		}),
-		[
-			chatWorkspace,
-			createProjectInChatWorkspace,
-			selectedTopic,
-			selectedProject,
-			displayTopicMode,
-			setTopicMode,
-			recoverTopicMode,
-			currentRole,
-			threadMessageCount,
-			isTaskRunning,
-			stopEventLoading,
-			isOnHomepage,
-			handleInterrupt,
-		],
-	)
+	const defaultAgent = resolveDefaultAgentSelection()
+	const baseContext = isChat ? chatContext : taskHome.context
+	const editorContext: SceneEditorContext = {
+		selectedTopic: null,
+		selectedProject: null,
+		...baseContext,
+		topicMode: isChat ? defaultAgent.topicPattern : displayTopicMode,
+		agentCode: isChat ? defaultAgent.agentCode : selectedTopic?.agent_code,
+		modelTopicMode: isChat ? (defaultAgent.modeIdentifier as TopicMode) : displayTopicMode,
+		setTopicMode: isChat ? undefined : setTopicMode,
+		recoverTopicMode: isChat ? undefined : recoverTopicMode,
+		topicExamplesMode: isChat ? defaultAgent.topicPattern : currentRole,
+		layoutConfig: MOBILE_LAYOUT_CONFIG,
+		isChatPageHomepage: isOnHomepage,
+		showModeToggle: !isChat,
+		showModelSelector: isChat,
+		placeholder: isChat ? t("mobileHome.chatPlaceholder") : undefined,
+		autoFocus: false,
+		skipInitialDraftRestore: activeStores.ready,
+		onReady: () => {
+			activeStores.ready = true
+		},
+		onSendStart: () => setBusy(true),
+		onSendComplete: ({ success, currentProject, currentTopic }) => {
+			setBusy(false)
+			if (!success || !baseContext.topicStore) return
+			applyOptimisticTopicRunningState({
+				topicStore: baseContext.topicStore,
+				topic: currentTopic,
+				project: currentProject,
+				workspace: baseContext.selectedWorkspace,
+			})
+		},
+	}
+	const changeHomeMode = (next: MobileHomeMode) => {
+		if (controlsBusy || next === homeMode) return
+		query.set("homeMode", next)
+		navigate({
+			name: isMobileHomeRoute ? RouteName.MobileHome : RouteName.MobileTabs,
+			query: Object.fromEntries(query),
+			replace: true,
+			viewTransition: false,
+		})
+	}
 
 	return (
 		<>
@@ -278,37 +263,68 @@ const ChatPagePanel = observer(function ChatPagePanel() {
 
 				<div className="flex min-h-0 flex-1 flex-col overflow-hidden">
 					{/* Flow layout: bottom inset is owned by GlobalSafeArea, not absolute bottom-0. */}
-					<div className="flex min-h-0 flex-1 items-center justify-center px-4">
-						<SloganSection />
-					</div>
+					{/* Short screens and the soft keyboard may scroll the hero without moving the input. */}
+					<ScrollArea
+						className="min-h-0 flex-1"
+						viewportClassName="[&>div]:!flex [&>div]:min-h-full [&>div]:flex-col"
+					>
+						<div className="flex flex-1 flex-col items-center justify-center px-4 py-4">
+							<SloganSection isChat={isChat} />
+							<MobileHomeModeControls
+								mode={homeMode}
+								onModeChange={changeHomeMode}
+								workspace={taskHome.workspace}
+								loading={taskHome.loading}
+								error={taskHome.error}
+								busy={controlsBusy}
+								onChooseWorkspace={() => setWorkspaceSheetOpen(true)}
+							/>
+						</div>
+					</ScrollArea>
 					<div className="shrink-0 bg-mobile-background">
-						<MobileInputContainer
-							ref={mobileInputContainerRef}
-							editorContext={editorContext}
-						/>
+						<MessageEditorStoreProvider store={activeStores.editor}>
+							<SceneStateProvider store={activeStores.scene}>
+								<MobileInputContainer
+									key={homeMode}
+									editorContext={editorContext}
+								/>
+							</SceneStateProvider>
+						</MessageEditorStoreProvider>
 					</div>
 				</div>
 			</div>
 
-			{/* 工作区/项目选择弹窗 */}
-			{isHierarchicalWorkspacePopupInitialized && (
-				<Suspense fallback={null}>
-					<HierarchicalWorkspacePopup ref={hierarchicalWorkspacePopupRef} />
-				</Suspense>
-			)}
+			<TaskWorkspaceSheet
+				open={workspaceSheetOpen}
+				onClose={() => setWorkspaceSheetOpen(false)}
+				selectedId={taskHome.workspace?.id}
+				onSelect={(workspace) => {
+					taskHome.selectWorkspace(workspace)
+					// Replace an entry destination so refresh restores the user's new explicit choice.
+					query.set("workspaceId", workspace.id)
+					navigate({
+						name: isMobileHomeRoute ? RouteName.MobileHome : RouteName.MobileTabs,
+						query: Object.fromEntries(query),
+						replace: true,
+						viewTransition: false,
+					})
+				}}
+			/>
 		</>
 	)
 })
 
 /** Mobile-home route entry: desktop viewport redirects to /super. */
-function MobileHomePage() {
+const MobileHomePage = observer(function MobileHomePage() {
 	const shellOutlet = useOptionalSuperMobileShellOutlet()
 	const { t } = useTranslation("super")
 
 	if (shellOutlet) {
 		return (
 			<MobileOnlyRoute>
-				<ChatPagePanel />
+				<ChatPagePanel
+					key={`${userStore.user.organizationCode}:${userStore.user.userInfo?.user_id}`}
+				/>
 			</MobileOnlyRoute>
 		)
 	}
@@ -320,10 +336,12 @@ function MobileHomePage() {
 				testIdPrefix="mobile-chat-home-page"
 				closeSidebarAriaLabel={t("mobile.shell.closeSidebar")}
 			>
-				<ChatPagePanel />
+				<ChatPagePanel
+					key={`${userStore.user.organizationCode}:${userStore.user.userInfo?.user_id}`}
+				/>
 			</SuperMobileShellRouteLayout>
 		</MobileOnlyRoute>
 	)
-}
+})
 
 export default MobileHomePage

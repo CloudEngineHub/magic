@@ -5,6 +5,7 @@ import useMessageQueue from "../useMessageQueue"
 const mocks = vi.hoisted(() => ({
 	getMessageQueueList: vi.fn(),
 	addMessageToQueue: vi.fn(),
+	subscribe: vi.fn(),
 }))
 
 vi.mock("@/apis", () => ({
@@ -49,7 +50,7 @@ vi.mock("@/apis/clients/chatWebSocket", () => ({
 
 vi.mock("@/utils/pubsub", () => ({
 	default: {
-		subscribe: vi.fn(),
+		subscribe: mocks.subscribe,
 		unsubscribe: vi.fn(),
 	},
 	PubSubEvents: {
@@ -94,6 +95,7 @@ vi.mock("../../useQueueDraft", () => ({
 
 describe("useMessageQueue", () => {
 	beforeEach(() => {
+		mocks.subscribe.mockClear()
 		mocks.getMessageQueueList.mockReset()
 		mocks.getMessageQueueList.mockResolvedValue({ list: [] })
 		mocks.addMessageToQueue.mockReset()
@@ -159,5 +161,51 @@ describe("useMessageQueue", () => {
 		})
 
 		expect(result.current.queue[0]?.id).toBe("server-queue-1")
+	})
+	it("discards a list response started before an external iframe enqueue update", async () => {
+		let resolveInitial!: (value: unknown) => void
+		mocks.getMessageQueueList.mockImplementationOnce(
+			() =>
+				new Promise((resolve) => {
+					resolveInitial = resolve
+				}),
+		)
+		mocks.getMessageQueueList.mockResolvedValue({
+			list: [
+				{
+					queue_id: "new-item",
+					message_content: JSON.stringify({ content: "{}" }),
+					status: 0,
+					created_at: "2026-09-28 00:00:01",
+					sort_order: "2",
+				},
+			],
+			total: 1,
+		})
+		const { result } = renderHook(() =>
+			useMessageQueue({ projectId: "project-1", topicId: "topic-1" }),
+		)
+		const refresh = mocks.subscribe.mock.calls.find(
+			([event]) => event === "SuperMagicMessageQueueConsumed",
+		)?.[1]
+		expect(refresh).toBeTypeOf("function")
+		await act(async () => {
+			refresh()
+		})
+		await act(async () => {
+			resolveInitial({
+				list: [
+					{
+						queue_id: "stale-item",
+						message_content: JSON.stringify({ content: "{}" }),
+						status: 0,
+						created_at: "2026-09-28 00:00:00",
+						sort_order: "1",
+					},
+				],
+				total: 1,
+			})
+		})
+		expect(result.current.queue.map((item) => item.id)).toEqual(["new-item"])
 	})
 })

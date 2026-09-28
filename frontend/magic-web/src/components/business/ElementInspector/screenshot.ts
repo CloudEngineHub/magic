@@ -15,6 +15,8 @@ interface CaptureOptions {
 	currentTabSession?: CurrentTabCaptureSession
 	/** Exact origin of the rendered iframe, used by the screenshot bridge. */
 	iframeTargetOrigin?: string
+	/** Element selector used by the iframe runtime as the snapdom root. */
+	selector?: string
 	/** Hide host inspector chrome before falling back to rendered-tab capture. */
 	beforeCurrentTabCapture?: () => Promise<void>
 	/** Ask the user to authorize browser capture immediately before getDisplayMedia. */
@@ -58,6 +60,7 @@ export function suppressCaptureCursor(iframe: HTMLIFrameElement): () => void {
 export interface CurrentTabCaptureSession {
 	acquire: () => Promise<MediaStream>
 	release: () => void
+	hasLiveStream: () => boolean
 }
 
 /** Whether this browser can request a rendered tab/window capture stream. */
@@ -69,11 +72,7 @@ export function supportsCurrentTabCapture(): boolean {
 }
 
 export type CurrentTabCaptureErrorCode =
-	| "unsupported"
-	| "permission-denied"
-	| "cancelled"
-	| "wrong-surface"
-	| "no-video"
+	"unsupported" | "permission-denied" | "cancelled" | "wrong-surface" | "no-video"
 
 export class CurrentTabCaptureError extends Error {
 	readonly code: CurrentTabCaptureErrorCode
@@ -272,7 +271,8 @@ export async function captureWithIframeRuntime(options: CaptureOptions): Promise
 		}
 
 		const handleMessage = (event: MessageEvent) => {
-			if (event.source !== targetWindow || event.origin !== targetOrigin) return
+			if (event.source !== targetWindow) return
+			if (event.origin !== targetOrigin) return
 			const data = event.data
 			if (!data || data.requestId !== requestId) return
 			if (
@@ -323,6 +323,7 @@ export async function captureWithIframeRuntime(options: CaptureOptions): Promise
 					requestId,
 					selection: options.selection,
 					outputSize,
+					selector: options.selector,
 				},
 				targetOrigin,
 			)
@@ -450,7 +451,9 @@ export function createCurrentTabCaptureSession(): CurrentTabCaptureSession {
 	}
 
 	const acquire = () => {
-		if (hasLiveVideoTrack(stream)) return Promise.resolve(stream as MediaStream)
+		if (hasLiveVideoTrack(stream)) {
+			return Promise.resolve(stream as MediaStream)
+		}
 		if (pending) return pending
 
 		const currentRequestId = ++requestId
@@ -489,7 +492,11 @@ export function createCurrentTabCaptureSession(): CurrentTabCaptureSession {
 		return nextRequest
 	}
 
-	return { acquire, release }
+	return {
+		acquire,
+		release,
+		hasLiveStream: () => hasLiveVideoTrack(stream),
+	}
 }
 
 function isHtmlElementNode(value: Element | null | undefined): value is HTMLElement {
@@ -1196,6 +1203,7 @@ export async function captureIframeRegion(options: CaptureOptions): Promise<stri
 		iframeDocument = null
 	}
 	if (!iframeDocument?.body || shouldCaptureCurrentTab(iframeDocument.body, options.selection)) {
+		const hasLiveCaptureSession = Boolean(options.currentTabSession?.hasLiveStream?.())
 		const iframeScreenshot = await captureWithIframeRuntime({
 			...options,
 			onIframeRuntimeFailure: (failure) => {
@@ -1203,12 +1211,16 @@ export async function captureIframeRegion(options: CaptureOptions): Promise<stri
 				options.onIframeRuntimeFailure?.(failure)
 			},
 		})
-		if (iframeScreenshot) return iframeScreenshot
+		if (iframeScreenshot) {
+			return iframeScreenshot
+		}
 
 		const authorizationContext =
 			iframeRuntimeFailure ??
 			({
-				reason: "iframe-runtime-unavailable",
+				reason: hasLiveCaptureSession
+					? "reuse-live-capture-session"
+					: "iframe-runtime-unavailable",
 				selection: options.selection,
 				viewportSelection: options.viewportSelection,
 				outputSize: getCaptureOutputSize(options.selection, options.viewportSelection),
@@ -1225,6 +1237,9 @@ export async function captureIframeRegion(options: CaptureOptions): Promise<stri
 			})
 			await options.beforeCurrentTabCapture?.()
 			return captureCurrentTab(options)
+		}
+		if (hasLiveCaptureSession) {
+			return startCurrentTabCapture()
 		}
 		if (options.requestCurrentTabCaptureAuthorization) {
 			const dataUrl = await options.requestCurrentTabCaptureAuthorization(

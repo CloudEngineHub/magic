@@ -8,7 +8,7 @@
 
 import type { RuntimePlugin } from "../RuntimePlugin"
 import { runtimeLoggerHub, type RuntimeLogger } from "../RuntimeLogger"
-import { postMessageToParent } from "../../utils/parentOrigin"
+import { isFromTrustedParent, postMessageToParent } from "../../utils/parentOrigin"
 
 export abstract class BaseRuntimeBridgeApiPlugin implements RuntimePlugin {
 	protected readonly logger: RuntimeLogger
@@ -19,6 +19,11 @@ export abstract class BaseRuntimeBridgeApiPlugin implements RuntimePlugin {
 	}
 
 	abstract install(): void
+
+	/** Use the shell's captured native parent, even after DevTools proxies window.parent. */
+	protected isHostMessage(event: MessageEvent): boolean {
+		return isFromTrustedParent(event)
+	}
 
 	/**
 	 * 向宿主窗口发起一次 postMessage 请求并等待响应。
@@ -58,6 +63,7 @@ export abstract class BaseRuntimeBridgeApiPlugin implements RuntimePlugin {
 			}, timeout)
 
 			const handler = (event: MessageEvent<Record<string, unknown>>) => {
+				if (!this.isHostMessage(event)) return
 				if (!event.data || event.data["requestId"] !== requestId) return
 				if (event.data["type"] !== responseType) return
 				clearTimeout(timer)
@@ -94,7 +100,16 @@ export abstract class BaseRuntimeBridgeApiPlugin implements RuntimePlugin {
 				}
 			}
 			window.addEventListener("message", handler)
-			postMessageToParent({ type, requestId, ...payload }, transfer)
+			try {
+				postMessageToParent({ type, requestId, ...payload }, transfer)
+			} catch (error) {
+				// Structured cloning can throw synchronously. A rejected request must
+				// not retain a listener and later emit a spurious timeout.
+				clearTimeout(timer)
+				window.removeEventListener("message", handler)
+				this.logger.error("request:failure", { type, requestId, error: String(error) })
+				reject(error)
+			}
 		})
 	}
 }

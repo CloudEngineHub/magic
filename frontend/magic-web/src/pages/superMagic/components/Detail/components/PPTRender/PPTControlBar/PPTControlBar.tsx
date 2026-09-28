@@ -11,16 +11,20 @@ import {
 	RotateCw,
 	PanelsTopLeft,
 	NotebookPen,
+	Monitor,
+	Check,
 } from "lucide-react"
 import type { PPTControlBarProps } from "./types"
 import { PPTZoomControl } from "./PPTZoomControl"
 import { cn } from "@/utils/cn"
 import { Button } from "@/components/shadcn-ui/button"
-import { MagicTooltip } from "@/components/base"
+import { MagicDropdown, MagicTooltip } from "@/components/base"
 
 export function PPTControlBar({
 	activeIndex,
 	totalSlides,
+	canGoPrevious = activeIndex > 0,
+	canGoNext = activeIndex < totalSlides - 1,
 	isTransitioning,
 	isMobile,
 	isFullscreen,
@@ -32,6 +36,9 @@ export function PPTControlBar({
 	isRefreshingCurrentSlide,
 	onJumpToPage,
 	onToggleFullscreen,
+	presenterScreens,
+	selectedPresenterScreen,
+	onSelectPresenterScreen,
 	onReplaceTemplate,
 	notesVisible,
 	onToggleNotes,
@@ -142,7 +149,7 @@ export function PPTControlBar({
 									onPrevSlide()
 								}}
 								aria-label={t("fileViewer.previousPage")}
-								disabled={activeIndex === 0 || isTransitioning}
+								disabled={!canGoPrevious || isTransitioning}
 							>
 								<ChevronLeft className="h-4 w-4" />
 							</Button>
@@ -221,7 +228,7 @@ export function PPTControlBar({
 									onNextSlide()
 								}}
 								aria-label={t("fileViewer.nextPage")}
-								disabled={activeIndex >= totalSlides - 1 || isTransitioning}
+								disabled={!canGoNext || isTransitioning}
 							>
 								<ChevronRight className="h-4 w-4" />
 							</Button>
@@ -242,7 +249,7 @@ export function PPTControlBar({
 									onGoToFirstSlide()
 								}}
 								aria-label={t("detail.goToFirstPage")}
-								disabled={activeIndex === 0 || isTransitioning}
+								disabled={!canGoPrevious || isTransitioning}
 							>
 								<Home className="h-4 w-4" />
 							</Button>
@@ -297,9 +304,7 @@ export function PPTControlBar({
 				{!isMobile && (
 					<MagicTooltip
 						title={
-							isFullscreen
-								? t("fileViewer.exitFullscreen")
-								: t("fileViewer.fullscreen")
+							isFullscreen ? t("fileViewer.exitFullscreen") : t("ppt.startSlideshow")
 						}
 					>
 						<span>
@@ -307,7 +312,7 @@ export function PPTControlBar({
 								variant="ghost"
 								size="sm"
 								data-testid="ppt-control-bar-fullscreen-button"
-								className="h-7 w-7 p-0 text-foreground"
+								className="h-7 gap-[5px] px-[7px] text-[13px] font-normal text-foreground"
 								onClick={(e) => {
 									e.stopPropagation()
 									e.currentTarget.blur()
@@ -316,7 +321,7 @@ export function PPTControlBar({
 								aria-label={
 									isFullscreen
 										? t("fileViewer.exitFullscreen")
-										: t("fileViewer.fullscreen")
+										: t("ppt.startSlideshow")
 								}
 							>
 								{isFullscreen ? (
@@ -324,10 +329,52 @@ export function PPTControlBar({
 								) : (
 									<Maximize className="h-4 w-4" />
 								)}
+								{isFullscreen
+									? t("fileViewer.exitFullscreen")
+									: t("ppt.startSlideshow")}
 							</Button>
 						</span>
 					</MagicTooltip>
 				)}
+				{!isMobile && presenterScreens?.length && onSelectPresenterScreen ? (
+					<MagicDropdown
+						placement="topRight"
+						getPopupContainer={() => portalContainer || document.body}
+						menu={{
+							items: presenterScreens.map((screen, index) => ({
+								key: String(index),
+								label: (
+									<div className="flex min-w-40 items-center justify-between gap-3">
+										<span>
+											{screen.label ||
+												t("ppt.presenter.screenOption", {
+													index: index + 1,
+												})}
+											{screen.isPrimary
+												? t("ppt.presenter.primarySuffix")
+												: ""}
+										</span>
+										{selectedPresenterScreen === index && (
+											<Check className="size-4" />
+										)}
+									</div>
+								),
+							})),
+							onClick: ({ key }) => onSelectPresenterScreen(Number(key)),
+						}}
+					>
+						<Button
+							variant="ghost"
+							size="sm"
+							data-testid="ppt-control-bar-presenter-screen-button"
+							className="h-7 gap-[5px] px-[7px] text-[13px] font-normal"
+							aria-label={t("ppt.presenter.selectScreen")}
+						>
+							<Monitor className="size-4" />
+							{t("ppt.presenter.screen")}
+						</Button>
+					</MagicDropdown>
+				) : null}
 			</div>
 			{(!isMobile || onToggleNotes) && (
 				<div

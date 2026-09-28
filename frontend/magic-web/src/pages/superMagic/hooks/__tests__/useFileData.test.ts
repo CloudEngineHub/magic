@@ -1,5 +1,5 @@
 import { createElement, type ReactNode } from "react"
-import { renderHook, waitFor } from "@testing-library/react"
+import { act, renderHook, waitFor } from "@testing-library/react"
 import { beforeEach, describe, expect, it, vi } from "vitest"
 import { SuperMagicApi } from "@/apis"
 import { FileAccessProvider } from "@/pages/superMagic/fileAccess/FileAccessProvider"
@@ -46,6 +46,7 @@ vi.mock("../useShareRoute", () => ({
 vi.mock("@/utils/pubsub", () => ({
 	default: {
 		subscribe: vi.fn(),
+		publish: vi.fn(),
 		unsubscribe: vi.fn(),
 	},
 	PubSubEvents: {
@@ -64,6 +65,7 @@ vi.mock("@/components/base/MagicToaster/utils", () => ({
 		loading: vi.fn(),
 		destroy: vi.fn(),
 		success: vi.fn(),
+		error: vi.fn(),
 	},
 }))
 
@@ -82,6 +84,147 @@ describe("useFileData", () => {
 			{ file_id: "file-1", url: "https://oss.test/file-1" },
 		] as never)
 		downloadFileContentMock.mockResolvedValue("<html></html>")
+	})
+
+	it.each(["<html></html>", ""])(
+		"keeps loaded content %j when switching to another file and back",
+		async (content) => {
+			downloadFileContentMock.mockResolvedValue(content)
+			const { result, rerender } = renderHook(
+				({ activeFileId }) => useFileData({ file_id: "file-1", activeFileId }),
+				{ initialProps: { activeFileId: "file-1" } },
+			)
+			await waitFor(() => expect(result.current.fileData).toBe(content))
+			const urlRequests = getTemporaryDownloadUrlMock.mock.calls.length
+			const historyRequests = getFileHistoryVersionsMock.mock.calls.length
+			rerender({ activeFileId: "other.js" })
+			await waitFor(() => expect(result.current.loadStatus).toBe("ready"))
+			rerender({ activeFileId: "file-1" })
+			await waitFor(() => expect(result.current.loadStatus).toBe("ready"))
+			expect(result.current.fileData).toBe(content)
+			expect(downloadFileContentMock).toHaveBeenCalledTimes(1)
+			expect(getTemporaryDownloadUrlMock).toHaveBeenCalledTimes(urlRequests)
+			expect(getFileHistoryVersionsMock).toHaveBeenCalledTimes(historyRequests)
+		},
+	)
+
+	it("refreshes cached content when the file revision changes", async () => {
+		const { result, rerender } = renderHook(
+			({ updatedAt }) =>
+				useFileData({ file_id: "file-1", activeFileId: "file-1", updatedAt }),
+			{ initialProps: { updatedAt: "first" } },
+		)
+		await waitFor(() => expect(result.current.fileData).toBe("<html></html>"))
+		downloadFileContentMock.mockResolvedValue("<html>updated</html>")
+		rerender({ updatedAt: "second" })
+		await waitFor(() => expect(result.current.fileData).toBe("<html>updated</html>"))
+		expect(result.current.loadStatus).toBe("ready")
+	})
+
+	it("reports failures, keeps the preview, and downloads again when retrying the same version", async () => {
+		const { result } = renderHook(() => useFileData({ file_id: "file-1" }))
+		await waitFor(() => expect(result.current.loadStatus).toBe("ready"))
+		downloadFileContentMock.mockRejectedValueOnce(new Error("offline"))
+		await act(async () => {
+			await result.current.changeFileVersion(2)
+		})
+		expect(result.current.loadStatus).toBe("error")
+		expect(result.current.fileData).toBe("<html></html>")
+		await act(async () => {
+			await result.current.changeFileVersion(2)
+		})
+		expect(result.current.loadStatus).toBe("ready")
+		expect(downloadFileContentMock).toHaveBeenCalledTimes(3)
+		expect(result.current.fileVersion).toBe(2)
+	})
+
+	it("does not let a slow older version replace the latest requested version", async () => {
+		const { result } = renderHook(() => useFileData({ file_id: "file-1" }))
+		await waitFor(() => expect(result.current.loadStatus).toBe("ready"))
+		let finishOld: (value: string) => void = () => undefined
+		downloadFileContentMock.mockImplementationOnce(
+			() =>
+				new Promise((resolve) => {
+					finishOld = resolve
+				}),
+		)
+		let previous: Promise<unknown> | undefined
+		act(() => {
+			previous = result.current.changeFileVersion(2)
+		})
+		await waitFor(() => expect(downloadFileContentMock).toHaveBeenCalledTimes(2))
+		downloadFileContentMock.mockResolvedValueOnce("newest")
+		await act(async () => {
+			await result.current.changeFileVersion(3)
+		})
+		await act(async () => {
+			finishOld("obsolete")
+			await previous
+		})
+		expect(result.current.fileData).toBe("newest")
+		expect(result.current.fileVersion).toBe(3)
+	})
+
+	it("keeps an explicit version selection when an earlier history lookup finishes late", async () => {
+		const { result } = renderHook(() => useFileData({ file_id: "file-1" }))
+		await waitFor(() => expect(result.current.loadStatus).toBe("ready"))
+		let finishHistory: (value: never) => void = () => undefined
+		getFileHistoryVersionsMock.mockImplementationOnce(
+			() =>
+				new Promise((resolve) => {
+					finishHistory = resolve
+				}),
+		)
+		let history: Promise<unknown> | undefined
+		act(() => {
+			history = result.current.fetchFileVersions("file-1", true)
+		})
+		await act(async () => {
+			await result.current.changeFileVersion(4)
+		})
+		await act(async () => {
+			finishHistory({ list: [{ version: 8 }] } as never)
+			await history
+		})
+		expect(result.current.fileVersion).toBe(4)
+		expect(downloadFileContentMock).toHaveBeenCalledTimes(2)
+	})
+
+	it("acknowledges a successful reload even when the bytes did not change", async () => {
+		const { result } = renderHook(() => useFileData({ file_id: "file-1" }))
+		await waitFor(() => expect(result.current.loadStatus).toBe("ready"))
+		const previousRevision = result.current.loadRevision
+		await act(async () => {
+			await result.current.refreshFile()
+		})
+		expect(result.current.loadRevision).toBeGreaterThan(previousRevision)
+		expect(result.current.loadStatus).toBe("ready")
+		expect(downloadFileContentMock).toHaveBeenCalledTimes(2)
+	})
+
+	it("does not let a pending refresh take over a later history selection", async () => {
+		const { result } = renderHook(() => useFileData({ file_id: "file-1" }))
+		await waitFor(() => expect(result.current.loadStatus).toBe("ready"))
+		let finishHistory: (value: never) => void = () => undefined
+		getFileHistoryVersionsMock.mockImplementationOnce(
+			() =>
+				new Promise((resolve) => {
+					finishHistory = resolve
+				}),
+		)
+		let refresh: Promise<unknown> | undefined
+		act(() => {
+			refresh = result.current.refreshFile()
+		})
+		await act(async () => {
+			await result.current.changeFileVersion(4)
+		})
+		await act(async () => {
+			finishHistory({ list: [{ version: 8 }] } as never)
+			await refresh
+		})
+		expect(result.current.fileVersion).toBe(4)
+		expect(downloadFileContentMock).toHaveBeenCalledTimes(2)
 	})
 
 	it("loads project files via history versions when the active tab matches", async () => {

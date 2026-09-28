@@ -2,7 +2,7 @@
 
 import { NodeViewWrapper, NodeViewContent } from "@/infrastructure/editors/tiptap/react"
 import type { NodeViewProps } from "@/infrastructure/editors/tiptap/react"
-import { Suspense, lazy, useEffect, useState } from "react"
+import { Suspense, lazy, useEffect, useMemo, useState } from "react"
 import type { CSSProperties } from "react"
 import {
 	DiffSyntaxHighlighter,
@@ -10,6 +10,7 @@ import {
 } from "@/infrastructure/vendors/react-syntax-highlighter/diff"
 import type { CodeBlockNodeOptions } from "./code-block-node-extension"
 import { cn } from "@/utils/cn"
+import type { CodeSearchHighlight } from "@/components/base/MagicCode/search-highlights"
 
 const MagicCode = lazy(() => import("@/components/base/MagicCode"))
 const MagicMermaid = lazy(() => import("@/components/base/MagicMermaid"))
@@ -27,7 +28,21 @@ interface CodeBlockNodeViewProps extends NodeViewProps {
  * - Read-only: uses MagicCode for enhanced display with syntax highlighting
  */
 export function CodeBlockNodeView(props: CodeBlockNodeViewProps) {
-	const { node, editor, extension } = props
+	const { node, editor, extension, innerDecorations } = props
+	// Read-only node views render outside contentDOM, so project the search decorations
+	// into the syntax renderer using their already node-relative offsets.
+	const searchHighlights = useMemo(() => {
+		const highlights: CodeSearchHighlight[] = []
+		innerDecorations.forEachSet((set) => {
+			for (const decoration of set.find()) {
+				const className = decoration.spec.searchResultClass
+				if (typeof className === "string") {
+					highlights.push({ from: decoration.from, to: decoration.to, className })
+				}
+			}
+		})
+		return highlights.sort((a, b) => a.from - b.from)
+	}, [innerDecorations])
 	const language = node.attrs.language || "text"
 	const { enableWrapToggle } = extension.options
 	const diffWrapClassName = enableWrapToggle ? "diff-code-wrapped" : "diff-code-unwrapped"
@@ -59,13 +74,12 @@ export function CodeBlockNodeView(props: CodeBlockNodeViewProps) {
 		}
 	}, [editor, isEditable])
 
-	// Editable mode: use default rendering to allow editing
+	// NodeViewContent hosts the renderer's actual <code> contentDOM. Keep it directly
+	// inside <pre>; another editable <code> wrapper can accept input outside the document.
 	if (isEditable) {
 		return (
-			<NodeViewWrapper as="pre">
-				<code>
-					<NodeViewContent as="div" />
-				</code>
+			<NodeViewWrapper as="div">
+				<NodeViewContent as="pre" />
 			</NodeViewWrapper>
 		)
 	}
@@ -83,7 +97,7 @@ export function CodeBlockNodeView(props: CodeBlockNodeViewProps) {
 		)
 	}
 	// Support diff format - use Light version to avoid conflict with code mode
-	if (language === "diff") {
+	if (language === "diff" && !searchHighlights.length) {
 		if (!diffStyle) {
 			return null
 		}
@@ -120,6 +134,7 @@ export function CodeBlockNodeView(props: CodeBlockNodeViewProps) {
 					data={codeContent}
 					className="code-block-node-view"
 					enableWrapToggle={enableWrapToggle}
+					searchHighlights={searchHighlights}
 				/>
 			</Suspense>
 		</NodeViewWrapper>

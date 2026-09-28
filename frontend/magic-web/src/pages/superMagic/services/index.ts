@@ -575,12 +575,22 @@ class SuperMagicService {
 		if (optimisticTopicId && navigationWorkspaceId) {
 			// Navigate to topic optimistically
 			this.topicStore.setSelectedTopic(null) // Clear first, wait for background data
-			this.route.navigateToTopic({
-				workspaceId: navigationWorkspaceId,
-				projectId: resolvedProject.id,
-				topicId: optimisticTopicId,
-				state: navigationState,
-			})
+			if (interfaceStore.isMobile) {
+				// Mobile has a dedicated project-topic route. navigateToTopic intentionally
+				// resolves to the project page there, so use the detail route directly.
+				this.route.navigateToProjectTopicOnMobile({
+					workspaceId: navigationWorkspaceId,
+					projectId: resolvedProject.id,
+					topicId: optimisticTopicId,
+				})
+			} else {
+				this.route.navigateToTopic({
+					workspaceId: navigationWorkspaceId,
+					projectId: resolvedProject.id,
+					topicId: optimisticTopicId,
+					state: navigationState,
+				})
+			}
 			navigatedToTopic = true
 		} else {
 			// Navigate to project optimistically

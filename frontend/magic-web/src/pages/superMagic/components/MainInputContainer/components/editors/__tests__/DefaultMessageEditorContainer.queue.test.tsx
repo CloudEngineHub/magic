@@ -5,6 +5,9 @@ import { beforeEach, describe, expect, it, vi } from "vitest"
 import { TopicMode } from "@/pages/superMagic/pages/Workspace/TopicMode"
 
 const mocks = vi.hoisted(() => ({
+	ensureProject: vi.fn(),
+	editorProps:
+		{} as import("@/pages/superMagic/components/MessageEditor/types").MessageEditorProps,
 	addToQueue: vi.fn(),
 	clearContentAfterSend: vi.fn(),
 	setContent: vi.fn(),
@@ -22,7 +25,8 @@ const mocks = vi.hoisted(() => ({
 }))
 
 vi.mock("@/pages/superMagic/components/MessageEditor/MessageEditor", () => ({
-	default: forwardRef((_, ref) => {
+	default: forwardRef((props, ref) => {
+		mocks.editorProps = props
 		useImperativeHandle(ref, () => ({
 			clearContentAfterSend: mocks.clearContentAfterSend,
 			setContent: mocks.setContent,
@@ -95,7 +99,7 @@ vi.mock("@/pages/superMagic/services/messageSendFlowService", () => ({
 
 vi.mock("@/pages/superMagic/services/messageSendPreparation", () => ({
 	createTopicForMessageContext: vi.fn(),
-	ensureProjectForMessageContext: vi.fn(),
+	ensureProjectForMessageContext: mocks.ensureProject,
 	preparePanelSend: mocks.preparePanelSend,
 	releaseHtmlScreenshotsAfterSend: mocks.releaseHtmlScreenshotsAfterSend,
 }))
@@ -107,6 +111,23 @@ vi.mock("@/pages/superMagic/components/MessageEditor/utils", () => ({
 import DefaultMessageEditorContainer from "../DefaultMessageEditorContainer"
 
 describe("DefaultMessageEditorContainer queue sending", () => {
+	it("keeps long pasted text on temporary uploads until a blank chat is sent", async () => {
+		render(
+			<DefaultMessageEditorContainer
+				editorContext={{
+					selectedProject: null,
+					selectedTopic: null,
+					selectedWorkspace: null,
+					topicMode: TopicMode.General,
+					deferProjectCreationUntilSend: true,
+				}}
+			/>,
+		)
+		await act(async () => {
+			expect(await mocks.editorProps.onEnsureProject?.()).toBeNull()
+		})
+		expect(mocks.ensureProject).not.toHaveBeenCalled()
+	})
 	beforeEach(() => {
 		vi.clearAllMocks()
 		mocks.handleSend = undefined

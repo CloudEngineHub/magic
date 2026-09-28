@@ -22,6 +22,8 @@ import magicToast from "@/components/base/MagicToaster/utils"
 import { uploadLogger } from "../utils/uploadLogger"
 import {
 	prepareExportSlides,
+	prepareFileExportSlides,
+	resolvePptExportSlides,
 	iterateExportSlides,
 	iterateSingleExportSlide,
 	prepareSingleSlideExport,
@@ -125,8 +127,7 @@ const findParentSlideFolder = (
 			// 检查目标文件是否是该文件夹的直接子项
 			if (item.children.some((child) => child.file_id === targetFileId)) {
 				const config = (item.display_config || item.metadata) as
-					| { type?: string; [key: string]: unknown }
-					| undefined
+					{ type?: string; [key: string]: unknown } | undefined
 				if (config?.type === "slide") {
 					return item
 				}
@@ -1093,11 +1094,9 @@ export function useFileOperations(options: UseFileOperationsOptions = {}) {
 			const toastId = createRandomUuidV4()
 			const resourceErrors = documentExporter.createResourceErrorCollector(t)
 			const displayConfig = item.display_config as
-				| { type?: string; slides?: string[]; [key: string]: unknown }
-				| undefined
+				{ type?: string; slides?: string[]; [key: string]: unknown } | undefined
 			const metadata = item.metadata as
-				| { type?: string; slides?: string[]; [key: string]: unknown }
-				| undefined
+				{ type?: string; slides?: string[]; [key: string]: unknown } | undefined
 			let mergedDisplayConfig = displayConfig || metadata
 			let slidePaths: string[] = Array.isArray(mergedDisplayConfig?.slides)
 				? mergedDisplayConfig.slides
@@ -1110,8 +1109,7 @@ export function useFileOperations(options: UseFileOperationsOptions = {}) {
 				if (parentFolder) {
 					isSlideFolder = true
 					const parentConfig = (parentFolder.display_config || parentFolder.metadata) as
-						| { type?: string; slides?: string[]; [key: string]: unknown }
-						| undefined
+						{ type?: string; slides?: string[]; [key: string]: unknown } | undefined
 					mergedDisplayConfig = parentConfig
 					slidePaths = [] // 单文件，不走多 slide 路径
 				}
@@ -1291,7 +1289,7 @@ export function useFileOperations(options: UseFileOperationsOptions = {}) {
 				})
 			}
 		},
-		[t, attachments],
+		[t, attachments, fileApi, fileAccess],
 	)
 
 	// 导出 PPTX（前端 html2pptx streaming-only）
@@ -1301,13 +1299,11 @@ export function useFileOperations(options: UseFileOperationsOptions = {}) {
 
 			const toastId = createRandomUuidV4()
 			const displayConfig = item.display_config as
-				| { type?: string; slides?: string[]; [key: string]: unknown }
-				| undefined
+				{ type?: string; slides?: string[]; [key: string]: unknown } | undefined
 			const metadata = item.metadata as
-				| { type?: string; slides?: string[]; [key: string]: unknown }
-				| undefined
+				{ type?: string; slides?: string[]; [key: string]: unknown } | undefined
 			const mergedDisplayConfig = displayConfig || metadata
-			const slidePaths: string[] = Array.isArray(mergedDisplayConfig?.slides)
+			let slidePaths: string[] = Array.isArray(mergedDisplayConfig?.slides)
 				? mergedDisplayConfig.slides
 				: []
 			const isSlideProject = mergedDisplayConfig?.type === "slide" || slidePaths.length > 0
@@ -1356,6 +1352,7 @@ export function useFileOperations(options: UseFileOperationsOptions = {}) {
 					magicToast.error(t("topicFiles.entryFileNotFound"))
 					return
 				}
+
 				assertPptxExportAvailable({ pageCount: isSingleFile ? 1 : slidePaths.length })
 				destinationLease = await openPptxDestination({
 					suggestedName: String(
@@ -1364,6 +1361,18 @@ export function useFileOperations(options: UseFileOperationsOptions = {}) {
 				})
 				if (!destinationLease) return
 
+				if (!isSingleFile) {
+					const resolved = await resolvePptExportSlides({
+						slidePaths,
+						displayConfig: mergedDisplayConfig,
+						attachmentList: attachmentScope,
+						mainFileId: fileId,
+						fileApi,
+						access: fileAccess ?? undefined,
+					})
+					slidePaths = resolved.slidePaths
+					if (!slidePaths.length) throw new Error("No visible slides to export")
+				}
 				magicToast.loading({
 					key: toastId,
 					content: getExportToastContent(t("topicFiles.exporting")),
@@ -1386,6 +1395,7 @@ export function useFileOperations(options: UseFileOperationsOptions = {}) {
 									})
 								: iterateExportSlides({
 										slidePaths,
+										configResolved: true,
 										attachmentList: attachmentScope,
 										mainFileId: fileId,
 										mainFileName: sourceFileName,
@@ -1475,7 +1485,7 @@ export function useFileOperations(options: UseFileOperationsOptions = {}) {
 				})
 			}
 		},
-		[t, attachments],
+		[t, attachments, fileApi, fileAccess],
 	)
 
 	// 导出 HTML / 文本类文件 为图片（PNG / JPEG）
@@ -1541,8 +1551,9 @@ export function useFileOperations(options: UseFileOperationsOptions = {}) {
 					}).promise
 				} else {
 					// HTML 文件使用原有逻辑
-					const result = await prepareSingleSlideExport({
+					const result = await prepareFileExportSlides({
 						fileId: item.file_id,
+						displayConfig: (item.display_config || item.metadata) as any,
 						fileName: item.file_name,
 						attachmentList: attachments ?? [],
 						access: fileAccess ?? undefined,
@@ -1562,6 +1573,7 @@ export function useFileOperations(options: UseFileOperationsOptions = {}) {
 						pages: result.htmlSlides,
 						attachments: attachments ?? [],
 						fileId: item.file_id,
+						displayConfig: (item.display_config || item.metadata) as any,
 						fileName: item.file_name,
 						attachmentList: attachments ?? [],
 						access: fileAccess ?? undefined,
@@ -1612,7 +1624,7 @@ export function useFileOperations(options: UseFileOperationsOptions = {}) {
 				})
 			}
 		},
-		[t, attachments, fileApi],
+		[t, attachments, fileApi, fileAccess],
 	)
 
 	// 文件下载功能 - 支持单个文件或多个文件

@@ -324,8 +324,7 @@ async function supportsOpfsStaging(): Promise<boolean> {
 
 function hasOpfsApi(): boolean {
 	const storage = (globalThis as { navigator?: Navigator }).navigator?.storage as
-		| { getDirectory?: unknown }
-		| undefined
+		{ getDirectory?: unknown } | undefined
 	return typeof storage?.getDirectory === "function"
 }
 

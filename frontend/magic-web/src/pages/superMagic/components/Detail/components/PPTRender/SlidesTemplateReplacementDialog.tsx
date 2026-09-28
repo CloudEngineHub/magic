@@ -76,7 +76,7 @@ export default function SlidesTemplateReplacementDialog({
 				onTemplateClick={setSelectedTemplate}
 				className="h-full"
 				toolbarClassName="sticky top-0 z-20 bg-background/95 pb-3 backdrop-blur"
-				gridClassName="min-h-0 flex-1"
+				gridClassName="min-h-0 flex-1 ![grid-template-columns:repeat(auto-fill,minmax(min(100%,240px),1fr))]"
 				showMyTemplates
 				enableMyTemplateRemoval
 			/>

@@ -62,10 +62,11 @@ export default function MicroAppDesktopConversationPanels({
 			{!isMessagePanelCollapsed ? (
 				<>
 					<TopicResizeHandle
+						withDivider
 						onResizeStart={onMessagePanelResizeStart}
 						className={cn(
 							isMessagePanelDragging ? "before:opacity-100" : undefined,
-							"border-l border-border !bg-sidebar",
+							"!bg-sidebar",
 						)}
 					/>
 					<aside

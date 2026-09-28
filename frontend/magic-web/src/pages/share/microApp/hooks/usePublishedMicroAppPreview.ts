@@ -3,7 +3,7 @@ import useMicroAppInstallFlow from "./useMicroAppInstallFlow"
 import useMicroAppSafetyNoticeConfirmation from "./useMicroAppSafetyNoticeConfirmation"
 import useMicroAppShareData from "./useMicroAppShareData"
 import HtmlPreviewContent from "@/pages/superMagic/components/Detail/contents/HTML"
-import type { AttachmentItem } from "@/pages/superMagic/components/TopicFilesButton/hooks"
+import { useMicroAppPreviewFiles } from "@/pages/superMagic/pages/MicroAppPage/hooks/useMicroAppPreviewFiles"
 import { resolveSelectedHtmlEntry } from "@/pages/superMagic/pages/MicroAppPage/utils/microAppFiles"
 import { resolvePublishedDefaultOpenFileId } from "../utils/publishedMicroAppPreview"
 
@@ -19,7 +19,6 @@ export function usePublishedMicroAppPreview({
 	appName,
 }: UsePublishedMicroAppPreviewOptions) {
 	const [previewMode, setPreviewMode] = useState<MicroAppPreviewMode>("desktop")
-	const [activeFileId, setActiveFileId] = useState<string | null>(null)
 	const { hasConfirmedSafetyNotice, confirmSafetyNotice } =
 		useMicroAppSafetyNoticeConfirmation(appId)
 	const shareDataState = useMicroAppShareData({ appId })
@@ -44,10 +43,12 @@ export function usePublishedMicroAppPreview({
 		[attachmentList, defaultOpenFileId],
 	)
 	const displayAppName = appName?.trim() || shareMeta.projectName
-	const previewFile = useMemo(
-		() => attachmentList.find((item) => item.file_id === activeFileId) || defaultEntryFile,
-		[activeFileId, attachmentList, defaultEntryFile],
-	)
+	const browser = useMicroAppPreviewFiles({
+		attachmentList,
+		defaultEntryFile,
+		scopeKey: `${appId}:${resourceId}:${shareMeta.projectId}`,
+	})
+	const previewFile = browser.previewEntryFile
 	const installFlow = useMicroAppInstallFlow({
 		appId,
 		hasEntryFile: Boolean(previewFile),
@@ -70,11 +71,7 @@ export function usePublishedMicroAppPreview({
 		},
 		[rememberVerifiedPassword, setError, setVerifiedPassword],
 	)
-	const handleOpenFileTab = useCallback((fileItem: AttachmentItem) => {
-		if (fileItem.file_id) {
-			setActiveFileId(fileItem.file_id)
-		}
-	}, [])
+	const handleOpenFileTab = browser.handlePreviewOpenFile
 
 	return {
 		appId,
@@ -83,6 +80,7 @@ export function usePublishedMicroAppPreview({
 		confirmSafetyNotice,
 		displayAppName,
 		previewFile,
+		browser,
 		defaultEntryFile,
 		installFlow,
 		previewMode,

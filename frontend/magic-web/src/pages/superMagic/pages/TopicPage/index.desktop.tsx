@@ -802,6 +802,7 @@ function TopicPage({ pageVariant = "default" }: TopicPageDesktopProps) {
 				isHistoryPanelOpen={isHistoryPanelOpen}
 				onToggleHistoryPanel={onToggleHistoryPanel}
 				trailingActions={isSingleTopicChat ? <ChatConversationActionsSlot /> : undefined}
+				isChatDetail={isSingleTopicChat}
 			/>
 		),
 	)
