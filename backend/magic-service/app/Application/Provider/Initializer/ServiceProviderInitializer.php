@@ -5,7 +5,7 @@ declare(strict_types=1);
  * Copyright (c) The Magic , Distributed under the software license
  */
 
-namespace App\Application\Provider\Official;
+namespace App\Application\Provider\Initializer;
 
 use App\Domain\Provider\Entity\ValueObject\ProviderCode;
 use App\Infrastructure\Util\IdGenerator\IdGenerator;

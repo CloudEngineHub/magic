@@ -5,7 +5,7 @@ declare(strict_types=1);
  * Copyright (c) The Magic , Distributed under the software license
  */
 
-namespace App\Application\Provider\Service;
+namespace App\Application\Provider\SyncModel;
 
 use App\Domain\File\Service\FileDomainService;
 use App\Domain\Provider\Entity\ProviderConfigEntity;
@@ -31,7 +31,7 @@ use function Hyperf\Support\retry;
  * 服务商模型同步应用服务.
  * 负责从外部API拉取模型并同步到Official服务商.
  */
-class ProviderModelSyncAppService
+class SyncModelToOfficialProvider
 {
     private LoggerInterface $logger;
 

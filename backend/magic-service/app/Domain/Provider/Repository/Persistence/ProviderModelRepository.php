@@ -179,6 +179,23 @@ class ProviderModelRepository extends AbstractProviderModelRepository implements
         $this->updateStatusDirect($dataIsolation, $organizationModelId, $status);
     }
 
+    public function updateStatusByModelIds(ProviderDataIsolation $dataIsolation, array $modelIds, Status $status): void
+    {
+        $modelIds = array_values(array_unique($modelIds));
+        if ($modelIds === []) {
+            return;
+        }
+
+        ProviderModelModel::query()
+            ->where('organization_code', $dataIsolation->getCurrentOrganizationCode())
+            ->whereIn('model_id', $modelIds)
+            ->where('status', '<>', $status->value)
+            ->update([
+                'status' => $status->value,
+                'updated_at' => date('Y-m-d H:i:s'),
+            ]);
+    }
+
     public function deleteByModelParentId(ProviderDataIsolation $dataIsolation, string $modelParentId): void
     {
         $builder = ProviderModelModel::query()->where('organization_code', $dataIsolation->getCurrentOrganizationCode());
