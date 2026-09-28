@@ -10,11 +10,15 @@ vi.mock("../../../../contents/HTML/components/StylePanel", () => ({
 
 describe("StablePreviewPortalSurface PPT viewport", () => {
 	let anchor: HTMLDivElement
+	let notifyResize: ResizeObserverCallback
 	beforeEach(() => {
 		resetOverlayStackForTest()
 		vi.stubGlobal(
 			"ResizeObserver",
 			class {
+				constructor(callback: ResizeObserverCallback) {
+					notifyResize = callback
+				}
 				observe = vi.fn()
 				disconnect = vi.fn()
 			},
@@ -28,6 +32,32 @@ describe("StablePreviewPortalSurface PPT viewport", () => {
 			width: 600,
 			height: 400,
 		} as DOMRect)
+	})
+
+	it("follows consecutive anchor resizes before paint without recreating the iframe", () => {
+		// ResizeObserver runs before paint. An extra animation frame leaves the portal
+		// at the previous width while the adjacent conversation has already moved.
+		const nextFrame = vi.spyOn(window, "requestAnimationFrame").mockReturnValue(1)
+		render(
+			<StablePreviewPortalSurface anchor={anchor} enabled visible isPpt isFullscreen={false}>
+				<iframe title="resizing-slide" />
+			</StablePreviewPortalSurface>,
+		)
+		const frame = screen.getByTitle("resizing-slide")
+		const host = frame.parentElement
+		if (!host) throw new Error("Missing portal host")
+		for (const width of [560, 480, 640, 600]) {
+			vi.mocked(anchor.getBoundingClientRect).mockReturnValue({
+				top: 40,
+				left: 80,
+				width,
+				height: 400,
+			} as DOMRect)
+			act(() => notifyResize([], {} as ResizeObserver))
+			expect(host.style.width).toBe(`${width}px`)
+			expect(screen.getByTitle("resizing-slide")).toBe(frame)
+		}
+		expect(nextFrame).not.toHaveBeenCalled()
 	})
 
 	it.each([false, true])(

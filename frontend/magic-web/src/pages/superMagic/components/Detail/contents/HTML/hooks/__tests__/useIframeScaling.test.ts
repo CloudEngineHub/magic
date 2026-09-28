@@ -1,13 +1,17 @@
-import { renderHook, waitFor } from "@testing-library/react"
+import { act, renderHook, waitFor } from "@testing-library/react"
 import { useIframeScaling } from "../useIframeScaling"
 import { createRef } from "react"
 import { afterEach, beforeEach, vi } from "vitest"
 
 describe("useIframeScaling", () => {
+	let notifyResize: ResizeObserverCallback
 	beforeEach(() => {
 		vi.stubGlobal(
 			"ResizeObserver",
 			class ResizeObserver {
+				constructor(callback: ResizeObserverCallback) {
+					notifyResize = callback
+				}
 				observe = vi.fn()
 				disconnect = vi.fn()
 			},
@@ -15,9 +19,44 @@ describe("useIframeScaling", () => {
 	})
 
 	afterEach(() => {
+		vi.useRealTimers()
 		vi.unstubAllGlobals()
 		vi.restoreAllMocks()
 		document.body.innerHTML = ""
+	})
+
+	it.each([null, 0.75])("keeps up with continuous resize at manual scale %s", (manualScale) => {
+		vi.useFakeTimers()
+		let width = 960
+		const container = document.createElement("div")
+		Object.defineProperties(container, {
+			offsetWidth: { get: () => width },
+			offsetHeight: { value: 800 },
+		})
+		// Keep the inputs stable, as in PPTSlide, so rerendering cannot accidentally
+		// recalculate the scale and mask a resize callback waiting for an idle gap.
+		const config = {
+			containerRef: { current: container },
+			iframeRef: createRef<HTMLIFrameElement>(),
+			isPptRender: true,
+			iframeLoaded: true,
+			contentInjected: true,
+			scaleContentDimensions: { width: 1920, height: 1080 },
+			manualScale,
+			onManualScaleChange: vi.fn(),
+		}
+		const { result, unmount } = renderHook(() => useIframeScaling(config))
+		act(() => vi.advanceTimersByTime(100))
+		for (width of [900, 800, 640, 720, 960]) {
+			act(() => {
+				notifyResize([], {} as ResizeObserver)
+				vi.advanceTimersByTime(8)
+			})
+			expect(result.current.containerDimensions.width).toBe(width)
+			expect(result.current.scaleRatio).toBeCloseTo(manualScale ?? width / 1920)
+		}
+		expect(config.onManualScaleChange).not.toHaveBeenCalled()
+		unmount()
 	})
 
 	it("should return default values when not in PPT mode", () => {

@@ -189,8 +189,11 @@ export default function StablePreviewPortalSurface({
 			scheduleSync()
 		}
 
+		// ResizeObserver already runs before paint. Deferring again lets the body portal
+		// overlap the resized conversation for one frame. Updating the separate host
+		// does not resize the observed anchor, so it cannot feed back into this observer.
 		const resizeObserver =
-			typeof ResizeObserver === "undefined" ? null : new ResizeObserver(scheduleSync)
+			typeof ResizeObserver === "undefined" ? null : new ResizeObserver(syncSurface)
 		resizeObserver?.observe(anchor)
 		document.addEventListener("scroll", handleDocumentScroll, {
 			capture: true,

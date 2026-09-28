@@ -1,3 +1,4 @@
+const { isDesignStylePreviewPath } = require("./designStylePreviewMiddleware")
 const MAGIC_WIDGET_PUBLIC_PATH = "/sdk/magic-widget.js"
 const MAGIC_HTML_SANDBOX_RUNTIME_PATH = "/husky-runtime.js"
 const NEGOTIATED_CACHE_CONTROL = "no-cache"
@@ -25,6 +26,17 @@ function isMagicHtmlSandboxRuntime(pathname) {
 }
 
 function setStaticAssetCacheHeaders(res, pathname) {
+	if (isDesignStylePreviewPath(pathname)) {
+		// Keep the access middleware's browser-only revalidation policy on static responses.
+		res.setHeader("Cache-Control", "private, no-cache")
+		return
+	}
+	if (normalizePathname(pathname).endsWith("/html-design-style/catalog.json")) {
+		// The catalog URL is stable across releases, so it must not stay fresh for a year.
+		res.setHeader("Cache-Control", "public, no-cache")
+		return
+	}
+
 	if (isMagicWidgetAsset(pathname)) {
 		// The widget has a stable external URL, so browsers may store it but must revalidate each load.
 		res.setHeader("Cache-Control", NEGOTIATED_CACHE_CONTROL)
