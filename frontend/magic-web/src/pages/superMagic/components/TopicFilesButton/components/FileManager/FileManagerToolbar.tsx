@@ -18,7 +18,7 @@ import {
 	RefreshCw,
 	Trash2,
 } from "lucide-react"
-import { Fragment, type ComponentProps, type ReactNode } from "react"
+import { Fragment, type ComponentProps, type ReactNode, useState } from "react"
 import { useTranslation } from "react-i18next"
 import MagicTooltip from "@/components/base/MagicTooltip"
 import MagicDropdown from "@/components/base/MagicDropdown"
@@ -44,7 +44,7 @@ interface Props {
 		actions: FileManagerActions
 	}
 	toolbarLeading?: ReactNode
-	/** 选择模式将路径、排序、搜索和刷新放到同一条可自适应工具栏。 */
+	/** 选择模式将路径、搜索和刷新放到同一条可自适应工具栏。 */
 	compact?: boolean
 	path: FileManagerPathItem[]
 	canBack: boolean
@@ -69,6 +69,7 @@ interface Props {
 
 export function FileManagerToolbar(props: Props) {
 	const { t } = useTranslation("super")
+	const [searchFocused, setSearchFocused] = useState(false)
 	const management = props.management
 	const navigation = [
 		{
@@ -128,7 +129,16 @@ export function FileManagerToolbar(props: Props) {
 		</MagicDropdown>
 	)
 	const search = (
-		<div className="relative w-40 min-w-24 flex-[0_1_10rem]">
+		<div
+			className={cn(
+				"relative min-w-24 shrink-0 transition-[width,flex-basis] duration-200",
+				props.compact
+					? searchFocused
+						? "w-64 max-w-[18rem] flex-[1_1_16rem]"
+						: "w-40 flex-[0_1_10rem]"
+					: "w-40 flex-[0_1_10rem]",
+			)}
+		>
 			<Search
 				size={16}
 				className="pointer-events-none absolute left-2 top-1.5 text-muted-foreground"
@@ -146,6 +156,12 @@ export function FileManagerToolbar(props: Props) {
 						? t("fileManager.searchProjectFiles")
 						: t("userSpace.searchDirectory")
 				}
+				onFocus={() => {
+					if (props.compact) setSearchFocused(true)
+				}}
+				onBlur={() => {
+					if (props.compact && !props.query) setSearchFocused(false)
+				}}
 				className="h-7 cursor-text rounded-md bg-muted/30 pl-8 text-xs"
 			/>
 		</div>
@@ -215,9 +231,7 @@ export function FileManagerToolbar(props: Props) {
 		return (
 			<div className="flex min-w-0 shrink-0 flex-wrap items-center gap-1 border-b border-border/60 px-3 py-2">
 				{props.toolbarLeading}
-				{navigationButtons}
 				{pathNavigation}
-				{sortSelector}
 				{search}
 				{refresh}
 			</div>
