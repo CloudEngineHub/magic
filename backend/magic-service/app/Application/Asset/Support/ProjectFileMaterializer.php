@@ -8,6 +8,7 @@ declare(strict_types=1);
 namespace App\Application\Asset\Support;
 
 use App\Domain\Asset\Service\AssetDomainService;
+use App\Domain\File\Constant\FileUploadBusinessCode;
 use App\Domain\File\Service\FileDomainService;
 use App\Domain\SuperMagic\File\Entity\TaskFileEntity;
 use App\Domain\SuperMagic\File\Service\TaskFileDomainService;
@@ -77,7 +78,11 @@ class ProjectFileMaterializer
                 return ['file_key' => $existing->getFileKey(), 'content_hash' => $contentHash];
             }
 
-            $uploadFile = new UploadFile($downloaded->getRealPath(), '', $file->getFileName());
+            $uploadFile = new UploadFile(
+                $downloaded->getRealPath(),
+                FileUploadBusinessCode::ASSET->getDir(),
+                $file->getFileName(),
+            );
             $this->fileDomainService->uploadByCredential($dataIsolation->getCurrentOrganizationCode(), $uploadFile);
             return ['file_key' => $uploadFile->getKey(), 'content_hash' => $contentHash];
         } finally {

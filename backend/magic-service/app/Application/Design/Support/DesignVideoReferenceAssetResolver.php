@@ -12,6 +12,7 @@ use App\Domain\Asset\Entity\AssetDataIsolation;
 use App\Domain\Asset\Service\AssetDomainService;
 use App\Domain\Design\Entity\DesignDataIsolation;
 use App\Domain\Design\Entity\DesignGenerationTaskEntity;
+use App\Domain\File\Constant\FileUploadBusinessCode;
 use App\Domain\File\Service\FileDomainService;
 use App\Domain\SuperMagic\File\Entity\TaskFileEntity;
 use App\Domain\SuperMagic\File\Service\TaskFileDomainService;
@@ -226,7 +227,11 @@ final class DesignVideoReferenceAssetResolver
 
             // 必须带上带扩展名的文件名：临时文件路径无后缀，会让私有桶 key 丢后缀，
             // 进而使 asset_media_type 推断失败、火山把视频/音频当图片处理（FormatUnsupported）。
-            $uploadFile = new UploadFile($downloaded->getRealPath(), '', $downloaded->getName());
+            $uploadFile = new UploadFile(
+                $downloaded->getRealPath(),
+                FileUploadBusinessCode::ASSET->getDir(),
+                $downloaded->getName(),
+            );
             $this->fileDomainService->uploadByCredential($organizationCode, $uploadFile);
 
             $asset = $this->assetAppService->createPersonalAsset($dataIsolation, $this->buildCreateDto($uploadFile->getKey(), $fileEntity->getFileName()));
