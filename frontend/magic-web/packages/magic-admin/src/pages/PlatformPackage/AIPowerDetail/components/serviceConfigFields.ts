@@ -104,6 +104,12 @@ const COMMON_FIELDS = {
 		placeholder: "modelNamePlaceholder",
 		description: "modelNameDesc",
 	}),
+
+	version: createFieldConfig("version", "version", "input"),
+	region: createFieldConfig("region", "region", "input"),
+	service: createFieldConfig("service", "serviceName", "input"),
+	endpoint: createFieldConfig("endpoint", "endpoint", "input"),
+	projectName: createFieldConfig("project_name", "projectName", "input"),
 } as const
 
 const PROVIDER_META_FIELD_KEYS = new Set(["provider", "provider_code", "name", "enable"])
@@ -121,6 +127,11 @@ const COMMON_FIELD_MAP: Partial<Record<string, FieldConfig>> = {
 	hot_words: COMMON_FIELDS.hotWords,
 	replacement_words: COMMON_FIELDS.replacementWords,
 	model_name: COMMON_FIELDS.modelName,
+	version: COMMON_FIELDS.version,
+	region: COMMON_FIELDS.region,
+	service: COMMON_FIELDS.service,
+	endpoint: COMMON_FIELDS.endpoint,
+	project_name: COMMON_FIELDS.projectName,
 }
 
 const PASSWORD_FIELD_PATTERNS = ["key", "secret", "token", "password"]
@@ -264,6 +275,18 @@ export const serviceTypeConfigs: Record<string, FieldConfig[]> = {
 		COMMON_FIELDS.provider,
 		COMMON_FIELDS.apiKey,
 		COMMON_FIELDS.requestUrl,
+	],
+
+	// 火山方舟素材服务配置
+	[PlatformPackage.PowerCode.VOLCENGINE_ARK_ASSETS]: [
+		COMMON_FIELDS.provider,
+		COMMON_FIELDS.accessKey,
+		COMMON_FIELDS.secretKey,
+		COMMON_FIELDS.version,
+		COMMON_FIELDS.region,
+		COMMON_FIELDS.service,
+		COMMON_FIELDS.endpoint,
+		COMMON_FIELDS.projectName,
 	],
 }
 

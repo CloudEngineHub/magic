@@ -51,6 +51,8 @@ class AssetDomainService
 
     private readonly AssetProviderInterface $provider;
 
+    private readonly string $projectName;
+
     public function __construct(
         private readonly AssetRepositoryInterface $assets,
         private readonly AssetProviderAssetRepositoryInterface $providerAssets,
@@ -59,10 +61,10 @@ class AssetDomainService
         private readonly AiAbilityDomainService $abilityDomainService,
         private readonly AssetSearchTextBuilder $searchTextBuilder,
     ) {
-        $this->provider = new VolcengineArkAssetProvider(
-            $this->logger,
-            $this->abilityDomainService->getProviderConfig(AiAbilityCode::VolcengineArkAssets),
-        );
+        $config = $this->abilityDomainService->getProviderConfig(AiAbilityCode::VolcengineArkAssets);
+        $providerConfig = $this->resolveProviderConfig($config);
+        $this->projectName = trim((string) ($providerConfig['project_name'] ?? '')) ?: self::DEFAULT_PROJECT_NAME;
+        $this->provider = new VolcengineArkAssetProvider($this->logger, $providerConfig);
     }
 
     public function createPersonal(AssetDataIsolation $dataIsolation, AssetEntity $asset): AssetEntity
@@ -272,7 +274,7 @@ class AssetDomainService
             $dataIsolation,
             $assetId,
             $this->provider->getProviderCode(),
-            self::DEFAULT_PROJECT_NAME,
+            $this->projectName,
         );
         if ($mapping === null) {
             return null;
@@ -314,7 +316,7 @@ class AssetDomainService
         $mapping = $this->providerAssets->findReusableMappingByAssetIds(
             $this->assets->findIdsByContentHash($contentHash),
             $this->provider->getProviderCode(),
-            self::DEFAULT_PROJECT_NAME,
+            $this->projectName,
         );
         if ($mapping === null || ! $mapping->getProviderStatus()->isPassed()) {
             return null;
@@ -350,7 +352,7 @@ class AssetDomainService
             $dataIsolation,
             $assetId,
             $this->provider->getProviderCode(),
-            self::DEFAULT_PROJECT_NAME,
+            $this->projectName,
         );
         if ($mapping !== null) {
             $providerAsset = new ProviderAssetEntity($mapping->toArray());
@@ -392,7 +394,7 @@ class AssetDomainService
             $dataIsolation,
             $assetIds,
             $this->provider->getProviderCode(),
-            self::DEFAULT_PROJECT_NAME,
+            $this->projectName,
         );
     }
 
@@ -411,7 +413,7 @@ class AssetDomainService
             $dataIsolation,
             $assetId,
             $this->provider->getProviderCode(),
-            self::DEFAULT_PROJECT_NAME,
+            $this->projectName,
         );
         if ($mapping === null) {
             return null;
@@ -476,7 +478,7 @@ class AssetDomainService
             $dataIsolation,
             $asset->getId(),
             $this->provider->getProviderCode(),
-            self::DEFAULT_PROJECT_NAME,
+            $this->projectName,
         );
         // 未同步到第三方，直接删除本地记录。
         if ($mappingModel === null) {
@@ -503,7 +505,7 @@ class AssetDomainService
                 $dataIsolation,
                 $asset->getId(),
                 $this->provider->getProviderCode(),
-                self::DEFAULT_PROJECT_NAME,
+                $this->projectName,
             );
         }
         return $deletedLocally;
@@ -522,8 +524,8 @@ class AssetDomainService
         if ($providerAssetId === '' && $providerGroupId === '') {
             return true;
         }
-        $reclaimedAsset = $providerAssetId === '' || $this->provider->deleteAsset($providerAssetId, self::DEFAULT_PROJECT_NAME);
-        $reclaimedGroup = $providerGroupId === '' || $this->provider->deleteAssetGroup($providerGroupId, self::DEFAULT_PROJECT_NAME);
+        $reclaimedAsset = $providerAssetId === '' || $this->provider->deleteAsset($providerAssetId, $this->projectName);
+        $reclaimedGroup = $providerGroupId === '' || $this->provider->deleteAssetGroup($providerGroupId, $this->projectName);
         if (! $reclaimedAsset || ! $reclaimedGroup) {
             $this->logger->warning('第三方资源回收未全部成功，映射行保留待补偿', [
                 'asset_id' => $mapping->getAssetId(),
@@ -631,7 +633,7 @@ class AssetDomainService
         return $this->providerAssets->findReusableMappingByAssetIds(
             $candidateIds,
             $this->provider->getProviderCode(),
-            self::DEFAULT_PROJECT_NAME,
+            $this->projectName,
         );
     }
 
@@ -647,7 +649,7 @@ class AssetDomainService
             'asset_id' => $asset->getId(),
             'organization_code' => $dataIsolation->getCurrentOrganizationCode(),
             'provider_code' => $this->provider->getProviderCode(),
-            'project_name' => self::DEFAULT_PROJECT_NAME,
+            'project_name' => $this->projectName,
             'provider_group_id' => $reusable->getProviderGroupId(),
             'provider_asset_id' => $reusable->getProviderAssetId(),
             'provider_status' => $reusable->getProviderStatus()->value,
@@ -668,13 +670,13 @@ class AssetDomainService
             $dataIsolation,
             (int) $asset->getId(),
             $this->provider->getProviderCode(),
-            self::DEFAULT_PROJECT_NAME,
+            $this->projectName,
         );
         $providerAsset = $mapping === null
             ? new ProviderAssetEntity([
                 'asset_id' => $asset->getId(),
                 'provider_code' => $this->provider->getProviderCode(),
-                'project_name' => self::DEFAULT_PROJECT_NAME,
+                'project_name' => $this->projectName,
             ])
             : new ProviderAssetEntity($mapping->toArray());
         $providerAsset->setProviderStatus($status);
@@ -729,7 +731,7 @@ class AssetDomainService
         $providerAssetGroupEntity = new ProviderAssetEntity([
             'asset_id' => (int) $asset->getId(),
             'provider_code' => $this->provider->getProviderCode(),
-            'project_name' => self::DEFAULT_PROJECT_NAME,
+            'project_name' => $this->projectName,
             'provider_group_id' => $providerGroupId,
             'provider_status' => ProviderAssetStatus::PROCESSING->value,
         ]);
@@ -747,7 +749,7 @@ class AssetDomainService
     {
         $response = $this->provider->createAssetGroup([
             'name' => $groupName,
-            'project_name' => self::DEFAULT_PROJECT_NAME,
+            'project_name' => $this->projectName,
         ]);
         $providerGroupId = trim((string) ($response['provider_group_id'] ?? ''));
         if ($providerGroupId === '') {
@@ -777,7 +779,7 @@ class AssetDomainService
             ...$asset->toArray(),
             'organization_code' => $dataIsolation->getCurrentOrganizationCode(),
             'group_id' => $providerGroupId,
-            'project_name' => self::DEFAULT_PROJECT_NAME,
+            'project_name' => $this->projectName,
         ]);
         $providerAssetId = (string) ($response['provider_asset_id'] ?? $response['asset_id'] ?? $response['id'] ?? '');
         if ($providerAssetId === '') {
@@ -787,7 +789,7 @@ class AssetDomainService
         $providerAssetEntity = new ProviderAssetEntity([
             'asset_id' => $asset->getId(),
             'provider_code' => $this->provider->getProviderCode(),
-            'project_name' => self::DEFAULT_PROJECT_NAME,
+            'project_name' => $this->projectName,
             'provider_group_id' => $providerGroupId,
             'provider_asset_id' => $providerAssetId,
             'provider_status' => ProviderAssetStatus::fromValue(
@@ -847,7 +849,7 @@ class AssetDomainService
     private function fetchProviderStatus(ProviderAssetEntity $providerAssetEntity): ProviderAssetStatus
     {
         try {
-            $state = $this->provider->getAssetStatus($providerAssetEntity->getProviderAssetId());
+            $state = $this->provider->getAssetStatus($providerAssetEntity->getProviderAssetId(), $this->projectName);
         } catch (Throwable $throwable) {
             $this->logger->warning('第三方素材状态回查失败，继续等待', [
                 'provider_asset_id' => $providerAssetEntity->getProviderAssetId(),
@@ -900,5 +902,24 @@ class AssetDomainService
     {
         $name = trim($asset->getI18nName('default'));
         return $name === '' ? self::UNNAMED_GROUP_NAME : $name;
+    }
+
+    /** @param array<string, mixed> $config @return array<string, mixed> */
+    private function resolveProviderConfig(array $config): array
+    {
+        $providers = $config['providers'] ?? null;
+        if (! is_array($providers)) {
+            return $config;
+        }
+        // 兼容管理端早期将单个 provider 保存为对象而非数组的配置形态。
+        if (isset($providers['provider'])) {
+            return $providers;
+        }
+        foreach ($providers as $provider) {
+            if (is_array($provider) && ($provider['enable'] ?? false) === true) {
+                return $provider;
+            }
+        }
+        return [];
     }
 }
