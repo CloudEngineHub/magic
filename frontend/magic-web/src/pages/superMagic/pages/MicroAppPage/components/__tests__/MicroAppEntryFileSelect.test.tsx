@@ -57,7 +57,14 @@ it.each([false, true])("keeps the file menu inside its overlay (mobile=%s)", (mo
 	)
 	fireEvent.click(screen.getByTestId("micro-app-default-open-file"))
 	const option = screen.getByRole("option", { name: "mobile.html" })
-	expect(container.firstChild).toContainElement(option)
+	if (mobile) {
+		expect(
+			screen.getByRole("dialog", { name: "microAppPage.publish.defaultOpenFile" }),
+		).toContainElement(option)
+		expect(container.firstChild).not.toContainElement(option)
+	} else {
+		expect(container.firstChild).toContainElement(option)
+	}
 	fireEvent.click(option)
 	expect(onChange).toHaveBeenCalledWith("mobile")
 	expect(screen.getByTestId("micro-app-default-open-file")).toHaveAttribute(
