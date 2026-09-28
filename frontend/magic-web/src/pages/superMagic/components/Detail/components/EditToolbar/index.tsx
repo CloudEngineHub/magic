@@ -62,6 +62,8 @@ import {
 import type { BeforeAction } from "../../utils/actionGuard"
 
 export interface EditToolbarProps {
+	/** Controlled by the preview host when fullscreen is managed outside this toolbar. */
+	isFullscreen?: boolean
 	/** 将更多菜单挂载到当前预览容器，以支持全屏。 */
 	getPopupContainer?: () => HTMLElement | null
 	/** Only the active cached preview should expose fixed test ids. */
@@ -159,6 +161,7 @@ export interface EditToolbarProps {
 }
 
 function EditToolbar({
+	isFullscreen: controlledFullscreen,
 	testIdsEnabled = true,
 	interactionDisabled = false,
 	showAIOptimization = false,
@@ -205,7 +208,8 @@ function EditToolbar({
 }: EditToolbarProps) {
 	const { t } = useTranslation("super")
 	const { emitFullscreenToggle } = usePPTEventBus()
-	const [isFullscreen, setIsFullscreen] = useState(false)
+	const [localFullscreen, setIsFullscreen] = useState(false)
+	const isFullscreen = controlledFullscreen ?? localFullscreen
 	const isFullscreenMode = useFullscreenMode()
 	const [isEditableExporting, setIsEditableExporting] = useState(false)
 
@@ -859,7 +863,8 @@ function EditToolbar({
 							onClick={() => {
 								void runGuardedAction(beforeAction, () => {
 									emitFullscreenToggle()
-									setIsFullscreen(!isFullscreen)
+									if (controlledFullscreen === undefined)
+										setIsFullscreen(!isFullscreen)
 								})
 							}}
 							title={

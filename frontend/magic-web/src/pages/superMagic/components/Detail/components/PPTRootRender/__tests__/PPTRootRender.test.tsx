@@ -53,6 +53,7 @@ vi.mock("../../PPTRender", () => ({
 		attachmentList,
 		mainFileId,
 		isFullscreen,
+		isFileFullscreen,
 		showRefresh,
 		onSortSave,
 		onDeckConfigSaved,
@@ -65,6 +66,7 @@ vi.mock("../../PPTRender", () => ({
 		attachmentList?: Array<{ file_id?: string; relative_file_path?: string }>
 		mainFileId?: string
 		isFullscreen?: boolean
+		isFileFullscreen?: boolean
 		showRefresh?: boolean
 		onSortSave?: (slidePaths: string[]) => void
 		onDeckConfigSaved?: (config: Record<string, unknown>) => void
@@ -88,6 +90,7 @@ vi.mock("../../PPTRender", () => ({
 			)}
 			data-has-structure-adapter={String(Boolean(slideStructureAdapter))}
 			data-is-fullscreen={String(Boolean(isFullscreen))}
+			data-is-file-fullscreen={String(Boolean(isFileFullscreen))}
 		>
 			<button
 				data-testid="local-hide"
@@ -219,6 +222,10 @@ describe("PPTRootRender", () => {
 		expect(screen.getByTestId("ppt-project-preview")).toBeInTheDocument()
 		await waitFor(() => {
 			expect(screen.getByTestId("ppt-render")).toHaveAttribute("data-is-fullscreen", "false")
+			expect(screen.getByTestId("ppt-render")).toHaveAttribute(
+				"data-is-file-fullscreen",
+				"true",
+			)
 		})
 	})
 

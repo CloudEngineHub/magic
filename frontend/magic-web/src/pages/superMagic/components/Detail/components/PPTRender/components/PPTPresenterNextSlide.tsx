@@ -6,6 +6,7 @@ import { resolvePptScaleContentDimensions } from "../../../contents/HTML/utils/s
 import { stripSlideNotes } from "../utils/slideNotes"
 
 interface PPTPresenterNextSlideProps {
+	current?: boolean
 	content?: string
 	rawContent?: string
 	isLastSlide: boolean
@@ -15,6 +16,7 @@ interface PPTPresenterNextSlideProps {
 
 /** A passive preview: the audience window remains the only interactive slide surface. */
 export default function PPTPresenterNextSlide({
+	current = false,
 	content,
 	rawContent,
 	isLastSlide,
@@ -42,10 +44,16 @@ export default function PPTPresenterNextSlide({
 
 	return (
 		<section
-			className="col-start-2 row-start-1 flex h-full min-h-0 min-w-0 flex-col gap-2"
-			data-testid="ppt-presenter-next-slide"
+			className={
+				current
+					? "col-start-1 row-span-2 flex min-h-0 min-w-0 flex-col gap-2"
+					: "col-start-2 row-start-1 flex h-full min-h-0 min-w-0 flex-col gap-2"
+			}
+			data-testid={current ? "ppt-presenter-current-slide" : "ppt-presenter-next-slide"}
 		>
-			<h2 className="shrink-0 text-sm text-white/70">{t("ppt.presenter.nextSlide")}</h2>
+			<h2 className="shrink-0 text-sm text-white/70">
+				{current ? t("ppt.speakerNotes.currentPage") : t("ppt.presenter.nextSlide")}
+			</h2>
 			<div
 				ref={viewportRef}
 				className="relative min-h-0 flex-1 overflow-hidden rounded-lg bg-black"
@@ -79,7 +87,11 @@ export default function PPTPresenterNextSlide({
 					<iframe
 						// Keep scripts isolated and prevent focus entering the next-slide preview.
 						ref={(element) => element?.setAttribute("inert", "")}
-						title={t("ppt.presenter.nextSlide")}
+						title={
+							current
+								? t("ppt.speakerNotes.currentPage")
+								: t("ppt.presenter.nextSlide")
+						}
 						sandbox="allow-scripts"
 						tabIndex={-1}
 						aria-hidden

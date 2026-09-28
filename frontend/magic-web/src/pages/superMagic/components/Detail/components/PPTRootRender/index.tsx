@@ -528,6 +528,7 @@ export default memo(function PPTRootRender(props: PPTRootRenderProps) {
 					openNewTab={openNewTab}
 					onDownload={handleDownload}
 					onFullscreen={onFullscreen}
+					isFileFullscreen={props.isFullscreen}
 					onActiveIndexChange={(_index, fileId) => {
 						props.onActiveFileChange?.(fileId)
 					}}

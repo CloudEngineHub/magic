@@ -72,7 +72,7 @@ const mockState = vi.hoisted(() => ({
 	changeSlide: vi.fn(),
 	presenterFallbackOnly: false,
 	presenterOpen: vi.fn(async () => "opened" as const),
-	presenterPost: vi.fn((_payload: unknown) => true),
+	presenterContainer: null as HTMLElement | null,
 	presenterClose: vi.fn(),
 	presenterMove: vi.fn(async () => true),
 	isSlideEditing: true,
@@ -205,10 +205,12 @@ vi.mock("../../EditToolbar", async () => {
 
 	function MockEditToolbar({
 		fileId,
+		isFullscreen,
 		interactionDisabled,
 		testIdsEnabled,
 	}: {
 		fileId?: string
+		isFullscreen?: boolean
 		interactionDisabled?: boolean
 		testIdsEnabled?: boolean
 	}) {
@@ -221,6 +223,7 @@ vi.mock("../../EditToolbar", async () => {
 			<div
 				data-testid="ppt-edit-toolbar"
 				data-file-id={fileId}
+				data-fullscreen={String(isFullscreen)}
 				data-interaction-disabled={String(Boolean(interactionDisabled))}
 				data-test-ids-enabled={String(testIdsEnabled !== false)}
 			>
@@ -390,7 +393,7 @@ vi.mock("../hooks", () => ({
 		screens: [],
 		selectedScreen: null,
 		open: mockState.presenterOpen,
-		post: mockState.presenterPost,
+		consoleContainer: mockState.presenterIsOpen ? mockState.presenterContainer : null,
 		close: mockState.presenterClose,
 		moveToScreen: mockState.presenterMove,
 	}),
@@ -553,6 +556,9 @@ function renderPPTRender(input?: {
 
 describe("PPTRender", () => {
 	beforeEach(() => {
+		mockState.presenterContainer?.remove()
+		mockState.presenterContainer = document.createElement("div")
+		document.body.appendChild(mockState.presenterContainer)
 		pptNotesPreferenceStore.setVisible(false)
 		pptNotesPreferenceStore.setHeight(144)
 		mockState.confirmConfig = null
@@ -589,7 +595,6 @@ describe("PPTRender", () => {
 		mockState.presenterFallbackOnly = false
 		mockState.presenterOpen.mockReset()
 		mockState.presenterOpen.mockResolvedValue("opened")
-		mockState.presenterPost.mockReset()
 		mockState.presenterClose.mockReset()
 		mockState.presenterMove.mockReset()
 		mockState.isSlideEditing = true
@@ -652,7 +657,25 @@ describe("PPTRender", () => {
 		})
 		renderPPTRender()
 		await waitFor(() => expect(mockState.presenterClose).toHaveBeenCalled())
-		expect(mockState.presenterPost).not.toHaveBeenCalled()
+	})
+
+	it("follows file viewer fullscreen state without remounting the toolbar", async () => {
+		const props = {
+			slidePaths: ["slide-1.html"],
+			filePathMapping: new Map(),
+			mainFileId: "ppt-root-file",
+			mainFileName: "Deck.html",
+			allowEdit: true,
+			onFullscreen: vi.fn(),
+		}
+		const { rerender } = render(<PPTRender {...props} isFileFullscreen={false} />)
+		const toolbar = await screen.findByTestId("ppt-edit-toolbar")
+		expect(toolbar).toHaveAttribute("data-fullscreen", "false")
+		rerender(<PPTRender {...props} isFileFullscreen />)
+		expect(toolbar).toHaveAttribute("data-fullscreen", "true")
+		rerender(<PPTRender {...props} isFileFullscreen={false} />)
+		expect(toolbar).toHaveAttribute("data-fullscreen", "false")
+		expect(mockState.toolbarMounted).toHaveBeenCalledOnce()
 	})
 
 	it.each([true, false])("keeps toolbar actions visible with busy=%s", async (busy) => {
@@ -687,7 +710,7 @@ describe("PPTRender", () => {
 		},
 	)
 
-	it("clears the hidden external frame while the next visible page is being selected", async () => {
+	it("hides the audience slide while a hidden page is being replaced", async () => {
 		mockState.isSlideEditing = false
 		mockState.presenterIsOpen = true
 		mockState.store.slides.push({
@@ -702,11 +725,10 @@ describe("PPTRender", () => {
 			displayConfig: { hidden_slides: ["slide-1.html"] },
 		})
 		renderPPTRender()
-		await waitFor(() => expect(mockState.presenterPost).toHaveBeenCalled())
-		const payload = mockState.presenterPost.mock.calls.at(-1)?.[0] as unknown as {
-			html: string
-		}
-		expect(payload.html).not.toContain(mockState.store.slides[0].content)
+		expect(screen.getByTestId("ppt-render-slide-stage")).toHaveAttribute(
+			"data-hidden-slide",
+			"true",
+		)
 		expect(mockState.presenterClose).not.toHaveBeenCalled()
 	})
 
@@ -845,6 +867,43 @@ describe("PPTRender", () => {
 		expect(mockState.presenterOpen).toHaveBeenCalledTimes(1)
 	})
 
+	it("waits for a fresh click when presenter fallback consumes user activation", async () => {
+		mockState.isSlideEditing = false
+		const activation = { isActive: false }
+		const originalActivation = Object.getOwnPropertyDescriptor(navigator, "userActivation")
+		Object.defineProperty(navigator, "userActivation", {
+			configurable: true,
+			value: activation,
+		})
+		try {
+			mockState.presenterOpen.mockImplementation(async () => {
+				mockState.presenterFallbackOnly = true
+				return "fallback"
+			})
+			const { rerender } = renderPPTRender()
+			fireEvent.click(screen.getByRole("button", { name: "present" }))
+			await waitFor(() => expect(mockState.presenterOpen).toHaveBeenCalledTimes(1))
+			expect(mockState.toggleFullscreen).not.toHaveBeenCalled()
+			activation.isActive = true
+			rerender(
+				<PPTRender
+					slidePaths={["slide-1.html"]}
+					filePathMapping={new Map()}
+					mainFileId="ppt-root-file"
+					mainFileName="Deck.html"
+					allowEdit
+				/>,
+			)
+			fireEvent.click(screen.getByRole("button", { name: "present" }))
+			await waitFor(() => expect(mockState.toggleFullscreen).toHaveBeenCalledTimes(1))
+			expect(mockState.presenterOpen).toHaveBeenCalledTimes(1)
+		} finally {
+			if (originalActivation)
+				Object.defineProperty(navigator, "userActivation", originalActivation)
+			else Reflect.deleteProperty(navigator, "userActivation")
+		}
+	})
+
 	it("does not start a late fullscreen fallback after presenter cancellation", async () => {
 		mockState.isSlideEditing = false
 		mockState.presenterOpen.mockResolvedValue("cancelled")
@@ -856,7 +915,7 @@ describe("PPTRender", () => {
 		expect(mockState.toggleFullscreen).not.toHaveBeenCalled()
 	})
 
-	it("switches the main window to a fullscreen presenter console while the popup is open", () => {
+	it("portals notes and controls outside the fullscreen audience stage", () => {
 		mockState.isSlideEditing = false
 		mockState.presenterIsOpen = true
 
@@ -870,7 +929,12 @@ describe("PPTRender", () => {
 		expect(screen.queryByTestId("ppt-render-sidebar")).not.toBeInTheDocument()
 		expect(screen.queryByTestId("ppt-render-edit-toolbar")).not.toBeInTheDocument()
 		expect(screen.queryByTestId("ppt-control-bar")).not.toBeInTheDocument()
-		expect(screen.getByTestId("ppt-presenter-console-controls")).toBeInTheDocument()
+		expect(mockState.presenterContainer).toContainElement(
+			screen.getByTestId("ppt-presenter-console-controls"),
+		)
+		expect(screen.getByTestId("ppt-render-slide-stage")).not.toContainElement(
+			screen.getByTestId("ppt-speaker-notes-panel"),
+		)
 		expect(screen.getByTestId("ppt-speaker-notes-panel")).toBeVisible()
 		expect(screen.getByTestId("ppt-speaker-notes-panel")).toHaveAttribute(
 			"data-layout",
@@ -913,7 +977,7 @@ describe("PPTRender", () => {
 		expect(mockState.store.ensureSlideContent).toHaveBeenCalledWith(1)
 	})
 
-	it("passes canonical slide dimensions to the presenter popup", async () => {
+	it("opens the presenter without copying slide HTML into a popup payload", async () => {
 		mockState.isSlideEditing = false
 		mockState.store.slides[0] = {
 			...mockState.store.slides[0],
@@ -927,11 +991,7 @@ describe("PPTRender", () => {
 		fireEvent.click(screen.getByRole("button", { name: "present" }))
 
 		await waitFor(() => {
-			expect(mockState.presenterOpen).toHaveBeenCalledWith({
-				index: 0,
-				html: expect.stringContaining('data-width="1600"'),
-				dimensions: { width: 1600, height: 900 },
-			})
+			expect(mockState.presenterOpen).toHaveBeenCalledWith()
 		})
 	})
 

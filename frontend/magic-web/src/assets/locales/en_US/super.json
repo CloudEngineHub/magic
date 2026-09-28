@@ -4792,6 +4792,7 @@
 			"loadingNextSlide": "Loading next slide…",
 			"nextSlide": "Next slide",
 			"primarySuffix": " (Primary)",
+			"retryFullscreen": "Presenter mode could not open. Click Fullscreen again to present in this window.",
 			"screen": "Presenter display",
 			"screenOption": "Display {{index}}",
 			"selectScreen": "Select presenter display",

@@ -2,518 +2,270 @@ import { act, renderHook } from "@testing-library/react"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 import { usePPTPresenterWindow } from "../usePPTPresenterWindow"
 
-vi.mock("react-i18next", () => ({
-	useTranslation: () => ({
-		t: (key: string, options?: { page?: number }) => {
-			if (key === "ppt.presenter.slideTitle") return `Slide ${options?.page} · Presenter`
-			return {
-				"ppt.presenter.title": "Presenter",
-				"ppt.presenter.frameTitle": "PPT presentation",
-				"ppt.presenter.enterFullscreen": "Enter fullscreen",
-			}[key]
-		},
-	}),
-}))
+vi.mock("react-i18next", () => ({ useTranslation: () => ({ t: (key: string) => key }) }))
+const home = { left: 0, top: 0, availLeft: 0, availTop: 24, availWidth: 1440, availHeight: 876 }
+const external = { left: 1440, top: 0, width: 1920, height: 1080 }
+let fullscreenElement: Element | null
+let target: HTMLDivElement
+let requestFullscreen: ReturnType<typeof vi.fn>
+let popup: Window
+let getScreenDetails: ReturnType<typeof vi.fn>
 
-type WindowWithManagement = Window & {
-	getScreenDetails?: () => Promise<{
-		currentScreen: object
-		screens: object[]
-	}>
-}
-
-const currentScreen = {
-	left: 0,
-	top: 0,
-	width: 1440,
-	height: 900,
-	availLeft: 0,
-	availTop: 24,
-	availWidth: 1440,
-	availHeight: 876,
-	isPrimary: true,
-	label: "Built-in display",
-}
-const externalScreen = {
-	left: 1440,
-	top: 0,
-	width: 1920,
-	height: 1080,
-	availLeft: 1440,
-	availTop: 0,
-	availWidth: 1920,
-	availHeight: 1040,
-	isPrimary: false,
-	label: "Projector",
-}
-
-function createPopup() {
-	const frame = document.createElement("iframe")
-	const fullscreenButton = document.createElement("button")
-	const documentListeners = new Map<string, EventListener>()
-	const windowListeners = new Map<string, EventListener>()
-	return {
+beforeEach(() => {
+	fullscreenElement = null
+	target = document.createElement("div")
+	requestFullscreen = vi.fn(async () => {
+		fullscreenElement = target
+	})
+	Object.assign(target, { requestFullscreen })
+	Object.defineProperty(document, "fullscreenElement", {
+		configurable: true,
+		get: () => fullscreenElement,
+	})
+	Object.defineProperty(document, "exitFullscreen", {
+		configurable: true,
+		value: vi.fn(async () => {
+			fullscreenElement = null
+		}),
+	})
+	Object.defineProperty(window.screen, "isExtended", { configurable: true, value: true })
+	getScreenDetails = vi.fn(async () => ({ currentScreen: home, screens: [home, external] }))
+	Object.assign(window, { getScreenDetails })
+	popup = {
 		closed: false,
-		innerWidth: 1280,
-		innerHeight: 800,
-		document: {
-			title: "",
-			open: vi.fn(),
-			write: vi.fn(),
-			close: vi.fn(),
-			documentElement: { requestFullscreen: vi.fn(async () => undefined) },
-			getElementById: vi.fn((id: string) =>
-				id === "ppt-presenter-frame" ? frame : fullscreenButton,
-			),
-			addEventListener: vi.fn((type: string, listener: EventListener) => {
-				documentListeners.set(type, listener)
-			}),
-			removeEventListener: vi.fn((type: string) => {
-				documentListeners.delete(type)
-			}),
-		},
-		postMessage: vi.fn(),
+		document: document.implementation.createHTMLDocument(),
 		focus: vi.fn(),
 		moveTo: vi.fn(),
 		resizeTo: vi.fn(),
 		close: vi.fn(),
-		addEventListener: vi.fn((type: string, listener: EventListener) => {
-			windowListeners.set(type, listener)
-		}),
-		removeEventListener: vi.fn((type: string) => {
-			windowListeners.delete(type)
-		}),
-		__frame: frame,
-		__fullscreenButton: fullscreenButton,
-		__documentListeners: documentListeners,
-		__windowListeners: windowListeners,
-	} as unknown as Window & {
-		__frame: HTMLIFrameElement
-		__fullscreenButton: HTMLButtonElement
-		__documentListeners: Map<string, EventListener>
-		__windowListeners: Map<string, EventListener>
-	}
+	} as unknown as Window
+	vi.spyOn(window, "open").mockReturnValue(popup)
+})
+afterEach(() => {
+	vi.restoreAllMocks()
+	vi.useRealTimers()
+})
+const setup = () => {
+	const ref = { current: target }
+	return renderHook(() => usePPTPresenterWindow(ref))
 }
 
-function createDeferred<T>() {
-	let resolve!: (value: T) => void
-	const promise = new Promise<T>((nextResolve) => {
-		resolve = nextResolve
+describe("fullscreen-first presenter", () => {
+	it("requests fullscreen before window.open consumes activation and renders only a console shell", async () => {
+		let activation = true
+		requestFullscreen.mockImplementation(async () => {
+			if (!activation) throw new Error("activation consumed")
+			fullscreenElement = target
+		})
+		vi.mocked(window.open).mockImplementation(() => {
+			activation = false
+			return popup
+		})
+		const { result } = setup()
+		await act(async () => {
+			expect(await result.current.open()).toBe("opened")
+		})
+		expect(requestFullscreen).toHaveBeenCalledWith({ screen: external })
+		expect(window.open).toHaveBeenCalledWith(
+			"",
+			"_blank",
+			"popup,left=0,top=24,width=1440,height=876",
+		)
+		expect(result.current.consoleContainer?.ownerDocument).toBe(popup.document)
+		expect(popup.document.querySelector("iframe")).toBeNull()
+		expect(result.current.selectedScreen).toBe(1)
 	})
-	return { promise, resolve }
-}
-
-describe("usePPTPresenterWindow", () => {
-	beforeEach(() => {
-		Object.defineProperty(window.screen, "isExtended", { configurable: true, value: true })
-		vi.spyOn(window, "focus").mockImplementation(() => undefined)
-		;(window as WindowWithManagement).getScreenDetails = vi.fn(async () => ({
-			currentScreen,
-			screens: [currentScreen, externalScreen],
-		}))
+	it("keeps native fullscreen when the companion popup is blocked", async () => {
+		vi.mocked(window.open).mockReturnValue(null)
+		const { result } = setup()
+		await act(async () => {
+			expect(await result.current.open()).toBe("opened")
+		})
+		expect(fullscreenElement).toBe(target)
+		expect(result.current.consoleContainer).toBeNull()
 	})
-
-	afterEach(() => {
-		delete (window as WindowWithManagement).getScreenDetails
-		Reflect.deleteProperty(window.screen, "isExtended")
-		vi.restoreAllMocks()
-	})
-
-	it.each([false, undefined])(
-		"preserves first-click fullscreen activation when isExtended is %s",
-		async (isExtended) => {
-			Object.defineProperty(window.screen, "isExtended", {
-				configurable: true,
-				value: isExtended,
-			})
-			let activationAvailable = true
-			const popup = createPopup()
-			const openWindow = vi.spyOn(window, "open").mockImplementation(() => {
-				activationAvailable = false
-				return popup
-			})
-			const getScreenDetails = vi.fn(async () => ({
-				currentScreen,
-				screens: [currentScreen],
-			}))
-			;(window as WindowWithManagement).getScreenDetails = getScreenDetails
-			const { result } = renderHook(() => usePPTPresenterWindow())
-			await act(async () => {
-				expect(await result.current.open({ index: 0, html: "<main>Slide</main>" })).toBe(
-					"fallback",
-				)
-				// The caller requests native fullscreen immediately on this fallback.
-				expect(activationAvailable).toBe(true)
-			})
-			expect(openWindow).not.toHaveBeenCalled()
-			expect(getScreenDetails).not.toHaveBeenCalled()
-			expect(result.current.isOpen).toBe(false)
-			expect(result.current.isFallbackOnly).toBe(false)
-		},
-	)
-
-	it("can open a presenter after an external display is connected", async () => {
+	it("does not create a popup on a single display", async () => {
 		Object.defineProperty(window.screen, "isExtended", { configurable: true, value: false })
-		const openWindow = vi.spyOn(window, "open").mockReturnValue(createPopup())
-		const { result } = renderHook(() => usePPTPresenterWindow())
+		const { result } = setup()
 		await act(async () => {
-			expect(await result.current.open({ index: 0, html: "Slide" })).toBe("fallback")
+			expect(await result.current.open()).toBe("fallback")
 		})
-		expect(openWindow).not.toHaveBeenCalled()
-		Object.defineProperty(window.screen, "isExtended", { configurable: true, value: true })
-		await act(async () => {
-			expect(await result.current.open({ index: 0, html: "Slide" })).toBe("opened")
-		})
-		expect(openWindow).toHaveBeenCalledTimes(1)
+		expect(window.open).not.toHaveBeenCalled()
+		expect(requestFullscreen).not.toHaveBeenCalled()
 	})
-
-	it("opens synchronously, writes a fixed shell, and posts structured slide data", async () => {
-		const popup = createPopup()
-		vi.spyOn(window, "open").mockReturnValue(popup)
-		const { result } = renderHook(() => usePPTPresenterWindow())
-
-		let openPromise!: Promise<"opened" | "fallback" | "cancelled">
-		act(() => {
-			openPromise = result.current.open({
-				index: 2,
-				html: "<script>alert(1)</script><main>Slide</main>",
-			})
-		})
-		expect(window.open).toHaveBeenCalledTimes(1)
-		await act(async () => expect(await openPromise).toBe("opened"))
-
-		expect(popup.document.write).toHaveBeenCalledWith(
-			expect.stringContaining('id="ppt-presenter-root"'),
-		)
-		expect(popup.document.write).toHaveBeenCalledWith(
-			expect.stringContaining('sandbox="allow-scripts"'),
-		)
-		expect(popup.document.write).not.toHaveBeenCalledWith(expect.stringContaining("<script"))
-		expect(popup.document.write).not.toHaveBeenCalledWith(expect.stringContaining("Presenter"))
-		expect(popup.document.write).not.toHaveBeenCalledWith(
-			expect.stringContaining("Enter fullscreen"),
-		)
-		expect(popup.document.write).not.toHaveBeenCalledWith(expect.stringContaining("alert(1)"))
-		expect(popup.document.title).toBe("Presenter")
-		expect(popup.__frame.title).toBe("PPT presentation")
-		expect(popup.__fullscreenButton).toHaveTextContent("Enter fullscreen")
-		expect(window.focus).toHaveBeenCalledOnce()
-		expect(popup.focus).not.toHaveBeenCalled()
-		expect(popup.postMessage).toHaveBeenCalledWith(
-			expect.objectContaining({
-				type: "ppt-presenter:slide",
-				payload: expect.objectContaining({
-					index: 2,
-					html: expect.stringContaining("Slide"),
-				}),
-			}),
-			window.location.origin,
-		)
-
-		const messageHandler = (popup.addEventListener as ReturnType<typeof vi.fn>).mock.calls.find(
-			([type]) => type === "message",
-		)?.[1] as (event: MessageEvent) => void
-		messageHandler({
-			origin: window.location.origin,
-			source: window,
-			data: { type: "ppt-presenter:slide", payload: { index: 3, html: "<main>Next</main>" } },
-		} as MessageEvent)
-		expect(popup.__frame.srcdoc).toBe("<main>Next</main>")
-		expect(popup.document.title).toBe("Slide 4 · Presenter")
-	})
-
-	it("lists displays and moves the presenter to selected available bounds", async () => {
-		const popup = createPopup()
-		vi.spyOn(window, "open").mockReturnValue(popup)
-		const { result } = renderHook(() => usePPTPresenterWindow())
-
+	it("does not open a popup if screen permission is rejected", async () => {
+		getScreenDetails.mockRejectedValue(new Error("denied"))
+		const { result } = setup()
 		await act(async () => {
-			await result.current.open({ index: 0, html: "<main>Slide</main>" })
+			expect(await result.current.open()).toBe("fallback")
 		})
-
-		expect(result.current.screens).toEqual([currentScreen, externalScreen])
-		expect(popup.moveTo).toHaveBeenCalledWith(1440, 0)
-		expect(popup.resizeTo).toHaveBeenCalledWith(1920, 1040)
-		expect(popup.document.documentElement.requestFullscreen).toHaveBeenCalledWith({
-			screen: externalScreen,
-		})
-		expect(popup.__fullscreenButton.hidden).toBe(true)
-
-		const exitFullscreen = vi.fn(async () => undefined)
-		Object.assign(popup.document, { fullscreenElement: {}, exitFullscreen })
-		;(popup.moveTo as ReturnType<typeof vi.fn>).mockClear()
-		;(popup.resizeTo as ReturnType<typeof vi.fn>).mockClear()
-		;(popup.document.documentElement.requestFullscreen as ReturnType<typeof vi.fn>).mockClear()
-		await act(async () => expect(await result.current.moveToScreen(0)).toBe(true))
-		expect(popup.moveTo).toHaveBeenLastCalledWith(0, 24)
-		expect(popup.resizeTo).toHaveBeenLastCalledWith(1440, 876)
-		expect(exitFullscreen).toHaveBeenCalledTimes(1)
-		expect(exitFullscreen.mock.invocationCallOrder[0]).toBeLessThan(
-			(popup.moveTo as ReturnType<typeof vi.fn>).mock.invocationCallOrder[0],
-		)
-		expect(popup.document.documentElement.requestFullscreen).not.toHaveBeenCalled()
-		expect(popup.__fullscreenButton.hidden).toBe(false)
-		expect(result.current.selectedScreen).toBe(0)
-	})
-
-	it("contains the canonical slide canvas and recalculates on popup resize", async () => {
-		const popup = createPopup()
-		Object.assign(popup, { innerWidth: 1280, innerHeight: 800 })
-		vi.spyOn(window, "open").mockReturnValue(popup)
-		const { result } = renderHook(() => usePPTPresenterWindow())
-
-		await act(async () => {
-			await result.current.open({
-				index: 0,
-				html: "<main>Slide</main>",
-				dimensions: { width: 1920, height: 1080 },
-			})
-		})
-
-		expect(popup.__frame.style.width).toBe("1920px")
-		expect(popup.__frame.style.height).toBe("1080px")
-		expect(popup.__frame.style.transform).toBe("translate(0px, 40px) scale(0.6666666666666666)")
-
-		Object.assign(popup, { innerWidth: 1000, innerHeight: 700 })
-		act(() => popup.__windowListeners.get("resize")?.(new Event("resize")))
-
-		expect(popup.__frame.style.transform).toBe(
-			"translate(0px, 68.75px) scale(0.5208333333333334)",
-		)
-		act(() => result.current.close())
-		expect(popup.__windowListeners.has("resize")).toBe(false)
-	})
-
-	it("enters fullscreen from the popup CTA and tracks fullscreen changes", async () => {
-		const popup = createPopup()
-		const requestFullscreen = popup.document.documentElement.requestFullscreen as ReturnType<
-			typeof vi.fn
-		>
-		requestFullscreen.mockRejectedValueOnce(new Error("activation expired"))
-		vi.spyOn(window, "open").mockReturnValue(popup)
-		const { result } = renderHook(() => usePPTPresenterWindow())
-
-		await act(async () => {
-			await result.current.open({ index: 0, html: "<main>Slide</main>" })
-		})
-		expect(popup.__fullscreenButton.hidden).toBe(false)
-
-		requestFullscreen.mockResolvedValueOnce(undefined)
-		await act(async () => {
-			popup.__fullscreenButton.click()
-			await Promise.resolve()
-		})
-		expect(requestFullscreen).toHaveBeenLastCalledWith()
-		expect(popup.__fullscreenButton.hidden).toBe(true)
-
-		Object.assign(popup.document, { fullscreenElement: {} })
-		act(() =>
-			popup.__documentListeners.get("fullscreenchange")?.(new Event("fullscreenchange")),
-		)
-		expect(popup.__fullscreenButton.hidden).toBe(true)
-		Object.assign(popup.document, { fullscreenElement: null })
-		act(() =>
-			popup.__documentListeners.get("fullscreenchange")?.(new Event("fullscreenchange")),
-		)
-		expect(popup.__fullscreenButton.hidden).toBe(false)
-	})
-
-	it("uses a unique popup name for each presenter hook instance", async () => {
-		const firstPopup = createPopup()
-		const secondPopup = createPopup()
-		const open = vi
-			.spyOn(window, "open")
-			.mockReturnValueOnce(firstPopup)
-			.mockReturnValueOnce(secondPopup)
-		const first = renderHook(() => usePPTPresenterWindow())
-		const second = renderHook(() => usePPTPresenterWindow())
-
-		await act(async () => {
-			await first.result.current.open({ index: 0, html: "<main>First</main>" })
-			await second.result.current.open({ index: 0, html: "<main>Second</main>" })
-		})
-
-		expect(open.mock.calls[0][1]).not.toBe(open.mock.calls[1][1])
-		first.unmount()
-		second.unmount()
-	})
-
-	it("keeps the positioned popup when targeted fullscreen is rejected", async () => {
-		const popup = createPopup()
-		;(
-			popup.document.documentElement.requestFullscreen as ReturnType<typeof vi.fn>
-		).mockRejectedValue(new Error("denied"))
-		vi.spyOn(window, "open").mockReturnValue(popup)
-		const { result } = renderHook(() => usePPTPresenterWindow())
-
-		await act(async () => {
-			expect(await result.current.open({ index: 0, html: "<main>Slide</main>" })).toBe(
-				"opened",
-			)
-		})
-
-		expect(result.current.isOpen).toBe(true)
-		expect(popup.resizeTo).toHaveBeenCalled()
-		expect(popup.__fullscreenButton.hidden).toBe(false)
-	})
-
-	it.each([
-		"unsupported",
-		"blocked",
-		"permission denied",
-		"single display",
-		"duplicate current display",
-	])("returns fallback when window management is %s", async (failure) => {
-		const popup = createPopup()
-		const windowOpen = vi
-			.spyOn(window, "open")
-			.mockReturnValue(failure === "blocked" ? null : popup)
-		if (failure === "unsupported") delete (window as WindowWithManagement).getScreenDetails
-		if (failure === "permission denied") {
-			;(window as WindowWithManagement).getScreenDetails = vi.fn(async () => {
-				throw new Error("denied")
-			})
-		}
-		if (failure === "single display") {
-			;(window as WindowWithManagement).getScreenDetails = vi.fn(async () => ({
-				currentScreen,
-				screens: [currentScreen],
-			}))
-		}
-		if (failure === "duplicate current display") {
-			;(window as WindowWithManagement).getScreenDetails = vi.fn(async () => ({
-				currentScreen,
-				screens: [currentScreen, { ...currentScreen, label: "Duplicate" }],
-			}))
-		}
-		const { result } = renderHook(() => usePPTPresenterWindow())
-
-		await act(async () => {
-			expect(await result.current.open({ index: 0, html: "<main>Slide</main>" })).toBe(
-				"fallback",
-			)
-		})
+		expect(window.open).not.toHaveBeenCalled()
 		expect(result.current.isFallbackOnly).toBe(true)
-		await act(async () => {
-			expect(await result.current.open({ index: 0, html: "<main>Again</main>" })).toBe(
-				"fallback",
-			)
-		})
-		if (failure === "unsupported") expect(windowOpen).not.toHaveBeenCalled()
-		else expect(windowOpen).toHaveBeenCalledTimes(1)
-		if (
-			["permission denied", "single display", "duplicate current display"].includes(failure)
-		) {
-			expect(popup.close).toHaveBeenCalled()
-		}
-		expect(result.current.isOpen).toBe(false)
 	})
-
-	it.each(["screen enumeration", "fullscreen"])(
-		"keeps the latest slide when navigation occurs during %s",
-		async (phase) => {
-			const popup = createPopup()
-			const pending = createDeferred<void>()
-			if (phase === "screen enumeration") {
-				;(window as WindowWithManagement).getScreenDetails = vi.fn(async () => {
-					await pending.promise
-					return { currentScreen, screens: [currentScreen, externalScreen] }
-				})
-			} else {
-				;(
-					popup.document.documentElement.requestFullscreen as ReturnType<typeof vi.fn>
-				).mockImplementation(() => pending.promise)
-			}
-			vi.spyOn(window, "open").mockReturnValue(popup)
-			const { result } = renderHook(() => usePPTPresenterWindow())
-			const initial = { index: 0, html: "<main>First</main>" }
-			const latest = {
-				index: 1,
-				html: "<main>Second</main>",
-				dimensions: { width: 960, height: 720 },
-			}
-			let openPromise!: Promise<"opened" | "fallback" | "cancelled">
-			await act(async () => {
-				openPromise = result.current.open(initial)
-				await Promise.resolve()
-			})
-			act(() => expect(result.current.post(latest)).toBe(true))
-			await act(async () => {
-				pending.resolve()
-				expect(await openPromise).toBe("opened")
-			})
-			expect(popup.postMessage).toHaveBeenLastCalledWith(
-				{ type: "ppt-presenter:slide", payload: latest },
-				window.location.origin,
-			)
-			expect(popup.__frame.style.width).toBe("960px")
-			expect(popup.__frame.style.height).toBe("720px")
-		},
-	)
-
-	it("cancels screen enumeration when the presenter is closed", async () => {
-		const popup = createPopup()
-		const screenDetails = createDeferred<{
-			currentScreen: typeof currentScreen
-			screens: Array<typeof currentScreen | typeof externalScreen>
-		}>()
-		;(window as WindowWithManagement).getScreenDetails = vi.fn(() => screenDetails.promise)
-		vi.spyOn(window, "open").mockReturnValue(popup)
-		const { result } = renderHook(() => usePPTPresenterWindow())
-		let openPromise!: Promise<"opened" | "fallback" | "cancelled">
-
-		act(() => {
-			openPromise = result.current.open({ index: 0, html: "<main>Slide</main>" })
-		})
-		act(() => result.current.close())
+	it("closes the companion if native fullscreen fails", async () => {
+		requestFullscreen.mockRejectedValue(new Error("denied"))
+		const { result } = setup()
 		await act(async () => {
-			screenDetails.resolve({ currentScreen, screens: [currentScreen, externalScreen] })
-			expect(await openPromise).toBe("cancelled")
+			expect(await result.current.open()).toBe("fallback")
 		})
-
-		expect(popup.moveTo).not.toHaveBeenCalled()
-		expect(popup.postMessage).not.toHaveBeenCalled()
-		expect(result.current.isFallbackOnly).toBe(false)
-	})
-
-	it("cancels screen enumeration when the presenter unmounts", async () => {
-		const popup = createPopup()
-		const screenDetails = createDeferred<{
-			currentScreen: typeof currentScreen
-			screens: Array<typeof currentScreen | typeof externalScreen>
-		}>()
-		;(window as WindowWithManagement).getScreenDetails = vi.fn(() => screenDetails.promise)
-		vi.spyOn(window, "open").mockReturnValue(popup)
-		const { result, unmount } = renderHook(() => usePPTPresenterWindow())
-		let openPromise!: Promise<"opened" | "fallback" | "cancelled">
-
-		act(() => {
-			openPromise = result.current.open({ index: 0, html: "<main>Slide</main>" })
-		})
-		unmount()
-		await act(async () => {
-			screenDetails.resolve({ currentScreen, screens: [currentScreen, externalScreen] })
-			expect(await openPromise).toBe("cancelled")
-		})
-
-		expect(popup.moveTo).not.toHaveBeenCalled()
-		expect(popup.postMessage).not.toHaveBeenCalled()
-	})
-
-	it("closes and clears presenter state", async () => {
-		const popup = createPopup()
-		vi.spyOn(window, "open").mockReturnValue(popup)
-		const { result } = renderHook(() => usePPTPresenterWindow())
-		await act(async () => {
-			await result.current.open({ index: 0, html: "<main>Slide</main>" })
-		})
-
-		act(() => result.current.close())
-
 		expect(popup.close).toHaveBeenCalled()
 		expect(result.current.isOpen).toBe(false)
+	})
+	it("cancels pending permission without creating a late window", async () => {
+		let resolve!: (value: unknown) => void
+		getScreenDetails.mockReturnValue(
+			new Promise((r) => {
+				resolve = r
+			}),
+		)
+		const { result } = setup()
+		let operation!: Promise<unknown>
 		act(() => {
-			expect(result.current.post({ index: 1, html: "<main>Next</main>" })).toBe(false)
+			operation = result.current.open()
+			result.current.close()
 		})
+		await act(async () => {
+			resolve({ currentScreen: home, screens: [home, external] })
+			expect(await operation).toBe("cancelled")
+		})
+		expect(window.open).not.toHaveBeenCalled()
+	})
+	it("ends fullscreen when the console is closed", async () => {
+		const { result } = setup()
+		await act(async () => {
+			await result.current.open()
+		})
+		await act(async () => {
+			result.current.close()
+		})
+		expect(popup.close).toHaveBeenCalled()
+		expect(document.exitFullscreen).toHaveBeenCalled()
+		expect(result.current.isOpen).toBe(false)
+	})
+	it("closes the console on native Escape and on unmount", async () => {
+		const { result, unmount } = setup()
+		await act(async () => {
+			await result.current.open()
+		})
+		act(() => {
+			fullscreenElement = null
+			document.dispatchEvent(new Event("fullscreenchange"))
+		})
+		expect(result.current.isOpen).toBe(false)
+		expect(popup.close).toHaveBeenCalledOnce()
+		unmount()
+	})
+	it("accepts screen requests only from the same-origin companion", async () => {
+		const { result } = setup()
+		await act(async () => {
+			await result.current.open()
+		})
+		requestFullscreen.mockClear()
+		const send = (origin: string, source: Window | null, index: number) =>
+			window.dispatchEvent(
+				new MessageEvent("message", {
+					origin,
+					source,
+					data: { type: "ppt-presenter:screen", index },
+				}),
+			)
+		await act(async () => {
+			send("https://untrusted.example", popup, 0)
+			send(window.location.origin, null, 0)
+			send(window.location.origin, popup, -1)
+		})
+		expect(requestFullscreen).not.toHaveBeenCalled()
+		await act(async () => {
+			send(window.location.origin, popup, 0)
+		})
+		expect(requestFullscreen).toHaveBeenCalledWith({ screen: home })
+		expect(result.current.selectedScreen).toBe(0)
+		expect(popup.moveTo).toHaveBeenCalledWith(1440, 0)
+	})
+	it("cancels fullscreen that completes after the user closes the session", async () => {
+		let finish!: () => void
+		requestFullscreen.mockImplementation(
+			() =>
+				new Promise<void>((resolve) => {
+					finish = () => {
+						fullscreenElement = target
+						resolve()
+					}
+				}),
+		)
+		const { result } = setup()
+		let opening!: Promise<unknown>
+		await act(async () => {
+			opening = result.current.open()
+			await Promise.resolve()
+		})
+		act(() => result.current.close())
+		await act(async () => {
+			finish()
+			expect(await opening).toBe("cancelled")
+		})
+		expect(fullscreenElement).toBeNull()
+		expect(result.current.consoleContainer).toBeNull()
+	})
+	it("ends the presentation when the companion window is closed externally", async () => {
+		vi.useFakeTimers()
+		const { result } = setup()
+		await act(async () => {
+			await result.current.open()
+		})
+		Object.assign(popup, { closed: true })
+		await act(async () => {
+			vi.advanceTimersByTime(500)
+		})
+		expect(document.exitFullscreen).toHaveBeenCalled()
+		expect(result.current.isOpen).toBe(false)
+	})
+	it("does not fall back when a cancelled permission request rejects", async () => {
+		let reject!: (reason: Error) => void
+		getScreenDetails.mockReturnValue(
+			new Promise((_, fail) => {
+				reject = fail
+			}),
+		)
+		const { result } = setup()
+		let opening!: Promise<unknown>
+		act(() => {
+			opening = result.current.open()
+			result.current.close()
+		})
+		await act(async () => {
+			reject(new Error("permission denied"))
+			expect(await opening).toBe("cancelled")
+		})
+		expect(result.current.isFallbackOnly).toBe(false)
+		expect(window.open).not.toHaveBeenCalled()
+	})
+	it("does not reenter fullscreen when a cancelled screen switch completes", async () => {
+		const { result } = setup()
+		await act(async () => {
+			await result.current.open()
+		})
+		let finish!: () => void
+		requestFullscreen.mockImplementation(
+			() =>
+				new Promise<void>((resolve) => {
+					finish = () => {
+						fullscreenElement = target
+						resolve()
+					}
+				}),
+		)
+		let switching!: Promise<boolean>
+		act(() => {
+			switching = result.current.moveToScreen(0)
+			result.current.close()
+		})
+		await act(async () => {
+			finish()
+			expect(await switching).toBe(false)
+		})
+		expect(fullscreenElement).toBeNull()
+		expect(result.current.isOpen).toBe(false)
+		expect(result.current.selectedScreen).toBe(1)
 	})
 })

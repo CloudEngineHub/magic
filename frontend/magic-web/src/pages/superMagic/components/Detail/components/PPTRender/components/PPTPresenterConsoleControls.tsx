@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react"
+import { useEffect, useRef, useState } from "react"
 import { useTranslation } from "react-i18next"
 import { ChevronLeft, ChevronRight, Check, LogOut, Monitor } from "lucide-react"
 import { Button } from "@/components/shadcn-ui/button"
@@ -30,7 +30,7 @@ interface PPTPresenterConsoleControlsProps {
 	onExit: () => void
 }
 
-/** The local operator controls stay with the preview; the popup remains a clean audience view. */
+/** Operator controls share React state with the fullscreen slide through a companion portal. */
 export default function PPTPresenterConsoleControls({
 	activeIndex,
 	totalSlides,
@@ -46,6 +46,7 @@ export default function PPTPresenterConsoleControls({
 	onExit,
 }: PPTPresenterConsoleControlsProps) {
 	const { t } = useTranslation("super")
+	const controlsRef = useRef<HTMLDivElement>(null)
 	const [isPageInputVisible, setIsPageInputVisible] = useState(false)
 	const [pageInput, setPageInput] = useState("")
 	const [elapsedSeconds, setElapsedSeconds] = useState(0)
@@ -70,6 +71,7 @@ export default function PPTPresenterConsoleControls({
 
 	return (
 		<div
+			ref={controlsRef}
 			data-testid="ppt-presenter-console-controls"
 			className="col-span-2 row-start-3 flex min-w-0 flex-wrap items-center justify-center gap-1 rounded-xl border border-white/15 bg-black/75 p-1.5 text-white"
 		>
@@ -148,10 +150,14 @@ export default function PPTPresenterConsoleControls({
 							<span className="hidden sm:inline">{t("ppt.presenter.screen")}</span>
 						</Button>
 					</DropdownMenuTrigger>
-					<DropdownMenuContent align="end">
+					<DropdownMenuContent
+						align="end"
+						container={controlsRef.current?.ownerDocument.body}
+					>
 						{screens.map((screen, index) => (
 							<DropdownMenuItem
 								key={index}
+								data-ppt-screen-index={index}
 								onSelect={() => onSelectScreen(index)}
 								className={cn("min-w-48", selectedScreen === index && "bg-accent")}
 							>

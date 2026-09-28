@@ -10,6 +10,7 @@ import {
 	useMemo,
 	useState,
 } from "react"
+import { createPortal } from "react-dom"
 import { useMemoizedFn } from "ahooks"
 import { useTranslation } from "react-i18next"
 import { observer } from "mobx-react-lite"
@@ -73,7 +74,6 @@ import {
 	type SlidesTemplateReplacementTarget,
 } from "@/pages/superMagic/utils/slidesTemplateReplacementActions"
 import pubsub, { PubSubEvents } from "@/utils/pubsub"
-import { resolvePptScaleContentDimensions } from "../../contents/HTML/utils/slide-dimensions"
 
 import { usePPTDeckTools } from "./hooks/usePPTDeckTools"
 import {
@@ -167,6 +167,7 @@ interface PPTRenderProps {
 		type?: "file" | "pdf" | "pptx"
 	}) => void
 	onFullscreen?: () => void
+	isFileFullscreen?: boolean
 	isTabActive?: boolean
 	onRegisterCheckBeforeClose?: (fileId: string, callback: () => Promise<boolean>) => void
 	onUnregisterCheckBeforeClose?: (fileId: string) => void
@@ -288,6 +289,7 @@ const PPTRenderInner = observer(function PPTRenderInner({
 	openNewTab,
 	onDownload,
 	onFullscreen: onFileFullscreen,
+	isFileFullscreen = false,
 	isTabActive,
 	allowDownload,
 	showRefresh = true,
@@ -417,29 +419,10 @@ const PPTRenderInner = observer(function PPTRenderInner({
 		screens: presenterScreens,
 		selectedScreen: selectedPresenterScreen,
 		open: openPresenterWindow,
-		post: postPresenterSlide,
+		consoleContainer: presenterConsoleContainer,
 		close: closePresenterWindow,
 		moveToScreen: movePresenterToScreen,
-	} = usePPTPresenterWindow()
-	const presenterSlideDimensions = useMemo(
-		() =>
-			resolvePptScaleContentDimensions(
-				store.currentSlide?.content,
-				store.currentSlide?.rawContent,
-			),
-		[store.currentSlide?.content, store.currentSlide?.rawContent],
-	)
-	const presenterPayload = useMemo(
-		() =>
-			(store.currentSlide?.content
-				? {
-						index: store.activeIndex,
-						html: store.currentSlide.content,
-						dimensions: presenterSlideDimensions,
-					}
-				: null) as Parameters<typeof openPresenterWindow>[0] | null,
-		[presenterSlideDimensions, store, store.activeIndex, store.currentSlide?.content],
-	)
+	} = usePPTPresenterWindow(presentationStageRef)
 	const togglePresenter = useMemoizedFn(async () => {
 		if (isPresenterWindowOpen) {
 			closePresenterWindow()
@@ -456,12 +439,14 @@ const PPTRenderInner = observer(function PPTRenderInner({
 		// Read after the guard, which may have skipped a hidden starting page.
 		const slide = store.slides[index]
 		if (!isPresenterFallbackOnly && !isMobile && slide?.content) {
-			const result = await openPresenterWindow({
-				index,
-				html: slide.content,
-				dimensions: resolvePptScaleContentDimensions(slide.content, slide.rawContent),
-			})
+			const result = await openPresenterWindow()
 			if (result !== "fallback") return
+			// A denied prompt or an opened popup may consume/expire the gesture. The
+			// browser requires a fresh click; do not issue a native request guaranteed to fail.
+			if (navigator.userActivation?.isActive === false) {
+				magicToast.info(t("ppt.presenter.retryFullscreen"))
+				return
+			}
 		}
 		await togglePresentationFullscreen()
 	})
@@ -473,31 +458,6 @@ const PPTRenderInner = observer(function PPTRenderInner({
 	)
 	const nextVisibleIndex = visibleSlideIndices.find((index) => index > store.activeIndex) ?? -1
 	const visibilityKey = visibleSlideIndices.join(",")
-	useEffect(() => {
-		if (!isPresenterWindowOpen) return
-		const indices = visibilityKey ? visibilityKey.split(",").map(Number) : []
-		if (!indices.includes(store.activeIndex)) {
-			// Clear the audience frame while the next visible slide loads.
-			if (indices.length)
-				postPresenterSlide({
-					index: store.activeIndex,
-					html: '<!doctype html><html><body style="margin:0;background:#000"></body></html>',
-					dimensions: presenterSlideDimensions,
-				})
-			else closePresenterWindow()
-			return
-		}
-		if (presenterPayload) postPresenterSlide(presenterPayload)
-	}, [
-		isPresenterWindowOpen,
-		visibilityKey,
-		store,
-		store.activeIndex,
-		closePresenterWindow,
-		postPresenterSlide,
-		presenterPayload,
-		presenterSlideDimensions,
-	])
 	useEffect(() => {
 		if (!(isPresentationFullscreen || isPresenterWindowOpen || isPlaybackMode)) return
 		const indices = visibilityKey ? visibilityKey.split(",").map(Number) : []
@@ -719,13 +679,15 @@ const PPTRenderInner = observer(function PPTRenderInner({
 		function handleKeyDown(event: KeyboardEvent) {
 			if (
 				event.defaultPrevented ||
-				event.target instanceof HTMLInputElement ||
-				event.target instanceof HTMLTextAreaElement ||
-				(event.target instanceof Element &&
-					!!event.target.closest("select, [contenteditable], [role=menuitem]")) ||
-				(event.key === " " &&
-					event.target instanceof Element &&
-					!!event.target.closest("button, a"))
+				(event.target &&
+					(event.target as Element).nodeType === 1 &&
+					Boolean(
+						(event.target as Element).closest(
+							event.key === " "
+								? "input, textarea, select, [contenteditable], [role=menuitem], button, a"
+								: "input, textarea, select, [contenteditable], [role=menuitem]",
+						),
+					))
 			) {
 				return
 			}
@@ -757,8 +719,14 @@ const PPTRenderInner = observer(function PPTRenderInner({
 		}
 
 		window.addEventListener("keydown", handleKeyDown)
-		return () => window.removeEventListener("keydown", handleKeyDown)
+		const companion = presenterConsoleContainer?.ownerDocument.defaultView
+		companion?.addEventListener("keydown", handleKeyDown)
+		return () => {
+			window.removeEventListener("keydown", handleKeyDown)
+			companion?.removeEventListener("keydown", handleKeyDown)
+		}
 	}, [
+		presenterConsoleContainer,
 		changeSlide,
 		isPresentationFullscreen,
 		isPresenterConsole,
@@ -1083,6 +1051,43 @@ const PPTRenderInner = observer(function PPTRenderInner({
 		onUnregisterCheckBeforeClose,
 	])
 
+	const speakerNotesPanel = store.currentSlide ? (
+		<PPTSpeakerNotesPanel
+			onPendingChangesChange={setNotesPending}
+			layout={isPresenterConsole ? "presenter" : "default"}
+			visible={isPresenterConsole || isPresenterView || pptNotesPreferenceStore.visible}
+			slides={store.slides.map((slide, slideIndex) => ({
+				key: store.getFileIdByPath(slide.path) || slide.path,
+				fileId: store.getFileIdByPath(slide.path) || "",
+				slideIndex,
+				rawContent: slide.rawContent,
+				loadingError: slide.loadingState === "error",
+			}))}
+			onLoadSlide={(key) => {
+				const index = store.slides.findIndex(
+					(slide) => (store.getFileIdByPath(slide.path) || slide.path) === key,
+				)
+				return store.ensureSlideContent(index)
+			}}
+
+			slideIndex={activeSlideIndex}
+			rawContent={store.currentSlide.rawContent || ""}
+			fileId={store.getFileIdByPath(store.currentSlide.path) || ""}
+			getLatestRawContent={(fileId) =>
+				store.slides.find((slide) => store.getFileIdByPath(slide.path) === fileId)
+					?.rawContent || ""
+			}
+			allowEdit={
+				effectiveAllowEdit && !deckTools.busy && !isPlaybackMode && !isPresenterConsole
+			}
+			saveEditContent={saveEditContent}
+			onSaved={(nextContent, fileId) =>
+				Promise.resolve(store.updateSlideNotes(fileId, nextContent)).then(() => undefined)
+			}
+			onGenerate={effectiveAllowEdit ? handleGenerateSpeakerNotes : undefined}
+		/>
+	) : null
+
 	return (
 		<>
 			<div
@@ -1303,6 +1308,12 @@ const PPTRenderInner = observer(function PPTRenderInner({
 										<EditToolbar
 											key={liveRenderScopeKey}
 											{...presentedToolbarModel.props}
+											isFullscreen={
+												onFileFullscreen
+													? isFileFullscreen
+													: isPresentationFullscreen ||
+														isPresenterWindowOpen
+											}
 											getPopupContainer={() => containerRef.current}
 											interactionDisabled={
 												Boolean(pendingKey) || deckTools.busy
@@ -1317,8 +1328,14 @@ const PPTRenderInner = observer(function PPTRenderInner({
 							<div
 								ref={presentationStageRef}
 								data-testid="ppt-render-slide-stage"
+								data-hidden-slide={
+									isPresenterConsole &&
+									!visibleSlideIndices.includes(store.activeIndex)
+										? "true"
+										: undefined
+								}
 								className={cn(
-									"relative z-0 min-h-0 w-full flex-1 overflow-hidden",
+									"relative z-0 min-h-0 w-full flex-1 overflow-hidden data-[hidden-slide=true]:[&>div]:invisible",
 									!isPresenterView &&
 										!isPresenterConsole &&
 										"bg-[#eeeeee] dark:bg-[#2b2b2b]",
@@ -1511,7 +1528,9 @@ const PPTRenderInner = observer(function PPTRenderInner({
 											}
 											selectedPresenterScreen={selectedPresenterScreen}
 											onSelectPresenterScreen={(index) => {
-												void movePresenterToScreen(index)
+												// The companion delegates activation from its own click listener.
+												if (!presenterConsoleContainer)
+													void movePresenterToScreen(index)
 											}}
 											onReplaceTemplate={
 												canReplaceTemplate
@@ -1527,96 +1546,71 @@ const PPTRenderInner = observer(function PPTRenderInner({
 									)}
 							</div>
 
-							{isPresenterConsole && (
-								<PPTPresenterNextSlide
-									content={store.slides[nextVisibleIndex]?.content}
-									loadingError={
-										store.slides[nextVisibleIndex]?.loadingState === "error"
-									}
-									onRetry={() => void store.ensureSlideContent(nextVisibleIndex)}
-									rawContent={store.slides[nextVisibleIndex]?.rawContent}
-									isLastSlide={nextVisibleIndex < 0}
-								/>
-							)}
+							{presenterConsoleContainer ? (
+								createPortal(
+									<>
+										<PPTPresenterNextSlide
+											current
+											content={store.currentSlide?.content}
+											rawContent={store.currentSlide?.rawContent}
+											isLastSlide={false}
+										/>
+										{isPresenterConsole && (
+											<PPTPresenterNextSlide
+												content={store.slides[nextVisibleIndex]?.content}
+												loadingError={
+													store.slides[nextVisibleIndex]?.loadingState ===
+													"error"
+												}
+												onRetry={() =>
+													void store.ensureSlideContent(nextVisibleIndex)
+												}
+												rawContent={
+													store.slides[nextVisibleIndex]?.rawContent
+												}
+												isLastSlide={nextVisibleIndex < 0}
+											/>
+										)}
 
-							{isPresenterConsole && store.isReady && hasSlides && (
-								<PPTPresenterConsoleControls
-									canGoPrevious={visibleSlideIndices.some(
-										(index) => index < store.activeIndex,
-									)}
-									canGoNext={nextVisibleIndex >= 0}
-									activeIndex={store.activeIndex}
-									totalSlides={store.slideUrls.length}
-									isTransitioning={store.isTransitioning}
-									screens={presenterScreens}
-									selectedScreen={selectedPresenterScreen}
-									onPrevSlide={() => void changeSlide("prev")}
-									onNextSlide={() => void changeSlide("next")}
-									onJumpToPage={handleJumpToPage}
-									onSelectScreen={(index) => {
-										void movePresenterToScreen(index)
-									}}
-									onExit={closePresenterWindow}
-								/>
+										{isPresenterConsole && store.isReady && hasSlides && (
+											<PPTPresenterConsoleControls
+												canGoPrevious={visibleSlideIndices.some(
+													(index) => index < store.activeIndex,
+												)}
+												canGoNext={nextVisibleIndex >= 0}
+												activeIndex={store.activeIndex}
+												totalSlides={store.slideUrls.length}
+												isTransitioning={store.isTransitioning}
+												screens={presenterScreens}
+												selectedScreen={selectedPresenterScreen}
+												onPrevSlide={() => void changeSlide("prev")}
+												onNextSlide={() => void changeSlide("next")}
+												onJumpToPage={handleJumpToPage}
+												onSelectScreen={(index) => {
+													// The companion delegates activation from its own click listener.
+													if (!presenterConsoleContainer)
+														void movePresenterToScreen(index)
+												}}
+												onExit={closePresenterWindow}
+											/>
+										)}
+										{!isSingleWindowFullscreen &&
+											store.isReady &&
+											hasSlides &&
+											store.currentSlide &&
+											speakerNotesPanel}
+									</>,
+									presenterConsoleContainer,
+								)
+							) : (
+								<>
+									{!isSingleWindowFullscreen &&
+										store.isReady &&
+										hasSlides &&
+										store.currentSlide &&
+										speakerNotesPanel}
+								</>
 							)}
-							{!isSingleWindowFullscreen &&
-								store.isReady &&
-								hasSlides &&
-								store.currentSlide && (
-									<PPTSpeakerNotesPanel
-										onPendingChangesChange={setNotesPending}
-										layout={isPresenterConsole ? "presenter" : "default"}
-										visible={
-											isPresenterConsole ||
-											isPresenterView ||
-											pptNotesPreferenceStore.visible
-										}
-										slides={store.slides.map((slide, slideIndex) => ({
-											key: store.getFileIdByPath(slide.path) || slide.path,
-											fileId: store.getFileIdByPath(slide.path) || "",
-											slideIndex,
-											rawContent: slide.rawContent,
-											loadingError: slide.loadingState === "error",
-										}))}
-										onLoadSlide={(key) => {
-											const index = store.slides.findIndex(
-												(slide) =>
-													(store.getFileIdByPath(slide.path) ||
-														slide.path) === key,
-											)
-											return store.ensureSlideContent(index)
-										}}
-
-										slideIndex={activeSlideIndex}
-										rawContent={store.currentSlide.rawContent || ""}
-										fileId={
-											store.getFileIdByPath(store.currentSlide.path) || ""
-										}
-										getLatestRawContent={(fileId) =>
-											store.slides.find(
-												(slide) =>
-													store.getFileIdByPath(slide.path) === fileId,
-											)?.rawContent || ""
-										}
-										allowEdit={
-											effectiveAllowEdit &&
-											!deckTools.busy &&
-											!isPlaybackMode &&
-											!isPresenterConsole
-										}
-										saveEditContent={saveEditContent}
-										onSaved={(nextContent, fileId) =>
-											Promise.resolve(
-												store.updateSlideNotes(fileId, nextContent),
-											).then(() => undefined)
-										}
-										onGenerate={
-											effectiveAllowEdit
-												? handleGenerateSpeakerNotes
-												: undefined
-										}
-									/>
-								)}
 						</div>
 					</div>
 				</div>

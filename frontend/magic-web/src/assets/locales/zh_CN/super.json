@@ -4792,6 +4792,7 @@
 			"loadingNextSlide": "正在加载下一页…",
 			"nextSlide": "下一页",
 			"primarySuffix": "（主屏幕）",
+			"retryFullscreen": "未能开启演示者模式，请再次点击「全屏」进入普通放映。",
 			"screen": "放映屏幕",
 			"screenOption": "屏幕 {{index}}",
 			"selectScreen": "选择放映屏幕",
