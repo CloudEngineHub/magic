@@ -29,5 +29,10 @@ export interface PPTSpeakerNotesPanelProps {
 		options?: { silent?: boolean },
 	) => Promise<boolean | void>
 	onSaved: (content: string, fileId: string) => Promise<void>
-	onGenerate?: (action: PPTNotesAction, fileId: string) => void
+	onGenerate?: (
+		action: PPTNotesAction,
+		fileId: string,
+		notes: string,
+		signal: AbortSignal,
+	) => Promise<string>
 }

@@ -1,3 +1,4 @@
+import { generateSpeakerNotes } from "./services/generateSpeakerNotes"
 import type { AttachmentLoadState } from "@/stores/projectFiles/types"
 import {
 	lazy,
@@ -613,51 +614,17 @@ const PPTRenderInner = observer(function PPTRenderInner({
 		return renamed
 	}
 	const handleGenerateSpeakerNotes = useMemoizedFn(
-		(action: PPTNotesAction, targetFileId: string) => {
-			const prompts = {
-				generate: t("ppt.speakerNotes.generatePrompt"),
-				polish: t("ppt.speakerNotes.polishPrompt"),
-				shorten: t("ppt.speakerNotes.shortenPrompt"),
-			}
+		async (
+			action: PPTNotesAction,
+			targetFileId: string,
+			notes: string,
+			signal: AbortSignal,
+		) => {
 			const slide = store.slides.find(
 				(item) => store.getFileIdByPath(item.path) === targetFileId,
 			)
-			if (!slide) return
-
-			const fileId = store.getFileIdByPath(slide.path)
-			const file = attachmentList?.find((item: any) => item.file_id === fileId)
-			if (!fileId || !file) return
-
-			pubsub.publish(PubSubEvents.Add_Content_To_Chat, {
-				content: {
-					type: "doc",
-					content: [
-						{
-							type: "paragraph",
-							content: [
-								{ type: "text", text: prompts[action] },
-								{
-									type: "mention",
-									attrs: {
-										id: null,
-										label: null,
-										mentionSuggestionChar: "@",
-										type: "project_file",
-										data: {
-											file_id: fileId,
-											file_name: file.file_name,
-											file_path: file.relative_file_path,
-											file_extension: file.file_extension,
-										},
-									},
-								},
-								{ type: "text", text: t("ppt.speakerNotes.generatePromptSuffix") },
-							],
-						},
-					],
-				},
-				extraData: { hasInput: true },
-			})
+			if (!effectiveAllowEdit || !slide?.rawContent) throw new Error("Slide is unavailable")
+			return generateSpeakerNotes({ action, rawContent: slide.rawContent, notes, signal })
 		},
 	)
 
