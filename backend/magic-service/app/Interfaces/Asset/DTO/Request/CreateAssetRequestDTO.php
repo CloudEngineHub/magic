@@ -34,7 +34,7 @@ class CreateAssetRequestDTO extends AbstractRequestDTO
 
     /**
      * 兼容前端以 tags 传递选中标签 ID 的请求格式；标准字段仍为 tag_ids。
-     * @var array<int, int|string|array<string, mixed>>
+     * @var array<int, array<string, mixed>|int|string>
      */
     public array $tags = [];
 

@@ -10,7 +10,6 @@ namespace App\Domain\Asset\Repository\Persistence;
 use App\Domain\Asset\Entity\AssetDataIsolation;
 use App\Domain\Asset\Entity\AssetEntity;
 use App\Domain\Asset\Entity\ValueObject\AssetScope;
-use App\Domain\Asset\Entity\ValueObject\ProviderAssetStatus;
 use App\Domain\Asset\Entity\ValueObject\Query\AssetQuery;
 use App\Domain\Asset\Repository\Facade\AssetRepositoryInterface;
 use App\Domain\Asset\Repository\Persistence\Model\AssetModel;
