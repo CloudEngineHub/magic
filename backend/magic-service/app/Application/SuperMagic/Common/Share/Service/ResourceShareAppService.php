@@ -2049,7 +2049,12 @@ class ResourceShareAppService extends AbstractShareAppService
             $rows[] = $this->formatShareCursorRow($entity->toArray(), $organizationCode);
             $existing[$entityId] = true;
         }
-        $result['list'] = $this->enrichShareV2Rows($rows, $organizationCode);
+        // Aligned with the project attachments V2 row shape: file_url stays '' and
+        // relative_file_path is not emitted. The web tree builder rebuilds paths from
+        // parent_id + file_name. Restore the batch enrichment below if a client needs
+        // the V1-compatible fields again.
+        // $result['list'] = $this->enrichShareV2Rows($rows, $organizationCode);
+        $result['list'] = $rows;
         return $result;
     }
 
@@ -2061,60 +2066,71 @@ class ResourceShareAppService extends AbstractShareAppService
         }
     }
 
-    /**
-     * Add the V1-compatible URL and relative path fields in one batch per page.
-     * The cursor query remains free of per-row object-storage lookups.
-     */
-    private function enrichShareV2Rows(array $rows, string $organizationCode): array
-    {
-        if ($rows === []) {
-            return $rows;
-        }
-
-        $fileKeys = array_values(array_unique(array_filter(
-            array_map(static fn (array $row): string => (string) ($row['file_key'] ?? ''), $rows),
-            static fn (string $fileKey): bool => $fileKey !== ''
-        )));
-        $links = $fileKeys === []
-            ? []
-            : $this->fileDomainService->getLinks($organizationCode, $fileKeys, StorageBucketType::Public);
-        $rowMap = [];
-        foreach ($rows as $row) {
-            $rowMap[(string) $row['file_id']] = $row;
-        }
-
-        foreach ($rows as &$row) {
-            $fileKey = (string) ($row['file_key'] ?? '');
-            $link = $links[$fileKey] ?? null;
-            $row['file_url'] = $link?->getUrl() ?? '';
-            $row['relative_file_path'] = $this->buildShareV2RelativePath($row, $rowMap);
-        }
-        unset($row);
-        return $rows;
-    }
-
-    private function buildShareV2RelativePath(array $row, array $rowMap): string
-    {
-        $parts = [];
-        $currentId = (string) ($row['file_id'] ?? '');
-        $visited = [];
-        for ($depth = 0; $depth < 15 && $currentId !== '' && isset($rowMap[$currentId]); ++$depth) {
-            if (isset($visited[$currentId])) {
-                return '';
-            }
-            $visited[$currentId] = true;
-            $name = (string) ($rowMap[$currentId]['file_name'] ?? '');
-            if ($name !== '' && $name !== '/') {
-                array_unshift($parts, $name);
-            }
-            $parentId = (string) ($rowMap[$currentId]['parent_id'] ?? '');
-            if ($parentId === '' || $parentId === '0') {
-                break;
-            }
-            $currentId = $parentId;
-        }
-        return implode('/', $parts);
-    }
+    // Disabled: the web client no longer reads file_url / relative_file_path from share V2 rows,
+    // and the project attachments V2 rows do not compute them either. Kept as a comment so the
+    // V1-compatible fields can be restored without rewriting the logic.
+    //
+    // | Field              | Now (aligned with attachments V2) | If restored                      |
+    // | file_url           | ''                                | one getLinks() batch per page    |
+    // | relative_file_path | not emitted                       | parent_id chain joined by '/'    |
+    //
+    // Restoring also requires re-enabling the 'relative_file_path' key in formatShareCursorRow()
+    // and the enrichShareV2Rows() call in appendShareV2Ancestors().
+    //
+    // /**
+    //  * Add the V1-compatible URL and relative path fields in one batch per page.
+    //  * The cursor query remains free of per-row object-storage lookups.
+    //  */
+    // private function enrichShareV2Rows(array $rows, string $organizationCode): array
+    // {
+    //     if ($rows === []) {
+    //         return $rows;
+    //     }
+    //
+    //     $fileKeys = array_values(array_unique(array_filter(
+    //         array_map(static fn (array $row): string => (string) ($row['file_key'] ?? ''), $rows),
+    //         static fn (string $fileKey): bool => $fileKey !== ''
+    //     )));
+    //     $links = $fileKeys === []
+    //         ? []
+    //         : $this->fileDomainService->getLinks($organizationCode, $fileKeys, StorageBucketType::Public);
+    //     $rowMap = [];
+    //     foreach ($rows as $row) {
+    //         $rowMap[(string) $row['file_id']] = $row;
+    //     }
+    //
+    //     foreach ($rows as &$row) {
+    //         $fileKey = (string) ($row['file_key'] ?? '');
+    //         $link = $links[$fileKey] ?? null;
+    //         $row['file_url'] = $link?->getUrl() ?? '';
+    //         $row['relative_file_path'] = $this->buildShareV2RelativePath($row, $rowMap);
+    //     }
+    //     unset($row);
+    //     return $rows;
+    // }
+    //
+    // private function buildShareV2RelativePath(array $row, array $rowMap): string
+    // {
+    //     $parts = [];
+    //     $currentId = (string) ($row['file_id'] ?? '');
+    //     $visited = [];
+    //     for ($depth = 0; $depth < 15 && $currentId !== '' && isset($rowMap[$currentId]); ++$depth) {
+    //         if (isset($visited[$currentId])) {
+    //             return '';
+    //         }
+    //         $visited[$currentId] = true;
+    //         $name = (string) ($rowMap[$currentId]['file_name'] ?? '');
+    //         if ($name !== '' && $name !== '/') {
+    //             array_unshift($parts, $name);
+    //         }
+    //         $parentId = (string) ($rowMap[$currentId]['parent_id'] ?? '');
+    //         if ($parentId === '' || $parentId === '0') {
+    //             break;
+    //         }
+    //         $currentId = $parentId;
+    //     }
+    //     return implode('/', $parts);
+    // }
 
     private function assertHistoricalShareOwnerPermission(ResourceShareEntity $shareEntity): void
     {
@@ -2164,7 +2180,8 @@ class ResourceShareAppService extends AbstractShareAppService
             'file_key' => $fileKey,
             'file_size' => (int) ($row['file_size'] ?? 0),
             'file_url' => '',
-            'relative_file_path' => (string) ($row['relative_file_path'] ?? ''),
+            // Same as ProjectAppService::formatAttachmentRowV2(): the row carries no relative path.
+            // 'relative_file_path' => (string) ($row['relative_file_path'] ?? ''),
             'is_hidden' => (bool) ($row['is_hidden'] ?? false),
             'is_directory' => (bool) ($row['is_directory'] ?? false),
             'sort' => (int) ($row['sort'] ?? 0),
