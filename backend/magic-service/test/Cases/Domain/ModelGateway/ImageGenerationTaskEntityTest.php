@@ -35,8 +35,8 @@ class ImageGenerationTaskEntityTest extends TestCase
         $this->assertTrue($task->markTimedOutIfRunning(720, new DateTimeImmutable('2026-05-14 10:12:01')));
 
         $this->assertSame(ImageGenerationTaskStatus::FAILED, $task->getStatus());
-        $this->assertSame('IMAGE_GENERATION_TIMEOUT', $task->getErrorCode());
-        $this->assertSame('image generation timeout', $task->getErrorMessage());
+        $this->assertSame('IMAGE_GENERATION_FAILED', $task->getErrorCode());
+        $this->assertSame('Image generation failed, please try again later', $task->getErrorMessage());
         $this->assertSame('2026-05-14 10:12:01', $task->getFinishedAt());
     }
 
@@ -118,8 +118,8 @@ class ImageGenerationTaskEntityTest extends TestCase
             model: 'seedream',
             requestPayload: ['prompt' => 'test'],
             status: ImageGenerationTaskStatus::FAILED,
-            errorCode: 'IMAGE_GENERATION_TIMEOUT',
-            errorMessage: 'image generation timeout',
+            errorCode: 'IMAGE_GENERATION_FAILED',
+            errorMessage: 'Image generation failed, please try again later',
             createdAt: '2026-05-14 10:00:00',
             startedAt: '2026-05-14 10:00:00',
             finishedAt: '2026-05-14 10:20:01',
@@ -129,6 +129,6 @@ class ImageGenerationTaskEntityTest extends TestCase
 
         $this->assertSame(ImageGenerationTaskStatus::FAILED, $task->getStatus());
         $this->assertSame([], $task->getResponsePayload());
-        $this->assertSame('IMAGE_GENERATION_TIMEOUT', $task->getErrorCode());
+        $this->assertSame('IMAGE_GENERATION_FAILED', $task->getErrorCode());
     }
 }

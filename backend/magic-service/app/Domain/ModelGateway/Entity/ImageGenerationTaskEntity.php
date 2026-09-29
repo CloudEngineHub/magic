@@ -11,12 +11,10 @@ use App\Domain\ModelGateway\Entity\ValueObject\ImageGenerationTaskStatus;
 use DateTimeImmutable;
 use DateTimeInterface;
 
+use function Hyperf\Translation\__;
+
 class ImageGenerationTaskEntity
 {
-    private const string TIMEOUT_ERROR_CODE = 'IMAGE_GENERATION_TIMEOUT';
-
-    private const string TIMEOUT_ERROR_MESSAGE = 'image generation timeout';
-
     public function __construct(
         private readonly string $id,
         private readonly string $organizationCode,
@@ -144,8 +142,17 @@ class ImageGenerationTaskEntity
         $this->updatedAt = $finishedAt;
     }
 
-    public function markTimedOutIfRunning(int $timeoutSeconds, ?DateTimeInterface $now = null): bool
-    {
+    /**
+     * 任务创建后超过 $timeoutSeconds 仍未结束，则置为失败。
+     *
+     * 对用户不说「超时」，文案统一取 image_generate.task_failed_retry；
+     * $errorMessage 由调用方按当前语种传入，不传时兜底英文。
+     */
+    public function markTimedOutIfRunning(
+        int $timeoutSeconds,
+        ?DateTimeInterface $now = null,
+        ?string $errorMessage = null
+    ): bool {
         if (! $this->status->isRunning()) {
             return false;
         }
@@ -156,7 +163,11 @@ class ImageGenerationTaskEntity
             return false;
         }
 
-        $this->markFailed(self::TIMEOUT_ERROR_CODE, self::TIMEOUT_ERROR_MESSAGE, $now);
+        $this->markFailed(
+            'IMAGE_GENERATION_FAILED',
+            $errorMessage ?? (string) __('image_generate.task_failed_retry', [], 'en_US'),
+            $now
+        );
         return true;
     }
 

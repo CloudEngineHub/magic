@@ -33,6 +33,34 @@ class ImageGenerationTaskRepository implements ImageGenerationTaskRepositoryInte
         );
     }
 
+    public function markTimedOutBatch(
+        string $createdBefore,
+        string $errorCode,
+        string $errorMessage,
+        int $limit
+    ): int {
+        if ($limit <= 0) {
+            return 0;
+        }
+
+        $now = date('Y-m-d H:i:s');
+
+        // order by + limit 由 MySqlGrammar::compileUpdate() 直接拼进 UPDATE 语句
+        // （Grammar 基类不带，MySQL 方言专门补了这段），所以走查询构造器即可保证单次更新行数可控。
+        return ImageGenerationTaskModel::query()
+            ->where('status', ImageGenerationTaskStatus::RUNNING->value)
+            ->where('created_at', '<=', $createdBefore)
+            ->orderBy('created_at')
+            ->limit($limit)
+            ->update([
+                'status' => ImageGenerationTaskStatus::FAILED->value,
+                'error_code' => $errorCode,
+                'error_message' => $errorMessage,
+                'finished_at' => $now,
+                'updated_at' => $now,
+            ]);
+    }
+
     private function createEntity(ImageGenerationTaskModel $model): ImageGenerationTaskEntity
     {
         return new ImageGenerationTaskEntity(
