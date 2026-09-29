@@ -70,12 +70,12 @@ class DesignGenerationTaskRepository extends DesignAbstractRepository implements
         return DesignGenerationTaskFactory::modelToEntity($model);
     }
 
-    public function findProcessingTasksBeforeId(int $cursorId, int $limit): array
+    public function findProcessingTasksAfterId(int $cursorId, int $limit): array
     {
         $models = DesignGenerationTaskModel::query()
             ->whereIn('status', ['pending', 'processing'])
-            ->where('id', '<', $cursorId)
-            ->orderByDesc('id')
+            ->where('id', '>', $cursorId)
+            ->orderBy('id')
             ->limit($limit)
             ->get();
 

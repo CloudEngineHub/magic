@@ -93,9 +93,9 @@ readonly class DesignGenerationTaskDomainService
     /**
      * @return DesignGenerationTaskEntity[]
      */
-    public function findProcessingTasksBeforeId(int $cursorId, int $limit): array
+    public function findProcessingTasksAfterId(int $cursorId, int $limit): array
     {
-        return $this->repository->findProcessingTasksBeforeId($cursorId, $limit);
+        return $this->repository->findProcessingTasksAfterId($cursorId, $limit);
     }
 
     public function markAsSubmitted(DesignDataIsolation $dataIsolation, DesignGenerationTaskEntity $entity, array $providerPayload): void

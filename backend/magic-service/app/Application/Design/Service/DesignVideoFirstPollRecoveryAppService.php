@@ -18,19 +18,11 @@ use Hyperf\Amqp\Producer;
 use Psr\Log\LoggerInterface;
 use Throwable;
 
-use function Hyperf\Translation\trans;
-
 class DesignVideoFirstPollRecoveryAppService
 {
     private const int BATCH_SIZE = 100;
 
     private const int MAX_BATCHES_PER_RUN = 10;
-
-    /**
-     * 非画布任务的提交在 create() 中同步完成，进程中断会让它停在空 operation_id。
-     * 给足宽限期避免误判仍在提交中的任务，超期后收敛为失败。
-     */
-    private const int SUBMIT_INTERRUPT_GRACE_SECONDS = 600;
 
     public function __construct(
         private readonly DesignGenerationTaskDomainService $domainService,
@@ -41,32 +33,25 @@ class DesignVideoFirstPollRecoveryAppService
 
     public function recover(): void
     {
-        // 倒序扫描：首轮轮询恢复只关心刚创建的任务，它们 id 最大，
-        // 倒序能保证它们永远落在扫描窗口内，不会被历史运行中任务挤占后饿死。
-        $cursorId = PHP_INT_MAX;
+        $cursorId = 0;
 
         for ($batchIndex = 0; $batchIndex < self::MAX_BATCHES_PER_RUN; ++$batchIndex) {
-            $tasks = $this->domainService->findProcessingTasksBeforeId($cursorId, self::BATCH_SIZE);
+            $tasks = $this->domainService->findProcessingTasksAfterId($cursorId, self::BATCH_SIZE);
             if ($tasks === []) {
                 return;
             }
 
             foreach ($tasks as $task) {
-                $cursorId = min($cursorId, (int) ($task->getId() ?? 0));
+                $cursorId = max($cursorId, (int) ($task->getId() ?? 0));
+
+                if (! $this->shouldRecoverFirstPoll($task)) {
+                    continue;
+                }
 
                 $dataIsolation = DesignDataIsolation::create(
                     $task->getOrganizationCode(),
                     $task->getUserId()
                 );
-
-                if ($this->isSubmitPending($task)) {
-                    $this->handleInterruptedSubmit($dataIsolation, $task);
-                    continue;
-                }
-
-                if (! $this->shouldRecoverFirstPoll($task)) {
-                    continue;
-                }
 
                 try {
                     $this->producer->produce($this->buildRecoveryPublisher($task));
@@ -99,6 +84,10 @@ class DesignVideoFirstPollRecoveryAppService
             return false;
         }
 
+        if (! $task->isCanvasComposition() && $task->getOperationId() === '') {
+            return false;
+        }
+
         if (! in_array($task->getFirstPollStatus(), ['pending', 'failed'], true)) {
             return false;
         }
@@ -119,41 +108,6 @@ class DesignVideoFirstPollRecoveryAppService
         }
 
         return $nextRetryTimestamp <= time();
-    }
-
-    /**
-     * 非画布任务必须先完成上游提交，空 operation_id 意味着提交还没走完（宽限期内）。
-     */
-    private function isSubmitPending(DesignGenerationTaskEntity $task): bool
-    {
-        return ! $task->isCanvasComposition() && $task->getOperationId() === '';
-    }
-
-    /**
-     * 收敛"提交过程中断"的任务。
-     *
-     * 提交失败时 create() 会删除任务，所以长时间停在空 operation_id 只可能是进程中断；
-     * 这类任务不会再有消息推动，必须显式置为失败，否则会永远停在 pending 并被每分钟重复扫到。
-     */
-    private function handleInterruptedSubmit(DesignDataIsolation $dataIsolation, DesignGenerationTaskEntity $task): void
-    {
-        $ageSeconds = time() - $task->getUpdatedAt()->getTimestamp();
-        if ($ageSeconds <= self::SUBMIT_INTERRUPT_GRACE_SECONDS) {
-            return;
-        }
-
-        $this->logger->error('design video submit interrupted, mark failed', [
-            'generation_id' => $task->getGenerationId(),
-            'project_id' => $task->getProjectId(),
-            'organization_code' => $task->getOrganizationCode(),
-            'age_seconds' => $ageSeconds,
-        ]);
-
-        $this->domainService->markAsFailed(
-            $dataIsolation,
-            $task,
-            trans('design.video_generation.submit_interrupted')
-        );
     }
 
     /**

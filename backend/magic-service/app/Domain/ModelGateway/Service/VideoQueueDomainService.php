@@ -261,18 +261,6 @@ readonly class VideoQueueDomainService
     }
 
     /**
-     * 保留 provider 拒绝提交时的失败记录，仅短存一段时间用于排查。
-     *
-     * 调用方此时拿不到 operation_id（接口直接抛异常），不会有人来轮询它，
-     * 所以不能按正常运行态的长 TTL 保留；但直接删除会让 provider payload、
-     * accepted_params、ignored_params 一并丢失，只能靠日志回溯。
-     */
-    public function saveFailedOperation(VideoQueueOperationEntity $operation): void
-    {
-        $this->videoQueueOperationRepository->saveOperation($operation, $this->failedOperationTtlSeconds());
-    }
-
-    /**
      * 删除尚未成功提交到 provider 的操作记录，避免限流等失败提交留下不可查询的临时记录。
      */
     public function deleteOperation(VideoQueueOperationEntity $operation): void
@@ -392,11 +380,6 @@ readonly class VideoQueueDomainService
     public function operationTtlSeconds(): int
     {
         return max(600, (int) config('model_gateway.video_queue.operation_ttl_seconds', 72 * 3600));
-    }
-
-    public function failedOperationTtlSeconds(): int
-    {
-        return max(60, (int) config('model_gateway.video_queue.failed_operation_ttl_seconds', 6 * 3600));
     }
 
     public function lockExpireSeconds(): int

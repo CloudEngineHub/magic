@@ -142,7 +142,7 @@ class SubmitConsumerInMemoryRepository implements DesignGenerationTaskRepository
         return $this->entity;
     }
 
-    public function findProcessingTasksBeforeId(int $cursorId, int $limit): array
+    public function findProcessingTasksAfterId(int $cursorId, int $limit): array
     {
         return [];
     }
