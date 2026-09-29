@@ -33,9 +33,18 @@ vi.mock("mobx-react-lite", () => ({
 	observer: <T,>(component: T) => component,
 }))
 
-vi.mock("ahooks", () => ({
-	useMemoizedFn: <T extends (...args: never[]) => unknown>(fn: T) => fn,
-}))
+vi.mock("ahooks", async () => {
+	const React = await import("react")
+
+	// Keep the real hook contract: a stable identity that always calls the latest closure.
+	function useMemoizedFn<T extends (...args: never[]) => unknown>(fn: T): T {
+		const fnRef = React.useRef(fn)
+		fnRef.current = fn
+		return React.useCallback(((...args: never[]) => fnRef.current(...args)) as T, [])
+	}
+
+	return { useMemoizedFn }
+})
 
 vi.mock("@/hooks/useIsMobile", () => ({
 	useIsMobile: () => false,
@@ -346,6 +355,32 @@ function renderPPTSlide(overrides: Partial<React.ComponentProps<typeof PPTSlide>
 	)
 }
 
+function rerenderSlide(
+	view: ReturnType<typeof renderPPTSlide>,
+	overrides: Partial<React.ComponentProps<typeof PPTSlide>> = {},
+) {
+	view.rerender(
+		<PPTSlide
+			index={0}
+			isActive={true}
+			content="<div>slide</div>"
+			rawContent="<div>slide</div>"
+			isFullscreen={false}
+			fileId="slide-1"
+			filePathMapping={new Map()}
+			openNewTab={vi.fn()}
+			updateSlideContents={vi.fn()}
+			allowEdit={true}
+			loadingState="loaded"
+			attachmentList={[]}
+			saveEditContent={mockState.saveEditContent}
+			onManualSave={mockState.onManualSave}
+			onDeactivate={mockState.onDeactivate}
+			{...overrides}
+		/>,
+	)
+}
+
 describe("PPTSlide", () => {
 	it("removes preview spacing from fullscreen on every device", () => {
 		renderPPTSlide({ isFullscreen: true })
@@ -495,7 +530,7 @@ describe("PPTSlide", () => {
 		expect(onRenderReadyChange).not.toHaveBeenCalledWith(false)
 	})
 
-	it("blanks the preview overlay when the visual revision changes", async () => {
+	it("re-acknowledges readiness when only the revision changes", async () => {
 		const onRenderReadyChange = vi.fn()
 		const view = renderPPTSlide({
 			content: "<main>Processed slide</main>",
@@ -513,27 +548,136 @@ describe("PPTSlide", () => {
 		expect(onRenderReadyChange).toHaveBeenCalledWith(true)
 		onRenderReadyChange.mockClear()
 
-		view.rerender(
-			<PPTSlide
-				index={0}
-				isActive={true}
-				content="<main>Processed slide</main>"
-				rawContent="<main>Slide</main>"
-				renderRevision="visual-revision-2"
-				isFullscreen={false}
-				fileId="slide-1"
-				filePathMapping={new Map()}
-				openNewTab={vi.fn()}
-				updateSlideContents={vi.fn()}
-				allowEdit={true}
-				loadingState="loaded"
-				attachmentList={[]}
-				saveEditContent={mockState.saveEditContent}
-				onRenderReadyChange={onRenderReadyChange}
-			/>,
-		)
+		rerenderSlide(view, {
+			content: "<main>Processed slide</main>",
+			rawContent: "<main>Slide</main>",
+			renderRevision: "visual-revision-2",
+			onRenderReadyChange,
+		})
 
-		expect(onRenderReadyChange).toHaveBeenCalledWith(false)
+		expect(onRenderReadyChange).toHaveBeenCalledWith(true)
+		expect(onRenderReadyChange).not.toHaveBeenCalledWith(false)
+	})
+
+	it("updates a rendered slide in place without a blocking loading state", async () => {
+		const view = renderPPTSlide({
+			content: "<main>Old</main>",
+			rawContent: "<main>Old raw</main>",
+			renderRevision: "visual-revision-1",
+		})
+		const renderer = screen.getByTestId("isolated-html-renderer")
+		const isolatedProps = mockState.renderedIsolatedProps.mock.calls.at(-1)?.[0] as
+			{ onRenderReady?: () => void } | undefined
+		act(() => isolatedProps?.onRenderReady?.())
+		const renderContent = screen.getByTestId("ppt-slide-render-content")
+		expect(renderContent.querySelector(".z-10")).toBeNull()
+
+		rerenderSlide(view, {
+			content: "<main>New</main>",
+			rawContent: "<main>New raw</main>",
+			renderRevision: "visual-revision-2",
+		})
+
+		expect(screen.queryByTestId("ppt-slide-content-updating")).not.toBeInTheDocument()
+		expect(screen.getByTestId("isolated-html-renderer")).toBe(renderer)
+		expect(screen.getByTestId("ppt-slide-render-content").querySelector(".z-10")).toBeNull()
+
+		await waitFor(() => {
+			expect(mockState.renderedIsolatedProps).toHaveBeenLastCalledWith(
+				expect.objectContaining({ content: "<main>New raw</main>" }),
+			)
+		})
+		expect(screen.getByTestId("isolated-html-renderer")).toBe(renderer)
+		expect(screen.getByTestId("ppt-slide-render-content").querySelector(".z-10")).toBeNull()
+	})
+
+	it("renders the saved source after saving its own edit", async () => {
+		const view = renderPPTSlide({
+			content: "<main>Processed</main>",
+			rawContent: "<main>Before</main>",
+			renderRevision: "visual-revision-1",
+		})
+		mockState.triggerSave.mockResolvedValue({
+			success: true,
+			cleanContent: "<main>After</main>",
+			rawContent: "<main>After</main>",
+			fileId: "slide-1",
+		})
+
+		fireEvent.click(screen.getByTestId("ppt-save-button"))
+		await waitFor(() => {
+			expect(mockState.onManualSave).toHaveBeenCalled()
+		})
+		mockState.renderedIsolatedProps.mockClear()
+
+		rerenderSlide(view, {
+			content: "<main>Processed after</main>",
+			rawContent: "<main>After</main>",
+			renderRevision: "visual-revision-2",
+		})
+
+		// The test processor echoes raw HTML, so the preview must follow the saved source.
+		await waitFor(() => {
+			expect(mockState.renderedIsolatedProps).toHaveBeenLastCalledWith(
+				expect.objectContaining({
+					rawSourceCode: "<main>After</main>",
+					content: "<main>After</main>",
+				}),
+			)
+		})
+		expect(screen.queryByTestId("ppt-slide-content-updating")).not.toBeInTheDocument()
+	})
+
+	it("converges to the latest source after rapid successive updates", async () => {
+		const view = renderPPTSlide({ content: "<p>v0</p>", rawContent: "<p>v0</p>" })
+		const renderer = screen.getByTestId("isolated-html-renderer")
+
+		for (const version of ["v1", "v2", "v3"]) {
+			rerenderSlide(view, {
+				content: `<p>${version}</p>`,
+				rawContent: `<p>${version}</p>`,
+				renderRevision: version,
+			})
+		}
+
+		await waitFor(() => {
+			expect(mockState.renderedIsolatedProps).toHaveBeenLastCalledWith(
+				expect.objectContaining({ content: "<p>v3</p>", rawSourceCode: "<p>v3</p>" }),
+			)
+		})
+		expect(screen.getByTestId("isolated-html-renderer")).toBe(renderer)
+	})
+
+	it("shows the first-paint overlay again after a code view round trip", () => {
+		renderPPTSlide({ content: "<p>slide</p>", rawContent: "<p>slide</p>" })
+		const isolatedProps = mockState.renderedIsolatedProps.mock.calls.at(-1)?.[0] as
+			{ onRenderReady?: () => void } | undefined
+		act(() => isolatedProps?.onRenderReady?.())
+		expect(screen.getByTestId("ppt-slide-render-content").querySelector(".z-10")).toBeNull()
+
+		fireEvent.click(screen.getByTestId("ppt-code-mode-button"))
+		expect(screen.queryByTestId("ppt-slide-render-content")).not.toBeInTheDocument()
+	})
+
+	it("shows the first-paint overlay when a slide recovers from an error", () => {
+		const view = renderPPTSlide({ content: "<p>slide</p>", rawContent: "<p>slide</p>" })
+		const isolatedProps = mockState.renderedIsolatedProps.mock.calls.at(-1)?.[0] as
+			{ onRenderReady?: () => void } | undefined
+		act(() => isolatedProps?.onRenderReady?.())
+
+		rerenderSlide(view, {
+			content: "<p>slide</p>",
+			rawContent: "<p>slide</p>",
+			loadingState: "error",
+		})
+		expect(screen.getByTestId("ppt-slide-error")).toBeInTheDocument()
+
+		rerenderSlide(view, {
+			content: "<p>slide</p>",
+			rawContent: "<p>slide</p>",
+			loadingState: "loaded",
+		})
+		expect(screen.getByTestId("ppt-slide-render-content").querySelector(".z-10")).not.toBeNull()
 	})
 
 	it("编辑工具栏显示时，渲染区域只占用剩余高度", () => {

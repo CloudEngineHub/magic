@@ -19,6 +19,7 @@ import { PPTZoomControl } from "./PPTZoomControl"
 import { cn } from "@/utils/cn"
 import { Button } from "@/components/shadcn-ui/button"
 import { MagicDropdown, MagicTooltip } from "@/components/base"
+import { FileSaveSyncBadge } from "../../FileSaveSyncBadge"
 
 export function PPTControlBar({
 	activeIndex,
@@ -32,6 +33,7 @@ export function PPTControlBar({
 	onNextSlide,
 	onGoToFirstSlide,
 	onRefreshSlides,
+	refreshAllProgress,
 	onRefreshCurrentSlide,
 	isRefreshingCurrentSlide,
 	onJumpToPage,
@@ -48,8 +50,10 @@ export function PPTControlBar({
 	onScaleChange,
 	onResetScale,
 	className,
+	currentFileId,
 }: PPTControlBarProps) {
 	const { t } = useTranslation("super")
+	const isRefreshingAll = Boolean(refreshAllProgress)
 	const [jumpPageInput, setJumpPageInput] = useState<string>("")
 	const [isPageInputVisible, setIsPageInputVisible] = useState(false)
 	const pageInputRef = useRef<HTMLInputElement>(null)
@@ -210,6 +214,7 @@ export function PPTControlBar({
 										{" "}
 										/ {totalSlides}
 									</span>
+									<FileSaveSyncBadge fileId={currentFileId} className="ml-1" />
 								</span>
 							</MagicTooltip>
 						)}
@@ -297,11 +302,17 @@ export function PPTControlBar({
 										onRefreshSlides()
 									}}
 									aria-label={t("ppt.reloadAllSlides")}
-									disabled={isTransitioning}
+									disabled={isTransitioning || isRefreshingAll}
+									aria-busy={isRefreshingAll}
 								>
-									<RefreshCw className="h-4 w-4" />
-									<span className={isMobile ? "sr-only" : undefined}>
+									<RefreshCw
+										className={cn("h-4 w-4", isRefreshingAll && "animate-spin")}
+									/>
+									<span className={isMobile ? "sr-only" : "tabular-nums"}>
 										{t("ppt.reloadAllSlides")}
+										{refreshAllProgress
+											? ` (${refreshAllProgress.done}/${refreshAllProgress.total})`
+											: null}
 									</span>
 								</Button>
 							</span>

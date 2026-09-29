@@ -216,6 +216,8 @@ const PPTSlide = observer(function PPTSlide({
 		content: string
 		usesIframe: boolean
 	} | null>(null)
+	// Renderer key that has already painted once. Later in-place updates stay silent.
+	const paintedRendererKeyRef = useRef<string | null>(null)
 	const iframeElement = rendererRef.current?.getIframeElement() ?? null
 	usePPTSwipeNavigation({
 		containerRef: slideWrapperRef,
@@ -271,6 +273,25 @@ const PPTSlide = observer(function PPTSlide({
 		() => resolvePptScaleContentDimensions(displayContent.content, displayContent.rawContent),
 		[displayContent.content, displayContent.rawContent],
 	)
+	// Latest-version refreshes keep the previous render on screen until the new HTML is
+	// processed, like the HTML preview. Version switches still show the blocking spinner.
+	const isDisplayContentStale =
+		!isDisplayContentCurrent &&
+		fileVersion === undefined &&
+		displayContent.sourceVersion === undefined &&
+		Boolean(displayContent.content.trim())
+	const canRenderDisplayContent = isDisplayContentCurrent || isDisplayContentStale
+	// Stable across content updates so the iframe is updated in place, not remounted.
+	const rendererKey = `${fileId ?? "slide"}:${displayContent.sourceVersion ?? "latest"}`
+	const isIframeMounted =
+		loadingState === "loaded" &&
+		Boolean(content?.trim()) &&
+		canRenderDisplayContent &&
+		viewMode !== "code"
+
+	useEffect(() => {
+		if (!isIframeMounted) paintedRendererKeyRef.current = null
+	}, [isIframeMounted])
 
 	// 历史版本对比弹窗状态
 	const [showHistoryCompareDialog, setShowHistoryCompareDialog] = useState(false)
@@ -428,7 +449,7 @@ const PPTSlide = observer(function PPTSlide({
 			presentedVisualRef.current = {
 				revision: renderRevision,
 				content: displayContent.content,
-				usesIframe: viewMode !== "code",
+				usesIframe: isIframeMounted,
 			}
 		}
 		if (presentedReadyRef.current === ready) return
@@ -437,10 +458,15 @@ const PPTSlide = observer(function PPTSlide({
 		onRenderReadyChange?.(ready)
 	})
 
+	const reacknowledgeRenderReady = useMemoizedFn(() => {
+		onRenderReadyChange?.(true)
+	})
+
 	const handleSlideRenderReady = useMemoizedFn(() => {
 		if (loadingState !== "loaded" || !displayContent.content || !isDisplayContentCurrent) {
 			return
 		}
+		paintedRendererKeyRef.current = rendererKey
 		reportSlideRenderReady(true)
 	})
 
@@ -456,18 +482,24 @@ const PPTSlide = observer(function PPTSlide({
 			return
 		}
 
-		// Keep iframe ready when visual identity is unchanged.
+		// Keep iframe ready when the rendered HTML is unchanged, even if the store revision moved.
 		// Code view unmounts the iframe, so it is a new present.
 		const presentedVisual = presentedVisualRef.current
 		const isUnchangedPresentedVisual =
 			Boolean(presentedVisual) &&
-			presentedVisual?.revision === renderRevision &&
 			presentedVisual?.content === displayContent.content &&
-			presentedVisual?.usesIframe === (viewMode !== "code") &&
+			presentedVisual?.usesIframe === isIframeMounted &&
 			loadingState === "loaded" &&
 			isDisplayContentCurrent
 
-		if (isUnchangedPresentedVisual) return
+		if (isUnchangedPresentedVisual) {
+			const wasReported = presentedReadyRef.current === true
+			const isRevisionChanged = presentedVisual?.revision !== renderRevision
+			reportSlideRenderReady(true)
+			// The owner tracks readiness per revision, so a new revision needs a fresh ack.
+			if (wasReported && isRevisionChanged) reacknowledgeRenderReady()
+			return
+		}
 		reportSlideRenderReady(false)
 		if (loadingState !== "loaded" || !displayContent.content || !isDisplayContentCurrent) return
 
@@ -475,6 +507,7 @@ const PPTSlide = observer(function PPTSlide({
 		// This only releases the local spinner for the initially presented page. It must not tell the
 		// double buffer that a hidden target is safe to swap before a real renderComplete signal.
 		const fallbackTimer = window.setTimeout(() => {
+			paintedRendererKeyRef.current = rendererKey
 			setIsSlideRenderReady(true)
 		}, 4000)
 
@@ -486,9 +519,12 @@ const PPTSlide = observer(function PPTSlide({
 		displayContent.content,
 		fileVersion,
 		isDisplayContentCurrent,
+		isIframeMounted,
 		loadingState,
 		rawContent,
 		renderRevision,
+		rendererKey,
+		reacknowledgeRenderReady,
 		reportSlideRenderReady,
 		viewMode,
 	])
@@ -1099,7 +1135,7 @@ const PPTSlide = observer(function PPTSlide({
 			)
 		}
 
-		if (!isDisplayContentCurrent) {
+		if (!canRenderDisplayContent) {
 			return (
 				<div
 					data-testid="ppt-slide-content-updating"
@@ -1128,7 +1164,7 @@ const PPTSlide = observer(function PPTSlide({
 				className={cn("relative min-h-0 w-full", isFullscreen ? "h-full" : "flex-1")}
 			>
 				<IsolatedHTMLRenderer
-					key={`${renderRevision || `${fileId}:${content.length}`}:${displayContent.sourceVersion ?? "latest"}`}
+					key={rendererKey}
 					ref={rendererRef as React.RefObject<IsolatedHTMLRendererRef>}
 					content={swipeEnabledContent}
 					rawSourceCode={displayContent.rawContent}
@@ -1165,7 +1201,7 @@ const PPTSlide = observer(function PPTSlide({
 					onAppendPickingChange={setIsAppendPicking}
 					onQuickSelectionChange={setIsQuickSelecting}
 				/>
-				{!isSlideRenderReady && (
+				{!isSlideRenderReady && paintedRendererKeyRef.current !== rendererKey && (
 					<div className="absolute inset-0 z-10 flex items-center justify-center bg-white dark:bg-[#1c1c1c]">
 						<MagicSpin spinning />
 					</div>

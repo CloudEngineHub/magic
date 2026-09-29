@@ -18,6 +18,11 @@ import type {
 	SlideScreenshotService,
 } from "../services"
 import { getTemporaryDownloadUrl } from "@/pages/superMagic/utils/api"
+import {
+	getFileSaveQueue,
+	peekUnsyncedDraft,
+	stringifySaveContent,
+} from "../../../services/fileSaveQueue"
 import type { FileApi } from "@/pages/superMagic/fileAccess/fileApi"
 import type { SlideItem } from "../PPTSidebar/types"
 import { getPPTPreviewOverscan } from "../PPTSidebar/utils/devicePerformance"
@@ -179,6 +184,7 @@ export class PPTStore {
 	private fullscreenContentPriorities = new Map<string, FullscreenContentPriority>()
 	private activeContentKey: string | null = null
 	private activeIndexAutoSaveDisposer: (() => void) | null = null
+	private queueUnsubscribe: (() => void) | null = null
 	private disposed = false
 	/** Normal viewer keeps the current slide and its immediate neighbors mounted. */
 	private readonly normalRenderWindowSize = 1
@@ -308,11 +314,19 @@ export class PPTStore {
 				fullscreenContentPreloadRadius: false,
 				previewScreenshotKeys: false,
 				activeIndexAutoSaveDisposer: false,
+				queueUnsubscribe: false,
 				disposed: false,
 				normalRenderWindowSize: false,
 			} as Record<string, false | typeof observable.ref>,
 			{ autoBind: true },
 		)
+
+		this.queueUnsubscribe = getFileSaveQueue().subscribe(() => {
+			if (this.disposed) return
+			void this.incrementalUpdateService.flushStagedRemoteUpdates(
+				this.createIncrementalUpdateContext(this.configUpdateVersion),
+			)
+		})
 
 		// Setup auto-save for activeIndex when cache is enabled
 		if (config.enableCache !== false) {
@@ -382,6 +396,31 @@ export class PPTStore {
 			this.pathMappingService.getFileIdByPath(slide.path) ||
 			this.pathMappingService.extractFileIdFromPath(slide.path)
 		)
+	}
+
+	private overlayUnsyncedSlideContent(
+		fileId: string | undefined,
+		processedContent: string,
+		rawContent: string,
+	): { content: string; rawContent: string } {
+		if (!fileId) return { content: processedContent, rawContent }
+		const pending = peekUnsyncedDraft(fileId)
+		if (pending === undefined) return { content: processedContent, rawContent }
+		const overlay = stringifySaveContent(pending)
+		return { content: overlay, rawContent: overlay }
+	}
+
+	async applyUnsyncedDraft(fileId: string, content: unknown): Promise<void> {
+		const html = stringifySaveContent(content)
+		runInAction(() => {
+			const index = this.slides.findIndex((slide) => this.getSlideFileId(slide) === fileId)
+			if (index === -1) return
+			this.slides[index].rawContent = html
+			this.slides[index].content = html
+			this.slides[index].loadingState = "loaded"
+			this.slides[index].loadingError = undefined
+			this.slides[index].lastLoadedAt = Date.now()
+		})
 	}
 
 	private getSlideStableKey(slide: SlideItem | undefined, fallbackIndex?: number): string {
@@ -665,6 +704,9 @@ export class PPTStore {
 			notifyServerUpdate: (fileId, content) => {
 				if (isCurrent()) this.notifyServerUpdate(fileId, content)
 			},
+			matchesLocalSave: (fileId, content) =>
+				isCurrent() && getFileSaveQueue().matchesLocal(fileId, content),
+			hasPendingSave: (fileId) => isCurrent() && getFileSaveQueue().hasPending(fileId),
 			isCurrent,
 		}
 	}
@@ -1437,11 +1479,16 @@ export class PPTStore {
 								urlMapping,
 							)
 
+						const overlaid = this.overlayUnsyncedSlideContent(
+							fileId,
+							processedContent.content,
+							content,
+						)
 						runInAction(() => {
 							const currentIndex = this.findSlideIndexByLoadTarget(target)
 							if (currentIndex !== -1 && this.slides[currentIndex]) {
-								this.slides[currentIndex].rawContent = content
-								this.slides[currentIndex].content = processedContent.content
+								this.slides[currentIndex].rawContent = overlaid.rawContent
+								this.slides[currentIndex].content = overlaid.content
 								this.slides[currentIndex].resourceVersionSignature =
 									processedContent.resourceVersionSignature
 								this.slides[currentIndex].loadingState = "loaded"
@@ -1633,6 +1680,12 @@ export class PPTStore {
 			)
 			if (!this.isContentLoadCurrent(options)) return ""
 
+			const overlaid = this.overlayUnsyncedSlideContent(
+				currentFileId,
+				processedContent.content,
+				rawContent,
+			)
+
 			runInAction(() => {
 				if (!this.isContentLoadCurrent(options)) return
 				const currentIndex = this.findSlideIndexByLoadTarget(target)
@@ -1644,8 +1697,8 @@ export class PPTStore {
 					return
 				}
 
-				this.slides[currentIndex].rawContent = rawContent
-				this.slides[currentIndex].content = processedContent.content
+				this.slides[currentIndex].rawContent = overlaid.rawContent
+				this.slides[currentIndex].content = overlaid.content
 				this.slides[currentIndex].resourceVersionSignature =
 					processedContent.resourceVersionSignature
 				this.slides[currentIndex].loadingState = "loaded"
@@ -1658,7 +1711,7 @@ export class PPTStore {
 				slideIndex: this.findSlideIndexByLoadTarget(target),
 			})
 
-			return processedContent.content
+			return overlaid.content
 		} catch (error) {
 			if (this.isAbortError(error) || !this.isContentLoadCurrent(options)) {
 				this.logger.debug("幻灯片内容加载已取消，丢弃结果", {
@@ -2978,6 +3031,8 @@ export class PPTStore {
 		this.activeContentKey = null
 		this.activeIndexAutoSaveDisposer?.()
 		this.activeIndexAutoSaveDisposer = null
+		this.queueUnsubscribe?.()
+		this.queueUnsubscribe = null
 		this.cacheManager.dispose()
 		this.logger.clearTimings()
 

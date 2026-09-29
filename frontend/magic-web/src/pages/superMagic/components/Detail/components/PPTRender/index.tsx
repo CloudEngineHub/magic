@@ -84,6 +84,7 @@ import {
 	getPptVisibleSlideIndices,
 } from "@/pages/superMagic/utils/pptHiddenSlides"
 import magicToast from "@/components/base/MagicToaster/utils"
+import { flushFileSaves, getFileSaveQueue } from "../../services/fileSaveQueue"
 const SlidesTemplateReplacementDialog = lazy(() => import("./SlidesTemplateReplacementDialog"))
 
 interface ManualSaveResult {
@@ -308,6 +309,25 @@ const PPTRenderInner = observer(function PPTRenderInner({
 	const { onDownloadRequest, onFullscreenToggle, emitFullscreenStateChange } = usePPTEventBus()
 	const store = usePPTStore()
 
+	useEffect(() => {
+		const queue = getFileSaveQueue()
+		const unsubs = store.slides.map((slide) => {
+			const fileId = store.getFileIdByPath(slide.path)
+			if (!fileId) return () => {}
+			const unrestore = queue.registerRestoreHandler(fileId, async () => {
+				await store.loadSlideContentByFileId(fileId, { path: slide.path })
+			})
+			const unapply = queue.registerDraftApplyHandler(fileId, async (content) => {
+				await store.applyUnsyncedDraft(fileId, content)
+			})
+			return () => {
+				unrestore()
+				unapply()
+			}
+		})
+		return () => unsubs.forEach((unsubscribe) => unsubscribe())
+	}, [store, store.slides])
+
 	const [isAnySlideEditing, setIsAnySlideEditing] = useState(false)
 	const [notesPending, setNotesPending] = useState(false)
 	const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false)
@@ -375,6 +395,7 @@ const PPTRenderInner = observer(function PPTRenderInner({
 		handleEditModeChange,
 		handleRefreshSlide,
 		handleRefreshAllSlides,
+		refreshAllProgress,
 		handleRegenerateScreenshot,
 		handleSidebarCollapsedChange,
 	} = useSlideHandlers({ store, setIsAnySlideEditing, setIsSidebarCollapsed })
@@ -817,8 +838,9 @@ const PPTRenderInner = observer(function PPTRenderInner({
 		setTemplateReplacementTarget({ scope: "slide", slideIndex })
 	})
 	const handleConfirmTemplateReplacement = useMemoizedFn(
-		(template: OptionItem, target: SlidesTemplateReplacementTarget) => {
+		async (template: OptionItem, target: SlidesTemplateReplacementTarget) => {
 			if (!mainFileId || !mainFileName || !resolvedProjectId) return
+			if (!(await flushFileSaves())) return
 			const mainFile =
 				attachmentList?.find((item: any) => item.file_id === mainFileId) ||
 				({
@@ -930,7 +952,15 @@ const PPTRenderInner = observer(function PPTRenderInner({
 	})
 
 	const handleCheckBeforeClose = useMemoizedFn(async (): Promise<boolean> => {
-		if (!isAnySlideEditing) return true
+		const flushUnsynced = async () => {
+			const queue = getFileSaveQueue()
+			if (!queue.hasUnsynced()) return true
+			return queue.flushAll()
+		}
+
+		if (!isAnySlideEditing) {
+			return await flushUnsynced()
+		}
 
 		return await new Promise<boolean>((resolve) => {
 			const fileName = mainFileName || t("common.untitledFile")
@@ -941,6 +971,7 @@ const PPTRenderInner = observer(function PPTRenderInner({
 						? await activeSlideDiscardHandlerRef.current()
 						: true
 					if (!didDiscard) return
+					if (!(await flushUnsynced())) return
 
 					modal.destroy()
 					resolve(true)
@@ -955,6 +986,7 @@ const PPTRenderInner = observer(function PPTRenderInner({
 						? await activeSlideCloseSaveHandlerRef.current()
 						: true
 					if (!didSave) return
+					if (!(await flushUnsynced())) return
 
 					modal.destroy()
 					resolve(true)
@@ -1483,6 +1515,7 @@ const PPTRenderInner = observer(function PPTRenderInner({
 											onNextSlide={() => changeSlide("next")}
 											onGoToFirstSlide={goToFirstSlide}
 											onRefreshSlides={handleRefreshAllSlides}
+											refreshAllProgress={refreshAllProgress}
 											onRefreshCurrentSlide={
 												!pendingKey &&
 												presentedToolbarModel?.props.showRefresh
@@ -1513,6 +1546,11 @@ const PPTRenderInner = observer(function PPTRenderInner({
 											portalContainer={containerRef.current}
 											onScaleChange={handleManualScaleChange}
 											onResetScale={() => handleManualScaleChange(null)}
+											currentFileId={
+												store.currentSlide
+													? store.getFileIdByPath(store.currentSlide.path)
+													: undefined
+											}
 										/>
 									)}
 							</div>
