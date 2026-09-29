@@ -252,12 +252,13 @@ abstract readonly class AbstractSeedanceGenerationCapabilityProvider
                     ],
                 ]],
             ],
-            // 首帧/首尾帧：输出比例强制跟随首帧图片，因此该模式不支持选择比例。
+            // 首帧/首尾帧：输出比例强制跟随首帧图片，因此该模式不支持选择比例，
+            // 尺寸档位（分辨率 × 比例）同样不暴露给前端。与 Keling 的约束写法保持一致。
             'keyframe_guided' => [
                 'description' => $this->translateInputMode('keyframe_guided.start_end'),
                 'supported_fields' => ['frames'],
                 'frame_roles' => ['start', 'end'],
-                'generation_constraints' => ['aspect_ratios' => []],
+                'generation_constraints' => ['aspect_ratios' => [], 'sizes' => []],
             ],
             // 视频编辑：至少一个参考视频，可搭配参考图片；时长与比例跟随待编辑视频，不暴露给前端。
             VideoInputMode::VideoEdit->value => array_merge(

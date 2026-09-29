@@ -572,6 +572,7 @@ class DesignVideoCreateDTO extends AbstractDTO
         $this->assertOptionalStringField($this->generation, 'negative_prompt', 'generation.negative_prompt', 4096);
         $this->assertOptionalBoolField($this->generation, 'generate_audio', 'generation.generate_audio');
         $this->assertOptionalBoolField($this->generation, 'web_search', 'generation.web_search');
+        $this->assertOptionalBoolField($this->generation, 'draft', 'generation.draft');
         $this->assertOptionalStringField($this->generation, 'person_generation', 'generation.person_generation', 50);
         $this->assertOptionalBoolField($this->generation, 'enhance_prompt', 'generation.enhance_prompt');
         $this->assertOptionalStringField($this->generation, 'compression_quality', 'generation.compression_quality', 50);

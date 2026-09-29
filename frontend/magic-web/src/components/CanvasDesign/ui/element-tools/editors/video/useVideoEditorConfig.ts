@@ -2108,7 +2108,9 @@ export function useVideoEditorConfig(options: UseVideoEditorConfigOptions): Vide
 				? { generate_audio: selectedGenerateAudio }
 				: {}),
 			...(selectedWebSearch !== undefined ? { web_search: selectedWebSearch } : {}),
-			...(selectedDraft !== undefined ? { draft: selectedDraft } : {}),
+			// 样片模式开关默认关闭，且方舟侧缺省即为 false。仅在真正开启时透传，
+			// 避免给每一条 2.5 请求都平白新增一个顶层字段。
+			...(selectedDraft === true ? { draft: true } : {}),
 			...(selectedCompressionQuality
 				? { compression_quality: selectedCompressionQuality }
 				: {}),

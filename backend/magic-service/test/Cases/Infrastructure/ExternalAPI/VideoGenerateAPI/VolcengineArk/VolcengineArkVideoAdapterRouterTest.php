@@ -221,10 +221,10 @@ final class VolcengineArkVideoAdapterRouterTest extends TestCase
         $config = $this->createFamilyAdapter($family)->resolveGenerationConfig($model, $model);
 
         $this->assertNotNull($config);
-        $this->assertSame(
-            [],
-            $config->toArray()['input_modes']['keyframe_guided']['generation_constraints']['aspect_ratios'],
-        );
+        $constraints = $config->toArray()['input_modes']['keyframe_guided']['generation_constraints'];
+        $this->assertSame([], $constraints['aspect_ratios']);
+        // 尺寸档位携带比例信息，同样必须声明为空，避免前端在首帧模式下暴露比例可选。
+        $this->assertSame([], $constraints['sizes']);
     }
 
     /**
@@ -251,8 +251,8 @@ final class VolcengineArkVideoAdapterRouterTest extends TestCase
         $this->assertIsArray($draftSwitch);
         $this->assertSame('switch', $draftSwitch['type']);
         $this->assertFalse($draftSwitch['default']);
-        $this->assertNotSame('', $draftSwitch['name']);
-        $this->assertNotSame('', $draftSwitch['description']);
+        $this->assertNotSame('', (string) $draftSwitch['name']);
+        $this->assertNotSame('', (string) $draftSwitch['description']);
 
         $others = ['mini_fast' => self::MINI_FAST_MODEL, 'two' => self::TWO_MODEL];
         foreach ($others as $family => $model) {
@@ -261,6 +261,33 @@ final class VolcengineArkVideoAdapterRouterTest extends TestCase
             $this->assertNotNull($config);
             $this->assertArrayNotHasKey('draft', $config->toArray()['generation']);
         }
+    }
+
+    /**
+     * 样片模式文案必须已在语言包里注册。
+     *
+     * 不能断言翻译结果：Hyperf 翻译器在文案缺失时会原样返回 key，而测试环境里
+     * 翻译组件是否可用又取决于同一次运行中其他用例，断言结果会随执行顺序摇摆。
+     *
+     * @dataProvider videoTranslationLocaleProvider
+     */
+    public function testDraftSwitchTranslationsAreRegistered(string $locale): void
+    {
+        $videoTranslations = require BASE_PATH . "/storage/languages/{$locale}/video.php";
+
+        $this->assertNotEmpty($videoTranslations['generation']['draft']['name'] ?? '');
+        $this->assertNotEmpty($videoTranslations['generation']['draft']['description'] ?? '');
+    }
+
+    /**
+     * @return array<string, array{0: string}>
+     */
+    public static function videoTranslationLocaleProvider(): array
+    {
+        return [
+            'zh_CN' => ['zh_CN'],
+            'en_US' => ['en_US'],
+        ];
     }
 
     /**
