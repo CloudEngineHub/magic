@@ -333,4 +333,40 @@ describe("server topic type filtering", () => {
 		expect(result.current.displayTopics).toEqual([])
 		expect(result.current.isLoading).toBe(false)
 	})
+
+	it("keeps loaded topics and retries the same page when loading more fails", async () => {
+		const service = {
+			getSidebarTopicsByProjectId: vi
+				.fn()
+				.mockResolvedValueOnce({ list: [createTopic("page-1", "One")], total: 2 })
+				.mockRejectedValueOnce(new Error("offline"))
+				.mockResolvedValueOnce({ list: [createTopic("page-2", "Two")], total: 2 }),
+			getTopicDetail: vi.fn(),
+		}
+		// Stable reference: storeTopics is an effect dependency of the hook.
+		const storeTopics: Topic[] = []
+		const { result } = renderHook(() =>
+			usePaginatedTopics({
+				projectId: "project-1",
+				storeTopics,
+				topicType: "topic",
+				pageSize: 1,
+				topicService: service as never,
+			}),
+		)
+		await waitFor(() => expect(result.current.displayTopics).toHaveLength(1))
+
+		await act(async () => result.current.loadMore())
+		expect(result.current.loadMoreError?.message).toBe("offline")
+		expect(result.current.error).toBeNull()
+		expect(result.current.hasMore).toBe(true)
+		expect(result.current.displayTopics.map((topic) => topic.id)).toEqual(["page-1"])
+
+		await act(async () => result.current.loadMore())
+		expect(service.getSidebarTopicsByProjectId).toHaveBeenLastCalledWith(
+			expect.objectContaining({ page: 2 }),
+		)
+		expect(result.current.loadMoreError).toBeNull()
+		expect(result.current.displayTopics.map((topic) => topic.id)).toEqual(["page-1", "page-2"])
+	})
 })

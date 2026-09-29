@@ -164,6 +164,21 @@ describe("RunningRecordModal", () => {
 	})
 })
 
+it("renders a static path instead of a link when the record has no project", async () => {
+	vi.clearAllMocks()
+	vi.mocked(ScheduledTaskApi.getScheduledTaskRunningRecord).mockResolvedValue({
+		total: 1,
+		list: [{ ...createMockRecord(), project_id: "0" }],
+	} as never)
+	render(<RunningRecordModal taskId="mock-task-id" />)
+
+	const path = await screen.findByTestId("running-record-path")
+
+	expect(path.tagName).toBe("SPAN")
+	expect(path).not.toHaveAttribute("href")
+	expect(screen.queryByRole("link")).not.toBeInTheDocument()
+})
+
 it("keeps records mounted while the next page is pending", async () => {
 	vi.clearAllMocks()
 	const api = vi.mocked(ScheduledTaskApi.getScheduledTaskRunningRecord)

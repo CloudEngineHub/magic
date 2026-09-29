@@ -26,16 +26,25 @@ function TopicsPopup({
 	const selectedProject = projectStore.selectedProject
 	const selectedTopic = topicStore.selectedTopic
 
-	const { error, displayTopics, total, isLoading, hasMore, loadMore, reload, reset } =
-		usePaginatedTopics({
-			enabled: open,
-			topicType,
-			projectId: selectedProject?.id || "",
-			selectedTopicId: selectedTopic?.id,
-			storeTopics: topicStore.topics,
-			// 话题列表 popup 用 100 条分页，不影响桌面端使用的默认 999 全量加载
-			pageSize: 100,
-		})
+	const {
+		error,
+		loadMoreError,
+		displayTopics,
+		total,
+		isLoading,
+		hasMore,
+		loadMore,
+		reload,
+		reset,
+	} = usePaginatedTopics({
+		enabled: open,
+		topicType,
+		projectId: selectedProject?.id || "",
+		selectedTopicId: selectedTopic?.id,
+		storeTopics: topicStore.topics,
+		// 话题列表 popup 用 100 条分页，不影响桌面端使用的默认 999 全量加载
+		pageSize: 100,
+	})
 
 	useEffect(() => {
 		if (open && selectedProject?.id) {
@@ -87,7 +96,12 @@ function TopicsPopup({
 					</div>
 
 					{/* InfiniteScroll 放在列表末尾，向上滑动到底部时自动加载下一页 */}
-					<InfiniteScroll hasMore={hasMore} loadMore={loadMore} />
+					{/* Pause auto-loading after a page failure to avoid a retry loop; the user retries the same page manually. */}
+					{loadMoreError ? (
+						<TopicListFeedback error={loadMoreError} onRetry={() => void loadMore()} />
+					) : (
+						<InfiniteScroll hasMore={hasMore} loadMore={loadMore} />
+					)}
 				</ScrollArea>
 
 				<div className="p-4">

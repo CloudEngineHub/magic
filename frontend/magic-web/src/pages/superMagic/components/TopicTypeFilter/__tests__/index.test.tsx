@@ -10,18 +10,19 @@ vi.mock("@/components/shadcn-ui/dropdown-menu", () => ({
 	DropdownMenu: ({ children }: { children: ReactNode }) => <div>{children}</div>,
 	DropdownMenuTrigger: ({ children }: { children: ReactNode }) => <>{children}</>,
 	DropdownMenuContent: ({ children }: { children: ReactNode }) => <div>{children}</div>,
-	DropdownMenuCheckboxItem: ({
+	DropdownMenuItem: ({
 		children,
-		checked,
-		onCheckedChange,
+		onSelect,
+		...props
 	}: {
 		children: ReactNode
-		checked: boolean
-		onCheckedChange: () => void
+		onSelect: (event: { preventDefault: () => void }) => void
+		role: string
+		"aria-checked": boolean
 	}) => (
-		<button role="menuitemcheckbox" aria-checked={checked} onClick={onCheckedChange}>
+		<div {...props} onClick={() => onSelect({ preventDefault: () => undefined })}>
 			{children}
-		</button>
+		</div>
 	),
 }))
 function Harness() {
@@ -38,15 +39,34 @@ describe("TopicTypeFilter", () => {
 	it("updates all three checkbox states when changing categories", async () => {
 		vi.useRealTimers()
 		render(<Harness />)
-		const topic = await screen.findByRole("menuitemcheckbox", { name: "topicTypeFilter.topic" })
+		// Row names also contain the nested "only" button label, so match by prefix.
+		const topic = await screen.findByRole("menuitemcheckbox", {
+			name: /^topicTypeFilter\.topic/,
+		})
 		fireEvent.click(topic)
 		expect(
-			screen.getByRole("menuitemcheckbox", { name: "topicTypeFilter.scheduledTask" }),
+			screen.getByRole("menuitemcheckbox", { name: /^topicTypeFilter\.scheduledTask/ }),
 		).toHaveAttribute("aria-checked", "true")
 		expect(topic).toHaveAttribute("aria-checked", "false")
 		fireEvent.click(topic)
 		expect(
 			screen.getByRole("menuitemcheckbox", { name: "topicTypeFilter.all" }),
 		).toHaveAttribute("aria-checked", "true")
+	})
+	it("shows only the chosen type without toggling the row", () => {
+		render(<Harness />)
+		// The reset row never offers "only".
+		expect(screen.getAllByRole("button", { name: "topicTypeFilter.onlyLabel" })).toHaveLength(2)
+
+		fireEvent.click(screen.getAllByRole("button", { name: "topicTypeFilter.onlyLabel" })[0])
+
+		expect(
+			screen.getByRole("menuitemcheckbox", { name: /topicTypeFilter.topic/ }),
+		).toHaveAttribute("aria-checked", "true")
+		expect(
+			screen.getByRole("menuitemcheckbox", { name: /topicTypeFilter.scheduledTask/ }),
+		).toHaveAttribute("aria-checked", "false")
+		// The selected row is already the only one, so its button is gone.
+		expect(screen.getAllByRole("button", { name: "topicTypeFilter.onlyLabel" })).toHaveLength(1)
 	})
 })

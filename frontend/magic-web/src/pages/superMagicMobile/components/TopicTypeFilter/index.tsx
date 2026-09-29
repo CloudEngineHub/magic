@@ -1,6 +1,6 @@
 import { useState } from "react"
 import { useTranslation } from "react-i18next"
-import { Check, ListFilter, X } from "lucide-react"
+import { Check, Filter, X } from "lucide-react"
 import MagicPopup from "@/components/base-mobile/MagicPopup"
 import { Button } from "@/components/shadcn-ui/button"
 import { cn } from "@/utils/cn"
@@ -37,7 +37,7 @@ export default function MobileTopicTypeFilter({
 				aria-expanded={open}
 				onClick={() => setOpen(true)}
 			>
-				<ListFilter className="size-5" />
+				<Filter className="size-5" />
 			</Button>
 			<MagicPopup
 				visible={open}

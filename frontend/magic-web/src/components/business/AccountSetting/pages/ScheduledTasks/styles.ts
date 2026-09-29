@@ -130,10 +130,14 @@ export const useStyles = createStyles(({ css, token, prefixCls }) => {
 			border-radius: 4px;
 			padding: 2px 4px;
 			background-color: ${token.magicColorUsages.fill[0]};
-			cursor: pointer;
 
-			&:hover,
-			&:active {
+			/* Only real links (with href) look and behave interactive. */
+			&[href] {
+				cursor: pointer;
+			}
+
+			&[href]:hover,
+			&[href]:active {
 				color: ${token.magicColorUsages.text[2]};
 				text-decoration: none;
 				background-color: ${token.magicColorUsages.fill[1]};
@@ -233,11 +237,14 @@ export const useStyles = createStyles(({ css, token, prefixCls }) => {
 			padding: 0 12px;
 			border-radius: 10px;
 			background-color: ${token.magicColorUsages.fill[0]};
-			cursor: pointer;
 			overflow: hidden;
 
-			&:hover,
-			&:active {
+			&[href] {
+				cursor: pointer;
+			}
+
+			&[href]:hover,
+			&[href]:active {
 				color: ${token.magicColorUsages.text[2]};
 				text-decoration: none;
 				background-color: ${token.magicColorUsages.fill[1]};

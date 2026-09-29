@@ -10209,6 +10209,8 @@
 		"failed": "Could not load topics. Please try again.",
 		"label": "Filter topic types",
 		"more": "Load more",
+		"only": "Only",
+		"onlyLabel": "Show only {{name}}",
 		"retry": "Retry",
 		"scheduledTask": "Scheduled tasks",
 		"topic": "Topics"

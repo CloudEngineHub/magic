@@ -10199,6 +10199,8 @@
 		"failed": "话题加载失败，请重试",
 		"label": "筛选话题类型",
 		"more": "加载更多",
+		"only": "仅此项",
+		"onlyLabel": "仅查看{{name}}",
 		"retry": "重试",
 		"scheduledTask": "定时任务",
 		"topic": "话题"

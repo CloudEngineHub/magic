@@ -28,7 +28,10 @@ interface UsePaginatedTopicsOptions {
 }
 
 interface UsePaginatedTopicsResult {
+	/** First-page failure; consumers may replace the whole list with it. */
 	error: Error | null
+	/** Next-page failure; loaded topics must stay visible and loadMore retries the same page. */
+	loadMoreError: Error | null
 	displayTopics: Topic[]
 	total: number
 	isLoading: boolean
@@ -123,6 +126,7 @@ function usePaginatedTopics({
 	const queryIdentity = JSON.stringify([projectId, searchKeyword, topicType])
 	const [resultIdentity, setResultIdentity] = useState(queryIdentity)
 	const [error, setError] = useState<Error | null>(null)
+	const [loadMoreError, setLoadMoreError] = useState<Error | null>(null)
 	const enabledRef = useRef(enabled)
 	enabledRef.current = enabled
 	const requestGeneration = useRef(0)
@@ -211,6 +215,7 @@ function usePaginatedTopics({
 		if (!enabled) return
 		let isActive = true
 		setError(null)
+		setLoadMoreError(null)
 		setCurrentPage(1)
 		setIsLoadingMore(false)
 
@@ -388,6 +393,7 @@ function usePaginatedTopics({
 		const generation = requestGeneration.current
 		const nextPage = currentPage + 1
 		setIsLoadingMore(true)
+		setLoadMoreError(null)
 
 		try {
 			const service = getService()
@@ -410,7 +416,7 @@ function usePaginatedTopics({
 			setCurrentPage(nextPage)
 		} catch (error) {
 			if (generation === requestGeneration.current)
-				setError(error instanceof Error ? error : new Error("Topic request failed"))
+				setLoadMoreError(error instanceof Error ? error : new Error("Topic request failed"))
 			console.error("加载更多话题失败:", error)
 		} finally {
 			if (generation === requestGeneration.current) setIsLoadingMore(false)
@@ -435,6 +441,7 @@ function usePaginatedTopics({
 
 	return {
 		error,
+		loadMoreError,
 		displayTopics,
 		total: resolvedTotal,
 		isLoading: isLoading || (enabled && resultIdentity !== queryIdentity),

@@ -43,7 +43,40 @@ function buildWorkspacePath(
 	return [workspaceName, item.project_name, item.topic_name].filter(Boolean).join(" / ")
 }
 
-/** Renders the clickable workspace breadcrumb that opens the related project/topic. */
+interface PathContainerProps {
+	className: string
+	href?: string
+	layout: "chip" | "bar"
+	children: ReactNode
+}
+
+/**
+ * Renders a real link only when a target exists. Records without a valid
+ * project have no URL, so they fall back to a static span (no pointer cursor).
+ */
+function PathContainer({ className, href, layout, children }: PathContainerProps) {
+	if (!href)
+		return (
+			<span className={className} data-testid="running-record-path" data-path-layout={layout}>
+				{children}
+			</span>
+		)
+
+	return (
+		<a
+			className={className}
+			href={href}
+			target="_blank"
+			rel="noopener noreferrer"
+			data-testid="running-record-path"
+			data-path-layout={layout}
+		>
+			{children}
+		</a>
+	)
+}
+
+/** Renders the workspace breadcrumb; it opens the related project/topic when a URL exists. */
 function WorkspacePathTag({
 	workspacePath,
 	workspaceUrl,
@@ -51,19 +84,14 @@ function WorkspacePathTag({
 	const { styles } = useStyles()
 
 	return (
-		<a
-			className={styles.tag}
-			href={workspaceUrl}
-			target="_blank"
-			rel="noopener noreferrer"
-			data-testid="running-record-path"
-			data-path-layout="chip"
-		>
+		<PathContainer className={styles.tag} href={workspaceUrl} layout="chip">
 			<span className={styles.ellipsisText}>{workspacePath}</span>
-			<span className={styles.tagIcon}>
-				<IconExternalLink size={14} color={colorUsages.text[2]} />
-			</span>
-		</a>
+			{workspaceUrl && (
+				<span className={styles.tagIcon}>
+					<IconExternalLink size={14} color={colorUsages.text[2]} />
+				</span>
+			)}
+		</PathContainer>
 	)
 }
 
@@ -75,19 +103,14 @@ function MobileWorkspacePath({
 	const { styles } = useStyles()
 
 	return (
-		<a
-			className={styles.mobilePath}
-			href={workspaceUrl}
-			target="_blank"
-			rel="noopener noreferrer"
-			data-testid="running-record-path"
-			data-path-layout="bar"
-		>
+		<PathContainer className={styles.mobilePath} href={workspaceUrl} layout="bar">
 			<span className={styles.mobilePathText}>{workspacePath}</span>
-			<span className={styles.tagIcon}>
-				<IconExternalLink size={16} color={colorUsages.text[2]} />
-			</span>
-		</a>
+			{workspaceUrl && (
+				<span className={styles.tagIcon}>
+					<IconExternalLink size={16} color={colorUsages.text[2]} />
+				</span>
+			)}
+		</PathContainer>
 	)
 }
 
