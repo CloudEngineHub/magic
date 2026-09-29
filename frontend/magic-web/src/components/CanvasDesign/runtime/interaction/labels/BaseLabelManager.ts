@@ -51,6 +51,16 @@ export interface BaseLabelManagerConfig {
 	visibilityConfig: LabelVisibilityConfig
 }
 
+export interface LabelSize {
+	width: number
+	height: number
+}
+
+export interface LabelBounds extends LabelSize {
+	x: number
+	y: number
+}
+
 class LabelCandidateIndex {
 	private typeBuckets = new Map<string, Set<string>>()
 	private elementTypesById = new Map<string, string>()
@@ -235,7 +245,7 @@ export abstract class BaseLabelManager {
 		this.eventUnsubscribers.push(this.canvas.eventEmitter.on(eventType, listener))
 	}
 
-	private requestOverlayDraw(reason: string): void {
+	protected requestOverlayDraw(reason: string): void {
 		this.canvas.runtimeScheduler.requestLayerDraw("overlay", {
 			source: this.constructor.name,
 			reason,
@@ -306,6 +316,50 @@ export abstract class BaseLabelManager {
 		labelSize: { width: number; height: number },
 		inverseScale: number,
 	): { x: number; y: number }
+
+	/**
+	 * Allows a label implementation to update content-specific layout before
+	 * the shared position and visibility calculations run.
+	 */
+	protected updateLabelLayout(
+		elementId: string,
+		element: ReturnType<typeof this.canvas.elementManager.getElementInstance>,
+		labelGroup: Konva.Group,
+		boundingRect: { x: number; y: number; width: number; height: number },
+		inverseScale: number,
+	): boolean {
+		void elementId
+		void element
+		void labelGroup
+		void boundingRect
+		void inverseScale
+		return false
+	}
+
+	/**
+	 * Returns the rendered label footprint in label-local coordinates. Subclasses
+	 * can include decorations such as an icon without changing collision callers.
+	 */
+	protected getLabelSize(labelGroup: Konva.Group): LabelSize | null {
+		const textNode = labelGroup.findOne("Text") as Konva.Text | null
+		if (!textNode) return null
+		return {
+			width: textNode.width(),
+			height: textNode.height(),
+		}
+	}
+
+	protected getLabelBounds(labelGroup: Konva.Group): LabelBounds | null {
+		const labelSize = this.getLabelSize(labelGroup)
+		if (!labelSize) return null
+
+		return {
+			x: labelGroup.x(),
+			y: labelGroup.y(),
+			width: labelSize.width * labelGroup.scaleX(),
+			height: labelSize.height * labelGroup.scaleY(),
+		}
+	}
 
 	/**
 	 * 设置事件监听器
@@ -620,16 +674,13 @@ export abstract class BaseLabelManager {
 			layoutChanged = true
 		}
 
-		// 获取文本节点以计算标签尺寸
-		const textNode = labelGroup.findOne("Text") as Konva.Text
-		if (!textNode) {
-			return false
-		}
+		layoutChanged =
+			this.updateLabelLayout(elementId, element, labelGroup, boundingRect, inverseScale) ||
+			layoutChanged
 
-		const labelSize = {
-			width: textNode.width(),
-			height: textNode.height(),
-		}
+		// 获取标签尺寸；子类可以把图标等装饰纳入布局。
+		const labelSize = this.getLabelSize(labelGroup)
+		if (!labelSize) return false
 
 		// 调用子类实现的位置计算方法
 		const position = this.calculateLabelPosition(boundingRect, labelSize, inverseScale)
@@ -809,17 +860,8 @@ export abstract class BaseLabelManager {
 
 			const labelGroup = manager.labelMap.get(elementId)
 			if (labelGroup && labelGroup.visible()) {
-				const textNode = labelGroup.findOne("Text") as Konva.Text
-				if (textNode) {
-					const scaleX = labelGroup.scaleX()
-					const scaleY = labelGroup.scaleY()
-					bounds.push({
-						x: labelGroup.x(),
-						y: labelGroup.y(),
-						width: textNode.width() * scaleX,
-						height: textNode.height() * scaleY,
-					})
-				}
+				const labelBounds = manager.getLabelBounds(labelGroup)
+				if (labelBounds) bounds.push(labelBounds)
 			}
 		}
 
@@ -868,21 +910,17 @@ export abstract class BaseLabelManager {
 			const labelGroup = manager.labelMap.get(elementId)
 			// 如果标签存在但不可见
 			if (labelGroup && !labelGroup.visible()) {
-				const textNode = labelGroup.findOne("Text") as Konva.Text
-				if (textNode) {
-					const scaleX = labelGroup.scaleX()
-					const labelWidth = textNode.width() * scaleX
-					const labelX = labelGroup.x()
+				const labelBounds = manager.getLabelBounds(labelGroup)
+				if (!labelBounds) continue
 
-					// 检查标签是否会超出元素宽度
-					if (
-						manager.checkLabelExceedsElementWidth(
-							{ x: labelX, width: labelWidth },
-							elementBounds,
-						)
-					) {
-						return true
-					}
+				// 检查标签是否会超出元素宽度
+				if (
+					manager.checkLabelExceedsElementWidth(
+						{ x: labelBounds.x, width: labelBounds.width },
+						elementBounds,
+					)
+				) {
+					return true
 				}
 			}
 		}
