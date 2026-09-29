@@ -46,7 +46,7 @@ class MagicServiceHandler(BaseImageGeneratorHandler):
         re.DOTALL,
     )
     _POLL_INTERVAL_SECONDS = 5
-    _POLL_TIMEOUT_SECONDS = 1220
+    _POLL_TIMEOUT_SECONDS = 560
 
     def __init__(self, api_base_url: str, access_key: str) -> None:
         super().__init__()

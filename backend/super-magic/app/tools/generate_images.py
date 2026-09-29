@@ -52,6 +52,7 @@ from app.tools.media_generator import (
     get_image_generator,
 )
 from app.tools.media_generator.base import ImageGenerationProviderError
+from app.tools.snippet_timeout_registry import SdkSnippetTimeoutRegistry
 from app.tools.workspace_tool import WorkspaceTool
 from app.utils.async_file_utils import (
     async_copy2,
@@ -63,6 +64,8 @@ from app.utils.async_file_utils import (
 )
 
 logger = get_logger(__name__)
+
+SdkSnippetTimeoutRegistry.register("generate_images", min_timeout=600)
 
 
 @dataclass
