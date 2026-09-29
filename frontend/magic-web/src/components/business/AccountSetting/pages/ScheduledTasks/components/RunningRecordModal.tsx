@@ -1,8 +1,8 @@
 import { ScheduledTaskApi } from "@/apis"
-import MagicModal, { MagicModalProps } from "@/components/base/MagicModal"
+import ScheduledTaskDialog from "./ScheduledTaskDialog"
 import { PageParams } from "@/types/other"
 import { ScheduledTask } from "@/types/scheduledTask"
-import { useMemoizedFn, useMount, useRequest } from "ahooks"
+import { useMount, useRequest } from "ahooks"
 import { Flex } from "antd"
 import { IconExternalLink, IconLoader } from "@tabler/icons-react"
 import { colorUsages } from "@/providers/ThemeProvider/colors"
@@ -10,13 +10,13 @@ import dayjs from "@/infrastructure/vendors/dayjs"
 import { SHARE_WORKSPACE_ID } from "@/pages/superMagic/constants"
 import { StatusTag } from "@dtyq/magic-admin/components"
 import InfiniteList from "@/components/base/InfiniteList"
-import { useModalStyles, useStyles } from "../styles"
+import { useStyles } from "../styles"
 import { useTranslation } from "react-i18next"
 import { useState, type ReactNode } from "react"
 import { generateProjectTopicUrl } from "@/pages/superMagic/utils/project"
 import { useIsMobile } from "@/hooks/useIsMobile"
 
-interface RunningRecordProps extends MagicModalProps {
+interface RunningRecordProps {
 	taskId: string
 	onClose?: () => void
 }
@@ -25,7 +25,7 @@ interface RecordRowProps {
 	item: ScheduledTask.RunningRecord
 	workspacePath: string
 	statusNode: ReactNode
-	onOpenWorkspace: (record: ScheduledTask.RunningRecord) => void
+	workspaceUrl?: string
 }
 
 /** Builds the workspace / project / topic breadcrumb shown on each running record. */
@@ -45,18 +45,17 @@ function buildWorkspacePath(
 
 /** Renders the clickable workspace breadcrumb that opens the related project/topic. */
 function WorkspacePathTag({
-	item,
 	workspacePath,
-	onOpenWorkspace,
-}: Pick<RecordRowProps, "item" | "workspacePath" | "onOpenWorkspace">) {
+	workspaceUrl,
+}: Pick<RecordRowProps, "workspacePath" | "workspaceUrl">) {
 	const { styles } = useStyles()
 
 	return (
-		<Flex
-			gap={4}
-			align="center"
+		<a
 			className={styles.tag}
-			onClick={() => onOpenWorkspace(item)}
+			href={workspaceUrl}
+			target="_blank"
+			rel="noopener noreferrer"
 			data-testid="running-record-path"
 			data-path-layout="chip"
 		>
@@ -64,30 +63,23 @@ function WorkspacePathTag({
 			<span className={styles.tagIcon}>
 				<IconExternalLink size={14} color={colorUsages.text[2]} />
 			</span>
-		</Flex>
+		</a>
 	)
 }
 
 /** Full-width mobile path bar that keeps the breadcrumb on one truncated line. */
 function MobileWorkspacePath({
-	item,
 	workspacePath,
-	onOpenWorkspace,
-}: Pick<RecordRowProps, "item" | "workspacePath" | "onOpenWorkspace">) {
+	workspaceUrl,
+}: Pick<RecordRowProps, "workspacePath" | "workspaceUrl">) {
 	const { styles } = useStyles()
 
 	return (
-		<div
+		<a
 			className={styles.mobilePath}
-			onClick={() => onOpenWorkspace(item)}
-			onKeyDown={(event) => {
-				if (event.key === "Enter" || event.key === " ") {
-					event.preventDefault()
-					onOpenWorkspace(item)
-				}
-			}}
-			role="button"
-			tabIndex={0}
+			href={workspaceUrl}
+			target="_blank"
+			rel="noopener noreferrer"
 			data-testid="running-record-path"
 			data-path-layout="bar"
 		>
@@ -95,12 +87,12 @@ function MobileWorkspacePath({
 			<span className={styles.tagIcon}>
 				<IconExternalLink size={16} color={colorUsages.text[2]} />
 			</span>
-		</div>
+		</a>
 	)
 }
 
 /** Desktop table row: time, info, and status stay in dedicated columns without overlapping. */
-function DesktopRecordRow({ item, workspacePath, statusNode, onOpenWorkspace }: RecordRowProps) {
+function DesktopRecordRow({ item, workspacePath, statusNode, workspaceUrl }: RecordRowProps) {
 	const { styles } = useStyles()
 
 	return (
@@ -115,11 +107,7 @@ function DesktopRecordRow({ item, workspacePath, statusNode, onOpenWorkspace }: 
 			</div>
 			<Flex vertical gap={4} className={styles.infoCol}>
 				<span className={styles.taskName}>{item.task_name}</span>
-				<WorkspacePathTag
-					item={item}
-					workspacePath={workspacePath}
-					onOpenWorkspace={onOpenWorkspace}
-				/>
+				<WorkspacePathTag workspacePath={workspacePath} workspaceUrl={workspaceUrl} />
 			</Flex>
 			<div className={styles.resultCol}>{statusNode}</div>
 		</Flex>
@@ -130,7 +118,7 @@ function DesktopRecordRow({ item, workspacePath, statusNode, onOpenWorkspace }: 
  * Mobile stacked row: time and status share the first line, then title and path
  * occupy full width so the status badge cannot overlap the breadcrumb.
  */
-function MobileRecordRow({ item, workspacePath, statusNode, onOpenWorkspace }: RecordRowProps) {
+function MobileRecordRow({ item, workspacePath, statusNode, workspaceUrl }: RecordRowProps) {
 	const { styles } = useStyles()
 
 	return (
@@ -146,20 +134,15 @@ function MobileRecordRow({ item, workspacePath, statusNode, onOpenWorkspace }: R
 				<div className={styles.mobileStatus}>{statusNode}</div>
 			</div>
 			<span className={styles.mobileTaskName}>{item.task_name}</span>
-			<MobileWorkspacePath
-				item={item}
-				workspacePath={workspacePath}
-				onOpenWorkspace={onOpenWorkspace}
-			/>
+			<MobileWorkspacePath workspacePath={workspacePath} workspaceUrl={workspaceUrl} />
 		</div>
 	)
 }
 
-function RunningRecordModal({ taskId, onClose, ...props }: RunningRecordProps) {
+function RunningRecordModal({ taskId, onClose }: RunningRecordProps) {
 	const { t } = useTranslation("interface")
 	const { t: tSuper } = useTranslation("super")
 	const { styles } = useStyles()
-	const { styles: modalStyles } = useModalStyles({ runningRecord: true })
 	const isMobile = useIsMobile()
 	const [open, setOpen] = useState(true)
 	const [total, setTotal] = useState(30)
@@ -186,22 +169,12 @@ function RunningRecordModal({ taskId, onClose, ...props }: RunningRecordProps) {
 		},
 	)
 
-	const goToWorkspace = useMemoizedFn((record: ScheduledTask.RunningRecord) => {
-		const projectId = record.project_id && record.project_id !== "0" ? record.project_id : null
-		const topicId = record.topic_id && record.topic_id !== "0" ? record.topic_id : null
-
-		if (!projectId) return
-
-		const url = generateProjectTopicUrl(projectId, topicId)
-		window.open(url, "_blank")
-	})
-
 	useMount(() => {
 		getData(taskId, params)
 	})
 
 	function loadMore() {
-		if (list.length >= total) return
+		if (loading || list.length >= total) return
 		const nextParams = {
 			...params,
 			page: params.page + 1,
@@ -234,17 +207,11 @@ function RunningRecordModal({ taskId, onClose, ...props }: RunningRecordProps) {
 	}
 
 	return (
-		<MagicModal
-			className={modalStyles.modal}
-			title={t("accountPanel.timedTasks.runningRecord")}
-			centered
+		<ScheduledTaskDialog
 			open={open}
-			onCancel={onCancel}
-			width={700}
-			height={500}
-			footer={null}
-			destroyOnClose
-			{...props}
+			onClose={onCancel}
+			title={t("accountPanel.timedTasks.runningRecord")}
+			records
 		>
 			<Flex vertical>
 				{isMobile ? null : (
@@ -264,51 +231,66 @@ function RunningRecordModal({ taskId, onClose, ...props }: RunningRecordProps) {
 						</span>
 					</Flex>
 				)}
-				<InfiniteList<ScheduledTask.RunningRecord>
-					list={list}
-					hasMore={list.length < total}
-					isLoading={loading}
-					grid={{ column: 1 }}
-					loadMore={loadMore}
-					itemClassName={isMobile ? styles.mobileListItem : styles.listItem}
-					wrapperClassName={isMobile ? styles.mobileListWrapper : styles.listWrapper}
-					loadingComponent={
-						<Flex justify="center" align="center" gap={4} className={styles.footer}>
-							<IconLoader size={20} />
-							<span>{t("accountPanel.timedTasks.loading")}...</span>
-						</Flex>
-					}
-					endMessageComponent={
-						<Flex justify="center" align="center" gap={10} className={styles.footer}>
-							<span>——————</span>
-							<span>{t("accountPanel.timedTasks.noMore")}</span>
-							<span>——————</span>
-						</Flex>
-					}
-					renderItem={(item) => {
-						const workspacePath = buildWorkspacePath(item, tSuper)
-						const rowProps: RecordRowProps = {
-							item,
-							workspacePath,
-							statusNode: renderStatus(item.status),
-							onOpenWorkspace: goToWorkspace,
+				{/* Reserve the same viewport before and after the initial request completes. */}
+				<div className={isMobile ? styles.mobileListWrapper : styles.listWrapper}>
+					<InfiniteList<ScheduledTask.RunningRecord>
+						list={list}
+						hasMore={list.length < total}
+						isLoading={loading && list.length === 0}
+						grid={{ column: 1 }}
+						loadMore={loadMore}
+						itemClassName={isMobile ? styles.mobileListItem : styles.listItem}
+						loadingComponent={
+							<Flex justify="center" align="center" gap={4} className={styles.footer}>
+								<IconLoader size={20} />
+								<span>{t("accountPanel.timedTasks.loading")}...</span>
+							</Flex>
 						}
+						endMessageComponent={
+							<Flex
+								justify="center"
+								align="center"
+								gap={10}
+								className={styles.footer}
+							>
+								<span>——————</span>
+								<span>{t("accountPanel.timedTasks.noMore")}</span>
+								<span>——————</span>
+							</Flex>
+						}
+						renderItem={(item) => {
+							const workspacePath = buildWorkspacePath(item, tSuper)
+							const rowProps: RecordRowProps = {
+								item,
+								workspacePath,
+								statusNode: renderStatus(item.status),
+								workspaceUrl:
+									item.project_id && item.project_id !== "0"
+										? generateProjectTopicUrl(
+												item.project_id,
+												item.topic_id && item.topic_id !== "0"
+													? item.topic_id
+													: null,
+											)
+										: undefined,
+							}
 
-						return isMobile ? (
-							<MobileRecordRow
-								key={`${item.task_name}-${workspacePath}`}
-								{...rowProps}
-							/>
-						) : (
-							<DesktopRecordRow
-								key={`${item.task_name}-${workspacePath}`}
-								{...rowProps}
-							/>
-						)
-					}}
-				/>
+							return isMobile ? (
+								<MobileRecordRow
+									key={`${item.task_name}-${workspacePath}`}
+									{...rowProps}
+								/>
+							) : (
+								<DesktopRecordRow
+									key={`${item.task_name}-${workspacePath}`}
+									{...rowProps}
+								/>
+							)
+						}}
+					/>
+				</div>
 			</Flex>
-		</MagicModal>
+		</ScheduledTaskDialog>
 	)
 }
 

@@ -1,3 +1,4 @@
+import { ScrollArea } from "@/components/shadcn-ui/scroll-area"
 import { Form } from "antd"
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react"
 import { useMemoizedFn, useUpdateEffect } from "ahooks"
@@ -342,110 +343,118 @@ export function MicroAppScheduledTasksModify({
 				colon={false}
 				requiredMark={customRequiredMark}
 			>
-				<div className="max-h-[65vh] overflow-y-auto p-5">
-					<Form.Item
-						label={t("accountPanel.timedTasks.name")}
-						name="task_name"
-						rules={[
-							{
-								required: true,
-								message: resolveToString(t("form.required"), {
-									label: t("accountPanel.timedTasks.name"),
-								}),
-							},
-						]}
-					>
-						<Input
-							data-testid="micro-app-scheduled-task-name"
-							placeholder={t("accountPanel.timedTasks.namePlaceholder")}
-						/>
-					</Form.Item>
-
-					<Form.Item
-						label={t("accountPanel.timedTasks.prompt")}
-						help={
-							promptRequired ? t("accountPanel.timedTasks.promptRequired") : undefined
-						}
-						validateStatus={promptRequired ? "error" : undefined}
-					>
-						<MessageEditor
-							ref={tiptapEditorRef}
-							className={cn(
-								"rounded-md border border-border",
-								promptRequired && "border-destructive",
-							)}
-							placeholder={tSuper("messageEditor.placeholderTask")}
-							selectedTopic={selectedTopic}
-							selectedProject={selectedProject}
-							selectedWorkspace={selectedWorkspace}
-							topicMode={modelTopicMode}
-							agentCode={allowSelectAgent ? agentSelection.agentCode : undefined}
-							setTopicMode={allowSelectAgent ? handleAgentChange : undefined}
-							showModeToggle={allowSelectAgent || undefined}
-							allowChangeMode={allowSelectAgent}
-							projectFilesStore={modalStores.projectFilesStore}
-							mentionPanelStore={modalStores.mentionPanelStore}
-							enableAiCompletion
-							attachments={attachments}
-							size={isMobile ? "mobile" : "default"}
-							containerClassName="border-none"
-						/>
-					</Form.Item>
-
-					{!allowSelectAgent && (
-						<>
-							<ReadonlyContextItem
-								label={tSuper("scheduleTask.projectScope")}
-								value={context.projectName || context.projectId}
+				<ScrollArea viewportClassName="max-h-[calc(100dvh-12rem)]">
+					<div className="p-5">
+						<Form.Item
+							label={t("accountPanel.timedTasks.name")}
+							name="task_name"
+							rules={[
+								{
+									required: true,
+									message: resolveToString(t("form.required"), {
+										label: t("accountPanel.timedTasks.name"),
+									}),
+								},
+							]}
+						>
+							<Input
+								data-testid="micro-app-scheduled-task-name"
+								placeholder={t("accountPanel.timedTasks.namePlaceholder")}
 							/>
-							<ReadonlyContextItem
-								label={tSuper("scheduleTask.agentScope")}
-								value={tSuper("scheduleTask.microAppAgent")}
+						</Form.Item>
+
+						<Form.Item
+							label={t("accountPanel.timedTasks.prompt")}
+							help={
+								promptRequired
+									? t("accountPanel.timedTasks.promptRequired")
+									: undefined
+							}
+							validateStatus={promptRequired ? "error" : undefined}
+						>
+							<MessageEditor
+								ref={tiptapEditorRef}
+								className={cn(
+									"rounded-md border border-border",
+									promptRequired && "border-destructive",
+								)}
+								placeholder={tSuper("messageEditor.placeholderTask")}
+								selectedTopic={selectedTopic}
+								selectedProject={selectedProject}
+								selectedWorkspace={selectedWorkspace}
+								topicMode={modelTopicMode}
+								agentCode={allowSelectAgent ? agentSelection.agentCode : undefined}
+								setTopicMode={allowSelectAgent ? handleAgentChange : undefined}
+								showModeToggle={allowSelectAgent || undefined}
+								allowChangeMode={allowSelectAgent}
+								projectFilesStore={modalStores.projectFilesStore}
+								mentionPanelStore={modalStores.mentionPanelStore}
+								enableAiCompletion
+								attachments={attachments}
+								size={isMobile ? "mobile" : "default"}
+								containerClassName="border-none"
 							/>
-						</>
-					)}
+						</Form.Item>
 
-					<ProjectTopicItem
-						mode="topic"
-						workspaceId={context.workspaceId}
-						projectId={context.projectId}
-						onSelect={handleTopicSelect}
-					/>
+						{!allowSelectAgent && (
+							<>
+								<ReadonlyContextItem
+									label={tSuper("scheduleTask.projectScope")}
+									value={context.projectName || context.projectId}
+								/>
+								<ReadonlyContextItem
+									label={tSuper("scheduleTask.agentScope")}
+									value={tSuper("scheduleTask.microAppAgent")}
+								/>
+							</>
+						)}
 
-					<Form.Item
-						label={t("accountPanel.timedTasks.plan")}
-						name="time_config"
-						rules={[
-							{ required: true, message: t("accountPanel.timedTasks.planRequired") },
-						]}
-					>
-						<ScheduledItem />
-					</Form.Item>
+						<ProjectTopicItem
+							mode="topic"
+							workspaceId={context.workspaceId}
+							projectId={context.projectId}
+							onSelect={handleTopicSelect}
+						/>
 
-					{timeConfig?.type !== ScheduledTask.ScheduleType.Once ? (
-						<div className="flex items-center gap-2">
-							<Form.Item name="deadline_enabled" noStyle>
-								<MagicSwitch size="small" />
-							</Form.Item>
-							<span className="text-sm leading-4 text-foreground/80">
-								{t("chat.timedTask.deadline")}
-							</span>
-							{deadlineEnabled ? (
-								<Form.Item
-									name="deadline"
-									noStyle
-									getValueProps={(value) => ({ value: value && dayjs(value) })}
-								>
-									<MagicDatePicker
-										format="YYYY/MM/DD"
-										minDate={dayjs(minDate, "YYYY/MM/DD HH:mm")}
-									/>
+						<Form.Item
+							label={t("accountPanel.timedTasks.plan")}
+							name="time_config"
+							rules={[
+								{
+									required: true,
+									message: t("accountPanel.timedTasks.planRequired"),
+								},
+							]}
+						>
+							<ScheduledItem />
+						</Form.Item>
+
+						{timeConfig?.type !== ScheduledTask.ScheduleType.Once ? (
+							<div className="flex items-center gap-2">
+								<Form.Item name="deadline_enabled" noStyle>
+									<MagicSwitch size="small" />
 								</Form.Item>
-							) : null}
-						</div>
-					) : null}
-				</div>
-
+								<span className="text-sm leading-4 text-foreground/80">
+									{t("chat.timedTask.deadline")}
+								</span>
+								{deadlineEnabled ? (
+									<Form.Item
+										name="deadline"
+										noStyle
+										getValueProps={(value) => ({
+											value: value && dayjs(value),
+										})}
+									>
+										<MagicDatePicker
+											format="YYYY/MM/DD"
+											minDate={dayjs(minDate, "YYYY/MM/DD HH:mm")}
+										/>
+									</Form.Item>
+								) : null}
+							</div>
+						) : null}
+					</div>
+				</ScrollArea>
 				<div className={footerClassName}>
 					<div className="flex items-center gap-2">
 						<span>{t("accountPanel.timedTasks.enabled")}</span>

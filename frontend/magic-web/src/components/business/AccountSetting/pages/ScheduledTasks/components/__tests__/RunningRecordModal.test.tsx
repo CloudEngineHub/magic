@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from "@testing-library/react"
+import { act, fireEvent, render, screen, waitFor } from "@testing-library/react"
 import { beforeEach, describe, expect, it, vi } from "vitest"
 
 import { ScheduledTask } from "@/types/scheduledTask"
@@ -13,37 +13,23 @@ vi.mock("@/hooks/useIsMobile", () => ({
 	useIsMobile: () => isMobileMock.value,
 }))
 
-vi.mock("@/components/base/MagicModal", () => ({
-	default: function MockMagicModal({
-		children,
-		title,
-	}: {
-		children: React.ReactNode
-		title?: React.ReactNode
-	}) {
-		return (
-			<div data-testid="running-record-modal">
-				<div>{title}</div>
-				{children}
-			</div>
-		)
-	},
-}))
-
 vi.mock("@/components/base/InfiniteList", () => ({
 	default: function MockInfiniteList({
 		list,
 		renderItem,
 		isLoading,
+		loadMore,
 	}: {
 		list: unknown[]
 		renderItem: (item: unknown, index: number) => React.ReactNode
 		isLoading: boolean
+		loadMore: () => void
 	}) {
 		if (isLoading) return <div data-testid="running-record-loading" />
 
 		return (
 			<div data-testid="running-record-list">
+				<button onClick={loadMore}>Load more</button>
 				{list.map((item, index) => (
 					<div key={index}>{renderItem(item, index)}</div>
 				))}
@@ -104,11 +90,6 @@ vi.mock("@/components/business/AccountSetting/pages/ScheduledTasks/styles", () =
 			tagIcon: "tag-icon",
 		},
 	}),
-	useModalStyles: () => ({
-		styles: {
-			modal: "modal",
-		},
-	}),
 }))
 
 vi.mock("@/apis", () => ({
@@ -152,6 +133,8 @@ describe("RunningRecordModal", () => {
 		const item = await screen.findByTestId("running-record-item")
 
 		expect(item).toHaveAttribute("data-layout", "stacked")
+		expect(screen.getByRole("link")).toHaveAttribute("href", "https://mock.example/project")
+		expect(screen.getByRole("link")).toHaveAttribute("target", "_blank")
 		expect(screen.queryByTestId("running-record-header")).not.toBeInTheDocument()
 		expect(screen.getByText("Mock scheduled task")).toBeInTheDocument()
 		expect(screen.getByText("Mock workspace / Mock project / Mock topic")).toBeInTheDocument()
@@ -170,6 +153,7 @@ describe("RunningRecordModal", () => {
 		})
 
 		expect(screen.getByTestId("running-record-item")).toHaveAttribute("data-layout", "table")
+		expect(screen.getByRole("link")).toHaveAttribute("href", "https://mock.example/project")
 		expect(screen.getByTestId("running-record-path")).toHaveAttribute(
 			"data-path-layout",
 			"chip",
@@ -179,3 +163,36 @@ describe("RunningRecordModal", () => {
 		expect(screen.getByText("accountPanel.timedTasks.runningResult")).toBeInTheDocument()
 	})
 })
+
+it("keeps records mounted while the next page is pending", async () => {
+	vi.clearAllMocks()
+	const api = vi.mocked(ScheduledTaskApi.getScheduledTaskRunningRecord)
+	let finish!: (value: never) => void
+	api.mockResolvedValueOnce({
+		total: 2,
+		list: [createMockRecord()],
+	} as never).mockImplementationOnce(
+		() =>
+			new Promise((resolve) => {
+				finish = resolve
+			}),
+	)
+	render(<RunningRecordModal taskId="mock-task-id" />)
+	const row = await screen.findByTestId("running-record-item")
+	fireEvent.click(screen.getByText("Load more"))
+	await waitFor(() =>
+		expect(api).toHaveBeenLastCalledWith("mock-task-id", { page: 2, page_size: 10 }),
+	)
+	expect(screen.getByTestId("running-record-item")).toBe(row)
+	expect(screen.queryByTestId("running-record-loading")).not.toBeInTheDocument()
+	fireEvent.click(screen.getByText("Load more"))
+	expect(api).toHaveBeenCalledTimes(2)
+	await act(async () => {
+		finish({ total: 2, list: [{ ...createMockRecord(), task_name: "Second run" }] } as never)
+	})
+	expect(screen.getAllByTestId("running-record-item")).toHaveLength(2)
+})
+
+vi.mock("antd", async (importOriginal) => ({
+	...(await importOriginal<typeof import("antd")>()),
+}))

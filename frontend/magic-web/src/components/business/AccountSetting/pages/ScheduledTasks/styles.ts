@@ -113,10 +113,17 @@ export const useStyles = createStyles(({ css, token, prefixCls }) => {
 			color: ${token.magicColorUsages.text[3]};
 		`,
 		tag: css`
+			display: flex;
+			align-items: center;
+			gap: 4px;
 			max-width: 100%;
 			min-width: 0;
 			width: fit-content;
-			height: 18px;
+			min-height: 18px;
+			flex-shrink: 0;
+			/* Do not inherit the taller row line-height and clip the link text. */
+			line-height: 14px;
+			text-decoration: none;
 			overflow: hidden;
 			font-size: 10px;
 			color: ${token.magicColorUsages.text[2]};
@@ -124,6 +131,13 @@ export const useStyles = createStyles(({ css, token, prefixCls }) => {
 			padding: 2px 4px;
 			background-color: ${token.magicColorUsages.fill[0]};
 			cursor: pointer;
+
+			&:hover,
+			&:active {
+				color: ${token.magicColorUsages.text[2]};
+				text-decoration: none;
+				background-color: ${token.magicColorUsages.fill[1]};
+			}
 		`,
 		ellipsisText: css`
 			flex: 1;
@@ -147,7 +161,9 @@ export const useStyles = createStyles(({ css, token, prefixCls }) => {
 			padding: 0 12px;
 		`,
 		resultCol: css`
-			flex: 0 0 auto;
+			flex: 0 0 80px;
+			white-space: nowrap;
+			text-align: center;
 		`,
 		taskName: css`
 			overflow: hidden;
@@ -155,8 +171,8 @@ export const useStyles = createStyles(({ css, token, prefixCls }) => {
 			white-space: nowrap;
 		`,
 		mobileListWrapper: css`
-			height: min(62vh, 520px);
-			min-height: 200px;
+			height: min(62dvh, 520px);
+			padding-inline: 16px;
 		`,
 		mobileListItem: css`
 			height: auto !important;
@@ -220,7 +236,10 @@ export const useStyles = createStyles(({ css, token, prefixCls }) => {
 			cursor: pointer;
 			overflow: hidden;
 
+			&:hover,
 			&:active {
+				color: ${token.magicColorUsages.text[2]};
+				text-decoration: none;
 				background-color: ${token.magicColorUsages.fill[1]};
 			}
 		`,
@@ -245,8 +264,7 @@ export const useStyles = createStyles(({ css, token, prefixCls }) => {
 			margin-top: 10px;
 		`,
 		listWrapper: css`
-			height: 500px;
-			min-height: 300px;
+			height: min(500px, calc(100dvh - 150px));
 		`,
 		listItem: css`
 			height: 60px;
@@ -264,6 +282,7 @@ export const useStyles = createStyles(({ css, token, prefixCls }) => {
 		`,
 		headerWrapper: css`
 			height: 40px;
+			/* Use the same inset as record rows, without an extra list gutter. */
 			padding: 0 16px;
 			font-size: 14px;
 			color: ${token.magicColorUsages.text[0]};
