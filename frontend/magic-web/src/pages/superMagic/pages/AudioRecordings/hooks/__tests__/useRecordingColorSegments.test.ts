@@ -28,6 +28,6 @@ Summary body.
 
 		const { result } = renderHook(() => useRecordingColorSegments(true, topicsMarkdown))
 
-		expect(result.current).toEqual([{ start: 10, end: 20, color: "#a8d5f7" }])
+		expect(result.current).toEqual([{ start: 10, end: 20, color: "#0d6efd" }])
 	})
 })
