@@ -71,7 +71,7 @@ interface PreparedAssetMedia {
 	workspacePath: string
 	fileName: string
 	dimensions: { width: number; height: number }
-	source: CanvasAssetImportResult["source"]
+	source: Exclude<CanvasAssetImportResult["source"], "existing-connection">
 }
 
 const FALLBACK_FILE_EXTENSIONS: Record<CanvasAssetMediaType, string> = {

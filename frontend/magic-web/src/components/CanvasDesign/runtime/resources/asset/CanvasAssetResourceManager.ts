@@ -8,6 +8,8 @@ import type {
 } from "../../../public/magic-types"
 import type { ResourceLoadFailureReason } from "../media-common/resourceLoadFailure"
 import { collectCanvasAssetIds } from "./assetMediaBinding"
+import { isOssExpiring } from "../offline-cache/ossExpiryUtils"
+import { assetDetailStore, type AssetDetailStoreChange } from "./AssetDetailStore"
 
 const ASSET_BATCH_GET_SIZE = 200
 
@@ -99,6 +101,9 @@ function normalizeAssetResourceInfo(
 		assetId,
 		mediaType: normalizeMediaType(value.mediaType),
 		fileUrl: fileUrl || null,
+		...(typeof value.expiresAt === "string" && value.expiresAt
+			? { expiresAt: value.expiresAt }
+			: {}),
 		...(typeof value.fileName === "string" && value.fileName
 			? { fileName: value.fileName }
 			: {}),
@@ -135,9 +140,18 @@ export class CanvasAssetResourceManager {
 		string,
 		Promise<CanvasAssetResourceInfo | undefined>
 	>()
+	private readonly pendingBatchForced = new Map<string, boolean>()
+	private readonly pendingBatchTokens = new Map<string, symbol>()
 	private destroyed = false
 
-	constructor(private readonly canvas: Canvas) {}
+	private readonly unsubscribeDetailStore: () => void
+
+	constructor(private readonly canvas: Canvas) {
+		// A second picker or browser tab can mutate an asset without touching this
+		// Canvas instance.  Subscribe to the shared detail store so its local
+		// resource entry cannot keep serving the previous signed URL or status.
+		this.unsubscribeDetailStore = assetDetailStore.subscribe(this.handleDetailStoreChange)
+	}
 
 	/**
 	 * 在文档进入 Canvas 前预取所有可由后端批量查询的素材详情。
@@ -158,6 +172,7 @@ export class CanvasAssetResourceManager {
 	/** 批量刷新当前 Canvas 需要的素材详情，并返回本次实际获取到的资源。 */
 	public async refreshResources(
 		assetIds: string[],
+		options?: Pick<AssetRequestOptions, "forceRefresh">,
 	): Promise<Map<string, CanvasAssetResourceInfo>> {
 		if (this.destroyed) return new Map()
 		const normalizedIds = Array.from(
@@ -170,7 +185,7 @@ export class CanvasAssetResourceManager {
 		const result = new Map<string, CanvasAssetResourceInfo>()
 
 		if (batchIds.length > 0 && this.getBatchResourceResolver()) {
-			const batchPromises = this.ensurePendingBatchResources(batchIds)
+			const batchPromises = this.ensurePendingBatchResources(batchIds, options)
 			const batchResults = await Promise.all(
 				batchIds.map((assetId) => batchPromises.get(assetId)),
 			)
@@ -185,7 +200,7 @@ export class CanvasAssetResourceManager {
 			const fallbackResults = await Promise.all(
 				fallbackIds.map(async (assetId) => {
 					try {
-						return await this.loadSingleResource(assetId)
+						return await this.loadSingleResource(assetId, options)
 					} catch {
 						return undefined
 					}
@@ -207,14 +222,24 @@ export class CanvasAssetResourceManager {
 		if (this.destroyed) {
 			throw new CanvasAssetResourceError("Asset resource manager destroyed", "load-error")
 		}
+		const normalizedAssetId = assetId.trim()
+		if (!normalizedAssetId) {
+			throw new CanvasAssetResourceError("Asset id is required", "load-error")
+		}
 
-		const existing = this.entries.get(assetId)
+		const existing = this.entries.get(normalizedAssetId)
 		if (existing?.requestPromise && (!options?.forceRefresh || existing.requestIsForced)) {
 			return existing.requestPromise
 		}
-		if (!options?.forceRefresh && existing?.info) return existing.info
+		if (
+			!options?.forceRefresh &&
+			existing?.info &&
+			isReusableAssetResourceInfo(existing.info)
+		) {
+			return existing.info
+		}
 
-		const requestToken = Symbol(`asset-resource:${assetId}`)
+		const requestToken = Symbol(`asset-resource:${normalizedAssetId}`)
 		const entry: AssetCacheEntry = existing ?? {
 			info: null,
 			requestPromise: null,
@@ -225,7 +250,7 @@ export class CanvasAssetResourceManager {
 
 		const requestPromise = (async () => {
 			try {
-				const info = await this.loadResource(assetId, options)
+				const info = await this.loadResource(normalizedAssetId, options)
 				if (!this.destroyed && entry.requestToken === requestToken) {
 					entry.info = info
 				}
@@ -240,7 +265,7 @@ export class CanvasAssetResourceManager {
 		})()
 
 		entry.requestPromise = requestPromise
-		this.entries.set(assetId, entry)
+		this.entries.set(normalizedAssetId, entry)
 
 		try {
 			return await requestPromise
@@ -259,15 +284,31 @@ export class CanvasAssetResourceManager {
 	}
 
 	public invalidate(assetId: string): void {
-		const entry = this.entries.get(assetId)
-		if (!entry) return
-		entry.info = null
+		const normalizedAssetId = assetId.trim()
+		if (!normalizedAssetId) return
+		const entry = this.entries.get(normalizedAssetId)
+		if (entry) {
+			entry.info = null
+			// A mutation can invalidate a resource while its old detail request is
+			// still pending.  Advance the token and detach that promise so the late
+			// response cannot repopulate the Canvas cache or be reused by the next
+			// render.
+			entry.requestToken = Symbol(`asset-resource-invalidated:${normalizedAssetId}`)
+			entry.requestPromise = null
+			entry.requestIsForced = false
+		}
+		this.pendingBatchResources.delete(normalizedAssetId)
+		this.pendingBatchForced.delete(normalizedAssetId)
+		this.pendingBatchTokens.delete(normalizedAssetId)
 	}
 
 	public destroy(): void {
 		this.destroyed = true
+		this.unsubscribeDetailStore()
 		this.entries.clear()
 		this.pendingBatchResources.clear()
+		this.pendingBatchForced.clear()
+		this.pendingBatchTokens.clear()
 	}
 
 	private getBatchResourceResolver() {
@@ -284,7 +325,7 @@ export class CanvasAssetResourceManager {
 	): Promise<CanvasAssetResourceInfo> {
 		const batchResolver = this.getBatchResourceResolver()
 		if (batchResolver && isBatchCompatibleAssetId(assetId)) {
-			const pending = this.ensurePendingBatchResource(assetId)
+			const pending = this.ensurePendingBatchResource(assetId, options)
 			try {
 				const info = await pending
 				if (!info) {
@@ -332,35 +373,55 @@ export class CanvasAssetResourceManager {
 
 	private ensurePendingBatchResource(
 		assetId: string,
+		options?: Pick<AssetRequestOptions, "forceRefresh">,
 	): Promise<CanvasAssetResourceInfo | undefined> {
-		return this.ensurePendingBatchResources([assetId]).get(assetId) as Promise<
+		return this.ensurePendingBatchResources([assetId], options).get(assetId) as Promise<
 			CanvasAssetResourceInfo | undefined
 		>
 	}
 
 	private ensurePendingBatchResources(
 		assetIds: string[],
+		options?: Pick<AssetRequestOptions, "forceRefresh">,
 	): Map<string, Promise<CanvasAssetResourceInfo | undefined>> {
 		const batchResolver = this.getBatchResourceResolver()
 		if (!batchResolver) {
 			throw new Error("Asset batch resource resolver is not configured")
 		}
 
-		const pendingIds = Array.from(new Set(assetIds)).filter(
-			(assetId) => !this.pendingBatchResources.has(assetId),
-		)
+		const pendingIds = Array.from(new Set(assetIds)).filter((assetId) => {
+			if (!this.pendingBatchResources.has(assetId)) return true
+			return options?.forceRefresh === true && !this.pendingBatchForced.get(assetId)
+		})
 		if (pendingIds.length > 0) {
+			const batchToken = Symbol("asset-resource-batch")
 			const batchPromise = (async () => {
 				const resources = new Map<string, CanvasAssetResourceInfo>()
 				for (let index = 0; index < pendingIds.length; index += ASSET_BATCH_GET_SIZE) {
 					const chunk = pendingIds.slice(index, index + ASSET_BATCH_GET_SIZE)
-					const values = await batchResolver(chunk)
+					const values = options?.forceRefresh
+						? await batchResolver(chunk, options)
+						: await batchResolver(chunk)
+					const returnedIds = new Set<string>()
 					values.forEach((value) => {
 						if (!pendingIds.includes(value.assetId)) return
+						// A forced refresh may supersede an older non-forced batch.  Do not
+						// let that older response overwrite the newer URL in the cache.
+						if (this.pendingBatchTokens.get(value.assetId) !== batchToken) return
 						const normalized = normalizeAssetResourceInfo(value.assetId, value)
+						returnedIds.add(normalized.assetId)
 						resources.set(normalized.assetId, normalized)
 						this.storeResourceInfo(normalized)
 					})
+					for (const assetId of chunk) {
+						if (
+							returnedIds.has(assetId) ||
+							this.pendingBatchTokens.get(assetId) !== batchToken
+						)
+							continue
+						const entry = this.entries.get(assetId)
+						if (entry) entry.info = null
+					}
 				}
 				return resources
 			})()
@@ -368,6 +429,8 @@ export class CanvasAssetResourceManager {
 			pendingIds.forEach((assetId) => {
 				const resultPromise = batchPromise.then((resources) => resources.get(assetId))
 				this.pendingBatchResources.set(assetId, resultPromise)
+				this.pendingBatchForced.set(assetId, options?.forceRefresh === true)
+				this.pendingBatchTokens.set(assetId, batchToken)
 				resultPromise.then(
 					() => this.clearPendingBatchResource(assetId, resultPromise),
 					() => this.clearPendingBatchResource(assetId, resultPromise),
@@ -391,6 +454,8 @@ export class CanvasAssetResourceManager {
 	): void {
 		if (this.pendingBatchResources.get(assetId) === request) {
 			this.pendingBatchResources.delete(assetId)
+			this.pendingBatchForced.delete(assetId)
+			this.pendingBatchTokens.delete(assetId)
 		}
 	}
 
@@ -404,8 +469,43 @@ export class CanvasAssetResourceManager {
 		entry.info = info
 		this.entries.set(info.assetId, entry)
 	}
+
+	private readonly handleDetailStoreChange = (change: AssetDetailStoreChange): void => {
+		if (!change.assetId) {
+			// A full clear can be emitted while auth/org scope is transitioning; do
+			// not compare against the new scope or an old signed URL could survive
+			// logout in an existing Canvas instance.
+			this.clearLocalCache()
+			this.canvas.refreshMediaComplianceFailedTags?.()
+			return
+		}
+		// AssetDetailStore keeps only the active account scope.  Do not compare the
+		// event with a separately-read global scope here: during logout/org changes
+		// that value can move first, and retaining an old signed URL would be unsafe.
+		const hadCachedResource = this.entries.has(change.assetId)
+		this.invalidate(change.assetId)
+		if (!hadCachedResource || this.destroyed) return
+		// An upsert already seeded the authoritative detail cache, so a normal read
+		// immediately rehydrates the Canvas entry.  An invalidation has no payload
+		// and must force the detail endpoint.  Both paths notify already-rendered
+		// decorators instead of waiting for a later media access to observe the edit.
+		void this.getResource(change.assetId, { forceRefresh: change.kind === "invalidate" })
+			.then(() => this.canvas.refreshMediaComplianceFailedTags?.())
+			.catch(() => undefined)
+	}
+
+	private clearLocalCache(): void {
+		this.entries.clear()
+		this.pendingBatchResources.clear()
+		this.pendingBatchForced.clear()
+		this.pendingBatchTokens.clear()
+	}
 }
 
 function isBatchCompatibleAssetId(assetId: string): boolean {
 	return /^\d{1,64}$/.test(assetId)
+}
+
+function isReusableAssetResourceInfo(info: CanvasAssetResourceInfo): boolean {
+	return Boolean(info.fileUrl && info.mediaType) && !isOssExpiring(info.expiresAt)
 }

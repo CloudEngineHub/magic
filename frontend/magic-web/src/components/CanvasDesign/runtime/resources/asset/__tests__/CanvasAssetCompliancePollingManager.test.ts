@@ -170,4 +170,28 @@ describe("CanvasAssetCompliancePollingManager", () => {
 		await vi.advanceTimersByTimeAsync(2500)
 		expect(getAssetComplianceStatus).toHaveBeenCalledTimes(2)
 	})
+
+	it("settles the local watcher when polling reaches its timeout", async () => {
+		vi.useFakeTimers()
+		const getAssetComplianceStatus = vi.fn().mockResolvedValue({
+			assetId: "600",
+			status: "PROCESSING",
+			failedReason: null,
+		})
+		const onSettled = vi.fn()
+		const onError = vi.fn()
+		const manager = createManager(getAssetComplianceStatus)
+
+		manager.start("600", { maxDurationMs: 1, onSettled, onError })
+		await vi.advanceTimersByTimeAsync(0)
+		await vi.advanceTimersByTimeAsync(2500)
+
+		expect(onError).toHaveBeenCalledWith(expect.any(Error))
+		expect(onSettled).toHaveBeenCalledWith({
+			assetId: "600",
+			status: "PROCESSING",
+			failedReason: null,
+		})
+		expect(manager.getState("600")).toMatchObject({ status: "PROCESSING" })
+	})
 })

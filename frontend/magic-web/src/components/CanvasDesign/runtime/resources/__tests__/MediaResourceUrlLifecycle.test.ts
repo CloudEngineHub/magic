@@ -163,7 +163,7 @@ describe("MediaResourceUrlLifecycle", () => {
 		expect(getCachedResource).not.toHaveBeenCalled()
 	})
 
-	it("force-refreshes an asset once after a media load failure", async () => {
+	it("bounds legacy asset retries per replacement URL", async () => {
 		const getAssetResourceInfo = vi
 			.fn()
 			.mockResolvedValueOnce({
@@ -175,6 +175,11 @@ describe("MediaResourceUrlLifecycle", () => {
 				assetId: "asset-1",
 				mediaType: "image",
 				fileUrl: "https://assets.test/refreshed.png",
+			})
+			.mockResolvedValueOnce({
+				assetId: "asset-1",
+				mediaType: "image",
+				fileUrl: "https://assets.test/refreshed-again.png",
 			})
 		const { lifecycle } = createLifecycle({ getAssetResourceInfo })
 		const entry = createEntry({ referencePath: "asset://asset-1" })
@@ -188,7 +193,83 @@ describe("MediaResourceUrlLifecycle", () => {
 				0,
 			),
 		).resolves.toBe("https://assets.test/refreshed.png")
-		expect(getAssetResourceInfo).toHaveBeenCalledTimes(2)
+		await expect(
+			lifecycle.resolveVirtualResourceFallbackOssSrc(
+				"asset://asset-1",
+				"https://assets.test/refreshed.png",
+				entry,
+				0,
+			),
+		).resolves.toBe("https://assets.test/refreshed-again.png")
+		await expect(
+			lifecycle.resolveVirtualResourceFallbackOssSrc(
+				"asset://asset-1",
+				"https://assets.test/refreshed-again.png",
+				entry,
+				0,
+			),
+		).resolves.toBeNull()
+		expect(getAssetResourceInfo).toHaveBeenCalledTimes(4)
+	})
+
+	it("refreshes an asset inside the optional expiry safety window", async () => {
+		const getAssetResourceInfo = vi
+			.fn()
+			.mockResolvedValueOnce({
+				assetId: "asset-1",
+				mediaType: "image",
+				fileUrl: "https://assets.test/almost-expired.png",
+				expiresAt: new Date(Date.now() + 1_000).toISOString(),
+			})
+			.mockResolvedValueOnce({
+				assetId: "asset-1",
+				mediaType: "image",
+				fileUrl: "https://assets.test/fresh.png",
+				expiresAt: new Date(Date.now() + 60_000).toISOString(),
+			})
+		const { lifecycle } = createLifecycle({ getAssetResourceInfo })
+		const entry = createEntry({ referencePath: "asset://asset-1" })
+
+		await lifecycle.exchangeOssSrc("asset://asset-1", entry)
+		await expect(lifecycle.ensureFreshOssInfo("asset://asset-1", entry)).resolves.toMatchObject(
+			{
+				ossSrc: "https://assets.test/fresh.png",
+			},
+		)
+		expect(getAssetResourceInfo).toHaveBeenNthCalledWith(2, "asset-1", {
+			forceRefresh: true,
+			priority: undefined,
+		})
+	})
+
+	it("force-refreshes an asset after its cached URL has expired", async () => {
+		const getAssetResourceInfo = vi
+			.fn()
+			.mockResolvedValueOnce({
+				assetId: "asset-1",
+				mediaType: "image",
+				fileUrl: "https://assets.test/expired.png",
+				expiresAt: new Date(Date.now() - 1_000).toISOString(),
+			})
+			.mockResolvedValueOnce({
+				assetId: "asset-1",
+				mediaType: "image",
+				fileUrl: "https://assets.test/fresh.png",
+				expiresAt: new Date(Date.now() + 60_000).toISOString(),
+			})
+		const { lifecycle } = createLifecycle({ getAssetResourceInfo })
+		const entry = createEntry({ referencePath: "asset://asset-1" })
+
+		await lifecycle.exchangeOssSrc("asset://asset-1", entry)
+		await expect(lifecycle.ensureFreshOssInfo("asset://asset-1", entry)).resolves.toMatchObject(
+			{
+				ossSrc: "https://assets.test/fresh.png",
+			},
+		)
+		expect(getAssetResourceInfo).toHaveBeenNthCalledWith(2, "asset-1", {
+			forceRefresh: true,
+			priority: undefined,
+		})
 	})
 
 	it("does not send malformed asset schemes to workspace getFileInfo", async () => {

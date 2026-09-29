@@ -18,7 +18,7 @@ interface AssetLibraryTransferOwnerDialogProps {
 	asset: AssetItem | null
 	t: TFunction
 	onClose: () => void
-	onTransferred: () => void
+	onTransferred: (assetId: string) => void
 }
 
 function keepSingleMember(values: TreeNode[]): TreeNode[] {
@@ -72,7 +72,7 @@ export function AssetLibraryTransferOwnerDialog({
 			})
 			toast.success(t("assets.transferSuccess", "素材归属人已转移"))
 			setSelectedMember(null)
-			onTransferred()
+			onTransferred(asset.asset_id)
 			onClose()
 		} catch (error) {
 			toast.error(

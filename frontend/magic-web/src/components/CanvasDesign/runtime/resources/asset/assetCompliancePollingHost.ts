@@ -50,10 +50,10 @@ const fallbackTaskHost: CanvasAssetComplianceTaskHost = {
 	assetResourceManager: {
 		getCachedResource: () => undefined,
 		refreshResources: async () => new Map(),
-	} as CanvasAssetComplianceTaskHost["assetResourceManager"],
+	} as unknown as CanvasAssetComplianceTaskHost["assetResourceManager"],
 	elementManager: {
 		getAllElements: () => [],
-	} as CanvasAssetComplianceTaskHost["elementManager"],
+	} as unknown as CanvasAssetComplianceTaskHost["elementManager"],
 }
 
 function getFallbackTaskManager(): CanvasAssetComplianceTaskManager {

@@ -24,6 +24,13 @@ vi.mock("@/apis", () => ({
 	},
 }))
 
+vi.mock("../asset-library/useAssetLibraryComplianceAction", () => ({
+	canStartAssetLibraryCompliance: () => false,
+	useAssetLibraryComplianceAction: () => ({
+		startCompliance: vi.fn(),
+	}),
+}))
+
 vi.mock("../../../app/providers/I18nProvider", () => ({
 	useCanvasDesignI18n: () => ({
 		t: (key: string, fallback?: string | Record<string, unknown>) => {
@@ -173,6 +180,7 @@ describe("AssetsModal", () => {
 
 		expect(screen.getByRole("button", { name: "确认" })).toBeDisabled()
 		expect(mocks.queryAssets).toHaveBeenCalledTimes(1)
+		// The small portrait library keeps the owner list warm with the modal session.
 		expect(mocks.getAssetOwners).toHaveBeenCalledTimes(1)
 	})
 
@@ -192,6 +200,21 @@ describe("AssetsModal", () => {
 		expect(screen.getByText(asset.name)).toBeInTheDocument()
 		expect(screen.getByRole("button", { name: "刷新素材" })).toBeDisabled()
 		resolveRefresh?.(response(refreshedAsset))
+		await screen.findByText(refreshedAsset.name)
+		expect(mocks.queryAssets).toHaveBeenCalledTimes(2)
+	})
+
+	it("revalidates an open modal after an external asset mutation", async () => {
+		const refreshedAsset = { ...asset, name: "Saved from canvas" }
+		mocks.queryAssets
+			.mockResolvedValueOnce(response(asset))
+			.mockResolvedValueOnce(response(refreshedAsset))
+
+		render(<AssetsModal open onClose={vi.fn()} />)
+		await screen.findByText(asset.name)
+
+		act(() => assetLibrarySessionStore.invalidateCurrentScope())
+
 		await screen.findByText(refreshedAsset.name)
 		expect(mocks.queryAssets).toHaveBeenCalledTimes(2)
 	})

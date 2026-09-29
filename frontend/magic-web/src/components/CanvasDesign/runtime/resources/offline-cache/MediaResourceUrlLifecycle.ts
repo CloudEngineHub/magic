@@ -9,7 +9,7 @@ import type {
 	CachedMediaResource,
 	MediaResourceOfflineCacheMediaType,
 } from "./MediaResourceOfflineCacheManager"
-import { parseExpiresAt, isOssExpired } from "./ossExpiryUtils"
+import { OSS_URL_EXPIRY_SAFETY_WINDOW_MS, parseExpiresAt, isOssExpired } from "./ossExpiryUtils"
 import {
 	getCanvasHostResourceReferenceIdentity,
 	isAssetResourcePath,
@@ -44,6 +44,8 @@ export interface MediaResourceUrlEntry {
 	backgroundRefreshPromise: Promise<void> | null
 	/** 最近一次后台 metadata 校验调度时间；用于避免缓存命中热路径反复强制换链 */
 	lastBackgroundRefreshAt?: number
+	/** Legacy asset URLs have no expiry metadata; bound load-error refreshes. */
+	assetFailureRefreshUsed?: boolean
 	lastFailureReason: ResourceLoadFailureReason | null
 }
 
@@ -86,6 +88,10 @@ export interface MediaResourceUrlLifecycleOptions<TEntry extends MediaResourceUr
 }
 
 const BACKGROUND_METADATA_REFRESH_COOLDOWN_MS = 60 * 1000
+
+function isOssExpiringWithinSafetyWindow(expiresAt: number | null): boolean {
+	return expiresAt !== null && expiresAt - Date.now() <= OSS_URL_EXPIRY_SAFETY_WINDOW_MS
+}
 
 export class MediaResourceUrlLifecycle<TEntry extends MediaResourceUrlEntry> {
 	constructor(private readonly options: MediaResourceUrlLifecycleOptions<TEntry>) {}
@@ -165,6 +171,12 @@ export class MediaResourceUrlLifecycle<TEntry extends MediaResourceUrlEntry> {
 		},
 	): Promise<ResolvedMediaResourceOssInfo | null> {
 		if (this.isDestroyed()) return null
+		// Keep this decision before clearing an expired URL: clearing the entry also
+		// clears expiresAt, but an asset that crossed the expiry/safety window must
+		// still request fresh detail metadata from the asset service.
+		const assetNeedsRefresh =
+			isAssetResourcePath(path) &&
+			(options?.forceRefresh || isOssExpiringWithinSafetyWindow(entry.expiresAt))
 
 		if (options?.forceRefresh) {
 			entry.ossSrc = null
@@ -173,6 +185,10 @@ export class MediaResourceUrlLifecycle<TEntry extends MediaResourceUrlEntry> {
 		} else {
 			this.clearExpiredOssSrc(entry)
 			this.applyVirtualResourceBypass(entry)
+			if (isAssetResourcePath(path) && isOssExpiringWithinSafetyWindow(entry.expiresAt)) {
+				entry.ossSrc = null
+				entry.ossSrcFromCachedFallback = false
+			}
 		}
 		if (!options?.allowCachedFallback) {
 			this.clearCachedFallbackOssSrc(entry)
@@ -184,7 +200,11 @@ export class MediaResourceUrlLifecycle<TEntry extends MediaResourceUrlEntry> {
 			}
 		}
 
-		const exchangeResult = await this.exchangeOssSrcInternal(path, entry, options)
+		const exchangeResult = await this.exchangeOssSrcInternal(
+			path,
+			entry,
+			assetNeedsRefresh ? { ...options, forceRefresh: true } : options,
+		)
 		if (this.isDestroyed()) return null
 		if (exchangeResult === SUPERSEDED_RESOURCE_REQUEST) {
 			this.options.setFailureReason(entry, null)
@@ -389,7 +409,14 @@ export class MediaResourceUrlLifecycle<TEntry extends MediaResourceUrlEntry> {
 				entry.sourceUrl = info.fileUrl
 				entry.ossSrc = info.fileUrl
 				entry.ossSrcFromCachedFallback = false
-				entry.expiresAt = null
+				entry.expiresAt = parseExpiresAt(info.expiresAt)
+				// Legacy responses have no expiry metadata, so the bounded load-error
+				// retry is scoped to the URL just handed to the media element. Newer
+				// responses use the expiry safety-window path above; either way, a
+				// single URL cannot trigger an unbounded refresh loop.
+				if (entry.expiresAt !== null || previousSourceUrl !== info.fileUrl) {
+					entry.assetFailureRefreshUsed = false
+				}
 				entry.source = undefined
 				entry.fileName = info.fileName
 				entry.resourceVersion = null
@@ -598,7 +625,7 @@ export class MediaResourceUrlLifecycle<TEntry extends MediaResourceUrlEntry> {
 		}
 	}
 
-	public applyCachedResource(path: string, entry: TEntry, cached: CachedMediaResource): void {
+	public applyCachedResource(_path: string, entry: TEntry, cached: CachedMediaResource): void {
 		const previousResourceVersion = entry.resourceVersion
 		entry.ossSrc = cached.url
 		entry.ossSrcFromCachedFallback = true
@@ -630,8 +657,13 @@ export class MediaResourceUrlLifecycle<TEntry extends MediaResourceUrlEntry> {
 		if (this.isDestroyed()) return null
 		if (isAssetResourcePath(path)) {
 			// Asset file_url values are signed and are not persisted in the offline
-			// cache. A failed media request gets one fresh detail lookup instead.
-			if (retryCount > 0) return null
+			// cache. A failed media request gets one fresh detail lookup. This also
+			// covers audio playback, whose caller always starts at retryCount 0.
+			if (retryCount > 0 || entry.assetFailureRefreshUsed) {
+				return null
+			}
+			if (!entry.sourceUrl && !entry.ossSrc) return null
+			entry.assetFailureRefreshUsed = true
 			entry.ossSrc = null
 			entry.ossSrcFromCachedFallback = false
 			entry.expiresAt = null

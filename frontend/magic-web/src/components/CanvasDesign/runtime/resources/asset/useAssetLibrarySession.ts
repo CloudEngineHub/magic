@@ -43,18 +43,25 @@ export function useAssetLibrarySession(query: AssetLibraryQuery, enabled: boolea
 
 	useEffect(() => {
 		if (!enabled) return
+		return assetLibrarySessionStore.subscribe(() => {
+			setOwners(assetLibrarySessionStore.getCachedOwners(scope) ?? EMPTY_OWNERS)
+		})
+	}, [enabled, scope])
+
+	useEffect(() => {
+		if (!enabled) return
 		// Keep the existing picker behavior: keyword changes settle briefly before
 		// issuing a request, while cached snapshots remain visible immediately.
 		const timer = window.setTimeout(
 			() => void assetLibrarySessionStore.queryAssets(query, scope).catch(() => undefined),
-			250,
+			snapshot.stale ? 0 : 250,
 		)
 		return () => window.clearTimeout(timer)
-	}, [enabled, query, queryKey, scope])
+	}, [enabled, query, queryKey, scope, snapshot.revision, snapshot.stale])
 
 	const refreshAssets = useCallback(
 		() => assetLibrarySessionStore.refreshAssets(query, scope),
-		[query, queryKey, scope],
+		[query, scope],
 	)
 
 	return {

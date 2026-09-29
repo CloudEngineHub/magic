@@ -139,4 +139,53 @@ describe("CanvasAssetComplianceTaskManager", () => {
 
 		expect(getAssetComplianceStatus).toHaveBeenCalledWith("check-resume")
 	})
+
+	it("starts library compliance without persisting to document", async () => {
+		vi.useFakeTimers()
+		const getAssetComplianceStatus = vi
+			.fn()
+			.mockResolvedValueOnce({
+				assetId: "asset-lib",
+				status: "PROCESSING",
+				failedReason: null,
+			})
+			.mockResolvedValueOnce({
+				assetId: "asset-lib",
+				status: "PASS",
+				failedReason: null,
+			})
+		const startExistingAssetCompliance = vi.fn().mockResolvedValue({
+			assetId: "unexpected-response-id",
+			mediaType: "image",
+			fileUrl: null,
+		})
+		const onSettled = vi.fn()
+		const { taskManager, canvas } = createTaskManager({ getAssetComplianceStatus })
+
+		const pollAssetId = await taskManager.startLibraryAssetCompliance(
+			{
+				assetId: "asset-lib",
+				fileKey: "private/demo.png",
+				name: "Demo",
+				startExistingAssetCompliance,
+			},
+			onSettled,
+		)
+
+		expect(pollAssetId).toBe("asset-lib")
+		expect(startExistingAssetCompliance).toHaveBeenCalledWith({
+			assetId: "asset-lib",
+			fileKey: "private/demo.png",
+			name: "Demo",
+		})
+		expect(canvas.elementManager.update).not.toHaveBeenCalled()
+
+		await vi.advanceTimersByTimeAsync(0)
+		await vi.advanceTimersByTimeAsync(2500)
+		expect(onSettled).toHaveBeenCalledWith({
+			assetId: "asset-lib",
+			status: "PASS",
+			failedReason: null,
+		})
+	})
 })

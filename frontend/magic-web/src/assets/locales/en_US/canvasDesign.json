@@ -29,6 +29,7 @@
 		"mediaTypeAll": "All",
 		"mediaTypeImage": "Images",
 		"mediaTypeVideo": "Videos",
+		"mediaUnknown": "Unknown type",
 		"mediaVideo": "Video",
 		"owner": "Owner",
 		"personalAssets": "Visible to me",

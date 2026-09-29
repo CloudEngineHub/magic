@@ -5,9 +5,17 @@ import type {
 } from "../../../public/magic-types"
 
 const DEFAULT_POLLING_INTERVAL = 2500
+const DEFAULT_MAX_POLLING_INTERVAL = 30_000
+const DEFAULT_MAX_DURATION = 5 * 60 * 1000
+const DEFAULT_BACKOFF_FACTOR = 2
 
 export interface CanvasAssetCompliancePollingOptions {
 	intervalMs?: number
+	maxIntervalMs?: number
+	maxDurationMs?: number
+	backoffFactor?: number
+	/** Avoid background-tab polling; the next visible event resumes immediately. */
+	pauseWhenHidden?: boolean
 	onUpdate?: (state: CanvasAssetComplianceState) => void
 	onSettled?: (state: CanvasAssetComplianceState) => void
 	onError?: (error: unknown) => void
@@ -24,6 +32,8 @@ interface PollingEntry {
 	timer?: ReturnType<typeof setTimeout>
 	inFlight: boolean
 	token: symbol
+	startedAt: number
+	consecutiveErrors: number
 }
 
 function isTerminalStatus(status: CanvasAssetComplianceStatus): boolean {
@@ -41,7 +51,11 @@ export class CanvasAssetCompliancePollingManager {
 	private readonly states = new Map<string, CanvasAssetComplianceState>()
 	private destroyed = false
 
-	constructor(private readonly canvas: Canvas) {}
+	constructor(private readonly canvas: Canvas) {
+		if (typeof document !== "undefined") {
+			document.addEventListener("visibilitychange", this.handleVisibilityChange)
+		}
+	}
 
 	public start(assetId: string, options: CanvasAssetCompliancePollingOptions = {}): () => void {
 		if (this.destroyed) return () => undefined
@@ -64,6 +78,8 @@ export class CanvasAssetCompliancePollingManager {
 			listeners: [listener],
 			inFlight: false,
 			token: Symbol(`asset-compliance:${normalizedAssetId}`),
+			startedAt: Date.now(),
+			consecutiveErrors: 0,
 		}
 		this.entries.set(normalizedAssetId, entry)
 		void this.poll(entry)
@@ -88,12 +104,32 @@ export class CanvasAssetCompliancePollingManager {
 
 	public destroy(): void {
 		this.destroyed = true
+		if (typeof document !== "undefined") {
+			document.removeEventListener("visibilitychange", this.handleVisibilityChange)
+		}
 		this.stopAll()
 		this.states.clear()
 	}
 
 	private async poll(entry: PollingEntry): Promise<void> {
 		if (!this.isCurrentEntry(entry) || entry.inFlight) return
+		if (this.shouldPauseForVisibility(entry)) return
+		if (this.hasTimedOut(entry)) {
+			this.emitError(entry, new Error("Asset compliance polling timed out"))
+			// The local watcher has reached its terminal condition even though the
+			// server task is still PROCESSING. Notify consumers so optimistic UI state
+			// is cleared and a later refresh can resume from the server state.
+			this.emitSettled(
+				entry,
+				this.states.get(entry.assetId) ?? {
+					assetId: entry.assetId,
+					status: "PROCESSING",
+					failedReason: null,
+				},
+			)
+			this.clearEntry(entry)
+			return
+		}
 
 		const getAssetComplianceStatus =
 			this.canvas.magicConfigManager.config?.methods?.getAssetComplianceStatus
@@ -109,6 +145,7 @@ export class CanvasAssetCompliancePollingManager {
 			if (!this.isCurrentEntry(entry)) return
 
 			this.states.set(entry.assetId, state)
+			entry.consecutiveErrors = 0
 			this.emitUpdate(entry, state)
 			if (isTerminalStatus(state.status)) {
 				this.emitSettled(entry, state)
@@ -122,6 +159,7 @@ export class CanvasAssetCompliancePollingManager {
 			// 与生成结果轮询一致：临时网络/服务异常不改变素材状态，
 			// 通知调用方后继续下一周期重试。
 			this.emitError(entry, error)
+			entry.consecutiveErrors += 1
 			this.scheduleNextPoll(entry)
 		} finally {
 			entry.inFlight = false
@@ -158,14 +196,58 @@ export class CanvasAssetCompliancePollingManager {
 	private scheduleNextPoll(entry: PollingEntry): void {
 		if (!this.isCurrentEntry(entry)) return
 		if (entry.timer) clearTimeout(entry.timer)
-		const interval = Math.max(
+		if (this.shouldPauseForVisibility(entry)) return
+		const baseInterval = Math.max(
 			0,
 			entry.listeners[0]?.options.intervalMs ?? DEFAULT_POLLING_INTERVAL,
+		)
+		const options = entry.listeners[0]?.options
+		const backoffFactor = Math.max(1, options?.backoffFactor ?? DEFAULT_BACKOFF_FACTOR)
+		const maxInterval = Math.max(
+			baseInterval,
+			options?.maxIntervalMs ?? DEFAULT_MAX_POLLING_INTERVAL,
+		)
+		const interval = Math.min(
+			maxInterval,
+			baseInterval * backoffFactor ** Math.max(0, entry.consecutiveErrors - 1),
 		)
 		entry.timer = setTimeout(() => {
 			entry.timer = undefined
 			void this.poll(entry)
 		}, interval)
+	}
+
+	private shouldPauseForVisibility(entry: PollingEntry): boolean {
+		return (
+			entry.listeners[0]?.options.pauseWhenHidden !== false &&
+			typeof document !== "undefined" &&
+			document.visibilityState === "hidden"
+		)
+	}
+
+	private hasTimedOut(entry: PollingEntry): boolean {
+		const maxDuration = Math.max(
+			0,
+			entry.listeners[0]?.options.maxDurationMs ?? DEFAULT_MAX_DURATION,
+		)
+		return maxDuration > 0 && Date.now() - entry.startedAt >= maxDuration
+	}
+
+	private readonly handleVisibilityChange = (): void => {
+		if (
+			this.destroyed ||
+			typeof document === "undefined" ||
+			document.visibilityState === "hidden"
+		) {
+			return
+		}
+		for (const entry of this.entries.values()) {
+			if (entry.timer) {
+				clearTimeout(entry.timer)
+				entry.timer = undefined
+			}
+			void this.poll(entry)
+		}
 	}
 
 	private isCurrentEntry(entry: PollingEntry): boolean {

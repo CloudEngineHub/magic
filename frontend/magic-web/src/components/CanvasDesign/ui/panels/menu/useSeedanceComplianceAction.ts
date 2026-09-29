@@ -1,5 +1,9 @@
 import { useCallback, useRef, useState } from "react"
 import { toast } from "sonner"
+import {
+	toastAssetComplianceFailureState,
+	toastAssetComplianceState,
+} from "../../toolbar/asset-library/assetComplianceToasts"
 import { useCanvas } from "../../../app/providers/CanvasProvider"
 import { useCanvasDesignI18n } from "../../../app/providers/I18nProvider"
 import { useMagic } from "../../../app/providers/MagicProvider"
@@ -25,7 +29,7 @@ interface ComplianceContent {
 	complianceCheckId?: string
 }
 
-interface SeedanceComplianceTarget {
+export interface SeedanceComplianceTarget {
 	elementId: string
 	contentId: string
 	path: string
@@ -49,7 +53,7 @@ function readComplianceContent(
 	return effectiveContent ?? (getActiveContent(element) as ComplianceContent | undefined)
 }
 
-function resolveSeedanceComplianceTarget(
+export function resolveSeedanceComplianceTarget(
 	canvas: {
 		elementManager: { getElementData: (elementId: string) => LayerElement | undefined }
 		getEffectiveContent?: <T extends { contentId: string }>(elementId: string) => T | undefined
@@ -66,8 +70,29 @@ function resolveSeedanceComplianceTarget(
 	}
 
 	const content = readComplianceContent(canvas, element)
-	const path = content?.src
-	if (!content || !path || parseAssetResourcePath(path)) return undefined
+	if (!content) return undefined
+
+	const assetId = content.assetId?.trim() || undefined
+	if (assetId) {
+		// An asset-backed element may retain an asset:// source or a legacy
+		// workspace source. Its assetId is authoritative for compliance routing.
+		const path = content.src?.trim() || `asset://${assetId}`
+		return {
+			elementId: element.id,
+			contentId: content.contentId,
+			path,
+			name: element.name || getCanvasResourceFileName(path) || assetId,
+			assetId,
+			complianceStatus: content.complianceStatus,
+			complianceFailedReason: content.complianceFailedReason,
+			complianceCheckId: content.complianceCheckId?.trim() || undefined,
+		}
+	}
+
+	const path = content.src
+	if (!path) return undefined
+
+	if (parseAssetResourcePath(path)) return undefined
 
 	const resolution = resolveCanvasStorageResourceReference(path, resolveResourceReference)
 	if (
@@ -84,7 +109,7 @@ function resolveSeedanceComplianceTarget(
 		contentId: content.contentId,
 		path,
 		name: element.name || fileName.replace(/\.[^.]+$/, "") || fileName,
-		assetId: content.assetId?.trim() || undefined,
+		assetId: undefined,
 		complianceStatus: content.complianceStatus,
 		complianceFailedReason: content.complianceFailedReason,
 		complianceCheckId: content.complianceCheckId?.trim() || undefined,
@@ -92,7 +117,6 @@ function resolveSeedanceComplianceTarget(
 }
 
 function needsNewComplianceCheck(target: SeedanceComplianceTarget): boolean {
-	if (target.assetId) return false
 	if (target.complianceStatus === "PASS") return false
 	if (target.complianceStatus === "PROCESSING") return false
 	return true
@@ -147,52 +171,14 @@ export function useSeedanceComplianceAction() {
 
 	const toastFailureState = useCallback(
 		(state: Pick<CanvasAssetComplianceState, "status" | "failedReason">) => {
-			if (state.status !== "FAILED") return
-			const reason = state.failedReason?.trim()
-			toast.error(
-				reason
-					? t("seedanceCompliance.failedWithReason", {
-							defaultValue: "合规校验未通过：{{reason}}",
-							reason,
-						})
-					: t("seedanceCompliance.failed", {
-							defaultValue: "合规校验未通过",
-						}),
-			)
+			toastAssetComplianceFailureState(t, state)
 		},
 		[t],
 	)
 
 	const toastState = useCallback(
 		(state: Pick<CanvasAssetComplianceState, "status" | "failedReason">) => {
-			if (state.status === "PASS") return
-			if (state.status === "FAILED") {
-				const reason = state.failedReason?.trim()
-				toast.error(
-					reason
-						? t("seedanceCompliance.failedWithReason", {
-								defaultValue: "合规校验未通过：{{reason}}",
-								reason,
-							})
-						: t("seedanceCompliance.failed", {
-								defaultValue: "合规校验未通过",
-							}),
-				)
-				return
-			}
-			if (state.status === "UNVERIFIED") {
-				toast.info(
-					t("seedanceCompliance.unverified", {
-						defaultValue: "该素材尚未开始合规校验",
-					}),
-				)
-				return
-			}
-			toast.info(
-				t("seedanceCompliance.processing", {
-					defaultValue: "合规校验进行中",
-				}),
-			)
+			toastAssetComplianceState(t, state)
 		},
 		[t],
 	)
@@ -241,6 +227,13 @@ export function useSeedanceComplianceAction() {
 				}
 			}
 			if (hidesComplianceMenu(getKnownComplianceStatus(canvas, target))) return false
+			if (target.assetId) {
+				return Boolean(
+					methods?.getAssetComplianceStatus &&
+					methods?.startExistingAssetCompliance &&
+					methods.ensureAssetAgreementSigned,
+				)
+			}
 			if (!needsNewComplianceCheck(target)) {
 				return Boolean(methods?.getAssetComplianceStatus)
 			}
@@ -285,7 +278,50 @@ export function useSeedanceComplianceAction() {
 						taskManager.watchCheck(target.assetId, { onSettled: toastFailureState })
 						return
 					}
-					toastState(state)
+					if (state.status === "PASS") {
+						toastState(state)
+						return
+					}
+					const startExistingAssetCompliance = methods?.startExistingAssetCompliance
+					const ensureAssetAgreementSigned = methods?.ensureAssetAgreementSigned
+					if (!startExistingAssetCompliance || !ensureAssetAgreementSigned) {
+						unavailable()
+						return
+					}
+					if (startingRef.current) return
+
+					startingRef.current = true
+					try {
+						const signed = await ensureAssetAgreementSigned()
+						if (!signed) return
+
+						const latest = resolveTarget(elementId)
+						if (
+							!latest ||
+							latest.contentId !== target.contentId ||
+							latest.path !== target.path ||
+							latest.assetId !== target.assetId
+						) {
+							unavailable()
+							return
+						}
+
+						const pollAssetId = await taskManager.startLibraryAssetCompliance(
+							{
+								assetId: target.assetId,
+								name: latest.name,
+								startExistingAssetCompliance,
+							},
+							toastFailureState,
+						)
+						if (!pollAssetId) {
+							unavailable()
+							return
+						}
+						toastState({ status: "PROCESSING", failedReason: null })
+					} finally {
+						startingRef.current = false
+					}
 					return
 				}
 

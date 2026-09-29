@@ -61,6 +61,14 @@ export interface AssetItem {
 	name: string
 	description: string
 	file_url: string | null
+	/** Signed URL expiry when newer backends expose it; absent on legacy deployments. */
+	expires_at?: string | null
+	/** Optional server-generated preview URL; older backends may omit it. */
+	thumbnail_url?: string | null
+	/** 私有桶文件 Key；列表/详情返回后用于素材库弹窗发起合规（POST /assets + file_key）。 */
+	file_key?: string | null
+	project_id?: string | null
+	project_file_path?: string | null
 	compliance_status: AssetComplianceStatus
 	compliance_failed_reason: string | null
 	owner: AssetOwner
@@ -98,6 +106,23 @@ export interface SaveAssetVisibility {
 
 export type CreateAssetParams = AssetParamsBase &
 	AssetFileSourceParams & {
+		visibility?: SaveAssetVisibility
+	}
+
+export type AssetComplianceSourceParams =
+	| {
+			file_key: string
+			project_id?: never
+			project_file_path?: never
+	  }
+	| {
+			file_key?: never
+			project_id: string
+			project_file_path: string
+	  }
+
+export type StartAssetComplianceParams = AssetParamsBase &
+	AssetComplianceSourceParams & {
 		visibility?: SaveAssetVisibility
 	}
 
@@ -220,9 +245,21 @@ export function normalizeAssetComplianceStatus(value: unknown): AssetComplianceS
 	return "UNVERIFIED"
 }
 
+export function normalizeAssetMediaType(value: unknown): AssetMediaType | null {
+	return value === "IMAGE" || value === "VIDEO" || value === "AUDIO" ? value : null
+}
+
 export function normalizeAssetItem(value: AssetItem): AssetItem {
 	return {
 		...value,
+		// Older list/detail deployments may omit optional-looking fields even
+		// though the shared response type marks them as present. Normalize them at
+		// the API boundary so Canvas and the picker never guess a media type or
+		// crash while rendering tags/owner metadata.
+		asset_media_type: normalizeAssetMediaType(value.asset_media_type),
+		file_url: value.file_url ?? null,
+		tags: Array.isArray(value.tags) ? value.tags : [],
+		owner: value.owner ?? { id: null, name: "" },
 		compliance_status: normalizeAssetComplianceStatus(value.compliance_status),
 	}
 }
@@ -249,8 +286,13 @@ export const generateAssetsApi = (fetch: ServiceHttpClient) => ({
 		return fetch.post<unknown[]>("/api/v1/asset-agreements")
 	},
 
-	/** 创建并异步执行火山方舟合规检查的资产。 */
+	/** @deprecated Use startAssetCompliance; kept for external compatibility. */
 	createAsset(params: CreateAssetParams) {
+		return fetch.post<AssetItem>("/api/v1/assets", params).then(normalizeAssetItem)
+	},
+
+	/** 发起素材合规检查；来源为已有 file_key 或工作区项目文件。 */
+	startAssetCompliance(params: StartAssetComplianceParams) {
 		return fetch.post<AssetItem>("/api/v1/assets", params).then(normalizeAssetItem)
 	},
 

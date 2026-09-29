@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest"
 import { assetLibrarySessionStore, type AssetLibraryQuery } from "../AssetLibrarySessionStore"
+import { assetDetailStore } from "../AssetDetailStore"
 
 const mocks = vi.hoisted(() => ({
 	queryAssets: vi.fn(),
@@ -66,6 +67,7 @@ describe("AssetLibrarySessionStore", () => {
 		expect(assetLibrarySessionStore.getCachedAssets(query, "scope-a")).toEqual([
 			asset("asset-1"),
 		])
+		expect(assetDetailStore.getCached("asset-1", "scope-a")).toEqual(asset("asset-1"))
 	})
 
 	it("shares a pending promise for concurrent requests", async () => {
@@ -149,5 +151,63 @@ describe("AssetLibrarySessionStore", () => {
 
 		expect(mocks.queryAssets).toHaveBeenCalledTimes(3)
 		expect(mocks.getAssetOwners).toHaveBeenCalledTimes(1)
+	})
+
+	it("marks cached lists stale without dropping the previous result", async () => {
+		mocks.queryAssets
+			.mockResolvedValueOnce(response(asset("old")))
+			.mockResolvedValueOnce(response(asset("new")))
+		await assetLibrarySessionStore.queryAssets(query, "scope-a")
+
+		const queryKey = assetLibrarySessionStore.getQueryKey(query, "scope-a")
+		assetLibrarySessionStore.invalidateCurrentScope("scope-a")
+		const staleSnapshot = assetLibrarySessionStore.getSnapshotByKey(queryKey, "scope-a")
+		expect(staleSnapshot.assets).toEqual([asset("old")])
+		expect(staleSnapshot.stale).toBe(true)
+
+		await assetLibrarySessionStore.queryAssets(query, "scope-a")
+		expect(assetLibrarySessionStore.getCachedAssets(query, "scope-a")).toEqual([asset("new")])
+	})
+
+	it("upserts a mutation response into the visible list before revalidation", async () => {
+		mocks.queryAssets.mockResolvedValue(response(asset("asset-1")))
+		await assetLibrarySessionStore.queryAssets(query, "scope-a")
+
+		const updated = { ...asset("asset-1"), name: "Updated" }
+		assetLibrarySessionStore.upsertAsset(updated, "scope-a")
+
+		const snapshot = assetLibrarySessionStore.getSnapshotByKey(
+			assetLibrarySessionStore.getQueryKey(query, "scope-a"),
+			"scope-a",
+		)
+		expect(snapshot.assets).toEqual([updated])
+		expect(snapshot.stale).toBe(true)
+	})
+
+	it("does not seed an in-flight stale list over a newer mutation detail", async () => {
+		let resolveList!: (value: ReturnType<typeof response>) => void
+		mocks.queryAssets.mockReturnValue(
+			new Promise((resolve) => {
+				resolveList = resolve
+			}),
+		)
+
+		const pendingList = assetLibrarySessionStore.queryAssets(query, "scope-a")
+		const updated = asset("asset-1")
+		updated.name = "Mutation result"
+		assetLibrarySessionStore.upsertAsset(updated, "scope-a")
+		resolveList(response(asset("asset-1")))
+		await pendingList
+
+		expect(assetDetailStore.getCached("asset-1", "scope-a")?.name).toBe("Mutation result")
+	})
+
+	it("clears detail entries when a mutation has no full asset response", () => {
+		assetDetailStore.upsert(asset("asset-1"), "scope-a")
+		expect(assetDetailStore.getCached("asset-1", "scope-a")).toBeDefined()
+
+		assetLibrarySessionStore.invalidateAsset("asset-1", "scope-a")
+
+		expect(assetDetailStore.getCached("asset-1", "scope-a")).toBeUndefined()
 	})
 })

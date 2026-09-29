@@ -29,6 +29,7 @@
 		"mediaTypeAll": "全部",
 		"mediaTypeImage": "图片",
 		"mediaTypeVideo": "视频",
+		"mediaUnknown": "未知类型",
 		"mediaVideo": "视频",
 		"owner": "归属人",
 		"personalAssets": "仅自己可见",

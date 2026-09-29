@@ -96,19 +96,22 @@ export function formatAssetDuration(seconds: number): string {
 	return `${String(minutes).padStart(2, "0")}:${String(remainSeconds).padStart(2, "0")}`
 }
 
-/** 将资产库条目转为画布全屏预览项；无可用 file_url 时返回 null。 */
+/** 将资产库条目转为画布全屏预览项；未知媒体类型不猜测为图片。 */
 export function toAssetLibraryFullscreenPreviewItem(
 	asset: AssetItem,
 ): MediaResourceFullscreenPreviewItem | null {
 	const previewSrc = asset.file_url?.trim()
-	if (!previewSrc) return null
+	if (!previewSrc || !asset.asset_media_type) return null
 
 	const kind =
 		asset.asset_media_type === "VIDEO"
 			? "video"
 			: asset.asset_media_type === "AUDIO"
 				? "audio"
-				: "image"
+				: asset.asset_media_type === "IMAGE"
+					? "image"
+					: null
+	if (!kind) return null
 
 	return {
 		path: previewSrc,

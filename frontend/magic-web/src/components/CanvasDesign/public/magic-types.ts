@@ -1155,6 +1155,8 @@ export interface CanvasAssetResourceInfo {
 	mediaType: CanvasAssetMediaType | null
 	/** 当前会话可用的签名资源地址；不得写入 Canvas 文档或离线缓存。 */
 	fileUrl: string | null
+	/** 后端可选返回的签名地址过期时间；旧后端缺失时保持 undefined。 */
+	expiresAt?: string
 	fileName?: string
 	complianceStatus?: CanvasAssetComplianceStatus | null
 	complianceFailedReason?: string | null
@@ -1176,8 +1178,16 @@ export interface CanvasOpenSaveAssetDialogParams {
 export interface CanvasStartWorkspaceMediaComplianceParams {
 	/** Canvas 文档中保存的媒体路径。 */
 	path: string
-	/** 传给 createAsset 的素材名称。 */
+	/** 发起工作区文件合规时使用的素材名称。 */
 	name: string
+}
+
+/** 使用 file_key 对素材库已有 asset 发起合规，不写回画布 DSL。 */
+export interface CanvasStartExistingAssetComplianceParams {
+	assetId: string
+	/** 素材库或 Canvas 详情中的 file_key；已有素材合规只允许该来源。 */
+	fileKey?: string
+	name?: string
 }
 
 /** 保存工作区媒体到素材库时由弹窗提交的可编辑信息。 */
@@ -1711,7 +1721,10 @@ export interface CanvasDesignMethods {
 		},
 	) => Promise<CanvasAssetResourceInfo>
 	/** 批量获取素材详情，用于 Canvas 加载和应用素材前刷新动态资源信息。 */
-	getAssetResourceInfos?: (assetIds: string[]) => Promise<CanvasAssetResourceInfo[]>
+	getAssetResourceInfos?: (
+		assetIds: string[],
+		options?: { forceRefresh?: boolean },
+	) => Promise<CanvasAssetResourceInfo[]>
 	/** 获取单个素材的异步合规状态，用于 Canvas 级轮询管理器。 */
 	getAssetComplianceStatus?: (assetId: string) => Promise<CanvasAssetComplianceState>
 	/** 请求宿主打开素材信息编辑弹窗；该入口本身不得直接发起保存。 */
@@ -1734,11 +1747,18 @@ export interface CanvasDesignMethods {
 		params: CanvasSaveAssetToLibraryParams,
 	) => Promise<CanvasAssetResourceInfo>
 	/**
-	 * 对当前画布工作区文件发起合规校验。调用 createAsset，不上传、不写回 assetId。
+	 * 对当前画布工作区文件发起合规校验。使用项目路径，不上传、不写回 assetId。
 	 * 返回值里的 assetId 只作为检查 ID。
 	 */
 	startWorkspaceMediaCompliance?: (
 		params: CanvasStartWorkspaceMediaComplianceParams,
+	) => Promise<CanvasAssetResourceInfo>
+	/**
+	 * 对素材库已有 asset 使用 file_key 发起合规，不创建新的 Canvas 素材绑定。
+	 * 入参 assetId 是稳定素材 ID，调用方始终使用它轮询和刷新状态。
+	 */
+	startExistingAssetCompliance?: (
+		params: CanvasStartExistingAssetComplianceParams,
 	) => Promise<CanvasAssetResourceInfo>
 	/**
 	 * 获取资源轻量版本信息；用于 cache hit 后台校验，不应触发 OSS 换链或下载 body

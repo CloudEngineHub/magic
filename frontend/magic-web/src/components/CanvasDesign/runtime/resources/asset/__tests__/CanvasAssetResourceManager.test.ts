@@ -1,5 +1,7 @@
 import { describe, expect, it, vi } from "vitest"
 import { CanvasAssetResourceManager } from "../CanvasAssetResourceManager"
+import { assetDetailStore } from "../AssetDetailStore"
+import { getSharedMediaResourceScope } from "@/pages/superMagic/services/sharedMediaResourceScope"
 
 function createManager(
 	getAssetResourceInfo: ReturnType<typeof vi.fn> = vi.fn(),
@@ -83,6 +85,21 @@ describe("CanvasAssetResourceManager", () => {
 		expect(getAssetResourceInfos.mock.calls[1][0]).toHaveLength(1)
 	})
 
+	it("passes force refresh through the batch resolver", async () => {
+		const getAssetResourceInfos = vi.fn().mockResolvedValue([
+			{
+				assetId: "100",
+				mediaType: "image",
+				fileUrl: "https://cdn.test/100-fresh.png",
+			},
+		])
+		const { manager } = createManager(vi.fn(), getAssetResourceInfos)
+
+		await manager.refreshResources(["100"], { forceRefresh: true })
+
+		expect(getAssetResourceInfos).toHaveBeenCalledWith(["100"], { forceRefresh: true })
+	})
+
 	it("does not batch non-numeric legacy ids and normalizes old compliance values", async () => {
 		const getAssetResourceInfo = vi.fn().mockResolvedValue({
 			assetId: "reference.png",
@@ -140,6 +157,100 @@ describe("CanvasAssetResourceManager", () => {
 		expect(getAssetResourceInfo).toHaveBeenCalledTimes(2)
 	})
 
+	it("drops its local cache when the shared asset detail is invalidated", async () => {
+		const getAssetResourceInfo = vi.fn().mockResolvedValue({
+			assetId: "asset-1",
+			mediaType: "image",
+			fileUrl: "https://cdn.test/asset-1.png",
+		})
+		const { manager } = createManager(getAssetResourceInfo)
+
+		await manager.getResource("asset-1")
+		assetDetailStore.invalidate("asset-1", getSharedMediaResourceScope())
+		await manager.getResource("asset-1")
+
+		expect(getAssetResourceInfo).toHaveBeenCalledTimes(2)
+		manager.destroy()
+	})
+
+	it("rehydrates the Canvas cache when shared detail data is upserted", async () => {
+		const getAssetResourceInfo = vi
+			.fn()
+			.mockResolvedValueOnce({
+				assetId: "asset-1",
+				mediaType: "image",
+				fileUrl: "https://cdn.test/old.png",
+			})
+			.mockResolvedValueOnce({
+				assetId: "asset-1",
+				mediaType: "image",
+				fileUrl: "https://cdn.test/new.png",
+			})
+		const { manager } = createManager(getAssetResourceInfo)
+
+		await manager.getResource("asset-1")
+		assetDetailStore.upsert(
+			{
+				asset_id: "asset-1",
+				asset_kind: "ASSET",
+				asset_business_type: null,
+				asset_media_type: "IMAGE",
+				parent_id: null,
+				name: "Updated",
+				description: "",
+				file_url: "https://cdn.test/new.png",
+				compliance_status: "PASS",
+				compliance_failed_reason: null,
+				owner: { id: "owner", name: "Owner" },
+				owner_uid: "owner",
+				source: "PERSONAL",
+				tags: [],
+			},
+			getSharedMediaResourceScope(),
+		)
+
+		await vi.waitFor(() => {
+			expect(manager.getCachedResource("asset-1")?.fileUrl).toBe("https://cdn.test/new.png")
+		})
+		expect(getAssetResourceInfo).toHaveBeenCalledTimes(2)
+		manager.destroy()
+	})
+
+	it("does not reuse an in-flight detail request after invalidation", async () => {
+		let resolveOld!: (value: { assetId: string; mediaType: "image"; fileUrl: string }) => void
+		const getAssetResourceInfo = vi
+			.fn()
+			.mockReturnValueOnce(
+				new Promise((resolve) => {
+					resolveOld = resolve
+				}),
+			)
+			.mockResolvedValueOnce({
+				assetId: "asset-1",
+				mediaType: "image",
+				fileUrl: "https://cdn.test/fresh.png",
+			})
+		const { manager } = createManager(getAssetResourceInfo)
+
+		const oldRequest = manager.getResource("asset-1")
+		manager.invalidate("asset-1")
+		const freshRequest = manager.getResource("asset-1")
+		resolveOld({
+			assetId: "asset-1",
+			mediaType: "image",
+			fileUrl: "https://cdn.test/stale.png",
+		})
+
+		await expect(freshRequest).resolves.toMatchObject({
+			fileUrl: "https://cdn.test/fresh.png",
+		})
+		await expect(oldRequest).resolves.toMatchObject({
+			fileUrl: "https://cdn.test/stale.png",
+		})
+		expect(manager.getCachedResource("asset-1")?.fileUrl).toBe("https://cdn.test/fresh.png")
+		expect(getAssetResourceInfo).toHaveBeenCalledTimes(2)
+	})
+
 	it("maps the documented not-found response to a stable resource error", async () => {
 		const error = Object.assign(new Error("asset unavailable"), { response: { code: 48000 } })
 		const getAssetResourceInfo = vi.fn().mockRejectedValue(error)
@@ -163,5 +274,56 @@ describe("CanvasAssetResourceManager", () => {
 			name: "CanvasAssetResourceError",
 			reason: "load-error",
 		})
+	})
+
+	it("refetches incomplete resource metadata instead of reusing it", async () => {
+		const getAssetResourceInfo = vi
+			.fn()
+			.mockResolvedValueOnce({
+				assetId: "asset-1",
+				mediaType: null,
+				fileUrl: null,
+			})
+			.mockResolvedValueOnce({
+				assetId: "asset-1",
+				mediaType: "image",
+				fileUrl: "https://cdn.test/hydrated.png",
+			})
+		const { manager } = createManager(getAssetResourceInfo)
+
+		await manager.getResource("asset-1")
+		await expect(manager.getResource("asset-1")).resolves.toMatchObject({
+			mediaType: "image",
+			fileUrl: "https://cdn.test/hydrated.png",
+		})
+		expect(getAssetResourceInfo).toHaveBeenCalledTimes(2)
+	})
+
+	it("drops a cached resource when batch-get no longer returns the asset", async () => {
+		const getAssetResourceInfos = vi
+			.fn()
+			.mockResolvedValueOnce([
+				{
+					assetId: "100",
+					mediaType: "image",
+					fileUrl: "https://cdn.test/old.png",
+				},
+			])
+			.mockResolvedValueOnce([])
+			.mockResolvedValueOnce([
+				{
+					assetId: "100",
+					mediaType: "image",
+					fileUrl: "https://cdn.test/fresh.png",
+				},
+			])
+		const { manager } = createManager(vi.fn(), getAssetResourceInfos)
+
+		await manager.refreshResources(["100"])
+		await manager.refreshResources(["100"], { forceRefresh: true })
+		await expect(manager.getResource("100")).resolves.toMatchObject({
+			fileUrl: "https://cdn.test/fresh.png",
+		})
+		expect(getAssetResourceInfos).toHaveBeenCalledTimes(3)
 	})
 })

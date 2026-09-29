@@ -6,6 +6,7 @@ import {
 	type AssetScope,
 } from "@/apis"
 import { getSharedMediaResourceScope } from "@/pages/superMagic/services/sharedMediaResourceScope"
+import { assetDetailStore } from "./AssetDetailStore"
 
 export type AssetLibraryScope = Extract<AssetScope, "ALL" | "PERSONAL" | "TEAM">
 
@@ -25,6 +26,10 @@ export interface AssetLibraryQuerySnapshot {
 	refreshing: boolean
 	error: unknown | null
 	updatedAt: number | null
+	/** The previous list remains visible while an external mutation is revalidated. */
+	stale: boolean
+	/** Monotonic value used by active hooks to observe invalidation without dropping data. */
+	revision: number
 }
 
 interface NormalizedAssetLibraryQuery extends AssetLibraryQuery {
@@ -64,6 +69,7 @@ function isPositiveDimension(value: number): boolean {
 const DEFAULT_MEDIA_TYPES: AssetMediaType[] = ["IMAGE"]
 const DEFAULT_PAGE = 1
 const DEFAULT_PAGE_SIZE = 200
+const EXTERNAL_REFRESH_COOLDOWN_MS = 30_000
 
 const EMPTY_QUERY_SNAPSHOT: AssetLibraryQuerySnapshot = {
 	assets: [],
@@ -71,6 +77,8 @@ const EMPTY_QUERY_SNAPSHOT: AssetLibraryQuerySnapshot = {
 	refreshing: false,
 	error: null,
 	updatedAt: null,
+	stale: false,
+	revision: 0,
 }
 
 export function normalizeAssetLibraryQuery(query: AssetLibraryQuery): NormalizedAssetLibraryQuery {
@@ -109,9 +117,25 @@ export class AssetLibrarySessionStore {
 	private readonly assetQueryCache = new Map<string, AssetQueryCacheEntry>()
 	private readonly ownersCache = new Map<string, OwnersCacheEntry>()
 	private readonly listeners = new Set<() => void>()
+	private readonly pendingMutationBroadcasts = new Set<string>()
+	private readonly mutationSource =
+		typeof crypto !== "undefined" && typeof crypto.randomUUID === "function"
+			? crypto.randomUUID()
+			: Math.random().toString(36).slice(2)
+	private readonly mutationChannel: BroadcastChannel | null = this.createMutationChannel()
 	private agreementCache: AssetAgreementCache = { signed: null, pending: null }
 	private readonly mediaDimensions = new Map<string, AssetMediaDimensions>()
 	private activeScope = getSharedMediaResourceScope()
+	private lastExternalRefreshAt = 0
+
+	constructor() {
+		if (typeof window === "undefined") return
+		window.addEventListener("focus", this.handleExternalRefresh)
+		document.addEventListener("visibilitychange", this.handleExternalRefresh)
+		if (this.mutationChannel) {
+			this.mutationChannel.addEventListener("message", this.handleMutationMessage)
+		}
+	}
 
 	public getQueryKey(query: AssetLibraryQuery, scope = getSharedMediaResourceScope()): string {
 		return getQueryKey(normalizeAssetLibraryQuery(query), scope)
@@ -231,15 +255,116 @@ export class AssetLibrarySessionStore {
 		this.notify()
 	}
 
-	/** Invalidate all list queries for the active user and organization. */
+	/**
+	 * Mark list snapshots stale without throwing away the last usable result.
+	 *
+	 * A mutation can finish while the picker is open.  Deleting the cache in that
+	 * situation leaves the hook's query dependencies unchanged, so no follow-up
+	 * request is issued and the modal can remain empty forever.  Keeping the
+	 * snapshot and bumping a revision lets active subscribers refresh naturally;
+	 * callers that are not mounted will refresh on their next query.
+	 */
 	public invalidateCurrentScope(scope = getSharedMediaResourceScope()): void {
 		this.ensureScope(scope)
-		for (const [queryKey, entry] of this.assetQueryCache) {
-			// Remove pending entries too. Their callbacks validate the map entry and
-			// therefore cannot repopulate a cache that has already been invalidated.
-			if (entry.scope === scope) this.assetQueryCache.delete(queryKey)
+		this.markScopeStale(scope)
+		this.scheduleMutationBroadcast(scope)
+	}
+
+	/** Invalidate one asset's detail and all visible list queries after an edit. */
+	public invalidateAsset(assetId: string, scope = getSharedMediaResourceScope()): void {
+		this.ensureScope(scope)
+		const normalizedAssetId = assetId.trim()
+		if (!normalizedAssetId) {
+			this.markScopeStale(scope)
+			this.scheduleMutationBroadcast(scope)
+			return
 		}
-		this.notify()
+		assetDetailStore.invalidate(normalizedAssetId, scope)
+		this.markScopeStale(scope)
+		this.scheduleMutationBroadcast(scope)
+	}
+
+	/** Apply a mutation response to visible snapshots before revalidation settles. */
+	public upsertAsset(asset: AssetItem, scope = getSharedMediaResourceScope()): void {
+		this.ensureScope(scope)
+		const normalizedAsset = assetDetailStore.upsert(asset, scope)
+		for (const entry of this.assetQueryCache.values()) {
+			if (entry.scope !== scope) continue
+			const currentIndex = entry.snapshot.assets.findIndex(
+				(item) => item.asset_id === normalizedAsset.asset_id,
+			)
+			const matches = this.matchesQuery(normalizedAsset, entry.query)
+			if (matches && currentIndex === -1) {
+				entry.snapshot = {
+					...entry.snapshot,
+					assets: [normalizedAsset, ...entry.snapshot.assets],
+				}
+			} else if (matches && currentIndex !== -1) {
+				const assets = [...entry.snapshot.assets]
+				assets[currentIndex] = normalizedAsset
+				entry.snapshot = {
+					...entry.snapshot,
+					assets,
+				}
+			} else if (!matches && currentIndex !== -1) {
+				entry.snapshot = {
+					...entry.snapshot,
+					assets: entry.snapshot.assets.filter(
+						(item) => item.asset_id !== normalizedAsset.asset_id,
+					),
+				}
+			}
+		}
+		this.markScopeStale(scope)
+		this.scheduleMutationBroadcast(scope)
+	}
+
+	/** Remove an asset from visible snapshots while the server refresh completes. */
+	public removeAsset(assetId: string, scope = getSharedMediaResourceScope()): void {
+		this.ensureScope(scope)
+		const normalizedAssetId = assetId.trim()
+		if (!normalizedAssetId) return
+		assetDetailStore.invalidate(normalizedAssetId, scope)
+		for (const entry of this.assetQueryCache.values()) {
+			if (entry.scope !== scope) continue
+			const assets = entry.snapshot.assets.filter(
+				(asset) => asset.asset_id !== normalizedAssetId,
+			)
+			if (assets.length === entry.snapshot.assets.length) continue
+			entry.snapshot = {
+				...entry.snapshot,
+				assets,
+			}
+		}
+		this.markScopeStale(scope)
+		this.scheduleMutationBroadcast(scope)
+	}
+
+	private markScopeStale(scope: string): void {
+		this.ensureScope(scope)
+		let changed = false
+		for (const entry of this.assetQueryCache.values()) {
+			if (entry.scope !== scope) continue
+			entry.snapshot = {
+				...entry.snapshot,
+				stale: true,
+				revision: entry.snapshot.revision + 1,
+			}
+			changed = true
+		}
+		if (changed) this.notify()
+	}
+
+	private matchesQuery(asset: AssetItem, query: NormalizedAssetLibraryQuery): boolean {
+		if (!query.mediaTypes.includes(asset.asset_media_type as AssetMediaType)) return false
+		if (query.scope !== "ALL" && asset.source !== query.scope) return false
+		if (query.ownerUid && asset.owner_uid !== query.ownerUid) return false
+		if (query.requiresCompliance && asset.compliance_status !== "PASS") return false
+		if (!query.keyword) return true
+		const keyword = query.keyword.toLocaleLowerCase()
+		return [asset.name, asset.description, ...(asset.tags ?? []).map((tag) => tag.name)].some(
+			(value) => typeof value === "string" && value.toLocaleLowerCase().includes(keyword),
+		)
 	}
 
 	/** Clear all in-memory data, used on logout and organization/account changes. */
@@ -248,6 +373,7 @@ export class AssetLibrarySessionStore {
 		this.ownersCache.clear()
 		this.agreementCache = { signed: null, pending: null }
 		this.mediaDimensions.clear()
+		assetDetailStore.clearAll()
 		this.notify()
 	}
 
@@ -267,7 +393,12 @@ export class AssetLibrarySessionStore {
 		const existing = this.assetQueryCache.get(queryKey)
 
 		if (existing?.pending) return existing.pending
-		if (!forceRefresh && existing?.snapshot.updatedAt !== null && existing) {
+		if (
+			!forceRefresh &&
+			existing?.snapshot.updatedAt !== null &&
+			existing &&
+			!existing.snapshot.stale
+		) {
 			return Promise.resolve(existing.snapshot.assets)
 		}
 
@@ -280,12 +411,15 @@ export class AssetLibrarySessionStore {
 		}
 		const requestGeneration = entry.requestGeneration + 1
 		entry.requestGeneration = requestGeneration
+		const requestRevision = entry.snapshot.revision
 		entry.snapshot = {
 			assets: entry.snapshot.assets,
 			loading: entry.snapshot.updatedAt === null,
 			refreshing: entry.snapshot.updatedAt !== null,
 			error: null,
 			updatedAt: entry.snapshot.updatedAt,
+			stale: entry.snapshot.stale,
+			revision: entry.snapshot.revision,
 		}
 		this.assetQueryCache.set(queryKey, entry)
 		this.notify()
@@ -295,12 +429,23 @@ export class AssetLibrarySessionStore {
 		pending.then(
 			(assets) => {
 				if (!this.isCurrentAssetRequest(queryKey, entry, requestGeneration)) return
+				// If a mutation landed while the request was in flight, this response
+				// may already be stale.  Keep it visible, but let the active hook issue
+				// one more coalesced refresh after the request settles.
+				const invalidatedDuringRequest = entry.snapshot.revision > requestRevision
+				if (!invalidatedDuringRequest) {
+					assets.forEach((asset) => assetDetailStore.seedFromList(asset, entry.scope))
+				}
 				entry.snapshot = {
 					assets,
 					loading: false,
 					refreshing: false,
 					error: null,
 					updatedAt: Date.now(),
+					stale: invalidatedDuringRequest,
+					revision: invalidatedDuringRequest
+						? entry.snapshot.revision + 1
+						: entry.snapshot.revision,
 				}
 				entry.pending = null
 				this.notify()
@@ -313,6 +458,10 @@ export class AssetLibrarySessionStore {
 					refreshing: false,
 					error: error,
 					updatedAt: entry.snapshot.updatedAt,
+					// A failed automatic refresh should not spin forever.  The old list
+					// remains usable and the error gives the user an explicit retry path.
+					stale: false,
+					revision: entry.snapshot.revision,
 				}
 				entry.pending = null
 				this.notify()
@@ -337,13 +486,14 @@ export class AssetLibrarySessionStore {
 			),
 		)
 		const seenAssetIds = new Set<string>()
-		return responses.flatMap((response) =>
+		const assets = responses.flatMap((response) =>
 			response.list.filter((asset) => {
 				if (seenAssetIds.has(asset.asset_id)) return false
 				seenAssetIds.add(asset.asset_id)
 				return true
 			}),
 		)
+		return assets
 	}
 
 	private loadOwners(scope: string, forceRefresh: boolean): Promise<AssetOwnerItem[]> {
@@ -395,6 +545,46 @@ export class AssetLibrarySessionStore {
 		this.ownersCache.clear()
 		this.agreementCache = { signed: null, pending: null }
 		this.mediaDimensions.clear()
+		assetDetailStore.clearAll()
+	}
+
+	private createMutationChannel(): BroadcastChannel | null {
+		if (typeof window === "undefined" || typeof BroadcastChannel === "undefined") return null
+		try {
+			return new BroadcastChannel("magic-asset-library-mutations")
+		} catch {
+			return null
+		}
+	}
+
+	private readonly handleMutationMessage = (event: MessageEvent<unknown>): void => {
+		if (!event.data || typeof event.data !== "object") return
+		const message = event.data as { source?: string; scope?: string }
+		if (
+			!message.scope ||
+			message.source === this.mutationSource ||
+			message.scope !== getSharedMediaResourceScope()
+		)
+			return
+		assetDetailStore.invalidate(undefined, message.scope)
+		this.markScopeStale(message.scope)
+	}
+
+	private readonly handleExternalRefresh = (): void => {
+		if (typeof document !== "undefined" && document.visibilityState === "hidden") return
+		const now = Date.now()
+		if (now - this.lastExternalRefreshAt < EXTERNAL_REFRESH_COOLDOWN_MS) return
+		this.lastExternalRefreshAt = now
+		this.markScopeStale(getSharedMediaResourceScope())
+	}
+
+	private scheduleMutationBroadcast(scope: string): void {
+		if (!this.mutationChannel || this.pendingMutationBroadcasts.has(scope)) return
+		this.pendingMutationBroadcasts.add(scope)
+		queueMicrotask(() => {
+			this.pendingMutationBroadcasts.delete(scope)
+			this.mutationChannel?.postMessage({ source: this.mutationSource, scope })
+		})
 	}
 
 	private notify(): void {

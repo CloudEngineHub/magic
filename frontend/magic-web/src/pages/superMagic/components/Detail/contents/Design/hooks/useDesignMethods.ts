@@ -12,6 +12,7 @@ import type {
 	CanvasOpenSaveLocalAssetDialogParams,
 	CanvasSaveAssetToLibraryParams,
 	CanvasSaveLocalAssetToLibraryParams,
+	CanvasStartExistingAssetComplianceParams,
 	CanvasStartWorkspaceMediaComplianceParams,
 	EraserRequest,
 	GenerateExtendedImageRequest,
@@ -48,6 +49,7 @@ import {
 } from "./useHighImageGeneration"
 import { useDesignFileDropPaths } from "./useDesignFileDropPaths"
 import { resolveDesignImagesFileDirWithSlash } from "./resolveDesignImagesFileDirWithSlash"
+import { buildAssetComplianceParamsFromAssetItem } from "@/components/CanvasDesign/runtime/resources/asset/buildCreateAssetParamsFromAssetItem"
 import { resolveDesignProjectBasePathFromAttachments } from "../utils/utils"
 import {
 	buildReferenceImageOptions,
@@ -68,6 +70,7 @@ import {
 	resolveDesignResourceReference,
 } from "../utils/designResourceReferenceResolver"
 import { assetLibrarySessionStore } from "@/components/CanvasDesign/runtime/resources/asset/AssetLibrarySessionStore"
+import { assetDetailStore } from "@/components/CanvasDesign/runtime/resources/asset/AssetDetailStore"
 import { resolveUploadAssetMediaType } from "@/components/CanvasDesign/ui/toolbar/asset-library/assetLibraryMedia"
 
 interface UseDesignMethodsOptions {
@@ -127,6 +130,7 @@ function toCanvasAssetResourceInfo(asset: AssetItem): CanvasAssetResourceInfo {
 		assetId: asset.asset_id,
 		mediaType: toCanvasAssetMediaType(asset.asset_media_type),
 		fileUrl: asset.file_url,
+		...(asset.expires_at ? { expiresAt: asset.expires_at } : {}),
 		fileName: asset.name || undefined,
 		complianceStatus: normalizeAssetComplianceStatus(asset.compliance_status),
 		complianceFailedReason: asset.compliance_failed_reason,
@@ -202,13 +206,13 @@ export function useDesignMethods(options: UseDesignMethodsOptions): CanvasDesign
 		})
 
 	const getAssetResourceInfo: NonNullable<CanvasDesignMethods["getAssetResourceInfo"]> =
-		useCallback(async (assetId: string): Promise<CanvasAssetResourceInfo> => {
-			const asset = await AssetsApi.getAsset(assetId)
+		useCallback(async (assetId, options): Promise<CanvasAssetResourceInfo> => {
+			const asset = await assetDetailStore.get(assetId, options)
 			return toCanvasAssetResourceInfo(asset)
 		}, [])
 
 	const getAssetResourceInfos: NonNullable<CanvasDesignMethods["getAssetResourceInfos"]> =
-		useCallback(async (assetIds: string[]): Promise<CanvasAssetResourceInfo[]> => {
+		useCallback(async (assetIds, options): Promise<CanvasAssetResourceInfo[]> => {
 			const normalizedAssetIds = Array.from(
 				new Set(assetIds.map((assetId) => assetId.trim()).filter(Boolean)),
 			)
@@ -219,10 +223,10 @@ export function useDesignMethods(options: UseDesignMethodsOptions): CanvasDesign
 				chunks.push(normalizedAssetIds.slice(index, index + ASSET_BATCH_GET_SIZE))
 			}
 
-			const responses = await Promise.all(
-				chunks.map((chunk) => AssetsApi.batchGetAssets({ asset_ids: chunk })),
+			const assets = await Promise.all(
+				chunks.map((chunk) => assetDetailStore.batchGet(chunk, options)),
 			)
-			return responses.flat().map(toCanvasAssetResourceInfo)
+			return assets.flat().map(toCanvasAssetResourceInfo)
 		}, [])
 
 	const getAssetComplianceStatus: NonNullable<CanvasDesignMethods["getAssetComplianceStatus"]> =
@@ -403,7 +407,7 @@ export function useDesignMethods(options: UseDesignMethodsOptions): CanvasDesign
 						: undefined,
 				tag_ids: params.tagIds,
 			})
-			assetLibrarySessionStore.invalidateCurrentScope()
+			assetLibrarySessionStore.upsertAsset(asset)
 
 			return toCanvasAssetResourceInfo(asset)
 		},
@@ -436,16 +440,41 @@ export function useDesignMethods(options: UseDesignMethodsOptions): CanvasDesign
 				throw new Error(t("assetLibrarySave.sourceUnavailable"))
 			}
 
-			const asset = await AssetsApi.createAsset({
+			const asset = await AssetsApi.startAssetCompliance({
 				asset_kind: "ASSET",
 				name,
 				project_id: projectId,
 				project_file_path: resolution.workspacePath,
 			})
-			assetLibrarySessionStore.invalidateCurrentScope()
+			assetLibrarySessionStore.upsertAsset(asset)
 			return toCanvasAssetResourceInfo(asset)
 		},
 		[projectId, resolveResourceReference, t],
+	)
+
+	const startExistingAssetCompliance: NonNullable<
+		CanvasDesignMethods["startExistingAssetCompliance"]
+	> = useCallback(
+		async (
+			params: CanvasStartExistingAssetComplianceParams,
+		): Promise<CanvasAssetResourceInfo> => {
+			const assetId = params.assetId.trim()
+			if (!assetId) {
+				throw new Error(t("assetLibrarySave.sourceUnavailable"))
+			}
+
+			const sourceAsset = params.fileKey?.trim()
+				? { name: params.name?.trim() || assetId, file_key: params.fileKey }
+				: await assetDetailStore.get(assetId)
+			const complianceParams = buildAssetComplianceParamsFromAssetItem(sourceAsset)
+			if (!complianceParams) {
+				throw new Error(t("assetLibrarySave.sourceUnavailable"))
+			}
+
+			const asset = await AssetsApi.startAssetCompliance(complianceParams)
+			return toCanvasAssetResourceInfo(asset)
+		},
+		[t],
 	)
 
 	const saveLocalAssetToLibrary: NonNullable<CanvasDesignMethods["saveLocalAssetToLibrary"]> =
@@ -500,7 +529,7 @@ export function useDesignMethods(options: UseDesignMethodsOptions): CanvasDesign
 						: undefined
 				const asset =
 					params.mode === "verify"
-						? await AssetsApi.createAsset({
+						? await AssetsApi.startAssetCompliance({
 								asset_kind: "ASSET",
 								name: params.name,
 								description: params.description,
@@ -517,7 +546,7 @@ export function useDesignMethods(options: UseDesignMethodsOptions): CanvasDesign
 								visibility,
 								tag_ids: params.tagIds,
 							})
-				assetLibrarySessionStore.invalidateCurrentScope()
+				assetLibrarySessionStore.upsertAsset(asset)
 				return toCanvasAssetResourceInfo(asset)
 			},
 			[projectId, resolveResourceReference, t, uploadFiles],
@@ -978,6 +1007,7 @@ export function useDesignMethods(options: UseDesignMethodsOptions): CanvasDesign
 			ensureAssetAgreementSigned,
 			saveAssetToLibrary,
 			startWorkspaceMediaCompliance,
+			startExistingAssetCompliance,
 			resolveResourceReference: resourceReferenceResolverSnapshot.resolve,
 			resourceReferenceResolverSnapshot,
 			resourceReferenceResolverVersion: resourceReferenceResolverSnapshot.revision,
@@ -1043,6 +1073,7 @@ export function useDesignMethods(options: UseDesignMethodsOptions): CanvasDesign
 		ensureAssetAgreementSigned,
 		saveAssetToLibrary,
 		startWorkspaceMediaCompliance,
+		startExistingAssetCompliance,
 		designProjectId,
 		resourceReferenceResolverSnapshot,
 		getVirtualResourceScope,

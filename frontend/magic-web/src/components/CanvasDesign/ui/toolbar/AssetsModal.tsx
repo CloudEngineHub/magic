@@ -21,10 +21,10 @@ import { useUserInfo } from "@/models/user/hooks"
 import { cn } from "@/utils/cn"
 import { LoaderCircle, RefreshCw, Search } from "lucide-react"
 import { toast } from "sonner"
-import { useCallback, useEffect, useMemo, useRef, useState } from "react"
+import { useCallback, useEffect, useMemo, useState } from "react"
 import { useOptionalCanvas } from "../../app/providers/CanvasProvider"
 import { useCanvasDesignI18n } from "../../app/providers/I18nProvider"
-import type { CanvasAssetResourceInfo } from "../../public/magic-types"
+import type { CanvasAssetComplianceState, CanvasAssetResourceInfo } from "../../public/magic-types"
 import {
 	assetLibrarySessionStore,
 	type AssetLibraryQuery,
@@ -36,6 +36,7 @@ import MediaResourceFullscreenPreview, {
 	type MediaResourceFullscreenPreviewItem,
 } from "../fullscreen/media-resource/index"
 import { AssetLibraryAssetCard } from "./asset-library/AssetLibraryAssetCard"
+import { useAssetLibraryComplianceAction } from "./asset-library/useAssetLibraryComplianceAction"
 import { AssetLibraryTransferOwnerDialog } from "./asset-library/AssetLibraryTransferOwnerDialog"
 import { AssetLibraryUploadCard } from "./asset-library/AssetLibraryUploadCard"
 import {
@@ -122,7 +123,8 @@ export default function AssetsModal({
 	const [confirmError, setConfirmError] = useState(false)
 	const [previewResource, setPreviewResource] =
 		useState<MediaResourceFullscreenPreviewItem | null>(null)
-	const pendingListRefreshRef = useRef(false)
+	const [optimisticProcessingIds, setOptimisticProcessingIds] = useState(() => new Set<string>())
+	const [pendingComplianceIds, setPendingComplianceIds] = useState(() => new Set<string>())
 	const complianceTaskManager = useMemo(() => resolveAssetComplianceTaskManager(canvas), [canvas])
 	const selectionLimit =
 		maxCount === undefined
@@ -152,14 +154,64 @@ export default function AssetsModal({
 		open,
 	)
 
+	const displayAssets = useMemo(() => {
+		if (optimisticProcessingIds.size === 0) return assets
+		return assets.map((asset) =>
+			optimisticProcessingIds.has(asset.asset_id)
+				? {
+						...asset,
+						compliance_status: "PROCESSING" as AssetComplianceStatus,
+						compliance_failed_reason: null,
+					}
+				: asset,
+		)
+	}, [assets, optimisticProcessingIds])
+
 	const selectedAssets = useMemo(
-		() => assets.filter((asset) => selectedAssetIds.includes(asset.asset_id)),
-		[assets, selectedAssetIds],
+		() => displayAssets.filter((asset) => selectedAssetIds.includes(asset.asset_id)),
+		[displayAssets, selectedAssetIds],
+	)
+
+	const refreshLibraryAfterCompliance = useCallback((assetId: string) => {
+		setOptimisticProcessingIds((current) => {
+			if (!current.has(assetId)) return current
+			const next = new Set(current)
+			next.delete(assetId)
+			return next
+		})
+		assetLibrarySessionStore.invalidateCurrentScope()
+	}, [])
+
+	const { startCompliance } = useAssetLibraryComplianceAction({
+		onComplianceStarted: (assetId) => {
+			setOptimisticProcessingIds((current) => new Set(current).add(assetId))
+		},
+		onComplianceSettled: (assetId) => {
+			refreshLibraryAfterCompliance(assetId)
+		},
+	})
+
+	const handleComplianceCheck = useCallback(
+		(asset: AssetItem) => {
+			const assetId = asset.asset_id
+			setPendingComplianceIds((current) => new Set(current).add(assetId))
+			void startCompliance(asset).finally(() => {
+				setPendingComplianceIds((current) => {
+					if (!current.has(assetId)) return current
+					const next = new Set(current)
+					next.delete(assetId)
+					return next
+				})
+			})
+		},
+		[startCompliance],
 	)
 
 	useEffect(() => {
 		if (!open) {
 			setPreviewResource(null)
+			setOptimisticProcessingIds(new Set())
+			setPendingComplianceIds(new Set())
 			return
 		}
 		setSelectedAssetIds([])
@@ -167,24 +219,28 @@ export default function AssetsModal({
 		setPreviewResource(null)
 	}, [open])
 
-	useEffect(() => {
-		if (!pendingListRefreshRef.current) return
-		pendingListRefreshRef.current = false
-		void refreshAssets().catch(() => undefined)
-	}, [assetQuery, refreshAssets])
-
-	const handleComplianceSettled = useCallback(() => {
-		assetLibrarySessionStore.invalidateCurrentScope()
-		void refreshAssets().catch(() => undefined)
-	}, [refreshAssets])
-
-	const processingAssetIds = useMemo(
-		() =>
-			assets
-				.filter((asset) => asset.compliance_status === "PROCESSING")
-				.map((asset) => asset.asset_id),
-		[assets],
+	const handleComplianceSettled = useCallback(
+		(state?: CanvasAssetComplianceState) => {
+			const assetId = state?.assetId?.trim()
+			if (assetId && canvas && !canvas.isDestroyed) {
+				void canvas.assetResourceManager
+					.refreshResources([assetId], { forceRefresh: true })
+					.catch(() => undefined)
+			}
+			assetLibrarySessionStore.invalidateCurrentScope()
+		},
+		[canvas],
 	)
+
+	const processingAssetIds = useMemo(() => {
+		const ids = assets
+			.filter((asset) => asset.compliance_status === "PROCESSING")
+			.map((asset) => asset.asset_id)
+		for (const assetId of optimisticProcessingIds) {
+			if (!ids.includes(assetId)) ids.push(assetId)
+		}
+		return ids
+	}, [assets, optimisticProcessingIds])
 	const processingAssetIdsKey = processingAssetIds.join("|")
 
 	useEffect(() => {
@@ -240,10 +296,7 @@ export default function AssetsModal({
 			mediaFilter !== "ALL" &&
 			mediaFilter !== uploadedMediaType
 		if (shouldSwitchFilter) {
-			pendingListRefreshRef.current = true
 			setMediaFilter(uploadedMediaType)
-		} else {
-			void refreshAssets().catch(() => undefined)
 		}
 		if (mode === "verify" && asset.asset_id) {
 			complianceTaskManager.watchLibraryComplianceChecks(
@@ -253,9 +306,9 @@ export default function AssetsModal({
 		}
 	}
 
-	const refreshLibrary = () => {
-		assetLibrarySessionStore.invalidateCurrentScope()
-		void refreshAssets().catch(() => undefined)
+	const refreshLibrary = (assetId?: string) => {
+		if (assetId) assetLibrarySessionStore.invalidateAsset(assetId)
+		else assetLibrarySessionStore.invalidateCurrentScope()
 		void assetLibrarySessionStore.refreshOwners().catch(() => undefined)
 	}
 
@@ -283,7 +336,7 @@ export default function AssetsModal({
 				visibility: asset.source === "TEAM" ? "team" : "private",
 				tagIds: asset.tags.map((tag) => tag.id),
 			},
-			onUpdated: refreshLibrary,
+			onUpdated: () => refreshLibrary(asset.asset_id),
 			onClosed: () => setHostDialogOpen(false),
 		})
 	}
@@ -294,8 +347,9 @@ export default function AssetsModal({
 			if (canvas) {
 				reconcileDeletedAssetOnCanvas(canvas, asset.asset_id)
 			}
+			assetLibrarySessionStore.removeAsset(asset.asset_id)
 			setSelectedAssetIds((currentIds) => currentIds.filter((id) => id !== asset.asset_id))
-			refreshLibrary()
+			void assetLibrarySessionStore.refreshOwners().catch(() => undefined)
 			toast.success(t("assets.deleteSuccess", "素材已删除"))
 		} catch (error) {
 			toast.error(
@@ -594,7 +648,7 @@ export default function AssetsModal({
 											{t("common.retry", "重试")}
 										</Button>
 									</div>
-								) : assets.length === 0 && !canUpload ? (
+								) : displayAssets.length === 0 && !canUpload ? (
 									<div className="flex h-full min-h-[300px] items-center justify-center text-sm text-muted-foreground">
 										<span>{t("assets.empty", "暂无素材")}</span>
 									</div>
@@ -612,7 +666,7 @@ export default function AssetsModal({
 												onFileSelected={handleLocalFileSelected}
 											/>
 										) : null}
-										{assets.map((asset) => {
+										{displayAssets.map((asset) => {
 											const selected = selectedAssetIds.includes(
 												asset.asset_id,
 											)
@@ -630,6 +684,10 @@ export default function AssetsModal({
 														currentUserId &&
 														asset.owner_uid === currentUserId,
 													)}
+													complianceActionPending={pendingComplianceIds.has(
+														asset.asset_id,
+													)}
+													onComplianceCheck={handleComplianceCheck}
 													onMenuOpenChange={setCardMenuOpen}
 													onEdit={handleEditAsset}
 													onTransferOwner={setTransferAsset}
@@ -687,7 +745,7 @@ export default function AssetsModal({
 				asset={transferAsset}
 				t={t}
 				onClose={() => setTransferAsset(null)}
-				onTransferred={refreshLibrary}
+				onTransferred={(assetId) => refreshLibrary(assetId)}
 			/>
 			{previewResource ? (
 				<MediaResourceFullscreenPreview
