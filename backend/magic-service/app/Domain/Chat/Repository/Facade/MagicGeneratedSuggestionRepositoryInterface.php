@@ -18,6 +18,7 @@ interface MagicGeneratedSuggestionRepositoryInterface
      * 按唯一键写入追加问题状态。已有终态不被后到的上报覆盖。
      *
      * @param string[] $suggestions
+     * @param array<string, string> $params 来源信息，不含对话内容和凭证
      */
     public function saveReport(
         int $type,
@@ -25,5 +26,6 @@ interface MagicGeneratedSuggestionRepositoryInterface
         GeneratedSuggestionStatus $status,
         array $suggestions,
         ?string $createdUid,
+        array $params,
     ): MagicGeneratedSuggestionEntity;
 }

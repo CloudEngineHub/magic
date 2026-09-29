@@ -40,6 +40,7 @@ class MagicGeneratedSuggestionDomainService
      * 保存沙箱上报的追加问题状态。
      *
      * @param string[] $suggestions
+     * @param array<string, string> $params
      */
     public function saveReport(
         int $type,
@@ -47,6 +48,7 @@ class MagicGeneratedSuggestionDomainService
         GeneratedSuggestionStatus $status,
         array $suggestions,
         ?string $createdUid,
+        array $params,
     ): MagicGeneratedSuggestionEntity {
         return $this->generatedSuggestionRepository->saveReport(
             $type,
@@ -54,6 +56,7 @@ class MagicGeneratedSuggestionDomainService
             $status,
             $suggestions,
             $createdUid,
+            $params,
         );
     }
 }

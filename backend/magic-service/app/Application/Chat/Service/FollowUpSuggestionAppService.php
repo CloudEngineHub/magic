@@ -82,6 +82,7 @@ class FollowUpSuggestionAppService extends AbstractAppService
                 $report->status,
                 $report->suggestions,
                 $task->getUserId(),
+                $this->buildReportParams($report->taskId, $task->getTopicId()),
             );
         } catch (Throwable $throwable) {
             $this->logger->warning('保存追加问题上报失败', [
@@ -96,6 +97,21 @@ class FollowUpSuggestionAppService extends AbstractAppService
             'relation_id' => $entity->getRelationId(),
             'status' => $entity->getStatus()?->value,
             'suggestions' => $entity->getSuggestions(),
+        ];
+    }
+
+    /**
+     * 只记录来源。对话内容和凭证不进入 params。
+     *
+     * @return array<string, string>
+     */
+    private function buildReportParams(string $taskId, int $topicId): array
+    {
+        return [
+            'source' => 'super_magic',
+            'generator' => 'follow_up_suggestion',
+            'task_id' => $taskId,
+            'topic_id' => (string) $topicId,
         ];
     }
 
