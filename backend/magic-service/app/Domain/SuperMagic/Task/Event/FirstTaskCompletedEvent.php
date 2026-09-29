@@ -20,7 +20,9 @@ class FirstTaskCompletedEvent extends AbstractEvent
         private readonly string $userId,
         private readonly string $organizationCode,
         private readonly int $taskId,
-        private readonly string $completedAt
+        private readonly string $completedAt,
+        private readonly string $taskType = '',
+        private readonly int $durationSeconds = 0
     ) {
         parent::__construct();
     }
@@ -45,6 +47,16 @@ class FirstTaskCompletedEvent extends AbstractEvent
         return $this->completedAt;
     }
 
+    public function getTaskType(): string
+    {
+        return $this->taskType;
+    }
+
+    public function getDurationSeconds(): int
+    {
+        return $this->durationSeconds;
+    }
+
     /**
      * Convert the event object to array format.
      */
@@ -55,6 +67,8 @@ class FirstTaskCompletedEvent extends AbstractEvent
             'organizationCode' => $this->organizationCode,
             'taskId' => $this->taskId,
             'completedAt' => $this->completedAt,
+            'taskType' => $this->taskType,
+            'durationSeconds' => $this->durationSeconds,
         ];
     }
 }

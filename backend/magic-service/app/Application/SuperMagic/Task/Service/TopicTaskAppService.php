@@ -411,13 +411,15 @@ class TopicTaskAppService extends AbstractAppService
 
             $this->projectDomainService->updateProjectStatus($task->getProjectId(), $task->getTopicId(), $status);
 
-            // 首次成功完成任务：派发事件供 OpenPanel 属性同步（是否首次由属性首次写入幂等保证）
+            // 首次成功完成任务：派发事件供 OpenPanel 属性与事件同步（是否首次由幂等写入保证）
             if ($status === TaskStatus::FINISHED) {
                 AsyncEventUtil::dispatch(new FirstTaskCompletedEvent(
                     $dataIsolation->getCurrentUserId(),
                     $dataIsolation->getCurrentOrganizationCode(),
                     (int) $task->getId(),
-                    date('Y-m-d H:i:s')
+                    date('Y-m-d H:i:s'),
+                    (string) $task->getTaskMode(),
+                    $this->resolveTaskDurationSeconds($task)
                 ));
             }
 
@@ -439,6 +441,24 @@ class TopicTaskAppService extends AbstractAppService
             ]);
             throw $e;
         }
+    }
+
+    /**
+     * 计算任务从开始到成功完成的耗时（秒）.
+     */
+    private function resolveTaskDurationSeconds(TaskEntity $task): int
+    {
+        $startedAt = $task->getStartedAt();
+        if (empty($startedAt)) {
+            return 0;
+        }
+
+        $startedTimestamp = strtotime($startedAt);
+        if ($startedTimestamp === false) {
+            return 0;
+        }
+
+        return max(0, time() - $startedTimestamp);
     }
 
     /**
