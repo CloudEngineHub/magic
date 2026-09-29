@@ -357,7 +357,9 @@ class AssetDomainService
         );
         if ($mapping !== null) {
             $providerAsset = new ProviderAssetEntity($mapping->toArray());
-            if ($providerAsset->getProviderStatus()->isPassed() || $providerAsset->getProviderStatus() === ProviderAssetStatus::FAILED) {
+            // PASS 可以直接复用；FAILED 仍需继续走全局 SHA-256 查找，避免当前记录的失败状态
+            // 遮蔽其他用户或组织已经通过审核的同内容 Provider 素材。
+            if ($providerAsset->getProviderStatus()->isPassed()) {
                 return $providerAsset;
             }
         }
@@ -368,10 +370,10 @@ class AssetDomainService
     /**
      * 在启动异步同步前建立可轮询的初始映射。
      *
-     * 合规接口以 Provider 映射为唯一状态来源；先写入 UNVERIFIED，避免创建接口返回后
-     * 协程尚未开始时被误判为 UNVERIFIED。
+     * 普通创建接口明确表示“正在处理”，因此协程尚未开始时也必须返回 PROCESSING；
+     * UNVERIFIED 仅用于保存到素材库、尚未发起第三方校验的素材。
      */
-    public function ensureProviderAssetPending(
+    public function ensureProviderAssetProcessing(
         AssetDataIsolation $dataIsolation,
         int|string $assetId,
     ): ProviderAssetEntity {
@@ -382,7 +384,7 @@ class AssetDomainService
         )) {
             ExceptionBuilder::throw(AssetErrorCode::NOT_FOUND);
         }
-        return $this->markProviderStatus($dataIsolation, $asset, ProviderAssetStatus::UNVERIFIED);
+        return $this->markProviderStatus($dataIsolation, $asset, ProviderAssetStatus::PROCESSING);
     }
 
     /**

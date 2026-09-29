@@ -72,8 +72,42 @@ class AssetAppService extends AbstractAssetAppService
         $asset = $this->createAssetEntity($requestDTO, false, $dataIsolation->getCurrentOrganizationCode());
         // 素材只落在私有桶：创建前解析出 file_url 供第三方拉取；落库后的实体不含该字段，回填给响应。
         $this->resolveAssetFileUrls([$asset]);
-        // 记录内容指纹：既用于复用已同步的第三方素材，也用于「同一份内容不重复落库」的判重。
+        // 记录内容指纹：用于跨组织复用已经通过审核的第三方素材。
         $asset->setContentHash($contentHash ?? $this->resolveContentHash($asset));
+
+        // 仅在当前用户、当前组织内复用本地记录，避免刷新同一个 file_key 时重复创建副本。
+        // 跨组织、跨用户的审核结果复用由 AssetDomainService::syncToProvider() 按 SHA-256 完成，
+        // 不能直接返回其他主体的 AssetEntity，避免越权暴露素材记录。
+        if ($asset->getContentHash() !== null && $asset->getContentHash() !== '') {
+            $existing = $this->assetDomainService->findPersonalAssetByContentHash(
+                $dataIsolation->getCurrentUserId(),
+                $asset->getContentHash(),
+                true,
+            );
+            if ($existing !== null
+                && $existing->getOrganizationCode() === $dataIsolation->getCurrentOrganizationCode()
+                && trim((string) $existing->getFileKey()) !== '') {
+                $this->resolveAssetFileUrls([$existing]);
+                $providerAsset = $this->assetDomainService->findProviderAssets(
+                    $dataIsolation,
+                    [(int) $existing->getId()],
+                )[(string) $existing->getId()] ?? null;
+                if ($providerAsset === null || ! $providerAsset->getProviderStatus()->isPassed()) {
+                    $existingFileUrl = $existing->getFileUrl();
+                    if ($synchronous) {
+                        $this->assetDomainService->syncPersonalAsset(
+                            $dataIsolation,
+                            $existing->getId(),
+                            $existingFileUrl,
+                            $this->shouldSkipProviderReview($dataIsolation, $existing, $existingFileUrl),
+                        );
+                    } else {
+                        $this->dispatchPersonalAssetSync($dataIsolation, $existing, $existingFileUrl);
+                    }
+                }
+                return $existing;
+            }
+        }
 
         $fileUrl = $asset->getFileUrl();
         $asset = $this->assetDomainService->createPersonal($dataIsolation, $asset);
@@ -389,7 +423,7 @@ class AssetAppService extends AbstractAssetAppService
 
         $assetId = $asset->getId();
         // 先落 Provider 初始状态，再启动协程，保证前端立即轮询时至少得到 PROCESSING。
-        $this->assetDomainService->ensureProviderAssetPending($dataIsolation, $assetId);
+        $this->assetDomainService->ensureProviderAssetProcessing($dataIsolation, $assetId);
         $coroutineId = Coroutine::id();
         Coroutine::create(function () use ($dataIsolation, $assetId, $fileUrl, $coroutineId): void {
             CoContext::copy($coroutineId);
