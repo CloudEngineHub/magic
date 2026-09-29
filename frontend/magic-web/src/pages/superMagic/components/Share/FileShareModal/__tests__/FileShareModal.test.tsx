@@ -13,6 +13,7 @@ const mocks = vi.hoisted(() => ({
 	writeText: vi.fn(),
 	successToast: vi.fn(),
 	errorToast: vi.fn(),
+	flushFileSaves: vi.fn(),
 	functionPermissions: {} as Record<string, boolean>,
 	isMobile: false,
 }))
@@ -241,6 +242,10 @@ vi.mock("../../utils/generateShareMessageText", () => ({
 	generateShareMessageText: () => "share-message",
 }))
 
+vi.mock("@/pages/superMagic/components/Detail/services/fileSaveQueue", () => ({
+	flushFileSaves: mocks.flushFileSaves,
+}))
+
 describe("FileShareModal", () => {
 	beforeEach(() => {
 		vi.clearAllMocks()
@@ -253,6 +258,7 @@ describe("FileShareModal", () => {
 		mocks.getSnowflakeIds.mockResolvedValue({ ids: ["share-1"] })
 		mocks.createOrUpdateShareResource.mockResolvedValue({ file_ids: [] })
 		mocks.batchGetFileDetails.mockResolvedValue({ files: [] })
+		mocks.flushFileSaves.mockResolvedValue(true)
 	})
 
 	it("创建录音文件分享时会补齐必需文件 ids", async () => {

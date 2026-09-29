@@ -12,6 +12,11 @@ import pubsub, { PubSubEvents } from "@/utils/pubsub"
 import { SuperMagicApi } from "@/apis"
 import { isNil } from "lodash-es"
 import { superMagicStore } from "@/pages/superMagic/stores"
+import {
+	flushFileSaves,
+	getFileSaveQueue,
+	peekUnsyncedDraft,
+} from "@/pages/superMagic/components/Detail/services/fileSaveQueue"
 
 interface FileUrlCache {
 	url: string
@@ -131,6 +136,14 @@ export const useFileData = ({
 		setLoadError(error)
 		setLoading(false)
 	})
+	const applyLoadedFileData = useMemoizedFn((data: unknown) => {
+		if (isShareFilePreview) {
+			setFileData(data)
+			return
+		}
+		const draft = peekUnsyncedDraft(file_id)
+		setFileData(draft === undefined ? data : draft)
+	})
 
 	/** 智能更新文件 URL - 只有当更新时间或版本变化时才更新 */
 	const updateFileUrlIfNeeded = useMemoizedFn(
@@ -211,7 +224,7 @@ export const useFileData = ({
 									}
 									finishLoad()
 									if (fileData === data) return
-									setFileData(data)
+									applyLoadedFileData(data)
 									setLoading(false)
 								},
 							)
@@ -289,6 +302,7 @@ export const useFileData = ({
 	const handleVersionRollback = useMemoizedFn(async (file_version?: number) => {
 		try {
 			if (!enabled || !file_id || !file_version) return
+			if (!(await flushFileSaves([file_id]))) return
 
 			const loading = magicToast.loading(t("common.rollbacking"))
 
@@ -430,7 +444,7 @@ export const useFileData = ({
 										version: undefined,
 									}
 									finishLoad()
-									setFileData(data)
+									applyLoadedFileData(data)
 								},
 							)
 						}
@@ -486,6 +500,14 @@ export const useFileData = ({
 			pubsub.unsubscribe(PubSubEvents.Change_Preview_File)
 		}
 	}, [enabled])
+
+	useEffect(() => {
+		if (!enabled || !file_id || isShareFilePreview) return
+		const queue = getFileSaveQueue()
+		return queue.registerDraftApplyHandler(file_id, (content) => {
+			setFileData(content)
+		})
+	}, [enabled, file_id, isShareFilePreview])
 
 	// 由于后端的文件版本生成机制，是在每一轮 Topic 执行结束时生成，
 	// 因此这里监听 Topic 级终态事件，而不是单条 Assistant Final。
