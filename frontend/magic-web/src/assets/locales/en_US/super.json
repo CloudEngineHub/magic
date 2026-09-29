@@ -1366,6 +1366,15 @@
 		},
 		"fileFormatNotSupported": "File format not supported for preview",
 		"fileNotSupported": "File preview not supported, please download the file",
+		"fileSave": {
+			"conflict": "The remote file changed. Your local edits are not synced.",
+			"failed": "Save did not reach the server. Local content was kept.",
+			"overwrite": "Overwrite remote",
+			"restoreRemote": "Restore remote",
+			"retry": "Retry",
+			"syncing": "Syncing",
+			"unsynced": "Unsynced"
+		},
 		"goToFirstPage": "Go to first page",
 		"joinEditFailed": "Failed to join editing",
 		"pleaseDownloadToView": "Please download the file to view content",

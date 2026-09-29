@@ -9,8 +9,11 @@ import { useIsMobile } from "@/hooks/useIsMobile"
 import { runGuardedAction } from "../../utils/actionGuard"
 import type { BeforeAction } from "../../utils/actionGuard"
 import { cn } from "@/utils/cn"
+import { FileSaveSyncBadge } from "../FileSaveSyncBadge"
 
 interface FileEditButtonsProps {
+	/** Unique file id used for the unsynced save badge. */
+	fileId?: string
 	/** Stable test id scope for the edit actions rendered by this component. */
 	testIdPrefix?: string
 	/** 是否禁用当前工具栏交互（例如 PPT 冷切页等待目标页 ready 时） */
@@ -39,6 +42,7 @@ interface FileEditButtonsProps {
 
 function FileEditButtons({
 	testIdPrefix,
+	fileId,
 	interactionDisabled = false,
 	isEditMode = false,
 	isSaving = false,
@@ -154,6 +158,7 @@ function FileEditButtons({
 				</ConditionalTooltip>
 			) : (
 				<>
+					<FileSaveSyncBadge fileId={fileId} />
 					<ConditionalTooltip
 						showText={showButtonText}
 						title={showSaving ? t("fileViewer.saving") : t("fileViewer.save")}

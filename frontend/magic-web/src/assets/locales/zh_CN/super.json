@@ -1367,6 +1367,15 @@
 		},
 		"fileFormatNotSupported": "文件格式暂不支持预览",
 		"fileNotSupported": "暂不支持预览该文件,请下载该文件",
+		"fileSave": {
+			"conflict": "远程文件已更新，本地修改尚未同步",
+			"failed": "保存未同步到服务器，本地内容已保留",
+			"overwrite": "覆盖远程",
+			"restoreRemote": "恢复远程版本",
+			"retry": "重试",
+			"syncing": "正在同步",
+			"unsynced": "未同步"
+		},
 		"goToFirstPage": "回到第一页",
 		"joinEditFailed": "加入编辑失败",
 		"pleaseDownloadToView": "请下载文件后查看内容",
