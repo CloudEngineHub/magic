@@ -1,7 +1,6 @@
 """监听主任务轮次，在满足条件时提交一次追加问题生成。"""
 
 import asyncio
-import copy
 from typing import Any, Optional, Set
 
 from agentlang.agent.state import AgentState
@@ -13,6 +12,7 @@ from agentlang.logger import get_logger
 from app.core.ai_abilities import AIAbility, get_ability_config
 from app.infrastructure.sdk.magic_service.kernel.magic_service_parameter import MagicServiceAuthConfig
 from app.service.agent_event.base_listener_service import BaseListenerService
+from app.service.follow_up_suggestion.context_builder import FollowUpContextBuilder, FollowUpTaskState
 from app.service.follow_up_suggestion.service import (
     FollowUpGenerationError,
     FollowUpGenerationJob,
@@ -29,6 +29,7 @@ class FollowUpSuggestionListener:
 
     def __init__(self, service: Optional[FollowUpSuggestionService] = None) -> None:
         self._service = service or FollowUpSuggestionService()
+        self._current_request = ""
         self._task_id = ""
         self._submitted = False
         self._task_effective = 0
@@ -54,6 +55,7 @@ class FollowUpSuggestionListener:
         if task_id == "":
             return
         self._switch_task_if_needed(task_id)
+        self._current_request = event.data.query
         self._run_effective_cursor = 0
         self._seen_loop_indexes = set()
         context.register_run_cleanup("follow_up_suggestions", self._cancel_background)
@@ -101,18 +103,28 @@ class FollowUpSuggestionListener:
         self._background_task.add_done_callback(self._release_background)
 
     def _build_job(self, context: Any, reason: str) -> FollowUpGenerationJob:
+        """固定运行身份、专用参考资料和模型配置，隔离后台生成。"""
         # 调试客户端的 CHAT 只带任务 ID 和个人偏好，身份在初始化消息里。
         # 聊天消息里的非空值优先；缺哪一项就用初始化消息补哪一项。
         user_id, organization_code, authorization = self._identity(context)
         history = getattr(context, "chat_history", None)
-        if history is None or not hasattr(history, "get_messages_for_llm"):
+        if history is None or not hasattr(history, "get_message_snapshot"):
             raise FollowUpGenerationError("history_missing")
-        messages = copy.deepcopy(history.get_messages_for_llm())
+        # 在主事件循环内同步组装为独立文本，不把可变历史对象传给后台任务。
+        reference_context = FollowUpContextBuilder(
+            max_context_tokens=self._positive_int(
+                config.get("follow_up_suggestions.context_token_budget", 8192), 8192,
+            ),
+        ).build(
+            history.get_message_snapshot(),
+            current_request=self._current_request,
+            task_state=FollowUpTaskState.COMPLETED if reason == "finished" else FollowUpTaskState.IN_PROGRESS,
+        ).render()
         llm_config = self._snapshot_model()
         return FollowUpGenerationJob(
             task_id=self._task_id_of(context),
             trigger_reason=reason,
-            messages=messages,
+            reference_context=reference_context,
             auth_config=MagicServiceAuthConfig(
                 user_id=user_id,
                 organization_code=organization_code,
@@ -162,6 +174,7 @@ class FollowUpSuggestionListener:
             return
         self._cancel_background_now()
         self._task_id = task_id
+        self._current_request = ""
         self._submitted = False
         self._task_effective = 0
         self._run_effective_cursor = 0
@@ -235,9 +248,10 @@ class FollowUpSuggestionListener:
 
     @staticmethod
     def _min_effective_loops() -> int:
+        """延后长任务的提前生成时机，短任务仍由完成事件触发。"""
         return FollowUpSuggestionListener._positive_int(
-            config.get("follow_up_suggestions.min_effective_loops", 5),
-            5,
+            config.get("follow_up_suggestions.min_effective_loops", 10),
+            10,
         )
 
     @staticmethod

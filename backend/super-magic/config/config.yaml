@@ -669,7 +669,8 @@ memory:
 
 # 追加问题是允许失败的辅助生成，超时只限制后台请求，不推迟主任务完成通知。
 follow_up_suggestions:
-  min_effective_loops: ${FOLLOW_UP_SUGGESTIONS_MIN_EFFECTIVE_LOOPS:-5}
+  # 达到 10 个有效循环迭代后提前生成；未达阈值的短任务在正常完成时生成。
+  min_effective_loops: ${FOLLOW_UP_SUGGESTIONS_MIN_EFFECTIVE_LOOPS:-10}
   model_timeout_seconds: ${FOLLOW_UP_SUGGESTIONS_MODEL_TIMEOUT_SECONDS:-60}
   report_timeout_seconds: ${FOLLOW_UP_SUGGESTIONS_REPORT_TIMEOUT_SECONDS:-5}
 

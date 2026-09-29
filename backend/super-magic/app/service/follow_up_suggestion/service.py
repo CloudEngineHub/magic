@@ -4,7 +4,7 @@ import asyncio
 import json
 import time
 from dataclasses import dataclass, field
-from typing import Any, Dict, List, Optional, Sequence
+from typing import Any, List, Optional, Sequence
 
 from agentlang.llms.factory import LLMClientConfig, LLMFactory
 from agentlang.llms.processors.processor_config import ProcessorConfig
@@ -19,6 +19,7 @@ from app.infrastructure.sdk.magic_service.result.follow_up_suggestion_result imp
 )
 from app.core.config.debug_config import is_local_debug_mode_enabled
 from app.service.follow_up_suggestion.prompts import (
+    FOLLOW_UP_USER_INSTRUCTION,
     FOLLOW_UP_SYSTEM_PROMPT,
     RESULT_TOOL_NAME,
     SUBMIT_FOLLOW_UP_SUGGESTIONS_TOOL,
@@ -49,7 +50,7 @@ class FollowUpGenerationJob:
 
     task_id: str
     trigger_reason: str
-    messages: List[Dict[str, Any]]
+    reference_context: str
     auth_config: MagicServiceAuthConfig
     llm_config: LLMClientConfig
     model_timeout_seconds: float
@@ -115,6 +116,23 @@ class FollowUpSuggestionService:
         self._store = store or FollowUpSuggestionStore()
 
     async def generate(self, job: FollowUpGenerationJob) -> None:
+        """为整个后台处理记录开始与结束；取消继续向上层传播。"""
+        started = time.monotonic()
+        self._log(job, "started")
+        try:
+            await self._generate(job)
+        except asyncio.CancelledError:
+            self._log(job, "cancelled", elapsed=time.monotonic() - started)
+            raise
+        except Exception as error:
+            self._log(job, "unexpected_failure", error, elapsed=time.monotonic() - started)
+            raise
+        finally:
+            # 结束仅表示处理生命周期结束，生成与上报结果由各自状态表达。
+            self._log(job, "finished", elapsed=time.monotonic() - started)
+
+    async def _generate(self, job: FollowUpGenerationJob) -> None:
+        """执行既有生成和上报流程，分别记录模型结果与交付结果。"""
         started = time.monotonic()
         local = await self._load_local(job)
         if local is not None and local.status in (STATUS_DONE, STATUS_FAILED):
@@ -143,6 +161,7 @@ class FollowUpSuggestionService:
 
         await self._save_local(job, STATUS_GENERATING, [])
 
+        self._log(job, "model_started")
         try:
             suggestions = await self._request_model(job)
         except asyncio.CancelledError:
@@ -155,13 +174,14 @@ class FollowUpSuggestionService:
 
         await self._save_local(job, STATUS_DONE, suggestions)
         elapsed = time.monotonic() - started
+        self._log(job, "done", status=STATUS_DONE, elapsed=elapsed, count=len(suggestions))
         try:
             await self._report(job, STATUS_DONE, suggestions)
-            self._log(job, "done", status=STATUS_DONE, elapsed=elapsed, count=len(suggestions))
+            self._log(job, "reported", status=STATUS_DONE, count=len(suggestions))
         except asyncio.CancelledError:
             raise
         except Exception as error:
-            # 文件已经写好。上报失败只说明测试环境还没有这个接口，耗时和条数仍要留下。
+            # 生成已经成功；上报失败不能改记成生成失败，也不能据此推断接口未部署。
             self._log(
                 job,
                 "report_done_failed",
@@ -199,24 +219,30 @@ class FollowUpSuggestionService:
             self._log(job, "save_local_failed", error)
 
     async def _request_model(self, job: FollowUpGenerationJob) -> List[str]:
+        """只传递筛选后的参考资料，并要求唯一结果工具，不修改共享模型配置。"""
         if not job.llm_config.supports_tool_use:
             raise FollowUpGenerationError("tool_use_unsupported")
         processor_config = ProcessorConfig(
             use_stream_mode=False,
             non_stream_timeout_seconds=int(job.model_timeout_seconds),
         )
+        llm_config = job.llm_config.model_copy(deep=True)
+        llm_config.extra_params = {
+            **llm_config.extra_params,
+            "tool_choice": {"type": "function", "function": {"name": RESULT_TOOL_NAME}},
+        }
         completion = await asyncio.wait_for(
             LLMFactory.call_with_tool_support(
                 model_id=job.llm_config.model_id,
                 messages=[
                     {"role": "system", "content": FOLLOW_UP_SYSTEM_PROMPT},
-                    {"role": "user", "content": json.dumps(job.messages, ensure_ascii=False)},
+                    {"role": "user", "content": job.reference_context + "\n\n" + FOLLOW_UP_USER_INSTRUCTION},
                 ],
                 tools=[SUBMIT_FOLLOW_UP_SUGGESTIONS_TOOL],
                 agent_context=None,
                 processor_config=processor_config,
                 enable_llm_response_events=False,
-                llm_config=job.llm_config,
+                llm_config=llm_config,
             ),
             timeout=job.model_timeout_seconds,
         )
@@ -257,6 +283,24 @@ class FollowUpSuggestionService:
         elapsed: Optional[float] = None,
         count: Optional[int] = None,
     ) -> None:
+        """按阶段输出明确文案，保留稳定状态字段用于检索，不输出凭证或错误正文。"""
+        messages = {
+            "started": "追加问题处理开始",
+            "finished": "追加问题处理结束",
+            "model_started": "追加问题模型生成开始",
+            "done": "追加问题生成成功",
+            "model_failed": "追加问题生成失败",
+            "cancelled": "追加问题处理已取消",
+            "unexpected_failure": "追加问题处理异常",
+            "skipped_local_terminal": "追加问题跳过生成：本地已有终态",
+            "skipped_existing_state": "追加问题跳过生成：远端状态不允许生成",
+            "report_generating_failed": "追加问题生成中状态上报失败",
+            "report_done_failed": "追加问题生成结果上报失败",
+            "report_failed_failed": "追加问题失败状态上报失败",
+            "reported": "追加问题生成结果上报成功",
+            "load_local_failed": "追加问题本地状态读取失败",
+            "save_local_failed": "追加问题本地状态保存失败",
+        }
         category = error.category if isinstance(error, FollowUpGenerationError) else (
             error.__class__.__name__ if error is not None else ""
         )
@@ -264,7 +308,7 @@ class FollowUpSuggestionService:
         elapsed_text = "" if elapsed is None else f"{elapsed:.3f}"
         count_text = "" if count is None else count
         logger.info(
-            "追加问题生成结束 "
+            f"{messages[state]} "
             f"task_id={job.task_id} reason={job.trigger_reason} state={state} "
             f"status={status} elapsed={elapsed_text} count={count_text} category={category}"
         )

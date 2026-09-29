@@ -6,6 +6,7 @@ from types import SimpleNamespace
 import pytest
 
 from app.path_manager import PathManager
+from agentlang.chat_history.chat_history_models import UserMessage
 
 from agentlang.event.data import (
     AfterAgentLoopEventData,
@@ -129,7 +130,7 @@ def _context(task_id="100", enabled=True, state_holder=None):
     class Context:
         def __init__(self):
             self.cleanups = {}
-            self.chat_history = SimpleNamespace(get_messages_for_llm=lambda: [{"role": "user", "content": "hello"}])
+            self.chat_history = SimpleNamespace(get_message_snapshot=lambda: (UserMessage(content="hello"),))
 
         def is_main_agent_context(self):
             return True
@@ -311,7 +312,7 @@ def _job():
     return FollowUpGenerationJob(
         task_id="100",
         trigger_reason="threshold",
-        messages=[{"role": "user", "content": "hello"}],
+        reference_context='{"current_request": "hello", "task_state": "in_progress"}',
         auth_config=MagicServiceAuthConfig(
             user_id="user-1",
             organization_code="org-1",
@@ -587,3 +588,122 @@ def test_production_report_failure_does_not_call_model(monkeypatch):
     record = asyncio.run(FollowUpSuggestionStore().load("100"))
     assert calls == []
     assert record is None
+
+
+def test_job_reference_is_detached_from_history_and_preserves_event_query():
+    """快照之后的历史变化不污染后台任务，运行事件保存当前诉求。"""
+    import json
+
+    listener = FollowUpSuggestionListener()
+    listener._snapshot_model = lambda: SimpleNamespace()
+    context = _context()
+    message = UserMessage(content="Mock original request")
+    context.chat_history = SimpleNamespace(get_message_snapshot=lambda: (message,))
+    event = _before_event(context)
+    event.data.query = "Mock active request"
+    asyncio.run(listener._handle_before_main_agent_run(event))
+    job = listener._build_job(context, "threshold")
+    message.content = "Changed after snapshot"
+    reference = json.loads(job.reference_context)
+    assert reference["current_request"] == "Mock active request"
+    assert reference["task_state"] == "in_progress"
+    assert "Changed after snapshot" not in job.reference_context
+
+
+def test_model_output_constraint_does_not_mutate_job_config(monkeypatch):
+    """指定唯一提交工具，同时保留原快照配置供其他消费者使用。"""
+    calls = []
+
+    async def fake_call(**kwargs):
+        """记录模型参数并返回合法的虚构推荐问题。"""
+        calls.append(kwargs)
+        return _completion('{"suggestions":["Mock next question?"]}')
+
+    monkeypatch.setattr(LLMFactory, "call_with_tool_support", fake_call)
+    job = _job()
+    asyncio.run(FollowUpSuggestionService()._request_model(job))
+    assert calls[0]["llm_config"].extra_params["tool_choice"] == {
+        "type": "function", "function": {"name": RESULT_TOOL_NAME},
+    }
+    assert job.llm_config.extra_params["tool_choice"] == "required"
+    assert calls[0]["messages"][1]["content"].startswith(job.reference_context)
+    assert calls[0]["messages"][1]["content"].endswith("Submit only the result tool call.")
+
+
+def test_default_threshold_waits_for_ten_effective_iterations(monkeypatch):
+    """默认在第十个有效循环触发，第五到第九个循环不会提前提交。"""
+    monkeypatch.setattr(
+        "app.service.follow_up_suggestion.listener.config.get",
+        lambda _key, default=None: default,
+    )
+    service = _RecordingService()
+    listener = FollowUpSuggestionListener(service)
+    listener._build_job = lambda _context, reason: reason
+    context = _context()
+
+    async def scenario():
+        """模拟有效循环计数，不执行真实模型或工具。"""
+        await listener._handle_before_main_agent_run(_before_event(context))
+        for index in range(1, 10):
+            await listener._handle_after_agent_loop(_loop_event(context, index, index, AgentLoopOutcome.NORMAL))
+            assert listener._background_task is None
+        await listener._handle_after_agent_loop(_loop_event(context, 10, 10, AgentLoopOutcome.NORMAL))
+        await listener._background_task
+
+    asyncio.run(scenario())
+    assert listener._min_effective_loops() == 10
+    assert service.reasons == ["threshold"]
+
+
+@pytest.mark.parametrize("outcome", ["success", "model_failure", "cancelled", "skip", "report_failure"])
+def test_generation_logs_distinguish_lifecycle_model_and_reporting(monkeypatch, outcome):
+    """开始与结束成对，模型成功、失败、取消、跳过及上报失败具有独立语义。"""
+    from unittest.mock import AsyncMock
+
+    logs = []
+    store = SimpleNamespace(load=AsyncMock(return_value=None), save=AsyncMock())
+    if outcome == "skip":
+        store.load.return_value = SimpleNamespace(status=STATUS_DONE)
+    service = FollowUpSuggestionService(store)
+    service._report = AsyncMock(return_value=FollowUpSuggestionResult({
+        "type": 1, "relation_id": "100", "status": STATUS_GENERATING, "suggestions": [],
+    }))
+    service._request_model = AsyncMock(return_value=["Mock next question?"])
+    if outcome == "model_failure":
+        service._request_model.side_effect = FollowUpGenerationError("missing_tool_call")
+    elif outcome == "cancelled":
+        service._request_model.side_effect = asyncio.CancelledError()
+    elif outcome == "report_failure":
+        service._report.side_effect = [
+            FollowUpSuggestionResult({"type": 1, "relation_id": "100", "status": STATUS_GENERATING}),
+            RuntimeError("mock reporting failure"),
+        ]
+    monkeypatch.setattr("app.service.follow_up_suggestion.service.logger.info", logs.append)
+
+    if outcome == "cancelled":
+        with pytest.raises(asyncio.CancelledError):
+            asyncio.run(service.generate(_job()))
+    else:
+        asyncio.run(service.generate(_job()))
+
+    assert logs[0].startswith("追加问题处理开始 ")
+    assert logs[-1].startswith("追加问题处理结束 ")
+    assert sum("state=started " in entry for entry in logs) == 1
+    assert sum("state=finished " in entry for entry in logs) == 1
+    assert all("追加问题生成结束" not in entry for entry in logs)
+    expected = {
+        "success": "追加问题生成成功",
+        "model_failure": "追加问题生成失败",
+        "cancelled": "追加问题处理已取消",
+        "skip": "追加问题跳过生成：本地已有终态",
+        "report_failure": "追加问题生成结果上报失败",
+    }
+    assert any(entry.startswith(expected[outcome]) for entry in logs)
+    if outcome == "report_failure":
+        success_index = next(index for index, entry in enumerate(logs) if entry.startswith("追加问题生成成功"))
+        report_index = next(index for index, entry in enumerate(logs) if entry.startswith("追加问题生成结果上报失败"))
+        assert success_index < report_index
+        assert not any(entry.startswith("追加问题生成失败") for entry in logs)
+    if outcome == "skip":
+        service._request_model.assert_not_called()
+        assert not any("state=model_started " in entry for entry in logs)
