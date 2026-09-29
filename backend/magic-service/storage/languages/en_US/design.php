@@ -57,6 +57,7 @@ return [
         'timeout' => 'Video generation timed out',
         'invalid_status' => 'Video generation status is abnormal',
         'first_poll_dispatch_failed' => 'Video task dispatch failed',
+        'submit_interrupted' => 'Video task submission was interrupted, please generate again',
         'composition_videos_required' => 'Canvas composition requires at least one video file',
         'estimate_failed' => 'Operation failed',
     ],

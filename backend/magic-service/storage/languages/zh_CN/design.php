@@ -57,6 +57,7 @@ return [
         'timeout' => '视频生成超时',
         'invalid_status' => '视频生成状态异常',
         'first_poll_dispatch_failed' => '视频任务调度失败',
+        'submit_interrupted' => '视频任务提交中断，请重新生成',
         'composition_videos_required' => '画布合成至少需要一个视频文件',
         'estimate_failed' => '操作失败',
     ],

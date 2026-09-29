@@ -15,6 +15,9 @@ return [
         'max_pending_per_user' => (int) env('MODEL_GATEWAY_VIDEO_QUEUE_MAX_PENDING_PER_USER', 2),
         // 视频任务实体和运行槽位在 Redis 中的保留时间。
         'operation_ttl_seconds' => (int) env('MODEL_GATEWAY_VIDEO_QUEUE_OPERATION_TTL_SECONDS', 72 * 3600),
+        // provider 拒绝提交时保留的失败记录时间：调用方拿不到 operation_id，不会去轮询，
+        // 因此只短留一段时间用于排查（含 provider payload 与 accepted/ignored params）。
+        'failed_operation_ttl_seconds' => (int) env('MODEL_GATEWAY_VIDEO_QUEUE_FAILED_OPERATION_TTL_SECONDS', 6 * 3600),
         // 视频队列调度和状态迁移使用的 Redis 锁过期时间。
         'lock_expire_seconds' => (int) env('MODEL_GATEWAY_VIDEO_QUEUE_LOCK_EXPIRE_SECONDS', 30),
         // 视频队列 worker 查询 provider 任务状态的轮询间隔。

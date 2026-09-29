@@ -93,9 +93,9 @@ readonly class DesignGenerationTaskDomainService
     /**
      * @return DesignGenerationTaskEntity[]
      */
-    public function findProcessingTasksAfterId(int $cursorId, int $limit): array
+    public function findProcessingTasksBeforeId(int $cursorId, int $limit): array
     {
-        return $this->repository->findProcessingTasksAfterId($cursorId, $limit);
+        return $this->repository->findProcessingTasksBeforeId($cursorId, $limit);
     }
 
     public function markAsSubmitted(DesignDataIsolation $dataIsolation, DesignGenerationTaskEntity $entity, array $providerPayload): void
@@ -207,6 +207,26 @@ readonly class DesignGenerationTaskDomainService
         $entity->setErrorMessage($errorMessage);
         $entity->setUpdatedAt(new DateTime());
         $this->repository->update($dataIsolation, $entity);
+    }
+
+    /**
+     * 标记失败的同时保留供应商已产出的结果快照。
+     *
+     * 归档失败等场景下供应商已经出片、积分也已经扣除，直接丢弃 output 会让成果彻底不可追溯，
+     * 因此先把供应商地址等信息落库，再置为失败。
+     *
+     * @param array<string, mixed> $outputPayload
+     */
+    public function markAsFailedWithOutput(
+        DesignDataIsolation $dataIsolation,
+        DesignGenerationTaskEntity $entity,
+        string $errorMessage,
+        array $outputPayload
+    ): void {
+        $entity->setOutputPayload(
+            $this->normalizeOutputPayload(array_merge($entity->getOutputPayload(), $outputPayload))
+        );
+        $this->markAsFailed($dataIsolation, $entity, $errorMessage);
     }
 
     public function markAsCompleted(DesignDataIsolation $dataIsolation, DesignGenerationTaskEntity $entity, array $outputPayload, string $fileName): void

@@ -207,6 +207,9 @@ class DesignVideoPollConsumer extends ConsumerMessage
 
             // 如果重试超过期限还是失败，则默认同意
             if (time() - $entity->getCreatedAt()->getTimestamp() > self::ARCHIVE_RETRY_MAX_AGE_SECONDS) {
+                // 供应商已出片且积分已扣，归档失败不能让成果彻底不可追溯：
+                // 先把供应商地址等信息落库，再标记失败，便于事后人工补归档。
+                $preservedOutput = $this->buildArchiveTimeoutOutput($result);
                 $this->logger->error('design video poll archive retry expired, mark failed', [
                     'reason' => 'archive_retry_expired',
                     'video_id' => $entity->getGenerationId(),
@@ -214,9 +217,15 @@ class DesignVideoPollConsumer extends ConsumerMessage
                     'organization_code' => $entity->getOrganizationCode(),
                     'operation_id' => $operationId,
                     'created_at' => $entity->getCreatedAt()->format(DATE_ATOM),
+                    'provider_video_url' => $preservedOutput['provider_video_url'],
                     'error' => $throwable->getMessage(),
                 ]);
-                $this->domainService->markAsFailed($dataIsolation, $entity, $throwable->getMessage());
+                $this->domainService->markAsFailedWithOutput(
+                    $dataIsolation,
+                    $entity,
+                    $throwable->getMessage(),
+                    $preservedOutput
+                );
                 return Result::ACK;
             }
 
@@ -374,6 +383,27 @@ class DesignVideoPollConsumer extends ConsumerMessage
                 @unlink($posterTempPath);
             }
         }
+    }
+
+    /**
+     * 归档重试超期时的结果快照：供应商已经出片，即使本地归档失败也要把地址留在库里。
+     *
+     * @param array<string, mixed> $result
+     * @return array<string, mixed>
+     */
+    private function buildArchiveTimeoutOutput(array $result): array
+    {
+        $output = is_array($result['output'] ?? null) ? $result['output'] : [];
+
+        return [
+            'provider_video_url' => trim((string) ($output['video_url'] ?? '')),
+            'provider_poster_url' => trim((string) ($output['poster_url'] ?? '')),
+            'duration_seconds' => $output['duration_seconds'] ?? null,
+            'resolution' => (string) ($output['resolution'] ?? ''),
+            'fps' => $output['fps'] ?? null,
+            'has_audio_output' => (bool) ($output['has_audio_output'] ?? true),
+            'archive_skipped_reason' => 'archive_retry_expired',
+        ];
     }
 
     /**

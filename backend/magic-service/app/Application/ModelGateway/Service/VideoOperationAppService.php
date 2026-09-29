@@ -228,7 +228,21 @@ readonly class VideoOperationAppService
                 $requestDTO->getBusinessParams(),
                 $throwable
             );
-            $this->videoQueueDomainService->deleteOperation($operation);
+            // 调用方拿到的是异常、没有 operation_id，因此按短 TTL 保留失败记录：
+            // 既能事后查 provider payload 与 accepted/ignored params，又不会长期占用 Redis。
+            $this->videoQueueDomainService->saveFailedOperation($operation);
+            $this->logger->error('video operation submit rejected by provider', [
+                'operation_id' => $operation->getId(),
+                'organization_code' => $operation->getOrganizationCode(),
+                'provider_code' => $operation->getProviderCode(),
+                'model_id' => $operation->getModel(),
+                'provider_model_id' => $operation->getProviderModelId(),
+                'error_code' => $operation->getErrorCode(),
+                'error_message' => $operation->getErrorMessage(),
+                'accepted_params' => $operation->getAcceptedParams(),
+                'ignored_params' => $operation->getIgnoredParams(),
+                'provider_payload' => $operation->getProviderPayload(),
+            ]);
             ExceptionBuilder::throw($throwable->getVideoErrorCode(), $throwable->getMessage(), throwable: $throwable);
         } catch (Throwable $throwable) {
             // 非业务异常会中断提交流程，释放槽位避免残留运行态阻塞后续提交。
