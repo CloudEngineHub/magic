@@ -180,39 +180,46 @@ class TaskMessageRepository implements TaskMessageRepositoryInterface
         // 执行查询
         $records = $query->get();
 
-        // 将查询结果转换为实体对象
-        $messages = [];
-        $imSeqIds = [];
-        foreach ($records as $record) {
-            // toArray() 会自动应用 casts 转换
-            $entity = new TaskMessageEntity($record->toArray());
-            $messages[] = $entity;
-
-            // 收集 im_seq_id 用于批量查询 im_status
-            if ($entity->getImSeqId() !== null) {
-                $imSeqIds[$entity->getImSeqId()] = $entity->getImSeqId();
-            }
-        }
-
-        // 批量查询 im_status
-        if (! empty($imSeqIds)) {
-            $imStatusMap = Db::table('magic_chat_sequences')
-                ->whereIn('id', array_values($imSeqIds))
-                ->pluck('status', 'id')
-                ->toArray();
-
-            // 将 im_status 设置到对应的实体中
-            foreach ($messages as $message) {
-                if ($message->getImSeqId() !== null && isset($imStatusMap[$message->getImSeqId()])) {
-                    $message->setImStatus((int) $imStatusMap[$message->getImSeqId()]);
-                }
-            }
-        }
+        $messages = $this->hydrateMessages($records);
 
         // 返回结构化结果
         return [
             'list' => $messages,
             'total' => $total,
+        ];
+    }
+
+    /**
+     * Find messages using keyset pagination.
+     *
+     * @return array{list: TaskMessageEntity[], has_more: bool, next_cursor: ?string}
+     */
+    public function findByTopicIdAfterId(int $topicId, ?int $afterId = null, int $limit = 20, bool $showInUi = true): array
+    {
+        $limit = max(1, min($limit, 100));
+        $query = $this->model::query()
+            ->where('topic_id', $topicId)
+            ->when($showInUi, static fn ($query) => $query->where('show_in_ui', true))
+            ->orderBy('id', 'asc')
+            ->limit($limit + 1);
+
+        if ($afterId !== null) {
+            $query->where('id', '>', $afterId);
+        }
+
+        $records = $query->get();
+        $hasMore = $records->count() > $limit;
+        if ($hasMore) {
+            $records = $records->slice(0, $limit)->values();
+        }
+
+        $messages = $this->hydrateMessages($records);
+        $lastMessage = $messages === [] ? null : $messages[array_key_last($messages)];
+
+        return [
+            'list' => $messages,
+            'has_more' => $hasMore,
+            'next_cursor' => $hasMore && $lastMessage !== null ? (string) $lastMessage->getId() : null,
         ];
     }
 
@@ -547,6 +554,38 @@ class TaskMessageRepository implements TaskMessageRepositoryInterface
         }
 
         return $hasUnreadMap;
+    }
+
+    /**
+     * Convert message records and hydrate IM status in one batch.
+     *
+     * @return TaskMessageEntity[]
+     */
+    private function hydrateMessages(iterable $records): array
+    {
+        $messages = [];
+        $imSeqIds = [];
+        foreach ($records as $record) {
+            $entity = new TaskMessageEntity($record->toArray());
+            $messages[] = $entity;
+            if ($entity->getImSeqId() !== null) {
+                $imSeqIds[$entity->getImSeqId()] = $entity->getImSeqId();
+            }
+        }
+
+        if (! empty($imSeqIds)) {
+            $imStatusMap = Db::table('magic_chat_sequences')
+                ->whereIn('id', array_values($imSeqIds))
+                ->pluck('status', 'id')
+                ->toArray();
+            foreach ($messages as $message) {
+                if ($message->getImSeqId() !== null && isset($imStatusMap[$message->getImSeqId()])) {
+                    $message->setImStatus((int) $imStatusMap[$message->getImSeqId()]);
+                }
+            }
+        }
+
+        return $messages;
     }
 
     /**

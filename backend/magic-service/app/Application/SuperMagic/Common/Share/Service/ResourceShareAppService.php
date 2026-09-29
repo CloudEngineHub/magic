@@ -73,6 +73,7 @@ use App\Interfaces\SuperMagic\Common\Share\DTO\Request\FindSimilarShareRequestDT
 use App\Interfaces\SuperMagic\Common\Share\DTO\Request\GetFilesByIdsRequestDTO;
 use App\Interfaces\SuperMagic\Common\Share\DTO\Request\GetShareCopyLogsRequestDTO;
 use App\Interfaces\SuperMagic\Common\Share\DTO\Request\GetShareDetailDTO;
+use App\Interfaces\SuperMagic\Common\Share\DTO\Request\GetShareDetailV2DTO;
 use App\Interfaces\SuperMagic\Common\Share\DTO\Request\GetShareFilesRequestDTO;
 use App\Interfaces\SuperMagic\Common\Share\DTO\Request\GetShareFilesV2RequestDTO;
 use App\Interfaces\SuperMagic\Common\Share\DTO\Request\GetShareStatisticsRequestDTO;
@@ -645,6 +646,22 @@ class ResourceShareAppService extends AbstractShareAppService
         $actualResourceId = $shareEntity->getRealResourceId();
         $extra = $shareEntity->getExtra() ?? [];
 
+        $resourceContent = $detailDTO instanceof GetShareDetailV2DTO
+            ? $factory->getResourceContentByCursor(
+                $actualResourceId,
+                $shareEntity->getCreatedUid(),
+                $shareEntity->getOrganizationCode(),
+                $detailDTO->getAfterId(),
+                $detailDTO->getLimit()
+            )
+            : $factory->getResourceContent(
+                $actualResourceId,
+                $shareEntity->getCreatedUid(),
+                $shareEntity->getOrganizationCode(),
+                $detailDTO->getPage(),
+                $detailDTO->getPageSize()
+            );
+
         // 构建返回数据
         $result = [
             'resource_type' => $resourceType->value, // 使用枚举的整数值，而不是枚举对象
@@ -659,13 +676,7 @@ class ResourceShareAppService extends AbstractShareAppService
             'updated_at' => DateFormatUtil::formatExpireAt($shareEntity->getUpdatedAt()),
             'expire_at' => DateFormatUtil::formatExpireAt($shareEntity->getExpireAt()),
             'view_count' => $shareEntity->getViewCount(),
-            'data' => $factory->getResourceContent(
-                $actualResourceId,
-                $shareEntity->getCreatedUid(),
-                $shareEntity->getOrganizationCode(),
-                $detailDTO->getPage(),
-                $detailDTO->getPageSize()
-            ),
+            'data' => $resourceContent,
         ];
 
         // 类型转换：将内部类型12（Project）转换为外部类型13（FileCollection）+ share_project=true
@@ -1946,8 +1957,7 @@ class ResourceShareAppService extends AbstractShareAppService
         int $projectId,
         string $organizationCode,
         bool $filterHidden = false
-    ): array
-    {
+    ): array {
         $this->assertShareV2QueueSize($result['next_parent_ids'] ?? []);
         $rows = $result['list'] ?? [];
         $contentIds = array_values(array_unique(array_map(static fn (array $row): int => (int) $row['file_id'], $rows)));

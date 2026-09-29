@@ -80,6 +80,13 @@ interface TaskMessageRepositoryInterface
      */
     public function findByTopicId(int $topicId, int $page = 1, int $pageSize = 20, bool $shouldPage = true, string $sortDirection = 'asc', bool $showInUi = true): array;
 
+    /**
+     * Find UI-visible messages after a cursor ID.
+     *
+     * @return array{list: TaskMessageEntity[], has_more: bool, next_cursor: ?string}
+     */
+    public function findByTopicIdAfterId(int $topicId, ?int $afterId = null, int $limit = 20, bool $showInUi = true): array;
+
     public function getUserFirstMessageByTopicId(int $topicId, string $userId): ?TaskMessageEntity;
 
     /**

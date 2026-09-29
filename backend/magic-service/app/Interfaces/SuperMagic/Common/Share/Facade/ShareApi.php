@@ -20,6 +20,7 @@ use App\Interfaces\SuperMagic\Common\Share\DTO\Request\FindSimilarShareRequestDT
 use App\Interfaces\SuperMagic\Common\Share\DTO\Request\GetFilesByIdsRequestDTO;
 use App\Interfaces\SuperMagic\Common\Share\DTO\Request\GetShareCopyLogsRequestDTO;
 use App\Interfaces\SuperMagic\Common\Share\DTO\Request\GetShareDetailDTO;
+use App\Interfaces\SuperMagic\Common\Share\DTO\Request\GetShareDetailV2DTO;
 use App\Interfaces\SuperMagic\Common\Share\DTO\Request\GetSharedProjectsTreeRequestDTO;
 use App\Interfaces\SuperMagic\Common\Share\DTO\Request\GetShareFilesRequestDTO;
 use App\Interfaces\SuperMagic\Common\Share\DTO\Request\GetShareFilesV2RequestDTO;
@@ -154,6 +155,26 @@ class ShareApi extends AbstractApi
         $dto = GetShareDetailDTO::fromRequest($this->request);
 
         return $this->shareAppService->getShareDetail($userAuthorization, $shareCode, $dto);
+    }
+
+    /**
+     * Get share detail with cursor-paginated topic messages.
+     */
+    #[RateLimit(create: 5, capacity: 10, key: 'share_detail')]
+    public function getShareDetailV2(RequestContext $requestContext, string $shareCode): array
+    {
+        try {
+            $requestContext->setUserAuthorization($this->getAuthorization());
+            $userAuthorization = $requestContext->getUserAuthorization();
+        } catch (Exception) {
+            $userAuthorization = null;
+        }
+
+        return $this->shareAppService->getShareDetail(
+            $userAuthorization,
+            $shareCode,
+            GetShareDetailV2DTO::fromRequest($this->request)
+        );
     }
 
     /**
