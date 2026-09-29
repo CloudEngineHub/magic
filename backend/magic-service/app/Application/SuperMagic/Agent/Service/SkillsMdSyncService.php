@@ -217,7 +217,7 @@ class SkillsMdSyncService
                 }
                 $name = $version->getPackageName();
                 if (! is_string($name) || $name === '' || in_array($name, ['.', '..'], true) || str_contains($name, '/') || str_contains($name, '\\')) {
-                    throw new RuntimeException('Invalid bound skill package name.');
+                    throw new RuntimeException('Invalid bound skill package name: ' . $code);
                 }
                 if (isset($names[$name]) && $names[$name] !== $code) {
                     throw new RuntimeException('Multiple bound skills use the same package name: ' . $name);
