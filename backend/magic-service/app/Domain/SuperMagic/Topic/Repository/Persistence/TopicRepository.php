@@ -11,6 +11,7 @@ use App\Domain\Chat\Entity\ValueObject\MagicMessageStatus;
 use App\Domain\Chat\Repository\Persistence\Model\MagicChatSequenceModel;
 use App\Domain\Chat\Repository\Persistence\Model\MagicChatTopicMessageModel;
 use App\Domain\Chat\Repository\Persistence\Model\MagicMessageModel;
+use App\Domain\SuperMagic\Common\Entity\ValueObject\CreationSource;
 use App\Domain\SuperMagic\Message\Repository\Model\TaskMessageModel;
 use App\Domain\SuperMagic\Task\Entity\ValueObject\TaskStatus;
 use App\Domain\SuperMagic\Topic\Entity\TopicEntity;
@@ -523,7 +524,8 @@ class TopicRepository implements TopicRepositoryInterface
         string $keyword = '',
         int $page = 1,
         int $pageSize = 20,
-        int $maxTotal = 999
+        int $maxTotal = 999,
+        array $topicTypes = []
     ): array {
         $query = $this->model::query()
             ->where('project_id', $projectId)
@@ -533,6 +535,18 @@ class TopicRepository implements TopicRepositoryInterface
 
         if ($keyword !== '') {
             $query->where('topic_name', 'like', '%' . $keyword . '%');
+        }
+
+        // Apply the same source predicate before counting and paging. Other sources
+        // (including legacy NULL values) remain visible under the ordinary topic type.
+        if (count($topicTypes) === 1) {
+            if ($topicTypes[0] === 'scheduled_task') {
+                $query->where('source', CreationSource::SCHEDULED_TASK->value);
+            } else {
+                $query->where(function ($query) {
+                    $query->where('source', '!=', CreationSource::SCHEDULED_TASK->value)->orWhereNull('source');
+                });
+            }
         }
 
         $realTotal = (clone $query)->count();

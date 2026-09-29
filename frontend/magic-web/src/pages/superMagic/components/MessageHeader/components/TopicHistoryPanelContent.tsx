@@ -1,3 +1,7 @@
+import TopicTypeFilter from "../../TopicTypeFilter"
+import TopicListFeedback from "../../TopicTypeFilter/TopicListFeedback"
+import { useTopicTypeFilter } from "../../../hooks/useTopicTypeFilter"
+import { ScrollArea } from "@/components/shadcn-ui/scroll-area"
 import { useEffect, useMemo, useRef, useState, type MouseEvent, type RefObject } from "react"
 import { useTranslation } from "react-i18next"
 import {
@@ -124,6 +128,11 @@ function TopicHistoryPanelContentInner({
 	searchInputRef,
 }: TopicHistoryPanelContentProps) {
 	const { t } = useTranslation("super")
+	const [topicType, setTopicType] = useTopicTypeFilter(projectId)
+	const listViewportRef = useRef<HTMLDivElement>(null)
+	useEffect(() => {
+		listViewportRef.current?.scrollTo?.({ top: 0 })
+	}, [topicType, projectId])
 	const [searchKeyword, setSearchKeyword] = useState("")
 	const [debouncedSearchKeyword, setDebouncedSearchKeyword] = useState("")
 	const [hoveredTopicId, setHoveredTopicId] = useState<string | null>(null)
@@ -148,6 +157,7 @@ function TopicHistoryPanelContentInner({
 	const editInputRef = useRef<HTMLInputElement>(null)
 
 	const {
+		error: topicsError,
 		displayTopics,
 		total: topicsTotalFromServer,
 		isLoading: isLoadingTopics,
@@ -156,6 +166,7 @@ function TopicHistoryPanelContentInner({
 		reset: resetTopics,
 	} = usePaginatedTopics({
 		enabled: isPanelVisible,
+		topicType,
 		projectId,
 		selectedTopicId,
 		storeTopics: topics,
@@ -164,6 +175,7 @@ function TopicHistoryPanelContentInner({
 	})
 	const { groups, onToggleGroup, onLoadMoreInGroup } = useTopicHistoryGroupedViewModel({
 		topics: displayTopics,
+		queryKey: `${projectId}:${topicType}:${debouncedSearchKeyword}`,
 	})
 	const visibleTopicIds = useMemo(
 		() =>
@@ -736,6 +748,8 @@ function TopicHistoryPanelContentInner({
 			)
 		}
 
+		if (topicsError) return <TopicListFeedback error={topicsError} onRetry={reloadTopics} />
+		if (groups.length === 0 && topicType !== "all") return <TopicListFeedback />
 		if (groups.length === 0) {
 			return (
 				<div
@@ -854,6 +868,7 @@ function TopicHistoryPanelContentInner({
 				data-testid="message-header-history-panel"
 			>
 				<div className="flex shrink-0 flex-col gap-2 p-2.5 pb-3">
+					<TopicTypeFilter value={topicType} onChange={setTopicType} />
 					<div className="relative min-w-0 shrink-0">
 						<Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
 						<Input
@@ -899,12 +914,14 @@ function TopicHistoryPanelContentInner({
 					) : null}
 				</div>
 
-				<div
-					className="flex min-h-0 flex-1 flex-col overflow-y-auto px-2.5 pb-2.5 [&::-webkit-scrollbar-thumb:hover]:bg-muted-foreground/50 [&::-webkit-scrollbar-thumb]:rounded [&::-webkit-scrollbar-thumb]:bg-muted-foreground/30 [&::-webkit-scrollbar-track]:bg-transparent [&::-webkit-scrollbar]:w-1"
+				<ScrollArea
+					viewportRef={listViewportRef}
+					className="min-h-0 flex-1"
+					viewportClassName="px-2.5 pb-2.5"
 					data-testid="message-header-history-list"
 				>
 					{renderListContent()}
-				</div>
+				</ScrollArea>
 			</div>
 		</div>
 	)

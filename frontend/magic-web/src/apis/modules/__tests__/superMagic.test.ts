@@ -130,3 +130,31 @@ describe("generateSuperMagicApi", () => {
 		expect(get).toHaveBeenNthCalledWith(2, "/api/v1/ai-abilities/availability")
 	})
 })
+
+describe("sidebar topic type query", () => {
+	it.each(["all", "topic", "scheduled_task"] as const)(
+		"serializes %s without changing search or paging",
+		async (topicType) => {
+			const get = vi.fn().mockResolvedValue({ list: [], total: 0 })
+			const api = generateSuperMagicApi({ get } as unknown as ServiceHttpClient)
+			await api.getSidebarTopicsByProjectId({
+				id: "project-1",
+				page: 2,
+				page_size: 100,
+				q: "report",
+				topicType,
+			})
+			expect(get).toHaveBeenCalledWith(
+				"/api/v1/super-agent/projects/project-1/sidebar-topics",
+				{
+					params: {
+						page: 2,
+						page_size: 100,
+						q: "report",
+						...(topicType === "all" ? {} : { topic_types: topicType }),
+					},
+				},
+			)
+		},
+	)
+})

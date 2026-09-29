@@ -1,3 +1,4 @@
+import { useTopicTypeFilter } from "@/pages/superMagic/hooks/useTopicTypeFilter"
 import { observer } from "mobx-react-lite"
 import { useEffect, useMemo, useRef, useState } from "react"
 import { createPortal } from "react-dom"
@@ -58,6 +59,7 @@ function LegacyProjectPage() {
 
 	// Get state from stores
 	const selectedProject = projectStore.selectedProject
+	const [topicType, setTopicType] = useTopicTypeFilter(selectedProject?.id)
 	const selectedWorkspace = workspaceStore.selectedWorkspace
 	const selectedTopic = topicStore.selectedTopic
 	const isReadonly = isReadOnlyProject(selectedProject?.user_role)
@@ -364,6 +366,8 @@ function LegacyProjectPage() {
 							data-testid="project-detail-topics-panel"
 						>
 							<ProjectPageMain
+								topicType={topicType}
+								onTopicTypeChange={setTopicType}
 								className="h-full min-h-0 flex-1"
 								onTopicMore={(topic) => openActionsPopup(topic, selectedProject)}
 								onTopicPin={(topic) => {
@@ -398,6 +402,8 @@ function LegacyProjectPage() {
 				</div>
 			</div>
 			<TopicsPopup
+				topicType={topicType}
+				onTopicTypeChange={setTopicType}
 				open={topicsPopupOpen}
 				onOpenChange={setTopicsPopupOpen}
 				onCreateTopic={handleCreateTopic}
