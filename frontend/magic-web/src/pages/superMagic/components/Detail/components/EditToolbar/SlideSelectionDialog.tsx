@@ -182,7 +182,7 @@ function SlideSelectionDialog({
 	return (
 		<Dialog open={open} onOpenChange={onOpenChange}>
 			<DialogContent className="flex max-h-[calc(100vh-2rem)] w-[calc(100%-2rem)] !max-w-[calc(100vw-2rem)] flex-col p-6 xl:!max-w-[1100px]">
-				<DialogHeader>
+				<DialogHeader className="shrink-0">
 					<DialogTitle>{t("ppt.selectSlidesToExport")}</DialogTitle>
 					<DialogDescription>
 						{selectedPaths.length > 0
@@ -192,7 +192,7 @@ function SlideSelectionDialog({
 				</DialogHeader>
 
 				{/* 全选/取消全选按钮 */}
-				<div className="flex items-center gap-2 border-b pb-2">
+				<div className="flex shrink-0 items-center gap-2 border-b pb-2">
 					<Button
 						variant="outline"
 						size="sm"
@@ -209,7 +209,7 @@ function SlideSelectionDialog({
 				</div>
 
 				{hiddenPaths.size > 0 && exportFormat !== "source" && (
-					<Label className="flex items-center gap-2 text-sm">
+					<Label className="flex shrink-0 items-center gap-2 text-sm">
 						<Checkbox
 							checked={includeHiddenSlides}
 							onCheckedChange={(checked) => setIncludeHiddenSlides(checked === true)}
@@ -218,7 +218,11 @@ function SlideSelectionDialog({
 					</Label>
 				)}
 				{/* 幻灯片网格：延后渲染，先出壳再出列表 */}
-				<ScrollArea className="min-h-0 flex-1" viewportClassName="px-1">
+				{/* 视口必须参与 flex 收缩，避免仅有 max-height 的弹窗中百分比高度被内容撑开。 */}
+				<ScrollArea
+					className="flex min-h-0 flex-1 flex-col overflow-hidden"
+					viewportClassName="min-h-0 flex-1 px-1"
+				>
 					{!contentReady ? (
 						<div className="grid grid-cols-[repeat(auto-fill,minmax(160px,1fr))] gap-4 py-2">
 							{Array.from({ length: 8 }).map((_, i) => (
@@ -320,7 +324,7 @@ function SlideSelectionDialog({
 				</ScrollArea>
 
 				{/* 导出格式选择 */}
-				<div className="border-b px-4 py-3">
+				<div className="shrink-0 border-b px-4 py-3">
 					<Label className="mb-2 text-sm font-medium">{t("ppt.exportFormat")}</Label>
 					<RadioGroup
 						value={exportFormat}
@@ -384,7 +388,7 @@ function SlideSelectionDialog({
 					</RadioGroup>
 				</div>
 
-				<DialogFooter>
+				<DialogFooter className="shrink-0">
 					<Button variant="outline" onClick={handleClose} disabled={isExporting}>
 						{t("common.cancel")}
 					</Button>
