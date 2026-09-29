@@ -540,7 +540,7 @@ class TopicRepository implements TopicRepositoryInterface
         // Apply the same source predicate before counting and paging. Other sources
         // (including legacy NULL values) remain visible under the ordinary topic type.
         if (count($topicTypes) === 1) {
-            if ($topicTypes[0] === 'scheduled_task') {
+            if ($topicTypes[0] === 2) {
                 $query->where('source', CreationSource::SCHEDULED_TASK->value);
             } else {
                 $query->where(function ($query) {

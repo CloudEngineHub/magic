@@ -1632,7 +1632,9 @@ export const generateSuperMagicApi = (fetch: ServiceHttpClient) => ({
 				page,
 				page_size,
 				q,
-				...(topicType && topicType !== "all" ? { topic_types: topicType } : {}),
+				...(topicType && topicType !== "all"
+					? { topic_types: topicType === "topic" ? 1 : 2 }
+					: {}),
 			},
 		})
 	},

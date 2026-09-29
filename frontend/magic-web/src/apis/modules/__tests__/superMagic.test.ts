@@ -151,7 +151,9 @@ describe("sidebar topic type query", () => {
 						page: 2,
 						page_size: 100,
 						q: "report",
-						...(topicType === "all" ? {} : { topic_types: topicType }),
+						...(topicType === "all"
+							? {}
+							: { topic_types: topicType === "topic" ? 1 : 2 }),
 					},
 				},
 			)

@@ -13,7 +13,7 @@ final class GetSidebarTopicsRequestDTOTest extends TestCase
 {
     public function testTypesAreParsedWithoutChangingSearchOrPagination(): void
     {
-        foreach (['' => [], 'topic' => ['topic'], 'scheduled_task' => ['scheduled_task'], 'topic,scheduled_task,topic' => ['topic', 'scheduled_task']] as $input => $expected) {
+        foreach ([['', []], ['1', [1]], ['2', [2]], ['1,2,1', [1, 2]], [1, [1]], [2, [2]]] as [$input, $expected]) {
             $request = $this->createMock(RequestInterface::class);
             $request->method('route')->willReturn(42);
             $request->method('input')->willReturnCallback(static fn ($key, $default = null) => [

@@ -22,7 +22,7 @@ class GetSidebarTopicsRequestDTO extends AbstractDTO
 
     protected int $pageSize = 20;
 
-    /** @var string[] Empty means all visible topic types. */
+    /** @var int[] 1 = ordinary topics, 2 = scheduled topics; empty means all. */
     protected array $topicTypes = [];
 
     public static function fromRequest(RequestInterface $request): self
@@ -33,14 +33,15 @@ class GetSidebarTopicsRequestDTO extends AbstractDTO
         $dto->setPage(max(1, (int) $request->input('page', 1)));
         $dto->setPageSize(max(1, (int) $request->input('page_size', 20)));
         $rawTypes = $request->input('topic_types', '');
-        if (! is_string($rawTypes)) {
+        if (! is_string($rawTypes) && ! is_int($rawTypes)) {
             ExceptionBuilder::throw(GenericErrorCode::ParameterValidationFailed, 'topic_types');
         }
+        $rawTypes = (string) $rawTypes;
         $types = $rawTypes === '' ? [] : array_values(array_unique(explode(',', $rawTypes)));
-        if (array_diff($types, ['topic', 'scheduled_task']) !== []) {
+        if (array_filter($types, static fn (string $type) => ! in_array($type, ['1', '2'], true)) !== []) {
             ExceptionBuilder::throw(GenericErrorCode::ParameterValidationFailed, 'topic_types');
         }
-        $dto->topicTypes = $types;
+        $dto->topicTypes = array_map('intval', $types);
         return $dto;
     }
 

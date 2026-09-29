@@ -825,6 +825,7 @@ function TopicHistoryPanelContentInner({
 						count: topicsTotalFromServer,
 					})}
 				</div>
+				<TopicTypeFilter compact value={topicType} onChange={setTopicType} />
 				{onClose ? (
 					<Button
 						type="button"
@@ -868,7 +869,6 @@ function TopicHistoryPanelContentInner({
 				data-testid="message-header-history-panel"
 			>
 				<div className="flex shrink-0 flex-col gap-2 p-2.5 pb-3">
-					<TopicTypeFilter value={topicType} onChange={setTopicType} />
 					<div className="relative min-w-0 shrink-0">
 						<Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
 						<Input
