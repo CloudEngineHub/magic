@@ -47,6 +47,11 @@ import MagicSpin from "@/components/base/MagicSpin"
 import { stripSlideNotes } from "./utils/slideNotes"
 import type { FileApi } from "@/pages/superMagic/fileAccess/fileApi"
 import { injectPPTSwipeBridge } from "./utils/pptSwipeBridge"
+import {
+	holdIframeAnimations,
+	injectPPTAnimationHoldBridge,
+	releaseIframeAnimations,
+} from "./utils/pptAnimationHold"
 import { usePPTSwipeNavigation, type PPTSwipeDirection } from "./hooks/usePPTSwipeNavigation"
 
 export interface PPTSlideToolbarModel {
@@ -131,6 +136,8 @@ interface PPTSlideProps {
 	/** Mobile horizontal swipe navigation, kept outside the iframe's link handling. */
 	onSwipe?: (direction: PPTSwipeDirection) => void
 }
+
+const SLIDE_REPLAY_TIMEOUT_MS = 4000
 
 interface PerformSaveOptions {
 	shouldExitEditMode?: boolean
@@ -218,6 +225,13 @@ const PPTSlide = observer(function PPTSlide({
 	} | null>(null)
 	// Renderer key that has already painted once. Later in-place updates stay silent.
 	const paintedRendererKeyRef = useRef<string | null>(null)
+	// True while a recreated document is loading off-screen before it may be presented.
+	const isReplayPendingRef = useRef(false)
+	const replayFrameRef = useRef(0)
+	const replayTokenRef = useRef(0)
+	const isAnimationHeldRef = useRef(false)
+	// A recreated slide must be laid out and painted (behind the presented one) to be swapped in.
+	const [isPreparingReplay, setIsPreparingReplay] = useState(false)
 	const iframeElement = rendererRef.current?.getIframeElement() ?? null
 	usePPTSwipeNavigation({
 		containerRef: slideWrapperRef,
@@ -252,13 +266,11 @@ const PPTSlide = observer(function PPTSlide({
 	})
 	// Keep runtime gesture code out of raw source and saved slide content.
 	const hasSwipeNavigation = Boolean(onSwipe)
-	const swipeEnabledContent = useMemo(
-		() =>
-			hasSwipeNavigation
-				? injectPPTSwipeBridge(displayContent.content, window.location.origin)
-				: displayContent.content,
-		[displayContent.content, hasSwipeNavigation],
-	)
+	const previewRuntimeContent = useMemo(() => {
+		const origin = window.location.origin
+		const content = injectPPTAnimationHoldBridge(displayContent.content, origin)
+		return hasSwipeNavigation ? injectPPTSwipeBridge(content, origin) : content
+	}, [displayContent.content, hasSwipeNavigation])
 
 	const isDisplayContentCurrent =
 		fileVersion === undefined
@@ -420,10 +432,11 @@ const PPTSlide = observer(function PPTSlide({
 		return !isMobile && !isFullscreen && !isPlaybackMode
 	}, [isMobile, isFullscreen, isPlaybackMode])
 
+	const isRendering = effectiveIsPresented || (isPreparingReplay && fileTabActive)
 	const slideWrapperClassNames = "absolute inset-0 flex h-full w-full flex-col"
 	// Keep every resident slide at the same dimensions while only the presented one is interactive.
 	const slideWrapperStyle: CSSProperties = {
-		visibility: effectiveIsPresented ? "visible" : "hidden",
+		visibility: isRendering ? "visible" : "hidden",
 		pointerEvents: isInteractive ? "auto" : "none",
 		zIndex: effectiveIsPresented ? 1 : 0,
 	}
@@ -462,13 +475,80 @@ const PPTSlide = observer(function PPTSlide({
 		onRenderReadyChange?.(true)
 	})
 
+	const finishReplay = useMemoizedFn(() => {
+		isReplayPendingRef.current = false
+		setIsPreparingReplay(false)
+		reportSlideRenderReady(true)
+	})
+
 	const handleSlideRenderReady = useMemoizedFn(() => {
 		if (loadingState !== "loaded" || !displayContent.content || !isDisplayContentCurrent) {
 			return
 		}
 		paintedRendererKeyRef.current = rendererKey
+		if (isReplayPendingRef.current) {
+			// Freeze the entrance at its first frame while the page is still covered, then give
+			// the compositor two frames to paint it. Swapping earlier exposes an unpainted
+			// (black) iframe, and unfrozen animations would already be mid-flight when shown.
+			const token = ++replayTokenRef.current
+			isAnimationHeldRef.current = true
+			void holdIframeAnimations(rendererRef.current?.getIframeElement() ?? null).then(() => {
+				if (token !== replayTokenRef.current) return
+				replayFrameRef.current = window.requestAnimationFrame(() => {
+					replayFrameRef.current = window.requestAnimationFrame(finishReplay)
+				})
+			})
+			return
+		}
 		reportSlideRenderReady(true)
 	})
+
+	useEffect(
+		() => () => {
+			replayTokenRef.current++
+			window.cancelAnimationFrame(replayFrameRef.current)
+		},
+		[],
+	)
+
+	// Start the frozen entrance the moment the recreated page becomes visible.
+	useLayoutEffect(() => {
+		if (!effectiveIsPresented || !isAnimationHeldRef.current) return
+		isAnimationHeldRef.current = false
+		releaseIframeAnimations(rendererRef.current?.getIframeElement() ?? null)
+	}, [effectiveIsPresented])
+
+	// A resident slide played its entrance animations while hidden. Page scripts cannot be
+	// rewound, so navigating to it recreates its document behind the current page; the double
+	// buffer swaps to it only after the fresh document reports render-ready and has painted.
+	const wasActiveRef = useRef(isActive)
+	useLayoutEffect(() => {
+		const becameActive = isActive && !wasActiveRef.current
+		wasActiveRef.current = isActive
+		if (!becameActive || effectiveIsPresented || isEditMode || viewMode === "code") return
+		if (!isIframeMounted || presentedReadyRef.current !== true) return
+
+		isReplayPendingRef.current = true
+		setIsPreparingReplay(true)
+		reportSlideRenderReady(false)
+		rendererRef.current?.restartDocument?.()
+	}, [
+		effectiveIsPresented,
+		isActive,
+		isEditMode,
+		isIframeMounted,
+		reportSlideRenderReady,
+		viewMode,
+	])
+
+	// Never leave the previous page on screen if the fresh document fails to report back.
+	useEffect(() => {
+		if (!isReplayPendingRef.current || isSlideRenderReady) return
+		const timer = window.setTimeout(() => {
+			if (isReplayPendingRef.current) finishReplay()
+		}, SLIDE_REPLAY_TIMEOUT_MS)
+		return () => window.clearTimeout(timer)
+	}, [finishReplay, isActive, isSlideRenderReady])
 
 	useEffect(() => {
 		const canPresentWithoutIframe =
@@ -486,6 +566,7 @@ const PPTSlide = observer(function PPTSlide({
 		// Code view unmounts the iframe, so it is a new present.
 		const presentedVisual = presentedVisualRef.current
 		const isUnchangedPresentedVisual =
+			!isReplayPendingRef.current &&
 			Boolean(presentedVisual) &&
 			presentedVisual?.content === displayContent.content &&
 			presentedVisual?.usesIframe === isIframeMounted &&
@@ -1166,14 +1247,14 @@ const PPTSlide = observer(function PPTSlide({
 				<IsolatedHTMLRenderer
 					key={rendererKey}
 					ref={rendererRef as React.RefObject<IsolatedHTMLRendererRef>}
-					content={swipeEnabledContent}
+					content={previewRuntimeContent}
 					rawSourceCode={displayContent.rawContent}
 					sandboxType="iframe"
 					isPptRender
 					scaleContentDimensions={scaleContentDimensions}
 					isFullscreen={isFullscreen}
 					isEditMode={isEditMode}
-					isVisible={effectiveIsPresented}
+					isVisible={isRendering}
 					isTabActive={isInteractive}
 					isSaving={isSaving}
 					saveEditContent={saveEditContent}

@@ -7,6 +7,10 @@ const mockState = vi.hoisted(() => ({
 	triggerSave: vi.fn(),
 	updateContent: vi.fn(),
 	resetContent: vi.fn(),
+	restartDocument: vi.fn(),
+	holdAnimations: vi.fn(),
+	releaseAnimations: vi.fn(),
+	initialEditMode: true,
 	getContent: vi.fn(),
 	clearServerUpdate: vi.fn(),
 	applyServerUpdate: vi.fn(),
@@ -55,11 +59,17 @@ vi.mock("@/utils/cn", () => ({
 		classNames.filter(Boolean).join(" "),
 }))
 
+vi.mock("../utils/pptAnimationHold", () => ({
+	injectPPTAnimationHoldBridge: (content: string) => content,
+	holdIframeAnimations: mockState.holdAnimations,
+	releaseIframeAnimations: mockState.releaseAnimations,
+}))
+
 vi.mock("../../../hooks/useEditMode", async () => {
 	const React = await import("react")
 
 	function useMockEditMode() {
-		const [isEditMode, setIsEditMode] = React.useState(true)
+		const [isEditMode, setIsEditMode] = React.useState(mockState.initialEditMode)
 		return { isEditMode, setIsEditMode }
 	}
 
@@ -135,6 +145,7 @@ vi.mock("../../../contents/HTML/IsolatedHTMLRenderer", async () => {
 			React.useImperativeHandle(ref, () => ({
 				updateContent: mockState.updateContent,
 				resetContent: mockState.resetContent,
+				restartDocument: mockState.restartDocument,
 				getContent: mockState.getContent,
 				getIframeElement: () => null,
 			}))
@@ -399,6 +410,11 @@ describe("PPTSlide", () => {
 		})
 		mockState.updateContent.mockReset()
 		mockState.resetContent.mockReset()
+		mockState.restartDocument.mockReset()
+		mockState.holdAnimations.mockReset()
+		mockState.holdAnimations.mockResolvedValue(undefined)
+		mockState.releaseAnimations.mockReset()
+		mockState.initialEditMode = true
 		mockState.getContent.mockReset()
 		mockState.getContent.mockResolvedValue("<div>editing</div>")
 		mockState.clearServerUpdate.mockReset()
@@ -896,6 +912,140 @@ describe("PPTSlide", () => {
 		} finally {
 			vi.useRealTimers()
 		}
+	})
+
+	describe("entrance animation replay", () => {
+		function markRendered() {
+			const props = mockState.renderedIsolatedProps.mock.calls.at(-1)?.[0] as
+				{ onRenderReady?: () => void } | undefined
+			act(() => props?.onRenderReady?.())
+		}
+
+		function renderRenderedBackgroundSlide(onRenderReadyChange = vi.fn()) {
+			mockState.initialEditMode = false
+			const view = renderPPTSlide({
+				isActive: false,
+				isPresented: false,
+				onRenderReadyChange,
+				renderRevision: "slide-1:1",
+			})
+			markRendered()
+			onRenderReadyChange.mockClear()
+			return view
+		}
+
+		it("recreates a rendered hidden slide and paints it behind before the swap", async () => {
+			const onRenderReadyChange = vi.fn()
+			const view = renderRenderedBackgroundSlide(onRenderReadyChange)
+			expect(screen.getByTestId("ppt-slide-item-slide-1")).toHaveStyle({
+				visibility: "hidden",
+			})
+
+			rerenderSlide(view, {
+				isActive: true,
+				isPresented: false,
+				onRenderReadyChange,
+				renderRevision: "slide-1:1",
+			})
+
+			expect(mockState.restartDocument).toHaveBeenCalledTimes(1)
+			expect(onRenderReadyChange).toHaveBeenLastCalledWith(false)
+			// Laid out and painted under the presented page so the swap never shows a blank iframe.
+			expect(screen.getByTestId("ppt-slide-item-slide-1")).toHaveStyle({
+				visibility: "visible",
+				zIndex: "0",
+			})
+			expect(mockState.renderedIsolatedProps).toHaveBeenLastCalledWith(
+				expect.objectContaining({ isVisible: true }),
+			)
+
+			markRendered()
+			expect(mockState.holdAnimations).toHaveBeenCalledTimes(1)
+			expect(onRenderReadyChange).toHaveBeenLastCalledWith(false)
+			await waitFor(() => {
+				expect(onRenderReadyChange).toHaveBeenLastCalledWith(true)
+			})
+
+			// The frozen entrance is released only once the page is actually shown.
+			expect(mockState.releaseAnimations).not.toHaveBeenCalled()
+			rerenderSlide(view, {
+				isActive: true,
+				isPresented: true,
+				onRenderReadyChange,
+				renderRevision: "slide-1:1",
+			})
+			expect(mockState.releaseAnimations).toHaveBeenCalledTimes(1)
+		})
+
+		it("does not swap while the frozen first frame is not acknowledged yet", async () => {
+			let acknowledge: () => void = () => undefined
+			mockState.holdAnimations.mockReturnValue(
+				new Promise<void>((resolve) => {
+					acknowledge = resolve
+				}),
+			)
+			const onRenderReadyChange = vi.fn()
+			const view = renderRenderedBackgroundSlide(onRenderReadyChange)
+			rerenderSlide(view, {
+				isActive: true,
+				isPresented: false,
+				onRenderReadyChange,
+				renderRevision: "slide-1:1",
+			})
+
+			markRendered()
+			await act(async () => {
+				await new Promise((resolve) => setTimeout(resolve, 60))
+			})
+			expect(onRenderReadyChange).not.toHaveBeenCalledWith(true)
+
+			await act(async () => acknowledge())
+			await waitFor(() => {
+				expect(onRenderReadyChange).toHaveBeenLastCalledWith(true)
+			})
+		})
+
+		it("does not recreate a slide that is already presented", () => {
+			mockState.initialEditMode = false
+			const view = renderPPTSlide({ isActive: false, isPresented: true })
+			markRendered()
+
+			rerenderSlide(view, { isActive: true, isPresented: true })
+
+			expect(mockState.restartDocument).not.toHaveBeenCalled()
+		})
+
+		it("does not recreate a slide that has not rendered yet", () => {
+			mockState.initialEditMode = false
+			const view = renderPPTSlide({ isActive: false, isPresented: false })
+
+			rerenderSlide(view, { isActive: true, isPresented: false })
+
+			expect(mockState.restartDocument).not.toHaveBeenCalled()
+		})
+
+		it("releases the swap when the recreated document never reports back", () => {
+			vi.useFakeTimers()
+			try {
+				const onRenderReadyChange = vi.fn()
+				const view = renderRenderedBackgroundSlide(onRenderReadyChange)
+				rerenderSlide(view, {
+					isActive: true,
+					isPresented: false,
+					onRenderReadyChange,
+					renderRevision: "slide-1:1",
+				})
+				expect(onRenderReadyChange).toHaveBeenLastCalledWith(false)
+
+				act(() => {
+					vi.advanceTimersByTime(4000)
+				})
+
+				expect(onRenderReadyChange).toHaveBeenLastCalledWith(true)
+			} finally {
+				vi.useRealTimers()
+			}
+		})
 	})
 
 	it("waits for the selected history version content before mounting its iframe", async () => {

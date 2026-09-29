@@ -120,6 +120,8 @@ export interface IsolatedHTMLRendererRef {
 	/** Close the element context panel without leaving HTML edit mode. */
 	closeElementContextPanel?: () => boolean
 	resetContent: () => void
+	/** Recreate the iframe document so page scripts and animations run from the start. */
+	restartDocument?: () => void
 	updateContent: (
 		newContent: string,
 		options?: {
@@ -1703,6 +1705,7 @@ const IsolatedHTMLRendererInner = forwardRef<IsolatedHTMLRendererRef, IsolatedHT
 				closeElementContextPanel,
 				requestInspectorExit,
 				consumeInspectorEscape,
+				restartDocument: restartPreviewDocument,
 				resetContent: () => {
 					// Clear edit history
 					if (editorRef.current) {
