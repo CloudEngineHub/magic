@@ -1182,3 +1182,14 @@ describe("MobileAudioRecordingDetailPage", () => {
 		})
 	})
 })
+
+vi.mock("@/pages/superMagic/hooks/usePaginatedTopics", () => ({
+	default: () => ({
+		displayTopics: [],
+		total: 0,
+		isLoading: false,
+		error: null,
+		hasMore: false,
+		reload: vi.fn(),
+	}),
+}))

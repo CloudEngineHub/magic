@@ -1,5 +1,4 @@
 import { useTranslation } from "react-i18next"
-import TopicTypeFilter from "@/pages/superMagic/components/TopicTypeFilter"
 import TopicListFeedback from "@/pages/superMagic/components/TopicTypeFilter/TopicListFeedback"
 import usePaginatedTopics from "@/pages/superMagic/hooks/usePaginatedTopics"
 import type { TopicTypeFilterValue } from "@/pages/superMagic/utils/topicTypeFilter"
@@ -15,13 +14,11 @@ import { useMobileProjectTopicSwitch } from "@/pages/superMagicMobile/hooks/useM
 const ProjectPageMain = observer(function ProjectPageMain({
 	className,
 	topicType = "all",
-	onTopicTypeChange,
 	onTopicMore,
 	onTopicPin,
 	onTopicDelete,
 }: TopicListProps & {
 	topicType?: TopicTypeFilterValue
-	onTopicTypeChange?: (value: TopicTypeFilterValue) => void
 	onTopicMore?: (topic: Topic) => void
 	onTopicPin?: (topic: Topic) => void
 	onTopicDelete?: (topic: Topic) => void
@@ -43,11 +40,6 @@ const ProjectPageMain = observer(function ProjectPageMain({
 
 	return (
 		<div className={`flex min-h-0 flex-col ${className || ""}`}>
-			{onTopicTypeChange && (
-				<div className="shrink-0 px-3 pb-2">
-					<TopicTypeFilter value={topicType} onChange={onTopicTypeChange} />
-				</div>
-			)}
 			{error ? (
 				<TopicListFeedback error={error} onRetry={reload} />
 			) : (

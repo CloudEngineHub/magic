@@ -676,6 +676,29 @@ describe("TopicHistoryPanelContent", () => {
 		expect(handleSelectTopic).not.toHaveBeenCalled()
 	})
 
+	it.each([false, true])(
+		"toggles pinned=%s from the context menu without selecting the topic",
+		async (isPinned) => {
+			const onPinTopic = vi.fn().mockResolvedValue(undefined)
+			const onUnpinTopic = vi.fn().mockResolvedValue(undefined)
+			const onSelectTopic = vi.fn()
+			renderComponent({
+				topics: [{ ...topics[1], is_pinned: isPinned }],
+				onPinTopic,
+				onUnpinTopic,
+				onSelectTopic,
+			})
+			fireEvent.contextMenu(screen.getByTestId("message-header-history-item-topic-2"))
+			const item = screen.getByTestId("message-header-history-context-pin")
+			expect(item).toHaveTextContent(isPinned ? "messageHeader.unpin" : "messageHeader.pin")
+			fireEvent.click(item)
+			await waitFor(() => expect(mockReloadTopics).toHaveBeenCalledTimes(1))
+			expect(isPinned ? onUnpinTopic : onPinTopic).toHaveBeenCalledWith("topic-2")
+			expect(isPinned ? onPinTopic : onUnpinTopic).not.toHaveBeenCalled()
+			expect(onSelectTopic).not.toHaveBeenCalled()
+		},
+	)
+
 	it("calls onEditTopic from context menu", () => {
 		const handleEditTopic = vi.fn()
 

@@ -1,4 +1,4 @@
-import TopicTypeFilter from "@/pages/superMagic/components/TopicTypeFilter"
+import TopicTypeFilter from "@/pages/superMagicMobile/components/TopicTypeFilter"
 import TopicListFeedback from "@/pages/superMagic/components/TopicTypeFilter/TopicListFeedback"
 import { ScrollArea } from "@/components/shadcn-ui/scroll-area"
 import { useEffect } from "react"
@@ -55,7 +55,7 @@ function TopicsPopup({
 			title={t("topic.allTopics")}
 		>
 			<div className="flex h-full flex-col">
-				<div className="shrink-0 space-y-2 px-4 py-2.5">
+				<div className="flex shrink-0 flex-row-reverse items-center justify-between px-4 py-2.5">
 					{onTopicTypeChange && (
 						<TopicTypeFilter value={topicType} onChange={onTopicTypeChange} />
 					)}

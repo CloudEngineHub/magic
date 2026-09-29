@@ -684,6 +684,22 @@ function TopicHistoryPanelContentInner({
 					onClick={(event) => event.stopPropagation()}
 					data-testid={`message-header-history-item-context-menu-topic-${topic.id}`}
 				>
+					{canShowPinAction && (
+						<ContextMenuItem
+							onSelect={(event) => {
+								event.stopPropagation()
+								void handlePinToggle(topic)
+							}}
+							data-testid="message-header-history-context-pin"
+						>
+							{topic.is_pinned ? (
+								<PinOff className="size-4 text-muted-foreground" />
+							) : (
+								<Pin className="size-4 text-muted-foreground" />
+							)}
+							{topic.is_pinned ? t("messageHeader.unpin") : t("messageHeader.pin")}
+						</ContextMenuItem>
+					)}
 					<ContextMenuItem
 						onSelect={(event) => {
 							event.stopPropagation()
@@ -914,10 +930,11 @@ function TopicHistoryPanelContentInner({
 					) : null}
 				</div>
 
+				{/* Keep long topic titles within the panel instead of expanding Radix's table wrapper. */}
 				<ScrollArea
 					viewportRef={listViewportRef}
-					className="min-h-0 flex-1"
-					viewportClassName="px-2.5 pb-2.5"
+					className="min-h-0 min-w-0 flex-1"
+					viewportClassName="px-2.5 pb-2.5 [&>div]:!block"
 					data-testid="message-header-history-list"
 				>
 					{renderListContent()}

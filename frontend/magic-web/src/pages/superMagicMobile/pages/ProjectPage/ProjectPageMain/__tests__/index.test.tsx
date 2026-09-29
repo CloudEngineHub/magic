@@ -303,14 +303,12 @@ it("passes mobile filter changes to the list API without selecting a conversatio
 	vi.clearAllMocks()
 	window.sessionStorage.clear()
 	topicStoreMock.topics = [createTopic()]
-	const { rerender } = render(
-		<ProjectPageMain topicType="scheduled_task" onTopicTypeChange={vi.fn()} />,
-	)
+	const { rerender } = render(<ProjectPageMain topicType="scheduled_task" />)
 	await act(async () => Promise.resolve())
 	expect(SuperMagicService.topic.getSidebarTopicsByProjectId).toHaveBeenLastCalledWith(
 		expect.objectContaining({ topicType: "scheduled_task" }),
 	)
-	rerender(<ProjectPageMain topicType="topic" onTopicTypeChange={vi.fn()} />)
+	rerender(<ProjectPageMain topicType="topic" />)
 	await act(async () => Promise.resolve())
 	expect(SuperMagicService.topic.getSidebarTopicsByProjectId).toHaveBeenLastCalledWith(
 		expect.objectContaining({ topicType: "topic" }),

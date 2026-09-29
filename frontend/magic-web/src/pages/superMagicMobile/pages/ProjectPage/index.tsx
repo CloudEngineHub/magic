@@ -1,3 +1,4 @@
+import MobileTopicTypeFilter from "@/pages/superMagicMobile/components/TopicTypeFilter"
 import { useTopicTypeFilter } from "@/pages/superMagic/hooks/useTopicTypeFilter"
 import { observer } from "mobx-react-lite"
 import { useEffect, useMemo, useRef, useState } from "react"
@@ -297,18 +298,25 @@ function LegacyProjectPage() {
 			{/* 与 MobileShell 面板、ProjectDetailHeader 及原型一致：整页使用主题 background，避免头部与内容区硬编码暖色分层 */}
 			<div className={cn("relative flex h-full min-h-0 flex-auto flex-col overflow-hidden")}>
 				{/* 与原型一致：tab 条单独 shrink-0 + px-3 pt-4，主内容区 flex-1 再各自 px-3，避免整块同一列 padding 与原型分层不一致 */}
-				<div className="relative z-40 flex shrink-0 justify-start px-3 pt-4">
+				<div className="relative z-40 flex shrink-0 items-center justify-between gap-2 px-3 pt-4">
 					<SmoothTabs
 						tabs={projectDetailTabs}
 						value={activeSiderTab}
 						onChange={setActiveSiderTab}
 						variant="background"
 						showTooltip={false}
-						className="h-9 w-max max-w-full rounded-full bg-muted p-[3px]"
+						className="h-9 w-max min-w-0 max-w-full rounded-full bg-muted p-[3px]"
 						buttonClassName="h-[30px] flex-none rounded-full px-4 text-[14px] leading-5 data-[state=active]:font-medium data-[state=active]:text-foreground data-[state=inactive]:font-normal data-[state=inactive]:text-muted-foreground"
 						indicatorClassName="inset-y-[3px] rounded-full border-0 bg-card shadow-[0px_8px_25px_0px_rgba(0,0,0,0.10)]"
 						data-testid="project-detail-hero"
 					/>
+					{activeSiderTab === "topics" && (
+						<MobileTopicTypeFilter
+							key={selectedProject?.id}
+							value={topicType}
+							onChange={setTopicType}
+						/>
+					)}
 				</div>
 				<div className="relative min-h-0 flex-1 overflow-hidden">
 					{activeSiderTab === "topicFiles" ? (
@@ -367,7 +375,6 @@ function LegacyProjectPage() {
 						>
 							<ProjectPageMain
 								topicType={topicType}
-								onTopicTypeChange={setTopicType}
 								className="h-full min-h-0 flex-1"
 								onTopicMore={(topic) => openActionsPopup(topic, selectedProject)}
 								onTopicPin={(topic) => {

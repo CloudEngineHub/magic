@@ -1,3 +1,8 @@
+import { Button } from "@/components/shadcn-ui/button"
+import MobileTopicTypeFilter from "@/pages/superMagicMobile/components/TopicTypeFilter"
+import TopicListFeedback from "@/pages/superMagic/components/TopicTypeFilter/TopicListFeedback"
+import usePaginatedTopics from "@/pages/superMagic/hooks/usePaginatedTopics"
+import { useTopicTypeFilter } from "@/pages/superMagic/hooks/useTopicTypeFilter"
 import type { ReactNode } from "react"
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { ChevronLeft, Check, Ellipsis, FileAudio, Loader2, Pencil, X } from "lucide-react"
@@ -148,6 +153,14 @@ export default function MobileAudioRecordingDetailPage() {
 	// `tab=ai` query never overrides that explicit choice.
 	const tabPickedByUserRef = useRef(false)
 	const [topics, setTopics] = useState<Topic[]>([])
+	const [topicType, setTopicType] = useTopicTypeFilter(projectId)
+	const filteredTopics = usePaginatedTopics({
+		enabled: activeTab === "ai" && topicType !== "all",
+		projectId,
+		storeTopics: topics,
+		topicType,
+		pageSize: 100,
+	})
 	const [topicsLoading, setTopicsLoading] = useState(false)
 	const [chatProject, setChatProject] = useState<ProjectListItem | null>(null)
 	const [chatWorkspace, setChatWorkspace] = useState<Workspace | null>(null)
@@ -285,6 +298,10 @@ export default function MobileAudioRecordingDetailPage() {
 	/** Refreshes the scoped topic list without touching the global project stores. */
 	async function refreshRecordingTopics() {
 		if (!projectId) return
+		if (topicType !== "all") {
+			filteredTopics.reload()
+			return
+		}
 		// Pull-to-refresh already renders its own indicator, so the loading flag stays
 		// untouched here to keep the existing rows visible instead of swapping them for
 		// the first-load skeleton. Failures bubble up to MagicPullToRefresh for toasting.
@@ -1027,17 +1044,53 @@ export default function MobileAudioRecordingDetailPage() {
 							className="flex min-h-0 flex-1 flex-col px-3 pt-2"
 							data-testid="mobile-recording-detail-ai-topics"
 						>
-							<ProjectTopicListView
-								className="min-h-0 flex-1"
-								projectId={projectId}
-								topics={topics}
-								loading={showTopicsSkeleton}
-								onRefresh={refreshRecordingTopics}
-								onSelectTopic={(topic) => void handleOpenTopic(topic)}
-								onTopicMore={openRecordingTopicActions}
-								onTopicPin={(topic) => void handleRecordingTopicPin(topic)}
-								onTopicDelete={(topic) => void handleRecordingTopicDelete(topic)}
-							/>
+							<div className="flex shrink-0 justify-end">
+								<MobileTopicTypeFilter
+									key={projectId}
+									value={topicType}
+									onChange={setTopicType}
+								/>
+							</div>
+							{topicType !== "all" && filteredTopics.error ? (
+								<TopicListFeedback
+									error={filteredTopics.error}
+									onRetry={filteredTopics.reload}
+								/>
+							) : (
+								<ProjectTopicListView
+									className="min-h-0 flex-1"
+									projectId={projectId}
+									key={`${projectId}:${topicType}`}
+									topics={
+										topicType === "all" ? topics : filteredTopics.displayTopics
+									}
+									emptyContent={
+										topicType !== "all" ? <TopicListFeedback /> : undefined
+									}
+									footer={
+										topicType !== "all" && filteredTopics.hasMore ? (
+											<Button
+												variant="ghost"
+												onClick={() => void filteredTopics.loadMore()}
+											>
+												{t("super:topicTypeFilter.more")}
+											</Button>
+										) : undefined
+									}
+									loading={
+										topicType === "all"
+											? showTopicsSkeleton
+											: filteredTopics.isLoading
+									}
+									onRefresh={refreshRecordingTopics}
+									onSelectTopic={(topic) => void handleOpenTopic(topic)}
+									onTopicMore={openRecordingTopicActions}
+									onTopicPin={(topic) => void handleRecordingTopicPin(topic)}
+									onTopicDelete={(topic) =>
+										void handleRecordingTopicDelete(topic)
+									}
+								/>
+							)}
 						</div>
 						{chatProject ? (
 							/* Keep the safe-area gutter on the same surface as the shared composer. */
