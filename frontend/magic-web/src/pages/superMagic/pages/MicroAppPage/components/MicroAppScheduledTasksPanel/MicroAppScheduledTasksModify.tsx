@@ -6,7 +6,7 @@ import { useTranslation } from "react-i18next"
 import { resolveToString } from "@dtyq/es6-template-strings"
 import dayjs from "@/infrastructure/vendors/dayjs"
 import { MagicDatePicker } from "@/components/base"
-import { MagicSwitch } from "@/components/base/MagicSwitch"
+import { FormSwitch } from "@/components/business/AccountSetting/pages/ScheduledTasks/components/FormSwitch"
 import magicToast from "@/components/base/MagicToaster/utils"
 import { useIsMobile } from "@/hooks/useIsMobile"
 import { cn } from "@/utils/cn"
@@ -432,7 +432,7 @@ export function MicroAppScheduledTasksModify({
 						{timeConfig?.type !== ScheduledTask.ScheduleType.Once ? (
 							<div className="flex items-center gap-2">
 								<Form.Item name="deadline_enabled" noStyle>
-									<MagicSwitch size="small" />
+									<FormSwitch />
 								</Form.Item>
 								<span className="text-sm leading-4 text-foreground/80">
 									{t("chat.timedTask.deadline")}
@@ -464,7 +464,7 @@ export function MicroAppScheduledTasksModify({
 							noStyle
 							normalize={(value) => (value ? 1 : 0)}
 						>
-							<MagicSwitch size="small" />
+							<FormSwitch />
 						</Form.Item>
 					</div>
 					<div className="flex gap-2.5">
