@@ -35,14 +35,22 @@ class MicroAppVisitRepository implements MicroAppVisitRepositoryInterface
             return;
         }
 
+        if ($existing instanceof MicroAppVisitModel) {
+            $visitId = $existing->id ?? IdGenerator::getSnowId();
+            $createdAt = $existing->created_at ?? $now;
+        } else {
+            $visitId = IdGenerator::getSnowId();
+            $createdAt = $now;
+        }
+
         MicroAppVisitModel::query()->upsert([
             [
-                'id' => $existing?->id ?? IdGenerator::getSnowId(),
+                'id' => $visitId,
                 'micro_app_id' => $microAppId,
                 'user_id' => $userId,
                 'organization_code' => $organizationCode,
                 'last_visited_at' => $now,
-                'created_at' => $existing?->created_at ?? $now,
+                'created_at' => $createdAt,
                 'updated_at' => $now,
             ],
         ], ['micro_app_id', 'user_id', 'organization_code'], ['last_visited_at', 'updated_at']);

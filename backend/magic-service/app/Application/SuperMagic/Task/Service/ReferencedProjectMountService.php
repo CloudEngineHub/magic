@@ -58,7 +58,7 @@ class ReferencedProjectMountService
             }
         };
         try {
-            if ($isTerminated()) {
+            if ($this->terminated($isTerminated)) {
                 return;
             }
             // This authenticated endpoint checks the current token against metadata.json.
@@ -107,14 +107,15 @@ class ReferencedProjectMountService
             try {
                 foreach (array_keys($refresh) as $projectId) {
                     $checkDeadline();
-                    if ($isTerminated()) {
+                    if ($this->terminated($isTerminated)) {
                         break;
                     }
                     $projectId = (string) $projectId;
-                    $root = (string) $this->files->getProjectRootFileId((int) $projectId);
-                    if ($root === '' || $root === '0') {
+                    $rootId = $this->files->getProjectRootFileId((int) $projectId);
+                    if ($rootId <= 0) {
                         throw new RuntimeException('Referenced project root is unavailable');
                     }
+                    $root = (string) $rootId;
                     $checkDeadline();
                     // A timed-out request may still have created the mount.
                     $attempted[] = $projectId;
@@ -127,7 +128,7 @@ class ReferencedProjectMountService
                 $this->cleanup($identity, $sandboxId, $attempted, $deadline);
                 throw $error;
             }
-            if ($isTerminated()) {
+            if ($this->terminated($isTerminated)) {
                 $this->cleanup($identity, $sandboxId, $attempted, $deadline);
                 return;
             }
@@ -137,6 +138,17 @@ class ReferencedProjectMountService
         } finally {
             $this->locker->release($lockName, $owner);
         }
+    }
+
+    /**
+     * 每次都重新询问终止状态。
+     * 重复直接调用同一个 callable 时，静态分析会沿用第一次的结果。
+     *
+     * @param callable(): bool $isTerminated
+     */
+    private function terminated(callable $isTerminated): bool
+    {
+        return $isTerminated();
     }
 
     private function canCollaborate(DataIsolation $identity, string $projectId): bool
