@@ -156,7 +156,9 @@ const PPTSpeakerNotesPanel = observer(function PPTSpeakerNotesPanel(
 						>
 							<AArrowUp size={16} />
 						</Button>
-						{props.allowEdit && props.onGenerate && <PPTNotesSettingsDialog />}
+						{props.allowEdit && props.onGenerate && (
+							<PPTNotesSettingsDialog hintEnabled={visible} />
+						)}
 					</div>
 				</div>
 				<ScrollArea

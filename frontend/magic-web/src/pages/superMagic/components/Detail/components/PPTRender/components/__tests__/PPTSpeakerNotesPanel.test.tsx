@@ -146,6 +146,23 @@ describe("PPTSpeakerNotesPanel", () => {
 		expect(screen.queryByTestId("ppt-notes-model-hint")).toBeNull()
 	})
 
+	it("keeps the model hint hidden while the notes panel is collapsed", async () => {
+		pptNotesPreferenceStore.modelHintDismissed = false
+		const props = {
+			slideIndex: 0,
+			fileId: "first",
+			rawContent: "",
+			allowEdit: true,
+			onSaved: vi.fn(),
+			onGenerate: vi.fn(),
+		}
+		const { rerender } = render(<PPTSpeakerNotesPanel {...props} visible={false} />)
+		await screen.findByTestId("ppt-notes-settings-trigger")
+		expect(screen.queryByTestId("ppt-notes-model-hint")).toBeNull()
+		rerender(<PPTSpeakerNotesPanel {...props} visible />)
+		expect(await screen.findByTestId("ppt-notes-model-hint")).toBeInTheDocument()
+	})
+
 	it("dismisses the model hint when the settings are opened", async () => {
 		pptNotesPreferenceStore.modelHintDismissed = false
 		render(

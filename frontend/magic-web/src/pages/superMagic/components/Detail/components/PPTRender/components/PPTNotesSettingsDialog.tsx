@@ -25,7 +25,12 @@ import { pptNotesPreferenceStore } from "@/stores/layout/PPTNotesPreferenceStore
 import { filterNotesModels, resolveNotesModelId } from "../utils/speakerNotesModel"
 
 /** Gear entry plus dialog for AI notes settings; observer keeps the async model list live. */
-const PPTNotesSettingsDialog = observer(function PPTNotesSettingsDialog() {
+const PPTNotesSettingsDialog = observer(function PPTNotesSettingsDialog({
+	hintEnabled = true,
+}: {
+	/** The panel stays mounted while collapsed; its portaled hint must not leak out. */
+	hintEnabled?: boolean
+}) {
 	const { t } = useTranslation("super")
 	const [open, setOpen] = useState(false)
 	const models = filterNotesModels(superMagicModeService.getModelListByMode(TopicMode.Default))
@@ -36,7 +41,7 @@ const PPTNotesSettingsDialog = observer(function PPTNotesSettingsDialog() {
 		if (open && !models.length) void superMagicModeService.fetchDefaultModeModelList()
 	}, [open, models.length])
 
-	const showHint = !pptNotesPreferenceStore.modelHintDismissed && !open
+	const showHint = hintEnabled && !pptNotesPreferenceStore.modelHintDismissed && !open
 
 	return (
 		<>
