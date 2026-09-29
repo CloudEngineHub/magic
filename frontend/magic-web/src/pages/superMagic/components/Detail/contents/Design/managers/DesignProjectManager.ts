@@ -113,7 +113,12 @@ export interface DesignProjectManagerAPI {
 		designData: DesignData,
 		options?: { immediate?: boolean; reason?: DesignDraftReason },
 	) => void
-	manualSave: () => Promise<boolean>
+	persistLocalDraftAndWait: (
+		designData: DesignData,
+		options?: { immediate?: boolean; reason?: DesignDraftReason },
+	) => Promise<DesignDraftWriteResult | null>
+	hasUnsavedChanges: (designData?: DesignData) => boolean
+	manualSave: (designData?: DesignData) => Promise<boolean>
 	syncDesignData: (newDesignData: DesignData) => void
 	persistPendingDesignUpgrade: () => Promise<boolean>
 
@@ -243,17 +248,13 @@ export class DesignProjectManager implements DesignProjectManagerAPI {
 			onSaveStart: () => this.remoteListener?.beginLocalSave() ?? null,
 			onSaveEnd: async (saveToken, didSave, savedUpdatedAt) => {
 				await this.remoteListener?.endLocalSave(saveToken, didSave, savedUpdatedAt)
-				if (
-					didSave &&
-					this.saveManager.wasLastSaveFullyPersisted() &&
-					!this.hasUnresolvedMergeConflicts()
-				) {
-					this.clearLocalDraftAfterFullyPersistedSave()
-				}
 			},
 			onAutoSaveResult: async (saveResult) => {
 				if (saveResult.ok) {
 					this.handleSuccessfulSaveResult(saveResult)
+					if (saveResult.fullyPersisted && !this.hasUnresolvedMergeConflicts()) {
+						this.clearLocalDraftAfterFullyPersistedSave(saveResult.savedFingerprint)
+					}
 					return
 				}
 				await this.handleSaveResultConflict(saveResult)
@@ -1465,24 +1466,24 @@ export class DesignProjectManager implements DesignProjectManagerAPI {
 		designData: DesignData,
 		reason: DesignDraftReason,
 		baseSnapshot: LocalDraftBaseSnapshot | null = this.getLocalDraftBaseSnapshot(),
-	): void {
+	): Promise<DesignDraftWriteResult | null> {
 		if (!this.canUseLocalDraft()) {
-			return
+			return Promise.resolve(null)
 		}
 		if (!baseSnapshot) {
-			return
+			return Promise.resolve(null)
 		}
 
 		const localFingerprint = hashDesignDataComparable(designData)
 		const identity = this.getDraftIdentity()
 		if (localFingerprint === baseSnapshot.baseRemoteFingerprint) {
 			this.clearLocalDraftBecauseAlreadySynced()
-			return
+			return Promise.resolve({ target: "none", durable: true })
 		}
 
 		const shouldWriteEmergencyDraft = reason === "pagehide" || reason === "manual-refresh"
 
-		void writeDesignDraft(
+		return writeDesignDraft(
 			{
 				...identity,
 				designProjectBasePath: this.getDesignProjectBasePath(),
@@ -1495,7 +1496,10 @@ export class DesignProjectManager implements DesignProjectManagerAPI {
 				baseRemoteData: baseSnapshot.baseRemoteData,
 			},
 			{ emergency: shouldWriteEmergencyDraft },
-		).then((result) => this.handleLocalDraftWriteResult(result, reason))
+		).then((result) => {
+			this.handleLocalDraftWriteResult(result, reason)
+			return result
+		})
 	}
 
 	private writeConflictLocalDraftNow(
@@ -1557,7 +1561,7 @@ export class DesignProjectManager implements DesignProjectManagerAPI {
 		const baseSnapshot = this.getLocalDraftBaseSnapshot()
 		if (options.immediate) {
 			this.clearPendingLocalDraftTimer()
-			this.writeLocalDraftNow(draftDesignData, reason, baseSnapshot)
+			void this.writeLocalDraftNow(draftDesignData, reason, baseSnapshot)
 			return
 		}
 		if (!baseSnapshot) {
@@ -1582,13 +1586,46 @@ export class DesignProjectManager implements DesignProjectManagerAPI {
 		}, getDesignDraftWriteDebounceMs())
 	}
 
+	async persistLocalDraftAndWait(
+		designData: DesignData,
+		options: { immediate?: boolean; reason?: DesignDraftReason } = {},
+	): Promise<DesignDraftWriteResult | null> {
+		if (!options.immediate) {
+			this.persistLocalDraft(designData, options)
+			return null
+		}
+
+		this.clearPendingLocalDraftTimer()
+		const reason = options.reason ?? "local-edit"
+		const draftDesignData = this.getLocalDraftDataForCurrentConflict(designData)
+		return this.writeLocalDraftNow(draftDesignData, reason)
+	}
+
+	hasUnsavedChanges(designData?: DesignData): boolean {
+		if (
+			this.hasBlockingConflict() ||
+			this.hasUnresolvedMergeConflicts() ||
+			this.saveManager.hasRemoteConflict() ||
+			this.stateBag.getPendingDesignUpgrade?.()
+		) {
+			return true
+		}
+
+		const previousFingerprint = this.stateBag.getPrevDesignDataFingerprint()
+		if (!previousFingerprint) return true
+		return (
+			hashDesignDataComparable(designData ?? this.stateBag.getDesignData()) !==
+			previousFingerprint
+		)
+	}
+
 	private clearLocalDraft(): void {
 		this.clearPendingLocalDraftTimer()
 		void deleteDesignDraft(this.getDraftIdentity())
 	}
 
-	private clearLocalDraftAfterFullyPersistedSave(): void {
-		this.clearLocalDraft()
+	private clearLocalDraftAfterFullyPersistedSave(expectedLocalFingerprint: string): void {
+		void deleteDesignDraft(this.getDraftIdentity(), expectedLocalFingerprint)
 	}
 
 	private clearLocalDraftBecauseAlreadySynced(): void {
@@ -1934,7 +1971,7 @@ export class DesignProjectManager implements DesignProjectManagerAPI {
 		this.clearConflictState()
 	}
 
-	async manualSave(): Promise<boolean> {
+	async manualSave(designData?: DesignData): Promise<boolean> {
 		if (this.isVersionDataSourceLocked()) {
 			return false
 		}
@@ -1969,14 +2006,14 @@ export class DesignProjectManager implements DesignProjectManagerAPI {
 		if (this.hasBlockingConflict()) {
 			return false
 		}
-		const saveResult = await this.saveManager.manualSave()
+		const saveResult = await this.saveManager.manualSave(designData)
 		if (saveResult.ok) {
 			this.handleSuccessfulSaveResult(saveResult)
 			if (
 				this.saveManager.wasLastSaveFullyPersisted() &&
 				!this.hasUnresolvedMergeConflicts()
 			) {
-				this.clearLocalDraftAfterFullyPersistedSave()
+				this.clearLocalDraftAfterFullyPersistedSave(saveResult.savedFingerprint)
 			}
 			this.pendingRemoteDesignData = null
 			return true
@@ -2139,7 +2176,7 @@ export class DesignProjectManager implements DesignProjectManagerAPI {
 		}
 
 		if (!this.hasUnresolvedMergeConflicts()) {
-			this.clearLocalDraftAfterFullyPersistedSave()
+			this.clearLocalDraftAfterFullyPersistedSave(saveResult.savedFingerprint)
 		}
 		this.pendingRemoteDesignData = null
 		this.stateBag.setters.setPendingDesignUpgrade?.(null)
@@ -2189,7 +2226,7 @@ export class DesignProjectManager implements DesignProjectManagerAPI {
 				this.saveManager.wasLastSaveFullyPersisted() &&
 				!this.hasUnresolvedMergeConflicts()
 			) {
-				this.clearLocalDraftAfterFullyPersistedSave()
+				this.clearLocalDraftAfterFullyPersistedSave(saveResult.savedFingerprint)
 			}
 			this.pendingRemoteDesignData = null
 			return
@@ -2469,7 +2506,7 @@ export class DesignProjectManager implements DesignProjectManagerAPI {
 				this.saveManager.wasLastSaveFullyPersisted() &&
 				!this.hasUnresolvedMergeConflicts()
 			) {
-				this.clearLocalDraftAfterFullyPersistedSave()
+				this.clearLocalDraftAfterFullyPersistedSave(saveResult.savedFingerprint)
 			}
 			return true
 		}
@@ -2753,7 +2790,7 @@ export class DesignProjectManager implements DesignProjectManagerAPI {
 				this.saveManager.wasLastSaveFullyPersisted() &&
 				!this.hasUnresolvedMergeConflicts()
 			) {
-				this.clearLocalDraftAfterFullyPersistedSave()
+				this.clearLocalDraftAfterFullyPersistedSave(saveResult.savedFingerprint)
 			}
 			return true
 		}

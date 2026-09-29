@@ -567,6 +567,7 @@ export class Canvas {
 		// 初始化名称标签管理器（使用共享的 Overlay Layer）
 		this.nameLabelManager = new NameLabelManager({
 			canvas: this,
+			iconResolver: options.nameLabelIconResolver,
 		})
 
 		this.elementRenameManager = new ElementRenameManager({

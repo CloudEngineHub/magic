@@ -1,9 +1,15 @@
 import Konva from "konva"
 import { ElementTypeEnum } from "../../document/types"
-import { BaseLabelManager, type BaseLabelManagerConfig } from "./BaseLabelManager"
-import { NAME_LABEL_GROUP_PREFIX, NAME_LABEL_HIT_NAME } from "./nameLabelNodeUtils"
+import { BaseLabelManager, type BaseLabelManagerConfig, type LabelSize } from "./BaseLabelManager"
+import {
+	NAME_LABEL_GROUP_PREFIX,
+	NAME_LABEL_HIT_NAME,
+	NAME_LABEL_ICON_NAME,
+	NAME_LABEL_TEXT_NAME,
+} from "./nameLabelNodeUtils"
 import type { Canvas } from "../../core/Canvas"
 import type { CanvasEventMap } from "../../core/EventEmitter"
+import type { NameLabelIconContext, NameLabelIconResolver } from "./nameLabelTypes"
 
 /**
  * 名称标签配置
@@ -21,7 +27,25 @@ const NAME_LABEL_CONFIG = {
 	OFFSET_LEFT: 0,
 	/** 透明命中区相对文字的内边距，避免短名称难以点中 */
 	HIT_PADDING: 2,
+	/** icon 与文本之间的默认间距（标签局部坐标） */
+	ICON_GAP: 4,
+	/** 文本宽度变化达到该粒度时才重新布局，避免缩放每帧触发文本重排 */
+	TEXT_WIDTH_BUCKET: 2,
+	/** 至少保留一个局部像素，避免 Konva 将宽度 0 视为自动宽度 */
+	MIN_TEXT_WIDTH: 1,
 } as const
+
+interface NameLabelLayoutState {
+	iconKey: string | null
+	iconWidth: number
+	iconHeight: number
+	iconGap: number
+	iconVisible: boolean
+	textOffsetX: number
+	naturalTextWidth: number
+	textWidth: number
+	canRenderText: boolean
+}
 
 /**
  * 名称标签管理器
@@ -36,8 +60,11 @@ export class NameLabelManager extends BaseLabelManager {
 	private renamingElementId: string | null = null
 	private interactionUnsubscribers: Array<() => void> = []
 	private pointerHoverElementId: string | null = null
+	private iconHoverElementId: string | null = null
+	private readonly iconResolver?: NameLabelIconResolver
+	private readonly labelLayoutStates = new WeakMap<Konva.Group, NameLabelLayoutState>()
 
-	constructor(options: { canvas: Canvas }) {
+	constructor(options: { canvas: Canvas; iconResolver?: NameLabelIconResolver }) {
 		const { canvas } = options
 		// 构建基类配置
 		const baseConfig: BaseLabelManagerConfig = {
@@ -72,6 +99,7 @@ export class NameLabelManager extends BaseLabelManager {
 		}
 
 		super(baseConfig)
+		this.iconResolver = options.iconResolver
 		this.setupInteractionListeners()
 	}
 
@@ -108,18 +136,28 @@ export class NameLabelManager extends BaseLabelManager {
 			return null
 		}
 
-		const textNode = labelGroup.findOne("Text") as Konva.Text | null
+		const textNode = this.getTextNode(labelGroup)
 		if (!textNode) {
 			return null
 		}
 
 		const scale = this.canvas.stage.scaleX()
 		const stagePosition = this.canvas.stage.position()
+		const layoutState = this.labelLayoutStates.get(labelGroup)
+		const textOffsetX = layoutState?.textOffsetX ?? 0
+		const textWidth = Math.max(
+			layoutState?.naturalTextWidth ?? this.measureNaturalTextWidth(textNode),
+			NAME_LABEL_CONFIG.MIN_TEXT_WIDTH,
+		)
 
 		return {
-			x: labelGroup.x() * scale + stagePosition.x,
-			y: labelGroup.y() * scale + stagePosition.y,
-			width: Math.ceil(textNode.width()),
+			x: labelGroup.x() * scale + stagePosition.x + textOffsetX * labelGroup.scaleX() * scale,
+			y:
+				labelGroup.y() * scale +
+				stagePosition.y +
+				textNode.y() * labelGroup.scaleY() * scale,
+			// Rename input must use the full name width, not the truncated render width.
+			width: Math.ceil(textWidth),
 			height: Math.ceil(textNode.height()),
 			text: textNode.text(),
 			fontSize: this.labelConfig.fontSize,
@@ -144,10 +182,13 @@ export class NameLabelManager extends BaseLabelManager {
 			name: `${NAME_LABEL_GROUP_PREFIX}${elementId}`,
 		})
 		const textNode = new Konva.Text({
+			name: NAME_LABEL_TEXT_NAME,
 			text: labelText,
 			fontSize: this.labelConfig.fontSize,
 			fontFamily: this.labelConfig.fontFamily,
 			fill: this.labelConfig.textColor,
+			wrap: "none",
+			ellipsis: true,
 			listening: false,
 		})
 		const hitRect = new Konva.Rect({
@@ -157,17 +198,281 @@ export class NameLabelManager extends BaseLabelManager {
 		})
 		labelGroup.add(hitRect)
 		labelGroup.add(textNode)
+		this.labelLayoutStates.set(labelGroup, {
+			iconKey: null,
+			iconWidth: 0,
+			iconHeight: 0,
+			iconGap: 0,
+			iconVisible: false,
+			textOffsetX: 0,
+			// The node is auto-sized during creation, so reuse Konva's measured
+			// natural width instead of measuring the same text a second time.
+			naturalTextWidth: textNode.getTextWidth(),
+			textWidth: Math.max(textNode.width(), NAME_LABEL_CONFIG.MIN_TEXT_WIDTH),
+			canRenderText: true,
+		})
+		this.syncIcon(elementId, labelGroup)
 		this.syncHitRect(labelGroup)
 		this.bindLabelInteraction(labelGroup, elementId)
 		return labelGroup
 	}
 
 	protected override updateLabelText(labelGroup: Konva.Group, text: string): boolean {
-		const changed = super.updateLabelText(labelGroup, text)
-		if (changed) {
-			this.syncHitRect(labelGroup)
+		const textNode = this.getTextNode(labelGroup)
+		if (!textNode || textNode.text() === text) return false
+
+		textNode.text(text)
+		const state = this.labelLayoutStates.get(labelGroup)
+		if (state) {
+			state.naturalTextWidth = this.measureNaturalTextWidth(textNode)
+			state.textWidth = 0
 		}
+		this.syncHitRect(labelGroup)
+		return true
+	}
+
+	/**
+	 * Constrains only the rendered text width. The original text remains on the
+	 * Konva.Text node, so rename can still read and display the complete name.
+	 */
+	protected override updateLabelLayout(
+		elementId: string,
+		element: ReturnType<typeof this.canvas.elementManager.getElementInstance>,
+		labelGroup: Konva.Group,
+		boundingRect: { x: number; y: number; width: number; height: number },
+		inverseScale: number,
+	): boolean {
+		void elementId
+		void element
+		const textNode = this.getTextNode(labelGroup)
+		const state = this.labelLayoutStates.get(labelGroup)
+		if (!textNode || !state) return false
+
+		const naturalTextWidth = state.naturalTextWidth
+
+		const safeInverseScale = Math.max(inverseScale, Number.EPSILON)
+		// getBoundingRect() is layer-relative, while the label uses inverse stage
+		// scaling. Convert the element width into the label's local coordinates.
+		const availableLabelWidth = Math.max(
+			0,
+			(boundingRect.width - this.labelConfig.offsetLeft) / safeInverseScale,
+		)
+		const hasIcon = state.iconKey !== null
+		const fullIconWidth = hasIcon ? state.iconWidth + state.iconGap : 0
+		const iconCanFit =
+			hasIcon && availableLabelWidth - fullIconWidth >= NAME_LABEL_CONFIG.MIN_TEXT_WIDTH
+		const textOffsetX = iconCanFit ? fullIconWidth : 0
+		const availableTextWidth = Math.max(0, availableLabelWidth - textOffsetX)
+		const canRenderText = availableTextWidth >= NAME_LABEL_CONFIG.MIN_TEXT_WIDTH
+		const targetTextWidth = this.getRenderedTextWidth(naturalTextWidth, availableTextWidth)
+		let changed = false
+
+		if (state.textOffsetX !== textOffsetX) {
+			state.textOffsetX = textOffsetX
+			changed = true
+		}
+		if (state.iconVisible !== iconCanFit) {
+			state.iconVisible = iconCanFit
+			changed = true
+		}
+		if (state.canRenderText !== canRenderText) {
+			state.canRenderText = canRenderText
+			changed = true
+		}
+		if (state.textWidth !== targetTextWidth) {
+			textNode.width(targetTextWidth)
+			state.textWidth = targetTextWidth
+			changed = true
+		}
+
+		const iconNode = this.getIconNode(labelGroup)
+		const labelHeight = Math.max(textNode.height(), iconCanFit ? state.iconHeight : 0)
+		const iconY = iconCanFit ? Math.max(0, (labelHeight - state.iconHeight) / 2) : 0
+		const textY = iconCanFit ? Math.max(0, (labelHeight - textNode.height()) / 2) : 0
+		if (iconNode) {
+			if (iconNode.x() !== 0 || iconNode.y() !== iconY) {
+				iconNode.position({ x: 0, y: iconY })
+				changed = true
+			}
+			if (iconNode.visible() !== iconCanFit) {
+				iconNode.visible(iconCanFit)
+				changed = true
+			}
+		}
+		if (textNode.x() !== textOffsetX) {
+			textNode.x(textOffsetX)
+			changed = true
+		}
+		if (textNode.y() !== textY) {
+			textNode.y(textY)
+			changed = true
+		}
+
+		if (changed) this.syncHitRect(labelGroup)
 		return changed
+	}
+
+	protected override getLabelSize(labelGroup: Konva.Group): LabelSize | null {
+		const textNode = this.getTextNode(labelGroup)
+		if (!textNode) return null
+
+		const state = this.labelLayoutStates.get(labelGroup)
+		return {
+			width: (state?.textOffsetX ?? 0) + textNode.width(),
+			height: Math.max(textNode.height(), state?.iconVisible ? state.iconHeight : 0),
+		}
+	}
+
+	private getTextNode(labelGroup: Konva.Group): Konva.Text | null {
+		return labelGroup.findOne(`.${NAME_LABEL_TEXT_NAME}`) as Konva.Text | null
+	}
+
+	private measureNaturalTextWidth(textNode: Konva.Text): number {
+		// Measure the full string without changing the constrained render width.
+		// This keeps text measurement out of the viewport hot path and avoids
+		// depending on Konva's internal "auto" width sentinel.
+		const naturalWidth = textNode
+			.text()
+			.split("\n")
+			.reduce((maxWidth, line) => Math.max(maxWidth, textNode.measureSize(line).width), 0)
+		return Number.isFinite(naturalWidth) ? Math.max(0, naturalWidth) : 0
+	}
+
+	private getIconNode(labelGroup: Konva.Group): Konva.Shape | Konva.Group | null {
+		return labelGroup.findOne(`.${NAME_LABEL_ICON_NAME}`) as Konva.Shape | Konva.Group | null
+	}
+
+	private getRenderedTextWidth(naturalWidth: number, availableWidth: number): number {
+		if (naturalWidth <= availableWidth) {
+			return Math.max(naturalWidth, NAME_LABEL_CONFIG.MIN_TEXT_WIDTH)
+		}
+
+		// Round down so a cached bucket never makes the label exceed its element.
+		const bucketedWidth =
+			Math.floor(availableWidth / NAME_LABEL_CONFIG.TEXT_WIDTH_BUCKET) *
+			NAME_LABEL_CONFIG.TEXT_WIDTH_BUCKET
+		return Math.max(bucketedWidth, NAME_LABEL_CONFIG.MIN_TEXT_WIDTH)
+	}
+
+	private getIconContext(elementId: string): NameLabelIconContext | null {
+		const element = this.canvas.elementManager.getElementInstance(elementId)
+		if (!element) return null
+
+		return {
+			elementId,
+			element,
+			data: element.getData(),
+			selected: this.canvas.selectionManager.isSelected(elementId),
+			hovered: this.canvas.hoverManager.getHoveredElementId() === elementId,
+		}
+	}
+
+	/**
+	 * Resolves icons only on discrete element/state changes. Pan and scale use
+	 * the cached descriptor and never invoke user code in their hot path.
+	 */
+	private syncIcon(elementId: string, labelGroup: Konva.Group): boolean {
+		if (!this.iconResolver) return false
+		const state = this.labelLayoutStates.get(labelGroup)
+		if (!state) return false
+
+		const context = this.getIconContext(elementId)
+		const descriptor = context ? this.iconResolver(context) : null
+		const currentNode = this.getIconNode(labelGroup)
+		let changed = false
+
+		if (!descriptor) {
+			if (currentNode) {
+				currentNode.destroy()
+				changed = true
+			}
+			if (
+				state.iconKey !== null ||
+				state.iconWidth !== 0 ||
+				state.iconHeight !== 0 ||
+				state.iconGap !== 0
+			) {
+				state.iconKey = null
+				state.iconWidth = 0
+				state.iconHeight = 0
+				state.iconGap = 0
+				state.iconVisible = false
+				state.textOffsetX = 0
+				state.textWidth = 0
+				changed = true
+			}
+			return changed
+		}
+		if (!context) return false
+
+		const width = this.normalizeIconDimension(descriptor.width)
+		const height = this.normalizeIconDimension(descriptor.height)
+		const gap = Math.max(0, descriptor.gap ?? NAME_LABEL_CONFIG.ICON_GAP)
+		const needsNewNode = !currentNode || state.iconKey !== descriptor.key
+		let iconNode = currentNode
+
+		if (needsNewNode) {
+			currentNode?.destroy()
+			iconNode = descriptor.create(context)
+			if (!iconNode) {
+				state.iconKey = null
+				state.iconWidth = 0
+				state.iconHeight = 0
+				state.iconGap = 0
+				state.iconVisible = false
+				state.textOffsetX = 0
+				state.textWidth = 0
+				return true
+			}
+			iconNode.addName(NAME_LABEL_ICON_NAME)
+			iconNode.listening(false)
+			iconNode.visible(true)
+			labelGroup.add(iconNode)
+			changed = true
+		} else {
+			if (!iconNode) return false
+			descriptor.update?.(iconNode, context)
+			// update() may change the icon pixels without changing its key.
+			changed = descriptor.update !== undefined
+		}
+
+		const dimensionsChanged =
+			state.iconKey !== descriptor.key ||
+			state.iconWidth !== width ||
+			state.iconHeight !== height ||
+			state.iconGap !== gap
+		changed = dimensionsChanged || changed
+		state.iconKey = descriptor.key
+		state.iconWidth = width
+		state.iconHeight = height
+		state.iconGap = gap
+		if (dimensionsChanged) state.textWidth = 0
+		return changed
+	}
+
+	private normalizeIconDimension(value: number): number {
+		return Number.isFinite(value) ? Math.max(0, value) : 0
+	}
+
+	/** Refreshes cached icon state for selected/hovered/data-changed labels. */
+	public refreshIcons(elementIds?: readonly string[]): void {
+		if (!this.iconResolver) return
+		const ids = elementIds ? Array.from(new Set(elementIds)) : Array.from(this.labelMap.keys())
+		let requiresDraw = false
+
+		for (const elementId of ids) {
+			const labelGroup = this.labelMap.get(elementId)
+			if (!labelGroup) continue
+			const iconChanged = this.syncIcon(elementId, labelGroup)
+			requiresDraw = iconChanged || requiresDraw
+			if (iconChanged) {
+				requiresDraw = this.updateLabelPosition(elementId, true) || requiresDraw
+			}
+		}
+
+		if (requiresDraw) {
+			this.requestOverlayDraw("name-label-icons")
+		}
 	}
 
 	protected override shouldRetainHiddenLabel(elementId: string): boolean {
@@ -176,6 +481,7 @@ export class NameLabelManager extends BaseLabelManager {
 
 	public override destroy(): void {
 		this.clearPointerHover()
+		this.iconHoverElementId = null
 		for (const unsubscribe of this.interactionUnsubscribers) {
 			unsubscribe()
 		}
@@ -222,6 +528,8 @@ export class NameLabelManager extends BaseLabelManager {
 		labelGroup: Konva.Group,
 		baseVisibility: boolean,
 	): boolean | null {
+		void labelGroup
+		void element
 		if (this.renamingElementId === elementId) {
 			return false
 		}
@@ -231,29 +539,12 @@ export class NameLabelManager extends BaseLabelManager {
 			return null
 		}
 
-		// 检查 name label 是否超出元素宽度
-		const boundingRect = element?.getBoundingRect()
-		if (boundingRect) {
-			const textNode = labelGroup.findOne("Text") as Konva.Text
-			if (textNode) {
-				// 获取标签的实际显示尺寸（考虑缩放）
-				const scaleX = labelGroup.scaleX()
-				const labelWidth = textNode.width() * scaleX
-				const labelX = labelGroup.x()
-
-				// 检测 name label 是否超出元素宽度
-				if (
-					this.checkLabelExceedsElementWidth(
-						{ x: labelX, width: labelWidth },
-						boundingRect,
-					)
-				) {
-					return false
-				}
-			}
+		const state = this.labelLayoutStates.get(labelGroup)
+		if (state && !state.canRenderText) {
+			return false
 		}
 
-		// 不修改基础可见性
+		// 文本已经按元素宽度设置了 ellipsis，宽度不足不再隐藏整个标签。
 		return null
 	}
 
@@ -267,6 +558,29 @@ export class NameLabelManager extends BaseLabelManager {
 		this.listenInteraction("eraser:exit")
 		this.listenInteraction("text:editing-state-change")
 		this.listenInteraction("permission:changed")
+		if (!this.iconResolver) return
+
+		this.interactionUnsubscribers.push(
+			this.canvas.eventEmitter.on("element:select", ({ data }) => {
+				this.refreshIcons(data.elementIds)
+			}),
+			this.canvas.eventEmitter.on("element:deselect", ({ data }) => {
+				this.refreshIcons(data?.elementIds)
+			}),
+			this.canvas.eventEmitter.on("element:hover", ({ data }) => {
+				const previousHoveredElementId = this.iconHoverElementId
+				this.iconHoverElementId = data.elementId
+				this.refreshIcons(
+					[previousHoveredElementId, data.elementId].filter(Boolean) as string[],
+				)
+			}),
+			this.canvas.eventEmitter.on("element:updated", ({ data }) => {
+				this.refreshIcons([data.elementId])
+			}),
+			this.canvas.eventEmitter.on("document:restored", () => {
+				this.refreshIcons()
+			}),
+		)
 	}
 
 	private listenInteraction<K extends keyof CanvasEventMap>(eventType: K): void {
@@ -307,17 +621,25 @@ export class NameLabelManager extends BaseLabelManager {
 	}
 
 	private syncHitRect(labelGroup: Konva.Group): void {
-		const textNode = labelGroup.findOne("Text") as Konva.Text | null
+		const labelSize = this.getLabelSize(labelGroup)
 		const hitRect = labelGroup.findOne(`.${NAME_LABEL_HIT_NAME}`) as Konva.Rect | null
-		if (!textNode || !hitRect) return
+		if (!labelSize || !hitRect) return
 
 		const padding = NAME_LABEL_CONFIG.HIT_PADDING
-		hitRect.setAttrs({
+		const attrs = {
 			x: -padding,
 			y: -padding,
-			width: Math.max(textNode.width() + padding * 2, padding * 2),
-			height: Math.max(textNode.height() + padding * 2, padding * 2),
-		})
+			width: Math.max(labelSize.width + padding * 2, padding * 2),
+			height: Math.max(labelSize.height + padding * 2, padding * 2),
+		}
+		if (
+			hitRect.x() !== attrs.x ||
+			hitRect.y() !== attrs.y ||
+			hitRect.width() !== attrs.width ||
+			hitRect.height() !== attrs.height
+		) {
+			hitRect.setAttrs(attrs)
+		}
 	}
 
 	private bindLabelInteraction(labelGroup: Konva.Group, elementId: string): void {

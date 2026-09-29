@@ -67,6 +67,7 @@ describe("VideoElement viewport layout", () => {
 			const updatePlaceholderContentLayout = vi.fn()
 			const updatePlayerLayout = vi.fn()
 			const updatePlayerViewportScaleLayout = vi.fn()
+			const updateViewportScaleLayout = vi.fn()
 			const element = Object.create(VideoElement.prototype) as unknown as {
 				data: { id: string; width: number; height: number }
 				canvas: {
@@ -77,6 +78,9 @@ describe("VideoElement viewport layout", () => {
 					updatePlaceholderContentLayout: typeof updatePlaceholderContentLayout
 					updatePlayerLayout: typeof updatePlayerLayout
 					updatePlayerViewportScaleLayout: typeof updatePlayerViewportScaleLayout
+				}
+				borderDecorator: {
+					updateViewportScaleLayout: typeof updateViewportScaleLayout
 				}
 				setupContentUpdateListener: (group: Konva.Group) => void
 				removeContentUpdateListener: () => void
@@ -89,6 +93,7 @@ describe("VideoElement viewport layout", () => {
 					updatePlayerLayout,
 					updatePlayerViewportScaleLayout,
 				},
+				borderDecorator: { updateViewportScaleLayout },
 			})
 
 			element.setupContentUpdateListener(group)
@@ -97,16 +102,19 @@ describe("VideoElement viewport layout", () => {
 
 			expect(updatePlaceholderContentLayout).toHaveBeenCalledWith(group, 320, 180)
 			expect(updatePlayerViewportScaleLayout).toHaveBeenCalledWith(group)
+			expect(updateViewportScaleLayout).toHaveBeenCalledTimes(1)
 			expect(updatePlayerLayout).not.toHaveBeenCalled()
 			expect(layerDrawSpy).not.toHaveBeenCalled()
 
 			updatePlaceholderContentLayout.mockClear()
 			updatePlayerViewportScaleLayout.mockClear()
+			updateViewportScaleLayout.mockClear()
 			updatePlayerLayout.mockClear()
 			group.fire("transform")
 			expect(updatePlaceholderContentLayout).toHaveBeenCalledTimes(1)
 			expect(updatePlayerLayout).toHaveBeenCalledTimes(1)
 			expect(updatePlayerViewportScaleLayout).not.toHaveBeenCalled()
+			expect(updateViewportScaleLayout).not.toHaveBeenCalled()
 			expect(layerDrawSpy).toHaveBeenCalledTimes(1)
 
 			element.removeContentUpdateListener()

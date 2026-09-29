@@ -1,6 +1,8 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
+import Konva from "konva"
 import { ElementTypeEnum, type ElementType } from "../../../document/types"
 import { NameLabelManager } from "../NameLabelManager"
+import type { NameLabelIconResolver } from "../nameLabelTypes"
 
 type TestElement = {
 	getData: () => { id: string; type: ElementType }
@@ -44,13 +46,30 @@ class TestNameLabelManager extends NameLabelManager {
 			true,
 		)
 	}
+
+	public getTextNodeForTest(elementId: string): Konva.Text | null {
+		return this.labelMap.get(elementId)?.findOne(".name-label-text") as Konva.Text | null
+	}
+
+	public getIconNodeForTest(elementId: string): Konva.Node | null {
+		return this.labelMap.get(elementId)?.findOne(".name-label-icon") as Konva.Node | null
+	}
+
+	public updateLabelPositionForTest(elementId: string): boolean {
+		return this.updateLabelPosition(elementId, true)
+	}
 }
 
 function createManager(
 	elements: Map<string, TestElement>,
-	options: { selectedElementId?: string; hoveredElementId?: string } = {},
+	options: {
+		selectedElementId?: string
+		hoveredElementId?: string
+		iconResolver?: NameLabelIconResolver
+	} = {},
 ): TestNameLabelManager {
 	return new TestNameLabelManager({
+		iconResolver: options.iconResolver,
 		canvas: {
 			cropManager: { getCroppingElementId: () => null },
 			elementManager: {
@@ -78,6 +97,8 @@ function createManager(
 describe("NameLabelManager visibility", () => {
 	beforeEach(() => {
 		vi.spyOn(HTMLCanvasElement.prototype, "getContext").mockReturnValue({
+			save: vi.fn(),
+			restore: vi.fn(),
 			clearRect: vi.fn(),
 			fillRect: vi.fn(),
 			getImageData: vi.fn(() => ({ data: new Uint8ClampedArray([0, 0, 0, 0]) })),
@@ -112,14 +133,17 @@ describe("NameLabelManager visibility", () => {
 		manager.destroy()
 	})
 
-	it("hides audio labels when the text exceeds the element width", () => {
+	it("keeps a narrow audio label visible and truncates its rendered text", () => {
 		const getBoundingRect = () => ({ x: 0, y: 0, width: 100, height: 100 })
+		const labelText = "A deliberately long audio name"
 		const elements = new Map<string, TestElement>([
 			[
 				"audio-1",
 				{
 					getBoundingRect,
 					getData: () => ({ id: "audio-1", type: ElementTypeEnum.Audio }),
+					getNameLabelText: () => labelText,
+					getNode: () => ({}),
 				},
 			],
 			[
@@ -132,8 +156,87 @@ describe("NameLabelManager visibility", () => {
 		])
 		const manager = createManager(elements)
 
-		expect(manager.getTooWideLabelVisibility("audio-1")).toBe(false)
-		expect(manager.getTooWideLabelVisibility("image-1")).toBe(false)
+		expect(manager.getTooWideLabelVisibility("audio-1")).toBeNull()
+		expect(manager.createOrUpdateLabelForTest("audio-1")).toBe(true)
+		expect(manager.isLabelVisible("audio-1")).toBe(true)
+
+		const textNode = manager.getTextNodeForTest("audio-1")
+		expect(textNode?.text()).toBe(labelText)
+		expect(textNode?.width()).toBeLessThanOrEqual(100)
+		expect(textNode?.textArr[0]?.text.endsWith("…")).toBe(true)
+
+		manager.destroy()
+	})
+
+	it("reserves an optional icon slot and resolves it outside layout-only updates", () => {
+		const getBoundingRect = vi.fn(() => ({ x: 10, y: 20, width: 100, height: 80 }))
+		const elements = new Map<string, TestElement>([
+			[
+				"audio-1",
+				{
+					getBoundingRect,
+					getData: () => ({ id: "audio-1", type: ElementTypeEnum.Audio }),
+					getNameLabelText: () => "Audio name",
+					getNode: () => ({}),
+				},
+			],
+		])
+		const iconResolver = vi.fn<NameLabelIconResolver>(({ selected }) => ({
+			key: selected ? "audio-selected" : "audio-status",
+			width: 12,
+			height: 12,
+			create: () => new Konva.Rect({ width: 12, height: 12 }),
+		}))
+		const options: { selectedElementId?: string; iconResolver?: NameLabelIconResolver } = {
+			iconResolver,
+		}
+		const manager = createManager(elements, options)
+
+		manager.createOrUpdateLabelForTest("audio-1")
+		const initialResolverCalls = iconResolver.mock.calls.length
+		const textNode = manager.getTextNodeForTest("audio-1")
+		const iconNode = manager.getIconNodeForTest("audio-1")
+
+		expect(iconNode).toBeInstanceOf(Konva.Rect)
+		expect(iconNode?.listening()).toBe(false)
+		expect(textNode?.x()).toBe(16)
+		expect(textNode?.width()).toBeLessThanOrEqual(84)
+
+		manager.updateLabelPositionForTest("audio-1")
+		expect(iconResolver).toHaveBeenCalledTimes(initialResolverCalls)
+		const layoutCallsBeforeStableRefresh = getBoundingRect.mock.calls.length
+		manager.refreshIcons(["audio-1"])
+		expect(getBoundingRect).toHaveBeenCalledTimes(layoutCallsBeforeStableRefresh)
+
+		expect(iconResolver).toHaveBeenCalledTimes(initialResolverCalls + 1)
+
+		options.selectedElementId = "audio-1"
+		manager.refreshIcons(["audio-1"])
+		expect(iconResolver).toHaveBeenLastCalledWith(
+			expect.objectContaining({ selected: true, elementId: "audio-1" }),
+		)
+
+		manager.destroy()
+	})
+
+	it("uses the complete text width for rename input when the label is truncated", () => {
+		const labelText = "A long name for rename that is definitely wider than the element"
+		const elements = new Map<string, TestElement>([
+			[
+				"audio-1",
+				{
+					getBoundingRect: () => ({ x: 10, y: 20, width: 40, height: 80 }),
+					getData: () => ({ id: "audio-1", type: ElementTypeEnum.Audio }),
+					getNameLabelText: () => labelText,
+					getNode: () => ({}),
+				},
+			],
+		])
+		const manager = createManager(elements)
+
+		const layout = manager.getRenameInputLayout("audio-1")
+		expect(layout?.text).toBe(labelText)
+		expect(layout?.width).toBeGreaterThan(40)
 
 		manager.destroy()
 	})

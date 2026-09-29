@@ -68,6 +68,32 @@ function createElement(id: string): LayerElement {
 	}
 }
 
+function createVisibilityManager(elements: LayerElement[]) {
+	const manager = Object.create(ElementManager.prototype) as unknown as {
+		elements: Map<string, { getData: () => LayerElement }>
+		documentIndex: CanvasDocumentIndex
+		dataTreeVisibilityCache: Map<string, boolean>
+		findParentIdForElement: (elementId: string) => string | undefined
+		isElementVisibleInDataTree: (elementId: string) => boolean
+		updateDataOnly: (
+			element: {
+				getData: () => LayerElement
+				getId: () => string
+				update: (data: LayerElement) => boolean
+			},
+			updates: ElementUpdatePatch,
+			options: { silent?: boolean },
+		) => void
+		invalidateGeometryForElement: (elementId: string) => void
+		scheduleContentLayerDraw: () => void
+		emitElementChange: () => void
+	}
+	manager.elements = new Map(elements.map((element) => [element.id, { getData: () => element }]))
+	manager.documentIndex = new CanvasDocumentIndex()
+	manager.dataTreeVisibilityCache = new Map()
+	return manager
+}
+
 describe("ElementManager element creation names", () => {
 	it("assigns the next unique name through the public create entry", () => {
 		const manager = Object.create(ElementManager.prototype) as unknown as {
@@ -180,6 +206,81 @@ describe("ElementManager nested geometry invalidation", () => {
 	})
 })
 
+describe("ElementManager data-tree visibility", () => {
+	it("reuses cached visibility for descendants of nested Frame and Group elements", () => {
+		const image = createElement("image")
+		const sibling = createElement("sibling")
+		const group = {
+			...createElement("group"),
+			type: "group" as const,
+			children: [image, sibling],
+		}
+		const innerFrame = {
+			...createElement("inner-frame"),
+			type: "frame" as const,
+			children: [group],
+		}
+		const outerFrame = {
+			...createElement("outer-frame"),
+			type: "frame" as const,
+			children: [innerFrame],
+		}
+		const manager = createVisibilityManager([outerFrame, innerFrame, group, image, sibling])
+		const findParentId = vi.spyOn(manager, "findParentIdForElement")
+
+		expect(manager.isElementVisibleInDataTree(image.id)).toBe(true)
+		expect(manager.isElementVisibleInDataTree(sibling.id)).toBe(true)
+
+		// The second branch only resolves the sibling itself; the shared Group and Frame chain is cached.
+		expect(findParentId).toHaveBeenCalledTimes(5)
+		expect(manager.dataTreeVisibilityCache).toEqual(
+			new Map([
+				[image.id, true],
+				[group.id, true],
+				[innerFrame.id, true],
+				[outerFrame.id, true],
+				[sibling.id, true],
+			]),
+		)
+	})
+
+	it("invalidates cached visibility when a hidden nested ancestor becomes visible", () => {
+		const image = createElement("image")
+		let groupData = {
+			...createElement("group"),
+			type: "group" as const,
+			visible: false,
+			children: [image],
+		}
+		const frame = {
+			...createElement("frame"),
+			type: "frame" as const,
+			children: [groupData],
+		}
+		const groupElement = {
+			getData: () => groupData as LayerElement,
+			getId: () => groupData.id,
+			update: vi.fn((nextData: LayerElement) => {
+				groupData = nextData as typeof groupData
+				return false
+			}),
+			getNode: () => null,
+		}
+		const manager = createVisibilityManager([frame, groupData, image])
+		manager.elements.set(groupData.id, groupElement)
+		manager.invalidateGeometryForElement = vi.fn()
+		manager.scheduleContentLayerDraw = vi.fn()
+		manager.emitElementChange = vi.fn()
+
+		expect(manager.isElementVisibleInDataTree(image.id)).toBe(false)
+
+		manager.updateDataOnly(groupElement, { visible: true }, { silent: true })
+
+		expect(manager.isElementVisibleInDataTree(image.id)).toBe(true)
+		expect(manager.dataTreeVisibilityCache.get(groupData.id)).toBe(true)
+	})
+})
+
 describe("ElementManager document loading", () => {
 	it("preserves persisted Frame dimensions during document loading", () => {
 		const manager = Object.create(ElementManager.prototype) as unknown as {
@@ -190,6 +291,7 @@ describe("ElementManager document loading", () => {
 			doCreate: ReturnType<typeof vi.fn>
 			flush: ReturnType<typeof vi.fn>
 			reorderTopLevelElements: ReturnType<typeof vi.fn>
+			canvas: { geometryCacheManager: { invalidateAll: ReturnType<typeof vi.fn> } }
 			replaceAll: ElementManager["replaceAll"]
 		}
 		const frame: LayerElement = {
@@ -210,6 +312,7 @@ describe("ElementManager document loading", () => {
 		manager.doCreate = vi.fn()
 		manager.flush = vi.fn()
 		manager.reorderTopLevelElements = vi.fn()
+		manager.canvas = { geometryCacheManager: { invalidateAll: vi.fn() } }
 
 		manager.replaceAll([frame])
 
@@ -221,6 +324,7 @@ describe("ElementManager document loading", () => {
 			}),
 			{ batch: true },
 		)
+		expect(manager.canvas.geometryCacheManager.invalidateAll).toHaveBeenCalledOnce()
 	})
 
 	it("continues loading after one element fails and records the issue", () => {
@@ -232,6 +336,7 @@ describe("ElementManager document loading", () => {
 			doCreate: ReturnType<typeof vi.fn>
 			flush: ReturnType<typeof vi.fn>
 			reorderTopLevelElements: ReturnType<typeof vi.fn>
+			canvas: { geometryCacheManager: { invalidateAll: ReturnType<typeof vi.fn> } }
 			replaceAll: ElementManager["replaceAll"]
 			getLastLoadIssues: ElementManager["getLastLoadIssues"]
 		}
@@ -244,6 +349,7 @@ describe("ElementManager document loading", () => {
 		})
 		manager.flush = vi.fn()
 		manager.reorderTopLevelElements = vi.fn()
+		manager.canvas = { geometryCacheManager: { invalidateAll: vi.fn() } }
 
 		manager.replaceAll([createElement("first"), createElement("broken"), createElement("last")])
 
@@ -548,6 +654,7 @@ describe("ElementManager container child lifecycle", () => {
 		}
 		const manager = Object.create(ElementManager.prototype) as {
 			elements: Map<string, typeof childElement>
+			dataTreeVisibilityCache: Map<string, boolean>
 			canvas: {
 				eventEmitter: {
 					emit: ReturnType<typeof vi.fn>
@@ -563,6 +670,7 @@ describe("ElementManager container child lifecycle", () => {
 			) => void
 		}
 		manager.elements = new Map()
+		manager.dataTreeVisibilityCache = new Map()
 		manager.canvas = {
 			eventEmitter: {
 				emit: vi.fn(),
@@ -1223,6 +1331,7 @@ describe("ElementManager runtime-only generation deletion", () => {
 		const emitElementChange = vi.fn()
 		const manager = Object.create(ElementManager.prototype) as unknown as {
 			elements: Map<string, typeof element>
+			dataTreeVisibilityCache: Map<string, boolean>
 			temporaryElements: Map<
 				string,
 				{
@@ -1240,6 +1349,7 @@ describe("ElementManager runtime-only generation deletion", () => {
 			delete: ElementManager["delete"]
 		}
 		manager.elements = new Map([[elementData.id, element]])
+		manager.dataTreeVisibilityCache = new Map()
 		manager.temporaryElements = new Map([
 			[
 				elementData.id,

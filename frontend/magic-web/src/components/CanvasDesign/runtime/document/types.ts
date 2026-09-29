@@ -12,6 +12,7 @@ import type {
 } from "../../public/magic-types"
 import type { TFunction } from "../../public/i18n-types"
 import type { CanvasAccessMode, CanvasCapability } from "../../public/props"
+import type { NameLabelIconResolver } from "../interaction/labels/nameLabelTypes"
 
 /** 裁剪矩形配置 */
 export interface CropConfig {
@@ -84,6 +85,8 @@ export interface CanvasConfig {
 	}
 	/** Plugin configuration injected by the host application. */
 	plugins?: CanvasDesignPluginModuleConfig
+	/** 可选的名称标签图标 resolver；不传时名称标签保持纯文本。 */
+	nameLabelIconResolver?: NameLabelIconResolver
 	/** 获取设备形态、布局和输入能力，如果未提供则使用默认检测 */
 	getDevice?: () => CanvasDeviceInfo
 	/** 翻译函数 */
