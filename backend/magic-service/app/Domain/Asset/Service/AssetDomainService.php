@@ -335,12 +335,15 @@ class AssetDomainService
 
     /**
      * 异步同步当前用户的个人素材到默认 Provider。
+     *
+     * @param bool $hasPerson 素材是否含人像（含无法排除的情况）：true 走第三方合规审核；
+     *                        false 表示调用方已确认无人像，凭证创建后直接标记通过
      */
     public function syncPersonalAsset(
         AssetDataIsolation $dataIsolation,
         int|string $assetId,
         ?string $fileUrl,
-        bool $skipProviderReview = false,
+        bool $hasPerson = true,
     ): ProviderAssetEntity {
         $asset = $this->assets->findById($dataIsolation, $assetId);
         if ($asset === null || ! $asset->isOwnedBy(
@@ -364,7 +367,7 @@ class AssetDomainService
             }
         }
         $asset->setFileUrl($fileUrl);
-        return $this->syncToProvider($dataIsolation, $asset, $skipProviderReview);
+        return $this->syncToProvider($dataIsolation, $asset, $hasPerson);
     }
 
     /**
@@ -580,13 +583,15 @@ class AssetDomainService
      * 不再重复上传——这是「同一张图片只上传一次」的核心。没有可复用的素材才走新建流程。
      *
      * 失败只回写 Provider 映射状态，不回收远程资源：凭证可查、可重试、可人工处置。
+     *
+     * @param bool $hasPerson 素材是否含人像（含无法排除的情况）：true 必须走第三方合规审核；
+     *                        只有调用方已确认无人像时才允许直接标记通过，公开资产创建固定传 true
      */
     private function syncToProvider(
         AssetDataIsolation $dataIsolation,
         AssetEntity $asset,
-        bool $skipProviderReview = false,
-    ): ProviderAssetEntity
-    {
+        bool $hasPerson = true,
+    ): ProviderAssetEntity {
         $this->markProviderStatus($dataIsolation, $asset, ProviderAssetStatus::PROCESSING);
         try {
             // 命中可复用凭证时跳过上传和合规轮询。
@@ -607,7 +612,7 @@ class AssetDomainService
             $providerGroupId = $this->createProviderAssetGroup($this->resolveProviderGroupName($asset));
             $this->persistGroupMapping($dataIsolation, $asset, $providerGroupId);
             $providerAssetEntity = $this->createProviderAsset($dataIsolation, $asset, $providerGroupId);
-            if (! $skipProviderReview) {
+            if ($hasPerson) {
                 $this->awaitProviderAssetPassed($dataIsolation, $asset, $providerAssetEntity);
             } else {
                 $providerAssetEntity->setProviderStatus(ProviderAssetStatus::PASS);

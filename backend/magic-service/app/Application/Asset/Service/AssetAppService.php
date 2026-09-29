@@ -20,11 +20,11 @@ use App\Domain\Asset\Entity\ValueObject\Query\AssetQuery;
 use App\Domain\Asset\Service\AssetDomainService;
 use App\Domain\Asset\Service\AssetTagDomainService;
 use App\Domain\Contact\Service\MagicUserDomainService;
+use App\Domain\ModelGateway\Entity\Dto\CompletionDTO;
+use App\Domain\ModelGateway\Entity\ValueObject\SourceId;
 use App\Domain\Permission\Entity\ValueObject\ResourceVisibility\PrincipalType;
 use App\Domain\Permission\Entity\ValueObject\ResourceVisibility\ResourceType;
 use App\Domain\Permission\Service\ResourceVisibilityDomainService;
-use App\Domain\ModelGateway\Entity\Dto\CompletionDTO;
-use App\Domain\ModelGateway\Entity\ValueObject\SourceId;
 use App\Domain\Provider\Entity\ValueObject\AiAbilityCode;
 use App\Domain\Provider\Entity\ValueObject\ProviderDataIsolation;
 use App\Domain\Provider\Service\AiAbilityDomainService;
@@ -36,8 +36,8 @@ use App\Infrastructure\Util\Context\CoContext;
 use App\Interfaces\Asset\DTO\Request\CreateAssetRequestDTO;
 use App\Interfaces\Asset\DTO\Request\QueryAssetRequestDTO;
 use App\Interfaces\Asset\DTO\Request\SaveAssetToLibraryRequestDTO;
-use Hyperf\DbConnection\Db;
 use Hyperf\Coroutine\Coroutine;
+use Hyperf\DbConnection\Db;
 use Hyperf\Odin\Api\Response\ChatCompletionResponse;
 use Psr\Log\LoggerInterface;
 use Qbhy\HyperfAuth\Authenticatable;
@@ -75,23 +75,12 @@ class AssetAppService extends AbstractAssetAppService
         // 记录内容指纹：用于跨组织复用已经通过审核的第三方素材。
         $asset->setContentHash($contentHash ?? $this->resolveContentHash($asset));
 
-        // 仅在当前用户、当前组织内复用本地记录，避免刷新同一个 file_key 时重复创建副本。
-        // 跨组织、跨用户的审核结果复用由 AssetDomainService::syncToProvider() 按 SHA-256 完成，
-        // 不能直接返回其他主体的 AssetEntity，避免越权暴露素材记录。
+        // 当前用户、当前组织内复用本地记录，避免刷新同一个 file_key 时重复创建副本
         if ($asset->getContentHash() !== null && $asset->getContentHash() !== '') {
-            $existing = $this->assetDomainService->findPersonalAssetByContentHash(
-                $dataIsolation->getCurrentUserId(),
-                $asset->getContentHash(),
-                true,
-            );
-            if ($existing !== null
-                && $existing->getOrganizationCode() === $dataIsolation->getCurrentOrganizationCode()
-                && trim((string) $existing->getFileKey()) !== '') {
+            $existing = $this->assetDomainService->findPersonalAssetByContentHash($dataIsolation->getCurrentUserId(), $asset->getContentHash(), true);
+            if ($existing !== null) {
                 $this->resolveAssetFileUrls([$existing]);
-                $providerAsset = $this->assetDomainService->findProviderAssets(
-                    $dataIsolation,
-                    [(int) $existing->getId()],
-                )[(string) $existing->getId()] ?? null;
+                $providerAsset = $this->assetDomainService->findProviderAssets($dataIsolation, [(int) $existing->getId()])[(string) $existing->getId()] ?? null;
                 if ($providerAsset === null || ! $providerAsset->getProviderStatus()->isPassed()) {
                     $existingFileUrl = $existing->getFileUrl();
                     if ($synchronous) {
