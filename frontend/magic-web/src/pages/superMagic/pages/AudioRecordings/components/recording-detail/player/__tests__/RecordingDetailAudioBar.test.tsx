@@ -58,7 +58,7 @@ describe("RecordingDetailAudioBar", () => {
 			/>,
 		)
 
-		fireEvent.click(screen.getByLabelText("detail.player.playbackRateMenuAria"))
+		fireEvent.click(screen.getByTestId("recording-detail-player-rate-trigger"))
 		fireEvent.click(screen.getByRole("option", { name: "1.5x" }))
 		expect(onPlaybackRateChange).toHaveBeenCalledWith(1.5)
 	})
@@ -70,5 +70,90 @@ describe("RecordingDetailAudioBar", () => {
 		fireEvent.click(screen.getByLabelText("detail.player.expandPlayerAria"))
 
 		expect(onExpandedChange).toHaveBeenCalledWith(true)
+	})
+
+	it("keeps the collapsed expand glyph aligned with skip control size", () => {
+		render(<RecordingDetailAudioBar {...baseProps} collapsedTransportControls />)
+
+		const expand = screen.getByLabelText("detail.player.expandPlayerAria")
+		expect(expand.className).toContain("size-7")
+		expect(expand.querySelector("svg")?.getAttribute("width")).toBe("20")
+	})
+
+	it("keeps the mobile collapsed expand glyph at the original lucide size", () => {
+		render(<RecordingDetailAudioBar {...baseProps} />)
+
+		const expand = screen.getByLabelText("detail.player.expandPlayerAria")
+		expect(expand.querySelector("svg")?.getAttribute("class")).toContain("size-5")
+	})
+
+	it("hides rate and skip controls in the default collapsed row", () => {
+		render(<RecordingDetailAudioBar {...baseProps} />)
+
+		expect(screen.queryByTestId("recording-detail-player-rate-trigger")).not.toBeInTheDocument()
+		expect(
+			screen.queryByTestId("recording-detail-player-skip-back-button"),
+		).not.toBeInTheDocument()
+		expect(
+			screen.queryByTestId("recording-detail-player-skip-forward-button"),
+		).not.toBeInTheDocument()
+	})
+
+	it("exposes rate and skip controls in the collapsed transport row", () => {
+		const onSeek = vi.fn()
+		const onPlaybackRateChange = vi.fn()
+		const onExpandedChange = vi.fn()
+		render(
+			<RecordingDetailAudioBar
+				{...baseProps}
+				collapsedTransportControls
+				currentSec={30}
+				onSeek={onSeek}
+				onPlaybackRateChange={onPlaybackRateChange}
+				onExpandedChange={onExpandedChange}
+			/>,
+		)
+
+		fireEvent.click(screen.getByTestId("recording-detail-player-skip-back-button"))
+		fireEvent.click(screen.getByTestId("recording-detail-player-skip-forward-button"))
+		expect(onSeek).toHaveBeenNthCalledWith(1, 15)
+		expect(onSeek).toHaveBeenNthCalledWith(2, 45)
+
+		fireEvent.click(screen.getByTestId("recording-detail-player-rate-trigger"))
+		expect(screen.getByTestId("recording-detail-player-rate-content")).toBeInTheDocument()
+		fireEvent.click(screen.getByRole("option", { name: "1.5x" }))
+		expect(onPlaybackRateChange).toHaveBeenCalledWith(1.5)
+
+		fireEvent.click(screen.getByLabelText("detail.player.expandPlayerAria"))
+		expect(onExpandedChange).toHaveBeenCalledWith(true)
+	})
+
+	it("opens the expanded rate menu upward by default so the mobile bottom player stays on screen", () => {
+		render(<RecordingDetailAudioBar {...baseProps} expanded />)
+
+		fireEvent.click(screen.getByTestId("recording-detail-player-rate-trigger"))
+		expect(screen.getByTestId("recording-detail-player-rate-content").className).toContain(
+			"bottom-full",
+		)
+	})
+
+	it("opens the PC expanded rate menu downward so the workbench does not clip it", () => {
+		render(<RecordingDetailAudioBar {...baseProps} expanded rateMenuPlacement="down" />)
+
+		fireEvent.click(screen.getByTestId("recording-detail-player-rate-trigger"))
+		const menu = screen.getByTestId("recording-detail-player-rate-content")
+		expect(menu.className).toContain("top-full")
+		expect(menu.className).not.toContain("bottom-full")
+		expect(screen.getByTestId("recording-detail-audio-bar").className).toContain("z-20")
+	})
+
+	it("opens the collapsed rate menu downward so the workbench header does not clip it", () => {
+		render(<RecordingDetailAudioBar {...baseProps} collapsedTransportControls />)
+
+		fireEvent.click(screen.getByTestId("recording-detail-player-rate-trigger"))
+		const menu = screen.getByTestId("recording-detail-player-rate-content")
+		expect(menu.className).toContain("top-full")
+		expect(menu.className).not.toContain("bottom-full")
+		expect(screen.getByTestId("recording-detail-audio-bar").className).toContain("z-20")
 	})
 })

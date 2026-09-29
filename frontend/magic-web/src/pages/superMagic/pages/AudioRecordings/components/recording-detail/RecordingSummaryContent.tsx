@@ -1,10 +1,9 @@
-import { useEffect, useMemo, useRef, useState } from "react"
+import { useEffect, useMemo, useRef, useState, Suspense } from "react"
 import { AlignLeft, Network } from "lucide-react"
 import { useTranslation } from "react-i18next"
 import { cn } from "@/utils/cn"
 import MagicMarkmap from "@/components/base/MagicMarkmap"
 import IsolatedHTMLRenderer from "@/pages/superMagic/components/Detail/contents/HTML/IsolatedHTMLRenderer"
-import { processHtmlContent } from "@/pages/superMagic/components/Detail/contents/HTML/htmlProcessor"
 import type { RecordingDetailFileRef, RecordingTopicSection } from "../../types/recording-detail"
 import type { AttachmentFile } from "@/pages/superMagic/utils/image-url-resolver"
 import { parseTopicsMarkdown } from "../../utils/topics-parser"
@@ -23,6 +22,8 @@ import {
 	useHorizontalScrollWithFade,
 } from "../../hooks/useHorizontalScrollWithFade"
 import { RecordingTokenText } from "./RecordingTokenText"
+import { useRecordingMetricsHtml } from "../../hooks/useRecordingMetricsHtml"
+import MagicSpin from "@/components/base/MagicSpin"
 
 export interface RecordingSummaryContentProps {
 	file: RecordingDetailFileRef
@@ -99,6 +100,7 @@ export function RecordingSummaryContent({
 	)
 }
 
+/** Renders the metrics HTML preview and keeps a generic loading mask until the iframe is ready. */
 function MetricsHtmlContent({
 	file,
 	content,
@@ -108,44 +110,51 @@ function MetricsHtmlContent({
 	content: string
 	attachmentList: AttachmentItem[]
 }) {
-	const [processedContent, setProcessedContent] = useState(content)
-	const [filePathMapping, setFilePathMapping] = useState<Map<string, string>>(new Map())
-
-	useEffect(() => {
-		let cancelled = false
-
-		void processHtmlContent({
+	const { t } = useTranslation("audioRecordings")
+	const { processedContent, filePathMapping, isLoading, handleRenderReady } =
+		useRecordingMetricsHtml({
 			content,
-			attachments: attachmentList,
 			attachmentList,
 			fileId: file.file.file_id,
 			fileName: file.fileName,
-		}).then((result) => {
-			if (cancelled) return
-			setProcessedContent(result.processedContent)
-			setFilePathMapping(result.filePathMapping)
 		})
-
-		return () => {
-			cancelled = true
-		}
-	}, [attachmentList, content, file.file.file_id, file.fileName])
 
 	return (
 		<div
-			className="flex min-h-0 flex-1 flex-col"
+			className="relative flex min-h-0 flex-1 flex-col"
+			aria-busy={isLoading}
 			data-testid="recording-detail-metrics-container"
 		>
-			<IsolatedHTMLRenderer
-				content={processedContent}
-				fileId={file.file.file_id}
-				filePathMapping={filePathMapping}
-				attachmentList={attachmentList}
-				relative_file_path={file.file.relative_file_path}
-				openNewTab={() => undefined}
-				className="flex min-h-[520px] flex-1 overflow-hidden rounded-2xl bg-card"
-				iframeClassName="h-full min-h-[520px] bg-white"
-			/>
+			{/* Keep IsolatedHTMLRenderer inside a local Suspense: it is a huge tree, and
+			    any suspend bubbles to the route LoadingFallback (FullSpin) which blanks
+			    the whole outlet while the app sidebar stays. The local overlay already
+			    covers metrics loading. */}
+			{processedContent ? (
+				<Suspense fallback={null}>
+					<IsolatedHTMLRenderer
+						content={processedContent}
+						fileId={file.file.file_id}
+						filePathMapping={filePathMapping}
+						attachmentList={attachmentList}
+						relative_file_path={file.file.relative_file_path}
+						openNewTab={() => undefined}
+						className="flex min-h-[520px] flex-1 overflow-hidden rounded-2xl bg-card"
+						iframeClassName="h-full min-h-[520px] bg-white"
+						onRenderReady={handleRenderReady}
+					/>
+				</Suspense>
+			) : null}
+			{isLoading ? (
+				<div
+					className="absolute inset-0 z-10 flex items-center justify-center rounded-2xl bg-card/80"
+					data-testid="recording-detail-metrics-loading"
+					role="status"
+					aria-live="polite"
+				>
+					{/* Metrics HTML is already inside the detail page; use the generic loading copy. */}
+					<MagicSpin spinning tip={t("loading")} />
+				</div>
+			) : null}
 		</div>
 	)
 }
