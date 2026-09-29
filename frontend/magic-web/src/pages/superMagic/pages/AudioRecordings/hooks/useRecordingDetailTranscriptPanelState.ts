@@ -15,7 +15,7 @@ export const RECORDING_DETAIL_TRANSCRIPT_PANEL_COLLAPSED_STORAGE_KEY = platformK
 	"audio-recording-detail-transcript-panel-collapsed",
 )
 
-/** The transcript column is the primary reading surface, so it starts expanded at its widest. */
+/** Starts expanded at the default width, which sits inside the draggable band. */
 const DEFAULT_TRANSCRIPT_PANEL_COLLAPSED = false
 
 interface TranscriptPanelPersistedState {

@@ -3,6 +3,8 @@ import { RecordingTranscriptPanelDragStore } from "../RecordingTranscriptPanelDr
 import {
 	RECORDING_DETAIL_SUMMARY_MIN_WIDTH,
 	RECORDING_DETAIL_TRANSCRIPT_HANDLE_WIDTH,
+	RECORDING_DETAIL_TRANSCRIPT_MAX_WIDTH,
+	RECORDING_DETAIL_TRANSCRIPT_MIN_WIDTH,
 } from "../../components/recording-detail/recording-detail-layout"
 
 describe("RecordingTranscriptPanelDragStore", () => {
@@ -62,10 +64,10 @@ describe("RecordingTranscriptPanelDragStore", () => {
 		expect(store.collapseProgress).toBe(0)
 		expect(store.collapseArmed).toBe(false)
 
-		// Move beyond max width (440px)
-		store.updateDrag(200)
+		// Move past the max: 400 + (400 - 100) = 700, clamped to the ceiling.
+		store.updateDrag(400)
 		expect(gridElement.style.gridTemplateColumns).toBe(
-			`440px ${RECORDING_DETAIL_TRANSCRIPT_HANDLE_WIDTH}px minmax(${RECORDING_DETAIL_SUMMARY_MIN_WIDTH}px, 1fr)`,
+			`${RECORDING_DETAIL_TRANSCRIPT_MAX_WIDTH}px ${RECORDING_DETAIL_TRANSCRIPT_HANDLE_WIDTH}px minmax(${RECORDING_DETAIL_SUMMARY_MIN_WIDTH}px, 1fr)`,
 		)
 	})
 
@@ -79,14 +81,14 @@ describe("RecordingTranscriptPanelDragStore", () => {
 			onCommit: vi.fn(),
 		})
 
-		// Drag left by 180px: rawWidth = 350 - 180 = 170px (< 300px min width)
-		// Overshoot = 300 - 170 = 130px >= 128px threshold -> armed!
+		// Drag left by 180px: rawWidth = 350 - 180 = 170px, below the 360px floor.
+		// Overshoot = 360 - 170 = 190px >= 128px threshold -> armed.
 		store.updateDrag(-80)
 		expect(store.collapseArmed).toBe(true)
 		expect(store.collapseProgress).toBe(1)
-		// Grid column clamped to minimum width
+		// Grid column stays on the floor while the over-drag arms collapse.
 		expect(gridElement.style.gridTemplateColumns).toBe(
-			`300px ${RECORDING_DETAIL_TRANSCRIPT_HANDLE_WIDTH}px minmax(${RECORDING_DETAIL_SUMMARY_MIN_WIDTH}px, 1fr)`,
+			`${RECORDING_DETAIL_TRANSCRIPT_MIN_WIDTH}px ${RECORDING_DETAIL_TRANSCRIPT_HANDLE_WIDTH}px minmax(${RECORDING_DETAIL_SUMMARY_MIN_WIDTH}px, 1fr)`,
 		)
 	})
 

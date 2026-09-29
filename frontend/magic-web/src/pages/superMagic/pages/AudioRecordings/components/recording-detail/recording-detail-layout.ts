@@ -7,13 +7,19 @@ export const RECORDING_DESKTOP_CONTENT_INSET_CLASS = "w-full px-[10%]"
 /** Markdown bodies add scroll-end breathing room on top of the shared inset. */
 export const RECORDING_DESKTOP_MD_CONTENT_CLASS = `${RECORDING_DESKTOP_CONTENT_INSET_CLASS} pb-8`
 
-/** Minimum readable width of the desktop transcript column. */
-export const RECORDING_DETAIL_TRANSCRIPT_MIN_WIDTH = 300
+/**
+ * Narrowest desktop transcript column that still fits the collapsed player.
+ * Play, time, rate, skip, and expand are fixed; 300px clipped the expand control.
+ */
+export const RECORDING_DETAIL_TRANSCRIPT_MIN_WIDTH = 360
 
-/** Maximum width reserved for the desktop transcript column. */
-export const RECORDING_DETAIL_TRANSCRIPT_MAX_WIDTH = 440
+/**
+ * Widest desktop transcript column. 640px is about forty 14px characters per line,
+ * and the 360–640 band leaves enough travel that dragging is still useful.
+ */
+export const RECORDING_DETAIL_TRANSCRIPT_MAX_WIDTH = 640
 
-/** Default expanded transcript width used when no persisted preference exists. */
+/** Default expanded width. Sits inside the band so a first open can still grow or shrink. */
 export const RECORDING_DETAIL_TRANSCRIPT_DEFAULT_WIDTH = 440
 
 /** Width of the drag handle column that separates transcript from summary in the expanded layout. */

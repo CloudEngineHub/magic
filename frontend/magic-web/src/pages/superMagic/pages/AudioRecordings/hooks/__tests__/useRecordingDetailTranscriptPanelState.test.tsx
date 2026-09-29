@@ -1,6 +1,11 @@
 import { act, renderHook } from "@testing-library/react"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 import {
+	RECORDING_DETAIL_TRANSCRIPT_DEFAULT_WIDTH,
+	RECORDING_DETAIL_TRANSCRIPT_MAX_WIDTH,
+	RECORDING_DETAIL_TRANSCRIPT_MIN_WIDTH,
+} from "../../components/recording-detail/recording-detail-layout"
+import {
 	RECORDING_DETAIL_TRANSCRIPT_PANEL_COLLAPSED_STORAGE_KEY,
 	useRecordingDetailTranscriptPanelState,
 } from "../useRecordingDetailTranscriptPanelState"
@@ -15,11 +20,11 @@ describe("useRecordingDetailTranscriptPanelState", () => {
 		localStorage.clear()
 	})
 
-	it("defaults to expanded at the widest transcript width", () => {
+	it("defaults to expanded at the default transcript width", () => {
 		const { result } = renderHook(() => useRecordingDetailTranscriptPanelState())
 
 		expect(result.current.isTranscriptPanelCollapsed).toBe(false)
-		expect(result.current.transcriptPanelWidth).toBe(440)
+		expect(result.current.transcriptPanelWidth).toBe(RECORDING_DETAIL_TRANSCRIPT_DEFAULT_WIDTH)
 	})
 
 	it("restores a persisted collapsed state and width", () => {
@@ -40,7 +45,7 @@ describe("useRecordingDetailTranscriptPanelState", () => {
 		const { result } = renderHook(() => useRecordingDetailTranscriptPanelState())
 
 		expect(result.current.isTranscriptPanelCollapsed).toBe(true)
-		expect(result.current.transcriptPanelWidth).toBe(440)
+		expect(result.current.transcriptPanelWidth).toBe(RECORDING_DETAIL_TRANSCRIPT_DEFAULT_WIDTH)
 	})
 
 	it("persists collapse and expand as a JSON payload", () => {
@@ -51,7 +56,7 @@ describe("useRecordingDetailTranscriptPanelState", () => {
 		})
 		expect(result.current.isTranscriptPanelCollapsed).toBe(true)
 		expect(localStorage.getItem(RECORDING_DETAIL_TRANSCRIPT_PANEL_COLLAPSED_STORAGE_KEY)).toBe(
-			JSON.stringify({ collapsed: true, width: 440 }),
+			JSON.stringify({ collapsed: true, width: RECORDING_DETAIL_TRANSCRIPT_DEFAULT_WIDTH }),
 		)
 
 		act(() => {
@@ -59,7 +64,7 @@ describe("useRecordingDetailTranscriptPanelState", () => {
 		})
 		expect(result.current.isTranscriptPanelCollapsed).toBe(false)
 		expect(localStorage.getItem(RECORDING_DETAIL_TRANSCRIPT_PANEL_COLLAPSED_STORAGE_KEY)).toBe(
-			JSON.stringify({ collapsed: false, width: 440 }),
+			JSON.stringify({ collapsed: false, width: RECORDING_DETAIL_TRANSCRIPT_DEFAULT_WIDTH }),
 		)
 	})
 
@@ -81,19 +86,21 @@ describe("useRecordingDetailTranscriptPanelState", () => {
 		act(() => {
 			result.current.setTranscriptPanelWidth(9999)
 		})
-		expect(result.current.transcriptPanelWidth).toBe(440)
+		expect(result.current.transcriptPanelWidth).toBe(RECORDING_DETAIL_TRANSCRIPT_MAX_WIDTH)
 
 		act(() => {
 			result.current.setTranscriptPanelWidth(1)
 		})
-		expect(result.current.transcriptPanelWidth).toBe(300)
+		expect(result.current.transcriptPanelWidth).toBe(RECORDING_DETAIL_TRANSCRIPT_MIN_WIDTH)
 	})
 
 	it("keeps the UI usable when the stored value is invalid or storage fails", () => {
 		localStorage.setItem(RECORDING_DETAIL_TRANSCRIPT_PANEL_COLLAPSED_STORAGE_KEY, "invalid")
 		const invalidStored = renderHook(() => useRecordingDetailTranscriptPanelState())
 		expect(invalidStored.result.current.isTranscriptPanelCollapsed).toBe(false)
-		expect(invalidStored.result.current.transcriptPanelWidth).toBe(440)
+		expect(invalidStored.result.current.transcriptPanelWidth).toBe(
+			RECORDING_DETAIL_TRANSCRIPT_DEFAULT_WIDTH,
+		)
 		invalidStored.unmount()
 
 		const getItemSpy = vi.spyOn(Storage.prototype, "getItem").mockImplementation(() => {
