@@ -20,11 +20,41 @@ describe("speaker notes generation", () => {
 		vi.mocked(aiLLMService.chat).mockResolvedValue({ content: "更新后的讲稿" })
 		expect(await generateSpeakerNotes(input())).toBe("更新后的讲稿")
 		expect(aiLLMService.chat).toHaveBeenCalledTimes(1)
-		expect(vi.mocked(aiLLMService.chat).mock.calls[0][1]?.model).toBe("available-model")
+		const options = vi.mocked(aiLLMService.chat).mock.calls[0][1]
+		expect(options?.model).toBe("available-model")
+		// Sampling parameters are left to the model's own defaults.
+		expect(options?.temperature).toBeUndefined()
+		expect(options?.maxTokens).toBeUndefined()
 		expect(JSON.parse(vi.mocked(aiLLMService.chat).mock.calls[0][0][0].content)).toEqual({
 			slideText: "业务进展",
 			notes: "原稿",
 		})
+	})
+	it("adds neighbouring slide text and image descriptions as context", async () => {
+		vi.mocked(aiLLMService.chat).mockResolvedValue({ content: "讲稿" })
+		await generateSpeakerNotes({
+			...input(),
+			rawContent: '<main>当前<img alt="渗透率图表"></main>',
+			previousRawContent: "<main>上一页</main>",
+			nextRawContent: "<main>下一页</main>",
+		})
+		expect(JSON.parse(vi.mocked(aiLLMService.chat).mock.calls[0][0][0].content)).toEqual({
+			slideText: "当前 渗透率图表",
+			previousSlideText: "上一页",
+			nextSlideText: "下一页",
+			notes: "原稿",
+		})
+	})
+	it("sends the user's custom instruction and requires one", async () => {
+		vi.mocked(aiLLMService.chat).mockResolvedValue({ content: "新讲稿" })
+		await generateSpeakerNotes({ ...input(), action: "custom", instruction: " 语气更轻松 " })
+		expect(
+			JSON.parse(vi.mocked(aiLLMService.chat).mock.calls[0][0][0].content).userInstruction,
+		).toBe("语气更轻松")
+		await expect(generateSpeakerNotes({ ...input(), action: "custom" })).rejects.toThrow(
+			"Missing instruction",
+		)
+		expect(aiLLMService.chat).toHaveBeenCalledTimes(1)
 	})
 	it("excludes scripts, styles, hidden content and stored notes", () => {
 		expect(

@@ -1,6 +1,6 @@
 import { observer } from "mobx-react-lite"
 import { pptNotesPreferenceStore } from "@/stores/layout/PPTNotesPreferenceStore"
-import { Loader2, Check, AlertCircle, AArrowDown, AArrowUp } from "lucide-react"
+import { AArrowDown, AArrowUp } from "lucide-react"
 import { useEffect, useRef, useState } from "react"
 import { useTranslation } from "react-i18next"
 import { Button } from "@/components/shadcn-ui/button"
@@ -10,6 +10,7 @@ import { useSpeakerNotesResize } from "../hooks/useSpeakerNotesResize"
 import { useNotesOverviewScroll } from "../hooks/useNotesOverviewScroll"
 import SpeakerNotesEditor, { type SaveState } from "./SpeakerNotesEditor"
 import PPTNotesSlideLoading from "./PPTNotesSlideLoading"
+import PPTNotesSettingsDialog from "./PPTNotesSettingsDialog"
 import type { PPTSpeakerNotesPanelProps } from "./pptNotesTypes"
 
 /** One keyed editor per file keeps drafts and pending saves intact across both views. */
@@ -55,17 +56,6 @@ const PPTSpeakerNotesPanel = observer(function PPTSpeakerNotesPanel(
 				: states.includes("saved")
 					? "saved"
 					: "idle"
-	const statusLabel =
-		status === "saving"
-			? t("ppt.speakerNotes.saving")
-			: status === "error"
-				? t("ppt.speakerNotes.saveFailed")
-				: status === "unsaved"
-					? t("ppt.speakerNotes.unsaved")
-					: status === "saved"
-						? t("ppt.speakerNotes.saved")
-						: null
-	const StatusIcon = status === "saving" ? Loader2 : status === "error" ? AlertCircle : Check
 	const { onPendingChangesChange } = props
 	// Single-page mode unmounts the old editor, but its draft remains in this panel's cache.
 	// Keep it protected even after that editor's transient save status is removed.
@@ -139,37 +129,7 @@ const PPTSpeakerNotesPanel = observer(function PPTSpeakerNotesPanel(
 							</Button>
 						</>
 					)}
-					{statusLabel && (
-						<span
-							role="status"
-							aria-live="polite"
-							data-testid="ppt-notes-save-status"
-							className={cn(
-								"ml-auto flex shrink-0 items-center gap-1.5 text-xs",
-								status === "error" ? "text-destructive" : "text-muted-foreground",
-							)}
-						>
-							{status !== "unsaved" && (
-								<StatusIcon
-									className={cn("size-4", status === "saving" && "animate-spin")}
-								/>
-							)}
-							{statusLabel}
-						</span>
-					)}
 					<div className="ml-auto flex shrink-0 items-center gap-1">
-						{props.allowEdit && props.onGenerate && (
-							<label className="mr-2 flex items-center gap-1.5 text-xs text-muted-foreground">
-								<input
-									type="checkbox"
-									checked={pptNotesPreferenceStore.autoApply}
-									onChange={(event) =>
-										pptNotesPreferenceStore.setAutoApply(event.target.checked)
-									}
-								/>
-								{t("ppt.speakerNotes.autoApply")}
-							</label>
-						)}
 						<Button
 							variant="ghost"
 							size="icon"
@@ -196,6 +156,7 @@ const PPTSpeakerNotesPanel = observer(function PPTSpeakerNotesPanel(
 						>
 							<AArrowUp size={16} />
 						</Button>
+						{props.allowEdit && props.onGenerate && <PPTNotesSettingsDialog />}
 					</div>
 				</div>
 				<ScrollArea

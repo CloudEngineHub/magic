@@ -13,6 +13,8 @@ import { AiPatch, getAiPatchState, proposeAiPatchMarkdown } from "@/components/t
 import { useTranslation } from "react-i18next"
 import { SimpleEditor } from "@/components/tiptap-templates/simple/simple-editor"
 import type { SimpleEditorRef } from "@/components/tiptap-templates/simple/types"
+import { cn } from "@/utils/cn"
+import "./notesGenerating.css"
 
 export interface PPTNotesMarkdownRef {
 	getSnapshot: () => JSONContent | undefined
@@ -25,6 +27,7 @@ interface PPTNotesMarkdownProps {
 	active?: boolean
 	overview?: boolean
 	fontSize?: number
+	generating?: boolean
 	value: string
 	readOnly: boolean
 	onChange: (value: string) => void
@@ -44,6 +47,7 @@ const PPTNotesMarkdown = forwardRef<PPTNotesMarkdownRef, PPTNotesMarkdownProps>(
 			onSave,
 			overview = false,
 			fontSize = 13,
+			generating = false,
 		}: PPTNotesMarkdownProps,
 		ref,
 	) {
@@ -55,6 +59,7 @@ const PPTNotesMarkdown = forwardRef<PPTNotesMarkdownRef, PPTNotesMarkdownProps>(
 			setEditor(instance?.editor ?? null)
 		}, [])
 		const initialContent = useRef(value)
+		const baselineRef = useRef<{ markdown: string; source: string }>()
 		const extensions = useMemo(() => [AiPatch], [])
 		const [unchanged, setUnchanged] = useState(false)
 		const [patchState, setPatchState] = useState<ReturnType<typeof getAiPatchState>>()
@@ -87,15 +92,20 @@ const PPTNotesMarkdown = forwardRef<PPTNotesMarkdownRef, PPTNotesMarkdownProps>(
 		useEffect(() => {
 			if (!editor) return
 			let revision = getAiPatchState(editor.state)?.appliedRevision ?? 0
+			// Accepted changes are handed back once, after the last pending change is resolved.
+			let hasUnflushedApply = false
 			const sync = () => {
 				const state = getAiPatchState(editor.state)
 				setPatchState(state)
 				if (state?.patches.length) setUnchanged(false)
-				callbacks.current.onPatchPending?.(
-					Boolean(state?.patches.length || state?.phase === "removing"),
-				)
+				const pending = Boolean(state?.patches.length || state?.phase === "removing")
+				callbacks.current.onPatchPending?.(pending)
 				if (state && state.appliedRevision !== revision) {
 					revision = state.appliedRevision
+					hasUnflushedApply = true
+				}
+				if (hasUnflushedApply && !pending) {
+					hasUnflushedApply = false
 					// Serialize after the whole transaction has completed, including Markdown updates.
 					queueMicrotask(() => {
 						if (!editor.isDestroyed)
@@ -126,11 +136,24 @@ const PPTNotesMarkdown = forwardRef<PPTNotesMarkdownRef, PPTNotesMarkdownProps>(
 			).markdown?.getMarkdown()
 			// Accept AI/server updates without resetting the cursor on local typing or creating a new edit.
 			if (current !== value) editor.commands.setContent(value, { emitUpdate: false })
+			// Remember how the editor serializes the untouched source, so re-serialization is not a user edit.
+			if (!baselineRef.current || current !== value) {
+				baselineRef.current = {
+					markdown:
+						(
+							editor.storage as { markdown?: { getMarkdown: () => string } }
+						).markdown?.getMarkdown() ?? value,
+					source: value,
+				}
+			}
 		}, [value, editor])
 
 		return (
 			<div
-				className="relative mx-3 mb-3 min-h-20 rounded-lg bg-muted/40 text-[13px] leading-6 text-foreground focus-within:ring-1 focus-within:ring-ring/40"
+				className={cn(
+					"relative mx-3 mb-3 min-h-20 rounded-lg bg-muted/40 text-[13px] leading-6 text-foreground focus-within:ring-1 focus-within:ring-ring/40",
+					generating && "ppt-notes-generating",
+				)}
 				onKeyDown={(event) => {
 					// Notes own the arrow keys and save shortcut; do not navigate the slide behind them.
 					event.stopPropagation()
@@ -186,7 +209,12 @@ const PPTNotesMarkdown = forwardRef<PPTNotesMarkdownRef, PPTNotesMarkdownProps>(
 						}
 						onContentChange={(content) => {
 							setUnchanged(false)
-							onChange(content)
+							const baseline = baselineRef.current
+							onChange(
+								baseline && content === baseline.markdown
+									? baseline.source
+									: content,
+							)
 						}}
 						onSave={onSave}
 						// Reset both editor scroll containers so wheel input reaches the panel's ScrollArea.

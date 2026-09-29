@@ -5061,7 +5061,13 @@
 			"contentChanged": "The content changed. Your edits were preserved. Please generate again.",
 			"currentPage": "Current slide",
 			"currentPageTitle": "Current slide · Notes",
+			"custom": {
+				"placeholder": "Describe how to revise the notes, e.g. a lighter tone with one example.",
+				"submit": "Revise",
+				"trigger": "Custom"
+			},
 			"decreaseFontSize": "Decrease font size",
+			"displaySize": "Display size",
 			"empty": "No notes yet.",
 			"fontSize": "Font size",
 			"generate": "Write script",
@@ -5085,6 +5091,14 @@
 			"saveFailed": "Save failed. Try again.",
 			"saved": "Saved",
 			"saving": "Saving",
+			"settings": {
+				"autoApplyHint": "When on, AI results are written to the notes directly. When off, you accept or skip each change first.",
+				"description": "Choose the model AI uses for notes. It powers Write script, Polish, Shorten and Custom.",
+				"model": "Model",
+				"noModels": "No models available",
+				"title": "Model settings",
+				"trigger": "Model settings"
+			},
 			"shorten": "Shorten",
 			"title": "Notes",
 			"unsaved": "Unsaved"

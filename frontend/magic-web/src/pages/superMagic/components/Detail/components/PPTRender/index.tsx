@@ -619,12 +619,22 @@ const PPTRenderInner = observer(function PPTRenderInner({
 			targetFileId: string,
 			notes: string,
 			signal: AbortSignal,
+			instruction?: string,
 		) => {
-			const slide = store.slides.find(
+			const slideIndex = store.slides.findIndex(
 				(item) => store.getFileIdByPath(item.path) === targetFileId,
 			)
+			const slide = store.slides[slideIndex]
 			if (!effectiveAllowEdit || !slide?.rawContent) throw new Error("Slide is unavailable")
-			return generateSpeakerNotes({ action, rawContent: slide.rawContent, notes, signal })
+			return generateSpeakerNotes({
+				action,
+				rawContent: slide.rawContent,
+				previousRawContent: store.slides[slideIndex - 1]?.rawContent,
+				nextRawContent: store.slides[slideIndex + 1]?.rawContent,
+				notes,
+				instruction,
+				signal,
+			})
 		},
 	)
 

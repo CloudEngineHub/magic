@@ -10,6 +10,7 @@ import { shadow } from "@/utils/shadow"
 import { extractSlideNotes, upsertSlideNotes } from "../utils/slideNotes"
 import PPTNotesMarkdown, { type PPTNotesMarkdownRef } from "./PPTNotesMarkdown"
 import PPTNotesActions from "./PPTNotesActions"
+import NotesSaveControl from "./NotesSaveControl"
 import type { PPTSpeakerNotesPanelProps } from "./pptNotesTypes"
 
 export type SaveState = "idle" | "saving" | "saved" | "error" | "unsaved"
@@ -141,7 +142,7 @@ export default function SpeakerNotesEditor({
 	}
 
 	return (
-		<section data-notes-editor className="group/notes flex min-h-0 flex-col">
+		<section data-notes-editor className="group/notes relative flex min-h-0 flex-col">
 			{/* Each page's toolbar stays above its notes until the next page takes over. */}
 			<div className="sticky top-0 z-10 flex shrink-0 flex-wrap items-center justify-between gap-2 bg-background px-4 py-2">
 				<div className="flex min-w-0 items-center gap-2">
@@ -152,7 +153,7 @@ export default function SpeakerNotesEditor({
 							: t("ppt.speakerNotes.pageTitle", { page: slideIndex + 1 })}
 					</h2>
 				</div>
-				<div className="flex flex-wrap items-center gap-1">
+				<div className="flex min-h-6 flex-wrap items-center gap-1">
 					{onGenerate && (
 						<div
 							className={cn(
@@ -167,11 +168,11 @@ export default function SpeakerNotesEditor({
 								disabled={
 									saveState === "saving" || !allowEdit || ai.busy || patchPending
 								}
-								onAction={async (action) => {
+								onAction={async (action, instruction) => {
 									const snapshot = markdownRef.current?.getSnapshot()
 									if (!snapshot) return
 									setPatchError(false)
-									const result = await ai.run(action)
+									const result = await ai.run(action, instruction)
 									if (result !== undefined && activeRef.current) {
 										setPatchError(
 											!markdownRef.current?.propose(
@@ -186,25 +187,23 @@ export default function SpeakerNotesEditor({
 						</div>
 					)}
 					{ai.busy && (
-						<Button variant="ghost" size="sm" onClick={ai.cancel}>
-							<Loader2 size={16} className="mr-1 animate-spin" />
+						<Button
+							type="button"
+							variant="ghost"
+							size="sm"
+							className="h-6 gap-1.5 rounded-md px-2 text-xs font-normal text-muted-foreground hover:text-foreground"
+							onClick={ai.cancel}
+						>
+							<Loader2 className="size-4 animate-spin" />
 							{t("ppt.speakerNotes.cancelGeneration")}
 						</Button>
 					)}
-					{allowEdit && dirty && (
-						<Button
-							type="button"
-							variant="outline"
-							size="sm"
-							disabled={saveState === "saving"}
-							onClick={() => void saveNotes()}
-							className="h-7 px-2 text-xs"
-						>
-							{saveState === "saving" && (
-								<Loader2 className="mr-1.5 size-3.5 animate-spin" />
-							)}
-							{t("ppt.speakerNotes.save")}
-						</Button>
+					{allowEdit && (
+						<NotesSaveControl
+							saveState={saveState}
+							dirty={dirty}
+							onSave={() => void saveNotes()}
+						/>
 					)}
 				</div>
 			</div>
@@ -227,6 +226,7 @@ export default function SpeakerNotesEditor({
 					void saveNotes(value)
 				}}
 				fontSize={fontSize}
+				generating={ai.busy}
 				overview={overview}
 				value={isEditing ? draft : notes}
 				readOnly={saveState === "saving" || !allowEdit}

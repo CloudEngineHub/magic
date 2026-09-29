@@ -90,11 +90,12 @@ describe("notes AI integration", () => {
 		expect(props.saveEditContent).not.toHaveBeenCalled()
 		expect(runtime.editor?.getText()).toContain("旧的开场")
 		fireEvent.click(screen.getByText("ppt.speakerNotes.acceptChange"))
-		await waitFor(() => expect(props.onSaved).toHaveBeenCalledTimes(1))
+		expect(props.onSaved).not.toHaveBeenCalled()
 		expect(screen.getByText("ppt.speakerNotes.acceptAllChanges")).toBeEnabled()
 		fireEvent.click(screen.getByText("ppt.speakerNotes.rejectAllChanges"))
 		expect(runtime.editor?.getText()).toContain("旧的结尾")
 		expect(runtime.editor?.getText()).toContain("新的开场")
+		await waitFor(() => expect(props.onSaved).toHaveBeenCalledTimes(1))
 	})
 	it("retains an applied draft when saving fails and allows retry", async () => {
 		const props = setup({ saveSuccess: false })

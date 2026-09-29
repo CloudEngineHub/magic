@@ -10,6 +10,13 @@ vi.mock("react-i18next", () => ({
 	}),
 }))
 
+vi.mock("@/services/superMagic/SuperMagicModeService", () => ({
+	default: {
+		getModelListByMode: () => [{ model_id: "m1", model_name: "Model 1" }],
+		fetchDefaultModeModelList: vi.fn(),
+	},
+}))
+
 const patchMock = vi.hoisted(() => ({ propose: vi.fn(() => true) }))
 beforeEach(() => patchMock.propose.mockClear())
 vi.mock("@/components/tiptap-node/ai-patch", () => ({
@@ -695,7 +702,7 @@ describe("all-slide notes", () => {
 		)
 	})
 
-	it("reports silent save progress in the fixed header and keeps success after content sync", async () => {
+	it("reports silent save progress beside the editor toolbar and keeps success after content sync", async () => {
 		const input = props()
 		let finish!: (value: boolean) => void
 		input.saveEditContent.mockImplementation(
@@ -708,9 +715,7 @@ describe("all-slide notes", () => {
 		fireEvent.change(screen.getByTestId("ppt-speaker-notes-editor"), {
 			target: { value: "New notes" },
 		})
-		expect(screen.getByTestId("ppt-notes-save-status")).toHaveTextContent(
-			"ppt.speakerNotes.unsaved",
-		)
+		expect(screen.queryByTestId("ppt-notes-save-status")).toBeNull()
 		fireEvent.click(screen.getByRole("button", { name: "ppt.speakerNotes.save" }))
 		expect(screen.getByTestId("ppt-notes-save-status")).toHaveTextContent(
 			"ppt.speakerNotes.saving",
@@ -730,7 +735,7 @@ describe("all-slide notes", () => {
 		)
 		expect(
 			screen.getByTestId("ppt-notes-save-status").closest("[data-notes-editor]"),
-		).toBeNull()
+		).not.toBeNull()
 	})
 
 	it("sends overview AI actions to the hovered file rather than the canvas", async () => {

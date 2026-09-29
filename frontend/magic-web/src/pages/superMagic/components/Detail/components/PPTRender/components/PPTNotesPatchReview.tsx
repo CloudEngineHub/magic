@@ -3,6 +3,10 @@ import { Button } from "@/components/shadcn-ui/button"
 import type { Editor } from "@/infrastructure/editors/tiptap/core"
 import type { AiPatchState } from "@/components/tiptap-node/ai-patch"
 
+const ACTION_CLASS = "h-6 rounded-md px-2 text-xs font-normal"
+const ACCEPT_CLASS = `${ACTION_CLASS} text-foreground hover:bg-accent`
+const REJECT_CLASS = `${ACTION_CLASS} text-muted-foreground hover:text-foreground`
+
 export default function PPTNotesPatchReview({
 	editor,
 	patchState,
@@ -27,38 +31,47 @@ export default function PPTNotesPatchReview({
 						})}
 					</span>
 					<Button
+						type="button"
 						size="sm"
 						variant="ghost"
+						className={ACCEPT_CLASS}
 						disabled={readOnly}
 						onClick={() => editor?.commands.acceptAiPatch(patchState?.patches[0]?.id)}
 					>
 						{t("ppt.speakerNotes.acceptChange")}
 					</Button>
 					<Button
+						type="button"
 						size="sm"
 						variant="ghost"
+						className={REJECT_CLASS}
 						onClick={() => editor?.commands.rejectAiPatch(patchState?.patches[0]?.id)}
 					>
 						{t("ppt.speakerNotes.rejectChange")}
 					</Button>
 					<Button
+						type="button"
 						size="sm"
-						variant="outline"
+						variant="ghost"
+						className={ACCEPT_CLASS}
 						disabled={readOnly}
 						onClick={() => editor?.commands.acceptAiPatch()}
 					>
 						{t("ppt.speakerNotes.acceptAllChanges")}
 					</Button>
 					<Button
+						type="button"
 						size="sm"
 						variant="ghost"
+						className={REJECT_CLASS}
 						onClick={() => editor?.commands.rejectAiPatch()}
 					>
 						{t("ppt.speakerNotes.rejectAllChanges")}
 					</Button>
 				</div>
 			)}
-			{Boolean(patchState?.invalidatedCount) && (
+			{/* The notice only matters while suggestions remain; it clears once all are resolved. */}
+			{Boolean(patchState?.invalidatedCount) && Boolean(patchState?.patches.length) && (
 				<p role="status" className="px-3 py-1 text-xs text-muted-foreground">
 					{t("ppt.speakerNotes.patchConflict")}
 				</p>

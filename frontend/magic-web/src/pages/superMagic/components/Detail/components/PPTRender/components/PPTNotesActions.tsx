@@ -1,15 +1,16 @@
 import { FilePenLine, WandSparkles, ListMinus } from "lucide-react"
 import { useTranslation } from "react-i18next"
 import { Button } from "@/components/shadcn-ui/button"
+import PPTNotesCustomAction from "./PPTNotesCustomAction"
 
-export type PPTNotesAction = "generate" | "polish" | "shorten"
+export type PPTNotesAction = "generate" | "polish" | "shorten" | "custom"
 
 export default function PPTNotesActions({
 	onAction,
 	hasNotes,
 	disabled,
 }: {
-	onAction: (action: PPTNotesAction) => void
+	onAction: (action: PPTNotesAction, instruction?: string) => void
 	hasNotes: boolean
 	disabled: boolean
 }) {
@@ -35,6 +36,10 @@ export default function PPTNotesActions({
 					{label}
 				</Button>
 			))}
+			<PPTNotesCustomAction
+				disabled={disabled || !hasNotes}
+				onSubmit={(instruction) => onAction("custom", instruction)}
+			/>
 		</>
 	)
 }

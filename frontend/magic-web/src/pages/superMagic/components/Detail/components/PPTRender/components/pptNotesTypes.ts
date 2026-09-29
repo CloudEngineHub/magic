@@ -34,5 +34,6 @@ export interface PPTSpeakerNotesPanelProps {
 		fileId: string,
 		notes: string,
 		signal: AbortSignal,
+		instruction?: string,
 	) => Promise<string>
 }

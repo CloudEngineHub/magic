@@ -5061,7 +5061,13 @@
 			"contentChanged": "内容已变化，未覆盖你的编辑，请重新生成。",
 			"currentPage": "当前页",
 			"currentPageTitle": "当前页 · 备注",
+			"custom": {
+				"placeholder": "输入你的修改要求，例如：语气更轻松，并补充一个案例。",
+				"submit": "修改",
+				"trigger": "自定义"
+			},
 			"decreaseFontSize": "缩小字体",
+			"displaySize": "显示大小",
 			"empty": "暂无备注",
 			"fontSize": "字号",
 			"generate": "写讲稿",
@@ -5085,6 +5091,14 @@
 			"saveFailed": "保存失败，请重试",
 			"saved": "已保存",
 			"saving": "保存中",
+			"settings": {
+				"autoApplyHint": "开启后，AI 的结果会直接写入备注；关闭后，会逐处让你确认后再应用。",
+				"description": "选择 AI 生成备注时使用的模型，写讲稿、润色、精简、自定义修改均使用它。",
+				"model": "模型",
+				"noModels": "暂无可用模型",
+				"title": "模型设置",
+				"trigger": "模型设置"
+			},
 			"shorten": "精简",
 			"title": "备注",
 			"unsaved": "未保存"

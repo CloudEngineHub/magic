@@ -4,9 +4,12 @@ const STORAGE_KEY = "supermagic-ppt-notes-visible"
 const FONT_STORAGE_KEY = "supermagic-ppt-notes-font-size"
 const AUTO_APPLY_STORAGE_KEY = "supermagic-ppt-notes-auto-apply"
 const HEIGHT_STORAGE_KEY = "supermagic-ppt-notes-height"
+const MODEL_STORAGE_KEY = "supermagic-ppt-notes-model"
 
 /** One browser-wide preference, shared by every PPT rather than stored per file. */
 export class PPTNotesPreferenceStore {
+	/** Empty means "use the default available model". */
+	modelId = ""
 	visible = false
 	height = 144
 	fontSize = 13
@@ -19,6 +22,7 @@ export class PPTNotesPreferenceStore {
 				this.fontSize = fontSize
 			this.autoApply = localStorage.getItem(AUTO_APPLY_STORAGE_KEY) !== "false"
 			this.visible = localStorage.getItem(STORAGE_KEY) === "true"
+			this.modelId = localStorage.getItem(MODEL_STORAGE_KEY) ?? ""
 			const height = Number(localStorage.getItem(HEIGHT_STORAGE_KEY))
 			if (Number.isFinite(height) && height >= 100) this.height = height
 		} catch {
@@ -34,6 +38,15 @@ export class PPTNotesPreferenceStore {
 			localStorage.setItem(FONT_STORAGE_KEY, String(size))
 		} catch {
 			// Reading controls remain usable when storage is restricted.
+		}
+	}
+
+	setModelId(modelId: string) {
+		this.modelId = modelId
+		try {
+			localStorage.setItem(MODEL_STORAGE_KEY, modelId)
+		} catch {
+			// The current session still keeps the user's choice.
 		}
 	}
 

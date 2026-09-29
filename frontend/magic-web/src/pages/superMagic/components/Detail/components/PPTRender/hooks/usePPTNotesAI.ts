@@ -39,35 +39,43 @@ export function usePPTNotesAI({
 		}
 	}, [fileId])
 
-	const run = useMemoizedFn(async (action: PPTNotesAction): Promise<string | undefined> => {
-		if (!generate || !enabled || request.current) return
-		const controller = new AbortController()
-		const snapshot = latest.current
-		request.current = controller
-		setBusy(true)
-		setError(undefined)
-		try {
-			const result = await generate(action, fileId, draft, controller.signal)
-			if (request.current !== controller || controller.signal.aborted) return
-			const current = latest.current
-			if (
-				!current.enabled ||
-				current.fileId !== snapshot.fileId ||
-				current.draft !== snapshot.draft ||
-				current.rawContent !== snapshot.rawContent
-			) {
-				setError("changed")
-				return
+	const run = useMemoizedFn(
+		async (action: PPTNotesAction, instruction?: string): Promise<string | undefined> => {
+			if (!generate || !enabled || request.current) return
+			const controller = new AbortController()
+			const snapshot = latest.current
+			request.current = controller
+			setBusy(true)
+			setError(undefined)
+			try {
+				const result = await generate(
+					action,
+					fileId,
+					draft,
+					controller.signal,
+					...(instruction ? [instruction] : []),
+				)
+				if (request.current !== controller || controller.signal.aborted) return
+				const current = latest.current
+				if (
+					!current.enabled ||
+					current.fileId !== snapshot.fileId ||
+					current.draft !== snapshot.draft ||
+					current.rawContent !== snapshot.rawContent
+				) {
+					setError("changed")
+					return
+				}
+				return result
+			} catch {
+				if (request.current === controller && !controller.signal.aborted) setError("failed")
+			} finally {
+				if (request.current === controller) {
+					request.current = undefined
+					setBusy(false)
+				}
 			}
-			return result
-		} catch {
-			if (request.current === controller && !controller.signal.aborted) setError("failed")
-		} finally {
-			if (request.current === controller) {
-				request.current = undefined
-				setBusy(false)
-			}
-		}
-	})
+		},
+	)
 	return { busy, error, run, cancel }
 }
