@@ -5094,6 +5094,8 @@
 			"settings": {
 				"autoApplyHint": "开启后，AI 的结果会直接写入备注；关闭后，会逐处让你确认后再应用。",
 				"description": "选择 AI 生成备注时使用的模型，写讲稿、润色、精简、自定义修改均使用它。",
+				"hint": "在这里可以配置调用的模型",
+				"hintDismiss": "知道了",
 				"model": "模型",
 				"noModels": "暂无可用模型",
 				"title": "模型设置",

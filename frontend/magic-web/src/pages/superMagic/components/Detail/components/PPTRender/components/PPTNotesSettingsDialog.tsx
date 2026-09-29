@@ -10,6 +10,7 @@ import {
 	DialogHeader,
 	DialogTitle,
 } from "@/components/shadcn-ui/dialog"
+import { Popover, PopoverAnchor, PopoverContent } from "@/components/shadcn-ui/popover"
 import {
 	Select,
 	SelectContent,
@@ -35,18 +36,48 @@ const PPTNotesSettingsDialog = observer(function PPTNotesSettingsDialog() {
 		if (open && !models.length) void superMagicModeService.fetchDefaultModeModelList()
 	}, [open, models.length])
 
+	const showHint = !pptNotesPreferenceStore.modelHintDismissed && !open
+
 	return (
 		<>
-			<Button
-				variant="ghost"
-				size="sm"
-				className="h-7 gap-1.5 px-2 text-xs font-normal text-muted-foreground hover:text-foreground"
-				data-testid="ppt-notes-settings-trigger"
-				onClick={() => setOpen(true)}
-			>
-				<Settings size={16} />
-				{t("ppt.speakerNotes.settings.trigger")}
-			</Button>
+			<Popover open={showHint}>
+				<PopoverAnchor asChild>
+					<Button
+						variant="ghost"
+						size="sm"
+						className="h-7 gap-1.5 px-2 text-xs font-normal text-muted-foreground hover:text-foreground"
+						data-testid="ppt-notes-settings-trigger"
+						onClick={() => {
+							pptNotesPreferenceStore.dismissModelHint()
+							setOpen(true)
+						}}
+					>
+						<Settings size={16} />
+						{t("ppt.speakerNotes.settings.trigger")}
+					</Button>
+				</PopoverAnchor>
+				{/* Non-modal: never steal focus or close on outside clicks; only explicit dismissal hides it. */}
+				<PopoverContent
+					side="top"
+					align="end"
+					className="flex w-64 items-start gap-3 p-3 text-xs"
+					data-testid="ppt-notes-model-hint"
+					onOpenAutoFocus={(event) => event.preventDefault()}
+					onInteractOutside={(event) => event.preventDefault()}
+					onEscapeKeyDown={(event) => event.preventDefault()}
+				>
+					<span className="flex-1 leading-5">{t("ppt.speakerNotes.settings.hint")}</span>
+					<Button
+						variant="ghost"
+						size="sm"
+						className="h-6 shrink-0 px-2 text-xs"
+						data-testid="ppt-notes-model-hint-dismiss"
+						onClick={() => pptNotesPreferenceStore.dismissModelHint()}
+					>
+						{t("ppt.speakerNotes.settings.hintDismiss")}
+					</Button>
+				</PopoverContent>
+			</Popover>
 			<Dialog open={open} onOpenChange={setOpen}>
 				<DialogContent className="max-w-sm" data-testid="ppt-notes-settings-content">
 					<DialogHeader>

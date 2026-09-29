@@ -4,6 +4,28 @@ import PPTSpeakerNotesPanel from "../PPTSpeakerNotesPanel"
 import { pptNotesPreferenceStore } from "@/stores/layout/PPTNotesPreferenceStore"
 import { unshadow } from "@/utils/shadow"
 
+vi.mock("@/components/shadcn-ui/popover", async () => {
+	const { createContext, useContext } = await import("react")
+	const OpenContext = createContext(false)
+	return {
+		Popover: ({ open = false, children }: { open?: boolean; children: React.ReactNode }) => (
+			<OpenContext.Provider value={open}>{children}</OpenContext.Provider>
+		),
+		PopoverTrigger: ({ children }: { children: React.ReactNode }) => <>{children}</>,
+		PopoverAnchor: ({ children }: { children: React.ReactNode }) => <>{children}</>,
+		PopoverContent: ({
+			children,
+			...props
+		}: {
+			children: React.ReactNode
+			"data-testid"?: string
+		}) =>
+			useContext(OpenContext) ? (
+				<div data-testid={props["data-testid"]}>{children}</div>
+			) : null,
+	}
+})
+
 vi.mock("react-i18next", () => ({
 	useTranslation: () => ({
 		t: (key: string) => key,
@@ -99,7 +121,47 @@ describe("PPTSpeakerNotesPanel", () => {
 		pptNotesPreferenceStore.setHeight(144)
 		pptNotesPreferenceStore.setFontSize(13)
 		pptNotesPreferenceStore.setAutoApply(true)
+		pptNotesPreferenceStore.modelHintDismissed = true
 		patchMock.propose.mockClear()
+	})
+
+	it("shows a dismissible model hint once and remembers the dismissal", async () => {
+		const props = {
+			slideIndex: 0,
+			fileId: "first",
+			rawContent: "",
+			allowEdit: true,
+			onSaved: vi.fn(),
+			onGenerate: vi.fn(),
+		}
+		pptNotesPreferenceStore.modelHintDismissed = false
+		const { unmount } = render(<PPTSpeakerNotesPanel {...props} />)
+		expect(await screen.findByTestId("ppt-notes-model-hint")).toBeInTheDocument()
+		fireEvent.click(screen.getByTestId("ppt-notes-model-hint-dismiss"))
+		await waitFor(() => expect(screen.queryByTestId("ppt-notes-model-hint")).toBeNull())
+		expect(localStorage.getItem("supermagic-ppt-notes-model-hint-dismissed")).toBe("true")
+		unmount()
+		render(<PPTSpeakerNotesPanel {...props} />)
+		await screen.findByTestId("ppt-notes-settings-trigger")
+		expect(screen.queryByTestId("ppt-notes-model-hint")).toBeNull()
+	})
+
+	it("dismisses the model hint when the settings are opened", async () => {
+		pptNotesPreferenceStore.modelHintDismissed = false
+		render(
+			<PPTSpeakerNotesPanel
+				slideIndex={0}
+				fileId="first"
+				rawContent=""
+				allowEdit
+				onSaved={vi.fn()}
+				onGenerate={vi.fn()}
+			/>,
+		)
+		await screen.findByTestId("ppt-notes-model-hint")
+		fireEvent.click(screen.getByTestId("ppt-notes-settings-trigger"))
+		await waitFor(() => expect(screen.queryByTestId("ppt-notes-model-hint")).toBeNull())
+		expect(pptNotesPreferenceStore.modelHintDismissed).toBe(true)
 	})
 
 	it("keeps inactive drafts pending and clears protection when the user restores original notes", async () => {

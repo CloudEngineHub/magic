@@ -5094,6 +5094,8 @@
 			"settings": {
 				"autoApplyHint": "When on, AI results are written to the notes directly. When off, you accept or skip each change first.",
 				"description": "Choose the model AI uses for notes. It powers Write script, Polish, Shorten and Custom.",
+				"hint": "Configure the model AI uses here.",
+				"hintDismiss": "Got it",
 				"model": "Model",
 				"noModels": "No models available",
 				"title": "Model settings",

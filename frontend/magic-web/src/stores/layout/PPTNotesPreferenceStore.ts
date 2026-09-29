@@ -5,6 +5,7 @@ const FONT_STORAGE_KEY = "supermagic-ppt-notes-font-size"
 const AUTO_APPLY_STORAGE_KEY = "supermagic-ppt-notes-auto-apply"
 const HEIGHT_STORAGE_KEY = "supermagic-ppt-notes-height"
 const MODEL_STORAGE_KEY = "supermagic-ppt-notes-model"
+const MODEL_HINT_STORAGE_KEY = "supermagic-ppt-notes-model-hint-dismissed"
 
 /** One browser-wide preference, shared by every PPT rather than stored per file. */
 export class PPTNotesPreferenceStore {
@@ -14,6 +15,7 @@ export class PPTNotesPreferenceStore {
 	height = 144
 	fontSize = 13
 	autoApply = true
+	modelHintDismissed = false
 
 	constructor() {
 		try {
@@ -23,6 +25,7 @@ export class PPTNotesPreferenceStore {
 			this.autoApply = localStorage.getItem(AUTO_APPLY_STORAGE_KEY) !== "false"
 			this.visible = localStorage.getItem(STORAGE_KEY) === "true"
 			this.modelId = localStorage.getItem(MODEL_STORAGE_KEY) ?? ""
+			this.modelHintDismissed = localStorage.getItem(MODEL_HINT_STORAGE_KEY) === "true"
 			const height = Number(localStorage.getItem(HEIGHT_STORAGE_KEY))
 			if (Number.isFinite(height) && height >= 100) this.height = height
 		} catch {
@@ -47,6 +50,15 @@ export class PPTNotesPreferenceStore {
 			localStorage.setItem(MODEL_STORAGE_KEY, modelId)
 		} catch {
 			// The current session still keeps the user's choice.
+		}
+	}
+
+	dismissModelHint() {
+		this.modelHintDismissed = true
+		try {
+			localStorage.setItem(MODEL_HINT_STORAGE_KEY, "true")
+		} catch {
+			// The hint may reappear next time; it never blocks the feature.
 		}
 	}
 
