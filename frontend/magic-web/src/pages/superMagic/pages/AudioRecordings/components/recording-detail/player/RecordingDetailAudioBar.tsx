@@ -1,6 +1,17 @@
 import { useEffect, useMemo, useRef, useState, type RefObject } from "react"
-import { ChevronDown, Maximize2, Minimize2, Pause, Play } from "lucide-react"
+import { ChevronDown, Ellipsis, Maximize2, Minimize2, Pause, Play } from "lucide-react"
 import { useTranslation } from "react-i18next"
+import { MagicTooltip } from "@/components/base"
+import {
+	DropdownMenu,
+	DropdownMenuContent,
+	DropdownMenuItem,
+	DropdownMenuLabel,
+	DropdownMenuRadioGroup,
+	DropdownMenuRadioItem,
+	DropdownMenuSeparator,
+	DropdownMenuTrigger,
+} from "@/components/shadcn-ui/dropdown-menu"
 import { cn } from "@/utils/cn"
 import { formatRecordingTime } from "../../../utils/time"
 import type { FlatColorSegment } from "../../../utils/chapter-color-segments"
@@ -34,7 +45,7 @@ interface RecordingDetailAudioBarProps {
 	chrome?: RecordingDetailAudioBarChrome
 	scrollSignal?: number
 	/**
-	 * PC collapsed row shows rate + ±15s beside the waveform.
+	 * PC collapsed row keeps rate and ±15s in a more menu so the waveform can use the row.
 	 * Mobile keeps the compact play/time/waveform/expand row when this is omitted.
 	 */
 	collapsedTransportControls?: boolean
@@ -54,11 +65,18 @@ interface RecordingDetailAudioBarProps {
 interface PlaybackRateMenuProps {
 	rate: number
 	open: boolean
-	compact: boolean
 	openDownward: boolean
 	wrapRef: RefObject<HTMLDivElement>
 	onToggleOpen: () => void
 	onSelectRate: (rate: number) => void
+}
+
+interface CollapsedTransportMoreMenuProps {
+	rate: number
+	scrollSignal: number
+	onSelectRate: (rate: number) => void
+	onSkipBack: () => void
+	onSkipForward: () => void
 }
 
 /** Formats seconds as HH:MM:SS for the expanded player time row. */
@@ -77,14 +95,12 @@ function formatPlaybackRateLabel(rate: number): string {
 }
 
 /**
- * Shared playback-rate trigger + listbox used by both collapsed and expanded player chrome.
- * Compact mode drops the chevron so the PC collapsed row can keep skip/expand visible.
+ * Playback-rate trigger + listbox for the expanded player.
  * Placement is injected by the shell: PC opens downward to escape workbench overflow clipping.
  */
 function PlaybackRateMenu({
 	rate,
 	open,
-	compact,
 	openDownward,
 	wrapRef,
 	onToggleOpen,
@@ -96,30 +112,24 @@ function PlaybackRateMenu({
 	})
 
 	return (
-		<div className={cn("relative", compact ? "shrink-0" : "flex justify-center")} ref={wrapRef}>
+		<div className="relative flex justify-center" ref={wrapRef}>
 			<button
 				type="button"
 				onClick={onToggleOpen}
-				className={
-					compact
-						? "inline-flex shrink-0 items-center rounded-full px-1.5 py-1 text-[12px] font-medium tabular-nums text-foreground transition-colors hover:bg-muted/70 active:bg-muted/90"
-						: "inline-flex shrink-0 items-center gap-1 rounded-full px-3 py-2 text-[14px] font-medium tabular-nums text-foreground transition-colors hover:bg-muted/70 active:bg-muted/90"
-				}
+				className="inline-flex shrink-0 items-center gap-1 rounded-full px-3 py-2 text-[14px] font-medium tabular-nums text-foreground transition-colors hover:bg-muted/70 active:bg-muted/90"
 				aria-label={t("detail.player.playbackRateMenuAria")}
 				aria-expanded={open}
 				aria-haspopup="listbox"
 				data-testid="recording-detail-player-rate-trigger"
 			>
 				{rateLabel}
-				{compact ? null : (
-					<ChevronDown
-						className={cn(
-							"size-4 shrink-0 opacity-70 transition-transform",
-							open && "rotate-180",
-						)}
-						strokeWidth={2}
-					/>
-				)}
+				<ChevronDown
+					className={cn(
+						"size-4 shrink-0 opacity-70 transition-transform",
+						open && "rotate-180",
+					)}
+					strokeWidth={2}
+				/>
 			</button>
 			{open ? (
 				<div
@@ -156,14 +166,99 @@ function PlaybackRateMenu({
 	)
 }
 
-/** Decides whether the rate listbox opens below the trigger. Compact defaults down; shells can override. */
+/**
+ * Collapsed PC transport menu. Rate and ±15s stay available without sitting on the waveform row.
+ * The menu opens downward because the player sits under the workbench header.
+ */
+function CollapsedTransportMoreMenu({
+	rate,
+	scrollSignal,
+	onSelectRate,
+	onSkipBack,
+	onSkipForward,
+}: CollapsedTransportMoreMenuProps) {
+	const { t } = useTranslation("audioRecordings")
+	const [open, setOpen] = useState(false)
+
+	useEffect(() => {
+		if (scrollSignal > 0) setOpen(false)
+	}, [scrollSignal])
+
+	/** Applies a radio value from the menu. Invalid values are ignored so the player rate stays unchanged. */
+	function handleRateValueChange(value: string) {
+		const playbackRate = Number(value)
+		if (!Number.isFinite(playbackRate)) return
+		onSelectRate(playbackRate)
+	}
+
+	return (
+		<DropdownMenu open={open} onOpenChange={setOpen}>
+			<MagicTooltip title={t("detail.player.moreActions")} placement="bottom" disabled={open}>
+				<DropdownMenuTrigger asChild>
+					<button
+						type="button"
+						className={COLLAPSED_GHOST_CONTROL_BTN}
+						aria-label={t("detail.player.moreActions")}
+						data-testid="recording-detail-player-more-trigger"
+					>
+						<Ellipsis className="size-4" />
+					</button>
+				</DropdownMenuTrigger>
+			</MagicTooltip>
+			<DropdownMenuContent
+				align="end"
+				side="bottom"
+				className="min-w-[11rem] rounded-xl border border-border bg-card py-1 text-[13px] shadow-md"
+				data-testid="recording-detail-player-more-content"
+			>
+				<DropdownMenuLabel className="px-3 text-[12px] font-medium text-muted-foreground">
+					{t("detail.player.playbackRateMenuAria")}
+				</DropdownMenuLabel>
+				<DropdownMenuRadioGroup
+					value={String(rate)}
+					onValueChange={handleRateValueChange}
+					aria-label={t("detail.player.playbackRateMenuAria")}
+					data-testid="recording-detail-player-rate-content"
+				>
+					{PLAYBACK_RATES.map((playbackRate) => (
+						<DropdownMenuRadioItem
+							key={playbackRate}
+							value={String(playbackRate)}
+							className="text-[13px] tabular-nums"
+						>
+							{t("detail.player.playbackSpeed", {
+								rate: formatPlaybackRateLabel(playbackRate),
+							})}
+						</DropdownMenuRadioItem>
+					))}
+				</DropdownMenuRadioGroup>
+				<DropdownMenuSeparator />
+				<DropdownMenuItem
+					onClick={onSkipBack}
+					className="gap-2 px-3 text-[13px]"
+					data-testid="recording-detail-player-skip-back-button"
+				>
+					<SkipBack15Icon className="size-4" />
+					{t("detail.player.skipBackAria")}
+				</DropdownMenuItem>
+				<DropdownMenuItem
+					onClick={onSkipForward}
+					className="gap-2 px-3 text-[13px]"
+					data-testid="recording-detail-player-skip-forward-button"
+				>
+					<SkipForward15Icon className="size-4" />
+					{t("detail.player.skipForwardAria")}
+				</DropdownMenuItem>
+			</DropdownMenuContent>
+		</DropdownMenu>
+	)
+}
+
+/** Decides whether the expanded rate listbox opens below the trigger. Unset placement stays upward for the mobile bottom bar. */
 function resolveOpenRateMenuDownward(
 	placement: RecordingDetailRateMenuPlacement | undefined,
-	compact: boolean,
 ): boolean {
-	if (placement === "down") return true
-	if (placement === "up") return false
-	return compact
+	return placement === "down"
 }
 
 /**
@@ -203,10 +298,7 @@ export function RecordingDetailAudioBar({
 	const waveformMaxPx = expanded ? 52 : 15
 	const seekKeyboardStep = expanded ? PLAYBACK_SKIP_SEC : 5
 	const showCollapsedTransport = collapsedTransportControls && !expanded
-	const openRateMenuDownward = resolveOpenRateMenuDownward(
-		rateMenuPlacement,
-		showCollapsedTransport,
-	)
+	const openRateMenuDownward = resolveOpenRateMenuDownward(rateMenuPlacement)
 
 	/** Default ±15s skip when shells do not override skip handlers. */
 	function handleSkipBack() {
@@ -272,8 +364,8 @@ export function RecordingDetailAudioBar({
 		// Keep a downward-open menu above the following transcript column.
 		openRateMenuDownward && rateMenuOpen && "relative z-20",
 	)
-	// Keep overflow visible whenever a rate listbox can escape the rounded player chrome.
-	const innerClassName = `rounded-2xl bg-card ${expanded || showCollapsedTransport ? "overflow-visible" : "overflow-hidden"}`
+	// Expanded rate listbox escapes the rounded chrome; the collapsed more menu portals out instead.
+	const innerClassName = `rounded-2xl bg-card ${expanded ? "overflow-visible" : "overflow-hidden"}`
 	const minimizedControlsClassName = "flex items-center gap-1.5 px-3 py-1.5"
 	const expandedControlsClassName = "flex flex-col gap-3 px-3 pb-3.5 pt-3"
 
@@ -319,35 +411,13 @@ export function RecordingDetailAudioBar({
 							/>
 						</div>
 						{showCollapsedTransport ? (
-							<>
-								<PlaybackRateMenu
-									rate={rate}
-									open={rateMenuOpen}
-									compact
-									openDownward={openRateMenuDownward}
-									wrapRef={rateMenuWrapRef}
-									onToggleOpen={handleToggleRateMenu}
-									onSelectRate={handleSelectRate}
-								/>
-								<button
-									type="button"
-									onClick={handleSkipBack}
-									className={COLLAPSED_GHOST_CONTROL_BTN}
-									aria-label={t("detail.player.skipBackAria")}
-									data-testid="recording-detail-player-skip-back-button"
-								>
-									<SkipBack15Icon />
-								</button>
-								<button
-									type="button"
-									onClick={handleSkipForward}
-									className={COLLAPSED_GHOST_CONTROL_BTN}
-									aria-label={t("detail.player.skipForwardAria")}
-									data-testid="recording-detail-player-skip-forward-button"
-								>
-									<SkipForward15Icon />
-								</button>
-							</>
+							<CollapsedTransportMoreMenu
+								rate={rate}
+								scrollSignal={scrollSignal}
+								onSelectRate={handleSelectRate}
+								onSkipBack={handleSkipBack}
+								onSkipForward={handleSkipForward}
+							/>
 						) : null}
 						<button
 							type="button"
@@ -387,7 +457,6 @@ export function RecordingDetailAudioBar({
 							<PlaybackRateMenu
 								rate={rate}
 								open={rateMenuOpen}
-								compact={false}
 								openDownward={openRateMenuDownward}
 								wrapRef={rateMenuWrapRef}
 								onToggleOpen={handleToggleRateMenu}

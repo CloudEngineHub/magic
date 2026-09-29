@@ -100,6 +100,7 @@
 		"player": {
 			"collapsePlayerAria": "Collapse player",
 			"expandPlayerAria": "Expand player",
+			"moreActions": "More actions",
 			"playbackRateMenuAria": "Playback speed",
 			"playbackSpeed": "{{rate}}x",
 			"skipBackAria": "Skip back 15 seconds",

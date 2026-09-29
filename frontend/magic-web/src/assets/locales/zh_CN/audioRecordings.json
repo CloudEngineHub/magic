@@ -100,6 +100,7 @@
 		"player": {
 			"collapsePlayerAria": "收起播放器",
 			"expandPlayerAria": "展开播放器",
+			"moreActions": "更多操作",
 			"playbackRateMenuAria": "播放速度",
 			"playbackSpeed": "{{rate}}x",
 			"skipBackAria": "后退 15 秒",

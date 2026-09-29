@@ -1,3 +1,4 @@
+import type { ReactNode } from "react"
 import { fireEvent, render, screen } from "@testing-library/react"
 import { describe, expect, it, vi } from "vitest"
 import { RecordingDetailAudioBar } from "../RecordingDetailAudioBar"
@@ -12,6 +13,18 @@ vi.mock("react-i18next", () => ({
 		},
 	}),
 }))
+
+// The base barrel initializes the i18n store. Keep MagicTooltip as a pass-through so the more-menu trigger still renders.
+vi.mock("@/components/base", () => ({
+	MagicTooltip: ({ children }: { children: ReactNode }) => <>{children}</>,
+}))
+
+/** Radix menus toggle on Enter. A click alone does not open this trigger in jsdom. */
+function openCollapsedMoreMenu() {
+	const trigger = screen.getByTestId("recording-detail-player-more-trigger")
+	trigger.focus()
+	fireEvent.keyDown(trigger, { key: "Enter", code: "Enter" })
+}
 
 describe("RecordingDetailAudioBar", () => {
 	const baseProps = {
@@ -90,6 +103,7 @@ describe("RecordingDetailAudioBar", () => {
 	it("hides rate and skip controls in the default collapsed row", () => {
 		render(<RecordingDetailAudioBar {...baseProps} />)
 
+		expect(screen.queryByTestId("recording-detail-player-more-trigger")).not.toBeInTheDocument()
 		expect(screen.queryByTestId("recording-detail-player-rate-trigger")).not.toBeInTheDocument()
 		expect(
 			screen.queryByTestId("recording-detail-player-skip-back-button"),
@@ -99,7 +113,7 @@ describe("RecordingDetailAudioBar", () => {
 		).not.toBeInTheDocument()
 	})
 
-	it("exposes rate and skip controls in the collapsed transport row", () => {
+	it("keeps collapsed rate and skip controls inside the more menu", () => {
 		const onSeek = vi.fn()
 		const onPlaybackRateChange = vi.fn()
 		const onExpandedChange = vi.fn()
@@ -114,14 +128,24 @@ describe("RecordingDetailAudioBar", () => {
 			/>,
 		)
 
+		expect(screen.queryByTestId("recording-detail-player-rate-trigger")).not.toBeInTheDocument()
+		expect(
+			screen.queryByTestId("recording-detail-player-skip-back-button"),
+		).not.toBeInTheDocument()
+
+		openCollapsedMoreMenu()
+		const menu = screen.getByTestId("recording-detail-player-more-content")
+		expect(menu).toHaveAttribute("data-side", "bottom")
+
 		fireEvent.click(screen.getByTestId("recording-detail-player-skip-back-button"))
+		openCollapsedMoreMenu()
 		fireEvent.click(screen.getByTestId("recording-detail-player-skip-forward-button"))
 		expect(onSeek).toHaveBeenNthCalledWith(1, 15)
 		expect(onSeek).toHaveBeenNthCalledWith(2, 45)
 
-		fireEvent.click(screen.getByTestId("recording-detail-player-rate-trigger"))
+		openCollapsedMoreMenu()
 		expect(screen.getByTestId("recording-detail-player-rate-content")).toBeInTheDocument()
-		fireEvent.click(screen.getByRole("option", { name: "1.5x" }))
+		fireEvent.click(screen.getByRole("menuitemradio", { name: "1.5x" }))
 		expect(onPlaybackRateChange).toHaveBeenCalledWith(1.5)
 
 		fireEvent.click(screen.getByLabelText("detail.player.expandPlayerAria"))
@@ -139,16 +163,6 @@ describe("RecordingDetailAudioBar", () => {
 
 	it("opens the PC expanded rate menu downward so the workbench does not clip it", () => {
 		render(<RecordingDetailAudioBar {...baseProps} expanded rateMenuPlacement="down" />)
-
-		fireEvent.click(screen.getByTestId("recording-detail-player-rate-trigger"))
-		const menu = screen.getByTestId("recording-detail-player-rate-content")
-		expect(menu.className).toContain("top-full")
-		expect(menu.className).not.toContain("bottom-full")
-		expect(screen.getByTestId("recording-detail-audio-bar").className).toContain("z-20")
-	})
-
-	it("opens the collapsed rate menu downward so the workbench header does not clip it", () => {
-		render(<RecordingDetailAudioBar {...baseProps} collapsedTransportControls />)
 
 		fireEvent.click(screen.getByTestId("recording-detail-player-rate-trigger"))
 		const menu = screen.getByTestId("recording-detail-player-rate-content")
