@@ -381,7 +381,8 @@ function AudioRecordingDetailPageDesktop() {
 			})
 			setSpeakerNameOverrides(nextSpeakers)
 			setSpeakerSettingsOpen(false)
-			void refresh()
+			// Keep the rendered detail and active player mounted while persisted speaker metadata syncs.
+			void refresh({ silent: true })
 		} catch {
 			// save errors surface through shared media util logging
 		}

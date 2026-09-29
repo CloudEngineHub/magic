@@ -259,7 +259,8 @@ function AudioFolderWorkbench({
 		})
 		setSpeakerNameOverrides(nextSpeakers)
 		setSpeakerSettingsOpen(false)
-		void refresh()
+		// Keep the embedded workbench mounted while persisted speaker metadata syncs in the background.
+		void refresh({ silent: true })
 	}, [canEditSpeakers, refresh, speakerDraft, speakerNameMap, texts.magicProject])
 
 	/** Seeks summary time links in the shared inline audio player. */
