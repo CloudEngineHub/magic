@@ -115,3 +115,28 @@ describe("FileEditButtons", () => {
 		expect(editBtnIconOnly.className).toContain("gap-0")
 	})
 })
+
+it("does not paint saving while the handler is in flight", async () => {
+	let resolveSave: (() => void) | undefined
+	const onSave = vi.fn(
+		() =>
+			new Promise<void>((resolve) => {
+				resolveSave = resolve
+			}),
+	)
+	render(
+		<FileEditButtons
+			testIdPrefix="html-editor"
+			isEditMode
+			showButtonText
+			onSave={onSave}
+			onCancel={vi.fn()}
+		/>,
+	)
+	fireEvent.click(screen.getByTestId("html-editor-save-button"))
+	expect(onSave).toHaveBeenCalledTimes(1)
+	expect(screen.getByTestId("html-editor-save-button")).toHaveTextContent("fileViewer.save")
+	expect(screen.queryByText("fileViewer.saving")).toBeNull()
+	resolveSave?.()
+	await waitFor(() => expect(onSave).toHaveBeenCalledTimes(1))
+})

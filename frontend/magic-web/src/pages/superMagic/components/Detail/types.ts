@@ -1,3 +1,5 @@
+import type { SaveConfirmationStage } from "./contents/HTML/hooks/useSaveConfirmation"
+
 /** 已验证完整内容的只读供数入口，不承担草稿或保存职责。 */
 export interface TextReadOnlyPreview {
 	content: string
@@ -218,6 +220,8 @@ export interface TextFileSession {
 	loading: boolean
 	loadError: boolean
 	saving: boolean
+	/** Drives the top-right save chip; omitted sessions never show save feedback. */
+	saveStage?: SaveConfirmationStage
 	setDraft: (content: string) => void
 	refresh: () => Promise<void>
 	save: () => Promise<void>
