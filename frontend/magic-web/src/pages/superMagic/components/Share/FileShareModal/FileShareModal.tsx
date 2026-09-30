@@ -38,7 +38,7 @@ import { Separator } from "@/components/shadcn-ui/separator"
 import magicToast from "@/components/base/MagicToaster/utils"
 import { projectStore } from "@/pages/superMagic/stores/core"
 import { userStore } from "@/models/user"
-import { flushFileSaves } from "@/pages/superMagic/components/Detail/services/fileSaveQueue"
+import { ensureFileSavesSynced } from "@/pages/superMagic/components/Detail/services/fileSaveQueue"
 import { generateShareMessageText } from "../utils/generateShareMessageText"
 import { mergeRecordingShareFileIds } from "@/pages/superMagic/pages/AudioRecordings/utils/build-recording-share-selection"
 import FileShareDocumentDependenciesOption from "./FileShareDocumentDependenciesOption"
@@ -773,7 +773,9 @@ export default memo(function FileShareModal(props: FileShareModalProps) {
 			return
 		}
 
-		const flushed = await flushFileSaves(effectiveShareProject ? undefined : submittedFileIds)
+		const flushed = await ensureFileSavesSynced(
+			effectiveShareProject ? undefined : submittedFileIds,
+		)
 		if (!flushed) return
 
 		setIsSaving(true)

@@ -78,6 +78,7 @@ function FileSaveFailureWatcher({
 }) {
 	const queue = getFileSaveQueue()
 	const shownRef = useRef(false)
+	const revealToken = queue.getFailureRevealToken(fileId)
 
 	useEffect(() => {
 		queue.rebindPersist(fileId, persist)
@@ -103,7 +104,7 @@ function FileSaveFailureWatcher({
 			shownRef.current = false
 			magicToast.destroy(toastKey)
 		}
-	}, [fileId, persist, queue])
+	}, [fileId, persist, queue, revealToken])
 
 	return null
 }

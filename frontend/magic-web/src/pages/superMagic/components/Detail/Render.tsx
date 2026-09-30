@@ -65,7 +65,7 @@ import {
 } from "@/pages/superMagic/providers/file-action-visibility-provider"
 import { FileSaveFailureListener } from "./components/FileSaveFailureListener"
 import {
-	flushFileSaves,
+	ensureFileSavesSynced,
 	enqueueOptimisticSave,
 	getFileSaveQueue,
 	type FileSavePersistRequest,
@@ -299,7 +299,7 @@ export default function Render(props: any) {
 	})
 
 	const persistQueuedSave = useMemoizedFn(async (request: FileSavePersistRequest) => {
-		await persistFileSave(request, {
+		return persistFileSave(request, {
 			getFileMeta: getPersistFileMeta,
 			syncFolderName: syncCustomProjectFolderNameBeforeSave,
 		})
@@ -363,7 +363,7 @@ export default function Render(props: any) {
 	}
 
 	const exportFile = async (fileId: string, fileVersion?: number) => {
-		if (!(await flushFileSaves([fileId]))) return
+		if (!(await ensureFileSavesSynced([fileId]))) return
 		try {
 			const dependencyResult = await resolveSingleDocumentStaticDependencies({
 				fileIds: [fileId],
@@ -407,7 +407,7 @@ export default function Render(props: any) {
 
 	const exportPdf = async (fileId: string) => {
 		if (!fileId) return
-		if (!(await flushFileSaves([fileId]))) return
+		if (!(await ensureFileSavesSynced([fileId]))) return
 
 		const documentExporter = documentExportService.get()
 		if (!documentExporter) {
@@ -509,7 +509,7 @@ export default function Render(props: any) {
 
 	const exportRasterPdf = async (fileId: string, pageMode: "fit" | "paginate") => {
 		if (!fileId) return
-		if (!(await flushFileSaves([fileId]))) return
+		if (!(await ensureFileSavesSynced([fileId]))) return
 
 		const documentExporter = documentExportService.get()
 		if (!documentExporter) {
@@ -597,7 +597,7 @@ export default function Render(props: any) {
 	}
 	const exportPptx = async (fileId: string) => {
 		if (!fileId) return
-		if (!(await flushFileSaves([fileId]))) return
+		if (!(await ensureFileSavesSynced([fileId]))) return
 
 		const toastId = createRandomUuidV4()
 		let cancelExport: (() => void) | null = null
@@ -733,7 +733,7 @@ export default function Render(props: any) {
 
 	const exportImage = async (fileId: string, format: ImageExportFormat = "png") => {
 		if (!fileId) return
-		if (!(await flushFileSaves([fileId]))) return
+		if (!(await ensureFileSavesSynced([fileId]))) return
 
 		const toastId = createRandomUuidV4()
 		try {

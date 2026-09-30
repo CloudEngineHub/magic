@@ -10,6 +10,7 @@ import {
 	FILE_SAVE_STATUS,
 	FileSaveConflictError,
 	FileSavePermanentError,
+	FileSaveRetryableError,
 	type FileSaveFailReason,
 	type FileSaveJob,
 	type FileSavePersistence,
@@ -29,6 +30,7 @@ export function stringifySaveContent(content: unknown): string {
 }
 
 export function isRetryableSaveError(error: unknown): boolean {
+	if (error instanceof FileSaveRetryableError) return true
 	if (error instanceof FileSaveConflictError || error instanceof FileSavePermanentError) {
 		return false
 	}
@@ -67,6 +69,18 @@ interface FileSaveEntry {
 	failReason?: FileSaveFailReason
 	attempt: number
 	running: boolean
+	/** Remote version reached by the last successful persist in this drain. */
+	syncedVersion?: string
+}
+
+/** Queued follow-ups start from a stale baseline once an earlier save lands. */
+function pickBaselineVersion(jobVersion?: string, syncedVersion?: string): string | undefined {
+	if (!syncedVersion) return jobVersion
+	if (!jobVersion) return syncedVersion
+	const job = Number(jobVersion)
+	const synced = Number(syncedVersion)
+	if (Number.isNaN(job) || Number.isNaN(synced)) return jobVersion
+	return synced > job ? syncedVersion : jobVersion
 }
 
 function defaultDelay(ms: number): Promise<void> {
@@ -85,6 +99,8 @@ export class FileSaveQueue {
 	private readonly flushWaiters = new Map<string, Array<(ok: boolean) => void>>()
 	private readonly restoreHandlers = new Map<string, () => void | Promise<void>>()
 	private readonly draftApplyHandlers = new Map<string, DraftApplyHandler>()
+	private readonly draftWrites = new Map<string, Promise<void>>()
+	private readonly failureRevealTokens = new Map<string, number>()
 	private readonly persistence: FileSavePersistence
 	private readonly delay: (ms: number) => Promise<void>
 	private readonly now: () => number
@@ -194,6 +210,16 @@ export class FileSaveQueue {
 		if (entry.inflight) entry.inflight = { ...entry.inflight, persist }
 	}
 
+	/** Ask the failure UI to show its actions again after the user dismissed them. */
+	revealFailure(fileId: string): void {
+		this.failureRevealTokens.set(fileId, (this.failureRevealTokens.get(fileId) ?? 0) + 1)
+		this.bump()
+	}
+
+	getFailureRevealToken(fileId: string): number {
+		return this.failureRevealTokens.get(fileId) ?? 0
+	}
+
 	getFailedFileIds(): string[] {
 		return [...this.entries.values()]
 			.filter((entry) => entry.status === FILE_SAVE_STATUS.Failed)
@@ -250,11 +276,7 @@ export class FileSaveQueue {
 		this.entries.delete(fileId)
 		this.resolveFlush(fileId, true)
 		this.bump()
-		try {
-			await this.persistence.remove(fileId)
-		} catch (error) {
-			console.error("Failed to drop unsynced file save", error)
-		}
+		await this.removeDraft(fileId, "Failed to drop unsynced file save")
 		const handler = this.restoreHandlers.get(fileId)
 		await handler?.()
 	}
@@ -345,11 +367,7 @@ export class FileSaveQueue {
 					entry.inflight = undefined
 					this.entries.set(fileId, entry)
 					this.bump()
-					try {
-						await this.persistence.remove(fileId)
-					} catch (error) {
-						console.error("Failed to clear synced file save", error)
-					}
+					await this.removeDraft(fileId, "Failed to clear synced file save")
 					try {
 						await job.onSuccess?.(job)
 					} catch (error) {
@@ -382,13 +400,14 @@ export class FileSaveQueue {
 		while (entry.attempt < this.maxAttempts) {
 			if (entry.queued) return true
 			try {
-				await job.persist({
+				const result = await job.persist({
 					fileId: job.fileId,
 					content: job.content,
 					enableShadow: job.enableShadow,
-					baselineVersion: job.baselineVersion,
+					baselineVersion: pickBaselineVersion(job.baselineVersion, entry.syncedVersion),
 					forceOverwrite: job.forceOverwrite,
 				})
+				if (result?.version) entry.syncedVersion = result.version
 				return true
 			} catch (error) {
 				entry.failReason = failReasonFromError(error)
@@ -418,12 +437,35 @@ export class FileSaveQueue {
 			// Keep the in-memory job; skip IndexedDB so one huge HTML cannot fill the store.
 			return
 		}
-		try {
-			await this.persistence.put(record)
-			await this.prunePersistedDrafts()
-		} catch (error) {
-			console.error("Failed to mirror unsynced file save", error)
-		}
+		await this.chainDraftWrite(job.fileId, async () => {
+			try {
+				await this.persistence.put(record)
+				await this.prunePersistedDrafts()
+			} catch (error) {
+				console.error("Failed to mirror unsynced file save", error)
+			}
+		})
+	}
+
+	private async removeDraft(fileId: string, errorMessage: string): Promise<void> {
+		await this.chainDraftWrite(fileId, async () => {
+			try {
+				await this.persistence.remove(fileId)
+			} catch (error) {
+				console.error(errorMessage, error)
+			}
+		})
+	}
+
+	/** Same-file IndexedDB writes run in call order so a late put cannot outlive a remove. */
+	private chainDraftWrite(fileId: string, task: () => Promise<void>): Promise<void> {
+		const previous = this.draftWrites.get(fileId)
+		const next = previous ? previous.then(task) : task()
+		this.draftWrites.set(fileId, next)
+		void next.then(() => {
+			if (this.draftWrites.get(fileId) === next) this.draftWrites.delete(fileId)
+		})
+		return next
 	}
 
 	private async prunePersistedDrafts(): Promise<void> {

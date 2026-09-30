@@ -6,6 +6,7 @@ import {
 	FILE_SAVE_STATUS,
 	FileSaveConflictError,
 	FileSavePermanentError,
+	FileSaveRetryableError,
 	type FileSaveJob,
 } from "../types"
 
@@ -61,8 +62,10 @@ describe("FileSaveQueue", () => {
 		queue.enqueue(createJob({ persist, content: "<p>First</p>" }))
 		queue.enqueue(createJob({ persist, content: "<p>Second</p>" }))
 		expect(queue.getStatus("file-1")).toBe(FILE_SAVE_STATUS.Saving)
-		expect(stringifySaveContent((await persistence.get("file-1"))?.content)).toBe(
-			"<p>Second</p>",
+		await vi.waitFor(async () =>
+			expect(stringifySaveContent((await persistence.get("file-1"))?.content)).toBe(
+				"<p>Second</p>",
+			),
 		)
 
 		resolveFirst?.()
@@ -122,6 +125,93 @@ describe("FileSaveQueue", () => {
 		await vi.waitFor(() => expect(queue.getStatus("file-1")).toBe(FILE_SAVE_STATUS.Idle))
 		expect(onSuccess).toHaveBeenCalledTimes(1)
 		expect(persist).toHaveBeenCalledTimes(2)
+	})
+
+	it("retries errors marked retryable even without a network signature", async () => {
+		const persist = vi
+			.fn()
+			.mockRejectedValueOnce(new FileSaveRetryableError("empty result"))
+			.mockResolvedValueOnce(undefined)
+		const queue = createQueue()
+		queue.enqueue(createJob({ persist }))
+		await vi.waitFor(() => expect(queue.getStatus("file-1")).toBe(FILE_SAVE_STATUS.Retrying))
+		delayed[0]?.()
+		await vi.waitFor(() => expect(queue.getStatus("file-1")).toBe(FILE_SAVE_STATUS.Idle))
+		expect(persist).toHaveBeenCalledTimes(2)
+	})
+
+	it("rebases a queued save onto the version the previous save produced", async () => {
+		let resolveFirst: ((value: { version: string }) => void) | undefined
+		const persist = vi.fn((request: { content: unknown }) => {
+			if (request.content === "<p>First</p>") {
+				return new Promise<{ version: string }>((resolve) => {
+					resolveFirst = resolve
+				})
+			}
+			return Promise.resolve(undefined)
+		})
+		const queue = createQueue()
+		queue.enqueue(createJob({ persist, content: "<p>First</p>", baselineVersion: "3" }))
+		await vi.waitFor(() => expect(persist).toHaveBeenCalledTimes(1))
+		queue.enqueue(createJob({ persist, content: "<p>Second</p>", baselineVersion: "3" }))
+		resolveFirst?.({ version: "4" })
+		await vi.waitFor(() => expect(queue.getStatus("file-1")).toBe(FILE_SAVE_STATUS.Idle))
+		expect(persist).toHaveBeenCalledTimes(2)
+		expect(persist.mock.calls[1]?.[0]).toMatchObject({ baselineVersion: "4" })
+	})
+
+	it("keeps a newer caller baseline over the version the queue observed", async () => {
+		let resolveFirst: ((value: { version: string }) => void) | undefined
+		const persist = vi.fn((request: { content: unknown }) => {
+			if (request.content === "<p>First</p>") {
+				return new Promise<{ version: string }>((resolve) => {
+					resolveFirst = resolve
+				})
+			}
+			return Promise.resolve(undefined)
+		})
+		const queue = createQueue()
+		queue.enqueue(createJob({ persist, content: "<p>First</p>", baselineVersion: "3" }))
+		await vi.waitFor(() => expect(persist).toHaveBeenCalledTimes(1))
+		queue.enqueue(createJob({ persist, content: "<p>Second</p>", baselineVersion: "6" }))
+		resolveFirst?.({ version: "4" })
+		await vi.waitFor(() => expect(queue.getStatus("file-1")).toBe(FILE_SAVE_STATUS.Idle))
+		expect(persist.mock.calls[1]?.[0]).toMatchObject({ baselineVersion: "6" })
+	})
+
+	it("does not let a slow draft mirror outlive the cleanup after a successful save", async () => {
+		let releaseMirror: (() => void) | undefined
+		const gate = new Promise<void>((resolve) => {
+			releaseMirror = resolve
+		})
+		const slowPersistence = {
+			...persistence,
+			put: async (record: Parameters<typeof persistence.put>[0]) => {
+				await gate
+				await persistence.put(record)
+			},
+		}
+		const queue = new FileSaveQueue({
+			persistence: slowPersistence,
+			delay: () => Promise.resolve(),
+			now: () => 1,
+		})
+		queue.enqueue(createJob({ persist: vi.fn().mockResolvedValue(undefined) }))
+		await vi.waitFor(() => expect(queue.getStatus("file-1")).toBe(FILE_SAVE_STATUS.Idle))
+		releaseMirror?.()
+		await queue.flush("file-1")
+		await new Promise((resolve) => setTimeout(resolve, 0))
+		expect(await persistence.get("file-1")).toBeUndefined()
+	})
+
+	it("reveals a failure again on request", () => {
+		const queue = createQueue()
+		expect(queue.getFailureRevealToken("file-1")).toBe(0)
+		const listener = vi.fn()
+		queue.subscribe(listener)
+		queue.revealFailure("file-1")
+		expect(queue.getFailureRevealToken("file-1")).toBe(1)
+		expect(listener).toHaveBeenCalled()
 	})
 
 	it("marks permanent errors as failed without retrying", async () => {

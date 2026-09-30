@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from "vitest"
 import { persistFileSave } from "../persistFileSave"
-import { FileSaveConflictError, FileSavePermanentError } from "../types"
+import { FileSaveConflictError, FileSaveRetryableError } from "../types"
+import { isRetryableSaveError } from "../FileSaveQueue"
 
 vi.mock("@/apis", () => ({
 	SuperMagicApi: {
@@ -74,20 +75,51 @@ describe("persistFileSave", () => {
 		})
 	})
 
-	it("treats empty saveFileContent results as permanent", async () => {
+	it("treats empty saveFileContent results as retryable", async () => {
 		vi.mocked(SuperMagicApi.getFileInfo).mockResolvedValue({ version: 1 } as never)
 		vi.mocked(SuperMagicApi.saveFileContent).mockResolvedValue({ success_files: [] } as never)
+		const error = await persistFileSave(
+			{
+				fileId: "file-1",
+				content: "<p>Local</p>",
+				enableShadow: false,
+			},
+			{
+				getFileMeta: () => ({}),
+			},
+		).catch((caught: unknown) => caught)
+		expect(error).toBeInstanceOf(FileSaveRetryableError)
+		expect(isRetryableSaveError(error)).toBe(true)
+	})
+
+	it("reports the version returned by saveFileContent", async () => {
+		vi.mocked(SuperMagicApi.saveFileContent).mockResolvedValue({
+			success_files: [{ file_id: "file-1", data: { version: 5 } }],
+		} as never)
+		await expect(
+			persistFileSave(
+				{ fileId: "file-1", content: "<p>Local</p>", enableShadow: false },
+				{ getFileMeta: () => ({}) },
+			),
+		).resolves.toEqual({ version: "5" })
+	})
+
+	it("reads the new remote version after replacing a file", async () => {
+		vi.mocked(SuperMagicApi.getFileInfo)
+			.mockResolvedValueOnce({ version: 3 } as never)
+			.mockResolvedValueOnce({ version: 4 } as never)
+		vi.mocked(ossUploadService.uploadContentByFileKey).mockResolvedValue("new-key")
+		vi.mocked(SuperMagicApi.replaceFile).mockResolvedValue({} as never)
 		await expect(
 			persistFileSave(
 				{
 					fileId: "file-1",
 					content: "<p>Local</p>",
 					enableShadow: false,
+					baselineVersion: "3",
 				},
-				{
-					getFileMeta: () => ({}),
-				},
+				{ getFileMeta: () => ({ fileKey: "k", projectId: "p" }) },
 			),
-		).rejects.toBeInstanceOf(FileSavePermanentError)
+		).resolves.toEqual({ version: "4" })
 	})
 })

@@ -84,7 +84,7 @@ import {
 	getPptVisibleSlideIndices,
 } from "@/pages/superMagic/utils/pptHiddenSlides"
 import magicToast from "@/components/base/MagicToaster/utils"
-import { flushFileSaves, getFileSaveQueue } from "../../services/fileSaveQueue"
+import { ensureFileSavesSynced, getFileSaveQueue } from "../../services/fileSaveQueue"
 const SlidesTemplateReplacementDialog = lazy(() => import("./SlidesTemplateReplacementDialog"))
 
 interface ManualSaveResult {
@@ -840,7 +840,7 @@ const PPTRenderInner = observer(function PPTRenderInner({
 	const handleConfirmTemplateReplacement = useMemoizedFn(
 		async (template: OptionItem, target: SlidesTemplateReplacementTarget) => {
 			if (!mainFileId || !mainFileName || !resolvedProjectId) return
-			if (!(await flushFileSaves())) return
+			if (!(await ensureFileSavesSynced())) return
 			const mainFile =
 				attachmentList?.find((item: any) => item.file_id === mainFileId) ||
 				({
@@ -955,11 +955,7 @@ const PPTRenderInner = observer(function PPTRenderInner({
 	})
 
 	const handleCheckBeforeClose = useMemoizedFn(async (): Promise<boolean> => {
-		const flushUnsynced = async () => {
-			const queue = getFileSaveQueue()
-			if (!queue.hasUnsynced()) return true
-			return queue.flushAll()
-		}
+		const flushUnsynced = () => ensureFileSavesSynced()
 
 		if (!isAnySlideEditing) {
 			return await flushUnsynced()

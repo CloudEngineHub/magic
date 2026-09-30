@@ -1367,6 +1367,7 @@
 		"fileFormatNotSupported": "File format not supported for preview",
 		"fileNotSupported": "File preview not supported, please download the file",
 		"fileSave": {
+			"blocked": "Some changes are not synced yet. Use Retry, Overwrite remote, or Restore remote in the save-failed notice first.",
 			"conflict": "The remote file changed. Your local edits are not synced.",
 			"failed": "Save did not reach the server. Local content was kept.",
 			"overwrite": "Overwrite remote",

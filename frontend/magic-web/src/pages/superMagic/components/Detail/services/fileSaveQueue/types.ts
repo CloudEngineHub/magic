@@ -24,6 +24,11 @@ export interface FileSavePersistRequest {
 	forceOverwrite?: boolean
 }
 
+export interface FileSavePersistResult {
+	/** Remote version after this save, used to rebase queued follow-up saves. */
+	version?: string
+}
+
 export interface FileSaveJob {
 	fileId: string
 	content: unknown
@@ -31,7 +36,7 @@ export interface FileSaveJob {
 	baselineVersion?: string
 	forceOverwrite?: boolean
 	silent?: boolean
-	persist: (request: FileSavePersistRequest) => Promise<void>
+	persist: (request: FileSavePersistRequest) => Promise<void | FileSavePersistResult>
 	onSuccess?: (job: FileSaveJob) => void | Promise<void>
 }
 
@@ -84,6 +89,14 @@ export class FileSavePermanentError extends Error {
 	override name = "FileSavePermanentError"
 
 	constructor(message = "File save is not retryable") {
+		super(message)
+	}
+}
+
+export class FileSaveRetryableError extends Error {
+	override name = "FileSaveRetryableError"
+
+	constructor(message = "File save failed and can be retried") {
 		super(message)
 	}
 }

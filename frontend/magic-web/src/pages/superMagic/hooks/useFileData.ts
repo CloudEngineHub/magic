@@ -13,7 +13,7 @@ import { SuperMagicApi } from "@/apis"
 import { isNil } from "lodash-es"
 import { superMagicStore } from "@/pages/superMagic/stores"
 import {
-	flushFileSaves,
+	ensureFileSavesSynced,
 	getFileSaveQueue,
 	peekUnsyncedDraft,
 } from "@/pages/superMagic/components/Detail/services/fileSaveQueue"
@@ -302,7 +302,7 @@ export const useFileData = ({
 	const handleVersionRollback = useMemoizedFn(async (file_version?: number) => {
 		try {
 			if (!enabled || !file_id || !file_version) return
-			if (!(await flushFileSaves([file_id]))) return
+			if (!(await ensureFileSavesSynced([file_id]))) return
 
 			const loading = magicToast.loading(t("common.rollbacking"))
 

@@ -2,7 +2,13 @@ import { SuperMagicApi } from "@/apis"
 import type { FileScope } from "@/apis/modules/fileScope"
 import { ossUploadService } from "@/stores/folderUpload/uploadService"
 import { unshadow } from "@/utils/shadow"
-import { FileSaveConflictError, FileSavePermanentError, type FileSavePersistRequest } from "./types"
+import {
+	FileSaveConflictError,
+	FileSavePermanentError,
+	FileSaveRetryableError,
+	type FileSavePersistRequest,
+	type FileSavePersistResult,
+} from "./types"
 import { getErrorStatus } from "./FileSaveQueue"
 
 export interface PersistFileSaveMeta {
@@ -32,6 +38,18 @@ export async function assertRemoteBaseline(
 	}
 }
 
+async function readRemoteVersion(fileId: string): Promise<string | undefined> {
+	try {
+		const info = await SuperMagicApi.getFileInfo(
+			{ file_id: fileId },
+			{ enableErrorMessagePrompt: false },
+		)
+		return info?.version != null ? String(info.version) : undefined
+	} catch {
+		return undefined
+	}
+}
+
 export function normalizePersistError(error: unknown): Error {
 	if (error instanceof FileSaveConflictError || error instanceof FileSavePermanentError) {
 		return error
@@ -50,7 +68,7 @@ export function normalizePersistError(error: unknown): Error {
 export async function persistFileSave(
 	request: FileSavePersistRequest,
 	context: PersistFileSaveContext,
-): Promise<void> {
+): Promise<FileSavePersistResult> {
 	try {
 		if (!request.forceOverwrite) {
 			await assertRemoteBaseline(request.fileId, request.baselineVersion)
@@ -81,7 +99,12 @@ export async function persistFileSave(
 				id: request.fileId,
 				file_key: uploadedPath,
 			})
-			return
+			// Only needed to rebase a queued follow-up save that started from this baseline.
+			return {
+				version: request.baselineVersion
+					? await readRemoteVersion(request.fileId)
+					: undefined,
+			}
 		}
 
 		const res = await SuperMagicApi.saveFileContent([
@@ -91,9 +114,18 @@ export async function persistFileSave(
 				enable_shadow: request.enableShadow,
 			},
 		])
-		if (!res?.success_files?.length) {
-			throw new FileSavePermanentError("Save API returned no success files")
+		const saved = res?.success_files?.[0]
+		if (!saved) {
+			// An empty result may be a transient gateway or backend fault, so let the queue retry.
+			const reason = res?.error_files?.[0]?.error
+			throw new FileSaveRetryableError(
+				reason
+					? `Save API rejected the file: ${reason}`
+					: "Save API returned no success files",
+			)
 		}
+		const version = saved.data?.version
+		return { version: version != null ? String(version) : undefined }
 	} catch (error) {
 		throw normalizePersistError(error)
 	}

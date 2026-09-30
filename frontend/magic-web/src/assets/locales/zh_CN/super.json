@@ -1368,6 +1368,7 @@
 		"fileFormatNotSupported": "文件格式暂不支持预览",
 		"fileNotSupported": "暂不支持预览该文件,请下载该文件",
 		"fileSave": {
+			"blocked": "存在未同步的修改，请先在保存失败提示中选择重试、覆盖远程或恢复远程。",
 			"conflict": "远程文件已更新，本地修改尚未同步",
 			"failed": "保存未同步到服务器，本地内容已保留",
 			"overwrite": "覆盖远程",

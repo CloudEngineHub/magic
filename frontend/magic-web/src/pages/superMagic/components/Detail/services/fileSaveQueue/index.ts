@@ -3,9 +3,11 @@ export {
 	FILE_SAVE_STATUS,
 	FileSaveConflictError,
 	FileSavePermanentError,
+	FileSaveRetryableError,
 	type FileSaveFailReason,
 	type FileSaveJob,
 	type FileSavePersistRequest,
+	type FileSavePersistResult,
 	type FileSaveQueueOptions,
 	type FileSaveSnapshot,
 	type FileSaveStatus,
@@ -21,4 +23,5 @@ export {
 	resetFileSaveQueueForTests,
 	stringifySaveContent,
 } from "./FileSaveQueue"
+export { ensureFileSavesSynced } from "./ensureFileSavesSynced"
 export { IndexedDbFileSavePersistence, createMemoryFileSavePersistence } from "./persistence"
