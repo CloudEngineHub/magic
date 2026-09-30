@@ -71,6 +71,43 @@ describe("FileSaveQueue", () => {
 		expect(await persistence.get("file-1")).toBeUndefined()
 	})
 
+	it("keeps flush pending when a newer save is queued during success cleanup", async () => {
+		let releaseOnSuccess: (() => void) | undefined
+		let resolveSecond: (() => void) | undefined
+		const persist = vi.fn((request: { content: unknown }) => {
+			if (request.content === "<p>Second</p>") {
+				return new Promise<void>((resolve) => {
+					resolveSecond = resolve
+				})
+			}
+			return Promise.resolve()
+		})
+		const queue = createQueue()
+		queue.enqueue(
+			createJob({
+				persist,
+				content: "<p>First</p>",
+				onSuccess: () =>
+					new Promise<void>((resolve) => {
+						releaseOnSuccess = resolve
+					}),
+			}),
+		)
+		await vi.waitFor(() => expect(releaseOnSuccess).toBeDefined())
+
+		const flushed = vi.fn()
+		void queue.flush("file-1").then(flushed)
+		queue.enqueue(createJob({ persist, content: "<p>Second</p>" }))
+		releaseOnSuccess?.()
+
+		await vi.waitFor(() => expect(persist).toHaveBeenCalledTimes(2))
+		expect(flushed).not.toHaveBeenCalled()
+
+		resolveSecond?.()
+		await vi.waitFor(() => expect(flushed).toHaveBeenCalledWith(true))
+		expect(queue.getStatus("file-1")).toBe(FILE_SAVE_STATUS.Idle)
+	})
+
 	it("retries retryable errors with backoff then succeeds", async () => {
 		const persist = vi
 			.fn()

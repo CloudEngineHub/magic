@@ -355,8 +355,11 @@ export class FileSaveQueue {
 					} catch (error) {
 						console.error("File save success callback failed", error)
 					}
-					this.resolveFlush(fileId, true)
-					if (!entry.queued) this.entries.delete(fileId)
+					// A save queued during cleanup keeps waiters pending until it settles.
+					if (!entry.queued) {
+						this.resolveFlush(fileId, true)
+						this.entries.delete(fileId)
+					}
 				} else {
 					// Keep the draft queued for Retry, but stop auto-persist.
 					entry.queued = job
