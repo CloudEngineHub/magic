@@ -398,25 +398,33 @@ export class PPTStore {
 		)
 	}
 
-	private overlayUnsyncedSlideContent(
-		fileId: string | undefined,
-		processedContent: string,
-		rawContent: string,
-	): { content: string; rawContent: string } {
-		if (!fileId) return { content: processedContent, rawContent }
+	/** Raw HTML to render: an unsynced draft wins over what the server returned. */
+	private resolveSlideSource(fileId: string | undefined, serverContent: string): string {
+		if (!fileId) return serverContent
 		const pending = peekUnsyncedDraft(fileId)
-		if (pending === undefined) return { content: processedContent, rawContent }
-		const overlay = stringifySaveContent(pending)
-		return { content: overlay, rawContent: overlay }
+		return pending === undefined ? serverContent : stringifySaveContent(pending)
 	}
 
 	async applyUnsyncedDraft(fileId: string, content: unknown): Promise<void> {
 		const html = stringifySaveContent(content)
+		const findIndex = () =>
+			this.slides.findIndex((slide) => this.getSlideFileId(slide) === fileId)
+		const initialIndex = findIndex()
+		if (initialIndex === -1) return
+		// Drafts are raw editor HTML; `content` must hold processed HTML.
+		const processed = await this.processorService.processSlide(
+			html,
+			initialIndex,
+			this.getRelativeFilePathByFileId(fileId),
+		)
+		const latest = peekUnsyncedDraft(fileId)
+		if (latest !== undefined && stringifySaveContent(latest) !== html) return
 		runInAction(() => {
-			const index = this.slides.findIndex((slide) => this.getSlideFileId(slide) === fileId)
+			const index = findIndex()
 			if (index === -1) return
 			this.slides[index].rawContent = html
-			this.slides[index].content = html
+			this.slides[index].content = processed.content
+			this.slides[index].resourceVersionSignature = processed.resourceVersionSignature
 			this.slides[index].loadingState = "loaded"
 			this.slides[index].loadingError = undefined
 			this.slides[index].lastLoadedAt = Date.now()
@@ -1347,7 +1355,7 @@ export class PPTStore {
 							return
 						}
 
-						const rawContent = await this.loaderService.loadSlide(url)
+						const loadedContent = await this.loaderService.loadSlide(url)
 
 						const currentIndex = this.findSlideIndexByLoadTarget(target)
 						if (currentIndex === -1) {
@@ -1362,6 +1370,7 @@ export class PPTStore {
 						const currentSlide = this.slides[currentIndex]
 						const fileId = target.fileId || this.getSlideFileId(currentSlide)
 						const relativeFilePath = this.getRelativeFilePathByFileId(fileId)
+						const rawContent = this.resolveSlideSource(fileId, loadedContent)
 
 						slideRawData.push({
 							url,
@@ -1479,16 +1488,11 @@ export class PPTStore {
 								urlMapping,
 							)
 
-						const overlaid = this.overlayUnsyncedSlideContent(
-							fileId,
-							processedContent.content,
-							content,
-						)
 						runInAction(() => {
 							const currentIndex = this.findSlideIndexByLoadTarget(target)
 							if (currentIndex !== -1 && this.slides[currentIndex]) {
-								this.slides[currentIndex].rawContent = overlaid.rawContent
-								this.slides[currentIndex].content = overlaid.content
+								this.slides[currentIndex].rawContent = content
+								this.slides[currentIndex].content = processedContent.content
 								this.slides[currentIndex].resourceVersionSignature =
 									processedContent.resourceVersionSignature
 								this.slides[currentIndex].loadingState = "loaded"
@@ -1656,7 +1660,7 @@ export class PPTStore {
 				slide.loadingError = undefined
 			})
 
-			const rawContent = await this.loaderService.loadSlide(target.url, {
+			const loadedContent = await this.loaderService.loadSlide(target.url, {
 				signal: options.signal,
 			})
 			if (!this.isContentLoadCurrent(options)) return ""
@@ -1673,18 +1677,13 @@ export class PPTStore {
 			const currentSlide = this.slides[processIndex]
 			const currentFileId = target.fileId || this.getSlideFileId(currentSlide)
 			const relativeFilePath = this.getRelativeFilePathByFileId(currentFileId)
+			const rawContent = this.resolveSlideSource(currentFileId, loadedContent)
 			const processedContent = await this.processorService.processSlide(
 				rawContent,
 				processIndex,
 				relativeFilePath,
 			)
 			if (!this.isContentLoadCurrent(options)) return ""
-
-			const overlaid = this.overlayUnsyncedSlideContent(
-				currentFileId,
-				processedContent.content,
-				rawContent,
-			)
 
 			runInAction(() => {
 				if (!this.isContentLoadCurrent(options)) return
@@ -1697,8 +1696,8 @@ export class PPTStore {
 					return
 				}
 
-				this.slides[currentIndex].rawContent = overlaid.rawContent
-				this.slides[currentIndex].content = overlaid.content
+				this.slides[currentIndex].rawContent = rawContent
+				this.slides[currentIndex].content = processedContent.content
 				this.slides[currentIndex].resourceVersionSignature =
 					processedContent.resourceVersionSignature
 				this.slides[currentIndex].loadingState = "loaded"
@@ -1711,7 +1710,7 @@ export class PPTStore {
 				slideIndex: this.findSlideIndexByLoadTarget(target),
 			})
 
-			return overlaid.content
+			return processedContent.content
 		} catch (error) {
 			if (this.isAbortError(error) || !this.isContentLoadCurrent(options)) {
 				this.logger.debug("幻灯片内容加载已取消，丢弃结果", {
