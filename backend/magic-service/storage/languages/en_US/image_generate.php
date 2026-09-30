@@ -95,9 +95,20 @@ return [
             'description' => 'Controls the generated image quality level',
             'options' => [
                 'auto' => 'Auto',
-                'high' => 'High',
-                'medium' => 'Medium',
                 'low' => 'Low',
+                'medium' => 'Standard',
+                'high' => 'High',
+                'xhigh' => 'Ultra high',
+                'max' => 'Max',
+            ],
+        ],
+        'background' => [
+            'label' => 'Background',
+            'description' => 'Controls the generated image background: auto lets the model decide from the prompt, keep background keeps it opaque, transparent background produces a transparent image',
+            'options' => [
+                'auto' => 'Auto',
+                'opaque' => 'Keep background',
+                'transparent' => 'Transparent background',
             ],
         ],
     ],

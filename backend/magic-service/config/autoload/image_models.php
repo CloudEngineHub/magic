@@ -550,7 +550,126 @@ return [
         ],
 
         // ==========================================================
-        // Wangsu GPT Image
+        // Wangsu GPT Image 2.5（透明背景 + 6 档画质只对 2.5 开放）
+        // 必须排在 gpt-image-2 之前：fuzzy 是 str_contains，且 matchConfig 首个命中即返回。
+        // ==========================================================
+        [
+            'match' => [
+                ['field' => 'model_version', 'value' => 'gpt-image-2.5', 'match_type' => 'fuzzy'],
+                ['field' => 'model_version', 'value' => 'gpt-image-2_5', 'match_type' => 'fuzzy'],
+                ['field' => 'model_version', 'value' => 'gpt-image-2-5', 'match_type' => 'fuzzy'],
+                ['field' => 'model_id', 'value' => 'gpt-image-2.5', 'match_type' => 'fuzzy'],
+                ['field' => 'model_id', 'value' => 'gpt-image-2_5', 'match_type' => 'fuzzy'],
+                ['field' => 'model_id', 'value' => 'gpt-image-2-5', 'match_type' => 'fuzzy'],
+            ],
+            'config' => [
+                'sizes' => [
+                    // 1:1
+                    ['label' => '1:1', 'value' => '1024x1024', 'scale' => '1K'],
+                    ['label' => '1:1', 'value' => '2048x2048', 'scale' => '2K'],
+                    ['label' => '1:1', 'value' => '2880x2880', 'scale' => '4K'],
+                    // 2:3
+                    ['label' => '2:3', 'value' => '1024x1536', 'scale' => '1K'],
+                    ['label' => '2:3', 'value' => '1664x2496', 'scale' => '2K'],
+                    ['label' => '2:3', 'value' => '2336x3504', 'scale' => '4K'],
+                    // 3:2
+                    ['label' => '3:2', 'value' => '1536x1024', 'scale' => '1K'],
+                    ['label' => '3:2', 'value' => '2496x1664', 'scale' => '2K'],
+                    ['label' => '3:2', 'value' => '3504x2336', 'scale' => '4K'],
+                    // 3:4
+                    ['label' => '3:4', 'value' => '864x1152', 'scale' => '1K'],
+                    ['label' => '3:4', 'value' => '1728x2304', 'scale' => '2K'],
+                    ['label' => '3:4', 'value' => '2448x3264', 'scale' => '4K'],
+                    // 4:3
+                    ['label' => '4:3', 'value' => '1152x864', 'scale' => '1K'],
+                    ['label' => '4:3', 'value' => '2304x1728', 'scale' => '2K'],
+                    ['label' => '4:3', 'value' => '3264x2448', 'scale' => '4K'],
+                    // 9:16
+                    ['label' => '9:16', 'value' => '864x1536', 'scale' => '1K'],
+                    ['label' => '9:16', 'value' => '1440x2560', 'scale' => '2K'],
+                    ['label' => '9:16', 'value' => '2160x3840', 'scale' => '4K'],
+                    // 16:9
+                    ['label' => '16:9', 'value' => '1536x864', 'scale' => '1K'],
+                    ['label' => '16:9', 'value' => '2560x1440', 'scale' => '2K'],
+                    ['label' => '16:9', 'value' => '3840x2160', 'scale' => '4K'],
+                    // 21:9
+                    ['label' => '21:9', 'value' => '1344x576', 'scale' => '1K'],
+                    ['label' => '21:9', 'value' => '2688x1152', 'scale' => '2K'],
+                    ['label' => '21:9', 'value' => '3696x1584', 'scale' => '4K'],
+                ],
+                // 对未显式列出的任意尺寸做总像素约束，保持在官方允许范围内。
+                'total_pixels_range' => [
+                    'min' => 655360,
+                    'max' => 8294400,
+                ],
+                'max_reference_images' => 14,
+                'max_output_images' => 10,
+                'image_settings' => [
+                    [
+                        // 2.5 独有：比 gpt-image-2 多 xhigh / max 两档（文案共用 image_model_settings.quality，不另开 key）
+                        'key' => 'image_generation_config.quality',
+                        'label' => 'i18n:image_generate.image_model_settings.quality.label',
+                        'description' => 'i18n:image_generate.image_model_settings.quality.description',
+                        'component' => 'single_select',
+                        'variant' => 'segmented',
+                        'default' => 'auto',
+                        'options' => [
+                            [
+                                'label' => 'i18n:image_generate.image_model_settings.quality.options.auto',
+                                'value' => 'auto',
+                            ],
+                            [
+                                'label' => 'i18n:image_generate.image_model_settings.quality.options.low',
+                                'value' => 'low',
+                            ],
+                            [
+                                'label' => 'i18n:image_generate.image_model_settings.quality.options.medium',
+                                'value' => 'medium',
+                            ],
+                            [
+                                'label' => 'i18n:image_generate.image_model_settings.quality.options.high',
+                                'value' => 'high',
+                            ],
+                            [
+                                'label' => 'i18n:image_generate.image_model_settings.quality.options.xhigh',
+                                'value' => 'xhigh',
+                            ],
+                            [
+                                'label' => 'i18n:image_generate.image_model_settings.quality.options.max',
+                                'value' => 'max',
+                            ],
+                        ],
+                    ],
+                    [
+                        // 2.5 独有：三态透明背景。自动（auto，等同声明默认值，前端原样提交，后端视为「用户没动过」）/ 保留背景（opaque）/ 透明背景（transparent）
+                        'key' => 'image_generation_config.background',
+                        'label' => 'i18n:image_generate.image_model_settings.background.label',
+                        'description' => 'i18n:image_generate.image_model_settings.background.description',
+                        'component' => 'single_select',
+                        'default' => 'auto',
+                        'options' => [
+                            [
+                                'label' => 'i18n:image_generate.image_model_settings.background.options.auto',
+                                'value' => 'auto',
+                            ],
+                            [
+                                'label' => 'i18n:image_generate.image_model_settings.background.options.opaque',
+                                'value' => 'opaque',
+                            ],
+                            [
+                                'label' => 'i18n:image_generate.image_model_settings.background.options.transparent',
+                                'value' => 'transparent',
+                            ],
+                        ],
+                    ],
+                ],
+                // 避免 2:3 这类已声明比例被直接解析成 682x1024 之类的“换算尺寸”。
+                'prefer_declared_sizes' => true,
+            ],
+        ],
+
+        // ==========================================================
+        // Wangsu GPT Image（2.5 以外的版本：只有质量，不提供透明背景）
         // ==========================================================
         [
             'match' => [
@@ -592,7 +711,7 @@ return [
                     ['label' => '21:9', 'value' => '2688x1152', 'scale' => '2K'],
                     ['label' => '21:9', 'value' => '3696x1584', 'scale' => '4K'],
                 ],
-                // 对未显式列出的任意尺寸做总像素约束，保持在 gpt-image-2 官方允许范围内。
+                // 对未显式列出的任意尺寸做总像素约束，保持在官方允许范围内。
                 'total_pixels_range' => [
                     'min' => 655360,
                     'max' => 8294400,
@@ -608,22 +727,23 @@ return [
                         'component' => 'single_select',
                         'variant' => 'segmented',
                         'default' => 'auto',
+                        // 顺序与 2.5 一致：自动在最前，其余由低到高
                         'options' => [
                             [
                                 'label' => 'i18n:image_generate.image_model_settings.quality.options.auto',
                                 'value' => 'auto',
                             ],
                             [
-                                'label' => 'i18n:image_generate.image_model_settings.quality.options.high',
-                                'value' => 'high',
+                                'label' => 'i18n:image_generate.image_model_settings.quality.options.low',
+                                'value' => 'low',
                             ],
                             [
                                 'label' => 'i18n:image_generate.image_model_settings.quality.options.medium',
                                 'value' => 'medium',
                             ],
                             [
-                                'label' => 'i18n:image_generate.image_model_settings.quality.options.low',
-                                'value' => 'low',
+                                'label' => 'i18n:image_generate.image_model_settings.quality.options.high',
+                                'value' => 'high',
                             ],
                         ],
                     ],
