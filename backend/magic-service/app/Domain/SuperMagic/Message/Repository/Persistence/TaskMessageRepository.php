@@ -65,19 +65,6 @@ class TaskMessageRepository implements TaskMessageRepositoryInterface
         $this->model::query()->insert($data);
     }
 
-    public function findByTaskId(string $taskId): array
-    {
-        $query = $this->model::query()
-            ->where('task_id', $taskId)
-            ->orderBy('send_timestamp', 'asc');
-
-        $result = Db::select($query->toSql(), $query->getBindings());
-
-        return array_map(function ($record) {
-            return new TaskMessageEntity((array) $record);
-        }, $result);
-    }
-
     public function findCompletedResultMessages(int $topicId, int $taskId): array
     {
         $query = $this->model::query()
@@ -97,25 +84,6 @@ class TaskMessageRepository implements TaskMessageRepositoryInterface
         return $query->get()
             ->map(static fn (TaskMessageModel $record): TaskMessageEntity => new TaskMessageEntity($record->toArray()))
             ->all();
-    }
-
-    /**
-     * 根据话题ID和任务ID获取用户消息列表（优化索引+过滤用户消息）.
-     * @return TaskMessageEntity[]
-     */
-    public function findUserMessagesByTopicIdAndTaskId(int $topicId, string $taskId): array
-    {
-        $query = $this->model::query()
-            ->where('topic_id', $topicId)
-            ->where('task_id', $taskId)
-            ->where('sender_type', 'user')
-            ->orderBy('id');
-
-        $result = Db::select($query->toSql(), $query->getBindings());
-
-        return array_map(function ($record) {
-            return new TaskMessageEntity((array) $record);
-        }, $result);
     }
 
     /**
@@ -163,7 +131,9 @@ class TaskMessageRepository implements TaskMessageRepositoryInterface
 
         // 如果 $showInUi 为 true，则添加条件过滤
         if ($showInUi) {
-            $query->where('show_in_ui', true);
+            $query->where('show_in_ui', true)
+                // Optimizer picks PRIMARY or idx_topic_message for ORDER BY id. This index matches the filter.
+                ->forceIndex('idx_topic_show_deleted_id');
         }
 
         $query->orderBy('id', $sortDirection);
@@ -199,7 +169,9 @@ class TaskMessageRepository implements TaskMessageRepositoryInterface
         $limit = max(1, min($limit, 100));
         $query = $this->model::query()
             ->where('topic_id', $topicId)
-            ->when($showInUi, static fn ($query) => $query->where('show_in_ui', true))
+            ->when($showInUi, static fn ($query) => $query->where('show_in_ui', true)
+                // Optimizer picks PRIMARY for id > cursor ORDER BY id. This index matches the filter.
+                ->forceIndex('idx_topic_show_deleted_id'))
             ->orderBy('id', 'asc')
             ->limit($limit + 1);
 
@@ -237,22 +209,6 @@ class TaskMessageRepository implements TaskMessageRepositoryInterface
             return null;
         }
         return new TaskMessageEntity($record->toArray());
-    }
-
-    public function findPendingMessagesByTopicId(int $topicId, string $processingStatus, string $senderType = 'assistant', int $limit = 50): array
-    {
-        $query = $this->model::query()
-            ->where('topic_id', $topicId)
-            ->where('processing_status', $processingStatus)
-            ->where('sender_type', $senderType)
-            ->orderBy('seq_id', 'asc')
-            ->limit($limit);
-
-        $result = Db::select($query->toSql(), $query->getBindings());
-
-        return array_map(function ($record) {
-            return new TaskMessageEntity((array) $record);
-        }, $result);
     }
 
     public function updateProcessingStatus(int $id, string $processingStatus, ?string $errorMessage = null, int $retryCount = 0): void
@@ -293,7 +249,8 @@ class TaskMessageRepository implements TaskMessageRepositoryInterface
         // 利用降序索引直接获取最大 seq_id，配合 ORDER BY seq_id DESC
         $maxSeqId = $this->model::query()
             ->where('topic_id', $topicId)
-            ->where('task_id', $taskId)
+            // task_id is varchar: bind as string, otherwise MySQL casts the column to double and the index cannot be used
+            ->where('task_id', (string) $taskId)
             ->orderByDesc('seq_id')
             ->value('seq_id');
 
@@ -325,7 +282,8 @@ class TaskMessageRepository implements TaskMessageRepositoryInterface
         $query = $this->model::query()
             ->where('seq_id', $seqId)
             ->where('topic_id', $topicId)
-            ->where('task_id', $taskId)
+            // task_id is varchar: bind as string to keep the index usable
+            ->where('task_id', (string) $taskId)
             ->first();
 
         if (! $query) {
@@ -397,7 +355,7 @@ class TaskMessageRepository implements TaskMessageRepositoryInterface
             ]);
 
         if ($taskId > 0) {
-            $query = $query->where('task_id', $taskId);
+            $query = $query->where('task_id', (string) $taskId);
         }
 
         $query->orderBy('seq_id', 'asc')->limit($limit * 2); // 适当放大limit，因为要在代码中过滤
