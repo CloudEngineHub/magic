@@ -60,10 +60,10 @@ export function useRecentProjectSearch(keyword: string, active: boolean, busy: b
 				{
 					project_name: query,
 					sort_mode: "recent",
-					include_special: 1,
 					show_collaboration: 1,
 					page,
 					page_size: PAGE_SIZE,
+					include_special: 1,
 				},
 				{ signal: controller.signal },
 			)
