@@ -10,6 +10,9 @@ namespace App\Application\ModelGateway\Support;
 use App\Domain\ModelGateway\Entity\ValueObject\ModelGatewayDataIsolation;
 use App\Infrastructure\ExternalAPI\ImageGenerateAPI\ImageModelConfig;
 use Hyperf\Codec\Json;
+use Hyperf\Logger\LoggerFactory;
+use Psr\Log\LoggerInterface;
+use Throwable;
 
 /**
  * 图片生成参数解析器：把模型的 image_settings 声明原文与用户提示词拼成用户内容，
@@ -22,9 +25,13 @@ class ImageGenerationConfigResolver
     /** 图片域的参数提取提示词（Prompt/ImageGenerationConfigExtractor.agent.yaml） */
     private const string EXTRACTOR_AGENT = 'ImageGenerationConfigExtractor';
 
+    protected readonly LoggerInterface $logger;
+
     public function __construct(
         private readonly GenerationConfigExtractor $extractor,
+        LoggerFactory $loggerFactory,
     ) {
+        $this->logger = $loggerFactory->get('ImageGenerationConfigResolver');
     }
 
     /**
@@ -36,25 +43,36 @@ class ImageGenerationConfigResolver
         string $prompt,
         ModelGatewayDataIsolation $dataIsolation
     ): array {
-        if (trim($prompt) === '') {
+        try {
+            if (trim($prompt) === '') {
+                return [];
+            }
+
+            $settings = $this->loadSettings($modelVersion, $modelId);
+            if ($settings === []) {
+                return [];
+            }
+
+            // 声明原文直接交给模型，不做任何结构转换
+            $userContent = sprintf(
+                "Parameter declaration（JSON）：\n%s\n\nUser input：\n%s",
+                Json::encode($settings),
+                $prompt
+            );
+
+            $result = $this->extractor->extract($dataIsolation, self::EXTRACTOR_AGENT, $userContent, true);
+
+            return $this->filterDeclared($result, $settings);
+        } catch (Throwable $throwable) {
+            // 提取失败不影响出图：退回声明默认值，只记录日志
+            $this->logger->error('ImageGenerationConfigResolveFailed', [
+                'model_version' => $modelVersion,
+                'model_id' => $modelId,
+                'error' => $throwable->getMessage(),
+            ]);
+
             return [];
         }
-
-        $settings = $this->loadSettings($modelVersion, $modelId);
-        if ($settings === []) {
-            return [];
-        }
-
-        // 声明原文直接交给模型，不做任何结构转换
-        $userContent = sprintf(
-            "Parameter declaration（JSON）：\n%s\n\nUser input：\n%s",
-            Json::encode($settings),
-            $prompt
-        );
-
-        $result = $this->extractor->extract($dataIsolation, self::EXTRACTOR_AGENT, $userContent, true);
-
-        return $this->filterDeclared($result, $settings);
     }
 
     /**
