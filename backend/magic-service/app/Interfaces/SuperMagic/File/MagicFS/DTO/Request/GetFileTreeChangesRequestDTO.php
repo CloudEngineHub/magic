@@ -18,7 +18,16 @@ class GetFileTreeChangesRequestDTO
 
     public static function fromRequest(RequestInterface $request): self
     {
-        $data = $request->all();
+        return self::fromArray($request->all());
+    }
+
+    /**
+     * 与 fromRequest 共用同一套归一化，供批量接口逐 root 复用。
+     *
+     * @param array<string, mixed> $data
+     */
+    public static function fromArray(array $data): self
+    {
         $dto = new self();
         $since = $data['since_revision'] ?? ($data['since'] ?? 0);
         $dto->since_revision = max(0, (int) $since);

@@ -19,12 +19,14 @@ use App\Domain\SuperMagic\File\Service\MagicFSFileDomainService;
 use App\Domain\SuperMagic\Project\Entity\ValueObject\MemberRole;
 use App\Domain\SuperMagic\Task\Service\TaskDomainService;
 use App\Domain\SuperMagic\Topic\Service\TopicDomainService;
+use App\ErrorCode\GenericErrorCode;
 use App\ErrorCode\MagicFSErrorCode;
 use App\ErrorCode\SuperAgentErrorCode;
 use App\Infrastructure\Core\Exception\ExceptionBuilder;
 use App\Infrastructure\SuperMagic\Utils\FileTreeBuilder;
 use App\Interfaces\Authorization\Web\MagicUserAuthorization;
 use App\Interfaces\SuperMagic\File\MagicFS\DTO\Request\CreateFileRequestDTO;
+use App\Interfaces\SuperMagic\File\MagicFS\DTO\Request\GetFileTreeChangesBatchRequestDTO;
 use App\Interfaces\SuperMagic\File\MagicFS\DTO\Request\GetFileTreeChangesRequestDTO;
 use App\Interfaces\SuperMagic\File\MagicFS\DTO\Request\GetFileTreeRequestDTO;
 use App\Interfaces\SuperMagic\File\MagicFS\DTO\Request\GetFileVersionsRequestDTO;
@@ -45,6 +47,14 @@ use Psr\Log\LoggerInterface;
 
 class MagicFSFileAppService extends AbstractAppService
 {
+    /**
+     * 批量拉取变更的 root 上限。
+     *
+     * 单沙箱的挂载点上限是 12（project + user + 最多 10 个 referenced-project），
+     * 64 留足余量；同时挡住把批量接口当扫描器用的调用方。
+     */
+    protected const int MAX_CHANGE_FEED_BATCH_ROOTS = 64;
+
     protected LoggerInterface $logger;
 
     public function __construct(
@@ -222,6 +232,65 @@ class MagicFSFileAppService extends AbstractAppService
         }
 
         return $responseDTO;
+    }
+
+    /**
+     * 读取订阅起点：head / oldest / cursor_expired，不加载任何变更行。
+     *
+     * 与 getFileTreeChanges 共用 domain 路径和同一条 VIEWER 鉴权，
+     * 保证"推送订阅"和"HTTP 拉取"对同一个 root 给出同样的可见性判定。
+     *
+     * @return array{head_revision:int, oldest_revision:int, cursor_expired:bool}
+     */
+    public function getFileTreeChangeFeedHead(
+        MagicUserAuthorization $authorization,
+        string $rootFileId,
+        int $sinceRevision
+    ): array {
+        $this->assertFileAccessible($rootFileId, $authorization, MemberRole::VIEWER);
+        $result = $this->magicFSFileDomainService->getFileTreeChanges($rootFileId, $sinceRevision, 0);
+
+        return [
+            'head_revision' => $result['revision'],
+            'oldest_revision' => $result['oldest'],
+            'cursor_expired' => $result['cursor_expired'],
+        ];
+    }
+
+    /**
+     * 批量拉取变更：降级路径一次请求服务全部挂载点。
+     *
+     * 逐 root 复用单 root 的服务路径（含鉴权、has_more、next_revision 的推导），
+     * 所以批量与单个接口不可能给出不同语义。
+     *
+     * 任一 root 鉴权失败就整体失败，不返回部分结果：调用方无法区分
+     * "这个 root 没有变更"和"这个 root 被跳过了"，静默跳过只会让挂载点悄悄停止同步。
+     *
+     * @return array{results: array<int, array<string, mixed>>}
+     */
+    public function getFileTreeChangesBatch(
+        MagicUserAuthorization $authorization,
+        GetFileTreeChangesBatchRequestDTO $requestDTO
+    ): array {
+        if ($requestDTO->roots === [] || count($requestDTO->roots) > static::MAX_CHANGE_FEED_BATCH_ROOTS) {
+            ExceptionBuilder::throw(GenericErrorCode::ParameterValidationFailed);
+        }
+
+        $results = [];
+        foreach ($requestDTO->roots as $root) {
+            if ($root['root_file_id'] === '') {
+                ExceptionBuilder::throw(GenericErrorCode::ParameterValidationFailed);
+            }
+
+            $single = new GetFileTreeChangesRequestDTO();
+            $single->since_revision = $root['since_revision'];
+            $single->limit = $root['limit'];
+
+            $responseDTO = $this->getFileTreeChanges($authorization, $root['root_file_id'], $single);
+            $results[] = ['root_file_id' => $root['root_file_id']] + $responseDTO->toArray();
+        }
+
+        return ['results' => $results];
     }
 
     /**

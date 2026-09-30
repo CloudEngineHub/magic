@@ -9,13 +9,16 @@ namespace App\Domain\SuperMagic\File\Repository\Persistence;
 
 use App\Domain\Contact\Entity\ValueObject\DataIsolation;
 use App\Domain\SuperMagic\Common\Entity\ValueObject\StorageType;
+use App\Domain\SuperMagic\File\Contract\FileTreeChangePublisherInterface;
 use App\Domain\SuperMagic\File\Entity\TaskFileEntity;
 use App\Domain\SuperMagic\File\Entity\ValueObject\FileSpaceType;
 use App\Domain\SuperMagic\File\Repository\Facade\TaskFileRepositoryInterface;
 use App\Domain\SuperMagic\File\Repository\Model\TaskFileModel;
 use App\Infrastructure\Util\IdGenerator\IdGenerator;
+use Hyperf\Context\ApplicationContext;
 use Hyperf\DbConnection\Db;
 use RuntimeException;
+use Throwable;
 
 class TaskFileRepository implements TaskFileRepositoryInterface
 {
@@ -24,6 +27,18 @@ class TaskFileRepository implements TaskFileRepositoryInterface
     private const FILE_TREE_HEADS_TABLE = 'magic_fs_file_tree_heads';
 
     private const MAX_FILE_TREE_DEPTH = 256;
+
+    /**
+     * 变更推送端口，惰性解析一次。
+     *
+     * 不走构造器注入是有意的：Hyperf 的 DefinitionSource::getParametersDefinition()
+     * 会跳过所有带默认值的可选参数，所以「?Port $port = null」这种写法看起来能被注入、
+     * 实际永远是 null，推送会静默失效。而且本仓库也会被直接 new（测试、历史调用方）。
+     * 这里显式向容器要，容器里没有实现时（单测）安静降级成不推送。
+     */
+    private ?FileTreeChangePublisherInterface $changePublisher = null;
+
+    private bool $changePublisherResolved = false;
 
     public function __construct(protected TaskFileModel $model)
     {
@@ -3526,6 +3541,9 @@ class TaskFileRepository implements TaskFileRepositoryInterface
                 }
 
                 $rootRevision = (int) ($head['revision'] ?? 0);
+                // 本次追加的排他下界 = 追加前的 head，也就是客户端此刻应当持有的游标。
+                // 推送协议里 from_revision 就是这个值，不是第一行的 revision。
+                $startRevision = $rootRevision;
                 $rows = [];
                 foreach ($group['events'] as $event) {
                     ++$rootRevision;
@@ -3557,6 +3575,12 @@ class TaskFileRepository implements TaskFileRepositoryInterface
                 foreach (array_chunk($rows, 500) as $chunk) {
                     Db::table(self::FILE_TREE_CHANGES_TABLE)->insert($chunk);
                 }
+
+                // journal 落库之后再通知推送。仓库层只认识 domain 端口，
+                // 不认识 Socket.IO / room / payload：实现由容器提供，
+                // 这样持久化层不必为了推送反向依赖接口层。
+                // 这里仍在调用方的事务里，发送时机由 publisher 自己按事务层级决定。
+                $this->resolveChangePublisher()?->queue($rootFileId, $startRevision, $rootRevision, $rows);
             }
 
             ksort($revisions);
@@ -3564,6 +3588,34 @@ class TaskFileRepository implements TaskFileRepositoryInterface
         };
 
         return Db::transactionLevel() > 0 ? $write() : Db::transaction($write);
+    }
+
+    /**
+     * 第一次 journal 追加时才解析推送端口，之后复用。
+     *
+     * 解析失败只意味着"不推送"：journal 才是唯一真相，客户端会退回轮询。
+     */
+    private function resolveChangePublisher(): ?FileTreeChangePublisherInterface
+    {
+        if ($this->changePublisherResolved) {
+            return $this->changePublisher;
+        }
+        $this->changePublisherResolved = true;
+
+        try {
+            if (! ApplicationContext::hasContainer()) {
+                return null;
+            }
+            $container = ApplicationContext::getContainer();
+            if ($container->has(FileTreeChangePublisherInterface::class)) {
+                $this->changePublisher = $container->get(FileTreeChangePublisherInterface::class);
+            }
+        } catch (Throwable) {
+            // 端口解析异常绝不能冒泡到写入路径。
+            $this->changePublisher = null;
+        }
+
+        return $this->changePublisher;
     }
 
     /** @return array<string, mixed> */

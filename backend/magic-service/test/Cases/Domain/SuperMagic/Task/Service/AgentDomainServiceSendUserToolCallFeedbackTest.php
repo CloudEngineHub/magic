@@ -48,9 +48,23 @@ class AgentDomainServiceSendUserToolCallFeedbackTest extends TestCase
 {
     private FakeContainer $container;
 
+    /**
+     * 被替换掉的原始容器，tearDown 时还回去。
+     *
+     * 这里替换的是进程级的 ApplicationContext。下面那个桩 ConfigInterface 对**任何**
+     * key 都返回字符串 'test'，所以只要不还原，同一进程里后续每个测试的
+     * config('error_message') 都会是 'test'，ExceptionBuilder::__construct 里的
+     * array_merge(array, 'test') 立刻 TypeError —— 任何抛业务异常的测试都会莫名其妙地挂。
+     */
+    private ?ContainerInterface $originalContainer = null;
+
     protected function setUp(): void
     {
         parent::setUp();
+
+        $this->originalContainer = ApplicationContext::hasContainer()
+            ? ApplicationContext::getContainer()
+            : null;
 
         $idGenerator = $this->createMock(IdGeneratorInterface::class);
         $idGenerator->method('generate')->willReturnCallback(static fn (): int => random_int(1, PHP_INT_MAX));
@@ -63,6 +77,16 @@ class AgentDomainServiceSendUserToolCallFeedbackTest extends TestCase
         $this->container->services[ConfigInterface::class] = $config;
 
         ApplicationContext::setContainer($this->container);
+    }
+
+    protected function tearDown(): void
+    {
+        if ($this->originalContainer !== null) {
+            ApplicationContext::setContainer($this->originalContainer);
+            $this->originalContainer = null;
+        }
+
+        parent::tearDown();
     }
 
     public function testExpiredQuestionThrowsDedicatedException(): void

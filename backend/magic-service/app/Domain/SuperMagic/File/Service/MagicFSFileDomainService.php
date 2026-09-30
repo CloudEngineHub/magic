@@ -857,6 +857,7 @@ class MagicFSFileDomainService
      * @return array{
      *     rows:array<int, array<string, mixed>>,
      *     head:int,
+     *     oldest:int,
      *     revision:int,
      *     has_more:bool,
      *     cursor_expired:bool
@@ -879,6 +880,10 @@ class MagicFSFileDomainService
             return [
                 'rows' => [],
                 'head' => $head,
+                // oldest is the first revision still replayable. The push
+                // handshake needs it to tell a subscriber how far back its
+                // cursor may be before the journal must be re-read wholesale.
+                'oldest' => $feed['oldest'],
                 'revision' => $head,
                 'has_more' => false,
                 // A head-only request still needs to tell a mounted client
@@ -897,6 +902,7 @@ class MagicFSFileDomainService
         return [
             'rows' => $rows,
             'head' => $head,
+            'oldest' => $feed['oldest'],
             'revision' => $head,
             'has_more' => $hasMore,
             'cursor_expired' => $feed['cursor_expired'],

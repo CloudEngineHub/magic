@@ -19,6 +19,10 @@ Router::addGroup(
         // 根据项目 ID 获取项目根目录 file_id（agfs-server 动态挂载 referenced-project 时调用）
         Router::get('/projects/{projectId}/root-file-id', [MagicFSApi::class, 'getProjectRootFileId']);
 
+        // 批量拉取多个文件树的变更（推送不可用时的合并轮询入口）。
+        // 必须定义在 /files/{id}/... 之前，避免将来出现同前缀动态段时被抢占。
+        Router::post('/changes/batch', [MagicFSApi::class, 'getFileTreeChangesBatch']);
+
         Router::addGroup('/files', static function () {
             // 列出目录内容
             Router::post('/queries', [MagicFSApi::class, 'listFiles']);

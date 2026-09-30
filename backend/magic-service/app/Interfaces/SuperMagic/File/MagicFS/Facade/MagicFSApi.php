@@ -12,11 +12,12 @@ use App\Application\SuperMagic\File\Service\MagicFSFileAppService;
 use App\Interfaces\Authorization\Web\MagicUserAuthorization;
 use App\Interfaces\SuperMagic\Common\Support\Facade\AbstractApi;
 use App\Interfaces\SuperMagic\File\MagicFS\DTO\Request\CreateFileRequestDTO;
-use App\Interfaces\SuperMagic\File\MagicFS\DTO\Request\GetFileTreeRequestDTO;
+use App\Interfaces\SuperMagic\File\MagicFS\DTO\Request\GetFileTreeChangesBatchRequestDTO;
 use App\Interfaces\SuperMagic\File\MagicFS\DTO\Request\GetFileTreeChangesRequestDTO;
+use App\Interfaces\SuperMagic\File\MagicFS\DTO\Request\GetFileTreeRequestDTO;
 use App\Interfaces\SuperMagic\File\MagicFS\DTO\Request\GetFileVersionsRequestDTO;
-use App\Interfaces\SuperMagic\File\MagicFS\DTO\Request\ListFilesRequestDTO;
 use App\Interfaces\SuperMagic\File\MagicFS\DTO\Request\ListChildrenPageRequestDTO;
+use App\Interfaces\SuperMagic\File\MagicFS\DTO\Request\ListFilesRequestDTO;
 use App\Interfaces\SuperMagic\File\MagicFS\DTO\Request\UpdateFileRequestDTO;
 use Dtyq\ApiResponse\Annotation\ApiResponse;
 use Hyperf\HttpServer\Contract\RequestInterface;
@@ -106,6 +107,18 @@ class MagicFSApi extends AbstractApi
         return $this->magicFSFileAppService
             ->getFileTreeChanges($authorization, $id, $requestDTO)
             ->toArray();
+    }
+
+    /**
+     * 批量获取多个文件树的精准变更（推送不可用时的合并轮询入口）。
+     * POST /api/v1/open-api/magicfs/changes/batch.
+     */
+    public function getFileTreeChangesBatch(): array
+    {
+        $authorization = $this->getCurrentUser();
+        $requestDTO = GetFileTreeChangesBatchRequestDTO::fromRequest($this->request);
+
+        return $this->magicFSFileAppService->getFileTreeChangesBatch($authorization, $requestDTO);
     }
 
     /**
