@@ -1,10 +1,7 @@
 import { SuperMagicApi } from "@/apis"
 import { TopicMode } from "@/pages/superMagic/pages/Workspace/TopicMode"
-import {
-	ProjectStatus,
-	type ProjectListItem,
-	type Workspace,
-} from "@/pages/superMagic/pages/Workspace/types"
+import type { ResourceProject } from "../resourceProjectTypes"
+import { ProjectStatus, type Workspace } from "@/pages/superMagic/pages/Workspace/types"
 
 /** 微应用列表的 app_id 不是文件项目 ID；缺少 project_id 时先解析源码项目。 */
 export async function loadMicroAppProjectPage({
@@ -17,7 +14,7 @@ export async function loadMicroAppProjectPage({
 	page: number
 	pageSize: number
 	signal?: AbortSignal
-}): Promise<{ list: ProjectListItem[]; total: number }> {
+}): Promise<{ list: ResourceProject[]; total: number }> {
 	signal?.throwIfAborted()
 	const response = await SuperMagicApi.getMicroApps({
 		page,
@@ -26,7 +23,7 @@ export async function loadMicroAppProjectPage({
 	})
 	signal?.throwIfAborted()
 	const list = await Promise.all(
-		response.list.map(async (app): Promise<ProjectListItem> => {
+		response.list.map(async (app): Promise<ResourceProject> => {
 			const detail = app.project_id
 				? undefined
 				: await SuperMagicApi.getMicroAppProject(app.app_id)
@@ -47,7 +44,14 @@ export async function loadMicroAppProjectPage({
 				user_role: app.user_role,
 				...detail?.project,
 				id: projectId,
+				project_id: projectId,
 				project_name: app.app_name,
+				micro_app_id: app.app_id,
+				resourceType: "micro-app",
+				resourceId: app.app_id,
+				resourceDescription: app.app_description,
+				resourceCoverUrl: app.cover_url,
+				resourceStatus: app.publish_status,
 			}
 		}),
 	)

@@ -75,11 +75,8 @@ import magicToast from "@/components/base/MagicToaster/utils"
 import { loadProjectAttachments } from "@/pages/superMagic/services"
 import { useSingleDocumentStaticDependencies } from "@/pages/superMagic/hooks/useSingleDocumentStaticDependencies"
 import { MentionDesktopPicker } from "./MentionDesktopPicker"
-import {
-	useResourceProjects,
-	RESOURCE_WORKSPACE_IDS,
-	type ResourceProject,
-} from "./useResourceProjects"
+import { useResourceProjects, RESOURCE_WORKSPACE_IDS } from "./useResourceProjects"
+import type { ResourceProject } from "../../resourceProjectTypes"
 import type { FileManagerCheckChange } from "../../../TopicFilesButton/components/FileManager/types"
 
 const FIXED_WORKSPACE_IDS = new Set<string>([SHARE_WORKSPACE_ID, MY_CLAW_WORKSPACE_ID])
@@ -545,7 +542,12 @@ function ProjectResourceSelectorModal({
 
 	// 项目选择处理。Mention 模式把“选中项目”和“进入项目”拆开，移动模式保持原交互。
 	const handleProjectClick = useMemoizedFn(
-		async (project: ProjectListItem, action: "select" | "enter" = "enter") => {
+		async (
+			project: ProjectListItem,
+			action: "select" | "enter" = "enter",
+			workspaceOverride?: Workspace,
+		) => {
+			const selectionWorkspace = workspaceOverride ?? currentWorkspace
 			if (
 				(project as ResourceProject).resourceType &&
 				!(project as ResourceProject).project_id
@@ -555,13 +557,16 @@ function ProjectResourceSelectorModal({
 			}
 			setLoadError(false)
 			if (isMentionMode && action === "select") {
-				if (!currentWorkspace) return
+				if (!selectionWorkspace) return
 				toggleMentionSelection({
 					level: "project",
-					workspace: resolveSelectionWorkspace(currentWorkspace),
+					workspace: resolveSelectionWorkspace(selectionWorkspace),
 					project,
 				})
 				return
+			}
+			if (workspaceOverride && workspaceOverride.id !== currentWorkspace?.id) {
+				setCurrentWorkspace(workspaceOverride)
 			}
 
 			cancelProjectRequest()
@@ -1826,6 +1831,7 @@ function ProjectResourceSelectorModal({
 				onLoadMore={handleLoadMoreResourceProjects}
 				onWorkspace={handleWorkspaceClick}
 				onProject={handleProjectClick}
+				onRecent={handleBackToWorkspace}
 				onBack={handleBackToProject}
 				onRefresh={() => {
 					if (currentProject) void handleProjectClick(currentProject)

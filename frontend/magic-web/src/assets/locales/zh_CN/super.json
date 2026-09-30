@@ -5027,6 +5027,14 @@
 		"typePublic": "公开",
 		"typePublicDescription": "互联网上任何人均可通过链接访问"
 	},
+	"projectTypeTag": {
+		"agent": "数字员工项目",
+		"audio": "音频项目",
+		"chat": "对话项目",
+		"magicClaw": "龙虾项目",
+		"microApp": "微应用项目",
+		"skill": "技能项目"
+	},
 	"recordingSummary": {
 		"actions": {
 			"cancelRecording": "取消录音",

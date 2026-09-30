@@ -522,7 +522,6 @@ class SuperMagicService {
 		navigationState?: Record<string, unknown> | null,
 	) {
 		this.flushCurrentTopicReadProgress("switch-project")
-
 		let resolvedProject = mergeProjectListItemWithStoreCache(project) ?? project
 		if (!resolvedProject.user_role) {
 			const detail = await this.project
@@ -531,6 +530,18 @@ class SuperMagicService {
 			if (detail) {
 				resolvedProject = mergeProjectListItemWithStoreCache(detail) ?? detail
 			}
+		}
+		if (resolvedProject.project_mode === TopicMode.MagiClaw && resolvedProject.claw_code) {
+			this.project.recordProjectVisit(resolvedProject)
+			projectStore.setSelectedProject(resolvedProject)
+			this.route.navigateToClawPlayground(resolvedProject.claw_code)
+			return
+		}
+		if (resolvedProject.project_mode === TopicMode.MicroApp && resolvedProject.micro_app_id) {
+			this.project.recordProjectVisit(resolvedProject)
+			projectStore.setSelectedProject(resolvedProject)
+			this.route.navigateToMicroApp(resolvedProject.micro_app_id)
+			return
 		}
 
 		// 1. 同步设置与检查
@@ -680,6 +691,18 @@ class SuperMagicService {
 		navigationState?: Record<string, unknown> | null,
 	) {
 		this.flushCurrentTopicReadProgress("switch-project")
+		if (project.project_mode === TopicMode.MagiClaw && project.claw_code) {
+			this.project.recordProjectVisit(project)
+			projectStore.setSelectedProject(project)
+			this.route.navigateToClawPlayground(project.claw_code)
+			return
+		}
+		if (project.project_mode === TopicMode.MicroApp && project.micro_app_id) {
+			this.project.recordProjectVisit(project)
+			projectStore.setSelectedProject(project)
+			this.route.navigateToMicroApp(project.micro_app_id)
+			return
+		}
 		// 1. 同步设置与检查
 		const _isReadOnlyProject = isReadOnlyProject(project.user_role)
 		const _isOwner = isOwner(project.user_role)

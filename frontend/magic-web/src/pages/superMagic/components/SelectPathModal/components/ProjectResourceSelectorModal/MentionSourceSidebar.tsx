@@ -1,4 +1,4 @@
-import { Bot, Box, LayoutGrid, UsersRound, Wrench } from "lucide-react"
+import { Bot, Box, Clock3, LayoutGrid, UsersRound, Wrench } from "lucide-react"
 import { useTranslation } from "react-i18next"
 import { MagiClaw } from "@/enhance/lucide-react"
 import { ScrollArea } from "@/components/shadcn-ui/scroll-area"
@@ -16,15 +16,22 @@ export function MentionSourceSidebar({
 	workspaces,
 	specialWorkspaces,
 	current,
+	recentActive,
+	onSelectRecent,
 	onSelect,
 }: {
 	workspaces: Workspace[]
 	specialWorkspaces: Workspace[]
 	current: Workspace | null
+	recentActive: boolean
+	onSelectRecent: () => void
 	onSelect: (workspace: Workspace) => void
 }) {
 	const { t } = useTranslation("super")
-	const viewport = useSelectionListViewport('[data-testid^="picker-source-"]', workspaces.length)
+	const viewport = useSelectionListViewport(
+		'[data-testid^="picker-source-"]',
+		workspaces.length + 1,
+	)
 	const row = (workspace: Workspace) => {
 		const Icon =
 			workspace.workspace_type === "micro-app"
@@ -48,9 +55,10 @@ export function MentionSourceSidebar({
 				hideChevron
 				testId={`picker-source-${workspace.id}`}
 				isActive={
-					current?.id === workspace.id ||
-					(workspace.workspace_type === "micro-app" &&
-						current?.workspace_type === "micro-app")
+					!recentActive &&
+					(current?.id === workspace.id ||
+						(workspace.workspace_type === "micro-app" &&
+							current?.workspace_type === "micro-app"))
 				}
 				onClick={() => onSelect(workspace)}
 			/>
@@ -61,6 +69,16 @@ export function MentionSourceSidebar({
 			aria-label={t("selectPathModal.workspace")}
 			className="flex min-h-0 w-40 shrink-0 flex-col border-r bg-muted/20 p-2"
 		>
+			<SidebarRow
+				label={t("projectNavigation.recent")}
+				labelVariant="navigation"
+				labelClassName="text-xs"
+				leading={<Clock3 size={16} />}
+				hideChevron
+				testId="picker-source-recent"
+				isActive={recentActive}
+				onClick={onSelectRecent}
+			/>
 			<div className="shrink-0 px-2 py-2 text-xs font-medium text-muted-foreground">
 				{t("selectPathModal.workspace")}
 			</div>

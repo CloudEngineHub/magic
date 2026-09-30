@@ -393,6 +393,7 @@ class ProjectMemberDomainService
         string $sortDirection = 'desc',
         bool $showHidden = false,
         ?ProjectSortMode $sortMode = null,
+        bool $includeSpecialModes = false,
     ): array {
         // 判断是否限制工作区（null 或 0 均表示不限制）
         $limitWorkspace = $workspaceId !== null && $workspaceId > 0;
@@ -408,7 +409,8 @@ class ProjectMemberDomainService
             $sortDirection,
             $organizationCodes,
             $showHidden,
-            $sortMode
+            $sortMode,
+            $includeSpecialModes
         );
     }
 

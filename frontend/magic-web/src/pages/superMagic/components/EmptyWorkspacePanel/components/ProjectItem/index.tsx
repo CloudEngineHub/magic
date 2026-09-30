@@ -32,6 +32,7 @@ import PinnedTag from "./components/PinnedTag"
 import { isOwner } from "@/pages/superMagic/utils/permission"
 import magicToast from "@/components/base/MagicToaster/utils"
 import ProjectActionsDropdown from "@/pages/superMagic/components/ProjectActionsDropdown"
+import ProjectTypeTag from "@/pages/superMagic/components/ProjectTypeTag"
 
 interface ProjectItemProps<T extends ProjectListItem | CollaborationProjectListItem> {
 	project: T
@@ -145,6 +146,7 @@ function ProjectItem<T extends ProjectListItem | CollaborationProjectListItem>({
 	// 最近项目按活动时间交错排列，标记跟随标题；普通工作区保留左侧置顶标记。
 	const projectTags = (
 		<>
+			{isRecentLayout && <ProjectTypeTag projectMode={item.project_mode} />}
 			{item.is_pinned && <PinnedTag className="" showText={false} />}
 			{!inCollaborationPanel && (
 				<CollaborationProjectTag

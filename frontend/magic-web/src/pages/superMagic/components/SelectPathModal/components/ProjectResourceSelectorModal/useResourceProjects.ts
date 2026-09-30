@@ -20,6 +20,7 @@ import {
 	MY_MICRO_APPS_WORKSPACE_ID,
 } from "../../../../constants"
 import { loadMicroAppProjectPage } from "../../utils/microAppProjects"
+import type { ResourceProject } from "../../resourceProjectTypes"
 
 export const RESOURCE_WORKSPACE_IDS = new Set<string>([
 	MY_SKILLS_WORKSPACE_ID,
@@ -27,12 +28,6 @@ export const RESOURCE_WORKSPACE_IDS = new Set<string>([
 ])
 /** Align with MySkills / MyCrew list page size; selector loads more on demand. */
 const RESOURCE_PROJECTS_PAGE_SIZE = 20
-
-export type ResourceProject = ProjectListItem & {
-	resourceType?: "skill" | "agent"
-	resourceId?: string
-	project_id?: string | null
-}
 
 /** 来源列表只持有项目元数据；切换来源或关闭时使旧请求失效，不加载项目文件树。 */
 export function useResourceProjects({
@@ -51,7 +46,7 @@ export function useResourceProjects({
 	setLoadError: (error: boolean) => void
 }) {
 	const { t } = useTranslation("super")
-	const [availableProjects, setAvailableProjects] = useState<ProjectListItem[]>([])
+	const [availableProjects, setAvailableProjects] = useState<ResourceProject[]>([])
 	const [loadingMoreResources, setLoadingMoreResources] = useState(false)
 	const [resourceProjectsPage, setResourceProjectsPage] = useState(1)
 	const [hasMoreResourceProjects, setHasMoreResourceProjects] = useState(false)
@@ -108,8 +103,9 @@ export function useResourceProjects({
 			})
 			if (requestId !== projectsRequestId.current) return
 			// 将 MagicClawItem 转换为 ProjectListItem 格式
-			const projects: ProjectListItem[] = (res?.list || []).map((item: MagicClawItem) => ({
+			const projects: ResourceProject[] = (res?.list || []).map((item: MagicClawItem) => ({
 				id: item.project_id,
+				project_id: item.project_id,
 				project_status: ProjectStatus.WAITING,
 				project_mode: TopicMode.MagiClaw,
 				project_description: item.description || undefined,
@@ -117,6 +113,14 @@ export function useResourceProjects({
 				work_dir: "",
 				workspace_name: t("workspace.myClawWorkspaceName"),
 				project_name: item.name,
+				claw_code: item.code,
+				resourceType: "claw",
+				resourceId: item.id,
+				resourceDescription: item.description,
+				resourceIcon: item.icon_file_url,
+				resourceStatus: item.status,
+				resourceTemplateCode: item.template_code,
+				resourceCode: item.code,
 				current_topic_id: "",
 				current_topic_status: "",
 				created_at: "",
@@ -147,11 +151,21 @@ export function useResourceProjects({
 				resourceType,
 				resourceId: item.id,
 				project_status: ProjectStatus.WAITING,
-				project_mode: "",
+				project_mode:
+					resourceType === "skill"
+						? TopicMode.SkillProjectCreator
+						: TopicMode.AgentCreator,
 				workspace_id: workspaceId,
 				work_dir: "",
 				workspace_name: "",
 				project_name: item.name,
+				resourceDescription: item.description,
+				resourceIcon: "logo" in item ? item.logo : item.icon,
+				resourceRole: "role" in item ? item.role : undefined,
+				resourceVersion:
+					resourceType === "skill"
+						? (item as UserSkillView).latestVersion
+						: (item as MyCrewView).latestVersionCode,
 				current_topic_id: "",
 				current_topic_status: "",
 				created_at: "",

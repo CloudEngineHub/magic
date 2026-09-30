@@ -306,6 +306,8 @@ export interface ProjectListItem {
 	tag: "collaboration" | "" // 用于标识是否是协作项目
 	is_pinned?: boolean // 协作项目才有
 	last_active_at?: string // 协作项目才有
+	claw_code?: string
+	micro_app_id?: string
 	user_role?: CollaboratorPermission
 	is_bind_workspace?: boolean // 协作项目才有
 	bind_workspace_id?: string // 协作项目才有

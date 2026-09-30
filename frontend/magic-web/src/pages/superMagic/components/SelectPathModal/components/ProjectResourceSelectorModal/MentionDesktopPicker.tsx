@@ -1,4 +1,5 @@
-import { useMemo, useRef, useState } from "react"
+import { useEffect, useMemo, useRef, useState, type ComponentProps } from "react"
+import { observer } from "mobx-react-lite"
 import { useTranslation } from "react-i18next"
 import { ArrowLeft, FolderSearch } from "lucide-react"
 import { Button } from "@/components/shadcn-ui/button"
@@ -11,7 +12,10 @@ import { ProjectsPanel, ProjectsPanelList } from "../../../WorkspacesMenu/compon
 import { useProjectManagerWindow } from "../../../WorkspacesMenu/useProjectManagerWindow"
 import { ViewToggle } from "../../../WorkspacesMenu/components/CollaborationProjectsPanel/components"
 import { useViewTogglePersistValue } from "../../../WorkspacesMenu/components/CollaborationProjectsPanel/components/ViewToggle/hooks"
-import { ViewMode } from "../../../EmptyWorkspacePanel/components/ProjectItem"
+import ProjectItem, {
+	SortType,
+	ViewMode,
+} from "../../../EmptyWorkspacePanel/components/ProjectItem"
 import { FileManager } from "../../../TopicFilesButton/components/FileManager/FileManager"
 import type {
 	FileManagerCheckChange,
@@ -38,6 +42,12 @@ import type { ProjectResourceSelection } from "../../types"
 import { MentionSelectionPanel, type MentionSelectionItem } from "./MentionSelectionPanel"
 import { MentionSourceSidebar } from "./MentionSourceSidebar"
 import { useSelectionListViewport } from "./useSelectionListViewport"
+import { ProjectResourceItem } from "./ProjectResourceItem"
+import { getResourceProjectType, type ResourceProject } from "../../resourceProjectTypes"
+import recentProjectsStore from "@/pages/superMagic/stores/core/recentProjects"
+import { useRecentProjectSearch } from "@/layouts/BaseLayout/components/MagicSidebar/hooks/useRecentProjectSearch"
+import { TopicMode } from "../../../../pages/Workspace/TopicMode"
+import { WorkspaceStatus } from "../../../../pages/Workspace/types"
 
 interface Props {
 	title: string
@@ -56,7 +66,8 @@ interface Props {
 	loadingMore: boolean
 	onLoadMore: () => void
 	onWorkspace: (workspace: Workspace) => void
-	onProject: (project: ProjectListItem, action: "select" | "enter") => void
+	onProject: (project: ProjectListItem, action: "select" | "enter", workspace?: Workspace) => void
+	onRecent: () => void
 	onBack: () => void
 	onRefresh: () => void
 	onCheck: (change: FileManagerCheckChange) => void
@@ -74,7 +85,7 @@ function selectionKey(selection: ProjectResourceSelection) {
 }
 
 /** 只组合现有管理器的选择模式；项目、附件请求和全局勾选仍由 selector 持有。 */
-export function MentionDesktopPicker(props: Props) {
+export const MentionDesktopPicker = observer(function MentionDesktopPicker(props: Props) {
 	const { t } = useTranslation("super")
 	const { userInfo } = useUserInfo()
 	const layer = useOverlayZIndex({ open: true, zIndexScope: "fullscreen" })
@@ -85,6 +96,7 @@ export function MentionDesktopPicker(props: Props) {
 		minSize: { width: 960, height: 560 },
 	})
 	const [query, setQuery] = useState("")
+	const [recentMode, setRecentMode] = useState(true)
 	const [reveal, setReveal] = useState<FileManagerRevealRequest>()
 	const [rootVisit, setRootVisit] = useState(0)
 	const revealId = useRef(0)
@@ -93,6 +105,13 @@ export function MentionDesktopPicker(props: Props) {
 		localStorageKey: "file_picker_projects_view",
 		defaultValue: ViewMode.LIST,
 	})
+	useEffect(() => {
+		if (!userInfo?.user_id || !userInfo.organization_code) return
+		recentProjectsStore.setIdentity(userInfo.user_id, userInfo.organization_code)
+		recentProjectsStore.invalidate()
+		void recentProjectsStore.loadMore()
+	}, [userInfo?.user_id, userInfo?.organization_code])
+	const recentSearch = useRecentProjectSearch(query, recentMode && !props.project, props.loading)
 	const projects = useMemo(
 		() =>
 			props.projects.filter(
@@ -109,6 +128,46 @@ export function MentionDesktopPicker(props: Props) {
 		projects.length,
 		`${viewMode}:${props.project?.id ?? ""}`,
 	)
+	const recentProjects = (
+		query.trim() && userInfo?.user_id && userInfo.organization_code
+			? recentSearch.items
+			: recentProjectsStore.items.filter((project) =>
+					(project.project_name || t("project.unnamedProject"))
+						.toLocaleLowerCase()
+						.includes(query.trim().toLocaleLowerCase()),
+				)
+	).filter((project) => !props.excludeProjectIds.includes(project.id))
+	const recentViewport = useSelectionListViewport(
+		'[data-testid="shared-workspace-dialog-project-item"]',
+		recentProjects.length,
+		`recent:${viewMode}`,
+	)
+	const recentWorkspaceForProject = (project: ProjectListItem): Workspace => {
+		if (project.project_mode === TopicMode.MagiClaw) return MY_CLAW_WORKSPACE_DATA(t)
+		if (
+			project.project_mode === TopicMode.AgentCreator ||
+			project.project_mode === TopicMode.CustomAgent
+		)
+			return MY_AGENTS_WORKSPACE_DATA(t)
+		if (
+			project.project_mode === TopicMode.SkillProjectCreator ||
+			project.project_mode === TopicMode.CustomSkill
+		)
+			return MY_SKILLS_WORKSPACE_DATA(t)
+		if (project.project_mode === TopicMode.MicroApp) return MY_MICRO_APPS_WORKSPACE_DATA(t)
+		return (
+			props.workspaces.find((workspace) => workspace.id === project.workspace_id) ?? {
+				id: project.workspace_id,
+				name: project.workspace_name || t("workspace.unnamedWorkspace"),
+				workspace_type: "default",
+				is_archived: 0,
+				workspace_status: WorkspaceStatus.WAITING,
+				project_count: 0,
+				current_project_id: project.id,
+				current_topic_id: project.current_topic_id ?? "",
+			}
+		)
+	}
 	const special = [
 		...(props.includeFixedWorkspaces
 			? [SHARE_WORKSPACE_DATA(t), MY_CLAW_WORKSPACE_DATA(t)]
@@ -176,6 +235,54 @@ export function MentionDesktopPicker(props: Props) {
 				: [],
 		),
 	)
+	const renderProjectItem = ({
+		project,
+		index,
+		viewMode: itemViewMode,
+		variant,
+		collaborationType,
+	}: ComponentProps<typeof ProjectItem>) => {
+		const resourceProject = project as ResourceProject
+		const resourceType = resourceProject.resourceType ?? getResourceProjectType(project)
+		const displayProject: ResourceProject = resourceType
+			? {
+					...resourceProject,
+					resourceType,
+					resourceId:
+						resourceProject.resourceId ??
+						resourceProject.micro_app_id ??
+						resourceProject.claw_code,
+				}
+			: resourceProject
+		const workspaceOverride = recentMode ? recentWorkspaceForProject(project) : undefined
+		const selection = {
+			checked: selectedProjects.has(project.id),
+			onCheck: () => props.onProject(project, "select", workspaceOverride),
+		}
+		if (resourceType) {
+			return (
+				<ProjectResourceItem
+					project={displayProject}
+					index={index}
+					viewMode={itemViewMode}
+					variant={variant}
+					onClick={(item) => props.onProject(item, "enter", workspaceOverride)}
+					selection={selection}
+				/>
+			)
+		}
+		return (
+			<ProjectItem
+				project={project}
+				index={index}
+				viewMode={itemViewMode}
+				variant={variant}
+				collaborationType={collaborationType}
+				onClick={() => props.onProject(project, "enter", workspaceOverride)}
+				selection={selection}
+			/>
+		)
+	}
 	const navigate = (key: string, target: "project" | "file") => {
 		const selection = props.selections.find((item) => selectionKey(item) === key)
 		if (!selection) return
@@ -224,7 +331,15 @@ export function MentionDesktopPicker(props: Props) {
 						workspaces={regular}
 						specialWorkspaces={special}
 						current={props.workspace}
+						recentActive={recentMode && !props.project}
+						onSelectRecent={() => {
+							setRecentMode(true)
+							setQuery("")
+							setReveal(undefined)
+							props.onRecent()
+						}}
 						onSelect={(workspace) => {
+							setRecentMode(false)
 							setQuery("")
 							setReveal(undefined)
 							props.onWorkspace(workspace)
@@ -269,6 +384,7 @@ export function MentionDesktopPicker(props: Props) {
 												className="h-7 shrink-0 gap-1 px-1.5 text-xs font-normal"
 												onClick={() => {
 													setReveal(undefined)
+													setRecentMode(false)
 													props.onBack()
 												}}
 											>
@@ -278,6 +394,95 @@ export function MentionDesktopPicker(props: Props) {
 										}
 									/>
 								</div>
+							</>
+						) : recentMode ? (
+							<>
+								<div className="flex shrink-0 flex-wrap items-center gap-3 border-b px-4 py-3">
+									<span className="min-w-0 flex-1 truncate text-sm font-medium">
+										{t("projectNavigation.recent")}
+									</span>
+									<Input
+										className="h-8 w-48"
+										value={query}
+										placeholder={t("projectNavigation.searchRecent")}
+										onChange={(event) => setQuery(event.target.value)}
+									/>
+									<ViewToggle value={viewMode} onChange={setViewMode} />
+								</div>
+								<ProjectsPanelList
+									projects={recentProjects}
+									loading={
+										query.trim()
+											? recentSearch.loading
+											: recentProjectsStore.loading
+									}
+									viewMode={viewMode}
+									toolbar={false}
+									renderItem={renderProjectItem}
+									itemProps={{
+										titleLayout: "recent",
+										sortType: SortType.MY_LAST_ACTIVE_TIME,
+										onClick: (project) => {
+											setRecentMode(false)
+											props.onProject(
+												project,
+												"enter",
+												recentWorkspaceForProject(project),
+											)
+										},
+									}}
+									selection={{
+										checkedIds: selectedProjects,
+										onCheck: (project) =>
+											props.onProject(
+												project,
+												"select",
+												recentWorkspaceForProject(project),
+											),
+									}}
+									listViewport={recentViewport}
+									error={
+										(
+											query.trim()
+												? recentSearch.error
+												: recentProjectsStore.error
+										) ? (
+											<Button
+												variant="ghost"
+												onClick={() =>
+													void (query.trim()
+														? recentSearch.loadMore()
+														: recentProjectsStore.loadMore())
+												}
+											>
+												{t("common.retry")}
+											</Button>
+										) : undefined
+									}
+									footer={
+										(
+											query.trim()
+												? recentSearch.hasMore
+												: recentProjectsStore.hasMore
+										) ? (
+											<Button
+												variant="ghost"
+												disabled={
+													query.trim()
+														? recentSearch.loading
+														: recentProjectsStore.loading
+												}
+												onClick={() =>
+													void (query.trim()
+														? recentSearch.loadMore()
+														: recentProjectsStore.loadMore())
+												}
+											>
+												{t("selectPathModal.loadMore")}
+											</Button>
+										) : undefined
+									}
+								/>
 							</>
 						) : (
 							<>
@@ -296,6 +501,7 @@ export function MentionDesktopPicker(props: Props) {
 									projects={projects}
 									loading={props.loading}
 									viewMode={viewMode}
+									renderItem={renderProjectItem}
 									toolbar={<ViewToggle value={viewMode} onChange={setViewMode} />}
 									itemProps={{
 										onClick: (project) => {
@@ -351,4 +557,4 @@ export function MentionDesktopPicker(props: Props) {
 			</div>
 		</ProjectsPanel>
 	)
-}
+})

@@ -14,6 +14,7 @@ import { canManageProject } from "@/pages/superMagic/utils/permission"
 import type { HandleRenameProjectParams } from "@/pages/superMagic/hooks/useProjects"
 import { getWorkspaceProjectRouteUrl } from "@/pages/superMagic/utils/route"
 import NavigationStatusIcon from "@/pages/superMagic/components/NavigationStatusIcon"
+import ProjectTypeTag from "@/pages/superMagic/components/ProjectTypeTag"
 import { canDragSidebarProject } from "./projectDndUtils"
 import { Button } from "@/components/shadcn-ui/button"
 
@@ -38,6 +39,7 @@ interface CollapsedWorkspaceProjectRowProps {
 	onDeleteProject?: ProjectRowActionHandler
 	onRenameProject?: (params: HandleRenameProjectParams) => Promise<void>
 	onInteractionChange?: (id: string, active: boolean) => void
+	showProjectTypeTag?: boolean
 }
 
 function CollapsedWorkspaceProjectRow({
@@ -59,6 +61,7 @@ function CollapsedWorkspaceProjectRow({
 	onDeleteProject,
 	onRenameProject,
 	onInteractionChange,
+	showProjectTypeTag = false,
 }: CollapsedWorkspaceProjectRowProps) {
 	const { t } = useTranslation("super")
 	const [isHovered, setIsHovered] = useState(false)
@@ -260,6 +263,12 @@ function CollapsedWorkspaceProjectRow({
 							status={project.project_status}
 							showDefaultIcon={false}
 						/>
+						{showProjectTypeTag && (
+							<ProjectTypeTag
+								projectMode={project.project_mode}
+								tooltipDisabled={hideNameTooltip}
+							/>
+						)}
 						{project.is_pinned && (
 							<PinnedTag className="h-3 w-3 border-0 bg-transparent p-0" />
 						)}

@@ -64,6 +64,7 @@ const RecentProjectRow = observer(function RecentProjectRow({
 		<>
 			<CollapsedWorkspaceProjectRow
 				project={project}
+				showProjectTypeTag
 				workspaceId={workspace.id}
 				isSelected={projectStore.selectedProject?.id === project.id}
 				dndDisabled

@@ -454,7 +454,8 @@ class ProjectMemberAppService extends AbstractAppService
             'last_active_at',
             'desc',
             $requestDTO->getShowHidden(),
-            $requestDTO->getSortMode()
+            $requestDTO->getSortMode(),
+            $requestDTO->getIncludeSpecial()
         );
 
         // 2. 提取工作区ID并获取名称
