@@ -474,7 +474,7 @@ class AssetAppService extends AbstractAssetAppService
             $request->setMessages([[
                 'role' => 'user',
                 'content' => [
-                    ['type' => 'text', 'text' => '判断图片中是否有人像。仅返回 JSON：{"has_person":true或false,"confidence":0到1之间的小数}。无法确定时返回 has_person=true。'],
+                    ['type' => 'text', 'text' => 'Determine whether there is a human figure in the image. Reply only with JSON content; do not include any non-JSON content. Example response: {"has_person": true or false, "confidence": a decimal between 0 and 1}. Return has_person=true if unable to determine.'],
                     ['type' => 'image_url', 'image_url' => ['url' => $fileUrl]],
                 ],
             ]]);
