@@ -144,11 +144,10 @@ function useEditMode({
 			_setIsEditMode(false)
 			return
 		}
-		// 这里需要“幂等”：
-		// - 内容组件保存时可能 setIsEditMode(false) -> 触发 leaveEdit
-		// - 弹窗“保存并关闭”流程也会显式调用 leaveEdit
-		// - React 状态更新是异步的，短时间内 isEditMode 可能仍为 true
-		// 因此用两个 ref 把“并发 + 状态滞后”都挡住，确保后端只收到一次 leave-editing
+		// Idempotent leave:
+		// - save/exit and close dialogs may both call setIsEditMode(false)
+		// - exit UI immediately; presence leave finishes in the background so
+		//   content sync cannot remount the editor while isEditMode is still true
 		if (leaveStateRef.current.hasLeft) {
 			return
 		}
@@ -156,23 +155,21 @@ function useEditMode({
 			await leaveStateRef.current.inFlight
 			return
 		}
-		if (!isEditModeRef.current && !isEditMode) {
-			return
-		}
+
+		stopSaveInterval()
+		isEditModeRef.current = false
+		_setIsEditMode(false)
+
 		try {
-			const promise = SuperMagicApi.leaveFileEdit(fileId).then(() => {})
+			const promise = SuperMagicApi.leaveFileEdit(fileId).then(() => {
+				leaveStateRef.current.hasLeft = true
+			})
 			leaveStateRef.current.inFlight = promise
 			await promise
-			leaveStateRef.current.inFlight = null
-			leaveStateRef.current.hasLeft = true
-
-			stopSaveInterval()
-
-			isEditModeRef.current = false
-			_setIsEditMode(false)
 		} catch (error) {
-			leaveStateRef.current.inFlight = null
 			console.error(error)
+		} finally {
+			leaveStateRef.current.inFlight = null
 		}
 	})
 

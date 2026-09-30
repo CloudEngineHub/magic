@@ -1216,6 +1216,8 @@ describe("PPTSlide", () => {
 				true,
 				expect.any(Function),
 				true,
+				false,
+				{ silent: true },
 			)
 		})
 

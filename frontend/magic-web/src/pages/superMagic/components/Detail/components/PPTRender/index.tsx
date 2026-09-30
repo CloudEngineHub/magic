@@ -932,7 +932,10 @@ const PPTRenderInner = observer(function PPTRenderInner({
 			// 保存后的原始 HTML 需要先经过 PPT 资源路径处理，否则缩略图会用未解析的背景资源截图。
 			const processedContent = await store.updateSlideContent(index, cleanContent)
 			const thumbnailContent = processedContent || cleanContent
-			await store.generateSlideScreenshot(index, thumbnailContent)
+			// Thumbnail work must not block leaving edit mode or the next action.
+			void store.generateSlideScreenshot(index, thumbnailContent).catch((error) => {
+				console.error(error)
+			})
 		},
 	)
 
