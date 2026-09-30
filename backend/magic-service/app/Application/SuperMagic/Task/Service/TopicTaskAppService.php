@@ -413,6 +413,12 @@ class TopicTaskAppService extends AbstractAppService
 
             // 首次成功完成任务：派发事件供 OpenPanel 属性与事件同步（是否首次由幂等写入保证）
             if ($status === TaskStatus::FINISHED) {
+                $this->logger->info('派发首次完成任务埋点事件', [
+                    'user_id' => $dataIsolation->getCurrentUserId(),
+                    'organization_code' => $dataIsolation->getCurrentOrganizationCode(),
+                    'task_id' => $task->getId(),
+                ]);
+
                 AsyncEventUtil::dispatch(new FirstTaskCompletedEvent(
                     $dataIsolation->getCurrentUserId(),
                     $dataIsolation->getCurrentOrganizationCode(),
