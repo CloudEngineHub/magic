@@ -490,8 +490,7 @@ export class PPTIncrementalUpdateService {
 					const isQueueEcho =
 						typeof newContent === "string" &&
 						!!newContent &&
-						(context.matchesLocalSave?.(fileId, newContent) === true ||
-							context.hasPendingSave?.(fileId) === true)
+						context.matchesLocalSave?.(fileId, newContent) === true
 					const isManualSaveEcho =
 						isManuallySaved &&
 						typeof newContent === "string" &&

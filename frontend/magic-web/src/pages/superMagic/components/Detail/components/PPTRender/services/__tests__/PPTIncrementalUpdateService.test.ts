@@ -209,6 +209,37 @@ describe("PPTIncrementalUpdateService", () => {
 		expect(context.slides[0].content).toBe("<div>local-draft</div>")
 	})
 
+	it("surfaces a foreign remote change while an edited slide still has a pending save", async () => {
+		const notifyServerUpdate = vi.fn()
+		const context = createContext({
+			getSlideEditingState: () => true,
+			hasPendingSave: () => true,
+			matchesLocalSave: () => false,
+			loadSlideContentSilently: async () => "<div>remote-change</div>",
+			notifyServerUpdate,
+			slides: [
+				{
+					id: "slide-1",
+					path: "slide-1.html",
+					url: "https://example.com/old-slide-1",
+					index: 0,
+					content: "<div>local-draft</div>",
+					rawContent: "<div>local-draft</div>",
+					loadingState: "loaded",
+				},
+			],
+		})
+
+		await incrementalUpdateService.applyIncrementalUpdates(
+			{ hasChanges: false, added: [], removed: [], reordered: false },
+			new Set(["file-1"]),
+			["slide-1.html"],
+			context,
+		)
+
+		expect(notifyServerUpdate).toHaveBeenCalledWith("file-1", "<div>remote-change</div>")
+	})
+
 	it("applies a staged remote update once the save queue is idle", async () => {
 		let pending = true
 		const context = createContext({
