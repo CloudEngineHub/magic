@@ -29,6 +29,8 @@ export const RESOURCE_WORKSPACE_IDS = new Set<string>([
 /** Align with MySkills / MyCrew list page size; selector loads more on demand. */
 const RESOURCE_PROJECTS_PAGE_SIZE = 20
 
+export type { ResourceProject } from "../../resourceProjectTypes"
+
 /** 来源列表只持有项目元数据；切换来源或关闭时使旧请求失效，不加载项目文件树。 */
 export function useResourceProjects({
 	visible,

@@ -41,8 +41,8 @@ interface ProjectsPanelProps {
 	onRestoreRecommendedSize?: () => void
 	resizeGuide?: { visible: boolean; onDismiss: () => void }
 	description?: string
-	searchValue: string
-	onSearchValueChange: ChangeEventHandler<HTMLInputElement>
+	searchValue?: string
+	onSearchValueChange?: ChangeEventHandler<HTMLInputElement>
 	onClose: () => void
 	children: ReactNode
 	sidebar?: ReactNode
@@ -213,7 +213,7 @@ export function ProjectsPanel({
 							)}
 							{toolbar !== undefined ? (
 								toolbar
-							) : (
+							) : onSearchValueChange ? (
 								<div className="shrink-0 border-b border-border px-4 py-3">
 									<div
 										className="relative"
@@ -232,7 +232,7 @@ export function ProjectsPanel({
 										/>
 									</div>
 								</div>
-							)}
+							) : null}
 							{children}
 						</div>
 					</div>
@@ -301,7 +301,7 @@ interface ProjectsPanelListProps<T extends ProjectListItem> {
 	projects: T[]
 	loading: boolean
 	viewMode: ViewMode
-	toolbar: ReactNode
+	toolbar?: ReactNode
 	itemProps: Omit<ComponentProps<typeof ProjectItem<T>>, "project" | "index" | "viewMode">
 	renderItem?: (props: ComponentProps<typeof ProjectItem<T>>) => ReactNode
 	tabType?: CollaborationProjectType
@@ -365,16 +365,18 @@ export function ProjectsPanelList<T extends ProjectListItem>({
 				data-tab-type={tabType}
 			>
 				{/* Control bar */}
-				<div className="shrink-0 border-b border-border px-4 py-3">
-					<div className="flex min-w-0 flex-wrap items-center justify-between gap-2.5">
-						<div className="shrink-0 text-sm font-semibold leading-5 text-foreground/80 opacity-80">
-							{t("workspace.projects")} · {total ?? projects.length}
-						</div>
-						<div className="flex min-w-0 flex-wrap items-center justify-end gap-2.5">
-							{toolbar}
+				{toolbar ? (
+					<div className="shrink-0 border-b border-border px-4 py-3">
+						<div className="flex min-w-0 flex-wrap items-center justify-between gap-2.5">
+							<div className="shrink-0 text-sm font-semibold leading-5 text-foreground/80 opacity-80">
+								{t("workspace.projects")} · {total ?? projects.length}
+							</div>
+							<div className="flex min-w-0 flex-wrap items-center justify-end gap-2.5">
+								{toolbar}
+							</div>
 						</div>
 					</div>
-				</div>
+				) : null}
 				{/* Project list */}
 				<div ref={listViewport?.containerRef} className="min-h-0 flex-1">
 					<ScrollArea

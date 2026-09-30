@@ -316,9 +316,6 @@ export const MentionDesktopPicker = observer(function MentionDesktopPicker(props
 			onRestoreRecommendedSize={frame.restoreRecommendedSize}
 			resizeGuide={{ visible: frame.resizeGuideVisible, onDismiss: frame.dismissResizeGuide }}
 			onClose={props.onClose}
-			toolbar={false}
-			searchValue=""
-			onSearchValueChange={() => undefined}
 		>
 			<div className="flex min-h-0 flex-1 flex-col [container-type:inline-size]">
 				<div className="flex min-h-0 flex-1">
@@ -412,7 +409,6 @@ export const MentionDesktopPicker = observer(function MentionDesktopPicker(props
 											: recentProjectsStore.loading
 									}
 									viewMode={viewMode}
-									toolbar={false}
 									renderItem={renderProjectItem}
 									itemProps={{
 										titleLayout: "recent",
@@ -495,13 +491,13 @@ export const MentionDesktopPicker = observer(function MentionDesktopPicker(props
 										placeholder={t("project.searchProject")}
 										onChange={(event) => setQuery(event.target.value)}
 									/>
+									<ViewToggle value={viewMode} onChange={setViewMode} />
 								</div>
 								<ProjectsPanelList
 									projects={projects}
 									loading={props.loading}
 									viewMode={viewMode}
 									renderItem={renderProjectItem}
-									toolbar={<ViewToggle value={viewMode} onChange={setViewMode} />}
 									itemProps={{
 										onClick: (project) => {
 											setReveal(undefined)
