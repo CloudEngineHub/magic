@@ -567,6 +567,8 @@ function MobileFilesMoveSheet({
 	const { t } = useTranslation("super")
 	const supportsCrossProject = Boolean(mobileCrossProjectConfig)
 	const isMentionMode = mobileCrossProjectConfig?.selectionMode === "mention"
+	const isResourceSelectionMode =
+		isMentionMode || mobileCrossProjectConfig?.selectionMode === "import"
 	const initialViewMode = mobileCrossProjectConfig?.initialViewMode || "directory"
 	const includeSpecialWorkspaces = mobileCrossProjectConfig?.includeSpecialWorkspaces ?? true
 	const allowWorkspaceSubmit = mobileCrossProjectConfig?.allowWorkspaceSubmit ?? false
@@ -657,7 +659,7 @@ function MobileFilesMoveSheet({
 		initialBrowsingWorkspace,
 		initialViewMode,
 		mobileCrossProjectConfig,
-		isMentionMode,
+		isResourceSelectionMode,
 		supportsCrossProject,
 		visible,
 	])
@@ -751,7 +753,7 @@ function MobileFilesMoveSheet({
 					project_count: chatProjectsTotal,
 					entryType: "chats",
 				},
-				...(isMentionMode && isMicroAppEnabled()
+				...(isResourceSelectionMode && isMicroAppEnabled()
 					? [
 							{
 								id: MY_MICRO_APPS_WORKSPACE_ID,
@@ -777,7 +779,7 @@ function MobileFilesMoveSheet({
 	}, [
 		ensureChatWorkspace,
 		includeSpecialWorkspaces,
-		isMentionMode,
+		isResourceSelectionMode,
 		mobileCrossProjectConfig?.workspaces,
 		t,
 	])
@@ -789,7 +791,11 @@ function MobileFilesMoveSheet({
 			projectRequestRef.current = request
 			setIsLoading(true)
 			try {
-				if (workspace.entryType === "micro-app" && isMentionMode && isMicroAppEnabled()) {
+				if (
+					workspace.entryType === "micro-app" &&
+					isResourceSelectionMode &&
+					isMicroAppEnabled()
+				) {
 					const microWorkspace = await SuperMagicApi.getMicroAppWorkspace()
 					request.signal.throwIfAborted()
 					microAppWorkspaceRef.current = microWorkspace
@@ -860,7 +866,7 @@ function MobileFilesMoveSheet({
 				if (!request.signal.aborted) setIsLoading(false)
 			}
 		},
-		[ensureChatWorkspace, isMentionMode, t],
+		[ensureChatWorkspace, isResourceSelectionMode, t],
 	)
 
 	useEffect(() => {
@@ -914,14 +920,16 @@ function MobileFilesMoveSheet({
 	}, [query, searchEmptyDescription, t])
 	const currentDirectories = useMemo(() => {
 		const currentItems = getDirectoriesFromPath(activeAttachments, pathStack)
-		return isMentionMode ? getVisibleEntries(currentItems) : getVisibleDirectories(currentItems)
-	}, [activeAttachments, isMentionMode, pathStack])
+		return isResourceSelectionMode
+			? getVisibleEntries(currentItems)
+			: getVisibleDirectories(currentItems)
+	}, [activeAttachments, isResourceSelectionMode, pathStack])
 	const searchResults = useMemo(() => {
 		if (!isSearching || viewMode !== "directory") return []
-		return isMentionMode
+		return isResourceSelectionMode
 			? searchResourceEntries(activeAttachments, query)
 			: searchDirectories(activeAttachments, query)
-	}, [activeAttachments, isMentionMode, isSearching, query, viewMode])
+	}, [activeAttachments, isResourceSelectionMode, isSearching, query, viewMode])
 	const filteredWorkspaces = useMemo(() => {
 		return searchWorkspaceItems(workspaceItems, query, t)
 	}, [query, t, workspaceItems])
@@ -969,7 +977,7 @@ function MobileFilesMoveSheet({
 		browsingWorkspace?.id &&
 		browsingWorkspace.entryType === "workspace",
 	)
-	const canConfirm = isMentionMode
+	const canConfirm = isResourceSelectionMode
 		? selectedResources.length > 0
 		: selectedPath !== null || canSubmitWorkspace
 	const breadcrumbSegments = useMemo<BreadcrumbSegment[]>(() => {
@@ -1156,7 +1164,7 @@ function MobileFilesMoveSheet({
 	function handleSelectDirectory(directory: AttachmentItem, shouldResolveFromTree = false) {
 		const directoryId = getItemId(directory)
 		if (disabledFolderIds.includes(directoryId)) return
-		if (isMentionMode) {
+		if (isResourceSelectionMode) {
 			const workspace = getSelectedWorkspace(browsingProject || undefined)
 			if (!workspace || !browsingProject) return
 			toggleMentionSelection({
@@ -1248,7 +1256,7 @@ function MobileFilesMoveSheet({
 	 * 确认动作继续向旧的 `onSubmit({ path })` 契约回传，避免改动原有移动文件链路。
 	 */
 	function handleConfirm() {
-		if (isMentionMode) {
+		if (isResourceSelectionMode) {
 			const firstSelection = selectedResources[0]
 			if (!firstSelection) return
 			onSubmit({
@@ -1302,7 +1310,7 @@ function MobileFilesMoveSheet({
 		<Sheet
 			open={visible}
 			onOpenChange={(nextVisible) => {
-				if (!nextVisible && !isMentionMode) onClose()
+				if (!nextVisible && !isResourceSelectionMode) onClose()
 			}}
 		>
 			<SheetContent
@@ -1312,10 +1320,10 @@ function MobileFilesMoveSheet({
 				className="flex h-[calc(100dvh-var(--safe-area-inset-top,0px))] max-h-[calc(100dvh-var(--safe-area-inset-top,0px))] min-h-[calc(100dvh-var(--safe-area-inset-top,0px))] flex-col overflow-hidden rounded-t-[14px] border-0 bg-muted p-0 !pb-0"
 				data-testid="select-directory-mobile-sheet-root"
 				onPointerDown={(event) => {
-					if (isMentionMode) event.stopPropagation()
+					if (isResourceSelectionMode) event.stopPropagation()
 				}}
 				onClick={(event) => {
-					if (isMentionMode) event.stopPropagation()
+					if (isResourceSelectionMode) event.stopPropagation()
 				}}
 			>
 				<div className="flex flex-col items-center py-1.5">
@@ -1494,7 +1502,7 @@ function MobileFilesMoveSheet({
 														resourceTree={activeAttachments}
 														secondaryText={pathLabel || undefined}
 														selected={
-															isMentionMode
+															isResourceSelectionMode
 																? selectedAttachmentIds.has(
 																		directoryId,
 																	)
@@ -1521,7 +1529,7 @@ function MobileFilesMoveSheet({
 									)
 								) : (
 									<>
-										{!isMentionMode && pathStack.length === 0 ? (
+										{!isResourceSelectionMode && pathStack.length === 0 ? (
 											<DirectoryCard>
 												<RootRow
 													rootLabel={rootLabel}
@@ -1548,7 +1556,7 @@ function MobileFilesMoveSheet({
 															directory={directory}
 															resourceTree={activeAttachments}
 															selected={
-																isMentionMode
+																isResourceSelectionMode
 																	? selectedAttachmentIds.has(
 																			directoryId,
 																		)

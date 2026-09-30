@@ -59,6 +59,8 @@ interface Props {
 	loading: boolean
 	error: boolean
 	submitting: boolean
+	selectionMode?: "mention" | "import"
+	allowProjectSelection?: boolean
 	includeFixedWorkspaces: boolean
 	excludeProjectIds: string[]
 	selections: ProjectResourceSelection[]
@@ -87,6 +89,7 @@ function selectionKey(selection: ProjectResourceSelection) {
 /** 只组合现有管理器的选择模式；项目、附件请求和全局勾选仍由 selector 持有。 */
 export const MentionDesktopPicker = observer(function MentionDesktopPicker(props: Props) {
 	const { t } = useTranslation("super")
+	const allowProjectSelection = props.allowProjectSelection ?? props.selectionMode === "mention"
 	const { userInfo } = useUserInfo()
 	const layer = useOverlayZIndex({ open: true, zIndexScope: "fullscreen" })
 	const identity = `${userInfo?.organization_code ?? ""}/${userInfo?.user_id ?? ""}`
@@ -255,10 +258,12 @@ export const MentionDesktopPicker = observer(function MentionDesktopPicker(props
 				}
 			: resourceProject
 		const workspaceOverride = recentMode ? recentWorkspaceForProject(project) : undefined
-		const selection = {
-			checked: selectedProjects.has(project.id),
-			onCheck: () => props.onProject(project, "select", workspaceOverride),
-		}
+		const selection = allowProjectSelection
+			? {
+					checked: selectedProjects.has(project.id),
+					onCheck: () => props.onProject(project, "select", workspaceOverride),
+				}
+			: undefined
 		if (resourceType) {
 			return (
 				<ProjectResourceItem
@@ -431,15 +436,19 @@ export const MentionDesktopPicker = observer(function MentionDesktopPicker(props
 											)
 										},
 									}}
-									selection={{
-										checkedIds: selectedProjects,
-										onCheck: (project) =>
-											props.onProject(
-												project,
-												"select",
-												recentWorkspaceForProject(project),
-											),
-									}}
+									selection={
+										allowProjectSelection
+											? {
+													checkedIds: selectedProjects,
+													onCheck: (project) =>
+														props.onProject(
+															project,
+															"select",
+															recentWorkspaceForProject(project),
+														),
+												}
+											: undefined
+									}
 									listViewport={recentViewport}
 									error={
 										(
@@ -509,10 +518,15 @@ export const MentionDesktopPicker = observer(function MentionDesktopPicker(props
 											props.onProject(project, "enter")
 										},
 									}}
-									selection={{
-										checkedIds: selectedProjects,
-										onCheck: (project) => props.onProject(project, "select"),
-									}}
+									selection={
+										allowProjectSelection
+											? {
+													checkedIds: selectedProjects,
+													onCheck: (project) =>
+														props.onProject(project, "select"),
+												}
+											: undefined
+									}
 									listViewport={viewport}
 									error={
 										props.error ? (

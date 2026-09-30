@@ -175,6 +175,8 @@ function ProjectResourceSelectorModal({
 	const [directories, setDirectories] = useState<AttachmentItem[]>([])
 	const [selectedResources, setSelectedResources] = useState<ProjectResourceSelection[]>([])
 	const isMentionMode = selectionMode === "mention"
+	const isResourceSelectionMode = isMentionMode || selectionMode === "import"
+	const allowProjectSelection = isMentionMode
 	const {
 		availableProjects,
 		setAvailableProjects,
@@ -187,7 +189,7 @@ function ProjectResourceSelectorModal({
 		resolveSelectionWorkspace,
 	} = useResourceProjects({
 		visible,
-		isMentionMode,
+		isMentionMode: isResourceSelectionMode,
 		currentWorkspace,
 		loading,
 		setLoading,
@@ -196,7 +198,7 @@ function ProjectResourceSelectorModal({
 	// This option only applies to multi-file transfers into another project; same-project
 	// operations retain their existing flat target-directory semantics.
 	const showPreserveParentPathOption =
-		!isMentionMode &&
+		!isResourceSelectionMode &&
 		fileIds.length > 1 &&
 		currentProject !== null &&
 		currentProject.id !== (selectedProject?.id || sourceAttachments[0]?.project_id)
@@ -322,9 +324,9 @@ function ProjectResourceSelectorModal({
 		return availableProjects.filter(
 			(project) =>
 				!excludeProjectIds.includes(project.id) &&
-				(isMentionMode || hasEditPermission(project.user_role)),
+				(isResourceSelectionMode || hasEditPermission(project.user_role)),
 		)
-	}, [availableProjects, excludeProjectIds, isMentionMode])
+	}, [availableProjects, excludeProjectIds, isResourceSelectionMode])
 	const shouldBlockPanelForLoading =
 		loading &&
 		((effectiveViewMode === "workspace" && availableWorkspaces.length === 0) ||
@@ -974,11 +976,11 @@ function ProjectResourceSelectorModal({
 			if (isProjectOnly) return
 			setIsSearch(false)
 
-			if (isMentionMode && action === "select") {
+			if (isResourceSelectionMode && action === "select") {
 				if (!currentWorkspace) return
 				toggleMentionSelection({
 					level: "attachment",
-					workspace: currentWorkspace,
+					workspace: resolveSelectionWorkspace(currentWorkspace),
 					project: currentProject,
 					attachment: item,
 				})
@@ -1020,7 +1022,7 @@ function ProjectResourceSelectorModal({
 	)
 
 	const submit = useMemoizedFn(async () => {
-		if (isMentionMode) {
+		if (isResourceSelectionMode) {
 			if (submittingRef.current || externalSubmitting) return
 			const firstSelection = selectedResources[0]
 			if (!firstSelection) return
@@ -1082,14 +1084,14 @@ function ProjectResourceSelectorModal({
 
 	// Workspace-level submit is opt-in; default file operations still require a target project.
 	const canSubmit = useMemo(() => {
-		if (isMentionMode) return selectedResources.length > 0
+		if (isResourceSelectionMode) return selectedResources.length > 0
 		return (
 			currentWorkspace !== null &&
 			(currentProject !== null ||
 				(allowWorkspaceRootSubmit && effectiveViewMode === "project"))
 		)
 	}, [
-		isMentionMode,
+		isResourceSelectionMode,
 		selectedResources.length,
 		allowWorkspaceRootSubmit,
 		currentWorkspace,
@@ -1218,7 +1220,7 @@ function ProjectResourceSelectorModal({
 			return t("selectPathModal.searchDirectory")
 		}
 	}, [effectiveViewMode, t])
-	const storageLabel = isMentionMode
+	const storageLabel = isResourceSelectionMode
 		? t("selectPathModal.selectMentionResource")
 		: t("selectPathModal.selectStorageLocation")
 	const emptyStorageDescription =
@@ -1233,7 +1235,7 @@ function ProjectResourceSelectorModal({
 	})
 
 	const createAction = useMemo(() => {
-		if (isMentionMode) return null
+		if (isResourceSelectionMode) return null
 		if (effectiveViewMode === "workspace") {
 			return {
 				onClick: createWorkspaceHook.showCreateWorkspace,
@@ -1257,7 +1259,7 @@ function ProjectResourceSelectorModal({
 		}
 		return null
 	}, [
-		isMentionMode,
+		isResourceSelectionMode,
 		effectiveViewMode,
 		canEdit,
 		t,
@@ -1272,7 +1274,7 @@ function ProjectResourceSelectorModal({
 		onOk: submit,
 		onCancel: handleCancel,
 		okDisabled:
-			(isMentionMode ? false : isSearch) ||
+			(isResourceSelectionMode ? false : isSearch) ||
 			!canSubmit ||
 			documentStaticDependencies.isLoading,
 	}
@@ -1284,13 +1286,13 @@ function ProjectResourceSelectorModal({
 	})
 
 	useEffect(() => {
-		if (visible && !isMentionMode) {
+		if (visible && !isResourceSelectionMode) {
 			window.addEventListener("keydown", handleKeyDown)
 			return () => window.removeEventListener("keydown", handleKeyDown)
 		} else {
 			window.removeEventListener("keydown", handleKeyDown)
 		}
-	}, [visible, handleKeyDown, isMentionMode])
+	}, [visible, handleKeyDown, isResourceSelectionMode])
 
 	// 渲染工作区列表
 	const renderWorkspaceList = () => {
@@ -1761,7 +1763,7 @@ function ProjectResourceSelectorModal({
 	const breadcrumbItemBase =
 		"relative flex max-w-[150px] cursor-pointer items-center rounded-[4px] text-foreground transition-colors hover:not(.disable):not(.current):text-primary [&.disable]:cursor-not-allowed [&.disable]:opacity-50"
 
-	if (isMobile && isMentionMode) {
+	if (isMobile && isResourceSelectionMode) {
 		return (
 			<MobileFilesMoveSheet
 				visible={visible}
@@ -1777,7 +1779,7 @@ function ProjectResourceSelectorModal({
 					initialViewMode: "workspace",
 					workspaces,
 					includeSpecialWorkspaces: includeFixedWorkspaces,
-					selectionMode: "mention",
+					selectionMode: selectionMode === "import" ? "import" : "mention",
 					excludeProjectIds,
 				}}
 				rootLabel={t("selectPathModal.rootDirectory")}
@@ -1811,7 +1813,7 @@ function ProjectResourceSelectorModal({
 		)
 	}
 
-	if (isMentionMode) {
+	if (isResourceSelectionMode) {
 		return visible ? (
 			<MentionDesktopPicker
 				title={title}
@@ -1819,6 +1821,8 @@ function ProjectResourceSelectorModal({
 				workspace={currentWorkspace}
 				project={currentProject}
 				projects={availableProjects}
+				selectionMode={selectionMode === "import" ? "import" : "mention"}
+				allowProjectSelection={allowProjectSelection}
 				attachments={attachments}
 				loading={loading}
 				error={loadError}
@@ -1830,7 +1834,9 @@ function ProjectResourceSelectorModal({
 				loadingMore={loadingMoreResources}
 				onLoadMore={handleLoadMoreResourceProjects}
 				onWorkspace={handleWorkspaceClick}
-				onProject={handleProjectClick}
+				onProject={(project, action, workspace) =>
+					handleProjectClick(project, action, workspace)
+				}
 				onRecent={handleBackToWorkspace}
 				onBack={handleBackToProject}
 				onRefresh={() => {

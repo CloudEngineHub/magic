@@ -127,7 +127,7 @@ export interface ProjectResourceSelectorModalProps extends Omit<
 	CrossProjectFileOperationModalProps,
 	"onSubmit"
 > {
-	selectionMode?: "destination" | "mention"
+	selectionMode?: "destination" | "mention" | "import"
 	excludeProjectIds?: string[]
 	emptyDirectoryDescription?: string
 	emptyDirectoryActionLabel?: string | null
