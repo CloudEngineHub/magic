@@ -7,7 +7,6 @@ import { saveMediaSpeakersAndMagicProjectJs } from "../../contents/HTML/media/ut
 import HTML from "../../contents/HTML"
 import { useRecordingAudioPlayer } from "@/pages/superMagic/pages/AudioRecordings/hooks/useRecordingAudioPlayer"
 import { useRecordingColorSegments } from "@/pages/superMagic/pages/AudioRecordings/hooks/useRecordingColorSegments"
-import { useRecordingPlayerCurrentSec } from "@/pages/superMagic/pages/AudioRecordings/hooks/useRecordingPlayerCurrentSec"
 import { useShareRecordingDetailData } from "@/pages/superMagic/pages/AudioRecordings/hooks/useShareRecordingDetailData"
 import { useRecordingDetailTranscriptPanelState } from "@/pages/superMagic/pages/AudioRecordings/hooks/useRecordingDetailTranscriptPanelState"
 import type { RecordingTranscriptSegment } from "@/pages/superMagic/pages/AudioRecordings/types/recording-detail"
@@ -172,11 +171,6 @@ function AudioFolderWorkbench({
 	const [speakerDraft, setSpeakerDraft] = useState<Record<string, string>>({})
 	const [speakerNameOverrides, setSpeakerNameOverrides] = useState<Record<string, string>>({})
 	const [selectedActiveKey, setSelectedActiveKey] = useState<string>()
-	const playerCurrentSec = useRecordingPlayerCurrentSec(
-		player.audioRef,
-		player.playing,
-		player.currentTime,
-	)
 	const summaryReady = Boolean(fileMap?.summaryFiles.length)
 	// Folder previews collapse the transcript column only when the right panel still offers a tab-strip expand entry.
 	const canCollapseTranscript = summaryReady && hasRecordingDetailTabStrip(fileMap, showNotesTab)
@@ -360,7 +354,7 @@ function AudioFolderWorkbench({
 							audioRef={player.audioRef}
 							audioUrl={audioUrl}
 							transcriptMarkdown={texts.transcript?.content}
-							currentSec={playerCurrentSec}
+							currentSec={player.currentTime}
 							currentTime={player.currentTime}
 							duration={player.duration}
 							playing={player.playing}

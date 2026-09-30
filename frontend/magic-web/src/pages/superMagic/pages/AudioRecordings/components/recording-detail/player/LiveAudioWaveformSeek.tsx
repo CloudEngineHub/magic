@@ -1,5 +1,6 @@
 import {
 	useCallback,
+	useEffect,
 	useRef,
 	useState,
 	type MouseEvent as ReactMouseEvent,
@@ -47,6 +48,9 @@ export function LiveAudioWaveformSeek({
 }: LiveAudioWaveformSeekProps) {
 	const wrapRef = useRef<HTMLDivElement>(null)
 	const draggingRef = useRef(false)
+	const [optimisticSec, setOptimisticSec] = useState<number | null>(null)
+	const rafSeekRef = useRef<number | null>(null)
+	const latestTargetSecRef = useRef<number>(0)
 	const duration = Math.max(0.001, durationSec)
 	// Hovered chapter segment plus the pointer time and viewport coordinates that anchor its floating panel.
 	const [hovered, setHovered] = useState<{
@@ -60,15 +64,62 @@ export function LiveAudioWaveformSeek({
 		const el = wrapRef.current
 		if (!el) return 0
 		const rect = el.getBoundingClientRect()
+		if (rect.width <= 0) return 0
 		return Math.min(1, Math.max(0, (clientX - rect.left) / rect.width))
 	}, [])
 
-	const commitSeek = useCallback(
-		(clientX: number) => {
-			onSeek(ratioFromClientX(clientX) * duration)
+	/**
+	 * Updates local optimistic seek state immediately for zero-latency progress tracking,
+	 * while throttling actual audio seek events via RAF using latestTargetSecRef to avoid decoder thrashing.
+	 */
+	const updateDragPosition = useCallback(
+		(clientX: number, isFinal = false) => {
+			const targetSec = ratioFromClientX(clientX) * duration
+			latestTargetSecRef.current = targetSec
+			setOptimisticSec(targetSec)
+
+			if (isFinal) {
+				if (rafSeekRef.current != null) {
+					cancelAnimationFrame(rafSeekRef.current)
+					rafSeekRef.current = null
+				}
+				onSeek(targetSec)
+			} else {
+				if (rafSeekRef.current == null) {
+					rafSeekRef.current = requestAnimationFrame(() => {
+						rafSeekRef.current = null
+						onSeek(latestTargetSecRef.current)
+					})
+				}
+			}
 		},
 		[duration, onSeek, ratioFromClientX],
 	)
+
+	/** Clean up pending RAF seek throttling on unmount. */
+	useEffect(() => {
+		return () => {
+			if (rafSeekRef.current != null) {
+				cancelAnimationFrame(rafSeekRef.current)
+				rafSeekRef.current = null
+			}
+		}
+	}, [])
+
+	/** Clear optimistic seek lock once actual playback time catches up with the seeked position. */
+	useEffect(() => {
+		if (optimisticSec == null || draggingRef.current) return
+		if (Math.abs(currentSec - optimisticSec) < 0.5) {
+			setOptimisticSec(null)
+			return
+		}
+		const timer = setTimeout(() => {
+			if (!draggingRef.current) {
+				setOptimisticSec(null)
+			}
+		}, 600)
+		return () => clearTimeout(timer)
+	}, [currentSec, optimisticSec])
 
 	/** Tracks the chapter under the cursor for the floating name/time panel, hiding it while dragging. */
 	function handleMouseMove(event: ReactMouseEvent<HTMLDivElement>) {
@@ -93,19 +144,21 @@ export function LiveAudioWaveformSeek({
 		if (event.button !== 0) return
 		event.preventDefault()
 		draggingRef.current = true
+		setHovered(null)
 		event.currentTarget.setPointerCapture(event.pointerId)
-		commitSeek(event.clientX)
+		updateDragPosition(event.clientX, false)
 	}
 
 	function onPointerMove(event: ReactPointerEvent<HTMLDivElement>) {
 		if (!draggingRef.current) return
 		event.preventDefault()
-		commitSeek(event.clientX)
+		updateDragPosition(event.clientX, false)
 	}
 
 	function endDrag(event: ReactPointerEvent<HTMLDivElement>) {
 		if (!draggingRef.current) return
 		draggingRef.current = false
+		updateDragPosition(event.clientX, true)
 		try {
 			event.currentTarget.releasePointerCapture(event.pointerId)
 		} catch {
@@ -113,11 +166,14 @@ export function LiveAudioWaveformSeek({
 		}
 	}
 
+	// Active display time prioritizes responsive drag/seek position during and immediately after interactions
+	const activeDisplaySec = optimisticSec ?? currentSec
+
 	return (
 		<>
 			<div
 				ref={wrapRef}
-				className="relative w-full"
+				className="relative w-full cursor-pointer"
 				style={{ height: maxBarPx, touchAction: "none" }}
 				onMouseMove={handleMouseMove}
 				onMouseLeave={handleMouseLeave}
@@ -125,9 +181,8 @@ export function LiveAudioWaveformSeek({
 				<StaticPeakWaveformStrip
 					peakNorms={peakNorms}
 					maxBarPx={maxBarPx}
-					currentSec={currentSec}
+					currentSec={activeDisplaySec}
 					durationSec={durationSec}
-					paused={paused}
 					colorSegments={colorSegments}
 					className="pointer-events-none"
 				/>
@@ -136,10 +191,10 @@ export function LiveAudioWaveformSeek({
 					aria-label={ariaLabel}
 					aria-valuemin={0}
 					aria-valuemax={Math.round(durationSec)}
-					aria-valuenow={Math.round(currentSec)}
-					aria-valuetext={`${formatHMS(currentSec)} / ${formatHMS(durationSec)}`}
+					aria-valuenow={Math.round(activeDisplaySec)}
+					aria-valuetext={`${formatHMS(activeDisplaySec)} / ${formatHMS(durationSec)}`}
 					tabIndex={0}
-					className="absolute inset-0 z-[1] touch-none select-none outline-none focus-visible:ring-2 focus-visible:ring-primary/40 focus-visible:ring-offset-1 focus-visible:ring-offset-card"
+					className="absolute inset-0 z-[1] cursor-pointer touch-none select-none outline-none focus-visible:ring-2 focus-visible:ring-primary/40 focus-visible:ring-offset-1 focus-visible:ring-offset-card"
 					onKeyDown={(event) => {
 						const step = seekKeyboardStep
 						if (event.key === "ArrowRight" || event.key === "ArrowUp") {

@@ -4,7 +4,6 @@ import type { AttachmentItem } from "@/pages/superMagic/components/TopicFilesBut
 import type { AttachmentFile } from "@/pages/superMagic/utils/image-url-resolver"
 import { useRecordingAudioPlayer } from "../../hooks/useRecordingAudioPlayer"
 import { useRecordingColorSegments } from "../../hooks/useRecordingColorSegments"
-import { useRecordingPlayerCurrentSec } from "../../hooks/useRecordingPlayerCurrentSec"
 import { useShareRecordingDetailData } from "../../hooks/useShareRecordingDetailData"
 import { useRecordingDetailTranscriptPanelState } from "../../hooks/useRecordingDetailTranscriptPanelState"
 import type { RecordingTranscriptSegment } from "../../types/recording-detail"
@@ -66,11 +65,6 @@ export function RecordingDetailShareDesktop({
 	)
 	const player = useRecordingAudioPlayer(audioUrl)
 	const [playerExpanded, setPlayerExpanded] = useState(false)
-	const playerCurrentSec = useRecordingPlayerCurrentSec(
-		player.audioRef,
-		player.playing,
-		player.currentTime,
-	)
 	const summaryReady = Boolean(fileMap?.summaryFiles.length)
 	// Share views only render a tab strip when summary/notes content is present, so collapse follows that.
 	const canCollapseTranscript =
@@ -250,7 +244,7 @@ export function RecordingDetailShareDesktop({
 								audioRef={player.audioRef}
 								audioUrl={audioUrl}
 								transcriptMarkdown={texts.transcript?.content}
-								currentSec={playerCurrentSec}
+								currentSec={player.currentTime}
 								currentTime={player.currentTime}
 								duration={player.duration}
 								playing={player.playing}

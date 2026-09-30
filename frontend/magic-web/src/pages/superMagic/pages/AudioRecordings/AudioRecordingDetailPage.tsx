@@ -27,7 +27,6 @@ import { normalizeSpeakerSelection } from "./utils/speaker-filter"
 import { hasRecordingDetailTabStrip } from "./utils/recording-detail-files"
 import { useRecordingDetailData } from "./hooks/useRecordingDetailData"
 import { useRecordingAudioPlayer } from "./hooks/useRecordingAudioPlayer"
-import { useRecordingPlayerCurrentSec } from "./hooks/useRecordingPlayerCurrentSec"
 import { useRecordingColorSegments } from "./hooks/useRecordingColorSegments"
 import { useRecordingDetailActions } from "./hooks/useRecordingDetailActions"
 import {
@@ -106,11 +105,6 @@ function AudioRecordingDetailPageDesktop() {
 
 	const player = useRecordingAudioPlayer(audioUrl)
 	const { seekTo, playSegment } = player
-	const playerCurrentSec = useRecordingPlayerCurrentSec(
-		player.audioRef,
-		player.playing,
-		player.currentTime,
-	)
 	const [detailItem, setDetailItem] = useState<AudioProjectListItem | null>(null)
 	const [titleOverride, setTitleOverride] = useState("")
 	const [playerExpanded, setPlayerExpanded] = useState(false)
@@ -514,7 +508,7 @@ function AudioRecordingDetailPageDesktop() {
 										audioRef={player.audioRef}
 										audioUrl={audioUrl}
 										transcriptMarkdown={texts.transcript?.content}
-										currentSec={playerCurrentSec}
+										currentSec={player.currentTime}
 										currentTime={player.currentTime}
 										duration={player.duration}
 										playing={player.playing}

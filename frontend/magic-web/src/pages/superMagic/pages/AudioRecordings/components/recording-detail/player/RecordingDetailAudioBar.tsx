@@ -13,6 +13,7 @@ import {
 	DropdownMenuTrigger,
 } from "@/components/shadcn-ui/dropdown-menu"
 import { cn } from "@/utils/cn"
+import { useRecordingPlayerCurrentSec } from "../../../hooks/useRecordingPlayerCurrentSec"
 import { formatRecordingTime } from "../../../utils/time"
 import type { FlatColorSegment } from "../../../utils/chapter-color-segments"
 import { buildSimulatedWaveformBars } from "../../../utils/simulated-waveform-bars"
@@ -23,11 +24,11 @@ export const PLAYBACK_RATES = [1, 1.25, 1.5, 2] as const
 export const PLAYBACK_SKIP_SEC = 15
 
 const GHOST_CONTROL_BTN =
-	"flex size-11 shrink-0 items-center justify-center rounded-full text-foreground transition-colors hover:bg-muted/70 active:bg-muted/90"
+	"flex size-11 shrink-0 cursor-pointer items-center justify-center rounded-full text-foreground transition-colors hover:bg-muted/70 active:bg-muted/90"
 
 /** Compact ghost hit target used by the collapsed transport row so skip stays visible without crowding time/waveform. */
 const COLLAPSED_GHOST_CONTROL_BTN =
-	"flex size-7 shrink-0 items-center justify-center rounded-full text-foreground transition-colors hover:bg-muted/70 active:bg-muted/90"
+	"flex size-7 shrink-0 cursor-pointer items-center justify-center rounded-full text-foreground transition-colors hover:bg-muted/70 active:bg-muted/90"
 
 export type RecordingDetailAudioBarChrome = "shadow" | "outlined"
 export type RecordingDetailRateMenuPlacement = "up" | "down"
@@ -116,7 +117,7 @@ function PlaybackRateMenu({
 			<button
 				type="button"
 				onClick={onToggleOpen}
-				className="inline-flex shrink-0 items-center gap-1 rounded-full px-3 py-2 text-[14px] font-medium tabular-nums text-foreground transition-colors hover:bg-muted/70 active:bg-muted/90"
+				className="inline-flex shrink-0 cursor-pointer items-center gap-1 rounded-full px-3 py-2 text-[14px] font-medium tabular-nums text-foreground transition-colors hover:bg-muted/70 active:bg-muted/90"
 				aria-label={t("detail.player.playbackRateMenuAria")}
 				aria-expanded={open}
 				aria-haspopup="listbox"
@@ -149,7 +150,7 @@ function PlaybackRateMenu({
 							aria-selected={playbackRate === rate}
 							onClick={() => onSelectRate(playbackRate)}
 							className={cn(
-								"flex w-full items-center px-3 py-2 text-left text-[14px] tabular-nums transition-colors hover:bg-muted/80",
+								"flex w-full cursor-pointer items-center px-3 py-2 text-left text-[14px] tabular-nums transition-colors hover:bg-muted/80",
 								playbackRate === rate
 									? "bg-muted/70 font-medium text-foreground"
 									: "text-foreground",
@@ -224,7 +225,7 @@ function CollapsedTransportMoreMenu({
 						<DropdownMenuRadioItem
 							key={playbackRate}
 							value={String(playbackRate)}
-							className="text-[13px] tabular-nums"
+							className="cursor-pointer text-[13px] tabular-nums"
 						>
 							{t("detail.player.playbackSpeed", {
 								rate: formatPlaybackRateLabel(playbackRate),
@@ -235,7 +236,7 @@ function CollapsedTransportMoreMenu({
 				<DropdownMenuSeparator />
 				<DropdownMenuItem
 					onClick={onSkipBack}
-					className="gap-2 px-3 text-[13px]"
+					className="cursor-pointer gap-2 px-3 text-[13px]"
 					data-testid="recording-detail-player-skip-back-button"
 				>
 					<SkipBack15Icon className="size-4" />
@@ -243,7 +244,7 @@ function CollapsedTransportMoreMenu({
 				</DropdownMenuItem>
 				<DropdownMenuItem
 					onClick={onSkipForward}
-					className="gap-2 px-3 text-[13px]"
+					className="cursor-pointer gap-2 px-3 text-[13px]"
 					data-testid="recording-detail-player-skip-forward-button"
 				>
 					<SkipForward15Icon className="size-4" />
@@ -295,6 +296,9 @@ export function RecordingDetailAudioBar({
 	)
 
 	const duration = Math.max(0, durationSec)
+	// Track playback currentTime with requestAnimationFrame locally inside the audio bar
+	// to isolate high-frequency re-renders from the entire detail page tree.
+	const liveCurrentSec = useRecordingPlayerCurrentSec(audioRef, playing, currentSec)
 	const waveformMaxPx = expanded ? 52 : 15
 	const seekKeyboardStep = expanded ? PLAYBACK_SKIP_SEC : 5
 	const showCollapsedTransport = collapsedTransportControls && !expanded
@@ -306,7 +310,7 @@ export function RecordingDetailAudioBar({
 			onSkipBack()
 			return
 		}
-		onSeek(Math.max(0, currentSec - PLAYBACK_SKIP_SEC))
+		onSeek(Math.max(0, liveCurrentSec - PLAYBACK_SKIP_SEC))
 	}
 
 	/** Default +15s skip when shells do not override skip handlers. */
@@ -315,7 +319,7 @@ export function RecordingDetailAudioBar({
 			onSkipForward()
 			return
 		}
-		onSeek(Math.min(duration, currentSec + PLAYBACK_SKIP_SEC))
+		onSeek(Math.min(duration, liveCurrentSec + PLAYBACK_SKIP_SEC))
 	}
 
 	/** Toggles the shared rate listbox for both collapsed and expanded chrome. */
@@ -378,7 +382,7 @@ export function RecordingDetailAudioBar({
 						<button
 							type="button"
 							onClick={onTogglePlay}
-							className="flex size-7 shrink-0 items-center justify-center rounded-full bg-foreground text-background active:opacity-80"
+							className="flex size-7 shrink-0 cursor-pointer items-center justify-center rounded-full bg-foreground text-background active:opacity-80"
 							aria-label={playing ? t("detail.pause") : t("detail.play")}
 							data-testid="recording-detail-player-toggle"
 						>
@@ -389,18 +393,16 @@ export function RecordingDetailAudioBar({
 							)}
 						</button>
 						<span className="shrink-0 text-[12px] tabular-nums leading-4 text-muted-foreground">
-							{formatRecordingTime(currentSec)} / {formatRecordingTime(duration)}
+							{formatRecordingTime(liveCurrentSec)} / {formatRecordingTime(duration)}
 						</span>
 						<div
 							className={
-								showCollapsedTransport
-									? "min-w-[48px] flex-1 overflow-hidden"
-									: "min-w-0 flex-1"
+								showCollapsedTransport ? "min-w-[48px] flex-1" : "min-w-0 flex-1"
 							}
 						>
 							<LiveAudioWaveformSeek
 								durationSec={duration}
-								currentSec={currentSec}
+								currentSec={liveCurrentSec}
 								peakNorms={peakNorms}
 								maxBarPx={waveformMaxPx}
 								paused={!playing}
@@ -425,7 +427,7 @@ export function RecordingDetailAudioBar({
 							className={
 								showCollapsedTransport
 									? COLLAPSED_GHOST_CONTROL_BTN
-									: "flex size-7 shrink-0 items-center justify-center rounded-full active:bg-foreground/[0.06]"
+									: "flex size-7 shrink-0 cursor-pointer items-center justify-center rounded-full active:bg-foreground/[0.06]"
 							}
 							aria-label={t("detail.player.expandPlayerAria")}
 						>
@@ -440,7 +442,7 @@ export function RecordingDetailAudioBar({
 					<div className={expandedControlsClassName}>
 						<LiveAudioWaveformSeek
 							durationSec={duration}
-							currentSec={currentSec}
+							currentSec={liveCurrentSec}
 							peakNorms={peakNorms}
 							maxBarPx={waveformMaxPx}
 							paused={!playing}
@@ -450,7 +452,7 @@ export function RecordingDetailAudioBar({
 							colorSegments={colorSegments}
 						/>
 						<div className="flex items-center justify-between text-[13px] tabular-nums text-muted-foreground">
-							<span>{formatHMS(currentSec)}</span>
+							<span>{formatHMS(liveCurrentSec)}</span>
 							<span>{formatHMS(duration)}</span>
 						</div>
 						<div className="grid w-full grid-cols-5 items-center gap-1 pt-0.5">
@@ -477,7 +479,7 @@ export function RecordingDetailAudioBar({
 								<button
 									type="button"
 									onClick={onTogglePlay}
-									className="flex size-14 shrink-0 items-center justify-center rounded-full bg-foreground text-background active:opacity-90"
+									className="flex size-14 shrink-0 cursor-pointer items-center justify-center rounded-full bg-foreground text-background active:opacity-90"
 									aria-label={playing ? t("detail.pause") : t("detail.play")}
 									data-testid="recording-detail-player-toggle"
 								>
