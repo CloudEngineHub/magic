@@ -187,6 +187,7 @@
 	"editor.tab.common": "通用信息",
 	"editor.tab.providers": "服务商",
 	"editor.tab.runtime": "运行参数",
+	"editor.temperature.disabled": "关闭温度",
 	"editor.temperature.fixed": "固定温度",
 	"editor.temperature.recommended": "推荐温度",
 	"editor.title": "新建模型",

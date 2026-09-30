@@ -703,6 +703,7 @@ export function ModelEditorDialog({
                   {category === providerModelCategory.llm || category === providerModelCategory.embedding ? (
                     <ModelEditorRuntimeFields
                       control={form.control}
+                      setValue={form.setValue}
                       disabled={isSaving}
                       errors={form.formState.errors}
                       modelType={modelType}
