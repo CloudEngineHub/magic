@@ -238,19 +238,16 @@ export const MentionDesktopPicker = observer(function MentionDesktopPicker(props
 				: [],
 		),
 	)
-	const renderProjectItem = ({
-		project,
-		index,
-		viewMode: itemViewMode,
-		variant,
-		collaborationType,
-	}: ComponentProps<typeof ProjectItem>) => {
+	const renderProjectItem = (itemProps: ComponentProps<typeof ProjectItem>) => {
+		const { project } = itemProps
 		const resourceProject = project as ResourceProject
 		const resourceType = resourceProject.resourceType ?? getResourceProjectType(project)
 		const displayProject: ResourceProject = resourceType
 			? {
 					...resourceProject,
 					resourceType,
+					// 最近列表返回的 id 已是文件项目 ID；模块列表仍以 project_id 判断是否关联源码。
+					project_id: recentMode ? project.id : resourceProject.project_id,
 					resourceId:
 						resourceProject.resourceId ??
 						resourceProject.micro_app_id ??
@@ -261,32 +258,24 @@ export const MentionDesktopPicker = observer(function MentionDesktopPicker(props
 		const selection = allowProjectSelection
 			? {
 					checked: selectedProjects.has(project.id),
-					onCheck: () => props.onProject(project, "select", workspaceOverride),
+					onCheck: () => props.onProject(displayProject, "select", workspaceOverride),
 				}
 			: undefined
+		const onClick = () => {
+			setRecentMode(false)
+			props.onProject(displayProject, "enter", workspaceOverride)
+		}
 		if (resourceType) {
 			return (
 				<ProjectResourceItem
+					{...itemProps}
 					project={displayProject}
-					index={index}
-					viewMode={itemViewMode}
-					variant={variant}
-					onClick={(item) => props.onProject(item, "enter", workspaceOverride)}
+					onClick={onClick}
 					selection={selection}
 				/>
 			)
 		}
-		return (
-			<ProjectItem
-				project={project}
-				index={index}
-				viewMode={itemViewMode}
-				variant={variant}
-				collaborationType={collaborationType}
-				onClick={() => props.onProject(project, "enter", workspaceOverride)}
-				selection={selection}
-			/>
-		)
+		return <ProjectItem {...itemProps} onClick={onClick} selection={selection} />
 	}
 	const navigate = (key: string, target: "project" | "file") => {
 		const selection = props.selections.find((item) => selectionKey(item) === key)
@@ -302,6 +291,7 @@ export const MentionDesktopPicker = observer(function MentionDesktopPicker(props
 			setReveal(undefined)
 			setRootVisit((value) => value + 1)
 		}
+		setRecentMode(false)
 		props.onNavigate(selection)
 	}
 	const panel = (
