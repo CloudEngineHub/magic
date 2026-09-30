@@ -2366,6 +2366,12 @@ class LLMAppService extends AbstractLLMAppService
             $modelGatewayDataIsolation
         );
 
-        return array_merge($extractedImageGenerationConfig, $textGenerateImageDTO->getImageGenerationConfig());
+        // 值为 auto 等同「用户没动过」（前端会按声明默认值播种），剔除后让提示词提取结果生效
+        $userImageGenerationConfig = array_filter(
+            $textGenerateImageDTO->getImageGenerationConfig(),
+            static fn ($value): bool => $value !== 'auto'
+        );
+
+        return array_merge($extractedImageGenerationConfig, $userImageGenerationConfig);
     }
 }
