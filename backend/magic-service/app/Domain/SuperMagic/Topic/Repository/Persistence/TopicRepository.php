@@ -26,6 +26,8 @@ use Psr\Log\LoggerInterface;
 
 class TopicRepository implements TopicRepositoryInterface
 {
+    private const SEQUENCE_UPDATE_BATCH_SIZE = 500;
+
     private LoggerInterface $logger;
 
     public function __construct(
@@ -890,9 +892,22 @@ class TopicRepository implements TopicRepositoryInterface
             return true;
         }
 
-        return (bool) $this->magicChatSequenceModel::query()
-            ->whereIn('id', $seqIds)
-            ->update(['status' => $status->value]);
+        // Keep the caller's transaction: a failed batch must roll back all batches.
+        $seqIds = array_values(array_unique($seqIds, SORT_STRING));
+        usort($seqIds, static function (int|string $left, int|string $right): int {
+            $left = (string) $left;
+            $right = (string) $right;
+            return strlen($left) <=> strlen($right) ?: strcmp($left, $right);
+        });
+        $updatedAt = $this->magicChatSequenceModel->freshTimestampString();
+        $affectedRows = 0;
+        foreach (array_chunk($seqIds, self::SEQUENCE_UPDATE_BATCH_SIZE) as $batch) {
+            $affectedRows += $this->magicChatSequenceModel::query()
+                ->whereIn('id', $batch)
+                ->update(['status' => $status->value, 'updated_at' => $updatedAt]);
+        }
+
+        return $affectedRows > 0;
     }
 
     /**

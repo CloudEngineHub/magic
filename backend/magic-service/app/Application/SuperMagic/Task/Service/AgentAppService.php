@@ -31,6 +31,8 @@ use App\Infrastructure\SuperMagic\ExternalAPI\SandboxOS\Gateway\Constant\Sandbox
 use App\Infrastructure\SuperMagic\ExternalAPI\SandboxOS\Gateway\Result\BatchStatusResult;
 use App\Infrastructure\SuperMagic\ExternalAPI\SandboxOS\Gateway\Result\GatewayResult;
 use App\Infrastructure\SuperMagic\ExternalAPI\SandboxOS\Gateway\Result\SandboxStatusResult;
+use App\Infrastructure\SuperMagic\Task\Locker\CheckpointRollbackLock;
+use Hyperf\DbConnection\Db;
 use Hyperf\Logger\LoggerFactory;
 use Psr\EventDispatcher\EventDispatcherInterface;
 use Psr\Log\LoggerInterface;
@@ -54,6 +56,7 @@ readonly class AgentAppService
         private readonly SandboxVersionDomainService $sandboxVersionDomainService,
         private readonly MagicUserSettingDomainService $magicUserSettingDomainService,
         private readonly EventDispatcherInterface $eventDispatcher,
+        private readonly CheckpointRollbackLock $checkpointRollbackLock,
     ) {
         $this->logger = $this->loggerFactory->get('sandbox');
     }
@@ -392,50 +395,57 @@ readonly class AgentAppService
             throw new BusinessException('Access denied for topic ID: ' . $topicId);
         }
 
-        // 执行沙箱回滚
-        $response = $this->agentDomainService->rollbackCheckpoint($dataIsolation, $sandboxId, $targetMessageId);
+        return $this->checkpointRollbackLock->run($topicEntity->getId(), function (callable $assertOwnership) use ($dataIsolation, $sandboxId, $targetMessageId, $topicEntity): AgentResponse {
+            $assertOwnership();
+            // 执行沙箱回滚
+            $response = $this->agentDomainService->rollbackCheckpoint($dataIsolation, $sandboxId, $targetMessageId);
 
-        // 沙箱回滚失败，记录日志并提前返回
-        if (! $response->isSuccess()) {
-            $this->logger->error('[Sandbox][App] Checkpoint rollback failed', [
+            // 沙箱回滚失败，记录日志并提前返回
+            if (! $response->isSuccess()) {
+                $this->logger->error('[Sandbox][App] Checkpoint rollback failed', [
+                    'sandbox_id' => $sandboxId,
+                    'target_message_id' => $targetMessageId,
+                    'code' => $response->getCode(),
+                    'message' => $response->getMessage(),
+                ]);
+
+                // 沙箱回滚失败，不执行消息回滚
+                $this->logger->info('[Sandbox][App] Skipping message rollback due to sandbox rollback failure', [
+                    'sandbox_id' => $sandboxId,
+                    'target_message_id' => $targetMessageId,
+                ]);
+
+                return $response;
+            }
+
+            // 沙箱回滚成功，记录日志并执行消息回滚
+            $this->logger->info('[Sandbox][App] Checkpoint rollback successful', [
                 'sandbox_id' => $sandboxId,
                 'target_message_id' => $targetMessageId,
-                'code' => $response->getCode(),
-                'message' => $response->getMessage(),
+                'sandbox_response' => $response->getMessage(),
             ]);
 
-            // 沙箱回滚失败，不执行消息回滚
-            $this->logger->info('[Sandbox][App] Skipping message rollback due to sandbox rollback failure', [
+            // 执行消息回滚
+            $affectedSeqIds = $this->runRollbackMessageMutation(
+                fn (): array => $this->topicDomainService->rollbackMessages($targetMessageId),
+                $assertOwnership
+            );
+            $assertOwnership();
+            $this->dispatchRollbackMessageChanges(
+                $topicEntity,
+                $dataIsolation,
+                CheckpointRollbackMessagesChangedEvent::ACTION_ROLLBACK,
+                $affectedSeqIds,
+                $targetMessageId
+            );
+
+            $this->logger->info('[Sandbox][App] Message rollback completed successfully', [
                 'sandbox_id' => $sandboxId,
                 'target_message_id' => $targetMessageId,
             ]);
 
             return $response;
-        }
-
-        // 沙箱回滚成功，记录日志并执行消息回滚
-        $this->logger->info('[Sandbox][App] Checkpoint rollback successful', [
-            'sandbox_id' => $sandboxId,
-            'target_message_id' => $targetMessageId,
-            'sandbox_response' => $response->getMessage(),
-        ]);
-
-        // 执行消息回滚
-        $affectedSeqIds = $this->topicDomainService->rollbackMessages($targetMessageId);
-        $this->dispatchRollbackMessageChanges(
-            $topicEntity,
-            $dataIsolation,
-            CheckpointRollbackMessagesChangedEvent::ACTION_ROLLBACK,
-            $affectedSeqIds,
-            $targetMessageId
-        );
-
-        $this->logger->info('[Sandbox][App] Message rollback completed successfully', [
-            'sandbox_id' => $sandboxId,
-            'target_message_id' => $targetMessageId,
-        ]);
-
-        return $response;
+        });
     }
 
     /**
@@ -463,44 +473,52 @@ readonly class AgentAppService
             throw new BusinessException('Access denied for topic ID: ' . $topicId);
         }
 
-        // Checkpoint operations may reattach to an existing sandbox; keep recovery init silent.
-        $sandboxId = $this->ensureSandboxInitialized($dataIsolation, $topicId, skipInitMessages: true);
+        return $this->checkpointRollbackLock->run($topicEntity->getId(), function (callable $assertOwnership) use ($dataIsolation, $topicId, $targetMessageId, $topicEntity): string {
+            // Checkpoint operations may reattach to an existing sandbox; keep recovery init silent.
+            $sandboxId = $this->ensureSandboxInitialized($dataIsolation, $topicId, skipInitMessages: true);
+            $assertOwnership();
 
-        // 调用沙箱网关开始回滚
-        $sandboxResponse = $this->agentDomainService->rollbackCheckpointStart($dataIsolation, $sandboxId, $targetMessageId);
+            // 调用沙箱网关开始回滚
+            $sandboxResponse = $this->agentDomainService->rollbackCheckpointStart($dataIsolation, $sandboxId, $targetMessageId);
 
-        if (! $sandboxResponse->isSuccess()) {
-            $this->logger->error('[Sandbox][App] Sandbox rollback start failed', [
-                'sandbox_id' => $sandboxId,
+            if (! $sandboxResponse->isSuccess()) {
+                $this->logger->error('[Sandbox][App] Sandbox rollback start failed', [
+                    'sandbox_id' => $sandboxId,
+                    'target_message_id' => $targetMessageId,
+                    'error' => $sandboxResponse->getMessage(),
+                ]);
+                throw new BusinessException('Sandbox rollback start failed: ' . $sandboxResponse->getMessage());
+            }
+
+            // 沙箱操作成功后，执行消息状态标记
+            $affectedSeqIds = $this->runRollbackMessageMutation(
+                fn (): array => $this->topicDomainService->rollbackMessagesStart($targetMessageId),
+                $assertOwnership
+            );
+            $assertOwnership();
+            $this->dispatchRollbackMessageChanges(
+                $topicEntity,
+                $dataIsolation,
+                CheckpointRollbackMessagesChangedEvent::ACTION_START,
+                $affectedSeqIds,
+                $targetMessageId
+            );
+            $assertOwnership();
+            $this->dispatchRollbackAffectedFileChanges(
+                $topicEntity,
+                $dataIsolation,
+                $sandboxResponse,
+                'checkpoint_rollback_start'
+            );
+
+            $this->logger->info('[Sandbox][App] Message rollback start completed successfully', [
+                'topic_id' => $topicId,
                 'target_message_id' => $targetMessageId,
-                'error' => $sandboxResponse->getMessage(),
+                'sandbox_response' => $sandboxResponse->getMessage(),
             ]);
-            throw new BusinessException('Sandbox rollback start failed: ' . $sandboxResponse->getMessage());
-        }
 
-        // 沙箱操作成功后，执行消息状态标记
-        $affectedSeqIds = $this->topicDomainService->rollbackMessagesStart($targetMessageId);
-        $this->dispatchRollbackMessageChanges(
-            $topicEntity,
-            $dataIsolation,
-            CheckpointRollbackMessagesChangedEvent::ACTION_START,
-            $affectedSeqIds,
-            $targetMessageId
-        );
-        $this->dispatchRollbackAffectedFileChanges(
-            $topicEntity,
-            $dataIsolation,
-            $sandboxResponse,
-            'checkpoint_rollback_start'
-        );
-
-        $this->logger->info('[Sandbox][App] Message rollback start completed successfully', [
-            'topic_id' => $topicId,
-            'target_message_id' => $targetMessageId,
-            'sandbox_response' => $sandboxResponse->getMessage(),
-        ]);
-
-        return 'Sandbox and messages rollback started successfully';
+            return 'Sandbox and messages rollback started successfully';
+        });
     }
 
     /**
@@ -526,35 +544,42 @@ readonly class AgentAppService
             throw new BusinessException('Access denied for topic ID: ' . $topicId);
         }
 
-        // Checkpoint operations may reattach to an existing sandbox; keep recovery init silent.
-        $sandboxId = $this->ensureSandboxInitialized($dataIsolation, $topicId, skipInitMessages: true);
+        return $this->checkpointRollbackLock->run($topicEntity->getId(), function (callable $assertOwnership) use ($dataIsolation, $topicId, $topicEntity): string {
+            // Checkpoint operations may reattach to an existing sandbox; keep recovery init silent.
+            $sandboxId = $this->ensureSandboxInitialized($dataIsolation, $topicId, skipInitMessages: true);
+            $assertOwnership();
 
-        // 调用沙箱网关提交回滚
-        $sandboxResponse = $this->agentDomainService->rollbackCheckpointCommit($dataIsolation, $sandboxId);
+            // 调用沙箱网关提交回滚
+            $sandboxResponse = $this->agentDomainService->rollbackCheckpointCommit($dataIsolation, $sandboxId);
 
-        if (! $sandboxResponse->isSuccess()) {
-            $this->logger->error('[Sandbox][App] Sandbox rollback commit failed', [
-                'sandbox_id' => $sandboxId,
-                'error' => $sandboxResponse->getMessage(),
+            if (! $sandboxResponse->isSuccess()) {
+                $this->logger->error('[Sandbox][App] Sandbox rollback commit failed', [
+                    'sandbox_id' => $sandboxId,
+                    'error' => $sandboxResponse->getMessage(),
+                ]);
+                throw new BusinessException('Sandbox rollback commit failed: ' . $sandboxResponse->getMessage());
+            }
+
+            // 沙箱操作成功后，执行物理删除撤回状态的消息
+            $affectedSeqIds = $this->runRollbackMessageMutation(
+                fn (): array => $this->topicDomainService->rollbackMessagesCommit($topicId, $dataIsolation->getCurrentUserId()),
+                $assertOwnership
+            );
+            $assertOwnership();
+            $this->dispatchRollbackMessageChanges(
+                $topicEntity,
+                $dataIsolation,
+                CheckpointRollbackMessagesChangedEvent::ACTION_COMMIT,
+                $affectedSeqIds
+            );
+
+            $this->logger->info('[Sandbox][App] Message rollback commit completed successfully', [
+                'topic_id' => $topicId,
+                'sandbox_response' => $sandboxResponse->getMessage(),
             ]);
-            throw new BusinessException('Sandbox rollback commit failed: ' . $sandboxResponse->getMessage());
-        }
 
-        // 沙箱操作成功后，执行物理删除撤回状态的消息
-        $affectedSeqIds = $this->topicDomainService->rollbackMessagesCommit($topicId, $dataIsolation->getCurrentUserId());
-        $this->dispatchRollbackMessageChanges(
-            $topicEntity,
-            $dataIsolation,
-            CheckpointRollbackMessagesChangedEvent::ACTION_COMMIT,
-            $affectedSeqIds
-        );
-
-        $this->logger->info('[Sandbox][App] Message rollback commit completed successfully', [
-            'topic_id' => $topicId,
-            'sandbox_response' => $sandboxResponse->getMessage(),
-        ]);
-
-        return 'Sandbox and messages rollback committed successfully';
+            return 'Sandbox and messages rollback committed successfully';
+        });
     }
 
     /**
@@ -590,42 +615,50 @@ readonly class AgentAppService
             throw new BusinessException('Access denied for topic ID: ' . $topicId);
         }
 
-        // Checkpoint operations may reattach to an existing sandbox; keep recovery init silent.
-        $sandboxId = $this->ensureSandboxInitialized($dataIsolation, $topicId, skipInitMessages: true);
+        return $this->checkpointRollbackLock->run($topicEntity->getId(), function (callable $assertOwnership) use ($dataIsolation, $topicId, $topicEntity): string {
+            // Checkpoint operations may reattach to an existing sandbox; keep recovery init silent.
+            $sandboxId = $this->ensureSandboxInitialized($dataIsolation, $topicId, skipInitMessages: true);
+            $assertOwnership();
 
-        // 调用沙箱网关撤销回滚
-        $sandboxResponse = $this->agentDomainService->rollbackCheckpointUndo($dataIsolation, $sandboxId);
+            // 调用沙箱网关撤销回滚
+            $sandboxResponse = $this->agentDomainService->rollbackCheckpointUndo($dataIsolation, $sandboxId);
 
-        if (! $sandboxResponse->isSuccess()) {
-            $this->logger->error('[Sandbox][App] Sandbox rollback undo failed', [
-                'sandbox_id' => $sandboxId,
-                'error' => $sandboxResponse->getMessage(),
+            if (! $sandboxResponse->isSuccess()) {
+                $this->logger->error('[Sandbox][App] Sandbox rollback undo failed', [
+                    'sandbox_id' => $sandboxId,
+                    'error' => $sandboxResponse->getMessage(),
+                ]);
+                throw new BusinessException('Sandbox rollback undo failed: ' . $sandboxResponse->getMessage());
+            }
+
+            // 沙箱操作成功后，执行消息撤回撤销操作（恢复为正常状态）
+            $affectedSeqIds = $this->runRollbackMessageMutation(
+                fn (): array => $this->topicDomainService->rollbackMessagesUndo($topicId, $dataIsolation->getCurrentUserId()),
+                $assertOwnership
+            );
+            $assertOwnership();
+            $this->dispatchRollbackMessageChanges(
+                $topicEntity,
+                $dataIsolation,
+                CheckpointRollbackMessagesChangedEvent::ACTION_UNDO,
+                $affectedSeqIds
+            );
+            $assertOwnership();
+            $this->dispatchRollbackAffectedFileChanges(
+                $topicEntity,
+                $dataIsolation,
+                $sandboxResponse,
+                'checkpoint_rollback_undo'
+            );
+
+            $this->logger->info('[Sandbox][App] Message rollback undo completed successfully', [
+                'topic_id' => $topicId,
+                'user_id' => $dataIsolation->getCurrentUserId(),
+                'sandbox_response' => $sandboxResponse->getMessage(),
             ]);
-            throw new BusinessException('Sandbox rollback undo failed: ' . $sandboxResponse->getMessage());
-        }
 
-        // 沙箱操作成功后，执行消息撤回撤销操作（恢复为正常状态）
-        $affectedSeqIds = $this->topicDomainService->rollbackMessagesUndo($topicId, $dataIsolation->getCurrentUserId());
-        $this->dispatchRollbackMessageChanges(
-            $topicEntity,
-            $dataIsolation,
-            CheckpointRollbackMessagesChangedEvent::ACTION_UNDO,
-            $affectedSeqIds
-        );
-        $this->dispatchRollbackAffectedFileChanges(
-            $topicEntity,
-            $dataIsolation,
-            $sandboxResponse,
-            'checkpoint_rollback_undo'
-        );
-
-        $this->logger->info('[Sandbox][App] Message rollback undo completed successfully', [
-            'topic_id' => $topicId,
-            'user_id' => $dataIsolation->getCurrentUserId(),
-            'sandbox_response' => $sandboxResponse->getMessage(),
-        ]);
-
-        return 'Sandbox and messages rollback undone successfully';
+            return 'Sandbox and messages rollback undone successfully';
+        });
     }
 
     /**
@@ -684,6 +717,20 @@ readonly class AgentAppService
         }
 
         return $response;
+    }
+
+    /**
+     * @param callable(): array $mutation
+     * @param callable(): void $assertOwnership
+     */
+    private function runRollbackMessageMutation(callable $mutation, callable $assertOwnership): array
+    {
+        $assertOwnership();
+        return Db::transaction(function () use ($mutation, $assertOwnership): array {
+            $affectedSeqIds = $mutation();
+            $assertOwnership();
+            return $affectedSeqIds;
+        });
     }
 
     /**
