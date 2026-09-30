@@ -335,8 +335,6 @@ export interface VideoGenerationConfig {
 		generate_audio?: VideoGenerationSwitchConfig
 		/** 是否启用网络搜索 */
 		web_search?: VideoGenerationSwitchConfig
-		/** 样片模式开关（仅部分模型支持）：先出低分辨率样片，确认后再出正片 */
-		draft?: VideoGenerationSwitchConfig
 		/** 可选分辨率列表，如 1080p */
 		resolutions?: string[]
 		/** 可选输出尺寸（与 aspect_ratios、resolutions 组合一一对应时可优先使用） */
@@ -448,8 +446,6 @@ export interface GenerateVideoGeneration {
 	generate_audio?: boolean
 	/** 是否启用网络搜索 */
 	web_search?: boolean
-	/** 样片模式：true 时先出低分辨率样片 */
-	draft?: boolean
 	/** 人物生成策略 */
 	person_generation?: string
 	/** 是否增强提示词 */

@@ -79,7 +79,6 @@ export function VideoGenerationSettingsPopover(props: VideoGenerationSettingsPop
 		durationDraftSeconds,
 		selectedGenerateAudio,
 		selectedWebSearch,
-		selectedDraft,
 		selectedCompressionQuality,
 		currentSelectValue,
 		ratioOption,
@@ -92,7 +91,6 @@ export function VideoGenerationSettingsPopover(props: VideoGenerationSettingsPop
 	const hasQuality = supportedCompressionQualityOptions.length > 0
 	const hasAudio = selectedGenerateAudio !== undefined
 	const hasWebSearch = selectedWebSearch !== undefined
-	const hasDraft = selectedDraft !== undefined
 
 	const fallbackTriggerLabel = t("videoEditor.generationSettings", "生成设置")
 
@@ -120,15 +118,7 @@ export function VideoGenerationSettingsPopover(props: VideoGenerationSettingsPop
 		],
 	)
 
-	if (
-		!hasAspect &&
-		!hasResolution &&
-		!hasDuration &&
-		!hasQuality &&
-		!hasAudio &&
-		!hasWebSearch &&
-		!hasDraft
-	)
+	if (!hasAspect && !hasResolution && !hasDuration && !hasQuality && !hasAudio && !hasWebSearch)
 		return null
 
 	return (
@@ -296,20 +286,6 @@ export function VideoGenerationSettingsPopover(props: VideoGenerationSettingsPop
 							<Switch
 								checked={selectedWebSearch}
 								onCheckedChange={handlers.handleWebSearchChange}
-							/>
-						</label>
-					</div>
-				)}
-
-				{hasDraft && (
-					<div className={styles.section}>
-						<label className={styles.switchRow}>
-							<span className={styles.sectionTitle}>
-								{t("videoEditor.draft", "样片模式")}
-							</span>
-							<Switch
-								checked={selectedDraft}
-								onCheckedChange={handlers.handleDraftChange}
 							/>
 						</label>
 					</div>
