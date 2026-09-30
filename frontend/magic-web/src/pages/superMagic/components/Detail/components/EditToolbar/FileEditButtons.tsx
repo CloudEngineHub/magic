@@ -63,21 +63,28 @@ function FileEditButtons({
 		typeof navigator !== "undefined" && /Mac|iPod|iPhone|iPad/.test(navigator.userAgent)
 	const isMobile = useIsMobile()
 
+	const runGuardedSave = useCallback(
+		async (action?: () => void | Promise<void>) => {
+			if (interactionDisabled || isSaving || saveInFlightRef.current || !action) return
+			saveInFlightRef.current = true
+			try {
+				await action()
+			} catch (error) {
+				console.error(error)
+			} finally {
+				saveInFlightRef.current = false
+			}
+		},
+		[interactionDisabled, isSaving],
+	)
+
 	const handleSave = useCallback(() => {
-		if (interactionDisabled || isSaving || saveInFlightRef.current || !onSave) return
-		saveInFlightRef.current = true
-		void Promise.resolve(onSave()).finally(() => {
-			saveInFlightRef.current = false
-		})
-	}, [interactionDisabled, onSave, isSaving])
+		void runGuardedSave(onSave)
+	}, [onSave, runGuardedSave])
 
 	const handleSaveAndExit = useCallback(() => {
-		if (interactionDisabled || isSaving || saveInFlightRef.current || !onSaveAndExit) return
-		saveInFlightRef.current = true
-		void Promise.resolve(onSaveAndExit()).finally(() => {
-			saveInFlightRef.current = false
-		})
-	}, [interactionDisabled, onSaveAndExit, isSaving])
+		void runGuardedSave(onSaveAndExit)
+	}, [onSaveAndExit, runGuardedSave])
 
 	const handleCancel = useCallback(
 		(event?: MouseEvent<HTMLButtonElement>) => {
