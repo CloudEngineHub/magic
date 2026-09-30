@@ -11,7 +11,7 @@ namespace App\Infrastructure\ExternalAPI\VideoGenerateAPI\VolcengineArk\Capabili
  * Seedance 2.5。
  *
  * 支持到 1080p、最长 30 秒，参考素材上限显著高于 2.0 系列；
- * 是目前唯一支持显式声明视频编辑子任务类型、也是唯一支持样片模式的家族。
+ * 是目前唯一支持显式声明视频编辑子任务类型、也是唯一支持样片模式与样片成片的家族。
  */
 readonly class Seedance25GenerationCapabilityProvider extends AbstractSeedanceGenerationCapabilityProvider
 {
@@ -31,6 +31,19 @@ readonly class Seedance25GenerationCapabilityProvider extends AbstractSeedanceGe
     protected function supportsDraft(): bool
     {
         return true;
+    }
+
+    protected function supportsDraftTask(): bool
+    {
+        return true;
+    }
+
+    /**
+     * @return list<string>
+     */
+    protected function supportedInputs(): array
+    {
+        return [...parent::supportedInputs(), 'video_draft_task'];
     }
 
     protected function resolveProfile(): array

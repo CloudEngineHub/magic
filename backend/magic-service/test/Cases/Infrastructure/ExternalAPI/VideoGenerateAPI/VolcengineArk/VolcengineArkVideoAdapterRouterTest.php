@@ -8,6 +8,7 @@ declare(strict_types=1);
 namespace HyperfTest\Cases\Infrastructure\ExternalAPI\VideoGenerateAPI\VolcengineArk;
 
 use App\Domain\ModelGateway\Entity\ValueObject\QueueExecutorConfig;
+use App\Domain\ModelGateway\Entity\ValueObject\VideoInputMode;
 use App\Domain\ModelGateway\Entity\ValueObject\VideoOperationStatus;
 use App\Domain\ModelGateway\Entity\VideoQueueOperationEntity;
 use App\Infrastructure\ExternalAPI\VideoGenerateAPI\VolcengineArk\Adapter\AbstractSeedanceVideoAdapter;
@@ -280,6 +281,18 @@ final class VolcengineArkVideoAdapterRouterTest extends TestCase
     }
 
     /**
+     * 成片模式文案同样必须已在语言包里注册，理由见上。
+     *
+     * @dataProvider videoTranslationLocaleProvider
+     */
+    public function testDraftTaskTranslationIsRegistered(string $locale): void
+    {
+        $videoTranslations = require BASE_PATH . "/storage/languages/{$locale}/video.php";
+
+        $this->assertNotEmpty($videoTranslations['input_modes']['draft_task'] ?? '');
+    }
+
+    /**
      * @return array<string, array{0: string}>
      */
     public static function videoTranslationLocaleProvider(): array
@@ -310,6 +323,112 @@ final class VolcengineArkVideoAdapterRouterTest extends TestCase
     }
 
     /**
+     * 样片成片：方舟成片接口只认 content.type=draft_task + 样片任务 ID + 目标分辨率 + draft=false。
+     *
+     * 提示词、参考素材、时长、比例全部由样片任务继承，重复下发会被判为非法参数，
+     * 因此这里连键顺序一起断言，确保 payload 里不夹带任何多余字段。
+     */
+    public function testDraftTaskPayloadFollowsArkDraftTaskProtocol(): void
+    {
+        $operation = $this->createOperation(self::TWO_FIVE_MODEL, $this->draftTaskRequest(self::TWO_FIVE_MODEL));
+        $payload = $this->createFamilyAdapter('two_five')->buildProviderPayload($operation);
+
+        $this->assertSame([
+            'model' => self::TWO_FIVE_MODEL,
+            'content' => [[
+                'type' => 'draft_task',
+                'draft_task' => ['id' => 'draft-task-1'],
+            ]],
+            'resolution' => '1080p',
+            'draft' => false,
+        ], $payload);
+
+        $this->assertSame(['inputs.draft_task.id', 'generation.resolution'], $operation->getAcceptedParams());
+        $this->assertSame(
+            ['generation.duration_seconds', 'generation.aspect_ratio'],
+            $operation->getIgnoredParams(),
+        );
+    }
+
+    /**
+     * 成片固定出正式档位：传入样片档位会被记为未生效并回落到 1080p，完全不传也取 1080p。
+     *
+     * 这条约束不能只靠前端与 Design 层：/v1/videos 直接调用时没有那一层兜底，
+     * 若沿用模型全量档位就会把成片降档出片。
+     */
+    public function testDraftTaskPayloadClampsResolutionToFinalTier(): void
+    {
+        $adapter = $this->createFamilyAdapter('two_five');
+
+        $downgraded = $this->createOperation(
+            self::TWO_FIVE_MODEL,
+            $this->draftTaskRequest(self::TWO_FIVE_MODEL, '720p'),
+        );
+        $this->assertSame('1080p', $adapter->buildProviderPayload($downgraded)['resolution']);
+        $this->assertContains('generation.resolution', $downgraded->getIgnoredParams());
+        $this->assertNotContains('generation.resolution', $downgraded->getAcceptedParams());
+
+        $omitted = $this->createOperation(
+            self::TWO_FIVE_MODEL,
+            $this->draftTaskRequest(self::TWO_FIVE_MODEL, null),
+        );
+        $this->assertSame('1080p', $adapter->buildProviderPayload($omitted)['resolution']);
+        $this->assertNotContains('generation.resolution', $omitted->getIgnoredParams());
+    }
+
+    /**
+     * 缺少样片任务 ID 时必须在构造阶段就报错，而不是把非法请求发给方舟。
+     */
+    public function testDraftTaskPayloadRequiresDraftTaskId(): void
+    {
+        $adapter = $this->createFamilyAdapter('two_five');
+
+        $this->expectException(InvalidArgumentException::class);
+        $adapter->buildProviderPayload($this->createOperation(self::TWO_FIVE_MODEL, [
+            'model_id' => self::TWO_FIVE_MODEL,
+            'task' => 'draft_task',
+            'input_mode' => 'draft_task',
+            'prompt' => '',
+            'inputs' => ['draft_task' => []],
+            'generation' => ['resolution' => '1080p'],
+        ]));
+    }
+
+    /**
+     * 需求一：只有 Seedance 2.5 声明 draft_task 输入模式，且成片只暴露分辨率档位。
+     *
+     * 时长、比例、尺寸档位都从样片继承，声明为空数组前端才不会在成片时暴露这些分区。
+     */
+    public function testOnlyTwoPointFiveDeclaresDraftTaskInputMode(): void
+    {
+        $config = $this->createFamilyAdapter('two_five')
+            ->resolveGenerationConfig(self::TWO_FIVE_MODEL, self::TWO_FIVE_MODEL)?->toArray();
+
+        $this->assertIsArray($config);
+        $this->assertContains('video_draft_task', $config['supported_inputs']);
+
+        $definition = $config['input_modes']['draft_task'];
+        $this->assertSame(['draft_task'], $definition['supported_fields']);
+        $this->assertSame('draft_task', $definition['task']);
+        $this->assertNotSame('', (string) $definition['description']);
+        $this->assertSame([
+            'durations' => [],
+            'aspect_ratios' => [],
+            'sizes' => [],
+            'resolutions' => ['1080p'],
+        ], $definition['generation_constraints']);
+
+        $others = ['mini_fast' => self::MINI_FAST_MODEL, 'two' => self::TWO_MODEL];
+        foreach ($others as $family => $model) {
+            $other = $this->createFamilyAdapter($family)->resolveGenerationConfig($model, $model)?->toArray();
+
+            $this->assertIsArray($other);
+            $this->assertArrayNotHasKey('draft_task', $other['input_modes']);
+            $this->assertNotContains('video_draft_task', $other['supported_inputs']);
+        }
+    }
+
+    /**
      * @param array<string, mixed> $rawRequest
      */
     private function assertPayloadMatchesMonolith(string $model, string $family, array $rawRequest): void
@@ -326,7 +445,7 @@ final class VolcengineArkVideoAdapterRouterTest extends TestCase
     }
 
     /**
-     * 剔除拆分后有意新增的两处能力声明，使其余结构可以与回滚位逐字比对。
+     * 剔除拆分后有意新增的能力声明，使其余结构可以与回滚位逐字比对。
      *
      * @param array<string, mixed> $config
      * @return array<string, mixed>
@@ -336,7 +455,9 @@ final class VolcengineArkVideoAdapterRouterTest extends TestCase
         unset(
             $config['generation']['draft'],
             $config['input_modes']['keyframe_guided']['generation_constraints'],
+            $config['input_modes'][VideoInputMode::DraftTask->value],
         );
+        $config['supported_inputs'] = array_values(array_diff($config['supported_inputs'], ['video_draft_task']));
 
         return $config;
     }
@@ -534,5 +655,34 @@ final class VolcengineArkVideoAdapterRouterTest extends TestCase
         $request['generation']['draft'] = true;
 
         return $request;
+    }
+
+    /**
+     * 样片成片请求：领域层归一化后的形态，只带样片任务 ID 与目标分辨率。
+     *
+     * 仍会带上 duration_seconds / aspect_ratio，用于覆盖“成片时这些参数必须被记为未生效”的行为。
+     * 传 null 表示调用方完全没指定分辨率。
+     *
+     * @return array<string, mixed>
+     */
+    private function draftTaskRequest(string $model, ?string $resolution = '1080p'): array
+    {
+        $generation = [];
+        if ($resolution !== null) {
+            $generation['resolution'] = $resolution;
+        }
+        $generation['duration_seconds'] = 5;
+        $generation['aspect_ratio'] = '16:9';
+
+        return [
+            'model_id' => $model,
+            'task' => 'draft_task',
+            'input_mode' => 'draft_task',
+            'prompt' => '',
+            'inputs' => [
+                'draft_task' => ['id' => 'draft-task-1'],
+            ],
+            'generation' => $generation,
+        ];
     }
 }

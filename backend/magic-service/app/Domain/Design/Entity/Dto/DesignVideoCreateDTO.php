@@ -220,6 +220,11 @@ class DesignVideoCreateDTO extends AbstractDTO
             return $this->inputMode;
         }
 
+        // 样片成片只靠 task 就能确定模式，且没有任何 frames / 参考素材可供推断。
+        if ($this->isDraftTask()) {
+            return VideoInputMode::DraftTask->value;
+        }
+
         // 旧调用不传 input_mode 时，仍按输入形态推断，避免 reference_images / frames 被误判。
         if ($this->getFrames() !== []) {
             return VideoInputMode::KeyframeGuided->value;
@@ -294,6 +299,20 @@ class DesignVideoCreateDTO extends AbstractDTO
     public function getExtensions(): array
     {
         return $this->extensions;
+    }
+
+    /**
+     * 样片成片引用。
+     *
+     * `video_id` 为样片的视频业务 ID，`uri` 为样片的工作区相对路径；二者至少其一，
+     * 同时存在时以 `video_id` 为准，由 Design 层解析成方舟样片任务 ID。
+     *
+     * @return array<string, mixed>
+     */
+    public function getDraftTask(): array
+    {
+        $draftTask = $this->inputs['draft_task'] ?? [];
+        return is_array($draftTask) ? $draftTask : [];
     }
 
     public function getMask(): ?string
@@ -381,7 +400,8 @@ class DesignVideoCreateDTO extends AbstractDTO
         if (! VideoTaskType::isValid($this->task)) {
             ExceptionBuilder::throw(MagicApiErrorCode::ValidateFailed, 'task is invalid');
         }
-        if (! $isCanvasComposition && $this->prompt === '') {
+        // 样片成片的提示词从样片任务继承，调用方不需要也不应该重新提供。
+        if (! $isCanvasComposition && ! $this->isDraftTask() && $this->prompt === '') {
             ExceptionBuilder::throw(MagicApiErrorCode::ValidateFailed, 'prompt is required');
         }
         if (! $isCanvasComposition && $this->fileDir === '') {
@@ -554,6 +574,39 @@ class DesignVideoCreateDTO extends AbstractDTO
         $this->assertMediaObject($this->inputs['mask'] ?? null, 'inputs.mask');
         $this->assertMediaObjectList($this->getReferenceVideos(), 'inputs.reference_videos');
         $this->assertMediaObjectList($this->getReferenceAudios(), 'inputs.reference_audios');
+        $this->assertDraftTaskInput();
+    }
+
+    /**
+     * 校验样片成片引用：必须给出 video_id 或 uri 之一。
+     */
+    private function assertDraftTaskInput(): void
+    {
+        $draftTask = $this->getDraftTask();
+        if ($draftTask === []) {
+            if ($this->isDraftTask()) {
+                ExceptionBuilder::throw(MagicApiErrorCode::ValidateFailed, 'inputs.draft_task is required');
+            }
+            return;
+        }
+
+        $videoId = trim((string) ($draftTask['video_id'] ?? ''));
+        $uri = trim((string) ($draftTask['uri'] ?? ''));
+        if ($videoId === '' && $uri === '') {
+            ExceptionBuilder::throw(MagicApiErrorCode::ValidateFailed, 'inputs.draft_task.video_id or inputs.draft_task.uri is required');
+        }
+        if ($uri !== '' && (str_contains($uri, '://') || str_contains($uri, "\0"))) {
+            ExceptionBuilder::throw(MagicApiErrorCode::ValidateFailed, 'inputs.draft_task.uri is invalid');
+        }
+    }
+
+    /**
+     * 是否为样片成片请求：task 或 input_mode 任一命中即成立，兼容只传其一的调用方。
+     */
+    private function isDraftTask(): bool
+    {
+        return $this->task === VideoTaskType::DraftTask->value
+            || $this->inputMode === VideoInputMode::DraftTask->value;
     }
 
     private function assertGenerationFields(): void

@@ -55,6 +55,8 @@ class DesignGenerationTaskEntity extends AbstractEntity
 
     private const string INPUT_KEY_FRAMES = 'frames';
 
+    private const string INPUT_KEY_DRAFT_TASK = 'draft_task';
+
     private const string FIELD_URI = 'uri';
 
     private const string OUTPUT_KEY_FILE_DIR_ID = 'file_dir_id';
@@ -227,6 +229,19 @@ class DesignGenerationTaskEntity extends AbstractEntity
     {
         $referenceAudios = $this->inputPayload[self::INPUT_KEY_REFERENCE_AUDIOS] ?? [];
         return is_array($referenceAudios) ? $referenceAudios : [];
+    }
+
+    /**
+     * 样片成片引用。
+     *
+     * 创建时是调用方给的 `video_id` / `uri`，提交前由 Design 层解析成 `{id: <下游样片任务 ID>}`。
+     *
+     * @return array<string, mixed>
+     */
+    public function getDraftTask(): array
+    {
+        $draftTask = $this->inputPayload[self::INPUT_KEY_DRAFT_TASK] ?? [];
+        return is_array($draftTask) ? $draftTask : [];
     }
 
     public function getId(): ?int

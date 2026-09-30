@@ -38,6 +38,9 @@ abstract readonly class AbstractSeedanceVideoAdapter implements VideoGenerationC
     // Seedance 2.5 起支持显式声明子任务类型，可把参数校验提前到提交阶段。
     private const string EDIT_TASK_TYPE = 'edit';
 
+    // 样片成片：方舟用 content.type=draft_task 承载样片任务 ID，其余参数全部继承样片。
+    private const string DRAFT_TASK_CONTENT_TYPE = 'draft_task';
+
     public function __construct(
         protected AbstractSeedanceGenerationCapabilityProvider $capabilityProvider,
         protected VolcengineArkVideoClient $client,
@@ -74,7 +77,9 @@ abstract readonly class AbstractSeedanceVideoAdapter implements VideoGenerationC
         ]];
         $acceptedParams = ['prompt', 'task'];
         $ignoredParams = [];
-        $isVideoEdit = $this->normalizeInputMode($request['input_mode'] ?? null) === VideoInputMode::VideoEdit->value;
+        $inputMode = $this->normalizeInputMode($request['input_mode'] ?? null);
+        $isVideoEdit = $inputMode === VideoInputMode::VideoEdit->value;
+        $isDraftTask = $inputMode === VideoInputMode::DraftTask->value;
 
         $startFrameUri = $this->extractFrameUri($frames, ['start', 'first']);
         if ($startFrameUri !== null) {
@@ -174,6 +179,17 @@ abstract readonly class AbstractSeedanceVideoAdapter implements VideoGenerationC
             'model' => $modelVersion,
             'content' => $content,
         ];
+
+        // 样片成片（draft_task）：方舟只认 content.type=draft_task + 样片任务 ID + 目标分辨率 + draft=false，
+        // 提示词、参考素材、时长、比例全部从样片任务继承，重复下发会被判为非法参数。
+        if ($isDraftTask) {
+            return $this->buildDraftTaskProviderPayload(
+                $operation,
+                $modelVersion,
+                $inputs,
+                $generation,
+            );
+        }
 
         $payload['resolution'] = $this->resolveResolution(
             $generation,
@@ -427,6 +443,60 @@ abstract readonly class AbstractSeedanceVideoAdapter implements VideoGenerationC
         }
 
         throw new ProviderVideoException(VideoGenerateErrorCode::INVALID_PARAMETER, 'Volcengine Ark connectivity test did not receive the expected validation error');
+    }
+
+    /**
+     * 构造样片成片请求体。
+     *
+     * 方舟的成片接口只接受样片任务 ID 与目标分辨率，提示词、参考素材、时长、比例都由样片任务继承，
+     * 因此这里不复用常规 payload 构造，只下发协议要求的字段。
+     *
+     * @param array<string, mixed> $inputs
+     * @param array<string, mixed> $generation
+     * @return array<string, mixed>
+     */
+    private function buildDraftTaskProviderPayload(
+        VideoQueueOperationEntity $operation,
+        string $modelVersion,
+        array $inputs,
+        array $generation,
+    ): array {
+        $draftTaskId = $this->firstNonEmptyString($inputs['draft_task']['id'] ?? null);
+        if ($draftTaskId === null) {
+            throw new InvalidArgumentException('inputs.draft_task.id is required for draft_task mode');
+        }
+
+        $acceptedParams = ['inputs.draft_task.id'];
+        $ignoredParams = [];
+        // 成片固定出正式档位：调用方传入的分辨率按成片档位裁剪，缺省即取成片默认档位。
+        $draftTaskResolutions = $this->capabilityProvider->resolveDraftTaskResolutions();
+        $resolution = $this->resolveResolution(
+            $generation,
+            $acceptedParams,
+            $ignoredParams,
+            $draftTaskResolutions,
+            $draftTaskResolutions[0],
+        );
+
+        // 除分辨率外的 generation 参数一律由样片任务继承，显式下发反而会被判为非法参数。
+        foreach (array_keys($generation) as $field) {
+            if ($field !== 'resolution') {
+                $ignoredParams[] = 'generation.' . $field;
+            }
+        }
+
+        $operation->setAcceptedParams(array_values(array_unique($acceptedParams)));
+        $operation->setIgnoredParams(array_values(array_unique($ignoredParams)));
+
+        return [
+            'model' => $modelVersion,
+            'content' => [[
+                'type' => self::DRAFT_TASK_CONTENT_TYPE,
+                'draft_task' => ['id' => $draftTaskId],
+            ]],
+            'resolution' => $resolution,
+            'draft' => false,
+        ];
     }
 
     /**

@@ -63,6 +63,9 @@ abstract readonly class AbstractSeedanceGenerationCapabilityProvider
         'video_upscale',
     ];
 
+    // 样片成片的成片分辨率档位：成片按正式分辨率出片，样片档位不再暴露给前端。
+    private const array DRAFT_TASK_RESOLUTIONS = ['1080p'];
+
     /**
      * 当前接入的 Seedance 尺寸基表。
      * 这里用于 featured 能力下发给前端；不同家族再按分辨率过滤。
@@ -113,7 +116,7 @@ abstract readonly class AbstractSeedanceGenerationCapabilityProvider
         $profile = $this->resolveProfile();
 
         return new VideoGenerationConfig([
-            'supported_inputs' => self::SUPPORTED_INPUTS,
+            'supported_inputs' => $this->supportedInputs(),
             'reference_images' => [
                 'max_count' => $profile['reference_limits']['images'],
                 'reference_types' => ['asset'],
@@ -136,6 +139,20 @@ abstract readonly class AbstractSeedanceGenerationCapabilityProvider
     }
 
     /**
+     * 样片成片允许的目标分辨率档位。
+     *
+     * adapter 在成片分支里据此裁剪调用方传入的分辨率：成片固定出正式档位，
+     * 传入样片档位（480p/720p）会被记为未生效并回落到这里的档位，
+     * 避免 /v1/videos 直接调用时把成片降档出片。
+     *
+     * @return list<string>
+     */
+    public function resolveDraftTaskResolutions(): array
+    {
+        return self::DRAFT_TASK_RESOLUTIONS;
+    }
+
+    /**
      * 是否支持样片模式（draft）。目前只有 Seedance 2.5 支持：先以 480p 出样片，
      * 确认后再以正式分辨率出片，两次出片分别计费。
      *
@@ -144,6 +161,27 @@ abstract readonly class AbstractSeedanceGenerationCapabilityProvider
     protected function supportsDraft(): bool
     {
         return false;
+    }
+
+    /**
+     * 是否支持样片成片（draft_task）。目前只有 Seedance 2.5 支持：用样片任务 ID
+     * 直接出正式分辨率的成片，提示词与参考素材全部继承样片。
+     *
+     * 仅能力层内部使用，决定 input_modes 与 supported_inputs 里是否声明该模式。
+     */
+    protected function supportsDraftTask(): bool
+    {
+        return false;
+    }
+
+    /**
+     * 该家族声明的 supported_inputs。默认与公共基表一致，支持样片成片的家族再追加。
+     *
+     * @return list<string>
+     */
+    protected function supportedInputs(): array
+    {
+        return self::SUPPORTED_INPUTS;
     }
 
     /**
@@ -221,7 +259,7 @@ abstract readonly class AbstractSeedanceGenerationCapabilityProvider
         $limits = $profile['reference_limits'];
         $totalCount = $limits['images'] + $limits['videos'] + $limits['audios'];
 
-        return [
+        $inputModes = [
             'standard' => [
                 'description' => $this->translateInputMode('standard'),
                 'supported_fields' => [],
@@ -279,6 +317,24 @@ abstract readonly class AbstractSeedanceGenerationCapabilityProvider
                 ['generation_constraints' => ['durations' => [], 'aspect_ratios' => []]],
             ),
         ];
+
+        // 样片成片：输入只有样片任务引用，提示词与参考素材全部继承样片，时长与比例同理，
+        // 因此这里只保留分辨率可选（成片档位）。
+        if ($this->supportsDraftTask()) {
+            $inputModes[VideoInputMode::DraftTask->value] = array_merge(
+                VideoInputModeDefinition::draftTask(
+                    description: $this->translateInputMode('draft_task'),
+                )->toArray(),
+                ['generation_constraints' => [
+                    'durations' => [],
+                    'aspect_ratios' => [],
+                    'sizes' => [],
+                    'resolutions' => self::DRAFT_TASK_RESOLUTIONS,
+                ]],
+            );
+        }
+
+        return $inputModes;
     }
 
     /**
