@@ -11,6 +11,20 @@ import { cn } from "@/utils/cn"
 import magicToast from "@/components/base/MagicToaster/utils"
 
 const SAVE_INTERVAL = 2 * 60 * 1000
+const LEAVE_RETRY_DELAYS_MS = [1000, 3000]
+
+async function leaveFileEditWithRetry(fileId: string) {
+	for (let attempt = 0; ; attempt += 1) {
+		try {
+			await SuperMagicApi.leaveFileEdit(fileId)
+			return
+		} catch (error) {
+			const delay = LEAVE_RETRY_DELAYS_MS[attempt]
+			if (delay === undefined) throw error
+			await new Promise((resolve) => setTimeout(resolve, delay))
+		}
+	}
+}
 
 function useEditMode({
 	fileId,
@@ -30,12 +44,15 @@ function useEditMode({
 	// leave-editing 幂等状态管理（防止重复调用后端接口）
 	// - inFlight: 正在进行的 leave 请求（用于去重并发调用）
 	// - hasLeft: 是否已成功离开（用于防止状态滞后导致的重复 leave）
+	// - failed: UI 已退出但 leave 请求重试后仍失败，卸载时需要再上报一次
 	const leaveStateRef = useRef<{
 		inFlight: Promise<void> | null
 		hasLeft: boolean
+		failed: boolean
 	}>({
 		inFlight: null,
 		hasLeft: false,
+		failed: false,
 	})
 	const beforeUnloadRef = useRef<((e: BeforeUnloadEvent) => void) | null>(null)
 
@@ -64,8 +81,11 @@ function useEditMode({
 	useEffect(() => {
 		return () => {
 			stopSaveInterval()
-			// Best-effort leave when hook unmounts while still in edit mode
-			if (editingPresenceEnabled && isEditModeRef.current && fileId) {
+			// Best-effort leave when hook unmounts while still in edit mode,
+			// or when an earlier leave failed after the UI already exited
+			const leaveState = leaveStateRef.current
+			const needsLeave = isEditModeRef.current || (leaveState.failed && !leaveState.hasLeft)
+			if (editingPresenceEnabled && needsLeave && fileId) {
 				SuperMagicApi.leaveFileEdit(fileId).catch((err) =>
 					console.debug("leaveFileEdit on unmount failed", err),
 				)
@@ -115,6 +135,7 @@ function useEditMode({
 		}
 		if (!editingPresenceEnabled) {
 			leaveStateRef.current.hasLeft = false
+			leaveStateRef.current.failed = false
 			isEditModeRef.current = true
 			_setIsEditMode(true)
 			return
@@ -126,6 +147,7 @@ function useEditMode({
 			startSaveInterval()
 
 			leaveStateRef.current.hasLeft = false
+			leaveStateRef.current.failed = false
 			isEditModeRef.current = true
 			_setIsEditMode(true)
 		} catch (error) {
@@ -161,12 +183,14 @@ function useEditMode({
 		_setIsEditMode(false)
 
 		try {
-			const promise = SuperMagicApi.leaveFileEdit(fileId).then(() => {
+			const promise = leaveFileEditWithRetry(fileId).then(() => {
 				leaveStateRef.current.hasLeft = true
+				leaveStateRef.current.failed = false
 			})
 			leaveStateRef.current.inFlight = promise
 			await promise
 		} catch (error) {
+			leaveStateRef.current.failed = true
 			console.error(error)
 		} finally {
 			leaveStateRef.current.inFlight = null
