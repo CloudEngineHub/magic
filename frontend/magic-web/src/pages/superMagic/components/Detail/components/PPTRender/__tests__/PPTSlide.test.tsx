@@ -1152,6 +1152,33 @@ describe("PPTSlide", () => {
 		})
 	})
 
+	it("keeps the preview live when save and exit leaves the content unchanged", async () => {
+		renderPPTSlide()
+		const lastProps = () =>
+			mockState.renderedIsolatedProps.mock.calls.at(-1)?.[0] as {
+				onRenderReady?: () => void
+			}
+		act(() => lastProps().onRenderReady?.())
+		mockState.triggerSave.mockResolvedValue({
+			success: true,
+			cleanContent: "<div>slide</div>",
+			rawContent: "<div>slide</div>",
+			fileId: "slide-1",
+		})
+
+		fireEvent.click(screen.getByTestId("ppt-save-and-exit-button"))
+
+		await waitFor(() => {
+			expect(screen.getByTestId("ppt-edit-button")).toBeInTheDocument()
+		})
+		await waitFor(() => {
+			expect(mockState.onManualSave).toHaveBeenCalled()
+		})
+		await waitFor(() => {
+			expect(lastProps().onRenderReady).toBeDefined()
+		})
+	})
+
 	it("服务端冲突确认后仍保持原始保存意图", async () => {
 		renderPPTSlide({
 			serverUpdatedContent: "<div>server-update</div>",

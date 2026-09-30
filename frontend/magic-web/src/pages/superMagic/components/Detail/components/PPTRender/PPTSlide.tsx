@@ -338,6 +338,10 @@ const PPTSlide = observer(function PPTSlide({
 			setEditPreviewHoldContent(null)
 		}
 	}
+	const releaseEditPreviewHold = useCallback(() => {
+		expectContentSyncAfterExitRef.current = false
+		setEditPreviewHoldContent(null)
+	}, [])
 	const holdsEditPreview = Boolean(isEditMode || editPreviewHoldContent !== null)
 	const isIframeMounted =
 		loadingState === "loaded" &&
@@ -881,7 +885,11 @@ const PPTSlide = observer(function PPTSlide({
 			} else {
 				finishSave(options)
 			}
-			void onManualSave?.(saveResult, index)
+			const syncing = onManualSave?.(saveResult, index)
+			if (options.shouldExitEditMode) {
+				// Identical preview HTML never triggers the content-change release.
+				void Promise.resolve(syncing).finally(releaseEditPreviewHold)
+			}
 			return true
 		} catch (err) {
 			console.error("保存失败", err)
