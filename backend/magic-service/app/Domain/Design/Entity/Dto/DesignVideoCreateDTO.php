@@ -578,7 +578,7 @@ class DesignVideoCreateDTO extends AbstractDTO
     }
 
     /**
-     * 校验样片成片引用：必须给出 video_id 或 uri 之一。
+     * 校验样片成片引用：单个对象，必须给出 video_id 或 uri 之一。
      */
     private function assertDraftTaskInput(): void
     {
@@ -588,6 +588,12 @@ class DesignVideoCreateDTO extends AbstractDTO
                 ExceptionBuilder::throw(MagicApiErrorCode::ValidateFailed, 'inputs.draft_task is required');
             }
             return;
+        }
+
+        // 样片引用是单个对象（与 inputs.mask 同构），不是列表。误传成列表时两个字段整体读不到，
+        // 不先拦下来只会退化成「video_id or uri is required」这种指向错误的提示。
+        if (array_is_list($draftTask)) {
+            ExceptionBuilder::throw(MagicApiErrorCode::ValidateFailed, 'inputs.draft_task must be an object');
         }
 
         $videoId = trim((string) ($draftTask['video_id'] ?? ''));

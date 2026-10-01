@@ -384,4 +384,42 @@ class DesignVideoCreateDTOTest extends TestCase
 
         $dto->validForCanvasComposition();
     }
+
+    public function testDraftTaskInputAcceptsUriObject(): void
+    {
+        $dto = new DesignVideoCreateDTO([
+            'project_id' => 1,
+            'video_id' => 'draft-task-1',
+            'model_id' => 'seedance-2.5',
+            'task' => 'draft_task',
+            'file_dir' => '/2121/videos/',
+            'inputs' => [
+                'draft_task' => ['uri' => '/2121/videos/sample.mp4'],
+            ],
+        ]);
+
+        $dto->valid();
+
+        $this->assertSame('draft_task', $dto->getInputMode());
+        $this->assertSame(['uri' => '/2121/videos/sample.mp4'], $dto->getDraftTask());
+    }
+
+    public function testDraftTaskInputRejectsListShape(): void
+    {
+        $dto = new DesignVideoCreateDTO([
+            'project_id' => 1,
+            'video_id' => 'draft-task-2',
+            'model_id' => 'seedance-2.5',
+            'task' => 'draft_task',
+            'file_dir' => '/2121/videos/',
+            'inputs' => [
+                // 样片引用是单个对象；列表形态两个字段都读不到，必须报「不是对象」而不是「uri 缺失」。
+                'draft_task' => [['uri' => '/2121/videos/sample.mp4']],
+            ],
+        ]);
+
+        $this->expectExceptionMessageMatches('/must be an object/');
+
+        $dto->valid();
+    }
 }
