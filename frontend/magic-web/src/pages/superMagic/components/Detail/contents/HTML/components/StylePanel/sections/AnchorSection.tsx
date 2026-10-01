@@ -27,24 +27,27 @@ const EMPTY_ATTRIBUTES: NonNullable<SelectedElementInfo["attributes"]> = {}
 export function AnchorSection({ selectedElement, disabled = false, onUpdate }: AnchorSectionProps) {
 	const { t } = useTranslation("super")
 	const attributes = selectedElement.attributes ?? EMPTY_ATTRIBUTES
-	const [draft, setDraft] = useState(attributes)
+	const hrefField = selectedElement.tagName.toLowerCase() === "a" ? "href" : "dataMagicHref"
+	const [draft, setDraft] = useState({ ...attributes, href: attributes[hrefField] })
 	const [advancedOpen, setAdvancedOpen] = useState(false)
 
 	useEffect(() => {
-		setDraft(selectedElement.attributes ?? EMPTY_ATTRIBUTES)
+		const nextAttributes = selectedElement.attributes ?? EMPTY_ATTRIBUTES
+		setDraft({ ...nextAttributes, href: nextAttributes[hrefField] })
 		setAdvancedOpen(false)
-	}, [selectedElement.selector, selectedElement.attributes])
+	}, [selectedElement.selector, selectedElement.attributes, hrefField])
 
 	const commit = async (field: AnchorField, value: string) => {
 		const normalized = value.trim()
 		if (field === "href" && !isSafeHref(normalized)) {
-			setDraft((current) => ({ ...current, href: attributes.href ?? "" }))
+			setDraft((current) => ({ ...current, href: attributes[hrefField] ?? "" }))
 			return
 		}
 		const nextValue = normalized || null
 		setDraft((current) => ({ ...current, [field]: normalized }))
-		if ((attributes[field] ?? "") === normalized) return
-		await onUpdate({ [field]: nextValue })
+		const attributeField = field === "href" ? hrefField : field
+		if ((attributes[attributeField] ?? "") === normalized) return
+		await onUpdate({ [attributeField]: nextValue })
 	}
 
 	const inputField = (

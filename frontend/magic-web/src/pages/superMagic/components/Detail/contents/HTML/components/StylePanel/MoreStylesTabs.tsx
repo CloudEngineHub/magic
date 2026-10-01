@@ -10,7 +10,7 @@ import { resolveMoreStylesTab } from "./utils/moreStylesTab"
 import BoxModelSection from "./sections/BoxModelSection"
 import FlexGridSection from "./sections/FlexGridSection"
 import ImageSection from "./sections/ImageSection"
-import { AnchorSection } from "./sections/AnchorSection"
+import { ClickLinkSection } from "./sections/ClickLinkSection"
 import BackgroundSection from "./sections/BackgroundSection"
 import BorderSection from "./sections/BorderSection"
 import ShadowSection from "./sections/ShadowSection"
@@ -71,6 +71,7 @@ export function MoreStylesTabs({
 		...(showBorder ? [{ value: "border", label: t("stylePanel.border") }] : []),
 		...(showShadow ? [{ value: "shadow", label: t("stylePanel.shadow") }] : []),
 		...(showImage ? [{ value: "image", label: t("stylePanel.imageSettings") }] : []),
+		{ value: "link", label: t("stylePanel.clickLink") },
 		{ value: "layout", label: t("stylePanel.layout") },
 		{ value: "advanced", label: t("stylePanel.customCSS.title") },
 	]
@@ -128,8 +129,15 @@ export function MoreStylesTabs({
 					>
 						{fontFamilySelector}
 						{textContentField}
-						{isLink && selectedElement ? (
-							<AnchorSection
+					</TabsContent>
+					<TabsContent
+						value="link"
+						className="mt-0 space-y-2"
+						data-testid="style-panel-more-link"
+					>
+						{selectedElement ? (
+							<ClickLinkSection
+								key={selectedElement.selector}
 								selectedElement={selectedElement}
 								disabled={disabled}
 								onUpdate={onUpdateAttributes}

@@ -56,10 +56,15 @@ export function createRuntime(withNavigation = false) {
 		)
 
 	run(getLinkHandlingScript("pages/index.html"))
-	const click = (markup: string, options: MouseEventInit = {}, type = "click") => {
+	const click = (
+		markup: string,
+		options: MouseEventInit = {},
+		type = "click",
+		targetSelector = "a, [data-magic-href]",
+	) => {
 		doc.body.innerHTML = markup
 		const event = new MouseEvent(type, { cancelable: true, ...options })
-		Object.defineProperty(event, "target", { value: doc.querySelector("a") })
+		Object.defineProperty(event, "target", { value: doc.querySelector(targetSelector) })
 		listeners.get(type)?.(event)
 		return event
 	}

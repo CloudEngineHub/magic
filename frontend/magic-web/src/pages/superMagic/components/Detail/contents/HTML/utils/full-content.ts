@@ -518,15 +518,28 @@ export const getLinkHandlingScript = (navigationBasePath = "") => {
 				var isMiddle = event.type === "auxclick" && event.button === 1;
 				if (!isMiddle && (event.type !== "click" || event.button !== 0)) return;
 				var element = event.target && (event.target.nodeType === 3 ? event.target.parentElement : event.target);
-				var link = element && typeof element.closest === "function" ? element.closest("a[href]") : null;
+				var link = element && typeof element.closest === "function" ? element.closest("a[href], [data-magic-href]") : null;
 				if (!link || link.hasAttribute("download")) return;
-				var raw = link.getAttribute("href");
+				var customLink = link.tagName.toLowerCase() !== "a" && link.hasAttribute("data-magic-href");
+				var raw = link.getAttribute(customLink ? "data-magic-href" : "href");
 				var base = document.querySelector("base[target]");
 				var target = link.getAttribute("target") || (base && base.getAttribute("target")) || "_self";
 				var newTab = isMiddle || event.ctrlKey || event.metaKey || event.shiftKey;
 				if (newTab) target = "_blank";
+				// Custom element links share the editor URL policy and never execute author schemes.
+				if (customLink) {
+					if (!raw) return;
+					raw = raw.trim().replace(/[\\u0000-\\u001f\\u007f-\\u009f]/g, "");
+					if (/^[a-z][a-z\\d+.-]*:/i.test(raw) && !/^(https?:|mailto:|tel:)/i.test(raw)) return;
+					event.preventDefault();
+					if (window.slideSelector && window.slideSelector.isEditMode) return;
+				}
 				var href = navigationRuntime.getInternalNavigationHref(raw);
 				if (!href) {
+					if (customLink) {
+						window.open(raw, target, "noopener,noreferrer");
+						return;
+					}
 					// Native external navigation remains inside the sandbox for _self.
 					// Explicit new contexts retain opener isolation without changing target.
 					if (target.toLowerCase() === "_blank") {
@@ -541,7 +554,7 @@ export const getLinkHandlingScript = (navigationBasePath = "") => {
 					return;
 				}
 				navigationRuntime.postHtmlNavigation(
-					href, link.href, target, link.getAttribute("data-auto-edit") === "true",
+					href, customLink ? raw : link.href, target, link.getAttribute("data-auto-edit") === "true",
 					link.textContent || "", !!(isMiddle || event.ctrlKey || event.metaKey) && !event.shiftKey, "push"
 				);
 			};

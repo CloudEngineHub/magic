@@ -119,6 +119,7 @@ export interface SelectedElementInfo {
 		alt?: string
 		title?: string
 		href?: string
+		dataMagicHref?: string
 		target?: string
 		rel?: string
 		download?: string
@@ -225,12 +226,7 @@ export type FlexDirection = "row" | "row-reverse" | "column" | "column-reverse"
  * Flex 主轴对齐
  */
 export type JustifyContent =
-	| "flex-start"
-	| "center"
-	| "flex-end"
-	| "space-between"
-	| "space-around"
-	| "space-evenly"
+	"flex-start" | "center" | "flex-end" | "space-between" | "space-around" | "space-evenly"
 
 /**
  * Flex 交叉轴对齐

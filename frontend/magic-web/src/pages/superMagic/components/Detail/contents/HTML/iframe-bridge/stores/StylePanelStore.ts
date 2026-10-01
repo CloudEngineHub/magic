@@ -134,6 +134,7 @@ export interface SelectedElementInfo {
 		alt?: string
 		title?: string
 		href?: string
+		dataMagicHref?: string
 		target?: string
 		rel?: string
 		download?: string

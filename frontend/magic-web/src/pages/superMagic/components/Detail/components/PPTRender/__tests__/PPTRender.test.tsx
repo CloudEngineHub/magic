@@ -70,6 +70,7 @@ const mockState = vi.hoisted(() => ({
 	toggleFullscreen: vi.fn(async () => undefined),
 	presenterIsOpen: false,
 	changeSlide: vi.fn(),
+	jumpToPage: vi.fn(),
 	presenterFallbackOnly: false,
 	presenterOpen: vi.fn(async () => "opened" as const),
 	presenterContainer: null as HTMLElement | null,
@@ -259,7 +260,9 @@ vi.mock("../PPTSlide", async () => {
 		onManualSave,
 		toolbarOwnerKey,
 		onToolbarModelChange,
+		openNewTab,
 	}: {
+		openNewTab?: (fileId: string, path: string) => void
 		fileId?: string
 		onSwipe?: (direction: "prev" | "next") => void
 		allowEdit?: boolean
@@ -302,6 +305,7 @@ vi.mock("../PPTSlide", async () => {
 		)
 
 		mockState.pptSlideProps({
+			openNewTab,
 			allowEdit,
 			fileId,
 			isActive,
@@ -429,7 +433,7 @@ vi.mock("../hooks", () => ({
 		return {
 			changeSlide: mockState.changeSlide,
 			goToFirstSlide: vi.fn(),
-			handleJumpToPage: vi.fn(),
+			handleJumpToPage: mockState.jumpToPage,
 			preparePresentation: () => mockState.store.activeIndex,
 		}
 	},
@@ -540,6 +544,7 @@ function renderPPTRender(input?: {
 	isTabActive?: boolean
 	isPlaybackMode?: boolean
 	slideStructureAdapter?: PPTSlideStructureAdapter
+	openNewTab?: (fileId: string, path: string) => void
 }) {
 	return render(
 		<PPTRender
@@ -548,6 +553,7 @@ function renderPPTRender(input?: {
 			mainFileId="ppt-root-file"
 			mainFileName="Deck.html"
 			allowEdit={true}
+			openNewTab={input?.openNewTab}
 			isPlaybackMode={input?.isPlaybackMode}
 			isTabActive={input?.isTabActive}
 			onRegisterCheckBeforeClose={input?.onRegisterCheckBeforeClose}
@@ -600,6 +606,7 @@ describe("PPTRender", () => {
 		mockState.nativeIsPresenterView = false
 		mockState.toggleFullscreen.mockReset()
 		mockState.changeSlide.mockReset()
+		mockState.jumpToPage.mockReset()
 		mockState.presenterIsOpen = false
 		mockState.presenterFallbackOnly = false
 		mockState.presenterOpen.mockReset()
@@ -641,6 +648,17 @@ describe("PPTRender", () => {
 
 		expect(afterStaleCleanup).toBe(models)
 		expect(afterStaleCleanup.get(ownerKey)).toBe(newModel)
+	})
+
+	it("routes normalized PPT file links to the slide instead of opening a file tab", () => {
+		const openNewTab = vi.fn()
+		renderPPTRender({ openNewTab })
+		const slideProps = mockState.pptSlideProps.mock.calls.at(-1)?.[0]
+		slideProps.openNewTab("slide-file-id", "/slide-1.html")
+		expect(mockState.jumpToPage).toHaveBeenCalledWith(0)
+		expect(openNewTab).not.toHaveBeenCalled()
+		slideProps.openNewTab("slide-file-id", "/reference.html")
+		expect(openNewTab).toHaveBeenCalledWith("slide-file-id", "/reference.html")
 	})
 
 	it("does not present a cached hidden page in playback mode", async () => {
