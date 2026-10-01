@@ -24,6 +24,7 @@ use App\Domain\ModelGateway\Entity\Dto\CompletionDTO;
 use App\Domain\ModelGateway\Entity\ValueObject\SourceId;
 use App\Domain\Permission\Entity\ValueObject\ResourceVisibility\PrincipalType;
 use App\Domain\Permission\Entity\ValueObject\ResourceVisibility\ResourceType;
+use App\Domain\Permission\Entity\ValueObject\ResourceVisibility\VisibilityType;
 use App\Domain\Permission\Service\ResourceVisibilityDomainService;
 use App\Domain\Provider\Entity\ValueObject\AiAbilityCode;
 use App\Domain\Provider\Entity\ValueObject\ProviderDataIsolation;
@@ -36,6 +37,7 @@ use App\Infrastructure\Util\Context\CoContext;
 use App\Interfaces\Asset\DTO\Request\CreateAssetRequestDTO;
 use App\Interfaces\Asset\DTO\Request\QueryAssetRequestDTO;
 use App\Interfaces\Asset\DTO\Request\SaveAssetToLibraryRequestDTO;
+use App\Interfaces\Asset\DTO\Request\UpdatePersonalAssetRequestDTO;
 use Hyperf\Coroutine\Coroutine;
 use Hyperf\DbConnection\Db;
 use Hyperf\Odin\Api\Response\ChatCompletionResponse;
@@ -232,6 +234,58 @@ class AssetAppService extends AbstractAssetAppService
             $this->resolveAssetFileUrls([$asset]);
         }
         return $asset;
+    }
+
+    /** 编辑个人素材元数据；文件字段不从请求读取，也不会被修改。 */
+    public function updatePersonalAsset(
+        Authenticatable|BaseDataIsolation $authorization,
+        int|string $assetId,
+        UpdatePersonalAssetRequestDTO $requestDTO,
+    ): AssetEntity {
+        $dataIsolation = $this->createAssetDataIsolation($authorization);
+        $dataIsolation->setContainOfficialOrganization(true);
+        $asset = $this->assetDomainService->find(
+            $dataIsolation,
+            $assetId,
+            $this->sharedAssetIds($dataIsolation, [(string) $assetId]) !== [],
+        );
+        if ($asset === null || ! $asset->isOwnedBy(
+            $dataIsolation->getCurrentOrganizationCode(),
+            $dataIsolation->getCurrentUserId(),
+        )) {
+            ExceptionBuilder::throw(AssetErrorCode::DELETE_DENIED);
+        }
+
+        if ($requestDTO->getName() !== null) {
+            $asset->setNameI18n(['default' => $requestDTO->getName()]);
+        }
+        if ($requestDTO->getDescription() !== null) {
+            $asset->setDescriptionI18n(['default' => $requestDTO->getDescription()]);
+        }
+        $updated = $this->assetDomainService->update($dataIsolation, $asset);
+        if ($updated === null) {
+            ExceptionBuilder::throw(AssetErrorCode::NOT_FOUND);
+        }
+
+        if ($requestDTO->getVisibility() !== null) {
+            $visibility = $requestDTO->getVisibility();
+            $this->resourceVisibilityDomainService->saveVisibilityByPrincipals(
+                $this->permissionDataIsolation($dataIsolation),
+                ResourceType::ASSET,
+                (string) $assetId,
+                VisibilityType::SPECIFIC,
+                array_values(array_unique([
+                    $dataIsolation->getCurrentUserId(),
+                    ...array_map('strval', (array) ($visibility['user_ids'] ?? [])),
+                ])),
+                array_values(array_map('strval', (array) ($visibility['department_ids'] ?? []))),
+            );
+        }
+        if ($requestDTO->getTagIds() !== null) {
+            $this->assetTagDomainService->syncAssetTags($dataIsolation, $updated, $requestDTO->getTagIds());
+        }
+        $this->resolveAssetFileUrls([$updated]);
+        return $updated;
     }
 
     /** @param array<int, int|string> $assetIds @return AssetEntity[] */

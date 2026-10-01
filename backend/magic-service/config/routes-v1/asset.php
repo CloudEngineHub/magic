@@ -36,6 +36,8 @@ Router::addGroup('/api/v1', static function (): void {
         // 查询资产详情。
         // 查询第三方合规状态。
         Router::get('/{assetId:\d+}/compliance', [AssetApi::class, 'compliance']);
+        // 编辑个人素材元数据（不允许修改文件）。
+        Router::put('/{assetId:\d+}', [AssetApi::class, 'update']);
         Router::get('/{assetId:\d+}', [AssetApi::class, 'detail']);
         // 删除个人资产。
         Router::delete('/{assetId:\d+}', [AssetApi::class, 'delete']);

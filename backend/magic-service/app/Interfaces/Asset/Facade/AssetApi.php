@@ -20,6 +20,7 @@ use App\Interfaces\Asset\DTO\Request\QueryAssetRequestDTO;
 use App\Interfaces\Asset\DTO\Request\SaveAssetTagRequestDTO;
 use App\Interfaces\Asset\DTO\Request\SaveAssetToLibraryRequestDTO;
 use App\Interfaces\Asset\DTO\Request\TransferAssetOwnerRequestDTO;
+use App\Interfaces\Asset\DTO\Request\UpdatePersonalAssetRequestDTO;
 use App\Interfaces\Asset\DTO\Response\AssetComplianceDTO;
 use Dtyq\ApiResponse\Annotation\ApiResponse;
 use Hyperf\HttpServer\Contract\RequestInterface;
@@ -104,6 +105,22 @@ class AssetApi extends AbstractApi
         if ($asset === null) {
             ExceptionBuilder::throw(AssetErrorCode::NOT_FOUND);
         }
+        return AssetAssembler::createItem(
+            $asset,
+            null,
+            false,
+            $this->assetAppService->providerAsset($authorization, $assetId),
+        )->toArray();
+    }
+
+    public function update(int|string $assetId): array
+    {
+        $authorization = $this->getAuthorization();
+        $asset = $this->assetAppService->updatePersonalAsset(
+            $authorization,
+            $assetId,
+            UpdatePersonalAssetRequestDTO::fromRequest($this->request),
+        );
         return AssetAssembler::createItem(
             $asset,
             null,

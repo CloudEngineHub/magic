@@ -102,6 +102,7 @@ final class SourceId
         self::API_PLATFORM,
         self::FOLLOW_UP_SUGGESTIONS,
         self::AI_ABILITY_CONNECTIVITY_TEST,
+        self::ASSET_COMPLIANCE_PRECHECK,
         self::SLIDES_TEMPLATE_VECTOR_SYNC,
         self::SKILL_MARKET_VECTOR_SYNC,
         self::AGENT_MARKET_VECTOR_SYNC,
