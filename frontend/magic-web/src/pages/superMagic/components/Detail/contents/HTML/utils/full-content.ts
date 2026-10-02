@@ -1321,6 +1321,15 @@ const getBaseStylesScript = () => {
 		body {
 			translate: no !important;
 		}
+		/* Linked containers include their text and image children in the click target. */
+		:where(a[href]:not([href=""]), [data-magic-href]:not([data-magic-href=""])),
+		:where(a[href]:not([href=""]), [data-magic-href]:not([data-magic-href=""])) * {
+			cursor: pointer !important;
+		}
+		/* Keep the insertion cursor while editing linked text. */
+		[data-text-editing="true"], [data-text-editing="true"] * {
+			cursor: text !important;
+		}
 	`
 }
 //注入HTML预览组件基础样式

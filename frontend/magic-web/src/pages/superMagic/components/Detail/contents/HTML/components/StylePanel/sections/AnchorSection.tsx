@@ -2,7 +2,6 @@ import { useEffect, useState } from "react"
 import { ChevronDown, Link2 } from "lucide-react"
 import { useTranslation } from "react-i18next"
 import { Input } from "@/components/shadcn-ui/input"
-import { Select, SelectItem, SelectTrigger, SelectValue } from "@/components/shadcn-ui/select"
 import {
 	Collapsible,
 	CollapsibleContent,
@@ -11,7 +10,6 @@ import {
 import { cn } from "@/utils/cn"
 import type { SelectedElementInfo } from "../types"
 import { STYLE_PANEL_STYLES } from "../styles"
-import { EditorSelectContent } from "../../EditorFloating"
 import { isSafeHref } from "@dtyq/html-sandbox/utils/safeUrl"
 
 interface AnchorSectionProps {
@@ -20,7 +18,7 @@ interface AnchorSectionProps {
 	onUpdate: (attributes: Record<string, string | null>) => Promise<void>
 }
 
-type AnchorField = "href" | "target" | "title" | "rel" | "download" | "ariaLabel"
+type AnchorField = "href" | "title" | "rel" | "download" | "ariaLabel"
 
 const EMPTY_ATTRIBUTES: NonNullable<SelectedElementInfo["attributes"]> = {}
 
@@ -30,7 +28,6 @@ export function AnchorSection({ selectedElement, disabled = false, onUpdate }: A
 	const hrefField = selectedElement.tagName.toLowerCase() === "a" ? "href" : "dataMagicHref"
 	const [draft, setDraft] = useState({ ...attributes, href: attributes[hrefField] })
 	const [advancedOpen, setAdvancedOpen] = useState(false)
-	const isExternalLink = /^(https?:)?\/\//i.test((draft.href ?? "").trim())
 
 	useEffect(() => {
 		const nextAttributes = selectedElement.attributes ?? EMPTY_ATTRIBUTES
@@ -47,15 +44,15 @@ export function AnchorSection({ selectedElement, disabled = false, onUpdate }: A
 		const nextValue = normalized || null
 		setDraft((current) => ({ ...current, [field]: normalized }))
 		const attributeField = field === "href" ? hrefField : field
-		const externalHref = field === "href" && /^(https?:)?\/\//i.test(normalized)
+		const hasHref = field === "href" && normalized.length > 0
 		if (
 			(attributes[attributeField] ?? "") === normalized &&
-			(!externalHref || attributes.target === "_blank")
+			(!hasHref || attributes.target === "_blank")
 		)
 			return
 		await onUpdate({
 			[attributeField]: nextValue,
-			...(externalHref ? { target: "_blank" } : {}),
+			...(hasHref ? { target: "_blank" } : {}),
 		})
 	}
 
@@ -99,40 +96,12 @@ export function AnchorSection({ selectedElement, disabled = false, onUpdate }: A
 					t("stylePanel.linkUrlPlaceholder"),
 					"url",
 				)}
-				<label className={cn("block", STYLE_PANEL_STYLES.field)}>
+				<div className={STYLE_PANEL_STYLES.field}>
 					<span className={STYLE_PANEL_STYLES.label}>{t("stylePanel.linkTarget")}</span>
-					{isExternalLink ? (
-						<p className="text-xs text-muted-foreground">
-							{t("stylePanel.linkTargetExternal")}
-						</p>
-					) : (
-						<Select
-							value={draft.target || "_self"}
-							onValueChange={(value) =>
-								void commit("target", value === "_self" ? "" : value)
-							}
-							disabled={disabled}
-						>
-							<SelectTrigger className={cn("w-full", STYLE_PANEL_STYLES.control)}>
-								<SelectValue />
-							</SelectTrigger>
-							<EditorSelectContent>
-								<SelectItem value="_self">
-									{t("stylePanel.linkTargetSelf")}
-								</SelectItem>
-								<SelectItem value="_blank">
-									{t("stylePanel.linkTargetBlank")}
-								</SelectItem>
-								<SelectItem value="_parent">
-									{t("stylePanel.linkTargetParent")}
-								</SelectItem>
-								<SelectItem value="_top">
-									{t("stylePanel.linkTargetTop")}
-								</SelectItem>
-							</EditorSelectContent>
-						</Select>
-					)}
-				</label>
+					<p className="text-xs text-muted-foreground">
+						{t("stylePanel.linkTargetBlank")}
+					</p>
+				</div>
 
 				<Collapsible open={advancedOpen} onOpenChange={setAdvancedOpen}>
 					<CollapsibleTrigger

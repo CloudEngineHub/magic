@@ -79,7 +79,7 @@ describe("ClickLinkSection", () => {
 				/>,
 			)
 			expect(screen.queryByRole("combobox")).not.toBeInTheDocument()
-			expect(screen.getByText("stylePanel.linkTargetExternal")).toBeInTheDocument()
+			expect(screen.getByText("stylePanel.linkTargetBlank")).toBeInTheDocument()
 			fireEvent.blur(screen.getByPlaceholderText("stylePanel.linkUrlPlaceholder"))
 			await waitFor(() =>
 				expect(onUpdate).toHaveBeenCalledWith({
@@ -126,10 +126,17 @@ describe("ClickLinkSection", () => {
 		const onUpdate = vi.fn(async () => undefined)
 		render(<ClickLinkSection selectedElement={element("div")} onUpdate={onUpdate} />)
 		expect(screen.queryByText("stylePanel.linkType")).not.toBeInTheDocument()
+		expect(screen.queryByRole("combobox")).not.toBeInTheDocument()
+		expect(screen.getByText("stylePanel.linkTargetBlank")).toBeInTheDocument()
 		const input = screen.getByPlaceholderText("stylePanel.linkUrlPlaceholder")
 		fireEvent.change(input, { target: { value: "detail.html" } })
 		fireEvent.blur(input)
-		await waitFor(() => expect(onUpdate).toHaveBeenCalledWith({ dataMagicHref: "detail.html" }))
+		await waitFor(() =>
+			expect(onUpdate).toHaveBeenCalledWith({
+				dataMagicHref: "detail.html",
+				target: "_blank",
+			}),
+		)
 	})
 
 	it("shows a failure and restores the displayed URL when the editor rejects a change", async () => {
