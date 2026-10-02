@@ -79,12 +79,13 @@ describe("ClickLinkSection", () => {
 				/>,
 			)
 			expect(screen.queryByRole("combobox")).not.toBeInTheDocument()
-			expect(screen.getByText("stylePanel.linkTargetBlank")).toBeInTheDocument()
+			expect(screen.queryByText("stylePanel.linkTarget")).not.toBeInTheDocument()
 			fireEvent.blur(screen.getByPlaceholderText("stylePanel.linkUrlPlaceholder"))
 			await waitFor(() =>
 				expect(onUpdate).toHaveBeenCalledWith({
 					[field]: "https://outside.test",
 					target: "_blank",
+					download: null,
 				}),
 			)
 		},
@@ -127,7 +128,7 @@ describe("ClickLinkSection", () => {
 		render(<ClickLinkSection selectedElement={element("div")} onUpdate={onUpdate} />)
 		expect(screen.queryByText("stylePanel.linkType")).not.toBeInTheDocument()
 		expect(screen.queryByRole("combobox")).not.toBeInTheDocument()
-		expect(screen.getByText("stylePanel.linkTargetBlank")).toBeInTheDocument()
+		expect(screen.queryByText("stylePanel.linkTarget")).not.toBeInTheDocument()
 		const input = screen.getByPlaceholderText("stylePanel.linkUrlPlaceholder")
 		fireEvent.change(input, { target: { value: "detail.html" } })
 		fireEvent.blur(input)
@@ -135,6 +136,7 @@ describe("ClickLinkSection", () => {
 			expect(onUpdate).toHaveBeenCalledWith({
 				dataMagicHref: "detail.html",
 				target: "_blank",
+				download: null,
 			}),
 		)
 	})

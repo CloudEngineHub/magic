@@ -18,7 +18,7 @@ interface AnchorSectionProps {
 	onUpdate: (attributes: Record<string, string | null>) => Promise<void>
 }
 
-type AnchorField = "href" | "title" | "rel" | "download" | "ariaLabel"
+type AnchorField = "href" | "title" | "ariaLabel"
 
 const EMPTY_ATTRIBUTES: NonNullable<SelectedElementInfo["attributes"]> = {}
 
@@ -47,12 +47,13 @@ export function AnchorSection({ selectedElement, disabled = false, onUpdate }: A
 		const hasHref = field === "href" && normalized.length > 0
 		if (
 			(attributes[attributeField] ?? "") === normalized &&
-			(!hasHref || attributes.target === "_blank")
+			(!hasHref || (attributes.target === "_blank" && attributes.download == null))
 		)
 			return
 		await onUpdate({
 			[attributeField]: nextValue,
-			...(hasHref ? { target: "_blank" } : {}),
+			// A configured navigation link must not retain an old download action.
+			...(hasHref ? { target: "_blank", download: null } : {}),
 		})
 	}
 
@@ -96,12 +97,6 @@ export function AnchorSection({ selectedElement, disabled = false, onUpdate }: A
 					t("stylePanel.linkUrlPlaceholder"),
 					"url",
 				)}
-				<div className={STYLE_PANEL_STYLES.field}>
-					<span className={STYLE_PANEL_STYLES.label}>{t("stylePanel.linkTarget")}</span>
-					<p className="text-xs text-muted-foreground">
-						{t("stylePanel.linkTargetBlank")}
-					</p>
-				</div>
 
 				<Collapsible open={advancedOpen} onOpenChange={setAdvancedOpen}>
 					<CollapsibleTrigger
@@ -121,16 +116,6 @@ export function AnchorSection({ selectedElement, disabled = false, onUpdate }: A
 							"title",
 							t("stylePanel.linkTitle"),
 							t("stylePanel.linkTitlePlaceholder"),
-						)}
-						{inputField(
-							"rel",
-							t("stylePanel.linkRel"),
-							t("stylePanel.linkRelPlaceholder"),
-						)}
-						{inputField(
-							"download",
-							t("stylePanel.linkDownload"),
-							t("stylePanel.linkDownloadPlaceholder"),
 						)}
 						{inputField(
 							"ariaLabel",
