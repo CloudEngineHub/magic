@@ -81,6 +81,9 @@ readonly class MagicBaseAccessControl
         $projectManager = $this->hasProjectDataAdminRole($authorization, $projectId);
         $readable = [];
         foreach ($tables as $table) {
+            if (! $table instanceof MagicBaseTableEntity) {
+                continue;
+            }
             $tableId = (int) $table->getId();
             $permissions = $this->metadataDomainService->listTablePermissions($authorization->getOrganizationCode(), $tableId);
             $admins = $this->metadataDomainService->listTableAdmins($authorization->getOrganizationCode(), $tableId);

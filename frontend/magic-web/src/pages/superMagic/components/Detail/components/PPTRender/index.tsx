@@ -57,6 +57,7 @@ import MagicModal from "@/components/base/MagicModal"
 import { Button } from "@/components/shadcn-ui/button"
 import { cn } from "@/utils/cn"
 import { findPPTSlideIndex } from "./utils/slideNavigation"
+import { PPTLinkContext } from "../../contents/HTML/contexts/PPTLinkContext"
 import { PPTProvider } from "./contexts/PPTContext"
 import { useContainerShowButtonText } from "@/hooks/useContainerShowButtonText"
 import type { MenuProps } from "antd"
@@ -664,7 +665,14 @@ const PPTRenderInner = observer(function PPTRenderInner({
 			store.slides.find((slide) => store.getFileIdByPath(slide.path) === fileId) ||
 			store.slides[store.activeIndex]
 		const targetIndex = currentSlide
-			? findPPTSlideIndex(store.slides, currentSlide.path, path)
+			? findPPTSlideIndex(
+					// Runtime links use workspace paths; slide config paths are deck-relative.
+					store.slides.map((slide) => ({
+						path: store.getFullRelativePath(slide.path) ?? slide.path,
+					})),
+					store.getFullRelativePath(currentSlide.path) ?? currentSlide.path,
+					path,
+				)
 			: -1
 
 		if (targetIndex >= 0) {
@@ -1390,86 +1398,99 @@ const PPTRenderInner = observer(function PPTRenderInner({
 									const slideHtmlRelativeFolderPath =
 										getHtmlRelativeFolderPath(slideFileItem)
 									return (
-										<PPTSlide
-											showRefresh={showRefresh}
+										<PPTLinkContext.Provider
 											key={key}
-											index={index}
-											isActive={index === store.activeIndex}
-											isPresented={
-												key === presentedKey &&
-												(!(
-													isPresentationFullscreen ||
-													isPresenterWindowOpen ||
-													isPlaybackMode
-												) ||
-													!hiddenPaths.has(slide.path))
-											}
-											isTabActive={isTabActive}
-											toolbarOwnerKey={key}
-											onToolbarModelChange={handleToolbarModelChange}
-											content={slide.content || ""}
-											rawContent={slide.rawContent || ""}
-											renderRevision={revision}
-											loadingState={slide.loadingState}
-											loadingError={slide.loadingError}
-											isFullscreen={isPresentationFullscreen}
-											isPlaybackMode={isPlaybackMode || isPresenterConsole}
-											manualScale={isPresenterConsole ? null : manualScale}
-											onManualScaleChange={handleManualScaleChange}
-											onScaleRatioChange={setActiveSlideScaleRatio}
-											onRenderReadyChange={(ready) =>
-												onSlideReadyChange(key, revision, ready)
-											}
-											saveEditContent={saveEditContent}
-											fileId={slideFileId}
-											projectId={resolvedProjectId}
-											filePathMapping={filePathMapping}
-											openNewTab={handleOpenNewTab}
-											htmlRelativeFolderPath={slideHtmlRelativeFolderPath}
-											selectedProject={selectedProject}
-											attachmentList={attachmentList}
-											fileApi={fileApi}
-											attachments={attachments}
-											updateSlideContents={(
-												newContents: Map<number, string>,
-											) => {
-												store.updateSlideContents(newContents)
+											value={{
+												currentSlidePath: slide.path,
+												slides: store.slides,
 											}}
-											allowEdit={effectiveAllowEdit && !isPresenterConsole}
-											showButtonText={shouldShowButtonText}
-											onEditModeChange={(isEditing) =>
-												handleEditModeChange(slideFileId, isEditing)
-											}
-											onRegisterSaveHandler={
-												index === store.activeIndex
-													? registerSaveHandler
-													: undefined
-											}
-											onRegisterDiscardHandler={
-												index === store.activeIndex
-													? registerDiscardHandler
-													: undefined
-											}
-											onRegisterCloseSaveHandler={
-												index === store.activeIndex
-													? registerCloseSaveHandler
-													: undefined
-											}
-											serverUpdatedContent={store.getSlideServerUpdate(
-												slideFileId,
-											)}
-											onClearServerUpdate={() => {
-												store.clearSlideServerUpdate(slideFileId)
-											}}
-											onRefreshSlide={handleRefreshSlide}
-											onManualSave={handleManualSave}
-											mainFileId={mainFileId}
-											mainFileName={mainFileName}
-											allowDownload={allowDownload}
-											onSwipe={(direction) => {
-												void changeSlide(direction)
-											}}
-										/>
+										>
+											<PPTSlide
+												showRefresh={showRefresh}
+												index={index}
+												isActive={index === store.activeIndex}
+												isPresented={
+													key === presentedKey &&
+													(!(
+														isPresentationFullscreen ||
+														isPresenterWindowOpen ||
+														isPlaybackMode
+													) ||
+														!hiddenPaths.has(slide.path))
+												}
+												isTabActive={isTabActive}
+												toolbarOwnerKey={key}
+												onToolbarModelChange={handleToolbarModelChange}
+												content={slide.content || ""}
+												rawContent={slide.rawContent || ""}
+												renderRevision={revision}
+												loadingState={slide.loadingState}
+												loadingError={slide.loadingError}
+												isFullscreen={isPresentationFullscreen}
+												isPlaybackMode={
+													isPlaybackMode || isPresenterConsole
+												}
+												manualScale={
+													isPresenterConsole ? null : manualScale
+												}
+												onManualScaleChange={handleManualScaleChange}
+												onScaleRatioChange={setActiveSlideScaleRatio}
+												onRenderReadyChange={(ready) =>
+													onSlideReadyChange(key, revision, ready)
+												}
+												saveEditContent={saveEditContent}
+												fileId={slideFileId}
+												projectId={resolvedProjectId}
+												filePathMapping={filePathMapping}
+												openNewTab={handleOpenNewTab}
+												htmlRelativeFolderPath={slideHtmlRelativeFolderPath}
+												selectedProject={selectedProject}
+												attachmentList={attachmentList}
+												fileApi={fileApi}
+												attachments={attachments}
+												updateSlideContents={(
+													newContents: Map<number, string>,
+												) => {
+													store.updateSlideContents(newContents)
+												}}
+												allowEdit={
+													effectiveAllowEdit && !isPresenterConsole
+												}
+												showButtonText={shouldShowButtonText}
+												onEditModeChange={(isEditing) =>
+													handleEditModeChange(slideFileId, isEditing)
+												}
+												onRegisterSaveHandler={
+													index === store.activeIndex
+														? registerSaveHandler
+														: undefined
+												}
+												onRegisterDiscardHandler={
+													index === store.activeIndex
+														? registerDiscardHandler
+														: undefined
+												}
+												onRegisterCloseSaveHandler={
+													index === store.activeIndex
+														? registerCloseSaveHandler
+														: undefined
+												}
+												serverUpdatedContent={store.getSlideServerUpdate(
+													slideFileId,
+												)}
+												onClearServerUpdate={() => {
+													store.clearSlideServerUpdate(slideFileId)
+												}}
+												onRefreshSlide={handleRefreshSlide}
+												onManualSave={handleManualSave}
+												mainFileId={mainFileId}
+												mainFileName={mainFileName}
+												allowDownload={allowDownload}
+												onSwipe={(direction) => {
+													void changeSlide(direction)
+												}}
+											/>
+										</PPTLinkContext.Provider>
 									)
 								})}
 

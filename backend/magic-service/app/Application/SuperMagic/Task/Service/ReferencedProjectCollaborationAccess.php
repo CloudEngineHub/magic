@@ -17,7 +17,8 @@ class ReferencedProjectCollaborationAccess
 {
     public function __construct(
         private readonly MicroAppProjectAppService $microAppProjectAppService,
-    ) {}
+    ) {
+    }
 
     public function canAccess(int $projectId, string $userId, string $organizationCode): bool
     {

@@ -7,8 +7,8 @@ declare(strict_types=1);
 
 namespace HyperfTest\Cases\Application\Design\Event\Subscribe;
 
-use App\Application\Design\Event\Subscribe\DesignVideoPollConsumer;
 use App\Application\Design\Event\Publish\DesignVideoPollDelayPublisher;
+use App\Application\Design\Event\Subscribe\DesignVideoPollConsumer;
 use App\Application\Design\Tool\VideoGeneration\DesignGeneratedVideoFileNameTool;
 use App\Domain\Design\Entity\DesignDataIsolation;
 use App\Domain\Design\Entity\DesignGenerationTaskEntity;
@@ -43,6 +43,7 @@ use PhpAmqpLib\Message\AMQPMessage;
 use PHPUnit\Framework\TestCase;
 use Psr\Container\ContainerInterface;
 use Psr\Log\LoggerInterface;
+use RuntimeException;
 
 /**
  * @internal
@@ -257,7 +258,7 @@ class DesignVideoPollConsumerTest extends TestCase
         $fileNameTool = $this->createMock(DesignGeneratedVideoFileNameTool::class);
         $fileNameTool->expects($this->once())
             ->method('resolveBaseNameWithoutExtension')
-            ->willThrowException(new \RuntimeException('archive write failed'));
+            ->willThrowException(new RuntimeException('archive write failed'));
 
         $consumer = $this->createConsumer(
             repository: $repository,
@@ -349,7 +350,7 @@ class DesignVideoPollConsumerTest extends TestCase
         $fileNameTool = $this->createMock(DesignGeneratedVideoFileNameTool::class);
         $fileNameTool->expects($this->once())
             ->method('resolveBaseNameWithoutExtension')
-            ->willThrowException(new \RuntimeException('archive write failed'));
+            ->willThrowException(new RuntimeException('archive write failed'));
 
         $consumer = $this->createConsumer(
             repository: $repository,

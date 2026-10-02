@@ -140,7 +140,6 @@ class SkillAppService extends AbstractSkillAppService
         protected PublishAsyncStatusManager $publishAsyncStatusManager,
         protected SuperMagicAgentAppService $agentAppService,
         LoggerFactory $loggerFactory
-
     ) {
         $this->logger = $loggerFactory->get(get_class($this));
     }

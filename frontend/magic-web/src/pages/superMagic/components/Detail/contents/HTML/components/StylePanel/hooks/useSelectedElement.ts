@@ -247,13 +247,16 @@ export function useSelectedElement(editorRef: React.RefObject<HTMLEditorV2Ref>) 
 			if (!editorRef.current || !selectedElement) return
 
 			await editorRef.current.updateElementAttributes(selectedElement.selector, attributes)
-			const nextAttributes = { ...(selectedElement.attributes ?? {}) }
+			// The iframe command may finish after the user selects another element.
+			const currentElement = stylePanelStore.selectedElement
+			if (currentElement?.selector !== selectedElement.selector) return
+			const nextAttributes = { ...(currentElement.attributes ?? {}) }
 			for (const [name, value] of Object.entries(attributes)) {
 				if (value === null || value.trim() === "")
 					delete nextAttributes[name as keyof typeof nextAttributes]
 				else nextAttributes[name as keyof typeof nextAttributes] = value
 			}
-			stylePanelStore.selectElement({ ...selectedElement, attributes: nextAttributes })
+			stylePanelStore.selectElement({ ...currentElement, attributes: nextAttributes })
 		},
 		[editorRef, stylePanelStore],
 	)

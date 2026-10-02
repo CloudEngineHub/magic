@@ -9,7 +9,6 @@ namespace App\Application\SuperMagic\Design\Service;
 
 use App\ErrorCode\DesignErrorCode;
 use App\Infrastructure\Core\Exception\ExceptionBuilder;
-use Throwable;
 
 /**
  * Reads bundled html-design-style source documents.
