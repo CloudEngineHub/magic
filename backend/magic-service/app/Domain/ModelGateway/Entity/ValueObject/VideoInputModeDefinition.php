@@ -126,7 +126,7 @@ final readonly class VideoInputModeDefinition
      */
     public static function draftTask(
         string $description,
-        string $task = VideoTaskType::DraftTask->value,
+        string $task = VideoTaskType::Generate->value,
     ): self {
         return new self(
             description: $description,

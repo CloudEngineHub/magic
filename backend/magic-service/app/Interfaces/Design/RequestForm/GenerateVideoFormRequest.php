@@ -9,7 +9,7 @@ namespace App\Interfaces\Design\RequestForm;
 
 use App\Domain\Design\Entity\Dto\DesignVideoCreateDTO;
 use App\Domain\Design\Entity\ValueObject\DesignGenerationType;
-use App\Domain\ModelGateway\Entity\ValueObject\VideoTaskType;
+use App\Domain\ModelGateway\Entity\ValueObject\VideoInputMode;
 use Hyperf\Validation\Request\FormRequest;
 use Hyperf\Validation\Rule;
 
@@ -75,7 +75,7 @@ class GenerateVideoFormRequest extends FormRequest
                 'string',
                 'max:' . self::MAX_PROMPT_LENGTH,
                 Rule::requiredIf(fn (): bool => $this->input('generation_type') !== DesignGenerationType::CANVAS_COMPOSITION->value
-                    && $this->input('task') !== VideoTaskType::DraftTask->value),
+                    && $this->input('input_mode') !== VideoInputMode::DraftTask->value),
             ],
             'file_dir' => 'required_unless:generation_type,' . DesignGenerationType::CANVAS_COMPOSITION->value . '|string|max:' . self::MAX_FILE_DIR_LENGTH,
             'file_name' => 'nullable|string|max:' . self::MAX_FILE_NAME_LENGTH,

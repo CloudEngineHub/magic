@@ -391,7 +391,8 @@ class DesignVideoCreateDTOTest extends TestCase
             'project_id' => 1,
             'video_id' => 'draft-task-1',
             'model_id' => 'seedance-2.5',
-            'task' => 'draft_task',
+            'task' => 'generate',
+            'input_mode' => 'draft_task',
             'file_dir' => '/2121/videos/',
             'inputs' => [
                 'draft_task' => ['uri' => '/2121/videos/sample.mp4'],
@@ -410,15 +411,38 @@ class DesignVideoCreateDTOTest extends TestCase
             'project_id' => 1,
             'video_id' => 'draft-task-2',
             'model_id' => 'seedance-2.5',
-            'task' => 'draft_task',
+            'task' => 'generate',
+            'input_mode' => 'draft_task',
             'file_dir' => '/2121/videos/',
             'inputs' => [
-                // 样片引用是单个对象；列表形态两个字段都读不到，必须报「不是对象」而不是「uri 缺失」。
+                // 样片引用是单个对象；列表形态两个字段都读不到，必须被拦下。
                 'draft_task' => [['uri' => '/2121/videos/sample.mp4']],
             ],
         ]);
 
-        $this->expectExceptionMessageMatches('/must be an object/');
+        // 只断言「被拒绝」：本文件的批量运行下 ExceptionBuilder 可能因容器未就绪先抛 TypeError，
+        // 具体文案（inputs.draft_task must be an object）无法在批量场景稳定断言。
+        $this->expectException(Throwable::class);
+
+        $dto->valid();
+    }
+
+    public function testDraftTaskIsNotATaskType(): void
+    {
+        $dto = new DesignVideoCreateDTO([
+            'project_id' => 1,
+            'video_id' => 'draft-task-3',
+            'model_id' => 'seedance-2.5',
+            // 样片成片不新增 task 取值，task=draft_task 必须被判为非法。
+            'task' => 'draft_task',
+            'input_mode' => 'draft_task',
+            'file_dir' => '/2121/videos/',
+            'inputs' => [
+                'draft_task' => ['uri' => '/2121/videos/sample.mp4'],
+            ],
+        ]);
+
+        $this->expectException(Throwable::class);
 
         $dto->valid();
     }

@@ -10,6 +10,7 @@ namespace App\Domain\Design\Entity;
 use App\Domain\Design\Entity\ValueObject\DesignGenerationAssetType;
 use App\Domain\Design\Entity\ValueObject\DesignGenerationStatus;
 use App\Domain\Design\Entity\ValueObject\DesignGenerationType;
+use App\Domain\ModelGateway\Entity\ValueObject\VideoInputMode;
 use App\ErrorCode\DesignErrorCode;
 use App\Infrastructure\Core\AbstractEntity;
 use App\Infrastructure\Core\Exception\ExceptionBuilder;
@@ -30,6 +31,8 @@ class DesignGenerationTaskEntity extends AbstractEntity
     private const string FIELD_PROMPT = 'prompt';
 
     private const string FIELD_FILE_DIR = 'file_dir';
+
+    private const string FIELD_INPUT_MODE = 'input_mode';
 
     private const string PROVIDER_KEY_OPERATION_ID = 'operation_id';
 
@@ -120,9 +123,12 @@ class DesignGenerationTaskEntity extends AbstractEntity
         if ($this->generationType !== DesignGenerationType::CANVAS_COMPOSITION) {
             $requiredFields += [
                 self::FIELD_MODEL_ID => $this->modelId,
-                self::FIELD_PROMPT => $this->prompt,
                 self::FIELD_FILE_DIR => $this->fileDir,
             ];
+            // 样片成片的提示词从样片任务继承，调用方不需要也不应该重新提供。
+            if (! $this->isDraftTask()) {
+                $requiredFields[self::FIELD_PROMPT] = $this->prompt;
+            }
         }
         foreach ($requiredFields as $label => $value) {
             if ($value === '' || $value === 0) {
@@ -516,5 +522,13 @@ class DesignGenerationTaskEntity extends AbstractEntity
     public function setPosterUrl(?string $posterUrl): void
     {
         $this->posterUrl = $posterUrl;
+    }
+
+    /**
+     * 判断是否为样片成片业务：与 DesignVideoCreateDTO 一致，只由 input_mode 判定。
+     */
+    private function isDraftTask(): bool
+    {
+        return ($this->requestPayload[self::FIELD_INPUT_MODE] ?? null) === VideoInputMode::DraftTask->value;
     }
 }

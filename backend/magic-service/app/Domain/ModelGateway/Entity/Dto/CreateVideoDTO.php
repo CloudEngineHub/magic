@@ -205,12 +205,11 @@ class CreateVideoDTO extends AbstractRequestDTO
     }
 
     /**
-     * 是否为样片成片请求：task 或 input_mode 任一命中即成立，兼容只传其一的调用方。
+     * 是否为样片成片请求：只由 input_mode 判定。
      */
     private function isDraftTaskRequest(): bool
     {
-        return $this->task === VideoTaskType::DraftTask->value
-            || $this->inputMode === VideoInputMode::DraftTask->value;
+        return $this->inputMode === VideoInputMode::DraftTask->value;
     }
 
     private function assertTopLevelArrayField(string $field): void

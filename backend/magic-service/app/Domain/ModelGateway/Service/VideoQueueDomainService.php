@@ -859,10 +859,6 @@ readonly class VideoQueueDomainService
             return VideoInputMode::VideoEdit->value;
         }
 
-        if ($task === VideoTaskType::DraftTask->value) {
-            return VideoInputMode::DraftTask->value;
-        }
-
         if ($task !== VideoTaskType::Generate->value) {
             return VideoInputMode::Standard->value;
         }

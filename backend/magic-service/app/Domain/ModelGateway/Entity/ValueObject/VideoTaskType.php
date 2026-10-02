@@ -9,10 +9,13 @@ namespace App\Domain\ModelGateway\Entity\ValueObject;
 
 /**
  * 视频任务类型。
+ *
+ * 只表达业务意图，不区分输入形态；样片成片（draft_task）是输入形态，
+ * 由 input_mode 单独表达，不在这里建值，见 VideoInputMode。
  */
 enum VideoTaskType: string
 {
-    // 普通生成：文生、图生、参考素材生成等默认任务。
+    // 普通生成：文生、图生、参考素材生成等默认任务；样片成片也归到这里。
     case Generate = 'generate';
 
     // 视频延长：基于已有视频继续生成后续片段。
@@ -23,9 +26,6 @@ enum VideoTaskType: string
 
     // 视频超清：对已有视频做清晰度增强。
     case Upscale = 'upscale';
-
-    // 样片成片：基于已生成的样片任务 ID 出正式分辨率的成片，当前仅 Seedance 2.5 支持。
-    case DraftTask = 'draft_task';
 
     /**
      * @return list<string>
@@ -47,9 +47,8 @@ enum VideoTaskType: string
     {
         return match ($this) {
             self::Edit => $inputMode === VideoInputMode::VideoEdit->value,
-            self::DraftTask => $inputMode === VideoInputMode::DraftTask->value,
-            self::Generate => $inputMode !== VideoInputMode::VideoEdit->value
-                && $inputMode !== VideoInputMode::DraftTask->value,
+            // 样片成片走普通生成意图 + input_mode=draft_task，因此这里不再排除该模式。
+            self::Generate => $inputMode !== VideoInputMode::VideoEdit->value,
             self::Extend, self::Upscale => $inputMode === VideoInputMode::Standard->value,
         };
     }
@@ -60,14 +59,13 @@ enum VideoTaskType: string
             self::Edit => 'video_edit',
             self::Extend => 'video_extension',
             self::Upscale => 'video_upscale',
-            self::DraftTask => 'video_draft_task',
             self::Generate => null,
         };
     }
 
     public function requiresReferenceVideo(): bool
     {
-        // 样片成片的输入是样片任务 ID，不是参考视频，因此与普通生成一样不强制参考视频。
-        return ! in_array($this, [self::Generate, self::DraftTask], true);
+        // 普通生成（含样片成片）的输入是提示词或样片任务 ID，不是参考视频。
+        return $this !== self::Generate;
     }
 }

@@ -254,6 +254,9 @@ final class VolcengineArkVideoAdapterRouterTest extends TestCase
         $this->assertFalse($draftSwitch['default']);
         $this->assertNotSame('', (string) $draftSwitch['name']);
         $this->assertNotSame('', (string) $draftSwitch['description']);
+        // 样片固定 480p：约束挂在开关自己的 constraints 上，与 input_modes 的
+        // generation_constraints 分属不同层级，后续要扩成规则数组也不必改名。
+        $this->assertSame(['resolutions' => ['480p']], $draftSwitch['constraints'] ?? null);
 
         $others = ['mini_fast' => self::MINI_FAST_MODEL, 'two' => self::TWO_MODEL];
         foreach ($others as $family => $model) {
@@ -386,7 +389,7 @@ final class VolcengineArkVideoAdapterRouterTest extends TestCase
         $this->expectException(InvalidArgumentException::class);
         $adapter->buildProviderPayload($this->createOperation(self::TWO_FIVE_MODEL, [
             'model_id' => self::TWO_FIVE_MODEL,
-            'task' => 'draft_task',
+            'task' => 'generate',
             'input_mode' => 'draft_task',
             'prompt' => '',
             'inputs' => ['draft_task' => []],
@@ -409,7 +412,8 @@ final class VolcengineArkVideoAdapterRouterTest extends TestCase
 
         $definition = $config['input_modes']['draft_task'];
         $this->assertSame(['draft_task'], $definition['supported_fields']);
-        $this->assertSame('draft_task', $definition['task']);
+        // 样片成片与共享模板一致：声明 task=generate，样片语义由 input_mode 表达。
+        $this->assertSame('generate', $definition['task']);
         $this->assertNotSame('', (string) $definition['description']);
         $this->assertSame([
             'durations' => [],
@@ -676,7 +680,7 @@ final class VolcengineArkVideoAdapterRouterTest extends TestCase
 
         return [
             'model_id' => $model,
-            'task' => 'draft_task',
+            'task' => 'generate',
             'input_mode' => 'draft_task',
             'prompt' => '',
             'inputs' => [

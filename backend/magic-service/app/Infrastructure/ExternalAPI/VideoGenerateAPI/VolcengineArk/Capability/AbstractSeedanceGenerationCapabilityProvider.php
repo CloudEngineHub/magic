@@ -63,6 +63,10 @@ abstract readonly class AbstractSeedanceGenerationCapabilityProvider
         'video_upscale',
     ];
 
+    // 样片模式的样片分辨率档位：样片只用于快速预览效果，固定 480p，
+    // 正式分辨率留到成片阶段（见 DRAFT_TASK_RESOLUTIONS）。
+    private const array DRAFT_RESOLUTIONS = ['480p'];
+
     // 样片成片的成片分辨率档位：成片按正式分辨率出片，样片档位不再暴露给前端。
     private const array DRAFT_TASK_RESOLUTIONS = ['1080p'];
 
@@ -240,6 +244,10 @@ abstract readonly class AbstractSeedanceGenerationCapabilityProvider
                 'default' => false,
                 'name' => __('video.generation.draft.name'),
                 'description' => __('video.generation.draft.description'),
+                // 开关打开时分辨率收窄到 480p，关闭时不受影响。
+                // 这里只是声明，后端不据此拦截：越界由上游方舟报错，
+                // 这样声明与执行不会出现两套判定标准。
+                'constraints' => ['resolutions' => self::DRAFT_RESOLUTIONS],
             ];
         }
 
