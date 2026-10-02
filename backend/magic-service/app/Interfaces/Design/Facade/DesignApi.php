@@ -33,12 +33,21 @@ use App\Interfaces\Design\RequestForm\IdentifyImageMarkFormRequest;
 use App\Interfaces\Design\RequestForm\QueryImageGenerationResultFormRequest;
 use App\Interfaces\Design\RequestForm\QueryVideoGenerationResultFormRequest;
 use App\Interfaces\Design\RequestForm\RemoveBackgroundFormRequest;
+use DateTimeInterface;
 use Dtyq\ApiResponse\Annotation\ApiResponse;
 use Hyperf\Di\Annotation\Inject;
 
 #[ApiResponse('low_code')]
 class DesignApi extends AbstractApi
 {
+    /**
+     * 预计生成耗时（秒），用于推导「预期完成时间」下发给前端。
+     *
+     * 与 ModelGateway 的 ImageGenerationTaskEntity::EXPECTED_DURATION_SECONDS 同语义、同取值，
+     * 因为画布元素与聊天工具卡共用同一个进度换算函数。后续要按 size / model 分档，两处都要改。
+     */
+    private const int EXPECTED_DURATION_SECONDS = 90;
+
     #[Inject]
     protected ImageGenerationAppService $imageGenerationAppService;
 
@@ -389,6 +398,11 @@ class DesignApi extends AbstractApi
             'status' => $entity->getStatus()->value,
             'error_message' => $entity->getErrorMessage(),
             'images' => $entity->getImages(),
+            // 带时区偏移的 ISO 8601，与元素上的 `start_time` 同一格式、同一个解析函数。
+            'expected_finished_at' => date(
+                DateTimeInterface::ATOM,
+                $entity->getCreatedAt()->getTimestamp() + self::EXPECTED_DURATION_SECONDS
+            ),
         ];
     }
 

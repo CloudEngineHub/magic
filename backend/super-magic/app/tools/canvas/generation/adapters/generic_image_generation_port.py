@@ -60,6 +60,7 @@ class GenericImageGenerationPort(GenerationSubmissionPort):
             tool_context,
             GenerateImagesParams(tasks=[task]),
             model_id=parameters.model_id,
+            on_task_created=request.on_task_created,
         )
         end_dt = datetime.now()
         duration_ms = int((time.monotonic() - started) * 1000)

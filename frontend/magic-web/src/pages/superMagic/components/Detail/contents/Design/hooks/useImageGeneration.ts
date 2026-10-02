@@ -59,6 +59,7 @@ function toSingleGenerateImageResponse(
 		updated_at: "",
 		file_url: firstImage?.file_url ?? null,
 		id: response.image_id,
+		expected_finished_at: response.expected_finished_at,
 	}
 }
 

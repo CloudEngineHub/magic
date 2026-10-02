@@ -525,6 +525,8 @@ export interface GenerateImageRequest {
 	size?: string
 	/** 分辨率（对应 scale 值） */
 	resolution?: string
+	/** 预期完成时间，后端写入的 ISO 8601 日期时间（如 2026-09-28T20:44:16+08:00），用于估算进度 */
+	expected_finished_at?: string
 	/** 文件目录，一定是本项目存在的目录 */
 	file_dir?: string
 	/** 参考图；DSL 中存相对路径，发请求时会还原为工作区绝对路径 */
@@ -569,6 +571,8 @@ export interface GenerateImageResponse {
 	file_url: string | null
 	/** ID */
 	id: string
+	/** 预期完成时间（ISO 8601 日期时间），后端下发，用于估算进度；聊天工具卡用的是同一个值 */
+	expected_finished_at?: string
 }
 
 export interface GeneratedImageResultItem {

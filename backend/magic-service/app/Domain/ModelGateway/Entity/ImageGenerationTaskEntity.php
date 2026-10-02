@@ -15,6 +15,13 @@ use function Hyperf\Translation\__;
 
 class ImageGenerationTaskEntity
 {
+    /**
+     * 预计生成耗时（秒），用于推导「预期完成时间」下发给前端。
+     *
+     * 先按固定值；后续要按 size / model 分档，只改这里。
+     */
+    private const int EXPECTED_DURATION_SECONDS = 90;
+
     public function __construct(
         private readonly string $id,
         private readonly string $organizationCode,
@@ -201,12 +208,30 @@ class ImageGenerationTaskEntity
             'created_at' => $this->createdAt,
             'updated_at' => $this->updatedAt,
             'finished_at' => $this->finishedAt,
+            'expected_finished_at' => $this->getExpectedFinishedAt(),
             'response' => $this->status === ImageGenerationTaskStatus::SUCCEEDED ? $this->responsePayload : null,
             'error' => $this->status === ImageGenerationTaskStatus::FAILED ? [
                 'code' => $this->errorCode,
                 'message' => $this->errorMessage,
             ] : null,
         ];
+    }
+
+    /**
+     * 预期完成时间（ISO 8601，带时区偏移）。
+     *
+     * 前端据此把「预期完成时间 → 百分比」换算成进度条，画布元素与聊天工具卡共用同一函数。
+     * 用带偏移量的 ISO 8601 而不是本地 `Y-m-d H:i:s`：后者无时区，浏览器 `Date.parse`
+     * 行为未定义；也不用毫秒时间戳，因为它和 `start_time` 这类日期时间字段要两套解析。
+     */
+    private function getExpectedFinishedAt(): string
+    {
+        $createdAt = strtotime($this->createdAt);
+        if ($createdAt === false) {
+            $createdAt = time();
+        }
+
+        return date(DateTimeInterface::ATOM, $createdAt + self::EXPECTED_DURATION_SECONDS);
     }
 
     private function formatTime(?DateTimeInterface $time): string

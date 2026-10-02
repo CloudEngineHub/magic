@@ -5,7 +5,7 @@
 后续视频/音频生成各自有独立的 video_dispatcher.py、audio_dispatcher.py。
 """
 
-from typing import Dict
+from typing import Dict, Optional
 
 from agentlang.config.config import config
 from agentlang.logger import get_logger
@@ -14,6 +14,7 @@ from app.tools.media_generator.base import (
     BaseImageGeneratorHandler,
     ImageGenerationRequest,
     ImageGenerationResponse,
+    ImageTaskCreatedCallback,
 )
 
 logger = get_logger(__name__)
@@ -73,11 +74,14 @@ class ImageGeneratorDispatcher:
             return False
 
     async def generate(
-        self, handler_name: str, request: ImageGenerationRequest
+        self,
+        handler_name: str,
+        request: ImageGenerationRequest,
+        on_task_created: Optional[ImageTaskCreatedCallback] = None,
     ) -> ImageGenerationResponse:
         """使用指定驱动执行图片生成"""
         handler = self._build_handler(handler_name)
         logger.info(
             f"使用驱动 [{handler.name}] 生成图片, model={request.model}, size={request.size}"
         )
-        return await handler.generate(request)
+        return await handler.generate(request, on_task_created)

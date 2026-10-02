@@ -445,6 +445,8 @@ export interface GenerateImagesResponse {
 	error_message: string | null
 	/** 已返回的图片列表 */
 	images: GeneratedImageResultItem[]
+	/** 预期完成时间（ISO 8601 日期时间），后端下发，用于估算进度；聊天工具卡用的是同一个值 */
+	expected_finished_at?: string
 }
 
 /**

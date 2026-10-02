@@ -105,6 +105,10 @@ export function getToolCardInteractionTarget(
 	if (detailRecord.type === "browser") {
 		return { type: "playback" }
 	}
+	// 生成进度详情只承载预期完成时间，没有可预览的内容，不能因为卡片在生成中就变成可点。
+	if (detailRecord.type === "generation_progress") {
+		return { type: "disabled" }
+	}
 	const data = detailRecord.data
 	if (data && typeof data === "object" && !Array.isArray(data)) {
 		const { target_file_id, target_file_path } = data as Record<string, unknown>

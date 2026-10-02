@@ -12,6 +12,7 @@ from app.tools.media_generator.base import (
     GeneratedImage,
     ImageGenerationRequest,
     ImageGenerationResponse,
+    ImageTaskCreatedCallback,
 )
 from app.utils.async_file_utils import async_close_fd, async_exists, async_mkstemp
 
@@ -30,8 +31,15 @@ class DebugImageGeneratorHandler(BaseImageGeneratorHandler):
         """判断本地模拟素材是否存在。"""
         return self._ASSET_PATH.is_file()
 
-    async def generate(self, request: ImageGenerationRequest) -> ImageGenerationResponse:
-        """按请求尺寸生成一个本地临时图片结果。"""
+    async def generate(
+        self,
+        request: ImageGenerationRequest,
+        on_task_created: ImageTaskCreatedCallback | None = None,
+    ) -> ImageGenerationResponse:
+        """按请求尺寸生成一个本地临时图片结果。
+
+        本地模拟没有任务创建阶段，故不触发 on_task_created。
+        """
         if not await async_exists(self._ASSET_PATH):
             raise FileNotFoundError(f"Mock image asset is missing: {self._ASSET_PATH.name}")
 

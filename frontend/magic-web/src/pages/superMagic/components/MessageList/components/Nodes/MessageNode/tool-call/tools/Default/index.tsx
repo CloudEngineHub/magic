@@ -4,6 +4,7 @@ import { superMagicStore } from "@/pages/superMagic/stores"
 import { useCallback, useMemo } from "react"
 import { observer } from "mobx-react-lite"
 import { useToolTooltip } from "@/pages/superMagic/components/MessageList/components/Nodes/ToolCall/hooks/useToolTooltip"
+import ToolGenerationProgress from "@/pages/superMagic/components/MessageList/components/shared/ToolGenerationProgress"
 import { useTranslation } from "react-i18next"
 import pubsub, { PubSubEvents } from "@/utils/pubsub"
 import { ToolIconBadge } from "@/pages/superMagic/components/MessageList/components/shared/ToolIconConfig"
@@ -27,6 +28,7 @@ interface ToolDataLike {
 	remark?: string
 	status?: string
 	detail?: {
+		type?: string
 		data?: Record<string, unknown>
 	}
 	interactionTarget?: ToolCardInteractionTarget
@@ -165,6 +167,12 @@ function DefaultTool(props: DefaultToolProps) {
 					renderSuffixIcon
 				)}
 			</div>
+			<ToolGenerationProgress
+				toolCallId={tool?.id}
+				toolName={tool?.name}
+				status={tool?.status}
+				detail={tool?.detail}
+			/>
 			{renderTooltip()}
 		</div>
 	)

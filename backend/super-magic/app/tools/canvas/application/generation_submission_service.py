@@ -7,6 +7,7 @@ from dataclasses import dataclass
 from typing import Any, TypeVar, cast
 
 from agentlang.context.tool_context import ToolContext
+from agentlang.logger import get_logger
 from app.tools.canvas.application.commands import GenerationSubmissionCommand
 from app.tools.canvas.application.element_sizing_service import CanvasElementSizingService
 from app.tools.canvas.application.results import CanvasBatchResult, CanvasResultItem, GeneratedResultItem
@@ -23,11 +24,14 @@ from app.tools.canvas.generation import (
     GenerationSubmission,
     GenerationTask,
     GenerationTaskRepository,
+    TaskCreatedCallback,
 )
 from app.tools.canvas.infrastructure.persistence.content_metadata_service import ContentMetadataService
 from app.tools.canvas.repository import CanvasUnitOfWork
 
 TGeneratedItem = TypeVar("TGeneratedItem", bound=CanvasResultItem)
+
+logger = get_logger(__name__)
 
 
 @dataclass(frozen=True)
@@ -169,6 +173,72 @@ class GenerationSubmissionService:
                 # 预写失败不改变 provider 的执行与原有失败收敛流程，完成阶段还会再次持久化。
                 continue
 
+    def _make_expected_finish_sink(
+        self,
+        submission_item: GenerationSubmissionCommand,
+        project_path: str,
+    ) -> TaskCreatedCallback:
+        """构造「provider 建单后立刻落预期完成时间」的回调。
+
+        provider 调用要阻塞到生成结束，而元素的公共生成请求只有「提交前 + 提交后」两个写入点，
+        中间没有；预期完成时间却只在建单响应里出现一次。所以这里补一次中途写入，
+        让画布元素在生成过程中就能按它估算进度（与聊天工具卡用的是同一个值）。
+        """
+
+        async def sink(task_id: str, expected_finished_at: str | None) -> None:
+            if expected_finished_at is None:
+                return
+            await self._persist_expected_finish(
+                project_path, submission_item, expected_finished_at
+            )
+
+        return sink
+
+    async def _persist_expected_finish(
+        self,
+        project_path: str,
+        submission_item: GenerationSubmissionCommand,
+        expected_finished_at: str,
+    ) -> None:
+        """把预期完成时间写进当前 Content 的公共生成请求。"""
+        if not generation_request_field(submission_item.element_type):
+            return
+
+        def persist(project: CanvasProject, metadata: dict[str, Any]) -> tuple[None, dict[str, Any]]:
+            """在项目事务中更新当前 Content 的公共生成请求。"""
+            detail = ContentMetadataService.get(
+                metadata,
+                submission_item.element_id,
+                submission_item.content_id,
+            )
+            parameters = {
+                **dict(detail.get("generationParameters") or {}),
+                "expected_finished_at": expected_finished_at,
+            }
+            request_field = generation_request_field(submission_item.element_type)
+            detail_update = {
+                **detail,
+                "generationParameters": parameters,
+                request_field: ContentMetadataService.build_public_generation_request(
+                    parameters,
+                    submission_item.element_type,
+                    project_path=project_path,
+                ),
+            }
+            ContentMetadataService.set(
+                metadata,
+                submission_item.element_id,
+                submission_item.content_id,
+                detail_update,
+            )
+            return None, metadata
+
+        try:
+            await self.unit_of_work.transaction_with_sidecar(project_path, persist)
+        except Exception as e:
+            # 中途写入失败不改变生成结果，元素会退回本端估算。
+            logger.warning(f"写入图片生成预期完成时间失败: {e}")
+
     def _build_work_item(
         self,
         submission_item: GenerationSubmissionCommand,
@@ -183,6 +253,7 @@ class GenerationSubmissionService:
             content_id=submission_item.content_id,
             element_type=submission_item.element_type,
             parameters=parameters,
+            on_task_created=self._make_expected_finish_sink(submission_item, project_path),
         )
         return _GenerationWorkItem(
             submission_item=submission_item,

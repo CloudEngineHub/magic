@@ -20,6 +20,7 @@ from app.tools.media_generator.base import (
     ImageGenerationProviderError,
     ImageGenerationRequest,
     ImageGenerationResponse,
+    ImageTaskCreatedCallback,
 )
 from app.utils.credential_utils import sanitize_headers
 
@@ -106,8 +107,22 @@ class MagicServiceHandler(BaseImageGeneratorHandler):
             "base64_length": len(match.group("data")),
         }
 
-    async def _call_api(self, payload: _ImageApiPayload) -> list[str]:
-        """调用 magic-service 异步图片生成 API，轮询完成后返回图片 URL 列表。"""
+    @staticmethod
+    def _parse_expected_finished_at(response_data: dict) -> Optional[str]:
+        """从任务响应里取预期完成时间（ISO 8601），缺失或类型异常时返回 None。"""
+        value = response_data.get("expected_finished_at")
+        return value if isinstance(value, str) and value else None
+
+    async def _call_api(
+        self,
+        payload: _ImageApiPayload,
+        on_task_created: Optional[ImageTaskCreatedCallback] = None,
+    ) -> list[str]:
+        """调用 magic-service 异步图片生成 API，轮询完成后返回图片 URL 列表。
+
+        任务创建成功后立即回调 on_task_created：预期完成时间只在创建响应里有，
+        而本方法要轮询到任务结束才返回，所以必须在此刻把值交出去。
+        """
         url = f"{self._api_base_url.rstrip('/')}/images/generation-tasks"
         headers = self._build_api_headers()
         payload_dict = dataclasses.asdict(payload)
@@ -140,6 +155,12 @@ class MagicServiceHandler(BaseImageGeneratorHandler):
                 task_id = str(response_data.get("id") or "").strip()
                 if not task_id:
                     raise ValueError("magic-service image generation task response missing id")
+
+                if on_task_created is not None:
+                    await on_task_created(
+                        task_id,
+                        self._parse_expected_finished_at(response_data),
+                    )
 
             deadline = time.monotonic() + self._POLL_TIMEOUT_SECONDS
             query_url = f"{self._api_base_url.rstrip('/')}/images/generation-tasks/{task_id}"
@@ -221,7 +242,11 @@ class MagicServiceHandler(BaseImageGeneratorHandler):
 
                 await asyncio.sleep(self._POLL_INTERVAL_SECONDS)
 
-    async def generate(self, request: ImageGenerationRequest) -> ImageGenerationResponse:
+    async def generate(
+        self,
+        request: ImageGenerationRequest,
+        on_task_created: Optional[ImageTaskCreatedCallback] = None,
+    ) -> ImageGenerationResponse:
         """调用 magic-service 异步图片生成 API，下载到临时文件后返回。"""
         payload = _ImageApiPayload(
             model=request.model,
@@ -231,7 +256,7 @@ class MagicServiceHandler(BaseImageGeneratorHandler):
             n=1,
         )
 
-        image_urls = await self._call_api(payload)
+        image_urls = await self._call_api(payload, on_task_created)
         if not image_urls:
             raise ValueError("API returned no image URLs")
 

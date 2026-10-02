@@ -31,6 +31,7 @@ import type {
 	EraserRequest,
 	GenerateExtendedImageRequest,
 	GenerateImageRequest,
+	GenerateImageResponse,
 	GenerateHightImageRequest,
 	ImageGenerationTaskMeta,
 	RemoveBackgroundRequest,
@@ -57,7 +58,7 @@ import type {
 } from "../../resources/image/ImageResourceManager"
 import { getPersistedSourceCrop } from "../../resources/image/imageCropUtils"
 import { getImageSourceDimensions } from "../../resources/image/imageSourceUtils"
-import { IMAGE_CONFIG, COLORS } from "./ImageElement.config"
+import { IMAGE_CONFIG, LAYOUT, COLORS } from "./ImageElement.config"
 import { ImageStaticLoader } from "../../resources/image/ImageStaticLoader"
 import { RenderUtils } from "../../shared/render/RenderUtils"
 import { BorderDecorator } from "../decorators/BorderDecorator"
@@ -87,6 +88,7 @@ import {
 	type MediaEditIntent,
 } from "../../interaction/media-edit-recovery/MediaEditRecoveryManager"
 import { resolveImageDisplayState, type ImageDisplayState } from "./imageDisplayState"
+import { resolveGenerationProgress } from "../../../../../utils/generationProgress"
 
 const IMAGE_CONTENT_NODE_NAME = "image-content"
 
@@ -134,6 +136,11 @@ export class ImageElement extends BaseElement<ImageElementData> {
 	private contentPreviewUnsubscribe?: () => void
 	private effectiveContentId?: string
 	private effectiveContentSrc?: string
+
+	// 生成进度百分比：锚点取本端首次观察到生成中的时刻（按 Content 缓存），与聊天工具卡同一套
+	// 起点语义。锚点与定时器分开保存：重渲染只停定时器、保留锚点，否则进度会回到起点。
+	private generationProgressAnchor?: { contentId: string; startedAtMs: number }
+	private generationProgressTimer?: ReturnType<typeof setInterval>
 
 	// 缓存已加载的图片对象（ImageBitmap | HTMLImageElement，由 ImageResourceManager 统一管理）
 	private loadedImage?: ImageSource
@@ -459,6 +466,7 @@ export class ImageElement extends BaseElement<ImageElementData> {
 	override rerender(): Konva.Node | null {
 		// 在重新渲染前清理监听器和装饰器
 		this.removeContentUpdateListener()
+		this.stopGenerationProgress()
 		this.borderDecorator?.destroy()
 		this.borderDecorator = undefined
 		this.cornerActionsDecorator?.destroy()
@@ -489,6 +497,7 @@ export class ImageElement extends BaseElement<ImageElementData> {
 		this.cornerActionsDecorator?.destroy()
 		this.mainVersionTagDecorator?.destroy()
 		this.removeContentUpdateListener()
+		this.stopGenerationProgress()
 		// 清理缓存的图片对象
 		this.clearLoadedImageReference()
 		// 清理 ossSrc Promise
@@ -737,7 +746,10 @@ export class ImageElement extends BaseElement<ImageElementData> {
 
 		try {
 			// 发起图片生成请求
-			await this.canvas.magicConfigManager.config?.methods?.generateImage(requestWithId)
+			const response = await this.canvas.magicConfigManager.config?.methods?.generateImage(
+				requestWithId,
+			)
+			this.applyExpectedFinishTime(requestWithId, response)
 
 			if (
 				!this.canvas.generationRuntimeManager.isCurrent(attemptId, this.data.id, contentId)
@@ -843,7 +855,8 @@ export class ImageElement extends BaseElement<ImageElementData> {
 		})
 
 		try {
-			await generateImage(requestWithId)
+			const response = await generateImage(requestWithId)
+			this.applyExpectedFinishTime(requestWithId, response)
 			if (
 				!this.canvas.generationRuntimeManager.isCurrent(attemptId, this.data.id, contentId)
 			) {
@@ -889,6 +902,22 @@ export class ImageElement extends BaseElement<ImageElementData> {
 			this.saveGenerateRecoveryDraft(requestWithId, recoveryContent, recoveryIntent)
 			this.rerenderWhenTransformIdle()
 			return false
+		}
+	}
+
+	/**
+	 * 把接口返回的预期完成时间并进提交请求。
+	 *
+	 * 就地合并：这个对象同时被运行时占位（等待期进度条读它）和确认后的 DSL 引用，
+	 * 所以一处赋值即可让画布元素拿到后端下发的 ETA，不需要再新增一条写入路径。
+	 */
+	private applyExpectedFinishTime(
+		request: GenerateImageRequest,
+		response?: GenerateImageResponse,
+	): void {
+		const expectedFinishedAt = response?.expected_finished_at
+		if (typeof expectedFinishedAt === "string" && expectedFinishedAt) {
+			request.expected_finished_at = expectedFinishedAt
 		}
 	}
 
@@ -2394,6 +2423,11 @@ export class ImageElement extends BaseElement<ImageElementData> {
 				this.setupContentUpdateListener(group)
 			})
 
+			// 进度文本必须晚于背景图加入，否则会被背景盖住
+			if (displayState.status === "generating") {
+				this.attachGenerationProgress(group, width, height)
+			}
+
 			this.createBorder(group, width, height, true)
 			this.createCornerActions(group, width, height)
 			this.createMainVersionTag(group, width, height)
@@ -2401,6 +2435,78 @@ export class ImageElement extends BaseElement<ImageElementData> {
 
 		this.finalizeNode(group)
 		return group
+	}
+
+	/**
+	 * 解析本次生成的进度起点。
+	 *
+	 * 一律取本端首次观察到该 Content 生成中的当前时刻：起点只要与后端给出的预期完成时间
+	 * 同处一条时间轴就能算出剩余时长，而本端时刻是本端唯一能保证单调、不受两端时钟偏差
+	 * 影响的选择。锚点按 Content 缓存，元素重渲染不会让进度回退。
+	 */
+	private resolveGenerationStartedAt(contentId: string): number {
+		if (this.generationProgressAnchor?.contentId === contentId) {
+			return this.generationProgressAnchor.startedAtMs
+		}
+
+		const startedAtMs = Date.now()
+		this.generationProgressAnchor = { contentId, startedAtMs }
+		return startedAtMs
+	}
+
+	/**
+	 * 在占位符底部显示生成百分比，并每秒推进一次。
+	 *
+	 * 百分比复用 `generationProgress.ts` 的估算：优先用后端写在公共生成请求里的
+	 * `expected_finished_at`（与聊天工具卡是同一个值），拿不到时才用固定兜底时长。
+	 * 每秒跳变即可，不做平滑动画，避免频繁重绘整个 layer。
+	 */
+	private attachGenerationProgress(group: Konva.Group, width: number, height: number): void {
+		const contentId = this.getActiveContentData().contentId
+		const labelWidth = Math.min(width, IMAGE_CONFIG.PROGRESS_LABEL_MAX_WIDTH)
+		if (!contentId || labelWidth <= 0) {
+			return
+		}
+
+		const startedAtMs = this.resolveGenerationStartedAt(contentId)
+		const request = this.getActiveGenerateImageRequest()
+
+		const labelNode = new Konva.Text({
+			x: (width - labelWidth) / 2,
+			y: height - IMAGE_CONFIG.PROGRESS_LABEL_INSET,
+			width: labelWidth,
+			align: "center",
+			fontSize: LAYOUT.TEXT_FONT_SIZE,
+			fontFamily: LAYOUT.TEXT_FONT_FAMILY,
+			fill: COLORS.LOADING_TEXT,
+			listening: false,
+		})
+		group.add(labelNode)
+
+		const applyProgress = () => {
+			const percent = resolveGenerationProgress({
+				status: "processing",
+				startedAtMs,
+				expectedFinishedAt: request?.expected_finished_at,
+			})
+			labelNode.text(`${percent}%`)
+			group.getLayer()?.batchDraw()
+		}
+
+		this.stopGenerationProgress()
+		this.generationProgressTimer = setInterval(
+			applyProgress,
+			IMAGE_CONFIG.PROGRESS_TICK_INTERVAL,
+		)
+		applyProgress()
+	}
+
+	private stopGenerationProgress(): void {
+		if (this.generationProgressTimer === undefined) {
+			return
+		}
+		clearInterval(this.generationProgressTimer)
+		this.generationProgressTimer = undefined
 	}
 
 	private hasActiveImageGenerationTask(): boolean {

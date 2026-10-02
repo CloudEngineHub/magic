@@ -179,7 +179,7 @@ class ContentMetadataService:
         for key in ("providerTaskId", "generationTaskId", "outputUri", "outputFilename", "errorMessage"):
             updated.pop(key, None)
         cleaned_parameters = _clean_generation_parameters(parameters)
-        for key in ("start_time", "end_time", "duration_ms"):
+        for key in ("start_time", "expected_finished_at", "end_time", "duration_ms"):
             cleaned_parameters.pop(key, None)
         cleaned_parameters = _with_generation_start_metadata(cleaned_parameters, element_type or "")
         updated.update({
@@ -267,7 +267,7 @@ class ContentMetadataService:
         因此更换 item_ref 仍然必须经过统一的重试上限校验。
         """
         stable_parameters = dict(parameters or {})
-        for key in ("start_time", "end_time", "duration_ms", "mode"):
+        for key in ("start_time", "expected_finished_at", "end_time", "duration_ms", "mode"):
             stable_parameters.pop(key, None)
         payload = {
             "item_ref": item_ref,
@@ -333,7 +333,16 @@ class ContentMetadataService:
             "prompt": str(parameters.get("prompt") or ""),
         }
         generic_keys = (
-            ("size", "image_id", "mode", "start_time", "end_time", "duration_ms", "model_id")
+            (
+                "size",
+                "image_id",
+                "mode",
+                "start_time",
+                "expected_finished_at",
+                "end_time",
+                "duration_ms",
+                "model_id",
+            )
             if element_type == "image"
             else ("model_id",)
         )

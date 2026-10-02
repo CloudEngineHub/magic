@@ -49,6 +49,7 @@ class DisplayType(str, Enum):
     DESIGN = 'design'
     ASK_USER = "ask_user"  # ask_user 问答结果展示
     PLAN = "plan"  # 开发计划确认展示
+    GENERATION_PROGRESS = "generation_progress"  # 生成进度：只带预期完成时间，百分比由前端换算
 
 
 class BrowserDetailStatus(str, Enum):
