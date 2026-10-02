@@ -43,6 +43,7 @@ export default function PPTTransitionPanel(props: PPTTransitionPanelProps) {
 	const reducedMotion = Boolean(useReducedMotion())
 	const draft = usePPTTransitionDraft(props)
 	const [previewRun, setPreviewRun] = useState(0)
+	const [panelElement, setPanelElement] = useState<HTMLElement | null>(null)
 	const closeFocus = useRef<HTMLElement | null>(null)
 	const opener = useRef<HTMLElement | null>(null)
 	const closeButton = useRef<HTMLButtonElement>(null)
@@ -113,6 +114,7 @@ export default function PPTTransitionPanel(props: PPTTransitionPanelProps) {
 	if (!props.open) return null
 	return (
 		<aside
+			ref={setPanelElement}
 			aria-label={t("ppt.transitions.title")}
 			data-testid="ppt-transition-panel"
 			// Stay in the PPT flex layout; only the settings body scrolls, never the actions.
@@ -268,7 +270,12 @@ export default function PPTTransitionPanel(props: PPTTransitionPanelProps) {
 							<SelectTrigger aria-labelledby={scopeLabelId}>
 								<SelectValue />
 							</SelectTrigger>
-							<SelectContent>
+							<SelectContent
+								// Share the preview's stacking/fullscreen tree, outside the scroll viewport.
+								container={panelElement}
+								collisionBoundary={panelElement}
+								onEscapeKeyDown={(event) => event.stopPropagation()}
+							>
 								<SelectItem value="current">
 									{t("ppt.transitions.current")}
 								</SelectItem>

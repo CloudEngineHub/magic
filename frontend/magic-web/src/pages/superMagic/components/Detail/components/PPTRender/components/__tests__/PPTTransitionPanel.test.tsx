@@ -1,7 +1,8 @@
 import { fireEvent, render, screen, waitFor, within } from "@testing-library/react"
-import { beforeEach, describe, expect, it, vi } from "vitest"
+import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vitest"
 import PPTTransitionPanel from "../PPTTransitionPanel"
 import PPTTransitionPreview from "../PPTTransitionPreview"
+import { OverlayZIndexProvider } from "@/utils/overlayZIndex"
 
 const { animate, cancel } = vi.hoisted(() => ({ animate: vi.fn(), cancel: vi.fn() }))
 const layout = vi.hoisted(() => ({ mobile: false }))
@@ -26,6 +27,22 @@ const base = {
 }
 
 describe("PPTTransitionPanel", () => {
+	const originalScrollIntoView = Object.getOwnPropertyDescriptor(
+		HTMLElement.prototype,
+		"scrollIntoView",
+	)
+	beforeAll(() => {
+		// jsdom has no layout scrolling; Radix focuses the opened scope option with it.
+		Object.defineProperty(HTMLElement.prototype, "scrollIntoView", {
+			configurable: true,
+			value: vi.fn(),
+		})
+	})
+	afterAll(() => {
+		if (originalScrollIntoView)
+			Object.defineProperty(HTMLElement.prototype, "scrollIntoView", originalScrollIntoView)
+		else Reflect.deleteProperty(HTMLElement.prototype, "scrollIntoView")
+	})
 	beforeEach(() => {
 		layout.mobile = false
 	})
@@ -67,6 +84,39 @@ describe("PPTTransitionPanel", () => {
 		expect(panel).toHaveClass("h-[45%]", "max-h-[360px]", "w-full", "border-t")
 		expect(panel).not.toHaveAttribute("aria-modal")
 	})
+
+	it.each([false, true])(
+		"keeps scope options outside the scroller in the preview tree (mobile=%s)",
+		(mobile) => {
+			layout.mobile = mobile
+			const onOpenChange = vi.fn()
+			render(
+				<OverlayZIndexProvider value={1010}>
+					<PPTTransitionPanel {...base} onOpenChange={onOpenChange} onSave={vi.fn()} />
+				</OverlayZIndexProvider>,
+			)
+			const panel = screen.getByRole("complementary")
+			const trigger = screen.getByRole("combobox", { name: "ppt.transitions.scope" })
+			fireEvent.keyDown(trigger, { key: "ArrowDown" })
+			const options = screen.getByRole("listbox", { hidden: true })
+			expect(panel).toContainElement(options)
+			expect(options.closest('[data-slot="scroll-area-viewport"]')).toBeNull()
+			expect(options.style.zIndex).toBe("1020")
+			fireEvent.keyDown(options, { key: "Escape" })
+			expect(screen.queryByRole("listbox", { hidden: true })).not.toBeInTheDocument()
+			expect(onOpenChange).not.toHaveBeenCalled()
+			fireEvent.keyDown(trigger, { key: "ArrowDown" })
+			fireEvent.keyDown(
+				within(screen.getByRole("listbox", { hidden: true })).getByRole("option", {
+					name: "ppt.transitions.all",
+					hidden: true,
+				}),
+				{ key: "Enter" },
+			)
+			expect(screen.queryByRole("listbox", { hidden: true })).not.toBeInTheDocument()
+			expect(trigger).toHaveTextContent("ppt.transitions.all")
+		},
+	)
 
 	it("uses shared animation only for explicit preview requests", () => {
 		animate.mockReset()
