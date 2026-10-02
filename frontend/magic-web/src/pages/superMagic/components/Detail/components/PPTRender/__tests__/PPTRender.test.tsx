@@ -597,6 +597,7 @@ describe("PPTRender", () => {
 			'<div class="slide-container" style="background-image:url(blob:processed-bg)">processed</div>',
 		)
 		mockState.store.generateSlideScreenshot.mockReset()
+		mockState.store.generateSlideScreenshot.mockResolvedValue(undefined)
 		mockState.store.markSlideAsManuallySaved.mockReset()
 		mockState.pptControlBarProps.mockReset()
 		mockState.pptSlideProps.mockReset()
