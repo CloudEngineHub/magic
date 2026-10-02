@@ -536,12 +536,17 @@ export const getLinkHandlingScript = (navigationBasePath = "") => {
 				}
 				var href = navigationRuntime.getInternalNavigationHref(raw);
 				if (!href) {
-					if (customLink) {
-						window.open(raw, target, "noopener,noreferrer");
+					// External web links must never replace the preview or its parent page.
+					if (/^(https?:)?\\/\\//i.test((raw || "").trim())) {
+						event.preventDefault();
+						if (window.slideSelector && window.slideSelector.isEditMode) return;
+						window.open(raw, "_blank", "noopener,noreferrer");
 						return;
 					}
-					// Native external navigation remains inside the sandbox for _self.
-					// Explicit new contexts retain opener isolation without changing target.
+					if (customLink) {
+						window.open(raw, "_blank", "noopener,noreferrer");
+						return;
+					}
 					if (target.toLowerCase() === "_blank") {
 						link.relList.add("noopener", "noreferrer");
 					}

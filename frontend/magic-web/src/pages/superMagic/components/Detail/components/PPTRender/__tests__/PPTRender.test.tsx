@@ -46,6 +46,7 @@ const mockState = vi.hoisted(() => ({
 		setActiveIndex: vi.fn(),
 		ensureSlideContent: vi.fn(async () => true),
 		getFileIdByPath: vi.fn(() => "slide-file-id"),
+		getFullRelativePath: (path: string) => `project/deck/${path}`,
 		getSlideEditingState: vi.fn(() => false),
 		getSlideServerUpdate: vi.fn(() => undefined),
 		clearSlideServerUpdate: vi.fn(),
@@ -652,11 +653,18 @@ describe("PPTRender", () => {
 
 	it("routes normalized PPT file links to the slide instead of opening a file tab", () => {
 		const openNewTab = vi.fn()
+		mockState.store.slides.push({
+			...mockState.store.slides[0],
+			id: "slide-2",
+			path: "section/slide-2.html",
+		})
 		renderPPTRender({ openNewTab })
 		const slideProps = mockState.pptSlideProps.mock.calls.at(-1)?.[0]
-		slideProps.openNewTab("slide-file-id", "/slide-1.html")
-		expect(mockState.jumpToPage).toHaveBeenCalledWith(0)
+		slideProps.openNewTab("slide-file-id", "/project/deck/section/slide-2.html")
+		expect(mockState.jumpToPage).toHaveBeenCalledWith(1)
 		expect(openNewTab).not.toHaveBeenCalled()
+		slideProps.openNewTab("slide-file-id", "/other/deck/slide-1.html")
+		expect(openNewTab).toHaveBeenCalledWith("slide-file-id", "/other/deck/slide-1.html")
 		slideProps.openNewTab("slide-file-id", "/reference.html")
 		expect(openNewTab).toHaveBeenCalledWith("slide-file-id", "/reference.html")
 	})

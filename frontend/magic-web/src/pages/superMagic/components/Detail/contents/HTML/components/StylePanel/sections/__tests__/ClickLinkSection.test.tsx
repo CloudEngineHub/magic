@@ -64,6 +64,32 @@ function renderSection(
 }
 
 describe("ClickLinkSection", () => {
+	it.each(["a", "div"])(
+		"only offers external opening for an external %s link",
+		async (tagName) => {
+			const field = tagName === "a" ? "href" : "dataMagicHref"
+			const onUpdate = vi.fn(async () => undefined)
+			render(
+				<ClickLinkSection
+					selectedElement={element(tagName, {
+						[field]: "https://outside.test",
+						target: "_self",
+					})}
+					onUpdate={onUpdate}
+				/>,
+			)
+			expect(screen.queryByRole("combobox")).not.toBeInTheDocument()
+			expect(screen.getByText("stylePanel.linkTargetExternal")).toBeInTheDocument()
+			fireEvent.blur(screen.getByPlaceholderText("stylePanel.linkUrlPlaceholder"))
+			await waitFor(() =>
+				expect(onUpdate).toHaveBeenCalledWith({
+					[field]: "https://outside.test",
+					target: "_blank",
+				}),
+			)
+		},
+	)
+
 	it.each(["a", "div", "img"])(
 		"configures a PPT target on %s using a stable relative file path",
 		async (tagName) => {

@@ -667,7 +667,14 @@ const PPTRenderInner = observer(function PPTRenderInner({
 			store.slides.find((slide) => store.getFileIdByPath(slide.path) === fileId) ||
 			store.slides[store.activeIndex]
 		const targetIndex = currentSlide
-			? findPPTSlideIndex(store.slides, currentSlide.path, path)
+			? findPPTSlideIndex(
+					// Runtime links use workspace paths; slide config paths are deck-relative.
+					store.slides.map((slide) => ({
+						path: store.getFullRelativePath(slide.path) ?? slide.path,
+					})),
+					store.getFullRelativePath(currentSlide.path) ?? currentSlide.path,
+					path,
+				)
 			: -1
 
 		if (targetIndex >= 0) {

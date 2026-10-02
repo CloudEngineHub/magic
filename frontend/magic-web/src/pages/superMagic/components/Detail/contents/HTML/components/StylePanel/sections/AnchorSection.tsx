@@ -30,6 +30,7 @@ export function AnchorSection({ selectedElement, disabled = false, onUpdate }: A
 	const hrefField = selectedElement.tagName.toLowerCase() === "a" ? "href" : "dataMagicHref"
 	const [draft, setDraft] = useState({ ...attributes, href: attributes[hrefField] })
 	const [advancedOpen, setAdvancedOpen] = useState(false)
+	const isExternalLink = /^(https?:)?\/\//i.test((draft.href ?? "").trim())
 
 	useEffect(() => {
 		const nextAttributes = selectedElement.attributes ?? EMPTY_ATTRIBUTES
@@ -46,8 +47,16 @@ export function AnchorSection({ selectedElement, disabled = false, onUpdate }: A
 		const nextValue = normalized || null
 		setDraft((current) => ({ ...current, [field]: normalized }))
 		const attributeField = field === "href" ? hrefField : field
-		if ((attributes[attributeField] ?? "") === normalized) return
-		await onUpdate({ [attributeField]: nextValue })
+		const externalHref = field === "href" && /^(https?:)?\/\//i.test(normalized)
+		if (
+			(attributes[attributeField] ?? "") === normalized &&
+			(!externalHref || attributes.target === "_blank")
+		)
+			return
+		await onUpdate({
+			[attributeField]: nextValue,
+			...(externalHref ? { target: "_blank" } : {}),
+		})
 	}
 
 	const inputField = (
@@ -92,27 +101,37 @@ export function AnchorSection({ selectedElement, disabled = false, onUpdate }: A
 				)}
 				<label className={cn("block", STYLE_PANEL_STYLES.field)}>
 					<span className={STYLE_PANEL_STYLES.label}>{t("stylePanel.linkTarget")}</span>
-					<Select
-						value={draft.target || "_self"}
-						onValueChange={(value) =>
-							void commit("target", value === "_self" ? "" : value)
-						}
-						disabled={disabled}
-					>
-						<SelectTrigger className={cn("w-full", STYLE_PANEL_STYLES.control)}>
-							<SelectValue />
-						</SelectTrigger>
-						<EditorSelectContent>
-							<SelectItem value="_self">{t("stylePanel.linkTargetSelf")}</SelectItem>
-							<SelectItem value="_blank">
-								{t("stylePanel.linkTargetBlank")}
-							</SelectItem>
-							<SelectItem value="_parent">
-								{t("stylePanel.linkTargetParent")}
-							</SelectItem>
-							<SelectItem value="_top">{t("stylePanel.linkTargetTop")}</SelectItem>
-						</EditorSelectContent>
-					</Select>
+					{isExternalLink ? (
+						<p className="text-xs text-muted-foreground">
+							{t("stylePanel.linkTargetExternal")}
+						</p>
+					) : (
+						<Select
+							value={draft.target || "_self"}
+							onValueChange={(value) =>
+								void commit("target", value === "_self" ? "" : value)
+							}
+							disabled={disabled}
+						>
+							<SelectTrigger className={cn("w-full", STYLE_PANEL_STYLES.control)}>
+								<SelectValue />
+							</SelectTrigger>
+							<EditorSelectContent>
+								<SelectItem value="_self">
+									{t("stylePanel.linkTargetSelf")}
+								</SelectItem>
+								<SelectItem value="_blank">
+									{t("stylePanel.linkTargetBlank")}
+								</SelectItem>
+								<SelectItem value="_parent">
+									{t("stylePanel.linkTargetParent")}
+								</SelectItem>
+								<SelectItem value="_top">
+									{t("stylePanel.linkTargetTop")}
+								</SelectItem>
+							</EditorSelectContent>
+						</Select>
+					)}
 				</label>
 
 				<Collapsible open={advancedOpen} onOpenChange={setAdvancedOpen}>

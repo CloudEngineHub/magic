@@ -1,6 +1,7 @@
 import type { ReactNode } from "react"
 import { useEffect, useState } from "react"
 import { useTranslation } from "react-i18next"
+import { observer } from "mobx-react-lite"
 import { ScrollArea } from "@/components/shadcn-ui/scroll-area"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/shadcn-ui/tabs"
 import type { HTMLEditorV2Ref } from "../../iframe-bridge/types/props"
@@ -34,7 +35,7 @@ export interface MoreStylesTabsProps {
 	onUpdateAttributes: (attributes: Record<string, string | null>) => Promise<void>
 }
 
-export function MoreStylesTabs({
+export const MoreStylesTabs = observer(function MoreStylesTabs({
 	selectedElement,
 	editorRef,
 	disabled,
@@ -221,4 +222,4 @@ export function MoreStylesTabs({
 			</div>
 		</Tabs>
 	)
-}
+})

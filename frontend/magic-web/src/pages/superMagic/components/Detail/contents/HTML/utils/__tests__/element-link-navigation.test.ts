@@ -11,6 +11,26 @@ import { getLinkHandlingScript } from "../full-content"
 import { findPPTSlideIndex } from "../../../../components/PPTRender/utils/slideNavigation"
 
 describe("element click links", () => {
+	it.each(["https://outside.test", "//outside.test"])(
+		"opens custom external link %s outside the preview",
+		(href) => {
+			const runtime = createRuntime()
+			const event = runtime.click(`<div data-magic-href="${href}" target="_self">Go</div>`)
+			expect(event.defaultPrevented).toBe(true)
+			expect(runtime.nativeOpen).toHaveBeenCalledWith(href, "_blank", "noopener,noreferrer")
+			expect(runtime.nativeNavigate).not.toHaveBeenCalled()
+			expect(runtime.postMessage).not.toHaveBeenCalled()
+		},
+	)
+
+	it("does not open external anchors while editing", () => {
+		const runtime = createRuntime()
+		Object.assign(runtime.frame, { slideSelector: { isEditMode: true } })
+		const event = runtime.click('<a href="https://outside.test">Go</a>')
+		expect(event.defaultPrevented).toBe(true)
+		expect(runtime.nativeOpen).not.toHaveBeenCalled()
+	})
+
 	it.each(["div", "img", "button"])(
 		"routes %s links through the existing navigation runtime",
 		(tag) => {

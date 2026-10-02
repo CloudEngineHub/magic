@@ -6687,7 +6687,7 @@
 			"top": "上"
 		},
 		"boxModelSideLabel": "{{layer}}{{side}}",
-		"clickLink": "点击跳转",
+		"clickLink": "跳转",
 		"closeContextPanel": "关闭元素样式面板",
 		"closeDevConsole": "关闭调试",
 		"colorStops": "色标",
@@ -7140,6 +7140,7 @@
 		"linkSlidePlaceholder": "选择要跳转的页面",
 		"linkTarget": "打开方式",
 		"linkTargetBlank": "新窗口",
+		"linkTargetExternal": "外部打开",
 		"linkTargetParent": "父级窗口",
 		"linkTargetSelf": "当前窗口",
 		"linkTargetTop": "顶层窗口",

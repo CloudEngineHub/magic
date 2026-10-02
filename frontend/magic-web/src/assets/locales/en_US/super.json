@@ -6688,7 +6688,7 @@
 			"top": "Top"
 		},
 		"boxModelSideLabel": "{{layer}} {{side}}",
-		"clickLink": "Click action",
+		"clickLink": "Navigation",
 		"closeContextPanel": "Close element style panel",
 		"closeDevConsole": "Close Dev Mode",
 		"colorStops": "Color Stops",
@@ -7141,6 +7141,7 @@
 		"linkSlidePlaceholder": "Select a slide",
 		"linkTarget": "Open in",
 		"linkTargetBlank": "New window",
+		"linkTargetExternal": "Open externally",
 		"linkTargetParent": "Parent window",
 		"linkTargetSelf": "Current window",
 		"linkTargetTop": "Top-level window",
