@@ -202,6 +202,38 @@ describe("IsolatedHTMLRenderer lifecycle", () => {
 		expect(getSetContentCalls(postMessage)).toHaveLength(1)
 	})
 
+	it("pauses a visible PPT during transitions and resumes without replacing its iframe", async () => {
+		const { rerender } = renderIsolated(
+			<IsolatedHTMLRenderer {...defaultProps} isPptRender isVisible isPlaybackPaused />,
+		)
+		const iframe = screen.getByTestId("isolated-html-content-iframe") as HTMLIFrameElement
+		const postMessage = vi
+			.spyOn(iframe.contentWindow as Window, "postMessage")
+			.mockImplementation(vi.fn())
+		dispatchIframeMessage(iframe, "iframeReady")
+		await flushReactEffects()
+		dispatchIframeMessage(iframe, "renderComplete")
+		expect(postMessage).toHaveBeenLastCalledWith(
+			{ type: "setAnimationState", paused: true },
+			window.location.origin,
+		)
+		rerender(
+			<IsolatedHTMLRenderer
+				{...defaultProps}
+				isPptRender
+				isVisible
+				isPlaybackPaused={false}
+			/>,
+		)
+		await flushReactEffects()
+		expect(postMessage).toHaveBeenLastCalledWith(
+			{ type: "setAnimationState", paused: false },
+			window.location.origin,
+		)
+		expect(screen.getByTestId("isolated-html-content-iframe")).toBe(iframe)
+		expect(getSetContentCalls(postMessage)).toHaveLength(1)
+	})
+
 	it("reloads only its own document and removes its message listener on unmount", async () => {
 		const onRefresh = vi.fn()
 		pubsub.subscribe(PubSubEvents.Super_Magic_Detail_Refresh, onRefresh)

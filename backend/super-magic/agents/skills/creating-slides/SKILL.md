@@ -1,6 +1,6 @@
 ---
 name: creating-slides
-description: Slide/PPT creation skill that provides complete slide creation, editing, and management capabilities. Use when users need to create slides, make presentations, edit slide content, or manage slide projects. CRITICAL - When user message contains [@slide_project:...] mention, you MUST load this skill first before any operations.
+description: Slide/PPT creation skill that provides complete slide creation, editing, and management capabilities. Use when users need to create slides, make presentations, edit slide content, configure slide transitions, or manage slide projects. CRITICAL - When user message contains [@slide_project:...] mention, you MUST load this skill first before any operations.
 
 ---
 
@@ -53,6 +53,14 @@ When user has no explicit requirements, follow these defaults:
 
 ---
 
+## Slide transitions
+
+When the user requests page transitions, read [slide-transitions.md](references/slide-transitions.md)
+and the current magic.project.js, then use update_slide_transitions. Keep slide HTML static.
+Do not add transitions without a request. Preserve existing settings, including explicit none,
+during content editing, template replacement, and regeneration. These settings apply to the
+online player; do not promise native PowerPoint transitions or standalone index.html playback.
+
 ## Technical Specifications
 
 ### Size and Implementation
@@ -93,7 +101,7 @@ Generate concise, presentation-ready notes from the page purpose, visible conten
 - **File generation**: Only generate static HTML files
 - **Responsive design prohibited**: Strictly no media queries, pages don't change with screen size
 - **Content overload prohibited**: Avoid excessively long text, too many list items, oversized images; split into multiple pages when single page has too much content
-- **Dynamic effects prohibited**: Page switching controlled by outer system, single pages focus on static display; disable transition, keyframes, dynamic data display animations; disable sound effects, only keep static visuals (CSS hover, shadows, gradients, borders and other style effects can be used normally)
+- **Dynamic effects prohibited**: Page switching controlled by outer system, single pages focus on static display; disable in-page transitions, keyframes, dynamic data display animations; disable sound effects, only keep static visuals (CSS hover, shadows, gradients, borders and other style effects can be used normally)
 - **Don't use server-side code, local file resources, complex interactive features**
 - **Unless user requests, don't use unverified external images**
 - **JavaScript code inline at `<body>` bottom, CSS inline in `<head>`, SVG graphics inline directly**
@@ -1024,7 +1032,7 @@ If user requests modifying slide file names or paths, reference the following wo
 
 1. Use list_dir tool to get complete project folder hierarchy, determine reasonable adjustment plan
 2. View magic.project.js file in slide project, understand slides array content
-3. Use shell_exec(command="mv old_path new_path") command to move or rename files, use edit_file to update slides array in magic.project.js
+3. Use shell_exec(command="mv old_path new_path") command to move or rename files, use edit_file to update slides array in magic.project.js. In the same configuration update, migrate the matching transitions.slides key from the old path to the new path. Deletion removes its override; copying copies only an explicit override, while an inherited setting stays inherited.
 
 ---
 

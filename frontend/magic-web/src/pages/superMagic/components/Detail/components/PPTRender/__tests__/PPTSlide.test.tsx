@@ -714,6 +714,34 @@ describe("PPTSlide", () => {
 		)
 	})
 
+	it.each(["incoming", "outgoing"] as const)(
+		"paints the %s transition layer while keeping its iframe inert and paused",
+		(transitionRole) => {
+			const register = vi.fn()
+			const { unmount } = renderPPTSlide({
+				isActive: transitionRole === "incoming",
+				isPresented: transitionRole === "outgoing",
+				transitionRole,
+				toolbarOwnerKey: "deck::slide-1",
+				onTransitionLayerChange: register,
+			})
+			const wrapper = screen.getByTestId("ppt-slide-item-slide-1")
+			expect(wrapper).toHaveStyle({ visibility: "visible", pointerEvents: "none" })
+			expect((wrapper as HTMLDivElement & { inert: boolean }).inert).toBe(true)
+			expect(wrapper).toHaveAttribute("aria-hidden", "true")
+			expect(register).toHaveBeenCalledWith("deck::slide-1", wrapper)
+			expect(mockState.renderedIsolatedProps).toHaveBeenLastCalledWith(
+				expect.objectContaining({
+					isVisible: true,
+					isTabActive: false,
+					isPlaybackPaused: true,
+				}),
+			)
+			unmount()
+			expect(register).toHaveBeenLastCalledWith("deck::slide-1", null)
+		},
+	)
+
 	it("reports real iframe readiness to the double-buffer owner", async () => {
 		const onRenderReadyChange = vi.fn()
 		renderPPTSlide({ onRenderReadyChange, renderRevision: "slide-1:1" })

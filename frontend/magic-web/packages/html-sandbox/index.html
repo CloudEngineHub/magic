@@ -605,13 +605,12 @@
 						videos.forEach(function (video) {
 							if (!video.paused) video.setAttribute("data-was-playing", "true")
 							video.pause()
-							video.currentTime = 0
+							// Resident slides resume at the user's position after a page transition.
 						})
 
 						audios.forEach(function (audio) {
 							if (!audio.paused) audio.setAttribute("data-was-playing", "true")
 							audio.pause()
-							audio.currentTime = 0
 						})
 					} catch (error) {
 						console.warn("暂停媒体时出错:", error)

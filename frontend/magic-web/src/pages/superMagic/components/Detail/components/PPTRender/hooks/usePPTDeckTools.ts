@@ -21,6 +21,12 @@ import { normalizeHiddenSlides } from "@/pages/superMagic/utils/pptHiddenSlides"
 import { createPPTFileMutationClient, PPTFileMutationError } from "../services/pptFileMutation"
 import type { PPTStore } from "../stores/PPTStore"
 import { moveSelectedToGap, selectSlideRange } from "../utils/slideSelection"
+import {
+	applyPPTTransitionEdit,
+	getPPTTransitionsSignature,
+	reconcilePPTTransitions,
+	type PPTTransitionEdit,
+} from "../utils/pptTransitions"
 
 interface Options {
 	store: PPTStore
@@ -121,9 +127,7 @@ export function usePPTDeckTools(options: Options) {
 	)
 	const run = useMemoizedFn(async (operation: () => Promise<void>) => {
 		if (pending.current || !isActive()) return
-		pending.current = true
-		retainedCreatedFiles.current.clear()
-		cancelRequested.current = false
+		let ownsOperation = false
 		try {
 			// The action was chosen against this order and visibility, before any
 			// unsaved-edit prompt. Do not rebase that intent onto a remote update
@@ -133,7 +137,13 @@ export function usePPTDeckTools(options: Options) {
 				expectedPaths,
 				store.getConfigForExport().displayConfig?.hidden_slides,
 			)
-			if (!(await current.current.beforeWrite()) || !isActive()) return
+			// A dirty transition panel may save through this same writer while resolving
+			// the guard. Reserve the writer only afterwards to avoid a reentrant deadlock.
+			if (!(await current.current.beforeWrite()) || !isActive() || pending.current) return
+			pending.current = true
+			ownsOperation = true
+			retainedCreatedFiles.current.clear()
+			cancelRequested.current = false
 			setBusy(true)
 			await store.syncManager.waitForCompletion()
 			if (!isActive() || cancelRequested.current) return
@@ -159,7 +169,7 @@ export function usePPTDeckTools(options: Options) {
 				else magicToast.error(t("ppt.batch.operationFailed"))
 			}
 		} finally {
-			if (isActive() && retainedCreatedFiles.current.size) {
+			if (ownsOperation && isActive() && retainedCreatedFiles.current.size) {
 				magicToast.info(
 					t("ppt.batch.filesRetained", { count: retainedCreatedFiles.current.size }),
 				)
@@ -169,8 +179,10 @@ export function usePPTDeckTools(options: Options) {
 						reason: "ppt-retained-copies",
 					})
 			}
-			pending.current = false
-			if (alive.current) setBusy(false)
+			if (ownsOperation) {
+				pending.current = false
+				if (alive.current) setBusy(false)
+			}
 		}
 	})
 	const loadManifest = async () => {
@@ -199,12 +211,17 @@ export function usePPTDeckTools(options: Options) {
 		manifest: Awaited<ReturnType<typeof loadManifest>>,
 		paths: string[],
 		hiddenPaths: string[],
+		transitions: unknown = manifest.config.transitions,
+		showToast = true,
 	) => {
 		if (!isActive() || cancelRequested.current) return false
 		const config = {
 			...manifest.config,
 			slides: paths,
 			hidden_slides: normalizeHiddenSlides(paths, hiddenPaths),
+			...(transitions !== undefined
+				? { transitions: reconcilePPTTransitions(transitions, paths) }
+				: {}),
 		}
 		await client.save(manifest.snapshot, generateUpdatedMagicProjectJs(config, paths))
 		if (!isActive()) return false
@@ -221,8 +238,35 @@ export function usePPTDeckTools(options: Options) {
 		if (activeIndex >= 0 && activeIndex !== store.activeIndex) store.setActiveIndex(activeIndex)
 		if (projectId)
 			requestProjectAttachmentsFullRefresh({ projectId, reason: "ppt-deck-operation" })
-		magicToast.success(t("ppt.batch.saved"))
+		if (showToast) magicToast.success(t("ppt.batch.saved"))
 		return true
+	}
+	const setTransitions = async (edit: PPTTransitionEdit): Promise<boolean> => {
+		let saved = false
+		await run(async () => {
+			const manifest = await loadManifest()
+			// Compare the panel's opening snapshot, not a newer version borrowed during save.
+			if (
+				JSON.stringify(edit.expectedPaths) !== JSON.stringify(manifest.paths) ||
+				getPPTTransitionsSignature(edit.expectedTransitions) !==
+					getPPTTransitionsSignature(manifest.config.transitions)
+			) {
+				throw new PPTFileMutationError("conflict")
+			}
+			const transitions = applyPPTTransitionEdit(
+				manifest.config.transitions,
+				manifest.paths,
+				edit,
+			)
+			saved = await commit(
+				manifest,
+				manifest.paths,
+				normalizeHiddenSlides(manifest.paths, manifest.config.hidden_slides),
+				transitions,
+				false,
+			)
+		})
+		return saved
 	}
 	const pathsFor = (targetIds: ReadonlySet<string>) => {
 		const paths = store.slides
@@ -294,6 +338,7 @@ export function usePPTDeckTools(options: Options) {
 			)
 				throw new Error("PPT folder is unavailable")
 			const copies: string[] = []
+			const transitionCopies: Array<{ from: string; to: string }> = []
 			const hiddenCopies: string[] = []
 			const createdIds: string[] = []
 			const names = new Set(
@@ -335,6 +380,7 @@ export function usePPTDeckTools(options: Options) {
 				const path = targets ? sourcePath.replace(/[^/]+$/, fileName) : fileName
 				store.pathMappingService.setPathFileIdMapping(path, fileId)
 				copies.push(path)
+				if (targets) transitionCopies.push({ from: sourcePath, to: path })
 				createdIds.push(fileId)
 				if (targets && hidden.includes(sourcePath)) hiddenCopies.push(path)
 			}
@@ -343,8 +389,13 @@ export function usePPTDeckTools(options: Options) {
 				? Math.max(...sourcePaths.map((path) => manifest.paths.indexOf(path))) + 1
 				: Math.min(Math.max(insertAt ?? manifest.paths.length, 0), manifest.paths.length)
 			const paths = [...manifest.paths.slice(0, gap), ...copies, ...manifest.paths.slice(gap)]
+			const transitions = transitionCopies.reduce(
+				(config, duplicatePath) =>
+					reconcilePPTTransitions(config, paths, { duplicatePath }),
+				manifest.config.transitions,
+			)
 			// A failed/unknown manifest commit must never trigger blind deletion of created files.
-			if (await commit(manifest, paths, [...hidden, ...hiddenCopies])) {
+			if (await commit(manifest, paths, [...hidden, ...hiddenCopies], transitions)) {
 				retainedCreatedFiles.current.clear()
 				setSelected(new Set(createdIds))
 				setSelecting(Boolean(targets))
@@ -369,6 +420,7 @@ export function usePPTDeckTools(options: Options) {
 			setSelected(new Set(ids.filter(Boolean)))
 		},
 		setHidden,
+		setTransitions,
 		remove,
 		reorder,
 		move,

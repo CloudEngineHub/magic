@@ -1275,6 +1275,53 @@ class MagicServiceClient:
             if should_close_session:
                 await session_to_use.close()
 
+    async def get_file_metadata(self, file_id: str) -> Dict[str, Any]:
+        """读取 MagicFS 元数据；version 是保存 CAS 使用的 metadata_version。"""
+        if not file_id.isdecimal() or int(file_id) <= 0:
+            raise ApiError("A synchronized file ID is required")
+        result = await self._request_user_file_json(
+            "POST", f"/api/v1/open-api/magicfs/files/{file_id}/queries", {}
+        )
+        metadata = result.get("file")
+        if not isinstance(metadata, dict):
+            raise ApiError("The file service did not return file metadata")
+        return metadata
+
+    async def save_file_content(
+        self, file_id: str, content: str, expected_revision: int
+    ) -> Dict[str, Any]:
+        """复用文件锁及编辑权限校验；不重试有副作用的请求。"""
+        if not file_id.isdecimal() or int(file_id) <= 0:
+            raise ApiError("A synchronized file ID is required")
+        if type(expected_revision) is not int or expected_revision < 0:
+            raise ApiError("A metadata revision is required for saving")
+        return await self._request_user_file_json(
+            "POST", "/api/v1/super-agent/file/save",
+            [{"file_id": file_id, "content": content, "expected_revision": expected_revision}],
+        )
+
+    async def _request_user_file_json(self, method: str, path: str, payload: Any) -> Dict[str, Any]:
+        # 凭据读取使用线程封装文件 I/O。WebUserGuard 优先读取 User-Authorization，
+        # 不能把 API key 或 Magic-Authorization 当作文件所有者的授权。
+        headers = await asyncio.to_thread(self._build_json_headers)
+        if not headers.get("User-Authorization"):
+            raise ApiError("User authorization is unavailable; no file write was attempted", status_code=401)
+        session = self.session or aiohttp.ClientSession()
+        try:
+            async with session.request(
+                method, f"{self._api_base_url()}{path}", json=payload,
+                headers=headers, timeout=aiohttp.ClientTimeout(total=20),
+            ) as response:
+                body = await response.json(content_type=None)
+                if not isinstance(body, dict):
+                    raise ApiError("Invalid file service response")
+                if response.status < 200 or response.status >= 300:
+                    raise ApiError("File service request rejected", response.status, body)
+                return self._extract_response_data(body, "File service")
+        finally:
+            if self.session is None:
+                await session.close()
+
     async def get_file_latest_version(self, file_id: str) -> Dict[str, Any]:
         """
         Get the latest content version number for a file.

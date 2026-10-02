@@ -25,6 +25,7 @@ import projectFilesStore from "@/stores/projectFiles"
 import { MentionItemType } from "@/components/business/MentionPanel/types"
 import { requestProjectAttachmentsFullRefresh } from "@/pages/superMagic/services/attachmentsTopicSync"
 import type { PPTSlideStructureAdapter } from "../types"
+import { reconcilePPTTransitions } from "../utils/pptTransitions"
 
 interface UsePPTSidebarOptions {
 	slides: SlideItem[]
@@ -916,6 +917,24 @@ export function usePPTSidebar({
 				}
 			}
 
+			// The manifest rename is confirmed now. Update its path-owned metadata immediately;
+			// waiting for attachment refresh would temporarily play the renamed page's default.
+			const displayConfig = store.getConfigForExport().displayConfig
+			if (displayConfig?.transitions !== undefined) {
+				await store.updateConfig({
+					displayConfig: {
+						...displayConfig,
+						slides: store.slidePaths,
+						transitions: reconcilePPTTransitions(
+							displayConfig.transitions,
+							store.slidePaths,
+							{
+								renamePath: { from: oldPath, to: result.newFilePath },
+							},
+						),
+					},
+				})
+			}
 			requestProjectAttachmentsFullRefresh({
 				projectId,
 				reason: "ppt-rename-slide",

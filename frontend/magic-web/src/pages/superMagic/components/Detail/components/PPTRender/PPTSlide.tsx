@@ -61,6 +61,9 @@ interface PPTSlideProps {
 	isActive: boolean
 	/** The slide currently painted in the main canvas. May differ from isActive while preparing. */
 	isPresented?: boolean
+	/** Both real iframe layers are visible during a transition, but neither accepts input. */
+	transitionRole?: "incoming" | "outgoing"
+	onTransitionLayerChange?: (key: string, element: HTMLDivElement | null) => void
 	/** Hide presented-slide chrome when the file tab is cached. */
 	isTabActive?: boolean
 	content: string
@@ -141,6 +144,8 @@ const PPTSlide = observer(function PPTSlide({
 	index,
 	isActive,
 	isPresented,
+	transitionRole,
+	onTransitionLayerChange,
 	isTabActive,
 	content,
 	rawContent,
@@ -187,7 +192,9 @@ const PPTSlide = observer(function PPTSlide({
 	const isMobile = useIsMobile()
 	const fileTabActive = isTabActive !== false
 	const effectiveIsPresented = (isPresented ?? isActive) && fileTabActive
-	const isInteractive = effectiveIsPresented && isActive
+	const isTransitionVisible = Boolean(transitionRole) && fileTabActive
+	const isVisible = effectiveIsPresented || isTransitionVisible
+	const isInteractive = effectiveIsPresented && isActive && !transitionRole
 
 	// 内部管理编辑模式
 	const { isEditMode, setIsEditMode } = useEditMode({ fileId })
@@ -402,12 +409,13 @@ const PPTSlide = observer(function PPTSlide({
 	const slideWrapperClassNames = "absolute inset-0 flex h-full w-full flex-col"
 	// Keep every resident slide at the same dimensions while only the presented one is interactive.
 	const slideWrapperStyle: CSSProperties = {
-		visibility: effectiveIsPresented ? "visible" : "hidden",
+		visibility: isVisible ? "visible" : "hidden",
 		pointerEvents: isInteractive ? "auto" : "none",
-		zIndex: effectiveIsPresented ? 1 : 0,
+		// Incoming must cover outgoing independently of their stable DOM/cache order.
+		zIndex: transitionRole === "incoming" ? 2 : isVisible ? 1 : 0,
 	}
 
-	useEffect(() => {
+	useLayoutEffect(() => {
 		const wrapper = slideWrapperRef.current as (HTMLDivElement & { inert?: boolean }) | null
 		if (!wrapper) return
 
@@ -927,6 +935,10 @@ const PPTSlide = observer(function PPTSlide({
 		},
 	)
 	const resolvedToolbarOwnerKey = toolbarOwnerKey || `${fileId || "missing-file"}:${index}`
+	useLayoutEffect(() => {
+		onTransitionLayerChange?.(resolvedToolbarOwnerKey, slideWrapperRef.current)
+		return () => onTransitionLayerChange?.(resolvedToolbarOwnerKey, null)
+	}, [onTransitionLayerChange, resolvedToolbarOwnerKey])
 	const toolbarModel = useMemo<PPTSlideToolbarModel | null>(() => {
 		if (!showEditToolbar) return null
 
@@ -1137,7 +1149,8 @@ const PPTSlide = observer(function PPTSlide({
 					scaleContentDimensions={scaleContentDimensions}
 					isFullscreen={isFullscreen}
 					isEditMode={isEditMode}
-					isVisible={effectiveIsPresented}
+					isVisible={isVisible}
+					isPlaybackPaused={Boolean(transitionRole)}
 					isTabActive={isInteractive}
 					isSaving={isSaving}
 					saveEditContent={saveEditContent}
@@ -1181,7 +1194,7 @@ const PPTSlide = observer(function PPTSlide({
 				data-testid={fileId ? `ppt-slide-item-${fileId}` : "ppt-slide-item"}
 				className={slideWrapperClassNames}
 				style={slideWrapperStyle}
-				aria-hidden={!effectiveIsPresented}
+				aria-hidden={!isInteractive}
 				data-interactive={String(isInteractive)}
 			>
 				{!onToolbarModelChange && toolbarModel && (

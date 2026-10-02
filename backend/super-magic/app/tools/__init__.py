@@ -18,6 +18,7 @@ from app.tools.read_chat_history import ReadChatHistory
 from app.tools.core import BaseTool, BaseToolParams, tool, tool_factory
 from app.tools.create_slide import CreateSlide
 from app.tools.create_slide_project import CreateSlideProject
+from app.tools.update_slide_transitions import UpdateSlideTransitions
 from app.tools.slide_template_builder import (
     CreateSlideTemplateProject,
     FinalizeSlideTemplate,
@@ -335,6 +336,7 @@ __all__ = [
     "UpdateTopicShare",
     "CreateSlide",
     "CreateSlideProject",
+    "UpdateSlideTransitions",
     "CreateSlideTemplateProject",
     "FinalizeSlideTemplate",
     "PrepareSlideTemplateSource",

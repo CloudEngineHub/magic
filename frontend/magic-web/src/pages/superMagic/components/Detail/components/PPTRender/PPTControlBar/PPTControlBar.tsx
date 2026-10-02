@@ -13,6 +13,7 @@ import {
 	NotebookPen,
 	Monitor,
 	Check,
+	GalleryHorizontalEnd,
 } from "lucide-react"
 import type { PPTControlBarProps } from "./types"
 import { PPTZoomControl } from "./PPTZoomControl"
@@ -42,6 +43,7 @@ export function PPTControlBar({
 	onReplaceTemplate,
 	notesVisible,
 	onToggleNotes,
+	onOpenTransitions,
 	scaleRatio,
 	isAutoScale,
 	portalContainer,
@@ -383,7 +385,7 @@ export function PPTControlBar({
 					</MagicDropdown>
 				) : null}
 			</div>
-			{(!isMobile || onToggleNotes) && (
+			{(!isMobile || onToggleNotes || onOpenTransitions) && (
 				<div
 					ref={zoomBarRef}
 					className={cn(
@@ -391,6 +393,20 @@ export function PPTControlBar({
 						separateRows || !onReplaceTemplate ? "col-start-2" : "col-start-3",
 					)}
 				>
+					{onOpenTransitions && (
+						<div className={barClassName}>
+							<Button
+								variant="ghost"
+								size="sm"
+								className="h-7 gap-[5px] px-[7px]"
+								data-testid="ppt-control-bar-transitions"
+								onClick={onOpenTransitions}
+							>
+								<GalleryHorizontalEnd className="size-4" />
+								{t("ppt.transitions.title")}
+							</Button>
+						</div>
+					)}
 					{onToggleNotes && (
 						<div className={barClassName} data-testid="ppt-control-bar-notes-group">
 							<Button

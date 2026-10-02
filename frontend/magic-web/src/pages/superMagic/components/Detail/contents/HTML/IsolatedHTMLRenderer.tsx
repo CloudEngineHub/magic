@@ -220,6 +220,8 @@ interface IsolatedHTMLRendererProps {
 	sandboxType?: "iframe" | "shadow-dom"
 	className?: string
 	isPptRender?: boolean
+	/** A visible PPT transition layer must paint without resuming its media yet. */
+	isPlaybackPaused?: boolean
 	isFullscreen?: boolean
 	/** Expands a pure-share iframe into the page instead of a viewport-scrolling shell. */
 	documentFlowFullscreen?: boolean
@@ -462,6 +464,7 @@ const IsolatedHTMLRendererInner = forwardRef<IsolatedHTMLRendererRef, IsolatedHT
 			sandboxType = "iframe",
 			className,
 			isPptRender,
+			isPlaybackPaused = false,
 			isFullscreen,
 			documentFlowFullscreen = false,
 			documentFlowContentHeight = 0,
@@ -2521,11 +2524,18 @@ const IsolatedHTMLRendererInner = forwardRef<IsolatedHTMLRendererRef, IsolatedHT
 			iframeRef.current.contentWindow.postMessage(
 				{
 					type: "setAnimationState",
-					paused: !isVisible,
+					paused: !isVisible || isPlaybackPaused,
 				},
 				iframeTargetOrigin,
 			)
-		}, [contentInjected, iframeTargetOrigin, isPptRender, isVisible, sandboxType])
+		}, [
+			contentInjected,
+			iframeTargetOrigin,
+			isPptRender,
+			isVisible,
+			isPlaybackPaused,
+			sandboxType,
+		])
 
 		useLayoutEffect(() => {
 			window.addEventListener("message", handleMessage, true)

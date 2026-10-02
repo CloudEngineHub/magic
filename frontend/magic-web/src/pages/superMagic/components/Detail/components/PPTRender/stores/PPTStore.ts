@@ -155,6 +155,8 @@ export class PPTStore {
 	private config: PPTStoreConfig
 	/** Only visibility needs reactive config reads; attachments remain outside MobX conversion. */
 	private hiddenSlidePaths: unknown
+	/** Small deck metadata is reactive independently from the large attachment config. */
+	transitions: unknown
 	private loaderService: SlideLoaderService
 	private processorService: SlideProcessorService
 	private readonly screenshotService: SlideScreenshotService
@@ -220,6 +222,7 @@ export class PPTStore {
 	constructor(config: PPTStoreConfig) {
 		this.config = config
 		this.hiddenSlidePaths = config.displayConfig?.hidden_slides
+		this.transitions = config.displayConfig?.transitions
 		this.attachmentListSnapshot = this.snapshotAttachmentList(config.attachmentList)
 		this.fileUpdateDebounceMs = Math.max(
 			0,
@@ -293,6 +296,7 @@ export class PPTStore {
 			{
 				config: false,
 				hiddenSlidePaths: observable.ref,
+				transitions: observable.ref,
 				attachmentListSnapshot: false,
 				initializingPromise: false,
 				initializingKey: false,
@@ -2429,6 +2433,7 @@ export class PPTStore {
 		this.config = { ...this.config, ...config }
 		if (hasOwnConfigField(config, "displayConfig")) {
 			this.hiddenSlidePaths = config.displayConfig?.hidden_slides
+			this.transitions = config.displayConfig?.transitions
 		}
 		const hasCacheConfigUpdate =
 			hasOwnConfigField(config, "organizationCode") ||

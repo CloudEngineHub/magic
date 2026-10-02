@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor } from "@testing-library/react"
+import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react"
 import { beforeEach, describe, expect, it, vi } from "vitest"
 import type { ReactNode } from "react"
 import PPTRender, { reconcilePPTSlideToolbarModels } from "../index"
@@ -174,6 +174,7 @@ vi.mock("../PPTControlBar", () => ({
 		notesVisible,
 		onToggleNotes,
 		onToggleFullscreen,
+		onOpenTransitions,
 	}: {
 		scaleRatio: number
 		onScaleChange: (scale: number) => void
@@ -181,10 +182,12 @@ vi.mock("../PPTControlBar", () => ({
 		notesVisible?: boolean
 		onToggleNotes?: () => void
 		onToggleFullscreen: () => void
+		onOpenTransitions?: () => void
 	}) => {
 		mockState.pptControlBarProps({ scaleRatio, onScaleChange, onReplaceTemplate })
 		return (
 			<div data-testid="ppt-control-bar">
+				{onOpenTransitions && <button onClick={onOpenTransitions}>open transitions</button>}
 				<button onClick={onToggleNotes} aria-expanded={notesVisible}>
 					toggle notes
 				</button>
@@ -499,16 +502,20 @@ vi.mock("@/components/base/MagicModal", () => ({
 	},
 }))
 
-vi.mock("@/components/shadcn-ui/button", () => ({
-	Button: ({
-		children,
-		...props
-	}: React.ButtonHTMLAttributes<HTMLButtonElement> & { children?: ReactNode }) => (
-		<button type="button" {...props}>
-			{children}
-		</button>
-	),
-}))
+vi.mock("@/components/shadcn-ui/button", async () => {
+	const { forwardRef } = await import("react")
+	return {
+		Button: forwardRef<HTMLButtonElement, React.ButtonHTMLAttributes<HTMLButtonElement>>(
+			function MockButton({ children, ...props }, ref) {
+				return (
+					<button ref={ref} type="button" {...props}>
+						{children}
+					</button>
+				)
+			},
+		),
+	}
+})
 
 vi.mock("@/components/shadcn-ui/alert-dialog", () => ({
 	AlertDialog: ({ children }: { children?: ReactNode }) => <div>{children}</div>,
@@ -539,6 +546,7 @@ function renderPPTRender(input?: {
 	onUnregisterCheckBeforeClose?: (fileId: string) => void
 	isTabActive?: boolean
 	isPlaybackMode?: boolean
+	allowEdit?: boolean
 	slideStructureAdapter?: PPTSlideStructureAdapter
 }) {
 	return render(
@@ -547,7 +555,7 @@ function renderPPTRender(input?: {
 			filePathMapping={new Map()}
 			mainFileId="ppt-root-file"
 			mainFileName="Deck.html"
-			allowEdit={true}
+			allowEdit={input?.allowEdit ?? true}
 			isPlaybackMode={input?.isPlaybackMode}
 			isTabActive={input?.isTabActive}
 			onRegisterCheckBeforeClose={input?.onRegisterCheckBeforeClose}
@@ -558,6 +566,59 @@ function renderPPTRender(input?: {
 }
 
 describe("PPTRender", () => {
+	it("opens the real transition panel from the editable control bar", async () => {
+		mockState.isSlideEditing = false
+		renderPPTRender()
+		const canvas = screen.getByTestId("ppt-render-div")
+		const liveSlide = screen.getByTestId("ppt-slide-slide-file-id")
+		fireEvent.click(screen.getByRole("button", { name: "open transitions" }))
+		const panel = await screen.findByRole("complementary", { name: "ppt.transitions.title" })
+		expect(screen.getByTestId("ppt-render-slide-content")).toContainElement(panel)
+		expect(screen.getByTestId("ppt-render-div")).toBe(canvas)
+		expect(screen.getByTestId("ppt-slide-slide-file-id")).toBe(liveSlide)
+		expect(
+			within(panel).getByRole("button", { name: "ppt.transitions.fade" }),
+		).toBeInTheDocument()
+		fireEvent.click(within(panel).getByRole("button", { name: "ppt.transitions.close" }))
+		expect(
+			screen.queryByRole("complementary", { name: "ppt.transitions.title" }),
+		).not.toBeInTheDocument()
+		expect(screen.getByTestId("ppt-render-div")).toBe(canvas)
+		expect(screen.getByTestId("ppt-slide-slide-file-id")).toBe(liveSlide)
+	})
+
+	it.each([{ isPlaybackMode: true }, { allowEdit: false }])(
+		"hides transition settings in read-only entry %j",
+		(input) => {
+			mockState.isSlideEditing = false
+			renderPPTRender(input)
+			expect(
+				screen.queryByRole("button", { name: "open transitions" }),
+			).not.toBeInTheDocument()
+			expect(
+				screen.queryByRole("complementary", { name: "ppt.transitions.title" }),
+			).not.toBeInTheDocument()
+		},
+	)
+
+	it("cancels navigation when a transition draft is kept", async () => {
+		mockState.isSlideEditing = false
+		renderPPTRender()
+		fireEvent.click(screen.getByRole("button", { name: "open transitions" }))
+		const panel = await screen.findByRole("complementary", { name: "ppt.transitions.title" })
+		fireEvent.click(within(panel).getByRole("button", { name: "ppt.transitions.push" }))
+		let navigate = Promise.resolve(true)
+		act(() => {
+			navigate = mockState.navigationCheck?.("next") ?? Promise.resolve(true)
+		})
+		fireEvent.click(within(panel).getByRole("button", { name: "common.cancel" }))
+		expect(await navigate).toBe(false)
+		expect(within(panel).getByRole("button", { name: "ppt.transitions.push" })).toHaveAttribute(
+			"aria-pressed",
+			"true",
+		)
+	})
+
 	it("connects slide swipes to deck navigation", () => {
 		renderPPTRender()
 		fireEvent.touchEnd(screen.getByTestId("ppt-slide-slide-file-id"))

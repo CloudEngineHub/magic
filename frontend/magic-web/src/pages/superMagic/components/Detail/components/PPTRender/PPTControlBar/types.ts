@@ -20,6 +20,7 @@ export interface PPTControlBarProps {
 	onReplaceTemplate?: () => void
 	notesVisible?: boolean
 	onToggleNotes?: () => void
+	onOpenTransitions?: () => void
 	scaleRatio: number
 	isAutoScale: boolean
 	portalContainer: HTMLElement | null
