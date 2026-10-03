@@ -4798,6 +4798,15 @@
 		"uploadImageCountLimit": "最多支持添加 10 张图",
 		"uploadImageSizeLimit": "请上传大小小于 2MB 的 JPG 或 PNG"
 	},
+	"operationResultList": {
+		"directory": "文件夹",
+		"file": "文件",
+		"interrupted": "操作已中断",
+		"running": "正在处理",
+		"summary": "{{success}} 项成功 · {{error}} 项失败",
+		"title": "操作结果",
+		"unavailable": "暂时无法显示操作结果"
+	},
 	"personalPet": {
 		"collapse": "收起宠物",
 		"contextMenu": {

@@ -30,6 +30,7 @@ export enum DetailType {
 	SelfMedia = "self-media",
 	AICard = "ai-card",
 	SlidesTemplate = "slides-template",
+	OperationResultList = "operation_result_list",
 }
 
 /** Self-media platform values supported by the dispatcher */
@@ -82,6 +83,20 @@ export interface DetailData {
 	[DetailType.PowerPoint]: DetailUniverData
 	[DetailType.SlidesTemplate]: DetailHTMLData
 	[DetailType.FileTree]: DetailFileTreeData
+	[DetailType.OperationResultList]: DetailOperationResultListData
+}
+
+/** 操作结果仅显示对象名称与执行状态，不提供文件跳转。 */
+export interface OperationResultItem {
+	label: string
+	kind: "file" | "directory" | "text"
+	status: "success" | "error"
+	message: string
+	description?: string
+}
+
+export interface DetailOperationResultListData {
+	items: OperationResultItem[]
 }
 
 /** 终端 Terminal */
