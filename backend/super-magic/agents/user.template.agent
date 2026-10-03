@@ -26,6 +26,8 @@ skills:
     - name: using-llm
     - name: env-manager
     - name: user-info
+    - name: vibe-coding
+    - name: startup-manager
   workspace_skills: "*"
 ---
 

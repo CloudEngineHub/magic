@@ -26,6 +26,8 @@ skills:
     - name: user-info
     - name: develop-data-analysis-dashboard
     - name: document-converter
+    - name: vibe-coding
+    - name: startup-manager
   workspace_skills: "*"
   preload:
     - name: develop-data-analysis-dashboard

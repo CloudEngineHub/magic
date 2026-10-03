@@ -4,7 +4,6 @@ import ctypes
 import gc
 import html
 import json
-import os
 import platform
 import random
 import string
@@ -672,7 +671,7 @@ class Agent(BaseAgent):
             "workspace_skills_dir": str(get_workspace_skills_dir().relative_to(PathManager.get_workspace_dir())),
             "project_root": str(PathManager.get_project_root()),
             "memory_root": str(PathManager.get_memory_root_dir()),
-            "agfs_fuse_mount_path": os.getenv("AGFS_FUSE_MOUNT_PATH", "/mnt/agfs"),
+            "agfs_fuse_mount_path": str(PathManager.get_agfs_fuse_mount_path()),
             "cwd": self.agent_context._workspace_dir,
             "python_version": sys.version,
             "nodejs_version": subprocess.check_output(["node", "--version"]).decode("utf-8").strip(),
@@ -680,6 +679,15 @@ class Agent(BaseAgent):
             "slide_template_html": slide_template_html,
             "managed_agent_code": managed_agent_code,
         }
+
+        # 提示词语法没有条件分支，按当前运行环境选择 sandbox / local 之一的说明，
+        # 用同一套变量预先渲染成正文；static_context 用 @variable 引用它，变量值不会被二次解析。
+        runtime_environment = PathManager.get_runtime_environment()
+        variables["runtime_environment"] = runtime_environment.value
+        variables["runtime_environment_prompt"] = self._agent_loader.set_variables(
+            f'{{{{ @include(path="./prompts/runtime_environment/{runtime_environment.value}.prompt") }}}}',
+            variables,
+        ).strip()
 
         return variables
 

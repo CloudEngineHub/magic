@@ -29,6 +29,8 @@ skills:
     - name: env-manager
     - name: user-info
     - name: document-converter
+    - name: vibe-coding
+    - name: startup-manager
   workspace_skills: "*"
 ---
 

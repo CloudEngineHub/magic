@@ -24,6 +24,8 @@ skills:
     - name: skill-vetter
     - name: download
     - name: using-mcp
+    - name: vibe-coding
+    - name: startup-manager
   workspace_skills: "*"
 ---
 
