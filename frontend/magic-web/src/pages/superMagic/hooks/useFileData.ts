@@ -1,7 +1,7 @@
 import { useFileAccess } from "@/pages/superMagic/fileAccess/FileAccessProvider"
 import { useFileApi } from "@/pages/superMagic/fileAccess/fileApi"
 import { isShareFileAccess } from "@/pages/superMagic/fileAccess/fileAccessContext"
-import { downloadFileContent } from "@/pages/superMagic/utils/api"
+import { downloadFileContent, type GetTemporaryDownloadUrlItem } from "@/pages/superMagic/utils/api"
 import { useEffect, useMemo, useRef, useState } from "react"
 import { useDebounceEffect, useMemoizedFn } from "ahooks"
 import { FileHistoryVersion, Topic } from "@/pages/superMagic/pages/Workspace/types"
@@ -12,6 +12,7 @@ import pubsub, { PubSubEvents } from "@/utils/pubsub"
 import { SuperMagicApi } from "@/apis"
 import { isNil } from "lodash-es"
 import { superMagicStore } from "@/pages/superMagic/stores"
+import { invalidateSharedMediaUrl } from "@/pages/superMagic/services/sharedMediaUrlCache"
 
 interface FileUrlCache {
 	url: string
@@ -28,6 +29,8 @@ export const useFileData = ({
 	isFromNode = false,
 	content,
 	disabledUrlCache = false,
+	useSharedMediaUrlCache = false,
+	skipContentDownload = false,
 	isSharePreview = false,
 	enabled = true,
 	loadContent = true,
@@ -41,6 +44,10 @@ export const useFileData = ({
 	isFromNode?: boolean
 	content?: string
 	disabledUrlCache?: boolean
+	/** 图片地址由共享媒体缓存复用，保留访问身份、版本和过期判断。 */
+	useSharedMediaUrlCache?: boolean
+	/** 图片只消费地址，不通过此 Hook 下载文件正文。 */
+	skipContentDownload?: boolean
 	/** 分享预览不拉项目文件版本，走分享下载 */
 	isSharePreview?: boolean
 	/** 外部编辑会话供数时关闭读取、历史版本与事件订阅。 */
@@ -132,6 +139,29 @@ export const useFileData = ({
 		setLoading(false)
 	})
 
+	const requestFileUrl = useMemoizedFn(
+		async (
+			fileVersion?: number,
+			forceRefresh = false,
+		): Promise<GetTemporaryDownloadUrlItem | null> => {
+			if (useSharedMediaUrlCache && !disabledUrlCache) {
+				const items = await fileApi.requestSharedMediaUrls([file_id], {
+					fileVersions:
+						fileVersion === undefined ? undefined : { [file_id]: fileVersion },
+					fileUpdatedAtMap:
+						updatedAt === undefined ? undefined : { [file_id]: updatedAt },
+					forceRefresh,
+				})
+				return items[0] ?? null
+			}
+			const items = await fileApi.getTemporaryDownloadUrl({
+				file_ids: [file_id],
+				file_versions: fileVersion ? { [file_id]: fileVersion } : undefined,
+			})
+			return items[0] ?? null
+		},
+	)
+
 	/** 智能更新文件 URL - 只有当更新时间或版本变化时才更新 */
 	const updateFileUrlIfNeeded = useMemoizedFn(
 		(newUrl: string, fileId: string, newUpdatedAt?: string, newVersion?: number) => {
@@ -172,18 +202,14 @@ export const useFileData = ({
 			const request = beginLoad()
 			historySequence.current += 1
 			// 获取文件下载地址
-			return fileApi
-				.getTemporaryDownloadUrl({
-					file_ids: [file_id],
-					file_versions: file_version ? { [file_id]: file_version } : undefined,
-				})
-				.then((res: any) => {
+			return requestFileUrl(file_version, forceReload)
+				.then((item) => {
 					if (!isCurrentLoad(request)) return
-					if (res[0]?.url) {
+					if (item?.url) {
 						setIsDeleted(false)
 						// 使用智能更新函数，只有当更新时间或版本变化时才更新 URL
 						const urlUpdated = updateFileUrlIfNeeded(
-							res[0]?.url,
+							item.url,
 							file_id,
 							updatedAt,
 							file_version,
@@ -197,15 +223,27 @@ export const useFileData = ({
 							file_id,
 							file_version,
 						)
+						// 地址模式不伪造已下载正文；仍通过当前请求检查和完成状态保护版本切换。
+						if (skipContentDownload) {
+							loadedContentFileIdRef.current = file_id
+							fileUrlCacheRef.current[file_id] = {
+								url: item.url,
+								updatedAt: updatedAt || "",
+								version: file_version,
+							}
+							setFileUrl(item.url)
+							finishLoad()
+							return
+						}
 						// 只有 URL 更新时才重新下载文件内容
 						if (urlUpdated || forceReload) {
-							return downloadFileContent(res[0]?.url, { responseType }).then(
+							return downloadFileContent(item.url, { responseType }).then(
 								(data: any) => {
 									if (!isCurrentLoad(request)) return
 									// Only successful bytes may satisfy a later cache hit.
 									loadedContentFileIdRef.current = file_id
 									fileUrlCacheRef.current[file_id] = {
-										url: res[0].url,
+										url: item.url,
 										updatedAt: updatedAt || "",
 										version: file_version,
 									}
@@ -327,7 +365,8 @@ export const useFileData = ({
 			!disabledUrlCache &&
 			successfulLoadScope.current === requestScope &&
 			loadedContentFileIdRef.current === file_id &&
-			!isNil(fileData) &&
+			(skipContentDownload || !isNil(fileData)) &&
+			(skipContentDownload ? !!cached?.url : true) &&
 			cached?.updatedAt === (updatedAt || "") &&
 			cached?.version === fileVersion
 		)
@@ -379,8 +418,10 @@ export const useFileData = ({
 		},
 	)
 
-	const hasLoadedCurrentContent = useMemoizedFn(
-		() => loadedContentFileIdRef.current === file_id && !isNil(fileData),
+	const hasLoadedCurrentContent = useMemoizedFn(() =>
+		skipContentDownload
+			? successfulLoadScope.current?.file_id === file_id && !!fileUrl
+			: loadedContentFileIdRef.current === file_id && !isNil(fileData),
 	)
 
 	/** 针对 分享/工具预览/内容审查 等场景，单独获取文件的最新下载地址 */
@@ -402,30 +443,38 @@ export const useFileData = ({
 			let cancelled = false
 			const request = beginLoad()
 			// 获取文件下载地址
-			fileApi
-				.getTemporaryDownloadUrl({
-					file_ids: [file_id],
-				})
-				.then((res: any) => {
+			requestFileUrl()
+				.then((item) => {
 					if (cancelled || !isCurrentLoad(request)) return
 					// 使用智能更新函数
 					const urlUpdated = updateFileUrlIfNeeded(
-						res[0]?.url,
+						item?.url ?? "",
 						file_id,
 						updatedAt,
 						undefined,
 					)
 					setFileVersion(undefined)
-					if (res[0]?.url) {
+					if (item?.url) {
 						setIsDeleted(false)
+						if (skipContentDownload) {
+							loadedContentFileIdRef.current = file_id
+							fileUrlCacheRef.current[file_id] = {
+								url: item.url,
+								updatedAt: updatedAt || "",
+								version: undefined,
+							}
+							setFileUrl(item.url)
+							finishLoad()
+							return
+						}
 						// 只有 URL 更新时才重新下载文件内容
 						if (urlUpdated) {
-							return downloadFileContent(res[0]?.url, { responseType }).then(
+							return downloadFileContent(item.url, { responseType }).then(
 								(data: any) => {
 									if (cancelled || !isCurrentLoad(request)) return
 									loadedContentFileIdRef.current = file_id
 									fileUrlCacheRef.current[file_id] = {
-										url: res[0].url,
+										url: item.url,
 										updatedAt: updatedAt || "",
 										version: undefined,
 									}
@@ -469,11 +518,15 @@ export const useFileData = ({
 		failLoad,
 		responseType,
 		updateFileUrlIfNeeded,
+		requestFileUrl,
+		skipContentDownload,
+		useSharedMediaUrlCache,
 	])
 
 	useEffect(() => {
 		if (!enabled) return
 		pubsub.subscribe(PubSubEvents.Change_Preview_File, () => {
+			if (useSharedMediaUrlCache) invalidateSharedMediaUrl(file_id)
 			setFileUrl("")
 			setFileData(undefined)
 			setFileVersion(undefined)
@@ -485,7 +538,7 @@ export const useFileData = ({
 		return () => {
 			pubsub.unsubscribe(PubSubEvents.Change_Preview_File)
 		}
-	}, [enabled])
+	}, [enabled, file_id, useSharedMediaUrlCache])
 
 	// 由于后端的文件版本生成机制，是在每一轮 Topic 执行结束时生成，
 	// 因此这里监听 Topic 级终态事件，而不是单条 Assistant Final。
@@ -493,13 +546,21 @@ export const useFileData = ({
 		if (!enabled) return
 		const unregister = superMagicStore.subscribe("topic.execution.ended", () => {
 			if (waitingForShareAccess || isShareFilePreview || activeFileId !== file_id) return
+			if (useSharedMediaUrlCache) invalidateSharedMediaUrl(file_id)
 			getFileVersion(file_id)
 		})
 
 		return () => {
 			unregister()
 		}
-	}, [enabled, activeFileId, file_id, isShareFilePreview, waitingForShareAccess])
+	}, [
+		enabled,
+		activeFileId,
+		file_id,
+		isShareFilePreview,
+		waitingForShareAccess,
+		useSharedMediaUrlCache,
+	])
 
 	return {
 		refreshFile,

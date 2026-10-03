@@ -53,9 +53,11 @@ function Img(props: any) {
 		updatedAt,
 		isFromNode,
 		disabledUrlCache: isPlaybackMode,
+		useSharedMediaUrlCache: !isPlaybackMode,
+		skipContentDownload: true,
 	})
 
-	const quitEditMode = () => { }
+	const quitEditMode = () => {}
 
 	const ImageRender = useMemo(() => {
 		if (loading)
