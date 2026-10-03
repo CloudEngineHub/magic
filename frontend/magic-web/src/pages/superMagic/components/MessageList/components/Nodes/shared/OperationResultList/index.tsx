@@ -140,12 +140,13 @@ function OperationResultList({
 									const ItemIcon = item.kind === "directory" ? Folder : File
 									const ResultIcon =
 										item.status === "success" ? CircleCheck : CircleX
+									const target = item.target
 									const resultBody = (
 										<>
 											<div className="flex flex-wrap items-start justify-between gap-x-3 gap-y-1">
 												<span className="min-w-0 break-all text-foreground">
 													{item.label}
-													{item.target && (
+													{target && (
 														<LocateFixed
 															size={14}
 															className="ml-1 inline-block text-muted-foreground"
@@ -192,7 +193,7 @@ function OperationResultList({
 													}
 												/>
 											)}
-											{item.target ? (
+											{target ? (
 												<button
 													type="button"
 													className="min-w-0 flex-1 rounded-sm text-left hover:bg-fill-secondary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
@@ -205,8 +206,8 @@ function OperationResultList({
 													onClick={(event) => {
 														event.stopPropagation()
 														focusCanvasElementByProjectPath({
-															projectPath: item.target.project_path,
-															elementId: item.target.element_id,
+															projectPath: target.project_path,
+															elementId: target.element_id,
 															filesStore,
 														})
 													}}
