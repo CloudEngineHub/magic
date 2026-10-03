@@ -56,7 +56,10 @@ const ChatFilePreviewPanel = observer(function ChatFilePreviewPanel({
 		const resolveFileInfo = async () => {
 			if (!previewInfo || previewInfo.src) return fileInfo
 			const result = await ChatFileService.fetchFileUrl([
-				{ file_id: previewInfo.file_id, message_id: fileInfo?.message_id || "" },
+				{
+					file_id: previewInfo.file_id,
+					message_id: previewInfo.message_id || fileInfo?.message_id || "",
+				},
 			])
 			return result[previewInfo.file_id] ?? fileInfo
 		}

@@ -75,6 +75,7 @@ export function VideoPreview(props: VideoPreviewProps) {
 
 	// Use custom hook for player management
 	const { isLoading, playerReady } = useXgPlayer({
+		fileId: file_id,
 		fileUrl,
 		fileResource,
 		refreshFileUrl,

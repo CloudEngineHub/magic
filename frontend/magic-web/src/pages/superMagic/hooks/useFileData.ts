@@ -98,6 +98,7 @@ export const useFileData = ({
 	const requestSequence = useRef(0)
 	const historySequence = useRef(0)
 	const refreshIntent = useRef(0)
+	const urlRefreshSequence = useRef(0)
 	// Scope identity invalidates pending responses immediately, before the next
 	// effect starts a request for another file, access token, version or edit mode.
 	const requestScope = useMemo(
@@ -114,6 +115,12 @@ export const useFileData = ({
 			refreshIntent.current += 1
 		},
 		[],
+	)
+	useEffect(
+		() => () => {
+			urlRefreshSequence.current += 1
+		},
+		[requestScope],
 	)
 	const beginLoad = useMemoizedFn(() => {
 		const sequence = ++requestSequence.current
@@ -330,13 +337,14 @@ export const useFileData = ({
 	})
 
 	const refreshFileUrl = useMemoizedFn(async () => {
+		const sequence = ++urlRefreshSequence.current
 		let resource: GetTemporaryDownloadUrlItem | null
 		try {
 			resource = await requestFileResource(fileVersion, true)
 		} catch {
 			return null
 		}
-		if (!resource) return null
+		if (!resource || sequence !== urlRefreshSequence.current) return null
 		setFileResource(resource)
 		setFileUrl(resource.url)
 		return resource

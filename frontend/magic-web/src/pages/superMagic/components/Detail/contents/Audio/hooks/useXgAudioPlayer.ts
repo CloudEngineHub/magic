@@ -8,6 +8,7 @@ import { SHARED_MEDIA_URL_EXPIRY_SAFETY_WINDOW_MS } from "@/pages/superMagic/ser
 export type UseXgAudioPlayerMode = "music" | "core"
 
 interface UseXgAudioPlayerProps {
+	fileId?: string
 	fileUrl?: string
 	fileResource?: GetTemporaryDownloadUrlItem | null
 	refreshFileUrl?: () => Promise<GetTemporaryDownloadUrlItem | null>
@@ -29,6 +30,7 @@ interface AudioPlayerState {
 }
 
 export function useXgAudioPlayer({
+	fileId,
 	fileUrl,
 	fileResource,
 	refreshFileUrl,
@@ -77,7 +79,8 @@ export function useXgAudioPlayer({
 
 	useEffect(() => {
 		refreshAttemptedRef.current = false
-	}, [fileUrl])
+		playbackStateRef.current = { current: 0, shouldResume: false, muted: false, rate: 1 }
+	}, [fileId])
 
 	// Initialize player
 	const initPlayer = useCallback(async () => {
@@ -198,6 +201,7 @@ export function useXgAudioPlayer({
 				}))
 				if (!refreshAttemptedRef.current && refreshFileUrl) {
 					refreshAttemptedRef.current = true
+					clearRefreshTimer()
 					refreshPendingRef.current = true
 					void refreshFileUrl().finally(() => {
 						refreshPendingRef.current = false

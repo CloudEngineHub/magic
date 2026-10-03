@@ -99,6 +99,7 @@ export function AudioPreview(props: AudioPreviewProps) {
 		setVolume: setPlayerVolume,
 		toggleMute,
 	} = useXgAudioPlayer({
+		fileId: file_id,
 		fileUrl,
 		fileResource,
 		refreshFileUrl,

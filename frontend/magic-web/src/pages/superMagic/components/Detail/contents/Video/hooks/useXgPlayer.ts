@@ -6,6 +6,7 @@ import { parseExpiresAt } from "@/components/CanvasDesign/runtime/resources/offl
 import { SHARED_MEDIA_URL_EXPIRY_SAFETY_WINDOW_MS } from "@/pages/superMagic/services/sharedMediaUrlCache"
 
 export interface UseXgPlayerProps {
+	fileId?: string
 	fileUrl?: string
 	fileResource?: GetTemporaryDownloadUrlItem | null
 	refreshFileUrl?: () => Promise<GetTemporaryDownloadUrlItem | null>
@@ -19,6 +20,7 @@ export interface UseXgPlayerResult {
 }
 
 export const useXgPlayer = ({
+	fileId,
 	fileUrl,
 	fileResource,
 	refreshFileUrl,
@@ -60,7 +62,14 @@ export const useXgPlayer = ({
 
 	useEffect(() => {
 		refreshAttemptedRef.current = false
-	}, [fileUrl])
+		playbackStateRef.current = {
+			currentTime: 0,
+			volume: 1,
+			muted: false,
+			playbackRate: 1,
+			shouldResume: false,
+		}
+	}, [fileId])
 
 	// Initialize xgplayer when fileUrl is available
 	useEffect(() => {
@@ -222,6 +231,7 @@ export const useXgPlayer = ({
 					setPlayerReady(false)
 					if (!refreshAttemptedRef.current && refreshFileUrl) {
 						refreshAttemptedRef.current = true
+						clearRefreshTimer()
 						refreshPendingRef.current = true
 						void refreshFileUrl().finally(() => {
 							refreshPendingRef.current = false
