@@ -129,8 +129,8 @@ def _classify_image_processing_error(error: str | None) -> str:
 class VisualUnderstandingParams(BaseToolParams):
     images: List[str] = Field(
         ...,
-        description="""<!--zh: 图片来源列表，可以是图片URL或本地文件路径，支持多图片输入-->
-Image source list, can be image URLs or local file paths, supports multiple image input"""
+        description="""<!--zh: 图片来源列表，可以是图片URL或本地文件路径，支持多图片输入；活跃 Browser 页面不要先截图再传入此工具-->
+Image source list, which can contain image URLs or local file paths and supports multiple images. For an active Browser tab, use browser_visual_query instead of taking a screenshot and passing it here."""
     )
     query: str = Field(
         ...,
@@ -158,6 +158,7 @@ class VisualUnderstanding(WorkspaceTool[VisualUnderstandingParams]):
     要求：
     - 输入图片路径或URL链接，支持同时输入多张图片
     - 提供对图片内容的具体问题或要求描述
+    - 活跃 Browser 页面需要视觉判断时使用 browser_visual_query；不要先调用 browser_screenshot 再把截图交给本工具
     调用示例：
     ```
     # 网址输入

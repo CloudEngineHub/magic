@@ -22,6 +22,31 @@
 - `.workspace/` 保存用户需要长期保留、下载或继续编辑的文件。
 - `.checkpoints/` 保存文件 checkpoint 和操作流水、内容帧本身。
 
+## Topic artifact 不等于 MagicFS 文件
+
+`.topic/` 在线上通常是 AGFS/MagicFS 挂载入口。把文件写入这个目录，意味着它可能进入
+文件元数据、版本树和 checkpoint 处理；这适合需要被用户浏览、下载、重命名、恢复和按文件
+管理的内容。topic 只是业务归属和生命周期范围，不代表每个 topic 内部对象都必须注册成
+MagicFS 文件。
+
+| 数据类型 | 线上保存方式 | 本地无 AGFS 运行方式 | 是否进入 MagicFS 文件管理 |
+|---|---|---|---|
+| 用户需要长期管理的文件 | `.workspace/`，沿用现有 MagicFS 文件流程 | 项目本地 `.workspace/` 兼容实现 | 是 |
+| Agent 活动会话和交接源 | `.chat_history/`、`.topic/chat_history/`，沿用既有 checkpoint／归档 | 普通本地目录 | 按既有会话规则 |
+| 只供模型或工具读取的 topic artifact | 直接写对象存储，保存稳定 artifact key，由 owner 负责 TTL 或 topic 删除清理 | `.topic/` 下受控的普通本地文件 | 否 |
+| 可重新生成的单次运行缓存 | `.runtime/<capability>/` | 同一路径 | 否 |
+
+例如浏览器截图只需要让下一次模型请求重新读取，不需要出现在用户文件树中。线上应使用
+topic-scoped 对象 artifact，避免为每张截图创建 MagicFS 元数据、版本树和 checkpoint 记录；
+本地单独运行 Python 时，对应 provider 才把同一个逻辑 key 映射到普通 `.topic` 文件。两种
+环境都只把稳定 artifact 引用写入消息历史，渲染请求时再用系统临时目录做 staging，处理结束
+立即删除 staging。
+
+对象存储直传不自动解决生命周期问题。新增 topic artifact 前必须确认对象存储前缀 TTL、
+topic 删除清理或其他明确回收入口；没有回收责任时，不能为了省 MagicFS 元数据而静默制造
+无界对象。对象 artifact 的临时 URL、绝对路径和 `.runtime` 路径都不能写入可跨运行恢复的
+消息历史。
+
 ## 活动会话的读写位置
 
 `.topic/` 是网络文件系统挂载。Agent 的一次回合会反复保存消息、会话状态、Horizon 和 token usage；若这些活动文件直接位于 `.topic/`，每次打开、读取、覆盖和关闭文件都可能产生网络往返，累积为明显的运行延迟。文件较小、保留数量较少或使用异步 I/O，都不能消除频繁访问网络文件系统的成本。

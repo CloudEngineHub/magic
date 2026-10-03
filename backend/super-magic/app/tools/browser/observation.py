@@ -17,7 +17,7 @@ from agentlang.logger import get_logger
 from agentlang.tools.tool_result import ToolResult
 from app.core.context.agent_context import AgentContext
 from app.core.entity.message.server_message import ToolDetail
-from app.service.browser import BrowserScreenshotService, BrowserService
+from app.service.browser import BrowserScreenshotArtifact, BrowserScreenshotService, BrowserService
 from app.service.browser.browser_file_adapter import BrowserFileAdapter
 from app.service.browser.browser_tool_result_builder import BrowserToolResultBuilder
 from app.tools.browser.base import BrowserToolBase, BrowserToolParams
@@ -138,7 +138,7 @@ class BrowserFindVisualParams(BrowserToolParams):
 
 
 class _BrowserVisualToolBase(BrowserToolBase[P], Generic[P]):
-    """浏览器视觉工具基类，复用截图发布、视觉推理及并发任务清理。"""
+    """浏览器视觉工具基类，复用截图 artifact、原生视觉和同步定位分析。"""
 
     async def _execute_visual_query(
         self,
@@ -157,6 +157,34 @@ class _BrowserVisualToolBase(BrowserToolBase[P], Generic[P]):
                 labels=labels,
                 session_id=current_page.session_id,
             )
+            if self.name == "browser_visual_query":
+                artifact = await BrowserScreenshotService(tool_context).publish(screenshot.image)
+                if await self._push_native_visual_message(
+                    tool_context,
+                    query=query,
+                    artifact=artifact,
+                ):
+                    await self.record_page_observation(
+                        tool_context,
+                        page_id=page.id,
+                        url=page.url,
+                        title=page.title,
+                    )
+                    return BrowserToolResultBuilder.native_visual(
+                        page,
+                        screenshot,
+                        artifact,
+                        query,
+                    )
+                analysis = await service.analyze_screenshot(screenshot.image, query)
+                await self.record_page_observation(
+                    tool_context,
+                    page_id=page.id,
+                    url=page.url,
+                    title=page.title,
+                )
+                return BrowserToolResultBuilder.visual(page, screenshot, artifact, analysis)
+
             artifact_task = asyncio.create_task(
                 BrowserScreenshotService(tool_context).publish(screenshot.image)
             )
@@ -223,6 +251,38 @@ class _BrowserVisualToolBase(BrowserToolBase[P], Generic[P]):
             return BrowserToolResultBuilder.visual(page, screenshot, artifact, analysis)
 
         return await self.execute_safely(operation())
+
+    async def _push_native_visual_message(
+        self,
+        tool_context: ToolContext,
+        *,
+        query: str,
+        artifact: BrowserScreenshotArtifact,
+    ) -> bool:
+        agent_context = tool_context.get_extension_typed("agent_context", AgentContext)
+        if agent_context is None:
+            return False
+        try:
+            model_state = agent_context.model_context.resolve_text_model()
+            if not model_state.config.supports_multimodal:
+                return False
+            from app.service.native_visual_message_builder import NativeVisualMessageBuilder
+
+            message = await NativeVisualMessageBuilder(
+                agent_context.get_workspace_dir()
+            ).build_user_message(
+                query,
+                [artifact.source_ref],
+                show_in_ui=False,
+                source="native_visual",
+            )
+            agent_context.horizon.push_user_message(message)
+            return True
+        except asyncio.CancelledError:
+            raise
+        except (AttributeError, OSError, ValueError):
+            logger.warning("Browser native visual message preparation failed", exc_info=True)
+            return False
 
 
 # Agent-facing usage is documented in agents/skills/browser/.

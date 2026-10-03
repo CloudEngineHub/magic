@@ -7,6 +7,7 @@ from typing import List, Optional
 
 from agentlang.chat_history.chat_history_models import UserMessage, UserMessageContentPart
 from agentlang.logger import get_logger
+from app.service.browser.browser_screenshot_artifact import BrowserScreenshotArtifactStore
 from app.tools.visual_understanding_utils import (
     ImageDimensionInfo,
     format_image_dimensions_info,
@@ -63,7 +64,9 @@ class NativeVisualMessageBuilder:
         return f"{_NATIVE_VISUAL_HORIZON_HINT}\n\n{dimensions_info}"
 
     def _normalize_image_ref(self, image_ref: str) -> str:
-        """将 workspace 内图片转换为相对引用，外部图片保留绝对路径。"""
+        """将 workspace 内图片转换为相对引用，artifact 引用和外部图片保持稳定。"""
+        if BrowserScreenshotArtifactStore.is_source_ref(image_ref):
+            return image_ref
         path = Path(image_ref).expanduser()
         if not path.is_absolute():
             path = (self.workspace_dir / path).resolve()
@@ -78,6 +81,9 @@ class NativeVisualMessageBuilder:
         """读取图片尺寸、宽高比和文件大小并格式化为模型提示。"""
         dimension_infos: List[Optional[ImageDimensionInfo]] = []
         for image_ref in image_refs:
+            if BrowserScreenshotArtifactStore.is_source_ref(image_ref):
+                dimension_infos.append(None)
+                continue
             try:
                 image_path = Path(image_ref).expanduser()
                 if not image_path.is_absolute():
