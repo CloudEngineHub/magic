@@ -187,6 +187,7 @@ export abstract class BaseLabelManager {
 	private labelCandidateIndex: LabelCandidateIndex
 	private eventUnsubscribers: Array<() => void> = []
 	private destroyed = false
+	private mediaLabelsAlwaysVisible = true
 
 	// 静态注册表，用于不同 LabelManager 之间的协调
 	protected static labelManagers: BaseLabelManager[] = []
@@ -306,6 +307,29 @@ export abstract class BaseLabelManager {
 		labelSize: { width: number; height: number },
 		inverseScale: number,
 	): { x: number; y: number }
+
+	/**
+	 * 更新图片和视频标签的显示模式，并立即同步现有及当前视口内的标签。
+	 * 常驻模式需要把媒体加入候选索引，否则缩小时标签尚未创建就无法显示。
+	 */
+	public setMediaLabelsAlwaysVisible(alwaysVisible: boolean): void {
+		if (this.mediaLabelsAlwaysVisible === alwaysVisible) return
+		this.mediaLabelsAlwaysVisible = alwaysVisible
+		this.visibleLabelQueryCache = null
+		this.syncVisibleLabels("media-label-visibility")
+	}
+
+	public isMediaLabelsAlwaysVisible(): boolean {
+		return this.mediaLabelsAlwaysVisible
+	}
+
+	protected shouldTreatAsAlwaysVisible(elementType: string): boolean {
+		return (
+			this.visibilityConfig.alwaysVisibleTypes.has(elementType) ||
+			(this.mediaLabelsAlwaysVisible &&
+				this.visibilityConfig.hoverOrSelectTypes.has(elementType))
+		)
+	}
 
 	/**
 	 * 设置事件监听器
@@ -682,7 +706,7 @@ export abstract class BaseLabelManager {
 		const elementType = elementData.type
 
 		// 检查是否为一直显示的类型
-		if (this.visibilityConfig.alwaysVisibleTypes.has(elementType)) {
+		if (this.shouldTreatAsAlwaysVisible(elementType)) {
 			return true
 		}
 		// 检查是否为选中或 hover 时显示的类型
@@ -786,7 +810,7 @@ export abstract class BaseLabelManager {
 		baseVisibility: boolean | null,
 	): boolean {
 		if (!element || baseVisibility === null) return false
-		if (this.visibilityConfig.alwaysVisibleTypes.has(element.getData().type)) return true
+		if (this.shouldTreatAsAlwaysVisible(element.getData().type)) return true
 		return baseVisibility || this.shouldRetainHiddenLabel(elementId)
 	}
 
@@ -927,7 +951,13 @@ export abstract class BaseLabelManager {
 	}
 
 	private getLabelCandidateElementIds(): ReadonlySet<string> {
-		return this.labelCandidateIndex.getCandidateIds(this.visibilityConfig.alwaysVisibleTypes)
+		const candidateTypes = new Set(this.visibilityConfig.alwaysVisibleTypes)
+		if (this.mediaLabelsAlwaysVisible) {
+			this.visibilityConfig.hoverOrSelectTypes.forEach((elementType) =>
+				candidateTypes.add(elementType),
+			)
+		}
+		return this.labelCandidateIndex.getCandidateIds(candidateTypes)
 	}
 
 	private updateExistingLabels(skipBatchDraw = true): boolean {

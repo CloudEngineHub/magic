@@ -28,7 +28,7 @@ const NAME_LABEL_CONFIG = {
  * 职责：
  * 1. 在独立的 Layer 上渲染所有元素的名称标签
  * 2. 监听元素变化，同步更新名称标签
- * 3. 管理名称标签的可见性（Frame/Audio 一直显示，Image 只在 hover 时显示）
+ * 3. 管理名称标签的可见性（媒体标签默认常驻，可通过画布设置切回 hover/选中显示）
  * 4. 处理名称标签的位置和缩放
  * 5. 选择工具下命中名称：hover 手势、单击选中、双击重命名（不从名称拖动元素）
  */
@@ -222,6 +222,14 @@ export class NameLabelManager extends BaseLabelManager {
 		labelGroup: Konva.Group,
 		baseVisibility: boolean,
 	): boolean | null {
+		const elementType = element?.getData().type
+		if (
+			this.isMediaLabelsAlwaysVisible() &&
+			(elementType === ElementTypeEnum.Image || elementType === ElementTypeEnum.Video)
+		) {
+			return null
+		}
+
 		if (this.renamingElementId === elementId) {
 			return false
 		}

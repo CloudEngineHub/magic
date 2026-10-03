@@ -55,6 +55,7 @@ function createManager(
 			cropManager: { getCroppingElementId: () => null },
 			elementManager: {
 				getElementInstance: (elementId: string) => elements.get(elementId),
+				getAllElementIds: () => Array.from(elements.keys()),
 			},
 			eraserManager: { getErasingElementId: () => null },
 			eventEmitter: { on: vi.fn(() => vi.fn()) },
@@ -70,6 +71,9 @@ function createManager(
 			stage: {
 				position: () => ({ x: 0, y: 0 }),
 				scaleX: () => 1,
+			},
+			viewportQueryCoordinator: {
+				getSnapshot: () => ({ generation: 0, labelElementIds: [] }),
 			},
 		} as never,
 	})
@@ -107,7 +111,7 @@ describe("NameLabelManager visibility", () => {
 		const manager = createManager(elements)
 
 		expect(manager.isLabelVisibleByDefault("audio-1")).toBe(true)
-		expect(manager.isLabelVisibleByDefault("image-1")).toBe(false)
+		expect(manager.isLabelVisibleByDefault("image-1")).toBe(true)
 
 		manager.destroy()
 	})
@@ -133,7 +137,7 @@ describe("NameLabelManager visibility", () => {
 		const manager = createManager(elements)
 
 		expect(manager.getTooWideLabelVisibility("audio-1")).toBe(false)
-		expect(manager.getTooWideLabelVisibility("image-1")).toBe(false)
+		expect(manager.getTooWideLabelVisibility("image-1")).toBeNull()
 
 		manager.destroy()
 	})
@@ -152,6 +156,7 @@ describe("NameLabelManager visibility", () => {
 			],
 		])
 		const manager = createManager(elements, options)
+		manager.setMediaLabelsAlwaysVisible(false)
 
 		expect(manager.createOrUpdateLabelForTest("image-1")).toBe(false)
 		expect(manager.hasLabel("image-1")).toBe(false)

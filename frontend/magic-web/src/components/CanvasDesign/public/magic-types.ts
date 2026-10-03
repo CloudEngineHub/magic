@@ -1335,6 +1335,8 @@ export interface CanvasDesignStorageData {
 	viewport?: ViewportState
 	/** 当前设计项目的小地图面板是否展开 */
 	minimapOpen?: boolean
+	/** 当前设计项目是否常驻显示图片和视频的标题、分辨率标签 */
+	mediaLabelsAlwaysVisible?: boolean
 	expandedElementIds?: string[]
 	layersCollapsed?: boolean
 	layersWidth?: number
