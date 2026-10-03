@@ -152,13 +152,18 @@ User-facing label shown directly in the UI for this delegated task. It is not th
 
 ### prompt
 
-With `fork=False, resume=False`, the sub-agent has no access to the parent's conversation history. The prompt must be fully self-contained. Include:
+With `fork=False, resume=False`, the sub-agent has no access to the parent's conversation history. Write the prompt as a self-contained task brief:
 
-- The exact task
-- Expected output format
-- Relevant file paths or object identifiers
-- Constraints (e.g. read-only, specific file to write)
-- Success criteria
+- Objective: one sentence, the single outcome you want.
+- Background: the minimum facts needed to act, such as what already exists and which decisions are made. Do not assume shared context.
+- In scope: the concrete targets or steps.
+- Out of scope: the adjacent things the sub-agent must not touch. Be specific.
+- Deliverable: the exact output path or object and its format.
+- Constraints: for example read-only, or nothing created besides the deliverable.
+- Done when: the check that proves the task is finished.
+- Report: what the final reply must contain.
+
+Naming what is out of scope matters most. A sub-agent told only what to do invents adjacent work: extra tool directories, rebuilds of files it does not own, cleanup nobody asked for. A sub-agent told what not to touch reports the problem instead.
 
 Bad:
 
@@ -166,12 +171,22 @@ Bad:
 Find out what competitors are doing and summarize.
 ```
 
+Bad, specific about the work but silent about the boundary:
+
+```text
+Write the analysis section of report.md. Make sure the whole report is consistent.
+```
+
 Good:
 
 ```text
-Search the web for the top 3 competitors of [product category] that have launched or updated in the past 12 months.
-For each, return: product name, target users, main differentiator, and source URL.
-Focus on product launch articles, review sites, and tech media. Do not modify files.
+Objective: write the competitor analysis section of an existing report.
+Background: reports/market.md already has an approved structure, an intro, and a data section written by another agent.
+In scope: replace the placeholder under "## Competitor analysis" in reports/market.md.
+Out of scope: do not edit other sections, restructure the report, touch reports/data.md, or create any file or directory.
+Deliverable: that section, 400-600 words of Markdown.
+Done when: the section is written and every claim has a source URL.
+Report: word count, source URLs, and any inconsistency you noticed elsewhere without fixing it.
 ```
 
 ### background
@@ -184,6 +199,16 @@ Use `background=True` in two scenarios:
 1. **Parallel workloads**: sequential `call_subagent(..., background=True)` calls result in concurrent execution regardless of whether the model supports parallel tool calls.
 2. **Long-running tasks**: even a single sub-agent should use `background=True` when the task may take more than a few seconds. This gives the parent progress visibility via `wait_for_subagents` (timeout snapshots, `pattern` matching for checkpoint-based interleaving), and keeps the sandbox alive during long waits.
 
+### Parallel context in the prompt
+
+When several sub-agents work on the same plan, every prompt must include a parallel context line:
+
+```text
+Parallel context: N sub-agents are working on this plan at the same time. You own <this slice>. The others own <their slices>. Do not edit, regenerate, or clean up their slices, and do not build shared tooling for them. <who> merges the results.
+```
+
+Only you can write this. Sub-agents are dispatched one at a time and cannot discover or message each other, so you hold the only complete picture of the split. The runtime already tells every sub-agent that siblings may exist and that their work is not its to fix; you add how many there are, who owns what, and who merges.
+
 ### fork
 
 - `False` (default): sub-agent starts with empty conversation history. The `prompt` must be fully self-contained.
@@ -192,6 +217,13 @@ Use `background=True` in two scenarios:
 If `fork=true` receives a non-empty `agent_name` that does not identify the current Agent, the runtime ignores it, uses the current Agent, and includes a short warning in `result.content`.
 
 Fork mode is useful when the sub-agent needs to reason over the same conversation context as the parent, e.g. generating a summary, extracting decisions, or continuing a task in isolation.
+
+A fork sees everything you promised the user and everything still unfinished. State the boundary, or it may pick up work that is not its own:
+
+```text
+From the conversation above, extract only the decisions we made about the data model and write them to docs/decisions.md as a bullet list.
+Do not act on any other open item in that conversation and do not continue tasks I have not finished.
+```
 
 ### resume
 
@@ -254,7 +286,7 @@ Result:
 
 ## Output Target
 
-Decide where results go before dispatching. If the output target is missing from the prompt, the sub-agent will guess — and will usually create a file or object it shouldn't.
+Decide where results go before dispatching. When the output target is missing, a sub-agent does not stop. It guesses, and the guess usually becomes a new file, a new directory, or a rebuild of something it does not own. In parallel runs several sub-agents make the same guess independently and collide.
 
 Three patterns:
 
@@ -317,12 +349,15 @@ def dispatch(session_id_base, task_label, prompt):
 
 competitors_id = dispatch("research-competitors", "competitor research", """Search the web for the top 3-5 competitors in this product space.
 For each, return: product name, target users, main differentiator, and source URL.
-Focus on product launches, review sites, and tech media from the past 12 months.""")
+Focus on product launches, review sites, and tech media from the past 12 months. Do not create files.
+Parallel context: 2 sub-agents are working on this research. You own competitors; the other owns market signals. Do not cover market signals. The parent agent merges the results.""")
 signals_id = dispatch("research-market-signals", "market signals", """Search the web for recent market signals in this product space.
 Return:
 1. notable user needs or pain points (with source URLs)
 2. recurring themes across articles or community discussions
-3. any emerging trends worth tracking""")
+3. any emerging trends worth tracking
+Do not create files.
+Parallel context: 2 sub-agents are working on this research. You own market signals; the other owns competitors. Do not profile individual competitors. The parent agent merges the results.""")
 ```
 
 Then wait:
@@ -391,6 +426,9 @@ Before dispatching:
 - For waiting or resuming, are you using the exact final `session_id` returned by `call_subagent`?
 - For an existing session, is `resume=True` and `fork=False`?
 - Is `task_label` concise, distinct, and written in the same language as the user's request?
+- Does the prompt name what is out of scope, not just what is in scope?
+- For parallel dispatch, does every prompt say how many siblings exist, who owns what, and who merges?
+- For a fork, does the prompt say which parts of the inherited conversation the sub-agent must not act on?
 - Is the output target explicit and conflict-free?
 - If `background=True`, is there a matching `wait_for_subagents`?
 - If an agent needs to be stopped, use `wait_for_subagents(agent_ids=[...], kill=True)` instead of re-dispatching

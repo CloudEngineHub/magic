@@ -1728,7 +1728,10 @@ class AgentHorizon:
         parts = ["<system_injected_context>"]
         identity = build_agent_identity(self._agent_context) if self._agent_context else None
         if identity is not None and identity != self._state.agent_identity:
-            parts.append(render_agent_identity(identity))
+            parts.append(render_agent_identity(
+                identity,
+                inherited_history=self._agent_context.is_subagent_forked(),
+            ))
         if user_block:
             parts.append(user_block)
         was_first_injection = self._is_first_injection
