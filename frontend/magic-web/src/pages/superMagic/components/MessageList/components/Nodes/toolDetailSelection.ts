@@ -33,16 +33,17 @@ export type ToolCardInteractionTarget =
 	| { type: "playback" }
 	| { type: "file"; fileId: string }
 	| { type: "file-reference"; fileId?: string; filePath?: string }
-	| { type: "design" }
+	| { type: "canvas" }
 
-const DESIGN_TOOL_NAMES = new Set([
+// 旧消息可能没有 DisplayType.DESIGN，保留稳定的 Canvas 导航工具名作为兼容兜底。
+// 工具属于 Design 领域不等于卡片点击必须打开 Canvas；query_canvas_overview 只打开详情。
+const LEGACY_CANVAS_NAVIGATION_TOOL_NAMES = new Set([
 	"create_design_project",
 	"create_canvas_element",
 	"update_canvas_element",
 	"batch_create_canvas_elements",
 	"batch_update_canvas_elements",
 	"reorder_canvas_elements",
-	"query_canvas_overview",
 	"query_canvas_element",
 	"generate_images_to_canvas",
 	"search_images_to_canvas",
@@ -97,11 +98,15 @@ export function getToolCardInteractionTarget(
 	if (toolName && DisabledDetailToolTypes.includes(toolName)) {
 		return { type: "disabled" }
 	}
-	if (toolName && DESIGN_TOOL_NAMES.has(toolName)) {
-		return { type: "design" }
-	}
 
 	const detailRecord = detail as Record<string, unknown>
+	// 明确的 DisplayType.DESIGN 详情表示卡片点击需要进入 Canvas。
+	if (detailRecord.type === "design") {
+		return { type: "canvas" }
+	}
+	if (toolName && LEGACY_CANVAS_NAVIGATION_TOOL_NAMES.has(toolName)) {
+		return { type: "canvas" }
+	}
 	if (detailRecord.type === "browser") {
 		return { type: "playback" }
 	}

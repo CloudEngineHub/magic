@@ -49,8 +49,7 @@ function DefaultTool(props: DefaultToolProps) {
 	const filesStore = useMessageListProjectFilesStore()
 	const { onMouseEnter, onMouseLeave, loading, classNames, onClick } = props
 	const node = superMagicStore.getMessageNode(props?.node?.super_message_id) as
-		| { tool?: ToolDataLike }
-		| undefined
+		{ tool?: ToolDataLike } | undefined
 	const tool = props.toolData || node?.tool
 	const interactionTarget =
 		props.toolData?.interactionTarget ?? getToolCardInteractionTarget(tool?.name, tool?.detail)
@@ -70,8 +69,9 @@ function DefaultTool(props: DefaultToolProps) {
 			if (!hasInteraction) return
 			const detail = { ...tool?.detail, id: tool?.id }
 			selectToolDetail({ detail, onSelectDetail: props?.onSelectDetail })
-			if (interactionTargetType === "design") {
+			if (interactionTargetType === "canvas") {
 				const { designProjectId, elements } = getToolDesignProjectInfo(tool, filesStore)
+				if (!designProjectId) return
 				pubsub.publish(PubSubEvents.Super_Magic_Focus_Canvas_Element, {
 					isFromPlaybackToolNode: true,
 					canvasDesignId: designProjectId,
