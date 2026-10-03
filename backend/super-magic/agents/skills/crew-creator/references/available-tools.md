@@ -140,13 +140,19 @@ skills:
 | `call_subagent` | Call a sub-agent for a specific task |
 | `wait_for_subagents` | Wait for one or more background sub-agents to finish |
 
-### Presentation & Slides
+### Presentation & Slides (Code Mode Only)
+
+Do not add these names to `TOOLS.md` or an agent's `tools:` whitelist. Enable
+`creating-slides` for project/page creation and transition settings, or
+`slide-template-maker` for template construction and webpage layout QA. Their
+instructions call these tools through `run_sdk_snippet` with `sdk.tool.call(...)`.
 
 | Tool | Description |
 |------|-------------|
 | `create_slide` | Create a slide in a presentation |
 | `create_slide_project` | Create a new slide presentation project |
 | `analysis_slide_webpage` | Analyze a slide/presentation webpage |
+| `update_slide_transitions` | Update deck and per-slide transition settings |
 
 ### Audio & Video
 

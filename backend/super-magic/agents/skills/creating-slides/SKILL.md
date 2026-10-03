@@ -23,6 +23,11 @@ Provides complete HTML slide creation capabilities, including project creation, 
 
 All Python code examples in this skill **must be executed via the `run_sdk_snippet` tool** in Agent environment.
 
+`create_slide_project` and `create_slide` are Code Mode only. Call them with
+`sdk.tool.call`, never as directly mounted tools. Before executing, read
+[slide tool contracts](references/slide-tools.md) for overwrite behavior, notes,
+page registration, and the difference between a saved file and successful layout QA.
+
 **Correct example**:
 
 ```python
@@ -519,8 +524,8 @@ print(search_result.content)
 | Parameter              | Required | Type   | Description                                                                     |
 | ---------------------- | -------- | ------ | ------------------------------------------------------------------------------- |
 | `project_path`         | Yes      | string | Project relative path (folder name), e.g., `"ChatGPT-Development-Report"`       |
-| `slide_count`          | No       | number | Slide page count, default 0 (empty project or determined by slides_array)       |
-| `slides_array`         | Yes      | array  | List of slide filenames, can be empty array `[]`                                |
+| `slide_count`          | No       | number | Requested page count, default 0; does not create page HTML                     |
+| `slides_array`         | No       | array  | Ordered slide filenames; defaults to empty array `[]`                          |
 | `slide_images_content` | No       | string | Image material library content (Markdown format), empty means not creating file |
 | `todo_list`            | No       | string | Task planning content (Markdown format), empty means not creating file          |
 
@@ -539,6 +544,7 @@ print(search_result.content)
 | -------------------- | -------- | ------ | --------------------------------------------------------------------------------- |
 | `file_path`          | Yes      | string | Slide file path (relative to working directory), e.g., `"project-name/page.html"` |
 | `content`            | Yes      | string | Complete HTML content                                                             |
+| `speaker_notes`      | No       | string | Omit to preserve existing notes or create an empty block; `""` clears notes; text replaces them |
 | `max_width`          | Yes      | number | Expected max width (usually 1920)                                                 |
 | `max_height`         | Yes      | number | Expected max height (usually 1080)                                                |
 | `analysis_js`        | Yes      | string | Layout analysis JavaScript function body (without function declaration)           |
@@ -922,7 +928,7 @@ If user requests creating specific slides or requests imitating/referencing to g
 - **When user already provided images**: No need to use image_search tool to search images, instead use visual_understanding tool to analyze image info, write image info into slide_images_content per format requirements
 - **When user already provided outline or specific text**: No need to use web_search tool to search webpages, directly extract todo_list content
 
-#### 2. Directly Use create_slide to Create Slides
+#### 2. Use create_slide Through Code Mode to Create Slides
 
 - Create slides based on user-provided information
 - Insist on using create_slide tool, use analysis_js to analyze layout
