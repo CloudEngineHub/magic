@@ -26,7 +26,7 @@ export function TopicFileTag({
 	return (
 		<ContextHelp
 			help={help}
-			mode="preview"
+			mode="dialog"
 			renderDialog={
 				articleId
 					? (props) => (

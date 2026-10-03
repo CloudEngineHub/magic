@@ -2386,6 +2386,9 @@
 	"fileManager": {
 		"back": "Back",
 		"browseFolder": "Browse folder",
+		"checkItem": "Select {{name}}",
+		"checkSelectionHint": "Check files; expand folders to keep selecting",
+		"clearSelection": "Clear all",
 		"clipboard": {
 			"copied": "Copied {{count}} items. Go to the destination to paste.",
 			"cut": "Cut {{count}} items. Paste to review and confirm the move.",
@@ -2445,6 +2448,8 @@
 		"files": "Files",
 		"forward": "Forward",
 		"itemCount": "{{count}} items",
+		"locateSelectedFile": "Locate file: {{path}}",
+		"locateUnavailable": "This file cannot be located. It may have been deleted or is no longer accessible.",
 		"memory": {
 			"current": "Current",
 			"noMatches": "No matching projects",
@@ -2457,6 +2462,7 @@
 		"name": "Name",
 		"newFolder": "New folder",
 		"noMatches": "No matching files in this folder",
+		"openSelectedProject": "Go to project: {{name}}",
 		"operationProgress": "Processing {{progress}}%",
 		"paste": "Paste",
 		"path": "File path",
@@ -2475,7 +2481,13 @@
 			"scope": "Deleted files you can access across projects and personal space. This list is not limited to the current project.",
 			"title": "File trash"
 		},
+		"removeSelected": "Remove {{name}}",
 		"restoredDirectoryUnavailable": "The previous folder is unavailable. Opened the nearest available folder.",
+		"searchProjectFiles": "Search project files or paths",
+		"selectedCount": "{{count}} selected",
+		"selectedFiles": "Selected files",
+		"selectionEmpty": "No files selected",
+		"selectionEmptyHint": "Check files on the left to add them here",
 		"selectionHint": "Click to select, double-click to open",
 		"sort": "Sort",
 		"sortModified": "By modified date",
@@ -5308,6 +5320,14 @@
 		"typePublic": "Public",
 		"typePublicDescription": "Anyone on the internet with the link can access"
 	},
+	"projectTypeTag": {
+		"agent": "Agent project",
+		"audio": "Audio project",
+		"chat": "Chat project",
+		"magicClaw": "Lobster project",
+		"microApp": "Micro-app project",
+		"skill": "Skill project"
+	},
 	"recordingSummary": {
 		"actions": {
 			"cancelRecording": "Cancel Recording",
@@ -6005,8 +6025,10 @@
 		"mentionEmptyProject": "This project has no files",
 		"mentionOtherProjectFiles": "Select Other Project/File",
 		"mentionProjectLimit": "You can select projects or files from up to 10 different projects",
+		"microAppSourceFiles": "Micro app projects and files",
 		"microApps": "Micro apps",
 		"myAgents": "My Digital Employees",
+		"myMicroApps": "My micro apps",
 		"mySkills": "My Skills",
 		"myWorkspaces": "My Workspaces",
 		"newProject": "New Project",
@@ -6034,6 +6056,7 @@
 		"searchResult": "Search Result",
 		"searchWorkspace": "Search Workspace",
 		"selectMentionResource": "Select a project or file",
+		"selectProject": "Select project {{name}}",
 		"selectSourceFiles": "Destination",
 		"selectSpaceOrFolder": "Select Space or Folder",
 		"selectStorageLocation": "Storage Location",
