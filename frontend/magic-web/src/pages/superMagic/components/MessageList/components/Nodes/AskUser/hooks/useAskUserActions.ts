@@ -19,6 +19,7 @@ import {
 	type AskUserCardData,
 	type AskUserQuestionData,
 } from "@/pages/superMagic/components/MessageList/utils/askUser"
+import { isTerminalAskUserReplyError } from "@/pages/superMagic/components/MessageList/utils/askUserReplyState"
 import {
 	buildAskUserDraftCacheKey,
 	clearAskUserDraftAnswers,
@@ -98,6 +99,8 @@ export function useAskUserActions({
 	askUser,
 	context,
 	isDisabled,
+	onExpiredInteraction,
+	onTerminalError,
 }: {
 	askUser: AskUserCardData
 	context?: {
@@ -106,6 +109,8 @@ export function useAskUserActions({
 		toolCallId?: string
 	}
 	isDisabled: boolean
+	onExpiredInteraction?: () => void
+	onTerminalError?: () => void
 }) {
 	const { t } = useTranslation("super")
 	const [inputValues, setInputValues] = useState<Record<string, string>>({})
@@ -242,12 +247,22 @@ export function useAskUserActions({
 	}, [answer, askUser.status, draftCacheKey, isDisabled])
 
 	const handleSubmit = useMemoizedFn(async () => {
+		const isExpiredAtNow = askUser.expiresAt > 0 && Date.now() / 1000 >= askUser.expiresAt
+		if (isExpiredAtNow) {
+			onExpiredInteraction?.()
+			return
+		}
 		if (isDisabled || pendingAction || !isValid) return
 
 		try {
 			setPendingAction("submit")
 			await sendToolReply(ASK_USER_RESPONSE_STATUS.answered)
 		} catch (error) {
+			if (isTerminalAskUserReplyError(error)) {
+				onTerminalError?.()
+				setPendingAction(null)
+				return
+			}
 			console.error(error)
 			setPendingAction(null)
 			magicToast.error(t("askUser.status.submitFailed"))
@@ -255,12 +270,22 @@ export function useAskUserActions({
 	})
 
 	const handleSkip = useMemoizedFn(async () => {
+		const isExpiredAtNow = askUser.expiresAt > 0 && Date.now() / 1000 >= askUser.expiresAt
+		if (isExpiredAtNow) {
+			onExpiredInteraction?.()
+			return
+		}
 		if (isDisabled || pendingAction) return
 
 		try {
 			setPendingAction("skip")
 			await sendToolReply(ASK_USER_RESPONSE_STATUS.skipped)
 		} catch (error) {
+			if (isTerminalAskUserReplyError(error)) {
+				onTerminalError?.()
+				setPendingAction(null)
+				return
+			}
 			console.error(error)
 			setPendingAction(null)
 			magicToast.error(t("askUser.status.submitFailed"))

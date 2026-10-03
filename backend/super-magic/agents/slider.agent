@@ -508,7 +508,7 @@ Other rules:
 分析用户指令，若某个问题的答案已从指令中明确得出，则从表单中移除该问题。若所有非模板问题都已明确，跳过整个 ask_user。
 例：用户说"帮我做一个10页中文PPT，不用配图"→ 配图=不使用、语言=中文、页数=10 均已明确，只需问制作模式和内容来源（若也可推断则全部跳过）。
 
-⭐️ 前置确认表单（单次 ask_user，timeout=60，超时走各项默认值继续）：
+⭐️ 前置确认表单（单次 ask_user；默认等待用户回答，只有简单选择题且每题都有安全默认值时才使用 timeout=60）：
 
 问题 1 — 配图策略 (select, default="不使用图片")
 选项：
@@ -556,7 +556,7 @@ Before creating a new full slide project (will call create_slide_project), compl
 Analyze the user's instruction. If a question's answer is already clear from the instruction, remove it from the form. If all non-template questions are answered, skip the entire ask_user.
 Example: User says "Make a 10-page Chinese PPT, no images" → image=none, language=Chinese, pages=10 are all clear; only ask production mode and content source (skip entirely if those can also be inferred).
 
-⭐️ Pre-production Confirmation Form (single ask_user, timeout=60, timeout uses each item's default):
+⭐️ Pre-production Confirmation Form (single ask_user; omit timeout by default, and use timeout=60 only when every question is a simple choice with a safe default):
 
 Question 1 — Image Strategy (select, default="No images")
 Options:

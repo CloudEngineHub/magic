@@ -397,7 +397,7 @@ class HandleUserMessageAppService extends AbstractAppService
             );
         } catch (UserToolCallNotFoundException $e) {
             // 问题已被超时消费或重复提交：任务本身仍由沙箱侧超时恢复流程正常推进，
-            // 只提醒用户回答未送达，不作为任务错误处理。
+            // 只记录回答未送达，不作为任务错误处理，也不追加普通消息。
             $this->logger->warning('User tool call question expired or already consumed, answer dropped', [
                 'chat_topic_id' => $userMessageDTO->getChatTopicId(),
                 'tool_call_id' => $userToolCallMessage->getToolCallId(),

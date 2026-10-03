@@ -298,8 +298,9 @@ class TaskMessageFactory(TaskMessageFactoryProtocol):
                 message_type=MessageType.CHAT,
                 status=status,
                 content=content,
-                attachments=attachments,
-                project_archive=project_archive,
+                # 等待用户回答时只保留等待状态，最终产物要等任务真正结束后再下发。
+                attachments=[] if status == TaskStatus.WAITING_FOR_USER else attachments,
+                project_archive=None if status == TaskStatus.WAITING_FOR_USER else project_archive,
                 event=EventType.AFTER_MAIN_AGENT_RUN,
                 seq_id=seq_id,
                 token_used=token_used,

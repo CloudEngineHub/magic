@@ -13,6 +13,7 @@ use App\Application\LongTermMemory\Enum\AppCodeEnum;
 use App\Application\SuperMagic\Message\DTO\UserMessageDTO;
 use App\Application\SuperMagic\Message\Service\ClientMessageAppService;
 use App\Application\SuperMagic\Message\Service\HandleUserMessageAppService;
+use App\ErrorCode\EventErrorCode;
 use App\Domain\Chat\DTO\Message\ChatMessage\RichTextMessage;
 use App\Domain\Chat\DTO\Message\ChatMessage\UserToolCallMessage;
 use App\Domain\Chat\DTO\Message\MagicMessageStruct;
@@ -286,6 +287,13 @@ class SuperAgentMessageSubscriberV2 extends MagicAgentEventAppService
         ?UserMessageDTO $userMessageDTO,
         EventException $e
     ): void {
+        // 过期回答是可预期的竞态结果，前端已经用 Tip 告知用户；不要再写入消息列表。
+        if ($e->getCode() === EventErrorCode::EVENT_USER_TOOL_CALL_EXPIRED->value) {
+            $this->logger->info('Skip reminder for expired user tool call answer', [
+                'error_code' => $e->getCode(),
+            ]);
+            return;
+        }
         if ($dataIsolation === null || $userMessageDTO === null) {
             return;
         }
