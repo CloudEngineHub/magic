@@ -12,6 +12,8 @@ Load this reference for image generation, image revision, reference images, or i
 6. Failed and the user agrees → `retry_canvas_content_generation`.
 7. The first Content of any Element is automatically main; the user confirms a later candidate → `select_canvas_main_content`.
 
+Image generation, editing, retries, and additional candidates may consume points or money. After a successful image, let the user review it; a successful image you personally dislike is not a failure. Follow the core user-confirmation rule before any additional image call.
+
 ## Tool choice
 
 - New logical image: `add_canvas_elements`, `element_type=image`, Content `source=generated`, `content_type=image`.

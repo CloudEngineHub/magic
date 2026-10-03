@@ -237,6 +237,8 @@ class GenerateImages(AbstractFileTool[GenerateImagesParams], WorkspaceTool[Gener
 -->
 **When to call**: user wants to generate or edit one or more images.
 
+Image generation, editing, retries, and additional candidates may consume points or money. After a successful image, let the user review it; do not regenerate or add candidates because of your own aesthetic judgment. Follow the core user-confirmation rule for any additional image call.
+
 **Key rules per task**
 - If the user uploaded images — whether to reference style, modify content, or change a detail — always pass them via reference_images
 - Each task can have a different output_path for organized saving
