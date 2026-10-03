@@ -128,7 +128,7 @@ function MessageQueue({
 				<ScrollArea
 					viewportRef={queueHeight.viewportRef}
 					viewportProps={{ "data-message-queue-viewport": true }}
-					className="min-h-0 rounded-b-xl"
+					className="min-h-0 rounded-b-xl [&_[data-slot='scroll-area-viewport']>div]:!block"
 					viewportClassName="px-2.5 pb-2.5"
 					viewportStyle={{ maxHeight: queueHeight.height }}
 				>
