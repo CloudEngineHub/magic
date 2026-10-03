@@ -510,6 +510,14 @@ export const toolIconMap: Record<string, ToolIconConfig> = {
 		icon: AgentIcon,
 		bgColor: "#4B4EFC",
 	},
+	call_subagent: {
+		icon: AgentIcon,
+		bgColor: "#4B4EFC",
+	},
+	wait_for_subagents: {
+		icon: AgentIcon,
+		bgColor: "#4B4EFC",
+	},
 	connect_wechat_bot: {
 		icon: WechatIcon,
 		bgColor: "#1BCB00",
