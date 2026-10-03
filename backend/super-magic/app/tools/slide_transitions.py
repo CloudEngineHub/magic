@@ -65,10 +65,10 @@ def validate_slide_path(value: str) -> str:
 class UpdateSlideTransitionsParams(BaseToolParams):
     model_config = ConfigDict(extra="forbid")
     project_path: str = Field(description="Existing slide project directory, relative to the workspace.")
-    operation: TransitionOperation = Field(description="set_default changes the deck default; set_slides replaces complete page settings; clear_overrides restores inheritance.")
-    expected_slides: list[str] = Field(description="Exact slides array read when resolving the requested pages; changed page order rejects the update.")
+    operation: TransitionOperation = Field(description="Transition update operation.")
+    expected_slides: list[str] = Field(description="Ordered slide paths used to resolve this request.")
     slide_paths: list[str] = Field(default_factory=list, description="Existing slide paths; required for set_slides and clear_overrides.")
-    transition: SlideTransition | None = Field(default=None, description="Complete setting for set operations. none has only effect; animated effects require duration_ms and easing; push/cover/wipe also require direction.")
+    transition: SlideTransition | None = Field(default=None, description="Complete transition setting for set operations; omitted for clear_overrides.")
     clear_overrides: bool = Field(default=False, strict=True, description="Only for set_default: true replaces all page overrides with the new default.")
 
     @model_validator(mode="after")

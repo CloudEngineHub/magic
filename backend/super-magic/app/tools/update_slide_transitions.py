@@ -23,16 +23,10 @@ from app.utils.async_file_utils import async_realpath
 logger = get_logger(__name__)
 
 
-@tool()
+# 模型使用说明：agents/skills/creating-slides/references/slide-transitions.md
+@tool(code_mode_only=True)
 class UpdateSlideTransitions(WorkspaceTool[UpdateSlideTransitionsParams]):
-    """Change presentation-level slide transitions while keeping slide HTML static.
-
-    Read the current magic.project.js first and resolve page numbers to existing
-    paths. Pass that exact slides array as expected_slides. Use only when the user
-    requests transitions; preserve settings during content or template edits.
-    A version conflict requires a fresh read and scope resolution. Never retry an
-    old payload or bypass a rejected save with a generic file-writing tool.
-    """
+    """Update deck transition metadata through a revision-protected save."""
 
     async def execute(self, tool_context: ToolContext, params: UpdateSlideTransitionsParams) -> ToolResult:
         context = tool_context.get_extension("agent_context")

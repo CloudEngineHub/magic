@@ -254,17 +254,44 @@ async def test_authenticated_client_forwards_user_identity_and_metadata_endpoint
 @pytest.mark.asyncio
 async def test_agent_and_tool_registration_and_transition_reference():
     import app.tools
+    from app.tools.core import tool_factory
     from agentlang.agent.define.parser import parse_agent_file
     from app.utils.async_file_utils import async_read_text
     root = Path(__file__).parents[2]
     source = await async_read_text(root / "agents/slider.agent")
     define = parse_agent_file(source)[0]
     assert "UpdateSlideTransitions" in app.tools.__all__
-    assert "update_slide_transitions" in define.tools_config
+    assert "update_slide_transitions" not in define.tools_config
+    assert UpdateSlideTransitions.code_mode_only is True
+    assert tool_factory.is_code_mode_only_tool("update_slide_transitions") is True
+    assert "update_slide_transitions" not in tool_factory.get_llm_direct_tool_names()
+    assert tool_factory.get_tool_instance("update_slide_transitions").allow_code_mode() is True
     assert "creating-slides" in define.skills_config.get_system_skill_names()
     reference = await async_read_text(root / "agents/skills/creating-slides/references/slide-transitions.md")
     assert "expected_slides" in reference
     assert "Do not automatically retry" in reference
+    assert "run_sdk_snippet" in reference
+    assert 'tool.call("update_slide_transitions"' in reference
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("code_mode", [False, True])
+async def test_executor_requires_code_mode_for_transition_updates(code_mode):
+    from agentlang.context.tool_context import ToolContext
+    from agentlang.tools.tool_result import ToolResult
+    from app.tools.core.tool_executor import ToolExecutor
+    context = ToolContext(tool_name="update_slide_transitions", tool_call_id="transition-test")
+    context.register_extension("is_code_mode", code_mode)
+    # 隔离文件服务写入；保留真实执行器入口、注册策略和参数校验。
+    with patch.object(UpdateSlideTransitions, "_update", AsyncMock(return_value=ToolResult(content="Saved and confirmed."))) as update:
+        result = await ToolExecutor().execute_tool_call(context, params().model_dump(mode="json", exclude_none=True))
+    assert result.ok is code_mode
+    if code_mode:
+        update.assert_awaited_once()
+        assert update.await_args.args[0].expected_slides == SLIDES
+    else:
+        assert "Code Mode only" in result.content
+        update.assert_not_awaited()
 
 
 @pytest.mark.asyncio

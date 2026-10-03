@@ -8,11 +8,28 @@ Read the current configuration first. For “page 3”, resolve `slides[2]` to a
 Pass the entire slides array from that read as `expected_slides`. Do not recalculate the
 page number against a newer array: a conflict requires reading and resolving intent again.
 
-Use `update_slide_transitions`; never overwrite the whole manifest with a generic file tool.
+`update_slide_transitions` is Code Mode only. Execute the Python examples through
+`run_sdk_snippet`, using `sdk.tool.call`; do not call it as a directly mounted tool.
+Never overwrite the whole manifest with a generic file tool.
 The tool reads synchronized file identity, content and metadata revision, submits one protected
 save, then checks the mounted result. A pending sync, rejected authorization, conflict or unknown
 outcome is not success. Do not automatically retry an old request. Cancellation may occur after
 the service committed; reread the project before deciding whether another update is needed.
+
+## Tool parameters
+
+| Parameter | Meaning |
+| --- | --- |
+| `project_path` | Existing project directory relative to the workspace; no absolute path or parent traversal. |
+| `operation` | `set_default`, `set_slides`, or `clear_overrides`, as described below. |
+| `expected_slides` | Required exact ordered `slides` array from the current configuration read, including hidden slides. A changed array rejects the update. |
+| `slide_paths` | Unique existing paths required for `set_slides` and `clear_overrides`; omit for `set_default`. |
+| `transition` | Complete setting required for either set operation; omit for `clear_overrides`. |
+| `clear_overrides` | Boolean, default `false`. Only `set_default` accepts `true`, removing all page overrides. |
+
+Slide paths must be canonical project-relative `.html` paths: no absolute paths,
+parent traversal, query/fragment, backslashes, or duplicate entries. Parameters are
+strict; do not add unsupported fields or send explicit null for irrelevant effect fields.
 
 ## Settings and scope
 
@@ -64,3 +81,19 @@ print(result.content)
 For a new deck, finish creating the project and its slides before configuring requested
 transitions. Report the affected pages, effect and duration after a confirmed save.
 Saving does not prove playback was previewed; claim preview only if it was actually observed.
+
+## Results and failures
+
+Read and print `result.content` for the save status, affected scope and any next step.
+`result.ok` is true only after the protected save and mounted readback are confirmed.
+For precise follow-up calls, successful `result.data` contains `project_path`, `file_id`,
+`revision` (metadata version), and `slide_paths` (resolved target paths; the entire
+`expected_slides` array for `set_default`). Do not print all
+structured data merely to repeat the readable result.
+
+Invalid parameters or unknown targets require correcting the request. A changed slide
+array or revision conflict requires a fresh configuration read and renewed page resolution.
+Permission failures require authorized edit access. Pending synchronization or an unknown
+save outcome requires rereading and checking the mounted project before another attempt;
+never bypass a rejected save with a generic file writer. Do not report success for a failed,
+cancelled or unconfirmed call. Cancellation can leave an already committed save intact.

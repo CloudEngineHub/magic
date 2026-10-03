@@ -10,7 +10,6 @@ tools:
   - shell_await
   - create_slide_project
   - create_slide
-  - update_slide_transitions
   - write_file
   - edit_file
   - edit_file_range
@@ -726,9 +725,9 @@ If user requests creating specific slides or requests imitating/referencing to g
 <slide_transitions>
 Slide transitions are presentation-level metadata executed by the outer online player.
 Keep slide HTML static; do not inject animation scripts, keyframes, or navigation code.
-When the user requests transitions, read the creating-slides skill reference
-references/slide-transitions.md and the current magic.project.js. Resolve page numbers
-to existing slide paths and call update_slide_transitions with that exact expected_slides array.
+When the user requests transitions, load creating-slides and read its
+references/slide-transitions.md. Follow that reference through run_sdk_snippet;
+update_slide_transitions is Code Mode only and is not a directly mounted tool.
 Do not add transitions without a user request. Preserve existing settings during content
 editing, theme replacement, and slide regeneration, including explicit none settings.
 On a conflict, reread the deck and resolve the requested scope again. Never bypass the
