@@ -4802,6 +4802,7 @@
 		"directory": "文件夹",
 		"file": "文件",
 		"interrupted": "操作已中断",
+		"locateCanvasElement": "定位到画布元素：{{label}}",
 		"running": "正在处理",
 		"summary": "{{success}} 项成功 · {{error}} 项失败",
 		"title": "操作结果",

@@ -7,12 +7,15 @@ import {
 	CircleX,
 	File,
 	Folder,
+	LocateFixed,
 	Loader2,
 } from "lucide-react"
 import { useTranslation } from "react-i18next"
 import { Button } from "@/components/shadcn-ui/button"
 import { cn } from "@/utils/cn"
 import { getOperationResultListData } from "@/pages/superMagic/utils/toolDetailDisplay"
+import { focusCanvasElementByProjectPath } from "@/pages/superMagic/components/Detail/contents/Design/utils/toolDesignProjectInfo"
+import { useMessageListProjectFilesStore } from "@/pages/superMagic/components/MessageList/context"
 import { ToolIconBadge } from "../../../shared/ToolIconConfig"
 import { useToggleWithScrollPreserve } from "../hooks/useToggleWithScrollPreserve"
 
@@ -39,6 +42,7 @@ function OperationResultList({
 	onMouseLeave,
 }: OperationResultListProps) {
 	const { t } = useTranslation("super")
+	const filesStore = useMessageListProjectFilesStore()
 	const contentId = useId()
 	// 沿用消息作用域和滚动保护；虚拟行重新挂载仍保留用户的展开选择。
 	const [open, toggle] = useToggleWithScrollPreserve(false, "operation-result-list-expanded")
@@ -136,6 +140,42 @@ function OperationResultList({
 									const ItemIcon = item.kind === "directory" ? Folder : File
 									const ResultIcon =
 										item.status === "success" ? CircleCheck : CircleX
+									const resultBody = (
+										<>
+											<div className="flex flex-wrap items-start justify-between gap-x-3 gap-y-1">
+												<span className="min-w-0 break-all text-foreground">
+													{item.label}
+													{item.target && (
+														<LocateFixed
+															size={14}
+															className="ml-1 inline-block text-muted-foreground"
+															aria-hidden
+														/>
+													)}
+												</span>
+												<span
+													className={cn(
+														"inline-flex items-center gap-1",
+														item.status === "success"
+															? "text-success"
+															: "text-destructive",
+													)}
+												>
+													<ResultIcon
+														size={16}
+														className="shrink-0"
+														aria-hidden
+													/>
+													{item.message}
+												</span>
+											</div>
+											{item.description && (
+												<p className="mb-0 mt-1 break-words text-muted-foreground">
+													{item.description}
+												</p>
+											)}
+										</>
+									)
 									return (
 										<li
 											key={`${item.label}-${index}`}
@@ -152,33 +192,30 @@ function OperationResultList({
 													}
 												/>
 											)}
-											<div className="min-w-0 flex-1">
-												<div className="flex flex-wrap items-start justify-between gap-x-3 gap-y-1">
-													<span className="min-w-0 break-all text-foreground">
-														{item.label}
-													</span>
-													<span
-														className={cn(
-															"inline-flex items-center gap-1",
-															item.status === "success"
-																? "text-success"
-																: "text-destructive",
-														)}
-													>
-														<ResultIcon
-															size={16}
-															className="shrink-0"
-															aria-hidden
-														/>
-														{item.message}
-													</span>
-												</div>
-												{item.description && (
-													<p className="mb-0 mt-1 break-words text-muted-foreground">
-														{item.description}
-													</p>
-												)}
-											</div>
+											{item.target ? (
+												<button
+													type="button"
+													className="min-w-0 flex-1 rounded-sm text-left hover:bg-fill-secondary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+													aria-label={t(
+														"operationResultList.locateCanvasElement",
+														{
+															label: item.label,
+														},
+													)}
+													onClick={(event) => {
+														event.stopPropagation()
+														focusCanvasElementByProjectPath({
+															projectPath: item.target.project_path,
+															elementId: item.target.element_id,
+															filesStore,
+														})
+													}}
+												>
+													{resultBody}
+												</button>
+											) : (
+												<div className="min-w-0 flex-1">{resultBody}</div>
+											)}
 										</li>
 									)
 								})}

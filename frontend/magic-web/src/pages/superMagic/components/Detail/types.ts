@@ -86,13 +86,20 @@ export interface DetailData {
 	[DetailType.OperationResultList]: DetailOperationResultListData
 }
 
-/** 操作结果仅显示对象名称与执行状态，不提供文件跳转。 */
+export interface OperationResultTarget {
+	type: "canvas_element"
+	project_path: string
+	element_id: string
+}
+
+/** 操作结果显示对象名称与执行状态，可选提供稳定的导航目标。 */
 export interface OperationResultItem {
 	label: string
 	kind: "file" | "directory" | "text"
 	status: "success" | "error"
 	message: string
 	description?: string
+	target?: OperationResultTarget
 }
 
 export interface DetailOperationResultListData {

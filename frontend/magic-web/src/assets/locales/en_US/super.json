@@ -4803,6 +4803,7 @@
 		"directory": "Folder",
 		"file": "File",
 		"interrupted": "Operation interrupted",
+		"locateCanvasElement": "Locate canvas element: {{label}}",
 		"running": "Processing",
 		"summary": "{{success}} succeeded · {{error}} failed",
 		"title": "Operation results",

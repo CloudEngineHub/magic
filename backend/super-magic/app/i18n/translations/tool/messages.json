@@ -1043,6 +1043,14 @@
         "zh_CN": "部分图片生成成功（{{succeeded_count}}/{{total_count}}）",
         "en_US": "Images partially generated ({{succeeded_count}}/{{total_count}} succeeded)"
     },
+    "generate_images.item_status.completed": {
+        "zh_CN": "{{name}}已生成",
+        "en_US": "{{name}} generated"
+    },
+    "generate_images.item_status.failed": {
+        "zh_CN": "{{name}}生成失败",
+        "en_US": "{{name}} generation failed"
+    },
     "task_progress.queued_message": {
         "zh_CN": "{{task_label}}排队中（{{percentage}}%）",
         "en_US": "{{task_label}} queued ({{percentage}}%)"
@@ -5756,6 +5764,30 @@
     "canvas.generate_status.failed": {
         "zh_CN": "{{count}} 个{{media}}生成失败",
         "en_US": "{{count}} {{media}} failed"
+    },
+    "canvas.generate_item_status.processing": {
+        "zh_CN": "正在生成",
+        "en_US": "Generating"
+    },
+    "canvas.generate_item_status.completed": {
+        "zh_CN": "已生成",
+        "en_US": "Generated"
+    },
+    "canvas.generate_item_status.failed": {
+        "zh_CN": "生成失败",
+        "en_US": "Generation failed"
+    },
+    "canvas.generate_named_item_status.processing": {
+        "zh_CN": "{{name}}正在生成",
+        "en_US": "{{name}} is generating"
+    },
+    "canvas.generate_named_item_status.completed": {
+        "zh_CN": "{{name}}已生成",
+        "en_US": "{{name}} generated"
+    },
+    "canvas.generate_named_item_status.failed": {
+        "zh_CN": "{{name}}生成失败",
+        "en_US": "{{name}} generation failed"
     },
     "canvas.detail.title.connections": {
         "zh_CN": "画布连线",

@@ -90,7 +90,11 @@ class AddCanvasContents(BaseTool[BaseToolParams]):
                     CanvasGenerationFeedback.action_key(generation_summary, pending=True),
                     category="tool.actions",
                 ),
-                "remark": CanvasGenerationFeedback.remark(generation_summary, pending=True),
+                "remark": CanvasGenerationFeedback.remark(
+                    generation_summary,
+                    pending=True,
+                    names=CanvasGenerationFeedback.item_names(args),
+                ),
                 "tool_name": tool_name,
             }
         items = args.get("items") or []
@@ -133,14 +137,17 @@ class AddCanvasContents(BaseTool[BaseToolParams]):
                         CanvasGenerationFeedback.action_key(generation_summary),
                         category="tool.actions",
                     ),
-                    "remark": CanvasGenerationFeedback.failure_remark(generation_summary),
+                    "remark": CanvasGenerationFeedback.failure_remark(
+                        generation_summary,
+                        CanvasGenerationFeedback.item_names(arguments),
+                    ),
                 }
             return {
                 "action": i18n.translate(
                     CanvasGenerationFeedback.action_key(generation_summary),
                     category="tool.actions",
                 ),
-                "remark": CanvasGenerationFeedback.remark(generation_summary),
+                "remark": CanvasGenerationFeedback.remark_for_result(result, arguments),
             }
         else:
             if not values and not result.ok:
@@ -171,6 +178,10 @@ class AddCanvasContents(BaseTool[BaseToolParams]):
         is_generation_batch = (
             CanvasGenerationFeedback.is_pure_generated_batch(arguments) and generation_summary.is_supported
         )
+        if is_generation_batch:
+            operation_detail = CanvasGenerationFeedback.operation_result_detail(result, arguments)
+            if operation_detail is not None:
+                return operation_detail
         title_key = (
             CanvasGenerationFeedback.detail_title_key(generation_summary)
             if is_generation_batch

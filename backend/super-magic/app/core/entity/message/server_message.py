@@ -331,14 +331,27 @@ class OperationResultStatus(str, Enum):
     ERROR = "error"
 
 
+class OperationResultTargetType(str, Enum):
+    CANVAS_ELEMENT = "canvas_element"
+
+
+class OperationResultTarget(BaseModel):
+    """结果项的可选导航目标。"""
+
+    type: OperationResultTargetType
+    project_path: str
+    element_id: str
+
+
 class OperationResultItem(BaseModel):
-    """已执行对象的展示结果；名称是纯文本，不授予文件导航能力。"""
+    """已执行对象的展示结果；target 仅在工具提供可靠导航目标时存在。"""
 
     label: str
     kind: OperationResultKind
     status: OperationResultStatus
     message: str
     description: str = ""
+    target: OperationResultTarget | None = None
 
 
 class OperationResultListContent(BaseModel):
