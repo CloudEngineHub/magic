@@ -1600,6 +1600,14 @@ export const generateSuperMagicApi = (fetch: ServiceHttpClient) => ({
 	getTopicSandboxStatus({ id }: { id: string }) {
 		return fetch.get(`/api/v1/super-agent/admin/topic/${id}/sandbox`)
 	},
+	/**
+	 * @description 重启普通项目话题绑定的沙盒（服务端按升级语义执行）
+	 */
+	restartTopicSandbox({ topic_id }: { topic_id: string }) {
+		return fetch.put<{ sandbox_id: string }>("/api/v1/super-agent/sandbox/restart", {
+			topic_id,
+		})
+	},
 
 	/**
 	 * @description 通过工作区id获取话题列表
