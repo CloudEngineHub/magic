@@ -7480,6 +7480,9 @@
 		"web_search": "网络搜索",
 		"write_file": "写入文件"
 	},
+	"toolWaitCountdown": {
+		"elapsed": "已等待 {{seconds}} 秒 / 共 {{total}} 秒"
+	},
 	"topic": {
 		"addTopic": "新增话题",
 		"addTopicSuccess": "创建话题成功",

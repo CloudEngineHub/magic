@@ -7471,6 +7471,9 @@
 		"web_search": "Web Search",
 		"write_file": "Write File"
 	},
+	"toolWaitCountdown": {
+		"elapsed": "Waited {{seconds}}s of {{total}}s"
+	},
 	"topic": {
 		"addTopic": "New Topic",
 		"addTopicSuccess": "Create topic successfully",
