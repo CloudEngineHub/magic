@@ -224,6 +224,7 @@
 		"errorRetry": "Click to retry",
 		"fileMissing": "Image file is missing",
 		"generateFailed": "Image generation failed",
+		"generateTerminated": "Image generation terminated",
 		"generating": "Generating...",
 		"generatorName": "Image Generator",
 		"loadError": "Failed to load image",
@@ -235,6 +236,7 @@
 			"generating": "(Generating)",
 			"loading": "(Loading)",
 			"removingBackground": "(Removing Background)",
+			"terminated": "(Terminated)",
 			"uploading": "(Uploading)"
 		},
 		"nameWithIndex": "Image {{index}}",

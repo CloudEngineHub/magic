@@ -272,16 +272,60 @@ class GenerationSubmissionService:
     ) -> None:
         """按完成事件消费生成结果，并立即提交已完成项。"""
         tasks = [asyncio.create_task(self._execute_work_item(item, project_path, tool_context)) for item in work_items]
+        committed_content_ids: set[str] = set()
         try:
             for completed_task in asyncio.as_completed(tasks):
                 work_result = await completed_task
                 await self._commit_generation_result(project_path, by_content, work_result)
-        except BaseException:
+                committed_content_ids.add(work_result.work_item.submission_item.content_id)
+        except BaseException as error:
             for task in tasks:
                 if not task.done():
                     task.cancel()
             await asyncio.gather(*tasks, return_exceptions=True)
+            # 用户终止任务 / 转向会把 provider 调用直接取消，不会走到结果提交，元素会永远停在
+            # 「生成中」。这里给还没落终态的项补一次失败收敛，再向上抛出中断。
+            await self._settle_uncommitted_work_items(
+                project_path, by_content, work_items, committed_content_ids, error
+            )
             raise
+
+    async def _settle_uncommitted_work_items(
+        self,
+        project_path: str,
+        by_content: dict[str, GeneratedResultItem],
+        work_items: list[_GenerationWorkItem],
+        committed_content_ids: set[str],
+        error: BaseException,
+    ) -> None:
+        """中断时把尚未落终态的生成项收敛为终态，避免画布元素卡在「生成中」。
+
+        用户中断（CancelledError）落「已终止」终态，其余异常落「失败」终态。
+        终止态不写 errorMessage：内部异常名不该成为用户可见文案，前端按状态渲染
+        「已终止」措辞；失败态交给 _failed_generation_submission，沿用其兜底文案与
+        长度截断，避免把裸类名（str 为空的异常）写进用户可见文案。
+        收敛本身失败不能盖掉原始中断，因此逐项兜底并只记日志。
+        """
+        terminated = isinstance(error, asyncio.CancelledError)
+        for work_item in work_items:
+            if work_item.submission_item.content_id in committed_content_ids:
+                continue
+            submission = (
+                self._terminated_generation_submission(work_item.capability.execution_mode)
+                if terminated
+                else self._failed_generation_submission(work_item.capability.execution_mode, error)
+            )
+            try:
+                await self._commit_generation_result(
+                    project_path,
+                    by_content,
+                    _GenerationWorkResult(work_item, submission),
+                )
+            except Exception as settle_error:
+                logger.warning(
+                    f"中断收敛生成项失败: element_id={work_item.submission_item.element_id}, "
+                    f"content_id={work_item.submission_item.content_id}, error={settle_error}"
+                )
 
     async def _execute_work_item(
         self,
@@ -492,10 +536,15 @@ class GenerationSubmissionService:
         return normalized if normalized > 0 else 1
 
     @staticmethod
-    def _failed_generation_submission(execution_mode: str, error: Exception) -> GenerationSubmission:
-        """把端口异常收敛为可持久化的失败结果。"""
+    def _failed_generation_submission(execution_mode: str, error: str | BaseException) -> GenerationSubmission:
+        """把端口异常或中断原因收敛为可持久化的失败结果。"""
         message = str(error).strip() or "Generation failed unexpectedly."
         return GenerationSubmission(execution_mode, "failed", error_message=message[:1000])
+
+    @staticmethod
+    def _terminated_generation_submission(execution_mode: str) -> GenerationSubmission:
+        """把用户中断收敛为可持久化的终止结果，不携带错误文案。"""
+        return GenerationSubmission(execution_mode, "terminated")
 
     @staticmethod
     def _output_filename(submission: GenerationSubmission) -> str | None:

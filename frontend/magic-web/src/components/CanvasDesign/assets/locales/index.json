@@ -218,6 +218,7 @@
 		"errorRetry": "点击重试",
 		"fileMissing": "图片文件不存在",
 		"generateFailed": "图片生成失败",
+		"generateTerminated": "生图已终止",
 		"generating": "正在生成中...",
 		"generatorName": "图片生成器",
 		"loadError": "图片加载失败",
@@ -229,6 +230,7 @@
 			"generating": "(生成中)",
 			"loading": "(加载中)",
 			"removingBackground": "(去背景中)",
+			"terminated": "(已终止)",
 			"uploading": "(上传中)"
 		},
 		"nameWithIndex": "图片 {{index}}",

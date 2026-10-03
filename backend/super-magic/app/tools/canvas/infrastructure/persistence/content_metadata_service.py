@@ -169,7 +169,7 @@ class ContentMetadataService:
         """归档上一终态并创建携带新公共请求的新尝试。"""
         updated = dict(detail)
         history = list(updated.get("attemptHistory") or [])
-        if updated.get("generationStatus") in {"completed", "failed"}:
+        if updated.get("generationStatus") in {"completed", "failed", "terminated"}:
             history.append({
                 "generationTaskId": updated.get("generationTaskId"),
                 "generationStatus": updated.get("generationStatus"),
@@ -230,7 +230,7 @@ class ContentMetadataService:
             if isinstance(value, dict):
                 current[key] = {**(current.get(key) if isinstance(current.get(key), dict) else {}), **value}
         runtime = dict(current.get("runtime") or {})
-        if status in {"completed", "failed"}:
+        if status in {"completed", "failed", "terminated"}:
             runtime.setdefault("finished_at", finished_at or _now_text())
             started_at = runtime.get("started_at")
             if runtime.get("elapsed_seconds") is None:
@@ -245,7 +245,7 @@ class ContentMetadataService:
     def complete_image_generation_request(request: dict[str, Any], status: str) -> dict[str, Any]:
         """在图片生成终态补齐完成时间和毫秒耗时。"""
         completed = dict(request)
-        if status not in {"completed", "failed"}:
+        if status not in {"completed", "failed", "terminated"}:
             return completed
         completed.setdefault("end_time", _now_text())
         if completed.get("duration_ms") is None:

@@ -47,7 +47,12 @@ export const ImageModelStatus = {
 /**
  * 图片/视频生成状态枚举
  */
-export type GenerationStatus = "pending" | "processing" | "completed" | "failed"
+export type GenerationStatus =
+	| "pending"
+	| "processing"
+	| "completed"
+	| "failed"
+	| "terminated"
 
 /**
  * 图片/视频生成状态枚举值
@@ -61,6 +66,8 @@ export const GenerationStatus = {
 	Completed: "completed",
 	/** 失败 */
 	Failed: "failed",
+	/** 已终止（用户终止任务 / 任务转向，节点保留） */
+	Terminated: "terminated",
 } as const
 
 /**

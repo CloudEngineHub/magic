@@ -721,10 +721,15 @@ class TaskMessageFactory(TaskMessageFactoryProtocol):
         # 根据工具执行结果设置工具状态
         if result and not result.ok:
             tool_status = ToolStatus.ERROR
-            # 失败场景：根据 use_custom_remark 参数决定是否使用工具自定义的 remark
-            if not result.use_custom_remark:
-                remark_value = i18n.translate("tool.call_failed_remark", category="tool.messages")
-            logger.info(f"工具调用失败，设置工具状态为ERROR: {tool_name}")
+            if (result.extra_info or {}).get("cancelled"):
+                # 用户中断导致的终态：用“已终止”措辞，避免与真正的执行失败混淆
+                remark_value = i18n.translate("tool.call_cancelled_remark", category="tool.messages")
+                logger.info(f"工具调用被中断，设置工具状态为ERROR(已终止): {tool_name}")
+            else:
+                # 失败场景：根据 use_custom_remark 参数决定是否使用工具自定义的 remark
+                if not result.use_custom_remark:
+                    remark_value = i18n.translate("tool.call_failed_remark", category="tool.messages")
+                logger.info(f"工具调用失败，设置工具状态为ERROR: {tool_name}")
         else:
             tool_status = ToolStatus.FINISHED
 

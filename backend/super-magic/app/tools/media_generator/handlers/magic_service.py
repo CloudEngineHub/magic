@@ -162,85 +162,97 @@ class MagicServiceHandler(BaseImageGeneratorHandler):
                         self._parse_expected_finished_at(response_data),
                     )
 
-            deadline = time.monotonic() + self._POLL_TIMEOUT_SECONDS
+            poll_started_at = time.monotonic()
+            deadline = poll_started_at + self._POLL_TIMEOUT_SECONDS
             query_url = f"{self._api_base_url.rstrip('/')}/images/generation-tasks/{task_id}"
             last_logged_status: str | None = None
 
-            while True:
-                async with session.get(
-                    query_url, headers=headers, timeout=300
-                ) as response:
-                    if response.status != 200:
-                        error_text = await response.text()
-                        raise Exception(
-                            f"Generation task query failed, status code: {response.status}, error: {error_text}"
+            try:
+                while True:
+                    async with session.get(
+                        query_url, headers=headers, timeout=300
+                    ) as response:
+                        if response.status != 200:
+                            error_text = await response.text()
+                            raise Exception(
+                                f"Generation task query failed, status code: {response.status}, error: {error_text}"
+                            )
+
+                        task_data = await response.json()
+                        if not isinstance(task_data, dict):
+                            raise Exception(
+                                f"Unexpected generation task query response format. "
+                                f"Expected dict, got: {type(task_data).__name__}"
+                            )
+
+                    status = str(task_data.get("status") or "").strip().lower()
+                    if status != last_logged_status:
+                        logger.info(
+                            f"magic-service 图片生成任务查询响应: {json.dumps({'task_id': task_id, 'body': task_data}, ensure_ascii=False)}"
+                        )
+                        last_logged_status = status
+
+                    if status == "failed":
+                        error = task_data.get("error") if isinstance(task_data.get("error"), dict) else {}
+                        code = error.get("code")
+                        message = error.get("message") or "image generation failed"
+                        raise Exception(f"Image generation task failed: {message} (code={code})")
+
+                    if status == "succeeded":
+                        response_payload = task_data.get("response")
+                        if not isinstance(response_payload, dict):
+                            raise Exception("Image generation task succeeded without response payload")
+
+                        if "data" not in response_payload:
+                            raise Exception(
+                                f"Unexpected API response format. Expected dict with 'data' key. "
+                                f"Response: {str(response_payload)[:200]}"
+                            )
+
+                        provider_error_code = response_payload.get("provider_error_code")
+                        provider_error_message = response_payload.get("provider_error_message") or "unknown provider error"
+                        if provider_error_code:
+                            sanitized_message = re.sub(
+                                r"https?://[^\s`'\"]+",
+                                "[hidden]",
+                                provider_error_message,
+                            )
+                            raise ImageGenerationProviderError(
+                                f"Image generation rejected by provider (code={provider_error_code}): {sanitized_message}",
+                                provider_error_code=provider_error_code,
+                            )
+
+                        data_array = response_payload.get("data", [])
+                        image_urls = [
+                            item["url"]
+                            for item in data_array
+                            if isinstance(item, dict) and "url" in item
+                        ]
+                        if not image_urls:
+                            raise Exception(
+                                "Image generation service returned no image URLs. "
+                                "This is a transient service error; retry the same request once."
+                            )
+
+                        logger.info(f"成功解析 {len(image_urls)} 个图片 URL")
+                        return image_urls
+
+                    if time.monotonic() >= deadline:
+                        raise TimeoutError(
+                            f"Image generation task polling timeout after {self._POLL_TIMEOUT_SECONDS}s: {task_id}"
                         )
 
-                    task_data = await response.json()
-                    if not isinstance(task_data, dict):
-                        raise Exception(
-                            f"Unexpected generation task query response format. "
-                            f"Expected dict, got: {type(task_data).__name__}"
-                        )
-
-                status = str(task_data.get("status") or "").strip().lower()
-                if status != last_logged_status:
-                    logger.info(
-                        f"magic-service 图片生成任务查询响应: {json.dumps({'task_id': task_id, 'body': task_data}, ensure_ascii=False)}"
-                    )
-                    last_logged_status = status
-
-                if status == "failed":
-                    error = task_data.get("error") if isinstance(task_data.get("error"), dict) else {}
-                    code = error.get("code")
-                    message = error.get("message") or "image generation failed"
-                    raise Exception(f"Image generation task failed: {message} (code={code})")
-
-                if status == "succeeded":
-                    response_payload = task_data.get("response")
-                    if not isinstance(response_payload, dict):
-                        raise Exception("Image generation task succeeded without response payload")
-
-                    if "data" not in response_payload:
-                        raise Exception(
-                            f"Unexpected API response format. Expected dict with 'data' key. "
-                            f"Response: {str(response_payload)[:200]}"
-                        )
-
-                    provider_error_code = response_payload.get("provider_error_code")
-                    provider_error_message = response_payload.get("provider_error_message") or "unknown provider error"
-                    if provider_error_code:
-                        sanitized_message = re.sub(
-                            r"https?://[^\s`'\"]+",
-                            "[hidden]",
-                            provider_error_message,
-                        )
-                        raise ImageGenerationProviderError(
-                            f"Image generation rejected by provider (code={provider_error_code}): {sanitized_message}",
-                            provider_error_code=provider_error_code,
-                        )
-
-                    data_array = response_payload.get("data", [])
-                    image_urls = [
-                        item["url"]
-                        for item in data_array
-                        if isinstance(item, dict) and "url" in item
-                    ]
-                    if not image_urls:
-                        raise Exception(
-                            "Image generation service returned no image URLs. "
-                            "This is a transient service error; retry the same request once."
-                        )
-
-                    logger.info(f"成功解析 {len(image_urls)} 个图片 URL")
-                    return image_urls
-
-                if time.monotonic() >= deadline:
-                    raise TimeoutError(
-                        f"Image generation task polling timeout after {self._POLL_TIMEOUT_SECONDS}s: {task_id}"
-                    )
-
-                await asyncio.sleep(self._POLL_INTERVAL_SECONDS)
+                    await asyncio.sleep(self._POLL_INTERVAL_SECONDS)
+            except asyncio.CancelledError:
+                # 用户终止任务 / 转向时，轮询协程会被直接取消：这条路径既不抛 TimeoutError 也不留
+                # 异常栈，不记日志就完全无从排查「画布一直转圈」到底是 provider 慢还是协程被丢弃。
+                # 画布元素的终态由调用方（GenerationSubmissionService）收敛。
+                logger.warning(
+                    f"magic-service 图片生成轮询被取消（任务未收敛，交由调用方写终态）: "
+                    f"task_id={task_id}, 已等待 {time.monotonic() - poll_started_at:.1f}s, "
+                    f"超时上限 {self._POLL_TIMEOUT_SECONDS}s"
+                )
+                raise
 
     async def generate(
         self,

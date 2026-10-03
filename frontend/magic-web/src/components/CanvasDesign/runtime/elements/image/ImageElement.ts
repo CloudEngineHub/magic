@@ -2081,6 +2081,8 @@ export class ImageElement extends BaseElement<ImageElementData> {
 				return displayState.failureSource === "resource"
 					? baseName
 					: `${baseName}${this.getText("image.nameSuffix.failed", "(失败)")}`
+			case "terminated":
+				return `${baseName}${this.getText("image.nameSuffix.terminated", "(已终止)")}`
 			default:
 				return baseName
 		}
@@ -2209,6 +2211,10 @@ export class ImageElement extends BaseElement<ImageElementData> {
 		}
 
 		if (displayState.surface === "error") {
+			// 终止态复用错误表面：语义是「用户已终止」，不能用生成失败的兜底文案。
+			if (displayState.status === "terminated") {
+				return this.renderError(this.getText("image.generateTerminated", "生图已终止"))
+			}
 			const errorMessage =
 				displayState.failureSource === "resource"
 					? this.getImageLoadErrorText()
