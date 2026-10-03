@@ -1,11 +1,16 @@
 import { useRef, useEffect, useState, useCallback } from "react"
 import type Player from "@/infrastructure/vendors/xgplayer"
 import { loadXGPlayer, loadXGPlayerModules } from "@/infrastructure/vendors/xgplayer"
+import type { GetTemporaryDownloadUrlItem } from "@/pages/superMagic/utils/api"
+import { parseExpiresAt } from "@/components/CanvasDesign/runtime/resources/offline-cache/ossExpiryUtils"
+import { SHARED_MEDIA_URL_EXPIRY_SAFETY_WINDOW_MS } from "@/pages/superMagic/services/sharedMediaUrlCache"
 
 export type UseXgAudioPlayerMode = "music" | "core"
 
 interface UseXgAudioPlayerProps {
 	fileUrl?: string
+	fileResource?: GetTemporaryDownloadUrlItem | null
+	refreshFileUrl?: () => Promise<GetTemporaryDownloadUrlItem | null>
 	fileName?: string
 	audioPlayerMode?: UseXgAudioPlayerMode
 	onPlay?: () => void
@@ -25,6 +30,8 @@ interface AudioPlayerState {
 
 export function useXgAudioPlayer({
 	fileUrl,
+	fileResource,
+	refreshFileUrl,
 	fileName,
 	audioPlayerMode = "music",
 	onPlay,
@@ -34,6 +41,11 @@ export function useXgAudioPlayer({
 	const playerRef = useRef<Player | null>(null)
 	const containerRef = useRef<HTMLDivElement>(null)
 	const volumeRef = useRef(1)
+	const refreshTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+	const refreshAttemptedRef = useRef(false)
+	const refreshPendingRef = useRef(false)
+	const destroyingRef = useRef(false)
+	const playbackStateRef = useRef({ current: 0, shouldResume: false, muted: false, rate: 1 })
 	const [state, setState] = useState<AudioPlayerState>({
 		isPlaying: false,
 		duration: 0,
@@ -43,6 +55,29 @@ export function useXgAudioPlayer({
 		isLoading: false,
 		error: null,
 	})
+
+	const clearRefreshTimer = useCallback(() => {
+		if (refreshTimerRef.current) clearTimeout(refreshTimerRef.current)
+		refreshTimerRef.current = null
+	}, [])
+
+	const refreshWhenPlaying = useCallback(() => {
+		clearRefreshTimer()
+		const expiresAt = parseExpiresAt(fileResource?.expires_at)
+		if (!expiresAt || !playbackStateRef.current.shouldResume || !refreshFileUrl) return
+		const delay = Math.max(0, expiresAt - Date.now() - SHARED_MEDIA_URL_EXPIRY_SAFETY_WINDOW_MS)
+		refreshTimerRef.current = setTimeout(() => {
+			if (refreshPendingRef.current || !playbackStateRef.current.shouldResume) return
+			refreshPendingRef.current = true
+			void refreshFileUrl().finally(() => {
+				refreshPendingRef.current = false
+			})
+		}, delay)
+	}, [clearRefreshTimer, fileResource, refreshFileUrl])
+
+	useEffect(() => {
+		refreshAttemptedRef.current = false
+	}, [fileUrl])
 
 	// Initialize player
 	const initPlayer = useCallback(async () => {
@@ -103,11 +138,20 @@ export function useXgAudioPlayer({
 					duration: player.duration || 0,
 					isLoading: false,
 				}))
+				if (playbackStateRef.current.current > 0) {
+					player.currentTime = playbackStateRef.current.current
+				}
+				player.muted = playbackStateRef.current.muted
+				player.playbackRate = playbackStateRef.current.rate
+				if (playbackStateRef.current.shouldResume) {
+					void Promise.resolve(player.play()).catch(() => undefined)
+				}
 			})
 
 			player.on("timeupdate", () => {
 				const current = player.currentTime || 0
 				const duration = player.duration || 0
+				playbackStateRef.current.current = current
 				setState((prev) => ({
 					...prev,
 					current,
@@ -117,11 +161,16 @@ export function useXgAudioPlayer({
 			})
 
 			player.on("play", () => {
+				playbackStateRef.current.shouldResume = true
+				refreshWhenPlaying()
 				setState((prev) => ({ ...prev, isPlaying: true }))
 				onPlay?.()
 			})
 
 			player.on("pause", () => {
+				if (destroyingRef.current) return
+				playbackStateRef.current.shouldResume = false
+				clearRefreshTimer()
 				setState((prev) => ({ ...prev, isPlaying: false }))
 				onPause?.()
 			})
@@ -133,6 +182,11 @@ export function useXgAudioPlayer({
 					volume: player.volume || 0,
 					isMuted: player.muted || false,
 				}))
+				playbackStateRef.current.muted = player.muted || false
+			})
+
+			player.on("ratechange", () => {
+				playbackStateRef.current.rate = player.playbackRate || 1
 			})
 
 			player.on("error", (error) => {
@@ -142,6 +196,13 @@ export function useXgAudioPlayer({
 					error: "Failed to load audio",
 					isLoading: false,
 				}))
+				if (!refreshAttemptedRef.current && refreshFileUrl) {
+					refreshAttemptedRef.current = true
+					refreshPendingRef.current = true
+					void refreshFileUrl().finally(() => {
+						refreshPendingRef.current = false
+					})
+				}
 			})
 
 			player.on("canplay", () => {
@@ -158,7 +219,17 @@ export function useXgAudioPlayer({
 				isLoading: false,
 			}))
 		}
-	}, [fileUrl, fileName, audioPlayerMode, onPlay, onPause, onTimeUpdate])
+	}, [
+		fileUrl,
+		fileName,
+		audioPlayerMode,
+		onPlay,
+		onPause,
+		onTimeUpdate,
+		refreshWhenPlaying,
+		clearRefreshTimer,
+		refreshFileUrl,
+	])
 
 	// Cleanup player
 	const destroyPlayer = useCallback(() => {
@@ -230,18 +301,29 @@ export function useXgAudioPlayer({
 
 	// Effect to reinitialize player when URL changes
 	useEffect(() => {
+		destroyingRef.current = true
 		destroyPlayer()
+		destroyingRef.current = false
+		clearRefreshTimer()
 		if (fileUrl) {
 			// Add a small delay to ensure DOM is ready
 			const timer = setTimeout(initPlayer, 100)
-			return () => clearTimeout(timer)
+			return () => {
+				clearTimeout(timer)
+				clearRefreshTimer()
+			}
 		}
-	}, [fileUrl, initPlayer, destroyPlayer])
+	}, [fileUrl, initPlayer, destroyPlayer, clearRefreshTimer])
 
 	// Cleanup on unmount
 	useEffect(() => {
-		return destroyPlayer
-	}, [destroyPlayer])
+		return () => {
+			destroyingRef.current = true
+			clearRefreshTimer()
+			destroyPlayer()
+			destroyingRef.current = false
+		}
+	}, [clearRefreshTimer, destroyPlayer])
 
 	return {
 		containerRef,

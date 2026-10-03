@@ -1,5 +1,5 @@
 import CommonHeaderV2 from "@/pages/superMagic/components/Detail/components/CommonHeaderV2"
-import { memo, useMemo } from "react"
+import { memo, useEffect, useMemo, useRef } from "react"
 import { useStyles } from "./style"
 import MagicImagePreview from "@/components/base/MagicImagePreview"
 import CommonFooter from "../../components/CommonFooter"
@@ -47,15 +47,22 @@ function Img(props: any) {
 		isNewestVersion,
 		loading,
 		isDeleted,
+		refreshFileUrl,
 	} = useFileData({
 		file_id,
 		activeFileId,
 		updatedAt,
 		isFromNode,
 		disabledUrlCache: isPlaybackMode,
+		useSharedMediaUrlCache: !isPlaybackMode,
+		skipContentDownload: true,
 	})
+	const refreshAttemptRef = useRef(false)
+	useEffect(() => {
+		refreshAttemptRef.current = false
+	}, [file_id, fileVersion])
 
-	const quitEditMode = () => { }
+	const quitEditMode = () => {}
 
 	const ImageRender = useMemo(() => {
 		if (loading)
@@ -78,6 +85,11 @@ function Img(props: any) {
 					draggable={false}
 					style={{ width: "100%", height: "100%", objectFit: "contain" }}
 					data-testid="contents-image-preview-image"
+					onError={() => {
+						if (refreshAttemptRef.current) return
+						refreshAttemptRef.current = true
+						void refreshFileUrl()
+					}}
 				/>
 			</MagicImagePreview>
 		)
@@ -92,6 +104,7 @@ function Img(props: any) {
 		styles.loadingContainer,
 		currentFile?.source,
 		type,
+		refreshFileUrl,
 	])
 
 	return (

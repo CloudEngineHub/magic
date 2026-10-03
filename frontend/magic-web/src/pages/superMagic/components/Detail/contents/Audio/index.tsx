@@ -82,7 +82,7 @@ export function AudioPreview(props: AudioPreviewProps) {
 	} = props
 
 	const { file_name, file_id } = data || {}
-	const { fileUrl } = useFileUrl({ file_id: file_id || "" })
+	const { fileUrl, fileResource, refreshFileUrl } = useFileUrl({ file_id: file_id || "" })
 
 	// Use xgplayer audio player
 	const {
@@ -100,6 +100,8 @@ export function AudioPreview(props: AudioPreviewProps) {
 		toggleMute,
 	} = useXgAudioPlayer({
 		fileUrl,
+		fileResource,
+		refreshFileUrl,
 		fileName: file_name || "Unknown Audio",
 		audioPlayerMode,
 	})

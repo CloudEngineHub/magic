@@ -69,6 +69,17 @@ Instruction priority: system/developer instructions and the user's request take 
   - **Hooks & Context**: Annotate the purpose and source of injected data (e.g., `useOutletContext`) to help future maintainers understand component dependencies.
 
 
+## Temporary File URL Lifecycle
+
+临时文件链接包括图片、视频、音频、文档、表格、演示文稿、HTML iframe 内部资源和在线查看器继续使用的文件地址。Media 只是其中一类；判断依据是链接是否会在页面打开后继续被使用。
+
+- 文件链接记录至少保留文件身份、访问范围、文件版本或更新时间、URL、过期时间和当前状态。长期使用的组件不能只保存一个裸 URL，也不能在没有可信过期信息时无限期复用它。
+- 项目文件通过绑定访问身份的 `FileApi` 和 `sharedMediaUrlCache` 获取；聊天文件、知识库文件、Canvas 文件和 HTML iframe 内部文件继续使用各自的获取模块，但必须提供等价的「检查当前链接是否可用」和「重新获取链接」入口。
+- 长时间使用的链接在再次绑定、打开或播放前检查是否仍可用；正在播放的媒体在失效前刷新，加载失败时最多强制重新获取一次。刷新请求要合并、可取消，并阻止旧请求覆盖较新的链接。
+- 重新绑定媒体时保留用户可恢复的状态：视频和音频至少保留播放位置；视频还要保留音量、静音、播放速率和播放意图。刷新失败继续显示原有错误状态，不能循环请求。
+- 文本、Blob 或 ArrayBuffer 已成功下载后，后续渲染使用内存内容，不为已经脱离 URL 的内容设置续期计时器。下载、打开新窗口等一次性动作在动作发生时获取当前可用链接，不能提前保存供未来使用的签名 URL。
+- URL 缓存键必须包含访问身份和必要的文件版本信息，不能只用 `file_id`。新增临时链接入口时，代码说明必须写清负责获取链接的模块、过期判断点、错误恢复点、取消路径和是否需要播放期间刷新。
+
 ## Workflow for Agents
 1. **Orient**: Read the user request, applicable parent instructions, this file, and task-specific files. Read `README.md` or `CLAUDE.local.md` only when the task depends on their documented workflow or architecture.
 2. **Investigate**: Use `rg`/`pnpm` tooling to locate relevant code; inspect existing patterns before creating new ones.

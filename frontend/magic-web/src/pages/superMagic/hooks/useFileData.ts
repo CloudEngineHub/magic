@@ -1,7 +1,7 @@
 import { useFileAccess } from "@/pages/superMagic/fileAccess/FileAccessProvider"
 import { useFileApi } from "@/pages/superMagic/fileAccess/fileApi"
 import { isShareFileAccess } from "@/pages/superMagic/fileAccess/fileAccessContext"
-import { downloadFileContent } from "@/pages/superMagic/utils/api"
+import { downloadFileContent, type GetTemporaryDownloadUrlItem } from "@/pages/superMagic/utils/api"
 import { useEffect, useMemo, useRef, useState } from "react"
 import { useDebounceEffect, useMemoizedFn } from "ahooks"
 import { FileHistoryVersion, Topic } from "@/pages/superMagic/pages/Workspace/types"
@@ -14,7 +14,7 @@ import { isNil } from "lodash-es"
 import { superMagicStore } from "@/pages/superMagic/stores"
 
 interface FileUrlCache {
-	url: string
+	resource: GetTemporaryDownloadUrlItem
 	updatedAt: string
 	version?: number
 }
@@ -32,6 +32,8 @@ export const useFileData = ({
 	enabled = true,
 	loadContent = true,
 	isTabActive,
+	useSharedMediaUrlCache = false,
+	skipContentDownload = false,
 }: {
 	file_id: string
 	responseType?: "text" | "arrayBuffer" | "blob"
@@ -49,6 +51,10 @@ export const useFileData = ({
 	loadContent?: boolean
 	/** Whether this renderer is the active file tab. */
 	isTabActive?: boolean
+	/** Use the shared expiring URL cache for previews that keep the URL mounted. */
+	useSharedMediaUrlCache?: boolean
+	/** Resolve the URL without downloading the file body into memory. */
+	skipContentDownload?: boolean
 }) => {
 	const { t } = useTranslation("super")
 	const { isShareRoute } = useShareRoute()
@@ -70,6 +76,7 @@ export const useFileData = ({
 
 	/** 文件地址 */
 	const [fileUrl, setFileUrl] = useState<string>("")
+	const [fileResource, setFileResource] = useState<GetTemporaryDownloadUrlItem | null>(null)
 	/** 文件数据 */
 	const [fileData, setFileData] = useState<any>(null)
 	/** 文件版本 */
@@ -132,12 +139,42 @@ export const useFileData = ({
 		setLoading(false)
 	})
 
+	const requestFileResource = useMemoizedFn(
+		async (
+			fileVersion?: number,
+			forceRefresh = false,
+		): Promise<GetTemporaryDownloadUrlItem | null> => {
+			if (!file_id || waitingForShareAccess) return null
+			const versionMap = fileVersion === undefined ? undefined : { [file_id]: fileVersion }
+			const items = useSharedMediaUrlCache
+				? await fileApi.requestSharedMediaUrls([file_id], {
+						fileVersions: versionMap,
+						fileUpdatedAtMap:
+							updatedAt === undefined ? undefined : { [file_id]: updatedAt },
+						forceRefresh,
+					})
+				: await fileApi.getTemporaryDownloadUrl({
+						file_ids: [file_id],
+						...(versionMap ? { file_versions: versionMap } : {}),
+						...(forceRefresh ? { cache: false } : {}),
+					})
+			return items?.[0]?.url ? items[0] : null
+		},
+	)
+
 	/** 智能更新文件 URL - 只有当更新时间或版本变化时才更新 */
 	const updateFileUrlIfNeeded = useMemoizedFn(
-		(newUrl: string, fileId: string, newUpdatedAt?: string, newVersion?: number) => {
+		(
+			newResource: GetTemporaryDownloadUrlItem,
+			fileId: string,
+			newUpdatedAt?: string,
+			newVersion?: number,
+		) => {
+			const newUrl = newResource.url
 			// 如果禁用缓存，直接更新 URL 并返回 true
 			if (disabledUrlCache) {
 				setFileUrl(newUrl)
+				setFileResource(newResource)
 				return true
 			}
 			const cachedData = fileUrlCacheRef.current[fileId]
@@ -148,10 +185,13 @@ export const useFileData = ({
 				loadedContentFileIdRef.current !== fileId ||
 				isNil(fileData) ||
 				cachedData.updatedAt !== currentUpdatedAt ||
-				cachedData.version !== newVersion
+				cachedData.version !== newVersion ||
+				cachedData.resource.url !== newResource.url ||
+				cachedData.resource.expires_at !== newResource.expires_at
 
 			if (shouldUpdate) {
 				setFileUrl(newUrl)
+				setFileResource(newResource)
 				return true
 			} else {
 				return false
@@ -172,18 +212,14 @@ export const useFileData = ({
 			const request = beginLoad()
 			historySequence.current += 1
 			// 获取文件下载地址
-			return fileApi
-				.getTemporaryDownloadUrl({
-					file_ids: [file_id],
-					file_versions: file_version ? { [file_id]: file_version } : undefined,
-				})
-				.then((res: any) => {
+			return requestFileResource(file_version, forceReload)
+				.then((resource) => {
 					if (!isCurrentLoad(request)) return
-					if (res[0]?.url) {
+					if (resource) {
 						setIsDeleted(false)
 						// 使用智能更新函数，只有当更新时间或版本变化时才更新 URL
 						const urlUpdated = updateFileUrlIfNeeded(
-							res[0]?.url,
+							resource,
 							file_id,
 							updatedAt,
 							file_version,
@@ -198,14 +234,14 @@ export const useFileData = ({
 							file_version,
 						)
 						// 只有 URL 更新时才重新下载文件内容
-						if (urlUpdated || forceReload) {
-							return downloadFileContent(res[0]?.url, { responseType }).then(
+						if ((urlUpdated || forceReload) && !skipContentDownload) {
+							return downloadFileContent(resource.url, { responseType }).then(
 								(data: any) => {
 									if (!isCurrentLoad(request)) return
 									// Only successful bytes may satisfy a later cache hit.
 									loadedContentFileIdRef.current = file_id
 									fileUrlCacheRef.current[file_id] = {
-										url: res[0].url,
+										resource,
 										updatedAt: updatedAt || "",
 										version: file_version,
 									}
@@ -216,6 +252,14 @@ export const useFileData = ({
 								},
 							)
 						} else {
+							if (urlUpdated && skipContentDownload) {
+								loadedContentFileIdRef.current = file_id
+								fileUrlCacheRef.current[file_id] = {
+									resource,
+									updatedAt: updatedAt || "",
+									version: file_version,
+								}
+							}
 							finishLoad()
 						}
 					} else {
@@ -283,6 +327,19 @@ export const useFileData = ({
 		const versions = isShareFilePreview ? undefined : await fetchFileVersions(file_id)
 		if (scope !== currentScope.current || intent !== refreshIntent.current) return
 		await changeFileVersion(undefined, versions, true)
+	})
+
+	const refreshFileUrl = useMemoizedFn(async () => {
+		let resource: GetTemporaryDownloadUrlItem | null
+		try {
+			resource = await requestFileResource(fileVersion, true)
+		} catch {
+			return null
+		}
+		if (!resource) return null
+		setFileResource(resource)
+		setFileUrl(resource.url)
+		return resource
 	})
 
 	/** 还原文件版本 */
@@ -373,6 +430,7 @@ export const useFileData = ({
 			fileData,
 			hasReusableContent,
 			waitingForShareAccess,
+			useSharedMediaUrlCache,
 		],
 		{
 			wait: 100,
@@ -402,44 +460,46 @@ export const useFileData = ({
 			let cancelled = false
 			const request = beginLoad()
 			// 获取文件下载地址
-			fileApi
-				.getTemporaryDownloadUrl({
-					file_ids: [file_id],
-				})
-				.then((res: any) => {
+			requestFileResource()
+				.then((resource) => {
 					if (cancelled || !isCurrentLoad(request)) return
+					if (!resource) {
+						failLoad(new Error("File URL is unavailable"))
+						setIsDeleted(true)
+						return
+					}
 					// 使用智能更新函数
 					const urlUpdated = updateFileUrlIfNeeded(
-						res[0]?.url,
+						resource,
 						file_id,
 						updatedAt,
 						undefined,
 					)
 					setFileVersion(undefined)
-					if (res[0]?.url) {
-						setIsDeleted(false)
-						// 只有 URL 更新时才重新下载文件内容
-						if (urlUpdated) {
-							return downloadFileContent(res[0]?.url, { responseType }).then(
-								(data: any) => {
-									if (cancelled || !isCurrentLoad(request)) return
-									loadedContentFileIdRef.current = file_id
-									fileUrlCacheRef.current[file_id] = {
-										url: res[0].url,
-										updatedAt: updatedAt || "",
-										version: undefined,
-									}
-									finishLoad()
-									setFileData(data)
-								},
-							)
-						}
-						loadedContentFileIdRef.current = file_id
-						finishLoad()
-					} else {
-						failLoad(new Error("File URL is unavailable"))
-						setIsDeleted(true)
+					setIsDeleted(false)
+					// 只有 URL 更新时才重新下载文件内容
+					if (urlUpdated && !skipContentDownload) {
+						return downloadFileContent(resource.url, { responseType }).then(
+							(data: any) => {
+								if (cancelled || !isCurrentLoad(request)) return
+								loadedContentFileIdRef.current = file_id
+								fileUrlCacheRef.current[file_id] = {
+									resource,
+									updatedAt: updatedAt || "",
+									version: undefined,
+								}
+								finishLoad()
+								setFileData(data)
+							},
+						)
 					}
+					loadedContentFileIdRef.current = file_id
+					fileUrlCacheRef.current[file_id] = {
+						resource,
+						updatedAt: updatedAt || "",
+						version: undefined,
+					}
+					finishLoad()
 				})
 				.catch((error) => {
 					if (cancelled || !isCurrentLoad(request)) return
@@ -468,6 +528,8 @@ export const useFileData = ({
 		finishLoad,
 		failLoad,
 		responseType,
+		skipContentDownload,
+		requestFileResource,
 		updateFileUrlIfNeeded,
 	])
 
@@ -475,6 +537,7 @@ export const useFileData = ({
 		if (!enabled) return
 		pubsub.subscribe(PubSubEvents.Change_Preview_File, () => {
 			setFileUrl("")
+			setFileResource(null)
 			setFileData(undefined)
 			setFileVersion(undefined)
 			setFileVersionsList([])
@@ -503,11 +566,13 @@ export const useFileData = ({
 
 	return {
 		refreshFile,
+		refreshFileUrl,
 		loadStatus,
 		loadRevision,
 		loadError,
 		loading,
 		fileUrl,
+		fileResource,
 		fileData,
 		setFileData,
 		fileVersion,

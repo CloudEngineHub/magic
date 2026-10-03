@@ -8,13 +8,16 @@ import magicToast from "@/components/base/MagicToaster/utils"
 import { useTranslation } from "react-i18next"
 import useShareRoute from "./useShareRoute"
 import { SuperMagicApi } from "@/apis"
+import type { GetTemporaryDownloadUrlItem } from "@/pages/superMagic/utils/api"
+import { parseExpiresAt } from "@/components/CanvasDesign/runtime/resources/offline-cache/ossExpiryUtils"
+import { SHARED_MEDIA_URL_EXPIRY_SAFETY_WINDOW_MS } from "@/pages/superMagic/services/sharedMediaUrlCache"
 
 export interface SlideFileData {
 	fileId: string
 	fileUrl: string
 	fileVersion: number | undefined
 	fileVersionsList: FileHistoryVersion[]
-	fileUrlVersionMap: Record<number, string>
+	fileUrlVersionMap: Record<number, GetTemporaryDownloadUrlItem>
 }
 
 export const useSlidesFileData = ({
@@ -38,25 +41,34 @@ export const useSlidesFileData = ({
 
 	/** 更改文件版本 */
 	const changeFileVersion = useMemoizedFn((file_version: number | undefined) => {
-		if (
-			!currentSildeFileId ||
-			file_version === slidesFileDataMap[currentSildeFileId]?.fileVersion
-		) {
+		if (!currentSildeFileId) {
 			return
 		}
+		const currentSlide = slidesFileDataMap[currentSildeFileId]
+		const currentVersion = file_version || currentSlide?.fileVersionsList[0]?.version
+		const currentResource = currentSlide?.fileUrlVersionMap?.[currentVersion]
+		const currentExpiresAt = parseExpiresAt(currentResource?.expires_at)
+		const currentResourceUsable =
+			Boolean(currentResource?.url) &&
+			(currentExpiresAt === null ||
+				currentExpiresAt - Date.now() > SHARED_MEDIA_URL_EXPIRY_SAFETY_WINDOW_MS)
+		if (file_version === currentSlide?.fileVersion && currentResourceUsable) return
 		// 1. 获取对应版本的文件地址：
 		// 优先使用已缓存的文件地址
-		const targetFileUrl =
-			slidesFileDataMap[currentSildeFileId]?.fileUrlVersionMap?.[
-				file_version || slidesFileDataMap[currentSildeFileId]?.fileVersionsList[0]?.version
-			]
-		// targetFileUrl存在，说明该版本的文件地址已获取过，可直接使用
-		if (targetFileUrl) {
+		const targetFileResource =
+			slidesFileDataMap[currentSildeFileId]?.fileUrlVersionMap?.[currentVersion]
+		const targetExpiresAt = parseExpiresAt(targetFileResource?.expires_at)
+		const targetResourceUsable =
+			Boolean(targetFileResource?.url) &&
+			(targetExpiresAt === null ||
+				targetExpiresAt - Date.now() > SHARED_MEDIA_URL_EXPIRY_SAFETY_WINDOW_MS)
+		// 只有仍在安全有效期内的完整链接记录才能直接复用。
+		if (targetResourceUsable && targetFileResource) {
 			setSlidesFileDataMap((prev) => ({
 				...prev,
 				[currentSildeFileId]: {
 					...prev[currentSildeFileId],
-					fileUrl: targetFileUrl,
+					fileUrl: targetFileResource.url,
 					fileVersion: file_version,
 				},
 			}))
@@ -64,25 +76,25 @@ export const useSlidesFileData = ({
 			if (shouldWaitForShareAccess(fileAccess)) return
 			// 获取文件下载地址
 			fileApi
-				.getTemporaryDownloadUrl({
-					file_ids: [currentSildeFileId],
-					file_versions: file_version
-						? { [currentSildeFileId]: file_version }
-						: undefined,
+				.requestSharedMediaUrls([currentSildeFileId], {
+					fileVersions: file_version ? { [currentSildeFileId]: file_version } : undefined,
+					fileUpdatedAtMap: updatedAt ? { [currentSildeFileId]: updatedAt } : undefined,
 				})
-				.then((res: any) => {
+				.then((res) => {
+					const resource = res[0]
+					if (!resource) return
 					setSlidesFileDataMap((prev) => ({
 						...prev,
 						[currentSildeFileId]: {
 							...prev[currentSildeFileId],
-							fileUrl: res[0]?.url,
+							fileUrl: resource.url,
 							fileVersion: file_version,
 							fileUrlVersionMap: file_version
 								? {
 										...(prev[currentSildeFileId]?.fileUrlVersionMap || {}),
 										[file_version ||
 										prev[currentSildeFileId]?.fileVersionsList[0]?.version]:
-											res[0]?.url,
+											resource,
 									}
 								: {
 										...(prev[currentSildeFileId]?.fileUrlVersionMap || {}),
