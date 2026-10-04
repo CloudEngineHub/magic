@@ -48,6 +48,11 @@ export interface LocateProjectFileActionOptions {
 	elementId?: string
 }
 
+export interface DeleteImageFileActionOptions {
+	/** 右键菜单打开时记录的目标元素；执行前仍会重新读取元素数据。 */
+	elementId?: string
+}
+
 export interface DownloadActionOptions {
 	/** default 对齐项目文件下载；normal 仅用于 AI 图片带水印下载。 */
 	downloadMode?: "default" | "normal"
@@ -61,6 +66,7 @@ export interface UserActionOptionsMap {
 	"frame.create": FrameCreateActionOptions
 	"view.focus-element": ViewActionOptions
 	"view.locate-project-file": LocateProjectFileActionOptions
+	"edit.delete-image-file": DeleteImageFileActionOptions
 	"download.image": DownloadActionOptions
 	"download.image-no-watermark": DownloadActionOptions
 	"download.frame": DownloadActionOptions

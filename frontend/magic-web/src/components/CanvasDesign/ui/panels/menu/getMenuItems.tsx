@@ -445,5 +445,20 @@ export function getMenuItems({
 				return canvas.userActionRegistry.canExecute("edit.delete")
 			},
 		},
+		{
+			id: "delete-image-file",
+			label: translate("menu.deleteImageFile", "彻底删除图片"),
+			icon: Trash2,
+			onClick: () => {
+				void canvas.userActionRegistry.execute("edit.delete-image-file", {
+					elementId: currentElementId ?? selectedIds[0],
+				})
+			},
+			visible: () => {
+				return canvas.userActionRegistry.canExecute("edit.delete-image-file", {
+					elementId: currentElementId ?? selectedIds[0],
+				})
+			},
+		},
 	]
 }

@@ -1,6 +1,7 @@
-import { useMemo, useCallback } from "react"
+import { createElement, useMemo, useCallback } from "react"
 import { useTranslation } from "react-i18next"
 import MagicModal, { type ModalFuncProps } from "@/components/base/MagicModal"
+import { Button } from "@/components/shadcn-ui/button"
 import type { Topic, Workspace, ProjectListItem } from "@/pages/superMagic/pages/Workspace/types"
 import type {
 	CanvasDesignMethods,
@@ -302,8 +303,63 @@ export function useDesignMethods(options: UseDesignMethodsOptions): CanvasDesign
 		[resolveResourceReference],
 	)
 
+	const deleteProjectFiles: NonNullable<CanvasDesignMethods["deleteProjectFiles"]> = useCallback(
+		async ({ fileIds }) => {
+			if (!projectId) {
+				throw new Error(
+					t("design.errors.projectUnavailable", "当前项目不可用，请刷新后重试"),
+				)
+			}
+			const result = await SuperMagicApi.deleteFiles({
+				file_ids: [...fileIds],
+				project_id: projectId,
+			})
+			updateAttachments()
+			return { deletedFileIds: result.file_ids.map(String) }
+		},
+		[projectId, t, updateAttachments],
+	)
+
 	const confirmModal: NonNullable<CanvasDesignMethods["confirmModal"]> = useCallback(
 		(options) => {
+			if (options.actions?.length) {
+				const modal = MagicModal.confirm({
+					title: options.title,
+					content: options.content as ModalFuncProps["content"],
+					variant: options.variant,
+					showIcon: options.showIcon,
+					cancelText: options.cancelText,
+					onCancel: options.onCancel,
+					footer: (_, { CancelBtn }) =>
+						createElement(
+							"div",
+							{
+								className:
+									"flex items-center justify-end gap-2 border-t border-border bg-muted/50 p-2",
+							},
+							createElement(CancelBtn),
+							...(options.actions?.map((action) =>
+								createElement(
+									Button,
+									{
+										key: action.id,
+										variant:
+											action.variant === "destructive"
+												? "destructive"
+												: "outline",
+										onClick: async () => {
+											await options.onAction?.(action.id)
+											modal?.destroy()
+										},
+									},
+									action.label,
+								),
+							) ?? []),
+						),
+				})
+				return
+			}
+
 			MagicModal.confirm({
 				title: options.title,
 				content: options.content as ModalFuncProps["content"],
@@ -311,6 +367,8 @@ export function useDesignMethods(options: UseDesignMethodsOptions): CanvasDesign
 				cancelText: options.cancelText,
 				okButtonProps: options.okButtonProps as ModalFuncProps["okButtonProps"],
 				cancelButtonProps: options.cancelButtonProps as ModalFuncProps["cancelButtonProps"],
+				variant: options.variant,
+				showIcon: options.showIcon,
 				onOk: options.onOk,
 				onCancel: options.onCancel,
 			})
@@ -683,6 +741,7 @@ export function useDesignMethods(options: UseDesignMethodsOptions): CanvasDesign
 			getImageGenerationResults,
 			getVideoGenerationResult,
 			locateProjectFile,
+			deleteProjectFiles,
 			uploadFiles,
 			getFileInfo,
 			getFileResourceMeta,
@@ -738,6 +797,7 @@ export function useDesignMethods(options: UseDesignMethodsOptions): CanvasDesign
 		getImageGenerationResults,
 		getVideoGenerationResult,
 		locateProjectFile,
+		deleteProjectFiles,
 		uploadFiles,
 		getFileInfo,
 		getFileResourceMeta,

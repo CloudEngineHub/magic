@@ -1,6 +1,7 @@
-import type { UserAction, EditActionOptions } from "../types"
+import type { UserAction, EditActionOptions, DeleteImageFileActionOptions } from "../types"
 import { ElementTypeEnum } from "../../document/types"
 import { selectionContainsReplacingMedia } from "../mediaReplacementGuards"
+import { canDeleteSelectedImageFile, executeDeleteImageFile } from "../imageFileDeletion"
 
 /**
  * 编辑操作相关的用户动作
@@ -95,6 +96,15 @@ export const editActions: UserAction[] = [
 			canvas.deleteSelection()
 		},
 	},
+	{
+		id: "edit.delete-image-file",
+		category: "edit",
+		canExecute: (canvas, options?: DeleteImageFileActionOptions) =>
+			canDeleteSelectedImageFile(canvas, options),
+		execute: (canvas, options?: DeleteImageFileActionOptions) => {
+			executeDeleteImageFile(canvas, options)
+		},
+	} satisfies UserAction<"edit.delete-image-file", DeleteImageFileActionOptions>,
 	{
 		id: "edit.undo",
 		category: "edit",

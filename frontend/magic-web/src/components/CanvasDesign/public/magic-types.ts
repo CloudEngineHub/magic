@@ -1456,8 +1456,18 @@ export interface CanvasDesignConfirmModalOptions {
 	cancelText?: string
 	okButtonProps?: Record<string, unknown>
 	cancelButtonProps?: Record<string, unknown>
+	variant?: "default" | "destructive"
+	showIcon?: boolean
+	actions?: readonly CanvasDesignConfirmModalAction[]
+	onAction?: (actionId: string) => void | Promise<void>
 	onOk?: () => void | Promise<void>
 	onCancel?: () => void
+}
+
+export interface CanvasDesignConfirmModalAction {
+	id: string
+	label: string
+	variant?: "default" | "destructive"
 }
 
 /**
@@ -1587,6 +1597,10 @@ export interface CanvasDesignMethods {
 		fileName?: string
 		locateInTree?: boolean
 	}) => Promise<void> | void
+	/** 将项目文件移入回收站，并返回服务端确认已处理的文件 ID。 */
+	deleteProjectFiles?: (params: {
+		fileIds: readonly string[]
+	}) => Promise<{ deletedFileIds: string[] }>
 	/**
 	 * 上传文件
 	 * @param uploadFiles 待上传文件数组
