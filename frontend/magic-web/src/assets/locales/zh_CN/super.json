@@ -206,6 +206,7 @@
 			"expiredPending": "正在处理，请稍候",
 			"processingFailed": "处理失败，请稍后重试",
 			"processingInProgress": "正在提交，请稍候。",
+			"recoveryFailed": "暂时无法继续处理，请稍后再试。你刚才填写的内容已保留。",
 			"skipped": "已跳过",
 			"submitFailed": "提交失败，请稍后重试",
 			"taskNotFound": "这个问题已经结束，请刷新页面后继续",

@@ -10,6 +10,7 @@ import {
 	isAskUserTaskSuspended,
 	normalizeAskUserRemark,
 	resolveAskUserLocaleFromAction,
+	ASK_USER_RECOVERY_FAILED_EVENT,
 } from "@/pages/superMagic/components/MessageList/utils/askUser"
 import {
 	buildAskUserDraftCacheKey,
@@ -264,6 +265,31 @@ function AskUserToolCall(props: AskUserToolCallProps) {
 	)
 
 	useEffect(() => {
+		if (!selectedTopic?.chat_topic_id || !toolId) return
+		return superMagicStore.subscribe(
+			"message.committed",
+			({ payload }) => {
+				if (
+					payload.message.event !== ASK_USER_RECOVERY_FAILED_EVENT ||
+					payload.message.toolCallId !== toolId
+				)
+					return
+				clearAskUserReply(replyStateKey)
+				setReplyState(null)
+				setPendingAction(null)
+			},
+			{ scope: { topicId: selectedTopic.chat_topic_id } },
+		)
+	}, [replyStateKey, selectedTopic?.chat_topic_id, toolId])
+
+	useEffect(() => {
+		if (normalizedAskUserStatus === ASK_USER_CARD_STATUS.pending) return
+		markAskUserReply(replyStateKey, normalizedAskUserStatus)
+		setReplyState(readAskUserReplyState(replyStateKey))
+		clearAskUserDraftAnswers(draftCacheKey)
+	}, [draftCacheKey, normalizedAskUserStatus, replyStateKey])
+
+	useEffect(() => {
 		if (hasAuthoritativeTerminalStatus) clearExpiryTip()
 		return clearExpiryTip
 	}, [clearExpiryTip, hasAuthoritativeTerminalStatus])
@@ -320,8 +346,6 @@ function AskUserToolCall(props: AskUserToolCallProps) {
 					toolCallId: toolId,
 					toolName: ASK_USER_TOOL.name,
 				})
-				markAskUserReply(replyStateKey, isAnswered ? "answered" : "skipped")
-				setReplyState(readAskUserReplyState(replyStateKey))
 			} catch (error) {
 				if (isTerminalAskUserReplyError(error)) {
 					showClosedTip()
@@ -339,7 +363,6 @@ function AskUserToolCall(props: AskUserToolCallProps) {
 				setReplyState(null)
 				throw error
 			}
-			clearAskUserDraftAnswers(draftCacheKey)
 			clearAskUserV2BrowserNotification({
 				topicId,
 				notificationKey: resolvedQuestionId || toolId,

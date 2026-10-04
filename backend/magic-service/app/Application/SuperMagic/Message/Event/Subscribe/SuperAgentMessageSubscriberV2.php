@@ -298,6 +298,16 @@ class SuperAgentMessageSubscriberV2 extends MagicAgentEventAppService
             return;
         }
         try {
+            if ($e->getCode() === EventErrorCode::EVENT_USER_TOOL_CALL_RECOVERY_FAILED->value) {
+                $this->clientMessageAppService->sendUserToolCallRecoveryTipToClient(
+                    topicId: $this->resolveTopicId($dataIsolation, $userMessageDTO),
+                    taskId: '',
+                    chatTopicId: $userMessageDTO->getChatTopicId(),
+                    chatConversationId: $userMessageDTO->getChatConversationId(),
+                    toolCallId: (string) ($e->getData()['tool_call_id'] ?? ''),
+                );
+                return;
+            }
             $this->clientMessageAppService->sendReminderMessageToClient(
                 topicId: $this->resolveTopicId($dataIsolation, $userMessageDTO),
                 taskId: '',

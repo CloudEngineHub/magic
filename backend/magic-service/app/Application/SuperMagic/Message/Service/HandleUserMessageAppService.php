@@ -57,6 +57,7 @@ use App\Infrastructure\Core\Exception\EventExceptionBuilder;
 use App\Infrastructure\Core\Exception\ExceptionBuilder;
 use App\Infrastructure\SuperMagic\ExternalAPI\SandboxOS\Exception\SandboxOperationException;
 use App\Infrastructure\SuperMagic\ExternalAPI\SandboxOS\Exception\UserToolCallNotFoundException;
+use App\Infrastructure\SuperMagic\ExternalAPI\SandboxOS\Exception\UserToolCallRecoveryException;
 use App\Infrastructure\SuperMagic\ExternalAPI\SandboxOS\Gateway\Constant\SandboxStatus;
 use App\Infrastructure\SuperMagic\Utils\TaskTerminationUtil;
 use App\Infrastructure\Util\IdGenerator\IdGenerator;
@@ -405,6 +406,18 @@ class HandleUserMessageAppService extends AbstractAppService
                 'reason' => $e->getMessage(),
             ]);
             EventExceptionBuilder::throw(EventErrorCode::EVENT_USER_TOOL_CALL_EXPIRED, trans('super_magic.task.question_expired'));
+        } catch (UserToolCallRecoveryException $e) {
+            $this->logger->warning('User tool call answer is waiting for execution recovery', [
+                'chat_topic_id' => $userMessageDTO->getChatTopicId(),
+                'tool_call_id' => $userToolCallMessage->getToolCallId(),
+                'name' => $userToolCallMessage->getName(),
+                'reason' => $e->getMessage(),
+            ]);
+            EventExceptionBuilder::throw(
+                EventErrorCode::EVENT_USER_TOOL_CALL_RECOVERY_FAILED,
+                trans('super_magic.task.question_recovery_failed'),
+                data: ['tool_call_id' => $userToolCallMessage->getToolCallId()]
+            );
         }
     }
 

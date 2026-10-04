@@ -1,4 +1,6 @@
 import type { RefObject } from "react"
+import magicToast from "@/components/base/MagicToaster/utils"
+import { useTranslation } from "react-i18next"
 import type { FileSidebarControl } from "../../components/Detail/components/FilesViewer/types"
 import pubsub, { PubSubEvents } from "@/utils/pubsub"
 import { runInAction } from "mobx"
@@ -67,6 +69,7 @@ import { isAbortError, useLatestAbortableRequest } from "../../hooks/useLatestAb
 import { useProjectFirstAttachmentRender } from "../../hooks/useProjectFirstAttachmentRender"
 import { useSlidesTemplateNavigation } from "../../hooks/useSlidesTemplateNavigation"
 import { HostConversationProvider } from "../../contexts/HostConversationContext"
+import { ASK_USER_RECOVERY_FAILED_EVENT } from "../../components/MessageList/utils/askUser"
 
 /** 任务消息状态变化后延迟拉工作区/项目详情，减轻后端尚未落库时单次请求仍返回 running 的问题 */
 const WORKSPACE_PROJECT_STATUS_REFRESH_DELAY_MS = 1000
@@ -148,6 +151,7 @@ interface TopicPageDesktopProps {
 // 工作区组件
 function TopicPage({ pageVariant = "default" }: TopicPageDesktopProps) {
 	const isSingleTopicChat = pageVariant === "singleTopicChat"
+	const { t } = useTranslation("super")
 	// Get workspace and project state from stores
 	const selectedWorkspace = workspaceStore.selectedWorkspace
 	const selectedProject = projectStore.selectedProject
@@ -451,6 +455,13 @@ function TopicPage({ pageVariant = "default" }: TopicPageDesktopProps) {
 			({ payload }) => {
 				const { message } = payload
 				if (message.role === "user") return
+				if (message.event === ASK_USER_RECOVERY_FAILED_EVENT) {
+					magicToast.warning({
+						key: `ask-user-recovery-${selectedTopic?.chat_topic_id || "topic"}`,
+						content: t("askUser.status.recoveryFailed"),
+						duration: 4000,
+					})
+				}
 				const readProgressPayload = resolveReadProgressPayloadFromMessage({
 					send_time: message.sendTime,
 					app_message_id: message.appMessageId,
@@ -464,7 +475,7 @@ function TopicPage({ pageVariant = "default" }: TopicPageDesktopProps) {
 			},
 			{ scope: { topicId: selectedTopic.chat_topic_id } },
 		)
-	}, [handleArrivedTopicStatusChange, selectedTopic?.chat_topic_id, selectedTopic?.id])
+	}, [handleArrivedTopicStatusChange, selectedTopic?.chat_topic_id, selectedTopic?.id, t])
 
 	const { messages, showLoading } = useTopicConversationLoading({
 		selectedTopic,

@@ -207,6 +207,7 @@
 			"expiredPending": "We’re still processing this. Please wait.",
 			"processingFailed": "Processing failed. Please try again later",
 			"processingInProgress": "Your answer is being submitted. Please wait.",
+			"recoveryFailed": "We cannot continue processing right now. Please try again later. Your answer has been kept.",
 			"skipped": "Skipped",
 			"submitFailed": "Failed to submit. Please try again later",
 			"taskNotFound": "This question has ended. Refresh the page to continue.",

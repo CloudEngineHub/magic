@@ -6,6 +6,7 @@ import {
 	type AskUserCardData,
 	getAskUserCorrelationId,
 	isAskUserMessage,
+	ASK_USER_RECOVERY_FAILED_EVENT,
 } from "./utils/askUser"
 
 interface ProjectionCacheEntry {
@@ -208,7 +209,8 @@ function convertMessages(
 		// 快速跳过：已撤回消息 或 before_llm_request 事件
 		if (
 			(isRevoked && (item.imStatus ?? item.status) === MessageStatus.REVOKED) ||
-			item.event === "before_llm_request"
+			item.event === "before_llm_request" ||
+			item.event === ASK_USER_RECOVERY_FAILED_EVENT
 		) {
 			continue
 		}

@@ -44,6 +44,9 @@ class SuperMagicMessage extends MagicMessageStruct implements MessageInterface
 
     protected ?string $status = null;
 
+    /** 业务通知事件，用于页面提示等不渲染正文的消息。 */
+    protected ?string $event = null;
+
     /**
      * 附件信息。
      */
@@ -87,6 +90,7 @@ class SuperMagicMessage extends MagicMessageStruct implements MessageInterface
             'usage' => $this->usage,
             'token_usage' => $this->tokenUsage,
             'status' => $this->status,
+            'event' => $this->event,
         ];
 
         return $filterNull ? array_filter($data, fn ($value) => ! is_null($value)) : $data;

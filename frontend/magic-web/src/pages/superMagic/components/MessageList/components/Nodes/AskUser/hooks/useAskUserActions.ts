@@ -18,6 +18,7 @@ import {
 	isAskUserOtherOption,
 	type AskUserCardData,
 	type AskUserQuestionData,
+	ASK_USER_RECOVERY_FAILED_EVENT,
 } from "@/pages/superMagic/components/MessageList/utils/askUser"
 import { isTerminalAskUserReplyError } from "@/pages/superMagic/components/MessageList/utils/askUserReplyState"
 import {
@@ -28,6 +29,7 @@ import {
 	type AskUserDraftAnswers,
 } from "@/pages/superMagic/components/MessageList/utils/askUserDraftCache"
 import { sendAskUserToolReply } from "@/pages/superMagic/services/askUserToolReplyService"
+import { superMagicStore } from "@/pages/superMagic/stores"
 
 function getOtherOption(options: readonly string[]) {
 	return options.find((option) => isAskUserOtherOption(option)) || ""
@@ -224,8 +226,23 @@ export function useAskUserActions({
 			detail,
 			isAnswered: responseStatus === ASK_USER_RESPONSE_STATUS.answered,
 		})
-		clearAskUserDraftAnswers(draftCacheKey)
 	})
+
+	useEffect(() => {
+		if (!context?.topicId || !context.toolCallId) return
+		return superMagicStore.subscribe(
+			"message.committed",
+			({ payload }) => {
+				if (
+					payload.message.event === ASK_USER_RECOVERY_FAILED_EVENT &&
+					payload.message.toolCallId === context.toolCallId
+				) {
+					setPendingAction(null)
+				}
+			},
+			{ scope: { topicId: context.topicId } },
+		)
+	}, [context?.topicId, context?.toolCallId])
 
 	useEffect(() => {
 		if (!draftCacheKey) return
