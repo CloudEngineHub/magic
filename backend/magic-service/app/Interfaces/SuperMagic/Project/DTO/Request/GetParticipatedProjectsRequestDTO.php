@@ -27,6 +27,11 @@ class GetParticipatedProjectsRequestDTO extends GetProjectListRequestDTO
      */
     public int $showHidden = 0;
 
+    /**
+     * Whether recent queries should include special project modes.
+     */
+    public int $includeSpecial = 0;
+
     public function setSortMode(?string $sortMode): void
     {
         $this->sortMode = $sortMode;
@@ -69,6 +74,16 @@ class GetParticipatedProjectsRequestDTO extends GetProjectListRequestDTO
         $this->showHidden = (int) $showHidden;
     }
 
+    public function getIncludeSpecial(): bool
+    {
+        return (bool) $this->includeSpecial;
+    }
+
+    public function setIncludeSpecial(int|string $includeSpecial): void
+    {
+        $this->includeSpecial = (int) $includeSpecial;
+    }
+
     /**
      * Get validation rules.
      */
@@ -79,6 +94,7 @@ class GetParticipatedProjectsRequestDTO extends GetProjectListRequestDTO
         return array_merge($parentRules, [
             'show_collaboration' => 'nullable|integer|in:0,1',
             'show_hidden' => 'nullable|integer|in:0,1',
+            'include_special' => 'nullable|integer|in:0,1',
             'sort_mode' => 'nullable|string|in:workspace,recent',
         ]);
     }
@@ -95,6 +111,8 @@ class GetParticipatedProjectsRequestDTO extends GetProjectListRequestDTO
             'show_collaboration.in' => 'Show collaboration must be 0 or 1',
             'show_hidden.integer' => 'Show hidden must be an integer',
             'show_hidden.in' => 'Show hidden must be 0 or 1',
+            'include_special.integer' => 'Include special must be an integer',
+            'include_special.in' => 'Include special must be 0 or 1',
         ]);
     }
 }

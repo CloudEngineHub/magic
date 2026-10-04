@@ -2258,6 +2258,7 @@ export const generateSuperMagicApi = (fetch: ServiceHttpClient) => ({
 			page_size,
 			show_collaboration = 1,
 			sort_mode,
+			include_special = 0,
 		}: {
 			workspace_id?: string
 			project_name?: string
@@ -2265,12 +2266,21 @@ export const generateSuperMagicApi = (fetch: ServiceHttpClient) => ({
 			page_size: number
 			show_collaboration?: number
 			sort_mode?: "workspace" | "recent"
+			include_special?: number
 		},
 		options?: Omit<RequestConfig, "url">,
 	) {
 		return fetch.post<WithPage<ProjectListItem>>(
 			"/api/v1/super-agent/projects/participated",
-			{ workspace_id, project_name, page, page_size, show_collaboration, sort_mode },
+			{
+				workspace_id,
+				project_name,
+				page,
+				page_size,
+				show_collaboration,
+				sort_mode,
+				include_special,
+			},
 			options,
 		)
 	},

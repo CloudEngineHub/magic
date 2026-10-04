@@ -183,7 +183,8 @@ interface ProjectMemberRepositoryInterface
         string $sortDirection = 'desc',
         ?array $organizationCodes = null,
         bool $showHidden = false,
-        ?ProjectSortMode $sortMode = null
+        ?ProjectSortMode $sortMode = null,
+        bool $includeSpecialModes = false
     ): array;
 
     /**
