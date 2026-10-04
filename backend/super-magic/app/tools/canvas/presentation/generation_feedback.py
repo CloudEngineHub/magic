@@ -3,8 +3,13 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any, Mapping
+from typing import TYPE_CHECKING, Any, Mapping, cast
 
+from agentlang.context.tool_context import ToolContext
+from agentlang.event import EventPairType, get_correlation_manager
+from agentlang.event.data import PendingToolCallEventData
+from agentlang.event.event import EventType
+from agentlang.logger import get_logger
 from agentlang.tools.tool_result import ToolResult
 from app.core.entity.message.server_message import (
     DisplayType,
@@ -16,10 +21,17 @@ from app.core.entity.message.server_message import (
     ToolDetail,
 )
 from app.i18n import i18n
+from app.tools.canvas.application.results.base import CanvasResult
 from app.tools.canvas.domain.content_fields.generated_media_protocol import (
     generated_media_types,
     ordered_generated_media_types,
 )
+
+if TYPE_CHECKING:
+    from app.core.context.agent_context import AgentContext
+    from app.tools.core.base_tool import BaseTool
+
+logger = get_logger(__name__)
 
 
 @dataclass
@@ -83,6 +95,61 @@ class CanvasGenerationFeedback:
         "not_applied",
         "unavailable",
     }
+
+    @classmethod
+    async def report_placeholders(
+        cls,
+        tool: BaseTool,
+        tool_context: ToolContext,
+        arguments: dict[str, Any],
+        result: CanvasResult,
+    ) -> None:
+        """把已经保存的占位元素投影为现有工具卡片的进行中明细。"""
+        try:
+            detail = cls.operation_result_detail(ToolResult(content="", data=result.to_dict()), arguments)
+            if detail is not None:
+                await cls.report_pending_detail(tool, tool_context, arguments, detail)
+        except Exception as error:
+            logger.warning("构建 Canvas 占位元素进度失败: %s", error)
+
+    @staticmethod
+    async def report_pending_detail(
+        tool: BaseTool,
+        tool_context: ToolContext,
+        arguments: dict[str, Any],
+        detail: ToolDetail,
+    ) -> None:
+        """复用工具进度事件更新同一张卡片，消息发送失败不阻断实际生成。"""
+        agent_context = cast("AgentContext | None", tool_context.get_extension("agent_context"))
+        if agent_context is None:
+            return
+        try:
+            friendly = await tool.get_before_tool_call_friendly_action_and_remark(
+                tool.name, tool_context, arguments,
+            )
+            correlation_id = get_correlation_manager().get_active_correlation_id(
+                EventPairType.TOOL_CALL, agent_context.context_id,
+            ) or tool_context.tool_call_id
+            detail_data = detail.model_dump(mode="json")
+            # 两代消息工厂都从 detail.data.message 读取 remark；保持工具状态 running，
+            # 例：2 个占位元素已保存，只提供定位入口，不表示 2 张图片已经生成。
+            detail_data["data"]["message"] = friendly.get("remark", "")
+            event_data = PendingToolCallEventData(
+                tool_context=tool_context,
+                tool_name=tool.name,
+                tool_instance=tool,
+                correlation_id=correlation_id,
+                arguments={
+                    "name": tool.name,
+                    "action": friendly.get("action", ""),
+                    "detail": detail_data,
+                    "correlation_id": correlation_id,
+                },
+            )
+            agent_context.update_activity_time()
+            await agent_context.dispatch_event(EventType.PENDING_TOOL_CALL, event_data)
+        except Exception as error:
+            logger.warning("发送 Canvas 占位元素进度失败: %s", error)
 
     @classmethod
     def from_arguments(cls, arguments: Mapping[str, Any] | None) -> GenerationFeedbackSummary:

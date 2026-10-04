@@ -388,11 +388,11 @@ export const toolIconMap: Record<string, ToolIconConfig> = {
 		bgColor: "#3D74FF",
 	},
 	add_canvas_elements: {
-		icon: Shapes,
+		icon: ImagePlus,
 		bgColor: "#3D74FF",
 	},
 	add_canvas_contents: {
-		icon: Shapes,
+		icon: ImagePlus,
 		bgColor: "#3D74FF",
 	},
 	generate_images_to_canvas: {

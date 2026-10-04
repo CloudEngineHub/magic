@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import math
+from functools import partial
 from typing import Any, Literal, cast
 
 from pydantic import ConfigDict, Field, model_validator
@@ -784,6 +785,9 @@ class AddCanvasElements(BaseTool[BaseToolParams]):
                 params.project_path,
                 commands,
                 tool_context=tool_context,
+                on_placeholders_created=partial(
+                    CanvasGenerationFeedback.report_placeholders, self, tool_context, params.model_dump(),
+                ),
             )
             return batch_tool_result(
                 content=items_content(

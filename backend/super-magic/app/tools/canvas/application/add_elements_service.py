@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from collections.abc import Sequence
+from collections.abc import Awaitable, Callable, Sequence
 from dataclasses import dataclass
 
 from agentlang.context.tool_context import ToolContext
@@ -64,6 +64,8 @@ class AddElementsService:
         project_path: str,
         items: Sequence[AddElementCommand],
         tool_context: ToolContext | None = None,
+        *,
+        on_placeholders_created: Callable[[AddElementsResult], Awaitable[None]] | None = None,
     ) -> AddElementsResult:
         """创建 Element，并按请求组装 Content、布局和初始 Connection。"""
         generated: list[GenerationSubmissionCommand] = []
@@ -270,6 +272,9 @@ class AddElementsService:
             )
         except CanvasDomainError as error:
             raise CanvasApplicationOperations.batch_error(list(item_list), current_item_ref, error) from error
+        # 事务成功后才公布真实 ID；生成尚未完成也能定位，失败回滚的元素不会成为导航目标。
+        if generated and on_placeholders_created is not None:
+            await on_placeholders_created(result)
         result = await self.generation_submission_service.submit_generated(project_path, result, generated, tool_context)
         result_items = {item.item_ref: item for item in result.items}
         for composition in compositions:

@@ -1,5 +1,6 @@
 """追加 Canvas Content 工具。"""
 
+from functools import partial
 from typing import Any
 
 from pydantic import ConfigDict, Field
@@ -226,6 +227,9 @@ class AddCanvasContents(BaseTool[BaseToolParams]):
                 params.project_path,
                 commands,
                 tool_context=tool_context,
+                on_placeholders_created=partial(
+                    CanvasGenerationFeedback.report_placeholders, self, tool_context, params.model_dump(),
+                ),
             )
             return batch_tool_result(
                 content=items_content(

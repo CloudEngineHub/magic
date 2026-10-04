@@ -25,7 +25,13 @@ function ToolIconBadge({ toolName, size = 16, iconSize = 10, className = "" }: T
 					aria-hidden
 				/>
 			) : (
-				<IconComponent size={iconSize} strokeWidth={2} className="text-white" />
+				<IconComponent
+					size={iconSize}
+					strokeWidth={2}
+					className="text-white"
+					// Button 的 SVG 默认尺寸会覆盖 size 属性；显式保留色块内部留白。
+					style={{ width: iconSize, height: iconSize }}
+				/>
 			)}
 		</span>
 	)

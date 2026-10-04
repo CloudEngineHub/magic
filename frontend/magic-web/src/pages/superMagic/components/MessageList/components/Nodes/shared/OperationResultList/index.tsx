@@ -51,22 +51,30 @@ function OperationResultList({
 	const failedCount = items?.filter((item) => item.status === "error").length ?? 0
 	const successCount = (items?.length ?? 0) - failedCount
 	const singleItem = items?.length === 1 ? items[0] : undefined
-	const statusClass = loading
-		? "text-muted-foreground"
-		: !items
+	// 中断、响应缺失或无失败明细的工具异常可能保留占位行，不能据此宣布成功。
+	// 有逐项失败的批次仍保留成功项，避免把部分成功误标为整批不可用。
+	const resultUnavailable =
+		toolData.status === "suspended" ||
+		toolData.status === "response_missing" ||
+		(toolData.status === "error" && failedCount === 0)
+	const statusClass =
+		loading || resultUnavailable
 			? "text-muted-foreground"
+			: !items
+				? "text-muted-foreground"
+				: failedCount === 0
+					? "text-success"
+					: successCount === 0
+						? "text-destructive"
+						: "text-warning"
+	const StatusIcon =
+		!items || resultUnavailable
+			? CircleAlert
 			: failedCount === 0
-				? "text-success"
+				? CircleCheck
 				: successCount === 0
-					? "text-destructive"
-					: "text-warning"
-	const StatusIcon = !items
-		? CircleAlert
-		: failedCount === 0
-			? CircleCheck
-			: successCount === 0
-				? CircleX
-				: CircleAlert
+					? CircleX
+					: CircleAlert
 	const unavailable = loading
 		? t("operationResultList.running")
 		: toolData.status === "suspended"
@@ -76,7 +84,7 @@ function OperationResultList({
 		? items
 			? t("operationResultList.summaryProcessing", { count: items.length })
 			: t("operationResultList.running")
-		: !items
+		: !items || resultUnavailable
 			? unavailable
 			: failedCount === 0
 				? t("operationResultList.summaryCompleted", { count: successCount })
@@ -158,9 +166,10 @@ function OperationResultList({
 									const ItemIcon = item.kind === "directory" ? Folder : File
 									const ResultIcon =
 										item.status === "success" ? CircleCheck : CircleX
-									const itemMessage =
-										item.message ||
-										(loading ? t("operationResultList.running") : "")
+									const itemMessage = resultUnavailable
+										? unavailable
+										: item.message ||
+											(loading ? t("operationResultList.running") : "")
 									const target = item.target
 									const resultBody = (
 										<div className="flex min-w-0 items-start gap-2">
@@ -193,14 +202,23 @@ function OperationResultList({
 													<span
 														className={cn(
 															"inline-flex shrink-0 items-center gap-1 whitespace-nowrap",
-															item.status === "success" && !loading
-																? "text-success"
-																: item.status === "error"
-																	? "text-destructive"
-																	: "text-muted-foreground",
+															resultUnavailable
+																? "text-muted-foreground"
+																: item.status === "success" &&
+																	  !loading
+																	? "text-success"
+																	: item.status === "error"
+																		? "text-destructive"
+																		: "text-muted-foreground",
 														)}
 													>
-														{loading && item.status === "success" ? (
+														{resultUnavailable ? (
+															<CircleAlert
+																size={14}
+																className="shrink-0"
+																aria-hidden
+															/>
+														) : loading && item.status === "success" ? (
 															<Loader2
 																size={14}
 																className="shrink-0 animate-spin"

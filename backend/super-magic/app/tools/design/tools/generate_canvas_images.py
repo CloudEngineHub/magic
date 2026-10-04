@@ -17,8 +17,17 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator, model_valida
 from agentlang.context.tool_context import ToolContext
 from agentlang.logger import get_logger
 from agentlang.tools.tool_result import ToolResult
-from app.core.entity.message.server_message import DisplayType, ToolDetail
+from app.core.entity.message.server_message import (
+    DisplayType,
+    OperationResultItem,
+    OperationResultListContent,
+    OperationResultStatus,
+    OperationResultTarget,
+    OperationResultTargetType,
+    ToolDetail,
+)
 from app.i18n import i18n
+from app.tools.canvas.presentation.generation_feedback import CanvasGenerationFeedback
 from app.tools.core import BaseToolParams, tool
 from app.tools.design.tools.base_generate_canvas_elements import (
     BaseGenerateCanvasElements,
@@ -780,6 +789,36 @@ Expand brief user descriptions into full prompts covering subject, style, compos
             "remark": self._get_remark_content(result, arguments),
         }
 
+    async def _after_placeholders_prepared(
+        self,
+        tool_context: ToolContext,
+        project_path_str: str,
+        placeholders: List[ElementDetail],
+    ) -> None:
+        """旧生图入口也用真实占位 ID 更新卡片，不按任务名称猜测目标。"""
+        if not placeholders:
+            return
+        pending_detail = ToolDetail(
+            type=DisplayType.OPERATION_RESULT_LIST,
+            data=OperationResultListContent(items=[
+                OperationResultItem(
+                    label=placeholder.name,
+                    kind="text",
+                    status=OperationResultStatus.SUCCESS,
+                    message=i18n.translate("canvas.generate_item_status.processing", category="tool.messages"),
+                    target=OperationResultTarget(
+                        type=OperationResultTargetType.CANVAS_ELEMENT,
+                        project_path=project_path_str,
+                        element_id=placeholder.id,
+                    ),
+                )
+                for placeholder in placeholders
+            ]),
+        )
+        await CanvasGenerationFeedback.report_pending_detail(
+            self, tool_context, tool_context.arguments, pending_detail,
+        )
+
     async def get_tool_detail(
         self,
         tool_context: ToolContext,
@@ -787,6 +826,28 @@ Expand brief user descriptions into full prompts covering subject, style, compos
         arguments: Dict[str, Any] = None,
     ) -> Optional[ToolDetail]:
         if not result.ok:
+            extra_info = result.extra_info or {}
+            project_path = extra_info.get("project_path", "")
+            placeholders = extra_info.get("created_elements", [])
+            if project_path and placeholders:
+                # 全部失败仍保留真实占位目标，用终态明细替换此前的 processing 进度。
+                return ToolDetail(
+                    type=DisplayType.OPERATION_RESULT_LIST,
+                    data=OperationResultListContent(items=[
+                        OperationResultItem(
+                            label=placeholder["name"],
+                            kind="text",
+                            status=OperationResultStatus.ERROR,
+                            message=i18n.translate("canvas.generate_item_status.failed", category="tool.messages"),
+                            target=OperationResultTarget(
+                                type=OperationResultTargetType.CANVAS_ELEMENT,
+                                project_path=project_path,
+                                element_id=placeholder["id"],
+                            ),
+                        )
+                        for placeholder in placeholders
+                    ]),
+                )
             return None
 
         try:
