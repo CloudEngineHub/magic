@@ -187,14 +187,14 @@ describe("preflightPptxExport", () => {
 		)
 	})
 
-	it("allows an unknown cumulative size and selects ZIP64 conservatively", () => {
+	it("keeps an unknown cumulative size in classic ZIP for PowerPoint compatibility", () => {
 		const result = preflightPptxExport({
 			destination: createSinkProxyDestination(),
 			hasInjectedPackager: true,
 		})
 
 		expect(result.accepted).toBe(true)
-		expect(result.zipMode).toBe("zip64")
+		expect(result.zipMode).toBe("classic")
 		expect(result.capacityConfidence).toBe("streaming-unknown")
 		expect(result.estimatedOutputBytes).toBeUndefined()
 		expect(result.warnings.map((issue) => issue.code)).toContain("unknown-output-size")

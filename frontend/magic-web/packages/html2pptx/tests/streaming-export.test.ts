@@ -371,9 +371,10 @@ describe("runStreamingExport", () => {
 		)?.plan?.capacityPlan
 		expect(capacityPlan).toMatchObject({
 			confidence: "streaming-unknown",
-			zipMode: "zip64",
+			zipMode: "classic",
 			hasUnknownLengthSource: true,
-			maxEntryBytesMayReachZip32Limit: true,
+			unknownLengthSourceMayReachZip32Limit: false,
+			maxEntryBytesMayReachZip32Limit: false,
 			archiveBytesMayReachZip32Limit: false,
 		})
 		expect(capacityPlan?.knownInputBytes).toBe(0n)
