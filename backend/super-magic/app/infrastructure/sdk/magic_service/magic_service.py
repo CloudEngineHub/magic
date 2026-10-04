@@ -13,12 +13,17 @@ from .api.ai_ability_api import AiAbilityApi
 from .api.file_api import FileApi  # TEMP: scan-wav workaround, remove when MagicFS auto-refreshes
 from .api.magicbase_api import MagicBaseApi
 from .api.mcp_authorization_credential_api import MCPAuthorizationCredentialApi
+from .api.message_api import MessageApi
 from .api.message_schedule_api import MessageScheduleApi
 from .api.micro_app_api import MicroAppApi
 from .api.oauth2_callback_relay_api import OAuth2CallbackRelayApi
+from .api.project_api import ProjectApi
 from .api.share_api import ShareApi
 from .api.skill_api import SkillApi
+from .api.task_api import TaskApi
+from .api.topic_api import TopicApi
 from .api.user_api import UserApi
+from .api.workspace_api import WorkspaceApi
 
 
 class MagicService:
@@ -56,6 +61,11 @@ class MagicService:
             'mcp_authorization_credential': MCPAuthorizationCredentialApi,
             'skill': SkillApi,
             'share': ShareApi,
+            'workspace': WorkspaceApi,
+            'project': ProjectApi,
+            'topic': TopicApi,
+            'message': MessageApi,
+            'task': TaskApi,
         }
 
         # Initialize fetched API instances
