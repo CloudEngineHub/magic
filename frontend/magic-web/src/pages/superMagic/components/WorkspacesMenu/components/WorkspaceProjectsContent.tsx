@@ -3,11 +3,24 @@ import { useMemoizedFn, useDebounce } from "ahooks"
 import { reaction } from "mobx"
 import { useTranslation } from "react-i18next"
 import { Plus } from "lucide-react"
-import { SuperMagicApi } from "@/apis"
+import { MagicClawApi, SuperMagicApi, type MicroAppListItem } from "@/apis"
 import MagicEmpty from "@/components/base/MagicEmpty"
 import { Button } from "@/components/shadcn-ui/button"
 import CreateProjectInput from "@/layouts/BaseLayout/components/MagicSidebar/WorkspaceList/CreateProjectInput"
-import type { ProjectListItem, Workspace } from "@/pages/superMagic/pages/Workspace/types"
+import {
+	ProjectStatus,
+	type ProjectListItem,
+	type Workspace,
+} from "@/pages/superMagic/pages/Workspace/types"
+import { TopicMode } from "@/pages/superMagic/pages/Workspace/TopicMode"
+import {
+	MICRO_APPS_WORKSPACE_ID,
+	MY_AGENTS_WORKSPACE_ID,
+	MY_CLAW_WORKSPACE_ID,
+	MY_SKILLS_WORKSPACE_ID,
+} from "@/pages/superMagic/constants"
+import { skillsService, type UserSkillView } from "@/services/skills/SkillsService"
+import { crewService, type MyCrewView } from "@/services/crew/CrewService"
 import projectStore from "@/pages/superMagic/stores/core/project"
 import recentProjectsStore from "@/pages/superMagic/stores/core/recentProjects"
 import RecentProjectItem from "./RecentProjectItem"
@@ -29,6 +42,109 @@ interface WorkspaceProjectsContentProps {
 }
 
 const PAGE_SIZE = 100
+
+const SPECIAL_WORKSPACE_IDS = new Set([
+	MY_CLAW_WORKSPACE_ID,
+	MICRO_APPS_WORKSPACE_ID,
+	MY_AGENTS_WORKSPACE_ID,
+	MY_SKILLS_WORKSPACE_ID,
+])
+
+function makeSpecialProject(
+	workspace: Workspace,
+	values: Pick<ProjectListItem, "id" | "project_name" | "project_mode"> &
+		Partial<Pick<ProjectListItem, "project_description" | "created_at" | "updated_at">>,
+): ProjectListItem {
+	return {
+		id: values.id,
+		project_status: ProjectStatus.WAITING,
+		project_mode: values.project_mode,
+		project_description: values.project_description,
+		workspace_id: workspace.id,
+		workspace_name: workspace.name,
+		work_dir: "",
+		project_name: values.project_name,
+		current_topic_id: "",
+		current_topic_status: "",
+		created_at: values.created_at || "",
+		updated_at: values.updated_at || "",
+		tag: "",
+	}
+}
+
+/**
+ * 特殊工作区使用各自已有的列表接口，项目管理器只负责把结果转换成统一项目行。
+ * 最近项目不走这里，而是使用 participated 接口的一次服务端查询。
+ */
+async function loadSpecialWorkspaceProjects(
+	workspaceId: string,
+	workspace: Workspace | undefined,
+): Promise<{ list: ProjectListItem[]; total: number }> {
+	if (!workspace) return { list: [], total: 0 }
+
+	if (workspaceId === MY_CLAW_WORKSPACE_ID) {
+		const response = await MagicClawApi.queryMagicClawList({ page: 1, page_size: PAGE_SIZE })
+		return {
+			total: response.total,
+			list: response.list.map((item) => {
+				const project = makeSpecialProject(workspace, {
+					id: item.project_id,
+					project_name: item.name,
+					project_mode: TopicMode.MagiClaw,
+					project_description: item.description || undefined,
+				})
+				return { ...project, claw_code: item.code }
+			}),
+		}
+	}
+
+	if (workspaceId === MICRO_APPS_WORKSPACE_ID) {
+		const response = await SuperMagicApi.getMicroApps({
+			scope: "created",
+			page: 1,
+			page_size: PAGE_SIZE,
+		})
+		return {
+			total: response.total,
+			list: response.list
+				.filter(
+					(item: MicroAppListItem): item is MicroAppListItem & { project_id: string } =>
+						Boolean(item.project_id),
+				)
+				.map((item) => ({
+					...makeSpecialProject(workspace, {
+						id: item.project_id,
+						project_name: item.app_name,
+						project_mode: TopicMode.MicroApp,
+						project_description: item.app_description,
+						updated_at: item.updated_at || "",
+					}),
+					micro_app_id: item.app_id,
+				})),
+		}
+	}
+
+	if (workspaceId === MY_SKILLS_WORKSPACE_ID || workspaceId === MY_AGENTS_WORKSPACE_ID) {
+		const response =
+			workspaceId === MY_SKILLS_WORKSPACE_ID
+				? await skillsService.getCreatedSkills({ page: 1, page_size: PAGE_SIZE })
+				: await crewService.getCreatedAgents({ page: 1, page_size: PAGE_SIZE })
+		const list = response.list.map((item: UserSkillView | MyCrewView) => {
+			const isSkill = workspaceId === MY_SKILLS_WORKSPACE_ID
+			const resource = item as UserSkillView & MyCrewView
+			return makeSpecialProject(workspace, {
+				id: resource.projectId || resource.id,
+				project_name: resource.name,
+				project_mode: isSkill ? TopicMode.SkillProjectCreator : TopicMode.AgentCreator,
+				project_description: resource.description,
+				updated_at: resource.updatedAt,
+			})
+		})
+		return { total: response.total, list }
+	}
+
+	return { list: [], total: 0 }
+}
 
 export default function WorkspaceProjectsContent({
 	searchValue,
@@ -71,31 +187,44 @@ export default function WorkspaceProjectsContent({
 		setLoading(true)
 		setFailed(false)
 		try {
-			const result = await SuperMagicApi.getProjectsWithCollaboration(
-				{
-					workspace_id: workspaceId,
-					sort_mode: recent ? "recent" : "workspace",
-					project_name: debouncedSearchValue,
-					page: nextPage,
-					page_size: PAGE_SIZE,
-					show_collaboration: 1,
-				},
-				{ signal: controller.signal },
+			const isSpecialWorkspace = Boolean(
+				workspaceId && SPECIAL_WORKSPACE_IDS.has(workspaceId),
 			)
+			const result = isSpecialWorkspace
+				? await loadSpecialWorkspaceProjects(workspaceId as string, workspace)
+				: await SuperMagicApi.getProjectsWithCollaboration(
+						{
+							workspace_id: workspaceId,
+							sort_mode: recent ? "recent" : "workspace",
+							project_name: debouncedSearchValue,
+							page: nextPage,
+							page_size: PAGE_SIZE,
+							show_collaboration: 1,
+							include_special: recent ? 1 : 0,
+						},
+						{ signal: controller.signal },
+					)
 			if (id !== requestId.current || controller.signal.aborted) return
 			// 搜索和分页只更新本面板；全局导航缓存继续由项目 service 维护。
+			const visibleList = isSpecialWorkspace
+				? result.list.filter((item) =>
+						item.project_name
+							.toLocaleLowerCase()
+							.includes(debouncedSearchValue.toLocaleLowerCase()),
+					)
+				: result.list
 			setProjects((previous) =>
 				nextPage === 1
-					? result.list
+					? visibleList
 					: [
 							...previous,
-							...result.list.filter(
+							...visibleList.filter(
 								(item) => !previous.some((existing) => existing.id === item.id),
 							),
 						],
 			)
 			setPage(nextPage)
-			setTotal(result.total)
+			setTotal(isSpecialWorkspace ? visibleList.length : result.total)
 		} catch {
 			if (id === requestId.current && !controller.signal.aborted) {
 				failedPageRef.current = nextPage

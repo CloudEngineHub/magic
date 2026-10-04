@@ -5308,6 +5308,14 @@
 		"typePublic": "Public",
 		"typePublicDescription": "Anyone on the internet with the link can access"
 	},
+	"projectTypeTag": {
+		"agent": "Agent project",
+		"audio": "Audio project",
+		"chat": "Chat project",
+		"magicClaw": "Lobster project",
+		"microApp": "Micro-app project",
+		"skill": "Skill project"
+	},
 	"recordingSummary": {
 		"actions": {
 			"cancelRecording": "Cancel Recording",

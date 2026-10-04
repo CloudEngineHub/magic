@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react"
+import type { TFunction } from "i18next"
 import { useMemoizedFn } from "ahooks"
 import { observer } from "mobx-react-lite"
 import { comparer, reaction } from "mobx"
@@ -8,6 +9,12 @@ import { SuperMagicApi } from "@/apis"
 import { Button } from "@/components/shadcn-ui/button"
 import { cn } from "@/utils/cn"
 import type { Workspace } from "@/pages/superMagic/pages/Workspace/types"
+import {
+	MICRO_APPS_WORKSPACE_DATA,
+	MY_AGENTS_WORKSPACE_DATA,
+	MY_CLAW_WORKSPACE_DATA,
+	MY_SKILLS_WORKSPACE_DATA,
+} from "@/pages/superMagic/constants"
 import { projectStore, workspaceStore } from "@/pages/superMagic/stores/core"
 import SuperMagicService from "@/pages/superMagic/services"
 import useSearchValue from "@/pages/superMagic/pages/Assistant/components/TopicPanel/hooks/useSearchValue"
@@ -26,6 +33,15 @@ interface WorkspaceProjectsPanelProps {
 export type ProjectBrowserSource =
 	{ type: "workspace"; workspace: Workspace } | { type: "collaboration" } | { type: "recent" }
 const WORKSPACE_PAGE_SIZE = 20
+
+function getSpecialWorkspaces(t: TFunction): Workspace[] {
+	return [
+		MY_CLAW_WORKSPACE_DATA(t),
+		MICRO_APPS_WORKSPACE_DATA(t),
+		MY_AGENTS_WORKSPACE_DATA(t),
+		MY_SKILLS_WORKSPACE_DATA(t),
+	]
+}
 
 function getInitialWorkspaces(source: ProjectBrowserSource): Workspace[] {
 	return Array.from(
@@ -55,6 +71,7 @@ function WorkspaceProjectsPanel({
 	const [workspaces, setWorkspaces] = useState<Workspace[]>(() =>
 		getInitialWorkspaces(initialSource),
 	)
+	const specialWorkspaces = getSpecialWorkspaces(t)
 	const [loading, setLoading] = useState(false)
 	const [failed, setFailed] = useState(false)
 	const [page, setPage] = useState(0)
@@ -281,7 +298,7 @@ function WorkspaceProjectsPanel({
 								{loading ? t("common.loading") : t("sidebarPanels.loadMore")}
 							</Button>
 						)}
-						{/* 共享紧随普通目录；两类入口一起滚动，少量目录时不会留下大段空白。 */}
+						{/* 固定入口统一放在普通工作区之后，顺序与资源选择器保持一致。 */}
 						<div className="mt-2 border-t border-border pt-2">
 							<button
 								type="button"
@@ -301,6 +318,32 @@ function WorkspaceProjectsPanel({
 									{t("workspace.collaborationProjectsTitle")}
 								</span>
 							</button>
+							{specialWorkspaces.map((item) => (
+								<button
+									type="button"
+									key={item.id}
+									aria-current={
+										source.type === "workspace" &&
+										source.workspace.id === item.id
+											? true
+											: undefined
+									}
+									className={cn(
+										"mt-0.5 flex min-h-9 w-full items-center gap-2 rounded-md px-2 py-2 text-left text-sm text-foreground outline-none hover:bg-accent focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring",
+										source.type === "workspace" &&
+											source.workspace.id === item.id &&
+											"bg-accent font-medium text-accent-foreground ring-1 ring-inset ring-border",
+									)}
+									onClick={() =>
+										selectSource({ type: "workspace", workspace: item })
+									}
+								>
+									<Layers size={16} className="shrink-0" />
+									<span className="min-w-0 flex-1 truncate" title={item.name}>
+										{item.name}
+									</span>
+								</button>
+							))}
 						</div>
 					</div>
 				</nav>
