@@ -10310,6 +10310,7 @@
 		"deleteWorkspaceConfirmTitle": "Delete Workspace?",
 		"deleteWorkspaceDescription": "\"{{name}}\" will be moved to Trash, along with all projects, topics, and files. You can restore it or delete it permanently from Trash.",
 		"deleteWorkspaceDescriptionWithoutName": "will be moved to Trash, along with all projects, topics, and files. You can restore it or delete it permanently from Trash.",
+		"executing": "Executing...",
 		"expandAllFiles": "Expand All Files",
 		"expandUserMessage": "Expand",
 		"filePreviewNotSupported": "File preview not supported, please download the file",

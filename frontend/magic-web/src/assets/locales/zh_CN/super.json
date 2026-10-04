@@ -10300,6 +10300,7 @@
 		"deleteWorkspaceConfirmTitle": "删除工作区?",
 		"deleteWorkspaceDescription": "「{{name}}」将移入回收站，其中所有项目、话题和文件也会一并移入。你可以在回收站中恢复或彻底删除。",
 		"deleteWorkspaceDescriptionWithoutName": "将移入回收站，其中所有项目、话题和文件也会一并移入。你可以在回收站中恢复或彻底删除。",
+		"executing": "正在执行中...",
 		"expandAllFiles": "展开全部文件",
 		"expandUserMessage": "展开",
 		"filePreviewNotSupported": "暂不支持预览该文件,请下载该文件",

@@ -467,7 +467,9 @@ const MessageList = observer(
 		const shouldShowBottomLoading =
 			currentTopicStatus !== TaskStatus.WAITING_FOR_USER &&
 			currentTopicStatus !== TaskStatus.FINISHED &&
-			(bottomLoadingVisibility.showImmediately || isStalledLoadingVisible)
+			(bottomLoadingVisibility.showImmediately ||
+				isStalledLoadingVisible ||
+				bottomLoadingVisibility.isToolExecuting)
 		const showAiGeneratedTip =
 			!shouldShowBottomLoading &&
 			((mainDisplayData.length > 0 && currentTopicStatus !== TaskStatus.RUNNING) ||
@@ -838,6 +840,7 @@ const MessageList = observer(
 						<LoadingMessage
 							messages={visibleData}
 							showLoading={shouldShowBottomLoading}
+							isToolExecuting={bottomLoadingVisibility.isToolExecuting}
 							selectedTopic={selectedTopic}
 						/>
 					) : null}
@@ -860,6 +863,7 @@ const MessageList = observer(
 			selectedTopic,
 			shouldShowBottomLoading,
 			showAiGeneratedTip,
+			bottomLoadingVisibility.isToolExecuting,
 			t,
 			visibleData,
 		])
