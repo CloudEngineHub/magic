@@ -465,10 +465,16 @@ function MessageHeader({
 		if (!selectedTopic || !topicActions.restartSandbox || isRestartingSandbox) return
 
 		setIsRestartingSandbox(true)
+		const loadingToast = magicToast.loading({
+			content: t("messageHeader.restartSandboxLoading"),
+			duration: 0,
+		})
 		try {
 			await topicActions.restartSandbox(selectedTopic.id)
+			magicToast.destroy(loadingToast)
 			magicToast.success(t("messageHeader.restartSandboxSuccess"))
 		} catch (error) {
+			magicToast.destroy(loadingToast)
 			console.error("Failed to restart sandbox:", error)
 			magicToast.error(t("messageHeader.restartSandboxFailed"))
 		} finally {
