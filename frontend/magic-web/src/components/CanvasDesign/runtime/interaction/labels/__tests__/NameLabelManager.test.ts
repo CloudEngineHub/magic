@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
+import Konva from "konva"
 import { ElementTypeEnum, type ElementType } from "../../../document/types"
 import { NameLabelManager } from "../NameLabelManager"
 
@@ -28,6 +29,18 @@ class TestNameLabelManager extends NameLabelManager {
 
 	public getLabelScale(elementId: string): number | undefined {
 		return this.labelMap.get(elementId)?.scaleX()
+	}
+
+	public getLabelTextMetrics(
+		elementId: string,
+	): { width: number; naturalWidth: number; ellipsis: boolean } | null {
+		const textNode = this.labelMap.get(elementId)?.findOne("Text") as Konva.Text | null
+		if (!textNode) return null
+		return {
+			width: textNode.width(),
+			naturalWidth: textNode.getTextWidth(),
+			ellipsis: textNode.ellipsis(),
+		}
 	}
 
 	public isLabelVisibleByDefault(elementId: string): boolean | null {
@@ -230,6 +243,29 @@ describe("NameLabelManager visibility", () => {
 
 		expect(manager.getLabelScale("image-1")).toBeLessThan(10)
 		expect(manager.getLabelScale("image-1")).toBeGreaterThan(0)
+		manager.destroy()
+	})
+
+	it("keeps short names at the shared font size and ellipsizes long names", () => {
+		const elements = new Map<string, TestElement>([
+			[
+				"image-1",
+				{
+					getBoundingRect: () => ({ x: 0, y: 20, width: 40, height: 80 }),
+					getData: () => ({ id: "image-1", type: ElementTypeEnum.Image }),
+					getNameLabelText: () => "A very long generated image title",
+					getNode: () => ({}),
+				},
+			],
+		])
+		const manager = createManager(elements)
+
+		manager.createOrUpdateLabelForTest("image-1")
+		const metrics = manager.getLabelTextMetrics("image-1")
+
+		expect(metrics).not.toBeNull()
+		expect(metrics?.ellipsis).toBe(true)
+		expect(metrics?.width).toBeLessThanOrEqual(40)
 		manager.destroy()
 	})
 })

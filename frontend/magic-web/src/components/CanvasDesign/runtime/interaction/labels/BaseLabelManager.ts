@@ -327,6 +327,25 @@ export abstract class BaseLabelManager {
 	}
 
 	/**
+	 * 在应用共同缩放后调整标签的局部布局。
+	 * 子类可以只收窄文字宽度，不改变原始文本，保留重命名等完整文本场景。
+	 */
+	protected updateLabelLayout(
+		elementId: string,
+		element: ReturnType<typeof this.canvas.elementManager.getElementInstance>,
+		labelGroup: Konva.Group,
+		boundingRect: { x: number; y: number; width: number; height: number },
+		inverseScale: number,
+	): boolean {
+		void elementId
+		void element
+		void labelGroup
+		void boundingRect
+		void inverseScale
+		return false
+	}
+
+	/**
 	 * 按当前元素的可用宽度限制标签的反向缩放。
 	 * 正常缩放时保留固定屏幕字号；当名称和尺寸标签合计宽度超过元素宽度时，
 	 * 两个管理器共享同一个比例，随画布继续缩小，避免常驻标签无限放大并重叠。
@@ -708,6 +727,20 @@ export abstract class BaseLabelManager {
 
 		// 获取 viewport 缩放，并在标签即将超出元素可用宽度时限制反向缩放。
 		const viewportScale = this.canvas.stage.scaleX()
+		const safeViewportScale =
+			Number.isFinite(viewportScale) && viewportScale > 0 ? viewportScale : 1
+		const desiredInverseScale = 1 / safeViewportScale
+
+		// 先按常规字号收窄名称文本，避免正常缩放时为了容纳长标题而缩小整行文字。
+		layoutChanged =
+			this.updateLabelLayout(
+				elementId,
+				element,
+				labelGroup,
+				boundingRect,
+				desiredInverseScale,
+			) || layoutChanged
+
 		const inverseScale = this.getEffectiveInverseScale(elementId, boundingRect, viewportScale)
 
 		// 应用反向缩放
@@ -715,6 +748,11 @@ export abstract class BaseLabelManager {
 			labelGroup.scale({ x: inverseScale, y: inverseScale })
 			layoutChanged = true
 		}
+
+		// 反向缩放在极小画布下可能再次改变可用局部宽度，再同步一次省略布局。
+		layoutChanged =
+			this.updateLabelLayout(elementId, element, labelGroup, boundingRect, inverseScale) ||
+			layoutChanged
 
 		// 获取文本节点以计算标签尺寸
 		const textNode = labelGroup.findOne("Text") as Konva.Text

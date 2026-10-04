@@ -21,6 +21,10 @@ const NAME_LABEL_CONFIG = {
 	OFFSET_LEFT: 0,
 	/** 透明命中区相对文字的内边距，避免短名称难以点中 */
 	HIT_PADDING: 2,
+	/** 名称与右侧尺寸标签之间的最小间距（标签局部坐标） */
+	LABEL_GAP: 4,
+	/** 省略后仍保留的最小文本宽度，避免标签节点宽度为 0 */
+	MIN_TEXT_WIDTH: 8,
 } as const
 
 /**
@@ -119,7 +123,7 @@ export class NameLabelManager extends BaseLabelManager {
 		return {
 			x: labelGroup.x() * scale + stagePosition.x,
 			y: labelGroup.y() * scale + stagePosition.y,
-			width: Math.ceil(textNode.width()),
+			width: Math.ceil(textNode.getTextWidth()),
 			height: Math.ceil(textNode.height()),
 			text: textNode.text(),
 			fontSize: this.labelConfig.fontSize,
@@ -168,6 +172,47 @@ export class NameLabelManager extends BaseLabelManager {
 			this.syncHitRect(labelGroup)
 		}
 		return changed
+	}
+
+	/**
+	 * 名称与尺寸共用一行时，优先保留右侧完整尺寸信息。
+	 * 名称只收窄渲染宽度并启用省略号，文本本身不改写，重命名仍能读取完整名称。
+	 */
+	protected override updateLabelLayout(
+		elementId: string,
+		element: ReturnType<typeof this.canvas.elementManager.getElementInstance>,
+		labelGroup: Konva.Group,
+		boundingRect: { x: number; y: number; width: number; height: number },
+		inverseScale: number,
+	): boolean {
+		void element
+		void boundingRect.x
+		void boundingRect.y
+		void boundingRect.height
+		if (this.renamingElementId === elementId) return false
+
+		const textNode = labelGroup.findOne("Text") as Konva.Text | null
+		if (!textNode) return false
+
+		const safeInverseScale = Math.max(inverseScale, Number.EPSILON)
+		const otherLabelBounds = this.getOtherLabelBounds(elementId, this)
+		const reservedWidth = otherLabelBounds.reduce(
+			(maxWidth, bounds) => Math.max(maxWidth, bounds.width / safeInverseScale),
+			0,
+		)
+		const availableTextWidth = Math.max(
+			NAME_LABEL_CONFIG.MIN_TEXT_WIDTH,
+			boundingRect.width / safeInverseScale - reservedWidth - NAME_LABEL_CONFIG.LABEL_GAP,
+		)
+		const naturalTextWidth = textNode.getTextWidth()
+		const targetTextWidth = Math.min(naturalTextWidth, availableTextWidth)
+
+		textNode.wrap("none")
+		textNode.ellipsis(true)
+		if (textNode.width() === targetTextWidth) return false
+		textNode.width(targetTextWidth)
+		this.syncHitRect(labelGroup)
+		return true
 	}
 
 	protected override shouldRetainHiddenLabel(elementId: string): boolean {
