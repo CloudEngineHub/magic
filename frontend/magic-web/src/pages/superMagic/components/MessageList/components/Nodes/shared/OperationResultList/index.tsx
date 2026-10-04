@@ -47,18 +47,19 @@ function OperationResultList({
 	// 沿用消息作用域和滚动保护；虚拟行重新挂载仍保留用户的展开选择。
 	const [open, toggle] = useToggleWithScrollPreserve(false, "operation-result-list-expanded")
 	const data = getOperationResultListData(toolData.detail)
-	const settled = !loading && (toolData.status === "finished" || toolData.status === "error")
-	const items = settled ? data?.items : undefined
+	const items = data?.items
 	const failedCount = items?.filter((item) => item.status === "error").length ?? 0
 	const successCount = (items?.length ?? 0) - failedCount
 	const singleItem = items?.length === 1 ? items[0] : undefined
-	const statusClass = !items
+	const statusClass = loading
 		? "text-muted-foreground"
-		: failedCount === 0
-			? "text-success"
-			: successCount === 0
-				? "text-destructive"
-				: "text-warning"
+		: !items
+			? "text-muted-foreground"
+			: failedCount === 0
+				? "text-success"
+				: successCount === 0
+					? "text-destructive"
+					: "text-warning"
 	const StatusIcon = !items
 		? CircleAlert
 		: failedCount === 0
@@ -71,15 +72,18 @@ function OperationResultList({
 		: toolData.status === "suspended"
 			? t("operationResultList.interrupted")
 			: t("operationResultList.unavailable")
-	const summary = items
-		? singleItem?.message ||
-			toolData.remark ||
-			t("operationResultList.summary", { success: successCount, error: failedCount })
-		: unavailable
+	const statusSummary = loading
+		? t("operationResultList.running")
+		: items
+			? singleItem?.message ||
+				t("operationResultList.summary", { success: successCount, error: failedCount })
+			: unavailable
+	const remark =
+		toolData.remark?.trim() || (singleItem?.kind === "text" ? singleItem.label : undefined)
 
 	return (
 		<div
-			className={cn("h-fit w-full flex-none", className)}
+			className={cn("h-fit max-w-full flex-none", className)}
 			data-tool={toolData.id}
 			onMouseEnter={onMouseEnter}
 			onMouseLeave={onMouseLeave}
@@ -87,7 +91,7 @@ function OperationResultList({
 			<div
 				className={cn(
 					"inline-flex max-w-full flex-col rounded-md border border-border bg-card shadow-sm",
-					open ? "w-full" : "w-fit",
+					open ? "w-full md:max-w-2xl" : "w-fit",
 				)}
 			>
 				<Button
@@ -96,96 +100,58 @@ function OperationResultList({
 					onClick={toggle}
 					aria-expanded={open}
 					aria-controls={contentId}
-					className="h-auto min-h-7 w-full justify-start gap-1.5 whitespace-normal p-1.5 text-left text-xs font-normal focus-visible:ring-inset"
+					className="flex h-auto min-h-7 w-full min-w-0 max-w-full items-center gap-1.5 whitespace-nowrap p-1.5 text-left text-xs font-normal hover:bg-transparent focus-visible:ring-inset"
 				>
-					<ToolIconBadge toolName={toolData.name} />
-					<span className="shrink-0">
+					<ToolIconBadge toolName={toolData.name} size={16} iconSize={10} />
+					<span className="shrink-0 whitespace-nowrap">
 						{toolData.action || t("operationResultList.title")}
 					</span>
-					{singleItem && (
-						<span className="min-w-0 break-all text-muted-foreground">
-							{singleItem.kind === "text"
-								? singleItem.label
-								: singleItem.label.split("/").pop()}
+					{remark && (
+						<span
+							className="min-w-0 flex-1 truncate text-muted-foreground"
+							title={remark}
+						>
+							{remark}
 						</span>
 					)}
 					<span
 						className={cn(
-							"inline-flex min-w-0 items-center gap-1 break-words",
+							"inline-flex shrink-0 items-center gap-1 whitespace-nowrap",
 							statusClass,
 						)}
 						aria-live="polite"
 					>
 						{loading ? (
-							<Loader2 size={16} className="shrink-0 animate-spin" aria-hidden />
+							<Loader2 size={14} className="shrink-0 animate-spin" aria-hidden />
 						) : (
-							<StatusIcon size={16} className="shrink-0" aria-hidden />
+							<StatusIcon size={14} className="shrink-0" aria-hidden />
 						)}
-						{summary}
+						{statusSummary}
 					</span>
 					<ChevronRight
-						size={16}
+						size={15}
 						aria-hidden
 						className={cn(
-							"ml-auto shrink-0 transition-transform motion-reduce:transition-none",
+							"ml-0 shrink-0 transition-transform motion-reduce:transition-none",
 							open && "rotate-90",
 						)}
 					/>
 				</Button>
 				{open && (
-					<div id={contentId} className="border-t border-border px-3 py-2">
+					<div id={contentId} className="border-t border-border px-2 py-1.5">
 						{items ? (
-							<ul className="m-0 list-none divide-y divide-border p-0">
+							<ul className="m-0 list-none space-y-0.5 p-0">
 								{items.map((item, index) => {
 									const ItemIcon = item.kind === "directory" ? Folder : File
 									const ResultIcon =
 										item.status === "success" ? CircleCheck : CircleX
 									const target = item.target
 									const resultBody = (
-										<>
-											<div className="flex flex-wrap items-start justify-between gap-x-3 gap-y-1">
-												<span className="min-w-0 break-all text-foreground">
-													{item.label}
-													{target && (
-														<LocateFixed
-															size={14}
-															className="ml-1 inline-block text-muted-foreground"
-															aria-hidden
-														/>
-													)}
-												</span>
-												<span
-													className={cn(
-														"inline-flex items-center gap-1",
-														item.status === "success"
-															? "text-success"
-															: "text-destructive",
-													)}
-												>
-													<ResultIcon
-														size={16}
-														className="shrink-0"
-														aria-hidden
-													/>
-													{item.message}
-												</span>
-											</div>
-											{item.description && (
-												<p className="mb-0 mt-1 break-words text-muted-foreground">
-													{item.description}
-												</p>
-											)}
-										</>
-									)
-									return (
-										<li
-											key={`${item.label}-${index}`}
-											className="flex items-start gap-2 py-2 text-xs"
-										>
+										<div className="flex min-w-0 items-start gap-2">
 											{item.kind !== "text" && (
 												<ItemIcon
-													size={16}
-													className="shrink-0 text-muted-foreground"
+													size={15}
+													className="mt-0.5 shrink-0 text-muted-foreground"
 													aria-label={
 														item.kind === "directory"
 															? t("operationResultList.directory")
@@ -193,10 +159,51 @@ function OperationResultList({
 													}
 												/>
 											)}
+											<div className="min-w-0 flex-1">
+												<div className="flex min-w-0 items-start gap-2">
+													<span
+														className="min-w-0 flex-1 truncate text-foreground"
+														title={item.label}
+													>
+														{item.label}
+														{target && (
+															<LocateFixed
+																size={13}
+																className="ml-1 inline-block text-muted-foreground"
+																aria-hidden
+															/>
+														)}
+													</span>
+													<span
+														className={cn(
+															"inline-flex shrink-0 items-center gap-1 whitespace-nowrap",
+															item.status === "success"
+																? "text-success"
+																: "text-destructive",
+														)}
+													>
+														<ResultIcon
+															size={14}
+															className="shrink-0"
+															aria-hidden
+														/>
+														{item.message}
+													</span>
+												</div>
+												{item.description && (
+													<p className="mb-0 mt-1 break-words text-muted-foreground">
+														{item.description}
+													</p>
+												)}
+											</div>
+										</div>
+									)
+									return (
+										<li key={`${item.label}-${index}`} className="text-xs">
 											{target ? (
 												<button
 													type="button"
-													className="min-w-0 flex-1 rounded-sm text-left hover:bg-fill-secondary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+													className="block w-full min-w-0 rounded px-1.5 py-1 text-left hover:bg-muted/30 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
 													aria-label={t(
 														"operationResultList.locateCanvasElement",
 														{
@@ -215,14 +222,16 @@ function OperationResultList({
 													{resultBody}
 												</button>
 											) : (
-												<div className="min-w-0 flex-1">{resultBody}</div>
+												<div className="px-1.5 py-1">{resultBody}</div>
 											)}
 										</li>
 									)
 								})}
 							</ul>
 						) : (
-							<p className="m-0 text-xs text-muted-foreground">{unavailable}</p>
+							<p className="m-0 px-1 py-1 text-xs text-muted-foreground">
+								{unavailable}
+							</p>
 						)}
 					</div>
 				)}

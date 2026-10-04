@@ -1,6 +1,7 @@
 import type { SuperMagicMessageItem } from "./type"
 import type { StreamState } from "../../stores/types"
 import { trimIncompleteCitationTag } from "../../utils/citations"
+import { isToolCallLoading } from "./components/Nodes/MessageNode/tool-call/types"
 
 interface ProjectedMessageNode {
 	reasoning_content?: unknown
@@ -63,6 +64,13 @@ function isRenderableToolCall(toolCall: unknown): boolean {
 function countRenderableToolCalls(toolCalls: unknown): number {
 	if (!Array.isArray(toolCalls)) return 0
 	return toolCalls.filter(isRenderableToolCall).length
+}
+
+function hasVisibleNonTerminalToolCall(node: ProjectedMessageNode | undefined): boolean {
+	if (!Array.isArray(node?.tool_calls)) return false
+	return node.tool_calls.some(
+		(toolCall) => isRenderableToolCall(toolCall) && isToolCallLoading(toolCall),
+	)
 }
 
 function toTextLength(value: unknown): number {
@@ -137,8 +145,16 @@ export function resolveBottomLoadingVisibility({
 				resolveStreamState(superMessageId)?.stage,
 			),
 	)
+	const hasVisibleToolProgress = visibleMessageIdsHasNonTerminalToolCall(
+		visibleMessageIds,
+		visibleMessages,
+		resolveMessageNode,
+	)
 
-	const showImmediately = (showLoading || hasActiveStream) && !hasVisibleActiveStreamProgress
+	const showImmediately =
+		(showLoading || hasActiveStream) &&
+		!hasVisibleActiveStreamProgress &&
+		!hasVisibleToolProgress
 
 	const isTopicGenerating = showLoading || hasActiveStream || isTopicTaskRunning
 	const hasAdvancingVisibleStream = activeStreamIds.some((superMessageId) =>
@@ -149,7 +165,26 @@ export function resolveBottomLoadingVisibility({
 	)
 	// showImmediately 已覆盖"完全无可见输出"的场景,stalled 只负责
 	// "已经有可见输出、但推进停住了"的空档,两个分支保持互斥。
-	const isGenerationStalled = isTopicGenerating && !showImmediately && !hasAdvancingVisibleStream
+	const isGenerationStalled =
+		isTopicGenerating &&
+		!showImmediately &&
+		!hasAdvancingVisibleStream &&
+		!hasVisibleToolProgress
 
 	return { showImmediately, isGenerationStalled }
+}
+
+function visibleMessageIdsHasNonTerminalToolCall(
+	visibleMessageIds: Set<string>,
+	visibleMessages: readonly SuperMagicMessageItem[],
+	resolveMessageNode: (superMessageId: string) => ProjectedMessageNode | undefined,
+): boolean {
+	return visibleMessages.some((message) => {
+		const superMessageId = message?.super_message_id
+		return (
+			typeof superMessageId === "string" &&
+			visibleMessageIds.has(superMessageId) &&
+			hasVisibleNonTerminalToolCall(resolveMessageNode(superMessageId))
+		)
+	})
 }

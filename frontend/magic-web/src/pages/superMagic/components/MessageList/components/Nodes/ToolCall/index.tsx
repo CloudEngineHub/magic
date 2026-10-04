@@ -17,6 +17,7 @@ import {
 	selectToolDetail,
 } from "../toolDetailSelection"
 import { useMessageListProjectFilesStore } from "@/pages/superMagic/components/MessageList/context"
+import { isToolCallLoading } from "../MessageNode/tool-call/types"
 
 function ToolCall(props: NodeProps) {
 	const { onSelectDetail } = props
@@ -41,6 +42,7 @@ function ToolCall(props: NodeProps) {
 
 	// const { t } = useTranslation("super")
 	const toolName = typeof tool?.name === "string" ? tool.name : ""
+	const loading = isToolCallLoading({ tool })
 
 	const ToolComponent = ToolsMap?.[toolName] || DefaultTool
 
@@ -110,7 +112,7 @@ function ToolCall(props: NodeProps) {
 		return (
 			<OperationResultList
 				toolData={tool}
-				loading={tool.status === "running" || tool.status === "waiting"}
+				loading={loading}
 				className={props.classNames?.markdown}
 				onMouseEnter={props.onMouseEnter}
 				onMouseLeave={props.onMouseLeave}
@@ -120,7 +122,7 @@ function ToolCall(props: NodeProps) {
 
 	return (
 		<Suspense fallback={null}>
-			<ToolComponent {...props} onClick={onProxyClick} />
+			<ToolComponent {...props} loading={loading} onClick={onProxyClick} />
 		</Suspense>
 	)
 }

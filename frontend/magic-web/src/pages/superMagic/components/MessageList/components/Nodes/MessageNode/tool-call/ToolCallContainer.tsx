@@ -7,9 +7,12 @@ import { getToolCardInteractionTarget } from "../../toolDetailSelection"
 import { useToolRemarkPreview } from "./preview/useToolRemarkPreview"
 import { ToolCallRenderer } from "./ToolCallRenderer"
 import { useMessageListProjectFilesStore } from "@/pages/superMagic/components/MessageList/context"
-import type { ToolCallContainerProps, ToolCallViewModel, ToolDetail } from "./types"
-
-const TERMINAL_TOOL_STATUSES = new Set(["finished", "error", "suspended", "response_missing"])
+import {
+	isToolCallLoading,
+	type ToolCallContainerProps,
+	type ToolCallViewModel,
+	type ToolDetail,
+} from "./types"
 
 export const ToolCallContainer = observer(function ToolCallContainer(
 	props: ToolCallContainerProps,
@@ -41,7 +44,7 @@ export const ToolCallContainer = observer(function ToolCallContainer(
 	)
 	const effectiveStatus = useMemo(() => resolveToolStatus(effectiveResponse), [effectiveResponse])
 	// Store normalization owns protocol status; nested detail.status is domain data.
-	const isToolLoading = !effectiveStatus || !TERMINAL_TOOL_STATUSES.has(effectiveStatus)
+	const isToolLoading = isToolCallLoading({ tool: effectiveResponse })
 	const responseRemark =
 		typeof effectiveResponse?.remark === "string"
 			? effectiveResponse.remark
