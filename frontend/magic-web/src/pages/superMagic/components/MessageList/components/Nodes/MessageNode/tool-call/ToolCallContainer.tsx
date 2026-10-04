@@ -7,6 +7,7 @@ import { getToolCardInteractionTarget } from "../../toolDetailSelection"
 import { useToolRemarkPreview } from "./preview/useToolRemarkPreview"
 import { ToolCallRenderer } from "./ToolCallRenderer"
 import { useMessageListProjectFilesStore } from "@/pages/superMagic/components/MessageList/context"
+import { getPendingCanvasOperationResultDetail } from "@/pages/superMagic/utils/toolDetailDisplay"
 import {
 	isToolCallLoading,
 	type ToolCallContainerProps,
@@ -61,6 +62,14 @@ export const ToolCallContainer = observer(function ToolCallContainer(
 		typeof streamToolCall?.function?.arguments === "string"
 			? streamToolCall.function.arguments
 			: toolCall.function.arguments || ""
+	const pendingDetail = useMemo(
+		() =>
+			isToolLoading && !effectiveDetail
+				? getPendingCanvasOperationResultDetail(toolCall.function.name, previewArguments)
+				: undefined,
+		[effectiveDetail, isToolLoading, previewArguments, toolCall.function.name],
+	)
+	const renderDetail = effectiveDetail || pendingDetail
 	const previewRemark = useToolRemarkPreview({
 		enabled: !responseRemark,
 		identity: `${topicId}:${ownerSuperMessageId || correlationId}:${toolCall.id}`,
@@ -85,23 +94,20 @@ export const ToolCallContainer = observer(function ToolCallContainer(
 			remark: responseRemark || previewRemark,
 			status: effectiveStatus,
 			attachments,
-			interactionTarget: getToolCardInteractionTarget(
-				toolCall.function.name,
-				effectiveDetail,
-			),
-			rawArguments: toolCall.function.arguments,
-			detail: effectiveDetail,
+			interactionTarget: getToolCardInteractionTarget(toolCall.function.name, renderDetail),
+			rawArguments: previewArguments,
+			detail: renderDetail,
 		}
 	}, [
 		toolCall.id,
 		toolCall.function.name,
 		toolCall.function.label,
-		toolCall.function.arguments,
 		responseRemark,
 		previewRemark,
 		effectiveResponse,
-		effectiveDetail,
 		effectiveStatus,
+		previewArguments,
+		renderDetail,
 	])
 
 	const onClick = useCallback(() => {

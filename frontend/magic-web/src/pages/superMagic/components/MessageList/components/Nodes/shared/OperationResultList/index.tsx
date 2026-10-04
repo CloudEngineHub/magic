@@ -145,6 +145,9 @@ function OperationResultList({
 									const ItemIcon = item.kind === "directory" ? Folder : File
 									const ResultIcon =
 										item.status === "success" ? CircleCheck : CircleX
+									const itemMessage =
+										item.message ||
+										(loading ? t("operationResultList.running") : "")
 									const target = item.target
 									const resultBody = (
 										<div className="flex min-w-0 items-start gap-2">
@@ -177,17 +180,27 @@ function OperationResultList({
 													<span
 														className={cn(
 															"inline-flex shrink-0 items-center gap-1 whitespace-nowrap",
-															item.status === "success"
+															item.status === "success" && !loading
 																? "text-success"
-																: "text-destructive",
+																: item.status === "error"
+																	? "text-destructive"
+																	: "text-muted-foreground",
 														)}
 													>
-														<ResultIcon
-															size={14}
-															className="shrink-0"
-															aria-hidden
-														/>
-														{item.message}
+														{loading && item.status === "success" ? (
+															<Loader2
+																size={14}
+																className="shrink-0 animate-spin"
+																aria-hidden
+															/>
+														) : (
+															<ResultIcon
+																size={14}
+																className="shrink-0"
+																aria-hidden
+															/>
+														)}
+														{itemMessage}
 													</span>
 												</div>
 												{item.description && (

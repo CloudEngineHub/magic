@@ -5,6 +5,13 @@ import {
 	type OperationResultTarget,
 } from "../components/Detail/types"
 
+const CANVAS_GENERATION_TOOL_NAMES = new Set([
+	"add_canvas_elements",
+	"add_canvas_contents",
+	"generate_canvas_images",
+	"generate_images_to_canvas",
+])
+
 /** 展示位置由类型决定；即使数据损坏，也在原卡片说明，不切换到回放面板。 */
 export function isInlineToolDetail(detail: unknown): boolean {
 	return isRecord(detail) && detail.type === DetailType.OperationResultList
@@ -21,6 +28,65 @@ export function getOperationResultListData(
 			...item,
 			target: isCanvasElementTarget(item.target) ? item.target : undefined,
 		})),
+	}
+}
+
+/**
+ * 从工具调用参数构建进行中的 Canvas 结果占位。
+ * 后端最终 detail 到达前仍可展示名称；只有参数明确提供 element_id 时才允许定位。
+ */
+export function getPendingCanvasOperationResultDetail(
+	toolName: string | undefined,
+	rawArguments: string | undefined,
+): Record<string, unknown> | undefined {
+	if (!toolName || !CANVAS_GENERATION_TOOL_NAMES.has(toolName) || !rawArguments) return undefined
+
+	const argumentsData = parseRecord(rawArguments)
+	if (!argumentsData) return undefined
+
+	const projectPath = getString(argumentsData.project_path)
+	const rawItems = Array.isArray(argumentsData.items)
+		? argumentsData.items
+		: Array.isArray(argumentsData.tasks)
+			? argumentsData.tasks
+			: []
+	const items: OperationResultItem[] = []
+
+	for (const rawItem of rawItems) {
+		if (!isRecord(rawItem)) continue
+		const content = isRecord(rawItem.content) ? rawItem.content : undefined
+		const itemRef = getString(rawItem.item_ref)
+		const label =
+			getString(content?.name) ||
+			getString(rawItem.name) ||
+			itemRef ||
+			getString(rawItem.element_id) ||
+			getString(rawItem.output_image_element_id)
+		if (!label) continue
+
+		const elementId =
+			getString(rawItem.element_id) || getString(rawItem.output_image_element_id)
+		const target =
+			projectPath && elementId
+				? {
+						type: "canvas_element" as const,
+						project_path: projectPath,
+						element_id: elementId,
+					}
+				: undefined
+		items.push({
+			label,
+			kind: "text",
+			status: "success",
+			message: "",
+			target,
+		})
+	}
+
+	if (items.length === 0) return undefined
+	return {
+		type: DetailType.OperationResultList,
+		data: { items },
 	}
 }
 
@@ -50,4 +116,17 @@ function isCanvasElementTarget(value: unknown): value is OperationResultTarget {
 
 function isRecord(value: unknown): value is Record<string, unknown> {
 	return !!value && typeof value === "object" && !Array.isArray(value)
+}
+
+function parseRecord(value: string): Record<string, unknown> | undefined {
+	try {
+		const parsed: unknown = JSON.parse(value)
+		return isRecord(parsed) ? parsed : undefined
+	} catch {
+		return undefined
+	}
+}
+
+function getString(value: unknown): string | undefined {
+	return typeof value === "string" && value.trim() ? value.trim() : undefined
 }
