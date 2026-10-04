@@ -11,11 +11,8 @@ from app.core.entity.message.server_message import DisplayType, FileContent, Too
 from app.i18n import i18n
 from app.core.horizon.models import ResumptionTrigger
 from app.infrastructure.magic_service.sandbox_types import SandboxRestartScheduleData
+from app.service.sandbox_restart_coordinator import sandbox_restart_coordinator
 from app.tools.core import BaseTool, BaseToolParams, tool
-from app.tools.core.sandbox_rebuild_scheduler import (
-    SANDBOX_REBUILD_DELAY_SECONDS,
-    schedule_sandbox_rebuild,
-)
 from app.tools.core.sandbox_tool_context import get_sandbox_tool_context
 
 logger = get_logger(__name__)
@@ -27,7 +24,7 @@ class RestartSandboxParams(BaseToolParams):
 
 @tool(code_mode_only=True)
 class RestartSandbox(BaseTool[RestartSandboxParams]):
-    """Schedule an unconditional restart for the sandbox that hosts the current Agent."""
+    """Request an unconditional restart after the current Agent run is finalized."""
 
     async def execute(self, tool_context: ToolContext, params: RestartSandboxParams) -> ToolResult:
         sandbox_context = get_sandbox_tool_context(tool_context, logger=logger)
@@ -37,7 +34,6 @@ class RestartSandbox(BaseTool[RestartSandboxParams]):
         if sandbox_context.agent_context.is_interruption_requested():
             raise asyncio.CancelledError("Sandbox restart interrupted before scheduling")
 
-        delay_seconds = SANDBOX_REBUILD_DELAY_SECONDS
         resumption = None
         try:
             # 先把“重启完成后还要继续验证并回复用户”持久化到 Horizon。
@@ -57,14 +53,11 @@ class RestartSandbox(BaseTool[RestartSandboxParams]):
             async def _cancel_resumption() -> None:
                 await sandbox_context.agent_context.horizon.cancel_resumption(resumption_id)
 
-            schedule_sandbox_rebuild(
+            sandbox_restart_coordinator.request_restart(
                 agent_context=sandbox_context.agent_context,
                 config=sandbox_context.config,
                 sandbox_id=sandbox_context.sandbox_id,
-                operation="restart",
-                delay_seconds=delay_seconds,
-                logger=logger,
-                on_cancel=_cancel_resumption,
+                cancel_resumption=_cancel_resumption,
             )
         except asyncio.CancelledError:
             if resumption is not None:
@@ -81,20 +74,18 @@ class RestartSandbox(BaseTool[RestartSandboxParams]):
 
         result: SandboxRestartScheduleData = {
             "sandbox_id": sandbox_context.sandbox_id,
-            "operation": "restart_scheduled",
-            "delay_seconds": delay_seconds,
+            "operation": "restart_requested",
         }
         payload = dict(result)
         return ToolResult(
             content=(
-                "The unconditional restart of the current sandbox has been scheduled. "
-                f"The sandbox is scheduled to be rebuilt in {delay_seconds} seconds. "
+                "The unconditional restart of the current sandbox has been requested. "
+                "The restart request will be sent after this Agent run completes its final "
+                "response and project archive; no fixed duration is promised. "
                 "Reply to the user now and do not call more tools. "
-                f"A new user message or interruption within the next {delay_seconds} seconds "
-                "will cancel the pending restart. Tell the user about this cancellation boundary. "
-                "This confirms scheduling, not completion; after the sandbox is available again, "
-                "the runtime will automatically resume this conversation and use get_sandbox_info "
-                "to verify its status."
+                "A new user message or interruption before finalization will cancel the pending "
+                "restart. After the sandbox is available again, the runtime will automatically "
+                "resume this conversation and use get_sandbox_info to verify its status."
             ),
             data=payload,
             extra_info=payload,
@@ -126,8 +117,7 @@ class RestartSandbox(BaseTool[RestartSandboxParams]):
             f"# {_translate('restart_sandbox.detail_title')}",
             "",
             f"- {_translate('sandbox.detail.sandbox_id')}: `{info.get('sandbox_id', '')}`",
-            f"- {_translate('sandbox.detail.operation')}: {_translate('sandbox.operation.restart_scheduled')}",
-            f"- {_translate('sandbox.detail.delay_seconds')}: {_display_value(info.get('delay_seconds'))}",
+            f"- {_translate('sandbox.detail.operation')}: {_translate('sandbox.operation.restart_requested')}",
         ]
         return ToolDetail(
             type=DisplayType.MD,
@@ -143,8 +133,7 @@ class RestartSandbox(BaseTool[RestartSandboxParams]):
         arguments: dict[str, object] | None = None,
     ) -> dict[str, str]:
         if result.ok:
-            delay_seconds = _result_data(result).get("delay_seconds", SANDBOX_REBUILD_DELAY_SECONDS)
-            remark = _translate("restart_sandbox.scheduled", delay_seconds=delay_seconds)
+            remark = _translate("restart_sandbox.scheduled")
         else:
             remark = _translate("restart_sandbox.error")
         return {"tool_name": tool_name, "action": _action(tool_name), "remark": remark}
@@ -164,11 +153,6 @@ def _result_data(result: ToolResult) -> dict[str, object]:
     if isinstance(result.extra_info, dict):
         return result.extra_info
     return {}
-
-
-def _display_value(value: object) -> str:
-    text = "" if value is None else str(value).strip()
-    return f"`{text}`" if text else _translate("sandbox.detail.unknown")
 
 
 def _error_detail(result: ToolResult) -> ToolDetail:

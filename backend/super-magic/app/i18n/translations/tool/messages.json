@@ -3738,8 +3738,8 @@
         "en_US": "Scheduling a restart for the current sandbox"
     },
     "restart_sandbox.scheduled": {
-        "zh_CN": "当前沙箱重启已安排，将在 {{delay_seconds}} 秒后执行",
-        "en_US": "The current sandbox restart is scheduled and will begin in {{delay_seconds}} seconds"
+        "zh_CN": "当前沙箱将在本轮回复完成并完成必要收尾后重启，恢复后会继续通知",
+        "en_US": "The current sandbox will restart after this Agent run completes its response and finalization; you will be notified after recovery"
     },
     "restart_sandbox.error": {
         "zh_CN": "沙箱重启失败",
@@ -3809,9 +3809,9 @@
         "zh_CN": "已是最新版本，未重启",
         "en_US": "Already current; no restart"
     },
-    "sandbox.operation.restart_scheduled": {
-        "zh_CN": "重启已安排",
-        "en_US": "Restart scheduled"
+    "sandbox.operation.restart_requested": {
+        "zh_CN": "重启已登记，等待本轮完成",
+        "en_US": "Restart requested; waiting for run finalization"
     },
     "manage_cron.status": {
         "zh_CN": "查看定时任务状态",

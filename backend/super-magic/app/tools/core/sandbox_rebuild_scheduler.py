@@ -12,7 +12,7 @@ from app.infrastructure.magic_service.client import MagicServiceClient
 from app.infrastructure.magic_service.config import MagicServiceConfig
 from app.tools.core.sandbox_tool_context import LoggerLike
 
-SandboxRebuildOperation = Literal["upgrade", "restart"]
+SandboxRebuildOperation = Literal["upgrade"]
 
 SANDBOX_REBUILD_DELAY_SECONDS = 10
 _pending_tasks: dict[str, asyncio.Task[None]] = {}
@@ -55,8 +55,8 @@ def schedule_sandbox_rebuild(
     为当前 run 安排一次延迟重建，并在 run 被中断时取消。
 
     MOCK DEMO：
-    - 10 秒内收到新消息：取消延迟任务，并通过 on_cancel 删除 pending resumption。
-    - Magic Service 已接受重建请求：不再执行 on_cancel，把事项交给新 runtime 消费。
+    - 延迟期间收到新消息：取消延迟任务，并通过 on_cancel 清理相关事项。
+    - Magic Service 已接受升级请求：不再执行 on_cancel，把事项交给新 runtime 消费。
     """
     if agent_context.is_interruption_requested():
         raise asyncio.CancelledError(f"Sandbox {operation} interrupted before scheduling")
@@ -134,10 +134,7 @@ async def _run_delayed_rebuild(
     )
 
     async with MagicServiceClient(config) as client:
-        if operation == "upgrade":
-            await client.upgrade_sandbox(sandbox_id)
-        else:
-            await client.restart_sandbox(sandbox_id)
+        await client.upgrade_sandbox(sandbox_id)
 
 
 __all__ = [

@@ -31,6 +31,7 @@ from app.service.channel_context_service import ChannelContextService
 from app.core.client_context import ClientContextService
 from app.service.image_model_sizes_service import ImageModelSizesService
 from app.service.video_model_config_service import VideoModelConfigService
+from app.service.sandbox_restart_coordinator import sandbox_restart_coordinator
 from app.service.cli_manager.service import CliManagerService
 from app.service.cli_status import CliStatusFactory
 from app.core.base_service import Base
@@ -601,12 +602,20 @@ class AgentService(Base):
         """
         await CliStatusFactory.wait_initial(agent_context)
 
+        archive_completed = False
         try:
             request = AgentRunRequest(query=query, image_refs=image_refs)
             await agent.run_main_agent(request)
         finally:
-            # 持久化聊天记录·
-            await FileStorageListenerService._archive_and_upload_project(agent_context)
+            try:
+                # 持久化聊天记录·
+                await FileStorageListenerService._archive_and_upload_project(agent_context)
+                archive_completed = True
+            finally:
+                await sandbox_restart_coordinator.dispatch_pending_restart(
+                    agent_context=agent_context,
+                    run_succeeded=archive_completed and agent.is_agent_finished(),
+                )
 
     def create_agent_context(
         self,

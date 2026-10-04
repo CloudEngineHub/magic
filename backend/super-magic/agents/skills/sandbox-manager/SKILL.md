@@ -98,7 +98,7 @@ When an update is needed, the tool schedules the existing rebuild API and return
 The current sandbox upgrade has been scheduled. The sandbox is scheduled to be rebuilt in 10 seconds. Reply to the user now and do not call more tools. This confirms scheduling, not completion; after the sandbox is available again, use get_sandbox_info to verify the new image version.
 ```
 
-Typical scheduled `result.data`:
+Typical requested `result.data`:
 
 ```json
 {
@@ -143,15 +143,15 @@ print(result.content)
 print(result.data)
 
 data = result.data
-if data["operation"] == "restart_scheduled":
-    print("Restart accepted; delay:", data["delay_seconds"], "seconds")
+if data["operation"] == "restart_requested":
+    print("Restart requested; it will be sent after this Agent run is finalized")
 """)
 ```
 
 Typical `result.content`:
 
 ```text
-The unconditional restart of the current sandbox has been scheduled. The sandbox is scheduled to be rebuilt in 10 seconds. Reply to the user now and do not call more tools. A new user message or interruption within the next 10 seconds will cancel the pending restart; tell the user about this boundary. This confirms scheduling, not completion; after the sandbox is available again, the runtime will automatically resume this conversation and verify its status.
+The unconditional restart of the current sandbox has been requested. The restart request will be sent after this Agent run completes its final response and project archive; no fixed duration is promised. Reply to the user now and do not call more tools. A new user message or interruption before finalization will cancel the pending restart. After the sandbox is available again, the runtime will automatically resume this conversation and use get_sandbox_info to verify its status.
 ```
 
 Typical `result.data`:
@@ -159,18 +159,17 @@ Typical `result.data`:
 ```json
 {
   "sandbox_id": "sandbox_example",
-  "operation": "restart_scheduled",
-  "delay_seconds": 10
+  "operation": "restart_requested"
 }
 ```
 
-For a scheduled restart, `sandbox_id` is the ID of the sandbox being replaced. It is not a promise that the rebuilt sandbox will have the same ID. The delayed request is held by the current Agent process, so a process crash or a new run that cancels the pending action can prevent it from executing. Send the user a short final response immediately, explicitly mention that a new message within 10 seconds cancels the restart, and do not call another tool in the same run. After recovery, the runtime automatically resumes the conversation and calls `get_sandbox_info`; do not claim that the sandbox recovered successfully until that verification succeeds.
+For a requested restart, `sandbox_id` is the ID of the sandbox being replaced. It is not a promise that the rebuilt sandbox will have the same ID. The request is held by the current Agent run until its final response and project archive complete. A new user message or interruption before finalization can cancel it. Send the user a short final response immediately and do not call another tool in the same run. After recovery, the runtime automatically resumes the conversation and calls `get_sandbox_info`; do not claim that the sandbox recovered successfully until that verification succeeds.
 
 ## Safety and persistence
 
 - Never upgrade or restart merely because `needs_update` is true; both operations require explicit user intent.
 - Save required work in `.workspace` before a rebuild. Files there persist across sandbox rebuilds; processes, temporary VM state, and files outside `.workspace` do not.
-- The tool waits 10 seconds after scheduling before it sends the rebuild request. This gives the Agent time to send its final response, but the delay is intentionally in-process: a process crash or deployment can lose the pending request.
+- The tool sends the restart request only after the current Agent run has completed its final response and project archive. This is an in-process finalization boundary: a process crash before dispatch can lose the pending request.
 - When the restart request is accepted, the runtime stores a resumption for the current conversation. After the new runtime is ready, it automatically resumes the Agent and verifies the sandbox before replying.
-- A new user message or interruption before the rebuild request completes cancels the pending task.
+- A new user message or interruption before finalization cancels the pending restart.
 - Do not automatically retry a failed or interrupted upgrade/restart. Inspect the returned error, and after recovery use `get_sandbox_info` before deciding what to do next.
