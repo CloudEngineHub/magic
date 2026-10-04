@@ -8,7 +8,7 @@ function ToolIconBadge({ toolName, size = 16, iconSize = 10, className = "" }: T
 
 	return (
 		<span
-			className={`flex flex-shrink-0 items-center justify-center rounded-sm ${className}`}
+			className={`flex flex-shrink-0 items-center justify-center overflow-hidden rounded-sm ${className}`}
 			style={{
 				backgroundColor: config.assetUrl ? "transparent" : config.bgColor,
 				width: `${size}px`,
@@ -16,7 +16,14 @@ function ToolIconBadge({ toolName, size = 16, iconSize = 10, className = "" }: T
 			}}
 		>
 			{config.assetUrl ? (
-				<img src={config.assetUrl} alt="" width={size} height={size} aria-hidden />
+				<img
+					src={config.assetUrl}
+					alt=""
+					width={size}
+					height={size}
+					className="block max-h-full max-w-full object-contain"
+					aria-hidden
+				/>
 			) : (
 				<IconComponent size={iconSize} strokeWidth={2} className="text-white" />
 			)}

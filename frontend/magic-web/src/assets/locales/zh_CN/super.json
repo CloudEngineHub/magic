@@ -4802,9 +4802,13 @@
 		"directory": "文件夹",
 		"file": "文件",
 		"interrupted": "操作已中断",
+		"itemCount": "{{count}} 项结果",
 		"locateCanvasElement": "定位到画布元素：{{label}}",
 		"running": "正在处理",
 		"summary": "{{success}} 项成功 · {{error}} 项失败",
+		"summaryCompleted": "已完成 {{count}} 项",
+		"summaryFailed": "{{count}} 项失败",
+		"summaryProcessing": "正在处理 {{count}} 项",
 		"title": "操作结果",
 		"unavailable": "暂时无法显示操作结果"
 	},

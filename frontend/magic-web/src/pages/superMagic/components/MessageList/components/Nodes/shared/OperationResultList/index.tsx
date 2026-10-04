@@ -73,13 +73,23 @@ function OperationResultList({
 			? t("operationResultList.interrupted")
 			: t("operationResultList.unavailable")
 	const statusSummary = loading
-		? t("operationResultList.running")
-		: items
-			? singleItem?.message ||
-				t("operationResultList.summary", { success: successCount, error: failedCount })
-			: unavailable
+		? items
+			? t("operationResultList.summaryProcessing", { count: items.length })
+			: t("operationResultList.running")
+		: !items
+			? unavailable
+			: failedCount === 0
+				? t("operationResultList.summaryCompleted", { count: successCount })
+				: successCount === 0
+					? t("operationResultList.summaryFailed", { count: failedCount })
+					: t("operationResultList.summary", {
+							success: successCount,
+							error: failedCount,
+						})
 	const remark =
 		toolData.remark?.trim() || (singleItem?.kind === "text" ? singleItem.label : undefined)
+	const headerRemark =
+		open && items ? t("operationResultList.itemCount", { count: items.length }) : remark
 
 	return (
 		<div
@@ -100,18 +110,21 @@ function OperationResultList({
 					onClick={toggle}
 					aria-expanded={open}
 					aria-controls={contentId}
-					className="flex h-auto min-h-7 w-full min-w-0 max-w-full items-center gap-1.5 whitespace-nowrap p-1.5 text-left text-xs font-normal hover:bg-transparent focus-visible:ring-inset"
+					className={cn(
+						"flex h-auto min-h-7 w-full min-w-0 max-w-full items-center gap-1.5 whitespace-nowrap p-1.5 text-left text-xs font-normal hover:bg-transparent focus-visible:ring-inset",
+						open && "bg-muted/20 hover:bg-muted/20",
+					)}
 				>
 					<ToolIconBadge toolName={toolData.name} size={16} iconSize={10} />
 					<span className="shrink-0 whitespace-nowrap">
 						{toolData.action || t("operationResultList.title")}
 					</span>
-					{remark && (
+					{headerRemark && (
 						<span
 							className="min-w-0 flex-1 truncate text-muted-foreground"
-							title={remark}
+							title={headerRemark}
 						>
-							{remark}
+							{headerRemark}
 						</span>
 					)}
 					<span
