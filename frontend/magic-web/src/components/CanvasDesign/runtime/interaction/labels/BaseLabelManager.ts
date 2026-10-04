@@ -39,6 +39,11 @@ export interface LabelVisibilityConfig {
 	hoverOrSelectTypes: Set<string>
 }
 
+export interface LabelSize {
+	width: number
+	height: number
+}
+
 /**
  * 基础标签管理器配置
  */
@@ -309,6 +314,60 @@ export abstract class BaseLabelManager {
 	): { x: number; y: number }
 
 	/**
+	 * 返回标签在自身坐标系中的布局尺寸。
+	 * 子类可以覆盖它来包含图标或其它局部布局；基类默认使用文本尺寸。
+	 */
+	protected getLabelSize(labelGroup: Konva.Group): LabelSize | null {
+		const textNode = labelGroup.findOne("Text") as Konva.Text | null
+		if (!textNode) return null
+		return {
+			width: textNode.width(),
+			height: textNode.height(),
+		}
+	}
+
+	/**
+	 * 按当前元素的可用宽度限制标签的反向缩放。
+	 * 正常缩放时保留固定屏幕字号；当名称和尺寸标签合计宽度超过元素宽度时，
+	 * 两个管理器共享同一个比例，随画布继续缩小，避免常驻标签无限放大并重叠。
+	 */
+	private getEffectiveInverseScale(
+		elementId: string,
+		boundingRect: { width: number },
+		viewportScale: number,
+	): number {
+		const safeViewportScale =
+			Number.isFinite(viewportScale) && viewportScale > 0 ? viewportScale : 1
+		const desiredInverseScale = 1 / safeViewportScale
+		const element = this.canvas.elementManager.getElementInstance(elementId)
+		const shouldAdaptMediaLabelScale =
+			this.mediaLabelsAlwaysVisible &&
+			element !== undefined &&
+			this.visibilityConfig.hoverOrSelectTypes.has(element.getData().type)
+		if (!shouldAdaptMediaLabelScale) return desiredInverseScale
+
+		const labelWidths = BaseLabelManager.labelManagers
+			.filter((manager) => manager.canvas === this.canvas)
+			.map((manager) => {
+				const labelGroup = manager.labelMap.get(elementId)
+				if (!labelGroup) return null
+				const labelSize = manager.getLabelSize(labelGroup)
+				return labelSize && Number.isFinite(labelSize.width) ? labelSize.width : null
+			})
+			.filter((width): width is number => width !== null && width > 0)
+
+		if (labelWidths.length === 0) return desiredInverseScale
+
+		const labelGap = labelWidths.length > 1 ? Math.max(this.labelConfig.fontSize * 0.25, 2) : 0
+		const totalLabelWidth = labelWidths.reduce((total, width) => total + width, labelGap)
+		const availableWidth = Math.max(boundingRect.width, 0)
+		if (totalLabelWidth <= 0 || availableWidth <= 0) return desiredInverseScale
+
+		const maxInverseScale = availableWidth / totalLabelWidth
+		return Math.min(desiredInverseScale, maxInverseScale)
+	}
+
+	/**
 	 * 更新图片和视频标签的显示模式，并立即同步现有及当前视口内的标签。
 	 * 常驻模式需要把媒体加入候选索引，否则缩小时标签尚未创建就无法显示。
 	 */
@@ -536,6 +595,9 @@ export abstract class BaseLabelManager {
 
 		// 更新标签位置（内部会调用 updateLabelVisibility）
 		this.updateLabelPosition(elementId, options?.skipBatchDraw)
+		if (createdLabel) {
+			this.updateOtherLabelPositions(elementId, options?.skipBatchDraw)
+		}
 
 		// 通知其他 LabelManager 也更新该元素的可见性（单个更新，需要立即 batchDraw）
 		if (!options?.skipNotify) {
@@ -543,6 +605,18 @@ export abstract class BaseLabelManager {
 		}
 
 		return createdLabel
+	}
+
+	/**
+	 * 当第二种标签刚创建时，重新布局同一元素上已经存在的其它标签，
+	 * 让名称和尺寸标签从首次渲染开始就共享同一个自适应比例。
+	 */
+	private updateOtherLabelPositions(elementId: string, skipBatchDraw = false): void {
+		for (const manager of BaseLabelManager.labelManagers) {
+			if (manager === this || manager.canvas !== this.canvas) continue
+			if (!manager.labelMap.has(elementId)) continue
+			manager.updateLabelPosition(elementId, skipBatchDraw)
+		}
 	}
 
 	/**
@@ -632,11 +706,9 @@ export abstract class BaseLabelManager {
 			return layoutChanged && labelGroup.visible()
 		}
 
-		// 获取 viewport 缩放
+		// 获取 viewport 缩放，并在标签即将超出元素可用宽度时限制反向缩放。
 		const viewportScale = this.canvas.stage.scaleX()
-
-		// 计算反向缩放（使标签不受 viewport 缩放影响）
-		const inverseScale = 1 / viewportScale
+		const inverseScale = this.getEffectiveInverseScale(elementId, boundingRect, viewportScale)
 
 		// 应用反向缩放
 		if (labelGroup.scaleX() !== inverseScale || labelGroup.scaleY() !== inverseScale) {
@@ -650,10 +722,8 @@ export abstract class BaseLabelManager {
 			return false
 		}
 
-		const labelSize = {
-			width: textNode.width(),
-			height: textNode.height(),
-		}
+		const labelSize = this.getLabelSize(labelGroup)
+		if (!labelSize) return false
 
 		// 调用子类实现的位置计算方法
 		const position = this.calculateLabelPosition(boundingRect, labelSize, inverseScale)
@@ -994,7 +1064,8 @@ export abstract class BaseLabelManager {
 			this.lastSyncedViewportScale === null ||
 			this.lastSyncedViewportScale !== currentViewportScale ||
 			reason === "document-restored" ||
-			reason === "locale"
+			reason === "locale" ||
+			reason === "media-label-visibility"
 
 		if (shouldUpdateExistingLabels) {
 			requiresDraw = this.updateExistingLabels(true)

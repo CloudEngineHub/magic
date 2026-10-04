@@ -492,6 +492,7 @@ describe("BaseLabelManager candidate cache", () => {
 				hoverOrSelectTypes: new Set([ElementTypeEnum.Image]),
 			},
 		})
+		manager.setMediaLabelsAlwaysVisible(false)
 
 		manager.initializeAllLabels()
 		expect(manager.hasLabel("image-1")).toBe(false)

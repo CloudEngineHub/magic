@@ -26,6 +26,10 @@ class TestNameLabelManager extends NameLabelManager {
 		return this.labelMap.get(elementId)?.visible()
 	}
 
+	public getLabelScale(elementId: string): number | undefined {
+		return this.labelMap.get(elementId)?.scaleX()
+	}
+
 	public isLabelVisibleByDefault(elementId: string): boolean | null {
 		const element = this.canvas.elementManager.getElementInstance(elementId)
 		return this.calculateBaseVisibility(elementId, element)
@@ -48,7 +52,11 @@ class TestNameLabelManager extends NameLabelManager {
 
 function createManager(
 	elements: Map<string, TestElement>,
-	options: { selectedElementId?: string; hoveredElementId?: string } = {},
+	options: {
+		selectedElementId?: string
+		hoveredElementId?: string
+		viewportScale?: number
+	} = {},
 ): TestNameLabelManager {
 	return new TestNameLabelManager({
 		canvas: {
@@ -70,7 +78,7 @@ function createManager(
 			},
 			stage: {
 				position: () => ({ x: 0, y: 0 }),
-				scaleX: () => 1,
+				scaleX: () => options.viewportScale ?? 1,
 			},
 			viewportQueryCoordinator: {
 				getSnapshot: () => ({ generation: 0, labelElementIds: [] }),
@@ -178,6 +186,50 @@ describe("NameLabelManager visibility", () => {
 		expect(manager.hasLabel("image-1")).toBe(true)
 		expect(manager.isLabelVisible("image-1")).toBe(true)
 
+		manager.destroy()
+	})
+
+	it("refreshes an existing media label immediately when the setting changes", () => {
+		const elements = new Map<string, TestElement>([
+			[
+				"image-1",
+				{
+					getBoundingRect: () => ({ x: 0, y: 20, width: 100, height: 80 }),
+					getData: () => ({ id: "image-1", type: ElementTypeEnum.Image }),
+					getNameLabelText: () => "Image 1",
+					getNode: () => ({}),
+				},
+			],
+		])
+		const manager = createManager(elements)
+
+		expect(manager.createOrUpdateLabelForTest("image-1")).toBe(true)
+		expect(manager.isLabelVisible("image-1")).toBe(true)
+
+		manager.setMediaLabelsAlwaysVisible(false)
+
+		expect(manager.hasLabel("image-1")).toBe(false)
+		manager.destroy()
+	})
+
+	it("limits inverse scale by the available element width at tiny viewport scales", () => {
+		const elements = new Map<string, TestElement>([
+			[
+				"image-1",
+				{
+					getBoundingRect: () => ({ x: 0, y: 20, width: 40, height: 80 }),
+					getData: () => ({ id: "image-1", type: ElementTypeEnum.Image }),
+					getNameLabelText: () => "Image 1",
+					getNode: () => ({}),
+				},
+			],
+		])
+		const manager = createManager(elements, { viewportScale: 0.1 })
+
+		manager.createOrUpdateLabelForTest("image-1")
+
+		expect(manager.getLabelScale("image-1")).toBeLessThan(10)
+		expect(manager.getLabelScale("image-1")).toBeGreaterThan(0)
 		manager.destroy()
 	})
 })

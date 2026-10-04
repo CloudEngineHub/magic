@@ -1,8 +1,8 @@
 import { Settings2 } from "lucide-react"
 import { useCanvasDesignI18n } from "../../../app/providers/I18nProvider"
 import { Button } from "../../primitives/shadcn/button"
-import { Checkbox } from "../../primitives/shadcn/checkbox"
 import { Popover, PopoverContent, PopoverTrigger } from "../../primitives/shadcn/popover"
+import { Switch } from "@/components/shadcn-ui/switch"
 import { useCachedMediaLabelsAlwaysVisible } from "./useCachedMediaLabelsAlwaysVisible"
 
 export default function MediaLabelsSettings() {
@@ -26,13 +26,13 @@ export default function MediaLabelsSettings() {
 				</Button>
 			</PopoverTrigger>
 			<PopoverContent align="end" className="w-auto min-w-[240px] p-3">
-				<label className="flex cursor-pointer items-start gap-2 text-sm">
-					<Checkbox
+				<label className="flex cursor-pointer items-center justify-between gap-3 text-sm">
+					<span className="leading-5">{mediaLabelsLabel}</span>
+					<Switch
 						checked={mediaLabelsAlwaysVisible}
 						onCheckedChange={(checked) => setMediaLabelsAlwaysVisible(checked === true)}
 						aria-label={mediaLabelsLabel}
 					/>
-					<span className="leading-5">{mediaLabelsLabel}</span>
 				</label>
 			</PopoverContent>
 		</Popover>
