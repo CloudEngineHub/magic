@@ -1,4 +1,5 @@
 import defaultToolIcon from "@/pages/superMagic/assets/tool_icon/default.svg"
+import { getToolIconConfig, toolIconMap } from "../../shared/ToolIconConfig/config"
 
 const iconModules = import.meta.glob<string>("/src/pages/superMagic/assets/tool_icon/*.svg", {
 	import: "default",
@@ -109,9 +110,14 @@ const iconNameMap: Record<string, string> = {
 /**
  * 支持的工具图标
  */
-export const supportedToolIcons: string[] = Object.keys(iconNameMap)
+export const supportedToolIcons: string[] = [
+	...new Set([...Object.keys(iconNameMap), ...Object.keys(toolIconMap)]),
+]
 
 export function loadToolIcon(toolName?: string): Promise<string> {
+	const assetUrl = getToolIconConfig(toolName).assetUrl
+	if (assetUrl) return Promise.resolve(assetUrl)
+
 	const iconName = iconNameMap[toolName ?? ""] ?? "default"
 	const iconPath = `/src/pages/superMagic/assets/tool_icon/${iconName}.svg`
 	const loader = iconModules[iconPath]
