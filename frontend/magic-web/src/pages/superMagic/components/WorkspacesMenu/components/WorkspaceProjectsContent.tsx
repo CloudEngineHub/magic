@@ -24,7 +24,12 @@ import { crewService, type MyCrewView } from "@/services/crew/CrewService"
 import projectStore from "@/pages/superMagic/stores/core/project"
 import recentProjectsStore from "@/pages/superMagic/stores/core/recentProjects"
 import RecentProjectItem from "./RecentProjectItem"
-import { SortType, ViewMode } from "../../EmptyWorkspacePanel/components/ProjectItem"
+import { ProjectResourceItem } from "../../SelectPathModal/components/ProjectResourceSelectorModal/ProjectResourceItem"
+import {
+	getResourceProjectType,
+	type ResourceProject,
+} from "../../SelectPathModal/resourceProjectTypes"
+import ProjectItem, { SortType, ViewMode } from "../../EmptyWorkspacePanel/components/ProjectItem"
 import useProjectItemActionProps from "../../EmptyWorkspacePanel/hooks/useProjectItemActionProps"
 import { ViewToggle } from "./CollaborationProjectsPanel/components"
 import { useViewTogglePersistValue } from "./CollaborationProjectsPanel/components/ViewToggle/hooks"
@@ -313,7 +318,25 @@ export default function WorkspaceProjectsContent({
 				}
 				loading={loading}
 				viewMode={viewMode}
-				renderItem={recent ? (props) => <RecentProjectItem {...props} /> : undefined}
+				renderItem={(props) => {
+					const resourceType = workspace
+						? getResourceProjectType(props.project)
+						: undefined
+					if (resourceType) {
+						const resourceProject: ResourceProject = {
+							...props.project,
+							resourceType,
+						}
+						return (
+							<ProjectResourceItem
+								project={resourceProject}
+								viewMode={props.viewMode}
+								onClick={(project) => props.onClick(project)}
+							/>
+						)
+					}
+					return recent ? <RecentProjectItem {...props} /> : <ProjectItem {...props} />
+				}}
 				toolbar={
 					<>
 						{workspace &&
