@@ -98,6 +98,7 @@ export function getToolCardInteractionTarget(
 	if (toolName && DisabledDetailToolTypes.includes(toolName)) {
 		return { type: "disabled" }
 	}
+	if (isInlineToolDetail(detail)) return { type: "inline" }
 
 	const detailRecord = detail as Record<string, unknown>
 	// 明确的 DisplayType.DESIGN 详情表示卡片点击需要进入 Canvas。
