@@ -93,12 +93,16 @@ class AddElementsService:
                 element_id = item.element_id or new_canvas_id("element")
                 if project.canvas.get_element(element_id) is not None:
                     raise CanvasDomainError("ELEMENT_ALREADY_EXISTS", f"Element {element_id} already exists.")
+                content = item.content
+                element_name = item.name
+                # 只传 Content 生图名称时，文件与画布标题都沿用该名称；显式 Element 名称优先。
+                if not element_name and content is not None and content.is_generated and content.generation_parameters:
+                    element_name = content.generation_parameters.name
                 element = CanvasElement(
                     element_id=element_id,
                     element_type=item.element_type,
-                    properties=ElementProperties(name=item.name),
+                    properties=ElementProperties(name=element_name),
                 )
-                content = item.content
                 if element.element_type == "video-edit" and content is None:
                     raise CanvasDomainError("VIDEO_EDIT_CONTENT_REQUIRED", "Video Edit Element requires Content.")
                 if element.element_type in {"frame", "group"}:
