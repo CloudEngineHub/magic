@@ -1,5 +1,10 @@
+import type { ReactElement } from "react"
 import { toast } from "sonner"
-import type { CanvasDesignMethods } from "../../public/magic-types"
+import {
+	renderImageFileDeletionConfirmContent,
+	type ImageFileDeletionScope,
+} from "../../ui/panels/menu/ImageFileDeletionConfirmContent"
+import type { CanvasDesignConfirmModalHandle, CanvasDesignMethods } from "../../public/magic-types"
 import { GenerationStatus } from "../../public/magic-types"
 import type { Canvas } from "../core/Canvas"
 import { getActiveImageContent, getImageContents } from "../document/elementContent"
@@ -241,9 +246,11 @@ async function deleteCurrentVersion(
 			translate(
 				canvas,
 				"menu.deleteImageVersionSuccess",
-				"当前版本已删除，仍被引用的文件已保留",
+				"当前版本已移除；图片文件仍被其它内容引用，已保留",
 			),
 		)
+	} else {
+		showFileDeletionSuccess(canvas)
 	}
 }
 
@@ -299,55 +306,111 @@ async function deleteAllVersions(canvas: Canvas, target: ImageFileDeletionTarget
 			"menu.deleteImageFileCanvasSaveFailed",
 			"图片已移入回收站，但画布保存失败，请重试",
 		)
+		return
 	}
+	showFileDeletionSuccess(canvas)
 }
 
-function openSingleVersionConfirm(canvas: Canvas, target: ImageFileDeletionTarget): void {
+function showFileDeletionSuccess(canvas: Canvas): void {
+	toast.success(
+		translate(
+			canvas,
+			"menu.deleteImageFileSuccess",
+			"已移除画布内容并删除图片文件，可在「回收站」中恢复文件。",
+		),
+	)
+}
+
+function openImageFileDeletionConfirm(canvas: Canvas, target: ImageFileDeletionTarget): void {
 	const confirmModal = getMethods(canvas)?.confirmModal
 	if (!confirmModal) return
-	confirmModal({
-		title: translate(canvas, "menu.deleteImageFileTitle", "彻底删除图片"),
-		content: translate(
-			canvas,
-			"menu.deleteImageFileContent",
-			"图片会从画布移除，并移入项目回收站。你可以稍后从回收站恢复。",
-		),
-		variant: "destructive",
-		showIcon: true,
-		okText: translate(canvas, "menu.deleteImageFileConfirm", "移入回收站并删除"),
-		cancelText: translate(canvas, "common.cancel", "取消"),
-		onOk: () => deleteCurrentVersion(canvas, target),
+	const contents = getImageContents(target.element)
+	const activeContent = getActiveImageContent(target.element)
+	const versions = contents.map((content) => ({
+		contentId: content.contentId,
+		src: content.src?.trim(),
+	}))
+	const references = getImageResourceReferences(canvas)
+	const resolvedCurrent = resolveImageContentFile(canvas, activeContent)
+	const currentFileShared =
+		!!resolvedCurrent && hasOtherReference(references, target.elementId, resolvedCurrent)
+	const resolvedContents = contents.flatMap((content) => {
+		const resolved = resolveImageContentFile(canvas, content)
+		return resolved ? [resolved] : []
 	})
-}
-
-function openVersionChoiceConfirm(canvas: Canvas, target: ImageFileDeletionTarget): void {
-	const confirmModal = getMethods(canvas)?.confirmModal
-	if (!confirmModal) return
-	confirmModal({
-		title: translate(canvas, "menu.deleteImageVersionsTitle", "删除图片历史版本"),
-		content: translate(
-			canvas,
-			"menu.deleteImageVersionsContent",
-			"这个图片包含多个历史版本。请选择要删除的范围；移入回收站的文件仍可恢复。",
-		),
+	const allVersionsShared = hasReferenceOutsideElement(
+		references,
+		target.elementId,
+		resolvedContents,
+	)
+	let scope: ImageFileDeletionScope = "current"
+	const getOkText = () =>
+		scope === "current" && currentFileShared
+			? translate(canvas, "menu.removeCurrentImageVersion", "移除当前版本")
+			: translate(canvas, "menu.deleteImageFileConfirm", "移除并删除文件")
+	const renderContent = (processing: boolean): ReactElement =>
+		renderImageFileDeletionConfirmContent(
+			{
+				versionCount: contents.length,
+				currentFileShared,
+				allVersionsShared,
+				processing,
+				onScopeChange: (nextScope: ImageFileDeletionScope) => {
+					scope = nextScope
+					modal.update({ content: renderContent(false), okText: getOkText() })
+				},
+			},
+			canvas.t ? { t: canvas.t } : undefined,
+		)
+	const modal: CanvasDesignConfirmModalHandle = confirmModal({
+		title: translate(canvas, "menu.deleteImageFileTitle", "从画布移除并删除图片文件？"),
+		content: renderContent(false),
 		variant: "destructive",
 		showIcon: true,
+		okText: getOkText(),
 		cancelText: translate(canvas, "common.cancel", "取消"),
-		actions: [
-			{
-				id: "current",
-				label: translate(canvas, "menu.deleteCurrentImageVersion", "只删除当前版本"),
-				variant: "default",
-			},
-			{
-				id: "all",
-				label: translate(canvas, "menu.deleteAllImageVersions", "删除全部版本"),
-				variant: "destructive",
-			},
-		],
-		onAction: async (actionId) => {
-			if (actionId === "current") await deleteCurrentVersion(canvas, target)
-			if (actionId === "all") await deleteAllVersions(canvas, target)
+		onOk: async () => {
+			const latestTarget = getTarget(canvas, { elementId: target.elementId })
+			const latestContents = latestTarget ? getImageContents(latestTarget.element) : []
+			// 确认的是具体版本和文件保留结果，目标变化时不能按旧弹框执行文件删除。
+			if (
+				!latestTarget ||
+				latestContents.length !== versions.length ||
+				latestContents.some(
+					(content, index) =>
+						content.contentId !== versions[index]?.contentId ||
+						content.src?.trim() !== versions[index]?.src,
+				) ||
+				getActiveImageContent(latestTarget.element).contentId !== activeContent.contentId ||
+				!canDeleteSelectedImageFile(canvas, { elementId: target.elementId })
+			) {
+				showError(canvas, "menu.deleteImageFileChanged", "图片版本已发生变化，请刷新后重试")
+				return
+			}
+			if (scope === "current") {
+				const resolved = resolveImageContentFile(
+					canvas,
+					getActiveImageContent(latestTarget.element),
+				)
+				if (
+					resolved &&
+					hasOtherReference(
+						getImageResourceReferences(canvas),
+						target.elementId,
+						resolved,
+					) !== currentFileShared
+				) {
+					showError(
+						canvas,
+						"menu.deleteImageReferencesChanged",
+						"图片引用已发生变化，请重新确认删除范围",
+					)
+					return
+				}
+			}
+			modal.update({ content: renderContent(true), okText: getOkText() })
+			if (scope === "all") await deleteAllVersions(canvas, latestTarget)
+			else await deleteCurrentVersion(canvas, latestTarget)
 		},
 	})
 }
@@ -360,9 +423,7 @@ export function executeDeleteImageFile(
 	const target = getTarget(canvas, options)
 	if (!target) return
 
-	const contents = getImageContents(target.element)
-	if (contents.length > 1) openVersionChoiceConfirm(canvas, target)
-	else openSingleVersionConfirm(canvas, target)
+	openImageFileDeletionConfirm(canvas, target)
 }
 
 export { canDeleteSelectedImageFile }

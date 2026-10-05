@@ -114,12 +114,21 @@ export function MenuItemRenderer({
 							option.onClick?.()
 						}}
 						className={cn(
-							option.id === "delete" ? styles.menuItemDelete : undefined,
+							option.variant === "destructive" ? styles.menuItemDelete : undefined,
 							styles.menuItem,
 						)}
 					>
 						{/* <div className={styles.menuItemIcon}>{renderIcon()}</div> */}
-						<div className={styles.menuItemLabel}>{option.label}</div>
+						{option.description ? (
+							<div className={styles.menuItemText}>
+								<div className={styles.menuItemLabel}>{option.label}</div>
+								<div className={styles.menuItemDescription}>
+									{option.description}
+								</div>
+							</div>
+						) : (
+							<div className={styles.menuItemLabel}>{option.label}</div>
+						)}
 						{option.rightContentRender ? (
 							<div className={styles.menuItemRightContent}>
 								{option.rightContentRender()}

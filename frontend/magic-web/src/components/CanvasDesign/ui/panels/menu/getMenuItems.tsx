@@ -436,7 +436,13 @@ export function getMenuItems({
 		{ type: "separator" },
 		{
 			id: "delete",
-			label: translate("menu.delete", "删除"),
+			label: translate("menu.removeFromCanvas", "从画布移除"),
+			description:
+				selectedElements.length > 0 &&
+				selectedElements.every((element) => element.type === ElementTypeEnum.Image)
+					? translate("menu.removeImageDescription", "只移除画布元素，项目文件仍保留")
+					: translate("menu.removeElementDescription", "只移除画布元素"),
+			variant: "destructive",
 			icon: Trash2,
 			onClick: () => {
 				canvas.userActionRegistry.execute("edit.delete")
@@ -447,7 +453,12 @@ export function getMenuItems({
 		},
 		{
 			id: "delete-image-file",
-			label: translate("menu.deleteImageFile", "彻底删除图片"),
+			label: translate("menu.deleteImageFile", "移除并删除文件…"),
+			description: translate(
+				"menu.deleteImageFileDescription",
+				"从画布移除，同时删除项目中的图片文件",
+			),
+			variant: "destructive",
 			icon: Trash2,
 			onClick: () => {
 				void canvas.userActionRegistry.execute("edit.delete-image-file", {

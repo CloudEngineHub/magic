@@ -7,6 +7,8 @@ import type { ShortcutModifier } from "../../../runtime/interaction/shortcuts/ty
 export interface MenuOption {
 	id: string
 	label: string | ReactNode
+	description?: string
+	variant?: "default" | "destructive"
 	icon: ComponentType<LucideProps> | ReactElement
 	shortcut?:
 		| ShortcutDisplay

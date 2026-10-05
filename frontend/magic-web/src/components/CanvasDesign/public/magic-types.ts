@@ -177,18 +177,11 @@ export interface VideoModelItem {
 
 /** 视频输入模式 */
 export type VideoInputMode =
-	| "standard"
-	| "image_reference"
-	| "omni_reference"
-	| "video_edit"
-	| "keyframe_guided"
+	"standard" | "image_reference" | "omni_reference" | "video_edit" | "keyframe_guided"
 
 /** 输入模式下允许提交的素材字段 */
 export type VideoInputModeSupportedField =
-	| "reference_images"
-	| "reference_videos"
-	| "reference_audios"
-	| "frames"
+	"reference_images" | "reference_videos" | "reference_audios" | "frames"
 
 /**
  * 模式级/变体级生成参数限制。
@@ -1325,8 +1318,7 @@ export interface IdentifyImageMarkAreaResponse extends IdentifyImageMarkResponse
  * 识别图片标记响应类型
  */
 export type IdentifyImageMarkResponse =
-	| IdentifyImageMarkPointResponse
-	| IdentifyImageMarkAreaResponse
+	IdentifyImageMarkPointResponse | IdentifyImageMarkAreaResponse
 
 /**
  * Storage 数据结构
@@ -1458,16 +1450,15 @@ export interface CanvasDesignConfirmModalOptions {
 	cancelButtonProps?: Record<string, unknown>
 	variant?: "default" | "destructive"
 	showIcon?: boolean
-	actions?: readonly CanvasDesignConfirmModalAction[]
-	onAction?: (actionId: string) => void | Promise<void>
 	onOk?: () => void | Promise<void>
 	onCancel?: () => void
 }
 
-export interface CanvasDesignConfirmModalAction {
-	id: string
-	label: string
-	variant?: "default" | "destructive"
+export interface CanvasDesignConfirmModalHandle {
+	/** 范围切换只更新确认按钮，不重建弹窗或触发删除。 */
+	update: (
+		options: Pick<CanvasDesignConfirmModalOptions, "content" | "okText" | "okButtonProps">,
+	) => void
 }
 
 /**
@@ -1718,7 +1709,7 @@ export interface CanvasDesignMethods {
 	 * 确认弹窗（可选）
 	 * 注入后 CanvasDesign 可复用宿主弹窗样式；未注入时由内部组件自行降级实现
 	 */
-	confirmModal?: (options: CanvasDesignConfirmModalOptions) => void
+	confirmModal?: (options: CanvasDesignConfirmModalOptions) => CanvasDesignConfirmModalHandle
 	/**
 	 * 剪贴板读写方法（可选）
 	 * 注入后 CanvasDesign 使用注入实现，否则降级到 navigator.clipboard

@@ -1,7 +1,6 @@
-import { createElement, useMemo, useCallback } from "react"
+import { useMemo, useCallback } from "react"
 import { useTranslation } from "react-i18next"
 import MagicModal, { type ModalFuncProps } from "@/components/base/MagicModal"
-import { Button } from "@/components/shadcn-ui/button"
 import type { Topic, Workspace, ProjectListItem } from "@/pages/superMagic/pages/Workspace/types"
 import type {
 	CanvasDesignMethods,
@@ -322,45 +321,7 @@ export function useDesignMethods(options: UseDesignMethodsOptions): CanvasDesign
 
 	const confirmModal: NonNullable<CanvasDesignMethods["confirmModal"]> = useCallback(
 		(options) => {
-			if (options.actions?.length) {
-				const modal = MagicModal.confirm({
-					title: options.title,
-					content: options.content as ModalFuncProps["content"],
-					variant: options.variant,
-					showIcon: options.showIcon,
-					cancelText: options.cancelText,
-					onCancel: options.onCancel,
-					footer: (_, { CancelBtn }) =>
-						createElement(
-							"div",
-							{
-								className:
-									"flex items-center justify-end gap-2 border-t border-border bg-muted/50 p-2",
-							},
-							createElement(CancelBtn),
-							...(options.actions?.map((action) =>
-								createElement(
-									Button,
-									{
-										key: action.id,
-										variant:
-											action.variant === "destructive"
-												? "destructive"
-												: "outline",
-										onClick: async () => {
-											await options.onAction?.(action.id)
-											modal?.destroy()
-										},
-									},
-									action.label,
-								),
-							) ?? []),
-						),
-				})
-				return
-			}
-
-			MagicModal.confirm({
+			const modal = MagicModal.confirm({
 				title: options.title,
 				content: options.content as ModalFuncProps["content"],
 				okText: options.okText,
@@ -372,6 +333,9 @@ export function useDesignMethods(options: UseDesignMethodsOptions): CanvasDesign
 				onOk: options.onOk,
 				onCancel: options.onCancel,
 			})
+			return {
+				update: (update) => modal.update(update as ModalFuncProps),
+			}
 		},
 		[],
 	)
