@@ -177,18 +177,11 @@ export interface VideoModelItem {
 
 /** 视频输入模式 */
 export type VideoInputMode =
-	| "standard"
-	| "image_reference"
-	| "omni_reference"
-	| "video_edit"
-	| "keyframe_guided"
+	"standard" | "image_reference" | "omni_reference" | "video_edit" | "keyframe_guided"
 
 /** 输入模式下允许提交的素材字段 */
 export type VideoInputModeSupportedField =
-	| "reference_images"
-	| "reference_videos"
-	| "reference_audios"
-	| "frames"
+	"reference_images" | "reference_videos" | "reference_audios" | "frames"
 
 /**
  * 模式级/变体级生成参数限制。
@@ -1325,8 +1318,7 @@ export interface IdentifyImageMarkAreaResponse extends IdentifyImageMarkResponse
  * 识别图片标记响应类型
  */
 export type IdentifyImageMarkResponse =
-	| IdentifyImageMarkPointResponse
-	| IdentifyImageMarkAreaResponse
+	IdentifyImageMarkPointResponse | IdentifyImageMarkAreaResponse
 
 /**
  * Storage 数据结构
@@ -1460,12 +1452,35 @@ export interface CanvasDesignConfirmModalOptions {
 	onCancel?: () => void
 }
 
+export interface CanvasImageRenameFile {
+	fileId: string
+	fileName: string
+	sourcePath: string
+	parentPath: string
+}
+
+export interface CanvasImageFileRename {
+	elementId: string
+	contentId: string
+	fileId: string
+	expectedName: string
+	targetName: string
+}
+
+export interface CanvasImageRenameMethods {
+	resolveImageRenameFile: (path: string) => CanvasImageRenameFile | undefined
+	validateImageFileRenames: (changes: readonly CanvasImageFileRename[]) => Record<string, string>
+	renameImageFile: (change: CanvasImageFileRename) => Promise<CanvasImageRenameFile>
+}
+
 /**
  * CanvasDesign 方法集合
  * 用于代理数据请求和存储操作，所有方法都是异步的
  * 注意：此接口完全独立，不依赖外部类型
  */
 export interface CanvasDesignMethods {
+	/** 手动图片命名由宿主处理实际文件；自动标题更新不触发文件改名。 */
+	imageRename?: CanvasImageRenameMethods
 	/**
 	 * 获取生图模型列表
 	 * @param mode 模式标识，如果不传则使用当前模式

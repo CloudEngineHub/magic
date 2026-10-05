@@ -1,3 +1,5 @@
+import { getActiveImageContent, isImageElementContent } from "../../document/elementContent"
+import { GenerationStatus } from "../../../public/magic-types"
 import type { Canvas } from "../../core/Canvas"
 
 export class ElementRenameManager {
@@ -20,8 +22,14 @@ export class ElementRenameManager {
 		return this.canvas.nameLabelManager.canStartRename(elementId)
 	}
 
-	public startRename(elementId: string): boolean {
-		if (!this.canRename(elementId)) {
+	public startRename(elementId: string, fromLayers = false): boolean {
+		if (
+			fromLayers
+				? !this.canvas.permissionManager.canRename(
+						this.canvas.elementManager.getElementData(elementId),
+					)
+				: !this.canRename(elementId)
+		) {
 			return false
 		}
 
@@ -39,21 +47,64 @@ export class ElementRenameManager {
 		return true
 	}
 
-	public commitRename(nextName: string): void {
+	public async commitRename(nextName: string): Promise<void> {
 		const elementId = this.renamingElementId
-		if (!elementId) {
+		const name = nextName.trim()
+		if (!elementId || !name) return
+		const element = this.canvas.elementManager.getElementData(elementId)
+		if (!this.canvas.permissionManager.canRename(element)) return
+		const currentName =
+			element?.name ||
+			this.canvas.elementManager.getElementInstance(elementId)?.getRenderName()
+		if (name === currentName) {
+			this.cancelRename()
 			return
 		}
-
-		const trimmedName = nextName.trim()
-		const currentLabel =
-			this.canvas.elementManager.getElementInstance(elementId)?.getNameLabelText() || ""
-
-		this.cancelRename()
-
-		if (trimmedName && trimmedName !== currentLabel) {
-			this.canvas.elementManager.update(elementId, { name: trimmedName })
+		let affectsFile = false
+		const methods = this.canvas.magicConfigManager.config?.methods?.imageRename
+		if (element && isImageElementContent(element) && element.contents.length === 1 && methods) {
+			const content = getActiveImageContent(element)
+			const processing =
+				content.status === GenerationStatus.Pending ||
+				content.status === GenerationStatus.Processing
+			const file =
+				!processing && content.src ? methods.resolveImageRenameFile(content.src) : undefined
+			if (file) {
+				const extension = file.fileName.match(/\.[^/.]+$/)?.[0] || ""
+				this.canvas.historyManager.recordHistoryImmediate()
+				await methods.renameImageFile({
+					elementId,
+					contentId: content.contentId,
+					fileId: file.fileId,
+					expectedName: file.fileName,
+					targetName: name.toLowerCase().endsWith(extension.toLowerCase())
+						? name
+						: `${name}${extension}`,
+				})
+				affectsFile = true
+			}
 		}
+		// 文件已改名时标题不能形成单独的撤销记录；普通元素命名继续沿用画布历史。
+		const current = this.canvas.elementManager.getElementData(elementId)
+		if (current && this.canvas.permissionManager.canRename(current) && current.name !== name) {
+			this.canvas.elementManager.update(
+				elementId,
+				{ name },
+				affectsFile ? { historyPolicy: "exclude" } : undefined,
+			)
+		}
+		if (affectsFile)
+			this.canvas.historyManager.applyExternalFileRename((document) => {
+				const rewrite = (items: typeof document.elements): typeof document.elements =>
+					items?.map((item) => {
+						if (item.id === elementId) return { ...item, name }
+						return "children" in item && item.children
+							? { ...item, children: rewrite(item.children) }
+							: item
+					})
+				return { ...document, elements: rewrite(document.elements) }
+			})
+		this.cancelRename()
 	}
 
 	public cancelRename(): void {

@@ -419,6 +419,38 @@
 		"projectFilesRoot": "Current Project Files",
 		"projectSelect": "Select from project"
 	},
+	"rename": {
+		"alsoRenameFile": "Also renames the actual file",
+		"baseName": "Base name for all versions",
+		"cancel": "Cancel",
+		"close": "Close",
+		"correctErrors": "Correct the highlighted filenames first.",
+		"current": "Current",
+		"description": "Edit the canvas title and version filenames. Preview batch names before saving.",
+		"elementName": "Element name",
+		"failed": "Rename failed",
+		"failedCount": "{{count}} files not renamed",
+		"fileChanged": "The file changed. Reopen this panel.",
+		"fileName": "Version {{number}} filename",
+		"fileUnavailable": "This file cannot be renamed",
+		"main": "Main",
+		"notGenerated": "No generated file yet. Rename it after generation.",
+		"renamed": "File renamed",
+		"retry": "Retry remaining changes",
+		"save": "Save changes",
+		"saving": "Saving",
+		"sharedFile": "Shared file",
+		"sharedTitle": "All versions share this title. Changing it does not rename files automatically.",
+		"stop": "Stop remaining changes",
+		"succeeded": "{{count}} files renamed",
+		"title": "Edit names",
+		"titleOnly": "Changes the element name only",
+		"titleSaved": "Element name saved",
+		"uniform": "Apply to all",
+		"uniformHint": "Fill name_v1, name_v2… while keeping extensions. Files change only when saved.",
+		"version": "V{{number}}",
+		"versionFiles": "Version filenames"
+	},
 	"shortcuts": {
 		"align": {
 			"bottom": {

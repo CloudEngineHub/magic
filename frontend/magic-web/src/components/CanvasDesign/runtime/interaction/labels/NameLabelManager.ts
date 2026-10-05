@@ -330,7 +330,16 @@ export class NameLabelManager extends BaseLabelManager {
 			stopPointerEvent(e)
 			this.selectElementFromLabel(elementId)
 		})
-		labelGroup.on("mouseup click tap", stopPointerEvent)
+		labelGroup.on("mouseup", stopPointerEvent)
+		labelGroup.on("click tap", (e) => {
+			stopPointerEvent(e)
+			// 图片名称是命名入口；多版本由同一管理器打开面板，普通元素保留双击编辑。
+			if (
+				this.canvas.elementManager.getElementData(elementId)?.type === ElementTypeEnum.Image
+			) {
+				this.canvas.elementRenameManager.startRename(elementId)
+			}
+		})
 		labelGroup.on("dblclick dbltap", (e) => {
 			stopPointerEvent(e)
 			this.canvas.elementRenameManager?.startRename(elementId)

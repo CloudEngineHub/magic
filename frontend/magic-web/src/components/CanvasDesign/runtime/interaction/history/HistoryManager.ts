@@ -150,6 +150,16 @@ export class HistoryManager {
 		this.doRecordHistory()
 	}
 
+	/** 文件已在服务端改名，撤销移动或尺寸时仍应使用新引用，不能恢复已不存在的旧路径。 */
+	public applyExternalFileRename(
+		updateDocument: (document: CanvasDocument) => CanvasDocument,
+	): void {
+		this.historyStack = this.historyStack.map((item) => ({
+			...item,
+			snapshot: updateDocument(item.snapshot),
+		}))
+	}
+
 	/**
 	 * 防抖记录历史
 	 */

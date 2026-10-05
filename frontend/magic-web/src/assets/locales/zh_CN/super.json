@@ -710,6 +710,12 @@
 			"description": "网络恢复后可继续编辑并保存画布内容",
 			"title": "网络已断开，画布已切换为只读"
 		},
+		"rename": {
+			"fileChanged": "文件已被修改，请重新打开命名面板。",
+			"fileRenamedSaveFailed": "文件已改名，但画布引用更新未完成，请刷新后检查。",
+			"fileUnavailable": "无法确认可重命名的项目文件，请刷新后重试。",
+			"verifyResult": "未能确认文件改名结果，请刷新文件列表后重试。"
+		},
 		"saved": "保存成功",
 		"saving": "正在保存",
 		"upgrade": {

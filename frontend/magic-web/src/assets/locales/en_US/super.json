@@ -709,6 +709,12 @@
 			"description": "You can continue editing and saving the canvas after the network reconnects.",
 			"title": "Network disconnected. Canvas is read-only"
 		},
+		"rename": {
+			"fileChanged": "The file changed. Reopen the naming panel.",
+			"fileRenamedSaveFailed": "The file was renamed, but canvas references could not be updated. Refresh and check the result.",
+			"fileUnavailable": "Cannot resolve a writable project file. Refresh and try again.",
+			"verifyResult": "The rename result could not be confirmed. Refresh the file list before retrying."
+		},
 		"saved": "Saved",
 		"saving": "Saving",
 		"upgrade": {

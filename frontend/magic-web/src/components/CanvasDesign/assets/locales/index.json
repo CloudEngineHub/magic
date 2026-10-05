@@ -425,6 +425,38 @@
 		"projectFilesRoot": "当前项目文件",
 		"projectSelect": "从项目选择"
 	},
+	"rename": {
+		"alsoRenameFile": "同时修改真实文件名",
+		"baseName": "统一命名的基础名称",
+		"cancel": "取消",
+		"close": "关闭",
+		"correctErrors": "请先修改标出的文件名错误。",
+		"current": "当前",
+		"description": "修改画布标题和各版本文件名，保存前可预览批量命名。",
+		"elementName": "元素名称",
+		"failed": "重命名失败",
+		"failedCount": "{{count}} 个文件未改名",
+		"fileChanged": "文件已变化，请重新打开命名面板。",
+		"fileName": "第 {{number}} 版文件名",
+		"fileUnavailable": "当前文件不可重命名",
+		"main": "主版本",
+		"notGenerated": "图片尚未生成，文件名生成后可修改。",
+		"renamed": "文件已改名",
+		"retry": "重试未完成项",
+		"save": "保存修改",
+		"saving": "正在保存",
+		"sharedFile": "共用同一文件",
+		"sharedTitle": "所有版本共用此名称，修改这里不会自动更改文件名。",
+		"stop": "停止后续操作",
+		"succeeded": "{{count}} 个文件已改名",
+		"title": "编辑名称",
+		"titleOnly": "仅修改元素名称",
+		"titleSaved": "元素名称已保存",
+		"uniform": "统一命名",
+		"uniformHint": "先预填“名称_v1、名称_v2…”；保留扩展名，保存时才真正改名。",
+		"version": "V{{number}}",
+		"versionFiles": "版本文件名"
+	},
 	"shortcuts": {
 		"align": {
 			"bottom": {
