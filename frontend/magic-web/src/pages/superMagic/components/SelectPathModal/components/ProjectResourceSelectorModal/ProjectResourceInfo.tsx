@@ -3,6 +3,7 @@ import { useTranslation } from "react-i18next"
 import dayjs from "@/infrastructure/vendors/dayjs"
 import MagicTooltip from "@/components/base/MagicTooltip"
 import SmartTooltip from "@/components/other/SmartTooltip"
+import { Badge } from "@/components/shadcn-ui/badge"
 import CrewFallbackAvatar from "@/pages/superMagic/components/CrewFallbackAvatar"
 import ProjectTypeTag from "@/pages/superMagic/components/ProjectTypeTag"
 import { SkillThumbnail } from "@/pages/superMagic/components/SkillThumbnail"
@@ -12,6 +13,9 @@ import MicroAppCardCover from "@/pages/superMagic/pages/MicroAppsPage/components
 import { IconWorkspaceProjectFolderIcon } from "@/enhance/tabler/icons-react/icons/IconWorkspaceProjectFolder"
 import { cn } from "@/utils/cn"
 import type { ResourceProject } from "../../resourceProjectTypes"
+
+const metadataBadgeClassName =
+	"min-h-5 max-w-full rounded-md px-1.5 py-0 text-xs font-normal leading-4"
 
 function ResourceIcon({ project }: { project: ResourceProject }) {
 	const iconClassName = "size-8 shrink-0 rounded-lg"
@@ -74,7 +78,7 @@ function ResourceStatus({ project }: { project: ResourceProject }) {
 		return (
 			<MagiClawStatusBadge
 				status={project.resourceStatus}
-				className="h-auto min-h-0 rounded-none border-none bg-transparent p-0 text-xs shadow-none [&>span:first-child]:size-1.5"
+				className={cn(metadataBadgeClassName, "h-auto [&>span:first-child]:size-1.5")}
 			/>
 		)
 	}
@@ -85,7 +89,17 @@ function ResourceStatus({ project }: { project: ResourceProject }) {
 				: project.resourceStatus === "unpublished"
 					? t("microAppsPage.statusUnpublished")
 					: t("projectResources.statusUnknown")
-		return <span className="shrink-0 text-foreground/75">{label}</span>
+		return (
+			<Badge
+				variant="outline"
+				className={cn(
+					metadataBadgeClassName,
+					"border-border bg-muted/30 text-foreground/80",
+				)}
+			>
+				{label}
+			</Badge>
+		)
 	}
 	return null
 }
@@ -162,9 +176,10 @@ export function ProjectResourceInfo({
 					)}
 				</div>
 				{hasMetadata && (
+					// 状态与版本用 Tag 区分字段，时间保留文字；窄屏按字段换行，不把整个元信息排成一个长句。
 					<div
 						className={cn(
-							"flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1 text-xs leading-4 text-muted-foreground",
+							"flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1 text-xs leading-4 text-muted-foreground",
 							list &&
 								!mobile &&
 								"[@container_(min-width:600px)]:max-w-72 [@container_(min-width:600px)]:justify-end",
@@ -182,21 +197,36 @@ export function ProjectResourceInfo({
 							</SmartTooltip>
 						)}
 						{showPackageName && (
-							<SmartTooltip
-								className="max-w-full break-all text-xs leading-4"
-								maxLines={2}
-								align="start"
-								disabled={mobile}
+							<Badge
+								variant="secondary"
+								className={cn(
+									metadataBadgeClassName,
+									"min-w-0 whitespace-normal bg-muted/50 text-muted-foreground",
+								)}
 							>
-								{packageName}
-							</SmartTooltip>
+								<SmartTooltip
+									elementType="span"
+									className="min-w-0 max-w-full break-all text-xs leading-4"
+									maxLines={2}
+									align="start"
+									disabled={mobile}
+								>
+									{packageName}
+								</SmartTooltip>
+							</Badge>
 						)}
 						{project.resourceVersion && (
-							<span className="break-all">
+							<Badge
+								variant="secondary"
+								className={cn(
+									metadataBadgeClassName,
+									"whitespace-normal break-all text-muted-foreground",
+								)}
+							>
 								{t("projectResources.version", {
 									version: project.resourceVersion,
 								})}
-							</span>
+							</Badge>
 						)}
 						{updatedDate && (
 							<MagicTooltip title={updatedDate.format("YYYY/MM/DD HH:mm [UTC]Z")}>
