@@ -5272,9 +5272,12 @@
 	},
 	"projectResources": {
 		"allTypes": "All types",
+		"createTime": "Created",
 		"generalType": "General projects",
+		"lastActiveTime": "Last active",
 		"role": "Role: {{role}}",
 		"statusUnknown": "Unknown status",
+		"updateTime": "Updated",
 		"updatedAt": "Updated {{date}}",
 		"version": "Version {{version}}",
 		"workspaceOrder": "Workspace order"

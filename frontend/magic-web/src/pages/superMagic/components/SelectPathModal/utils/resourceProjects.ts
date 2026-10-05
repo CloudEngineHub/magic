@@ -94,6 +94,7 @@ export async function loadResourceProjectPage({
 			})),
 		}
 	}
+	if (workspace.id !== MY_AGENTS_WORKSPACE_ID) throw new Error("Unsupported resource workspace")
 	const result = await crewService.getCreatedAgents(params)
 	signal?.throwIfAborted()
 	return {

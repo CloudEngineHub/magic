@@ -25,7 +25,7 @@ import { cn } from "@/utils/cn"
 import magicToast from "@/components/base/MagicToaster/utils"
 import {
 	MY_CLAW_WORKSPACE_ID,
-	MY_MICRO_APPS_WORKSPACE_ID,
+	MICRO_APPS_WORKSPACE_ID,
 	SHARE_WORKSPACE_DATA,
 	SHARE_WORKSPACE_ID,
 	isCollaborationProject,
@@ -756,7 +756,7 @@ function MobileFilesMoveSheet({
 				...(isResourceSelectionMode && isMicroAppEnabled()
 					? [
 							{
-								id: MY_MICRO_APPS_WORKSPACE_ID,
+								id: MICRO_APPS_WORKSPACE_ID,
 								name: t("selectPathModal.myMicroApps"),
 								project_count: 0,
 								entryType: "micro-app" as const,

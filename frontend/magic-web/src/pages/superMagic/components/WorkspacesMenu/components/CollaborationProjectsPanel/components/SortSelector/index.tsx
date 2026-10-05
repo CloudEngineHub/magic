@@ -6,17 +6,30 @@ import MagicDropdown from "@/components/base/MagicDropdown"
 import { type SortSelectorProps } from "../types"
 import { SortType } from "@/pages/superMagic/components/EmptyWorkspacePanel/components/ProjectItem"
 
-function SortSelectorComponent({ value, onChange }: SortSelectorProps) {
+function SortSelectorComponent({
+	value,
+	onChange,
+	includeWorkspaceOrder,
+	compact,
+}: SortSelectorProps) {
 	const { t } = useTranslation("super")
 
 	const getSortLabel = (sortValue: SortType) => {
 		switch (sortValue) {
+			case SortType.WORKSPACE_ORDER:
+				return t("projectResources.workspaceOrder")
 			case SortType.PROJECT_UPDATE_TIME:
-				return t("workspace.sortByProjectUpdateTime")
+				return compact
+					? t("projectResources.updateTime")
+					: t("workspace.sortByProjectUpdateTime")
 			case SortType.MY_LAST_ACTIVE_TIME:
-				return t("workspace.sortByMyLastActiveTime")
+				return compact
+					? t("projectResources.lastActiveTime")
+					: t("workspace.sortByMyLastActiveTime")
 			case SortType.PROJECT_CREATE_TIME:
-				return t("workspace.sortByProjectCreateTime")
+				return compact
+					? t("projectResources.createTime")
+					: t("workspace.sortByProjectCreateTime")
 			default:
 				return t("workspace.sortByProjectUpdateTime")
 		}
@@ -26,6 +39,25 @@ function SortSelectorComponent({ value, onChange }: SortSelectorProps) {
 		<MagicDropdown
 			menu={{
 				items: [
+					...(includeWorkspaceOrder
+						? [
+								{
+									key: SortType.WORKSPACE_ORDER,
+									label: (
+										<div className="flex items-center justify-between gap-1">
+											{t("projectResources.workspaceOrder")}
+											{value === SortType.WORKSPACE_ORDER && (
+												<MagicIcon
+													component={IconCheck}
+													size={16}
+													className="text-primary"
+												/>
+											)}
+										</div>
+									),
+								},
+							]
+						: []),
 					{
 						key: SortType.PROJECT_UPDATE_TIME,
 						label: (
@@ -78,9 +110,11 @@ function SortSelectorComponent({ value, onChange }: SortSelectorProps) {
 			<div className="flex h-8 cursor-pointer items-center rounded-lg px-2.5 transition-all duration-200 hover:bg-fill">
 				<div className="flex items-center gap-1">
 					<MagicIcon component={IconArrowsSort} size={16} />
-					<span className="text-xs font-normal leading-4 text-muted-foreground">
-						{t("workspace.sort")}
-					</span>
+					{!compact && (
+						<span className="text-xs font-normal leading-4 text-muted-foreground">
+							{t("workspace.sort")}
+						</span>
+					)}
 					<span className="text-xs font-normal leading-4 text-foreground">
 						{getSortLabel(value)}
 					</span>

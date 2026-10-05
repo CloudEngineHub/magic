@@ -3,13 +3,14 @@ import type { TFunction } from "i18next"
 import { useMemoizedFn } from "ahooks"
 import { observer } from "mobx-react-lite"
 import { comparer, reaction } from "mobx"
-import { Layers, Users, AppWindow, Clock3 } from "lucide-react"
+import { AppWindow } from "lucide-react"
 import { useTranslation } from "react-i18next"
 import { SuperMagicApi } from "@/apis"
 import { Button } from "@/components/shadcn-ui/button"
-import { cn } from "@/utils/cn"
 import type { Workspace } from "@/pages/superMagic/pages/Workspace/types"
 import {
+	SHARE_WORKSPACE_DATA,
+	SHARE_WORKSPACE_ID,
 	MICRO_APPS_WORKSPACE_DATA,
 	MY_AGENTS_WORKSPACE_DATA,
 	MY_CLAW_WORKSPACE_DATA,
@@ -18,6 +19,7 @@ import {
 import { projectStore, workspaceStore } from "@/pages/superMagic/stores/core"
 import SuperMagicService from "@/pages/superMagic/services"
 import useSearchValue from "@/pages/superMagic/pages/Assistant/components/TopicPanel/hooks/useSearchValue"
+import { MentionSourceSidebar } from "../../SelectPathModal/components/ProjectResourceSelectorModal/MentionSourceSidebar"
 import { ProjectsPanel } from "./ProjectsPanel"
 import WorkspaceProjectsContent from "./WorkspaceProjectsContent"
 import { CollaborationProjectsContent } from "./CollaborationProjectsPanel"
@@ -202,151 +204,64 @@ function WorkspaceProjectsPanel({
 			open={open}
 			title={t("sidebarPanels.projectManager")}
 			titleIcon={<AppWindow size={16} />}
-			location={
-				<>
-					{source.type === "workspace" ? (
-						<Layers size={16} className="text-muted-foreground" />
-					) : source.type === "recent" ? (
-						<Clock3 size={16} className="text-muted-foreground" />
-					) : (
-						<Users size={16} className="text-muted-foreground" />
-					)}
-					<span className="truncate" title={locationName}>
-						{locationName}
-					</span>
-				</>
-			}
 			windowOptions={windowOptions}
 			onRestoreRecommendedSize={restoreRecommendedSize}
 			resizeGuide={{
 				visible: resizeGuideVisible,
 				onDismiss: dismissResizeGuide,
 			}}
-			searchValue={searchValue}
-			onSearchValueChange={onSearchValueChange}
 			onClose={close}
 			sidebar={
-				<nav
-					aria-label={t("sidebarPanels.browseWorkspaces")}
-					className="flex min-h-0 w-[180px] shrink-0 flex-col border-r border-border bg-muted/20 p-2 max-sm:w-[128px]"
-				>
-					<div className="px-2 py-2 text-xs font-medium text-muted-foreground">
-						{t("sidebarPanels.browseWorkspaces")}
-					</div>
-					<div className="min-h-0 flex-1 overflow-y-auto">
-						<div className="mb-2 border-b border-border pb-2">
-							<button
-								type="button"
-								aria-current={source.type === "recent" ? true : undefined}
-								className={cn(
-									"flex min-h-9 w-full items-center gap-2 rounded-md px-2 py-2 text-left text-sm text-foreground outline-none hover:bg-accent focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring",
-									source.type === "recent" &&
-										"bg-accent font-medium text-accent-foreground",
-								)}
-								onClick={() => selectSource({ type: "recent" })}
-							>
-								<Clock3 size={16} className="shrink-0" />
-								<span className="truncate">{t("projectNavigation.recent")}</span>
-							</button>
-						</div>
-						{workspaces.map((item) => (
-							<button
-								type="button"
-								key={item.id}
-								aria-current={
-									source.type === "workspace" && source.workspace.id === item.id
-										? true
-										: undefined
-								}
-								className={cn(
-									"mb-0.5 flex min-h-9 w-full items-center gap-2 rounded-md px-2 py-2 text-left text-sm text-foreground outline-none hover:bg-accent focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring",
-									source.type === "workspace" &&
-										source.workspace.id === item.id &&
-										"bg-accent font-medium text-accent-foreground ring-1 ring-inset ring-border",
-								)}
-								onClick={() => selectSource({ type: "workspace", workspace: item })}
-							>
-								<Layers size={16} className="shrink-0" />
-								<span
-									className="min-w-0 flex-1 truncate"
-									title={item.name || t("workspace.unnamedWorkspace")}
+				<MentionSourceSidebar
+					workspaces={workspaces}
+					specialWorkspaces={[SHARE_WORKSPACE_DATA(t), ...specialWorkspaces]}
+					current={
+						source.type === "workspace"
+							? source.workspace
+							: source.type === "collaboration"
+								? SHARE_WORKSPACE_DATA(t)
+								: null
+					}
+					recentActive={source.type === "recent"}
+					onSelectRecent={() => selectSource({ type: "recent" })}
+					onSelect={(workspace) =>
+						selectSource(
+							workspace.id === SHARE_WORKSPACE_ID
+								? { type: "collaboration" }
+								: { type: "workspace", workspace },
+						)
+					}
+					footer={
+						<>
+							{failed && (
+								<div
+									role="alert"
+									className="px-2 py-2 text-xs text-muted-foreground"
 								>
-									{item.name || t("workspace.unnamedWorkspace")}
-								</span>
-							</button>
-						))}
-						{failed && (
-							<div role="alert" className="px-2 py-2 text-xs text-muted-foreground">
-								{t("sidebarPanels.workspacesLoadFailed")}
+									{t("sidebarPanels.workspacesLoadFailed")}
+									<Button
+										variant="ghost"
+										size="sm"
+										onClick={() => void loadWorkspaces(failedPage.current)}
+									>
+										{t("sidebarPanels.retry")}
+									</Button>
+								</div>
+							)}
+							{!failed && hasMore && (
 								<Button
 									variant="ghost"
 									size="sm"
-									onClick={() => void loadWorkspaces(failedPage.current)}
+									className="w-full"
+									disabled={loading}
+									onClick={() => void loadWorkspaces(page + 1)}
 								>
-									{t("sidebarPanels.retry")}
+									{loading ? t("common.loading") : t("sidebarPanels.loadMore")}
 								</Button>
-							</div>
-						)}
-						{!failed && hasMore && (
-							<Button
-								variant="ghost"
-								size="sm"
-								className="w-full"
-								disabled={loading}
-								onClick={() => void loadWorkspaces(page + 1)}
-							>
-								{loading ? t("common.loading") : t("sidebarPanels.loadMore")}
-							</Button>
-						)}
-						{/* 固定入口统一放在普通工作区之后，顺序与资源选择器保持一致。 */}
-						<div className="mt-2 border-t border-border pt-2">
-							<button
-								type="button"
-								aria-current={source.type === "collaboration" ? true : undefined}
-								className={cn(
-									"flex min-h-9 w-full items-center gap-2 rounded-md px-2 py-2 text-left text-sm text-foreground outline-none hover:bg-accent focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring",
-									source.type === "collaboration" &&
-										"bg-accent font-medium text-accent-foreground",
-								)}
-								onClick={() => selectSource({ type: "collaboration" })}
-							>
-								<Users size={16} className="shrink-0" />
-								<span
-									className="min-w-0 flex-1 truncate"
-									title={t("workspace.collaborationProjectsTitle")}
-								>
-									{t("workspace.collaborationProjectsTitle")}
-								</span>
-							</button>
-							{specialWorkspaces.map((item) => (
-								<button
-									type="button"
-									key={item.id}
-									aria-current={
-										source.type === "workspace" &&
-										source.workspace.id === item.id
-											? true
-											: undefined
-									}
-									className={cn(
-										"mt-0.5 flex min-h-9 w-full items-center gap-2 rounded-md px-2 py-2 text-left text-sm text-foreground outline-none hover:bg-accent focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring",
-										source.type === "workspace" &&
-											source.workspace.id === item.id &&
-											"bg-accent font-medium text-accent-foreground ring-1 ring-inset ring-border",
-									)}
-									onClick={() =>
-										selectSource({ type: "workspace", workspace: item })
-									}
-								>
-									<Layers size={16} className="shrink-0" />
-									<span className="min-w-0 flex-1 truncate" title={item.name}>
-										{item.name}
-									</span>
-								</button>
-							))}
-						</div>
-					</div>
-				</nav>
+							)}
+						</>
+					}
+				/>
 			}
 		>
 			{createPending && source.type !== "workspace" ? (
@@ -358,7 +273,9 @@ function WorkspaceProjectsPanel({
 					key={source.type === "workspace" ? source.workspace.id : "recent"}
 					open={open}
 					workspace={source.type === "workspace" ? source.workspace : undefined}
+					location={locationName}
 					searchValue={searchValue}
+					onSearchValueChange={onSearchValueChange}
 					onClearSearch={() => setSearchValue("")}
 					onClose={close}
 					initialCreating={createPending}
@@ -367,7 +284,9 @@ function WorkspaceProjectsPanel({
 			) : (
 				<CollaborationProjectsContent
 					open={open}
+					location={locationName}
 					searchValue={searchValue}
+					onSearchValueChange={onSearchValueChange}
 					onClose={close}
 					workspaces={workspaceStore.workspaces}
 					selectedWorkspace={workspaceStore.selectedWorkspace}

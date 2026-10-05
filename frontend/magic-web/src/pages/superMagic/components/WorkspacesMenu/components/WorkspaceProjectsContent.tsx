@@ -3,24 +3,11 @@ import { useMemoizedFn, useDebounce } from "ahooks"
 import { reaction } from "mobx"
 import { useTranslation } from "react-i18next"
 import { Plus } from "lucide-react"
-import { MagicClawApi, SuperMagicApi, type MicroAppListItem } from "@/apis"
+import { SuperMagicApi } from "@/apis"
 import MagicEmpty from "@/components/base/MagicEmpty"
 import { Button } from "@/components/shadcn-ui/button"
 import CreateProjectInput from "@/layouts/BaseLayout/components/MagicSidebar/WorkspaceList/CreateProjectInput"
-import {
-	ProjectStatus,
-	type ProjectListItem,
-	type Workspace,
-} from "@/pages/superMagic/pages/Workspace/types"
-import { TopicMode } from "@/pages/superMagic/pages/Workspace/TopicMode"
-import {
-	MICRO_APPS_WORKSPACE_ID,
-	MY_AGENTS_WORKSPACE_ID,
-	MY_CLAW_WORKSPACE_ID,
-	MY_SKILLS_WORKSPACE_ID,
-} from "@/pages/superMagic/constants"
-import { skillsService, type UserSkillView } from "@/services/skills/SkillsService"
-import { crewService, type MyCrewView } from "@/services/crew/CrewService"
+import { type Workspace } from "@/pages/superMagic/pages/Workspace/types"
 import projectStore from "@/pages/superMagic/stores/core/project"
 import recentProjectsStore from "@/pages/superMagic/stores/core/recentProjects"
 import RecentProjectItem from "./RecentProjectItem"
@@ -31,11 +18,21 @@ import {
 } from "../../SelectPathModal/resourceProjectTypes"
 import ProjectItem, { SortType, ViewMode } from "../../EmptyWorkspacePanel/components/ProjectItem"
 import useProjectItemActionProps from "../../EmptyWorkspacePanel/hooks/useProjectItemActionProps"
-import { ViewToggle } from "./CollaborationProjectsPanel/components"
+import { SortSelector, ViewToggle } from "./CollaborationProjectsPanel/components"
 import { useViewTogglePersistValue } from "./CollaborationProjectsPanel/components/ViewToggle/hooks"
+import { ProjectsPanelToolbar } from "./ProjectsPanelToolbar"
+import { ProjectTypeFilter, type RecentProjectType } from "./ProjectTypeFilter"
+import type { ChangeEventHandler } from "react"
 import { ProjectsPanelList } from "./ProjectsPanel"
+import {
+	isResourceWorkspace,
+	loadResourceProjectPage,
+} from "../../SelectPathModal/utils/resourceProjects"
+import magicToast from "@/components/base/MagicToaster/utils"
 
 interface WorkspaceProjectsContentProps {
+	location: string
+	onSearchValueChange: ChangeEventHandler<HTMLInputElement>
 	searchValue: string
 	onClearSearch: () => void
 	open: boolean
@@ -48,110 +45,9 @@ interface WorkspaceProjectsContentProps {
 
 const PAGE_SIZE = 100
 
-const SPECIAL_WORKSPACE_IDS = new Set([
-	MY_CLAW_WORKSPACE_ID,
-	MICRO_APPS_WORKSPACE_ID,
-	MY_AGENTS_WORKSPACE_ID,
-	MY_SKILLS_WORKSPACE_ID,
-])
-
-function makeSpecialProject(
-	workspace: Workspace,
-	values: Pick<ProjectListItem, "id" | "project_name" | "project_mode"> &
-		Partial<Pick<ProjectListItem, "project_description" | "created_at" | "updated_at">>,
-): ProjectListItem {
-	return {
-		id: values.id,
-		project_status: ProjectStatus.WAITING,
-		project_mode: values.project_mode,
-		project_description: values.project_description,
-		workspace_id: workspace.id,
-		workspace_name: workspace.name,
-		work_dir: "",
-		project_name: values.project_name,
-		current_topic_id: "",
-		current_topic_status: "",
-		created_at: values.created_at || "",
-		updated_at: values.updated_at || "",
-		tag: "",
-	}
-}
-
-/**
- * 特殊工作区使用各自已有的列表接口，项目管理器只负责把结果转换成统一项目行。
- * 最近项目不走这里，而是使用 participated 接口的一次服务端查询。
- */
-async function loadSpecialWorkspaceProjects(
-	workspaceId: string,
-	workspace: Workspace | undefined,
-): Promise<{ list: ProjectListItem[]; total: number }> {
-	if (!workspace) return { list: [], total: 0 }
-
-	if (workspaceId === MY_CLAW_WORKSPACE_ID) {
-		const response = await MagicClawApi.queryMagicClawList({ page: 1, page_size: PAGE_SIZE })
-		return {
-			total: response.total,
-			list: response.list.map((item) => {
-				const project = makeSpecialProject(workspace, {
-					id: item.project_id,
-					project_name: item.name,
-					project_mode: TopicMode.MagiClaw,
-					project_description: item.description || undefined,
-				})
-				return { ...project, claw_code: item.code }
-			}),
-		}
-	}
-
-	if (workspaceId === MICRO_APPS_WORKSPACE_ID) {
-		const response = await SuperMagicApi.getMicroApps({
-			scope: "created",
-			page: 1,
-			page_size: PAGE_SIZE,
-		})
-		return {
-			total: response.total,
-			list: response.list
-				.filter(
-					(item: MicroAppListItem): item is MicroAppListItem & { project_id: string } =>
-						Boolean(item.project_id),
-				)
-				.map((item) => ({
-					...makeSpecialProject(workspace, {
-						id: item.project_id,
-						project_name: item.app_name,
-						project_mode: TopicMode.MicroApp,
-						project_description: item.app_description,
-						updated_at: item.updated_at || "",
-					}),
-					micro_app_id: item.app_id,
-				})),
-		}
-	}
-
-	if (workspaceId === MY_SKILLS_WORKSPACE_ID || workspaceId === MY_AGENTS_WORKSPACE_ID) {
-		const response =
-			workspaceId === MY_SKILLS_WORKSPACE_ID
-				? await skillsService.getCreatedSkills({ page: 1, page_size: PAGE_SIZE })
-				: await crewService.getCreatedAgents({ page: 1, page_size: PAGE_SIZE })
-		const list = response.list.map((item: UserSkillView | MyCrewView) => {
-			const isSkill = workspaceId === MY_SKILLS_WORKSPACE_ID
-			const resource = item as UserSkillView & MyCrewView
-			return makeSpecialProject(workspace, {
-				id: resource.projectId || resource.id,
-				project_name: resource.name,
-				project_mode: isSkill ? TopicMode.SkillProjectCreator : TopicMode.AgentCreator,
-				project_description: resource.description,
-				updated_at: resource.updatedAt,
-			})
-		})
-		return { total: response.total, list }
-	}
-
-	return { list: [], total: 0 }
-}
-
 export default function WorkspaceProjectsContent({
+	location,
+	onSearchValueChange,
 	searchValue,
 	onClearSearch,
 	open,
@@ -163,12 +59,16 @@ export default function WorkspaceProjectsContent({
 	const { t } = useTranslation("super")
 	const workspaceId = workspace?.id
 	const recent = !workspace
+	const [sortType, setSortType] = useState<SortType>(
+		recent ? SortType.MY_LAST_ACTIVE_TIME : SortType.WORKSPACE_ORDER,
+	)
+	const [projectType, setProjectType] = useState<RecentProjectType>("all")
 	const debouncedSearchValue = useDebounce(searchValue, { wait: 500 })
 	const { viewMode, setViewMode } = useViewTogglePersistValue({
 		localStorageKey: "workspace_projects_panel_view_toggle_value",
 		defaultValue: ViewMode.LIST,
 	})
-	const [projects, setProjects] = useState<ProjectListItem[]>(() =>
+	const [projects, setProjects] = useState<ResourceProject[]>(() =>
 		workspaceId ? projectStore.getProjectsByWorkspace(workspaceId) : [],
 	)
 	const [loading, setLoading] = useState(open)
@@ -192,32 +92,34 @@ export default function WorkspaceProjectsContent({
 		setLoading(true)
 		setFailed(false)
 		try {
-			const isSpecialWorkspace = Boolean(
-				workspaceId && SPECIAL_WORKSPACE_IDS.has(workspaceId),
-			)
-			const result = isSpecialWorkspace
-				? await loadSpecialWorkspaceProjects(workspaceId as string, workspace)
-				: await SuperMagicApi.getProjectsWithCollaboration(
-						{
-							workspace_id: workspaceId,
-							sort_mode: recent ? "recent" : "workspace",
-							project_name: debouncedSearchValue,
+			const result =
+				workspace && isResourceWorkspace(workspace)
+					? await loadResourceProjectPage({
+							workspace,
 							page: nextPage,
-							page_size: PAGE_SIZE,
-							show_collaboration: 1,
-							include_special: recent ? 1 : 0,
-						},
-						{ signal: controller.signal },
-					)
+							pageSize: PAGE_SIZE,
+							keyword: debouncedSearchValue,
+							signal: controller.signal,
+						})
+					: await SuperMagicApi.getProjectsWithCollaboration(
+							{
+								workspace_id: workspaceId,
+								sort_mode: recent ? "recent" : "workspace",
+								project_name: debouncedSearchValue,
+								page: nextPage,
+								page_size: PAGE_SIZE,
+								show_collaboration: 1,
+								include_special: recent ? 1 : 0,
+								project_type: recent ? projectType : undefined,
+								sort_field:
+									sortType === SortType.WORKSPACE_ORDER ? undefined : sortType,
+								sort_direction: "desc",
+							},
+							{ signal: controller.signal },
+						)
 			if (id !== requestId.current || controller.signal.aborted) return
 			// 搜索和分页只更新本面板；全局导航缓存继续由项目 service 维护。
-			const visibleList = isSpecialWorkspace
-				? result.list.filter((item) =>
-						item.project_name
-							.toLocaleLowerCase()
-							.includes(debouncedSearchValue.toLocaleLowerCase()),
-					)
-				: result.list
+			const visibleList = result.list
 			setProjects((previous) =>
 				nextPage === 1
 					? visibleList
@@ -229,7 +131,7 @@ export default function WorkspaceProjectsContent({
 						],
 			)
 			setPage(nextPage)
-			setTotal(isSpecialWorkspace ? visibleList.length : result.total)
+			setTotal(result.total)
 		} catch {
 			if (id === requestId.current && !controller.signal.aborted) {
 				failedPageRef.current = nextPage
@@ -255,7 +157,7 @@ export default function WorkspaceProjectsContent({
 			request.current?.abort()
 			isOpenRef.current = false
 		}
-	}, [open, workspaceId, debouncedSearchValue, load])
+	}, [open, workspaceId, debouncedSearchValue, sortType, projectType, load])
 
 	// 普通目录订阅自己的缓存；最近分类订阅 service 的失效版本，搜索／分页不会改写侧栏快照。
 	useEffect(() => {
@@ -331,15 +233,39 @@ export default function WorkspaceProjectsContent({
 							<ProjectResourceItem
 								project={resourceProject}
 								viewMode={props.viewMode}
-								onClick={(project) => props.onClick(project)}
+								onClick={(project) => {
+									if (!project.project_id) {
+										magicToast.info(t("fileManager.locateUnavailable"))
+										return
+									}
+									props.onClick(project)
+								}}
 							/>
 						)
 					}
 					return recent ? <RecentProjectItem {...props} /> : <ProjectItem {...props} />
 				}}
 				toolbar={
-					<>
+					<ProjectsPanelToolbar
+						location={location}
+						total={total}
+						searchValue={searchValue}
+						onSearchValueChange={onSearchValueChange}
+						viewToggle={<ViewToggle value={viewMode} onChange={setViewMode} />}
+					>
+						{recent && (
+							<ProjectTypeFilter value={projectType} onChange={setProjectType} />
+						)}
+						{(!workspace || !isResourceWorkspace(workspace)) && (
+							<SortSelector
+								value={sortType}
+								onChange={setSortType}
+								includeWorkspaceOrder={!recent}
+								compact
+							/>
+						)}
 						{workspace &&
+							!isResourceWorkspace(workspace) &&
 							(creating ? (
 								<CreateProjectInput
 									workspaceId={workspace.id}
@@ -355,11 +281,10 @@ export default function WorkspaceProjectsContent({
 									{t("sidebarPanels.createProject")}
 								</Button>
 							))}
-						<ViewToggle value={viewMode} onChange={setViewMode} />
-					</>
+					</ProjectsPanelToolbar>
 				}
 				itemProps={{
-					sortType: recent ? SortType.MY_LAST_ACTIVE_TIME : SortType.PROJECT_UPDATE_TIME,
+					sortType,
 					onClick: (project) => {
 						if (project.id !== projectStore.selectedProject?.id)
 							actions.handleProjectClick(project)

@@ -23,6 +23,11 @@ class QueryMagicClawListRequestDTO extends AbstractRequestDTO
 
     public string $keyword = '';
 
+    public function setKeyword(?string $keyword): void
+    {
+        $this->keyword = $keyword ?? '';
+    }
+
     public function getKeyword(): string
     {
         return trim($this->keyword);

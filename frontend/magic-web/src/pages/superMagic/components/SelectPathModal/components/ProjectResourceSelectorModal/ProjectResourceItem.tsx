@@ -1,6 +1,7 @@
 import type { KeyboardEvent } from "react"
 import { useTranslation } from "react-i18next"
-import dayjs from "dayjs"
+import dayjs from "@/infrastructure/vendors/dayjs"
+import MagicTooltip from "@/components/base/MagicTooltip"
 import SmartTooltip from "@/components/other/SmartTooltip"
 
 import { Badge } from "@/components/shadcn-ui/badge"
@@ -44,6 +45,7 @@ function ResourceIcon({ project }: { project: ResourceProject }) {
 					id={project.resourceId || project.id}
 					coverUrl={project.resourceCoverUrl ?? undefined}
 					compact
+					variant="icon"
 				/>
 			)
 		case "skill":
@@ -113,7 +115,7 @@ export function ProjectResourceItem({
 	onClick,
 	selection,
 }: ProjectResourceItemProps) {
-	const { t } = useTranslation("super")
+	const { t, i18n } = useTranslation("super")
 	const isList = viewMode === ViewMode.LIST
 	const name =
 		project.project_name?.trim() ||
@@ -121,9 +123,9 @@ export function ProjectResourceItem({
 			? t("crew/create:untitledCrew")
 			: project.resourcePackageName || t("project.unnamedProject"))
 	const description = getDescription(project)
-	const updatedAt =
+	const updatedDate =
 		project.updated_at && dayjs(project.updated_at).isValid()
-			? dayjs(project.updated_at).format("YYYY/MM/DD HH:mm [UTC]Z")
+			? dayjs(project.updated_at).locale(i18n.language.startsWith("zh") ? "zh-cn" : "en")
 			: undefined
 	const handleKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
 		if (event.target !== event.currentTarget) return
@@ -137,9 +139,9 @@ export function ProjectResourceItem({
 	return (
 		<div
 			className={cn(
-				"relative flex min-w-0 cursor-pointer flex-wrap items-center gap-3 border border-border bg-card transition-colors hover:bg-accent/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+				"relative flex min-w-0 cursor-pointer flex-wrap items-center gap-2 border border-border bg-card transition-colors hover:bg-accent/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
 				isList
-					? "min-h-14 w-full rounded-none border-x-0 border-t-0 px-3 py-2"
+					? "min-h-14 w-full rounded-none border-x-0 border-t-0 px-3 py-2 [container-type:inline-size]"
 					: "flex-col items-stretch rounded-lg p-3",
 				variant === "default" && "shadow-xs",
 				selection?.checked && "border-primary/50 bg-primary/5",
@@ -187,27 +189,41 @@ export function ProjectResourceItem({
 			</div>
 			<div
 				className={cn(
-					"flex min-w-0 flex-wrap items-center gap-2 text-xs text-muted-foreground",
-					isList ? "ml-auto" : "pl-10",
+					"flex min-w-0 flex-col gap-1.5 text-xs text-muted-foreground",
+					// 按卡片可用宽度折行，避免窄面板把名称挤到只剩图标。
+					isList
+						? "ml-auto items-end [@container_(max-width:600px)]:ml-0 [@container_(max-width:600px)]:basis-full [@container_(max-width:600px)]:items-start [@container_(max-width:600px)]:pl-10"
+						: "items-start pl-10",
+					selection && (isList ? "[@container_(max-width:600px)]:pl-16" : "pl-16"),
 				)}
 			>
-				<ResourceStatus project={project} />
-				{project.resourceRole && (
-					<SmartTooltip className="max-w-48" align="start">
-						{t("projectResources.role", { role: project.resourceRole })}
-					</SmartTooltip>
+				<div className="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1 empty:hidden">
+					{(project.resourceType === "claw" || project.resourceType === "micro-app") && (
+						<ResourceStatus project={project} />
+					)}
+					{project.resourceRole && (
+						<SmartTooltip className="max-w-48" align="start">
+							{t("projectResources.role", { role: project.resourceRole })}
+						</SmartTooltip>
+					)}
+					{project.resourcePackageName && (
+						<SmartTooltip className="max-w-48" align="start">
+							{project.resourcePackageName}
+						</SmartTooltip>
+					)}
+					{project.resourceVersion && (
+						<span>
+							{t("projectResources.version", { version: project.resourceVersion })}
+						</span>
+					)}
+				</div>
+				{updatedDate && (
+					<MagicTooltip title={updatedDate.format("YYYY/MM/DD HH:mm [UTC]Z")}>
+						<span>
+							{t("projectResources.updatedAt", { date: updatedDate.fromNow() })}
+						</span>
+					</MagicTooltip>
 				)}
-				{project.resourcePackageName && (
-					<SmartTooltip className="max-w-48" align="start">
-						{project.resourcePackageName}
-					</SmartTooltip>
-				)}
-				{project.resourceVersion && (
-					<span>
-						{t("projectResources.version", { version: project.resourceVersion })}
-					</span>
-				)}
-				{updatedAt && <span>{t("projectResources.updatedAt", { date: updatedAt })}</span>}
 			</div>
 		</div>
 	)

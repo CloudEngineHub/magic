@@ -1,3 +1,4 @@
+import type { ReactNode } from "react"
 import { Bot, Box, Clock3, LayoutGrid, UsersRound, Wrench } from "lucide-react"
 import { useTranslation } from "react-i18next"
 import { MagiClaw } from "@/enhance/lucide-react"
@@ -19,12 +20,14 @@ export function MentionSourceSidebar({
 	recentActive,
 	onSelectRecent,
 	onSelect,
+	footer,
 }: {
 	workspaces: Workspace[]
 	specialWorkspaces: Workspace[]
 	current: Workspace | null
 	recentActive: boolean
 	onSelectRecent: () => void
+	footer?: ReactNode
 	onSelect: (workspace: Workspace) => void
 }) {
 	const { t } = useTranslation("super")
@@ -89,7 +92,10 @@ export function MentionSourceSidebar({
 					viewportRef={viewport.viewportRef}
 					viewportClassName="[&>div]:!block"
 				>
-					<div>{workspaces.map(row)}</div>
+					<div>
+						{workspaces.map(row)}
+						{footer}
+					</div>
 				</ScrollArea>
 			</div>
 			<div className="mt-2 shrink-0 border-t pt-2">{specialWorkspaces.map(row)}</div>

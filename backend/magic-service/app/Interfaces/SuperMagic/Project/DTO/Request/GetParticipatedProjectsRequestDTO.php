@@ -17,6 +17,37 @@ class GetParticipatedProjectsRequestDTO extends GetProjectListRequestDTO
 {
     public ?string $sortMode = null;
 
+    public ?string $sortField = null;
+
+    public string $sortDirection = 'desc';
+
+    public string $projectType = 'all';
+
+    public function setSortDirection(?string $sortDirection): void
+    {
+        $this->sortDirection = $sortDirection ?? 'desc';
+    }
+
+    public function setProjectType(?string $projectType): void
+    {
+        $this->projectType = $projectType ?? 'all';
+    }
+
+    public function getSortField(): ?string
+    {
+        return $this->sortField;
+    }
+
+    public function getSortDirection(): string
+    {
+        return $this->sortDirection;
+    }
+
+    public function getProjectType(): string
+    {
+        return $this->projectType;
+    }
+
     /**
      * Whether to show collaboration projects.
      */
@@ -96,6 +127,9 @@ class GetParticipatedProjectsRequestDTO extends GetProjectListRequestDTO
             'show_hidden' => 'nullable|integer|in:0,1',
             'include_special' => 'nullable|integer|in:0,1',
             'sort_mode' => 'nullable|string|in:workspace,recent',
+            'sort_field' => 'nullable|string|in:last_active_at,updated_at,created_at',
+            'sort_direction' => 'nullable|string|in:asc,desc',
+            'project_type' => 'nullable|string|in:all,general,claw,micro-app,agent,skill',
         ]);
     }
 

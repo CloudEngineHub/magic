@@ -32,7 +32,6 @@ export async function loadMicroAppProjectPage({
 				: await SuperMagicApi.getMicroAppProject(app.app_id)
 			signal?.throwIfAborted()
 			const projectId = app.project_id || detail?.project_id
-			if (!projectId) throw new Error("Micro app source project is unavailable")
 			return {
 				project_status: ProjectStatus.WAITING,
 				project_mode: TopicMode.MicroApp,
@@ -46,8 +45,8 @@ export async function loadMicroAppProjectPage({
 				tag: "",
 				user_role: app.user_role,
 				...detail?.project,
-				id: projectId,
-				project_id: projectId,
+				id: projectId || app.app_id,
+				project_id: projectId || null,
 				project_name: app.app_name,
 				micro_app_id: app.app_id,
 				resourceType: "micro-app",

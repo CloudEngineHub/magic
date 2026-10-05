@@ -166,7 +166,7 @@ export interface Workspace {
 	cooperate_project_count?: number
 	project_count: number
 	status?: "waiting" | "running" | "finished" | "error" // 其实没有这个字段，但是为了兼容旧数据，所以加了这个字段
-	workspace_type: "chat" | "default"
+	workspace_type: "chat" | "default" | "micro-app"
 }
 
 // 话题

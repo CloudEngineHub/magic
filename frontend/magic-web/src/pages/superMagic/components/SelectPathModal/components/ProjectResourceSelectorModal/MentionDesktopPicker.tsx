@@ -1,8 +1,10 @@
 import { useEffect, useMemo, useRef, useState, type ComponentProps } from "react"
+import { useDebounce } from "ahooks"
 import { observer } from "mobx-react-lite"
 import { useTranslation } from "react-i18next"
 import { ArrowLeft, FolderSearch } from "lucide-react"
 import { Button } from "@/components/shadcn-ui/button"
+import { Checkbox } from "@/components/shadcn-ui/checkbox"
 import { Input } from "@/components/shadcn-ui/input"
 import { useUserInfo } from "@/models/user/hooks"
 import { useOverlayZIndex } from "@/hooks/useOverlayZIndex"
@@ -34,7 +36,7 @@ import {
 	MY_AGENTS_WORKSPACE_ID,
 	MY_CLAW_WORKSPACE_DATA,
 	MY_CLAW_WORKSPACE_ID,
-	MY_MICRO_APPS_WORKSPACE_DATA,
+	MICRO_APPS_WORKSPACE_DATA,
 	MY_SKILLS_WORKSPACE_DATA,
 	SHARE_WORKSPACE_DATA,
 } from "../../../../constants"
@@ -66,6 +68,7 @@ interface Props {
 	selections: ProjectResourceSelection[]
 	hasMore: boolean
 	loadingMore: boolean
+	onProjectSearch: (keyword: string) => void
 	onLoadMore: () => void
 	onWorkspace: (workspace: Workspace) => void
 	onProject: (project: ProjectListItem, action: "select" | "enter", workspace?: Workspace) => void
@@ -99,6 +102,12 @@ export const MentionDesktopPicker = observer(function MentionDesktopPicker(props
 		minSize: { width: 960, height: 560 },
 	})
 	const [query, setQuery] = useState("")
+	const { workspace: searchWorkspace, project: searchProject, onProjectSearch } = props
+	const debouncedQuery = useDebounce(query, { wait: 500 })
+	useEffect(() => {
+		if (query === debouncedQuery && searchWorkspace && !searchProject)
+			onProjectSearch(debouncedQuery)
+	}, [query, debouncedQuery, searchWorkspace, searchProject, onProjectSearch])
 	const [recentMode, setRecentMode] = useState(true)
 	const [reveal, setReveal] = useState<FileManagerRevealRequest>()
 	const [rootVisit, setRootVisit] = useState(0)
@@ -116,15 +125,8 @@ export const MentionDesktopPicker = observer(function MentionDesktopPicker(props
 	}, [userInfo?.user_id, userInfo?.organization_code])
 	const recentSearch = useRecentProjectSearch(query, recentMode && !props.project, props.loading)
 	const projects = useMemo(
-		() =>
-			props.projects.filter(
-				(project) =>
-					!props.excludeProjectIds.includes(project.id) &&
-					(project.project_name || t("project.unnamedProject"))
-						.toLocaleLowerCase()
-						.includes(query.trim().toLocaleLowerCase()),
-			),
-		[props.projects, props.excludeProjectIds, query, t],
+		() => props.projects.filter((project) => !props.excludeProjectIds.includes(project.id)),
+		[props.projects, props.excludeProjectIds],
 	)
 	const viewport = useSelectionListViewport(
 		'[data-testid="shared-workspace-dialog-project-item"]',
@@ -157,7 +159,7 @@ export const MentionDesktopPicker = observer(function MentionDesktopPicker(props
 			project.project_mode === TopicMode.CustomSkill
 		)
 			return MY_SKILLS_WORKSPACE_DATA(t)
-		if (project.project_mode === TopicMode.MicroApp) return MY_MICRO_APPS_WORKSPACE_DATA(t)
+		if (project.project_mode === TopicMode.MicroApp) return MICRO_APPS_WORKSPACE_DATA(t)
 		return (
 			props.workspaces.find((workspace) => workspace.id === project.workspace_id) ?? {
 				id: project.workspace_id,
@@ -177,7 +179,7 @@ export const MentionDesktopPicker = observer(function MentionDesktopPicker(props
 			: []),
 		MY_SKILLS_WORKSPACE_DATA(t),
 		MY_AGENTS_WORKSPACE_DATA(t),
-		...(isMicroAppEnabled() ? [MY_MICRO_APPS_WORKSPACE_DATA(t)] : []),
+		...(isMicroAppEnabled() ? [MICRO_APPS_WORKSPACE_DATA(t)] : []),
 	]
 	const specialIds = new Set(special.map((workspace) => workspace.id))
 	const regular = props.workspaces.filter(
@@ -265,7 +267,7 @@ export const MentionDesktopPicker = observer(function MentionDesktopPicker(props
 			setRecentMode(false)
 			props.onProject(displayProject, "enter", workspaceOverride)
 		}
-		if (resourceType) {
+		if (resourceType && !recentMode) {
 			return (
 				<ProjectResourceItem
 					{...itemProps}
@@ -275,7 +277,22 @@ export const MentionDesktopPicker = observer(function MentionDesktopPicker(props
 				/>
 			)
 		}
-		return <ProjectItem {...itemProps} onClick={onClick} selection={selection} />
+		return (
+			<div className="flex min-w-0 items-center gap-2">
+				{selection && (
+					<Checkbox
+						checked={selection.checked}
+						aria-label={t("selectPathModal.selectProject", {
+							name: project.project_name,
+						})}
+						onCheckedChange={selection.onCheck}
+					/>
+				)}
+				<div className="min-w-0 flex-1">
+					<ProjectItem {...itemProps} onClick={onClick} />
+				</div>
+			</div>
+		)
 	}
 	const navigate = (key: string, target: "project" | "file") => {
 		const selection = props.selections.find((item) => selectionKey(item) === key)
@@ -422,19 +439,6 @@ export const MentionDesktopPicker = observer(function MentionDesktopPicker(props
 											)
 										},
 									}}
-									selection={
-										allowProjectSelection
-											? {
-													checkedIds: selectedProjects,
-													onCheck: (project) =>
-														props.onProject(
-															project,
-															"select",
-															recentWorkspaceForProject(project),
-														),
-												}
-											: undefined
-									}
 									listViewport={recentViewport}
 									error={
 										(
@@ -504,15 +508,6 @@ export const MentionDesktopPicker = observer(function MentionDesktopPicker(props
 											props.onProject(project, "enter")
 										},
 									}}
-									selection={
-										allowProjectSelection
-											? {
-													checkedIds: selectedProjects,
-													onCheck: (project) =>
-														props.onProject(project, "select"),
-												}
-											: undefined
-									}
 									listViewport={viewport}
 									error={
 										props.error ? (

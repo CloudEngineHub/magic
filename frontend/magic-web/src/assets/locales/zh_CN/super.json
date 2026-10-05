@@ -5273,9 +5273,12 @@
 	},
 	"projectResources": {
 		"allTypes": "全部类型",
+		"createTime": "创建时间",
 		"generalType": "普通项目",
+		"lastActiveTime": "最近活动",
 		"role": "角色：{{role}}",
 		"statusUnknown": "状态未知",
+		"updateTime": "更新时间",
 		"updatedAt": "更新于 {{date}}",
 		"version": "版本 {{version}}",
 		"workspaceOrder": "工作区顺序"

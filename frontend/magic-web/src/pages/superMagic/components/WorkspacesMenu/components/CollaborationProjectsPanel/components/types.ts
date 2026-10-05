@@ -12,6 +12,8 @@ export interface CreatorFilterProps {
 export interface SortSelectorProps {
 	value: SortType
 	onChange: (value: SortType) => void
+	includeWorkspaceOrder?: boolean
+	compact?: boolean
 }
 
 export interface ViewToggleProps {

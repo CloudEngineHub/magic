@@ -451,11 +451,12 @@ class ProjectMemberAppService extends AbstractAppService
             $requestDTO->getPage(),
             $requestDTO->getPageSize(),
             $paidOrganizationCodes,
-            'last_active_at',
-            'desc',
+            $requestDTO->getSortField(),
+            $requestDTO->getSortDirection(),
             $requestDTO->getShowHidden(),
             $requestDTO->getSortMode(),
-            $requestDTO->getIncludeSpecial()
+            $requestDTO->getIncludeSpecial(),
+            $requestDTO->getProjectType()
         );
 
         // 2. 提取工作区ID并获取名称

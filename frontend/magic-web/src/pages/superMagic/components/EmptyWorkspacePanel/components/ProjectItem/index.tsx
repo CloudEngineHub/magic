@@ -65,6 +65,7 @@ export const enum ViewMode {
 }
 
 export const enum SortType {
+	WORKSPACE_ORDER = "workspace",
 	PROJECT_UPDATE_TIME = "updated_at",
 	MY_LAST_ACTIVE_TIME = "last_active_at",
 	PROJECT_CREATE_TIME = "created_at",
@@ -209,6 +210,10 @@ function ProjectItem<T extends ProjectListItem | CollaborationProjectListItem>({
 			case SortType.PROJECT_CREATE_TIME: {
 				const value = item.created_at.replaceAll("-", "/")
 				return { value, label: t("common.createdAt", { time: value }) }
+			}
+			case SortType.PROJECT_UPDATE_TIME: {
+				const value = item.updated_at.replaceAll("-", "/")
+				return { value, label: t("common.lastUpdatedAt", { time: value }) }
 			}
 			default: {
 				// 保留原更新时间的回退顺序；列表仅去掉已有列标题重复表达的前缀。
