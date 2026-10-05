@@ -3423,6 +3423,7 @@
 			"unknownProviderTypeWithCode": "未知服务商类型（{{providerTypeId}}）"
 		},
 		"at": "引用",
+		"copyMention": "复制标签",
 		"deleteUploadedFileConfirm": {
 			"cancel": "取消",
 			"confirm": "删除",

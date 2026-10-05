@@ -1,3 +1,5 @@
+import MentionContextMenu from "./components/MentionContextMenu"
+import type { AttachmentItem } from "@/pages/superMagic/components/TopicFilesButton/hooks"
 import { EditorContent, type Editor } from "@/infrastructure/editors/tiptap/react"
 import FlexBox from "@/components/base/FlexBox"
 import DragOverlay from "./components/DragOverlay"
@@ -26,6 +28,8 @@ interface MessageEditorViewProps {
 	containerClassName?: string
 	headerContent?: ReactNode
 	size: MessageEditorSize
+	getWorkspaceFilesList?: () => AttachmentItem[]
+	getCurrentProjectId?: () => string | undefined
 	tiptapEditor: Editor | null
 	domRef: RefObject<HTMLDivElement>
 	isDragOver: boolean
@@ -57,6 +61,8 @@ function MessageEditorView({
 	headerContent,
 	size,
 	tiptapEditor,
+	getWorkspaceFilesList,
+	getCurrentProjectId,
 	domRef,
 	isDragOver,
 	dragEvents,
@@ -120,15 +126,24 @@ function MessageEditorView({
 							</div>
 						)}
 						<div className={cn(messageEditorTextContainerVariants({ size }))}>
-							<EditorContent
-								ref={domRef}
+							<MentionContextMenu
 								editor={tiptapEditor}
-								className={cn(messageEditorContentVariants({ size }), className)}
-								onCompositionStart={onCompositionStart}
-								onCompositionEnd={onCompositionEnd}
-								data-testid="super-message-editor-content"
-								id={SummaryGuideDOMId.MessageEditorContent}
-							/>
+								getWorkspaceFilesList={getWorkspaceFilesList}
+								getCurrentProjectId={getCurrentProjectId}
+							>
+								<EditorContent
+									ref={domRef}
+									editor={tiptapEditor}
+									className={cn(
+										messageEditorContentVariants({ size }),
+										className,
+									)}
+									onCompositionStart={onCompositionStart}
+									onCompositionEnd={onCompositionEnd}
+									data-testid="super-message-editor-content"
+									id={SummaryGuideDOMId.MessageEditorContent}
+								/>
+							</MentionContextMenu>
 							{promptCarouselNode}
 						</div>
 						{showAiCompletion && <AiCompletionTip icon={TabIcon as string} />}
