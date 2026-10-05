@@ -16,6 +16,8 @@ print(projects.content)
 
 Read `result.content` first. Use `result.data` only for an exact ID, cursor, status, or path needed by a later call. Do not print a large `data` object into the conversation.
 
+For "which projects are in this workspace", resolve the workspace ID and call `list_projects` with `workspace_id`. Follow its pagination for the complete list; individual `get_project` calls are unnecessary unless the user asks for project details. See [projects](references/projects.md).
+
 ## Find and answer from another topic
 
 1. If the user supplied a topic ID, call `get_topic` and then `read_topic_messages`. Otherwise use `list_projects` and `list_topics` to locate likely topics. Do not pick between ambiguous names without enough evidence.

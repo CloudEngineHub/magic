@@ -17,6 +17,7 @@ from .models import PROJECT, TOPIC, ProductParams, projected, projected_page, re
 class ListProjectsParams(ProductParams):
     keyword: str = Field("", max_length=255, description="Optional project name filter.")
     scope: Literal["owned", "participated"] = Field("owned", description="Owned projects or projects you participate in.")
+    workspace_id: str | None = Field(None, description="Exact workspace ID. Limit results to projects in this workspace.")
     page: int = Field(1, ge=1, description="Page number.")
     page_size: int = Field(20, ge=1, le=100, description="Projects per page.")
 
@@ -27,8 +28,9 @@ class ListProjects(ProductTool[ListProjectsParams]):
     name = "list_projects"
 
     async def execute(self, tool_context: ToolContext, params: ListProjectsParams) -> ToolResult:
+        workspace_id = resource_id(params.workspace_id, "workspace_id") if params.workspace_id is not None else None
         async def operation(ctx):
-            raw = await ctx.sdk.project.list_async(ctx.auth, keyword=params.keyword, scope=params.scope, page=params.page, page_size=params.page_size)
+            raw = await ctx.sdk.project.list_async(ctx.auth, keyword=params.keyword, scope=params.scope, workspace_id=workspace_id, page=params.page, page_size=params.page_size)
             return projected_page(raw, PROJECT)
         return await self.run_product(tool_context, "Project search", operation)
 

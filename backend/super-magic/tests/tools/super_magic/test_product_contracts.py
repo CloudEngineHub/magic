@@ -96,6 +96,25 @@ async def test_participated_projects_use_distinct_endpoint(monkeypatch, auth):
     assert captured["options"]["json"]["show_hidden"] == 0
 
 
+@pytest.mark.asyncio
+@pytest.mark.parametrize("scope, method, parameter_key", [
+    ("owned", "GET", "params"),
+    ("participated", "POST", "json"),
+])
+async def test_project_list_filters_by_workspace(monkeypatch, auth, scope, method, parameter_key):
+    captured = {}
+
+    async def request(self, parameter, actual_method, path):
+        captured.update(method=actual_method, path=path, options=parameter.to_options(actual_method))
+        return {"list": []}
+
+    monkeypatch.setattr(ProjectApi, "request_by_parameter_async", request)
+    await object.__new__(ProjectApi).list_async(auth, scope=scope, workspace_id="987654321012345678")
+
+    assert captured["method"] == method
+    assert captured["options"][parameter_key]["workspace_id"] == "987654321012345678"
+
+
 def test_message_cursor_survives_filtered_page():
     raw = {
         "list": [{"id": 123, "role": "assistant", "content_type": "reasoning", "content": "private"}],
