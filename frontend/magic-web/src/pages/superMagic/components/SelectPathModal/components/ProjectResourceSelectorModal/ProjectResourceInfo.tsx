@@ -137,7 +137,10 @@ export function ProjectResourceInfo({
 
 	return (
 		<div
-			className="flex min-w-0 flex-1 items-start gap-2 [container-type:inline-size]"
+			className={cn(
+				"flex min-w-0 flex-1 items-start gap-2 [container-type:inline-size]",
+				!list && !mobile && "h-full",
+			)}
 			data-testid="project-resource-info"
 		>
 			{icon ?? <ProjectResourceIcon project={project} />}
@@ -145,6 +148,8 @@ export function ProjectResourceInfo({
 			<div
 				className={cn(
 					"grid min-w-0 flex-1 grid-cols-1 items-center gap-x-4 gap-y-1",
+					// 网格中名称靠顶、元信息靠底；列表仍随实际内容自然增高。
+					!list && !mobile && "content-between self-stretch",
 					list &&
 						!mobile &&
 						"[@container_(min-width:600px)]:grid-cols-[minmax(0,1fr)_auto]",

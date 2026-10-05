@@ -210,6 +210,7 @@ export default function WorkspaceProjectsContent({
 		<>
 			<ProjectsPanelList
 				projects={projects}
+				listLayout={workspace && isResourceWorkspace(workspace) ? "resource" : "project"}
 				selectedProjectId={projectStore.selectedProject?.id}
 				total={total}
 				emptyContent={

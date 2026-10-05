@@ -50,7 +50,7 @@ export function ProjectResourceItem({
 				"relative flex min-w-0 cursor-pointer items-start gap-2 border border-border bg-card transition-colors hover:bg-accent/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
 				isList
 					? "min-h-14 w-full rounded-none border-x-0 border-t-0 px-3 py-3"
-					: "rounded-lg p-3",
+					: "h-full rounded-lg p-3",
 				variant === "default" && !isMobile && "shadow-xs",
 				selection?.checked && "border-primary/50 bg-primary/5",
 			)}

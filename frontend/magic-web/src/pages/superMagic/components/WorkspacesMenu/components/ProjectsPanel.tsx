@@ -201,6 +201,7 @@ interface ProjectsPanelListProps<T extends ProjectListItem> {
 	projects: T[]
 	loading: boolean
 	viewMode: ViewMode
+	listLayout?: "project" | "resource"
 	toolbar?: ReactNode
 	listViewport?: ReturnType<typeof useSelectionListViewport>
 	itemProps: Omit<ComponentProps<typeof ProjectItem<T>>, "project" | "index" | "viewMode">
@@ -217,6 +218,7 @@ export function ProjectsPanelList<T extends ProjectListItem>({
 	projects,
 	loading,
 	viewMode,
+	listLayout = "project",
 	toolbar,
 	itemProps,
 	renderItem,
@@ -230,6 +232,7 @@ export function ProjectsPanelList<T extends ProjectListItem>({
 }: ProjectsPanelListProps<T>) {
 	const { t } = useTranslation("super")
 	const isList = viewMode === ViewMode.LIST
+	const isResourceLayout = listLayout === "resource"
 	const isShared = !!itemProps.inCollaborationPanel
 	// 最近项目使用资源缩略图，表头首列与条目的 32px 图标保持一致。
 	const iconColumn = itemProps.titleLayout === "recent" ? "32px" : "16px"
@@ -277,7 +280,7 @@ export function ProjectsPanelList<T extends ProjectListItem>({
 							style={isList ? listStyle : undefined}
 						>
 							{error}
-							{isList && projects.length > 0 && (
+							{isList && !isResourceLayout && projects.length > 0 && (
 								<div className="hidden items-center gap-x-3 border-b border-border px-3 py-2 text-xs text-muted-foreground [grid-template-columns:var(--project-list-columns)] [@container_(min-width:800px)]:grid">
 									<span className="col-span-2">
 										{t("sidebarPanels.projectName")}
@@ -294,6 +297,8 @@ export function ProjectsPanelList<T extends ProjectListItem>({
 									viewMode === ViewMode.LIST
 										? "grid-cols-1"
 										: "gap-2 [grid-template-columns:repeat(auto-fill,minmax(min(100%,240px),1fr))]",
+									// 资源卡片统一网格行高，空字段不再让卡片边框停在半行。
+									!isList && isResourceLayout && "auto-rows-fr",
 								)}
 								data-testid="shared-workspace-dialog-project-list-layout"
 								data-view-mode={viewMode}

@@ -87,7 +87,7 @@ export async function loadResourceProjectPage({
 				resourceDescription: item.description,
 				resourceIcon: item.logo,
 				resourceVersion: item.latestVersion,
-				resourcePackageName: item.packageName || item.skillCode,
+				resourcePackageName: item.packageName,
 				user_role: item.userRole,
 				created_at: item.createdAt,
 				updated_at: item.updatedAt,

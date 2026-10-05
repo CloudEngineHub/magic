@@ -50,6 +50,8 @@ import recentProjectsStore from "@/pages/superMagic/stores/core/recentProjects"
 import { useRecentProjectSearch } from "@/layouts/BaseLayout/components/MagicSidebar/hooks/useRecentProjectSearch"
 import { TopicMode } from "../../../../pages/Workspace/TopicMode"
 import { WorkspaceStatus } from "../../../../pages/Workspace/types"
+import { isOwner } from "../../../../utils/permission"
+import { isResourceWorkspace } from "../../utils/resourceProjects"
 
 interface Props {
 	title: string
@@ -289,7 +291,18 @@ export const MentionDesktopPicker = observer(function MentionDesktopPicker(props
 					/>
 				)}
 				<div className="min-w-0 flex-1">
-					<ProjectItem {...itemProps} onClick={onClick} />
+					<ProjectItem
+						{...itemProps}
+						locationName={
+							recentMode
+								? isOwner(project.user_role)
+									? workspaceOverride?.name
+									: t("workspace.shareWorkspaceName")
+								: undefined
+						}
+						relativeActiveTime={recentMode}
+						onClick={onClick}
+					/>
 				</div>
 			</div>
 		)
@@ -493,6 +506,11 @@ export const MentionDesktopPicker = observer(function MentionDesktopPicker(props
 								/>
 								<ProjectsPanelList
 									projects={projects}
+									listLayout={
+										props.workspace && isResourceWorkspace(props.workspace)
+											? "resource"
+											: "project"
+									}
 									loading={props.loading}
 									viewMode={viewMode}
 									renderItem={renderProjectItem}
