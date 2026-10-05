@@ -760,7 +760,8 @@ export class ImageResourceManager {
 			return this.getDisplayResource(entry, "low")
 		}
 
-		return this.getDisplayResource(entry, "preview") ?? entry.fullResource
+		// preview 必须命中自己的显示槽：full 会被预览目标拒绝，不能据此跳过 preview 解码。
+		return this.getDisplayResource(entry, "preview")
 	}
 
 	private getLoadingPromiseForVariant(
