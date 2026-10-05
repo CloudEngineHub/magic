@@ -390,10 +390,14 @@
 		"unlock": "解锁"
 	},
 	"messageHistory": {
+		"completed": "已生成",
+		"contentMissing": "该图片版本已不存在",
 		"copyPrompt": "复制",
 		"copyResourcePath": "复制资源路径",
 		"deletedSuffix": "（已删除）",
 		"expandPrompt": "展开",
+		"failed": "生成失败",
+		"generating": "生成中",
 		"generationMode": "生成方式",
 		"inputMode": "输入模式",
 		"model": "模型",
@@ -403,7 +407,9 @@
 		"referenceImage": "参考图",
 		"referenceVideo": "参考视频",
 		"size": "尺寸",
-		"title": "生成记录"
+		"syncing": "生成信息正在同步",
+		"title": "生成记录",
+		"unavailable": "未记录生成信息"
 	},
 	"rectangle": {
 		"defaultName": "矩形"

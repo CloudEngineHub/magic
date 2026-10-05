@@ -54,40 +54,58 @@ function OperationResultList({
 		: toolData.status === "suspended"
 			? t("operationResultList.interrupted")
 			: t("operationResultList.unavailable")
-	const statusSummary = loading
-		? items
-			? t("operationResultList.summaryProcessing", { count: items.length })
-			: t("operationResultList.running")
-		: !items || resultUnavailable
-			? unavailable
-			: failedCount === 0
-				? t("operationResultList.summaryCompleted", { count: successCount })
-				: successCount === 0
-					? t("operationResultList.summaryFailed", { count: failedCount })
-					: t("operationResultList.summary", {
-							success: successCount,
-							error: failedCount,
-						})
-	const StatusIcon = loading
-		? Loader2
-		: !items || resultUnavailable
-			? CircleAlert
-			: failedCount === 0
-				? CircleCheck
-				: successCount === 0
-					? CircleX
-					: CircleAlert
-	const statusClass =
-		loading || resultUnavailable || !items
-			? "text-muted-foreground"
-			: failedCount === 0
-				? "text-muted-foreground"
-				: successCount === 0
-					? "text-destructive"
-					: "text-warning"
-	const remark =
-		(items?.length === 1 ? items[0].label : toolData.remark?.trim()) ||
-		(items ? t("operationResultList.itemCount", { count: items.length }) : undefined)
+	const StatusIcon = loading ? Loader2 : CircleAlert
+	// 展开只增加明细，不替换汇总；成功和失败各自着色，用户无需滚动数结果。
+	const summary = (
+		<span
+			className="ml-auto inline-flex min-w-0 flex-wrap items-center justify-end gap-x-3 gap-y-1"
+			aria-live="polite"
+		>
+			{resultUnavailable || !items ? (
+				<span className="inline-flex min-w-0 items-center gap-1.5 text-muted-foreground">
+					<StatusIcon
+						size={16}
+						aria-hidden
+						className={cn("shrink-0", loading && "animate-spin")}
+					/>
+					<span className="[overflow-wrap:anywhere]">{unavailable}</span>
+				</span>
+			) : (
+				<>
+					{(successCount > 0 || loading) && (
+						<span
+							className={cn(
+								"inline-flex items-center gap-1.5 whitespace-nowrap",
+								loading ? "text-muted-foreground" : "text-success",
+							)}
+						>
+							{loading ? (
+								<Loader2 size={16} aria-hidden className="shrink-0 animate-spin" />
+							) : (
+								<CircleCheck size={16} aria-hidden className="shrink-0" />
+							)}
+							{loading
+								? successCount > 0
+									? t("operationResultList.summaryProcessing", {
+											count: successCount,
+										})
+									: t("operationResultList.running")
+								: t("operationResultList.summarySucceeded", {
+										count: successCount,
+									})}
+						</span>
+					)}
+					{failedCount > 0 && (
+						<span className="inline-flex items-center gap-1.5 whitespace-nowrap text-destructive">
+							<CircleX size={16} aria-hidden className="shrink-0" />
+							{t("operationResultList.summaryFailed", { count: failedCount })}
+						</span>
+					)}
+				</>
+			)}
+		</span>
+	)
+	const remark = items?.length === 1 ? items[0].label : toolData.remark?.trim()
 
 	return (
 		<div
@@ -111,11 +129,6 @@ function OperationResultList({
 						<span className="min-w-0 flex-1 whitespace-normal text-sm leading-5 text-foreground">
 							{toolData.action || t("operationResultList.title")}
 						</span>
-						{open && items && items.length > 1 && (
-							<span className="shrink-0 text-muted-foreground">
-								{t("operationResultList.itemCount", { count: items.length })}
-							</span>
-						)}
 						<ChevronRight
 							size={16}
 							aria-hidden
@@ -125,45 +138,20 @@ function OperationResultList({
 							)}
 						/>
 					</span>
-					{!open && (
-						<span className="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1 pl-7">
-							{remark && (
-								<SmartTooltip
-									fileName
-									elementType="span"
-									placement="top"
-									align="start"
-									className="min-w-0 flex-1 basis-20 text-xs leading-4 text-muted-foreground"
-								>
-									{remark}
-								</SmartTooltip>
-							)}
-							<span
-								className={cn(
-									"ml-auto inline-flex max-w-full shrink-0 items-center gap-1.5 whitespace-normal",
-									statusClass,
-								)}
-								aria-live="polite"
+					<span className="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1 pl-7">
+						{!open && remark && (
+							<SmartTooltip
+								fileName
+								elementType="span"
+								placement="top"
+								align="start"
+								className="min-w-0 flex-1 basis-20 text-xs leading-4 text-muted-foreground"
 							>
-								<StatusIcon
-									size={16}
-									aria-hidden
-									className={cn(
-										"shrink-0",
-										loading && "animate-spin",
-										!loading &&
-											!resultUnavailable &&
-											items &&
-											failedCount === 0 &&
-											"text-success",
-									)}
-								/>
-								<span className="min-w-0 [overflow-wrap:anywhere]">
-									{statusSummary}
-								</span>
-							</span>
-						</span>
-					)}
+								{remark}
+							</SmartTooltip>
+						)}
+						{summary}
+					</span>
 				</Button>
 				{open && (
 					<div id={contentId} className="border-t border-border">
@@ -179,10 +167,12 @@ function OperationResultList({
 											unavailable={
 												resultUnavailable ? unavailable : undefined
 											}
-											onLocate={(target) =>
+											onLocate={(target, showDetails) =>
 												focusCanvasElementByProjectPath({
 													projectPath: target.project_path,
 													elementId: target.element_id,
+													contentId: target.content_id,
+													showGenerationDetails: showDetails,
 													filesStore,
 												})
 											}

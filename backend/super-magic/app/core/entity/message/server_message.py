@@ -1,6 +1,6 @@
 import time
 from enum import Enum
-from typing import Any, Dict, List, Optional, Union
+from typing import Any, Dict, List, Literal, Optional, Union
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -341,6 +341,8 @@ class OperationResultTarget(BaseModel):
     type: OperationResultTargetType
     project_path: str
     element_id: str
+    content_id: str | None = None
+    content_type: Literal["image", "video", "audio"] | None = None
 
 
 class OperationResultItem(BaseModel):

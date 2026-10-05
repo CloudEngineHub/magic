@@ -390,10 +390,14 @@
 		"unlock": "Unlock"
 	},
 	"messageHistory": {
+		"completed": "Generated",
+		"contentMissing": "This image version no longer exists",
 		"copyPrompt": "Copy",
 		"copyResourcePath": "Copy resource path",
 		"deletedSuffix": " (Deleted)",
 		"expandPrompt": "Expand",
+		"failed": "Generation failed",
+		"generating": "Generating",
 		"generationMode": "Generation method",
 		"inputMode": "Input mode",
 		"model": "Model",
@@ -403,7 +407,9 @@
 		"referenceImage": "Image",
 		"referenceVideo": "Video",
 		"size": "Size",
-		"title": "Generation History"
+		"syncing": "Generation details are syncing",
+		"title": "Generation History",
+		"unavailable": "No generation details recorded"
 	},
 	"rectangle": {
 		"defaultName": "Rectangle"

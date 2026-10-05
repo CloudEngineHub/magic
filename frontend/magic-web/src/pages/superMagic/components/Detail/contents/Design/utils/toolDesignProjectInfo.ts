@@ -53,6 +53,8 @@ export function getDesignProjectCurrentFileByProjectPath(options: {
 export function focusCanvasElementByProjectPath(options: {
 	projectPath: string
 	elementId: string
+	contentId?: string
+	showGenerationDetails?: boolean
 	filesStore?: Pick<typeof projectFilesStore, "workspaceFileTree" | "workspaceFilesList">
 }): boolean {
 	const filesStore = options.filesStore ?? projectFilesStore
@@ -73,6 +75,8 @@ export function focusCanvasElementByProjectPath(options: {
 			canvasDesignId: designProject.id,
 			elementIds: [options.elementId],
 			selectElement: [options.elementId],
+			contentId: options.contentId,
+			showGenerationDetails: options.showGenerationDetails,
 			animated: false,
 			padding: { top: "25%", right: "25%", bottom: "25%", left: "25%" },
 		})

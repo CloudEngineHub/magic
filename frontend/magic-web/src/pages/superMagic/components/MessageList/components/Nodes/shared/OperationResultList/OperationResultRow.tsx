@@ -1,4 +1,13 @@
-import { CircleAlert, CircleCheck, CircleX, File, Folder, Loader2, LocateFixed } from "lucide-react"
+import {
+	CircleAlert,
+	CircleCheck,
+	CircleX,
+	File,
+	Folder,
+	Info,
+	Loader2,
+	LocateFixed,
+} from "lucide-react"
 import { useTranslation } from "react-i18next"
 import { Button } from "@/components/shadcn-ui/button"
 import { cn } from "@/utils/cn"
@@ -11,7 +20,7 @@ interface OperationResultRowProps {
 	item: OperationResultItem
 	loading: boolean
 	unavailable?: string
-	onLocate: (target: OperationResultTarget) => void
+	onLocate: (target: OperationResultTarget, showDetails?: boolean) => void
 }
 
 export default function OperationResultRow({
@@ -97,22 +106,42 @@ export default function OperationResultRow({
 					<span className="[overflow-wrap:anywhere]">{message}</span>
 				</span>
 				{target && (
-					<Button
-						type="button"
-						variant="ghost"
-						size="sm"
-						onClick={(event) => {
-							event.stopPropagation()
-							locate()
-						}}
-						aria-label={t("operationResultList.locateCanvasElement", {
-							label: item.label,
-						})}
-						className="-mr-1 h-6 shrink-0 gap-1.5 px-1 text-xs font-normal text-primary hover:bg-primary/5 hover:text-primary"
-					>
-						<LocateFixed size={16} aria-hidden />
-						{t("operationResultList.viewInCanvas")}
-					</Button>
+					<span className="ml-auto flex flex-wrap items-center justify-end gap-2">
+						{target.content_type === "image" && (
+							<Button
+								type="button"
+								variant="ghost"
+								size="sm"
+								onClick={(event) => {
+									event.stopPropagation()
+									onLocate(target, true)
+								}}
+								aria-label={t("operationResultList.openGenerationDetails", {
+									label: item.label,
+								})}
+								className="h-6 shrink-0 gap-1.5 px-1 text-xs font-normal text-primary hover:bg-primary/5 hover:text-primary"
+							>
+								<Info size={16} aria-hidden />
+								{t("operationResultList.generationDetails")}
+							</Button>
+						)}
+						<Button
+							type="button"
+							variant="ghost"
+							size="sm"
+							onClick={(event) => {
+								event.stopPropagation()
+								locate()
+							}}
+							aria-label={t("operationResultList.locateCanvasElement", {
+								label: item.label,
+							})}
+							className="-mr-1 h-6 shrink-0 gap-1.5 px-1 text-xs font-normal text-primary hover:bg-primary/5 hover:text-primary"
+						>
+							<LocateFixed size={16} aria-hidden />
+							{t("operationResultList.viewInCanvas")}
+						</Button>
+					</span>
 				)}
 			</div>
 		</li>

@@ -290,6 +290,8 @@ class CanvasGenerationFeedback:
                     type=OperationResultTargetType.CANVAS_ELEMENT,
                     project_path=project_path,
                     element_id=element_id,
+                    content_id=raw_item.get("content_id") or None,
+                    content_type=cls.media_type_for_item(raw_item, arguments),
                 )
 
             description = ""

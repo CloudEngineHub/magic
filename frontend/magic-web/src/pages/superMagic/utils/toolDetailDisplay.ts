@@ -26,7 +26,13 @@ export function getOperationResultListData(
 	return {
 		items: items.map((item) => ({
 			...item,
-			target: isCanvasElementTarget(item.target) ? item.target : undefined,
+			target: isCanvasElementTarget(item.target)
+				? {
+						...item.target,
+						content_id: item.target.content_id ?? undefined,
+						content_type: item.target.content_type ?? undefined,
+					}
+				: undefined,
 		})),
 	}
 }
@@ -66,12 +72,22 @@ export function getPendingCanvasOperationResultDetail(
 
 		const elementId =
 			getString(rawItem.element_id) || getString(rawItem.output_image_element_id)
-		const target =
+		const contentType = getString(content?.content_type)
+		const target: OperationResultTarget | undefined =
 			projectPath && elementId
 				? {
 						type: "canvas_element" as const,
 						project_path: projectPath,
 						element_id: elementId,
+						content_id: getString(rawItem.content_id) || getString(content?.content_id),
+						content_type:
+							contentType === "image" ||
+							contentType === "video" ||
+							contentType === "audio"
+								? contentType
+								: Array.isArray(argumentsData.tasks)
+									? "image"
+									: undefined,
 					}
 				: undefined
 		items.push({
@@ -110,7 +126,13 @@ function isCanvasElementTarget(value: unknown): value is OperationResultTarget {
 		typeof value.project_path === "string" &&
 		value.project_path.length > 0 &&
 		typeof value.element_id === "string" &&
-		value.element_id.length > 0
+		value.element_id.length > 0 &&
+		(value.content_id == null ||
+			(typeof value.content_id === "string" && value.content_id.length > 0)) &&
+		(value.content_type == null ||
+			value.content_type === "image" ||
+			value.content_type === "video" ||
+			value.content_type === "audio")
 	)
 }
 

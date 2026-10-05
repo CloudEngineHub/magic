@@ -90,6 +90,8 @@ export interface OperationResultTarget {
 	type: "canvas_element"
 	project_path: string
 	element_id: string
+	content_id?: string
+	content_type?: "image" | "video" | "audio"
 }
 
 /** 操作结果显示对象名称与执行状态，可选提供稳定的导航目标。 */

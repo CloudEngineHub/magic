@@ -2220,6 +2220,8 @@ export class ImageElement extends BaseElement<ImageElementData> {
 					this.data.mainContentId !== newData.mainContentId))
 		const needsRerender =
 			contentControlsChanged ||
+			Boolean(currentContent.generateImageRequest) !==
+				Boolean(nextContent.generateImageRequest) ||
 			currentContent.contentId !== nextContent.contentId ||
 			currentContent.generateImageRequest?.image_id !==
 				nextContent.generateImageRequest?.image_id ||
@@ -2730,7 +2732,7 @@ export class ImageElement extends BaseElement<ImageElementData> {
 	}
 
 	private shouldShowInfoButton(): boolean {
-		return !!this.getActiveGenerateImageRequest()
+		return !!this.getActiveGenerateImageRequest() || this.isActiveGenerationPlaceholder()
 	}
 
 	private createMainVersionTag(group: Konva.Group, width: number, height: number): void {

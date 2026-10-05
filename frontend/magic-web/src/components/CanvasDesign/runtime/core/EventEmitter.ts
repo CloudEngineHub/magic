@@ -144,7 +144,7 @@ export interface CanvasEventMap {
 	"element:rename-start": { elementId: string }
 	/** 提交或取消画布重命名，供 React overlay 关闭输入框 */
 	"element:rename-end": { elementId: string }
-	"element:image:infoButtonClick": { elementId: string }
+	"element:image:infoButtonClick": { elementId: string; contentId?: string }
 	"element:video:infoButtonClick": { elementId: string }
 	/** 失败态点击重新生成，交给 UI 打开编辑器并恢复草稿 */
 	"element:image:retryClick": { elementId: string }
