@@ -32,6 +32,8 @@ import { isOwner } from "@/pages/superMagic/utils/permission"
 import magicToast from "@/components/base/MagicToaster/utils"
 import ProjectActionsDropdown from "@/pages/superMagic/components/ProjectActionsDropdown"
 import ProjectTypeTag from "@/pages/superMagic/components/ProjectTypeTag"
+import { ProjectResourceIcon } from "../../../SelectPathModal/components/ProjectResourceSelectorModal/ProjectResourceInfo"
+import { getResourceProjectType } from "../../../SelectPathModal/resourceProjectTypes"
 
 interface ProjectItemProps<T extends ProjectListItem | CollaborationProjectListItem> {
 	project: T
@@ -106,6 +108,7 @@ function ProjectItem<T extends ProjectListItem | CollaborationProjectListItem>({
 	const isCompact = variant === "compact"
 	const isCompactList = isCompact && isListMode
 	const isRecentLayout = isCompact && titleLayout === "recent"
+	const hasResourceIcon = isRecentLayout && Boolean(getResourceProjectType(item))
 
 	// Use custom hook for rename functionality
 	const {
@@ -296,7 +299,7 @@ function ProjectItem<T extends ProjectListItem | CollaborationProjectListItem>({
 							isCompact && !isListMode && "min-h-[88px]",
 							isCompactList &&
 								"min-h-12 grid-cols-[16px_minmax(0,1fr)_auto] rounded-none border-0 border-b bg-transparent [@container_(min-width:800px)]:[grid-template-columns:var(--project-list-columns)]",
-							isRecentLayout && "items-start",
+							isRecentLayout && "grid-cols-[32px_minmax(0,1fr)_auto] items-start",
 							mobileLayout &&
 								"min-h-14 grid-cols-[32px_minmax(0,1fr)_auto] gap-x-2 py-3",
 						)}
@@ -315,16 +318,28 @@ function ProjectItem<T extends ProjectListItem | CollaborationProjectListItem>({
 							className={cn(
 								"project-item-icon relative flex flex-1 items-center justify-center rounded px-2 py-2",
 								isCompact && "col-start-1 row-start-1 size-4 flex-none p-0",
-								isRecentLayout && "h-5 self-start",
+								isRecentLayout && "size-8 self-start",
 								mobileLayout && "size-8",
 							)}
 							data-testid="project-item-icon"
 						>
-							<IconWorkspaceProjectFolder
-								isHovered={isHover}
-								wasHovered={!isHover}
-								size={mobileLayout ? 32 : isCompact ? 16 : isListMode ? 30 : 60}
-							/>
+							{hasResourceIcon ? (
+								<ProjectResourceIcon project={item} />
+							) : (
+								<IconWorkspaceProjectFolder
+									isHovered={isHover}
+									wasHovered={!isHover}
+									size={
+										mobileLayout || isRecentLayout
+											? 32
+											: isCompact
+												? 16
+												: isListMode
+													? 30
+													: 60
+									}
+								/>
+							)}
 						</div>
 						<div
 							className={cn(

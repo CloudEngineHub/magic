@@ -12,15 +12,16 @@ import { MagiClawStatusBadge } from "@/pages/superMagic/pages/MagiClawPage/MagiC
 import MicroAppCardCover from "@/pages/superMagic/pages/MicroAppsPage/components/MicroAppCardCover"
 import { IconWorkspaceProjectFolderIcon } from "@/enhance/tabler/icons-react/icons/IconWorkspaceProjectFolder"
 import { cn } from "@/utils/cn"
-import type { ResourceProject } from "../../resourceProjectTypes"
+import { getResourceProjectType, type ResourceProject } from "../../resourceProjectTypes"
 
 const metadataBadgeClassName =
 	"min-h-5 max-w-full rounded-md px-1.5 py-0 text-xs font-normal leading-4"
 
-function ResourceIcon({ project }: { project: ResourceProject }) {
+/** 最近项目只带项目类型时，沿用各模块已有默认图标；有资源图片时使用同一展示。 */
+export function ProjectResourceIcon({ project }: { project: ResourceProject }) {
 	const iconClassName = "size-8 shrink-0 rounded-lg"
 
-	switch (project.resourceType) {
+	switch (project.resourceType ?? getResourceProjectType(project)) {
 		case "claw":
 			return (
 				<MagiClawTemplateAvatar
@@ -32,7 +33,7 @@ function ResourceIcon({ project }: { project: ResourceProject }) {
 		case "micro-app":
 			return (
 				<MicroAppCardCover
-					id={project.resourceId || project.id}
+					id={project.resourceId || project.micro_app_id || project.id}
 					coverUrl={project.resourceCoverUrl ?? undefined}
 					compact
 					variant="icon"
@@ -139,7 +140,7 @@ export function ProjectResourceInfo({
 			className="flex min-w-0 flex-1 items-start gap-2 [container-type:inline-size]"
 			data-testid="project-resource-info"
 		>
-			{icon ?? <ResourceIcon project={project} />}
+			{icon ?? <ProjectResourceIcon project={project} />}
 			{/* 按卡片可用宽度折行，避免窄面板把名称挤到只剩图标。 */}
 			<div
 				className={cn(

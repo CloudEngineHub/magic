@@ -231,14 +231,16 @@ export function ProjectsPanelList<T extends ProjectListItem>({
 	const { t } = useTranslation("super")
 	const isList = viewMode === ViewMode.LIST
 	const isShared = !!itemProps.inCollaborationPanel
+	// 最近项目使用资源缩略图，表头首列与条目的 32px 图标保持一致。
+	const iconColumn = itemProps.titleLayout === "recent" ? "32px" : "16px"
 	const showCreator = isShared && tabType === CollaborationProjectType.Received
 	// 表头与条目共用列宽；800px 可容纳最完整的人员列和至少 120px 名称，窄容器改为多行。
 	const listStyle: CSSProperties & { "--project-list-columns": string } = {
 		"--project-list-columns": showCreator
-			? "16px minmax(120px,1fr) [creator] 144px [members] 128px [time] 176px [actions] 32px"
+			? `${iconColumn} minmax(120px,1fr) [creator] 144px [members] 128px [time] 176px [actions] 32px`
 			: isShared
-				? "16px minmax(120px,1fr) [members] 128px [time] 176px [actions] 128px"
-				: "16px minmax(120px,1fr) [time] 176px [actions] 32px",
+				? `${iconColumn} minmax(120px,1fr) [members] 128px [time] 176px [actions] 128px`
+				: `${iconColumn} minmax(120px,1fr) [time] 176px [actions] 32px`,
 	}
 	const timeHeading =
 		itemProps.sortType === SortType.MY_LAST_ACTIVE_TIME
