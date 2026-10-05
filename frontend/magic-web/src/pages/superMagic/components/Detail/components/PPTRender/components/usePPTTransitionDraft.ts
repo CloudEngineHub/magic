@@ -14,6 +14,7 @@ import {
 	type TransitionScope,
 	type TransitionSlide,
 } from "./pptTransitionDraft"
+import type { PPTTransitionPreviewSource } from "./PPTTransitionPreview"
 
 export interface PPTTransitionPanelProps {
 	open: boolean
@@ -24,6 +25,7 @@ export interface PPTTransitionPanelProps {
 	selectedPaths: string[]
 	config: unknown
 	busy: boolean
+	previewSource?: PPTTransitionPreviewSource
 	initialScope?: "current" | "selected"
 	onSave: (edit: PPTTransitionEdit) => Promise<boolean>
 	registerBeforeClose?: (guard: (() => Promise<boolean>) | null) => void

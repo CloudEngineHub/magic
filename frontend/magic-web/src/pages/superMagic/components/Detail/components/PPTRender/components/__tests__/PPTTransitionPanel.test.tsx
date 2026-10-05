@@ -5,14 +5,29 @@ import PPTTransitionPreview from "../PPTTransitionPreview"
 import { OverlayZIndexProvider } from "@/utils/overlayZIndex"
 
 const { animate, cancel } = vi.hoisted(() => ({ animate: vi.fn(), cancel: vi.fn() }))
-const layout = vi.hoisted(() => ({ mobile: false }))
+const layout = vi.hoisted(() => ({ mobile: false, reducedMotion: true }))
 vi.mock("../../utils/pptTransitionAnimation", () => ({ animatePPTTransition: animate }))
+vi.mock("../../../../contents/HTML/IsolatedHTMLRenderer", async () => {
+	const { useEffect } = await import("react")
+	return {
+		default: function MockIsolatedHTMLRenderer({
+			content,
+			onRenderReady,
+		}: {
+			content: string
+			onRenderReady: () => void
+		}) {
+			useEffect(() => onRenderReady(), [content, onRenderReady])
+			return <div>{content}</div>
+		},
+	}
+})
 
 vi.mock("react-i18next", () => ({ useTranslation: () => ({ t: (key: string) => key }) }))
 vi.mock("@/hooks/useIsMobile", () => ({ useIsMobile: () => layout.mobile }))
 vi.mock("framer-motion", async (importOriginal) => ({
 	...(await importOriginal<typeof import("framer-motion")>()),
-	useReducedMotion: () => true,
+	useReducedMotion: () => layout.reducedMotion,
 }))
 
 const base = {
@@ -23,6 +38,9 @@ const base = {
 	slides: [{ path: "a.html", label: "A" }],
 	config: undefined,
 	busy: false,
+	previewSource: {
+		current: { id: "a", path: "a.html", index: 0, content: "Actual selected slide" },
+	},
 	onOpenChange: vi.fn(),
 }
 
@@ -45,6 +63,7 @@ describe("PPTTransitionPanel", () => {
 	})
 	beforeEach(() => {
 		layout.mobile = false
+		layout.reducedMotion = true
 	})
 
 	it("stays in its parent layout and restores entry focus after Escape", () => {
@@ -121,20 +140,53 @@ describe("PPTTransitionPanel", () => {
 	it("uses shared animation only for explicit preview requests", () => {
 		animate.mockReset()
 		cancel.mockReset()
-		animate.mockReturnValue({ cancel, finished: Promise.resolve() })
+		animate.mockReturnValue({ cancel, finished: new Promise(() => undefined) })
 		const transition = { effect: "fade" as const, duration_ms: 400 }
 		const { rerender, unmount } = render(
-			<PPTTransitionPreview transition={transition} run={0} reducedMotion={false} />,
+			<PPTTransitionPreview
+				source={base.previewSource}
+				transition={transition}
+				run={0}
+				reducedMotion={false}
+			/>,
 		)
 		expect(animate).not.toHaveBeenCalled()
-		rerender(<PPTTransitionPreview transition={transition} run={1} reducedMotion={false} />)
+		rerender(
+			<PPTTransitionPreview
+				source={base.previewSource}
+				transition={transition}
+				run={1}
+				reducedMotion={false}
+			/>,
+		)
 		expect(animate).toHaveBeenCalledTimes(1)
-		rerender(<PPTTransitionPreview transition={transition} run={1} reducedMotion />)
+		rerender(
+			<PPTTransitionPreview
+				source={base.previewSource}
+				transition={transition}
+				run={1}
+				reducedMotion
+			/>,
+		)
 		expect(cancel).toHaveBeenCalledTimes(1)
-		rerender(<PPTTransitionPreview transition={transition} run={1} reducedMotion={false} />)
+		rerender(
+			<PPTTransitionPreview
+				source={base.previewSource}
+				transition={transition}
+				run={1}
+				reducedMotion={false}
+			/>,
+		)
 		expect(animate).toHaveBeenCalledTimes(1)
 		unmount()
-		render(<PPTTransitionPreview transition={transition} run={1} reducedMotion={false} />)
+		render(
+			<PPTTransitionPreview
+				source={base.previewSource}
+				transition={transition}
+				run={1}
+				reducedMotion={false}
+			/>,
+		)
 		expect(animate).toHaveBeenCalledTimes(1)
 	})
 
@@ -156,6 +208,33 @@ describe("PPTTransitionPanel", () => {
 			),
 		)
 	})
+	it("previews the current selected page's settings when it is not the first batch target", () => {
+		layout.reducedMotion = false
+		animate.mockReset()
+		animate.mockReturnValue({ cancel, finished: new Promise(() => undefined) })
+		const currentTransition = { effect: "fade", duration_ms: 400, easing: "linear" }
+		render(
+			<PPTTransitionPanel
+				{...base}
+				initialScope="selected"
+				selectedPaths={["b.html", "a.html"]}
+				slides={[...base.slides, { path: "b.html", label: "Other slide" }]}
+				config={{ slides: { "a.html": currentTransition, "b.html": { effect: "none" } } }}
+				onSave={vi.fn()}
+			/>,
+		)
+		fireEvent.click(screen.getByRole("button", { name: "ppt.transitions.preview" }))
+		expect(animate).toHaveBeenCalledWith(
+			expect.any(HTMLElement),
+			expect.any(HTMLElement),
+			currentTransition,
+		)
+	})
+	it("disables preview until the selected page is available without blocking configuration", () => {
+		render(<PPTTransitionPanel {...base} previewSource={undefined} onSave={vi.fn()} />)
+		expect(screen.getByRole("button", { name: "ppt.transitions.preview" })).toBeDisabled()
+		expect(screen.getByRole("button", { name: "ppt.transitions.fade" })).toBeEnabled()
+	})
 	it("previews a draft without saving and strips parameters when choosing none", async () => {
 		const onSave = vi.fn().mockResolvedValue(true)
 		render(<PPTTransitionPanel {...base} onSave={onSave} />)
@@ -163,7 +242,7 @@ describe("PPTTransitionPanel", () => {
 		expect(screen.getByLabelText("ppt.transitions.duration")).toHaveValue(0.45)
 		fireEvent.click(screen.getByRole("button", { name: "ppt.transitions.preview" }))
 		expect(onSave).not.toHaveBeenCalled()
-		expect(screen.getByText("ppt.transitions.example")).toBeInTheDocument()
+		expect(screen.getByText("ppt.transitions.previewCurrent")).toBeInTheDocument()
 		expect(screen.getByText("ppt.transitions.reducedMotion")).toBeInTheDocument()
 		fireEvent.click(screen.getByRole("button", { name: "ppt.transitions.none" }))
 		expect(screen.queryByLabelText("ppt.transitions.duration")).not.toBeInTheDocument()

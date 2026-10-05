@@ -43,6 +43,7 @@ export default function PPTTransitionPanel(props: PPTTransitionPanelProps) {
 	const reducedMotion = Boolean(useReducedMotion())
 	const draft = usePPTTransitionDraft(props)
 	const [previewRun, setPreviewRun] = useState(0)
+	const [previewReady, setPreviewReady] = useState(false)
 	const [panelElement, setPanelElement] = useState<HTMLElement | null>(null)
 	const closeFocus = useRef<HTMLElement | null>(null)
 	const opener = useRef<HTMLElement | null>(null)
@@ -97,7 +98,7 @@ export default function PPTTransitionPanel(props: PPTTransitionPanelProps) {
 				? t("ppt.transitions.selected", { count: draft.paths.length })
 				: draft.session.slides.find((slide) => slide.path === draft.session.activePath)
 						?.label
-	// Keep the sample configuration stable; typing parameters must not autoplay the preview.
+	// Keep playback configuration stable; typing parameters must not autoplay the preview.
 	const [previewTransition, setPreviewTransition] = useState<PPTTransition>({ effect: "none" })
 	const requestClose = () => {
 		closeFocus.current = document.activeElement as HTMLElement | null
@@ -233,13 +234,19 @@ export default function PPTTransitionPanel(props: PPTTransitionPanelProps) {
 						transition={previewTransition}
 						run={previewRun}
 						reducedMotion={reducedMotion}
+						source={props.previewSource}
+						onReadyChange={setPreviewReady}
 					/>
 					<Button
 						variant="outline"
 						className="w-full"
-						disabled={locked}
+						disabled={locked || !previewReady}
 						onClick={() => {
-							setPreviewTransition(draft.transitions[0] ?? { effect: "none" })
+							const activeIndex = draft.paths.indexOf(draft.session.activePath)
+							setPreviewTransition(
+								draft.transitions[activeIndex] ??
+									draft.transitions[0] ?? { effect: "none" },
+							)
 							setPreviewRun((value) => value + 1)
 						}}
 					>

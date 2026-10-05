@@ -6,6 +6,22 @@ import { TAILWIND_Z_INDEX_CLASSES } from "../../../contents/HTML/constants/z-ind
 import type { PPTSlideStructureAdapter } from "../types"
 import { pptNotesPreferenceStore } from "@/stores/layout/PPTNotesPreferenceStore"
 
+vi.mock("../../../contents/HTML/IsolatedHTMLRenderer", async () => {
+	const { useEffect } = await import("react")
+	return {
+		default: function MockIsolatedHTMLRenderer({
+			content,
+			onRenderReady,
+		}: {
+			content: string
+			onRenderReady: () => void
+		}) {
+			useEffect(() => onRenderReady(), [content, onRenderReady])
+			return <div data-testid="transition-preview-html">{content}</div>
+		},
+	}
+})
+
 const mockState = vi.hoisted(() => ({
 	store: {
 		activeIndex: 0,
@@ -46,6 +62,7 @@ const mockState = vi.hoisted(() => ({
 		setActiveIndex: vi.fn(),
 		ensureSlideContent: vi.fn(async () => true),
 		getFileIdByPath: vi.fn(() => "slide-file-id"),
+		getFullRelativePath: vi.fn((path: string) => `project/deck/${path}`),
 		getSlideEditingState: vi.fn(() => false),
 		getSlideServerUpdate: vi.fn(() => undefined),
 		clearSlideServerUpdate: vi.fn(),
@@ -566,6 +583,33 @@ function renderPPTRender(input?: {
 }
 
 describe("PPTRender", () => {
+	it("previews the selected page from the preceding visible page without navigating the deck", async () => {
+		mockState.isSlideEditing = false
+		mockState.store.slidePaths = ["slide-1.html", "slide-2.html", "slide-3.html"]
+		mockState.store.slideUrls = [...mockState.store.slidePaths]
+		mockState.store.slides = mockState.store.slidePaths.map((path, index) => ({
+			id: path,
+			path,
+			index,
+			content: `Real page ${index + 1}`,
+			rawContent: `Real page ${index + 1}`,
+			loadingState: "loaded",
+			loadingError: undefined,
+		}))
+		mockState.store.activeIndex = 2
+		mockState.store.getConfigForExport.mockReturnValue({
+			displayConfig: { hidden_slides: ["slide-2.html"] },
+		})
+		renderPPTRender()
+		fireEvent.click(screen.getByRole("button", { name: "open transitions" }))
+		const panel = await screen.findByRole("complementary", { name: "ppt.transitions.title" })
+		expect(within(panel).getByText("Real page 3")).toBeInTheDocument()
+		expect(within(panel).getByText("Real page 1")).toBeInTheDocument()
+		expect(within(panel).queryByText("Real page 2")).not.toBeInTheDocument()
+		expect(mockState.store.ensureSlideContent).toHaveBeenCalledWith(2, "preview")
+		expect(mockState.store.ensureSlideContent).toHaveBeenCalledWith(0, "preview")
+		expect(mockState.store.setActiveIndex).not.toHaveBeenCalled()
+	})
 	it("opens the real transition panel from the editable control bar", async () => {
 		mockState.isSlideEditing = false
 		renderPPTRender()
@@ -573,6 +617,10 @@ describe("PPTRender", () => {
 		const liveSlide = screen.getByTestId("ppt-slide-slide-file-id")
 		fireEvent.click(screen.getByRole("button", { name: "open transitions" }))
 		const panel = await screen.findByRole("complementary", { name: "ppt.transitions.title" })
+		expect(within(panel).getByTestId("transition-preview-html")).toHaveTextContent(
+			"<div>slide</div>",
+		)
+		expect(mockState.store.ensureSlideContent).toHaveBeenCalledWith(0, "preview")
 		expect(screen.getByTestId("ppt-render-slide-content")).toContainElement(panel)
 		expect(screen.getByTestId("ppt-render-div")).toBe(canvas)
 		expect(screen.getByTestId("ppt-slide-slide-file-id")).toBe(liveSlide)

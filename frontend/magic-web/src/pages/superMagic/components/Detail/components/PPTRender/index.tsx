@@ -572,6 +572,33 @@ const PPTRenderInner = observer(function PPTRenderInner({
 		!isPresentationFullscreen &&
 		store.slides.length,
 	)
+	const transitionPreviewIndex = store.slides.findIndex(
+		(slide) => slide.path === transitionTarget.path,
+	)
+	const transitionPreviousIndex = visibleSlideIndices
+		.filter((index) => index < transitionPreviewIndex)
+		.at(-1)
+	const getTransitionPreviewSlide = (index: number | undefined) => {
+		const slide = index === undefined ? undefined : store.slides[index]
+		if (!transitionPanelOpen || !slide) return undefined
+		const fileId = store.getFileIdByPath(slide.path)
+		const relativeFilePath = store.getFullRelativePath(slide.path)
+		// Read only two small records so MobX tracks loaded/refreshed HTML, without copying attachments.
+		return {
+			...slide,
+			fileId,
+			htmlRelativeFolderPath: getHtmlRelativeFolderPath({
+				relative_file_path: relativeFilePath,
+			}),
+		}
+	}
+	useEffect(() => {
+		if (!transitionPanelOpen || transitionPreviewIndex < 0) return
+		// Use the existing content queue without changing the main stage's active page.
+		void store.ensureSlideContent(transitionPreviewIndex, "preview")
+		if (transitionPreviousIndex !== undefined)
+			void store.ensureSlideContent(transitionPreviousIndex, "preview")
+	}, [store, transitionPanelOpen, transitionPreviewIndex, transitionPreviousIndex])
 	const openTransitions = useMemoizedFn(async (index?: number) => {
 		if (!canConfigureTransitions || deckTools.busy) return
 		if (transitionCloseGuardRef.current && !(await transitionCloseGuardRef.current())) return
@@ -1736,6 +1763,12 @@ const PPTRenderInner = observer(function PPTRenderInner({
 								label: t("ppt.batch.page", { page: index + 1 }),
 							}))}
 							activePath={transitionTarget.path}
+							previewSource={{
+								current: getTransitionPreviewSlide(transitionPreviewIndex),
+								previous: getTransitionPreviewSlide(transitionPreviousIndex),
+								filePathMapping,
+								projectId: resolvedProjectId,
+							}}
 							selectedPaths={store.slides
 								.filter((slide) =>
 									deckTools.selected.has(store.getFileIdByPath(slide.path) || ""),
