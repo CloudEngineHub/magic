@@ -35,6 +35,7 @@ from app.core.stream.stdout_stream import StdoutStream
 from agentlang.config.config import config
 from app.magic.agent import Agent
 from app.service.agent_service import AgentService
+from app.service.sandbox_restart_coordinator import sandbox_restart_coordinator
 from app.service.agent_event.file_storage_listener_service import FileStorageListenerService
 
 from app.service.agent_event.rag_listener_service import RagListenerService
@@ -582,7 +583,9 @@ class AgentDispatcher(Base):
         agent_context.register_run_cleanup() immediately after this method returns —
         it will run when the new run ends or is interrupted.
         """
+        sandbox_restart_coordinator.ensure_accepting_runs(self.agent_context.context_id)
         await self.agent_context.stop_run(reason="new message")
+        sandbox_restart_coordinator.ensure_accepting_runs()
         self.agent_context.reset_run_state()
         self.agent_context.set_resumption_context(resumption_id, resumption_run_id)
 

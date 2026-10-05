@@ -3734,24 +3734,28 @@
         "en_US": "Sandbox upgrade failed"
     },
     "restart_sandbox.before": {
-        "zh_CN": "正在安排当前沙箱重启",
-        "en_US": "Scheduling a restart for the current sandbox"
+        "zh_CN": "正在准备重启虚拟机",
+        "en_US": "Preparing to restart the virtual machine"
     },
     "restart_sandbox.scheduled": {
-        "zh_CN": "当前沙箱将在本轮回复完成并完成必要收尾后重启，恢复后会继续通知",
-        "en_US": "The current sandbox will restart after this Agent run completes its response and finalization; you will be notified after recovery"
+        "zh_CN": "本轮回复结束后将重启虚拟机，恢复后会通知你",
+        "en_US": "The virtual machine will restart after this reply and finalization; you will be notified after recovery"
+    },
+    "restart_sandbox.already_requested": {
+        "zh_CN": "虚拟机已安排重启，无需重复请求",
+        "en_US": "A virtual machine restart is already scheduled; no additional request is needed"
     },
     "restart_sandbox.error": {
-        "zh_CN": "沙箱重启失败",
-        "en_US": "Sandbox restart failed"
+        "zh_CN": "暂时无法安排虚拟机重启，请稍后再试",
+        "en_US": "Unable to schedule the virtual machine restart. Please try again later."
     },
     "restart_sandbox.detail_title": {
-        "zh_CN": "沙箱重启结果",
-        "en_US": "Sandbox restart result"
+        "zh_CN": "虚拟机重启",
+        "en_US": "Virtual machine restart"
     },
     "restart_sandbox.detail_failed_title": {
-        "zh_CN": "沙箱重启失败",
-        "en_US": "Sandbox restart failed"
+        "zh_CN": "未能安排虚拟机重启",
+        "en_US": "Virtual machine restart could not be scheduled"
     },
     "sandbox.detail.sandbox_id": {
         "zh_CN": "沙箱 ID",

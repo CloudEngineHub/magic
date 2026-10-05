@@ -128,7 +128,7 @@ If the image is already current, the result is:
 
 ## Restart the current sandbox
 
-Call `restart_sandbox` only after the user explicitly asks to restart this sandbox, regardless of its image version.
+Call `restart_sandbox` only from the interactive main Agent after the user explicitly asks to restart this sandbox, regardless of its image version. Sub-agents must return the request to the main Agent.
 
 ```python
 run_sdk_snippet(python_code="""
@@ -151,7 +151,7 @@ if data["operation"] == "restart_requested":
 Typical `result.content`:
 
 ```text
-The unconditional restart of the current sandbox has been requested. The restart request will be sent after this Agent run completes its final response and project archive; no fixed duration is promised. Reply to the user now and do not call more tools. A new user message or interruption before finalization will cancel the pending restart. After the sandbox is available again, the runtime will automatically resume this conversation and use get_sandbox_info to verify its status.
+The unconditional restart of the current sandbox has been requested. After your final reply, other Agent tasks will be interrupted and the existing archive will be attempted before the restart request is sent. No fixed duration is promised. Reply to the user now and do not call more tools. A new user message or interruption before API dispatch will cancel the pending restart. After the sandbox is available again, the runtime will automatically resume this conversation and use get_sandbox_info to verify its status.
 ```
 
 Typical `result.data`:
@@ -163,13 +163,13 @@ Typical `result.data`:
 }
 ```
 
-For a requested restart, `sandbox_id` is the ID of the sandbox being replaced. It is not a promise that the rebuilt sandbox will have the same ID. The request is held by the current Agent run until its final response and project archive complete. A new user message or interruption before finalization can cancel it. Send the user a short final response immediately and do not call another tool in the same run. After recovery, the runtime automatically resumes the conversation and calls `get_sandbox_info`; do not claim that the sandbox recovered successfully until that verification succeeds.
+For a requested restart, `sandbox_id` is the ID of the sandbox being replaced. It is not a promise that the rebuilt sandbox will have the same ID. The request is held until the main Agent finishes its reply, other Agent tasks receive interruption, and the existing archive is attempted. Cleanup timeout or archive failure does not prevent restarting. A new user message or interruption before API dispatch can cancel the pending request. Send the user a short final response immediately and do not call another tool in the same run. After recovery, the runtime resumes the conversation and calls `get_sandbox_info`; report the current availability without assuming the earlier restart request succeeded.
 
 ## Safety and persistence
 
 - Never upgrade or restart merely because `needs_update` is true; both operations require explicit user intent.
 - Save required work in `.workspace` before a rebuild. Files there persist across sandbox rebuilds; processes, temporary VM state, and files outside `.workspace` do not.
-- The tool sends the restart request only after the current Agent run has completed its final response and project archive. This is an in-process finalization boundary: a process crash before dispatch can lose the pending request.
-- When the restart request is accepted, the runtime stores a resumption for the current conversation. After the new runtime is ready, it automatically resumes the Agent and verifies the sandbox before replying.
-- A new user message or interruption before finalization cancels the pending restart.
+- Restart waits for the main Agent's final reply, bounded interruption of other Agent tasks, and a best-effort archive. A process crash before dispatch can lose the pending request.
+- The tool stores a resumption before registering the deferred restart. After the new runtime is ready, it resumes this conversation and checks the current sandbox status before replying.
+- A new user message or interruption before API dispatch cancels the pending restart. Once dispatch begins, no new Agent work starts in the old runtime. A failed API request is not automatically retried.
 - Do not automatically retry a failed or interrupted upgrade/restart. Inspect the returned error, and after recovery use `get_sandbox_info` before deciding what to do next.
