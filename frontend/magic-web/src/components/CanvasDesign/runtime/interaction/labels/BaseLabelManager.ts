@@ -9,7 +9,7 @@ interface VisibleLabelQueryCache {
 	candidateRevision: number
 }
 
-type VisibleLabelSyncMode = "existing" | "full"
+type VisibleLabelSyncMode = "existing" | "full" | "visibility"
 
 /**
  * 标签配置
@@ -186,6 +186,7 @@ export abstract class BaseLabelManager {
 	private visibleLabelSyncRafId: number | null = null
 	private pendingVisibleLabelSyncMode: VisibleLabelSyncMode | null = null
 	private pendingVisibleLabelSyncReason = "unknown"
+	private pendingLabelVisibilityRefresh = false
 	private visibleLabelQueryCache: VisibleLabelQueryCache | null = null
 	private lastSyncedViewportScale: number | null = null
 	private labelZIndexes = new Map<string, number>()
@@ -250,7 +251,13 @@ export abstract class BaseLabelManager {
 	}
 
 	private scheduleVisibleLabelSync(reason: string, mode: VisibleLabelSyncMode): void {
-		if (mode === "full" || this.pendingVisibleLabelSyncMode === null) {
+		// 同一帧的缩放/视口同步可以合并调度，但不能丢掉几何变化引起的遮挡刷新。
+		if (mode === "visibility") this.pendingLabelVisibilityRefresh = true
+		if (
+			mode === "full" ||
+			this.pendingVisibleLabelSyncMode === null ||
+			(mode === "existing" && this.pendingVisibleLabelSyncMode === "visibility")
+		) {
 			this.pendingVisibleLabelSyncMode = mode
 			this.pendingVisibleLabelSyncReason = reason
 		}
@@ -266,14 +273,17 @@ export abstract class BaseLabelManager {
 		this.visibleLabelSyncRafId = schedule(() => {
 			const pendingMode = this.pendingVisibleLabelSyncMode
 			const pendingReason = this.pendingVisibleLabelSyncReason
+			const refreshVisibility = this.pendingLabelVisibilityRefresh
+			this.pendingLabelVisibilityRefresh = false
 			this.visibleLabelSyncRafId = null
 			this.pendingVisibleLabelSyncMode = null
 			this.pendingVisibleLabelSyncReason = "unknown"
 			if (pendingMode === "full") {
 				this.syncVisibleLabels(pendingReason)
-				return
+			} else if (pendingMode === "existing") {
+				this.syncExistingLabels(pendingReason)
 			}
-			this.syncExistingLabels(pendingReason)
+			if (refreshVisibility) this.updateAllLabelsVisibility()
 		})
 	}
 
@@ -288,6 +298,7 @@ export abstract class BaseLabelManager {
 		this.visibleLabelSyncRafId = null
 		this.pendingVisibleLabelSyncMode = null
 		this.pendingVisibleLabelSyncReason = "unknown"
+		this.pendingLabelVisibilityRefresh = false
 	}
 
 	private markLabelCandidatesDirty(): void {
@@ -417,12 +428,14 @@ export abstract class BaseLabelManager {
 		this.listen("element:created", (event) => {
 			this.syncLabelCandidateForElement(event.data.elementId)
 			this.createOrUpdateLabel(event.data.elementId)
+			this.scheduleVisibleLabelSync("media-geometry", "visibility")
 		})
 
 		// 监听元素删除
 		this.listen("element:deleted", (event) => {
 			this.labelCandidateIndex.removeElement(event.data.elementId)
 			this.removeLabel(event.data.elementId)
+			this.scheduleVisibleLabelSync("media-geometry", "visibility")
 		})
 
 		// 处理拖拽移动事件
@@ -441,23 +454,27 @@ export abstract class BaseLabelManager {
 		// 监听拖拽移动事件
 		this.listen("elements:transform:dragmove", ({ data }) => {
 			data.elementIds.forEach((elementId) => handleDragMove(elementId))
+			this.scheduleVisibleLabelSync("media-geometry", "visibility")
 		})
 
 		// 监听缩放移动事件
 		this.listen("elements:transform:anchorDragmove", ({ data }) => {
 			data.elementIds.forEach((elementId) => handleDragMove(elementId))
+			this.scheduleVisibleLabelSync("media-geometry", "visibility")
 		})
 
 		// 监听元素数据更新（属性变化，如名称变化或 zIndex 变化）
 		this.listen("element:updated", (event) => {
 			this.syncLabelCandidateForElement(event.data.elementId)
 			this.createOrUpdateLabel(event.data.elementId)
+			this.scheduleVisibleLabelSync("media-geometry", "visibility")
 		})
 
 		// 监听元素重新渲染（位置、尺寸变化等）
 		this.listen("element:rerendered", (event) => {
 			this.syncLabelCandidateForElement(event.data.elementId)
 			this.createOrUpdateLabel(event.data.elementId)
+			this.scheduleVisibleLabelSync("media-geometry", "visibility")
 		})
 
 		// 监听选择变化
@@ -614,7 +631,7 @@ export abstract class BaseLabelManager {
 
 		// 更新标签位置（内部会调用 updateLabelVisibility）
 		this.updateLabelPosition(elementId, options?.skipBatchDraw)
-		if (createdLabel) {
+		if (createdLabel || this.isMediaLabelsAlwaysVisible()) {
 			this.updateOtherLabelPositions(elementId, options?.skipBatchDraw)
 		}
 
@@ -898,6 +915,8 @@ export abstract class BaseLabelManager {
 			shouldShow = customVisibility !== null ? customVisibility : baseVisibility
 		}
 
+		if (shouldShow && this.isMediaLabelRowCovered(elementId)) shouldShow = false
+
 		if (labelGroup.visible() === shouldShow) return false
 		labelGroup.visible(shouldShow)
 
@@ -924,6 +943,66 @@ export abstract class BaseLabelManager {
 
 	protected shouldRetainHiddenLabel(elementId: string): boolean {
 		void elementId
+		return false
+	}
+
+	/** 读取局部尺寸而非上一帧缩放后的边界，隐藏或缩放不改变分辨率预留空间。 */
+	protected getOtherLabelSizes(elementId: string): LabelSize[] {
+		const sizes: LabelSize[] = []
+		for (const manager of BaseLabelManager.labelManagers) {
+			if (manager === this || manager.canvas !== this.canvas) continue
+			const group = manager.labelMap.get(elementId)
+			const size = group ? manager.getLabelSize(group) : null
+			if (size) sizes.push(size)
+		}
+		return sizes
+	}
+
+	/**
+	 * 标签层位于媒体层之上，因此需要显式遵守同父级媒体的遮挡关系。
+	 * 任一标签被上层媒体覆盖时整行隐藏；不依赖标签当前 visible，移开后可以恢复。
+	 */
+	private isMediaLabelRowCovered(elementId: string): boolean {
+		const element = this.canvas.elementManager.getElementInstance(elementId)
+		if (!element) return false
+		const data = element.getData()
+		if (data.type !== ElementTypeEnum.Image && data.type !== ElementTypeEnum.Video) return false
+		const parentId = this.canvas.elementManager.findParentIdForElement(elementId)
+		for (const manager of BaseLabelManager.labelManagers) {
+			if (manager.canvas !== this.canvas) continue
+			const group = manager.labelMap.get(elementId)
+			const size = group ? manager.getLabelSize(group) : null
+			if (!group || !size) continue
+			const bounds = {
+				x: group.x(),
+				y: group.y(),
+				width: size.width * group.scaleX(),
+				height: size.height * group.scaleY(),
+			}
+			const candidates = this.canvas.geometryCacheManager.queryElementIdsByExpandedRect(
+				bounds,
+				0,
+			)
+			for (const candidateId of candidates) {
+				if (candidateId === elementId) continue
+				const candidate = this.canvas.elementManager.getElementInstance(candidateId)
+				if (!candidate) continue
+				const candidateData = candidate.getData()
+				if (
+					candidateData.type !== ElementTypeEnum.Image &&
+					candidateData.type !== ElementTypeEnum.Video
+				)
+					continue
+				if ((candidateData.zIndex ?? 0) <= (data.zIndex ?? 0)) continue
+				if (this.canvas.elementManager.findParentIdForElement(candidateId) !== parentId)
+					continue
+				const node = candidate.getNode()
+				if (!node?.isVisible() || node.getAbsoluteOpacity() === 0) continue
+				const candidateBounds = candidate.getBoundingRect()
+				if (candidateBounds && this.checkRectOverlap(bounds, candidateBounds, 0))
+					return true
+			}
+		}
 		return false
 	}
 

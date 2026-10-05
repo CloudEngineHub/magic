@@ -40,6 +40,7 @@ export class NameLabelManager extends BaseLabelManager {
 	private renamingElementId: string | null = null
 	private interactionUnsubscribers: Array<() => void> = []
 	private pointerHoverElementId: string | null = null
+	private naturalTextWidths = new WeakMap<Konva.Text, { key: string; width: number }>()
 
 	constructor(options: { canvas: Canvas }) {
 		const { canvas } = options
@@ -123,7 +124,7 @@ export class NameLabelManager extends BaseLabelManager {
 		return {
 			x: labelGroup.x() * scale + stagePosition.x,
 			y: labelGroup.y() * scale + stagePosition.y,
-			width: Math.ceil(textNode.getTextWidth()),
+			width: Math.ceil(this.getNaturalTextWidth(textNode)),
 			height: Math.ceil(textNode.height()),
 			text: textNode.text(),
 			fontSize: this.labelConfig.fontSize,
@@ -195,16 +196,16 @@ export class NameLabelManager extends BaseLabelManager {
 		if (!textNode) return false
 
 		const safeInverseScale = Math.max(inverseScale, Number.EPSILON)
-		const otherLabelBounds = this.getOtherLabelBounds(elementId, this)
-		const reservedWidth = otherLabelBounds.reduce(
-			(maxWidth, bounds) => Math.max(maxWidth, bounds.width / safeInverseScale),
+		const otherLabelSizes = this.getOtherLabelSizes(elementId)
+		const reservedWidth = otherLabelSizes.reduce(
+			(maxWidth, size) => Math.max(maxWidth, size.width),
 			0,
 		)
 		const availableTextWidth = Math.max(
 			NAME_LABEL_CONFIG.MIN_TEXT_WIDTH,
 			boundingRect.width / safeInverseScale - reservedWidth - NAME_LABEL_CONFIG.LABEL_GAP,
 		)
-		const naturalTextWidth = textNode.getTextWidth()
+		const naturalTextWidth = this.getNaturalTextWidth(textNode)
 		const targetTextWidth = Math.min(naturalTextWidth, availableTextWidth)
 
 		textNode.wrap("none")
@@ -213,6 +214,31 @@ export class NameLabelManager extends BaseLabelManager {
 		textNode.width(targetTextWidth)
 		this.syncHitRect(labelGroup)
 		return true
+	}
+
+	/** 完整文本宽度独立于省略布局；仅文本或字体变化时重新测量，缩放可以恢复全文。 */
+	private getNaturalTextWidth(textNode: Konva.Text): number {
+		const key = JSON.stringify([
+			textNode.text(),
+			textNode.fontFamily(),
+			textNode.fontSize(),
+			textNode.fontStyle(),
+			textNode.fontVariant(),
+			textNode.letterSpacing(),
+		])
+		const cached = this.naturalTextWidths.get(textNode)
+		if (cached?.key === key) return cached.width
+		const width = Math.max(
+			...textNode
+				.text()
+				.split("\n")
+				.map(
+					(line) =>
+						textNode.measureSize(line).width + line.length * textNode.letterSpacing(),
+				),
+		)
+		this.naturalTextWidths.set(textNode, { key, width })
+		return width
 	}
 
 	protected override shouldRetainHiddenLabel(elementId: string): boolean {
