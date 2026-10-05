@@ -5,6 +5,7 @@ import { useCanvasDesignI18n } from "../../../app/providers/I18nProvider"
 import type { ImageElement, ImageElementContent } from "../../../runtime/document/types"
 import type { CanvasImageFileRename, CanvasImageRenameFile } from "../../../public/magic-types"
 import { GenerationStatus } from "../../../public/magic-types"
+import { useGenerationRuntimeRevision } from "../../../app/hooks/canvas/useGenerationRuntime"
 
 export interface ImageRenameRow {
 	content: ImageElementContent
@@ -14,6 +15,8 @@ export interface ImageRenameRow {
 	status?: "saving" | "success" | "error"
 	error?: string
 	shared: boolean
+	processing: boolean
+	expectedName?: string
 }
 
 export function splitRenameFileName(name: string): { base: string; extension: string } {
@@ -26,9 +29,12 @@ export function useImageRename(element: ImageElement) {
 	const { methods } = useMagic()
 	const { t } = useCanvasDesignI18n()
 	const rename = methods?.imageRename
+	useGenerationRuntimeRevision(element.id)
 	const [elementName, setElementName] = useState(element.name || "")
 	const [customBaseName, setBaseName] = useState<string>()
 	const baseName = customBaseName ?? elementName
+	const [appliedBaseName, setAppliedBaseName] = useState<string>()
+	const [appliedFileCount, setAppliedFileCount] = useState(0)
 	const [drafts, setDrafts] = useState<Record<string, string>>({})
 	const [results, setResults] = useState<
 		Record<string, { status: "saving" | "success" | "error"; error?: string }>
@@ -46,8 +52,12 @@ export function useImageRename(element: ImageElement) {
 		[],
 	)
 
-	const files = element.contents.map((content) => {
+	const runtimes = element.contents.map((content) =>
+		canvas?.generationRuntimeManager.getTargetState(element.id, content.contentId),
+	)
+	const files = element.contents.map((content, index) => {
 		const processing =
+			Boolean(runtimes[index]) ||
 			content.status === GenerationStatus.Pending ||
 			content.status === GenerationStatus.Processing
 		return !processing && content.src ? rename?.resolveImageRenameFile(content.src) : undefined
@@ -60,6 +70,13 @@ export function useImageRename(element: ImageElement) {
 		const file = changedFile ? undefined : resolved
 		return {
 			content,
+			processing:
+				Boolean(runtimes[index]) ||
+				content.status === GenerationStatus.Pending ||
+				content.status === GenerationStatus.Processing,
+			// 按 contentId 读取该版本参数，不用共享标题或 active 版本代替缺失名称。
+			expectedName:
+				runtimes[index]?.generateImageRequest?.name || content.generateImageRequest?.name,
 			version: index + 1,
 			file,
 			name: file ? (drafts[file.fileId] ?? file.fileName) : "",
@@ -115,6 +132,8 @@ export function useImageRename(element: ImageElement) {
 				`${base}_v${row.version}${splitRenameFileName(row.file.fileName).extension}`
 		}
 		setDrafts(next)
+		setAppliedBaseName(base)
+		setAppliedFileCount(seen.size)
 		setResults({})
 		setError("")
 	}
@@ -193,6 +212,8 @@ export function useImageRename(element: ImageElement) {
 		},
 		titleSaved,
 		baseName,
+		appliedBaseName,
+		appliedFileCount,
 		setBaseName,
 		rows,
 		changes,

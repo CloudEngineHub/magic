@@ -506,6 +506,8 @@ export interface DefaultGenerateVideoConfig {
  * 发起图片生成请求参数
  */
 export interface GenerateImageRequest {
+	/** 该版本的生成名称；最终文件名仍由生成结果确定。 */
+	name?: string
 	/** 项目 id */
 	project_id?: string
 	/** 图片 id */

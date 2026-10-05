@@ -79,6 +79,22 @@ export class NameLabelManager extends BaseLabelManager {
 		return this.shouldShowLabel(elementId)
 	}
 
+	/** 铅笔使用名称的屏幕坐标；沿用同一权限和工具条件，不为 DOM 入口绕过限制。 */
+	public getRenameButtonLayout(elementId: string): { x: number; y: number } | null {
+		if (
+			this.renamingElementId ||
+			!this.areNameLabelsInteractive() ||
+			this.canvas.elementManager.getElementData(elementId)?.type !== ElementTypeEnum.Image ||
+			!this.canvas.elementRenameManager.canRename(elementId)
+		)
+			return null
+		const layout = this.getRenameInputLayout(elementId)
+		if (!layout || !this.labelMap.get(elementId)?.visible()) return null
+		const bounds = this.canvas.elementManager.getElementInstance(elementId)?.getBoundingRect()
+		if (!bounds || layout.width + 24 > bounds.width * this.canvas.stage.scaleX()) return null
+		return { x: layout.x + layout.width, y: layout.y + layout.height - 24 }
+	}
+
 	public setRenamingElementId(elementId: string | null): void {
 		const previousElementId = this.renamingElementId
 		this.renamingElementId = elementId
@@ -229,6 +245,34 @@ export class NameLabelManager extends BaseLabelManager {
 		// 如果基础可见性为 false，不需要检查自定义逻辑
 		if (!baseVisibility) {
 			return null
+		}
+
+		// 图片名称为 24px 铅笔命中区预留空间。尺寸文本能放下时也预留其真实宽度，
+		// 长标题只在标签中省略，编辑面板仍读取完整元素名，不把铅笔压到尺寸标注上。
+		if (element?.getData().type === ElementTypeEnum.Image) {
+			const textNode = labelGroup.findOne("Text") as Konva.Text | null
+			const bounds = element.getBoundingRect()
+			if (textNode && bounds) {
+				const screenWidth = bounds.width * this.canvas.stage.scaleX()
+				const buttonWidth = this.canvas.permissionManager.canRename(element.getData())
+					? 24
+					: 0
+				const sizeWidth = textNode.measureSize(element.getSizeLabelText()).width
+				const available = screenWidth - buttonWidth
+				const withSize = available - sizeWidth - 8
+				textNode.wrap("none")
+				textNode.ellipsis(true)
+				textNode.width(
+					Math.max(
+						1,
+						Math.min(
+							textNode.measureSize(textNode.text()).width,
+							withSize >= 32 ? withSize : available,
+						),
+					),
+				)
+				this.syncHitRect(labelGroup)
+			}
 		}
 
 		// 检查 name label 是否超出元素宽度

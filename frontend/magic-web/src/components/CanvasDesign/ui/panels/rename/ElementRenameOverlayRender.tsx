@@ -140,8 +140,8 @@ export default function ElementRenameOverlayRender({ elementId }: ElementRenameO
 				ref={inputRef}
 				className={cn(
 					"box-border min-h-0 w-auto min-w-[72px] px-1.5 py-0 leading-[1.2]",
-					"rounded border border-blue-500 bg-background shadow-[0_0_0_1px_rgb(59_130_246/0.08)]",
-					"text-base focus-visible:border-blue-500 focus-visible:ring-2 focus-visible:ring-blue-500/20 focus-visible:ring-offset-0 md:text-base",
+					"rounded border border-input bg-background shadow-none",
+					"text-base focus-visible:border-ring focus-visible:ring-1 focus-visible:ring-ring focus-visible:ring-offset-0 md:text-base",
 				)}
 				value={value}
 				disabled={saving}
