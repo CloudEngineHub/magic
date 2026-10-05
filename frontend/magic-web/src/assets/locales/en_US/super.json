@@ -8627,7 +8627,7 @@
 							}
 						]
 					},
-					"note": "Describing roles in files does not mean collaborators have already been started.",
+					"note": "Describing roles in files does not mean collaborators have already been started. The gray people folder identifies collaboration role instructions, not the project's current member list.",
 					"preview": [
 						"For example, one role organizes material and another checks sources before a report is assembled.",
 						"Describing roles in files does not mean collaborators have already been started."
@@ -8669,7 +8669,7 @@
 							}
 						]
 					},
-					"note": "Assets support content creation and processing; they do not all need to be read as prompt text.",
+					"note": "Assets support content creation and processing; they do not all need to be read as prompt text. The yellow image folder identifies a resource collection that can include data and other assets, not only images.",
 					"preview": [
 						"A report might use a team logo or an existing template.",
 						"Assets support content creation and processing; they do not all need to be read as prompt text."
@@ -8755,7 +8755,7 @@
 						"steps": [],
 						"title": "Teach AI a reusable way to complete a type of work"
 					},
-					"note": "The standard filename is SKILL.md. On case-sensitive file systems, lowercase or mixed-case variants may not be loaded by the current skill scanner. Scripts perform operations; assets provide material for the output. If a directory contains multiple case variants, keep one clearly identified standard entry.",
+					"note": "The standard filename is SKILL.md. On case-sensitive file systems, lowercase or mixed-case variants may not be loaded by the current skill scanner. Scripts perform operations; assets provide material for the output. If a directory contains multiple case variants, keep one clearly identified standard entry. The rounded puzzle icon identifies the main instructions, distinct from the puzzle folder containing the whole skill package.",
 					"preview": [
 						"Keeps the workflow and expected result clear.",
 						"The standard filename is SKILL.md."
@@ -8786,7 +8786,7 @@
 							}
 						]
 					},
-					"note": "These are evaluation requirements, not evaluation results.",
+					"note": "These are evaluation requirements, not evaluation results. The JSON icon identifies the data format; the cases badge identifies its role in evaluation.",
 					"preview": [
 						"For example: generate a report from three sources, preserving citations and separating unconfirmed information.",
 						"These are evaluation requirements, not evaluation results."
@@ -8828,7 +8828,7 @@
 							}
 						]
 					},
-					"note": "Keep inputs separate from outputs, and do not substitute example answers for the actual input.",
+					"note": "Keep inputs separate from outputs, and do not substitute example answers for the actual input. The green input arrow identifies material supplied to an evaluation, not a download action.",
 					"preview": [
 						"Using the same input documents makes it easier to compare the effects of a change in method.",
 						"Keep inputs separate from outputs, and do not substitute example answers for the actual input."
@@ -8870,7 +8870,7 @@
 							}
 						]
 					},
-					"note": "Evaluation files do not prove that an evaluation ran or passed. Ordinary use does not require you to write evaluations.",
+					"note": "Evaluation files do not prove that an evaluation ran or passed. Ordinary use does not require you to write evaluations. The green flask folder identifies evaluation methods and cases; the color distinguishes purpose only.",
 					"preview": [
 						"Prepare several common report tasks and compare whether a revised skill produces more complete results that meet the requirements.",
 						"Evaluation files do not prove that an evaluation ran or passed."
@@ -8902,7 +8902,7 @@
 							}
 						]
 					},
-					"note": "An example teaches the method; it does not mean the current task has been completed.",
+					"note": "An example teaches the method; it does not mean the current task has been completed. The teal lightbulb folder identifies examples for learning and comparison.",
 					"preview": [
 						"Before using an unfamiliar skill, a complete example can help you understand which material to prepare.",
 						"An example teaches the method; it does not mean the current task has been completed."
@@ -8993,7 +8993,7 @@
 						"tipsTitle": "Share skills without packaging personal credentials",
 						"title": "Find the skills available for project work here"
 					},
-					"note": "Project skills are the skills stored here, not a complete list of everything AI can do. Installation does not sign in to external accounts or grant access; complete any required service setup separately.",
+					"note": "Project skills are the skills stored here, not a complete list of everything AI can do. Installation does not sign in to external accounts or grant access; complete any required service setup separately. The grid folder identifies a skill collection; a puzzle folder identifies one skill within it.",
 					"preview": [
 						"Project members can use these skills for project tasks.",
 						"Configure personal credentials in personal space."
@@ -9024,7 +9024,7 @@
 							}
 						]
 					},
-					"note": "The actual text determines the conditions. A filename alone does not grant every permission.",
+					"note": "The actual text determines the conditions. A filename alone does not grant every permission. The regular file icon is retained, while the license badge identifies the permission statement.",
 					"preview": [
 						"Read the terms before sharing an external skill with a team or using it for a particular purpose.",
 						"The actual text determines the conditions."
@@ -9056,7 +9056,7 @@
 							}
 						]
 					},
-					"note": "Selecting publication content and completing publication are separate actions.",
+					"note": "Selecting publication content and completing publication are separate actions. The configuration icon and publication badge identify what to publish, not an action that publishes it.",
 					"preview": [
 						"Choose the intended skill before publishing so temporary content does not enter the published package.",
 						"Selecting publication content and completing publication are separate actions."
@@ -9087,7 +9087,7 @@
 							}
 						]
 					},
-					"note": "README helps people use the skill; SKILL.md mainly teaches AI to perform it.",
+					"note": "README helps people use the skill; SKILL.md mainly teaches AI to perform it. The Markdown icon identifies the format; the usage badge identifies the guidance written for people.",
 					"preview": [
 						"To decide whether a skill suits your needs, read what it can do, which inputs it needs and its usage examples.",
 						"README helps people use the skill; SKILL."
@@ -9155,7 +9155,7 @@
 						"steps": [],
 						"title": "Read the common method first, specialist details when needed"
 					},
-					"note": "SKILL.md must say which file to read under which conditions. Creating a references folder alone does not define loading behavior. Requirements that apply to every task still belong in the main instructions.",
+					"note": "SKILL.md must say which file to read under which conditions. Creating a references folder alone does not define loading behavior. Requirements that apply to every task still belong in the main instructions. The blue book folder identifies reference material; its badge describes the purpose.",
 					"preview": [
 						"Read the main method first, then relevant detail.",
 						"SKILL.md explains when to read each file."
@@ -9187,7 +9187,7 @@
 							}
 						]
 					},
-					"note": "Programs perform operations; on-demand guidance provides knowledge to read. A script’s presence does not mean it has run.",
+					"note": "Programs perform operations; on-demand guidance provides knowledge to read. A script’s presence does not mean it has run. The orange code folder identifies executable programs. Neither the icon nor its purpose badge runs a script.",
 					"preview": [
 						"A program can repeatedly combine a set of tables using defined steps.",
 						"Programs perform operations; on-demand guidance provides knowledge to read."
@@ -9238,7 +9238,7 @@
 							}
 						]
 					},
-					"note": "One skill addresses a type of work; a skill library collects several skills.",
+					"note": "One skill addresses a type of work; a skill library collects several skills. The puzzle folder represents the whole skill package. Open it to read SKILL.md and use supporting resources as needed.",
 					"preview": [
 						"A report skill may include a workflow, specialist rules and templates.",
 						"One skill addresses a type of work; a skill library collects several skills."
@@ -9269,7 +9269,7 @@
 							}
 						]
 					},
-					"note": "A template supplies structure. Example figures and conclusions are not facts for the current task.",
+					"note": "A template supplies structure. Example figures and conclusions are not facts for the current task. The warm-orange layout folder identifies reusable content structure, distinct from a completed output.",
 					"preview": [
 						"For reports with conclusions, evidence and recommendations, prepare that structure once and fill it with the current task’s real content.",
 						"A template supplies structure."
@@ -9307,7 +9307,7 @@
 				"license": "License",
 				"publishConfig": "Publish configuration",
 				"readme": "Usage notes",
-				"references": "On-demand guidance",
+				"references": "References",
 				"scripts": "Scripts",
 				"skill": "Skill",
 				"templates": "Templates"
@@ -9390,7 +9390,7 @@
 						]
 					},
 					"label": "{{clawBrand}} skills",
-					"note": "Skills explain methods; execution still needs the relevant tools and permissions.",
+					"note": "Skills explain methods; execution still needs the relevant tools and permissions. The grid folder identifies the skill collection in this scope.",
 					"preview": [
 						"Prepare skills for recurring work so the {{clawBrand}} has a method available when a suitable task appears.",
 						"Skills explain methods; execution still needs the relevant tools and permissions."
@@ -9482,7 +9482,7 @@
 						"title": "Give a digital employee methods suited to its role"
 					},
 					"label": "Employee skills",
-					"note": "The editing area is for preparing changes. Other users work with the published employee version. Putting files in a folder does not complete skill configuration or publication.",
+					"note": "The editing area is for preparing changes. Other users work with the published employee version. Putting files in a folder does not complete skill configuration or publication. The grid folder identifies the skill collection in this scope.",
 					"preview": [
 						"Configured, published skills work alongside built-in capabilities.",
 						"Organize skills around the employee’s role."
@@ -9569,7 +9569,7 @@
 						"title": "Find reusable methods in one place"
 					},
 					"label": "Skill library",
-					"note": "Folder contents do not establish installation status, account access or a published employee version.",
+					"note": "Folder contents do not establish installation status, account access or a published employee version. The grid folder identifies the skill collection in this scope.",
 					"preview": [
 						"Each skill provides a reusable working method.",
 						"The owning space determines its audience."
@@ -9661,7 +9661,7 @@
 						"title": "Reuse your methods when you move to another project"
 					},
 					"label": "Personal skills",
-					"note": "Personal skills belong to the current organization and account. They are not automatically shared with people who join a project. Put team methods in the project or configure them for a digital employee.",
+					"note": "Personal skills belong to the current organization and account. They are not automatically shared with people who join a project. Put team methods in the project or configure them for a digital employee. The grid folder identifies the skill collection in this scope.",
 					"preview": [
 						"Combines your recurring preferences with the current task.",
 						"Project membership does not automatically share personal skills."

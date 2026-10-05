@@ -17,7 +17,7 @@ import {
 	useInteractions,
 	useRole,
 } from "@floating-ui/react"
-import { ArrowRight } from "lucide-react"
+import { ArrowRight, MousePointer2 } from "lucide-react"
 import { useTranslation } from "react-i18next"
 import { Button } from "@/components/shadcn-ui/button"
 import { Dialog } from "@/components/shadcn-ui/dialog"
@@ -132,7 +132,12 @@ export function ContextHelp({ help, mode, children, renderDialog }: ContextHelpP
 						side="bottom"
 						className="max-w-[min(18rem,var(--radix-tooltip-content-available-width,100vw))] whitespace-normal text-wrap break-words"
 					>
-						{help.summary}
+						<p>{help.summary}</p>
+						{/* 仅直接打开详情的入口提示点击，不能把先打开预览卡片的行为描述成直接进入教程。 */}
+						<div className="border-current/15 mt-1.5 flex items-center gap-1.5 border-t pt-1.5 text-[10px] opacity-80">
+							<MousePointer2 size={12} className="shrink-0" aria-hidden />
+							<span>{t("contextHelp.clickToViewGuide")}</span>
+						</div>
 					</TooltipContent>
 				</Tooltip>
 			) : (
