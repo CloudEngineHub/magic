@@ -74,21 +74,25 @@ type RequestKey = string
 
 class ProjectService {
 	private visitKey: string | null = null
+	private visitScope: object | undefined
 	private visitGeneration = 0
 
 	resetVisit() {
 		this.visitKey = null
+		this.visitScope = undefined
 		this.visitGeneration++
 	}
 
 	/** 每次进入只记录一次；话题切换、后台详情刷新及预取不会制造新访问。 */
-	recordProjectVisit(project: ProjectListItem) {
+	recordProjectVisit(project: ProjectListItem, visitScope?: object) {
 		const userId = userStore.user.userInfo?.user_id
 		const organizationCode = userStore.user.organizationCode
 		if (!userId || !organizationCode) return
 		const key = JSON.stringify([userId, organizationCode, project.id])
-		if (this.visitKey === key && projectStore.selectedProject?.id === project.id) return
+		// 专用页面有独立 store，以页面进入范围去重，不依赖普通项目的选中态。
+		if (this.visitKey === key && this.visitScope === visitScope) return
 		this.visitKey = key
+		this.visitScope = visitScope
 		const generation = this.visitGeneration
 		void SuperMagicApi.recordProjectVisit(project.id)
 			.then((result) => {

@@ -7,6 +7,7 @@ declare(strict_types=1);
 
 namespace App\Domain\SuperMagic\Project\Repository\Persistence;
 
+use App\Domain\SuperMagic\Common\Entity\ValueObject\HiddenType;
 use App\Domain\SuperMagic\Project\Entity\ProjectMemberEntity;
 use App\Domain\SuperMagic\Project\Entity\ValueObject\MemberRole;
 use App\Domain\SuperMagic\Project\Entity\ValueObject\MemberStatus;
@@ -1070,7 +1071,19 @@ class ProjectMemberRepository implements ProjectMemberRepositoryInterface
         }
 
         if (! $showHidden) {
-            $query->where('p.is_hidden', 0);
+            $query->where(function ($visibilityQuery) use ($includeSpecialModes): void {
+                $visibilityQuery->where('p.is_hidden', 0);
+                if ($includeSpecialModes) {
+                    // 专用页面的源码项目可进入最近列表；预热、下载和运行期项目仍不可见。
+                    $visibilityQuery->orWhere(function ($specialQuery): void {
+                        $specialQuery->whereIn('p.project_mode', ProjectMode::getRecentListSpecialModes())
+                            ->where(function ($hiddenTypeQuery): void {
+                                $hiddenTypeQuery->whereNull('p.hidden_type')
+                                    ->orWhere('p.hidden_type', HiddenType::AGENT->value);
+                            });
+                    });
+                }
+            });
         }
 
         if (! $includeSpecialModes) {
