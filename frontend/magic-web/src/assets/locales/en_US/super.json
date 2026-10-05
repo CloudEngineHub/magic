@@ -5273,6 +5273,7 @@
 	"projectResources": {
 		"allTypes": "All types",
 		"createTime": "Created",
+		"filterType": "Filter project type",
 		"generalType": "General projects",
 		"lastActiveTime": "Last active",
 		"role": "Role: {{role}}",

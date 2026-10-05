@@ -5274,6 +5274,7 @@
 	"projectResources": {
 		"allTypes": "全部类型",
 		"createTime": "创建时间",
+		"filterType": "筛选项目类型",
 		"generalType": "普通项目",
 		"lastActiveTime": "最近活动",
 		"role": "角色：{{role}}",

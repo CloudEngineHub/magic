@@ -3,6 +3,7 @@ import { useMemoizedFn, useDebounce } from "ahooks"
 import { reaction } from "mobx"
 import { useTranslation } from "react-i18next"
 import { Plus } from "lucide-react"
+import { useIsMobile } from "@/hooks/useIsMobile"
 import { SuperMagicApi } from "@/apis"
 import MagicEmpty from "@/components/base/MagicEmpty"
 import { Button } from "@/components/shadcn-ui/button"
@@ -57,6 +58,7 @@ export default function WorkspaceProjectsContent({
 	onCancelCreating,
 }: WorkspaceProjectsContentProps) {
 	const { t } = useTranslation("super")
+	const isMobile = useIsMobile()
 	const workspaceId = workspace?.id
 	const recent = !workspace
 	const [sortType, setSortType] = useState<SortType>(
@@ -64,10 +66,12 @@ export default function WorkspaceProjectsContent({
 	)
 	const [projectType, setProjectType] = useState<RecentProjectType>("all")
 	const debouncedSearchValue = useDebounce(searchValue, { wait: 500 })
-	const { viewMode, setViewMode } = useViewTogglePersistValue({
+	const { viewMode: preferredViewMode, setViewMode } = useViewTogglePersistValue({
 		localStorageKey: "workspace_projects_panel_view_toggle_value",
 		defaultValue: ViewMode.LIST,
 	})
+	// 手机始终使用列表，但不改写用户在桌面保存的视图偏好。
+	const viewMode = isMobile ? ViewMode.LIST : preferredViewMode
 	const [projects, setProjects] = useState<ResourceProject[]>(() =>
 		workspaceId ? projectStore.getProjectsByWorkspace(workspaceId) : [],
 	)
@@ -254,7 +258,11 @@ export default function WorkspaceProjectsContent({
 						viewToggle={<ViewToggle value={viewMode} onChange={setViewMode} />}
 					>
 						{recent && (
-							<ProjectTypeFilter value={projectType} onChange={setProjectType} />
+							<ProjectTypeFilter
+								value={projectType}
+								onChange={setProjectType}
+								responsive
+							/>
 						)}
 						{(!workspace || !isResourceWorkspace(workspace)) && (
 							<SortSelector
@@ -262,6 +270,7 @@ export default function WorkspaceProjectsContent({
 								onChange={setSortType}
 								includeWorkspaceOrder={!recent}
 								compact
+								responsive
 							/>
 						)}
 						{workspace &&
@@ -284,6 +293,7 @@ export default function WorkspaceProjectsContent({
 					</ProjectsPanelToolbar>
 				}
 				itemProps={{
+					mobileLayout: isMobile,
 					sortType,
 					onClick: (project) => {
 						if (project.id !== projectStore.selectedProject?.id)

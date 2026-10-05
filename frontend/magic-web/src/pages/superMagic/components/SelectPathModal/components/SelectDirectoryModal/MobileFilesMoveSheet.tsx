@@ -43,6 +43,8 @@ import type { MobileCrossProjectConfig, SelectDirectorySubmitParams } from "./ty
 import { MAX_MENTION_PROJECT_COUNT, type ProjectResourceSelection } from "../../types"
 import { isMicroAppEnabled } from "@/services/microAppFeature"
 import { loadMicroAppProjectPage } from "../../utils/microAppProjects"
+import type { ResourceProject } from "../../resourceProjectTypes"
+import { ProjectResourceInfo } from "../ProjectResourceSelectorModal/ProjectResourceInfo"
 
 interface MobileFilesMoveSheetProps {
 	visible: boolean
@@ -254,11 +256,11 @@ function getProjectDisplayName(
 }
 
 function searchProjectItems(
-	items: ProjectListItem[],
+	items: ResourceProject[],
 	keyword: string,
 	t: ReturnType<typeof useTranslation>["t"],
 	workspaceEntryType?: WorkspaceEntryType,
-): ProjectListItem[] {
+): ResourceProject[] {
 	const normalizedKeyword = keyword.trim().toLowerCase()
 	if (!normalizedKeyword) return items
 
@@ -384,14 +386,14 @@ function WorkspaceRow({
 	)
 }
 
-function ProjectRow({
+export function MobileProjectRow({
 	project,
 	workspaceEntryType,
 	selected,
 	onSelect,
 	onDrillIn,
 }: {
-	project: ProjectListItem
+	project: ResourceProject
 	workspaceEntryType?: WorkspaceEntryType
 	selected?: boolean
 	onSelect?: () => void
@@ -422,19 +424,33 @@ function ProjectRow({
 						) : null}
 					</div>
 				) : null}
-				<Icon
-					className="size-[22px] shrink-0 text-muted-foreground"
-					data-testid={`select-directory-mobile-project-icon-${project.id}`}
+				<ProjectResourceInfo
+					project={project}
+					name={getProjectDisplayName(project, t, workspaceEntryType)}
+					mobile
+					list
+					icon={
+						project.resourceType ? undefined : (
+							<Icon
+								className="size-8 shrink-0 text-muted-foreground"
+								data-testid={`select-directory-mobile-project-icon-${project.id}`}
+							/>
+						)
+					}
+					titleTrailing={
+						<>
+							{project.is_pinned && <PinnedTag />}
+							{(isWorkspaceShortcutProject(project) ||
+								isCollaborationProject(project)) && (
+								<CollaborationProjectTag
+									visible
+									project={project}
+									showText={false}
+								/>
+							)}
+						</>
+					}
 				/>
-				<div className="flex min-w-0 flex-1 items-center gap-1.5">
-					<p className="min-w-0 max-w-full shrink truncate text-[16px] font-medium leading-5 text-foreground">
-						{getProjectDisplayName(project, t, workspaceEntryType)}
-					</p>
-					{project.is_pinned && <PinnedTag />}
-					{(isWorkspaceShortcutProject(project) || isCollaborationProject(project)) && (
-						<CollaborationProjectTag visible project={project} showText={false} />
-					)}
-				</div>
 			</button>
 			{onSelect ? (
 				<>
@@ -607,7 +623,7 @@ function MobileFilesMoveSheet({
 		supportsCrossProject ? initialViewMode : "directory",
 	)
 	const [workspaceItems, setWorkspaceItems] = useState<WorkspaceBrowseItem[]>([])
-	const [projectItems, setProjectItems] = useState<ProjectListItem[]>([])
+	const [projectItems, setProjectItems] = useState<ResourceProject[]>([])
 	const [browsingWorkspace, setBrowsingWorkspace] = useState<BrowsingWorkspace | null>(
 		initialBrowsingWorkspace,
 	)
@@ -799,7 +815,7 @@ function MobileFilesMoveSheet({
 					const microWorkspace = await SuperMagicApi.getMicroAppWorkspace()
 					request.signal.throwIfAborted()
 					microAppWorkspaceRef.current = microWorkspace
-					const projects: ProjectListItem[] = []
+					const projects: ResourceProject[] = []
 					let page = 1
 					// H5 保留原列表交互；逐页读取项目元数据，不预取任何项目附件。
 					while (!request.signal.aborted) {
@@ -1402,7 +1418,11 @@ function MobileFilesMoveSheet({
 							<LoadingCards />
 						) : (
 							<div
-								className="flex flex-col gap-2 px-[14px] py-2 pb-4"
+								className={cn(
+									"flex flex-col pb-4",
+									// 项目行自身已有内边距；这里不再叠加卡片间距和左右留白。
+									viewMode === "project" ? "bg-card" : "gap-2 px-[14px] py-2",
+								)}
 								data-testid="select-directory-mobile-list"
 							>
 								{viewMode === "workspace" ? (
@@ -1458,8 +1478,11 @@ function MobileFilesMoveSheet({
 										</div>
 									) : (
 										filteredProjects.map((project) => (
-											<DirectoryCard key={project.id}>
-												<ProjectRow
+											<div
+												key={project.id}
+												className="border-b border-border bg-card last:border-b-0"
+											>
+												<MobileProjectRow
 													project={project}
 													workspaceEntryType={
 														browsingWorkspace?.entryType
@@ -1476,7 +1499,7 @@ function MobileFilesMoveSheet({
 													}
 													onDrillIn={() => handleProjectDrillIn(project)}
 												/>
-											</DirectoryCard>
+											</div>
 										))
 									)
 								) : isSearching ? (

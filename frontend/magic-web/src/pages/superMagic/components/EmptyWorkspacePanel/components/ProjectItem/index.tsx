@@ -56,6 +56,8 @@ interface ProjectItemProps<T extends ProjectListItem | CollaborationProjectListI
 	onMouseEnter?: () => void
 	locationName?: string
 	relativeActiveTime?: boolean
+	/** 仅资源浏览面板使用手机信息行，不改变其他项目卡片的布局。 */
+	mobileLayout?: boolean
 }
 
 // View mode enum
@@ -94,6 +96,7 @@ function ProjectItem<T extends ProjectListItem | CollaborationProjectListItem>({
 	onMouseEnter,
 	locationName,
 	relativeActiveTime = false,
+	mobileLayout = false,
 }: ProjectItemProps<T>) {
 	const ref = useRef<HTMLDivElement>(null)
 	const isHover = useHover(ref)
@@ -191,6 +194,32 @@ function ProjectItem<T extends ProjectListItem | CollaborationProjectListItem>({
 	) : null
 
 	const time = useMemo(() => {
+		if (mobileLayout) {
+			const isActiveTime =
+				sortType === SortType.MY_LAST_ACTIVE_TIME ||
+				(sortType === SortType.WORKSPACE_ORDER && Boolean(item.last_active_at))
+			const rawTime = isActiveTime
+				? item.last_active_at
+				: sortType === SortType.PROJECT_CREATE_TIME
+					? item.created_at
+					: item.updated_at
+			const date = rawTime ? dayjs(rawTime) : null
+			const value = date?.isValid()
+				? date
+						.locale(i18n.language.toLowerCase().startsWith("zh") ? "zh-cn" : "en")
+						.fromNow()
+				: undefined
+			return {
+				value,
+				label: !value
+					? ""
+					: isActiveTime
+						? t("common.lastActiveAt", { time: value })
+						: sortType === SortType.PROJECT_CREATE_TIME
+							? t("common.createdAt", { time: value })
+							: t("common.lastUpdatedAt", { time: value }),
+			}
+		}
 		switch (sortType) {
 			case SortType.MY_LAST_ACTIVE_TIME: {
 				let value = item.last_active_at?.replaceAll("-", "/")
@@ -227,12 +256,14 @@ function ProjectItem<T extends ProjectListItem | CollaborationProjectListItem>({
 		item.last_active_at,
 		sortType,
 		relativeActiveTime,
+		mobileLayout,
 		i18n.language,
 		t,
 	])
 
 	return (
-		<>
+		<div className={mobileLayout ? "w-full min-w-0 [&>span]:flex [&>span]:w-full" : "contents"}>
+			{/* 手机菜单的触发容器是 inline-flex；仅本面板将它铺满行宽，避免项目信息缩成半行。 */}
 			<ProjectActionsDropdown
 				item={item}
 				inCollaborationPanel={inCollaborationPanel}
@@ -266,6 +297,8 @@ function ProjectItem<T extends ProjectListItem | CollaborationProjectListItem>({
 							isCompactList &&
 								"min-h-12 grid-cols-[16px_minmax(0,1fr)_auto] rounded-none border-0 border-b bg-transparent [@container_(min-width:800px)]:[grid-template-columns:var(--project-list-columns)]",
 							isRecentLayout && "items-start",
+							mobileLayout &&
+								"min-h-14 grid-cols-[32px_minmax(0,1fr)_auto] gap-x-2 py-3",
 						)}
 						onClick={() => onClick(item)}
 						onMouseEnter={onMouseEnter}
@@ -283,13 +316,14 @@ function ProjectItem<T extends ProjectListItem | CollaborationProjectListItem>({
 								"project-item-icon relative flex flex-1 items-center justify-center rounded px-2 py-2",
 								isCompact && "col-start-1 row-start-1 size-4 flex-none p-0",
 								isRecentLayout && "h-5 self-start",
+								mobileLayout && "size-8",
 							)}
 							data-testid="project-item-icon"
 						>
 							<IconWorkspaceProjectFolder
 								isHovered={isHover}
 								wasHovered={!isHover}
-								size={isCompact ? 16 : isListMode ? 30 : 60}
+								size={mobileLayout ? 32 : isCompact ? 16 : isListMode ? 30 : 60}
 							/>
 						</div>
 						<div
@@ -345,6 +379,7 @@ function ProjectItem<T extends ProjectListItem | CollaborationProjectListItem>({
 												isCompact &&
 													"cursor-pointer text-[13px] font-medium",
 												isRecentLayout && "flex-initial",
+												mobileLayout && "text-sm",
 											)}
 											onClick={
 												isListMode || isCompact
@@ -352,6 +387,7 @@ function ProjectItem<T extends ProjectListItem | CollaborationProjectListItem>({
 													: handleNameClick
 											}
 											data-testid="project-item-title"
+											maxLines={mobileLayout ? 2 : 1}
 											data-editable={
 												!isListMode && !isCompact && !!onRenameProject
 											}
@@ -375,19 +411,22 @@ function ProjectItem<T extends ProjectListItem | CollaborationProjectListItem>({
 									</SmartTooltip>
 								)}
 							</div>
-							<SmartTooltip
-								className={cn(
-									"project-item-updated-at text-[10px] font-normal leading-[13px] text-muted-foreground",
-									isCompact && "truncate text-xs leading-4",
-									isCompactList &&
-										"col-start-2 row-start-2 [@container_(min-width:800px)]:col-start-[time] [@container_(min-width:800px)]:row-start-1",
-									isRecentLayout && isCompactList && "leading-5",
-								)}
-								data-testid="project-item-time"
-								data-sort-type={sortType}
-							>
-								{isCompactList ? time.value : time.label}
-							</SmartTooltip>
+							{(!mobileLayout || time.value) && (
+								<SmartTooltip
+									className={cn(
+										"project-item-updated-at text-[10px] font-normal leading-[13px] text-muted-foreground",
+										isCompact && "truncate text-xs leading-4",
+										isCompactList &&
+											"col-start-2 row-start-2 [@container_(min-width:800px)]:col-start-[time] [@container_(min-width:800px)]:row-start-1",
+										isRecentLayout && isCompactList && "leading-5",
+										mobileLayout && "whitespace-normal",
+									)}
+									data-testid="project-item-time"
+									data-sort-type={sortType}
+								>
+									{isCompactList && !mobileLayout ? time.value : time.label}
+								</SmartTooltip>
+							)}
 						</div>
 
 						<div
@@ -428,7 +467,7 @@ function ProjectItem<T extends ProjectListItem | CollaborationProjectListItem>({
 					</div>
 				)}
 			</ProjectActionsDropdown>
-		</>
+		</div>
 	)
 }
 

@@ -5,7 +5,7 @@ import { useTranslation } from "react-i18next"
 import { ArrowLeft, FolderSearch } from "lucide-react"
 import { Button } from "@/components/shadcn-ui/button"
 import { Checkbox } from "@/components/shadcn-ui/checkbox"
-import { Input } from "@/components/shadcn-ui/input"
+import { ProjectsPanelToolbar } from "../../../WorkspacesMenu/components/ProjectsPanelToolbar"
 import { useUserInfo } from "@/models/user/hooks"
 import { useOverlayZIndex } from "@/hooks/useOverlayZIndex"
 import type { FileManagerLocationSnapshot } from "@/models/config/repositories/SuperProjectStateTypes"
@@ -406,18 +406,14 @@ export const MentionDesktopPicker = observer(function MentionDesktopPicker(props
 							</>
 						) : recentMode ? (
 							<>
-								<div className="flex shrink-0 flex-wrap items-center gap-3 border-b px-4 py-3">
-									<span className="min-w-0 flex-1 truncate text-sm font-medium">
-										{t("projectNavigation.recent")}
-									</span>
-									<Input
-										className="h-8 w-48"
-										value={query}
-										placeholder={t("projectNavigation.searchRecent")}
-										onChange={(event) => setQuery(event.target.value)}
-									/>
-									<ViewToggle value={viewMode} onChange={setViewMode} />
-								</div>
+								<ProjectsPanelToolbar
+									location={t("projectNavigation.recent")}
+									searchValue={query}
+									onSearchValueChange={(event) => setQuery(event.target.value)}
+									viewToggle={
+										<ViewToggle value={viewMode} onChange={setViewMode} />
+									}
+								/>
 								<ProjectsPanelList
 									projects={recentProjects}
 									loading={
@@ -485,18 +481,16 @@ export const MentionDesktopPicker = observer(function MentionDesktopPicker(props
 							</>
 						) : (
 							<>
-								<div className="flex shrink-0 flex-wrap items-center gap-3 border-b px-4 py-3">
-									<span className="min-w-0 flex-1 truncate text-sm font-medium">
-										{props.workspace?.name || t("selectPathModal.workspace")}
-									</span>
-									<Input
-										className="h-8 w-48"
-										value={query}
-										placeholder={t("project.searchProject")}
-										onChange={(event) => setQuery(event.target.value)}
-									/>
-									<ViewToggle value={viewMode} onChange={setViewMode} />
-								</div>
+								<ProjectsPanelToolbar
+									location={
+										props.workspace?.name || t("selectPathModal.workspace")
+									}
+									searchValue={query}
+									onSearchValueChange={(event) => setQuery(event.target.value)}
+									viewToggle={
+										<ViewToggle value={viewMode} onChange={setViewMode} />
+									}
+								/>
 								<ProjectsPanelList
 									projects={projects}
 									loading={props.loading}
