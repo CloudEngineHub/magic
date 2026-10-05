@@ -195,6 +195,10 @@ function ProjectResourceSelectorModal({
 		setLoading,
 		setLoadError,
 	})
+	const handleProjectSearch = useMemoizedFn((keyword: string) => {
+		if (currentWorkspace && !currentProject)
+			void fetchProjectsByWorkspace(currentWorkspace.id, keyword)
+	})
 	// This option only applies to multi-file transfers into another project; same-project
 	// operations retain their existing flat target-directory semantics.
 	const showPreserveParentPathOption =
@@ -1833,6 +1837,7 @@ function ProjectResourceSelectorModal({
 				hasMore={hasMoreResourceProjects}
 				loadingMore={loadingMoreResources}
 				onLoadMore={handleLoadMoreResourceProjects}
+				onProjectSearch={handleProjectSearch}
 				onWorkspace={handleWorkspaceClick}
 				onProject={(project, action, workspace) =>
 					handleProjectClick(project, action, workspace)

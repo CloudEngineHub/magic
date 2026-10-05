@@ -8,11 +8,13 @@ export async function loadMicroAppProjectPage({
 	workspace,
 	page,
 	pageSize,
+	keyword,
 	signal,
 }: {
 	workspace: Workspace
 	page: number
 	pageSize: number
+	keyword?: string
 	signal?: AbortSignal
 }): Promise<{ list: ResourceProject[]; total: number }> {
 	signal?.throwIfAborted()
@@ -20,6 +22,7 @@ export async function loadMicroAppProjectPage({
 		page,
 		page_size: pageSize,
 		scope: "created",
+		keyword,
 	})
 	signal?.throwIfAborted()
 	const list = await Promise.all(

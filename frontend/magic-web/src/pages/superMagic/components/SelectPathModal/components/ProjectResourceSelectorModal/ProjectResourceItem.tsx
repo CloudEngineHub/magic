@@ -1,5 +1,7 @@
 import type { KeyboardEvent } from "react"
 import { useTranslation } from "react-i18next"
+import dayjs from "dayjs"
+import SmartTooltip from "@/components/other/SmartTooltip"
 
 import { Badge } from "@/components/shadcn-ui/badge"
 import { Checkbox } from "@/components/shadcn-ui/checkbox"
@@ -80,7 +82,6 @@ function ResourceIcon({ project }: { project: ResourceProject }) {
 
 function ResourceStatus({ project }: { project: ResourceProject }) {
 	const { t } = useTranslation("super")
-	if (!project.resourceStatus) return null
 	if (project.resourceType === "claw") {
 		return <MagiClawStatusBadge status={project.resourceStatus} />
 	}
@@ -88,7 +89,9 @@ function ResourceStatus({ project }: { project: ResourceProject }) {
 		const label =
 			project.resourceStatus === "published"
 				? t("microAppsPage.statusPublished")
-				: t("microAppsPage.statusUnpublished")
+				: project.resourceStatus === "unpublished"
+					? t("microAppsPage.statusUnpublished")
+					: t("projectResources.statusUnknown")
 		return (
 			<Badge variant="outline" className="h-6 rounded-md px-2 text-xs font-normal">
 				{label}
@@ -99,7 +102,7 @@ function ResourceStatus({ project }: { project: ResourceProject }) {
 }
 
 function getDescription(project: ResourceProject) {
-	return project.resourceDescription || project.project_description || project.resourceRole
+	return project.resourceDescription || project.project_description
 }
 
 export function ProjectResourceItem({
@@ -112,8 +115,16 @@ export function ProjectResourceItem({
 }: ProjectResourceItemProps) {
 	const { t } = useTranslation("super")
 	const isList = viewMode === ViewMode.LIST
-	const name = project.project_name || t("project.unnamedProject")
+	const name =
+		project.project_name?.trim() ||
+		(project.resourceType === "agent"
+			? t("crew/create:untitledCrew")
+			: project.resourcePackageName || t("project.unnamedProject"))
 	const description = getDescription(project)
+	const updatedAt =
+		project.updated_at && dayjs(project.updated_at).isValid()
+			? dayjs(project.updated_at).format("YYYY/MM/DD HH:mm [UTC]Z")
+			: undefined
 	const handleKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
 		if (event.target !== event.currentTarget) return
 		if (event.key === "Enter") onClick(project)
@@ -126,10 +137,10 @@ export function ProjectResourceItem({
 	return (
 		<div
 			className={cn(
-				"relative flex min-w-0 cursor-pointer items-center gap-3 border border-border bg-card transition-colors hover:bg-accent/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+				"relative flex min-w-0 cursor-pointer flex-wrap items-center gap-3 border border-border bg-card transition-colors hover:bg-accent/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
 				isList
 					? "min-h-14 w-full rounded-none border-x-0 border-t-0 px-3 py-2"
-					: "min-h-[88px] flex-col items-stretch rounded-lg p-3",
+					: "flex-col items-stretch rounded-lg p-3",
 				variant === "default" && "shadow-xs",
 				selection?.checked && "border-primary/50 bg-primary/5",
 			)}
@@ -142,7 +153,7 @@ export function ProjectResourceItem({
 			data-view-mode={viewMode}
 			data-resource-type={project.resourceType}
 		>
-			<div className={cn("flex min-w-0 items-center gap-2", !isList && "w-full")}>
+			<div className={cn("flex min-w-0 flex-1 items-center gap-2", !isList && "w-full")}>
 				{selection ? (
 					<div
 						className="shrink-0"
@@ -159,20 +170,44 @@ export function ProjectResourceItem({
 				<ResourceIcon project={project} />
 				<div className="flex min-w-0 flex-1 flex-col gap-0.5">
 					<div className="flex min-w-0 items-center gap-1.5">
-						<span className="min-w-0 truncate text-sm font-medium text-foreground">
+						<SmartTooltip
+							className="min-w-0 text-sm font-medium text-foreground"
+							align="start"
+						>
 							{name}
-						</span>
+						</SmartTooltip>
 						<ProjectTypeTag projectMode={project.project_mode} tooltipDisabled />
 					</div>
 					{description ? (
-						<span className="truncate text-xs text-muted-foreground">
+						<SmartTooltip className="text-xs text-muted-foreground" align="start">
 							{description}
-						</span>
+						</SmartTooltip>
 					) : null}
 				</div>
 			</div>
-			<div className={cn("flex shrink-0 items-center gap-2", !isList && "pl-10")}>
+			<div
+				className={cn(
+					"flex min-w-0 flex-wrap items-center gap-2 text-xs text-muted-foreground",
+					isList ? "ml-auto" : "pl-10",
+				)}
+			>
 				<ResourceStatus project={project} />
+				{project.resourceRole && (
+					<SmartTooltip className="max-w-48" align="start">
+						{t("projectResources.role", { role: project.resourceRole })}
+					</SmartTooltip>
+				)}
+				{project.resourcePackageName && (
+					<SmartTooltip className="max-w-48" align="start">
+						{project.resourcePackageName}
+					</SmartTooltip>
+				)}
+				{project.resourceVersion && (
+					<span>
+						{t("projectResources.version", { version: project.resourceVersion })}
+					</span>
+				)}
+				{updatedAt && <span>{t("projectResources.updatedAt", { date: updatedAt })}</span>}
 			</div>
 		</div>
 	)

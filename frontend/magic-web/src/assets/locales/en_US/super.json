@@ -2386,6 +2386,9 @@
 	"fileManager": {
 		"back": "Back",
 		"browseFolder": "Browse folder",
+		"checkItem": "Select {{name}}",
+		"checkSelectionHint": "Check files; expand folders to keep selecting",
+		"clearSelection": "Clear all",
 		"clipboard": {
 			"copied": "Copied {{count}} items. Go to the destination to paste.",
 			"cut": "Cut {{count}} items. Paste to review and confirm the move.",
@@ -2445,6 +2448,8 @@
 		"files": "Files",
 		"forward": "Forward",
 		"itemCount": "{{count}} items",
+		"locateSelectedFile": "Locate file: {{path}}",
+		"locateUnavailable": "This file cannot be located. It may have been deleted or is no longer accessible.",
 		"memory": {
 			"current": "Current",
 			"noMatches": "No matching projects",
@@ -2457,6 +2462,7 @@
 		"name": "Name",
 		"newFolder": "New folder",
 		"noMatches": "No matching files in this folder",
+		"openSelectedProject": "Go to project: {{name}}",
 		"operationProgress": "Processing {{progress}}%",
 		"paste": "Paste",
 		"path": "File path",
@@ -2475,7 +2481,13 @@
 			"scope": "Deleted files you can access across projects and personal space. This list is not limited to the current project.",
 			"title": "File trash"
 		},
+		"removeSelected": "Remove {{name}}",
 		"restoredDirectoryUnavailable": "The previous folder is unavailable. Opened the nearest available folder.",
+		"searchProjectFiles": "Search project files or paths",
+		"selectedCount": "{{count}} selected",
+		"selectedFiles": "Selected files",
+		"selectionEmpty": "No files selected",
+		"selectionEmptyHint": "Check files on the left to add them here",
 		"selectionHint": "Click to select, double-click to open",
 		"sort": "Sort",
 		"sortModified": "By modified date",
@@ -5258,6 +5270,15 @@
 		"workspaces": "Workspaces",
 		"workspacesShort": "Spaces"
 	},
+	"projectResources": {
+		"allTypes": "All types",
+		"generalType": "General projects",
+		"role": "Role: {{role}}",
+		"statusUnknown": "Unknown status",
+		"updatedAt": "Updated {{date}}",
+		"version": "Version {{version}}",
+		"workspaceOrder": "Workspace order"
+	},
 	"projectShare": {
 		"advancedSettings": "Advanced settings",
 		"copyLink": "Copy link",
@@ -6026,7 +6047,9 @@
 		"noWorkspace": "No Workspace",
 		"onlySelectableAdministratorDocument": "Only Selectable Administrator Document",
 		"pleaseSelectFile": "Please Select File",
+		"preserveParentPath": "Preserve folder hierarchy",
 		"preserveParentPathConfirmTitle": "Keep the original folder path?",
+		"preserveParentPathDescription": "Recreate the original parent-folder path in the target project. Leave this unchecked to place the items directly in the selected folder.",
 		"preserveParentPathExamples": "Compare folder path options",
 		"preserveParentPathFlatDescription": "Selected files will be stored directly in the current folder.",
 		"preserveParentPathFlatTitle": "Place in current folder",
@@ -6042,6 +6065,7 @@
 		"searchResult": "Search Result",
 		"searchWorkspace": "Search Workspace",
 		"selectMentionResource": "Select a project or file",
+		"selectProject": "Select project {{name}}",
 		"selectSourceFiles": "Destination",
 		"selectSpaceOrFolder": "Select Space or Folder",
 		"selectStorageLocation": "Storage Location",

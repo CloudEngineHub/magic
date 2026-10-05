@@ -1,30 +1,31 @@
 import { useEffect, useRef, useState } from "react"
 import { useMemoizedFn } from "ahooks"
 import { useTranslation } from "react-i18next"
-import { MagicClawApi, SuperMagicApi, type MagicClawItem } from "@/apis"
+import { SuperMagicApi } from "@/apis"
 import magicToast from "@/components/base/MagicToaster/utils"
-import { skillsService, type UserSkillView } from "@/services/skills/SkillsService"
-import { crewService, type MyCrewView } from "@/services/crew/CrewService"
 import {
-	ProjectStatus,
 	type Workspace,
 	type ProjectListItem,
 	type CollaborationProjectListItem,
 } from "../../../../pages/Workspace/types"
-import { TopicMode } from "../../../../pages/Workspace/TopicMode"
 import {
+	MY_CLAW_WORKSPACE_DATA,
+	MY_SKILLS_WORKSPACE_DATA,
+	MY_AGENTS_WORKSPACE_DATA,
 	SHARE_WORKSPACE_ID,
 	MY_CLAW_WORKSPACE_ID,
 	MY_SKILLS_WORKSPACE_ID,
 	MY_AGENTS_WORKSPACE_ID,
-	MY_MICRO_APPS_WORKSPACE_ID,
+	MICRO_APPS_WORKSPACE_ID,
 } from "../../../../constants"
-import { loadMicroAppProjectPage } from "../../utils/microAppProjects"
+import { loadResourceProjectPage } from "../../utils/resourceProjects"
 import type { ResourceProject } from "../../resourceProjectTypes"
 
 export const RESOURCE_WORKSPACE_IDS = new Set<string>([
 	MY_SKILLS_WORKSPACE_ID,
 	MY_AGENTS_WORKSPACE_ID,
+	MY_CLAW_WORKSPACE_ID,
+	MICRO_APPS_WORKSPACE_ID,
 ])
 /** Align with MySkills / MyCrew list page size; selector loads more on demand. */
 const RESOURCE_PROJECTS_PAGE_SIZE = 20
@@ -54,6 +55,7 @@ export function useResourceProjects({
 	const [hasMoreResourceProjects, setHasMoreResourceProjects] = useState(false)
 	const loadingMoreResourcesRef = useRef(false)
 	const projectsRequestId = useRef(0)
+	const keywordRef = useRef("")
 	const microWorkspaceRef = useRef<Workspace | null>(null)
 	const cancelProjectRequest = useMemoizedFn(() => {
 		projectsRequestId.current += 1
@@ -93,90 +95,6 @@ export function useResourceProjects({
 		setLoading(false)
 	})
 
-	// 获取龙虾列表并转换为项目格式
-	const fetchMagicClawProjects = useMemoizedFn(async () => {
-		const requestId = ++projectsRequestId.current
-		setLoadError(false)
-		setLoading(true)
-		try {
-			const res = await MagicClawApi.queryMagicClawList({
-				page: 1,
-				page_size: 99,
-			})
-			if (requestId !== projectsRequestId.current) return
-			// 将 MagicClawItem 转换为 ProjectListItem 格式
-			const projects: ResourceProject[] = (res?.list || []).map((item: MagicClawItem) => ({
-				id: item.project_id,
-				project_id: item.project_id,
-				project_status: ProjectStatus.WAITING,
-				project_mode: TopicMode.MagiClaw,
-				project_description: item.description || undefined,
-				workspace_id: MY_CLAW_WORKSPACE_ID,
-				work_dir: "",
-				workspace_name: t("workspace.myClawWorkspaceName"),
-				project_name: item.name,
-				claw_code: item.code,
-				resourceType: "claw",
-				resourceId: item.id,
-				resourceDescription: item.description,
-				resourceIcon: item.icon_file_url,
-				resourceStatus: item.status,
-				resourceTemplateCode: item.template_code,
-				resourceCode: item.code,
-				current_topic_id: "",
-				current_topic_status: "",
-				created_at: "",
-				updated_at: "",
-				tag: "" as const,
-			}))
-			setAvailableProjects(projects)
-		} catch (error) {
-			if (requestId !== projectsRequestId.current) return
-			setLoadError(true)
-			console.error("Failed to fetch magic claw projects:", error)
-			magicToast.error(t("selectPathModal.fetchClawsFailed"))
-			setAvailableProjects([])
-		}
-		setLoading(false)
-	})
-
-	const mapResourceProject = useMemoizedFn(
-		(
-			item: UserSkillView | MyCrewView,
-			resourceType: "skill" | "agent",
-			workspaceId: string,
-		): ResourceProject => {
-			const projectId = item.projectId || null
-			return {
-				id: projectId || item.id,
-				project_id: projectId,
-				resourceType,
-				resourceId: item.id,
-				project_status: ProjectStatus.WAITING,
-				project_mode:
-					resourceType === "skill"
-						? TopicMode.SkillProjectCreator
-						: TopicMode.AgentCreator,
-				workspace_id: workspaceId,
-				work_dir: "",
-				workspace_name: "",
-				project_name: item.name,
-				resourceDescription: item.description,
-				resourceIcon: "logo" in item ? item.logo : item.icon,
-				resourceRole: "role" in item ? item.role : undefined,
-				resourceVersion:
-					resourceType === "skill"
-						? (item as UserSkillView).latestVersion
-						: (item as MyCrewView).latestVersionCode,
-				current_topic_id: "",
-				current_topic_status: "",
-				created_at: "",
-				updated_at: "",
-				tag: "",
-			}
-		},
-	)
-
 	const resetResourceProjectsPagination = useMemoizedFn(() => {
 		setResourceProjectsPage(1)
 		setHasMoreResourceProjects(false)
@@ -198,27 +116,27 @@ export function useResourceProjects({
 		const requestId = ++projectsRequestId.current
 		setLoadError(false)
 		try {
-			const params = { page, page_size: RESOURCE_PROJECTS_PAGE_SIZE }
-			const isSkillsWorkspace = workspaceId === MY_SKILLS_WORKSPACE_ID
-			const response = isSkillsWorkspace
-				? await skillsService.getCreatedSkills(params)
-				: await crewService.getCreatedAgents(params)
-			const mapped = response.list.map((item) =>
-				mapResourceProject(
-					item,
-					isSkillsWorkspace ? "skill" : "agent",
-					isSkillsWorkspace ? MY_SKILLS_WORKSPACE_ID : MY_AGENTS_WORKSPACE_ID,
-				),
-			)
-
+			const workspace =
+				workspaceId === MY_CLAW_WORKSPACE_ID
+					? MY_CLAW_WORKSPACE_DATA(t)
+					: workspaceId === MY_SKILLS_WORKSPACE_ID
+						? MY_SKILLS_WORKSPACE_DATA(t)
+						: MY_AGENTS_WORKSPACE_DATA(t)
+			const response = await loadResourceProjectPage({
+				workspace,
+				page,
+				pageSize: RESOURCE_PROJECTS_PAGE_SIZE,
+				keyword: keywordRef.current,
+			})
+			const mapped = response.list
 			if (requestId !== projectsRequestId.current) return
 			setAvailableProjects((prev) => {
 				if (!isLoadMore) return mapped
 				const existingIds = new Set(prev.map((project) => project.id))
 				return [...prev, ...mapped.filter((project) => !existingIds.has(project.id))]
 			})
-			setResourceProjectsPage(response.page)
-			setHasMoreResourceProjects(response.page * response.pageSize < response.total)
+			setResourceProjectsPage(page)
+			setHasMoreResourceProjects(page * RESOURCE_PROJECTS_PAGE_SIZE < response.total)
 		} catch (error) {
 			if (requestId !== projectsRequestId.current) return
 			setLoadError(true)
@@ -267,10 +185,11 @@ export function useResourceProjects({
 				microWorkspaceRef.current ?? (await SuperMagicApi.getMicroAppWorkspace())
 			if (requestId !== projectsRequestId.current) return
 			microWorkspaceRef.current = workspace
-			const result = await loadMicroAppProjectPage({
+			const result = await loadResourceProjectPage({
 				workspace,
 				page,
 				pageSize: RESOURCE_PROJECTS_PAGE_SIZE,
+				keyword: keywordRef.current,
 			})
 			if (requestId !== projectsRequestId.current) return
 			setAvailableProjects((previous) =>
@@ -299,10 +218,11 @@ export function useResourceProjects({
 	})
 
 	// 获取工作区的项目列表
-	const fetchProjectsByWorkspace = useMemoizedFn(async (workspaceId: string) => {
+	const fetchProjectsByWorkspace = useMemoizedFn(async (workspaceId: string, keyword = "") => {
+		keywordRef.current = keyword
 		if (
 			isMentionMode &&
-			(workspaceId === MY_MICRO_APPS_WORKSPACE_ID ||
+			(workspaceId === MICRO_APPS_WORKSPACE_ID ||
 				workspaceId === microWorkspaceRef.current?.id)
 		) {
 			await fetchMicroAppProjects()
@@ -317,16 +237,14 @@ export function useResourceProjects({
 			await fetchCollaborationProjects()
 			return
 		}
-		if (workspaceId === MY_CLAW_WORKSPACE_ID) {
-			await fetchMagicClawProjects()
-			return
-		}
+
 		const requestId = ++projectsRequestId.current
 		setLoadError(false)
 		setLoading(true)
 		try {
 			const res = await SuperMagicApi.getProjectsWithCollaboration({
 				workspace_id: workspaceId,
+				project_name: keyword,
 				page: 1,
 				page_size: 99,
 			})
