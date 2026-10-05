@@ -1,6 +1,12 @@
 import { getActiveImageContent, isImageElementContent } from "../../document/elementContent"
 import { GenerationStatus } from "../../../public/magic-types"
 import type { Canvas } from "../../core/Canvas"
+import type { CanvasImageFileRename } from "../../../public/magic-types"
+
+export interface ImageRenameOptions {
+	/** 显式传入选项时，标题和文件独立提交；未提供文件变化表示只改标题。 */
+	fileChange?: CanvasImageFileRename
+}
 
 export class ElementRenameManager {
 	private renamingElementId: string | null = null
@@ -47,7 +53,7 @@ export class ElementRenameManager {
 		return true
 	}
 
-	public async commitRename(nextName: string): Promise<void> {
+	public async commitRename(nextName: string, options?: ImageRenameOptions): Promise<void> {
 		const elementId = this.renamingElementId
 		const name = nextName.trim()
 		if (!elementId || !name) return
@@ -56,13 +62,39 @@ export class ElementRenameManager {
 		const currentName =
 			element?.name ||
 			this.canvas.elementManager.getElementInstance(elementId)?.getRenderName()
-		if (name === currentName) {
+		if (name === currentName && !options?.fileChange) {
 			this.cancelRename()
 			return
 		}
 		let affectsFile = false
 		const methods = this.canvas.magicConfigManager.config?.methods?.imageRename
-		if (element && isImageElementContent(element) && element.contents.length === 1 && methods) {
+		if (options?.fileChange) {
+			const change = options.fileChange
+			if (
+				!methods ||
+				!element ||
+				!isImageElementContent(element) ||
+				element.contents.length !== 1 ||
+				change.elementId !== elementId ||
+				getActiveImageContent(element).contentId !== change.contentId
+			) {
+				throw new Error(
+					this.canvas.t?.("rename.fileChanged", "文件已变化，请重新打开命名面板。") ||
+						"文件已变化，请重新打开命名面板。",
+				)
+			}
+			const error = methods.validateImageFileRenames([change])[change.fileId]
+			if (error) throw new Error(error)
+			this.canvas.historyManager.recordHistoryImmediate()
+			await methods.renameImageFile(change)
+			affectsFile = true
+		} else if (
+			!options &&
+			element &&
+			isImageElementContent(element) &&
+			element.contents.length === 1 &&
+			methods
+		) {
 			const content = getActiveImageContent(element)
 			const processing =
 				content.status === GenerationStatus.Pending ||

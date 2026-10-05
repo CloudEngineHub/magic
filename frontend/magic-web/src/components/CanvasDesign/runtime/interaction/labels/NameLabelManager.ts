@@ -36,6 +36,7 @@ export class NameLabelManager extends BaseLabelManager {
 	private renamingElementId: string | null = null
 	private interactionUnsubscribers: Array<() => void> = []
 	private pointerHoverElementId: string | null = null
+	private domLabelElementId: string | null = null
 
 	constructor(options: { canvas: Canvas }) {
 		const { canvas } = options
@@ -93,6 +94,34 @@ export class NameLabelManager extends BaseLabelManager {
 		const bounds = this.canvas.elementManager.getElementInstance(elementId)?.getBoundingRect()
 		if (!bounds || layout.width + 24 > bounds.width * this.canvas.stage.scaleX()) return null
 		return { x: layout.x + layout.width, y: layout.y + layout.height - 24 }
+	}
+
+	/** 只把当前可交互图片的名称交给 DOM；布局和其它元素标签仍由原管理器维护。 */
+	public getImageNameLabelLayout(
+		elementId: string,
+	): ReturnType<NameLabelManager["getRenameInputLayout"]> {
+		if (
+			this.renamingElementId ||
+			!this.areNameLabelsInteractive() ||
+			this.canvas.elementManager.getElementData(elementId)?.type !== ElementTypeEnum.Image
+		)
+			return null
+		const layout = this.getRenameInputLayout(elementId)
+		return layout && this.labelMap.get(elementId)?.visible() ? layout : null
+	}
+
+	public setDOMLabelElementId(elementId: string | null): void {
+		if (this.domLabelElementId === elementId) return
+		const previous = this.domLabelElementId
+		this.domLabelElementId = elementId
+		// DOM 文字支持原生选中复制，只隐藏同一标签的 Konva 文字，避免双份文字重叠。
+		if (previous) this.labelMap.get(previous)?.findOne<Konva.Text>("Text")?.opacity(1)
+		if (elementId) this.labelMap.get(elementId)?.findOne<Konva.Text>("Text")?.opacity(0)
+		this.canvas.runtimeScheduler.requestLayerDraw("overlay", {
+			source: "NameLabelManager",
+			reason: "dom-name-label",
+			priority: "input",
+		})
 	}
 
 	public setRenamingElementId(elementId: string | null): void {
@@ -165,6 +194,7 @@ export class NameLabelManager extends BaseLabelManager {
 			fontFamily: this.labelConfig.fontFamily,
 			fill: this.labelConfig.textColor,
 			listening: false,
+			opacity: this.domLabelElementId === elementId ? 0 : 1,
 		})
 		const hitRect = new Konva.Rect({
 			name: NAME_LABEL_HIT_NAME,
@@ -238,7 +268,10 @@ export class NameLabelManager extends BaseLabelManager {
 		labelGroup: Konva.Group,
 		baseVisibility: boolean,
 	): boolean | null {
-		if (this.renamingElementId === elementId) {
+		if (
+			this.renamingElementId === elementId &&
+			element?.getData().type !== ElementTypeEnum.Image
+		) {
 			return false
 		}
 
@@ -377,16 +410,13 @@ export class NameLabelManager extends BaseLabelManager {
 		labelGroup.on("mouseup", stopPointerEvent)
 		labelGroup.on("click tap", (e) => {
 			stopPointerEvent(e)
-			// 图片名称是命名入口；多版本由同一管理器打开面板，普通元素保留双击编辑。
-			if (
-				this.canvas.elementManager.getElementData(elementId)?.type === ElementTypeEnum.Image
-			) {
-				this.canvas.elementRenameManager.startRename(elementId)
-			}
 		})
 		labelGroup.on("dblclick dbltap", (e) => {
 			stopPointerEvent(e)
-			this.canvas.elementRenameManager?.startRename(elementId)
+			if (
+				this.canvas.elementManager.getElementData(elementId)?.type !== ElementTypeEnum.Image
+			)
+				this.canvas.elementRenameManager?.startRename(elementId)
 		})
 		labelGroup.on("contextmenu", (e) => {
 			e.evt.preventDefault()

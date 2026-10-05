@@ -1,4 +1,4 @@
-import { useLayoutEffect, useRef } from "react"
+import { useLayoutEffect, useRef, type KeyboardEventHandler } from "react"
 import { Textarea } from "../../primitives/shadcn/textarea"
 
 interface RenameNameFieldProps {
@@ -8,6 +8,7 @@ interface RenameNameFieldProps {
 	extension?: string
 	disabled?: boolean
 	invalid?: boolean
+	onKeyDown?: KeyboardEventHandler<HTMLTextAreaElement>
 }
 
 /** 标题与文件名共用排版；始终挂载输入，不因出现原名对照而丢失光标。 */
@@ -18,6 +19,7 @@ export default function RenameNameField({
 	extension,
 	disabled,
 	invalid,
+	onKeyDown,
 }: RenameNameFieldProps) {
 	const input = useRef<HTMLTextAreaElement>(null)
 	const beforeFocus = useRef(value)
@@ -56,6 +58,10 @@ export default function RenameNameField({
 				}}
 				onChange={(event) => onChange(event.target.value.replace(/[\r\n]/g, ""))}
 				onKeyDown={(event) => {
+					if (onKeyDown) {
+						onKeyDown(event)
+						return
+					}
 					if (event.nativeEvent.isComposing || event.nativeEvent.keyCode === 229) return
 					if (event.key === "Enter") {
 						event.preventDefault()

@@ -4,6 +4,7 @@ import ElementRenameOverlayRender from "./ElementRenameOverlayRender"
 import ImageRenamePanel from "./ImageRenamePanel"
 import { isImageElementContent } from "../../../runtime/document/elementContent"
 import NameLabelRenameButton from "./NameLabelRenameButton"
+import SingleImageRenamePanel from "./SingleImageRenamePanel"
 
 export default function ElementRenameOverlay() {
 	const { canvasRenamingElementId } = useCanvasRenameUI()
@@ -13,9 +14,12 @@ export default function ElementRenameOverlay() {
 		return <NameLabelRenameButton />
 	}
 
-	return isImageElementContent(element) && element.contents.length > 1 ? (
-		<ImageRenamePanel key={element.id} element={element} />
-	) : (
-		<ElementRenameOverlayRender key={element.id} elementId={canvasRenamingElementId} />
-	)
+	if (isImageElementContent(element)) {
+		return element.contents.length > 1 ? (
+			<ImageRenamePanel key={element.id} element={element} />
+		) : (
+			<SingleImageRenamePanel key={element.id} element={element} />
+		)
+	}
+	return <ElementRenameOverlayRender key={element.id} elementId={canvasRenamingElementId} />
 }

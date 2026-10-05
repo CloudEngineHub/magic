@@ -9,12 +9,6 @@ import { Input } from "../../primitives/shadcn/input"
 import styles from "./index.module.css"
 import { useCanvasDesignI18n } from "../../../app/providers/I18nProvider"
 import { Loader2 } from "lucide-react"
-import { useMagic } from "../../../app/providers/MagicProvider"
-import { GenerationStatus } from "../../../public/magic-types"
-import {
-	getActiveImageContent,
-	isImageElementContent,
-} from "../../../runtime/document/elementContent"
 
 export interface ElementRenameOverlayRenderProps {
 	elementId: string
@@ -28,7 +22,6 @@ export default function ElementRenameOverlayRender({ elementId }: ElementRenameO
 	const [value, setValue] = useState("")
 	const [isComposing, setIsComposing] = useState(false)
 	const { t } = useCanvasDesignI18n()
-	const { methods } = useMagic()
 	const [saving, setSaving] = useState(false)
 	const savingRef = useRef(false)
 	const [error, setError] = useState("")
@@ -125,14 +118,6 @@ export default function ElementRenameOverlayRender({ elementId }: ElementRenameO
 	if (!elementId || !element) {
 		return null
 	}
-	const content = isImageElementContent(element) ? getActiveImageContent(element) : undefined
-	const file =
-		content &&
-		content.status !== GenerationStatus.Pending &&
-		content.status !== GenerationStatus.Processing &&
-		content.src
-			? methods?.imageRename?.resolveImageRenameFile(content.src)
-			: undefined
 
 	return (
 		<div ref={setRefs} className={styles.renameOverlayRoot} data-canvas-ui-component>
@@ -189,8 +174,6 @@ export default function ElementRenameOverlayRender({ elementId }: ElementRenameO
 					</>
 				) : error ? (
 					<span className="text-destructive">{error}</span>
-				) : file ? (
-					t("rename.alsoRenameFile", "同时修改真实文件名")
 				) : (
 					t("rename.titleOnly", "仅修改元素名称")
 				)}
