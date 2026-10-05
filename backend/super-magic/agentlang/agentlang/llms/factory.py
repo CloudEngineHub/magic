@@ -19,6 +19,7 @@ from openai.types.chat import ChatCompletion
 from pydantic import BaseModel, Field
 
 from agentlang.config.config import config
+from agentlang.exceptions import StreamInterruptedError
 from agentlang.interface.context import AgentContextInterface
 from agentlang.llms.token_usage.tracker import TokenUsageTracker
 from agentlang.llms.token_usage.pricing import ModelPricing
@@ -257,6 +258,7 @@ class LLMFactory:
         # 执行 LLM 调用（统一管理流式/非流式及降级重试）
         response = None
         exception = None
+        cancelled: bool = False
         try:
             response = await ProcessorManager.execute_llm_call(
                 client=client,
@@ -301,7 +303,18 @@ class LLMFactory:
             logger.info(f"[{request_id}] 请求完成 {display_model_id}:{llm_config.name}, 耗时: {elapsed_time:.2f}ms, tokens: {response.usage.total_tokens if response.usage else 'N/A'}")
 
             return response
+        except asyncio.CancelledError:
+            cancelled = True
+            raise
         except Exception as e:
+            # 有终止信号的提前断流按取消处理；无信号断流仍保留失败日志和重试。
+            if (
+                isinstance(e, StreamInterruptedError)
+                and agent_context is not None
+                and agent_context.is_interruption_requested()
+            ):
+                cancelled = True
+                raise asyncio.CancelledError("LLM request stopped by interruption signal") from e
             exception = e
             # Check for resource limit errors (insufficient points, consumption rounds limit, concurrency limit)
             cls._check_and_handle_resource_limit_error(e, request_id)
@@ -316,23 +329,26 @@ class LLMFactory:
 
             raise
         finally:
-            # 统一记录调试日志（内部根据环境变量决定是否记录成功请求，失败请求总是记录）
-            end_timestamp = datetime.now().isoformat()
-            debug_info = LLMDebugInfo(
-                model_id=llm_config.model_id,
-                model_name=llm_config.name,
-                provider=llm_config.provider,
-                api_base_url=llm_config.api_base_url,
-                api_key=llm_config.api_key
-            )
-            asyncio.create_task(save_llm_debug_log(
-                debug_info=debug_info,
-                request_params=request_params,
-                response=response,
-                exception=exception,
-                start_timestamp=start_timestamp,
-                end_timestamp=end_timestamp
-            ))
+            # 在当前调用内确定取消结果，避免后台保存时读到下一次运行重置后的状态。
+            # 取消不生成失败档案，也不触发失败档案淘汰；真实故障继续走原保存流程。
+            if not cancelled:
+                # 统一记录调试日志（内部根据环境变量决定是否记录成功请求，失败请求总是记录）
+                end_timestamp = datetime.now().isoformat()
+                debug_info = LLMDebugInfo(
+                    model_id=llm_config.model_id,
+                    model_name=llm_config.name,
+                    provider=llm_config.provider,
+                    api_base_url=llm_config.api_base_url,
+                    api_key=llm_config.api_key
+                )
+                asyncio.create_task(save_llm_debug_log(
+                    debug_info=debug_info,
+                    request_params=request_params,
+                    response=response,
+                    exception=exception,
+                    start_timestamp=start_timestamp,
+                    end_timestamp=end_timestamp
+                ))
 
     @classmethod
     def get_embedding_client(cls, model_id: str) -> Any:
