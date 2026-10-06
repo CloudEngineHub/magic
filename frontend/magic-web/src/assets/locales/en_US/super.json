@@ -4806,6 +4806,7 @@
 		"uploadImageSizeLimit": "The file size should be less than 2MB."
 	},
 	"operationResultList": {
+		"detailsShort": "Details",
 		"directory": "Folder",
 		"file": "File",
 		"generationDetails": "Generation details",
@@ -4813,6 +4814,7 @@
 		"itemCount": "{{count}} results",
 		"itemCount_one": "{{count}} result",
 		"locateCanvasElement": "Locate canvas element: {{label}}",
+		"locateShort": "Locate",
 		"openGenerationDetails": "View generation details: {{label}}",
 		"running": "Processing",
 		"summary": "{{success}} succeeded · {{error}} failed",

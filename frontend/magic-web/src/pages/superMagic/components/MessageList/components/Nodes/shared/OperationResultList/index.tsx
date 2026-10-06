@@ -55,19 +55,24 @@ function OperationResultList({
 			? t("operationResultList.interrupted")
 			: t("operationResultList.unavailable")
 	const StatusIcon = loading ? Loader2 : CircleAlert
+	// 展开时由明细转圈；只有明细全部失败或不可用时，头部仍负责执行反馈。
+	const showHeaderSpinner =
+		loading && (!open || Boolean(items?.length && (resultUnavailable || successCount === 0)))
 	// 展开只增加明细，不替换汇总；成功和失败各自着色，用户无需滚动数结果。
 	const summary = (
 		<span
-			className="ml-auto inline-flex min-w-0 flex-wrap items-center justify-end gap-x-3 gap-y-1"
+			className="inline-flex min-w-0 flex-wrap items-center gap-x-2.5 gap-y-1 text-xs leading-4"
 			aria-live="polite"
 		>
 			{resultUnavailable || !items ? (
 				<span className="inline-flex min-w-0 items-center gap-1.5 text-muted-foreground">
-					<StatusIcon
-						size={16}
-						aria-hidden
-						className={cn("shrink-0", loading && "animate-spin")}
-					/>
+					{(!loading || showHeaderSpinner) && (
+						<StatusIcon
+							size={16}
+							aria-hidden
+							className={cn("shrink-0", loading && "animate-spin")}
+						/>
+					)}
 					<span className="[overflow-wrap:anywhere]">{unavailable}</span>
 				</span>
 			) : (
@@ -79,11 +84,11 @@ function OperationResultList({
 								loading ? "text-muted-foreground" : "text-success",
 							)}
 						>
-							{loading ? (
+							{showHeaderSpinner ? (
 								<Loader2 size={16} aria-hidden className="shrink-0 animate-spin" />
-							) : (
+							) : !loading ? (
 								<CircleCheck size={16} aria-hidden className="shrink-0" />
-							)}
+							) : null}
 							{loading
 								? successCount > 0
 									? t("operationResultList.summaryProcessing", {
@@ -122,40 +127,40 @@ function OperationResultList({
 					onClick={toggle}
 					aria-expanded={open}
 					aria-controls={contentId}
-					className="flex h-auto w-full min-w-0 flex-col items-stretch gap-1.5 rounded-none px-3 py-2.5 text-left text-xs font-normal hover:bg-muted/30 focus-visible:ring-inset"
+					className="grid h-auto min-h-10 w-full min-w-0 grid-cols-[minmax(0,1fr)_auto] items-start gap-x-2 gap-y-1 rounded-none px-3 py-2 text-left text-xs font-normal hover:bg-muted/30 focus-visible:ring-inset"
 				>
-					<span className="flex min-w-0 items-center gap-2">
-						<ToolIconBadge toolName={toolData.name} size={20} iconSize={12} />
-						<span className="min-w-0 flex-1 whitespace-normal text-sm leading-5 text-foreground">
-							{toolData.action || t("operationResultList.title")}
+					<span className="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1">
+						<span className="flex min-w-0 flex-1 basis-40 items-center gap-2">
+							<ToolIconBadge toolName={toolData.name} size={20} iconSize={12} />
+							<span className="min-w-0 whitespace-normal text-sm leading-5 text-foreground">
+								{toolData.action || t("operationResultList.title")}
+							</span>
 						</span>
-						<ChevronRight
-							size={16}
-							aria-hidden
-							className={cn(
-								"shrink-0 text-muted-foreground transition-transform motion-reduce:transition-none",
-								open && "rotate-90",
-							)}
-						/>
-					</span>
-					<span className="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1 pl-7">
-						{!open && remark && (
-							<SmartTooltip
-								fileName
-								elementType="span"
-								placement="top"
-								align="start"
-								className="min-w-0 flex-1 basis-20 text-xs leading-4 text-muted-foreground"
-							>
-								{remark}
-							</SmartTooltip>
-						)}
 						{summary}
 					</span>
+					<ChevronRight
+						size={16}
+						aria-hidden
+						className={cn(
+							"mt-0.5 shrink-0 text-muted-foreground transition-transform motion-reduce:transition-none",
+							open && "rotate-90",
+						)}
+					/>
+					{!open && remark && (
+						<SmartTooltip
+							fileName
+							elementType="span"
+							placement="top"
+							align="start"
+							className="min-w-0 pl-7 text-xs leading-4 text-muted-foreground"
+						>
+							{remark}
+						</SmartTooltip>
+					)}
 				</Button>
 				{open && (
 					<div id={contentId} className="border-t border-border">
-						{items ? (
+						{items?.length ? (
 							// Radix 的 table 内容包装会把长名称变成最小宽度，使用块布局让名称在卡片内换行。
 							<ScrollArea viewportClassName="max-h-96 [&>div]:!block">
 								<ul className="m-0 list-none divide-y divide-border p-0">
