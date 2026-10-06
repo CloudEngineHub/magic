@@ -1,7 +1,10 @@
 import type { SuperMagicMessageItem } from "./type"
 import type { StreamState } from "../../stores/types"
 import { trimIncompleteCitationTag } from "../../utils/citations"
-import { isToolCallLoading } from "./components/Nodes/MessageNode/tool-call/types"
+import {
+	isToolCallLoading,
+	type ToolCallItem,
+} from "./components/Nodes/MessageNode/tool-call/types"
 
 interface ProjectedMessageNode {
 	reasoning_content?: unknown
@@ -27,8 +30,10 @@ export interface ResolveBottomLoadingVisibilityParams {
 	isTopicTaskRunning: boolean
 	activeStreamSuperMessageIds: readonly string[]
 	visibleMessages: readonly SuperMagicMessageItem[]
+	currentTurnMessages: readonly SuperMagicMessageItem[]
 	resolveMessageNode: (superMessageId: string) => ProjectedMessageNode | undefined
 	resolveStreamState: (superMessageId: string) => BottomLoadingStreamSnapshot | undefined
+	resolveToolResponse: (toolCallId: string) => { status?: string } | undefined
 }
 
 export interface BottomLoadingVisibility {
@@ -48,7 +53,7 @@ function hasVisibleText(value: unknown): value is string {
 	return typeof value === "string" && !/^\s*$/.test(value)
 }
 
-function isRenderableToolCall(toolCall: unknown): boolean {
+function isRenderableToolCall(toolCall: unknown): toolCall is ToolCallItem {
 	if (!toolCall || typeof toolCall !== "object") return false
 	const candidate = toolCall as {
 		id?: unknown
@@ -66,13 +71,6 @@ function isRenderableToolCall(toolCall: unknown): boolean {
 function countRenderableToolCalls(toolCalls: unknown): number {
 	if (!Array.isArray(toolCalls)) return 0
 	return toolCalls.filter(isRenderableToolCall).length
-}
-
-function hasVisibleNonTerminalToolCall(node: ProjectedMessageNode | undefined): boolean {
-	if (!Array.isArray(node?.tool_calls)) return false
-	return node.tool_calls.some(
-		(toolCall) => isRenderableToolCall(toolCall) && isToolCallLoading(toolCall),
-	)
 }
 
 function toTextLength(value: unknown): number {
@@ -124,8 +122,10 @@ export function resolveBottomLoadingVisibility({
 	isTopicTaskRunning,
 	activeStreamSuperMessageIds,
 	visibleMessages,
+	currentTurnMessages,
 	resolveMessageNode,
 	resolveStreamState,
+	resolveToolResponse,
 }: ResolveBottomLoadingVisibilityParams): BottomLoadingVisibility {
 	const activeStreamIds = activeStreamSuperMessageIds.filter(
 		(superMessageId) => typeof superMessageId === "string" && superMessageId.trim().length > 0,
@@ -147,10 +147,11 @@ export function resolveBottomLoadingVisibility({
 				resolveStreamState(superMessageId)?.stage,
 			),
 	)
-	const hasVisibleToolProgress = visibleMessageIdsHasNonTerminalToolCall(
+	const hasVisibleToolProgress = currentTurnHasExecutingTool(
 		visibleMessageIds,
-		visibleMessages,
+		currentTurnMessages,
 		resolveMessageNode,
+		resolveToolResponse,
 	)
 
 	const showImmediately =
@@ -180,17 +181,25 @@ export function resolveBottomLoadingVisibility({
 	}
 }
 
-function visibleMessageIdsHasNonTerminalToolCall(
+function currentTurnHasExecutingTool(
 	visibleMessageIds: Set<string>,
-	visibleMessages: readonly SuperMagicMessageItem[],
+	currentTurnMessages: readonly SuperMagicMessageItem[],
 	resolveMessageNode: (superMessageId: string) => ProjectedMessageNode | undefined,
+	resolveToolResponse: ResolveBottomLoadingVisibilityParams["resolveToolResponse"],
 ): boolean {
-	return visibleMessages.some((message) => {
+	// 新用户消息开始新一轮；历史工具即使残留 running，也不能改变本轮等待模型的文案。
+	return currentTurnMessages.some((message) => {
 		const superMessageId = message?.super_message_id
-		return (
-			typeof superMessageId === "string" &&
-			visibleMessageIds.has(superMessageId) &&
-			hasVisibleNonTerminalToolCall(resolveMessageNode(superMessageId))
-		)
+		if (typeof superMessageId !== "string" || !visibleMessageIds.has(superMessageId))
+			return false
+		const node = resolveMessageNode(superMessageId)
+		if (!Array.isArray(node?.tool_calls)) return false
+		return node.tool_calls.some((toolCall: unknown) => {
+			if (!isRenderableToolCall(toolCall)) return false
+			// 例：初始化调用仍保存 running，独立响应已是 finished。实际响应优先；
+			// 尚无明确状态的调用参数不代表工具已经执行，不改卡片自身的缺失响应保护。
+			const response = resolveToolResponse(toolCall.id) ?? toolCall.tool
+			return Boolean(response?.status) && isToolCallLoading({ tool: response })
+		})
 	})
 }
