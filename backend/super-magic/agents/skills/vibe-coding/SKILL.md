@@ -104,7 +104,7 @@ print(result.content)
 
 | Reported storage | Meaning |
 | --- | --- |
-| network storage | Persisted and visible to the user; each new small file costs about 2 seconds |
+| network storage | Persisted and visible to the user; each new small file takes about 2 seconds to write and counts toward the plan's file and storage limits |
 | local dependency directory | Fast local disk inside the project; emptied on rebuild and reinstalled by the package manager |
 | container-local disk | Fast, hidden from the user, wiped on rebuild |
 | platform-managed internal storage | Used by the platform itself; do not put project files there |

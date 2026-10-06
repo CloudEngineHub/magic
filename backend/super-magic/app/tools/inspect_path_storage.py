@@ -17,10 +17,11 @@ from app.path_manager import PathManager, RuntimeEnvironment
 from app.tools.core import BaseTool, BaseToolParams, tool
 from app.utils.path_storage import PathStorageInfo, PathStorageLayer, inspect_path_storage
 
-# 每层对模型的说明：只写对放置决策有用的事实（速度、持久、可见、重建后怎样）
+# 每层对模型的说明：只写对放置决策有用的事实（速度、配额、持久、可见、重建后怎样）
 _SANDBOX_LAYER_DESCRIPTIONS: dict[PathStorageLayer, str] = {
     PathStorageLayer.NETWORK: (
-        "network storage. Persisted and visible to the user. Each new small file costs about 2 seconds; keep file count low."
+        "network storage. Persisted and visible to the user. Each new small file takes about 2 seconds to write, "
+        "and the user's plan caps file count per project and total storage size; keep file count low."
     ),
     PathStorageLayer.LOCAL_DEPENDENCY: (
         "local dependency directory. Its files live on this sandbox's local disk, so many small files are fast. "
