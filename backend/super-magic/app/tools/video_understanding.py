@@ -51,6 +51,7 @@ class VideoUnderstanding(WorkspaceTool[VideoUnderstandingParams]):
     1、分析需求明确时，为视频专家提供完整的逐字引用的分析需求
     2、需要说明分析背景，帮助视频专家理解分析意图
     3、要求视频专家描述视频内容、场景、主题等关键信息
+    4、要找视频中的特定画面或时刻时，先让视频专家给出对应时间点，再只截取这几个时间点的帧；不要按固定频率批量抽帧再逐张查看，视觉理解一次只能有效查看少量图片
 
     支持格式：MP4、AVI、MOV、MKV、WebM 等常见视频格式（视模型支持情况而定）
     适用场景：视频内容识别描述、场景分析、主题提炼、人物行为分析、多视频对比等视频理解场景
@@ -82,6 +83,7 @@ class VideoUnderstanding(WorkspaceTool[VideoUnderstandingParams]):
     1. When analysis requirements are clear, provide video expert with complete verbatim quoted analysis requirements
     2. Provide analysis background to help the video expert understand the intent
     3. Ask the video expert to describe video content, scenes, themes and key information
+    4. To find a specific scene or moment in a video, ask the video expert for its timestamps first, then extract frames only at those timestamps. Do not extract frames at a fixed rate and inspect them one by one; visual understanding can only examine a few images per call
 
     Supported formats: MP4, AVI, MOV, MKV, WebM and other common video formats (depends on model support)
     Use scenarios: Video content recognition/description, scene analysis, theme extraction, character behavior analysis, multi-video comparison and other video understanding scenarios

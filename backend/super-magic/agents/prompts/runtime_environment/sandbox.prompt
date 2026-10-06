@@ -11,6 +11,7 @@
 - 上传或导入进来的依赖目录不受平台保护，先删除，再让包管理器重新安装。
 - 不要在网络存储里用软链调整目录布局，这类软链不会持久保存，沙盒重启后会消失。
 - 交付给用户的构建产物放在 .workspace 里，用户才能浏览；尽量减少产物文件数，例如关闭 sourcemap、合并为少量文件。
+- 视频帧、PDF 逐页图片、切分片段等批量生成的中间文件写到 $MAGIC_BOX_DIR；只有要交付或展示给用户的少量文件才放进 .workspace。
 - 需要包管理器、构建步骤或本地服务时，如果可以使用 vibe-coding skill，先读取它；否则选择不需要安装和构建的做法。
 网络：
 - 沙盒之间没有网络隔离。本地服务默认只监听 127.0.0.1；只有服务本身校验难以猜测的强凭证、并拒绝未认证请求时，才可以监听 0.0.0.0。
@@ -28,6 +29,7 @@ Also follow these constraints:
 - A dependency directory that arrived by upload or import is not protected by the platform. Delete it first, then let the package manager reinstall it.
 - Do not use symlinks in network storage to change directory layout. Such symlinks are not persisted and disappear after the sandbox restarts.
 - Keep build output delivered to the user inside `.workspace` so the user can browse it, and keep its file count low, for example by disabling sourcemaps and bundling into a few files.
+- Write bulk intermediates such as video frames, per-page PDF images, and split chunks to `$MAGIC_BOX_DIR`; place only the few files that are delivered or shown to the user in `.workspace`.
 - When a package manager, a build step, or a local server is needed, read the `vibe-coding` skill first if it is available; otherwise choose an approach that needs no installation or build.
 Network:
 - Sandboxes are not network-isolated from each other. Local servers bind `127.0.0.1` by default. Bind `0.0.0.0` only when the service itself verifies a strong, unguessable credential and rejects unauthenticated requests.
