@@ -217,7 +217,7 @@ result = tool.call("wait_for_subagents", {
 
 | Value | Behavior |
 |-------|----------|
-| `> 0` | Wait up to N seconds. If agents are still running, returns current status with progress snapshot. You must either call again to keep waiting, or use kill=True. Unattended agents run indefinitely. |
+| `> 0` | Wait up to N seconds. If agents are still running, returns current status with a progress snapshot, not a final result. Wait again before finishing; use kill=True only when the delegated work is no longer needed. |
 | `= 0` | Return current status snapshot immediately without waiting. |
 | `= -1` | Wait indefinitely until all agents finish (capped at 60 minutes). |
 
@@ -229,12 +229,14 @@ Set `kill=True` to immediately terminate all specified sub-agents and return the
 
 ### Handling `running` status
 
-When `wait_for_subagents` returns agents with status `running`, those agents are still executing in the background. You must take one of these actions:
+When `wait_for_subagents` returns agents with status `running`, their work is not complete. Before finishing the parent task:
 
-1. **Keep waiting**: call `wait_for_subagents` again with the same `agent_ids` (and optionally a longer timeout)
-2. **Kill**: call `wait_for_subagents` with `kill=True` to terminate them immediately
+1. **Keep waiting**: call `wait_for_subagents` again with the same `agent_ids` (and optionally a longer timeout), then collect and process their final results.
+2. **Stop unneeded work**: use `kill=True` only when the delegated task is no longer needed.
 
-Do not proceed without dealing with running agents — they run indefinitely and consume resources until explicitly waited on or killed. Read the `Last message:` progress snapshot in the result to decide: if the agent is making progress, wait longer; if it looks stuck or the task is no longer needed, kill it.
+You may do independent work while sub-agents run, but collect and process their final results before finishing the parent task. A timeout, a progress message, or a pattern match is not completion. Read `Last message:` to understand progress and keep waiting when the delegated work is still needed.
+
+When the parent is waiting for a user answer, background sub-agents continue running. Do not stop them merely because you asked the user a question. Any runtime reminder supplies current status; you still need to call the tools to wait or explicitly stop unneeded work.
 
 Awaits all listed agents together. `result.content` uses this format per agent:
 
@@ -249,7 +251,7 @@ Result:
 - `status` values: `done`, `error`, `interrupted`, `running`, `not_found`, `ambiguous`
 - `Result:` appears only when status is `done` — contains the sub-agent's final output
 - When status is `running` (timed out), `Result:` is replaced by `Last message:` — this is the last assistant message the sub-agent produced before the timeout, useful for gauging progress
-- `wait_for_subagents` is idempotent — if status is still `running`, call it again or kill it. Do not ignore running agents — they consume resources indefinitely until explicitly waited on or killed.
+- `wait_for_subagents` can be called repeatedly — if status is still `running`, keep waiting and collect the final results before finishing. Stop the agent explicitly only when its delegated work is no longer needed.
 - `result.data["results"]`: structured list for programmatic access, fields: `agent_id` (legacy session ID), `agent_name`, `task_label`, `status`, `result`, `error`, `last_activity`, `matched_content`
 
 ## Output Target
@@ -336,9 +338,8 @@ result = tool.call("wait_for_subagents", {
 print(result.content)
 # If result shows any agent with status "running":
 # - Read "Last message:" to gauge progress
-# - Call wait_for_subagents again to keep waiting, OR
-# - Call wait_for_subagents with kill=True to terminate
-# Do NOT ignore running agents — they consume resources indefinitely.
+# - Keep waiting and process the final results before finishing the parent task
+# - Use kill=True only if the delegated work is no longer needed
 ```
 
 ## Advanced: Checkpoint Pattern Matching
@@ -377,7 +378,7 @@ Rules:
 - `pattern` applies only when `timeout != 0` and `kill=False`
 - Only messages produced AFTER the wait call are scanned — no false triggers from historical content
 - When matched, `result.data["results"][i]["matched_content"]` contains the full message that triggered the match
-- The sub-agent continues running after a pattern match — call `wait_for_subagents` again to keep collecting, or use `kill=True` to terminate if the task is done
+- The sub-agent continues running after a pattern match. After processing intermediate results, wait again and collect the final result before finishing the parent task. Use `kill=True` only if the remaining delegated work is no longer needed.
 - If the agent finishes before any match, returns normally with `status: done`
 - Pattern errors (invalid regex) return an immediate error result
 
@@ -392,5 +393,5 @@ Before dispatching:
 - For an existing session, is `resume=True` and `fork=False`?
 - Is `task_label` concise, distinct, and written in the same language as the user's request?
 - Is the output target explicit and conflict-free?
-- If `background=True`, is there a matching `wait_for_subagents`?
+- Before finishing, have you collected and processed the final results of background sub-agents, or explicitly stopped work that is no longer needed?
 - If an agent needs to be stopped, use `wait_for_subagents(agent_ids=[...], kill=True)` instead of re-dispatching

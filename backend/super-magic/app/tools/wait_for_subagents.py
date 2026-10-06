@@ -657,24 +657,25 @@ def _build_results_text(
         if reason == "pattern_matched":
             sections.append(
                 f"--- {len(running_labels)} agent(s) still running after pattern match ({labels_str}). "
-                "Sub-agents keep running after a match. You must either: "
-                "(1) call wait_for_subagents again to continue monitoring, or "
-                "(2) use kill=True to terminate. Do not leave running agents unattended."
+                "A pattern match is progress, not completion. Call wait_for_subagents again "
+                "and process the final results before finishing the parent task. "
+                "Use kill=True only when the delegated work is no longer needed."
             )
         elif reason == "timeout":
             sections.append(
                 f"--- {len(running_labels)} agent(s) still running after timeout ({labels_str}). "
-                "Timeout is NOT failure — the agents are still working. You must either: "
-                "(1) call wait_for_subagents again to keep waiting, or "
-                "(2) use kill=True to terminate. "
-                "Unattended agents run indefinitely and consume resources."
+                "Timeout is not failure or completion — the agents are still working. "
+                "Call wait_for_subagents again and process the final results before "
+                "finishing the parent task. Use kill=True only when the delegated work "
+                "is no longer needed."
             )
         else:
             # timeout=0 快照或其他场景
             sections.append(
                 f"--- {len(running_labels)} agent(s) still running ({labels_str}). "
-                "Use wait_for_subagents with timeout > 0 to wait for completion, "
-                "or kill=True to terminate."
+                "Use wait_for_subagents with timeout > 0 and process the final results "
+                "before finishing the parent task. Use kill=True only when the delegated "
+                "work is no longer needed."
             )
 
     return "\n\n".join(sections)

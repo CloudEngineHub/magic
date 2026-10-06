@@ -84,6 +84,7 @@ from app.core.entity.final_task_state import (
     build_final_task_state,
 )
 from app.core.entity.message.server_message import TaskStatus
+from app.core.entity.todo import TodoItem, TodoStatus
 
 # 多语言支持
 from app.magic.user_command_handler import Commands
@@ -96,6 +97,7 @@ from app.tools.core import AutoMount
 from app.tools.core.app_tool_validator import AppToolValidator
 from app.tools.core.tool_factory import tool_factory
 from app.tools.list_dir import ListDir
+from app.tools.subagent_session_manager import SubagentRunRef, subagent_session_manager
 from app.utils.file_utils import (
     WorkspaceSnapshot,
     extract_workspace_entries,
@@ -142,6 +144,8 @@ class AgentLoopState:
     last_llm_message: Optional[ChatCompletionMessage] = None
     should_continue: bool = True
     output_recovery_count: int = 0
+    # Todo 与子 Agent 共用本次运行的提醒次数；工具调用、重试和压缩都不重置。
+    completion_reminder_count: int = 0
     # reactive compact：context_window_exceeded 时自动压缩一次后重试
     reactive_compact_attempted: bool = False
     # LLM 两阶梯重试状态
@@ -1399,10 +1403,10 @@ class Agent(BaseAgent):
                     if not llm_context.has_tool_calls and llm_context.message.role == "assistant":
                         await self._handle_no_tool_calls(llm_context, loop_state)
                         if not loop_state.should_continue:
-                            # todo都完成了，退出循环
+                            # 没有追加提醒，按模型本次结束意图退出，不代表所有事项都已完成。
                             break
                         else:
-                            # 还有未完成的todo，继续循环让大模型继续处理
+                            # 提醒已进入上下文，继续调用模型，由模型处理未完成事项。
                             continue
 
                     # Reset no_tool_call_count when tools are called successfully
@@ -3106,37 +3110,92 @@ Since your subsequent output will be merged with pre-interruption content and di
             except Exception as e:
                 logger.warning(f"合成 error tool_result 失败: tool={tool_name}, error={e}")
 
+    _MAX_COMPLETION_REMINDERS = 2
+
     async def _handle_no_tool_calls(self, llm_context: LLMResponseContext, loop_state: AgentLoopState) -> None:
+        """结束前提供有限提醒，不代替模型等待、停止子 Agent 或更新 Todo。
+
+        例：第一次只提醒 Todo，第二次同时提醒 Todo 和子 Agent，共用两次机会。
+        模型再次选择结束时不再提醒；次数用完也不终止它主动继续调用工具的工作。
         """
-        处理LLM响应中没有工具调用的情况
+        loop_state.should_continue = False
+        if loop_state.completion_reminder_count >= self._MAX_COMPLETION_REMINDERS:
+            return
 
-        逻辑流程:
-        1. 检查是否存在未完成的todo任务
-        2. 如果有未完成任务，通知大模型继续处理
-        3. 如果todo都完成了，直接退出循环
+        incomplete_todos = await self._check_incomplete_todos()
+        running_subagents: list[SubagentRunRef] = []
+        try:
+            running_subagents = await subagent_session_manager.list_running_child_runs(
+                self.agent_context.context_id,
+            )
+        except Exception as error:
+            logger.warning(f"读取运行中子 Agent 失败: {error}")
 
-        Args:
-            llm_context: LLM响应上下文
-            loop_state: 循环状态，会被直接修改
-        """
-        # 检查是否存在未完成的todo任务
-        has_incomplete_todos, todo_message = await self._check_incomplete_todos()
+        if not incomplete_todos and not running_subagents:
+            return
 
-        if has_incomplete_todos:
-            # 有未完成的任务，将提示消息添加到聊天历史
-            logger.info("检测到未完成的todo任务，提示大模型继续完成任务")
-            await self.chat_history.append_user_message(todo_message, show_in_ui=False)
+        reminder = self._build_completion_reminder(incomplete_todos, running_subagents)
+        # 先占用机会，写入失败不无限重试；次数和容忍结束的边界不发送给模型。
+        loop_state.completion_reminder_count += 1
+        try:
             # 本轮没有工具结果，不会经过通常的注入点；继续推理前仍需要最新目录。
             ctx_update = await self._build_horizon_context_update_safely(
                 injection_point=HorizonInjectionPoint.BEFORE_CONTINUATION_LLM, log_context="继续未完成任务",
             )
             if ctx_update:
                 await self.chat_history.append_user_message(ctx_update, show_in_ui=False, source="horizon")
+            # 直接写入当前上下文，不放入可能因预算超限而延期消费的 Horizon 通知队列。
+            await self.chat_history.append_user_message(
+                reminder, show_in_ui=False, source="completion_reminder",
+            )
             loop_state.should_continue = True
-        else:
-            # All tasks completed, exit the loop directly
-            logger.info("所有任务已完成，退出 agent 循环")
-            loop_state.should_continue = False
+            logger.info(
+                f"已追加结束提醒 #{loop_state.completion_reminder_count}/{self._MAX_COMPLETION_REMINDERS}，"
+                f"未完成 Todo={len(incomplete_todos)}，运行中子 Agent={len(running_subagents)}"
+            )
+        except Exception as error:
+            logger.warning(f"结束提醒写入失败，沿用正常结束流程: {error}")
+
+    @staticmethod
+    def _build_completion_reminder(
+        incomplete_todos: list[TodoItem],
+        running_subagents: list[SubagentRunRef],
+    ) -> str:
+        """按实际存在的事项生成提醒；运行上限不是模型可选择的工作方式。"""
+        lines = [
+            "Runtime reminder, not a new user instruction.",
+            "There is unfinished work to resolve before completing this task.",
+        ]
+        if running_subagents:
+            lines.extend(["", "Sub-agents still running:"])
+            lines.extend(f"- {ref.agent_name} / {ref.agent_id}" for ref in running_subagents)
+            lines.extend([
+                "",
+                "Before finishing, wait for the running sub-agents to complete and collect their results.",
+                "Call wait_for_subagents with these exact final session IDs:",
+                json.dumps([ref.agent_id for ref in running_subagents], ensure_ascii=False),
+                "A timeout or progress message does not mean the sub-agent has completed. "
+                "Keep waiting and process the final results before completing this task.",
+                "If a delegated task is no longer needed, explicitly stop that sub-agent "
+                "instead of leaving it running.",
+            ])
+        if incomplete_todos:
+            lines.extend(["", "Todo items still incomplete:"])
+            lines.extend(
+                f"- [{todo.status.value}] {todo.id}: {todo.content}"
+                for todo in incomplete_todos
+            )
+            lines.extend([
+                "",
+                "Resolve the incomplete Todo items. Use todo_update to mark an item completed "
+                "only when its work is done, or cancelled only when it is no longer needed.",
+            ])
+        content = html.escape("\n".join(lines), quote=False)
+        return (
+            '<system_injected_context>\n<notifications>\n'
+            f'<notification source="completion_reminder">\n{content}\n</notification>\n'
+            '</notifications>\n</system_injected_context>'
+        )
 
     async def _execute_and_process_tool_calls(self, llm_context: LLMResponseContext) -> ToolExecutionResult:
         """
@@ -3299,57 +3358,19 @@ Since your subsequent output will be merged with pre-interruption content and di
 
         return should_exit, final_response, inject_horizon_after_tools
 
-    async def _check_incomplete_todos(self) -> tuple[bool, Optional[str]]:
-        """
-        检查是否存在未完成的任务
-
-        Returns:
-            tuple[bool, Optional[str]]: (是否有未完成任务, 提示消息)
-        """
+    async def _check_incomplete_todos(self) -> list[TodoItem]:
+        """读取未完成 Todo；保留原有读取失败不阻止结束的行为。"""
         try:
             # 加载待办任务列表
             todos = await TodoService.load_todos()
-
-            # 如果没有任务,直接返回
-            if not todos:
-                logger.debug("没有找到任何待办任务")
-                return False, None
-
             # 过滤出未完成的任务(状态为pending或in_progress)
-            incomplete_todos = [
+            return [
                 todo for todo in todos
-                if todo.status in ["pending", "in_progress"]
+                if todo.status in (TodoStatus.PENDING, TodoStatus.IN_PROGRESS)
             ]
-
-            # 如果没有未完成任务,返回False
-            if not incomplete_todos:
-                logger.info("所有任务都已完成")
-                return False, None
-
-            # 构造提示消息
-            logger.info(f"发现 {len(incomplete_todos)} 个未完成的任务")
-
-            formatted_todos = TodoService.format_todos_simple(incomplete_todos)
-
-            # 构造详细的提示消息
-            message_lines = [
-                "我发现有任务处于未完成的状态，以下是所有任务的列表",
-                "",
-                formatted_todos,
-                "",
-                "你需要自行确认(不需要问我)这些任务是否已经完成了，如果已经完成了，请使用 todo_update 工具将其标记为 completed；如果不需要完成，请使用 todo_update 工具将其标记为 cancelled。",
-                "",
-                "如果存在没有完成的任务，请立马开始处理它们"
-            ]
-
-            prompt_message = "\n".join(message_lines)
-
-            return True, prompt_message
-
         except Exception as e:
             logger.error(f"检查未完成任务时发生错误: {e}", exc_info=True)
-            # 出错时返回False,不阻止任务完成
-            return False, None
+            return []
 
     async def _execute_history_compact(self, result: CompactResult) -> None:
         """
