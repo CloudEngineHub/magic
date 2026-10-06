@@ -102,6 +102,8 @@ export interface OperationResultItem {
 	message: string
 	description?: string
 	target?: OperationResultTarget
+	started_at?: string
+	expected_finished_at?: string
 }
 
 export interface DetailOperationResultListData {

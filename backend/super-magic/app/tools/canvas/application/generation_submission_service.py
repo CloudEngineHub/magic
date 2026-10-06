@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import asyncio
 from dataclasses import dataclass
-from typing import Any, TypeVar, cast
+from typing import Any, Awaitable, Callable, TypeVar, cast
 
 from agentlang.context.tool_context import ToolContext
 from agentlang.logger import get_logger
@@ -83,6 +83,7 @@ class GenerationSubmissionService:
         result: CanvasBatchResult[TGeneratedItem],
         generated: list[GenerationSubmissionCommand],
         tool_context: ToolContext | None,
+        on_progress_updated: Callable[[CanvasBatchResult[TGeneratedItem]], Awaitable[None]] | None = None,
     ) -> CanvasBatchResult[TGeneratedItem]:
         """并发执行生成策略，再按输入顺序提交结果和持久化状态。"""
         by_content: dict[str, GeneratedResultItem] = {}
@@ -93,7 +94,10 @@ class GenerationSubmissionService:
         if not generated:
             return result
 
-        work_items = [self._build_work_item(item, project_path) for item in generated]
+        work_items = [
+            self._build_work_item(item, project_path, result, by_content, on_progress_updated)
+            for item in generated
+        ]
         await self._persist_generation_start_metadata(project_path, work_items, tool_context)
         await self._execute_work_items(work_items, project_path, tool_context, by_content)
         return result
@@ -177,6 +181,9 @@ class GenerationSubmissionService:
         self,
         submission_item: GenerationSubmissionCommand,
         project_path: str,
+        result: CanvasBatchResult[TGeneratedItem],
+        result_item: GeneratedResultItem,
+        on_progress_updated: Callable[[CanvasBatchResult[TGeneratedItem]], Awaitable[None]] | None,
     ) -> TaskCreatedCallback:
         """构造 provider 建单后同步任务时间的回调。"""
 
@@ -187,9 +194,13 @@ class GenerationSubmissionService:
         ) -> None:
             if expected_finished_at is None:
                 return
+            result_item.started_at = started_at
+            result_item.expected_finished_at = expected_finished_at
             await self._persist_generation_timing(
                 project_path, submission_item, expected_finished_at, started_at
             )
+            if on_progress_updated is not None:
+                await on_progress_updated(result)
 
         return sink
 
@@ -245,6 +256,9 @@ class GenerationSubmissionService:
         self,
         submission_item: GenerationSubmissionCommand,
         project_path: str,
+        result: CanvasBatchResult[TGeneratedItem],
+        by_content: dict[str, GeneratedResultItem],
+        on_progress_updated: Callable[[CanvasBatchResult[TGeneratedItem]], Awaitable[None]] | None,
     ) -> _GenerationWorkItem:
         """在并发执行前固定 capability、策略、请求和参数快照。"""
         parameters = submission_item.parameters
@@ -255,7 +269,13 @@ class GenerationSubmissionService:
             content_id=submission_item.content_id,
             element_type=submission_item.element_type,
             parameters=parameters,
-            on_task_created=self._make_generation_timing_sink(submission_item, project_path),
+            on_task_created=self._make_generation_timing_sink(
+                submission_item,
+                project_path,
+                result,
+                by_content[submission_item.content_id],
+                on_progress_updated,
+            ),
         )
         return _GenerationWorkItem(
             submission_item=submission_item,

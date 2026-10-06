@@ -164,6 +164,7 @@ function OperationResultList({
 											key={`${item.label}-${index}`}
 											item={item}
 											loading={loading}
+											progressAnchorKey={`${toolData.id || "operation-result"}:${item.target?.content_id || index}`}
 											unavailable={
 												resultUnavailable ? unavailable : undefined
 											}

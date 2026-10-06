@@ -15,11 +15,13 @@ import type {
 	OperationResultItem,
 	OperationResultTarget,
 } from "@/pages/superMagic/components/Detail/types"
+import { GenerationProgress } from "@/pages/superMagic/components/MessageList/components/shared/ToolGenerationProgress"
 
 interface OperationResultRowProps {
 	item: OperationResultItem
 	loading: boolean
 	unavailable?: string
+	progressAnchorKey: string
 	onLocate: (target: OperationResultTarget, showDetails?: boolean) => void
 }
 
@@ -27,6 +29,7 @@ export default function OperationResultRow({
 	item,
 	loading,
 	unavailable,
+	progressAnchorKey,
 	onLocate,
 }: OperationResultRowProps) {
 	const { t } = useTranslation("super")
@@ -41,6 +44,7 @@ export default function OperationResultRow({
 	const ItemIcon = item.kind === "directory" ? Folder : File
 	const message = unavailable || (pending ? t("operationResultList.running") : item.message)
 	const target = item.target
+	const showProgress = pending && Boolean(item.expected_finished_at)
 	const locate = () => {
 		if (target) onLocate(target)
 	}
@@ -94,16 +98,31 @@ export default function OperationResultRow({
 							: "text-muted-foreground",
 					)}
 				>
-					<ResultIcon
-						size={16}
-						aria-hidden
-						className={cn(
-							"shrink-0",
-							pending && "animate-spin",
-							!pending && !unavailable && item.status === "success" && "text-success",
-						)}
-					/>
-					<span className="[overflow-wrap:anywhere]">{message}</span>
+					{item.expected_finished_at && (
+						<GenerationProgress
+							anchorKey={progressAnchorKey}
+							active={showProgress}
+							startedAt={item.started_at}
+							expectedFinishedAt={item.expected_finished_at}
+						/>
+					)}
+					{!showProgress && (
+						<>
+							<ResultIcon
+								size={16}
+								aria-hidden
+								className={cn(
+									"shrink-0",
+									pending && "animate-spin",
+									!pending &&
+										!unavailable &&
+										item.status === "success" &&
+										"text-success",
+								)}
+							/>
+							<span className="[overflow-wrap:anywhere]">{message}</span>
+						</>
+					)}
 				</span>
 				{target && (
 					<span className="ml-auto flex flex-wrap items-center justify-end gap-2">

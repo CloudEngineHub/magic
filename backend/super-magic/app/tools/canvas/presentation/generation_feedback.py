@@ -310,6 +310,8 @@ class CanvasGenerationFeedback:
                     message=i18n.translate(message_key, category="tool.messages"),
                     description=description,
                     target=target,
+                    started_at=raw_item.get("started_at") or None,
+                    expected_finished_at=raw_item.get("expected_finished_at") or None,
                 )
             )
 

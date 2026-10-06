@@ -115,7 +115,9 @@ function isOperationResultItem(
 		(item.kind === "file" || item.kind === "directory" || item.kind === "text") &&
 		(item.status === "success" || item.status === "error") &&
 		typeof item.message === "string" &&
-		(item.description === undefined || typeof item.description === "string")
+		(item.description === undefined || typeof item.description === "string") &&
+		(item.started_at === undefined || typeof item.started_at === "string") &&
+		(item.expected_finished_at === undefined || typeof item.expected_finished_at === "string")
 	)
 }
 

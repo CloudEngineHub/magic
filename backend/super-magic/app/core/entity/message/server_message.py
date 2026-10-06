@@ -355,6 +355,8 @@ class OperationResultItem(BaseModel):
     message: str
     description: str = ""
     target: OperationResultTarget | None = None
+    started_at: str | None = None
+    expected_finished_at: str | None = None
 
 
 class OperationResultListContent(BaseModel):

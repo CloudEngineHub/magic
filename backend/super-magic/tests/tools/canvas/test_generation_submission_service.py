@@ -207,10 +207,16 @@ async def test_task_created_persists_backend_timing() -> None:
     service._commit_generation_result = AsyncMock()
     service._persist_generation_start_metadata = AsyncMock()
     service._persist_generation_timing = AsyncMock()
+    on_progress_updated = AsyncMock()
     tool_context = object()
+    result = _make_result(["one"])
 
     await service.submit_generated(
-        "mock-project", _make_result(["one"]), _make_commands(["one"]), tool_context
+        "mock-project",
+        result,
+        _make_commands(["one"]),
+        tool_context,
+        on_progress_updated=on_progress_updated,
     )
 
     expected_persist_call = (
@@ -220,3 +226,6 @@ async def test_task_created_persists_backend_timing() -> None:
         "2026-10-05T10:00:00+08:00",
     )
     service._persist_generation_timing.assert_awaited_once_with(*expected_persist_call)
+    assert result.items[0].started_at == "2026-10-05T10:00:00+08:00"
+    assert result.items[0].expected_finished_at == "2026-10-05T10:01:30+08:00"
+    on_progress_updated.assert_awaited_once_with(result)

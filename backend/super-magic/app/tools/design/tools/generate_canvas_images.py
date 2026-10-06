@@ -7,7 +7,7 @@
 import asyncio
 import random
 import time
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
@@ -136,6 +136,14 @@ class GeneratedImageInfo:
     height: Optional[float]
     generate_request: Dict[str, Any]
 
+
+@dataclass
+class ImageGenerationProgressState:
+    """保存一次批量调用的逐项进度，避免把状态挂在可复用工具实例上。"""
+
+    project_path: str = ""
+    placeholders: List[ElementDetail] = field(default_factory=list)
+    timing_by_index: Dict[int, Tuple[Optional[str], Optional[str]]] = field(default_factory=dict)
 
 
 class ImageTaskSpec(BaseModel):
@@ -404,6 +412,7 @@ Expand brief user descriptions into full prompts covering subject, style, compos
         placeholder: ElementDetail,
         tool_context: ToolContext,
         project_path: Path,
+        progress_state: ImageGenerationProgressState,
         timestamp: str = "",
         output_path: str = "",
         workspace_path: Optional[Path] = None,
@@ -422,6 +431,7 @@ Expand brief user descriptions into full prompts covering subject, style, compos
             project_path=project_path,
             tool_context=tool_context,
             image_model_id=kwargs.get("image_model_id"),
+            progress_state=progress_state,
         )
 
         if result.success:
@@ -462,6 +472,7 @@ Expand brief user descriptions into full prompts covering subject, style, compos
             "output_path": output_path,
             "workspace_path": workspace_path,
             "image_model_id": self._image_model_id,
+            "progress_state": ImageGenerationProgressState(),
         }
 
     def _build_created_element_dict(
@@ -484,6 +495,11 @@ Expand brief user descriptions into full prompts covering subject, style, compos
             update = task_result.placeholder_update
             if isinstance(update, ImagePlaceholderUpdate) and update.src:
                 d["src"] = update.src
+        generate_request = getattr(task_result.placeholder_update, "generateImageRequest", None) or {}
+        if generate_request.get("start_time"):
+            d["started_at"] = generate_request["start_time"]
+        if generate_request.get("expected_finished_at"):
+            d["expected_finished_at"] = generate_request["expected_finished_at"]
         return d
 
     def _build_result_content(
@@ -568,6 +584,7 @@ Expand brief user descriptions into full prompts covering subject, style, compos
         output_path: str,
         project_path: Path,
         tool_context: ToolContext,
+        progress_state: ImageGenerationProgressState,
         image_model_id: Optional[str] = None,
     ) -> ImageGenerationResult:
         """生成单张图片，委托 generate_images 执行（含重试、下载、保存）"""
@@ -602,6 +619,7 @@ Expand brief user descriptions into full prompts covering subject, style, compos
             shared_started_at = started_at or timing["started_at"]
             timing["started_at"] = shared_started_at
             timing["expected_finished_at"] = expected_finished_at
+            progress_state.timing_by_index[idx] = (shared_started_at, expected_finished_at)
 
             try:
                 manager = await get_canvas_manager(str(project_path))
@@ -636,6 +654,7 @@ Expand brief user descriptions into full prompts covering subject, style, compos
             except Exception as error:
                 # 时间同步失败不能中断真实生图；前端仍可用本地兜底进度继续展示。
                 logger.warning(f"写入画布生图时间失败: {error}")
+            await self._report_progress_state(tool_context, progress_state)
 
         try:
             generate_tool = GenerateImages(
@@ -646,6 +665,7 @@ Expand brief user descriptions into full prompts covering subject, style, compos
                 gen_params,
                 model_id=image_model_id,
                 on_task_created=on_task_created,
+                report_progress=False,
             )
         except Exception as exc:
             error_msg = f"Task {idx + 1} 异常: {exc!s}"
@@ -871,10 +891,22 @@ Expand brief user descriptions into full prompts covering subject, style, compos
         tool_context: ToolContext,
         project_path_str: str,
         placeholders: List[ElementDetail],
+        progress_state: ImageGenerationProgressState,
+        **kwargs: Any,
     ) -> None:
         """旧生图入口也用真实占位 ID 更新卡片，不按任务名称猜测目标。"""
         if not placeholders:
             return
+        progress_state.project_path = project_path_str
+        progress_state.placeholders = placeholders
+        await self._report_progress_state(tool_context, progress_state)
+
+    async def _report_progress_state(
+        self,
+        tool_context: ToolContext,
+        progress_state: ImageGenerationProgressState,
+    ) -> None:
+        """用同一张可展开卡片更新逐项时间，不再发送独立进度详情。"""
         pending_detail = ToolDetail(
             type=DisplayType.OPERATION_RESULT_LIST,
             data=OperationResultListContent(items=[
@@ -885,13 +917,15 @@ Expand brief user descriptions into full prompts covering subject, style, compos
                     message=i18n.translate("canvas.generate_item_status.processing", category="tool.messages"),
                     target=OperationResultTarget(
                         type=OperationResultTargetType.CANVAS_ELEMENT,
-                        project_path=project_path_str,
+                        project_path=progress_state.project_path,
                         element_id=placeholder.id,
                         content_id=placeholder.content_id,
                         content_type="image",
                     ),
+                    started_at=progress_state.timing_by_index.get(index, (None, None))[0],
+                    expected_finished_at=progress_state.timing_by_index.get(index, (None, None))[1],
                 )
-                for placeholder in placeholders
+                for index, placeholder in enumerate(progress_state.placeholders)
             ]),
         )
         await CanvasGenerationFeedback.report_pending_detail(
@@ -956,6 +990,8 @@ Expand brief user descriptions into full prompts covering subject, style, compos
                             content_id=element.get("content_id"),
                             content_type="image",
                         ),
+                        started_at=element.get("started_at"),
+                        expected_finished_at=element.get("expected_finished_at"),
                     )
                     for element in elements
                 ]),

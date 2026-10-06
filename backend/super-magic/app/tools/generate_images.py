@@ -270,13 +270,18 @@ class GenerateImages(AbstractFileTool[GenerateImagesParams], WorkspaceTool[Gener
         *,
         model_id: Optional[str] = None,
         on_task_created: Optional[ImageTaskCreatedCallback] = None,
+        report_progress: bool = True,
     ) -> ImageToolResult:
         """供其他工具内部调用，并允许使用已验证的图片模型覆盖值。
 
         `on_task_created` 由画布链路传入，用来把任务时间写进元素元数据。
         """
         return await self._execute_with_model(
-            tool_context, params, model_id=model_id, on_task_created=on_task_created
+            tool_context,
+            params,
+            model_id=model_id,
+            on_task_created=on_task_created,
+            report_progress=report_progress,
         )
 
     async def execute(
@@ -292,6 +297,7 @@ class GenerateImages(AbstractFileTool[GenerateImagesParams], WorkspaceTool[Gener
         *,
         model_id: Optional[str] = None,
         on_task_created: Optional[ImageTaskCreatedCallback] = None,
+        report_progress: bool = True,
     ) -> ImageToolResult:
         """使用显式模型或当前用户图片模型执行批量生成。"""
         try:
@@ -312,7 +318,7 @@ class GenerateImages(AbstractFileTool[GenerateImagesParams], WorkspaceTool[Gener
                 nonlocal generation_progress_dispatched
                 if on_task_created is not None:
                     await on_task_created(task_id, expected_finished_at, started_at)
-                if generation_progress_dispatched or expected_finished_at is None:
+                if not report_progress or generation_progress_dispatched or expected_finished_at is None:
                     return
                 generation_progress_dispatched = True
                 await self._dispatch_generation_progress(

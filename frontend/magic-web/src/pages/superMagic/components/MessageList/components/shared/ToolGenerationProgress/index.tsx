@@ -61,6 +61,59 @@ export interface ToolGenerationProgressProps {
 	detail?: ToolGenerationProgressDetail
 }
 
+interface GenerationProgressProps {
+	anchorKey?: string
+	active: boolean
+	startedAt?: string
+	expectedFinishedAt?: string
+}
+
+/**
+ * 所有生成入口共用的百分比展示。调用方只决定该项是否仍在生成，时间换算始终走同一套算法。
+ */
+export function GenerationProgress({
+	anchorKey,
+	active,
+	startedAt,
+	expectedFinishedAt,
+}: GenerationProgressProps) {
+	const [observedAtMs, setObservedAtMs] = useState<number | null>(null)
+	const [nowMs, setNowMs] = useState(() => Date.now())
+
+	useEffect(() => {
+		if (!anchorKey) return
+		if (!active) {
+			firstSeenAtByAnchorKey.delete(anchorKey)
+			return
+		}
+		const anchor = firstSeenAtByAnchorKey.get(anchorKey) ?? Date.now()
+		firstSeenAtByAnchorKey.set(anchorKey, anchor)
+		setObservedAtMs(anchor)
+	}, [active, anchorKey])
+
+	useEffect(() => {
+		if (!active) return
+		const timer = setInterval(() => setNowMs(Date.now()), TICK_INTERVAL_MS)
+		return () => clearInterval(timer)
+	}, [active])
+
+	if (!active || !anchorKey || observedAtMs === null) return null
+
+	const percent = resolveGenerationProgress({
+		status: "processing",
+		startedAtMs: observedAtMs,
+		startedAt,
+		expectedFinishedAt,
+		nowMs,
+	})
+
+	return (
+		<span data-testid="generation-progress" className="tabular-nums text-muted-foreground">
+			{percent}%
+		</span>
+	)
+}
+
 /**
  * 工具卡里的媒体生成百分比。
  *
@@ -77,50 +130,37 @@ function ToolGenerationProgress({ toolCallId, status, detail }: ToolGenerationPr
 	const expectedFinishedAt = readNonEmptyString(generationProgressData?.expected_finished_at)
 	// 锚点的键：优先工具调用 id，卡片没有时用后端任务 id。
 	const anchorKey = toolCallId ?? readNonEmptyString(generationProgressData?.task_id)
-	const [observedAtMs, setObservedAtMs] = useState<number | null>(null)
-	const [nowMs, setNowMs] = useState(() => Date.now())
 
-	useEffect(() => {
-		if (!anchorKey) {
-			return
-		}
-		if (!isActive) {
-			firstSeenAtByAnchorKey.delete(anchorKey)
-			return
-		}
-		// 本地锚点只用于后端起点缺失的兼容路径。
-		const anchor = firstSeenAtByAnchorKey.get(anchorKey) ?? Date.now()
-		firstSeenAtByAnchorKey.set(anchorKey, anchor)
-		setObservedAtMs(anchor)
-	}, [anchorKey, isActive])
-
-	useEffect(() => {
-		if (!isActive) {
-			return
-		}
-		const timer = setInterval(() => setNowMs(Date.now()), TICK_INTERVAL_MS)
-		return () => clearInterval(timer)
-	}, [isActive])
-
-	if (!isActive || observedAtMs === null) {
+	if (!generationProgressData) {
 		return null
 	}
-
-	const percent = resolveGenerationProgress({
-		status: "processing",
-		startedAtMs: observedAtMs,
-		startedAt,
-		expectedFinishedAt,
-		nowMs,
-	})
+	if (!anchorKey) {
+		return null
+	}
+	if (!isActive) {
+		// 终态仍挂载一次公共组件，让它清理兼容旧数据使用的本地时间锚点。
+		return (
+			<GenerationProgress
+				anchorKey={anchorKey}
+				active={false}
+				startedAt={startedAt}
+				expectedFinishedAt={expectedFinishedAt}
+			/>
+		)
+	}
 
 	return (
 		// 挂在工具卡的同一行内、紧跟 action 文案：自身不能带外边距（会错位），
 		// flex-none 保证 remark 被省略号截断时百分比依然可见。
 		// 字号与行高都要跟 action 文案一致——小字号即便基线对齐，视觉重心仍偏低，
 		// 看起来就是「没对齐」。
-		<div className="flex-none" data-testid="tool-generation-progress">
-			<span className="text-xs tabular-nums leading-4 text-muted-foreground">{percent}%</span>
+		<div className="flex-none text-xs leading-4" data-testid="tool-generation-progress">
+			<GenerationProgress
+				anchorKey={anchorKey}
+				active={isActive}
+				startedAt={startedAt}
+				expectedFinishedAt={expectedFinishedAt}
+			/>
 		</div>
 	)
 }

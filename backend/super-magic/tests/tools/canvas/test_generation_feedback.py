@@ -66,6 +66,43 @@ def test_generation_feedback_separates_image_statuses() -> None:
         I18nManager.reset_language()
 
 
+def test_generation_detail_keeps_each_items_timing() -> None:
+    """逐项结果必须携带自己的起止时间，供刷新后的行内百分比恢复。"""
+    arguments = _arguments(
+        ("image-1", "generated", "image"),
+        ("image-2", "generated", "image"),
+    )
+    result = ToolResult(
+        content="mock",
+        data={
+            "items": [
+                {
+                    "item_ref": "image-1",
+                    "status": "processing",
+                    "element_id": "element-1",
+                    "started_at": "2026-10-05T10:00:00+08:00",
+                    "expected_finished_at": "2026-10-05T10:00:45+08:00",
+                },
+                {
+                    "item_ref": "image-2",
+                    "status": "processing",
+                    "element_id": "element-2",
+                    "started_at": "2026-10-05T10:00:01+08:00",
+                    "expected_finished_at": "2026-10-05T10:01:11+08:00",
+                },
+            ],
+        },
+    )
+
+    detail = CanvasGenerationFeedback.operation_result_detail(result, arguments)
+
+    assert detail is not None
+    assert detail.data.items[0].started_at == "2026-10-05T10:00:00+08:00"
+    assert detail.data.items[0].expected_finished_at == "2026-10-05T10:00:45+08:00"
+    assert detail.data.items[1].started_at == "2026-10-05T10:00:01+08:00"
+    assert detail.data.items[1].expected_finished_at == "2026-10-05T10:01:11+08:00"
+
+
 def test_generation_feedback_ignores_imported_media() -> None:
     """导入素材不能被误报成生成任务。"""
     arguments = _arguments(("import-1", "imported", "image"))
