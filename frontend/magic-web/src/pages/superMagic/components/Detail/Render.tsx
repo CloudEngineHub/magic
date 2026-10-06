@@ -85,7 +85,7 @@ export default function Render(props: any) {
 		terminalToolInfo,
 		isFullscreen,
 		attachmentList,
-		allowEdit,
+		allowEdit: requestedAllowEdit,
 		// New props for ActionButtons functionality
 		viewMode,
 		onViewModeChange,
@@ -118,7 +118,7 @@ export default function Render(props: any) {
 		onUnregisterCheckBeforeClose,
 		projectId,
 		browserAttachments,
-		allowDownload,
+		allowDownload: requestedAllowDownload,
 		audioPlayerMode,
 		mdToolbarContainer,
 	} = props
@@ -135,6 +135,9 @@ export default function Render(props: any) {
 	const fileApi = useFileApi()
 	const shareToken = getShareAccessToken(fileAccess)
 	const effectiveDisplayConfig = displayConfig || data?.display_config
+	const allowDownload = fileAccess?.kind === "recycle-bin" ? false : requestedAllowDownload
+	const allowEdit =
+		effectiveDisplayConfig?.previewPolicy?.readonly === true ? false : requestedAllowEdit
 	const editingPresenceEnabled = isEditingPresenceEnabled(effectiveDisplayConfig)
 	const fileShareAllowed = isFileShareAllowed(effectiveDisplayConfig)
 	const fileVersionHistoryAllowed = isFileVersionHistoryAllowed(effectiveDisplayConfig)
@@ -142,11 +145,25 @@ export default function Render(props: any) {
 	const fileActionVisibility = useMemo(
 		() => ({
 			...inheritedFileActionVisibility,
+			hideCopyTo:
+				inheritedFileActionVisibility.hideCopyTo || fileAccess?.kind === "recycle-bin",
+			hideMoveTo:
+				inheritedFileActionVisibility.hideMoveTo || fileAccess?.kind === "recycle-bin",
+			hideShareTopic:
+				inheritedFileActionVisibility.hideShareTopic || fileAccess?.kind === "recycle-bin",
+			hideCreateNewTopic:
+				inheritedFileActionVisibility.hideCreateNewTopic ||
+				fileAccess?.kind === "recycle-bin",
 			hideShareFile: inheritedFileActionVisibility.hideShareFile || !fileShareAllowed,
 			hideVersionHistory:
 				inheritedFileActionVisibility.hideVersionHistory || !fileVersionHistoryAllowed,
 		}),
-		[inheritedFileActionVisibility, fileShareAllowed, fileVersionHistoryAllowed],
+		[
+			inheritedFileActionVisibility,
+			fileShareAllowed,
+			fileVersionHistoryAllowed,
+			fileAccess?.kind,
+		],
 	)
 	const isPptRenderer =
 		type === DetailType.PowerPoint ||
@@ -183,7 +200,7 @@ export default function Render(props: any) {
 	useEffect(() => {
 		const handleEnterEditMode = (fileId: string) => {
 			// 只有当事件中的 fileId 与当前文件的 fileId 匹配时才触发
-			if (fileId === data?.file_id) {
+			if (allowEdit && fileId === data?.file_id) {
 				setIsEditMode(true)
 			}
 		}
@@ -286,6 +303,7 @@ export default function Render(props: any) {
 		shouldExitEditMode: boolean = false,
 		options?: { silent?: boolean },
 	): Promise<boolean> {
+		if (!allowEdit) return false
 		const key = `save-${targetFileId}`
 		if (!options?.silent)
 			magicToast.loading({

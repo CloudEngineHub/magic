@@ -67,7 +67,7 @@ class TaskFileDomainService
     // File URL cache constants
     private const FILE_URL_CACHE_PREFIX = 'super_agent:file_url:';
 
-    private const URL_EXPIRES = 3600;
+    public const URL_EXPIRES = 3600;
 
     private const CACHE_TTL = 3540;
 

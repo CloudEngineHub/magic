@@ -5777,6 +5777,11 @@
 		"loader": {
 			"noMoreData": "You've seen everything!"
 		},
+		"preview": {
+			"open": "Preview",
+			"readonly": "Recycle bin file · Read-only",
+			"unavailable": "This file is unavailable or you no longer have access."
+		},
 		"project": {
 			"applyRange": "Apply",
 			"cancelSearch": "Cancel search",

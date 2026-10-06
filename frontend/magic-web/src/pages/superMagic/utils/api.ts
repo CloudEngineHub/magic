@@ -1,3 +1,4 @@
+import { RecycleBinApi } from "@/apis"
 import { defaultMagicClient as magicClient } from "@/infrastructure/network/http/runtime"
 import { DownloadImageMode } from "../pages/Workspace/types"
 import {
@@ -252,6 +253,28 @@ export const getTemporaryDownloadUrl = async ({
 	enableErrorMessagePrompt?: boolean
 	access?: FileAccessContext
 }) => {
+	if (access?.kind === "recycle-bin") {
+		// 仅当前回收站记录绑定的文件可读；关联文件、版本及下载不能回落普通接口。
+		if (
+			file_ids.some((id) => id !== access.fileId) ||
+			file_versions ||
+			is_download ||
+			download_mode !== undefined
+		) {
+			throw new Error("Recycle bin preview does not allow this file operation")
+		}
+		if (!file_ids.length) return []
+		const file = await RecycleBinApi.previewFile(access.recycleBinId, access.projectId)
+		if (file.file_id !== access.fileId) throw new Error("Recycle bin file identity changed")
+		return [
+			{
+				file_id: file.file_id,
+				url: file.url,
+				expires_at: file.expires_at,
+				updated_at: file.updated_at,
+			},
+		]
+	}
 	// Share pages require explicit access; runtime conversations deliberately use session access.
 	if (shouldWaitForShareAccess(access)) {
 		return []

@@ -21,6 +21,7 @@ import {
 } from "./recycle-bin-domain"
 
 export interface RecycleBinListProps {
+	onPreview?: (item: RecycleBinItem) => void
 	project?: RecycleBinFileListOptions
 	items: RecycleBinItem[]
 	selectedIds: string[]
@@ -141,7 +142,18 @@ export function RecycleBinList(props: RecycleBinListProps) {
 									{getCategoryLabel(item.category, t, item.fileKind)}
 								</Badge>
 								<div className="truncate text-sm font-medium leading-normal text-foreground">
-									{getDisplayTitle(item, t)}
+									{props.onPreview &&
+									item.category === "files" &&
+									item.fileKind !== "folder" ? (
+										<button
+											type="button"
+											onClick={() => props.onPreview?.(item)}
+										>
+											{getDisplayTitle(item, t)}
+										</button>
+									) : (
+										getDisplayTitle(item, t)
+									)}
 								</div>
 							</div>
 
@@ -175,6 +187,13 @@ export function RecycleBinList(props: RecycleBinListProps) {
 								</div>
 							</DropdownMenuTrigger>
 							<DropdownMenuContent align="end">
+								{props.onPreview &&
+									item.category === "files" &&
+									item.fileKind !== "folder" && (
+										<DropdownMenuItem onSelect={() => props.onPreview?.(item)}>
+											{t("recycleBin.preview.open")}
+										</DropdownMenuItem>
+									)}
 								<DropdownMenuItem
 									variant="default"
 									onSelect={() => onOpenRestore({ kind: "item", item })}

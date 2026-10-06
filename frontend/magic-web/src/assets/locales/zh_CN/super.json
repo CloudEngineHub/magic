@@ -5778,6 +5778,11 @@
 		"loader": {
 			"noMoreData": "没有更多数据了"
 		},
+		"preview": {
+			"open": "预览",
+			"readonly": "回收站文件 · 只读",
+			"unavailable": "文件已不可用或你已无权访问。"
+		},
 		"project": {
 			"applyRange": "应用",
 			"cancelSearch": "取消查询",

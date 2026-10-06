@@ -488,6 +488,8 @@ export function FileManager(props: FileManagerProps) {
 						}
 					>
 						<RecycleBinContent
+							onPreview={props.onPreviewFile}
+							onPreviewRemoved={props.onPreviewRemoved}
 							key={props.identityKey}
 							projectId={
 								props.spaceConfig?.scope

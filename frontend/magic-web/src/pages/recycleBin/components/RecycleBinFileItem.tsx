@@ -17,6 +17,7 @@ import type { RecycleBinItem, RestoreTarget } from "./recycle-bin-domain"
 import { getRecycleBinRelativePath, parseRecycleBinTime } from "./recycle-bin-file-view"
 
 interface Props {
+	onPreview?: (item: RecycleBinItem) => void
 	item: RecycleBinItem
 	grid: boolean
 	byLocation: boolean
@@ -38,6 +39,7 @@ export const RecycleBinFileItem = memo(function RecycleBinFileItem({
 	onRestore,
 	onDelete,
 	onDetail,
+	onPreview,
 }: Props) {
 	const { t } = useTranslation("super")
 	const [menuOpen, setMenuOpen] = useState(false)
@@ -80,6 +82,11 @@ export const RecycleBinFileItem = memo(function RecycleBinFileItem({
 				</DropdownMenuTrigger>
 			</MagicTooltip>
 			<DropdownMenuContent align="end">
+				{!folder && onPreview && (
+					<DropdownMenuItem onSelect={() => onPreview(item)}>
+						{t("recycleBin.preview.open")}
+					</DropdownMenuItem>
+				)}
 				<DropdownMenuItem onSelect={() => onDetail(item)}>
 					<Info size={16} />
 					{t("recycleBin.project.details")}
@@ -138,7 +145,7 @@ export const RecycleBinFileItem = memo(function RecycleBinFileItem({
 					type="button"
 					className="flex min-w-0 text-left"
 					disabled={disabled}
-					onClick={select}
+					onClick={!folder && onPreview ? () => onPreview(item) : select}
 				>
 					{title}
 				</button>
@@ -172,7 +179,7 @@ export const RecycleBinFileItem = memo(function RecycleBinFileItem({
 					type="button"
 					className="flex w-full min-w-0 items-center gap-2 text-left"
 					disabled={disabled}
-					onClick={select}
+					onClick={!folder && onPreview ? () => onPreview(item) : select}
 				>
 					<MagicFileIcon type={fileType} size={20} className="shrink-0" />
 					{title}

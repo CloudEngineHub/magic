@@ -5,6 +5,11 @@ declare(strict_types=1);
  * Copyright (c) The Magic , Distributed under the software license
  */
 return [
+    'preview' => [
+        'unavailable' => 'This recycle bin file is unavailable or you no longer have access.',
+        'expired' => 'This recycle bin file has expired.',
+        'directory' => 'Recycle bin folders cannot be previewed.',
+    ],
     'query' => [
         'project_invalid' => 'The project could not be determined. Reopen its recycle bin.',
         'time_required' => 'Select a deletion time range before searching by name.',
