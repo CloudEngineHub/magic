@@ -5780,7 +5780,7 @@
 		},
 		"preview": {
 			"open": "预览",
-			"readonly": "已删除 · 只读",
+			"readonly": "已删除文件，仅可预览",
 			"unavailable": "文件已不可用或你已无权访问。"
 		},
 		"project": {
