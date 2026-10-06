@@ -1,6 +1,6 @@
 import { memo, useState } from "react"
 import { useTranslation } from "react-i18next"
-import { Info, MoreHorizontal, RotateCcw, Trash2 } from "lucide-react"
+import { Eye, Info, MoreHorizontal, RotateCcw, Trash2 } from "lucide-react"
 import MagicFileIcon from "@/components/base/MagicFileIcon"
 import MagicTooltip from "@/components/base/MagicTooltip"
 import SmartTooltip from "@/components/other/SmartTooltip"
@@ -84,6 +84,7 @@ export const RecycleBinFileItem = memo(function RecycleBinFileItem({
 			<DropdownMenuContent align="end">
 				{!folder && onPreview && (
 					<DropdownMenuItem onSelect={() => onPreview(item)}>
+						<Eye size={16} />
 						{t("recycleBin.preview.open")}
 					</DropdownMenuItem>
 				)}

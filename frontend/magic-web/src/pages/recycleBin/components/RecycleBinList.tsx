@@ -1,6 +1,6 @@
 import type { UIEvent } from "react"
 import type { TFunction } from "i18next"
-import { CheckLine, MoreHorizontal, RotateCcw, Trash2 } from "lucide-react"
+import { CheckLine, Eye, MoreHorizontal, RotateCcw, Trash2 } from "lucide-react"
 import { Badge } from "@/components/shadcn-ui/badge"
 import { Button } from "@/components/shadcn-ui/button"
 import { Checkbox } from "@/components/shadcn-ui/checkbox"
@@ -191,6 +191,7 @@ export function RecycleBinList(props: RecycleBinListProps) {
 									item.category === "files" &&
 									item.fileKind !== "folder" && (
 										<DropdownMenuItem onSelect={() => props.onPreview?.(item)}>
+											<Eye size={16} />
 											{t("recycleBin.preview.open")}
 										</DropdownMenuItem>
 									)}
