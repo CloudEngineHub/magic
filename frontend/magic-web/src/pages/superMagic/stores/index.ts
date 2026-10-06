@@ -1398,6 +1398,50 @@ export class SuperMagicStore implements SuperMagicStoreCallbackRegistrar {
 		settlements: Array<{ toolId: string; response: ToolResponseState }>,
 	) {
 		const activeStreamIds = this.getTopicMetadata(topicId).content
+		// 例：文本 Final 已到，生图仍 running。HTTP 缺少结果不能结束工具；
+		// 只有不同身份的后继 Assistant 已产生有效输出，才证明前一调用阶段已结束。
+		const assistantSeqIds = new Map<string, string>()
+		const rememberAssistant = (
+			superMessageId: string,
+			seqId: string,
+			node: RawSuperMagicMessageNode | undefined,
+		) => {
+			if (!superMessageId || !seqId || node?.role !== "assistant") return
+			if (
+				!node.content?.trim() &&
+				!(typeof node.reasoning_content === "string" && node.reasoning_content.trim()) &&
+				!(Array.isArray(node.tool_calls) && node.tool_calls.length > 0)
+			)
+				return
+			const previousSeqId = assistantSeqIds.get(superMessageId)
+			// 同一 Assistant 的修订不是下一条回复，使用已知的最早 seq 排序。
+			if (!previousSeqId || compareMessageSeqId(seqId, previousSeqId) < 0)
+				assistantSeqIds.set(superMessageId, seqId)
+		}
+		;(this.messages.get(topicId) || []).forEach((message) => {
+			if (message.imStatus === "revoked") return
+			const superMessageId = this.getMessageSuperMessageId(message)
+			rememberAssistant(
+				superMessageId,
+				message.seq_id,
+				this.getAssistantMessageNode(topicId, superMessageId),
+			)
+		})
+		envelopes.forEach((envelope) => {
+			const message = envelope?.seq?.message
+			if (message?.status === "revoked") return
+			const node = getRawMessageNode(message)
+			rememberAssistant(
+				this.normalizeAssistantSuperMessageId(node, String(message?.app_message_id || "")),
+				String(envelope?.seq?.seq_id || ""),
+				node,
+			)
+		})
+		const latestAssistant = Array.from(assistantSeqIds).reduce<[string, string] | undefined>(
+			(latest, candidate) =>
+				!latest || compareMessageSeqId(candidate[1], latest[1]) > 0 ? candidate : latest,
+			undefined,
+		)
 		const seenAssistantIds = new Set<string>()
 		envelopes.forEach((envelope) => {
 			const rawNode = getRawMessageNode(envelope?.seq?.message)
@@ -1409,6 +1453,14 @@ export class SuperMagicStore implements SuperMagicStoreCallbackRegistrar {
 			if (!superMessageId || seenAssistantIds.has(superMessageId)) return
 			seenAssistantIds.add(superMessageId)
 			if (activeStreamIds.has(superMessageId)) return
+			const ownerSeqId = assistantSeqIds.get(superMessageId)
+			if (
+				!ownerSeqId ||
+				!latestAssistant ||
+				latestAssistant[0] === superMessageId ||
+				compareMessageSeqId(latestAssistant[1], ownerSeqId) <= 0
+			)
+				return
 
 			const canonicalNode = this.getAssistantMessageNode(topicId, superMessageId) || rawNode
 			const toolCalls = Array.isArray(canonicalNode.tool_calls)
