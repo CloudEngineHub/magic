@@ -1,11 +1,12 @@
 import { useCallback, useEffect, useState } from "react"
 import ElementToolTopSurfaceRender from "./ElementToolTopSurfaceRender"
-import { useCanvasSelectionUI } from "../../../app/providers/CanvasUIProvider"
+import { useCanvasRenameUI, useCanvasSelectionUI } from "../../../app/providers/CanvasUIProvider"
 import { useMagic } from "../../../app/providers/MagicProvider"
 import { useCanvas } from "../../../app/providers/CanvasProvider"
 import { useCanvasEvent } from "../../../app/hooks/canvas"
 import { isStoryboardOutputFrame } from "../../../runtime/interaction/storyboard/storyboardOutputFrame"
 import { useElementTools } from "../model/useElementTools"
+import { ElementTypeEnum } from "../../../runtime/document/types"
 
 /** 顶部工具栏只是统一 Resolver 的 top surface 适配器。 */
 export default function ElementTools() {
@@ -16,6 +17,7 @@ export default function ElementTools() {
 		isAiAbilityAvailabilityReady,
 	} = useMagic()
 	const { canvas } = useCanvas()
+	const { canvasRenamingElementId } = useCanvasRenameUI()
 	const { selectedElements, isDragging, isSelecting, activeToolSession } = useCanvasSelectionUI()
 	const [replacingMediaElementId, setReplacingMediaElementId] = useState<string | null>(
 		() => canvas?.mediaReplaceController?.getReplacingElementId?.() ?? null,
@@ -76,6 +78,11 @@ export default function ElementTools() {
 			isStoryboardOutputFrame(canvas, firstSelectedElement.id),
 		),
 	})
-	if (!tools.length) return null
+	if (
+		!tools.length ||
+		(firstSelectedElement?.type === ElementTypeEnum.Image &&
+			firstSelectedElement.id === canvasRenamingElementId)
+	)
+		return null
 	return <ElementToolTopSurfaceRender tools={tools} />
 }

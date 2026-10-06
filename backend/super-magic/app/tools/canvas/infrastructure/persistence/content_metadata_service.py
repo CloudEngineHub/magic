@@ -334,6 +334,7 @@ class ContentMetadataService:
         }
         generic_keys = (
             (
+                "name",
                 "size",
                 "image_id",
                 "mode",

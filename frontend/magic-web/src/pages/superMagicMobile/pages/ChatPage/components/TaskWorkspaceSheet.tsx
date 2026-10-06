@@ -57,7 +57,11 @@ export default function TaskWorkspaceSheet({
 						aria-label={t("mobileHome.searchWorkspaces")}
 					/>
 				</div>
-				<ScrollArea className="h-[45dvh] min-h-0" viewportClassName="overscroll-contain">
+				<ScrollArea
+					className="h-[45dvh] min-h-0"
+					// Radix wraps content in a `display: table` box that grows with long names; keep it block so rows truncate within the sheet.
+					viewportClassName="overscroll-contain [&>div]:!block"
+				>
 					<div
 						// Match the sidebar rows: the body keeps padding for controls, while rows reach the same edge.
 						className="-mx-4 flex flex-col gap-1"
@@ -78,10 +82,10 @@ export default function TaskWorkspaceSheet({
 							>
 								<MobileResourceTypeIcon type="workspace" loaderSizeClass="size-6" />
 								<div className="flex min-w-0 flex-1 flex-col items-start">
-									<p className="truncate text-[16px] font-medium leading-6 text-foreground">
-										{workspace.name}
+									<p className="max-w-full truncate text-[16px] font-medium leading-6 text-foreground">
+										{workspace.name || tSuper("workspace.unnamedWorkspace")}
 									</p>
-									<p className="truncate text-[12px] font-light leading-4 text-muted-foreground">
+									<p className="max-w-full truncate text-[12px] font-light leading-4 text-muted-foreground">
 										{tSuper("workspace.projectCount", {
 											count:
 												workspace.project_count ??

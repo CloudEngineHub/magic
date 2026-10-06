@@ -23,6 +23,7 @@ export default function MobileHomeModeControls({
 	onChooseWorkspace: () => void
 }) {
 	const { t } = useTranslation("super/mainInput")
+	const { t: tSuper } = useTranslation("super")
 	return (
 		<fieldset
 			disabled={busy}
@@ -62,7 +63,10 @@ export default function MobileHomeModeControls({
 					>
 						<span className="truncate">
 							{workspace
-								? t("mobileHome.destination", { name: workspace.name })
+								? t("mobileHome.destination", {
+										name:
+											workspace.name || tSuper("workspace.unnamedWorkspace"),
+									})
 								: loading
 									? t("mobileHome.loading")
 									: error

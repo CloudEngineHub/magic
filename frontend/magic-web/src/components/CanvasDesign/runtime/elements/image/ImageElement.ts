@@ -39,7 +39,10 @@ import type {
 } from "../../../public/magic-types"
 import { GenerationStatus, ImageGenerationTaskTypeMap } from "../../../public/magic-types"
 import { generateUUID, collectElementsByType, type Rect } from "../../shared/ids"
-import { areCanvasHostResourceReferencesSame } from "../../shared/path/canvasResourcePath"
+import {
+	areCanvasHostResourceReferencesSame,
+	getCanvasResourceFileName,
+} from "../../shared/path/canvasResourcePath"
 import type { ResourceLoadFailureReason } from "../../resources/media-common/resourceLoadFailure"
 import { TransformBehavior } from "../../interaction/transform/TransformManager"
 import type { Canvas } from "../../core/Canvas"
@@ -2061,7 +2064,10 @@ export class ImageElement extends BaseElement<ImageElementData> {
 	 * 获取渲染名称（用于显示的默认名称，支持多语言）
 	 */
 	public getRenderName(): string {
-		return this.getText("image.defaultName", "图片生成器")
+		// 与音频名称展示一致：已存在图片但元素未命名时，使用真实文件名，空占位保留默认名称。
+		const fileName = getCanvasResourceFileName(this.getActiveContentData().src)
+		const baseName = fileName.replace(/\.[^/.]+$/, "")
+		return baseName || this.getText("image.defaultName", "图片生成器")
 	}
 
 	/**
@@ -2248,6 +2254,8 @@ export class ImageElement extends BaseElement<ImageElementData> {
 					this.data.mainContentId !== newData.mainContentId))
 		const needsRerender =
 			contentControlsChanged ||
+			Boolean(currentContent.generateImageRequest) !==
+				Boolean(nextContent.generateImageRequest) ||
 			currentContent.contentId !== nextContent.contentId ||
 			currentContent.generateImageRequest?.image_id !==
 				nextContent.generateImageRequest?.image_id ||
@@ -2828,7 +2836,7 @@ export class ImageElement extends BaseElement<ImageElementData> {
 	}
 
 	private shouldShowInfoButton(): boolean {
-		return !!this.getActiveGenerateImageRequest()
+		return !!this.getActiveGenerateImageRequest() || this.isActiveGenerationPlaceholder()
 	}
 
 	private createMainVersionTag(group: Konva.Group, width: number, height: number): void {

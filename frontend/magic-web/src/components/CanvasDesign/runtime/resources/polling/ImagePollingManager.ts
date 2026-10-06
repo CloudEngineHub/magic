@@ -357,7 +357,10 @@ export class ImagePollingManager {
 				Boolean(storagePath) &&
 				this.config.shouldAutoActivateContent?.(target.contentId)
 			const namePatch =
-				storagePath && result.file_name && !target.content.imageGenerationTaskMeta
+				storagePath &&
+				result.file_name &&
+				!currentElement.name &&
+				!target.content.imageGenerationTaskMeta
 					? { name: extractSmartNameFromFileName(result.file_name) }
 					: {}
 			const didUpdateElement =

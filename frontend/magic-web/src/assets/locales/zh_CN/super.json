@@ -710,6 +710,12 @@
 			"description": "网络恢复后可继续编辑并保存画布内容",
 			"title": "网络已断开，画布已切换为只读"
 		},
+		"rename": {
+			"fileChanged": "文件已被修改，请重新打开命名面板。",
+			"fileRenamedSaveFailed": "文件已改名，但画布引用更新未完成，请刷新后检查。",
+			"fileUnavailable": "无法确认可重命名的项目文件，请刷新后重试。",
+			"verifyResult": "未能确认文件改名结果，请刷新文件列表后重试。"
+		},
 		"saved": "保存成功",
 		"saving": "正在保存",
 		"upgrade": {
@@ -4797,6 +4803,26 @@
 		"submitSuccess": "提交成功",
 		"uploadImageCountLimit": "最多支持添加 10 张图",
 		"uploadImageSizeLimit": "请上传大小小于 2MB 的 JPG 或 PNG"
+	},
+	"operationResultList": {
+		"directory": "文件夹",
+		"file": "文件",
+		"generationDetails": "生成详情",
+		"interrupted": "操作已中断",
+		"itemCount": "{{count}} 项结果",
+		"itemCount_one": "{{count}} 项结果",
+		"locateCanvasElement": "定位到画布元素：{{label}}",
+		"openGenerationDetails": "查看生成详情：{{label}}",
+		"running": "正在处理",
+		"summary": "{{success}} 项成功 · {{error}} 项失败",
+		"summaryCompleted": "已完成 {{count}} 项",
+		"summaryFailed": "{{count}} 项失败",
+		"summaryProcessing": "正在处理 {{count}} 项",
+		"summaryProcessing_one": "正在处理 {{count}} 项",
+		"summarySucceeded": "{{count}} 项成功",
+		"title": "操作结果",
+		"unavailable": "暂时无法显示操作结果",
+		"viewInCanvas": "在画布中查看"
 	},
 	"personalPet": {
 		"collapse": "收起宠物",
@@ -10289,6 +10315,7 @@
 		"deleteWorkspaceConfirmTitle": "删除工作区?",
 		"deleteWorkspaceDescription": "「{{name}}」将移入回收站，其中所有项目、话题和文件也会一并移入。你可以在回收站中恢复或彻底删除。",
 		"deleteWorkspaceDescriptionWithoutName": "将移入回收站，其中所有项目、话题和文件也会一并移入。你可以在回收站中恢复或彻底删除。",
+		"executing": "正在执行中...",
 		"expandAllFiles": "展开全部文件",
 		"expandUserMessage": "展开",
 		"filePreviewNotSupported": "暂不支持预览该文件,请下载该文件",

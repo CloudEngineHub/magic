@@ -698,6 +698,9 @@ class GenerateImages(AbstractFileTool[GenerateImagesParams], WorkspaceTool[Gener
         self, result: ToolResult, arguments: dict | None = None
     ) -> str:
         if not result.ok:
+            task_remark = self._get_task_result_remark(result, self._get_task_names(arguments))
+            if task_remark:
+                return task_remark
             return i18n.translate("generate_images.failed", category="tool.messages")
 
         if isinstance(result, ImageToolResult) and result.extra_info:
@@ -705,6 +708,10 @@ class GenerateImages(AbstractFileTool[GenerateImagesParams], WorkspaceTool[Gener
             total: int = result.extra_info.get("total_count", 0)
             failed: int = result.extra_info.get("failed_count", 0)
             saved_images: List[str] = result.extra_info.get("saved_images", [])
+            task_names = self._get_task_names(arguments)
+            task_remark = self._get_task_result_remark(result, task_names)
+            if task_remark:
+                return task_remark
 
             if succeeded == 0:
                 return i18n.translate("generate_images.failed", category="tool.messages")
@@ -724,6 +731,41 @@ class GenerateImages(AbstractFileTool[GenerateImagesParams], WorkspaceTool[Gener
             )
 
         return i18n.translate("generate_images.processing", category="tool.messages")
+
+    @staticmethod
+    def _get_task_names(arguments: dict | None) -> List[str]:
+        tasks = (arguments or {}).get("tasks", [])
+        return [
+            str(task.get("name") or "").strip()
+            for task in tasks
+            if isinstance(task, dict)
+        ]
+
+    @staticmethod
+    def _get_task_result_remark(result: ToolResult, task_names: List[str]) -> str:
+        if not result.extra_info:
+            return ""
+        task_results = result.extra_info.get("tasks")
+        if not isinstance(task_results, list) or not task_results:
+            return ""
+
+        segments: List[str] = []
+        for index, task_result in enumerate(task_results):
+            if not isinstance(task_result, dict):
+                continue
+            name = task_names[index] if index < len(task_names) else ""
+            if not name:
+                saved_path = str(task_result.get("relative_path") or task_result.get("saved_path") or "")
+                name = os.path.basename(saved_path)
+            if not name:
+                continue
+            key = (
+                "generate_images.item_status.completed"
+                if task_result.get("success")
+                else "generate_images.item_status.failed"
+            )
+            segments.append(i18n.translate(key, category="tool.messages", name=name))
+        return "；".join(segments)
 
     async def get_before_tool_call_friendly_action_and_remark(
         self,

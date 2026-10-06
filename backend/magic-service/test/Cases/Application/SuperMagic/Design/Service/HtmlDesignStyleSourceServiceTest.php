@@ -43,11 +43,6 @@ class HtmlDesignStyleSourceServiceTest extends TestCase
         parent::tearDown();
     }
 
-    private function service(): HtmlDesignStyleSourceService
-    {
-        return new HtmlDesignStyleSourceService($this->tempRoot);
-    }
-
     public function testReadsKnownStyleSource(): void
     {
         $result = $this->service()->getSource('apple');
@@ -88,8 +83,13 @@ class HtmlDesignStyleSourceServiceTest extends TestCase
     public function testRejectsBackslashStyleCode(): void
     {
         $this->assertThrowsErrorCode(DesignErrorCode::InvalidStyleCode, function (): void {
-            $this->service()->getSource('apple\\..\\nested');
+            $this->service()->getSource('apple\..\nested');
         });
+    }
+
+    private function service(): HtmlDesignStyleSourceService
+    {
+        return new HtmlDesignStyleSourceService($this->tempRoot);
     }
 
     private function assertThrowsErrorCode(DesignErrorCode $expected, callable $callback): void

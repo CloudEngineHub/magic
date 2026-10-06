@@ -371,6 +371,8 @@ export interface CanvasDesignRef {
 		data: CanvasDocument,
 		options?: {
 			mode?: "smart" | "replace"
+			/** 文件操作已在服务端发生，不生成只能撤销画布引用的历史步骤。 */
+			historyPolicy?: "include" | "exclude"
 			/** sidecar 解析出的运行时来源；不会写入画布 DSL */
 			elementDetailsProvenance?: ElementDetailsProvenance
 		},
