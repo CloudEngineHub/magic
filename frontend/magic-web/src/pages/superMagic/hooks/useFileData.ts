@@ -388,7 +388,11 @@ export const useFileData = ({
 	/** 针对 分享/工具预览/内容审查 等场景，单独获取文件的最新下载地址 */
 	useEffect(() => {
 		if (!enabled || !loadContent || !file_id) return
-		if (waitingForShareAccess || (isShareFilePreview && !isShareFileAccess(fileAccess))) {
+		// 回收站与分享都跳过历史版本，但回收站使用自己的已绑定身份，不能等待分享身份。
+		if (
+			waitingForShareAccess ||
+			(isShareFilePreview && !isShareFileAccess(fileAccess) && !isRecycleBinPreview)
+		) {
 			setLoading(true)
 			return
 		}
@@ -460,6 +464,7 @@ export const useFileData = ({
 		file_id,
 		isShareFilePreview,
 		loadContent,
+		isRecycleBinPreview,
 		shareAccessKey,
 		waitingForShareAccess,
 		fileAccess,
