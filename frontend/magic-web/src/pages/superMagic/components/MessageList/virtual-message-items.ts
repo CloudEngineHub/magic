@@ -1,6 +1,6 @@
 import type { SuperMagicMessageItem } from "./type"
 import { getMessageNodeKey } from "./helpers"
-import { canToolMessageRender } from "./message-render-contract"
+import { canRenderFinalAttachments, canToolMessageRender } from "./message-render-contract"
 import {
 	buildMessageKeysAndTurnGroups,
 	isToolRoleMessage,
@@ -182,7 +182,10 @@ function shouldIncludeVirtualMessage(
 	// Assistant sidecar UI can be rendered from fields outside the streaming payload trio.
 	// Terminal status is retained here because the Store may fill the final Assistant projection
 	// after the historical message enters the list.
-	return attachmentPayloads.some(hasRenderableMessageValue) || hasTerminalMessageStatus(node)
+	return (
+		(canRenderFinalAttachments(node) && attachmentPayloads.some(hasRenderableMessageValue)) ||
+		hasTerminalMessageStatus(node)
+	)
 }
 
 /**

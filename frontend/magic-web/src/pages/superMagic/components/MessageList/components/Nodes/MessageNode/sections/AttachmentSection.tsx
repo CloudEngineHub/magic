@@ -22,7 +22,10 @@ import { openMessageFile } from "@/pages/superMagic/components/MessageList/utils
 import { superMagicStore } from "@/pages/superMagic/stores"
 import { useMessageViewState } from "@/pages/superMagic/components/MessageList/view-state/MessageViewStateContext"
 import { useFilePathAttachmentDownload } from "@/pages/superMagic/components/MessageList/components/MessageAttachment/hooks/useFilePathAttachmentDownload"
-import { resolveAttachmentList } from "@/pages/superMagic/components/MessageList/message-render-contract"
+import {
+	canRenderFinalAttachments,
+	resolveAttachmentList,
+} from "@/pages/superMagic/components/MessageList/message-render-contract"
 
 interface AttachmentSectionProps {
 	node?: Record<string, unknown>
@@ -43,13 +46,15 @@ export const AttachmentSection = observer(function AttachmentSection({
 	className,
 }: AttachmentSectionProps) {
 	const resolvedProjectFilesStore = useMessageListProjectFilesStore()
-	const attachments = resolveAttachmentList(node, fallbackNode) as AttachmentProps[]
+	const canDisplayAttachments = canRenderFinalAttachments(node)
+	const attachments = canDisplayAttachments
+		? (resolveAttachmentList(node, fallbackNode) as AttachmentProps[])
+		: []
 
 	const rawFilePathAttachments = useMemo(() => {
-		if (!prevSuperMessageId) return []
+		if (!canDisplayAttachments || !prevSuperMessageId) return []
 		const prevMessageNode = superMagicStore.getMessageNode(prevSuperMessageId) as
-			| Record<string, unknown>
-			| undefined
+			Record<string, unknown> | undefined
 		const prevContent =
 			typeof prevMessageNode?.content === "string" ? prevMessageNode.content : ""
 		if (!prevContent) return []
@@ -61,7 +66,7 @@ export const AttachmentSection = observer(function AttachmentSection({
 			seenReferences.add(referenceKey)
 			return true
 		})
-	}, [prevSuperMessageId])
+	}, [canDisplayAttachments, prevSuperMessageId])
 
 	const seenFilePaths = new Set<string>()
 	const filePathAttachments = rawFilePathAttachments.flatMap((attachment) => {
@@ -94,6 +99,7 @@ export const AttachmentSection = observer(function AttachmentSection({
 		onSelectDetail?.(item)
 	})
 
+	if (!canDisplayAttachments) return null
 	if (filePathAttachments.length > 0) {
 		return <FilePathAttachmentList attachments={filePathAttachments} className={className} />
 	}
