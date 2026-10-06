@@ -5779,7 +5779,7 @@
 		},
 		"preview": {
 			"open": "Preview",
-			"readonly": "Recycle bin file · Read-only",
+			"readonly": "Deleted · Read-only",
 			"unavailable": "This file is unavailable or you no longer have access."
 		},
 		"project": {

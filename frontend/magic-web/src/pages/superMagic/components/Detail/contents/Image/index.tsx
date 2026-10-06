@@ -1,5 +1,5 @@
 import CommonHeaderV2 from "@/pages/superMagic/components/Detail/components/CommonHeaderV2"
-import { memo, useMemo } from "react"
+import { memo, useMemo, useEffect, useState } from "react"
 import { useStyles } from "./style"
 import MagicImagePreview from "@/components/base/MagicImagePreview"
 import CommonFooter from "../../components/CommonFooter"
@@ -10,8 +10,11 @@ import Deleted from "../../components/Deleted"
 import { DownloadImageMode } from "@/pages/superMagic/pages/Workspace/types"
 import { DetailType } from "../../types"
 import { AttachmentSource } from "../../../TopicFilesButton/hooks/types"
+import DetailEmpty from "../../components/DetailEmpty"
+import { useTranslation } from "react-i18next"
 
 function Img(props: any) {
+	const { t } = useTranslation("super")
 	const { styles } = useStyles()
 	const {
 		type,
@@ -40,6 +43,8 @@ function Img(props: any) {
 	const { file_id } = data
 	const {
 		fileUrl,
+		loadError,
+		refreshFile,
 		fileVersion,
 		changeFileVersion,
 		fileVersionsList,
@@ -54,10 +59,22 @@ function Img(props: any) {
 		isFromNode,
 		disabledUrlCache: isPlaybackMode,
 	})
+	const [imageLoadError, setImageLoadError] = useState(false)
+	useEffect(() => setImageLoadError(false), [fileUrl])
 
-	const quitEditMode = () => { }
+	const quitEditMode = () => {}
 
 	const ImageRender = useMemo(() => {
+		if (loadError || imageLoadError)
+			return (
+				<DetailEmpty
+					title={t("common.fileNotFoundOrLoadFailed")}
+					onRetry={() => {
+						setImageLoadError(false)
+						void refreshFile()
+					}}
+				/>
+			)
 		if (loading)
 			return (
 				<Flex align="center" justify="center" className={styles.loadingContainer}>
@@ -69,7 +86,11 @@ function Img(props: any) {
 			<MagicImagePreview
 				rootClassName={styles.imagePreview}
 				toolContainerClassName={styles.imagePreviewToolContainer}
-				onDownload={(mode?: DownloadImageMode) => onDownload?.(undefined, undefined, mode)}
+				onDownload={
+					allowDownload !== false && onDownload
+						? (mode?: DownloadImageMode) => onDownload(undefined, undefined, mode)
+						: undefined
+				}
 				isAIImage={currentFile?.source === AttachmentSource.AI && type === DetailType.Image}
 			>
 				<img
@@ -78,15 +99,21 @@ function Img(props: any) {
 					draggable={false}
 					style={{ width: "100%", height: "100%", objectFit: "contain" }}
 					data-testid="contents-image-preview-image"
+					onError={() => setImageLoadError(true)}
 				/>
 			</MagicImagePreview>
 		)
 	}, [
+		loadError,
+		imageLoadError,
+		refreshFile,
+		t,
 		data,
 		fileUrl,
 		loading,
 		isDeleted,
 		onDownload,
+		allowDownload,
 		styles.imagePreview,
 		styles.imagePreviewToolContainer,
 		styles.loadingContainer,

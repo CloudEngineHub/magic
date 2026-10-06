@@ -1,6 +1,5 @@
 import type { FileHelpContext } from "@/pages/superMagic/components/TopicFilesButton/utils/magic-system-folder"
 import { getFileDisplayPath } from "@/pages/superMagic/utils/markdownFileReference"
-import { Trash2 } from "lucide-react"
 import { memo, useMemo } from "react"
 import { Tooltip } from "antd"
 import { IconX, IconLock } from "@tabler/icons-react"
@@ -233,8 +232,11 @@ const TabItem = memo<TabItemProps>(
 					</span>
 					{tab.fileData.recycleBin && (
 						<Tooltip title={t("recycleBin.preview.readonly")}>
-							<span aria-label={t("recycleBin.preview.readonly")}>
-								<Trash2 size={16} />
+							<span
+								className="shrink-0 rounded bg-amber-100 px-1.5 py-0.5 text-[10px] font-medium leading-4 text-amber-800 dark:bg-amber-950/50 dark:text-amber-300"
+								aria-label={t("recycleBin.preview.readonly")}
+							>
+								{t("fileViewer.tabs.deleted")}
 							</span>
 						</Tooltip>
 					)}

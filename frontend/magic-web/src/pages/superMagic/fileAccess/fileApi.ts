@@ -66,6 +66,8 @@ export function createFileApi(access?: FileAccessContext | null): FileApi {
 					)
 				return getTemporaryDownloadUrl({
 					file_ids: fileIds,
+					download_mode: options?.downloadMode,
+					is_download: options?.isDownload,
 					access: requestAccess,
 				})
 			}

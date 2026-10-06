@@ -3,6 +3,8 @@ import {
 	FileAccessProvider as RequestFileAccessProvider,
 } from "@/pages/superMagic/fileAccess/FileAccessProvider"
 import { lazy, Suspense, memo, useCallback, useEffect, useRef } from "react"
+import { useTranslation } from "react-i18next"
+import { Trash2 } from "lucide-react"
 import { cn } from "@/utils/cn"
 import useFullscreenMode from "@/hooks/useFullscreenMode"
 import Render from "../../../Render"
@@ -84,6 +86,7 @@ const TabCache = memo(
 		fillPortalSurface = false,
 		onCloseTab,
 	}: TabCacheProps) => {
+		const { t } = useTranslation("super")
 		const tabType = getFileViewerTabType(tab)
 		const managerState = tab.fileManager
 			? (getFileManagerState(tab.fileManager) ?? tab.fileManagerState)
@@ -143,6 +146,15 @@ const TabCache = memo(
 
 		const inheritedRequestAccess = useRequestFileAccess()
 		const recycleBin = tab.fileData?.recycleBin
+		const filePreview = (
+			<Render
+				key={tab.refreshKey || tab.id}
+				{...renderProps}
+				onActiveFileChange={recycleBin ? undefined : handleActiveFileChange}
+				openFileTab={openFileTab}
+				isTabActive={isActive}
+			/>
+		)
 		const renderContent = (
 			<RequestFileAccessProvider
 				value={
@@ -157,13 +169,20 @@ const TabCache = memo(
 						: inheritedRequestAccess
 				}
 			>
-				<Render
-					key={tab.refreshKey || tab.id}
-					{...renderProps}
-					onActiveFileChange={recycleBin ? undefined : handleActiveFileChange}
-					openFileTab={openFileTab}
-					isTabActive={isActive}
-				/>
+				{recycleBin ? (
+					<div className="flex h-full min-h-0 flex-col">
+						<div
+							role="status"
+							className="flex shrink-0 items-center gap-2 border-b border-amber-200 bg-amber-50/70 px-3 py-2 text-xs text-amber-800 dark:border-amber-900 dark:bg-amber-950/30 dark:text-amber-300"
+						>
+							<Trash2 size={16} aria-hidden />
+							{t("recycleBin.preview.readonly")}
+						</div>
+						<div className="min-h-0 flex-1">{filePreview}</div>
+					</div>
+				) : (
+					filePreview
+				)}
 			</RequestFileAccessProvider>
 		)
 

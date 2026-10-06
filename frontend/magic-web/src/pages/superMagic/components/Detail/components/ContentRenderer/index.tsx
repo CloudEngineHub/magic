@@ -1,4 +1,5 @@
 import { lazy } from "react"
+import { useFileAccess } from "@/pages/superMagic/fileAccess/FileAccessProvider"
 import type { DetailHTMLData, DetailTerminalData, DetailUniverData } from "../../types"
 import { DetailType } from "../../types"
 import {
@@ -53,6 +54,7 @@ interface ContentRendererProps {
 }
 
 function ContentRenderer({ type, data, commonProps }: ContentRendererProps) {
+	const fileAccess = useFileAccess()
 	// console.log("ContentRenderer:", type, data, commonProps)
 
 	// 在 playbackTab 中，除了 FileTree、Browser、Search、Terminal，其他类型都不需要显示 CommonHeader
@@ -67,7 +69,11 @@ function ContentRenderer({ type, data, commonProps }: ContentRendererProps) {
 		showRefresh: commonProps.showRefresh ?? !commonProps.isShareRoute,
 	}
 
-	if (data?.space_type === "user" || data?.file_reference?.space_type === "user") {
+	// 回收站文本使用绑定的只读文件接口，不进入活跃个人文件的编辑／冲突会话。
+	if (
+		fileAccess?.kind !== "recycle-bin" &&
+		(data?.space_type === "user" || data?.file_reference?.space_type === "user")
+	) {
 		if ([DetailType.Md, DetailType.Text, DetailType.Code].includes(type)) {
 			return <UserTextPreview data={data} {...commonProps} />
 		}

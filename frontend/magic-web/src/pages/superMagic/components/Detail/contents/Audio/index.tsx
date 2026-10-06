@@ -2,6 +2,8 @@ import CommonHeaderV2 from "@/pages/superMagic/components/Detail/components/Comm
 import React, { memo, useMemo, useState, useCallback } from "react"
 import { useStyles } from "./style"
 import { useFileUrl } from "@/pages/superMagic/hooks/useFileUrl"
+import DetailEmpty from "../../components/DetailEmpty"
+import { useTranslation } from "react-i18next"
 import { useXgAudioPlayer, type UseXgAudioPlayerMode } from "./hooks/useXgAudioPlayer"
 import { Flex } from "antd"
 import {
@@ -23,6 +25,7 @@ function formatTime(sec: number) {
 }
 
 interface AudioPreviewProps {
+	onRefreshFile?: () => void
 	type: string
 	currentIndex: number
 	onPrevious?: () => void
@@ -59,6 +62,7 @@ interface AudioPreviewProps {
 }
 
 export function AudioPreview(props: AudioPreviewProps) {
+	const { t } = useTranslation("super")
 	const { styles } = useStyles()
 	const {
 		type,
@@ -82,7 +86,7 @@ export function AudioPreview(props: AudioPreviewProps) {
 	} = props
 
 	const { file_name, file_id } = data || {}
-	const { fileUrl } = useFileUrl({ file_id: file_id || "" })
+	const { fileUrl, hasError } = useFileUrl({ file_id: file_id || "" })
 
 	// Use xgplayer audio player
 	const {
@@ -244,9 +248,16 @@ export function AudioPreview(props: AudioPreviewProps) {
 	])
 
 	const handleDownload = useCallback(() => {
-		if (onDownload) onDownload()
-	}, [onDownload])
+		if (allowDownload !== false && onDownload) onDownload()
+	}, [allowDownload, onDownload])
 
+	if (hasError)
+		return (
+			<DetailEmpty
+				title={t("common.fileNotFoundOrLoadFailed")}
+				onRetry={props.onRefreshFile}
+			/>
+		)
 	return (
 		<div className={styles.mediaViewer}>
 			{showFileHeader && (
@@ -371,13 +382,15 @@ export function AudioPreview(props: AudioPreviewProps) {
 								/>
 							</div>
 						</div>
-						<div
-							className={styles.iconButton}
-							onClick={handleDownload}
-							data-testid="handle-download"
-						>
-							<IconDownload size={20} color="#fff" />
-						</div>
+						{allowDownload !== false && onDownload && (
+							<div
+								className={styles.iconButton}
+								onClick={handleDownload}
+								data-testid="handle-download"
+							>
+								<IconDownload size={20} color="#fff" />
+							</div>
+						)}
 					</Flex>
 				</div>
 			</div>
