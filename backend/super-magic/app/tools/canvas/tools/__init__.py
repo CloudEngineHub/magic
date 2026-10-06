@@ -22,7 +22,7 @@ from app.tools.canvas.tools.query_canvas_overview import QueryCanvasOverview
 from app.tools.canvas.tools.query_canvas_layout import QueryCanvasLayout
 from app.tools.canvas.tools.arrange_canvas_elements import ArrangeCanvasElements
 from app.tools.canvas.tools.rename_canvas_elements import RenameCanvasElements
-from app.tools.canvas.tools.manage_canvas_elements import ManageCanvasElements
+from app.tools.canvas.tools.unframe_canvas_elements import UnframeCanvasElements
 from app.tools.canvas.tools.delete_canvas_elements import DeleteCanvasElements
 from app.tools.canvas.tools.retry_canvas_content_generation import (
     GenerationOverrideInput,
@@ -40,7 +40,7 @@ __all__ = [
     "QueryCanvasLayout",
     "ArrangeCanvasElements",
     "RenameCanvasElements",
-    "ManageCanvasElements",
+    "UnframeCanvasElements",
     "DeleteCanvasElements",
     "AddCanvasContents",
     "AddCanvasElements",

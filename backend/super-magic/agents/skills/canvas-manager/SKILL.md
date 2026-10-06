@@ -254,7 +254,7 @@ When a user requests a transformation of an existing Canvas video, guide the wor
 
 Group exact sibling Elements into a new Frame.
 
-Parameters: `project_path` and `items` are required. Select exact unlocked root-level siblings, including existing shapes or text. This tool does not frame existing Frames/Groups. Unframing uses `manage_canvas_elements` from `references/element-management.md`.
+Parameters: `project_path` and `items` are required. Select exact unlocked root-level siblings, including existing shapes or text. This tool does not frame existing Frames/Groups. Unframing uses `unframe_canvas_elements` from `references/element-management.md`.
 
 | Parameter | Required | Description |
 |---|---|---|
@@ -543,7 +543,7 @@ Use preset or numeric short-side resolutions in `output`, such as `1080p` or `76
 - Ordinary video workflow: full creative target, point estimate and `ask_user` confirmation, then async generation and waiting.
 - Detailed video production workflow: Storyboard, first frames, shot videos, direct business Connections, `video-edit`, and the final MP4.
 - `video-edit` Content stores an editable ordered plan via `videoSequence` and optional `audioSequence`; create matching incoming Connections in the same `add_canvas_elements` call when a reusable edit plan is needed.
-- Frame workflow: group only exact root-level writable sibling Elements; never include read-only Element types, do not re-frame existing Frames/Groups, and no unframing or deletion is offered.
+- Frame workflow: group only exact root-level writable sibling Elements; never include read-only Element types, do not re-frame existing Frames/Groups. Use `unframe_canvas_elements` to remove a Frame while retaining its children, or `delete_canvas_elements` for confirmed removal of a Frame and its descendants; follow `references/element-management.md`.
 - Layout strategies: `row_incremental`, `dependency_flow`, `explicit_position`.
 - Version management: the first Content is automatically main; appended candidates require user confirmation before main Content selection, with a retry cap on failures.
 

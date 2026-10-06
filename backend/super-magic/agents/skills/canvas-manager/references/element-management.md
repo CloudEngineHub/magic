@@ -4,12 +4,12 @@ Load for unframing or deleting exact Canvas Elements and existing image versions
 
 ## Unframe
 
-`manage_canvas_elements`: required `project_path`, exact `element_ids`, `action=unframe`. Removes only the selected Frames, releases children to their parent while preserving positions, transformations, media and relative order. Connections involving the removed Frame disappear; child connections remain. Unknown geometry, undecodable children/connections and locked Elements are rejected. Do not confuse unframing with recursively deleting a Frame. Create Frames with the existing `frame_canvas_elements` tool.
+`unframe_canvas_elements`: required `project_path` and exact Frame `element_ids`. Removes only the selected Frames, releases children to their parent while preserving positions, transformations, media and relative order. Connections involving the removed Frame disappear; child connections remain. Unknown geometry, undecodable children/connections and locked Elements are rejected. Do not confuse unframing with recursively deleting a Frame. Create Frames with the existing `frame_canvas_elements` tool.
 
 ```python
 from sdk.tool import tool
-result = tool.call("manage_canvas_elements", {
-    "project_path": "Demo", "element_ids": ["frame-A"], "action": "unframe",
+result = tool.call("unframe_canvas_elements", {
+    "project_path": "Demo", "element_ids": ["frame-A"],
 })
 print(result.content)
 ```

@@ -1,8 +1,6 @@
-"""已有元素结构管理；本轮仅取消画框。"""
+"""取消画框工具；保留子元素及其内容和文件。"""
 
 from __future__ import annotations
-
-from typing import Literal
 
 from pydantic import ConfigDict, Field
 
@@ -16,17 +14,16 @@ from app.tools.core import BaseToolParams, tool
 
 
 # 完整说明：agents/skills/canvas-manager/references/element-management.md。
-@tool(name="manage_canvas_elements", code_mode_only=True)
-class ManageCanvasElements(CanvasManagementTool):
+@tool(name="unframe_canvas_elements", code_mode_only=True)
+class UnframeCanvasElements(CanvasManagementTool):
     """Release Frame children without deleting their media."""
 
-    name = "manage_canvas_elements"
+    name = "unframe_canvas_elements"
 
     class Params(BaseToolParams):
         model_config = ConfigDict(extra="forbid")
         project_path: str = Field(min_length=1)
         element_ids: list[str] = Field(min_length=1)
-        action: Literal["unframe"] = "unframe"
 
     params_class = Params
 

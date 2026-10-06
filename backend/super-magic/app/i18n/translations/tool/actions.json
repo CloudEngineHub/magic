@@ -1023,7 +1023,7 @@
         "zh_CN": "重命名画布图片",
         "en_US": "Rename canvas images"
     },
-    "manage_canvas_elements": {
+    "unframe_canvas_elements": {
         "zh_CN": "取消画框",
         "en_US": "Unframe canvas elements"
     },
