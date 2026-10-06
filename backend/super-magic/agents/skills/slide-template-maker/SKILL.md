@@ -292,7 +292,7 @@ If a dedicated source tool fails, print `result.content`, fix the arguments, and
 - Use `visual_understanding` for standalone images, screenshots, and generated `previews/slides/` files.
 - Call `visual_understanding_webpage` and `analysis_slide_webpage` only through `run_sdk_snippet` with `sdk.tool.call(...)`; they are not directly mounted on the slide agent.
 - Use `visual_understanding_webpage` through that Code Mode path to inspect source HTML before finalization. Pass the declared canvas as `viewport_width` and `viewport_height`, with `device_scale_factor: 1`.
-- Use `analysis_slide_webpage` through that Code Mode path for declared-canvas overflow, clipping, scrollbar, and broken-image checks. The tool uses `max_width` and `max_height` as its Browser viewport.
+- Use `analysis_slide_webpage` through that Code Mode path for declared-canvas overflow, clipping, scrollbar, and broken-image checks. It is Code Mode only; read [its contract](references/webpage-layout-analysis.md) for parameters, pagination, results, and failures. The tool uses `max_width` and `max_height` as its Browser viewport.
 - After `finalize_slide_template`, use `visual_understanding` on the generated files under `previews/slides/`. These images are the authoritative visual evidence because they are the exact preview artifacts that will be published. If finalize was skipped, failed, or `previews/` is missing, stop and use the Blocked Report. Do not say the template is complete.
 - Do not install Playwright or Chromium from the Agent. Template finalization uses the configured Super Magic Browser backend automatically.
 - Use `generate_images` only for neutral, non-sensitive visual assets when the source does not provide enough usable imagery.

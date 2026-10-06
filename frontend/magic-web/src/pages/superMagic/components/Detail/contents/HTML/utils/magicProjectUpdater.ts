@@ -1,6 +1,7 @@
 import { MagicFSApi, SuperMagicApi } from "@/apis"
 import { flattenAttachments } from "./index"
 import { parseMagicProjectConfigContent } from "@/pages/superMagic/utils/magicProjectConfigParser"
+import { reconcilePPTTransitions } from "../../../components/PPTRender/utils/pptTransitions"
 import { createFileApi, type FileApi } from "@/pages/superMagic/fileAccess/fileApi"
 import {
 	createSessionFileAccess,
@@ -77,6 +78,9 @@ export function generateUpdatedMagicProjectJs(config: any, newSlidesOrder: strin
 	const updatedConfig = {
 		...config,
 		slides: newSlidesOrder,
+		...(config.transitions !== undefined
+			? { transitions: reconcilePPTTransitions(config.transitions, newSlidesOrder) }
+			: {}),
 		...(config.hidden_slides !== undefined
 			? {
 					hidden_slides: config.hidden_slides.filter((path: string) =>
@@ -134,6 +138,16 @@ export async function updateSlidesOrder(
 				)
 			if (duplicatePath && parsed.config.hidden_slides.includes(duplicatePath.from))
 				parsed.config.hidden_slides = [...parsed.config.hidden_slides, duplicatePath.to]
+		}
+		if (parsed.config.transitions !== undefined) {
+			parsed.config.transitions = reconcilePPTTransitions(
+				parsed.config.transitions,
+				newSlidesOrder,
+				{
+					renamePath,
+					duplicatePath,
+				},
+			)
 		}
 
 		// Generate updated content

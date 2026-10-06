@@ -874,6 +874,59 @@ describe("PPTSlide", () => {
 		)
 	})
 
+	it.each(["incoming", "outgoing"] as const)(
+		"paints the %s transition layer while keeping its iframe inert and paused",
+		(transitionRole) => {
+			const register = vi.fn()
+			const { unmount } = renderPPTSlide({
+				isActive: transitionRole === "incoming",
+				isPresented: transitionRole === "outgoing",
+				transitionRole,
+				toolbarOwnerKey: "deck::slide-1",
+				onTransitionLayerChange: register,
+			})
+			const wrapper = screen.getByTestId("ppt-slide-item-slide-1")
+			expect(wrapper).toHaveStyle({ visibility: "visible", pointerEvents: "none" })
+			expect((wrapper as HTMLDivElement & { inert: boolean }).inert).toBe(true)
+			expect(wrapper).toHaveAttribute("aria-hidden", "true")
+			expect(register).toHaveBeenCalledWith("deck::slide-1", wrapper)
+			expect(mockState.renderedIsolatedProps).toHaveBeenLastCalledWith(
+				expect.objectContaining({
+					isVisible: true,
+					isTabActive: false,
+					isPlaybackPaused: true,
+				}),
+			)
+			unmount()
+			expect(register).toHaveBeenLastCalledWith("deck::slide-1", null)
+		},
+	)
+
+	it("pauses both saved and live preview frames when a page transition begins", async () => {
+		mockState.initialEditMode = false
+		const view = renderPPTSlide({ content: "<p>old</p>", rawContent: "<p>old</p>" })
+		const initialProps = mockState.renderedIsolatedProps.mock.calls.at(-1)?.[0] as
+			{ onRenderReady?: () => void } | undefined
+		act(() => initialProps?.onRenderReady?.())
+		rerenderSlide(view, { content: "<p>new</p>", rawContent: "<p>new</p>" })
+		await waitFor(() => expect(screen.getAllByTestId("isolated-html-renderer")).toHaveLength(2))
+		mockState.renderedIsolatedProps.mockClear()
+		rerenderSlide(view, {
+			content: "<p>new</p>",
+			rawContent: "<p>new</p>",
+			isActive: false,
+			isPresented: true,
+			transitionRole: "outgoing",
+		})
+		const frames = mockState.renderedIsolatedProps.mock.calls.slice(-2).map(([props]) => props)
+		expect(frames).toHaveLength(2)
+		expect(frames.every((props) => props.isPlaybackPaused)).toBe(true)
+		expect(screen.getByTestId("ppt-slide-item-slide-1")).toHaveStyle({
+			visibility: "visible",
+			pointerEvents: "none",
+		})
+	})
+
 	it("reports real iframe readiness to the double-buffer owner", async () => {
 		const onRenderReadyChange = vi.fn()
 		renderPPTSlide({ onRenderReadyChange, renderRevision: "slide-1:1" })

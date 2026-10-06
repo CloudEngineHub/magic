@@ -40,6 +40,7 @@ const DRAG_AUTO_SCROLL_EDGE_SIZE = 56
 const DRAG_AUTO_SCROLL_MAX_SPEED = 20
 
 function PPTSidebar({
+	onOpenTransitions,
 	tools,
 	hiddenPaths,
 	onOpenFile,
@@ -549,6 +550,9 @@ function PPTSidebar({
 				{/* Mobile keeps the thumbnail strip without the selection toolbar's column. */}
 				{tools && !isMobile ? (
 					<PPTDeckToolbar
+						onOpenTransitions={
+							onOpenTransitions ? () => onOpenTransitions() : undefined
+						}
 						tools={tools}
 						allowEdit={allowEdit}
 						slideCount={slides.length}
@@ -705,6 +709,11 @@ function PPTSidebar({
 													: undefined
 											}
 											onOpenFile={onOpenFile}
+											onOpenTransitions={
+												onOpenTransitions
+													? () => onOpenTransitions(item.index)
+													: undefined
+											}
 											onLocateFile={() => handleLocateFile(item.index)}
 											isMobile={isMobile}
 											className={cn(

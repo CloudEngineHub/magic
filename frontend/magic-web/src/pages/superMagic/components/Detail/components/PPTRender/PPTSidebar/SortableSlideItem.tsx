@@ -15,6 +15,7 @@ import {
 	LayoutTemplate,
 	EyeOff,
 	Eye,
+	GalleryHorizontalEnd,
 } from "lucide-react"
 import { useTranslation } from "react-i18next"
 import { cn } from "@/utils/cn"
@@ -46,6 +47,7 @@ import { FILE_SAVE_STATUS } from "../../../services/fileSaveQueue"
 import { useFileSaveStatus } from "../../../hooks/useFileSaveStatus"
 
 function SortableSlideItem({
+	onOpenTransitions,
 	item,
 	isActive,
 	onClick,
@@ -437,6 +439,15 @@ function SortableSlideItem({
 						<FileSearch className="mr-2 size-4" />
 						{t("fileViewer.locateFile")}
 					</ContextMenuItem>
+					{onOpenTransitions && (
+						<ContextMenuItem
+							disabled={Boolean(pendingAction)}
+							onSelect={onOpenTransitions}
+						>
+							<GalleryHorizontalEnd className="mr-2 size-4" />
+							{t("ppt.transitions.title")}
+						</ContextMenuItem>
+					)}
 					{onOpenFile && (
 						<ContextMenuItem
 							disabled={

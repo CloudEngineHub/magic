@@ -9,7 +9,9 @@ from app.tools.create_slide import CreateSlide
 
 class CreateSlideOrderTest(unittest.IsolatedAsyncioTestCase):
     async def update_slides(self, slides, filename, insert_after):
-        config = {"slides": slides, "name": "Presentation"}
+        config = {"slides": slides, "name": "Presentation",
+                  "transitions": {"default": {"effect": "none"},
+                                  "slides": {"cover.html": {"effect": "fade", "duration_ms": 400, "easing": "linear"}}}}
         tool = SimpleNamespace(
             base_dir=Path("/presentation"),
             _parse_magic_project_config=AsyncMock(return_value=config),
@@ -44,5 +46,7 @@ class CreateSlideOrderTest(unittest.IsolatedAsyncioTestCase):
                     ["cover.html", "end.html"], "new.html", insert_after
                 )
                 self.assertEqual(config["slides"], expected)
+                self.assertEqual(config["transitions"]["default"], {"effect": "none"})
+                self.assertNotIn("new.html", config["transitions"]["slides"])
                 write.assert_awaited_once()
                 self.assertIn(json.dumps(config, indent=2, ensure_ascii=False), write.call_args.args[1])

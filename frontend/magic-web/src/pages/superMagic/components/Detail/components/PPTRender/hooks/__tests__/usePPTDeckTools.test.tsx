@@ -161,6 +161,115 @@ describe("usePPTDeckTools", () => {
 		)
 	})
 
+	it("saves transitions with the manifest revision and preserves unrelated config", async () => {
+		const options = makeOptions()
+		const existing = {
+			default: { effect: "fade", duration_ms: 400 },
+			slides: { "b.html": { effect: "none" } },
+		}
+		mocks.read.mockResolvedValue({
+			fileId: "manifest",
+			revision: 17,
+			content: JSON.stringify({
+				slides: ["a.html", "b.html"],
+				transitions: existing,
+				title: "Keep",
+			}),
+		})
+		const { result } = renderHook(() => usePPTDeckTools(options))
+		let saved: boolean | undefined
+		await act(async () => {
+			saved = await result.current.setTransitions({
+				scope: "slides",
+				paths: ["a.html"],
+				transition: { effect: "push", duration_ms: 500, direction: "up" },
+				expectedTransitions: existing,
+				expectedPaths: ["a.html", "b.html"],
+			})
+		})
+		expect(saved).toBe(true)
+		expect(mocks.save.mock.calls[0][0].revision).toBe(17)
+		const config = JSON.parse(mocks.save.mock.calls[0][1])
+		expect(config.title).toBe("Keep")
+		expect(config.transitions.slides["b.html"]).toEqual({ effect: "none" })
+		expect(config.transitions.slides["a.html"]).toMatchObject({
+			effect: "push",
+			duration_ms: 500,
+			direction: "up",
+		})
+		expect(options.store.updateConfig).toHaveBeenCalledWith(
+			expect.objectContaining({
+				displayConfig: expect.objectContaining({ transitions: config.transitions }),
+			}),
+		)
+	})
+
+	it("refuses a stale transition panel snapshot without submitting a write", async () => {
+		const options = makeOptions()
+		mocks.read.mockResolvedValue({
+			fileId: "manifest",
+			revision: 2,
+			content: JSON.stringify({
+				slides: ["a.html", "b.html"],
+				transitions: { default: { effect: "none" } },
+			}),
+		})
+		const { result } = renderHook(() => usePPTDeckTools(options))
+		await act(async () => {
+			expect(
+				await result.current.setTransitions({
+					scope: "all",
+					paths: ["a.html", "b.html"],
+					transition: { effect: "fade", duration_ms: 400 },
+					expectedTransitions: undefined,
+					expectedPaths: ["a.html", "b.html"],
+				}),
+			).toBe(false)
+		})
+		expect(mocks.save).not.toHaveBeenCalled()
+		expect(mocks.toast).toHaveBeenCalledWith("ppt.batch.operationConflict")
+	})
+
+	it("retains transition drafts after uncertain persistence without applying optimistic config", async () => {
+		const options = makeOptions()
+		mocks.save.mockRejectedValue(new Error("network"))
+		const { result } = renderHook(() => usePPTDeckTools(options))
+		await act(async () => {
+			expect(
+				await result.current.setTransitions({
+					scope: "slides",
+					paths: ["a.html"],
+					transition: { effect: "none" },
+					expectedTransitions: undefined,
+					expectedPaths: ["a.html", "b.html"],
+				}),
+			).toBe(false)
+		})
+		expect(mocks.save).toHaveBeenCalledTimes(1)
+		expect(options.store.updateConfig).not.toHaveBeenCalled()
+	})
+
+	it("allows a dirty-panel guard to save through the writer without deadlocking", async () => {
+		const options = makeOptions()
+		const { result } = renderHook(() => usePPTDeckTools(options))
+		options.beforeWrite.mockImplementationOnce(async () => {
+			const saved = await result.current.setTransitions({
+				scope: "slides",
+				paths: ["a.html"],
+				transition: { effect: "none" },
+				expectedTransitions: undefined,
+				expectedPaths: ["a.html", "b.html"],
+			})
+			expect(saved).toBe(true)
+			return true
+		})
+		await act(async () => {
+			await result.current.reorder(["b.html", "a.html"])
+		})
+		expect(mocks.save).toHaveBeenCalledTimes(2)
+		expect(result.current.busy).toBe(false)
+	})
+
 	it.each([
 		{
 			operation: "remove middle",

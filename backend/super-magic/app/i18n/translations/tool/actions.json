@@ -1010,5 +1010,9 @@
     "inspect_memory": {
         "zh_CN": "检查记忆用量",
         "en_US": "Inspect memory usage"
+    },
+    "update_slide_transitions": {
+        "zh_CN": "设置过渡动画",
+        "en_US": "Set slide transitions"
     }
 }
