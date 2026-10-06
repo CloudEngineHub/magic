@@ -108,9 +108,9 @@ class MagicServiceHandler(BaseImageGeneratorHandler):
         }
 
     @staticmethod
-    def _parse_expected_finished_at(response_data: dict) -> Optional[str]:
-        """从任务响应里取预期完成时间（ISO 8601），缺失或类型异常时返回 None。"""
-        value = response_data.get("expected_finished_at")
+    def _parse_time_field(response_data: dict, key: str) -> Optional[str]:
+        """从任务响应里取非空时间字符串。"""
+        value = response_data.get(key)
         return value if isinstance(value, str) and value else None
 
     async def _call_api(
@@ -120,8 +120,9 @@ class MagicServiceHandler(BaseImageGeneratorHandler):
     ) -> list[str]:
         """调用 magic-service 异步图片生成 API，轮询完成后返回图片 URL 列表。
 
-        任务创建成功后立即回调 on_task_created：预期完成时间只在创建响应里有，
-        而本方法要轮询到任务结束才返回，所以必须在此刻把值交出去。
+        任务创建成功后立即回调 on_task_created：发起时间与预期完成时间只在创建响应里有，
+        而本方法要轮询到任务结束才返回，所以必须在此刻把这一对值交出去 —— 前端就是靠
+        这两个绝对时刻算进度百分比。
         """
         url = f"{self._api_base_url.rstrip('/')}/images/generation-tasks"
         headers = self._build_api_headers()
@@ -159,7 +160,10 @@ class MagicServiceHandler(BaseImageGeneratorHandler):
                 if on_task_created is not None:
                     await on_task_created(
                         task_id,
-                        self._parse_expected_finished_at(response_data),
+                        self._parse_time_field(response_data, "expected_finished_at"),
+                        # 兼容尚未返回 started_at 的旧接口。
+                        self._parse_time_field(response_data, "started_at")
+                        or self._parse_time_field(response_data, "created_at"),
                     )
 
             poll_started_at = time.monotonic()

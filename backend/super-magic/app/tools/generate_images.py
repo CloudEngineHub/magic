@@ -273,7 +273,7 @@ class GenerateImages(AbstractFileTool[GenerateImagesParams], WorkspaceTool[Gener
     ) -> ImageToolResult:
         """供其他工具内部调用，并允许使用已验证的图片模型覆盖值。
 
-        `on_task_created` 由画布链路传入，用来把预期完成时间写进元素元数据。
+        `on_task_created` 由画布链路传入，用来把任务时间写进元素元数据。
         """
         return await self._execute_with_model(
             tool_context, params, model_id=model_id, on_task_created=on_task_created
@@ -302,19 +302,21 @@ class GenerateImages(AbstractFileTool[GenerateImagesParams], WorkspaceTool[Gener
             await self._normalize_tasks(params.tasks, workspace_root, tool_context)
 
             # 整批任务共用一张工具卡，进度事件只需要下发一次；画布元素则每个任务各写各的。
-            expected_finish_dispatched = False
+            generation_progress_dispatched = False
 
             async def _handle_task_created(
-                task_id: str, expected_finished_at: Optional[str]
+                task_id: str,
+                expected_finished_at: Optional[str],
+                started_at: Optional[str],
             ) -> None:
-                nonlocal expected_finish_dispatched
+                nonlocal generation_progress_dispatched
                 if on_task_created is not None:
-                    await on_task_created(task_id, expected_finished_at)
-                if expected_finish_dispatched or expected_finished_at is None:
+                    await on_task_created(task_id, expected_finished_at, started_at)
+                if generation_progress_dispatched or expected_finished_at is None:
                     return
-                expected_finish_dispatched = True
-                await self._dispatch_expected_finish(
-                    tool_context, params, task_id, expected_finished_at
+                generation_progress_dispatched = True
+                await self._dispatch_generation_progress(
+                    tool_context, params, task_id, expected_finished_at, started_at
                 )
 
             async def _run_with_delay(
@@ -537,41 +539,51 @@ class GenerateImages(AbstractFileTool[GenerateImagesParams], WorkspaceTool[Gener
             error="未知错误",
         )
 
-    async def _dispatch_expected_finish(
+    async def _dispatch_generation_progress(
         self,
         tool_context: ToolContext,
         params: GenerateImagesParams,
         task_id: str,
         expected_finished_at: str,
+        started_at: Optional[str],
     ) -> None:
-        """把 magic-service 给出的预期完成时间补发给工具卡。
-
-        卡片在 before_tool_call 时就已经发出，那时还没调 magic-service，拿不到这个值；
-        所以复用音频/下载进度用的 pending_tool_call 事件补一次。事件会按 tool_call_id
-        合并回同一张卡片，因此 action / remark 必须与 before_tool_call 保持一致，
-        否则卡片会掉标题和副标题。
-        """
+        """补发生成时间，供工具卡与 Canvas 使用同一进度口径。"""
         try:
             agent_context = tool_context.get_extension_typed("agent_context", AgentContext)
             if agent_context is None:
                 return
+
+            # 委托调用时沿用外层工具的名称与文案，确保进度更新原工具卡。
+            tool_name = tool_context.tool_name or "generate_images"
+            tool_instance = self
+            friendly_arguments = dict(tool_context.arguments or {})
+            if tool_name != "generate_images":
+                try:
+                    from app.tools.core.tool_factory import tool_factory
+
+                    tool_instance = tool_factory.get_tool_instance(tool_name)
+                except Exception:
+                    tool_name = "generate_images"
+                    friendly_arguments = {}
+            if not friendly_arguments:
+                friendly_arguments = {"tasks": [task.model_dump() for task in params.tasks]}
 
             scope_id = getattr(agent_context, "context_id", None)
             correlation_id = get_correlation_manager().get_active_correlation_id(
                 EventPairType.TOOL_CALL, scope_id
             ) or tool_context.tool_call_id or str(uuid.uuid4())
 
-            friendly = await self.get_before_tool_call_friendly_action_and_remark(
-                "generate_images",
+            friendly = await tool_instance.get_before_tool_call_friendly_action_and_remark(
+                tool_name,
                 tool_context,
-                {"tasks": [task.model_dump() for task in params.tasks]},
+                friendly_arguments,
             )
 
             event_data = PendingToolCallEventData(
                 tool_context=tool_context,
-                tool_name="generate_images",
+                tool_name=tool_name,
                 arguments={
-                    "name": "generate_images",
+                    "name": tool_name,
                     "correlation_id": correlation_id,
                     "action": friendly.get("action", ""),
                     "detail": {
@@ -579,20 +591,21 @@ class GenerateImages(AbstractFileTool[GenerateImagesParams], WorkspaceTool[Gener
                         "data": {
                             "media_type": "image",
                             "task_id": task_id,
+                            "started_at": started_at,
                             "expected_finished_at": expected_finished_at,
                             "message": friendly.get("remark", ""),
                         },
                     },
                     "status": "processing",
                 },
-                tool_instance=self,
+                tool_instance=tool_instance,
                 correlation_id=correlation_id,
             )
             agent_context.update_activity_time()
             await agent_context.dispatch_event(EventType.PENDING_TOOL_CALL, event_data)
         except Exception as e:
             # 进度下发失败不能影响出图结果。
-            logger.warning(f"下发图片生成预期完成时间失败: {e}")
+            logger.warning(f"下发图片生成进度失败: {e}")
 
     async def _save_from_image(
         self,

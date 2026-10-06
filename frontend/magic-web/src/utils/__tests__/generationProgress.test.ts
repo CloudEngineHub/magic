@@ -30,17 +30,39 @@ describe("resolveGenerationProgress", () => {
 		).toBe(50)
 	})
 
-	it("derives the duration from the backend's expected finish time", () => {
+	it("derives the duration from the backend start and expected finish times", () => {
 		const startedAtMs = Date.parse("2026-09-28T20:42:46+08:00")
-		// 后端说 100 秒完成，走过 30 秒即 30%，与兜底 90 秒的口径不同，能区分出用了哪一个。
+		// 后端说 100 秒完成，走过 30 秒即 30%，与兜底 90 秒的口径不同。
 		expect(
 			resolveGenerationProgress({
 				startedAtMs,
 				status: "processing",
+				startedAt: "2026-09-28T20:42:46+08:00",
 				expectedFinishedAt: "2026-09-28T20:44:26+08:00",
 				nowMs: startedAtMs + 30_000,
 			}),
 		).toBe(30)
+	})
+
+	it("shows the same percentage when Canvas and Agent observe different start times", () => {
+		const startedAtMs = Date.parse("2026-09-28T20:42:46+08:00")
+		const common = {
+			status: "processing" as const,
+			startedAt: "2026-09-28T20:42:46+08:00",
+			expectedFinishedAt: "2026-09-28T20:44:26+08:00",
+			nowMs: startedAtMs + 30_000,
+		}
+		const canvasPercent = resolveGenerationProgress({
+			...common,
+			startedAtMs: startedAtMs - 8_000,
+		})
+		const agentPercent = resolveGenerationProgress({
+			...common,
+			startedAtMs: startedAtMs + 7_000,
+		})
+
+		expect(canvasPercent).toBe(30)
+		expect(agentPercent).toBe(canvasPercent)
 	})
 
 	it("never exceeds 99 while still running", () => {

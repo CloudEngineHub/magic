@@ -45,6 +45,28 @@ function contentImage(
 	}
 }
 
+describe("ImageElement generation timing", () => {
+	it("persists the backend start and expected finish times on the request", () => {
+		const element = Object.create(ImageElement.prototype) as ImageElement & {
+			applyGenerationTiming: (
+				request: GenerateImageRequest,
+				response?: { started_at?: string; expected_finished_at?: string },
+			) => void
+		}
+		const request: GenerateImageRequest = { prompt: "a test image" }
+
+		element.applyGenerationTiming(request, {
+			started_at: "2026-10-05T10:00:00+08:00",
+			expected_finished_at: "2026-10-05T10:01:30+08:00",
+		})
+
+		expect(request).toMatchObject({
+			start_time: "2026-10-05T10:00:00+08:00",
+			expected_finished_at: "2026-10-05T10:01:30+08:00",
+		})
+	})
+})
+
 type ContentApiTestImageElement = {
 	data: ImageElementData
 	canvas: Canvas

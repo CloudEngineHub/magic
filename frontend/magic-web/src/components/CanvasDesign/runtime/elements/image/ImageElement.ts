@@ -58,7 +58,7 @@ import type {
 } from "../../resources/image/ImageResourceManager"
 import { getPersistedSourceCrop } from "../../resources/image/imageCropUtils"
 import { getImageSourceDimensions } from "../../resources/image/imageSourceUtils"
-import { IMAGE_CONFIG, LAYOUT, COLORS } from "./ImageElement.config"
+import { IMAGE_CONFIG, COLORS } from "./ImageElement.config"
 import { ImageStaticLoader } from "../../resources/image/ImageStaticLoader"
 import { RenderUtils } from "../../shared/render/RenderUtils"
 import { BorderDecorator } from "../decorators/BorderDecorator"
@@ -137,8 +137,8 @@ export class ImageElement extends BaseElement<ImageElementData> {
 	private effectiveContentId?: string
 	private effectiveContentSrc?: string
 
-	// 生成进度百分比：锚点取本端首次观察到生成中的时刻（按 Content 缓存），与聊天工具卡同一套
-	// 起点语义。锚点与定时器分开保存：重渲染只停定时器、保留锚点，否则进度会回到起点。
+	// 后端任务起点尚未回写时，用本端首次观察时刻兜底。锚点与定时器分开保存：
+	// 重渲染只停定时器、保留锚点，避免兼容路径的进度回退。
 	private generationProgressAnchor?: { contentId: string; startedAtMs: number }
 	private generationProgressTimer?: ReturnType<typeof setInterval>
 
@@ -749,7 +749,7 @@ export class ImageElement extends BaseElement<ImageElementData> {
 			const response = await this.canvas.magicConfigManager.config?.methods?.generateImage(
 				requestWithId,
 			)
-			this.applyExpectedFinishTime(requestWithId, response)
+			this.applyGenerationTiming(requestWithId, response)
 
 			if (
 				!this.canvas.generationRuntimeManager.isCurrent(attemptId, this.data.id, contentId)
@@ -856,7 +856,7 @@ export class ImageElement extends BaseElement<ImageElementData> {
 
 		try {
 			const response = await generateImage(requestWithId)
-			this.applyExpectedFinishTime(requestWithId, response)
+			this.applyGenerationTiming(requestWithId, response)
 			if (
 				!this.canvas.generationRuntimeManager.isCurrent(attemptId, this.data.id, contentId)
 			) {
@@ -905,16 +905,15 @@ export class ImageElement extends BaseElement<ImageElementData> {
 		}
 	}
 
-	/**
-	 * 把接口返回的预期完成时间并进提交请求。
-	 *
-	 * 就地合并：这个对象同时被运行时占位（等待期进度条读它）和确认后的 DSL 引用，
-	 * 所以一处赋值即可让画布元素拿到后端下发的 ETA，不需要再新增一条写入路径。
-	 */
-	private applyExpectedFinishTime(
+	/** 就地合并，让运行时占位和后续 DSL 持久化共用同一对任务时间。 */
+	private applyGenerationTiming(
 		request: GenerateImageRequest,
 		response?: GenerateImageResponse,
 	): void {
+		const startedAt = response?.started_at
+		if (typeof startedAt === "string" && startedAt) {
+			request.start_time = startedAt
+		}
 		const expectedFinishedAt = response?.expected_finished_at
 		if (typeof expectedFinishedAt === "string" && expectedFinishedAt) {
 			request.expected_finished_at = expectedFinishedAt
@@ -2411,6 +2410,10 @@ export class ImageElement extends BaseElement<ImageElementData> {
 			displayState.status === "generating"
 				? this.getGeneratingPlaceholderText(displayState)
 				: this.getText("image.uploading", "正在上传中...")
+		const placeholderText =
+			displayState.status === "generating"
+				? `${displayText} ${IMAGE_CONFIG.PROGRESS_TEXT_PROBE}`
+				: displayText
 
 		// 异步加载背景和内容
 		this.imageLoader.loadImage(imageBackgroundLoading).then((backgroundImage) => {
@@ -2419,7 +2422,7 @@ export class ImageElement extends BaseElement<ImageElementData> {
 
 			// 创建居中的图标和文本
 			RenderUtils.createCenteredIconText(group, width, height, {
-				text: displayText,
+				text: placeholderText,
 				textColor: COLORS.LOADING_TEXT,
 				iconSrc: imageIcon,
 				withBackground: true,
@@ -2427,12 +2430,10 @@ export class ImageElement extends BaseElement<ImageElementData> {
 			}).then((contentGroup) => {
 				this.contentGroup = contentGroup
 				this.setupContentUpdateListener(group)
+				if (displayState.status === "generating") {
+					this.attachGenerationProgress(group, contentGroup, displayText)
+				}
 			})
-
-			// 进度文本必须晚于背景图加入，否则会被背景盖住
-			if (displayState.status === "generating") {
-				this.attachGenerationProgress(group, width, height)
-			}
 
 			this.createBorder(group, width, height, true)
 			this.createCornerActions(group, width, height)
@@ -2443,13 +2444,7 @@ export class ImageElement extends BaseElement<ImageElementData> {
 		return group
 	}
 
-	/**
-	 * 解析本次生成的进度起点。
-	 *
-	 * 一律取本端首次观察到该 Content 生成中的当前时刻：起点只要与后端给出的预期完成时间
-	 * 同处一条时间轴就能算出剩余时长，而本端时刻是本端唯一能保证单调、不受两端时钟偏差
-	 * 影响的选择。锚点按 Content 缓存，元素重渲染不会让进度回退。
-	 */
+	/** 缓存后端任务时间回写前的本地兜底起点。 */
 	private resolveGenerationStartedAt(contentId: string): number {
 		if (this.generationProgressAnchor?.contentId === contentId) {
 			return this.generationProgressAnchor.startedAtMs
@@ -2460,42 +2455,29 @@ export class ImageElement extends BaseElement<ImageElementData> {
 		return startedAtMs
 	}
 
-	/**
-	 * 在占位符底部显示生成百分比，并每秒推进一次。
-	 *
-	 * 百分比复用 `generationProgress.ts` 的估算：优先用后端写在公共生成请求里的
-	 * `expected_finished_at`（与聊天工具卡是同一个值），拿不到时才用固定兜底时长。
-	 * 每秒跳变即可，不做平滑动画，避免频繁重绘整个 layer。
-	 */
-	private attachGenerationProgress(group: Konva.Group, width: number, height: number): void {
+	/** 每秒更新占位文本；胶囊宽度由初始 100% 文本固定。 */
+	private attachGenerationProgress(
+		group: Konva.Group,
+		contentGroup: Konva.Group,
+		displayText: string,
+	): void {
 		const contentId = this.getActiveContentData().contentId
-		const labelWidth = Math.min(width, IMAGE_CONFIG.PROGRESS_LABEL_MAX_WIDTH)
-		if (!contentId || labelWidth <= 0) {
+		const textNode = contentGroup.findOne<Konva.Text>(".placeholder-text")
+		if (!contentId || !textNode) {
 			return
 		}
 
 		const startedAtMs = this.resolveGenerationStartedAt(contentId)
-		const request = this.getActiveGenerateImageRequest()
-
-		const labelNode = new Konva.Text({
-			x: (width - labelWidth) / 2,
-			y: height - IMAGE_CONFIG.PROGRESS_LABEL_INSET,
-			width: labelWidth,
-			align: "center",
-			fontSize: LAYOUT.TEXT_FONT_SIZE,
-			fontFamily: LAYOUT.TEXT_FONT_FAMILY,
-			fill: COLORS.LOADING_TEXT,
-			listening: false,
-		})
-		group.add(labelNode)
-
 		const applyProgress = () => {
+			// 建单回调会在占位图渲染后更新 start_time，因此每次都读当前请求。
+			const request = this.getActiveGenerateImageRequest()
 			const percent = resolveGenerationProgress({
 				status: "processing",
 				startedAtMs,
+				startedAt: request?.start_time,
 				expectedFinishedAt: request?.expected_finished_at,
 			})
-			labelNode.text(`${percent}%`)
+			textNode.text(`${displayText} ${percent}%`)
 			group.getLayer()?.batchDraw()
 		}
 
@@ -2612,6 +2594,10 @@ export class ImageElement extends BaseElement<ImageElementData> {
 		} else if (displayState.status === "uploading") {
 			displayText = this.getText("image.uploading", "正在上传中...")
 		}
+		const placeholderText =
+			displayState.status === "generating"
+				? `${displayText} ${IMAGE_CONFIG.PROGRESS_TEXT_PROBE}`
+				: displayText
 
 		// 异步加载背景和内容
 		this.imageLoader.loadImage(imageBackgroundLoading).then((backgroundImage) => {
@@ -2620,7 +2606,7 @@ export class ImageElement extends BaseElement<ImageElementData> {
 
 			// 创建居中的图标和文本
 			RenderUtils.createCenteredIconText(group, width, height, {
-				text: displayText,
+				text: placeholderText,
 				textColor: COLORS.LOADING_TEXT,
 				iconSrc: imageIcon,
 				withBackground: true,
@@ -2628,6 +2614,12 @@ export class ImageElement extends BaseElement<ImageElementData> {
 			}).then((contentGroup) => {
 				this.contentGroup = contentGroup
 				this.setupContentUpdateListener(group)
+				// 这条路径是 Agent 生图的主链路：Content 在任务创建时就已带上 src（产物路径），
+				// 图片还没就绪 → displayState.surface 落到 "loading" 而不是 "placeholder"，
+				// 只挂在 renderGeneratingPlaceholder 会漏掉它。
+				if (displayState.status === "generating") {
+					this.attachGenerationProgress(group, contentGroup, displayText)
+				}
 			})
 
 			this.createBorder(group, width, height, true)

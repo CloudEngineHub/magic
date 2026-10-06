@@ -95,10 +95,10 @@ class ImageGenerationResponse:
         return self._best_image_cache
 
 
-# 任务在 magic-service 创建成功后的回调：(task_id, 预期完成时间 ISO 8601)。
+# 任务在 magic-service 创建成功后的回调：(task_id, 预期完成时间 ISO 8601, 任务发起时间 ISO 8601)。
 # handler 不持有 tool_context，且是进程内单例（不能挂 per-request 状态），
 # 所以「任务已创建」这个中途进度事件只能由调用方通过回调下发。
-ImageTaskCreatedCallback = Callable[[str, Optional[str]], Awaitable[None]]
+ImageTaskCreatedCallback = Callable[[str, Optional[str], Optional[str]], Awaitable[None]]
 
 
 class BaseImageGeneratorHandler(ABC):

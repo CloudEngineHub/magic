@@ -22,10 +22,8 @@ export const IMAGE_CONFIG = {
 	HOVER_DELAY: 50,
 	/** 图片元素在屏幕上的最小尺寸阈值（像素），小于此值时隐藏 info 按钮 */
 	MIN_ELEMENT_SCREEN_SIZE_FOR_INFO_BUTTON: 60,
-	/** 生成进度文本距元素底部的内边距（像素） */
-	PROGRESS_LABEL_INSET: 24,
-	/** 生成进度文本最大宽度（像素），元素更宽时居中显示 */
-	PROGRESS_LABEL_MAX_WIDTH: 240,
+	/** 生成进度后缀的测量探针：取最长形态，保证百分比位数变化时胶囊宽度不跳动 */
+	PROGRESS_TEXT_PROBE: "100%",
 	/** 生成进度推进间隔（毫秒）；估算精度远低于 1 秒，不需要更密的刷新 */
 	PROGRESS_TICK_INTERVAL: 1000,
 } as const

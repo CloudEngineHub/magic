@@ -148,6 +148,11 @@ function DefaultTool(props: DefaultToolProps) {
 							{tool?.action}
 						</span>
 					)}
+					<ToolGenerationProgress
+						toolCallId={tool?.id}
+						status={tool?.status}
+						detail={tool?.detail}
+					/>
 					{tool?.remark && (
 						<span
 							{...tooltipProps}
@@ -170,12 +175,6 @@ function DefaultTool(props: DefaultToolProps) {
 					renderSuffixIcon
 				)}
 			</div>
-			<ToolGenerationProgress
-				toolCallId={tool?.id}
-				toolName={tool?.name}
-				status={tool?.status}
-				detail={tool?.detail}
-			/>
 			<ToolWaitCountdown
 				toolCallId={tool?.id}
 				toolName={tool?.name}

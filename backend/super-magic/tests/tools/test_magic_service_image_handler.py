@@ -25,7 +25,7 @@ async def test_magic_service_handler_generate_calls_single_api_method(monkeypatc
             )
         ]
 
-    async def on_task_created(task_id, expected_finished_at):
+    async def on_task_created(task_id, expected_finished_at, started_at):
         """建单回调必须原样透传给轮询方法，由它在建单响应之后触发。"""
 
     monkeypatch.setattr(handler, "_call_api", fake_call_api)
@@ -109,6 +109,7 @@ async def test_magic_service_handler_call_api_submits_task_and_polls(monkeypatch
                     "id": "IGT-test",
                     "status": "running",
                     "expected_finished_at": "2026-05-14T09:21:30+08:00",
+                    "started_at": "2026-05-14T09:20:00+08:00",
                 },
             )
 
@@ -118,10 +119,10 @@ async def test_magic_service_handler_call_api_submits_task_and_polls(monkeypatch
 
     monkeypatch.setattr(magic_service.aiohttp, "ClientSession", FakeSession)
 
-    created: list[tuple[str, object]] = []
+    created: list[tuple[str, object, object]] = []
 
-    async def on_task_created(task_id, expected_finished_at):
-        created.append((task_id, expected_finished_at))
+    async def on_task_created(task_id, expected_finished_at, started_at):
+        created.append((task_id, expected_finished_at, started_at))
 
     image_urls = await handler._call_api(
         _ImageApiPayload(
@@ -135,8 +136,10 @@ async def test_magic_service_handler_call_api_submits_task_and_polls(monkeypatch
     )
 
     assert image_urls == ["https://cdn.example.com/image.png"]
-    # 预期完成时间只在建单响应里有，必须在轮询之前就交出去。
-    assert created == [("IGT-test", "2026-05-14T09:21:30+08:00")]
+    # 预期完成时间与起始时间只在建单响应里有，必须在轮询之前就交出去。
+    assert created == [
+        ("IGT-test", "2026-05-14T09:21:30+08:00", "2026-05-14T09:20:00+08:00")
+    ]
     assert calls == [
         (
             "post",

@@ -32,7 +32,7 @@ async def test_generic_image_generation_port_converts_project_reference_path(mon
 
     monkeypatch.setattr("app.tools.generate_images.GenerateImages", FakeGenerateImages)
 
-    async def on_task_created(task_id, expected_finished_at):
+    async def on_task_created(task_id, expected_finished_at, started_at):
         """请求上的建单回调必须原样透传给生图工具。"""
 
     result = await GenericImageGenerationPort(tmp_path).submit(

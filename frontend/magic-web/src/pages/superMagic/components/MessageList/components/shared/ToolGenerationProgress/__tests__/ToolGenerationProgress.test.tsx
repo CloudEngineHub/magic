@@ -2,6 +2,19 @@ import { act, render } from "@testing-library/react"
 import { afterEach, describe, expect, it, vi } from "vitest"
 import ToolGenerationProgress from "../index"
 
+/** 后端建单成功后补发的生成详情；测试里只关心这几个字段。 */
+function generationDetail(taskId?: string, expectedFinishedAt?: string, startedAt?: string) {
+	return {
+		type: "generation_progress",
+		data: {
+			media_type: "image",
+			...(taskId ? { task_id: taskId } : {}),
+			...(startedAt ? { started_at: startedAt } : {}),
+			...(expectedFinishedAt ? { expected_finished_at: expectedFinishedAt } : {}),
+		},
+	}
+}
+
 function readPercent(container: HTMLElement): number {
 	const label = container.querySelector("[data-testid='tool-generation-progress'] span")
 	return Number((label?.textContent ?? "").replace("%", ""))
@@ -12,31 +25,45 @@ describe("ToolGenerationProgress", () => {
 		vi.useRealTimers()
 	})
 
-	it("renders nothing for a tool that does not generate images", () => {
+	it("renders nothing without a generation detail, so non-generating tools stay untouched", () => {
+		vi.useFakeTimers()
+
+		const { container } = render(
+			<ToolGenerationProgress toolCallId="spec-no-detail" status="running" />,
+		)
+
+		expect(container.querySelector("[data-testid='tool-generation-progress']")).toBeNull()
+		// 没有生成详情的工具不应起每秒定时器，否则消息列表里每个进行中的工具卡都会空转。
+		expect(vi.getTimerCount()).toBe(0)
+	})
+
+	it("renders nothing when another detail type happens to carry an expected finish time", () => {
 		vi.useFakeTimers()
 
 		const { container } = render(
 			<ToolGenerationProgress
-				toolCallId="spec-non-image"
-				toolName="read_file"
+				toolCallId="spec-other-detail"
 				status="running"
+				detail={{
+					type: "operation_result_list",
+					data: { expected_finished_at: "2026-01-01T00:01:30Z" },
+				}}
 			/>,
 		)
 
 		expect(container.querySelector("[data-testid='tool-generation-progress']")).toBeNull()
-		// 非生图工具不应起每秒定时器，否则消息列表里每个进行中的工具卡都会空转。
 		expect(vi.getTimerCount()).toBe(0)
 	})
 
-	it("renders nothing once the tool reached a terminal status", () => {
+	it("renders nothing once the tool reached a strong terminal status", () => {
 		vi.useFakeTimers()
 
-		for (const status of ["finished", "error", "suspended", "response_missing"]) {
+		for (const status of ["finished", "error", "suspended"]) {
 			const { container } = render(
 				<ToolGenerationProgress
 					toolCallId={`spec-terminal-${status}`}
-					toolName="generate_images"
 					status={status}
+					detail={generationDetail("IGT-terminal")}
 				/>,
 			)
 
@@ -45,15 +72,35 @@ describe("ToolGenerationProgress", () => {
 		}
 	})
 
-	it("ticks once per second while an image generation tool is running", () => {
+	it("keeps showing progress after refresh marks the historical tool response as missing", () => {
+		vi.useFakeTimers()
+		vi.setSystemTime(new Date("2026-01-01T00:00:30Z"))
+
+		const { container } = render(
+			<ToolGenerationProgress
+				toolCallId="spec-history-response-missing"
+				status="response_missing"
+				detail={generationDetail(
+					"IGT-history-response-missing",
+					"2026-01-01T00:01:30Z",
+					"2026-01-01T00:00:00Z",
+				)}
+			/>,
+		)
+
+		// response_missing 只是“暂时没拿到真实工具结果”，不能把历史任务重置为无进度。
+		expect(readPercent(container)).toBe(33)
+	})
+
+	it("ticks once per second while a generation detail is present", () => {
 		vi.useFakeTimers()
 		vi.setSystemTime(new Date("2026-01-01T00:00:00Z"))
 
 		const { unmount } = render(
 			<ToolGenerationProgress
 				toolCallId="spec-tick"
-				toolName="generate_images"
 				status="running"
+				detail={generationDetail("IGT-tick")}
 			/>,
 		)
 
@@ -62,19 +109,48 @@ describe("ToolGenerationProgress", () => {
 		expect(vi.getTimerCount()).toBe(0)
 	})
 
-	it("renders a percentage for an image generation tool in progress", () => {
+	it("renders a percentage for any tool that declares generation progress", () => {
 		vi.useFakeTimers()
 		vi.setSystemTime(new Date("2026-01-01T00:00:00Z"))
 
+		// 准入只看详情，不看工具名：画布生成、设计画布生成等未列进旧白名单的工具同样显示。
 		const { container } = render(
 			<ToolGenerationProgress
 				toolCallId="spec-running"
-				toolName="generate_images"
 				status="running"
+				detail={generationDetail("IGT-running")}
 			/>,
 		)
 
 		expect(readPercent(container)).toBe(1)
+	})
+
+	it("uses the backend task start time so a remount does not restart at 1%", () => {
+		vi.useFakeTimers()
+		const startedAt = "2026-01-01T00:00:00Z"
+		const expectedFinishedAt = "2026-01-01T00:01:30Z"
+		vi.setSystemTime(new Date("2026-01-01T00:00:30Z"))
+
+		const detail = generationDetail("IGT-backend-anchor", expectedFinishedAt, startedAt)
+		const { container, unmount } = render(
+			<ToolGenerationProgress
+				toolCallId="spec-backend-anchor"
+				status="running"
+				detail={detail}
+			/>,
+		)
+		expect(readPercent(container)).toBe(33)
+		unmount()
+
+		vi.setSystemTime(new Date("2026-01-01T00:00:45Z"))
+		const second = render(
+			<ToolGenerationProgress
+				toolCallId="spec-backend-anchor"
+				status="running"
+				detail={detail}
+			/>,
+		)
+		expect(readPercent(second.container)).toBe(50)
 	})
 
 	it("falls back to the fixed duration when no expected finish time is given", () => {
@@ -84,8 +160,8 @@ describe("ToolGenerationProgress", () => {
 		const { container } = render(
 			<ToolGenerationProgress
 				toolCallId="spec-fallback"
-				toolName="generate_images"
 				status="running"
+				detail={generationDetail("IGT-fallback")}
 			/>,
 		)
 
@@ -100,12 +176,9 @@ describe("ToolGenerationProgress", () => {
 		vi.useFakeTimers()
 		vi.setSystemTime(new Date("2026-01-01T00:00:00Z"))
 
+		const detail = generationDetail("IGT-remount")
 		const first = render(
-			<ToolGenerationProgress
-				toolCallId="spec-remount"
-				toolName="generate_images"
-				status="running"
-			/>,
+			<ToolGenerationProgress toolCallId="spec-remount" status="running" detail={detail} />,
 		)
 		expect(readPercent(first.container)).toBe(1)
 
@@ -113,11 +186,7 @@ describe("ToolGenerationProgress", () => {
 		first.unmount()
 
 		const second = render(
-			<ToolGenerationProgress
-				toolCallId="spec-remount"
-				toolName="generate_images"
-				status="running"
-			/>,
+			<ToolGenerationProgress toolCallId="spec-remount" status="running" detail={detail} />,
 		)
 
 		// 重新挂载后如果重新取锚点，进度会退回 1%。
@@ -128,22 +197,15 @@ describe("ToolGenerationProgress", () => {
 		vi.useFakeTimers()
 		vi.setSystemTime(new Date("2026-01-01T00:00:00Z"))
 
+		const detail = generationDetail("IGT-reuse")
 		const running = render(
-			<ToolGenerationProgress
-				toolCallId="spec-reuse"
-				toolName="generate_images"
-				status="running"
-			/>,
+			<ToolGenerationProgress toolCallId="spec-reuse" status="running" detail={detail} />,
 		)
 		running.unmount()
 
 		vi.setSystemTime(new Date("2026-01-01T00:01:00Z"))
 		const finished = render(
-			<ToolGenerationProgress
-				toolCallId="spec-reuse"
-				toolName="generate_images"
-				status="finished"
-			/>,
+			<ToolGenerationProgress toolCallId="spec-reuse" status="finished" detail={detail} />,
 		)
 		expect(
 			finished.container.querySelector("[data-testid='tool-generation-progress']"),
@@ -151,11 +213,7 @@ describe("ToolGenerationProgress", () => {
 		finished.unmount()
 
 		const restarted = render(
-			<ToolGenerationProgress
-				toolCallId="spec-reuse"
-				toolName="generate_images"
-				status="running"
-			/>,
+			<ToolGenerationProgress toolCallId="spec-reuse" status="running" detail={detail} />,
 		)
 
 		expect(readPercent(restarted.container)).toBe(1)
@@ -168,12 +226,8 @@ describe("ToolGenerationProgress", () => {
 		const { container } = render(
 			<ToolGenerationProgress
 				toolCallId="spec-eta"
-				toolName="generate_images"
 				status="running"
-				detail={{
-					type: "generation_progress",
-					data: { task_id: "IGT-eta", expected_finished_at: "2026-01-01T00:01:30Z" },
-				}}
+				detail={generationDetail("IGT-eta", "2026-01-01T00:01:30Z")}
 			/>,
 		)
 		// 刚挂载时起点即当前时间，进度从最小值开始。
@@ -190,17 +244,13 @@ describe("ToolGenerationProgress", () => {
 		vi.useFakeTimers()
 		vi.setSystemTime(new Date("2026-01-01T00:00:00Z"))
 
-		const detail = { type: "generation_progress", data: { task_id: "IGT-no-tool-id" } }
-		const first = render(
-			<ToolGenerationProgress toolName="generate_images" status="running" detail={detail} />,
-		)
+		const detail = generationDetail("IGT-no-tool-id")
+		const first = render(<ToolGenerationProgress status="running" detail={detail} />)
 		expect(readPercent(first.container)).toBe(1)
 		first.unmount()
 
 		vi.setSystemTime(new Date("2026-01-01T00:00:30Z"))
-		const second = render(
-			<ToolGenerationProgress toolName="generate_images" status="running" detail={detail} />,
-		)
+		const second = render(<ToolGenerationProgress status="running" detail={detail} />)
 
 		// 起点按 task_id 缓存，重挂载后接着走，而不是回到最小值。
 		expect(readPercent(second.container)).toBeGreaterThan(1)
@@ -211,7 +261,7 @@ describe("ToolGenerationProgress", () => {
 		vi.setSystemTime(new Date("2026-01-01T00:00:00Z"))
 
 		const { container } = render(
-			<ToolGenerationProgress toolName="generate_images" status="running" />,
+			<ToolGenerationProgress status="running" detail={generationDetail()} />,
 		)
 
 		// 没有键就缓存不住起点，宁可不显示进度条，也不显示一条每秒回到原点的假进度。

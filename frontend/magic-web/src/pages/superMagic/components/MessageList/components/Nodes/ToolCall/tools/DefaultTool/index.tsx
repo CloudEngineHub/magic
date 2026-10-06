@@ -133,6 +133,11 @@ function DefaultTool(props: DefaultToolProps) {
 					<span className="w-fit flex-none text-xs font-normal leading-4 text-foreground">
 						{tool?.action}
 					</span>
+					<ToolGenerationProgress
+						toolCallId={tool?.id}
+						status={tool?.status}
+						detail={tool?.detail}
+					/>
 					<span
 						{...tooltipProps}
 						className={cn(
@@ -153,12 +158,6 @@ function DefaultTool(props: DefaultToolProps) {
 					renderSuffixIcon
 				)}
 			</div>
-			<ToolGenerationProgress
-				toolCallId={tool?.id}
-				toolName={tool?.name}
-				status={tool?.status}
-				detail={tool?.detail}
-			/>
 			{renderTooltip()}
 		</div>
 	)

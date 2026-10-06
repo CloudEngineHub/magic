@@ -53,6 +53,19 @@ class _TrackingStrategy(GenerationExecutionStrategyInterface):
             self.finished.append(content_id)
 
 
+class _CallbackStrategy(_TrackingStrategy):
+    """模拟 provider 建单后回传任务时间。"""
+
+    async def execute(self, capability, request, tool_context) -> GenerationSubmission:
+        if request.on_task_created is not None:
+            await request.on_task_created(
+                "provider-task-1",
+                "2026-10-05T10:01:30+08:00",
+                "2026-10-05T10:00:00+08:00",
+            )
+        return await super().execute(capability, request, tool_context)
+
+
 def _make_service(strategy: _TrackingStrategy, max_concurrency: int = 4) -> GenerationSubmissionService:
     """创建只依赖 mock 的生成提交服务。"""
     capability = GenerationCapability(
@@ -184,3 +197,26 @@ async def test_submit_generated_cancels_unfinished_provider_tasks() -> None:
         await submission_task
     assert strategy.active == 0
     assert strategy.finished == ["first"]
+
+
+@pytest.mark.asyncio
+async def test_task_created_persists_backend_timing() -> None:
+    """建单回调把后端起点和预期完成时间写进 Canvas。"""
+    strategy = _CallbackStrategy()
+    service = _make_service(strategy)
+    service._commit_generation_result = AsyncMock()
+    service._persist_generation_start_metadata = AsyncMock()
+    service._persist_generation_timing = AsyncMock()
+    tool_context = object()
+
+    await service.submit_generated(
+        "mock-project", _make_result(["one"]), _make_commands(["one"]), tool_context
+    )
+
+    expected_persist_call = (
+        "mock-project",
+        _make_commands(["one"])[0],
+        "2026-10-05T10:01:30+08:00",
+        "2026-10-05T10:00:00+08:00",
+    )
+    service._persist_generation_timing.assert_awaited_once_with(*expected_persist_call)

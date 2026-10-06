@@ -15,11 +15,13 @@ from typing import Any, Dict, List, Optional, Tuple
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from agentlang.context.tool_context import ToolContext
+from agentlang.event.event import EventType
 from agentlang.logger import get_logger
 from agentlang.tools.tool_result import ToolResult
 from app.core.entity.message.server_message import DisplayType, ToolDetail
 from app.i18n import i18n
 from app.tools.core import BaseToolParams, tool
+from app.tools.design.manager.canvas_manager_factory import get_canvas_manager
 from app.tools.design.tools.base_generate_canvas_elements import (
     BaseGenerateCanvasElements,
     ElementDetail,
@@ -388,6 +390,7 @@ Expand brief user descriptions into full prompts covering subject, style, compos
         result = await self._generate_single(
             idx=idx,
             task=task,
+            placeholder=placeholder,
             timestamp=timestamp,
             output_path=output_path,
             project_path=project_path,
@@ -532,6 +535,7 @@ Expand brief user descriptions into full prompts covering subject, style, compos
         self,
         idx: int,
         task: ImageTaskSpec,
+        placeholder: ElementDetail,
         timestamp: str,
         output_path: str,
         project_path: Path,
@@ -552,8 +556,59 @@ Expand brief user descriptions into full prompts covering subject, style, compos
         )
         gen_params = GenerateImagesParams(tasks=[gen_task])
 
-        _start_dt = datetime.now()
+        _start_dt = datetime.now().astimezone()
         _t0 = time.monotonic()
+        timing: Dict[str, Optional[str]] = {
+            "started_at": _start_dt.isoformat(timespec="milliseconds"),
+            "expected_finished_at": None,
+        }
+
+        async def on_task_created(
+            _task_id: str,
+            expected_finished_at: Optional[str],
+            started_at: Optional[str],
+        ) -> None:
+            """建单后立即把后端任务时间写回占位 Content。"""
+            if not expected_finished_at:
+                return
+            shared_started_at = started_at or timing["started_at"]
+            timing["started_at"] = shared_started_at
+            timing["expected_finished_at"] = expected_finished_at
+
+            try:
+                manager = await get_canvas_manager(str(project_path))
+                config_file = self._get_magic_project_js_path(project_path)
+                generate_request: Dict[str, Any] = {
+                    "prompt": task.prompt,
+                    "size": task.size,
+                    "mode": mode,
+                    "start_time": shared_started_at,
+                    "expected_finished_at": expected_finished_at,
+                }
+                if task.reference_images:
+                    generate_request["reference_images"] = task.reference_images
+
+                async def update(config: Any) -> bool:
+                    return await manager.update_element(
+                        placeholder.id,
+                        {"generateImageRequest": generate_request},
+                        config=config,
+                        content_id=placeholder.content_id,
+                    )
+
+                await manager.run_write_transaction(
+                    update,
+                    before_write=lambda: self._dispatch_file_event(
+                        tool_context, str(config_file), EventType.BEFORE_FILE_UPDATED
+                    ),
+                    after_write=lambda _: self._dispatch_file_event(
+                        tool_context, str(config_file), EventType.FILE_UPDATED
+                    ),
+                )
+            except Exception as error:
+                # 时间同步失败不能中断真实生图；前端仍可用本地兜底进度继续展示。
+                logger.warning(f"写入画布生图时间失败: {error}")
+
         try:
             generate_tool = GenerateImages(
                 base_dir=self._get_runtime_workspace_dir(tool_context),
@@ -562,12 +617,13 @@ Expand brief user descriptions into full prompts covering subject, style, compos
                 tool_context,
                 gen_params,
                 model_id=image_model_id,
+                on_task_created=on_task_created,
             )
         except Exception as exc:
             error_msg = f"Task {idx + 1} 异常: {exc!s}"
             logger.error(error_msg, exc_info=True)
             return ImageGenerationResult(index=idx, success=False, error_message=error_msg)
-        _end_dt = datetime.now()
+        _end_dt = datetime.now().astimezone()
         _duration_ms = int((time.monotonic() - _t0) * 1000)
 
         extra = gen_result.extra_info or {}
@@ -596,10 +652,12 @@ Expand brief user descriptions into full prompts covering subject, style, compos
             "size": size_value,
             "image_id": image_id,
             "mode": mode,
-            "start_time": _start_dt.isoformat(timespec="milliseconds"),
+            "start_time": timing["started_at"],
             "end_time": _end_dt.isoformat(timespec="milliseconds"),
             "duration_ms": _duration_ms,
         }
+        if timing["expected_finished_at"]:
+            generate_request["expected_finished_at"] = timing["expected_finished_at"]
         model_id = task_info.get("model")
         if model_id:
             generate_request["model_id"] = model_id

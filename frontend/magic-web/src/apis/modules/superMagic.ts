@@ -392,6 +392,10 @@ export interface GenerateImageResponse {
 	file_url: string | null
 	/** ID */
 	id: string
+	/** 任务发起时间（ISO 8601 日期时间），与 expected_finished_at 配对计算进度 */
+	started_at?: string
+	/** 预期完成时间（ISO 8601 日期时间），后端下发，用于估算进度 */
+	expected_finished_at?: string
 }
 
 export interface GeneratedImageResultItem {
@@ -445,6 +449,8 @@ export interface GenerateImagesResponse {
 	error_message: string | null
 	/** 已返回的图片列表 */
 	images: GeneratedImageResultItem[]
+	/** 任务发起时间（ISO 8601 日期时间），与 expected_finished_at 配对计算进度 */
+	started_at?: string
 	/** 预期完成时间（ISO 8601 日期时间），后端下发，用于估算进度；聊天工具卡用的是同一个值 */
 	expected_finished_at?: string
 }
@@ -551,6 +557,10 @@ export interface ImageGenerationResultResponse {
 	file_url: string
 	/** ID */
 	id: string
+	/** 任务发起时间（ISO 8601 日期时间），与 expected_finished_at 配对计算进度 */
+	started_at?: string
+	/** 预期完成时间（ISO 8601 日期时间），用于估算进度 */
+	expected_finished_at?: string
 }
 
 /**
@@ -589,6 +599,10 @@ export interface ImageGenerationResultsResponse {
 	error_message: string | null
 	/** 已返回的图片列表 */
 	images: GeneratedImageResultItem[]
+	/** 任务发起时间（ISO 8601 日期时间），与 expected_finished_at 配对计算进度 */
+	started_at?: string
+	/** 预期完成时间（ISO 8601 日期时间），用于估算进度 */
+	expected_finished_at?: string
 }
 
 /** 视频生成参数；画布合成暂不使用，保留为后续输出配置扩展。 */

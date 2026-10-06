@@ -17,6 +17,28 @@ use PHPUnit\Framework\TestCase;
  */
 class ImageGenerationTaskEntityTest extends TestCase
 {
+    public function testResponseContainsStartedAtAndExpectedFinish(): void
+    {
+        $task = new ImageGenerationTaskEntity(
+            id: 'IGT-test',
+            organizationCode: 'org-test',
+            userId: 'user-test',
+            accessTokenId: '123',
+            environment: 'local',
+            model: 'seedream',
+            requestPayload: ['resolution' => '2k'],
+            status: ImageGenerationTaskStatus::RUNNING,
+            createdAt: '2026-05-14 10:00:00',
+            startedAt: '2026-05-14 10:00:00',
+        );
+
+        $response = $task->toResponseArray();
+        $this->assertSame(
+            70,
+            strtotime($response['expected_finished_at']) - strtotime($response['started_at'])
+        );
+    }
+
     public function testRunningTaskBecomesFailedWhenTimedOut(): void
     {
         $task = new ImageGenerationTaskEntity(
