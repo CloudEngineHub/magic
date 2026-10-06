@@ -229,7 +229,7 @@ const TabItem = memo<TabItemProps>(
 								"max-w-[160px] truncate font-sans text-xs font-normal leading-4 text-foreground",
 								isDeleted && !isRecycleBin && "text-destructive line-through",
 								isRecycleBin &&
-									"line-through decoration-muted-foreground/60 decoration-1",
+									"line-through decoration-muted-foreground/60 decoration-1 dark:decoration-foreground/80 dark:decoration-[1.5px]",
 								isLoading && "text-muted-foreground",
 							)}
 							aria-label={
