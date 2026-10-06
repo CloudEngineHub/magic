@@ -28,7 +28,7 @@ import type { AttachmentItem } from "../../../../TopicFilesButton/hooks/types"
 import { TabActionType } from "../types"
 import { getFileType } from "@/pages/superMagic/utils/handleFIle"
 import { copyFileContent } from "@/pages/superMagic/utils/share"
-import { useFileApi } from "@/pages/superMagic/fileAccess/fileApi"
+import { createFileApi, useFileApi } from "@/pages/superMagic/fileAccess/fileApi"
 import pubsub, { PubSubEvents } from "@/utils/pubsub"
 import {
 	convertFileToTabItem,
@@ -2313,15 +2313,14 @@ export function useFilesViewer(props: FilesViewerProps) {
 				onNext: () => {
 					// TODO: Implement next file navigation
 				},
-				onFullscreen: () => handleFileFullscreen(tab.fileData.file_id),
+				onFullscreen: () => handleFileFullscreen(tab.id),
 				onDownload: (fileId?: string, fileVersion?: number, mode?: DownloadImageMode) =>
 					onDownload?.(fileId || tab.fileData.file_id, fileVersion, mode),
 				totalFiles: fileList.length,
 				hasUserSelectDetail: false,
 				isFromNode: false,
 				userSelectDetail,
-				isFullscreen:
-					Boolean(forceFullscreenMode) || fullscreenFileId === tab.fileData.file_id,
+				isFullscreen: Boolean(forceFullscreenMode) || fullscreenFileId === tab.id,
 				attachmentList,
 				viewMode,
 				onViewModeChange: (mode: "code" | "desktop" | "phone") =>
@@ -2335,6 +2334,24 @@ export function useFilesViewer(props: FilesViewerProps) {
 							? tab.fileData.content
 							: undefined
 
+					const recycleBin = tab.fileData.recycleBin
+					if (recycleBin) {
+						void copyFileContent(
+							[],
+							t,
+							tab.fileData.file_id,
+							undefined,
+							undefined,
+							createFileApi({
+								kind: "recycle-bin",
+								recycleBinId: recycleBin.id,
+								fileId: tab.fileData.file_id,
+								identityKey: recycleBin.identityKey,
+								projectId: recycleBin.projectId,
+							}),
+						)
+						return
+					}
 					handleCopy(fileId || tab.fileData.file_id, copySourceContent, fileVersion)
 				},
 				onShare: () => handleShare(tab.fileData.file_id),
