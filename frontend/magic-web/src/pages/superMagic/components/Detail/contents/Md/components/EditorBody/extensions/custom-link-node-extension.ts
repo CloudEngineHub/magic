@@ -9,6 +9,8 @@ import {
 import { calculateRelativePath } from "@/utils/path"
 import { parseAnchorLink } from "@/utils/slug"
 import { runActiveEditor } from "@/utils/tiptapEditorLifecycle"
+import { mergeAttributes } from "@/infrastructure/editors/tiptap/core"
+import { isMarkdownFileLink } from "@/pages/superMagic/utils/markdownFileReference"
 
 export interface CustomLinkNodeOptions extends LinkNodeOptions {
 	/**
@@ -43,6 +45,49 @@ export const CustomLinkNode = LinkNode.extend<CustomLinkNodeOptions>({
 		}
 	},
 
+	parseHTML() {
+		return [
+			...(this.parent?.() || []),
+			{
+				tag: "a[data-file-href]",
+				getAttrs: (element) => ({
+					href: element.getAttribute("data-file-href"),
+					title: element.getAttribute("title"),
+				}),
+			},
+		]
+	},
+
+	addAttributes() {
+		const attributes = this.parent?.() || {}
+		return {
+			...attributes,
+			href: {
+				...attributes.href,
+				// 从只读预览复制的 HTML 仍还原原始目标，不能丢失 mark 的文件路径。
+				parseHTML: (element) =>
+					element.getAttribute("data-file-href") ?? element.getAttribute("href"),
+			},
+		}
+	},
+
+	renderHTML({ HTMLAttributes }) {
+		const attributes = mergeAttributes(this.options.HTMLAttributes || {}, HTMLAttributes)
+		const href = typeof attributes.href === "string" ? attributes.href : ""
+		// mark 始终保存原路径；只读 DOM 只提供文件操作，避免悬停／中键走前端路由。
+		if (!this.editor.isEditable && isMarkdownFileLink(href)) {
+			delete attributes.href
+			delete attributes.target
+			attributes["data-file-href"] = href
+			attributes.role = "button"
+			attributes.tabindex = "0"
+			attributes.class = [attributes.class, "cursor-pointer focus-visible:outline"]
+				.filter(Boolean)
+				.join(" ")
+		}
+		return ["a", attributes, 0]
+	},
+
 	addProseMirrorPlugins() {
 		const parentPlugins = this.parent?.() || []
 		const options = this.options
@@ -57,12 +102,25 @@ export const CustomLinkNode = LinkNode.extend<CustomLinkNodeOptions>({
 				key: customLinkClickKey,
 				props: {
 					handleDOMEvents: {
+						keydown: (_view, event) => {
+							if (event.key !== "Enter" && event.key !== " ") return false
+							const target = event.target
+							if (!(target instanceof HTMLElement)) return false
+							const link = target.closest<HTMLAnchorElement>("a[data-file-href]")
+							if (!link) return false
+							event.preventDefault()
+							// 键盘激活走与鼠标相同的已注册点击处理，不能生成另一套文件打开行为。
+							link.click()
+							return true
+						},
 						click: (_view, event) => {
 							const target = event.target as HTMLElement
 							const linkElement = target.closest("a")
 
 							if (linkElement) {
-								const href = linkElement.getAttribute("href")
+								const href =
+									linkElement.getAttribute("data-file-href") ??
+									linkElement.getAttribute("href")
 								if (!href) return false
 
 								// Call custom click handler if provided (works in both editable and non-editable modes)

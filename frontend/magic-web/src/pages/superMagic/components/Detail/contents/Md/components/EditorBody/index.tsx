@@ -26,6 +26,9 @@ import { SafeHtmlDiv, SafeHtmlSpan, SafeHtmlTextBlockStyles } from "./extensions
 import { SafeVideo } from "./extensions/safe-video"
 import LargeMarkdownPreview from "./components/LargeMarkdownPreview"
 import { isLargeMarkdownContent } from "./largeMarkdown"
+import { useTranslation } from "react-i18next"
+import magicToast from "@/components/base/MagicToaster/utils"
+import { isMarkdownFileLink } from "@/pages/superMagic/utils/markdownFileReference"
 
 interface EditorBodyProps {
 	selectionRootRef?: React.Ref<HTMLDivElement>
@@ -101,6 +104,17 @@ function EditorBody({
 	resolveImagesFolderParentId,
 	requireImagesFolderParentId,
 }: EditorBodyProps) {
+	const { t } = useTranslation("super")
+	const linkRequestRef = useRef(0)
+	// 缓存标签切换、文档／空间变化和卸载后，旧异步结果不再打开文件或提示失败。
+	useEffect(
+		() => () => {
+			linkRequestRef.current += 1
+		},
+		[currentDocumentPath, resolveRelativeFile, selectedProject?.id, isTabActive],
+	)
+	const showLinkError = (href: string) =>
+		magicToast.error(t("common.fileCannotOpen", { path: href }))
 	// Use project image extensions hook
 	const projectImageExtensions = useProjectImageExtensions({
 		projectId: selectedProject?.id,
@@ -121,8 +135,6 @@ function EditorBody({
 			const { filePath, anchor: parsedAnchor } = parseAnchorLink(href)
 			const anchorId = anchor || parsedAnchor
 
-			console.log("handleLinkClick", filePath, anchorId)
-
 			// Handle pure anchor link (e.g., #heading)
 			if (!filePath && anchorId) {
 				// Scroll to anchor in current document
@@ -138,12 +150,23 @@ function EditorBody({
 				return true
 			}
 
+			// 网页路由与应用协议保持原语义；文件未匹配不能借此退回网页。
+			if (!isMarkdownFileLink(href)) return !href.trim()
+			if (!isTabActive) return true
+			const requestId = ++linkRequestRef.current
+
 			if (resolveRelativeFile && onOpenFile) {
 				void resolveRelativeFile(filePath)
 					.then((file) => {
+						if (requestId !== linkRequestRef.current) return
 						if (file?.file_id) onOpenFile({ ...file, file_id: file.file_id })
+						else showLinkError(href)
 					})
-					.catch(() => undefined)
+					.catch((error: unknown) => {
+						if (requestId !== linkRequestRef.current) return
+						if (error instanceof Error && error.name === "AbortError") return
+						showLinkError(href)
+					})
 				return true
 			}
 
@@ -180,6 +203,7 @@ function EditorBody({
 			}
 
 			// If file not found or no handler, prevent default
+			showLinkError(href)
 			return true
 		},
 	)
