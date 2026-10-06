@@ -58,6 +58,8 @@ import { runActiveEditor, useLatestActiveEditor } from "./utils/editorLifecycle"
 import useEditorPromptCarousel from "./hooks/useEditorPromptCarousel"
 import useChooseUploadDirModal from "./hooks/useChooseUploadDirModal"
 import { useMixedClipboardPaste } from "./hooks/useMixedClipboardPaste"
+import { isWechatChatText } from "./extensions/wechat-chat-history/parser"
+import { isInternationalEnv, isPrivateDeployment } from "@/utils/env"
 import { superMagicTopicModelService } from "@/services/superMagic/topicModel"
 import { resolveModelTopicMode } from "./utils/modelTopicMode"
 import type { Topic } from "../../pages/Workspace/types"
@@ -72,6 +74,7 @@ import { useTaskInterrupt } from "../../hooks/useTaskInterrupt"
 import { openMessageFile } from "@/pages/superMagic/components/MessageList/utils/openMessageFile"
 import {
 	containsCanonicalWorkspaceLink,
+	hasMagicClipboardData,
 	createPastedTextFile,
 	shouldConvertPastedTextToAttachment,
 } from "./utils/pastedTextAttachment"
@@ -351,6 +354,12 @@ export const MessageEditorContainer = observer(
 				cancelPendingUpload,
 				isProjectContext,
 				onPreparingChange: setIsPreparingPaste,
+				wechatChatEnabled:
+					uploadEnabled &&
+					shouldEnableMention &&
+					!isInternationalEnv() &&
+					!isPrivateDeployment(),
+				onWechatImported: (id) => wechatChat.onImported(id),
 			})
 
 			const addFiles = useMemoizedFn(async (files: File[]) => {
@@ -414,6 +423,7 @@ export const MessageEditorContainer = observer(
 			)
 
 			const handleSend = useMessageSendHandler({
+				isSendSuspended: () => wechatChat.isOpen(),
 				voiceInputRef,
 				canSendMessage,
 				hasLoadingMarker,
@@ -431,7 +441,8 @@ export const MessageEditorContainer = observer(
 				isMountedRef,
 			})
 
-			const { tiptapEditor, domRef } = useMessageEditor({
+			const { tiptapEditor, domRef, wechatChat } = useMessageEditor({
+				wechatChatEnabled: uploadEnabled && shouldEnableMention,
 				value: store.editorStore.value,
 				onSend: handleSend,
 				placeholder: promptCarouselConfigured ? "" : placeholder,
@@ -912,6 +923,17 @@ export const MessageEditorContainer = observer(
 					}
 
 					if (!uploadEnabled || !shouldEnableMention) return
+					if (
+						wechatChat.available &&
+						!hasMagicClipboardData(clipboardData) &&
+						isWechatChatText(clipboardData.getData("text/plain"))
+					) {
+						if (!claimCanvasClipboardPasteEvent(nativeEvent)) return
+						e.preventDefault()
+						e.stopPropagation()
+						pasteFilesWithText(clipboardData, [])
+						return
+					}
 					if (containsCanonicalWorkspaceLink(clipboardData)) return
 					if (!shouldConvertPastedTextToAttachment(clipboardData)) return
 					if (!claimCanvasClipboardPasteEvent(nativeEvent)) return
@@ -930,6 +952,7 @@ export const MessageEditorContainer = observer(
 					_addFiles,
 					addFiles,
 					pasteFilesWithText,
+					wechatChat.available,
 					collectMentionItemsFromEditor,
 					getCanvasClipboardSessionId,
 					ensureProjectContextForPastedText,
@@ -1051,7 +1074,7 @@ export const MessageEditorContainer = observer(
 				shouldEnableMention,
 				uploadEnabled,
 				sendEnabled,
-				sendButtonDisabled,
+				sendButtonDisabled: sendButtonDisabled || wechatChat.activeId !== null,
 				sendButtonLoading,
 				showLoading,
 				isTaskRunning,
@@ -1113,6 +1136,7 @@ export const MessageEditorContainer = observer(
 					uploadModal={uploadModal}
 					promptCarouselNode={promptCarouselNode}
 					showAiCompletion={effectiveAiCompletionEnabled}
+					wechatChat={wechatChat}
 				/>
 			)
 		},

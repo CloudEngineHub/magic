@@ -32,7 +32,7 @@ export function shouldConvertPastedTextToAttachment(
 	const types = getClipboardTypes(clipboardData.types)
 	if (types.length === 0) return true
 	if (!types.includes("text/plain")) return false
-	if (hasMagicClipboardData({ clipboardData, types })) return false
+	if (hasMagicClipboardData(clipboardData)) return false
 
 	return true
 }
@@ -75,13 +75,8 @@ function getClipboardTypes(types?: readonly string[] | DOMStringList): string[] 
 	return Array.from(types)
 }
 
-function hasMagicClipboardData({
-	clipboardData,
-	types,
-}: {
-	clipboardData: ClipboardDataLike
-	types: string[]
-}): boolean {
+export function hasMagicClipboardData(clipboardData: ClipboardDataLike): boolean {
+	const types = getClipboardTypes(clipboardData.types)
 	if (types.some((type) => MAGIC_CLIPBOARD_TYPES.has(type))) return true
 
 	const html = clipboardData.getData("text/html")

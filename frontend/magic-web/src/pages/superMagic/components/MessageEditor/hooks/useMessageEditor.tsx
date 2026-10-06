@@ -11,6 +11,7 @@ import {
 	PlaceholderExtension,
 	CopyMessageExtension,
 	InspectorDetailExtension,
+	WechatChatHistoryExtension,
 } from "../extensions"
 import MentionExtension, {
 	Language,
@@ -57,6 +58,7 @@ import {
 import type { AttachmentItem } from "@/pages/superMagic/components/TopicFilesButton/hooks"
 import { getClipboardPlainText } from "@/pages/superMagic/components/MessageList/utils/mentionClipboard"
 import magicToast from "@/components/base/MagicToaster/utils"
+import { useWechatChatImport } from "./useWechatChatImport"
 
 interface UseMessageEditorProps {
 	value?: JSONContent
@@ -100,6 +102,7 @@ interface UseMessageEditorProps {
 	) => boolean
 	getWorkspaceFilesList?: () => AttachmentItem[]
 	getCurrentProjectId?: () => string | undefined
+	wechatChatEnabled?: boolean
 }
 
 type MentionEditorCommands = {
@@ -175,6 +178,7 @@ export const useMessageEditor = ({
 	shouldRestoreRemovedMention,
 	getWorkspaceFilesList,
 	getCurrentProjectId,
+	wechatChatEnabled = false,
 }: UseMessageEditorProps) => {
 	const domRef = useRef<HTMLDivElement>(null)
 	const { i18n } = useTranslation()
@@ -268,6 +272,7 @@ export const useMessageEditor = ({
 	}
 
 	const fetchSuggestion = useMemoizedFn(async (text: string) => {
+		if (wechatChat.isOpen() || wechatChat.menu) return ""
 		try {
 			// if (!selectedTopic || !selectedTopic.chat_conversation_id || !selectedTopic.id)
 			// 	return ""
@@ -299,7 +304,7 @@ export const useMessageEditor = ({
 	const updateAiCompletionState = useMemoizedFn((editor: ReturnType<typeof useEditor>) => {
 		if (!editor) return
 
-		const isFocusOnPlaceholder = isFocusOnSuperPlaceholder(editor)
+		const isFocusOnPlaceholder = isFocusOnSuperPlaceholder(editor) || wechatChat.isOpen()
 		if (isFocusOnPlaceholder !== isFocusOnPlaceholderRef.current) {
 			isFocusOnPlaceholderRef.current = isFocusOnPlaceholder
 			if (isFocusOnPlaceholder) {
@@ -332,6 +337,12 @@ export const useMessageEditor = ({
 			attributes: ariaLabel ? { "aria-label": ariaLabel } : {},
 			handleKeyDown: (_, event) => {
 				event.stopPropagation()
+				if (event.isComposing) return false
+				// 动作菜单先消费 Enter；导入窗口内回车用于编辑，不发送 AI 请求。
+				if (wechatChat.handleKeyDown(event)) {
+					event.preventDefault()
+					return true
+				}
 
 				if (tryNavigatePromptCarouselShortcut(event, onPromptCarouselNavigate)) {
 					return true
@@ -377,7 +388,7 @@ export const useMessageEditor = ({
 					}
 
 					// Keep newline behavior when Enter-to-send is disabled for this editor.
-					if (!shouldSendWhenEnter) {
+					if (!shouldSendWhenEnter || wechatChat.isOpen()) {
 						return false
 					}
 
@@ -414,6 +425,7 @@ export const useMessageEditor = ({
 				size: size || "default",
 			}),
 			InspectorDetailExtension.configure({ prepareCopiedMention }),
+			WechatChatHistoryExtension,
 			PlaceholderExtension.configure({
 				placeholder,
 			}),
@@ -492,6 +504,11 @@ export const useMessageEditor = ({
 		},
 	})
 
+	const wechatChat = useWechatChatImport(
+		tiptapEditor,
+		wechatChatEnabled,
+		`${selectedTopic?.id ?? ""}:${getCurrentProjectId?.() ?? ""}`,
+	)
 	AiCompletionService.setInstance({ editor: tiptapEditor })
 
 	// Handle AI completion based on mobile, aiCompletionEnabled, and focus position
@@ -503,7 +520,12 @@ export const useMessageEditor = ({
 		const isFocusOnPlaceholder = isFocusOnSuperPlaceholder(tiptapEditor)
 		isFocusOnPlaceholderRef.current = isFocusOnPlaceholder
 		const wasEnabled = previousAiCompletionEnabledRef.current
-		const shouldEnable = !isMobile && aiCompletionEnabled && !isFocusOnPlaceholder
+		const shouldEnable =
+			!isMobile &&
+			aiCompletionEnabled &&
+			!isFocusOnPlaceholder &&
+			!wechatChat.activeId &&
+			!wechatChat.menu
 		previousAiCompletionEnabledRef.current = shouldEnable
 
 		if (!shouldEnable) {
@@ -518,7 +540,7 @@ export const useMessageEditor = ({
 		return () => {
 			AiCompletionService.enable()
 		}
-	}, [isMobile, aiCompletionEnabled, tiptapEditor])
+	}, [isMobile, aiCompletionEnabled, tiptapEditor, wechatChat.activeId, wechatChat.menu])
 
 	// Handle dynamic placeholder updates
 	useUpdateEffect(() => {
@@ -599,5 +621,6 @@ export const useMessageEditor = ({
 		tiptapEditor,
 		domRef,
 		scrollToBottom,
+		wechatChat,
 	}
 }

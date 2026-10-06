@@ -20,6 +20,7 @@ import AiCompletionTip from "@/pages/chatNew/components/MessageEditor/components
 import { SummaryGuideDOMId } from "@/pages/superMagic/components/MessagePanel/components/TopicExamples/SummaryGuide"
 import { GuideTourElementId } from "@/pages/superMagic/components/LazyGuideTour"
 import { useIsMobile } from "@/hooks/useIsMobile"
+import { ScrollArea } from "@/components/shadcn-ui/scroll-area"
 
 interface MessageEditorViewProps {
 	className?: string
@@ -49,6 +50,8 @@ interface MessageEditorViewProps {
 	taskDataNode?: ReactNode
 	messageQueueNode?: ReactNode
 	showAiCompletion: boolean
+	previewActiveId?: string | null
+	wechatScrollRef?: RefObject<HTMLDivElement>
 }
 
 function MessageEditorView({
@@ -72,6 +75,8 @@ function MessageEditorView({
 	uploadModal,
 	promptCarouselNode,
 	showAiCompletion,
+	previewActiveId,
+	wechatScrollRef,
 }: MessageEditorViewProps) {
 	const isMobile = useIsMobile()
 
@@ -91,6 +96,7 @@ function MessageEditorView({
 							mobile: isMobile,
 						}),
 						containerClassName,
+						previewActiveId && "h-full max-h-none min-h-0",
 					)}
 					onDragEnter={dragEvents.onDragEnter}
 					onDragLeave={dragEvents.onDragLeave}
@@ -120,15 +126,26 @@ function MessageEditorView({
 							</div>
 						)}
 						<div className={cn(messageEditorTextContainerVariants({ size }))}>
-							<EditorContent
-								ref={domRef}
-								editor={tiptapEditor}
-								className={cn(messageEditorContentVariants({ size }), className)}
-								onCompositionStart={onCompositionStart}
-								onCompositionEnd={onCompositionEnd}
-								data-testid="super-message-editor-content"
-								id={SummaryGuideDOMId.MessageEditorContent}
-							/>
+							<ScrollArea
+								className="min-h-0 flex-1"
+								viewportRef={wechatScrollRef}
+								viewportClassName="h-full"
+							>
+								<EditorContent
+									ref={domRef}
+									editor={tiptapEditor}
+									className={cn(
+										messageEditorContentVariants({ size }),
+										"h-auto overflow-visible [&_.ProseMirror]:h-auto",
+										className,
+										previewActiveId && "[&_.ProseMirror>p]:hidden",
+									)}
+									onCompositionStart={onCompositionStart}
+									onCompositionEnd={onCompositionEnd}
+									data-testid="super-message-editor-content"
+									id={SummaryGuideDOMId.MessageEditorContent}
+								/>
+							</ScrollArea>
 							{promptCarouselNode}
 						</div>
 						{showAiCompletion && <AiCompletionTip icon={TabIcon as string} />}
