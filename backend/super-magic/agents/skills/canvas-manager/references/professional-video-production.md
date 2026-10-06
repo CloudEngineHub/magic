@@ -130,7 +130,7 @@ Bind reference assets in the prompt by array order:
 - `reference_video_paths[0]` → `[video1]`, `reference_video_paths[1]` → `[video2]`
 - `reference_audio_paths[0]` → `[audio1]`, `reference_audio_paths[1]` → `[audio2]`
 
-Place each token next to the subject, action, or source media it controls. Do not put file paths in the prompt.
+Place each token next to the subject, action, or source media it controls, and say what that reference governs and how strictly, e.g. "the presenter from [image1], face and outfit exactly as in [image1]". Do not put file paths in the prompt.
 
 Use `task="edit"` and `input_mode="video_edit"` only for an explicit video-to-video edit. For prompt-only generation, omit reference arrays. For image, video, or audio references, populate the corresponding arrays and bind every reference in the prompt.
 
@@ -182,6 +182,7 @@ Use the current Canvas Content lifecycle rather than creating replacement Elemen
 - Treat all submitted compatible assets as required source material by default. Use every relevant path in the appropriate reference array and map every materially contributing Canvas Element separately to direct Connections.
 - Exclude an asset only when the user explicitly asks to ignore it or the current generation tool cannot accept its media type. If relevance is unclear, ask before omitting it.
 - Before each generation call, verify that every used asset appears in the correct reference array, that direct Connections contain only the intended upstream Element IDs, and that any requested or storyboarded audio is still present in the prompt with `content.audioPolicy="generate"` on the direct video request.
+- The generation model sees each reference directly; the prompt carries its role, not its appearance. Restating a referenced subject's look in your own words (skin, facial hair, glasses, clothing details) adds your misreadings as instructions the model also follows, and the result drifts from the reference. Name a detail only when the user stressed it, it is the thing changing, it is small and easily lost (a logo, label text), or you must pick one of several subjects, and point to it in the reference instead of re-describing it. With a first frame, the frame already fixes subject and scene; describe motion, camera, and what happens next.
 - Reference media may contain watermarks, captions, interface marks, compression artifacts, unwanted backgrounds, or accidental crops. Preserve intended subject information but explicitly exclude those defects from generated prompts unless the user requests them.
 - Use only model IDs, `input_mode`, task values, aspect ratios, resolutions, durations, FPS values, and other generation fields declared by the current `<media_model_info>`.
 
@@ -232,7 +233,7 @@ Locate the video specified by the user and create a silent copy in a system temp
 
 ### 2. Understand the assets
 
-Use `visual_understanding` to identify subjects, products, scenes, text, style, distinguishing details, defects, and factual constraints. Separate direct observations from uncertain inferences.
+Look at each asset to identify subjects, products, scenes, text, style, distinguishing details, defects, and factual constraints; call `visual_understanding` only for assets not already visible in your context. Separate direct observations from uncertain inferences. These observations drive planning, reference roles, and defect exclusion; they are not prompt text (see Asset and prompt fidelity).
 Imported assets are original reference material only. They do not count as initialization visual anchors, storyboard first frames, or confirmed main Content unless a newly generated anchor has been created and confirmed through the stage below.
 Treat uncertain brand marks, product categories, and feature claims as inferences rather than facts. If a requested selling point is not supported by the submitted assets, identify the gap and ask the user to confirm it before putting the claim into a generation prompt.
 
@@ -312,7 +313,7 @@ result = tool.call("add_canvas_elements", {
             "source": "generated",
             "content_type": "image",
             "name": "Opening shot first frame",
-            "prompt": "The confirmed opening shot composition, subject identity, scene, camera framing, lighting, and artifact exclusions.",
+            "prompt": "The product from Image 1 exactly as shown, placed in the location from Image 2, in the style of Image 3; then the confirmed opening composition, camera framing, lighting, and artifact exclusions.",
             "reference_images": ["./images/product-anchor.webp", "./images/scene-anchor.webp", "./images/style-anchor.webp"],
             "size": "1080x1920",
         },

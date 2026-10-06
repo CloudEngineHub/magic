@@ -4,7 +4,7 @@ Use this reference as the default Canvas video path. For video tasks, read and f
 
 ## Workflow
 
-1. Understand the subject, action, scene, camera, style, duration, aspect ratio, resolution, model, and requested audio. If a reference is a provider-managed asset URI such as `asset://virtual-human-asset-id`, treat it as an opaque generation input: do not call `visual_understanding`, do not try to resolve it as a local file, and do not import it into Canvas. Only inspect a reference when it is an actual workspace media path or an accessible image URL.
+1. Understand the subject, action, scene, camera, style, duration, aspect ratio, resolution, model, and requested audio. If a reference is a provider-managed asset URI such as `asset://virtual-human-asset-id`, treat it as an opaque generation input: do not call `visual_understanding`, do not try to resolve it as a local file, and do not import it into Canvas. Only inspect a reference when it is an actual workspace media path or an accessible image URL, and skip the call when the image is already visible in your context.
 2. Present one concise generation target and complete prompt before generating. Ask only about unresolved choices that materially affect the result.
 3. Generate one video Element directly through the basic Canvas video-generation path.
 4. Use the same direct media pattern as basic image generation: the generated video is the result, and no storyboard, initialization image, first frame, `video-edit`, final composition, or professional-production Connection is created.
@@ -63,6 +63,8 @@ print(result.content)
 - Use only model, duration, aspect ratio, resolution, and mode values declared in the current `<media_model_info>`.
 - Omit optional parameters when the user did not request them and the current model rules do not make a legal choice clear.
 - Bind every reference asset inside the prompt by array order: `[image1]`, `[video1]`, and `[audio1]`. These binding tokens are part of the final prompt and must already be present before point estimation.
+- For each bound reference, say what it governs and how strictly, e.g. "the woman from [image1], face and outfit exactly as in [image1]" or "follow the camera movement of [video1]". The video model sees the reference itself; restating its look in your own words adds your misreadings as instructions it also follows. Name a detail only when the user stressed it, it is the thing changing, it is small and easily lost (a logo, label text), or you must pick one of several subjects, and point to it in the reference instead of re-describing it.
+- With `frame_start_path`, the first frame already fixes the subject and scene; spend the prompt on motion, camera, and what happens next.
 - Do not put file paths in the prompt. Paths belong in their corresponding reference arrays.
 - Use `frame_start_path` and optional `frame_end_path` for a start/end-frame transition; do not duplicate those files in `reference_image_paths`.
 - Use `task="edit"` and `input_mode="video_edit"` only for an explicit video-to-video edit.
