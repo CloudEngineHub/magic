@@ -66,7 +66,7 @@ overrides:
 
 patchedDependencies:
   pptxgenjs@4.0.1:
-    hash: 668754a4380375aeead657811cf8909f1bbdc87ff248f06988987a0e885041d3
+    hash: 3f7940a20123d8f378188a78506a4e21c0eaf5c9003d290fba5a5d7a262f12fc
     path: patches/pptxgenjs@4.0.1.patch
   tiptap-markdown@0.9.0:
     hash: dff3f968e3e70a1e0f1d3b502ab6441e71149a5ca5125a8c10915c43448d90f5
@@ -690,7 +690,7 @@ importers:
         version: 1.0.7
       pptxgenjs:
         specifier: 4.0.1
-        version: 4.0.1(patch_hash=668754a4380375aeead657811cf8909f1bbdc87ff248f06988987a0e885041d3)
+        version: 4.0.1(patch_hash=3f7940a20123d8f378188a78506a4e21c0eaf5c9003d290fba5a5d7a262f12fc)
       prismjs:
         specifier: ^1.30.0
         version: 1.30.0
@@ -1263,7 +1263,7 @@ importers:
         version: 4.2.0
       pptxgenjs:
         specifier: 4.0.1
-        version: 4.0.1(patch_hash=668754a4380375aeead657811cf8909f1bbdc87ff248f06988987a0e885041d3)
+        version: 4.0.1(patch_hash=3f7940a20123d8f378188a78506a4e21c0eaf5c9003d290fba5a5d7a262f12fc)
       puppeteer:
         specifier: 24.32.0
         version: 24.32.0(typescript@5.9.3)
@@ -2636,7 +2636,7 @@ packages:
       dayjs: ^1.11.12
 
   '@dtyq/upload-sdk@0.0.12':
-    resolution: {integrity: sha512-zSDjryMWEvhRTYTr+v/lmbmWUZlRg/fuE5nu9ik/1kI0qqsezQRgDCYUjwb3Qv3uugM6yIjPwQUqgbBdj+xKJA==}
+    resolution: {integrity: sha512-zwxRtg9wKJ3Z3tGX3CGCW5gqDJt0ctOvmGg4FuVJxc8GjiGAOOdBT5JDhp3aLi0aV5vvymmp3eoXkR2c0t3gLA==, tarball: https://registry.npmjs.org/@dtyq/upload-sdk/-/upload-sdk-0.0.12.tgz}
     engines: {node: '>=18.0.0'}
     peerDependencies:
       lodash-es: ^4.17.21
@@ -33770,7 +33770,7 @@ snapshots:
       tslib: 2.8.1
       uuid: 10.0.0
 
-  pptxgenjs@4.0.1(patch_hash=668754a4380375aeead657811cf8909f1bbdc87ff248f06988987a0e885041d3):
+  pptxgenjs@4.0.1(patch_hash=3f7940a20123d8f378188a78506a4e21c0eaf5c9003d290fba5a5d7a262f12fc):
     dependencies:
       '@types/node': 22.20.1
       https: 1.0.0
