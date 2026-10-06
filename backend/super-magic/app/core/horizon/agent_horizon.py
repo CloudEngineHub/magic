@@ -710,6 +710,23 @@ class AgentHorizon:
         await self._ensure_loaded()
         return _abs(file_path) in self._state.file_records
 
+    async def has_complete_file_read(self, file_path: Union[str, Path]) -> bool:
+        """查询当前观察版本是否已完整提供；搜索快照和 AutoRead 来源不构成阅读证明。"""
+        await self._ensure_loaded()
+        record = self._state.file_records.get(_abs(file_path))
+        if not record or not record.file_hash or record.metadata.get("complete_read_hash") != record.file_hash:
+            return False
+        # 整包更新被预算拒绝时仍保留旧观察版本；不能据此跳过磁盘上已变化的候选。
+        try:
+            stat = await get_fresh_file_stat(record.path)
+            current_hash = (
+                await calculate_file_hash(record.path)
+                if stat.size <= HASH_DETECTION_THRESHOLD else f"__mtime__{stat.mtime}"
+            )
+            return current_hash == record.file_hash
+        except OSError:
+            return False
+
     async def on_context_reset(self) -> None:
         """聊天历史压缩或 /new 后调用，重置与上下文内容相关的所有状态。
 
@@ -770,6 +787,7 @@ class AgentHorizon:
         tool_name: str,
         ranges: Optional[list[tuple[int, int]]] = None,
         metadata: Optional[dict] = None,
+        source_content: str | None = None,
     ) -> None:
         """read_file 工具成功读取后调用。
 
@@ -785,10 +803,23 @@ class AgentHorizon:
 
             file_content, snapshot_mode, snapshot_reason = await _read_file_content_for_snapshot(abs_path)
 
-            record_metadata = dict(metadata or {})
+            previous = self._state.file_records.get(abs_path)
+            record_metadata = dict(previous.metadata if previous else {})
+            record_metadata.update(metadata or {})
             record_metadata["snapshot_mode"] = snapshot_mode
             if snapshot_reason:
                 record_metadata["snapshot_reason"] = snapshot_reason
+            else:
+                record_metadata.pop("snapshot_reason", None)
+
+            # 工具读到 A 后文件可能变成 B；只有本次全文与稳定的观察版本一致才确认完整。
+            # 同版本后续范围读取不清除已经确认的全文；搜索或写入也不能推进该凭据。
+            if (
+                source_content is not None and not truncated
+                and snapshot_mode == "full" and source_content == file_content
+                and await calculate_file_hash(abs_path) == file_hash
+            ):
+                record_metadata["complete_read_hash"] = file_hash
 
             self._state.file_records[abs_path] = FileContextRecord(
                 path=abs_path,
@@ -2029,6 +2060,7 @@ class AgentHorizon:
         for abs_path, (cur_hash, cur_size) in current_hashes.items():
             rec = self._state.file_records.get(abs_path)
             if rec and cur_hash and rec.file_hash != cur_hash:
+                previous_fully_read = rec.metadata.get("complete_read_hash") == rec.file_hash
                 rec.file_hash = cur_hash
                 rec.file_size_bytes = cur_size
                 rec.file_mtime_ms = current_mtimes.get(abs_path, rec.file_mtime_ms)
@@ -2047,6 +2079,11 @@ class AgentHorizon:
                 """
                 displayed = displayed_files.get(abs_path)
                 snapshot = displayed.new_snapshot if displayed is not None else None
+                if (
+                    snapshot is not None and displayed is not None
+                    and (displayed.is_full_read or previous_fully_read)
+                ):
+                    rec.metadata["complete_read_hash"] = cur_hash
                 if snapshot is not None and num_tokens_from_string(snapshot) <= display_budget.file_snapshot_max_tokens:
                     rec.file_content = snapshot
                     rec.metadata["snapshot_mode"] = "full"
