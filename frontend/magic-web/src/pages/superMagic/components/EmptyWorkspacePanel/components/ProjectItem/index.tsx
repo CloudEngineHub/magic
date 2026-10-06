@@ -27,6 +27,7 @@ import { observer } from "mobx-react-lite"
 import MagicButton from "@/components/base/MagicButton"
 import MagicIcon from "@/components/base/MagicIcon"
 import ProjectCollaborators from "./components/ProjectCollaborators"
+import ProjectMetadata from "./components/ProjectMetadata"
 import PinnedTag from "./components/PinnedTag"
 import { isOwner } from "@/pages/superMagic/utils/permission"
 import magicToast from "@/components/base/MagicToaster/utils"
@@ -417,30 +418,54 @@ function ProjectItem<T extends ProjectListItem | CollaborationProjectListItem>({
 										{isRecentLayout && projectTags}
 									</FlexBox>
 								)}
-								{isRecentLayout && locationName && (
-									<SmartTooltip
-										className="min-w-0 text-xs font-normal leading-4 text-muted-foreground"
-										data-testid="project-item-location"
-									>
-										{locationName}
-									</SmartTooltip>
-								)}
-							</div>
-							{(!mobileLayout || time.value) && (
-								<SmartTooltip
-									className={cn(
-										"project-item-updated-at text-[10px] font-normal leading-[13px] text-muted-foreground",
-										isCompact && "truncate text-xs leading-4",
-										isCompactList &&
-											"col-start-2 row-start-2 [@container_(min-width:800px)]:col-start-[time] [@container_(min-width:800px)]:row-start-1",
-										isRecentLayout && isCompactList && "leading-5",
-										mobileLayout && "whitespace-normal",
+								{isRecentLayout &&
+									isCompactList &&
+									!mobileLayout &&
+									locationName && (
+										<SmartTooltip
+											className="min-w-0 text-xs font-normal leading-4 text-muted-foreground"
+											data-testid="project-item-location"
+										>
+											{locationName}
+										</SmartTooltip>
 									)}
-									data-testid="project-item-time"
-									data-sort-type={sortType}
-								>
-									{isCompactList && !mobileLayout ? time.value : time.label}
-								</SmartTooltip>
+							</div>
+							{isCompact && (!isCompactList || mobileLayout) ? (
+								<ProjectMetadata
+									mobile={mobileLayout}
+									list={isCompactList}
+									recent={isRecentLayout}
+									locationName={locationName}
+									time={{ value: time.value ?? "", label: time.label }}
+									timeLabel={
+										sortType === SortType.MY_LAST_ACTIVE_TIME ||
+										(sortType === SortType.WORKSPACE_ORDER &&
+											Boolean(item.last_active_at))
+											? t("sidebarPanels.lastActiveTime")
+											: sortType === SortType.PROJECT_CREATE_TIME
+												? t("sidebarPanels.createdTime")
+												: t("sidebarPanels.updatedTime")
+									}
+									createdAt={item.created_at}
+									relativeActiveTime={relativeActiveTime}
+								/>
+							) : (
+								(!mobileLayout || time.value) && (
+									<SmartTooltip
+										className={cn(
+											"project-item-updated-at text-[10px] font-normal leading-[13px] text-muted-foreground",
+											isCompact && "truncate text-xs leading-4",
+											isCompactList &&
+												"col-start-2 row-start-2 [@container_(min-width:800px)]:col-start-[time] [@container_(min-width:800px)]:row-start-1",
+											isRecentLayout && isCompactList && "leading-5",
+											mobileLayout && "whitespace-normal",
+										)}
+										data-testid="project-item-time"
+										data-sort-type={sortType}
+									>
+										{isCompactList && !mobileLayout ? time.value : time.label}
+									</SmartTooltip>
+								)
 							)}
 						</div>
 

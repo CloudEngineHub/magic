@@ -6564,6 +6564,8 @@
 		"viewShortcuts": "View Shortcuts"
 	},
 	"sidebarPanels": {
+		"absoluteTime": "Full timestamp",
+		"activityTimeFormat": "Last active, currently {{format}}; choose a time format",
 		"browseWorkspaces": "Workspaces",
 		"clearSearch": "Clear search",
 		"collapseFiles": "Collapse files",
@@ -6576,6 +6578,7 @@
 		"loadMore": "Load more",
 		"loadedProjects": "Showing {{count}} / {{total}} projects",
 		"noMatchingProjects": "No matching projects",
+		"projectLocation": "Location",
 		"projectManager": "Project manager",
 		"projectManagerDescription": "Browse and manage projects across workspaces",
 		"projectName": "Project name",
@@ -6584,6 +6587,7 @@
 		"pullLeftToCollapse": "Keep dragging left to collapse",
 		"pullRightToCancel": "Drag back right to cancel",
 		"pullRightToCollapse": "Keep dragging right to collapse",
+		"relativeTime": "Relative time",
 		"releaseKeepsOpen": "Releasing keeps the panel open",
 		"releaseToCollapse": "Release to collapse",
 		"renameCancel": "Cancel (Esc)",
