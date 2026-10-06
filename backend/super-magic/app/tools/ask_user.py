@@ -4,7 +4,7 @@ import json
 import time
 from typing import Any, Dict, List, Optional, Tuple
 
-from pydantic import Field
+from pydantic import Field, model_validator
 
 from agentlang.context.tool_context import ToolContext
 from agentlang.logger import get_logger
@@ -32,7 +32,12 @@ ASK_USER_TIMEOUT_DEFAULT_SECONDS = 10 * 60
 ASK_USER_POLICY_SKIP_SECONDS = 1
 
 class AskUserParams(BaseToolParams):
+    prepared_tool_call_id: str | None = Field(
+        default=None,
+        description="Bind a prepared Canvas deletion or batch file rename. Omit questions: the runtime supplies the exact confirmation question. Never invent a confirmation ID.",
+    )
     questions: str = Field(
+        default="",
         description="""<!--zh: 用 XML 格式描述要问用户的问题。支持 type: confirm / input / select / multi_select。每个问题用 <question> 标签包裹。-->
 Questions in XML format. Wrap each question in a <question> tag with a `type` attribute (confirm / input / select / multi_select). For select/multi_select, add <option> children. Optional attributes: default, placeholder, min, max.""",
     )
@@ -41,6 +46,13 @@ Questions in XML format. Wrap each question in a <question> tag with a `type` at
         description="""<!--zh: 等待用户回答的超时秒数（600~1800，即 10~30 分钟）。根据问题复杂程度自行判断：简单确认填 600，需要用户思考或输入内容填 900~1200，涉及复杂决策或需要用户查阅资料填 1200~1800。-->
 How many seconds to wait for the user's answer (600–1800, i.e. 10–30 minutes). Choose based on the complexity of the question: 600 for simple confirmations, 900–1200 when the user needs to think or type content, 1200–1800 for complex decisions or when the user may need to look something up.""",
     )
+
+
+    @model_validator(mode="after")
+    def require_questions_or_preparation(self) -> "AskUserParams":
+        if not self.questions and not self.prepared_tool_call_id:
+            raise ValueError("questions is required unless prepared_tool_call_id is supplied")
+        return self
 
 
 @tool()
@@ -182,16 +194,32 @@ Use the `default` attribute to set a fallback when the user times out or skips.
         from app.tools.ask_user_parser import parse_questions_xml
 
         raw_xml = tool_context.arguments.get("questions", "")
+        source = self._get_execution_source(tool_context)
+        prepared_id = tool_context.arguments.get("prepared_tool_call_id")
+        if prepared_id and is_ask_user_allowed_source(source):
+            from xml.sax.saxutils import escape
+            from app.tools.canvas.application.operation_confirmation import CanvasOperationConfirmation
+
+            confirmation = CanvasOperationConfirmation.from_tool(tool_context)
+            prepared = await confirmation.read(str(prepared_id))
+            raw_xml = f'<question type="confirm">{escape(prepared.question)}</question>'
+            tool_context.arguments["questions"] = raw_xml
         tool_context.arguments["parsed_questions"] = parse_questions_xml(raw_xml)
         tool_context.arguments["status"] = "pending"
 
-        source = self._get_execution_source(tool_context)
         policy_blocked = not is_ask_user_allowed_source(source)
         tool_context.arguments["ask_user_policy_blocked"] = policy_blocked
         tool_context.arguments["ask_user_policy_source"] = source.value
 
         if policy_blocked:
             tool_context.arguments["expires_at"] = int(time.time()) + ASK_USER_POLICY_SKIP_SECONDS
+            return
+
+        if prepared_id:
+            parsed = tool_context.arguments["parsed_questions"]
+            await confirmation.bind(str(prepared_id), tool_context.tool_call_id, parsed[0]["sub_id"])
+            # 画布危险操作等待真人决定，默认不以超时答案代替确认。
+            tool_context.arguments["expires_at"] = 0
             return
 
         # 用大模型指定的超时覆盖基类写入的默认值，限制在 [600, 1800] 秒内
@@ -219,6 +247,7 @@ Use the `default` attribute to set a fallback when the user times out or skips.
         """
         return {
             "parsed_questions": tool_context.arguments.get("parsed_questions", []),
+            "prepared_tool_call_id": tool_context.arguments.get("prepared_tool_call_id"),
             "policy_blocked": bool(tool_context.arguments.get("ask_user_policy_blocked", False)),
             "policy_source": tool_context.arguments.get(
                 "ask_user_policy_source",

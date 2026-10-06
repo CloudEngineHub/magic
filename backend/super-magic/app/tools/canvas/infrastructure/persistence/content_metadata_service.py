@@ -24,6 +24,30 @@ class ContentMetadataService:
     """负责 Content 详情读取、写入和生成尝试演进。"""
 
     @staticmethod
+    def remove(metadata: dict, element_id: str, content_ids: list[str] | None = None) -> None:
+        """移除已确认删除目标的详情；None 表示整元素，不影响其它版本或未知旧记录。"""
+        documents = [metadata]
+        runtime = metadata.get(RUNTIME_METADATA_KEY)
+        if isinstance(runtime, dict):
+            documents.append(runtime)
+        for document in documents:
+            elements = document.get("elements")
+            if isinstance(elements, dict):
+                if content_ids is None:
+                    elements.pop(element_id, None)
+                else:
+                    element = elements.get(element_id)
+                    details = element.get("contentDetails") if isinstance(element, dict) else None
+                    if isinstance(details, dict):
+                        for content_id in content_ids:
+                            details.pop(content_id, None)
+            legacy = document.get("contentDetails")
+            if isinstance(legacy, dict):
+                for content_id, detail in list(legacy.items()):
+                    if isinstance(detail, dict) and detail.get("elementId") == element_id and (content_ids is None or content_id in content_ids):
+                        legacy.pop(content_id, None)
+
+    @staticmethod
     def get(metadata: dict, element_id: str, content_id: str) -> dict[str, Any]:
         """读取公共与运行态合并后的 Content 详情，并兼容旧 sidecar。"""
         elements = metadata.get("elements") if isinstance(metadata, dict) else None

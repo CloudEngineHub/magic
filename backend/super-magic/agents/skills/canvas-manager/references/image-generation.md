@@ -7,15 +7,15 @@ Load this reference for image generation, image revision, reference images, or i
 1. Query the Canvas and any exact reference Elements.
 2. Call `visual_understanding` first when you need to understand the subject, composition, dimensions, or what to preserve.
 3. Confirm the creative direction when the direction is ambiguous.
-4. New logical image → `add_canvas_elements`.
-5. New candidate on an existing image → `add_canvas_contents`.
+4. New image or image revision → `add_canvas_elements`, one independent Element per image; preserve the original and use its actual path as a reference.
+5. Only when the user explicitly requests versions inside one existing image Element → `add_canvas_contents`.
 6. Failed and the user agrees → `retry_canvas_content_generation`.
 7. The first Content of any Element is automatically main; the user confirms a later candidate → `select_canvas_main_content`.
 
 ## Tool choice
 
 - New logical image: `add_canvas_elements`, `element_type=image`, Content `source=generated`, `content_type=image`.
-- New candidate on an existing image: `add_canvas_contents` — appends, never overwrites.
+- Revised image: `add_canvas_elements` by default, even for "another version" or a small change. Use `add_canvas_contents` only for an explicit request to keep versions in the same Element; append without overwriting.
 - In-place retry: `retry_canvas_content_generation` with the exact Element ID and failed Content ID.
 - After the user confirms a later candidate: `select_canvas_main_content`. Do not call it for the first Content of any Element.
 

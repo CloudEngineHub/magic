@@ -189,8 +189,7 @@ export function useAskUserViewModel({
 	const askUserNode = getAskUserNode(node as typeof node)
 	const parsedContent = parseAskUserContent(askUserNode?.content)
 	const askUserTool = askUserNode?.tool as
-		| { status?: string; detail?: { data?: Record<string, unknown> } }
-		| undefined
+		{ status?: string; detail?: { data?: Record<string, unknown> } } | undefined
 	const detailData =
 		(askUserTool?.detail?.data as Record<string, unknown> | undefined) || askUserEmptyDetailData
 	const detailStatus = typeof detailData.status === "string" ? detailData.status : ""
@@ -254,10 +253,13 @@ export function useAskUserViewModel({
 			: resolvedAskUser
 	const resolvedErrorState = errorState
 	const hasMultipleQuestions = effectiveAskUser.questions.length > 1
-	const { isExpiredLocal, remainingText } = useAskUserCountdown({
+	// 只有后端明确返回零值才无期限；解析失败／缺字段产生的默认零值仍按原逻辑过期。
+	const hasNoDeadline = detailData.expires_at === 0 || parsedContent?.expires_at === 0
+	const { isExpiredLocal: countdownExpired, remainingText } = useAskUserCountdown({
 		expiresAt: effectiveAskUser.expiresAt,
 		isActive: effectiveAskUser.status === ASK_USER_CARD_STATUS.pending,
 	})
+	const isExpiredLocal = !hasNoDeadline && countdownExpired
 	const shouldDisableInteraction =
 		Boolean(resolvedErrorState) ||
 		effectiveAskUser.status !== ASK_USER_CARD_STATUS.pending ||
@@ -295,6 +297,7 @@ export function useAskUserViewModel({
 		askUserFromNode,
 		errorState: resolvedErrorState,
 		hasMultipleQuestions,
+		hasNoDeadline,
 		isExpiredLocal,
 		remainingText,
 		resolvedAskUser: effectiveAskUser,

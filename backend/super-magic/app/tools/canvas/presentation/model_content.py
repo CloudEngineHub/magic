@@ -118,6 +118,23 @@ def elements_content(result: dict[str, Any]) -> str:
             fields = [
                 f"content_id={content['content_id']}",
             ]
+            fields.append(f"version=V{content.get('version_index', 1)}")
+            if content.get("is_current"):
+                fields.append("current=true")
+            if content.get("is_main"):
+                fields.append("main=true")
+            if content.get("file_name"):
+                fields.append(f"file_name={content['file_name']}")
+            if content.get("file_id"):
+                fields.append(f"file_id={content['file_id']}")
+            if content.get("file_exists") is False:
+                fields.append("file_exists=false")
+            fields.append(f"can_rename_file={str(content.get('can_rename_file', False)).lower()}")
+            if content.get("file_rename_reason"):
+                fields.append(f"file_rename_reason={content['file_rename_reason']}")
+            if content.get("generation_name"):
+                key = "expected_generation_name" if content.get("status") in {"pending", "processing"} else "original_generation_name"
+                fields.append(f"{key}={content['generation_name']}")
             if content.get("status"):
                 fields.append(f"status={content['status']}")
             if content.get("source"):
@@ -154,6 +171,7 @@ def elements_content(result: dict[str, Any]) -> str:
             )
     for warning in result.get("warnings", []):
         lines.append(f"- Warning: {warning}")
+    lines.append("An Element has one shared Canvas title; each Content version can reference its own file. Generation names are historical inputs, not current filenames.")
     return "\n".join(lines)
 
 

@@ -1,6 +1,11 @@
 """独立 Canvas Agent 工具包。"""
 
 from app.tools.canvas.tools import (
+    QueryCanvasLayout,
+    ArrangeCanvasElements,
+    RenameCanvasElements,
+    ManageCanvasElements,
+    DeleteCanvasElements,
     AddCanvasContents,
     AddCanvasElements,
     EstimateCanvasContentPoints,
@@ -18,6 +23,11 @@ from app.tools.canvas.tools import (
 )
 
 __all__ = [
+    "QueryCanvasLayout",
+    "ArrangeCanvasElements",
+    "RenameCanvasElements",
+    "ManageCanvasElements",
+    "DeleteCanvasElements",
     "AddCanvasContents",
     "AddCanvasElements",
     "EstimateCanvasContentPoints",

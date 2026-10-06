@@ -144,6 +144,9 @@ class BaseUserToolCallTool(BaseTool[T]):
             tool_context.arguments.get("expires_at")
             or (int(time.time()) + self.user_tool_call_timeout)
         )
+        # 仅已绑定的画布确认可无限等待；普通工具缺失期限或 None 的兜底保持不变。
+        if self.name == "ask_user" and tool_context.arguments.get("prepared_tool_call_id") and tool_context.arguments.get("expires_at") == 0:
+            expires_at = 0
         tool_data: dict = self.build_tool_data(tool_context)
 
         chat_history = getattr(agent_context, "chat_history", None)

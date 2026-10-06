@@ -6508,5 +6508,209 @@
     "inspect_memory.unavailable": {
         "zh_CN": "当前任务无法使用记忆用量统计",
         "en_US": "Memory measurement is unavailable for this task"
+    },
+    "canvas.detail.title.query_canvas_layout": {
+        "zh_CN": "查看画布周边",
+        "en_US": "Inspect canvas region"
+    },
+    "canvas.detail.title.arrange_canvas_elements": {
+        "zh_CN": "整理画布元素",
+        "en_US": "Arrange canvas elements"
+    },
+    "canvas.detail.title.rename_canvas_elements": {
+        "zh_CN": "重命名画布图片",
+        "en_US": "Rename canvas images"
+    },
+    "canvas.detail.title.manage_canvas_elements": {
+        "zh_CN": "取消画框",
+        "en_US": "Unframe canvas elements"
+    },
+    "canvas.detail.title.delete_canvas_elements": {
+        "zh_CN": "移除画布元素",
+        "en_US": "Remove canvas elements"
+    },
+    "canvas.shared_file_kept": {
+        "zh_CN": "其他版本仍在使用，保留文件",
+        "en_US": "Shared by other versions; file retained"
+    },
+    "canvas.rename_confirmation": {
+        "zh_CN": "将以下 {{count}} 个文件改名？图片内容不变，同目录重名会拒绝。\n\n{{comparison}}",
+        "en_US": "Rename these {{count}} files? Image content stays unchanged; duplicate names in the same directory are rejected.\n\n{{comparison}}"
+    },
+    "canvas.delete_confirmation": {
+        "zh_CN": "从画布移除以下 {{count}} 个元素及所列版本／子元素？真实文件会保留。相关连接：{{connections}} 条。\n\n{{elements}}",
+        "en_US": "Remove these {{count}} Elements and the listed versions/descendants from the Canvas? Actual files are retained. Related connections: {{connections}}.\n\n{{elements}}"
+    },
+    "canvas.delete_confirmation_files": {
+        "zh_CN": "移除以下 {{count}} 个图片目标，并删除所列文件？文件按项目回收站规则处理；恢复文件不会恢复画布位置和连接。标记为共享的文件会保留。相关连接：{{connections}} 条。\n\n{{elements}}\n\n文件：\n{{files}}",
+        "en_US": "Remove these {{count}} image targets and delete the listed files? Files follow project recycle-bin rules; restoring files does not restore Canvas positions or connections. Shared files remain. Related connections: {{connections}}.\n\n{{elements}}\n\nFiles:\n{{files}}"
+    },
+    "canvas.detail.field.matched": {
+        "zh_CN": "匹配数量",
+        "en_US": "Matches"
+    },
+    "canvas.detail.field.has_more": {
+        "zh_CN": "还有下一页",
+        "en_US": "More pages"
+    },
+    "canvas.detail.field.stage": {
+        "zh_CN": "操作阶段",
+        "en_US": "Operation stage"
+    },
+    "canvas.detail.field.file_name": {
+        "zh_CN": "文件名",
+        "en_US": "Filename"
+    },
+    "canvas.detail.field.target_file_name": {
+        "zh_CN": "新文件名",
+        "en_US": "New filename"
+    },
+    "canvas.detail.status.changed": {
+        "zh_CN": "已整理",
+        "en_US": "Arranged"
+    },
+    "canvas.detail.status.unchanged": {
+        "zh_CN": "无需修改",
+        "en_US": "Unchanged"
+    },
+    "canvas.detail.status.unframed": {
+        "zh_CN": "已取消画框",
+        "en_US": "Unframed"
+    },
+    "canvas.detail.status.prepared": {
+        "zh_CN": "等待确认",
+        "en_US": "Awaiting confirmation"
+    },
+    "canvas.detail.status.file_renamed": {
+        "zh_CN": "文件已改名，引用待恢复",
+        "en_US": "File renamed; references need recovery"
+    },
+    "canvas.detail.status.shared_file_kept": {
+        "zh_CN": "共享文件已保留",
+        "en_US": "Shared file retained"
+    },
+    "canvas.detail.status.file_deleted": {
+        "zh_CN": "文件已删除",
+        "en_US": "File deleted"
+    },
+    "canvas.detail.status.retained": {
+        "zh_CN": "已保留",
+        "en_US": "Retained"
+    },
+    "canvas.detail.status.canvas_write_failed": {
+        "zh_CN": "画布更新失败",
+        "en_US": "Canvas update failed"
+    },
+    "canvas.detail.status.deletion_unconfirmed": {
+        "zh_CN": "文件删除未确认",
+        "en_US": "File deletion unconfirmed"
+    },
+    "canvas.confirmation_element": {
+        "zh_CN": "{{name}}（{{versions}} 个版本）",
+        "en_US": "{{name}} ({{versions}} versions)"
+    },
+    "canvas.detail.status.rename_unconfirmed": {
+        "zh_CN": "文件改名未确认",
+        "en_US": "File rename unconfirmed"
+    },
+    "canvas.detail.status.executed": {
+        "zh_CN": "已执行",
+        "en_US": "Executed"
+    },
+    "canvas.detail.status.recovered": {
+        "zh_CN": "引用已恢复",
+        "en_US": "References recovered"
+    },
+    "canvas.rename_title_comparison": {
+        "zh_CN": "画布标题将改为：{{name}}",
+        "en_US": "Canvas title will become: {{name}}"
+    },
+    "canvas.management_error.ELEMENT_LOCKED": {
+        "zh_CN": "目标或所在画框已锁定，请先手动解锁。",
+        "en_US": "The target or its parent is locked. Unlock it manually first."
+    },
+    "canvas.management_error.ELEMENT_NOT_FOUND": {
+        "zh_CN": "目标已不存在，请重新选择。",
+        "en_US": "The selected Element no longer exists. Select it again."
+    },
+    "canvas.management_error.FILE_NAME_CONFLICT": {
+        "zh_CN": "同目录已有同名文件，请换一个名称。",
+        "en_US": "That name is already used in the same directory. Choose another name."
+    },
+    "canvas.management_error.FILE_IDENTITY_CHANGED": {
+        "zh_CN": "文件已被改名或替换，请重新查询后操作。",
+        "en_US": "The file was renamed or replaced. Query it again before continuing."
+    },
+    "canvas.management_error.FILE_SHARED": {
+        "zh_CN": "其他图片仍在使用这个文件，不能一起删除。",
+        "en_US": "Other images still reference this file. It cannot be deleted with this selection."
+    },
+    "canvas.management_error.SHARED_FILE_CONFLICT": {
+        "zh_CN": "同一个文件被要求改成不同名称，请统一名称。",
+        "en_US": "One shared file has conflicting requested names. Choose a single name."
+    },
+    "canvas.management_error.FILE_NOT_READY": {
+        "zh_CN": "图片尚未生成或文件不可用，可以先修改画布标题。",
+        "en_US": "The image is still generating or its file is unavailable. Its Canvas title can be renamed."
+    },
+    "canvas.management_error.FILE_DELETE_INCOMPLETE": {
+        "zh_CN": "文件删除未完成，画布目标已保留。",
+        "en_US": "File deletion did not complete. The Canvas target was retained."
+    },
+    "canvas.management_error.INVALID_FILE_NAME": {
+        "zh_CN": "文件名不能包含路径，图片扩展名也不能改变。",
+        "en_US": "The filename must not contain a path or change the image extension."
+    },
+    "canvas.management_error.VERSION_SCOPE_REQUIRED": {
+        "zh_CN": "存在多个版本，请明确选择当前版本或全部版本。",
+        "en_US": "This image has multiple versions. Choose current or all explicitly."
+    },
+    "canvas.management_error.CONFIRMATION_REQUIRED": {
+        "zh_CN": "尚未取得这次操作的用户确认，请重新确认。",
+        "en_US": "This operation has no valid human confirmation. Confirm it again."
+    },
+    "canvas.management_error.CONFIRMATION_STALE": {
+        "zh_CN": "确认后的目标已变化，请重新确认当前清单。",
+        "en_US": "The targets changed after confirmation. Confirm the current list again."
+    },
+    "canvas.management_error.CONFIRMATION_UNAVAILABLE": {
+        "zh_CN": "这项操作需要在可交互的主对话中确认。",
+        "en_US": "This operation requires confirmation in an interactive main conversation."
+    },
+    "canvas.management_error.CONFIRMATION_MISMATCH": {
+        "zh_CN": "确认记录与当前操作不匹配，请重新确认。",
+        "en_US": "The confirmation does not match this operation. Confirm it again."
+    },
+    "canvas.management_error.CONFIRMATION_PENDING": {
+        "zh_CN": "已有确认正在等待或已被使用，请重新准备操作。",
+        "en_US": "The confirmation is pending or already used. Prepare a new operation."
+    },
+    "canvas.management_error.DIFFERENT_PARENTS": {
+        "zh_CN": "只能整理同一个画框或同一层的元素。",
+        "en_US": "Only Elements with the same immediate parent can be arranged together."
+    },
+    "canvas.management_error.LAYOUT_COLLISION": {
+        "zh_CN": "指定位置与其他元素重叠，请选择参照元素和摆放方向。",
+        "en_US": "The layout overlaps other Elements. Choose a reference and placement side."
+    },
+    "canvas.management_error.LAYOUT_OUTSIDE_FRAME": {
+        "zh_CN": "画框空间不足，没有移动任何元素。",
+        "en_US": "The layout does not fit inside the Frame. No Elements were moved."
+    },
+    "canvas.management_error.GEOMETRY_UNAVAILABLE": {
+        "zh_CN": "无法读取可靠的位置或尺寸，没有移动元素。",
+        "en_US": "Reliable position or display dimensions are unavailable. No Elements were moved."
+    },
+    "canvas.management_error.METADATA_CLEANUP_FAILED": {
+        "zh_CN": "画布修改已完成，但详情记录清理失败。",
+        "en_US": "The Canvas change completed, but detail metadata could not be cleaned up."
+    },
+    "canvas.management_error.OPERATION_INCOMPLETE": {
+        "zh_CN": "操作未全部完成，请查看每一项的结果。",
+        "en_US": "The operation did not fully complete. Review the individual results."
+    },
+    "canvas.management_error.INTERNAL_ERROR": {
+        "zh_CN": "操作未完成，请重新查询当前状态后处理失败项。",
+        "en_US": "The operation did not complete. Query the current state before handling failed items."
     }
 }

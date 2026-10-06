@@ -391,6 +391,31 @@ class MagicServiceClient:
                 return base_url[: -len(suffix)]
         return base_url
 
+    async def query_workspace_file(self, file_id: str) -> dict[str, object]:
+        """按稳定 file_id 获取实际名称和父目录，供改名后复查身份。"""
+        data = await self._request_json(
+            "POST", f"/api/v1/open-api/magicfs/files/{quote(file_id, safe='')}/queries",
+            operation_name="Query workspace file",
+        )
+        file = data.get("file")
+        if not isinstance(file, dict):
+            raise ApiError("Workspace file metadata is unavailable")
+        return file
+
+    async def check_workspace_file_write_access(self, file_id: str) -> None:
+        """在文件操作前复用挂载端的 EDITOR 权限预检。"""
+        await self._request_json(
+            "POST", f"/api/v1/open-api/magicfs/files/{quote(file_id, safe='')}/check-access",
+            operation_name="Check workspace file write access",
+        )
+
+    async def rename_workspace_file_checked(self, file_id: str, target_name: str) -> dict[str, object]:
+        """复用手动重命名接口，同目录同名拒绝，不走 POSIX 覆盖语义。"""
+        return await self._request_json(
+            "POST", f"/api/v1/super-agent/file/{quote(file_id, safe='')}/rename",
+            {"target_name": target_name}, operation_name="Rename workspace file",
+        )
+
     def _build_json_headers(self) -> Dict[str, str]:
         headers = {
             "Content-Type": "application/json",

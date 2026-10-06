@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from dataclasses import replace
+from pathlib import PurePosixPath
 from typing import Any, cast
 
 from app.tools.canvas.application.results import (
@@ -19,9 +21,12 @@ from app.tools.canvas.domain.content_fields.generated_media_protocol import (
 from app.tools.canvas.domain.errors import CanvasDomainError
 from app.tools.canvas.domain.models import CanvasElement
 from app.tools.canvas.domain.services.element_tree_index import ElementTreeIndex
+from app.tools.canvas.domain.services.spatial_geometry import CanvasSpatialGeometry
 from app.tools.canvas.domain.types import JsonObject
+from app.tools.canvas.infrastructure.assets.project_asset_path_resolver import ProjectAssetPathResolver
 from app.tools.canvas.infrastructure.persistence.canvas_repository_interface import CanvasRepositoryInterface
 from app.tools.canvas.infrastructure.persistence.element_details_adapter import ElementDetailsAdapter
+from app.utils.async_file_utils import async_exists, get_file_id_from_xattr
 
 _RUNTIME_DETAIL_FIELDS = frozenset(
     {
@@ -80,13 +85,37 @@ class ElementDetailsQueryService:
             for connection in project.canvas.connections
             if connection.source_element_id in selected or connection.target_element_id in selected
         )
+        projected: list[CanvasElementDetailResult] = []
+        paths = ProjectAssetPathResolver(self.repository.workspace)
+        geometry = CanvasSpatialGeometry(project.canvas)
+        for element in requested:
+            dto = self.element_details_dto(element, merged_details.get(element.element_id, {}), connections, tree)
+            contents: list[CanvasContentDetailResult] = []
+            for content in dto.contents:
+                if content.asset_path and "://" not in content.asset_path and not content.asset_path.startswith("data:"):
+                    try:
+                        reference = paths.to_workspace_reference_path(project_path, content.asset_path)
+                    except ValueError:
+                        sidecar_warnings.append(
+                            f"Element {element.element_id} Content {content.content_id} has an unresolved Workspace file path."
+                        )
+                        contents.append(replace(content, file_name=None))
+                        continue
+                    path = self.repository.workspace / reference
+                    exists = await async_exists(path)
+                    content = replace(
+                        content, file_exists=exists,
+                        file_id=await get_file_id_from_xattr(path) if exists else None,
+                        file_name=path.name if exists else None,
+                    )
+                unlocked = all(e.properties.locked is not True for e in [element, *geometry.ancestors(element.element_id)])
+                available = element.element_type == "image" and unlocked and bool(content.file_exists and content.file_id) and content.status not in {"pending", "processing"}
+                contents.append(replace(content, can_rename_file=available, file_rename_reason=None if available else "The Element or its parent is locked." if not unlocked else "No completed, resolved Workspace image file is available for this version."))
+            projected.append(replace(dto, contents=tuple(contents)))
         return CanvasElementsResult(
             project_path=project_path,
             details_complete=not sidecar_warnings,
-            elements=tuple(
-                self.element_details_dto(element, merged_details.get(element.element_id, {}), connections, tree)
-                for element in requested
-            ),
+            elements=tuple(projected),
             connections=connections,
             warnings=tuple(sidecar_warnings),
         )
@@ -113,7 +142,7 @@ class ElementDetailsQueryService:
             z_index=element.properties.z_index,
         )
         contents: list[CanvasContentDetailResult] = []
-        for content in element.contents:
+        for version_index, content in enumerate(element.contents, 1):
             detail = details.get(content.content_id, {})
             payload = {
                 key: value
@@ -123,7 +152,16 @@ class ElementDetailsQueryService:
                 } | generated_request_fields()
             }
             generation_request = find_generation_request(detail)
+            parameters = detail.get("generationParameters")
+            if not isinstance(parameters, dict):
+                parameters = generation_request[1] if generation_request else {}
             contents.append(CanvasContentDetailResult(
+                version_index=version_index,
+                file_name=(PurePosixPath(content.fields.asset_path).name
+                           if content.fields.asset_path and "://" not in content.fields.asset_path else None),
+                generation_name=str(parameters["name"]) if parameters.get("name") else None,
+                is_current=content.content_id == element.active_content_id,
+                is_main=content.content_id == element.main_content_id,
                 content_id=content.content_id,
                 status=content.fields.generation_status,
                 asset_path=content.fields.asset_path,

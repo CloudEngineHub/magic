@@ -184,6 +184,11 @@ from app.tools.design.tools import (
 
 # 独立 Canvas Agent 工具集；不复用旧 Design Canvas 工具实现
 from app.tools.canvas import (
+    QueryCanvasLayout,
+    ArrangeCanvasElements,
+    RenameCanvasElements,
+    ManageCanvasElements,
+    DeleteCanvasElements,
     AddCanvasContents,
     AddCanvasElements,
     FrameCanvasElements,
@@ -473,6 +478,11 @@ __all__ = [
     "UpsertStoryboard",
 
     # 独立 Canvas Agent 工具
+    "QueryCanvasLayout",
+    "ArrangeCanvasElements",
+    "RenameCanvasElements",
+    "ManageCanvasElements",
+    "DeleteCanvasElements",
     "AddCanvasContents",
     "AddCanvasElements",
     "InitializeCanvas",
