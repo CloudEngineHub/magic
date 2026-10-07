@@ -2,8 +2,10 @@ import { useEffect, useRef, useState } from "react"
 import { useMemoizedFn } from "ahooks"
 import { useTranslation } from "react-i18next"
 import type { Editor, JSONContent } from "@/infrastructure/editors/tiptap/core"
+import { NodeSelection } from "@/infrastructure/editors/tiptap/pm-state"
 import { isInternationalEnv, isPrivateDeployment } from "@/utils/env"
 import { findWechatChat } from "../extensions/wechat-chat-history/commands"
+import { WECHAT_CHAT_HISTORY } from "../extensions/wechat-chat-history/types"
 import {
 	createWechatChat,
 	serializeWechatInstruction,
@@ -50,7 +52,23 @@ export function useWechatChatImport(editor: Editor | null, enabled: boolean, ses
 			[{ type: "paragraph" }],
 			t("wechatChat.instructionPlaceholder"),
 		)
-		if (!editor.commands.insertContent([block, { type: "paragraph" }])) return
+		const selection = editor.state.selection
+		let afterChat: number | undefined =
+			selection instanceof NodeSelection && selection.node.type.name === WECHAT_CHAT_HISTORY
+				? selection.to
+				: undefined
+		for (let depth = selection.$from.depth; depth > 0; depth--) {
+			if (selection.$from.node(depth).type.name !== WECHAT_CHAT_HISTORY) continue
+			afterChat = selection.$from.after(depth)
+			break
+		}
+		// 工具栏可以在区块内点击；新导入放在当前区块后，不覆盖聊天或局部要求。
+		const content: JSONContent[] = [block, { type: "paragraph" }]
+		const inserted =
+			afterChat === undefined
+				? editor.commands.insertContent(content)
+				: editor.commands.insertContentAt(afterChat, content)
+		if (!inserted) return
 		const id = block.attrs?.id as string
 		const location = findWechatChat(editor, id)
 		if (location) editor.commands.setTextSelection(location.position + 2)
@@ -105,6 +123,11 @@ export function useWechatChatImport(editor: Editor | null, enabled: boolean, ses
 		(event: KeyboardEvent) => slash.current?.handleKeyDown(event) ?? false,
 	)
 	const isOpen = useMemoizedFn(() => activeRef.current !== null)
+	const openCommandMenu = useMemoizedFn((anchor: HTMLElement) => {
+		if (!available || !editor?.isEditable || activeRef.current) return
+		AiCompletionService.disable()
+		slash.current?.open(anchor)
+	})
 	useEffect(() => {
 		if (!editor || !available) return
 		const controller = installWechatSlashCommand(editor, setMenu, openImport)
@@ -135,6 +158,7 @@ export function useWechatChatImport(editor: Editor | null, enabled: boolean, ses
 		}
 	}, [editor])
 	useEffect(() => {
+		slash.current?.dismiss()
 		activeRef.current = null
 		setActiveId(null)
 		setMenu(null)
@@ -152,7 +176,8 @@ export function useWechatChatImport(editor: Editor | null, enabled: boolean, ses
 		onImported,
 		handleKeyDown,
 		isOpen,
-		dismissMenu: () => slash.current?.dismiss(),
+		openCommandMenu,
+		dismissMenu: (restoreFocus = false) => slash.current?.dismiss(restoreFocus),
 	}
 }
 

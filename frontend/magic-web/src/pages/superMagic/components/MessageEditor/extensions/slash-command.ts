@@ -14,6 +14,8 @@ export interface SlashMenuState {
 	query: string
 	rect: DOMRect
 	choose: () => void
+	anchor?: HTMLElement
+	onQueryChange?: (query: string) => void
 }
 export const matchesWechatCommand = (query: string) =>
 	["微信聊天记录", "wechat", "chat", "wx"].some((name) =>
@@ -29,6 +31,32 @@ export function installWechatSlashCommand(
 	const inputKey = new PluginKey("wechatSlashInput")
 	let inputFrom = -1
 	let current: SuggestionProps<CommandItem> | null = null
+	let buttonMenu: { anchor: HTMLElement; query: string } | null = null
+	const dismiss = (restoreFocus = false) => {
+		const wasButtonMenu = buttonMenu !== null
+		buttonMenu = null
+		onMenu(null)
+		if (!editor.isDestroyed) exitSuggestion(editor.view, key)
+		if (restoreFocus && wasButtonMenu && !editor.isDestroyed) editor.commands.focus()
+	}
+	const publishButtonMenu = () => {
+		if (!buttonMenu) return
+		onMenu({
+			query: buttonMenu.query,
+			rect: buttonMenu.anchor.getBoundingClientRect(),
+			anchor: buttonMenu.anchor,
+			choose: () => {
+				if (!buttonMenu) return
+				dismiss()
+				onChoose()
+			},
+			onQueryChange: (query) => {
+				if (!buttonMenu) return
+				buttonMenu.query = query
+				publishButtonMenu()
+			},
+		})
+	}
 	const publish = (props: SuggestionProps<CommandItem>) => {
 		current = props
 		const rect = props.clientRect?.()
@@ -88,25 +116,35 @@ export function installWechatSlashCommand(
 		}),
 	)
 	return {
-		dismiss() {
-			exitSuggestion(editor.view, key)
+		open(anchor: HTMLElement) {
+			if (!editor.isEditable || editor.isDestroyed) return
+			// 按钮复用同一菜单，但搜索不写入正文；仅键盘 / 入口需要删除触发范围。
+			dismiss()
+			buttonMenu = { anchor, query: "" }
+			publishButtonMenu()
 		},
+		dismiss,
 		handleKeyDown(event: KeyboardEvent): boolean {
-			if (!current) return false
+			if (!current && !buttonMenu) return false
 			if (event.isComposing) return false
 			if (event.key === "Escape") {
-				exitSuggestion(editor.view, key)
+				dismiss(true)
 				return true
 			}
 			if (event.key === "Enter") {
-				if (matchesWechatCommand(current.query))
+				if (current && matchesWechatCommand(current.query))
 					current.command({ id: "wechat-chat-history" })
+				else if (buttonMenu && matchesWechatCommand(buttonMenu.query)) {
+					dismiss()
+					onChoose()
+				}
 				return true
 			}
 			return event.key === "ArrowDown" || event.key === "ArrowUp"
 		},
 		dispose() {
 			current = null
+			buttonMenu = null
 			onMenu(null)
 			if (!editor.isDestroyed) {
 				editor.unregisterPlugin(inputKey)

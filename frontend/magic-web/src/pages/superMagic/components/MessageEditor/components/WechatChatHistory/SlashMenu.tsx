@@ -5,6 +5,7 @@ import {
 	Command,
 	CommandEmpty,
 	CommandGroup,
+	CommandInput,
 	CommandItem,
 	CommandList,
 } from "@/components/shadcn-ui/command"
@@ -16,7 +17,7 @@ export default function SlashMenu({
 	onDismiss,
 }: {
 	menu: SlashMenuState | null
-	onDismiss: () => void
+	onDismiss: (restoreFocus?: boolean) => void
 }) {
 	const { t } = useTranslation("super")
 	if (!menu) return null
@@ -27,17 +28,44 @@ export default function SlashMenu({
 				if (!open) onDismiss()
 			}}
 		>
-			<PopoverAnchor virtualRef={{ current: { getBoundingClientRect: () => menu.rect } }} />
+			<PopoverAnchor
+				virtualRef={{
+					current: {
+						getBoundingClientRect: () =>
+							menu.anchor?.getBoundingClientRect() ?? menu.rect,
+					},
+				}}
+			/>
 			<PopoverContent
 				side="top"
 				align="start"
 				sideOffset={8}
 				collisionPadding={16}
 				className="w-80 max-w-[calc(100vw-32px)] rounded-xl p-1.5"
-				onOpenAutoFocus={(event) => event.preventDefault()}
+				onOpenAutoFocus={(event) => {
+					if (!menu.onQueryChange) event.preventDefault()
+				}}
 				onCloseAutoFocus={(event) => event.preventDefault()}
+				onEscapeKeyDown={(event) => {
+					event.preventDefault()
+					onDismiss(true)
+				}}
+				onInteractOutside={(event) => {
+					// 触发按钮自己负责切换，避免外部点击先关闭、click 随后又打开。
+					if (event.target instanceof Node && menu.anchor?.contains(event.target))
+						event.preventDefault()
+				}}
 			>
 				<Command shouldFilter={false} value="wechat-chat-history">
+					{menu.onQueryChange && (
+						<CommandInput
+							autoFocus
+							value={menu.query}
+							onValueChange={menu.onQueryChange}
+							placeholder={t("wechatChat.searchCommands")}
+							aria-label={t("wechatChat.searchCommands")}
+						/>
+					)}
 					<ScrollArea className="max-h-64">
 						<CommandList className="max-h-none overflow-visible">
 							<CommandGroup heading={t("wechatChat.importGroup")}>

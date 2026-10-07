@@ -1080,6 +1080,7 @@ export const MessageEditorContainer = observer(
 				isTaskRunning,
 				isUploadingFiles: !isAllFilesUploaded,
 				voiceInputEnabled,
+				commandMenu: wechatChat,
 				stopEventLoading: effectiveStopEventLoading,
 				isEditingQueueItem: isEditingQueueItem ?? false,
 				selectedTopic,

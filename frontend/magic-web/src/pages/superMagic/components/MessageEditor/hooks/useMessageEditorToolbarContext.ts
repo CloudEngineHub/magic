@@ -31,6 +31,7 @@ interface UseMessageEditorToolbarContextParams {
 	isEditingQueueItem: boolean
 	isUploadingFiles: boolean
 	voiceInputEnabled: boolean
+	commandMenu?: ButtonRendererContext["commandMenu"]
 	selectedTopic?: Topic | null
 	selectedProject?: ProjectListItem | null
 	topicMode?: TopicMode
@@ -68,6 +69,7 @@ function useMessageEditorToolbarContext({
 	isEditingQueueItem,
 	isUploadingFiles,
 	voiceInputEnabled,
+	commandMenu,
 	selectedTopic,
 	selectedProject,
 	topicMode,
@@ -103,6 +105,7 @@ function useMessageEditorToolbarContext({
 			isTaskRunning,
 			isUploadingFiles,
 			voiceInputEnabled,
+			commandMenu,
 			stopEventLoading,
 			isEditingQueueItem,
 			selectedTopic,
@@ -139,6 +142,7 @@ function useMessageEditorToolbarContext({
 			isTaskRunning,
 			isUploadingFiles,
 			voiceInputEnabled,
+			commandMenu,
 			stopEventLoading,
 			isEditingQueueItem,
 			selectedTopic,
