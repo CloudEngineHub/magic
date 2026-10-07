@@ -5,6 +5,11 @@ import { useTranslation } from "react-i18next"
 import { Check, X } from "lucide-react"
 import type { Editor } from "@/infrastructure/editors/tiptap/core"
 import { useIsMobile } from "@/hooks/useIsMobile"
+import { useDialogWindowFrame } from "@/pages/superMagic/hooks/useDialogWindowFrame"
+import {
+	DialogRestoreSizeButton,
+	DialogWindowDecorations,
+} from "@/pages/superMagic/components/DialogWindow"
 import { Button } from "@/components/shadcn-ui/button"
 import {
 	Dialog,
@@ -53,6 +58,12 @@ export default observer(function EditorHost({
 	const [host] = useState(() => document.createElement("div"))
 	host.className = "flex h-full min-h-0 flex-col"
 	const open = controller.activeId !== null
+	const windowFrame = useDialogWindowFrame(open && !mobile, {
+		storageKeyPrefix: "super_magic/wechat_chat_history_dialog",
+		recommendedSize: { width: 1400, height: 960 },
+		viewportRatio: { width: 0.94, height: 0.88 },
+		minSize: { width: 840, height: 520 },
+	})
 	const location =
 		editor && controller.activeId ? findWechatChat(editor, controller.activeId) : null
 	const sourceNode = location?.node
@@ -99,7 +110,13 @@ export default observer(function EditorHost({
 	)
 	const body = (
 		<>
-			<div className="flex shrink-0 items-center justify-between gap-4 border-b px-5 py-4">
+			<div
+				data-dialog-drag-handle={!mobile || undefined}
+				className={cn(
+					"flex shrink-0 items-center justify-between gap-4 border-b px-5 py-4",
+					!mobile && "cursor-grab touch-none select-none active:cursor-grabbing",
+				)}
+			>
 				<div className="min-w-0">
 					{mobile ? (
 						<SheetTitle className="text-sm">{title}</SheetTitle>
@@ -108,6 +125,7 @@ export default observer(function EditorHost({
 					)}
 				</div>
 				<div className="flex shrink-0 items-center gap-5">
+					{!mobile && <DialogRestoreSizeButton frame={windowFrame} />}
 					<label className="flex items-center gap-2 text-xs text-muted-foreground">
 						<span>{t("wechatChat.syncScroll")}</span>
 						<Switch
@@ -140,9 +158,10 @@ export default observer(function EditorHost({
 					</TabsList>
 				</Tabs>
 			)}
+			{/* 只裁剪两侧内容，保留窗口外侧的尺寸调整热区和引导。 */}
 			<div
 				className={cn(
-					"grid min-h-0 flex-1",
+					"grid min-h-0 flex-1 overflow-hidden",
 					!mobile && "grid-cols-[minmax(0,1fr)_minmax(0,1fr)]",
 				)}
 			>
@@ -224,6 +243,7 @@ export default observer(function EditorHost({
 						side="bottom"
 						showClose={false}
 						className="flex h-[92dvh] flex-col gap-0 p-0"
+						onInteractOutside={(event) => event.preventDefault()}
 						onOpenAutoFocus={(event) => event.preventDefault()}
 						onCloseAutoFocus={(event) => event.preventDefault()}
 					>
@@ -242,7 +262,9 @@ export default observer(function EditorHost({
 				>
 					<DialogContent
 						showCloseButton={false}
-						className="flex h-[min(88dvh,960px)] w-[min(1400px,calc(100vw-48px))] max-w-none flex-col gap-0 overflow-hidden p-0 sm:max-w-none"
+						windowOptions={windowFrame.windowOptions}
+						className="flex flex-col gap-0 p-0"
+						onInteractOutside={(event) => event.preventDefault()}
 						onOpenAutoFocus={(event) => event.preventDefault()}
 						onCloseAutoFocus={() => {
 							editor?.commands.focus()
@@ -252,6 +274,7 @@ export default observer(function EditorHost({
 							{t("wechatChat.confirmHint")}
 						</DialogDescription>
 						{body}
+						<DialogWindowDecorations frame={windowFrame} />
 					</DialogContent>
 				</Dialog>
 			)}

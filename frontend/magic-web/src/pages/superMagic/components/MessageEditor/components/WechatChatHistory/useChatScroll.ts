@@ -20,6 +20,7 @@ export function useChatScroll(
 	scrollRequest: number,
 ) {
 	const [synced, setSynced] = useState(true)
+	const hasMessages = messages.length > 0
 	const lastSide = useRef<Side>("left")
 	const anchor = useRef<Anchor>({ index: 0, progress: 0, bottom: true })
 	const expected = useRef<Partial<Record<Side, number>>>({})
@@ -70,7 +71,7 @@ export function useChatScroll(
 	})
 	const write = useMemoizedFn((side: Side, value: Anchor) => {
 		const viewport = side === "left" ? left.current : right.current
-		if (!viewport) return
+		if (!viewport || !hasMessages) return
 		let next = viewport.scrollHeight
 		if (!value.bottom) {
 			let low = 0
@@ -109,7 +110,7 @@ export function useChatScroll(
 	})
 	const toggle = useMemoizedFn((value: boolean) => {
 		setSynced(value)
-		if (value) {
+		if (value && hasMessages) {
 			anchor.current = read(lastSide.current)
 			write(lastSide.current === "left" ? "right" : "left", anchor.current)
 		}
@@ -131,15 +132,20 @@ export function useChatScroll(
 	}, [editor])
 	useEffect(() => {
 		if (!openId) return
+		// 空导入显示教程，应从第一步开始阅读；有消息时才定位最新消息并联动两侧。
+		if (!hasMessages) {
+			if (right.current) right.current.scrollTop = 0
+			return
+		}
 		const frame = requestAnimationFrame(() => {
 			anchor.current = { index: 0, progress: 1, bottom: true }
 			write("left", anchor.current)
 			write("right", anchor.current)
 		})
 		return () => cancelAnimationFrame(frame)
-	}, [openId, scrollRequest, left, right, write])
+	}, [openId, scrollRequest, hasMessages, left, right, write])
 	useEffect(() => {
-		if (!openId) return
+		if (!openId || !hasMessages) return
 		const leftViewport = left.current
 		const rightViewport = right.current
 		const leftScroll = () => onScroll("left")
@@ -160,6 +166,6 @@ export function useChatScroll(
 			leftViewport?.removeEventListener("scroll", leftScroll)
 			rightViewport?.removeEventListener("scroll", rightScroll)
 		}
-	}, [openId, synced, messages, left, right, onScroll, write])
+	}, [openId, synced, hasMessages, messages, left, right, onScroll, write])
 	return { synced, toggle }
 }
