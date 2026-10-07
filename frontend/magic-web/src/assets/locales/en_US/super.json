@@ -4806,8 +4806,10 @@
 		"uploadImageSizeLimit": "The file size should be less than 2MB."
 	},
 	"operationResultList": {
+		"collapse": "Collapse result list",
 		"detailsShort": "Details",
 		"directory": "Folder",
+		"expand": "Expand result list",
 		"file": "File",
 		"generationDetails": "Generation details",
 		"interrupted": "Operation interrupted",
@@ -4817,6 +4819,7 @@
 		"locateShort": "Locate",
 		"openGenerationDetails": "View generation details: {{label}}",
 		"openImage": "View image: {{label}}",
+		"openReport": "View analysis details",
 		"running": "Processing",
 		"summary": "{{success}} succeeded · {{error}} failed",
 		"summaryCompleted": "{{count}} completed",

@@ -27,6 +27,7 @@ export function ToolCallRenderer({
 			<OperationResultList
 				toolData={toolData}
 				loading={loading}
+				onSelectDetail={onSelectDetail}
 				className={classNames}
 				onMouseEnter={onMouseEnter}
 				onMouseLeave={onMouseLeave}

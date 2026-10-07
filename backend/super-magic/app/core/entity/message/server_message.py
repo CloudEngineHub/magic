@@ -370,12 +370,20 @@ class OperationResultListContent(BaseModel):
     items: list[OperationResultItem] = Field(min_length=1)
 
 
+class OperationResultListReportContent(FileContent):
+    """图片清单随消息保存；报告正文保留在顶层，沿用既有文件化出口。"""
+
+    items: list[OperationResultItem] = Field(min_length=1)
+    file_id: str | None = None
+    file_extension: str | None = None
+
+
 class ToolDetail(BaseModel):
     """工具详情模型"""
 
     type: DisplayType  # 展示类型
     data: Union[
-        FileContent, FileTreeContent, TerminalContent, BrowserContent, SearchContent,
+        OperationResultListReportContent, FileContent, FileTreeContent, TerminalContent, BrowserContent, SearchContent,
         ScriptExecutionContent, DeepWriteContent, TodoContent, DesignCanvasContent, DesignElementContent,
         AskUserQuestionContent, AskUserResultContent, PlanToolContent, OperationResultListContent, Dict[str, Any]
     ]  # 展示内容，根据type动态展示

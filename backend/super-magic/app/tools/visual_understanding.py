@@ -3,6 +3,7 @@ import re
 from collections import Counter
 from pathlib import Path
 from typing import Any, Dict, List, Optional
+from urllib.parse import urlsplit
 
 from pydantic import Field
 
@@ -16,6 +17,7 @@ from app.core.entity.message.server_message import (
     OperationResultFileTarget,
     OperationResultItem,
     OperationResultListContent,
+    OperationResultListReportContent,
     OperationResultTargetType,
     ToolDetail,
 )
@@ -476,33 +478,16 @@ class VisualUnderstanding(WorkspaceTool[VisualUnderstandingParams]):
                 images: list[str] = result.extra_info["images"]
                 names = Counter(Path(image).name for image in images)
                 workspace_dir = PathManager.get_workspace_dir().resolve()
-                items: list[OperationResultItem] = []
                 # 原生工具完成的是图片输入准备；分析结论由后续 Agent 回复承接。
                 # 单图、多图共用结果列表，项目外图片保留状态，但不提供错误的文件入口。
-                for image in images:
-                    image_path = Path(image)
-                    target: OperationResultFileTarget | None = None
-                    description = ""
-                    try:
-                        relative_path = image_path.resolve().relative_to(workspace_dir).as_posix()
-                        target = OperationResultFileTarget(
-                            type=OperationResultTargetType.FILE,
-                            relative_file_path=relative_path,
-                        )
-                        if names[image_path.name] > 1:
-                            description = relative_path
-                    except ValueError:
-                        description = i18n.translate(
-                            "visual_understanding.preview_unavailable", category="tool.messages"
-                        )
-                    items.append(OperationResultItem(
-                        label=image_path.name,
-                        kind="file",
-                        status="success",
-                        message=i18n.translate("visual_understanding.image_loaded", category="tool.messages"),
-                        description=description,
-                        target=target,
-                    ))
+                items = [self._build_image_result_item(
+                    source=image,
+                    name=Path(image).name,
+                    success=True,
+                    message=i18n.translate("visual_understanding.image_loaded", category="tool.messages"),
+                    duplicate_name=names[Path(image).name] > 1,
+                    workspace_dir=workspace_dir,
+                ) for image in images]
                 return ToolDetail(
                     type=DisplayType.OPERATION_RESULT_LIST,
                     data=OperationResultListContent(items=items),
@@ -515,6 +500,32 @@ class VisualUnderstanding(WorkspaceTool[VisualUnderstandingParams]):
             elif image_count > 1:
                 title = i18n.translate("visual_understanding.multiple", category="tool.messages", count=image_count)
 
+            if result.ok and result.extra_info and "batch_results" in result.extra_info:
+                batch_results: BatchImageProcessingResults = result.extra_info["batch_results"]
+                names = Counter(self._get_image_result_name(image.source) for image in batch_results.results)
+                workspace_dir = PathManager.get_workspace_dir().resolve()
+                # 例：4 张输入中 1 张预处理失败，报告只分析其余 3 张，清单仍保留失败项。
+                # 导航使用输入原图，不能指向 finally 会清理的临时复制文件。
+                items = [self._build_image_result_item(
+                    source=image.source,
+                    name=self._get_image_result_name(image.source),
+                    success=image.success,
+                    message=i18n.translate(
+                        "visual_understanding.image_analyzed" if image.success else "visual_understanding.image_not_analyzed",
+                        category="tool.messages",
+                    ),
+                    duplicate_name=names[self._get_image_result_name(image.source)] > 1,
+                    workspace_dir=workspace_dir,
+                ) for image in batch_results.results]
+                return ToolDetail(
+                    type=DisplayType.OPERATION_RESULT_LIST,
+                    data=OperationResultListReportContent(
+                        items=items,
+                        file_name=i18n.translate("visual_understanding.result_file", category="tool.messages"),
+                        content=f"## {title}\n\n{result.content}",
+                    ),
+                )
+
             # 返回Markdown格式的视觉理解内容
             return ToolDetail(
                 type=DisplayType.MD,
@@ -526,6 +537,47 @@ class VisualUnderstanding(WorkspaceTool[VisualUnderstandingParams]):
         except Exception as e:
             logger.error(f"生成工具详情失败: {e!s}")
             return None
+
+    def _get_image_result_name(self, source: str) -> str:
+        """卡片只显示文件名，不能透传沙盒路径、签名 URL 或内联图片数据。"""
+        if source.startswith("data:"):
+            return i18n.translate("visual_understanding.external_image", category="tool.messages")
+        if re.match(r"^https?://", source, re.IGNORECASE):
+            return Path(urlsplit(source).path).name or i18n.translate(
+                "visual_understanding.external_image", category="tool.messages"
+            )
+        return Path(source).name
+
+    def _build_image_result_item(
+        self,
+        source: str,
+        name: str,
+        success: bool,
+        message: str,
+        duplicate_name: bool,
+        workspace_dir: Path,
+    ) -> OperationResultItem:
+        """原生与非原生共用原图入口，URL／项目外图片仅显示安全名称和状态。"""
+        target: OperationResultFileTarget | None = None
+        description = i18n.translate("visual_understanding.preview_unavailable", category="tool.messages")
+        if not source.startswith("data:") and not re.match(r"^https?://", source, re.IGNORECASE):
+            try:
+                relative_path = Path(source).resolve().relative_to(workspace_dir).as_posix()
+                target = OperationResultFileTarget(
+                    type=OperationResultTargetType.FILE,
+                    relative_file_path=relative_path,
+                )
+                description = relative_path if duplicate_name else ""
+            except ValueError:
+                pass
+        return OperationResultItem(
+            label=name,
+            kind="file",
+            status="success" if success else "error",
+            message=message,
+            description=description,
+            target=target,
+        )
 
     def _get_remark_content(self, result: ToolResult, arguments: Dict[str, Any] = None) -> str:
         """获取备注内容"""

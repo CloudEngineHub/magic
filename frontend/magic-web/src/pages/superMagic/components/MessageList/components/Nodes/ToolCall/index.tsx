@@ -113,6 +113,7 @@ function ToolCall(props: NodeProps) {
 			<OperationResultList
 				toolData={tool}
 				loading={loading}
+				onSelectDetail={onSelectDetail}
 				className={props.classNames?.markdown}
 				onMouseEnter={props.onMouseEnter}
 				onMouseLeave={props.onMouseLeave}

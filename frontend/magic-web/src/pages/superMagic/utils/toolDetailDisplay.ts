@@ -26,6 +26,7 @@ export function getOperationResultListData(
 	const { items } = detail.data
 	if (!Array.isArray(items) || items.length === 0 || !items.every(isOperationResultItem)) return
 	return {
+		...detail.data,
 		items: items.map((item) => ({
 			...item,
 			target: isCanvasElementTarget(item.target)
@@ -39,6 +40,19 @@ export function getOperationResultListData(
 					: undefined,
 		})),
 	}
+}
+
+/** 列表仍留在消息里；报告正文或持久化 file_id 通过原 Markdown 入口打开。 */
+export function getOperationResultListReportDetail(
+	detail: unknown,
+): { type: DetailType.Md; data: Record<string, unknown> } | undefined {
+	if (!isRecord(detail) || !isInlineToolDetail(detail) || !isRecord(detail.data)) return
+	const data = detail.data
+	if (!getString(data.file_name) || (!getString(data.content) && !getString(data.file_id))) return
+	// 只改变本次展示目标，不改写消息里的清单、正文或文件引用。
+	const reportData = { ...data }
+	delete reportData.items
+	return { type: DetailType.Md, data: reportData }
 }
 
 /**

@@ -1,17 +1,21 @@
 import { useId, type MouseEventHandler, type ReactNode } from "react"
 import { observer } from "mobx-react-lite"
-import { ChevronRight, CircleAlert, CircleCheck, CircleX, Loader2 } from "lucide-react"
+import { ChevronRight, CircleAlert, CircleCheck, CircleX, Loader2, MonitorPlay } from "lucide-react"
 import { useTranslation } from "react-i18next"
 import { Button } from "@/components/shadcn-ui/button"
 import { ScrollArea } from "@/components/shadcn-ui/scroll-area"
 import SmartTooltip from "@/components/other/SmartTooltip"
+import MagicTooltip from "@/components/base/MagicTooltip"
 import { cn } from "@/utils/cn"
-import { getOperationResultListData } from "@/pages/superMagic/utils/toolDetailDisplay"
+import {
+	getOperationResultListData,
+	getOperationResultListReportDetail,
+} from "@/pages/superMagic/utils/toolDetailDisplay"
 import { focusCanvasElementByProjectPath } from "@/pages/superMagic/components/Detail/contents/Design/utils/toolDesignProjectInfo"
 import { useMessageListProjectFilesStore } from "@/pages/superMagic/components/MessageList/context"
 import { ToolIconBadge } from "../../../shared/ToolIconConfig"
 import { useToggleWithScrollPreserve } from "../hooks/useToggleWithScrollPreserve"
-import { selectToolFile } from "../../toolDetailSelection"
+import { selectToolDetail, selectToolFile } from "../../toolDetailSelection"
 import OperationResultRow from "./OperationResultRow"
 
 interface OperationResultListProps {
@@ -25,6 +29,7 @@ interface OperationResultListProps {
 	}
 	loading?: boolean
 	className?: string
+	onSelectDetail?: (detail: unknown) => void
 	onMouseEnter?: MouseEventHandler
 	onMouseLeave?: MouseEventHandler
 }
@@ -33,6 +38,7 @@ function OperationResultList({
 	toolData,
 	loading = false,
 	className,
+	onSelectDetail,
 	onMouseEnter,
 	onMouseLeave,
 }: OperationResultListProps) {
@@ -42,6 +48,7 @@ function OperationResultList({
 	// 沿用消息作用域和滚动保护；虚拟行重新挂载仍保留用户的展开选择。
 	const [open, toggle] = useToggleWithScrollPreserve(false, "operation-result-list-expanded")
 	const items = getOperationResultListData(toolData.detail)?.items
+	const reportDetail = getOperationResultListReportDetail(toolData.detail)
 	const failedCount = items?.filter((item) => item.status === "error").length ?? 0
 	const successCount = (items?.length ?? 0) - failedCount
 	// 中断、响应缺失或无失败明细的工具异常可能保留占位行，不能据此宣布成功。
@@ -122,43 +129,89 @@ function OperationResultList({
 		>
 			{/* 收起、展开共用宽度；名称可收缩，状态与操作不被长名称挤出。 */}
 			<div className="min-w-0 overflow-hidden rounded-lg border border-border bg-card">
-				<Button
-					type="button"
-					variant="ghost"
-					onClick={toggle}
-					aria-expanded={open}
-					aria-controls={contentId}
-					className="grid h-auto min-h-10 w-full min-w-0 grid-cols-[minmax(0,1fr)_auto] items-start gap-x-2 gap-y-1 rounded-none px-3 py-2 text-left text-xs font-normal hover:bg-muted/30 focus-visible:ring-inset"
-				>
-					<span className="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1">
-						<span className="flex min-w-0 flex-1 basis-40 items-center gap-2">
-							<ToolIconBadge toolName={toolData.name} size={20} iconSize={12} />
-							<span className="min-w-0 whitespace-normal text-sm leading-5 text-foreground">
-								{toolData.action || t("operationResultList.title")}
+				{/* 标题、报告、箭头分别使用原生按钮；报告点击不冒泡成展开动作，也不嵌套按钮。 */}
+				<div className="flex min-w-0 items-start">
+					<Button
+						type="button"
+						variant="ghost"
+						onClick={toggle}
+						aria-expanded={open}
+						aria-controls={contentId}
+						className="grid h-auto min-h-10 min-w-0 flex-1 grid-cols-1 items-start gap-y-1 rounded-none py-2 pl-3 pr-1 text-left text-xs font-normal hover:bg-muted/30 focus-visible:ring-inset"
+					>
+						<span className="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1">
+							<span className="flex min-w-0 flex-1 basis-40 items-center gap-2">
+								<ToolIconBadge toolName={toolData.name} size={20} iconSize={12} />
+								<span className="min-w-0 whitespace-normal text-sm leading-5 text-foreground">
+									{toolData.action || t("operationResultList.title")}
+								</span>
 							</span>
+							{summary}
 						</span>
-						{summary}
-					</span>
-					<ChevronRight
-						size={16}
-						aria-hidden
-						className={cn(
-							"mt-0.5 shrink-0 text-muted-foreground transition-transform motion-reduce:transition-none",
-							open && "rotate-90",
+						{!open && remark && (
+							<SmartTooltip
+								fileName
+								elementType="span"
+								placement="top"
+								align="start"
+								className="min-w-0 pl-7 text-xs leading-4 text-muted-foreground"
+							>
+								{remark}
+							</SmartTooltip>
 						)}
-					/>
-					{!open && remark && (
-						<SmartTooltip
-							fileName
-							elementType="span"
-							placement="top"
-							align="start"
-							className="min-w-0 pl-7 text-xs leading-4 text-muted-foreground"
-						>
-							{remark}
-						</SmartTooltip>
+					</Button>
+					{reportDetail && (
+						<MagicTooltip title={t("operationResultList.openReport")}>
+							<Button
+								type="button"
+								variant="ghost"
+								size="icon"
+								className="mt-1.5 size-7 shrink-0"
+								aria-label={t("operationResultList.openReport")}
+								disabled={
+									loading || resultUnavailable || toolData.status === "error"
+								}
+								onClick={() =>
+									selectToolDetail({
+										detail: {
+											...reportDetail,
+											id: toolData.id,
+											name: toolData.name,
+											action: toolData.action,
+											remark: toolData.remark,
+										},
+										onSelectDetail,
+									})
+								}
+							>
+								<MonitorPlay size={16} className="text-foreground" aria-hidden />
+							</Button>
+						</MagicTooltip>
 					)}
-				</Button>
+					<Button
+						type="button"
+						variant="ghost"
+						size="icon"
+						className="mr-2 mt-1.5 size-7 shrink-0"
+						onClick={toggle}
+						aria-expanded={open}
+						aria-controls={contentId}
+						aria-label={
+							open
+								? t("operationResultList.collapse")
+								: t("operationResultList.expand")
+						}
+					>
+						<ChevronRight
+							size={16}
+							aria-hidden
+							className={cn(
+								"text-muted-foreground transition-transform motion-reduce:transition-none",
+								open && "rotate-90",
+							)}
+						/>
+					</Button>
+				</div>
 				{open && (
 					<div id={contentId} className="border-t border-border">
 						{items?.length ? (

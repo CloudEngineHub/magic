@@ -907,6 +907,18 @@
         "zh_CN": "图片已载入",
         "en_US": "Image loaded"
     },
+    "visual_understanding.image_analyzed": {
+        "zh_CN": "已参与分析",
+        "en_US": "Included in the analysis"
+    },
+    "visual_understanding.external_image": {
+        "zh_CN": "外部图片",
+        "en_US": "External image"
+    },
+    "visual_understanding.image_not_analyzed": {
+        "zh_CN": "未能载入，未参与分析",
+        "en_US": "Could not load; excluded from the analysis"
+    },
     "visual_understanding.images_loaded": {
         "zh_CN": "已载入 {{count}} 张图片",
         "en_US": "Loaded {{count}} images"

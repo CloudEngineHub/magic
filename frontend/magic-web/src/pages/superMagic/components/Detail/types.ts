@@ -111,9 +111,21 @@ export interface OperationResultItem {
 	target?: OperationResultTarget
 }
 
-export interface DetailOperationResultListData {
+export interface DetailOperationResultListItemsData {
 	items: OperationResultItem[]
 }
+
+/** 正文与文件化引用保持顶层结构，卡片只提供原有 Markdown 详情入口。 */
+export interface DetailOperationResultListReportData extends DetailOperationResultListItemsData {
+	file_name: string
+	content: string
+	file_id?: string
+	storage_type?: string
+	file_extension?: string
+}
+
+export type DetailOperationResultListData =
+	DetailOperationResultListItemsData | DetailOperationResultListReportData
 
 /** 终端 Terminal */
 export interface TerminalToolInfo {
