@@ -157,7 +157,20 @@ export interface TokenUsageDetail {
 	cache_write_tokens: number
 }
 
+export interface ContextInputBreakdown {
+	source: "text_estimate"
+	system_tokens: number
+	tool_definition_tokens: number
+	skill_tokens: number
+	mcp_tokens: number
+	conversation_tokens: number
+	tool_result_tokens: number
+	contains_non_text_content: boolean
+	partial_attribution: boolean
+}
+
 export interface TokenUsage {
+	input_breakdown?: ContextInputBreakdown
 	input_tokens: number
 	output_tokens: number
 	total_tokens: number

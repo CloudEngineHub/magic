@@ -3,7 +3,7 @@ import { CircleHelp } from "lucide-react"
 import { useTranslation } from "react-i18next"
 import { ContextHelp } from "@/components/shadcn-composed/context-help"
 
-const ContextUsageHelpContent = lazy(() => import("./ContextUsageHelpContent"))
+const ContextUsageHelpBrowser = lazy(() => import("./ContextUsageHelpBrowser"))
 
 /** 复用全局帮助的简介、弹窗与焦点恢复；正文只在用户打开说明时加载。 */
 export default function ContextUsageHelp() {
@@ -12,19 +12,25 @@ export default function ContextUsageHelp() {
 	return (
 		<ContextHelp
 			mode="dialog"
+			header={{
+				title: t("ui.tokenUsage.guide.title"),
+				description: t("ui.tokenUsage.guide.subtitle"),
+			}}
+			renderDialog={(props) => <ContextUsageHelpBrowser {...props} />}
 			help={{
 				title: t("ui.tokenUsage.help.title"),
 				summary: t("ui.tokenUsage.help.summary"),
 				tone: "neutral",
-				renderBody: () => <ContextUsageHelpContent />,
+				renderBody: () => <p>{t("ui.tokenUsage.help.summary")}</p>,
 			}}
 		>
 			<button
 				type="button"
-				aria-label={t("ui.tokenUsage.help.label")}
-				className="flex size-6 shrink-0 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-fill hover:text-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+				aria-label={t("ui.tokenUsage.guide.label")}
+				className="flex h-7 shrink-0 items-center justify-center gap-1.5 rounded-md px-1.5 text-xs text-muted-foreground transition-colors hover:bg-fill hover:text-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
 			>
 				<CircleHelp size={16} aria-hidden />
+				{t("ui.tokenUsage.guide.label")}
 			</button>
 		</ContextHelp>
 	)

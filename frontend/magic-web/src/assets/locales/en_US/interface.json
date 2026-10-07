@@ -1488,6 +1488,7 @@
 		"collapse": "Collapse",
 		"contents": "Guide contents",
 		"dismiss": "Close file guide",
+		"dismissWithTitle": "Close {{title}}",
 		"example": "Example",
 		"expand": "Expand",
 		"furtherReading": "Further reading",

@@ -25,7 +25,7 @@ from agentlang.chat_history.chat_history_models import (
     format_duration_to_str, parse_duration_from_str,
     SystemMessage, UserMessage,
     UserMessageContentPart,
-    AssistantMessage, ToolMessage, ChatMessage,
+    AssistantMessage, ToolMessage, ChatMessage, ContextSource,
     FunctionCall, ToolCall, chat_message_from_dict
 )
 from agentlang.chat_history.session_config import SessionConfig
@@ -1766,7 +1766,8 @@ class ChatHistory:
                             tool_call_id: str,
                             system: Optional[str] = None,
                             show_in_ui: bool = False,
-                            duration_ms: Optional[float] = None) -> None:
+                            duration_ms: Optional[float] = None,
+                            context_source: ContextSource | None = None) -> None:
         """
         添加一条工具消息。
 
@@ -1784,7 +1785,8 @@ class ChatHistory:
             tool_call_id=tool_call_id,
             system=system,
             show_in_ui=show_in_ui,
-            duration_ms=duration_ms
+            duration_ms=duration_ms,
+            context_source=context_source,
         )
         await self.add_message(message)
 

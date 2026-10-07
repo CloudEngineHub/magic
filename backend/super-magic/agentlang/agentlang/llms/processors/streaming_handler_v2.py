@@ -25,6 +25,7 @@ from openai.types.completion_usage import CompletionUsage
 
 from agentlang.exceptions import StreamChunkTimeoutError, StreamInterruptedError, STREAMING_PASSTHROUGH_EXCEPTIONS
 from agentlang.interface.context import AgentContextInterface
+from agentlang.llms.token_usage.models import ContextInputBreakdown
 from agentlang.logger import get_logger
 from agentlang.streaming.interface import StreamingInterface
 from agentlang.streaming.models import ChunkData, ChunkDelta, ChunkMetadata, ChunkStatus
@@ -538,6 +539,7 @@ class StreamResponseHandlerV2(StreamResponseHandlerBase):
                 state=state,
                 usage=usage,
                 collected_chunks=collected_chunks,
+                input_breakdown=context.input_breakdown,
                 interrupted=state.interrupted_by_signal,
             )
 
@@ -560,6 +562,7 @@ class StreamResponseHandlerV2(StreamResponseHandlerBase):
         usage: Optional[CompletionUsage],
         collected_chunks: List[ChatCompletionChunk],
         interrupted: bool = False,
+        input_breakdown: ContextInputBreakdown | None = None,
     ) -> None:
         """流结束后统一触发一次 AFTER_AGENT_REPLY 事件，携带完整 content + reasoning + tool_calls。
 
@@ -591,6 +594,7 @@ class StreamResponseHandlerV2(StreamResponseHandlerBase):
             if usage:
                 try:
                     token_usage = TokenUsage.from_response(usage)
+                    token_usage.input_breakdown = input_breakdown
                     # 补充 model 信息和最大上下文 token 数，from_response 仅解析原始 token 计数
                     token_usage.model_id = model_id
                     token_usage.model_name = processor_config.model_name or model_id
