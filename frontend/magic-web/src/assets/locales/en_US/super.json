@@ -2468,6 +2468,8 @@
 			"target": "{{count}} selected · Destination: {{target}}"
 		},
 		"processing": "Processing…",
+		"recent": "Recently updated",
+		"recentEmpty": "No recently updated files",
 		"recycle": {
 			"back": "Back to files",
 			"permanentPhrase": "Permanently delete {{count}} items",

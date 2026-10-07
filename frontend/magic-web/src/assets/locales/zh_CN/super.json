@@ -2468,6 +2468,8 @@
 			"target": "已选 {{count}} 项 · 目标：{{target}}"
 		},
 		"processing": "正在处理…",
+		"recent": "最近更新",
+		"recentEmpty": "暂无最近更新的文件",
 		"recycle": {
 			"back": "返回文件",
 			"permanentPhrase": "永久删除 {{count}} 项",
