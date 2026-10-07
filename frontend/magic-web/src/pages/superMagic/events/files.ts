@@ -15,7 +15,34 @@ export type SuperMagicUpdateActiveFileIdArgs = [fileId: string]
  * 触发左侧文件树将指定文件滚动到可见区域并高亮。
  * 传入目标文件 ID。
  */
-export type SuperMagicLocateFileInTreeArgs = [fileId: string]
+export interface UploadedFileNavigationTarget {
+	projectId: string
+	fileId: string
+	identityKey: string
+}
+
+export function isUploadedFileNavigationTarget(
+	value: unknown,
+): value is UploadedFileNavigationTarget {
+	if (!value || typeof value !== "object") return false
+	return (
+		"projectId" in value &&
+		typeof value.projectId === "string" &&
+		"fileId" in value &&
+		typeof value.fileId === "string" &&
+		"identityKey" in value &&
+		typeof value.identityKey === "string"
+	)
+}
+
+export interface SuperMagicLocateFileContext {
+	projectId: string
+	exact?: boolean
+	signal?: AbortSignal
+	onResult?: (status: "located" | "unavailable" | "cancelled") => void
+}
+
+export type SuperMagicLocateFileInTreeArgs = [fileId: string, context?: SuperMagicLocateFileContext]
 
 /**
  * 请求刷新当前话题的附件列表。
@@ -64,10 +91,7 @@ export type SuperMagicEnterEditModeArgs = [fileId: string]
  * })
  */
 export type SuperMagicInsertDragDataToEditorPayload =
-	| TabDragData
-	| AttachmentDragData
-	| MultipleFilesDragData
-	| PPTSlideDragData
+	TabDragData | AttachmentDragData | MultipleFilesDragData | PPTSlideDragData
 
 export type SuperMagicInsertDragDataToEditorArgs = [
 	dragData: SuperMagicInsertDragDataToEditorPayload,

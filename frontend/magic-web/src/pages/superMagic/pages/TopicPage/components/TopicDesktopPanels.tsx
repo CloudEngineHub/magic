@@ -1,3 +1,11 @@
+import { useLocation } from "react-router"
+import pubsub, { PubSubEvents } from "@/utils/pubsub"
+import { projectStore } from "../../../stores/core"
+import { getFileReferenceIdentityKey } from "../../../services/userFileReferenceResolver"
+import {
+	isUploadedFileNavigationTarget,
+	type SuperMagicLocateFileContext,
+} from "../../../events/files"
 import type { FileSidebarControl } from "../../../components/Detail/components/FilesViewer/types"
 import {
 	useEffect,
@@ -164,6 +172,25 @@ function TopicDesktopPanels({
 			historyResize?.onWidthCommit(result.width)
 		},
 	})
+	const location = useLocation()
+	const currentProjectId = projectStore.selectedProject?.id
+	useEffect(() => {
+		const revealFiles = (_fileId: string, context?: SuperMagicLocateFileContext) => {
+			if (context?.projectId === projectStore.selectedProject?.id) expandProjectSider()
+		}
+		pubsub.subscribe(PubSubEvents.Locate_File_In_Tree, revealFiles)
+		return () => pubsub.unsubscribe(PubSubEvents.Locate_File_In_Tree, revealFiles)
+	}, [expandProjectSider])
+	useEffect(() => {
+		const target = location.state?.uploadedFileTarget
+		if (
+			isUploadedFileNavigationTarget(target) &&
+			target.projectId === currentProjectId &&
+			target.identityKey === getFileReferenceIdentityKey()
+		)
+			expandProjectSider()
+	}, [location.key, location.state?.uploadedFileTarget, expandProjectSider, currentProjectId])
+
 	const collapsedMessagePanelWidthPx =
 		collapsedConversationPanelWidth ?? defaultCollapsedMessagePanelWidthPx
 	// Preserve the stored project width while removing both its visual slot and resize affordance.

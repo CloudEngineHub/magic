@@ -269,7 +269,7 @@ export interface UseFileOperationsOptions {
 	onFileDelete?: (fileId: string) => Promise<void>
 	// 新增：文件创建成功回调
 	onFileCreated?: (fileItem: any) => void
-	onUpdateAttachments?: () => void
+	onUpdateAttachments?: (sourceProjectId?: string) => void
 	// 添加直接更新attachments的回调
 	onAttachmentsChange?: (attachments: AttachmentItem[]) => void
 	selectedProject?: ProjectListItem
@@ -379,7 +379,7 @@ export function useFileOperations(options: UseFileOperationsOptions = {}) {
 				uploadType: "file",
 				projectFiles: attachments || [],
 				uploadFileCount: files.length,
-				onUpdateAttachments,
+				onUpdateAttachments: () => onUpdateAttachments?.(projectId),
 			})
 			const currentProjectFileCount = refreshCoordinator.currentProjectFileCount
 			// 获取父文件夹路径
@@ -499,7 +499,7 @@ export function useFileOperations(options: UseFileOperationsOptions = {}) {
 				uploadType: "folder",
 				projectFiles: attachments || [],
 				uploadFileCount: files.length,
-				onUpdateAttachments,
+				onUpdateAttachments: () => onUpdateAttachments?.(projectId),
 			})
 			const currentProjectFileCount = refreshCoordinator.currentProjectFileCount
 			// 获取父文件夹ID
