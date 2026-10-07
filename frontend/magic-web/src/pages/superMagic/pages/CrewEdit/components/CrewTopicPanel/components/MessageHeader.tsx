@@ -4,7 +4,6 @@ import { type Topic, TaskStatus, ProjectListItem } from "@/pages/superMagic/page
 import pubsub, { PubSubEvents } from "@/utils/pubsub"
 import { useMemoizedFn, useMount } from "ahooks"
 import MagicModal from "@/components/base/MagicModal"
-import { GuideTourElementId } from "@/pages/superMagic/components/LazyGuideTour"
 import { SuperMagicApi } from "@/apis"
 import { observer } from "mobx-react-lite"
 import { superMagicStore } from "@/pages/superMagic/stores"
@@ -338,13 +337,6 @@ function MessageHeader({
 		}
 	})
 
-	useMount(() => {
-		pubsub.publish(
-			PubSubEvents.GuideTourElementReady,
-			GuideTourElementId.MessageHeaderTopicGroup,
-		)
-	})
-
 	return (
 		<>
 			<div
@@ -519,7 +511,6 @@ function MessageHeader({
 							{!shouldHideTopicEntry ? (
 								<div
 									className="flex items-center gap-1"
-									id={GuideTourElementId.MessageHeaderTopicGroup}
 									data-testid="message-header-topic-group"
 								>
 									<MagicTooltip title={t("messageHeader.newTopic")}>

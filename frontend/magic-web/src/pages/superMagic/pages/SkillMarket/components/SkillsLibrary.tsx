@@ -12,6 +12,7 @@ import { Skills } from "@/enhance/lucide-react"
 import { useFunctionPermission } from "@/hooks/useFunctionPermission"
 import { cn } from "@/utils/cn"
 import { configStore } from "@/models/config"
+import { HomeOnboardingAnchor } from "@/pages/superMagic/components/LazyGuideTour/GuideTourManager"
 import SkillActionDropdown from "@/pages/superMagic/components/SkillActionDropdown"
 import { SkillDetailDialog } from "@/pages/superMagic/components/SkillDetailDialog"
 import { useAutoLoadMoreSentinel } from "@/pages/superMagic/hooks/useAutoLoadMoreSentinel"
@@ -252,6 +253,7 @@ function SkillsLibrary({
 						variant="outline"
 						className="h-9 flex-1 gap-2 bg-background shadow-xs sm:flex-none"
 						onClick={handleMySkills}
+						data-guide-anchor={HomeOnboardingAnchor.SkillMarketMySkills}
 						data-testid="skills-library-my-skills-button"
 					>
 						<Skills className="size-4" />
@@ -278,6 +280,7 @@ function SkillsLibrary({
 							<span>
 								<Button
 									className="h-9 flex-1 gap-2 shadow-xs sm:flex-none"
+									data-guide-anchor={HomeOnboardingAnchor.SkillMarketCreate}
 									data-testid="skills-library-create-button"
 								>
 									<Plus className="size-4" />
@@ -295,16 +298,23 @@ function SkillsLibrary({
 				scrollViewportRef={scrollViewportRef}
 				data-testid="skills-library-sticky-header"
 			>
-				<SearchBar
-					value={searchQuery}
-					onChange={setSearchQuery}
-					onSearch={handleSearch}
-					onCompositionStart={onSearchCompositionStart}
-					onCompositionEnd={onSearchCompositionEnd}
-					placeholder={t("skillsLibrary.aiSearchPlaceholder")}
-					enableSearchSubmit
-					data-testid="skills-library-search-bar"
-				/>
+				{/*
+				 * The onboarding tour highlights the search field as one control. The anchor wraps
+				 * the bar instead of being passed into it: `SearchBar` is shared with the crew and
+				 * connector markets and knows nothing about guides.
+				 */}
+				<div data-guide-anchor={HomeOnboardingAnchor.SkillMarketSearch}>
+					<SearchBar
+						value={searchQuery}
+						onChange={setSearchQuery}
+						onSearch={handleSearch}
+						onCompositionStart={onSearchCompositionStart}
+						onCompositionEnd={onSearchCompositionEnd}
+						placeholder={t("skillsLibrary.aiSearchPlaceholder")}
+						enableSearchSubmit
+						data-testid="skills-library-search-bar"
+					/>
+				</div>
 				<SkillCategoryFilter
 					categories={skillsStore.categories}
 					selectedCategoryIds={skillsStore.categoryIds}

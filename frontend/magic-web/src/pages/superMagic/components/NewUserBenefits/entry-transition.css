@@ -1,0 +1,88 @@
+/*
+ * Folding the entry card cannot be animated as a size change. The open card is a 310px grid and
+ * the folded one an auto-width pill, and neither `width: auto` nor a `display` swap interpolates —
+ * the box has to jump. The motion is carried by the two keyframes below instead: the card pops,
+ * and whichever half becomes visible slides in from the side it settles on. 0.24s on one ease-out
+ * curve for all of them.
+ *
+ * Class names are global (this is a plain stylesheet, not a module), so they carry a prefix.
+ */
+.nb-entry-fold {
+	animation: nb-entry-fold 0.24s cubic-bezier(0.16, 1, 0.3, 1);
+	transform-origin: top right;
+}
+
+.nb-entry-unfold {
+	animation: nb-entry-unfold 0.24s cubic-bezier(0.16, 1, 0.3, 1);
+	transform-origin: top right;
+}
+
+/*
+ * The card's own children are the grid cells, so the body fade is hung off the unfold class rather
+ * than repeated on every cell — the card is the only thing that knows which state it is in.
+ */
+.nb-entry-unfold > * {
+	animation: nb-entry-body-in 0.24s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.nb-entry-pill-in {
+	animation: nb-entry-pill-in 0.24s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+/*
+ * Scaling about the top-right corner rather than the centre. The card is pinned to that corner
+ * (`right-4 top-20`), so the fold reads as the card shrinking into it and the unfold as it growing
+ * back out; scaling about the centre barely registers at these factors anyway.
+ */
+@keyframes nb-entry-fold {
+	from {
+		opacity: 0.5;
+		transform: scale(0.965);
+	}
+	to {
+		opacity: 1;
+		transform: none;
+	}
+}
+
+@keyframes nb-entry-unfold {
+	from {
+		opacity: 0.62;
+		transform: scale(0.972);
+	}
+	to {
+		opacity: 1;
+		transform: none;
+	}
+}
+
+@keyframes nb-entry-pill-in {
+	from {
+		opacity: 0;
+		transform: translateX(10px) scale(0.94);
+	}
+	to {
+		opacity: 1;
+		transform: none;
+	}
+}
+
+@keyframes nb-entry-body-in {
+	from {
+		opacity: 0;
+		transform: translateY(-5px);
+	}
+	to {
+		opacity: 1;
+		transform: none;
+	}
+}
+
+@media (prefers-reduced-motion: reduce) {
+	.nb-entry-fold,
+	.nb-entry-unfold,
+	.nb-entry-unfold > *,
+	.nb-entry-pill-in {
+		animation: none;
+	}
+}

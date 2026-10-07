@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react"
 import { IconPlus } from "@tabler/icons-react"
-import { useMemoizedFn, useCreation, useMount } from "ahooks"
+import { useMemoizedFn, useCreation } from "ahooks"
 import { AgentCommonModal } from "../../AgentCommonModal"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/shadcn-ui/popover"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/shadcn-ui/tooltip"
@@ -9,7 +9,6 @@ import MagicImage from "@/components/base/MagicImage"
 import { useTranslation } from "react-i18next"
 import pubsub, { PubSubEvents } from "@/utils/pubsub"
 import { getMCPAccess, loadMCPWithInstalledConnectorReconciliation } from "../store/mcp-access"
-import { GuideTourElementId } from "@/pages/superMagic/components/LazyGuideTour"
 import AgentSettings from "../AgentSettings"
 import MobileMCPPluginsSheet from "./MobileMCPPluginsSheet"
 import { cn } from "@/utils/cn"
@@ -191,16 +190,9 @@ function MCPButton(props?: MCPButtonProps) {
 		mcpEnabledStore.setEnabledIds(ids)
 	}, [activeMCPAccess.initialized, activeMCPIds])
 
-	useMount(() => {
-		pubsub.publish(PubSubEvents.GuideTourElementReady, GuideTourElementId.MCPButton)
-		// 按钮渲染后立即预加载弹窗组件
-		// preloadModalComponents()
-	})
-
 	const button = (
 		<button
 			type="button"
-			id={GuideTourElementId.MCPButton}
 			className={cn(
 				"flex items-center justify-center gap-1 rounded-md border-0 bg-[#f5f5f5] text-foreground transition-all hover:opacity-80 active:opacity-60",
 				"dark:bg-sidebar dark:text-foreground dark:hover:bg-muted dark:hover:text-foreground",

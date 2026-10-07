@@ -1,8 +1,6 @@
-import { memo, useEffect, useMemo, useState } from "react"
+import { memo, useMemo, useState } from "react"
 import { SmoothTabs } from "@/components/shadcn-ui/smooth-tabs"
 import { ProjectSiderProps } from "./types"
-import { GuideTourElementId } from "@/pages/superMagic/components/LazyGuideTour"
-import pubsub, { PubSubEvents } from "@/utils/pubsub"
 import { cn } from "@/utils/cn"
 
 export default memo(function ProjectSider(props: ProjectSiderProps) {
@@ -36,10 +34,6 @@ export default memo(function ProjectSider(props: ProjectSiderProps) {
 		[visibleItems, currentValue],
 	)
 
-	useEffect(() => {
-		pubsub.publish(PubSubEvents.GuideTourElementReady, GuideTourElementId.ProjectFileSider)
-	}, [])
-
 	const handleChange = (newValue: string) => {
 		if (!value) {
 			setInternalValue(newValue)
@@ -57,7 +51,6 @@ export default memo(function ProjectSider(props: ProjectSiderProps) {
 		return (
 			<div
 				className={cn("relative flex flex-none flex-col border-border", className)}
-				id={GuideTourElementId.ProjectFileSider}
 				style={width ? { width } : undefined}
 			>
 				{visibleItems[0].content}
@@ -68,8 +61,8 @@ export default memo(function ProjectSider(props: ProjectSiderProps) {
 	return (
 		<div
 			className={cn("relative flex flex-none flex-col border-border", className)}
-			id={GuideTourElementId.ProjectFileSider}
 			style={width ? { width } : undefined}
+			data-guide-anchor="project-sider"
 		>
 			<div className="flex h-full flex-col gap-1">
 				{/* Header - 横向 Tabs */}

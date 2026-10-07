@@ -96,6 +96,7 @@ function SidebarContent({ collapsed, onBusyChange, onSelect }: SidebarContentPro
 					<SidebarGroup
 						className="w-full shrink-0 px-2 pb-1 pt-0"
 						data-testid="sidebar-content-apps-group"
+						data-guide-anchor="workspace-sidebar"
 					>
 						<SidebarGroupContent>
 							<SidebarMenu>

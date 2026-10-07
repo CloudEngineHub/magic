@@ -14,6 +14,7 @@ import { RouteName } from "@/routes/constants"
 import { FUNCTION_PERMISSION_CODE } from "@/apis"
 import { useFunctionPermission } from "@/hooks/useFunctionPermission"
 import { CrewDetailDialog } from "@/pages/superMagic/components/CrewDetailDialog"
+import { HomeOnboardingAnchor } from "@/pages/superMagic/components/LazyGuideTour"
 import { crewService } from "@/services/crew/CrewService"
 import {
 	UserWorkspaceMapCache,
@@ -291,23 +292,38 @@ function EmployeeMarketDesktop({ scrollViewportRef }: EmployeeMarketDesktopProps
 					scrollViewportRef={scrollViewportRef}
 					data-testid="crew-market-sticky-header"
 				>
-					<SearchBar
-						value={searchQuery}
-						onChange={setSearchQuery}
-						onSearch={handleSearch}
-						onCompositionStart={onSearchCompositionStart}
-						onCompositionEnd={onSearchCompositionEnd}
-						placeholder={t("aiSearchPlaceholder")}
-						enableSearchSubmit
-						data-testid="crew-market-desktop-search-bar"
-					/>
+					{/*
+					 * The two onboarding anchors below sit on wrappers: the search bar and the
+					 * category strip are shared with the skill and connector markets, and the
+					 * "了解如何雇佣使用数字员工" tour is the only flow that should frame them.
+					 */}
+					<div
+						className="min-w-0"
+						data-guide-anchor={HomeOnboardingAnchor.CrewMarketSearch}
+					>
+						<SearchBar
+							value={searchQuery}
+							onChange={setSearchQuery}
+							onSearch={handleSearch}
+							onCompositionStart={onSearchCompositionStart}
+							onCompositionEnd={onSearchCompositionEnd}
+							placeholder={t("aiSearchPlaceholder")}
+							enableSearchSubmit
+							data-testid="crew-market-desktop-search-bar"
+						/>
+					</div>
 
-					<CategoryFilter
-						categories={store.categories}
-						activeCategoryId={activeFilterId}
-						onCategoryChange={handleCategoryChange}
-						showOrganizationShared={!isPersonalOrganization}
-					/>
+					<div
+						className="min-w-0"
+						data-guide-anchor={HomeOnboardingAnchor.CrewMarketCategories}
+					>
+						<CategoryFilter
+							categories={store.categories}
+							activeCategoryId={activeFilterId}
+							onCategoryChange={handleCategoryChange}
+							showOrganizationShared={!isPersonalOrganization}
+						/>
+					</div>
 				</MarketStickyHeader>
 
 				<div className="flex min-w-0 flex-col gap-5 sm:gap-6">

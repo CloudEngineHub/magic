@@ -18,7 +18,6 @@ import {
 } from "./variants"
 import AiCompletionTip from "@/pages/chatNew/components/MessageEditor/components/AiCompletionTip"
 import { SummaryGuideDOMId } from "@/pages/superMagic/components/MessagePanel/components/TopicExamples/SummaryGuide"
-import { GuideTourElementId } from "@/pages/superMagic/components/LazyGuideTour"
 import { useIsMobile } from "@/hooks/useIsMobile"
 
 interface MessageEditorViewProps {
@@ -99,6 +98,7 @@ function MessageEditorView({
 					onPasteCapture={onPaste}
 					data-testid="super-message-editor-container"
 					data-queue-editor-surface
+					data-guide-anchor="message-editor-container"
 				>
 					<FlexBox
 						vertical
@@ -119,7 +119,10 @@ function MessageEditorView({
 								)}
 							</div>
 						)}
-						<div className={cn(messageEditorTextContainerVariants({ size }))}>
+						<div
+							className={cn(messageEditorTextContainerVariants({ size }))}
+							data-guide-anchor="message-editor-content"
+						>
 							<EditorContent
 								ref={domRef}
 								editor={tiptapEditor}
@@ -135,10 +138,10 @@ function MessageEditorView({
 						<div
 							className={messageEditorToolbarVariants({ size })}
 							data-testid="super-message-editor-toolbar"
+							data-guide-anchor="message-editor-toolbar"
 						>
 							<div
 								className={messageEditorToolbarLeftVariants({ size })}
-								id={GuideTourElementId.ModelSelector}
 								data-testid="super-message-editor-toolbar-left"
 							>
 								{bottomLeftContent}

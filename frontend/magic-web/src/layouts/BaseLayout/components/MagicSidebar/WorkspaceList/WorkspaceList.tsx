@@ -33,6 +33,7 @@ import { SCROLL_HINT_HEIGHTS } from "@/components/shadcn-ui/scroll-area"
 import { useWorkspaceListDnd } from "./useWorkspaceListDnd"
 import { useProjectPinBoundaryConfirmation } from "./ProjectPinBoundaryConfirmDialog"
 import { subscribeWorkspaceSearchInvalidation } from "@/pages/superMagic/services/workspaceListSearchInvalidation"
+import { isHomeOnboardingSidebarTopMode } from "@/pages/superMagic/components/LazyGuideTour/GuideTourManager"
 
 const SEARCH_PAGE_SIZE = 20
 
@@ -526,6 +527,13 @@ function WorkspaceList({
 
 		const workspaceIdSegment = toTestIdSegment(selectedWorkspaceId)
 		const animationFrameId = window.requestAnimationFrame(() => {
+			if (isHomeOnboardingSidebarTopMode()) {
+				const scrollContainer = workspaceListRef.current?.closest<HTMLElement>(
+					"[data-testid='sidebar-content-root']",
+				)
+				scrollContainer?.scrollTo({ top: 0, behavior: "auto" })
+				return
+			}
 			const workspaceElement = workspaceListRef.current?.querySelector<HTMLElement>(
 				`[data-workspace-id-segment="${workspaceIdSegment}"]`,
 			)
@@ -560,6 +568,7 @@ function WorkspaceList({
 			onDragEnd={handleDragEnd}
 			// Stay in flow when inactive so the shared tree scroll does not clamp.
 			className="relative flex flex-col"
+			data-guide-anchor="sidebar-workspace-list"
 		>
 			{confirmationDialog}
 			<ProjectNavigationToolbar

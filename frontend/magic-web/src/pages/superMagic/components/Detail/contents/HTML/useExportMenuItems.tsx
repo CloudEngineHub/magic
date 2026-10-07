@@ -4,7 +4,6 @@ import { MenuProps } from "antd"
 import { createStyles } from "antd-style"
 import { useMemo } from "react"
 import { useTranslation } from "react-i18next"
-import { HTMLGuideTourElementId } from "@/pages/superMagic/hooks/useHTMLGuideTour"
 import ActionButton from "@/pages/superMagic/components/Detail/components/CommonHeader/components/ActionButton"
 import { Download } from "lucide-react"
 import type { ImageExportFormat } from "@magic-web/html2image"
@@ -140,7 +139,6 @@ export function useExportMenuItems({
 		>
 			<span>
 				<ActionButton
-					id={HTMLGuideTourElementId.HTMLFileDownloadButton}
 					icon={<Download size={16} strokeWidth={1.5} />}
 					title={t("topicFiles.download")}
 					text={t("topicFiles.download")}

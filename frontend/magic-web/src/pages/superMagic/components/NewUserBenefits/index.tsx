@@ -1,0 +1,915 @@
+import { useCallback, useEffect, useState } from "react"
+import { Trans, useTranslation } from "react-i18next"
+import type { LucideIcon } from "lucide-react"
+import {
+	BookOpen,
+	ChevronRight,
+	ChevronUp,
+	CircleUserRound,
+	FileText,
+	Gift,
+	Grid2X2,
+	Mic,
+	MousePointerClick,
+	Sparkles,
+	Workflow,
+	X,
+} from "lucide-react"
+
+import {
+	Dialog,
+	DialogContent,
+	DialogDescription,
+	DialogTitle,
+} from "@/components/shadcn-ui/dialog"
+import { ScrollArea } from "@/components/shadcn-ui/scroll-area"
+import magicToast from "@/components/base/MagicToaster/utils"
+import { cn } from "@/utils/cn"
+import { useUserInfo } from "@/models/user/hooks"
+import useNavigate from "@/routes/hooks/useNavigate"
+import { RouteName } from "@/routes/constants"
+import {
+	canManuallyCompleteHomeOnboardingTask,
+	claimHomeOnboardingReward,
+	ensureHomeOnboardingRewardList,
+	getHomeOnboardingRewardList,
+	getHomeOnboardingTaskEntryPage,
+	homeOnboardingClaimFailureKey,
+	HOME_ONBOARDING_RUN_EVENT,
+	HOME_ONBOARDING_STATE_EVENT,
+	isHomeOnboardingRunActive,
+	isReplayableHomeOnboardingTask,
+	startHomeOnboarding,
+	type HomeOnboardingReward,
+	type HomeOnboardingTaskId,
+} from "../LazyGuideTour"
+import { useCanHostHomeOnboarding } from "../LazyGuideTour/onboardingAvailability"
+import "./entry-transition.css"
+
+/**
+ * Source directory reserved for this feature's artwork. The current
+ * implementation intentionally uses vector placeholders until the product
+ * artwork is supplied.
+ */
+export const NEW_USER_BENEFITS_ASSET_DIR = "src/pages/superMagic/components/NewUserBenefits/assets/"
+
+/**
+ * Paid on top of the last row's own reward. The dialog spells the whole pot out ("完成第一次AI工作
+ * +100 积分；其余每项 +50 积分；全部完成额外 +50 积分"), so the bonus lives here and every surface
+ * reads it from the rows instead of restating the total as a literal.
+ *
+ * A **display** figure, not a payout rule: the bonus is granted by the backend off the same data
+ * this card reads, so the client never works out *whether* to pay it — only what the row set plus
+ * the documented bonus adds up to. Keeping it out of the sum would understate the pot under a
+ * header that names it.
+ */
+const COMPLETION_BONUS = 50
+
+/**
+ * Where the folded state is remembered. Folding the card is not a per-visit toggle but a standing
+ * answer to "how much of my workspace may this cover", so it outlives the visit that set it.
+ */
+const ENTRY_COLLAPSED_STORAGE_KEY = "magiFeatureEntryCollapsed"
+
+/**
+ * Reading storage can throw outright rather than merely return null — Safari in private mode does —
+ * so the card falls back to open instead of failing to render.
+ */
+function readEntryCollapsed() {
+	try {
+		return window.localStorage.getItem(ENTRY_COLLAPSED_STORAGE_KEY) === "1"
+	} catch {
+		return false
+	}
+}
+
+/**
+ * What a row can be asked to do, decided from the backend's two verdicts on it.
+ *
+ * - `start` — nothing has happened yet: the entry into the task's guided flow.
+ * - `replay` — finished and paid, and the task's flow is a review of the product rather than a job;
+ *   a second pass says so instead of promising the reward again.
+ * - `retry` — the task is done but its points never landed. The completion call is idempotent, so
+ *   asking again is the whole fix.
+ * - `done` — finished, and there is nothing this client may call: either the points are in, or the
+ *   task is one only a backend system event can complete.
+ * - `expired` — past `expires_at`. No call can succeed, so the row is shown for what it is.
+ */
+type BenefitAction = "start" | "replay" | "retry" | "done" | "expired"
+
+/** How each action looks. The two "there is nothing to do" entries share the muted, dead look. */
+const ACTION_BUTTON_CLASS: Record<BenefitAction, string> = {
+	start: "bg-[#171717] text-white hover:bg-[#2b2b2b]",
+	retry: "bg-[#171717] text-white hover:bg-[#2b2b2b]",
+	replay: "bg-[#dfe1e7] text-[#3d4048] hover:bg-[#ced3db]",
+	done: "cursor-default bg-[#dfe1e7] text-[#969ba7]",
+	expired: "cursor-default bg-[#dfe1e7] text-[#969ba7]",
+}
+
+interface BenefitRow {
+	/** The backend's code, which is what makes a row unique across a renamed flow. */
+	id: string
+	taskId: HomeOnboardingTaskId
+	title: string
+	description: string
+	icon: LucideIcon
+	points: number
+	validityDays: number
+	/** The backend's verdict on the task itself. */
+	completed: boolean
+	/** The points actually landed in the account. Not the same as `completed`. */
+	granted: boolean
+	recommended: boolean
+	action: BenefitAction
+	/** A completion call is in flight for this row, so its button is spent until it answers. */
+	busy: boolean
+	onAction?: () => void
+}
+
+/**
+ * One row of the benefits dialog, in the state the backend last reported.
+ *
+ * The label is resolved with a chain of literal keys rather than a lookup table, and the row's copy
+ * lives in the component below rather than in a module-level record, because tooling has to be able
+ * to see every i18n key statically (see `AGENTS.md`). The cost is a handful of extra lines; the
+ * alternative is keys assembled at run time that nothing can check.
+ */
+function NewUserBenefitsTaskRow({ row }: { row: BenefitRow }) {
+	const { t } = useTranslation("super/guideTour")
+	const Icon = row.icon
+	const label =
+		row.action === "start"
+			? t("newUserBenefits.task.start")
+			: row.action === "retry"
+				? t("newUserBenefits.task.claimRetry")
+				: row.action === "replay"
+					? t("newUserBenefits.task.replay")
+					: row.action === "expired"
+						? t("newUserBenefits.task.expired")
+						: t("newUserBenefits.task.done")
+	/**
+	 * The announced name of the button, built from the visible label: the wording of an action and
+	 * the action itself are one fact, and restating it in a second key is how the two drift.
+	 */
+	const actionAriaLabel = t("newUserBenefits.task.actionAria", {
+		action: label,
+		title: row.title,
+	})
+	const actionable = Boolean(row.onAction) && !row.busy
+
+	return (
+		<div
+			className={cn(
+				"grid grid-cols-[36px_minmax(0,1fr)_78px] items-center gap-3 border-b border-[#ececec] px-0 py-3 last:border-b-0",
+				row.completed && "opacity-[0.65]",
+			)}
+		>
+			<div
+				className={cn(
+					"grid size-9 place-items-center rounded-lg bg-[#f3f3f3] text-[#171717]",
+					row.completed && "text-[#8c8c8c]",
+				)}
+			>
+				<Icon aria-hidden="true" className="size-5" strokeWidth={1.9} />
+			</div>
+			<div className="min-w-0">
+				<div className="flex items-center gap-2">
+					<h3 className="truncate text-[15px] font-bold leading-5 text-[#171717]">
+						{row.title}
+					</h3>
+					{row.recommended && (
+						<span className="shrink-0 text-[11px] font-semibold text-[#777]">
+							{t("newUserBenefits.task.recommended")}
+						</span>
+					)}
+				</div>
+				<p className="mt-1 truncate text-[12px] leading-5 text-[#666]">{row.description}</p>
+				<div className="mt-1.5 flex items-center gap-3 text-[11px] text-[#888]">
+					<span>{t("newUserBenefits.task.duration")}</span>
+					{/*
+					 * The reward and its expiry sit in one emphasised segment: both are what the row is
+					 * offering, and the design reads them as a single green phrase. Both figures are the
+					 * backend's — the points a completion pays, and the window it stays payable for.
+					 */}
+					<span className="font-bold text-[#20a66a]">
+						{t("newUserBenefits.task.reward", { points: row.points })}
+						{" · "}
+						{t("newUserBenefits.task.validity", { days: row.validityDays })}
+					</span>
+				</div>
+			</div>
+			{/*
+			 * A real `disabled` (not just a muted look) keeps a settled row from being re-entered —
+			 * unless it can still be acted on, where the muted look keeps the hover affordance.
+			 */}
+			<button
+				aria-busy={row.busy || undefined}
+				aria-label={actionAriaLabel}
+				className={cn(
+					"h-9 rounded-[10px] px-3 text-[12px] font-bold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#171717]/30",
+					ACTION_BUTTON_CLASS[row.action],
+				)}
+				disabled={!actionable}
+				onClick={actionable ? row.onAction : undefined}
+				type="button"
+			>
+				{label}
+			</button>
+		</div>
+	)
+}
+
+/**
+ * The card itself, mounted only where the feature exists.
+ *
+ * Its effects ask the backend for the reward list and follow the answer, so the guard has to sit
+ * outside it rather than return `null` from within: a card that mounts and then hides has already
+ * made the request it was supposed to skip.
+ */
+function NewUserBenefitsCard() {
+	const { t } = useTranslation("super/guideTour")
+	const { userInfo } = useUserInfo()
+	const navigate = useNavigate()
+	const [open, setOpen] = useState(false)
+	/**
+	 * The backend's answer for this account. Read through the manager, which owns the cache, and
+	 * re-read off every state change: a claim, a refresh or the first load all announce themselves
+	 * the same way. The manager hands back the same object while nothing has changed, so a re-read
+	 * that finds nothing new is not a re-render.
+	 */
+	const [rewardList, setRewardList] = useState(() =>
+		getHomeOnboardingRewardList(userInfo?.magic_id),
+	)
+	/**
+	 * Which row is waiting on a completion call. Only ever set for a row the backend can complete on
+	 * request, and cleared however the call ends, so a slow network cannot leave a button spent.
+	 */
+	const [claiming, setClaiming] = useState<HomeOnboardingTaskId | null>(null)
+	/**
+	 * Whether a guided run holds the screen at this moment — the introduction dialog of a first
+	 * visit, or the step overlays of any task this card leads into. Read once on mount as well as
+	 * followed, because the card cannot work it out for itself and the two mount in whichever order
+	 * the page takes: the automatic run opens its dialog on a first visit, before anything asks for
+	 * this card at all.
+	 */
+	const [runActive, setRunActive] = useState(isHomeOnboardingRunActive)
+
+	/**
+	 * Whether the entry card is folded down to its pill. Read once on mount so a stored preference
+	 * applies from the first paint rather than after a visible re-open.
+	 */
+	const [collapsed, setCollapsed] = useState(readEntryCollapsed)
+
+	useEffect(() => {
+		try {
+			window.localStorage.setItem(ENTRY_COLLAPSED_STORAGE_KEY, collapsed ? "1" : "")
+		} catch {
+			// Nothing to remember if storage refuses the write; the card still folds this session.
+		}
+	}, [collapsed])
+
+	useEffect(() => {
+		const userMagicId = userInfo?.magic_id
+		if (!userMagicId) return
+		const syncStatus = () => setRewardList(getHomeOnboardingRewardList(userMagicId))
+		syncStatus()
+		// The list is the card's only source of truth, so it is asked for as soon as the card is up
+		// and then followed: the tour reports its own outcome through the same event, and the rows
+		// and counters update as soon as a guided flow closes.
+		void ensureHomeOnboardingRewardList(userMagicId)
+		window.addEventListener(HOME_ONBOARDING_STATE_EVENT, syncStatus)
+		return () => window.removeEventListener(HOME_ONBOARDING_STATE_EVENT, syncStatus)
+	}, [userInfo?.magic_id])
+
+	/**
+	 * A run takes the screen and gives it back on its own schedule, so the card follows it instead of
+	 * working it out from anything it knows. It has nothing to work it out from: every task leads to
+	 * the same thing from the card's side, and the run that opens the introduction dialog is not one
+	 * the card ever asked for.
+	 */
+	useEffect(() => {
+		const syncRun = () => setRunActive(isHomeOnboardingRunActive())
+		syncRun()
+		window.addEventListener(HOME_ONBOARDING_RUN_EVENT, syncRun)
+		return () => window.removeEventListener(HOME_ONBOARDING_RUN_EVENT, syncRun)
+	}, [])
+
+	/**
+	 * Opens a task's guided flow — both the "开始体验" of an unfinished task and the "回看" of a
+	 * finished one. The dialog is closed first on purpose: while a modal dialog is open Radix
+	 * disables pointer events on `body`, so a tour overlay mounted behind it would be rendered but
+	 * not interactive.
+	 */
+	const openTask = useCallback(
+		(task: HomeOnboardingTaskId) => {
+			setOpen(false)
+			// A task belongs to the page that carries its anchors. This card sits on the home page,
+			// so a task whose steps live on a route of its own has to be navigated to — the entry is
+			// then served by that page's own tour, and the home tour ignores it. A task that spans
+			// routes opens on the first of them and walks the rest itself.
+			const page = getHomeOnboardingTaskEntryPage(task)
+			if (page === "magi-claw") navigate({ name: RouteName.MagiClaw })
+			else if (page === "crew-market") navigate({ name: RouteName.CrewMarketCrew })
+			else if (page === "skill-market") navigate({ name: RouteName.CrewMarketSkills })
+			else if (page === "micro-apps") navigate({ name: RouteName.MicroApps })
+			else if (page === "slides-templates") navigate({ name: RouteName.SuperSlidesTemplates })
+			else if (page === "recordings") navigate({ name: RouteName.AudioRecordings })
+			startHomeOnboarding(task)
+		},
+		[navigate],
+	)
+
+	/**
+	 * Asking for a task's points again, for a row the backend reports as done but unpaid.
+	 *
+	 * Nothing is recorded locally here: the manager only marks a task finished once the backend says
+	 * the grant went through, so a failure simply leaves this row as it was — still claimable — which
+	 * is what makes the retry the user's to make rather than something the card swallows.
+	 */
+	const claimReward = useCallback(
+		async (task: HomeOnboardingTaskId) => {
+			const userMagicId = userInfo?.magic_id
+			if (!userMagicId) return
+			setClaiming(task)
+			const result = await claimHomeOnboardingReward(userMagicId, task)
+			setClaiming(null)
+			if (result.ok) return
+			const copy = homeOnboardingClaimFailureKey(result.code)
+			if (copy) magicToast.error({ content: t(copy), duration: 3000 })
+		},
+		[t, userInfo?.magic_id],
+	)
+
+	/**
+	 * What each row says, still keyed by the *flow* id rather than the backend code: the backend
+	 * decides which tasks exist, in what order, what they are worth and where they stand, while the
+	 * copy and the icon are this client's own and are written out here so every i18n key is a
+	 * literal.
+	 */
+	const rowPresentation: Record<
+		HomeOnboardingTaskId,
+		{ title: string; description: string; icon: LucideIcon; recommended?: boolean }
+	> = {
+		"first-ai-work": {
+			title: t("newUserBenefits.tasks.firstAiWork.title"),
+			description: t("newUserBenefits.tasks.firstAiWork.description"),
+			icon: BookOpen,
+			// The task to start with, and the only one worth more than the rest.
+			recommended: true,
+		},
+		workbench: {
+			title: t("newUserBenefits.tasks.workbench.title"),
+			description: t("newUserBenefits.tasks.workbench.description"),
+			icon: Grid2X2,
+		},
+		"create-ai-ppt": {
+			title: t("newUserBenefits.tasks.aiPpt.title"),
+			description: t("newUserBenefits.tasks.aiPpt.description"),
+			icon: FileText,
+		},
+		"audio-recording": {
+			title: t("newUserBenefits.tasks.recording.title"),
+			description: t("newUserBenefits.tasks.recording.description"),
+			icon: Mic,
+		},
+		"hire-employee": {
+			title: t("newUserBenefits.tasks.employees.title"),
+			description: t("newUserBenefits.tasks.employees.description"),
+			icon: CircleUserRound,
+		},
+		"manage-skill": {
+			title: t("newUserBenefits.tasks.skills.title"),
+			description: t("newUserBenefits.tasks.skills.description"),
+			icon: Sparkles,
+		},
+		"create-micro-app": {
+			title: t("newUserBenefits.tasks.microapps.title"),
+			description: t("newUserBenefits.tasks.microapps.description"),
+			icon: Grid2X2,
+		},
+		"super-lobster": {
+			title: t("newUserBenefits.tasks.superLobster.title"),
+			description: t("newUserBenefits.tasks.superLobster.description"),
+			icon: Workflow,
+		},
+	}
+
+	/**
+	 * The rows, straight off the backend's list and in the order it sent them — it is authoritative
+	 * for order and for count, and a user whose progress predates a task keeps the shorter list.
+	 *
+	 * A code this build has no copy for is skipped rather than rendered blank: the backend may add a
+	 * task before this client learns its row, and a nameless row with no flow behind it is worse than
+	 * one that appears after the next release. (The manager keeps such a row, so nothing else has to
+	 * throw it away.)
+	 */
+	const rows: BenefitRow[] = rewardList.rewards.flatMap((reward: HomeOnboardingReward) => {
+		const taskId = reward.taskId
+		if (!taskId) return []
+		const presentation = rowPresentation[taskId]
+		const granted = reward.rewardStatus === "GRANTED"
+		const completed = reward.status === "COMPLETED"
+		const expired = reward.status === "EXPIRED"
+		const replayable = granted && isReplayableHomeOnboardingTask(taskId)
+		/**
+		 * Done but unpaid. The completion call is idempotent, so asking again is how the points are
+		 * collected — but only for a task the backend lets a client complete: the AI-work task is
+		 * finished by a system event and answers `9303` to anyone who asks, so its row is shown for
+		 * what it is instead of offering a call that cannot work.
+		 */
+		const claimable = completed && !granted && canManuallyCompleteHomeOnboardingTask(taskId)
+
+		const action: BenefitAction = expired
+			? "expired"
+			: granted
+				? replayable
+					? "replay"
+					: "done"
+				: claimable
+					? "retry"
+					: completed
+						? "done"
+						: "start"
+
+		const onAction =
+			action === "start" || action === "replay"
+				? () => openTask(taskId)
+				: action === "retry"
+					? () => void claimReward(taskId)
+					: undefined
+
+		return [
+			{
+				id: reward.code,
+				taskId,
+				title: presentation.title,
+				description: presentation.description,
+				icon: presentation.icon,
+				points: reward.points,
+				validityDays: reward.validityDays,
+				completed,
+				granted,
+				recommended: presentation.recommended === true,
+				action,
+				busy: claiming === taskId,
+				onAction,
+			},
+		]
+	})
+
+	/**
+	 * The card is a promotional surface, so it only exists once there is something to promote: while
+	 * the list is on its way it would be a card whose numbers are all zero, and on a deployment that
+	 * does not offer the feature (`9300`/`9301`) or a failed fetch there is nothing to show at all.
+	 * Waiting costs a beat; guessing costs a wrong number in front of the user.
+	 */
+	if (rows.length === 0) return null
+
+	const totalTasks = rows.length
+	const completedTasks = rows.filter((row) => row.completed)
+	const remainingTasks = rows.filter((row) => !row.completed)
+	const completedCount = completedTasks.length
+	const remainingCount = remainingTasks.length
+	/**
+	 * The corner dot is a call to action, not decoration: it advertises that this card still has
+	 * something to hand out. Once the last task is done there is nothing left to point at, so the
+	 * dot goes with it rather than staying on a finished card.
+	 */
+	const hasUnfinishedTasks = remainingCount > 0
+	/*
+	 * The pot both surfaces advertise, summed from the rows rather than taken as a flat per-task
+	 * figure plus a made-up total. `first-ai-work` pays double, so the old `TOTAL_TASKS * 50 + 50`
+	 * understated the card and the pill beneath it by 50 points while the dialog header promised
+	 * 500. The per-task figures are the backend's; the completion bonus is the documented figure.
+	 */
+	const maxPoints = rows.reduce((total, row) => total + row.points, 0) + COMPLETION_BONUS
+	const earnedPoints = rows
+		.filter((row) => row.granted)
+		.reduce((total, row) => total + row.points, 0)
+	const remainingPoints = maxPoints - earnedPoints
+
+	const toggleCollapsed = () => setCollapsed((previous) => !previous)
+
+	/**
+	 * A folded card has room for one target, and the design gives it to unfolding: the pill's
+	 * chevron points right and the whole pill is the button, so a click anywhere on it opens the
+	 * card again. The dialog is still one click away once it is open.
+	 */
+	const handleCardClick = () => {
+		if (collapsed) toggleCollapsed()
+		else setOpen(true)
+	}
+
+	/*
+	 * The open card and the folded pill are two different boxes rather than one box with a
+	 * modifier: open is a 310px grid of four rows, folded an auto-width pill. Neither `width: auto`
+	 * nor a `display` swap interpolates, so the two are separate class sets — the CSS in
+	 * `entry-transition.css` carries the motion the size change cannot.
+	 *
+	 * The fold control is a sibling of the card rather than a child of it: the card is itself a
+	 * button, and a button inside a button is invalid. The wrapper below is what pins the pair to
+	 * the corner — absolutely positioned and shrink-to-fit, it is exactly as wide as whichever box
+	 * is rendered, so the control can hang off that box's own top-right corner.
+	 */
+	return (
+		<>
+			{/*
+			 * The wrapper carries two things the card itself cannot:
+			 *
+			 * - The lift. The design's control lives inside the card, so the card's own
+			 *   `translateY(-2px)` carries it along for free; here the control has to be a sibling (a
+			 *   button inside a button is invalid), so the hover moves up to the box holding both. One
+			 *   hover region and one transform, and the control cannot drift away from its card.
+			 * - The desktop gate. `hidden` is the base and `md:block` lifts it, so the card is up
+			 *   only while nothing else is using the page: opening this card's own dialog drops the
+			 *   last rule that lifts it, and so does a guided run — the introduction dialog of a
+			 *   first visit, or the step overlays of any task entered from here. Both paint over the
+			 *   whole window, and a card left underneath is one a screen reader keeps reading while a
+			 *   pointer cannot reach it. Closing either returns the card.
+			 *
+			 * The gate is a display swap rather than a conditional render on purpose: `hidden` keeps
+			 * the card mounted, and the two boxes below carry the fold and the unfold animation. A
+			 * card that comes back from the dead would replay the wrong half of that pair.
+			 */}
+			<div
+				className={cn(
+					"absolute right-4 top-20 z-30 hidden transition-transform duration-200 hover:-translate-y-0.5",
+					!open && !runActive && "md:block",
+				)}
+			>
+				<button
+					/*
+					 * Folded, the card no longer opens the dialog — it unfolds — so the announced
+					 * action follows the state instead of promising a dialog it will not show. The
+					 * design moves the "展开" / "收起" wording onto the fold control; with the control
+					 * unmounted while folded, that wording lives here.
+					 */
+					aria-haspopup={collapsed ? undefined : "dialog"}
+					aria-label={
+						collapsed
+							? t("newUserBenefits.entry.expand")
+							: t("newUserBenefits.entry.ariaLabel")
+					}
+					className={cn(
+						/*
+						 * No `hover:-translate-y-0.5` here: the lift belongs to the wrapper, so that
+						 * the fold control hanging off this card's corner travels with it.
+						 */
+						"group relative border border-[#292a2e] bg-[radial-gradient(circle_at_76%_36%,rgba(255,181,35,0.09),transparent_28%),linear-gradient(145deg,#151619_0%,#0c0d0f_68%,#151516_100%)] text-left text-white shadow-[0_2px_5px_rgba(0,0,0,0.18),0_18px_42px_rgba(15,15,18,0.28)] transition-[border-color,box-shadow] duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#ffb523]/70",
+						collapsed
+							? "nb-entry-fold inline-flex w-auto min-w-0 items-center gap-3 rounded-full p-[8px_10px_8px_8px] hover:border-[#5a4e33] hover:shadow-[0_4px_9px_rgba(0,0,0,0.2),0_22px_50px_rgba(15,15,18,0.34),0_0_0_3px_rgba(255,181,35,0.14)]"
+							: "nb-entry-unfold grid w-[310px] min-w-[310px] grid-cols-[1fr_auto] gap-x-3 gap-y-2 rounded-[17px] p-[13px_15px_12px] hover:border-[#4a4231]",
+					)}
+					onClick={handleCardClick}
+					type="button"
+				>
+					{/* Shown while any task is still unfinished; a fully finished or folded card loses it. */}
+					{hasUnfinishedTasks && !collapsed ? (
+						<span
+							aria-hidden="true"
+							className="pointer-events-none absolute -right-[5px] -top-[5px] size-[10px] rounded-full bg-[#ff5b0a] shadow-[0_0_0_2px_rgba(255,91,10,0.12)]"
+						/>
+					) : null}
+					{collapsed ? (
+						/*
+						 * The pill is the whole card here, and the button already announces the action,
+						 * so its pieces are decoration — nothing in it is a fact the button does not
+						 * already carry.
+						 */
+						<span
+							aria-hidden="true"
+							className="nb-entry-pill-in inline-flex items-center gap-3"
+						>
+							<span className="grid size-[38px] place-items-center rounded-full bg-[radial-gradient(circle_at_50%_34%,rgba(255,181,35,0.38),rgba(255,181,35,0.05)_74%)] text-[#ffc43c]">
+								<Gift aria-hidden="true" className="size-5" strokeWidth={1.9} />
+							</span>
+							<strong className="whitespace-nowrap text-[16px] font-extrabold">
+								{t("newUserBenefits.entry.badge")}
+							</strong>
+							{/*
+							 * The folded card advertises the pot, not the progress: it has no room for
+							 * a count, and the pot is what it is offering. `em` is italic by default,
+							 * hence `not-italic`.
+							 */}
+							<em className="whitespace-nowrap text-[16px] font-extrabold not-italic text-[#ffb523]">
+								{t("newUserBenefits.entry.pillReward", { points: maxPoints })}
+							</em>
+							<span className="grid size-8 place-items-center rounded-full bg-white/10 text-white transition-colors group-hover:bg-white/[0.17]">
+								<ChevronRight
+									aria-hidden="true"
+									className="size-[15px] transition-transform group-hover:translate-x-0.5"
+									strokeWidth={2.4}
+								/>
+							</span>
+						</span>
+					) : (
+						<>
+							{/*
+							 * `pr-8` reserves the corner the fold control sits in, so the counter stops
+							 * where the control begins instead of running under it.
+							 */}
+							<span className="col-span-2 flex items-center justify-between gap-3 pr-8">
+								<span className="inline-flex h-6 items-center gap-1.5 rounded-full border border-[#ffbe3e]/20 bg-[#6f4e19]/80 px-2.5 text-[11px] font-bold text-[#fff6db]">
+									<span className="size-2 rounded-full bg-[#f5b817] shadow-[0_0_9px_rgba(245,184,23,0.58)]" />
+									{t("newUserBenefits.entry.badge")}
+								</span>
+								<strong className="text-[15px] font-[780] leading-none tracking-[-0.02em]">
+									{completedCount}/{totalTasks}
+								</strong>
+							</span>
+							<span className="col-start-1 row-start-2 flex min-h-12 flex-col justify-center gap-1">
+								<strong className="text-[15px] font-extrabold leading-tight">
+									{/*
+									 * With nothing finished the card sells the whole pot instead of reporting
+									 * progress: "继续体验" reads as a lie before the first task, and "已完成 0 项"
+									 * as a discouragement. The two spans are `whitespace-nowrap` so the break
+									 * falls on the comma — Chinese otherwise wraps between any two glyphs, which
+									 * left "领" stranded at the end of the first line.
+									 */}
+									{completedCount === 0 ? (
+										<Trans
+											components={{
+												line1: <span className="whitespace-nowrap" />,
+												line2: <span className="whitespace-nowrap" />,
+											}}
+											i18nKey="newUserBenefits.entry.titleFresh"
+											ns="super/guideTour"
+											values={{ points: maxPoints, total: totalTasks }}
+										/>
+									) : (
+										t("newUserBenefits.entry.title")
+									)}
+								</strong>
+								{/* Nothing to report before the first task, so the headline stands alone. */}
+								{completedCount > 0 ? (
+									<small className="text-[11px] font-medium leading-tight text-[#b9bbc1]">
+										{t("newUserBenefits.entry.meta", {
+											completed: completedCount,
+											remaining: remainingCount,
+										})}
+									</small>
+								) : null}
+							</span>
+							<div
+								aria-hidden="true"
+								className="col-start-2 row-span-2 row-start-2 grid size-[70px] place-items-center text-[#f7b42a]"
+								data-assets-directory={NEW_USER_BENEFITS_ASSET_DIR}
+							>
+								<svg
+									aria-hidden="true"
+									className="h-[60px] w-[70px] -translate-y-1 drop-shadow-[0_8px_12px_rgba(245,168,25,0.16)]"
+									viewBox="0 0 120 96"
+								>
+									<defs>
+										<linearGradient
+											id="newUserBenefitsEntryGold"
+											x1="0"
+											y1="0"
+											x2="1"
+											y2="1"
+										>
+											<stop offset="0" stopColor="#FFF09A" />
+											<stop offset=".35" stopColor="#FFC43C" />
+											<stop offset=".72" stopColor="#E99A13" />
+											<stop offset="1" stopColor="#FFD86A" />
+										</linearGradient>
+									</defs>
+									<path
+										d="M37 18h46v29c0 17-10 29-23 29S37 64 37 47V18Z"
+										fill="url(#newUserBenefitsEntryGold)"
+									/>
+									<path
+										d="M37 27H24c0 20 8 29 22 31M83 27h13c0 20-8 29-22 31"
+										fill="none"
+										stroke="#F5B323"
+										strokeLinecap="round"
+										strokeWidth="7"
+									/>
+									<circle cx="60" cy="43" r="9" fill="#E29A17" />
+									<circle cx="60" cy="43" r="5" fill="#FFC942" />
+									<path
+										d="M55 74h10v9H55zM43 83h34v8H43z"
+										fill="url(#newUserBenefitsEntryGold)"
+									/>
+									<path
+										d="M24 60c-8-3-13-9-16-17M96 60c8-3 13-9 16-17M17 66l-8-2M15 72l-8 2M103 66l8-2M105 72l8 2"
+										fill="none"
+										stroke="#B87B0D"
+										strokeLinecap="round"
+										strokeWidth="3"
+									/>
+								</svg>
+							</div>
+							{/*
+							 * The track is a 2px hairline — the height the design gives it
+							 * (`.feature-entry-nodes::before{height:2px}`). At 4px it read as a bar as heavy as
+							 * the 12px nodes it links, so the nodes stopped standing out against it.
+							 *
+							 * Each node is painted off its own row rather than off a count: the tasks are
+							 * completed in whatever order the user takes them, so "the first N are done" is
+							 * only true by accident.
+							 */}
+							<div className="relative col-start-1 row-start-3 flex w-[92%] items-center justify-between gap-1 before:absolute before:left-1.5 before:right-1.5 before:top-1/2 before:h-0.5 before:-translate-y-1/2 before:rounded-full before:bg-[#55575c]">
+								{rows.map((row) => (
+									<span
+										aria-hidden="true"
+										className={cn(
+											"relative z-10 size-3 rounded-full border-2 border-[#111215] bg-[#777a80]",
+											row.completed && "bg-[#e7a91a]",
+										)}
+										key={row.id}
+									/>
+								))}
+							</div>
+							{/*
+							 * `justify-self-start` keeps the pill at content width — a grid item stretches to
+							 * its whole column otherwise, and `self-end` only aligns it on the block axis.
+							 */}
+							<span className="col-start-1 row-start-4 inline-flex h-[26px] items-center gap-1.5 self-end justify-self-start rounded-full border border-[#ffbc34]/15 bg-[#684615]/55 px-2.5 text-[11px] font-[760] text-[#f6b92b]">
+								<Gift
+									aria-hidden="true"
+									className="size-[14px]"
+									strokeWidth={1.8}
+								/>
+								{t("newUserBenefits.entry.remainingReward", {
+									points: remainingPoints,
+								})}
+							</span>
+							<span className="col-start-2 row-start-4 grid size-9 place-items-center self-end justify-self-end rounded-full bg-gradient-to-br from-[#ffc44d] to-[#f4a928] text-[#171717] shadow-[0_7px_16px_rgba(244,169,40,0.24)]">
+								<MousePointerClick
+									aria-hidden="true"
+									className="size-5"
+									strokeWidth={1.8}
+								/>
+							</span>
+						</>
+					)}
+				</button>
+				{/*
+				 * Only the open card carries the control. Folded, the pill has no room for a second
+				 * target and needs none — being the one target is what it is for.
+				 *
+				 * 15px, not the design's 14px: the design hangs the control inside the card, so its
+				 * 14px is measured from the card's padding box and the card's 1px border sits outside
+				 * it — 15px from the outer edge, which is what the design renders as. This control's
+				 * containing block is the borderless wrapper above, so the border has to be counted
+				 * here instead.
+				 */}
+				{!collapsed ? (
+					<button
+						aria-expanded="true"
+						aria-label={t("newUserBenefits.entry.collapse")}
+						className="absolute right-[15px] top-[15px] grid size-[22px] place-items-center rounded-full bg-white/[0.08] text-[#c9cdd6] transition-colors hover:bg-white/[0.18] hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#ffb523]/70"
+						onClick={toggleCollapsed}
+						title={t("newUserBenefits.entry.collapse")}
+						type="button"
+					>
+						<ChevronUp aria-hidden="true" className="size-[13px]" strokeWidth={2.2} />
+					</button>
+				) : null}
+			</div>
+
+			<Dialog open={open} onOpenChange={setOpen}>
+				<DialogContent
+					/*
+					 * 800px now, after 920 then 860: at 920 the dialog all but filled the viewport it
+					 * was reviewed in and the rows read as loose, because the flexible middle column
+					 * had ~220px of slack. 800 still clears the widest intrinsic line by a wide
+					 * margin — the summary explanation plus its counter is about 610px including the
+					 * side padding — so nothing re-wraps.
+					 */
+					className="!max-w-[800px] overflow-hidden rounded-[20px] border-0 bg-white p-0 text-[#171717] shadow-[0_24px_80px_rgba(0,0,0,0.22)]"
+					overlayClassName="bg-black/50"
+					showCloseButton={false}
+				>
+					<DialogTitle className="sr-only">
+						{t("newUserBenefits.dialog.title")}
+					</DialogTitle>
+					<DialogDescription className="sr-only">
+						{t("newUserBenefits.dialog.description")}
+					</DialogDescription>
+					<div className="flex h-[min(720px,calc(100vh-64px))] min-h-0 flex-col">
+						<header className="flex shrink-0 items-start justify-between border-b border-[#e7e7e7] px-8 pb-4 pt-6">
+							<div>
+								<h2 className="text-[30px] font-extrabold leading-none tracking-[-0.04em]">
+									{t("newUserBenefits.dialog.title")}
+								</h2>
+								{/*
+								 * The dialog's secondary copy is deliberately a step darker than the
+								 * first draft: `#666` for the three description lines and `#888` for a
+								 * row's duration. At the old `#777` / `#999` these sizes read too
+								 * faint against white, and the duration stays the lighter of the two
+								 * so the row keeps its own hierarchy.
+								 */}
+								<p className="mt-3 text-[14px] text-[#666]">
+									{/*
+									 * The reward is the headline of the dialog, so the amount and its unit
+									 * are emphasised together. `Trans` keeps the emphasis inside the
+									 * translation — "500 积分" and "500 points" highlight as one phrase.
+									 */}
+									<Trans
+										components={{
+											strong: <strong className="font-bold text-[#20a66a]" />,
+										}}
+										i18nKey="newUserBenefits.dialog.maxReward"
+										ns="super/guideTour"
+										values={{ points: maxPoints }}
+									/>
+								</p>
+							</div>
+							<button
+								aria-label={t("newUserBenefits.dialog.close")}
+								className="grid size-10 place-items-center rounded-[12px] border border-[#dedede] text-[#4c4c4c] hover:bg-[#f7f7f7] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#171717]/30"
+								onClick={() => setOpen(false)}
+								type="button"
+							>
+								<X aria-hidden="true" className="size-6" strokeWidth={1.8} />
+							</button>
+						</header>
+
+						<ScrollArea className="min-h-0 flex-1 px-8">
+							{/*
+							 * The heading, its explanation and the counter are the whole summary: the
+							 * progress bar and the extra note are gone now that each row states its own
+							 * reward and window. `items-center` keeps the counter centred on the
+							 * two-line block the way the design reads it.
+							 *
+							 * The block is asymmetric on purpose: the design leaves only half as much
+							 * room under the explanation as above the heading (`pb-3` against `pt-6`),
+							 * so the divider sits close to the text instead of floating in whitespace.
+							 */}
+							<div className="border-b border-[#e7e7e7] pb-3 pt-6">
+								<div className="flex items-center justify-between gap-6">
+									<div>
+										<h3 className="text-[15px] font-[750] leading-tight">
+											{t("newUserBenefits.summary.title", {
+												total: totalTasks,
+												points: maxPoints,
+											})}
+										</h3>
+										<p className="mt-2 text-[13px] text-[#666]">
+											{t("newUserBenefits.summary.description")}
+										</p>
+									</div>
+									<strong className="shrink-0 text-[14px] font-[750]">
+										{t("newUserBenefits.summary.progress", {
+											completed: completedCount,
+											total: totalTasks,
+										})}
+									</strong>
+								</div>
+							</div>
+
+							<section className="py-5">
+								<h3 className="mb-2 flex items-center gap-3 text-[15px] font-[750]">
+									{t("newUserBenefits.section.incomplete")}
+									{/*
+									 * `size-6` (24px) rather than the `size-8` first draft: at 32px the
+									 * counter read as a second heading instead of a marker beside the
+									 * 16px heading type. The "completed" section below uses the same
+									 * badge.
+									 */}
+									<span className="grid size-6 place-items-center rounded-full bg-[#f0f0f0] text-[12px] text-[#666]">
+										{remainingCount}
+									</span>
+								</h3>
+								{remainingTasks.map((row) => (
+									<NewUserBenefitsTaskRow key={row.id} row={row} />
+								))}
+							</section>
+
+							{/*
+							 * Nothing is finished yet, so the section — heading, counter and its
+							 * divider — is dropped entirely instead of rendering an empty list.
+							 */}
+							{completedTasks.length > 0 && (
+								<section className="border-t border-[#e7e7e7] py-5">
+									<h3 className="mb-2 flex items-center gap-3 text-[15px] font-[750]">
+										{t("newUserBenefits.section.complete")}
+										<span className="grid size-6 place-items-center rounded-full bg-[#f0f0f0] text-[12px] text-[#666]">
+											{completedCount}
+										</span>
+									</h3>
+									{completedTasks.map((row) => (
+										<NewUserBenefitsTaskRow key={row.id} row={row} />
+									))}
+								</section>
+							)}
+						</ScrollArea>
+					</div>
+				</DialogContent>
+			</Dialog>
+		</>
+	)
+}
+
+/**
+ * The benefits card's entry point. The whole new-user onboarding is a SaaS personal-plan feature,
+ * so on a private deployment or in a team organization this returns `null` without mounting the card
+ * above — nothing is rendered, no reward list is asked for, and the card's own chunk is never pulled.
+ */
+export default function NewUserBenefits() {
+	if (!useCanHostHomeOnboarding()) return null
+
+	return <NewUserBenefitsCard />
+}

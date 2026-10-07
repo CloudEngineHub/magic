@@ -37,7 +37,7 @@ import CommonHeaderV2 from "../../components/CommonHeaderV2"
 import { useDevicePreview } from "../../components/DevicePreview/useDevicePreview"
 import { DevicePreviewToolbar } from "../../components/DevicePreview/DevicePreviewToolbar"
 import { DevicePreviewViewport } from "../../components/DevicePreview/DevicePreviewViewport"
-import { Flex, Tour } from "antd"
+import { Flex } from "antd"
 import { shadow } from "@/utils/shadow"
 import CodeEditor from "@/components/base/CodeEditor"
 import { scrollToAnchor } from "@/utils/slug"
@@ -47,7 +47,6 @@ import {
 	parseHtmlNavigationRequest,
 	resolveRootHtmlIndexFallback,
 } from "./utils/html-navigation"
-import { HTMLGuideTourElementId, useHTMLGuideTour } from "@/pages/superMagic/hooks/useHTMLGuideTour"
 import pubsub, { PubSubEvents } from "@/utils/pubsub"
 import MagicSpin from "@/components/base/MagicSpin"
 import DashboardIsolatedHTMLRenderer from "./dashboard/DashboardIsolatedHTMLRenderer"
@@ -1381,31 +1380,12 @@ export default memo(function HTML(props: HTMLProps) {
 		isEditMode,
 	})
 
-	const { guideTourOpen, setGuideTourOpen, guideTourSteps } = useHTMLGuideTour({
-		isMobile,
-	})
 	const quickSelectionLabel = isQuickSelecting
 		? t("topicFiles.exitSelectElement")
 		: t("topicFiles.selectElement")
 	const quickSelectionTitle = isQuickSelecting
 		? t("topicFiles.exitSelectElementDescription")
 		: t("topicFiles.selectElementDescription")
-
-	// 通知编辑按钮已准备好
-	useEffect(() => {
-		if (showFileEditButton) {
-			pubsub.publish(
-				PubSubEvents.GuideTourHTMLElementReady,
-				HTMLGuideTourElementId.HTMLFileEditButton,
-			)
-		}
-		if (showAIOptimizationButton) {
-			pubsub.publish(
-				PubSubEvents.GuideTourHTMLElementReady,
-				HTMLGuideTourElementId.MoreButton,
-			)
-		}
-	}, [showFileEditButton, showAIOptimizationButton])
 
 	const aiEditMenuItems = useAIEditMenuItems({
 		attachmentList,
@@ -1415,7 +1395,6 @@ export default memo(function HTML(props: HTMLProps) {
 		onPrimaryAction: handleAIEdit,
 		isPrimaryActive: isAppendPicking,
 	})
-
 	const headerActionConfig = useMemo<HeaderActionConfig>(
 		() => ({
 			hideDefaults: isReadonlyPreview
@@ -1619,7 +1598,6 @@ export default memo(function HTML(props: HTMLProps) {
 		attachments,
 		actionConfig: headerActionConfig,
 		onCompareVersion: handleCompareVersion,
-		moreButtonId: htmlTestIdsEnabled ? HTMLGuideTourElementId.MoreButton : undefined,
 		extraMoreMenuItems: [
 			...(aiEditMenuItems ?? []),
 			...(!isDataAnalysis && !isCodeViewMode
@@ -1829,14 +1807,6 @@ export default memo(function HTML(props: HTMLProps) {
 				/>
 			)}
 
-			<Tour
-				steps={guideTourSteps}
-				open={guideTourOpen}
-				onClose={() => setGuideTourOpen(false)}
-				gap={{
-					radius: 8,
-				}}
-			/>
 			{permissionManagerOpen && canManageHtmlPermissions ? (
 				<Suspense fallback={null}>
 					<HtmlPermissionManagerDialog

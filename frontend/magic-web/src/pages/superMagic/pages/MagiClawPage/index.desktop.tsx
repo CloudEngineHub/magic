@@ -10,6 +10,7 @@ import { usePoppinsFont } from "@/styles/font"
 import useGeistFont from "@/styles/fonts/geist"
 import { getClawBrandTranslationValues } from "@/pages/superMagic/utils/clawBrand"
 import { useNamedPageTitle } from "@/pages/superMagic/hooks/useNamedPageTitle"
+import GuideTourWrapper from "@/pages/superMagic/components/LazyGuideTour"
 import { MagiClawCreatedSection } from "./MagiClawCreatedSection"
 import { MagiClawCreateDialog, type MagiClawCreatePayload } from "./MagiClawCreateDialog"
 import { EMPTY_MAGIC_CLAW_LIST, MAGI_CLAW_LIST_POLLING_INTERVAL } from "./constants"
@@ -113,6 +114,12 @@ export default function MagiClawDesktopPage() {
 				onCreate={(payload) => void handleCreateClaw(payload)}
 				isSubmitting={isCreating}
 			/>
+
+			{/*
+			 * The "了解超级龙虾如何使用" steps are highlighted on this page, and it is a standalone route
+			 * outside the home layout — so the tour has to be mounted here to serve that task.
+			 */}
+			<GuideTourWrapper isMobile={false} page="magi-claw" />
 		</>
 	)
 }

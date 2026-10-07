@@ -363,8 +363,7 @@ const MessageList = observer(
 		const isLastMessageError = useMemo(() => {
 			const lastNode = mainDisplayData?.[mainDisplayData?.length - 1]
 			const n = superMagicStore.getMessageNode(lastNode?.super_message_id) as
-				| { status?: TaskStatus }
-				| undefined
+				{ status?: TaskStatus } | undefined
 			return n?.status === TaskStatus.ERROR
 		}, [mainDisplayData])
 
@@ -883,6 +882,7 @@ const MessageList = observer(
 							"message-list-container",
 							className,
 						)}
+						data-guide-anchor="message-list-container"
 					>
 						{enableExport && exportStore.exportMode && (
 							<div className="px-2 pt-2">

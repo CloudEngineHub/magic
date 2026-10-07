@@ -1,0 +1,865 @@
+import fs from "node:fs"
+import path from "node:path"
+import { fileURLToPath } from "node:url"
+
+import { act, fireEvent, render, screen } from "@testing-library/react"
+import { renderToStaticMarkup } from "react-dom/server"
+import { beforeEach, describe, expect, it, vi } from "vitest"
+
+import enGuideTour from "@/assets/locales/en_US/super/guideTour.json"
+import zhGuideTour from "@/assets/locales/zh_CN/super/guideTour.json"
+
+/*
+ * The verdict is handed over directly rather than through the barrel the component imports: only a
+ * tour ever writes it, so the barrel has no reason to pass the writer on to the product.
+ */
+import { setHomeOnboardingRunActive } from "../../LazyGuideTour/GuideTourManager"
+import {
+	type HomeOnboardingReward,
+	type HomeOnboardingRewardList,
+	type HomeOnboardingTaskId,
+} from "../../LazyGuideTour"
+import NewUserBenefits from "../index"
+
+const dirname = path.dirname(fileURLToPath(import.meta.url))
+
+/**
+ * What the 新手福利 dialog promises, as the latest design states it.
+ *
+ * The design dropped the dialog-wide countdown in favour of a 7-day window on every row, and
+ * simplified the summary down to a heading, its explanation and the counter. Both are easy to
+ * "restore" by accident, because nothing else in the dialog would look wrong — so this file pins
+ * them: the header asks for the reward line and no longer for a countdown, the summary block holds
+ * nothing but that one row, the section follows it directly, and every row still carries its
+ * duration, reward and window.
+ *
+ * Copy itself is not asserted: the mock hands back the key, so these are contract checks that
+ * survive wording changes. It still records what every slot was rendered with — the interpolated
+ * numbers and the markup the wording rides on — which is how the point total and the card's forced
+ * line break stay pinned without the copy being restated here.
+ */
+const { calls, translate } = vi.hoisted(() => {
+	const calls: Array<{
+		key: string
+		/** The named slots `Trans` was handed, as `[name, className]` pairs. */
+		slots: Array<[string, string]>
+		values?: Record<string, unknown>
+	}> = []
+	return {
+		calls,
+		translate: (key: string, values?: Record<string, unknown>) => {
+			calls.push({ key, slots: [], values })
+			return key
+		},
+	}
+})
+
+vi.mock("react-i18next", () => ({
+	useTranslation: () => ({ i18n: { language: "en_US" }, t: translate }),
+	// The real one interpolates markup; here the key alone is enough to name the string a slot uses.
+	Trans: (props: {
+		components?: Record<string, unknown>
+		i18nKey: string
+		values?: Record<string, unknown>
+	}) => {
+		calls.push({
+			key: props.i18nKey,
+			slots: Object.entries(props.components ?? {}).map(([name, node]) => [
+				name,
+				(node as { props?: { className?: string } })?.props?.className ?? "",
+			]),
+			values: props.values,
+		})
+		return props.i18nKey
+	},
+}))
+
+vi.mock("@/routes/hooks/useNavigate", () => ({ default: () => vi.fn() }))
+
+vi.mock("@/models/user/hooks", () => ({
+	useUserInfo: () => ({ userInfo: { magic_id: "magic-benefits-copy" } }),
+	/*
+	 * The card asks whether this deployment and this organization are the ones the feature belongs
+	 * to before it mounts at all — see `onboardingAvailability`. This file is about the card's own
+	 * contract, so the answer here is the one that gets it on screen: a SaaS personal organization.
+	 * Which environments answer no is the gate's subject, and is covered where the gate lives.
+	 */
+	useOrganization: () => ({ organizationListReady: true, isPersonalOrganization: true }),
+}))
+
+vi.mock("@/utils/env", async (importOriginal) => ({
+	...(await importOriginal<typeof import("@/utils/env")>()),
+	isPrivateDeployment: () => false,
+}))
+
+/** The toast is the card's only way of reporting a failed claim; captured rather than rendered. */
+const { toasts } = vi.hoisted(() => ({
+	toasts: [] as string[],
+}))
+
+vi.mock("@/components/base/MagicToaster/utils", () => ({
+	default: {
+		error: (options: { content: string }) => {
+			toasts.push(options.content)
+		},
+	},
+}))
+
+/**
+ * The backend's answer, as this card sees it.
+ *
+ * The rows are the eight the contract's appendix lists, in the order it lists them, with the
+ * documented points — so the card is exercised against the real shape rather than a fixture shaped
+ * to flatter it. Two sets stand in for what the user has done, and the factory below turns them
+ * into `status`/`reward_status` the way the backend would.
+ *
+ * The code → flow mapping is deliberately *not* restated here: it is read off the module under
+ * test, so a row the card cannot place would fail these tests the same way it would fail the app.
+ */
+const { TASK_ROWS, listState, unpaidRows, paidRows, claimReward, buildRewardList } = vi.hoisted(
+	() => {
+		/** `code` and `points`, exactly as the contract's appendix tabulates them. */
+		const TASK_ROWS: Array<{ code: string; points: number }> = [
+			{ code: "first_ai_work", points: 100 },
+			{ code: "super_magic_intro", points: 50 },
+			{ code: "ai_ppt", points: 50 },
+			{ code: "ai_recording", points: 50 },
+			{ code: "digital_employee", points: 50 },
+			{ code: "skill_management", points: 50 },
+			{ code: "micro_app", points: 50 },
+			{ code: "magiclaw", points: 50 },
+		]
+		/** What the account has done, by code: done-but-unpaid and done-and-paid. */
+		const unpaidRows = new Set<string>()
+		const paidRows = new Set<string>()
+		const claimReward = vi.fn()
+		/**
+		 * The three answers a deployment can give that are not a full list: no feature, nothing to
+		 * show yet, and a task this build has no row for.
+		 */
+		const listState = { empty: false, extraCode: null as string | null }
+
+		return { TASK_ROWS, listState, unpaidRows, paidRows, claimReward, buildRewardList }
+
+		function buildRewardList(
+			toTaskId: (code: string) => HomeOnboardingTaskId | null,
+		): HomeOnboardingRewardList {
+			if (listState.empty) return { status: "ready", rewards: [] }
+
+			const rows = listState.extraCode
+				? [...TASK_ROWS, { code: listState.extraCode, points: 50 }]
+				: TASK_ROWS
+
+			const rewards: HomeOnboardingReward[] = rows.map(({ code, points }) => {
+				const done = paidRows.has(code) || unpaidRows.has(code)
+				return {
+					taskId: toTaskId(code),
+					code,
+					points,
+					validityDays: 7,
+					status: done ? "COMPLETED" : "PENDING",
+					rewardStatus: paidRows.has(code) ? "GRANTED" : "PENDING",
+					completedAt: null,
+					rewardGrantedAt: null,
+					expiresAt: "2026-10-06T09:12:33+00:00",
+				}
+			})
+
+			return { status: "ready", rewards }
+		}
+	},
+)
+
+vi.mock("../../LazyGuideTour", async (importOriginal) => {
+	const actual = await importOriginal<typeof import("../../LazyGuideTour")>()
+	return {
+		...actual,
+		// The card reads the list through the manager, which owns the cache; here it is a fixture.
+		getHomeOnboardingRewardList: () => buildRewardList(actual.getHomeOnboardingTaskIdByCode),
+		ensureHomeOnboardingRewardList: () => Promise.resolve(),
+		claimHomeOnboardingReward: claimReward,
+	}
+})
+
+/** The pot the design pays out once every tour is done. */
+const MAX_POINTS = 500
+
+/** Where the design stores the folded state; a rename here would silently forget it. */
+const COLLAPSED_KEY = "magiFeatureEntryCollapsed"
+
+beforeEach(() => {
+	calls.length = 0
+	toasts.length = 0
+	paidRows.clear()
+	unpaidRows.clear()
+	listState.empty = false
+	listState.extraCode = null
+	claimReward.mockReset()
+	claimReward.mockResolvedValue({ ok: true, points: 50 })
+	// The card reads its folded state on mount, and jsdom keeps storage for the whole file — so a
+	// test that folds the card would otherwise decide the state every later test starts in.
+	window.localStorage.clear()
+	// Likewise for the run signal: it lives in the tour's module, which this file does not reset, so
+	// a test that hands the screen to a run would otherwise hide the card for every later one.
+	setHomeOnboardingRunActive(false)
+})
+
+/** Every render of the slot named by `key`, oldest first. */
+function rendersOf(key: string) {
+	return calls.filter((call) => call.key === key)
+}
+
+/** The order the design lists the eight tours in — the order the backend advertises them in too. */
+const ROW_ORDER = [
+	"firstAiWork",
+	"workbench",
+	"aiPpt",
+	"recording",
+	"employees",
+	"skills",
+	"microapps",
+	"superLobster",
+]
+
+/** The tour names, in the order the dialog renders them. */
+function rowTitles() {
+	return screen
+		.getAllByRole("heading", { level: 3 })
+		.map((heading) => heading.textContent ?? "")
+		.filter((text) => text.startsWith("newUserBenefits.tasks."))
+		.map((text) => text.replace("newUserBenefits.tasks.", "").replace(".title", ""))
+}
+
+/** Opens the dialog the way the card's entry button does. */
+function openDialog() {
+	render(<NewUserBenefits />)
+	fireEvent.click(screen.getByLabelText("newUserBenefits.entry.ariaLabel"))
+}
+
+/** The bordered block that holds the heading, its explanation and the counter. */
+function summaryBlock() {
+	// <p> → the title/description column → the row holding the counter → the bordered block.
+	const column = screen.getByText("newUserBenefits.summary.description")
+		.parentElement as HTMLElement
+	const summaryRow = column.parentElement as HTMLElement
+	return { column, summaryRow, block: summaryRow.parentElement as HTMLElement }
+}
+
+/** The action button of the row whose title slot is `titleKey`: `<h3>` → text column → row. */
+function rowAction(titleKey: string) {
+	const title = screen.getByText(`newUserBenefits.tasks.${titleKey}.title`)
+	const row = title.parentElement?.parentElement?.parentElement as HTMLElement
+	return row.querySelector("button") as HTMLButtonElement
+}
+
+describe("NewUserBenefits dialog copy", () => {
+	it("states the reward in the header instead of a dialog-wide countdown", () => {
+		openDialog()
+
+		expect(screen.getByText("newUserBenefits.dialog.maxReward")).toBeTruthy()
+		expect(screen.queryByText("newUserBenefits.dialog.expiry")).toBeNull()
+	})
+
+	it("keeps the summary to one row and lets the task list follow it", () => {
+		openDialog()
+
+		const { summaryRow, block } = summaryBlock()
+		// The row is the text column plus the counter. The bar and the note used to follow it inside
+		// the block, so both would break either assertion below.
+		expect(summaryRow.children).toHaveLength(2)
+		expect(block.children).toHaveLength(1)
+		expect(block.nextElementSibling?.tagName).toBe("SECTION")
+
+		const summary = block.textContent ?? ""
+		expect(summary).toContain("newUserBenefits.summary.title")
+		expect(summary).toContain("newUserBenefits.summary.progress")
+		expect(screen.queryByText("newUserBenefits.summary.note")).toBeNull()
+	})
+
+	it("hangs the divider just under the explanation", () => {
+		openDialog()
+
+		// The block is deliberately asymmetric: the design leaves about half as much room under the
+		// explanation as above the heading, so the divider does not float in whitespace. A plain
+		// `py-*` would restore the even spacing and the gap the user asked to tighten.
+		const { block } = summaryBlock()
+		const classes = block.className.split(/\s+/)
+		expect(classes).toContain("pt-6")
+		expect(classes).toContain("pb-3")
+		expect(classes).not.toContain("py-6")
+	})
+
+	it("keeps the section counters in a compact badge", () => {
+		openDialog()
+
+		// 24px next to 16px heading type. At the 32px it started at, the counter read as a second
+		// heading rather than a marker. The "completed" section is dropped while nothing is
+		// finished, so only the "remaining" counter is on screen; both share the class.
+		const counters = screen
+			.getAllByRole("heading", { level: 3 })
+			.filter((heading) => (heading.textContent ?? "").startsWith("newUserBenefits.section."))
+		expect(counters).toHaveLength(1)
+
+		const badge = counters[0].querySelector("span") as HTMLElement
+		const classes = badge.className.split(/\s+/)
+		expect(classes).toContain("size-6")
+		expect(classes).not.toContain("size-7")
+		expect(classes).not.toContain("size-8")
+	})
+
+	it("keeps the secondary copy a shade darker than the first draft", () => {
+		openDialog()
+
+		/*
+		 * The four pieces of secondary copy the user asked to deepen: the header line, the summary
+		 * explanation, a row's description and a row's duration. The first three used to sit at
+		 * `#777` and the duration at `#999` — both too faint at 11–14px against white. The
+		 * "recommended" tag next to a title is deliberately left at `#777`: it was not in the set.
+		 */
+		const headerLine = screen.getByText("newUserBenefits.dialog.maxReward")
+		const summaryLine = screen.getByText("newUserBenefits.summary.description")
+		const rowDescriptions = screen.getAllByText(/^newUserBenefits\.tasks\..+\.description$/)
+		const rowDurations = screen.getAllByText("newUserBenefits.task.duration")
+
+		expect(rowDescriptions).toHaveLength(ROW_ORDER.length)
+		expect(rowDurations).toHaveLength(ROW_ORDER.length)
+
+		for (const line of [headerLine, summaryLine, ...rowDescriptions]) {
+			const classes = line.className.split(/\s+/)
+			expect(classes).toContain("text-[#666]")
+			expect(classes).not.toContain("text-[#777]")
+		}
+
+		// The duration span carries no colour of its own — the row's meta line does.
+		for (const duration of rowDurations) {
+			const metaLine = (duration.parentElement as HTMLElement).className.split(/\s+/)
+			expect(metaLine).toContain("text-[#888]")
+			expect(metaLine).not.toContain("text-[#999]")
+		}
+	})
+
+	it("keeps the dialog narrower than the first draft", () => {
+		openDialog()
+
+		/*
+		 * 800px, after a 920px first draft and an intermediate 860px. At 920 the dialog all but
+		 * filled the viewport it was reviewed in — barely 20px of margin a side — and the rows read
+		 * as loose, because the flexible middle column had ~220px of slack. The widest intrinsic
+		 * line is the summary explanation plus its counter at about 610px including the side
+		 * padding, so the narrower frame does not make anything re-wrap.
+		 */
+		const dialog = screen.getByRole("dialog")
+		const classes = dialog.className.split(/\s+/)
+		expect(classes).toContain("!max-w-[800px]")
+		expect(classes).not.toContain("!max-w-[860px]")
+		expect(classes).not.toContain("!max-w-[920px]")
+	})
+
+	it("lists the tours in the order the backend sends them", () => {
+		openDialog()
+
+		expect(rowTitles()).toEqual(ROW_ORDER)
+	})
+
+	it("recommends the first tour and no other", () => {
+		openDialog()
+
+		const badge = screen.getByText("newUserBenefits.task.recommended")
+		expect(badge.parentElement?.textContent).toContain(
+			"newUserBenefits.tasks.firstAiWork.title",
+		)
+	})
+
+	it("gives every row its duration, reward and 7-day window", () => {
+		openDialog()
+
+		expect(screen.getAllByText("newUserBenefits.task.duration")).toHaveLength(ROW_ORDER.length)
+		expect(
+			screen.getAllByText("newUserBenefits.task.reward · newUserBenefits.task.validity"),
+		).toHaveLength(ROW_ORDER.length)
+	})
+})
+
+describe("NewUserBenefits rows come from the backend", () => {
+	it("draws one row and one progress node per task the backend advertises", () => {
+		openDialog()
+
+		expect(rowTitles()).toHaveLength(TASK_ROWS.length)
+		expect(screen.getByText(`0/${TASK_ROWS.length}`)).toBeTruthy()
+	})
+
+	it("marks a paid task done, and offers the review rather than the reward again", () => {
+		paidRows.add("ai_ppt")
+		openDialog()
+
+		const action = rowAction("aiPpt")
+		expect(action.textContent).toBe("newUserBenefits.task.replay")
+		// Paid and re-watchable, so the button opens the review; the reward is not on offer twice.
+		expect(action.disabled).toBe(false)
+	})
+
+	it("never offers to claim the AI-work task, which only a system event can finish", () => {
+		paidRows.add("first_ai_work")
+		openDialog()
+
+		const action = rowAction("firstAiWork")
+		expect(action.textContent).toBe("newUserBenefits.task.done")
+		expect(action.disabled).toBe(true)
+	})
+
+	it("offers a retry for a task that is done but was never paid", () => {
+		unpaidRows.add("ai_ppt")
+		openDialog()
+
+		const action = rowAction("aiPpt")
+		expect(action.textContent).toBe("newUserBenefits.task.claimRetry")
+		expect(action.disabled).toBe(false)
+	})
+
+	it("keeps a done-but-unpaid AI-work task dead rather than offering a call it cannot make", () => {
+		// The backend answers `9303` to any manual completion of this one, so an unpaid row must
+		// still show as finished instead of a retry that is guaranteed to fail.
+		unpaidRows.add("first_ai_work")
+		openDialog()
+
+		expect(rowAction("firstAiWork").textContent).toBe("newUserBenefits.task.done")
+		expect(rowAction("firstAiWork").disabled).toBe(true)
+	})
+
+	it("re-asks for the points when a retry is clicked, and keeps the row if it fails", async () => {
+		unpaidRows.add("ai_ppt")
+		claimReward.mockResolvedValue({
+			ok: false,
+			code: 9306,
+			retryable: true,
+			message: "ignored",
+		})
+		openDialog()
+
+		await act(async () => {
+			fireEvent.click(rowAction("aiPpt"))
+		})
+
+		expect(claimReward).toHaveBeenCalledWith("magic-benefits-copy", "create-ai-ppt")
+		// The row is exactly as it was: still claimable, which is what makes the retry the user's.
+		expect(rowAction("aiPpt").textContent).toBe("newUserBenefits.task.claimRetry")
+		expect(rowAction("aiPpt").disabled).toBe(false)
+		// Our own copy, not the backend's `message`: the endpoint does no language negotiation.
+		expect(toasts).toEqual(["homeOnboarding.claim.retry"])
+	})
+
+	it("says nothing when the deployment stops offering the feature mid-claim", async () => {
+		unpaidRows.add("ai_ppt")
+		claimReward.mockResolvedValue({ ok: false, code: 9301, retryable: false, message: null })
+		openDialog()
+
+		await act(async () => {
+			fireEvent.click(rowAction("aiPpt"))
+		})
+
+		expect(toasts).toEqual([])
+	})
+
+	it("drops a code this build has no row for, keeping the rest", () => {
+		// The backend may add a task before this client learns its copy; a nameless, flow-less row
+		// would be worse than one that appears with the next release.
+		listState.extraCode = "brand_new_task"
+		openDialog()
+
+		expect(rowTitles()).toEqual(ROW_ORDER)
+		expect(screen.queryByText(/brand_new_task/)).toBeNull()
+	})
+})
+
+describe("NewUserBenefits entry card", () => {
+	it("sells the whole pot until the first task is finished", () => {
+		render(<NewUserBenefits />)
+
+		/*
+		 * With nothing done the card advertises the pot instead of reporting progress: "继续体验"
+		 * reads as a lie before the first task, and "已完成 0 项" as a discouragement. The break falls
+		 * on the comma because both halves are `whitespace-nowrap` — Chinese otherwise wraps between
+		 * any two glyphs, which stranded "领" at the end of the first line. The slot names matter as
+		 * much as the classes: `Trans` only lines a slot up with a translation that names it.
+		 */
+		const [headline] = rendersOf("newUserBenefits.entry.titleFresh")
+		expect(headline?.slots.map(([name]) => name)).toEqual(["line1", "line2"])
+		for (const [, className] of headline?.slots ?? []) {
+			expect(className.split(/\s+/)).toContain("whitespace-nowrap")
+		}
+
+		expect(screen.queryByText("newUserBenefits.entry.title")).toBeNull()
+		// There are no counts to report yet, so the headline stands alone.
+		expect(screen.queryByText("newUserBenefits.entry.meta")).toBeNull()
+	})
+
+	it("goes back to reporting progress once a task is done", () => {
+		paidRows.add("first_ai_work")
+		render(<NewUserBenefits />)
+
+		expect(screen.getByText("newUserBenefits.entry.title")).toBeTruthy()
+		expect(screen.getByText("newUserBenefits.entry.meta")).toBeTruthy()
+		expect(rendersOf("newUserBenefits.entry.titleFresh")).toHaveLength(0)
+	})
+
+	it("draws the progress track as a hairline under the nodes", () => {
+		render(<NewUserBenefits />)
+
+		/*
+		 * 2px, the height the design gives the track (`.feature-entry-nodes::before{height:2px}`).
+		 * It sat at 4px here, which read as a bar as heavy as the 12px nodes it links, so the nodes
+		 * stopped standing out against it. The track is a pseudo-element, so the classes are all
+		 * there is to assert — trimming the height must not disturb its centring, which is what
+		 * keeps it running through the middle of the nodes rather than under them.
+		 */
+		const card = screen.getByLabelText("newUserBenefits.entry.ariaLabel")
+		const track = card.querySelector('[class*="55575c"]') as HTMLElement
+		const classes = track.className.split(/\s+/)
+
+		expect(classes).toContain("before:h-0.5")
+		expect(classes).not.toContain("before:h-1")
+		expect(classes).toContain("before:top-1/2")
+		expect(classes).toContain("before:-translate-y-1/2")
+	})
+
+	it("lights the node of each finished task, not the first N", () => {
+		// The tasks are taken in whatever order the user likes, so a track painted off a count would
+		// claim the first task is done when the last one is.
+		paidRows.add("magiclaw")
+		render(<NewUserBenefits />)
+
+		const card = screen.getByLabelText("newUserBenefits.entry.ariaLabel")
+		const track = card.querySelector('[class*="55575c"]') as HTMLElement
+		const nodes = Array.from(track.children)
+		const lit = nodes.map((node) => node.className.includes("e7a91a"))
+
+		expect(lit).toEqual([false, false, false, false, false, false, false, true])
+	})
+
+	it("keeps both line tags in every locale", () => {
+		/*
+		 * `Trans` only breaks the line where the translation carries the tags, and the mock above
+		 * hands back the key without ever parsing the markup — so a locale that lost them would drop
+		 * the break with nothing else in this file noticing.
+		 */
+		for (const locale of [zhGuideTour, enGuideTour]) {
+			const copy = locale.newUserBenefits.entry.titleFresh
+			for (const tag of ["line1", "line2"]) {
+				expect(copy).toContain(`<${tag}>`)
+				expect(copy).toContain(`</${tag}>`)
+			}
+		}
+	})
+
+	it("prices the card and the dialog off the same pot", () => {
+		openDialog()
+
+		/*
+		 * 500 is the reachable ceiling the design pays out: the rows sum to 450 — `first_ai_work`
+		 * pays 100 and the other seven 50 — and finishing the lot adds the documented 50-point
+		 * bonus. The card used to derive it as `8 * 50 + 50`, which promised 450 in a pill sitting
+		 * under a header that advertised 500. Only the per-row figures are the backend's; the
+		 * bonus is the documented constant it is added to.
+		 */
+		const [headline] = rendersOf("newUserBenefits.entry.titleFresh")
+		expect(headline?.values).toEqual({ points: MAX_POINTS, total: ROW_ORDER.length })
+
+		const [pill] = rendersOf("newUserBenefits.entry.remainingReward")
+		expect(pill?.values).toEqual({ points: MAX_POINTS })
+
+		const [header] = rendersOf("newUserBenefits.dialog.maxReward")
+		expect(header?.values).toEqual({ points: MAX_POINTS })
+	})
+
+	it("stays off the page when the deployment offers nothing", () => {
+		/*
+		 * The one state the card must not dress up. A list that is still on its way, one that failed,
+		 * and a deployment that answered `9300`/`9301` all end up with no rows — and the card has
+		 * nothing to advertise in any of them, so it renders nothing rather than a card whose
+		 * numbers are all zero.
+		 */
+		listState.empty = true
+
+		const { container } = render(<NewUserBenefits />)
+
+		expect(container.innerHTML).toBe("")
+	})
+})
+
+/**
+ * Folding the entry card down to its pill, and the motion that carries it.
+ *
+ * The card and the pill are two different boxes — a 310px grid against an auto-width pill — so
+ * nothing about the change of size interpolates. What these pin is the rest of the contract: that
+ * folding swaps which target the card is, that the folded state outlives the visit under the key
+ * the design uses, that the control sits on the card's corner instead of inside its button, and
+ * that the keyframes the two states are marked with exist and are not motion-only.
+ */
+describe("NewUserBenefits entry card fold", () => {
+	/** The fold control, which only the open card carries. */
+	function foldControl() {
+		return screen.getByLabelText("newUserBenefits.entry.collapse")
+	}
+
+	/*
+	 * The card is one button whose announced action follows its state — it opens the dialog when
+	 * open and unfolds when folded — so the two states are reached by two labels rather than one.
+	 */
+	function openCard() {
+		return screen.getByLabelText("newUserBenefits.entry.ariaLabel")
+	}
+
+	function foldedCard() {
+		return screen.getByLabelText("newUserBenefits.entry.expand")
+	}
+
+	it("folds to the pill and unfolds again, without opening the dialog in between", () => {
+		render(<NewUserBenefits />)
+		// Open by default: the counter and the headline, and no pill anywhere.
+		expect(rendersOf("newUserBenefits.entry.pillReward")).toHaveLength(0)
+		expect(screen.getByText(`0/${ROW_ORDER.length}`)).toBeTruthy()
+
+		fireEvent.click(foldControl())
+
+		/*
+		 * Folded, the pill replaces the body and the card becomes the unfold target: the design
+		 * points its chevron right and gives the whole pill to expanding, so a click there must
+		 * not also reach the dialog.
+		 */
+		expect(screen.queryByLabelText("newUserBenefits.entry.collapse")).toBeNull()
+		expect(screen.queryByLabelText("newUserBenefits.entry.ariaLabel")).toBeNull()
+		expect(screen.queryByText(`0/${ROW_ORDER.length}`)).toBeNull()
+		expect(screen.queryByRole("dialog")).toBeNull()
+
+		const [pill] = rendersOf("newUserBenefits.entry.pillReward")
+		expect(pill?.values).toEqual({ points: MAX_POINTS })
+
+		fireEvent.click(foldedCard())
+
+		// Back to the open card, and the dialog still needs its own click.
+		expect(screen.queryByRole("dialog")).toBeNull()
+		expect(openCard()).toBeTruthy()
+		expect(screen.getByText(`0/${ROW_ORDER.length}`)).toBeTruthy()
+	})
+
+	it("starts folded on a later visit, from the key the design stores it under", () => {
+		window.localStorage.setItem(COLLAPSED_KEY, "1")
+		render(<NewUserBenefits />)
+
+		// Folded from the first paint, rather than after a visible re-open.
+		expect(foldedCard()).toBeTruthy()
+		expect(rendersOf("newUserBenefits.entry.pillReward")[0]?.values).toEqual({
+			points: MAX_POINTS,
+		})
+		// The open body never rendered at all, which is what "from the first paint" means here.
+		expect(rendersOf("newUserBenefits.entry.titleFresh")).toHaveLength(0)
+		expect(screen.queryByText(`0/${ROW_ORDER.length}`)).toBeNull()
+	})
+
+	it("remembers the fold, in both directions", () => {
+		render(<NewUserBenefits />)
+		expect(window.localStorage.getItem(COLLAPSED_KEY)).toBe("")
+
+		fireEvent.click(foldControl())
+		expect(window.localStorage.getItem(COLLAPSED_KEY)).toBe("1")
+
+		fireEvent.click(foldedCard())
+		expect(window.localStorage.getItem(COLLAPSED_KEY)).toBe("")
+	})
+
+	it("hangs the control off the card's own corner, clear of the counter", () => {
+		render(<NewUserBenefits />)
+
+		// 22px at 15px from both outer edges, and the card's top row reserves exactly that corner —
+		// the counter would otherwise run under the control. 15 rather than the design's 14 because
+		// the design measures it from the card's padding box, with the 1px border outside.
+		const classes = foldControl().className.split(/\s+/)
+		expect(classes).toContain("right-[15px]")
+		expect(classes).toContain("top-[15px]")
+		expect(classes).toContain("size-[22px]")
+		expect(classes).not.toContain("right-3.5")
+
+		const topRow = screen.getByText(`0/${ROW_ORDER.length}`).parentElement as HTMLElement
+		expect(topRow.className.split(/\s+/)).toContain("pr-8")
+		expect(topRow.className.split(/\s+/)).toContain("col-span-2")
+	})
+
+	it("keeps the control beside the card, not a button inside a button", () => {
+		render(<NewUserBenefits />)
+
+		const control = foldControl()
+		const card = openCard()
+
+		expect(control.tagName).toBe("BUTTON")
+		expect(card.tagName).toBe("BUTTON")
+		expect(control.getAttribute("aria-expanded")).toBe("true")
+		// Nesting the control in the card's own button is invalid markup, and the inner button's
+		// clicks are swallowed by the outer one — hence the sibling wrapper.
+		expect(card.contains(control)).toBe(false)
+		expect(card.parentElement?.contains(control)).toBe(true)
+		expect(card.querySelector("button")).toBeNull()
+	})
+
+	it("marks both states with the classes the stylesheet animates", () => {
+		render(<NewUserBenefits />)
+
+		const open = openCard().className.split(/\s+/)
+		expect(open).toContain("nb-entry-unfold")
+		expect(open).not.toContain("nb-entry-fold")
+
+		fireEvent.click(foldControl())
+
+		const folded = foldedCard()
+		expect(folded.className.split(/\s+/)).toContain("nb-entry-fold")
+		expect(folded.className.split(/\s+/)).not.toContain("nb-entry-unfold")
+		// The card's own children are its grid cells, so the body fade rides on the pill itself.
+		expect(folded.firstElementChild?.className.split(/\s+/)).toContain("nb-entry-pill-in")
+	})
+
+	it("animates the fold on the design's curve, and drops it for reduced motion", () => {
+		/*
+		 * Vitest does not process stylesheets, so the file is read directly. Without this the
+		 * motion could be deleted — or its import dropped from the component — with every other
+		 * assertion in the file still passing.
+		 */
+		const css = fs.readFileSync(path.resolve(dirname, "../entry-transition.css"), "utf8")
+		const source = fs.readFileSync(path.resolve(dirname, "../index.tsx"), "utf8")
+
+		/*
+		 * Each rule spelled out rather than matched loosely: `toContain("@keyframes nb-entry-pill-in")`
+		 * would also accept a renamed `@keyframes nb-entry-pill-in-removed`, and one rule drifting to
+		 * a longer duration would hide behind the three that still read 0.24s.
+		 */
+		for (const name of ["fold", "unfold", "pill-in", "body-in"]) {
+			expect(css).toMatch(new RegExp(`@keyframes nb-entry-${name} \\{`))
+			expect(css).toContain(
+				`animation: nb-entry-${name} 0.24s cubic-bezier(0.16, 1, 0.3, 1);`,
+			)
+		}
+		// Folding is decorative, so it has to be skippable; a missing guard is an accessibility
+		// problem rather than a taste one.
+		expect(css).toContain("@media (prefers-reduced-motion: reduce)")
+		expect(source).toContain('import "./entry-transition.css"')
+	})
+})
+
+/**
+ * The wrapper that holds the card and its fold control.
+ *
+ * The design's control sits inside the card, so the card's own `translateY(-2px)` carries it along
+ * for free. Here the control has to be a sibling — a button inside a button is invalid — and moving
+ * it out also moved it out of the card's lift: the card rose, the control stayed, and the two came
+ * apart exactly when the user was pointing at them. The lift therefore belongs to the box holding
+ * both, which is also what lets the card step aside while its dialog is up.
+ *
+ * The same box carries the card's other reason to be off screen: a guided run. That one is not the
+ * card's to work out — a first visit is shown the introduction dialog by a run the card never asked
+ * for — so the card is told, and these tests hand it the verdict directly.
+ */
+describe("NewUserBenefits entry card wrapper", () => {
+	/** The box holding the card and its fold control: what the two have in common. */
+	function wrapperOf(label: string) {
+		return screen.getByLabelText(label).parentElement as HTMLElement
+	}
+
+	it("lifts the fold control with the card, from one shared hover region", () => {
+		render(<NewUserBenefits />)
+
+		const card = screen.getByLabelText("newUserBenefits.entry.ariaLabel")
+		const control = screen.getByLabelText("newUserBenefits.entry.collapse")
+		const classes = wrapperOf("newUserBenefits.entry.ariaLabel").className.split(/\s+/)
+
+		/*
+		 * jsdom runs no layout, so the hover cannot be exercised — where the lift is attached can.
+		 * On the wrapper one `:hover` covers both boxes and the 2px of travel cannot come apart;
+		 * on the card the control would be left behind, which is the seam this replaced.
+		 */
+		expect(wrapperOf("newUserBenefits.entry.ariaLabel").contains(control)).toBe(true)
+		expect(classes).toContain("hover:-translate-y-0.5")
+		expect(classes).toContain("transition-transform")
+		expect(classes).toContain("duration-200")
+		expect(card.className.split(/\s+/)).not.toContain("hover:-translate-y-0.5")
+	})
+
+	it("steps aside while its dialog is up, and comes back when it closes", () => {
+		render(<NewUserBenefits />)
+
+		// Closed, `md:block` is what lifts the base `hidden` — the desktop gate the card always had.
+		expect(wrapperOf("newUserBenefits.entry.ariaLabel").className.split(/\s+/)).toContain(
+			"md:block",
+		)
+
+		fireEvent.click(screen.getByLabelText("newUserBenefits.entry.ariaLabel"))
+		expect(screen.getByRole("dialog")).toBeTruthy()
+
+		/*
+		 * Open, nothing lifts the base `hidden`, so the card is gone for the whole breakpoint range
+		 * rather than sitting behind the overlay — where it would stay readable to a screen reader
+		 * while being unreachable to a pointer.
+		 */
+		expect(wrapperOf("newUserBenefits.entry.ariaLabel").className.split(/\s+/)).not.toContain(
+			"md:block",
+		)
+
+		fireEvent.click(screen.getByLabelText("newUserBenefits.dialog.close"))
+
+		expect(screen.queryByRole("dialog")).toBeNull()
+		expect(wrapperOf("newUserBenefits.entry.ariaLabel").className.split(/\s+/)).toContain(
+			"md:block",
+		)
+	})
+
+	it("steps aside for a guided run, not only for its own dialog", () => {
+		render(<NewUserBenefits />)
+
+		const classes = () => wrapperOf("newUserBenefits.entry.ariaLabel").className.split(/\s+/)
+
+		expect(classes()).toContain("md:block")
+
+		/*
+		 * Every task this card leads into paints over the window while it runs — the introduction
+		 * dialog on a first visit, then the step overlays — so the card yields to the run rather
+		 * than to the one dialog it opens itself. Two reasons, one gate.
+		 */
+		act(() => setHomeOnboardingRunActive(true))
+		expect(classes()).not.toContain("md:block")
+
+		act(() => setHomeOnboardingRunActive(false))
+		expect(classes()).toContain("md:block")
+	})
+
+	it("is already off screen in its first markup, when a run is up before the card arrives", () => {
+		/*
+		 * The automatic run opens the introduction dialog on a first visit — before anything asks for
+		 * this card — so the card is mounted *into* a run rather than told about one afterwards.
+		 *
+		 * A server render is the only view of that first frame jsdom offers: it runs the render and
+		 * nothing else, so a missing `md:block` here means the card was never on screen, rather than
+		 * that an effect caught up with it before the test looked. Reading the manager at mount — as
+		 * the folded state is read — is what buys that, and it is the whole of what this pins.
+		 */
+		setHomeOnboardingRunActive(true)
+
+		// Radix's own layout effect, which means nothing on a server. Silenced for the one call.
+		const complaints = vi.spyOn(console, "error").mockImplementation(() => undefined)
+		const markup = renderToStaticMarkup(<NewUserBenefits />)
+		complaints.mockRestore()
+
+		// The card is there: it is only the desktop gate that never lifted.
+		expect(markup).toContain("newUserBenefits.entry.ariaLabel")
+		expect(markup).not.toContain("md:block")
+	})
+
+	it("stays mounted while a run has the page, so neither fold class can replay", () => {
+		render(<NewUserBenefits />)
+		act(() => setHomeOnboardingRunActive(true))
+
+		/*
+		 * Unshown but still there. Rendering it away would bring the card back playing the unfold
+		 * half of the pair — the animation for coming out of the pill — on a card the user never
+		 * folded, and a card folded before the run would come back folded and silent.
+		 */
+		expect(screen.getByLabelText("newUserBenefits.entry.ariaLabel")).toBeTruthy()
+		expect(rendersOf("newUserBenefits.entry.titleFresh").length).toBeGreaterThan(0)
+	})
+})

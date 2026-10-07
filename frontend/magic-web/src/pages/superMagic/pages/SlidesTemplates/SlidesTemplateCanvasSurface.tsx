@@ -7,7 +7,7 @@ import {
 	type RefObject,
 } from "react"
 import type { OptionItem } from "@/pages/superMagic/components/MainInputContainer/panels/types"
-import type { TemplateCanvasItem } from "./canvasLayout"
+import type { TemplateCanvasGuideAnchor, TemplateCanvasItem } from "./canvasLayout"
 import {
 	getCanvasEdgeCursor,
 	type CanvasEdgeCursor,
@@ -37,6 +37,7 @@ interface SlidesTemplateCanvasSurfaceProps {
 	isLoadingMore: boolean
 	isRefreshFailed: boolean
 	isRefreshing: boolean
+	guideAnchor: TemplateCanvasGuideAnchor | null
 	onCanvasClickCapture: MouseEventHandler<HTMLDivElement>
 	onCanvasActivity: () => void
 	onCanvasPointerLeave: () => void
@@ -73,6 +74,7 @@ export default function SlidesTemplateCanvasSurface({
 	contentRef,
 	favoritePendingCodes,
 	focusedAnchorTileId,
+	guideAnchor,
 	isCanvasFocusSettling,
 	isDragging,
 	isCanvasMoving,
@@ -190,6 +192,7 @@ export default function SlidesTemplateCanvasSurface({
 				prioritizeCoverLoading={!isDragging && !isCanvasMoving}
 				visibleCanvasItems={visibleCanvasItems}
 				focusedAnchorTileId={focusedAnchorTileId}
+				guideAnchor={guideAnchor}
 				selectedTemplateValue={selectedTemplateValue}
 				onFindSimilarColors={onFindSimilarColors}
 				onFavoriteToggle={onFavoriteToggle}
