@@ -6585,13 +6585,13 @@
 		"collapse": "收起执行过程",
 		"description": "任务完成后收起过程，保留最后回复。",
 		"dismiss": "知道了",
+		"enable": "启用简洁模式",
 		"enabled": "已开启",
 		"expand": "查看执行过程",
 		"guideHelp": "可在「更多」里随时关闭。",
 		"guideTitle": "试试简洁模式",
 		"messageCount": "{{count}} 条消息",
-		"title": "简洁模式",
-		"trySwitch": "打开开关试试"
+		"title": "简洁模式"
 	},
 	"slidesTemplatePreview": {
 		"save": {

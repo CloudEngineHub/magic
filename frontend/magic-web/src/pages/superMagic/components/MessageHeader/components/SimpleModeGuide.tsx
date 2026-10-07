@@ -5,7 +5,6 @@ import { useTranslation } from "react-i18next"
 import { Popover, PopoverAnchor, PopoverContent } from "@/components/shadcn-ui/popover"
 import { Switch } from "@/components/shadcn-ui/switch"
 import { Button } from "@/components/shadcn-ui/button"
-import { cn } from "@/utils/cn"
 import { useMessageDisplayPreference } from "../../../services/messageDisplayPreference"
 
 /** 锚定三个点图标；引导和菜单共享偏好，领取提示时就记为已展示。 */
@@ -68,17 +67,24 @@ export function SimpleModeGuide({
 					{t("simpleMode.guideHelp")}
 				</p>
 				<div className="flex items-center justify-between gap-3">
-					<span
-						className={cn(
-							"inline-flex items-center gap-1 text-xs text-muted-foreground",
-							preference.simpleMode && "text-success",
-						)}
-					>
-						{preference.simpleMode && <CircleCheck size={14} />}
-						{preference.simpleMode
-							? t("simpleMode.enabled")
-							: t("simpleMode.trySwitch")}
-					</span>
+					{preference.simpleMode ? (
+						<span
+							role="status"
+							className="inline-flex items-center gap-1 text-xs text-success"
+						>
+							<CircleCheck size={14} />
+							{t("simpleMode.enabled")}
+						</span>
+					) : (
+						<Button
+							type="button"
+							size="sm"
+							className="h-7 px-2.5 text-xs"
+							onClick={() => preference.setSimpleMode(true)}
+						>
+							{t("simpleMode.enable")}
+						</Button>
+					)}
 					<Button
 						variant="outline"
 						size="sm"
