@@ -63,6 +63,8 @@ export function MediaPreviewTrigger(props: MediaPreviewTriggerProps) {
 		thumbnailClassName = "size-4 shrink-0 rounded object-cover",
 		thumbnailStyle,
 	} = props
+	// 行内图框由预览组件负责，不能被宿主 Markdown 的 height:auto 改成原图比例。
+	const resolvedThumbnailStyle = { width: 16, height: 16, ...thumbnailStyle }
 
 	const [previewOpen, setPreviewOpen] = useState(false)
 	const retries = useRef({ thumbnail: false, preview: false })
@@ -115,6 +117,7 @@ export function MediaPreviewTrigger(props: MediaPreviewTriggerProps) {
 	const thumbnailFallback = source?.isLoading ? (
 		<span
 			className={`${thumbnailClassName} inline-flex items-center justify-center`}
+			style={resolvedThumbnailStyle}
 			aria-label="Loading"
 		>
 			<LoaderCircle className="size-full animate-spin text-muted-foreground" aria-hidden />
@@ -132,7 +135,7 @@ export function MediaPreviewTrigger(props: MediaPreviewTriggerProps) {
 					alt={fileName}
 					fallback={thumbnailFallback}
 					className={thumbnailClassName}
-					style={thumbnailStyle}
+					style={resolvedThumbnailStyle}
 					onError={() => recover("thumbnail")}
 				/>
 			))

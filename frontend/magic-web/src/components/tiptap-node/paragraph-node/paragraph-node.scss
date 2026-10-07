@@ -192,6 +192,28 @@
     code {
       color: inherit;
     }
+
+    // 媒体引用使用自己的主题标签；普通链接继续沿用上面的颜色和下划线。
+    &:has(> [data-file-reference-preview-ui]) {
+      color: rgb(var(--primary-rgb));
+      background-color: var(--custom-primary-10-dark-primary-20);
+      text-decoration: none;
+
+      &:hover {
+        background-color: rgb(var(--primary-rgb) / 0.15);
+        text-decoration: none;
+      }
+
+      // 继承实际父元素的装饰，既移除链接 span 下划线，也保留显式 u／s 标记。
+      span {
+        text-decoration: inherit;
+      }
+
+      &:focus-visible {
+        outline: 1px solid rgb(var(--primary-rgb));
+        outline-offset: 2px;
+      }
+    }
   }
 }
 

@@ -82,7 +82,12 @@ export function MarkdownFileLink({
 			role={isFile ? "button" : props.role}
 			tabIndex={isFile ? 0 : props.tabIndex}
 			title={source ? undefined : props.title}
-			className={cn(props.className, isFile && "cursor-pointer focus-visible:outline")}
+			className={cn(
+				props.className,
+				isFile && "cursor-pointer focus-visible:outline",
+				source &&
+					"inline-flex min-h-5 max-w-full items-start gap-1 rounded bg-primary-10 px-1 align-middle text-sm font-normal leading-5 text-primary no-underline hover:bg-primary/15",
+			)}
 			onKeyDown={(event) => {
 				props.onKeyDown?.(event)
 				if (
@@ -95,18 +100,25 @@ export function MarkdownFileLink({
 				}
 			}}
 		>
-			{source && (
-				<span
-					data-file-reference-preview-ui
-					contentEditable={false}
-					aria-hidden
-					// 缩略图只占一个文字图标的位置，正文与表格中的名称仍可自然换行。
-					className="mr-1 inline-flex size-4 select-none items-center align-text-bottom"
-				>
-					{thumbnail}
-				</span>
+			{source ? (
+				<>
+					<span
+						data-file-reference-preview-ui
+						contentEditable={false}
+						aria-hidden
+						// 缩略图只占一个文字图标的位置，正文与表格中的名称仍可自然换行。
+						className="mt-0.5 inline-flex size-4 shrink-0 select-none items-center"
+					>
+						{thumbnail}
+					</span>
+					{/* 名称独立换行，续行从文字起点开始；保留 mark 内容与搜索高亮。 */}
+					<span className="min-w-0 whitespace-normal [overflow-wrap:anywhere]">
+						{children}
+					</span>
+				</>
+			) : (
+				children
 			)}
-			{children}
 		</a>
 	)
 	return (
