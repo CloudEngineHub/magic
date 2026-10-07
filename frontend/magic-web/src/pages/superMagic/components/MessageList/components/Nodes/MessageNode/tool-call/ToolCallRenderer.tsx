@@ -4,6 +4,7 @@ import KnowledgeSearchTool from "./tools/KnowledgeSearch"
 import WriteFileTool from "./tools/WriteFile"
 import { MCPTool } from "./tools/MCP"
 import type { ToolCallRendererProps } from "./types"
+import FileDownloadCard from "../../shared/FileDownloadCard"
 
 const AskUserToolCall = lazy(() => import("./tools/AskUser"))
 const MicroAppPlanToolCall = lazy(() => import("./tools/MicroAppPlan"))
@@ -20,6 +21,17 @@ export function ToolCallRenderer({
 	onMouseEnter,
 	onMouseLeave,
 }: ToolCallRendererProps) {
+	if (toolCall.function.name === "create_file_download") {
+		return (
+			<FileDownloadCard
+				toolData={toolData}
+				loading={loading}
+				className={classNames}
+				onMouseEnter={onMouseEnter}
+				onMouseLeave={onMouseLeave}
+			/>
+		)
+	}
 	// MCP uses tool.name for the wrapper protocol while function.name identifies the MCP method.
 	if (toolCall.tool?.name === "mcp_tool_call") {
 		return (

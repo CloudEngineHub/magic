@@ -30,6 +30,22 @@ export enum DetailType {
 	SelfMedia = "self-media",
 	AICard = "ai-card",
 	SlidesTemplate = "slides-template",
+	FileDownload = "file_download",
+}
+
+export interface FileDownloadItem {
+	file_id: string
+	relative_file_path: string
+	file_name: string
+	file_size: number
+}
+
+export interface FileDownloadData {
+	title: string
+	archive_name: string
+	project_id: string
+	total_bytes: number
+	items: FileDownloadItem[]
 }
 
 /** Self-media platform values supported by the dispatcher */
@@ -70,6 +86,7 @@ export interface DetailSelfMediaData {
 
 /** 详情 */
 export interface DetailData {
+	[DetailType.FileDownload]: FileDownloadData
 	[DetailType.Terminal]: DetailTerminalData
 	[DetailType.Browser]: DetailBrowserData
 	[DetailType.Search]: DetailSearchData

@@ -1249,6 +1249,7 @@ function Topic({
 										viewportRef={messageContainerRef}
 									>
 										<MessageList
+											allowDownload={allowDownloadProjectFile === true}
 											topicId={topicId || data?.project_id || ""}
 											messageList={messageList}
 											onSelectDetail={(detail) => {
@@ -1422,6 +1423,7 @@ function Topic({
 									className="h-full w-full overflow-y-auto overflow-x-hidden p-2.5"
 								>
 									<MessageList
+										allowDownload={allowDownloadProjectFile === true}
 										topicId={topicId || data?.project_id || ""}
 										messageList={messageList}
 										onSelectDetail={(detail) => {

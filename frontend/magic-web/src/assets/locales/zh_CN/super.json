@@ -2383,6 +2383,23 @@
 		"generatedBy": "由{{platformName}}生成",
 		"platformFallback": "平台"
 	},
+	"fileDownload": {
+		"cancelled": "已取消下载",
+		"download": "打包下载",
+		"downloading": "正在打包下载",
+		"failed": "未能获取全部文件，未生成压缩包。请重试。",
+		"fileCount": "{{count}} 个文件",
+		"files": "查看文件清单",
+		"noWatermark": "高清无水印下载",
+		"preparing": "正在准备文件清单",
+		"retry": "重试下载",
+		"sourceFiles": "原文件 · 保留目录结构",
+		"started": "已发起下载",
+		"title": "文件下载",
+		"tooLarge": "文件集合超出浏览器打包容量，请减少文件，或在文件管理中下载。",
+		"unavailable": "文件清单暂不可用，请让 AI 重新创建下载入口。",
+		"view": "查看"
+	},
 	"fileManager": {
 		"back": "后退",
 		"browseFolder": "浏览文件夹",

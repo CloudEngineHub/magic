@@ -9,6 +9,7 @@ tools:
   - list_dir
   - file_search
   - read_files
+  - create_file_download
   - grep_search
   - write_file
   - edit_file

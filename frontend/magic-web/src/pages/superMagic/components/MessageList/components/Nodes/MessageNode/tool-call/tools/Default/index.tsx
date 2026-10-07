@@ -34,6 +34,8 @@ interface ToolDataLike {
 }
 
 interface DefaultToolProps {
+	suffix?: ReactNode
+	cardClassName?: string
 	node?: NodeProps["node"]
 	toolData?: ToolDataLike
 	loading?: boolean
@@ -49,8 +51,7 @@ function DefaultTool(props: DefaultToolProps) {
 	const filesStore = useMessageListProjectFilesStore()
 	const { onMouseEnter, onMouseLeave, loading, classNames, onClick } = props
 	const node = superMagicStore.getMessageNode(props?.node?.super_message_id) as
-		| { tool?: ToolDataLike }
-		| undefined
+		{ tool?: ToolDataLike } | undefined
 	const tool = props.toolData || node?.tool
 	const interactionTarget =
 		props.toolData?.interactionTarget ?? getToolCardInteractionTarget(tool?.name, tool?.detail)
@@ -127,11 +128,13 @@ function DefaultTool(props: DefaultToolProps) {
 				className={cn(
 					"inline-flex h-fit w-fit max-w-full items-center overflow-hidden rounded-md border border-border bg-white pl-1.5 shadow-sm dark:bg-card",
 					!loading && "gap-1.5",
+					props.cardClassName,
 				)}
 			>
 				<div
 					className={cn(
 						"inline-flex h-7 w-fit items-center gap-1.5 overflow-hidden py-1.5 pr-1.5",
+						props.suffix !== undefined && "min-w-0 flex-1",
 						hasInteraction && "cursor-pointer",
 					)}
 					onClick={hasInteraction ? onClick : undefined}
@@ -162,7 +165,7 @@ function DefaultTool(props: DefaultToolProps) {
 						</div>
 					</div>
 				) : (
-					renderSuffixIcon
+					(props.suffix ?? renderSuffixIcon)
 				)}
 			</div>
 			{renderTooltip()}

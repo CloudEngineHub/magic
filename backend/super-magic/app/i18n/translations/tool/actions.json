@@ -1010,5 +1010,9 @@
     "inspect_memory": {
         "zh_CN": "检查记忆用量",
         "en_US": "Inspect memory usage"
+    },
+    "create_file_download": {
+        "zh_CN": "文件下载",
+        "en_US": "File download"
     }
 }

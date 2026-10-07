@@ -6508,5 +6508,41 @@
     "inspect_memory.unavailable": {
         "zh_CN": "当前任务无法使用记忆用量统计",
         "en_US": "Memory measurement is unavailable for this task"
+    },
+    "file_download.failed": {
+        "zh_CN": "无法准备完整文件清单，请检查文件是否存在且已同步，再重试。",
+        "en_US": "Could not prepare the complete file collection. Check that the files exist and are synchronized, then retry."
+    },
+    "file_download.error.file_not_found": {
+        "zh_CN": "没有找到指定的工作区文件",
+        "en_US": "The workspace file was not found"
+    },
+    "file_download.error.not_a_file": {
+        "zh_CN": "指定路径不是文件",
+        "en_US": "The selected path is not a file"
+    },
+    "file_download.error.file_id_missing": {
+        "zh_CN": "文件尚未同步，暂时无法下载",
+        "en_US": "The file is not synchronized yet and cannot be downloaded"
+    },
+    "file_download.error.path_outside_workspace": {
+        "zh_CN": "请使用当前工作区内的相对文件路径",
+        "en_US": "Use a relative file path inside the current workspace"
+    },
+    "file_download.error.path_symlink_not_allowed": {
+        "zh_CN": "路径不能经过符号链接，请使用工作区内的真实文件路径",
+        "en_US": "Use the actual workspace file path without symbolic links"
+    },
+    "file_download.error.file_not_in_project": {
+        "zh_CN": "文件不属于当前项目",
+        "en_US": "The file does not belong to the current project"
+    },
+    "file_download.error.file_project_unverified": {
+        "zh_CN": "无法确认文件属于当前项目，请等待文件同步后重试",
+        "en_US": "The file project could not be verified; retry after synchronization"
+    },
+    "file_download.error.missing_project_context": {
+        "zh_CN": "当前上下文缺少项目，请在项目话题中重试",
+        "en_US": "The current context has no project; retry in a project topic"
     }
 }

@@ -53,6 +53,7 @@ import { ExportPreviewModal } from "./components/ExportPreviewModal"
 import { extractTurns } from "./export/extractMessageContent"
 
 import { MessageListProvider, useMessageListContext } from "./context"
+import { useFileBundleDownload } from "@/pages/superMagic/hooks/useFileBundleDownload"
 import defaultProjectFilesStore from "@/stores/projectFiles"
 import MessageRenderContent from "./components/MessageRenderContent"
 import { projectRevokedMessageBranches } from "../../utils/project-visible-messages-by-revoked-tail"
@@ -572,6 +573,11 @@ const MessageList = observer(
 		})
 
 		const parentCtx = useMessageListContext()
+		const fileBundleDownload = useFileBundleDownload(
+			currentTopicKey,
+			parentCtx.projectFilesStore,
+			!isShare,
+		)
 		const workspaceFilesList = parentCtx.projectFilesStore?.workspaceFilesList
 
 		const exportTurns = useMemo(() => {
@@ -596,6 +602,7 @@ const MessageList = observer(
 		const augmentedMessageListContext = useMemo(
 			() => ({
 				...parentCtx,
+				fileBundleDownload,
 				projectFilesStore: parentCtx.projectFilesStore ?? defaultProjectFilesStore,
 				allowUserFileReferences: !isShare && parentCtx.allowUserFileReferences !== false,
 				allowExport: enableExport,
@@ -605,6 +612,7 @@ const MessageList = observer(
 			// eslint-disable-next-line react-hooks/exhaustive-deps
 			[
 				isShare,
+				fileBundleDownload,
 				parentCtx.allowUserFileReferences,
 				parentCtx.allowRevoke,
 				parentCtx.allowUserMessageCopy,
@@ -867,6 +875,7 @@ const MessageList = observer(
 		return (
 			<MessageListProvider value={augmentedMessageListContext}>
 				<MessageViewStateProvider topicKey={currentTopicKey}>
+					{fileBundleDownload.agreementModal}
 					<div
 						className={cn(
 							"relative flex h-full min-h-0 w-full flex-1 flex-col overflow-hidden",

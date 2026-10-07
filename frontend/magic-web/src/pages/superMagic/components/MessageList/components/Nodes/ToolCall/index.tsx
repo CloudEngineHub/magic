@@ -15,6 +15,7 @@ import {
 	selectToolDetail,
 } from "../toolDetailSelection"
 import { useMessageListProjectFilesStore } from "@/pages/superMagic/components/MessageList/context"
+import FileDownloadCard from "../shared/FileDownloadCard"
 
 function ToolCall(props: NodeProps) {
 	const { onSelectDetail } = props
@@ -100,6 +101,17 @@ function ToolCall(props: NodeProps) {
 		handleSelectDetail?.(newDetail)
 	}
 
+	if (tool && toolName === "create_file_download") {
+		return (
+			<FileDownloadCard
+				toolData={tool}
+				loading={tool.status === "running" || tool.status === "waiting"}
+				className={props.classNames?.markdown}
+				onMouseEnter={props.onMouseEnter}
+				onMouseLeave={props.onMouseLeave}
+			/>
+		)
+	}
 	return (
 		<Suspense fallback={null}>
 			<ToolComponent {...props} onClick={onProxyClick} />
