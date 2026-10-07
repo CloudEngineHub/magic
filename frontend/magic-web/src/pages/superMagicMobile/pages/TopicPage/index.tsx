@@ -1,3 +1,4 @@
+import { SimpleModeGuide } from "@/pages/superMagic/components/MessageHeader/components/SimpleModeGuide"
 import { useMemoizedFn, useUpdateEffect } from "ahooks"
 import {
 	useMemo,
@@ -186,6 +187,7 @@ function TopicPage({
 
 	// Refs
 	const footerRef = useRef<HTMLDivElement>(null)
+	const simpleModeAnchorRef = useRef<HTMLSpanElement>(null)
 	const { shouldRenderProjectFirstRequest, resetProjectFirstRequestRender } =
 		useProjectFirstAttachmentRender()
 	const { startRequest: startAttachmentsRequest, cancelCurrent: cancelAttachmentsRequest } =
@@ -548,11 +550,14 @@ function TopicPage({
 	})
 
 	// Topic list actions
-	const { openActionsPopup, openShareModal, topicActionComponents } = useTopicListActions()
+	const isReadonly = isReadOnlyProject(selectedProject?.user_role)
+	const simpleModeAvailable = pageKind === MobileTopicPageKind.ProjectTopic && !isReadonly
+	const { openActionsPopup, openShareModal, topicActionComponents } = useTopicListActions({
+		enableSimpleMode: simpleModeAvailable,
+	})
 
 	const previewDetailPopupRef = useRef<PreviewDetailPopupRef>(null)
 	const linkPreviewPopupRef = useRef<PreviewDetailPopupRef>(null)
-	const isReadonly = isReadOnlyProject(selectedProject?.user_role)
 
 	useEffect(() => {
 		// A direct message click may open before the project tree arrives; enrich it afterwards.
@@ -573,19 +578,29 @@ function TopicPage({
 			<div className={cn(styles.container, className)} data-testid="topic-page-root">
 				{projectTopicMorePortalTarget &&
 					createPortal(
-						<Button
-							variant="ghost"
-							className="h-12 w-12 shrink-0 rounded-full p-0 text-foreground hover:bg-transparent active:opacity-70"
-							onClick={openProjectTopicActionSheet}
-							aria-label={t("topic.moreAria")}
-							data-testid="project-topic-header-more-button"
-						>
-							<Ellipsis className="h-[22px] w-[22px]" />
-						</Button>,
+						<>
+							<Button
+								variant="ghost"
+								className="h-12 w-12 shrink-0 rounded-full p-0 text-foreground hover:bg-transparent active:opacity-70"
+								onClick={openProjectTopicActionSheet}
+								aria-label={t("topic.moreAria")}
+								data-testid="project-topic-header-more-button"
+							>
+								<span ref={simpleModeAnchorRef} className="inline-flex size-[22px]">
+									<Ellipsis className="h-[22px] w-[22px]" />
+								</span>
+							</Button>
+							<SimpleModeGuide
+								anchorRef={simpleModeAnchorRef}
+								available={simpleModeAvailable && Boolean(selectedTopic)}
+								menuOpen={projectTopicActionSheetVisible}
+							/>
+						</>,
 						projectTopicMorePortalTarget,
 					)}
 				{shouldRenderInlineHeader && (
 					<ChatHeader
+						enableSimpleMode={simpleModeAvailable}
 						selectedTopic={selectedTopic}
 						openActionsPopup={(topic: Topic) => {
 							openActionsPopup(topic, selectedProject)
@@ -605,6 +620,7 @@ function TopicPage({
 					<MessageListProvider value={value}>
 						{/* MessageList owns pagination, anchor restoration, and auto-follow for this viewport. */}
 						<MessageList
+							enableSimpleMode={simpleModeAvailable}
 							data={messages as any}
 							setSelectedDetail={setUserSelectDetail}
 							selectedTopic={selectedTopic}
@@ -677,6 +693,7 @@ function TopicPage({
 						: topicActionComponents)}
 				{isStandaloneProjectTopicPage ? (
 					<ConversationActionsPopup
+						enableSimpleMode={simpleModeAvailable}
 						visible={projectTopicActionSheetVisible}
 						title={projectTopicActionPopupTitle}
 						subtitle={projectTopicActionPopupSubtitle}

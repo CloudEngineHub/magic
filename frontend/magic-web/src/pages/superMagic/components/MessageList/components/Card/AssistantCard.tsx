@@ -34,6 +34,7 @@ const logger = Logger.createLogger("AssistantCard")
 
 export function withAssistantCard<
 	T extends {
+		contentMode?: "full" | "answer" | "process"
 		node: any
 		selectedTopic: Topic | null
 		classNames?: {
@@ -248,11 +249,18 @@ export function withAssistantCard<
 
 		const baseShowSuggestCondition = useMemo(
 			() =>
+				props.contentMode !== "process" &&
 				!isShareRoute &&
 				!isMagicShareRoute &&
 				messageNode?.status === "finished" &&
 				!isRevokedMessage,
-			[isRevokedMessage, messageNode?.status, isShareRoute, isMagicShareRoute],
+			[
+				isRevokedMessage,
+				messageNode?.status,
+				isShareRoute,
+				isMagicShareRoute,
+				props.contentMode,
+			],
 		)
 
 		const showSuggestList = useMemo(
@@ -277,7 +285,7 @@ export function withAssistantCard<
 			<>
 				<WrapperComponent {...props} />
 
-				{statusList.has(messageNode?.status) && (
+				{props.contentMode !== "process" && statusList.has(messageNode?.status) && (
 					<>
 						{messageNode?.role === "tool" && messageNode?.content && (
 							<div className="mb-2 text-muted-foreground">{messageNode?.content}</div>

@@ -1,3 +1,4 @@
+import { getPrependedVirtualItemCount } from "../virtual-message-items"
 import {
 	type MutableRefObject,
 	type RefObject,
@@ -37,6 +38,8 @@ interface VirtualScrollItem {
 interface UseVirtualMessageScrollOptions {
 	containerRef: RefObject<HTMLDivElement | null>
 	virtualizerRef: MutableRefObject<MessageListScrollAdapter | null>
+	projectionKey?: string
+	projectionInteractionKey?: string
 	items: ReadonlyArray<VirtualScrollItem>
 	topicKey: string
 	onPullMore?: () => void | Promise<unknown>
@@ -47,12 +50,14 @@ interface UseVirtualMessageScrollOptions {
 }
 
 export interface UseVirtualMessageScrollReturn {
+	prepareProjectionChange: (key?: string) => void
 	showBackToLatest: boolean
 	scrollToBottom: (behavior?: ScrollBehavior) => void
 	notifyPullMoreStarted: () => void
 	onVirtualizerChange: (instance: MessageListScrollAdapter, sync: boolean) => void
 }
 
+// 下方历史滚动契约适用于分页和流式输出；简洁模式切换另外保留可见行或底部，用户新手势会取消该位置恢复。
 /**
  * Owns scroll *intent*; the virtualizer owns scroll *position*.
  *
@@ -66,6 +71,8 @@ export function useVirtualMessageScroll({
 	containerRef,
 	virtualizerRef,
 	items,
+	projectionKey = "",
+	projectionInteractionKey = "",
 	topicKey,
 	onPullMore,
 	minTopDistance = DEFAULT_MIN_TOP_DISTANCE,
@@ -73,6 +80,45 @@ export function useVirtualMessageScroll({
 }: UseVirtualMessageScrollOptions): UseVirtualMessageScrollReturn {
 	const [showBackToLatest, setShowBackToLatest] = useState(false)
 	const itemsRef = useRef(items)
+	const pendingProjectionAnchor = useRef<{ key: string; offset: number } | "bottom" | null>(null)
+	const previousProjectionKey = useRef(projectionKey)
+	const previousInteractionKey = useRef(projectionInteractionKey)
+	const captureProjectionAnchor = (key?: string) => {
+		const viewport = containerRef.current
+		const adapter = virtualizerRef.current
+		if (!viewport || !adapter) return
+		if (
+			!key &&
+			viewport.scrollHeight - viewport.scrollTop - viewport.clientHeight < MIN_BOTTOM_DISTANCE
+		) {
+			pendingProjectionAnchor.current = "bottom"
+			return
+		}
+		const oldItems = itemsRef.current
+		const retainedKeys = new Set(items.map((item) => item.key))
+		const visibleIndex = adapter.findItemIndex(adapter.scrollOffset)
+		let index = key ? oldItems.findIndex((item) => item.key === key) : visibleIndex
+		if (!key) {
+			while (index < oldItems.length && !retainedKeys.has(oldItems[index].key)) index += 1
+			if (index >= oldItems.length) {
+				index = visibleIndex
+				while (index >= 0 && !retainedKeys.has(oldItems[index].key)) index -= 1
+			}
+		}
+		if (index >= 0 && oldItems[index])
+			pendingProjectionAnchor.current = {
+				key: oldItems[index].key,
+				offset: adapter.getItemOffset(index) - adapter.scrollOffset,
+			}
+	}
+	if (previousProjectionKey.current !== projectionKey) {
+		const isHistoryPrepend =
+			previousInteractionKey.current === projectionInteractionKey &&
+			getPrependedVirtualItemCount(itemsRef.current, items) > 0
+		if (!pendingProjectionAnchor.current && !isHistoryPrepend) captureProjectionAnchor()
+		previousInteractionKey.current = projectionInteractionKey
+		previousProjectionKey.current = projectionKey
+	}
 	itemsRef.current = items
 	const onPullMoreRef = useRef(onPullMore)
 	onPullMoreRef.current = onPullMore
@@ -134,6 +180,7 @@ export function useVirtualMessageScroll({
 			clearGuard()
 			guardTimerRef.current = window.setTimeout(() => {
 				guardTimerRef.current = null
+				pendingProjectionAnchor.current = null
 				ownershipRef.current = finishCorrection(ownershipRef.current, "explicit")
 				// Carried in the closure so `clearGuard` — which a fresh gesture calls — drops the
 				// correction along with the guard it belonged to.
@@ -212,11 +259,26 @@ export function useVirtualMessageScroll({
 		[requestScrollToLatest],
 	)
 
+	const prepareProjectionChange = useMemoizedFn((key?: string) => {
+		captureProjectionAnchor(key)
+		if (key) {
+			autoFollowRef.current = false
+			pendingScrollToLatestRef.current = false
+		}
+	})
+	useLayoutEffect(() => {
+		if (!pendingProjectionAnchor.current) return
+		ownershipRef.current = beginExplicitScroll(ownershipRef.current)
+		userHistoryIntentRef.current = false
+		startGuard(SHRINK_SUPPRESS_DURATION)
+	}, [projectionKey, startGuard])
+
 	/**
 	 * Retained for the eight `handlePullMoreMessage(topic, callback)` call sites. Anchor capture
 	 * is gone — the virtualizer's `shift` compensation covers restoration — so this only records
 	 * that a history page owns the next layout pass.
 	 */
+
 	const notifyPullMoreStarted = useCallback(() => {
 		ownershipRef.current = beginHistoryAnchor(
 			ownershipRef.current,
@@ -234,6 +296,7 @@ export function useVirtualMessageScroll({
 
 	if (prevTopicKeyRef.current !== topicKey) {
 		prevTopicKeyRef.current = topicKey
+		pendingProjectionAnchor.current = null
 		autoFollowRef.current = true
 		previousScrollTopRef.current = 0
 		userHistoryIntentRef.current = false
@@ -386,6 +449,7 @@ export function useVirtualMessageScroll({
 		}
 
 		const handleWheel = (event: WheelEvent) => {
+			pendingProjectionAnchor.current = null
 			if (isNestedScrollGesture(event.target)) return
 
 			if (historyLoadStateRef.current !== "idle") {
@@ -405,6 +469,7 @@ export function useVirtualMessageScroll({
 		}
 		const handlePointerDown = (event: PointerEvent) => {
 			if (isNestedScrollGesture(event.target)) return
+			pendingProjectionAnchor.current = null
 			isUserScrollInteractionRef.current = true
 		}
 		const handlePointerEnd = () => {
@@ -429,6 +494,19 @@ export function useVirtualMessageScroll({
 	}, [clearGuard, containerRef, finishHistoryLoad, minTopDistance])
 
 	const onVirtualizerChange = useMemoizedFn((instance: MessageListScrollAdapter) => {
+		const anchor = pendingProjectionAnchor.current
+		if (anchor) {
+			if (anchor === "bottom")
+				instance.scrollToIndex(instance.itemCount - 1, { align: "end" })
+			else {
+				const index = itemsRef.current.findIndex((item) => item.key === anchor.key)
+				if (index >= 0) {
+					const offset = instance.getItemOffset(index) - anchor.offset
+					if (Math.abs(instance.scrollOffset - offset) > 1) instance.scrollTo(offset)
+				} else pendingProjectionAnchor.current = null
+			}
+			return
+		}
 		const scrollSize = instance.scrollSize
 		const previousScrollSize = lastScrollSizeRef.current
 		lastScrollSizeRef.current = scrollSize
@@ -490,5 +568,11 @@ export function useVirtualMessageScroll({
 
 	useEffect(() => () => clearGuard(), [clearGuard])
 
-	return { showBackToLatest, scrollToBottom, notifyPullMoreStarted, onVirtualizerChange }
+	return {
+		prepareProjectionChange,
+		showBackToLatest,
+		scrollToBottom,
+		notifyPullMoreStarted,
+		onVirtualizerChange,
+	}
 }

@@ -13,8 +13,7 @@ const MessageNode = observer(function MessageNode(props: NodeProps) {
 		props.node?.super_message_id,
 		props.node?.topic_id,
 	) ?? superMagicStore.getMessageNode(props.node?.super_message_id)) as
-		| Record<string, unknown>
-		| undefined
+		Record<string, unknown> | undefined
 	const topicId = props.node?.topic_id || ""
 	const correlationId = props.node?.correlation_id || ""
 	const messageId = props.node?.app_message_id || ""
@@ -53,45 +52,53 @@ const MessageNode = observer(function MessageNode(props: NodeProps) {
 			className={cn(
 				"flex w-full flex-col gap-2",
 				hasAssistantContent &&
+					props.contentMode !== "process" &&
 					"rounded-lg transition-[background-color,box-shadow] group-hover:bg-muted group-hover:shadow-[-2px_0_0_5px_rgb(var(--muted-rgb))]",
 			)}
 		>
-			<ReasoningSection
-				node={node}
-				messageId={messageId}
-				streamState={streamState}
-				onMouseEnter={props.onMouseEnter}
-				onMouseLeave={props.onMouseLeave}
-			/>
-			<ContentSection
-				node={node}
-				streamState={streamState}
-				onMouseEnter={props.onMouseEnter}
-				onMouseLeave={props.onMouseLeave}
-			/>
-			{renderableToolCalls.map((toolCall) =>
-				toolCall.function.name === "run_sdk_snippet" ? null : (
-					<ToolCallContainer
-						key={toolCall.id}
-						toolCall={toolCall}
-						topicId={topicId}
-						ownerSuperMessageId={ownerSuperMessageId}
-						selectedTopic={props.selectedTopic}
-						isShare={props.isShare}
-						correlationId={correlationId || messageId}
-						onSelectDetail={props.onSelectDetail}
-						onMouseEnter={props.onMouseEnter}
-						onMouseLeave={props.onMouseLeave}
-					/>
-				),
+			{props.contentMode !== "answer" && (
+				<ReasoningSection
+					node={node}
+					messageId={messageId}
+					streamState={streamState}
+					onMouseEnter={props.onMouseEnter}
+					onMouseLeave={props.onMouseLeave}
+				/>
 			)}
-			<AttachmentSection
-				node={node}
-				fallbackNode={props.node}
-				prevSuperMessageId={props.prevNode?.super_message_id}
-				onFileClick={props.onFileClick}
-				onSelectDetail={props.onSelectDetail}
-			/>
+			{props.contentMode !== "process" && (
+				<ContentSection
+					node={node}
+					streamState={streamState}
+					onMouseEnter={props.onMouseEnter}
+					onMouseLeave={props.onMouseLeave}
+				/>
+			)}
+			{props.contentMode !== "answer" &&
+				renderableToolCalls.map((toolCall) =>
+					toolCall.function.name === "run_sdk_snippet" ? null : (
+						<ToolCallContainer
+							key={toolCall.id}
+							toolCall={toolCall}
+							topicId={topicId}
+							ownerSuperMessageId={ownerSuperMessageId}
+							selectedTopic={props.selectedTopic}
+							isShare={props.isShare}
+							correlationId={correlationId || messageId}
+							onSelectDetail={props.onSelectDetail}
+							onMouseEnter={props.onMouseEnter}
+							onMouseLeave={props.onMouseLeave}
+						/>
+					),
+				)}
+			{props.contentMode !== "process" && (
+				<AttachmentSection
+					node={node}
+					fallbackNode={props.node}
+					prevSuperMessageId={props.prevNode?.super_message_id}
+					onFileClick={props.onFileClick}
+					onSelectDetail={props.onSelectDetail}
+				/>
+			)}
 		</div>
 	)
 })
