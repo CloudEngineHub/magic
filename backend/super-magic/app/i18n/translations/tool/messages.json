@@ -903,6 +903,18 @@
         "zh_CN": "图像搜索失败: {{error}}",
         "en_US": "Image search failed: {{error}}"
     },
+    "visual_understanding.image_loaded": {
+        "zh_CN": "图片已载入",
+        "en_US": "Image loaded"
+    },
+    "visual_understanding.images_loaded": {
+        "zh_CN": "已载入 {{count}} 张图片",
+        "en_US": "Loaded {{count}} images"
+    },
+    "visual_understanding.preview_unavailable": {
+        "zh_CN": "图片不在项目文件中，无法打开预览",
+        "en_US": "This image is outside the project files and cannot be previewed"
+    },
     "visual_understanding.completed": {
         "zh_CN": "已理解图片: {{image_name}}",
         "en_US": "Image understanding completed: {{image_name}}"

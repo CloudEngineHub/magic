@@ -11,6 +11,7 @@ import { focusCanvasElementByProjectPath } from "@/pages/superMagic/components/D
 import { useMessageListProjectFilesStore } from "@/pages/superMagic/components/MessageList/context"
 import { ToolIconBadge } from "../../../shared/ToolIconConfig"
 import { useToggleWithScrollPreserve } from "../hooks/useToggleWithScrollPreserve"
+import { selectToolFile } from "../../toolDetailSelection"
 import OperationResultRow from "./OperationResultRow"
 
 interface OperationResultListProps {
@@ -172,7 +173,25 @@ function OperationResultList({
 											unavailable={
 												resultUnavailable ? unavailable : undefined
 											}
-											onLocate={(target, showDetails) =>
+											onLocate={(target, showDetails) => {
+												// 普通图片沿用项目文件预览，画布元素保留原定位与生成详情流程。
+												if (target.type === "file") {
+													// 显式相对入口保留 ~、冒号等 POSIX 文件名，不被解析成个人文件或 URL。
+													const filePath = `./${target.relative_file_path}`
+													selectToolFile({
+														detail: {
+															data: {
+																target_file_path: filePath,
+															},
+														},
+														target: {
+															type: "file-reference",
+															filePath,
+														},
+														filesStore,
+													})
+													return
+												}
 												focusCanvasElementByProjectPath({
 													projectPath: target.project_path,
 													elementId: target.element_id,
@@ -180,7 +199,7 @@ function OperationResultList({
 													showGenerationDetails: showDetails,
 													filesStore,
 												})
-											}
+											}}
 										/>
 									))}
 								</ul>

@@ -3,6 +3,7 @@ import {
 	CircleCheck,
 	CircleX,
 	File,
+	Image,
 	Folder,
 	Info,
 	Loader2,
@@ -42,6 +43,10 @@ export default function OperationResultRow({
 	const ItemIcon = item.kind === "directory" ? Folder : File
 	const message = unavailable || (pending ? t("operationResultList.running") : item.message)
 	const target = item.target
+	const targetLabel =
+		target?.type === "file"
+			? t("operationResultList.openImage", { label: item.label })
+			: t("operationResultList.locateCanvasElement", { label: item.label })
 	const locate = () => {
 		if (target) onLocate(target)
 	}
@@ -78,9 +83,7 @@ export default function OperationResultRow({
 										event.stopPropagation()
 										locate()
 									}}
-									aria-label={t("operationResultList.locateCanvasElement", {
-										label: item.label,
-									})}
+									aria-label={targetLabel}
 									className="min-w-0 rounded-sm text-left text-sm leading-5 text-foreground [overflow-wrap:anywhere] hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
 								>
 									{item.label}
@@ -106,7 +109,23 @@ export default function OperationResultRow({
 							</p>
 						)}
 					</div>
-					{target && (
+					{target?.type === "file" && (
+						<Button
+							type="button"
+							variant="ghost"
+							size="sm"
+							onClick={(event) => {
+								event.stopPropagation()
+								locate()
+							}}
+							aria-label={targetLabel}
+							className="-mr-1 -mt-1 h-7 shrink-0 gap-1 px-1.5 text-xs font-normal text-muted-foreground hover:bg-muted hover:text-foreground"
+						>
+							<Image size={16} aria-hidden />
+							{t("operationResultList.viewImage")}
+						</Button>
+					)}
+					{target?.type === "canvas_element" && (
 						<span className="-mr-1 -mt-1 flex shrink-0 items-center gap-0.5">
 							{target.content_type === "image" && (
 								<MagicTooltip title={t("operationResultList.generationDetails")}>

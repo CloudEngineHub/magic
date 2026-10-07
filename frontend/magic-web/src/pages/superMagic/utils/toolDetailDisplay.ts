@@ -3,6 +3,8 @@ import {
 	type DetailOperationResultListData,
 	type OperationResultItem,
 	type OperationResultTarget,
+	type OperationResultCanvasTarget,
+	type OperationResultFileTarget,
 } from "../components/Detail/types"
 
 const CANVAS_GENERATION_TOOL_NAMES = new Set([
@@ -32,7 +34,9 @@ export function getOperationResultListData(
 						content_id: item.target.content_id ?? undefined,
 						content_type: item.target.content_type ?? undefined,
 					}
-				: undefined,
+				: isFileTarget(item.target)
+					? item.target
+					: undefined,
 		})),
 	}
 }
@@ -119,7 +123,7 @@ function isOperationResultItem(
 	)
 }
 
-function isCanvasElementTarget(value: unknown): value is OperationResultTarget {
+function isCanvasElementTarget(value: unknown): value is OperationResultCanvasTarget {
 	return (
 		isRecord(value) &&
 		value.type === "canvas_element" &&
@@ -133,6 +137,18 @@ function isCanvasElementTarget(value: unknown): value is OperationResultTarget {
 			value.content_type === "image" ||
 			value.content_type === "video" ||
 			value.content_type === "audio")
+	)
+}
+
+function isFileTarget(value: unknown): value is OperationResultFileTarget {
+	if (!isRecord(value) || value.type !== "file" || typeof value.relative_file_path !== "string")
+		return false
+	const path = value.relative_file_path
+	// 文件目标只接受当前项目的相对路径，不能转成 URL、个人文件或其他项目引用。
+	return (
+		Boolean(path) &&
+		!path.startsWith("/") &&
+		path.split("/").every((part) => part && part !== "." && part !== "..")
 	)
 }
 

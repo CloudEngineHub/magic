@@ -333,16 +333,24 @@ class OperationResultStatus(str, Enum):
 
 class OperationResultTargetType(str, Enum):
     CANVAS_ELEMENT = "canvas_element"
+    FILE = "file"
 
 
 class OperationResultTarget(BaseModel):
     """结果项的可选导航目标。"""
 
-    type: OperationResultTargetType
+    type: Literal[OperationResultTargetType.CANVAS_ELEMENT]
     project_path: str
     element_id: str
     content_id: str | None = None
     content_type: Literal["image", "video", "audio"] | None = None
+
+
+class OperationResultFileTarget(BaseModel):
+    """当前项目文件的预览目标，不包含沙盒绝对路径或临时下载地址。"""
+
+    type: Literal[OperationResultTargetType.FILE]
+    relative_file_path: str
 
 
 class OperationResultItem(BaseModel):
@@ -353,7 +361,7 @@ class OperationResultItem(BaseModel):
     status: OperationResultStatus
     message: str
     description: str = ""
-    target: OperationResultTarget | None = None
+    target: OperationResultTarget | OperationResultFileTarget | None = None
 
 
 class OperationResultListContent(BaseModel):

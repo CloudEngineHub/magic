@@ -1,5 +1,6 @@
 import asyncio
 import re
+from collections import Counter
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
@@ -9,8 +10,15 @@ from agentlang.context.tool_context import ToolContext
 from agentlang.logger import get_logger
 from agentlang.tools.tool_result import ToolResult
 from app.core.ai_abilities import get_visual_understanding_model_id
-from app.core.entity.attachment import AttachmentStorageType
-from app.core.entity.message.server_message import DisplayType, FileContent, ToolDetail
+from app.core.entity.message.server_message import (
+    DisplayType,
+    FileContent,
+    OperationResultFileTarget,
+    OperationResultItem,
+    OperationResultListContent,
+    OperationResultTargetType,
+    ToolDetail,
+)
 from app.i18n import i18n
 from app.path_manager import PathManager
 from app.service.native_visual_message_builder import NativeVisualMessageBuilder
@@ -464,21 +472,40 @@ class VisualUnderstanding(WorkspaceTool[VisualUnderstandingParams]):
         try:
             image_count = result.extra_info.get("image_count", 0) if result.extra_info else 0
 
-            if result.extra_info and result.extra_info.get("native_visual") and image_count == 1:
-                image_path = Path(result.extra_info["images"][0])
+            if result.ok and result.extra_info and result.extra_info.get("native_visual"):
+                images: list[str] = result.extra_info["images"]
+                names = Counter(Path(image).name for image in images)
                 workspace_dir = PathManager.get_workspace_dir().resolve()
-                try:
-                    relative_path = image_path.resolve().relative_to(workspace_dir).as_posix()
-                except ValueError:
-                    return None
+                items: list[OperationResultItem] = []
+                # 原生工具完成的是图片输入准备；分析结论由后续 Agent 回复承接。
+                # 单图、多图共用结果列表，项目外图片保留状态，但不提供错误的文件入口。
+                for image in images:
+                    image_path = Path(image)
+                    target: OperationResultFileTarget | None = None
+                    description = ""
+                    try:
+                        relative_path = image_path.resolve().relative_to(workspace_dir).as_posix()
+                        target = OperationResultFileTarget(
+                            type=OperationResultTargetType.FILE,
+                            relative_file_path=relative_path,
+                        )
+                        if names[image_path.name] > 1:
+                            description = relative_path
+                    except ValueError:
+                        description = i18n.translate(
+                            "visual_understanding.preview_unavailable", category="tool.messages"
+                        )
+                    items.append(OperationResultItem(
+                        label=image_path.name,
+                        kind="file",
+                        status="success",
+                        message=i18n.translate("visual_understanding.image_loaded", category="tool.messages"),
+                        description=description,
+                        target=target,
+                    ))
                 return ToolDetail(
-                    type=DisplayType.IMAGE,
-                    data=FileContent(
-                        file_name=image_path.name,
-                        content="",
-                        relative_file_path=relative_path,
-                        storage_type=AttachmentStorageType.WORKSPACE,
-                    ),
+                    type=DisplayType.OPERATION_RESULT_LIST,
+                    data=OperationResultListContent(items=items),
                 )
 
             title = i18n.translate("visual_understanding.title", category="tool.messages")
@@ -502,6 +529,12 @@ class VisualUnderstanding(WorkspaceTool[VisualUnderstandingParams]):
 
     def _get_remark_content(self, result: ToolResult, arguments: Dict[str, Any] = None) -> str:
         """获取备注内容"""
+        if result.ok and result.extra_info and result.extra_info.get("native_visual"):
+            return i18n.translate(
+                "visual_understanding.images_loaded",
+                category="tool.messages",
+                count=result.extra_info["image_count"],
+            )
         if not arguments or "images" not in arguments:
             return i18n.translate("visual_understanding_webpage.success", category="tool.messages")
 

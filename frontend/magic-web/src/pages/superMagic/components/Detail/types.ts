@@ -86,13 +86,20 @@ export interface DetailData {
 	[DetailType.OperationResultList]: DetailOperationResultListData
 }
 
-export interface OperationResultTarget {
+export interface OperationResultCanvasTarget {
 	type: "canvas_element"
 	project_path: string
 	element_id: string
 	content_id?: string
 	content_type?: "image" | "video" | "audio"
 }
+
+export interface OperationResultFileTarget {
+	type: "file"
+	relative_file_path: string
+}
+
+export type OperationResultTarget = OperationResultCanvasTarget | OperationResultFileTarget
 
 /** 操作结果显示对象名称与执行状态，可选提供稳定的导航目标。 */
 export interface OperationResultItem {

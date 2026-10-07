@@ -4816,6 +4816,7 @@
 		"locateCanvasElement": "Locate canvas element: {{label}}",
 		"locateShort": "Locate",
 		"openGenerationDetails": "View generation details: {{label}}",
+		"openImage": "View image: {{label}}",
 		"running": "Processing",
 		"summary": "{{success}} succeeded · {{error}} failed",
 		"summaryCompleted": "{{count}} completed",
@@ -4825,6 +4826,7 @@
 		"summarySucceeded": "{{count}} succeeded",
 		"title": "Operation results",
 		"unavailable": "Operation results are unavailable",
+		"viewImage": "View image",
 		"viewInCanvas": "View in canvas"
 	},
 	"personalPet": {
