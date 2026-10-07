@@ -10,6 +10,7 @@ import {
 	FileDown,
 	FolderSearch,
 	Frame,
+	Layers,
 	LockKeyhole,
 	LockOpen,
 	MessageSquarePlus,
@@ -321,14 +322,7 @@ export function getMenuItems({
 		},
 	}
 
-	const conversationBlock: MenuItem[] = includeConversationMenuItems
-		? [addToCurrentConversationMenuItem, addToNewConversationMenuItem, { type: "separator" }]
-		: []
-
-	return [
-		copyMenuItem,
-		copyPngMenuItem,
-		{ type: "separator" },
+	const layerMenuItems: MenuOption[] = [
 		{
 			id: "move-up",
 			label: translate("menu.moveUp", "上移一层"),
@@ -376,6 +370,24 @@ export function getMenuItems({
 			visible: () => {
 				return canvas.userActionRegistry.canExecute("layer.move-to-bottom")
 			},
+		},
+	]
+
+	const conversationBlock: MenuItem[] = includeConversationMenuItems
+		? [addToCurrentConversationMenuItem, addToNewConversationMenuItem, { type: "separator" }]
+		: []
+
+	return [
+		copyMenuItem,
+		copyPngMenuItem,
+		{ type: "separator" },
+		{
+			id: "layer",
+			label: translate("menu.layer", "图层"),
+			icon: Layers,
+			children: layerMenuItems,
+			// 四项都不可见时隐藏分组，避免只读或锁定选区出现空子菜单。
+			visible: () => layerMenuItems.some((item) => !item.visible || item.visible()),
 		},
 		{ type: "separator" },
 		{
