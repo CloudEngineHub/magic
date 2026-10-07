@@ -13,12 +13,7 @@ import CodeSourceEditor from "./components/CodeSourceEditor"
 import { formatLongCurlDataRawForPreview } from "./components/CodeSourceEditor/preview-content"
 import { ProjectListItem } from "@/pages/superMagic/pages/Workspace/types"
 import { useIsMobile } from "@/hooks/use-mobile"
-import {
-	isExternalUrl,
-	findFileByPath,
-	resolveRelativePath,
-	type AttachmentFile,
-} from "../../utils"
+import { isExternalUrl, type AttachmentFile } from "../../utils"
 import { parseAnchorLink, scrollToAnchor } from "@/utils/slug"
 import { Editor } from "@/infrastructure/editors/tiptap/react"
 import type { ProjectImageUrlResolver } from "@/components/tiptap-node/project-image-node/project-image-node-extension"
@@ -29,6 +24,8 @@ import { isLargeMarkdownContent } from "./largeMarkdown"
 import { useTranslation } from "react-i18next"
 import magicToast from "@/components/base/MagicToaster/utils"
 import { isMarkdownFileLink } from "@/pages/superMagic/utils/markdownFileReference"
+import { useMarkdownFileLinks } from "./hooks/useMarkdownFileLinks"
+import { MarkdownFileLinkContext } from "./components/MarkdownFileLink"
 
 interface EditorBodyProps {
 	selectionRootRef?: React.Ref<HTMLDivElement>
@@ -105,13 +102,34 @@ function EditorBody({
 	requireImagesFolderParentId,
 }: EditorBodyProps) {
 	const { t } = useTranslation("super")
+	const resolveLinkedFile = useMarkdownFileLinks({
+		documentPath: currentDocumentPath,
+		attachments,
+		resolveRelativeFile,
+		projectId: selectedProject?.id,
+		enabled: isTabActive,
+	})
+	const fileLinkContext = useMemo(
+		() => ({
+			resolveLinkedFile,
+			projectId: selectedProject?.id,
+			active: isTabActive && !isEditMode,
+		}),
+		[resolveLinkedFile, selectedProject?.id, isTabActive, isEditMode],
+	)
 	const linkRequestRef = useRef(0)
 	// 缓存标签切换、文档／空间变化和卸载后，旧异步结果不再打开文件或提示失败。
 	useEffect(
 		() => () => {
 			linkRequestRef.current += 1
 		},
-		[currentDocumentPath, resolveRelativeFile, selectedProject?.id, isTabActive],
+		[
+			currentDocumentPath,
+			resolveRelativeFile,
+			selectedProject?.id,
+			isTabActive,
+			resolveLinkedFile,
+		],
 	)
 	const showLinkError = (href: string) =>
 		magicToast.error(t("common.fileCannotOpen", { path: href }))
@@ -155,12 +173,23 @@ function EditorBody({
 			if (!isTabActive) return true
 			const requestId = ++linkRequestRef.current
 
-			if (resolveRelativeFile && onOpenFile) {
-				void resolveRelativeFile(filePath)
+			if (onOpenFile) {
+				void resolveLinkedFile(filePath)
 					.then((file) => {
 						if (requestId !== linkRequestRef.current) return
-						if (file?.file_id) onOpenFile({ ...file, file_id: file.file_id })
-						else showLinkError(href)
+						if (!file?.file_id) {
+							showLinkError(href)
+							return
+						}
+						// Open file in tab
+						onOpenFile({ ...file, file_id: file.file_id })
+						// If there's an anchor, scroll to it after document loads
+						if (!resolveRelativeFile && anchorId) {
+							// Wait for document to render before scrolling
+							setTimeout(() => {
+								scrollToAnchor(anchorId, 80)
+							}, 1000) // Adjust delay as needed
+						}
 					})
 					.catch((error: unknown) => {
 						if (requestId !== linkRequestRef.current) return
@@ -168,38 +197,6 @@ function EditorBody({
 						showLinkError(href)
 					})
 				return true
-			}
-
-			// Handle relative path (with or without anchor)
-			if (currentDocumentPath && attachments && onOpenFile) {
-				// Get document directory path
-				const documentDir = currentDocumentPath.substring(
-					0,
-					currentDocumentPath.lastIndexOf("/"),
-				)
-
-				// Resolve relative path to project root path
-				const resolvedPath = documentDir
-					? resolveRelativePath(documentDir, filePath)
-					: filePath
-
-				// Find file by path
-				const matchedFile = findFileByPath(attachments, resolvedPath)
-
-				if (matchedFile?.file_id) {
-					// Open file in tab
-					onOpenFile({ file_id: matchedFile.file_id })
-
-					// If there's an anchor, scroll to it after document loads
-					if (anchorId) {
-						// Wait for document to render before scrolling
-						setTimeout(() => {
-							scrollToAnchor(anchorId, 80)
-						}, 1000) // Adjust delay as needed
-					}
-
-					return true
-				}
 			}
 
 			// If file not found or no handler, prevent default
@@ -293,78 +290,82 @@ function EditorBody({
 				className,
 			}}
 		>
-			<div
-				ref={selectionRootRef}
-				className={`${enableSourceLocation ? "relative " : ""}${className}`}
-				data-testid={dataTestId}
-			>
-				{isLoading ? (
-					suppressLoadingIndicator ? (
-						<div className="min-h-dvh" />
+			<MarkdownFileLinkContext.Provider value={fileLinkContext}>
+				<div
+					ref={selectionRootRef}
+					className={`${enableSourceLocation ? "relative " : ""}${className}`}
+					data-testid={dataTestId}
+				>
+					{isLoading ? (
+						suppressLoadingIndicator ? (
+							<div className="min-h-dvh" />
+						) : (
+							<div
+								data-testid="editor-body-loading"
+								className="flex min-h-0 flex-1 items-center justify-center"
+								style={{
+									display: "flex",
+									alignItems: "center",
+									justifyContent: "center",
+									minHeight: 120,
+								}}
+							>
+								<MagicSpin spinning />
+							</div>
+						)
+					) : shouldUseCodeSourceEditor ? (
+						<CodeSourceEditor
+							key={isEditMode ? "edit" : "preview"}
+							language={language}
+							isEditMode={isEditMode}
+							isLargeFile={isLargeMarkdown}
+							content={isEditMode ? (editContent ?? content) : previewCodeContent}
+							onChange={setEditContent}
+						/>
+					) : isLargeMarkdown ? (
+						<LargeMarkdownPreview
+							enableSourceLocation={enableSourceLocation}
+							content={processedContent || content}
+							documentFlow={documentFlowFullscreen}
+							isTabActive={isTabActive}
+							enableSearch={enableSearch}
+							urlResolver={urlResolver}
+							onLinkClick={handleLinkClick}
+						/>
 					) : (
-						<div
-							data-testid="editor-body-loading"
-							className="flex min-h-0 flex-1 items-center justify-center"
-							style={{
-								display: "flex",
-								alignItems: "center",
-								justifyContent: "center",
-								minHeight: 120,
+						<SimpleEditor
+							key={`${!!isEditMode}-${enableSourceLocation}`}
+							onFrontmatterSourceMap={
+								enableSourceLocation && !isEditMode
+									? handleFrontmatterSourceMap
+									: undefined
+							}
+							ref={actualEditorRef}
+							content={
+								isEditMode ? (editContent ?? content) : processedContent || content
+							}
+							enableCodeBlockWrap
+							enableReadonlySearch={enableSearch}
+							isTabActive={isTabActive}
+							onUpdate={({ editor: _editor }) => {
+								const content =
+									(
+										_editor.storage as {
+											markdown?: { getMarkdown: () => string }
+										}
+									).markdown?.getMarkdown() || ""
+								setEditContent?.(content)
 							}}
-						>
-							<MagicSpin spinning />
-						</div>
-					)
-				) : shouldUseCodeSourceEditor ? (
-					<CodeSourceEditor
-						key={isEditMode ? "edit" : "preview"}
-						language={language}
-						isEditMode={isEditMode}
-						isLargeFile={isLargeMarkdown}
-						content={isEditMode ? (editContent ?? content) : previewCodeContent}
-						onChange={setEditContent}
-					/>
-				) : isLargeMarkdown ? (
-					<LargeMarkdownPreview
-						enableSourceLocation={enableSourceLocation}
-						content={processedContent || content}
-						documentFlow={documentFlowFullscreen}
-						isTabActive={isTabActive}
-						enableSearch={enableSearch}
-						urlResolver={urlResolver}
-						onLinkClick={handleLinkClick}
-					/>
-				) : (
-					<SimpleEditor
-						key={`${!!isEditMode}-${enableSourceLocation}`}
-						onFrontmatterSourceMap={
-							enableSourceLocation && !isEditMode
-								? handleFrontmatterSourceMap
-								: undefined
-						}
-						ref={actualEditorRef}
-						content={
-							isEditMode ? (editContent ?? content) : processedContent || content
-						}
-						enableCodeBlockWrap
-						enableReadonlySearch={enableSearch}
-						isTabActive={isTabActive}
-						onUpdate={({ editor: _editor }) => {
-							const content =
-								(
-									_editor.storage as { markdown?: { getMarkdown: () => string } }
-								).markdown?.getMarkdown() || ""
-							setEditContent?.(content)
-						}}
-						additionalExtensions={allExtensions}
-						isEditable={isEditMode}
-						isMobile={isMobile || viewMode === "phone"}
-						documentFlow={documentFlowFullscreen}
-						placeholder={placeholder}
-						onSave={onSave}
-					/>
-				)}
-			</div>
+							additionalExtensions={allExtensions}
+							isEditable={isEditMode}
+							isMobile={isMobile || viewMode === "phone"}
+							documentFlow={documentFlowFullscreen}
+							placeholder={placeholder}
+							onSave={onSave}
+						/>
+					)}
+				</div>
+			</MarkdownFileLinkContext.Provider>
 		</EditorErrorBoundary>
 	)
 }

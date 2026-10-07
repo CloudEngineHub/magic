@@ -21,6 +21,12 @@ export const MEDIA_PREVIEW_POLICY: Record<MediaPreviewType, MediaPreviewPolicy> 
  */
 export interface MediaPreviewSource {
 	mediaType: MediaPreviewType
+	/** 资源切换时清理预览状态，不能将旧文件的播放位置带到新文件。 */
+	resourceKey?: string
+	expiresAt?: number
+	/** 资源获取层决定续期时刻；展示层不依赖具体产品的签名地址策略。 */
+	refreshAt?: number
+	refreshSource?: (rendition: "thumbnail" | "preview") => Promise<void>
 	thumbnailUrl?: string | null
 	thumbnailElement?: ReactNode
 	previewUrl?: string | null
@@ -58,6 +64,7 @@ export interface MediaPreviewThumbnailProps {
 	className?: string
 	style?: CSSProperties
 	objectFit?: "cover" | "contain"
+	onError?: () => void | Promise<void>
 }
 
 export interface MediaPreviewTooltipProps {
@@ -90,4 +97,5 @@ export interface MediaPreviewTooltipProps {
 	container?: HTMLElement | null
 	open?: boolean
 	onOpenChange?: (open: boolean) => void
+	onMediaError?: () => void | Promise<void>
 }

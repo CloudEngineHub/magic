@@ -11,6 +11,7 @@ import {
 } from "react"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/shadcn-ui/tooltip"
 import { useIsMobile } from "@/hooks/useIsMobile"
+import { useMediaPreviewPlayback } from "./useMediaPreviewPlayback"
 import { MEDIA_PREVIEW_POLICY, type MediaPreviewCrop, type MediaPreviewTooltipProps } from "./types"
 
 function isInteractiveTriggerTarget(target: EventTarget | null): boolean {
@@ -72,12 +73,14 @@ function AudioPlayer({
 	audioRef,
 	onError,
 	labels,
+	playback,
 }: {
 	src: string
 	fileName: string
 	audioRef: MutableRefObject<HTMLAudioElement | null>
 	onError?: () => void
 	labels: MediaPreviewTooltipProps["audioLabels"]
+	playback: ReturnType<typeof useMediaPreviewPlayback>
 }) {
 	const [playing, setPlaying] = useState(false)
 	const [currentTime, setCurrentTime] = useState(0)
@@ -86,6 +89,7 @@ function AudioPlayer({
 	const playRequestRef = useRef(0)
 	const playbackIntentRef = useRef(false)
 	const [isLoading, setIsLoading] = useState(false)
+	const { remember: rememberPlayback, restore: restorePlayback } = playback
 	const progressPercent = duration > 0 ? Math.min(100, (currentTime / duration) * 100) : 0
 
 	const playAudio = useCallback((audio: HTMLAudioElement) => {
@@ -126,7 +130,8 @@ function AudioPlayer({
 		const audio = audioRef.current
 		if (!audio || isSeekingRef.current) return
 		setCurrentTime(audio.currentTime)
-	}, [audioRef])
+		rememberPlayback(audio)
+	}, [audioRef, rememberPlayback])
 
 	useEffect(() => {
 		invalidatePlayback()
@@ -194,7 +199,15 @@ function AudioPlayer({
 				aria-label={fileName}
 				// 避免 display:none：部分环境下会让 timeupdate 不可靠；用 sr-only 隐藏即可。
 				className="sr-only"
-				onLoadedMetadata={(event) => setDuration(event.currentTarget.duration || 0)}
+				onLoadedMetadata={(event) => {
+					const audio = event.currentTarget
+					setDuration(audio.duration || 0)
+					const saved = restorePlayback(audio)
+					setCurrentTime(audio.currentTime)
+					if (saved?.shouldResume) playAudio(audio)
+				}}
+				onVolumeChange={(event) => rememberPlayback(event.currentTarget)}
+				onRateChange={(event) => rememberPlayback(event.currentTarget)}
 				onDurationChange={(event) => setDuration(event.currentTarget.duration || 0)}
 				onTimeUpdate={syncCurrentTimeFromAudio}
 				onLoadStart={() => {
@@ -356,11 +369,16 @@ export function MediaPreviewTooltip(props: MediaPreviewTooltipProps) {
 		container,
 		open: controlledOpen,
 		onOpenChange,
+		onMediaError,
 	} = props
 	const isMobile = useIsMobile()
 	const [uncontrolledOpen, setUncontrolledOpen] = useState(false)
 	const videoRef = useRef<HTMLVideoElement>(null)
 	const audioRef = useRef<HTMLAudioElement>(null)
+	const videoPlayback = useMediaPreviewPlayback()
+	const audioPlayback = useMediaPreviewPlayback()
+	const { reset: resetVideoPlayback } = videoPlayback
+	const { reset: resetAudioPlayback } = audioPlayback
 	const [videoReady, setVideoReady] = useState(false)
 	const [mediaError, setMediaError] = useState(false)
 	const [intrinsicPreviewSize, setIntrinsicPreviewSize] = useState<
@@ -403,6 +421,11 @@ export function MediaPreviewTooltip(props: MediaPreviewTooltipProps) {
 		lastContentInteractionAtRef.current = Date.now()
 		event.stopPropagation()
 	}, [])
+	const handleMediaError = useCallback(() => {
+		setMediaError(true)
+		const recovery = onMediaError?.()
+		if (recovery) void recovery.then(() => setMediaError(false))
+	}, [onMediaError])
 
 	useEffect(() => {
 		setMediaError(false)
@@ -419,6 +442,8 @@ export function MediaPreviewTooltip(props: MediaPreviewTooltipProps) {
 		(nextOpen: boolean) => {
 			if (controlledOpen === undefined) setUncontrolledOpen(nextOpen)
 			if (!nextOpen) {
+				resetVideoPlayback()
+				resetAudioPlayback()
 				videoRef.current?.pause()
 				if (videoRef.current) videoRef.current.currentTime = 0
 				audioRef.current?.pause()
@@ -428,7 +453,7 @@ export function MediaPreviewTooltip(props: MediaPreviewTooltipProps) {
 			}
 			onOpenChange?.(nextOpen)
 		},
-		[controlledOpen, onOpenChange],
+		[controlledOpen, onOpenChange, resetVideoPlayback, resetAudioPlayback],
 	)
 
 	useEffect(() => {
@@ -536,7 +561,7 @@ export function MediaPreviewTooltip(props: MediaPreviewTooltipProps) {
 									})
 								}
 							}}
-							onError={() => setMediaError(true)}
+							onError={handleMediaError}
 						/>
 					</div>
 				) : (
@@ -560,7 +585,7 @@ export function MediaPreviewTooltip(props: MediaPreviewTooltipProps) {
 								})
 							}
 						}}
-						onError={() => setMediaError(true)}
+						onError={handleMediaError}
 					/>
 				)
 			) : mediaType === "video" ? (
@@ -584,6 +609,7 @@ export function MediaPreviewTooltip(props: MediaPreviewTooltipProps) {
 							aria-label={fileName}
 							className="block h-full w-full object-contain"
 							onLoadedMetadata={(event) => {
+								videoPlayback.restore(event.currentTarget)
 								const { videoWidth, videoHeight } = event.currentTarget
 								if (videoWidth > 0 && videoHeight > 0) {
 									setIntrinsicPreviewSize({
@@ -593,9 +619,12 @@ export function MediaPreviewTooltip(props: MediaPreviewTooltipProps) {
 								}
 							}}
 							onCanPlay={() => setVideoReady(true)}
+							onTimeUpdate={(event) => videoPlayback.remember(event.currentTarget)}
+							onVolumeChange={(event) => videoPlayback.remember(event.currentTarget)}
+							onRateChange={(event) => videoPlayback.remember(event.currentTarget)}
 							onError={() => {
 								setVideoReady(false)
-								setMediaError(true)
+								handleMediaError()
 							}}
 						/>
 					) : null}
@@ -609,7 +638,8 @@ export function MediaPreviewTooltip(props: MediaPreviewTooltipProps) {
 						src={audioUrl ?? previewUrl ?? ""}
 						fileName={fileName}
 						audioRef={audioRef}
-						onError={() => setMediaError(true)}
+						playback={audioPlayback}
+						onError={handleMediaError}
 						labels={audioLabels}
 					/>
 				</div>

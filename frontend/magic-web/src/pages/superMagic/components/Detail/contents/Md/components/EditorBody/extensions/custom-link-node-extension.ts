@@ -11,6 +11,8 @@ import { parseAnchorLink } from "@/utils/slug"
 import { runActiveEditor } from "@/utils/tiptapEditorLifecycle"
 import { mergeAttributes } from "@/infrastructure/editors/tiptap/core"
 import { isMarkdownFileLink } from "@/pages/superMagic/utils/markdownFileReference"
+import { ReactMarkViewRenderer } from "@/infrastructure/editors/tiptap/react"
+import { MarkdownLinkMarkView } from "../components/MarkdownLinkMarkView"
 
 export interface CustomLinkNodeOptions extends LinkNodeOptions {
 	/**
@@ -37,6 +39,9 @@ export interface CustomLinkNodeOptions extends LinkNodeOptions {
  * 2. Support for custom click behavior
  */
 export const CustomLinkNode = LinkNode.extend<CustomLinkNodeOptions>({
+	addMarkView() {
+		return ReactMarkViewRenderer(MarkdownLinkMarkView)
+	},
 	addOptions() {
 		return {
 			...this.parent?.(),

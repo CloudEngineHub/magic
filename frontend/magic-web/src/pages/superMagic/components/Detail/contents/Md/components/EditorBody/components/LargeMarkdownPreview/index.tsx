@@ -24,7 +24,8 @@ import { Virtuoso, type VirtuosoHandle } from "react-virtuoso"
 import { useTheme } from "@/models/config/hooks"
 import { cn } from "@/utils/cn"
 import { parseAnchorLink, scrollToAnchor, slugify } from "@/utils/slug"
-import { isMarkdownFileLink } from "@/pages/superMagic/utils/markdownFileReference"
+import { MarkdownFileLink } from "../MarkdownFileLink"
+import { copyMarkdownFileLinks } from "../markdown-file-link-clipboard"
 import {
 	getVirtualMarkdownChunkContent,
 	splitMarkdownIntoVirtualChunks,
@@ -286,25 +287,9 @@ const MarkdownChunk = memo(function MarkdownChunk({
 	const components = useMemo<Components>(
 		() => ({
 			a: ({ href = "", ...props }: AnchorHTMLAttributes<HTMLAnchorElement>) => (
-				<a
+				<MarkdownFileLink
 					{...props}
-					href={isMarkdownFileLink(href) ? undefined : href || undefined}
-					data-file-href={isMarkdownFileLink(href) ? href : undefined}
-					role={isMarkdownFileLink(href) ? "button" : props.role}
-					tabIndex={isMarkdownFileLink(href) ? 0 : props.tabIndex}
-					className={cn(
-						props.className,
-						isMarkdownFileLink(href) && "cursor-pointer focus-visible:outline",
-					)}
-					onKeyDown={(event) => {
-						if (
-							!isMarkdownFileLink(href) ||
-							(event.key !== "Enter" && event.key !== " ")
-						)
-							return
-						event.preventDefault()
-						event.currentTarget.click()
-					}}
+					href={href}
 					onClick={(event) => {
 						if (onAnchorClick(href)) {
 							event.preventDefault()
@@ -812,6 +797,7 @@ export default function LargeMarkdownPreview({
 				className,
 			)}
 			data-testid="large-markdown-preview"
+			onCopy={copyMarkdownFileLinks}
 		>
 			<LargeMarkdownSearchToolbar
 				visible={searchEnabled && searchVisible}
