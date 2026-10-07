@@ -474,13 +474,20 @@ class GenerationSubmissionService:
 
         try:
             await self.unit_of_work.transaction_with_sidecar(project_path, persist)
-        except Exception:
-            if not submission.generation_task_id:
-                raise
+        except Exception as persistence_error:
+            logger.warning(
+                "持久化生成结果失败: project_path=%s, element_id=%s, content_id=%s, error=%s",
+                project_path,
+                submission_item.element_id,
+                submission_item.content_id,
+                persistence_error,
+            )
             if target is not None:
                 target.persistence_warning = (
                     "The generation task was created, but its Canvas metadata could not be saved. "
                     "Keep the returned generation_task_id and call wait_canvas_generation."
+                    if submission.generation_task_id
+                    else "The generation result was produced, but its Canvas metadata could not be saved."
                 )
                 target.persistence_error = "Canvas metadata persistence is temporarily unavailable."
         if task_repository_error and target is not None:

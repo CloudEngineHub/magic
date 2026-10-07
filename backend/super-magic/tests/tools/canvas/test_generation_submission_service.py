@@ -201,6 +201,35 @@ async def test_submit_generated_isolates_provider_failure_per_item() -> None:
 
 
 @pytest.mark.asyncio
+async def test_submit_generated_isolates_canvas_persistence_failure_per_item() -> None:
+    """单项 Canvas 持久化失败只记录告警，不应取消其他生成项。"""
+    strategy = _TrackingStrategy(delays={"first": 0.01, "second": 0.04})
+    service = _make_service(strategy, max_concurrency=2)
+    service._persist_generation_start_metadata = AsyncMock()
+    service.unit_of_work = AsyncMock()
+    service.unit_of_work.transaction_with_sidecar = AsyncMock(
+        side_effect=[IOError("File is empty after write"), None]
+    )
+    result = _make_result(["first", "second"])
+
+    await service.submit_generated(
+        "mock-project",
+        result,
+        _make_commands(["first", "second"]),
+        None,
+    )
+
+    assert strategy.finished == ["first", "second"]
+    assert [item.status for item in result.items] == ["completed", "completed"]
+    assert result.items[0].persistence_warning == (
+        "The generation result was produced, but its Canvas metadata could not be saved."
+    )
+    assert result.items[0].persistence_error == "Canvas metadata persistence is temporarily unavailable."
+    assert result.items[1].persistence_warning is None
+    assert service.unit_of_work.transaction_with_sidecar.await_count == 2
+
+
+@pytest.mark.asyncio
 async def test_submit_generated_cancels_unfinished_provider_tasks() -> None:
     """外层取消时应回收尚未完成的 provider 任务。"""
     strategy = _TrackingStrategy(delays={"first": 60, "second": 60})
