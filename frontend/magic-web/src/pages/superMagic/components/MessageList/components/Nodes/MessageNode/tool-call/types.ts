@@ -1,3 +1,4 @@
+import type { DownloadProgressState } from "@/pages/superMagic/stores/download-progress"
 import type { MouseEvent, ReactNode } from "react"
 import type { FileItem, Topic } from "@/pages/superMagic/pages/Workspace/types"
 import type { ToolCardInteractionTarget } from "../../toolDetailSelection"
@@ -33,6 +34,7 @@ export interface ToolCallItem {
 }
 
 export interface ToolCallViewModel {
+	downloadProgress?: DownloadProgressState
 	id?: string
 	name?: string
 	url?: string

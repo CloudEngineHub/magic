@@ -88,7 +88,17 @@ export const ToolCallContainer = observer(function ToolCallContainer(
 
 		return {
 			id: toolCall.id,
-			name: toolCall.function.name,
+			downloadProgress: toolResponse?.downloadProgress,
+			name:
+				typeof effectiveResponse?.name === "string" &&
+				[
+					"download_from_urls",
+					"audio_understanding",
+					"audio_understanding_progress",
+					"video_generation_progress",
+				].includes(effectiveResponse.name)
+					? effectiveResponse.name
+					: toolCall.function.name,
 			action,
 			// Preview strategies only fill an empty UI remark; canonical response remains authoritative.
 			remark: responseRemark || previewRemark,
@@ -105,6 +115,7 @@ export const ToolCallContainer = observer(function ToolCallContainer(
 		responseRemark,
 		previewRemark,
 		effectiveResponse,
+		toolResponse?.downloadProgress,
 		effectiveStatus,
 		previewArguments,
 		renderDetail,

@@ -5,6 +5,8 @@ import {
 	type OperationResultTarget,
 	type OperationResultCanvasTarget,
 	type OperationResultFileTarget,
+	type OperationResultUrlTarget,
+	type OperationResultSummary,
 } from "../components/Detail/types"
 
 const CANVAS_GENERATION_TOOL_NAMES = new Set([
@@ -22,11 +24,56 @@ export function isInlineToolDetail(detail: unknown): boolean {
 export function getOperationResultListData(
 	detail: unknown,
 ): DetailOperationResultListData | undefined {
-	if (!isRecord(detail) || !isInlineToolDetail(detail) || !isRecord(detail.data)) return
-	const { items } = detail.data
+	if (!isRecord(detail) || !isRecord(detail.data)) return
+	if (detail.type === DetailType.Search && Array.isArray(detail.data.groups)) {
+		const items: OperationResultItem[] = []
+		let count = 0
+		for (const group of detail.data.groups) {
+			if (!isRecord(group) || !Array.isArray(group.results)) continue
+			for (const result of group.results) {
+				if (!isRecord(result) || !isHttpUrl(result.url)) continue
+				count += 1
+				if (items.length >= 8) continue
+				items.push({
+					label: getString(result.title) || new URL(result.url).hostname,
+					kind: "text",
+					status: "success",
+					message: "",
+					target: { type: "url", url: result.url },
+				})
+			}
+		}
+		return items.length
+			? {
+					items: items.slice(0, 8),
+					stage: "find",
+					total_count: count,
+					success_count: count,
+					omitted_count: Math.max(0, count - 8),
+				}
+			: undefined
+	}
+	if (!isInlineToolDetail(detail)) return
+	const data = detail.data
+	const { items } = data
 	if (!Array.isArray(items) || items.length === 0 || !items.every(isOperationResultItem)) return
 	return {
 		...detail.data,
+		stage: ["read", "edit", "find", "download", "analyze", "load"].includes(
+			String(detail.data.stage),
+		)
+			? (detail.data.stage as OperationResultSummary["stage"])
+			: undefined,
+		...Object.fromEntries(
+			["total_count", "success_count", "failed_count", "skipped_count", "omitted_count"].map(
+				(key) => [
+					key,
+					typeof data[key] === "number" && Number.isInteger(data[key]) && data[key] >= 0
+						? data[key]
+						: undefined,
+				],
+			),
+		),
 		items: items.map((item) => ({
 			...item,
 			target: isCanvasElementTarget(item.target)
@@ -35,7 +82,7 @@ export function getOperationResultListData(
 						content_id: item.target.content_id ?? undefined,
 						content_type: item.target.content_type ?? undefined,
 					}
-				: isFileTarget(item.target)
+				: isFileTarget(item.target) || isUrlTarget(item.target)
 					? item.target
 					: undefined,
 		})),
@@ -45,14 +92,27 @@ export function getOperationResultListData(
 /** 列表仍留在消息里；报告正文或持久化 file_id 通过原 Markdown 入口打开。 */
 export function getOperationResultListReportDetail(
 	detail: unknown,
-): { type: DetailType.Md; data: Record<string, unknown> } | undefined {
-	if (!isRecord(detail) || !isInlineToolDetail(detail) || !isRecord(detail.data)) return
+): { type: DetailType; data: Record<string, unknown> } | undefined {
+	if (!isRecord(detail) || !isRecord(detail.data)) return
+	if (detail.type === DetailType.Search) return { type: DetailType.Search, data: detail.data }
+	if (!isInlineToolDetail(detail)) return
 	const data = detail.data
-	if (!getString(data.file_name) || (!getString(data.content) && !getString(data.file_id))) return
+	if (
+		!getString(data.file_name) ||
+		(!getString(data.content) && !getString(data.file_id) && !getString(data.target_file_path))
+	)
+		return
 	// 只改变本次展示目标，不改写消息里的清单、正文或文件引用。
 	const reportData = { ...data }
 	delete reportData.items
-	return { type: DetailType.Md, data: reportData }
+	return {
+		type:
+			Object.values(DetailType).includes(data.report_type as DetailType) &&
+			data.report_type !== DetailType.OperationResultList
+				? (data.report_type as DetailType)
+				: DetailType.Md,
+		data: reportData,
+	}
 }
 
 /**
@@ -131,9 +191,18 @@ function isOperationResultItem(
 		isRecord(item) &&
 		typeof item.label === "string" &&
 		(item.kind === "file" || item.kind === "directory" || item.kind === "text") &&
-		(item.status === "success" || item.status === "error") &&
+		(item.status === "success" || item.status === "error" || item.status === "skipped") &&
 		typeof item.message === "string" &&
-		(item.description === undefined || typeof item.description === "string")
+		(item.description === undefined || typeof item.description === "string") &&
+		(item.changes == null ||
+			(isRecord(item.changes) &&
+				[
+					item.changes.added_lines,
+					item.changes.deleted_lines,
+					item.changes.modified_lines ?? 0,
+				].every(
+					(value) => typeof value === "number" && Number.isInteger(value) && value >= 0,
+				)))
 	)
 }
 
@@ -164,6 +233,19 @@ function isFileTarget(value: unknown): value is OperationResultFileTarget {
 		!path.startsWith("/") &&
 		path.split("/").every((part) => part && part !== "." && part !== "..")
 	)
+}
+
+function isHttpUrl(value: unknown): value is string {
+	if (typeof value !== "string") return false
+	try {
+		return ["https:", "http:"].includes(new URL(value).protocol)
+	} catch {
+		return false
+	}
+}
+
+function isUrlTarget(value: unknown): value is OperationResultUrlTarget {
+	return isRecord(value) && value.type === "url" && isHttpUrl(value.url)
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

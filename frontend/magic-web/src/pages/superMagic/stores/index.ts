@@ -1,3 +1,4 @@
+import { mergeDownloadProgress } from "./download-progress"
 import { makeAutoObservable, observable, runInAction, toJS } from "mobx"
 import pubsub, { PubSubEvents } from "@/utils/pubsub"
 import { unionBy, get, set, merge, isEqual } from "lodash-es"
@@ -6263,6 +6264,7 @@ export class SuperMagicStore implements SuperMagicStoreCallbackRegistrar {
 		}
 
 		if (!current) {
+			incoming.downloadProgress = mergeDownloadProgress(undefined, incoming)
 			toolResponseMap.set(toolId, incoming)
 			if (normalizedSeqId) seqMap.set(toolId, normalizedSeqId)
 			this.toolResponseMap.set(topicId, toolResponseMap)
@@ -6358,6 +6360,14 @@ export class SuperMagicStore implements SuperMagicStoreCallbackRegistrar {
 			if (preserveRealPayload && key !== "status" && current?.[key] !== undefined) return
 			merged[key] = value
 		})
+
+		merged.downloadProgress = mergeDownloadProgress(current, incoming)
+		if (
+			current?.name === "download_from_urls" &&
+			this.isStrongToolResponseStatus(currentStatus) &&
+			!this.isStrongToolResponseStatus(incomingStatus)
+		)
+			merged.detail = current.detail
 
 		if (!currentStatus || incomingStatus === undefined) {
 			if (currentStatus && incomingStatus === undefined) merged.status = currentStatus

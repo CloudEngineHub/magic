@@ -1,3 +1,4 @@
+import { ToolProgressCard } from "../../ToolCall/tools/ToolProgress/ToolProgress"
 import { lazy, Suspense } from "react"
 import DefaultTool from "./tools/Default"
 import KnowledgeSearchTool from "./tools/KnowledgeSearch"
@@ -22,13 +23,36 @@ export function ToolCallRenderer({
 	onMouseEnter,
 	onMouseLeave,
 }: ToolCallRendererProps) {
-	if (isInlineToolDetail(toolData.detail)) {
+	if (
+		isInlineToolDetail(toolData.detail) ||
+		(toolCall.function.name === "web_search" && toolData.detail?.type === "search")
+	) {
 		return (
 			<OperationResultList
 				toolData={toolData}
 				loading={loading}
 				onSelectDetail={onSelectDetail}
 				className={classNames}
+				onMouseEnter={onMouseEnter}
+				onMouseLeave={onMouseLeave}
+			/>
+		)
+	}
+
+	if (
+		loading &&
+		toolData.detail?.type === "text" &&
+		[
+			"download_from_urls",
+			"audio_understanding",
+			"audio_understanding_progress",
+			"video_generation_progress",
+		].includes(toolData.name || "")
+	) {
+		return (
+			<ToolProgressCard
+				tool={toolData}
+				onClick={onClick}
 				onMouseEnter={onMouseEnter}
 				onMouseLeave={onMouseLeave}
 			/>

@@ -329,11 +329,13 @@ class OperationResultKind(str, Enum):
 class OperationResultStatus(str, Enum):
     SUCCESS = "success"
     ERROR = "error"
+    SKIPPED = "skipped"
 
 
 class OperationResultTargetType(str, Enum):
     CANVAS_ELEMENT = "canvas_element"
     FILE = "file"
+    URL = "url"
 
 
 class OperationResultTarget(BaseModel):
@@ -353,6 +355,31 @@ class OperationResultFileTarget(BaseModel):
     relative_file_path: str
 
 
+class OperationResultUrlTarget(BaseModel):
+    """原网页入口；展示来源与导航 URL 分开处理。"""
+
+    type: Literal[OperationResultTargetType.URL] = OperationResultTargetType.URL
+    url: str
+
+
+class OperationResultChanges(BaseModel):
+    added_lines: int = Field(ge=0)
+    deleted_lines: int = Field(ge=0)
+    modified_lines: int = Field(default=0, ge=0)
+
+
+OperationResultStage = Literal["read", "edit", "find", "download", "analyze", "load"]
+
+
+class OperationResultSummary(BaseModel):
+    stage: OperationResultStage | None = None
+    total_count: int | None = Field(default=None, ge=0)
+    success_count: int | None = Field(default=None, ge=0)
+    failed_count: int | None = Field(default=None, ge=0)
+    skipped_count: int | None = Field(default=None, ge=0)
+    omitted_count: int | None = Field(default=None, ge=0)
+
+
 class OperationResultItem(BaseModel):
     """已执行对象的展示结果；target 仅在工具提供可靠导航目标时存在。"""
 
@@ -361,21 +388,23 @@ class OperationResultItem(BaseModel):
     status: OperationResultStatus
     message: str
     description: str = ""
-    target: OperationResultTarget | OperationResultFileTarget | None = None
+    target: OperationResultTarget | OperationResultFileTarget | OperationResultUrlTarget | None = None
+    changes: OperationResultChanges | None = None
 
 
-class OperationResultListContent(BaseModel):
+class OperationResultListContent(OperationResultSummary):
     """有限的逐项结果随消息保存；大报告仍使用原有文件正文持久化。"""
 
     items: list[OperationResultItem] = Field(min_length=1)
 
 
-class OperationResultListReportContent(FileContent):
+class OperationResultListReportContent(FileContent, OperationResultSummary):
     """图片清单随消息保存；报告正文保留在顶层，沿用既有文件化出口。"""
 
     items: list[OperationResultItem] = Field(min_length=1)
     file_id: str | None = None
     file_extension: str | None = None
+    report_type: DisplayType | None = None
 
 
 class ToolDetail(BaseModel):

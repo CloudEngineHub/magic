@@ -7,6 +7,10 @@ from agentlang.context.tool_context import ToolContext
 from agentlang.logger import get_logger
 from agentlang.tools.tool_result import ToolResult
 from app.core.ai_abilities import get_video_understanding_model_id, get_video_understanding_timeout
+from app.core.entity.factory.tool_detail_factory import ToolDetailFactory
+from app.core.entity.message.server_message import OperationResultStatus
+from app.core.entity.message.server_message import OperationResultItem, OperationResultKind, OperationResultUrlTarget
+from urllib.parse import urlparse
 from app.core.entity.message.server_message import DisplayType, FileContent, ToolDetail
 from app.i18n import i18n
 from app.tools.core import BaseToolParams, tool
@@ -203,6 +207,7 @@ class VideoUnderstanding(WorkspaceTool[VideoUnderstandingParams]):
                 "videos": videos,
                 "video_count": len(videos),
                 "video_names": video_names,
+                "video_results": [{"source": item.source, "success": item.success} for item in batch.results],
             }
         )
 
@@ -340,13 +345,24 @@ Video size limit safeguard:
                     count=video_count,
                 )
 
-            return ToolDetail(
+            report = ToolDetail(
                 type=DisplayType.MD,
                 data=FileContent(
                     file_name=i18n.translate("video_understanding.result_file", category="tool.messages"),
                     content=f"## {title}\n\n{result.content}",
                 )
             )
+            items = []
+            for item in (result.extra_info or {}).get("video_results", []):
+                source = item["source"]
+                status = OperationResultStatus.SUCCESS if item["success"] else OperationResultStatus.ERROR
+                if urlparse(source).scheme in {"http", "https"}:
+                    items.append(OperationResultItem(label=extract_media_source_name(source), kind=OperationResultKind.TEXT,
+                        status=status, message="", target=OperationResultUrlTarget(url=source)))
+                elif not source.startswith("data:"):
+                    items.append(ToolDetailFactory.create_file_result_item(source, self.base_dir, status,
+                        message="" if item["success"] else i18n.translate("tool_card.video_failed", category="tool.messages")))
+            return ToolDetailFactory.create_operation_result_detail(items, report=report, stage="analyze")
         except Exception as e:
             logger.error(f"生成工具详情失败: {e!s}")
             return None

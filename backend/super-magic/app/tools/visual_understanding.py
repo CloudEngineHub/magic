@@ -490,7 +490,7 @@ class VisualUnderstanding(WorkspaceTool[VisualUnderstandingParams]):
                 ) for image in images]
                 return ToolDetail(
                     type=DisplayType.OPERATION_RESULT_LIST,
-                    data=OperationResultListContent(items=items),
+                    data=OperationResultListContent(items=items, stage="load"),
                 )
 
             title = i18n.translate("visual_understanding.title", category="tool.messages")
@@ -521,6 +521,7 @@ class VisualUnderstanding(WorkspaceTool[VisualUnderstandingParams]):
                     type=DisplayType.OPERATION_RESULT_LIST,
                     data=OperationResultListReportContent(
                         items=items,
+                        stage="analyze",
                         file_name=i18n.translate("visual_understanding.result_file", category="tool.messages"),
                         content=f"## {title}\n\n{result.content}",
                     ),

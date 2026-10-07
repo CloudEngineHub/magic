@@ -6608,5 +6608,17 @@
     "inspect_memory.unavailable": {
         "zh_CN": "当前任务无法使用记忆用量统计",
         "en_US": "Memory measurement is unavailable for this task"
+    },
+    "tool_card.download_failed": {
+        "zh_CN": "下载失败",
+        "en_US": "Download failed"
+    },
+    "tool_card.video_failed": {
+        "zh_CN": "未参与分析",
+        "en_US": "Not analyzed"
+    },
+    "tool_card.matches": {
+        "zh_CN": "{{count}} 处匹配",
+        "en_US": "{{count}} matches"
     }
 }

@@ -99,19 +99,35 @@ export interface OperationResultFileTarget {
 	relative_file_path: string
 }
 
-export type OperationResultTarget = OperationResultCanvasTarget | OperationResultFileTarget
+export interface OperationResultUrlTarget {
+	type: "url"
+	url: string
+}
+
+export type OperationResultTarget =
+	OperationResultCanvasTarget | OperationResultFileTarget | OperationResultUrlTarget
 
 /** 操作结果显示对象名称与执行状态，可选提供稳定的导航目标。 */
 export interface OperationResultItem {
 	label: string
 	kind: "file" | "directory" | "text"
-	status: "success" | "error"
+	status: "success" | "error" | "skipped"
 	message: string
 	description?: string
 	target?: OperationResultTarget
+	changes?: { added_lines: number; deleted_lines: number; modified_lines?: number }
 }
 
-export interface DetailOperationResultListItemsData {
+export interface OperationResultSummary {
+	stage?: "read" | "edit" | "find" | "download" | "analyze" | "load"
+	total_count?: number
+	success_count?: number
+	failed_count?: number
+	skipped_count?: number
+	omitted_count?: number
+}
+
+export interface DetailOperationResultListItemsData extends OperationResultSummary {
 	items: OperationResultItem[]
 }
 
@@ -122,6 +138,8 @@ export interface DetailOperationResultListReportData extends DetailOperationResu
 	file_id?: string
 	storage_type?: string
 	file_extension?: string
+	target_file_path?: string
+	report_type?: DetailType
 }
 
 export type DetailOperationResultListData =

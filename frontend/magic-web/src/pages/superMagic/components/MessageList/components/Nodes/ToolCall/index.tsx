@@ -108,7 +108,11 @@ function ToolCall(props: NodeProps) {
 		handleSelectDetail?.(newDetail)
 	}
 
-	if (tool && isInlineToolDetail(tool.detail)) {
+	if (
+		tool &&
+		(isInlineToolDetail(tool.detail) ||
+			(toolName === "web_search" && tool.detail?.type === "search"))
+	) {
 		return (
 			<OperationResultList
 				toolData={tool}

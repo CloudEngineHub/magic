@@ -4,6 +4,9 @@
 通过 replace_start/replace_end 定位并替换文件中的唯一区间（包含边界）。
 """
 
+from app.core.entity.factory.tool_detail_factory import ToolDetailFactory
+
+from app.core.entity.message.server_message import OperationResultChanges, OperationResultStatus
 from app.i18n import i18n
 import os
 from pathlib import Path
@@ -242,6 +245,9 @@ On failure: re-read and verify anchor existence/uniqueness -> increase anchor le
             return ToolResult(
                 content=output,
                 extra_info={
+                    "added_lines": stats["added_lines"],
+                    "deleted_lines": stats["deleted_lines"],
+                    "modified_lines": stats["modified_lines"],
                     "diff": full_diff,
                     "file_path": str(file_path),
                 }
@@ -326,13 +332,25 @@ On failure: re-read and verify anchor existence/uniqueness -> increase anchor le
         markdown_content += diff_content
         markdown_content += "\n```"
 
-        return ToolDetail(
+        report = ToolDetail(
             type=DisplayType.MD,
             data=await self._build_file_content(
                 file_path=file_path,
                 file_name=f"{file_name}.diff",
                 content=markdown_content
             )
+        )
+
+        return ToolDetailFactory.create_operation_result_detail(
+            [ToolDetailFactory.create_file_result_item(
+                file_path, self.base_dir, OperationResultStatus.SUCCESS,
+                changes=OperationResultChanges(
+                    added_lines=int(result.extra_info.get("added_lines", 0)),
+                    deleted_lines=int(result.extra_info.get("deleted_lines", 0)),
+                    modified_lines=int(result.extra_info.get("modified_lines", 0)),
+                ),
+            )],
+            report=report, stage="edit",
         )
 
     def _get_remark_content(self, result: ToolResult, arguments: Dict[str, Any] = None) -> str:
