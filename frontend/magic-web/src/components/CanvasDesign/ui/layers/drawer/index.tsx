@@ -32,6 +32,7 @@ import {
 	type TriangleElement,
 	type StarElement,
 	type ImageElement,
+	type ImageElementContent,
 	type VideoElement,
 } from "../../../runtime/document/types"
 import { useCanvas } from "../../../app/providers/CanvasProvider"
@@ -321,6 +322,9 @@ export default function LayersDrawer() {
 		(node: TreeNode<LayerTreeData>, context: RenderNodeContext) => {
 			const isLocked = node.data?.locked ?? false
 			const isVisible = node.data?.visible ?? true
+			const isDiscarded =
+				node.data?.type === ElementTypeEnum.Image &&
+				canvas?.getEffectiveContent<ImageElementContent>(node.id)?.discarded === true
 			const isEditing = layerRenamingElementId === node.id
 			const isLayerItemHovered = hoveredLayerItemId === node.id
 			const LockIcon = isLocked ? LockKeyhole : LockOpen
@@ -438,6 +442,11 @@ export default function LayersDrawer() {
 								{node.label}
 							</div>
 						)}
+						{isDiscarded && (
+							<span className={styles.layerNodeDiscarded}>
+								{t("elementBottomToolbar.discardedDraft", "废稿")}
+							</span>
+						)}
 					</div>
 				</div>
 			)
@@ -532,6 +541,7 @@ export default function LayersDrawer() {
 			canWrite,
 			canvas,
 			setLayerRenamingElementId,
+			t,
 		],
 	)
 

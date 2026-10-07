@@ -48,6 +48,12 @@ export interface LocateProjectFileActionOptions {
 	elementId?: string
 }
 
+export interface ImageDiscardActionOptions {
+	discarded: boolean
+	/** 菜单打开时固定目标版本，执行时不重新解释当前选择。 */
+	targets: Array<{ elementId: string; contentId: string }>
+}
+
 export interface DownloadActionOptions {
 	/** default 对齐项目文件下载；normal 仅用于 AI 图片带水印下载。 */
 	downloadMode?: "default" | "normal"
@@ -57,6 +63,7 @@ export interface DownloadActionOptions {
  * 根据动作 ID 映射到对应的选项类型
  */
 export interface UserActionOptionsMap {
+	"image.set-discarded": ImageDiscardActionOptions
 	"edit.paste": EditActionOptions
 	"frame.create": FrameCreateActionOptions
 	"view.focus-element": ViewActionOptions

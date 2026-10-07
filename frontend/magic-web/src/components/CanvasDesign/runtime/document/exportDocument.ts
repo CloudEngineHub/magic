@@ -129,6 +129,9 @@ export function exportLayerElement(element: LayerElement): LayerElement {
 	const result = exportLayerElementInternal(element)
 	const contents = getContents(element).map((content) => {
 		const serialized = cloneSerializable(content) as unknown as Record<string, unknown>
+		if (element.type === ElementTypeEnum.Image && serialized.discarded !== true) {
+			delete serialized.discarded
+		}
 		if (element.type === ElementTypeEnum.Image && serialized.crop) {
 			serialized.crop = exportCropConfig(serialized.crop as CropConfig)
 		}

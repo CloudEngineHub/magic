@@ -1248,6 +1248,7 @@ export class Canvas {
 		}))
 
 		this.elementManager.batchUpdate(updates)
+		if (!visible) this.deselectHiddenElements()
 	}
 
 	/**
@@ -1321,6 +1322,16 @@ export class Canvas {
 	 */
 	public setElementVisible(elementId: string, visible: boolean): void {
 		this.elementManager.setElementVisible(elementId, visible)
+		if (!visible) this.deselectHiddenElements()
+	}
+
+	private deselectHiddenElements(): void {
+		// 隐藏父容器也会让已选择的子项不可见；以后仍可从图层面板主动选择它们。
+		for (const id of this.selectionManager.getSelectedIds()) {
+			if (!this.elementManager.isElementVisibleInDataTree(id)) {
+				this.selectionManager.deselect(id)
+			}
+		}
 	}
 
 	/**

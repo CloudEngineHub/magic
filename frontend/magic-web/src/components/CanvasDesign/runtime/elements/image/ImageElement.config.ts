@@ -2,6 +2,8 @@
  * 图片元素相关配置
  */
 export const IMAGE_CONFIG = {
+	/** 轻微保留原色便于辨认；悬浮时不应用滤镜，不改变原图透明度。 */
+	DISCARDED_FILTER: "grayscale(75%) brightness(0.92)",
 	/** 默认宽度（像素） */
 	DEFAULT_WIDTH: 1024,
 	/** 默认高度（像素） */
@@ -42,6 +44,8 @@ export const COLORS = {
 	BUTTON_BG: "rgba(0, 0, 0, 0.70)",
 	/** Info 按钮 hover 状态背景颜色 */
 	BUTTON_BG_HOVER: "rgba(0, 0, 0, 0.85)",
+	/** 废稿是人工取舍，使用独立角标，不覆盖原主版本或生成状态。 */
+	DISCARDED_TAG_BG: "rgba(120, 83, 30, 0.90)",
 	/** 加载状态文本背景颜色 */
 	LOADING_BG: "rgba(255, 255, 255, 0.30)",
 } as const

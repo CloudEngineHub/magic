@@ -1,7 +1,13 @@
 import Konva from "konva"
 import type { Canvas } from "../../core/Canvas"
 import { getContents, getMainContent } from "../../document/elementContent"
-import type { ImageElement, VideoElement } from "../../document/types"
+import {
+	ElementTypeEnum,
+	type ImageElement,
+	type ImageElementContent,
+	type VideoElement,
+	type VideoElementContent,
+} from "../../document/types"
 import {
 	COLORS,
 	IMAGE_CONFIG,
@@ -11,7 +17,7 @@ import {
 
 type VersionedMediaElement = ImageElement | VideoElement
 
-interface MediaMainVersionTagDecoratorConfig {
+interface MediaVersionTagDecoratorConfig {
 	canvas: Canvas
 	width: number
 	height: number
@@ -19,7 +25,8 @@ interface MediaMainVersionTagDecoratorConfig {
 }
 
 /** 媒体主版本标识：仅展示当前内容是否为主版本，不提供版本操作。 */
-export class MediaMainVersionTagDecorator {
+// 图片另显示人工废稿状态，与主版本并列，不改变版本操作。
+export class MediaVersionTagDecorator {
 	private tag?: Konva.Group
 	private viewportLayoutUnsubscribe?: () => void
 	private transformHandler?: () => void
@@ -27,18 +34,13 @@ export class MediaMainVersionTagDecorator {
 
 	constructor(
 		private readonly elementGroup: Konva.Group,
-		private config: MediaMainVersionTagDecoratorConfig,
+		private config: MediaVersionTagDecoratorConfig,
 	) {}
 
 	public create(): void {
 		this.destroyTag()
-		if (!this.shouldDisplay()) return
-
-		const label = this.config.canvas.t
-			? this.config.canvas.t("elementBottomToolbar.mainVersion", {
-					defaultValue: "主版本",
-				})
-			: "主版本"
+		const label = this.getLabel()
+		if (!label) return
 		const labelProbe = new Konva.Text({
 			text: label,
 			fontSize: LAYOUT.TEXT_FONT_SIZE,
@@ -58,7 +60,7 @@ export class MediaMainVersionTagDecorator {
 				width,
 				height: IMAGE_CONFIG.INFO_BUTTON_SIZE,
 				cornerRadius: IMAGE_CONFIG.CORNER_RADIUS,
-				fill: COLORS.BUTTON_BG,
+				fill: this.isDiscarded() ? COLORS.DISCARDED_TAG_BG : COLORS.BUTTON_BG,
 				listening: false,
 			}),
 			new Konva.Text({
@@ -80,7 +82,7 @@ export class MediaMainVersionTagDecorator {
 		this.setupListeners()
 	}
 
-	public updateConfig(config: Partial<MediaMainVersionTagDecoratorConfig>): void {
+	public updateConfig(config: Partial<MediaVersionTagDecoratorConfig>): void {
 		this.config = { ...this.config, ...config }
 		this.create()
 	}
@@ -103,9 +105,38 @@ export class MediaMainVersionTagDecorator {
 		}
 	}
 
-	private shouldDisplay(): boolean {
+	private isDiscarded(): boolean {
+		return (
+			this.config.data.type === ElementTypeEnum.Image &&
+			this.config.canvas.getEffectiveContent<ImageElementContent>(this.config.data.id)
+				?.discarded === true
+		)
+	}
+
+	private getLabel(): string {
+		const labels: string[] = []
+		if (this.shouldDisplayMainVersion()) {
+			labels.push(
+				this.config.canvas.t?.("elementBottomToolbar.mainVersion", {
+					defaultValue: "主版本",
+				}) ?? "主版本",
+			)
+		}
+		if (this.isDiscarded()) {
+			labels.push(
+				this.config.canvas.t?.("elementBottomToolbar.discardedDraft", {
+					defaultValue: "废稿",
+				}) ?? "废稿",
+			)
+		}
+		return labels.join(" · ")
+	}
+
+	private shouldDisplayMainVersion(): boolean {
 		const contents = getContents(this.config.data)
-		const activeContent = this.config.canvas.getEffectiveContent(this.config.data.id)
+		const activeContent = this.config.canvas.getEffectiveContent<
+			ImageElementContent | VideoElementContent
+		>(this.config.data.id)
 		const mainContent = getMainContent(this.config.data)
 		return (
 			contents.length > 1 &&

@@ -118,6 +118,8 @@ def elements_content(result: dict[str, Any]) -> str:
             fields = [
                 f"content_id={content['content_id']}",
             ]
+            if content.get("discarded") is True:
+                fields.append("review=discarded draft (main-content selection and connections unchanged)")
             if content.get("status"):
                 fields.append(f"status={content['status']}")
             if content.get("source"):

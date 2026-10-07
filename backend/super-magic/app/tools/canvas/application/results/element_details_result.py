@@ -46,6 +46,7 @@ class CanvasContentDetailResult:
     generation_parameters: JsonObject | None
     payload: JsonObject | None
     runtime: JsonObject | None
+    discarded: bool = False
 
     def to_dict(self) -> JsonObject:
         """转换为 Content 详情 JSON 对象。"""
@@ -60,6 +61,7 @@ class CanvasContentDetailResult:
             "generation_parameters": self.generation_parameters,
             "payload": self.payload,
             "runtime": self.runtime,
+            "discarded": True if self.discarded else None,
         }
         return {key: value for key, value in values.items() if value is not None}
 
