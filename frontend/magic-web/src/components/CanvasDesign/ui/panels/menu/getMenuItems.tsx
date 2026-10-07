@@ -16,7 +16,7 @@ import {
 	MessageSquareReply,
 	Pencil,
 	Trash2,
-	Archive,
+	ArchiveX,
 	ArchiveRestore,
 } from "lucide-react"
 import { toast } from "sonner"
@@ -440,7 +440,7 @@ export function getMenuItems({
 			label: allDiscarded
 				? translate("menu.restoreDraft", "取消废稿标记")
 				: translate("menu.discardDraft", "标记为废稿"),
-			icon: allDiscarded ? ArchiveRestore : Archive,
+			icon: allDiscarded ? ArchiveRestore : ArchiveX,
 			visible: () => canDiscard,
 			onClick: () => {
 				if (!canvas.userActionRegistry.canExecute("image.set-discarded", discardOptions)) {

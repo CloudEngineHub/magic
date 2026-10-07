@@ -2,8 +2,6 @@
  * 图片元素相关配置
  */
 export const IMAGE_CONFIG = {
-	/** 轻微保留原色便于辨认；悬浮时不应用滤镜，不改变原图透明度。 */
-	DISCARDED_FILTER: "grayscale(75%) brightness(0.92)",
 	/** 默认宽度（像素） */
 	DEFAULT_WIDTH: 1024,
 	/** 默认高度（像素） */
@@ -45,7 +43,9 @@ export const COLORS = {
 	/** Info 按钮 hover 状态背景颜色 */
 	BUTTON_BG_HOVER: "rgba(0, 0, 0, 0.85)",
 	/** 废稿是人工取舍，使用独立角标，不覆盖原主版本或生成状态。 */
-	DISCARDED_TAG_BG: "rgba(120, 83, 30, 0.90)",
+	DISCARDED_TAG_BG: "#DC2626",
+	/** 保持不同底图上的标签边界和图标对比度。 */
+	DISCARDED_TAG_BORDER: "#FFFFFF",
 	/** 加载状态文本背景颜色 */
 	LOADING_BG: "rgba(255, 255, 255, 0.30)",
 } as const
@@ -54,6 +54,8 @@ export const COLORS = {
  * 布局和样式配置
  */
 export const LAYOUT = {
+	/** 废稿小标签中的图标与文字间距（屏幕像素）。 */
+	DISCARDED_ICON_TEXT_GAP: 4,
 	/** 文本水平内边距（像素） */
 	TEXT_PADDING_X: 8,
 	/** 文本垂直内边距（像素） */

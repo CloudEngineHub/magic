@@ -66,7 +66,6 @@ import {
 	type ElementCornerActionConfig,
 } from "../decorators/ElementCornerActionsDecorator"
 import { MediaVersionTagDecorator } from "../decorators/MediaVersionTagDecorator"
-import { DiscardedImageDecorator } from "../decorators/DiscardedImageDecorator"
 import { ImagePollingManager } from "../../resources/polling/ImagePollingManager"
 import { DECORATOR_COLORS, DECORATOR_CONFIG } from "../decorators/DecoratorConfig"
 import type { TransformContext } from "../core/BaseElement"
@@ -111,7 +110,6 @@ export class ImageElement extends BaseElement<ImageElementData> {
 	private borderDecorator?: BorderDecorator
 	private cornerActionsDecorator?: ElementCornerActionsDecorator
 	private mainVersionTagDecorator?: MediaVersionTagDecorator
-	private discardedImageDecorator?: DiscardedImageDecorator
 
 	// 生成相关：Runtime manager 是并发状态的唯一事实来源；legacy 标记只兼容
 	// 尚未建立 Runtime target 的测试和初始化生命周期。
@@ -459,8 +457,6 @@ export class ImageElement extends BaseElement<ImageElementData> {
 	 * 重新渲染节点（重写以清理监听器）
 	 */
 	override rerender(): Konva.Node | null {
-		this.discardedImageDecorator?.destroy()
-		this.discardedImageDecorator = undefined
 		// 在重新渲染前清理监听器和装饰器
 		this.removeContentUpdateListener()
 		this.borderDecorator?.destroy()
@@ -478,8 +474,6 @@ export class ImageElement extends BaseElement<ImageElementData> {
 	 * 销毁元素时清理资源
 	 */
 	override destroy(): void {
-		this.discardedImageDecorator?.destroy()
-		this.discardedImageDecorator = undefined
 		this.canvas.visibilityManager.unregisterImageElement(this.data.id)
 		this.removeResourceLoadedListener()
 		this.contentPreviewUnsubscribe?.()
@@ -2583,13 +2577,6 @@ export class ImageElement extends BaseElement<ImageElementData> {
 		})
 
 		group.add(imageNode)
-		if (this.getActiveContentData().discarded) {
-			this.discardedImageDecorator = new DiscardedImageDecorator(
-				imageNode,
-				this.canvas,
-				this.data.id,
-			)
-		}
 
 		// 创建边框
 		this.createBorder(group, width, height, false)
