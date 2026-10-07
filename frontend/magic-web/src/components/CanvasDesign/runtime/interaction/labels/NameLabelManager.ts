@@ -84,6 +84,23 @@ export class NameLabelManager extends BaseLabelManager {
 		return this.shouldShowLabel(elementId)
 	}
 
+	/** 浏览文字使用最终屏幕比例；编辑入口继续通过 getRenameInputLayout 读取全文。 */
+	public getDisplayLabelLayout(
+		elementId: string,
+	): ReturnType<NameLabelManager["getRenameInputLayout"]> {
+		const layout = this.getRenameInputLayout(elementId)
+		const group = this.labelMap.get(elementId)
+		const textNode = group?.findOne<Konva.Text>("Text")
+		if (!layout || !group?.visible() || !textNode) return null
+		const screenRatio = group.scaleX() * this.canvas.stage.scaleX()
+		return {
+			...layout,
+			width: textNode.width() * screenRatio,
+			height: textNode.height() * screenRatio,
+			fontSize: textNode.fontSize() * screenRatio,
+		}
+	}
+
 	public setRenamingElementId(elementId: string | null): void {
 		const previousElementId = this.renamingElementId
 		this.renamingElementId = elementId
@@ -141,6 +158,10 @@ export class NameLabelManager extends BaseLabelManager {
 		return element?.getNameLabelText() || ""
 	}
 
+	protected override getLabelGap(): number {
+		return NAME_LABEL_CONFIG.LABEL_GAP
+	}
+
 	protected override createLabel(elementId: string): Konva.Group {
 		const labelText = this.getLabelText(elementId)
 		const labelGroup = new Konva.Group({
@@ -196,6 +217,8 @@ export class NameLabelManager extends BaseLabelManager {
 		if (!textNode) return false
 
 		const safeInverseScale = Math.max(inverseScale, Number.EPSILON)
+		const mediaLayout = this.getMediaRowLayout(elementId)
+		// 媒体使用整行的标题优先预算；下方原有尺寸预留规则只用于其它元素。
 		const otherLabelSizes = this.getOtherLabelSizes(elementId)
 		const reservedWidth = otherLabelSizes.reduce(
 			(maxWidth, size) => Math.max(maxWidth, size.width),
@@ -206,7 +229,9 @@ export class NameLabelManager extends BaseLabelManager {
 			boundingRect.width / safeInverseScale - reservedWidth - NAME_LABEL_CONFIG.LABEL_GAP,
 		)
 		const naturalTextWidth = this.getNaturalTextWidth(textNode)
-		const targetTextWidth = Math.min(naturalTextWidth, availableTextWidth)
+		const targetTextWidth = mediaLayout
+			? Math.max(Number.EPSILON, mediaLayout.nameWidth)
+			: Math.min(naturalTextWidth, availableTextWidth)
 
 		textNode.wrap("none")
 		textNode.ellipsis(true)

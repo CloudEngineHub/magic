@@ -117,6 +117,8 @@ export class SizeLabelManager extends BaseLabelManager {
 		labelGroup: Konva.Group,
 		baseVisibility: boolean,
 	): boolean | null {
+		const mediaLayout = this.getMediaRowLayout(elementId)
+		if (mediaLayout) return baseVisibility && mediaLayout.hasSpace && mediaLayout.showSize
 		const elementType = element?.getData().type
 		if (
 			this.isMediaLabelsAlwaysVisible() &&
