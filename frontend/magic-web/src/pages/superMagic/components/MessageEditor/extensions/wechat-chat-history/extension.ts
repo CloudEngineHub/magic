@@ -3,6 +3,7 @@ import { ReactNodeViewRenderer } from "@/infrastructure/editors/tiptap/react"
 import { Plugin, PluginKey } from "@/infrastructure/editors/tiptap/pm-state"
 import ChatBlock from "../../components/WechatChatHistory/ChatBlock"
 import { WECHAT_CHAT_HISTORY } from "./types"
+import { deleteWechatChatAtBoundary } from "./commands"
 
 export const WechatChatHistoryExtension = Node.create({
 	name: WECHAT_CHAT_HISTORY,
@@ -51,6 +52,12 @@ export const WechatChatHistoryExtension = Node.create({
 	},
 	addNodeView() {
 		return ReactNodeViewRenderer(ChatBlock)
+	},
+	addKeyboardShortcuts() {
+		return {
+			Backspace: ({ editor }) => deleteWechatChatAtBoundary(editor, -1),
+			Delete: ({ editor }) => deleteWechatChatAtBoundary(editor, 1),
+		}
 	},
 	addProseMirrorPlugins() {
 		return [

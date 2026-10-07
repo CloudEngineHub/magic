@@ -1,10 +1,18 @@
 import { useMemo } from "react"
+import type { JSONContent } from "@/infrastructure/editors/tiptap/core"
 import {
 	NodeViewContent,
 	NodeViewWrapper,
 	type ReactNodeViewProps,
 } from "@/infrastructure/editors/tiptap/react"
-import { Expand, MessageSquareText, MoreHorizontal, Plus, Trash2 } from "lucide-react"
+import {
+	ClipboardPaste,
+	Expand,
+	MessageSquareText,
+	MoreHorizontal,
+	Plus,
+	Trash2,
+} from "lucide-react"
 import { useTranslation } from "react-i18next"
 import { Button } from "@/components/shadcn-ui/button"
 import {
@@ -14,18 +22,31 @@ import {
 	DropdownMenuTrigger,
 } from "@/components/shadcn-ui/dropdown-menu"
 import { cn } from "@/utils/cn"
-import { parseWechatChat } from "../../extensions/wechat-chat-history/parser"
+import { useIsMobile } from "@/hooks/useIsMobile"
+import { isWechatInstruction, parseWechatChat } from "../../extensions/wechat-chat-history/parser"
 import { useWechatChatActions } from "./context"
 import { useWechatChatTitle } from "./useWechatChatTitle"
 
-export default function ChatBlock({ node, deleteNode, editor }: ReactNodeViewProps) {
+export default function ChatBlock({ node, deleteNode, editor, getPos }: ReactNodeViewProps) {
 	const { t } = useTranslation("super")
+	const mobile = useIsMobile()
 	const actions = useWechatChatActions()
 	const id = node.attrs.id as string
 	const expanded = actions?.activeId === id
-	const snapshot = useMemo(() => parseWechatChat(node.toJSON().content ?? []), [node])
+	const content = useMemo<JSONContent[]>(() => node.toJSON().content ?? [], [node])
+	const snapshot = useMemo(() => parseWechatChat(content), [content])
+	const emptySource = content
+		.filter((paragraph) => !isWechatInstruction(paragraph))
+		.every((paragraph) => !paragraph.content?.length)
 	const title = useWechatChatTitle(snapshot.participants)
 	const last = snapshot.messages.at(-1)
+	const pasteHint = mobile
+		? t("wechatChat.mobilePasteHint")
+		: t("wechatChat.desktopPasteHint", {
+				shortcut: /Mac|iPhone|iPad|iPod/i.test(navigator.platform || navigator.userAgent)
+					? "⌘ V"
+					: "Ctrl V",
+			})
 	return (
 		<NodeViewWrapper
 			as="section"
@@ -96,6 +117,38 @@ export default function ChatBlock({ node, deleteNode, editor }: ReactNodeViewPro
 					</div>
 				)}
 			</div>
+			{expanded && emptySource && editor.isEditable && (
+				<div contentEditable={false} className="mx-4 mt-3">
+					<Button
+						type="button"
+						variant="outline"
+						className="h-auto w-full justify-start gap-3 whitespace-normal border-dashed bg-muted/20 px-3 py-4 text-left"
+						onClick={() => {
+							const position = getPos()
+							if (typeof position !== "number") return
+							// 引导只聚焦同一区块的原文段落；仍由既有 paste 和附件上传流程处理。
+							const first = editor.state.doc.nodeAt(position)?.firstChild
+							const chain = editor.chain()
+							if (first && isWechatInstruction(first.toJSON()))
+								chain.insertContentAt(position + 1, { type: "paragraph" })
+							chain
+								.focus()
+								.setTextSelection(position + 2)
+								.run()
+						}}
+					>
+						<ClipboardPaste className="size-4 shrink-0 text-muted-foreground" />
+						<span className="min-w-0">
+							<span className="block text-sm font-medium">
+								{t("wechatChat.pasteHere")}
+							</span>
+							<span className="mt-1 block text-xs font-normal leading-5 text-muted-foreground">
+								{pasteHint}
+							</span>
+						</span>
+					</Button>
+				</div>
+			)}
 			{!expanded && last && (
 				<div
 					contentEditable={false}
