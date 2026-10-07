@@ -95,8 +95,13 @@ export function useVirtualMessageScroll({
 			return
 		}
 		const oldItems = itemsRef.current
+		if (oldItems.length === 0) return
 		const retainedKeys = new Set(items.map((item) => item.key))
-		const visibleIndex = adapter.findItemIndex(adapter.scrollOffset)
+		// 页脚有独立虚拟索引，阅读锚点只能指向消息或过程控制行。
+		const visibleIndex = Math.min(
+			adapter.findItemIndex(adapter.scrollOffset),
+			oldItems.length - 1,
+		)
 		let index = key ? oldItems.findIndex((item) => item.key === key) : visibleIndex
 		if (!key) {
 			while (index < oldItems.length && !retainedKeys.has(oldItems[index].key)) index += 1
