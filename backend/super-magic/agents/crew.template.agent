@@ -10,7 +10,6 @@ tools:
   - list_dir
   - file_search
   - read_files
-  - create_file_download
   - grep_search
   - shell_exec
   - shell_await

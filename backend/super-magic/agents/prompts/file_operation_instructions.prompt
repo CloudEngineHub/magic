@@ -85,6 +85,3 @@ Path Usage:
 -->
 Frontend File Management Interaction:
 - If users request converting or exporting files to other formats (such as .pdf, .pptx, etc.), politely decline and guide users to use the file download function on the Web interface to download or export files in the desired format.
-
-<!--zh: 用户要下载一组已有文件时，调用 create_file_download 创建消息内下载入口，不在工作区生成 ZIP。只有用户明确要求 ZIP 保存在项目中供后续使用时，才创建持久 ZIP。-->
-When the user wants to download a collection of existing files, call create_file_download to create a download card instead of writing a ZIP to the workspace. Create a persistent ZIP only when the user explicitly needs it saved in the project for later use.

@@ -36,10 +36,10 @@ class CreateFileDownloadParams(BaseToolParams):
     """集合名称和准确的工作区文件路径。"""
 
     model_config = ConfigDict(extra="forbid")
-    title: str = Field(..., min_length=1, max_length=160, description="Download collection name in the user's language; used as the ZIP filename.")
+    title: str = Field(..., min_length=1, max_length=160, description="Collection name used as the ZIP filename.")
     file_paths: list[str] = Field(
         ..., min_length=1, max_length=MAX_FILES,
-        description="Exact workspace-relative paths of the existing files to download. Any file type is supported. Do not pass directories, URLs, or wildcard patterns.",
+        description="Exact workspace-relative file paths.",
     )
 
     @field_validator("title")
@@ -61,9 +61,10 @@ def _failure_message(result: ToolResult) -> str:
     return f"{message}：{path}" if path else message
 
 
-@tool(name="create_file_download")
+# 模型使用说明：agents/skills/file-bundle/SKILL.md。
+@tool(name="create_file_download", code_mode_only=True)
 class CreateFileDownload(BaseTool[CreateFileDownloadParams]):
-    """Create a download card for existing workspace files. No ZIP is created or uploaded; the user clicks the card to package and download the listed source files in their browser. Use this for downloading a file collection, unless the user explicitly needs a ZIP saved in the project."""
+    """Create a browser download card for existing workspace files."""
 
     name = "create_file_download"
 

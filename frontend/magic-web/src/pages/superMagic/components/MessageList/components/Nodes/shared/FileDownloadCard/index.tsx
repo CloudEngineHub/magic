@@ -1,15 +1,9 @@
 import { useId, type MouseEventHandler, type ReactNode } from "react"
-import {
-	ChevronDown,
-	ChevronRight,
-	Download,
-	FileArchive,
-	Loader2,
-	RotateCcw,
-	X,
-} from "lucide-react"
+import { ChevronDown, ChevronRight, Download, Loader2, RotateCcw, X } from "lucide-react"
 import { useTranslation } from "react-i18next"
 import { Button } from "@/components/shadcn-ui/button"
+import { Checkbox } from "@/components/shadcn-ui/checkbox"
+import VIPTag from "@/pages/superMagic/components/VIPTag"
 import { ScrollArea } from "@/components/shadcn-ui/scroll-area"
 import MagicFileIcon from "@/components/base/MagicFileIcon"
 import SmartTooltip from "@/components/other/SmartTooltip"
@@ -93,6 +87,11 @@ export default function FileDownloadCard({
 	const { t } = useTranslation("super")
 	const { fileBundleDownload: download, projectFilesStore } = useMessageListContext()
 	const [open, setOpen] = useMessageViewState("file-download-expanded", false)
+	const [noWatermark, setNoWatermark] = useMessageViewState(
+		`file-download-quality:${toolData.id}`,
+		true,
+	)
+	const qualityId = useId()
 	const contentId = useId()
 	const data = getFileDownloadData(toolData.detail)
 	const failureText =
@@ -111,7 +110,7 @@ export default function FileDownloadCard({
 		!data
 	const disabled =
 		unavailable || !toolData.id || !download?.canDownload || download.state.phase === "running"
-	const start = (noWatermark = false) => {
+	const start = () => {
 		if (data && toolData.id && !disabled) download?.start(toolData.id, data, noWatermark)
 	}
 	const toggle = () => setOpen((value) => !value)
@@ -137,12 +136,21 @@ export default function FileDownloadCard({
 			disabled={disabled}
 			onClick={() => start()}
 		>
-			{state?.phase === "error" ? <RotateCcw size={14} /> : <Download size={14} />}
-			{state?.phase === "error" ? t("fileDownload.retry") : t("fileDownload.download")}
+			{state?.phase === "error" && !state.fileId ? (
+				<RotateCcw size={14} />
+			) : (
+				<Download size={14} />
+			)}
+			{state?.phase === "error" && !state.fileId
+				? t("fileDownload.retry")
+				: t("fileDownload.download")}
 		</Button>
 	)
 	return (
-		<div className={cn("w-full max-w-lg", className)} data-file-download={toolData.id}>
+		<div
+			className={cn("max-w-full", open ? "w-full max-w-lg" : "w-fit", className)}
+			data-file-download={toolData.id}
+		>
 			<DefaultTool
 				toolData={{
 					id: toolData.id,
@@ -156,7 +164,7 @@ export default function FileDownloadCard({
 				onClick={toggle}
 				onMouseEnter={onMouseEnter}
 				onMouseLeave={onMouseLeave}
-				cardClassName={cn("w-full", open && "rounded-b-none")}
+				cardClassName={cn(open && "w-full rounded-b-none")}
 				suffix={
 					<div className="ml-auto flex shrink-0 items-center gap-0.5 pr-1">
 						{action}
@@ -229,27 +237,48 @@ export default function FileDownloadCard({
 											>
 												{t("fileDownload.view")}
 											</Button>
+											<Button
+												size="icon"
+												variant="ghost"
+												className="size-6 shrink-0"
+												disabled={disabled}
+												aria-label={t("fileDownload.downloadFile", {
+													name: item.file_name,
+												})}
+												title={t("fileDownload.downloadOne")}
+												onClick={() => {
+													if (toolData.id)
+														download?.startFile(
+															toolData.id,
+															data,
+															item.file_id,
+															noWatermark,
+														)
+												}}
+											>
+												<Download size={14} />
+											</Button>
 										</li>
 									))}
 								</ul>
 							</ScrollArea>
-							<div className="flex flex-wrap items-center justify-between gap-2 border-t border-border px-3 py-2 text-[11px] text-muted-foreground">
-								<span className="inline-flex items-center gap-1">
-									<FileArchive size={14} />
-									{t("fileDownload.sourceFiles")}
-								</span>
-								{containsDownloadImages(data) && (
-									<Button
-										size="sm"
-										variant="ghost"
-										className="h-6 px-1.5 text-xs"
+							{containsDownloadImages(data) && (
+								<div className="flex items-center gap-2 border-t border-border px-3 py-2">
+									<Checkbox
+										id={qualityId}
+										checked={noWatermark}
+										onCheckedChange={(value) => setNoWatermark(value === true)}
 										disabled={disabled}
-										onClick={() => start(true)}
+									/>
+									<label
+										htmlFor={qualityId}
+										className="cursor-pointer text-xs text-foreground"
 									>
 										{t("fileDownload.noWatermark")}
-									</Button>
-								)}
-							</div>
+									</label>
+									{download?.noWatermarkRequiresVip && <VIPTag />}
+								</div>
+							)}
 						</>
 					) : (
 						<p className="m-0 p-3 text-xs text-muted-foreground">
