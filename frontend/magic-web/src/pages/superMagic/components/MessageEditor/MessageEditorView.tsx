@@ -126,17 +126,18 @@ function MessageEditorView({
 							</div>
 						)}
 						<div className={cn(messageEditorTextContainerVariants({ size }))}>
+							{/* Radix 内容层默认为 table，无法承接视口高度；短内容铺满可点击区，长内容自然增长并滚动。 */}
 							<ScrollArea
 								className="min-h-0 flex-1"
 								viewportRef={wechatScrollRef}
-								viewportClassName="h-full"
+								viewportClassName="h-full [&>div]:!flex [&>div]:min-h-full [&>div]:flex-col"
 							>
 								<EditorContent
 									ref={domRef}
 									editor={tiptapEditor}
 									className={cn(
 										messageEditorContentVariants({ size }),
-										"h-auto overflow-visible [&_.ProseMirror]:h-auto",
+										"flex h-auto flex-col overflow-visible [&_.ProseMirror]:h-auto [&_.ProseMirror]:flex-1",
 										className,
 										previewActiveId && "[&_.ProseMirror>p]:hidden",
 									)}
