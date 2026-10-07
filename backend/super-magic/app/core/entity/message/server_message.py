@@ -357,6 +357,7 @@ class OperationResultItem(BaseModel):
     target: OperationResultTarget | None = None
     started_at: str | None = None
     expected_finished_at: str | None = None
+    is_processing: bool | None = None
 
 
 class OperationResultListContent(BaseModel):

@@ -85,7 +85,7 @@ def test_generation_detail_keeps_each_items_timing() -> None:
                 },
                 {
                     "item_ref": "image-2",
-                    "status": "processing",
+                    "status": "completed",
                     "element_id": "element-2",
                     "started_at": "2026-10-05T10:00:01+08:00",
                     "expected_finished_at": "2026-10-05T10:01:11+08:00",
@@ -101,6 +101,8 @@ def test_generation_detail_keeps_each_items_timing() -> None:
     assert detail.data.items[0].expected_finished_at == "2026-10-05T10:00:45+08:00"
     assert detail.data.items[1].started_at == "2026-10-05T10:00:01+08:00"
     assert detail.data.items[1].expected_finished_at == "2026-10-05T10:01:11+08:00"
+    assert detail.data.items[0].is_processing is True
+    assert detail.data.items[1].is_processing is False
 
 
 def test_generation_feedback_ignores_imported_media() -> None:

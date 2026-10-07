@@ -99,7 +99,14 @@ class GenerationSubmissionService:
             for item in generated
         ]
         await self._persist_generation_start_metadata(project_path, work_items, tool_context)
-        await self._execute_work_items(work_items, project_path, tool_context, by_content)
+        await self._execute_work_items(
+            work_items,
+            project_path,
+            tool_context,
+            by_content,
+            result,
+            on_progress_updated,
+        )
         return result
 
     async def _persist_generation_start_metadata(
@@ -186,13 +193,12 @@ class GenerationSubmissionService:
         on_progress_updated: Callable[[CanvasBatchResult[TGeneratedItem]], Awaitable[None]] | None,
     ) -> TaskCreatedCallback:
         """构造 provider 建单后同步任务时间的回调。"""
-
         async def sink(
             _task_id: str,
             expected_finished_at: str | None,
             started_at: str | None,
         ) -> None:
-            if expected_finished_at is None:
+            if expected_finished_at is None or result_item.expected_finished_at is not None:
                 return
             result_item.started_at = started_at
             result_item.expected_finished_at = expected_finished_at
@@ -291,6 +297,8 @@ class GenerationSubmissionService:
         project_path: str,
         tool_context: ToolContext | None,
         by_content: dict[str, GeneratedResultItem],
+        result: CanvasBatchResult[TGeneratedItem],
+        on_progress_updated: Callable[[CanvasBatchResult[TGeneratedItem]], Awaitable[None]] | None,
     ) -> None:
         """按完成事件消费生成结果，并立即提交已完成项。"""
         tasks = [asyncio.create_task(self._execute_work_item(item, project_path, tool_context)) for item in work_items]
@@ -300,6 +308,8 @@ class GenerationSubmissionService:
                 work_result = await completed_task
                 await self._commit_generation_result(project_path, by_content, work_result)
                 committed_content_ids.add(work_result.work_item.submission_item.content_id)
+                if on_progress_updated is not None:
+                    await on_progress_updated(result)
         except BaseException as error:
             for task in tasks:
                 if not task.done():

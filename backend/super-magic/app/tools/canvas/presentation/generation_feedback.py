@@ -312,6 +312,7 @@ class CanvasGenerationFeedback:
                     target=target,
                     started_at=raw_item.get("started_at") or None,
                     expected_finished_at=raw_item.get("expected_finished_at") or None,
+                    is_processing=status in cls._PROCESSING_STATUSES,
                 )
             )
 

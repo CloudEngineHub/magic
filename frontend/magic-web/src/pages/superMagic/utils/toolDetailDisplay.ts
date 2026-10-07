@@ -117,7 +117,9 @@ function isOperationResultItem(
 		typeof item.message === "string" &&
 		(item.description === undefined || typeof item.description === "string") &&
 		(item.started_at === undefined || typeof item.started_at === "string") &&
-		(item.expected_finished_at === undefined || typeof item.expected_finished_at === "string")
+		(item.expected_finished_at === undefined ||
+			typeof item.expected_finished_at === "string") &&
+		(item.is_processing == null || typeof item.is_processing === "boolean")
 	)
 }
 

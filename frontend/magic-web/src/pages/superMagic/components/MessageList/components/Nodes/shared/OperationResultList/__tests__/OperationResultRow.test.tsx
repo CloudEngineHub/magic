@@ -56,4 +56,26 @@ describe("OperationResultRow", () => {
 
 		expect(screen.getByTestId("generation-progress")).toHaveTextContent("99%")
 	})
+
+	it("shows a completed row while the rest of the tool is still loading", () => {
+		render(
+			<OperationResultRow
+				item={{
+					label: "Finished image",
+					kind: "text",
+					status: "success",
+					message: "Completed",
+					is_processing: false,
+					started_at: "2026-10-05T10:00:00+08:00",
+					expected_finished_at: "2026-10-05T10:00:45+08:00",
+				}}
+				loading
+				progressAnchorKey="tool-1:content-3"
+				onLocate={vi.fn()}
+			/>,
+		)
+
+		expect(screen.queryByTestId("generation-progress")).not.toBeInTheDocument()
+		expect(screen.getByText("Completed")).toBeInTheDocument()
+	})
 })

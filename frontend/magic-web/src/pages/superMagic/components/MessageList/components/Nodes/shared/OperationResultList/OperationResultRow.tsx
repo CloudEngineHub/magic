@@ -33,7 +33,8 @@ export default function OperationResultRow({
 	onLocate,
 }: OperationResultRowProps) {
 	const { t } = useTranslation("super")
-	const pending = loading && item.status === "success" && !unavailable
+	const pending =
+		loading && item.status === "success" && item.is_processing !== false && !unavailable
 	const ResultIcon = unavailable
 		? CircleAlert
 		: pending

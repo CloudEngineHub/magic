@@ -56,6 +56,10 @@ class _TrackingStrategy(GenerationExecutionStrategyInterface):
 class _CallbackStrategy(_TrackingStrategy):
     """模拟 provider 建单后回传任务时间。"""
 
+    def __init__(self, retry: bool = False) -> None:
+        super().__init__()
+        self.retry = retry
+
     async def execute(self, capability, request, tool_context) -> GenerationSubmission:
         if request.on_task_created is not None:
             await request.on_task_created(
@@ -63,6 +67,12 @@ class _CallbackStrategy(_TrackingStrategy):
                 "2026-10-05T10:01:30+08:00",
                 "2026-10-05T10:00:00+08:00",
             )
+            if self.retry:
+                await request.on_task_created(
+                    "provider-task-2",
+                    "2026-10-05T10:03:00+08:00",
+                    "2026-10-05T10:01:30+08:00",
+                )
         return await super().execute(capability, request, tool_context)
 
 
@@ -121,18 +131,27 @@ async def test_submit_generated_commits_each_completed_item_immediately() -> Non
     service = _make_service(strategy, max_concurrency=2)
     content_ids = ["content-1", "content-2"]
     commit_order: list[str] = []
+    progress_snapshots: list[list[str]] = []
 
     async def commit_result(project_path, by_content, work_result) -> None:
         """记录提交时序，并确认快项提交时慢项尚未完成。"""
         content_id = work_result.work_item.submission_item.content_id
         commit_order.append(content_id)
+        by_content[content_id].status = work_result.submission.status
         if content_id == "content-2":
             assert "content-1" not in strategy.finished
+
+    async def record_progress(current_result) -> None:
+        progress_snapshots.append([item.status for item in current_result.items])
 
     service._commit_generation_result = AsyncMock(side_effect=commit_result)
 
     result = await service.submit_generated(
-        "mock-project", _make_result(content_ids), _make_commands(content_ids), None
+        "mock-project",
+        _make_result(content_ids),
+        _make_commands(content_ids),
+        None,
+        on_progress_updated=record_progress,
     )
 
     assert strategy.max_active == 2
@@ -140,6 +159,10 @@ async def test_submit_generated_commits_each_completed_item_immediately() -> Non
     assert commit_order == ["content-2", "content-1"]
     assert [item.content_id for item in result.items] == content_ids
     assert strategy.finished == ["content-2", "content-1"]
+    assert progress_snapshots == [
+        ["pending", "completed"],
+        ["completed", "completed"],
+    ]
 
 
 @pytest.mark.asyncio
@@ -228,4 +251,33 @@ async def test_task_created_persists_backend_timing() -> None:
     service._persist_generation_timing.assert_awaited_once_with(*expected_persist_call)
     assert result.items[0].started_at == "2026-10-05T10:00:00+08:00"
     assert result.items[0].expected_finished_at == "2026-10-05T10:01:30+08:00"
-    on_progress_updated.assert_awaited_once_with(result)
+    assert on_progress_updated.await_count == 2
+    on_progress_updated.assert_awaited_with(result)
+
+
+@pytest.mark.asyncio
+async def test_task_retry_keeps_first_generation_timing() -> None:
+    """provider 自动重试时只持久化第一次有效建单时间。"""
+    strategy = _CallbackStrategy(retry=True)
+    service = _make_service(strategy)
+    service._commit_generation_result = AsyncMock()
+    service._persist_generation_start_metadata = AsyncMock()
+    service._persist_generation_timing = AsyncMock()
+    result = _make_result(["one"])
+
+    await service.submit_generated(
+        "mock-project",
+        result,
+        _make_commands(["one"]),
+        None,
+        on_progress_updated=AsyncMock(),
+    )
+
+    service._persist_generation_timing.assert_awaited_once_with(
+        "mock-project",
+        _make_commands(["one"])[0],
+        "2026-10-05T10:01:30+08:00",
+        "2026-10-05T10:00:00+08:00",
+    )
+    assert result.items[0].started_at == "2026-10-05T10:00:00+08:00"
+    assert result.items[0].expected_finished_at == "2026-10-05T10:01:30+08:00"

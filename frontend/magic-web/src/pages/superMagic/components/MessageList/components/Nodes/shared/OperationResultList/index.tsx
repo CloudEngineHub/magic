@@ -43,6 +43,9 @@ function OperationResultList({
 	const items = getOperationResultListData(toolData.detail)?.items
 	const failedCount = items?.filter((item) => item.status === "error").length ?? 0
 	const successCount = (items?.length ?? 0) - failedCount
+	const processingCount =
+		items?.filter((item) => item.status === "success" && item.is_processing !== false).length ??
+		0
 	// 中断、响应缺失或无失败明细的工具异常可能保留占位行，不能据此宣布成功。
 	// 有逐项失败的批次仍保留成功项，避免把部分成功误标为整批不可用。
 	const resultUnavailable =
@@ -85,11 +88,15 @@ function OperationResultList({
 								<CircleCheck size={16} aria-hidden className="shrink-0" />
 							)}
 							{loading
-								? successCount > 0
+								? processingCount > 0
 									? t("operationResultList.summaryProcessing", {
-											count: successCount,
+											count: processingCount,
 										})
-									: t("operationResultList.running")
+									: successCount > 0
+										? t("operationResultList.summarySucceeded", {
+												count: successCount,
+											})
+										: t("operationResultList.running")
 								: t("operationResultList.summarySucceeded", {
 										count: successCount,
 									})}
