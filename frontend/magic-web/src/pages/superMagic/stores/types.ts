@@ -162,6 +162,7 @@ export interface TokenUsage {
 	output_tokens: number
 	total_tokens: number
 	max_context_tokens?: number
+	compaction_threshold_tokens?: number
 	model_id: string
 	input_tokens_details: TokenUsageDetail
 	request_id: string

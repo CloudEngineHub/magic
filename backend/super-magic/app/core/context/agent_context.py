@@ -340,6 +340,8 @@ class AgentContext(BaseAgentContext):
             "organization_code": (None, Optional[str]),
             "token_usage_report_manager": (None, Optional[TokenUsageReport]),
             "final_token_usage_report": (None, Optional[TokenUsageCollection]),
+            # 当前 run 已解析的自动整理阈值；0 表示尚未解析或自动整理未启用。
+            "compaction_threshold_tokens": (0, int),
             "final_response": (None, Optional[str]),
             "final_task_state": (None, Optional[FinalTaskState]),
             "finish_task_files": (None, Optional[List[str]]),
@@ -1444,8 +1446,17 @@ class AgentContext(BaseAgentContext):
         # cancellation handle 不重置，由 register_worker_cancel 在新 worker 创建时覆盖
         self.shared_context.update_field("interruption_requested", False)
         self.shared_context.update_field("interruption_reason", None)
+        self.set_compaction_threshold_tokens(0)
         self._interruption_event.clear()
         self.set_resumption_context(None, None)
+
+    def set_compaction_threshold_tokens(self, threshold: int) -> None:
+        """保存业务模型实际采用的整理阈值，供消息工厂透传，不重新计算。"""
+        self.shared_context.update_field("compaction_threshold_tokens", threshold)
+
+    def get_compaction_threshold_tokens(self) -> int:
+        """读取当前 run 的整理阈值；新 run 清零，避免沿用上一轮模型的阈值。"""
+        return self.shared_context.get_field("compaction_threshold_tokens")
 
     # ====== 思考状态管理方法 ======
 

@@ -1,5 +1,6 @@
 import { TriangleAlert } from "lucide-react"
 import { useTranslation } from "react-i18next"
+import { useRef } from "react"
 import { cn } from "@/utils/cn"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/shadcn-ui/popover"
 import { Button } from "@/components/shadcn-ui/button"
@@ -7,6 +8,7 @@ import { Separator } from "@/components/shadcn-ui/separator"
 import type { MessageEditorSize } from "../../types"
 import { observer } from "mobx-react-lite"
 import { formatTokenCount } from "./utils"
+import ContextUsageHelp from "./ContextUsageHelp"
 
 /** Max token context window size */
 const MAX_TOKEN_COUNT = 200_000
@@ -99,6 +101,8 @@ interface TokenUsageButtonProps {
 	tokenUsed: number
 	/** Max context window token count; falls back to built-in default when not provided */
 	maxContextTokens?: number
+	/** 后端已解析的自动整理阈值；缺少时不在前端推导。 */
+	compactionThresholdTokens?: number
 	/** Ring diameter in px; overrides size-derived default when provided */
 	iconSize?: number
 	size?: MessageEditorSize
@@ -111,12 +115,14 @@ interface TokenUsageButtonProps {
 function TokenUsageButton({
 	tokenUsed,
 	maxContextTokens,
+	compactionThresholdTokens,
 	iconSize,
 	size = "default",
 	className,
 	onCompressContext,
 }: TokenUsageButtonProps) {
 	const { t } = useTranslation("super")
+	const compressButtonRef = useRef<HTMLButtonElement>(null)
 
 	const effectiveMaxTokens = maxContextTokens ?? MAX_TOKEN_COUNT
 	const ratio = Math.min(tokenUsed / effectiveMaxTokens, 1)
@@ -124,6 +130,12 @@ function TokenUsageButton({
 	const percentageLabel = formatPercentage(ratio)
 	const usedLabel = formatTokenCount(tokenUsed)
 	const maxLabel = formatTokenCount(effectiveMaxTokens)
+	const thresholdLabel =
+		compactionThresholdTokens !== undefined &&
+		Number.isFinite(compactionThresholdTokens) &&
+		compactionThresholdTokens > 0
+			? formatTokenCount(compactionThresholdTokens)
+			: undefined
 
 	const triggerStyle = TRIGGER_STYLE_MAP[size]
 	const ringSize = iconSize ?? triggerStyle.ring
@@ -155,14 +167,21 @@ function TokenUsageButton({
 				align="end"
 				side="top"
 				sideOffset={8}
+				onOpenAutoFocus={(event) => {
+					// 保持原来聚焦手动操作的行为，避免新增问号在浮层打开时自动弹出简介遮挡正文。
+					event.preventDefault()
+					compressButtonRef.current?.focus()
+				}}
 			>
 				{/* Usage section */}
 				<div className="flex flex-col gap-1.5 p-2">
 					{/* Header row */}
 					<div className="flex items-center gap-1.5 text-xs leading-4 text-foreground">
-						<span className="flex-1 overflow-hidden text-ellipsis whitespace-nowrap font-normal">
+						<span className="overflow-hidden text-ellipsis whitespace-nowrap font-normal">
 							{t("ui.tokenUsage.contextUsage")}
 						</span>
+						<ContextUsageHelp />
+						<span className="flex-1" />
 						<span className="shrink-0 font-semibold">{percentageLabel}</span>
 					</div>
 					<div className="text-xs leading-4 text-muted-foreground">
@@ -187,6 +206,13 @@ function TokenUsageButton({
 							max: maxLabel,
 						})}
 					</span>
+					{thresholdLabel && (
+						<span className="text-xs leading-4 text-muted-foreground">
+							{t("ui.tokenUsage.autoCompactThreshold", {
+								threshold: thresholdLabel,
+							})}
+						</span>
+					)}
 				</div>
 				<Separator />
 				<div className="flex flex-col gap-1.5 p-2">
@@ -203,7 +229,12 @@ function TokenUsageButton({
 						</div>
 					)}
 					{/* Compress context button */}
-					<Button size="sm" className="h-8 w-full text-xs" onClick={onCompressContext}>
+					<Button
+						ref={compressButtonRef}
+						size="sm"
+						className="h-8 w-full text-xs"
+						onClick={onCompressContext}
+					>
 						{t("ui.tokenUsage.compressContext")}
 					</Button>
 				</div>

@@ -206,6 +206,7 @@ class TaskMessageFactoryV2(TaskMessageFactoryProtocol):
                 "model_id": usage.model_id,
                 "input_tokens_details": usage.input_tokens_details.to_dict() if usage.input_tokens_details else None,
                 "max_context_tokens": current_max_context_tokens,
+                "compaction_threshold_tokens": agent_context.get_compaction_threshold_tokens() or None,
                 "request_id": correlation_id,
             }
             inner_message["token_usage"] = {k: v for k, v in tu.items() if v is not None}

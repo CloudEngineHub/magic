@@ -1759,6 +1759,7 @@ class Agent(BaseAgent):
             bool: True if compaction was triggered, False otherwise
         """
         if not self.compaction_config.enable_compaction:
+            self.agent_context.set_compaction_threshold_tokens(0)
             return False
 
         token_count = await self.chat_history.tokens_count()
@@ -1794,6 +1795,8 @@ class Agent(BaseAgent):
             threshold_matched_rule = None
             threshold_used_default = False
 
+        # 展示自动整理的硬阈值；后台提前准备仍沿用原逻辑，不另算前端比例。
+        self.agent_context.set_compaction_threshold_tokens(compaction_threshold_tokens)
         early_threshold = self.compaction_config.early_compact_threshold
         message_threshold = self.compaction_config.max_conversation_rounds
         background_failed_this_snapshot = False
