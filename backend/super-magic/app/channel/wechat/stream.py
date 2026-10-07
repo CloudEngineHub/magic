@@ -14,7 +14,8 @@ import aiohttp
 
 from agentlang.logger import get_logger
 from app.channel.base.message_splitter import split_reply
-from app.channel.base.reply_content import extract_reply_content, is_no_reply
+from app.channel.base.no_send import filter_no_send
+from app.channel.base.reply_content import extract_reply_content
 from app.channel.wechat.models import WechatDeliveryResult
 from app.channel.wechat import api
 from app.channel.wechat.reply_media_parser import MediaItem, parse_reply_media
@@ -50,7 +51,6 @@ class WechatStream(Stream):
         self._is_proactive = is_proactive
         self._finished = False
         self._last_content = ""
-        self._last_reply_can_suppress = False
         self._tool_delivery_results: dict[str, WechatDeliveryResult] = {}
 
     async def write(self, data: str, data_type: str = "json") -> int:
@@ -61,20 +61,12 @@ class WechatStream(Stream):
             payload = msg.get("payload", {})
             event = payload.get("event", "")
             if event == "before_tool_call":
-                self._last_reply_can_suppress = False
+                # 工具调用表示本轮还会继续处理，之前的正文不能作为最终答复发送。
+                self._last_content = ""
 
             # 捕获最终 assistant 正文，兼容 v1 agent_reply 与 v2 super_magic_message。
-            content = extract_reply_content(payload)
-            if content and event != "after_tool_call":
-                self._last_content = content
-                raw = payload.get("raw_content") or {}
-                inner = raw.get("super_magic_message") or {}
-                self._last_reply_can_suppress = (
-                    event == "after_agent_reply"
-                    and not payload.get("attachments")
-                    and not inner.get("attachments")
-                    and not inner.get("tool_calls")
-                )
+            if event == "after_agent_reply" and payload.get("content_type") == "content":
+                self._last_content = extract_reply_content(payload)
 
             if event == "after_main_agent_run":
                 self._finished = True
@@ -83,19 +75,20 @@ class WechatStream(Stream):
                         logger.warning(f"[WechatStream] 未捕获到可发送回复，跳过微信发送, stream_id={self._stream_id}")
                         return len(data)
 
-                    if is_no_reply(self._last_content):
-                        delivered = any(result.status == "sent" for result in self._tool_delivery_results.values())
-                        if (
-                            not delivered or not self._last_reply_can_suppress
-                            or self._is_proactive or payload.get("status") != "finished"
-                        ):
-                            self._push_delivery_failure_notification(api.WechatAPIError(
-                                "no_reply requires a successful tool delivery in this completed WeChat run.",
-                                label="invalid_no_reply",
-                            ))
+                    # 先派生微信副本，再解析分段与媒体；标签内的附件也不能触发发送。
+                    # 不改原始正文，网页、模型历史和任务终态仍保留完整内容。
+                    filtered = filter_no_send(self._last_content)
+                    if filtered.region_count or filtered.orphan_closing_count:
+                        logger.info(
+                            f"[WechatStream] no_send: stream_id={self._stream_id}, "
+                            f"regions={filtered.region_count}, unclosed={filtered.unclosed}, "
+                            f"orphan_closings={filtered.orphan_closing_count}, "
+                            f"original_length={len(self._last_content)}, delivery_length={len(filtered.content)}"
+                        )
+                    if not filtered.content.strip():
                         return len(data)
 
-                    segments = split_reply(self._last_content)
+                    segments = split_reply(filtered.content)
                     # 先校验整批正文与 caption，避免发出前半篇后才发现后半篇本地超限。
                     for seg_text, _ in segments:
                         api.validate_text_length(api.markdown_to_plain_text(parse_reply_media(seg_text).text))

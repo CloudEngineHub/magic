@@ -48,11 +48,8 @@ class SendWechatMessage(BaseTool[SendWechatMessageParams]):
         content += f"\nSent {sent}/{len(results)} items. Current text budget: {api.text_max_bytes()} UTF-8 bytes."
         if not mirrored:
             content += "\nWeb mirroring was incomplete. Preserve confirmed WeChat sends; do not resend them to repair Web history."
-        content += (
-            "\nYour final assistant reply is also sent to WeChat. If all intended content has already "
-            "been successfully delivered and nothing remains to say, output only <no_reply>. "
-            "A progress update alone does not replace the final answer. Do not automatically retry unknown delivery."
-        )
+        if any(result.status == "unknown" for result in results):
+            content += "\nDo not automatically retry unknown delivery."
         return ToolResult(
             ok=sent == len(results) and mirrored, content=content,
             data={

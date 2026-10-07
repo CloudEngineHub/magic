@@ -12,6 +12,7 @@ import {
 	type ReactNode,
 } from "react"
 import { preprocessMarkdown } from "@/pages/superMagic/utils/handleMarkDown"
+import { prepareNoSendMarkdown } from "@/pages/superMagic/utils/noSend"
 import type { CitationSource } from "@/pages/superMagic/utils/citations"
 import HtmlCodeBlockPreview from "./components/HtmlCodeBlockPreview"
 import type { HtmlCodeBlockPreviewStreamingScrollState } from "./components/HtmlCodeBlockPreview/types"
@@ -21,6 +22,7 @@ import {
 } from "./components/HtmlCodeBlockPreview/markdown-fence"
 import { FilePath } from "./parser/FilePath"
 import { Image } from "./parser/Image"
+import { NoSend } from "./parser/NoSend"
 import { MarkdownLink, type MarkdownLinkProps } from "./parser/MarkdownLink"
 import { normalizeInlineStyle } from "./normalizeInlineStyle"
 import { cn } from "@/utils/cn"
@@ -57,7 +59,13 @@ const RAW_HTML_TAG_PATTERN = /<\/?([a-z][a-z0-9_-]*)((?:\s+[^>/]*)?)\s*\/?>/gi
 // 匹配 DOCTYPE、注释等 HTML 声明节点。
 const RAW_HTML_DECLARATION_PATTERN = /<![^>]*>/gi
 // 允许保留的项目自定义标签，避免它们在预处理阶段被误转义。
-const RAW_HTML_ALLOWED_CUSTOM_TAGS = new Set(["file-path", "citation", "references", "ref"])
+const RAW_HTML_ALLOWED_CUSTOM_TAGS = new Set([
+	"file-path",
+	"citation",
+	"references",
+	"ref",
+	"no-send",
+])
 const QRCODE_FENCE_LANGUAGE = "qrcode"
 
 function renderLegacyFilePathCode(code: string): ReactNode {
@@ -379,6 +387,7 @@ function MarkdownComponent({
 	className,
 	isStreaming = false,
 	allowRawHtml = true,
+	enableNoSend = false,
 	enableHtmlCodeBlockPreview = true,
 	citations,
 	highlightedCitation,
@@ -386,17 +395,27 @@ function MarkdownComponent({
 	onMouseEnter,
 	onMouseLeave,
 }: MarkdownComponentProps) {
+	const noSend = useMemo(
+		() =>
+			enableNoSend
+				? prepareNoSendMarkdown(
+						resolveMarkdownRenderSource(content, { isStreaming }),
+						isStreaming,
+					)
+				: { content, hasControls: false, hasBlock: false },
+		[content, isStreaming, enableNoSend],
+	)
 	const markdownContent = useMemo(() => {
-		const normalizedContent = content
+		const normalizedContent = noSend.content
 		const shouldUseNormalizedStreamingContent = isStreaming && normalizedContent.includes("```")
 		const nextMarkdownSource =
-			shouldUseNormalizedStreamingContent || !isStreaming ? normalizedContent : content
+			shouldUseNormalizedStreamingContent || !isStreaming ? normalizedContent : noSend.content
 
 		const fenceClosed = resolveMarkdownRenderSource(nextMarkdownSource, { isStreaming })
 		const normalized = allowRawHtml ? fenceClosed : normalizeMarkdownHtmlFences(fenceClosed)
 		// preprocessMarkdown 处理标签转义等；citation/references 作为自定义标签保留
-		return preprocessMarkdown(normalized)
-	}, [content, isStreaming, allowRawHtml])
+		return preprocessMarkdown(normalized, enableNoSend)
+	}, [noSend.content, isStreaming, allowRawHtml, enableNoSend])
 
 	const shouldAnimateStreamingText = useMemo(
 		() => shouldEnableStreamingTextAnimation(markdownContent, { isStreaming }),
@@ -429,6 +448,20 @@ function MarkdownComponent({
 		isCodeWrapped,
 		onToggleCodeWrap,
 	})
+	const replyComponents = useMemo(
+		() => (noSend.hasControls ? { ...components, "no-send": NoSend } : components),
+		[components, noSend.hasControls],
+	)
+	const purifyConfig = useMemo(
+		() =>
+			noSend.hasControls
+				? {
+						...MARKDOWN_DOMPURIFY_CONFIG,
+						ADD_TAGS: [...MARKDOWN_DOMPURIFY_CONFIG.ADD_TAGS, "no-send"],
+					}
+				: MARKDOWN_DOMPURIFY_CONFIG,
+		[noSend.hasControls],
+	)
 
 	return (
 		<div
@@ -446,10 +479,11 @@ function MarkdownComponent({
 				escapeRawHtml={false}
 				protectCustomTagNewlines
 				content={markdownContent}
-				components={components as unknown as NonNullable<XMarkdownProps["components"]>}
+				components={replyComponents as unknown as NonNullable<XMarkdownProps["components"]>}
+				paragraphTag={noSend.hasBlock ? "div" : undefined}
 				streaming={streamingOptions}
 				openLinksInNewTab
-				dompurifyConfig={MARKDOWN_DOMPURIFY_CONFIG}
+				dompurifyConfig={purifyConfig}
 			/>
 		</div>
 	)

@@ -72,13 +72,28 @@ This is a conservative local policy, not a verified server limit. If
 `text_too_long` is returned, use the reported budget to divide the complete
 content. The delivery layer never automatically splits or truncates it.
 
-Tool messages are delivered immediately and mirrored to Web. Your final reply
-will also be sent to WeChat. If all intended content has already been successfully
-delivered and nothing remains to say, output only `<no_reply>` as the entire
-final reply, without a code fence or other text. A progress update alone does
-not replace the final answer. Never use it to hide failed, partial, or uncertain
-delivery. If Web mirroring fails after WeChat succeeds, do not resend the WeChat
-message to repair the Web record.
+Tool messages are delivered immediately and mirrored to Web. If Web mirroring fails after WeChat succeeds, do not resend the WeChat message to repair the Web record.
+
+### Final reply delivery
+
+WeChat sends your final reply automatically. <no_send>...</no_send> keeps enclosed content visible on Web without sending it to WeChat; outside content is sent normally. Wrap the whole reply to send nothing. This controls delivery, not whether the user should reply.
+
+Use it for confirmed delivery recaps or checks that do not meet the user's notification condition; no prior tool send is required for a quiet check. Keep answers or updates the user requested or is waiting for, questions, and actionable failures outside. A progress update alone does not deliver the final result. Tags in code or quotations are literal.
+
+Report and explanation confirmed sent by tool:
+```text
+<no_send>Report delivered.</no_send>
+```
+
+User requested failure alerts only; check found no failure:
+```text
+<no_send>No failures found.</no_send>
+```
+
+Report sent; a requested 20% over-budget alert is still undelivered:
+```text
+<no_send>Report delivered.</no_send> Spending is 20% over budget.
+```
 
 ### Splitting into multiple messages
 

@@ -4570,6 +4570,11 @@
 		"unfavorite": "取消收藏",
 		"unfavoriteSuccess": "已取消收藏"
 	},
+	"noSend": {
+		"description": "此段内容保留在网页，不发送到微信",
+		"invalidClosing": "回复中有未配对的发送标记，其他内容仍正常发送",
+		"unclosed": "此段内容保留在网页，不发送到微信；发送标记未完整结束"
+	},
 	"notification": {
 		"superMagicTitle": "$t(common:platform.name)通知",
 		"taskCompleteBody": "🟢 「{{taskName}}」任务已完成，点击查看"
