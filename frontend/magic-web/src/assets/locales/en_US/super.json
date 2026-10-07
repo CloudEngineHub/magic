@@ -470,6 +470,7 @@
 			"reload": "Reload Page",
 			"title": "Page Load Failed"
 		},
+		"fileCannotOpen": "Unable to open this file: {{path}}",
 		"fileNotFoundOrLoadFailed": "File not found or failed to load",
 		"fileUrlFetchFailed": "Failed to fetch file URL",
 		"generalMode": "General",

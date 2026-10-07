@@ -8,6 +8,7 @@ import pubsub, { PubSubEvents } from "@/utils/pubsub"
 import {
 	classifyMarkdownFileHref,
 	findAttachmentByPath,
+	isMarkdownFileLink,
 } from "@/pages/superMagic/utils/markdownFileReference"
 import {
 	resolveReferencedProjectAttachment,
@@ -184,7 +185,15 @@ export const MarkdownLink = observer((props: MarkdownLinkProps) => {
 		)
 	}
 
-	if (explicitFileReference) {
+	if (!normalizedHref.trim()) {
+		return (
+			<span {...safeAttributes} style={normalizedStyle}>
+				{children}
+			</span>
+		)
+	}
+
+	if (explicitFileReference || isMarkdownFileLink(normalizedHref)) {
 		const referencedProjectResolved =
 			fileTarget?.scope !== "referenced-project" ||
 			referencedProjectResolution?.href === normalizedHref
@@ -197,7 +206,7 @@ export const MarkdownLink = observer((props: MarkdownLinkProps) => {
 					disabled
 					title={
 						referencedProjectResolved
-							? t("common.fileNotFoundOrLoadFailed")
+							? t("common.fileCannotOpen", { path: normalizedHref })
 							: (normalizedTitle ?? normalizedHref)
 					}
 				/>

@@ -264,6 +264,19 @@ export function isMarkdownFileHrefCandidate(href: string): boolean {
 	return classifyMarkdownFileHref(href).explicitFileReference
 }
 
+/** 文件用途不取决于是否匹配成功；../ 等相对目标失败后也不能变成网页导航。 */
+export function isMarkdownFileLink(href: string): boolean {
+	const path = href.trim()
+	if (!path || path.startsWith("#") || path.startsWith("?") || path.startsWith("//")) return false
+	if (/^[a-z][a-z\d+.-]*:/i.test(path)) return false
+	const filePath = path.split("#", 1)[0]
+	// 站点根路由保留网页语义；只有已支持的用户／引用项目根属于文件。
+	if (filePath.startsWith("/")) {
+		return classifyMarkdownFileHref(filePath).explicitFileReference
+	}
+	return true
+}
+
 function encodePathSegment(segment: string): string {
 	return segment.replace(/[#?%<>]/g, (char) => {
 		const encoded: Record<string, string> = {
