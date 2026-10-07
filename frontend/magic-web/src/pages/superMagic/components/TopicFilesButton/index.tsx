@@ -303,7 +303,27 @@ const TopicFilesButton = forwardRef<TopicFilesButtonRef, TopicFilesButtonProps>(
 						!shareCode
 							? () =>
 									onFileClick({
-										file_manager: { spaceType: "project", projectId },
+										file_manager: {
+											spaceType: "project",
+											projectId,
+											area: "files",
+										},
+									})
+							: undefined
+					}
+					onOpenRecycleBin={
+						showFileManager &&
+						projectId &&
+						!spaceConfig?.scope &&
+						onFileClick &&
+						!shareCode
+							? () =>
+									onFileClick({
+										file_manager: {
+											spaceType: "project",
+											projectId,
+											area: "recycle",
+										},
 									})
 							: undefined
 					}

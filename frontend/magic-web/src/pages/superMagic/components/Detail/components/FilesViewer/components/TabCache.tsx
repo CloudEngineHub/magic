@@ -197,6 +197,7 @@ const TabCache = memo(
 								}
 								isActive={isActive}
 								projectId={tab.fileManager.projectId}
+								areaRequest={tab.fileManagerAreaRequest}
 								initialDirectoryId={tab.fileManager.directoryId}
 							/>
 						)}

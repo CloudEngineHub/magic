@@ -33,6 +33,7 @@ import type {
 } from "./types"
 
 interface Props {
+	projectRecycle?: boolean
 	onOpenRecycle: () => void
 	createMenu: Omit<ComponentProps<typeof FileMenuDropdown>, "children">
 	uploadMenu: Omit<ComponentProps<typeof UploadMenuDropdown>, "children">
@@ -144,7 +145,9 @@ export function FileManagerToolbar(props: Props) {
 					onClick={props.onOpenRecycle}
 				>
 					<Trash2 size={14} />
-					{t("fileManager.recycle.title")}
+					{props.projectRecycle
+						? t("fileManager.recycle.projectTitle")
+						: t("fileManager.recycle.title")}
 				</Button>
 			</div>
 			<div className="flex shrink-0 flex-wrap items-center gap-1 border-b border-border/60 px-3 pb-2 pt-1">

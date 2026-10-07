@@ -63,7 +63,7 @@ function RecycleBinPage() {
 			<div className="flex w-full flex-col gap-3">
 				<div className="flex w-full items-center gap-2">
 					<h1 className="text-2xl font-medium leading-normal text-foreground">
-						{t("recycleBin.title")}
+						{t("recycleBin.globalTitle")}
 					</h1>
 				</div>
 				<Separator orientation="horizontal" />

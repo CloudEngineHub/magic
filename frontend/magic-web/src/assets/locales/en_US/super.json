@@ -2442,6 +2442,8 @@
 		"copyTarget": "Copy {{count}} items to {{target}}",
 		"cut": "Cut",
 		"empty": "This folder is empty",
+		"entry": "File manager",
+		"entryHint": "Browse and manage files in this project",
 		"files": "Files",
 		"forward": "Forward",
 		"itemCount": "{{count}} items",
@@ -2470,8 +2472,12 @@
 		"processing": "Processing…",
 		"recycle": {
 			"back": "Back to files",
+			"backToProject": "Back to project files",
 			"permanentPhrase": "Permanently delete {{count}} items",
 			"permanentWarning": "Permanently deleted files cannot be restored. Check every file and its original path.",
+			"projectEntryHint": "View deleted files you can access in this project",
+			"projectHeading": "Project recycle bin · {{name}}",
+			"projectTitle": "Project recycle bin",
 			"scope": "Deleted files you can access across projects and personal space. This list is not limited to the current project.",
 			"title": "File trash"
 		},
@@ -5760,6 +5766,7 @@
 			"loadFailed": "Load failed, please retry",
 			"retry": "Retry"
 		},
+		"globalTitle": "Global recycle bin",
 		"item": {
 			"deletedOn": "Deleted on {{date}}",
 			"more": "More actions",

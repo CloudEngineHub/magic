@@ -662,6 +662,7 @@ export function useFilesViewer(props: FilesViewerProps) {
 	})
 
 	// Tab operations
+	const fileManagerAreaRequestId = useRef(0)
 	const openFileTab = useMemoizedFn((fileItem: any, autoEdit?: boolean) => {
 		// Reset manual close flag when opening new tab
 		manuallyClosedLastTabRef.current = false
@@ -682,6 +683,13 @@ export function useFilesViewer(props: FilesViewerProps) {
 				activeTab?.type === "file_manager" ? activeTab.returnTabId : activeTab?.id,
 			)
 			manager.fileManagerState = getFileManagerState(managerContext)
+			if (managerContext.spaceType === "project" && managerContext.area) {
+				// 每次点击都产生新请求：在内部返回文件后，再点同一入口仍要进入回收站。
+				manager.fileManagerAreaRequest = {
+					requestId: ++fileManagerAreaRequestId.current,
+					area: managerContext.area,
+				}
+			}
 			if (
 				managerContext.spaceType === "user" &&
 				manager.fileManagerState?.spaceType === "user"
