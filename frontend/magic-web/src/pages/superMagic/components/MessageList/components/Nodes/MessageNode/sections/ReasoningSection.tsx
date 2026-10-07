@@ -57,7 +57,11 @@ export function ReasoningSection({
 			title={
 				streamState === "reasoning_content"
 					? t("agentThink.thinking")
-					: t("agentThink.thinkDone")
+					: streamState === "interrupted"
+						? t("agentThink.interrupted")
+						: streamState === "idle"
+							? t("agentThink.title")
+							: t("agentThink.thinkDone")
 			}
 			onToggle={() => {
 				pubsub.publish(PubSubEvents.Message_Suppress_Auto_Scroll)

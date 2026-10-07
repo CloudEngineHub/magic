@@ -176,8 +176,10 @@
 		}
 	},
 	"agentThink": {
+		"interrupted": "思考已中断",
 		"thinkDone": "已完成思考",
-		"thinking": "思考中..."
+		"thinking": "思考中...",
+		"title": "思考"
 	},
 	"askUser": {
 		"actions": {
