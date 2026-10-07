@@ -15,7 +15,7 @@ export interface SlashMenuState {
 	rect: DOMRect
 	choose: () => void
 	anchor?: HTMLElement
-	onQueryChange?: (query: string) => void
+	onQueryChange: (query: string) => void
 }
 export const matchesWechatCommand = (query: string) =>
 	["微信聊天记录", "wechat", "chat", "wx"].some((name) =>
@@ -31,41 +31,46 @@ export function installWechatSlashCommand(
 	const inputKey = new PluginKey("wechatSlashInput")
 	let inputFrom = -1
 	let current: SuggestionProps<CommandItem> | null = null
-	let buttonMenu: { anchor: HTMLElement; query: string } | null = null
+	let buttonAnchor: HTMLElement | null = null
+	let query = ""
 	const dismiss = (restoreFocus = false) => {
-		const wasButtonMenu = buttonMenu !== null
-		buttonMenu = null
+		const wasOpen = current !== null || buttonAnchor !== null
+		current = null
+		buttonAnchor = null
+		inputFrom = -1
+		query = ""
 		onMenu(null)
 		if (!editor.isDestroyed) exitSuggestion(editor.view, key)
-		if (restoreFocus && wasButtonMenu && !editor.isDestroyed) editor.commands.focus()
+		if (restoreFocus && wasOpen && !editor.isDestroyed) editor.commands.focus()
 	}
-	const publishButtonMenu = () => {
-		if (!buttonMenu) return
+	const choose = () => {
+		if (!matchesWechatCommand(query) || !editor.isEditable || editor.isDestroyed) return
+		if (current) current.command({ id: "wechat-chat-history" })
+		else if (buttonAnchor) {
+			dismiss()
+			onChoose()
+		}
+	}
+	// 两个入口共用菜单查询；搜索栏只筛选命令，字符入口的 Suggestion 仍负责原文触发范围。
+	const publishMenu = () => {
+		const rect = buttonAnchor?.getBoundingClientRect() ?? current?.clientRect?.()
+		if (!rect) return
 		onMenu({
-			query: buttonMenu.query,
-			rect: buttonMenu.anchor.getBoundingClientRect(),
-			anchor: buttonMenu.anchor,
-			choose: () => {
-				if (!buttonMenu) return
-				dismiss()
-				onChoose()
-			},
-			onQueryChange: (query) => {
-				if (!buttonMenu) return
-				buttonMenu.query = query
-				publishButtonMenu()
+			query,
+			rect,
+			anchor: buttonAnchor ?? undefined,
+			choose,
+			onQueryChange: (nextQuery) => {
+				query = nextQuery
+				publishMenu()
 			},
 		})
 	}
 	const publish = (props: SuggestionProps<CommandItem>) => {
+		if (buttonAnchor || props.range.from !== inputFrom) return
+		if (!current || props.query !== current.query) query = props.query
 		current = props
-		const rect = props.clientRect?.()
-		if (rect)
-			onMenu({
-				query: props.query,
-				rect,
-				choose: () => props.command({ id: "wechat-chat-history" }),
-			})
+		publishMenu()
 	}
 	// @ 插件与 slash 各自拥有输入记录和 PluginKey；paste/程序恢复不激活动作菜单。
 	editor.registerPlugin(
@@ -101,6 +106,7 @@ export function installWechatSlashCommand(
 			items: ({ query }) =>
 				matchesWechatCommand(query) ? [{ id: "wechat-chat-history" }] : [],
 			command: ({ editor: instance, range }) => {
+				dismiss()
 				instance.chain().deleteRange(range).run()
 				onChoose()
 			},
@@ -110,7 +116,10 @@ export function installWechatSlashCommand(
 				onExit: () => {
 					current = null
 					inputFrom = -1
-					onMenu(null)
+					if (!buttonAnchor) {
+						query = ""
+						onMenu(null)
+					}
 				},
 			}),
 		}),
@@ -120,31 +129,27 @@ export function installWechatSlashCommand(
 			if (!editor.isEditable || editor.isDestroyed) return
 			// 按钮复用同一菜单，但搜索不写入正文；仅键盘 / 入口需要删除触发范围。
 			dismiss()
-			buttonMenu = { anchor, query: "" }
-			publishButtonMenu()
+			buttonAnchor = anchor
+			publishMenu()
 		},
 		dismiss,
 		handleKeyDown(event: KeyboardEvent): boolean {
-			if (!current && !buttonMenu) return false
+			if (!current && !buttonAnchor) return false
 			if (event.isComposing) return false
 			if (event.key === "Escape") {
 				dismiss(true)
 				return true
 			}
 			if (event.key === "Enter") {
-				if (current && matchesWechatCommand(current.query))
-					current.command({ id: "wechat-chat-history" })
-				else if (buttonMenu && matchesWechatCommand(buttonMenu.query)) {
-					dismiss()
-					onChoose()
-				}
+				choose()
 				return true
 			}
 			return event.key === "ArrowDown" || event.key === "ArrowUp"
 		},
 		dispose() {
 			current = null
-			buttonMenu = null
+			buttonAnchor = null
+			query = ""
 			onMenu(null)
 			if (!editor.isDestroyed) {
 				editor.unregisterPlugin(inputKey)

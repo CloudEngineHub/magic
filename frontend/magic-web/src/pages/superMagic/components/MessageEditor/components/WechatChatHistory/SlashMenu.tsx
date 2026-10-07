@@ -42,9 +42,6 @@ export default function SlashMenu({
 				sideOffset={8}
 				collisionPadding={16}
 				className="w-80 max-w-[calc(100vw-32px)] rounded-xl p-1.5"
-				onOpenAutoFocus={(event) => {
-					if (!menu.onQueryChange) event.preventDefault()
-				}}
 				onCloseAutoFocus={(event) => event.preventDefault()}
 				onEscapeKeyDown={(event) => {
 					event.preventDefault()
@@ -57,15 +54,13 @@ export default function SlashMenu({
 				}}
 			>
 				<Command shouldFilter={false} value="wechat-chat-history">
-					{menu.onQueryChange && (
-						<CommandInput
-							autoFocus
-							value={menu.query}
-							onValueChange={menu.onQueryChange}
-							placeholder={t("wechatChat.searchCommands")}
-							aria-label={t("wechatChat.searchCommands")}
-						/>
-					)}
+					<CommandInput
+						autoFocus
+						value={menu.query}
+						onValueChange={menu.onQueryChange}
+						placeholder={t("wechatChat.searchCommands")}
+						aria-label={t("wechatChat.searchCommands")}
+					/>
 					<ScrollArea className="max-h-64">
 						<CommandList className="max-h-none overflow-visible">
 							<CommandGroup heading={t("wechatChat.importGroup")}>

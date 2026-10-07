@@ -11253,7 +11253,7 @@
 		"close": "Close",
 		"command": "/微信聊天记录",
 		"commandDescription": "Paste and preview, then add to the current editor",
-		"commandHint": "Type to search · Enter to select · Esc to dismiss",
+		"commandHint": "Search commands · Enter to select · Esc to dismiss",
 		"commands": "Slash commands",
 		"confirm": "Confirm and return",
 		"confirmHint": "Confirmation returns to the editor. Chat history and instructions reach the current Agent only when you send.",

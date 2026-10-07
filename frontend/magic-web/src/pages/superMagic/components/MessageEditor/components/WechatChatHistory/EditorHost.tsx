@@ -209,7 +209,8 @@ export default observer(function EditorHost({
 	)
 	return (
 		<WechatChatContext.Provider value={controller.available ? controller : null}>
-			<div ref={home} className="min-h-0 flex-1" />
+			{/* 原输入区的直接父级可能是普通块布局；承接其高度，避免 flex-1 失效后在编辑器下方留下空白。 */}
+			<div ref={home} className="h-full min-h-0 flex-1" />
 			{createPortal(children, host)}
 			<SlashMenu menu={controller.menu} onDismiss={controller.dismissMenu} />
 			{mobile ? (
