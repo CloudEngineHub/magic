@@ -129,60 +129,86 @@ def _classify_image_processing_error(error: str | None) -> str:
 class VisualUnderstandingParams(BaseToolParams):
     images: List[str] = Field(
         ...,
-        description="""<!--zh: 图片URL或本地文件路径，支持多张。支持原生视觉时，本地图片会加载到你自己的视野；URL 始终交给独立视觉模型分析-->
-Image URLs or local file paths; multiple images allowed. With native vision, local images load into your own view; URLs are always analyzed by the separate vision model"""
+        description="""<!--zh: 图片来源列表，可以是图片URL或本地文件路径，支持多图片输入-->
+Image source list, can be image URLs or local file paths, supports multiple image input"""
     )
     query: str = Field(
         ...,
-        description="""<!--zh: 要从图片中看什么、回答什么。独立视觉模型看不到你的上下文：需写清必要背景；用户提出过图片分析要求时逐字引用；可要求它同时描述所见内容，便于你核对答案-->
-What to look for or answer about the images. The separate vision model cannot see your context: include the needed background, quote the user's image requirements verbatim when they gave any, and you may ask it to describe what it sees so you can check its answer"""
+        description="""<!--zh: 关于图片的问题或分析需求，需要详尽且准确，若用户提供了图片分析需求，则需要对用户的分析需求进行逐字引用，并提供必要的分析背景信息-->
+Question or analysis requirements about images, needs to be thorough and accurate. If user provides image analysis requirements, quote user's analysis requirements verbatim and provide necessary analysis background information"""
     )
 
 
 @tool()
 class VisualUnderstanding(WorkspaceTool[VisualUnderstandingParams]):
     """<!--zh
-    查看你当前看不到的图片，并理解其内容。
+    视觉理解工具：调用AI视觉专家来查看、读取、分析或解释图片内容。
+    视觉专家无法得知你所知晓的上下文，因此需要提供必要且充足的背景与需求信息。
+    对于简单问题，视觉专家可给出答案，不仅限于分析和解释图片本身。
 
-    按当前模型能力，结果有两种：
-    - 原生视觉：本地图片加载到你自己的视野，工具返回 "Please read the image(s)."，图片连同尺寸和文件大小出现在下一轮，由你直接看图作答。
-    - 其他情况（URL 图片，或模型不支持原生视觉）：由独立视觉模型分析并返回答案。
+    图片已经在对话中直接呈现给你时（例如用户在消息里发送的图片），直接查看即可，不要再调用本工具；本工具用于查看你当前看不到的图片，例如只给出文件路径或链接的图片。同一批图片不要重复调用。
 
-    不要调用：
-    - 图片已在你的上下文中可见：用户在聊天中上传的图片，或之前用本工具加载且仍可见的图片。直接看图；再调用只会重复加载同一张图。
-    - 同一批图片不要调用第二次。
+    最佳实践：
+    1、分析需求明确时，为视觉专家提供完整的逐字引用的分析需求
+    2、简单问题可直接要求视觉专家给出答案（如：与上下文无关的、无需太多背景信息的问题）
+    3、无论如何都需要要求视觉专家解释图片内容，以便于检验答案准确性或在复杂场景下辅助推理
 
-    需要调用：图片只以路径或 URL 存在，例如工作区或画布文件、需要检查的生成结果、超出系统首批加载数量的附件、之前出现过但现在已看不到的图片。
+    支持格式：JPEG, PNG, GIF, WEBP, BMP, TIFF 等常见图片格式
+    适用场景：图片内容识别描述、图表分析解读、文字识别提取、多图片对比等视觉理解场景
+    也可用于图片尺寸、格式、大小等信息识别
 
-    支持 JPEG、PNG、GIF、WEBP、BMP、TIFF 等常见格式。可用于描述内容、读取图表和文字、多图对比，以及查看尺寸、格式、文件大小。
-
+    要求：
+    - 输入图片路径或URL链接，支持同时输入多张图片
+    - 提供对图片内容的具体问题或要求描述
     调用示例：
     ```
+    # 网址输入
+    {
+        "images": ["https://example.com/image1.jpg", "https://example.com/image2.jpg"],
+        "query": "..." # 输入分析需求
+    }
+    ```
+    或
+    ```
+    # 本地文件路径输入
     {
         "images": ["./uploads/image1.jpg", "./uploads/image2.jpg"],
-        "query": "..."
+        "query": "..." # 输入分析需求
     }
     ```
     -->
-    View and understand images you cannot currently see.
+    Visual understanding tool: Call AI vision expert to view, read, analyze or interpret image content.
+    Vision expert cannot know the context you know, so provide necessary and sufficient background and requirement information.
+    For simple questions, vision expert can provide answers, not limited to analyzing and interpreting images themselves.
 
-    The outcome depends on the current model:
-    - Native vision: local images load into your own view. The tool returns "Please read the image(s)." and the images appear in your next turn with their dimensions and file sizes; look at them and answer yourself.
-    - Otherwise (URL images, or a model without native vision): a separate vision model analyzes the images and returns its answer.
+    If an image is already shown to you in the conversation (for example, one the user sent in a message), look at it directly instead of calling this tool. Use this tool for images you cannot currently see, such as those given only as a file path or URL. Do not call it again for the same images.
 
-    Do not call:
-    - When the image is already visible in your context: the user attached it in chat, or you loaded it with this tool earlier and it is still shown. Look at it directly; calling again only reloads the same image.
-    - A second time for the same batch of images.
+    Best practices:
+    1. When analysis requirements are clear, provide vision expert with complete verbatim quoted analysis requirements
+    2. Simple questions can directly ask vision expert for answers (e.g., context-independent questions requiring minimal background)
+    3. Always require vision expert to explain image content to verify answer accuracy or assist reasoning in complex scenarios
 
-    Call when the image exists only as a path or URL: workspace or canvas files, generated results you need to check, attachments beyond the first batch the system loaded, or images seen earlier that are no longer shown.
+    Supported formats: JPEG, PNG, GIF, WEBP, BMP, TIFF and other common image formats
+    Use scenarios: Image content recognition/description, chart analysis/interpretation, text recognition/extraction, multi-image comparison and other visual understanding scenarios
+    Can also be used for image size, format, file size information recognition
 
-    Supports JPEG, PNG, GIF, WEBP, BMP, TIFF and other common formats. Use it to describe content, read charts and text, compare images, and check dimensions, format and file size.
-
-    Usage example:
+    Requirements:
+    - Input image paths or URL links, supports inputting multiple images simultaneously
+    - Provide specific questions or requirement descriptions about image content
+    Usage examples:
     ```
+    # URL input
+    {
+        "images": ["https://example.com/image1.jpg", "https://example.com/image2.jpg"],
+        "query": "..." # Input analysis requirements
+    }
+    ```
+    or
+    ```
+    # Local file path input
     {
         "images": ["./uploads/image1.jpg", "./uploads/image2.jpg"],
-        "query": "..."
+        "query": "..." # Input analysis requirements
     }
     ```
     """
