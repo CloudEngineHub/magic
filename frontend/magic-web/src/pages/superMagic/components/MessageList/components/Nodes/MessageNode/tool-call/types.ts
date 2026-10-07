@@ -65,6 +65,22 @@ export interface ToolCallRendererProps extends ToolCallContainerProps {
 	onClick: () => void
 }
 
+export const TERMINAL_TOOL_STATUSES = new Set([
+	"finished",
+	"error",
+	"suspended",
+	"response_missing",
+])
+
+/** 工具响应未进入终态时，进度由工具卡片承接。 */
+export function isToolCallLoading(toolCall: unknown): boolean {
+	if (!toolCall || typeof toolCall !== "object" || Array.isArray(toolCall)) return true
+	const tool = (toolCall as { tool?: unknown }).tool
+	if (!tool || typeof tool !== "object" || Array.isArray(tool)) return true
+	const status = (tool as { status?: unknown }).status
+	return typeof status !== "string" || !TERMINAL_TOOL_STATUSES.has(status)
+}
+
 export function isRenderableToolCall(toolCall: unknown): toolCall is ToolCallItem {
 	if (!toolCall || typeof toolCall !== "object") return false
 	const candidate = toolCall as {

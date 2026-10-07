@@ -2,11 +2,14 @@ import type { CanvasDocument, LayerElement } from "@/components/CanvasDesign/run
 import { type ImageGenerationTaskMeta } from "@/components/CanvasDesign/public/magic-types"
 import type { ResolveCanvasResourceReference } from "@/components/CanvasDesign/public/resource-reference"
 import { isLegacyBareDesignResourcePath } from "./designPath"
+import { isOpaqueAssetReference } from "@/components/CanvasDesign/runtime/shared/path/canvasResourcePath"
 
 interface ReplaceCanvasFilePathReferencesOptions {
 	oldWorkspaceRelativePath: string
 	newCanvasPath: string
 	resolveResourceReference: ResolveCanvasResourceReference
+	/** 文件改名不改变 asset 身份；保持稳定引用，不将它转换成路径。 */
+	preserveAssetReferences?: boolean
 }
 
 interface PathReplacementContext {
@@ -14,6 +17,7 @@ interface PathReplacementContext {
 	newCanvasPath: string
 	resolveResourceReference: ResolveCanvasResourceReference
 	unsafeReferenceFound: boolean
+	preserveAssetReferences?: boolean
 }
 
 export interface CanvasFilePathReplacementResult {
@@ -27,6 +31,7 @@ function asRecord(value: object): Record<string, unknown> {
 
 function shouldReplacePath(value: unknown, context: PathReplacementContext): value is string {
 	if (typeof value !== "string" || !value.trim()) return false
+	if (context.preserveAssetReferences && isOpaqueAssetReference(value)) return false
 	const mode = isLegacyBareDesignResourcePath(value) ? "legacy-recovery" : "strict-current-canvas"
 
 	const resolution = context.resolveResourceReference(
@@ -285,6 +290,7 @@ export function getCanvasFilePathReplacementResult(
 		newCanvasPath,
 		resolveResourceReference,
 		unsafeReferenceFound: false,
+		preserveAssetReferences: options.preserveAssetReferences,
 	}
 
 	const nextCanvasData = JSON.parse(JSON.stringify(canvasData)) as CanvasDocument

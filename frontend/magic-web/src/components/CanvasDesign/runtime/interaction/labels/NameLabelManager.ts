@@ -36,6 +36,7 @@ export class NameLabelManager extends BaseLabelManager {
 	private renamingElementId: string | null = null
 	private interactionUnsubscribers: Array<() => void> = []
 	private pointerHoverElementId: string | null = null
+	private domLabelElementId: string | null = null
 
 	constructor(options: { canvas: Canvas }) {
 		const { canvas } = options
@@ -77,6 +78,50 @@ export class NameLabelManager extends BaseLabelManager {
 
 	public canStartRename(elementId: string): boolean {
 		return this.shouldShowLabel(elementId)
+	}
+
+	/** 铅笔使用名称的屏幕坐标；沿用同一权限和工具条件，不为 DOM 入口绕过限制。 */
+	public getRenameButtonLayout(elementId: string): { x: number; y: number } | null {
+		if (
+			this.renamingElementId ||
+			!this.areNameLabelsInteractive() ||
+			this.canvas.elementManager.getElementData(elementId)?.type !== ElementTypeEnum.Image ||
+			!this.canvas.elementRenameManager.canRename(elementId)
+		)
+			return null
+		const layout = this.getRenameInputLayout(elementId)
+		if (!layout || !this.labelMap.get(elementId)?.visible()) return null
+		const bounds = this.canvas.elementManager.getElementInstance(elementId)?.getBoundingRect()
+		if (!bounds || layout.width + 24 > bounds.width * this.canvas.stage.scaleX()) return null
+		return { x: layout.x + layout.width, y: layout.y + layout.height - 24 }
+	}
+
+	/** 只把当前可交互图片的名称交给 DOM；布局和其它元素标签仍由原管理器维护。 */
+	public getImageNameLabelLayout(
+		elementId: string,
+	): ReturnType<NameLabelManager["getRenameInputLayout"]> {
+		if (
+			this.renamingElementId ||
+			!this.areNameLabelsInteractive() ||
+			this.canvas.elementManager.getElementData(elementId)?.type !== ElementTypeEnum.Image
+		)
+			return null
+		const layout = this.getRenameInputLayout(elementId)
+		return layout && this.labelMap.get(elementId)?.visible() ? layout : null
+	}
+
+	public setDOMLabelElementId(elementId: string | null): void {
+		if (this.domLabelElementId === elementId) return
+		const previous = this.domLabelElementId
+		this.domLabelElementId = elementId
+		// DOM 文字支持原生选中复制，只隐藏同一标签的 Konva 文字，避免双份文字重叠。
+		if (previous) this.labelMap.get(previous)?.findOne<Konva.Text>("Text")?.opacity(1)
+		if (elementId) this.labelMap.get(elementId)?.findOne<Konva.Text>("Text")?.opacity(0)
+		this.canvas.runtimeScheduler.requestLayerDraw("overlay", {
+			source: "NameLabelManager",
+			reason: "dom-name-label",
+			priority: "input",
+		})
 	}
 
 	public setRenamingElementId(elementId: string | null): void {
@@ -149,6 +194,7 @@ export class NameLabelManager extends BaseLabelManager {
 			fontFamily: this.labelConfig.fontFamily,
 			fill: this.labelConfig.textColor,
 			listening: false,
+			opacity: this.domLabelElementId === elementId ? 0 : 1,
 		})
 		const hitRect = new Konva.Rect({
 			name: NAME_LABEL_HIT_NAME,
@@ -222,13 +268,44 @@ export class NameLabelManager extends BaseLabelManager {
 		labelGroup: Konva.Group,
 		baseVisibility: boolean,
 	): boolean | null {
-		if (this.renamingElementId === elementId) {
+		if (
+			this.renamingElementId === elementId &&
+			element?.getData().type !== ElementTypeEnum.Image
+		) {
 			return false
 		}
 
 		// 如果基础可见性为 false，不需要检查自定义逻辑
 		if (!baseVisibility) {
 			return null
+		}
+
+		// 图片名称为 24px 铅笔命中区预留空间。尺寸文本能放下时也预留其真实宽度，
+		// 长标题只在标签中省略，编辑面板仍读取完整元素名，不把铅笔压到尺寸标注上。
+		if (element?.getData().type === ElementTypeEnum.Image) {
+			const textNode = labelGroup.findOne("Text") as Konva.Text | null
+			const bounds = element.getBoundingRect()
+			if (textNode && bounds) {
+				const screenWidth = bounds.width * this.canvas.stage.scaleX()
+				const buttonWidth = this.canvas.permissionManager.canRename(element.getData())
+					? 24
+					: 0
+				const sizeWidth = textNode.measureSize(element.getSizeLabelText()).width
+				const available = screenWidth - buttonWidth
+				const withSize = available - sizeWidth - 8
+				textNode.wrap("none")
+				textNode.ellipsis(true)
+				textNode.width(
+					Math.max(
+						1,
+						Math.min(
+							textNode.measureSize(textNode.text()).width,
+							withSize >= 32 ? withSize : available,
+						),
+					),
+				)
+				this.syncHitRect(labelGroup)
+			}
 		}
 
 		// 检查 name label 是否超出元素宽度
@@ -330,10 +407,16 @@ export class NameLabelManager extends BaseLabelManager {
 			stopPointerEvent(e)
 			this.selectElementFromLabel(elementId)
 		})
-		labelGroup.on("mouseup click tap", stopPointerEvent)
+		labelGroup.on("mouseup", stopPointerEvent)
+		labelGroup.on("click tap", (e) => {
+			stopPointerEvent(e)
+		})
 		labelGroup.on("dblclick dbltap", (e) => {
 			stopPointerEvent(e)
-			this.canvas.elementRenameManager?.startRename(elementId)
+			if (
+				this.canvas.elementManager.getElementData(elementId)?.type !== ElementTypeEnum.Image
+			)
+				this.canvas.elementRenameManager?.startRename(elementId)
 		})
 		labelGroup.on("contextmenu", (e) => {
 			e.evt.preventDefault()

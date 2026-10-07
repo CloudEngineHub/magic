@@ -30,6 +30,7 @@ export enum DetailType {
 	SelfMedia = "self-media",
 	AICard = "ai-card",
 	SlidesTemplate = "slides-template",
+	OperationResultList = "operation_result_list",
 }
 
 /** Self-media platform values supported by the dispatcher */
@@ -82,7 +83,49 @@ export interface DetailData {
 	[DetailType.PowerPoint]: DetailUniverData
 	[DetailType.SlidesTemplate]: DetailHTMLData
 	[DetailType.FileTree]: DetailFileTreeData
+	[DetailType.OperationResultList]: DetailOperationResultListData
 }
+
+export interface OperationResultCanvasTarget {
+	type: "canvas_element"
+	project_path: string
+	element_id: string
+	content_id?: string
+	content_type?: "image" | "video" | "audio"
+}
+
+export interface OperationResultFileTarget {
+	type: "file"
+	relative_file_path: string
+}
+
+export type OperationResultTarget = OperationResultCanvasTarget | OperationResultFileTarget
+
+/** 操作结果显示对象名称与执行状态，可选提供稳定的导航目标。 */
+export interface OperationResultItem {
+	label: string
+	kind: "file" | "directory" | "text"
+	status: "success" | "error"
+	message: string
+	description?: string
+	target?: OperationResultTarget
+}
+
+export interface DetailOperationResultListItemsData {
+	items: OperationResultItem[]
+}
+
+/** 正文与文件化引用保持顶层结构，卡片只提供原有 Markdown 详情入口。 */
+export interface DetailOperationResultListReportData extends DetailOperationResultListItemsData {
+	file_name: string
+	content: string
+	file_id?: string
+	storage_type?: string
+	file_extension?: string
+}
+
+export type DetailOperationResultListData =
+	DetailOperationResultListItemsData | DetailOperationResultListReportData
 
 /** 终端 Terminal */
 export interface TerminalToolInfo {

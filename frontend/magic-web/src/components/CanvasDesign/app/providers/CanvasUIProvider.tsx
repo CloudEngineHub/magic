@@ -48,7 +48,8 @@ interface CanvasUIContextValue {
 
 	// 当前查看历史记录的图片元素 ID（null 表示不显示）
 	messageHistoryElementId: string | null
-	setMessageHistoryElementId: (id: string | null) => void
+	messageHistoryContentId?: string
+	setMessageHistoryElementId: (id: string | null, contentId?: string) => void
 
 	// 当前全屏预览的媒体元素（null 表示不显示）
 	fullscreenMediaElement: FullscreenMediaElement | null
@@ -95,7 +96,8 @@ interface CanvasSelectionUIContextValue {
 
 interface CanvasPanelUIContextValue {
 	messageHistoryElementId: string | null
-	setMessageHistoryElementId: (id: string | null) => void
+	messageHistoryContentId?: string
+	setMessageHistoryElementId: (id: string | null, contentId?: string) => void
 	fullscreenMediaElement: FullscreenMediaElement | null
 	setFullscreenMediaElement: (element: FullscreenMediaElement | null) => void
 	storyboardReferenceImagePreview: StoryboardReferenceImagePreview | null
@@ -134,7 +136,16 @@ export function CanvasUIProvider({ children }: CanvasUIProviderProps) {
 	const [isDragging, setIsDragging] = useState(false)
 	const [isSelecting, setIsSelecting] = useState(false)
 
-	const [messageHistoryElementId, setMessageHistoryElementId] = useState<string | null>(null)
+	const [messageHistory, setMessageHistory] = useState<{
+		elementId: string | null
+		contentId?: string
+	}>({ elementId: null })
+	const messageHistoryElementId = messageHistory.elementId
+	const messageHistoryContentId = messageHistory.contentId
+	// 元素和版本作为一次查看一起更新，关闭时同时清除，避免下一次复用旧版本。
+	const setMessageHistoryElementId = useCallback((id: string | null, contentId?: string) => {
+		setMessageHistory({ elementId: id, contentId: id ? contentId : undefined })
+	}, [])
 	const [fullscreenMediaElement, setFullscreenMediaElement] =
 		useState<FullscreenMediaElement | null>(null)
 	const [storyboardReferenceImagePreview, setStoryboardReferenceImagePreview] =
@@ -181,12 +192,15 @@ export function CanvasUIProvider({ children }: CanvasUIProviderProps) {
 		setIsSelecting(false)
 	})
 
-	const openMessageHistory = useCallback((elementId: string) => {
-		setMessageHistoryElementId(elementId)
-	}, [])
+	const openMessageHistory = useCallback(
+		(elementId: string, contentId?: string) => {
+			setMessageHistoryElementId(elementId, contentId)
+		},
+		[setMessageHistoryElementId],
+	)
 
 	useCanvasEvent("element:image:infoButtonClick", ({ data }) => {
-		openMessageHistory(data.elementId)
+		openMessageHistory(data.elementId, data.contentId)
 	})
 
 	useCanvasEvent("element:video:infoButtonClick", ({ data }) => {
@@ -235,7 +249,9 @@ export function CanvasUIProvider({ children }: CanvasUIProviderProps) {
 			setActiveToolSession((current) =>
 				current?.elementId === data.elementId ? null : current,
 			)
-			setMessageHistoryElementId((current) => (current === data.elementId ? null : current))
+			setMessageHistory((current) =>
+				current.elementId === data.elementId ? { elementId: null } : current,
+			)
 			setFullscreenMediaElement((current) =>
 				current?.elementId === data.elementId ? null : current,
 			)
@@ -333,13 +349,20 @@ export function CanvasUIProvider({ children }: CanvasUIProviderProps) {
 	const panelValue = useMemo<CanvasPanelUIContextValue>(() => {
 		return {
 			messageHistoryElementId,
+			messageHistoryContentId,
 			setMessageHistoryElementId,
 			fullscreenMediaElement,
 			setFullscreenMediaElement,
 			storyboardReferenceImagePreview,
 			setStoryboardReferenceImagePreview,
 		}
-	}, [messageHistoryElementId, fullscreenMediaElement, storyboardReferenceImagePreview])
+	}, [
+		messageHistoryElementId,
+		messageHistoryContentId,
+		setMessageHistoryElementId,
+		fullscreenMediaElement,
+		storyboardReferenceImagePreview,
+	])
 
 	const modeValue = useMemo<CanvasModeUIContextValue>(() => {
 		return {

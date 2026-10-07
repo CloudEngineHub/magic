@@ -1,0 +1,280 @@
+import { useId, type MouseEventHandler, type ReactNode } from "react"
+import { observer } from "mobx-react-lite"
+import { ChevronRight, CircleAlert, CircleCheck, CircleX, Loader2, MonitorPlay } from "lucide-react"
+import { useTranslation } from "react-i18next"
+import { Button } from "@/components/shadcn-ui/button"
+import { ScrollArea } from "@/components/shadcn-ui/scroll-area"
+import SmartTooltip from "@/components/other/SmartTooltip"
+import MagicTooltip from "@/components/base/MagicTooltip"
+import { cn } from "@/utils/cn"
+import {
+	getOperationResultListData,
+	getOperationResultListReportDetail,
+} from "@/pages/superMagic/utils/toolDetailDisplay"
+import { focusCanvasElementByProjectPath } from "@/pages/superMagic/components/Detail/contents/Design/utils/toolDesignProjectInfo"
+import { useMessageListProjectFilesStore } from "@/pages/superMagic/components/MessageList/context"
+import { ToolIconBadge } from "../../../shared/ToolIconConfig"
+import { useToggleWithScrollPreserve } from "../hooks/useToggleWithScrollPreserve"
+import { selectToolDetail, selectToolFile } from "../../toolDetailSelection"
+import OperationResultRow from "./OperationResultRow"
+
+interface OperationResultListProps {
+	toolData: {
+		id?: string
+		name?: string
+		action?: ReactNode
+		remark?: string
+		status?: string
+		detail?: unknown
+	}
+	loading?: boolean
+	className?: string
+	onSelectDetail?: (detail: unknown) => void
+	onMouseEnter?: MouseEventHandler
+	onMouseLeave?: MouseEventHandler
+}
+
+function OperationResultList({
+	toolData,
+	loading = false,
+	className,
+	onSelectDetail,
+	onMouseEnter,
+	onMouseLeave,
+}: OperationResultListProps) {
+	const { t } = useTranslation("super")
+	const filesStore = useMessageListProjectFilesStore()
+	const contentId = useId()
+	// 沿用消息作用域和滚动保护；虚拟行重新挂载仍保留用户的展开选择。
+	const [open, toggle] = useToggleWithScrollPreserve(false, "operation-result-list-expanded")
+	const items = getOperationResultListData(toolData.detail)?.items
+	const reportDetail = getOperationResultListReportDetail(toolData.detail)
+	const failedCount = items?.filter((item) => item.status === "error").length ?? 0
+	const successCount = (items?.length ?? 0) - failedCount
+	// 中断、响应缺失或无失败明细的工具异常可能保留占位行，不能据此宣布成功。
+	// 有逐项失败的批次仍保留成功项，避免把部分成功误标为整批不可用。
+	const resultUnavailable =
+		toolData.status === "suspended" ||
+		toolData.status === "response_missing" ||
+		(toolData.status === "error" && failedCount === 0)
+	const unavailable = loading
+		? t("operationResultList.running")
+		: toolData.status === "suspended"
+			? t("operationResultList.interrupted")
+			: t("operationResultList.unavailable")
+	const StatusIcon = loading ? Loader2 : CircleAlert
+	// 展开时由明细转圈；只有明细全部失败或不可用时，头部仍负责执行反馈。
+	const showHeaderSpinner =
+		loading && (!open || Boolean(items?.length && (resultUnavailable || successCount === 0)))
+	// 展开只增加明细，不替换汇总；成功和失败各自着色，用户无需滚动数结果。
+	const summary = (
+		<span
+			className="inline-flex min-w-0 flex-wrap items-center gap-x-2.5 gap-y-1 text-xs leading-4"
+			aria-live="polite"
+		>
+			{resultUnavailable || !items ? (
+				<span className="inline-flex min-w-0 items-center gap-1.5 text-muted-foreground">
+					{(!loading || showHeaderSpinner) && (
+						<StatusIcon
+							size={16}
+							aria-hidden
+							className={cn("shrink-0", loading && "animate-spin")}
+						/>
+					)}
+					<span className="[overflow-wrap:anywhere]">{unavailable}</span>
+				</span>
+			) : (
+				<>
+					{(successCount > 0 || loading) && (
+						<span
+							className={cn(
+								"inline-flex items-center gap-1.5 whitespace-nowrap",
+								loading ? "text-muted-foreground" : "text-success",
+							)}
+						>
+							{showHeaderSpinner ? (
+								<Loader2 size={16} aria-hidden className="shrink-0 animate-spin" />
+							) : !loading ? (
+								<CircleCheck size={16} aria-hidden className="shrink-0" />
+							) : null}
+							{loading
+								? successCount > 0
+									? t("operationResultList.summaryProcessing", {
+											count: successCount,
+										})
+									: t("operationResultList.running")
+								: t("operationResultList.summarySucceeded", {
+										count: successCount,
+									})}
+						</span>
+					)}
+					{failedCount > 0 && (
+						<span className="inline-flex items-center gap-1.5 whitespace-nowrap text-destructive">
+							<CircleX size={16} aria-hidden className="shrink-0" />
+							{t("operationResultList.summaryFailed", { count: failedCount })}
+						</span>
+					)}
+				</>
+			)}
+		</span>
+	)
+	const remark = items?.length === 1 ? items[0].label : toolData.remark?.trim()
+
+	return (
+		<div
+			className={cn("h-fit w-full min-w-0 max-w-lg flex-none", className)}
+			data-tool={toolData.id}
+			onMouseEnter={onMouseEnter}
+			onMouseLeave={onMouseLeave}
+		>
+			{/* 收起、展开共用宽度；名称可收缩，状态与操作不被长名称挤出。 */}
+			<div className="min-w-0 overflow-hidden rounded-lg border border-border bg-card">
+				{/* 标题、报告、箭头分别使用原生按钮；报告点击不冒泡成展开动作，也不嵌套按钮。 */}
+				<div className="flex min-w-0 items-start">
+					<Button
+						type="button"
+						variant="ghost"
+						onClick={toggle}
+						aria-expanded={open}
+						aria-controls={contentId}
+						className="grid h-auto min-h-10 min-w-0 flex-1 grid-cols-1 items-start gap-y-1 rounded-none py-2 pl-3 pr-1 text-left text-xs font-normal hover:bg-muted/30 focus-visible:ring-inset"
+					>
+						<span className="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1">
+							<span className="flex min-w-0 flex-1 basis-40 items-center gap-2">
+								<ToolIconBadge toolName={toolData.name} size={20} iconSize={12} />
+								<span className="min-w-0 whitespace-normal text-sm leading-5 text-foreground">
+									{toolData.action || t("operationResultList.title")}
+								</span>
+							</span>
+							{summary}
+						</span>
+						{!open && remark && (
+							<SmartTooltip
+								fileName
+								elementType="span"
+								placement="top"
+								align="start"
+								className="min-w-0 pl-7 text-xs leading-4 text-muted-foreground"
+							>
+								{remark}
+							</SmartTooltip>
+						)}
+					</Button>
+					{reportDetail && (
+						<MagicTooltip title={t("operationResultList.openReport")}>
+							<Button
+								type="button"
+								variant="ghost"
+								size="icon"
+								className="mt-1.5 size-7 shrink-0"
+								aria-label={t("operationResultList.openReport")}
+								disabled={
+									loading || resultUnavailable || toolData.status === "error"
+								}
+								onClick={() =>
+									selectToolDetail({
+										detail: {
+											...reportDetail,
+											id: toolData.id,
+											name: toolData.name,
+											action: toolData.action,
+											remark: toolData.remark,
+										},
+										onSelectDetail,
+									})
+								}
+							>
+								<MonitorPlay size={16} className="text-foreground" aria-hidden />
+							</Button>
+						</MagicTooltip>
+					)}
+					<Button
+						type="button"
+						variant="ghost"
+						size="icon"
+						className="mr-2 mt-1.5 size-7 shrink-0"
+						onClick={toggle}
+						aria-expanded={open}
+						aria-controls={contentId}
+						aria-label={
+							open
+								? t("operationResultList.collapse")
+								: t("operationResultList.expand")
+						}
+					>
+						<ChevronRight
+							size={16}
+							aria-hidden
+							className={cn(
+								"text-muted-foreground transition-transform motion-reduce:transition-none",
+								open && "rotate-90",
+							)}
+						/>
+					</Button>
+				</div>
+				{open && (
+					<div id={contentId} className="border-t border-border">
+						{items?.length ? (
+							// Radix 的 table 内容包装会把长名称变成最小宽度，使用块布局让名称在卡片内换行。
+							<ScrollArea viewportClassName="max-h-96 [&>div]:!block">
+								<ul className="m-0 list-none divide-y divide-border p-0">
+									{items.map((item, index) => (
+										<OperationResultRow
+											key={`${item.label}-${index}`}
+											item={item}
+											loading={loading}
+											unavailable={
+												resultUnavailable ? unavailable : undefined
+											}
+											onLocate={(target, showDetails) => {
+												// 普通图片沿用项目文件预览，画布元素保留原定位与生成详情流程。
+												if (target.type === "file") {
+													// 显式相对入口保留 ~、冒号等 POSIX 文件名，不被解析成个人文件或 URL。
+													const filePath = `./${target.relative_file_path}`
+													selectToolFile({
+														detail: {
+															data: {
+																target_file_path: filePath,
+															},
+														},
+														target: {
+															type: "file-reference",
+															filePath,
+														},
+														filesStore,
+													})
+													return
+												}
+												focusCanvasElementByProjectPath({
+													projectPath: target.project_path,
+													elementId: target.element_id,
+													contentId: target.content_id,
+													showGenerationDetails: showDetails,
+													filesStore,
+												})
+											}}
+										/>
+									))}
+								</ul>
+							</ScrollArea>
+						) : (
+							<p
+								className="m-0 flex items-center gap-2 px-3 py-3 text-xs text-muted-foreground"
+								aria-live="polite"
+							>
+								<StatusIcon
+									size={16}
+									aria-hidden
+									className={cn(loading && "animate-spin")}
+								/>
+								{unavailable}
+							</p>
+						)}
+					</div>
+				)}
+			</div>
+		</div>
+	)
+}
+
+export default observer(OperationResultList)

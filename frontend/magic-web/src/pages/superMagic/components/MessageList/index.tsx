@@ -437,6 +437,11 @@ const MessageList = observer(
 			messages,
 			revokedDisplayMessages,
 		])
+		const currentTurnMessages = useMemo(() => {
+			const currentTurn = messageTurnGroups[messageTurnGroups.length - 1]
+			// 复用正常会话的用户轮次分组，排除撤回历史分支与无用户起点的历史片段。
+			return currentTurn?.stickyItem ? currentTurn.items.map(({ node }) => node) : []
+		}, [messageTurnGroups])
 		const activeStreamSuperMessageIds =
 			superMagicStore.getActiveStreamSuperMessageIds(currentTopicKey)
 		// 活跃 StreamState 和占位消息行都不代表用户已经看到流式进度；
@@ -448,6 +453,7 @@ const MessageList = observer(
 			isTopicTaskRunning: currentTopicStatus === TaskStatus.RUNNING,
 			activeStreamSuperMessageIds,
 			visibleMessages: effectiveVisibleMessages,
+			currentTurnMessages,
 			resolveMessageNode: (superMessageId) =>
 				superMagicStore.getMessageNode(superMessageId) as
 					| {
@@ -458,6 +464,9 @@ const MessageList = observer(
 					| undefined,
 			resolveStreamState: (superMessageId) =>
 				superMagicStore.getStreamState(currentTopicKey, superMessageId),
+			// 文案描述实际执行阶段；不把卡片为保留打字机顺序而延后的终态当作执行中。
+			resolveToolResponse: (toolCallId) =>
+				superMagicStore.toolResponseMap.get(currentTopicKey)?.get(toolCallId),
 		})
 		const isStalledLoadingVisible = useStalledGenerationLoading(
 			currentTopicStatus !== TaskStatus.WAITING_FOR_USER &&
@@ -467,7 +476,9 @@ const MessageList = observer(
 		const shouldShowBottomLoading =
 			currentTopicStatus !== TaskStatus.WAITING_FOR_USER &&
 			currentTopicStatus !== TaskStatus.FINISHED &&
-			(bottomLoadingVisibility.showImmediately || isStalledLoadingVisible)
+			(bottomLoadingVisibility.showImmediately ||
+				isStalledLoadingVisible ||
+				bottomLoadingVisibility.isToolExecuting)
 		const showAiGeneratedTip =
 			!shouldShowBottomLoading &&
 			((mainDisplayData.length > 0 && currentTopicStatus !== TaskStatus.RUNNING) ||
@@ -838,6 +849,7 @@ const MessageList = observer(
 						<LoadingMessage
 							messages={visibleData}
 							showLoading={shouldShowBottomLoading}
+							isToolExecuting={bottomLoadingVisibility.isToolExecuting}
 							selectedTopic={selectedTopic}
 						/>
 					) : null}
@@ -860,6 +872,7 @@ const MessageList = observer(
 			selectedTopic,
 			shouldShowBottomLoading,
 			showAiGeneratedTip,
+			bottomLoadingVisibility.isToolExecuting,
 			t,
 			visibleData,
 		])
