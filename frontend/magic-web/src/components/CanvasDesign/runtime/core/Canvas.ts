@@ -937,6 +937,10 @@ export class Canvas {
 			this.userActionRegistry.execute("selection.select-all")
 		})
 
+		this.eventEmitter.on("keyboard:duplicate", () => {
+			void this.userActionRegistry.execute("edit.duplicate")
+		})
+
 		// 监听复制快捷键
 		this.eventEmitter.on("keyboard:copy", () => {
 			this.userActionRegistry.execute("edit.copy")
