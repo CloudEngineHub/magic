@@ -21,6 +21,7 @@ import {
 	transformRawMessage,
 	sortMessages,
 	positionAnchoredMessages,
+	reconcileMessageDisplayAnchors,
 	addOneToBigNumberString,
 	isToolCallsEqual,
 	isToolCallArgumentsComplete,
@@ -643,8 +644,10 @@ export class SuperMagicStore implements SuperMagicStoreCallbackRegistrar {
 	 * Stream rendering deliberately does not use this path for every frame.
 	 */
 	private setTopicMessages(topicId: string, messages: MessageItem[]) {
-		this.messages.set(topicId, messages)
-		this.rebuildTopicMessageIndex(topicId, messages)
+		// Final、HTTP 和断线补齐共用此入口，避免旧流式位置在正式顺序补齐后继续生效。
+		const reconciledMessages = reconcileMessageDisplayAnchors(messages)
+		this.messages.set(topicId, reconciledMessages)
+		this.rebuildTopicMessageIndex(topicId, reconciledMessages)
 		this.topicMessageMembershipRevisions.set(
 			topicId,
 			(this.topicMessageMembershipRevisions.get(topicId) || 0) + 1,
