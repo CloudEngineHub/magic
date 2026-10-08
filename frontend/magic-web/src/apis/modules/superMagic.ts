@@ -597,6 +597,8 @@ export interface GenerateVideoGeneration {
 	resolution?: string
 	/** 时长（秒） */
 	duration_seconds?: number
+	/** 是否以样片模式生成；仅在模型能力声明 draft 时发送 */
+	draft?: boolean
 	/** 预留扩展字段 */
 	[key: string]: unknown
 }

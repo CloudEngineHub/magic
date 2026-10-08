@@ -4,6 +4,7 @@ import { forwardRef, useCallback, useEffect, useMemo, useRef, useState } from "r
 import { createPortal } from "react-dom"
 import { useCanvasDesignI18n } from "../../../../app/providers/I18nProvider"
 import { useMagic } from "../../../../app/providers/MagicProvider"
+import { Select, SelectContent, SelectItem, SelectTrigger } from "../../../primitives/shadcn/select"
 import EditorModelSelect from "./model-config/EditorModelSelect"
 import type {
 	VideoEditorConfig,
@@ -308,14 +309,35 @@ export default function VideoEditorControls(props: VideoEditorControlsProps) {
 	} = config
 
 	const removeSlotAriaLabel = t("videoEditor.removeSlotResource", "移除该参考资源")
-	/** 文生视频走提示词，不作为模式 Tab 展示；仅展示需切换素材类型的模式 */
-	const inputModesForTabs = useMemo(
-		() => availableInputModes.filter((mode) => mode !== "standard"),
+	/** 文生视频走提示词，不作为模式菜单项展示；仅展示需切换素材类型的模式 */
+	const inputModesForSelect = useMemo(
+		() =>
+			availableInputModes.filter(
+				(mode): mode is Exclude<VideoInputMode, "standard"> => mode !== "standard",
+			),
 		[availableInputModes],
 	)
-	const shouldShowModeTabs =
-		inputModesForTabs.length > 0 &&
-		(inputModesForTabs.length > 1 || availableInputModes.includes("standard"))
+	const shouldShowModeSelect =
+		inputModesForSelect.length > 0 &&
+		(inputModesForSelect.length > 1 || availableInputModes.includes("standard"))
+	const selectedInputModeForSelect = inputModesForSelect.includes(
+		selectedInputMode as Exclude<VideoInputMode, "standard">,
+	)
+		? (selectedInputMode as Exclude<VideoInputMode, "standard">)
+		: inputModesForSelect[0]
+	const inputModeLabels = {
+		framesLabel: t("videoEditor.frames", "首尾帧"),
+		videoEditLabel: t("videoEditor.videoEdit", "视频编辑"),
+		referenceImageLabel: t("videoEditor.referenceImage", "参考图"),
+		referenceAssetLabel: t("videoEditor.referenceAsset", "全能模式"),
+	}
+	const handleInputModeSelect = useCallback(
+		(value: string) => {
+			if (!inputModesForSelect.includes(value as Exclude<VideoInputMode, "standard">)) return
+			handlers.handleInputModeChange(value as VideoInputMode)
+		},
+		[handlers, inputModesForSelect],
+	)
 
 	const getPopoverLimitState = useCallback(
 		(paths: Array<string | undefined>, slotIndex: number, maxCount?: number) => {
@@ -1194,36 +1216,27 @@ export default function VideoEditorControls(props: VideoEditorControlsProps) {
 							selectedModelOption={selectedModelOption}
 							onModelChange={handlers.handleModelChange}
 						/>
-						{shouldShowModeTabs && (
-							<div className={styles.tabsList} role="tablist">
-								{inputModesForTabs.map((inputMode) => (
-									<button
-										key={inputMode}
-										type="button"
-										role="tab"
-										aria-selected={selectedInputMode === inputMode}
-										className={styles.tabsTrigger}
-										data-state={
-											selectedInputMode === inputMode ? "active" : undefined
-										}
-										data-testid={`video-generate-editor-mode-${inputMode}`}
-										onClick={() => handlers.handleInputModeChange(inputMode)}
-									>
-										{getInputModeLabel(inputMode, {
-											framesLabel: t("videoEditor.frames", "首尾帧"),
-											videoEditLabel: t("videoEditor.videoEdit", "视频编辑"),
-											referenceImageLabel: t(
-												"videoEditor.referenceImage",
-												"参考图",
-											),
-											referenceAssetLabel: t(
-												"videoEditor.referenceAsset",
-												"全能模式",
-											),
-										})}
-									</button>
-								))}
-							</div>
+						{shouldShowModeSelect && selectedInputModeForSelect && (
+							<Select
+								value={selectedInputModeForSelect}
+								onValueChange={handleInputModeSelect}
+							>
+								<SelectTrigger className={styles.modeSelectTrigger}>
+									{getInputModeLabel(selectedInputModeForSelect, inputModeLabels)}
+								</SelectTrigger>
+								<SelectContent className={styles.modeSelectContent}>
+									{inputModesForSelect.map((inputMode) => (
+										<SelectItem
+											key={inputMode}
+											value={inputMode}
+											className={styles.modeSelectItem}
+											data-testid={`video-generate-editor-mode-${inputMode}`}
+										>
+											{getInputModeLabel(inputMode, inputModeLabels)}
+										</SelectItem>
+									))}
+								</SelectContent>
+							</Select>
 						)}
 					</div>
 					<div className={styles.right}>

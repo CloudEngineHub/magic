@@ -103,6 +103,28 @@ describe("useVideoGeneration model grouping", () => {
 		})
 	})
 
+	it("keeps the draft flag nested under generation", async () => {
+		const { result } = renderHook(() =>
+			useVideoGeneration({
+				projectId: "project-1",
+				updateAttachments: vi.fn(),
+			}),
+		)
+
+		await result.current.generateVideo({
+			model_id: "doubao-seedance-2-5-260xxx",
+			prompt: "make a draft video",
+			generation: { draft: true },
+		})
+
+		expect(generateVideo).toHaveBeenCalledWith(
+			expect.objectContaining({
+				project_id: "project-1",
+				generation: { draft: true },
+			}),
+		)
+	})
+
 	it("loads all supported models independently of the active topic", async () => {
 		vi.mocked(superMagicModeService.getAllVideoModelGroups).mockReturnValue([
 			createGroup("claude-video", "claude-video", "seedance-2-fast"),

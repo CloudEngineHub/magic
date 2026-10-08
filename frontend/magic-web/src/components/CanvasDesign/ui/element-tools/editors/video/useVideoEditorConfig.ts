@@ -266,6 +266,7 @@ export function useVideoEditorConfig(options: UseVideoEditorConfigOptions): Vide
 		undefined,
 	)
 	const [selectedWebSearch, setSelectedWebSearch] = useState<boolean | undefined>(undefined)
+	const [selectedDraft, setSelectedDraft] = useState<boolean | undefined>(undefined)
 	const [selectedCompressionQuality, setSelectedCompressionQuality] = useState<
 		string | undefined
 	>(undefined)
@@ -858,6 +859,7 @@ export function useVideoEditorConfig(options: UseVideoEditorConfigOptions): Vide
 		return {
 			audio: generation?.generate_audio,
 			webSearch: generation?.web_search,
+			draft: generation?.draft,
 		}
 	}, [selectedModel])
 
@@ -987,6 +989,17 @@ export function useVideoEditorConfig(options: UseVideoEditorConfigOptions): Vide
 			setSelectedWebSearch(generationSwitchConfig.webSearch.default)
 		}
 	}, [generationSwitchConfig.webSearch, selectedWebSearch])
+
+	useEffect(() => {
+		// 能力未声明时保持 undefined，让设置面板隐藏且请求不会携带 draft。
+		if (!generationSwitchConfig.draft) {
+			if (selectedDraft !== undefined) setSelectedDraft(undefined)
+			return
+		}
+		if (selectedDraft === undefined) {
+			setSelectedDraft(generationSwitchConfig.draft.default)
+		}
+	}, [generationSwitchConfig.draft, selectedDraft])
 
 	const resetSelectedResourceSlot = useCallback((expectedSlot?: VideoInputSlotInfo) => {
 		const currentSlot = selectedResourceSlotRef.current
@@ -1547,6 +1560,7 @@ export function useVideoEditorConfig(options: UseVideoEditorConfigOptions): Vide
 				nextGen?.generate_audio ? nextGen.generate_audio.default : undefined,
 			)
 			setSelectedWebSearch(nextGen?.web_search ? nextGen.web_search.default : undefined)
+			setSelectedDraft(nextGen?.draft ? nextGen.draft.default : undefined)
 			setSelectedCompressionQuality(
 				prevCompressionQuality && nextQualityOpts.includes(prevCompressionQuality)
 					? prevCompressionQuality
@@ -1673,6 +1687,10 @@ export function useVideoEditorConfig(options: UseVideoEditorConfigOptions): Vide
 
 	const handleWebSearchChange = useCallback((value: boolean) => {
 		setSelectedWebSearch(value)
+	}, [])
+
+	const handleDraftChange = useCallback((value: boolean) => {
+		setSelectedDraft(value)
 	}, [])
 
 	const handleCompressionQualityChange = useCallback((value: string) => {
@@ -2090,6 +2108,8 @@ export function useVideoEditorConfig(options: UseVideoEditorConfigOptions): Vide
 				? { generate_audio: selectedGenerateAudio }
 				: {}),
 			...(selectedWebSearch !== undefined ? { web_search: selectedWebSearch } : {}),
+			// 方舟侧缺省即为 false；关闭时省略字段，只有用户明确开启才透传。
+			...(selectedDraft === true ? { draft: true } : {}),
 			...(selectedCompressionQuality
 				? { compression_quality: selectedCompressionQuality }
 				: {}),
@@ -2146,6 +2166,7 @@ export function useVideoEditorConfig(options: UseVideoEditorConfigOptions): Vide
 		selectedDurationSeconds,
 		selectedGenerateAudio,
 		selectedWebSearch,
+		selectedDraft,
 		selectedCompressionQuality,
 		supportsReferenceAssets,
 		supportsEndFrame,
@@ -2263,8 +2284,7 @@ export function useVideoEditorConfig(options: UseVideoEditorConfigOptions): Vide
 			const requestToRestore = sessionSnapshot?.request ?? currentRequest
 			const rootStorage = canvas.magicConfigManager.config?.methods?.getRootStorage?.()
 			const defaultConfig = rootStorage?.defaultGenerateVideoConfig as
-				| DefaultGenerateVideoConfig
-				| undefined
+				DefaultGenerateVideoConfig | undefined
 			const quickEditPreferredModelId = selectedModelId || savedRequest?.model_id
 			const quickEditModel = isQuickEdit
 				? resolveVideoReferenceVideoModel(videoModelList, quickEditPreferredModelId)
@@ -2353,6 +2373,10 @@ export function useVideoEditorConfig(options: UseVideoEditorConfigOptions): Vide
 				fallbackGen?.web_search
 					? (requestToRestore?.generation?.web_search ?? fallbackGen.web_search.default)
 					: undefined,
+			)
+			const draftFromRequest = isQuickEdit ? undefined : requestToRestore?.generation?.draft
+			setSelectedDraft(
+				fallbackGen?.draft ? (draftFromRequest ?? fallbackGen.draft.default) : undefined,
 			)
 
 			const qualityOpts =
@@ -2662,6 +2686,7 @@ export function useVideoEditorConfig(options: UseVideoEditorConfigOptions): Vide
 			handleDurationPopoverOpenChange,
 			handleGenerateAudioChange,
 			handleWebSearchChange,
+			handleDraftChange,
 			handleCompressionQualityChange,
 			handleInputModeChange,
 			handleInputTabChange,
@@ -2699,6 +2724,7 @@ export function useVideoEditorConfig(options: UseVideoEditorConfigOptions): Vide
 			handleDurationChange,
 			handleGenerateAudioChange,
 			handleWebSearchChange,
+			handleDraftChange,
 			handleCompressionQualityChange,
 			handleInputModeChange,
 			handleInputTabChange,
@@ -2743,6 +2769,7 @@ export function useVideoEditorConfig(options: UseVideoEditorConfigOptions): Vide
 		durationDraftSeconds,
 		selectedGenerateAudio,
 		selectedWebSearch,
+		selectedDraft,
 		selectedCompressionQuality,
 		currentFrameImages,
 		frameImageInfos,

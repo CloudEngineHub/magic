@@ -177,18 +177,11 @@ export interface VideoModelItem {
 
 /** 视频输入模式 */
 export type VideoInputMode =
-	| "standard"
-	| "image_reference"
-	| "omni_reference"
-	| "video_edit"
-	| "keyframe_guided"
+	"standard" | "image_reference" | "omni_reference" | "video_edit" | "keyframe_guided"
 
 /** 输入模式下允许提交的素材字段 */
 export type VideoInputModeSupportedField =
-	| "reference_images"
-	| "reference_videos"
-	| "reference_audios"
-	| "frames"
+	"reference_images" | "reference_videos" | "reference_audios" | "frames"
 
 /**
  * 模式级/变体级生成参数限制。
@@ -335,6 +328,8 @@ export interface VideoGenerationConfig {
 		generate_audio?: VideoGenerationSwitchConfig
 		/** 是否启用网络搜索 */
 		web_search?: VideoGenerationSwitchConfig
+		/** 样片模式开关（仅由服务端声明该能力的模型支持）：先出低分辨率样片，再出正片 */
+		draft?: VideoGenerationSwitchConfig
 		/** 可选分辨率列表，如 1080p */
 		resolutions?: string[]
 		/** 可选输出尺寸（与 aspect_ratios、resolutions 组合一一对应时可优先使用） */
@@ -446,6 +441,8 @@ export interface GenerateVideoGeneration {
 	generate_audio?: boolean
 	/** 是否启用网络搜索 */
 	web_search?: boolean
+	/** 是否以样片模式生成；仅在模型能力声明 draft 时发送 */
+	draft?: boolean
 	/** 人物生成策略 */
 	person_generation?: string
 	/** 是否增强提示词 */
@@ -1325,8 +1322,7 @@ export interface IdentifyImageMarkAreaResponse extends IdentifyImageMarkResponse
  * 识别图片标记响应类型
  */
 export type IdentifyImageMarkResponse =
-	| IdentifyImageMarkPointResponse
-	| IdentifyImageMarkAreaResponse
+	IdentifyImageMarkPointResponse | IdentifyImageMarkAreaResponse
 
 /**
  * Storage 数据结构
