@@ -40,6 +40,13 @@ class SkillSources:
     region_filtered_names: list[str]
 
 
+@dataclass(frozen=True)
+class PreloadedSkillFile:
+    """保存实际进入 system prompt 的源文本，不能用后来的磁盘内容冒充已读版本。"""
+    path: Path
+    source_content: str
+
+
 @dataclass
 class SkillPromptResult:
     """
@@ -51,6 +58,7 @@ class SkillPromptResult:
     disabled_names: list[str] = field(default_factory=list)
     preloaded_content: str = ""
     preloaded_files: tuple[Path, ...] = ()
+    preloaded_file_contents: tuple[PreloadedSkillFile, ...] = ()
 
 
 @dataclass
@@ -64,6 +72,7 @@ class PreloadedSkillsResult:
     disabled_names: list[str]
     preloaded_files: tuple[Path, ...] = ()
     read_notices: tuple[str, ...] = ()
+    preloaded_file_contents: tuple[PreloadedSkillFile, ...] = ()
 
 
 def generate_skills_prompt(
@@ -382,6 +391,7 @@ async def _do_generate(
             disabled_names=preload_result.disabled_names,
             preloaded_content=preload_result.content,
             preloaded_files=preload_result.preloaded_files,
+            preloaded_file_contents=preload_result.preloaded_file_contents,
         )
 
     except Exception as e:
@@ -423,6 +433,7 @@ async def _build_preloaded_skills_xml(
     meta_by_name = {m.name: m for m in skills_metadata}
     skill_parts: List[str] = []
     preloaded_files: list[Path] = []
+    preloaded_file_contents: list[PreloadedSkillFile] = []
     notices: list[str] = []
 
     for skill_name, files in preload_map.items():
@@ -434,6 +445,7 @@ async def _build_preloaded_skills_xml(
         file_blocks: List[str] = []
         successful: list[str] = []
         successful_paths: list[Path] = []
+        successful_contents: list[PreloadedSkillFile] = []
         for filename in files:
             try:
                 filename = normalize_preload_path(filename)
@@ -478,6 +490,7 @@ async def _build_preloaded_skills_xml(
             successful.append(filename)
             file_blocks.append(f'<file location="{file_path}">\n{file_content}\n</file>')
             successful_paths.append(file_path)
+            successful_contents.append(PreloadedSkillFile(file_path, file_content))
 
         loaded_files[skill_name] = tuple(successful)
         # 先记录真实读取结果，再判断是否交付这一整项 Skill；不能以目录存在或配置声明代替成功。
@@ -494,6 +507,7 @@ async def _build_preloaded_skills_xml(
         parts.append(f"</skill>")
         skill_parts.append("\n".join(parts))
         preloaded_files.extend(successful_paths)
+        preloaded_file_contents.extend(successful_contents)
 
     disabled = [name for name, files in required.items() if not set(files).issubset(loaded_files.get(name, ()))]
     if not skill_parts:
@@ -510,4 +524,7 @@ async def _build_preloaded_skills_xml(
         "  Call `read_skills({\"skill_names\": [\"<name>\"]})` (using the `name` attribute of the `<skill>` tag) to load the full documentation."
     )
     content = "<preloaded_skills>\n" + header + "\n\n" + "\n\n".join(skill_parts) + "\n\n</preloaded_skills>"
-    return PreloadedSkillsResult(content, loaded_files, disabled, tuple(dict.fromkeys(preloaded_files)), tuple(notices))
+    return PreloadedSkillsResult(
+        content, loaded_files, disabled, tuple(dict.fromkeys(preloaded_files)), tuple(notices),
+        tuple(preloaded_file_contents),
+    )

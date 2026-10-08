@@ -243,6 +243,7 @@ Strongly recommended to use this tool for batch reading multiple reference files
         read_file_tool.base_dir = self.base_dir
         read_failure_count = 0
         has_truncation = False
+        read_results: list[ToolResult | None] = []
 
         # 批量处理每个文件操作，收集结果
         for operation in params.operations:
@@ -261,7 +262,9 @@ Strongly recommended to use this tool for batch reading multiple reference files
                     tool_context, file_params, raw_mode=True,
                     max_tokens=max_tokens, allow_fuzzy_match=allow_fuzzy_match,
                     use_context_budget=use_context_budget,
+                    record_read=False,
                 )
+                read_results.append(result)
 
                 if result.ok:
                     # 直接使用content（已经不包含截断提示了）
@@ -281,10 +284,6 @@ Strongly recommended to use this tool for batch reading multiple reference files
                             "file_path": operation.file_path,
                             "content": safe_raw_content,
                         })
-
-                    # ReadFile 工具已经设置了时间戳，这里不需要重复设置
-                    # 但为了确保一致性，我们记录一下日志
-                    logger.debug(f"文件读取成功，时间戳已由 ReadFile 工具设置: {operation.file_path}")
 
                     # 创建文件读取结果对象
                     # 截断信息通过extra_info获取，不再需要字符串解析
@@ -310,6 +309,8 @@ Strongly recommended to use this tool for batch reading multiple reference files
                     ))
                     read_failure_count += 1
             except Exception as e:
+                if len(read_results) < len(results) + 1:
+                    read_results.append(None)
                 logger.exception(f"读取文件失败: {e!s}")
                 results.append(FileReadingResult(
                     file_path=operation.file_path,
@@ -351,6 +352,19 @@ Strongly recommended to use this tool for batch reading multiple reference files
 
         # 格式化最终结果
         formatted_result = self._format_results(results, summary, has_truncation)
+        # 单项完整不代表批量输出完整；最终截断后才能确认模型实际获得的阅读范围。
+        if tool_context:
+            for operation, item, read_result in zip(params.operations, results, read_results, strict=True):
+                if read_result is not None and item.is_success:
+                    await read_file_tool.record_read_result(
+                        tool_context,
+                        ReadFileParams(file_path=operation.file_path, offset=operation.offset, limit=operation.limit),
+                        read_result,
+                        truncated=item.was_truncated,
+                    )
+                    # ReadFile 工具已经设置了时间戳，这里不需要重复设置
+                    # 但为了确保一致性，我们记录一下日志
+                    logger.debug(f"文件读取成功，时间戳已由 ReadFile 工具设置: {operation.file_path}")
 
         # 记录实际token数
         actual_tokens = num_tokens_from_string(formatted_result)

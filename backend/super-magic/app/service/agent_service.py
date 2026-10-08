@@ -568,7 +568,6 @@ class AgentService(Base):
 
         # 追加渠道专属上下文片段（如微信消息携带的媒体文件路径），不支持的渠道返回空串不影响
         query = ChannelContextService.append_channel_context(query, chat_client_message)
-        await ChannelContextService.suggest_channel_skills(chat_client_message, agent_context)
 
         # 原生视觉消费 mention 模块提取出的工作区或挂载目录图片路径。
         image_refs = await self._mention_builder.extract_image_refs(mentions, agent_context)
