@@ -5,7 +5,7 @@ import type { FileHelpContext } from "./utils/magic-system-folder"
 import { ProjectFileTag } from "./components/TopicFileTag"
 import { useFileAccess } from "@/pages/superMagic/providers/FileAccessProvider"
 import { IconChevronDown, IconChevronRight, IconDots } from "@tabler/icons-react"
-import { Loader2, ChevronDown } from "lucide-react"
+import { Loader2, ChevronDown, Files, ArrowRight } from "lucide-react"
 import { Flex, message } from "antd"
 import { Checkbox } from "@/components/shadcn-ui/checkbox"
 import { useMemo, useImperativeHandle, forwardRef, useRef, useEffect, useCallback } from "react"
@@ -2801,7 +2801,15 @@ const TopicFilesCore = forwardRef<TopicFilesCoreRef, TopicFilesCoreProps>(functi
 									: t("topicFiles.moving")
 						}
 						position="top"
-						width={280}
+						icon={
+							(crossProjectOperation.isOperating &&
+								crossProjectOperation.operationType === "copy") ||
+							importOperation.isOperating ? (
+								<Files size={10} />
+							) : (
+								<ArrowRight size={10} />
+							)
+						}
 						showPercentage={true}
 						progressHeight={4}
 						zIndex={99999}

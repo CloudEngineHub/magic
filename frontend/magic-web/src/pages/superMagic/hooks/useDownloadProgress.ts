@@ -143,10 +143,11 @@ export function useDownloadProgress() {
 			labelRef.current = label ?? labelRef.current
 			magicToast.loading({
 				key: toastId,
+				icon: null,
 				content: createElement(DownloadProgressToast, {
 					progress,
 					text: labelRef.current || t("topicFiles.downloading"),
-					cancelText: cancelTextRef.current || t("topicFiles.downloadAbort"),
+					cancelText: cancelTextRef.current || t("common.cancel"),
 					onCancel: cancelDownload,
 				}),
 				duration: 0,

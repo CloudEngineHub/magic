@@ -71,9 +71,9 @@ export const useTaskItemStyles = createStyles(({ token, css }) => ({
 		min-width: 0;
 	`,
 
-	// 任务名称 - 14px，PingFang SC，400，黑色
+	// 任务名称 - 13px，PingFang SC，400，黑色
 	taskName: css`
-		font-size: 14px;
+		font-size: 13px;
 		font-weight: 400;
 		line-height: 20px;
 		color: ${token.magicColorUsages.text[0]};
@@ -166,11 +166,33 @@ export const useTaskItemStyles = createStyles(({ token, css }) => ({
 		flex-shrink: 0;
 	`,
 
+	statusGrid: css`
+		/* 图标和文字共用固定列：百分比、完成、目录阶段及重试都保持同一起点。 */
+		display: grid;
+		grid-template-columns: 18px 5em;
+		column-gap: 6px;
+		row-gap: 2px;
+		align-items: center;
+		font-size: 12px;
+		line-height: 18px;
+		font-weight: 400;
+		overflow-wrap: anywhere;
+	`,
+	statusProgress: css`
+		display: flex;
+		align-items: center;
+		/* 与 24 格图标的外圆直径及线宽对齐，保留 antd 的进度渲染。 */
+		svg {
+			transform: scale(calc(11 / 12));
+			transform-origin: center;
+		}
+	`,
+
 	// 进度百分比文本
 	progressPercentText: css`
 		font-size: 12px;
 		font-weight: 400;
-		line-height: 1.33;
+		line-height: 18px;
 		color: ${token.magicColorUsages.text[2]};
 	`,
 
@@ -193,7 +215,7 @@ export const useTaskItemStyles = createStyles(({ token, css }) => ({
 	successText: css`
 		font-size: 12px;
 		font-weight: 400;
-		line-height: 1.33;
+		line-height: 18px;
 		color: ${token.magicColorUsages.text[2]};
 	`,
 
@@ -201,7 +223,7 @@ export const useTaskItemStyles = createStyles(({ token, css }) => ({
 	errorText: css`
 		font-size: 12px;
 		font-weight: 400;
-		line-height: 1.33;
+		line-height: 18px;
 		color: #ff7d00;
 	`,
 
@@ -215,6 +237,8 @@ export const useTaskItemStyles = createStyles(({ token, css }) => ({
 
 	// 重试按钮
 	retryButton: css`
+		grid-column: 2;
+		justify-self: start;
 		display: flex;
 		justify-content: center;
 		align-items: center;
@@ -238,12 +262,13 @@ export const useTaskItemStyles = createStyles(({ token, css }) => ({
 	retryButtonText: css`
 		font-size: 12px;
 		font-weight: 400;
-		line-height: 1.33;
+		line-height: 18px;
 		color: #ff7d00;
 	`,
 
 	// 警告图标 - 18x18
 	warningIcon: css`
+		color: ${token.colorWarning};
 		width: 18px;
 		height: 18px;
 		flex-shrink: 0;

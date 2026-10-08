@@ -2390,6 +2390,9 @@
 		"generatedBy": "由{{platformName}}生成",
 		"platformFallback": "平台"
 	},
+	"feedback": {
+		"processing": "正在处理"
+	},
 	"fileManager": {
 		"back": "后退",
 		"browseFolder": "浏览文件夹",

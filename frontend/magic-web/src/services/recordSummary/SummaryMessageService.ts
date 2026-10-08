@@ -50,7 +50,7 @@ export class SummaryMessageService {
 		if (!this.messageVisible || !this.currentStage) return
 
 		const baseContent = this.getMessageContent(this.currentStage)
-		const content = progressInfo ? `${baseContent} (${progressInfo})` : baseContent
+		const content = progressInfo ? `${baseContent}\n${progressInfo}` : baseContent
 		this.showPersistentLoadingToast(content)
 	}
 
