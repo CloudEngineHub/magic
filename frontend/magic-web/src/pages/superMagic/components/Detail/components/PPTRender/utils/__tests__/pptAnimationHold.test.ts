@@ -3,7 +3,9 @@ import { filterInjectedTags } from "../../../../contents/HTML/utils"
 import {
 	holdIframeAnimations,
 	injectPPTAnimationHoldBridge,
+	prepareIframeAnimations,
 	releaseIframeAnimations,
+	renewIframeAnimationHold,
 } from "../pptAnimationHold"
 
 const ORIGIN = "https://app.example.test"
@@ -33,6 +35,9 @@ function setup(animations: ReturnType<typeof createAnimation>[], svgs: unknown[]
 		clearTimeout: (id: number) => window.clearTimeout(id),
 	}
 	const fakeDocument = {
+		getElementById: (id: string) => doc.getElementById(id),
+		createElement: (tag: string) => doc.createElement(tag),
+		documentElement: doc.documentElement,
 		timeline: "document-timeline",
 		getAnimations: () => animations,
 		querySelectorAll: () => svgs,
@@ -41,9 +46,9 @@ function setup(animations: ReturnType<typeof createAnimation>[], svgs: unknown[]
 		fakeDocument,
 		frame,
 	)
-	const send = (type: string, source: unknown = parent) =>
-		listeners.get("message")?.({ source, data: { type } })
-	return { content, parent, send }
+	const send = (type: string, source: unknown = parent, options: Record<string, unknown> = {}) =>
+		listeners.get("message")?.({ source, data: { type, ...options } })
+	return { content, parent, send, doc }
 }
 
 afterEach(() => {
@@ -95,6 +100,18 @@ describe("PPT animation hold bridge", () => {
 		expect(running.play).toHaveBeenCalledTimes(1)
 	})
 
+	it("correlates prepared frames and removes the temporary CSS reset before acknowledging", () => {
+		const running = createAnimation()
+		const { doc, send, parent } = setup([running])
+		send("ppt-slide-animation-hold", parent, { rewindCSS: true, requestId: "prepared" })
+		expect(running.currentTime).toBe(0)
+		expect(doc.querySelectorAll("style")).toHaveLength(0)
+		expect(parent.postMessage).toHaveBeenCalledWith(
+			{ type: "ppt-slide-animation-held", requestId: "prepared" },
+			ORIGIN,
+		)
+	})
+
 	it("ignores commands that do not come from the host window", () => {
 		const running = createAnimation()
 		const { send } = setup([running])
@@ -115,6 +132,20 @@ describe("PPT animation hold bridge", () => {
 		expect(running.play).toHaveBeenCalledTimes(1)
 	})
 
+	it("renews a prepared entrance through a long transition without resetting it again", () => {
+		vi.useFakeTimers()
+		const running = createAnimation()
+		const { send, parent } = setup([running])
+		send("ppt-slide-animation-hold")
+		vi.advanceTimersByTime(3900)
+		send("ppt-slide-animation-hold", parent, { refreshHold: true })
+		vi.advanceTimersByTime(2000)
+		expect(running.play).not.toHaveBeenCalled()
+		expect(running.pause).toHaveBeenCalledTimes(1)
+		vi.advanceTimersByTime(3000)
+		expect(running.play).toHaveBeenCalledTimes(1)
+	})
+
 	it("removes the runtime bridge when serializing a saved slide", () => {
 		const { content } = setup([])
 		const saved = filterInjectedTags(content, new Map())
@@ -125,6 +156,36 @@ describe("PPT animation hold bridge", () => {
 })
 
 describe("PPT animation hold host commands", () => {
+	it("reuses only the requested frame's acknowledgement", async () => {
+		const target = { postMessage: vi.fn() }
+		const pending = prepareIframeAnimations({
+			contentWindow: target,
+		} as unknown as HTMLIFrameElement)
+		const request = target.postMessage.mock.calls[0][0]
+		expect(request).toMatchObject({ type: "ppt-slide-animation-hold", rewindCSS: true })
+		window.dispatchEvent(
+			new MessageEvent("message", {
+				source: target as unknown as MessageEventSource,
+				data: { type: "ppt-slide-animation-held", requestId: "obsolete" },
+			}),
+		)
+		window.dispatchEvent(
+			new MessageEvent("message", {
+				source: target as unknown as MessageEventSource,
+				data: { type: "ppt-slide-animation-held", requestId: request.requestId },
+			}),
+		)
+		await expect(pending).resolves.toBe(true)
+	})
+	it("rejects unsupported or missing cached frames instead of treating timeout as readiness", async () => {
+		vi.useFakeTimers()
+		const pending = prepareIframeAnimations({
+			contentWindow: { postMessage: vi.fn() },
+		} as unknown as HTMLIFrameElement)
+		await vi.advanceTimersByTimeAsync(300)
+		await expect(pending).resolves.toBe(false)
+		await expect(prepareIframeAnimations(null)).resolves.toBe(false)
+	})
 	it("resolves when the frame acknowledges the hold", async () => {
 		const target = { postMessage: vi.fn() }
 		const iframe = { contentWindow: target } as unknown as HTMLIFrameElement
@@ -162,6 +223,15 @@ describe("PPT animation hold host commands", () => {
 		releaseIframeAnimations({ contentWindow: target } as unknown as HTMLIFrameElement)
 		expect(target.postMessage).toHaveBeenCalledWith(
 			{ type: "ppt-slide-animation-release" },
+			"*",
+		)
+	})
+
+	it("renews a frozen frame without requesting another reset", () => {
+		const target = { postMessage: vi.fn() }
+		renewIframeAnimationHold({ contentWindow: target } as unknown as HTMLIFrameElement)
+		expect(target.postMessage).toHaveBeenCalledWith(
+			{ type: "ppt-slide-animation-hold", refreshHold: true },
 			"*",
 		)
 	})

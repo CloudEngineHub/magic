@@ -25,8 +25,27 @@ export function injectPPTAnimationHoldBridge(content: string, parentOrigin: stri
 		held = [];
 		svgs = [];
 	}
-	function hold() {
+	function hold(options) {
+		if (options && options.refreshHold) {
+			window.clearTimeout(safetyTimer);
+			safetyTimer = window.setTimeout(release, 5000);
+			return;
+		}
 		release();
+		// The resident frame is covered. Restart CSS (including finished no-fill animations)
+		// without recreating its document, then freeze the new timelines before the next paint.
+		var pauseSheet = null;
+		var wasDisabled = false;
+		if (options && options.rewindCSS) {
+			var pauseStyle = document.getElementById('magic-animation-pause');
+			pauseSheet = pauseStyle && pauseStyle.sheet;
+			if (pauseSheet) { wasDisabled = pauseSheet.disabled; pauseSheet.disabled = true; }
+			var resetStyle = document.createElement('style');
+			resetStyle.textContent = '*,*::before,*::after{animation:none!important}';
+			document.documentElement.appendChild(resetStyle);
+			void document.documentElement.offsetWidth;
+			resetStyle.remove();
+		}
 		var animations = document.getAnimations ? document.getAnimations() : [];
 		animations.forEach(function (animation) {
 			if (animation.timeline !== document.timeline) return;
@@ -38,6 +57,7 @@ export function injectPPTAnimationHoldBridge(content: string, parentOrigin: stri
 				held.push(animation);
 			} catch (_) {}
 		});
+		if (pauseSheet) pauseSheet.disabled = wasDisabled;
 		[].slice.call(document.querySelectorAll('svg')).forEach(function (svg) {
 			if (typeof svg.pauseAnimations !== 'function') return;
 			try {
@@ -48,11 +68,13 @@ export function injectPPTAnimationHoldBridge(content: string, parentOrigin: stri
 		});
 		// Never leave a slide frozen if the host disappears before releasing it.
 		safetyTimer = window.setTimeout(release, 5000);
-		window.parent.postMessage({ type: '${HELD_MESSAGE}' }, ${origin});
+		var response = { type: '${HELD_MESSAGE}' };
+		if (options && options.requestId) response.requestId = options.requestId;
+		window.parent.postMessage(response, ${origin});
 	}
 	function onMessage(event) {
 		if (event.source !== window.parent || !event.data) return;
-		if (event.data.type === '${HOLD_MESSAGE}') hold();
+		if (event.data.type === '${HOLD_MESSAGE}') hold(event.data);
 		else if (event.data.type === '${RELEASE_MESSAGE}') release();
 	}
 	window.addEventListener('message', onMessage);
@@ -87,4 +109,40 @@ export function holdIframeAnimations(iframe: HTMLIFrameElement | null): Promise<
 
 export function releaseIframeAnimations(iframe: HTMLIFrameElement | null): void {
 	iframe?.contentWindow?.postMessage({ type: RELEASE_MESSAGE }, "*")
+}
+
+/** Keep a prepared entrance frozen through the upcoming transition without resetting or repainting. */
+export function renewIframeAnimationHold(iframe: HTMLIFrameElement | null): void {
+	iframe?.contentWindow?.postMessage({ type: HOLD_MESSAGE, refreshHold: true }, "*")
+}
+
+let prepareSequence = 0
+
+/** Reuse only a positively acknowledged frame; unsupported bridges fall back to document replay. */
+export function prepareIframeAnimations(iframe: HTMLIFrameElement | null): Promise<boolean> {
+	const target = iframe?.contentWindow
+	if (!target) return Promise.resolve(false)
+	const requestId = `ppt-prepare-${++prepareSequence}`
+	return new Promise((resolve) => {
+		const finish = (ready: boolean) => {
+			window.clearTimeout(timer)
+			window.removeEventListener("message", onMessage)
+			resolve(ready)
+		}
+		const onMessage = (event: MessageEvent) => {
+			if (
+				event.source === target &&
+				event.data?.type === HELD_MESSAGE &&
+				event.data.requestId === requestId
+			)
+				finish(true)
+		}
+		const timer = window.setTimeout(() => finish(false), HOLD_ACK_TIMEOUT_MS)
+		window.addEventListener("message", onMessage)
+		try {
+			target.postMessage({ type: HOLD_MESSAGE, rewindCSS: true, requestId }, "*")
+		} catch {
+			finish(false)
+		}
+	})
 }

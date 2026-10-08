@@ -9,6 +9,8 @@ const mockState = vi.hoisted(() => ({
 	resetContent: vi.fn(),
 	restartDocument: vi.fn(),
 	holdAnimations: vi.fn(),
+	prepareAnimations: vi.fn(),
+	renewAnimationHold: vi.fn(),
 	releaseAnimations: vi.fn(),
 	initialEditMode: true,
 	getContent: vi.fn(),
@@ -62,6 +64,8 @@ vi.mock("@/utils/cn", () => ({
 vi.mock("../utils/pptAnimationHold", () => ({
 	injectPPTAnimationHoldBridge: (content: string) => content,
 	holdIframeAnimations: mockState.holdAnimations,
+	prepareIframeAnimations: mockState.prepareAnimations,
+	renewIframeAnimationHold: mockState.renewAnimationHold,
 	releaseIframeAnimations: mockState.releaseAnimations,
 }))
 
@@ -413,6 +417,9 @@ describe("PPTSlide", () => {
 		mockState.restartDocument.mockReset()
 		mockState.holdAnimations.mockReset()
 		mockState.holdAnimations.mockResolvedValue(undefined)
+		mockState.prepareAnimations.mockReset()
+		mockState.prepareAnimations.mockResolvedValue(true)
+		mockState.renewAnimationHold.mockReset()
 		mockState.releaseAnimations.mockReset()
 		mockState.initialEditMode = true
 		mockState.getContent.mockReset()
@@ -968,6 +975,7 @@ describe("PPTSlide", () => {
 	})
 
 	describe("entrance animation replay", () => {
+		const scriptedSlide = "<div>slide</div><script>window.counter = 0</script>"
 		function markRendered() {
 			const props = mockState.renderedIsolatedProps.mock.calls.at(-1)?.[0] as
 				{ onRenderReady?: () => void } | undefined
@@ -977,6 +985,8 @@ describe("PPTSlide", () => {
 		function renderRenderedBackgroundSlide(onRenderReadyChange = vi.fn()) {
 			mockState.initialEditMode = false
 			const view = renderPPTSlide({
+				content: scriptedSlide,
+				rawContent: scriptedSlide,
 				isActive: false,
 				isPresented: false,
 				onRenderReadyChange,
@@ -995,6 +1005,8 @@ describe("PPTSlide", () => {
 			})
 
 			rerenderSlide(view, {
+				content: scriptedSlide,
+				rawContent: scriptedSlide,
 				isActive: true,
 				isPresented: false,
 				onRenderReadyChange,
@@ -1022,6 +1034,8 @@ describe("PPTSlide", () => {
 			// The frozen entrance is released only once the page is actually shown.
 			expect(mockState.releaseAnimations).not.toHaveBeenCalled()
 			rerenderSlide(view, {
+				content: scriptedSlide,
+				rawContent: scriptedSlide,
 				isActive: true,
 				isPresented: true,
 				onRenderReadyChange,
@@ -1040,6 +1054,8 @@ describe("PPTSlide", () => {
 			const onRenderReadyChange = vi.fn()
 			const view = renderRenderedBackgroundSlide(onRenderReadyChange)
 			rerenderSlide(view, {
+				content: scriptedSlide,
+				rawContent: scriptedSlide,
 				isActive: true,
 				isPresented: false,
 				onRenderReadyChange,
@@ -1083,6 +1099,8 @@ describe("PPTSlide", () => {
 				const onRenderReadyChange = vi.fn()
 				const view = renderRenderedBackgroundSlide(onRenderReadyChange)
 				rerenderSlide(view, {
+					content: scriptedSlide,
+					rawContent: scriptedSlide,
 					isActive: true,
 					isPresented: false,
 					onRenderReadyChange,
@@ -1098,6 +1116,73 @@ describe("PPTSlide", () => {
 			} finally {
 				vi.useRealTimers()
 			}
+		})
+
+		it("prepares a declarative resident page before navigation and reuses its iframe", async () => {
+			mockState.initialEditMode = false
+			const ready = vi.fn()
+			const view = renderPPTSlide({
+				isActive: false,
+				isPresented: false,
+				onRenderReadyChange: ready,
+			})
+			markRendered()
+			expect(mockState.prepareAnimations).toHaveBeenCalledTimes(1)
+			expect(mockState.renderedIsolatedProps).toHaveBeenLastCalledWith(
+				expect.objectContaining({ isPlaybackPaused: true }),
+			)
+			await waitFor(() => expect(ready).toHaveBeenLastCalledWith(true))
+			rerenderSlide(view, { isActive: true, isPresented: false, onRenderReadyChange: ready })
+			expect(mockState.restartDocument).not.toHaveBeenCalled()
+			expect(mockState.prepareAnimations).toHaveBeenCalledTimes(1)
+			expect(mockState.releaseAnimations).not.toHaveBeenCalled()
+			expect(mockState.renewAnimationHold).toHaveBeenCalledTimes(1)
+			rerenderSlide(view, { isActive: true, isPresented: true, onRenderReadyChange: ready })
+			expect(mockState.releaseAnimations).toHaveBeenCalledTimes(1)
+		})
+
+		it("falls back to document replay when the cached animation bridge cannot acknowledge", async () => {
+			mockState.initialEditMode = false
+			mockState.prepareAnimations.mockResolvedValue(false)
+			const ready = vi.fn()
+			const view = renderPPTSlide({
+				isActive: false,
+				isPresented: false,
+				onRenderReadyChange: ready,
+			})
+			markRendered()
+			await waitFor(() => expect(ready).toHaveBeenLastCalledWith(true))
+			expect(mockState.restartDocument).not.toHaveBeenCalled()
+			rerenderSlide(view, { isActive: true, isPresented: false, onRenderReadyChange: ready })
+			expect(mockState.restartDocument).toHaveBeenCalledTimes(1)
+			expect(ready).toHaveBeenLastCalledWith(false)
+		})
+
+		it("does not acknowledge a prepared frame after its source changes", async () => {
+			mockState.initialEditMode = false
+			let acknowledge!: (ready: boolean) => void
+			mockState.prepareAnimations.mockReturnValue(
+				new Promise<boolean>((resolve) => {
+					acknowledge = resolve
+				}),
+			)
+			const ready = vi.fn()
+			const view = renderPPTSlide({
+				isActive: false,
+				isPresented: false,
+				onRenderReadyChange: ready,
+			})
+			markRendered()
+			rerenderSlide(view, {
+				isActive: false,
+				isPresented: false,
+				content: "<div>updated</div>",
+				rawContent: "<div>updated</div>",
+				onRenderReadyChange: ready,
+			})
+			ready.mockClear()
+			await act(async () => acknowledge(true))
+			expect(ready).not.toHaveBeenCalledWith(true)
 		})
 	})
 
