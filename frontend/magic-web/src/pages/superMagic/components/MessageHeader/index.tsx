@@ -59,6 +59,7 @@ import {
 } from "@/pages/superMagic/utils/resolve-chat-conversation-display-name"
 import { isTopicShareAllowed } from "@/pages/superMagic/utils/is-topic-share-allowed"
 import { isMagicApp } from "@/utils/devices"
+import { classifyRestartSandboxError } from "./restartSandboxError"
 interface TopicMutationSuccessOptions {
 	onSuccess?: () => Promise<void> | void
 }
@@ -469,12 +470,34 @@ function MessageHeader({
 		if (!selectedTopic || !topicActions.restartSandbox || isRestartingSandbox) return
 
 		setIsRestartingSandbox(true)
+		const loadingToast = magicToast.loading({
+			content: t("messageHeader.restartSandboxLoading"),
+			duration: 0,
+		})
 		try {
 			await topicActions.restartSandbox(selectedTopic.id)
+			magicToast.destroy(loadingToast)
 			magicToast.success(t("messageHeader.restartSandboxSuccess"))
 		} catch (error) {
+			magicToast.destroy(loadingToast)
 			console.error("Failed to restart sandbox:", error)
-			magicToast.error(t("messageHeader.restartSandboxFailed"))
+			const errorType = classifyRestartSandboxError(error)
+			switch (errorType) {
+				case "notFound":
+					magicToast.error(t("messageHeader.restartSandboxNotFound"))
+					break
+				case "permissionDenied":
+					magicToast.error(t("messageHeader.restartSandboxPermissionDenied"))
+					break
+				case "busy":
+					magicToast.error(t("messageHeader.restartSandboxBusy"))
+					break
+				case "network":
+					magicToast.error(t("messageHeader.restartSandboxNetworkError"))
+					break
+				default:
+					magicToast.error(t("messageHeader.restartSandboxFailed"))
+			}
 		} finally {
 			setIsRestartingSandbox(false)
 		}
