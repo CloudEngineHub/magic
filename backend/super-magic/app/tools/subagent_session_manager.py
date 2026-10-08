@@ -96,6 +96,17 @@ class SubagentSessionManager:
             if not children:
                 self._children_by_parent_context.pop(parent_context_id, None)
 
+    async def list_running_child_runs(self, parent_context_id: str) -> list[SubagentRunRef]:
+        """只读查询该父上下文仍在运行的子 Agent，不创建句柄或修改父子登记。"""
+        running: list[SubagentRunRef] = []
+        async with self._registry_lock:
+            for ref in self._children_by_parent_context.get(parent_context_id, set()):
+                handle = self._sessions.get(self._make_key(ref.agent_name, ref.agent_id))
+                # task 可能已结束，但注销回调尚未执行；不能只凭父子登记判断仍在运行。
+                if handle is not None and handle.is_running():
+                    running.append(ref)
+        return sorted(running, key=lambda ref: (ref.agent_name, ref.agent_id))
+
     async def interrupt_child_runs(
         self,
         parent_context_id: str,
