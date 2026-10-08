@@ -76,7 +76,6 @@ export default function PlatformPublishReviewPage({
 					? "internalPublishReview.description"
 					: "publishReview.description",
 			)}
-			showSeparator={variant === "platform"}
 			title={t(
 				variant === "internal" ? "internalPublishReview.title" : "publishReview.title",
 			)}
