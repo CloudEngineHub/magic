@@ -6,6 +6,11 @@ import type { InspectorDetailAttrs, MarkdownSelectionBlockType } from "./types"
 export const SELECTION_START = "<magic-selection>"
 export const SELECTION_END = "</magic-selection>"
 
+/** 粘贴和长文本分流共用识别入口；字段及文件身份仍由恢复器校验。 */
+export function hasSerializedSelection(text: string): boolean {
+	return /<magic-selection>[\s\S]*?<\/magic-selection>/.test(text)
+}
+
 /** 只将引用变为单行；HTML、引号及 & 保留原值，不按 XML 编码。 */
 export function encodeSelectionText(value: string): string {
 	return value.replace(/\\/g, "\\\\").replace(/\n/g, "\\n").replace(/\r/g, "\\r")
@@ -17,6 +22,7 @@ export function decodeSelectionText(value: string): string {
 	)
 }
 
+// 发送和复制都须将 File／Screenshot 转成可定位链接；内部 ID 不能代替模型正文中的路径。
 export function serializeSelection(attrs: InspectorDetailAttrs): JSONContent[] {
 	const nodes: JSONContent[] = [{ type: "text", text: SELECTION_START }]
 	let first = true
