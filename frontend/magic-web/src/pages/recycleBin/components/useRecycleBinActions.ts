@@ -187,6 +187,10 @@ function parseRestoreCheckResponse(data: {
 }
 
 interface UseRecycleBinActionsParams {
+	onRecordsChanged?: (result: {
+		kind: "restore" | "permanent-delete"
+		recordIds: string[]
+	}) => void
 	onMutationComplete?: () => void
 	items: RecycleBinItem[]
 	setItems: React.Dispatch<React.SetStateAction<RecycleBinItem[]>>
@@ -202,6 +206,7 @@ export function useRecycleBinActions({
 	hasMixedSelectionTypes,
 	onRefresh,
 	onMutationComplete,
+	onRecordsChanged,
 }: UseRecycleBinActionsParams) {
 	const { t } = useTranslation("super")
 	const [restoreTarget, setRestoreTarget] = useState<RestoreTarget | null>(null)
@@ -306,6 +311,12 @@ export function useRecycleBinActions({
 
 	function removeItemsByResourceIds(resourceIds: string[]) {
 		if (resourceIds.length === 0) return
+		onRecordsChanged?.({
+			kind: "restore",
+			recordIds: items
+				.filter((item) => resourceIds.includes(item.resourceId))
+				.map((item) => item.id),
+		})
 		setItems((prev) => prev.filter((item) => !resourceIds.includes(item.resourceId)))
 	}
 
@@ -702,6 +713,7 @@ export function useRecycleBinActions({
 			const data = await permanentDeleteRecycleBin({ ids })
 			const failedIdSet = new Set(data.failed.map((f) => String(f.id)))
 			const successIdStrings = ids.filter((id) => !failedIdSet.has(id))
+			onRecordsChanged?.({ kind: "permanent-delete", recordIds: successIdStrings })
 
 			setItems((prev) => {
 				const nextItems = prev.filter((item) => !successIdStrings.includes(item.id))

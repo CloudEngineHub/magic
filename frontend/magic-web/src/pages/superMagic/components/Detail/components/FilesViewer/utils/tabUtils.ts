@@ -222,6 +222,7 @@ function resolveProjectTabFile(
 	file: FileItem | AttachmentItem,
 	attachments?: FileItem[] | AttachmentItem[],
 ): FileItem | AttachmentItem {
+	if ("recycleBin" in file && file.recycleBin) return file
 	if (file.space_type === "user" || file.file_reference?.space_type === "user") return file
 	const templateTabFile = resolveSlidesTemplateTabFile(file, attachments)
 	if (templateTabFile) return templateTabFile
@@ -254,7 +255,10 @@ export function normalizeProjectTabItem(
 
 	return {
 		...tab,
-		id: stableFileId,
+		id:
+			"recycleBin" in tabFile && tabFile.recycleBin
+				? `recycle-bin:${tabFile.recycleBin.id}`
+				: stableFileId,
 		title: getFileTabTitle(tabFile, attachments, displayConfig),
 		fileData: {
 			...tab.fileData,
@@ -439,7 +443,10 @@ export function convertFileToTabItem(
 	const now = Date.now()
 
 	const tabItem: TabItem = {
-		id: stableFileId,
+		id:
+			"recycleBin" in tabFile && tabFile.recycleBin
+				? `recycle-bin:${tabFile.recycleBin.id}`
+				: stableFileId,
 		type: "file",
 		title: tabTitle,
 		fileData: {
@@ -534,7 +541,7 @@ export function handleDuplicateTabNames(state: TabItem[], newTab: TabItem): TabI
 	return [
 		...state.map((tab) => ({
 			...tab,
-			active: false,
+			active: newTab.active === false ? tab.active : false,
 			filePath: tab.fileData.relative_file_path || tab.filePath,
 		})),
 		{

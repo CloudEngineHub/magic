@@ -87,6 +87,7 @@ export type ActiveDetailTabType = FileViewerTabType | null
 
 // File item interface
 export interface FileItem {
+	recycleBin?: { id: string; identityKey: string; projectId?: string }
 	/** 文件引用身份独立于 previewPolicy.fileScope 的编辑策略。 */
 	file_reference?: FileReference
 	space_type?: FileReference["space_type"]
@@ -224,6 +225,7 @@ export interface FilesViewerProps extends BaseComponentProps {
 	canLocateFile?: boolean
 	/** Controls whether project-level preview tabs are restored and persisted across mounts. */
 	persistFileTabs?: boolean
+	onTabsEmpty?: () => void
 
 	// Render component props
 	allowEdit?: boolean
@@ -265,7 +267,7 @@ export interface FilesViewerProps extends BaseComponentProps {
 
 // FilesViewer ref interface
 export interface FilesViewerRef {
-	openFileTab: (fileItem: any, autoEdit?: boolean) => void
+	openFileTab: (fileItem: any, autoEdit?: boolean, activate?: boolean) => void
 	closeFileTab: (fileId: string) => void
 	switchToTab: (fileId: string) => void
 	clearAllTabs: () => void

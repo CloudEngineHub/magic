@@ -1,3 +1,7 @@
+import {
+	useFileAccess as useRequestFileAccess,
+	FileAccessProvider as RequestFileAccessProvider,
+} from "@/pages/superMagic/fileAccess/FileAccessProvider"
 import { lazy, Suspense, memo, useCallback, useEffect, useRef } from "react"
 import { cn } from "@/utils/cn"
 import useFullscreenMode from "@/hooks/useFullscreenMode"
@@ -137,14 +141,33 @@ const TabCache = memo(
 			? FILE_VIEWER_FULLSCREEN_TAB_CONTENT_CLASS_NAME
 			: FILE_VIEWER_FULLSCREEN_BROWSER_TAB_CONTENT_CLASS_NAME
 
-		const renderContent = (
+		const inheritedRequestAccess = useRequestFileAccess()
+		const recycleBin = tab.fileData?.recycleBin
+		const filePreview = (
 			<Render
 				key={tab.refreshKey || tab.id}
 				{...renderProps}
-				onActiveFileChange={handleActiveFileChange}
+				onActiveFileChange={recycleBin ? undefined : handleActiveFileChange}
 				openFileTab={openFileTab}
 				isTabActive={isActive}
 			/>
+		)
+		const renderContent = (
+			<RequestFileAccessProvider
+				value={
+					recycleBin
+						? {
+								kind: "recycle-bin",
+								recycleBinId: recycleBin.id,
+								fileId: tab.fileData!.file_id,
+								identityKey: recycleBin.identityKey,
+								projectId: recycleBin.projectId,
+							}
+						: inheritedRequestAccess
+				}
+			>
+				{filePreview}
+			</RequestFileAccessProvider>
 		)
 
 		return (
@@ -181,6 +204,8 @@ const TabCache = memo(
 								}
 								isActive={isActive}
 								context={tab.fileManager}
+								onPreviewFile={managerProps.onPreviewFile}
+								onPreviewRemoved={managerProps.onPreviewRemoved}
 								onFileClick={managerProps.onFileClick}
 								projectId={managerProps.selectedProject?.id}
 								projectName={managerProps.selectedProject?.project_name}

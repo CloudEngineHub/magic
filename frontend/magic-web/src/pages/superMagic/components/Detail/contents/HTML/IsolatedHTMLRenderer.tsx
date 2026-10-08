@@ -2090,6 +2090,33 @@ const IsolatedHTMLRendererInner = forwardRef<IsolatedHTMLRendererRef, IsolatedHT
 				return
 			}
 
+			// 回收站 HTML 只展示保留内容，不授予嵌入页面操作宿主项目或会话的能力。
+			if (
+				fileAccess?.kind === "recycle-bin" &&
+				([
+					"MAGIC_FS_",
+					"MAGIC_DB_",
+					"MAGIC_LLM_",
+					"MAGIC_CREATE_TOPIC_",
+					"MAGIC_SEND_MESSAGE_",
+					"MAGIC_UPLOAD_FILES_",
+					"MAGIC_ADD_FILES_TO_MESSAGE_",
+					"MAGIC_DOWNLOAD_FILES_",
+				].some((prefix) => messageType.startsWith(prefix)) ||
+					messageType === "MAGIC_SET_INPUT_MESSAGE")
+			) {
+				if (messageType.endsWith("_REQUEST"))
+					iframeRef.current?.contentWindow?.postMessage(
+						{
+							type: messageType.replace(/_REQUEST$/, "_RESPONSE"),
+							requestId: event.data.requestId,
+							success: false,
+							error: "Recycle bin content is read-only",
+						},
+						iframeTargetOrigin,
+					)
+				return
+			}
 			const requestBoundMessageTypes = [
 				"contentLoaded",
 				"domReady",

@@ -5,6 +5,11 @@ declare(strict_types=1);
  * Copyright (c) The Magic , Distributed under the software license
  */
 return [
+    'preview' => [
+        'unavailable' => '回收站文件已不可用或你已无权访问。',
+        'expired' => '回收站文件已过期。',
+        'directory' => '回收站文件夹不支持内容预览。',
+    ],
     'query' => [
         'project_invalid' => '无法确定文件所属项目，请重新打开项目回收站。',
         'time_required' => '请指定删除时间范围后查询文件名称。',

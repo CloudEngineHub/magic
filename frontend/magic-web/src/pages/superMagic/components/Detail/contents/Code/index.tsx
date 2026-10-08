@@ -85,6 +85,8 @@ export default function CodeViewer(props: any) {
 		fetchFileVersions,
 		isNewestVersion,
 		isDeleted,
+		loadError: fileLoadError,
+		refreshFile,
 		loading: fileLoading,
 	} = useFileData({
 		enabled: true,
@@ -393,10 +395,10 @@ export default function CodeViewer(props: any) {
 			tabIndex={-1}
 		>
 			{showFileHeader && <CommonHeaderV2 {...headerContext} />}
-			{textFileSession?.loadError ? (
+			{textFileSession?.loadError || fileLoadError ? (
 				<DetailEmpty
 					title={t("common.fileNotFoundOrLoadFailed")}
-					onRetry={textFileSession.refresh}
+					onRetry={textFileSession?.refresh ?? refreshFile}
 				/>
 			) : textFileSession && loading ? (
 				<Flex

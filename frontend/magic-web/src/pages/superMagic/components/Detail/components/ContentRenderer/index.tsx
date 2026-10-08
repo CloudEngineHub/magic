@@ -5,6 +5,7 @@ import type {
 	DetailTerminalData,
 	DetailUniverData,
 } from "../../types"
+import { useFileAccess } from "@/pages/superMagic/fileAccess/FileAccessProvider"
 import { DetailType } from "../../types"
 import {
 	isFileInSlideCanvasMode,
@@ -59,6 +60,7 @@ interface ContentRendererProps {
 }
 
 function ContentRenderer({ type, data, commonProps }: ContentRendererProps) {
+	const fileAccess = useFileAccess()
 	// console.log("ContentRenderer:", type, data, commonProps)
 
 	// 在 playbackTab 中，工具执行详情需要保留公共标题栏，其它文件预览不显示该标题栏。
@@ -78,7 +80,11 @@ function ContentRenderer({ type, data, commonProps }: ContentRendererProps) {
 		showRefresh: commonProps.showRefresh ?? !commonProps.isShareRoute,
 	}
 
-	if (data?.space_type === "user" || data?.file_reference?.space_type === "user") {
+	// 回收站文本使用绑定的只读文件接口，不进入活跃个人文件的编辑／冲突会话。
+	if (
+		fileAccess?.kind !== "recycle-bin" &&
+		(data?.space_type === "user" || data?.file_reference?.space_type === "user")
+	) {
 		if ([DetailType.Md, DetailType.Text, DetailType.Code].includes(type)) {
 			return <UserTextPreview data={data} {...commonProps} />
 		}

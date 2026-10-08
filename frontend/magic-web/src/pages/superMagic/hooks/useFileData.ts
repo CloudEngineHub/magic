@@ -71,7 +71,8 @@ export const useFileData = ({
 	const fileApi = useFileApi()
 	// Load strategy follows access kind, not URL. Published runtime uses
 	// session access on /micro-app even though the route is a share page.
-	const isShareFilePreview = isShareFileAccess(fileAccess)
+	const isRecycleBinPreview = fileAccess?.kind === "recycle-bin"
+	const isShareFilePreview = isShareFileAccess(fileAccess) || isRecycleBinPreview
 	const waitingForShareAccess = (isShareRoute || isSharePreview) && !fileAccess
 	const shareAccessKey =
 		fileAccess?.kind === "share"
@@ -322,7 +323,7 @@ export const useFileData = ({
 	 * @returns 文件版本列表
 	 */
 	const fetchFileVersions = useMemoizedFn(async (fileId: string, isSelectNewest = false) => {
-		if (!enabled) return []
+		if (!enabled || isRecycleBinPreview) return []
 		const scope = requestScope
 		const sequence = ++historySequence.current
 		if (isSelectNewest) {
@@ -391,6 +392,7 @@ export const useFileData = ({
 		try {
 			if (!enabled || !file_id || !file_version) return
 
+			if (isRecycleBinPreview) return
 			const loading = magicToast.loading(t("common.rollbacking"))
 
 			const res = await SuperMagicApi.rollbackFileVersion({
@@ -510,7 +512,11 @@ export const useFileData = ({
 	/** 针对 分享/工具预览/内容审查 等场景，单独获取文件的最新下载地址 */
 	useEffect(() => {
 		if (!enabled || !loadContent || !file_id) return
-		if (waitingForShareAccess || (isShareFilePreview && !isShareFileAccess(fileAccess))) {
+		// 回收站与分享都跳过历史版本，但回收站使用自己的已绑定身份，不能等待分享身份。
+		if (
+			waitingForShareAccess ||
+			(isShareFilePreview && !isShareFileAccess(fileAccess) && !isRecycleBinPreview)
+		) {
 			setLoading(true)
 			return
 		}
@@ -581,6 +587,7 @@ export const useFileData = ({
 		file_id,
 		isShareFilePreview,
 		loadContent,
+		isRecycleBinPreview,
 		shareAccessKey,
 		waitingForShareAccess,
 		fileAccess,

@@ -72,6 +72,8 @@ export default function Text(props: any) {
 		fetchFileVersions,
 		isNewestVersion,
 		isDeleted,
+		loadError: fileLoadError,
+		refreshFile,
 	} = useFileData({
 		enabled: !readOnlyPreview,
 		loadContent: !textFileSession,
@@ -367,10 +369,10 @@ export default function Text(props: any) {
 			)}
 		>
 			{showFileHeader && <CommonHeaderV2 {...headerContext} />}
-			{textFileSession?.loadError ? (
+			{textFileSession?.loadError || fileLoadError ? (
 				<DetailEmpty
 					title={t("common.fileNotFoundOrLoadFailed")}
-					onRetry={textFileSession.refresh}
+					onRetry={textFileSession?.refresh ?? refreshFile}
 				/>
 			) : textFileSession && loading ? (
 				<div

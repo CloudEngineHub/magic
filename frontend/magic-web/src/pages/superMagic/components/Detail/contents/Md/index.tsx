@@ -220,6 +220,8 @@ export default memo(function TextEditor(props: TextEditorProps) {
 		fetchFileVersions,
 		isNewestVersion,
 		isDeleted,
+		loadError: fileLoadError,
+		refreshFile,
 	} = useFileData({
 		enabled: true,
 		loadContent: !textFileSession,
@@ -998,10 +1000,10 @@ export default memo(function TextEditor(props: TextEditorProps) {
 						active={isTabActive && !loading && !isDeleted}
 					/>
 				)}
-				{textFileSession?.loadError ? (
+				{textFileSession?.loadError || fileLoadError ? (
 					<DetailEmpty
 						title={t("common.fileNotFoundOrLoadFailed")}
-						onRetry={textFileSession.refresh}
+						onRetry={textFileSession?.refresh ?? refreshFile}
 					/>
 				) : loading ? (
 					documentFlowFullscreen ? (

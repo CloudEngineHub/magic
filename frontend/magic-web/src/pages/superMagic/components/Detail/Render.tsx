@@ -86,7 +86,7 @@ function FileContentRender(props: any) {
 		terminalToolInfo,
 		isFullscreen,
 		attachmentList,
-		allowEdit,
+		allowEdit: requestedAllowEdit,
 		// New props for ActionButtons functionality
 		viewMode,
 		onViewModeChange,
@@ -119,7 +119,7 @@ function FileContentRender(props: any) {
 		onUnregisterCheckBeforeClose,
 		projectId,
 		browserAttachments,
-		allowDownload,
+		allowDownload: requestedAllowDownload,
 		audioPlayerMode,
 		mdToolbarContainer,
 	} = props
@@ -136,6 +136,9 @@ function FileContentRender(props: any) {
 	const fileApi = useFileApi()
 	const shareToken = getShareAccessToken(fileAccess)
 	const effectiveDisplayConfig = displayConfig || data?.display_config
+	const allowDownload = fileAccess?.kind === "recycle-bin" ? false : requestedAllowDownload
+	const allowEdit =
+		effectiveDisplayConfig?.previewPolicy?.readonly === true ? false : requestedAllowEdit
 	const editingPresenceEnabled = isEditingPresenceEnabled(effectiveDisplayConfig)
 	const fileShareAllowed = isFileShareAllowed(effectiveDisplayConfig)
 	const fileVersionHistoryAllowed = isFileVersionHistoryAllowed(effectiveDisplayConfig)
@@ -174,7 +177,7 @@ function FileContentRender(props: any) {
 	useEffect(() => {
 		const handleEnterEditMode = (fileId: string) => {
 			// 只有当事件中的 fileId 与当前文件的 fileId 匹配时才触发
-			if (fileId === data?.file_id) {
+			if (allowEdit && fileId === data?.file_id) {
 				setIsEditMode(true)
 			}
 		}
@@ -277,6 +280,7 @@ function FileContentRender(props: any) {
 		shouldExitEditMode: boolean = false,
 		options?: { silent?: boolean },
 	): Promise<boolean> {
+		if (!allowEdit) return false
 		const key = `save-${targetFileId}`
 		if (!options?.silent)
 			magicToast.loading({
@@ -895,10 +899,21 @@ function FileContentRender(props: any) {
 					}
 				>
 					<FileAccessProvider
-						permissions={{ share: fileShareAllowed }}
+						permissions={{
+							share: fileShareAllowed && fileAccess?.kind !== "recycle-bin",
+						}}
 						options={{
+							copyTo: inheritedOptions.copyTo && fileAccess?.kind !== "recycle-bin",
+							moveTo: inheritedOptions.moveTo && fileAccess?.kind !== "recycle-bin",
+							shareTopic:
+								inheritedOptions.shareTopic && fileAccess?.kind !== "recycle-bin",
+							createNewTopic:
+								inheritedOptions.createNewTopic &&
+								fileAccess?.kind !== "recycle-bin",
 							versionHistory:
-								inheritedOptions.versionHistory && fileVersionHistoryAllowed,
+								inheritedOptions.versionHistory &&
+								fileVersionHistoryAllowed &&
+								fileAccess?.kind !== "recycle-bin",
 						}}
 					>
 						<ContentRenderer type={type} data={data} commonProps={commonProps} />

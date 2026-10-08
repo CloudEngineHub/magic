@@ -4,7 +4,10 @@ import type { FileHelpContext } from "../../utils/magic-system-folder"
 import type { TopicFilesSpaceConfig } from "../../file-space"
 import type { ProjectListItem, Topic } from "../../../../pages/Workspace/types"
 import type { FileManagerLocationSnapshot } from "@/models/config/repositories/SuperProjectStateTypes"
-import type { FileManagerStateChangeOptions } from "../../../Detail/components/FilesViewer/types"
+import type {
+	FileItem,
+	FileManagerStateChangeOptions,
+} from "../../../Detail/components/FilesViewer/types"
 
 export type FileManagerView = FileManagerLocationSnapshot["view"]
 export type FileManagerSort = FileManagerLocationSnapshot["sort"]
@@ -57,6 +60,8 @@ export interface FileManagerRevealRequest {
 }
 
 interface FileManagerBaseProps {
+	onPreviewFile?: (file: FileItem, activate: boolean) => void
+	onPreviewRemoved?: (recordIds: string[]) => void
 	hidePlaces?: boolean
 	defaultView?: FileManagerView
 	/** 选择模式下显示在文件导航工具栏最左侧的返回入口。 */

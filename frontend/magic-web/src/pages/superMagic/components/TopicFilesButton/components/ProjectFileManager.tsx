@@ -9,9 +9,15 @@ import { getFilePresentationIndex } from "../utils/file-presentation"
 import { requestProjectAttachmentsFullRefresh } from "../../../services/attachmentsTopicSync"
 import type { AttachmentLoadState } from "@/stores/projectFiles/types"
 import type { ProjectFileManagerSnapshot } from "@/models/config/repositories/SuperProjectStateTypes"
-import type { FileManagerStateChangeOptions } from "../../Detail/components/FilesViewer/types"
+import type {
+	FileItem,
+	FileManagerStateChangeOptions,
+} from "../../Detail/components/FilesViewer/types"
 
 export interface ProjectFileManagerProps {
+	onPreviewFile?: (file: FileItem, activate: boolean) => void
+	onPreviewRemoved?: (recordIds: string[]) => void
+
 	projectId: string
 	initialDirectoryId?: string
 	attachments: AttachmentItem[]

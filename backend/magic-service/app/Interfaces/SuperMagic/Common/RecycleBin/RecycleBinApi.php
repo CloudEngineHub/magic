@@ -35,6 +35,16 @@ class RecycleBinApi extends AbstractApi
         parent::__construct($request);
     }
 
+    public function previewFile(RequestContext $requestContext, string $id): array
+    {
+        $requestContext->setUserAuthorization($this->getAuthorization());
+        $projectId = $this->request->query('project_id');
+        if ($projectId !== null && (! is_string($projectId) || ! ctype_digit($projectId) || (int) $projectId <= 0)) {
+            throw new BusinessException(\Hyperf\Translation\trans('recycle_bin.query.project_invalid'), GenericErrorCode::ParameterValidationFailed->value);
+        }
+        return $this->recycleBinAppService->previewFile($requestContext, (int) $id, $projectId === null ? null : (int) $projectId)->toArray();
+    }
+
     /**
      * 获取回收站列表.
      */
