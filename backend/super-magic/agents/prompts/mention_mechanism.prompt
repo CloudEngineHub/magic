@@ -41,6 +41,9 @@ Use Markdown file links in message text, including when a file mention appears i
 
 Project file links in messages are relative to the workspace root. File links and image paths written inside a Markdown file are relative to that file's directory. Compute them from the actual document and target locations; do not copy a message link unchanged into a file or call a `./` path absolute. For `project/docs/guide.md` referencing `project/images/photo.png`, use `[image](./project/images/photo.png)` in messages and `[image](../images/photo.png)` or `![image](../images/photo.png)` inside the document.
 
+<!--zh: 带空格路径的尖括号规则同样适用于 Markdown 正文和表格中的文件链接及嵌入图片。修复未渲染引用时，检查实际受影响文档的链接语法与文档相对路径，并重新读取修正后的源码再报告完成。-->
+The space-handling rule also applies to file links and embedded images in Markdown documents, including tables: `[asset](<../images/asset name.png>)` and `![asset](<../images/asset name.png>)`. When repairing an unrendered reference, check the affected document's actual link syntax and document-relative path; reread the corrected source before reporting completion.
+
 <!--zh
 ### 处理要点
 - 引用通常相关但需结合具体要求判断是否处理
