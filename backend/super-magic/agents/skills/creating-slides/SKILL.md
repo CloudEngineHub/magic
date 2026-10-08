@@ -325,6 +325,10 @@ Reference the following template to create slide pages. Each page is an independ
 
 ### Create Slide Project
 
+For the planned project example, first prepare `production_plan` as the complete
+Markdown described in [Production plan format](references/slide-tools.md#production-plan-format).
+Its three page entries must match `cover.html`, `product-intro.html`, and `key-features.html`.
+
 ```python
 from sdk.tool import tool
 
@@ -336,7 +340,7 @@ result = tool.call('create_slide_project', {
     "todo_list": ""
 })
 
-# Create complete project (with images and outline)
+# Create a project skeleton with images and a complete design plan
 result = tool.call('create_slide_project', {
     "project_path": "Product-Launch",
     "slides_array": ["cover.html", "product-intro.html", "key-features.html"],
@@ -358,25 +362,9 @@ result = tool.call('create_slide_project', {
 - Use Case: Cover hero image
 - Search Keywords: product hero image modern technology
 """,
-    "todo_list": """# Slide Production Plan
-
-## Project Info
-- Project name: Product Launch
-- Theme: New product release and feature showcase
-- Pages: 3
-- Keywords: product, technology, innovation
-
-## Content Outline
-### Cover (cover.html)
-Display product name and hero visual
-
-### Product Introduction (product-intro.html)
-Introduce product background and core value
-
-### Key Features (key-features.html)
-Showcase the three core product features
-"""
+    "todo_list": production_plan
 })
+print(result.content)
 ```
 
 ### Create Single Slide Page
@@ -778,39 +766,17 @@ The `slide_images_content` parameter should contain complete slide-images.md fil
 
 #### todo_list Format Requirements
 
-The `todo_list` parameter should contain complete slide-todo.md file content for recording slide content planning and task breakdown.
+Pass the complete `slide-todo.md` Markdown, with project information, an overall
+design scheme, and a content plan and design specification for every page.
+An outline alone is insufficient. Record the palette, typography, shared layout,
+decorations, and reusable styling; for each page specify its content, layout,
+media and asset readiness, static emphasis, text limits, and visual hierarchy.
 
-Recommended format:
-
-```markdown
-# Slide Production Task Planning
-
-## Project Information
-
-- Project Name: ChatGPT Development Report
-- Theme: ChatGPT Evolution and Impact Analysis
-- Pages: 10
-- Key Keywords: ChatGPT, OpenAI, GPT-4, Artificial Intelligence
-
-## Content Outline
-
-### Cover (OpenAI Milestones.html)
-
-Introduce OpenAI's important development nodes and breakthrough achievements
-
-### Table of Contents (AI Revolution Timeline.html)
-
-Display key time points and milestone events in artificial intelligence development
-
-### GPT Series Evolution (GPT-4 Technological Breakthrough.html)
-
-Detail GPT-4's technical innovations and performance improvements compared to previous generations
-
-### Commercialization Process (ChatGPT Business Miracle.html)
-
-Analyze how ChatGPT reached billion-level user scale in short time
-...
-```
+When using a template, derive colors and decorations from its actual `theme.css`
+and ensure text and accent colors contrast with the selected backgrounds.
+Read [Production plan format](references/slide-tools.md#production-plan-format)
+for the complete example before preparing this parameter. Adapt it to the user's
+language, selected theme, content, and actual page count.
 
 #### magic.project.js Format Description (slide type)
 
