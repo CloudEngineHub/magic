@@ -86,7 +86,7 @@ export function MarkdownFileLink({
 				props.className,
 				isFile && "cursor-pointer focus-visible:outline",
 				source &&
-					"inline-flex min-h-5 max-w-full items-start gap-1 rounded bg-primary-10 px-1 align-middle text-sm font-normal leading-5 text-primary no-underline hover:bg-primary/15",
+					"inline-flex max-w-full items-baseline gap-1 rounded bg-primary-10 px-0.5 align-baseline text-primary no-underline [font-size:inherit] [font-weight:inherit] [line-height:inherit] hover:bg-primary/15",
 			)}
 			onKeyDown={(event) => {
 				props.onKeyDown?.(event)
@@ -107,7 +107,7 @@ export function MarkdownFileLink({
 						contentEditable={false}
 						aria-hidden
 						// 缩略图只占一个文字图标的位置，正文与表格中的名称仍可自然换行。
-						className="mt-0.5 inline-flex size-4 shrink-0 select-none items-center"
+						className="inline-flex h-[1lh] w-4 shrink-0 select-none items-center self-start"
 					>
 						{thumbnail}
 					</span>

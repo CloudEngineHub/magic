@@ -34,6 +34,7 @@ import { CitationBadge } from "../../../Citations"
 import MarkdownCodeBlockToolbar from "./components/MarkdownCodeBlockToolbar"
 import { useCodeBlockWrapPreference } from "@/services/markdown/codeBlockWrapPreference"
 import { extractFilePathMentions } from "@/pages/superMagic/utils/filePathMention"
+import { spacedFileLinkConfig } from "@/pages/superMagic/utils/markedSpacedFileLinks"
 import { copySelectedFileReferences } from "@/pages/superMagic/components/MessageList/utils/fileReferenceClipboard"
 
 const MARKDOWN_ALLOWED_URI_REGEXP =
@@ -438,6 +439,7 @@ function MarkdownComponent({
 			data-testid="on-mouse-enter"
 		>
 			<XMarkdown
+				config={spacedFileLinkConfig}
 				className={cn(
 					"!dark:text-white !text-sidebar-foreground",
 					styles.plainMarkdown,

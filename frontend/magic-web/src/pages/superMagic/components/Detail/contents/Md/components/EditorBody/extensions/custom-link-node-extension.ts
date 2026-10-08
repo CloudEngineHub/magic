@@ -13,6 +13,8 @@ import { mergeAttributes } from "@/infrastructure/editors/tiptap/core"
 import { isMarkdownFileLink } from "@/pages/superMagic/utils/markdownFileReference"
 import { ReactMarkViewRenderer } from "@/infrastructure/editors/tiptap/react"
 import { MarkdownLinkMarkView } from "../components/MarkdownLinkMarkView"
+import type MarkdownIt from "markdown-it"
+import { installSpacedMarkdownFileLinks } from "@/pages/superMagic/utils/markdownFileLinkSyntax"
 
 export interface CustomLinkNodeOptions extends LinkNodeOptions {
 	/**
@@ -39,6 +41,22 @@ export interface CustomLinkNodeOptions extends LinkNodeOptions {
  * 2. Support for custom click behavior
  */
 export const CustomLinkNode = LinkNode.extend<CustomLinkNodeOptions>({
+	addStorage() {
+		const parent = this.parent?.()
+		return {
+			...parent,
+			markdown: {
+				...parent?.markdown,
+				parse: {
+					...parent?.markdown?.parse,
+					setup(md: MarkdownIt) {
+						parent?.markdown?.parse?.setup?.(md)
+						installSpacedMarkdownFileLinks(md)
+					},
+				},
+			},
+		}
+	},
 	addMarkView() {
 		return ReactMarkViewRenderer(MarkdownLinkMarkView)
 	},

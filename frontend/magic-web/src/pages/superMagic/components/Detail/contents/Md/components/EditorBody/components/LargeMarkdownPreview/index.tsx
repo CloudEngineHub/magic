@@ -20,6 +20,7 @@ import { useTranslation } from "react-i18next"
 import rehypeRaw from "rehype-raw"
 import rehypeSanitize, { defaultSchema } from "rehype-sanitize"
 import remarkGfm from "remark-gfm"
+import { remarkSpacedFileLinks } from "@/pages/superMagic/utils/remarkSpacedFileLinks"
 import { Virtuoso, type VirtuosoHandle } from "react-virtuoso"
 import { useTheme } from "@/models/config/hooks"
 import { cn } from "@/utils/cn"
@@ -324,7 +325,7 @@ const MarkdownChunk = memo(function MarkdownChunk({
 	return (
 		<div data-markdown-chunk-id={chunk.id}>
 			<ReactMarkdown
-				remarkPlugins={[remarkGfm]}
+				remarkPlugins={[remarkGfm, remarkSpacedFileLinks]}
 				rehypePlugins={[
 					rehypeRaw,
 					[rehypeSanitize, markdownSanitizeSchema],

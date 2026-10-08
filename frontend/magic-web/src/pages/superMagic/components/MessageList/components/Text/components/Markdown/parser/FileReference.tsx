@@ -5,7 +5,6 @@ import type { ReactNode, MouseEvent } from "react"
 import { Loader2 } from "lucide-react"
 import type { TiptapMentionAttributes } from "@/components/business/MentionPanel/tiptap-plugin"
 import { MediaPreviewTrigger } from "@/components/base/MediaPreview"
-import { MESSAGE_FILE_MENTION_DESKTOP_CLASSES } from "@/components/business/MentionPanel/messageMentionVisual"
 import { useTranslation } from "react-i18next"
 import {
 	useFileMediaSource,
@@ -77,7 +76,7 @@ export function FileReference({
 			className={[
 				"inline-flex max-w-full items-baseline gap-1 overflow-hidden align-baseline",
 				source
-					? MESSAGE_FILE_MENTION_DESKTOP_CLASSES
+					? "rounded bg-primary-10 px-0.5 text-primary [font-size:inherit] [font-weight:inherit] [line-height:inherit]"
 					: "rounded bg-[#f0f6ff] px-0.5 text-xs font-normal text-[#315cec]",
 				disabled
 					? "cursor-default opacity-60"
