@@ -1,6 +1,7 @@
 import projectFilesStore from "@/stores/projectFiles"
 import pubsub, { PubSubEvents } from "@/utils/pubsub"
 import { DisabledDetailToolTypes } from "@/pages/superMagic/components/Detail/constants"
+import { isInlineToolDetail } from "@/pages/superMagic/utils/toolDetailDisplay"
 import { reaction } from "mobx"
 import magicToast from "@/components/base/MagicToaster/utils"
 import i18n from "i18next"
@@ -30,6 +31,7 @@ type ToolDetail = Record<string, unknown> & {
 
 export type ToolCardInteractionTarget =
 	| { type: "disabled" }
+	| { type: "inline" }
 	| { type: "playback" }
 	| { type: "file"; fileId: string }
 	| { type: "file-reference"; fileId?: string; filePath?: string }
@@ -292,6 +294,7 @@ export function selectSourceFileFromTool({
 }
 
 export function selectToolDetail({ detail, onSelectDetail }: SelectToolDetailOptions) {
+	if (isInlineToolDetail(detail)) return
 	pubsub.publish(PubSubEvents.Open_Playback_Tab, detail)
 	onSelectDetail?.(markSelectionTarget(detail, "detail"))
 }

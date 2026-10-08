@@ -1,5 +1,6 @@
 import { LayerElement } from "@/components/CanvasDesign/runtime/document/types"
 import projectFilesStore from "@/stores/projectFiles"
+import pubsub, { PubSubEvents } from "@/utils/pubsub"
 
 export function getToolDesignProjectInfo(
 	tool: unknown,
@@ -47,6 +48,41 @@ export function getDesignProjectCurrentFileByProjectPath(options: {
 	if (!id || !name) return undefined
 
 	return { id, name }
+}
+
+export function focusCanvasElementByProjectPath(options: {
+	projectPath: string
+	elementId: string
+	contentId?: string
+	showGenerationDetails?: boolean
+	filesStore?: Pick<typeof projectFilesStore, "workspaceFileTree" | "workspaceFilesList">
+}): boolean {
+	const filesStore = options.filesStore ?? projectFilesStore
+	const designProject = getDesignProjectCurrentFileByProjectPath({
+		projectPath: options.projectPath,
+		attachments: filesStore.workspaceFileTree,
+		flatAttachments: filesStore.workspaceFilesList,
+	})
+	if (!designProject) return false
+
+	pubsub.publish(PubSubEvents.Open_File_Tab, {
+		fileId: designProject.id,
+	})
+
+	// 复用 Canvas 详情区已有的初始化等待队列；事件先发出，Canvas 准备好后再执行聚焦。
+	setTimeout(() => {
+		pubsub.publish(PubSubEvents.Super_Magic_Focus_Canvas_Element, {
+			canvasDesignId: designProject.id,
+			elementIds: [options.elementId],
+			selectElement: [options.elementId],
+			contentId: options.contentId,
+			showGenerationDetails: options.showGenerationDetails,
+			animated: false,
+			padding: { top: "25%", right: "25%", bottom: "25%", left: "25%" },
+		})
+	}, 200)
+
+	return true
 }
 
 export function isSameDesignProjectPath(options: {

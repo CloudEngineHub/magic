@@ -12,6 +12,8 @@ from agentlang.logger import get_logger
 from agentlang.tools.tool_result import ToolResult
 from agentlang.utils.token_estimator import num_tokens_from_string
 from app.core.entity.attachment import AttachmentStorageType
+from app.core.entity.factory.tool_detail_factory import ToolDetailFactory
+from app.core.entity.message.server_message import OperationResultStatus
 from app.core.entity.message.server_message import (DisplayType, FileContent,
                                                     ToolDetail)
 from app.tools.abstract_file_tool import AbstractFileTool
@@ -805,7 +807,7 @@ Suggestions:
             # Absolute paths outside the workspace have no workspace attachment identity.
             pass
 
-        return ToolDetail(
+        report = ToolDetail(
             type=display_type,
             data=FileContent(
                 file_name=original_file_name,
@@ -813,6 +815,13 @@ Suggestions:
                 relative_file_path=relative_file_path,
                 storage_type=storage_type,
             )
+        )
+
+        return ToolDetailFactory.create_operation_result_detail(
+            [ToolDetailFactory.create_file_result_item(
+                original_file_path_str, self.base_dir, OperationResultStatus.SUCCESS,
+                message=self._get_read_range_remark(result, arguments),
+            )], report=report, stage="read",
         )
 
     def _get_remark_content(self, result: ToolResult, arguments: Dict[str, Any] = None) -> str:

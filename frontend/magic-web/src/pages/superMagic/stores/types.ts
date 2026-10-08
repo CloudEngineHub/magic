@@ -1,3 +1,4 @@
+import type { DownloadProgressState } from "./download-progress"
 import type { SeqRecord } from "@/apis/modules/chat/types"
 import type {
 	ConversationMessageSend,
@@ -273,6 +274,7 @@ export interface ToolStreamMessageState {
 }
 
 export interface ToolResponseState {
+	downloadProgress?: DownloadProgressState
 	action?: string
 	attachments?: null | Array<any>
 	detail?: {

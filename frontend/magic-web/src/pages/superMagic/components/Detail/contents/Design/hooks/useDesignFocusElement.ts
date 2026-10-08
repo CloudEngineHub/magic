@@ -2,7 +2,7 @@ import { useRef, useCallback, useEffect } from "react"
 import { useLatest } from "ahooks"
 import { CanvasDesignRef } from "@/components/CanvasDesign/public/props"
 import pubsub, { PubSubEvents } from "@/utils/pubsub"
-import { PaddingInsetConfig } from "@/components/CanvasDesign/runtime/document/types"
+import type { SuperMagicFocusCanvasElementPayload } from "@/pages/superMagic/events/markers"
 
 interface UseDesignFocusElementProps {
 	isPlaybackMode?: boolean
@@ -24,14 +24,7 @@ export function useDesignFocusElement({
 
 	// 处理聚焦元素的函数
 	const handleFocusElement = useCallback(
-		(data: {
-			isFromPlaybackToolNode?: boolean
-			canvasDesignId: string
-			elementIds: string[]
-			selectElement?: string[] | boolean
-			animated?: boolean
-			padding?: PaddingInsetConfig
-		}) => {
+		(data: SuperMagicFocusCanvasElementPayload) => {
 			const {
 				isFromPlaybackToolNode,
 				animated,
@@ -39,6 +32,8 @@ export function useDesignFocusElement({
 				elementIds,
 				selectElement,
 				padding,
+				showGenerationDetails,
+				contentId,
 			} = data
 			if (
 				canvasDesignId !== designProjectId ||
@@ -54,6 +49,14 @@ export function useDesignFocusElement({
 					selectElement,
 					padding,
 				})
+				if (showGenerationDetails && elementIds.length === 1) {
+					const canvas = canvasDesignRef.current?.getCanvasInstance()
+					// 复用画布信息按钮事件，查看参数不会切换或写入主版本。
+					canvas?.eventEmitter.emit({
+						type: "element:image:infoButtonClick",
+						data: { elementId: elementIds[0], contentId },
+					})
+				}
 			}
 
 			// 检查是否初始化完成：loading 完成且 ref 已准备好

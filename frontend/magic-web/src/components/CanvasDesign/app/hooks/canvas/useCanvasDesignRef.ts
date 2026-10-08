@@ -98,7 +98,8 @@ export function useCanvasDesignRef(ref: React.Ref<CanvasDesignRef>): void {
 						elementDetailsProvenance: options?.elementDetailsProvenance,
 					})
 					// 立即记录历史，支持撤销到更新前的状态
-					canvas.historyManager.recordHistoryImmediate()
+					if (options?.historyPolicy !== "exclude")
+						canvas.historyManager.recordHistoryImmediate()
 				}
 			},
 			exportCurrentDocument: () => {

@@ -32,6 +32,7 @@ export enum DetailType {
 	AICard = "ai-card",
 	SlidesTemplate = "slides-template",
 	Subagents = "subagents",
+	OperationResultList = "operation_result_list",
 }
 
 /** 等待子智能体卡片里的一行，字段与后端 SubagentItemContent 一一对应 */
@@ -111,7 +112,67 @@ export interface DetailData {
 	[DetailType.PowerPoint]: DetailUniverData
 	[DetailType.SlidesTemplate]: DetailHTMLData
 	[DetailType.FileTree]: DetailFileTreeData
+	[DetailType.OperationResultList]: DetailOperationResultListData
 }
+
+export interface OperationResultCanvasTarget {
+	type: "canvas_element"
+	project_path: string
+	element_id: string
+	content_id?: string
+	content_type?: "image" | "video" | "audio"
+}
+
+export interface OperationResultFileTarget {
+	type: "file"
+	relative_file_path: string
+}
+
+export interface OperationResultUrlTarget {
+	type: "url"
+	url: string
+}
+
+export type OperationResultTarget =
+	OperationResultCanvasTarget | OperationResultFileTarget | OperationResultUrlTarget
+
+/** 操作结果显示对象名称与执行状态，可选提供稳定的导航目标。 */
+export interface OperationResultItem {
+	label: string
+	kind: "file" | "directory" | "text"
+	status: "success" | "error" | "skipped"
+	message: string
+	description?: string
+	target?: OperationResultTarget
+	changes?: { added_lines: number; deleted_lines: number; modified_lines?: number }
+}
+
+export interface OperationResultSummary {
+	stage?: "read" | "edit" | "find" | "download" | "analyze" | "load"
+	total_count?: number
+	success_count?: number
+	failed_count?: number
+	skipped_count?: number
+	omitted_count?: number
+}
+
+export interface DetailOperationResultListItemsData extends OperationResultSummary {
+	items: OperationResultItem[]
+}
+
+/** 正文与文件化引用保持顶层结构，卡片只提供原有 Markdown 详情入口。 */
+export interface DetailOperationResultListReportData extends DetailOperationResultListItemsData {
+	file_name: string
+	content: string
+	file_id?: string
+	storage_type?: string
+	file_extension?: string
+	target_file_path?: string
+	report_type?: DetailType
+}
+
+export type DetailOperationResultListData =
+	DetailOperationResultListItemsData | DetailOperationResultListReportData
 
 /** 终端 Terminal */
 export interface TerminalToolInfo {

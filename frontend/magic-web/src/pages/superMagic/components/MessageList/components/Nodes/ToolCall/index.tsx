@@ -9,12 +9,15 @@ import DefaultTool from "./tools/DefaultTool"
 import pubsub, { PubSubEvents } from "@/utils/pubsub"
 import { filterClickableMessageWithoutRevoked } from "@/pages/superMagic/utils/handleMessage"
 import { getToolDesignProjectInfo } from "@/pages/superMagic/components/Detail/contents/Design/utils/toolDesignProjectInfo"
+import { isInlineToolDetail } from "@/pages/superMagic/utils/toolDetailDisplay"
+import OperationResultList from "../shared/OperationResultList"
 import {
 	getToolCardInteractionTarget,
 	selectToolFile,
 	selectToolDetail,
 } from "../toolDetailSelection"
 import { useMessageListProjectFilesStore } from "@/pages/superMagic/components/MessageList/context"
+import { isToolCallLoading } from "../MessageNode/tool-call/types"
 
 function ToolCall(props: NodeProps) {
 	const { onSelectDetail } = props
@@ -22,7 +25,11 @@ function ToolCall(props: NodeProps) {
 	const node = superMagicStore.getMessageNode(props?.node?.super_message_id) as
 		| {
 				tool?: {
+					id?: string
 					name?: string
+					action?: string
+					remark?: string
+					status?: string
 					detail?: Record<string, unknown>
 					[key: string]: unknown
 				}
@@ -35,6 +42,7 @@ function ToolCall(props: NodeProps) {
 
 	// const { t } = useTranslation("super")
 	const toolName = typeof tool?.name === "string" ? tool.name : ""
+	const loading = isToolCallLoading({ tool })
 
 	const ToolComponent = ToolsMap?.[toolName] || DefaultTool
 
@@ -44,7 +52,7 @@ function ToolCall(props: NodeProps) {
 		[key: string]: unknown
 	}) => {
 		const target = getToolCardInteractionTarget(tool?.name, detail)
-		if (target.type === "disabled") return
+		if (target.type === "disabled" || target.type === "inline") return
 
 		if (target.type === "canvas") {
 			const { designProjectId, designProject, elements } = getToolDesignProjectInfo(
@@ -100,9 +108,26 @@ function ToolCall(props: NodeProps) {
 		handleSelectDetail?.(newDetail)
 	}
 
+	if (
+		tool &&
+		(isInlineToolDetail(tool.detail) ||
+			(toolName === "web_search" && tool.detail?.type === "search"))
+	) {
+		return (
+			<OperationResultList
+				toolData={tool}
+				loading={loading}
+				onSelectDetail={onSelectDetail}
+				className={props.classNames?.markdown}
+				onMouseEnter={props.onMouseEnter}
+				onMouseLeave={props.onMouseLeave}
+			/>
+		)
+	}
+
 	return (
 		<Suspense fallback={null}>
-			<ToolComponent {...props} onClick={onProxyClick} />
+			<ToolComponent {...props} loading={loading} onClick={onProxyClick} />
 		</Suspense>
 	)
 }

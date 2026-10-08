@@ -30,6 +30,9 @@ from agentlang.event.event import EventType
 from agentlang.logger import get_logger
 from agentlang.tools.tool_result import ToolResult
 from agentlang.utils.metadata import MetadataUtil
+from app.core.entity.factory.tool_detail_factory import ToolDetailFactory
+from app.core.entity.message.server_message import OperationResultStatus
+from app.core.entity.message.server_message import FileContent
 from app.core.entity.message.server_message import DisplayType, ToolDetail
 from app.core.context.run_interruption import await_with_interruption
 from app.infrastructure.magic_service.config import MagicServiceConfigLoader
@@ -1551,11 +1554,17 @@ class AudioUnderstanding(WorkspaceTool[AudioUnderstandingParams]):
         try:
             # Extract metadata from extra_info
             audio_path = result.extra_info.get("audio_path", "")
-            # Get audio filename
-            audio_filename = Path(audio_path).name if audio_path else "unknown"
-            return ToolDetail(
-                type=DisplayType.TEXT, data={"message": "100%", "progress": 100, "file_name": audio_filename}
-            )
+            item = ToolDetailFactory.create_file_result_item(audio_path, self.base_dir, OperationResultStatus.SUCCESS)
+            transcript = str(result.extra_info.get("transcription_file_path") or "")
+            report = None
+            if transcript:
+                transcript_item = ToolDetailFactory.create_file_result_item(transcript, self.base_dir, OperationResultStatus.SUCCESS)
+                if transcript_item.target:
+                    report = ToolDetail(type=DisplayType.MD, data=FileContent(
+                        file_name=Path(transcript).name, content="",
+                        target_file_path=f"./{transcript_item.target.relative_file_path}",
+                    ))
+            return ToolDetailFactory.create_operation_result_detail([item], report=report, stage="analyze")
         except Exception as e:
             self.logger.error(f"生成工具详情失败: {e}")
             return None

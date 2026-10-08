@@ -919,6 +919,30 @@
         "zh_CN": "图像搜索失败: {{error}}",
         "en_US": "Image search failed: {{error}}"
     },
+    "visual_understanding.image_loaded": {
+        "zh_CN": "图片已载入",
+        "en_US": "Image loaded"
+    },
+    "visual_understanding.image_analyzed": {
+        "zh_CN": "已参与分析",
+        "en_US": "Included in the analysis"
+    },
+    "visual_understanding.external_image": {
+        "zh_CN": "外部图片",
+        "en_US": "External image"
+    },
+    "visual_understanding.image_not_analyzed": {
+        "zh_CN": "未能载入，未参与分析",
+        "en_US": "Could not load; excluded from the analysis"
+    },
+    "visual_understanding.images_loaded": {
+        "zh_CN": "已载入 {{count}} 张图片",
+        "en_US": "Loaded {{count}} images"
+    },
+    "visual_understanding.preview_unavailable": {
+        "zh_CN": "图片不在项目文件中，无法打开预览",
+        "en_US": "This image is outside the project files and cannot be previewed"
+    },
     "visual_understanding.completed": {
         "zh_CN": "已理解图片: {{image_name}}",
         "en_US": "Image understanding completed: {{image_name}}"
@@ -1058,6 +1082,14 @@
     "generate_images.remark_success_partial": {
         "zh_CN": "部分图片生成成功（{{succeeded_count}}/{{total_count}}）",
         "en_US": "Images partially generated ({{succeeded_count}}/{{total_count}} succeeded)"
+    },
+    "generate_images.item_status.completed": {
+        "zh_CN": "{{name}}已生成",
+        "en_US": "{{name}} generated"
+    },
+    "generate_images.item_status.failed": {
+        "zh_CN": "{{name}}生成失败",
+        "en_US": "{{name}} generation failed"
     },
     "task_progress.queued_message": {
         "zh_CN": "{{task_label}}排队中（{{percentage}}%）",
@@ -3577,9 +3609,53 @@
         "zh_CN": "未知",
         "en_US": "Unknown"
     },
-    "delete_file.error": {
-        "zh_CN": "删除文件 {{file_path}} 时出错",
-        "en_US": "Error deleting file {{file_path}}"
+    "delete_file.deleted": {
+        "zh_CN": "已删除",
+        "en_US": "Deleted"
+    },
+    "delete_file.not_deleted": {
+        "zh_CN": "未删除",
+        "en_US": "Not deleted"
+    },
+    "delete_file.single_result": {
+        "zh_CN": "{{file_name}} · {{status}}",
+        "en_US": "{{file_name}} · {{status}}"
+    },
+    "delete_file.deleted_count": {
+        "zh_CN": "{{count}} 项已删除",
+        "en_US": "{{count}} items deleted"
+    },
+    "delete_file.failed_count": {
+        "zh_CN": "{{count}} 项未删除",
+        "en_US": "{{count}} items not deleted"
+    },
+    "delete_file.partial_result": {
+        "zh_CN": "{{deleted}} 项已删除 · {{failed}} 项未删除",
+        "en_US": "{{deleted}} items deleted · {{failed}} not deleted"
+    },
+    "delete_file.detail_title": {
+        "zh_CN": "删除结果",
+        "en_US": "Deletion results"
+    },
+    "delete_file.detail_unavailable": {
+        "zh_CN": "未能获取完整的删除结果，请检查文件当前状态。",
+        "en_US": "Complete deletion results are unavailable. Please check the current file state."
+    },
+    "delete_file.reason_not_found": {
+        "zh_CN": "文件或文件夹不存在",
+        "en_US": "The file or folder does not exist"
+    },
+    "delete_file.reason_permission_denied": {
+        "zh_CN": "没有访问权限",
+        "en_US": "Access denied"
+    },
+    "delete_file.reason_invalid_path": {
+        "zh_CN": "路径无效",
+        "en_US": "Invalid path"
+    },
+    "delete_file.reason_failed": {
+        "zh_CN": "删除未完成，请检查文件状态后重试。",
+        "en_US": "Deletion did not complete. Check the file state before retrying."
     },
     "video.project_config_create_failed": {
         "zh_CN": "配置文件创建失败，将尝试解决...",
@@ -5757,6 +5833,30 @@
         "zh_CN": "{{count}} 个{{media}}生成失败",
         "en_US": "{{count}} {{media}} failed"
     },
+    "canvas.generate_item_status.processing": {
+        "zh_CN": "正在生成",
+        "en_US": "Generating"
+    },
+    "canvas.generate_item_status.completed": {
+        "zh_CN": "已生成",
+        "en_US": "Generated"
+    },
+    "canvas.generate_item_status.failed": {
+        "zh_CN": "生成失败",
+        "en_US": "Generation failed"
+    },
+    "canvas.generate_named_item_status.processing": {
+        "zh_CN": "{{name}}正在生成",
+        "en_US": "{{name}} is generating"
+    },
+    "canvas.generate_named_item_status.completed": {
+        "zh_CN": "{{name}}已生成",
+        "en_US": "{{name}} generated"
+    },
+    "canvas.generate_named_item_status.failed": {
+        "zh_CN": "{{name}}生成失败",
+        "en_US": "{{name}} generation failed"
+    },
     "canvas.detail.title.connections": {
         "zh_CN": "画布连线",
         "en_US": "Canvas connections"
@@ -6748,5 +6848,17 @@
     "startup_task.error.unknown": {
         "zh_CN": "操作暂时无法完成",
         "en_US": "The operation could not be completed"
+    },
+    "tool_card.download_failed": {
+        "zh_CN": "下载失败",
+        "en_US": "Download failed"
+    },
+    "tool_card.video_failed": {
+        "zh_CN": "未参与分析",
+        "en_US": "Not analyzed"
+    },
+    "tool_card.matches": {
+        "zh_CN": "{{count}} 处匹配",
+        "en_US": "{{count}} matches"
     }
 }

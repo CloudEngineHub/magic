@@ -1281,8 +1281,8 @@ export function useTopicMessages({
 					...(writeMode === "replace_tail" ? { anchorSuperMessageId } : {}),
 					...(writeMode !== "merge" ? { preserveStreamSuperMessageIds } : {}),
 					syncGeneration,
-					toolProjectionPolicy:
-						writeMode === "merge" ? "preserve_live" : "historical_terminal",
+					// replace/replace_tail 只决定列表覆盖范围，不能证明工具已执行结束。
+					toolProjectionPolicy: "preserve_live",
 				},
 			})
 			reconcileActiveRevokedAnchorFromHttp(

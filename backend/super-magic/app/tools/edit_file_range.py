@@ -14,7 +14,8 @@ from agentlang.logger import get_logger
 from agentlang.tools.tool_result import ToolResult
 from agentlang.utils.syntax_checker import SyntaxChecker
 from app.core.context.agent_context import AgentContext
-from app.core.entity.message.server_message import DisplayType, ToolDetail
+from app.core.entity.factory.tool_detail_factory import ToolDetailFactory
+from app.core.entity.message.server_message import DisplayType, ToolDetail, OperationResultChanges, OperationResultStatus
 from app.i18n import i18n
 from app.service.html_app_memory_service import is_html_app_memory_path
 from app.tools.abstract_file_tool import AbstractFileTool
@@ -275,7 +276,8 @@ This tool accepts only a range_id returned by find_file_range. It does not accep
         return ToolResult(
             content=output,
             data={"status": "applied"},
-            extra_info={"diff": full_diff, "file_path": str(file_path), "range_id": record.range_id},
+            extra_info={"diff": full_diff, "file_path": str(file_path), "range_id": record.range_id,
+                "added_lines": stats["added_lines"], "deleted_lines": stats["deleted_lines"], "modified_lines": stats["modified_lines"]},
         )
 
     @staticmethod
@@ -311,13 +313,26 @@ This tool accepts only a range_id returned by find_file_range. It does not accep
             content = f"## File Edit: {file_name}\n\n```diff\n{result.extra_info['diff']}\n```"
         else:
             content = f"## File Edit: {file_name}\n\n{result.content}"
-        return ToolDetail(
+        report = ToolDetail(
             type=DisplayType.MD,
             data=await self._build_file_content(
                 file_path=file_path,
                 file_name=f"{file_name}.diff",
                 content=content,
             ),
+        )
+
+        if not result.ok or not file_path or not (result.extra_info or {}).get("diff"):
+            return report
+        return ToolDetailFactory.create_operation_result_detail(
+            [ToolDetailFactory.create_file_result_item(
+                file_path, self.base_dir, OperationResultStatus.SUCCESS,
+                changes=OperationResultChanges(
+                    added_lines=int(result.extra_info["added_lines"]),
+                    deleted_lines=int(result.extra_info["deleted_lines"]),
+                    modified_lines=int(result.extra_info["modified_lines"]),
+                ),
+            )], report=report, stage="edit",
         )
 
     def _get_remark_content(self, result: ToolResult, arguments: dict[str, Any] | None = None) -> str:
