@@ -1,6 +1,12 @@
 # Canvas Element management
 
-Load for unframing or deleting exact Canvas Elements and existing image versions. Query details first. Use business tools in Code mode and print `result.content`; never edit Canvas JSON or use file/shell deletion to bypass these rules.
+Load for inspecting saved generation records, unframing or deleting exact Canvas Elements and existing image versions. Query details first. Use business tools in Code mode and print `result.content`; never edit Canvas JSON or use file/shell deletion to bypass these rules.
+
+## Generation records
+
+Call `query_canvas_element_details` with exact Element IDs. Read each version's `content_id`, current/main markers, file, prompt, `model_id`, optional recorded model name, ordered `[imageN]` reference paths, source-image crop, size, resolution and saved generation settings. These are persisted records, including saved requests while generating; they do not expose unsaved browser drafts. Reuse reference bindings in their returned order. Keep project-relative references unchanged for Canvas tools; prefix the exact project path only for Workspace-anchored tools.
+
+`generation_record=not_recorded` means no saved request was found, as with an imported image; `unavailable` means details could not be fully read. Neither authorizes guessing the model or prompt. A missing setting is unknown, not the current model's default. Versions have independent records; identify the intended Content before reusing a prompt. Reading a record does not submit generation, change files or select a different version. The ordinary revision rule still creates a new independent Element unless the user explicitly requests versions in the same Element.
 
 ## Unframe
 

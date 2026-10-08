@@ -169,7 +169,7 @@ Read the created-or-existing status. Next: `query_canvas_overview` when you need
 
 ## `query_canvas_overview`
 
-Use when element IDs are unknown, when resuming work, or when the user asks what is on the Canvas. Returns a lightweight Element index with compact relations.
+Use when element IDs are unknown, when resuming work, or when the user asks what is on the Canvas. Returns a lightweight text Element index with titles, current persisted Content IDs, media paths, filenames and compact relations. It does not render a Canvas image. A missing asset path means no persisted media reference; an existing path does not prove the file exists.
 
 Parameters: `project_path` is required; `page` and `limit` are optional.
 
@@ -188,7 +188,7 @@ If it reports a next page, increment `page`. For full Content, hierarchy, or con
 
 ## `query_canvas_element_details`
 
-Query 1–10 exact element IDs; returns Content, status, media paths, Frame hierarchy, and related Connections.
+Query 1–10 exact element IDs; returns Content, status, media paths, Frame hierarchy, and related Connections. Each version includes its recorded prompt, model ID, reference images in binding order, source-image crop and saved generation settings when available. Read `references/element-management.md` for generation-record interpretation; never infer missing history from an image or current model defaults.
 
 Parameters: `project_path` and 1–10 exact `element_ids` are required. Use the `asset_path`, status, task ID, and Connection ID returned in the details only as real inputs to later tools.
 
@@ -620,6 +620,6 @@ Load references only when the matching task appears:
 
 - `references/naming.md` — shared Canvas title, actual version files, batch naming and conflicts.
 - `references/layout.md` — finite spatial queries, relative arrangement, alignment and distribution.
-- `references/element-management.md` — unframing and confirmed Element/version/file removal.
+- `references/element-management.md` — saved generation records, unframing and confirmed Element/version/file removal.
 
 No reference may widen the confirmation or retry boundaries. Direct file operations remain forbidden except for the controlled `magic.project.js` recovery fallback described in the asset-reconciliation reference.

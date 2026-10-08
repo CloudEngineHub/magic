@@ -155,6 +155,10 @@ class ElementDetailsQueryService:
             parameters = detail.get("generationParameters")
             if not isinstance(parameters, dict):
                 parameters = generation_request[1] if generation_request else {}
+            elif generation_request is not None:
+                # 界面按版本读取公共生成请求；同名字段以它为准，保留运行记录中的补充字段。
+                # 只构造查询投影，不修改 sidecar 或用于重试的原始参数。
+                parameters = {**parameters, **generation_request[1]}
             contents.append(CanvasContentDetailResult(
                 version_index=version_index,
                 file_name=(PurePosixPath(content.fields.asset_path).name
@@ -170,11 +174,7 @@ class ElementDetailsQueryService:
                 retry_count=int(detail.get("retryCount", 0)),
                 generation_task_id=detail.get("generationTaskId"),
                 generation_parameters=(
-                    cast(JsonObject, detail["generationParameters"])
-                    if isinstance(detail.get("generationParameters"), dict)
-                    else cast(JsonObject, generation_request[1])
-                    if generation_request is not None
-                    else None
+                    cast(JsonObject, parameters) if parameters else None
                 ),
                 payload=cast(JsonObject, payload) if payload else None,
                 runtime=ElementDetailsQueryService._runtime_detail(detail),
