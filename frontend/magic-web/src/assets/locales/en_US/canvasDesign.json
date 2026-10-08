@@ -372,6 +372,8 @@
 		"createVideoGenerator": "Video Generation",
 		"delete": "Delete",
 		"discardDraft": "Mark as discarded draft",
+		"discardDraftDescription": "Keep the image and dim it on the canvas",
+		"discardedStatus": "Discarded",
 		"downloadAudio": "Download Audio",
 		"downloadFile": "Download File",
 		"downloadImage": "Download Image",
@@ -390,6 +392,7 @@
 		"removeFrame": "Remove Frame",
 		"rename": "Rename",
 		"restoreDraft": "Remove draft mark",
+		"restoreDraftDescription": "Restore the normal appearance",
 		"show": "Show",
 		"unlock": "Unlock"
 	},

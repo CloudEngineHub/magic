@@ -32,6 +32,7 @@ import type { TFunction } from "../../../public/i18n-types"
 import { getSelectedFileElements } from "../../../runtime/shared/ids"
 import type { MagicPermissions } from "../../../public/magic-types"
 import type { CanvasDownloadMenuContext } from "./resolveCanvasDownloadMenuContext"
+import styles from "./index.module.css"
 
 interface RenameMenuConfig {
 	menuSource?: MenuSource | null
@@ -341,6 +342,32 @@ export function getMenuItems({
 		},
 	}
 
+	const discardedMenuItem: MenuOption = {
+		id: "set-discarded",
+		label: allDiscarded
+			? translate("menu.restoreDraft", "取消废稿标记")
+			: translate("menu.discardDraft", "标记为废稿"),
+		description: allDiscarded
+			? translate("menu.restoreDraftDescription", "恢复正常显示")
+			: translate("menu.discardDraftDescription", "保留图片，淡化显示"),
+		icon: allDiscarded ? ArchiveRestore : ArchiveX,
+		rightContentRender: allDiscarded
+			? () => (
+					<span className={styles.draftStatus}>
+						{translate("menu.discardedStatus", "废稿")}
+					</span>
+				)
+			: undefined,
+		onClick: () => {
+			if (!canvas.userActionRegistry.canExecute("image.set-discarded", discardOptions)) {
+				toast.error(translate("menu.draftTargetChanged", "图片状态已变化，请重新操作"))
+				return
+			}
+			void canvas.userActionRegistry.execute("image.set-discarded", discardOptions)
+		},
+	}
+	const discardedBlock: MenuItem[] = canDiscard ? [discardedMenuItem, { type: "separator" }] : []
+
 	const conversationBlock: MenuItem[] = includeConversationMenuItems
 		? [addToCurrentConversationMenuItem, addToNewConversationMenuItem, { type: "separator" }]
 		: []
@@ -349,6 +376,7 @@ export function getMenuItems({
 		copyMenuItem,
 		copyPngMenuItem,
 		{ type: "separator" },
+		...discardedBlock,
 		{
 			id: "move-up",
 			label: translate("menu.moveUp", "上移一层"),
@@ -433,21 +461,6 @@ export function getMenuItems({
 			},
 			visible: () => {
 				return canvas.userActionRegistry.canExecute("element.toggle-visible")
-			},
-		},
-		{
-			id: "set-discarded",
-			label: allDiscarded
-				? translate("menu.restoreDraft", "取消废稿标记")
-				: translate("menu.discardDraft", "标记为废稿"),
-			icon: allDiscarded ? ArchiveRestore : ArchiveX,
-			visible: () => canDiscard,
-			onClick: () => {
-				if (!canvas.userActionRegistry.canExecute("image.set-discarded", discardOptions)) {
-					toast.error(translate("menu.draftTargetChanged", "图片状态已变化，请重新操作"))
-					return
-				}
-				void canvas.userActionRegistry.execute("image.set-discarded", discardOptions)
 			},
 		},
 		{

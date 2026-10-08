@@ -22,6 +22,8 @@ export const IMAGE_CONFIG = {
 	HOVER_DELAY: 50,
 	/** 图片元素在屏幕上的最小尺寸阈值（像素），小于此值时隐藏 info 按钮 */
 	MIN_ELEMENT_SCREEN_SIZE_FOR_INFO_BUTTON: 60,
+	/** 废稿静态展示强度；悬浮时仅恢复图片内容节点，原图与角标不变。 */
+	DISCARDED_OPACITY: 0.55,
 } as const
 
 /**

@@ -365,6 +365,8 @@
 		"createVideoGenerator": "视频生成",
 		"delete": "删除",
 		"discardDraft": "标记为废稿",
+		"discardDraftDescription": "保留图片，淡化显示",
+		"discardedStatus": "废稿",
 		"downloadAudio": "下载音频",
 		"downloadFile": "下载文件",
 		"downloadImage": "下载图片",
@@ -383,6 +385,7 @@
 		"removeFrame": "取消画框",
 		"rename": "重命名",
 		"restoreDraft": "取消废稿标记",
+		"restoreDraftDescription": "恢复正常显示",
 		"show": "显示",
 		"unlock": "解锁"
 	},
