@@ -31,6 +31,8 @@ const NAME_LABEL_CONFIG = {
 	ICON_GAP: 4,
 	/** 文本宽度变化达到该粒度时才重新布局，避免缩放每帧触发文本重排 */
 	TEXT_WIDTH_BUCKET: 2,
+	/** 名称标签与右侧尺寸标签之间的最小间距（标签局部坐标） */
+	SIZE_LABEL_GAP: 4,
 	/** 至少保留一个局部像素，避免 Konva 将宽度 0 视为自动宽度 */
 	MIN_TEXT_WIDTH: 1,
 } as const
@@ -253,10 +255,12 @@ export class NameLabelManager extends BaseLabelManager {
 		const safeInverseScale = Math.max(inverseScale, Number.EPSILON)
 		// getBoundingRect() is layer-relative, while the label uses inverse stage
 		// scaling. Convert the element width into the label's local coordinates.
-		const availableLabelWidth = Math.max(
+		const elementLabelWidth = Math.max(
 			0,
 			(boundingRect.width - this.labelConfig.offsetLeft) / safeInverseScale,
 		)
+		const sizeLabelReservation = this.getSizeLabelReservation(elementId)
+		const availableLabelWidth = Math.max(0, elementLabelWidth - sizeLabelReservation)
 		const hasIcon = state.iconKey !== null
 		const fullIconWidth = hasIcon ? state.iconWidth + state.iconGap : 0
 		const iconCanFit =
@@ -352,6 +356,21 @@ export class NameLabelManager extends BaseLabelManager {
 			Math.floor(availableWidth / NAME_LABEL_CONFIG.TEXT_WIDTH_BUCKET) *
 			NAME_LABEL_CONFIG.TEXT_WIDTH_BUCKET
 		return Math.max(bucketedWidth, NAME_LABEL_CONFIG.MIN_TEXT_WIDTH)
+	}
+
+	/**
+	 * Reserve the right-side size label only while it is actually visible. The
+	 * size is already reported in label-local coordinates, so it can be
+	 * subtracted directly from the name label's available width.
+	 */
+	private getSizeLabelReservation(elementId: string): number {
+		const sizeLabelManager = this.canvas.sizeLabelManager
+		if (!sizeLabelManager?.isLabelVisibleForElement(elementId)) return 0
+
+		const sizeLabelSize = sizeLabelManager.getLabelSizeForElement(elementId)
+		if (!sizeLabelSize || !Number.isFinite(sizeLabelSize.width)) return 0
+
+		return Math.max(0, sizeLabelSize.width) + NAME_LABEL_CONFIG.SIZE_LABEL_GAP
 	}
 
 	private getIconContext(elementId: string): NameLabelIconContext | null {

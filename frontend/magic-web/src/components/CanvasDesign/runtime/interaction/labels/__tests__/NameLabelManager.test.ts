@@ -51,6 +51,10 @@ class TestNameLabelManager extends NameLabelManager {
 		return this.labelMap.get(elementId)?.findOne(".name-label-text") as Konva.Text | null
 	}
 
+	public getRenderedTextWidthForTest(elementId: string): number | undefined {
+		return this.getTextNodeForTest(elementId)?.width()
+	}
+
 	public getIconNodeForTest(elementId: string): Konva.Node | null {
 		return this.labelMap.get(elementId)?.findOne(".name-label-icon") as Konva.Node | null
 	}
@@ -66,6 +70,13 @@ function createManager(
 		selectedElementId?: string
 		hoveredElementId?: string
 		iconResolver?: NameLabelIconResolver
+		sizeLabelManager?: {
+			isLabelVisibleForElement: (elementId: string) => boolean
+			getLabelSizeForElement: (elementId: string) => {
+				width: number
+				height: number
+			} | null
+		}
 	} = {},
 ): TestNameLabelManager {
 	return new TestNameLabelManager({
@@ -83,6 +94,7 @@ function createManager(
 			},
 			overlayLayer: { add: vi.fn() },
 			runtimeScheduler: { requestLayerDraw: vi.fn() },
+			sizeLabelManager: options.sizeLabelManager,
 			selectionManager: {
 				isSelected: (elementId: string) => options.selectedElementId === elementId,
 			},
@@ -237,6 +249,37 @@ describe("NameLabelManager visibility", () => {
 		const layout = manager.getRenameInputLayout("audio-1")
 		expect(layout?.text).toBe(labelText)
 		expect(layout?.width).toBeGreaterThan(40)
+
+		manager.destroy()
+	})
+
+	it("reserves a visible size label and releases the space when it is hidden", () => {
+		const sizeLabelManager = {
+			isLabelVisibleForElement: vi.fn(() => true),
+			getLabelSizeForElement: vi.fn(() => ({
+				width: 30,
+				height: 12,
+			})),
+		}
+		const elements = new Map<string, TestElement>([
+			[
+				"audio-1",
+				{
+					getBoundingRect: () => ({ x: 10, y: 20, width: 100, height: 80 }),
+					getData: () => ({ id: "audio-1", type: ElementTypeEnum.Audio }),
+					getNameLabelText: () => "A deliberately long audio name",
+					getNode: () => ({}),
+				},
+			],
+		])
+		const manager = createManager(elements, { sizeLabelManager })
+
+		manager.createOrUpdateLabelForTest("audio-1")
+		expect(manager.getRenderedTextWidthForTest("audio-1")).toBe(66)
+
+		sizeLabelManager.isLabelVisibleForElement.mockReturnValue(false)
+		manager.updateLabelPositionForTest("audio-1")
+		expect(manager.getRenderedTextWidthForTest("audio-1")).toBe(100)
 
 		manager.destroy()
 	})

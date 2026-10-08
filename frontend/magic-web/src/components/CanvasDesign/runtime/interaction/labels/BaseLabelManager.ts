@@ -361,6 +361,25 @@ export abstract class BaseLabelManager {
 		}
 	}
 
+	/** Returns the current label footprint before the manager's inverse scale. */
+	public getLabelSizeForElement(elementId: string): LabelSize | null {
+		const labelGroup = this.labelMap.get(elementId)
+		return labelGroup ? this.getLabelSize(labelGroup) : null
+	}
+
+	/** Returns whether the element's label is currently rendered. */
+	public isLabelVisibleForElement(elementId: string): boolean {
+		return this.labelMap.get(elementId)?.visible() === true
+	}
+
+	/**
+	 * Recomputes one label's layout without changing its visibility policy.
+	 * This is used when another label manager changes the available space.
+	 */
+	public refreshLabelLayout(elementId: string, skipBatchDraw = false): boolean {
+		return this.updateLabelPosition(elementId, skipBatchDraw)
+	}
+
 	/**
 	 * 设置事件监听器
 	 */

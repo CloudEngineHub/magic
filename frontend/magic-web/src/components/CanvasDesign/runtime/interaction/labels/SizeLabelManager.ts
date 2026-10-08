@@ -1,7 +1,7 @@
 import Konva from "konva"
 import type { Canvas } from "../../core/Canvas"
 import { ElementTypeEnum } from "../../document/types"
-import { BaseLabelManager, type BaseLabelManagerConfig } from "./BaseLabelManager"
+import { BaseLabelManager, type BaseLabelManagerConfig, type LabelSize } from "./BaseLabelManager"
 
 /**
  * 尺寸标签配置
@@ -29,6 +29,8 @@ const SIZE_LABEL_CONFIG = {
  * 5. 标签显示在元素右上角
  */
 export class SizeLabelManager extends BaseLabelManager {
+	private updatingLabelPositionElementIds = new Set<string>()
+
 	constructor(options: { canvas: Canvas }) {
 		const { canvas } = options
 		// 构建基类配置
@@ -56,6 +58,59 @@ export class SizeLabelManager extends BaseLabelManager {
 		}
 
 		super(baseConfig)
+	}
+
+	/**
+	 * Name labels reserve the rendered size label width. Refresh that sibling
+	 * after the size label changes visibility or geometry, while keeping the
+	 * coordination out of the per-frame name-label layout path.
+	 */
+	protected override updateLabelPosition(elementId: string, skipBatchDraw = false): boolean {
+		const previousVisible = this.isLabelVisibleForElement(elementId)
+		const previousSize = this.getLabelSizeForElement(elementId)
+		let result = false
+		this.updatingLabelPositionElementIds.add(elementId)
+		try {
+			result = super.updateLabelPosition(elementId, skipBatchDraw)
+		} finally {
+			this.updatingLabelPositionElementIds.delete(elementId)
+		}
+
+		const nextVisible = this.isLabelVisibleForElement(elementId)
+		const nextSize = this.getLabelSizeForElement(elementId)
+		const visibilityChanged = previousVisible !== nextVisible
+		const sizeChanged = this.hasLabelSizeChanged(previousSize, nextSize)
+		if ((previousVisible || nextVisible) && (visibilityChanged || sizeChanged)) {
+			this.canvas.nameLabelManager?.refreshLabelLayout(elementId, skipBatchDraw)
+		}
+
+		return result
+	}
+
+	protected override updateLabelVisibility(elementId: string, skipBatchDraw = false): boolean {
+		const visibilityChanged = super.updateLabelVisibility(elementId, skipBatchDraw)
+		if (
+			visibilityChanged &&
+			this.labelMap.has(elementId) &&
+			!this.updatingLabelPositionElementIds.has(elementId)
+		) {
+			this.canvas.nameLabelManager?.refreshLabelLayout(elementId, skipBatchDraw)
+		}
+		return visibilityChanged
+	}
+
+	protected override removeLabel(elementId: string): void {
+		const hadLabel = this.labelMap.has(elementId)
+		super.removeLabel(elementId)
+		if (hadLabel && !this.updatingLabelPositionElementIds.has(elementId)) {
+			this.canvas.nameLabelManager?.refreshLabelLayout(elementId)
+		}
+	}
+
+	private hasLabelSizeChanged(previous: LabelSize | null, next: LabelSize | null): boolean {
+		if (previous === next) return false
+		if (!previous || !next) return true
+		return previous.width !== next.width || previous.height !== next.height
 	}
 
 	/**
@@ -103,8 +158,8 @@ export class SizeLabelManager extends BaseLabelManager {
 	}
 
 	/**
-	 * 计算自定义可见性（检查 size label 是否超出元素宽度或与其他标签重叠）
-	 * 当标签重叠时，优先隐藏 size label
+	 * 计算自定义可见性（检查 size label 是否超出元素宽度）
+	 * 名称标签会根据当前可见的 size label 预留空间，避免两个标签重叠。
 	 * @param elementId - 元素 ID
 	 * @param element - 元素实例
 	 * @param labelGroup - 标签组
@@ -122,7 +177,7 @@ export class SizeLabelManager extends BaseLabelManager {
 			return null
 		}
 
-		// 检查 size label 是否超出元素宽度或与其他标签重叠
+		// 检查 size label 是否超出元素宽度
 		const boundingRect = element?.getBoundingRect()
 		const textNode = labelGroup.findOne("Text") as Konva.Text
 		if (textNode && boundingRect) {
@@ -148,17 +203,9 @@ export class SizeLabelManager extends BaseLabelManager {
 				return false
 			}
 
-			// 检查是否与其他可见标签重叠
-			// 获取其他标签的位置信息
-			const otherLabelBounds = this.getOtherLabelBounds(elementId, this)
-
-			// 检查是否与其他标签重叠
-			for (const otherBounds of otherLabelBounds) {
-				if (this.checkRectOverlap(sizeLabelBounds, otherBounds)) {
-					// 如果重叠，隐藏 size label
-					return false
-				}
-			}
+			// NameLabelManager reserves this label's rendered width before drawing
+			// its text. Do not compare against the name's previous full-width bounds
+			// here, otherwise the size label would hide itself before that relayout.
 		}
 
 		// 不修改基础可见性
