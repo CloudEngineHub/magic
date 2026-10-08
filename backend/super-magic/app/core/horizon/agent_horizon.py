@@ -70,7 +70,7 @@ if TYPE_CHECKING:
     from app.core.entity.message.client_message import SuperMagicProductContext
     from app.utils.file_utils import WorkspaceSnapshot
 
-from agentlang.chat_history.chat_history_models import UserMessage
+from agentlang.chat_history.chat_history_models import ChatMessage, UserMessage
 from agentlang.logger import get_logger
 from agentlang.utils.token_estimator import num_tokens_from_string
 from app.core.horizon.diff_builder import detect_file_changes
@@ -97,6 +97,7 @@ from app.core.horizon.models import (
     VideoModelState,
 )
 from app.core.horizon.store import HorizonStore
+from app.core.horizon.time_awareness import TimeAwareness, collect_time_awareness, render_current_time
 from app.core.entity.user_context import UserContextSnapshot
 from app.core.horizon.profile_context import build_agent_identity, render_agent_identity, render_user_context
 from app.core.process_runtime import PROCESS_STARTED_AT_NS
@@ -451,6 +452,10 @@ class AgentHorizon:
         self._context_used: int = 0    # 上一次 LLM 响应结束后的真实 Token 总量
         self._context_total: int = 0   # 模型最大上下文窗口
 
+        # 只比较同一实例、同一窗口的时间采样；重启和 fork 不继承单调时钟基准。
+        self._last_time_sample: float | None = None
+        self._last_time_history_message: ChatMessage | None = None
+
         # 当前上下文窗口是否尚未完成首包注入；只有为 True 时才输出完整 <initial_context>
         self._is_first_injection: bool = True
         # 运行时 staging：表示这次消息处理前刚拿到的 current 状态，不落持久化。
@@ -508,6 +513,8 @@ class AgentHorizon:
     def _apply_loaded_state(self, loaded: Optional[HorizonState]) -> None:
         """应用持久 baseline，并清空不属于该 baseline 的运行时状态。"""
         self._state = loaded if loaded is not None else HorizonState(agent_id=self._store.agent_id)
+        self._last_time_sample = None
+        self._last_time_history_message = None
         self._loaded = True
 
         # 容器重启 / Agent 实例重建时，只恢复“这个上下文窗口是否已经发过首包”。
@@ -740,6 +747,8 @@ class AgentHorizon:
         self._image_model_changed = False
         self._video_model_changed = False
         self._is_first_injection = True
+        self._last_time_sample = None
+        self._last_time_history_message = None
         self._state.initial_context_injected = False
         self._state.last_injected_date = ""
         self._state.context_usage_baseline_used = 0
@@ -1695,14 +1704,35 @@ class AgentHorizon:
         ]
 
         # ── 时间 ────────────────────────────────────────────────────────────
-        from agentlang.utils.datetime_formatter import get_current_datetime_str
+        from agentlang.utils.datetime_formatter import format_datetime, get_current_datetime
         tz = self._agent_context.get_user_timezone() if self._agent_context else None
-        now_str = get_current_datetime_str(tz)
+        now = get_current_datetime(tz or "UTC")
+        time_sample = time.monotonic()
         # 格式固定为 "YYYY-MM-DD HH:MM:SS Weekday (Week N) TZ (UTC+xx:xx)"
-        today_date = now_str[:10]
+        today_date = now.date().isoformat()
         date_changed = today_date != self._state.last_injected_date
         # 同一天内省略周几、第几周、时区，只保留 "YYYY-MM-DD HH:MM:SS"
-        time_display = now_str if date_changed else now_str[:19]
+        # 简略展示仍带 UTC offset；日期判断和展示共用一次结构化采样，不切割字符串。
+        time_display = format_datetime(now, include_calendar=self._is_first_injection or date_changed)
+        elapsed_seconds: float | None = None
+        time_awareness = TimeAwareness()
+        messages: tuple[ChatMessage, ...] = ()
+        # ChatHistory 是 Agent 初始化时动态挂载的边界对象，确认类型后只读快照。
+        from agentlang.chat_history.chat_history import ChatHistory
+
+        chat_history = getattr(self._agent_context, "chat_history", None)
+        if isinstance(chat_history, ChatHistory):
+            messages = chat_history.get_message_snapshot()
+        if self._last_time_sample is not None:
+            elapsed_seconds = time_sample - self._last_time_sample
+            time_awareness = collect_time_awareness(
+                messages, after_message=self._last_time_history_message,
+            )
+        current_time_context = render_current_time(
+            time_display,
+            elapsed_seconds=elapsed_seconds,
+            awareness=time_awareness,
+        )
 
         # 目录扫描由 Agent 提前完成；这里只比较并展示，整包超限时仍不推进基准。
         memory_directory_context = self._build_memory_directory_context(today_date)
@@ -1741,8 +1771,8 @@ class AgentHorizon:
         if was_first_injection:
             # 当前上下文窗口的首包注入：只应发生在真正的新窗口里，而不是容器重启恢复后
             init_parts = [
-                f"<current_time>{now_str}</current_time>"
-                "\n<!-- When handling time expressions like 'this year', 'recently', 'now', use the above as your authoritative current time. -->"
+                current_time_context
+                + "\n<!-- When handling time expressions like 'this year', 'recently', 'now', use the above as your authoritative current time. -->"
             ]
             init_parts.append(_build_runtime_environment_context(process_started_at_ns))
 
@@ -1801,7 +1831,7 @@ class AgentHorizon:
 
         else:
             # 常规增量注入：同一天只输出时间，跨天输出完整日期时间
-            parts.append(f"<current_time>{time_display}</current_time>")
+            parts.append(current_time_context)
 
             if self._state.process_started_at_ns == 0:
                 parts.append(_build_runtime_environment_context(process_started_at_ns))
@@ -1944,6 +1974,8 @@ class AgentHorizon:
             return HORIZON_CONTEXT_OVERSIZED_NOTICE
 
         # 只有确认本轮上下文会进入 ChatHistory，才推进运行时标志和持久化 baseline。
+        self._last_time_sample = time_sample
+        self._last_time_history_message = messages[-1] if messages else None
         if was_first_injection:
             self._is_first_injection = False
             self._llm_model_changed = False
