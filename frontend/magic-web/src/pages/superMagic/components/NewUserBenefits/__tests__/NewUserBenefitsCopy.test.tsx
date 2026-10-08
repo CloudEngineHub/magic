@@ -1,13 +1,16 @@
 import fs from "node:fs"
 import path from "node:path"
 import { fileURLToPath } from "node:url"
+import type { ComponentType } from "react"
 
 import { act, fireEvent, render, screen } from "@testing-library/react"
+import { Boxes } from "lucide-react"
 import { renderToStaticMarkup } from "react-dom/server"
 import { beforeEach, describe, expect, it, vi } from "vitest"
 
 import enGuideTour from "@/assets/locales/en_US/super/guideTour.json"
 import zhGuideTour from "@/assets/locales/zh_CN/super/guideTour.json"
+import { BASE_MARKET_MENU_ITEMS } from "@/layouts/BaseLayout/components/MagicSidebar/hooks/baseMarketMenuItems"
 
 /*
  * The verdict is handed over directly rather than through the barrel the component imports: only a
@@ -520,6 +523,102 @@ describe("NewUserBenefits rows come from the backend", () => {
 
 		expect(rowTitles()).toEqual(ROW_ORDER)
 		expect(screen.queryByText(/brand_new_task/)).toBeNull()
+	})
+})
+
+describe("NewUserBenefits row icons", () => {
+	/**
+	 * The rows whose task is a product the sidebar's menu also lists, and the key the sidebar
+	 * declares that entry under.
+	 *
+	 * Read off the sidebar's own table rather than restated: `BASE_MARKET_MENU_ITEMS` is where the
+	 * three market entries choose their icon, so swapping one there fails here instead of leaving
+	 * the card drawing a second, private picture of the same product. Micro apps has its own menu
+	 * item rather than a market entry, and is compared against that component's icon instead.
+	 */
+	const SHARED_WITH_SIDEBAR: Array<[row: string, sidebarTitleKey: string]> = [
+		["aiPpt", "sidebar:slidesTemplates.title"],
+		["skills", "sidebar:skillsLibrary.title"],
+		["superLobster", "sidebar:superLobster.title"],
+	]
+
+	/** The shape an icon draws, under the name lucide stamps on it — one name for both sides. */
+	function shapeOf(className: string) {
+		return (
+			className
+				.split(/\s+/)
+				.find((name) => name.startsWith("lucide-") && name.length > "lucide-".length) ?? ""
+		)
+	}
+
+	/** The icon component a sidebar market entry uses. */
+	function sidebarIcon(titleKey: string) {
+		const item = BASE_MARKET_MENU_ITEMS.find((entry) => entry.titleKey === titleKey)
+		if (!item) throw new Error(`the sidebar no longer lists ${titleKey}`)
+		return item.Icon
+	}
+
+	/** A component's own shape name, taken from its markup. */
+	function componentShape(Icon: ComponentType) {
+		return shapeOf(renderToStaticMarkup(<Icon />).match(/class="([^"]*)"/)?.[1] ?? "")
+	}
+
+	/** The `<svg>` a row draws: the title heading → text column → row. */
+	function rowIcon(row: string) {
+		const title = screen.getByText(`newUserBenefits.tasks.${row}.title`)
+		const svg = (
+			title.parentElement?.parentElement?.parentElement as HTMLElement
+		).querySelector("svg")
+		if (!svg) throw new Error(`the ${row} row draws no icon`)
+		return svg
+	}
+
+	function rowShape(row: string) {
+		return shapeOf(rowIcon(row).getAttribute("class") ?? "")
+	}
+
+	/**
+	 * The weight a row's shape is drawn at. Read off whichever element declares it: lucide puts it
+	 * on the root `<svg>`, while the sidebar's two custom icons put it on the path itself.
+	 */
+	function rowStrokeWidth(row: string) {
+		const svg = rowIcon(row)
+		const declared =
+			svg.getAttribute("stroke-width") ??
+			svg.querySelector("path")?.getAttribute("stroke-width")
+		if (declared == null) throw new Error(`the ${row} row declares no stroke width`)
+		return Number(declared)
+	}
+
+	it("draws the four product rows with the icons the sidebar uses for them", () => {
+		openDialog()
+
+		for (const [row, sidebarTitleKey] of SHARED_WITH_SIDEBAR) {
+			expect(rowShape(row)).toBe(componentShape(sidebarIcon(sidebarTitleKey)))
+		}
+
+		// A product the card lists but the market table does not: its menu item is the only place
+		// that picks this one.
+		expect(rowShape("microapps")).toBe(componentShape(Boxes))
+	})
+
+	it("draws the two custom marks at the row's weight, not at its number", () => {
+		/*
+		 * The sidebar keeps `MagiClaw` and `Skills` on a 16-unit drawing grid while lucide uses 24,
+		 * so a stroke width is not comparable between them: handed the same number the custom pair
+		 * comes out half again as thick once both are scaled into the row's 20px box, which is what
+		 * made them read as a heavier set than the rows around them.
+		 */
+		openDialog()
+
+		const lucide = rowStrokeWidth("aiPpt")
+		const custom = rowStrokeWidth("skills")
+
+		expect(custom).toBeLessThan(lucide)
+		// The drawn line is what has to agree: each is scaled by its own grid into the same box.
+		expect(custom / 16).toBeCloseTo(lucide / 24, 6)
+		// And the rule holds for the other custom mark, so neither can drift on its own.
+		expect(rowStrokeWidth("superLobster")).toBeCloseTo(custom, 6)
 	})
 })
 

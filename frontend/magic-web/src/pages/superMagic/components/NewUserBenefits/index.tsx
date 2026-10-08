@@ -4,19 +4,19 @@ import { Trans, useTranslation } from "react-i18next"
 import type { LucideIcon } from "lucide-react"
 import {
 	BookOpen,
+	Boxes,
 	ChevronRight,
 	ChevronUp,
 	CircleUserRound,
-	FileText,
 	Gift,
 	Grid2X2,
 	Mic,
 	MousePointerClick,
-	Sparkles,
-	Workflow,
+	Presentation,
 	X,
 } from "lucide-react"
 
+import { MagiClaw, Skills } from "@/enhance/lucide-react"
 import {
 	Dialog,
 	DialogContent,
@@ -129,6 +129,21 @@ const ACTION_BUTTON_CLASS: Record<BenefitAction, string> = {
 	expired: "cursor-default bg-[#dfe1e7] text-[#969ba7]",
 }
 
+/**
+ * The weight a row's icon is drawn at, and the weight that same look costs on the sidebar's own two
+ * icons.
+ *
+ * The sidebar's four product entries are the icons these rows are meant to read as, but they do not
+ * share a drawing grid: `lucide` lays its shapes out in a 24-unit square, while `MagiClaw` and
+ * `Skills` — the two the sidebar keeps for itself — use a 16-unit one. A stroke width is in the
+ * icon's own units and is then scaled by the box it lands in, so one number handed to both would
+ * draw the custom pair half again as thick at the row's 20px: `1.9` on a 16-unit grid comes out at
+ * 2.38px, against 1.58px for every lucide icon beside it. The compensation below asks the custom
+ * pair for the same *drawn* line instead of the same number.
+ */
+const ICON_STROKE_WIDTH = 1.9
+const ICON_STROKE_WIDTH_16 = (ICON_STROKE_WIDTH * 16) / 24
+
 interface BenefitRow {
 	/** The backend's code, which is what makes a row unique across a renamed flow. */
 	id: string
@@ -136,6 +151,7 @@ interface BenefitRow {
 	title: string
 	description: string
 	icon: LucideIcon
+	strokeWidth: number
 	points: number
 	validityDays: number
 	/** The backend's verdict on the task itself. */
@@ -193,7 +209,7 @@ function NewUserBenefitsTaskRow({ row }: { row: BenefitRow }) {
 					row.completed && "text-[#8c8c8c]",
 				)}
 			>
-				<Icon aria-hidden="true" className="size-5" strokeWidth={1.9} />
+				<Icon aria-hidden="true" className="size-5" strokeWidth={row.strokeWidth} />
 			</div>
 			<div className="min-w-0">
 				<div className="flex items-center gap-2">
@@ -410,10 +426,22 @@ function NewUserBenefitsCard() {
 	 * decides which tasks exist, in what order, what they are worth and where they stand, while the
 	 * copy and the icon are this client's own and are written out here so every i18n key is a
 	 * literal.
+	 *
+	 * The four rows that exist as an entry in the sidebar's own menu — AI PPT, the claw, skills and
+	 * micro apps — are drawn with that menu's icon, so a task reads as the product it opens rather
+	 * than as a second, private picture of it. `baseMarketMenuItems.ts` and
+	 * `MicroAppsSidebarMenuItem` are where those choices live; taking one from here instead is how
+	 * the two drift apart. `strokeWidth` is the grid compensation above, not taste.
 	 */
 	const rowPresentation: Record<
 		HomeOnboardingTaskId,
-		{ title: string; description: string; icon: LucideIcon; recommended?: boolean }
+		{
+			title: string
+			description: string
+			icon: LucideIcon
+			strokeWidth?: number
+			recommended?: boolean
+		}
 	> = {
 		"first-ai-work": {
 			title: t("newUserBenefits.tasks.firstAiWork.title"),
@@ -430,7 +458,7 @@ function NewUserBenefitsCard() {
 		"create-ai-ppt": {
 			title: t("newUserBenefits.tasks.aiPpt.title"),
 			description: t("newUserBenefits.tasks.aiPpt.description"),
-			icon: FileText,
+			icon: Presentation,
 		},
 		"audio-recording": {
 			title: t("newUserBenefits.tasks.recording.title"),
@@ -445,17 +473,21 @@ function NewUserBenefitsCard() {
 		"manage-skill": {
 			title: t("newUserBenefits.tasks.skills.title"),
 			description: t("newUserBenefits.tasks.skills.description"),
-			icon: Sparkles,
+			// The sidebar's own mark for "数字员工・技能・连接器", which this row's tour leads into.
+			icon: Skills as LucideIcon,
+			strokeWidth: ICON_STROKE_WIDTH_16,
 		},
 		"create-micro-app": {
 			title: t("newUserBenefits.tasks.microapps.title"),
 			description: t("newUserBenefits.tasks.microapps.description"),
-			icon: Grid2X2,
+			icon: Boxes,
 		},
 		"super-lobster": {
 			title: t("newUserBenefits.tasks.superLobster.title"),
 			description: t("newUserBenefits.tasks.superLobster.description"),
-			icon: Workflow,
+			// The claw the sidebar shows for the product, drawn on its own 16-unit grid.
+			icon: MagiClaw as LucideIcon,
+			strokeWidth: ICON_STROKE_WIDTH_16,
 		},
 	}
 
@@ -510,6 +542,7 @@ function NewUserBenefitsCard() {
 				title: presentation.title,
 				description: presentation.description,
 				icon: presentation.icon,
+				strokeWidth: presentation.strokeWidth ?? ICON_STROKE_WIDTH,
 				points: reward.points,
 				validityDays: reward.validityDays,
 				completed,
