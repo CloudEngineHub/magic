@@ -14,6 +14,11 @@ import { useCanvasEvent } from "../hooks/canvas/useCanvasEvent"
 import { useCanvasElements } from "../hooks/canvas/useCanvasElement"
 import { useCanvas } from "./CanvasProvider"
 import type { ElementToolSession } from "../../runtime/element-tools"
+import { ElementTypeEnum } from "../../runtime/document/types"
+import {
+	pickContentElementIdAtStagePointer,
+	resolveManagedElementIdFromKonvaNode,
+} from "../../runtime/interaction/transform/elementNodeUtils"
 
 export interface FullscreenMediaElement {
 	elementId: string
@@ -184,6 +189,29 @@ export function CanvasUIProvider({ children }: CanvasUIProviderProps) {
 	const openMessageHistory = useCallback((elementId: string) => {
 		setMessageHistoryElementId(elementId)
 	}, [])
+
+	useEffect(() => {
+		if (!canvas || !messageHistoryElementId) return
+		if (
+			canvas.elementManager.getElementData(messageHistoryElementId)?.type !==
+			ElementTypeEnum.Image
+		)
+			return
+		// 同一图片再次点击不会改变选区；直接消费已有输入事件，切回编辑器。
+		return canvas.inputManager.on("down", (input) => {
+			if (input.button !== 0 || input.activePointerCount > 1) return
+			if (Object.values(input.modifiers).some(Boolean)) return
+			let node: typeof input.target | null = input.target
+			while (node && node !== canvas.stage) {
+				if (node.name().startsWith("decorator-")) return
+				node = node.getParent()
+			}
+			const elementId =
+				resolveManagedElementIdFromKonvaNode(input.target, canvas) ??
+				pickContentElementIdAtStagePointer(canvas, input.stage)
+			if (elementId === messageHistoryElementId) setMessageHistoryElementId(null)
+		})
+	}, [canvas, messageHistoryElementId])
 
 	useCanvasEvent("element:image:infoButtonClick", ({ data }) => {
 		openMessageHistory(data.elementId)

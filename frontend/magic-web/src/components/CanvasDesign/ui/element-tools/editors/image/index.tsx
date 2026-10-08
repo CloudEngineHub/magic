@@ -1,5 +1,9 @@
 import { useCallback, useEffect, useState } from "react"
-import { useCanvasModeUI, useCanvasSelectionUI } from "../../../../app/providers/CanvasUIProvider"
+import {
+	useCanvasModeUI,
+	useCanvasPanelUI,
+	useCanvasSelectionUI,
+} from "../../../../app/providers/CanvasUIProvider"
 import { useCanvas } from "../../../../app/providers/CanvasProvider"
 import { ElementTypeEnum, type ImageElement } from "../../../../runtime/document/types"
 import {
@@ -24,6 +28,7 @@ export default function ImageMessageEditor() {
 	const { canvas } = useCanvas()
 	const { selectedElements, isSelecting, isDragging, activeToolSession } = useCanvasSelectionUI()
 	const { croppingElementId, extendingElementId, erasingElementId } = useCanvasModeUI()
+	const { messageHistoryElementId } = useCanvasPanelUI()
 	const [retryEditingElementId, setRetryEditingElementId] = useState<string | null>(null)
 	const [pendingToolCommand, setPendingToolCommand] =
 		useState<GenerationToolCommandRequest | null>(null)
@@ -108,15 +113,18 @@ export default function ImageMessageEditor() {
 	return (
 		<>
 			{editorEligible ? (
-				<ActiveImageMessageEditor
-					imageElement={imageElement}
-					isDragging={isDragging}
-					retryEditingElementId={retryEditingElementId}
-					pendingToolCommand={pendingToolCommand}
-					onPendingToolCommandHandled={() => setPendingToolCommand(null)}
-					onPreviewMediaResource={setPreviewingMediaResource}
-					isMediaResourcePreviewOpen={previewingMediaResource != null}
-				/>
+				// 只隐藏表面，保留编辑器及尚未持久化的草稿，详情关闭后继续编辑。
+				<div hidden={messageHistoryElementId === imageElement.id}>
+					<ActiveImageMessageEditor
+						imageElement={imageElement}
+						isDragging={isDragging}
+						retryEditingElementId={retryEditingElementId}
+						pendingToolCommand={pendingToolCommand}
+						onPendingToolCommandHandled={() => setPendingToolCommand(null)}
+						onPreviewMediaResource={setPreviewingMediaResource}
+						isMediaResourcePreviewOpen={previewingMediaResource != null}
+					/>
+				</div>
 			) : null}
 			{previewingMediaResource != null ? (
 				<MediaResourceFullscreenPreview
