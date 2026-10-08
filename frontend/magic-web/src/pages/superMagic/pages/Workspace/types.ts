@@ -166,7 +166,7 @@ export interface Workspace {
 	cooperate_project_count?: number
 	project_count: number
 	status?: "waiting" | "running" | "finished" | "error" // 其实没有这个字段，但是为了兼容旧数据，所以加了这个字段
-	workspace_type: "chat" | "default"
+	workspace_type: "chat" | "default" | "micro-app"
 }
 
 // 话题
@@ -311,6 +311,8 @@ export interface ProjectListItem {
 	tag: "collaboration" | "" // 用于标识是否是协作项目
 	is_pinned?: boolean // 协作项目才有
 	last_active_at?: string // 协作项目才有
+	claw_code?: string
+	micro_app_id?: string
 	user_role?: CollaboratorPermission
 	is_bind_workspace?: boolean // 协作项目才有
 	bind_workspace_id?: string // 协作项目才有

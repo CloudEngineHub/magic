@@ -481,11 +481,17 @@ class ProjectMemberRepository implements ProjectMemberRepositoryInterface
         string $sortDirection = 'desc',
         ?array $organizationCodes = null,
         bool $showHidden = false,
-        ?ProjectSortMode $sortMode = null
+        ?ProjectSortMode $sortMode = null,
+        bool $includeSpecialModes = false
     ): array {
+        // 特殊项目只进入最近项目视图，避免普通工作区查询因请求参数扩大范围。
+        $includeSpecialModes = $includeSpecialModes && $sortMode === ProjectSortMode::Recent;
         $query = $this->buildParticipatedProjectsQuery($userId);
         $this->applyParticipatedMemberFilters($query, $userId);
-        $this->applyProjectListBaseFilters($query, $organizationCodes, $showHidden);
+        if ($includeSpecialModes) {
+            $this->applyRecentSpecialProjectJoins($query, $userId, $organizationCodes);
+        }
+        $this->applyProjectListBaseFilters($query, $organizationCodes, $showHidden, $includeSpecialModes);
         $this->applyAccessibleParticipatedProjectFilter($query, $userId);
 
         // 工作区限制（可选）
@@ -505,6 +511,9 @@ class ProjectMemberRepository implements ProjectMemberRepositoryInterface
         $total = $totalQuery->select('p.id')->distinct()->count();
 
         // 构建查询字段
+        $lastActiveAtExpression = $includeSpecialModes
+            ? "CASE WHEN p.project_mode = '" . ProjectMode::MICRO_APP->value . "' THEN GREATEST(COALESCE(mav.last_visited_at, p.created_at), COALESCE(pms.last_active_at, p.created_at)) ELSE COALESCE(pms.last_active_at, p.created_at) END"
+            : 'COALESCE(pms.last_active_at, p.created_at)';
         $query->select([
             'p.id',
             'p.workspace_id',
@@ -526,7 +535,7 @@ class ProjectMemberRepository implements ProjectMemberRepositoryInterface
             Db::raw('COALESCE(pms.is_pinned, 0) as is_pinned'),
             Db::raw('COALESCE(pms.is_bind_workspace, 0) as is_bind_workspace'),
             Db::raw('COALESCE(pms.bind_workspace_id, 0) as bind_workspace_id'),
-            Db::raw('COALESCE(pms.last_active_at, p.created_at) as last_active_at'),
+            Db::raw($lastActiveAtExpression . ' as last_active_at'),
             Db::raw('pms.sort_order as sort_order'),
             Db::raw('pms.pinned_sort_order as pinned_sort_order'),
             'pms.pinned_at',
@@ -541,6 +550,13 @@ class ProjectMemberRepository implements ProjectMemberRepositoryInterface
             Db::raw('CASE WHEN p.user_id != ? THEN 1 ELSE 0 END as is_collaborator'),
         ])
             ->addBinding($userId, 'select');
+
+        if ($includeSpecialModes) {
+            $query->addSelect([
+                Db::raw('mc.code as claw_code'),
+                Db::raw('ma.id as micro_app_id'),
+            ]);
+        }
 
         // 去重
         $query->distinct();
@@ -1043,7 +1059,8 @@ class ProjectMemberRepository implements ProjectMemberRepositoryInterface
     private function applyProjectListBaseFilters(
         QueryBuilder $query,
         ?array $organizationCodes,
-        bool $showHidden
+        bool $showHidden,
+        bool $includeSpecialModes = false
     ): void {
         $query->where('p.project_status', 1)
             ->whereNull('p.deleted_at');
@@ -1056,7 +1073,49 @@ class ProjectMemberRepository implements ProjectMemberRepositoryInterface
             $query->where('p.is_hidden', 0);
         }
 
-        $query->whereNotIn('p.project_mode', ProjectMode::getQueryFilterModes());
+        if (! $includeSpecialModes) {
+            $query->whereNotIn('p.project_mode', ProjectMode::getQueryFilterModes());
+            return;
+        }
+
+        $query->whereNotIn(
+            'p.project_mode',
+            array_values(array_diff(ProjectMode::getQueryFilterModes(), ProjectMode::getRecentListSpecialModes()))
+        )->where(function ($specialQuery): void {
+            $specialQuery
+                ->where('p.project_mode', '<>', ProjectMode::MAGICLAW->value)
+                ->orWhereNotNull('mc.code');
+        })->where(function ($specialQuery): void {
+            $specialQuery
+                ->where('p.project_mode', '<>', ProjectMode::MICRO_APP->value)
+                ->orWhereNotNull('ma.id');
+        });
+    }
+
+    private function applyRecentSpecialProjectJoins(
+        QueryBuilder $query,
+        string $userId,
+        ?array $organizationCodes
+    ): void {
+        $microAppVisits = Db::table('magic_super_agent_micro_app_visits')
+            ->select('micro_app_id')
+            ->selectRaw('MAX(last_visited_at) as last_visited_at')
+            ->where('user_id', $userId)
+            ->when(! empty($organizationCodes), static function (QueryBuilder $visitQuery) use ($organizationCodes): void {
+                $visitQuery->whereIn('organization_code', $organizationCodes);
+            })
+            ->groupBy('micro_app_id');
+
+        $query
+            ->leftJoin('magic_super_magic_claw as mc', function ($join): void {
+                $join->on('mc.project_id', '=', 'p.id')->whereNull('mc.deleted_at');
+            })
+            ->leftJoin('magic_super_agent_micro_apps as ma', function ($join): void {
+                $join->on('ma.project_id', '=', 'p.id')->whereNull('ma.deleted_at');
+            })
+            ->leftJoinSub($microAppVisits, 'mav', function ($join): void {
+                $join->on('mav.micro_app_id', '=', 'ma.id');
+            });
     }
 
     private function applyAccessibleParticipatedProjectFilter(QueryBuilder $query, string $userId): void

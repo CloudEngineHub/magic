@@ -63,6 +63,7 @@ export function useRecentProjectSearch(keyword: string, active: boolean, busy: b
 					show_collaboration: 1,
 					page,
 					page_size: PAGE_SIZE,
+					include_special: 1,
 				},
 				{ signal: controller.signal },
 			)

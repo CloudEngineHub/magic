@@ -13,15 +13,28 @@ export function useFileManagerSelection({
 	location,
 	setLocation,
 	ready,
+	checked,
 }: {
 	ids: string[]
 	location: FileManagerLocationState
 	setLocation: Dispatch<SetStateAction<FileManagerLocationState>>
 	ready: boolean
+	checked?: {
+		ids: ReadonlySet<string>
+		onChange: (addedIds: string[], removedIds: string[]) => void
+	}
 }) {
 	const positions = useMemo(() => new Map(ids.map((id, index) => [id, index])), [ids])
+	const checking = Boolean(checked)
+	const checkedIds = checked?.ids
+	const selectedIds = useMemo(
+		() => (checkedIds ? new Set(checkedIds) : location.selectedIds),
+		[checkedIds, location.selectedIds],
+	)
 	const select = useMemoizedFn((id: string, modifiers: Modifiers, focusOnly = false) => {
 		setLocation((current) => {
+			// 勾选模式中，点名称和移动焦点不改变清单；只有 checkbox／Space 改变勾选。
+			if (checked) return { ...current, focusedId: id, anchorId: id }
 			const additive = modifiers.metaKey || modifiers.ctrlKey
 			let selectedIds = new Set(additive ? current.selectedIds : [])
 			if (focusOnly) selectedIds = current.selectedIds
@@ -51,20 +64,29 @@ export function useFileManagerSelection({
 	useEffect(() => {
 		if (!ready) return
 		setLocation((current) => {
-			const selectedIds = new Set([...current.selectedIds].filter((id) => positions.has(id)))
+			const selectedIds = checking
+				? current.selectedIds
+				: new Set([...current.selectedIds].filter((id) => positions.has(id)))
 			const focusedId =
 				current.focusedId && positions.has(current.focusedId) ? current.focusedId : null
 			if (selectedIds.size === current.selectedIds.size && focusedId === current.focusedId)
 				return current
 			return { ...current, selectedIds, focusedId }
 		})
-	}, [positions, ready, setLocation])
+	}, [positions, ready, setLocation, checking])
+	const toggle = useMemoizedFn((id: string) => {
+		if (!checked) return
+		const removing = checked.ids.has(id)
+		checked.onChange(removing ? [] : [id], removing ? [id] : [])
+		setLocation((current) => ({ ...current, focusedId: id, anchorId: id }))
+	})
 	return {
-		selectedIds: location.selectedIds,
+		selectedIds,
 		focusedId: location.focusedId,
 		positions,
 		select,
 		replace,
+		toggle,
 		clear: () =>
 			setLocation((current) => ({
 				...current,
@@ -72,6 +94,12 @@ export function useFileManagerSelection({
 				focusedId: null,
 				anchorId: null,
 			})),
-		all: () => replace(new Set(ids)),
+		all: () =>
+			checked
+				? checked.onChange(
+						ids.filter((id) => !checked.ids.has(id)),
+						[],
+					)
+				: replace(new Set(ids)),
 	}
 }
