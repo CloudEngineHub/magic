@@ -19,7 +19,7 @@ use function Hyperf\Config\config;
  */
 class ModelCallAuditListRequestDTO extends AbstractDTO
 {
-    /** 默认查询天数：今天往前推 29 天的 00:00:00，与今天共 30 个自然日 */
+    /** 无有效筛选条件时的默认查询天数：今天往前推 29 天，与今天共 30 个自然日 */
     private const int DEFAULT_RANGE_DAYS = 30;
 
     public string $type = '';
@@ -113,7 +113,7 @@ class ModelCallAuditListRequestDTO extends AbstractDTO
         if ($endDateMs !== null) {
             $filters['end_operation_time'] = $endDateMs;
         }
-        if ($startDateMs === null && $endDateMs === null) {
+        if ($filters === []) {
             $filters['start_operation_time'] = $this->defaultStartOperationTimeMs();
             $filters['end_operation_time'] = $this->defaultEndOperationTimeMs();
         }
