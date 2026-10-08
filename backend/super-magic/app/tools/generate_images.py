@@ -106,8 +106,8 @@ class ImageGenerationTask(BaseModel):
 
     prompt: str = Field(
         ...,
-        description="""<!--zh: 图片生成提示词，建议包含主体、风格、构图、光线、色调，描述越具体生成质量越高。禁止包含色情、暴力、种族歧视等风险内容。-->
-Image generation prompt. Include subject, style, composition, lighting, and color tone for best results. Prohibited: pornography, violence, racism.""",
+        description="""<!--zh: 图片生成提示词，建议包含主体、风格、构图、光线、色调，描述越具体生成质量越高；有参考图时，写清每张图参考什么，不要复述参考图里已有的外观。禁止包含色情、暴力、种族歧视等风险内容。-->
+Image generation prompt. Include subject, style, composition, lighting, and color tone for best results; with reference images, state what each image governs instead of restating its appearance. Prohibited: pornography, violence, racism.""",
     )
     size: Optional[str] = Field(
         None,
@@ -126,8 +126,8 @@ Save directory (relative path). Name the directory based on the user's intent fo
     )
     reference_images: List[str] = Field(
         default_factory=list,
-        description="""<!--zh: 参考图或待编辑图片的工作区相对路径列表（如 ['uploads/image.png']）。有值时以参考图为风格/内容/编辑基础生成；空列表则纯文本生成。用户上传了图片必须传入。-->
-Workspace-relative paths of reference or source images (e.g. ['uploads/image.png']). When provided, generates based on them as style/content/edit reference. Pass [] for text-only generation. Must provide when the user has uploaded images.""",
+        description="""<!--zh: 参考图或待编辑图片的工作区相对路径列表（如 ['uploads/image.png']）。有值时以参考图为风格/内容/编辑基础生成，prompt 中按此顺序称为图片1、图片2；空列表则纯文本生成。用户上传了图片必须传入。-->
+Workspace-relative paths of reference or source images (e.g. ['uploads/image.png']). When provided, generates based on them as style/content/edit reference; the prompt cites them in this order as Image 1, Image 2. Pass [] for text-only generation. Must provide when the user has uploaded images.""",
     )
 
     @field_validator("prompt")
@@ -219,8 +219,9 @@ class GenerateImages(AbstractFileTool[GenerateImagesParams], WorkspaceTool[Gener
 - Prompt 是创意简报，不是关键词堆砌。把你要传达的视觉决定逐一写清楚，而不是堆叠空洞形容词（"精美"、"震撼"）
 - 要消除歧义：确定哪 2-3 个视觉维度如果出错就会让图片失败，把这些维度写明
 - 用具体替代含糊："戏剧性光线" → "来自左侧 90°的单点硬光，右侧深度阴影"
-- 图生图时，分离内容与风格：主体（形状、颜色、细节）是什么必须保留，背景/光线/色调可以变化
-- 多张参考图时，按 reference_images 中的顺序引用，如"第一张图"、"第二张图"，并声明每张图贡献的属性
+- 有参考图时，生成模型会直接看图；prompt 是它同样会遵从的第二条信息通道。复述参考图里已有的外观（肤色、胡子、眼镜、服装细节）不会增加信息，看错或说重了还会把结果拉离参考图
+- 所以文字只写图片表达不了的内容：按 reference_images 顺序称为图片1、图片2，写清每张图负责哪些方面（人物身份与五官、发型、服装、表情、姿势、产品外形与标签、构图、配色、光线、风格）以及保持程度（完全一致或宽松参考）；再完整描述新的场景、动作、镜头、光线和要改动的内容
+- 需要强调时照常强调：用户提到的特征、正在修改的部分、容易丢失的小细节（logo、痣、包装文字）、需要区分多个主体时，指向参考图里的位置来写（"保留图片1左脸颊的痣"），不要重新描述它的样子；用户原话照常保留
 - 用户给出模糊描述时，扩写为包含主体、构图、光线、色调的完整描述；用户给出精心构建的 prompt 时，保留其原文，仅补充必要参数
 
 **形式选择**
@@ -248,8 +249,9 @@ Image generation, editing, retries, and additional candidates may consume points
 - A prompt is a creative brief, not a keyword list. Make every visual decision explicit rather than stacking vague adjectives ("beautiful", "stunning")
 - Identify the 2–3 dimensions that would make the image fail if wrong, and make those explicit
 - Replace vague terms with specifics: "dramatic lighting" → "single hard key light at 90° to the subject, deep shadow on the opposite side"
-- For image-to-image: separate content from style — state what must be preserved (subject shape, color, surface details) and what can change (background, lighting, color grade)
-- With multiple references, cite them by position in reference_images ("the first image", "the second image") and declare what each contributes
+- With reference images, the generation model sees them directly; your prompt is a second channel it also obeys. Restating their appearance (skin tone, facial hair, glasses, clothing details) adds nothing, and a misreading or exaggeration pulls the result away from the reference
+- So write what the images cannot say: cite them by reference_images order as Image 1, Image 2 (图片1, 图片2 in a Chinese prompt), state which aspects each governs (identity and face, hairstyle, outfit, expression, pose, product shape and label, composition, palette, lighting, style) and how strictly (exact or loose); then fully describe the new scene, action, camera, lighting, and the change
+- Emphasize when it matters: a feature the user mentioned, the part being changed, a small detail that is easily lost (logo, mole, label text), or which of several subjects you mean. Point to it in the reference ("keep the mole on the left cheek from Image 1") instead of re-describing it; keep the user's own wording
 - User gives a vague idea → expand into a complete visual specification; user provides a crafted prompt → keep their wording, only append missing parameters
 
 **Format selection**

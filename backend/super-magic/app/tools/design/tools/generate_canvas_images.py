@@ -138,8 +138,8 @@ class ImageTaskSpec(BaseModel):
     """
     prompt: str = Field(
         ...,
-        description="""<!--zh: 图片生成提示词。建议包含主体、风格、构图、光线、色调。-->
-Image generation prompt. Include subject, style, composition, lighting, and color tone for best results."""
+        description="""<!--zh: 图片生成提示词。建议包含主体、风格、构图、光线、色调；有参考图时，写清每张图参考什么，不要复述参考图里已有的外观。-->
+Image generation prompt. Include subject, style, composition, lighting, and color tone for best results; with reference images, state what each image governs instead of restating its appearance."""
     )
     name: str = Field(
         ...,
@@ -153,8 +153,8 @@ Output image dimensions in 'WxH' format. Optional when reference_images is non-e
     )
     reference_images: List[str] = Field(
         ...,
-        description="""<!--zh: 参考图路径列表。无参考图时传 []。参考图提供视觉锚点（结构、风格、构图），模型以其为起点创作而非复制。-->
-Reference image paths. Pass [] for text-only generation. Reference images serve as a visual anchor — structure, style, or composition — that the model builds upon rather than copies."""
+        description="""<!--zh: 参考图路径列表，prompt 中按此顺序称为图片1、图片2。无参考图时传 []。每张图提供什么（人物形象、服装、产品外形、构图、风格等）、严格程度（完全一致或仅作参考），由 prompt 说明。-->
+Reference image paths; the prompt cites them in this order as Image 1, Image 2. Pass [] for text-only generation. The prompt states what each image provides (identity, outfit, product shape, composition, style, and so on) and how strictly (exact match or loose reference)."""
     )
     element_id: Optional[str] = Field(
         None,

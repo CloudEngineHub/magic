@@ -146,6 +146,8 @@ class VisualUnderstanding(WorkspaceTool[VisualUnderstandingParams]):
     视觉专家无法得知你所知晓的上下文，因此需要提供必要且充足的背景与需求信息。
     对于简单问题，视觉专家可给出答案，不仅限于分析和解释图片本身。
 
+    图片已经在对话中直接呈现给你时（例如用户在消息里发送的图片），直接查看即可，不要再调用本工具；本工具用于查看你当前看不到的图片，例如只给出文件路径或链接的图片。同一批图片不要重复调用。
+
     最佳实践：
     1、分析需求明确时，为视觉专家提供完整的逐字引用的分析需求
     2、简单问题可直接要求视觉专家给出答案（如：与上下文无关的、无需太多背景信息的问题）
@@ -179,6 +181,8 @@ class VisualUnderstanding(WorkspaceTool[VisualUnderstandingParams]):
     Visual understanding tool: Call AI vision expert to view, read, analyze or interpret image content.
     Vision expert cannot know the context you know, so provide necessary and sufficient background and requirement information.
     For simple questions, vision expert can provide answers, not limited to analyzing and interpreting images themselves.
+
+    If an image is already shown to you in the conversation (for example, one the user sent in a message), look at it directly instead of calling this tool. Use this tool for images you cannot currently see, such as those given only as a file path or URL. Do not call it again for the same images.
 
     Best practices:
     1. When analysis requirements are clear, provide vision expert with complete verbatim quoted analysis requirements

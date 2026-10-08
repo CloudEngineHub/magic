@@ -563,13 +563,13 @@ A `[@design_marker:name]` mention is the user annotating a region of a Canvas im
 ### Processing steps
 
 1. **Parse** — extract the marker name (the intent), the image path, and the marked area / coordinates.
-2. **Understand** — call `visual_understanding` on the image to get its content description and dimensions. Convert the marker's Canvas project-relative path to a Workspace-relative path by prefixing the exact `project_path` before this call (for example, `./images/dog.jpg` in project `Demo` becomes `Demo/images/dog.jpg`). Do not pass the bare `./images/...` path to `visual_understanding`. You need to know what the image contains to describe what should change and what must stay.
-3. **Build the prompt** — `[full scene from visual_understanding] + [the change, at the marked location] + [preserve everything else]`. Fold the marker coordinates directly into the prompt, combined with the object name from `visual_understanding`.
+2. **Look** — see the image to identify the object at the marked area and get the original dimensions. If the image is not already visible in your context, call `visual_understanding`; convert the marker's Canvas project-relative path to a Workspace-relative path by prefixing the exact `project_path` (for example, `./images/dog.jpg` in project `Demo` becomes `Demo/images/dog.jpg`). Do not pass the bare `./images/...` path to `visual_understanding`.
+3. **Build the prompt** — `[the change, at the marked location in Image 1] + [keep everything else in Image 1 unchanged]`. Name the marked object and fold in the coordinates so the model edits the right spot. The reference already shows the rest of the scene; re-describing it adds your misreadings as competing instructions (see Reference roles in `references/image-generation.md`).
 4. **Generate** — `add_canvas_elements` with a single image Element whose Content uses `source=generated`, `content_type=image`, a specific `name`, `reference_images=[original project-relative path]`, and `size` set to the original image's dimensions.
 
 ```python
-# visual_understanding was already called and returned the scene description
-# and the original dimensions (e.g. 1920x1080).
+# You have seen the image: the marked object is the dog's ear, and the original
+# dimensions are 1920x1080.
 
 result = tool.call("add_canvas_elements", {
     "project_path": "Demo",
@@ -582,10 +582,9 @@ result = tool.call("add_canvas_elements", {
             "content_type": "image",
             "name": "dog with red ear",
             "prompt": (
-                "A golden retriever sitting on grass, looking at the camera, warm afternoon "
-                "sunlight from the left. Change only the ear at approximately (64%, 7%) to bright "
-                "red — same fur texture, same lighting, just the color changed. Preserve the dog's "
-                "face, body, pose, the grass, and the entire background exactly as they appear."
+                "In Image 1, change only the dog's ear at approximately (64%, 7%) to bright red, "
+                "keeping its fur texture and lighting. Keep the dog's face, body, pose, and the "
+                "entire background exactly as in Image 1."
             ),
             "reference_images": ["./images/dog.jpg"],
             "size": "1920x1080",
@@ -595,7 +594,7 @@ result = tool.call("add_canvas_elements", {
 print(result.content)
 ```
 
-Key points: always pass the original image path in `reference_images`; always set `size` to the original dimensions; describe the full scene, not just the change, and explicitly state what is preserved; the new image is a separate Element — the original Element and file remain unchanged.
+Key points: always pass the original image path in `reference_images`; always set `size` to the original dimensions; describe the change precisely and state that everything else in Image 1 is kept, without re-describing the scene; the new image is a separate Element — the original Element and file remain unchanged.
 
 ## Mandatory context loading
 
