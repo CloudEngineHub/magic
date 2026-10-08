@@ -33,7 +33,7 @@ export type HttpToolProjectionPolicy = "preserve_live" | "historical_terminal"
 export type HttpAssistantSnapshotPolicy = "progress_snapshot" | "canonical_final"
 
 /** Final settlement can finish transport while the visible row still catches up. */
-export type AssistantRenderPhase = "reasoning_content" | "content" | "tool"
+export type AssistantRenderPhase = "reasoning_content" | "content" | "tool" | "idle" | "interrupted"
 
 export type LifecycleEventPolicy = "silent" | "live"
 
@@ -119,6 +119,10 @@ export type SuperMagicStoreMessageNode = RawSuperMagicMessageNode | SharedMessag
 
 export interface MessageItem {
 	app_message_id: string
+	/** 本地流式卡的序号只用于展示；真实 IM/HTTP 消息接管后才参与服务端水位。 */
+	is_stream_placeholder: boolean
+	/** 首次出现时的前一条可见消息身份；后续同步只更新内容，不改变展示位置。 */
+	display_after_message_id?: string
 	/** Store/UI 统一查询身份；User=app_message_id，Assistant/Tool 历史消息回退 app_message_id。 */
 	super_message_id: string
 	/** 消息相关联Id */

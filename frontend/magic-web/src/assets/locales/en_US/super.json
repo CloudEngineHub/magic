@@ -177,6 +177,7 @@
 		}
 	},
 	"agentThink": {
+		"interrupted": "Thinking interrupted",
 		"thinkDone": "Done thinking",
 		"thinking": "Thinking..."
 	},
