@@ -1,11 +1,11 @@
 ---
 name: file-bundle
-description: Use when a user wants to download or package a collection of existing workspace files, including mixed images, documents, audio, video, code, or archives, without saving a ZIP in the project.
+description: Use when a user wants to download or package a collection of existing workspace files, including mixed images, documents, audio, video, code, or archives, or reports that a previously provided file bundle card cannot be used.
 ---
 
 # File Bundle
 
-Create a message card with `create_file_download` through Code Mode in `run_sdk_snippet`. The card lists the selected files and lets the user download them individually or package them into a ZIP in their browser. The tool does not create, upload, or download an archive itself.
+Create a message card with `create_file_download` through Code Mode in `run_sdk_snippet`. The card lists the selected files and lets the user download them individually or package them into a ZIP in their browser. The tool does not create, upload, or download an archive itself. This card is currently supported only by the Web client; other clients may not display it or support its download controls.
 
 ## Choose the Right Capability
 
@@ -32,7 +32,15 @@ result = tool.call("create_file_download", {
 print(result.content)
 ```
 
-Read `result.content` and check `result.ok`. Use a collection title in the user's language. Do not create a ZIP or a manifest file merely to add a final-response link; the successful card is the collection's delivery entry.
+Read `result.content` and check `result.ok`. Use a collection title in the user's language. Normally, the successful card is the collection's delivery entry; do not also create a ZIP or manifest just to add a final-response link. Use the attachment fallback below when the user cannot use the card.
+
+## Attachment Fallback
+
+Prefer the card because Web packages the files when the user clicks, without storing a ZIP in the project. An ordinary ZIP attachment is stored as a project file; deleting it later may only soft-delete it and retain its object-storage usage until cleanup.
+
+If the user reports that the card is missing, cannot be clicked, or cannot download, an unsupported client is one possible cause, not a confirmed diagnosis. Do not repeatedly provide the same card or require the user to switch to Web. Create a ZIP of the same selected files through the existing file workflow and deliver it as a normal downloadable attachment, using the current channel's delivery guidance when applicable. This is an accepted fallback despite its storage cost; do not silently omit unavailable members or expand the collection.
+
+Fallback does not bypass file access, watermark, subscription, or agreement policies. An explicit permission or policy error must be resolved through the existing rules rather than repackaging to evade it. Report attachment readiness only after the ZIP is created and available; never claim the user has saved it.
 
 ## Parameters and Boundaries
 
