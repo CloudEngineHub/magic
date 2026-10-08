@@ -189,14 +189,39 @@ export default function FileDownloadCard({
 				>
 					{data ? (
 						<>
-							<div className="border-b border-border px-3 py-2 text-xs">
-								<p className="m-0 break-words font-medium text-foreground">
-									{data.title}
-								</p>
-								<p className="m-0 mt-1 text-muted-foreground">
-									{t("fileDownload.fileCount", { count: data.items.length })} ·{" "}
-									{formatFileSize(data.total_bytes)}
-								</p>
+							<div className="flex items-start justify-between gap-3 border-b border-border px-3 py-2 text-xs">
+								<div className="min-w-0 flex-1">
+									<SmartTooltip
+										elementType="p"
+										content={data.title}
+										className="m-0 truncate font-medium text-foreground"
+									>
+										{data.title}
+									</SmartTooltip>
+									<p className="m-0 mt-1 text-muted-foreground">
+										{t("fileDownload.fileCount", { count: data.items.length })}{" "}
+										· {formatFileSize(data.total_bytes)}
+									</p>
+								</div>
+								{containsDownloadImages(data) && (
+									<div className="flex shrink-0 items-center gap-1.5 whitespace-nowrap">
+										<Checkbox
+											id={qualityId}
+											checked={noWatermark}
+											onCheckedChange={(value) =>
+												setNoWatermark(value === true)
+											}
+											disabled={disabled}
+										/>
+										<label
+											htmlFor={qualityId}
+											className="cursor-pointer text-xs text-foreground"
+										>
+											{t("fileDownload.noWatermark")}
+										</label>
+										{download?.noWatermarkRequiresVip && <VIPTag />}
+									</div>
+								)}
 							</div>
 							<ScrollArea viewportClassName="max-h-72 [&>div]:!block">
 								<ul className="m-0 list-none divide-y divide-border p-0">
@@ -262,23 +287,6 @@ export default function FileDownloadCard({
 									))}
 								</ul>
 							</ScrollArea>
-							{containsDownloadImages(data) && (
-								<div className="flex items-center gap-2 border-t border-border px-3 py-2">
-									<Checkbox
-										id={qualityId}
-										checked={noWatermark}
-										onCheckedChange={(value) => setNoWatermark(value === true)}
-										disabled={disabled}
-									/>
-									<label
-										htmlFor={qualityId}
-										className="cursor-pointer text-xs text-foreground"
-									>
-										{t("fileDownload.noWatermark")}
-									</label>
-									{download?.noWatermarkRequiresVip && <VIPTag />}
-								</div>
-							)}
 						</>
 					) : (
 						<p className="m-0 p-3 text-xs text-muted-foreground">
