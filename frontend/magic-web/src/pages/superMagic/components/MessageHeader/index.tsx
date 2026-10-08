@@ -27,6 +27,7 @@ import {
 	PanelRightOpen,
 	Ellipsis,
 	PenLine,
+	RefreshCw,
 	WandSparkles,
 	Trash2,
 } from "lucide-react"
@@ -98,6 +99,7 @@ export interface MessageHeaderTopicActions {
 	unpinTopic: (topicId: string) => Promise<void> | void
 	archiveTopic: (topicId: string) => Promise<void> | void
 	unarchiveTopic: (topicId: string) => Promise<void> | void
+	restartSandbox?: (topicId: string) => Promise<void> | void
 }
 
 interface MessageHeaderTopicHistoryPanelProps {
@@ -419,6 +421,7 @@ function MessageHeader({
 	const [renamingValue, setRenamingValue] = useState("")
 	const [sharePopoverVisible, setSharePopoverVisible] = useState(false)
 	const [topicMenuOpen, setTopicMenuOpen] = useState(false)
+	const [isRestartingSandbox, setIsRestartingSandbox] = useState(false)
 	const [topicHistoryOpen, setTopicHistoryOpen] = useState(false)
 	const inputRef = useRef<HTMLInputElement>(null)
 	const isLayoutHistoryTrigger = historyTriggerMode === "layout"
@@ -459,6 +462,21 @@ function MessageHeader({
 		} catch (err: unknown) {
 			console.error("Failed to rename topic:", err)
 			setIsRenaming(false)
+		}
+	})
+
+	const handleRestartSandbox = useMemoizedFn(async () => {
+		if (!selectedTopic || !topicActions.restartSandbox || isRestartingSandbox) return
+
+		setIsRestartingSandbox(true)
+		try {
+			await topicActions.restartSandbox(selectedTopic.id)
+			magicToast.success(t("messageHeader.restartSandboxSuccess"))
+		} catch (error) {
+			console.error("Failed to restart sandbox:", error)
+			magicToast.error(t("messageHeader.restartSandboxFailed"))
+		} finally {
+			setIsRestartingSandbox(false)
 		}
 	})
 
@@ -824,6 +842,21 @@ function MessageHeader({
 												/>
 												{t("messageHeader.aiRename")}
 											</DropdownMenuItem>
+											{topicActions.restartSandbox ? (
+												<DropdownMenuItem
+													disabled={isRestartingSandbox}
+													onClick={() => void handleRestartSandbox()}
+												>
+													<RefreshCw
+														size={16}
+														className={cn(
+															"text-muted-foreground",
+															isRestartingSandbox && "animate-spin",
+														)}
+													/>
+													{t("messageHeader.restartSandbox")}
+												</DropdownMenuItem>
+											) : null}
 											<DropdownMenuSeparator />
 											<DropdownMenuItem
 												variant="destructive"

@@ -1,11 +1,15 @@
 ---
 name: sandbox-manager
-description: Inspect, upgrade, or restart the sandbox this Agent is running in. Use when the user asks about this Agent's sandbox status or Agent image version, or explicitly asks to upgrade or restart its current environment.
+description: Inspect, upgrade, or restart the sandbox this Agent is running in. Use when the user asks about this Agent's sandbox or virtual machine status, Agent image version, or explicitly asks to upgrade or restart its current environment.
 ---
 
 # Sandbox Manager
 
 This skill manages the execution environment hosting the current Agent. “Current sandbox” means the environment running this Agent process, not an arbitrary sandbox selected by the user.
+
+## User terminology
+
+In this product, “virtual machine”, “VM”, and “virtual machine environment” are user-facing names for the current sandbox hosting this Agent. Treat requests to inspect, upgrade, or restart that virtual machine as requests for the corresponding sandbox operation. Do not interpret them as requests to manage the host machine or another sandbox.
 
 These are Code Mode tools. Execute every example through `run_sdk_snippet` with `sdk.tool.call(...)`; do not invent or pass a sandbox ID.
 
