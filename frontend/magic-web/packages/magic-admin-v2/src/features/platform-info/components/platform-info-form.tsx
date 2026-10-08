@@ -53,7 +53,7 @@ export function PlatformInfoForm({
 	value: PlatformInfoFormState
 }) {
 	const { t } = useTranslation()
-	const contentCompletion = getContentLocaleCompletion(value)
+	const contentCompletion = getContentLocaleCompletion(value, activeSection)
 	const errors = form.formState.errors
 	const setValue = form.setValue
 	const showContentLocale = showsPlatformInfoContentLocale(activeSection)
