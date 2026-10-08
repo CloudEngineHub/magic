@@ -73,16 +73,17 @@ export function FileReference({
 			aria-disabled={disabled || undefined}
 			aria-busy={loading || undefined}
 			// Use the filename's baseline for surrounding text; the icon must not supply the flex baseline.
+			// 媒体名称略小于正文，外间距分开连续引用；最大宽度扣除外间距，避免窄列溢出。
 			className={[
-				"inline-flex max-w-full items-baseline gap-1 overflow-hidden align-baseline",
+				"inline-flex items-baseline gap-1 overflow-hidden align-baseline",
 				source
-					? "rounded bg-primary-10 px-0.5 text-primary [font-size:inherit] [font-weight:inherit] [line-height:inherit]"
-					: "rounded bg-[#f0f6ff] px-0.5 text-xs font-normal text-[#315cec]",
+					? "m-0.5 max-w-[calc(100%-0.25rem)] rounded bg-primary/5 px-1 text-primary leading-[1.4] [font-size:0.93em] [font-weight:inherit]"
+					: "max-w-full rounded bg-[#f0f6ff] px-0.5 text-xs font-normal text-[#315cec]",
 				disabled
 					? "cursor-default opacity-60"
 					: onClick
 						? source
-							? "cursor-pointer hover:bg-primary/15"
+							? "cursor-pointer hover:bg-primary/10"
 							: "cursor-pointer hover:bg-[#e0ecff]"
 						: "",
 			].join(" ")}
