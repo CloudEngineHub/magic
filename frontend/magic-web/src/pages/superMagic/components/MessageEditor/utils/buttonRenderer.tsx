@@ -322,6 +322,8 @@ export const BUTTON_RENDERERS: Record<ToolbarButton, ButtonRenderer> = {
 			<TokenUsageButton
 				tokenUsed={Number(tokenUsage?.total_tokens || ctx.selectedTopic?.token_used)}
 				maxContextTokens={tokenUsage?.max_context_tokens}
+				compactionThresholdTokens={tokenUsage?.compaction_threshold_tokens}
+				inputBreakdown={tokenUsage?.input_breakdown}
 				iconSize={ctx.topBarIconSize}
 				size={ctx.size}
 				onCompressContext={ctx.handleCompressContext}

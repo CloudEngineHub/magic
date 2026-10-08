@@ -1,4 +1,5 @@
 from app.i18n import i18n
+from app.utils.context_usage import ContextUsageEstimator, ToolSchemaEstimate
 import asyncio
 import ctypes
 import gc
@@ -25,7 +26,7 @@ from app.core.horizon.models import HorizonInjectionPoint
 from app.service.user_context_service import UserContextService
 from agentlang.chat_history import AssistantMessage, CompactionConfig, SystemMessage, ToolCall
 from agentlang.chat_history.chat_history import ChatHistory
-from agentlang.chat_history.chat_history_models import UserMessage
+from agentlang.chat_history.chat_history_models import UserMessage, ToolMessage, ContextSource
 from agentlang.context.tool_context import ToolContext
 from agentlang.event.data import (
     AfterAgentReplyEventData,
@@ -290,6 +291,7 @@ class Agent(BaseAgent):
 
     def __init__(self, agent_name: str, agent_context: AgentContext = None, agent_id: str = None):
         self.agent_name = agent_name
+        self._context_usage_estimator = ContextUsageEstimator()
         self._closed = False
         self._context_registered = False
         self._active_run_task: asyncio.Task[object] | None = None
@@ -436,6 +438,7 @@ class Agent(BaseAgent):
         if self._closed:
             return
         self._closed = True
+        self._context_usage_estimator.clear()
         self._bg_compact_state.reset()
 
         if self._context_registered:
@@ -565,6 +568,10 @@ class Agent(BaseAgent):
 
         # 准备静态变量并应用到 system_prompt
         static_vars = self._prepare_prompt_static_variables()
+        self._context_usage_estimator.set_skill_blocks((
+            self._agent_loader.set_variables(skills_prompt_content, static_vars) if skills_prompt_content else "",
+            skill_result.preloaded_content,
+        ))
         self.system_prompt = self._agent_loader.set_variables(self.system_prompt, static_vars)
 
         # Skill 是文件原文，须避开模板处理，保留注释及其中的模板示例。
@@ -1767,6 +1774,7 @@ class Agent(BaseAgent):
             bool: True if compaction was triggered, False otherwise
         """
         if not self.compaction_config.enable_compaction:
+            self.agent_context.set_compaction_threshold_tokens(0)
             return False
 
         token_count = await self.chat_history.tokens_count()
@@ -1802,6 +1810,8 @@ class Agent(BaseAgent):
             threshold_matched_rule = None
             threshold_used_default = False
 
+        # 展示自动整理的硬阈值；后台提前准备仍沿用原逻辑，不另算前端比例。
+        self.agent_context.set_compaction_threshold_tokens(compaction_threshold_tokens)
         early_threshold = self.compaction_config.early_compact_threshold
         message_threshold = self.compaction_config.max_conversation_rounds
         background_failed_this_snapshot = False
@@ -3325,6 +3335,11 @@ Since your subsequent output will be merged with pre-interruption content and di
                     tool_call_id=result.tool_call_id,
                     system=result.system,
                     duration_ms=tool_duration_ms,
+                    context_source=(
+                        ContextSource.SKILLS if result.name == "read_skills"
+                        else ContextSource.MCP if bool(result.name and result.name.startswith("mcp_"))
+                        else ContextSource.from_value(result.extra_info.get("context_source"))
+                    ),
                 )
 
                 # 检查其他特殊工具调用
@@ -3503,6 +3518,7 @@ Since your subsequent output will be merged with pre-interruption content and di
 
             await self._rehydrate_media_models_after_context_reset()
 
+            self._context_usage_estimator.clear()
             logger.info("Chat history reset for new session via /new")
 
         except Exception as e:
@@ -3905,6 +3921,31 @@ Since your subsequent output will be merged with pre-interruption content and di
             processor_config.stream_chunk_timeout_seconds = chunk_timeout
         if non_stream_timeout is not None:
             processor_config.non_stream_timeout_seconds = non_stream_timeout
+
+        if self.agent_context.is_main_agent and self.agent_context.get_message_version() == "v2":
+            sources: dict[str, ContextSource | None] = {}
+            for message in self.chat_history.messages:
+                if isinstance(message, AssistantMessage):
+                    for call in message.tool_calls or []:
+                        if call.function is None:
+                            continue
+                        name = call.function.name
+                        sources[call.id] = (
+                            ContextSource.SKILLS if name == "read_skills"
+                            else ContextSource.MCP if name.startswith("mcp_")
+                            else ContextSource.MIXED if name == "run_sdk_snippet"
+                            else None
+                        )
+                elif isinstance(message, ToolMessage) and message.context_source is not None:
+                    sources[message.tool_call_id] = message.context_source
+            schema_estimates: dict[int, ToolSchemaEstimate] = {}
+            for tool_param in tools_list:
+                estimate = tool_factory.get_context_usage_schema_estimate(tool_param["function"]["name"])
+                if estimate is not None:
+                    schema_estimates[id(estimate.schema)] = estimate
+            processor_config.context_usage_estimator = lambda request: self._context_usage_estimator.estimate(
+                request, sources, schema_estimates,
+            )
 
         processor_config.model_id = text_model_state.model_id
         processor_config.model_name = text_model_state.model_name

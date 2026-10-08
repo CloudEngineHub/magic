@@ -1491,6 +1491,7 @@
 		"collapse": "收起",
 		"contents": "帮助目录",
 		"dismiss": "关闭用途指南",
+		"dismissWithTitle": "关闭{{title}}",
 		"example": "例如",
 		"expand": "展开",
 		"furtherReading": "拓展阅读",

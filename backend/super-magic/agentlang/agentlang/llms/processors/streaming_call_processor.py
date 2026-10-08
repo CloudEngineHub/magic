@@ -16,6 +16,7 @@ from openai.types.chat import ChatCompletionChunk, ChatCompletion
 
 from agentlang.exceptions import StreamChunkTimeoutError, StreamInterruptedError, STREAMING_PASSTHROUGH_EXCEPTIONS
 from agentlang.interface.context import AgentContextInterface
+from agentlang.llms.token_usage.models import ContextInputBreakdown
 from .processor_config import ProcessorConfig
 from .streaming_context import StreamProcessContext
 from .streaming_handler import StreamResponseHandler
@@ -76,6 +77,7 @@ class StreamingCallProcessor:
         request_id: Optional[str] = None,
         correlation_id: Optional[str] = None,
         enable_llm_response_events: bool = True,
+        input_breakdown: ContextInputBreakdown | None = None,
     ) -> ChatCompletion:
         """使用流式调用LLM的方法
 
@@ -138,6 +140,7 @@ class StreamingCallProcessor:
                     model_id=model_id,
                     correlation_id=correlation_id,
                     processor_config=processor_config,
+                    input_breakdown=input_breakdown,
                     agent_context=agent_context,
                     http_request_start_time=http_request_start_time,
                     enable_llm_response_events=enable_llm_response_events,
