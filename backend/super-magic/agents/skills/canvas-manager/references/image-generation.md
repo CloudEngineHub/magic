@@ -12,6 +12,8 @@ Load this reference for image generation, image revision, reference images, or i
 6. Failed and the user agrees → `retry_canvas_content_generation`.
 7. The first Content of any Element is automatically main; the user confirms a later candidate → `select_canvas_main_content`.
 
+Image generation, editing, retries, and additional candidates may consume points or money. After a successful image, let the user review it; a successful image you personally dislike is not a failure. Follow the core user-confirmation rule before any additional image call.
+
 ## Tool choice
 
 - New logical image: `add_canvas_elements`, `element_type=image`, Content `source=generated`, `content_type=image`.
@@ -76,6 +78,15 @@ print(result.content)
 
 Follow the retry, waiting, and version rules in SKILL.md. A failed image Content is retried in place with `retry_canvas_content_generation`, using the exact Element ID and Content ID.
 
+## Output format
+
+Honor a format the user already chose. If the user has not chosen between a direct image, an HTML page, and an SVG file, explain the relevant tradeoffs briefly, recommend an option, and let the user decide before generating anything.
+
+- Direct image generation suits concise copy and compositions where text and artwork should be designed together. Preserve requested wording in the image prompt; do not remove it because of outdated assumptions about image-model text rendering.
+- HTML suits long or structured content and frequent revisions. Keep the copy as editable page text and generate only the supporting images needed by the page.
+- An explicit SVG request is a direct file-authoring request, not Canvas image generation. Write the `.svg` file with the existing file-writing capability. Do not call image-generation tools, use scripts or code generators, create a raster intermediate, or convert PNG/JPG to SVG. Keep the SVG's vector elements, text, styles, and `viewBox` editable and self-contained.
+- A supporting illustration, background, or other pure-image request does not require this format question.
+
 ## Writing a high-quality prompt
 
 A prompt is a creative brief, not a keyword list. State what must stay fixed and what may change.
@@ -131,18 +142,18 @@ Every reference carries subject, composition, palette, lighting, texture, and st
 
 ### Positive framing, negative constraints
 
-Describe what should be present. Use negative constraints only to block known failures that have no positive equivalent: "no text or watermarks", "the product shape and proportions must not be altered".
+Describe what should be present. Use negative constraints only to block known failures that have no positive equivalent. Use "no text or watermarks" only when the user wants a text-free supporting image; when the user asks for a poster, notice, diagram, or other image with wording, preserve that wording in the positive prompt instead.
 
 ### Scene quick reference
 
 | Scene | Technical anchors | Common negatives |
 |---|---|---|
-| Product / commercial | Medium-format rendering, studio softbox, seamless backdrop, macro surface detail | Product must not be distorted or redesigned; no text or watermarks |
+| Product / commercial | Medium-format rendering, studio softbox, seamless backdrop, macro surface detail | Product must not be distorted or redesigned; no text or watermarks for a text-free supporting product image |
 | Portrait | 85mm f/1.4, shallow DOF, catch-light in eyes, skin-tone accuracy | Preserve facial features exactly; do not alter identity |
-| Food / beverage | 45° overhead or 30° side angle, diffused side light, textured surface, steam or condensation details | No utensil clutter; no text |
+| Food / beverage | 45° overhead or 30° side angle, diffused side light, textured surface, steam or condensation details | No utensil clutter; no text only for a text-free food image, not for a food poster with requested copy |
 | Cinematic / film | Anamorphic lens, film grain, letterbox crop, practical motivated lighting | — |
 | Japanese / minimal | High-key exposure, wabi-sabi negative space, diffused natural light, desaturated warm tones | No neon colours; no artificial studio glow |
-| Design / poster | Grid-based layout, flat graphic style, limited colour palette | Clear visual hierarchy; no decorative noise |
+| Design / poster | Grid-based layout, flat graphic style, limited colour palette | Clear visual hierarchy; preserve requested wording and legibility; no decorative noise |
 | Lifestyle / environmental | Wide-angle environmental framing, natural available light, subject in context | No artificial product distortion |
 | Concept / atmospheric | Volumetric light, environmental haze, scale cues for depth, sensory stacking | — |
 

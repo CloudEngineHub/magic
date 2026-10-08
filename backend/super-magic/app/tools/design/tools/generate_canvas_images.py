@@ -283,6 +283,8 @@ class GenerateCanvasImages(BaseGenerateCanvasElements[GenerateCanvasImagesParams
 -->
 Each task is a self-contained description of one image. Three things to know:
 
+Image generation, retries, and additional candidates may consume points or money. After a successful image, let the user review it; a successful image you personally dislike is not a failure. Follow the core user-confirmation rule before any additional image call.
+
 [reference_images — always required]
 The question is not whether the user said "reference image" but whether they want the output to have visual continuity with an existing image:
 - Uploaded a file, mentioned a canvas asset, or expressed "based on this / reference this / in this style" → include those paths

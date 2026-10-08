@@ -52,6 +52,17 @@ Writing Files:
 - Editing anchors: Keep named anchor comments in regions that may need later edits (`<!-- ANCHOR: region-name -->` for HTML/markup, `# ANCHOR: region-name` for code). Write anchors alongside complete content; later edit_file calls can target them precisely instead of searching through large ambiguous text blocks.
 
 <!--zh
+SVG 直接编写：
+- 用户明确要求 SVG 图或架构图时，直接用现有文件写入能力创建或修改 `.svg` 文件
+- 不调用生图工具，不使用脚本或代码生成器，不生成位图中间文件，也不把 PNG/JPG 转换成 SVG；SVG 文件本身就是交付物
+- 保留用户需要的可编辑矢量元素、文字、样式和 `viewBox`，并遵循已有项目文件规则
+-->
+Direct SVG authoring:
+- When the user explicitly asks for an SVG image or diagram, create or update the `.svg` file directly with the existing file-writing capability.
+- Do not call image-generation tools, use scripts or code generators, create a raster intermediate, or convert PNG/JPG into SVG. The SVG file itself is the deliverable.
+- Keep the SVG self-contained and preserve editable vector elements, text, styles, and `viewBox` values required by the user's request. Follow any existing project-owned file rules before writing.
+
+<!--zh
 查看目录：
 - list_dir建议最少使用level=3来获取足够多的文件信息
 -->

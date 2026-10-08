@@ -14,6 +14,8 @@ Use this reference as the default Canvas video path. For video tasks, read and f
 
 Video billing remains in force. Before generating, call `estimate_canvas_content_points`, show the estimated points, and obtain explicit user confirmation. This is a workflow instruction; the estimate tool and generation tool are independent, and generation does not validate an estimate ID.
 
+Video generation, revisions, retries, and additional candidates may consume points or money. After a successful video, let the user review it; a successful video you personally dislike is not a failure. Follow the core user-confirmation rule before any additional video call.
+
 Continue using this basic video-generation path unless the user explicitly states that they want to use the professional video-production capabilities in `references/professional-video-production.md`.
 
 ## Tool choice
