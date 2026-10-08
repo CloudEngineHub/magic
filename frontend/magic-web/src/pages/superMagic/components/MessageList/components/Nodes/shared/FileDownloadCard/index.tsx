@@ -192,7 +192,7 @@ export default function FileDownloadCard({
 							<div className="flex items-start justify-between gap-3 border-b border-border px-3 py-2 text-xs">
 								<div className="min-w-0 flex-1">
 									<SmartTooltip
-										elementType="p"
+										elementType="div"
 										content={data.title}
 										className="m-0 truncate font-medium text-foreground"
 									>
