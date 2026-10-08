@@ -70,12 +70,15 @@ export function VideoPreview(props: VideoPreviewProps) {
 	} = props
 
 	const { file_id } = data || {}
-	const { fileUrl } = useFileUrl({ file_id: file_id || "" })
+	const { fileUrl, fileResource, refreshFileUrl } = useFileUrl({ file_id: file_id || "" })
 	const containerRef = useRef<HTMLDivElement>(null)
 
 	// Use custom hook for player management
 	const { isLoading, playerReady } = useXgPlayer({
+		fileId: file_id,
 		fileUrl,
+		fileResource,
+		refreshFileUrl,
 		containerRef,
 	})
 
