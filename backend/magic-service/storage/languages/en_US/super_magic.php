@@ -163,6 +163,7 @@ return [
         'sandbox_init_failed' => 'Runtime environment error. Please try again later.',
         'chat_task_start_failed' => 'Failed to start the task. Please try again later.',
         'question_expired' => 'This question has expired or already been handled, so your answer was not delivered. You can continue the conversation by sending a new message.',
+        'question_recovery_failed' => 'We cannot continue processing right now. Please try again later. Your answer has been kept.',
         'project_file_count_exceeded' => 'The project space needs some file cleanup before this task can continue. Remove files you no longer need and try again.',
         'user_space_file_count_exceeded' => 'Your personal file space needs some cleanup before this task can continue. Remove files you no longer need and try again.',
     ],

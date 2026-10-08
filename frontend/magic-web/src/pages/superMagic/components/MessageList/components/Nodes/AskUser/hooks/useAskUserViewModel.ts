@@ -1,4 +1,6 @@
-import { useMemo } from "react"
+import magicToast from "@/components/base/MagicToaster/utils"
+import { useCallback, useEffect, useMemo } from "react"
+import { useTranslation } from "react-i18next"
 import { messagesConverter } from "@/pages/superMagic/components/MessageList/helpers"
 import { superMagicStore } from "@/pages/superMagic/stores"
 import {
@@ -186,11 +188,11 @@ export function useAskUserViewModel({
 	node,
 	selectedTopic,
 }: Pick<NodeProps, "node" | "selectedTopic">) {
+	const { t } = useTranslation("super")
 	const askUserNode = getAskUserNode(node as typeof node)
 	const parsedContent = parseAskUserContent(askUserNode?.content)
 	const askUserTool = askUserNode?.tool as
-		| { status?: string; detail?: { data?: Record<string, unknown> } }
-		| undefined
+		{ status?: string; detail?: { data?: Record<string, unknown> } } | undefined
 	const detailData =
 		(askUserTool?.detail?.data as Record<string, unknown> | undefined) || askUserEmptyDetailData
 	const detailStatus = typeof detailData.status === "string" ? detailData.status : ""
@@ -262,6 +264,35 @@ export function useAskUserViewModel({
 		Boolean(resolvedErrorState) ||
 		effectiveAskUser.status !== ASK_USER_CARD_STATUS.pending ||
 		isExpiredLocal
+	const expiryToastKey = `ask-user-expiry-${
+		selectedTopic?.chat_topic_id || "topic"
+	}-${resolvedAskUser.questionId || "question"}`
+	const showExpiryTip = useCallback(() => {
+		magicToast.warning({
+			key: expiryToastKey,
+			content: t("askUser.status.expiredPending"),
+			duration: 0,
+		})
+	}, [expiryToastKey, t])
+	const showClosedTip = useCallback(() => {
+		magicToast.warning({
+			key: expiryToastKey,
+			content: t("askUser.status.alreadyProcessed"),
+			duration: 4000,
+		})
+	}, [expiryToastKey, t])
+	const clearExpiryTip = useCallback(() => {
+		magicToast.destroy(expiryToastKey)
+	}, [expiryToastKey])
+
+	useEffect(() => {
+		if (resolvedErrorState || effectiveAskUser.status !== ASK_USER_CARD_STATUS.pending) {
+			clearExpiryTip()
+		} else if (isExpiredLocal) {
+			showExpiryTip()
+		}
+		return clearExpiryTip
+	}, [clearExpiryTip, effectiveAskUser.status, isExpiredLocal, resolvedErrorState, showExpiryTip])
 	const shouldRender = Boolean(askUserFromNode || parsedContent || hasDetailQuestions)
 	const askUserToolId =
 		typeof (askUserNode?.tool as { id?: unknown } | undefined)?.id === "string"
@@ -284,6 +315,8 @@ export function useAskUserViewModel({
 				"",
 		},
 		isDisabled: shouldDisableInteraction,
+		onExpiredInteraction: showExpiryTip,
+		onTerminalError: showClosedTip,
 	})
 	const answeredQuestionCount = getAnsweredQuestionCount({
 		askUser: effectiveAskUser,

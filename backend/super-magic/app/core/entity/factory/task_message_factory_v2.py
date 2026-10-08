@@ -985,6 +985,8 @@ class TaskMessageFactoryV2(TaskMessageFactoryProtocol):
 
         tool_call_id = cls._make_tool_call_id(event.data.correlation_id)
         tool_status = ToolStatus.FINISHED if status != TaskStatus.ERROR else ToolStatus.ERROR
+        final_attachments = [] if status == TaskStatus.WAITING_FOR_USER else attachments
+        final_project_archive = None if status == TaskStatus.WAITING_FOR_USER else project_archive
         # waiting_for_user 时 content 故意为空，但 tool.action 需给前端可读的摘要
         tool_action = (
             i18n.translate("task.waiting_for_user", category="tool.messages")
@@ -996,7 +998,7 @@ class TaskMessageFactoryV2(TaskMessageFactoryProtocol):
             name="finish_task",
             action=tool_action,
             status=tool_status,
-            attachments=attachments if attachments else None,
+            attachments=final_attachments if final_attachments else None,
         )
 
         inner = cls._build_inner_message(
@@ -1014,8 +1016,8 @@ class TaskMessageFactoryV2(TaskMessageFactoryProtocol):
             event_type=EventType.AFTER_MAIN_AGENT_RUN,
             correlation_id=event.data.correlation_id,
             token_used=token_used,
-            attachments=attachments,
-            project_archive=project_archive,
+            attachments=final_attachments,
+            project_archive=final_project_archive,
             content=content,
         )
 

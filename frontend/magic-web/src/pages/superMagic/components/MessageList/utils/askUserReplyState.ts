@@ -144,6 +144,8 @@ export function isTerminalAskUserReplyError(error: unknown) {
 		"already processed",
 		"question not found",
 		"question expired",
+		"无法再提交",
+		"这个问题已经结束",
 	].some((marker) => text.includes(marker))
 }
 

@@ -163,6 +163,7 @@ return [
         'sandbox_init_failed' => '运行环境异常，请稍后重试。',
         'chat_task_start_failed' => '任务启动失败，请稍后重试。',
         'question_expired' => '该问题已超时或已被处理，您的回答未能送达。您可以直接发送新消息继续对话。',
+        'question_recovery_failed' => '暂时无法继续处理，请稍后再试。您刚才填写的内容已保留。',
         'project_file_count_exceeded' => '当前项目空间需要先整理文件，建议清理部分不再需要的文件后重试。',
         'user_space_file_count_exceeded' => '当前个人文件空间需要先整理文件，建议清理部分不再需要的文件后重试。',
     ],

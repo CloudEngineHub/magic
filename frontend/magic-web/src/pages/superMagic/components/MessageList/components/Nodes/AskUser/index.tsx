@@ -73,8 +73,7 @@ function AskUser(props: NodeProps) {
 			? "askUser.answersTitle"
 			: "askUser.title"
 	const messageNode = superMagicStore.getMessageNode(props?.node?.super_message_id) as
-		| { tool?: { action?: string } }
-		| undefined
+		{ tool?: { action?: string } } | undefined
 	const askUserAction = messageNode?.tool?.action
 	const askUserLocale = useMemo(
 		() => resolveAskUserLocaleFromAction(askUserAction),
@@ -202,17 +201,19 @@ function AskUser(props: NodeProps) {
 								{askUserT("askUser.actions.skip")}
 							</Button>
 						</div>
-						<div className="ml-auto flex min-w-0 items-center gap-1 text-right text-xs font-medium leading-4 text-muted-foreground">
-							<span
-								className={cn(
-									"min-w-0 whitespace-pre-wrap break-words [overflow-wrap:anywhere]",
-								)}
-							>
-								{askUserT("askUser.status.autoSubmitIn", {
-									time: remainingText,
-								})}
-							</span>
-						</div>
+						{resolvedAskUser.expiresAt > 0 && (
+							<div className="ml-auto flex min-w-0 items-center gap-1 text-right text-xs font-medium leading-4 text-muted-foreground">
+								<span
+									className={cn(
+										"min-w-0 whitespace-pre-wrap break-words [overflow-wrap:anywhere]",
+									)}
+								>
+									{askUserT("askUser.status.autoSubmitIn", {
+										time: remainingText,
+									})}
+								</span>
+							</div>
+						)}
 					</div>
 				</div>
 			</div>
