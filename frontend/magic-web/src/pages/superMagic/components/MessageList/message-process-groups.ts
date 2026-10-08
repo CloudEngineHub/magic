@@ -46,17 +46,26 @@ export function buildMessageProcessGroups(
 		if (!task.hasUser) continue
 		const finishIndex = task.indices[task.indices.length - 1]
 		const finish = resolveNode(messages[finishIndex])
+		// 等待回答时也会发送 tool.status=finished 的收尾消息；只有节点任务状态
+		// finished 才表示整轮成功，不能把 waiting_for_user 当作折叠边界。
 		if (
 			finish.role !== "tool" ||
 			finish.tool?.name !== "finish_task" ||
+			finish.status !== TaskStatus.FINISHED ||
 			finish.tool.status !== TaskStatus.FINISHED
 		)
 			continue
 		if (
 			task.indices.some((index) => {
 				const node = resolveNode(messages[index])
+				// 同任务可经过多次等待再完成；仅放行明确的等待收尾记录，
+				// 较早的成功终态或未知收尾仍保留完整展示，避免混合不同执行阶段。
 				return (
-					(index !== finishIndex && node.tool?.name === "finish_task") ||
+					(index !== finishIndex &&
+						node.tool?.name === "finish_task" &&
+						(node.role !== "tool" ||
+							node.tool.status !== TaskStatus.FINISHED ||
+							node.status !== TaskStatus.WAITING_FOR_USER)) ||
 					node.status === TaskStatus.ERROR ||
 					node.status === TaskStatus.SUSPENDED ||
 					isRendering(messages[index])
