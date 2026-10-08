@@ -6,6 +6,7 @@ declare(strict_types=1);
  */
 return [
     'general_error' => 'Image generation service error',
+    'image_operation_failed' => 'Image processing failed. Please try again later.',
     'response_format_error' => 'Invalid response format from image generation service',
     'missing_image_data' => 'Generated image data is invalid',
     'no_valid_image_generated' => 'No valid image was generated',
