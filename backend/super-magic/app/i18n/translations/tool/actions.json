@@ -1042,5 +1042,25 @@
     "create_client_side_file_bundle": {
         "zh_CN": "文件打包",
         "en_US": "File bundle"
+    },
+    "query_canvas_layout": {
+        "zh_CN": "查看画布周边",
+        "en_US": "Inspect canvas region"
+    },
+    "arrange_canvas_elements": {
+        "zh_CN": "整理画布元素",
+        "en_US": "Arrange canvas elements"
+    },
+    "rename_canvas_elements": {
+        "zh_CN": "重命名画布图片",
+        "en_US": "Rename canvas images"
+    },
+    "unframe_canvas_elements": {
+        "zh_CN": "取消画框",
+        "en_US": "Unframe canvas elements"
+    },
+    "delete_canvas_elements": {
+        "zh_CN": "移除画布元素",
+        "en_US": "Remove canvas elements"
     }
 }

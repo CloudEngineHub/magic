@@ -214,6 +214,8 @@ class UserToolCallService:
         pending.cancel_timeout()
         pending.agent_context.clear_user_tool_call_pending()
 
+        await self._cancel_canvas_confirmation(pending)
+
         chat_history = getattr(pending.agent_context, "chat_history", None)
         if chat_history is None:
             logger.error("user_tool_call pending exists but chat_history is None, cannot write cancelled ToolResult")
@@ -282,6 +284,18 @@ class UserToolCallService:
             logger.error(f"user_tool_call result_builder failed: {e}", exc_info=True)
             content, extra_info = str(e), {"status": "error"}
 
+        if pending.tool_data.get("prepared_tool_call_id"):
+            from app.tools.canvas.application.operation_confirmation import CanvasOperationConfirmation
+            try:
+                await CanvasOperationConfirmation(pending.agent_context).answer(
+                    str(pending.tool_data["prepared_tool_call_id"]), pending.tool_call_id,
+                    response_status, extra_info.get("answers", {}),
+                )
+            except Exception:
+                # 凭据落盘失败不能变成授权；普通提问和恢复流程仍继续。
+                logger.error("Canvas operation confirmation was not recorded", exc_info=True)
+                content += "\nThe Canvas operation was not authorized. Prepare and confirm it again."
+
         # 结果内容可能包含用户答案和备注，不在日志中记录完整正文。
         logger.info(
             f"user_tool_call result: tool_call_id={pending.tool_call_id}, "
@@ -342,8 +356,8 @@ class UserToolCallService:
         try:
             while True:
                 now = int(time.time())
-                remaining = expires_at - now
-                if remaining <= 0:
+                remaining = expires_at - now if expires_at else 60
+                if expires_at and remaining <= 0:
                     break
 
                 sleep_seconds = min(60, remaining)
@@ -387,6 +401,8 @@ class UserToolCallService:
         """判断当前等待是否需要 ask_user 保活。"""
         if tool_name != "ask_user":
             return False
+        if expires_at == 0:
+            return True
         return expires_at - int(time.time()) > ASK_USER_KEEPALIVE_THRESHOLD_SECONDS
 
     @staticmethod
@@ -406,8 +422,22 @@ class UserToolCallService:
             return
         pending.cancel_timeout()
         pending.agent_context.clear_user_tool_call_pending()
+        await self._cancel_canvas_confirmation(pending)
         await self._delete_pending_file(pending.agent_context)
         logger.info(f"user_tool_call cleanup on stop_run: tool_call_id={tool_call_id}")
+
+    @staticmethod
+    async def _cancel_canvas_confirmation(pending: PendingToolCall) -> None:
+        prepared_id = pending.tool_data.get("prepared_tool_call_id")
+        if not prepared_id:
+            return
+        from app.tools.canvas.application.operation_confirmation import CanvasOperationConfirmation
+        try:
+            await CanvasOperationConfirmation(pending.agent_context).answer(
+                str(prepared_id), pending.tool_call_id, "cancelled", {},
+            )
+        except Exception:
+            logger.warning("Canvas confirmation cancellation could not be recorded", exc_info=True)
 
     # ─── 持久化 ───────────────────────────────────────────────────────────────
 

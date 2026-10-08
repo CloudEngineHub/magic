@@ -53,6 +53,7 @@ function AskUser(props: NodeProps) {
 		handleSubmit,
 		handleToggleOption,
 		hasMultipleQuestions,
+		hasNoDeadline,
 		isExpiredLocal,
 		isValid,
 		isQuestionValid,
