@@ -2,6 +2,7 @@ import {
 	containsMarkdownFileReference,
 	classifyMarkdownFileHref,
 } from "@/pages/superMagic/utils/filePathMention"
+import { hasSerializedSelection } from "../extensions/inspector-detail/serialization"
 
 export const LONG_PLAIN_TEXT_PASTE_THRESHOLD = 4000
 const MAGIC_CLIPBOARD_TYPES = new Set([
@@ -27,6 +28,8 @@ export function shouldConvertPastedTextToAttachment(
 	if (clipboardData.files.length > 0) return false
 
 	const text = clipboardData.getData("text/plain")
+	// 标签渲染之前还有输入分流；纯文本复制的选取资料也须交给粘贴恢复器。
+	if (hasSerializedSelection(text)) return false
 	if (text.trim().length < threshold) return false
 
 	const types = getClipboardTypes(clipboardData.types)

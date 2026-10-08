@@ -24,6 +24,7 @@ import {
 import { loadProjectAttachments } from "@/pages/superMagic/services/projectAttachmentsLoader"
 import { runActiveEditor } from "@/utils/tiptapEditorLifecycle"
 import { transformInspectorContent } from "./inspector-detail"
+import { hasSerializedSelection } from "./inspector-detail/serialization"
 import magicToast from "@/components/base/MagicToaster/utils"
 import i18n from "i18next"
 import { createUserFileMention } from "@/components/business/MentionPanel/utils/fileReferenceMention"
@@ -115,10 +116,6 @@ function appendText(parts: PastePart[], text: string): void {
 	} else {
 		parts.push({ type: "text", text })
 	}
-}
-
-function hasMagicSelection(text: string): boolean {
-	return /<magic-selection>[\s\S]*?<\/magic-selection>/.test(text)
 }
 
 function extractPasteFileLinks(text: string) {
@@ -252,7 +249,7 @@ function extractHtmlMarkdownFileTargets(html: string): MarkdownFileTarget[] {
 }
 
 function getPreferredMarkdownFileTargets(html: string, plainText: string): MarkdownFileTarget[] {
-	if (hasMagicSelection(plainText))
+	if (hasSerializedSelection(plainText))
 		return extractPasteFileLinks(plainText).map((match) => match.target)
 	const htmlTargets = extractHtmlMarkdownFileTargets(html)
 	if (htmlTargets.length > 0) return htmlTargets
@@ -335,7 +332,7 @@ function buildClipboardPasteParts(
 	referencedProjectAttachments: ReferencedProjectAttachmentMap = EMPTY_REFERENCED_PROJECT_ATTACHMENTS,
 	userFileMentions: UserFileMentionMap = EMPTY_USER_FILE_MENTIONS,
 ): PastePart[] | null {
-	if (hasMagicSelection(plainText))
+	if (hasSerializedSelection(plainText))
 		return buildPlainTextPasteParts(
 			plainText,
 			attachments,
@@ -358,7 +355,7 @@ function hasMentionPart(parts: PastePart[] | null): parts is PastePart[] {
 }
 
 function getClipboardFallbackText(html: string, plainText: string): string {
-	if (hasMagicSelection(plainText)) return plainText
+	if (hasSerializedSelection(plainText)) return plainText
 	if (html) {
 		const container = document.createElement("div")
 		container.innerHTML = html
@@ -437,7 +434,7 @@ export function pasteMarkdownFileLinks(
 
 	if (!hasReferencedProjectTarget && !needsWorkspaceLookup && !hasUserTarget) {
 		const parts = buildClipboardPasteParts(html, plainText, attachments)
-		if (!hasMentionPart(parts) && !hasMagicSelection(plainText)) {
+		if (!hasMentionPart(parts) && !hasSerializedSelection(plainText)) {
 			const fallback = getClipboardFallbackText(html, plainText)
 			if (!containsMarkdownFileReference(fallback)) return false
 			return (
