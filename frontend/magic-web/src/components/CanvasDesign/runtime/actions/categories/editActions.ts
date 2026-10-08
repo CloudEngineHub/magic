@@ -1,4 +1,4 @@
-import type { UserAction, EditActionOptions } from "../types"
+import type { UserAction, EditActionOptions, DuplicateActionOptions } from "../types"
 import { ElementTypeEnum } from "../../document/types"
 import { selectionContainsReplacingMedia } from "../mediaReplacementGuards"
 
@@ -6,6 +6,15 @@ import { selectionContainsReplacingMedia } from "../mediaReplacementGuards"
  * 编辑操作相关的用户动作
  */
 export const editActions: UserAction[] = [
+	{
+		id: "edit.duplicate",
+		category: "edit",
+		canExecute: (canvas, options?: DuplicateActionOptions) =>
+			canvas.clipboardManager.canDuplicate(options?.elementIds),
+		execute: async (canvas, options?: DuplicateActionOptions) => {
+			await canvas.clipboardManager.duplicate(options?.elementIds)
+		},
+	} satisfies UserAction<"edit.duplicate", DuplicateActionOptions>,
 	{
 		id: "edit.copy",
 		category: "edit",

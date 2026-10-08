@@ -124,6 +124,18 @@ export function getMenuItems({
 		},
 	}
 
+	const duplicateOptions = { elementIds: selectedElements.map((element) => element.id) }
+	const duplicateMenuItem: MenuItem = {
+		id: "duplicate",
+		label: translate("menu.duplicate", "创建副本"),
+		icon: CopyPlus,
+		shortcut: getShortcutDisplay("edit.duplicate"),
+		onClick: () => {
+			void canvas.userActionRegistry.execute("edit.duplicate", duplicateOptions)
+		},
+		visible: () => canvas.userActionRegistry.canExecute("edit.duplicate", duplicateOptions),
+	}
+
 	const copyPngMenuItem: MenuItem = {
 		id: "copy-png",
 		label: translate("menu.copyPng", "复制为 PNG"),
@@ -327,6 +339,7 @@ export function getMenuItems({
 
 	return [
 		copyMenuItem,
+		duplicateMenuItem,
 		copyPngMenuItem,
 		{ type: "separator" },
 		{

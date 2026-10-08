@@ -53,6 +53,7 @@ export class KeyboardManager {
 		"edit.undo": "keyboard:undo",
 		"edit.redo": "keyboard:redo",
 		"edit.copy": "keyboard:copy",
+		"edit.duplicate": "keyboard:duplicate",
 		"edit.copy-png": "keyboard:copy-png",
 		"edit.paste": "keyboard:paste",
 		// 选择快捷键
@@ -390,6 +391,9 @@ export class KeyboardManager {
 				break
 			case "keyboard:redo":
 				this.canvas.eventEmitter.emit({ type: "keyboard:redo", data: undefined })
+				break
+			case "keyboard:duplicate":
+				this.canvas.eventEmitter.emit({ type: "keyboard:duplicate", data: undefined })
 				break
 			case "keyboard:copy":
 				this.canvas.eventEmitter.emit({ type: "keyboard:copy", data: undefined })

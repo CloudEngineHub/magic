@@ -27,6 +27,11 @@ export interface EditActionOptions {
 	pasteSource?: "keyboard" | "menu"
 }
 
+export interface DuplicateActionOptions {
+	/** 菜单打开时固定目标；快捷键省略时使用当前选区。 */
+	elementIds?: string[]
+}
+
 /**
  * 创建画框操作的选项
  */
@@ -57,6 +62,7 @@ export interface DownloadActionOptions {
  * 根据动作 ID 映射到对应的选项类型
  */
 export interface UserActionOptionsMap {
+	"edit.duplicate": DuplicateActionOptions
 	"edit.paste": EditActionOptions
 	"frame.create": FrameCreateActionOptions
 	"view.focus-element": ViewActionOptions

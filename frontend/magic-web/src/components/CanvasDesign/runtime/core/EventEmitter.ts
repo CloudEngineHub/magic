@@ -411,6 +411,7 @@ export interface CanvasEventMap {
 	"keyboard:undo": void
 	"keyboard:redo": void
 	"keyboard:copy": void
+	"keyboard:duplicate": void
 	"keyboard:copy-png": void
 	"keyboard:paste": ClipboardEvent // 传递 ClipboardEvent 以便访问剪贴板数据
 	"keyboard:frame:create": void
