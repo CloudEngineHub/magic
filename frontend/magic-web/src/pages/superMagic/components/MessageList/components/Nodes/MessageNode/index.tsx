@@ -37,7 +37,8 @@ const MessageNode = observer(function MessageNode(props: NodeProps) {
 		// it. A wrapper here would keep emitting a 12px gap for every result that renders nothing.
 		return (
 			<AttachmentSection
-				className="mb-3"
+				// 仅实际渲染的附件列表带此标记，供完成提示的布局样式判断间距。
+				className="message-attachments mb-3"
 				node={node}
 				fallbackNode={props.node}
 				prevSuperMessageId={props.prevNode?.super_message_id}

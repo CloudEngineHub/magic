@@ -13,7 +13,7 @@ export function MessageProcessToggle({
 }) {
 	const { t } = useTranslation("super")
 	const content = (
-		<div className="mb-3 mt-1 w-full">
+		<div className="mt-1 w-full">
 			<button
 				type="button"
 				aria-expanded={item.expanded}

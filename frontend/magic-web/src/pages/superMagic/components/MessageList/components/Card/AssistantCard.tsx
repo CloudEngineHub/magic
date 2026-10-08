@@ -281,8 +281,9 @@ export function withAssistantCard<
 			[baseShowSuggestCondition, followUpSuggestions, isLastMessage],
 		)
 
+		// contents 不新增布局盒；有附件时沿用列表留白，无附件时给完成提示增加间距。
 		return (
-			<>
+			<div className="contents [&:not(:has(.message-attachments))>[data-slot=message-status][data-status=finished]]:pt-2">
 				<WrapperComponent {...props} />
 
 				{props.contentMode !== "process" && statusList.has(messageNode?.status) && (
@@ -293,6 +294,8 @@ export function withAssistantCard<
 						<div
 							className="ml-[var(--message-status-offset,0px)] w-fit"
 							data-testid="message-list-status-badge"
+							data-slot="message-status"
+							data-status={messageNode?.status}
 						>
 							<StatusBadge status={messageNode?.status} />
 						</div>
@@ -362,7 +365,7 @@ export function withAssistantCard<
 						</button>
 					</div>
 				)}
-			</>
+			</div>
 		)
 	})
 
