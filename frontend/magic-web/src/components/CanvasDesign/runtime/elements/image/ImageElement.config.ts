@@ -2,6 +2,8 @@
  * 图片元素相关配置
  */
 export const IMAGE_CONFIG = {
+	/** 图片等待超过 10 分钟可重新生成；不代表后台任务已取消。 */
+	GENERATION_TIMEOUT_MS: 10 * 60 * 1000,
 	/** 默认宽度（像素） */
 	DEFAULT_WIDTH: 1024,
 	/** 默认高度（像素） */

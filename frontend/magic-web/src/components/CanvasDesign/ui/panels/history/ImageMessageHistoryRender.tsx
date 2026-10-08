@@ -1,8 +1,12 @@
-import { ElementTypeEnum, type ImageElement } from "../../../runtime/document/types"
+import {
+	ElementTypeEnum,
+	type ImageElement,
+	type ImageElementContent,
+} from "../../../runtime/document/types"
 import styles from "./index.module.css"
 import IconButton from "../../primitives/custom/IconButton/index"
 import { Copy, ImagePlus, X } from "lucide-react"
-import { useMemo, useCallback } from "react"
+import { useMemo, useCallback, useState } from "react"
 import { toast } from "sonner"
 import useElementPositionEffect from "../../../app/hooks/layout/useElementPositionEffect"
 import { useCanvasPanelUI, useCanvasSelectionUI } from "../../../app/providers/CanvasUIProvider"
@@ -20,7 +24,8 @@ import { resolvePromptPlaceholderTokenConfig } from "../../editors/message/refer
 import { copyHistoryPromptToClipboard } from "./historyPromptClipboard"
 import { MessageHistoryCollapsiblePrompt } from "./MessageHistoryCollapsiblePrompt"
 import { PromptPlaceholderPreviewText } from "./PromptPlaceholderPreviewText"
-import { useGenerationRuntime } from "../../../app/hooks/canvas"
+import { useGenerationRuntime, useCanvasEvent } from "../../../app/hooks/canvas"
+import { isImageGenerationTimedOut } from "../../../runtime/elements/image/imageGenerationTiming"
 import { getActiveImageContent } from "../../../runtime/document/elementContent"
 import { normalizeImageSizeValue } from "../../element-tools/editors/image/image-editor-config.utils"
 
@@ -37,6 +42,14 @@ export default function ImageMessageHistoryRender(props: ImageMessageHistoryRend
 	const { canvas } = useCanvas()
 	const { t } = useCanvasDesignI18n()
 	const generationRuntime = useGenerationRuntime(imageElement.id)
+	const [, refreshDisplayState] = useState(0)
+	useCanvasEvent(
+		"element:image:displayStateChanged",
+		({ data }) => {
+			if (data.elementId === imageElement.id) refreshDisplayState((revision) => revision + 1)
+		},
+		[imageElement.id],
+	)
 	const promptPlaceholderTokenConfig = useMemo(() => resolvePromptPlaceholderTokenConfig(t), [t])
 	const imageContent =
 		canvas?.getEffectiveContent<ImageElementContent>(imageElement.id) ??
@@ -54,6 +67,19 @@ export default function ImageMessageHistoryRender(props: ImageMessageHistoryRend
 		return canvas.elementManager.getElementInstance(imageElement.id) as
 			ImageElementClass | undefined
 	}, [canvas, imageElement.id])
+	const timing =
+		elementInstance?.getGenerationTiming(imageContent.contentId) ??
+		imageContent.generationTiming
+	const timedOut = isImageGenerationTimedOut(imageContent, timing)
+	const generationStatus = timedOut
+		? t("image.timedOut", "生成已超时")
+		: generationRuntime
+			? t("image.generating", "正在生成中...")
+			: imageContent.status === "failed"
+				? t("messageHistory.generationFailed", "生成失败")
+				: imageContent.src || imageContent.status === "completed"
+					? t("messageHistory.generationCompleted", "生成完成")
+					: t("image.generating", "正在生成中...")
 
 	// 获取尺寸
 	const sizes = useMemo(() => {
@@ -182,6 +208,20 @@ export default function ImageMessageHistoryRender(props: ImageMessageHistoryRend
 			</div>
 			<div className={styles.divider}></div>
 			<div className={styles.body}>
+				<div className={styles.item}>
+					<div className={styles.itemTitle}>
+						{t("messageHistory.generationStatus", "生成状态")}
+					</div>
+					<div className={styles.itemContent}>{generationStatus}</div>
+					{timing?.source === "observed" ? (
+						<div className={styles.itemContent}>
+							{t(
+								"messageHistory.generationTimeObserved",
+								"缺少原始开始时间，等待时长从首次查看起计算。",
+							)}
+						</div>
+					) : null}
+				</div>
 				{/* 提示词 */}
 				<div className={styles.item}>
 					<div className={styles.itemTitleRow}>

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react"
+import { useCallback, useEffect, useState } from "react"
 import { useCanvasModeUI, useCanvasSelectionUI } from "../../../../app/providers/CanvasUIProvider"
 import { useCanvas } from "../../../../app/providers/CanvasProvider"
 import { ElementTypeEnum, type ImageElement } from "../../../../runtime/document/types"
@@ -152,6 +152,14 @@ function ActiveImageMessageEditor({
 	const activeContent = getActiveImageContent(imageElement)
 	const generationRuntime = useGenerationRuntime(imageElement.id, activeContent.contentId)
 	const activeContentState = getContentState(activeContent)
+	const [, refreshDisplayState] = useState(0)
+	useCanvasEvent(
+		"element:image:displayStateChanged",
+		({ data }) => {
+			if (data.elementId === imageElement.id) refreshDisplayState((revision) => revision + 1)
+		},
+		[imageElement.id],
+	)
 
 	const hasGenerateImageRequest = !!(
 		generationRuntime?.generateImageRequest || activeContent.generateImageRequest
@@ -161,31 +169,13 @@ function ActiveImageMessageEditor({
 	const isTemporaryElement =
 		canvas != null ? canvas.elementManager.isTemporary(imageElement.id) : false
 
-	const isUploading = activeContentState === "processing" && !hasGenerateImageRequest
-
-	const isRequestPlaceholder =
-		!hasResultImage && (activeContentState === "pending" || activeContentState === "processing")
-	const hasTerminalImageGenerationState =
-		hasResultImage || activeContentState === "completed" || activeContentState === "failed"
-
-	const hasPendingImageTask =
-		!hasResultImage && (activeContentState === "pending" || activeContentState === "processing")
-	const hasRuntimeGenerationAttempt = Boolean(generationRuntime)
-
-	const isGenerating = useMemo(() => {
-		if (!canvas || hasTerminalImageGenerationState) return false
-		const imageInstance = canvas.elementManager.getElementInstance(imageElement.id)
-		if (!(imageInstance instanceof ImageElementClass)) return false
-		return (
-			imageInstance.isImageGenerating(activeContent.contentId) || hasRuntimeGenerationAttempt
-		)
-	}, [
-		activeContent.contentId,
-		canvas,
-		imageElement.id,
-		hasRuntimeGenerationAttempt,
-		hasTerminalImageGenerationState,
-	])
+	const imageInstance = canvas?.elementManager.getElementInstance(imageElement.id)
+	const displayState =
+		imageInstance instanceof ImageElementClass ? imageInstance.getDisplayState() : undefined
+	const isTimedOut = displayState?.status === "timed-out"
+	const isGenerating =
+		!isTimedOut && (displayState?.status === "generating" || Boolean(generationRuntime))
+	const readOnly = isGenerating || !canvas?.permissionManager.can("sideEffect.generate")
 
 	useEffect(() => {
 		setHiddenAfterSubmit(false)
@@ -219,26 +209,26 @@ function ActiveImageMessageEditor({
 		[imageElement.id],
 	)
 
-	if (
-		isTemporaryElement ||
-		isUploading ||
-		isRequestPlaceholder ||
-		isDragging ||
-		hiddenAfterSubmit ||
-		isGenerating ||
-		hasPendingImageTask
-	)
+	if (isTemporaryElement || isDragging || (hiddenAfterSubmit && !isGenerating && !isTimedOut))
 		return null
 
 	const isRetryEditing =
 		activeContentState === "failed" && retryEditingElementId === imageElement.id
 
 	// 如果没有生成图片请求且没有结果图片，则显示图片编辑器
-	if ((!hasGenerateImageRequest && !hasResultImage) || isRetryEditing) {
+	if (
+		(!hasGenerateImageRequest && !hasResultImage) ||
+		isRetryEditing ||
+		(!hasResultImage && (isGenerating || isTimedOut))
+	) {
 		return (
 			<ImageMessageEditorRender
 				key={`${imageElement.id}-${activeContent.contentId}-${isRetryEditing ? "retry" : "create"}`}
 				imageElement={imageElement}
+				readOnly={readOnly}
+				request={
+					generationRuntime?.generateImageRequest ?? activeContent.generateImageRequest
+				}
 				autoFocus={isRetryEditing}
 				autoFocusAtDocumentEnd={isRetryEditing}
 				onPreviewMediaResource={onPreviewMediaResource}

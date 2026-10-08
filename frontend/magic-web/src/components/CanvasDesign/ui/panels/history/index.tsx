@@ -11,7 +11,7 @@ import {
 import MediaResourceFullscreenPreview, {
 	type MediaResourceFullscreenPreviewItem,
 } from "../../fullscreen/media-resource/index"
-import { getActiveContent, getActiveImageContent } from "../../../runtime/document/elementContent"
+import { getActiveContent } from "../../../runtime/document/elementContent"
 import { useFloatingUI } from "../../../app/providers/FloatingUIProvider"
 import { useCanvas } from "../../../app/providers/CanvasProvider"
 
@@ -59,15 +59,8 @@ export default function MessageHistory() {
 		if (!messageHistoryElementId || !element) return null
 		if (element.id !== messageHistoryElementId) return null
 
-		if (
-			element.type === ElementTypeEnum.Image &&
-			(generationRuntime?.generateImageRequest ||
-				(
-					(canvas?.getEffectiveContent(element.id) as
-						| ReturnType<typeof getActiveImageContent>
-						| undefined) ?? getActiveImageContent(element)
-				).generateImageRequest)
-		) {
+		// 生成占位图可能尚未收到请求详情，仍允许打开记录查看状态及缺失说明。
+		if (element.type === ElementTypeEnum.Image) {
 			return (
 				<ImageMessageHistoryRender
 					key={element.id}
@@ -82,8 +75,8 @@ export default function MessageHistory() {
 			(generationRuntime?.generateVideoRequest ||
 				(
 					(canvas?.getEffectiveContent(element.id) as
-						| ReturnType<typeof getActiveContent>
-						| undefined) ?? getActiveContent(element)
+						ReturnType<typeof getActiveContent> | undefined) ??
+					getActiveContent(element)
 				)?.generateVideoRequest)
 		) {
 			return (

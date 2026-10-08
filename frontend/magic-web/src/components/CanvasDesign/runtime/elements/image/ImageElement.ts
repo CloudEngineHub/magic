@@ -217,6 +217,10 @@ export class ImageElement extends BaseElement<ImageElementData> {
 				this.rerender()
 			},
 		})
+		this.canvas.eventEmitter.on(
+			"element:image:displayStateChanged",
+			this.handleDisplayStateChanged,
+		)
 
 		const activeContent = this.getActiveContentData()
 		// active 有 src：先监听资源事件，实际加载交给 CanvasVisibilityManager 调度。
@@ -302,7 +306,12 @@ export class ImageElement extends BaseElement<ImageElementData> {
 		const taskMeta = this.getActiveImageGenerationTaskMeta()
 
 		return resolveImageDisplayState({
-			content: activeContent,
+			generationTiming: this.pollingManager.getGenerationTiming(activeContent.contentId),
+			content: {
+				...activeContent,
+				generateImageRequest: generationRequest,
+				imageGenerationTaskMeta: taskMeta,
+			},
 			isTemporary: this.canvas?.elementManager?.isTemporary?.(this.data.id) ?? false,
 			hasActiveGeneration: this.hasActiveGeneration(activeContent.contentId),
 			hasActiveGenerationTask: Boolean(generationRequest?.image_id || taskMeta?.image_id),
@@ -316,8 +325,16 @@ export class ImageElement extends BaseElement<ImageElementData> {
 		})
 	}
 
+	private handleDisplayStateChanged = (event: { data: { elementId: string } }): void => {
+		if (event.data.elementId === this.data.id) this.rerenderWhenTransformIdle()
+	}
+
 	public getContentData(contentId: string): ImageElementContent | undefined {
 		return getImageContentById(this.getData(), contentId)
+	}
+
+	public getGenerationTiming(contentId: string): ImageElementContent["generationTiming"] {
+		return this.pollingManager.getGenerationTiming(contentId)
 	}
 
 	public updateActiveContentData(
@@ -485,6 +502,10 @@ export class ImageElement extends BaseElement<ImageElementData> {
 		this.mediaReplaceStateUnsubscribe?.()
 		this.mediaReplaceStateUnsubscribe = undefined
 		this.pollingManager.destroy()
+		this.canvas.eventEmitter.off(
+			"element:image:displayStateChanged",
+			this.handleDisplayStateChanged,
+		)
 		this.borderDecorator?.destroy()
 		this.cornerActionsDecorator?.destroy()
 		this.mainVersionTagDecorator?.destroy()
@@ -2044,6 +2065,8 @@ export class ImageElement extends BaseElement<ImageElementData> {
 		const displayState = this.getDisplayState()
 
 		switch (displayState.status) {
+			case "timed-out":
+				return `${baseName}${this.getText("image.nameSuffix.timedOut", "(超时)")}`
 			case "generating":
 				return `${baseName}${this.getGeneratingNameSuffix(displayState)}`
 			case "uploading":
@@ -2180,6 +2203,9 @@ export class ImageElement extends BaseElement<ImageElementData> {
 		}
 
 		if (displayState.surface === "error") {
+			if (displayState.status === "timed-out") {
+				return this.renderError(this.getText("image.timedOut", "生成已超时"))
+			}
 			const errorMessage =
 				displayState.failureSource === "resource"
 					? this.getImageLoadErrorText()
@@ -2221,6 +2247,8 @@ export class ImageElement extends BaseElement<ImageElementData> {
 			currentTaskMeta?.type !== nextTaskMeta?.type ||
 			currentContent.src !== nextContent.src ||
 			currentContent.status !== nextContent.status ||
+			currentContent.generationTiming?.startedAt !==
+				nextContent.generationTiming?.startedAt ||
 			!this.isPersistedCropConfigEqual(currentContent.crop, nextContent.crop)
 
 		// Effective Content 切换时，元素级 decoded image / failure reason 不能跨版本复用。
@@ -2714,6 +2742,9 @@ export class ImageElement extends BaseElement<ImageElementData> {
 		if (!actions.length) return
 
 		this.cornerActionsDecorator = new ElementCornerActionsDecorator(group, {
+			showOnSelection:
+				this.getDisplayState().status === "generating" ||
+				this.getDisplayState().status === "timed-out",
 			elementId: this.data.id,
 			canvas: this.canvas,
 			width,

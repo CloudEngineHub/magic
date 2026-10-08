@@ -15,6 +15,8 @@ import { buildImageRequestWithLinkedEditorInputs } from "../../../editors/connec
 import { isImageElementContent } from "../../../../runtime/document/elementContent"
 
 interface ImageMessageEditorRenderProps {
+	readOnly?: boolean
+	request?: GenerateImageRequest
 	imageElement: ImageElement
 	autoFocus?: boolean
 	/** 与 autoFocus 联用：挂载后将光标置于提示词末尾 */
@@ -26,6 +28,8 @@ interface ImageMessageEditorRenderProps {
 export default function ImageMessageEditorRender(props: ImageMessageEditorRenderProps) {
 	const {
 		imageElement,
+		readOnly = false,
+		request,
 		autoFocus = false,
 		autoFocusAtDocumentEnd = false,
 		onPreviewMediaResource,
@@ -41,6 +45,9 @@ export default function ImageMessageEditorRender(props: ImageMessageEditorRender
 
 	// 使用共享的配置 hook
 	const config = useImageEditorConfig({
+		readOnly,
+		request,
+		manageRecoverySession: !readOnly,
 		imageElement,
 		editorFocusRef: editorRef,
 	})
@@ -72,6 +79,7 @@ export default function ImageMessageEditorRender(props: ImageMessageEditorRender
 	// 处理发送按钮点击
 	const handleSend = useCallback(
 		async (linkedEditorInputs: LinkedEditorInputsState) => {
+			if (readOnly || !canvas?.permissionManager.can("sideEffect.generate")) return
 			if (sendingRef.current) return
 			if (!canvas) {
 				return
@@ -117,10 +125,11 @@ export default function ImageMessageEditorRender(props: ImageMessageEditorRender
 				setIsSending(false)
 			}
 		},
-		[canvas, config.handlers, config.prompt, config.selectedModelId, imageElement.id],
+		[canvas, config.handlers, config.prompt, config.selectedModelId, imageElement.id, readOnly],
 	)
 
 	useUpdateEffect(() => {
+		if (readOnly) return
 		// 如果正在恢复配置，不触发保存
 		if (config.isRestoringRef.current) return
 		if (!config.hasRestoredRef.current) return
@@ -141,6 +150,7 @@ export default function ImageMessageEditorRender(props: ImageMessageEditorRender
 	])
 
 	useUpdateEffect(() => {
+		if (readOnly) return
 		if (!canvas || !config.hasRestoredRef.current) return
 		const [width, height] = config.selectedSize?.split("x").map(Number) || []
 		if (!isNaN(width) && !isNaN(height)) {
@@ -150,6 +160,7 @@ export default function ImageMessageEditorRender(props: ImageMessageEditorRender
 
 	return (
 		<ImageEditorSurface
+			readOnly={readOnly}
 			imageElement={imageElement}
 			config={config}
 			editorRef={editorRef}
