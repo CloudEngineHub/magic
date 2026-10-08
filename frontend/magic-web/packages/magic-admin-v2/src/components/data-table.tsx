@@ -23,7 +23,6 @@ import {
 	SheetTitle,
 } from "@magic-admin-v2/components/ui/sheet"
 import {
-	Table,
 	TableBody,
 	TableCell,
 	TableHead,
@@ -31,6 +30,7 @@ import {
 	TableRow,
 } from "@magic-admin-v2/components/ui/table"
 import { useIsMobile } from "@magic-admin-v2/hooks/use-is-mobile"
+import { DataTableFrame } from "@magic-admin-v2/components/data-table-frame"
 import { cn } from "@magic-admin-v2/utils/cn"
 import { mobileCardTokens } from "@magic-admin-v2/components/mobile-card"
 
@@ -91,6 +91,8 @@ export type DataTableProps<TData, TValue> = {
 	sorting?: SortingState
 	/** 移动端详情抽屉中需要高亮的行 ID。 */
 	selectedRowId?: string
+	/** 页面纵向滚动时保持桌面端表头可见；默认关闭，按页面逐步启用。 */
+	stickyHeader?: boolean
 	/** 需要固定在左侧的列 ID。 */
 	stickyLeftColumnId?: string
 	/** 需要固定在右侧的列 ID；移动端也会作为操作列保留。 */
@@ -111,6 +113,7 @@ export function DataTable<TData, TValue>({
 	columnVisibility,
 	sorting,
 	selectedRowId,
+	stickyHeader = false,
 	stickyLeftColumnId,
 	stickyRightColumnId,
 }: DataTableProps<TData, TValue>) {
@@ -199,50 +202,78 @@ export function DataTable<TData, TValue>({
 		)
 	}
 
-	if (isLoading) {
+	if (!isLoading && table.getRowModel().rows.length === 0) {
 		return (
 			<div
 				className={cn(desktopContainerClassName, containerClassName)}
 				data-slot="data-table-desktop"
 			>
-				<Table
-					className={hasFitContentColumn ? "table-auto" : "table-fixed"}
-					style={{ minWidth }}
-				>
-					<TableHeader>
-						{table.getHeaderGroups().map((headerGroup) => (
-							<TableRow key={headerGroup.id} className="hover:bg-transparent">
-								{headerGroup.headers.map((header) => (
-									<TableHead
-										className={cn(
-											getFitContentColumnClassName(header.column),
-											getStickyColumnClassName(
-												header.column.id,
-												stickyLeftColumnId,
-												stickyRightColumnId,
-												"head",
-											),
+				{emptyState}
+			</div>
+		)
+	}
+
+	function renderHeader(sizingOnly = false) {
+		return (
+			<TableHeader
+				aria-hidden={sizingOnly || undefined}
+				className={cn(stickyHeader && "bg-muted", sizingOnly && "[&_tr]:border-0")}
+				role={stickyHeader && !sizingOnly ? "rowgroup" : undefined}
+			>
+				{table.getHeaderGroups().map((headerGroup) => (
+					<TableRow
+						key={headerGroup.id}
+						className="hover:bg-transparent"
+						role={stickyHeader && !sizingOnly ? "row" : undefined}
+					>
+						{headerGroup.headers.map((header) => (
+							<TableHead
+								className={cn(
+									getFitContentColumnClassName(header.column),
+									!sizingOnly &&
+										getStickyColumnClassName(
+											header.column.id,
+											stickyLeftColumnId,
+											stickyRightColumnId,
+											"head",
+										),
+									sizingOnly && "h-0 py-0",
+								)}
+								colSpan={header.colSpan}
+								key={header.id}
+								role={stickyHeader && !sizingOnly ? "columnheader" : undefined}
+								style={getColumnSizeStyle(header.column)}
+							>
+								{header.isPlaceholder || sizingOnly ? null : (
+									<SortableHeader column={header.column}>
+										{flexRender(
+											header.column.columnDef.header,
+											header.getContext(),
 										)}
-										key={header.id}
-										style={getColumnSizeStyle(header.column)}
-									>
-										{header.isPlaceholder ? null : (
-											<SortableHeader column={header.column}>
-												{flexRender(
-													header.column.columnDef.header,
-													header.getContext(),
-												)}
-											</SortableHeader>
-										)}
-									</TableHead>
-								))}
-							</TableRow>
+									</SortableHeader>
+								)}
+							</TableHead>
 						))}
-					</TableHeader>
-					<TableBody>
-						{Array.from({ length: 6 }, (_, rowIndex) => (
-							<TableRow key={rowIndex}>
-								{table.getAllLeafColumns().map((column) => (
+					</TableRow>
+				))}
+			</TableHeader>
+		)
+	}
+
+	return (
+		<DataTableFrame
+			containerClassName={containerClassName}
+			header={renderHeader()}
+			minWidth={minWidth}
+			sizingHeader={stickyHeader ? renderHeader(true) : null}
+			stickyHeader={stickyHeader}
+			tableClassName={hasFitContentColumn ? "table-auto" : "table-fixed"}
+		>
+			<TableBody role={stickyHeader ? "rowgroup" : undefined}>
+				{isLoading
+					? Array.from({ length: 6 }, (_, rowIndex) => (
+							<TableRow key={rowIndex} role={stickyHeader ? "row" : undefined}>
+								{table.getVisibleLeafColumns().map((column) => (
 									<TableCell
 										className={cn(
 											getFitContentColumnClassName(column),
@@ -254,6 +285,7 @@ export function DataTable<TData, TValue>({
 											),
 										)}
 										key={column.id}
+										role={stickyHeader ? "cell" : undefined}
 									>
 										<Skeleton
 											className={cn(
@@ -264,97 +296,44 @@ export function DataTable<TData, TValue>({
 									</TableCell>
 								))}
 							</TableRow>
-						))}
-					</TableBody>
-				</Table>
-			</div>
-		)
-	}
-
-	if (table.getRowModel().rows.length === 0) {
-		return (
-			<div
-				className={cn(desktopContainerClassName, containerClassName)}
-				data-slot="data-table-desktop"
-			>
-				{emptyState}
-			</div>
-		)
-	}
-
-	return (
-		<div
-			className={cn(desktopContainerClassName, containerClassName)}
-			data-slot="data-table-desktop"
-		>
-			<Table
-				className={hasFitContentColumn ? "table-auto" : "table-fixed"}
-				style={{ minWidth }}
-			>
-				<TableHeader>
-					{table.getHeaderGroups().map((headerGroup) => (
-						<TableRow key={headerGroup.id} className="hover:bg-transparent">
-							{headerGroup.headers.map((header) => (
-								<TableHead
-									className={cn(
-										getFitContentColumnClassName(header.column),
-										getStickyColumnClassName(
-											header.column.id,
-											stickyLeftColumnId,
-											stickyRightColumnId,
-											"head",
-										),
-									)}
-									key={header.id}
-									style={getColumnSizeStyle(header.column)}
+						))
+					: table.getRowModel().rows.map((row) => {
+							const selected = row.getIsSelected() || row.id === selectedRowId
+							return (
+								<TableRow
+									aria-selected={selected || undefined}
+									className={
+										selected ? "bg-primary/5 hover:bg-primary/10" : undefined
+									}
+									data-state={selected ? "selected" : undefined}
+									key={row.id}
+									role={stickyHeader ? "row" : undefined}
 								>
-									{header.isPlaceholder ? null : (
-										<SortableHeader column={header.column}>
-											{flexRender(
-												header.column.columnDef.header,
-												header.getContext(),
+									{row.getVisibleCells().map((cell) => (
+										<TableCell
+											className={cn(
+												getFitContentColumnClassName(cell.column),
+												getStickyColumnClassName(
+													cell.column.id,
+													stickyLeftColumnId,
+													stickyRightColumnId,
+													"cell",
+												),
 											)}
-										</SortableHeader>
-									)}
-								</TableHead>
-							))}
-						</TableRow>
-					))}
-				</TableHeader>
-				<TableBody>
-					{table.getRowModel().rows.map((row) => {
-						const selected = row.getIsSelected() || row.id === selectedRowId
-						return (
-							<TableRow
-								aria-selected={selected || undefined}
-								className={
-									selected ? "bg-primary/5 hover:bg-primary/10" : undefined
-								}
-								data-state={selected ? "selected" : undefined}
-								key={row.id}
-							>
-								{row.getVisibleCells().map((cell) => (
-									<TableCell
-										className={cn(
-											getFitContentColumnClassName(cell.column),
-											getStickyColumnClassName(
-												cell.column.id,
-												stickyLeftColumnId,
-												stickyRightColumnId,
-												"cell",
-											),
-										)}
-										key={cell.id}
-									>
-										{flexRender(cell.column.columnDef.cell, cell.getContext())}
-									</TableCell>
-								))}
-							</TableRow>
-						)
-					})}
-				</TableBody>
-			</Table>
-		</div>
+											key={cell.id}
+											role={stickyHeader ? "cell" : undefined}
+										>
+											{flexRender(
+												cell.column.columnDef.cell,
+												cell.getContext(),
+											)}
+										</TableCell>
+									))}
+								</TableRow>
+							)
+						})}
+			</TableBody>
+		</DataTableFrame>
 	)
 }
 
