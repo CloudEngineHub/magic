@@ -10,6 +10,7 @@ import type { ResourceLoadFailureReason } from "../media-common/resourceLoadFail
 import { collectCanvasAssetIds } from "./assetMediaBinding"
 import { isOssExpiring } from "../offline-cache/ossExpiryUtils"
 import { assetDetailStore, type AssetDetailStoreChange } from "./AssetDetailStore"
+import { reconcileDeletedAssetOnCanvas } from "./canvasAssetDocumentReconcile"
 
 const ASSET_BATCH_GET_SIZE = 200
 
@@ -163,7 +164,25 @@ export class CanvasAssetResourceManager {
 		if (assetIds.length === 0) return
 
 		try {
-			await this.refreshResources(assetIds)
+			const hasBatchResolver = Boolean(this.getBatchResourceResolver())
+			// Canvas reopen is also the point where a remote asset deletion must be
+			// observed. Force the authoritative detail query here; normal media reads
+			// still reuse the session cache after the document has been reconciled.
+			const resources = await this.refreshResources(assetIds, { forceRefresh: true })
+			// A successful batch response can omit an ID when the asset was deleted or
+			// is no longer available to the current account. Only reconcile numeric IDs
+			// covered by that batch path; a failed single-resource/network request must
+			// not be mistaken for deletion and silently detach a valid Content.
+			const missingBatchIds = assetIds.filter(
+				(assetId) =>
+					hasBatchResolver &&
+					isBatchCompatibleAssetId(assetId) &&
+					!resources.has(assetId) &&
+					!assetDetailStore.getCached(assetId),
+			)
+			for (const assetId of missingBatchIds) {
+				reconcileDeletedAssetOnCanvas(this.canvas, assetId)
+			}
 		} catch {
 			// 预取属于优化和详情刷新，不应让旧 asset:// 画布无法打开。
 		}
@@ -476,6 +495,7 @@ export class CanvasAssetResourceManager {
 			// not compare against the new scope or an old signed URL could survive
 			// logout in an existing Canvas instance.
 			this.clearLocalCache()
+			this.canvas.refreshNameLabelIcons?.()
 			this.canvas.refreshMediaComplianceFailedTags?.()
 			return
 		}
@@ -484,13 +504,19 @@ export class CanvasAssetResourceManager {
 		// that value can move first, and retaining an old signed URL would be unsafe.
 		const hadCachedResource = this.entries.has(change.assetId)
 		this.invalidate(change.assetId)
-		if (!hadCachedResource || this.destroyed) return
+		if (!hadCachedResource || this.destroyed) {
+			this.canvas.refreshNameLabelIcons?.()
+			return
+		}
 		// An upsert already seeded the authoritative detail cache, so a normal read
 		// immediately rehydrates the Canvas entry.  An invalidation has no payload
 		// and must force the detail endpoint.  Both paths notify already-rendered
 		// decorators instead of waiting for a later media access to observe the edit.
 		void this.getResource(change.assetId, { forceRefresh: change.kind === "invalidate" })
-			.then(() => this.canvas.refreshMediaComplianceFailedTags?.())
+			.then(() => {
+				this.canvas.refreshNameLabelIcons?.()
+				this.canvas.refreshMediaComplianceFailedTags?.()
+			})
 			.catch(() => undefined)
 	}
 

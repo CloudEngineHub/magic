@@ -61,9 +61,9 @@ export class SizeLabelManager extends BaseLabelManager {
 	}
 
 	/**
-	 * Name labels reserve the rendered size label width. Refresh that sibling
-	 * after the size label changes visibility or geometry, while keeping the
-	 * coordination out of the per-frame name-label layout path.
+	 * Name labels reserve the independently eligible size label width. Refresh
+	 * that sibling after the size label changes visibility or geometry, while
+	 * keeping the coordination out of the per-frame name-label layout path.
 	 */
 	protected override updateLabelPosition(elementId: string, skipBatchDraw = false): boolean {
 		const previousVisible = this.isLabelVisibleForElement(elementId)
@@ -99,6 +99,21 @@ export class SizeLabelManager extends BaseLabelManager {
 		return visibilityChanged
 	}
 
+	/**
+	 * Re-evaluates visibility after name content changes. The position-update
+	 * guard prevents this one-way notification from recursively refreshing name.
+	 */
+	public refreshVisibilityForNamePriority(elementId: string, skipBatchDraw = false): boolean {
+		if (this.updatingLabelPositionElementIds.has(elementId)) return false
+
+		this.updatingLabelPositionElementIds.add(elementId)
+		try {
+			return this.updateLabelVisibility(elementId, skipBatchDraw)
+		} finally {
+			this.updatingLabelPositionElementIds.delete(elementId)
+		}
+	}
+
 	protected override removeLabel(elementId: string): void {
 		const hadLabel = this.labelMap.has(elementId)
 		super.removeLabel(elementId)
@@ -121,6 +136,35 @@ export class SizeLabelManager extends BaseLabelManager {
 
 		const element = this.canvas.elementManager.getElementInstance(elementId)
 		return element?.supportsSizeEditing() ?? false
+	}
+
+	/**
+	 * Returns whether this size label is independently eligible by its visibility
+	 * policy. Geometry is evaluated separately with the current element width;
+	 * name-priority suppression is intentionally excluded so a hidden size label
+	 * can be restored when the element becomes wide enough again.
+	 */
+	public isLabelEligibleForNamePriority(elementId: string): boolean {
+		const element = this.canvas.elementManager.getElementInstance(elementId)
+		const labelGroup = this.labelMap.get(elementId)
+		if (!element || !labelGroup || !this.shouldShowLabel(elementId)) return false
+		if (this.calculateBaseVisibility(elementId, element) !== true) return false
+
+		// Geometry eligibility is evaluated by the caller with the current
+		// element width; this method only reports the independent visibility policy.
+		return true
+	}
+
+	private doesLabelFitElementWidth(
+		element: ReturnType<typeof this.canvas.elementManager.getElementInstance>,
+		labelGroup: Konva.Group,
+	): boolean {
+		const boundingRect = element?.getBoundingRect()
+		const textNode = labelGroup.findOne("Text") as Konva.Text | null
+		if (!boundingRect || !textNode) return false
+
+		const renderedWidth = textNode.width() * Math.abs(labelGroup.scaleX())
+		return renderedWidth <= boundingRect.width
 	}
 
 	/**
@@ -179,33 +223,19 @@ export class SizeLabelManager extends BaseLabelManager {
 
 		// 检查 size label 是否超出元素宽度
 		const boundingRect = element?.getBoundingRect()
-		const textNode = labelGroup.findOne("Text") as Konva.Text
-		if (textNode && boundingRect) {
-			const scaleX = labelGroup.scaleX()
-			const scaleY = labelGroup.scaleY()
-			const sizeLabelBounds = {
-				x: labelGroup.x(),
-				y: labelGroup.y(),
-				width: textNode.width() * scaleX,
-				height: textNode.height() * scaleY,
-			}
+		if (boundingRect) {
+			if (!this.doesLabelFitElementWidth(element, labelGroup)) return false
 
-			// 检查 size label 是否超出元素宽度（从右侧超出）
-			// size label 是从右侧对齐的，如果元素宽度太小，size label 可能会超出左侧边界
-			if (sizeLabelBounds.x < boundingRect.x) {
+			// Name label 可以通过 ellipsis 保持可见，因此不能再根据其当前
+			// visible 状态推断空间是否足够，改由 name 优先级决策统一判断。
+			if (this.canvas.nameLabelManager?.shouldSuppressSizeLabel(elementId)) {
 				return false
 			}
 
-			// 检查其他标签是否因为超出元素宽度而隐藏
-			// 如果 name label 存在但不可见，且会超出元素宽度，说明空间太小，size label 也应该隐藏
+			// 保留其他标签的旧有越界协作规则。
 			if (this.checkOtherLabelHiddenDueToWidth(elementId, this, boundingRect)) {
-				// 其他标签因为超出元素宽度而隐藏，说明空间太小，size label 也应该隐藏
 				return false
 			}
-
-			// NameLabelManager reserves this label's rendered width before drawing
-			// its text. Do not compare against the name's previous full-width bounds
-			// here, otherwise the size label would hide itself before that relayout.
 		}
 
 		// 不修改基础可见性

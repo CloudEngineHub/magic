@@ -58,6 +58,49 @@ export class AssetDetailStore {
 		options?: AssetDetailRequestOptions,
 		scope = getSharedMediaResourceScope(),
 	): Promise<AssetItem> {
+		return this.getInternal(assetId, options, scope, isReusableAssetDetail)
+	}
+
+	/**
+	 * Read an asset detail that is safe to use as an existing-asset compliance
+	 * source. Library list rows may contain a usable preview URL while omitting
+	 * file_key, so the ordinary resource cache predicate is intentionally not
+	 * sufficient for this mutation path.
+	 */
+	public async getWithFileKey(
+		assetId: string,
+		options?: AssetDetailRequestOptions,
+		scope = getSharedMediaResourceScope(),
+	): Promise<AssetItem> {
+		const asset = await this.getInternal(
+			assetId,
+			options,
+			scope,
+			isReusableAssetDetailWithFileKey,
+		)
+		if (asset.file_key?.trim()) return asset
+
+		// A Canvas preload may have an in-flight batch response that intentionally
+		// omits file_key. Do one single-detail retry rather than treating that
+		// shared preview response as sufficient for the compliance mutation.
+		const refreshed = await this.getInternal(
+			assetId,
+			{ ...options, forceRefresh: true },
+			scope,
+			isReusableAssetDetailWithFileKey,
+		)
+		if (!refreshed.file_key?.trim()) {
+			throw new Error(`Asset file key is unavailable: ${assetId.trim()}`)
+		}
+		return refreshed
+	}
+
+	private getInternal(
+		assetId: string,
+		options: AssetDetailRequestOptions | undefined,
+		scope: string,
+		isReusable: (asset: AssetItem) => boolean,
+	): Promise<AssetItem> {
 		this.ensureScope(scope)
 		const id = normalizeAssetId(assetId)
 		if (!id) return Promise.reject(new Error("Asset id is required"))
@@ -71,7 +114,7 @@ export class AssetDetailStore {
 		}
 
 		const cached = this.entries.get(id)?.asset
-		if (!options?.forceRefresh && cached && isReusableAssetDetail(cached)) {
+		if (!options?.forceRefresh && cached && isReusable(cached)) {
 			return Promise.resolve(cached)
 		}
 
@@ -378,6 +421,12 @@ function isReusableAssetDetail(asset: AssetItem): boolean {
 	// paths.  Keep that metadata in memory for the UI, but require a complete
 	// resource before short-circuiting the next detail request.
 	return Boolean(asset.file_url && asset.asset_media_type) && !isAssetDetailExpiring(asset)
+}
+
+function isReusableAssetDetailWithFileKey(asset: AssetItem): boolean {
+	// Compliance submits the opaque key itself; a preview URL or media type is
+	// not required for this path and may be intentionally omitted by list APIs.
+	return Boolean(asset.file_key?.trim())
 }
 
 export const assetDetailStore = new AssetDetailStore()

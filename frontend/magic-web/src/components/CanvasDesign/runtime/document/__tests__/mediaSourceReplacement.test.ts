@@ -88,9 +88,11 @@ describe("mediaSourceReplacement", () => {
 				previousSrc: "./images/old.png",
 				nextSrc: "./images/new.png",
 				previousComplianceCheckId: "check-1",
+				previousAssetId: "asset-1",
 			},
 		)
 		expect(stop).toHaveBeenCalledWith("check-1")
+		expect(stop).toHaveBeenCalledWith("asset-1")
 		expect(refreshMediaComplianceFailedTags).toHaveBeenCalledTimes(1)
 	})
 })

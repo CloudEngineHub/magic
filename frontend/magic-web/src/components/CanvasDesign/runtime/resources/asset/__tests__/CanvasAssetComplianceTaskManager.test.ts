@@ -15,6 +15,16 @@ function createTaskManager(options?: {
 			failedReason: null,
 		})
 
+	let element = {
+		id: "image-1",
+		type: ElementTypeEnum.Image,
+		contents: [
+			{
+				contentId: "content-1",
+				src: "workspace://images/demo.png",
+			},
+		],
+	} as ImageElement
 	const canvas = {
 		magicConfigManager: {
 			config: {
@@ -25,18 +35,13 @@ function createTaskManager(options?: {
 			can: () => options?.canWrite ?? true,
 		},
 		elementManager: {
-			getElementData: () =>
-				({
-					id: "image-1",
-					type: ElementTypeEnum.Image,
-					contents: [
-						{
-							contentId: "content-1",
-							src: "workspace://images/demo.png",
-						},
-					],
-				}) as ImageElement,
-			update: vi.fn(),
+			getElementData: (_elementId?: string) => {
+				void _elementId
+				return element
+			},
+			update: vi.fn((_elementId: string, patch: { contents?: ImageElement["contents"] }) => {
+				if (patch.contents) element = { ...element, contents: patch.contents }
+			}),
 			getAllElements: () => [],
 		},
 		assetResourceManager: {
@@ -60,29 +65,29 @@ afterEach(() => {
 })
 
 describe("CanvasAssetComplianceTaskManager", () => {
-	it("starts workspace compliance and persists processing before polling settles", async () => {
+	it("binds the created asset before polling and does not persist compliance snapshots", async () => {
 		vi.useFakeTimers()
 		const getAssetComplianceStatus = vi
 			.fn()
 			.mockResolvedValueOnce({
-				assetId: "check-1",
+				assetId: "asset-created",
 				status: "PROCESSING",
 				failedReason: null,
 			})
 			.mockResolvedValueOnce({
-				assetId: "check-1",
+				assetId: "asset-created",
 				status: "PASS",
 				failedReason: null,
 			})
 		const startWorkspaceMediaCompliance = vi.fn().mockResolvedValue({
-			assetId: "check-1",
+			assetId: "asset-created",
 			mediaType: "image",
 			fileUrl: null,
 		})
 		const onSettled = vi.fn()
 		const { taskManager, canvas } = createTaskManager({ getAssetComplianceStatus })
 
-		const checkId = await taskManager.startWorkspaceFileCompliance(
+		const assetId = await taskManager.startWorkspaceFileCompliance(
 			{
 				path: "workspace://images/demo.png",
 				name: "Demo",
@@ -96,20 +101,33 @@ describe("CanvasAssetComplianceTaskManager", () => {
 			{ onSettled },
 		)
 
-		expect(checkId).toBe("check-1")
+		expect(assetId).toBe("asset-created")
 		expect(startWorkspaceMediaCompliance).toHaveBeenCalledWith({
 			path: "workspace://images/demo.png",
 			name: "Demo",
 		})
-		expect(canvas.elementManager.update).toHaveBeenCalled()
+		expect(canvas.elementManager.update).toHaveBeenCalledTimes(1)
+		expect(canvas.elementManager.getElementData("image-1")?.contents[0]).toMatchObject({
+			assetId: "asset-created",
+		})
+		expect(canvas.elementManager.getElementData("image-1")?.contents[0]).not.toHaveProperty(
+			"complianceStatus",
+		)
+		expect(canvas.elementManager.getElementData("image-1")?.contents[0]).not.toHaveProperty(
+			"complianceCheckId",
+		)
 
 		await vi.advanceTimersByTimeAsync(0)
 		await vi.advanceTimersByTimeAsync(2500)
+		expect(getAssetComplianceStatus).toHaveBeenCalledWith("asset-created")
 		expect(onSettled).toHaveBeenCalledWith({
-			assetId: "check-1",
+			assetId: "asset-created",
 			status: "PASS",
 			failedReason: null,
 		})
+		// Polling status belongs to the asset service; it must not add a second
+		// workspace-Dsl update after the initial asset binding.
+		expect(canvas.elementManager.update).toHaveBeenCalledTimes(1)
 	})
 
 	it("resumes document compliance without creating a new asset", () => {
@@ -138,6 +156,47 @@ describe("CanvasAssetComplianceTaskManager", () => {
 		taskManager.resumeDocumentCompliancePolling()
 
 		expect(getAssetComplianceStatus).toHaveBeenCalledWith("check-resume")
+	})
+
+	it("does not poll when the workspace source changed before the asset was bound", async () => {
+		vi.useFakeTimers()
+		const getAssetComplianceStatus = vi.fn().mockResolvedValue({
+			assetId: "asset-created",
+			status: "PROCESSING",
+			failedReason: null,
+		})
+		const startWorkspaceMediaCompliance = vi.fn().mockResolvedValue({
+			assetId: "asset-created",
+			mediaType: "image",
+			fileUrl: null,
+		})
+		const { taskManager, canvas } = createTaskManager({ getAssetComplianceStatus })
+		canvas.elementManager.getElementData = () =>
+			({
+				id: "image-1",
+				type: ElementTypeEnum.Image,
+				contents: [
+					{
+						contentId: "content-1",
+						src: "workspace://images/replaced.png",
+					},
+				],
+			}) as ImageElement
+
+		const assetId = await taskManager.startWorkspaceFileCompliance({
+			path: "workspace://images/demo.png",
+			name: "Demo",
+			persistTarget: {
+				elementId: "image-1",
+				contentId: "content-1",
+				sourcePath: "workspace://images/demo.png",
+			},
+			startWorkspaceMediaCompliance,
+		})
+
+		expect(assetId).toBeNull()
+		await vi.advanceTimersByTimeAsync(0)
+		expect(getAssetComplianceStatus).not.toHaveBeenCalled()
 	})
 
 	it("starts library compliance without persisting to document", async () => {

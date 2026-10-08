@@ -88,20 +88,14 @@ export function ElementMenuProvider(props: PropsWithChildren<unknown>) {
 							contentId: string
 							src?: string
 							assetId?: string
-							complianceCheckId?: string
 						}>(element.id)
 					: undefined
 			const content = effectiveContent ?? getActiveContent(element)
 			const path = content?.src
 			if (!content || !path) return undefined
-			// 已绑定素材库，或已通过画布合规创建素材库记录的 Content，不能再次保存为新素材。
-			// 合规流程故意不把返回的 assetId 绑定回画布，因此 complianceCheckId 是这里的持久化标记。
-			if (
-				content.assetId?.trim() ||
-				content.complianceCheckId?.trim() ||
-				parseAssetResourcePath(path)
-			)
-				return undefined
+			// 已绑定素材库的 Content 不能再次保存为新素材。画布合规流程也会把
+			// 后端创建的 assetId 写回同一个 Content，因此无需依赖旧的检查字段拦截。
+			if (content.assetId?.trim() || parseAssetResourcePath(path)) return undefined
 
 			const resolution = resolveCanvasStorageResourceReference(
 				path,

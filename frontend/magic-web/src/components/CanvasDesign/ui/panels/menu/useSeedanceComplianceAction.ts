@@ -364,7 +364,7 @@ export function useSeedanceComplianceAction() {
 						return
 					}
 
-					const checkId = await taskManager.startWorkspaceFileCompliance(
+					const assetId = await taskManager.startWorkspaceFileCompliance(
 						{
 							path: latest.path,
 							name: latest.name,
@@ -373,7 +373,7 @@ export function useSeedanceComplianceAction() {
 						},
 						{ onSettled: toastFailureState },
 					)
-					if (!checkId) {
+					if (!assetId) {
 						unavailable()
 						return
 					}

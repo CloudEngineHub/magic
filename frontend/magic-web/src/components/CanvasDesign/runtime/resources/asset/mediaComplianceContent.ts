@@ -78,7 +78,8 @@ export function clearWorkspaceMediaComplianceState(
 }
 
 /**
- * 轮询或查询结果写回 workspace Content；UNVERIFIED 走清空而非落库。
+ * 兼容旧 workspace 合规记录的写回工具；新发起流程绑定 assetId 后不再调用它。
+ * UNVERIFIED 走清空而非落库。
  */
 export function applyWorkspaceMediaComplianceState(
 	canvas: Pick<Canvas, "elementManager">,

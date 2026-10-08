@@ -35,8 +35,9 @@ function shouldResumeWorkspaceComplianceContent(content: {
 }
 
 /**
- * 扫描文档里尚未结束的 workspace 合规任务。
- * 刷新页面后靠持久化的 complianceCheckId 恢复轮询，而不是重新 POST 创建。
+ * 扫描旧文档里尚未结束的 workspace 合规任务。
+ * 新流程会先绑定 assetId，因此不会再产生这类 DSL 检查记录；保留扫描器只为
+ * 让历史进行中的任务不因代码升级而留下无主轮询。
  */
 export function collectDocumentComplianceResumeTargets(
 	host: CanvasAssetComplianceTaskHost,

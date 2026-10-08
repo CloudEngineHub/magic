@@ -71,7 +71,8 @@ export function collectMediaContentAssetBindings(
 }
 
 /**
- * 素材库删除后：保留 src，解绑 assetId 并清空 workspace 合规字段。
+ * 素材库删除后：工作区 src 可继续使用时仅解绑 assetId；legacy asset:// 源也要
+ * 一并清空，避免解绑后仍反复请求已经不存在的逻辑地址。
  */
 export function reconcileDeletedAssetOnCanvas(
 	canvas: Pick<
@@ -107,9 +108,14 @@ export function reconcileDeletedAssetOnCanvas(
 		const content = getContentById(element, binding.contentId)
 		if (!content || !contentMatchesAssetId(content, normalizedAssetId)) continue
 
+		const isLegacyAssetSource =
+			content.src !== undefined && parseAssetResourcePath(content.src) === normalizedAssetId
 		const patch = isComplianceMediaElement(element)
-			? CLEARED_ASSET_BINDING_PATCH
-			: { assetId: undefined }
+			? {
+					...CLEARED_ASSET_BINDING_PATCH,
+					...(isLegacyAssetSource ? { src: undefined } : {}),
+				}
+			: { assetId: undefined, ...(isLegacyAssetSource ? { src: undefined } : {}) }
 		const next = updateContent(element, binding.contentId, patch)
 		const nextContent = getContentById(next, binding.contentId)
 		if (nextContent && isComplianceMediaElement(element)) {

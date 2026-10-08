@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from "vitest"
 import { CanvasAssetResourceManager } from "../CanvasAssetResourceManager"
 import { assetDetailStore } from "../AssetDetailStore"
 import { getSharedMediaResourceScope } from "@/pages/superMagic/services/sharedMediaResourceScope"
+import { ElementTypeEnum, type ImageElement } from "../../../document/types"
 
 function createManager(
 	getAssetResourceInfo: ReturnType<typeof vi.fn> = vi.fn(),
@@ -98,6 +99,57 @@ describe("CanvasAssetResourceManager", () => {
 		await manager.refreshResources(["100"], { forceRefresh: true })
 
 		expect(getAssetResourceInfos).toHaveBeenCalledWith(["100"], { forceRefresh: true })
+	})
+
+	it("unbinds document content when a successful asset batch omits the asset", async () => {
+		const assetId = "987654321098765432"
+		assetDetailStore.invalidate(assetId, getSharedMediaResourceScope())
+		const element: ImageElement = {
+			id: "image-1",
+			type: ElementTypeEnum.Image,
+			activeContentId: "content-1",
+			mainContentId: "content-1",
+			contents: [
+				{
+					contentId: "content-1",
+					src: "./images/portrait.png",
+					assetId,
+				},
+			],
+		}
+		const update = vi.fn()
+		const stop = vi.fn()
+		const canvas = {
+			magicConfigManager: {
+				config: {
+					methods: {
+						getAssetResourceInfos: vi.fn().mockResolvedValue([]),
+					},
+				},
+			},
+			elementManager: {
+				getAllElements: () => [element],
+				getElementData: () => element,
+				update,
+			},
+			permissionManager: { can: () => true },
+			assetCompliancePollingManager: { stop },
+			assetResourceManager: null as unknown as CanvasAssetResourceManager,
+			refreshMediaComplianceFailedTags: vi.fn(),
+		}
+		const manager = new CanvasAssetResourceManager(canvas as never)
+		canvas.assetResourceManager = manager
+
+		await manager.preloadDocumentAssets({ elements: [element] } as never)
+
+		expect(canvas.magicConfigManager.config.methods.getAssetResourceInfos).toHaveBeenCalledWith(
+			[assetId],
+			{ forceRefresh: true },
+		)
+		expect(stop).toHaveBeenCalledWith(assetId)
+		const contents = update.mock.calls[0]?.[1]?.contents as ImageElement["contents"]
+		expect(contents[0]?.assetId).toBeUndefined()
+		manager.destroy()
 	})
 
 	it("does not batch non-numeric legacy ids and normalizes old compliance values", async () => {

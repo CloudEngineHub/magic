@@ -68,8 +68,9 @@ import {
 import { MediaComplianceFailedTagDecorator } from "../decorators/MediaComplianceFailedTagDecorator"
 import { MediaMainVersionTagDecorator } from "../decorators/MediaMainVersionTagDecorator"
 import { ImagePollingManager } from "../../resources/polling/ImagePollingManager"
+import { resolveMediaComplianceStatus } from "../../resources/asset/assetComplianceState"
 import { DECORATOR_COLORS, DECORATOR_CONFIG } from "../decorators/DecoratorConfig"
-import type { TransformContext } from "../core/BaseElement"
+import type { NameLabelContent, TransformContext } from "../core/BaseElement"
 import {
 	appendReferenceImageInfos,
 	removeReferenceImageInfosByPath,
@@ -2054,23 +2055,30 @@ export class ImageElement extends BaseElement<ImageElementData> {
 	}
 
 	/**
-	 * 获取名称标签文本（根据状态添加后缀）
+	 * 获取名称标签结构（状态后缀保持独立，供标签布局单独截断主名称）。
 	 */
-	public override getNameLabelText(): string {
+	public override getNameLabelContent(): NameLabelContent {
 		const baseName = this.data.name || this.getRenderName()
 		const displayState = this.getDisplayState()
+		const withSuffix = (text: string): NameLabelContent => ({
+			primaryText: baseName,
+			suffix: { text },
+		})
 
 		switch (displayState.status) {
 			case "generating":
-				return `${baseName}${this.getGeneratingNameSuffix(displayState)}`
+				return withSuffix(this.getGeneratingNameSuffix(displayState))
 			case "uploading":
-				return `${baseName}${this.getText("image.nameSuffix.uploading", "(上传中)")}`
+				return withSuffix(this.getText("image.nameSuffix.uploading", "(上传中)"))
 			case "failed":
 				return displayState.failureSource === "resource"
-					? baseName
-					: `${baseName}${this.getText("image.nameSuffix.failed", "(失败)")}`
+					? { primaryText: baseName }
+					: withSuffix(this.getText("image.nameSuffix.failed", "(失败)"))
 			default:
-				return baseName
+				return resolveMediaComplianceStatus(this.canvas, this.getActiveContentData()) ===
+					"PROCESSING"
+					? withSuffix(this.getText("image.nameSuffix.complianceProcessing", "(校验中)"))
+					: { primaryText: baseName }
 		}
 	}
 

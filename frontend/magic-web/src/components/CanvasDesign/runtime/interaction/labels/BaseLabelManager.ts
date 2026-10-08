@@ -632,6 +632,14 @@ export abstract class BaseLabelManager {
 	}
 
 	/**
+	 * Updates label content before layout. Structured label implementations can
+	 * override this hook and keep content resolution out of viewport hot paths.
+	 */
+	protected updateLabelContent(elementId: string, labelGroup: Konva.Group): boolean {
+		return this.updateLabelText(labelGroup, this.getLabelText(elementId))
+	}
+
+	/**
 	 * 递归更新 Frame 子元素的标签位置
 	 * @param children - 子元素列表
 	 * @param skipBatchDraw - 是否跳过 batchDraw（用于递归调用时统一在最外层调用）
@@ -668,9 +676,9 @@ export abstract class BaseLabelManager {
 			return false
 		}
 
-		// 更新标签文本（因为 transform 时文本内容可能变化，如尺寸标签）
-		const newLabelText = this.getLabelText(elementId)
-		let layoutChanged = this.updateLabelText(labelGroup, newLabelText)
+		// 更新标签内容；名称标签会复用事件阶段缓存，避免 transform/viewport 热路径
+		// 重复解析生成状态和测量自然宽度。
+		let layoutChanged = this.updateLabelContent(elementId, labelGroup)
 
 		// 使用元素的 getBoundingRect 方法获取边界矩形
 		const boundingRect = element.getBoundingRect()

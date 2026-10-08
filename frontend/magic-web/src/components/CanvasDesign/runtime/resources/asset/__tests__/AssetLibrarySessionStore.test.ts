@@ -22,7 +22,7 @@ const query: AssetLibraryQuery = {
 	requiresCompliance: false,
 }
 
-function asset(id: string, mediaType: "IMAGE" | "VIDEO" = "IMAGE") {
+function asset(id: string, mediaType: "IMAGE" | "VIDEO" | "AUDIO" = "IMAGE") {
 	return {
 		asset_id: id,
 		asset_kind: "ASSET" as const,
@@ -87,10 +87,9 @@ describe("AssetLibrarySessionStore", () => {
 		await expect(first).resolves.toHaveLength(1)
 	})
 
-	it("deduplicates media types in caller order while using an order-independent cache key", async () => {
-		mocks.queryAssets.mockImplementation(
-			({ asset_media_type }: { asset_media_type: "IMAGE" | "VIDEO" }) =>
-				Promise.resolve(response(asset(asset_media_type, asset_media_type))),
+	it("queries all image and video assets once without a media type filter", async () => {
+		mocks.queryAssets.mockResolvedValue(
+			response(asset("IMAGE", "IMAGE"), asset("VIDEO", "VIDEO")),
 		)
 		const imageAndVideo = { ...query, mediaTypes: ["IMAGE", "VIDEO"] as const }
 		const videoAndImage = { ...query, mediaTypes: ["VIDEO", "IMAGE"] as const }
@@ -100,11 +99,29 @@ describe("AssetLibrarySessionStore", () => {
 		).resolves.toEqual([asset("IMAGE", "IMAGE"), asset("VIDEO", "VIDEO")])
 		await assetLibrarySessionStore.queryAssets(videoAndImage, "scope-a")
 
-		expect(mocks.queryAssets).toHaveBeenCalledTimes(2)
-		expect(mocks.queryAssets.mock.calls.map(([params]) => params.asset_media_type)).toEqual([
-			"IMAGE",
-			"VIDEO",
-		])
+		expect(mocks.queryAssets).toHaveBeenCalledTimes(1)
+		expect(mocks.queryAssets.mock.calls[0][0]).not.toHaveProperty("asset_media_type")
+	})
+
+	it("filters unsupported media returned by the unfiltered endpoint", async () => {
+		mocks.queryAssets.mockResolvedValue(
+			response(asset("IMAGE", "IMAGE"), asset("AUDIO", "AUDIO"), asset("VIDEO", "VIDEO")),
+		)
+		const imageAndVideo = { ...query, mediaTypes: ["IMAGE", "VIDEO"] as const }
+
+		await expect(
+			assetLibrarySessionStore.queryAssets(imageAndVideo, "scope-a"),
+		).resolves.toEqual([asset("IMAGE", "IMAGE"), asset("VIDEO", "VIDEO")])
+	})
+
+	it("keeps a media type filter for a single-type query", async () => {
+		mocks.queryAssets.mockResolvedValue(response(asset("IMAGE", "IMAGE")))
+
+		await assetLibrarySessionStore.queryAssets(query, "scope-a")
+
+		expect(mocks.queryAssets).toHaveBeenCalledWith(
+			expect.objectContaining({ asset_media_type: "IMAGE" }),
+		)
 	})
 
 	it("refreshes only the current query and keeps old assets when refresh fails", async () => {

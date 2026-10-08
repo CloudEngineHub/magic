@@ -286,6 +286,8 @@ export class VideoPollingManager {
 						"complianceCheckId" in currentContent
 							? currentContent.complianceCheckId
 							: undefined,
+					previousAssetId:
+						"assetId" in currentContent ? currentContent.assetId : undefined,
 				})
 			}
 			return true

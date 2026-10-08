@@ -55,7 +55,7 @@ export interface AssetsModalProps {
 	onConfirm?: (asset: AssetItem) => void | Promise<void>
 	/** 多选模式下返回全部已选资产；单选入口继续使用 onConfirm。 */
 	onConfirmMultiple?: (assets: AssetItem[]) => void | Promise<void>
-	/** 当前入口允许选择的媒体类型；接口仅支持单类型查询，弹窗负责合并结果。 */
+	/** 当前入口允许选择的媒体类型；全部图片/视频时由查询层使用无类型过滤请求。 */
 	mediaTypes?: readonly AssetMediaType[]
 	/** 需要合规素材的入口只查询 PASS 素材；普通素材入口展示全部状态。 */
 	requiresCompliance?: boolean

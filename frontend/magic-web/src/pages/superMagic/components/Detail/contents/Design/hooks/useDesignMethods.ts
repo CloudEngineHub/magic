@@ -465,7 +465,7 @@ export function useDesignMethods(options: UseDesignMethodsOptions): CanvasDesign
 
 			const sourceAsset = params.fileKey?.trim()
 				? { name: params.name?.trim() || assetId, file_key: params.fileKey }
-				: await assetDetailStore.get(assetId)
+				: await assetDetailStore.getWithFileKey(assetId)
 			const complianceParams = buildAssetComplianceParamsFromAssetItem(sourceAsset)
 			if (!complianceParams) {
 				throw new Error(t("assetLibrarySave.sourceUnavailable"))

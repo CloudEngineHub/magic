@@ -95,4 +95,29 @@ describe("canvasAssetDocumentReconcile", () => {
 		expect(contents[0].complianceCheckId).toBeUndefined()
 		expect(contents[0].src).toBe("./images/demo.png")
 	})
+
+	it("clears a deleted legacy asset source instead of leaving a broken asset:// path", () => {
+		const element = createBoundImage("asset-legacy")
+		element.contents[0] = {
+			...element.contents[0],
+			src: "asset://asset-legacy",
+		}
+		const update = vi.fn()
+		const canvas = {
+			elementManager: {
+				getAllElements: () => [element],
+				getElementData: () => element,
+				update,
+			},
+			permissionManager: { can: () => true },
+			assetResourceManager: { invalidate: vi.fn() },
+			assetCompliancePollingManager: { stop: vi.fn() },
+			refreshMediaComplianceFailedTags: vi.fn(),
+		}
+
+		expect(reconcileDeletedAssetOnCanvas(canvas, "asset-legacy")).toBe(1)
+		const contents = update.mock.calls[0]?.[1]?.contents as ImageElement["contents"]
+		expect(contents[0]?.assetId).toBeUndefined()
+		expect(contents[0]?.src).toBeUndefined()
+	})
 })

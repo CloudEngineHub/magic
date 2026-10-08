@@ -1174,7 +1174,7 @@ export interface CanvasOpenSaveAssetDialogParams {
 	name?: string
 }
 
-/** 对已有工作区图片或视频发起合规校验，不经过保存弹窗。 */
+/** 对已有工作区图片或视频发起合规校验；后端会创建素材并返回其 assetId。 */
 export interface CanvasStartWorkspaceMediaComplianceParams {
 	/** Canvas 文档中保存的媒体路径。 */
 	path: string
@@ -1747,8 +1747,8 @@ export interface CanvasDesignMethods {
 		params: CanvasSaveAssetToLibraryParams,
 	) => Promise<CanvasAssetResourceInfo>
 	/**
-	 * 对当前画布工作区文件发起合规校验。使用项目路径，不上传、不写回 assetId。
-	 * 返回值里的 assetId 只作为检查 ID。
+	 * 对当前画布工作区文件发起合规校验。后端会在流程中创建素材；返回值里的
+	 * assetId 必须绑定回发起校验的 Content。
 	 */
 	startWorkspaceMediaCompliance?: (
 		params: CanvasStartWorkspaceMediaComplianceParams,

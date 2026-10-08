@@ -74,7 +74,7 @@ describe("AssetsModal", () => {
 		mocks.getAssetOwners.mockReset().mockResolvedValue([])
 	})
 
-	it("queries and merges every allowed media type in caller order", async () => {
+	it("queries all allowed image and video assets in one request", async () => {
 		const videoAsset: AssetItem = {
 			...asset,
 			asset_id: "asset-video",
@@ -82,27 +82,19 @@ describe("AssetsModal", () => {
 			name: "Video",
 			file_url: "https://example.com/video.mp4",
 		}
-		mocks.queryAssets
-			.mockResolvedValueOnce({ page: 1, page_size: 200, total: 1, list: [asset] })
-			.mockResolvedValueOnce({
-				page: 1,
-				page_size: 200,
-				total: 2,
-				list: [videoAsset, asset],
-			})
+		mocks.queryAssets.mockResolvedValueOnce({
+			page: 1,
+			page_size: 200,
+			total: 2,
+			list: [videoAsset, asset],
+		})
 
 		render(<AssetsModal open onClose={vi.fn()} mediaTypes={["IMAGE", "VIDEO"]} />)
 
 		await screen.findByText(videoAsset.name)
 		expect(screen.getAllByText(asset.name)).toHaveLength(1)
-		expect(mocks.queryAssets).toHaveBeenNthCalledWith(
-			1,
-			expect.objectContaining({ asset_media_type: "IMAGE" }),
-		)
-		expect(mocks.queryAssets).toHaveBeenNthCalledWith(
-			2,
-			expect.objectContaining({ asset_media_type: "VIDEO" }),
-		)
+		expect(mocks.queryAssets).toHaveBeenCalledTimes(1)
+		expect(mocks.queryAssets.mock.calls[0][0]).not.toHaveProperty("asset_media_type")
 	})
 
 	it("returns the selected asset without downloading or uploading it", async () => {

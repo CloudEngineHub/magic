@@ -65,12 +65,17 @@ export function finalizeMediaSourceReplacement(
 		previousSrc?: string
 		nextSrc?: string
 		previousComplianceCheckId?: string
+		previousAssetId?: string
 	},
 ): void {
 	if (!isMediaSourceChanged(options.previousSrc, options.nextSrc)) return
-	const checkId = options.previousComplianceCheckId?.trim()
-	if (checkId) {
-		canvas.assetCompliancePollingManager.stop(checkId)
+	const pollingIds = new Set(
+		[options.previousComplianceCheckId, options.previousAssetId]
+			.map((id) => id?.trim())
+			.filter((id): id is string => Boolean(id)),
+	)
+	for (const pollingId of pollingIds) {
+		canvas.assetCompliancePollingManager?.stop(pollingId)
 	}
 	canvas.refreshMediaComplianceFailedTags?.()
 }

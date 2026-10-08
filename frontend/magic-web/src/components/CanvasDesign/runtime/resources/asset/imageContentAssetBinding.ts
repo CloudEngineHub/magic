@@ -15,7 +15,7 @@ export interface ImageContentAssetBindingParams {
 }
 
 export type ImageContentAssetBindingResult =
-	"bound" | "already-bound" | "target-missing" | "source-changed"
+	"bound" | "already-bound" | "target-missing" | "source-changed" | "asset-changed"
 
 type AssetBindableElement = ImageElement | VideoElement
 
@@ -39,7 +39,12 @@ export function bindMediaContentToAsset(
 	const content = getContentById(element, params.contentId)
 	if (!content) return "target-missing"
 	if (content.src !== params.sourcePath) return "source-changed"
-	if (content.assetId === params.assetId) return "already-bound"
+	const currentAssetId = content.assetId?.trim()
+	if (currentAssetId === params.assetId) return "already-bound"
+	// Saving or checking is asynchronous. If another action has already bound a
+	// different asset to this exact Content, preserve that newer binding instead of
+	// replacing it with a late response from the older request.
+	if (currentAssetId) return "asset-changed"
 
 	const next = updateContent(element, params.contentId, {
 		assetId: params.assetId,

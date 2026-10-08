@@ -47,7 +47,8 @@ export class ElementRenameManager {
 
 		const trimmedName = nextName.trim()
 		const currentLabel =
-			this.canvas.elementManager.getElementInstance(elementId)?.getNameLabelText() || ""
+			this.canvas.elementManager.getElementInstance(elementId)?.getNameLabelContent()
+				.primaryText || ""
 
 		this.cancelRename()
 

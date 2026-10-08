@@ -62,7 +62,8 @@ export default function ElementRenameOverlayRender({ elementId }: ElementRenameO
 		}
 
 		const labelText =
-			canvas?.elementManager.getElementInstance(elementId)?.getNameLabelText() || ""
+			canvas?.elementManager.getElementInstance(elementId)?.getNameLabelContent()
+				.primaryText || ""
 		setValue(labelText)
 		setIsComposing(false)
 	}, [canvas, elementId])

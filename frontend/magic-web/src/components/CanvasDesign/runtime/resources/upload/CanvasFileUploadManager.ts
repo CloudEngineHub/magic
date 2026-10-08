@@ -1110,6 +1110,7 @@ export class CanvasFileUploadManager {
 			previousSrc: previousContent?.src,
 			nextSrc: nextPath,
 			previousComplianceCheckId: previousContent?.complianceCheckId,
+			previousAssetId: previousContent?.assetId,
 		})
 
 		// Marker 坐标绑定旧图片内容；仅在 src 成功写入后清理目标 Content，失败时保持原状。
@@ -1340,9 +1341,11 @@ export class CanvasFileUploadManager {
 			previousSrc: previousContent?.src,
 			nextSrc: nextPath,
 			previousComplianceCheckId:
-				previousContent && "complianceCheckId" in previousContent
+				typeof previousContent?.complianceCheckId === "string"
 					? previousContent.complianceCheckId
 					: undefined,
+			previousAssetId:
+				typeof previousContent?.assetId === "string" ? previousContent.assetId : undefined,
 		})
 		historyManager.recordHistoryImmediate()
 		return true

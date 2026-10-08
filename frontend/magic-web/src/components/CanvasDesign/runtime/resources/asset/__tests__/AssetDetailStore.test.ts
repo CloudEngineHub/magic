@@ -107,6 +107,53 @@ describe("AssetDetailStore", () => {
 		expect(mocks.getAsset).toHaveBeenCalledWith("1")
 	})
 
+	it("refetches a list row when existing-asset compliance needs file_key", async () => {
+		store.upsert(asset("1"), "scope-a")
+		mocks.getAsset.mockResolvedValue({ ...asset("1"), file_key: "private/portrait.png" })
+
+		await expect(store.getWithFileKey("1", undefined, "scope-a")).resolves.toMatchObject({
+			file_key: "private/portrait.png",
+		})
+		expect(mocks.getAsset).toHaveBeenCalledWith("1")
+	})
+
+	it("falls back to single detail when an in-flight batch omits file_key", async () => {
+		let resolveBatch!: (assets: AssetItem[]) => void
+		mocks.batchGetAssets.mockReturnValueOnce(
+			new Promise<AssetItem[]>((resolve) => {
+				resolveBatch = resolve
+			}),
+		)
+		const batchPromise = store.batchGet(["1"], undefined, "scope-a")
+		mocks.getAsset.mockResolvedValue({ ...asset("1"), file_key: "private/portrait.png" })
+
+		const compliancePromise = store.getWithFileKey("1", undefined, "scope-a")
+		resolveBatch([asset("1")])
+
+		await expect(compliancePromise).resolves.toMatchObject({
+			file_key: "private/portrait.png",
+		})
+		await batchPromise
+		expect(mocks.getAsset).toHaveBeenCalledWith("1")
+	})
+
+	it("does not request details when the cached asset already has file_key", async () => {
+		store.upsert(
+			{
+				...asset("1"),
+				asset_media_type: null,
+				file_url: null,
+				file_key: "private/portrait.png",
+			},
+			"scope-a",
+		)
+
+		await expect(store.getWithFileKey("1", undefined, "scope-a")).resolves.toMatchObject({
+			file_key: "private/portrait.png",
+		})
+		expect(mocks.getAsset).not.toHaveBeenCalled()
+	})
+
 	it("drops a detail omitted by an authoritative batch response", async () => {
 		mocks.batchGetAssets
 			.mockResolvedValueOnce([asset("1", "https://example.com/old")])

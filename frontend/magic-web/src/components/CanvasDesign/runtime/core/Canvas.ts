@@ -27,6 +27,7 @@ import { MarkerManager } from "../interaction/marker/MarkerManager"
 import { SnapGuideManager } from "../interaction/snap/SnapGuideManager"
 import { PermissionManager } from "./PermissionManager"
 import { NameLabelManager } from "../interaction/labels/NameLabelManager"
+import { complianceNameLabelIconResolver } from "../interaction/labels/complianceNameLabelIconResolver"
 import { SizeLabelManager } from "../interaction/labels/SizeLabelManager"
 import type { TFunction } from "../../public/i18n-types"
 import type { CanvasAccessUpdate } from "./CanvasAccessPolicy"
@@ -567,7 +568,7 @@ export class Canvas {
 		// 初始化名称标签管理器（使用共享的 Overlay Layer）
 		this.nameLabelManager = new NameLabelManager({
 			canvas: this,
-			iconResolver: options.nameLabelIconResolver,
+			iconResolver: options.nameLabelIconResolver ?? complianceNameLabelIconResolver,
 		})
 
 		this.elementRenameManager = new ElementRenameManager({
@@ -1142,6 +1143,7 @@ export class Canvas {
 		// per media element.
 		void this.assetResourceManager.preloadDocumentAssets(normalizedDoc).finally(() => {
 			this.assetComplianceTaskManager.resumeDocumentCompliancePolling()
+			this.refreshNameLabelIcons()
 			this.refreshMediaComplianceFailedTags()
 		})
 		this.resourceUrlWarmupManager.warmupDocument(normalizedDoc, "loadDocument")
@@ -1185,6 +1187,7 @@ export class Canvas {
 		const normalizedDoc = normalizeStoryboardDocument(doc)
 		void this.assetResourceManager.preloadDocumentAssets(normalizedDoc).finally(() => {
 			this.assetComplianceTaskManager.resumeDocumentCompliancePolling()
+			this.refreshNameLabelIcons()
 			this.refreshMediaComplianceFailedTags()
 		})
 		this.resourceUrlWarmupManager.warmupDocument(normalizedDoc, "loadDocumentSmart")
@@ -1220,6 +1223,11 @@ export class Canvas {
 				{ refreshComplianceFailedTag?: () => void } | undefined
 			instance?.refreshComplianceFailedTag?.()
 		}
+	}
+
+	/** Refreshes label icon/text state after runtime asset compliance changes. */
+	public refreshNameLabelIcons(elementIds?: readonly string[]): void {
+		this.nameLabelManager?.refreshIcons(elementIds)
 	}
 
 	/**

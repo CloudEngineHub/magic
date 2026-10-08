@@ -70,6 +70,7 @@ const DEFAULT_MEDIA_TYPES: AssetMediaType[] = ["IMAGE"]
 const DEFAULT_PAGE = 1
 const DEFAULT_PAGE_SIZE = 200
 const EXTERNAL_REFRESH_COOLDOWN_MS = 30_000
+const IMAGE_AND_VIDEO_MEDIA_TYPES: readonly AssetMediaType[] = ["IMAGE", "VIDEO"]
 
 const EMPTY_QUERY_SNAPSHOT: AssetLibraryQuerySnapshot = {
 	assets: [],
@@ -471,23 +472,33 @@ export class AssetLibrarySessionStore {
 	}
 
 	private async fetchAssets(query: NormalizedAssetLibraryQuery): Promise<AssetItem[]> {
-		const responses = await Promise.all(
-			query.mediaTypes.map((mediaType) =>
-				AssetsApi.queryAssets({
-					scope: query.scope,
-					asset_kind: "ASSET",
-					asset_media_type: mediaType,
-					compliance_status: query.requiresCompliance ? "PASS" : undefined,
-					keyword: query.keyword || undefined,
-					owner_uids: query.ownerUid ? [query.ownerUid] : undefined,
-					page: query.page,
-					page_size: query.pageSize,
-				}),
-			),
-		)
+		const baseParams = {
+			scope: query.scope,
+			asset_kind: "ASSET" as const,
+			compliance_status: query.requiresCompliance ? ("PASS" as const) : undefined,
+			keyword: query.keyword || undefined,
+			owner_uids: query.ownerUid ? [query.ownerUid] : undefined,
+			page: query.page,
+			page_size: query.pageSize,
+		}
+		const isAllImageAndVideoQuery =
+			query.mediaTypes.length === IMAGE_AND_VIDEO_MEDIA_TYPES.length &&
+			IMAGE_AND_VIDEO_MEDIA_TYPES.every((mediaType) => query.mediaTypes.includes(mediaType))
+		const responses = isAllImageAndVideoQuery
+			? [await AssetsApi.queryAssets(baseParams)]
+			: await Promise.all(
+					query.mediaTypes.map((mediaType) =>
+						AssetsApi.queryAssets({
+							...baseParams,
+							asset_media_type: mediaType,
+						}),
+					),
+				)
 		const seenAssetIds = new Set<string>()
 		const assets = responses.flatMap((response) =>
 			response.list.filter((asset) => {
+				if (!query.mediaTypes.includes(asset.asset_media_type as AssetMediaType))
+					return false
 				if (seenAssetIds.has(asset.asset_id)) return false
 				seenAssetIds.add(asset.asset_id)
 				return true

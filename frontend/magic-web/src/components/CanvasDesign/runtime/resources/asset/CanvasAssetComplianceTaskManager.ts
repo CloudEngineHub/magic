@@ -12,11 +12,9 @@ import {
 	collectAssetBoundComplianceResumeIds,
 	collectDocumentComplianceResumeTargets,
 } from "./collectDocumentComplianceResumeTargets"
-import {
-	applyWorkspaceMediaComplianceState,
-	writeMediaComplianceState,
-} from "./mediaComplianceContent"
+import { applyWorkspaceMediaComplianceState } from "./mediaComplianceContent"
 import { assetLibrarySessionStore } from "./AssetLibrarySessionStore"
+import { bindMediaContentToAsset } from "./imageContentAssetBinding"
 
 export interface MediaCompliancePersistTarget {
 	elementId: string
@@ -37,6 +35,7 @@ export interface CanvasAssetComplianceTaskHost {
 	elementManager: Canvas["elementManager"]
 	permissionManager?: Canvas["permissionManager"]
 	refreshMediaComplianceFailedTags?: () => void
+	refreshNameLabelIcons?: (elementIds?: readonly string[]) => void
 }
 
 export interface StartWorkspaceFileComplianceParams {
@@ -61,7 +60,7 @@ export interface StartLibraryAssetComplianceParams {
 }
 
 /**
- * 统一编排素材合规：发起检查、写 DSL、轮询 compliance、文档刷新后恢复。
+ * 统一编排素材合规：发起检查、绑定素材 ID、轮询 compliance、文档刷新后恢复。
  * UI 层只负责触发与 toast，不直接 setInterval 或拼 API 流程。
  */
 export class CanvasAssetComplianceTaskManager {
@@ -81,6 +80,7 @@ export class CanvasAssetComplianceTaskManager {
 					this.persistState(persistTargets, state, normalizedId)
 				}
 				options.onUpdate?.(state)
+				this.host.refreshNameLabelIcons?.()
 				this.host.refreshMediaComplianceFailedTags?.()
 			},
 			onSettled: (state) => {
@@ -92,6 +92,7 @@ export class CanvasAssetComplianceTaskManager {
 				// before notifying UI listeners so PASS/FAILED is visible there too.
 				assetLibrarySessionStore.invalidateAsset(normalizedId)
 				options.onSettled?.(state)
+				this.host.refreshNameLabelIcons?.()
 				this.host.refreshMediaComplianceFailedTags?.()
 			},
 			onError: options.onError,
@@ -108,24 +109,29 @@ export class CanvasAssetComplianceTaskManager {
 			path: params.path,
 			name: params.name,
 		})
-		const checkId = created.assetId.trim()
-		if (!checkId) return null
+		const assetId = created.assetId?.trim()
+		if (!assetId) return null
 
 		if (this.canPersistToDocument()) {
-			writeMediaComplianceState(this.host as Canvas, {
+			// The project-path compliance endpoint creates the asset as part of the
+			// request. Bind that server-owned ID before polling so a reload, menu
+			// decision, or concurrent edit can never mistake it for a transient check ID.
+			const bindingResult = bindMediaContentToAsset(this.host as Canvas, {
 				elementId: params.persistTarget.elementId,
 				contentId: params.persistTarget.contentId,
 				sourcePath: params.persistTarget.sourcePath,
-				complianceStatus: "PROCESSING",
-				complianceCheckId: checkId,
+				assetId,
 			})
+			// The asset is already created on the server, but it belongs to the
+			// original source only when the binding still matches.  Do not start a
+			// watcher for a late response that can no longer affect this Content.
+			if (bindingResult !== "bound" && bindingResult !== "already-bound") return null
 		}
 
-		this.watchCheck(checkId, {
-			persistTargets: [params.persistTarget],
-			...watchOptions,
-		})
-		return checkId
+		// Once the Content is bound, compliance status belongs to the asset service;
+		// do not persist PROCESSING/PASS/FAILED snapshots back into the workspace DSL.
+		this.watchCheck(assetId, watchOptions)
+		return assetId
 	}
 
 	/** 素材库对已有 asset 发起合规：使用稳定源 ID 轮询，不写 DSL。 */
@@ -166,6 +172,7 @@ export class CanvasAssetComplianceTaskManager {
 				},
 			})
 		}
+		this.host.refreshNameLabelIcons?.()
 		this.host.refreshMediaComplianceFailedTags?.()
 	}
 

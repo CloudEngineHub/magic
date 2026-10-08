@@ -303,6 +303,7 @@
 		"loadError": "Failed to load image",
 		"loading": "Loading...",
 		"nameSuffix": {
+			"complianceProcessing": "(Compliance checking)",
 			"erasing": "(Erasing)",
 			"expanding": "(Expanding)",
 			"failed": "(Failed)",
@@ -744,6 +745,7 @@
 		"loading": "Loading...",
 		"merging": "Merging...",
 		"nameSuffix": {
+			"complianceProcessing": "(Compliance checking)",
 			"composing": "(Merging)",
 			"failed": "(Failed)",
 			"generating": "(Generating)",

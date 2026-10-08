@@ -1,6 +1,7 @@
 import type Konva from "konva"
 import type { LayerElement } from "../../document/types"
 import type { BaseElement } from "../../elements/core/BaseElement"
+import type { CanvasAssetComplianceStatus } from "../../../public/magic-types"
 
 /**
  * Resolver receives runtime state so an icon can reflect element data and
@@ -12,6 +13,10 @@ export interface NameLabelIconContext {
 	data: LayerElement
 	selected: boolean
 	hovered: boolean
+	/** True when the media content is bound to an existing asset-library item. */
+	isAssetLibrary: boolean
+	/** Runtime compliance state; asset-backed media is resolved outside the DSL. */
+	complianceStatus?: CanvasAssetComplianceStatus
 }
 
 /**

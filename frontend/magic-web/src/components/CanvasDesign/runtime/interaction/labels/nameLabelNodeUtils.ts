@@ -3,6 +3,7 @@ import type Konva from "konva"
 export const NAME_LABEL_GROUP_PREFIX = "name-label-"
 export const NAME_LABEL_HIT_NAME = "name-label-hit"
 export const NAME_LABEL_TEXT_NAME = "name-label-text"
+export const NAME_LABEL_SUFFIX_NAME = "name-label-suffix"
 export const NAME_LABEL_ICON_NAME = "name-label-icon"
 
 /**

@@ -101,7 +101,7 @@ export function useAssetLibraryComplianceAction(options: {
 				if (!signed) return
 				const sourceAsset = asset.file_key?.trim()
 					? asset
-					: await assetDetailStore.get(listAssetId)
+					: await assetDetailStore.getWithFileKey(listAssetId)
 
 				const pollAssetId = await complianceTaskManager.startLibraryAssetCompliance(
 					{

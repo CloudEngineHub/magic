@@ -386,6 +386,7 @@ export class ImagePollingManager {
 						previousSrc: currentContent.src,
 						nextSrc: storagePath,
 						previousComplianceCheckId: currentContent.complianceCheckId,
+						previousAssetId: currentContent.assetId,
 					})
 				}
 			}
@@ -490,6 +491,7 @@ export class ImagePollingManager {
 					previousSrc: currentContent.src,
 					nextSrc: persistedPath,
 					previousComplianceCheckId: currentContent.complianceCheckId,
+					previousAssetId: currentContent.assetId,
 				})
 				this.config.canvas.eventEmitter.emit({
 					type: "element:image:resultUpdated",

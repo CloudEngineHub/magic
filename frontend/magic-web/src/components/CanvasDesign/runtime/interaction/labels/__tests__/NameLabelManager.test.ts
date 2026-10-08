@@ -3,11 +3,13 @@ import Konva from "konva"
 import { ElementTypeEnum, type ElementType } from "../../../document/types"
 import { NameLabelManager } from "../NameLabelManager"
 import type { NameLabelIconResolver } from "../nameLabelTypes"
+import type { NameLabelContent } from "../../../elements/core/BaseElement"
 
 type TestElement = {
 	getData: () => { id: string; type: ElementType }
 	getBoundingRect?: () => { x: number; y: number; width: number; height: number }
 	getNameLabelText?: () => string
+	getNameLabelContent?: () => NameLabelContent
 	getNode?: () => object
 }
 
@@ -59,8 +61,19 @@ class TestNameLabelManager extends NameLabelManager {
 		return this.labelMap.get(elementId)?.findOne(".name-label-icon") as Konva.Node | null
 	}
 
+	public getSuffixNodeForTest(elementId: string): Konva.Text | null {
+		return (
+			(this.labelMap.get(elementId)?.findOne(".name-label-suffix") as Konva.Text | null) ??
+			null
+		)
+	}
+
 	public updateLabelPositionForTest(elementId: string): boolean {
 		return this.updateLabelPosition(elementId, true)
+	}
+
+	public shouldSuppressSizeLabelForTest(elementId: string): boolean {
+		return this.shouldSuppressSizeLabel(elementId)
 	}
 }
 
@@ -71,7 +84,12 @@ function createManager(
 		hoveredElementId?: string
 		iconResolver?: NameLabelIconResolver
 		sizeLabelManager?: {
-			isLabelVisibleForElement: (elementId: string) => boolean
+			isLabelVisibleForElement?: (elementId: string) => boolean
+			isLabelEligibleForNamePriority?: (elementId: string) => boolean
+			refreshVisibilityForNamePriority?: (
+				elementId: string,
+				skipBatchDraw?: boolean,
+			) => boolean
 			getLabelSizeForElement: (elementId: string) => {
 				width: number
 				height: number
@@ -180,6 +198,68 @@ describe("NameLabelManager visibility", () => {
 		manager.destroy()
 	})
 
+	it("truncates only the primary name and keeps the state suffix complete", () => {
+		const labelContent: NameLabelContent = {
+			primaryText: "A deliberately long audio name",
+			suffix: { text: "(生成中)" },
+		}
+		const elements = new Map<string, TestElement>([
+			[
+				"audio-1",
+				{
+					getBoundingRect: () => ({ x: 0, y: 0, width: 100, height: 100 }),
+					getData: () => ({ id: "audio-1", type: ElementTypeEnum.Audio }),
+					getNameLabelContent: () => labelContent,
+					getNode: () => ({}),
+				},
+			],
+		])
+		const manager = createManager(elements)
+
+		manager.createOrUpdateLabelForTest("audio-1")
+
+		const primaryNode = manager.getTextNodeForTest("audio-1")
+		const suffixNode = manager.getSuffixNodeForTest("audio-1")
+		expect(primaryNode?.text()).toBe(labelContent.primaryText)
+		expect(primaryNode?.textArr[0]?.text.endsWith("…")).toBe(true)
+		expect(suffixNode?.text()).toBe("(生成中)")
+		expect(suffixNode?.x()).toBe(primaryNode?.width())
+		expect((primaryNode?.width() ?? 0) + (suffixNode?.width() ?? 0)).toBeLessThanOrEqual(100)
+
+		manager.destroy()
+	})
+
+	it("updates and removes a suffix when runtime label state changes", () => {
+		let suffix: string | undefined = "(生成中)"
+		const elements = new Map<string, TestElement>([
+			[
+				"audio-1",
+				{
+					getBoundingRect: () => ({ x: 0, y: 0, width: 100, height: 100 }),
+					getData: () => ({ id: "audio-1", type: ElementTypeEnum.Audio }),
+					getNameLabelContent: () => ({
+						primaryText: "Audio name",
+						suffix: suffix ? { text: suffix } : undefined,
+					}),
+					getNode: () => ({}),
+				},
+			],
+		])
+		const manager = createManager(elements)
+		manager.createOrUpdateLabelForTest("audio-1")
+		expect(manager.getSuffixNodeForTest("audio-1")?.text()).toBe("(生成中)")
+
+		suffix = "(失败)"
+		manager.refreshIcons(["audio-1"])
+		expect(manager.getSuffixNodeForTest("audio-1")?.text()).toBe("(失败)")
+
+		suffix = undefined
+		manager.refreshIcons(["audio-1"])
+		expect(manager.getSuffixNodeForTest("audio-1")).toBeNull()
+
+		manager.destroy()
+	})
+
 	it("reserves an optional icon slot and resolves it outside layout-only updates", () => {
 		const getBoundingRect = vi.fn(() => ({ x: 10, y: 20, width: 100, height: 80 }))
 		const elements = new Map<string, TestElement>([
@@ -211,7 +291,8 @@ describe("NameLabelManager visibility", () => {
 
 		expect(iconNode).toBeInstanceOf(Konva.Rect)
 		expect(iconNode?.listening()).toBe(false)
-		expect(textNode?.x()).toBe(16)
+		expect(iconNode?.x()).toBe(0)
+		expect(textNode?.x()).toBe(14)
 		expect(textNode?.width()).toBeLessThanOrEqual(84)
 
 		manager.updateLabelPositionForTest("audio-1")
@@ -239,7 +320,10 @@ describe("NameLabelManager visibility", () => {
 				{
 					getBoundingRect: () => ({ x: 10, y: 20, width: 40, height: 80 }),
 					getData: () => ({ id: "audio-1", type: ElementTypeEnum.Audio }),
-					getNameLabelText: () => labelText,
+					getNameLabelContent: () => ({
+						primaryText: labelText,
+						suffix: { text: "(生成中)" },
+					}),
 					getNode: () => ({}),
 				},
 			],
@@ -249,13 +333,15 @@ describe("NameLabelManager visibility", () => {
 		const layout = manager.getRenameInputLayout("audio-1")
 		expect(layout?.text).toBe(labelText)
 		expect(layout?.width).toBeGreaterThan(40)
+		expect(layout?.width).toBeLessThan((labelText + "(生成中)").length * 8)
 
 		manager.destroy()
 	})
 
-	it("reserves a visible size label and releases the space when it is hidden", () => {
+	it("suppresses size label when it would truncate the name", () => {
 		const sizeLabelManager = {
 			isLabelVisibleForElement: vi.fn(() => true),
+			refreshVisibilityForNamePriority: vi.fn(() => true),
 			getLabelSizeForElement: vi.fn(() => ({
 				width: 30,
 				height: 12,
@@ -275,10 +361,104 @@ describe("NameLabelManager visibility", () => {
 		const manager = createManager(elements, { sizeLabelManager })
 
 		manager.createOrUpdateLabelForTest("audio-1")
-		expect(manager.getRenderedTextWidthForTest("audio-1")).toBe(66)
+		expect(manager.shouldSuppressSizeLabelForTest("audio-1")).toBe(true)
+		expect(sizeLabelManager.refreshVisibilityForNamePriority).toHaveBeenCalledWith(
+			"audio-1",
+			true,
+		)
+		expect(manager.getRenderedTextWidthForTest("audio-1")).toBe(100)
+		expect(manager.getTextNodeForTest("audio-1")?.textArr[0]?.text.endsWith("…")).toBe(true)
 
-		sizeLabelManager.isLabelVisibleForElement.mockReturnValue(false)
+		manager.destroy()
+	})
+
+	it("includes the complete suffix when deciding whether size must yield", () => {
+		const sizeLabelManager = {
+			isLabelVisibleForElement: vi.fn(() => true),
+			getLabelSizeForElement: vi.fn(() => ({
+				width: 30,
+				height: 12,
+			})),
+		}
+		const elements = new Map<string, TestElement>([
+			[
+				"audio-1",
+				{
+					getBoundingRect: () => ({ x: 0, y: 0, width: 100, height: 80 }),
+					getData: () => ({ id: "audio-1", type: ElementTypeEnum.Audio }),
+					getNameLabelContent: () => ({
+						primaryText: "Long name",
+						suffix: { text: "(生成中)" },
+					}),
+					getNode: () => ({}),
+				},
+			],
+		])
+		const manager = createManager(elements, { sizeLabelManager })
+
+		manager.createOrUpdateLabelForTest("audio-1")
+		expect(manager.shouldSuppressSizeLabelForTest("audio-1")).toBe(true)
+		expect(manager.getSuffixNodeForTest("audio-1")?.text()).toBe("(生成中)")
+
+		manager.destroy()
+	})
+
+	it("restores the size label decision after the name fits beside it", () => {
+		let elementWidth = 100
+		const sizeLabelManager = {
+			isLabelVisibleForElement: vi.fn(() => true),
+			getLabelSizeForElement: vi.fn(() => ({
+				width: 30,
+				height: 12,
+			})),
+		}
+		const elements = new Map<string, TestElement>([
+			[
+				"audio-1",
+				{
+					getBoundingRect: () => ({ x: 10, y: 20, width: elementWidth, height: 80 }),
+					getData: () => ({ id: "audio-1", type: ElementTypeEnum.Audio }),
+					getNameLabelText: () => "Long name",
+					getNode: () => ({}),
+				},
+			],
+		])
+		const manager = createManager(elements, { sizeLabelManager })
+
+		manager.createOrUpdateLabelForTest("audio-1")
+		expect(manager.shouldSuppressSizeLabelForTest("audio-1")).toBe(true)
+
+		elementWidth = 110
 		manager.updateLabelPositionForTest("audio-1")
+		expect(manager.shouldSuppressSizeLabelForTest("audio-1")).toBe(false)
+		expect(manager.getRenderedTextWidthForTest("audio-1")).toBe(72)
+
+		manager.destroy()
+	})
+
+	it("does not suppress size when it is independently hidden", () => {
+		const sizeLabelManager = {
+			isLabelVisibleForElement: vi.fn(() => false),
+			getLabelSizeForElement: vi.fn(() => ({
+				width: 30,
+				height: 12,
+			})),
+		}
+		const elements = new Map<string, TestElement>([
+			[
+				"audio-1",
+				{
+					getBoundingRect: () => ({ x: 10, y: 20, width: 100, height: 80 }),
+					getData: () => ({ id: "audio-1", type: ElementTypeEnum.Audio }),
+					getNameLabelText: () => "A deliberately long audio name",
+					getNode: () => ({}),
+				},
+			],
+		])
+		const manager = createManager(elements, { sizeLabelManager })
+
+		manager.createOrUpdateLabelForTest("audio-1")
+		expect(manager.shouldSuppressSizeLabelForTest("audio-1")).toBe(false)
 		expect(manager.getRenderedTextWidthForTest("audio-1")).toBe(100)
 
 		manager.destroy()

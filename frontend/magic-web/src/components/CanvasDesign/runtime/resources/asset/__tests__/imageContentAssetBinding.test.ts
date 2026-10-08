@@ -114,4 +114,20 @@ describe("bindImageContentToAsset", () => {
 		).toBe("already-bound")
 		expect(harness.update).not.toHaveBeenCalled()
 	})
+
+	it("does not replace a newer binding created while the request was in flight", () => {
+		const element = image()
+		element.contents[0] = { ...element.contents[0], assetId: "newer-asset" }
+		const harness = createHarness(element)
+
+		expect(
+			bindImageContentToAsset(harness.canvas, {
+				elementId: "image-1",
+				contentId: "content-1",
+				sourcePath: "./images/one.png",
+				assetId: "late-response-asset",
+			}),
+		).toBe("asset-changed")
+		expect(harness.update).not.toHaveBeenCalled()
+	})
 })

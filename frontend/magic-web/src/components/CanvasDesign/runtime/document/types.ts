@@ -352,7 +352,7 @@ export interface ImageElementContent extends ElementContentBase {
 	complianceStatus?: CanvasAssetComplianceStatus
 	/** 未绑定素材时的合规失败原因。 */
 	complianceFailedReason?: string | null
-	/** createAsset 返回的检查 ID，只用于轮询，不得写入 assetId。 */
+	/** 旧版 workspace 合规流程的检查字段；新流程创建素材后统一写入 assetId。 */
 	complianceCheckId?: string
 	/** 状态 */
 	status?: GenerationStatus
@@ -381,7 +381,7 @@ export interface VideoElementContent extends ElementContentBase {
 	complianceStatus?: CanvasAssetComplianceStatus
 	/** 未绑定素材时的合规失败原因。 */
 	complianceFailedReason?: string | null
-	/** createAsset 返回的检查 ID，只用于轮询，不得写入 assetId。 */
+	/** 旧版 workspace 合规流程的检查字段；新流程创建素材后统一写入 assetId。 */
 	complianceCheckId?: string
 	/** 视频状态 */
 	status?: GenerationStatus
