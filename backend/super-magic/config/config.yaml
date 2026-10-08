@@ -523,6 +523,8 @@ pdf_understanding:
 audio_understanding:
   api_key: "${VOICE_UNDERSTANDING_API_KEY}"
   api_base_url: "${VOICE_UNDERSTANDING_API_BASE_URL}"
+  # 连续查询失败达到此值才结束；合法响应后重置计数，不重发已提交任务。
+  max_consecutive_query_failures: 5
 
 # Checkpoint管理配置
 checkpoint:
