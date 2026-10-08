@@ -45,6 +45,7 @@ import { processHtmlContent, type ProcessHtmlContentInput } from "../../contents
 import { HTML_PREVIEW_IMAGE_PROCESS } from "../../contents/HTML/previewImageProcess"
 import { resolvePptScaleContentDimensions } from "../../contents/HTML/utils/slide-dimensions"
 import { usePPTVersionManager } from "./hooks/usePPTVersionManager"
+import { flushFileSaves } from "../../services/fileSaveQueue"
 import { cn } from "@/utils/cn"
 import { AttachmentItem } from "../../../TopicFilesButton/hooks"
 import MagicSpin from "@/components/base/MagicSpin"
@@ -276,6 +277,26 @@ const PPTSlide = observer(function PPTSlide({
 	} = usePPTVersionManager({
 		fileId: fileId || "",
 	})
+	const notesVersionSourceRef = useRef({ fileId, rawContent })
+	useEffect(() => {
+		const previous = notesVersionSourceRef.current
+		notesVersionSourceRef.current = { fileId, rawContent }
+		if (
+			previous.fileId !== fileId ||
+			previous.rawContent === rawContent ||
+			stripSlideNotes(previous.rawContent) !== stripSlideNotes(rawContent)
+		)
+			return
+		// Notes change the local source without refreshing the iframe. Wait for the
+		// shared optimistic save queue before asking the server for the new history.
+		let cancelled = false
+		void flushFileSaves([fileId]).then((saved) => {
+			if (saved && !cancelled) void fetchFileVersions(fileId, true)
+		})
+		return () => {
+			cancelled = true
+		}
+	}, [fileId, rawContent, fetchFileVersions])
 
 	const [displayContent, setDisplayContent] = useState<{
 		content: string
@@ -542,7 +563,9 @@ const PPTSlide = observer(function PPTSlide({
 	}, [])
 
 	const rendererStaticProps = {
-		rawSourceCode: displayContent.rawContent,
+		// Metadata saves must reach the save boundary immediately, even while the
+		// processed preview is retained. Historical previews keep their own source.
+		rawSourceCode: fileVersion === undefined ? rawContent : displayContent.rawContent,
 		sandboxType: "iframe" as const,
 		isPptRender: true as const,
 		scaleContentDimensions,

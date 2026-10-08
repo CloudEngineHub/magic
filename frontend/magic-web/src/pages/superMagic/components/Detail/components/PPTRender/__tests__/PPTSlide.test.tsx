@@ -23,6 +23,8 @@ const mockState = vi.hoisted(() => ({
 	fileVersion: undefined as number | undefined,
 	versionContent: undefined as string | null | undefined,
 	isLoadingVersion: false,
+	fetchFileVersions: vi.fn(),
+	flushFileSaves: vi.fn(async () => true),
 }))
 
 vi.mock("react-i18next", () => ({
@@ -54,6 +56,11 @@ vi.mock("ahooks", async () => {
 
 vi.mock("@/hooks/useIsMobile", () => ({
 	useIsMobile: () => false,
+}))
+
+vi.mock("../../../services/fileSaveQueue", async (importOriginal) => ({
+	...(await importOriginal<typeof import("../../../services/fileSaveQueue")>()),
+	flushFileSaves: mockState.flushFileSaves,
 }))
 
 vi.mock("@/utils/cn", () => ({
@@ -168,7 +175,7 @@ vi.mock("../hooks/usePPTVersionManager", () => ({
 		fileVersion: mockState.fileVersion,
 		changeFileVersion: vi.fn(),
 		fileVersionsList: [],
-		fetchFileVersions: vi.fn(),
+		fetchFileVersions: mockState.fetchFileVersions,
 		handleVersionRollback: vi.fn(),
 		isNewestVersion: true,
 		versionContent: mockState.versionContent ?? null,
@@ -434,12 +441,77 @@ describe("PPTSlide", () => {
 		mockState.fileVersion = undefined
 		mockState.versionContent = undefined
 		mockState.isLoadingVersion = false
+		mockState.fetchFileVersions.mockReset()
+		mockState.flushFileSaves.mockReset()
+		mockState.flushFileSaves.mockResolvedValue(true)
 	})
 
 	it("preserves the source project for a shared slide without a conversation host", () => {
 		renderPPTSlide({ projectId: "shared-source", selectedProject: undefined, allowEdit: false })
 		expect(mockState.renderedIsolatedProps).toHaveBeenCalledWith(
 			expect.objectContaining({ projectId: "shared-source", isPptRender: true }),
+		)
+	})
+
+	it("refreshes versions when an optimistic notes save finishes without replacing the preview", async () => {
+		mockState.initialEditMode = false
+		let finishSave!: (saved: boolean) => void
+		mockState.flushFileSaves.mockReturnValue(
+			new Promise<boolean>((resolve) => {
+				finishSave = resolve
+			}),
+		)
+		const original = "<main>Slide</main><template data-magic-slide-notes>Old</template>"
+		const updated = original.replace("Old", "Saved note")
+		const view = renderPPTSlide({ content: original, rawContent: original })
+		const renderer = screen.getByTestId("isolated-html-renderer")
+		rerenderSlide(view, { content: original, rawContent: updated })
+		await waitFor(() => expect(mockState.flushFileSaves).toHaveBeenCalledWith(["slide-1"]))
+		expect(mockState.fetchFileVersions).not.toHaveBeenCalled()
+		await act(async () => {
+			finishSave(true)
+		})
+		await waitFor(() =>
+			expect(mockState.fetchFileVersions).toHaveBeenCalledWith("slide-1", true),
+		)
+		expect(screen.getByTestId("isolated-html-renderer")).toBe(renderer)
+	})
+
+	it("does not publish a new version when the queued notes save fails", async () => {
+		mockState.flushFileSaves.mockResolvedValue(false)
+		const original = "<main>Slide</main><template data-magic-slide-notes>Old</template>"
+		const view = renderPPTSlide({ content: original, rawContent: original })
+		rerenderSlide(view, { content: original, rawContent: original.replace("Old", "New") })
+		await act(async () => {
+			await Promise.resolve()
+		})
+		expect(mockState.flushFileSaves).toHaveBeenCalledWith(["slide-1"])
+		expect(mockState.fetchFileVersions).not.toHaveBeenCalled()
+	})
+
+	it("ignores a pending notes version refresh after the slide unmounts", async () => {
+		let finishSave!: (saved: boolean) => void
+		mockState.flushFileSaves.mockReturnValue(
+			new Promise<boolean>((resolve) => {
+				finishSave = resolve
+			}),
+		)
+		const original = "<main>Slide</main><template data-magic-slide-notes>Old</template>"
+		const view = renderPPTSlide({ content: original, rawContent: original })
+		rerenderSlide(view, { content: original, rawContent: original.replace("Old", "New") })
+		view.unmount()
+		await act(async () => {
+			finishSave(true)
+		})
+		expect(mockState.fetchFileVersions).not.toHaveBeenCalled()
+	})
+
+	it("refreshes versions even when the optimistic save has already completed", async () => {
+		const original = "<main>Slide</main><template data-magic-slide-notes>Old</template>"
+		const view = renderPPTSlide({ content: original, rawContent: original })
+		rerenderSlide(view, { content: original, rawContent: original.replace("Old", "New") })
+		await waitFor(() =>
+			expect(mockState.fetchFileVersions).toHaveBeenCalledWith("slide-1", true),
 		)
 	})
 
