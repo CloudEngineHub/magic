@@ -1,4 +1,4 @@
-"""当前微信入站运行的有序投递；微信结果与 Web 镜像共享同一正文和附件。"""
+"""已连接微信的龙虾主 Agent 有序投递；微信结果与 Web 镜像共享同一正文和附件。"""
 from __future__ import annotations
 
 import asyncio
@@ -11,6 +11,7 @@ from agentlang.context.tool_context import ToolContext
 from bs4 import BeautifulSoup
 
 from app.channel.wechat import api
+from app.channel.wechat.channel import WechatChannel
 from app.channel.wechat.models import (
     TextFileMessageItem, TextFormat, TextMessageItem,
     WechatDeliveryResult, WechatMessageItem,
@@ -18,7 +19,6 @@ from app.channel.wechat.models import (
 from app.channel.wechat.reply_media_parser import MediaItem, MediaKind
 from app.channel.wechat.stream import WechatStream
 from app.core.context.agent_context import AgentContext
-from app.core.context.execution_source import SuperMagicExecutionSource
 from app.core.entity.attachment import Attachment
 from app.core.entity.event.event_context import EventContext, OutboundMessageRecord
 from app.service.agent_event.file_storage_listener_service import FileStorageListenerService
@@ -33,19 +33,18 @@ class PreparedMessage:
     attachment: Attachment | None = None
 
 
+def check_send_permission(context: AgentContext) -> None:
+    # 例：网页对话和 cron 完成通知都可由龙虾主 Agent 发送；cron 子 Agent 只返回结果。
+    # 权限依据项目模式、主 Agent 身份和连接状态，不依据本轮消息来源。
+    if not context.is_interactive_main_agent_context() or not context.is_magiclaw():
+        raise ValueError("Only the main agent in Claw mode can send WeChat messages.")
+    if not WechatChannel.get_instance().is_connected:
+        raise ValueError("WeChat is disconnected. Connect it before sending messages.")
+
+
 def resolve_current_stream(context: AgentContext) -> WechatStream:
-    message = context.get_chat_client_message()
-    if (
-        not context.is_interactive_main_agent_context()
-        or context.get_execution_source() != SuperMagicExecutionSource.THIRD_PARTY_IM
-        or message is None or message.metadata is None
-        or message.metadata.channel_name != "wechat"
-    ):
-        raise ValueError("Sending requires the current main-agent WeChat inbound run; no recent-user fallback is allowed.")
-    streams = [stream for stream in context.streams.values() if isinstance(stream, WechatStream)]
-    if len(streams) != 1 or not streams[0].can_send_tool_message:
-        raise ValueError("The current run has no unique active WeChat delivery stream.")
-    return streams[0]
+    check_send_permission(context)
+    return WechatChannel.get_instance().get_tool_delivery_stream(context)
 
 
 def format_text(text: str, text_format: TextFormat) -> str:
@@ -106,7 +105,16 @@ async def deliver_messages(
     events = tool_context.get_extension_typed("event_context", EventContext)
     if context is None or events is None or not tool_context.tool_call_id:
         raise ValueError("A tool event and the current Agent context are required for coordinated delivery.")
-    stream = resolve_current_stream(context)
+    try:
+        stream = resolve_current_stream(context)
+    except ValueError as error:
+        return [
+            WechatDeliveryResult(
+                index=index, kind=item.kind, delivery_id=f"wechat:{tool_context.tool_call_id}:{index}",
+                status="failed", error_code="channel_unavailable", message=str(error),
+            )
+            for index, item in enumerate(items)
+        ]
     prepared: list[PreparedMessage | None] = []
     results: list[WechatDeliveryResult] = []
     too_long = False
@@ -143,6 +151,13 @@ async def deliver_messages(
             continue
         if context.is_interruption_requested():
             raise asyncio.CancelledError()
+        try:
+            check_send_permission(context)
+            if not stream.can_send_tool_message:
+                raise ValueError("The current WeChat delivery stream is no longer available.")
+        except ValueError as error:
+            result.status, result.error_code, result.message = "failed", "channel_unavailable", str(error)
+            continue
         # 同一批 item 串行投递；网络异常不能假定对端未收到，更不能自动重发。
         try:
             if message.media is not None:

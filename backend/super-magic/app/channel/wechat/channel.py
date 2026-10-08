@@ -10,7 +10,7 @@ from __future__ import annotations
 
 import asyncio
 import uuid
-from typing import Optional
+from typing import TYPE_CHECKING, Optional
 
 import aiohttp
 
@@ -33,6 +33,9 @@ from app.core.context.execution_source import EXECUTION_SOURCE_DYNAMIC_CONFIG_KE
 from app.core.entity.message.client_message import ChatClientMessage, Metadata
 from app.core.keepalive_registry import KeepaliveRegistry
 from app.utils.time_utils import now_ms
+
+if TYPE_CHECKING:
+    from app.core.context.agent_context import AgentContext
 
 logger = get_logger(__name__)
 
@@ -423,16 +426,7 @@ class WechatChannel(BaseChannel):
             return False
 
         stream_id = f"wechat-proactive-{id(self)}"
-        wechat_stream = WechatStream(
-            http_session=self._http_session,
-            bot_token=self._credential.bot_token,
-            to_user_id=latest_context.user_id,
-            context_token=latest_context.context_token,
-            base_url=self._credential.base_url,
-            cdn_base_url=self._credential.cdn_base_url,
-            stream_id=stream_id,
-            is_proactive=True,
-        )
+        wechat_stream = self._create_outbound_stream(stream_id=stream_id)
         ctx.add_stream(wechat_stream)
 
         async def _cleanup() -> None:
@@ -441,6 +435,45 @@ class WechatChannel(BaseChannel):
         ctx.register_run_cleanup(cleanup_key, _cleanup)
         logger.info("[WechatChannel] proactive stream registered for cron notification")
         return True
+
+    def get_tool_delivery_stream(self, ctx: AgentContext) -> WechatStream:
+        """复用本轮微信通道；无通道时为显式发送创建仅工具使用的通道。"""
+        streams = [stream for stream in ctx.streams.values() if isinstance(stream, WechatStream)]
+        if streams:
+            if len(streams) != 1 or not streams[0].can_send_tool_message:
+                raise ValueError("The current run has no unique active WeChat delivery stream.")
+            return streams[0]
+
+        stream = self._create_outbound_stream(
+            stream_id=f"wechat-tool-{ctx.context_id}", send_final_reply=False,
+        )
+        ctx.add_stream(stream)
+
+        async def _cleanup() -> None:
+            ctx.remove_stream(stream)
+
+        ctx.register_run_cleanup("wechat_tool_stream", _cleanup)
+        return stream
+
+    def _create_outbound_stream(
+        self, *, stream_id: str, send_final_reply: bool = True,
+    ) -> WechatStream:
+        if not self.is_connected or self._credential is None or self._http_session is None:
+            raise ValueError("WeChat is disconnected. Connect it before sending messages.")
+        latest_context = self._get_latest_context()
+        if not latest_context.user_id or not latest_context.context_token:
+            raise ValueError("No WeChat conversation is available. Send a message in WeChat to establish it.")
+        return WechatStream(
+            http_session=self._http_session,
+            bot_token=self._credential.bot_token,
+            to_user_id=latest_context.user_id,
+            context_token=latest_context.context_token,
+            base_url=self._credential.base_url,
+            cdn_base_url=self._credential.cdn_base_url,
+            stream_id=stream_id,
+            is_proactive=True,
+            send_final_reply=send_final_reply,
+        )
 
     def _build_runtime_state(self) -> WechatRuntimeState:
         return WechatRuntimeState(

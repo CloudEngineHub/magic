@@ -6,7 +6,7 @@ from pydantic import Field
 from agentlang.context.tool_context import ToolContext
 from agentlang.tools.tool_result import ToolResult
 from app.channel.wechat import api
-from app.channel.wechat.code_mode_delivery import deliver_messages, resolve_current_stream
+from app.channel.wechat.code_mode_delivery import check_send_permission, deliver_messages
 from app.channel.wechat.models import WechatMessageItem
 from app.core.context.agent_context import AgentContext
 from app.core.entity.event.event_context import EventContext
@@ -25,12 +25,19 @@ class SendWechatMessage(BaseTool[SendWechatMessageParams]):
 
     def is_visible_in_context(self, agent_context: AgentContext) -> bool:
         try:
-            resolve_current_stream(agent_context)
+            check_send_permission(agent_context)
             return True
         except ValueError:
             return False
 
     async def execute(self, tool_context: ToolContext, params: SendWechatMessageParams) -> ToolResult:
+        context = tool_context.get_extension_typed("agent_context", AgentContext)
+        if context is None:
+            return ToolResult.error("The current Agent context is required. No messages were sent.")
+        try:
+            check_send_permission(context)
+        except ValueError as error:
+            return ToolResult.error(f"WeChat delivery is unavailable: {error} No messages were sent.")
         try:
             results = await deliver_messages(tool_context, params.items)
         except Exception as error:

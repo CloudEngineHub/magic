@@ -37,12 +37,18 @@ Handle the wait result:
 
 ## Reply Format After Connection
 
-Final replies are sent to WeChat automatically. Markdown is converted to readable text on delivery; do not assume HTML or Markdown renders as rich text in the client. Use the sending tool below for messages or files that must arrive before the final reply.
+Final replies from WeChat conversations and scheduled main-agent notifications are sent to WeChat automatically. Web replies stay on Web unless you explicitly use the sending tool below. Markdown is converted to readable text on delivery; do not assume HTML or Markdown renders as rich text in the client.
 
 ### Send messages through Code Mode
 
-Only the current main-agent WeChat inbound run can use this tool. It cannot send
-from a Web run, a sub-agent, a scheduled run, or to an arbitrary recipient.
+The main agent in Claw mode can use this tool while WeChat is connected, whether
+the run starts from WeChat, Web, or a scheduled-task completion notification.
+Ordinary projects, sub-agents, and disconnected WeChat channels cannot use it.
+Scheduled-task agents return results to the main agent; they do not send directly.
+Decide whether, when, and what to send from the user's request and notification
+preferences. The channel supplies the recipient; arbitrary recipients are not accepted.
+If no conversation is available yet, ask the user to send a message in WeChat to
+establish it. Read the actual result; tool permission does not guarantee delivery.
 
 ```python
 from sdk.tool import tool
@@ -76,7 +82,7 @@ Tool messages are delivered immediately and mirrored to Web. If Web mirroring fa
 
 ### Final reply delivery
 
-WeChat sends your final reply automatically. <no_send>...</no_send> keeps enclosed content visible on Web without sending it to WeChat; outside content is sent normally. Wrap the whole reply to send nothing. This controls delivery, not whether the user should reply.
+When the current run has automatic WeChat final delivery, <no_send>...</no_send> keeps enclosed content visible on Web without sending it to WeChat; outside content is sent normally. Wrap the whole reply to send nothing. This controls delivery, not whether the user should reply. Explicit tool sends from a Web conversation do not enable automatic WeChat final delivery.
 
 Use it for confirmed delivery recaps or checks that do not meet the user's notification condition; no prior tool send is required for a quiet check. Keep answers or updates the user requested or is waiting for, questions, and actionable failures outside. A progress update alone does not deliver the final result. Tags in code or quotations are literal.
 

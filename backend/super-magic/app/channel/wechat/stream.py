@@ -38,6 +38,7 @@ class WechatStream(Stream):
         stream_id: str,
         typing_controller: WechatTypingController | None = None,
         is_proactive: bool = False,
+        send_final_reply: bool = True,
     ) -> None:
         super().__init__()
         self._http_session = http_session
@@ -49,6 +50,7 @@ class WechatStream(Stream):
         self._stream_id = stream_id
         self._typing_controller = typing_controller
         self._is_proactive = is_proactive
+        self._send_final_reply = send_final_reply
         self._finished = False
         self._last_content = ""
         self._tool_delivery_results: dict[str, WechatDeliveryResult] = {}
@@ -60,6 +62,12 @@ class WechatStream(Stream):
             msg = json.loads(data)
             payload = msg.get("payload", {})
             event = payload.get("event", "")
+            # 网页运行按需创建的 stream 只发送显式工具消息，不自动转发网页最终回复。
+            # 入站与 cron 通知的 stream 仍负责最终回复；两者均可复用工具投递记录。
+            if not self._send_final_reply:
+                if event == "after_main_agent_run":
+                    self._finished = True
+                return len(data)
             if event == "before_tool_call":
                 # 工具调用表示本轮还会继续处理，之前的正文不能作为最终答复发送。
                 self._last_content = ""
@@ -144,7 +152,7 @@ class WechatStream(Stream):
 
     @property
     def can_send_tool_message(self) -> bool:
-        return not self._finished and not self._is_proactive and bool(self._context_token)
+        return not self._finished and not self._http_session.closed and bool(self._context_token)
 
     def get_tool_delivery(self, delivery_id: str) -> WechatDeliveryResult | None:
         return self._tool_delivery_results.get(delivery_id)

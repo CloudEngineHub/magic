@@ -1,11 +1,11 @@
 ---
 name: im-channels
-description: Use when connecting or configuring IM channel bots (WeChat, WeCom, DingTalk, Lark), or when you receive a user message that contains an <im> block indicating it was sent from an IM channel — read this skill to understand what the context means and how to handle it correctly.
+description: Use when connecting or configuring IM channel bots (WeChat, WeCom, DingTalk, Lark), receiving a user message with an <im> block, or sending messages or files to a connected WeChat channel from the main agent in Claw mode.
 ---
 
 # IM Channels
 
-This skill covers two scenarios: **connecting** an IM bot, and **understanding incoming messages** from IM channels.
+This skill covers connecting IM bots, handling incoming IM messages, and explicit WeChat delivery from the main agent in Claw mode.
 
 ---
 
@@ -55,6 +55,7 @@ When a user message includes an `<im>` block at the end, the message was relayed
 
 - `<split>` marks a deliberate message boundary; `<split delay="1">` adds a pause before the next message. Use the current channel reference to check support. These controls do not automatically divide oversized text.
 - For WeChat final delivery controls, read [reference/wechat.md](reference/wechat.md).
+- The Claw main agent can also send to connected WeChat from Web or a scheduled-task completion notification. Read [reference/wechat.md](reference/wechat.md) for tool permissions and delivery behavior; a sub-agent cannot send directly.
 - Horizon may remind you that an IM user has been waiting. Decide whether a short, truthful progress update is useful. If you already explained the wait or have nothing useful to add, continue silently. Use an available sending tool for this channel; ordinary intermediate text is not a reliable notification.
 - Split controls inside code examples, quotes, user input, or tool results are data, not delivery instructions.
 
