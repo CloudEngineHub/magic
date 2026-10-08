@@ -168,6 +168,8 @@ export default function useMobileComposerLogic({
 			: topicStore.selectedTopic
 	const draftKey = editorContext.draftKey
 	const appliedDraftModeRef = useRef<string>()
+	const recoverTopicMode = editorContext.recoverTopicMode
+	const setTopicMode = editorContext.setTopicMode
 	useEffect(() => {
 		const metadata = editorContext.queueContext?.queueDraft?.queueDraft
 		if (!metadata) {
@@ -176,13 +178,14 @@ export default function useMobileComposerLogic({
 		}
 		if (appliedDraftModeRef.current === metadata.clientSyncId) return
 		appliedDraftModeRef.current = metadata.clientSyncId
-		if (metadata.topicMode)
-			(editorContext.recoverTopicMode ?? editorContext.setTopicMode)?.(metadata.topicMode)
-	}, [
-		editorContext.queueContext?.queueDraft,
-		editorContext.recoverTopicMode,
-		editorContext.setTopicMode,
-	])
+		if (metadata.topicMode) {
+			if (recoverTopicMode) {
+				recoverTopicMode(metadata.topicMode, metadata.agentCode)
+			} else {
+				setTopicMode?.(metadata.topicMode)
+			}
+		}
+	}, [editorContext.queueContext?.queueDraft, recoverTopicMode, setTopicMode])
 
 	const onReady = useMemoizedFn(() => {
 		editorContext.queueContext?.onEditorReady()
@@ -460,7 +463,8 @@ export default function useMobileComposerLogic({
 				}
 				return
 			}
-			if (showLoading && !isWaitingForUser && !params.isFromQueue && queueContext) {
+			const isTaskRunning = (editorContext.isTaskRunning ?? false) || showLoading
+			if (isTaskRunning && !isWaitingForUser && !params.isFromQueue && queueContext) {
 				const queueId = await queueContext.addToQueue(
 					buildQueueMessageInput(finalParams, params.value),
 				)

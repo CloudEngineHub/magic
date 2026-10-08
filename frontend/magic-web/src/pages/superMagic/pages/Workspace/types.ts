@@ -202,6 +202,11 @@ export function isTopicWaitingForUser(topic?: Pick<Topic, "task_status"> | null)
 	return topic?.task_status === TaskStatus.WAITING_FOR_USER
 }
 
+/** Topic 状态仍为 running 时，即使消息流 loading 短暂归零，也不能把新消息直接发给当前任务。 */
+export function isTopicTaskRunning(topic?: Pick<Topic, "task_status" | "status"> | null): boolean {
+	return (topic?.task_status || topic?.status) === TaskStatus.RUNNING
+}
+
 // 消息相关类型
 export interface MessageContent {
 	id: string

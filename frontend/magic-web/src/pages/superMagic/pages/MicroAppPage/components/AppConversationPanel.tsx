@@ -18,6 +18,7 @@ import type { TopicStore } from "@/pages/superMagic/stores/core/topic"
 import { messageSendService } from "@/pages/superMagic/services/messageSendFlowService"
 import type { HandleSendParams } from "@/pages/superMagic/services/messageSendFlowService"
 import {
+	isTopicTaskRunning,
 	isTopicWaitingForUser,
 	type ProjectListItem,
 } from "@/pages/superMagic/pages/Workspace/types"
@@ -165,12 +166,13 @@ function AppConversationPanel({
 		onConversationGeneratingChange: conversation.setConversationGenerating,
 		onTopicMessagesChange: handleTopicMessagesChange,
 	})
+	const isTaskRunning = showLoading || isTopicTaskRunning(selectedTopic)
 
 	const messageQueue = useMessageQueue({
 		projectId: selectedProject?.id,
 		topicId: selectedTopic?.id,
 		agentCode,
-		isTaskRunning: showLoading,
+		isTaskRunning,
 		isWaitingForUser: isTopicWaitingForUser(selectedTopic),
 		isEmptyStatus: false,
 		isShowLoadingInit: isMessagesInitialLoading,

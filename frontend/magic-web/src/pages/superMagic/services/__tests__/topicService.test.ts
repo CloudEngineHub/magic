@@ -588,6 +588,35 @@ describe("TopicService frontend mode patch", () => {
 		})
 	})
 
+	it("restores a queued custom employee when mode and employee code are separate", async () => {
+		const newTopic = createEmptyModeTopic("topic-2", "New Topic")
+		const mergeTopic = vi.fn()
+		const service = new TopicService({
+			store: {
+				setTopics: vi.fn(),
+				setSelectedTopic: vi.fn(),
+				mergeTopic,
+			} as never,
+		})
+		vi.mocked(SuperMagicApi.getTopicDetail).mockResolvedValue(newTopic)
+
+		service.syncTopicFrontendModePatch({
+			topic: newTopic,
+			mode: TopicMode.CustomAgent,
+			agentCode: "custom-agent-code",
+		})
+
+		await expect(service.getTopicDetail("topic-2")).resolves.toEqual({
+			...newTopic,
+			topic_mode: TopicMode.CustomAgent,
+			agent_code: "custom-agent-code",
+		})
+		expect(mergeTopic).toHaveBeenCalledWith("topic-2", {
+			topic_mode: TopicMode.CustomAgent,
+			agent_code: "custom-agent-code",
+		})
+	})
+
 	it("clears the frontend employee patch agent code when the user manually switches to a built-in mode", async () => {
 		const newTopic = createTopic({ id: "topic-2", topic_name: "New Topic" })
 		const mergeTopic = vi.fn()

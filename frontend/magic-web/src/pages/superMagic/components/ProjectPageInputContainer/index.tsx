@@ -28,7 +28,11 @@ import { TopicInvalidModeFallback } from "../MessageEditor/components/TopicInval
 import { userStore } from "@/models/user"
 import { useTaskInterrupt } from "@/pages/superMagic/hooks/useTaskInterrupt"
 import { isCachedChatWorkspaceProject } from "@/pages/superMagic/utils/isChatWorkspaceProject"
-import { isTopicWaitingForUser, TaskStatus } from "@/pages/superMagic/pages/Workspace/types"
+import {
+	isTopicTaskRunning,
+	isTopicWaitingForUser,
+	TaskStatus,
+} from "@/pages/superMagic/pages/Workspace/types"
 import { useConversationInputLayout } from "../ConversationInputResize/context"
 
 /**
@@ -91,8 +95,9 @@ const ProjectPageInputContainerComponent: React.FC<ProjectPageInputContainerProp
 	const [sceneStateStore] = useState(() => createSceneStateStore())
 	const organizationCode = userStore.user.organizationCode
 	const userId = userStore.user.userInfo?.user_id
+	const isTaskRunning = showLoading || isTopicTaskRunning(selectedTopic)
 	const canInterruptTask =
-		showLoading || selectedTopic?.task_status === TaskStatus.WAITING_FOR_USER
+		isTaskRunning || selectedTopic?.task_status === TaskStatus.WAITING_FOR_USER
 	/**
 	 * 话题页优先使用当前项目模式展示示例，不修改首页的全局模式选择。
 	 */
@@ -135,7 +140,7 @@ const ProjectPageInputContainerComponent: React.FC<ProjectPageInputContainerProp
 		projectId: selectedProject?.id,
 		topicId: selectedTopic?.id,
 		agentCode: effectiveAgentCode,
-		isTaskRunning: showLoading,
+		isTaskRunning,
 		isWaitingForUser: isTopicWaitingForUser(selectedTopic),
 		isEmptyStatus,
 		isShowLoadingInit,

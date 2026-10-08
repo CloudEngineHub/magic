@@ -33,7 +33,11 @@ import { useTopicMessages } from "@/pages/superMagic/hooks/useTopicMessages"
 import { createMessageSendService } from "@/pages/superMagic/services/messageSendFlowService"
 import { resolveMessageSendContext } from "@/pages/superMagic/services/messageSendPreparation"
 import { TopicMode } from "@/pages/superMagic/pages/Workspace/TopicMode"
-import { isTopicWaitingForUser, TaskStatus } from "@/pages/superMagic/pages/Workspace/types"
+import {
+	isTopicTaskRunning,
+	isTopicWaitingForUser,
+	TaskStatus,
+} from "@/pages/superMagic/pages/Workspace/types"
 import { userStore } from "@/models/user"
 import { Button } from "@/components/shadcn-ui/button"
 import { DEFAULT_LAYOUT_CONFIG } from "@/pages/superMagic/components/MessageEditor/constants/constant"
@@ -105,8 +109,9 @@ function CrewConversationPanel({
 			}
 		},
 	})
+	const isTaskRunning = showLoading || isTopicTaskRunning(selectedTopic)
 	const canInterruptTask =
-		showLoading || selectedTopic?.task_status === TaskStatus.WAITING_FOR_USER
+		isTaskRunning || selectedTopic?.task_status === TaskStatus.WAITING_FOR_USER
 
 	const { handlePullMoreMessage, isMessagesInitialLoading } = useTopicMessages({
 		selectedTopic,
@@ -116,7 +121,7 @@ function CrewConversationPanel({
 		projectId: selectedProject?.id,
 		topicId: selectedTopic?.id,
 		agentCode,
-		isTaskRunning: showLoading,
+		isTaskRunning,
 		isWaitingForUser: isTopicWaitingForUser(selectedTopic),
 		isEmptyStatus: false,
 		isShowLoadingInit: isMessagesInitialLoading,

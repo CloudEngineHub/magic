@@ -24,7 +24,11 @@ import { useTopicMessages } from "@/pages/superMagic/hooks/useTopicMessages"
 import { createMessageSendService } from "@/pages/superMagic/services/messageSendFlowService"
 import { resolveMessageSendContext } from "@/pages/superMagic/services/messageSendPreparation"
 import { shouldCheckAttachmentsOnTaskStatus } from "@/pages/superMagic/services/topicStatusSyncService"
-import { isTopicWaitingForUser, TaskStatus } from "@/pages/superMagic/pages/Workspace/types"
+import {
+	isTopicTaskRunning,
+	isTopicWaitingForUser,
+	TaskStatus,
+} from "@/pages/superMagic/pages/Workspace/types"
 import { TopicMode } from "../../Workspace/TopicMode"
 import { getClawBrandTranslationValues } from "@/pages/superMagic/utils/clawBrand"
 import { createSuperMagicTopicModelStore } from "@/stores/superMagic/topicModelStore"
@@ -88,6 +92,7 @@ export const ClawConversationPanel = observer(function ClawConversationPanel({
 			}
 		},
 	})
+	const isTaskRunning = showLoading || isTopicTaskRunning(selectedTopic)
 
 	const { handlePullMoreMessage, isMessagesInitialLoading, isSelectedTopicMessagesReady } =
 		useTopicMessages({
@@ -98,7 +103,7 @@ export const ClawConversationPanel = observer(function ClawConversationPanel({
 		projectId: selectedProject?.id,
 		topicId: selectedTopic?.id,
 		agentCode: clawCode,
-		isTaskRunning: showLoading,
+		isTaskRunning,
 		isWaitingForUser: isTopicWaitingForUser(selectedTopic),
 		isEmptyStatus: false,
 		isShowLoadingInit: isMessagesInitialLoading,
@@ -322,7 +327,7 @@ export const ClawConversationPanel = observer(function ClawConversationPanel({
 					{/* Preserve resized height while keeping the toolbar close to the editor. */}
 					<ClawPlaygroundInputToolbar
 						variant="desktop"
-						isTaskRunning={showLoading}
+						isTaskRunning={isTaskRunning}
 						onNewChat={handleClawNewChatSlash}
 						onOpenSkills={() => onOpenSkillsPanel?.()}
 					/>
