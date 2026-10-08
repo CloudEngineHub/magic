@@ -25,6 +25,7 @@ from app.utils.async_file_utils import async_unlink, async_write_bytes_iter
 from .config import MagicServiceConfig, MagicServiceConfigLoader
 from .constants import FileEditType
 from .exceptions import ApiError, ConnectionError
+from .file_version_trace import FileVersionRequestTrace, create_file_version_trace_config
 from .sandbox_types import (
     SandboxInfoData,
     SandboxRebuildData,
@@ -52,7 +53,7 @@ class MagicServiceClient:
 
     async def __aenter__(self):
         """Async context manager entry"""
-        self.session = aiohttp.ClientSession()
+        self.session = aiohttp.ClientSession(trace_configs=[create_file_version_trace_config()])
         return self
 
     async def __aexit__(self, exc_type, exc_val, exc_tb):
@@ -1238,7 +1239,10 @@ class MagicServiceClient:
         url = f"{self.config.api_base_url.rstrip('/')}/open/internal-api/super-agent/file/versions"
         request_data = {"file_key": file_key, "edit_type": edit_type}
 
-        session_to_use = self.session or aiohttp.ClientSession()
+        request_trace = FileVersionRequestTrace()
+        session_to_use = self.session or aiohttp.ClientSession(
+            trace_configs=[create_file_version_trace_config()],
+        )
         should_close_session = self.session is None
 
         try:
@@ -1251,10 +1255,21 @@ class MagicServiceClient:
             # 添加 Magic-Authorization 与 User-Authorization 请求头
             MetadataUtil.add_magic_and_user_authorization_headers(headers)
 
-            logger.info(f"创建文件版本: {file_key}, edit_type: {edit_type}")
+            logger.info(
+                f"创建文件版本: {file_key}, edit_type: {edit_type}, "
+                f"diagnostic_id={request_trace.diagnostic_id}"
+            )
 
-            async with session_to_use.post(url, json=request_data, headers=headers, timeout=30) as response:
+            async with session_to_use.post(
+                url, json=request_data, headers=headers, timeout=30,
+                trace_request_ctx=request_trace,
+            ) as response:
+                request_trace.http_status = response.status
+                request_trace.response_request_id = response.headers.get("X-Request-ID")
+                request_trace.response_log_id = response.headers.get("X-Tt-Logid")
+                request_trace.mark("response_headers_received", "reading_response_body")
                 response_text = await response.text()
+                request_trace.mark("response_body_received", "processing_response")
                 logger.debug(f"File version API response status: {response.status}")
                 logger.debug(f"File version API response: {response_text}")
 
@@ -1263,6 +1278,8 @@ class MagicServiceClient:
                         result = json.loads(response_text)
                         # 使用标准响应处理方法
                         data = self._process_api_response(result, f"创建文件版本({file_key})")
+                        request_trace.mark("completed", "completed")
+                        logger.info(f"文件版本请求完成: file_key={file_key}, trace={request_trace.summary()}")
                         return {"file_key": file_key, "success": True, "data": data}
                     except json.JSONDecodeError:
                         raise ApiError(f"Invalid JSON response: {response_text[:200]}...", response.status)
@@ -1271,6 +1288,13 @@ class MagicServiceClient:
                         raise
                 else:
                     raise ApiError(f"HTTP error: {response.status}", response.status, {"response": response_text})
+        except Exception as exc:
+            logger.error(
+                f"文件版本请求失败: file_key={file_key}, "
+                f"error_type={type(exc).__name__}, error={exc!r}, trace={request_trace.summary()}\n"
+                f"{traceback.format_exc()}"
+            )
+            raise
         finally:
             if should_close_session:
                 await session_to_use.close()
