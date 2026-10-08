@@ -67,9 +67,10 @@ class CanvasToolDetailBuilder:
         """返回工具调用参数。"""
         return self._arguments
 
-    def add_field(self, field_key: str, value: Any) -> None:
+    def add_field(self, field_key: str, value: Any, *, label_key: str | None = None) -> None:
         """追加一个带翻译标签的详情字段。"""
-        self._output_lines.append(self._field_line(field_key, self.localized_field_value(field_key, value)))
+        # 字段身份仍用于摘要去重；概览可把 elements 标为「本页返回节点数」，不改变其他工具的标签。
+        self._output_lines.append(self._field_line(label_key or field_key, self.localized_field_value(field_key, value)))
         self._output_field_keys.add(field_key)
 
     def add_item(self, fields: Mapping[str, Any]) -> None:

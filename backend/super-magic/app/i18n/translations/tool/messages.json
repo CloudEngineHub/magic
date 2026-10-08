@@ -6238,8 +6238,28 @@
         "en_US": "Canvas project already exists"
     },
     "canvas.overview_result": {
-        "zh_CN": "共 {{elements}} 个节点，{{connections}} 条连线",
-        "en_US": "Elements: {{elements}}; connections: {{connections}}"
+        "zh_CN": "第 {{page}} 页 · 返回 {{returned}} 个节点 · 共 {{elements}} 个",
+        "en_US": "Page {{page}} · {{returned}} elements returned · {{elements}} total"
+    },
+    "canvas.overview_empty_page": {
+        "zh_CN": "第 {{page}} 页 · 无节点 · 共 {{elements}} 个",
+        "en_US": "Page {{page}} · No elements · {{elements}} total"
+    },
+    "canvas.detail.field.total_elements": {
+        "zh_CN": "全画布节点数",
+        "en_US": "Total Canvas elements"
+    },
+    "canvas.detail.field.returned_elements": {
+        "zh_CN": "本页返回节点数",
+        "en_US": "Elements returned on this page"
+    },
+    "canvas.detail.field.total_connections": {
+        "zh_CN": "全画布连线数",
+        "en_US": "Total Canvas connections"
+    },
+    "canvas.detail.field.limit": {
+        "zh_CN": "每页上限",
+        "en_US": "Page limit"
     },
     "canvas.element_targets": {
         "zh_CN": "目标节点：{{targets}}",

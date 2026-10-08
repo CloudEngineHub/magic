@@ -64,11 +64,13 @@ class QueryCanvasOverview(BaseTool[BaseToolParams]):
             remark = i18n.translate("canvas.operation_failed", category="tool.messages")
         else:
             data = result.data or {}
+            returned = len(data.get("elements", []))
             remark = canvas_remark(
-                "canvas.overview_result",
+                "canvas.overview_result" if returned else "canvas.overview_empty_page",
                 data.get("project_path", args.get("project_path", "")),
+                page=data.get("page", args.get("page", 1)),
+                returned=returned,
                 elements=data.get("total_elements", 0),
-                connections=data.get("total_connections", 0),
             )
         return {
             "action": i18n.translate(self.feedback_action_key, category="tool.actions"),
@@ -82,9 +84,12 @@ class QueryCanvasOverview(BaseTool[BaseToolParams]):
         data = result.data or {}
         builder = CanvasToolDetailBuilder(self.name, "overview", result, arguments)
         builder.add_field("project_path", data.get("project_path") or builder.arguments.get("project_path") or "-")
-        builder.add_field("elements", data.get("total_elements", 0))
-        builder.add_field("connections", data.get("total_connections", 0))
+        builder.add_field("total_elements", data.get("total_elements", 0))
+        builder.add_field("elements", len(data.get("elements", [])), label_key="returned_elements")
+        builder.add_field("total_connections", data.get("total_connections", 0))
         builder.add_field("page", data.get("page", builder.arguments.get("page", 1)))
+        builder.add_field("limit", data.get("limit", builder.arguments.get("limit", 50)))
+        builder.add_field("has_more", builder.boolean_value(data.get("has_more", False)))
         for element in data.get("elements", []):
             fields = {
                 "element_id": element.get("element_id", "-"),

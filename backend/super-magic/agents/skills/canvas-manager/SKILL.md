@@ -94,7 +94,7 @@ Within the writable type set, you may add Elements, append Content, retry failed
 
 ## How to call tools
 
-Every Canvas tool is called in Code mode and returns a result whose `content` string is the only thing you read:
+Every Canvas tool is called in Code mode. Read `result.content` for business meaning; use `result.data` only for programmatic pagination as shown below:
 
 ```python
 from sdk.tool import tool
@@ -108,7 +108,7 @@ print(result.content)
 ```
 
 - The `from sdk.tool import tool` import is required in every snippet; it is shown once above and omitted in all later examples for brevity.
-- Read only `result.content`; never index the result object or read `result.data`.
+- Read `result.content`; never index the result object. Use `result.data["has_more"]` only to control pagination, not to replace the readable result.
 - `item_ref` is a batch-local label linking a request to its result, not a persisted Canvas ID.
 
 ## Confirmation and asking the user
@@ -148,7 +148,7 @@ User wants prompt inspiration / no ideas?    → search_canvas_image_prompts  (s
 
 ## Tool reference
 
-Each tool below is documented with when to use it, its parameters, and a minimal example. Read every result only from `result.content` and reuse returned IDs verbatim.
+Each tool below is documented with when to use it, its parameters, and a minimal example. Read `result.content` and reuse returned IDs verbatim; pagination uses `result.data["has_more"]`.
 
 ## `initialize_canvas`
 
@@ -182,9 +182,12 @@ Parameters: `project_path` is required; `page` and `limit` are optional.
 ```python
 result = tool.call("query_canvas_overview", {"project_path": "Demo", "page": 1, "limit": 50})
 print(result.content)
+# Inspect this page first. Stop when the requested Element is found.
+if result.ok and result.data["has_more"]:
+    print("Another page is available; request it only if more Elements are needed.")
 ```
 
-If it reports a next page, increment `page`. For full Content, hierarchy, or connections, pass the returned IDs to `query_canvas_element_details`.
+When looking for a specific Element, stop as soon as it is found. Otherwise increment `page` only when `result.data["has_more"]` is true; stop on false or a failed query. Do not fetch a fixed number of pages or infer pagination from `Next` in the readable content. If exact Element IDs are already known, call `query_canvas_element_details` directly for Content, hierarchy, or connections.
 
 ## `query_canvas_element_details`
 
