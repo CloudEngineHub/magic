@@ -512,7 +512,8 @@ export const TagManager = forwardRef<TagManagerHandle, TagManagerProps>(function
 					</div>
 				</CardContent>
 			</Card>
-			<section className="min-w-0 overflow-visible bg-transparent md:overflow-hidden md:rounded-lg md:border md:bg-card">
+			{/* Clip rounded corners without creating a scroll container that blocks sticky headers. */}
+			<section className="min-w-0 overflow-visible bg-transparent md:overflow-clip md:rounded-lg md:border md:bg-card">
 				<div className="hidden border-b p-4 md:block">
 					<h3 className="min-w-0 truncate font-semibold">
 						{selectedGroup

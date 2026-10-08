@@ -8,7 +8,7 @@ vi.mock("../../../src/hooks/use-is-mobile", () => ({ useIsMobile: () => false })
 const columns = [{ accessorKey: "name", header: "Name" }]
 const data = [{ name: "Example" }]
 
-function renderTable(stickyHeader = true, isLoading = false) {
+function renderTable(stickyHeader?: boolean, isLoading = false) {
 	return render(
 		<DataTable
 			columns={columns}
@@ -36,8 +36,9 @@ describe("DataTable native sticky header", () => {
 		vi.unstubAllGlobals()
 	})
 
-	it("exposes one accessible table and a single working sorting control", () => {
+	it("enables sticky headers by default with one accessible table and sorting control", () => {
 		renderTable()
+		expect(document.querySelector('[data-slot="data-table-sticky-header"]')).not.toBeNull()
 		expect(screen.getAllByRole("table")).toHaveLength(1)
 		expect(screen.getAllByRole("columnheader")).toHaveLength(1)
 		expect(screen.getAllByRole("button", { name: "Name" })).toHaveLength(1)
@@ -69,7 +70,7 @@ describe("DataTable native sticky header", () => {
 		expect(bodyViewport.scrollLeft).toBe(500)
 	})
 
-	it("keeps existing tables unchanged unless enabled", () => {
+	it("allows a table to explicitly disable sticky headers", () => {
 		renderTable(false)
 		expect(document.querySelector('[data-slot="data-table-sticky-header"]')).toBeNull()
 		expect(screen.getByRole("table").tagName).toBe("TABLE")

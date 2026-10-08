@@ -91,7 +91,7 @@ export type DataTableProps<TData, TValue> = {
 	sorting?: SortingState
 	/** 移动端详情抽屉中需要高亮的行 ID。 */
 	selectedRowId?: string
-	/** 页面纵向滚动时保持桌面端表头可见；默认关闭，按页面逐步启用。 */
+	/** 默认保持桌面端表头在页面或弹窗滚动区顶部；特殊场景可显式关闭。 */
 	stickyHeader?: boolean
 	/** 需要固定在左侧的列 ID。 */
 	stickyLeftColumnId?: string
@@ -113,7 +113,7 @@ export function DataTable<TData, TValue>({
 	columnVisibility,
 	sorting,
 	selectedRowId,
-	stickyHeader = false,
+	stickyHeader = true,
 	stickyLeftColumnId,
 	stickyRightColumnId,
 }: DataTableProps<TData, TValue>) {
