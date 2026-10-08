@@ -342,18 +342,11 @@ class HandleUserMessageAppService extends AbstractAppService
             $sandboxID = $this->createAndSendMessageToAgent($dataIsolation, $taskContext, $projectEntity, $topicEntity);
             $taskEntity->setSandboxId($sandboxID);
 
-            // Update task status
             if (TaskTerminationUtil::isTaskTerminated($this->redis, $this->logger, $taskEntity->getId())) {
                 $result = $this->agentDomainService->getSandboxStatus($topicEntity->getSandboxId());
                 if ($result->getStatus() === SandboxStatus::RUNNING) {
                     $this->agentDomainService->sendInterruptMessage($dataIsolation, $taskEntity->getSandboxId(), (string) $taskEntity->getId(), '');
                 }
-            } else {
-                $this->topicTaskAppService->updateTaskStatus(
-                    dataIsolation: $dataIsolation,
-                    task: $taskEntity,
-                    status: TaskStatus::RUNNING
-                );
             }
         } catch (Throwable $e) {
             // The task failed before any agent message could exist, so the normal
@@ -700,6 +693,7 @@ class HandleUserMessageAppService extends AbstractAppService
         $this->topicDomainService->updateTopicSandboxId($dataIsolation, $taskContext->getTopicId(), $sandboxId);
         $this->taskDomainService->updateTaskSandboxId($dataIsolation, $taskContext->getTask()->getId(), $sandboxId);
         $taskContext->setSandboxId($sandboxId);
+        $taskContext->getTask()->setSandboxId($sandboxId);
 
         // Stop before sending if the task was terminated during initialization
         if (TaskTerminationUtil::isTaskTerminated($this->redis, $this->logger, $taskId)) {
@@ -726,7 +720,18 @@ class HandleUserMessageAppService extends AbstractAppService
             $sandboxId,
             $crossProjectMounts,
             fn (): bool => TaskTerminationUtil::isTaskTerminated($this->redis, $this->logger, $taskId),
-            fn () => $this->agentAppService->sendChatMessage($dataIsolation, $taskContext),
+            function () use ($dataIsolation, $taskContext, $taskId): void {
+                $this->agentAppService->sendChatMessage($dataIsolation, $taskContext);
+                // Update task status
+                // 启动状态与发送共用准备锁，避免前一请求迟到的 RUNNING 覆盖后一请求。
+                if (! TaskTerminationUtil::isTaskTerminated($this->redis, $this->logger, $taskId)) {
+                    $this->topicTaskAppService->updateTaskStatus(
+                        dataIsolation: $dataIsolation,
+                        task: $taskContext->getTask(),
+                        status: TaskStatus::RUNNING
+                    );
+                }
+            },
         );
 
         return $sandboxId;
