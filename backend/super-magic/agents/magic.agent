@@ -42,6 +42,8 @@ skills:
     - name: html-app-architect
     - name: document-converter
     - name: using-oauth2
+    - name: vibe-coding
+    - name: startup-manager
   workspace_skills: "*"
 ---
 

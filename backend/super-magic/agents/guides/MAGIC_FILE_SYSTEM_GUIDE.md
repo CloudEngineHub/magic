@@ -9,7 +9,9 @@
 .topic/chat_history/ = 话题卷上的交接源：启动时从它恢复（一次性迁移/兜底）
 .topic/archives/     = 按能力有限保留的排查档案，只接收完整生成的内容
 .runtime/       = 可重新生成的运行数据，不需要 checkpoint，不进入归档
+.box/           = Agent 使用的本地工作目录，沙盒重建清空，不进 checkpoint
 .workspace/     = 用户文件，由现有文件 checkpoint 机制单独处理
+.workspace/.magic/startup/ = 每次沙盒启动执行的任务定义
 .checkpoints/   = checkpoint 自身，不能复制进自己
 ```
 
@@ -62,6 +64,23 @@ topic 删除清理或其他明确回收入口；没有回收责任时，不能�
 
 禁止将活动 `chat_history_dir` 指向 `.topic/`，包括经软链接指向该目录；平台配置的 `.chat_history/` 根映射由平台管理。`.runtime/` 保存临时运行数据，`.topic/` 用于话题持久数据和低频存档，跨沙盒恢复沿用现有归档流程。
 
+## 存储层与写入耗时
+
+沙盒里同一棵目录树下混着三类存储，小文件写入耗时相差上万倍。写入耗时按文件个数算，不按大小算：一个几十 MB 的文件很快写完，大量碎文件会耗费大量时间。另有套餐配额：单个项目的文件个数和总存储容量都有上限，其中总存储容量是严格的硬限制，超出后写入失败。耗时和配额是两回事，不要混成「按文件个数收费」。
+
+| 存储层 | 范围 | 小文件写入 | 持久／用户可见 |
+|---|---|---|---|
+| magicfs 网络空间 | `<AGFS_FUSE_MOUNT_PATH>/magicfs/` 下的 project、topic、user、referenced-projects（`.workspace`、`.topic` 都解析到这里），背后是对象存储 | 约 2 秒／个 | 是 |
+| 平台内部本地挂载 | 同一挂载点下的其他插件，例如 localfs 的 `chat_history` | 快 | 由平台管理 |
+| 容器本地盘 | 不在挂载点下的路径，如 `.box`、`.runtime`、`/tmp`；以及 magicfs 里的影子目录 | 毫秒级 | 否，沙盒重建清空 |
+
+- 影子目录：magicfs 对白名单目录名不落对象存储，内容直接放在容器本地盘。白名单来自 `sandbox-components` 的 gateway 环境变量 `AGFS_MAGICFS_LOCAL_SHADOW_PATH`（默认 `.venv:node_modules:vendor`），本仓库不维护；只对 `mkdir` 创建的目录生效，上传或导入的同名目录仍在对象存储。沙盒重建后影子目录表现为空目录，所以启动任务要用包管理器自身的幂等安装，不能用「目录存在」判断已安装。
+- 网络路径里的软链只存在于 agfs-server 内存，沙盒重启后消失，不能用来调整目录布局。
+- `.box` 与 `.runtime` 都在容器本地盘：`.runtime` 归应用所有，由各 owner 按数量、容量和存活时间淘汰；`.box` 归 Agent 自由使用（子进程环境变量 `MAGIC_BOX_DIR`，Python 字节码经 `PYTHONPYCACHEPREFIX` 写到 `.box/pycache`），不做时间淘汰，靠沙盒重建清空。
+- 判断方法：agfs-fuse 按插件名给节点生成 `user.<插件名>.*` 扩展属性，影子目录不经过插件、没有扩展属性。`app/utils/path_storage.py` 按这一规则判断任意路径的存储层，`inspect_path_storage` 工具把结果说明给 Agent。
+- 运行环境：`PathManager.get_runtime_environment()` 按 `.workspace` 解析后是否位于 `<挂载点>/magicfs/` 下区分 sandbox／local；系统提示词只注入对应的 `agents/prompts/runtime_environment/<环境>.prompt`。本地开发环境没有挂载点，所有路径都是本机普通磁盘。
+- 启动任务：`.workspace/.magic/startup/<task_id>.md` 由 `StartupTaskService` 在 `AgentDispatcher.on_runtime_ready()` 后台按顺序执行，作为普通后台 shell 任务运行；任务记录确认时的 `project_id`，与当前项目不一致时跳过。
+
 ## 目标目录结构
 
 ```text
@@ -86,9 +105,12 @@ project_root/
 │   ├── bg_shell/                          后台 shell 日志
 │   ├── mcp_outputs/                       MCP 自动保存的大结果
 │   └── slide-template-maker/              幻灯片模板作者过程的中间文件
+├── .box/                                  Agent 本地工作目录（MAGIC_BOX_DIR），沙盒重建清空
+│   └── pycache/                           Python 字节码缓存（PYTHONPYCACHEPREFIX）
 │
 └── .workspace/                            用户文件
     ├── .magic/                            工作区级 Agent、Skill、cron 配置
+    │   └── startup/                       启动任务定义，每次沙盒启动后台执行
     └── ...                                 用户创建或需要保留的文件
 ```
 

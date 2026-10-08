@@ -6552,5 +6552,201 @@
     "inspect_memory.unavailable": {
         "zh_CN": "当前任务无法使用记忆用量统计",
         "en_US": "Memory measurement is unavailable for this task"
+    },
+    "inspect_path_storage.remark": {
+        "zh_CN": "检查 {{count}} 个路径",
+        "en_US": "Checked {{count}} path(s)"
+    },
+    "inspect_path_storage.failed": {
+        "zh_CN": "部分路径暂时无法检查",
+        "en_US": "Some paths could not be checked"
+    },
+    "inspect_path_storage.local_runtime": {
+        "zh_CN": "当前运行在本地机器上，所有路径都是本机普通磁盘。",
+        "en_US": "Running on a local machine; all paths are on this machine's ordinary disk."
+    },
+    "inspect_path_storage.detail.path": {
+        "zh_CN": "路径",
+        "en_US": "Path"
+    },
+    "inspect_path_storage.detail.storage": {
+        "zh_CN": "存储位置",
+        "en_US": "Storage"
+    },
+    "inspect_path_storage.layer.network": {
+        "zh_CN": "工作区存储：长期保存，可在文件列表中查看",
+        "en_US": "Workspace storage: kept and shown in the file list"
+    },
+    "inspect_path_storage.layer.local_dependency": {
+        "zh_CN": "本地依赖目录：读写快，沙盒重建后需要重新安装",
+        "en_US": "Local dependency folder: fast, reinstalled after a sandbox rebuild"
+    },
+    "inspect_path_storage.layer.platform_internal": {
+        "zh_CN": "平台内部存储",
+        "en_US": "Platform internal storage"
+    },
+    "inspect_path_storage.layer.container_local": {
+        "zh_CN": "沙盒本地磁盘：读写快，沙盒重建后清空",
+        "en_US": "Sandbox local disk: fast, cleared after a sandbox rebuild"
+    },
+    "inspect_path_storage.layer.local_machine": {
+        "zh_CN": "本机磁盘",
+        "en_US": "Local disk"
+    },
+    "inspect_path_storage.not_exists": {
+        "zh_CN": "尚未创建，创建后位于{{storage}}",
+        "en_US": "Not created yet; it will be on {{storage}}"
+    },
+    "inspect_path_storage.inspect_failed": {
+        "zh_CN": "暂时无法检查",
+        "en_US": "Could not be checked"
+    },
+    "inspect_path_storage.unavailable": {
+        "zh_CN": "没有可展示的检查结果",
+        "en_US": "No results to show"
+    },
+    "startup_task.list.before": {
+        "zh_CN": "正在查看沙盒启动时自动运行的任务",
+        "en_US": "Checking tasks that run when the sandbox starts"
+    },
+    "startup_task.list.after_success": {
+        "zh_CN": "{{count}} 个启动任务",
+        "en_US": "{{count}} startup task(s)"
+    },
+    "startup_task.after_failed": {
+        "zh_CN": "操作未完成：{{error}}",
+        "en_US": "Not completed: {{error}}"
+    },
+    "startup_task.create.before": {
+        "zh_CN": "正在添加启动任务「{{name}}」",
+        "en_US": "Adding startup task \"{{name}}\""
+    },
+    "startup_task.create.after_success": {
+        "zh_CN": "已添加启动任务「{{name}}」，以后每次沙盒启动都会自动运行",
+        "en_US": "Startup task \"{{name}}\" added; it will run every time the sandbox starts"
+    },
+    "startup_task.update.before": {
+        "zh_CN": "正在修改启动任务「{{task_id}}」",
+        "en_US": "Editing startup task \"{{task_id}}\""
+    },
+    "startup_task.update.after_success": {
+        "zh_CN": "已修改启动任务「{{task_id}}」",
+        "en_US": "Startup task \"{{task_id}}\" updated"
+    },
+    "startup_task.delete.before": {
+        "zh_CN": "正在删除启动任务「{{task_id}}」",
+        "en_US": "Deleting startup task \"{{task_id}}\""
+    },
+    "startup_task.delete.after_success": {
+        "zh_CN": "已删除启动任务「{{task_id}}」，以后沙盒启动时不再运行",
+        "en_US": "Startup task \"{{task_id}}\" deleted; it will no longer run when the sandbox starts"
+    },
+    "startup_task.run.before": {
+        "zh_CN": "正在试运行启动任务「{{task_id}}」",
+        "en_US": "Test-running startup task \"{{task_id}}\""
+    },
+    "startup_task.run.after": {
+        "zh_CN": "启动任务「{{task_id}}」：{{status}}",
+        "en_US": "Startup task \"{{task_id}}\": {{status}}"
+    },
+    "startup_task.detail.empty": {
+        "zh_CN": "还没有启动任务",
+        "en_US": "No startup tasks yet"
+    },
+    "startup_task.detail.name": {
+        "zh_CN": "名称",
+        "en_US": "Name"
+    },
+    "startup_task.detail.workdir": {
+        "zh_CN": "运行目录",
+        "en_US": "Folder"
+    },
+    "startup_task.detail.enabled": {
+        "zh_CN": "自动运行",
+        "en_US": "Runs automatically"
+    },
+    "startup_task.detail.status": {
+        "zh_CN": "本次启动后的状态",
+        "en_US": "Status since this start"
+    },
+    "startup_task.detail.yes": {
+        "zh_CN": "是",
+        "en_US": "Yes"
+    },
+    "startup_task.detail.no": {
+        "zh_CN": "否",
+        "en_US": "No"
+    },
+    "startup_task.status.not_started": {
+        "zh_CN": "尚未运行",
+        "en_US": "Not run yet"
+    },
+    "startup_task.status.running": {
+        "zh_CN": "运行中",
+        "en_US": "Running"
+    },
+    "startup_task.status.succeeded": {
+        "zh_CN": "已完成",
+        "en_US": "Completed"
+    },
+    "startup_task.status.failed": {
+        "zh_CN": "运行失败",
+        "en_US": "Failed"
+    },
+    "startup_task.status.timed_out": {
+        "zh_CN": "运行超时，已停止",
+        "en_US": "Timed out and stopped"
+    },
+    "startup_task.status.skipped_disabled": {
+        "zh_CN": "已停用，未运行",
+        "en_US": "Disabled, not run"
+    },
+    "startup_task.status.skipped_untrusted": {
+        "zh_CN": "来自其他项目，需确认后才会运行",
+        "en_US": "From another project; needs confirmation before it runs"
+    },
+    "startup_task.error.confirmation_required": {
+        "zh_CN": "需要你确认后才能添加或启用这个启动任务",
+        "en_US": "Your confirmation is needed before this startup task is added or enabled"
+    },
+    "startup_task.error.task_exists": {
+        "zh_CN": "已有同名的启动任务",
+        "en_US": "A startup task with the same name already exists"
+    },
+    "startup_task.error.task_not_found": {
+        "zh_CN": "找不到这个启动任务",
+        "en_US": "This startup task was not found"
+    },
+    "startup_task.error.invalid_name": {
+        "zh_CN": "任务名称不能为空",
+        "en_US": "The task name cannot be empty"
+    },
+    "startup_task.error.invalid_script": {
+        "zh_CN": "要运行的命令不能为空",
+        "en_US": "The command to run cannot be empty"
+    },
+    "startup_task.error.invalid_workdir": {
+        "zh_CN": "运行目录不存在",
+        "en_US": "The folder does not exist"
+    },
+    "startup_task.error.invalid_timeout": {
+        "zh_CN": "运行时长超出允许范围",
+        "en_US": "The run time is out of the allowed range"
+    },
+    "startup_task.error.no_changes": {
+        "zh_CN": "没有需要修改的内容",
+        "en_US": "Nothing to change"
+    },
+    "startup_task.error.already_running": {
+        "zh_CN": "这个启动任务正在运行",
+        "en_US": "This startup task is already running"
+    },
+    "startup_task.error.untrusted": {
+        "zh_CN": "这个启动任务来自其他项目，需要你确认后才能运行",
+        "en_US": "This startup task comes from another project and needs your confirmation before it runs"
+    },
+    "startup_task.error.unknown": {
+        "zh_CN": "操作暂时无法完成",
+        "en_US": "The operation could not be completed"
     }
 }

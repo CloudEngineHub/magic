@@ -624,6 +624,14 @@ runtime_cleanup:
     max_age_days: 3
     max_directory_count: 16
 
+# 启动任务：每次沙盒启动后在后台按顺序执行 .workspace/.magic/startup/ 下登记的脚本。
+startup_task:
+  # 单个任务默认与最大运行时长（秒）；最大值不能超过后台 shell 任务 1 小时的存活上限。
+  default_timeout_seconds: 900
+  max_timeout_seconds: 3600
+  # 前台观察多久后转为后台任务；转后台后 Agent 可以用 shell_await 查看输出。
+  background_after_seconds: 1
+
 # Horizon 的展示额度与 5 MiB 文件扫描保护相互独立。
 # 例：普通文件每份最多 4K，重要规则文件每份最多 16K；所有文件变化合计仍受 24K 约束。
 # 整条通知还包含目录、浏览器和运行时事实，最后统一受 context_max_tokens 约束。

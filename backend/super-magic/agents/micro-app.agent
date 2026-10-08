@@ -32,6 +32,8 @@ skills:
     - name: user-info
     - name: skill-creator
     - name: use-magicbase
+    - name: vibe-coding
+    - name: startup-manager
   workspace_skills: "*"
 ---
 

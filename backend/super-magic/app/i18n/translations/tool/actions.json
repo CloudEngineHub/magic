@@ -1010,5 +1010,29 @@
     "inspect_memory": {
         "zh_CN": "检查记忆用量",
         "en_US": "Inspect memory usage"
+    },
+    "inspect_path_storage": {
+        "zh_CN": "检查文件存储位置",
+        "en_US": "Check file storage"
+    },
+    "startup_task_list": {
+        "zh_CN": "查看启动任务",
+        "en_US": "View startup tasks"
+    },
+    "startup_task_create": {
+        "zh_CN": "添加启动任务",
+        "en_US": "Add startup task"
+    },
+    "startup_task_update": {
+        "zh_CN": "修改启动任务",
+        "en_US": "Edit startup task"
+    },
+    "startup_task_delete": {
+        "zh_CN": "删除启动任务",
+        "en_US": "Delete startup task"
+    },
+    "startup_task_run": {
+        "zh_CN": "试运行启动任务",
+        "en_US": "Test startup task"
     }
 }
