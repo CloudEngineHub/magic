@@ -158,6 +158,8 @@ export function MediaPreviewTrigger(props: MediaPreviewTriggerProps) {
 		<MediaPreviewTooltip
 			key={resourceKey}
 			mediaType={source.mediaType}
+			resourceKey={source.resourceKey}
+			imageActions={source.imageActions}
 			fileName={fileName}
 			previewUrl={source.previewUrl}
 			posterUrl={source.posterUrl}

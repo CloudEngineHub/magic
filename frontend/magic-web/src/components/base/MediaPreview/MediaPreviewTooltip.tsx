@@ -8,7 +8,10 @@ import {
 	type MutableRefObject,
 	type PointerEvent as ReactPointerEvent,
 	type SyntheticEvent,
+	type ReactNode,
 } from "react"
+import { MediaPreviewImageActions } from "./MediaPreviewImageActions"
+import { MediaPreviewImageHover } from "./MediaPreviewImageHover"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/shadcn-ui/tooltip"
 import { useIsMobile } from "@/hooks/useIsMobile"
 import { useMediaPreviewPlayback } from "./useMediaPreviewPlayback"
@@ -351,6 +354,8 @@ export function MediaPreviewTooltip(props: MediaPreviewTooltipProps) {
 		children,
 		mediaType,
 		fileName,
+		resourceKey,
+		imageActions,
 		previewUrl,
 		posterUrl,
 		audioUrl,
@@ -416,6 +421,8 @@ export function MediaPreviewTooltip(props: MediaPreviewTooltipProps) {
 	const cropDisplayScale =
 		cropRect && cropDisplaySize ? cropDisplaySize.width / cropRect.width : 1
 	const touchInteractionRef = useRef(false)
+	const triggerElementRef = useRef<HTMLElement | null>(null)
+	const suppressFocusPreviewRef = useRef(false)
 	const lastContentInteractionAtRef = useRef(0)
 	const handleContentInteraction = useCallback((event: SyntheticEvent) => {
 		lastContentInteractionAtRef.current = Date.now()
@@ -472,7 +479,18 @@ export function MediaPreviewTooltip(props: MediaPreviewTooltipProps) {
 
 	const trigger = cloneElement(children, {
 		"data-media-preview-trigger": "",
+		onFocus: (event: React.FocusEvent<HTMLElement>) => {
+			triggerElementRef.current = event.currentTarget
+			children.props.onFocus?.(event)
+			if (suppressFocusPreviewRef.current) event.preventDefault()
+		},
+		onBlur: (event: React.FocusEvent<HTMLElement>) => {
+			children.props.onBlur?.(event)
+			suppressFocusPreviewRef.current = false
+		},
 		onPointerMove: (event: ReactPointerEvent<HTMLElement>) => {
+			triggerElementRef.current = event.currentTarget
+			suppressFocusPreviewRef.current = false
 			children.props.onPointerMove?.(event)
 			if (isHoverExcludedTriggerTarget(event.target)) event.preventDefault()
 		},
@@ -507,18 +525,21 @@ export function MediaPreviewTooltip(props: MediaPreviewTooltipProps) {
 			touchInteractionRef.current = false
 		},
 	})
-	const content = (
+	const renderContent = (controls?: ReactNode) => (
 		<div
 			className="relative overflow-hidden rounded-md border border-white/15 bg-black/90 text-white shadow-lg"
 			data-media-preview-content=""
+			onPointerDown={imageActions ? handleContentInteraction : undefined}
+			onDoubleClickCapture={imageActions ? handleContentInteraction : undefined}
 		>
 			<div
 				className="absolute inset-x-0 top-0 z-10 flex items-center gap-2 bg-gradient-to-b from-black/80 to-transparent px-2.5 py-1.5"
 				data-reference-media-tooltip-header=""
 			>
-				<span className="min-w-0 truncate text-xs font-medium" title={fileName}>
+				<span className="min-w-0 flex-1 truncate text-xs font-medium" title={fileName}>
 					{fileName}
 				</span>
+				{controls}
 			</div>
 			{isLoading ? (
 				mediaType === "audio" ? (
@@ -647,7 +668,7 @@ export function MediaPreviewTooltip(props: MediaPreviewTooltipProps) {
 		</div>
 	)
 
-	return (
+	const renderTooltip = () => (
 		<Tooltip open={open} onOpenChange={handleOpenChange} delayDuration={250}>
 			<TooltipTrigger asChild>{trigger}</TooltipTrigger>
 			<TooltipContent
@@ -667,8 +688,47 @@ export function MediaPreviewTooltip(props: MediaPreviewTooltipProps) {
 					maxHeight: policy.maxHeight,
 				}}
 			>
-				{content}
+				{renderContent()}
 			</TooltipContent>
 		</Tooltip>
+	)
+	if (mediaType !== "image" || !imageActions) return renderTooltip()
+	return (
+		<MediaPreviewImageActions
+			key={resourceKey ?? imageActions.resourceKey ?? previewUrl ?? fileName}
+			fileName={fileName}
+			resourceKey={resourceKey ?? imageActions.resourceKey}
+			imageActions={imageActions}
+			container={container}
+			crop={crop}
+			sourceSize={sourceSize}
+			getTrigger={() => triggerElementRef.current}
+			onExpand={() => {
+				suppressFocusPreviewRef.current = true
+				handleOpenChange(false)
+			}}
+		>
+			{(controls, modalOpen, menuOpen) => (
+				<MediaPreviewImageHover
+					open={open && !modalOpen}
+					onOpenChange={(nextOpen) => {
+						if (nextOpen && (modalOpen || suppressFocusPreviewRef.current)) return
+						if (!nextOpen && menuOpen && !modalOpen) return
+						handleOpenChange(nextOpen)
+					}}
+					trigger={trigger}
+					getTrigger={(element) => {
+						triggerElementRef.current = element
+					}}
+					side={side}
+					sideOffset={sideOffset}
+					container={container}
+					width={contentWidth}
+					maxHeight={policy.maxHeight}
+				>
+					{renderContent(controls)}
+				</MediaPreviewImageHover>
+			)}
+		</MediaPreviewImageActions>
 	)
 }

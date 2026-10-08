@@ -2486,6 +2486,12 @@
 		"up": "上一级",
 		"uploadTarget": "上传到「{{target}}」"
 	},
+	"filePreview": {
+		"downloadFailed": "图片下载失败",
+		"downloadImage": "下载图片",
+		"expandImage": "放大预览",
+		"retry": "重试"
+	},
 	"fileTree": {
 		"collapseAll": "一键折叠",
 		"empty": "暂无文件",

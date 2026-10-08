@@ -24,11 +24,12 @@ export interface MarkdownFileLinkProps extends AnchorHTMLAttributes<HTMLAnchorEl
 	resolveLinkedFile?: ResolveMarkdownLinkedFile
 	projectId?: string
 	active?: boolean
+	allowDownload?: boolean
 }
 
 // 两种 renderer 共用当前文档上下文；缓存标签变为隐藏时，已有 mark view 也立即停止预览。
 export const MarkdownFileLinkContext = createContext<
-	Pick<MarkdownFileLinkProps, "resolveLinkedFile" | "projectId" | "active">
+	Pick<MarkdownFileLinkProps, "resolveLinkedFile" | "projectId" | "active" | "allowDownload">
 >({ active: false })
 
 export function MarkdownFileLink({
@@ -37,6 +38,7 @@ export function MarkdownFileLink({
 	resolveLinkedFile: providedResolver,
 	projectId: providedProjectId,
 	active: providedActive,
+	allowDownload: providedAllowDownload,
 	...props
 }: MarkdownFileLinkProps) {
 	const context = useContext(MarkdownFileLinkContext)
@@ -71,7 +73,10 @@ export function MarkdownFileLink({
 		active && resolution?.href === href && resolution.resolve === resolveLinkedFile
 			? resolution.file
 			: undefined
-	const metadata = file ? getFileMediaMetadata(file, projectId) : null
+	const fileMetadata = file ? getFileMediaMetadata(file, projectId) : null
+	const metadata = fileMetadata
+		? { ...fileMetadata, allowDownload: providedAllowDownload ?? context.allowDownload }
+		: null
 	const source = useFileMediaSource(metadata, { enabled: active })
 	const renderLink = (thumbnail: ReactNode) => (
 		<a

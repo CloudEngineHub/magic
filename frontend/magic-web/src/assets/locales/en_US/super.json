@@ -2486,6 +2486,12 @@
 		"up": "Up one level",
 		"uploadTarget": "Upload to {{target}}"
 	},
+	"filePreview": {
+		"downloadFailed": "Image download failed",
+		"downloadImage": "Download image",
+		"expandImage": "Expand preview",
+		"retry": "Retry"
+	},
 	"fileTree": {
 		"collapseAll": "Collapse All",
 		"empty": "No files",

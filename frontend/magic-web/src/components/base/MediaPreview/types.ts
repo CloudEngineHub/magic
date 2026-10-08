@@ -1,4 +1,21 @@
 import type { CSSProperties, ReactElement, ReactNode } from "react"
+import type { DownloadImageMode } from "@/pages/superMagic/pages/Workspace/types"
+
+export interface MediaPreviewImageResource {
+	url: string
+	refreshAt?: number
+}
+
+/** 图片来源负责原图与下载权限，展示层不能拿缩略图地址代替下载。 */
+export interface MediaPreviewImageActions {
+	resourceKey?: string
+	load: (options: {
+		signal: AbortSignal
+		forceRefresh: boolean
+	}) => Promise<MediaPreviewImageResource | null>
+	onDownload?: (mode?: DownloadImageMode) => Promise<void>
+	isAIImage?: boolean
+}
 
 export type MediaPreviewType = "image" | "video" | "audio"
 
@@ -21,6 +38,7 @@ export const MEDIA_PREVIEW_POLICY: Record<MediaPreviewType, MediaPreviewPolicy> 
  */
 export interface MediaPreviewSource {
 	mediaType: MediaPreviewType
+	imageActions?: MediaPreviewImageActions
 	/** 资源切换时清理预览状态，不能将旧文件的播放位置带到新文件。 */
 	resourceKey?: string
 	expiresAt?: number
@@ -70,6 +88,8 @@ export interface MediaPreviewThumbnailProps {
 export interface MediaPreviewTooltipProps {
 	children: ReactElement
 	mediaType: MediaPreviewType
+	resourceKey?: string
+	imageActions?: MediaPreviewImageActions
 	fileName: string
 	previewUrl?: string | null
 	posterUrl?: string | null

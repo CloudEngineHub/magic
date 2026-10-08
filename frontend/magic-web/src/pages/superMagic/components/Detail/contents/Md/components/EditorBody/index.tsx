@@ -28,6 +28,7 @@ import { useMarkdownFileLinks } from "./hooks/useMarkdownFileLinks"
 import { MarkdownFileLinkContext } from "./components/MarkdownFileLink"
 
 interface EditorBodyProps {
+	allowDownload?: boolean
 	selectionRootRef?: React.Ref<HTMLDivElement>
 	enableSourceLocation?: boolean
 	isLoading: boolean
@@ -70,6 +71,7 @@ interface EditorBodyProps {
 }
 
 function EditorBody({
+	allowDownload,
 	selectionRootRef,
 	enableSourceLocation = false,
 	isLoading,
@@ -114,8 +116,9 @@ function EditorBody({
 			resolveLinkedFile,
 			projectId: selectedProject?.id,
 			active: isTabActive && !isEditMode,
+			allowDownload,
 		}),
-		[resolveLinkedFile, selectedProject?.id, isTabActive, isEditMode],
+		[resolveLinkedFile, selectedProject?.id, isTabActive, isEditMode, allowDownload],
 	)
 	const linkRequestRef = useRef(0)
 	// 缓存标签切换、文档／空间变化和卸载后，旧异步结果不再打开文件或提示失败。
