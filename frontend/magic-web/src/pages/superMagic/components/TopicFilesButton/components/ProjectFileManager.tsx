@@ -11,6 +11,7 @@ import type { AttachmentLoadState } from "@/stores/projectFiles/types"
 import type { ProjectFileManagerSnapshot } from "@/models/config/repositories/SuperProjectStateTypes"
 import type {
 	FileItem,
+	FileManagerAreaRequest,
 	FileManagerStateChangeOptions,
 } from "../../Detail/components/FilesViewer/types"
 
@@ -20,6 +21,7 @@ export interface ProjectFileManagerProps {
 
 	projectId: string
 	initialDirectoryId?: string
+	areaRequest?: FileManagerAreaRequest
 	attachments: AttachmentItem[]
 	selectedProject?: ProjectListItem | null
 	selectedTopic?: Topic | null

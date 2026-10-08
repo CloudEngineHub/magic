@@ -33,6 +33,7 @@ export function tabReducer(state: TabItem[], action: TabAction): TabItem[] {
 						active: true,
 						active_at: now,
 						fileManager: incomingTab.fileManager ?? tab.fileManager,
+						fileManagerAreaRequest: incomingTab.fileManagerAreaRequest,
 						fileManagerState: incomingTab.fileManagerState ?? tab.fileManagerState,
 						returnTabId: incomingTab.returnTabId ?? tab.returnTabId,
 						title: shouldReplaceFileData ? incomingTab.title : tab.title,

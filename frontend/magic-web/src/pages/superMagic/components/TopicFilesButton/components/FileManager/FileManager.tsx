@@ -1,6 +1,5 @@
 import { useEffect, useMemo, useRef, useDeferredValue, useState, lazy, Suspense } from "react"
-import { ArrowLeft } from "lucide-react"
-import { Button } from "@/components/shadcn-ui/button"
+import { FileManagerRecycleHeader } from "./FileManagerRecycleHeader"
 import { cn } from "@/utils/cn"
 import { useTranslation } from "react-i18next"
 import { useMemoizedFn } from "ahooks"
@@ -50,9 +49,28 @@ export function FileManager(props: FileManagerProps) {
 		props.initialDirectoryId !== undefined &&
 		props.initialDirectoryId !== (initialState?.directoryId || props.rootId)
 	const [recycle, setRecycle] = useState(
-		!selecting && !locating && initialState?.area === "recycle",
+		!selecting &&
+			(props.areaRequest
+				? props.areaRequest.area === "recycle"
+				: !locating && initialState?.area === "recycle"),
 	)
-	const interacted = useRef(false)
+	const interacted = useRef(Boolean(props.areaRequest))
+	const handledAreaRequest = useRef(props.isActive ? props.areaRequest?.requestId : undefined)
+	useEffect(() => {
+		const request = props.areaRequest
+		if (
+			selecting ||
+			!props.isActive ||
+			!request ||
+			handledAreaRequest.current === request.requestId
+		)
+			return
+		handledAreaRequest.current = request.requestId
+		interacted.current = true
+		// 只切换显示区域，文件目录、选择和滚动状态保留；附件加载失败也不阻止查看回收站。
+		setRecycle(request.area === "recycle")
+	}, [props.areaRequest, props.isActive, selecting])
+	const projectRecycle = props.context.kind === "project" && !props.spaceConfig?.scope
 	const places = useRef(
 		initialState?.places ?? { expandedIds: [], rootExpanded: true, scrollTop: 0 },
 	)
@@ -522,18 +540,10 @@ export function FileManager(props: FileManagerProps) {
 				className="flex h-full min-h-0 flex-col bg-background text-foreground"
 			>
 				{recycle && (
-					<div className="flex h-12 shrink-0 items-center gap-2 border-b border-border/60 bg-muted/20 px-4 text-sm font-medium">
-						<Button
-							variant="ghost"
-							size="icon"
-							className="size-7"
-							aria-label={t("fileManager.recycle.back")}
-							onClick={() => setRecycle(false)}
-						>
-							<ArrowLeft size={15} />
-						</Button>
-						<span className="truncate">{t("fileManager.recycle.title")}</span>
-					</div>
+					<FileManagerRecycleHeader
+						projectName={projectRecycle ? props.rootName : undefined}
+						onBack={() => setRecycle(false)}
+					/>
 				)}
 				{recycle && props.isActive && (
 					<div className="flex min-h-0 flex-1 flex-col gap-3 overflow-hidden p-4">
@@ -596,6 +606,7 @@ export function FileManager(props: FileManagerProps) {
 						)}
 					<div className="flex min-h-0 min-w-0 flex-1 flex-col">
 						<FileManagerToolbar
+							projectRecycle={projectRecycle}
 							toolbarLeading={props.toolbarLeading}
 							compact={selecting}
 							management={

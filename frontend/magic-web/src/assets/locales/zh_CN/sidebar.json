@@ -27,6 +27,8 @@
 		"defaultUser": "用户",
 		"feedback": "使用反馈",
 		"freeAccount": "Free",
+		"globalRecycleBin": "全局回收站",
+		"globalRecycleBinHint": "查看你有权限访问的已删除空间、项目、话题、文件和微应用",
 		"helpCenter": "帮助中心",
 		"inbox": "收件箱",
 		"recycleBin": "回收站",

@@ -6,6 +6,7 @@ import type { ProjectListItem, Topic } from "../../../../pages/Workspace/types"
 import type { FileManagerLocationSnapshot } from "@/models/config/repositories/SuperProjectStateTypes"
 import type {
 	FileItem,
+	FileManagerAreaRequest,
 	FileManagerStateChangeOptions,
 } from "../../../Detail/components/FilesViewer/types"
 
@@ -76,6 +77,7 @@ interface FileManagerBaseProps {
 	initialDirectoryId?: string
 	initialState?: FileManagerLocationSnapshot
 	revealRequest?: FileManagerRevealRequest
+	areaRequest?: FileManagerAreaRequest
 	onStateChange?: (
 		state: FileManagerLocationSnapshot,
 		options?: FileManagerStateChangeOptions,

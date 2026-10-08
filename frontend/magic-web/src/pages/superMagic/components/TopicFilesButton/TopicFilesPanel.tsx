@@ -9,8 +9,7 @@ import {
 	useImperativeHandle,
 	type ReactNode,
 } from "react"
-import { PanelsTopLeft, ArrowUpRight } from "lucide-react"
-import { Button } from "@/components/shadcn-ui/button"
+import { FileManagerFooter } from "./components/FileManager/FileManagerFooter"
 import { useTranslation } from "react-i18next"
 import TopicFilesCore, {
 	type TopicFilesCoreRef,
@@ -104,6 +103,7 @@ interface TopicFilesPanelProps {
 	onConvertToSlidesTemplate?: (item: AttachmentItem) => void
 	headerTrailingAction?: ReactNode
 	onOpenFileManager?: () => void
+	onOpenRecycleBin?: () => void
 	section?: SidebarSectionOptions
 	contentBefore?: ReactNode
 	/** 宿主已有空状态或错误说明时，隐藏默认空文件提示，仍保留文件树与工具栏。 */
@@ -175,6 +175,7 @@ const TopicFilesPanel = forwardRef<TopicFilesPanelRef, TopicFilesPanelProps>(
 			onConvertToSlidesTemplate,
 			headerTrailingAction,
 			onOpenFileManager,
+			onOpenRecycleBin,
 			section,
 			headerLayout = "inline",
 			contentBefore,
@@ -845,17 +846,10 @@ const TopicFilesPanel = forwardRef<TopicFilesPanelRef, TopicFilesPanelProps>(
 						</>
 					)}
 					{!isMobile && onOpenFileManager && (
-						<div className="shrink-0 border-t border-border/60 p-2">
-							<Button
-								variant="ghost"
-								className="h-9 w-full justify-start gap-2 rounded-lg px-3 text-xs text-muted-foreground hover:text-foreground"
-								onClick={onOpenFileManager}
-							>
-								<PanelsTopLeft size={16} />
-								{t("userSpace.openManager")}
-								<ArrowUpRight size={14} className="ml-auto" />
-							</Button>
-						</div>
+						<FileManagerFooter
+							onOpenFileManager={onOpenFileManager}
+							onOpenRecycleBin={onOpenRecycleBin}
+						/>
 					)}
 				</div>
 				{projectDetailFilesController.deleteConfirmNode}
