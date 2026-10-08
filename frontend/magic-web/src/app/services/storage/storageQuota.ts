@@ -11,6 +11,15 @@ import {
 	STORAGE_QUOTA_EXCEEDED_EVENT_KEY,
 	claimStorageQuotaReport,
 } from "./storageFailure"
+import {
+	measureStorageSizes,
+	DEFAULT_SIZE_OVERALL_BUDGET_MS,
+	DEFAULT_SIZE_SLICE_BUDGET_MS,
+	type StorageMeasurementStage,
+	type StorageSizeFailureReason,
+	type StorageSizeMeasurementResult,
+	type StorageTopItem,
+} from "./sizeMeasurement"
 
 /** Usage ratio that, together with the 1 GiB floor, marks a high-fill origin. */
 const QUOTA_RATIO_THRESHOLD = 0.7
@@ -42,6 +51,24 @@ export interface StorageQuotaHighReportData {
 	indexedDB?: IndexedDBReportCount[]
 	cacheCountDurationMs?: number
 	indexedDBCountDurationMs?: number
+	indexedDBContentBytes?: number
+	cacheStorageContentBytes?: number
+	storageTop10?: StorageTopItem[]
+	indexedDBSizeDurationMs?: number
+	cacheStorageSizeDurationMs?: number
+	sizeMeasurementDurationMs?: number
+	sizeMeasurementStatus?: "complete" | "incomplete"
+	sizeMeasurementVersion?: number
+	sizeMeasurementFailureReason?: StorageSizeFailureReason
+	sizeMeasurementFailureStage?: StorageMeasurementStage
+	sizeMeasurementSliceCount?: number
+	sizeMeasurementElapsedMs?: number
+	sizeMeasurementSliceBudgetMs?: number
+	sizeMeasurementOverallBudgetMs?: number
+	indexedDBRecordsRead?: number
+	indexedDBStoresRead?: number
+	cacheStorageEntriesRead?: number
+	cacheStorageOpaqueEntries?: number
 }
 
 /** Trim one-decimal numbers so 2.0G is written as 2G. */
@@ -122,6 +149,7 @@ function pickReportableIndexedDB(databases: IndexedDBDatabaseCount[]): IndexedDB
  */
 export function toReadableHighQuotaData(
 	snapshot: StorageQuotaSnapshot,
+	sizeMeasurement?: StorageSizeMeasurementResult,
 ): StorageQuotaHighReportData {
 	const data: StorageQuotaHighReportData = {
 		eventKey: "storage_quota_high",
@@ -144,6 +172,31 @@ export function toReadableHighQuotaData(
 	}
 	if (isReportableNumber(snapshot.indexedDBCountDurationMs)) {
 		data.indexedDBCountDurationMs = snapshot.indexedDBCountDurationMs
+	}
+	if (sizeMeasurement) {
+		data.sizeMeasurementStatus = sizeMeasurement.status
+		data.sizeMeasurementVersion = 1
+		data.sizeMeasurementSliceCount = sizeMeasurement.sliceCount
+		data.sizeMeasurementElapsedMs = sizeMeasurement.elapsedMs
+		data.sizeMeasurementSliceBudgetMs = DEFAULT_SIZE_SLICE_BUDGET_MS
+		data.sizeMeasurementOverallBudgetMs = DEFAULT_SIZE_OVERALL_BUDGET_MS
+		data.indexedDBRecordsRead = sizeMeasurement.coverage.indexedDBRecordsRead
+		data.indexedDBStoresRead = sizeMeasurement.coverage.indexedDBStoresRead
+		data.cacheStorageEntriesRead = sizeMeasurement.coverage.cacheStorageEntriesRead
+		data.cacheStorageOpaqueEntries = sizeMeasurement.coverage.cacheStorageOpaqueEntries
+		if (sizeMeasurement.status === "complete") {
+			data.indexedDBContentBytes = sizeMeasurement.measurement.indexedDBContentBytes
+			data.cacheStorageContentBytes = sizeMeasurement.measurement.cacheStorageContentBytes
+			data.indexedDBSizeDurationMs = sizeMeasurement.measurement.indexedDBSizeDurationMs
+			data.cacheStorageSizeDurationMs = sizeMeasurement.measurement.cacheStorageSizeDurationMs
+			data.sizeMeasurementDurationMs = sizeMeasurement.measurement.sizeMeasurementDurationMs
+			if (sizeMeasurement.measurement.top10.length) {
+				data.storageTop10 = sizeMeasurement.measurement.top10
+			}
+		} else {
+			data.sizeMeasurementFailureReason = sizeMeasurement.reason
+			data.sizeMeasurementFailureStage = sizeMeasurement.stage
+		}
 	}
 	return data
 }
@@ -183,9 +236,12 @@ export function createStorageQuotaPlugin(): LoggerPlugin {
 				if (signal.aborted || !snapshot || !isHighQuota(snapshot.usage, snapshot.quota))
 					return
 				if (!claimStorageQuotaReport("storage_quota_high", reportedThisPage)) return
+				const sizeMeasurement = await measureStorageSizes(signal)
+				if (signal.aborted) return
+				if (sizeMeasurement.status === "incomplete") noteFault()
 				logger.report({
 					namespace: "storageQuota",
-					data: toReadableHighQuotaData(snapshot),
+					data: toReadableHighQuotaData(snapshot, sizeMeasurement),
 				})
 			}
 			const delayTimer = setTimeout(() => {
