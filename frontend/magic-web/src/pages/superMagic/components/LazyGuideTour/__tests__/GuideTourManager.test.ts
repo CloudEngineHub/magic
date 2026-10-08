@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from "vitest"
+import { beforeEach, describe, expect, it, vi } from "vitest"
 
 /*
  * No mock of the onboarding contract is needed here: this file exercises the manager's in-memory
@@ -30,6 +30,15 @@ async function loadOnboarding() {
 	vi.resetModules()
 	return import("../GuideTourManager")
 }
+
+/**
+ * The one piece of runtime state that is not module memory: the introduction the account has already
+ * been shown. jsdom keeps storage for the whole file, so without this a test that offers the dialog
+ * would decide the answer every later test starts from.
+ */
+beforeEach(() => {
+	window.localStorage.clear()
+})
 
 describe("home onboarding status", () => {
 	it("starts every task unfinished on every page load", async () => {
@@ -149,28 +158,39 @@ describe("home onboarding entry", () => {
 })
 
 describe("home onboarding introduction", () => {
-	it("offers the introduction dialog on a fresh page load", async () => {
+	it("offers the introduction dialog to an account that has not been shown it", async () => {
 		const onboarding = await loadOnboarding()
-		expect(onboarding.isHomeOnboardingIntroSpent()).toBe(false)
+		expect(onboarding.isHomeOnboardingIntroSpent(MAGIC_ID)).toBe(false)
 	})
 
-	it("keeps the introduction spent once it has been answered", async () => {
+	it("keeps the introduction spent across a reload", async () => {
 		const onboarding = await loadOnboarding()
-		onboarding.spendHomeOnboardingIntro()
+		onboarding.spendHomeOnboardingIntro(MAGIC_ID)
+		expect(onboarding.isHomeOnboardingIntroSpent(MAGIC_ID)).toBe(true)
 
-		// Answering the dialog is not a reload: it stays gone for the rest of the page load, so a
-		// route change back to the home page cannot reopen the dialog the user walked away from.
-		expect(onboarding.isHomeOnboardingIntroSpent()).toBe(true)
-
-		// Only the next page load restores it, together with the rest of the runtime state.
+		/*
+		 * The point of the flag outliving the page. The dialog is offered once, so someone who has
+		 * seen it — and declined it, or left the run it opened — must not be asked again by the next
+		 * load: both tasks are entered from the benefits card from there on, and refreshing cannot
+		 * undo that.
+		 */
 		const nextLoad = await loadOnboarding()
-		expect(nextLoad.isHomeOnboardingIntroSpent()).toBe(false)
+		expect(nextLoad.isHomeOnboardingIntroSpent(MAGIC_ID)).toBe(true)
+	})
+
+	it("asks each account separately", async () => {
+		const onboarding = await loadOnboarding()
+		onboarding.spendHomeOnboardingIntro(MAGIC_ID)
+
+		// The dialog was shown to an account, not to the browser: the next account to sign in on
+		// this machine still has its own copy coming.
+		expect(onboarding.isHomeOnboardingIntroSpent("user-2")).toBe(false)
 	})
 
 	it("treats a benefits-card entry as a run of its own", async () => {
 		const onboarding = await loadOnboarding()
-		onboarding.startHomeOnboarding(WORKBENCH)
-		expect(onboarding.isHomeOnboardingIntroSpent()).toBe(true)
+		onboarding.startHomeOnboarding(WORKBENCH, MAGIC_ID)
+		expect(onboarding.isHomeOnboardingIntroSpent(MAGIC_ID)).toBe(true)
 	})
 })
 
@@ -518,5 +538,20 @@ describe("home onboarding reward gate", () => {
 		// A fetch that never arrived is not the backend saying no: it is retried on the next mount,
 		// so the tour is not denied to whoever was behind a bad connection at load time.
 		expect(onboarding.canOpenAutomaticHomeOnboarding("failed")).toBe(true)
+	})
+})
+
+describe("legacy entry points another layer still imports", () => {
+	it("keeps `setNeedGuideTour` exported, and inert", async () => {
+		const onboarding = await loadOnboarding()
+
+		// `enterprise/src/layouts/BaseLayout` imports this by name when the "improve information"
+		// modal closes. That file is served as-is on the enterprise build, so losing the export is
+		// not a warning there — it is a dev-server-fatal `SyntaxError: … does not provide an export
+		// named 'setNeedGuideTour'`, raised while the page is loading and nothing to do with the
+		// caller. No one reads the localStorage flags it used to write any more, so what has to hold
+		// is only this: the name resolves, and calling it changes nothing.
+		expect(typeof onboarding.setNeedGuideTour).toBe("function")
+		expect(onboarding.setNeedGuideTour(MAGIC_ID)).toBeUndefined()
 	})
 })

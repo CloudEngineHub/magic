@@ -11,15 +11,22 @@ import {
 	getHomeOnboardingRewardList,
 	HOME_ONBOARDING_REQUEST_EVENT,
 	HOME_ONBOARDING_STATE_EVENT,
+	isHomeOnboardingIntroSpent,
 	isHomeOnboardingTaskOnPage,
 	type HomeOnboardingRewardListStatus,
 	type HomeOnboardingTaskPage,
 } from "./GuideTourManager"
 import { useCanHostHomeOnboarding } from "./onboardingAvailability"
+import { useHomeOnboardingPreludeHeld } from "./onboardingPrelude"
 
 const HomeOnboardingTour = lazy(() => import("./HomeOnboardingTour"))
 
 interface GuideTourWrapperProps {
+	/**
+	 * Whether this wrapper is on a mobile client. It is passed rather than worked out here because
+	 * the answer is the page's: `useIsMobile` is already how these layouts decide what to render,
+	 * and asking a second time could only disagree with the page it is on.
+	 */
 	isMobile: boolean
 	/**
 	 * Which page is hosting this wrapper. Every task's steps are highlighted on one page, and only
@@ -30,13 +37,14 @@ interface GuideTourWrapperProps {
 }
 
 /**
- * The tour itself, mounted only on a deployment and in an organization that has the feature.
+ * The tour itself, mounted only where the feature can actually be shown: a SaaS personal
+ * organization, on a desktop client.
  *
  * It is a component of its own rather than a guard inside the one below, because the guard has to
  * run *before* the work: the effects here ask the backend for a reward list and follow its answer,
  * and a component that mounts and then hides has already asked. Keeping the two apart means that on
- * a private deployment or in a team organization none of this is ever mounted, its effects never
- * run, and the lazy chunk above is never fetched.
+ * a private deployment, in a team organization or on a mobile client none of this is ever mounted,
+ * its effects never run, and the lazy chunk above is never fetched.
  */
 function GuideTourGate({ isMobile, page = "home" }: GuideTourWrapperProps) {
 	const { userInfo } = useUserInfo()
@@ -51,6 +59,12 @@ function GuideTourGate({ isMobile, page = "home" }: GuideTourWrapperProps) {
 	const [rewardStatus, setRewardStatus] = useState<HomeOnboardingRewardListStatus>(
 		() => getHomeOnboardingRewardList(userInfo?.magic_id).status,
 	)
+	/**
+	 * Whether a dialog that comes *before* this feature is holding the screen — the profile one a
+	 * brand-new account is asked to fill in, or the daily reward one. This run is the last of them,
+	 * so it waits here rather than painting over whatever is up. See `onboardingPrelude`.
+	 */
+	const preludeHeld = useHomeOnboardingPreludeHeld()
 	const workspacePage = topicId && projectId ? WorkspacePage.Chat : WorkspacePage.Home
 	const isHome = workspacePage === WorkspacePage.Home
 
@@ -89,13 +103,30 @@ function GuideTourGate({ isMobile, page = "home" }: GuideTourWrapperProps) {
 	 * them on the way to the page that owns them. It also waits for the reward list before it offers
 	 * anything, which keeps both things the list can take away off the screen: a task the account has
 	 * already finished, and the tour itself on a deployment that does not have the feature.
+	 *
+	 * And it waits behind the dialogs that come first. Only this run — not an entry a user asked for
+	 * from the benefits card — is held back by them: the intro dialog is what opens unasked, and a
+	 * run already on screen belongs to someone who asked for it, so a dialog arriving late (the daily
+	 * reward is checked on a timer, not only at startup) must not tear it down.
+	 *
+	 * The introduction dialog is in fact all this run ever shows, and it is shown once per account
+	 * rather than once per page load. Once spent there is nothing left for an unasked run to do, so
+	 * the wrapper does not mount one at all — the tasks are entered from the benefits card from then
+	 * on, and a reload cannot bring the dialog back.
 	 */
 	const automaticRun =
 		page === "home" &&
 		!entryTask &&
+		!preludeHeld &&
+		!isHomeOnboardingIntroSpent(userInfo?.magic_id) &&
 		canOpenAutomaticHomeOnboarding(rewardStatus) &&
 		checkIfHomeOnboardingNeeded(userInfo?.magic_id, isHome, isMobile)
 
+	/*
+	 * The second line behind the wrapper's own mobile answer. That gate is what keeps a phone from
+	 * asking at all; this one is about rendering, and it is kept because the two are different
+	 * claims — nothing in this component is for a mobile client, whatever got it mounted.
+	 */
 	if (!userInfo?.magic_id || isMobile) return null
 	if (!entryForThisPage && !automaticRun && !activeFlow) return null
 
@@ -115,13 +146,23 @@ function GuideTourGate({ isMobile, page = "home" }: GuideTourWrapperProps) {
  * The entry point every page mounts, and the one place the feature's own availability is read.
  *
  * Pages do not ask whether to mount this: they mount it and it decides, which keeps the rule in one
- * file and out of the eight call sites. `null` here means "this deployment or this organization has
- * no new-user onboarding", and it is answered without mounting anything.
+ * file and out of the eight call sites. `null` here means "this client has no new-user onboarding",
+ * and it is answered without mounting anything.
+ *
+ * **Mobile is one of those answers, and it has to be read here rather than below.** The home layout
+ * mounts this wrapper on both clients — it is the layout that renders it, and that layout is the
+ * same either way — while `GuideTourGate` only reads `isMobile` in its render body. A gate that
+ * mounted on a phone would therefore register its effects first and return `null` afterwards, which
+ * is exactly the shape this file exists to avoid: the reward list is asked for on mount, and a
+ * client that cannot show the feature must not ask for it. (On a phone, `/super` is reached and then
+ * redirected to the mobile home, so the gate really does get that one render.)
  */
-export default function GuideTourWrapper(props: GuideTourWrapperProps) {
-	if (!useCanHostHomeOnboarding()) return null
+export default function GuideTourWrapper({ isMobile, page }: GuideTourWrapperProps) {
+	const canHostFeature = useCanHostHomeOnboarding()
 
-	return <GuideTourGate {...props} />
+	if (isMobile || !canHostFeature) return null
+
+	return <GuideTourGate isMobile={isMobile} page={page} />
 }
 export {
 	HOME_ONBOARDING_RUN_EVENT,

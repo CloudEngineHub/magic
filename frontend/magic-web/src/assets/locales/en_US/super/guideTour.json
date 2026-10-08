@@ -101,6 +101,7 @@
 		"claim": {
 			"broken": "Your task progress looks broken. Refresh the page, or contact support.",
 			"expired": "This task has expired, so its reward can no longer be claimed",
+			"granted": "Tour complete — {{points}} points earned",
 			"retry": "We couldn't grant the points. Run the task again to retry.",
 			"unavailable": "This task can't be claimed right now"
 		},

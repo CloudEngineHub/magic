@@ -15,11 +15,15 @@ import zhGuideTour from "@/assets/locales/zh_CN/super/guideTour.json"
  */
 import { setHomeOnboardingRunActive } from "../../LazyGuideTour/GuideTourManager"
 import {
+	holdHomeOnboardingPrelude,
+	releaseHomeOnboardingPrelude,
+} from "../../LazyGuideTour/onboardingPrelude"
+import {
 	type HomeOnboardingReward,
 	type HomeOnboardingRewardList,
 	type HomeOnboardingTaskId,
 } from "../../LazyGuideTour"
-import NewUserBenefits from "../index"
+import NewUserBenefits, { ENTRY_FOLD_OUT_MS } from "../index"
 
 const dirname = path.dirname(fileURLToPath(import.meta.url))
 
@@ -92,15 +96,18 @@ vi.mock("@/utils/env", async (importOriginal) => ({
 	isPrivateDeployment: () => false,
 }))
 
-/** The toast is the card's only way of reporting a failed claim; captured rather than rendered. */
+/** What the card said to the user, oldest first — every toast is captured rather than rendered. */
 const { toasts } = vi.hoisted(() => ({
-	toasts: [] as string[],
+	toasts: [] as Array<{ type: "error" | "success"; content: string }>,
 }))
 
 vi.mock("@/components/base/MagicToaster/utils", () => ({
 	default: {
 		error: (options: { content: string }) => {
-			toasts.push(options.content)
+			toasts.push({ type: "error", content: options.content })
+		},
+		success: (options: { content: string }) => {
+			toasts.push({ type: "success", content: options.content })
 		},
 	},
 }))
@@ -202,11 +209,34 @@ beforeEach(() => {
 	// Likewise for the run signal: it lives in the tour's module, which this file does not reset, so
 	// a test that hands the screen to a run would otherwise hide the card for every later one.
 	setHomeOnboardingRunActive(false)
+	// And for the holds that put a dialog in front of the card, which live in their own module for
+	// the same reason.
+	releaseHomeOnboardingPrelude("user-profile-dialog")
+	releaseHomeOnboardingPrelude("daily-reward-dialog")
+	releaseHomeOnboardingPrelude("daily-reward-claim")
 })
 
 /** Every render of the slot named by `key`, oldest first. */
 function rendersOf(key: string) {
 	return calls.filter((call) => call.key === key)
+}
+
+/** The content of every notice of one kind, oldest first. */
+function notices(type: "error" | "success") {
+	return toasts.filter((toast) => toast.type === type).map((toast) => toast.content)
+}
+
+/**
+ * How much of the card's connector is lit, as the percentage the lit run is given.
+ *
+ * It travels as a CSS custom property rather than a class, because it is the one part of the
+ * drawing that follows the account's progress — and the lit run is a pseudo-element of the track,
+ * so there is no box to read a `width` off.
+ */
+function litTrackPercent() {
+	const card = screen.getByLabelText("newUserBenefits.entry.ariaLabel")
+	const track = card.querySelector('[class*="55575c"]') as HTMLElement
+	return Number.parseFloat(track.style.getPropertyValue("--nb-entry-track-lit"))
 }
 
 /** The order the design lists the eight tours in — the order the backend advertises them in too. */
@@ -445,7 +475,29 @@ describe("NewUserBenefits rows come from the backend", () => {
 		expect(rowAction("aiPpt").textContent).toBe("newUserBenefits.task.claimRetry")
 		expect(rowAction("aiPpt").disabled).toBe(false)
 		// Our own copy, not the backend's `message`: the endpoint does no language negotiation.
-		expect(toasts).toEqual(["homeOnboarding.claim.retry"])
+		expect(notices("error")).toEqual(["homeOnboarding.claim.retry"])
+	})
+
+	it("announces the points a retry finally granted", async () => {
+		unpaidRows.add("ai_ppt")
+		claimReward.mockResolvedValue({ ok: true, points: 50 })
+		openDialog()
+
+		await act(async () => {
+			fireEvent.click(rowAction("aiPpt"))
+		})
+
+		/*
+		 * A grant used to be silent here, and silence is indistinguishable from a failure: the row
+		 * would flip to "已完成" and the counter would move, but the user clicked a button that
+		 * promised points and got no word about them.
+		 *
+		 * The figure is the backend's own, not the row's advertised price — same number today, but
+		 * the one that actually landed is the one worth saying.
+		 */
+		expect(notices("success")).toEqual(["homeOnboarding.claim.granted"])
+		expect(rendersOf("homeOnboarding.claim.granted")[0]?.values).toEqual({ points: 50 })
+		expect(notices("error")).toEqual([])
 	})
 
 	it("says nothing when the deployment stops offering the feature mid-claim", async () => {
@@ -508,23 +560,67 @@ describe("NewUserBenefits entry card", () => {
 		/*
 		 * 2px, the height the design gives the track (`.feature-entry-nodes::before{height:2px}`).
 		 * It sat at 4px here, which read as a bar as heavy as the 12px nodes it links, so the nodes
-		 * stopped standing out against it. The track is a pseudo-element, so the classes are all
-		 * there is to assert — trimming the height must not disturb its centring, which is what
-		 * keeps it running through the middle of the nodes rather than under them.
+		 * stopped standing out against it. Both halves of the line are pseudo-elements, so the
+		 * classes are all there is to assert — trimming the height must not disturb their centring,
+		 * which is what keeps the line running through the middle of the nodes rather than under
+		 * them, and the lit run has to share the grey run's box or it cannot meet the nodes it
+		 * claims to connect.
 		 */
 		const card = screen.getByLabelText("newUserBenefits.entry.ariaLabel")
 		const track = card.querySelector('[class*="55575c"]') as HTMLElement
 		const classes = track.className.split(/\s+/)
 
-		expect(classes).toContain("before:h-0.5")
-		expect(classes).not.toContain("before:h-1")
-		expect(classes).toContain("before:top-1/2")
-		expect(classes).toContain("before:-translate-y-1/2")
+		for (const half of ["before:", "after:"]) {
+			expect(classes).toContain(`${half}h-0.5`)
+			expect(classes).not.toContain(`${half}h-1`)
+			expect(classes).toContain(`${half}top-1/2`)
+			expect(classes).toContain(`${half}-translate-y-1/2`)
+		}
+		// The lit run starts where the grey one does: half a node in, so it ends on a node's centre.
+		expect(classes).toContain("after:left-1.5")
+		expect(classes).toContain("after:w-[var(--nb-entry-track-lit)]")
 	})
 
-	it("lights the node of each finished task, not the first N", () => {
-		// The tasks are taken in whatever order the user likes, so a track painted off a count would
-		// claim the first task is done when the last one is.
+	it("leaves the connector dark until a second task is finished", () => {
+		// One node on its own has nothing to connect to: the line under it still reads as a run of
+		// one, and lighting anything would promise a segment the node cannot reach.
+		paidRows.add("magiclaw")
+		render(<NewUserBenefits />)
+
+		expect(litTrackPercent()).toBeCloseTo(0, 4)
+	})
+
+	it("lights the connector between two finished nodes, and only that far", () => {
+		/*
+		 * Two lit nodes with grey between them read as two separate attempts rather than as
+		 * progress, which is what this pins: the segment they span is lit, the five after it are
+		 * not. One segment out of the seven the line is divided into.
+		 */
+		paidRows.add("magiclaw")
+		paidRows.add("ai_ppt")
+		render(<NewUserBenefits />)
+
+		expect(litTrackPercent()).toBeCloseTo(100 / 7, 4)
+	})
+
+	it("lights the whole connector once every task is done", () => {
+		for (const { code } of TASK_ROWS) paidRows.add(code)
+		render(<NewUserBenefits />)
+
+		expect(litTrackPercent()).toBeCloseTo(100, 4)
+	})
+
+	it("lights one node per finished task, counting from the left", () => {
+		/*
+		 * The track is a gauge, not a checklist: it answers "how far along am I", and the rows
+		 * below it answer "which one is which". Lighting each node off its own row was tried and
+		 * read as broken — finishing the *second* task left the second node lit and the first
+		 * dark, which looks like a step was skipped. So the lit count follows the count alone,
+		 * whatever order the tasks were taken in.
+		 *
+		 * `magiclaw` is the eighth and last row, and it is the only one finished here — which is
+		 * the case that separates the two rules. Off counts, the first node is the one that lights.
+		 */
 		paidRows.add("magiclaw")
 		render(<NewUserBenefits />)
 
@@ -533,7 +629,22 @@ describe("NewUserBenefits entry card", () => {
 		const nodes = Array.from(track.children)
 		const lit = nodes.map((node) => node.className.includes("e7a91a"))
 
-		expect(lit).toEqual([false, false, false, false, false, false, false, true])
+		expect(lit).toEqual([true, false, false, false, false, false, false, false])
+	})
+
+	it("grows the lit run with each finished task, from the first node", () => {
+		// The other half of the rule: two done is two lit, and still the first two — the track
+		// never grows from the middle outwards, whichever pair it was.
+		paidRows.add("magiclaw")
+		paidRows.add("ai_ppt")
+		render(<NewUserBenefits />)
+
+		const card = screen.getByLabelText("newUserBenefits.entry.ariaLabel")
+		const track = card.querySelector('[class*="55575c"]') as HTMLElement
+		const nodes = Array.from(track.children)
+		const lit = nodes.map((node) => node.className.includes("e7a91a"))
+
+		expect(lit).toEqual([true, true, false, false, false, false, false, false])
 	})
 
 	it("keeps both line tags in every locale", () => {
@@ -613,13 +724,80 @@ describe("NewUserBenefits entry card fold", () => {
 		return screen.getByLabelText("newUserBenefits.entry.expand")
 	}
 
-	it("folds to the pill and unfolds again, without opening the dialog in between", () => {
+	/**
+	 * Folds the card and waits the motion out. Folding is the one change with a beat built into it:
+	 * the open card is given one animation's worth of time to shrink away and only then is the pill
+	 * swapped in, so every assertion about the folded card has to come after that beat rather than
+	 * on the next line. The slack is for the timer to fire and React to flush the swap.
+	 */
+	async function foldAndSettle() {
+		fireEvent.click(foldControl())
+		await act(async () => {
+			await new Promise((resolve) => {
+				setTimeout(resolve, ENTRY_FOLD_OUT_MS + 40)
+			})
+		})
+	}
+
+	it("shows the card leaving before the pill takes its place", async () => {
+		/*
+		 * The beat itself, which is the whole point of the change: a fold that swapped in a single
+		 * frame is what read as the card being yanked off the screen. Asserted as "the old card is
+		 * still up, marked as leaving, right after the click, and the pill is there after the beat"
+		 * — the class is what carries the motion, and jsdom runs no animation of its own.
+		 */
+		render(<NewUserBenefits />)
+
+		fireEvent.click(foldControl())
+
+		const leaving = screen.getByLabelText("newUserBenefits.entry.ariaLabel")
+		expect(screen.queryByLabelText("newUserBenefits.entry.expand")).toBeNull()
+		expect((leaving.parentElement as HTMLElement).className.split(/\s+/)).toContain(
+			"nb-entry-leaving",
+		)
+
+		await act(async () => {
+			await new Promise((resolve) => {
+				setTimeout(resolve, ENTRY_FOLD_OUT_MS + 40)
+			})
+		})
+
+		expect(screen.queryByLabelText("newUserBenefits.entry.ariaLabel")).toBeNull()
+		expect(foldedCard().className.split(/\s+/)).toContain("nb-entry-fold")
+		expect((foldedCard().parentElement as HTMLElement).className.split(/\s+/)).not.toContain(
+			"nb-entry-leaving",
+		)
+	})
+
+	it("skips the beat when the reader has asked for no motion", () => {
+		/*
+		 * With the animation switched off there is nothing to wait for, so waiting would be a beat
+		 * of empty corner before a pill appears. The preference is read at the click, so stubbing it
+		 * is enough — no re-render is involved.
+		 */
+		const original = window.matchMedia
+		window.matchMedia = ((query: string) => ({
+			matches: query.includes("reduce"),
+		})) as unknown as typeof window.matchMedia
+		try {
+			render(<NewUserBenefits />)
+
+			fireEvent.click(foldControl())
+
+			expect(foldedCard()).toBeTruthy()
+			expect(screen.queryByLabelText("newUserBenefits.entry.ariaLabel")).toBeNull()
+		} finally {
+			window.matchMedia = original
+		}
+	})
+
+	it("folds to the pill and unfolds again, without opening the dialog in between", async () => {
 		render(<NewUserBenefits />)
 		// Open by default: the counter and the headline, and no pill anywhere.
 		expect(rendersOf("newUserBenefits.entry.pillReward")).toHaveLength(0)
 		expect(screen.getByText(`0/${ROW_ORDER.length}`)).toBeTruthy()
 
-		fireEvent.click(foldControl())
+		await foldAndSettle()
 
 		/*
 		 * Folded, the pill replaces the body and the card becomes the unfold target: the design
@@ -656,11 +834,13 @@ describe("NewUserBenefits entry card fold", () => {
 		expect(screen.queryByText(`0/${ROW_ORDER.length}`)).toBeNull()
 	})
 
-	it("remembers the fold, in both directions", () => {
+	it("remembers the fold, in both directions", async () => {
 		render(<NewUserBenefits />)
 		expect(window.localStorage.getItem(COLLAPSED_KEY)).toBe("")
 
-		fireEvent.click(foldControl())
+		await foldAndSettle()
+		// Written when the fold was asked for rather than when it landed, so a card taken off the
+		// page mid-animation still remembers it.
 		expect(window.localStorage.getItem(COLLAPSED_KEY)).toBe("1")
 
 		fireEvent.click(foldedCard())
@@ -700,14 +880,14 @@ describe("NewUserBenefits entry card fold", () => {
 		expect(card.querySelector("button")).toBeNull()
 	})
 
-	it("marks both states with the classes the stylesheet animates", () => {
+	it("marks both states with the classes the stylesheet animates", async () => {
 		render(<NewUserBenefits />)
 
 		const open = openCard().className.split(/\s+/)
 		expect(open).toContain("nb-entry-unfold")
 		expect(open).not.toContain("nb-entry-fold")
 
-		fireEvent.click(foldControl())
+		await foldAndSettle()
 
 		const folded = foldedCard()
 		expect(folded.className.split(/\s+/)).toContain("nb-entry-fold")
@@ -736,9 +916,30 @@ describe("NewUserBenefits entry card fold", () => {
 				`animation: nb-entry-${name} 0.24s cubic-bezier(0.16, 1, 0.3, 1);`,
 			)
 		}
+
+		/*
+		 * The exit is the one animation the component *waits* for, so its length is written in two
+		 * places — the rule below and `ENTRY_FOLD_OUT_MS` above. Drift between them is either a beat
+		 * of empty corner or a card cut off mid-shrink, and neither shows up as a failure anywhere
+		 * else. The curve is its own: eased in, so the card accelerates as it leaves.
+		 */
+		expect(css).toMatch(/@keyframes nb-entry-leave \{/)
+		expect(css).toContain(
+			`animation: nb-entry-leave ${ENTRY_FOLD_OUT_MS / 1000}s cubic-bezier(0.4, 0, 1, 1) forwards;`,
+		)
+
+		/*
+		 * The two halves of the fold meet on the same opacity: the exit stops at 0.35 and the pill's
+		 * entrance starts there, so the swap is a hand-off rather than a frame with nothing on the
+		 * corner. A mismatch is a blink that no other assertion here would catch.
+		 */
+		expect(css).toMatch(/@keyframes nb-entry-leave \{[\s\S]*?opacity: 0\.35;/)
+		expect(css).toMatch(/@keyframes nb-entry-fold \{[\s\S]*?from \{\s*opacity: 0\.35;/)
+
 		// Folding is decorative, so it has to be skippable; a missing guard is an accessibility
 		// problem rather than a taste one.
 		expect(css).toContain("@media (prefers-reduced-motion: reduce)")
+		expect(css).toContain(".nb-entry-leaving")
 		expect(source).toContain('import "./entry-transition.css"')
 	})
 })
@@ -861,5 +1062,41 @@ describe("NewUserBenefits entry card wrapper", () => {
 		 */
 		expect(screen.getByLabelText("newUserBenefits.entry.ariaLabel")).toBeTruthy()
 		expect(rendersOf("newUserBenefits.entry.titleFresh").length).toBeGreaterThan(0)
+	})
+})
+
+/**
+ * The card's third reason to be off the screen, and the only one that is temporary: a dialog that
+ * comes before the whole feature — the profile one a brand-new account is asked to fill in, the
+ * daily reward one — owns the page first. Unlike the other two this is not about the account or the
+ * deployment but about the moment, so the card has to appear when the dialog is dismissed, on a
+ * page nobody remounts.
+ */
+describe("NewUserBenefits behind the dialogs that come first", () => {
+	it("is not on the page at all while one of them holds it", () => {
+		holdHomeOnboardingPrelude("user-profile-dialog")
+
+		render(<NewUserBenefits />)
+
+		/*
+		 * Neither the card nor its dialog — and neither of them may be explained away by an empty
+		 * reward list: the backend here answers with the full eight rows, so the only thing keeping
+		 * the card away is the dialog in front of it.
+		 */
+		expect(listState.empty).toBe(false)
+		expect(screen.queryByLabelText("newUserBenefits.entry.ariaLabel")).toBeNull()
+		expect(screen.queryByRole("dialog")).toBeNull()
+	})
+
+	it("comes up as soon as that dialog is gone, on the same mount", () => {
+		holdHomeOnboardingPrelude("daily-reward-dialog")
+
+		render(<NewUserBenefits />)
+		expect(screen.queryByLabelText("newUserBenefits.entry.ariaLabel")).toBeNull()
+
+		// Dismissed long after the first paint, on a page that is not remounted.
+		act(() => releaseHomeOnboardingPrelude("daily-reward-dialog"))
+
+		expect(screen.getByLabelText("newUserBenefits.entry.ariaLabel")).toBeTruthy()
 	})
 })

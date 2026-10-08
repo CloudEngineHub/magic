@@ -338,16 +338,26 @@ let onboardingEntryTask: HomeOnboardingTaskId | null = null
  * tour, which announces its own state on the way in.
  */
 let onboardingRunActive = false
-/**
- * Whether the introduction dialog is still on offer. It opens the AI-work task on a first visit and
- * the product offers it once per page load — on the automatic run. Leaving it spends it: from then
- * on both tasks are entered on their own from the benefits card, with no dialog. Memory-only, like
- * the rest of the runtime state, so it is back on every load.
- */
-let onboardingIntroSpent = false
 
 /** Progress is tracked per account; a signed-out visitor still gets one slot under "unknown". */
 const getUserKey = (userMagicId?: string) => userMagicId || "unknown"
+
+/**
+ * Where an account's copy of the one-shot introduction flag lives.
+ *
+ * The introduction dialog opens the AI-work task on a first visit, and it is offered **once per
+ * account** — not once per page load. Someone who declined it, or who left the run it opened, must
+ * not be asked again by the next load; from there both tasks are entered on their own from the
+ * benefits card. So this flag, alone among the runtime state here, is storage rather than a
+ * variable: everything else describes a run in progress, which a reload is meant to reset.
+ *
+ * Scoped per account, because the answer belongs to the account that was shown the dialog rather
+ * than to the browser: the next account to sign in on this machine still has it coming.
+ */
+const INTRO_SPENT_STORAGE_PREFIX = "magiHomeOnboardingIntroSpent:"
+
+const getIntroSpentStorageKey = (userMagicId?: string) =>
+	`${INTRO_SPENT_STORAGE_PREFIX}${getUserKey(userMagicId)}`
 
 /** A status is scoped to an account *and* a task: the two flows finish independently. */
 const getStatusKey = (userMagicId: string | undefined, task: HomeOnboardingTaskId) =>
@@ -459,17 +469,36 @@ export function setHomeOnboardingRunActive(active: boolean) {
 	}
 }
 
-/** Whether the automatic run still has the introduction dialog to offer. */
-export function isHomeOnboardingIntroSpent() {
-	return onboardingIntroSpent
+/**
+ * Whether the introduction dialog is still on offer for this account — the answer survives a reload,
+ * which is the whole point of keeping it in storage, so it is read on every load rather than
+ * remembered here. Read by the automatic run's gate as well as by the tour itself.
+ */
+export function isHomeOnboardingIntroSpent(userMagicId?: string) {
+	try {
+		return window.localStorage.getItem(getIntroSpentStorageKey(userMagicId)) === "1"
+	} catch {
+		// Storage can refuse to be read at all — Safari in private mode does. Nothing is remembered
+		// then, so the dialog falls back to being offered once per load, which is what the feature
+		// did before it remembered anything.
+		return false
+	}
 }
 
 /**
- * The introduction is behind us: the user answered its dialog or stepped out of the run it opened,
- * or a benefits-card entry took over. Both tasks are entered one at a time from here on.
+ * The introduction is behind us: its dialog was put in front of the user — answered, declined or
+ * closed — or a benefits-card entry took over. Both tasks are entered one at a time from here on.
+ *
+ * Written the moment the dialog appears rather than when it is answered, because being shown it is
+ * the thing that must not happen twice: someone who reloads with it still up on screen has been
+ * shown it just as much as someone who clicked it away, and coming back must not re-open it.
  */
-export function spendHomeOnboardingIntro() {
-	onboardingIntroSpent = true
+export function spendHomeOnboardingIntro(userMagicId?: string) {
+	try {
+		window.localStorage.setItem(getIntroSpentStorageKey(userMagicId), "1")
+	} catch {
+		// An unwritable store cannot remember the answer; the dialog simply comes back next load.
+	}
 }
 
 export function getHomeOnboardingStatus(
@@ -508,12 +537,18 @@ function setHomeOnboardingStatus(
  * living on another route (`super-lobster`, `hire-employee`, `create-micro-app`, `create-ai-ppt`,
  * `audio-recording`) therefore has to be navigated to by the caller before or right after this call
  * — the tour mounts on the page that owns the anchors, not on the caller's.
+ *
+ * The account is named because opening a task from the card spends the introduction for it, and that
+ * answer is remembered per account.
  */
-export const startHomeOnboarding = (task: HomeOnboardingTaskId = "workbench") => {
+export const startHomeOnboarding = (
+	task: HomeOnboardingTaskId = "workbench",
+	userMagicId?: string,
+) => {
 	onboardingEntryTask = task
 	// A card entry opens its own task on its own first step, so the introduction is behind us by
 	// definition — a later mount must not fall back to its dialog.
-	spendHomeOnboardingIntro()
+	spendHomeOnboardingIntro(userMagicId)
 	// A task carried by highlighted steps has no step of its own: it opens on its first one. The
 	// AI-work entry opens on the featured-case picker. Either way the stored flow is dropped, so a
 	// run always starts from its own first step instead of resuming the other task's.
@@ -821,3 +856,32 @@ export async function claimHomeOnboardingReward(
 		}
 	}
 }
+
+/*
+ * ---------------------------------------------------------------------------------------------
+ * Legacy surface: kept so imports resolve, deliberately does nothing.
+ * ---------------------------------------------------------------------------------------------
+ */
+
+/**
+ * @deprecated **No-op. Kept only so that the import resolves.**
+ *
+ * This used to arm the localStorage-driven workspace/project tour: it wrote
+ * `super_magic/is_need_{workspace,project}_features_guide/<magicId>` — read back by the matching
+ * `checkIfGuideTourNeeded` — and published `PubSubEvents.GuideTourElementReady` to wake the tour up.
+ * The rewrite above replaced that whole mechanism with the backend-driven one, and took every
+ * reader with it: neither the two flags, nor `checkIfGuideTourNeeded`, nor `markGuideTourCompleted`
+ * is referenced anywhere in the app any more, so there is nothing left to arm. The new flow also
+ * never waits on a user's profile, which is what the call sites below were really gating.
+ *
+ * It outlives its implementation because `enterprise/src/layouts/BaseLayout` still calls it when the
+ * "improve information" modal closes. The enterprise layer is served as-is on the enterprise build,
+ * so a missing export there is a **fatal `SyntaxError` in the dev server** (`does not provide an
+ * export named …`), not something a bundler can tree-shake or warn about. Its neighbour on the next
+ * line, `setNeedHTMLGuideTour`, was left behind as a stub for exactly this reason.
+ *
+ * The signature is kept so that call site stays type-correct, while the body takes no argument at
+ * all: naming one only to leave it unused would be a lint warning, and pretending to read it would
+ * be a lie. Nothing here can use a `magicId` — the state it used to key on no longer exists.
+ */
+export const setNeedGuideTour: (userMagicId?: string) => void = () => undefined

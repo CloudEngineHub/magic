@@ -580,14 +580,15 @@ function HomeOnboardingTour({ userMagicId, page = "home", onComplete }: HomeOnbo
 		const task: HomeOnboardingTaskId = requestedTask ?? "first-ai-work"
 		/**
 		 * A first visit opens the AI-work task with its introduction dialog: nothing asked for it,
-		 * there is no step to resume, the dialog is still unspent and the task itself is still open.
-		 * Once answered, both tasks are entered on their own from the benefits card — which never
-		 * shows the dialog — so the dialog cannot come back.
+		 * there is no step to resume, the dialog has not been offered to this account before and the
+		 * task itself is still open. Once answered, both tasks are entered on their own from the
+		 * benefits card — which never shows the dialog — so the dialog cannot come back, and not
+		 * merely for this page load: the answer is kept per account, so a reload finds it spent.
 		 */
 		const startsWithIntro =
 			!requestedTask &&
 			!storedFlow &&
-			!isHomeOnboardingIntroSpent() &&
+			!isHomeOnboardingIntroSpent(userMagicId) &&
 			!isHomeOnboardingCompleted(userMagicId, "first-ai-work")
 		return {
 			/** A benefits-card entry is a run of its own, never the automatic one. */
@@ -760,8 +761,13 @@ function HomeOnboardingTour({ userMagicId, page = "home", onComplete }: HomeOnbo
 	 * Reporting a finished run to the backend, which is the only side that decides whether the task
 	 * is done and whether the points were paid.
 	 *
-	 * Three things make this more than a single call:
+	 * Four things make this more than a single call:
 	 *
+	 * - **A grant is announced.** The run's overlay is the last thing on screen and it closes as the
+	 *   call goes out, so without a word from here a paid task looks exactly like a failed one: the
+	 *   card's counter moves and nothing else happens. The figure is the backend's own `points`
+	 *   rather than the task's advertised price — those are the same today, and the one the account
+	 *   actually received is the one worth saying out loud.
 	 * - **A re-watch pays nothing.** The task was finished on an earlier run, and the design's own
 	 *   toast says so; calling completion again would be a pointless round trip at best.
 	 * - **The AI-work task is never completed by this client.** The backend finishes it off a "the
@@ -779,7 +785,13 @@ function HomeOnboardingTour({ userMagicId, page = "home", onComplete }: HomeOnbo
 				return
 			}
 			const result = await claimHomeOnboardingReward(userMagicId, task)
-			if (result.ok) return
+			if (result.ok) {
+				magicToast.success({
+					content: t("homeOnboarding.claim.granted", { points: result.points }),
+					duration: 3000,
+				})
+				return
+			}
 			const copy = homeOnboardingClaimFailureKey(result.code)
 			if (copy) magicToast.error({ content: t(copy), duration: 3000 })
 		},
@@ -794,12 +806,12 @@ function HomeOnboardingTour({ userMagicId, page = "home", onComplete }: HomeOnbo
 	 */
 	const exitTour = useCallback(
 		(outcome: "completed" | "aborted") => {
-			// The introduction is offered once per page load, so any run ending — the dialog
-			// answered or declined, the walk left mid-way — spends it. Every task touched from here
-			// on is entered on its own from the benefits card.
-			spendHomeOnboardingIntro()
-			// The tour is only dismissed locally: a page load re-opens it while a task is
-			// unfinished, which is what makes a refresh behave like a first visit.
+			// Nothing to record about the introduction here: it was spent when its dialog was put on
+			// screen, and a run ending cannot un-spend it — every task is entered from the benefits
+			// card from that point on, whichever way this run goes.
+			//
+			// The tour is only dismissed locally. What a page load derives the next run from is the
+			// outcome written below, not the state of this instance.
 			setHomeOnboardingSidebarTopMode(false)
 			setHomeOnboardingFlow(null)
 			// The next run of any task starts from its own first step, not from wherever this one
@@ -853,7 +865,8 @@ function HomeOnboardingTour({ userMagicId, page = "home", onComplete }: HomeOnbo
 	 * entry.
 	 */
 	const startFirstAiWork = useCallback(() => {
-		spendHomeOnboardingIntro()
+		// The dialog has been on screen, so the introduction is already spent; taking it up is what
+		// this button does, not what ends it.
 		// The picker starts from an empty composer, so the prompt of the chosen case is the only
 		// thing in it.
 		pubsub.publish(PubSubEvents.Set_Input_Message, {
@@ -1085,6 +1098,13 @@ function HomeOnboardingTour({ userMagicId, page = "home", onComplete }: HomeOnbo
 	 * drifting: the flag below is reported from the same verdict this component returns on.
 	 */
 	const runActive = Boolean(userMagicId) && !dismissed && !unsolicited && ownedByThisPage
+	/**
+	 * The introduction dialog's own condition: a first visit that has not started walking yet. It is
+	 * named rather than inlined so that the thing which spends the one-shot flag and the thing which
+	 * puts the dialog up are the same test — the flag has to be written by exactly what the user was
+	 * shown, no more and no less.
+	 */
+	const showingIntro = runActive && entry.startsWithIntro && !started && !flow
 
 	/**
 	 * Telling the benefits entry card that a run is up, and telling it again when the screen is
@@ -1101,11 +1121,24 @@ function HomeOnboardingTour({ userMagicId, page = "home", onComplete }: HomeOnbo
 		return () => setHomeOnboardingRunActive(false)
 	}, [runActive])
 
+	/**
+	 * The dialog is offered once per account, and it is spent *here* — the moment it is on screen —
+	 * rather than in the exits it can be left through. Being shown it is the thing that must not
+	 * happen twice: someone who reloads with it still up, or who walks to another route and comes
+	 * back, has been shown it just as much as someone who clicked "暂不体验", and a write on the way
+	 * out misses exactly those. A layout effect, so the answer is on disk before the frame is
+	 * painted and no click can outrace it.
+	 */
+	useLayoutEffect(() => {
+		if (!showingIntro) return
+		spendHomeOnboardingIntro(userMagicId)
+	}, [showingIntro, userMagicId])
+
 	if (!runActive) return null
 
 	// The introduction dialog opens the AI-work task of a first visit and nothing else: every other
 	// kind of run either has a step to show already (`started`) or, being unsolicited, returned above.
-	if (entry.startsWithIntro && !started && !flow) {
+	if (showingIntro) {
 		return createPortal(
 			<div
 				className="fixed inset-0 z-[1200] text-foreground"

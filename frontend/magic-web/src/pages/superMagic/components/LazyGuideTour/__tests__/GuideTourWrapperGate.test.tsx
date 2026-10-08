@@ -2,8 +2,8 @@ import { act, render, screen } from "@testing-library/react"
 import { beforeEach, describe, expect, it, vi } from "vitest"
 
 /**
- * The two gates in front of the automatic run: the feature's own availability, and the backend's
- * answer for this account.
+ * The three gates in front of the automatic run: the feature's own availability, the dialogs that
+ * come before it, and the backend's answer for this account.
  *
  * The benefits card reads the backend's answer for itself — its rows come back empty and it renders
  * nothing — but the automatic run has no rows to read: it asks `checkIfHomeOnboardingNeeded`, which
@@ -17,6 +17,18 @@ import { beforeEach, describe, expect, it, vi } from "vitest"
  * organization must not mount it at all. "Not mounted" is asserted as "never asked": the reward
  * list is the feature's first request, and a component that mounts and only then hides would have
  * already sent it.
+ *
+ * A mobile client is the third answer to that same question, and it is read in the same place for
+ * the same reason — the wrapper is mounted by a layout that is the same on both clients, so only
+ * the wrapper can keep a phone from asking.
+ *
+ * The last group is about *when* rather than *whether*: a new account is shown a profile dialog and
+ * possibly a daily reward dialog before this feature has its turn, and the introduction dialog has
+ * to be the last of the three rather than an overlay on top of one of them.
+ *
+ * And the one after that is the one-shot rule: the introduction is spent by the account that was
+ * shown it rather than by the page load that showed it, so a later load — the same browser, the same
+ * account — has to find it gone.
  *
  * These tests drive the wrapper itself, because that is where both answers have to be read.
  */
@@ -108,25 +120,32 @@ function task(code: string, status: "PENDING" | "COMPLETED") {
 /** A fresh wrapper and manager, so one test's answer cannot decide what the next one starts from. */
 async function loadWrapper() {
 	vi.resetModules()
+	const prelude = await import("../onboardingPrelude")
 	const onboarding = await import("../GuideTourManager")
 	const wrapper = await import("../index")
-	return { onboarding, wrapper }
+	return { prelude, onboarding, wrapper }
 }
 
 /**
  * Loads fresh modules, lets the caller arrange the backend's answer, and then mounts the wrapper the
  * way the home page does. The order is the point: the reward list is asked for on mount, so whatever
  * the suite wants the backend to say has to be decided before it is.
+ *
+ * `isMobile` is handed in the way a page hands its own answer in — the wrapper is told which client
+ * it is on rather than working it out, so a test moves exactly that.
  */
-async function mountWrapper(arrange: () => void) {
-	const { onboarding, wrapper } = await loadWrapper()
-	arrange()
-	const rendered = render(<wrapper.default isMobile={false} />)
+async function mountWrapper(
+	arrange: (modules: Awaited<ReturnType<typeof loadWrapper>>) => void,
+	{ isMobile = false }: { isMobile?: boolean } = {},
+) {
+	const modules = await loadWrapper()
+	arrange(modules)
+	const rendered = render(<modules.wrapper.default isMobile={isMobile} />)
 	// Let whatever the mount started settle — the reward list among it — before the caller asserts.
 	await act(async () => {
 		await Promise.resolve()
 	})
-	return { onboarding, wrapper, ...rendered }
+	return { ...modules, ...rendered }
 }
 
 beforeEach(() => {
@@ -138,6 +157,12 @@ beforeEach(() => {
 
 	getOnboardingTasks.mockReset()
 	completeOnboardingTask.mockReset()
+	/*
+	 * The introduction is the one piece of state that outlives a page load, so it is deliberately not
+	 * reset with the modules — and jsdom keeps storage for the whole file. Without this, the first
+	 * test that is shown the dialog would spend it for every test after it.
+	 */
+	window.localStorage.clear()
 })
 
 describe("whether the feature is mounted at all", () => {
@@ -173,6 +198,20 @@ describe("whether the feature is mounted at all", () => {
 		organization.organizationListReady = false
 
 		await mountWrapper(homeTasksPending)
+
+		expect(getOnboardingTasks).not.toHaveBeenCalled()
+		expect(screen.queryByRole("dialog", { name: INTRO })).toBeNull()
+	})
+
+	it("stays off a mobile client without asking for anything", async () => {
+		/*
+		 * The home layout mounts this wrapper on both clients — it is the layout that renders it,
+		 * and the layout is the same either way, so a phone reaches it on the way to `/super` before
+		 * being redirected to the mobile home. `GuideTourGate` reads `isMobile` too, but only in its
+		 * render body, and its effects are registered before that return: a gate left to answer for
+		 * mobile would ask for the reward list and hide itself afterwards.
+		 */
+		await mountWrapper(homeTasksPending, { isMobile: true })
 
 		expect(getOnboardingTasks).not.toHaveBeenCalled()
 		expect(screen.queryByRole("dialog", { name: INTRO })).toBeNull()
@@ -244,6 +283,84 @@ describe("the wrapper's gate on the automatic run", () => {
 		await vi.waitFor(
 			() => {
 				expect(onboarding.getHomeOnboardingRewardList(MAGIC_ID).status).toBe("ready")
+			},
+			{ timeout: 5000 },
+		)
+
+		expect(screen.queryByRole("dialog", { name: INTRO })).toBeNull()
+	})
+})
+
+describe("the wrapper's gate on the dialogs that come first", () => {
+	it("keeps the introduction dialog away while one of them holds the screen", async () => {
+		const { onboarding } = await mountWrapper(({ prelude }) => {
+			getOnboardingTasks.mockResolvedValue({ tasks: [task("first_ai_work", "PENDING")] })
+			// The profile dialog a brand-new account is asked to fill in: up before the onboarding,
+			// and not the onboarding's to paint over.
+			prelude.holdHomeOnboardingPrelude("user-profile-dialog")
+		})
+
+		// Everything else says yes — the list is in, and there is a task left to walk — so the
+		// absence below is this gate's doing rather than one of the other two's.
+		await vi.waitFor(
+			() => {
+				expect(onboarding.getHomeOnboardingRewardList(MAGIC_ID).status).toBe("ready")
+			},
+			{ timeout: 5000 },
+		)
+
+		expect(screen.queryByRole("dialog", { name: INTRO })).toBeNull()
+	})
+
+	it("opens as soon as that dialog is gone, without waiting for a reload", async () => {
+		const { prelude } = await mountWrapper(({ prelude: preludeModule }) => {
+			getOnboardingTasks.mockResolvedValue({ tasks: [task("first_ai_work", "PENDING")] })
+			preludeModule.holdHomeOnboardingPrelude("user-profile-dialog")
+		})
+
+		expect(screen.queryByRole("dialog", { name: INTRO })).toBeNull()
+
+		/*
+		 * The dialog is dismissed on a page that is not remounted, so the hold has to be followed
+		 * rather than read once. And the introduction still has to be on offer at that point: waiting
+		 * behind the dialog must not spend it — the one-shot flag is the same thing that decides
+		 * whether a later mount ever shows the dialog at all.
+		 */
+		act(() => prelude.releaseHomeOnboardingPrelude("user-profile-dialog"))
+
+		expect(await screen.findByRole("dialog", { name: INTRO }, { timeout: 15000 })).toBeTruthy()
+	})
+})
+
+describe("the wrapper's offer of the introduction", () => {
+	/**
+	 * A page load is a fresh module graph over storage that is *not* cleared, which is exactly what
+	 * mounting the wrapper twice here reproduces: `vi.resetModules()` reloads the code, and the
+	 * account's answer has to be read back from somewhere that survives it.
+	 */
+	it("does not offer the dialog to an account that has already been shown it", async () => {
+		const first = await mountWrapper(() => {
+			getOnboardingTasks.mockResolvedValue({ tasks: [task("first_ai_work", "PENDING")] })
+		})
+
+		// The dialog is up, so the account has been shown it — which is all it takes.
+		await screen.findByRole("dialog", { name: INTRO }, { timeout: 15000 })
+		expect(first.onboarding.isHomeOnboardingIntroSpent(MAGIC_ID)).toBe(true)
+
+		first.unmount()
+
+		/*
+		 * The next load. The account still owes both home tasks and the list still says so, so this
+		 * is the one-shot flag rather than progress — and nothing here may put the dialog back. The
+		 * tasks are opened from the benefits card from now on.
+		 */
+		const second = await mountWrapper(() => {
+			getOnboardingTasks.mockResolvedValue({ tasks: [task("first_ai_work", "PENDING")] })
+		})
+
+		await vi.waitFor(
+			() => {
+				expect(second.onboarding.getHomeOnboardingRewardList(MAGIC_ID).status).toBe("ready")
 			},
 			{ timeout: 5000 },
 		)

@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from "react"
+import type { CSSProperties } from "react"
 import { Trans, useTranslation } from "react-i18next"
 import type { LucideIcon } from "lucide-react"
 import {
@@ -44,6 +45,7 @@ import {
 	type HomeOnboardingTaskId,
 } from "../LazyGuideTour"
 import { useCanHostHomeOnboarding } from "../LazyGuideTour/onboardingAvailability"
+import { useHomeOnboardingPreludeHeld } from "../LazyGuideTour/onboardingPrelude"
 import "./entry-transition.css"
 
 /**
@@ -72,6 +74,16 @@ const COMPLETION_BONUS = 50
 const ENTRY_COLLAPSED_STORAGE_KEY = "magiFeatureEntryCollapsed"
 
 /**
+ * How long the open card is given to shrink away before the pill takes its place.
+ *
+ * The JS half of a two-part motion whose other half is `.nb-entry-leaving` in `entry-transition.css`:
+ * the exit animation has to finish before the swap, or the card is cut off mid-shrink, and waiting
+ * longer than it leaves the corner empty. The two values therefore have to agree, and a test reads
+ * the stylesheet to check that they still do.
+ */
+export const ENTRY_FOLD_OUT_MS = 150
+
+/**
  * Reading storage can throw outright rather than merely return null — Safari in private mode does —
  * so the card falls back to open instead of failing to render.
  */
@@ -81,6 +93,17 @@ function readEntryCollapsed() {
 	} catch {
 		return false
 	}
+}
+
+/**
+ * Whether the reader has asked for no motion. Only the fold needs to know: it is the one change the
+ * card waits out, and with the animation switched off there would be nothing to wait for — just a
+ * beat of empty corner before a pill appears. Answered at the moment of the click rather than
+ * followed, because a mid-fold preference change is not worth a re-render.
+ */
+function prefersReducedMotion() {
+	if (typeof window === "undefined" || typeof window.matchMedia !== "function") return false
+	return window.matchMedia("(prefers-reduced-motion: reduce)").matches
 }
 
 /**
@@ -260,13 +283,44 @@ function NewUserBenefitsCard() {
 	 */
 	const [collapsed, setCollapsed] = useState(readEntryCollapsed)
 
+	/**
+	 * Whether the open card is on its way out. The card keeps its place for one animation's worth of
+	 * time so the shrink can be watched, and only then does the pill take over — a fold that swapped
+	 * in a single frame is what made folding read as the card being yanked away.
+	 *
+	 * Nothing renders off this on its own: it is the beat *before* `collapsed`, which stays the one
+	 * answer to "is this card folded".
+	 */
+	const [foldingOut, setFoldingOut] = useState(false)
+
 	useEffect(() => {
+		// Remembered from the moment the fold is asked for rather than when it lands, so a card taken
+		// off the page mid-animation still remembers a fold the user did ask for.
 		try {
-			window.localStorage.setItem(ENTRY_COLLAPSED_STORAGE_KEY, collapsed ? "1" : "")
+			window.localStorage.setItem(
+				ENTRY_COLLAPSED_STORAGE_KEY,
+				collapsed || foldingOut ? "1" : "",
+			)
 		} catch {
 			// Nothing to remember if storage refuses the write; the card still folds this session.
 		}
-	}, [collapsed])
+	}, [collapsed, foldingOut])
+
+	/**
+	 * Ends the fold the card is in the middle of.
+	 *
+	 * A timer rather than the exit animation's own `animationend`, because the card's children
+	 * animate too and their events bubble: the first grid cell to finish would otherwise declare the
+	 * whole fold over. The length is the stylesheet's, kept in step by a test.
+	 */
+	useEffect(() => {
+		if (!foldingOut) return
+		const timer = window.setTimeout(() => {
+			setCollapsed(true)
+			setFoldingOut(false)
+		}, ENTRY_FOLD_OUT_MS)
+		return () => window.clearTimeout(timer)
+	}, [foldingOut])
 
 	useEffect(() => {
 		const userMagicId = userInfo?.magic_id
@@ -314,9 +368,11 @@ function NewUserBenefitsCard() {
 			else if (page === "micro-apps") navigate({ name: RouteName.MicroApps })
 			else if (page === "slides-templates") navigate({ name: RouteName.SuperSlidesTemplates })
 			else if (page === "recordings") navigate({ name: RouteName.AudioRecordings })
-			startHomeOnboarding(task)
+			// The account is named so the entry can spend this account's introduction: from the
+			// moment a task is opened from the card, the dialog is behind it for good.
+			startHomeOnboarding(task, userInfo?.magic_id)
 		},
-		[navigate],
+		[navigate, userInfo?.magic_id],
 	)
 
 	/**
@@ -325,6 +381,9 @@ function NewUserBenefitsCard() {
 	 * Nothing is recorded locally here: the manager only marks a task finished once the backend says
 	 * the grant went through, so a failure simply leaves this row as it was — still claimable — which
 	 * is what makes the retry the user's to make rather than something the card swallows.
+	 *
+	 * A grant is announced here for the same reason the tour announces one: points landing in an
+	 * account is worth a word, and the row's own state change is easy to miss under a dialog.
 	 */
 	const claimReward = useCallback(
 		async (task: HomeOnboardingTaskId) => {
@@ -333,7 +392,13 @@ function NewUserBenefitsCard() {
 			setClaiming(task)
 			const result = await claimHomeOnboardingReward(userMagicId, task)
 			setClaiming(null)
-			if (result.ok) return
+			if (result.ok) {
+				magicToast.success({
+					content: t("homeOnboarding.claim.granted", { points: result.points }),
+					duration: 3000,
+				})
+				return
+			}
 			const copy = homeOnboardingClaimFailureKey(result.code)
 			if (copy) magicToast.error({ content: t(copy), duration: 3000 })
 		},
@@ -471,6 +536,20 @@ function NewUserBenefitsCard() {
 	const completedCount = completedTasks.length
 	const remainingCount = remainingTasks.length
 	/**
+	 * How much of the connector is lit: the nodes sit on a line, and two finished tasks have to read
+	 * as one run of progress rather than as two islands with grey between them. The line is divided
+	 * into one segment per gap — `nodes - 1` of them — and a finished task lights the segment behind
+	 * it, so `n` finished tasks light `n - 1` segments and the last one lights the lot.
+	 *
+	 * Measured as a fraction of the line's own length (its box is exactly node-centre to
+	 * node-centre), which is why this is a ratio and not a pixel count.
+	 */
+	const trackSegments = totalTasks - 1
+	const litTrackRatio =
+		trackSegments > 0
+			? Math.min(Math.max(completedCount - 1, 0), trackSegments) / trackSegments
+			: 0
+	/**
 	 * The corner dot is a call to action, not decoration: it advertises that this card still has
 	 * something to hand out. Once the last task is done there is nothing left to point at, so the
 	 * dot goes with it rather than staying on a finished card.
@@ -488,15 +567,33 @@ function NewUserBenefitsCard() {
 		.reduce((total, row) => total + row.points, 0)
 	const remainingPoints = maxPoints - earnedPoints
 
-	const toggleCollapsed = () => setCollapsed((previous) => !previous)
+	/**
+	 * Folding is asked for rather than applied: the card plays its exit first and the fold lands when
+	 * that is over. Unfolding has no such beat — a box growing back out of the corner needs no exit
+	 * to explain it, which is why the two directions are not the same code.
+	 */
+	const foldCard = () => {
+		if (prefersReducedMotion()) {
+			setCollapsed(true)
+			return
+		}
+		setFoldingOut(true)
+	}
+
+	const unfoldCard = () => setCollapsed(false)
 
 	/**
 	 * A folded card has room for one target, and the design gives it to unfolding: the pill's
 	 * chevron points right and the whole pill is the button, so a click anywhere on it opens the
 	 * card again. The dialog is still one click away once it is open.
+	 *
+	 * A card already on its way out is let go rather than reversed. Its pointer events are off while
+	 * it leaves (see the wrapper), but it is still the button it was, so a keyboard activation could
+	 * reach this — and it must not open the dialog of a card that is disappearing.
 	 */
 	const handleCardClick = () => {
-		if (collapsed) toggleCollapsed()
+		if (foldingOut) return
+		if (collapsed) unfoldCard()
 		else setOpen(true)
 	}
 
@@ -504,17 +601,20 @@ function NewUserBenefitsCard() {
 	 * The open card and the folded pill are two different boxes rather than one box with a
 	 * modifier: open is a 310px grid of four rows, folded an auto-width pill. Neither `width: auto`
 	 * nor a `display` swap interpolates, so the two are separate class sets — the CSS in
-	 * `entry-transition.css` carries the motion the size change cannot.
+	 * `entry-transition.css` carries the motion the size change cannot. Folding is the half of that
+	 * pair with a beat behind it: this box plays its exit animation first, and the swap waits for it
+	 * out (`foldingOut`).
 	 *
 	 * The fold control is a sibling of the card rather than a child of it: the card is itself a
 	 * button, and a button inside a button is invalid. The wrapper below is what pins the pair to
 	 * the corner — absolutely positioned and shrink-to-fit, it is exactly as wide as whichever box
-	 * is rendered, so the control can hang off that box's own top-right corner.
+	 * is rendered, so the control can hang off that box's own top-right corner. It is also what the
+	 * exit animation is applied to, so the card and the control leave together.
 	 */
 	return (
 		<>
 			{/*
-			 * The wrapper carries two things the card itself cannot:
+			 * The wrapper carries three things the card itself cannot:
 			 *
 			 * - The lift. The design's control lives inside the card, so the card's own
 			 *   `translateY(-2px)` carries it along for free; here the control has to be a sibling (a
@@ -526,6 +626,10 @@ function NewUserBenefitsCard() {
 			 *   first visit, or the step overlays of any task entered from here. Both paint over the
 			 *   whole window, and a card left underneath is one a screen reader keeps reading while a
 			 *   pointer cannot reach it. Closing either returns the card.
+			 * - The fold, while it is leaving. The exit animation rides here so that the fold control
+			 *   goes with the card, and so does `pointer-events-none` — a card on its way out has
+			 *   nothing left to be clicked for, and the control that asked for the fold is about to
+			 *   unmount under the user's pointer.
 			 *
 			 * The gate is a display swap rather than a conditional render on purpose: `hidden` keeps
 			 * the card mounted, and the two boxes below carry the fold and the unfold animation. A
@@ -533,8 +637,16 @@ function NewUserBenefitsCard() {
 			 */}
 			<div
 				className={cn(
-					"absolute right-4 top-20 z-30 hidden transition-transform duration-200 hover:-translate-y-0.5",
+					"absolute right-4 top-20 z-30 hidden hover:-translate-y-0.5",
+					/*
+					 * Dropped for the fraction of a second the card is leaving, on purpose: the exit
+					 * animation is what moves this box then, and a transform transition left on would
+					 * start up off the animation's last keyframe the moment the animation is taken
+					 * away — the pill would then grow under two transforms at once.
+					 */
+					!foldingOut && "transition-transform duration-200",
 					!open && !runActive && "md:block",
+					foldingOut && "nb-entry-leaving pointer-events-none",
 				)}
 			>
 				<button
@@ -705,17 +817,34 @@ function NewUserBenefitsCard() {
 							 * (`.feature-entry-nodes::before{height:2px}`). At 4px it read as a bar as heavy as
 							 * the 12px nodes it links, so the nodes stopped standing out against it.
 							 *
-							 * Each node is painted off its own row rather than off a count: the tasks are
-							 * completed in whatever order the user takes them, so "the first N are done" is
-							 * only true by accident.
+							 * A node is lit off the *count* of finished tasks, filling from the left, and
+							 * deliberately not off the row sitting at its own index. Painting each node from
+							 * its row told the truth about which task was done, and that is what read as
+							 * broken: taking the second task first left the track with its second node lit and
+							 * its first dark, which looks like a skipped step rather than progress. The track
+							 * is a gauge here, not a checklist — the rows below it are the checklist, and they
+							 * already say which task is which.
+							 *
+							 * Both halves of the line are pseudo-elements of this one box, so the lit run
+							 * (`::after`) shares the grey run's geometry exactly — same insets, same height,
+							 * same centring — and no width class has to restate what the nodes already imply.
+							 * `--nb-entry-track-lit` is the lit run's width, handed over inline because it is
+							 * the only part of the drawing that depends on the account's progress.
 							 */}
-							<div className="relative col-start-1 row-start-3 flex w-[92%] items-center justify-between gap-1 before:absolute before:left-1.5 before:right-1.5 before:top-1/2 before:h-0.5 before:-translate-y-1/2 before:rounded-full before:bg-[#55575c]">
-								{rows.map((row) => (
+							<div
+								className="relative col-start-1 row-start-3 flex w-[92%] items-center justify-between gap-1 before:absolute before:left-1.5 before:right-1.5 before:top-1/2 before:h-0.5 before:-translate-y-1/2 before:rounded-full before:bg-[#55575c] after:absolute after:left-1.5 after:top-1/2 after:h-0.5 after:w-[var(--nb-entry-track-lit)] after:-translate-y-1/2 after:rounded-full after:bg-[#e7a91a]"
+								style={
+									{
+										"--nb-entry-track-lit": `${litTrackRatio * 100}%`,
+									} as CSSProperties
+								}
+							>
+								{rows.map((row, index) => (
 									<span
 										aria-hidden="true"
 										className={cn(
 											"relative z-10 size-3 rounded-full border-2 border-[#111215] bg-[#777a80]",
-											row.completed && "bg-[#e7a91a]",
+											index < completedCount && "bg-[#e7a91a]",
 										)}
 										key={row.id}
 									/>
@@ -760,7 +889,7 @@ function NewUserBenefitsCard() {
 						aria-expanded="true"
 						aria-label={t("newUserBenefits.entry.collapse")}
 						className="absolute right-[15px] top-[15px] grid size-[22px] place-items-center rounded-full bg-white/[0.08] text-[#c9cdd6] transition-colors hover:bg-white/[0.18] hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#ffb523]/70"
-						onClick={toggleCollapsed}
+						onClick={foldCard}
 						title={t("newUserBenefits.entry.collapse")}
 						type="button"
 					>
@@ -904,12 +1033,24 @@ function NewUserBenefitsCard() {
 }
 
 /**
- * The benefits card's entry point. The whole new-user onboarding is a SaaS personal-plan feature,
- * so on a private deployment or in a team organization this returns `null` without mounting the card
- * above — nothing is rendered, no reward list is asked for, and the card's own chunk is never pulled.
+ * The benefits card's entry point, and the one place both of the card's reasons to be off the screen
+ * are read.
+ *
+ * The whole new-user onboarding is a SaaS personal-plan feature, so on a private deployment or in a
+ * team organization this returns `null` without mounting the card above — nothing is rendered, no
+ * reward list is asked for, and the card's own chunk is never pulled.
+ *
+ * The card also waits behind the dialogs that come before it: the profile one a brand-new account is
+ * asked to fill in, and the daily reward one. They own the screen first, and a card underneath them
+ * is one nobody can reach — as is its dialog, whose overlay would land on top of theirs. Both
+ * answers are read before either return, so nothing here exists while either says no, and releasing
+ * a hold brings the card back on the same mount rather than needing a reload.
  */
 export default function NewUserBenefits() {
-	if (!useCanHostHomeOnboarding()) return null
+	const canHostFeature = useCanHostHomeOnboarding()
+	const preludeHeld = useHomeOnboardingPreludeHeld()
+
+	if (!canHostFeature || preludeHeld) return null
 
 	return <NewUserBenefitsCard />
 }

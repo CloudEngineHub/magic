@@ -15,7 +15,20 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
  * is finished by a backend system event and answers `9303` to any client that asks, so a run of it
  * reports nothing and re-reads the list instead.
  */
-const { translate } = vi.hoisted(() => ({ translate: (key: string) => key }))
+const { translate, translated } = vi.hoisted(() => {
+	/**
+	 * Every `t()` call, so the numbers handed to a sentence stay assertable: the mock hands back the
+	 * key, which is what keeps these checks about the contract rather than about the wording.
+	 */
+	const translated: Array<{ key: string; values?: Record<string, unknown> }> = []
+	return {
+		translated,
+		translate: (key: string, values?: Record<string, unknown>) => {
+			translated.push({ key, values })
+			return key
+		},
+	}
+})
 
 vi.mock("react-i18next", () => ({
 	useTranslation: () => ({
@@ -31,7 +44,7 @@ vi.mock("@/stores/layout", () => ({
 }))
 
 const { toasts, completeOnboardingTask, getOnboardingTasks } = vi.hoisted(() => ({
-	toasts: [] as string[],
+	toasts: [] as Array<{ type: "error" | "success"; content: string }>,
 	completeOnboardingTask: vi.fn(),
 	getOnboardingTasks: vi.fn(),
 }))
@@ -48,7 +61,10 @@ vi.mock("@/apis/modules/onboarding", async (importOriginal) => {
 vi.mock("@/components/base/MagicToaster/utils", () => ({
 	default: {
 		error: (options: { content: string }) => {
-			toasts.push(options.content)
+			toasts.push({ type: "error", content: options.content })
+		},
+		success: (options: { content: string }) => {
+			toasts.push({ type: "success", content: options.content })
 		},
 		info: vi.fn(),
 	},
@@ -93,9 +109,15 @@ function primaryAction() {
 	return buttons[buttons.length - 1]
 }
 
+/** The content of every notice of one kind, oldest first. */
+function notices(type: "error" | "success") {
+	return toasts.filter((toast) => toast.type === type).map((toast) => toast.content)
+}
+
 beforeEach(() => {
 	vi.useFakeTimers()
 	toasts.length = 0
+	translated.length = 0
 	completeOnboardingTask.mockReset()
 	getOnboardingTasks.mockReset()
 	getOnboardingTasks.mockResolvedValue({ tasks: [] })
@@ -207,7 +229,17 @@ describe("home onboarding: what a run through to its last step reports", () => {
 
 		expect(completeOnboardingTask).toHaveBeenCalledWith("super_magic_intro")
 		expect(onboarding.isHomeOnboardingCompleted(MAGIC_ID, WORKBENCH)).toBe(true)
-		expect(toasts).toEqual([])
+
+		/*
+		 * The run's overlay is the last thing on screen and it closes as the call goes out, so the
+		 * grant has to say so itself — a paid task and a failed one used to look identical from
+		 * here. The number is the backend's `points`, not the task's advertised price.
+		 */
+		expect(notices("success")).toEqual(["homeOnboarding.claim.granted"])
+		expect(
+			translated.find((call) => call.key === "homeOnboarding.claim.granted")?.values,
+		).toEqual({ points: 50 })
+		expect(notices("error")).toEqual([])
 	})
 
 	it("leaves the task unfinished when the claim fails, so the card still offers it", async () => {
@@ -234,6 +266,8 @@ describe("home onboarding: what a run through to its last step reports", () => {
 		// The run is over either way — the walk really did finish — but the account's state is not
 		// this client's to write, so the row stays open and the error is spelled out.
 		expect(onboarding.isHomeOnboardingCompleted(MAGIC_ID, WORKBENCH)).toBe(false)
-		expect(toasts).toEqual(["homeOnboarding.claim.retry"])
+		expect(notices("error")).toEqual(["homeOnboarding.claim.retry"])
+		// And nothing is announced as granted: the points did not land.
+		expect(notices("success")).toEqual([])
 	})
 })

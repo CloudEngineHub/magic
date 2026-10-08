@@ -56,6 +56,12 @@ async function loadTour() {
 describe("home onboarding: the screen a run claims", () => {
 	beforeEach(() => {
 		vi.useFakeTimers()
+		/*
+		 * The introduction is the one piece of state that outlives a page load, so it is storage
+		 * rather than module memory — and jsdom keeps storage for the whole file. Clearing it is
+		 * what makes each case here start from an account that has not been shown the dialog.
+		 */
+		window.localStorage.clear()
 	})
 
 	afterEach(() => {
@@ -76,6 +82,13 @@ describe("home onboarding: the screen a run claims", () => {
 		expect(screen.getByText(WELCOME_TITLE)).toBeInTheDocument()
 		expect(onboarding.isHomeOnboardingRunActive()).toBe(true)
 
+		/*
+		 * Being on screen is what spends it, before anything is clicked. A user who reloads with the
+		 * dialog still up, or who walks off to another route and comes back, has been shown it just
+		 * the same, and neither may be met with it again.
+		 */
+		expect(onboarding.isHomeOnboardingIntroSpent(MAGIC_ID)).toBe(true)
+
 		await act(async () => {
 			fireEvent.click(screen.getByLabelText(WELCOME_CLOSE))
 		})
@@ -89,7 +102,7 @@ describe("home onboarding: the screen a run claims", () => {
 
 		// Asking for a run is not the same as one being up: the tour is what paints, and it is what
 		// speaks for it.
-		onboarding.startHomeOnboarding("workbench")
+		onboarding.startHomeOnboarding("workbench", MAGIC_ID)
 		expect(onboarding.isHomeOnboardingRunActive()).toBe(false)
 
 		const { unmount } = render(<tour.default page="home" userMagicId={MAGIC_ID} />)
@@ -107,10 +120,11 @@ describe("home onboarding: the screen a run claims", () => {
 	it("claims nothing on a mount that asked for nothing and has nothing to show", async () => {
 		const { onboarding, tour } = await loadTour()
 
-		// The introduction has been answered: from here the tasks are entered from the card, and a
-		// later remount — a route change back to the home page — must neither start one nor claim
-		// the screen for it. A claim left standing here would keep the card hidden for good.
-		onboarding.spendHomeOnboardingIntro()
+		// The introduction has already been shown to this account: from here the tasks are entered
+		// from the card, and a later remount — a route change back to the home page — must neither
+		// start one nor claim the screen for it. A claim left standing here would keep the card
+		// hidden for good.
+		onboarding.spendHomeOnboardingIntro(MAGIC_ID)
 		render(<tour.default page="home" userMagicId={MAGIC_ID} />)
 
 		expect(screen.queryByText(WELCOME_TITLE)).toBeNull()
