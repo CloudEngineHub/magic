@@ -8,6 +8,7 @@ export interface MenuOption {
 	id: string
 	label: string | ReactNode
 	description?: string
+	help?: string
 	variant?: "default" | "destructive"
 	icon: ComponentType<LucideProps> | ReactElement
 	shortcut?:

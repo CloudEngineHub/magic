@@ -437,10 +437,13 @@ export function getMenuItems({
 		{
 			id: "delete",
 			label: translate("menu.removeFromCanvas", "从画布移除"),
-			description:
+			help:
 				selectedElements.length > 0 &&
 				selectedElements.every((element) => element.type === ElementTypeEnum.Image)
-					? translate("menu.removeImageDescription", "只移除画布元素，项目文件仍保留")
+					? translate(
+							"menu.removeImageDescription",
+							"仅移除画布中的元素，项目里的图片文件仍会保留。",
+						)
 					: translate("menu.removeElementDescription", "只移除画布元素"),
 			variant: "destructive",
 			icon: Trash2,
@@ -454,9 +457,9 @@ export function getMenuItems({
 		{
 			id: "delete-image-file",
 			label: translate("menu.deleteImageFile", "移除并删除文件…"),
-			description: translate(
+			help: translate(
 				"menu.deleteImageFileDescription",
-				"从画布移除，同时删除项目中的图片文件",
+				"移除画布中的图片，并删除对应项目文件。删除的文件可从全局「回收站」恢复，但不会自动恢复画布中的元素和位置。多版本图片可在确认弹框中选择删除范围。",
 			),
 			variant: "destructive",
 			icon: Trash2,

@@ -380,7 +380,7 @@
 		"deleteImageFileChanged": "图片版本已发生变化，请刷新后重试",
 		"deleteImageFileConfirm": "移除并删除文件",
 		"deleteImageFileContent": "这张图片会从画布移除，对应图片文件也会从项目中删除。",
-		"deleteImageFileDescription": "从画布移除，同时删除项目中的图片文件",
+		"deleteImageFileDescription": "移除画布中的图片，并删除对应项目文件。删除的文件可从全局「回收站」恢复，但不会自动恢复画布中的元素和位置。多版本图片可在确认弹框中选择删除范围。",
 		"deleteImageFileFailed": "图片文件移入回收站失败，请重试",
 		"deleteImageFileIncomplete": "部分图片已移入回收站，请刷新文件列表后重试",
 		"deleteImageFileSuccess": "已移除画布内容并删除图片文件，可在「回收站」中恢复文件。",
@@ -415,7 +415,7 @@
 		"removeElementDescription": "只移除画布元素",
 		"removeFrame": "取消画框",
 		"removeFromCanvas": "从画布移除",
-		"removeImageDescription": "只移除画布元素，项目文件仍保留",
+		"removeImageDescription": "仅移除画布中的元素，项目里的图片文件仍会保留。",
 		"rename": "重命名",
 		"show": "显示",
 		"unlock": "解锁"

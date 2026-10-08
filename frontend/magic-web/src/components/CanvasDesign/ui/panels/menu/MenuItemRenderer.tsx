@@ -1,5 +1,4 @@
 import {
-	ContextMenuItem,
 	ContextMenuSeparator,
 	ContextMenuSub,
 	ContextMenuSubTrigger,
@@ -9,6 +8,7 @@ import { formatShortcut } from "../../../runtime/shared/lib/index"
 import { cn } from "../../../runtime/shared/lib/utils"
 import type { MenuItem, MenuOption } from "./types"
 import styles from "./index.module.css"
+import { MenuActionItem } from "./MenuActionItem"
 // import { isValidElement } from "react"
 
 interface MenuItemRendererProps {
@@ -102,54 +102,12 @@ export function MenuItemRenderer({
 
 				// 普通菜单项
 				return (
-					<ContextMenuItem
+					<MenuActionItem
 						key={option.id}
-						disabled={isDisabled}
-						onClick={(e) => {
-							if (!isClickEnabled) {
-								e.preventDefault()
-								e.stopPropagation()
-								return
-							}
-							option.onClick?.()
-						}}
-						className={cn(
-							option.variant === "destructive" ? styles.menuItemDelete : undefined,
-							styles.menuItem,
-						)}
-					>
-						{/* <div className={styles.menuItemIcon}>{renderIcon()}</div> */}
-						{option.description ? (
-							<div className={styles.menuItemText}>
-								<div className={styles.menuItemLabel}>{option.label}</div>
-								<div className={styles.menuItemDescription}>
-									{option.description}
-								</div>
-							</div>
-						) : (
-							<div className={styles.menuItemLabel}>{option.label}</div>
-						)}
-						{option.rightContentRender ? (
-							<div className={styles.menuItemRightContent}>
-								{option.rightContentRender()}
-							</div>
-						) : (
-							<div className={styles.menuItemShortcut}>
-								{option.shortcut?.modifiers?.map((item) => {
-									return (
-										<div key={item} className={styles.menuItemShortcutItem}>
-											{formatShortcut(item)}
-										</div>
-									)
-								})}
-								{option.shortcut?.key && (
-									<div className={styles.menuItemShortcutItem}>
-										{option.shortcut.key.toUpperCase()}
-									</div>
-								)}
-							</div>
-						)}
-					</ContextMenuItem>
+						option={option}
+						isDisabled={isDisabled}
+						isClickEnabled={isClickEnabled}
+					/>
 				)
 			})}
 		</>

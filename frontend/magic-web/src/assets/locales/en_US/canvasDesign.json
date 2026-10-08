@@ -380,7 +380,7 @@
 		"deleteImageFileChanged": "The image versions changed. Refresh and try again.",
 		"deleteImageFileConfirm": "Remove and delete file",
 		"deleteImageFileContent": "This image will be removed from the canvas, and its image file will be deleted from the project.",
-		"deleteImageFileDescription": "Remove from the canvas and delete the image file from the project",
+		"deleteImageFileDescription": "Remove the image from the canvas and delete its project file. Deleted files can be restored from the global Recycle Bin, but restoring a file does not restore canvas elements or their positions. For images with multiple versions, choose which versions to delete in the confirmation dialog.",
 		"deleteImageFileFailed": "Failed to move the image file to the recycle bin. Please try again.",
 		"deleteImageFileIncomplete": "Some images were moved to the recycle bin. Refresh the file list and try again.",
 		"deleteImageFileSuccess": "Canvas content removed and image files deleted. You can restore the files from the Recycle Bin.",
@@ -415,7 +415,7 @@
 		"removeElementDescription": "Remove canvas elements only",
 		"removeFrame": "Remove Frame",
 		"removeFromCanvas": "Remove from canvas",
-		"removeImageDescription": "Remove canvas elements only; keep project files",
+		"removeImageDescription": "Only remove elements from the canvas. Image files remain in the project.",
 		"rename": "Rename",
 		"show": "Show",
 		"unlock": "Unlock"
