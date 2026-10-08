@@ -4,6 +4,8 @@ export function canReplaySlideInPlace(content: string): boolean {
 	// Event handlers and embedded documents can own state that animation APIs cannot reset.
 	if (doc.querySelector("iframe, object, embed, form, input, textarea, select, details"))
 		return false
+	// External styles cannot be inspected here, and may override the universal reset rule.
+	if (doc.querySelector('link[rel~="stylesheet" i]')) return false
 	// Important authored animation rules can override the temporary reset stylesheet. They
 	// retain document replay rather than silently failing to replay a completed entrance.
 	for (const element of doc.querySelectorAll("style, [style]")) {
@@ -11,10 +13,18 @@ export function canReplaySlideInPlace(content: string): boolean {
 			element.tagName === "STYLE"
 				? (element.textContent ?? "")
 				: (element.getAttribute("style") ?? "")
-		if (/animation(?:-[a-z-]+)?\s*:[^;{}]*!important/i.test(css)) return false
+		const declarations = css.replace(/\/\*[\s\S]*?\*\//g, "")
+		if (
+			/@import\b/i.test(declarations) ||
+			/animation(?:-[a-z-]+)?\s*:[^;{}]*!\s*important/i.test(declarations)
+		)
+			return false
 	}
 	for (const element of doc.querySelectorAll("*")) {
 		if (element.getAttributeNames().some((name) => /^on/i.test(name))) return false
+		// Tailwind can inject important animation rules after this source classification.
+		if (Array.from(element.classList).some((name) => /(?:^|:)!animate-/.test(name)))
+			return false
 	}
 	return Array.from(doc.querySelectorAll("script")).every((script) => {
 		// Some loaders supply only processed HTML. This specific host polyfill is stateless;

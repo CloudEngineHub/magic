@@ -26,6 +26,10 @@ describe("slide replay policy", () => {
 		'<script src="https://example.test/slide-bridge.js"></script>',
 		'<input type="checkbox" checked>',
 		"<style>.card {animation: enter 1s !important}</style>",
+		"<style>.card {animation/**/: enter 1s ! important}</style>",
+		'<link rel="STYLESHEET" href="./animations.css">',
+		"<style>@import/**/ './animations.css';</style>",
+		'<div class="hover:!animate-bounce"></div>',
 		'<div style="animation-name: enter !important"></div>',
 		'<script data-injected="true">requestAnimationFrame(animate)</script>',
 	])("keeps full document replay for custom runtime: %s", (content) => {
