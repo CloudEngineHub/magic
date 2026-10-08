@@ -89,15 +89,6 @@ class ModelCallAuditStatisticsRequestDTO extends AbstractDTO
     private function parseRange(string $startDate, string $endDate): array
     {
         $timezone = $this->displayTimezone();
-        $isHourStart = preg_match('/^\d{4}-\d{2}-\d{2} \d{2}:00:00$/', $startDate) === 1;
-        $isHourEnd = preg_match('/^\d{4}-\d{2}-\d{2} \d{2}:59:59$/', $endDate) === 1;
-        if (! $isHourStart || ! $isHourEnd) {
-            ExceptionBuilder::throw(
-                GenericErrorCode::ParameterValidationFailed,
-                'start_date must be Y-m-d H:00:00 and end_date must be Y-m-d H:59:59'
-            );
-        }
-
         $start = DateTimeImmutable::createFromFormat('!Y-m-d H:i:s', $startDate, $timezone);
         $startErrors = DateTimeImmutable::getLastErrors();
         $end = DateTimeImmutable::createFromFormat('!Y-m-d H:i:s', $endDate, $timezone);
@@ -112,6 +103,8 @@ class ModelCallAuditStatisticsRequestDTO extends AbstractDTO
             ExceptionBuilder::throw(GenericErrorCode::ParameterValidationFailed, 'invalid statistics time range');
         }
 
+        // 兼容旧后台传入分秒：校验原始范围后，扩展到完整小时供归档统计使用。
+        $start = $start->setTime((int) $start->format('H'), 0, 0);
         $exclusiveEnd = $end->setTime((int) $end->format('H'), 0, 0)->modify('+1 hour');
         $tomorrowStart = new DateTimeImmutable('tomorrow', $timezone);
         if ($exclusiveEnd > $tomorrowStart) {
