@@ -681,6 +681,7 @@
 			"parseFileFailed": "解析 magic.project.js 文件失败",
 			"projectIdNotExists": "项目 ID 不存在，无法上传图片",
 			"projectIdNotExistsForGenerate": "项目 ID 不存在，无法生成图片",
+			"projectUnavailable": "当前项目不可用，请刷新后重试",
 			"refreshFailed": "刷新失败，请稍后重试",
 			"removeBackgroundImagesDirUnresolved": "无法解析设计项目的 images 目录，请确认设计文件已在话题附件中打开",
 			"removeBackgroundParamsIncomplete": "去背景失败：请提供图片任务 ID 与源文件路径",

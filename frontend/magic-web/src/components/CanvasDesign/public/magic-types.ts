@@ -1450,6 +1450,8 @@ export interface CanvasDesignConfirmModalOptions {
 	cancelText?: string
 	okButtonProps?: Record<string, unknown>
 	cancelButtonProps?: Record<string, unknown>
+	variant?: "default" | "destructive"
+	showIcon?: boolean
 	onOk?: () => void | Promise<void>
 	onCancel?: () => void
 }
@@ -1473,6 +1475,13 @@ export interface CanvasImageRenameMethods {
 	resolveImageRenameFile: (path: string) => CanvasImageRenameFile | undefined
 	validateImageFileRenames: (changes: readonly CanvasImageFileRename[]) => Record<string, string>
 	renameImageFile: (change: CanvasImageFileRename) => Promise<CanvasImageRenameFile>
+}
+
+export interface CanvasDesignConfirmModalHandle {
+	/** 范围切换只更新确认按钮，不重建弹窗或触发删除。 */
+	update: (
+		options: Pick<CanvasDesignConfirmModalOptions, "content" | "okText" | "okButtonProps">,
+	) => void
 }
 
 /**
@@ -1604,6 +1613,10 @@ export interface CanvasDesignMethods {
 		fileName?: string
 		locateInTree?: boolean
 	}) => Promise<void> | void
+	/** 将项目文件移入回收站，并返回服务端确认已处理的文件 ID。 */
+	deleteProjectFiles?: (params: {
+		fileIds: readonly string[]
+	}) => Promise<{ deletedFileIds: string[] }>
 	/**
 	 * 上传文件
 	 * @param uploadFiles 待上传文件数组
@@ -1721,7 +1734,7 @@ export interface CanvasDesignMethods {
 	 * 确认弹窗（可选）
 	 * 注入后 CanvasDesign 可复用宿主弹窗样式；未注入时由内部组件自行降级实现
 	 */
-	confirmModal?: (options: CanvasDesignConfirmModalOptions) => void
+	confirmModal?: (options: CanvasDesignConfirmModalOptions) => CanvasDesignConfirmModalHandle
 	/**
 	 * 剪贴板读写方法（可选）
 	 * 注入后 CanvasDesign 使用注入实现，否则降级到 navigator.clipboard

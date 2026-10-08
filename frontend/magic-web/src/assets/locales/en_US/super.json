@@ -680,6 +680,7 @@
 			"parseFileFailed": "Failed to parse magic.project.js file",
 			"projectIdNotExists": "Project ID does not exist, cannot upload image",
 			"projectIdNotExistsForGenerate": "Project ID does not exist, cannot generate image",
+			"projectUnavailable": "The current project is unavailable. Refresh and try again.",
 			"refreshFailed": "Refresh failed, please try again later",
 			"removeBackgroundImagesDirUnresolved": "Cannot resolve the design project's images folder. Make sure the design file is open in the topic attachments.",
 			"removeBackgroundParamsIncomplete": "Remove background failed: image task ID and source file path are required.",

@@ -302,18 +302,40 @@ export function useDesignMethods(options: UseDesignMethodsOptions): CanvasDesign
 		[resolveResourceReference],
 	)
 
+	const deleteProjectFiles: NonNullable<CanvasDesignMethods["deleteProjectFiles"]> = useCallback(
+		async ({ fileIds }) => {
+			if (!projectId) {
+				throw new Error(
+					t("design.errors.projectUnavailable", "当前项目不可用，请刷新后重试"),
+				)
+			}
+			const result = await SuperMagicApi.deleteFiles({
+				file_ids: [...fileIds],
+				project_id: projectId,
+			})
+			updateAttachments()
+			return { deletedFileIds: result.file_ids.map(String) }
+		},
+		[projectId, t, updateAttachments],
+	)
+
 	const confirmModal: NonNullable<CanvasDesignMethods["confirmModal"]> = useCallback(
 		(options) => {
-			MagicModal.confirm({
+			const modal = MagicModal.confirm({
 				title: options.title,
 				content: options.content as ModalFuncProps["content"],
 				okText: options.okText,
 				cancelText: options.cancelText,
 				okButtonProps: options.okButtonProps as ModalFuncProps["okButtonProps"],
 				cancelButtonProps: options.cancelButtonProps as ModalFuncProps["cancelButtonProps"],
+				variant: options.variant,
+				showIcon: options.showIcon,
 				onOk: options.onOk,
 				onCancel: options.onCancel,
 			})
+			return {
+				update: (update) => modal.update(update as ModalFuncProps),
+			}
 		},
 		[],
 	)
@@ -683,6 +705,7 @@ export function useDesignMethods(options: UseDesignMethodsOptions): CanvasDesign
 			getImageGenerationResults,
 			getVideoGenerationResult,
 			locateProjectFile,
+			deleteProjectFiles,
 			uploadFiles,
 			getFileInfo,
 			getFileResourceMeta,
@@ -738,6 +761,7 @@ export function useDesignMethods(options: UseDesignMethodsOptions): CanvasDesign
 		getImageGenerationResults,
 		getVideoGenerationResult,
 		locateProjectFile,
+		deleteProjectFiles,
 		uploadFiles,
 		getFileInfo,
 		getFileResourceMeta,
