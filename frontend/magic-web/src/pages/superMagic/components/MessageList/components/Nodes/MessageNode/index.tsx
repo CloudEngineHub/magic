@@ -93,6 +93,7 @@ const MessageNode = observer(function MessageNode(props: NodeProps) {
 				)}
 			{props.contentMode !== "process" && (
 				<AttachmentSection
+					className="message-attachments"
 					node={node}
 					fallbackNode={props.node}
 					prevSuperMessageId={props.prevNode?.super_message_id}
