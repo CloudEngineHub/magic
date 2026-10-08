@@ -93,7 +93,7 @@ type MessageSendService = ReturnType<typeof createMessageSendService>
 type MessageSendServiceDeps = Parameters<MessageSendService["configure"]>[0]
 
 describe("MessageSendService / SuperMagic 单候选请求", () => {
-	it("adds the text Mention backend label while preserving structured content", async () => {
+	it("sends custom Mention text while preserving its rich-text metadata", async () => {
 		const chat = vi.fn().mockResolvedValue({})
 		const addUserMessage = vi.fn()
 		const service = createMessageSendService({
@@ -134,9 +134,12 @@ describe("MessageSendService / SuperMagic 单候选请求", () => {
 								mentionSuggestionChar: "@",
 								type: "text",
 								data: {
-									id: "mock-text-001",
-									label: "模拟图表",
-									text: "图表id: mock-chart-001;时间范围：模拟区间",
+									groupId: "mock-business-charts",
+									id: "mock-chart-a",
+									label: "Chart A",
+									text: "Business chart Chart A; period: sample quarter; metric: mock revenue; trend: up 12% quarter over quarter.",
+									type: "chart",
+									source: "fixture",
 								},
 							},
 						},
@@ -166,7 +169,7 @@ describe("MessageSendService / SuperMagic 单候选请求", () => {
 							...structuredContent.content[0].content[1],
 							attrs: {
 								...structuredContent.content[0].content[1].attrs,
-								label: "图表id: mock-chart-001;时间范围：模拟区间",
+								label: "Business chart Chart A; period: sample quarter; metric: mock revenue; trend: up 12% quarter over quarter.",
 							},
 						},
 					],
@@ -175,6 +178,14 @@ describe("MessageSendService / SuperMagic 单候选请求", () => {
 		}
 		expect(JSON.parse(displayed)).toEqual(expectedContent)
 		expect(JSON.parse(transported)).toEqual(expectedContent)
+		expect(JSON.parse(transported).content[0].content[1].attrs.data).toEqual({
+			groupId: "mock-business-charts",
+			id: "mock-chart-a",
+			label: "Chart A",
+			text: "Business chart Chart A; period: sample quarter; metric: mock revenue; trend: up 12% quarter over quarter.",
+			type: "chart",
+			source: "fixture",
+		})
 		expect(structuredContent.content[0].content[1].attrs.label).toBeNull()
 	})
 

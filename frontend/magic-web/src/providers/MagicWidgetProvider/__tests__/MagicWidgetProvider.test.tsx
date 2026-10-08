@@ -261,6 +261,123 @@ describe("MagicWidgetProvider", () => {
 		)
 	})
 
+	it("rejects an invalid custom group snapshot without replacing the previous one", () => {
+		Object.defineProperty(window, "parent", {
+			configurable: true,
+			value: parentWindow,
+		})
+		renderProvider(
+			createWidgetSearch({
+				layout: "desktop",
+				panel: {
+					customGroups: [
+						{
+							id: "provider-valid-group",
+							label: "Provider valid group",
+							items: [{ id: "provider-valid", type: "card", text: "Provider valid" }],
+						},
+					],
+				},
+			}),
+		)
+
+		act(() => {
+			window.dispatchEvent(
+				new MessageEvent("message", {
+					origin: HOST_ORIGIN,
+					source: parentWindow,
+					data: {
+						protocol: "magic-widget",
+						version: 1,
+						instanceId: INSTANCE_ID,
+						requestId: "request-provider-invalid-dynamic",
+						type: "config",
+						config: {
+							layout: "desktop",
+							panel: {
+								customGroups: [
+									{
+										id: "duplicate-group",
+										label: "Duplicate group",
+										items: [
+											{ id: "duplicate", type: "card", text: "one" },
+											{ id: "duplicate", type: "card", text: "two" },
+										],
+									},
+								],
+							},
+						},
+					},
+				}),
+			)
+		})
+
+		expect(screen.getByTestId("widget-config")).toHaveTextContent("provider-valid")
+		expect(postMessage).toHaveBeenLastCalledWith(
+			expect.objectContaining({
+				requestId: "request-provider-invalid-dynamic",
+				ok: false,
+				error: expect.objectContaining({ code: "INVALID_CONFIG" }),
+			}),
+			HOST_ORIGIN,
+		)
+	})
+
+	it("filters custom group overflow and acknowledges the non-fatal warning", () => {
+		Object.defineProperty(window, "parent", {
+			configurable: true,
+			value: parentWindow,
+		})
+		renderProvider(createWidgetSearch({ layout: "desktop" }))
+
+		act(() => {
+			window.dispatchEvent(
+				new MessageEvent("message", {
+					origin: HOST_ORIGIN,
+					source: parentWindow,
+					data: {
+						protocol: "magic-widget",
+						version: 1,
+						instanceId: INSTANCE_ID,
+						requestId: "request-provider-filtered-config",
+						type: "config",
+						config: {
+							layout: "desktop",
+							panel: {
+								customGroups: Array.from({ length: 51 }, (_, index) => ({
+									id: `provider-fixture-group-${index}`,
+									label: `Provider fixture group ${index}`,
+									items: [],
+								})),
+							},
+						},
+					},
+				}),
+			)
+		})
+
+		expect(screen.getByTestId("widget-config")).toHaveTextContent("provider-fixture-group-49")
+		expect(screen.getByTestId("widget-config")).not.toHaveTextContent(
+			"provider-fixture-group-50",
+		)
+		expect(postMessage).toHaveBeenLastCalledWith(
+			expect.objectContaining({
+				requestId: "request-provider-filtered-config",
+				ok: true,
+				result: {
+					configWarning: expect.objectContaining({
+						code: "CUSTOM_MENTION_FILTERED",
+						details: expect.objectContaining({
+							droppedGroups: 1,
+							reasons: ["MAX_GROUPS"],
+						}),
+					}),
+				},
+			}),
+			HOST_ORIGIN,
+		)
+	})
+
 	it("applies a host config snapshot without rechecking field values", () => {
 		Object.defineProperty(window, "parent", {
 			configurable: true,

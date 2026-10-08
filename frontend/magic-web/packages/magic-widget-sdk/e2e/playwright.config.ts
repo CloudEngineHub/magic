@@ -24,7 +24,10 @@ export default defineConfig({
 	timeout: 90_000,
 	expect: { timeout: 5_000 },
 	fullyParallel: false,
-	retries: process.env.CI ? 2 : 0,
+	// Real iframe tests share one authenticated local dev service; serialize files to avoid SDK-load races.
+	workers: 1,
+	// Retry intermittent remote iframe failures consistently in local and CI runs.
+	retries: 2,
 	reporter: [
 		["list"],
 		[

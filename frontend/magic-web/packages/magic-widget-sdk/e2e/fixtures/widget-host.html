@@ -26,6 +26,9 @@
     <button data-testid="close-callback-success">Close callback success</button>
     <button data-testid="close-callback-failure">Close callback failure</button>
     <button data-testid="update-config">Update config</button>
+    <button data-testid="update-dynamic-content">Update dynamic content</button>
+    <button data-testid="update-overflow-custom-groups">Filter overflow custom groups</button>
+    <button data-testid="update-invalid-dynamic-content">Reject dynamic content</button>
     <button data-testid="set-input">Set input</button>
     <button data-testid="append-input">Append input</button>
     <button data-testid="set-structured-input">Set structured input</button>
@@ -70,6 +73,14 @@
         connectors: true,
         skills: true,
         canvasElements: true,
+        customGroups: [{
+          id: "fixture-business-charts",
+          label: "Business charts",
+          items: [
+            { id: "fixture-card", type: "chart", title: "Chart A", description: "Fixture description", text: "Business chart A; period: sample quarter; metric: mock revenue; trend: up 12%. Analyze the main changes.", icon: "file-folder", data: { source: "fixture" } },
+            { id: "fixture-unknown", type: "unknown", text: "Unknown business reference; context: fictional fallback item. Explain what additional information is needed.", data: { source: "fixture" } },
+          ],
+        }],
       },
       bottom: {
         internetSearch: { enabled: true, buttonVisible: true },
@@ -306,6 +317,41 @@
         .then(() => { status.textContent = "update-config:success" })
         .catch((error) => { status.textContent = `update-config:${error.code ?? "ERROR"}` })
     }
+    document.querySelector('[data-testid="update-dynamic-content"]').onclick = () => {
+      void window.MagicWidget.updateConfig({
+        panel: {
+          customGroups: [{ id: "fixture-business-charts", label: "Business charts", items: [{ id: "fixture-replacement", type: "chart", title: "Chart B", text: "Business chart B; period: sample month; metric: mock active users; trend: down 8%. Analyze likely causes.", data: { source: "fixture" } }] }],
+        },
+      })
+        .then(() => { status.textContent = "update-dynamic-content:success" })
+        .catch((error) => { status.textContent = `update-dynamic-content:${error.code ?? "ERROR"}` })
+    }
+    document.querySelector('[data-testid="update-overflow-custom-groups"]').onclick = () => {
+      void window.MagicWidget.updateConfig({
+        panel: {
+          customGroups: [{
+            id: "fixture-overflow-group",
+            label: "Overflow fixtures",
+            items: Array.from({ length: 1_001 }, (_, index) => ({
+              id: `fixture-overflow-${index}`,
+              type: "fixture",
+              text: `Overflow fixture ${index}`,
+            })),
+          }],
+        },
+      })
+        .then(() => { status.textContent = "update-overflow-custom-groups:success" })
+        .catch((error) => { status.textContent = `update-overflow-custom-groups:${error.code ?? "ERROR"}` })
+    }
+    document.querySelector('[data-testid="update-invalid-dynamic-content"]').onclick = () => {
+      void window.MagicWidget.updateConfig({
+        panel: {
+          customGroups: [{ id: "fixture-business-charts", label: "Business charts", items: [{ id: "duplicate", type: "card", text: "one" }, { id: "duplicate", type: "card", text: "two" }] }],
+        },
+      })
+        .then(() => { status.textContent = "update-invalid-dynamic-content:unexpected-success" })
+        .catch((error) => { status.textContent = `update-invalid-dynamic-content:${error.code ?? "ERROR"}` })
+    }
     document.querySelector('[data-testid="set-input"]').onclick = async () => {
       try { await window.MagicWidget.setInput("Mock input from host"); status.textContent = "set-input:success" }
       catch (error) { status.textContent = `set-input:${error.code ?? "ERROR"}` }
@@ -341,6 +387,11 @@
       script.src = `${appUrl.replace(/\/$/, "")}/sdk/magic-widget.js`
       script.onload = () => {
         window.MagicWidget.on("agent_ready", () => recordEvent("agent-ready"))
+        window.MagicWidget.on("config.warning", (warning) =>
+          recordEvent(
+            `config-warning:${warning.code}:${warning.details.droppedItems}:${warning.details.reasons.join(",")}`,
+          ),
+        )
         window.MagicWidget.on("preview_fullscreen", (isFullscreen) =>
           recordEvent(`preview-fullscreen:${isFullscreen}`),
         )

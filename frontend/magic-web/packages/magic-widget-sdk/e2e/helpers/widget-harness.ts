@@ -57,7 +57,8 @@ async function reloadWidgetFrameIfUpdateBoundaryVisible(page: Page): Promise<boo
 	if (!frame) return false
 	const boundaryVisible = await frame.getByText(UPDATE_BOUNDARY_TEXT).first().isVisible()
 	if (!boundaryVisible) return false
-	await frame.reload()
+	// Reload only the embedded document so host callbacks and fixture state remain intact.
+	await frame.goto(frame.url(), { waitUntil: "domcontentloaded" })
 	return true
 }
 

@@ -81,7 +81,7 @@ window.MagicWidget
 | `open`            | `() => void`                                                   | Opens the panel programmatically. The floating button is hidden while the panel is open.                          | Must be called after `mount`; otherwise an error is thrown.          |
 | `close`           | `() => void`                                                   | Closes the panel programmatically. The floating button is shown again after the close animation.                  | Safe to call when the panel is already closed.                       |
 | `destroy`         | `() => void`                                                   | Removes the widget DOM, event listeners, timers, and current configuration.                                       | Call `mount` again before using `open`.                              |
-| `on`              | `on(event, listener)`                                          | Subscribes to Agent readiness, preview state, message stream start, tool settlement, or task completion events.   | Each event has a distinct listener signature; see Event API below.   |
+| `on`              | `on(event, listener)`                                          | Subscribes to config warnings, Agent readiness, preview state, and runtime events.                                | Each event has a distinct listener signature; see Event API below.   |
 | `setInput`        | `(content: string \| InputContent) => Promise<void>`           | Replaces the Agent editor content and focuses it without sending.                                                 | Accepts non-empty text or validated text/Mention blocks.             |
 | `appendInput`     | `(content: string \| InputContent) => Promise<void>`           | Appends text or Mention blocks to the current editor value without sending.                                       | Preserves the supplied block order.                                  |
 | `clearInput`      | `() => Promise<void>`                                          | Clears the current editor without sending.                                                                        | Completion follows the iframe response.                              |
@@ -93,6 +93,32 @@ window.MagicWidget
 The object also exposes `window.MagicWidget.version` for diagnostics.
 
 ### Event API
+
+#### `config.warning`
+
+```ts
+on(event: "config.warning", listener: (warning: MagicWidget.ConfigWarning) => void): () => void
+```
+
+When `panel.customGroups` exceeds a count or UTF-8 JSON byte limit, the SDK filters overflow in configuration order, continues mounting or updating the Widget, and emits one aggregate warning. It also writes a `console.warn`; the host may use the event to show a toast, record a log, or report telemetry. Subscribe before `mount` to receive filtering diagnostics for initial configuration:
+
+```js
+const unsubscribeConfigWarning = window.MagicWidget.on("config.warning", (warning) => {
+	if (warning.code === "CUSTOM_MENTION_FILTERED") {
+		showHostWarning(warning.message, warning.details)
+	}
+})
+```
+
+`warning.details` includes removed group and item counts plus these reasons:
+
+- `MAX_GROUPS`: only the first 50 groups are considered.
+- `MAX_ITEMS_PER_GROUP`: only the first 1,000 candidates in each group are considered.
+- `MAX_TOTAL_ITEMS`: at most 5,000 items are retained across groups in configuration order.
+- `MAX_ITEM_BYTES`: an item whose UTF-8 JSON exceeds 32 KiB is removed.
+- `MAX_PAYLOAD_BYTES`: the complete snapshot is retained in configuration order up to 2 MiB; items or groups that no longer fit are removed.
+
+Count and byte overflow does not make `mount` throw or `updateConfig` reject, reload the iframe, or clear conversation state. Missing fields, duplicate IDs, built-in ID collisions, unknown fields, circular objects, and non-JSON-safe values remain structural errors: they still reject with `INVALID_CONFIG` without partially replacing the previous snapshot.
 
 #### `message.stream.started`
 
@@ -207,13 +233,7 @@ on(event: "agent_ready", listener: () => void): () => void
 ```ts
 namespace MagicWidget {
 	type HeaderActionName =
-		| "fullscreen"
-		| "pin"
-		| "newTopic"
-		| "history"
-		| "share"
-		| "more"
-		| "close"
+		"fullscreen" | "pin" | "newTopic" | "history" | "share" | "more" | "close"
 
 	interface HeaderActionContext {
 		action: HeaderActionName
@@ -228,7 +248,9 @@ namespace MagicWidget {
 		iframe?: IframeOptions
 		modal?: ModalOptions
 		target?: HTMLElement
-		headerActions?: Partial<Record<HeaderActionName, (context: HeaderActionContext) => void | Promise<void>>>
+		headerActions?: Partial<
+			Record<HeaderActionName, (context: HeaderActionContext) => void | Promise<void>>
+		>
 	}
 }
 ```
@@ -348,7 +370,7 @@ The host must give the container a non-zero width and height. Inline mode has no
 
 All input, send, conversation, and configuration methods return a Promise. They reject with an error containing `code` values such as `NOT_MOUNTED`, `INVALID_INPUT`, `INVALID_CONFIG`, `IFRAME_NOT_READY`, or `COMMAND_FAILED`. The SDK waits only for the iframe document to load during initial navigation or reload, not for `agent_ready`; command results follow the iframe response.
 
-The iframe uses a versioned `postMessage` protocol restricted to the SDK-derived Magic origin and the bound iframe window. Do not send secrets or unnecessary business data. Host-controlled `@` candidate lists and Agent-to-host action callbacks are not public in this phase.
+The iframe uses a versioned `postMessage` protocol restricted to the SDK-derived Magic origin and the bound iframe window. Do not send secrets or unnecessary business data. Dynamic content is available only to desktop inline Widget embeds; ordinary Magic Web pages and mobile layouts do not consume it.
 
 ### `config`
 
@@ -376,14 +398,37 @@ namespace MagicWidget {
 			visible?: boolean
 			title?: string
 			topicName?: { mode?: "current" | "hidden" | "static"; text?: string }
-			actions?: Partial<Record<"fullscreen" | "pin" | "newTopic" | "history" | "share" | "more" | "close", boolean>>
+			actions?: Partial<
+				Record<
+					"fullscreen" | "pin" | "newTopic" | "history" | "share" | "more" | "close",
+					boolean
+				>
+			>
 		}
 		panel?: {
-			projectFiles?: boolean; uploadFiles?: boolean
-			otherProjectFiles?: boolean; digitalEmployees?: boolean
-			microApps?: boolean; workflows?: boolean
-			connectors?: boolean; skills?: boolean
+			projectFiles?: boolean
+			uploadFiles?: boolean
+			otherProjectFiles?: boolean
+			digitalEmployees?: boolean
+			microApps?: boolean
+			workflows?: boolean
+			connectors?: boolean
+			skills?: boolean
 			canvasElements?: boolean
+			customGroups?: Array<{
+				id: string
+				label: string
+				icon?: string
+				items: Array<{
+					id: string
+					type: string
+					text: string
+					title?: string
+					description?: string
+					icon?: string
+					data?: Record<string, unknown>
+				}>
+			}>
 		}
 		bottom?: {
 			internetSearch?: { enabled?: boolean; buttonVisible?: boolean }
@@ -397,21 +442,22 @@ namespace MagicWidget {
 }
 ```
 
-| Field                        | Description                                                    | Boundary                                                                                                                                                                 |
-| ---------------------------- | -------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `layout`                     | Selects the desktop or mobile Crew conversation content.       | It does not replace the surrounding application shell. SDK embeds default to `mobile`; set `desktop` explicitly when needed.                                             |
-| `shell.appSidebar`           | Shows or hides the application sidebar.                        | Applied only to a valid SDK embed whose effective Crew layout is `desktop`; it does not affect mobile embedded layouts.                                                  |
-| `responsive.mobileDetection` | Selects viewport-only or device-and-viewport mobile semantics. | SDK embeds default to `viewport` for compatibility with existing mobile hosts. Set `device-and-viewport` when narrow desktop iframes should retain desktop interactions. |
-| `conversation.projectFiles`  | Shows or hides the desktop project-files panel.                | Applied only by the desktop Crew conversation layout.                                                                                                                    |
-| `conversation.topicHistory`  | Enables or disables the desktop topic-history entry and panel. | Applied only by the desktop Crew conversation layout.                                                                                                                    |
-| `conversation.autoHire`      | Automatically attempts to hire an unusable Crew member.        | Enabled by default only for valid SDK embeds; ordinary Magic Web Crew pages never auto-hire.                                                                             |
-| `conversation.previewMode`   | Selects `split`, `fullscreen`, or `switchable` presentation.   | Desktop SDK embeds default to `switchable`; ordinary Magic Web pages keep their existing split layout.                                                                   |
-| `header.visible`             | Shows or hides the inline standard header.                     | Applies to desktop inline only; the host may draw its own header when hidden.                                                                                           |
-| `header.title` / `topicName` | Configures the first-line title and second-line topic text.    | `topicName.mode` supports `current`, `hidden`, and `static`; current topic name is the default.                                                                        |
-| `header.actions`             | Controls visibility of each standard header action.             | Omitted actions stay visible; set an action to `false` to hide it. `fullscreen` and `pin` have no in-widget behavior: register the matching `headerActions` handler, or set that flag to `false`. Omitting them without a handler still renders the button, and the click does nothing. `header.visible=false` hides the whole header. |
-| `panel.*`                    | Controls each fixed root row in the `@` mention panel: project files, upload files, other project files, digital employees, flows, micro-apps, connectors, skills, and canvas elements. | Each field only affects the matching Mention row. Flow child rows such as agents and tools keep their existing behavior. Omitted values preserve current behavior. |
-| `bottom.*`                   | Controls capability and button visibility for search, connector, upload, and voice, plus the model picker button. | Bottom settings are independent from Mention rows. Disabling upload also blocks drag/drop, paste, and image paths; hiding only the button preserves capability. `internetSearch.enabled: false` hides the button and forces `enable_web_search` off on send. The model picker has button visibility only. |
-| `window.closable`            | Controls visibility of the close button inside the iframe standard header. | `false` hides only the entry; the host can still call `close()`.                                                                                              |
+| Field                        | Description                                                                                                                                                                             | Boundary                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         |
+| ---------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `layout`                     | Selects the desktop or mobile Crew conversation content.                                                                                                                                | It does not replace the surrounding application shell. SDK embeds default to `mobile`; set `desktop` explicitly when needed.                                                                                                                                                                                                                                                                                                                                                                                                                                     |
+| `shell.appSidebar`           | Shows or hides the application sidebar.                                                                                                                                                 | Applied only to a valid SDK embed whose effective Crew layout is `desktop`; it does not affect mobile embedded layouts.                                                                                                                                                                                                                                                                                                                                                                                                                                          |
+| `responsive.mobileDetection` | Selects viewport-only or device-and-viewport mobile semantics.                                                                                                                          | SDK embeds default to `viewport` for compatibility with existing mobile hosts. Set `device-and-viewport` when narrow desktop iframes should retain desktop interactions.                                                                                                                                                                                                                                                                                                                                                                                         |
+| `conversation.projectFiles`  | Shows or hides the desktop project-files panel.                                                                                                                                         | Applied only by the desktop Crew conversation layout.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            |
+| `conversation.topicHistory`  | Enables or disables the desktop topic-history entry and panel.                                                                                                                          | Applied only by the desktop Crew conversation layout.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            |
+| `conversation.autoHire`      | Automatically attempts to hire an unusable Crew member.                                                                                                                                 | Enabled by default only for valid SDK embeds; ordinary Magic Web Crew pages never auto-hire.                                                                                                                                                                                                                                                                                                                                                                                                                                                                     |
+| `conversation.previewMode`   | Selects `split`, `fullscreen`, or `switchable` presentation.                                                                                                                            | Desktop SDK embeds default to `switchable`; ordinary Magic Web pages keep their existing split layout.                                                                                                                                                                                                                                                                                                                                                                                                                                                           |
+| `header.visible`             | Shows or hides the inline standard header.                                                                                                                                              | Applies to desktop inline only; the host may draw its own header when hidden.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    |
+| `header.title` / `topicName` | Configures the first-line title and second-line topic text.                                                                                                                             | `topicName.mode` supports `current`, `hidden`, and `static`; current topic name is the default.                                                                                                                                                                                                                                                                                                                                                                                                                                                                  |
+| `header.actions`             | Controls visibility of each standard header action.                                                                                                                                     | Omitted actions stay visible; set an action to `false` to hide it. `fullscreen` and `pin` have no in-widget behavior: register the matching `headerActions` handler, or set that flag to `false`. Omitting them without a handler still renders the button, and the click does nothing. `header.visible=false` hides the whole header.                                                                                                                                                                                                                           |
+| `panel.*`                    | Controls each fixed root row in the `@` mention panel: project files, upload files, other project files, digital employees, flows, micro-apps, connectors, skills, and canvas elements. | Each field only affects the matching Mention row. Flow child rows such as agents and tools keep their existing behavior. Omitted values preserve current behavior.                                                                                                                                                                                                                                                                                                                                                                                               |
+| `bottom.*`                   | Controls capability and button visibility for search, connector, upload, and voice, plus the model picker button.                                                                       | Bottom settings are independent from Mention rows. Disabling upload also blocks drag/drop, paste, and image paths; hiding only the button preserves capability. `internetSearch.enabled: false` hides the button and forces `enable_web_search` off on send. The model picker has button visibility only.                                                                                                                                                                                                                                                        |
+| `window.closable`            | Controls visibility of the close button inside the iframe standard header.                                                                                                              | `false` hides only the entry; the host can still call `close()`.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 |
+| `panel.customGroups`         | Adds named business groups to the end of the desktop inline `@` panel.                                                                                                                  | The complete snapshot is replaced by `mount`/`updateConfig`; group IDs are unique and cannot collide with built-in roots, item IDs are unique within each group, and empty groups are hidden. Maximum 50 groups, 1,000 items per group, 5,000 items in total, 32 KiB per item, and 2 MiB for the complete UTF-8 JSON payload. Count or byte overflow is filtered in order and emits `config.warning` without interrupting rendering; structurally invalid, duplicate, or non-JSON-safe values still reject with `INVALID_CONFIG` and keep the previous snapshot. |
 
 `split` keeps the expanded conversation and preview side by side. `fullscreen` shows only the preview in the current host-controlled Widget container and closes the preview when the user exits; it covers the host viewport only when the host resizes the Widget container accordingly. `switchable` keeps the preview inside the Widget layout, collapses the conversation when a new preview session starts, and lets the user expand or collapse the conversation without recreating the preview. Manual fullscreen remains available and returns to the previous conversation layout when the user exits. The controller keeps the same iframe mounted, so file tabs, playback state, editor content, and loaded preview data remain intact. A runtime configuration update affects the next preview activation and does not force the current layout to change.
 
@@ -436,6 +482,107 @@ await window.MagicWidget.updateConfig({
 	window: { closable: false },
 })
 ```
+
+### Custom Mention groups
+
+Custom Mention groups are delivered after the `config_ready` handshake, so they are deliberately omitted from the protected initial URL query. A desktop inline Widget shows each non-empty host-named group after the built-in `@` entries. Clicking an item immediately inserts a `text` Mention and closes the Mention panel. The Mention displays the item's short `title` (falling back to `text`), while the Agent prompt uses the complete `text`. The original group ID, item ID, type, and data stay in the rich-text Mention metadata; no new backend Mention protocol is introduced.
+
+`text` must be self-contained: it is the only item field that the Agent can currently consume as stable semantic input. Put the business object name and the facts needed for analysis in `text`. `title` supplies the short list/chip label, `description` is list copy, and `data` remains rich-text Mention metadata for rendering and restoration. These fields do not enter `extra.super_agent.mentions` and do not become Agent-readable structured context.
+
+```js
+// Recommended: the Agent can answer a follow-up such as "Analyze it" from this text.
+text: 'Business chart "Chart A"; period: sample quarter; metric: mock revenue; trend: up 12% quarter over quarter. Analyze the main changes.'
+
+// Avoid: the Agent receives only this ambiguous label and cannot infer the chart data.
+text: "Chart A"
+```
+
+```js
+window.MagicWidget.mount({
+	page: { type: "crew", crewId: "crew-demo" },
+	target: document.querySelector("#agent-slot"),
+	config: {
+		layout: "desktop",
+		panel: {
+			customGroups: [
+				{
+					id: "business-charts",
+					label: "Business charts",
+					items: [
+						{
+							id: "fixture-chart-a",
+							type: "chart",
+							text: 'Business chart "Chart A"; period: sample quarter; metric: mock revenue; trend: up 12% quarter over quarter. Analyze the main changes.',
+							title: "Chart A",
+							data: { source: "fixture" },
+						},
+					],
+				},
+			],
+		},
+	},
+})
+
+await window.MagicWidget.updateConfig({
+	panel: {
+		customGroups: [
+			{
+				id: "business-charts",
+				label: "Business charts",
+				items: [
+					{
+						id: "fixture-chart-b",
+						type: "chart",
+						text: 'Business chart "Chart B"; period: sample month; metric: mock active users; trend: down 8%. Analyze likely causes.',
+						title: "Chart B",
+					},
+				],
+			},
+		],
+	},
+})
+```
+
+#### Information carried when sending
+
+After the user clicks an item, the editor immediately inserts a `text` Mention. For this configuration:
+
+```js
+{
+	id: "chart-a",
+	type: "chart",
+	text: 'Business chart "Chart A"; period: sample quarter; metric: mock revenue; trend: up 12% quarter over quarter. Analyze the main changes.',
+	title: "Chart A",
+	data: { source: "host", metric: "revenue" },
+}
+```
+
+the rich-text message sent by Magic Web contains a Mention node equivalent to:
+
+```js
+{
+	type: "mention",
+	attrs: {
+		type: "text",
+		label: 'Business chart "Chart A"; period: sample quarter; metric: mock revenue; trend: up 12% quarter over quarter. Analyze the main changes.',
+		data: {
+			source: "host",
+			metric: "revenue",
+			groupId: "business-charts",
+			id: "chart-a",
+			label: "Chart A",
+			text: 'Business chart "Chart A"; period: sample quarter; metric: mock revenue; trend: up 12% quarter over quarter. Analyze the main changes.',
+			type: "chart",
+		},
+	},
+}
+```
+
+`groupId`, `id`, `label`, `text`, and the original item `type` are reserved fields generated by the Widget and override same-named fields from the item's `data`. `label` is derived from the trimmed `title`, or from `text` when `title` is absent or blank. Other JSON-safe `data` fields stay in the rich-text payload so the editor can render and restore the Mention. `title`, `description`, and `icon` are not copied under their original keys unless the host also puts them in `data`.
+
+The Mention is deliberately excluded from `extra.super_agent.mentions`. It does not become a new backend structured-Mention type such as `chart`; the backend renders it into the Agent prompt as plain text in the form `@<item.text>`. The additional JSON remains rich-text metadata and must not be relied on as Agent-readable structured context until the backend protocol explicitly supports it.
+
+`icon` is treated as a local safe token; the Widget never loads arbitrary URLs from an item. HTML and script-looking strings in `text`, descriptions, or `data` are rendered as text. Count and byte overflow uses the filtered complete snapshot; a structurally rejected update does not partially replace the previous list or reload the iframe.
 
 Use `headerActions` to observe inline header actions after their built-in behavior completes. A callback cannot cancel that behavior. `newTopic` is reported after the topic is created, and `share`, `history`, and `more` are reported after their UI is triggered. `fullscreen` and `pin` have no in-widget behavior, so their callbacks run directly. `headerActionHandled: false` is only an ownership ack; the iframe does not fall back. Hide any host-owned action that has no handler. This example implements `pin` and `close`, so it hides `fullscreen`. `close` dismisses the Widget first and then runs `headerActions.close`; a rejection does not reopen it:
 

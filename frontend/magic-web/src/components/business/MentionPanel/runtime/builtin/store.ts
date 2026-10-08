@@ -43,6 +43,7 @@ import { prependPinnedRootItems } from "./store-helpers/pinned-root-items"
 import { matchesQuery, searchBuiltinMentionItems } from "./store-helpers/search"
 import type { MentionFilePreviewSourceRow } from "./domains/file-preview/preview-utils"
 import { resolveFolderWorkspaceEntryFromTab } from "../../utils/projectReferenceMention"
+import type { MagicWidget } from "@magic-web/widget-sdk"
 
 export type { WorkspaceFile, WorkspaceFolder }
 
@@ -57,6 +58,12 @@ export interface MentionPanelBuiltinVisibility {
 	connectors?: boolean
 	skills?: boolean
 	canvasElements?: boolean
+}
+
+/** Maps host icon tokens to the existing local icon set; URLs are intentionally ignored. */
+function normalizeCustomMentionIcon(icon: string | undefined): string {
+	if (!icon || /^(https?:|data:|blob:|\/\/)/i.test(icon)) return "ts-file-text"
+	return icon.startsWith("ts-") || icon === "file-folder" ? icon : "ts-file-text"
 }
 
 const BUILTIN_VISIBILITY_IDS: Record<keyof MentionPanelBuiltinVisibility, string[]> = {
@@ -86,6 +93,7 @@ export class MentionPanelStore {
 	private readonly canvasElementsStore: MentionPanelCanvasElementsStore
 	pinnedRootItems: MentionItem[] = []
 	private builtinVisibility: MentionPanelBuiltinVisibility = {}
+	private customMentionGroups: MagicWidget.CustomMentionGroup[] = []
 
 	constructor(projectFilesStore: ProjectFilesStore) {
 		this.projectFilesStore = projectFilesStore
@@ -192,6 +200,22 @@ export class MentionPanelStore {
 		this.builtinVisibility = visibility
 	}
 
+	/** Replaces host-provided named groups without mutating an existing editor draft. */
+	setCustomMentionGroups(groups: MagicWidget.CustomMentionGroup[] = []) {
+		this.customMentionGroups = groups.map((group) => ({
+			...group,
+			items: group.items.map((item) => ({
+				...item,
+				data: item.data ? { ...item.data } : undefined,
+			})),
+		}))
+	}
+
+	/** Exposes the current immutable group snapshot to stale-detail guards. */
+	get customMentionGroupsSnapshot() {
+		return this.customMentionGroups
+	}
+
 	/** Filters disabled roots and pinned micro-app items without changing catalog data. */
 	private filterVisibleItems(items: MentionItem[]): MentionItem[] {
 		const hiddenIds = new Set(
@@ -259,7 +283,48 @@ export class MentionPanelStore {
 		this.uploadFilesStore.setItems(files)
 	}
 
+	/** Builds the same Mention item for folder browsing and search results. */
+	private getCustomMentionItems(
+		group: MagicWidget.CustomMentionGroup,
+		query?: string,
+	): MentionItem[] {
+		return group.items
+			.filter(
+				(item) =>
+					!query ||
+					this.matchesQuery(item.title?.trim() || item.text, query) ||
+					this.matchesQuery(item.text, query) ||
+					Boolean(item.description && this.matchesQuery(item.description, query)),
+			)
+			.map((item) => {
+				// Keep the short UI label separate from the self-contained text sent to the Agent.
+				const displayLabel = item.title?.trim() || item.text
+				return {
+					id: item.id,
+					name: displayLabel,
+					description: item.description,
+					type: MentionItemType.TEXT,
+					data: {
+						...item.data,
+						groupId: group.id,
+						id: item.id,
+						label: displayLabel,
+						text: item.text,
+						type: item.type,
+					},
+					icon: normalizeCustomMentionIcon(item.icon),
+					metadata: {
+						customMention: true,
+						customMentionGroupId: group.id,
+					},
+				}
+			})
+	}
+
+	/** Resolves a custom group before falling back to the built-in folder sources. */
 	private getFolderMentionItems(folderId: string) {
+		const customGroup = this.customMentionGroups.find((group) => group.id === folderId)
+		if (customGroup) return this.getCustomMentionItems(customGroup)
 		if (isCanvasElementsMentionItemId(folderId)) {
 			return this.canvasElementsStore.getFolderMentionItems(folderId)
 		}
@@ -357,6 +422,25 @@ export class MentionPanelStore {
 
 	private buildDefaultItems(t: I18nTexts): MentionItem[] {
 		let defaultItems = createDefaultItems(t)[PanelState.DEFAULT] as MentionItem[]
+		if (this.customMentionGroups.length > 0) {
+			defaultItems = [
+				...defaultItems,
+				...this.customMentionGroups
+					.filter((group) => group.items.length > 0)
+					.map((group) => ({
+						id: group.id,
+						type: MentionItemType.FOLDER,
+						name: group.label,
+						icon: normalizeCustomMentionIcon(group.icon),
+						hasChildren: true,
+						isFolder: true,
+						metadata: {
+							customMentionGroup: true,
+							customMentionGroupId: group.id,
+						},
+					})),
+			]
+		}
 		if (this.projectFilesStore.currentSelectedProject) {
 			defaultItems = defaultItems.filter((item) => item.id !== BuiltinItemId.UPLOAD_FILES)
 			defaultItems = this.injectCanvasElementsRootItem(defaultItems, t)
@@ -426,10 +510,13 @@ export class MentionPanelStore {
 		return matchesQuery(target, query)
 	}
 
+	/** Searches host items within their group, or alongside built-ins from the root. */
 	private async searchMentionItems(
 		query: string,
 		scopeFolderId?: string,
 	): Promise<MentionItem[]> {
+		const customGroup = this.customMentionGroups.find((group) => group.id === scopeFolderId)
+		if (customGroup) return query.trim() ? this.getCustomMentionItems(customGroup, query) : []
 		if (isCanvasElementsMentionItemId(scopeFolderId)) {
 			return this.canvasElementsStore.searchItems(query, scopeFolderId, this.matchesQuery)
 		}
@@ -439,9 +526,13 @@ export class MentionPanelStore {
 			pluginHost: this.getPluginHost(),
 		})
 		if (scopeFolderId?.trim()) return builtinItems
+		const customItems = query.trim()
+			? this.customMentionGroups.flatMap((group) => this.getCustomMentionItems(group, query))
+			: []
 		return [
 			...this.canvasElementsStore.searchItems(query, undefined, this.matchesQuery),
 			...builtinItems,
+			...customItems,
 		]
 	}
 

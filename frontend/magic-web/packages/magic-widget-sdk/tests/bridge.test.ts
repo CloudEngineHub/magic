@@ -504,6 +504,82 @@ describe("WidgetBridge", () => {
 		await expect(configPromise).resolves.toBeUndefined()
 	})
 
+	it("returns a provider-side config warning without rejecting the update", async () => {
+		const { iframe, postMessage } = createTestIframe()
+		const bridge = new WidgetBridge(iframe, TEST_ORIGIN, TEST_INSTANCE_ID)
+		dispatchLoad(iframe)
+		dispatchConfigReady(iframe)
+		const configPromise = bridge.sendConfig({ layout: "desktop" })
+		await vi.waitFor(() => expect(postMessage).toHaveBeenCalledTimes(1))
+		const message = postMessage.mock.calls[0]?.[0] as { requestId: string }
+		const configWarning = {
+			code: "CUSTOM_MENTION_FILTERED" as const,
+			message: "Fixture content was filtered",
+			details: {
+				droppedGroups: 1,
+				droppedItems: 2,
+				reasons: ["MAX_GROUPS" as const],
+			},
+		}
+
+		window.dispatchEvent(
+			new MessageEvent("message", {
+				origin: TEST_ORIGIN,
+				source: iframe.contentWindow,
+				data: {
+					protocol: WIDGET_PROTOCOL,
+					version: WIDGET_PROTOCOL_VERSION,
+					instanceId: TEST_INSTANCE_ID,
+					requestId: message.requestId,
+					type: "response",
+					ok: true,
+					result: { configWarning },
+				},
+			}),
+		)
+
+		await expect(configPromise).resolves.toEqual(configWarning)
+	})
+
+	it("preserves INVALID_CONFIG from a provider rejection", async () => {
+		const { iframe, postMessage } = createTestIframe()
+		const bridge = new WidgetBridge(iframe, TEST_ORIGIN, TEST_INSTANCE_ID)
+		dispatchLoad(iframe)
+		const configPromise = bridge.sendConfig({
+			panel: {
+				customGroups: [
+					{
+						id: "bridge-group",
+						label: "Bridge group",
+						items: [{ id: "bridge-item", type: "card", text: "Bridge fixture" }],
+					},
+				],
+			},
+		})
+		dispatchConfigReady(iframe)
+		await vi.waitFor(() => expect(postMessage).toHaveBeenCalledTimes(1))
+		const message = postMessage.mock.calls[0]?.[0] as { requestId: string }
+		window.dispatchEvent(
+			new MessageEvent("message", {
+				origin: TEST_ORIGIN,
+				source: iframe.contentWindow,
+				data: {
+					protocol: WIDGET_PROTOCOL,
+					version: WIDGET_PROTOCOL_VERSION,
+					instanceId: TEST_INSTANCE_ID,
+					requestId: message.requestId,
+					type: "response",
+					ok: false,
+					error: { code: "INVALID_CONFIG", message: "fixture rejection" },
+				},
+			}),
+		)
+		await expect(configPromise).rejects.toMatchObject({
+			code: "INVALID_CONFIG",
+			message: "fixture rejection",
+		})
+	})
+
 	it("preserves config readiness when the child handshake arrives before iframe load", async () => {
 		const { iframe, postMessage } = createTestIframe()
 		const bridge = new WidgetBridge(iframe, TEST_ORIGIN, TEST_INSTANCE_ID)

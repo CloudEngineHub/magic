@@ -53,13 +53,7 @@ export declare namespace MagicWidget {
 	}
 
 	export type HeaderActionName =
-		| "fullscreen"
-		| "pin"
-		| "newTopic"
-		| "history"
-		| "share"
-		| "more"
-		| "close"
+		"fullscreen" | "pin" | "newTopic" | "history" | "share" | "more" | "close"
 
 	export interface HeaderConfig {
 		visible?: boolean
@@ -88,6 +82,8 @@ export declare namespace MagicWidget {
 		skills?: boolean
 		/** Shows or hides the canvas elements row when the current project provides it. */
 		canvasElements?: boolean
+		/** Adds host-owned named groups to the end of the Mention panel. */
+		customGroups?: CustomMentionGroup[]
 	}
 
 	export interface CapabilityConfig {
@@ -111,6 +107,27 @@ export declare namespace MagicWidget {
 	export interface WidgetWindowConfig {
 		/** Hides the close button inside the iframe header. The floating shell close button stays available. */
 		closable?: boolean
+	}
+
+	/** Describes one host-owned JSON item that can be inserted as a text mention. */
+	export interface CustomMentionItem {
+		id: string
+		type: string
+		/** Self-contained semantic text rendered into the Agent prompt. */
+		text: string
+		/** Short optional label shown in the editor and message panel; falls back to text. */
+		title?: string
+		description?: string
+		icon?: string
+		data?: Record<string, unknown>
+	}
+
+	/** Describes one named host-owned group in the Mention panel. */
+	export interface CustomMentionGroup {
+		id: string
+		label: string
+		icon?: string
+		items: CustomMentionItem[]
 	}
 
 	/** Controls how Agent previews share the desktop viewport with the conversation. */
@@ -251,8 +268,31 @@ export declare namespace MagicWidget {
 		event: RuntimeEventMap[T],
 	) => void
 
+	/** Identifies the bounded custom Mention rule that removed host-provided content. */
+	export type ConfigWarningReason =
+		| "MAX_GROUPS"
+		| "MAX_ITEMS_PER_GROUP"
+		| "MAX_TOTAL_ITEMS"
+		| "MAX_ITEM_BYTES"
+		| "MAX_PAYLOAD_BYTES"
+
+	/** Describes one non-fatal configuration adjustment made before rendering. */
+	export interface ConfigWarning {
+		code: "CUSTOM_MENTION_FILTERED"
+		message: string
+		details: {
+			droppedGroups: number
+			droppedItems: number
+			reasons: ConfigWarningReason[]
+		}
+	}
+
+	/** Handles non-fatal configuration diagnostics that the host may surface in its own UI. */
+	export type ConfigWarningEventListener = (warning: ConfigWarning) => void
+
 	/** Lists lifecycle, UI state, and runtime events exposed to the embedding host. */
-	export type EventName = "agent_ready" | "preview_fullscreen" | RuntimeEventName
+	export type EventName =
+		"agent_ready" | "preview_fullscreen" | "config.warning" | RuntimeEventName
 	/** Handles notifications that the current Agent editor and draft state are ready. */
 	export type AgentReadyEventListener = () => void
 	/**
@@ -273,6 +313,8 @@ export declare namespace MagicWidget {
 		 * The host owns any container resizing or fullscreen styling triggered by this state.
 		 */
 		on(event: "preview_fullscreen", listener: PreviewFullscreenEventListener): () => void
+		/** Subscribes to non-fatal configuration filtering diagnostics. */
+		on(event: "config.warning", listener: ConfigWarningEventListener): () => void
 		/** Subscribes to future message stream starts without replaying earlier generations. */
 		on(
 			event: "message.stream.started",

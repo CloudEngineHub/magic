@@ -30,7 +30,11 @@ import { useMagicWidgetPreviewFullscreen } from "./hooks/useMagicWidgetPreviewFu
 import { resolvePreviewConversationTransition } from "./utils/previewLayout"
 
 interface CrewConversationDesktopProps {
-	widgetContext?: { instanceId: string; hostOrigin: string } | null
+	widgetContext?: {
+		instanceId: string
+		hostOrigin: string
+		renderMode?: "inline" | "floating"
+	} | null
 	widgetConfig?: MagicWidgetConfig
 }
 

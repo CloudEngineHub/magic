@@ -54,7 +54,11 @@ import {
 } from "../utils/editorCustomization"
 
 interface CrewConversationPanelProps {
-	widgetContext?: { instanceId: string; hostOrigin: string } | null
+	widgetContext?: {
+		instanceId: string
+		hostOrigin: string
+		renderMode?: "inline" | "floating"
+	} | null
 	variant: "desktop" | "mobile"
 	detailPanelVisible?: boolean
 	isConversationPanelCollapsed?: boolean
@@ -112,6 +116,22 @@ function CrewConversationPanel({
 		if (!widgetContext) return
 		store.mentionPanelStore.setBuiltinVisibility(widgetConfig.panel)
 	}, [store.mentionPanelStore, widgetConfig.panel, widgetContext])
+
+	useLayoutEffect(() => {
+		// Host-owned Mention groups are intentionally limited to the desktop inline Widget surface.
+		const groups =
+			widgetContext?.renderMode === "inline" && !isMobile && widgetConfig.layout === "desktop"
+				? (widgetConfig.panel?.customGroups ?? [])
+				: []
+		store.mentionPanelStore.setCustomMentionGroups(groups)
+	}, [
+		isMobile,
+		store.mentionPanelStore,
+		widgetConfig.panel?.customGroups,
+		widgetConfig.panel,
+		widgetConfig.layout,
+		widgetContext,
+	])
 
 	const scopedMessageSendService = useMemo(
 		() =>

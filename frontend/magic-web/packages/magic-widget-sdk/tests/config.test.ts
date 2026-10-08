@@ -1,5 +1,16 @@
 import { describe, expect, it } from "vitest"
 import { mergeWidgetConfig, normalizeWidgetConfig, resolveInitialWidgetConfig } from "../src/config"
+import type { MagicWidget } from "../src/types"
+
+/** Creates bounded fictional rows for count and payload boundary tests. */
+function createCustomMentionItems(count: number, prefix: string, dataBytes = 0) {
+	return Array.from({ length: count }, (_, index) => ({
+		id: `${prefix}-${index}`,
+		type: "fixture",
+		text: `Fixture ${index}`,
+		...(dataBytes > 0 ? { data: { value: "x".repeat(dataBytes) } } : {}),
+	}))
+}
 
 describe("Widget config", () => {
 	it("uses the legacy mobile layout and viewport semantics as initial defaults", () => {
@@ -198,5 +209,239 @@ describe("Widget config", () => {
 			},
 			window: { closable: false },
 		})
+	})
+
+	it("validates and clones named custom Mention groups", () => {
+		const source = {
+			panel: {
+				customGroups: [
+					{
+						id: "group-fictional",
+						label: "Sample group",
+						items: [
+							{
+								id: "item-fictional",
+								type: "card",
+								text: "Sample content",
+								data: { nested: { value: "fixture" } },
+							},
+						],
+					},
+				],
+			},
+		}
+		const normalized = normalizeWidgetConfig(source)
+		expect(normalized.panel?.customGroups).toEqual(source.panel.customGroups)
+		expect(normalized.panel?.customGroups).not.toBe(source.panel.customGroups)
+		expect(normalized.panel?.customGroups?.[0]?.items[0]?.data).not.toBe(
+			source.panel.customGroups[0].items[0].data,
+		)
+	})
+
+	it("rejects unsafe and duplicate custom groups atomically", () => {
+		expect(() =>
+			normalizeWidgetConfig({
+				panel: {
+					customGroups: [
+						{
+							id: "same-group",
+							label: "Same",
+							items: [
+								{ id: "same", type: "card", text: "one" },
+								{ id: "same", type: "card", text: "two" },
+							],
+						},
+					],
+				},
+			}),
+		).toThrow(/duplicate id/)
+
+		const cyclic: Record<string, unknown> = {}
+		cyclic.self = cyclic
+		expect(() =>
+			normalizeWidgetConfig({
+				panel: {
+					customGroups: [
+						{
+							id: "cycle-group",
+							label: "Cycle",
+							items: [{ id: "cycle", type: "card", text: "unsafe", data: cyclic }],
+						},
+					],
+				},
+			}),
+		).toThrow(/circular/)
+	})
+
+	it("requires unique root group IDs while allowing IDs to repeat across groups", () => {
+		const normalized = normalizeWidgetConfig({
+			panel: {
+				customGroups: [
+					{
+						id: "charts",
+						label: "Charts",
+						items: [{ id: "same-item", type: "chart", text: "A" }],
+					},
+					{
+						id: "links",
+						label: "Links",
+						items: [{ id: "same-item", type: "link", text: "B" }],
+					},
+				],
+			},
+		})
+		expect(normalized.panel?.customGroups?.[1]?.items[0]?.id).toBe("same-item")
+		expect(() =>
+			normalizeWidgetConfig({
+				panel: {
+					customGroups: [
+						{ id: "charts", label: "One", items: [] },
+						{ id: "charts", label: "Two", items: [] },
+					],
+				},
+			}),
+		).toThrow(/duplicate group id/)
+		expect(() =>
+			normalizeWidgetConfig({
+				panel: { customGroups: [{ id: "project-files", label: "Collision", items: [] }] },
+			}),
+		).toThrow(/conflicts with a built-in/)
+	})
+
+	it("filters group, per-group item, and total item overflow with one warning", () => {
+		const maximumSnapshot = normalizeWidgetConfig({
+			panel: {
+				customGroups: Array.from({ length: 5 }, (_, groupIndex) => ({
+					id: `group-${groupIndex}`,
+					label: `Group ${groupIndex}`,
+					items: createCustomMentionItems(1_000, `group-${groupIndex}-item`),
+				})),
+			},
+		})
+		expect(maximumSnapshot.panel?.customGroups).toHaveLength(5)
+		expect(maximumSnapshot.panel?.customGroups?.[0]?.items).toHaveLength(1_000)
+
+		const groupWarnings: MagicWidget.ConfigWarning[] = []
+		const groupOverflow = normalizeWidgetConfig(
+			{
+				panel: {
+					customGroups: Array.from({ length: 51 }, (_, index) => ({
+						id: `group-${index}`,
+						label: `Group ${index}`,
+						items: [],
+					})),
+				},
+			},
+			(warning) => groupWarnings.push(warning),
+		)
+		expect(groupOverflow.panel?.customGroups).toHaveLength(50)
+		expect(groupWarnings).toEqual([
+			expect.objectContaining({
+				code: "CUSTOM_MENTION_FILTERED",
+				details: expect.objectContaining({ droppedGroups: 1, reasons: ["MAX_GROUPS"] }),
+			}),
+		])
+
+		const perGroupWarnings: MagicWidget.ConfigWarning[] = []
+		const perGroupOverflow = normalizeWidgetConfig(
+			{
+				panel: {
+					customGroups: [
+						{
+							id: "oversized-group",
+							label: "Oversized group",
+							items: createCustomMentionItems(1_001, "oversized-item"),
+						},
+					],
+				},
+			},
+			(warning) => perGroupWarnings.push(warning),
+		)
+		expect(perGroupOverflow.panel?.customGroups?.[0]?.items).toHaveLength(1_000)
+		expect(perGroupWarnings[0]?.details).toMatchObject({
+			droppedItems: 1,
+			reasons: ["MAX_ITEMS_PER_GROUP"],
+		})
+
+		const totalWarnings: MagicWidget.ConfigWarning[] = []
+		const totalOverflow = normalizeWidgetConfig(
+			{
+				panel: {
+					customGroups: [
+						...Array.from({ length: 5 }, (_, groupIndex) => ({
+							id: `full-group-${groupIndex}`,
+							label: `Full group ${groupIndex}`,
+							items: createCustomMentionItems(1_000, `full-${groupIndex}`),
+						})),
+						{
+							id: "one-too-many",
+							label: "One too many",
+							items: createCustomMentionItems(1, "extra"),
+						},
+					],
+				},
+			},
+			(warning) => totalWarnings.push(warning),
+		)
+		expect(
+			totalOverflow.panel?.customGroups?.reduce(
+				(count, group) => count + group.items.length,
+				0,
+			),
+		).toBe(5_000)
+		expect(totalWarnings[0]?.details).toMatchObject({
+			droppedItems: 1,
+			reasons: ["MAX_TOTAL_ITEMS"],
+		})
+	})
+
+	it("filters item and complete snapshot UTF-8 byte overflow", () => {
+		const itemWarnings: MagicWidget.ConfigWarning[] = []
+		const itemOverflow = normalizeWidgetConfig(
+			{
+				panel: {
+					customGroups: [
+						{
+							id: "large-item-group",
+							label: "Large item group",
+							items: createCustomMentionItems(1, "large-item", 32 * 1024),
+						},
+					],
+				},
+			},
+			(warning) => itemWarnings.push(warning),
+		)
+		expect(itemOverflow.panel?.customGroups?.[0]?.items).toEqual([])
+		expect(itemWarnings[0]?.details).toMatchObject({
+			droppedItems: 1,
+			reasons: ["MAX_ITEM_BYTES"],
+		})
+
+		const payloadWarnings: MagicWidget.ConfigWarning[] = []
+		const payloadOverflow = normalizeWidgetConfig(
+			{
+				panel: {
+					customGroups: [
+						{
+							id: "payload-a",
+							label: "Payload A",
+							items: createCustomMentionItems(500, "payload-a-item", 2_100),
+						},
+						{
+							id: "payload-b",
+							label: "Payload B",
+							items: createCustomMentionItems(500, "payload-b-item", 2_100),
+						},
+					],
+				},
+			},
+			(warning) => payloadWarnings.push(warning),
+		)
+		expect(
+			new TextEncoder().encode(JSON.stringify(payloadOverflow.panel?.customGroups))
+				.byteLength,
+		).toBeLessThanOrEqual(2 * 1024 * 1024)
+		expect(payloadWarnings[0]?.details.reasons).toContain("MAX_PAYLOAD_BYTES")
+		expect(payloadWarnings[0]?.details.droppedItems).toBeGreaterThan(0)
 	})
 })

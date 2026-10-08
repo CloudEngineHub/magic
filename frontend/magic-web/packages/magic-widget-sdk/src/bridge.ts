@@ -32,6 +32,18 @@ export function createWidgetCommandError(
 	return error
 }
 
+/** Preserves iframe-provided public error codes while falling back for unknown protocol values. */
+function isCommandErrorCode(value: unknown): value is MagicWidget.CommandErrorCode {
+	return (
+		value === "NOT_MOUNTED" ||
+		value === "INVALID_INPUT" ||
+		value === "INVALID_CONFIG" ||
+		value === "IFRAME_NOT_READY" ||
+		value === "COMMAND_FAILED" ||
+		value === "DESTROYED"
+	)
+}
+
 /** Generates identifiers without exposing host business data in protocol metadata. */
 export function createWidgetId(prefix: string): string {
 	const randomValue =
@@ -339,10 +351,12 @@ export class WidgetBridge {
 		)
 	}
 
-	/** Sends a complete configuration snapshot without changing the iframe URL. */
-	async sendConfig(config: MagicWidget.WidgetConfig): Promise<void> {
+	/** Sends a complete configuration snapshot and returns any provider-side filtering diagnostic. */
+	async sendConfig(
+		config: MagicWidget.WidgetConfig,
+	): Promise<MagicWidget.ConfigWarning | undefined> {
 		await this.waitUntilConfigReady()
-		await this.sendRequest(
+		const result = await this.sendRequest(
 			(requestId) => ({
 				protocol: WIDGET_PROTOCOL,
 				version: WIDGET_PROTOCOL_VERSION,
@@ -353,6 +367,7 @@ export class WidgetBridge {
 			}),
 			DEFAULT_COMMAND_TIMEOUT_MS,
 		)
+		return result?.configWarning
 	}
 
 	/** Accepts messages only from the bound iframe, origin, protocol, and instance. */
@@ -408,7 +423,9 @@ export class WidgetBridge {
 		this.pendingRequests.delete(event.data.requestId)
 		pending.reject(
 			createWidgetCommandError(
-				"COMMAND_FAILED",
+				isCommandErrorCode(event.data.error?.code)
+					? event.data.error.code
+					: "COMMAND_FAILED",
 				event.data.error?.message ?? "Magic widget command failed",
 			),
 		)

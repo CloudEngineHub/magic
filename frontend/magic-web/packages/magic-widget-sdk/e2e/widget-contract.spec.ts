@@ -1,5 +1,29 @@
-import { test, expect } from "@playwright/test"
-import { expectHeaderAction, openWidgetHost, widgetConfig, widgetFrame } from "./helpers/widget-harness"
+import { test, expect, type Page } from "@playwright/test"
+import {
+	expectHeaderAction,
+	openWidgetHost,
+	widgetConfig,
+	widgetFrame,
+} from "./helpers/widget-harness"
+
+/** Opens the fixture group after its root row becomes visible in the virtual list. */
+async function openBusinessChartsGroup(page: Page): Promise<void> {
+	const frame = widgetFrame(page)
+	await frame.getByTestId("super-message-editor-at-button").click()
+	const scroller = frame.getByTestId("virtuoso-scroller")
+	await expect(scroller).toBeVisible()
+	await expect(frame.getByRole("option").first()).toBeVisible()
+	await expect
+		.poll(() => scroller.evaluate((element) => element.scrollHeight > element.clientHeight))
+		.toBe(true)
+	// Custom groups follow built-in entries, so scroll the root list before entering it.
+	await scroller.evaluate((element) => {
+		element.scrollTop = element.scrollHeight
+	})
+	const group = frame.getByRole("option").filter({ hasText: "Business charts" })
+	await expect(group).toBeVisible()
+	await group.locator("button").click()
+}
 
 test.describe("Magic Widget SDK contract", () => {
 	test.beforeEach(async ({ page }) => {
@@ -41,7 +65,8 @@ test.describe("Magic Widget SDK contract", () => {
 				if (!iframe?.contentWindow) throw new Error("Widget iframe is unavailable")
 				const iframeUrl = new URL(iframe.src)
 				const event = new MessageEvent("message", {
-					origin: new URL(new URLSearchParams(location.search).get("appUrl") ?? "").origin,
+					origin: new URL(new URLSearchParams(location.search).get("appUrl") ?? "")
+						.origin,
 					source: iframe.contentWindow,
 					data: {
 						protocol: "magic-widget",
@@ -92,7 +117,9 @@ test.describe("Magic Widget SDK contract", () => {
 		await expect(frame.getByTestId("message-header-container")).toHaveCount(0)
 	})
 
-	test("serializes panel and bottom capability configuration into the iframe contract", async ({ page }) => {
+	test("serializes panel and bottom capability configuration into the iframe contract", async ({
+		page,
+	}) => {
 		await page.getByTestId("mount-minimal-capabilities").click()
 		const config = await widgetConfig(page)
 		expect(config.panel).toEqual({
@@ -114,7 +141,9 @@ test.describe("Magic Widget SDK contract", () => {
 		})
 	})
 
-	test("serializes layout, conversation, responsive, Header, and window customization", async ({ page }) => {
+	test("serializes layout, conversation, responsive, Header, and window customization", async ({
+		page,
+	}) => {
 		await page.getByTestId("mount-config-matrix").click()
 		const config = await widgetConfig(page)
 
@@ -147,7 +176,9 @@ test.describe("Magic Widget SDK contract", () => {
 		expect(mobileConfig.responsive).toEqual({ mobileDetection: "device-and-viewport" })
 	})
 
-	test("renders configured Header labels and applies topic and close visibility", async ({ page }) => {
+	test("renders configured Header labels and applies topic and close visibility", async ({
+		page,
+	}) => {
 		await page.getByTestId("mount-header-labels").click()
 		const frame = widgetFrame(page)
 		await expectHeaderAction(page, "message-header-fullscreen-button")
@@ -205,7 +236,9 @@ test.describe("Magic Widget SDK contract", () => {
 		)
 	})
 
-	test("forwards agent readiness and preview fullscreen state events to the host", async ({ page }) => {
+	test("forwards agent readiness and preview fullscreen state events to the host", async ({
+		page,
+	}) => {
 		await expect(page.getByTestId("event-result")).toContainText("agent-ready")
 		await page.getByTestId("emit-preview-fullscreen").click()
 		await expect(page.getByTestId("event-result")).toContainText("preview-fullscreen:true")
@@ -224,9 +257,122 @@ test.describe("Magic Widget SDK contract", () => {
 		await page.getByTestId("append-input").click()
 		await expect(page.getByTestId("status")).toContainText("append-input:success")
 		await page.getByTestId("get-input").click()
-		await expect(page.getByTestId("status")).toContainText("get-input:Mock input from host + appended")
+		await expect(page.getByTestId("status")).toContainText(
+			"get-input:Mock input from host + appended",
+		)
 		await page.getByTestId("clear-input").click()
 		await expect(page.getByTestId("status")).toContainText("clear-input:success")
+	})
+
+	test("inserts, replaces, and rejects custom Mention groups without reloading", async ({
+		page,
+	}) => {
+		const before = await page.locator("iframe").getAttribute("src")
+		const frame = widgetFrame(page)
+
+		await openBusinessChartsGroup(page)
+		const initialItem = frame
+			.getByTestId("mention-panel-menu-item")
+			.filter({ hasText: "Chart A" })
+		await expect(initialItem).toBeVisible()
+		await initialItem.click()
+		await expect(frame.getByTestId("super-message-editor-content")).toContainText("@Chart A")
+		await expect(frame.getByTestId("super-message-editor-at-button")).toHaveAttribute(
+			"data-visible",
+			"false",
+		)
+		await expect(page.locator("iframe")).toHaveAttribute("src", before ?? "")
+
+		await page.getByTestId("update-dynamic-content").click()
+		await expect(page.getByTestId("status")).toHaveText("update-dynamic-content:success")
+		await expect(page.locator("iframe")).toHaveAttribute("src", before ?? "")
+		await page.getByTestId("clear-input").click()
+		await expect(page.getByTestId("status")).toContainText("clear-input:success")
+
+		await openBusinessChartsGroup(page)
+		await frame.getByTestId("mention-panel-menu-item").filter({ hasText: "Chart B" }).click()
+		await expect(frame.getByTestId("super-message-editor-content")).toContainText("@Chart B")
+		await expect(page.locator("iframe")).toHaveAttribute("src", before ?? "")
+		await page.getByTestId("append-input").click()
+		await expect(page.getByTestId("status")).toContainText("append-input:success")
+		await page.getByTestId("get-input").click()
+		await expect(page.getByTestId("status")).toContainText("get-input:@Chart B + appended")
+
+		await page.getByTestId("update-invalid-dynamic-content").click()
+		await expect(page.getByTestId("status")).toHaveText(
+			"update-invalid-dynamic-content:INVALID_CONFIG",
+		)
+		await expect(page.locator("iframe")).toHaveAttribute("src", before ?? "")
+
+		// The rejected snapshot must keep the last valid replacement selectable.
+		await page.getByTestId("clear-input").click()
+		await expect(page.getByTestId("status")).toContainText("clear-input:success")
+		await openBusinessChartsGroup(page)
+		await frame.getByTestId("mention-panel-menu-item").filter({ hasText: "Chart B" }).click()
+		await expect(frame.getByTestId("super-message-editor-content")).toContainText("@Chart B")
+		await expect(page.locator("iframe")).toHaveAttribute("src", before ?? "")
+	})
+
+	test("finds a custom Mention by semantic text in global search", async ({ page }) => {
+		const frame = widgetFrame(page)
+		await frame.getByTestId("super-message-editor-at-button").click()
+		const searchInput = frame
+			.getByRole("searchbox", { name: "Search input area" })
+			.locator("input")
+		await searchInput.fill("sample quarter")
+
+		const chart = frame.getByTestId("mention-panel-menu-item").filter({ hasText: "Chart A" })
+		await expect(chart).toBeVisible()
+		await expect(
+			frame.getByTestId("mention-panel-menu-item").filter({ hasText: "Unknown business" }),
+		).toHaveCount(0)
+		await chart.click()
+		await expect(frame.getByTestId("super-message-editor-content")).toContainText("@Chart A")
+	})
+
+	test("searches only the active custom Mention group by description", async ({ page }) => {
+		const frame = widgetFrame(page)
+		await openBusinessChartsGroup(page)
+		await frame
+			.getByRole("searchbox", { name: "Search input area" })
+			.locator("input")
+			.fill("Fixture description")
+
+		const chart = frame.getByTestId("mention-panel-menu-item").filter({ hasText: "Chart A" })
+		await expect(chart).toBeVisible()
+		await expect(
+			frame.getByTestId("mention-panel-menu-item").filter({ hasText: "Unknown business" }),
+		).toHaveCount(0)
+		await chart.click()
+		await expect(frame.getByTestId("super-message-editor-content")).toContainText("@Chart A")
+	})
+
+	test("filters custom Mention overflow without interrupting iframe rendering", async ({
+		page,
+	}) => {
+		const before = await page.locator("iframe").getAttribute("src")
+		const frame = widgetFrame(page)
+
+		await page.getByTestId("update-overflow-custom-groups").click()
+		await expect(page.getByTestId("status")).toHaveText("update-overflow-custom-groups:success")
+		await expect(page.getByTestId("event-result")).toContainText(
+			"config-warning:CUSTOM_MENTION_FILTERED:1:MAX_ITEMS_PER_GROUP",
+		)
+		await expect(page.locator("iframe")).toHaveAttribute("src", before ?? "")
+
+		await frame.getByTestId("super-message-editor-at-button").click()
+		const scroller = frame.getByTestId("virtuoso-scroller")
+		await expect(scroller).toBeVisible()
+		await expect(frame.getByRole("option").first()).toBeVisible()
+		await expect
+			.poll(() => scroller.evaluate((element) => element.scrollHeight > element.clientHeight))
+			.toBe(true)
+		await scroller.evaluate((element) => {
+			element.scrollTop = element.scrollHeight
+		})
+		await expect(
+			frame.getByRole("option").filter({ hasText: "Overflow fixtures" }),
+		).toBeVisible()
 	})
 
 	test("sets structured text Mentions without reloading the iframe", async ({ page }) => {
@@ -254,7 +400,9 @@ test.describe("Magic Widget SDK contract", () => {
 		await expect(page.getByTestId("status")).toContainText("@Mock Table")
 	})
 
-	test("acknowledges structured sendMessage without replacing the current editor", async ({ page }) => {
+	test("acknowledges structured sendMessage without replacing the current editor", async ({
+		page,
+	}) => {
 		const frame = widgetFrame(page)
 		await page.getByTestId("set-input").click()
 		await expect(page.getByTestId("status")).toContainText("set-input:success")

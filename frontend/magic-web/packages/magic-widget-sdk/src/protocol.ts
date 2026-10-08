@@ -7,6 +7,7 @@ export const WIDGET_QUERY_EMBED = "magicWidgetEmbed"
 export const WIDGET_QUERY_INSTANCE_ID = "magicWidgetInstanceId"
 export const WIDGET_QUERY_PROTOCOL_VERSION = "magicWidgetProtocolVersion"
 export const WIDGET_QUERY_HOST_ORIGIN = "magicWidgetHostOrigin"
+export const WIDGET_QUERY_RENDER_MODE = "magicWidgetRenderMode"
 export const WIDGET_QUERY_DEPLOYMENT_CODE = "magicWidgetDeploymentCode"
 export const WIDGET_QUERY_CONFIG = "magicWidgetConfig"
 const HEADER_ACTIONS = new Set<MagicWidget.HeaderActionName>(WIDGET_HEADER_ACTION_NAMES)
@@ -39,8 +40,12 @@ export interface WidgetResponseMessage {
 	requestId: string
 	type: "response"
 	ok: boolean
-	/** Command payload, or `headerActionHandled` as an ownership ack that does not trigger iframe fallback. */
-	result?: { content?: string; headerActionHandled?: boolean }
+	/** Command payload, ownership ack, or a non-fatal config filtering diagnostic. */
+	result?: {
+		content?: string
+		headerActionHandled?: boolean
+		configWarning?: MagicWidget.ConfigWarning
+	}
 	error?: { code: string; message: string }
 }
 

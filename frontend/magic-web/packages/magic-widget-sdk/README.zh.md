@@ -81,7 +81,7 @@ window.MagicWidget
 | `open`            | `() => void`                                                   | 主动打开面板。面板打开时，悬浮按钮会隐藏。                                              | 必须在 `mount` 后调用；未挂载时调用会抛错。                   |
 | `close`           | `() => void`                                                   | 主动关闭面板。关闭动画结束后，悬浮按钮会重新显示。                                      | 面板已关闭时调用不会产生额外影响。                            |
 | `destroy`         | `() => void`                                                   | 移除 widget DOM、事件监听、定时器与当前配置。                                           | 调用后如需再次打开，需要先重新 `mount`。                      |
-| `on`              | `on(event, listener)`                                          | 订阅 Agent 就绪、预览状态、消息流开始、工具结算或任务完成事件，并返回取消订阅函数。     | 每种事件对应不同的 listener 签名，详见下方“事件 API”。        |
+| `on`              | `on(event, listener)`                                          | 订阅配置警告、Agent 就绪、预览状态和运行时事件，并返回取消订阅函数。                    | 每种事件对应不同的 listener 签名，详见下方“事件 API”。        |
 | `setInput`        | `(content: string \| InputContent) => Promise<void>`           | 替换 Agent 输入框内容并聚焦，但不发送。                                                 | 接受非空文本或通过校验的文本/Mention blocks。                 |
 | `appendInput`     | `(content: string \| InputContent) => Promise<void>`           | 将文本或 Mention blocks 追加到当前输入末尾，但不发送。                                  | 保留传入 blocks 的顺序。                                      |
 | `clearInput`      | `() => Promise<void>`                                          | 清空当前输入框并聚焦，不发送消息。                                                      | 以 iframe response 为准。                                     |
@@ -93,6 +93,32 @@ window.MagicWidget
 同时可以通过 `window.MagicWidget.version` 获取当前脚本版本，便于排查接入问题。
 
 ### 事件 API
+
+#### `config.warning`
+
+```ts
+on(event: "config.warning", listener: (warning: MagicWidget.ConfigWarning) => void): () => void
+```
+
+当 `panel.customGroups` 超过数量或 UTF-8 JSON 字节限制时，SDK 会按原顺序过滤超限内容、继续挂载或更新 Widget，并触发一次聚合警告。SDK 同时输出 `console.warn`，宿主可以通过事件决定是否展示 Toast、记录日志或上报埋点。建议在 `mount` 前订阅，以接收初始配置的过滤结果：
+
+```js
+const unsubscribeConfigWarning = window.MagicWidget.on("config.warning", (warning) => {
+	if (warning.code === "CUSTOM_MENTION_FILTERED") {
+		showHostWarning(warning.message, warning.details)
+	}
+})
+```
+
+`warning.details` 包含被过滤的分组数、条目数和以下原因：
+
+- `MAX_GROUPS`：仅保留前 50 个分组。
+- `MAX_ITEMS_PER_GROUP`：每组仅保留前 1,000 条候选内容。
+- `MAX_TOTAL_ITEMS`：全部分组按配置顺序最多保留 5,000 条。
+- `MAX_ITEM_BYTES`：过滤 UTF-8 JSON 超过 32 KiB 的单条内容。
+- `MAX_PAYLOAD_BYTES`：完整快照按配置顺序保留到 2 MiB；不能再放入的条目或分组会被过滤。
+
+数量或字节超限不会让 `mount` 抛错，也不会让 `updateConfig` reject；不会刷新 iframe 或清空已有会话状态。字段缺失、重复 ID、内置 ID 冲突、未知字段、循环对象和非 JSON-safe 值仍属于结构错误，会继续返回 `INVALID_CONFIG`，且不会部分替换旧快照。
 
 #### `message.stream.started`
 
@@ -207,13 +233,7 @@ on(event: "agent_ready", listener: () => void): () => void
 ```ts
 namespace MagicWidget {
 	type HeaderActionName =
-		| "fullscreen"
-		| "pin"
-		| "newTopic"
-		| "history"
-		| "share"
-		| "more"
-		| "close"
+		"fullscreen" | "pin" | "newTopic" | "history" | "share" | "more" | "close"
 
 	interface HeaderActionContext {
 		action: HeaderActionName
@@ -228,7 +248,9 @@ namespace MagicWidget {
 		iframe?: IframeOptions
 		modal?: ModalOptions
 		target?: HTMLElement
-		headerActions?: Partial<Record<HeaderActionName, (context: HeaderActionContext) => void | Promise<void>>>
+		headerActions?: Partial<
+			Record<HeaderActionName, (context: HeaderActionContext) => void | Promise<void>>
+		>
 	}
 }
 ```
@@ -348,7 +370,7 @@ await window.MagicWidget.sendMessage("发送新对话中的虚构内容")
 
 所有输入、发送、新建对话和配置更新方法均返回 Promise。失败时错误对象包含稳定的 `code`，例如 `NOT_MOUNTED`、`INVALID_INPUT`、`INVALID_CONFIG`、`IFRAME_NOT_READY` 或 `COMMAND_FAILED`。SDK 只在首次加载或重新加载期间等待 iframe 文档完成加载，不等待 `agent_ready`；命令结果以 iframe response 为准。
 
-跨域通信使用版本化 `postMessage` 协议，并同时限制为 SDK 推导出的 Magic Origin 和当前 iframe 窗口。调用方不应传递密钥或完成任务不需要的业务数据。本阶段不开放宿主自定义 `@` 候选列表和动态内容注入。
+跨域通信使用版本化 `postMessage` 协议，并同时限制为 SDK 推导出的 Magic Origin 和当前 iframe 窗口。调用方不应传递密钥或完成任务不需要的业务数据。动态内容只在桌面 inline Widget 中生效，普通 Magic Web 页面和移动布局不会消费它。
 
 ### `config`
 
@@ -376,14 +398,37 @@ namespace MagicWidget {
 			visible?: boolean
 			title?: string
 			topicName?: { mode?: "current" | "hidden" | "static"; text?: string }
-			actions?: Partial<Record<"fullscreen" | "pin" | "newTopic" | "history" | "share" | "more" | "close", boolean>>
+			actions?: Partial<
+				Record<
+					"fullscreen" | "pin" | "newTopic" | "history" | "share" | "more" | "close",
+					boolean
+				>
+			>
 		}
 		panel?: {
-			projectFiles?: boolean; uploadFiles?: boolean
-			otherProjectFiles?: boolean; digitalEmployees?: boolean
-			microApps?: boolean; workflows?: boolean
-			connectors?: boolean; skills?: boolean
+			projectFiles?: boolean
+			uploadFiles?: boolean
+			otherProjectFiles?: boolean
+			digitalEmployees?: boolean
+			microApps?: boolean
+			workflows?: boolean
+			connectors?: boolean
+			skills?: boolean
 			canvasElements?: boolean
+			customGroups?: Array<{
+				id: string
+				label: string
+				icon?: string
+				items: Array<{
+					id: string
+					type: string
+					text: string
+					title?: string
+					description?: string
+					icon?: string
+					data?: Record<string, unknown>
+				}>
+			}>
 		}
 		bottom?: {
 			internetSearch?: { enabled?: boolean; buttonVisible?: boolean }
@@ -397,21 +442,22 @@ namespace MagicWidget {
 }
 ```
 
-| 字段                         | 作用                                                  | 边界限制                                                                                                    |
-| ---------------------------- | ----------------------------------------------------- | ----------------------------------------------------------------------------------------------------------- |
-| `layout`                     | 选择 Crew 对话内容使用桌面版或移动版。                | 不替换外围应用外壳；SDK 默认使用 `mobile`，可显式配置为 `desktop`。                                         |
-| `shell.appSidebar`           | 显示或隐藏应用侧边栏。                                | 仅在合法 SDK 嵌入且最终 Crew 布局为 `desktop` 时生效，不影响移动端嵌入布局。                                |
-| `responsive.mobileDetection` | 选择仅视口或设备与视口组合的移动端语义。              | SDK 默认使用 `viewport` 以兼容已有移动业务；需要窄 PC iframe 保持桌面交互时可配置为 `device-and-viewport`。 |
-| `conversation.projectFiles`  | 显示或隐藏桌面版项目文件面板。                        | 仅由桌面版 Crew 对话布局消费。                                                                              |
-| `conversation.topicHistory`  | 启用或关闭桌面版历史话题入口和面板。                  | 仅由桌面版 Crew 对话布局消费。                                                                              |
-| `conversation.autoHire`      | 直开员工不可执行时是否自动尝试雇佣，默认开启。        | 仅在合法 SDK 嵌入中生效；普通 Magic Web Crew 页面不会自动雇佣。                                             |
-| `conversation.previewMode`   | 选择 `split`、`fullscreen` 或 `switchable` 预览策略。 | 桌面 SDK 嵌入默认 `switchable`；普通 Magic Web 页面继续使用现有并排布局。                                   |
-| `header.visible`             | 显示或隐藏 inline 标准头部。                         | 仅桌面 inline 生效；隐藏后宿主可自行绘制头部。                                                       |
-| `header.title` / `topicName` | 配置头部上行标题和下行话题文案。                     | `topicName.mode` 支持 `current`、`hidden`、`static`；默认使用当前话题名。                              |
-| `header.actions`             | 控制头部每个操作是否显示。                           | 未配置的操作保持显示；显式 `false` 隐藏。`fullscreen` 和 `pin` 没有组件内行为：要么注册对应的 `headerActions`，要么设为 `false`。只省略不注册仍会画出按钮，点击没有效果。`header.visible=false` 时整体不生效。 |
-| `panel.*`                    | 分别控制 `@` 提及面板根层的当前项目文件、上传文件、其它项目/文件、数字员工、流程、微应用、连接器、技能和画布元素行。 | 每个字段只影响对应的 Mention 行；流程下的智能体和工具子行沿用现有行为。未配置保持当前行为。 |
-| `bottom.*`                   | 分别控制联网搜索、连接器、上传、语音的能力和按钮，以及模型选择按钮。 | 底部配置与 Mention 行相互独立。上传能力关闭会同步阻断拖拽/粘贴/图片；仅隐藏按钮仍保留能力。`internetSearch.enabled: false` 会隐藏按钮，并在发送时强制 `enable_web_search` 为 false。模型选择只有按钮显隐。 |
-| `window.closable`            | 控制 iframe 标准头部内的关闭按钮是否显示。           | `false` 只隐藏入口，宿主仍可调用 `close()`。                                                            |
+| 字段                         | 作用                                                                                                                 | 边界限制                                                                                                                                                                                                                                                                                                                                           |
+| ---------------------------- | -------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `layout`                     | 选择 Crew 对话内容使用桌面版或移动版。                                                                               | 不替换外围应用外壳；SDK 默认使用 `mobile`，可显式配置为 `desktop`。                                                                                                                                                                                                                                                                                |
+| `shell.appSidebar`           | 显示或隐藏应用侧边栏。                                                                                               | 仅在合法 SDK 嵌入且最终 Crew 布局为 `desktop` 时生效，不影响移动端嵌入布局。                                                                                                                                                                                                                                                                       |
+| `responsive.mobileDetection` | 选择仅视口或设备与视口组合的移动端语义。                                                                             | SDK 默认使用 `viewport` 以兼容已有移动业务；需要窄 PC iframe 保持桌面交互时可配置为 `device-and-viewport`。                                                                                                                                                                                                                                        |
+| `conversation.projectFiles`  | 显示或隐藏桌面版项目文件面板。                                                                                       | 仅由桌面版 Crew 对话布局消费。                                                                                                                                                                                                                                                                                                                     |
+| `conversation.topicHistory`  | 启用或关闭桌面版历史话题入口和面板。                                                                                 | 仅由桌面版 Crew 对话布局消费。                                                                                                                                                                                                                                                                                                                     |
+| `conversation.autoHire`      | 直开员工不可执行时是否自动尝试雇佣，默认开启。                                                                       | 仅在合法 SDK 嵌入中生效；普通 Magic Web Crew 页面不会自动雇佣。                                                                                                                                                                                                                                                                                    |
+| `conversation.previewMode`   | 选择 `split`、`fullscreen` 或 `switchable` 预览策略。                                                                | 桌面 SDK 嵌入默认 `switchable`；普通 Magic Web 页面继续使用现有并排布局。                                                                                                                                                                                                                                                                          |
+| `header.visible`             | 显示或隐藏 inline 标准头部。                                                                                         | 仅桌面 inline 生效；隐藏后宿主可自行绘制头部。                                                                                                                                                                                                                                                                                                     |
+| `header.title` / `topicName` | 配置头部上行标题和下行话题文案。                                                                                     | `topicName.mode` 支持 `current`、`hidden`、`static`；默认使用当前话题名。                                                                                                                                                                                                                                                                          |
+| `header.actions`             | 控制头部每个操作是否显示。                                                                                           | 未配置的操作保持显示；显式 `false` 隐藏。`fullscreen` 和 `pin` 没有组件内行为：要么注册对应的 `headerActions`，要么设为 `false`。只省略不注册仍会画出按钮，点击没有效果。`header.visible=false` 时整体不生效。                                                                                                                                     |
+| `panel.*`                    | 分别控制 `@` 提及面板根层的当前项目文件、上传文件、其它项目/文件、数字员工、流程、微应用、连接器、技能和画布元素行。 | 每个字段只影响对应的 Mention 行；流程下的智能体和工具子行沿用现有行为。未配置保持当前行为。                                                                                                                                                                                                                                                        |
+| `bottom.*`                   | 分别控制联网搜索、连接器、上传、语音的能力和按钮，以及模型选择按钮。                                                 | 底部配置与 Mention 行相互独立。上传能力关闭会同步阻断拖拽/粘贴/图片；仅隐藏按钮仍保留能力。`internetSearch.enabled: false` 会隐藏按钮，并在发送时强制 `enable_web_search` 为 false。模型选择只有按钮显隐。                                                                                                                                         |
+| `window.closable`            | 控制 iframe 标准头部内的关闭按钮是否显示。                                                                           | `false` 只隐藏入口，宿主仍可调用 `close()`。                                                                                                                                                                                                                                                                                                       |
+| `panel.customGroups`         | 向桌面 inline Widget 的 `@` 面板末尾注入自定义命名分组。                                                             | `mount`/`updateConfig` 都是整体替换；分组 ID 不能重复或与内置入口冲突，同组子项 ID 不能重复，空分组不显示。最多 50 组、每组 1,000 条、所有分组合计 5,000 条、单条 32 KiB、整体 2 MiB（UTF-8 JSON）。数量或字节超限会按顺序过滤并触发 `config.warning`，不会中断渲染；结构非法、重复或非 JSON-safe 值仍返回带路径的 `INVALID_CONFIG` 并保留旧快照。 |
 
 `split` 让展开的对话与预览并排展示；`fullscreen` 只在当前宿主控制的 Widget 容器内展示预览，退出时直接关闭预览；只有宿主同步放大 Widget 容器时，预览才会覆盖宿主视口；`switchable` 将预览保持在 Widget 内部布局中，新预览会话开始时自动收起对话，并允许用户展开或再次收起对话而不重建预览。用户仍可手动进入宿主全屏，退出后恢复进入前的对话布局。宿主控制器始终保持同一个 iframe 挂载，因此文件 Tab、工具回放状态、输入内容和已加载预览数据不会被重建。运行时更新配置只影响下一次预览激活，不会强制改变当前布局。
 
@@ -436,6 +482,107 @@ await window.MagicWidget.updateConfig({
 	window: { closable: false },
 })
 ```
+
+### 自定义 Mention 分组
+
+自定义 Mention 分组会在 `config_ready` 握手后发送，因此不会进入受保护的首帧 URL query。桌面 inline Widget 会把非空分组按配置顺序追加到内置 `@` 入口之后。用户点击条目后会立即插入 `text` Mention 并关闭 Mention 面板；Mention 使用简短 `title` 展示（未提供时回退到 `text`），Agent prompt 使用完整 `text`。分组 ID、子项 ID、类型和数据保留在富文本 Mention 元数据中，不增加后端 Mention 协议字段。
+
+`text` 必须是自包含文本：它是当前 Agent 唯一能够稳定消费的条目语义。业务方应把业务对象名称以及分析所需的关键事实写入 `text`。`title` 用作列表和 Mention 标签的短文案，`description` 只用于列表展示，`data` 保留在富文本 Mention 元数据中用于展示和恢复；这些字段不会进入 `extra.super_agent.mentions`，也不会自动成为 Agent 可读取的结构化上下文。
+
+```js
+// 推荐：用户继续输入“解读它”时，Agent 已获得必要的示例背景。
+text: "业务图表「图表A」；时间范围：示例季度；指标：模拟营收；趋势：环比增长12%；请分析主要变化。"
+
+// 不推荐：Agent 只会收到含义不完整的名称，无法推断图表数据。
+text: "图表A"
+```
+
+```js
+window.MagicWidget.mount({
+	page: { type: "crew", crewId: "crew-demo" },
+	target: document.querySelector("#agent-slot"),
+	config: {
+		layout: "desktop",
+		panel: {
+			customGroups: [
+				{
+					id: "business-charts",
+					label: "业务图表",
+					items: [
+						{
+							id: "fixture-chart-a",
+							type: "chart",
+							text: "业务图表「图表A」；时间范围：示例季度；指标：模拟营收；趋势：环比增长12%；请分析主要变化。",
+							title: "图表A",
+							data: { source: "fixture" },
+						},
+					],
+				},
+			],
+		},
+	},
+})
+
+await window.MagicWidget.updateConfig({
+	panel: {
+		customGroups: [
+			{
+				id: "business-charts",
+				label: "业务图表",
+				items: [
+					{
+						id: "fixture-chart-b",
+						type: "chart",
+						text: "业务图表「图表B」；时间范围：示例月份；指标：模拟活跃用户；趋势：环比下降8%；请分析可能原因。",
+						title: "图表B",
+					},
+				],
+			},
+		],
+	},
+})
+```
+
+#### 发送时携带的信息
+
+用户点击条目后，编辑器会立即插入一个 `text` Mention。例如宿主配置：
+
+```js
+{
+	id: "chart-a",
+	type: "chart",
+	text: "业务图表「图表A」；时间范围：示例季度；指标：模拟营收；趋势：环比增长12%；请分析主要变化。",
+	title: "图表A",
+	data: { source: "host", metric: "revenue" },
+}
+```
+
+Magic Web 发送的富文本消息中会包含等价的 Mention 节点：
+
+```js
+{
+	type: "mention",
+	attrs: {
+		type: "text",
+		label: "业务图表「图表A」；时间范围：示例季度；指标：模拟营收；趋势：环比增长12%；请分析主要变化。",
+		data: {
+			source: "host",
+			metric: "revenue",
+			groupId: "business-charts",
+			id: "chart-a",
+			label: "图表A",
+			text: "业务图表「图表A」；时间范围：示例季度；指标：模拟营收；趋势：环比增长12%；请分析主要变化。",
+			type: "chart",
+		},
+	},
+}
+```
+
+`groupId`、`id`、`label`、`text` 和原始条目 `type` 是 Widget 生成的保留字段，会覆盖条目 `data` 中的同名字段；`label` 取去除首尾空白后的 `title`，未提供或为空时回退到 `text`。其他 JSON-safe `data` 会保留在富文本 payload 中，用于编辑器展示和历史恢复。`title`、`description`、`icon` 不会以原字段名复制到 Mention data，除非宿主也将其放入 `data`。
+
+该 Mention 会被明确排除在 `extra.super_agent.mentions` 之外，不会作为 `chart` 等新的后端结构化 Mention 类型发送。后端会将它以 `@<item.text>` 的纯文本形式写入 Agent prompt；附加 JSON 只是富文本元数据，在后端协议明确支持前，宿主不能依赖 Agent 将其作为结构化上下文读取。
+
+`icon` 只作为本地图标安全 token 使用，Widget 不会加载条目提供的任意 URL。`text`、描述或 `data` 中的 HTML/script 字符串只按文本展示。数量和字节超限会使用过滤后的完整快照；结构非法的更新不会部分替换旧列表，也不会刷新 iframe。
 
 `headerActions` 在 inline 头部原有行为完成之后通知宿主，回调不能取消该行为。`newTopic` 在话题创建成功后上报，`share`、`history`、`more` 在对应界面触发后上报。`fullscreen` 和 `pin` 没有组件内行为，回调会直接执行。`headerActionHandled: false` 只是所有权回执，iframe 不会回退。没有 handler 的宿主动作必须隐藏。下面的示例实现了 `pin` 和 `close`，因此把 `fullscreen` 设为 `false`。`close` 会先关闭 Widget，再执行 `headerActions.close`；回调失败不会把 Widget 重新打开：
 

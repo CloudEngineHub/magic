@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 import { createMagicWidgetController } from "../src/controller"
+import type { MagicWidget } from "../src/types"
 
 function setViewport(width: number, height: number) {
 	Object.defineProperty(window, "innerWidth", {
@@ -910,6 +911,78 @@ describe("createMagicWidgetController", () => {
 		widget.destroy()
 	})
 
+	it("sends the complete custom Mention group snapshot after config_ready", async () => {
+		const widget = createMagicWidgetController()
+		appendWidgetScript("https://widget-app.example.invalid/sdk/magic-widget.js")
+		const target = document.createElement("div")
+		document.body.append(target)
+		widget.mount({
+			page: { type: "crew", crewId: "crew-mock-custom-groups" },
+			target,
+			config: {
+				layout: "desktop",
+				panel: {
+					customGroups: [
+						{
+							id: "charts",
+							label: "Charts",
+							items: [{ id: "chart-a", type: "chart", text: "Chart A" }],
+						},
+					],
+				},
+			},
+		})
+		const iframe = document
+			.querySelector("[data-magic-widget-root]")
+			?.shadowRoot?.querySelector("iframe") as HTMLIFrameElement
+		const postMessage = vi.fn()
+		const frameWindow = { postMessage } as unknown as Window
+		Object.defineProperty(iframe, "contentWindow", { configurable: true, value: frameWindow })
+		const initialSrc = iframe.src
+		const initialConfig = JSON.parse(
+			new URL(initialSrc).searchParams.get("magicWidgetConfig") ?? "null",
+		)
+		expect(initialConfig.panel?.customGroups).toBeUndefined()
+		iframe.dispatchEvent(new Event("load"))
+		dispatchConfigReady(iframe, frameWindow, "https://widget-app.example.invalid")
+		await vi.waitFor(() => expect(postMessage).toHaveBeenCalled())
+		respondToConfig(
+			frameWindow,
+			"https://widget-app.example.invalid",
+			postMessage.mock.calls[0]?.[0] as Record<string, unknown>,
+		)
+		postMessage.mockClear()
+
+		const updatePromise = widget.updateConfig({
+			panel: {
+				customGroups: [
+					{
+						id: "charts",
+						label: "Updated charts",
+						items: [{ id: "chart-b", type: "chart", text: "Chart B" }],
+					},
+				],
+			},
+		})
+		await vi.waitFor(() => expect(postMessage).toHaveBeenCalled())
+		const configMessage = postMessage.mock.calls[0]?.[0] as { config: MagicWidget.WidgetConfig }
+		expect(configMessage.config.panel?.customGroups).toEqual([
+			{
+				id: "charts",
+				label: "Updated charts",
+				items: [{ id: "chart-b", type: "chart", text: "Chart B" }],
+			},
+		])
+		respondToConfig(
+			frameWindow,
+			"https://widget-app.example.invalid",
+			postMessage.mock.calls[0]?.[0] as Record<string, unknown>,
+		)
+		await expect(updatePromise).resolves.toBeUndefined()
+		expect(iframe.src).toBe(initialSrc)
+		widget.destroy()
+	})
+
 	it("resynchronizes the latest runtime config after iframe reload without changing its URL", async () => {
 		const origin = "https://widget-app.example.invalid"
 		const widget = createMagicWidgetController()
@@ -975,6 +1048,45 @@ describe("createMagicWidgetController", () => {
 			.querySelector("[data-magic-widget-root]")
 			?.shadowRoot?.querySelector("iframe") as HTMLIFrameElement
 		expect(iframe.getAttribute("src")).toBeNull()
+		widget.destroy()
+	})
+
+	it("filters oversized custom Mention updates and keeps the widget rendered", async () => {
+		const widget = createMagicWidgetController()
+		const warnings: MagicWidget.ConfigWarning[] = []
+		const consoleWarning = vi.spyOn(console, "warn").mockImplementation(() => undefined)
+		appendWidgetScript("https://widget-app.example.invalid/sdk/magic-widget.js")
+		widget.mount({ page: { type: "crew", crewId: "crew-mock-filtered-config" } })
+		widget.on("config.warning", (warning) => warnings.push(warning))
+
+		await expect(
+			widget.updateConfig({
+				panel: {
+					customGroups: [
+						{
+							id: "fixture-group",
+							label: "Fixture group",
+							items: Array.from({ length: 1_001 }, (_, index) => ({
+								id: `fixture-item-${index}`,
+								type: "fixture",
+								text: `Fixture ${index}`,
+							})),
+						},
+					],
+				},
+			}),
+		).resolves.toBeUndefined()
+		expect(warnings).toEqual([
+			expect.objectContaining({
+				code: "CUSTOM_MENTION_FILTERED",
+				details: expect.objectContaining({
+					droppedItems: 1,
+					reasons: ["MAX_ITEMS_PER_GROUP"],
+				}),
+			}),
+		])
+		expect(document.querySelector("[data-magic-widget-root]")).not.toBeNull()
+		expect(consoleWarning).toHaveBeenCalledOnce()
 		widget.destroy()
 	})
 

@@ -120,6 +120,16 @@ async function searchItems(query: string): Promise<MentionItem[]> {
 	return result.items ?? []
 }
 
+/** Searches the current custom group through the same scoped request used by the panel. */
+async function searchItemsInGroup(query: string, scopeFolderId: string): Promise<MentionItem[]> {
+	const result = await mentionPanelStore.dispatch({
+		kind: "search",
+		query,
+		scopeFolderId,
+	})
+	return result.items ?? []
+}
+
 async function getSkillItems(): Promise<MentionItem[]> {
 	const result = await mentionPanelStore.dispatch({
 		kind: "catalog",
@@ -308,6 +318,7 @@ describe("MentionPanelStore Sorting Algorithm", () => {
 		mentionPanelStore.clearActiveCanvasElementsContext()
 		mentionPanelStore.setPinnedCurrentMicroApp(null)
 		mentionPanelStore.setBuiltinVisibility({})
+		mentionPanelStore.setCustomMentionGroups([])
 
 		vi.mocked(CrewApi.getMentionSkills).mockResolvedValue([])
 
@@ -340,6 +351,80 @@ describe("MentionPanelStore Sorting Algorithm", () => {
 	})
 
 	describe("default root items", () => {
+		it("exposes named custom groups as directories and text mentions", async () => {
+			mentionPanelStore.setCustomMentionGroups([
+				{
+					id: "custom-group-fixture",
+					label: "Fixture group",
+					items: [
+						{
+							id: "custom-item-fixture",
+							type: "card",
+							text: "Fixture content",
+							title: "Fixture card",
+							data: { source: "fixture" },
+						},
+					],
+				},
+			])
+
+			const rootItems = await getDefaultItems()
+			expect(rootItems.at(-1)).toMatchObject({
+				id: "custom-group-fixture",
+				name: "Fixture group",
+				hasChildren: true,
+			})
+			const contentItems = await mentionPanelStore.dispatch({
+				kind: "children",
+				id: "custom-group-fixture",
+			})
+			expect(contentItems.items).toEqual([
+				expect.objectContaining({
+					id: "custom-item-fixture",
+					name: "Fixture card",
+					type: MentionItemType.TEXT,
+					metadata: { customMention: true, customMentionGroupId: "custom-group-fixture" },
+					data: expect.objectContaining({
+						groupId: "custom-group-fixture",
+						id: "custom-item-fixture",
+						label: "Fixture card",
+						text: "Fixture content",
+						type: "card",
+						source: "fixture",
+					}),
+				}),
+			])
+		})
+
+		it("falls back to semantic text when a custom item has no usable title", async () => {
+			mentionPanelStore.setCustomMentionGroups([
+				{
+					id: "fallback-group-fixture",
+					label: "Fallback group",
+					items: [
+						{
+							id: "fallback-item-fixture",
+							type: "card",
+							text: "Fallback semantic text",
+							title: "   ",
+						},
+					],
+				},
+			])
+
+			const result = await mentionPanelStore.dispatch({
+				kind: "children",
+				id: "fallback-group-fixture",
+			})
+			expect(result.items?.[0]).toMatchObject({
+				name: "Fallback semantic text",
+				data: {
+					label: "Fallback semantic text",
+					text: "Fallback semantic text",
+				},
+			})
+		})
+
 		it("should show other project files without a current project", async () => {
 			projectFilesStore.setSelectedProject(null)
 
@@ -416,6 +501,70 @@ describe("MentionPanelStore Sorting Algorithm", () => {
 				catalogId: MentionPanelCatalogId.FLOWS,
 			})
 			expect(flowItems.items?.map((item) => item.id)).toEqual(["agents", "tools"])
+		})
+	})
+
+	describe("custom group search", () => {
+		beforeEach(() => {
+			mentionPanelStore.setCustomMentionGroups([
+				{
+					id: "fixture-charts",
+					label: "Charts",
+					items: [
+						{
+							id: "fixture-chart-a",
+							type: "chart",
+							title: "Chart A",
+							text: "Mock revenue for a sample quarter",
+							description: "Fixture chart description",
+						},
+					],
+				},
+				{
+					id: "fixture-reports",
+					label: "Reports",
+					items: [
+						{
+							id: "fixture-report-a",
+							type: "report",
+							title: "Report A",
+							text: "Mock revenue for a different period",
+							description: "Fixture report description",
+						},
+					],
+				},
+			])
+		})
+
+		it("finds custom items globally by title and semantic text", async () => {
+			const byTitle = await searchItems("Chart A")
+			expect(byTitle.filter((item) => item.metadata?.customMention)).toMatchObject([
+				{ id: "fixture-chart-a", name: "Chart A" },
+			])
+
+			const byText = await searchItems("sample quarter")
+			expect(byText.filter((item) => item.metadata?.customMention)).toMatchObject([
+				{
+					id: "fixture-chart-a",
+					data: { groupId: "fixture-charts", text: "Mock revenue for a sample quarter" },
+				},
+			])
+
+			const acrossGroups = await searchItems("mock revenue")
+			expect(
+				acrossGroups
+					.filter((item) => item.metadata?.customMention)
+					.map((item) => item.data?.groupId),
+			).toEqual(["fixture-charts", "fixture-reports"])
+		})
+
+		it("limits a scoped search to its group and matches descriptions", async () => {
+			const byText = await searchItemsInGroup("mock revenue", "fixture-charts")
+			expect(byText).toMatchObject([{ id: "fixture-chart-a", name: "Chart A" }])
+
+			const byDescription = await searchItemsInGroup("chart description", "fixture-charts")
+			expect(byDescription).toMatchObject([{ id: "fixture-chart-a" }])
+			expect(await searchItemsInGroup("report description", "fixture-charts")).toEqual([])
 		})
 	})
 

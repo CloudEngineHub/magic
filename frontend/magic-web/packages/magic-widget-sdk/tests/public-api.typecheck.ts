@@ -58,6 +58,20 @@ const validOptions: MagicWidget.MountOptions = {
 			connectors: false,
 			skills: false,
 			canvasElements: false,
+			customGroups: [
+				{
+					id: "group-typecheck",
+					label: "Typecheck group",
+					items: [
+						{
+							id: "content-typecheck",
+							type: "card",
+							text: "Typecheck fixture",
+							data: { source: "fixture" },
+						},
+					],
+				},
+			],
 		},
 		bottom: {
 			internetSearch: { enabled: true, buttonVisible: false },
@@ -106,6 +120,18 @@ const unsubscribePreviewFullscreen = window.MagicWidget?.on(
 	},
 )
 void unsubscribePreviewFullscreen
+
+const unsubscribeConfigWarning = window.MagicWidget?.on("config.warning", (warning) => {
+	const code: "CUSTOM_MENTION_FILTERED" = warning.code
+	const droppedGroups: number = warning.details.droppedGroups
+	const droppedItems: number = warning.details.droppedItems
+	const reasons: MagicWidget.ConfigWarningReason[] = warning.details.reasons
+	void code
+	void droppedGroups
+	void droppedItems
+	void reasons
+})
+void unsubscribeConfigWarning
 
 const unsubscribeMessageStreamStarted = window.MagicWidget?.on(
 	"message.stream.started",

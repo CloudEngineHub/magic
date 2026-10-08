@@ -65,6 +65,8 @@ export const defaultMentionPanelCatalogBehavior: MentionPanelCatalogBehavior<str
 				return buildCatalogTransition(MentionPanelCatalogId.TABS)
 			case MentionPanelItemType.HISTORIES:
 				return buildCatalogTransition(MentionPanelCatalogId.HISTORIES)
+			case MentionItemType.TEXT:
+				return null
 			case MentionItemType.MCP:
 			case MentionItemType.AGENT:
 			case MentionItemType.SKILL:

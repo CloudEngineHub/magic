@@ -1,4 +1,10 @@
-import type { MagicWidgetConfig, MagicWidgetEmbedContext, MagicWidgetLayout } from "./types"
+import type {
+	MagicWidgetConfig,
+	MagicWidgetConfigWarning,
+	MagicWidgetEmbedContext,
+	MagicWidgetLayout,
+} from "./types"
+import { normalizeMagicWidgetCustomGroups } from "./custom-groups"
 
 export const MAGIC_WIDGET_PROTOCOL = "magic-widget"
 export const MAGIC_WIDGET_PROTOCOL_VERSION = 1
@@ -8,12 +14,34 @@ const MAGIC_WIDGET_QUERY_EMBED = "magicWidgetEmbed"
 const MAGIC_WIDGET_QUERY_INSTANCE_ID = "magicWidgetInstanceId"
 const MAGIC_WIDGET_QUERY_PROTOCOL_VERSION = "magicWidgetProtocolVersion"
 const MAGIC_WIDGET_QUERY_HOST_ORIGIN = "magicWidgetHostOrigin"
+const MAGIC_WIDGET_QUERY_RENDER_MODE = "magicWidgetRenderMode"
 const MAX_INITIAL_CONFIG_LENGTH = 4_096
 
-/** Accepts a host config snapshot. Field rules stay in the SDK; the iframe only refuses values it cannot render. */
-export function acceptMagicWidgetConfig(value: unknown): MagicWidgetConfig {
+/** Accepts a host config snapshot while reporting non-fatal custom Mention filtering. */
+export function acceptMagicWidgetConfig(
+	value: unknown,
+	reportWarning?: (warning: MagicWidgetConfigWarning) => void,
+): MagicWidgetConfig {
 	if (!isPlainConfigObject(value)) {
 		throw new Error("Magic widget config must be an object")
+	}
+	if (value.panel !== undefined) {
+		if (!isPlainConfigObject(value.panel))
+			throw new Error("Magic widget config.panel must be an object")
+		return {
+			...value,
+			panel: {
+				...value.panel,
+				...(value.panel.customGroups === undefined
+					? {}
+					: {
+							customGroups: normalizeMagicWidgetCustomGroups(
+								value.panel.customGroups,
+								reportWarning,
+							),
+						}),
+			},
+		}
 	}
 	return value
 }
@@ -33,6 +61,7 @@ export function getMagicWidgetEmbedContext(search: string): MagicWidgetEmbedCont
 	const instanceId = params.get(MAGIC_WIDGET_QUERY_INSTANCE_ID)?.trim()
 	const protocolVersion = Number(params.get(MAGIC_WIDGET_QUERY_PROTOCOL_VERSION))
 	const hostOriginValue = params.get(MAGIC_WIDGET_QUERY_HOST_ORIGIN)
+	const renderModeValue = params.get(MAGIC_WIDGET_QUERY_RENDER_MODE)
 	if (!instanceId || protocolVersion !== MAGIC_WIDGET_PROTOCOL_VERSION || !hostOriginValue) {
 		return null
 	}
@@ -40,7 +69,14 @@ export function getMagicWidgetEmbedContext(search: string): MagicWidgetEmbedCont
 	try {
 		const hostUrl = new URL(hostOriginValue)
 		if (hostUrl.protocol !== "http:" && hostUrl.protocol !== "https:") return null
-		return { instanceId, protocolVersion, hostOrigin: hostUrl.origin }
+		return {
+			instanceId,
+			protocolVersion,
+			hostOrigin: hostUrl.origin,
+			...(renderModeValue === "inline" || renderModeValue === "floating"
+				? { renderMode: renderModeValue }
+				: {}),
+		}
 	} catch {
 		return null
 	}
