@@ -55,6 +55,20 @@ export function ClawRecurringScheduleFields({
 		{ value: 6, label: t("accountPanel.timedTasks.clawWeekdaySat") },
 		{ value: 0, label: t("accountPanel.timedTasks.clawWeekdaySun") },
 	]
+	// Ordered as the five cron fields: minute hour day-of-month month day-of-week.
+	const cronFieldOptions = [
+		{ label: t("accountPanel.timedTasks.clawCronFieldMinute"), range: "0-59" },
+		{ label: t("accountPanel.timedTasks.clawCronFieldHour"), range: "0-23" },
+		{ label: t("accountPanel.timedTasks.clawCronFieldDay"), range: "1-31" },
+		{ label: t("accountPanel.timedTasks.clawCronFieldMonth"), range: "1-12" },
+		{ label: t("accountPanel.timedTasks.clawCronFieldWeekday"), range: "0-6" },
+	]
+	const cronSymbolOptions = [
+		{ symbol: "*", label: t("accountPanel.timedTasks.clawCronSymbolAny") },
+		{ symbol: ",", label: t("accountPanel.timedTasks.clawCronSymbolList") },
+		{ symbol: "-", label: t("accountPanel.timedTasks.clawCronSymbolRange") },
+		{ symbol: "/", label: t("accountPanel.timedTasks.clawCronSymbolStep") },
+	]
 	const isCustomCycle = cycle === CLAW_CRON_RECURRING_CYCLE.Custom
 	const isWeeklyCycle = cycle === CLAW_CRON_RECURRING_CYCLE.Weekly
 	const isMonthlyCycle = cycle === CLAW_CRON_RECURRING_CYCLE.Monthly
@@ -190,6 +204,34 @@ export function ClawRecurringScheduleFields({
 						data-testid="claw-scheduled-task-recurring-expr-input"
 					/>
 					{exprError ? <div className="text-xs text-destructive">{exprError}</div> : null}
+					<div
+						className="space-y-1.5 rounded-md border bg-background p-2 text-xs text-muted-foreground"
+						data-testid="claw-scheduled-task-recurring-expr-help"
+					>
+						<div className="grid grid-cols-5 gap-1 text-center">
+							{cronFieldOptions.map((field) => (
+								<div key={field.label} className="rounded bg-muted/50 px-1 py-1">
+									<div className="font-medium text-foreground">{field.label}</div>
+									<div className="font-mono">{field.range}</div>
+								</div>
+							))}
+						</div>
+						<div className="flex flex-wrap gap-x-3 gap-y-1">
+							{cronSymbolOptions.map((option) => (
+								<span
+									key={option.symbol}
+									className="inline-flex items-center gap-1"
+								>
+									<code className="rounded bg-muted px-1 font-mono text-foreground">
+										{option.symbol}
+									</code>
+									{option.label}
+								</span>
+							))}
+						</div>
+						<div>{t("accountPanel.timedTasks.clawCronSundayHint")}</div>
+						<div>{t("accountPanel.timedTasks.clawCronExampleHint")}</div>
+					</div>
 				</div>
 			) : null}
 		</div>
