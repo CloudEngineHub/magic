@@ -242,7 +242,7 @@ function PlaybackTabContent(props: PlaybackTabContentProps) {
 									<ToolIconBadge
 										toolName={currentToolStep?.name}
 										size={16}
-										iconSize={10}
+										iconSize={12}
 									/>
 									<div className="flex items-center gap-2">
 										<span

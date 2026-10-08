@@ -2,7 +2,6 @@ import {
 	BrainCircuit,
 	MonitorCloud,
 	Search,
-	Plug,
 	FileScan,
 	FilePlus,
 	FilePenLine,
@@ -25,14 +24,11 @@ import {
 	FileText,
 	ListTodo,
 	ListChecks,
-	Frame,
 	Shapes,
-	Layers3,
-	LayoutGrid,
 	CandlestickChart,
 } from "lucide-react"
 import type { ToolIconConfig } from "./types"
-import { AgentIcon, WechatIcon, ImageSearch, SkillIcon, DefaultIcon } from "./CustomIcons"
+import { AgentIcon, ImageSearch, SkillIcon, DefaultIcon } from "./CustomIcons"
 import createFieldIcon from "@/pages/superMagic/assets/tool_icon/create_field.svg"
 import createTableIcon from "@/pages/superMagic/assets/tool_icon/create_table.svg"
 import deleteFieldIcon from "@/pages/superMagic/assets/tool_icon/delete_field.svg"
@@ -43,6 +39,26 @@ import updateTablePermissionsIcon from "@/pages/superMagic/assets/tool_icon/upda
 import viewTableIcon from "@/pages/superMagic/assets/tool_icon/view_table.svg"
 import longMemoryIcon from "@/pages/superMagic/assets/tool_icon/long_memory.svg"
 import todoWriteIcon from "@/pages/superMagic/assets/tool_icon/todo_write.svg"
+import legacyFileMusicIcon from "@/pages/superMagic/assets/tool_icon/builtin-file-music-002bff.svg"
+import legacyFileTextIcon from "@/pages/superMagic/assets/tool_icon/builtin-file-text-9747ff.svg"
+import legacySkillIconIcon from "@/pages/superMagic/assets/tool_icon/builtin-skill-icon-00b5c2.svg"
+import legacyPresentationIcon from "@/pages/superMagic/assets/tool_icon/builtin-presentation-ff7c35.svg"
+import legacyCloudDownloadIcon from "@/pages/superMagic/assets/tool_icon/builtin-cloud-download-76d700.svg"
+import legacySparklesIcon from "@/pages/superMagic/assets/tool_icon/builtin-sparkles-a109ff.svg"
+import legacyAgentIconIcon from "@/pages/superMagic/assets/tool_icon/builtin-agent-icon-4b4efc.svg"
+import legacyListTodoIcon from "@/pages/superMagic/assets/tool_icon/builtin-list-todo-00cbd5.svg"
+import { platformToolIconGroups } from "./platformIcons"
+import { builtinToolIconGroups } from "./builtinIcons"
+
+// 两种渲染入口均读取这份配置；SVG 已包含背景和 12px 图形，不能再套一层底色。
+const assetToolIconMap: Record<string, ToolIconConfig> = Object.fromEntries(
+	[...platformToolIconGroups, ...builtinToolIconGroups].flatMap(([assetUrl, toolNames]) =>
+		toolNames.map((toolName) => [
+			toolName,
+			{ icon: DefaultIcon, bgColor: "transparent", assetUrl } satisfies ToolIconConfig,
+		]),
+	),
+)
 
 /**
  * 工具图标配置映射
@@ -59,16 +75,6 @@ export const toolIconMap: Record<string, ToolIconConfig> = {
 	init_virtual_machine: {
 		icon: MonitorCloud,
 		bgColor: "#6B84FF",
-	},
-
-	// MCP 工具调用
-	mcp_tool_call: {
-		icon: Plug,
-		bgColor: "#242424",
-	},
-	mcp_init: {
-		icon: Plug,
-		bgColor: "#242424",
 	},
 
 	// 金融分析
@@ -275,6 +281,7 @@ export const toolIconMap: Record<string, ToolIconConfig> = {
 	download_from_markdown: {
 		icon: CloudDownload,
 		bgColor: "#76D700",
+		assetUrl: legacyCloudDownloadIcon,
 	},
 	download_from_url: {
 		icon: CloudDownload,
@@ -307,6 +314,7 @@ export const toolIconMap: Record<string, ToolIconConfig> = {
 	generate_images: {
 		icon: Sparkles,
 		bgColor: "#A109FF",
+		assetUrl: legacySparklesIcon,
 	},
 
 	// 文件转换
@@ -339,84 +347,22 @@ export const toolIconMap: Record<string, ToolIconConfig> = {
 	create_slide_project: {
 		icon: Presentation,
 		bgColor: "#FF7C35",
+		assetUrl: legacyPresentationIcon,
 	},
 	create_slide: {
 		icon: Presentation,
 		bgColor: "#FF7C35",
+		assetUrl: legacyPresentationIcon,
 	},
 	setup_audio_project: {
 		icon: FileMusic,
 		bgColor: "#002BFF",
+		assetUrl: legacyFileMusicIcon,
 	},
 	analyze_audio_project: {
 		icon: FileMusic,
 		bgColor: "#002BFF",
-	},
-	create_design_project: {
-		icon: Frame,
-		bgColor: "#484848",
-	},
-	create_canvas: {
-		icon: Frame,
-		bgColor: "#484848",
-	},
-
-	// 设计画布操作
-	create_canvas_element: {
-		icon: Shapes,
-		bgColor: "#3D74FF",
-	},
-	update_canvas_element: {
-		icon: Shapes,
-		bgColor: "#3D74FF",
-	},
-	delete_canvas_element: {
-		icon: Shapes,
-		bgColor: "#3D74FF",
-	},
-	query_canvas_element: {
-		icon: Shapes,
-		bgColor: "#3D74FF",
-	},
-	batch_create_canvas_elements: {
-		icon: Shapes,
-		bgColor: "#3D74FF",
-	},
-	batch_update_canvas_elements: {
-		icon: Shapes,
-		bgColor: "#3D74FF",
-	},
-	generate_images_to_canvas: {
-		icon: Shapes,
-		bgColor: "#3D74FF",
-	},
-	generate_canvas_images: {
-		icon: Shapes,
-		bgColor: "#3D74FF",
-	},
-	search_images_to_canvas: {
-		icon: Shapes,
-		bgColor: "#3D74FF",
-	},
-	reorder_canvas_elements: {
-		icon: Layers3,
-		bgColor: "#FF7300",
-	},
-	query_canvas_overview: {
-		icon: LayoutGrid,
-		bgColor: "#FC4B9A",
-	},
-	generate_videos_to_canvas: {
-		icon: Shapes,
-		bgColor: "#3D74FF",
-	},
-	generate_canvas_videos: {
-		icon: Shapes,
-		bgColor: "#3D74FF",
-	},
-	query_video_generation: {
-		icon: Shapes,
-		bgColor: "#3D74FF",
+		assetUrl: legacyFileMusicIcon,
 	},
 
 	// 记忆管理
@@ -441,6 +387,7 @@ export const toolIconMap: Record<string, ToolIconConfig> = {
 	compact_chat_history: {
 		icon: FileText,
 		bgColor: "#9747FF",
+		assetUrl: legacyFileTextIcon,
 	},
 
 	// TODO 管理
@@ -451,6 +398,7 @@ export const toolIconMap: Record<string, ToolIconConfig> = {
 	todo_read: {
 		icon: ListTodo,
 		bgColor: "#00CBD5",
+		assetUrl: legacyListTodoIcon,
 	},
 	todo_write: {
 		icon: ListTodo,
@@ -477,14 +425,17 @@ export const toolIconMap: Record<string, ToolIconConfig> = {
 	create_skill: {
 		icon: SkillIcon,
 		bgColor: "#00B5C2",
+		assetUrl: legacySkillIconIcon,
 	},
 	upload_skill: {
 		icon: SkillIcon,
 		bgColor: "#00B5C2",
+		assetUrl: legacySkillIconIcon,
 	},
 	edit_skill: {
 		icon: SkillIcon,
 		bgColor: "#00B5C2",
+		assetUrl: legacySkillIconIcon,
 	},
 	skills_read: {
 		icon: SkillIcon,
@@ -493,6 +444,7 @@ export const toolIconMap: Record<string, ToolIconConfig> = {
 	read_skills: {
 		icon: SkillIcon,
 		bgColor: "#00B5C2",
+		assetUrl: legacySkillIconIcon,
 	},
 	skill_read_references: {
 		icon: SkillIcon,
@@ -505,26 +457,23 @@ export const toolIconMap: Record<string, ToolIconConfig> = {
 	get_agent_info: {
 		icon: AgentIcon,
 		bgColor: "#4B4EFC",
+		assetUrl: legacyAgentIconIcon,
 	},
 	update_agent: {
 		icon: AgentIcon,
 		bgColor: "#4B4EFC",
+		assetUrl: legacyAgentIconIcon,
 	},
+	...assetToolIconMap,
 	call_subagent: {
 		icon: AgentIcon,
 		bgColor: "#4B4EFC",
+		assetUrl: legacyAgentIconIcon,
 	},
 	wait_for_subagents: {
 		icon: AgentIcon,
 		bgColor: "#4B4EFC",
-	},
-	connect_wechat_bot: {
-		icon: WechatIcon,
-		bgColor: "#1BCB00",
-	},
-	wait_wechat_login: {
-		icon: WechatIcon,
-		bgColor: "#1BCB00",
+		assetUrl: legacyAgentIconIcon,
 	},
 }
 

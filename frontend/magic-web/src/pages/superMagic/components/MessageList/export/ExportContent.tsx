@@ -140,7 +140,7 @@ function ToolPart({ part }: { part: ExportMessagePart }) {
 					<ToolIconBadge
 						toolName={part.toolRawName || part.toolName}
 						size={16}
-						iconSize={10}
+						iconSize={12}
 					/>
 					<span className="w-fit flex-none whitespace-nowrap text-xs font-normal leading-4 text-foreground">
 						{part.toolName || "tool"}
