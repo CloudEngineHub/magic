@@ -35,6 +35,7 @@ const logger = Logger.createLogger("AssistantCard")
 
 export function withAssistantCard<
 	T extends {
+		contentMode?: "full" | "answer" | "process"
 		node: any
 		selectedTopic: Topic | null
 		classNames?: {
@@ -257,11 +258,18 @@ export function withAssistantCard<
 
 		const baseShowSuggestCondition = useMemo(
 			() =>
+				props.contentMode !== "process" &&
 				!isShareRoute &&
 				!isMagicShareRoute &&
 				messageNode?.status === "finished" &&
 				!isRevokedMessage,
-			[isRevokedMessage, messageNode?.status, isShareRoute, isMagicShareRoute],
+			[
+				isRevokedMessage,
+				messageNode?.status,
+				isShareRoute,
+				isMagicShareRoute,
+				props.contentMode,
+			],
 		)
 
 		const showSuggestList = useMemo(
@@ -282,11 +290,12 @@ export function withAssistantCard<
 			[baseShowSuggestCondition, followUpSuggestions, isLastMessage],
 		)
 
+		// contents 不新增布局盒；有附件时沿用列表留白，无附件时给完成提示增加间距。
 		return (
-			<>
+			<div className="contents [&:not(:has(.message-attachments))>[data-slot=message-status][data-status=finished]]:pt-2">
 				{!fileSpaceLimitData && <WrapperComponent {...props} />}
 
-				{statusList.has(messageNode?.status) && (
+				{props.contentMode !== "process" && statusList.has(messageNode?.status) && (
 					<>
 						{fileSpaceLimitData && (
 							<FileSpaceLimitCard
@@ -300,6 +309,8 @@ export function withAssistantCard<
 						<div
 							className={`${fileSpaceLimitData ? "mt-3" : ""} ml-[var(--message-status-offset,0px)] w-fit`}
 							data-testid="message-list-status-badge"
+							data-slot="message-status"
+							data-status={messageNode?.status}
 						>
 							<StatusBadge status={messageNode?.status} />
 						</div>
@@ -369,7 +380,7 @@ export function withAssistantCard<
 						</button>
 					</div>
 				)}
-			</>
+			</div>
 		)
 	})
 

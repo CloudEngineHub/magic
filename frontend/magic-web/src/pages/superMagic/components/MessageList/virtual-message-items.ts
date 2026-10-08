@@ -8,7 +8,11 @@ import {
 	type MessageTurnGroup,
 } from "./message-turn-groups"
 
-export interface VirtualMessageItem {
+export interface VirtualMessageRowItem {
+	kind: "message"
+	contentMode?: "full" | "answer" | "process"
+	viewStateKey?: string
+	suppressHeader?: boolean
 	key: string
 	node: SuperMagicMessageItem
 	/** Position in the composed virtual sequence. */
@@ -24,8 +28,28 @@ export interface VirtualMessageItem {
 	exportSelectable: boolean
 }
 
+export interface VirtualProcessToggleItem {
+	kind: "process-toggle"
+	key: string
+	index: number
+	sourceIndex: number
+	turnKey: string
+	groupKey: string
+	count: number
+	expanded: boolean
+	showHeader: boolean
+	sendTime?: number
+	role: "assistant"
+	isUser: false
+	isTool: false
+	stickyCandidate: false
+	renderMode: "message"
+	exportSelectable: false
+}
+export type VirtualMessageItem = VirtualMessageRowItem | VirtualProcessToggleItem
+
 export interface VirtualMessageProjection {
-	items: Array<VirtualMessageItem>
+	items: Array<VirtualMessageRowItem>
 	messageKeys: Array<string>
 	messageTurnGroups: Array<MessageTurnGroup>
 	userIndices: Array<number>
@@ -44,9 +68,9 @@ function areShallowRecordsEqual(left: Record<string, unknown>, right: Record<str
  * shallow so large message payloads are not deep-cloned or deep-compared in a render path.
  */
 export function stabilizeVirtualMessageItems(
-	previousItems: ReadonlyArray<VirtualMessageItem>,
-	nextItems: Array<VirtualMessageItem>,
-): Array<VirtualMessageItem> {
+	previousItems: ReadonlyArray<VirtualMessageRowItem>,
+	nextItems: Array<VirtualMessageRowItem>,
+): Array<VirtualMessageRowItem> {
 	if (previousItems.length === 0 || nextItems.length === 0) return nextItems
 
 	const previousByIdentity = new Map(
@@ -56,7 +80,10 @@ export function stabilizeVirtualMessageItems(
 	const stableItems = nextItems.map((item) => {
 		const previous = previousByIdentity.get(`${item.key}\u0000${item.sourceIndex}`)
 		if (
-			previous &&
+			previous?.kind === "message" &&
+			item.kind === "message" &&
+			previous.contentMode === item.contentMode &&
+			previous.suppressHeader === item.suppressHeader &&
 			previous.role === item.role &&
 			previous.turnKey === item.turnKey &&
 			previous.isUser === item.isUser &&
@@ -197,7 +224,7 @@ export function buildVirtualMessageProjection(
 ): VirtualMessageProjection {
 	const { messageKeys, messageTurnGroups } = buildMessageKeysAndTurnGroups(messages)
 	const userIndices: Array<number> = []
-	const items: Array<VirtualMessageItem> = []
+	const items: Array<VirtualMessageRowItem> = []
 	let currentTurnKey = "leading-messages"
 
 	messages.forEach((node, sourceIndex) => {
@@ -215,6 +242,7 @@ export function buildVirtualMessageProjection(
 		}
 
 		items.push({
+			kind: "message",
 			key,
 			node,
 			index: items.length,
@@ -235,7 +263,7 @@ export function buildVirtualMessageProjection(
 
 interface ComposeVirtualMessageItemsOptions {
 	normalItems: ReadonlyArray<VirtualMessageItem>
-	revokedItems: ReadonlyArray<VirtualMessageItem>
+	revokedItems: ReadonlyArray<VirtualMessageRowItem>
 	firstRevokedUserKey?: string | null
 	includeRevoked: boolean
 	showOnlyFirstRevoked?: boolean

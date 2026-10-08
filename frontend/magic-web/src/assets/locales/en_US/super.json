@@ -6791,6 +6791,19 @@
 		"searchBoard": "Search dashboards",
 		"shareBoard": "Share dashboard"
 	},
+	"simpleMode": {
+		"collapse": "Hide process",
+		"description": "Collapse the process after a task completes and keep the final reply.",
+		"dismiss": "Got it",
+		"enable": "Enable simple mode",
+		"enabled": "Enabled",
+		"expand": "View process",
+		"guideHelp": "You can turn it off anytime in More.",
+		"guideTitle": "Try simple mode",
+		"messageCount_one": "{{count}} message",
+		"messageCount_other": "{{count}} messages",
+		"title": "Simple mode"
+	},
 	"slidesTemplatePreview": {
 		"save": {
 			"cancel": "Cancel",
