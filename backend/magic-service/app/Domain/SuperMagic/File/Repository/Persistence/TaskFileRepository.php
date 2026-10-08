@@ -1480,8 +1480,7 @@ class TaskFileRepository implements TaskFileRepositoryInterface
         $query = $this->model::query()
             ->select(['file_id'])
             ->where('project_id', $projectId)
-            ->where('space_type', FileSpaceType::PROJECT->value)
-            ->where('storage_type', StorageType::WORKSPACE->value)
+            ->projectSpace()
             ->whereNull('deleted_at')
             ->limit($limit);
 
@@ -1492,8 +1491,7 @@ class TaskFileRepository implements TaskFileRepositoryInterface
     {
         return $this->model::query()
             ->where('project_id', $projectId)
-            ->where('space_type', FileSpaceType::PROJECT->value)
-            ->where('storage_type', StorageType::WORKSPACE->value)
+            ->projectSpace()
             ->whereNull('deleted_at')
             ->count('file_id');
     }
