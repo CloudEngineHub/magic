@@ -230,13 +230,16 @@ function notices(type: "error" | "success") {
 }
 
 /**
- * How much of the card's connector is lit, as the percentage the lit run is given.
+ * How much of the card's connector is lit, as the 0–1 figure the lit run is scaled by.
  *
  * It travels as a CSS custom property rather than a class, because it is the one part of the
- * drawing that follows the account's progress — and the lit run is a pseudo-element of the track,
- * so there is no box to read a `width` off.
+ * drawing that follows the account's progress — and the lit run is a pseudo-element, so there is no
+ * box to read a width or a scale off. A bare number, not a percentage: the lit run is a fraction of
+ * the *line*, and the line is shorter than the track box it is drawn in (half a node at each end),
+ * so a percentage of the box would overshoot the node it stops on — least visibly at one task, by a
+ * whole node once every row is finished.
  */
-function litTrackPercent() {
+function litTrackRatio() {
 	const card = screen.getByLabelText("newUserBenefits.entry.ariaLabel")
 	const track = card.querySelector('[class*="55575c"]') as HTMLElement
 	return Number.parseFloat(track.style.getPropertyValue("--nb-entry-track-lit"))
@@ -429,6 +432,25 @@ describe("NewUserBenefits rows come from the backend", () => {
 		expect(action.textContent).toBe("newUserBenefits.task.replay")
 		// Paid and re-watchable, so the button opens the review; the reward is not on offer twice.
 		expect(action.disabled).toBe(false)
+	})
+
+	it("offers the review on every finished tour but the AI-work one", () => {
+		/*
+		 * The reported bug: a finished 了解超级龙虾如何使用 stayed a dead "已完成" while every other
+		 * finished tour offered 回看. Its tour only points at parts of the MagiClaw page — a demo,
+		 * like the crew-market one — so it belongs in the reviewable set whatever route serves it.
+		 *
+		 * All eight rows at once, because the rule is about the task and not about the row: the
+		 * only one that may not be watched again is the flow that walks a real piece of work.
+		 */
+		for (const { code } of TASK_ROWS) paidRows.add(code)
+		openDialog()
+
+		const labels = ROW_ORDER.map((title) => rowAction(title).textContent)
+		expect(labels).toEqual([
+			"newUserBenefits.task.done",
+			...ROW_ORDER.slice(1).map(() => "newUserBenefits.task.replay"),
+		])
 	})
 
 	it("never offers to claim the AI-work task, which only a system event can finish", () => {
@@ -674,10 +696,26 @@ describe("NewUserBenefits entry card", () => {
 			expect(classes).not.toContain(`${half}h-1`)
 			expect(classes).toContain(`${half}top-1/2`)
 			expect(classes).toContain(`${half}-translate-y-1/2`)
+			/*
+			 * Both ends, on both halves. The line is half a node in from either edge, and it has to
+			 * be the *same* half node on both: half a node is what puts an end on a node's centre,
+			 * so a missing inset leaves the grey run poking out past the outer node.
+			 */
+			expect(classes).toContain(`${half}left-1.5`)
+			expect(classes).toContain(`${half}right-1.5`)
 		}
-		// The lit run starts where the grey one does: half a node in, so it ends on a node's centre.
-		expect(classes).toContain("after:left-1.5")
-		expect(classes).toContain("after:w-[var(--nb-entry-track-lit)]")
+
+		/*
+		 * And the lit run takes its length from the grey one rather than from the track box. It was
+		 * given `width: var(--nb-entry-track-lit)` — a percentage of the box, which is half a node
+		 * longer at each end than the line — so every partial fill ran past the node it was meant to
+		 * stop on: barely at two tasks, 6px at five, and a whole 12px of loose bar past the last node
+		 * once all eight were done. Scaling the shared box has no such percentage in it.
+		 */
+		expect(classes).toContain("after:origin-left")
+		expect(classes).toContain("after:scale-x-[var(--nb-entry-track-lit)]")
+		expect(classes).not.toContain("after:w-[var(--nb-entry-track-lit)]")
+		expect(classes).not.toContain("after:w-[calc((100%_-_12px)*var(--nb-entry-track-lit))]")
 	})
 
 	it("leaves the connector dark until a second task is finished", () => {
@@ -686,7 +724,7 @@ describe("NewUserBenefits entry card", () => {
 		paidRows.add("magiclaw")
 		render(<NewUserBenefits />)
 
-		expect(litTrackPercent()).toBeCloseTo(0, 4)
+		expect(litTrackRatio()).toBeCloseTo(0, 4)
 	})
 
 	it("lights the connector between two finished nodes, and only that far", () => {
@@ -699,14 +737,19 @@ describe("NewUserBenefits entry card", () => {
 		paidRows.add("ai_ppt")
 		render(<NewUserBenefits />)
 
-		expect(litTrackPercent()).toBeCloseTo(100 / 7, 4)
+		expect(litTrackRatio()).toBeCloseTo(1 / 7, 4)
 	})
 
 	it("lights the whole connector once every task is done", () => {
+		/*
+		 * Exactly 1, not a hair over: the lit run is the line's own box, so a finished track ends on
+		 * the last node's centre. It used to end a whole node further right — a loose bar hanging in
+		 * the empty space past the last dot — because the ratio was applied to the longer track box.
+		 */
 		for (const { code } of TASK_ROWS) paidRows.add(code)
 		render(<NewUserBenefits />)
 
-		expect(litTrackPercent()).toBeCloseTo(100, 4)
+		expect(litTrackRatio()).toBeCloseTo(1, 4)
 	})
 
 	it("lights one node per finished task, counting from the left", () => {

@@ -1,5 +1,9 @@
 import { beforeEach, describe, expect, it, vi } from "vitest"
 
+// A type-only import: erased at build time, so the module is still read through `loadOnboarding`
+// and the fresh instance per test is the only one this file ever touches.
+import type { HomeOnboardingTaskId } from "../GuideTourManager"
+
 /*
  * No mock of the onboarding contract is needed here: this file exercises the manager's in-memory
  * state machine and never completes a task or fetches the reward list, and the manager imports only
@@ -284,16 +288,34 @@ describe("home onboarding task pages", () => {
 
 	it("only lets a finished tour that produces nothing be opened again", async () => {
 		const onboarding = await loadOnboarding()
-		// The workbench, crew market, skill, app-space and slides-template tours only point at parts
-		// of the product, so a second pass is a review. The AI-work flow walks a real task and the
-		// MagiClaw tour is never re-entered.
-		expect(onboarding.isReplayableHomeOnboardingTask(WORKBENCH)).toBe(true)
-		expect(onboarding.isReplayableHomeOnboardingTask(HIRE_EMPLOYEE)).toBe(true)
-		expect(onboarding.isReplayableHomeOnboardingTask(MANAGE_SKILL)).toBe(true)
-		expect(onboarding.isReplayableHomeOnboardingTask(CREATE_MICRO_APP)).toBe(true)
-		expect(onboarding.isReplayableHomeOnboardingTask(CREATE_AI_PPT)).toBe(true)
+		/*
+		 * Every tour but the AI-work one only points at parts of the product, so a second pass is a
+		 * review and its row offers one. That has to hold for the MagiClaw tour too: it is a demo
+		 * like the crew-market one, and the card that enters it is the same card — where its route
+		 * lives has nothing to do with whether a finished run may be watched again.
+		 *
+		 * The list of tasks is read off the record keyed by the task id rather than restated here,
+		 * so a ninth task cannot be added without this comparison seeing it — which is the shape
+		 * that let MagiClaw fall out of the entry list unnoticed.
+		 */
+		const allTasks = Object.keys(
+			onboarding.HOME_ONBOARDING_TASK_PAGES,
+		) as HomeOnboardingTaskId[]
+		const replayable = allTasks.filter((task) =>
+			onboarding.isReplayableHomeOnboardingTask(task),
+		)
+
+		expect(replayable).toEqual([
+			WORKBENCH,
+			SUPER_LOBSTER,
+			HIRE_EMPLOYEE,
+			MANAGE_SKILL,
+			CREATE_MICRO_APP,
+			CREATE_AI_PPT,
+			"audio-recording",
+		])
+		// The one task left out walks a real piece of work, so it is not a review of itself.
 		expect(onboarding.isReplayableHomeOnboardingTask(FIRST_AI_WORK)).toBe(false)
-		expect(onboarding.isReplayableHomeOnboardingTask(SUPER_LOBSTER)).toBe(false)
 	})
 
 	it("opens the skill tour on its own steps and tracks it apart from the rest", async () => {

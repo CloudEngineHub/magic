@@ -574,8 +574,14 @@ function NewUserBenefitsCard() {
 	 * into one segment per gap — `nodes - 1` of them — and a finished task lights the segment behind
 	 * it, so `n` finished tasks light `n - 1` segments and the last one lights the lot.
 	 *
-	 * Measured as a fraction of the line's own length (its box is exactly node-centre to
-	 * node-centre), which is why this is a ratio and not a pixel count.
+	 * A fraction of the *line's* length, not of the track box it is drawn in. The two are not the
+	 * same length and the difference is a node: the nodes' centres sit half a node in from either
+	 * edge, which is what the line is inset by, so the track box is 12px longer at 8 nodes. Handing
+	 * this ratio to a `width` resolved against the box therefore overshoots by
+	 * `(1 - ratio) × 12px` — nothing at one task, 6px at five, a whole 12px once every row is
+	 * finished, which is the stub that hung past the last node. The lit run is scaled *inside* the
+	 * line's own box instead (see the track below), so this stays a plain 0–1 progress figure and
+	 * nothing here has to know how wide either box is.
 	 */
 	const trackSegments = totalTasks - 1
 	const litTrackRatio =
@@ -858,17 +864,25 @@ function NewUserBenefitsCard() {
 							 * is a gauge here, not a checklist — the rows below it are the checklist, and they
 							 * already say which task is which.
 							 *
-							 * Both halves of the line are pseudo-elements of this one box, so the lit run
-							 * (`::after`) shares the grey run's geometry exactly — same insets, same height,
-							 * same centring — and no width class has to restate what the nodes already imply.
-							 * `--nb-entry-track-lit` is the lit run's width, handed over inline because it is
-							 * the only part of the drawing that depends on the account's progress.
+							 * Both halves of the line are pseudo-elements of this one box and carry the
+							 * same insets, so they are the same line: half a node in from either edge at
+							 * both ends, which is what puts each end on a node's centre and stops the
+							 * grey run from poking out past the outer two nodes.
+							 *
+							 * The lit half is that same line *scaled* from its left end rather than given
+							 * a width of its own. A width would be a percentage of this box — the longer
+							 * of the two, by half a node at each end — so every partial fill overshot the
+							 * node it was supposed to stop on, and a finished track ran a whole 12px past
+							 * the last node. Scaling shares the grey run's box exactly instead of
+							 * restating its insets in a `calc()`, and `--nb-entry-track-lit` is a plain 0–1
+							 * progress figure, handed over inline because it is the only part of the
+							 * drawing that depends on the account's progress.
 							 */}
 							<div
-								className="relative col-start-1 row-start-3 flex w-[92%] items-center justify-between gap-1 before:absolute before:left-1.5 before:right-1.5 before:top-1/2 before:h-0.5 before:-translate-y-1/2 before:rounded-full before:bg-[#55575c] after:absolute after:left-1.5 after:top-1/2 after:h-0.5 after:w-[var(--nb-entry-track-lit)] after:-translate-y-1/2 after:rounded-full after:bg-[#e7a91a]"
+								className="relative col-start-1 row-start-3 flex w-[92%] items-center justify-between gap-1 before:absolute before:left-1.5 before:right-1.5 before:top-1/2 before:h-0.5 before:-translate-y-1/2 before:rounded-full before:bg-[#55575c] after:absolute after:left-1.5 after:right-1.5 after:top-1/2 after:h-0.5 after:origin-left after:-translate-y-1/2 after:scale-x-[var(--nb-entry-track-lit)] after:rounded-full after:bg-[#e7a91a]"
 								style={
 									{
-										"--nb-entry-track-lit": `${litTrackRatio * 100}%`,
+										"--nb-entry-track-lit": String(litTrackRatio),
 									} as CSSProperties
 								}
 							>

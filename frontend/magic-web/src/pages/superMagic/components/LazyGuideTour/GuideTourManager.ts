@@ -273,9 +273,15 @@ export const HOME_ONBOARDING_TASK_IDS: HomeOnboardingTaskId[] = ["workbench", "f
  * The tasks a finished row can open again. Walking them produces nothing — they only point at parts
  * of the product — so a second pass is a review of an already-finished task rather than a repeat of
  * the job, and the last step says so instead of promising the reward again.
+ *
+ * That covers every task but `first-ai-work`, which is left out because walking it *does* produce
+ * something: a template is picked, a prompt is sent and a project comes out, so a second pass would
+ * be another piece of work rather than a look back at this one. It is also the only task the client
+ * may not finish, which makes the review a claim about a flow this side cannot close.
  */
 export const HOME_ONBOARDING_REPLAYABLE_TASK_IDS: HomeOnboardingTaskId[] = [
 	"workbench",
+	"super-lobster",
 	"hire-employee",
 	"manage-skill",
 	"create-micro-app",
