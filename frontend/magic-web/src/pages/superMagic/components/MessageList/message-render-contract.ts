@@ -1,4 +1,5 @@
 import { extractFilePathMentions } from "@/pages/superMagic/utils/filePathMention"
+import { TaskStatus } from "@/pages/superMagic/pages/Workspace/types"
 import { SuperMagicMessageType } from "./type"
 
 /**
@@ -30,6 +31,27 @@ const renderableNodeTypes = new Set<string>([
  */
 export function hasRenderableNodeType(node?: { type?: unknown }) {
 	return typeof node?.type === "string" && renderableNodeTypes.has(node.type)
+}
+
+/**
+ * 附件列表属于任务交付：工具步骤结束或等待用户回答都不算任务完成。
+ * raw 投影的 debug.status / superStatus 是任务状态，外层 status 仅表示 IM 传输状态；
+ * canonical 节点则直接使用 status。历史完成消息按自身状态展示，不受新任务影响。
+ */
+export function canRenderFinalAttachments(node?: {
+	role?: unknown
+	status?: unknown
+	superStatus?: unknown
+	debug?: unknown
+	tool?: unknown
+}): boolean {
+	const debug = node?.debug as Record<string, unknown> | undefined
+	const message = debug ?? node
+	const tool = message?.tool as Record<string, unknown> | undefined
+	const status = debug ? (debug.status ?? node?.superStatus) : (node?.superStatus ?? node?.status)
+	return (
+		message?.role === "tool" && tool?.name === "finish_task" && status === TaskStatus.FINISHED
+	)
 }
 
 /**
@@ -80,6 +102,7 @@ export function canToolMessageRender({
 	previousContent,
 }: ToolMessageRenderInput) {
 	if (hasRenderableNodeType(node)) return true
+	if (!canRenderFinalAttachments(node)) return false
 
 	const debug = node?.debug as Record<string, unknown> | undefined
 	const tool = node?.tool as Record<string, unknown> | undefined
