@@ -105,6 +105,19 @@ export const HomeOnboardingAnchor = {
 	AudioRecordingLiveTranscript: "audio-recording-live-transcript",
 	AudioRecordingFinishSheet: "audio-recording-finish-sheet",
 	AudioRecordingHeaderActions: "audio-recording-header-actions",
+	/**
+	 * The two steps a user gets the first time they open a file a task produced. They belong to no
+	 * task's flow: no task is finished by looking at a result, and what offers this tour is the
+	 * account still being a new one, not a row being unfinished. See `startHomeOnboardingDeliverableRunIfDue`.
+	 *
+	 * `DeliverableAttachment` is the attachment block of the message that delivered the file — the
+	 * one that was clicked, because it is the click that opens the tour. `DeliverableProjectFile`
+	 * is that same file's row in the project files panel, where the second step sends the user: the
+	 * row carries it only while it is the open file, so the panel's own state decides whether there
+	 * is anything to point at.
+	 */
+	DeliverableAttachment: "deliverable-attachment",
+	DeliverableProjectFile: "deliverable-project-file",
 } as const
 
 export const HOME_ONBOARDING_REQUEST_EVENT = "magic-home-onboarding-request"
@@ -344,6 +357,19 @@ let onboardingEntryTask: HomeOnboardingTaskId | null = null
  * tour, which announces its own state on the way in.
  */
 let onboardingRunActive = false
+/**
+ * The account the guide belongs to, as the surface that hosts it sees it.
+ *
+ * Read by the entries that live too far from an account of their own to grow one: a click on a
+ * file a task delivered happens inside the message list, and reaching for the user store there
+ * would drag mobx and the whole admin component tree into the module graph of every message row
+ * — see the note at the top of this file. The wrapper that already reads the account (`GuideTourGate`)
+ * publishes it here instead, and those entries read it back.
+ *
+ * Not part of the runtime state above, and cleared on the way out, because a signed-out or
+ * unhosted client must not keep answering as the account it last held.
+ */
+let currentUserMagicId: string | undefined
 
 /** Progress is tracked per account; a signed-out visitor still gets one slot under "unknown". */
 const getUserKey = (userMagicId?: string) => userMagicId || "unknown"
@@ -476,6 +502,20 @@ export function setHomeOnboardingRunActive(active: boolean) {
 }
 
 /**
+ * Publishing the account for the entries that have none of their own, and reading it back. See
+ * `currentUserMagicId`. Written by the wrapper on every account change and cleared when it goes
+ * away, so an entry that fires after the guide has left the page cannot answer for the account
+ * that was signed in before.
+ */
+export function setHomeOnboardingUserMagicId(userMagicId?: string) {
+	currentUserMagicId = userMagicId
+}
+
+export function getHomeOnboardingUserMagicId() {
+	return currentUserMagicId
+}
+
+/**
  * Whether the introduction dialog is still on offer for this account — the answer survives a reload,
  * which is the whole point of keeping it in storage, so it is read on every load rather than
  * remembered here. Read by the automatic run's gate as well as by the tour itself.
@@ -504,6 +544,45 @@ export function spendHomeOnboardingIntro(userMagicId?: string) {
 		window.localStorage.setItem(getIntroSpentStorageKey(userMagicId), "1")
 	} catch {
 		// An unwritable store cannot remember the answer; the dialog simply comes back next load.
+	}
+}
+
+/**
+ * Where an account's copy of the one-shot "task deliverable" flag lives.
+ *
+ * The tour that frames a task's result — the file itself, and the copy the project files panel
+ * keeps — is opened by the first click on one of those files, and it is offered **once per account
+ * per browser**. The two halves of that are deliberate and come from the two halves of the key:
+ * the account is in it, so the answer belongs to whoever was shown the tour rather than to the
+ * machine; and it is kept in storage rather than beside the rest of the runtime state, which is
+ * memory-only, so the same account does not sit through it again on the next page load.
+ *
+ * Being per browser is the point of keeping it here rather than on the backend, next to the task
+ * progress: a first look at a delivered file is a moment in *this* window, and an account that
+ * opens its next result on another machine is having that moment for the first time too.
+ */
+const DELIVERABLE_SPENT_STORAGE_PREFIX = "magiHomeOnboardingDeliverableSpent:"
+
+const getDeliverableSpentStorageKey = (userMagicId?: string) =>
+	`${DELIVERABLE_SPENT_STORAGE_PREFIX}${getUserKey(userMagicId)}`
+
+/** Whether this browser has already shown this account the tour of a delivered file. */
+export function isHomeOnboardingDeliverableSpent(userMagicId?: string) {
+	try {
+		return window.localStorage.getItem(getDeliverableSpentStorageKey(userMagicId)) === "1"
+	} catch {
+		// Storage can refuse to be read at all — Safari in private mode does. Nothing is
+		// remembered then, so the tour falls back to being offered once per load.
+		return false
+	}
+}
+
+/** The tour of a delivered file is behind us: offered, walked or closed. */
+export function spendHomeOnboardingDeliverableIntro(userMagicId?: string) {
+	try {
+		window.localStorage.setItem(getDeliverableSpentStorageKey(userMagicId), "1")
+	} catch {
+		// An unwritable store cannot remember the answer; the tour simply comes back next load.
 	}
 }
 
@@ -564,6 +643,56 @@ export const startHomeOnboarding = (
 	if (typeof window !== "undefined") {
 		window.dispatchEvent(new Event(HOME_ONBOARDING_REQUEST_EVENT))
 	}
+}
+
+/**
+ * Opening the tour that frames a delivered file: the two steps of the `project-result` flow — the
+ * attachment block that was just opened, and the copy of the file in the project files panel.
+ *
+ * A run of its own rather than a task's flow. Nothing named it, so the tour enters it as the
+ * automatic run's task — `first-ai-work` — which is also the one whose page carries these anchors:
+ * the home shell hosts the project page, so its message list and project sider are served by the
+ * same mount. The outcome is read as belonging to no task as well (see the tour), so walking this
+ * tour neither claims a reward nor records an abort.
+ *
+ * The stored flow is what makes the mount visible at all: a run nobody asked for is one the tour
+ * refuses to paint, and a stored flow is exactly what "somebody asked" looks like from outside.
+ */
+export function startHomeOnboardingDeliverableRun() {
+	setHomeOnboardingFlow("project-result")
+	// The home shell is none of this tour's business: its anchors are the project page's own.
+	setHomeOnboardingSidebarTopMode(false)
+	resetHomeOnboardingStepIndex()
+	if (typeof window !== "undefined") {
+		window.dispatchEvent(new Event(HOME_ONBOARDING_REQUEST_EVENT))
+	}
+}
+
+/**
+ * The entry a click on a file a task delivered takes: whether the tour is due, and — when it is —
+ * opening it and remembering that it was.
+ *
+ * All three conditions are read here rather than at the call site, because all three are this
+ * module's own business: there is an account to ask about, that account is still a new one per the
+ * backend (`hasHomeOnboardingTasks`), and this browser has not shown it this tour yet. That a click
+ * is the only caller is also the answer to "is this file one the task produced" — an attachment
+ * block is what a task's result is rendered as, on the tool and the assistant role alike.
+ *
+ * Answers whether the tour was opened, which is what lets the caller mark the block it was opened
+ * from: the first step points at the block that was clicked, and nothing else can tell the tour
+ * which of the page's attachment blocks that is.
+ */
+export function startHomeOnboardingDeliverableRunIfDue(): boolean {
+	const userMagicId = currentUserMagicId
+	if (!userMagicId) return false
+	if (isHomeOnboardingDeliverableSpent(userMagicId)) return false
+	if (!hasHomeOnboardingTasks(userMagicId)) return false
+	// Spent as it opens, by the thing that opened it — the rule the introduction dialog follows,
+	// and for the same reason: being shown the tour is what must not happen twice, so a reload
+	// with it still up must not bring it back.
+	spendHomeOnboardingDeliverableIntro(userMagicId)
+	startHomeOnboardingDeliverableRun()
+	return true
 }
 
 /**
@@ -665,13 +794,60 @@ export function getHomeOnboardingRewardList(userMagicId?: string): HomeOnboardin
  *   renders nothing — but the run has no rows of its own to read that from, which is why the rule
  *   lives here.
  *
- * `failed` does let the run through: a fetch that did not arrive is not the backend saying no, it is
- * retried on the next mount, and blocking it would deny the tour to anyone whose first request hit a
- * bad connection. The caller holds the status in state, so it passes the snapshot its render is
- * based on rather than asking the cache a second time.
+ * `failed` does let the run through *here*: a list that never arrived is not the backend saying no,
+ * and this predicate answers about the list's state rather than about the account. It is
+ * deliberately not the last word — the run's own precondition is a task the list reports as still
+ * pending (`isHomeOnboardingTaskPending`), a failed list has no such row, so an unanswered ask does
+ * not put the dialog up. An account whose first request hit a bad connection is asked again on the
+ * next mount rather than shown a dialog for a task nobody confirmed.
+ *
+ * The caller holds the status in state, so it passes the snapshot its render is based on rather
+ * than asking the cache a second time.
  */
 export function canOpenAutomaticHomeOnboarding(status: HomeOnboardingRewardListStatus) {
 	return status === "ready" || status === "failed"
+}
+
+/**
+ * Whether the backend still counts this account as a new user, which is the only thing that
+ * decides whether a delivered file is worth a tour.
+ *
+ * The list itself is the answer: it is the account's tasks, and an account the deployment no
+ * longer treats as new has none left to send. Deliberately read from `ready` alone rather than
+ * through `canOpenAutomaticHomeOnboarding`, because the two states it lets through mean different
+ * things — `failed` is "we could not ask", and treating that as "the backend says yes" would put
+ * the tour in front of every account whose first request hit a bad connection. `unsupported`
+ * answers the other way and is covered by the same test: it carries no rows either.
+ */
+export function hasHomeOnboardingTasks(userMagicId?: string) {
+	const list = getHomeOnboardingRewardList(userMagicId)
+	return list.status === "ready" && list.rewards.length > 0
+}
+
+/**
+ * Whether the backend's list still has this task *waiting* for the account — the introduction
+ * dialog's own precondition.
+ *
+ * The automatic run's only surface is the AI-work introduction, and it is offered to an account
+ * that still owes that task. The progress mirror cannot answer that: it is seeded from the list's
+ * `COMPLETED` rows alone, so a task the backend has `EXPIRED` — or dropped from the list
+ * altogether, which is what a progress older than the task gets — still reads as unfinished, and
+ * the dialog would open on an account with nothing left to do. The list carries the verdict, and
+ * only its `ready` answer is read as one, exactly as `hasHomeOnboardingTasks` reads it for the
+ * delivered-file tour: `failed` is "we could not ask", and taking that for a yes would put the
+ * dialog in front of every account whose first request hit a bad connection. The ask is retried on
+ * the next mount, so an account that really is new is asked again rather than shown a dialog for a
+ * task nobody confirmed.
+ */
+export function isHomeOnboardingTaskPending(
+	userMagicId: string | undefined,
+	task: HomeOnboardingTaskId,
+) {
+	const list = getHomeOnboardingRewardList(userMagicId)
+	return (
+		list.status === "ready" &&
+		list.rewards.some((reward) => reward.taskId === task && reward.status === "PENDING")
+	)
 }
 
 /**

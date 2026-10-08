@@ -6,11 +6,16 @@ import { beforeEach, describe, expect, it, vi } from "vitest"
  * come before it, and the backend's answer for this account.
  *
  * The benefits card reads the backend's answer for itself — its rows come back empty and it renders
- * nothing — but the automatic run has no rows to read: it asks `checkIfHomeOnboardingNeeded`, which
- * answers from the progress mirror, and a deployment that does not offer the feature seeds no
- * progress, because there is none to seed. Every task therefore still reads as unfinished and the
- * introduction dialog would open in an organization the feature does not exist in — which is the
- * second group below.
+ * nothing — but the automatic run has the progress mirror to answer from, and a deployment that does
+ * not offer the feature seeds no progress, because there is none to seed. Every task therefore still
+ * reads as unfinished and the introduction dialog would open in an organization the feature does not
+ * exist in — which is the second group below.
+ *
+ * The mirror is not the only thing the run has to read, and the second group pins the other half:
+ * the dialog is offered on the strength of the list's own `PENDING` row for the AI-work task, so a
+ * task the backend has expired — or that a shorter list, a progress older than the task, never
+ * carried — keeps it away. The mirror reads both of those as unfinished, which is what put the
+ * dialog in front of accounts with nothing left to do.
  *
  * The first group is the earlier question, and the reason both gates sit on the same component:
  * new-user onboarding belongs to the SaaS personal plan, so a private deployment and a team
@@ -104,7 +109,7 @@ vi.mock("@/pages/superMagic/utils/clawBrand", () => ({
 const INTRO = "homeOnboarding.welcome.title"
 
 /** One reward row as the backend sends it. `status` is the part the gate's callers act on. */
-function task(code: string, status: "PENDING" | "COMPLETED") {
+function task(code: string, status: "PENDING" | "COMPLETED" | "EXPIRED") {
 	return {
 		code,
 		points: 30,
@@ -283,6 +288,75 @@ describe("the wrapper's gate on the automatic run", () => {
 		await vi.waitFor(
 			() => {
 				expect(onboarding.getHomeOnboardingRewardList(MAGIC_ID).status).toBe("ready")
+			},
+			{ timeout: 5000 },
+		)
+
+		expect(screen.queryByRole("dialog", { name: INTRO })).toBeNull()
+	})
+
+	it("stays off on a list whose AI-work task has expired", async () => {
+		/*
+		 * An account the deployment no longer counts as new: its AI-work task is over, and the
+		 * progress mirror cannot see that — the mirror is seeded from *completed* rows, and an
+		 * expired task was never completed, so it reads as unfinished. The list is the only thing
+		 * that knows, which is why the run reads it directly.
+		 */
+		const { onboarding } = await mountWrapper(() => {
+			getOnboardingTasks.mockResolvedValue({ tasks: [task("first_ai_work", "EXPIRED")] })
+		})
+
+		await vi.waitFor(
+			() => {
+				expect(onboarding.getHomeOnboardingRewardList(MAGIC_ID).status).toBe("ready")
+			},
+			{ timeout: 5000 },
+		)
+
+		// The absence below has to be this rule's doing, so the mirror is asked first: it still
+		// calls the task unfinished, and would have opened the dialog on its own.
+		expect(onboarding.checkIfHomeOnboardingNeeded(MAGIC_ID, true, false)).toBe(true)
+		expect(onboarding.isHomeOnboardingTaskPending(MAGIC_ID, "first-ai-work")).toBe(false)
+		expect(screen.queryByRole("dialog", { name: INTRO })).toBeNull()
+	})
+
+	it("stays off on a list that does not carry the AI-work task at all", async () => {
+		/*
+		 * A progress that predates a task keeps the shorter list, so the row the dialog is for is
+		 * simply not there — and the mirror has nothing to seed from it either. The workbench row
+		 * being pending is what makes the absence this rule's doing rather than "there was nothing
+		 * to show".
+		 */
+		const { onboarding } = await mountWrapper(() => {
+			getOnboardingTasks.mockResolvedValue({ tasks: [task("super_magic_intro", "PENDING")] })
+		})
+
+		await vi.waitFor(
+			() => {
+				expect(onboarding.getHomeOnboardingRewardList(MAGIC_ID).status).toBe("ready")
+			},
+			{ timeout: 5000 },
+		)
+
+		expect(onboarding.isHomeOnboardingTaskPending(MAGIC_ID, "workbench")).toBe(true)
+		expect(onboarding.checkIfHomeOnboardingNeeded(MAGIC_ID, true, false)).toBe(true)
+		expect(screen.queryByRole("dialog", { name: INTRO })).toBeNull()
+	})
+
+	it("stays off when the list never arrived", async () => {
+		/*
+		 * "We could not ask" is not "the backend says there is one". The introduction is offered on
+		 * a confirmed task, so a request that failed leaves it out rather than showing it on a guess
+		 * — and the ask is retried on the next mount, which is where an account that really is new
+		 * gets its dialog.
+		 */
+		const { onboarding } = await mountWrapper(() => {
+			getOnboardingTasks.mockRejectedValue(new Error("Network Error"))
+		})
+
+		await vi.waitFor(
+			() => {
+				expect(onboarding.getHomeOnboardingRewardList(MAGIC_ID).status).toBe("failed")
 			},
 			{ timeout: 5000 },
 		)

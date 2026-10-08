@@ -124,6 +124,19 @@
 				}
 			}
 		},
+		"deliverable": {
+			"actions": {
+				"finish": "Finish the tour"
+			},
+			"attachment": {
+				"description": "This is the visual file Super Magic delivered for you — preview or download it right here. If anything needs adjusting, say so in the input box.",
+				"title": "Your task result is ready"
+			},
+			"saved": {
+				"description": "Files AI produces are filed in the \"project files\" area automatically, so they stay easy to find and manage.",
+				"title": "Saved automatically"
+			}
+		},
 		"demoNote": "This is a guided demo — nothing is really created and no credits are spent.",
 		"employee": {
 			"actions": {
@@ -344,12 +357,16 @@
 		"entry": {
 			"ariaLabel": "Open new user benefits to view feature tour progress",
 			"badge": "New user benefits",
+			"badgeDone": "Benefits complete",
 			"collapse": "Collapse new user benefits",
+			"earnedReward": "{{points}} points earned",
 			"expand": "Expand new user benefits",
 			"meta": "{{completed}} completed, {{remaining}} left to explore",
+			"metaDone": "All {{total}} core capabilities completed",
 			"pillReward": "{{points}} points",
 			"remainingReward": "+{{points}} points",
 			"title": "Keep exploring core capabilities",
+			"titleDone": "New user benefits completed",
 			"titleFresh": "<line1>Explore {{total}} core capabilities,</line1><line2>claim {{points}} points</line2>"
 		},
 		"section": {

@@ -51,6 +51,7 @@ import {
 	useCopyFileSelector,
 } from "./hooks"
 import { useFileShortcuts } from "./hooks/useFileShortcuts"
+import { HomeOnboardingAnchor } from "@/pages/superMagic/components/LazyGuideTour/GuideTourManager"
 import {
 	useCrossProjectFileOperation,
 	type CrossProjectOperationSuccessResult,
@@ -1623,6 +1624,16 @@ const TopicFilesCore = forwardRef<TopicFilesCoreRef, TopicFilesCoreProps>(functi
 						contextMenuItemId === itemId && styles.contextMenuActiveItem,
 					)}
 					data-testid="file-item-virtual"
+					/*
+					 * The row of the file that is open right now, which is what the new-user guide's
+					 * second step frames when someone first opens a result a task delivered. Published
+					 * from the row's own state rather than only while that tour is up, because the tour
+					 * arrives after the file is open and a row that is already there is the only kind it
+					 * can find. See `HomeOnboardingAnchor.DeliverableProjectFile`.
+					 */
+					data-guide-anchor={
+						isActiveFile ? HomeOnboardingAnchor.DeliverableProjectFile : undefined
+					}
 					onMouseEnter={() => setHoveredItem(itemId)}
 					onMouseLeave={() => setHoveredItem(null)}
 					draggable={false}
@@ -2107,6 +2118,11 @@ const TopicFilesCore = forwardRef<TopicFilesCoreRef, TopicFilesCoreProps>(functi
 				)}
 				data-file-id={item.file_id}
 				data-testid="file-item"
+				/* The open file's row — the guide's second step, when a task's result is first opened.
+				 * See the same attribute on the virtual row above. */
+				data-guide-anchor={
+					isActiveFile ? HomeOnboardingAnchor.DeliverableProjectFile : undefined
+				}
 				onClick={(e) => {
 					e.stopPropagation()
 					if (isSelectMode) {

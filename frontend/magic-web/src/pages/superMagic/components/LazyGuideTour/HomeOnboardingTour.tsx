@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react"
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react"
 import type { CSSProperties } from "react"
 import { createPortal } from "react-dom"
 import { useTranslation } from "react-i18next"
@@ -89,6 +89,21 @@ const NARROW_CARD_MAX_WIDTH = 760
 const SCROLLBAR_ALLOWANCE = 16
 
 /**
+ * Taking the mark off the attachment block this run was opened from.
+ *
+ * The entry that opens the tour of a delivered file is what puts the mark there, because only the
+ * click knows which of a page's blocks was the one — the message list holds one per message and
+ * they all look the same (see `startHomeOnboardingDeliverableRunIfDue`). Leaving it behind would
+ * let that block go on claiming to be the subject of a tour that is over, and the next tour to ask
+ * for the anchor — another account's, on the same machine — would frame it rather than its own.
+ */
+function clearDeliverableAnchor() {
+	document
+		.querySelectorAll(`[data-guide-anchor="${HomeOnboardingAnchor.DeliverableAttachment}"]`)
+		.forEach((element) => element.removeAttribute("data-guide-anchor"))
+}
+
+/**
  * How long a step that the hosting page has to build waits for that page to answer before the run
  * gives up on it. It is not a deadline for the page's work — the page's answer is what matters and
  * its library may legitimately take a while — but a guard against a page that never answers at all,
@@ -142,6 +157,27 @@ interface OnboardingStep {
 	 * on whether its anchor turned up.
 	 */
 	awaitsPage?: boolean
+}
+
+/**
+ * One step of a guided flow — the in-project tour and the tour of a delivered file. It answers the
+ * same questions an `OnboardingStep` does, and the run renders it through the same card; what
+ * differs is how it is reached. A task's steps belong to the task and are walked by index, while a
+ * flow's steps belong to the flow and are walked in the order they are written, which is also why
+ * the flow each one carries has to be written out on every step rather than named once.
+ */
+interface GuidedFlowStep {
+	flow: HomeOnboardingFlow
+	anchor: string
+	title: string
+	text: string
+	placement: Placement
+	/**
+	 * Whether the step may be walked past when its anchor is not on the page — see
+	 * `OnboardingStep.optional`. A flow's steps are the ones that need it most, because what they
+	 * frame is often the user's own screen rather than a control the tour can count on.
+	 */
+	optional?: boolean
 }
 
 interface HomeOnboardingTourProps {
@@ -199,43 +235,84 @@ function HomeOnboardingTour({ userMagicId, page = "home", onComplete }: HomeOnbo
 			prompt: t("homeOnboarding.featured.case3.prompt"),
 		},
 	]
-	const guidedProjectSteps = [
-		{
-			flow: "project-file" as HomeOnboardingFlow,
-			anchor: "project-sider",
-			title: t("homeOnboarding.project.file.title"),
-			text: t("homeOnboarding.project.file.description"),
-			placement: "right" as Placement,
-		},
-		{
-			flow: "project-orientation" as HomeOnboardingFlow,
-			anchor: "message-header-topic-group",
-			title: t("homeOnboarding.project.topic.title"),
-			text: t("homeOnboarding.project.topic.description"),
-			placement: "left" as Placement,
-		},
-		{
-			flow: "project-orientation" as HomeOnboardingFlow,
-			anchor: "message-list-container",
-			title: t("homeOnboarding.project.result.title"),
-			text: t("homeOnboarding.project.result.description"),
-			placement: "left" as Placement,
-		},
-		{
-			flow: "project-orientation" as HomeOnboardingFlow,
-			anchor: "message-editor-container",
-			title: t("homeOnboarding.project.composer.title"),
-			text: t("homeOnboarding.project.composer.description"),
-			placement: "top" as Placement,
-		},
-		{
-			flow: "project-orientation" as HomeOnboardingFlow,
-			anchor: "message-editor-at-button",
-			title: t("homeOnboarding.project.at.title"),
-			text: t("homeOnboarding.project.at.description"),
-			placement: "left" as Placement,
-		},
-	]
+	/**
+	 * The in-project tour is entered where the task used to hand over — the "开始了解" button of the
+	 * processing dialog — and the two lists change their wording together, so both stay memoized:
+	 * the run hands the list it is on to the effect that waits for a step's anchor, and an array
+	 * rebuilt on every pass would make that wait start over each time.
+	 */
+	const guidedProjectSteps = useMemo<GuidedFlowStep[]>(
+		() => [
+			{
+				flow: "project-file",
+				anchor: "project-sider",
+				title: t("homeOnboarding.project.file.title"),
+				text: t("homeOnboarding.project.file.description"),
+				placement: "right",
+			},
+			{
+				flow: "project-orientation",
+				anchor: "message-header-topic-group",
+				title: t("homeOnboarding.project.topic.title"),
+				text: t("homeOnboarding.project.topic.description"),
+				placement: "left",
+			},
+			{
+				flow: "project-orientation",
+				anchor: "message-list-container",
+				title: t("homeOnboarding.project.result.title"),
+				text: t("homeOnboarding.project.result.description"),
+				placement: "left",
+			},
+			{
+				flow: "project-orientation",
+				anchor: "message-editor-container",
+				title: t("homeOnboarding.project.composer.title"),
+				text: t("homeOnboarding.project.composer.description"),
+				placement: "top",
+			},
+			{
+				flow: "project-orientation",
+				anchor: "message-editor-at-button",
+				title: t("homeOnboarding.project.at.title"),
+				text: t("homeOnboarding.project.at.description"),
+				placement: "left",
+			},
+		],
+		[t],
+	)
+	/**
+	 * The two steps of a delivered file — the tour a click on one of a task's results opens. The
+	 * benefits card never offers it and no task is finished by it: what it marks is the moment the
+	 * user first sees what a task produced, which is a moment rather than a task.
+	 *
+	 * Both steps frame something the click brought about. The first is the attachment block that was
+	 * clicked, which is why the entry marks that block as the anchor before opening the tour. The
+	 * second is the same file's row in the project files panel, which is the one part of the tour
+	 * that can be legitimately missing: the row is only marked while that file is the open one, and
+	 * the panel only shows it while it is on its file tab and expanded. So that step may be stepped
+	 * over — a user who left their panel closed loses a sentence, not the tour.
+	 */
+	const deliverableSteps = useMemo<GuidedFlowStep[]>(
+		() => [
+			{
+				flow: "project-result",
+				anchor: HomeOnboardingAnchor.DeliverableAttachment,
+				title: t("homeOnboarding.deliverable.attachment.title"),
+				text: t("homeOnboarding.deliverable.attachment.description"),
+				placement: "top",
+			},
+			{
+				flow: "project-result",
+				anchor: HomeOnboardingAnchor.DeliverableProjectFile,
+				title: t("homeOnboarding.deliverable.saved.title"),
+				text: t("homeOnboarding.deliverable.saved.description"),
+				placement: "right",
+				optional: true,
+			},
+		],
+		[t],
+	)
 	/**
 	 * The "了解超级龙虾如何使用" steps. Their anchors are on the MagiClaw page, which is a route of its
 	 * own: the benefits card is the only entry, and it navigates there before asking for this run.
@@ -606,6 +683,17 @@ function HomeOnboardingTour({ userMagicId, page = "home", onComplete }: HomeOnbo
 	const initialFlow = entry.flow
 	const isReplayRun = entry.isReplay
 	/**
+	 * Whether this run is the tour of a delivered file — the one a click on a task's result opens.
+	 *
+	 * Read from the flow the run was entered with rather than from the one it is on, because the
+	 * flow is this run's own for its whole life and the two must not be able to disagree. It is not
+	 * a task's flow: nothing about it finishes a task, so it reports nothing on the way out — it
+	 * neither claims a reward nor records an abort against the tasks that do. What it marks is a
+	 * moment in the account's first look at its own results, and that answer was already spent by
+	 * the entry that opened it.
+	 */
+	const isDeliverableRun = initialFlow === "project-result"
+	/**
 	 * Whether this run walks the MagiClaw steps. Its anchors live on another route, its popover is a
 	 * demo with a note, and it leaves the home shell (the sidebar) alone.
 	 */
@@ -728,10 +816,27 @@ function HomeOnboardingTour({ userMagicId, page = "home", onComplete }: HomeOnbo
 	const stepPage = flow ? page : (primarySteps[stepIndex]?.page ?? page)
 	const stepOnThisPage = stepPage === page
 	/**
-	 * Whether the highlighted step may be stepped over. The in-flight flows are never: they walk the
-	 * user through something that really happens, and each of their steps has an anchor to match.
+	 * The steps of the guided flow this run is in, and the one it is on. A stored flow picks the
+	 * list: the in-project tour and the tour of a delivered file are walked the same way — by
+	 * position, under the one index — and a run is only ever inside one of them at a time. The list
+	 * a run is not in is left alone rather than emptied, so `flow` going back to null cannot strand
+	 * the run on a step that no longer exists.
 	 */
-	const stepOptional = !flow && primarySteps[stepIndex]?.optional === true
+	const activeGuideSteps = flow === "project-result" ? deliverableSteps : guidedProjectSteps
+	const activeProjectStep = activeGuideSteps[projectStepIndex]
+	/**
+	 * Whether the highlighted step may be stepped over.
+	 *
+	 * A task's own steps say so one by one. A flow's steps do too, and the ones that carry it are
+	 * the entries the user's own screen can legitimately not have: the create-skill entry, which
+	 * needs a permission, and the project files row a delivered file is filed under, which exists
+	 * only while that file is the open one and the panel is showing its files at all. Every other
+	 * step of a flow walks the user through something that really happens and has an anchor to
+	 * match, and a missing one there is a failed run, not a step to walk past.
+	 */
+	const stepOptional = flow
+		? activeProjectStep?.optional === true
+		: primarySteps[stepIndex]?.optional === true
 	/**
 	 * Whether this step highlights something the hosting page has to build. Such a step is not
 	 * judged on its anchor until the page says it is done — a page that is still fetching its
@@ -818,12 +923,20 @@ function HomeOnboardingTour({ userMagicId, page = "home", onComplete }: HomeOnbo
 			// happened to stop.
 			resetHomeOnboardingStepIndex()
 			clearHomeOnboardingEntryTask()
-			if (outcome === "completed") void reportCompletion(currentTask, isReplayRun)
-			else markHomeOnboardingAborted(userMagicId, currentTask)
+			/*
+			 * The tour of a delivered file belongs to no task. It borrows the home page's anchors
+			 * because that is where a project's result is shown, and nothing about looking at a
+			 * result finishes anything — so it must not claim a reward for the task whose page it
+			 * shares, nor record an abort against it when it is left early.
+			 */
+			if (!isDeliverableRun) {
+				if (outcome === "completed") void reportCompletion(currentTask, isReplayRun)
+				else markHomeOnboardingAborted(userMagicId, currentTask)
+			} else clearDeliverableAnchor()
 			setDismissed(true)
 			onComplete?.()
 		},
-		[currentTask, isReplayRun, onComplete, reportCompletion, userMagicId],
+		[currentTask, isDeliverableRun, isReplayRun, onComplete, reportCompletion, userMagicId],
 	)
 
 	const complete = useCallback(() => exitTour("completed"), [exitTour])
@@ -849,15 +962,52 @@ function HomeOnboardingTour({ userMagicId, page = "home", onComplete }: HomeOnbo
 	}, [exitTour, t])
 
 	/**
+	 * Moving along the steps of the guided flow the run is in. Position and flow are written to the
+	 * manager as well as to this instance, and together, because a flow is what a mount is keyed on
+	 * and the flow a step belongs to can change part-way through: the in-project tour opens on the
+	 * files panel and continues as the orientation steps.
+	 */
+	const goToProjectStep = useCallback(
+		(index: number) => {
+			setProjectStepIndex(index)
+			const nextFlow = activeGuideSteps[index].flow
+			setFlow(nextFlow)
+			setHomeOnboardingFlow(nextFlow)
+		},
+		[activeGuideSteps],
+	)
+
+	/**
 	 * Walking past an optional step whose anchor is not on the page — the create-skill entry, which
-	 * an account without the permission never renders. The run carries on to the next step, and
-	 * stepping over the last one closes the run exactly as confirming it would have.
+	 * an account without the permission never renders, or the project files row a delivered file is
+	 * filed under, which is only there while that file is the open one. The run carries on to the
+	 * next step, and stepping over the last one closes the run exactly as confirming it would have.
+	 *
+	 * A run in a guided flow walks that flow's steps by position, so the two cases share nothing
+	 * but the entry: the position and the list both belong to the flow rather than to a task.
 	 */
 	const skipStep = useCallback(() => {
+		if (flow) {
+			if (projectStepIndex < activeGuideSteps.length - 1)
+				goToProjectStep(projectStepIndex + 1)
+			else complete()
+			return
+		}
 		if (stepIndex < primarySteps.length - 1) goToStep(stepIndex + 1)
 		else if (isReplayRun) finishReplay()
 		else complete()
-	}, [complete, finishReplay, goToStep, isReplayRun, primarySteps.length, stepIndex])
+	}, [
+		activeGuideSteps.length,
+		complete,
+		finishReplay,
+		flow,
+		goToProjectStep,
+		goToStep,
+		isReplayRun,
+		primarySteps.length,
+		projectStepIndex,
+		stepIndex,
+	])
 
 	/**
 	 * Confirming the introduction walks straight into the featured-case picker: the dialog opens the
@@ -960,7 +1110,6 @@ function HomeOnboardingTour({ userMagicId, page = "home", onComplete }: HomeOnbo
 		return () => window.clearTimeout(frame)
 	}, [flow, isStandaloneRun, started, stepIndex])
 
-	const activeProjectStep = guidedProjectSteps[projectStepIndex]
 	const isProjectRoute = Boolean(
 		document.querySelector('[data-guide-anchor="message-list-container"]'),
 	)
@@ -1352,12 +1501,12 @@ function HomeOnboardingTour({ userMagicId, page = "home", onComplete }: HomeOnbo
 		flow && flow !== "prompt-ready" && flow !== "task-processing" && flow !== "featured-case",
 	)
 	const displayCurrent = isProjectGuide ? projectStepIndex + 1 : stepIndex + 1
-	const displayTotal = isProjectGuide ? guidedProjectSteps.length : primarySteps.length
-	const isLastProjectStep = isProjectGuide && projectStepIndex === guidedProjectSteps.length - 1
+	const displayTotal = isProjectGuide ? activeGuideSteps.length : primarySteps.length
+	const isLastProjectStep = isProjectGuide && projectStepIndex === activeGuideSteps.length - 1
 	const showPrevious = isProjectGuide ? projectStepIndex > 0 : !flow && stepIndex > 0
 	const progressBarWidth = 44
 	const progressGap = 12
-	const progressItems = isProjectGuide ? guidedProjectSteps : primarySteps
+	const progressItems = isProjectGuide ? activeGuideSteps : primarySteps
 	const progressIndex = isProjectGuide ? projectStepIndex : stepIndex
 	/**
 	 * The last highlighted step closes the run, and its label says which run that was. Re-watching a
@@ -1380,7 +1529,16 @@ function HomeOnboardingTour({ userMagicId, page = "home", onComplete }: HomeOnbo
 			? t("homeOnboarding.featured.send.button")
 			: isProjectGuide
 				? isLastProjectStep
-					? t("homeOnboarding.project.actions.finish")
+					? /*
+						 * The last step closes the run, and the two guided flows close differently:
+						 * the in-project tour is part of a task and ends by naming that ("结束导览"),
+						 * while the tour of a delivered file belongs to no task and simply ends.
+						 */
+						t(
+							isDeliverableRun
+								? "homeOnboarding.deliverable.actions.finish"
+								: "homeOnboarding.project.actions.finish",
+						)
 					: t("homeOnboarding.project.actions.next")
 				: stepIndex === primarySteps.length - 1
 					? finishLabel
@@ -1391,8 +1549,15 @@ function HomeOnboardingTour({ userMagicId, page = "home", onComplete }: HomeOnbo
 	 * the last step closes the run rather than moving on, which is why the state-named finish
 	 * labels never carry one. It is drawn as an icon instead of being part of the wording: the
 	 * label has to stay translatable, and the arrow needs spacing of its own.
+	 *
+	 * The tour of a delivered file is the one guided flow that carries it. Its two steps are read
+	 * as a pair — "here is the file, here is where it is kept" — so the first one says out loud that
+	 * it is moving on; the in-project tour instead walks a page the user is already looking at, and
+	 * its labels have always stood on their own.
 	 */
-	const showsAdvanceArrow = !flow && stepIndex !== primarySteps.length - 1 && !step.action
+	const showsAdvanceArrow = isDeliverableRun
+		? !isLastProjectStep && !step.action
+		: !flow && stepIndex !== primarySteps.length - 1 && !step.action
 	const progressLeft = (index: number) => {
 		let left = 0
 		for (let position = 0; position < index; position += 1) {
@@ -1735,12 +1900,8 @@ function HomeOnboardingTour({ userMagicId, page = "home", onComplete }: HomeOnbo
 								className="min-h-[42px] whitespace-nowrap rounded-[10px] px-4 text-[13px] text-muted-foreground hover:bg-muted"
 								type="button"
 								onClick={() => {
-									if (isProjectGuide) {
-										const previous = projectStepIndex - 1
-										setProjectStepIndex(previous)
-										setFlow(guidedProjectSteps[previous].flow)
-										setHomeOnboardingFlow(guidedProjectSteps[previous].flow)
-									} else goToStep(stepIndex - 1)
+									if (isProjectGuide) goToProjectStep(projectStepIndex - 1)
+									else goToStep(stepIndex - 1)
 								}}
 							>
 								{t("homeOnboarding.actions.previous")}
@@ -1766,11 +1927,8 @@ function HomeOnboardingTour({ userMagicId, page = "home", onComplete }: HomeOnbo
 								else complete()
 							} else if (!flow) goToStep(stepIndex + 1)
 							else if (flow === "prompt-ready") return
-							else if (projectStepIndex < guidedProjectSteps.length - 1) {
-								const next = projectStepIndex + 1
-								setProjectStepIndex(next)
-								setHomeOnboardingFlow(guidedProjectSteps[next].flow)
-								setFlow(guidedProjectSteps[next].flow)
+							else if (projectStepIndex < activeGuideSteps.length - 1) {
+								goToProjectStep(projectStepIndex + 1)
 							} else complete()
 						}}
 					>

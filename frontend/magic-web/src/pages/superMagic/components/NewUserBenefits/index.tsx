@@ -594,6 +594,17 @@ function NewUserBenefitsCard() {
 	 * dot goes with it rather than staying on a finished card.
 	 */
 	const hasUnfinishedTasks = remainingCount > 0
+	/**
+	 * Whether the account has finished every tour this deployment offered it, which is a state of
+	 * its own rather than "the best progress there is".
+	 *
+	 * Read off the row statuses rather than off a count of claims: the finished card reports the
+	 * *work* ("已完成全部 8 项核心能力"), and a task the backend calls `COMPLETED` is done whether or
+	 * not its points have been collected — a row that is done but unpaid still offers to collect
+	 * them. `rows` is never empty by the time this is read (the card returns above), so "nothing left
+	 * unfinished" and "everything finished" are the same claim and the negation is honest.
+	 */
+	const allTasksCompleted = !hasUnfinishedTasks
 	/*
 	 * The pot both surfaces advertise, summed from the rows rather than taken as a flat per-task
 	 * figure plus a made-up total. `first-ai-work` pays double, so the old `TOTAL_TASKS * 50 + 50`
@@ -735,7 +746,17 @@ function NewUserBenefitsCard() {
 								<Gift aria-hidden="true" className="size-5" strokeWidth={1.9} />
 							</span>
 							<strong className="whitespace-nowrap text-[16px] font-extrabold">
-								{t("newUserBenefits.entry.badge")}
+								{/*
+								 * Folded, this badge is the whole headline: the pill has no room
+								 * for a title, so a finished set says so here. The open card keeps
+								 * "新手福利" on the chip and reports the finish in its title, which
+								 * is what the design does.
+								 */}
+								{t(
+									allTasksCompleted
+										? "newUserBenefits.entry.badgeDone"
+										: "newUserBenefits.entry.badge",
+								)}
 							</strong>
 							{/*
 							 * The folded card advertises the pot, not the progress: it has no room for
@@ -771,13 +792,19 @@ function NewUserBenefitsCard() {
 							<span className="col-start-1 row-start-2 flex min-h-12 flex-col justify-center gap-1">
 								<strong className="text-[15px] font-extrabold leading-tight">
 									{/*
-									 * With nothing finished the card sells the whole pot instead of reporting
-									 * progress: "继续体验" reads as a lie before the first task, and "已完成 0 项"
-									 * as a discouragement. The two spans are `whitespace-nowrap` so the break
-									 * falls on the comma — Chinese otherwise wraps between any two glyphs, which
+									 * Three headlines, one per state of the set. A finished set reports
+									 * itself — there is no next tour to sell and no count left to
+									 * improve, so "继续体验" would be the one thing that is not true.
+									 * With nothing finished the card sells the whole pot instead of
+									 * reporting progress: "继续体验" reads as a lie before the first
+									 * task, and "已完成 0 项" as a discouragement. The two spans of
+									 * that version are `whitespace-nowrap` so the break falls on the
+									 * comma — Chinese otherwise wraps between any two glyphs, which
 									 * left "领" stranded at the end of the first line.
 									 */}
-									{completedCount === 0 ? (
+									{allTasksCompleted ? (
+										t("newUserBenefits.entry.titleDone")
+									) : completedCount === 0 ? (
 										<Trans
 											components={{
 												line1: <span className="whitespace-nowrap" />,
@@ -791,13 +818,21 @@ function NewUserBenefitsCard() {
 										t("newUserBenefits.entry.title")
 									)}
 								</strong>
-								{/* Nothing to report before the first task, so the headline stands alone. */}
+								{/*
+								 * Nothing to report before the first task, so the headline stands alone.
+								 * A finished set does report: how many tours there were, which is the
+								 * one figure that still means something once every row is done.
+								 */}
 								{completedCount > 0 ? (
 									<small className="text-[11px] font-medium leading-tight text-[#b9bbc1]">
-										{t("newUserBenefits.entry.meta", {
-											completed: completedCount,
-											remaining: remainingCount,
-										})}
+										{allTasksCompleted
+											? t("newUserBenefits.entry.metaDone", {
+													total: totalTasks,
+												})
+											: t("newUserBenefits.entry.meta", {
+													completed: completedCount,
+													remaining: remainingCount,
+												})}
 									</small>
 								) : null}
 							</span>
@@ -907,9 +942,25 @@ function NewUserBenefitsCard() {
 									className="size-[14px]"
 									strokeWidth={1.8}
 								/>
-								{t("newUserBenefits.entry.remainingReward", {
-									points: remainingPoints,
-								})}
+								{/*
+								 * "还差多少" while there is something to do, "已获得多少" once there is
+								 * not: the same pill, told which of the two it is reporting.
+								 *
+								 * The finished figure is the whole pot rather than a sum of the rows the
+								 * backend says it paid. It sits beside "已完成全部 8 项", and the two have
+								 * to agree with each other — a sum would report the completion bonus
+								 * alone whenever a finished tour's reward had not been collected yet,
+								 * and would contradict the folded pill, which advertises the pot. The
+								 * per-row ledger is the dialog's job: a row says "领取" for exactly the
+								 * rewards still to collect, and the card points at that dialog.
+								 */}
+								{allTasksCompleted
+									? t("newUserBenefits.entry.earnedReward", {
+											points: maxPoints,
+										})
+									: t("newUserBenefits.entry.remainingReward", {
+											points: remainingPoints,
+										})}
 							</span>
 							<span className="col-start-2 row-start-4 grid size-9 place-items-center self-end justify-self-end rounded-full bg-gradient-to-br from-[#ffc44d] to-[#f4a928] text-[#171717] shadow-[0_7px_16px_rgba(244,169,40,0.24)]">
 								<MousePointerClick

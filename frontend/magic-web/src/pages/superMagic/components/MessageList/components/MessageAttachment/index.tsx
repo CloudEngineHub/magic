@@ -2,7 +2,7 @@ import type { AttachmentItem } from "@/pages/superMagic/components/TopicFilesBut
 import { FileResourceIcon } from "@/pages/superMagic/components/TopicFilesButton/components/FileResourceIcon"
 import { resolveFilePresentation } from "@/pages/superMagic/components/TopicFilesButton/utils/file-presentation"
 import { getFileType } from "@/pages/superMagic/utils/handleFIle"
-import { useState } from "react"
+import { useRef, useState } from "react"
 import type { AttachmentProps } from "./type"
 import MagicIcon from "@/components/base/MagicIcon"
 import { IconChevronDown, IconChevronRight, IconDownload, IconEye } from "@tabler/icons-react"
@@ -20,6 +20,10 @@ import { useMessageAttachmentDownload } from "./hooks/useMessageAttachmentDownlo
 import { observer } from "mobx-react-lite"
 import { useMessageListProjectFilesStore } from "../../context"
 import { detectContentTypeRender } from "@/pages/superMagic/components/Detail/components/FilesViewer/utils/preview"
+import {
+	HomeOnboardingAnchor,
+	startHomeOnboardingDeliverableRunIfDue,
+} from "@/pages/superMagic/components/LazyGuideTour/GuideTourManager"
 
 export const Attachment = observer(function Attachment({
 	attachments,
@@ -37,6 +41,15 @@ export const Attachment = observer(function Attachment({
 	const isMobile = useIsMobile()
 	const handleDownload = useMessageAttachmentDownload(attachments)
 	const [expanded, setExpanded] = useState(false)
+	/**
+	 * The block the new-user guide frames when it is opened from here.
+	 *
+	 * Marked by hand rather than declared in the markup, because the guide has to point at the block
+	 * that was *clicked* and nothing in the markup can tell the blocks apart: the message list holds
+	 * one of these per message, and they all look the same. See
+	 * `HomeOnboardingAnchor.DeliverableAttachment` and the tour's first step.
+	 */
+	const sectionRef = useRef<HTMLDivElement>(null)
 
 	const toggleExpanded = (e: any) => {
 		e.stopPropagation()
@@ -98,12 +111,27 @@ export const Attachment = observer(function Attachment({
 			})
 		}
 	}
+	/**
+	 * Opening one of these files, and — when the guide is due — opening the tour that frames what
+	 * was opened. The two go together because the tour is about the file the user just asked to see:
+	 * `startHomeOnboardingDeliverableRunIfDue` answers whether it was opened, and only then does
+	 * this block become what the first step points at.
+	 */
+	const openAttachment = (item: AttachmentProps) => {
+		if (startHomeOnboardingDeliverableRunIfDue()) {
+			sectionRef.current?.setAttribute(
+				"data-guide-anchor",
+				HomeOnboardingAnchor.DeliverableAttachment,
+			)
+		}
+		handleOpenFile(item)
+	}
 	const getMetaDataName = (item: any) => {
 		return item?.name ? `${item?.name}` : null
 	}
 	if (!show) return null
 	return (
-		<div className={cn("flex w-full flex-col rounded-md", className)}>
+		<div ref={sectionRef} className={cn("flex w-full flex-col rounded-md", className)}>
 			<div
 				className={cn(
 					"flex items-center gap-1",
@@ -150,7 +178,7 @@ export const Attachment = observer(function Attachment({
 										return
 									}
 									e.stopPropagation()
-									handleOpenFile(item)
+									openAttachment(item)
 								}}
 								data-testid="handle-open-file"
 							>
@@ -191,7 +219,7 @@ export const Attachment = observer(function Attachment({
 										className="shrink-0 cursor-pointer text-muted-foreground [&_svg]:text-muted-foreground hover:[&_svg]:text-foreground/80"
 										onClick={(e: any) => {
 											e.stopPropagation()
-											handleOpenFile(item)
+											openAttachment(item)
 										}}
 										component={IconEye}
 										stroke={2}

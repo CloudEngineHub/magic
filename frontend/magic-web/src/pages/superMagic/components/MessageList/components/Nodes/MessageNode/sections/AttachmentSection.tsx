@@ -1,7 +1,7 @@
 import { FileResourceIcon } from "@/pages/superMagic/components/TopicFilesButton/components/FileResourceIcon"
 import { resolveFilePresentation } from "@/pages/superMagic/components/TopicFilesButton/utils/file-presentation"
 import type { FilePresentation } from "@/pages/superMagic/components/TopicFilesButton/utils/file-presentation"
-import { memo, useMemo, type MouseEvent } from "react"
+import { memo, useMemo, useRef, type MouseEvent } from "react"
 import { observer } from "mobx-react-lite"
 import { useTranslation } from "react-i18next"
 import { useMemoizedFn } from "ahooks"
@@ -23,6 +23,10 @@ import { superMagicStore } from "@/pages/superMagic/stores"
 import { useMessageViewState } from "@/pages/superMagic/components/MessageList/view-state/MessageViewStateContext"
 import { useFilePathAttachmentDownload } from "@/pages/superMagic/components/MessageList/components/MessageAttachment/hooks/useFilePathAttachmentDownload"
 import { resolveAttachmentList } from "@/pages/superMagic/components/MessageList/message-render-contract"
+import {
+	HomeOnboardingAnchor,
+	startHomeOnboardingDeliverableRunIfDue,
+} from "@/pages/superMagic/components/LazyGuideTour/GuideTourManager"
 
 interface AttachmentSectionProps {
 	node?: Record<string, unknown>
@@ -48,8 +52,7 @@ export const AttachmentSection = observer(function AttachmentSection({
 	const rawFilePathAttachments = useMemo(() => {
 		if (!prevSuperMessageId) return []
 		const prevMessageNode = superMagicStore.getMessageNode(prevSuperMessageId) as
-			| Record<string, unknown>
-			| undefined
+			Record<string, unknown> | undefined
 		const prevContent =
 			typeof prevMessageNode?.content === "string" ? prevMessageNode.content : ""
 		if (!prevContent) return []
@@ -121,8 +124,36 @@ const FilePathAttachmentList = memo(function FilePathAttachmentList({
 	const { t } = useTranslation("super")
 	const [expanded, setExpanded] = useMessageViewState("file-path-attachments-expanded", false)
 	const downloadFileByPath = useFilePathAttachmentDownload()
+	/**
+	 * The block the new-user guide frames when it is opened from here.
+	 *
+	 * Marked by hand rather than declared in the markup, because the guide has to point at the block
+	 * that was *clicked* and nothing in the markup can tell the blocks apart: the message list holds
+	 * one of these per message, and they all look the same. See the tour's first step — the mark is
+	 * its anchor, and the entry that decides the tour is due is the only thing that knows which
+	 * block it belongs on.
+	 */
+	const sectionRef = useRef<HTMLDivElement>(null)
 
 	if (attachments.length === 0) return null
+
+	/**
+	 * Opening one of these files — and, when the guide is due, opening the tour that frames what was
+	 * opened. The two go together because the tour is about the file the user just asked to see:
+	 * `startHomeOnboardingDeliverableRunIfDue` answers whether it was opened, and only then does
+	 * this block become what the first step points at.
+	 */
+	const openAttachment = (
+		attachment: FilePathAttachment & { presentation: FilePresentation },
+	) => {
+		if (startHomeOnboardingDeliverableRunIfDue()) {
+			sectionRef.current?.setAttribute(
+				"data-guide-anchor",
+				HomeOnboardingAnchor.DeliverableAttachment,
+			)
+		}
+		openFileByPath(attachment)
+	}
 
 	const toggleExpanded = (event: MouseEvent) => {
 		event.stopPropagation()
@@ -132,7 +163,7 @@ const FilePathAttachmentList = memo(function FilePathAttachmentList({
 		expanded || attachments.length < 4 ? attachments : attachments.slice(0, 4)
 
 	return (
-		<div className={cn("flex w-full flex-col rounded-md", className)}>
+		<div ref={sectionRef} className={cn("flex w-full flex-col rounded-md", className)}>
 			<div
 				className={cn(
 					"flex items-center gap-1",
@@ -159,7 +190,7 @@ const FilePathAttachmentList = memo(function FilePathAttachmentList({
 						<div
 							key={attachment.filePath}
 							className="w-full cursor-pointer"
-							onClick={() => openFileByPath(attachment)}
+							onClick={() => openAttachment(attachment)}
 							data-testid="open-file-by-path"
 						>
 							<div
@@ -180,7 +211,7 @@ const FilePathAttachmentList = memo(function FilePathAttachmentList({
 									className="shrink-0 cursor-pointer text-muted-foreground [&_svg]:text-muted-foreground hover:[&_svg]:text-foreground/80"
 									onClick={(event: MouseEvent) => {
 										event.stopPropagation()
-										openFileByPath(attachment)
+										openAttachment(attachment)
 									}}
 									component={IconEye}
 									stroke={2}

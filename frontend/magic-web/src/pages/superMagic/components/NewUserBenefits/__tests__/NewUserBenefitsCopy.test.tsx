@@ -675,6 +675,64 @@ describe("NewUserBenefits entry card", () => {
 		expect(rendersOf("newUserBenefits.entry.titleFresh")).toHaveLength(0)
 	})
 
+	it("reports the finished set instead of selling the next tour", () => {
+		/*
+		 * Every tour done, which is a state of its own rather than the best progress there is: there
+		 * is no next tour to sell and no count left to improve, so "继续体验" would be the one thing
+		 * on the card that is not true, and "还剩 0 项待体验" the other. The chip keeps the product
+		 * name and the counter keeps its 8/8 — the design changes the headline, the line under it and
+		 * the reward pill, and nothing else.
+		 */
+		for (const { code } of TASK_ROWS) paidRows.add(code)
+		render(<NewUserBenefits />)
+
+		expect(screen.getByText("newUserBenefits.entry.titleDone")).toBeTruthy()
+		expect(screen.queryByText("newUserBenefits.entry.title")).toBeNull()
+		expect(rendersOf("newUserBenefits.entry.titleFresh")).toHaveLength(0)
+
+		// The count is still worth reporting once it is complete: it is how many tours there were.
+		const [meta] = rendersOf("newUserBenefits.entry.metaDone")
+		expect(meta?.values).toEqual({ total: ROW_ORDER.length })
+		expect(rendersOf("newUserBenefits.entry.meta")).toHaveLength(0)
+
+		// The pill turns from "还差多少" into "已获得多少", and the finished figure is the pot —
+		// the same 500 the folded pill and the dialog header advertise.
+		const [pill] = rendersOf("newUserBenefits.entry.earnedReward")
+		expect(pill?.values).toEqual({ points: MAX_POINTS })
+		expect(rendersOf("newUserBenefits.entry.remainingReward")).toHaveLength(0)
+	})
+
+	it("still reports the pot when a finished tour has not been paid out yet", () => {
+		/*
+		 * Done but unpaid: the *task* is finished, so the card is finished with it. The figure stays
+		 * the pot rather than a sum of what has landed, so the two lines of the card agree with each
+		 * other and with the folded pill — the row's own "领取" is where the uncollected reward is
+		 * accounted for, in the dialog the card opens.
+		 */
+		for (const { code } of TASK_ROWS) unpaidRows.add(code)
+		render(<NewUserBenefits />)
+
+		expect(screen.getByText("newUserBenefits.entry.titleDone")).toBeTruthy()
+		expect(rendersOf("newUserBenefits.entry.earnedReward")[0]?.values).toEqual({
+			points: MAX_POINTS,
+		})
+	})
+
+	it("carries the finished badge on the folded pill, which has room for the headline alone", () => {
+		for (const { code } of TASK_ROWS) paidRows.add(code)
+		// Folded from the first paint, so the assertion is about the pill and not about an animation.
+		window.localStorage.setItem(COLLAPSED_KEY, "1")
+		render(<NewUserBenefits />)
+
+		expect(screen.getByLabelText("newUserBenefits.entry.expand")).toBeTruthy()
+		expect(screen.getByText("newUserBenefits.entry.badgeDone")).toBeTruthy()
+		expect(screen.queryByText("newUserBenefits.entry.badge")).toBeNull()
+		// And the pot is what a folded card advertises either way — the finished one agrees with it.
+		expect(rendersOf("newUserBenefits.entry.pillReward")[0]?.values).toEqual({
+			points: MAX_POINTS,
+		})
+	})
+
 	it("draws the progress track as a hairline under the nodes", () => {
 		render(<NewUserBenefits />)
 

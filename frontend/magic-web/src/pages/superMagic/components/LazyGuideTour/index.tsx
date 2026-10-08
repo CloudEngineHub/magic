@@ -13,6 +13,8 @@ import {
 	HOME_ONBOARDING_STATE_EVENT,
 	isHomeOnboardingIntroSpent,
 	isHomeOnboardingTaskOnPage,
+	isHomeOnboardingTaskPending,
+	setHomeOnboardingUserMagicId,
 	type HomeOnboardingRewardListStatus,
 	type HomeOnboardingTaskPage,
 } from "./GuideTourManager"
@@ -89,6 +91,18 @@ function GuideTourGate({ isMobile, page = "home" }: GuideTourWrapperProps) {
 		return () => window.removeEventListener(HOME_ONBOARDING_STATE_EVENT, sync)
 	}, [userInfo?.magic_id])
 
+	/**
+	 * Publishing the account for the entries that have none of their own. A click on a file a task
+	 * delivered happens inside the message list, which has no account to ask and must not grow one
+	 * — see `setHomeOnboardingUserMagicId`. Written here because this wrapper is the one place that
+	 * already reads it, and cleared on the way out so a client the guide has left behind cannot
+	 * keep answering as the account it last held.
+	 */
+	useEffect(() => {
+		setHomeOnboardingUserMagicId(userInfo?.magic_id)
+		return () => setHomeOnboardingUserMagicId(undefined)
+	}, [userInfo?.magic_id])
+
 	const activeFlow = getHomeOnboardingFlow()
 	/**
 	 * A request names the task it wants, so the page that owns that task's anchors is the one that
@@ -101,8 +115,17 @@ function GuideTourGate({ isMobile, page = "home" }: GuideTourWrapperProps) {
 	 * The automatic run stays a home-page affair — its steps are the home layout's — and it stands
 	 * aside while a request is pending, so it can neither start the MagiClaw steps nor answer for
 	 * them on the way to the page that owns them. It also waits for the reward list before it offers
-	 * anything, which keeps both things the list can take away off the screen: a task the account has
-	 * already finished, and the tour itself on a deployment that does not have the feature.
+	 * anything, which keeps the three things the list can take away off the screen: a task the
+	 * account has already finished, the tour itself on a deployment that does not have the feature,
+	 * and — the narrowest of them — the introduction on an account whose AI-work task is no longer
+	 * waiting for it.
+	 *
+	 * That last one is read from the list rather than from the progress mirror, and it is why the
+	 * run names its own task here. The mirror is seeded from the list's completed rows alone, so a
+	 * task the backend has expired, or one a shorter list never carried at all, still reads as
+	 * unfinished — and the dialog would open on an account with nothing left to do. The run belongs
+	 * to the AI-work task (see `entry` in the tour: nothing asks for the workbench one, so an
+	 * unasked run can only be this), so its row is the one that has to say `PENDING`.
 	 *
 	 * And it waits behind the dialogs that come first. Only this run — not an entry a user asked for
 	 * from the benefits card — is held back by them: the intro dialog is what opens unasked, and a
@@ -120,6 +143,7 @@ function GuideTourGate({ isMobile, page = "home" }: GuideTourWrapperProps) {
 		!preludeHeld &&
 		!isHomeOnboardingIntroSpent(userInfo?.magic_id) &&
 		canOpenAutomaticHomeOnboarding(rewardStatus) &&
+		isHomeOnboardingTaskPending(userInfo?.magic_id, "first-ai-work") &&
 		checkIfHomeOnboardingNeeded(userInfo?.magic_id, isHome, isMobile)
 
 	/*

@@ -124,6 +124,19 @@
 				}
 			}
 		},
+		"deliverable": {
+			"actions": {
+				"finish": "完成引导"
+			},
+			"attachment": {
+				"description": "这里是超级麦吉给你交付的可视化文件，可以直接预览/下载，如果还需要调整可以通过输入区输入要求。",
+				"title": "任务成果已生成"
+			},
+			"saved": {
+				"description": "AI 生成的结果产物会自动保存在“项目文件区”，方便管理/查阅。",
+				"title": "成果已自动保存"
+			}
+		},
 		"demoNote": "这是功能导览演示，不会实际生成内容，也不会消耗使用积分。",
 		"employee": {
 			"actions": {
@@ -344,12 +357,16 @@
 		"entry": {
 			"ariaLabel": "打开新手福利，查看功能导览进度",
 			"badge": "新手福利",
+			"badgeDone": "新手福利已完成",
 			"collapse": "收起新手福利",
+			"earnedReward": "已获得 {{points}} 积分",
 			"expand": "展开新手福利",
 			"meta": "已完成 {{completed}} 项，还剩 {{remaining}} 项待体验",
+			"metaDone": "已完成全部 {{total}} 项核心能力",
 			"pillReward": "{{points}}积分",
 			"remainingReward": "+{{points}} 积分",
 			"title": "继续体验核心能力",
+			"titleDone": "新手福利已完成",
 			"titleFresh": "<line1>体验 {{total}} 项核心能力，</line1><line2>领 {{points}} 积分</line2>"
 		},
 		"section": {
