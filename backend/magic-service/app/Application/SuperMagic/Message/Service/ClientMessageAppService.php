@@ -250,7 +250,8 @@ class ClientMessageAppService extends AbstractAppService
         string $chatConversationId,
         string $remind = '',
         string $remindEvent = '',
-        ?array $dynamicParams = null
+        ?array $dynamicParams = null,
+        ?array $data = null
     ): void {
         try {
             $messageId = IdGenerator::getSnowId();
@@ -263,6 +264,7 @@ class ClientMessageAppService extends AbstractAppService
                     $chatConversationId,
                     $remind,
                     TaskStatus::Suspended->value,
+                    $data,
                 );
             } else {
                 $message = $this->createSuperAgentMessage(
@@ -328,7 +330,8 @@ class ClientMessageAppService extends AbstractAppService
         string $chatTopicId,
         string $chatConversationId,
         string $content,
-        string $status
+        string $status,
+        ?array $data = null
     ): void {
         $rawContent = [
             'type' => ChatMessageType::SuperMagicMessage->value,
@@ -339,6 +342,7 @@ class ClientMessageAppService extends AbstractAppService
                 'role' => 'assistant',
                 'content' => $content,
                 'status' => $status,
+                ...($data === null ? [] : ['data' => $data]),
             ],
         ];
 

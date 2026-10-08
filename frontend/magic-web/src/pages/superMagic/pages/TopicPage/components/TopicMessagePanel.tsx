@@ -278,6 +278,9 @@ function TopicMessagePanel({
 			onTopicSwitch: setSelectedTopic,
 			onRetryOptimisticMessage: handleRetryOptimisticMessage,
 			projectFilesStore: scopedProjectFilesStore,
+			onOpenProjectFiles: fileSidebarControl?.isCollapsed
+				? fileSidebarControl.onToggle
+				: undefined,
 			renderAssistantAvatar: topicModeConfig?.mode
 				? ({ className } = {}) => (
 						<ModeAvatar
@@ -294,6 +297,7 @@ function TopicMessagePanel({
 		setSelectedTopic,
 		handleRetryOptimisticMessage,
 		scopedProjectFilesStore,
+		fileSidebarControl,
 	])
 
 	const currentTopicId = selectedTopic?.chat_topic_id

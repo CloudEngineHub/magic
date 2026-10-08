@@ -163,8 +163,8 @@ return [
         'sandbox_init_failed' => 'Runtime environment error. Please try again later.',
         'chat_task_start_failed' => 'Failed to start the task. Please try again later.',
         'question_expired' => 'This question has expired or already been handled, so your answer was not delivered. You can continue the conversation by sending a new message.',
-        'project_file_count_exceeded' => 'The project space has reached the file limit of :limit. Unable to continue the task. Please contact the administrator.',
-        'user_space_file_count_exceeded' => 'Your personal space has reached the file limit of :limit. Unable to continue the task. Please contact the administrator.',
+        'project_file_count_exceeded' => 'The project space needs some file cleanup before this task can continue. Remove files you no longer need and try again.',
+        'user_space_file_count_exceeded' => 'Your personal file space needs some cleanup before this task can continue. Remove files you no longer need and try again.',
     ],
     'magic_claw' => [
         'create_system_error' => 'A system error occurred. Please try again later.',

@@ -298,6 +298,7 @@ class SuperAgentMessageSubscriberV2 extends MagicAgentEventAppService
                 remind: $e->getMessage(),
                 remindEvent: TaskEventUtil::getRemindTaskEventByCode($e->getCode()),
                 dynamicParams: $userMessageDTO->getDynamicParams(),
+                data: $e->getData(),
             );
         } catch (Throwable $notifyError) {
             $this->logger->error('Failed to send reminder message to client', [

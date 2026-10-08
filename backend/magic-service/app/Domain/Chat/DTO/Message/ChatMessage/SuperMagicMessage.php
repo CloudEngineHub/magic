@@ -45,6 +45,11 @@ class SuperMagicMessage extends MagicMessageStruct implements MessageInterface
     protected ?string $status = null;
 
     /**
+     * 提醒卡片的结构化数据；实时发送和历史消息序列化都需要保留。
+     */
+    protected ?array $data = null;
+
+    /**
      * 附件信息。
      */
     protected ?array $attachments = null;
@@ -87,6 +92,7 @@ class SuperMagicMessage extends MagicMessageStruct implements MessageInterface
             'usage' => $this->usage,
             'token_usage' => $this->tokenUsage,
             'status' => $this->status,
+            'data' => $this->data,
         ];
 
         return $filterNull ? array_filter($data, fn ($value) => ! is_null($value)) : $data;
