@@ -365,7 +365,6 @@ export default function PlatformModelListPage() {
 					</div>
 				}
 				description={t("nav.desc.modelList")}
-				showSeparator={false}
 				title={t("nav.item.modelList")}
 			>
 				<ModelCategoryTabs

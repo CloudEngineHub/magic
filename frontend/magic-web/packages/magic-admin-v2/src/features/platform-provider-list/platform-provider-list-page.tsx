@@ -209,7 +209,6 @@ export default function PlatformProviderListPage() {
 					</Button>
 				}
 				description={t("providerList.description")}
-				showSeparator={false}
 				title={t("providerList.title")}
 			>
 				<ProviderCategoryTabs
@@ -258,7 +257,6 @@ export default function PlatformProviderListPage() {
 					</>
 				}
 				description={t("providerList.description")}
-				showSeparator={false}
 				title={t("providerList.title")}
 			>
 				<ProviderCategoryTabs
