@@ -50,8 +50,8 @@ function shouldShimImportMap(userAgent) {
 
 /**
  * Transform HTML string to enable es-module-shims in Shim Mode for legacy browsers:
- * 1. Inject es-module-shims script tag before the import map
- * 2. Convert <script type="importmap"> to <script type="importmap-shim">
+ * 1. Convert <script type="importmap">...</script> to <script type="importmap-shim">...</script>
+ * 2. Inject es-module-shims script tag AFTER the import map (so that large import maps are fully parsed in the DOM first)
  * 3. Convert <script type="module" ...> to <script type="module-shim" ...>
  * 4. Convert <link rel="modulepreload" ...> to <link rel="modulepreload-shim" ...>
  *
@@ -65,18 +65,19 @@ function transformHtmlForShimMode(html) {
 
 	let transformed = html
 
-	// Inject es-module-shims script before importmap-shim, and replace type="importmap" with type="importmap-shim"
-	if (transformed.includes('<script type="importmap">')) {
-		transformed = transformed.replace(
-			'<script type="importmap">',
-			`${esModuleShimsTag}<script type="importmap-shim">`,
-		)
-	} else if (transformed.includes("<script type='importmap'>")) {
-		transformed = transformed.replace(
-			"<script type='importmap'>",
-			`${esModuleShimsTag}<script type='importmap-shim'>`,
-		)
-	} else {
+	// Convert <script type="importmap">...</script> to <script type="importmap-shim">...</script>
+	// and inject es-module-shims script AFTER the closing </script> of the import map
+	// to ensure the entire JSON DOM node is fully constructed before the polyfill runs.
+	let hasImportMap = false
+	transformed = transformed.replace(
+		/<script\b([^>]*)\btype=["']importmap["']([\s\S]*?)<\/script>/gi,
+		(match, p1, p2) => {
+			hasImportMap = true
+			return `<script${p1}type="importmap-shim"${p2}</script>\n${esModuleShimsTag}`
+		},
+	)
+
+	if (!hasImportMap) {
 		transformed = transformed.replace("</head>", `${esModuleShimsTag}</head>`)
 	}
 

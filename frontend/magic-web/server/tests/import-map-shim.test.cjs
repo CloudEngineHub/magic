@@ -118,11 +118,10 @@ test("transformHtmlForShimMode rewrites script and modulepreload tags for shim m
 
 	const transformed = transformHtmlForShimMode(originalHtml)
 
-	// es-module-shims script tag is injected
-	assert.match(
-		transformed,
-		/<script async src="https:\/\/cdn\.jsdelivr\.net\/npm\/es-module-shims@2\.8\.4\/dist\/es-module-shims\.min\.js" crossorigin="anonymous"><\/script>/,
-	)
+	// es-module-shims script tag is injected AFTER importmap-shim
+	const importMapEndIndex = transformed.indexOf("</script>")
+	const shimScriptIndex = transformed.indexOf("es-module-shims@2.8.4")
+	assert.ok(shimScriptIndex > importMapEndIndex)
 
 	// <script type="importmap"> is converted to <script type="importmap-shim">
 	assert.match(transformed, /<script type="importmap-shim">/)
