@@ -34,6 +34,8 @@ interface ToolDataLike {
 }
 
 interface DefaultToolProps {
+	suffix?: ReactNode
+	cardClassName?: string
 	node?: NodeProps["node"]
 	toolData?: ToolDataLike
 	loading?: boolean
@@ -127,11 +129,13 @@ function DefaultTool(props: DefaultToolProps) {
 				className={cn(
 					"inline-flex h-fit w-fit max-w-full items-center overflow-hidden rounded-md border border-border bg-white pl-1.5 shadow-sm dark:bg-card",
 					!loading && "gap-1.5",
+					props.cardClassName,
 				)}
 			>
 				<div
 					className={cn(
 						"inline-flex h-7 w-fit items-center gap-1.5 overflow-hidden py-1.5 pr-1.5",
+						props.suffix !== undefined && "min-w-0 flex-1",
 						hasInteraction && "cursor-pointer",
 					)}
 					onClick={hasInteraction ? onClick : undefined}
@@ -162,7 +166,7 @@ function DefaultTool(props: DefaultToolProps) {
 						</div>
 					</div>
 				) : (
-					renderSuffixIcon
+					(props.suffix ?? renderSuffixIcon)
 				)}
 			</div>
 			{renderTooltip()}

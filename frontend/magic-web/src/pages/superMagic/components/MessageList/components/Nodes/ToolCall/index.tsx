@@ -18,6 +18,7 @@ import {
 } from "../toolDetailSelection"
 import { useMessageListProjectFilesStore } from "@/pages/superMagic/components/MessageList/context"
 import { isToolCallLoading } from "../MessageNode/tool-call/types"
+import FileDownloadCard from "../shared/FileDownloadCard"
 
 function ToolCall(props: NodeProps) {
 	const { onSelectDetail } = props
@@ -84,6 +85,7 @@ function ToolCall(props: NodeProps) {
 			return
 		}
 		// Resolve explicit file targets first; legacy sources retain attachment checks.
+
 		if (
 			selectToolFile({
 				detail,
@@ -106,6 +108,18 @@ function ToolCall(props: NodeProps) {
 		}
 
 		handleSelectDetail?.(newDetail)
+	}
+
+	if (tool && toolName === "create_client_side_file_bundle") {
+		return (
+			<FileDownloadCard
+				toolData={tool}
+				loading={loading}
+				className={props.classNames?.markdown}
+				onMouseEnter={props.onMouseEnter}
+				onMouseLeave={props.onMouseLeave}
+			/>
+		)
 	}
 
 	if (

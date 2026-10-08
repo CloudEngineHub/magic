@@ -2,10 +2,13 @@ import { Topic } from "@/pages/superMagic/pages/Workspace/types"
 import type { JSONContent } from "@/infrastructure/editors/tiptap/core"
 import { createContext, type PropsWithChildren, type ReactNode, useContext } from "react"
 import defaultProjectFilesStore, { type ProjectFilesStore } from "@/stores/projectFiles"
+import type { FileBundleDownloadCapability } from "@/pages/superMagic/hooks/useFileBundleDownload"
 
 export interface MessageListContextState {
 	/** 打开当前话题的文件管理器，并显示一次性整理引导。 */
 	onOpenProjectFiles?: () => void
+	/** 列表拥有下载任务；虚拟卡片只展示状态和触发动作。 */
+	fileBundleDownload?: FileBundleDownloadCapability
 	/** 仅登录的非分享会话解析当前用户的个人文件引用。 */
 	allowUserFileReferences?: boolean
 	/** 是否允许撤回 */

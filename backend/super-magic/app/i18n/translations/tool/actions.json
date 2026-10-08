@@ -1038,5 +1038,9 @@
     "startup_task_run": {
         "zh_CN": "试运行启动任务",
         "en_US": "Test startup task"
+    },
+    "create_client_side_file_bundle": {
+        "zh_CN": "文件打包",
+        "en_US": "File bundle"
     }
 }

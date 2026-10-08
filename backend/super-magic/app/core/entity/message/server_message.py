@@ -52,6 +52,7 @@ class DisplayType(str, Enum):
     ASK_USER = "ask_user"  # ask_user 问答结果展示
     PLAN = "plan"  # 开发计划确认展示
     OPERATION_RESULT_LIST = "operation_result_list"  # 简短操作结果，在消息卡片内展开
+    FILE_DOWNLOAD = "file_download"
 
 
 class BrowserDetailStatus(str, Enum):
@@ -449,12 +450,31 @@ class OperationResultListReportContent(FileContent, OperationResultSummary):
     report_type: DisplayType | None = None
 
 
+class FileDownloadItem(BaseModel):
+    """原文件引用；下载时按 ID 授权，路径只用于 ZIP 内目录。"""
+
+    file_id: str
+    relative_file_path: str
+    file_name: str
+    file_size: int = Field(ge=0)
+
+
+class FileDownloadContent(BaseModel):
+    """完整下载集合随消息保存，不包含正文、临时地址或存储凭证。"""
+
+    title: str
+    archive_name: str
+    project_id: str
+    total_bytes: int = Field(ge=0)
+    items: list[FileDownloadItem] = Field(min_length=1)
+
+
 class ToolDetail(BaseModel):
     """工具详情模型"""
 
     type: DisplayType  # 展示类型
     data: Union[
-        OperationResultListReportContent, FileContent, FileTreeContent, TerminalContent, BrowserContent, SearchContent,
+        OperationResultListReportContent, FileDownloadContent, FileContent, FileTreeContent, TerminalContent, BrowserContent, SearchContent,
         ScriptExecutionContent, DeepWriteContent, TodoContent, DesignCanvasContent, DesignElementContent,
         AskUserQuestionContent, AskUserResultContent, PlanToolContent, SubagentsContent, OperationResultListContent, Dict[str, Any]
     ]  # 展示内容，根据type动态展示

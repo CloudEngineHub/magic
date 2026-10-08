@@ -7,6 +7,7 @@ import { MCPTool } from "./tools/MCP"
 import type { ToolCallRendererProps } from "./types"
 import { isInlineToolDetail } from "@/pages/superMagic/utils/toolDetailDisplay"
 import OperationResultList from "../../shared/OperationResultList"
+import FileDownloadCard from "../../shared/FileDownloadCard"
 
 const AskUserToolCall = lazy(() => import("./tools/AskUser"))
 const MicroAppPlanToolCall = lazy(() => import("./tools/MicroAppPlan"))
@@ -24,6 +25,18 @@ export function ToolCallRenderer({
 	onMouseEnter,
 	onMouseLeave,
 }: ToolCallRendererProps) {
+	if (toolCall.function.name === "create_client_side_file_bundle") {
+		return (
+			<FileDownloadCard
+				toolData={toolData}
+				loading={loading}
+				className={classNames}
+				onMouseEnter={onMouseEnter}
+				onMouseLeave={onMouseLeave}
+			/>
+		)
+	}
+
 	if (
 		isInlineToolDetail(toolData.detail) ||
 		(toolCall.function.name === "web_search" && toolData.detail?.type === "search")

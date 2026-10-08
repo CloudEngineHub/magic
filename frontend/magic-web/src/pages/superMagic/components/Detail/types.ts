@@ -33,6 +33,7 @@ export enum DetailType {
 	SlidesTemplate = "slides-template",
 	Subagents = "subagents",
 	OperationResultList = "operation_result_list",
+	FileDownload = "file_download",
 }
 
 /** 等待子智能体卡片里的一行，字段与后端 SubagentItemContent 一一对应 */
@@ -59,6 +60,21 @@ export interface DetailSubagentsData {
 	elapsed_seconds: number
 	phase: "waiting" | "settled"
 	agents: DetailSubagentItem[]
+}
+
+export interface FileDownloadItem {
+	file_id: string
+	relative_file_path: string
+	file_name: string
+	file_size: number
+}
+
+export interface FileDownloadData {
+	title: string
+	archive_name: string
+	project_id: string
+	total_bytes: number
+	items: FileDownloadItem[]
 }
 
 /** Self-media platform values supported by the dispatcher */
@@ -99,6 +115,7 @@ export interface DetailSelfMediaData {
 
 /** 详情 */
 export interface DetailData {
+	[DetailType.FileDownload]: FileDownloadData
 	[DetailType.Terminal]: DetailTerminalData
 	[DetailType.ScriptExecution]: DetailScriptExecutionData
 	[DetailType.Browser]: DetailBrowserData
