@@ -89,7 +89,7 @@ export const MICRO_APPS_WORKSPACE_DATA = (t: TFunction): Workspace => ({
 	current_topic_id: "",
 	current_project_id: "",
 	project_count: 0,
-	workspace_type: "default",
+	workspace_type: "micro-app",
 })
 
 export const MY_AUDIO_RECORDINGS_WORKSPACE_DATA = (t: TFunction): Workspace => {

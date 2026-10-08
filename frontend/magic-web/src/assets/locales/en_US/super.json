@@ -5291,6 +5291,19 @@
 		"workspaces": "Workspaces",
 		"workspacesShort": "Spaces"
 	},
+	"projectResources": {
+		"allTypes": "All types",
+		"createTime": "Created",
+		"filterType": "Filter project type",
+		"generalType": "General projects",
+		"lastActiveTime": "Last active",
+		"role": "Role: {{role}}",
+		"statusUnknown": "Unknown status",
+		"updateTime": "Updated",
+		"updatedAt": "Updated {{date}}",
+		"version": "Version {{version}}",
+		"workspaceOrder": "Workspace order"
+	},
 	"projectShare": {
 		"advancedSettings": "Advanced settings",
 		"copyLink": "Copy link",
@@ -6071,7 +6084,9 @@
 		"noWorkspace": "No Workspace",
 		"onlySelectableAdministratorDocument": "Only Selectable Administrator Document",
 		"pleaseSelectFile": "Please Select File",
+		"preserveParentPath": "Preserve folder hierarchy",
 		"preserveParentPathConfirmTitle": "Keep the original folder path?",
+		"preserveParentPathDescription": "Recreate the original parent-folder path in the target project. Leave this unchecked to place the items directly in the selected folder.",
 		"preserveParentPathExamples": "Compare folder path options",
 		"preserveParentPathFlatDescription": "Selected files will be stored directly in the current folder.",
 		"preserveParentPathFlatTitle": "Place in current folder",
@@ -6582,6 +6597,8 @@
 		"viewShortcuts": "View Shortcuts"
 	},
 	"sidebarPanels": {
+		"absoluteTime": "Full timestamp",
+		"activityTimeFormat": "Last active, currently {{format}}; choose a time format",
 		"browseWorkspaces": "Workspaces",
 		"clearSearch": "Clear search",
 		"collapseFiles": "Collapse files",
@@ -6594,6 +6611,7 @@
 		"loadMore": "Load more",
 		"loadedProjects": "Showing {{count}} / {{total}} projects",
 		"noMatchingProjects": "No matching projects",
+		"projectLocation": "Location",
 		"projectManager": "Project manager",
 		"projectManagerDescription": "Browse and manage projects across workspaces",
 		"projectName": "Project name",
@@ -6602,6 +6620,7 @@
 		"pullLeftToCollapse": "Keep dragging left to collapse",
 		"pullRightToCancel": "Drag back right to cancel",
 		"pullRightToCollapse": "Keep dragging right to collapse",
+		"relativeTime": "Relative time",
 		"releaseKeepsOpen": "Releasing keeps the panel open",
 		"releaseToCollapse": "Release to collapse",
 		"renameCancel": "Cancel (Esc)",

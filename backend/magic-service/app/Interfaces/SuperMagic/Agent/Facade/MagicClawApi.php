@@ -173,7 +173,7 @@ class MagicClawApi extends AbstractApi
         $requestContext->setUserAuthorization($authorization);
 
         $dto = QueryMagicClawListRequestDTO::fromRequest($this->request);
-        $result = $this->magicClawAppService->queries($authorization, $dto->getPage(), $dto->getPageSize());
+        $result = $this->magicClawAppService->queries($authorization, $dto->getPage(), $dto->getPageSize(), $dto->getKeyword());
 
         $list = [];
         foreach ($result['list'] as $item) {

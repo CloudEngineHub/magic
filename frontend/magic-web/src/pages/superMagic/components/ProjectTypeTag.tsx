@@ -13,15 +13,26 @@ interface ProjectTypeTagProps {
 	className?: string
 }
 
-const PROJECT_TYPE_ICONS: Record<string, { Icon: ComponentType<LucideProps>; labelKey: string }> = {
-	magiclaw: { Icon: MagiClaw, labelKey: "magicClaw" },
-	"micro-app": { Icon: Boxes, labelKey: "microApp" },
-	agent_creator: { Icon: Bot, labelKey: "agent" },
-	custom_agent: { Icon: Bot, labelKey: "agent" },
-	skill_creator: { Icon: Wrench, labelKey: "skill" },
-	custom_skill: { Icon: Wrench, labelKey: "skill" },
-	audio: { Icon: Mic, labelKey: "audio" },
-	chat: { Icon: MessageCircle, labelKey: "chat" },
+type ProjectTypeTagLabelKey =
+	| "projectTypeTag.magicClaw"
+	| "projectTypeTag.microApp"
+	| "projectTypeTag.agent"
+	| "projectTypeTag.skill"
+	| "projectTypeTag.audio"
+	| "projectTypeTag.chat"
+
+const PROJECT_TYPE_ICONS: Record<
+	string,
+	{ Icon: ComponentType<LucideProps>; labelKey: ProjectTypeTagLabelKey }
+> = {
+	magiclaw: { Icon: MagiClaw, labelKey: "projectTypeTag.magicClaw" },
+	"micro-app": { Icon: Boxes, labelKey: "projectTypeTag.microApp" },
+	agent_creator: { Icon: Bot, labelKey: "projectTypeTag.agent" },
+	custom_agent: { Icon: Bot, labelKey: "projectTypeTag.agent" },
+	skill_creator: { Icon: Wrench, labelKey: "projectTypeTag.skill" },
+	custom_skill: { Icon: Wrench, labelKey: "projectTypeTag.skill" },
+	audio: { Icon: Mic, labelKey: "projectTypeTag.audio" },
+	chat: { Icon: MessageCircle, labelKey: "projectTypeTag.chat" },
 }
 
 /** 最近项目将类型标记放在置顶和协作标记所在的位置，不发起额外请求。 */
@@ -34,7 +45,7 @@ export default function ProjectTypeTag({
 	const config = projectMode ? PROJECT_TYPE_ICONS[projectMode] : undefined
 	if (!config) return null
 
-	const label = t(`projectTypeTag.${config.labelKey}`)
+	const label = t(config.labelKey)
 	const Icon = config.Icon
 	return (
 		<MagicTooltip title={label} disabled={tooltipDisabled}>

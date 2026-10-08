@@ -2267,6 +2267,9 @@ export const generateSuperMagicApi = (fetch: ServiceHttpClient) => ({
 			show_collaboration = 1,
 			sort_mode,
 			include_special = 0,
+			project_type,
+			sort_field,
+			sort_direction,
 		}: {
 			workspace_id?: string
 			project_name?: string
@@ -2275,6 +2278,9 @@ export const generateSuperMagicApi = (fetch: ServiceHttpClient) => ({
 			show_collaboration?: number
 			sort_mode?: "workspace" | "recent"
 			include_special?: number
+			project_type?: "all" | "general" | "claw" | "micro-app" | "agent" | "skill"
+			sort_field?: "last_active_at" | "updated_at" | "created_at"
+			sort_direction?: "asc" | "desc"
 		},
 		options?: Omit<RequestConfig, "url">,
 	) {
@@ -2288,6 +2294,9 @@ export const generateSuperMagicApi = (fetch: ServiceHttpClient) => ({
 				show_collaboration,
 				sort_mode,
 				include_special,
+				project_type,
+				sort_field,
+				sort_direction,
 			},
 			options,
 		)

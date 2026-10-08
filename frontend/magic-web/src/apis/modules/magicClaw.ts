@@ -16,6 +16,8 @@ export interface MagicClawItem {
 	template_code: MagicClawTemplateCode
 	status: MagicClawStatus
 	need_upgrade?: boolean
+	created_at?: string | null
+	updated_at?: string | null
 }
 
 export interface MagicClawListData {
@@ -61,7 +63,7 @@ export function generateMagicClawApi(fetch: ServiceHttpClient) {
 		 * Paginated Magic Claw list (sandbox auth).
 		 */
 		queryMagicClawList(
-			params?: { page?: number; page_size?: number },
+			params?: { page?: number; page_size?: number; keyword?: string },
 			config?: Omit<RequestConfig, "url" | "body">,
 		) {
 			const page = params?.page ?? 1
@@ -69,7 +71,7 @@ export function generateMagicClawApi(fetch: ServiceHttpClient) {
 			const page_size = Math.min(Math.max(1, rawSize), MAX_PAGE_SIZE)
 			return fetch.post<MagicClawListData>(
 				"/api/v1/magic-claw/queries",
-				{ page, page_size },
+				{ page, page_size, keyword: params?.keyword },
 				config,
 			)
 		},

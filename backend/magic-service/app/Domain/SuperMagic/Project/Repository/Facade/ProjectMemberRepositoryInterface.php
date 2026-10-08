@@ -179,12 +179,13 @@ interface ProjectMemberRepositoryInterface
         ?string $projectName = null,
         int $page = 1,
         int $pageSize = 10,
-        string $sortField = 'last_active_at',
+        ?string $sortField = null,
         string $sortDirection = 'desc',
         ?array $organizationCodes = null,
         bool $showHidden = false,
         ?ProjectSortMode $sortMode = null,
-        bool $includeSpecialModes = false
+        bool $includeSpecialModes = false,
+        string $projectType = 'all'
     ): array;
 
     /**

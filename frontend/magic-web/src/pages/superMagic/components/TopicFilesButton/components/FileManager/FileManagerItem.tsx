@@ -8,7 +8,7 @@ import {
 	type KeyboardEvent,
 	type MouseEvent,
 	type ReactNode,
-	type RefObject,
+	type MutableRefObject,
 } from "react"
 import { useMemoizedFn } from "ahooks"
 import { useTranslation } from "react-i18next"
@@ -313,7 +313,7 @@ const pendingRenameCancelTimers = new WeakMap<object, number>()
 
 /** Expose a textarea as the InputRef useRename already knows how to focus and select. */
 function bindRenameTextArea(
-	renameInputRef: RefObject<InputRef | null>,
+	renameInputRef: MutableRefObject<InputRef | null>,
 	node: HTMLTextAreaElement | null,
 ) {
 	if (!node) {

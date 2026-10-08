@@ -5292,6 +5292,19 @@
 		"workspaces": "工作空间",
 		"workspacesShort": "空间"
 	},
+	"projectResources": {
+		"allTypes": "全部类型",
+		"createTime": "创建时间",
+		"filterType": "筛选项目类型",
+		"generalType": "普通项目",
+		"lastActiveTime": "最近活动",
+		"role": "角色：{{role}}",
+		"statusUnknown": "状态未知",
+		"updateTime": "更新时间",
+		"updatedAt": "更新于 {{date}}",
+		"version": "版本 {{version}}",
+		"workspaceOrder": "工作区顺序"
+	},
 	"projectShare": {
 		"advancedSettings": "高级设置",
 		"copyLink": "复制链接",
@@ -6070,7 +6083,9 @@
 		"noWorkspace": "暂无工作区",
 		"onlySelectableAdministratorDocument": "仅可选择有管理员权限的文档",
 		"pleaseSelectFile": "请选择文件",
+		"preserveParentPath": "保留文件夹层级关系",
 		"preserveParentPathConfirmTitle": "保留原文件夹路径？",
+		"preserveParentPathDescription": "是否需要在目标项目中按原上级文件夹路径创建层级？不勾选将直接放入所选目录。",
 		"preserveParentPathExamples": "文件夹路径保留方式对比",
 		"preserveParentPathFlatDescription": "所选文件将直接存储到当前目录。",
 		"preserveParentPathFlatTitle": "直接放入当前目录",
@@ -6581,6 +6596,8 @@
 		"viewShortcuts": "查看快捷键"
 	},
 	"sidebarPanels": {
+		"absoluteTime": "完整时间",
+		"activityTimeFormat": "最近活动，当前为{{format}}，选择时间格式",
 		"browseWorkspaces": "工作区",
 		"clearSearch": "清除搜索",
 		"collapseFiles": "收起文件栏",
@@ -6593,6 +6610,7 @@
 		"loadMore": "加载更多",
 		"loadedProjects": "已显示 {{count}} / {{total}} 个项目",
 		"noMatchingProjects": "未找到匹配项目",
+		"projectLocation": "位置",
 		"projectManager": "项目管理器",
 		"projectManagerDescription": "浏览与管理所有工作区的项目",
 		"projectName": "项目名称",
@@ -6601,6 +6619,7 @@
 		"pullLeftToCollapse": "继续向左拉动以收起",
 		"pullRightToCancel": "向右回拉可取消",
 		"pullRightToCollapse": "继续向右拉动以收起",
+		"relativeTime": "人性化时间",
 		"releaseKeepsOpen": "松手后仍保持展开",
 		"releaseToCollapse": "松开即可收起",
 		"renameCancel": "取消（Esc）",

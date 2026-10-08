@@ -7,6 +7,7 @@ declare(strict_types=1);
 
 namespace App\Domain\SuperMagic\Project\Repository\Persistence;
 
+use App\Domain\SuperMagic\Common\Entity\ValueObject\HiddenType;
 use App\Domain\SuperMagic\Project\Entity\ProjectMemberEntity;
 use App\Domain\SuperMagic\Project\Entity\ValueObject\MemberRole;
 use App\Domain\SuperMagic\Project\Entity\ValueObject\MemberStatus;
@@ -477,12 +478,13 @@ class ProjectMemberRepository implements ProjectMemberRepositoryInterface
         ?string $projectName = null,
         int $page = 1,
         int $pageSize = 10,
-        string $sortField = 'last_active_at',
+        ?string $sortField = null,
         string $sortDirection = 'desc',
         ?array $organizationCodes = null,
         bool $showHidden = false,
         ?ProjectSortMode $sortMode = null,
-        bool $includeSpecialModes = false
+        bool $includeSpecialModes = false,
+        string $projectType = 'all'
     ): array {
         // 特殊项目只进入最近项目视图，避免普通工作区查询因请求参数扩大范围。
         $includeSpecialModes = $includeSpecialModes && $sortMode === ProjectSortMode::Recent;
@@ -493,6 +495,24 @@ class ProjectMemberRepository implements ProjectMemberRepositoryInterface
         }
         $this->applyProjectListBaseFilters($query, $organizationCodes, $showHidden, $includeSpecialModes);
         $this->applyAccessibleParticipatedProjectFilter($query, $userId);
+
+        if ($sortMode === ProjectSortMode::Recent) {
+            $typeModes = match ($projectType) {
+                'claw' => [ProjectMode::MAGICLAW->value],
+                'micro-app' => [ProjectMode::MICRO_APP->value],
+                'agent' => [ProjectMode::AGENT_CREATOR->value, ProjectMode::CUSTOM_AGENT->value],
+                'skill' => [ProjectMode::SKILL_CREATOR->value, ProjectMode::CUSTOM_SKILL->value],
+                default => [],
+            };
+            if ($typeModes !== []) {
+                $query->whereIn('p.project_mode', $typeModes);
+            } elseif ($projectType === 'general') {
+                $query->whereNotIn('p.project_mode', array_merge(
+                    ProjectMode::getQueryFilterModes(),
+                    [ProjectMode::CUSTOM_AGENT->value, ProjectMode::CUSTOM_SKILL->value]
+                ));
+            }
+        }
 
         // 工作区限制（可选）
         $this->applyParticipatedWorkspaceFilter($query, $userId, $workspaceId);
@@ -561,7 +581,19 @@ class ProjectMemberRepository implements ProjectMemberRepositoryInterface
         // 去重
         $query->distinct();
 
-        if ($sortMode === ProjectSortMode::Recent || ($sortMode === null && ! $showCollaboration)) {
+        if ($sortField !== null) {
+            // 显式时间排序只改变本次展示；普通工作区置顶优先，手工顺序不写回。
+            if ($sortMode !== ProjectSortMode::Recent) {
+                $query->orderByDesc('is_pinned');
+            }
+            $column = match ($sortField) {
+                'updated_at' => 'p.updated_at',
+                'created_at' => 'p.created_at',
+                default => 'last_active_at',
+            };
+            $query->orderBy($column, $sortDirection === 'asc' ? 'asc' : 'desc')
+                ->orderByDesc('p.id');
+        } elseif ($sortMode === ProjectSortMode::Recent || ($sortMode === null && ! $showCollaboration)) {
             // Recent-use mode ignores pin/manual ordering.
             $query->orderByDesc('last_active_at')
                 ->orderByDesc('p.created_at')
@@ -1070,7 +1102,19 @@ class ProjectMemberRepository implements ProjectMemberRepositoryInterface
         }
 
         if (! $showHidden) {
-            $query->where('p.is_hidden', 0);
+            $query->where(function ($visibilityQuery) use ($includeSpecialModes): void {
+                $visibilityQuery->where('p.is_hidden', 0);
+                if ($includeSpecialModes) {
+                    // 专用页面的源码项目可进入最近列表；预热、下载和运行期项目仍不可见。
+                    $visibilityQuery->orWhere(function ($specialQuery): void {
+                        $specialQuery->whereIn('p.project_mode', ProjectMode::getRecentListSpecialModes())
+                            ->where(function ($hiddenTypeQuery): void {
+                                $hiddenTypeQuery->whereNull('p.hidden_type')
+                                    ->orWhere('p.hidden_type', HiddenType::AGENT->value);
+                            });
+                    });
+                }
+            });
         }
 
         if (! $includeSpecialModes) {

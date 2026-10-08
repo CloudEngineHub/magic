@@ -70,7 +70,9 @@ export function useFileManagerColumns(saved?: FileManagerColumnsSnapshot, option
 			visible
 				.map((column) =>
 					column.id === "name" && values.name === undefined
-						? `minmax(${options?.defaultNameWidth ?? column.width}px, 1fr)`
+						? options?.defaultNameWidth === undefined
+							? `minmax(${column.width}px, 1fr)`
+							: `${options.defaultNameWidth}px`
 						: `${values[column.id] ?? column.width}px`,
 				)
 				.join(" "),
@@ -78,7 +80,7 @@ export function useFileManagerColumns(saved?: FileManagerColumnsSnapshot, option
 		// 包含行内边距及虚拟列表左右留白，表头和行共享同一水平滚动空间。
 		container.style.setProperty(
 			"--manager-list-width",
-			`${visible.reduce((sum, column) => sum + (values[column.id] ?? column.width), 44)}px`,
+			`${visible.reduce((sum, column) => sum + (values[column.id] ?? (column.id === "name" ? options?.defaultNameWidth : undefined) ?? column.width), 44)}px`,
 		)
 	})
 	useLayoutEffect(

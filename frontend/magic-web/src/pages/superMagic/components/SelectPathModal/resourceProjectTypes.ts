@@ -13,6 +13,7 @@ export type ResourceProject = ProjectListItem & {
 	resourceStatus?: string | null
 	resourceRole?: string | null
 	resourceVersion?: string | null
+	resourcePackageName?: string
 	resourceTemplateCode?: string | null
 	resourceCode?: string | null
 	project_id?: string | null
