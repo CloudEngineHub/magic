@@ -7,6 +7,7 @@ export interface TextReadOnlyPreview {
 /** 详情类型 */
 export enum DetailType {
 	Terminal = "terminal",
+	ScriptExecution = "script_execution",
 	Browser = "browser",
 	Search = "search",
 	KnowledgeSearch = "knowledge_search",
@@ -71,6 +72,7 @@ export interface DetailSelfMediaData {
 /** 详情 */
 export interface DetailData {
 	[DetailType.Terminal]: DetailTerminalData
+	[DetailType.ScriptExecution]: DetailScriptExecutionData
 	[DetailType.Browser]: DetailBrowserData
 	[DetailType.Search]: DetailSearchData
 	[DetailType.KnowledgeSearch]: any
@@ -100,6 +102,16 @@ export interface DetailTerminalData {
 	output: string
 	code: string
 	exit_code: number
+}
+
+/** Python 脚本执行详情。代码、标准输出和标准错误保持独立，避免前端重新猜测文本来源。 */
+export interface DetailScriptExecutionData {
+	code: string
+	args?: string | null
+	stdout: string
+	stderr: string
+	exit_code: number
+	success: boolean
 }
 
 /** 浏览器 Browser */
