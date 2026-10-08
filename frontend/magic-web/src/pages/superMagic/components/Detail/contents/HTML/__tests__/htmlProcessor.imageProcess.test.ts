@@ -18,6 +18,137 @@ describe("processHtmlContent image processing", () => {
 		vi.mocked(getTemporaryDownloadUrl).mockReset()
 	})
 
+	it("preserves escaped code examples and quoted attributes through resource processing", async () => {
+		const result = await processHtmlContent({
+			content: `<!doctype html><html><head></head><body>
+				<p>&lt;LoginForm</p><p>&lt;Button</p><p>/&gt; &amp; &#169;</p>
+				<div title="&quot;quoted&quot; &lt;value&gt; &amp; more"></div>
+			</body></html>`,
+			attachments: [
+				{
+					file_id: "slide-file",
+					file_name: "slide.html",
+					relative_file_path: "deck/slide.html",
+				},
+			],
+			fileId: "slide-file",
+			html_relative_path: "deck/",
+		})
+		const doc = new DOMParser().parseFromString(result.processedContent, "text/html")
+		expect(Array.from(doc.querySelectorAll("p"), (p) => p.textContent)).toEqual([
+			"<LoginForm",
+			"<Button",
+			"/> & ©",
+		])
+		expect(doc.querySelector("div")?.getAttribute("title")).toBe('"quoted" <value> & more')
+		expect(Array.from(doc.querySelectorAll("*"), (el) => el.tagName)).not.toContain(
+			"LOGINFORM<",
+		)
+	})
+
+	it("retains raw script/style and nested SVG namespaces while removing only the root namespace", async () => {
+		const script = 'window.example = "<Button> &lt;"; if (1 < 2 && 3 > 2) window.ready = true;'
+		const css = '.parent > .child::before { content: "< & >"; }'
+		const result = await processHtmlContent({
+			content: `<!doctype html><!-- document comment --><html xmlns="http://www.w3.org/1999/xhtml"><head>
+				<script>${script}</script><style>${css}</style></head><body>
+				<svg xmlns="http://www.w3.org/2000/svg"><foreignObject>
+					<div xmlns="http://www.w3.org/1999/xhtml">&lt;Button &amp; text</div>
+				</foreignObject></svg></body></html>`,
+			attachments: [
+				{
+					file_id: "slide-file",
+					file_name: "slide.html",
+					relative_file_path: "deck/slide.html",
+				},
+			],
+			fileId: "slide-file",
+		})
+		const doc = new DOMParser().parseFromString(result.processedContent, "text/html")
+		expect(doc.querySelector("script:not([data-injected])")?.textContent).toBe(script)
+		expect(doc.querySelector("style")?.textContent).toBe(css)
+		expect(doc.doctype?.name).toBe("html")
+		expect(result.processedContent).toContain("<!-- document comment -->")
+		expect(doc.documentElement.hasAttribute("xmlns")).toBe(false)
+		const svg = doc.querySelector("svg")
+		expect(svg?.namespaceURI).toBe("http://www.w3.org/2000/svg")
+		expect(svg?.querySelector("div")?.getAttribute("xmlns")).toBe(
+			"http://www.w3.org/1999/xhtml",
+		)
+		expect(svg?.querySelector("div")?.textContent).toBe("<Button & text")
+	})
+
+	it.each([
+		"img",
+		"inline-style",
+		"inline-double-quote",
+		"inline-unquoted",
+		"stylesheet",
+		"style-block",
+	])("resolves ampersands in %s resource paths without corrupting text", async (usage) => {
+		const path = "a&b.png"
+		const url = "https://cdn.example.com/image.png?token=one&version=two"
+		const sources: Record<string, string> = {
+			img: '<img src="a&amp;b.png">',
+			"inline-style": `<div style="background: url('a&amp;b.png')"></div>`,
+			"inline-double-quote": '<div style="background: url(&quot;a&amp;b.png&quot;)"></div>',
+			"inline-unquoted": '<div style="background: url(a&amp;b.png)"></div>',
+			stylesheet: '<link rel="stylesheet" href="theme&amp;dark.css">',
+			"style-block": `<style>.hero { background: url('a&b.png'); }</style>`,
+		}
+		const attachments = [
+			{
+				file_id: "html-file",
+				file_name: "slide.html",
+				relative_file_path: "deck/slide.html",
+			},
+			{ file_id: "image-file", file_name: path, relative_file_path: `deck/${path}` },
+			{
+				file_id: "css-file",
+				file_name: "theme&dark.css",
+				relative_file_path: "deck/theme&dark.css",
+			},
+		]
+		const fileApi: FileApi = {
+			identityKey: "test:entities",
+			getTemporaryDownloadUrl: vi.fn().mockResolvedValue([{ file_id: "image-file", url }]),
+			getFileContentById: vi.fn().mockResolvedValue(`.hero { background: url('a&b.png'); }`),
+			getFileContentsByIds: vi.fn(),
+			requestSharedMediaUrls: vi.fn(),
+		}
+		const result = await processHtmlContent({
+			content: `<html><head></head><body>${sources[usage]}<p>&lt;Button &amp; text</p></body></html>`,
+			attachments,
+			attachmentList: attachments,
+			fileId: "html-file",
+			html_relative_path: "deck/",
+			fileApi,
+			preloadedUrlMapping: new Map([
+				["image-file", url],
+				["css-file", "https://cdn.example.com/theme.css"],
+			]),
+		})
+		const doc = new DOMParser().parseFromString(result.processedContent, "text/html")
+		expect(doc.querySelector("p")?.textContent).toBe("<Button & text")
+		if (usage === "img") {
+			expect(doc.querySelector("img")?.getAttribute("src")).toBe(url)
+			expect(doc.querySelector("img")?.getAttribute("data-original-path")).toBe(path)
+		} else if (usage.startsWith("inline-")) {
+			expect(doc.querySelector("div")?.getAttribute("style")).toContain(url)
+		} else {
+			expect(doc.querySelector("style")?.textContent).toContain(url)
+		}
+		const saved = new DOMParser().parseFromString(
+			filterInjectedTags(result.processedContent, result.filePathMapping),
+			"text/html",
+		)
+		if (usage === "img") expect(saved.querySelector("img")?.getAttribute("src")).toBe(path)
+		if (usage.startsWith("inline-"))
+			expect(saved.querySelector("div")?.getAttribute("style")).toContain(path)
+		if (usage === "stylesheet")
+			expect(saved.querySelector("link")?.getAttribute("href")).toBe("theme&dark.css")
+	})
+
 	it("only replaces standalone window reload calls", async () => {
 		const result = await processHtmlContent({
 			content: `
