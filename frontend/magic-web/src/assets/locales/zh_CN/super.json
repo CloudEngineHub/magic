@@ -473,6 +473,7 @@
 			"reload": "重新加载",
 			"title": "页面加载失败"
 		},
+		"fileCannotOpen": "无法打开此文件：{{path}}",
 		"fileNotFoundOrLoadFailed": "文件不存在或加载错误",
 		"fileUrlFetchFailed": "文件链接获取失败",
 		"generalMode": "通用模式",
@@ -2535,6 +2536,12 @@
 		"type": "类型",
 		"up": "上一级",
 		"uploadTarget": "上传到「{{target}}」"
+	},
+	"filePreview": {
+		"downloadFailed": "图片下载失败",
+		"downloadImage": "下载图片",
+		"expandImage": "放大预览",
+		"retry": "重试"
 	},
 	"fileSpaceLimit": {
 		"cleanupCount": "建议至少清理约 {{count}} 个不再需要的文件",

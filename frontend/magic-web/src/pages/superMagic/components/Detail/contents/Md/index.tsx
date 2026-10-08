@@ -1049,6 +1049,7 @@ export default memo(function TextEditor(props: TextEditorProps) {
 								)}
 							>
 								<EditorBody
+									allowDownload={allowDownload}
 									selectionRootRef={markdownSelection.selectionRootRef}
 									enableSourceLocation={
 										!!allowEdit &&

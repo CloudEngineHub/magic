@@ -2254,6 +2254,7 @@ const TopicFilesCore = forwardRef<TopicFilesCoreRef, TopicFilesCoreProps>(functi
 								{imagePreviewSource ? (
 									<ProjectFileImageSmartTooltip
 										source={imagePreviewSource}
+										allowDownload={allowDownload}
 										className={cx(
 											"min-w-0 flex-1",
 											styles.ellipsis,

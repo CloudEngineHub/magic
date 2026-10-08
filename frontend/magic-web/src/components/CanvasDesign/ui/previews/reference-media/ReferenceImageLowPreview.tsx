@@ -14,6 +14,7 @@ import { useObserveBoxSize } from "./useObserveBoxSize"
 import { useCanvasDesignI18n } from "../../../app/providers/I18nProvider"
 import { REFERENCE_MEDIA_TOOLTIP_MAX_SIZE } from "./constants"
 import { usePortalContainer } from "../../primitives/custom/PortalContainerContext"
+import { useCanvasImagePreviewActions } from "./useCanvasImagePreviewActions"
 
 export function ReferenceImageLowPreview(props: ReferenceMediaPreviewProps) {
 	const {
@@ -71,6 +72,7 @@ export function ReferenceImageLowPreview(props: ReferenceMediaPreviewProps) {
 
 	const canCropLayout =
 		Boolean(sourceCrop) && Boolean(imageInfo?.naturalWidth && imageInfo?.naturalHeight)
+	const imageActions = useCanvasImagePreviewActions(path, fileName, { crop: normalizedCrop })
 
 	const {
 		ref: previewBoxRef,
@@ -160,6 +162,7 @@ export function ReferenceImageLowPreview(props: ReferenceMediaPreviewProps) {
 			source={
 				{
 					mediaType: "image",
+					imageActions,
 					thumbnailUrl: lowUrl,
 					previewUrl: fullUrl,
 					crop: normalizedCrop,

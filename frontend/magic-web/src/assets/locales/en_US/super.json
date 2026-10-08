@@ -472,6 +472,7 @@
 			"reload": "Reload Page",
 			"title": "Page Load Failed"
 		},
+		"fileCannotOpen": "Unable to open this file: {{path}}",
 		"fileNotFoundOrLoadFailed": "File not found or failed to load",
 		"fileUrlFetchFailed": "Failed to fetch file URL",
 		"generalMode": "General",
@@ -2535,6 +2536,12 @@
 		"type": "Type",
 		"up": "Up one level",
 		"uploadTarget": "Upload to {{target}}"
+	},
+	"filePreview": {
+		"downloadFailed": "Image download failed",
+		"downloadImage": "Download image",
+		"expandImage": "Expand preview",
+		"retry": "Retry"
 	},
 	"fileSpaceLimit": {
 		"cleanupCount": "We recommend removing about {{count}} files you no longer need",
