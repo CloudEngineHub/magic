@@ -105,18 +105,64 @@ class FileTreeNode(BaseModel):
     error: Optional[str] = None  # 错误信息（如权限错误、访问错误等）
 
 
+class UnexpansionReason(str, Enum):
+    """某个目录没有被完整读出来的原因。
+
+    四种原因的共同含义只有一个：**该目录的真实内容没有被观测到**。区分原因是给
+    消费方和排查用的，不是给消费方推断"里面有什么"用的。
+
+    这个类型存在的原因是此前的节点预算会把"没读到"表达成"不存在"：被截断的子树
+    从条目集合里消失，上一层据此认为这些路径被删除了。任何一次未完整读取都必须
+    留下记录，消费方才能把"目录是空的"和"目录没被读过"分开。
+    """
+
+    NODE_BUDGET = "node_budget"  # 达到条目数预算
+    BYTE_BUDGET = "byte_budget"  # 达到输出体积预算
+    TIME_BUDGET = "time_budget"  # 达到扫描时间预算
+    UNREADABLE = "unreadable"    # 目录打不开
+
+
+class UnexpandedDirectory(BaseModel):
+    """本次扫描未能完整读取的一个目录。"""
+
+    path: str  # 相对 root_path 的路径；根目录本身为 root_path 的取值
+    reason: UnexpansionReason
+
+
+class DirectoryScanFailure(str, Enum):
+    """整次扫描未能开始或中途失败的原因；None 表示扫描本身跑完了。"""
+
+    NOT_FOUND = "not_found"              # 路径不存在
+    NOT_A_DIRECTORY = "not_a_directory"  # 路径存在但不是目录
+    UNREADABLE = "unreadable"            # 扫描过程中抛出未预期的错误
+
+
 class FileTreeContent(BaseModel):
-    """文件树内容模型"""
+    """文件树内容模型
+
+    `tree` 只保证包含"已观测到"的节点。判断一份结果能不能当作完整事实使用，看
+    `complete`，不要看 `total_files`/`total_dirs`（它们统计的是已观测到的数量）。
+    """
 
     root_path: str  # 根路径
     level: int  # 扫描层级
     filter_binary: bool  # 是否过滤二进制文件
-    total_files: int  # 总文件数
-    total_dirs: int  # 总目录数
-    total_size: int  # 总大小（字节）
+    total_files: int  # 已观测到的文件数
+    total_dirs: int  # 已观测到的目录数
+    total_size: int  # 已观测到的文件总大小（字节）
     tree: List[FileTreeNode]  # 文件树结构
-    truncated: bool = False
-    truncated_reason: Optional[str] = None
+    unexpanded: List[UnexpandedDirectory] = []  # 未完整读取的目录；空表示没有预算缺口
+    failure: Optional[DirectoryScanFailure] = None  # 整次扫描的失败原因
+    failure_detail: Optional[str] = None  # 失败的原始错误文本，仅用于日志和排查
+
+    @property
+    def complete(self) -> bool:
+        """扫描深度内，是否每个存在的路径都出现在 `tree` 里。
+
+        注意 `level` 造成的深度边界**不算**不完整：那是调用方要求的语义，不是预算
+        缺口。只有预算缺口和读取失败才算——这是"集合差能不能用来推断增删"的唯一依据。
+        """
+        return self.failure is None and not self.unexpanded
 
 
 class CodeContent(BaseModel):

@@ -47,3 +47,9 @@ def get_referenced_project_mount_base() -> Path:
     if explicit:
         return Path(os.path.normpath(explicit))
     return get_agfs_fuse_mount_root() / "magicfs" / "referenced-projects"
+
+
+# 工作区在 AGFS 命名空间里的挂载点。网关按这个路径挂载 magicfs 插件（见
+# sandbox-gateway 的 bindSandbox），所有需要"按挂载点寻址"的调用方都从这里取值，
+# 避免同一个字符串在多处各写一遍。
+WORKSPACE_MOUNT_PATH = "/magicfs/project"
