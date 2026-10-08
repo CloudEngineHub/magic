@@ -74,6 +74,7 @@ export const useFileData = ({
 	const [fileData, setFileData] = useState<any>(null)
 	/** 文件版本 */
 	const [fileVersion, setFileVersion] = useState<number>()
+	const selectedVersionRef = useRef<number>()
 	/** 版本列表 */
 	const [fileVersionsList, setFileVersionsList] = useState<FileHistoryVersion[]>([])
 	/** 是否正在加载 */
@@ -94,8 +95,8 @@ export const useFileData = ({
 	// Scope identity invalidates pending responses immediately, before the next
 	// effect starts a request for another file, access token, version or edit mode.
 	const requestScope = useMemo(
-		() => ({ file_id, fileApi, updatedAt, isEditing, enabled }),
-		[file_id, fileApi, updatedAt, isEditing, enabled],
+		() => ({ file_id, fileApi, updatedAt, responseType, isEditing, enabled, loadContent }),
+		[file_id, fileApi, updatedAt, responseType, isEditing, enabled, loadContent],
 	)
 	const successfulLoadScope = useRef<typeof requestScope | null>(null)
 	const currentScope = useRef(requestScope)
@@ -145,6 +146,8 @@ export const useFileData = ({
 			// 检查是否需要更新：没有缓存数据、更新时间不同、版本不同
 			const shouldUpdate =
 				!cachedData ||
+				cachedData.url !== newUrl ||
+				successfulLoadScope.current !== requestScope ||
 				loadedContentFileIdRef.current !== fileId ||
 				isNil(fileData) ||
 				cachedData.updatedAt !== currentUpdatedAt ||
@@ -168,6 +171,7 @@ export const useFileData = ({
 		) => {
 			if (!enabled || !file_id) return
 			if (waitingForShareAccess) return
+			selectedVersionRef.current = file_version
 			refreshIntent.current += 1
 			const request = beginLoad()
 			historySequence.current += 1
@@ -254,7 +258,12 @@ export const useFileData = ({
 			})
 			if (scope !== currentScope.current || sequence !== historySequence.current) return []
 			if (res && res.list) {
-				if (isSelectNewest && loadContent) {
+				if (
+					isSelectNewest &&
+					loadContent &&
+					selectedVersionRef.current === undefined &&
+					!isEditing
+				) {
 					changeFileVersion(undefined, res.list)
 				} else {
 					setFileVersionsList(res.list)
@@ -299,6 +308,7 @@ export const useFileData = ({
 			if (res) {
 				const list = await fetchFileVersions(file_id)
 				if (list && list.length > 0) {
+					selectedVersionRef.current = list[0].version
 					setFileVersion?.(list[0].version)
 					magicToast.destroy(loading)
 					magicToast.success(t("common.rollbackSuccess"))
@@ -319,6 +329,17 @@ export const useFileData = ({
 		fetchFileVersions(file_id, isSelectNewest)
 	})
 
+	useEffect(() => {
+		// 文件身份或正文类型改变后，旧版本选择及成功缓存不能用于新资源。
+		selectedVersionRef.current = undefined
+		fileUrlCacheRef.current = {}
+		loadedContentFileIdRef.current = null
+		setFileUrl("")
+		setFileData(null)
+		setFileVersion(undefined)
+		setFileVersionsList([])
+	}, [file_id, responseType])
+
 	// Tab activation is not a refresh. Reuse bytes only for the same access scope,
 	// file revision and selected version; explicit refresh bypasses this guard.
 	const hasReusableContent = useMemoizedFn(() => {
@@ -329,7 +350,7 @@ export const useFileData = ({
 			loadedContentFileIdRef.current === file_id &&
 			!isNil(fileData) &&
 			cached?.updatedAt === (updatedAt || "") &&
-			cached?.version === fileVersion
+			cached?.version === selectedVersionRef.current
 		)
 	})
 
@@ -358,7 +379,11 @@ export const useFileData = ({
 			)
 				return
 			// 是否正在查看历史版本
-			const isViewingHistoryVersion = fileVersion !== undefined
+			const isViewingHistoryVersion = selectedVersionRef.current !== undefined
+			// 历史正文未加载完成就切换标签时，重新激活后恢复同一版本的读取。
+			if (isViewingHistoryVersion && loadContent) {
+				void changeFileVersion(selectedVersionRef.current)
+			}
 			// 如果用户正在查看历史版本，只更新版本列表，不自动切换到最新版本
 			getFileVersion(file_id, !isViewingHistoryVersion)
 		},
@@ -372,6 +397,9 @@ export const useFileData = ({
 			isShareFilePreview,
 			fileData,
 			hasReusableContent,
+			changeFileVersion,
+			responseType,
+			loadContent,
 			waitingForShareAccess,
 		],
 		{
@@ -400,11 +428,14 @@ export const useFileData = ({
 				setFileData(null)
 			}
 			let cancelled = false
+			// 后台预览与前台版本选择读取同一版本，不能在标签切换时改回最新版本。
+			const version = selectedVersionRef.current
 			const request = beginLoad()
 			// 获取文件下载地址
 			fileApi
 				.getTemporaryDownloadUrl({
 					file_ids: [file_id],
+					file_versions: version === undefined ? undefined : { [file_id]: version },
 				})
 				.then((res: any) => {
 					if (cancelled || !isCurrentLoad(request)) return
@@ -413,9 +444,9 @@ export const useFileData = ({
 						res[0]?.url,
 						file_id,
 						updatedAt,
-						undefined,
+						version,
 					)
-					setFileVersion(undefined)
+					setFileVersion(version)
 					if (res[0]?.url) {
 						setIsDeleted(false)
 						// 只有 URL 更新时才重新下载文件内容
@@ -427,7 +458,7 @@ export const useFileData = ({
 									fileUrlCacheRef.current[file_id] = {
 										url: res[0].url,
 										updatedAt: updatedAt || "",
-										version: undefined,
+										version,
 									}
 									finishLoad()
 									setFileData(data)
@@ -474,6 +505,10 @@ export const useFileData = ({
 	useEffect(() => {
 		if (!enabled) return
 		pubsub.subscribe(PubSubEvents.Change_Preview_File, () => {
+			requestSequence.current += 1
+			historySequence.current += 1
+			refreshIntent.current += 1
+			selectedVersionRef.current = undefined
 			setFileUrl("")
 			setFileData(undefined)
 			setFileVersion(undefined)
