@@ -1096,17 +1096,6 @@ class Agent(BaseAgent):
             if not self.chat_history.messages:
                 logger.info("聊天记录为空，添加主 System Prompt")
                 await self.chat_history.append_system_message(self.system_prompt)
-
-                if self.agent_context.get_subagent_depth() > 0:
-                    parent_agent_name = self.agent_context.get_subagent_parent_agent_name() or "the parent agent"
-                    subagent_context_message = (
-                        "Sub-agent execution context:\n"
-                        f"- You are running as a sub-agent invoked by {parent_agent_name}.\n"
-                        "- The next visible user message is the delegated task from the parent agent, not a direct end-user chat.\n"
-                        "- Focus on completing the delegated task for the parent agent.\n"
-                        "- When you finish, include the paths of key deliverable files (if any) in your final reply — only files the user would care about, not temporary or intermediate ones."
-                    )
-                    await self.chat_history.append_user_message(subagent_context_message, show_in_ui=False)
             else:
                 # 聊天记录存在时，更新第一条 system message 为最新的 system_prompt
                 # 因为代码会更新，聊天记录不会更新，需要在 agent 每次运行时更新最新的 system prompt

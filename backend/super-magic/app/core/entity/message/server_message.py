@@ -47,6 +47,7 @@ class DisplayType(str, Enum):
     MCP_INIT = "mcp_init"  # 添加MCP初始化枚举值
     FILE_TREE = "file_tree"  # 添加文件树枚举值
     TODO = "todo"  # 添加TODO枚举值
+    SUBAGENTS = "subagents"  # 等待子 Agent 的进度与结果，在消息卡片内展开
     DESIGN = 'design'
     ASK_USER = "ask_user"  # ask_user 问答结果展示
     PLAN = "plan"  # 开发计划确认展示
@@ -129,6 +130,46 @@ class TerminalContent(BaseModel):
     command: str  # 终端命令
     output: str  # 终端输出
     exit_code: int  # 终端退出码
+
+
+class SubagentsPhase(str, Enum):
+    """子 Agent 卡片所处阶段：同一张卡片先显示等待进度，工具调用结束后变成结果。"""
+
+    WAITING = "waiting"
+    SETTLED = "settled"
+
+
+class SubagentItemContent(BaseModel):
+    """子 Agent 卡片里的一行。"""
+
+    agent_id: str
+    label: str
+    # 取值同 SubagentQueryStatus：done / error / interrupted / running / pending / not_found / ambiguous
+    status: str
+    # 运行中为已用时，已结束为总耗时；没有开始时间时为空。由前端按用户语言格式化
+    elapsed_seconds: Optional[int] = None
+    last_activity: Optional[str] = None
+    result: Optional[str] = None
+    error: Optional[str] = None
+
+
+class SubagentsContent(BaseModel):
+    """等待子 Agent 卡片的数据。
+
+    | 字段 | 服务谁 |
+    | message | 收起时的单行头部，也作为 remark；必须短，不放名单 |
+    | progress / indeterminate | 头部进度：已结束个数 / 总数；只等一个时为不确定态 |
+    | agents | 展开后的逐行列表，名单、状态和结果只放这里 |
+    """
+
+    progress: int
+    indeterminate: bool
+    message: str
+    total_agents: int
+    finished_agents: int
+    elapsed_seconds: int
+    phase: SubagentsPhase
+    agents: List[SubagentItemContent]
 
 
 class ScriptExecutionContent(BaseModel):
@@ -327,7 +368,7 @@ class ToolDetail(BaseModel):
     data: Union[
         FileContent, FileTreeContent, TerminalContent, BrowserContent, SearchContent,
         ScriptExecutionContent, DeepWriteContent, TodoContent, DesignCanvasContent, DesignElementContent,
-        AskUserQuestionContent, AskUserResultContent, PlanToolContent, Dict[str, Any]
+        AskUserQuestionContent, AskUserResultContent, PlanToolContent, SubagentsContent, Dict[str, Any]
     ]  # 展示内容，根据type动态展示
 
     model_config = ConfigDict(use_enum_values=True)

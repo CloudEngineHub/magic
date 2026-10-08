@@ -12,4 +12,5 @@ export const DisabledDetailToolTypes = [
 	"download_from_urls",
 	"audio_understanding",
 	"audio_understanding_progress",
+	"wait_for_subagents",
 ]

@@ -31,6 +31,33 @@ export enum DetailType {
 	SelfMedia = "self-media",
 	AICard = "ai-card",
 	SlidesTemplate = "slides-template",
+	Subagents = "subagents",
+}
+
+/** 等待子智能体卡片里的一行，字段与后端 SubagentItemContent 一一对应 */
+export interface DetailSubagentItem {
+	agent_id: string
+	label: string
+	/** pending / running / done / error / interrupted / not_found / ambiguous */
+	status: string
+	elapsed_seconds?: number
+	last_activity?: string
+	result?: string
+	error?: string
+}
+
+/** 等待子智能体卡片，字段与后端 SubagentsContent 一一对应 */
+export interface DetailSubagentsData {
+	/** 已结束个数占比，0-100；不是工作量进度 */
+	progress: number
+	/** 只等一个时没有中间进度，显示转圈而不是 0% */
+	indeterminate: boolean
+	message: string
+	total_agents: number
+	finished_agents: number
+	elapsed_seconds: number
+	phase: "waiting" | "settled"
+	agents: DetailSubagentItem[]
 }
 
 /** Self-media platform values supported by the dispatcher */

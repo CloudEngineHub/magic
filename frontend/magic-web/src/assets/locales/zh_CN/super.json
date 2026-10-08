@@ -7247,6 +7247,19 @@
 		"zoomIn": "放大",
 		"zoomOut": "缩小"
 	},
+	"subagents": {
+		"durationHours": "{{hours}} 小时 {{minutes}} 分",
+		"durationMinutes": "{{minutes}} 分 {{seconds}} 秒",
+		"durationSeconds": "{{seconds}} 秒",
+		"settled": "等待结束",
+		"status": {
+			"done": "已完成",
+			"error": "失败",
+			"interrupted": "已停止",
+			"notFound": "未找到",
+			"running": "处理中"
+		}
+	},
 	"superMagicMessageListFallback": {
 		"cardMarketingSlogan": "创意营销口号",
 		"cardProductIntro": "摄写产品介绍",
@@ -7409,7 +7422,7 @@
 		"backup_dashboard_template": "仪表盘模板备份恢复",
 		"batch_create_canvas_elements": "批量创建画布元素",
 		"batch_update_canvas_elements": "批量更新画布元素",
-		"call_subagent": "调用子代理",
+		"call_subagent": "调用智能体",
 		"compact_chat_history": "压缩聊天历史",
 		"connect_dingtalk_bot": "连接钉钉机器人",
 		"connect_lark_bot": "连接飞书机器人",

@@ -140,6 +140,7 @@ class AgentContext(BaseAgentContext):
         self._subagent_depth = 0
         self._subagent_parent_agent_name: Optional[str] = None
         self._subagent_parent_agent_id: Optional[str] = None
+        self._subagent_forked = False
 
         # 运行时身份 / 上下文标识
         # context_id 用于 Skill Code Mode 路由；
@@ -228,6 +229,18 @@ class AgentContext(BaseAgentContext):
     def get_subagent_parent_agent_id(self) -> Optional[str]:
         """获取父 Agent ID；主 Agent 返回 None。"""
         return self._subagent_parent_agent_id
+
+    def set_subagent_forked(self, forked: bool) -> None:
+        """记录本次子 Agent 会话是否由 fork 创建。
+
+        这是本次派发的意图，不随 resume 延续：resume 一条 fork 会话时为 False。
+        身份块已在 fork 首轮写进历史，resume 时不需要再强调「继承的历史只是背景」。
+        """
+        self._subagent_forked = forked
+
+    def is_subagent_forked(self) -> bool:
+        """当前子 Agent 会话是否带着父 Agent 的完整历史启动。"""
+        return self._subagent_forked
 
     def mark_chat_history_persisted(self) -> None:
         self._chat_history_persisted = True

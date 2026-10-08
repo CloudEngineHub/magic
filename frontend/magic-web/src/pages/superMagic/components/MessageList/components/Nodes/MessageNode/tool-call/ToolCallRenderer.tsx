@@ -7,6 +7,7 @@ import type { ToolCallRendererProps } from "./types"
 
 const AskUserToolCall = lazy(() => import("./tools/AskUser"))
 const MicroAppPlanToolCall = lazy(() => import("./tools/MicroAppPlan"))
+const SubagentsTool = lazy(() => import("./tools/Subagents"))
 
 export function ToolCallRenderer({
 	toolCall,
@@ -80,6 +81,21 @@ export function ToolCallRenderer({
 				onMouseEnter={onMouseEnter}
 				onMouseLeave={onMouseLeave}
 			/>
+		)
+	}
+
+	if (toolCall.function.name === "wait_for_subagents") {
+		return (
+			<Suspense fallback={null}>
+				<SubagentsTool
+					onClick={onClick}
+					toolData={toolData}
+					loading={loading}
+					classNames={classNames}
+					onMouseEnter={onMouseEnter}
+					onMouseLeave={onMouseLeave}
+				/>
+			</Suspense>
 		)
 	}
 

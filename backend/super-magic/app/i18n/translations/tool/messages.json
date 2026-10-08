@@ -2199,6 +2199,30 @@
         "zh_CN": "等待智能体失败: {{error}}",
         "en_US": "Failed while waiting for Agents: {{error}}"
     },
+    "wait_for_subagents.progress_single": {
+        "zh_CN": "{{label}} 正在处理",
+        "en_US": "{{label}} is working"
+    },
+    "wait_for_subagents.progress_single_finished": {
+        "zh_CN": "{{label}} 已完成，正在整理结果",
+        "en_US": "{{label}} finished, collecting results"
+    },
+    "wait_for_subagents.progress_all_finished": {
+        "zh_CN": "{{total}} 个任务都已完成，正在整理结果",
+        "en_US": "All {{total}} tasks finished, collecting results"
+    },
+    "wait_for_subagents.progress_multi": {
+        "zh_CN": "{{total}} 个任务：{{finished}} 个已完成，{{running}} 个处理中",
+        "en_US": "{{total}} tasks: {{finished}} finished, {{running}} in progress"
+    },
+    "wait_for_subagents.stopping_single": {
+        "zh_CN": "正在停止 {{label}}",
+        "en_US": "Stopping {{label}}"
+    },
+    "wait_for_subagents.stopping_multi": {
+        "zh_CN": "正在停止 {{total}} 个任务",
+        "en_US": "Stopping {{total}} tasks"
+    },
     "chat_history.history_root": {
         "zh_CN": "历史根目录（只读）：{{root}}",
         "en_US": "History root (read-only): {{root}}"

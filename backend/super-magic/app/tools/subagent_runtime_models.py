@@ -75,7 +75,7 @@ class SubagentQueryResult:
     error: Optional[str] = None
     # 仅在 status=running（超时但仍在执行）时填充，内容为子 Agent 最近一条 assistant 消息，供父 Agent 了解进度
     last_activity: Optional[str] = None
-    # 仅在 pattern 匹配时填充，内容为匹配到的 assistant 消息（截断至 _LAST_ACTIVITY_MAX_CHARS）
+    # 仅在 pattern 匹配时填充，内容为匹配到的 assistant 消息（截断至 LAST_ACTIVITY_MAX_CHARS）
     matched_content: Optional[str] = None
     # canonical session address; agent_id remains for API compatibility.
     # Appended for positional-constructor compatibility.

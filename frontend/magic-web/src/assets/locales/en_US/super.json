@@ -7248,6 +7248,19 @@
 		"zoomIn": "Zoom In",
 		"zoomOut": "Zoom Out"
 	},
+	"subagents": {
+		"durationHours": "{{hours}}h {{minutes}}m",
+		"durationMinutes": "{{minutes}}m {{seconds}}s",
+		"durationSeconds": "{{seconds}}s",
+		"settled": "Finished waiting",
+		"status": {
+			"done": "Finished",
+			"error": "Failed",
+			"interrupted": "Stopped",
+			"notFound": "Not found",
+			"running": "In progress"
+		}
+	},
 	"superMagicMessageListFallback": {
 		"cardMarketingSlogan": "Creative marketing slogan",
 		"cardProductIntro": "Write product introduction",
@@ -7400,7 +7413,7 @@
 		"backup_dashboard_template": "Backup Dashboard Template",
 		"batch_create_canvas_elements": "Batch Create Canvas Elements",
 		"batch_update_canvas_elements": "Batch Update Canvas Elements",
-		"call_subagent": "Call Subagent",
+		"call_subagent": "Call Agent",
 		"compact_chat_history": "Compact Chat History",
 		"connect_dingtalk_bot": "Connect Ding Talk Bot",
 		"connect_lark_bot": "Connect Lark Bot",
