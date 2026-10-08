@@ -139,7 +139,7 @@ from app.tools.visual_understanding import VisualUnderstanding
 from app.tools.visual_understanding_webpage import VisualUnderstandingWebpage
 from app.tools.video_understanding import VideoUnderstanding
 from app.tools.analysis_slide_webpage import AnalysisSlideWebpage
-from app.tools.channel import ConnectDingTalkBot, ConnectLarkBot, ConnectWecomBot, ConnectWechatBot, GetIMChannelStatus, WaitWechatLogin
+from app.tools.channel import ConnectDingTalkBot, ConnectLarkBot, ConnectWecomBot, ConnectWechatBot, GetIMChannelStatus, WaitWechatLogin, SendWechatMessage
 
 # 数据分析看板工具
 from app.tools.data_analyst_dashboard_tools import (
@@ -309,6 +309,7 @@ __all__ = [
     "ConnectWecomBot",
     "ConnectWechatBot",
     "WaitWechatLogin",
+    "SendWechatMessage",
     "CompactChatHistory",
     "ListChatHistory",
     "SearchChatHistory",

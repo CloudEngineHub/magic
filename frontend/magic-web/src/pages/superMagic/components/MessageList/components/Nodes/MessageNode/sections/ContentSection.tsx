@@ -69,6 +69,7 @@ export function ContentSection({
 	return (
 		<>
 			<MarkdownComponent
+				enableNoSend={node?.role === "assistant"}
 				className={messageMarkdownBaseClassName}
 				isStreaming={isContentStreaming}
 				content={displayContent}

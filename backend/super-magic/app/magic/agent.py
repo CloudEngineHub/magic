@@ -460,6 +460,7 @@ class Agent(BaseAgent):
             raise RuntimeError(f"Agent {self.agent_name} is already running")
 
         self._active_run_task = current_task
+        self.agent_context.horizon.begin_im_progress()
         return current_task
 
     def _set_run_terminal_state(
@@ -476,6 +477,7 @@ class Agent(BaseAgent):
         if self._active_run_task is not run_task:
             return
         self._active_run_task = None
+        self.agent_context.horizon.end_im_progress()
 
     def dispose(self) -> None:
         """兼容性别名，语义等同于 close()。"""

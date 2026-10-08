@@ -441,6 +441,8 @@ class AgentHorizon:
         self._state = HorizonState(agent_id=agent_id)
         self._loaded = False
         self._agent_context = agent_context
+        self._im_progress_reference: float | None = None
+        self._im_progress_interval: float = 0.0
 
         # 以下为纯内存状态，不持久化（session 级别）
         self._last_llm_model_id: str = ""
@@ -483,6 +485,50 @@ class AgentHorizon:
     # ─────────────────────────────────────────────────────────────────────────
     # 初始化
     # ─────────────────────────────────────────────────────────────────────────
+
+    def begin_im_progress(self) -> None:
+        """仅记录 run 时间；没有后台计时任务，压缩也不会重置这两个值。"""
+        from agentlang.config.config import config
+        from app.core.context.execution_source import SuperMagicExecutionSource
+
+        context = self._agent_context
+        self.end_im_progress()
+        if context is not None and context.is_interactive_main_agent_context() and (
+            context.get_execution_source() == SuperMagicExecutionSource.THIRD_PARTY_IM
+        ):
+            self._im_progress_reference = time.monotonic()
+            self._im_progress_interval = max(1.0, float(config.get("agent.im_progress_initial_seconds", 60)))
+
+    def end_im_progress(self) -> None:
+        self._im_progress_reference = None
+        self._im_progress_interval = 0.0
+
+    def record_im_delivery(self) -> None:
+        if self._im_progress_reference is not None:
+            self._im_progress_reference = time.monotonic()
+
+    def _im_progress_notice(self, injection_point: HorizonInjectionPoint) -> str:
+        context = self._agent_context
+        if (
+            self._im_progress_reference is None
+            or context is None
+            or context.is_interruption_requested()
+            or injection_point not in {
+                HorizonInjectionPoint.AFTER_TOOL_RESULT,
+                HorizonInjectionPoint.BEFORE_CONTINUATION_LLM,
+            }
+            or time.monotonic() - self._im_progress_reference < self._im_progress_interval
+        ):
+            return ""
+        return (
+            '<im_progress_reminder>'
+            'The user is waiting in an IM channel where intermediate replies may not be visible. '
+            'Decide whether a short, truthful progress message would help. '
+            'If you already explained the wait or have no useful update, continue silently. '
+            'Use an available sending tool for the current channel; for WeChat use send_wechat_message. '
+            'A progress message does not replace the final result. Never invent progress.'
+            '</im_progress_reminder>'
+        )
 
     async def _ensure_loaded(self) -> None:
         if self._loaded:
@@ -1978,6 +2024,10 @@ class AgentHorizon:
         if browser_pages_context:
             parts.append(browser_pages_context)
 
+        im_progress_notice = self._im_progress_notice(injection_point)
+        if im_progress_notice:
+            parts.append(im_progress_notice)
+
         if notif_blocks:
             parts.append("<notifications>")
             parts.extend(notif_blocks)
@@ -2003,6 +2053,13 @@ class AgentHorizon:
             """
             self._log_oversized_context_update(context_update, injection_point)
             return HORIZON_CONTEXT_OVERSIZED_NOTICE
+
+        if im_progress_notice:
+            from agentlang.config.config import config
+
+            self._im_progress_reference = time.monotonic()
+            maximum = max(self._im_progress_interval, float(config.get("agent.im_progress_max_seconds", 240)))
+            self._im_progress_interval = min(self._im_progress_interval * 2, maximum)
 
         # 只有确认本轮上下文会进入 ChatHistory，才推进运行时标志和持久化 baseline。
         self._last_time_sample = time_sample

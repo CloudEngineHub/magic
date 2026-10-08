@@ -4822,6 +4822,11 @@
 		"unfavorite": "Remove from favorites",
 		"unfavoriteSuccess": "Template removed from favorites"
 	},
+	"noSend": {
+		"description": "This content remains visible on Web and is not sent to WeChat",
+		"invalidClosing": "The reply contains an unmatched delivery marker; other content is still sent normally",
+		"unclosed": "This content remains visible on Web and is not sent to WeChat; its delivery marker was not closed"
+	},
 	"notification": {
 		"superMagicTitle": "$t(common:platform.name) Notification",
 		"taskCompleteBody": "🟢 Task \"{{taskName}}\" completed, click to view"

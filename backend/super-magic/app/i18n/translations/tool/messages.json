@@ -1,4 +1,44 @@
 {
+    "send_wechat_message.error.text_too_long": {
+        "zh_CN": "正文超过当前发送长度，请分成多条发送；本批未发送",
+        "en_US": "Text exceeds the current budget; divide it into messages. This batch was not sent."
+    },
+    "send_wechat_message.error.preparation_failed": {
+        "zh_CN": "文件或正文准备失败，请检查文件是否存在、已同步且可以读取",
+        "en_US": "Preparation failed; check that the file exists, is synchronized, and can be read."
+    },
+    "send_wechat_message.error.wechat_api_error": {
+        "zh_CN": "微信未确认本条消息发送成功，请按投递状态处理",
+        "en_US": "WeChat did not confirm this delivery; follow the reported status."
+    },
+    "send_wechat_message.error.delivery_unknown": {
+        "zh_CN": "请求未获得确定结果，请确认微信是否收到，避免重复发送",
+        "en_US": "No definitive delivery result; check WeChat before resending."
+    },
+    "send_wechat_message.success": {
+        "zh_CN": "消息已发送",
+        "en_US": "Messages sent"
+    },
+    "send_wechat_message.incomplete": {
+        "zh_CN": "消息未全部发送或网页同步未完成，请查看各项状态",
+        "en_US": "Delivery or Web synchronization is incomplete; check each item"
+    },
+    "send_wechat_message.sent": {
+        "zh_CN": "已发送",
+        "en_US": "Sent"
+    },
+    "send_wechat_message.failed": {
+        "zh_CN": "发送失败",
+        "en_US": "Failed"
+    },
+    "send_wechat_message.unknown": {
+        "zh_CN": "投递状态未知，请确认微信是否收到，勿直接重发",
+        "en_US": "Delivery unknown; check WeChat before resending"
+    },
+    "send_wechat_message.not_sent": {
+        "zh_CN": "尚未发送",
+        "en_US": "Not sent"
+    },
     "list_dir.error": {
         "zh_CN": "查看目录 {{dir_path}} 时出错",
         "en_US": "Error listing directory {{dir_path}}"
