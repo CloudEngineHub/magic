@@ -454,6 +454,9 @@ class Agent(BaseAgent):
 
     def _claim_run(self) -> asyncio.Task[object]:
         """登记当前 run 的 Task 身份，阻止同一 Agent 被并发执行。"""
+        from app.service.sandbox_restart_coordinator import sandbox_restart_coordinator
+
+        sandbox_restart_coordinator.ensure_accepting_runs()
         current_task = asyncio.current_task()
         if current_task is None:
             raise RuntimeError("Agent.run() must execute inside an asyncio Task")
