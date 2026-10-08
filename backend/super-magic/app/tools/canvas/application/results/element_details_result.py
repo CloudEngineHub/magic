@@ -55,6 +55,7 @@ class CanvasContentDetailResult:
     file_exists: bool | None = None
     can_rename_file: bool = False
     file_rename_reason: str | None = None
+    discarded: bool = False
 
     def to_dict(self) -> JsonObject:
         """转换为 Content 详情 JSON 对象。"""
@@ -78,6 +79,7 @@ class CanvasContentDetailResult:
             "file_exists": self.file_exists,
             "can_rename_file": self.can_rename_file,
             "file_rename_reason": self.file_rename_reason,
+            "discarded": True if self.discarded else None,
         }
         return {key: value for key, value in values.items() if value is not None}
 

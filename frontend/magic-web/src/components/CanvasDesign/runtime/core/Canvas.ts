@@ -1239,15 +1239,22 @@ export class Canvas {
 	 */
 	public toggleElementsVisibility(visible: boolean): void {
 		const selectedIds = this.selectionManager.getSelectedIds()
-		if (selectedIds.length === 0) return
+		const changedIds = selectedIds.filter((id) => {
+			const element = this.elementManager.getElementData(id)
+			return element !== undefined && (element.visible ?? true) !== visible
+		})
+		if (changedIds.length === 0) return
 
 		// 批量更新
-		const updates = selectedIds.map((id) => ({
+		const updates = changedIds.map((id) => ({
 			id,
 			data: { visible },
 		}))
 
-		this.elementManager.batchUpdate(updates)
+		this.historyManager.runTransaction(() => {
+			this.elementManager.batchUpdate(updates)
+			if (!visible) this.deselectHiddenElements()
+		})
 	}
 
 	/**
@@ -1320,7 +1327,23 @@ export class Canvas {
 	 * @param visible - 可见性状态
 	 */
 	public setElementVisible(elementId: string, visible: boolean): void {
-		this.elementManager.setElementVisible(elementId, visible)
+		const element = this.elementManager.getElementData(elementId)
+		if (!element || (element.visible ?? true) === visible) return
+
+		// 图层眼睛的一次点击立即形成历史，不等待普通连续更新的防抖。
+		this.historyManager.runTransaction(() => {
+			this.elementManager.setElementVisible(elementId, visible)
+			if (!visible) this.deselectHiddenElements()
+		})
+	}
+
+	private deselectHiddenElements(): void {
+		// 隐藏父容器也会让已选择的子项不可见；以后仍可从图层面板主动选择它们。
+		for (const id of this.selectionManager.getSelectedIds()) {
+			if (!this.elementManager.isElementVisibleInDataTree(id)) {
+				this.selectionManager.deselect(id)
+			}
+		}
 	}
 
 	/**

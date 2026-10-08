@@ -9,6 +9,7 @@ import { formatShortcut } from "../../../runtime/shared/lib/index"
 import { cn } from "../../../runtime/shared/lib/utils"
 import type { MenuItem, MenuOption } from "./types"
 import styles from "./index.module.css"
+import { createElement, isValidElement } from "react"
 // import { isValidElement } from "react"
 
 interface MenuItemRendererProps {
@@ -39,6 +40,9 @@ export function MenuItemRenderer({
 
 				// 检查是否禁用
 				const isDisabled = option.disabled ? option.disabled() : false
+				const iconNode = isValidElement(option.icon)
+					? option.icon
+					: createElement(option.icon, { size: 16 })
 
 				// 判断 icon 是组件还是 ReactElement，并渲染
 				// const renderIcon = () => {
@@ -58,6 +62,7 @@ export function MenuItemRenderer({
 								className={cn(styles.menuItem)}
 							>
 								{/* <div className={styles.menuItemIcon}>{renderIcon()}</div> */}
+								<div className={styles.menuItemIcon}>{iconNode}</div>
 								<div className={styles.menuItemLabel}>{option.label}</div>
 								{option.rightContentRender ? (
 									<div className={styles.menuItemRightContent}>
@@ -119,6 +124,7 @@ export function MenuItemRenderer({
 						)}
 					>
 						{/* <div className={styles.menuItemIcon}>{renderIcon()}</div> */}
+						<div className={styles.menuItemIcon}>{iconNode}</div>
 						<div className={styles.menuItemLabel}>{option.label}</div>
 						{option.rightContentRender ? (
 							<div className={styles.menuItemRightContent}>

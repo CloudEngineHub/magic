@@ -19,6 +19,7 @@ from app.tools.canvas.domain.content_fields.generated_media_protocol import (
     generated_request_fields,
 )
 from app.tools.canvas.domain.errors import CanvasDomainError
+from app.tools.canvas.domain.content_fields.image import ImageContentFields
 from app.tools.canvas.domain.models import CanvasElement
 from app.tools.canvas.domain.services.element_tree_index import ElementTreeIndex
 from app.tools.canvas.domain.services.spatial_geometry import CanvasSpatialGeometry
@@ -148,7 +149,7 @@ class ElementDetailsQueryService:
                 key: value
                 for key, value in content.fields.to_dict().items()
                 if key not in {
-                    "src", "status", "errorMessage", "imageGenerationTaskMeta",
+                    "src", "status", "errorMessage", "imageGenerationTaskMeta", "discarded",
                 } | generated_request_fields()
             }
             generation_request = find_generation_request(detail)
@@ -178,6 +179,7 @@ class ElementDetailsQueryService:
                 ),
                 payload=cast(JsonObject, payload) if payload else None,
                 runtime=ElementDetailsQueryService._runtime_detail(detail),
+                discarded=isinstance(content.fields, ImageContentFields) and content.fields.discarded,
             ))
         return CanvasElementDetailResult(
             element_id=element.element_id,

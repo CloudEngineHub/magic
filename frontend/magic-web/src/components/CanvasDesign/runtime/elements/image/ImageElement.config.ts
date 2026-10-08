@@ -22,6 +22,8 @@ export const IMAGE_CONFIG = {
 	HOVER_DELAY: 50,
 	/** 图片元素在屏幕上的最小尺寸阈值（像素），小于此值时隐藏 info 按钮 */
 	MIN_ELEMENT_SCREEN_SIZE_FOR_INFO_BUTTON: 60,
+	/** 废稿静态展示强度；悬浮时仅恢复图片内容节点，原图与角标不变。 */
+	DISCARDED_OPACITY: 0.55,
 } as const
 
 /**
@@ -42,6 +44,10 @@ export const COLORS = {
 	BUTTON_BG: "rgba(0, 0, 0, 0.70)",
 	/** Info 按钮 hover 状态背景颜色 */
 	BUTTON_BG_HOVER: "rgba(0, 0, 0, 0.85)",
+	/** 废稿是人工取舍，使用独立角标，不覆盖原主版本或生成状态。 */
+	DISCARDED_TAG_BG: "#DC2626",
+	/** 保持不同底图上的标签边界和图标对比度。 */
+	DISCARDED_TAG_BORDER: "#FFFFFF",
 	/** 加载状态文本背景颜色 */
 	LOADING_BG: "rgba(255, 255, 255, 0.30)",
 } as const
@@ -50,6 +56,10 @@ export const COLORS = {
  * 布局和样式配置
  */
 export const LAYOUT = {
+	/** 废稿小标签中的图标与文字间距（屏幕像素）。 */
+	DISCARDED_ICON_TEXT_GAP: 4,
+	/** 废稿角标宽高各不超过图片屏幕尺寸的此比例，正常尺寸不放大。 */
+	DISCARDED_TAG_MAX_IMAGE_RATIO: 0.2,
 	/** 文本水平内边距（像素） */
 	TEXT_PADDING_X: 8,
 	/** 文本垂直内边距（像素） */

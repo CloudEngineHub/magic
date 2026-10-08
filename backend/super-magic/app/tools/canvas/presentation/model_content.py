@@ -144,6 +144,8 @@ def elements_content(result: dict[str, Any]) -> str:
             if content.get("generation_name"):
                 key = "expected_generation_name" if content.get("status") in {"pending", "processing"} else "original_generation_name"
                 fields.append(f"{key}={content['generation_name']}")
+            if content.get("discarded") is True:
+                fields.append("review=discarded draft (main-content selection and connections unchanged)")
             if content.get("status"):
                 fields.append(f"status={content['status']}")
             if content.get("source"):

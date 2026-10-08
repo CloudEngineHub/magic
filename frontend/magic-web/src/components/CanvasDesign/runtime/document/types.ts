@@ -147,9 +147,7 @@ export type ElementType = (typeof ElementTypeEnum)[keyof typeof ElementTypeEnum]
 
 /** 可直接替换资源的画布媒体元素类型。 */
 export type MediaElementType =
-	| typeof ElementTypeEnum.Image
-	| typeof ElementTypeEnum.Video
-	| typeof ElementTypeEnum.Audio
+	typeof ElementTypeEnum.Image | typeof ElementTypeEnum.Video | typeof ElementTypeEnum.Audio
 
 /** 边框位置类型 */
 export type StrokePosition = "inside" | "center" | "outside"
@@ -340,6 +338,8 @@ export interface TextElement extends ContentElementProps<TextElementContent> {
 
 /** 图片节点中可独立切换的内容 */
 export interface ImageElementContent extends ElementContentBase {
+	/** 人工废稿标记，仅属于此版本，不改变生成状态或主版本。 */
+	discarded?: boolean
 	/** 大模型对当前图片 Content 的理解结果；重字段由 sidecar 拆分保存。 */
 	visualUnderstanding?: unknown
 	/** 图片源(用来换取 ossSrc 的临时 path) */

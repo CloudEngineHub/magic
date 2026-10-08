@@ -350,6 +350,10 @@ export abstract class BaseLabelManager {
 		this.listen("element:updated", (event) => {
 			this.syncLabelCandidateForElement(event.data.elementId)
 			this.createOrUpdateLabel(event.data.elementId)
+			const { data, previousData } = event.data
+			if (data.visible !== previousData?.visible && "children" in data && data.children) {
+				this.refreshChildLabelsVisibility(data.children)
+			}
 		})
 
 		// 监听元素重新渲染（位置、尺寸变化等）
@@ -579,6 +583,23 @@ export abstract class BaseLabelManager {
 		}
 	}
 
+	private refreshChildLabelsVisibility(children: LayerElement[]): void {
+		// 父级隐藏时同步隐藏独立 overlay 标题；恢复父级时也创建初始隐藏子项的标题。
+		const visit = (items: LayerElement[]): void => {
+			for (const child of items) {
+				this.createOrUpdateLabel(child.id, {
+					skipReorder: true,
+					skipNotify: true,
+					skipBatchDraw: true,
+				})
+				if ("children" in child && child.children) visit(child.children)
+			}
+		}
+		visit(children)
+		this.reorderAllLabels(true)
+		this.requestOverlayDraw("child-labels-visibility")
+	}
+
 	/**
 	 * 更新标签位置
 	 * @param elementId - 元素 ID
@@ -661,6 +682,9 @@ export abstract class BaseLabelManager {
 		if (!element) {
 			return null
 		}
+
+		// 标签位于独立 Overlay Layer，必须同时遵守元素自身和祖先的隐藏状态。
+		if (!this.canvas.elementManager.isElementVisibleInDataTree(elementId)) return false
 
 		// 检查是否在裁剪状态下，如果是裁剪的元素，强制显示标签
 		const croppingElementId = this.canvas.cropManager.getCroppingElementId()

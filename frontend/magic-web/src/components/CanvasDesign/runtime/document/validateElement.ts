@@ -140,6 +140,7 @@ function isValidElementContent(content: Record<string, unknown>, type: string): 
 	const allowedFields = new Set(["contentId", ...getElementContentFields(type)])
 	if (!hasOnlyAllowedFields(content, allowedFields)) return false
 	if (!isOptionalString(content.src)) return false
+	if (content.discarded !== undefined && typeof content.discarded !== "boolean") return false
 	if (!isOptionalString(content.status)) return false
 	if (!isOptionalString(content.errorMessage)) return false
 	if (content.crop !== undefined && !isValidCropConfig(content.crop)) return false

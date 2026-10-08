@@ -17,9 +17,13 @@ import {
 	MessageSquareReply,
 	Pencil,
 	Trash2,
+	ArchiveX,
+	ArchiveRestore,
 } from "lucide-react"
+import { toast } from "sonner"
+import type { ImageDiscardActionOptions } from "../../../runtime/actions/types"
 import { FrameDotted, VIPTag } from "../../primitives/icons/index"
-import type { LayerElement } from "../../../runtime/document/types"
+import type { ImageElementContent, LayerElement } from "../../../runtime/document/types"
 import { ElementTypeEnum } from "../../../runtime/document/types"
 import type { MenuItem, MenuOption, MenuSource } from "./types"
 import type { Canvas } from "../../../runtime/core/Canvas"
@@ -29,6 +33,7 @@ import type { TFunction } from "../../../public/i18n-types"
 import { getSelectedFileElements } from "../../../runtime/shared/ids"
 import type { MagicPermissions } from "../../../public/magic-types"
 import type { CanvasDownloadMenuContext } from "./resolveCanvasDownloadMenuContext"
+import styles from "./index.module.css"
 
 interface RenameMenuConfig {
 	menuSource?: MenuSource | null
@@ -83,6 +88,22 @@ export function getMenuItems({
 	// 判断选中元素的状态
 	const allUnlocked = selectedElements.every((el) => el.locked !== true)
 	const allVisible = selectedElements.every((el) => el.visible !== false)
+	const imageTargets = selectedElements.flatMap((element) => {
+		if (element.type !== ElementTypeEnum.Image) return []
+		const contentId = canvas.getEffectiveContentId(element.id)
+		return contentId ? [{ elementId: element.id, contentId }] : []
+	})
+	const allDiscarded = imageTargets.every(
+		(target) =>
+			canvas.getEffectiveContent<ImageElementContent>(target.elementId)?.discarded === true,
+	)
+	const discardOptions: ImageDiscardActionOptions = {
+		targets: imageTargets,
+		discarded: !allDiscarded,
+	}
+	const canDiscard =
+		imageTargets.length === selectedElements.length &&
+		canvas.userActionRegistry.canExecute("image.set-discarded", discardOptions)
 	const selectedFileElements = getSelectedFileElements(canvas)
 	const hasSelectedImageElement = selectedFileElements.some((element) => element.type === "image")
 	const hasSelectedVideoElement = selectedFileElements.some((element) => element.type === "video")
@@ -322,6 +343,32 @@ export function getMenuItems({
 		},
 	}
 
+	const discardedMenuItem: MenuOption = {
+		id: "set-discarded",
+		label: allDiscarded
+			? translate("menu.restoreDraft", "取消废稿标记")
+			: translate("menu.discardDraft", "标记为废稿"),
+		description: allDiscarded
+			? translate("menu.restoreDraftDescription", "恢复正常显示")
+			: translate("menu.discardDraftDescription", "保留图片，淡化显示"),
+		icon: allDiscarded ? ArchiveRestore : ArchiveX,
+		rightContentRender: allDiscarded
+			? () => (
+					<span className={styles.draftStatus}>
+						{translate("menu.discardedStatus", "废稿")}
+					</span>
+				)
+			: undefined,
+		onClick: () => {
+			if (!canvas.userActionRegistry.canExecute("image.set-discarded", discardOptions)) {
+				toast.error(translate("menu.draftTargetChanged", "图片状态已变化，请重新操作"))
+				return
+			}
+			void canvas.userActionRegistry.execute("image.set-discarded", discardOptions)
+		},
+	}
+	const discardedBlock: MenuItem[] = canDiscard ? [discardedMenuItem, { type: "separator" }] : []
+
 	const layerMenuItems: MenuOption[] = [
 		{
 			id: "move-up",
@@ -381,6 +428,7 @@ export function getMenuItems({
 		copyMenuItem,
 		copyPngMenuItem,
 		{ type: "separator" },
+		...discardedBlock,
 		{
 			id: "layer",
 			label: translate("menu.layer", "图层"),

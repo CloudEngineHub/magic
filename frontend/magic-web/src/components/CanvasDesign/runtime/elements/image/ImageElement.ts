@@ -68,7 +68,8 @@ import {
 	ElementCornerActionsDecorator,
 	type ElementCornerActionConfig,
 } from "../decorators/ElementCornerActionsDecorator"
-import { MediaMainVersionTagDecorator } from "../decorators/MediaMainVersionTagDecorator"
+import { MediaVersionTagDecorator } from "../decorators/MediaVersionTagDecorator"
+import { DiscardedImageDecorator } from "../decorators/DiscardedImageDecorator"
 import { ImagePollingManager } from "../../resources/polling/ImagePollingManager"
 import { DECORATOR_COLORS, DECORATOR_CONFIG } from "../decorators/DecoratorConfig"
 import type { TransformContext } from "../core/BaseElement"
@@ -112,7 +113,8 @@ export class ImageElement extends BaseElement<ImageElementData> {
 	private pollingManager: ImagePollingManager
 	private borderDecorator?: BorderDecorator
 	private cornerActionsDecorator?: ElementCornerActionsDecorator
-	private mainVersionTagDecorator?: MediaMainVersionTagDecorator
+	private mainVersionTagDecorator?: MediaVersionTagDecorator
+	private discardedImageDecorator?: DiscardedImageDecorator
 
 	// 生成相关：Runtime manager 是并发状态的唯一事实来源；legacy 标记只兼容
 	// 尚未建立 Runtime target 的测试和初始化生命周期。
@@ -468,6 +470,8 @@ export class ImageElement extends BaseElement<ImageElementData> {
 		this.cornerActionsDecorator = undefined
 		this.mainVersionTagDecorator?.destroy()
 		this.mainVersionTagDecorator = undefined
+		this.discardedImageDecorator?.destroy()
+		this.discardedImageDecorator = undefined
 
 		// 调用父类的 rerender
 		return super.rerender()
@@ -492,6 +496,7 @@ export class ImageElement extends BaseElement<ImageElementData> {
 		this.cornerActionsDecorator?.destroy()
 		this.mainVersionTagDecorator?.destroy()
 		this.removeContentUpdateListener()
+		this.discardedImageDecorator?.destroy()
 		// 清理缓存的图片对象
 		this.clearLoadedImageReference()
 		// 清理 ossSrc Promise
@@ -2229,6 +2234,7 @@ export class ImageElement extends BaseElement<ImageElementData> {
 			currentTaskMeta?.type !== nextTaskMeta?.type ||
 			currentContent.src !== nextContent.src ||
 			currentContent.status !== nextContent.status ||
+			currentContent.discarded !== nextContent.discarded ||
 			!this.isPersistedCropConfigEqual(currentContent.crop, nextContent.crop)
 
 		// Effective Content 切换时，元素级 decoded image / failure reason 不能跨版本复用。
@@ -2584,6 +2590,13 @@ export class ImageElement extends BaseElement<ImageElementData> {
 		})
 
 		group.add(imageNode)
+		if (this.getActiveContentData().discarded === true) {
+			this.discardedImageDecorator = new DiscardedImageDecorator(
+				imageNode,
+				this.canvas,
+				this.data.id,
+			)
+		}
 
 		// 创建边框
 		this.createBorder(group, width, height, false)
@@ -2736,7 +2749,7 @@ export class ImageElement extends BaseElement<ImageElementData> {
 	}
 
 	private createMainVersionTag(group: Konva.Group, width: number, height: number): void {
-		this.mainVersionTagDecorator = new MediaMainVersionTagDecorator(group, {
+		this.mainVersionTagDecorator = new MediaVersionTagDecorator(group, {
 			canvas: this.canvas,
 			width,
 			height,
