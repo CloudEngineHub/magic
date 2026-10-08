@@ -241,8 +241,8 @@
 		"description": "编辑素材信息后保存到素材库",
 		"descriptionLabel": "描述",
 		"descriptionPlaceholder": "补充素材描述（可选）",
-		"editDescription": "当前仅支持修改标签",
-		"editSuccess": "素材标签已更新",
+		"editDescription": "编辑素材名称、描述、可见范围和标签",
+		"editSuccess": "素材信息已更新",
 		"editTitle": "编辑素材",
 		"loadingTags": "标签加载中...",
 		"nameLabel": "素材名称",
@@ -270,6 +270,7 @@
 		"title": "保存到素材库",
 		"unsupportedFile": "暂不支持该文件类型",
 		"visibilityLabel": "可见范围",
+		"visibilityReadOnly": "当前可见范围暂不支持修改，保存时将保持不变",
 		"visibilityTargetRequired": "请选择可见的成员或部门"
 	},
 	"assistant": {

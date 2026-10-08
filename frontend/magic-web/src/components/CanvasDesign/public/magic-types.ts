@@ -1199,9 +1199,24 @@ export interface CanvasSaveAssetToLibraryParams extends CanvasOpenSaveAssetDialo
 	tagIds?: string[]
 }
 
+/** 已有素材的元数据更新参数；不携带文件路径或文件内容。 */
+export interface CanvasUpdateAssetParams {
+	name: string
+	description: string
+	userIds?: string[]
+	departmentIds?: string[]
+	tagIds: string[]
+}
+
 export type CanvasLocalAssetUploadMode = "save" | "verify"
 
-/** 编辑已有素材时只能改标签；名称、描述和可见范围由弹窗只读展示。 */
+export interface CanvasAssetVisibilityTarget {
+	id: string
+	name: string
+	type: "user" | "department"
+}
+
+/** 编辑已有素材时复用保存弹窗；素材文件本身始终保持不变。 */
 export interface CanvasEditAssetTarget {
 	assetId: string
 	name: string
@@ -1209,6 +1224,11 @@ export interface CanvasEditAssetTarget {
 	fileUrl: string | null
 	mediaType: CanvasAssetMediaType | null
 	visibility: "private" | "team"
+	userIds?: string[]
+	departmentIds?: string[]
+	visibilityTargets?: CanvasAssetVisibilityTarget[]
+	/** 未读取到授权明细时只允许编辑元数据和标签，避免误清权限。 */
+	visibilityEditable?: boolean
 	tagIds: string[]
 }
 
@@ -1731,7 +1751,7 @@ export interface CanvasDesignMethods {
 	openSaveAssetToLibraryDialog?: (params: CanvasOpenSaveAssetDialogParams) => void
 	/** 素材库本地上传：打开保存弹窗，不在选文件时直接入库。 */
 	openSaveLocalAssetDialog?: (params: CanvasOpenSaveLocalAssetDialogParams) => void
-	/** 素材库卡片编辑：复用保存弹窗的编辑模式，只提交标签。 */
+	/** 素材库卡片编辑：复用保存弹窗编辑素材元数据和标签。 */
 	openEditAssetDialog?: (params: CanvasOpenEditAssetDialogParams) => void
 	/** 将本地文件上传到当前画布 images/videos 后保存到素材库。 */
 	saveLocalAssetToLibrary?: (

@@ -2014,8 +2014,19 @@ function DesignViewer(props: DesignViewerProps) {
 					onClose={closeSaveAssetDialog}
 					getPreviewUrl={getSaveAssetPreviewUrl}
 					onSave={methods.saveAssetToLibrary}
-					onUpdateTags={async (assetId, tagIds) => {
-						await AssetsApi.updateAssetTags(assetId, { tag_ids: tagIds })
+					onUpdateAsset={async (assetId, params) => {
+						await AssetsApi.updateAsset(assetId, {
+							name: params.name,
+							description: params.description,
+							visibility:
+								params.userIds !== undefined || params.departmentIds !== undefined
+									? {
+											user_ids: params.userIds ?? [],
+											department_ids: params.departmentIds ?? [],
+										}
+									: undefined,
+							tag_ids: params.tagIds,
+						})
 						const session = saveAssetDialogSessionRef.current
 						if (session?.kind === "edit") session.onUpdated()
 					}}

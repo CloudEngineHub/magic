@@ -4,6 +4,7 @@ import {
 	type AssetItem,
 	type AssetMediaType,
 	type AssetScope,
+	type AssetVisibilityConfig,
 } from "@/apis"
 import { Button } from "@/components/shadcn-ui/button"
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/shadcn-ui/dialog"
@@ -24,7 +25,11 @@ import { toast } from "sonner"
 import { useCallback, useEffect, useMemo, useState } from "react"
 import { useOptionalCanvas } from "../../app/providers/CanvasProvider"
 import { useCanvasDesignI18n } from "../../app/providers/I18nProvider"
-import type { CanvasAssetComplianceState, CanvasAssetResourceInfo } from "../../public/magic-types"
+import type {
+	CanvasAssetComplianceState,
+	CanvasAssetResourceInfo,
+	CanvasEditAssetTarget,
+} from "../../public/magic-types"
 import {
 	assetLibrarySessionStore,
 	type AssetLibraryQuery,
@@ -80,6 +85,61 @@ const DEFAULT_QUERY: AssetQueryState = {
 }
 
 const DEFAULT_MEDIA_TYPES: readonly AssetMediaType[] = ["IMAGE"]
+
+function getVisibilityTargetName(target: { id: string; nickname?: string; name?: string }): string {
+	return target.nickname?.trim() || target.name?.trim() || target.id
+}
+
+function buildEditVisibility(
+	config: AssetVisibilityConfig | undefined,
+	currentUserId: string,
+): Pick<
+	CanvasEditAssetTarget,
+	"visibility" | "userIds" | "departmentIds" | "visibilityTargets" | "visibilityEditable"
+> {
+	const users = Array.isArray(config?.users) ? config.users : []
+	const departments = Array.isArray(config?.departments) ? config.departments : []
+	const visibilityType = Number(config?.visibility_type)
+	const userIds = Array.from(
+		new Set(users.map((target) => String(target.id).trim()).filter(Boolean)),
+	)
+	const departmentIds = Array.from(
+		new Set(departments.map((target) => String(target.id).trim()).filter(Boolean)),
+	)
+	const visibilityTargets = [
+		...users
+			.filter((target) => String(target.id).trim())
+			.map((target) => ({
+				id: String(target.id),
+				name: getVisibilityTargetName(target),
+				type: "user" as const,
+			})),
+		...departments
+			.filter((target) => String(target.id).trim())
+			.map((target) => ({
+				id: String(target.id),
+				name: getVisibilityTargetName(target),
+				type: "department" as const,
+			})),
+	]
+	const onlyCurrentUser =
+		departmentIds.length === 0 &&
+		userIds.length <= 1 &&
+		(userIds.length === 0 || (currentUserId !== "" && userIds[0] === currentUserId))
+
+	return {
+		visibility: visibilityType === 1 || !onlyCurrentUser ? "team" : "private",
+		userIds,
+		departmentIds,
+		visibilityTargets,
+		// The update contract supports specific users/departments. An organization-wide
+		// visibility record cannot be represented by those arrays, so keep it read-only.
+		visibilityEditable:
+			(visibilityType === 0 || visibilityType === 2) &&
+			Array.isArray(config?.users) &&
+			Array.isArray(config?.departments),
+	}
+}
 
 const SCOPE_OPTIONS: Array<{ value: AssetsScope; key: string; fallback: string }> = [
 	{ value: "ALL", key: "assets.allAssets", fallback: "全部素材" },
@@ -312,29 +372,57 @@ export default function AssetsModal({
 		void assetLibrarySessionStore.refreshOwners().catch(() => undefined)
 	}
 
-	const handleEditAsset = (asset: AssetItem) => {
+	const handleEditAsset = async (asset: AssetItem) => {
 		const openEditAssetDialog = canvas?.magicConfigManager.config?.methods?.openEditAssetDialog
 		if (!openEditAssetDialog) {
 			toast.error(t("assets.editUnavailable", "当前无法编辑素材"))
 			return
 		}
+
+		const baseTarget: Omit<
+			CanvasEditAssetTarget,
+			"visibility" | "userIds" | "departmentIds" | "visibilityTargets" | "visibilityEditable"
+		> = {
+			assetId: asset.asset_id,
+			name: asset.name,
+			description: asset.description,
+			fileUrl: asset.file_url,
+			mediaType:
+				asset.asset_media_type === "VIDEO"
+					? "video"
+					: asset.asset_media_type === "AUDIO"
+						? "audio"
+						: asset.asset_media_type === "IMAGE"
+							? "image"
+							: null,
+			tagIds: asset.tags.map((tag) => tag.id),
+		}
+
+		let visibility: Pick<
+			CanvasEditAssetTarget,
+			"visibility" | "userIds" | "departmentIds" | "visibilityTargets" | "visibilityEditable"
+		>
+		try {
+			const response = await AssetsApi.getAssetVisibilityConfig(asset.asset_id)
+			visibility = buildEditVisibility(response.visibility_config, currentUserId)
+		} catch {
+			// Older deployments may not expose the generic visibility endpoint. Keep
+			// the permission controls read-only and omit visibility from PUT instead
+			// of replacing an unknown authorization set with empty arrays.
+			visibility = {
+				visibility: asset.source === "TEAM" ? "team" : "private",
+				userIds: [],
+				departmentIds: [],
+				visibilityTargets: [],
+				visibilityEditable: false,
+			}
+		}
+
 		setHostDialogOpen(true)
 		openEditAssetDialog({
 			asset: {
-				assetId: asset.asset_id,
-				name: asset.name,
-				description: asset.description,
-				fileUrl: asset.file_url,
-				mediaType:
-					asset.asset_media_type === "VIDEO"
-						? "video"
-						: asset.asset_media_type === "AUDIO"
-							? "audio"
-							: asset.asset_media_type === "IMAGE"
-								? "image"
-								: null,
-				visibility: asset.source === "TEAM" ? "team" : "private",
-				tagIds: asset.tags.map((tag) => tag.id),
+				...baseTarget,
+				...visibility,
 			},
 			onUpdated: () => refreshLibrary(asset.asset_id),
 			onClosed: () => setHostDialogOpen(false),

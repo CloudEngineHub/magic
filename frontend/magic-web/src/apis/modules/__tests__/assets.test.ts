@@ -60,13 +60,22 @@ describe("generateAssetsApi", () => {
 		})
 		await api.queryAssets({ scope: "ALL", compliance_status: "PASS" })
 		await api.getAsset("asset-1")
+		await api.getAssetVisibilityConfig("asset-1")
+		await api.updateAsset("asset-1", {
+			name: "更新后的素材",
+			description: "",
+			visibility: {
+				user_ids: [],
+				department_ids: ["department-1"],
+			},
+			tag_ids: [],
+		})
 		await api.batchGetAssets({ asset_ids: ["asset-1", "asset-2"] })
 		await api.getAssetCompliance("asset-1")
 		await api.getAssetTags()
 		await api.createAssetTag({ name: "人物", node_type: "group", parent_id: "0" })
 		await api.updateAssetTag("tag-1", { name: "肖像" })
 		await api.deleteAssetTag("tag-1")
-		await api.updateAssetTags("asset-1", { tag_ids: ["tag-2"] })
 		await api.getAssetOwners()
 		await api.transferAssetOwner({ asset_ids: ["asset-1"], owner_uid: "user-2" })
 		await api.deleteAsset("asset-1")
@@ -98,14 +107,26 @@ describe("generateAssetsApi", () => {
 		})
 		expect(get).toHaveBeenNthCalledWith(1, "/api/v1/asset-agreements")
 		expect(get).toHaveBeenNthCalledWith(2, "/api/v1/assets/asset-1")
-		expect(get).toHaveBeenNthCalledWith(3, "/api/v1/assets/asset-1/compliance")
-		expect(get).toHaveBeenNthCalledWith(4, "/api/v1/assets/tags")
-		expect(get).toHaveBeenNthCalledWith(5, "/api/v1/assets/owners")
-		expect(put).toHaveBeenNthCalledWith(1, "/api/v1/assets/tags/tag-1", {
-			name: "肖像",
+		expect(get).toHaveBeenNthCalledWith(3, "/api/v1/resource-visibility/config", {
+			params: {
+				resource_type: 5,
+				resource_code: "asset-1",
+			},
 		})
-		expect(put).toHaveBeenNthCalledWith(2, "/api/v1/assets/asset-1/tags", {
-			tag_ids: ["tag-2"],
+		expect(get).toHaveBeenNthCalledWith(4, "/api/v1/assets/asset-1/compliance")
+		expect(get).toHaveBeenNthCalledWith(5, "/api/v1/assets/tags")
+		expect(get).toHaveBeenNthCalledWith(6, "/api/v1/assets/owners")
+		expect(put).toHaveBeenNthCalledWith(1, "/api/v1/assets/asset-1", {
+			name: "更新后的素材",
+			description: "",
+			visibility: {
+				user_ids: [],
+				department_ids: ["department-1"],
+			},
+			tag_ids: [],
+		})
+		expect(put).toHaveBeenNthCalledWith(2, "/api/v1/assets/tags/tag-1", {
+			name: "肖像",
 		})
 		expect(deleteRequest).toHaveBeenNthCalledWith(1, "/api/v1/assets/tags/tag-1")
 		expect(deleteRequest).toHaveBeenNthCalledWith(2, "/api/v1/assets/asset-1")

@@ -20,11 +20,13 @@ import { useTranslation } from "react-i18next"
 import { toast } from "sonner"
 import type {
 	CanvasAssetResourceInfo,
+	CanvasAssetVisibilityTarget,
 	CanvasEditAssetTarget,
 	CanvasLocalAssetUploadMode,
 	CanvasOpenSaveAssetDialogParams,
 	CanvasSaveAssetToLibraryParams,
 	CanvasSaveLocalAssetToLibraryParams,
+	CanvasUpdateAssetParams,
 } from "@/components/CanvasDesign/public/magic-types"
 import { getAssetDisplayName } from "@/components/CanvasDesign/ui/toolbar/asset-library/assetLibraryMedia"
 import type {
@@ -50,7 +52,7 @@ interface SaveAssetToLibraryDialogProps {
 	onSaveLocalFile?: (
 		params: CanvasSaveLocalAssetToLibraryParams,
 	) => Promise<CanvasAssetResourceInfo>
-	onUpdateTags?: (assetId: string, tagIds: string[]) => Promise<void>
+	onUpdateAsset?: (assetId: string, params: CanvasUpdateAssetParams) => Promise<void>
 	onBindSavedAsset: (params: ImageContentAssetBindingParams) => ImageContentAssetBindingResult
 }
 
@@ -62,6 +64,12 @@ function isLocalAssetFileSource(
 
 function isEditAssetSource(source: SaveAssetDialogSource | null): source is CanvasEditAssetTarget {
 	return !!source && "assetId" in source
+}
+
+function isWorkspaceAssetSource(
+	source: SaveAssetDialogSource | null,
+): source is CanvasOpenSaveAssetDialogParams {
+	return Boolean(source) && !isLocalAssetFileSource(source) && !isEditAssetSource(source)
 }
 
 type VisibilityMode = "private" | "team"
@@ -84,6 +92,18 @@ function getVisibilityTargets(targets: TreeNode[]): TreeNode[] {
 	)
 }
 
+function toTreeNode(target: CanvasAssetVisibilityTarget): TreeNode {
+	return {
+		id: target.id,
+		name: target.name || target.id,
+		dataType: target.type === "user" ? NodeType.User : NodeType.Department,
+	} as TreeNode
+}
+
+function toFallbackTreeNode(id: string, type: CanvasAssetVisibilityTarget["type"]): TreeNode {
+	return toTreeNode({ id, name: id, type })
+}
+
 export default function SaveAssetToLibraryDialog({
 	open,
 	source,
@@ -91,7 +111,7 @@ export default function SaveAssetToLibraryDialog({
 	getPreviewUrl,
 	onSave,
 	onSaveLocalFile,
-	onUpdateTags,
+	onUpdateAsset,
 	onBindSavedAsset,
 }: SaveAssetToLibraryDialogProps) {
 	const { t } = useTranslation("super")
@@ -111,7 +131,7 @@ export default function SaveAssetToLibraryDialog({
 	const getPreviewUrlRef = useRef(getPreviewUrl)
 	const localFileSource = isLocalAssetFileSource(source) ? source : null
 	const editSource = isEditAssetSource(source) ? source : null
-	const workspaceSource = localFileSource || editSource ? null : source
+	const workspaceSource = isWorkspaceAssetSource(source) ? source : null
 	const sourcePath = workspaceSource?.path
 	const sourceName = localFileSource
 		? getAssetDisplayName(localFileSource.file.name)
@@ -127,7 +147,17 @@ export default function SaveAssetToLibraryDialog({
 			? localFileSource.file.type.startsWith("video/") ||
 				/\.(mp4|mov|webm)$/i.test(localFileSource.file.name)
 			: /\.(mp4|mov|webm)(?:$|[?#])/i.test(sourcePath ?? "")
-	const fieldsLocked = Boolean(editSource)
+	const visibilityEditable = !editSource || editSource.visibilityEditable === true
+	const initialEditTargets = useMemo(() => {
+		if (!editSource) return []
+		if (editSource.visibilityTargets?.length) {
+			return editSource.visibilityTargets.map(toTreeNode)
+		}
+		return [
+			...(editSource.userIds ?? []).map((id) => toFallbackTreeNode(id, "user")),
+			...(editSource.departmentIds ?? []).map((id) => toFallbackTreeNode(id, "department")),
+		]
+	}, [editSource])
 
 	useEffect(() => {
 		getPreviewUrlRef.current = getPreviewUrl
@@ -140,14 +170,14 @@ export default function SaveAssetToLibraryDialog({
 		setName(editSource?.name ?? sourceName ?? "")
 		setDescription(editSource?.description ?? "")
 		setVisibility(editSource?.visibility ?? "private")
-		setSelectedTargets([])
-		setPendingTargets([])
+		setSelectedTargets(initialEditTargets)
+		setPendingTargets(initialEditTargets)
 		setSelectedTagIds(editSource?.tagIds ?? [])
 		setPreviewUrl(editSource?.fileUrl ?? undefined)
 		setSelectorOpen(false)
 		setError(undefined)
 		setLoading(!localFileSource && !editSource)
-	}, [editSource, open, sourceIdentity, sourceName, localFileSource])
+	}, [editSource, initialEditTargets, open, sourceIdentity, sourceName, localFileSource])
 
 	const localPreviewFile = localFileSource?.file
 
@@ -225,7 +255,7 @@ export default function SaveAssetToLibraryDialog({
 			return
 		}
 		if (
-			!fieldsLocked &&
+			visibilityEditable &&
 			visibility === "team" &&
 			getVisibilityTargets(selectedTargets).length === 0
 		) {
@@ -238,8 +268,28 @@ export default function SaveAssetToLibraryDialog({
 		setSaving(true)
 		try {
 			if (editSource) {
-				if (!onUpdateTags) return
-				await onUpdateTags(editSource.assetId, selectedTagIds)
+				if (!onUpdateAsset) return
+				await onUpdateAsset(editSource.assetId, {
+					name: trimmedName,
+					description: description.trim(),
+					// The edit endpoint replaces the complete visibility set. Send empty
+					// arrays when switching to private so previous team grants are removed.
+					userIds: visibilityEditable
+						? visibility === "team"
+							? selectedTargets
+									.filter((target) => target.dataType === NodeType.User)
+									.map(getTargetBusinessId)
+							: []
+						: undefined,
+					departmentIds: visibilityEditable
+						? visibility === "team"
+							? selectedTargets
+									.filter((target) => target.dataType === NodeType.Department)
+									.map(getTargetBusinessId)
+							: []
+						: undefined,
+					tagIds: selectedTagIds,
+				})
 				toast.success(t("assetLibrarySave.editSuccess"))
 				onClose()
 				return
@@ -403,7 +453,6 @@ export default function SaveAssetToLibraryDialog({
 									<Input
 										value={name}
 										maxLength={255}
-										disabled={fieldsLocked}
 										placeholder={t("assetLibrarySave.namePlaceholder")}
 										onChange={(event) => {
 											setName(event.target.value)
@@ -424,7 +473,6 @@ export default function SaveAssetToLibraryDialog({
 								<Textarea
 									value={description}
 									rows={3}
-									disabled={fieldsLocked}
 									placeholder={t("assetLibrarySave.descriptionPlaceholder")}
 									onChange={(event) => setDescription(event.target.value)}
 								/>
@@ -440,7 +488,7 @@ export default function SaveAssetToLibraryDialog({
 										<button
 											key={mode}
 											type="button"
-											disabled={fieldsLocked}
+											disabled={!visibilityEditable}
 											className={cn(
 												"rounded-md px-3 py-2 text-sm font-medium transition-colors",
 												visibility === mode
@@ -458,7 +506,11 @@ export default function SaveAssetToLibraryDialog({
 										</button>
 									))}
 								</div>
-								{fieldsLocked ? null : visibility === "private" ? (
+								{!visibilityEditable ? (
+									<p className="text-xs text-muted-foreground">
+										{t("assetLibrarySave.visibilityReadOnly")}
+									</p>
+								) : visibility === "private" ? (
 									<p className="text-xs text-muted-foreground">
 										{t("assetLibrarySave.privateHint")}
 									</p>
@@ -473,30 +525,35 @@ export default function SaveAssetToLibraryDialog({
 													<span className="truncate">
 														{getTargetLabel(target)}
 													</span>
-													<button
-														type="button"
-														className="text-muted-foreground hover:text-foreground"
-														aria-label={t(
-															"assetLibrarySave.removeTarget",
-														)}
-														onClick={() =>
-															setSelectedTargets((current) =>
-																current.filter(
-																	(item) =>
-																		item.dataType !==
-																			target.dataType ||
-																		getTargetBusinessId(
-																			item,
-																		) !==
+													{visibilityEditable ? (
+														<button
+															type="button"
+															className="text-muted-foreground hover:text-foreground"
+															aria-label={t(
+																"assetLibrarySave.removeTarget",
+															)}
+															onClick={() =>
+																setSelectedTargets((current) =>
+																	current.filter(
+																		(item) =>
+																			item.dataType !==
+																				target.dataType ||
 																			getTargetBusinessId(
-																				target,
-																			),
-																),
-															)
-														}
-													>
-														<X className="size-3" aria-hidden="true" />
-													</button>
+																				item,
+																			) !==
+																				getTargetBusinessId(
+																					target,
+																				),
+																	),
+																)
+															}
+														>
+															<X
+																className="size-3"
+																aria-hidden="true"
+															/>
+														</button>
+													) : null}
 												</span>
 											))}
 										</div>

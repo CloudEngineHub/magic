@@ -125,6 +125,9 @@ export type {
 	AssetTagMatch,
 	AssetTagMutationResponse,
 	AssetTagNodeType,
+	AssetVisibilityConfig,
+	AssetVisibilityConfigResponse,
+	AssetVisibilityMember,
 	BatchGetAssetsParams,
 	CreateAssetParams,
 	CreateAssetTagParams,
@@ -138,8 +141,7 @@ export type {
 	TransferAssetOwnerParams,
 	TransferAssetOwnerResponse,
 	UpdateAssetTagParams,
-	UpdateAssetTagsParams,
-	UpdateAssetTagsResponse,
+	UpdateAssetParams,
 } from "./modules/assets"
 export type {
 	MagicBaseColumn,

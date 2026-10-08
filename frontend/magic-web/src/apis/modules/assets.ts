@@ -104,6 +104,34 @@ export interface SaveAssetVisibility {
 	department_ids?: string[]
 }
 
+export interface UpdateAssetParams {
+	name: string
+	description: string
+	visibility?: {
+		user_ids: string[]
+		department_ids: string[]
+	}
+	tag_ids: string[]
+}
+
+export interface AssetVisibilityMember {
+	id: string
+	nickname?: string
+	name?: string
+}
+
+export interface AssetVisibilityConfig {
+	visibility_type?: 0 | 1 | 2
+	users?: AssetVisibilityMember[]
+	departments?: AssetVisibilityMember[]
+}
+
+export interface AssetVisibilityConfigResponse {
+	resource_type: number
+	resource_code: string
+	visibility_config?: AssetVisibilityConfig
+}
+
 export type CreateAssetParams = AssetParamsBase &
 	AssetFileSourceParams & {
 		visibility?: SaveAssetVisibility
@@ -203,15 +231,6 @@ export interface AssetTagMutationResponse {
 	ownerUid?: string | null
 	isOfficial?: boolean
 	deleted?: boolean
-}
-
-export interface UpdateAssetTagsParams {
-	tag_ids: string[]
-}
-
-export interface UpdateAssetTagsResponse {
-	asset_id: string
-	tag_ids: string[]
 }
 
 export interface AssetOwnerItem {
@@ -316,6 +335,21 @@ export const generateAssetsApi = (fetch: ServiceHttpClient) => ({
 		return fetch.get<AssetItem>(`/api/v1/assets/${assetId}`).then(normalizeAssetItem)
 	},
 
+	/** 查询素材的用户/部门授权明细，用于编辑弹窗恢复原始可见范围。 */
+	getAssetVisibilityConfig(assetId: string) {
+		return fetch.get<AssetVisibilityConfigResponse>("/api/v1/resource-visibility/config", {
+			params: {
+				resource_type: 5,
+				resource_code: assetId,
+			},
+		})
+	},
+
+	/** 编辑素材元数据；不包含文件字段，空 tag_ids 会清空标签关联。 */
+	updateAsset(assetId: string, params: UpdateAssetParams) {
+		return fetch.put<AssetItem>(`/api/v1/assets/${assetId}`, params).then(normalizeAssetItem)
+	},
+
 	/** 按资产 ID 批量获取最新详情和动态文件链接。 */
 	batchGetAssets(params: BatchGetAssetsParams) {
 		return fetch
@@ -351,11 +385,6 @@ export const generateAssetsApi = (fetch: ServiceHttpClient) => ({
 	/** 删除用户标签组或标签。 */
 	deleteAssetTag(tagId: string) {
 		return fetch.delete<AssetTagMutationResponse>(`/api/v1/assets/tags/${tagId}`)
-	},
-
-	/** 更新资产的标签关联，传空数组表示清空关联。 */
-	updateAssetTags(assetId: string, params: UpdateAssetTagsParams) {
-		return fetch.put<UpdateAssetTagsResponse>(`/api/v1/assets/${assetId}/tags`, params)
 	},
 
 	/** 查询当前用户可见的其他资产归属人。 */

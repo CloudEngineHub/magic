@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor } from "@testing-library/react"
+import { act, fireEvent, render, screen, waitFor } from "@testing-library/react"
 import { beforeEach, describe, expect, it, vi } from "vitest"
 import SaveAssetToLibraryDialog from "../SaveAssetToLibraryDialog"
 
@@ -258,6 +258,104 @@ describe("SaveAssetToLibraryDialog", () => {
 				userIds: [],
 				departmentIds: ["department-1"],
 				tagIds: undefined,
+			}),
+		)
+	})
+
+	it("edits asset metadata and submits complete visibility and tag arrays", async () => {
+		const onUpdateAsset = vi.fn().mockResolvedValue(undefined)
+		const onClose = vi.fn()
+
+		render(
+			<SaveAssetToLibraryDialog
+				open
+				source={{
+					assetId: "asset-edit-1",
+					name: "旧名称",
+					description: "旧描述",
+					fileUrl: "https://example.com/asset.png",
+					mediaType: "image",
+					visibility: "private",
+					userIds: ["user-1"],
+					departmentIds: [],
+					visibilityTargets: [{ id: "user-1", name: "Alice", type: "user" }],
+					visibilityEditable: true,
+					tagIds: [],
+				}}
+				onClose={onClose}
+				getPreviewUrl={vi.fn().mockResolvedValue(undefined)}
+				onSave={vi.fn()}
+				onUpdateAsset={onUpdateAsset}
+				onBindSavedAsset={vi.fn().mockReturnValue("bound")}
+			/>,
+		)
+
+		await waitFor(() => expect(mocks.getAssetTags).toHaveBeenCalledTimes(1))
+		fireEvent.change(screen.getByDisplayValue("旧名称"), {
+			target: { value: "新名称" },
+		})
+		fireEvent.change(screen.getByDisplayValue("旧描述"), {
+			target: { value: "新描述" },
+		})
+		fireEvent.click(screen.getByRole("button", { name: "assetLibrarySave.teamVisibility" }))
+		fireEvent.click(screen.getByRole("button", { name: "assetLibrarySave.selectTargets" }))
+		fireEvent.click(screen.getByRole("button", { name: "confirm-target", hidden: true }))
+		await act(async () => {
+			fireEvent.click(screen.getByRole("button", { name: "assetLibrarySave.save" }))
+			await Promise.resolve()
+		})
+		expect(onUpdateAsset).toHaveBeenCalledWith("asset-edit-1", {
+			name: "新名称",
+			description: "新描述",
+			userIds: [],
+			departmentIds: ["department-1"],
+			tagIds: [],
+		})
+		expect(onClose).toHaveBeenCalledTimes(1)
+		expect(mocks.toastSuccess).toHaveBeenCalledWith("assetLibrarySave.editSuccess")
+	})
+
+	it("clears existing team visibility when switching an asset to private", async () => {
+		const onUpdateAsset = vi.fn().mockResolvedValue(undefined)
+
+		render(
+			<SaveAssetToLibraryDialog
+				open
+				source={{
+					assetId: "asset-edit-2",
+					name: "团队素材",
+					description: "描述",
+					fileUrl: "https://example.com/asset.png",
+					mediaType: "image",
+					visibility: "team",
+					userIds: ["user-1"],
+					departmentIds: ["department-1"],
+					visibilityTargets: [
+						{ id: "user-1", name: "Alice", type: "user" },
+						{ id: "department-1", name: "Design", type: "department" },
+					],
+					visibilityEditable: true,
+					tagIds: ["tag-1"],
+				}}
+				onClose={vi.fn()}
+				getPreviewUrl={vi.fn().mockResolvedValue(undefined)}
+				onSave={vi.fn()}
+				onUpdateAsset={onUpdateAsset}
+				onBindSavedAsset={vi.fn().mockReturnValue("bound")}
+			/>,
+		)
+
+		await waitFor(() => expect(mocks.getAssetTags).toHaveBeenCalledTimes(1))
+		fireEvent.click(screen.getByRole("button", { name: "assetLibrarySave.privateVisibility" }))
+		fireEvent.click(screen.getByRole("button", { name: "assetLibrarySave.save" }))
+
+		await waitFor(() =>
+			expect(onUpdateAsset).toHaveBeenCalledWith("asset-edit-2", {
+				name: "团队素材",
+				description: "描述",
+				userIds: [],
+				departmentIds: [],
+				tagIds: ["tag-1"],
 			}),
 		)
 	})

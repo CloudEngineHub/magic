@@ -242,8 +242,8 @@
 		"description": "Edit the asset information before saving it to Assets",
 		"descriptionLabel": "Description",
 		"descriptionPlaceholder": "Add an optional description",
-		"editDescription": "Only tags can be changed",
-		"editSuccess": "Asset tags updated",
+		"editDescription": "Edit the asset name, description, visibility, and tags",
+		"editSuccess": "Asset information updated",
 		"editTitle": "Edit asset",
 		"loadingTags": "Loading tags...",
 		"nameLabel": "Asset name",
@@ -271,6 +271,7 @@
 		"title": "Save to Assets",
 		"unsupportedFile": "This file type is not supported",
 		"visibilityLabel": "Visibility",
+		"visibilityReadOnly": "This visibility scope cannot be edited here and will be kept unchanged",
 		"visibilityTargetRequired": "Select at least one member or department"
 	},
 	"assistant": {
