@@ -21,7 +21,7 @@ export function ToolCallRenderer({
 	onMouseEnter,
 	onMouseLeave,
 }: ToolCallRendererProps) {
-	if (toolCall.function.name === "create_file_download") {
+	if (toolCall.function.name === "create_client_side_file_bundle") {
 		return (
 			<FileDownloadCard
 				toolData={toolData}

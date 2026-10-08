@@ -5,7 +5,7 @@ description: Use when a user wants to download or package a collection of existi
 
 # File Bundle
 
-Create a message card with `create_file_download` through Code Mode in `run_sdk_snippet`. The card lists the selected files and lets the user download them individually or package them into a ZIP in their browser. The tool does not create, upload, or download an archive itself. This card is currently supported only by the Web client; other clients may not display it or support its download controls.
+Create a message card with `create_client_side_file_bundle` through Code Mode in `run_sdk_snippet`. The card lists the selected files and lets the user download them individually or package them into a ZIP in their browser. The tool does not create, upload, or download an archive itself. This card is currently supported only by the Web client; other clients may not display it or support its download controls.
 
 ## Choose the Right Capability
 
@@ -21,7 +21,7 @@ First identify the exact files with the existing file-list or search tools. Incl
 ```python
 from sdk.tool import tool
 
-result = tool.call("create_file_download", {
+result = tool.call("create_client_side_file_bundle", {
     "title": "Project materials",
     "file_paths": [
         "images/scene.png",

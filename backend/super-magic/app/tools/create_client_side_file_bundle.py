@@ -28,11 +28,11 @@ def _positive_limit(name: str, default: int) -> int:
     return value
 
 
-MAX_FILES = _positive_limit("CREATE_FILE_DOWNLOAD_MAX_FILES", 200)
-MAX_DETAIL_BYTES = _positive_limit("CREATE_FILE_DOWNLOAD_MAX_DETAIL_BYTES", 256 * 1024)
+MAX_FILES = _positive_limit("CREATE_CLIENT_SIDE_FILE_BUNDLE_MAX_FILES", 200)
+MAX_DETAIL_BYTES = _positive_limit("CREATE_CLIENT_SIDE_FILE_BUNDLE_MAX_DETAIL_BYTES", 256 * 1024)
 
 
-class CreateFileDownloadParams(BaseToolParams):
+class CreateClientSideFileBundleParams(BaseToolParams):
     """集合名称和准确的工作区文件路径。"""
 
     model_config = ConfigDict(extra="forbid")
@@ -62,13 +62,13 @@ def _failure_message(result: ToolResult) -> str:
 
 
 # 模型使用说明：agents/skills/file-bundle/SKILL.md。
-@tool(name="create_file_download", code_mode_only=True)
-class CreateFileDownload(BaseTool[CreateFileDownloadParams]):
-    """Create a browser download card for existing workspace files."""
+@tool(name="create_client_side_file_bundle", code_mode_only=True)
+class CreateClientSideFileBundle(BaseTool[CreateClientSideFileBundleParams]):
+    """Create a client-side file bundle card for existing workspace files."""
 
-    name = "create_file_download"
+    name = "create_client_side_file_bundle"
 
-    async def execute(self, tool_context: ToolContext, params: CreateFileDownloadParams) -> ToolResult:
+    async def execute(self, tool_context: ToolContext, params: CreateClientSideFileBundleParams) -> ToolResult:
         try:
             project_id = required_numeric_metadata(tool_context, "project_id", "missing_project_context")
             root = get_workspace_root(tool_context)

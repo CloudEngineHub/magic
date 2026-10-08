@@ -154,7 +154,7 @@ export default function FileDownloadCard({
 			<DefaultTool
 				toolData={{
 					id: toolData.id,
-					name: "create_file_download",
+					name: "create_client_side_file_bundle",
 					action: t("fileDownload.title"),
 					remark: summary,
 					status: toolData.status,

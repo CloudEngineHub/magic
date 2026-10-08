@@ -50,7 +50,7 @@ from app.tools.purify import Purify
 # 导出工具类
 from app.tools.read_file import ReadFile
 from app.tools.read_files import ReadFiles
-from app.tools.create_file_download import CreateFileDownload
+from app.tools.create_client_side_file_bundle import CreateClientSideFileBundle
 # Code Mode 也依赖模块显式导入完成工具注册；仅写 Skill 示例不会让运行时找到这个工具。
 from app.tools.inspect_memory import InspectMemory
 from app.tools.read_webpages_as_markdown import ReadWebpagesAsMarkdown
@@ -378,7 +378,7 @@ __all__ = [
     "ReadFile",
     "InspectMemory",
     "ReadFiles",
-    "CreateFileDownload",
+    "CreateClientSideFileBundle",
     "ReadWebpagesAsMarkdown",
     "Reflection",
     "ShellExec",

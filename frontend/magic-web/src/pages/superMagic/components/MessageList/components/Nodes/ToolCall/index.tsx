@@ -101,7 +101,7 @@ function ToolCall(props: NodeProps) {
 		handleSelectDetail?.(newDetail)
 	}
 
-	if (tool && toolName === "create_file_download") {
+	if (tool && toolName === "create_client_side_file_bundle") {
 		return (
 			<FileDownloadCard
 				toolData={tool}

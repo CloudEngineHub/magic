@@ -49,7 +49,7 @@ import todoWriteIcon from "@/pages/superMagic/assets/tool_icon/todo_write.svg"
  * 基于 Figma 设计规范：https://www.figma.com/design/6Y4cUmZyEJnas4qKtbcJ5Y/Magic---SuperMagic-Shadcn?node-id=96-61394
  */
 export const toolIconMap: Record<string, ToolIconConfig> = {
-	create_file_download: { icon: FileBox, bgColor: "#285AFF" },
+	create_client_side_file_bundle: { icon: FileBox, bgColor: "#285AFF" },
 	// AI 思考相关
 	agent_think: {
 		icon: BrainCircuit,

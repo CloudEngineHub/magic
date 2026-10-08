@@ -1011,7 +1011,7 @@
         "zh_CN": "检查记忆用量",
         "en_US": "Inspect memory usage"
     },
-    "create_file_download": {
+    "create_client_side_file_bundle": {
         "zh_CN": "文件打包",
         "en_US": "File bundle"
     }
