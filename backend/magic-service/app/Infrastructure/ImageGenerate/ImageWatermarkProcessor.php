@@ -43,41 +43,43 @@ class ImageWatermarkProcessor
     protected ImageEnhancementProcessorInterface $imageEnhancementProcessor;
 
     /**
-     * Add watermarks to a base64 / data-URI image, then upload the processed bytes.
+     * 为 base64 / data-URI 图片添加水印，并上传处理后的图片二进制。
      *
-     * @return string Public URL on upload success; processed data URI when upload/link/metadata fails
+     * @return string 上传成功返回公网 URL；上传/取链接/写元数据失败时返回处理后的 data URI
      */
     public function addWatermarkToBase64(string $base64Image, ImageGenerateRequest $imageGenerateRequest): string
     {
-        // Detect declared format from data-URI prefix when present.
+        // 检测原始格式
         $originalFormat = $this->extractBase64Format($base64Image);
 
-        // Decode once at the entry boundary; later steps reuse binary bytes.
+        // 入口解码一次，后续步骤复用图片二进制
         $imageData = $this->decodeBase64Image($base64Image);
 
-        // Prefer non-jpeg declared format; otherwise trust binary detection.
+        // 双重检测确保格式准确
         $detectedFormat = $this->detectImageFormat($imageData);
         $targetFormat = $originalFormat !== 'jpeg' ? $originalFormat : $detectedFormat;
 
+        // 使用统一的水印处理方法
         if ($imageGenerateRequest->isAddWatermark()) {
             $this->addWaterMarkHandler($imageData, $imageGenerateRequest, $targetFormat);
         }
 
+        // 立即添加隐式水印
         $implicitWatermark = $imageGenerateRequest->getImplicitWatermark();
         if ($implicitWatermark !== null) {
             $this->imageEnhancementProcessor->enhanceImageData($imageData, $implicitWatermark);
             $this->logger->info('【AIGC】隐式水印处理完成(Base64格式)');
         }
 
-        // Upload by detected post-process format; keep $targetFormat only for failure fallback prefix.
+        // 按处理后的真实格式上传；失败回退前缀仍沿用历史 $targetFormat 语义
         $uploadFormat = $this->detectImageFormat($imageData);
         return $this->uploadProcessedImage($imageData, $uploadFormat, $targetFormat, $imageGenerateRequest);
     }
 
     /**
-     * Add watermarks to a remote image URL, then upload the processed bytes.
+     * 为 URL 格式图片添加水印，并上传处理后的图片二进制。
      *
-     * @return string Public URL on upload success; processed data URI when upload/link/metadata fails
+     * @return string 上传成功返回公网 URL；上传/取链接/写元数据失败时返回处理后的 data URI
      */
     public function addWatermarkToUrl(string $imageUrl, ImageGenerateRequest $imageGenerateRequest): string
     {
@@ -87,6 +89,7 @@ class ImageWatermarkProcessor
             $this->addWaterMarkHandler($imageData, $imageGenerateRequest);
         }
 
+        // 立即添加XMP隐式水印
         $implicitWatermark = $imageGenerateRequest->getImplicitWatermark();
         if ($implicitWatermark !== null) {
             $this->imageEnhancementProcessor->enhanceImageData($imageData, $implicitWatermark);
@@ -95,7 +98,7 @@ class ImageWatermarkProcessor
             ]);
         }
 
-        // Use the real post-process format for both upload naming and failure fallback.
+        // 根据处理后的真实图片二进制重新检测格式，用于上传命名与失败回退前缀
         $outputFormat = $this->detectImageFormat($imageData);
         return $this->uploadProcessedImage($imageData, $outputFormat, $outputFormat, $imageGenerateRequest);
     }
@@ -455,14 +458,13 @@ class ImageWatermarkProcessor
     }
 
     /**
-     * Upload processed image bytes via a local temporary file.
+     * 将处理后的图片二进制写入临时文件后上传.
      *
-     * Success path avoids re-encoding to base64/data URI. Failure path keeps the
-     * historical behavior: return the processed image as a data URI so callers that
-     * already accept URL-or-data-URI strings remain compatible.
+     * 成功路径不再重新编码为 base64/data URI；失败时仍返回处理后的 data URI，
+     * 以兼容调用方既有的 URL / data URI 返回约定。
      *
-     * @param string $uploadFormat Format used for the uploaded object file extension
-     * @param string $fallbackFormat Format used only for the failure data-URI prefix
+     * @param string $uploadFormat 用于上传对象文件扩展名的格式
+     * @param string $fallbackFormat 仅用于失败回退 data URI 前缀的格式
      */
     private function uploadProcessedImage(
         string $imageData,
@@ -472,7 +474,7 @@ class ImageWatermarkProcessor
     ): string {
         $organizationCode = CloudFileRepository::DEFAULT_ICON_ORGANIZATION_CODE;
         $fileDomainService = di(FileDomainService::class);
-        // Per-call manager so cleanup never deletes temp files owned by other requests.
+        // 每次上传使用独立 manager，避免清理时误删其它请求的临时文件
         $temporaryFileManager = new TemporaryFileManager(di(LoggerFactory::class));
 
         try {
@@ -485,7 +487,7 @@ class ImageWatermarkProcessor
                 throw new RuntimeException('Failed to write processed image to temporary file');
             }
 
-            // Pass an explicit name with extension; do not rely on the extension-less tempnam() basename.
+            // 显式指定带扩展名的文件名，避免依赖无扩展名的 tempnam() basename
             $extension = $this->normalizeImageExtension($uploadFormat);
             $fileName = sprintf('watermark_%s.%s', uniqid('', true), $extension);
             $uploadFile = new UploadFile($tempFilePath, 'open', $fileName);
@@ -497,7 +499,7 @@ class ImageWatermarkProcessor
                 throw new RuntimeException('Uploaded image link is missing');
             }
 
-            // Object metadata remains a backup channel for validity period.
+            // 设置对象元数据作为备用方案
             $validityPeriod = $imageGenerateRequest->getValidityPeriod();
             $metadataContent = [];
             if ($validityPeriod !== null) {
@@ -514,7 +516,7 @@ class ImageWatermarkProcessor
                 'organization_code' => $organizationCode,
             ]);
 
-            // Encode only on failure; callers historically accept this processed data URI.
+            // 仅失败时编码；保持历史回退：返回处理后的 data URI
             return $this->generateBase64Prefix($fallbackFormat) . base64_encode($imageData);
         } finally {
             $temporaryFileManager->cleanup();
@@ -522,7 +524,7 @@ class ImageWatermarkProcessor
     }
 
     /**
-     * Normalize detected image format to a safe object-storage file extension.
+     * 将检测到的图片格式规范化为对象存储可用的文件扩展名.
      */
     private function normalizeImageExtension(string $format): string
     {
