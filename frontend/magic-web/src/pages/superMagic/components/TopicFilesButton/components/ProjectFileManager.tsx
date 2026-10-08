@@ -72,19 +72,19 @@ export default observer(function ProjectFileManager({
 			rootId=""
 			rootName={props.selectedProject?.project_name ?? t("topicFiles.title")}
 			context={{ kind: "project", projectId: props.projectId }}
+			isActive={isActive}
+			allowEdit={allowEdit}
+			allowDownload={allowDownload}
+			onOpen={props.onFileClick}
 			placesBefore={
 				<RecentFiles
-					attachments={props.attachments}
 					presentationIndex={getFilePresentationIndex(props.attachments)}
+					attachmentLoadState={props.attachmentLoadState}
 					context={{ kind: "project", projectId: props.projectId }}
 					onOpen={props.onFileClick}
 					getPopupContainer={() => null}
 				/>
 			}
-			isActive={isActive}
-			allowEdit={allowEdit}
-			allowDownload={allowDownload}
-			onOpen={props.onFileClick}
 			onRefresh={() => requestProjectAttachmentsFullRefresh({ projectId: props.projectId })}
 		/>
 	)

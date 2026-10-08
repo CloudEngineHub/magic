@@ -194,7 +194,7 @@ export function getFileManagerColumnText(
 	return String(value)
 }
 
-function parseFileTime(value: unknown): number | null {
+export function parseFileTime(value: unknown): number | null {
 	if ((typeof value !== "number" && typeof value !== "string") || value === "") return null
 	const numeric = typeof value === "number" || /^\d+$/.test(value) ? Number(value) : null
 	const source =
