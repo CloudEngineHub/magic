@@ -69,6 +69,15 @@ Instruction priority: system/developer instructions and the user's request take 
   - **Hooks & Context**: Annotate the purpose and source of injected data (e.g., `useOutletContext`) to help future maintainers understand component dependencies.
 
 
+## Recovery after browser suspension
+
+- New or changed server-backed views that consume real-time events must define how their current data is reconciled after page visibility returns, bfcache restoration, or network recovery. A WebSocket `OPEN` state or receipt of an event does not prove that missed changes were recovered.
+- Reuse the module's existing authorized reads, update queue, and merge logic. Add a recovery trigger at the existing data owner; do not introduce an application-wide scheduler, another store, permanent polling, or migrate unrelated working modules for a local recovery requirement.
+- Background reconciliation must retain rendered content until a successful result is ready. Preserve selection, scroll, pagination, open tabs, viewport, local drafts, editing conflicts, and explicitly selected historical versions; do not simulate manual refresh or remount a view to update it.
+- Coalesce repeated triggers, retain changes received during reconciliation, and reject stale results after project, account, organization, or access-scope changes. Abort or unsubscribe when the consumer leaves; one consumer must not cancel a shared read still needed by another.
+- Notify dependent content only after the recovered data has successfully committed and entered that consumer's context. Request completion, including failure, is not a successful reconciliation. For example, commit the project file snapshot before checking an open canvas version.
+- Recovery re-reads state; it must not restart recording, resend queued messages, repeat writes, broaden share permissions, or replay one-time notifications. Preserve existing error handling, resource expiry rules, and normal polling budgets. State any uncovered recovery path instead of claiming global coverage.
+
 ## Workflow for Agents
 1. **Orient**: Read the user request, applicable parent instructions, this file, and task-specific files. Read `README.md` or `CLAUDE.local.md` only when the task depends on their documented workflow or architecture.
 2. **Investigate**: Use `rg`/`pnpm` tooling to locate relevant code; inspect existing patterns before creating new ones.

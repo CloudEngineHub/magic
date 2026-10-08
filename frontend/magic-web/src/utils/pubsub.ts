@@ -151,6 +151,8 @@ export const PubSubEvents = {
 	SuperMagicMessageQueueConsumed: "PubSub_Super_Magic_Message_Queue",
 	/** 超级麦吉 - WebSocket Intermediate 工程文件变更（订阅方自行处理） */
 	Super_Magic_File_Change_Intermediate: "PubSub_Super_Magic_File_Change_Intermediate",
+	/** 当前项目附件恢复快照已成功提交，不代表收到新的服务端文件事件。 */
+	Super_Magic_Project_Attachments_Reconciled: "super_magic_project_attachments_reconciled",
 	/** 超级麦吉 - WebSocket 检查点撤销/恢复通知（订阅方通过 HTTP 对账） */
 	Super_Magic_Checkpoint_Rollback: "PubSub_Super_Magic_Checkpoint_Rollback",
 	/** 录音总结 - 接收外部消息内容，发送消息 */

@@ -4,6 +4,16 @@ import type {
 	PPTSlideDragData,
 	TabDragData,
 } from "@/pages/superMagic/components/MessageEditor/utils/drag"
+import type { ProjectFilesStore } from "@/stores/projectFiles"
+import type { AttachmentItem } from "../components/TopicFilesButton/hooks/types"
+
+/** 成功提交的恢复快照；消费者等待这些附件进入自身上下文后再读取依赖内容。 */
+export interface SuperMagicProjectAttachmentsReconciledPayload {
+	projectId: string
+	accessScope: string
+	store: ProjectFilesStore
+	snapshot: { tree: AttachmentItem[]; list: AttachmentItem[] }
+}
 
 /**
  * 文件预览激活时同步当前选中文件 ID 到其他组件。
@@ -64,10 +74,7 @@ export type SuperMagicEnterEditModeArgs = [fileId: string]
  * })
  */
 export type SuperMagicInsertDragDataToEditorPayload =
-	| TabDragData
-	| AttachmentDragData
-	| MultipleFilesDragData
-	| PPTSlideDragData
+	TabDragData | AttachmentDragData | MultipleFilesDragData | PPTSlideDragData
 
 export type SuperMagicInsertDragDataToEditorArgs = [
 	dragData: SuperMagicInsertDragDataToEditorPayload,
