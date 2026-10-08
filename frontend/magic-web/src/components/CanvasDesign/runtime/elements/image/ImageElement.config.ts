@@ -58,6 +58,8 @@ export const COLORS = {
 export const LAYOUT = {
 	/** 废稿小标签中的图标与文字间距（屏幕像素）。 */
 	DISCARDED_ICON_TEXT_GAP: 4,
+	/** 废稿角标宽高各不超过图片屏幕尺寸的此比例，正常尺寸不放大。 */
+	DISCARDED_TAG_MAX_IMAGE_RATIO: 0.2,
 	/** 文本水平内边距（像素） */
 	TEXT_PADDING_X: 8,
 	/** 文本垂直内边距（像素） */

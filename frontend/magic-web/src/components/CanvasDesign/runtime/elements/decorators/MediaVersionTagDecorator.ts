@@ -203,19 +203,29 @@ export class MediaVersionTagDecorator {
 		if (!Number.isFinite(totalScaleX) || !Number.isFinite(totalScaleY)) return
 		if (!totalScaleX || !totalScaleY) return
 
-		const offsetX = resolveImageControlCanvasOffset(totalScaleX)
-		const offsetY = resolveImageControlCanvasOffset(totalScaleY)
 		const elementScreenWidth = Math.abs(this.config.width * totalScaleX)
 		const elementScreenHeight = Math.abs(this.config.height * totalScaleY)
+		// 正常尺寸抵消画布缩放；废稿在小图上减少抵消，角标与边距一起缩小。
+		const tagScale = this.isDiscarded()
+			? Math.min(
+					1,
+					(elementScreenWidth * LAYOUT.DISCARDED_TAG_MAX_IMAGE_RATIO) / this.tag.width(),
+					(elementScreenHeight * LAYOUT.DISCARDED_TAG_MAX_IMAGE_RATIO) /
+						this.tag.height(),
+				)
+			: 1
+		const offsetX = resolveImageControlCanvasOffset(totalScaleX) * tagScale
+		const offsetY = resolveImageControlCanvasOffset(totalScaleY) * tagScale
 		const offsetScreenX = offsetX * totalScaleX
 		const offsetScreenY = offsetY * totalScaleY
-		const tagScreenWidth = this.tag.width()
-		const tagScreenHeight = this.tag.height()
+		const tagScreenWidth = this.tag.width() * tagScale
+		const tagScreenHeight = this.tag.height() * tagScale
 
-		this.tag.scale({ x: 1 / totalScaleX, y: 1 / totalScaleY })
+		this.tag.scale({ x: tagScale / totalScaleX, y: tagScale / totalScaleY })
 		this.tag.position({ x: offsetX, y: offsetY })
 		this.tag.visible(
-			elementScreenWidth >= tagScreenWidth + offsetScreenX * 2 &&
+			tagScale > 0 &&
+				elementScreenWidth >= tagScreenWidth + offsetScreenX * 2 &&
 				elementScreenHeight >= tagScreenHeight + offsetScreenY * 2,
 		)
 		this.tag.opacity(this.config.canvas.permissionManager.can("document.write") ? 1 : 0.55)
