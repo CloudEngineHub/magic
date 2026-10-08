@@ -75,7 +75,7 @@ function DefaultTool(props: DefaultToolProps) {
 			if (!hasInteraction) return
 			const detail = { ...tool?.detail, id: tool?.id }
 			selectToolDetail({ detail, onSelectDetail: props?.onSelectDetail })
-			if (interactionTargetType === "design") {
+			if (interactionTargetType === "canvas") {
 				const { designProjectId, elements } = getToolDesignProjectInfo(tool, filesStore)
 				if (!designProjectId) return
 				pubsub.publish(PubSubEvents.Super_Magic_Focus_Canvas_Element, {

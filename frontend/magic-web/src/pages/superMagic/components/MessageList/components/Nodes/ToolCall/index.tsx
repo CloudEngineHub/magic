@@ -46,7 +46,7 @@ function ToolCall(props: NodeProps) {
 		const target = getToolCardInteractionTarget(tool?.name, detail)
 		if (target.type === "disabled") return
 
-		if (target.type === "design") {
+		if (target.type === "canvas") {
 			const { designProjectId, designProject, elements } = getToolDesignProjectInfo(
 				tool,
 				filesStore,
