@@ -26,26 +26,13 @@ function DownloadProgressToast({
 	const resolvedText = text ?? t("topicFiles.downloading")
 	const resolvedCancelText = cancelText ?? t("common.cancel")
 	const normalizedProgress = Number.isFinite(progress) ? Math.min(Math.max(progress, 0), 100) : 0
-	const progressBar = (
-		<div
-			className={cn(
-				"h-1 overflow-hidden rounded-full bg-primary/10",
-				description ? "mt-2.5 w-full" : "w-[100px] shrink-0",
-			)}
-			aria-hidden
-		>
-			<div
-				className="h-full rounded-full bg-primary"
-				style={{ width: `${normalizedProgress}%` }}
-			/>
-		</div>
-	)
 
 	return (
 		<div className={cn("min-w-0", description && "py-1")}>
-			<div className="flex flex-wrap items-center gap-2.5">
-				<div className="flex min-w-0 flex-auto items-start gap-2.5">
-					<span className="text-primary">
+			{/* 窄屏只让文案在剩余宽度内换行，百分比和取消保持同组，不单独掉到下一行。 */}
+			<div className="flex items-center gap-2.5">
+				<div className="flex min-w-0 flex-1 items-center gap-2.5">
+					<span className="shrink-0 text-primary">
 						<ProgressIndicator
 							value={normalizedProgress}
 							icon={<Download />}
@@ -61,32 +48,44 @@ function DownloadProgressToast({
 						{resolvedText}
 					</span>
 				</div>
-				{!description && progressBar}
-				{showPercentage && (
-					<span className="shrink-0 text-xs tabular-nums text-muted-foreground">
-						{Math.round(normalizedProgress)}%
-					</span>
+				{(showPercentage || onCancel) && (
+					<div className="flex shrink-0 items-center gap-2.5">
+						{showPercentage && (
+							<span className="text-xs tabular-nums text-muted-foreground">
+								{Math.round(normalizedProgress)}%
+							</span>
+						)}
+						{onCancel && (
+							<Button
+								type="button"
+								variant="secondary"
+								size="sm"
+								className="h-[22px] shrink-0 rounded-[5px] border border-destructive/15 bg-destructive/5 px-1.5 text-xs font-normal text-destructive shadow-none hover:bg-destructive/10 hover:text-destructive [@media(pointer:coarse)]:min-h-11"
+								onClick={onCancel}
+							>
+								{resolvedCancelText}
+							</Button>
+						)}
+					</div>
 				)}
-				{onCancel ? (
-					<Button
-						type="button"
-						variant="secondary"
-						size="sm"
-						className="h-[22px] shrink-0 rounded-[5px] border border-destructive/15 bg-destructive/5 px-1.5 text-xs font-normal text-destructive shadow-none hover:bg-destructive/10 hover:text-destructive [@media(pointer:coarse)]:min-h-11"
-						onClick={onCancel}
-					>
-						{resolvedCancelText}
-					</Button>
-				) : null}
 			</div>
 			{description && (
-				<>
-					<div className="mt-[7px] text-xs leading-[19px] text-muted-foreground [overflow-wrap:anywhere]">
-						{description}
-					</div>
-					{progressBar}
-				</>
+				<div className="mt-[7px] text-xs leading-[19px] text-muted-foreground [overflow-wrap:anywhere]">
+					{description}
+				</div>
 			)}
+			<div
+				className={cn(
+					"h-1 w-full overflow-hidden rounded-full bg-primary/10",
+					description ? "mt-2.5" : "mt-2",
+				)}
+				aria-hidden
+			>
+				<div
+					className="h-full rounded-full bg-primary"
+					style={{ width: `${normalizedProgress}%` }}
+				/>
+			</div>
 		</div>
 	)
 }
