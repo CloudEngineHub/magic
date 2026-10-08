@@ -508,6 +508,10 @@ config/config.yaml 中线上 `.runtime` 的清理配置统一位于 `runtime_cle
     - 不提供跨 sandbox 重建恢复保证。
     - Python 文件操作必须使用 async_file_utils 的异步 API。
 
+浏览器原生视觉的截图源不属于 `.runtime`：线上由 topic-scoped 对象 artifact 保存，线下由
+普通 `.topic` provider 保存；`.runtime/native_visual_cache` 只缓存压缩后的请求数据。沙盒
+重启会清空 runtime，因此不得把截图原路径或临时 staging 路径写入跨运行消息历史。
+
 以下内容不会被这些 runtime helper 自动删除：
     - .workspace 中的用户文件。
     - .topic 下的主 Agent 历史、subagents、compacted 和其他话题存档。

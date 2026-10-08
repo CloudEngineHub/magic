@@ -3269,6 +3269,10 @@
         "zh_CN": "没有返回可展示的视觉分析结果。",
         "en_US": "No displayable visual analysis was returned."
     },
+    "browser.detail.native_visual_attached": {
+        "zh_CN": "截图已附加到下一次模型请求，模型会直接根据截图回答视觉问题。",
+        "en_US": "The screenshot was attached to the next model request for native visual reasoning."
+    },
     "browser.detail.no_visual_evidence": {
         "zh_CN": "没有返回可展示的视觉定位证据。",
         "en_US": "No displayable visual matching evidence was returned."

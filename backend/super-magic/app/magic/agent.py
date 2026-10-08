@@ -90,6 +90,7 @@ from app.magic.user_command_handler import Commands
 from app.path_manager import PathManager
 from app.service.auto_read_file_service import AutoReadFileService
 from app.service.agent_event.native_visual_disable_listener_service import NativeVisualDisableListenerService
+from app.service.browser.browser_screenshot_artifact import BrowserScreenshotArtifactStore
 from app.service.native_visual_message_builder import NativeVisualMessageBuilder
 from app.service.todo_service import TodoService
 from app.tools.core import AutoMount
@@ -297,7 +298,8 @@ class Agent(BaseAgent):
         # 设置Agent上下文
         self.agent_context = self._setup_agent_context(agent_context)
         self._message_renderer = LLMMessageRenderer(
-            workspace_dir=self.agent_context.get_workspace_dir()
+            workspace_dir=self.agent_context.get_workspace_dir(),
+            browser_artifact_store=BrowserScreenshotArtifactStore(self.agent_context),
         )
         self._native_visual_message_builder = NativeVisualMessageBuilder(
             self.agent_context.get_workspace_dir()
