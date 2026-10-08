@@ -18,11 +18,12 @@ const templateCache = new Map()
  * @returns {string}
  */
 function buildCdnScriptTags() {
+	const esModuleShimsTag = `<script async src="https://cdn.jsdelivr.net/npm/es-module-shims@2.8.4/dist/es-module-shims.min.js" crossorigin="anonymous"></script>\n`
 	let tags = CDNUrl
-		? `<script defer src="${CDNUrl}/react/18.3.1/react.production.min.js" crossorigin="anonymous"></script>
+		? `${esModuleShimsTag}\t<script defer src="${CDNUrl}/react/18.3.1/react.production.min.js" crossorigin="anonymous"></script>
 	<script defer src="${CDNUrl}/react-dom/18.3.1/react-dom.production.min.js" crossorigin="anonymous"></script>
 	<script defer src="${CDNUrl}/lodash/4.17.21/lodash.min.js" crossorigin="anonymous"></script>`
-		: `<script defer src="https://cdn.jsdelivr.net/npm/react@18.3.1/umd/react.production.min.js" crossorigin="anonymous"></script>
+		: `${esModuleShimsTag}<script defer src="https://cdn.jsdelivr.net/npm/react@18.3.1/umd/react.production.min.js" crossorigin="anonymous"></script>
 <script defer src="https://cdn.jsdelivr.net/npm/react-dom@18.3.1/umd/react-dom.production.min.js" crossorigin="anonymous"></script>
 <script defer src="https://cdn.jsdelivr.net/npm/lodash@4.17.21/lodash.min.js" crossorigin="anonymous"></script>
 	`
