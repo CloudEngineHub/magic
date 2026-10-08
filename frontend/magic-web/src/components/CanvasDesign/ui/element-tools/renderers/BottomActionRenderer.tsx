@@ -1,4 +1,4 @@
-import { LoaderCircle, Pencil, RotateCcw, SquarePen } from "lucide-react"
+import { LoaderCircle, Pencil, RotateCcw, SquarePen, ZapIcon } from "lucide-react"
 import type { ElementToolIcon, ElementToolResolution } from "../../../runtime/element-tools"
 import type { ElementBottomToolbarItem } from "../../canvas-editor/element-bottom-toolbar/ElementBottomToolbar"
 
@@ -28,13 +28,28 @@ export default function BottomActionRenderer({ tools, t }: BottomActionRendererP
 	return tools.map<ElementBottomToolbarItem>((tool) => {
 		const iconType = tool.loading ? "loader" : tool.presentation.icon
 		const Icon = iconType ? ACTION_ICONS[iconType] : undefined
+		const estimate = tool.data?.videoGenerationEstimate
+		const label = resolveToolLabel(tool, t)
 		return {
 			id: tool.id,
 			group: tool.presentation.group,
 			icon: Icon ? (
 				<Icon size={14} className={tool.loading ? "animate-spin" : undefined} />
 			) : undefined,
-			label: resolveToolLabel(tool, t),
+			label: estimate ? (
+				<span data-video-generation-estimate>
+					<span>{label}</span>
+					<span>{estimate.resolution}</span>
+					{estimate.points != null ? (
+						<span data-video-generation-estimate-points>
+							<ZapIcon size={16} fill="currentColor" aria-hidden />
+							<span>{estimate.points}</span>
+						</span>
+					) : null}
+				</span>
+			) : (
+				label
+			),
 			shortcut: tool.presentation.shortcut,
 			disabled: tool.visibility === "disabled" || Boolean(tool.loading),
 			loading: tool.loading,

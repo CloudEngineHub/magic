@@ -324,6 +324,7 @@ export const ElementToolTypeEnum = {
 	GenerationQuickEdit: "generation.quick-edit",
 	GenerationReEdit: "generation.re-edit",
 	GenerationGenerateAgain: "generation.generate-again",
+	GenerationGenerateFinal: "generation.generate-final",
 
 	VersionPrevious: "version.previous",
 	VersionNext: "version.next",

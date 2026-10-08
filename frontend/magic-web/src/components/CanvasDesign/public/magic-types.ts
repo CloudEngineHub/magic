@@ -177,11 +177,16 @@ export interface VideoModelItem {
 
 /** 视频输入模式 */
 export type VideoInputMode =
-	"standard" | "image_reference" | "omni_reference" | "video_edit" | "keyframe_guided"
+	| "standard"
+	| "image_reference"
+	| "omni_reference"
+	| "video_edit"
+	| "keyframe_guided"
+	| "draft_task"
 
 /** 输入模式下允许提交的素材字段 */
 export type VideoInputModeSupportedField =
-	"reference_images" | "reference_videos" | "reference_audios" | "frames"
+	"reference_images" | "reference_videos" | "reference_audios" | "frames" | "draft_task"
 
 /**
  * 模式级/变体级生成参数限制。
@@ -303,6 +308,8 @@ export interface VideoGenerationSwitchConfig {
 	default: boolean
 	name: string
 	description?: string
+	/** 开关启用时进一步收窄当前模式可选的生成参数。 */
+	constraints?: VideoGenerationConstraints
 }
 /**
  * 视频模型元数据：能力、可选生成参数与约束
@@ -417,6 +424,11 @@ export interface GenerateVideoInputs {
 	mask?: {
 		/** 资源 URI（PATH）；DSL 中存相对路径，发请求时会还原为工作区绝对路径 */
 		uri: string
+	}
+	/** 样片成片输入；优先使用业务 video_id，旧数据可回退工作区 URI。 */
+	draft_task?: {
+		video_id?: string
+		uri?: string
 	}
 	/** 音频资源列表 */
 	audio?: Array<{

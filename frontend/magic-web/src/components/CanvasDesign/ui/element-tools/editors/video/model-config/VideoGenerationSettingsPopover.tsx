@@ -83,6 +83,7 @@ export function VideoGenerationSettingsPopover(props: VideoGenerationSettingsPop
 		selectedGenerateAudio,
 		selectedWebSearch,
 		selectedDraft,
+		canEnableDraft,
 		selectedModelOption,
 		selectedCompressionQuality,
 		currentSelectValue,
@@ -320,6 +321,7 @@ export function VideoGenerationSettingsPopover(props: VideoGenerationSettingsPop
 							<Switch
 								checked={selectedDraft === true}
 								onCheckedChange={handlers.handleDraftChange}
+								disabled={!canEnableDraft}
 								data-testid="video-generate-editor-draft-mode"
 							/>
 						</label>

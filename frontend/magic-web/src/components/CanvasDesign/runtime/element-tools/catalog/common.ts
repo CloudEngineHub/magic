@@ -120,6 +120,7 @@ export function resolveRuntimeTool(
 			state?.available === false ? "hidden" : state?.disabled ? "disabled" : "visible",
 		loading: state?.loading,
 		disabledReason: state?.disabledReason,
+		data: state?.data,
 	})
 }
 

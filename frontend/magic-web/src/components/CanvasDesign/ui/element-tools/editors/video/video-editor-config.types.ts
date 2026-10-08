@@ -196,6 +196,8 @@ export interface VideoEditorConfig {
 	selectedWebSearch: boolean | undefined
 	/** 样片模式开关；模型未声明 draft 能力时为 undefined */
 	selectedDraft: boolean | undefined
+	/** 当前模型与输入模式是否存在合法的 480p 样片档位。 */
+	canEnableDraft: boolean
 	selectedCompressionQuality: string | undefined
 	currentSelectValue: string | undefined
 	ratioOption:

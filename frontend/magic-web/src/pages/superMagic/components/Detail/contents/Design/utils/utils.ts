@@ -521,6 +521,7 @@ function replaceVideoContentPaths(
 	}
 	replaceUri(inputs.video as PathRecord | undefined)
 	replaceUri(inputs.mask as PathRecord | undefined)
+	replaceUri(inputs.draft_task as PathRecord | undefined)
 	return hasReplaced
 }
 

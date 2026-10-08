@@ -403,7 +403,10 @@
 		"referenceImage": "Image",
 		"referenceVideo": "Video",
 		"size": "Size",
-		"title": "Generation History"
+		"title": "Generation History",
+		"videoInputModes": {
+			"draftTask": "Draft to final"
+		}
 	},
 	"rectangle": {
 		"defaultName": "Rectangle"
@@ -651,6 +654,7 @@
 		"defaultName": "Video Generator",
 		"empty": "Please send an instruction to generate a video",
 		"fileMissing": "Video file is missing",
+		"finalResultName": "Final video",
 		"generateFailed": "Video generation failed",
 		"generating": "Generating...",
 		"loadError": "Failed to load video",
@@ -699,11 +703,14 @@
 		"aspectRatio": "Aspect ratio",
 		"bottomToolbar": "Video element bottom toolbar",
 		"clearLinkedFrame": "Clear current slot association",
+		"draft": "Draft mode",
 		"duration": "Duration",
 		"firstFrame": "First frame",
 		"frames": "First & last frame",
 		"generateAgain": "Generate again",
 		"generateAudio": "Audio",
+		"generateFinal": "Generate final",
+		"generateFinalFailed": "Failed to generate the final video. Please try again.",
 		"generationSettings": "Generation settings",
 		"generationSettingsAria": "Video generation parameters",
 		"lastFrame": "Last frame",

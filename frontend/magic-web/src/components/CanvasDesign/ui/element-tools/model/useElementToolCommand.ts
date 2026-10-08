@@ -32,6 +32,11 @@ export function useElementToolCommand(registration: ElementToolCommandRegistrati
 				registration.state?.disabled ?? false,
 				registration.state?.loading ?? false,
 				registration.state?.disabledReason ?? "",
+				registration.state?.data?.version?.current ?? "",
+				registration.state?.data?.version?.total ?? "",
+				registration.state?.data?.version?.isMain ?? "",
+				registration.state?.data?.videoGenerationEstimate?.resolution ?? "",
+				registration.state?.data?.videoGenerationEstimate?.points ?? "",
 			].join("\u0000")
 		: null
 	useLayoutEffect(() => {

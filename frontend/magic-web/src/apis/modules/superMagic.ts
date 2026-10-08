@@ -613,6 +613,27 @@ export interface GenerateVideoRequest {
 	model_id?: string
 	/** 提示词 */
 	prompt?: string
+	/** 视频输入模式；draft_task 为样片成片内部模式。 */
+	input_mode?:
+		| "standard"
+		| "image_reference"
+		| "omni_reference"
+		| "video_edit"
+		| "keyframe_guided"
+		| "draft_task"
+	/** 任务类型；样片成片仍使用 generate。 */
+	task?: "generate" | "extend" | "edit" | "upscale"
+	/** 结构化视频输入。 */
+	inputs?: {
+		frames?: Array<{ role: "start" | "end"; uri: string }>
+		reference_images?: Array<{ uri: string; reference_type?: "asset" | "style" }>
+		reference_videos?: Array<{ uri: string }>
+		reference_audios?: Array<{ uri: string }>
+		video?: { uri: string }
+		mask?: { uri: string }
+		audio?: Array<{ uri: string }>
+		draft_task?: { video_id?: string; uri?: string }
+	}
 	/** 文件目录，一定是本项目存在的目录 */
 	file_dir?: string
 	/** 宽高比 */
