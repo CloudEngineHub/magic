@@ -1,3 +1,4 @@
+import type { AttachmentItem } from "@/pages/superMagic/components/TopicFilesButton/hooks"
 import type { Editor } from "@/infrastructure/editors/tiptap/react"
 import type { ReactNode } from "react"
 import type { MessageEditorStore } from "../stores"
@@ -12,6 +13,8 @@ interface MessageEditorContainerViewProps {
 	containerClassName?: string
 	headerContent?: ReactNode
 	size: MessageEditorSize
+	getWorkspaceFilesList?: () => AttachmentItem[]
+	getCurrentProjectId?: () => string | undefined
 	tiptapEditor: Editor | null
 	domRef: React.RefObject<HTMLDivElement>
 	isDragOver: boolean
@@ -43,6 +46,8 @@ export default function MessageEditorContainerView({
 	headerContent,
 	size,
 	tiptapEditor,
+	getWorkspaceFilesList,
+	getCurrentProjectId,
 	domRef,
 	isDragOver,
 	dragEvents,
@@ -66,6 +71,8 @@ export default function MessageEditorContainerView({
 			headerContent={headerContent}
 			size={size}
 			tiptapEditor={tiptapEditor}
+			getWorkspaceFilesList={getWorkspaceFilesList}
+			getCurrentProjectId={getCurrentProjectId}
 			domRef={domRef}
 			isDragOver={isDragOver}
 			dragEvents={dragEvents}

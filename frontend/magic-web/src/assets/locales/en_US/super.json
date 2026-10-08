@@ -3447,6 +3447,7 @@
 			"unknownProviderTypeWithCode": "Unknown provider type ({{providerTypeId}})"
 		},
 		"at": "Reference",
+		"copyMention": "Copy mention",
 		"deleteUploadedFileConfirm": {
 			"cancel": "Cancel",
 			"confirm": "Delete",
