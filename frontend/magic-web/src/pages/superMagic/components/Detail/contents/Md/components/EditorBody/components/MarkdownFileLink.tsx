@@ -86,7 +86,7 @@ export function MarkdownFileLink({
 				props.className,
 				isFile && "cursor-pointer focus-visible:outline",
 				source &&
-					"inline-flex max-w-full items-baseline gap-1 rounded bg-primary-10 px-0.5 align-baseline text-primary no-underline [font-size:inherit] [font-weight:inherit] [line-height:inherit] hover:bg-primary/15",
+					"inline-flex max-w-full items-baseline gap-1 align-baseline text-[var(--link-text-color)] no-underline [font-size:inherit] [font-weight:inherit] [line-height:inherit]",
 			)}
 			onKeyDown={(event) => {
 				props.onKeyDown?.(event)

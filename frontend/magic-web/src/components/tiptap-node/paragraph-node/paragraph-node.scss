@@ -193,15 +193,16 @@
       color: inherit;
     }
 
-    // 媒体引用使用自己的主题标签；普通链接继续沿用上面的颜色和下划线。
+    // 文档媒体引用沿用普通链接颜色，长名称换行时不产生多行标签底色。
     &:has(> [data-file-reference-preview-ui]) {
-      color: rgb(var(--primary-rgb));
-      background-color: var(--custom-primary-10-dark-primary-20);
       text-decoration: none;
 
       &:hover {
-        background-color: rgb(var(--primary-rgb) / 0.15);
         text-decoration: none;
+
+        > span:not([data-file-reference-preview-ui]) {
+          text-decoration: underline;
+        }
       }
 
       // 继承实际父元素的装饰，既移除链接 span 下划线，也保留显式 u／s 标记。
