@@ -81,6 +81,15 @@ Instruction priority: system/developer instructions and the user's request take 
 - 文本、Blob 或 ArrayBuffer 已成功下载后，后续渲染使用内存内容，不为已经脱离 URL 的内容设置续期计时器。下载、打开新窗口等一次性动作在动作发生时获取当前可用链接，不能提前保存供未来使用的签名 URL。
 - URL 缓存键必须包含访问身份和必要的文件版本信息，不能只用 `file_id`。新增临时链接入口时，代码说明必须写清负责获取链接的模块、过期判断点、错误恢复点、取消路径和是否需要播放期间刷新。
 
+## Recovery after browser suspension
+
+- New or changed server-backed views that consume real-time events must define how their current data is reconciled after page visibility returns, bfcache restoration, or network recovery. A WebSocket `OPEN` state or receipt of an event does not prove that missed changes were recovered.
+- Reuse the module's existing authorized reads, update queue, and merge logic. Add a recovery trigger at the existing data owner; do not introduce an application-wide scheduler, another store, permanent polling, or migrate unrelated working modules for a local recovery requirement.
+- Background reconciliation must retain rendered content until a successful result is ready. Preserve selection, scroll, pagination, open tabs, viewport, local drafts, editing conflicts, and explicitly selected historical versions; do not simulate manual refresh or remount a view to update it.
+- Coalesce repeated triggers, retain changes received during reconciliation, and reject stale results after project, account, organization, or access-scope changes. Abort or unsubscribe when the consumer leaves; one consumer must not cancel a shared read still needed by another.
+- Notify dependent content only after the recovered data has successfully committed and entered that consumer's context. Request completion, including failure, is not a successful reconciliation. For example, commit the project file snapshot before checking an open canvas version.
+- Recovery re-reads state; it must not restart recording, resend queued messages, repeat writes, broaden share permissions, or replay one-time notifications. Preserve existing error handling, resource expiry rules, and normal polling budgets. State any uncovered recovery path instead of claiming global coverage.
+
 ## Workflow for Agents
 1. **Orient**: Read the user request, applicable parent instructions, this file, and task-specific files. Read `README.md` or `CLAUDE.local.md` only when the task depends on their documented workflow or architecture.
 2. **Investigate**: Use `rg`/`pnpm` tooling to locate relevant code; inspect existing patterns before creating new ones.
