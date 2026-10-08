@@ -179,8 +179,7 @@
 	"agentThink": {
 		"interrupted": "Thinking interrupted",
 		"thinkDone": "Done thinking",
-		"thinking": "Thinking...",
-		"title": "Thoughts"
+		"thinking": "Thinking..."
 	},
 	"askUser": {
 		"actions": {

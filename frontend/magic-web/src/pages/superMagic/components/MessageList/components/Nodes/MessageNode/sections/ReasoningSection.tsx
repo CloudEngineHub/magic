@@ -1,4 +1,4 @@
-import { useEffect, type MouseEvent } from "react"
+import { useEffect, useRef, type MouseEvent } from "react"
 import { useTranslation } from "react-i18next"
 import { ScrollArea, ScrollBar } from "@/components/shadcn-ui/scroll-area"
 import { cn } from "@/utils/cn"
@@ -33,6 +33,22 @@ export function ReasoningSection({
 	const reasoningContent =
 		typeof node?.reasoning_content === "string" ? node.reasoning_content : ""
 	const hasReasoningContent = !/^\s*$/.test(reasoningContent)
+	// idle 只暂停动画，不向用户新增连接/恢复状态；保留本卡最近有依据的标题。
+	// 重新挂载时由 Store 的正文、工具及结束事实恢复，不能沿用另一条消息的标题。
+	const confirmedPhase = useRef<{
+		messageId: string
+		phase: "reasoning_content" | "done" | "interrupted"
+	}>({ messageId, phase: "reasoning_content" })
+	if (confirmedPhase.current.messageId !== messageId) {
+		confirmedPhase.current = { messageId, phase: "reasoning_content" }
+	}
+	if (streamState !== "idle") {
+		confirmedPhase.current.phase =
+			streamState === "reasoning_content" || streamState === "interrupted"
+				? streamState
+				: "done"
+	}
+	const reasoningPhase = confirmedPhase.current.phase
 	const [openReasoning, setOpenReasoning] = useMessageViewState("reasoning-expanded", false)
 	const [hasUserControlledReasoning, setHasUserControlledReasoning] = useMessageViewState(
 		"reasoning-user-controlled",
@@ -55,13 +71,11 @@ export function ReasoningSection({
 			open={openReasoning}
 			loading={streamState === "reasoning_content"}
 			title={
-				streamState === "reasoning_content"
+				reasoningPhase === "reasoning_content"
 					? t("agentThink.thinking")
-					: streamState === "interrupted"
+					: reasoningPhase === "interrupted"
 						? t("agentThink.interrupted")
-						: streamState === "idle"
-							? t("agentThink.title")
-							: t("agentThink.thinkDone")
+						: t("agentThink.thinkDone")
 			}
 			onToggle={() => {
 				pubsub.publish(PubSubEvents.Message_Suppress_Auto_Scroll)

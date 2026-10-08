@@ -5732,31 +5732,52 @@ export class SuperMagicStore implements SuperMagicStoreCallbackRegistrar {
 		const finalRenderState = this.getFinalRenderState(topicId, superMessageId)
 		const finalPhase = finalRenderState ? this.getFinalRenderPhase(finalRenderState) : undefined
 		if (finalPhase) return finalPhase
-		if (
-			(!this.getCanonicalFinalBarrier(topicId, superMessageId) &&
-				this.eventTransitions.getLastStreamEndReason(
-					this.getEventEntityKey("stream", topicId, superMessageId),
-				) === "suspended") ||
-			this.getAssistantMessageNode(topicId, superMessageId)?.status === "suspended"
+		const node = this.getAssistantMessageNode(topicId, superMessageId)
+		const streamEndReason = this.eventTransitions.getLastStreamEndReason(
+			this.getEventEntityKey("stream", topicId, superMessageId),
 		)
-			return "interrupted"
-		if (this.getAssistantMessageNode(topicId, superMessageId)?.status === "error") return "idle"
-
 		const identities = [superMessageId, correlationId, appMessageId].filter(
 			(identity): identity is string => Boolean(identity),
 		)
+		let activeStage: StreamState["stage"] | undefined
+		let recoveryFailed = false
 		for (const identity of identities) {
-			if (this.getStreamRecoveryState(topicId, identity)?.status === "failed") return "idle"
-			const streamState = this.getStreamState(topicId, identity)
-			if (streamState) return streamState.stage
+			recoveryFailed ||= this.getStreamRecoveryState(topicId, identity)?.status === "failed"
+			activeStage ??= this.getStreamState(topicId, identity)?.stage
 		}
+		// 正文/工具阶段证明这段思考已结束，不代表工具或整轮任务已完成。
+		// 保留正在展示的阶段，避免旧恢复失败覆盖正文/工具的打字机动画。
+		if (activeStage && activeStage !== "reasoning_content") return activeStage
+		const visibleNode = this.getRenderedMessageNode(superMessageId, topicId)
+		const hasVisibleOutput =
+			visibleNode?.role === "assistant" &&
+			((typeof visibleNode.content === "string" && visibleNode.content.trim().length > 0) ||
+				(Array.isArray(visibleNode.tool_calls) &&
+					visibleNode.tool_calls.some(
+						(toolCall: ToolCall) => toolCall.id && toolCall.function?.name,
+					)))
+		if (hasVisibleOutput) return "done"
+		if (
+			(!this.getCanonicalFinalBarrier(topicId, superMessageId) &&
+				streamEndReason === "suspended") ||
+			node?.status === "suspended" ||
+			node?.status === "error"
+		)
+			return "interrupted"
+		// finish_reason 已结束当前输出；等待正式 Final 不应让思考标题退回未知。
+		if (
+			!activeStage &&
+			(this.getCanonicalFinalBarrier(topicId, superMessageId) ||
+				streamEndReason === "finish_reason" ||
+				streamEndReason === "authoritative_final")
+		)
+			return "done"
+		if (recoveryFailed) return "idle"
+		if (activeStage) return activeStage
 		const index = this.getTopicMessageIndex(topicId).bySuperMessageId.get(superMessageId)
 		if (index !== undefined && this.messages.get(topicId)?.[index]?.is_stream_placeholder)
 			return "idle"
-		if (
-			!this.getCanonicalFinalBarrier(topicId, superMessageId) &&
-			this.getAssistantMessageNode(topicId, superMessageId)?.status === "running"
-		)
+		if (!this.getCanonicalFinalBarrier(topicId, superMessageId) && node?.status === "running")
 			return "idle"
 		return undefined
 	}
