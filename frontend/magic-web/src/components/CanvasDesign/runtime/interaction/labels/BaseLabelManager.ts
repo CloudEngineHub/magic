@@ -198,7 +198,7 @@ export abstract class BaseLabelManager {
 	private labelCandidateIndex: LabelCandidateIndex
 	private eventUnsubscribers: Array<() => void> = []
 	private destroyed = false
-	private mediaLabelsAlwaysVisible = true
+	private mediaLabelsAlwaysVisible = false
 	private labelMeasureNode: Konva.Text | null = null
 	private intrinsicLabelSizes = new WeakMap<object, { text: string; size: LabelSize }>()
 
@@ -427,9 +427,14 @@ export abstract class BaseLabelManager {
 	 * 更新图片和视频标签的显示模式，并立即同步现有及当前视口内的标签。
 	 * 常驻模式需要把媒体加入候选索引，否则缩小时标签尚未创建就无法显示。
 	 */
-	public setMediaLabelsAlwaysVisible(alwaysVisible: boolean): void {
+	public setMediaLabelsAlwaysVisible(alwaysVisible: boolean, syncLabels = true): void {
 		if (this.mediaLabelsAlwaysVisible === alwaysVisible) return
 		this.mediaLabelsAlwaysVisible = alwaysVisible
+		if (syncLabels) this.syncMediaLabelsVisibility()
+	}
+
+	/** Canvas 先统一标题与分辨率的模式，再沿用现有同步和清理流程。 */
+	public syncMediaLabelsVisibility(): void {
 		this.visibleLabelQueryCache = null
 		this.syncVisibleLabels("media-label-visibility")
 	}
@@ -753,6 +758,18 @@ export abstract class BaseLabelManager {
 		const element = this.canvas.elementManager.getElementInstance(elementId)
 		if (!element) {
 			return false
+		}
+
+		// 关闭常驻后先移除非交互标签，避免移除前仍为整批媒体度量文本、布局和计算遮挡。
+		// 悬浮、选中与重命名标签继续由原有保留规则处理。
+		if (
+			!this.shouldRetainLabel(
+				elementId,
+				element,
+				this.calculateBaseVisibility(elementId, element),
+			)
+		) {
+			return this.updateLabelVisibility(elementId, skipBatchDraw)
 		}
 
 		// 更新标签文本（因为 transform 时文本内容可能变化，如尺寸标签）

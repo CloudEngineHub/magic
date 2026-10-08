@@ -229,7 +229,7 @@ export class Canvas {
 	public videoResourceManager: VideoResourceManager
 	public videoCompositionManager: VideoCompositionManager
 	/** 当前图片和视频标签是否常驻显示。 */
-	private mediaLabelsAlwaysVisible = true
+	private mediaLabelsAlwaysVisible = false
 	public videoPlaybackManager: VideoPlaybackManager
 	public audioResourceManager: AudioResourceManager
 	public audioPlaybackManager: AudioPlaybackManager
@@ -1653,8 +1653,11 @@ export class Canvas {
 	public setMediaLabelsAlwaysVisible(alwaysVisible: boolean): void {
 		if (this.mediaLabelsAlwaysVisible === alwaysVisible) return
 		this.mediaLabelsAlwaysVisible = alwaysVisible
-		this.nameLabelManager.setMediaLabelsAlwaysVisible(alwaysVisible)
-		this.sizeLabelManager.setMediaLabelsAlwaysVisible(alwaysVisible)
+		// 两种标签会互相通知；先统一模式，关闭时不再按另一管理器的旧常驻状态布局。
+		this.nameLabelManager.setMediaLabelsAlwaysVisible(alwaysVisible, false)
+		this.sizeLabelManager.setMediaLabelsAlwaysVisible(alwaysVisible, false)
+		this.nameLabelManager.syncMediaLabelsVisibility()
+		this.sizeLabelManager.syncMediaLabelsVisibility()
 	}
 
 	public isMediaLabelsAlwaysVisible(): boolean {
