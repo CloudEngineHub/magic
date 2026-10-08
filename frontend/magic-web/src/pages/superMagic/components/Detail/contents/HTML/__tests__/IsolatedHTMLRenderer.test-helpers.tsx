@@ -4,12 +4,14 @@ import { afterEach, beforeEach, vi, type MockInstance } from "vitest"
 import type { TopicStore } from "@/pages/superMagic/stores/core/topic"
 import { HostConversationProvider } from "@/pages/superMagic/contexts/HostConversationContext"
 import type { UseIframeAgentOptions } from "../iframe-api/hooks/useIframeAgent"
+import type { useHTMLEditorV2 } from "../hooks/useHTMLEditorV2"
 
 const hookState = vi.hoisted(() => ({
 	editorContentInjectedValues: [] as boolean[],
 	isManualZoom: false,
 	shouldApplyScaling: false,
 	realAPIHooks: false,
+	editorOptions: null as Parameters<typeof useHTMLEditorV2>[0] | null,
 }))
 
 const envMock = vi.hoisted(() => vi.fn(() => ""))
@@ -190,8 +192,9 @@ vi.mock("../iframe-bridge/contexts/StylePanelContext", () => ({
 }))
 
 vi.mock("../hooks/useHTMLEditorV2", () => ({
-	useHTMLEditorV2: vi.fn(({ contentInjected }: { contentInjected: boolean }) => {
-		hookState.editorContentInjectedValues.push(contentInjected)
+	useHTMLEditorV2: vi.fn((options: Parameters<typeof useHTMLEditorV2>[0]) => {
+		hookState.editorOptions = options
+		hookState.editorContentInjectedValues.push(options.contentInjected)
 	}),
 }))
 
@@ -483,6 +486,7 @@ export function useRendererTestSetup() {
 		userState.user.userInfo = null
 		agentActionMocks.authorizeHtmlPermissions.mockResolvedValue(true)
 		hookState.editorContentInjectedValues = []
+		hookState.editorOptions = null
 		hookState.isManualZoom = false
 		hookState.shouldApplyScaling = false
 		hookState.realAPIHooks = false
