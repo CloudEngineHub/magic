@@ -1,3 +1,4 @@
+import { restoreWechatChatContent } from "./wechat-chat-history/transform"
 import type { Editor, JSONContent } from "@/infrastructure/editors/tiptap/core"
 import type { TiptapMentionAttributes } from "@/components/business/MentionPanel/tiptap-plugin/types"
 import { MentionItemType } from "@/components/business/MentionPanel/types"
@@ -456,7 +457,11 @@ export function pasteMarkdownFileLinks(
 			runActiveEditor(
 				editor,
 				(editor) => {
-					if (!editor.commands.insertContent(transformInspectorContent(paste.content)))
+					if (
+						!editor.commands.insertContent(
+							restoreWechatChatContent(transformInspectorContent(paste.content)),
+						)
+					)
 						return false
 					options.onMentionsInsert?.(paste.mentions)
 					return true
@@ -512,7 +517,9 @@ export function pasteMarkdownFileLinks(
 			)
 			if (parts) {
 				resolvedPaste = buildPasteContent(parts)
-				resolvedPaste.content = transformInspectorContent(resolvedPaste.content)
+				resolvedPaste.content = restoreWechatChatContent(
+					transformInspectorContent(resolvedPaste.content),
+				)
 			}
 		} catch (error) {
 			console.warn("Referenced project Markdown paste could not be resolved", error)

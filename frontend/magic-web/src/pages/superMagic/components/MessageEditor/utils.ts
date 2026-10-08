@@ -4,7 +4,12 @@ import { JSONContent, generateText } from "@/infrastructure/editors/tiptap/core"
 import { Document } from "@/infrastructure/editors/tiptap/extension-document"
 import { Paragraph } from "@/infrastructure/editors/tiptap/extension-paragraph"
 import { Text } from "@/infrastructure/editors/tiptap/extension-text"
-import { HardBlock, SuperPlaceholderExtension, InspectorDetailExtension } from "./extensions"
+import {
+	HardBlock,
+	SuperPlaceholderExtension,
+	InspectorDetailExtension,
+	WechatChatHistoryExtension,
+} from "./extensions"
 import MentionExtension from "@/components/business/MentionPanel/tiptap-plugin"
 import { TFunction } from "i18next"
 
@@ -69,6 +74,7 @@ export const generateTextFromJSONContent = (value: JSONContent | undefined) => {
 		MentionExtension,
 		SuperPlaceholderExtension,
 		InspectorDetailExtension,
+		WechatChatHistoryExtension,
 	]
 
 	return generateText(value, extensions)

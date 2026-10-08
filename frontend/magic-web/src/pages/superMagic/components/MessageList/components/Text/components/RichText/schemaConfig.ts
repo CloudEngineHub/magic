@@ -10,6 +10,7 @@ import { getDisplayText } from "@/pages/superMagic/components/MessageEditor/exte
 import { MentionItemType } from "@/components/business/MentionPanel/types"
 import { INSPECTOR_DETAIL_TYPE } from "@/pages/superMagic/components/MessageEditor/extensions/inspector-detail/const"
 import type { MarkdownSelectionSource } from "@/pages/superMagic/components/MessageEditor/extensions/inspector-detail/types"
+import { WECHAT_CHAT_HISTORY } from "@/pages/superMagic/components/MessageEditor/extensions/wechat-chat-history/types"
 
 function safeParseJsonAttr(value: string | null) {
 	if (!value) return null
@@ -55,6 +56,22 @@ interface InspectorDetailSchemaAttrs extends Record<string, unknown> {
 
 export default {
 	nodes: {
+		[WECHAT_CHAT_HISTORY]: {
+			group: "block",
+			content: "paragraph+",
+			attrs: { id: { default: null } },
+			parseDOM: [
+				{
+					tag: `section[data-type="${WECHAT_CHAT_HISTORY}"]`,
+					getAttrs: (dom: HTMLElement) => ({ id: dom.getAttribute("data-chat-id") }),
+				},
+			],
+			toDOM: (node: SchemaNodeWithAttrs<{ id: string }>) => [
+				"section",
+				{ "data-type": WECHAT_CHAT_HISTORY, "data-chat-id": node.attrs.id },
+				0,
+			],
+		},
 		doc: {
 			content: "block+",
 		},

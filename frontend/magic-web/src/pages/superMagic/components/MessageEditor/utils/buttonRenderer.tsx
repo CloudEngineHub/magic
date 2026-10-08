@@ -15,6 +15,8 @@ import SuperMagicVoiceInput from "../components/VoiceInput"
 import InterruptButton from "../components/InterruptButton"
 import UploadHoverPanelButton from "../components/UploadHoverPanelButton"
 import TokenUsageButton from "../components/TokenUsageButton"
+import CommandMenuButton from "../components/WechatChatHistory/CommandMenuButton"
+import type { WechatChatImportController } from "../hooks/useWechatChatImport"
 
 // Types
 import { ToolbarButton, MessageEditorSize } from "../types"
@@ -65,6 +67,10 @@ export interface ButtonRendererContext {
 	isEditingQueueItem: boolean
 	isUploadingFiles: boolean
 	voiceInputEnabled: boolean
+	commandMenu?: Pick<
+		WechatChatImportController,
+		"available" | "activeId" | "menu" | "openCommandMenu" | "dismissMenu"
+	>
 
 	// Data
 	selectedTopic?: Topic | null
@@ -97,8 +103,8 @@ type ButtonRenderer = (context: ButtonRendererContext) => React.ReactNode
 function getMessageTokenUsage(message: Record<string, unknown>): TokenUsage | undefined {
 	const node =
 		(superMagicStore.getMessageNode(message.super_message_id as string) as
-			| Record<string, unknown>
-			| undefined) || (message.debug as Record<string, unknown> | undefined)
+			Record<string, unknown> | undefined) ||
+		(message.debug as Record<string, unknown> | undefined)
 	const tokenUsage = node?.token_usage as TokenUsage | undefined
 
 	return tokenUsage && typeof tokenUsage.total_tokens === "number" ? tokenUsage : undefined
@@ -131,6 +137,15 @@ export const BUTTON_RENDERERS: Record<ToolbarButton, ButtonRenderer> = {
 					"dark:bg-sidebar dark:text-foreground dark:hover:bg-muted dark:hover:text-foreground",
 					getButtonPaddingClass(ctx.size),
 				)}
+			/>
+		) : null,
+	[ToolbarButton.SLASH_COMMAND]: (ctx) =>
+		ctx.commandMenu?.available && ctx.tiptapEditor?.isEditable && !ctx.commandMenu.activeId ? (
+			<CommandMenuButton
+				open={ctx.commandMenu.menu !== null}
+				iconSize={ctx.topBarIconSize}
+				onOpen={ctx.commandMenu.openCommandMenu}
+				onDismiss={ctx.commandMenu.dismissMenu}
 			/>
 		) : null,
 	[ToolbarButton.MODEL_SWITCH]: (ctx) =>

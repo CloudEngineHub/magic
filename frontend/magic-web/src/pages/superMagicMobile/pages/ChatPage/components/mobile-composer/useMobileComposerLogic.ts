@@ -22,6 +22,12 @@ import { useOptionalSceneStateStore } from "@/pages/superMagic/components/MainIn
 import useChooseUploadDirModal from "@/pages/superMagic/components/MessageEditor/hooks/useChooseUploadDirModal"
 import useMessageEditorPubSub from "@/pages/superMagic/components/MessageEditor/hooks/useMessageEditorPubSub"
 import { useMessageEditor } from "@/pages/superMagic/components/MessageEditor/hooks/useMessageEditor"
+import { useMixedClipboardPaste } from "@/pages/superMagic/components/MessageEditor/hooks/useMixedClipboardPaste"
+import type { WechatChatImportController } from "@/pages/superMagic/components/MessageEditor/hooks/useWechatChatImport"
+import { isWechatChatText } from "@/pages/superMagic/components/MessageEditor/extensions/wechat-chat-history/parser"
+import { hasMagicClipboardData } from "@/pages/superMagic/components/MessageEditor/utils/pastedTextAttachment"
+import { CanvasDesignClipboard } from "@/components/CanvasDesign/public/clipboard"
+import { isInternationalEnv, isPrivateDeployment } from "@/utils/env"
 import useMessageSendHandler from "@/pages/superMagic/components/MessageEditor/hooks/useMessageSendHandler"
 import useResolvedEditorStore from "@/pages/superMagic/components/MessageEditor/hooks/useResolvedEditorStore"
 import useSharedDataFromApp from "@/pages/superMagic/components/MessageEditor/hooks/useSharedDataFromApp"
@@ -112,6 +118,7 @@ export interface MobileComposerLogic {
 	handleCompositionStart: () => void
 	handleCompositionEnd: () => void
 	handleBlurComposer: () => void
+	wechatChat: WechatChatImportController
 }
 
 function appendPresetSuffixContent(
@@ -146,6 +153,7 @@ export default function useMobileComposerLogic({
 	const { config: providerConfig } = useMessageEditorProvider()
 	const [isSending, setIsSending] = useState(false)
 	const [isPreparingSend, setIsPreparingSend] = useState(false)
+	const [isPreparingPaste, setIsPreparingPaste] = useState(false)
 	const [isComposerFocused, setIsComposerFocused] = useState(false)
 	const mentionPanelStore =
 		(editorContext.mentionPanelStore as typeof GlobalMentionPanelStore | undefined) ??
@@ -319,7 +327,11 @@ export default function useMobileComposerLogic({
 		})
 	})
 
-	const { addFilesWithDir, UploadModal } = useChooseUploadDirModal({
+	const {
+		addFilesWithDir,
+		UploadModal,
+		onModalClose: cancelPendingUpload,
+	} = useChooseUploadDirModal({
 		addFiles: addFilesRaw,
 		selectedProject,
 		attachments: editorContext.attachments,
@@ -370,6 +382,7 @@ export default function useMobileComposerLogic({
 		if (!sendEnabled) return false
 		if (hasLoadingMarker) return false
 		if (isPreparingSend) return false
+		if (isPreparingPaste) return false
 		if (editorContext.queueContext?.editingQueueItem) return isAllFilesUploaded && !isSending
 
 		return !store.editorStore.isEmpty && isAllFilesUploaded && !isSending
@@ -378,6 +391,7 @@ export default function useMobileComposerLogic({
 		hasLoadingMarker,
 		isAllFilesUploaded,
 		isPreparingSend,
+		isPreparingPaste,
 		isSending,
 		sendEnabled,
 		store.editorStore.isEmpty,
@@ -543,6 +557,7 @@ export default function useMobileComposerLogic({
 	})
 
 	const handleSend = useMessageSendHandler({
+		isSendSuspended: () => wechatChat.isOpen(),
 		voiceInputRef,
 		canSendMessage,
 		hasLoadingMarker,
@@ -564,7 +579,8 @@ export default function useMobileComposerLogic({
 		() => selectedTopic?.project_id ?? selectedProject?.id ?? draftKey?.projectId,
 	)
 
-	const { tiptapEditor, domRef } = useMessageEditor({
+	const { tiptapEditor, domRef, wechatChat } = useMessageEditor({
+		wechatChatEnabled: uploadEnabled && shouldEnableMention,
 		value: store.editorStore.value,
 		onSend: handleSend,
 		placeholder,
@@ -838,18 +854,44 @@ export default function useMobileComposerLogic({
 		[addFiles],
 	)
 
+	const getPasteSessionId = useMemoizedFn(
+		() =>
+			`${selectedTopic?.id ?? ""}:${selectedProject?.id ?? draftKey?.projectId ?? ""}:${draftKey?.workspaceId ?? ""}`,
+	)
+	const pasteFilesWithText = useMixedClipboardPaste({
+		getEditor,
+		getSessionId: getPasteSessionId,
+		getFiles: () => store.fileUploadStore.files,
+		addFiles: addFilesWithDir,
+		cancelPendingUpload,
+		isProjectContext: Boolean(selectedProject?.id),
+		onPreparingChange: setIsPreparingPaste,
+		wechatChatEnabled:
+			uploadEnabled && shouldEnableMention && !isInternationalEnv() && !isPrivateDeployment(),
+		onWechatImported: wechatChat.onImported,
+	})
 	const handlePaste = useCallback(
 		(event: React.ClipboardEvent) => {
 			const clipboardData = event.clipboardData
 			if (!clipboardData) return
 
-			const inputFiles = Array.from(clipboardData.files)
+			const inputFiles = CanvasDesignClipboard.readAllEventFilesSnapshot(event.nativeEvent)
 			if (uploadEnabled && inputFiles.length > 0) {
 				event.preventDefault()
-				void addFiles(inputFiles)
+				event.stopPropagation()
+				if (shouldEnableMention) pasteFilesWithText(clipboardData, inputFiles)
+				else void addFiles(inputFiles)
+			} else if (
+				wechatChat.available &&
+				!hasMagicClipboardData(clipboardData) &&
+				isWechatChatText(clipboardData.getData("text/plain"))
+			) {
+				event.preventDefault()
+				event.stopPropagation()
+				pasteFilesWithText(clipboardData, [])
 			}
 		},
-		[addFiles, uploadEnabled],
+		[addFiles, uploadEnabled, shouldEnableMention, pasteFilesWithText, wechatChat.available],
 	)
 
 	const handleSelectMentionItem = useMemoizedFn(
@@ -957,6 +999,7 @@ export default function useMobileComposerLogic({
 
 	return {
 		parentStore,
+		wechatChat,
 		store,
 		domRef,
 		tiptapEditor,
