@@ -709,9 +709,9 @@ function BrandMark({ brand, href, isCollapsed = false }: BrandMarkProps) {
 			to={href}
 		>
 			{brand.isLoading ? (
-				<BrandLogoPlaceholder />
+				<BrandLogoPlaceholder isCollapsed={isCollapsed} />
 			) : (
-				<BrandLogo logoUrl={brand.logoUrl} name={brand.name} />
+				<BrandLogo isCollapsed={isCollapsed} logoUrl={brand.logoUrl} name={brand.name} />
 			)}
 			{!isCollapsed ? (
 				<div className="grid min-w-0 flex-1 text-left text-sm leading-tight">
@@ -719,7 +719,9 @@ function BrandMark({ brand, href, isCollapsed = false }: BrandMarkProps) {
 						<BrandTextSkeleton />
 					) : (
 						<>
-							<span className="truncate font-semibold">{brand.name}</span>
+							<span className="truncate font-semibold text-sidebar-foreground">
+								{brand.name}
+							</span>
 							<span className="truncate text-xs text-muted-foreground">
 								{t("app.subtitle")}
 							</span>
@@ -738,13 +740,16 @@ type PlatformBrand = {
 	isLoading: boolean
 }
 
-function BrandLogoPlaceholder() {
+function BrandLogoPlaceholder({ isCollapsed }: { isCollapsed: boolean }) {
 	return (
 		<span
 			aria-hidden="true"
-			className="flex size-8 shrink-0 items-center justify-center rounded-lg"
+			className={cn(
+				"flex shrink-0 items-center justify-center rounded-lg",
+				isCollapsed ? "size-8" : "size-10",
+			)}
 		>
-			<Skeleton className="size-8 rounded-lg" />
+			<Skeleton className="size-full rounded-lg" />
 		</span>
 	)
 }
@@ -758,7 +763,15 @@ function BrandTextSkeleton() {
 	)
 }
 
-function BrandLogo({ logoUrl, name }: { logoUrl: string; name: string }) {
+function BrandLogo({
+	isCollapsed,
+	logoUrl,
+	name,
+}: {
+	isCollapsed: boolean
+	logoUrl: string
+	name: string
+}) {
 	const [hasImageError, setHasImageError] = useState(false)
 
 	useEffect(() => {
@@ -767,10 +780,18 @@ function BrandLogo({ logoUrl, name }: { logoUrl: string; name: string }) {
 
 	if (isSafeImageUrl(logoUrl) && !hasImageError) {
 		return (
-			<span className="flex aspect-square size-8 shrink-0 items-center justify-center overflow-hidden rounded-lg border border-sidebar-border bg-background shadow-sm">
+			<span
+				className={cn(
+					"flex aspect-square shrink-0 items-center justify-center overflow-hidden rounded-lg border border-sidebar-border bg-background shadow-sm",
+					isCollapsed ? "size-8" : "size-10",
+				)}
+			>
 				<img
 					alt=""
-					className="max-h-7 max-w-7 object-contain"
+					className={cn(
+						"object-contain",
+						isCollapsed ? "max-h-7 max-w-7" : "max-h-9 max-w-9",
+					)}
 					draggable={false}
 					onError={() => setHasImageError(true)}
 					src={logoUrl}
@@ -782,7 +803,10 @@ function BrandLogo({ logoUrl, name }: { logoUrl: string; name: string }) {
 	return (
 		<span
 			aria-hidden="true"
-			className="relative flex aspect-square size-8 shrink-0 items-center justify-center rounded-lg bg-gradient-to-br from-violet-500 to-fuchsia-500 text-sm font-semibold text-white shadow-md shadow-violet-500/20 transition-transform group-hover/team:scale-105"
+			className={cn(
+				"relative flex aspect-square shrink-0 items-center justify-center rounded-lg bg-gradient-to-br from-violet-500 to-fuchsia-500 text-sm font-semibold text-white shadow-md shadow-violet-500/20 transition-transform group-hover/team:scale-105",
+				isCollapsed ? "size-8" : "size-10",
+			)}
 		>
 			<Sparkles className="absolute size-4 opacity-20" />
 			<span className="relative">{getBrandInitial(name)}</span>

@@ -13,7 +13,7 @@ export function DashboardLayoutSkeleton() {
         <div className="flex min-h-0 w-full flex-col overflow-hidden">
           <div className="flex flex-col gap-2 p-2">
             <div className="flex items-center gap-2">
-              <Skeleton className="size-8 rounded-lg" />
+              <Skeleton className="size-10 rounded-lg" />
               <div className="flex min-w-0 flex-1 flex-col gap-1.5">
                 <Skeleton className="h-4 w-24" />
                 <Skeleton className="h-3 w-14" />
