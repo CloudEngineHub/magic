@@ -106,7 +106,7 @@ const configureRoutes = (app) => {
 			res.setHeader("Pragma", "no-cache")
 			res.setHeader("Expires", "0")
 			res.setHeader("Content-Type", "text/html; charset=utf-8")
-			res.send(getHtmlTemplate("login-popup-callback"))
+			res.send(getHtmlTemplate("login-popup-callback", req.get("user-agent")))
 		})
 	}
 

@@ -12,18 +12,101 @@ const hasLoginPopupTemplate = fs.existsSync(
 const templateCache = new Map()
 
 /**
+ * Detect whether the client browser lacks complete native Import Map support
+ * and requires es-module-shims fallback in shim mode.
+ * - Chromium (Chrome/Edge/Electron): < 105 has relative dynamic import issues with import maps
+ * - Safari (WebKit): < 16.4 lacks native import map support
+ * - Firefox (Gecko): < 108 lacks native import map support
+ *
+ * @param {string} [userAgent]
+ * @returns {boolean}
+ */
+function shouldShimImportMap(userAgent) {
+	if (!userAgent || typeof userAgent !== "string") return false
+
+	// Chrome / Chromium / Edge / Electron / Opera
+	const chromeMatch = userAgent.match(/(?:Chrome|CriOS|HeadlessChrome)\/(\d+)/i)
+	if (chromeMatch) {
+		const version = parseInt(chromeMatch[1], 10)
+		return version < 105
+	}
+
+	// Safari / Mobile Safari (Check Version/XX.X before Safari)
+	const safariMatch = userAgent.match(/Version\/(\d+(?:\.\d+)?).*Safari/i)
+	if (safariMatch) {
+		const version = parseFloat(safariMatch[1])
+		return version < 16.4
+	}
+
+	// Firefox
+	const firefoxMatch = userAgent.match(/Firefox\/(\d+)/i)
+	if (firefoxMatch) {
+		const version = parseInt(firefoxMatch[1], 10)
+		return version < 108
+	}
+
+	return false
+}
+
+/**
+ * Transform HTML string to enable es-module-shims in Shim Mode for legacy browsers:
+ * 1. Inject es-module-shims script tag before the import map
+ * 2. Convert <script type="importmap"> to <script type="importmap-shim">
+ * 3. Convert <script type="module" ...> to <script type="module-shim" ...>
+ * 4. Convert <link rel="modulepreload" ...> to <link rel="modulepreload-shim" ...>
+ *
+ * @param {string} html
+ * @returns {string}
+ */
+function transformHtmlForShimMode(html) {
+	if (typeof html !== "string") return html
+
+	const esModuleShimsTag = `<script async src="https://cdn.jsdelivr.net/npm/es-module-shims@2.8.4/dist/es-module-shims.min.js" crossorigin="anonymous"></script>\n`
+
+	let transformed = html
+
+	// Inject es-module-shims script before importmap-shim, and replace type="importmap" with type="importmap-shim"
+	if (transformed.includes('<script type="importmap">')) {
+		transformed = transformed.replace(
+			'<script type="importmap">',
+			`${esModuleShimsTag}<script type="importmap-shim">`,
+		)
+	} else if (transformed.includes("<script type='importmap'>")) {
+		transformed = transformed.replace(
+			"<script type='importmap'>",
+			`${esModuleShimsTag}<script type='importmap-shim'>`,
+		)
+	} else {
+		transformed = transformed.replace("</head>", `${esModuleShimsTag}</head>`)
+	}
+
+	// Convert type="module" to type="module-shim"
+	transformed = transformed.replace(
+		/<script\b([^>]*)\btype=["']module["']/gi,
+		'<script$1type="module-shim"',
+	)
+
+	// Convert rel="modulepreload" to rel="modulepreload-shim"
+	transformed = transformed.replace(
+		/<link\b([^>]*)\brel=["']modulepreload["']/gi,
+		'<link$1rel="modulepreload-shim"',
+	)
+
+	return transformed
+}
+
+/**
  * @description 构建 CDN script 标签字符串，初始化 HTML 模板(在 Pod 启动时立即加载（配置路由之前）)
  * 在html模版生成后根据环境变量注入 CDN资源和用户行为分析代码（每次环境变量配置会重启pod所以能够持久化在内存中）
  * @param {object} options
  * @returns {string}
  */
 function buildCdnScriptTags() {
-	const esModuleShimsTag = `<script async src="https://cdn.jsdelivr.net/npm/es-module-shims@2.8.4/dist/es-module-shims.min.js" crossorigin="anonymous"></script>\n`
 	let tags = CDNUrl
-		? `${esModuleShimsTag}\t<script defer src="${CDNUrl}/react/18.3.1/react.production.min.js" crossorigin="anonymous"></script>
+		? `<script defer src="${CDNUrl}/react/18.3.1/react.production.min.js" crossorigin="anonymous"></script>
 	<script defer src="${CDNUrl}/react-dom/18.3.1/react-dom.production.min.js" crossorigin="anonymous"></script>
 	<script defer src="${CDNUrl}/lodash/4.17.21/lodash.min.js" crossorigin="anonymous"></script>`
-		: `${esModuleShimsTag}<script defer src="https://cdn.jsdelivr.net/npm/react@18.3.1/umd/react.production.min.js" crossorigin="anonymous"></script>
+		: `<script defer src="https://cdn.jsdelivr.net/npm/react@18.3.1/umd/react.production.min.js" crossorigin="anonymous"></script>
 <script defer src="https://cdn.jsdelivr.net/npm/react-dom@18.3.1/umd/react-dom.production.min.js" crossorigin="anonymous"></script>
 <script defer src="https://cdn.jsdelivr.net/npm/lodash@4.17.21/lodash.min.js" crossorigin="anonymous"></script>
 	`
@@ -80,13 +163,17 @@ async function initHtmlTemplate(htmlPath, { key, critical = true } = {}) {
 }
 
 /**
- * @description 同步获取已初始化的 HTML 模板
- * @param {string} key - 与 initHtmlTemplate 中 options.key 对应
+ * @description 同步获取已初始化的 HTML 模板，并根据客户端 User-Agent 进行按需兼容转换
+ * @param {string} [key="index"] - 与 initHtmlTemplate 中 options.key 对应
+ * @param {string} [userAgent=""] - 请求的 User-Agent 字符串
  * @returns {string}
  */
-function getHtmlTemplate(key = "index") {
+function getHtmlTemplate(key = "index", userAgent = "") {
 	const html = templateCache.get(key)
 	if (!html) throw new Error(`HTML template "${key}" not initialized`)
+	if (shouldShimImportMap(userAgent)) {
+		return transformHtmlForShimMode(html)
+	}
 	return html
 }
 
@@ -106,4 +193,6 @@ if (hasLoginPopupTemplate) {
 module.exports = {
 	initHtmlTemplate,
 	getHtmlTemplate,
+	shouldShimImportMap,
+	transformHtmlForShimMode,
 }
