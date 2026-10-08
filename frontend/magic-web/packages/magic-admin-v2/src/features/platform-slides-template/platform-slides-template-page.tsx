@@ -185,7 +185,6 @@ export default function PlatformSlidesTemplatePage() {
 					</>
 				}
 				description={t("slidesTemplate.description")}
-				showSeparator={false}
 				title={t("slidesTemplate.title")}
 			>
 			<Tabs onValueChange={(value) => setTab(value as TabValue)} value={tab}>

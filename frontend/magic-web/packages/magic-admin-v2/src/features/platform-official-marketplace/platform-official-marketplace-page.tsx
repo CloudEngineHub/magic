@@ -50,7 +50,6 @@ export default function PlatformOfficialMarketplacePage() {
         </Button>
       }
       description={t("officialMarketplace.description")}
-      showSeparator={false}
       title={t("officialMarketplace.title")}
     >
       <Tabs
