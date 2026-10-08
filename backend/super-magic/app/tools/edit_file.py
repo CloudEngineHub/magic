@@ -20,11 +20,13 @@ from pydantic import Field
 
 from agentlang.context.tool_context import ToolContext
 from app.core.entity.message.server_message import DisplayType, ToolDetail
+from app.core.context.agent_context import AgentContext
 from app.core.horizon.agent_horizon import VALIDATION_ERROR_NOT_READ
 from agentlang.tools.tool_result import ToolResult
 from agentlang.logger import get_logger
 from app.tools.abstract_file_tool import AbstractFileTool
 from app.tools.core import BaseToolParams, tool
+from app.tools.file_edit_store import FileEditStore
 from app.tools.workspace_tool import WorkspaceTool
 from agentlang.utils.syntax_checker import SyntaxChecker
 from app.utils.line_number_handler import LineNumberHandler
@@ -258,7 +260,7 @@ When editing the same file multiple times:
                     error_msg += "SOLUTIONS:\n"
                     error_msg += "1. Read current file content around the target snippet to check if it has been modified, then retry with latest text\n"
                     error_msg += "2. Check character-by-character alignment (whitespace, indentation, punctuation, newlines)\n"
-                    error_msg += "3. If multiple attempts fail and edit_file_range is available, try it for range-anchored replacement\n"
+                    error_msg += "3. For a large replacement, call find_file_range first, then edit_file_range with its range_id\n"
                     error_msg += "4. As a last resort, use shell commands or a Python script for precise edits"
 
                 # Check for excessive escaping and add warning at the end
@@ -274,7 +276,22 @@ When editing the same file multiple times:
                         "Remove the extra escape characters from your strings."
                     )
 
-                return ToolResult.error(error_msg)
+                replacement_id = await self._save_failed_replacement(
+                    tool_context,
+                    file_path=file_path,
+                    value=params.new_string,
+                )
+                if replacement_id:
+                    error_msg += (
+                        "\n\nGenerated replacement text was saved as replacement_id="
+                        f"{replacement_id}. After calling find_file_range again, pass that replacement_id "
+                        "to edit_file_range instead of sending the long text again."
+                    )
+
+                return ToolResult.error(
+                    error_msg,
+                    data={"replacement_id": replacement_id} if replacement_id else {},
+                )
 
             # Handle count mismatch
             if occurrences != params.expected_replacements:
@@ -292,7 +309,22 @@ When editing the same file multiple times:
                 if locations:
                     error_msg += f"Match locations:\n{locations}"
 
-                return ToolResult.error(error_msg)
+                replacement_id = await self._save_failed_replacement(
+                    tool_context,
+                    file_path=file_path,
+                    value=params.new_string,
+                )
+                if replacement_id:
+                    error_msg += (
+                        "\n\nGenerated replacement text was saved as replacement_id="
+                        f"{replacement_id}. After calling find_file_range again, pass that replacement_id "
+                        "to edit_file_range instead of sending the long text again."
+                    )
+
+                return ToolResult.error(
+                    error_msg,
+                    data={"replacement_id": replacement_id} if replacement_id else {},
+                )
 
             # Perform replacement
             new_content = original_content.replace(params.old_string, params.new_string, params.expected_replacements)
@@ -303,7 +335,21 @@ When editing the same file multiple times:
             )
             if not is_valid:
                 tool_context.set_metadata("error_type", "edit_file.error_file_modified")
-                return ToolResult.error(error_message)
+                replacement_id = await self._save_failed_replacement(
+                    tool_context,
+                    file_path=file_path,
+                    value=params.new_string,
+                )
+                if replacement_id:
+                    error_message += (
+                        "\n\nGenerated replacement text was saved as replacement_id="
+                        f"{replacement_id}. After calling find_file_range again, pass that replacement_id "
+                        "to edit_file_range instead of sending the long text again."
+                    )
+                return ToolResult.error(
+                    error_message,
+                    data={"replacement_id": replacement_id} if replacement_id else {},
+                )
 
             # Write new content with file versioning (triggers events and updates timestamp)
             async with self._file_versioning_context(tool_context, file_path):
@@ -387,7 +433,7 @@ When editing the same file multiple times:
                 error="The edit_file tool encountered an unexpected error. "
                       "First re-read current file content around the target snippet to check if it has been modified, then retry with latest text. "
                       "Then check exact character alignment (whitespace/punctuation/newlines). "
-                      "If multiple attempts fail and edit_file_range is available, try it. "
+                      "For a large replacement, call find_file_range and then edit_file_range. "
                       "As a last resort, use shell commands (e.g., sed/awk; avoid piping sed to cat -A for multi-byte characters) "
                       "or write a Python script."
             )
@@ -410,6 +456,24 @@ When editing the same file multiple times:
 
         await async_write_text(file_path, content)
         return content
+
+    async def _save_failed_replacement(
+        self,
+        tool_context: ToolContext,
+        *,
+        file_path: Path,
+        value: str,
+    ) -> str | None:
+        try:
+            context = tool_context.get_extension_typed("agent_context", AgentContext)
+            return await FileEditStore.save_replacement(
+                context,
+                file_path=file_path,
+                value=value,
+            )
+        except Exception as error:
+            logger.warning("Could not save failed edit replacement: %s", error)
+            return None
 
     def _find_similar_strings(self, content: str, search_string: str, max_suggestions: int = 5) -> str:
         """Find similar strings in content for suggestions"""

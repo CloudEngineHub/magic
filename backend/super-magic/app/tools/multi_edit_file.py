@@ -109,10 +109,26 @@ edit locations. If the version changed, every applied edit must request and matc
 replacement in its sequential step. Otherwise follow the error's reading guidance. Read surrounding
 content when needed for your decision; skipped no-ops do not count as replacements.
 
+This call is atomic for one file: all edits are validated before any file write. If one edit fails,
+the whole call fails and none of its edits are applied. Separate tool calls, including calls for
+other files, are independent and may have different results.
+
 IMPORTANT: Copy text exactly as it appears in the file, including punctuation style.
 When copying from read_file output, copy only the actual file content after the line-number prefix.
 Never include the line number + tab in any old_string or new_string.
 """
+
+    @staticmethod
+    def _format_atomic_failure(message: str, total_edits: int) -> str:
+        """明确告诉模型：单文件批量编辑在写入前整体失败。"""
+        return (
+            "Atomic multi-edit failed before the file was written.\n"
+            f"This call contained {total_edits} edits for one file. "
+            "No changes were written; none of the edits from this call were applied.\n\n"
+            f"Reason:\n{message}\n\n"
+            "Correct the failed edit and retry the complete edits list. "
+            "Do not assume that any part of this call succeeded."
+        )
 
     async def execute(self, tool_context: ToolContext, params: MultiEditFileParams) -> ToolResult:
         """
@@ -125,6 +141,7 @@ Never include the line number + tab in any old_string or new_string.
         Returns:
             ToolResult: Operation result
         """
+        write_started = False
         try:
             # Get safe file path with fuzzy matching
             resolved = self.resolve_path_fuzzy(params.file_path)
@@ -135,16 +152,20 @@ Never include the line number + tab in any old_string or new_string.
             # Check if file exists
             if not await async_exists(file_path):
                 tool_context.set_metadata("error_type", "edit_file.error_file_not_exist")
-                return ToolResult(
-                    error=f"File does not exist: {file_path}\n"
-                          "Use write_file to create new files."
+                return ToolResult.error(
+                    f"File does not exist: {file_path}\n"
+                    "Use write_file to create new files.\n\n"
+                    "No changes were written to the file."
                 )
 
             # 内部读取只服务本次匹配，不能替代编辑前必须已有的观察记录。
             horizon = self.get_horizon(tool_context)
             if not await horizon.is_file_tracked(file_path):
                 tool_context.set_metadata("error_type", "edit_file.error_file_modified")
-                return ToolResult.error(VALIDATION_ERROR_NOT_READ)
+                return ToolResult.error(
+                    f"{VALIDATION_ERROR_NOT_READ}\n\n"
+                    "No changes were written to the file."
+                )
 
             # Read original content
             original_snapshot = await self._read_file(file_path)
@@ -187,7 +208,9 @@ Never include the line number + tab in any old_string or new_string.
                 # 直接从验证结果中获取错误类型
                 error_type = validation_result.get('error_type', "edit_file.error_validation_failed")
                 tool_context.set_metadata("error_type", error_type)
-                return ToolResult.error(validation_result['error'])
+                return ToolResult.error(
+                    self._format_atomic_failure(validation_result['error'], len(params.edits))
+                )
 
             # Apply edits sequentially
             working_content = original_content
@@ -203,9 +226,12 @@ Never include the line number + tab in any old_string or new_string.
                 # Check for empty old_string - not supported
                 if edit.old_string == "":
                     tool_context.set_metadata("error_type", "edit_file.error_validation_failed")
-                    return ToolResult(
-                        error=f"Edit {i+1}/{len(params.edits)} failed:\n"
-                              f"Empty old_string is not supported. Use write_file to create new files."
+                    return ToolResult.error(
+                        self._format_atomic_failure(
+                            f"Edit {i+1}/{len(params.edits)} failed:\n"
+                            "Empty old_string is not supported. Use write_file to create new files.",
+                            len(params.edits),
+                        )
                     )
 
                 # Check if punctuation was auto-fixed during validation phase
@@ -226,7 +252,9 @@ Never include the line number + tab in any old_string or new_string.
 
                     if punctuation_error:
                         error_msg = f"Edit {i+1}/{len(params.edits)} failed:\n{punctuation_error}"
-                        return ToolResult.error(error_msg)
+                        return ToolResult.error(
+                            self._format_atomic_failure(error_msg, len(params.edits))
+                        )
 
                     error_msg = f"Edit {i+1}/{len(params.edits)} failed:\n"
                     error_msg += f"old_string not found in current content.\n"
@@ -246,14 +274,19 @@ Never include the line number + tab in any old_string or new_string.
                             "Remove the extra escape characters from your strings."
                         )
 
-                    return ToolResult.error(error_msg)
+                    return ToolResult.error(
+                        self._format_atomic_failure(error_msg, len(params.edits))
+                    )
 
                 if occurrences != edit.expected_replacements:
                     tool_context.set_metadata("error_type", "edit_file.error_replacements_mismatch")
-                    return ToolResult(
-                        error=f"Edit {i+1}/{len(params.edits)} failed:\n"
-                              f"Expected {edit.expected_replacements} replacement(s) but found {occurrences}.\n"
-                              f"Adjust expected_replacements or refine old_string."
+                    return ToolResult.error(
+                        self._format_atomic_failure(
+                            f"Edit {i+1}/{len(params.edits)} failed:\n"
+                            f"Expected {edit.expected_replacements} replacement(s) but found {occurrences}.\n"
+                            "Adjust expected_replacements or refine old_string.",
+                            len(params.edits),
+                        )
                     )
 
                 # Collect punctuation fix warning if any
@@ -297,10 +330,19 @@ Never include the line number + tab in any old_string or new_string.
             )
             if not is_valid:
                 tool_context.set_metadata("error_type", "edit_file.error_file_modified")
-                return ToolResult.error(error_message)
+                return ToolResult.error(
+                    "Atomic multi-edit was not written.\n"
+                    f"This call contained {len(params.edits)} edits for one file. "
+                    "The file changed after validation and before the single write, "
+                    "so none of the edits from this call were applied.\n\n"
+                    f"Reason:\n{error_message}\n\n"
+                    "Read the current file, update the complete edits list, and retry. "
+                    "Do not assume partial success."
+                )
 
             # Write the final result with file versioning (triggers events and updates timestamp)
             async with self._file_versioning_context(tool_context, file_path):
+                write_started = True
                 working_content = await self._write_file(file_path, working_content)
 
             # Syntax check
@@ -392,7 +434,18 @@ Never include the line number + tab in any old_string or new_string.
         except Exception as e:
             logger.exception(f"Failed to execute multi-edit: {e}")
             tool_context.set_metadata("error_type", "edit_file.error_unexpected")
-            return ToolResult.error("The multi_edit_file tool encountered an unexpected error. Try using multiple edit_file calls, shell commands (e.g., sed -i; avoid piping sed to cat -A for multi-byte characters), or write a Python script to perform these edits instead.")
+            if write_started:
+                return ToolResult.error(
+                    "The multi-edit write did not complete normally. "
+                    "The final file state is unknown. No automatic retry was performed.\n\n"
+                    "Read the file before retrying and decide whether any edits still need to be applied."
+                )
+            return ToolResult.error(
+                self._format_atomic_failure(
+                    "The tool encountered an unexpected error before writing the file.",
+                    len(params.edits) if 'params' in locals() else 0,
+                )
+            )
 
     def _validate_all_edits(self, edits: List[EditOperation], content: str) -> dict:
         """

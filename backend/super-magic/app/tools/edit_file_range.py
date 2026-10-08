@@ -1,347 +1,329 @@
-"""
-区间单点编辑工具
+"""Apply one previously located file range."""
 
-通过 replace_start/replace_end 定位并替换文件中的唯一区间（包含边界）。
-"""
+from __future__ import annotations
 
-from app.i18n import i18n
+import asyncio
 import os
 from pathlib import Path
-from typing import Any, Dict, Optional
+from typing import Any
 
-from pydantic import Field
+from pydantic import Field, model_validator
 
 from agentlang.context.tool_context import ToolContext
-from app.core.entity.message.server_message import DisplayType, ToolDetail
-from agentlang.tools.tool_result import ToolResult
 from agentlang.logger import get_logger
+from agentlang.tools.tool_result import ToolResult
+from agentlang.utils.syntax_checker import SyntaxChecker
+from app.core.context.agent_context import AgentContext
+from app.core.entity.message.server_message import DisplayType, ToolDetail
+from app.i18n import i18n
+from app.service.html_app_memory_service import is_html_app_memory_path
 from app.tools.abstract_file_tool import AbstractFileTool
 from app.tools.core import BaseToolParams, tool
+from app.tools.file_edit_store import FileEditRangeRecord, FileEditStore
+from app.tools.utils.file_change_stats import (
+    FileChangeMetrics,
+    FileTextSnapshot,
+    format_file_change_metrics,
+    measure_text,
+    read_text_snapshot,
+)
 from app.tools.workspace_tool import WorkspaceTool
-from agentlang.utils.syntax_checker import SyntaxChecker
+from app.utils.async_file_utils import async_exists, async_write_text
 from app.utils.diff_generator import DiffGenerator
 from app.utils.line_number_handler import LineNumberHandler
-from app.utils.replace_range_resolver import resolve_replace_range
-from app.service.html_app_memory_service import is_html_app_memory_path
-from app.utils.async_file_utils import async_exists, async_write_text
-from app.tools.utils.file_change_stats import (
-    FileChangeMetrics, FileTextSnapshot, format_file_change_metrics, measure_text, read_text_snapshot,
-)
 
 logger = get_logger(__name__)
 
 
 class EditFileRangeParams(BaseToolParams):
-    file_path: str = Field(
+    range_id: str = Field(
         ...,
-        description="<!--zh: 要修改的文件的绝对路径-->The absolute path to the file to modify"
+        description="<!--zh: find_file_range 返回的 8 位范围编号，只能成功使用一次；沙盒重启、重建或会话重置后失效，必须重新查找-->Single-use 8-character ID from find_file_range. Invalid after restart, rebuild, or session reset; obtain a new ID",
     )
-    replace_start: str = Field(
-        ...,
-        description="<!--zh: 替换区间起始锚点文本。该锚点会被包含在替换范围内。可为空，与 replace_end 不能同时为空。-->Start anchor text of the replacement range. This anchor is included in replaced range. Can be empty. Cannot be empty together with replace_end."
+    new_string: str | None = Field(
+        default=None,
+        description="<!--zh: 替换已定位范围的新内容；可以为空字符串表示删除范围-->New content for the located range; an empty string deletes the range",
     )
-    replace_end: str = Field(
-        ...,
-        description="<!--zh: 替换区间结束锚点文本。该锚点会被包含在替换范围内。可为空，与 replace_start 不能同时为空。-->End anchor text of the replacement range. This anchor is included in replaced range. Can be empty. Cannot be empty together with replace_start."
+    replacement_id: str | None = Field(
+        default=None,
+        description="<!--zh: 当前运行环境和同一文件内之前编辑失败时返回的 replacement_id；与 new_string 二选一，重启或清理后失效-->A replacement_id from an earlier failed edit for the same file and runtime; use it instead of new_string. It expires after restart or cleanup",
     )
-    new_content: str = Field(
-        ...,
-        description="<!--zh: 用于替换目标区间的新内容。-->New content to replace the target range."
-    )
+
+    @model_validator(mode="after")
+    def validate_replacement_input(self) -> "EditFileRangeParams":
+        if (self.new_string is None) == (self.replacement_id is None):
+            raise ValueError("Provide exactly one of new_string or replacement_id.")
+        return self
 
 
 @tool()
 class EditFileRange(AbstractFileTool[EditFileRangeParams], WorkspaceTool[EditFileRangeParams]):
-    """<!--zh
-    基于替换边界编辑文件，替换从 replace_start 到 replace_end 的整个区间（包含边界）。
-    优先用 edit_file；old_string 过长时才用本工具。创建新文件用 write_file。
-    -->
-    Range-based file editing, replacing the full range from replace_start to replace_end (inclusive).
-    Prefer edit_file; use this tool only when old_string is too long. Use write_file to create new files.
-    """
+    """Apply a single-use range found by find_file_range."""
 
     def get_prompt_hint(self) -> str:
         return """\
 <!--zh
-使用前提（必须满足）：
-- 本工具只在「被替换内容 old_string 较大」时使用，用于节省 token
-- old_string 至少满足其一：
-  1) old_string >= 5 行
-  2) old_string >= 200 字符
-- 若 old_string 同时小于 5 行且小于 200 字符，改用 edit_file
-
-锚点规则：
-- 调用前先读文件，确认锚点文本存在，再逐字复制（空格/缩进/标点/大小写完全一致）
-- 从 read_file 输出复制文本时，只复制行号前缀之后的实际文件内容；不要把「行号 + 制表符」放进 replace_start、replace_end 或 new_content
-- replace_start 与 replace_end（非空时）各自至少满足其一：
-  1) >= 2 行
-  2) >= 50 字符
-- start 为空或 end 为空是允许的边界模式，不受上条最小长度限制
-- 锚点需文本唯一；不唯一会导致匹配失败
-
-区间语义（包含边界，replace_start/end 本身也被替换）：
-- 两端都有：替换 replace_start 到 replace_end 之间的完整区间
-- start 为空：从文件开头替换到 replace_end
-- end 为空：从 replace_start 替换到文件末尾（追加场景）；new_content 须重新包含 replace_start 的内容
-
-失败时：重读文件确认锚点存在与唯一性 → 扩展锚点长度 → 仍失败则改用 edit_file
+本工具只接受 find_file_range 返回的 range_id，不再接受文件路径或锚点。
+- 正常流程：先调用 find_file_range，再传 range_id 和 new_string。
+- range_id 只能成功应用一次；当前文件内容变化、沙盒重启或上下文重置后会失效，必须重新查找。
+- 如果工具返回 replacement_id，重新查找得到新的 range_id 后，可在当前运行环境和同一文件内传 replacement_id 复用已经生成的新内容，避免再次输出长文本；重启、重置或清理后必须重新生成。
+- 只有范围定位失败或文件版本变化时才使用本工具；短文本优先使用 edit_file，多个短修改使用 multi_edit_file。
 -->
-Usage prerequisites (must meet):
-- Use this tool only when the REPLACED content (old_string) is large enough to justify range replacement
-- old_string must meet at least one threshold:
-  1) old_string >= 5 lines
-  2) old_string >= 200 characters
-- If old_string is below both thresholds, use edit_file instead
-
-Anchor rules:
-- Read the file before calling and copy anchors verbatim (spaces/indentation/punctuation/case must match exactly)
-- When copying from read_file output, copy only the actual file content after the line-number prefix; never include the line number + tab in replace_start, replace_end, or new_content
-- For non-empty anchors, replace_start and replace_end must each meet at least one threshold:
-  1) >= 2 lines
-  2) >= 50 characters
-- Empty start or empty end is allowed for boundary mode and is exempt from the minimum-length rule
-- Anchors must be text-unique; non-unique anchors cause matching failure
-
-Range semantics (inclusive; replace_start/end themselves are replaced):
-- Both provided: replace the full range from replace_start to replace_end
-- Empty start: replace from file start to replace_end
-- Empty end: replace from replace_start to end of file (append scenario); new_content must include replace_start again
-
-On failure: re-read and verify anchor existence/uniqueness -> increase anchor length -> switch to edit_file if still failing
+This tool accepts only a range_id returned by find_file_range. It does not accept a file path or anchors.
+- Normal flow: call find_file_range, then pass its range_id and new_string.
+- A range_id can be applied successfully once. It becomes invalid when the file changes, the sandbox restarts, or the context is reset; find the range again.
+- If the tool returns a replacement_id, use it with a new range_id for the same file and current runtime to reuse already generated text. It is unavailable after restart, reset, or cleanup.
+- Use this tool for large located ranges. Prefer edit_file for short edits and multi_edit_file for multiple short edits.
 """
 
     async def execute(self, tool_context: ToolContext, params: EditFileRangeParams) -> ToolResult:
-        """
-        Execute range-based editing operation
-
-        Args:
-            tool_context: Tool context
-            params: Edit parameters
-
-        Returns:
-            ToolResult: Operation result with diff
-        """
         try:
-            resolved = self.resolve_path_fuzzy(params.file_path)
-            file_path = resolved.path
-            fuzzy_warning = resolved.warning
-            if is_html_app_memory_path(file_path):
-                return ToolResult.error("MICRO-APP.md is managed by update_html_app_memory. Use that tool instead of edit_file_range so MagicBase data model records are not overwritten.")
-            ai_warnings = []
-            ai_warnings.extend(self._strip_line_number_prefixes(file_path, params))
-            if fuzzy_warning:
-                ai_warnings.append(fuzzy_warning)
-
-            if params.replace_start == "" and params.replace_end == "":
-                tool_context.set_metadata("error_type", "edit_file.error_validation_failed")
-                return ToolResult.error("replace_start and replace_end cannot both be empty.")
-
-            if not await async_exists(file_path):
-                tool_context.set_metadata("error_type", "edit_file.error_file_not_exist")
-                return ToolResult.error(
-                    f"File does not exist: {file_path}\n"
-                    "Use write_file to create new files."
-                )
-
-            is_valid, error_message = await self.get_horizon(tool_context).validate_file_not_modified(file_path)
-            if not is_valid:
-                tool_context.set_metadata("error_type", "edit_file.error_file_modified")
-                return ToolResult.error(error_message)
-
-            original_snapshot = await self._read_file(file_path)
-            original_content = original_snapshot.content
-
-            try:
-                resolution = resolve_replace_range(
-                    original_content,
-                    params.replace_start,
-                    params.replace_end
-                )
-                matched_range = resolution.matched_range
-                ai_warnings.extend(resolution.warnings)
-            except ValueError as match_error:
-                tool_context.set_metadata("error_type", "edit_file.error_match_failed")
-                return ToolResult.error(
-                    f"Range match failed: {match_error}\n\n"
-                    "SOLUTIONS:\n"
-                    "1. Re-read current file content around range anchors to check if it has been modified, then retry with latest text\n"
-                    "2. Ensure anchors are copied character-by-character (whitespace, punctuation, indentation, newlines)\n"
-                    "3. If multiple attempts fail and edit_file is available (for short/precise edits), try edit_file\n"
-                    "4. As a last resort, use shell commands or a Python script for precise edits"
-                )
-
-            new_content = (
-                original_content[:matched_range.start_index]
-                + params.new_content
-                + original_content[matched_range.end_index:]
-            )
-
-            if new_content == original_content:
-                msg = "No changes made. Replacement content is identical to current content in target range."
-                if ai_warnings:
-                    msg += "\n\n" + "\n\n".join(ai_warnings)
-                msg += "\n" + format_file_change_metrics(
-                    FileChangeMetrics(original_snapshot.metrics, original_snapshot.metrics),
-                )
-                return ToolResult(content=msg)
-
-            async with self._file_versioning_context(tool_context, file_path):
-                new_content = await self._write_file(file_path, new_content)
-
-            syntax_result = await SyntaxChecker.check_syntax(str(file_path), new_content)
-            if not syntax_result.is_valid:
-                errors_str = "\n".join(syntax_result.errors)
-                ai_warnings.append(f"WARNING: Syntax errors detected in the modified file:\n{errors_str}")
-
-            stats = DiffGenerator.calculate_change_stats(
-                # 选中范围只决定替换位置；这里比较整份修改前后文本，不把片段大小当成文件大小。
-                original_content, new_content, old_size=original_snapshot.metrics.byte_count,
-            )
-            summary_diff = DiffGenerator.generate_summary_diff(str(file_path.name), stats)
-            full_diff = DiffGenerator.generate_unified_diff(
-                original_content,
-                new_content,
-                str(file_path.name)
-            )
-            replaced_fragment = original_content[matched_range.start_index:matched_range.end_index]
-            replaced_line_count = 0 if replaced_fragment == "" else replaced_fragment.count("\n") + 1
-            new_line_count = 0 if params.new_content == "" else params.new_content.count("\n") + 1
-
-            absolute_path = file_path.resolve()
-            output = f"File updated: {absolute_path}\n"
-            output += (
-                f"Range replaced: lines {matched_range.start_line}-{matched_range.end_line} "
-                f"({replaced_line_count} line(s) replaced with {new_line_count} line(s))\n"
-            )
-
-            if stats["added_lines"] > 0:
-                output += f"Lines added: +{stats['added_lines']}\n"
-            if stats["deleted_lines"] > 0:
-                output += f"Lines deleted: -{stats['deleted_lines']}\n"
-            if stats["modified_lines"] > 0:
-                output += f"Lines modified: ~{stats['modified_lines']}\n"
-
-            size_change = stats["size_change"]
-            if size_change != 0:
-                sign = "+" if size_change > 0 else ""
-                output += f"Size change: {sign}{size_change} bytes ({stats['old_size']}→{stats['new_size']})\n"
-
-            if summary_diff:
-                output += "\n--- Change Summary ---\n"
-                output += summary_diff
-
-            # 原摘要继续提供全部行数／字节事实；计数只追加 Token，不替代原有信息。
-            output += "\n" + format_file_change_metrics(
-                FileChangeMetrics(original_snapshot.metrics, measure_text(new_content, stats['new_size'])),
-                include_bytes=False,
-            )
-
-            if ai_warnings:
-                output += "\n\n" + "\n\n".join(ai_warnings)
-
-            return ToolResult(
-                content=output,
-                extra_info={
-                    "diff": full_diff,
-                    "file_path": str(file_path),
-                }
-            )
-
-        except Exception as e:
-            logger.exception(f"Failed to edit file range: {e}")
+            return await self._execute(tool_context, params)
+        except asyncio.CancelledError:
+            raise
+        except Exception as error:
+            logger.exception("Failed to edit file range: %s", error)
             tool_context.set_metadata("error_type", "edit_file.error_unexpected")
             return ToolResult.error(
                 "The edit_file_range tool encountered an unexpected error. "
-                "First re-read current file content around range anchors to check if it has been modified, then retry with latest text. "
-                "Then check exact character alignment in anchors (whitespace/punctuation/newlines). "
-                "If multiple attempts fail and the edit_file tool is available (for short/precise edits), try it. "
-                "As a last resort, use shell commands or write a Python script."
+                "Call find_file_range again and retry with the returned range_id.",
+                data={"error_code": "write_failed"},
             )
 
-    def _strip_line_number_prefixes(self, file_path: Path, params: EditFileRangeParams) -> list[str]:
-        warnings: list[str] = []
-
-        replace_start_cleaned, had_start_numbers, _ = LineNumberHandler.detect_and_strip(params.replace_start)
-        if had_start_numbers:
-            logger.info(f"Stripped line numbers from replace_start for {file_path}")
-            params.replace_start = replace_start_cleaned
-            warnings.append(
-                "WARNING: Line numbers were detected and automatically removed from replace_start. "
-                "When copying from read_file output, exclude the line number prefix (e.g., '123\\t')."
+    async def _execute(self, tool_context: ToolContext, params: EditFileRangeParams) -> ToolResult:
+        context = tool_context.get_extension_typed("agent_context", AgentContext)
+        record = await FileEditStore.get_range(context, params.range_id)
+        if record is None:
+            tool_context.set_metadata("error_type", "edit_file.error_range_unavailable")
+            return self._error(
+                "range_id is invalid, expired, or belongs to another AgentContext. "
+                "Call find_file_range again and use its new range_id.",
+                error_code="range_unavailable",
+            )
+        if record.state == "applied":
+            tool_context.set_metadata("error_type", "edit_file.error_range_used")
+            return self._error(
+                "This range_id has already been used successfully. Call find_file_range again for another edit.",
+                error_code="already_applied",
+                status="already_applied",
+            )
+        if record.state != "ready":
+            tool_context.set_metadata("error_type", "edit_file.error_range_unavailable")
+            return self._error(
+                "This range_id is no longer available. Call find_file_range again before editing.",
+                error_code="range_unavailable",
             )
 
-        replace_end_cleaned, had_end_numbers, _ = LineNumberHandler.detect_and_strip(params.replace_end)
-        if had_end_numbers:
-            logger.info(f"Stripped line numbers from replace_end for {file_path}")
-            params.replace_end = replace_end_cleaned
-            warnings.append(
-                "WARNING: Line numbers were detected and automatically removed from replace_end. "
-                "When copying from read_file output, exclude the line number prefix (e.g., '123\\t')."
+        replacement_id = params.replacement_id
+        if replacement_id is not None:
+            replacement = await FileEditStore.get_replacement(context, replacement_id)
+            if replacement is None:
+                tool_context.set_metadata("error_type", "edit_file.error_replacement_unavailable")
+                return self._error(
+                    "replacement_id is invalid or expired. Regenerate the replacement text and retry with a new range_id.",
+                    error_code="replacement_unavailable",
+                )
+            if replacement.file_path != record.file_path:
+                tool_context.set_metadata("error_type", "edit_file.error_replacement_unavailable")
+                return self._error("replacement_id belongs to another file.", error_code="replacement_conflict")
+            new_string = replacement.value
+        else:
+            new_string = params.new_string or ""
+            cleaned, had_line_numbers, _ = LineNumberHandler.detect_and_strip(new_string)
+            if had_line_numbers:
+                new_string = cleaned
+
+        file_path = Path(record.file_path)
+        if is_html_app_memory_path(file_path):
+            return self._error(
+                "MICRO-APP.md is managed by update_html_app_memory. Use that tool instead of edit_file_range.",
+                error_code="write_forbidden",
+            )
+        if not await async_exists(file_path):
+            tool_context.set_metadata("error_type", "edit_file.error_file_not_exist")
+            return self._error(
+                f"File does not exist: {file_path}. Use write_file to create new files.",
+                error_code="file_unavailable",
             )
 
-        new_content_cleaned, had_new_numbers, _ = LineNumberHandler.detect_and_strip(params.new_content)
-        if had_new_numbers:
-            logger.info(f"Stripped line numbers from new_content for {file_path}")
-            params.new_content = new_content_cleaned
-            warnings.append(
-                "WARNING: Line numbers were detected and automatically removed from new_content. "
-                "Replacement content should not contain read_file line-number prefixes."
-            )
+        write_started = False
+        async with FileEditStore.path_lock(file_path, context.get_interruption_event()):
+            # Reload while holding the path lock so parallel calls cannot apply one range twice.
+            record = await FileEditStore.get_range(context, params.range_id)
+            if record is None or record.state != "ready":
+                tool_context.set_metadata("error_type", "edit_file.error_range_used")
+                return self._error(
+                    "This range_id is no longer available. Call find_file_range again.",
+                    error_code="range_unavailable",
+                )
+            await FileEditStore.set_range_state(context, record, "applying")
+            try:
+                original_snapshot = await read_text_snapshot(file_path)
+                if FileEditStore.content_digest(original_snapshot.content) != record.source_digest:
+                    await FileEditStore.set_range_state(context, record, "invalid")
+                    recovery_id = replacement_id or await FileEditStore.save_replacement(
+                        context,
+                        file_path=file_path,
+                        value=new_string,
+                        replacement_id=replacement_id,
+                    )
+                    tool_context.set_metadata("error_type", "edit_file.error_file_modified")
+                    return self._error(
+                        "The file changed after find_file_range, so the range_id is invalid. "
+                        f"Call find_file_range again, then reuse replacement_id={recovery_id}.",
+                        error_code="range_stale",
+                        replacement_id=recovery_id,
+                    )
 
-        return warnings
+                original_content = original_snapshot.content
+                if not 0 <= record.start_index <= record.end_index <= len(original_content):
+                    await FileEditStore.set_range_state(context, record, "invalid")
+                    tool_context.set_metadata("error_type", "edit_file.error_range_unavailable")
+                    return self._error(
+                        "The saved range is outside the current file. Call find_file_range again.",
+                        error_code="range_unavailable",
+                    )
 
-    async def _read_file(self, file_path: Path) -> FileTextSnapshot:
-        """Read file content"""
-        return await read_text_snapshot(file_path)
+                new_content = (
+                    original_content[:record.start_index]
+                    + new_string
+                    + original_content[record.end_index:]
+                )
+                if new_content == original_content:
+                    await FileEditStore.set_range_state(context, record, "applied")
+                    if replacement_id is not None:
+                        await FileEditStore.consume_replacement(replacement_id)
+                    return ToolResult(
+                        content="No changes made. The replacement content already matches the selected range.",
+                        data={"status": "unchanged"},
+                        extra_info={"file_path": str(file_path), "range_id": record.range_id},
+                    )
+
+                async with self._file_versioning_context(tool_context, file_path):
+                    new_content = await self._write_file(file_path, new_content)
+                    write_started = True
+
+                await FileEditStore.set_range_state(context, record, "applied")
+                if replacement_id is not None:
+                    await FileEditStore.consume_replacement(replacement_id)
+            except asyncio.CancelledError:
+                raise
+            except Exception:
+                if not write_started:
+                    await FileEditStore.set_range_state(context, record, "ready")
+                raise
+
+        return await self._build_success_result(
+            file_path=file_path,
+            record=record,
+            replacement=new_string,
+            original_snapshot=original_snapshot,
+            new_content=new_content,
+        )
+
+    async def _build_success_result(
+        self,
+        *,
+        file_path: Path,
+        record: FileEditRangeRecord,
+        replacement: str,
+        original_snapshot: FileTextSnapshot,
+        new_content: str,
+    ) -> ToolResult:
+        ai_warnings: list[str] = []
+        syntax_result = await SyntaxChecker.check_syntax(str(file_path), new_content)
+        if not syntax_result.is_valid:
+            errors_str = "\n".join(syntax_result.errors)
+            ai_warnings.append(f"WARNING: Syntax errors detected in the modified file:\n{errors_str}")
+
+        stats = DiffGenerator.calculate_change_stats(
+            original_snapshot.content,
+            new_content,
+            old_size=original_snapshot.metrics.byte_count,
+        )
+        summary_diff = DiffGenerator.generate_summary_diff(str(file_path.name), stats)
+        full_diff = DiffGenerator.generate_unified_diff(
+            original_snapshot.content,
+            new_content,
+            str(file_path.name),
+        )
+        replaced_fragment = original_snapshot.content[record.start_index:record.end_index]
+        replaced_line_count = 0 if replaced_fragment == "" else replaced_fragment.count("\n") + 1
+        new_line_count = 0 if replacement == "" else replacement.count("\n") + 1
+        output = (
+            f"File updated: {file_path.resolve()}\n"
+            f"Range replaced: lines {record.start_line}-{record.end_line} "
+            f"({replaced_line_count} line(s) replaced with {new_line_count} line(s))\n"
+        )
+        if stats["added_lines"] > 0:
+            output += f"Lines added: +{stats['added_lines']}\n"
+        if stats["deleted_lines"] > 0:
+            output += f"Lines deleted: -{stats['deleted_lines']}\n"
+        if stats["modified_lines"] > 0:
+            output += f"Lines modified: ~{stats['modified_lines']}\n"
+        if stats["size_change"] != 0:
+            sign = "+" if stats["size_change"] > 0 else ""
+            output += f"Size change: {sign}{stats['size_change']} bytes ({stats['old_size']}→{stats['new_size']})\n"
+        if summary_diff:
+            output += f"\n--- Change Summary ---\n{summary_diff}"
+        output += "\n" + format_file_change_metrics(
+            FileChangeMetrics(original_snapshot.metrics, measure_text(new_content, stats["new_size"])),
+            include_bytes=False,
+        )
+        if ai_warnings:
+            output += "\n\n" + "\n\n".join(ai_warnings)
+        return ToolResult(
+            content=output,
+            data={"status": "applied"},
+            extra_info={"diff": full_diff, "file_path": str(file_path), "range_id": record.range_id},
+        )
+
+    @staticmethod
+    def _error(
+        message: str,
+        *,
+        error_code: str,
+        replacement_id: str | None = None,
+        status: str | None = None,
+    ) -> ToolResult:
+        data: dict[str, str] = {"error_code": error_code}
+        if replacement_id:
+            data["replacement_id"] = replacement_id
+        if status:
+            data["status"] = status
+        return ToolResult.error(message, data=data)
 
     async def _write_file(self, file_path: Path, content: str) -> str:
-        """
-        Write file content
-
-        返回加过末尾换行的实际内容，使语法检查、Diff 和用量反馈讨论的是同一份文件。
-        """
         if content and not content.endswith("\n"):
             content += "\n"
-
         await async_write_text(file_path, content)
         return content
 
-    async def get_tool_detail(self, tool_context: ToolContext, result: ToolResult, arguments: Dict[str, Any] = None) -> Optional[ToolDetail]:
-        """Get tool details for display - shows the diff of changes"""
-        if not result.ok:
-            return None
-
-        if not result.extra_info or "diff" not in result.extra_info:
-            return None
-
-        diff_content = result.extra_info.get("diff", "")
-        if not diff_content:
-            return None
-
-        file_path = result.extra_info.get("file_path", "")
-        file_name = os.path.basename(file_path) if file_path else "unknown"
-
-        markdown_content = f"## File Edit: {file_name}\n\n"
-        markdown_content += "```diff\n"
-        markdown_content += diff_content
-        markdown_content += "\n```"
-
+    async def get_tool_detail(
+        self,
+        tool_context: ToolContext,
+        result: ToolResult,
+        arguments: dict[str, Any] | None = None,
+    ) -> ToolDetail:
+        file_path = str(result.extra_info.get("file_path", "")) if result.extra_info else ""
+        file_name = os.path.basename(file_path) if file_path else "file"
+        if result.ok and result.extra_info and result.extra_info.get("diff"):
+            content = f"## File Edit: {file_name}\n\n```diff\n{result.extra_info['diff']}\n```"
+        else:
+            content = f"## File Edit: {file_name}\n\n{result.content}"
         return ToolDetail(
             type=DisplayType.MD,
             data=await self._build_file_content(
                 file_path=file_path,
                 file_name=f"{file_name}.diff",
-                content=markdown_content
-            )
+                content=content,
+            ),
         )
 
-    def _get_remark_content(self, result: ToolResult, arguments: Dict[str, Any] = None) -> str:
-        """Get remark content"""
-        if not arguments or "file_path" not in arguments:
-            return i18n.translate("read_file.not_found", category="tool.messages")
-
-        file_path = arguments["file_path"]
-        return os.path.basename(file_path)
+    def _get_remark_content(self, result: ToolResult, arguments: dict[str, Any] | None = None) -> str:
+        if result.ok and result.extra_info.get("file_path"):
+            return os.path.basename(str(result.extra_info["file_path"]))
+        return i18n.translate("edit_file.error_no_file", category="tool.messages")
 
     async def get_after_tool_call_friendly_action_and_remark(
         self,
@@ -349,32 +331,17 @@ On failure: re-read and verify anchor existence/uniqueness -> increase anchor le
         tool_context: ToolContext,
         result: ToolResult,
         execution_time: float,
-        arguments: Dict[str, Any] = None
-    ) -> Dict:
-        """Get friendly action and remark after tool call"""
+        arguments: dict[str, Any] | None = None,
+    ) -> dict[str, str]:
+        result.use_custom_remark = True
         if not result.ok:
-            result.use_custom_remark = True
             error_type = tool_context.get_metadata("error_type")
-
-            if error_type:
-                remark = i18n.translate(error_type, category="tool.messages")
-            else:
-                file_path_str = arguments.get("file_path", "") if arguments else ""
-                if file_path_str:
-                    remark = i18n.translate("edit_file.error", category="tool.messages", file_path=file_path_str)
-                else:
-                    remark = i18n.translate("edit_file.error_no_file", category="tool.messages")
-
-            if error_type and error_type != "edit_file.error_unexpected":
-                suffix = i18n.translate("tool.ai_retry_suffix", category="tool.messages")
-                remark = remark + suffix
-
+            remark = i18n.translate(error_type or "edit_file.error", category="tool.messages")
             return {
                 "action": i18n.translate("edit_file_range", category="tool.actions"),
-                "remark": remark
+                "remark": remark,
             }
-
         return {
             "action": i18n.translate("edit_file_range", category="tool.actions"),
-            "remark": self._get_remark_content(result, arguments)
+            "remark": self._get_remark_content(result, arguments),
         }

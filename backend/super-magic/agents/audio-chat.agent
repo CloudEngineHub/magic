@@ -13,8 +13,8 @@ tools:
   - write_file
   - edit_file
   - edit_file_range
+  - find_file_range
   - multi_edit_file
-  - multi_edit_file_range
   - delete_files
   - generate_images
   - read_webpages_as_markdown
