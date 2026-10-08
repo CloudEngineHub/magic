@@ -18,9 +18,12 @@ use App\Infrastructure\Core\Exception\ExceptionBuilder;
 use App\Infrastructure\Core\Traits\HasLogger;
 use App\Infrastructure\Core\ValueObject\StorageBucketType;
 use App\Infrastructure\ExternalAPI\ImageGenerateAPI\Request\ImageGenerateRequest;
+use App\Infrastructure\Util\File\TemporaryFileManager;
 use Dtyq\CloudFile\Kernel\Struct\UploadFile;
 use Hyperf\Codec\Json;
 use Hyperf\Di\Annotation\Inject;
+use Hyperf\Logger\LoggerFactory;
+use RuntimeException;
 use Throwable;
 
 /**
@@ -40,40 +43,41 @@ class ImageWatermarkProcessor
     protected ImageEnhancementProcessorInterface $imageEnhancementProcessor;
 
     /**
-     * 为base64格式图片添加水印.
+     * Add watermarks to a base64 / data-URI image, then upload the processed bytes.
+     *
+     * @return string Public URL on upload success; processed data URI when upload/link/metadata fails
      */
     public function addWatermarkToBase64(string $base64Image, ImageGenerateRequest $imageGenerateRequest): string
     {
-        // 检测原始格式
+        // Detect declared format from data-URI prefix when present.
         $originalFormat = $this->extractBase64Format($base64Image);
 
-        // 解码base64图片
+        // Decode once at the entry boundary; later steps reuse binary bytes.
         $imageData = $this->decodeBase64Image($base64Image);
 
-        // 双重检测确保格式准确
+        // Prefer non-jpeg declared format; otherwise trust binary detection.
         $detectedFormat = $this->detectImageFormat($imageData);
         $targetFormat = $originalFormat !== 'jpeg' ? $originalFormat : $detectedFormat;
 
-        // 使用统一的水印处理方法
         if ($imageGenerateRequest->isAddWatermark()) {
             $this->addWaterMarkHandler($imageData, $imageGenerateRequest, $targetFormat);
         }
 
-        // 立即添加隐式水印
         $implicitWatermark = $imageGenerateRequest->getImplicitWatermark();
         if ($implicitWatermark !== null) {
             $this->imageEnhancementProcessor->enhanceImageData($imageData, $implicitWatermark);
             $this->logger->info('【AIGC】隐式水印处理完成(Base64格式)');
         }
 
-        // 重新编码为base64并上传
-        $outputPrefix = $this->generateBase64Prefix($targetFormat);
-        return $this->processBase64Images($outputPrefix . base64_encode($imageData), $imageGenerateRequest);
+        // Upload by detected post-process format; keep $targetFormat only for failure fallback prefix.
+        $uploadFormat = $this->detectImageFormat($imageData);
+        return $this->uploadProcessedImage($imageData, $uploadFormat, $targetFormat, $imageGenerateRequest);
     }
 
     /**
-     * 为URL格式图片添加水印
-     * 可选择返回格式：URL 或 base64.
+     * Add watermarks to a remote image URL, then upload the processed bytes.
+     *
+     * @return string Public URL on upload success; processed data URI when upload/link/metadata fails
      */
     public function addWatermarkToUrl(string $imageUrl, ImageGenerateRequest $imageGenerateRequest): string
     {
@@ -83,7 +87,6 @@ class ImageWatermarkProcessor
             $this->addWaterMarkHandler($imageData, $imageGenerateRequest);
         }
 
-        // 立即添加XMP隐式水印
         $implicitWatermark = $imageGenerateRequest->getImplicitWatermark();
         if ($implicitWatermark !== null) {
             $this->imageEnhancementProcessor->enhanceImageData($imageData, $implicitWatermark);
@@ -92,10 +95,9 @@ class ImageWatermarkProcessor
             ]);
         }
 
-        // 根据处理后的真实图片二进制重新检测格式，避免 PNG 被错误包装成 image/jpeg。
+        // Use the real post-process format for both upload naming and failure fallback.
         $outputFormat = $this->detectImageFormat($imageData);
-        $outputPrefix = $this->generateBase64Prefix($outputFormat);
-        return $this->processBase64Images($outputPrefix . base64_encode($imageData), $imageGenerateRequest);
+        return $this->uploadProcessedImage($imageData, $outputFormat, $outputFormat, $imageGenerateRequest);
     }
 
     public function extractWatermarkInfo(string $imageUrl): ?array
@@ -452,21 +454,50 @@ class ImageWatermarkProcessor
         };
     }
 
-    private function processBase64Images(string $base64Image, ImageGenerateRequest $imageGenerateRequest): string
-    {
+    /**
+     * Upload processed image bytes via a local temporary file.
+     *
+     * Success path avoids re-encoding to base64/data URI. Failure path keeps the
+     * historical behavior: return the processed image as a data URI so callers that
+     * already accept URL-or-data-URI strings remain compatible.
+     *
+     * @param string $uploadFormat Format used for the uploaded object file extension
+     * @param string $fallbackFormat Format used only for the failure data-URI prefix
+     */
+    private function uploadProcessedImage(
+        string $imageData,
+        string $uploadFormat,
+        string $fallbackFormat,
+        ImageGenerateRequest $imageGenerateRequest,
+    ): string {
         $organizationCode = CloudFileRepository::DEFAULT_ICON_ORGANIZATION_CODE;
         $fileDomainService = di(FileDomainService::class);
-        try {
-            $subDir = 'open';
+        // Per-call manager so cleanup never deletes temp files owned by other requests.
+        $temporaryFileManager = new TemporaryFileManager(di(LoggerFactory::class));
 
-            // 直接使用已包含XMP水印的base64数据
-            $uploadFile = new UploadFile($base64Image, $subDir, '');
+        try {
+            $tempDirectory = defined('BASE_PATH') ? BASE_PATH . '/runtime/tmp' : sys_get_temp_dir();
+            $tempFilePath = TemporaryFileManager::createTempFile('watermark_', $tempDirectory);
+            $temporaryFileManager->add($tempFilePath);
+
+            $bytesWritten = file_put_contents($tempFilePath, $imageData);
+            if ($bytesWritten === false || $bytesWritten !== strlen($imageData)) {
+                throw new RuntimeException('Failed to write processed image to temporary file');
+            }
+
+            // Pass an explicit name with extension; do not rely on the extension-less tempnam() basename.
+            $extension = $this->normalizeImageExtension($uploadFormat);
+            $fileName = sprintf('watermark_%s.%s', uniqid('', true), $extension);
+            $uploadFile = new UploadFile($tempFilePath, 'open', $fileName);
 
             $fileDomainService->uploadByCredential($organizationCode, $uploadFile, StorageBucketType::Public);
 
             $fileLink = $fileDomainService->getLink($organizationCode, $uploadFile->getKey(), StorageBucketType::Public);
+            if ($fileLink === null || $fileLink->getUrl() === '') {
+                throw new RuntimeException('Uploaded image link is missing');
+            }
 
-            // 设置对象元数据作为备用方案
+            // Object metadata remains a backup channel for validity period.
             $validityPeriod = $imageGenerateRequest->getValidityPeriod();
             $metadataContent = [];
             if ($validityPeriod !== null) {
@@ -478,14 +509,30 @@ class ImageWatermarkProcessor
 
             return $fileLink->getUrl();
         } catch (Throwable $e) {
-            $this->logger->error('Failed to process base64 image', [
+            $this->logger->error('Failed to process image upload', [
                 'error' => $e->getMessage(),
                 'organization_code' => $organizationCode,
             ]);
-            // If upload fails, keep the original base64 data
-            $processedImage = $base64Image;
+
+            // Encode only on failure; callers historically accept this processed data URI.
+            return $this->generateBase64Prefix($fallbackFormat) . base64_encode($imageData);
+        } finally {
+            $temporaryFileManager->cleanup();
         }
-        return $processedImage;
+    }
+
+    /**
+     * Normalize detected image format to a safe object-storage file extension.
+     */
+    private function normalizeImageExtension(string $format): string
+    {
+        return match (strtolower($format)) {
+            'png' => 'png',
+            'webp' => 'webp',
+            'gif' => 'gif',
+            'jpeg', 'jpg' => 'jpg',
+            default => 'jpg',
+        };
     }
 
     private function applyWatermarks(
