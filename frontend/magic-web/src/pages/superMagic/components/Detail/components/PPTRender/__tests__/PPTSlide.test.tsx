@@ -127,6 +127,7 @@ vi.mock("../../../contents/HTML/IsolatedHTMLRenderer", async () => {
 				updateContent: mockState.updateContent,
 				resetContent: mockState.resetContent,
 				getContent: mockState.getContent,
+				getIframeElement: () => null,
 			}))
 
 			React.useEffect(() => {
@@ -346,6 +347,13 @@ function renderPPTSlide(overrides: Partial<React.ComponentProps<typeof PPTSlide>
 }
 
 describe("PPTSlide", () => {
+	it("removes preview spacing from fullscreen on every device", () => {
+		renderPPTSlide({ isFullscreen: true })
+		expect(mockState.renderedIsolatedProps).toHaveBeenLastCalledWith(
+			expect.objectContaining({ autoFitVerticalPadding: 0 }),
+		)
+	})
+
 	beforeEach(() => {
 		mockState.triggerSave.mockReset()
 		mockState.triggerSave.mockResolvedValue({
@@ -370,6 +378,13 @@ describe("PPTSlide", () => {
 		mockState.isLoadingVersion = false
 	})
 
+	it("preserves the source project for a shared slide without a conversation host", () => {
+		renderPPTSlide({ projectId: "shared-source", selectedProject: undefined, allowEdit: false })
+		expect(mockState.renderedIsolatedProps).toHaveBeenCalledWith(
+			expect.objectContaining({ projectId: "shared-source", isPptRender: true }),
+		)
+	})
+
 	it("向 HTML renderer 传入 PPT 固定缩放尺寸", () => {
 		renderPPTSlide({
 			content: '<div class="slide-container" data-width="1600" data-height="900"></div>',
@@ -387,6 +402,140 @@ describe("PPTSlide", () => {
 		)
 	})
 
+	it("updates the raw notes baseline without remounting the slide renderer", async () => {
+		const original = "<main>Slide</main><template data-magic-slide-notes>Old note</template>"
+		const updated =
+			"<main>Slide</main><template data-magic-slide-notes>Updated note with more text</template>"
+		const view = renderPPTSlide({
+			content: "<main>Processed slide</main>",
+			rawContent: original,
+			renderRevision: "visual-revision-1",
+		})
+		const renderer = screen.getByTestId("isolated-html-renderer")
+
+		view.rerender(
+			<PPTSlide
+				index={0}
+				isActive={true}
+				content="<main>Processed slide</main>"
+				rawContent={updated}
+				renderRevision="visual-revision-1"
+				isFullscreen={false}
+				fileId="slide-1"
+				filePathMapping={new Map()}
+				openNewTab={vi.fn()}
+				updateSlideContents={vi.fn()}
+				allowEdit={true}
+				loadingState="loaded"
+				attachmentList={[]}
+				saveEditContent={mockState.saveEditContent}
+			/>,
+		)
+
+		await waitFor(() => {
+			expect(mockState.renderedIsolatedProps).toHaveBeenLastCalledWith(
+				expect.objectContaining({
+					content: "<main>Processed slide</main>",
+					rawSourceCode: updated,
+				}),
+			)
+		})
+		expect(screen.getByTestId("isolated-html-renderer")).toBe(renderer)
+		expect(screen.queryByTestId("ppt-slide-content-updating")).not.toBeInTheDocument()
+	})
+
+	it("does not blank the preview overlay when only speaker notes change", async () => {
+		const original = "<main>Slide</main><template data-magic-slide-notes>Old note</template>"
+		const updated =
+			"<main>Slide</main><template data-magic-slide-notes>Updated note with more text</template>"
+		const onRenderReadyChange = vi.fn()
+		const view = renderPPTSlide({
+			content: "<main>Processed slide</main>",
+			rawContent: original,
+			renderRevision: "visual-revision-1",
+			onRenderReadyChange,
+		})
+
+		await waitFor(() => {
+			expect(onRenderReadyChange).toHaveBeenCalledWith(false)
+		})
+		const isolatedProps = mockState.renderedIsolatedProps.mock.calls.at(-1)?.[0] as
+			{ onRenderReady?: () => void } | undefined
+		act(() => isolatedProps?.onRenderReady?.())
+		expect(onRenderReadyChange).toHaveBeenCalledWith(true)
+		onRenderReadyChange.mockClear()
+
+		view.rerender(
+			<PPTSlide
+				index={0}
+				isActive={true}
+				content="<main>Processed slide</main>"
+				rawContent={updated}
+				renderRevision="visual-revision-1"
+				isFullscreen={false}
+				fileId="slide-1"
+				filePathMapping={new Map()}
+				openNewTab={vi.fn()}
+				updateSlideContents={vi.fn()}
+				allowEdit={true}
+				loadingState="loaded"
+				attachmentList={[]}
+				saveEditContent={mockState.saveEditContent}
+				onRenderReadyChange={onRenderReadyChange}
+			/>,
+		)
+
+		await waitFor(() => {
+			expect(mockState.renderedIsolatedProps).toHaveBeenLastCalledWith(
+				expect.objectContaining({
+					rawSourceCode: updated,
+				}),
+			)
+		})
+		expect(onRenderReadyChange).not.toHaveBeenCalledWith(false)
+	})
+
+	it("blanks the preview overlay when the visual revision changes", async () => {
+		const onRenderReadyChange = vi.fn()
+		const view = renderPPTSlide({
+			content: "<main>Processed slide</main>",
+			rawContent: "<main>Slide</main>",
+			renderRevision: "visual-revision-1",
+			onRenderReadyChange,
+		})
+
+		await waitFor(() => {
+			expect(onRenderReadyChange).toHaveBeenCalledWith(false)
+		})
+		const isolatedProps = mockState.renderedIsolatedProps.mock.calls.at(-1)?.[0] as
+			{ onRenderReady?: () => void } | undefined
+		act(() => isolatedProps?.onRenderReady?.())
+		expect(onRenderReadyChange).toHaveBeenCalledWith(true)
+		onRenderReadyChange.mockClear()
+
+		view.rerender(
+			<PPTSlide
+				index={0}
+				isActive={true}
+				content="<main>Processed slide</main>"
+				rawContent="<main>Slide</main>"
+				renderRevision="visual-revision-2"
+				isFullscreen={false}
+				fileId="slide-1"
+				filePathMapping={new Map()}
+				openNewTab={vi.fn()}
+				updateSlideContents={vi.fn()}
+				allowEdit={true}
+				loadingState="loaded"
+				attachmentList={[]}
+				saveEditContent={mockState.saveEditContent}
+				onRenderReadyChange={onRenderReadyChange}
+			/>,
+		)
+
+		expect(onRenderReadyChange).toHaveBeenCalledWith(false)
+	})
+
 	it("编辑工具栏显示时，渲染区域只占用剩余高度", () => {
 		renderPPTSlide()
 
@@ -394,7 +543,7 @@ describe("PPTSlide", () => {
 		expect(screen.getByTestId("ppt-slide-render-content")).toHaveClass("min-h-0", "flex-1")
 		expect(mockState.renderedIsolatedProps).toHaveBeenCalledWith(
 			expect.objectContaining({
-				className: "h-full",
+				className: expect.stringContaining("h-full"),
 			}),
 		)
 	})

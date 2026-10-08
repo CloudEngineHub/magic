@@ -60,7 +60,8 @@ vi.mock("@/assets/locales/locale-adapters", () => ({
 	loadFallbackLocale: vi.fn(),
 }))
 
-vi.mock("react-router", () => ({
+vi.mock("react-router", async (importOriginal) => ({
+	...(await importOriginal<typeof import("react-router")>()),
 	useLocation: () => ({ pathname: "/mock-route" }),
 }))
 
@@ -120,6 +121,7 @@ vi.mock("@/routes/constants", () => ({
 
 vi.mock("@/routes/history/helpers", () => ({
 	getRoutePath: () => "/recordings",
+	routesMatch: () => undefined,
 	routesPathMatch: () => false,
 }))
 

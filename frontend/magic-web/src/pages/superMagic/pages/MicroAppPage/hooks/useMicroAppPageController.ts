@@ -7,7 +7,6 @@ import type { UpdateMicroAppBody } from "@/apis/modules/superMagic"
 import magicToast from "@/components/base/MagicToaster/utils"
 import type { AttachmentItem } from "@/pages/superMagic/components/TopicFilesButton/hooks"
 import useCollaboratorUpdatePanel from "@/pages/superMagic/components/WithCollaborators/hooks/useCollaboratorUpdatePanel"
-import { useCreateTopicListener } from "@/pages/superMagic/components/TopicMode"
 import { useDefaultModeModelListRefreshOnMount } from "@/pages/superMagic/hooks"
 import { useAttachmentsPolling } from "@/pages/superMagic/hooks/useAttachmentsPolling"
 import { useProjectAttachmentsChangeRealtime } from "@/pages/superMagic/hooks/useProjectAttachmentsChangeRealtime"
@@ -18,19 +17,25 @@ import {
 	withAttachmentsRefreshWaitersResolved,
 } from "@/pages/superMagic/services/attachmentsTopicSync"
 import { AttachmentDataProcessor } from "@/pages/superMagic/utils/attachmentDataProcessor"
-import { canManageProject, isReadOnlyProject } from "@/pages/superMagic/utils/permission"
+import {
+	canEditProject,
+	canManageProject,
+	isReadOnlyProject,
+} from "@/pages/superMagic/utils/permission"
 import { TaskStatus } from "@/pages/superMagic/pages/Workspace/types"
 import { RouteName } from "@/routes/constants"
 import useNavigate from "@/routes/hooks/useNavigate"
 import pubsub, { PubSubEvents } from "@/utils/pubsub"
+import { useOrganization } from "@/models/user/hooks/useOrganization"
 
 import type { DetailRef } from "@/pages/superMagic/components/Detail"
 import { getFileManagerRequest } from "@/pages/superMagic/components/Detail/components/FilesViewer/utils/fileManagerTabs"
 import { useAppStore } from "../context"
 import { captureMicroAppCover } from "../utils/captureMicroAppCover"
 import { canEditMicroAppMetadata, canPublishMicroApp } from "../utils/microAppPermissions"
-import { resolveDefaultHtmlEntry } from "../utils/microAppFiles"
+import { getAttachmentId, resolveSelectedHtmlEntry } from "../utils/microAppFiles"
 import { useMicroAppSelectedProjectSync } from "./useMicroAppSelectedProjectSync"
+import { useMicroAppVisit } from "./useMicroAppVisit"
 
 /**
  * 微应用桌面端和移动端共用的数据控制层。
@@ -38,8 +43,10 @@ import { useMicroAppSelectedProjectSync } from "./useMicroAppSelectedProjectSync
  */
 export function useMicroAppPageController(appId: string, projectId: string) {
 	const { t } = useTranslation("super")
+	const { organizationCode: currentOrganizationCode } = useOrganization()
 	const store = useAppStore()
 	const { conversation } = store
+	const conversationType = store.conversationType
 	const navigate = useNavigate()
 	const [isInitialAttachmentsLoaded, setIsInitialAttachmentsLoaded] = useState(false)
 	const [activeFileId, setActiveFileId] = useState<string | null>(null)
@@ -49,13 +56,28 @@ export function useMicroAppPageController(appId: string, projectId: string) {
 	const [editDialogOpen, setEditDialogOpen] = useState(false)
 	const [editSubmitting, setEditSubmitting] = useState(false)
 	const [isDatabasePanelOpen, setIsDatabasePanelOpen] = useState(false)
+	const [publishedDefaultOpenFileId, setPublishedDefaultOpenFileId] = useState<string | null>(
+		null,
+	)
+	const [sourceOrganizationCode, setSourceOrganizationCode] = useState("")
 	const detailRef = useRef<DetailRef>(null)
 	const defaultEntryOpenedKeyRef = useRef<string | null>(null)
-	const selectedProject = conversation.selectedProject
-	const selectedTopic = conversation.topicStore.selectedTopic
+	const recordVisit = useMicroAppVisit(appId)
+	// Files, database and publish configuration always belong to the development
+	// project. The active conversation may point at the usage project.
+	const selectedProject = store.developmentConversation.selectedProject
+	const selectedTopic = store.developmentConversation.topicStore.selectedTopic
+	const canUseDevelopment = canEditProject(
+		store.developmentConversation.selectedProject?.user_role,
+	)
+	// Developers already sit in the source org; fall back while detail loads.
+	const resolvedSourceOrganizationCode =
+		sourceOrganizationCode || (canUseDevelopment ? currentOrganizationCode || "" : "")
 	const hasRunningTopic =
 		selectedTopic?.task_status === TaskStatus.RUNNING ||
-		conversation.topicStore.topics.some((topic) => topic.task_status === TaskStatus.RUNNING)
+		store.developmentConversation.topicStore.topics.some(
+			(topic) => topic.task_status === TaskStatus.RUNNING,
+		)
 	const isReadOnly = isReadOnlyProject(selectedProject?.user_role)
 	const canEdit = canEditMicroAppMetadata(selectedProject)
 	const canPublish = canPublishMicroApp(selectedProject)
@@ -81,7 +103,27 @@ export function useMicroAppPageController(appId: string, projectId: string) {
 		if (projectId && store.projectId !== projectId) {
 			store.initFromProjectId(projectId)
 		}
-	}, [projectId, store])
+	}, [appId, projectId, store])
+
+	useEffect(() => {
+		const canUseRuntime = Boolean(
+			appId &&
+			currentOrganizationCode &&
+			resolvedSourceOrganizationCode &&
+			currentOrganizationCode === resolvedSourceOrganizationCode,
+		)
+		if (canUseRuntime) {
+			void store.loadRuntimeProject(appId)
+			return
+		}
+		store.resetRuntimeProjectContext()
+	}, [appId, currentOrganizationCode, resolvedSourceOrganizationCode, store])
+
+	useEffect(() => {
+		if (selectedProject && !canUseDevelopment && conversationType === "development") {
+			store.setConversationType("usage")
+		}
+	}, [canUseDevelopment, conversationType, selectedProject, store])
 
 	useEffect(() => {
 		setActiveFileId(null)
@@ -92,13 +134,32 @@ export function useMicroAppPageController(appId: string, projectId: string) {
 		setEditDialogOpen(false)
 		setEditSubmitting(false)
 		setIsDatabasePanelOpen(false)
+		setPublishedDefaultOpenFileId(null)
 	}, [projectId])
 
+	useEffect(() => {
+		if (!appId) return
+
+		let active = true
+		setSourceOrganizationCode("")
+		void SuperMagicApi.getMicroAppProject(appId, { enableErrorMessagePrompt: false })
+			.then((detail) => {
+				if (!active) return
+				setSourceOrganizationCode(detail.organization_code?.trim() || "")
+				const published = detail.publish as
+					{ default_open_file_id?: string | null } | undefined
+				setPublishedDefaultOpenFileId(published?.default_open_file_id ?? null)
+			})
+			.catch(() => {
+				if (active) setPublishedDefaultOpenFileId(null)
+			})
+
+		return () => {
+			active = false
+		}
+	}, [appId])
+
 	useDefaultModeModelListRefreshOnMount()
-	useCreateTopicListener({
-		selectedProject,
-		topicStore: conversation.topicStore,
-	})
 
 	const updateAttachments = useDebounceFn(
 		(pid?: string, callback?: (didLoad: boolean) => void) => {
@@ -109,8 +170,6 @@ export function useMicroAppPageController(appId: string, projectId: string) {
 				return
 			}
 
-			const temporaryToken =
-				(window as Window & { temporary_token?: string }).temporary_token || ""
 			let didLoad = false
 
 			pubsub.publish(PubSubEvents.Update_Attachments_Loading, true)
@@ -118,7 +177,6 @@ export function useMicroAppPageController(appId: string, projectId: string) {
 				pid,
 				SuperMagicApi.getAttachmentsByProjectId({
 					projectId: pid,
-					temporaryToken,
 				})
 					.then((res) => {
 						const processedData = AttachmentDataProcessor.processAttachmentData(res)
@@ -140,8 +198,12 @@ export function useMicroAppPageController(appId: string, projectId: string) {
 	).run
 
 	const defaultEntryFile = useMemo(
-		() => resolveDefaultHtmlEntry(attachmentList),
-		[attachmentList],
+		() =>
+			resolveSelectedHtmlEntry({
+				items: attachmentList,
+				selectedFileId: publishedDefaultOpenFileId,
+			}),
+		[publishedDefaultOpenFileId, attachmentList],
 	)
 	const handleAttachmentsChange = useCallback(
 		({ tree, list }: { tree: AttachmentItem[]; list: AttachmentItem[] }) => {
@@ -153,19 +215,26 @@ export function useMicroAppPageController(appId: string, projectId: string) {
 	)
 
 	useEffect(() => {
-		if (!isInitialAttachmentsLoaded || !isFileTabsCacheLoaded || !defaultEntryFile?.file_id) {
+		if (!isInitialAttachmentsLoaded || !isFileTabsCacheLoaded || !defaultEntryFile) {
 			return
 		}
 
 		// FilesViewer 会异步恢复缓存标签，等待恢复完成后再打开默认入口，避免缓存覆盖入口页。
-		const entryId = String(defaultEntryFile.file_id)
+		const entryId = String(getAttachmentId(defaultEntryFile))
 		const openKey = `${projectId}:${entryId}`
 		if (defaultEntryOpenedKeyRef.current === openKey) return
 
 		defaultEntryOpenedKeyRef.current = openKey
 		setActiveFileId(entryId)
 		detailRef.current?.openFileTab(defaultEntryFile)
-	}, [defaultEntryFile, isFileTabsCacheLoaded, isInitialAttachmentsLoaded, projectId])
+		recordVisit()
+	}, [
+		defaultEntryFile,
+		isFileTabsCacheLoaded,
+		isInitialAttachmentsLoaded,
+		projectId,
+		recordVisit,
+	])
 
 	useMicroAppSelectedProjectSync(store.projectFilesStore, selectedProject)
 
@@ -302,7 +371,7 @@ export function useMicroAppPageController(appId: string, projectId: string) {
 
 	const handleProjectNameChange = useMemoizedFn((projectName: string) => {
 		if (!selectedProject) return
-		conversation.setSelectedProject({
+		store.developmentConversation.setSelectedProject({
 			...selectedProject,
 			project_name: projectName,
 		})
@@ -344,9 +413,32 @@ export function useMicroAppPageController(appId: string, projectId: string) {
 		}
 	})
 
+	const handleConversationTypeChange = useMemoizedFn((type: "development" | "usage") => {
+		store.setConversationType(type)
+	})
+	const ensureUsageProject = useMemoizedFn(() => {
+		if (
+			!currentOrganizationCode ||
+			!resolvedSourceOrganizationCode ||
+			currentOrganizationCode !== resolvedSourceOrganizationCode
+		) {
+			const message = t("microAppShare.crossOrganizationConversationUnsupported")
+			magicToast.error(message)
+			return Promise.reject(new Error(message))
+		}
+		return store.ensureUsageProject(appId)
+	})
+
 	return {
 		store,
 		conversation,
+		conversationType: store.conversationType,
+		canUseDevelopment,
+		runtimeProject: store.runtimeProject,
+		runtimeProjectState: store.runtimeProjectState,
+		ensureUsageProject,
+		sourceOrganizationCode: resolvedSourceOrganizationCode,
+		handleConversationTypeChange,
 		selectedProject,
 		selectedTopic,
 		hasRunningTopic,
@@ -370,6 +462,7 @@ export function useMicroAppPageController(appId: string, projectId: string) {
 		checkAttachmentsNowDebounced,
 		publishDialogOpen,
 		setPublishDialogOpen,
+		setPublishedDefaultOpenFileId,
 		editDialogOpen,
 		setEditDialogOpen,
 		editSubmitting,
@@ -379,7 +472,7 @@ export function useMicroAppPageController(appId: string, projectId: string) {
 		canManageCollaborators,
 		handleManageCollaborators,
 		handleProjectNameChange,
-		captureCoverReady: Boolean(defaultEntryFile?.file_id),
+		captureCoverReady: Boolean(defaultEntryFile),
 		handleCaptureCover,
 		handleEditMicroApp,
 	}

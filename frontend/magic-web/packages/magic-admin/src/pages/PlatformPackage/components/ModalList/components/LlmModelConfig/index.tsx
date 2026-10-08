@@ -3,6 +3,7 @@ import { Checkbox, Flex, Form, Input, InputNumber } from "antd"
 import { useTranslation } from "react-i18next"
 import { IconTools, IconEyeSpark, IconTopologyStarRing3 } from "@tabler/icons-react"
 import type { FormInstance } from "antd/lib"
+import { MagicSelect } from "@admin-components"
 import { AiModel } from "@admin/const/aiModel"
 import { useAdminStore } from "@admin/stores/admin"
 import { useStyles } from "../AddModelModal/styles"
@@ -12,7 +13,7 @@ interface LlmModelConfigProps {
 	innerModelType?: AiModel.ModelTypeGroup | null
 	form: FormInstance
 }
-const LlmModelConfig = ({ innerModelType, form }: LlmModelConfigProps) => {
+const LlmModelConfig = ({ innerModelType }: LlmModelConfigProps) => {
 	const { t } = useTranslation("admin/ai/model")
 	const { styles, cx } = useStyles()
 
@@ -41,6 +42,22 @@ const LlmModelConfig = ({ innerModelType, form }: LlmModelConfigProps) => {
 		],
 		[t],
 	)
+
+	const chatApiOptions = useMemo(
+		() => [
+			{
+				label: t("form.chatApiChatCompletions"),
+				value: AiModel.ChatApi.ChatCompletions,
+			},
+			{
+				label: t("form.chatApiResponses"),
+				value: AiModel.ChatApi.Responses,
+			},
+		],
+		[t],
+	)
+
+	const isEmbedding = innerModelType === AiModel.ModelTypeGroup.Embedding
 
 	return (
 		<>
@@ -102,17 +119,25 @@ const LlmModelConfig = ({ innerModelType, form }: LlmModelConfigProps) => {
 			{/* 创造性温度 */}
 			<ModelTemperature isOfficialOrg={isOfficialOrg} />
 
+			{/* OpenAI 兼容聊天接口：name 直接挂在 Form.Item 上，避免嵌套 Flex 导致控件不渲染 */}
+			<Form.Item
+				label={t("form.chatApi")}
+				name={["config", "chat_api"]}
+				className={styles.formItem}
+				initialValue={AiModel.ChatApi.ChatCompletions}
+				hidden={isEmbedding}
+				extra={<div className={styles.desc}>{t("form.chatApiDesc")}</div>}
+			>
+				<MagicSelect options={chatApiOptions} />
+			</Form.Item>
+
 			{/* 模型能力 */}
 			<Form.Item
 				label={t("form.modelPower")}
 				name="model_power"
 				className={styles.formItem}
-				dependencies={["model_type"]}
 				initialValue={[AiModel.ModelPower.SupportTool, AiModel.ModelPower.SupportVision]}
-				hidden={
-					form.getFieldValue("model_type") === AiModel.ModelTypeGroup.Embedding ||
-					innerModelType === AiModel.ModelTypeGroup.Embedding
-				}
+				hidden={isEmbedding}
 			>
 				<Checkbox.Group className={styles.checkboxGroup}>
 					{powerOptions.map(({ value, desc, label, icon }) => (

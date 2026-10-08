@@ -8,6 +8,7 @@ import {
 	createResourcePlugin,
 	createPageDwellPlugin,
 } from "@/infrastructure/logger/plugins"
+import { createStorageQuotaPlugin } from "./storage/storageQuota"
 import { recordId } from "@/infrastructure/logger/record"
 
 type AppLogConfig = typeof window.CONFIG
@@ -48,6 +49,7 @@ export class AppLoggerService {
 					}),
 					createResourcePlugin(),
 					createPageDwellPlugin(),
+					createStorageQuotaPlugin(),
 					createDevicePlugin({
 						sha: config?.MAGIC_APP_SHA,
 						version: config?.MAGIC_APP_VERSION,

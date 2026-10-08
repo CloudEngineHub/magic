@@ -1,12 +1,19 @@
 import { act, renderHook, waitFor } from "@testing-library/react"
 import { beforeEach, describe, expect, it, vi } from "vitest"
-import { normalizeMicroAppListResponse, useMicroAppsPage } from "../useMicroAppsPage"
+import {
+	getMicroAppAvailableScopes,
+	normalizeMicroAppListResponse,
+	normalizeMicroAppListScope,
+	shouldOpenPublishedShare,
+	useMicroAppsPage,
+} from "../useMicroAppsPage"
 
 const mocks = vi.hoisted(() => ({
 	getMicroAppWorkspace: vi.fn(),
 	getMicroApps: vi.fn(),
 	updateMicroApp: vi.fn(),
 	deleteMicroApp: vi.fn(),
+	user: { isPersonalOrganization: false },
 }))
 
 vi.mock("@/apis", () => ({
@@ -18,9 +25,16 @@ vi.mock("@/apis", () => ({
 	},
 }))
 
+vi.mock("@/models/user", () => ({
+	userStore: {
+		user: mocks.user,
+	},
+}))
+
 describe("useMicroAppsPage", () => {
 	beforeEach(() => {
 		vi.clearAllMocks()
+		mocks.user.isPersonalOrganization = false
 		mocks.getMicroAppWorkspace.mockResolvedValue({ id: "workspace-1", name: "Micro Apps" })
 		mocks.getMicroApps.mockResolvedValue({
 			list: [
@@ -48,6 +62,48 @@ describe("useMicroAppsPage", () => {
 			project_id: "100000000000009002",
 			deleted: true,
 		})
+	})
+
+	it("keeps panel scopes independent while sharing search and one workspace request", async () => {
+		const { result, rerender } = renderHook(
+			({ keyword }) => ({
+				development: useMicroAppsPage({ initialScope: "created", keyword }),
+				access: useMicroAppsPage({ initialScope: "recent", loadWorkspace: false, keyword }),
+			}),
+			{ initialProps: { keyword: "" } },
+		)
+		await waitFor(() => expect(result.current.access.loading).toBe(false))
+		expect(mocks.getMicroAppWorkspace).toHaveBeenCalledTimes(1)
+		expect(result.current.development.scope).toBe("created")
+		act(() => result.current.access.setScope("accessible"))
+		expect(result.current.access.loading).toBe(true)
+		expect(result.current.development.scope).toBe("created")
+		rerender({ keyword: "客户" })
+		await waitFor(() => expect(result.current.access.loading).toBe(false))
+		expect(mocks.getMicroApps).toHaveBeenCalledWith(
+			expect.objectContaining({ scope: "accessible", keyword: "客户" }),
+		)
+		expect(mocks.getMicroApps).toHaveBeenCalledWith(
+			expect.objectContaining({ scope: "created", keyword: "客户" }),
+		)
+	})
+
+	it("ignores an older panel response after changing scope", async () => {
+		let resolveOld!: (value: unknown) => void
+		mocks.getMicroApps.mockImplementationOnce(
+			() =>
+				new Promise((resolve) => {
+					resolveOld = resolve
+				}),
+		)
+		const { result } = renderHook(() =>
+			useMicroAppsPage({ initialScope: "recent", loadWorkspace: false }),
+		)
+		await waitFor(() => expect(mocks.getMicroApps).toHaveBeenCalledTimes(1))
+		act(() => result.current.setScope("accessible"))
+		await waitFor(() => expect(result.current.loading).toBe(false))
+		await act(async () => resolveOld({ list: [{ app_id: "stale" }], total: 1, page: 1 }))
+		expect(result.current.apps[0].app_id).toBe("100000000000009001")
 	})
 
 	it("loads the new app list with the default scope", async () => {
@@ -229,5 +285,70 @@ describe("useMicroAppsPage", () => {
 		await waitFor(() => expect(result.current.loading).toBe(false))
 		expect(result.current.apps).toEqual([])
 		expect(result.current.hasMore).toBe(false)
+	})
+
+	it("opens published share pages according to scope and publish status", () => {
+		expect(shouldOpenPublishedShare("recent", "published")).toBe(true)
+		expect(shouldOpenPublishedShare("recent", "unpublished")).toBe(false)
+		expect(shouldOpenPublishedShare("accessible", "unpublished")).toBe(true)
+		expect(shouldOpenPublishedShare("all", "published")).toBe(false)
+		expect(shouldOpenPublishedShare("created", "published")).toBe(false)
+	})
+
+	it("hides collaborated from personal organization scopes", () => {
+		expect(getMicroAppAvailableScopes(true)).toEqual(["all", "created", "accessible", "recent"])
+		expect(getMicroAppAvailableScopes(false)).toContain("collaborated")
+		expect(normalizeMicroAppListScope("collaborated", true)).toBe("all")
+		expect(normalizeMicroAppListScope("collaborated", false)).toBe("collaborated")
+	})
+
+	it("ignores collaborated scope in a personal organization", async () => {
+		mocks.user.isPersonalOrganization = true
+		const { result } = renderHook(() => useMicroAppsPage())
+		await waitFor(() => expect(result.current.loading).toBe(false))
+
+		act(() => {
+			result.current.setScope("collaborated")
+		})
+
+		expect(result.current.scope).toBe("all")
+		expect(result.current.availableScopes).not.toContain("collaborated")
+		expect(mocks.getMicroApps).toHaveBeenLastCalledWith({
+			page: 1,
+			page_size: 20,
+			keyword: "",
+			scope: "all",
+		})
+	})
+
+	it("falls back from collaborated when switching to a personal organization", async () => {
+		const { result, rerender } = renderHook(() => useMicroAppsPage())
+		await waitFor(() => expect(result.current.loading).toBe(false))
+
+		act(() => {
+			result.current.setScope("collaborated")
+		})
+		await waitFor(() =>
+			expect(mocks.getMicroApps).toHaveBeenLastCalledWith({
+				page: 1,
+				page_size: 20,
+				keyword: "",
+				scope: "collaborated",
+			}),
+		)
+
+		mocks.user.isPersonalOrganization = true
+		rerender()
+
+		expect(result.current.scope).toBe("all")
+		expect(result.current.availableScopes).not.toContain("collaborated")
+		await waitFor(() =>
+			expect(mocks.getMicroApps).toHaveBeenLastCalledWith({
+				page: 1,
+				page_size: 20,
+				keyword: "",
+				scope: "all",
+			}),
+		)
 	})
 })

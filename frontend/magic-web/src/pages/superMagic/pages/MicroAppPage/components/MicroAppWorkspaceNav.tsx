@@ -1,4 +1,4 @@
-import { Database, File, Monitor, Timer } from "lucide-react"
+import { BookOpen, Database, File, Monitor, Timer } from "lucide-react"
 import { useTranslation } from "react-i18next"
 
 import { Button } from "@/components/shadcn-ui/button"
@@ -8,7 +8,7 @@ import { cn } from "@/utils/cn"
 import UserSpaceIcon from "../../../components/UserSpace/UserSpaceIcon"
 
 export type MicroAppWorkspaceView =
-	"preview" | "files" | "database" | "scheduledTasks" | "shareManagement" | "userSpace"
+	"preview" | "files" | "skills" | "database" | "scheduledTasks" | "shareManagement" | "userSpace"
 
 interface MicroAppWorkspaceNavProps {
 	activeView: MicroAppWorkspaceView
@@ -38,6 +38,13 @@ export default function MicroAppWorkspaceNav({
 			label: t("microAppPage.navigation.files"),
 			icon: File,
 			testId: "micro-app-nav-files",
+		},
+		{
+			view: "skills" as const,
+			label: t("microAppPage.navigation.skills"),
+			icon: BookOpen,
+			testId: "micro-app-nav-skills",
+			disabled: projectPanelDisabled,
 		},
 		{
 			view: "database" as const,

@@ -198,7 +198,7 @@ export class MagicFSApi extends BaseRuntimeBridgeApiPlugin {
 				const handler = (
 					event: MessageEvent<{ type?: string; path?: string; timestamp?: number }>,
 				) => {
-					if (isStaleDocument(installedVersion)) return
+					if (!this.isHostMessage(event) || isStaleDocument(installedVersion)) return
 					if (!event.data || event.data.type !== "MAGIC_FS_FILE_CHANGED") return
 					if (event.data.path !== path) return
 					try {
@@ -246,7 +246,7 @@ export class MagicFSApi extends BaseRuntimeBridgeApiPlugin {
 						maxEntryCount?: number
 					}>,
 				) => {
-					if (isStaleDocument(installedVersion)) return
+					if (!this.isHostMessage(event) || isStaleDocument(installedVersion)) return
 					if (
 						!event.data ||
 						(event.data.type !== "MAGIC_FS_DIR_CHANGED" &&

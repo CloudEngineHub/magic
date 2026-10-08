@@ -33,12 +33,18 @@ export default function RecordSummaryEditorContainer({
 	const shouldFillHeight = Boolean(inputLayout?.fillHeight)
 	const scopedTopicStore = editorContext?.topicStore ?? topicStore
 
-	const selectedTopic = editorContext?.selectedTopic ?? scopedTopicStore.selectedTopic
-	const selectedProject = editorContext?.selectedProject ?? projectStore.selectedProject
+	const selectedTopic =
+		editorContext?.selectedTopic !== undefined
+			? editorContext.selectedTopic
+			: scopedTopicStore.selectedTopic
+	const selectedProject =
+		editorContext?.selectedProject !== undefined
+			? editorContext.selectedProject
+			: projectStore.selectedProject
 	const selectedWorkspace =
-		editorContext?.selectedWorkspace ??
-		workspaceStore.selectedWorkspace ??
-		workspaceStore.firstWorkspace
+		editorContext?.selectedWorkspace !== undefined
+			? editorContext.selectedWorkspace
+			: (workspaceStore.selectedWorkspace ?? workspaceStore.firstWorkspace)
 	const effectiveSetTopicMode = editorContext?.setTopicMode ?? roleStore.setCurrentRole
 
 	useSharedProjectMode({ setTopicMode: effectiveSetTopicMode })

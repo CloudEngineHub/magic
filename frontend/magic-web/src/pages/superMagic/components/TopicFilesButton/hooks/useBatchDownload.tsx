@@ -1,8 +1,9 @@
-import { useState, useMemo, useRef } from "react"
-import type { AttachmentItem, ConfirmFileOperation } from "./types"
-import { useFileAccess } from "@/pages/superMagic/providers/FileAccessProvider"
+import { useFileAccess as useFilePermissions } from "@/pages/superMagic/providers/FileAccessProvider"
 import { filterFileAccessMenuItems } from "../utils/file-access-menu"
-import { MenuProps } from "antd"
+import { createElement, useState, useMemo, useRef } from "react"
+import type { AttachmentItem, ConfirmFileOperation } from "./types"
+import { Button } from "antd"
+import type { MenuProps } from "antd"
 import { collectFileIds } from "../utils/collectFileIds"
 import { collectSelectedItemIds } from "../utils/collectSelectedItemIds"
 import {
@@ -27,6 +28,9 @@ import { MagicSystemFolderIcon } from "../components/MagicSystemFolderIcon"
 import pubsub, { PubSubEvents } from "@/utils/pubsub"
 import { useIsMobile } from "@/hooks/useIsMobile"
 import { SuperMagicApi } from "@/apis"
+import { getShareAccessToken } from "@/pages/superMagic/fileAccess/fileAccessContext"
+import { useFileAccess } from "@/pages/superMagic/fileAccess/FileAccessProvider"
+import { useFileApi } from "@/pages/superMagic/fileAccess/fileApi"
 import useShareRoute from "../../../hooks/useShareRoute"
 import magicToast from "@/components/base/MagicToaster/utils"
 import { createRandomUuidV4 } from "@/utils/create-random-uuid-v4"
@@ -132,11 +136,12 @@ export function useBatchDownload(options: UseBatchDownloadOptions) {
 	const isChatProject = isCachedChatWorkspaceProject(selectedProject)
 	const { deleteConfirmNode, openDeleteConfirm } = useMobileDeleteConfirmSheet()
 	const { isShareRoute, isFileShare } = useShareRoute()
-
+	const fileAccess = useFileAccess()
+	const fileApi = useFileApi()
 	const {
 		permissions: access,
 		options: { copyTo, moveTo },
-	} = useFileAccess()
+	} = useFilePermissions()
 	const canDownload = allowDownload !== false
 
 	// 退出多选模式的辅助函数
@@ -394,12 +399,8 @@ export function useBatchDownload(options: UseBatchDownloadOptions) {
 
 	// 批量下载选中文件
 	const handleBatchDownload = async () => {
-		if (
-			!access.download ||
-			!canDownload ||
-			selectedItems.size === 0 ||
-			(!projectId && !options.onDownloadSelected)
-		)
+		if (!access.download) return
+		if (!canDownload || selectedItems.size === 0 || (!projectId && !options.onDownloadSelected))
 			return
 		setBatchLoading(true)
 		let keepLoadingForPolling = false
@@ -422,7 +423,7 @@ export function useBatchDownload(options: UseBatchDownloadOptions) {
 
 			const token =
 				isShareRoute || isFileShare
-					? ((window as unknown as { temporary_token?: string }).temporary_token ?? "")
+					? getShareAccessToken(fileAccess) || undefined
 					: undefined
 
 			if (downloadProgress) {
@@ -484,6 +485,7 @@ export function useBatchDownload(options: UseBatchDownloadOptions) {
 					try {
 						const checkData = await SuperMagicApi.checkBatchDownloadStatus(
 							data.batch_key,
+							token,
 						)
 						if (checkData.status === "ready" && checkData.download_url) {
 							downloadFileWithAnchor(checkData.download_url)
@@ -538,10 +540,9 @@ export function useBatchDownload(options: UseBatchDownloadOptions) {
 		}
 	}
 
-	const handleExportPdfOrPpt = async (convert_type = "pdf") => {
-		if (!access.export || !canDownload || selectedItems.size === 0) return
-		const convertType = convert_type as "pdf" | "ppt"
-		const format = convertType === "pdf" ? "pdf" : "pptx"
+	const handleExportDocument = async (format: "pdf" | "pptx" = "pdf") => {
+		if (!access.export) return
+		if (!canDownload || selectedItems.size === 0) return
 		// Always resolve against the complete attachment tree. The filtered tree can omit
 		// folder resources while a search is active, which would produce incomplete exports.
 		const sourceItems = attachments.length > 0 ? attachments : filteredFiles
@@ -580,12 +581,30 @@ export function useBatchDownload(options: UseBatchDownloadOptions) {
 
 		setBatchLoading(true)
 		const toastId = createRandomUuidV4()
+		const exportController = format === "pptx" ? new AbortController() : null
+		const exportText =
+			format === "pdf" ? t("topicFiles.batchExportingPdf") : t("topicFiles.batchExportingPpt")
+		const getExportToastContent = (progressText: string) =>
+			exportController
+				? createElement(
+						"div",
+						{ style: { display: "flex", alignItems: "center", gap: 8 } },
+						createElement("span", null, progressText),
+						createElement(
+							Button,
+							{
+								type: "default",
+								size: "small",
+								danger: true,
+								onClick: () => exportController.abort(),
+							},
+							t("topicFiles.exportCancel"),
+						),
+					)
+				: progressText
 		magicToast.loading({
 			key: toastId,
-			content:
-				convertType === "pdf"
-					? t("topicFiles.batchExportingPdf")
-					: t("topicFiles.batchExportingPpt"),
+			content: getExportToastContent(exportText),
 			duration: 0,
 		})
 
@@ -595,6 +614,16 @@ export function useBatchDownload(options: UseBatchDownloadOptions) {
 				targets,
 				attachments: sourceItems,
 				projectName: selectedProject?.project_name,
+				access: fileAccess ?? undefined,
+				fileApi,
+				signal: exportController?.signal,
+				onProgress: (progress) => {
+					magicToast.loading({
+						key: toastId,
+						content: getExportToastContent(`${exportText} (${Math.round(progress)}%)`),
+						duration: 0,
+					})
+				},
 			})
 
 			if (result.cancelled) {
@@ -609,7 +638,7 @@ export function useBatchDownload(options: UseBatchDownloadOptions) {
 				})
 				return
 			}
-			if (!result.artifact || result.successCount === 0) {
+			if ((!result.artifact && !result.streamedToDisk) || result.successCount === 0) {
 				magicToast.error({
 					key: toastId,
 					content: t("topicFiles.contextMenu.fileExport.exportFailed"),
@@ -618,15 +647,17 @@ export function useBatchDownload(options: UseBatchDownloadOptions) {
 				return
 			}
 
-			// Use the direct Blob downloader so a successful export does not open the
-			// manual retry/copy download modal used by source-file downloads.
-			const downloadResult = await downloadBlobFile(
-				result.artifact.blob,
-				result.artifact.fileName,
-				format,
-			)
-			if (!downloadResult.success) {
-				throw new Error(downloadResult.message || "Batch export download failed")
+			if (result.artifact) {
+				// PDF paths return one in-memory artifact. Streaming PPTX paths have already
+				// committed their files to the selected destination.
+				const downloadResult = await downloadBlobFile(
+					result.artifact.blob,
+					result.artifact.fileName,
+					format,
+				)
+				if (!downloadResult.success) {
+					throw new Error(downloadResult.message || "Batch export download failed")
+				}
 			}
 
 			if (result.failureCount > 0) {
@@ -751,7 +782,7 @@ export function useBatchDownload(options: UseBatchDownloadOptions) {
 										<span>{t("topicFiles.exportPdf")}</span>
 									</div>
 								),
-								onClick: () => handleExportPdfOrPpt("pdf"),
+								onClick: () => handleExportDocument("pdf"),
 								disabled: batchLoading,
 							},
 							{
@@ -759,10 +790,10 @@ export function useBatchDownload(options: UseBatchDownloadOptions) {
 								label: (
 									<div style={{ display: "flex", alignItems: "center", gap: 8 }}>
 										<IconFileTypePpt size={16} stroke={1.5} />
-										<span>{t("topicFiles.exportPpt")}</span>
+										<span>{t("topicFiles.exportPptx")}</span>
 									</div>
 								),
-								onClick: () => handleExportPdfOrPpt("ppt"),
+								onClick: () => handleExportDocument("pptx"),
 								disabled: batchLoading,
 							},
 						],
@@ -794,7 +825,7 @@ export function useBatchDownload(options: UseBatchDownloadOptions) {
 									<span>{t("topicFiles.exportPdf")}</span>
 								</div>
 							),
-							onClick: () => handleExportPdfOrPpt("pdf"),
+							onClick: () => handleExportDocument("pdf"),
 							disabled: batchLoading,
 						},
 						{
@@ -802,10 +833,10 @@ export function useBatchDownload(options: UseBatchDownloadOptions) {
 							label: (
 								<div style={{ display: "flex", alignItems: "center", gap: 8 }}>
 									<IconFileTypePpt size={16} stroke={1.5} />
-									<span>{t("topicFiles.exportPpt")}</span>
+									<span>{t("topicFiles.exportPptx")}</span>
 								</div>
 							),
-							onClick: () => handleExportPdfOrPpt("ppt"),
+							onClick: () => handleExportDocument("pptx"),
 							disabled: batchLoading,
 						},
 					]
@@ -894,7 +925,7 @@ export function useBatchDownload(options: UseBatchDownloadOptions) {
 
 		// 处理函数
 		handleBatchDownload,
-		handleExportPdfOrPpt,
+		handleExportDocument,
 		handleBatchDelete,
 		deleteWithConfirm,
 		handleMobileBatchDelete,

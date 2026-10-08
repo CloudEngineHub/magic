@@ -12,7 +12,7 @@ import { cn } from "@/utils/cn"
 import { Attachment } from "@/pages/superMagic/components/MessageList/components/MessageAttachment"
 import type { AttachmentProps } from "@/pages/superMagic/components/MessageList/components/MessageAttachment/type"
 import { normalizeWorkspacePathForComparison } from "@/pages/superMagic/utils/markdownFileReference"
-import { useMessageListContext } from "@/pages/superMagic/components/MessageList/context"
+import { useMessageListProjectFilesStore } from "@/pages/superMagic/components/MessageList/context"
 import {
 	buildFilePathAttachments,
 	findFilePathAttachment,
@@ -21,7 +21,6 @@ import {
 } from "@/pages/superMagic/components/MessageList/utils/attachmentByFilePath"
 import { openMessageFile } from "@/pages/superMagic/components/MessageList/utils/openMessageFile"
 import { superMagicStore } from "@/pages/superMagic/stores"
-import projectFilesStore from "@/stores/projectFiles"
 import { useMessageViewState } from "@/pages/superMagic/components/MessageList/view-state/MessageViewStateContext"
 import { useFilePathAttachmentDownload } from "@/pages/superMagic/components/MessageList/components/MessageAttachment/hooks/useFilePathAttachmentDownload"
 import { resolveAttachmentList } from "@/pages/superMagic/components/MessageList/message-render-contract"
@@ -44,8 +43,7 @@ export const AttachmentSection = observer(function AttachmentSection({
 	onSelectDetail,
 	className,
 }: AttachmentSectionProps) {
-	const { projectFilesStore: scopedProjectFilesStore } = useMessageListContext()
-	const resolvedProjectFilesStore = scopedProjectFilesStore ?? projectFilesStore
+	const resolvedProjectFilesStore = useMessageListProjectFilesStore()
 	const attachments = resolveAttachmentList(node, fallbackNode) as AttachmentProps[]
 
 	const rawFilePathAttachments = useMemo(() => {
@@ -68,7 +66,7 @@ export const AttachmentSection = observer(function AttachmentSection({
 	const seenFilePaths = new Set<string>()
 	const filePathAttachments = rawFilePathAttachments.flatMap((attachment) => {
 		const found = findFilePathAttachment(
-			resolvedProjectFilesStore.workspaceFilesList,
+			resolvedProjectFilesStore?.workspaceFilesList ?? [],
 			attachment,
 		)
 		if (!found || found.type === "directory" || found.is_directory) return []

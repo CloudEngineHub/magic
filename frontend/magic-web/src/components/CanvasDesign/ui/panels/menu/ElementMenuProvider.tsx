@@ -250,12 +250,7 @@ export function ElementMenuProvider(props: PropsWithChildren<unknown>) {
 			}
 
 			setLayerRenamingElementId(null)
-			const started = canvas.elementRenameManager.startRename(elementId)
-			if (!started) {
-				return
-			}
-
-			setCanvasRenamingElementId(elementId)
+			canvas.elementRenameManager.startRename(elementId)
 		},
 		[canvas, setCanvasRenamingElementId, setLayerRenamingElementId],
 	)
@@ -551,7 +546,7 @@ export function ElementMenuProvider(props: PropsWithChildren<unknown>) {
 	)
 
 	return (
-		<ElementMenuContext.Provider value={{ openMenu }}>
+		<ElementMenuContext.Provider value={{ openMenu, openMenuAt: openMenuByPosition }}>
 			<ContextMenu key={menuKey} onOpenChange={handleMenuOpenChange}>
 				<ContextMenuTrigger asChild>
 					<div

@@ -1,4 +1,6 @@
-import { getTemporaryDownloadUrl } from "@/pages/superMagic/utils/api"
+import { useFileApi } from "@/pages/superMagic/fileAccess/fileApi"
+import { useFileAccess } from "@/pages/superMagic/fileAccess/FileAccessProvider"
+import { shouldWaitForShareAccess } from "@/pages/superMagic/fileAccess/fileAccessContext"
 import { useMemo, useState } from "react"
 import { useDebounceEffect, useMemoizedFn } from "ahooks"
 import { FileHistoryVersion } from "@/pages/superMagic/pages/Workspace/types"
@@ -26,6 +28,10 @@ export const useSlidesFileData = ({
 }) => {
 	const { t } = useTranslation("super")
 	const { isShareRoute, isMagicShareRoute } = useShareRoute()
+	const fileAccess = useFileAccess()
+	// Bind the ambient share/session identity so slide version URLs resolve on share
+	// previews as well as in the host session.
+	const fileApi = useFileApi()
 
 	/** 每一页PPT文件的数据 */
 	const [slidesFileDataMap, setSlidesFileDataMap] = useState<Record<string, SlideFileData>>({})
@@ -42,7 +48,7 @@ export const useSlidesFileData = ({
 		// 优先使用已缓存的文件地址
 		const targetFileUrl =
 			slidesFileDataMap[currentSildeFileId]?.fileUrlVersionMap?.[
-			file_version || slidesFileDataMap[currentSildeFileId]?.fileVersionsList[0]?.version
+				file_version || slidesFileDataMap[currentSildeFileId]?.fileVersionsList[0]?.version
 			]
 		// targetFileUrl存在，说明该版本的文件地址已获取过，可直接使用
 		if (targetFileUrl) {
@@ -55,30 +61,35 @@ export const useSlidesFileData = ({
 				},
 			}))
 		} else {
+			if (shouldWaitForShareAccess(fileAccess)) return
 			// 获取文件下载地址
-			getTemporaryDownloadUrl({
-				file_ids: [currentSildeFileId],
-				file_versions: file_version ? { [currentSildeFileId]: file_version } : undefined,
-			}).then((res: any) => {
-				setSlidesFileDataMap((prev) => ({
-					...prev,
-					[currentSildeFileId]: {
-						...prev[currentSildeFileId],
-						fileUrl: res[0]?.url,
-						fileVersion: file_version,
-						fileUrlVersionMap: file_version
-							? {
-								...(prev[currentSildeFileId]?.fileUrlVersionMap || {}),
-								[file_version ||
-									prev[currentSildeFileId]?.fileVersionsList[0]?.version]:
-									res[0]?.url,
-							}
-							: {
-								...(prev[currentSildeFileId]?.fileUrlVersionMap || {}),
-							},
-					},
-				}))
-			})
+			fileApi
+				.getTemporaryDownloadUrl({
+					file_ids: [currentSildeFileId],
+					file_versions: file_version
+						? { [currentSildeFileId]: file_version }
+						: undefined,
+				})
+				.then((res: any) => {
+					setSlidesFileDataMap((prev) => ({
+						...prev,
+						[currentSildeFileId]: {
+							...prev[currentSildeFileId],
+							fileUrl: res[0]?.url,
+							fileVersion: file_version,
+							fileUrlVersionMap: file_version
+								? {
+										...(prev[currentSildeFileId]?.fileUrlVersionMap || {}),
+										[file_version ||
+										prev[currentSildeFileId]?.fileVersionsList[0]?.version]:
+											res[0]?.url,
+									}
+								: {
+										...(prev[currentSildeFileId]?.fileUrlVersionMap || {}),
+									},
+						},
+					}))
+				})
 		}
 	})
 

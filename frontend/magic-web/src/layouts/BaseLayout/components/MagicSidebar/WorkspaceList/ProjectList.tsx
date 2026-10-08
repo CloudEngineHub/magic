@@ -46,6 +46,9 @@ function ProjectList({
 	const loadMore = useCallback(() => {
 		void projectStore.loadMoreProjectsForWorkspace(workspaceId)
 	}, [workspaceId])
+	// Ensure virtualizer is enabled when active, even before maxProjectHeight is first computed.
+	// maxProjectHeight limits viewport maxHeight in CSS; it should not disable project rendering.
+	const enabled = active && (maxProjectHeight === undefined || maxProjectHeight > 0)
 	const {
 		scrollRef,
 		virtualizer,
@@ -57,7 +60,7 @@ function ProjectList({
 		hasActiveInteraction,
 	} = useVirtualProjectList({
 		// 先确定视口高度再恢复滚动位置，避免侧栏重新展开时 DOM 回到顶部、虚拟行仍停在旧位置。
-		enabled: active && (maxProjectHeight ?? 0) > 0,
+		enabled,
 		loadEnabled: active,
 		listRef,
 		scrollKey: `workspace-projects:${workspaceId}`,

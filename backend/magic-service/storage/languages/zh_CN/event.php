@@ -53,6 +53,7 @@ return [
     'task' => [
         'pending' => '任务待处理',
         'stop' => '任务已停止',
+        'question_expired' => '问题已超时',
     ],
     'credit' => [
         'insufficient_limit' => '信用额度不足',

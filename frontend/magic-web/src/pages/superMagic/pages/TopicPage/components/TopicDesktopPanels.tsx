@@ -58,6 +58,12 @@ interface TopicDesktopPanelsProps {
 	keepDetailMountedWhenHidden?: boolean
 	autoExpandConversationWhenDetailVisible?: boolean
 	persistConversationPanelState?: boolean
+	initialConversationPanelCollapsed?: boolean
+	/** Embedding pages can reserve horizontal padding around the collapsed navigation. */
+	collapsedConversationPanelWidth?: number
+	conversationResizeHandleClassName?: string
+	/** Keep overlays inside an embedding page instead of anchoring them to the viewport. */
+	historyOverlayScope?: "viewport" | "container"
 	historyLayout?: TopicDesktopPanelsHistoryLayout
 	shouldShowDetailPanel: boolean
 	isDetailPanelCollapsed?: boolean
@@ -73,6 +79,7 @@ interface TopicDesktopPanelsProps {
 		isHistoryPanelOpen: boolean
 		onToggleHistoryPanel?: () => void
 	}) => ReactNode
+	detailResizeHandleClassName?: string
 }
 
 function TopicDesktopPanels({
@@ -88,11 +95,16 @@ function TopicDesktopPanels({
 	keepDetailMountedWhenHidden = false,
 	autoExpandConversationWhenDetailVisible = true,
 	persistConversationPanelState = true,
+	initialConversationPanelCollapsed = false,
+	collapsedConversationPanelWidth,
+	conversationResizeHandleClassName,
+	historyOverlayScope = "viewport",
 	historyLayout,
 	shouldShowDetailPanel,
 	isDetailPanelCollapsed = false,
 	onExpandDetailPanel,
 	renderMessagePanel,
+	detailResizeHandleClassName,
 }: TopicDesktopPanelsProps) {
 	const { t } = useTranslation("super")
 	const reducedMotion = useReducedMotion()
@@ -131,7 +143,7 @@ function TopicDesktopPanels({
 		containerWidthPx,
 		projectSiderWidthPx: storedProjectSiderWidthPx,
 		messagePanelWidthPx,
-		collapsedMessagePanelWidthPx,
+		collapsedMessagePanelWidthPx: defaultCollapsedMessagePanelWidthPx,
 		isConversationPanelCollapsed,
 		isDraggingProjectSider,
 		isDraggingMessagePanel,
@@ -144,6 +156,7 @@ function TopicDesktopPanels({
 		isReadOnly,
 		allowProjectSiderResize: showProjectSidebar && showProjectResizeHandle,
 		persistConversationPanelState,
+		initialConversationPanelCollapsed,
 		enableProjectCollapse,
 		allowConversationPanelResize:
 			!isReadOnly && (!enableProjectCollapse || shouldShowDetailPanel),
@@ -151,6 +164,8 @@ function TopicDesktopPanels({
 			historyResize?.onWidthCommit(result.width)
 		},
 	})
+	const collapsedMessagePanelWidthPx =
+		collapsedConversationPanelWidth ?? defaultCollapsedMessagePanelWidthPx
 	// Preserve the stored project width while removing both its visual slot and resize affordance.
 	const projectSiderWidthPx = showProjectSidebar
 		? isProjectSiderCollapsed
@@ -159,6 +174,19 @@ function TopicDesktopPanels({
 		: 0
 	const shouldShowProjectResizeHandle =
 		showProjectSidebar && showProjectResizeHandle && !isProjectSiderCollapsed
+	const showCollapsedProjectDivider =
+		showProjectSidebar && isProjectSiderCollapsed && !shouldShowDetailPanel
+	const collapsedProjectDividerHost =
+		typeof document !== "undefined"
+			? document.querySelector<HTMLElement>('[data-testid="base-layout-pc-main-frame"]')
+			: null
+	const collapsedProjectDivider = (
+		<div
+			className="pointer-events-none absolute inset-y-0 left-0 z-20 w-px bg-border"
+			data-testid="collapsed-project-sidebar-divider"
+			aria-hidden="true"
+		/>
+	)
 	const sidebarTransition =
 		reducedMotion || isDraggingProjectSider || isDraggingHistoryPanel
 			? "none"
@@ -381,7 +409,7 @@ function TopicDesktopPanels({
 
 		return (
 			<div
-				className={cn("flex h-full min-h-0 shrink-0 pl-2", isDrawer && "z-20")}
+				className={cn("flex h-full min-h-0 shrink-0", isDrawer && "z-20")}
 				style={{ width: TOPIC_HISTORY_PANEL_WIDTH }}
 			>
 				<section
@@ -402,13 +430,58 @@ function TopicDesktopPanels({
 		)
 	}
 
+	const fixedTopicHistory =
+		isFixedTopicHistory && visibleTopicHistoryMode ? (
+			<div
+				className={
+					historyOverlayScope === "container"
+						? "pointer-events-none absolute inset-y-0 right-0 z-40"
+						: topicHistorySafeAreaPortalClassName
+				}
+			>
+				<div className="pointer-events-auto h-full">
+					{renderTopicHistoryShell(visibleTopicHistoryMode)}
+				</div>
+			</div>
+		) : null
+	const drawerTopicHistory = isDrawerTopicHistory ? (
+		<div
+			className={cn(
+				"pointer-events-none z-50",
+				historyOverlayScope === "container" ? "absolute inset-0" : "fixed inset-0",
+			)}
+		>
+			<div
+				className="pointer-events-auto absolute inset-0 bg-transparent"
+				data-testid="topic-history-panel-dismiss-area"
+				onClick={onCloseTopicHistoryPanel}
+				aria-hidden="true"
+			/>
+			<div
+				className={
+					historyOverlayScope === "container"
+						? "pointer-events-auto absolute inset-y-0 right-0"
+						: topicHistorySafeAreaDrawerClassName
+				}
+			>
+				{renderTopicHistoryShell("drawer")}
+			</div>
+		</div>
+	) : null
+
 	return (
 		<div
 			ref={containerRef}
 			className={containerClassName}
 			data-testid="main-workspace-container"
 		>
-			<div className="flex h-full w-full min-w-0">
+			<div className="relative flex h-full w-full min-w-0">
+				{/* Render in the outer frame so the boundary also covers its desktop top/bottom spacing. */}
+				{showCollapsedProjectDivider
+					? collapsedProjectDividerHost
+						? createPortal(collapsedProjectDivider, collapsedProjectDividerHost)
+						: collapsedProjectDivider
+					: null}
 				{showProjectSidebar ? (
 					<div
 						className="shrink-0"
@@ -443,7 +516,6 @@ function TopicDesktopPanels({
 
 				{shouldShowProjectResizeHandle && (
 					<TopicResizeHandle
-						gripVariant="dots"
 						dragging={isDraggingProjectSider}
 						collapseProgress={isDraggingProjectSider ? collapseProgress : 0}
 						collapseArmed={isDraggingProjectSider && isCollapseArmed}
@@ -456,7 +528,7 @@ function TopicDesktopPanels({
 				)}
 
 				<div
-					className="relative flex h-full min-w-0 flex-1 overflow-hidden"
+					className="relative flex h-full min-w-0 flex-1 overflow-hidden bg-sidebar"
 					data-testid="topic-desktop-main-content"
 				>
 					{(isReadOnly || shouldShowDetailPanel || keepDetailMountedWhenHidden) && (
@@ -553,7 +625,10 @@ function TopicDesktopPanels({
 					{!isReadOnly && shouldShowDetailPanel && (
 						<div
 							data-testid="topic-detail-resize-handle-slot"
-							className="relative z-20 shrink-0 overflow-visible"
+							className={cn(
+								"relative z-20 shrink-0 overflow-visible",
+								detailResizeHandleClassName,
+							)}
 							style={{
 								width: targetRightHandleWidth,
 								minWidth: targetRightHandleWidth,
@@ -562,7 +637,6 @@ function TopicDesktopPanels({
 							}}
 						>
 							<TopicResizeHandle
-								gripVariant="dots"
 								dragging={isDraggingMessagePanel}
 								collapseDirection={1}
 								collapseProgress={
@@ -584,6 +658,8 @@ function TopicDesktopPanels({
 								}}
 								className={cn(
 									"h-full w-full shrink-0",
+									!isConversationPanelCollapsed &&
+										conversationResizeHandleClassName,
 									!isDraggingMessagePanel && "transition-opacity duration-150",
 									(isConversationPanelCollapsed || !shouldShowDetailPanel) &&
 										"pointer-events-none",
@@ -657,32 +733,16 @@ function TopicDesktopPanels({
 								style={{ width: TOPIC_HISTORY_PANEL_WIDTH - 8 }}
 								aria-hidden="true"
 							/>
-							{createPortal(
-								<div className={topicHistorySafeAreaPortalClassName}>
-									<div className="pointer-events-auto h-full">
-										{renderTopicHistoryShell(visibleTopicHistoryMode)}
-									</div>
-								</div>,
-								document.body,
-							)}
+							{historyOverlayScope === "container"
+								? fixedTopicHistory
+								: createPortal(fixedTopicHistory, document.body)}
 						</>
 					) : null}
 
 					{!historyResize && isDrawerTopicHistory
-						? createPortal(
-								<div className="pointer-events-none fixed inset-0 z-50">
-									<div
-										className="pointer-events-auto absolute inset-0 bg-transparent"
-										data-testid="topic-history-panel-dismiss-area"
-										onClick={onCloseTopicHistoryPanel}
-										aria-hidden="true"
-									/>
-									<div className={topicHistorySafeAreaDrawerClassName}>
-										{renderTopicHistoryShell("drawer")}
-									</div>
-								</div>,
-								document.body,
-							)
+						? historyOverlayScope === "container"
+							? drawerTopicHistory
+							: createPortal(drawerTopicHistory, document.body)
 						: null}
 				</div>
 			</div>

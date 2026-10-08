@@ -50,7 +50,10 @@ import { getAppEntryFile } from "@/pages/superMagic/components/MessageList/compo
 import { getFileType } from "@/pages/superMagic/utils/handleFIle"
 import SuperMagicService from "@/pages/superMagic/services"
 import { resolveMobileAudioShareCreatedByBadgeBottom } from "./utils/audio-share-topbar-offset"
+import { resolveShareErrorBackNavigation } from "./utils/share-error-back"
 import usePureShareDocumentFlow from "./hooks/usePureShareDocumentFlow"
+import { FileAccessProvider } from "@/pages/superMagic/fileAccess/FileAccessProvider"
+import { createShareFileAccess } from "@/pages/superMagic/fileAccess/fileAccessContext"
 // import { fixJsonPropertyNames } from "../flow/components/FlowAssistant/utils/streamUtils"
 
 const topicContainerBase =
@@ -181,6 +184,7 @@ function Share() {
 	const [isNeedPassword, setIsNeedPassword] = useState(false)
 	const [resourceId, setResourceId] = useState("")
 	const [projectId, setProjectId] = useState("")
+	const [shareToken, setShareToken] = useState("")
 	const [passwordFromUrl, setPasswordFromUrl] = useState("")
 	const [data, setData] = useState({}) as any
 	const [error, setError] = useState<Error | null>(null)
@@ -308,7 +312,9 @@ function Share() {
 		password: verifiedPassword,
 		data,
 		onTokenRefreshed: (tokenInfo) => {
-			console.log("Token refreshed successfully:", tokenInfo)
+			if (tokenInfo.temporary_token) {
+				setShareToken(tokenInfo.temporary_token)
+			}
 		},
 		onRefreshError: (error) => {
 			console.error("Token refresh failed:", error)
@@ -348,7 +354,12 @@ function Share() {
 	}, [search, isFileShare])
 
 	const updateAttachments = useCallback(
-		(params: { projectId?: string; resource_id?: string; password?: string }) => {
+		(params: {
+			projectId?: string
+			resource_id?: string
+			password?: string
+			temporaryToken?: string
+		}) => {
 			if (activeDataHook.updateAttachments) {
 				activeDataHook.updateAttachments(params)
 			}
@@ -358,14 +369,15 @@ function Share() {
 
 	useEffect(() => {
 		if (data?.temporary_token) {
-			// @ts-ignore 给window添加临时token
-			window.temporary_token = data.temporary_token
-			const projectId = data?.data?.project_id || data?.data?.data?.project_id
-			// @ts-ignore 给window添加临时project_id
-			window.project_id = projectId
-			console.log(data.data, "dataxxxxxxxx", projectId, "projectIdprojectId")
-			updateAttachments({ projectId, password: verifiedPassword, resource_id: resourceId })
-			setProjectId(projectId)
+			const nextProjectId = data?.data?.project_id || data?.data?.data?.project_id
+			setShareToken(data.temporary_token)
+			updateAttachments({
+				projectId: nextProjectId,
+				password: verifiedPassword,
+				resource_id: resourceId,
+				temporaryToken: data.temporary_token,
+			})
+			setProjectId(nextProjectId)
 		}
 	}, [data])
 
@@ -380,14 +392,10 @@ function Share() {
 					// Legacy file share: /share/{topicId}/file/{fileId}
 					setResourceId(params.topicId || "")
 					setFileId(params.fileId || "")
-					//@ts-ignore
-					window.topic_id = params.topicId
 				} else {
 					// Legacy topic share: /share/{topicId}
 					setResourceId(params.topicId || "")
 					setFileId("")
-					//@ts-ignore
-					window.topic_id = params.topicId
 				}
 			} else {
 				// New format
@@ -395,14 +403,10 @@ function Share() {
 					// New file share: /share/files/{resourceId}
 					setResourceId(params.resourceId || "")
 					setFileId("")
-					//@ts-ignore
-					window.topic_id = params.resourceId
 				} else {
 					// New topic share: /share/topic/{resourceId}
 					setResourceId(params.resourceId || "")
 					setFileId("")
-					//@ts-ignore
-					window.topic_id = params.resourceId
 				}
 			}
 		}
@@ -648,19 +652,28 @@ function Share() {
 		shouldRenderAudioShareShell,
 	])
 
-	const clearWindowData = useMemoizedFn(() => {
-		// @ts-ignore
-		window.temporary_token = ""
-		// @ts-ignore
-		window.project_id = ""
-		// @ts-ignore
-		window.topic_id = ""
-	})
+	const shareAccess = useMemo(() => {
+		const token = shareToken || data?.temporary_token || ""
+		const nextProjectId =
+			projectId || data?.data?.project_id || data?.data?.data?.project_id || ""
+		if (!token || !nextProjectId) return null
+		return createShareFileAccess({
+			token,
+			projectId: nextProjectId,
+			topicId: resourceId,
+			resourceId,
+		})
+	}, [data, projectId, resourceId, shareToken])
+
+	const waitingForShareAccess =
+		!shareAccess &&
+		!error &&
+		!isNeedPassword &&
+		(isFileShare || isProjectShare || !isEmpty(data))
 
 	const handleErrorBack = useMemoizedFn(() => {
 		if (!isLogined) {
 			const currentHref = window.location.href
-			clearWindowData()
 			authEventBus.emit(AuthEventName.RequestLogin, {
 				reason: "share-access-required",
 				source: "share",
@@ -670,12 +683,12 @@ function Share() {
 			return
 		}
 
-		window.location.href = window.location.origin
+		// 已登录但没有查看权限：直接回到当前端的首页（桌面 /super、移动 /mobile-home），
+		// 不再跳到站点根路由再重定向一次，也避免整页刷新。
+		navigate(resolveShareErrorBackNavigation(isMobile))
 	})
 
 	const handleWorkspaceButtonClick = useMemoizedFn(async () => {
-		clearWindowData()
-
 		if (!shouldEnterSharedProject) {
 			history.push({ name: RouteName.Super })
 			return
@@ -700,11 +713,6 @@ function Share() {
 		})
 	})
 
-	useEffect(() => {
-		return () => {
-			clearWindowData()
-		}
-	}, [])
 	const handleCopyProject = useMemoizedFn(() => {
 		// 处理查询参数，添加 copyProject=1
 		const urlSearchParams = new URLSearchParams(window.location.search)
@@ -732,7 +740,6 @@ function Share() {
 
 	/** Starts the existing share login flow while preserving the current URL for post-login return. */
 	const handleShareLogin = useMemoizedFn(() => {
-		clearWindowData()
 		authEventBus.emit(AuthEventName.RequestLogin, {
 			reason: "manual",
 			source: "share",
@@ -838,275 +845,288 @@ function Share() {
 	}
 
 	return (
-		<div
-			className={cn(
-				shareDisplayOptions.documentFlowFullscreen
-					? "box-border flex min-h-dvh w-full flex-col overflow-visible bg-muted dark:bg-muted"
-					: "box-border flex h-full w-screen flex-col overflow-hidden bg-muted dark:bg-muted",
-				!isMobileAudioShareLayout &&
-					"max-md:block max-md:bg-white max-md:pb-[calc(50px+var(--safe-area-inset-bottom,0px))] dark:max-md:bg-card",
-				isMobileAudioShareLayout &&
-					"max-md:flex max-md:min-h-0 max-md:bg-white dark:max-md:bg-card",
-				isFileShare && "max-md:pb-0",
-				!isFileShare && "pb-[50px]",
-				isImmersiveFullscreen && "max-md:bg-transparent dark:max-md:bg-transparent",
-			)}
-			data-testid="share-page-root"
-		>
-			{copyProjectData && isProjectShare && isLogined && (
-				<CopyProjectModal
-					open={isCopyProjectModalOpen}
-					onCancel={() => setIsCopyProjectModalOpen(false)}
-					projectData={copyProjectData}
-					onCopySuccess={handleCopySuccess}
-				/>
-			)}
-
-			{/* 复制项目进度条 */}
-			<CopyProjectProgressToast
-				projectId={copyingProjectId}
-				visible={showCopyProgress}
-				projectInfo={copyingProjectInfo}
-				onComplete={handleCopyProgressComplete}
-				onError={handleCopyProgressError}
-				setCopyProjectIsRunning={setCopyProjectIsRunning}
-				onProgress={(_progress) => {
-					// setCopyProjectProgress(progress)
-				}}
-				position="top"
-			/>
-			<CopyProjectProgressToast
-				projectId={copiedFilesProjectInfo?.project_id || ""}
-				visible={Boolean(copiedFilesProjectInfo)}
-				completed
-				completedText={t("share.copyFilesCompleted")}
-				projectInfo={copiedFilesProjectInfo || undefined}
-				onComplete={() => setCopiedFilesProjectInfo(null)}
-				position="top"
-			/>
-			{!isMobileAudioShare && !isImmersiveFullscreen && !shouldHideHeader && (
-				<div className={topicContainerBase} data-testid="share-topbar">
-					{showSuperMagicIcon ? <Logo className="h-[42px] shrink-0 max-md:h-9" /> : null}
-					{isMobile && hasStarted && !isFileShare && (
-						<div
-							className="flex min-w-0 flex-1 items-center gap-2 max-md:gap-1"
-							data-testid="share-mobile-topic-info"
-						>
-							<StatusIcon status={taskStatus as any} />
-							<span
-								className="min-w-0 flex-1 cursor-pointer overflow-hidden text-ellipsis whitespace-nowrap text-sm font-normal leading-[1.43] text-foreground transition-all duration-200"
-								data-testid="share-mobile-title"
-							>
-								{data?.resource_name || t("messageHeader.untitledTopic")}
-							</span>
-						</div>
-					)}
-					{!isMobile && hasStarted && data?.extra?.show_original_info ? (
-						<div
-							className="ml-[30px] flex min-w-0 flex-1 shrink items-center gap-2.5 overflow-hidden text-ellipsis whitespace-nowrap text-sm font-semibold leading-5 text-foreground/80"
-							data-testid="share-original-info"
-						>
-							<MagicAvatar src={data?.creator?.avatar_url || UserAvatar} size={24} />
-							<span
-								className="shrink-0 font-semibold text-foreground/80"
-								data-testid="share-creator-name"
-							>
-								{data?.creator?.nickname || t("common.unknownUser")}
-							</span>
-							<span className="shrink-0 text-muted-foreground">/</span>
-							<span data-testid="share-title">
-								{data?.resource_name ||
-									(isFileShare
-										? t("common.untitledProject")
-										: t("messageHeader.untitledTopic"))}
-							</span>
-						</div>
-					) : !isMobile && hasStarted && data?.extra ? (
-						<div
-							className="ml-[30px] flex min-w-0 flex-1 shrink items-center gap-2.5 overflow-hidden text-ellipsis whitespace-nowrap text-sm font-semibold leading-5 text-foreground/80"
-							data-testid="share-title-info"
-						>
-							<span data-testid="share-title">
-								{data?.resource_name ||
-									(isFileShare
-										? t("common.untitledProject")
-										: t("messageHeader.untitledTopic"))}
-							</span>
-						</div>
-					) : null}
-					<div className="flex gap-2" data-testid="share-topbar-actions">
-						{showMobileFolderButton && (
-							<Button
-								variant="outline"
-								size="icon-sm"
-								className="h-8 w-8 rounded-lg p-1.5"
-								onClick={() => pubsub.publish(PubSubEvents.Folder_Click)}
-								data-testid="share-folder-button"
-							>
-								<IconFolder size={20} />
-							</Button>
-						)}
-						{enableImmersiveShareChrome && (
-							<Button
-								variant="outline"
-								size="icon-sm"
-								className="h-8 w-8 rounded-lg p-1.5"
-								onClick={() => pubsub.publish(PubSubEvents.Maximize_File)}
-								data-testid="share-immersive-fullscreen-button"
-							>
-								<IconMaximize size={20} />
-							</Button>
-						)}
-						{showCopyProjectButton && (
-							<Button
-								variant="outline"
-								size="sm"
-								className="h-8 gap-1.5 rounded-lg border-black/[0.08] px-1.5 py-1.5 dark:border-white/[0.08]"
-								onClick={handleCopyProject}
-								disabled={copyProjectIsRunning}
-								data-testid="share-copy-project-button"
-							>
-								<IconGitFork size={18} stroke={1.5} className="size-[18px]" />
-								<span className="text-sm font-normal leading-5 text-foreground/80">
-									{t("share.copyProject")}
-								</span>
-								<span
-									className="inline-flex h-[22px] items-center rounded-[4px] bg-fill px-1.5 py-0.5 text-xs font-bold leading-4 text-foreground"
-									data-testid="share-copy-project-count"
-								>
-									{formatCopyProjectCount(data?.data?.extended?.fork_num)}
-								</span>
-							</Button>
-						)}
-						{showWorkspaceButton && !shouldRenderAudioShareShell ? (
-							<WorkspaceButton
-								label={
-									shouldEnterSharedProject
-										? t("share.enterProject")
-										: t("share.workspace")
-								}
-								onClick={handleWorkspaceButtonClick}
-							/>
-						) : null}
-						{!isLogined ? (
-							<Button
-								variant="outline"
-								size="sm"
-								className="h-8 rounded-lg px-5 py-1.5"
-								onClick={handleShareLogin}
-								data-testid="share-login-button"
-							>
-								{t("share.login")}
-							</Button>
-						) : null}
-					</div>
-				</div>
-			)}
+		<FileAccessProvider value={shareAccess}>
 			<div
 				className={cn(
-					"relative max-md:w-full",
 					shareDisplayOptions.documentFlowFullscreen
-						? "min-h-dvh overflow-visible"
-						: isMobileAudioShareLayout
-							? "min-h-0 flex-1 overflow-hidden"
-							: "h-full overflow-hidden",
+						? "box-border flex min-h-dvh w-full flex-col overflow-visible bg-muted dark:bg-muted"
+						: "box-border flex h-full w-screen flex-col overflow-hidden bg-muted dark:bg-muted",
+					!isMobileAudioShareLayout &&
+						"max-md:block max-md:bg-white max-md:pb-[calc(50px+var(--safe-area-inset-bottom,0px))] dark:max-md:bg-card",
+					isMobileAudioShareLayout &&
+						"max-md:flex max-md:min-h-0 max-md:bg-white dark:max-md:bg-card",
+					isFileShare && "max-md:pb-0",
+					!isFileShare && "pb-[50px]",
+					isImmersiveFullscreen && "max-md:bg-transparent dark:max-md:bg-transparent",
 				)}
-				data-testid="share-content-container"
+				data-testid="share-page-root"
 			>
-				{loading && (
-					<div
-						className={cn(
-							"flex items-center justify-center",
-							shareDisplayOptions.documentFlowFullscreen ? "min-h-dvh" : "h-full",
+				{copyProjectData && isProjectShare && isLogined && (
+					<CopyProjectModal
+						open={isCopyProjectModalOpen}
+						onCancel={() => setIsCopyProjectModalOpen(false)}
+						projectData={copyProjectData}
+						onCopySuccess={handleCopySuccess}
+					/>
+				)}
+
+				{/* 复制项目进度条 */}
+				<CopyProjectProgressToast
+					projectId={copyingProjectId}
+					visible={showCopyProgress}
+					projectInfo={copyingProjectInfo}
+					onComplete={handleCopyProgressComplete}
+					onError={handleCopyProgressError}
+					setCopyProjectIsRunning={setCopyProjectIsRunning}
+					onProgress={(_progress) => {
+						// setCopyProjectProgress(progress)
+					}}
+					position="top"
+				/>
+				<CopyProjectProgressToast
+					projectId={copiedFilesProjectInfo?.project_id || ""}
+					visible={Boolean(copiedFilesProjectInfo)}
+					completed
+					completedText={t("share.copyFilesCompleted")}
+					projectInfo={copiedFilesProjectInfo || undefined}
+					onComplete={() => setCopiedFilesProjectInfo(null)}
+					position="top"
+				/>
+				{!isMobileAudioShare && !isImmersiveFullscreen && !shouldHideHeader && (
+					<div className={topicContainerBase} data-testid="share-topbar">
+						{showSuperMagicIcon ? (
+							<Logo className="h-[42px] shrink-0 max-md:h-9" />
+						) : null}
+						{isMobile && hasStarted && !isFileShare && (
+							<div
+								className="flex min-w-0 flex-1 items-center gap-2 max-md:gap-1"
+								data-testid="share-mobile-topic-info"
+							>
+								<StatusIcon status={taskStatus as any} />
+								<span
+									className="min-w-0 flex-1 cursor-pointer overflow-hidden text-ellipsis whitespace-nowrap text-sm font-normal leading-[1.43] text-foreground transition-all duration-200"
+									data-testid="share-mobile-title"
+								>
+									{data?.resource_name || t("messageHeader.untitledTopic")}
+								</span>
+							</div>
 						)}
-						data-testid="share-loading"
-					>
-						<MagicSpin />
+						{!isMobile && hasStarted && data?.extra?.show_original_info ? (
+							<div
+								className="ml-[30px] flex min-w-0 flex-1 shrink items-center gap-2.5 overflow-hidden text-ellipsis whitespace-nowrap text-sm font-semibold leading-5 text-foreground/80"
+								data-testid="share-original-info"
+							>
+								<MagicAvatar
+									src={data?.creator?.avatar_url || UserAvatar}
+									size={24}
+								/>
+								<span
+									className="shrink-0 font-semibold text-foreground/80"
+									data-testid="share-creator-name"
+								>
+									{data?.creator?.nickname || t("common.unknownUser")}
+								</span>
+								<span className="shrink-0 text-muted-foreground">/</span>
+								<span data-testid="share-title">
+									{data?.resource_name ||
+										(isFileShare
+											? t("common.untitledProject")
+											: t("messageHeader.untitledTopic"))}
+								</span>
+							</div>
+						) : !isMobile && hasStarted && data?.extra ? (
+							<div
+								className="ml-[30px] flex min-w-0 flex-1 shrink items-center gap-2.5 overflow-hidden text-ellipsis whitespace-nowrap text-sm font-semibold leading-5 text-foreground/80"
+								data-testid="share-title-info"
+							>
+								<span data-testid="share-title">
+									{data?.resource_name ||
+										(isFileShare
+											? t("common.untitledProject")
+											: t("messageHeader.untitledTopic"))}
+								</span>
+							</div>
+						) : null}
+						<div className="flex gap-2" data-testid="share-topbar-actions">
+							{showMobileFolderButton && (
+								<Button
+									variant="outline"
+									size="icon-sm"
+									className="h-8 w-8 rounded-lg p-1.5"
+									onClick={() => pubsub.publish(PubSubEvents.Folder_Click)}
+									data-testid="share-folder-button"
+								>
+									<IconFolder size={20} />
+								</Button>
+							)}
+							{enableImmersiveShareChrome && (
+								<Button
+									variant="outline"
+									size="icon-sm"
+									className="h-8 w-8 rounded-lg p-1.5"
+									onClick={() => pubsub.publish(PubSubEvents.Maximize_File)}
+									data-testid="share-immersive-fullscreen-button"
+								>
+									<IconMaximize size={20} />
+								</Button>
+							)}
+							{showCopyProjectButton && (
+								<Button
+									variant="outline"
+									size="sm"
+									className="h-8 gap-1.5 rounded-lg border-black/[0.08] px-1.5 py-1.5 dark:border-white/[0.08]"
+									onClick={handleCopyProject}
+									disabled={copyProjectIsRunning}
+									data-testid="share-copy-project-button"
+								>
+									<IconGitFork size={18} stroke={1.5} className="size-[18px]" />
+									<span className="text-sm font-normal leading-5 text-foreground/80">
+										{t("share.copyProject")}
+									</span>
+									<span
+										className="inline-flex h-[22px] items-center rounded-[4px] bg-fill px-1.5 py-0.5 text-xs font-bold leading-4 text-foreground"
+										data-testid="share-copy-project-count"
+									>
+										{formatCopyProjectCount(data?.data?.extended?.fork_num)}
+									</span>
+								</Button>
+							)}
+							{showWorkspaceButton && !shouldRenderAudioShareShell ? (
+								<WorkspaceButton
+									label={
+										shouldEnterSharedProject
+											? t("share.enterProject")
+											: t("share.workspace")
+									}
+									onClick={handleWorkspaceButtonClick}
+								/>
+							) : null}
+							{!isLogined ? (
+								<Button
+									variant="outline"
+									size="sm"
+									className="h-8 rounded-lg px-5 py-1.5"
+									onClick={handleShareLogin}
+									data-testid="share-login-button"
+								>
+									{t("share.login")}
+								</Button>
+							) : null}
+						</div>
 					</div>
 				)}
-				{isNeedPassword && isEmpty(data) && !error && !loading && (
-					<PasswordVerification
-						resourceId={resourceId}
-						initialPassword={passwordFromUrl}
-						onVerifySuccess={handleVerifySuccess}
-						onVerifyFail={handleVerifyFail}
-						getShareData={getShareData}
-						isFileShare={routeInfo.isFileShare}
-					/>
-				)}
-				{error && !loading && (
-					<ErrorDisplay
-						errorMessage={t("share.noPermissionToView")}
-						onBack={handleErrorBack}
-						isFileShare={routeInfo.isFileShare}
-					/>
-				)}
-				{(!isEmpty(data) || isFileShare || isProjectShare) && !error ? (
-					shouldRenderAudioShareShell ? (
-						isAudioProjectShare ? (
-							isMobile ? (
-								<ShareMobileAudioRecordingDetailPage
-									projectId={projectId}
-									resourceName={data?.data?.project_name || data?.resource_name}
-									allowDownloadProjectFile={allowDownloadProjectFile}
-									showCopyProject={showCopyProjectButton}
-									copyProjectLabel={t("share.copyProject")}
-									showLogin={!isLogined}
-									loginLabel={t("share.login")}
-									onCopyProject={handleCopyProject}
-									onLogin={handleShareLogin}
-									attachments={attachments}
-									onPlayerExpandedChange={setMobileAudioSharePlayerExpanded}
-								/>
-							) : (
-								<RecordingDetailShareDesktop
-									projectId={projectId}
-									resourceName={data?.data?.project_name || data?.resource_name}
-									allowDownloadProjectFile={allowDownloadProjectFile}
-									attachments={attachments}
-								/>
-							)
-						) : null
-					) : (
-						<ShareContent
-							isMobile={isMobile}
-							data={data}
-							attachments={attachments}
-							isLogined={isLogined}
-							isFileShare={isFileShare || isProjectShare}
-							isProjectShare={isProjectShare}
-							fileId={fileId}
-							defaultOpenFileId={defaultOpenFileId}
-							enableImmersiveShareChrome={enableImmersiveShareChrome}
-							isImmersiveFullscreen={isImmersiveFullscreen}
-							projectId={projectId}
-							shareCode={data?.share_code || data?.data?.share_code || resourceId}
-							sharePassword={verifiedPassword}
-							onCopySharedFilesComplete={handleCopySharedFilesComplete}
-							topicId={resourceId}
-							showAllProjectFiles={showAllProjectFiles || viewFileList}
-							viewFileList={viewFileList}
-							showCreatedByBadge={data?.extra?.hide_created_by_super_magic === false}
-							allowDownloadProjectFile={allowDownloadProjectFile}
-							allowCopyProjectFiles={allowCopyProjectFiles}
-							forceFullscreenMode={shareDisplayOptions.forceFullscreenMode}
-							documentFlowFullscreen={shareDisplayOptions.documentFlowFullscreen}
-							hidePreviewHeader={shareDisplayOptions.hideHeader}
-							showFileHeader={shareDisplayOptions.showFileHeader}
-							onPreviewFileChange={setCurrentPreviewFileId}
-							onPreviewFullscreenChange={setPreviewIsFullscreen}
+				<div
+					className={cn(
+						"relative max-md:w-full",
+						shareDisplayOptions.documentFlowFullscreen
+							? "min-h-dvh overflow-visible"
+							: isMobileAudioShareLayout
+								? "min-h-0 flex-1 overflow-hidden"
+								: "h-full overflow-hidden",
+					)}
+					data-testid="share-content-container"
+				>
+					{(loading || waitingForShareAccess) && (
+						<div
+							className={cn(
+								"flex items-center justify-center",
+								shareDisplayOptions.documentFlowFullscreen ? "min-h-dvh" : "h-full",
+							)}
+							data-testid="share-loading"
+						>
+							<MagicSpin />
+						</div>
+					)}
+					{isNeedPassword && isEmpty(data) && !error && !loading && (
+						<PasswordVerification
+							resourceId={resourceId}
+							initialPassword={passwordFromUrl}
+							onVerifySuccess={handleVerifySuccess}
+							onVerifyFail={handleVerifyFail}
+							getShareData={getShareData}
+							isFileShare={routeInfo.isFileShare}
 						/>
-					)
-				) : null}
+					)}
+					{error && !loading && (
+						<ErrorDisplay
+							errorMessage={t("share.noPermissionToView")}
+							onBack={handleErrorBack}
+							isFileShare={routeInfo.isFileShare}
+						/>
+					)}
+					{shareAccess && !error ? (
+						shouldRenderAudioShareShell ? (
+							isAudioProjectShare ? (
+								isMobile ? (
+									<ShareMobileAudioRecordingDetailPage
+										projectId={projectId}
+										resourceName={
+											data?.data?.project_name || data?.resource_name
+										}
+										allowDownloadProjectFile={allowDownloadProjectFile}
+										showCopyProject={showCopyProjectButton}
+										copyProjectLabel={t("share.copyProject")}
+										showLogin={!isLogined}
+										loginLabel={t("share.login")}
+										onCopyProject={handleCopyProject}
+										onLogin={handleShareLogin}
+										attachments={attachments}
+										onPlayerExpandedChange={setMobileAudioSharePlayerExpanded}
+									/>
+								) : (
+									<RecordingDetailShareDesktop
+										projectId={projectId}
+										resourceName={
+											data?.data?.project_name || data?.resource_name
+										}
+										allowDownloadProjectFile={allowDownloadProjectFile}
+										attachments={attachments}
+									/>
+								)
+							) : null
+						) : (
+							<ShareContent
+								isMobile={isMobile}
+								data={data}
+								attachments={attachments}
+								isLogined={isLogined}
+								isFileShare={isFileShare || isProjectShare}
+								isProjectShare={isProjectShare}
+								fileId={fileId}
+								defaultOpenFileId={defaultOpenFileId}
+								enableImmersiveShareChrome={enableImmersiveShareChrome}
+								isImmersiveFullscreen={isImmersiveFullscreen}
+								projectId={projectId}
+								shareCode={data?.share_code || data?.data?.share_code || resourceId}
+								sharePassword={verifiedPassword}
+								onCopySharedFilesComplete={handleCopySharedFilesComplete}
+								topicId={resourceId}
+								showAllProjectFiles={showAllProjectFiles || viewFileList}
+								viewFileList={viewFileList}
+								showCreatedByBadge={
+									data?.extra?.hide_created_by_super_magic === false
+								}
+								allowDownloadProjectFile={allowDownloadProjectFile}
+								allowCopyProjectFiles={allowCopyProjectFiles}
+								forceFullscreenMode={shareDisplayOptions.forceFullscreenMode}
+								documentFlowFullscreen={shareDisplayOptions.documentFlowFullscreen}
+								hidePreviewHeader={shareDisplayOptions.hideHeader}
+								showFileHeader={shareDisplayOptions.showFileHeader}
+								onPreviewFileChange={setCurrentPreviewFileId}
+								onPreviewFullscreenChange={setPreviewIsFullscreen}
+							/>
+						)
+					) : null}
+				</div>
+				{/* 由超级麦吉创造按钮：默认不显示，只有 hide_created_by_super_magic 为 false 时才显示 */}
+				<CreatedByBadge
+					visible={
+						!isImmersiveFullscreen && data?.extra?.hide_created_by_super_magic === false
+					}
+					style={{ bottom: createdByBadgeBottom }}
+				/>
 			</div>
-			{/* 由超级麦吉创造按钮：默认不显示，只有 hide_created_by_super_magic 为 false 时才显示 */}
-			<CreatedByBadge
-				visible={
-					!isImmersiveFullscreen && data?.extra?.hide_created_by_super_magic === false
-				}
-				style={{ bottom: createdByBadgeBottom }}
-			/>
-		</div>
+		</FileAccessProvider>
 	)
 }
 

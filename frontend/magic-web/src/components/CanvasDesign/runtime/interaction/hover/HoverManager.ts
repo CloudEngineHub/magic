@@ -5,6 +5,7 @@ import {
 	pickSelectedElementIdAtStagePointer,
 	resolveManagedElementIdFromKonvaNode,
 } from "../transform/elementNodeUtils"
+import { getNameLabelElementIdFromNode } from "../labels/nameLabelNodeUtils"
 
 /**
  * Hover 管理器 - 管理元素的 hover 效果
@@ -264,6 +265,12 @@ export class HoverManager {
 			return
 		}
 
+		// 名称标签在 overlay 层；只查这一层，避免无连接时对整张 stage 做命中。
+		const overlayTarget = this.canvas.overlayLayer?.getIntersection?.(pointerPosition)
+		if (this.applyNameLabelHover(overlayTarget)) {
+			return
+		}
+
 		if (this.canvas.connectionManager.hasConnections()) {
 			const targetAtPointer = this.canvas.stage.getIntersection?.(pointerPosition)
 			if (targetAtPointer && this.isConnectionTarget(targetAtPointer)) {
@@ -300,6 +307,10 @@ export class HoverManager {
 
 		if (this.isConnectionTarget(target)) {
 			this.clearHover()
+			return
+		}
+
+		if (this.applyNameLabelHover(target)) {
 			return
 		}
 
@@ -444,6 +455,22 @@ export class HoverManager {
 		return this.canvas.selectionManager.isSelected(elementId)
 			? this.hoverNode === null
 			: this.hoverNode !== null
+	}
+
+	private applyNameLabelHover(target: Konva.Node | null | undefined): boolean {
+		const elementId = getNameLabelElementIdFromNode(target)
+		if (!elementId) return false
+
+		const invalidElementReason = this.getInvalidElementIdReason(elementId)
+		if (invalidElementReason) {
+			this.clearHover()
+			return true
+		}
+
+		if (!this.isHoverStateCurrentForElement(elementId)) {
+			this.setHover(elementId)
+		}
+		return true
 	}
 
 	/**

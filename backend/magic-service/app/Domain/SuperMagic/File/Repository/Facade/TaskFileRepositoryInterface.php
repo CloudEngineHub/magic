@@ -94,6 +94,8 @@ interface TaskFileRepositoryInterface
      */
     public function getByProjectParentAndName(int $projectId, ?int $parentId, string $fileName, bool $withTrash = false): ?TaskFileEntity;
 
+    public function getBySpaceParentAndName(string $spaceType, int $projectId, ?int $parentId, string $fileName, string $userId, string $organizationCode, bool $withTrash = false): ?TaskFileEntity;
+
     /**
      * 根据项目、父目录和文件名批量查询直接子节点。
      *
@@ -448,6 +450,15 @@ interface TaskFileRepositoryInterface
      * @return TaskFileEntity[] Array of file entities
      */
     public function getFilesByProjectIdWithResume(int $projectId, ?int $lastFileId, int $limit): array;
+
+    /**
+     * Parent map of the project-space files the fork enumeration can see
+     * (space_type=project, visible, not deleted). Used to compute which files
+     * still have a valid ancestor chain up to the project root.
+     *
+     * @return array<int, null|int> [file_id => parent_id]
+     */
+    public function getVisibleProjectFileParentMap(int $projectId): array;
 
     /**
      * Batch update parent_id for multiple files.

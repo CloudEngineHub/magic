@@ -18,9 +18,8 @@ import { cn } from "@/utils/cn"
 import { useIsMobile } from "@/hooks/useIsMobile"
 import { openMessageFile } from "../../utils/openMessageFile"
 import { useMessageAttachmentDownload } from "./hooks/useMessageAttachmentDownload"
-import projectFilesStore from "@/stores/projectFiles"
 import { observer } from "mobx-react-lite"
-import { useMessageListContext } from "../../context"
+import { useMessageListProjectFilesStore } from "../../context"
 import { detectContentTypeRender } from "@/pages/superMagic/components/Detail/components/FilesViewer/utils/preview"
 
 export const Attachment = observer(function Attachment({
@@ -35,8 +34,7 @@ export const Attachment = observer(function Attachment({
 	className?: string
 }) {
 	const { t } = useTranslation("super")
-	const { projectFilesStore: scopedProjectFilesStore } = useMessageListContext()
-	const resolvedProjectFilesStore = scopedProjectFilesStore ?? projectFilesStore
+	const resolvedProjectFilesStore = useMessageListProjectFilesStore()
 	const isMobile = useIsMobile()
 	const { permissions: access } = useFileAccess()
 	const handleDownload = useMessageAttachmentDownload(attachments)
@@ -54,8 +52,8 @@ export const Attachment = observer(function Attachment({
 	const resolveMagicProject = (item: MagicProjectAttachmentFile) =>
 		resolveMagicProjectAttachment(
 			item,
-			resolvedProjectFilesStore.workspaceFilesList,
-			resolvedProjectFilesStore.workspaceFileTree,
+			resolvedProjectFilesStore?.workspaceFilesList ?? [],
+			resolvedProjectFilesStore?.workspaceFileTree ?? [],
 		)
 
 	const handleOpenFile = (item: any) => {
@@ -66,13 +64,13 @@ export const Attachment = observer(function Attachment({
 			: undefined
 		const openTarget = magicProjectResolution?.projectDirectory || item
 
-		if (!isMobile && openTarget.file_id) {
-			openMessageFile(openTarget)
+		if (onFileClick && openTarget.file_id) {
+			onFileClick(openTarget)
 			return
 		}
 
-		if (onFileClick && openTarget.file_id) {
-			onFileClick(openTarget)
+		if (!isMobile && openTarget.file_id) {
+			openMessageFile(openTarget)
 			return
 		}
 

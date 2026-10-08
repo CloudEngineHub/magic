@@ -73,7 +73,9 @@ export default function Text(props: any) {
 		isNewestVersion,
 		isDeleted,
 	} = useFileData({
-		enabled: !textFileSession && !readOnlyPreview,
+		enabled: !readOnlyPreview,
+		loadContent: !textFileSession,
+		isTabActive,
 		file_id,
 		updatedAt,
 		isEditing: isEditMode,
@@ -85,7 +87,11 @@ export default function Text(props: any) {
 	const textAreaRef = useRef<any>(null)
 
 	const [localContent, setContent] = useState<string>("")
-	const content = readOnlyPreview?.content ?? textFileSession?.content ?? localContent
+	const content =
+		readOnlyPreview?.content ??
+		(fileVersion !== undefined
+			? (initialContent ?? textFileSession?.content ?? "")
+			: (textFileSession?.content ?? localContent))
 	const loading = textFileSession?.loading ?? fileLoading
 	const [localDraft, setLocalDraft] = useState<string>("")
 	const editingContent = textFileSession?.draft ?? localDraft
@@ -367,7 +373,12 @@ export default function Text(props: any) {
 					onRetry={textFileSession.refresh}
 				/>
 			) : textFileSession && loading ? (
-				<MagicSpin spinning />
+				<div
+					data-testid="text-file-session-loading"
+					className="flex min-h-0 flex-1 items-center justify-center bg-background"
+				>
+					<MagicSpin spinning />
+				</div>
 			) : isEditMode ? (
 				<Input.TextArea
 					ref={textAreaRef}

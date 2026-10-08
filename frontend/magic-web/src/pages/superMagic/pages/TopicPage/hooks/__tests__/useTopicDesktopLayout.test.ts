@@ -41,6 +41,8 @@ function createLocalStorageMock(): Storage {
 describe("useTopicDesktopLayout", () => {
 	beforeEach(() => {
 		vi.stubGlobal("ResizeObserver", MockResizeObserver)
+		// Layout defaults are desktop-specific; jsdom otherwise reports a narrow viewport.
+		vi.stubGlobal("innerWidth", 1440)
 		vi.stubGlobal("localStorage", createLocalStorageMock())
 		localStorage.clear()
 	})
@@ -212,5 +214,24 @@ describe("useTopicDesktopLayout", () => {
 			"supermagic-topic-conversation-panel",
 			expect.any(String),
 		)
+	})
+
+	it("should support a temporary layout that starts collapsed and expands globally", () => {
+		const { result, rerender } = renderHook(() =>
+			useTopicDesktopLayout({
+				isReadOnly: false,
+				initialConversationPanelCollapsed: true,
+				persistConversationPanelState: false,
+			}),
+		)
+
+		expect(result.current.isConversationPanelCollapsed).toBe(true)
+
+		act(() => {
+			pubsub.publish(PubSubEvents.Expand_Topic_Conversation_Panel)
+		})
+		rerender()
+
+		expect(result.current.isConversationPanelCollapsed).toBe(false)
 	})
 })

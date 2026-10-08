@@ -77,6 +77,7 @@ return [
         'publisher_type_invalid' => 'Invalid publisher type',
         'publish_target_value_required' => 'publish_target_value is required for current publish target type',
         'publish' => [
+            'skills_sync_failed' => 'Penerbitan gagal: rujukan kemahiran gagal disegerakkan (:reason). Sila semak kemahiran yang terikat pada ejen ini dan cuba lagi.',
             'identity_md_not_found' => 'Penerbitan gagal: fail wajib :path tidak ditemui di bawah direktori akar projek. Sila tambah fail tersebut dan cuba lagi.',
         ],
     ],
@@ -84,6 +85,8 @@ return [
         'prompt_length_exceeded' => 'Teks input terlalu panjang. Sila muat naik sebagai fail dan rujuk dalam dialog.',
         'sandbox_init_failed' => 'Ralat persekitaran runtime. Sila cuba lagi kemudian.',
         'chat_task_start_failed' => 'Gagal memulakan tugas. Sila cuba lagi kemudian.',
+        'project_file_count_exceeded' => 'Ruang projek semasa telah mencapai had :limit fail. Tugas tidak dapat diteruskan. Sila hubungi pentadbir.',
+        'user_space_file_count_exceeded' => 'Ruang pengguna semasa telah mencapai had :limit fail. Tugas tidak dapat diteruskan. Sila hubungi pentadbir.',
     ],
     'magic_claw' => [
         'create_system_error' => 'Ralat sistem berlaku. Sila cuba lagi kemudian.',

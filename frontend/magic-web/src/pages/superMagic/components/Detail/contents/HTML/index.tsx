@@ -1,3 +1,4 @@
+import { useSharedHtmlAppPermissions } from "./hooks/HtmlAppPermissionContext"
 import { lazy, memo, Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { isConvertibleFile } from "../../utils/file"
 import IsolatedHTMLRenderer, {
@@ -17,6 +18,15 @@ import { createVirtualStorageMessageHandler } from "./utils/virtual-storage"
 import { HTML_IFRAME_RENDER_LIFECYCLE_EVENT } from "./telemetry/iframeRenderLifecycle"
 import type { SaveResult } from "./iframe-bridge/types"
 import { useStyles } from "./styles"
+import MagicTooltip from "@/components/base/MagicTooltip"
+import { useHtmlPreviewFreshness } from "./hooks/useHtmlPreviewFreshness"
+import { HtmlPreviewFreshness } from "./components/HtmlPreviewFreshness"
+import { useFileAccess } from "@/pages/superMagic/fileAccess/FileAccessProvider"
+import { useFileApi } from "@/pages/superMagic/fileAccess/fileApi"
+import {
+	getFileAccessContentKey,
+	isShareFileAccess,
+} from "@/pages/superMagic/fileAccess/fileAccessContext"
 import { useFileData } from "@/pages/superMagic/hooks/useFileData"
 import { processHtmlContent, type HtmlPreviewBundledTemplateKind } from "./htmlProcessor"
 import { resolveHtmlPreviewBundledTemplate } from "./html-preview-bundled-shell"
@@ -35,7 +45,14 @@ import { Flex, Tour } from "antd"
 import { shadow } from "@/utils/shadow"
 import CodeEditor from "@/components/base/CodeEditor"
 import { scrollToAnchor } from "@/utils/slug"
-import { getHtmlNavigationKey, parseHtmlNavigationRequest } from "./utils/html-navigation"
+import {
+	getHtmlNavigationKey,
+	normalizeHtmlPreviewPath,
+	parseHtmlNavigationRequest,
+	resolveRootHtmlIndexFallback,
+	getHtmlNavigationIntent,
+	type HtmlNavigationIntent,
+} from "./utils/html-navigation"
 import { HTMLGuideTourElementId, useHTMLGuideTour } from "@/pages/superMagic/hooks/useHTMLGuideTour"
 import pubsub, { PubSubEvents } from "@/utils/pubsub"
 import MagicSpin from "@/components/base/MagicSpin"
@@ -44,8 +61,10 @@ import { inlineDashboardDataJs } from "./dashboard/resourceVersioning"
 import { useDashboardVersioning } from "./dashboard/useDashboardVersioning"
 import { useAIEditMenuItems } from "@/pages/superMagic/components/Detail/components/EditToolbar/useAIEditMenuItems"
 import FileEditButtons from "@/pages/superMagic/components/Detail/components/EditToolbar/FileEditButtons"
+import ConditionalTooltip from "@/pages/superMagic/components/Detail/components/EditToolbar/ConditionalTooltip"
 import ActionButton from "@/pages/superMagic/components/Detail/components/CommonHeader/components/ActionButton"
-import { ProjectListItem, Topic } from "@/pages/superMagic/pages/Workspace/types"
+import { cn } from "@/utils/cn"
+import { ProjectListItem } from "@/pages/superMagic/pages/Workspace/types"
 import CommonFooter from "../../components/CommonFooter"
 import { useIsMobile } from "@/hooks/useIsMobile"
 import useExportMenuItems from "./useExportMenuItems"
@@ -60,11 +79,7 @@ import useServerUpdate from "../../hooks/useServerUpdate"
 import CodeVersionCompareDialog from "../../components/versioning/CodeVersionCompareDialog"
 import VersionCompareDialog from "../../components/versioning/VersionCompareDialog"
 import HistoryVersionCompareDialog from "../../components/PPTRender/components/HistoryVersionCompareDialog"
-import {
-	getFileContentById,
-	getTemporaryDownloadUrl,
-	downloadFileContent,
-} from "@/pages/superMagic/utils/api"
+import { getFileContentById, downloadFileContent } from "@/pages/superMagic/utils/api"
 import { useTranslation } from "react-i18next"
 import { AlertTriangle, Crosshair, ShieldCheck, Terminal } from "lucide-react"
 import { Button } from "@/components/shadcn-ui/button"
@@ -88,12 +103,16 @@ import {
 	shouldShowHtmlPermissionManager,
 	useHtmlAppPermissions,
 } from "./hooks/useHtmlAppPermissions"
-import type { TopicStore } from "@/pages/superMagic/stores/core/topic"
 import { useHtmlDevConsoleState } from "./hooks/useHtmlDevConsoleState"
+import DesignStyleButton from "./design-styles/DesignStyleButton"
 import {
 	type HtmlPermissionManagerHandle,
 	useHtmlPermissionManagerBridge,
 } from "./hooks/useHtmlPermissionManagerBridge"
+import {
+	readCachedHtmlEditButton,
+	writeCachedHtmlEditButton,
+} from "./utils/edit-capability-session"
 
 const htmlRenderLogger = Logger.createLogger("HTMLContent")
 const HtmlPermissionManagerDialog = lazy(
@@ -147,12 +166,10 @@ interface HTMLProps {
 	exportFile?: (fileId: string, fileVersion?: number) => void
 	exportPdf?: (fileId: string) => void
 	exportRasterPdf?: (fileId: string, pageMode: "fit" | "paginate") => void
-	exportPpt?: (fileId: string) => void
 	exportPptx?: (fileId: string) => void
 	exportImage?: (fileId: string, format?: ImageExportFormat) => void
 	isExporting?: boolean
 	selectedProject?: ProjectListItem | null
-	selectedTopic?: Topic | null
 	showFileHeader?: boolean
 	activeFileId?: string | null
 	/** Live tab state, excluded from cached renderProps. */
@@ -171,21 +188,24 @@ interface HTMLProps {
 	// 是否允许下载（用于分享页面权限控制）
 	allowDownload?: boolean
 	projectId?: string
-	/** 微应用编辑页传入的独立话题 store，供 iframe Agent 操作同步当前话题。 */
-	topicStore?: TopicStore
+	/** 发布微应用身份，仅由宿主传入。 */
+	microAppId?: string
+	microAppName?: string
 	/** 跨多个 HTML 文件共享虚拟存储时使用的稳定标记。 */
 	virtualStorageMarkerId?: string
+	/** 分享预览不拉项目文件版本，走分享下载 */
+	isSharePreview?: boolean
+	/** Controls whether the HTML header exposes the manual refresh action. */
+	showRefresh?: boolean
 }
 
 interface HtmlExportActionProps {
 	handleExportSource: () => void
 	handleExportPDF: () => void
-	handleExportPPT: () => void
 	handleExportPptx: () => void
 	handleExportImage?: (format: ImageExportFormat) => void
 	handleExportRasterPdf?: (pageMode: "fit" | "paginate") => void
 	isExporting?: boolean
-	supportPPT: boolean
 	showButtonText: boolean
 	showExportPptx?: boolean
 	showExportImage?: boolean
@@ -196,12 +216,10 @@ interface HtmlExportActionProps {
 const HtmlExportAction = memo(function HtmlExportAction({
 	handleExportSource,
 	handleExportPDF,
-	handleExportPPT,
 	handleExportPptx,
 	handleExportImage,
 	handleExportRasterPdf,
 	isExporting,
-	supportPPT,
 	showButtonText,
 	showExportPptx,
 	showExportImage,
@@ -211,13 +229,11 @@ const HtmlExportAction = memo(function HtmlExportAction({
 	const { ExportDropdownButton } = useExportMenuItems({
 		handleExportSource,
 		handleExportPDF,
-		handleExportPPT,
 		handleExportPptx,
 		handleExportImage,
 		handleExportRasterPdf,
 		isExporting,
 		showButtonText,
-		supportPPT,
 		showExportPptx,
 		showExportImage,
 		showExportRasterPdf,
@@ -228,6 +244,10 @@ const HtmlExportAction = memo(function HtmlExportAction({
 })
 
 export default memo(function HTML(props: HTMLProps) {
+	const fileAccess = useFileAccess()
+	const fileApi = useFileApi()
+	// Token refresh must not reprocess HTML / remount the iframe.
+	const fileAccessContentKey = getFileAccessContentKey(fileAccess)
 	const {
 		data: displayData,
 		attachments,
@@ -255,12 +275,10 @@ export default memo(function HTML(props: HTMLProps) {
 		exportFile,
 		exportPdf,
 		exportRasterPdf,
-		exportPpt,
 		exportPptx,
 		exportImage,
 		isExporting,
 		selectedProject,
-		selectedTopic,
 		showFileHeader = true,
 		activeFileId,
 		isTabActive,
@@ -276,9 +294,13 @@ export default memo(function HTML(props: HTMLProps) {
 		isInPPTMode = false,
 		allowDownload,
 		projectId,
-		topicStore,
+		microAppId,
+		microAppName,
 		virtualStorageMarkerId,
+		isSharePreview = false,
+		showRefresh = true,
 	} = props
+	// origin：显式传入的项目，缺省时用当前选中项目
 	const runtimeProjectId = projectId ?? selectedProject?.id
 
 	const displayConfig = displayData?.display_config || externalDisplayConfig
@@ -306,11 +328,32 @@ export default memo(function HTML(props: HTMLProps) {
 	// 跨域 shell 渲染下，数据加载完成 ≠ iframe 内容已画出来；
 	// 用 iframe 上报的渲染就绪信号来控制预览 loading 收起时机，避免"loading 没了但页面空白"。
 	const [isPreviewRenderReady, setIsPreviewRenderReady] = useState(false)
+	const previewFreshness = useHtmlPreviewFreshness(displayData?.file_id)
+	const {
+		begin: beginPreviewUpdate,
+		ready: acknowledgePreview,
+		isCurrent: isCurrentPreview,
+		fail: failPreview,
+		rendering: markPreviewRendering,
+	} = previewFreshness
+	const [previewRenderGeneration, setPreviewRenderGeneration] = useState(0)
+	const forcePreviewRestartRef = useRef(false)
+	const readyPreviewContentRef = useRef<string | null>(null)
+	useEffect(() => {
+		readyPreviewContentRef.current = null
+		forcePreviewRestartRef.current = false
+		setIsPreviewRenderReady(false)
+	}, [displayData?.file_id])
 	const [documentFlowContentHeight, setDocumentFlowContentHeight] = useState(0)
 	const [saveFunction, setSaveFunction] = useState<
 		(() => Promise<SaveResult | undefined>) | (() => void) | null
 	>(null) // 保存函数
 	const [renderKey, setRenderKey] = useState(0)
+	const fileIdForEditCache = displayData?.file_id || currentFile?.id
+	const cachedEditButtonVisible = useMemo(
+		() => readCachedHtmlEditButton(fileIdForEditCache),
+		[fileIdForEditCache],
+	)
 	/** 当前展示的 HTML 文件的数据 */
 	const [data, setData] = useState<any>({})
 	const [editingCodeContent, setEditingCodeContent] = useState<string>("")
@@ -331,6 +374,10 @@ export default memo(function HTML(props: HTMLProps) {
 
 	const {
 		fileData: htmlFileData,
+		refreshFile,
+		loadStatus,
+		loadRevision,
+		loadError,
 		fileVersion: htmlFileVersion,
 		changeFileVersion: changeHtmlFileVersion,
 		loading,
@@ -347,6 +394,7 @@ export default memo(function HTML(props: HTMLProps) {
 		isFromNode,
 		content: displayData?.content || "",
 		disabledUrlCache: isPlaybackMode,
+		isSharePreview,
 	})
 
 	const {
@@ -364,6 +412,7 @@ export default memo(function HTML(props: HTMLProps) {
 		displayConfig,
 		isFromNode,
 		isPlaybackMode,
+		isSharePreview,
 		htmlVersioning: {
 			fileVersion: htmlFileVersion,
 			changeFileVersion: changeHtmlFileVersion,
@@ -382,6 +431,14 @@ export default memo(function HTML(props: HTMLProps) {
 		const isCurrentTabActive =
 			isTabActive === undefined ? activeFileId === displayData.file_id : isTabActive
 		if (!isCurrentTabActive) return
+
+		// Refreshing must never replace an editing draft. The existing compare flow
+		// remains the only path for accepting remote content while editing.
+		if (isEditMode) return
+		if (!isDataAnalysis) {
+			await refreshHtmlPreview()
+			return
+		}
 
 		const htmlFileId = displayData.file_id
 		const prevHtmlNewest = htmlFileVersionsList[0]?.version
@@ -422,14 +479,16 @@ export default memo(function HTML(props: HTMLProps) {
 		fileId: displayData?.file_id,
 		fallbackFileName: data?.file_name || displayData?.file_name,
 	})
-	const htmlPermissionController = useHtmlAppPermissions({
+	const sharedHtmlPermissionController = useSharedHtmlAppPermissions()
+	const localHtmlPermissionController = useHtmlAppPermissions({
 		content: processedContent,
 		rawSourceCode: data?.content,
 		relativeFilePath: currentHtmlFileInfo.relativeFilePath,
 		projectId: runtimeProjectId,
 		fileList: flattenedAttachmentList,
-		enabled: !isDataAnalysis && !htmlIsDeleted,
+		enabled: !sharedHtmlPermissionController && !isDataAnalysis && !htmlIsDeleted,
 	})
+	const htmlPermissionController = sharedHtmlPermissionController ?? localHtmlPermissionController
 	const {
 		hasHtmlPermissionDeclarations,
 		activeHtmlPermissionGrantCount,
@@ -482,16 +541,18 @@ export default memo(function HTML(props: HTMLProps) {
 
 	/** 更新HTML文件的数据内容 */
 	const updateDataContent = useMemoizedFn((fileData: any) => {
+		// Remote props must not replace the current editing baseline or draft.
+		if (isEditMode && data.content !== undefined) return
 		const newData = {
 			...displayData,
-			content: fileData || displayData?.content,
+			content: fileData ?? displayData?.content,
 		}
 		const contentChanged = data.content !== newData.content
 		const navigationChanged =
 			getHtmlNavigationKey(data?.htmlNavigation) !==
 			getHtmlNavigationKey(newData?.htmlNavigation)
 
-		if (contentChanged || navigationChanged) {
+		if (contentChanged || navigationChanged || data?.file_id !== newData?.file_id) {
 			setData(newData)
 		}
 	})
@@ -510,7 +571,7 @@ export default memo(function HTML(props: HTMLProps) {
 		if (viewMode === "code") {
 			const newData = {
 				...displayData,
-				content: htmlFileData || displayData?.content,
+				content: htmlFileData ?? displayData?.content,
 			}
 			setData(newData)
 		} else {
@@ -621,7 +682,7 @@ export default memo(function HTML(props: HTMLProps) {
 		async (targetVersion: number): Promise<string | null> => {
 			if (!fileId) return null
 			try {
-				const urlRes = await getTemporaryDownloadUrl({
+				const urlRes = await fileApi.getTemporaryDownloadUrl({
 					file_ids: [fileId],
 					file_versions: { [fileId]: targetVersion },
 				})
@@ -650,6 +711,8 @@ export default memo(function HTML(props: HTMLProps) {
 				attachmentList,
 				displayConfig,
 				xMagicImageProcess: HTML_PREVIEW_IMAGE_PROCESS,
+				access: fileAccess,
+				fileApi,
 			})
 			return result.processedContent
 		} catch {
@@ -844,6 +907,8 @@ export default memo(function HTML(props: HTMLProps) {
 			htmlRelativeFolderPath,
 			currentFileId || "",
 			onFetchIntercepted,
+			fileAccess,
+			fileApi,
 		)
 
 		// 处理嵌套 HTML iframe 内容请求
@@ -855,7 +920,8 @@ export default memo(function HTML(props: HTMLProps) {
 			{
 				postMessageTargetStrategy,
 				projectId: runtimeProjectId,
-				topicId: selectedTopic?.id ?? selectedProject?.current_topic_id,
+				access: fileAccess,
+				fileApi,
 				parentTargetOrigin: window.location.origin,
 				onTelemetry: (data) => {
 					htmlRenderLogger.report(HTML_IFRAME_RENDER_LIFECYCLE_EVENT, {
@@ -893,55 +959,128 @@ export default memo(function HTML(props: HTMLProps) {
 			window.removeEventListener("message", virtualStorageMessageHandler)
 		}
 		// eslint-disable-next-line react-hooks/exhaustive-deps
-	}, [attachmentList, displayData?.file_id, runtimeProjectId, selectedTopic?.id])
+	}, [attachmentList, displayData?.file_id, runtimeProjectId, fileApi, fileAccess])
 
-	const processContent = useMemoizedFn(async () => {
-		if (isDataAnalysis && !activeHistory.isPreviewReady) return
-
-		try {
-			const result = await processHtmlContent({
-				content: data?.content,
-				attachments,
-				fileId: displayData?.file_id,
-				fileName: data?.file_name,
-				attachmentList,
-				displayConfig,
-				resourceFileVersions,
-				htmlPreviewBundledTemplate,
-				xMagicImageProcess: HTML_PREVIEW_IMAGE_PROCESS,
-			})
-
-			let finalProcessedContent = result.processedContent
-			finalProcessedContent = inlineDashboardDataJs({
-				html: finalProcessedContent,
-				dataJsContent: dashboardDataJsContent,
-			})
-
-			// 注入fetch拦截器脚本（默认启用）
-			// 注意：media拦截器现在在htmlProcessor中根据display_config.type自动注入
-			finalProcessedContent = injectFetchInterceptorScript(finalProcessedContent, {
-				fileId: displayData?.file_id || "",
-				postMessageTargetStrategy,
-			})
-
-			// dashboard 通过 postMessage 驱动编辑态，不需要额外注入键盘拦截器；
-			// 否则会导致内容指纹变化并触发 iframe 二次重写。
-			if (isEditMode && !isDataAnalysis) {
-				finalProcessedContent = injectKeyboardInterceptorScript(finalProcessedContent)
+	const processContent = useMemoizedFn(
+		async (sourceContent = data?.content, background = false) => {
+			// Resource metadata can change before a newer file finishes downloading.
+			// Processing the previous bytes must not acknowledge that remote update.
+			if (
+				!isEditMode &&
+				!isDataAnalysis &&
+				(loadStatus === "loading" || loadStatus === "error")
+			)
+				return
+			if (isSharePreview && !isShareFileAccess(fileAccess)) return
+			if (isDataAnalysis && !activeHistory.isPreviewReady) return
+			const request = beginPreviewUpdate(!isDataAnalysis && !background)
+			if (sourceContent === "") {
+				forcePreviewRestartRef.current = false
+				readyPreviewContentRef.current = ""
+				setProcessedContent("")
+				setFilePathMapping(new Map())
+				setIsPreviewRenderReady(true)
+				acknowledgePreview(request)
+				return
 			}
 
-			setProcessedContent(finalProcessedContent)
-			setFilePathMapping(result.filePathMapping)
-		} catch (error) {
-			console.error("Error processing HTML content:", error)
-			setProcessedContent(data?.content || "")
+			try {
+				const result = await processHtmlContent({
+					content: sourceContent,
+					attachments,
+					fileId: displayData?.file_id,
+					fileName: data?.file_name,
+					attachmentList,
+					displayConfig,
+					resourceFileVersions,
+					htmlPreviewBundledTemplate,
+					xMagicImageProcess: HTML_PREVIEW_IMAGE_PROCESS,
+					access: fileAccess,
+					fileApi,
+				})
+
+				let finalProcessedContent = result.processedContent
+				finalProcessedContent = inlineDashboardDataJs({
+					html: finalProcessedContent,
+					dataJsContent: dashboardDataJsContent,
+				})
+
+				// 注入fetch拦截器脚本（默认启用）
+				// 注意：media拦截器现在在htmlProcessor中根据display_config.type自动注入
+				finalProcessedContent = injectFetchInterceptorScript(finalProcessedContent, {
+					fileId: displayData?.file_id || "",
+					postMessageTargetStrategy,
+				})
+
+				// dashboard 通过 postMessage 驱动编辑态，不需要额外注入键盘拦截器；
+				// 否则会导致内容指纹变化并触发 iframe 二次重写。
+				if (isEditMode && !isDataAnalysis) {
+					finalProcessedContent = injectKeyboardInterceptorScript(finalProcessedContent)
+				}
+
+				if (!isCurrentPreview(request)) return
+				const shouldRestart = forcePreviewRestartRef.current
+				forcePreviewRestartRef.current = false
+				setPreviewRenderGeneration(request)
+				if (
+					isDataAnalysis ||
+					(finalProcessedContent === readyPreviewContentRef.current && !shouldRestart)
+				) {
+					acknowledgePreview(request)
+				} else {
+					if (!isDataAnalysis) markPreviewRendering(request)
+					setIsPreviewRenderReady(false)
+				}
+				if (shouldRestart) {
+					readyPreviewContentRef.current = null
+					setRenderKey((current) => current + 1)
+				}
+				setProcessedContent(finalProcessedContent)
+				setFilePathMapping(result.filePathMapping)
+			} catch (error) {
+				console.error("Error processing HTML content:", error)
+				// Keep the last working preview when resource processing fails.
+				if (!isDataAnalysis) failPreview(request)
+			}
+		},
+	)
+
+	const refreshHtmlPreview = useMemoizedFn(async () => {
+		if (isEditMode || isDataAnalysis) return
+		forcePreviewRestartRef.current = true
+		if (remoteHtmlFileId) {
+			await refreshFile()
+		} else {
+			await processContent()
 		}
 	})
+
+	// The file loader can fail before processing starts, or finish with identical
+	// bytes. Observe both outcomes so an unchanged file never becomes falsely stale.
+	const handleRemoteLoadStatus = useMemoizedFn(() => {
+		if (isEditMode || isDataAnalysis) return
+		if (loadStatus === "loading") {
+			beginPreviewUpdate()
+		} else if (loadStatus === "error") {
+			failPreview(beginPreviewUpdate())
+		} else if (loadStatus === "ready" && htmlFileData === data?.content) {
+			void processContent()
+		}
+	})
+	useEffect(handleRemoteLoadStatus, [
+		handleRemoteLoadStatus,
+		loadStatus,
+		loadRevision,
+		loadError,
+		isEditMode,
+		isDataAnalysis,
+	])
 
 	const shouldReprocessOnEditMode = !isDataAnalysis && Boolean(isEditMode)
 
 	useDeepCompareEffect(() => {
-		if (!data?.content) return
+		if (typeof data?.content !== "string") return
+		if (isSharePreview && !isShareFileAccess(fileAccess)) return
 		if (isDataAnalysis && !activeHistory.isPreviewReady) return
 		processContent()
 	}, [
@@ -951,7 +1090,9 @@ export default memo(function HTML(props: HTMLProps) {
 		htmlPreviewBundledTemplate,
 		resourceFileVersions,
 		dashboardDataJsContent,
+		fileAccessContentKey,
 		isDataAnalysis,
+		isSharePreview,
 		activeHistory.isPreviewReady,
 	])
 
@@ -959,24 +1100,37 @@ export default memo(function HTML(props: HTMLProps) {
 	// 进而打断未保存编辑；因此仅在非编辑态响应 attachmentList 变化。
 	useDeepCompareEffect(() => {
 		if (isEditMode) return
-		if (!data?.content) return
+		if (typeof data?.content !== "string") return
+		if (isSharePreview && !isShareFileAccess(fileAccess)) return
 		if (isDataAnalysis && !activeHistory.isPreviewReady) return
-		processContent()
+		// Attachment changes often come from runtime data writes. Only show feedback
+		// if processing actually produces a different document.
+		processContent(undefined, true)
 	}, [
 		attachmentList,
 		htmlPreviewBundledTemplate,
 		resourceFileVersions,
 		dashboardDataJsContent,
+		fileAccessContentKey,
 		isDataAnalysis,
+		isSharePreview,
 		activeHistory.isPreviewReady,
 	])
 
 	// AI modification detection is now handled by PPTStore internally
 	// This logic has been removed to simplify the component
 
+	const editButtonStateReady = Boolean(
+		displayData?.file_id &&
+		!loading &&
+		!activeHistory.loading &&
+		(saveFunction !== null || viewMode === "code"),
+	)
+
 	// 按钮处理函数
 	const handleEdit = useMemoizedFn(() => {
-		if (setIsEditMode) {
+		// Cached visibility prevents a visual flash, but must not enable editing before live data is ready.
+		if (setIsEditMode && editButtonStateReady) {
 			editSessionBaselineContentRef.current = getEditSessionBaselineContent()
 			setIsEditMode(true)
 			// 初始化编辑内容
@@ -1134,27 +1288,12 @@ export default memo(function HTML(props: HTMLProps) {
 		[],
 	)
 
-	const handlePreviewRenderReady = useMemoizedFn(() => {
+	const handlePreviewRenderReady = useCallback(() => {
+		if (!isCurrentPreview(previewRenderGeneration)) return
+		readyPreviewContentRef.current = processedContent
 		setIsPreviewRenderReady(true)
-	})
-
-	// 待渲染内容变化（切换文件 / 内容更新 / 重新挂载）时重置渲染就绪态，重新显示 loading；
-	// 同时设置兜底定时器，避免极端情况下 iframe 未上报就绪信号导致 loading 永久卡住。
-	useEffect(() => {
-		setIsPreviewRenderReady(false)
-		// 空文件没有可写入 iframe 的内容，也不会触发 onRenderReady。
-		// 此时预览本身已经完成（展示空白区域），应立即收起 loading。
-		if (!processedContent) {
-			setIsPreviewRenderReady(true)
-			return
-		}
-		const fallbackTimer = window.setTimeout(() => {
-			setIsPreviewRenderReady(true)
-		}, 4000)
-		return () => {
-			window.clearTimeout(fallbackTimer)
-		}
-	}, [processedContent, renderKey])
+		acknowledgePreview(previewRenderGeneration)
+	}, [isCurrentPreview, acknowledgePreview, previewRenderGeneration, processedContent])
 
 	// 当 viewMode 变化时，退出编辑模式
 	useEffect(() => {
@@ -1166,7 +1305,12 @@ export default memo(function HTML(props: HTMLProps) {
 		// eslint-disable-next-line react-hooks/exhaustive-deps
 	}, [viewMode])
 
-	const openNewTab = (fileId: string, path: string, autoEdit?: boolean) => {
+	const openNewTab = (
+		fileId: string,
+		path: string,
+		autoEdit?: boolean,
+		intent?: HtmlNavigationIntent,
+	) => {
 		// 防护检查：fileId 不能为空
 		if (!fileId) {
 			console.warn("openNewTab: fileId is empty, cannot open new tab")
@@ -1177,9 +1321,12 @@ export default memo(function HTML(props: HTMLProps) {
 		if (!navigationTarget) return
 
 		const { filePath, anchor } = navigationTarget
+		const targetsCurrentContext = ["_self", "_parent", "_top"].includes(
+			(intent?.target || "_self").toLowerCase(),
+		)
 
 		// Handle pure anchor link (navigation within current document)
-		if (!filePath && !navigationTarget.search && anchor) {
+		if (!filePath && !navigationTarget.search && anchor && targetsCurrentContext) {
 			scrollToAnchor(anchor, 80) // 80px offset for fixed headers
 			return
 		}
@@ -1195,18 +1342,45 @@ export default memo(function HTML(props: HTMLProps) {
 			return
 		}
 
-		const relativePath = fileItem.relative_file_path.replace(fileItem.file_name, "")
-		const newPath = filePath
-			? filePath.startsWith("/")
-				? filePath.replace(/^\/+/, "")
-				: resolveRelativePath(relativePath, filePath)
+		const requestedPath = filePath ? filePath.replace(/\\/g, "/") : ""
+		const relativePath = normalizeHtmlPreviewPath(
+			fileItem.relative_file_path.replace(fileItem.file_name, ""),
+		)
+		let newPath = requestedPath
+			? requestedPath.startsWith("/")
+				? requestedPath.replace(/^\/+/, "")
+				: resolveRelativePath(relativePath, requestedPath)
 			: fileItem.relative_file_path
-		const item = attachmentList?.find((item: any) => item.relative_file_path === newPath)
-		if (item) {
-			openFileTab?.({ ...item, htmlNavigation: navigationTarget }, autoEdit)
 
-			// If there's an anchor, scroll to it after document loads
-			if (anchor) {
+		newPath = normalizeHtmlPreviewPath(newPath)
+
+		// Empty or directory paths resolve to the directory's index.html.
+		if (!newPath || newPath.endsWith("/")) {
+			newPath = `${newPath}index.html`
+		}
+
+		let item = attachmentList?.find((attachment: any) => {
+			return normalizeHtmlPreviewPath(attachment.relative_file_path) === newPath
+		})
+
+		if (!item) {
+			item = resolveRootHtmlIndexFallback(newPath, attachmentList)
+		}
+
+		if (item) {
+			openFileTab?.(
+				{
+					...item,
+					htmlNavigation: {
+						...navigationTarget,
+						...getHtmlNavigationIntent(intent || {}),
+					},
+				},
+				autoEdit,
+			)
+
+			// A new tab owns its anchor; never scroll the preserved opener underneath it.
+			if (anchor && targetsCurrentContext && !intent?.background) {
 				// Wait for document to render before scrolling
 				setTimeout(() => {
 					scrollToAnchor(anchor, 80)
@@ -1225,10 +1399,6 @@ export default memo(function HTML(props: HTMLProps) {
 
 	const handleExportRasterPdf = useMemoizedFn((pageMode: "fit" | "paginate") => {
 		exportRasterPdf?.(displayData?.file_id, pageMode)
-	})
-
-	const handleExportPPT = useMemoizedFn(() => {
-		exportPpt?.(displayData?.file_id)
 	})
 
 	const handleExportPptx = useMemoizedFn(() => {
@@ -1302,6 +1472,43 @@ export default memo(function HTML(props: HTMLProps) {
 		displayData?.file_id,
 		activeHistory.isNewestVersion,
 	])
+	const canUseCachedEditButton = Boolean(
+		fileIdForEditCache && !isReadonlyPreview && !isMediaScenario && !isMobile && allowEdit,
+	)
+	const effectiveShowFileEditButton = editButtonStateReady
+		? showFileEditButton
+		: canUseCachedEditButton
+			? (cachedEditButtonVisible ?? showFileEditButton)
+			: showFileEditButton
+
+	useEffect(() => {
+		if (!editButtonStateReady || !fileIdForEditCache) return
+		writeCachedHtmlEditButton(fileIdForEditCache, showFileEditButton)
+	}, [editButtonStateReady, fileIdForEditCache, showFileEditButton])
+
+	const showDesignStyleButton = useMemo(
+		() =>
+			Boolean(
+				!isReadonlyPreview &&
+				!isEditMode &&
+				allowEdit &&
+				!isDataAnalysis &&
+				!isMediaScenario &&
+				displayData?.file_id &&
+				currentHtmlFileInfo.fileName &&
+				(currentHtmlFileInfo.relativeFilePath || currentHtmlFileInfo.fileName),
+			),
+		[
+			allowEdit,
+			currentHtmlFileInfo.fileName,
+			currentHtmlFileInfo.relativeFilePath,
+			displayData?.file_id,
+			isDataAnalysis,
+			isEditMode,
+			isMediaScenario,
+			isReadonlyPreview,
+		],
+	)
 
 	/** 使用分享按钮可见性控制 Hook */
 	const { showDownloadButton, showExportButton } = useShareButtonVisibility({
@@ -1349,6 +1556,17 @@ export default memo(function HTML(props: HTMLProps) {
 
 	const headerActionConfig = useMemo<HeaderActionConfig>(
 		() => ({
+			overrides: {
+				refresh: {
+					disabled: Boolean(
+						isEditMode ||
+						(!isDataAnalysis &&
+							(previewFreshness.phase === "updating" ||
+								previewFreshness.phase === "rendering")),
+					),
+					tooltip: t("htmlEditor.previewRefreshTooltip"),
+				},
+			},
 			hideDefaults: isReadonlyPreview
 				? ["refresh", "download", "share", "versionMenu", "more"]
 				: [],
@@ -1359,27 +1577,37 @@ export default memo(function HTML(props: HTMLProps) {
 					before: "refresh",
 					visible: () => Boolean(isEditMode && hasServerUpdate),
 					render: (context) => (
-						<Button
-							variant="secondary"
-							size="sm"
-							onClick={() =>
-								void runGuardedAction(context.beforeAction, handleViewServerUpdate)
-							}
-							className="h-6 gap-1.5 rounded-md px-3 text-xs font-normal shadow-xs"
-							data-testid={
-								htmlTestIdsEnabled ? "html-server-update-button" : undefined
-							}
-						>
-							<AlertTriangle size={16} className="text-amber-600" />
-							<span>{t("ppt.serverUpdateAvailable")}</span>
-						</Button>
+						<MagicTooltip title={t("htmlEditor.serverUpdateTooltip")}>
+							<Button
+								variant="secondary"
+								size="sm"
+								onClick={() =>
+									void runGuardedAction(
+										context.beforeAction,
+										handleViewServerUpdate,
+									)
+								}
+								className="h-6 gap-1.5 rounded-md px-3 text-xs font-normal shadow-xs"
+								data-testid={
+									htmlTestIdsEnabled ? "html-server-update-button" : undefined
+								}
+							>
+								<AlertTriangle size={16} className="text-amber-600" />
+								<span>{t("ppt.serverUpdateAvailable")}</span>
+							</Button>
+						</MagicTooltip>
 					),
 				},
 				{
 					key: "html-toolbar-actions",
 					zone: "secondary",
 					before: "refresh",
-					visible: () => Boolean(showAIOptimizationButton || showFileEditButton),
+					visible: () =>
+						Boolean(
+							showAIOptimizationButton ||
+							effectiveShowFileEditButton ||
+							showDesignStyleButton,
+						),
 					render: (context) => (
 						<div
 							className="flex items-center gap-1"
@@ -1387,35 +1615,63 @@ export default memo(function HTML(props: HTMLProps) {
 								htmlTestIdsEnabled ? "html-editor-toolbar-actions" : undefined
 							}
 						>
-							{showAIOptimizationButton && !isEditMode && (
-								<Button
-									variant="outline"
-									size="sm"
-									onClick={() => void handleQuickSelection()}
-									aria-pressed={isQuickSelecting}
-									aria-label={quickSelectionLabel}
-									title={quickSelectionTitle}
-									className="h-6 gap-1.5 rounded-[8px] px-3 py-0 text-xs font-normal text-foreground shadow-xs"
-									data-testid={
-										htmlTestIdsEnabled ? "html-ai-pick-button" : undefined
+							{showDesignStyleButton && (
+								<DesignStyleButton
+									fileInfo={{
+										fileId: displayData?.file_id ?? "",
+										fileName: currentHtmlFileInfo.fileName,
+										filePath:
+											currentHtmlFileInfo.relativeFilePath ??
+											currentHtmlFileInfo.fileName ??
+											"",
+									}}
+									showButtonText={context.showButtonText}
+									getPopupContainer={context.getPopupContainer}
+									testId={
+										htmlTestIdsEnabled ? "html-design-style-button" : undefined
 									}
+								/>
+							)}
+							{showAIOptimizationButton && !isEditMode && (
+								<ConditionalTooltip
+									showText={Boolean(context.showButtonText)}
+									title={quickSelectionTitle}
+									getPopupContainer={context.getPopupContainer}
 								>
-									<Crosshair
-										size={16}
-										className={isQuickSelecting ? "text-primary" : undefined}
-									/>
-									{context.showButtonText && (
-										<span
+									<Button
+										variant="outline"
+										size="sm"
+										onClick={() => void handleQuickSelection()}
+										aria-pressed={isQuickSelecting}
+										aria-label={quickSelectionLabel}
+										title={quickSelectionTitle}
+										className={cn(
+											"h-6 rounded-[8px] py-0 text-xs font-normal text-foreground shadow-xs",
+											context.showButtonText ? "gap-1.5 px-3" : "px-1.5",
+										)}
+										data-testid={
+											htmlTestIdsEnabled ? "html-ai-pick-button" : undefined
+										}
+									>
+										<Crosshair
+											size={16}
 											className={
 												isQuickSelecting ? "text-primary" : undefined
 											}
-										>
-											{quickSelectionLabel}
-										</span>
-									)}
-								</Button>
+										/>
+										{context.showButtonText && (
+											<span
+												className={
+													isQuickSelecting ? "text-primary" : undefined
+												}
+											>
+												{quickSelectionLabel}
+											</span>
+										)}
+									</Button>
+								</ConditionalTooltip>
 							)}
-							{showFileEditButton && (
+							{effectiveShowFileEditButton && (
 								<FileEditButtons
 									testIdPrefix={htmlTestIdsEnabled ? "html-editor" : undefined}
 									isEditMode={isEditMode}
@@ -1430,6 +1686,7 @@ export default memo(function HTML(props: HTMLProps) {
 									onSave={handleSave}
 									onSaveAndExit={handleSaveAndExit}
 									onCancel={handleCancel}
+									getPopupContainer={context.getPopupContainer}
 								/>
 							)}
 						</div>
@@ -1439,7 +1696,7 @@ export default memo(function HTML(props: HTMLProps) {
 					key: "html-permission-manager",
 					zone: "secondary",
 					before: "refresh",
-					visible: () => canManageHtmlPermissions,
+					visible: () => canManageHtmlPermissions && !sharedHtmlPermissionController,
 					render: (context) => (
 						<ActionButton
 							icon={<ShieldCheck size={16} />}
@@ -1467,12 +1724,10 @@ export default memo(function HTML(props: HTMLProps) {
 						<HtmlExportAction
 							handleExportSource={handleExportSource}
 							handleExportPDF={handleExportPDF}
-							handleExportPPT={handleExportPPT}
 							handleExportPptx={handleExportPptx}
 							handleExportImage={handleExportImage}
 							handleExportRasterPdf={handleExportRasterPdf}
 							isExporting={isExporting}
-							supportPPT={isInPPTMode}
 							showButtonText={context.showButtonText}
 							showExportPptx={isConvertibleFile(displayData, ["html"])}
 							showExportImage={isConvertibleFile(displayData, ["html"])}
@@ -1485,13 +1740,14 @@ export default memo(function HTML(props: HTMLProps) {
 		}),
 		[
 			attachmentList,
-			displayData?.file_id,
+			currentHtmlFileInfo.fileName,
+			currentHtmlFileInfo.relativeFilePath,
+			displayData,
 			handleCancel,
 			handleAIEdit,
 			handleQuickSelection,
 			handleEdit,
 			handleExportPDF,
-			handleExportPPT,
 			handleExportPptx,
 			handleExportImage,
 			handleExportRasterPdf,
@@ -1500,23 +1756,23 @@ export default memo(function HTML(props: HTMLProps) {
 			handleSaveAndExit,
 			handleViewServerUpdate,
 			hasServerUpdate,
+			previewFreshness.phase,
 			htmlTestIdsEnabled,
 			isExporting,
 			isEditMode,
 			isInPPTMode,
 			isReadonlyPreview,
 			showAIOptimizationButton,
+			showDesignStyleButton,
 			showExportButton,
-			showFileEditButton,
+			effectiveShowFileEditButton,
 			isAppendPicking,
 			isQuickSelecting,
 			quickSelectionLabel,
 			quickSelectionTitle,
 			canManageHtmlPermissions,
+			sharedHtmlPermissionController,
 			handleOpenHtmlPermissionManager,
-			isDataAnalysis,
-			htmlIsDeleted,
-			hasHtmlPermissionDeclarations,
 			t,
 		],
 	)
@@ -1544,7 +1800,7 @@ export default memo(function HTML(props: HTMLProps) {
 		isEditMode,
 		fileVersion: activeHistory.fileVersion,
 		isNewestFileVersion: activeHistory.isNewestVersion,
-		showRefreshButton: true,
+		showRefreshButton: showRefresh,
 		changeFileVersion: activeHistory.changeFileVersion,
 		fileVersionsList: activeHistory.fileVersionsList,
 		handleVersionRollback: activeHistory.handleVersionRollback,
@@ -1645,6 +1901,14 @@ export default memo(function HTML(props: HTMLProps) {
 							[styles.documentFlowPreviewInner]: documentFlowFullscreen,
 						})}
 					>
+						{!isEditMode && !isDataAnalysis && (
+							<HtmlPreviewFreshness
+								key={displayData?.file_id}
+								phase={previewFreshness.phase}
+								hasRendered={previewFreshness.hasRendered}
+								onRetry={() => void refreshHtmlPreview()}
+							/>
+						)}
 						{isDataAnalysis ? (
 							<DevicePreviewViewport
 								{...devicePreview}
@@ -1679,6 +1943,11 @@ export default memo(function HTML(props: HTMLProps) {
 							<>
 								<IsolatedHTMLRenderer
 									ref={htmlRendererRef}
+									className={
+										isImmersiveLayout
+											? undefined
+											: "!bg-[#eeeeee] dark:!bg-[#2b2b2b]"
+									}
 									devicePreview={{
 										...devicePreview,
 										active: htmlTestIdsEnabled,
@@ -1705,10 +1974,9 @@ export default memo(function HTML(props: HTMLProps) {
 									htmlRelativeFolderPath={
 										currentHtmlFileInfo.htmlRelativeFolderPath
 									}
-									selectedProject={selectedProject}
 									projectId={runtimeProjectId}
-									topicStore={topicStore}
-									selectedTopic={selectedTopic}
+									microAppId={microAppId}
+									microAppName={microAppName}
 									devConsoleEnabled={devConsoleEnabled}
 									permissionController={htmlPermissionController}
 									attachmentList={attachmentList}
@@ -1734,18 +2002,23 @@ export default memo(function HTML(props: HTMLProps) {
 									onQuickSelectionChange={setIsQuickSelecting}
 								/>
 								{/* 跨域 shell 渲染期间用 loading 覆盖层填补"数据已就绪但 iframe 内容未画出"的空窗 */}
-								{!isPreviewRenderReady && !documentFlowFullscreen && (
-									<Flex
-										data-testid={
-											htmlTestIdsEnabled ? "html-preview-loading" : undefined
-										}
-										justify="center"
-										align="center"
-										className="absolute inset-0 z-10 bg-white dark:bg-[#1c1c1c]"
-									>
-										<MagicSpin spinning />
-									</Flex>
-								)}
+								{Boolean(processedContent) &&
+									!isPreviewRenderReady &&
+									previewFreshness.phase !== "failed" &&
+									!documentFlowFullscreen && (
+										<Flex
+											data-testid={
+												htmlTestIdsEnabled
+													? "html-preview-loading"
+													: undefined
+											}
+											justify="center"
+											align="center"
+											className="absolute inset-0 z-10 bg-white dark:bg-[#1c1c1c]"
+										>
+											<MagicSpin spinning />
+										</Flex>
+									)}
 							</>
 						)}
 					</div>

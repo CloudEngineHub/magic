@@ -9,7 +9,10 @@ import magicToast from "@/components/base/MagicToaster/utils"
 import { SuperMagicApi } from "@/apis"
 import type { ProjectAttachmentsV2NextParentState } from "@/apis/modules/superMagic"
 import { generateUniqueFileName } from "../../utils/generateUniqueFileName"
-import { superMagicUploadTokenService } from "../../services/UploadTokenService"
+import {
+	superMagicUploadTokenService,
+	type UploadTokenService,
+} from "../../services/UploadTokenService"
 import { UploadService } from "../../services/UploadService"
 import type { FileData } from "../../types"
 import { UploadSource } from "../../types"
@@ -43,6 +46,8 @@ export interface AddFilesOptions {
 }
 
 export interface FileUploadStoreOptions {
+	/** Independent blank composers must not upload into the same temporary project directory. */
+	uploadTokenService?: UploadTokenService
 	maxUploadCount?: number
 	maxUploadSize?: number
 	projectId?: string
@@ -71,6 +76,10 @@ export interface FileUploadStoreOptions {
 const logger = Logger.createLogger("SuperMagicUpload")
 
 export class FileUploadStore {
+	getTemporaryWorkdir() {
+		return this.uploadTokenService.getLastWorkDir()
+	}
+
 	files: FileData[] = []
 	uploading = false
 	maxUploadCount = 20
@@ -103,12 +112,15 @@ export class FileUploadStore {
 	private sessionSavedProjectFileIds = new Set<string>()
 	private tempUploadDirectoryIds = new Map<string, string>()
 	private projectFilesStore: ProjectFilesStore
+	private uploadTokenService: UploadTokenService
 
 	constructor(options: FileUploadStoreOptions = {}) {
 		this.projectFilesStore = options.projectFilesStore ?? projectFilesStore
-		makeAutoObservable(
+		this.uploadTokenService = options.uploadTokenService ?? superMagicUploadTokenService
+		makeAutoObservable<FileUploadStore, "uploadTokenService">(
 			this,
 			{
+				uploadTokenService: false,
 				// Node views call this during render and must track the observable file fields.
 				getFileById: false,
 			},
@@ -366,7 +378,7 @@ export class FileUploadStore {
 			fileList,
 			customCredentials,
 			customOption,
-			url: superMagicUploadTokenService.getUploadTokenUrl,
+			url: this.uploadTokenService.getUploadTokenUrl,
 			body: {
 				project_id: this.projectId,
 				expires: 3600,
@@ -479,14 +491,14 @@ export class FileUploadStore {
 			})
 		}
 
-		let customCredentials = await superMagicUploadTokenService.getUploadToken(
+		let customCredentials = await this.uploadTokenService.getUploadToken(
 			this.projectId,
 			targetParentId,
 		)
 		if (addFilesOptions.isCurrent?.() === false) return
 
 		if (tempDirectoryId && customCredentials) {
-			customCredentials = superMagicUploadTokenService.changeDir(
+			customCredentials = this.uploadTokenService.changeDir(
 				customCredentials,
 				TEMP_UPLOAD_DIR_NAME,
 			)
@@ -558,16 +570,16 @@ export class FileUploadStore {
 						logger.warn("upload credentials expired, refreshing and retrying", {
 							expiredCount: hasExpired.length,
 						})
-						await superMagicUploadTokenService.fetchUploadToken(this.projectId)
+						await this.uploadTokenService.fetchUploadToken(this.projectId)
 					}
 
-					const newCustomCredentials = await superMagicUploadTokenService.getUploadToken(
+					const newCustomCredentials = await this.uploadTokenService.getUploadToken(
 						this.projectId,
 						targetParentId,
 						true,
 					)
 					const retryCustomCredentials = tempDirectoryId
-						? superMagicUploadTokenService.changeDir(
+						? this.uploadTokenService.changeDir(
 								newCustomCredentials,
 								TEMP_UPLOAD_DIR_NAME,
 							)
@@ -651,7 +663,7 @@ export class FileUploadStore {
 		const file = this.files.find((f) => f.id === fileId)
 		if (!file) return
 
-		const customCredentials = await superMagicUploadTokenService.getUploadToken(
+		const customCredentials = await this.uploadTokenService.getUploadToken(
 			this.projectId,
 			file.parentId,
 			true,

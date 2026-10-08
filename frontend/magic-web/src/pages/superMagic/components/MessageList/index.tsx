@@ -53,6 +53,7 @@ import { ExportPreviewModal } from "./components/ExportPreviewModal"
 import { extractTurns } from "./export/extractMessageContent"
 
 import { MessageListProvider, useMessageListContext } from "./context"
+import defaultProjectFilesStore from "@/stores/projectFiles"
 import MessageRenderContent from "./components/MessageRenderContent"
 import { projectRevokedMessageBranches } from "../../utils/project-visible-messages-by-revoked-tail"
 import { resolveBottomLoadingVisibility } from "./bottom-loading-visibility"
@@ -67,7 +68,6 @@ import { MessageViewStateProvider } from "./view-state/MessageViewStateContext"
 import type { RevokedMessageEditorContext } from "./revoked-editor-context"
 import type { MessageListScrollAdapter } from "./message-list-scroll-adapter"
 import { useStableArrayReference } from "./hooks/useStableArrayReference"
-import { classicNameResolver } from "typescript"
 
 export { MessageListProvider }
 
@@ -81,10 +81,12 @@ interface MessageListProps {
 	data: Array<SuperMagicMessageItem>
 	isShare?: boolean
 	setSelectedDetail?: (detail: any) => void
+	/** Host surface and fade tail: --message-list-surface / --message-list-sticky-fade-height. */
 	className?: string
 
 	classNames?: {
-		scrollWrapper?: string
+		/** Classes on the content column; its actual offset is measured by the virtualizer. */
+		content?: string
 	}
 	isEmptyStatus?: boolean
 	selectedTopic: Topic | null
@@ -118,8 +120,7 @@ interface MessageListProps {
 	/** Distance from the top at which a fresh upward gesture may load one history page. */
 	historyLoadThresholdPx?: number
 	/**
-	 * Top/bottom scroll edge fade on mobile (prototype ChatScreen).
-	 * Pass `false` to disable; default enables on mobile when not share.
+	 * Opt-in scroll edge fade. Uses the host surface unless a color token is supplied.
 	 */
 	scrollEdgeFade?: boolean | { fadeColor?: ScrollEdgeFadeColor }
 }
@@ -196,18 +197,11 @@ const MessageList = observer(
 		 */
 		const [scrollViewport, setScrollViewport] = useState<HTMLDivElement | null>(null)
 		const virtualizerRef = useRef<MessageListScrollAdapter | null>(null)
-		/** Scroll edge fade is mobile-only; desktop TopicMessagePanel / share pages stay unchanged. */
+		// Edge treatment is chosen by the containing panel, independently of device detection.
 		const scrollEdgeFadeConfig = useMemo(() => {
-			if (!isMobile || isShare) return null
-			if (scrollEdgeFade === false) return null
-			if (typeof scrollEdgeFade === "object") {
-				return {
-					fadeColor:
-						scrollEdgeFade.fadeColor ?? ("mobile-background" as ScrollEdgeFadeColor),
-				}
-			}
-			return { fadeColor: "mobile-background" as ScrollEdgeFadeColor }
-		}, [scrollEdgeFade, isMobile, isShare])
+			if (!scrollEdgeFade) return null
+			return typeof scrollEdgeFade === "object" ? scrollEdgeFade : {}
+		}, [scrollEdgeFade])
 
 		const renderedMessageKeysRef = useRef<Set<string>>(new Set())
 		const projectionCachesRef = useRef({
@@ -602,6 +596,7 @@ const MessageList = observer(
 		const augmentedMessageListContext = useMemo(
 			() => ({
 				...parentCtx,
+				projectFilesStore: parentCtx.projectFilesStore ?? defaultProjectFilesStore,
 				allowUserFileReferences: !isShare && parentCtx.allowUserFileReferences !== false,
 				allowExport: enableExport,
 				exportModeActive,
@@ -621,6 +616,7 @@ const MessageList = observer(
 				parentCtx.onTopicSwitch,
 				parentCtx.renderAssistantAvatar,
 				parentCtx.showTaskCompletedBadge,
+				parentCtx.projectFilesStore,
 				enableExport,
 				exportModeActive,
 				exportEnterRequest,
@@ -873,7 +869,7 @@ const MessageList = observer(
 				<MessageViewStateProvider topicKey={currentTopicKey}>
 					<div
 						className={cn(
-							"relative flex h-full w-full flex-1 flex-col overflow-hidden",
+							"relative flex h-full min-h-0 w-full flex-1 flex-col overflow-hidden",
 							"message-list-container",
 							className,
 						)}
@@ -916,8 +912,7 @@ const MessageList = observer(
 									// viewport, but a growing list can push this column past it so
 									// the virtualizer canvas inside keeps its measurable height.
 									"mx-auto block min-h-full min-w-[unset] max-w-3xl pb-2",
-									isMobile ? "px-4 pt-[10px]" : "pl-2 pt-[50px]",
-									classNames?.scrollWrapper,
+									classNames?.content,
 								)}
 							>
 								{visibleData.length > 0 || !isEmptyStatus ? (
@@ -925,9 +920,7 @@ const MessageList = observer(
 										topicId={currentTopicKey}
 										items={virtualMessageItems}
 										userIndices={userIndices}
-										isMobile={isMobile}
 										getScrollElement={getScrollElement}
-										startMargin={isMobile ? 10 : 50}
 										footer={messageListFooter}
 										stickyMessageClassName={stickyMessageClassName}
 										renderNode={renderVirtualMessageNode}
@@ -951,7 +944,12 @@ const MessageList = observer(
 						</div>
 						{scrollEdgeFadeConfig ? (
 							<ScrollEdgeFadeOverlays
-								fadeColor={scrollEdgeFadeConfig.fadeColor}
+								fadeColor={scrollEdgeFadeConfig.fadeColor ?? "background"}
+								surfaceColor={
+									scrollEdgeFadeConfig.fadeColor
+										? undefined
+										: "var(--message-list-surface, rgb(var(--background-rgb)))"
+								}
 								showTopMask={showTopMask}
 								showBottomMask={showBottomMask}
 							/>

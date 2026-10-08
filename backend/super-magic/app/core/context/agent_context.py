@@ -331,6 +331,8 @@ class AgentContext(BaseAgentContext):
             "attachments": ({}, Dict[str, Attachment]),
             "chat_client_message": (None, Optional[ChatClientMessage]),
             "super_magic_product_context": (None, Optional[SuperMagicProductContext]),
+            # None 表示任务尚未建立平台提示词快照；空字符串表示已建立快照但平台未配置内容。
+            "global_system_prompt": (None, Optional[str]),
             "task_id": (None, Optional[str]),
             "interrupt_queue": (None, Optional[asyncio.Queue]),
             "sandbox_id": ("", str),
@@ -776,6 +778,21 @@ class AgentContext(BaseAgentContext):
     def get_super_magic_product_context(self) -> Optional["SuperMagicProductContext"]:
         """获取本轮最新的 Super Magic 产品上下文。"""
         return self.shared_context.get_field("super_magic_product_context")
+
+    def initialize_global_system_prompt(self, prompt: str) -> bool:
+        """首次加载时固定平台级全局系统提示词，后续配置刷新不覆盖任务快照。"""
+        if self.is_global_system_prompt_initialized():
+            return False
+        self.shared_context.update_field("global_system_prompt", prompt if isinstance(prompt, str) else "")
+        return True
+
+    def is_global_system_prompt_initialized(self) -> bool:
+        """判断当前任务是否已经建立平台级全局系统提示词快照。"""
+        return self.shared_context.get_field("global_system_prompt") is not None
+
+    def get_global_system_prompt(self) -> str:
+        """获取平台级全局系统提示词。"""
+        return self.shared_context.get_field("global_system_prompt") or ""
 
     def has_stream(self, stream: Stream) -> bool:
         """检查是否存在指定的通信流
@@ -1488,8 +1505,18 @@ class AgentContext(BaseAgentContext):
             pass
 
     def get_streaming_sinks(self) -> list:
-        """返回当前所有额外流式推送目标列表。"""
-        return self.shared_context.get_field("streaming_sinks") or []
+        """返回当前所有额外流式推送目标列表。
+
+        本地 /subscribe 是进程级单例：子 Agent 不继承 streaming_sinks，
+        但只要调试面板连着，主 / 子请求都要把 chunk 抄过去。
+        """
+        sinks = list(self.shared_context.get_field("streaming_sinks") or [])
+        from app.streaming.local_subscribe_driver import get_local_subscribe_driver
+
+        local_driver = get_local_subscribe_driver()
+        if local_driver.has_subscribers() and local_driver not in sinks:
+            sinks.append(local_driver)
+        return sinks
 
     # ====== 消息版本协商 ======
 

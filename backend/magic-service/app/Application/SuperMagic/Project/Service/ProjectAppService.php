@@ -458,6 +458,64 @@ class ProjectAppService extends AbstractAppService
         }
     }
 
+    /** Query a user-scoped special project without creating it. */
+    public function findSpecialProject(RequestContext $requestContext, string $specialKey): ?ProjectEntity
+    {
+        $dataIsolation = $this->createDataIsolation($requestContext->getUserAuthorization());
+        $setting = $this->magicUserSettingDomainService->get(
+            $dataIsolation,
+            UserSettingKey::genSuperMagicSpecialProject($specialKey),
+        );
+        $projectId = (int) ($setting?->getValue()['project_id'] ?? 0);
+        if ($projectId <= 0) {
+            return null;
+        }
+
+        $project = $this->projectRepository->findById($projectId);
+        return $project !== null && $project->getUserId() === $dataIsolation->getCurrentUserId()
+            ? $project
+            : null;
+    }
+
+    /** Create or get a micro-app runtime project with server-owned defaults. */
+    public function ensureMicroAppRuntimeProject(RequestContext $requestContext, string $specialKey): array
+    {
+        $requestDTO = new CreateSpecialProjectRequestDTO([
+            'key' => $specialKey,
+            'project_name' => $specialKey,
+            'dynamic_params' => ['agent_mode' => 'micro-app', 'message_version' => 'v2'],
+        ]);
+        $result = $this->createOrGetSpecialProject($requestContext, $requestDTO);
+        $projectId = (int) ($result['project']['id'] ?? 0);
+        $project = $projectId > 0 ? $this->projectRepository->findById($projectId) : null;
+        if ($project === null) {
+            ExceptionBuilder::throw(SuperAgentErrorCode::CREATE_PROJECT_FAILED, 'project.create_project_failed');
+        }
+
+        $project = $this->normalizeMicroAppRuntimeProject($project);
+
+        return [
+            'project' => ProjectItemDTO::fromEntity($project)->toArray(),
+            'is_existing' => (bool) ($result['is_existing'] ?? false),
+        ];
+    }
+
+    public function normalizeMicroAppRuntimeProject(ProjectEntity $project): ProjectEntity
+    {
+        if (! $project->isHidden()
+            || $project->getHiddenType() !== HiddenType::MICRO_APP_RUNTIME->value
+            || $project->getSource() !== CreationSource::SYSTEM_CREATED->value) {
+            $project->setIsHidden(true)
+                ->setHiddenTypeEnum(HiddenType::MICRO_APP_RUNTIME)
+                ->setSource(CreationSource::SYSTEM_CREATED->value)
+                ->setUpdatedUid($project->getUserId())
+                ->setUpdatedAt(date('Y-m-d H:i:s'));
+            return $this->projectDomainService->saveProjectEntity($project);
+        }
+
+        return $project;
+    }
+
     /**
      * 更新项目.
      */
@@ -1293,7 +1351,7 @@ class ProjectAppService extends AbstractAppService
 
             // 7. Skip root directory initialization (fork uses async file migration)
 
-            // Publish fork event for async file migration
+            // Build the fork event for async file migration; it is published after the commit
             $event = new ProjectForkEvent(
                 $requestDTO->getSourceProjectId(),
                 $forkProjectEntity->getId(),
@@ -1301,13 +1359,10 @@ class ProjectAppService extends AbstractAppService
                 $dataIsolation->getCurrentOrganizationCode(),
                 $forkProjectRecordEntity->getId()
             );
-            $publisher = new ProjectForkPublisher($event);
-            $this->producer->produce($publisher);
-            $this->logger->info(sprintf('Published fork event, event ID: %s', $event->getEventId()));
 
             Db::commit();
 
-            return ForkProjectResponseDTO::fromEntity($forkProjectRecordEntity)->toArray();
+            $responseData = ForkProjectResponseDTO::fromEntity($forkProjectRecordEntity)->toArray();
         } catch (EventException $e) {
             Db::rollBack();
             ExceptionBuilder::throw(SuperAgentErrorCode::PROJECT_FORK_ACCESS_DENIED, $e->getMessage());
@@ -1316,6 +1371,12 @@ class ProjectAppService extends AbstractAppService
             $this->logger->error('Fork project failed, error: ' . $e->getMessage(), ['request' => $requestDTO->toArray()]);
             throw $e;
         }
+
+        // The consumer reads the forked project on its own connection, so the event may only be
+        // published once the transaction is committed and those rows are visible to it.
+        $this->publishForkEvent($event);
+
+        return $responseData;
     }
 
     /**
@@ -1379,6 +1440,9 @@ class ProjectAppService extends AbstractAppService
                 $event->getForkRecordId(),
                 $e->getMessage()
             ));
+            // Failures raised before the migration itself starts leave the record untouched,
+            // so give it a terminal state instead of letting the client poll 0% forever.
+            $this->projectDomainService->markForkRecordFailed($event->getForkRecordId(), 'File migration failed');
             throw $e;
         }
     }
@@ -2603,6 +2667,26 @@ class ProjectAppService extends AbstractAppService
         return $project;
     }
 
+    /**
+     * Publish the fork event, marking the fork record as failed when the message cannot be sent,
+     * so the client stops polling a progress that would never advance.
+     */
+    private function publishForkEvent(ProjectForkEvent $event): void
+    {
+        try {
+            $this->producer->produce(new ProjectForkPublisher($event));
+            $this->logger->info(sprintf('Published fork event, event ID: %s', $event->getEventId()));
+        } catch (Throwable $e) {
+            $this->logger->error(sprintf(
+                'Failed to publish fork event, fork record ID: %d, event ID: %s, error: %s',
+                $event->getForkRecordId(),
+                $event->getEventId(),
+                $e->getMessage()
+            ));
+            $this->projectDomainService->markForkRecordFailed($event->getForkRecordId(), 'File migration failed');
+        }
+    }
+
     private function deleteMicroAppResources(int $projectId, ?MicroAppEntity $microAppRecord = null): void
     {
         $microAppRecord ??= $this->microAppRepository->findByProjectId($projectId);
@@ -2657,7 +2741,7 @@ class ProjectAppService extends AbstractAppService
                 $dataIsolation->getCurrentOrganizationCode(),
                 '',
                 '',
-                ProjectMode::GENERAL->value
+                ProjectMode::MICRO_APP->value
             );
             $this->logger->info(sprintf('Created micro app project, projectId=%s', $projectEntity->getId()));
 

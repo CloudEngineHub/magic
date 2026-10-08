@@ -136,6 +136,7 @@ interface ResourceLookup {
 }
 
 const MAGIC_PROJECT_FILE_NAME = "magic.project.js"
+const DESIGN_CANVAS_DISPLAY_TYPE = "design"
 const CANVAS_RESOURCE_DIRS = new Set(["images", "videos", "audios"])
 const DIRECT_PATH_KEYS = new Set(["src", "file_dir", "file_path", "uri", "audio", "video", "mask"])
 const PATH_ARRAY_KEYS = new Set([
@@ -158,6 +159,24 @@ function normalizePath(value: unknown): string {
 
 function itemName(item: AttachmentItem): string {
 	return item.file_name || item.filename || item.display_filename || item.name || ""
+}
+
+/** Path repair rewrites Design canvas DSL only — not slide/PPT or other magic.project.js types. */
+function isDesignCanvasProjectRoot(root: AttachmentItem | undefined): boolean {
+	if (!root?.is_directory) return false
+	return root.display_config?.type === DESIGN_CANVAS_DISPLAY_TYPE
+}
+
+export function resolveCanvasOperationConfirmTitleKey(options: {
+	requiresCanvasRisk: boolean
+	hasPathRepairFailures: boolean
+}):
+	| "topicFiles.canvasOperationRisk.title"
+	| "topicFiles.canvasOperationRisk.pathRepairFailureTitle" {
+	if (options.requiresCanvasRisk) return "topicFiles.canvasOperationRisk.title"
+	if (options.hasPathRepairFailures)
+		return "topicFiles.canvasOperationRisk.pathRepairFailureTitle"
+	return "topicFiles.canvasOperationRisk.title"
 }
 
 function itemPath(
@@ -232,6 +251,7 @@ function collectCanvasProjects(items: AttachmentItem[], projectId?: string): Can
 		if (!isAttachmentPathConsistent(item, items)) continue
 		const parent = findParentItem(items, item)
 		if (!parent?.is_directory) continue
+		if (!isDesignCanvasProjectRoot(parent)) continue
 		if (!isAttachmentPathConsistent(parent, items)) continue
 		if (
 			projectId &&
@@ -306,6 +326,181 @@ function isAffectedProject(
 		const selectedPath = itemPath(item, items)
 		return isSameOrDescendant(project.rootPath, selectedPath)
 	})
+}
+
+function resolveIndexedItem(
+	attachmentIndex: AttachmentIndex,
+	lookupKey: string,
+): AttachmentItem | undefined {
+	return attachmentIndex.getItemById(lookupKey) || attachmentIndex.getItemByKey(lookupKey)
+}
+
+function resolveSelectedItemsWithIndex(options: CanvasProjectPathRepairOptions): AttachmentItem[] {
+	const attachmentIndex = options.attachmentIndex
+	if (!attachmentIndex) return []
+
+	const selected = [...(options.items || [])]
+	for (const fileId of options.fileIds || []) {
+		const item = resolveIndexedItem(attachmentIndex, String(fileId))
+		if (item) selected.push(item)
+	}
+
+	const seen = new Set<string>()
+	return selected.filter((item) => {
+		const key = String(item.file_id || item.relative_file_path || item.path || "")
+		if (!key || key === "undefined") return false
+		if (seen.has(key)) return false
+		seen.add(key)
+		return true
+	})
+}
+
+function directoryHasMagicProjectChild(
+	directory: AttachmentItem,
+	attachmentIndex: AttachmentIndex,
+): AttachmentItem | undefined {
+	const lookupKey = String(directory.file_id || directory.relative_file_path || "")
+	if (!lookupKey) return undefined
+
+	const childKeys = directory.file_id
+		? attachmentIndex.getChildKeysById(String(directory.file_id))
+		: attachmentIndex.getChildKeysByKey(lookupKey)
+
+	for (const childKey of childKeys) {
+		const child = attachmentIndex.getItemByKey(childKey)
+		if (!child || child.is_directory) continue
+		if (itemName(child) === MAGIC_PROJECT_FILE_NAME) return child
+	}
+	return undefined
+}
+
+function getIndexedParentItems(
+	item: AttachmentItem,
+	attachmentIndex: AttachmentIndex,
+): AttachmentItem[] {
+	if (item.file_id) return attachmentIndex.getParentItemsById(String(item.file_id))
+	const path = normalizePath(item.relative_file_path || item.path)
+	if (!path) return []
+	return attachmentIndex.getParentItemsByKey(path)
+}
+
+/**
+ * Path repair only applies when the selection is the canvas root or an ancestor
+ * directory. Resource files / folders inside a canvas (images, magic.project.js,
+ * etc.) must not trigger a full-tree collect + rewrite plan.
+ */
+function selectedCanTriggerPathRepair(
+	selectedItems: AttachmentItem[],
+	attachmentIndex: AttachmentIndex,
+): boolean {
+	return selectedItems.some((item) => {
+		if (!item.is_directory) return false
+
+		// Descendant of an existing canvas root → cannot be "root or ancestor".
+		const ancestors = getIndexedParentItems(item, attachmentIndex)
+		if (ancestors.some((ancestor) => directoryHasMagicProjectChild(ancestor, attachmentIndex)))
+			return false
+
+		return true
+	})
+}
+
+function collectSidecarsForRoot(
+	root: AttachmentItem,
+	mainFile: AttachmentItem,
+	attachmentIndex: AttachmentIndex,
+): AttachmentItem[] {
+	const lookupKey = String(root.file_id || root.relative_file_path || "")
+	if (!lookupKey) return []
+
+	const childKeys = root.file_id
+		? attachmentIndex.getChildKeysById(String(root.file_id))
+		: attachmentIndex.getChildKeysByKey(lookupKey)
+
+	return childKeys
+		.map((key) => attachmentIndex.getItemByKey(key))
+		.filter((candidate): candidate is AttachmentItem => {
+			if (!candidate || candidate.is_directory || !candidate.file_id) return false
+			if (String(candidate.file_id) === String(mainFile.file_id)) return false
+			const name = itemName(candidate)
+			return name === ELEMENT_DETAILS_FILENAME || name === ELEMENT_DETAILS_USER_FILENAME
+		})
+}
+
+function collectAffectedProjectsWithIndex(
+	selectedItems: AttachmentItem[],
+	attachmentIndex: AttachmentIndex,
+	projectId?: string,
+): CanvasProjectInfo[] {
+	const projects = new Map<string, CanvasProjectInfo>()
+
+	const maybeAddProject = (root: AttachmentItem, mainFile: AttachmentItem) => {
+		if (!isDesignCanvasProjectRoot(root)) return
+		if (
+			projectId &&
+			[root, mainFile].some(
+				(candidate) =>
+					candidate.project_id !== undefined &&
+					candidate.project_id !== null &&
+					String(candidate.project_id) !== String(projectId),
+			)
+		)
+			return
+
+		const rootPath = normalizePath(root.relative_file_path || root.path) || itemName(root)
+		if (!rootPath || !mainFile.file_id) return
+
+		const projectKey = String(root.file_id || rootPath)
+		if (projects.has(projectKey)) return
+
+		projects.set(projectKey, {
+			rootPath,
+			projectName: itemName(root) || rootPath.split("/").pop() || rootPath,
+			mainFile,
+			sidecars: collectSidecarsForRoot(root, mainFile, attachmentIndex),
+		})
+	}
+
+	for (const item of selectedItems) {
+		if (!item.is_directory) continue
+
+		const ancestors = getIndexedParentItems(item, attachmentIndex)
+		if (ancestors.some((ancestor) => directoryHasMagicProjectChild(ancestor, attachmentIndex)))
+			continue
+
+		const ownMainFile = directoryHasMagicProjectChild(item, attachmentIndex)
+		if (ownMainFile) {
+			maybeAddProject(item, ownMainFile)
+			continue
+		}
+
+		const lookupKey = String(item.file_id || item.relative_file_path || "")
+		if (!lookupKey) continue
+
+		const descendantKeys = item.file_id
+			? attachmentIndex.getDescendantKeysById(String(item.file_id))
+			: attachmentIndex.getDescendantKeysByKey(lookupKey)
+
+		for (const key of descendantKeys) {
+			const candidate = attachmentIndex.getItemByKey(key)
+			if (
+				!candidate ||
+				candidate.is_directory ||
+				itemName(candidate) !== MAGIC_PROJECT_FILE_NAME
+			)
+				continue
+			if (!candidate.file_id) continue
+
+			const parent =
+				(candidate.file_id
+					? attachmentIndex.getParentItemById(String(candidate.file_id))
+					: null) || attachmentIndex.getParentItemByKey(key)
+			if (!parent?.is_directory) continue
+			maybeAddProject(parent, candidate)
+		}
+	}
+
+	return [...projects.values()]
 }
 
 function getSaveFailureMessage(response: unknown, fileId: string): string | null {
@@ -430,6 +625,116 @@ function buildResourceLookup(
 		}
 		return ambiguous
 	}
+	return {
+		isComplete,
+		allFilePaths: new Set(fileIdsByPath.keys()),
+		uniqueFilePaths: toUniquePaths(fileIdsByPath),
+		allDirectoryPaths: new Set(directoryIdsByPath.keys()),
+		uniqueDirectoryPaths: toUniquePaths(directoryIdsByPath),
+		allWorkspaceFilePaths: new Set(workspaceFileIdsByPath.keys()),
+		uniqueWorkspaceFilePaths: toUniqueWorkspacePaths(workspaceFileIdsByPath),
+		allWorkspaceDirectoryPaths: new Set(workspaceDirectoryIdsByPath.keys()),
+		uniqueWorkspaceDirectoryPaths: toUniqueWorkspacePaths(workspaceDirectoryIdsByPath),
+		ambiguousBareFilePaths: collectAmbiguousBarePaths(fileIdsByPath, workspaceFileIdsByPath),
+		ambiguousBareDirectoryPaths: collectAmbiguousBarePaths(
+			directoryIdsByPath,
+			workspaceDirectoryIdsByPath,
+		),
+	}
+}
+
+/**
+ * Builds the same lookup directly from the session index. The legacy array
+ * implementation resolves every parent with `items.find`, which becomes
+ * quadratic when a large attachment tree omits explicit relative paths.
+ */
+function buildResourceLookupFromIndex(
+	attachmentIndex: AttachmentIndex,
+	rootPath: string,
+	isComplete: boolean,
+): ResourceLookup {
+	const pathCache = new Map<string, string>()
+
+	const getPath = (item: AttachmentItem): string => {
+		const itemId = String(item.file_id || "")
+		if (itemId && pathCache.has(itemId)) return pathCache.get(itemId) || ""
+		const explicitPath = normalizePath(item.relative_file_path || item.path)
+		const parent = itemId ? attachmentIndex.getParentItemById(itemId) : null
+		// Preserve the legacy consistency guard without an O(n) parent lookup:
+		// explicit paths are trusted only when they agree with the indexed parent.
+		if (item.parent_id !== undefined && item.parent_id !== null && !parent) {
+			if (itemId) pathCache.set(itemId, "")
+			return ""
+		}
+		const parentPathValue = parent ? getPath(parent) : ""
+		if (explicitPath) {
+			if (parent && explicitPath !== `${parentPathValue}/${normalizePath(itemName(item))}`) {
+				if (itemId) pathCache.set(itemId, "")
+				return ""
+			}
+			if (itemId) pathCache.set(itemId, explicitPath)
+			return explicitPath
+		}
+		const path = parentPathValue
+			? `${parentPathValue}/${normalizePath(itemName(item))}`
+			: normalizePath(itemName(item))
+		if (itemId) pathCache.set(itemId, path)
+		return path
+	}
+
+	const fileIdsByPath = new Map<string, Set<string>>()
+	const directoryIdsByPath = new Map<string, Set<string>>()
+	const workspaceFileIdsByPath = new Map<string, Set<string>>()
+	const workspaceDirectoryIdsByPath = new Map<string, Set<string>>()
+	for (const key of attachmentIndex.allKeys) {
+		const item = attachmentIndex.getItemByKey(key)
+		if (!item) continue
+		if (!item.file_id) continue
+		const path = getPath(item)
+		if (!path) continue
+		const id = String(item.file_id)
+		const workspacePaths = item.is_directory
+			? workspaceDirectoryIdsByPath
+			: workspaceFileIdsByPath
+		const workspaceIds = workspacePaths.get(path)
+		if (workspaceIds) workspaceIds.add(id)
+		else workspacePaths.set(path, new Set([id]))
+
+		const relative = resourceRelativePath(rootPath, path)
+		if (!relative) continue
+		const pathIds = item.is_directory ? directoryIdsByPath : fileIdsByPath
+		const ids = pathIds.get(relative)
+		if (ids) ids.add(id)
+		else pathIds.set(relative, new Set([id]))
+	}
+
+	const toUniquePaths = (paths: Map<string, Set<string>>) => {
+		const unique = new Map<string, string>()
+		for (const [relative, ids] of paths)
+			if (ids.size === 1) unique.set(relative, `./${relative}`)
+		return unique
+	}
+	const toUniqueWorkspacePaths = (paths: Map<string, Set<string>>) => {
+		const unique = new Map<string, string>()
+		for (const [workspacePath, ids] of paths)
+			if (ids.size === 1) unique.set(workspacePath, `/${workspacePath}`)
+		return unique
+	}
+	const collectAmbiguousBarePaths = (
+		canvasPaths: Map<string, Set<string>>,
+		workspacePaths: Map<string, Set<string>>,
+	) => {
+		const ambiguous = new Set<string>()
+		for (const [workspacePath, ids] of workspacePaths)
+			if (ids.size > 1) ambiguous.add(workspacePath)
+		for (const [relative, canvasIds] of canvasPaths) {
+			const workspaceIds = workspacePaths.get(relative)
+			if (workspaceIds && new Set([...canvasIds, ...workspaceIds]).size > 1)
+				ambiguous.add(relative)
+		}
+		return ambiguous
+	}
+
 	return {
 		isComplete,
 		allFilePaths: new Set(fileIdsByPath.keys()),
@@ -808,17 +1113,38 @@ export async function planCanvasProjectsBeforeFileOperation(
 	options: CanvasProjectPathRepairOptions,
 ): Promise<CanvasProjectPathRepairResult> {
 	options.signal?.throwIfAborted()
-	const flatItems = resolveFlatAttachmentItems(options)
-	const selectedItems = selectedOperationItems(options, flatItems)
-	if (selectedItems.length === 0) {
-		return emptyPathRepairResult()
+	let projects: CanvasProjectInfo[] = []
+
+	// Local-index fast path: resource moves inside a canvas (images / magic.project.js /
+	// sidecars) must not materialize the full attachment list just to discover that no
+	// project root is affected.
+	if (options.attachmentIndex) {
+		const indexedSelectedItems = resolveSelectedItemsWithIndex(options)
+		if (indexedSelectedItems.length === 0) return emptyPathRepairResult()
+		if (!selectedCanTriggerPathRepair(indexedSelectedItems, options.attachmentIndex))
+			return emptyPathRepairResult()
+
+		projects = collectAffectedProjectsWithIndex(
+			indexedSelectedItems,
+			options.attachmentIndex,
+			options.projectId,
+		)
+		if (projects.length === 0) return emptyPathRepairResult()
+	} else {
+		const flatItems = resolveFlatAttachmentItems(options)
+		const selectedItems = selectedOperationItems(options, flatItems)
+		if (selectedItems.length === 0) {
+			return emptyPathRepairResult()
+		}
+		projects = collectCanvasProjects(flatItems, options.projectId).filter((project) =>
+			isAffectedProject(project, selectedItems, flatItems),
+		)
+		if (projects.length === 0) {
+			return emptyPathRepairResult()
+		}
 	}
-	const projects = collectCanvasProjects(flatItems, options.projectId).filter((project) =>
-		isAffectedProject(project, selectedItems, flatItems),
-	)
-	if (projects.length === 0) {
-		return emptyPathRepairResult()
-	}
+
+	const flatItems = options.attachmentIndex ? [] : resolveFlatAttachmentItems(options)
 
 	const mainFileIds = projects.map((project) => String(project.mainFile.file_id))
 	const mainContents = await getFileContentsByIds(mainFileIds, {
@@ -829,11 +1155,17 @@ export async function planCanvasProjectsBeforeFileOperation(
 
 	const checkedProjects: ProjectCheckState[] = projects.map((project) => ({
 		project,
-		resourceLookup: buildResourceLookup(
-			flatItems,
-			project.rootPath,
-			options.attachmentSnapshotComplete === true,
-		),
+		resourceLookup: options.attachmentIndex
+			? buildResourceLookupFromIndex(
+					options.attachmentIndex,
+					project.rootPath,
+					options.attachmentSnapshotComplete === true,
+				)
+			: buildResourceLookup(
+					flatItems,
+					project.rootPath,
+					options.attachmentSnapshotComplete === true,
+				),
 		projectResult: {
 			projectName: project.projectName,
 			rootPath: project.rootPath,

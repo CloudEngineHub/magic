@@ -11,9 +11,11 @@ from app.infrastructure.sdk.base import SdkBase, SdkContext
 from .api.agent_api import AgentApi
 from .api.ai_ability_api import AiAbilityApi
 from .api.file_api import FileApi  # TEMP: scan-wav workaround, remove when MagicFS auto-refreshes
+from .api.html_design_style_api import HtmlDesignStyleApi
 from .api.magicbase_api import MagicBaseApi
 from .api.mcp_authorization_credential_api import MCPAuthorizationCredentialApi
 from .api.message_schedule_api import MessageScheduleApi
+from .api.micro_app_api import MicroAppApi
 from .api.oauth2_callback_relay_api import OAuth2CallbackRelayApi
 from .api.share_api import ShareApi
 from .api.skill_api import SkillApi
@@ -48,7 +50,9 @@ class MagicService:
             'ai_ability': AiAbilityApi,
             'agent': AgentApi,
             'file': FileApi,  # TEMP: scan-wav workaround, remove when MagicFS auto-refreshes
+            'html_design_style': HtmlDesignStyleApi,
             'magicbase': MagicBaseApi,
+            'micro_app': MicroAppApi,
             'message_schedule': MessageScheduleApi,
             'oauth2_callback_relay': OAuth2CallbackRelayApi,
             'mcp_authorization_credential': MCPAuthorizationCredentialApi,
@@ -99,6 +103,11 @@ class MagicService:
         # TEMP: scan-wav workaround, remove when MagicFS auto-refreshes.
         """
         return self._fetched_definitions['file']
+
+    @property
+    def html_design_style(self) -> 'HtmlDesignStyleApi':
+        """Get HTML design style source API instance."""
+        return self._fetched_definitions['html_design_style']
 
     @property
     def magicbase(self) -> 'MagicBaseApi':

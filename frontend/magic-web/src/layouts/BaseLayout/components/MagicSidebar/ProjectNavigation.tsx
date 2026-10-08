@@ -1,3 +1,4 @@
+import { useChatSidebarSelection } from "./hooks/useChatSidebarSelection"
 import recentProjectsStore from "@/pages/superMagic/stores/core/recentProjects"
 import {
 	lazy,
@@ -54,7 +55,9 @@ function ProjectNavigation({
 	const userId = userStore.user.userInfo?.user_id
 	const organizationCode = userStore.user.organizationCode
 	const selectedWorkspace = workspaceStore.selectedWorkspace
+	const { isChatRoute } = useChatSidebarSelection()
 	const recentExpanded = sidebarStore.recentProjectsExpanded
+	const workspacesExpanded = sidebarStore.workspacesExpanded
 	const workspaceIcon = <Box size={16} />
 	const recentIcon = <Clock3 size={16} />
 	const managerIcon = <AppWindow size={16} />
@@ -150,7 +153,7 @@ function ProjectNavigation({
 				data-testid="sidebar-content-root"
 			>
 				{apps}
-				<div className="mx-2 my-1 h-px bg-sidebar-border/40" />
+				<div className="mx-2 mb-2 mt-1 h-px bg-sidebar-border/25" />
 				<div
 					ref={navigationRef}
 					className={
@@ -216,6 +219,7 @@ function ProjectNavigation({
 							</SidebarMenuItem>
 							<SidebarMenuItem>
 								<CollapsedWorkspaceMenu
+									key={JSON.stringify([userId, organizationCode])}
 									open={popover === "workspaces"}
 									onOpenChange={(open) => {
 										if (!recentBusy) setPopover(open ? "workspaces" : null)
@@ -250,7 +254,7 @@ function ProjectNavigation({
 								disabled={workspaceBusy || recentBusy}
 								onOpenManager={() => openManager()}
 							/>
-							{/* Overlap both lists so hiding one cannot clamp the shared tree. */}
+							{/* Preserve both trees in flow so switching sections keeps the shared scroll height. */}
 							<div className="grid grid-cols-1 grid-rows-1">
 								<div
 									aria-hidden={!recentExpanded}
@@ -272,14 +276,15 @@ function ProjectNavigation({
 									)}
 								</div>
 								<div
-									aria-hidden={recentExpanded}
+									aria-hidden={!workspacesExpanded}
 									className={cn(
 										"col-start-1 row-start-1",
-										recentExpanded && "invisible",
+										!workspacesExpanded && "invisible",
 									)}
-									{...(recentExpanded ? { inert: "" as const } : {})}
+									{...(!workspacesExpanded ? { inert: "" as const } : {})}
 								>
 									<WorkspaceList
+										onSelect={onSelect}
 										scrollRef={scrollRef}
 										scrollAreaRef={scrollAreaRef}
 										key={JSON.stringify([userId, organizationCode])}
@@ -288,25 +293,32 @@ function ProjectNavigation({
 											openManager({ type: "workspace", workspace })
 										}
 										beforeItems={
-											<SidebarMenuItem>
-												<SidebarMenuButton
-													isActive={isCollaborationWorkspace(
-														selectedWorkspace,
-													)}
-													disabled={workspaceBusy || recentBusy}
-													className="mb-1 text-[13px] font-normal leading-5 data-[active=true]:font-normal"
-													onClick={() =>
-														openManager({ type: "collaboration" })
-													}
-													data-testid="sidebar-content-share-workspace-button"
-												>
-													<UsersRound
-														size={16}
-														className="ml-6 text-sidebar-foreground/70"
-													/>
-													<span>{t("workspace.shareWorkspaceName")}</span>
-												</SidebarMenuButton>
-											</SidebarMenuItem>
+											<>
+												<SidebarMenuItem>
+													<SidebarMenuButton
+														isActive={
+															!isChatRoute &&
+															isCollaborationWorkspace(
+																selectedWorkspace,
+															)
+														}
+														disabled={workspaceBusy || recentBusy}
+														className="mb-1 text-[13px] font-normal leading-5 data-[active=true]:font-normal"
+														onClick={() =>
+															openManager({ type: "collaboration" })
+														}
+														data-testid="sidebar-content-share-workspace-button"
+													>
+														<UsersRound
+															size={16}
+															className="ml-6 text-sidebar-foreground/70"
+														/>
+														<span>
+															{t("workspace.shareWorkspaceName")}
+														</span>
+													</SidebarMenuButton>
+												</SidebarMenuItem>
+											</>
 										}
 									/>
 								</div>

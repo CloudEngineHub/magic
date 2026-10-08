@@ -16,6 +16,7 @@ export interface UseIframeDatabaseOptions {
 	projectId: string | undefined
 	/** 项目上下文不可用时返回给 iframe 的语义化错误。 */
 	projectContextUnavailableError?: string
+	getFileAccess?: IframeDatabaseConfig["getFileAccess"]
 }
 
 export interface UseIframeDatabaseReturn {
@@ -24,7 +25,7 @@ export interface UseIframeDatabaseReturn {
 }
 
 export function useIframeDatabase(options: UseIframeDatabaseOptions): UseIframeDatabaseReturn {
-	const { iframeRef, projectId, projectContextUnavailableError } = options
+	const { iframeRef, projectId, projectContextUnavailableError, getFileAccess } = options
 
 	const serviceRef = useRef<IframeDatabaseService | null>(null)
 	const projectIdRef = useRef(projectId)
@@ -41,6 +42,7 @@ export function useIframeDatabase(options: UseIframeDatabaseOptions): UseIframeD
 			postToIframe,
 			getProjectId,
 			projectContextUnavailableError,
+			getFileAccess,
 		}
 
 		serviceRef.current = new IframeDatabaseService(cfg)

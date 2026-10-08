@@ -18,6 +18,7 @@ const virtualState = vi.hoisted(() => ({
 	canonicalNode: undefined as Record<string, unknown> | undefined,
 	lastProps: undefined as Record<string, any> | undefined,
 	scrollOffset: 0,
+	startMargin: 0,
 	scrollSize: 2000,
 	viewportSize: 400,
 	resizeCallbacks: [] as ResizeObserverCallback[],
@@ -28,6 +29,11 @@ const virtualState = vi.hoisted(() => ({
 	originShift: 0,
 	/** Every render's pinned indices against the rows actually available to resolve them. */
 	keepMountedRenders: [] as Array<{ keepMounted?: Array<number>; rowCount: number }>,
+}))
+
+// The fixed-grid suite controls the measured origin; the layout hook is tested separately.
+vi.mock("../hooks/useVirtualListStartMargin", () => ({
+	useVirtualListStartMargin: () => virtualState.startMargin,
 }))
 
 /**
@@ -148,18 +154,20 @@ function createViewport(scrollHeight?: number) {
 
 function renderList(
 	items: Array<SuperMagicMessageItem>,
-	options?: Partial<ComponentProps<typeof VirtualMessageList>>,
+	options: Partial<ComponentProps<typeof VirtualMessageList>> & { startMargin?: number } = {},
 ) {
+	const { startMargin = 0, ...props } = options
+	virtualState.startMargin = startMargin
 	const projection = buildVirtualMessageProjection(items)
 	const viewport = createViewport()
 	return render(
 		<VirtualMessageList
 			items={projection.items}
 			userIndices={projection.userIndices}
-			isMobile={false}
+			stickyTopOffset={40}
 			getScrollElement={() => viewport}
 			renderNode={({ item }) => <span>{item.key}</span>}
-			{...options}
+			{...props}
 		/>,
 	)
 }
@@ -204,6 +212,7 @@ describe("VirtualMessageList", () => {
 		virtualState.canonicalNode = undefined
 		virtualState.lastProps = undefined
 		virtualState.scrollOffset = 0
+		virtualState.startMargin = 0
 		virtualState.scrollSize = 2000
 		virtualState.resizeCallbacks = []
 		virtualState.stickySyncCalls = 0
@@ -284,7 +293,7 @@ describe("VirtualMessageList", () => {
 			<VirtualMessageList
 				items={buildVirtualMessageProjection([message("user-0", "user")]).items}
 				userIndices={[0]}
-				isMobile={false}
+				stickyTopOffset={40}
 				getScrollElement={() => lateViewport.current}
 				renderNode={({ item }) => <span>{item.key}</span>}
 			/>,
@@ -306,7 +315,7 @@ describe("VirtualMessageList", () => {
 				<VirtualMessageList
 					items={projection.items}
 					userIndices={projection.userIndices}
-					isMobile={false}
+					stickyTopOffset={40}
 					getScrollElement={() => viewport}
 					renderNode={({ item }) => <span>{item.key}</span>}
 				/>
@@ -370,7 +379,7 @@ describe("VirtualMessageList", () => {
 				<VirtualMessageList
 					items={projection.items}
 					userIndices={projection.userIndices}
-					isMobile={false}
+					stickyTopOffset={40}
 					getScrollElement={() => viewport}
 					renderNode={({ item }) => <span>{item.key}</span>}
 				/>
@@ -450,6 +459,36 @@ describe("VirtualMessageList", () => {
 		expect(pinned?.style.top).toBe("var(--message-group-sticky-top, 0px)")
 	})
 
+	it("recomputes sticky ownership when User candidates are disabled and restored", () => {
+		const items = [message("user-0", "user"), ...assistantTail(5, 1)]
+		const projection = buildVirtualMessageProjection(items)
+		const viewport = createViewport()
+		virtualState.startMargin = 50
+		const renderVirtualList = (userIndices: Array<number>) => (
+			<VirtualMessageList
+				items={projection.items}
+				userIndices={userIndices}
+				stickyTopOffset={40}
+				getScrollElement={() => viewport}
+				renderNode={({ item }) => <span>{item.key}</span>}
+			/>
+		)
+		const { container, rerender } = render(renderVirtualList(projection.userIndices))
+
+		scrollTo(100)
+		expect(container.querySelector('[data-virtual-item-sticky="true"]')).not.toBeNull()
+		const previousScrollOffset = virtualState.scrollOffset
+
+		rerender(renderVirtualList([]))
+		expect(container.querySelector('[data-virtual-item-sticky="true"]')).toBeNull()
+		expect(virtualState.scrollOffset).toBe(previousScrollOffset)
+
+		rerender(renderVirtualList(projection.userIndices))
+		flushAnimationFrame()
+		expect(container.querySelector('[data-virtual-item-sticky="true"]')).not.toBeNull()
+		expect(virtualState.scrollOffset).toBe(previousScrollOffset)
+	})
+
 	it("leaves the first User row unpinned while it still sits in its natural slot", () => {
 		// A list that opens with a User row is the shape of a conversation started from empty.
 		// `findItemIndex` clamps the negative probe to row 0 and reports it as parked, but the
@@ -515,6 +554,33 @@ describe("VirtualMessageList", () => {
 			if (!pinned) continue
 			expect(pinnedViewportTop(canvas)).toBe(40)
 		}
+	})
+
+	it("defaults to the viewport top and recomputes when the measured layout changes", () => {
+		const items = [message("user-0", "user"), ...assistantTail(5, 1)]
+		const view = renderList(items, { stickyTopOffset: undefined, startMargin: 10 })
+		const canvas = view.container.querySelector(
+			'[data-testid="virtual-message-canvas"]',
+		) as HTMLElement
+		scrollTo(20)
+		expect(pinnedViewportTop(canvas)).toBe(0)
+		expect(view.container.querySelector('[data-virtual-item-sticky="true"]')).not.toBeNull()
+
+		// Increasing content padding moves the natural row below the pin line at the same scroll offset.
+		virtualState.startMargin = 30
+		const projection = buildVirtualMessageProjection(items)
+		const viewport = createViewport()
+		view.rerender(
+			<VirtualMessageList
+				items={projection.items}
+				userIndices={projection.userIndices}
+				getScrollElement={() => viewport}
+				renderNode={({ item }) => <span>{item.key}</span>}
+			/>,
+		)
+		flushAnimationFrame()
+		expect(virtualState.lastProps?.startMargin).toBe(30)
+		expect(view.container.querySelector('[data-virtual-item-sticky="true"]')).toBeNull()
 	})
 
 	it("lets a shell without a header park the pinned turn flush with the viewport top", () => {
@@ -622,7 +688,7 @@ describe("VirtualMessageList", () => {
 		const props = {
 			items: projection.items,
 			userIndices: projection.userIndices,
-			isMobile: false,
+			stickyTopOffset: 40,
 			getScrollElement: () => viewport,
 			renderNode: ({ item }: { item: (typeof projection.items)[number] }) => (
 				<span>{item.key}</span>
@@ -849,6 +915,7 @@ describe("VirtualMessageList", () => {
 		// element, so the column has to actually be one of them here.
 		const viewport = createViewport()
 		const column = document.createElement("div")
+		virtualState.startMargin = 50
 		column.style.paddingBottom = "8px"
 		viewport.appendChild(column)
 
@@ -863,10 +930,9 @@ describe("VirtualMessageList", () => {
 			<VirtualMessageList
 				items={projection.items}
 				userIndices={projection.userIndices}
-				isMobile={false}
+				stickyTopOffset={40}
 				virtualizerRef={virtualizerRef}
 				getScrollElement={() => viewport}
-				startMargin={50}
 				renderNode={({ item }) => <span>{item.key}</span>}
 			/>,
 			{ container: column },

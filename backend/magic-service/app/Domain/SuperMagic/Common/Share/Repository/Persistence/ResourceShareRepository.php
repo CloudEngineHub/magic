@@ -114,6 +114,11 @@ class ResourceShareRepository extends AbstractRepository implements ResourceShar
      */
     public function create(array $data): string
     {
+        $extra = $data['extra'] ?? [];
+        if (is_string($extra)) {
+            $extra = Json::decode($extra);
+        }
+        $data['extra'] = Json::encode($this->renewAuthorizationVersion($extra ?? []));
         $model = new $this->model();
         $model->fill($data);
         $model->save();
@@ -130,6 +135,7 @@ class ResourceShareRepository extends AbstractRepository implements ResourceShar
      */
     public function save(ResourceShareEntity $shareEntity): ResourceShareEntity
     {
+        $shareEntity->setExtra($this->renewAuthorizationVersion($shareEntity->getExtra() ?? []));
         $data = $this->entityToArray($shareEntity);
 
         try {
@@ -519,6 +525,7 @@ class ResourceShareRepository extends AbstractRepository implements ResourceShar
         // 使用事务批量更新
         return Db::transaction(function () use ($shareEntities) {
             foreach ($shareEntities as $entity) {
+                $entity->setExtra($this->renewAuthorizationVersion($entity->getExtra() ?? []));
                 $data = $this->entityToArray($entity);
                 // Include soft-deleted records when updating existing rows.
                 $this->model::withTrashed()
@@ -678,6 +685,17 @@ class ResourceShareRepository extends AbstractRepository implements ResourceShar
             'deleted_at' => $entity->getDeletedAt(),
             'updated_uid' => $entity->getUpdatedUid(),
         ];
+    }
+
+    /**
+     * Every settings save revokes existing tokens, even when settings are restored.
+     * Always overwrite this internal field; client payloads cannot restore an old
+     * version. View counters use separate updates and do not rotate this value.
+     */
+    private function renewAuthorizationVersion(array $extra): array
+    {
+        $extra['_authorization_version'] = bin2hex(random_bytes(32));
+        return $extra;
     }
 
     /**

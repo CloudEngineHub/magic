@@ -61,8 +61,11 @@ describe("InspectorDetailComponent", () => {
 			"relative",
 			"top-[1px]",
 			"!align-baseline",
-			"max-w-[min(220px,100%)]",
+			// 宽度上限必须扣掉标签自身的左右外边距，否则窄容器（如任务队列预览）里
+			// 行内盒会连边距一起溢出被裁，右侧边框与圆角会消失。
+			"max-w-[min(220px,calc(100%_-_8px))]",
 		)
+		expect(wrapper).not.toHaveClass("max-w-[min(220px,100%)]")
 		expect(button).toHaveClass("min-w-0")
 		expect(button).not.toHaveClass("overflow-hidden")
 		expect(wrapper).toHaveAttribute("draggable", "false")

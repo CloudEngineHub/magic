@@ -61,6 +61,11 @@ return [
         'estimate_failed' => 'Operation failed',
     ],
     'third_party_service_error' => 'Third party service error',
+    'html_design_style' => [
+        'invalid_style_code' => 'Invalid design style code',
+        'style_source_not_found' => 'Design style source not found: :style_code',
+        'style_source_read_failed' => 'Failed to read design style source',
+    ],
     'attributes' => [
         'project_id' => 'Project ID',
         'image_id' => 'Image ID',
@@ -82,6 +87,7 @@ return [
         'area' => 'Area',
         'area_coordinate' => 'Area coordinate',
         'image_generation_config' => 'Image generation config',
+        'extra' => 'Extra params',
         'number' => 'Number',
         'resolution' => 'Resolution',
         'type' => 'Type',

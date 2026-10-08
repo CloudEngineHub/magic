@@ -1,11 +1,16 @@
-import { forwardRef } from "react"
+import { forwardRef, useImperativeHandle } from "react"
 import { act, render } from "@testing-library/react"
 import type { JSONContent } from "@/infrastructure/editors/tiptap/core"
 import { beforeEach, describe, expect, it, vi } from "vitest"
 import { TopicMode } from "@/pages/superMagic/pages/Workspace/TopicMode"
 
 const mocks = vi.hoisted(() => ({
+	ensureProject: vi.fn(),
+	editorProps:
+		{} as import("@/pages/superMagic/components/MessageEditor/types").MessageEditorProps,
 	addToQueue: vi.fn(),
+	clearContentAfterSend: vi.fn(),
+	setContent: vi.fn(),
 	preparePanelSend: vi.fn(),
 	sendPanelMessage: vi.fn(),
 	releaseHtmlScreenshotsAfterSend: vi.fn(),
@@ -14,12 +19,21 @@ const mocks = vi.hoisted(() => ({
 				value: JSONContent
 				mentionItems: []
 				topicMode: TopicMode
+				shouldClearEditorAfterSend?: boolean
 		  }) => Promise<boolean>)
 		| undefined,
 }))
 
 vi.mock("@/pages/superMagic/components/MessageEditor/MessageEditor", () => ({
-	default: forwardRef(() => null),
+	default: forwardRef((props, ref) => {
+		mocks.editorProps = props
+		useImperativeHandle(ref, () => ({
+			clearContentAfterSend: mocks.clearContentAfterSend,
+			setContent: mocks.setContent,
+			getQueueDraft: () => null,
+		}))
+		return null
+	}),
 }))
 
 vi.mock("react-i18next", () => ({
@@ -85,7 +99,7 @@ vi.mock("@/pages/superMagic/services/messageSendFlowService", () => ({
 
 vi.mock("@/pages/superMagic/services/messageSendPreparation", () => ({
 	createTopicForMessageContext: vi.fn(),
-	ensureProjectForMessageContext: vi.fn(),
+	ensureProjectForMessageContext: mocks.ensureProject,
 	preparePanelSend: mocks.preparePanelSend,
 	releaseHtmlScreenshotsAfterSend: mocks.releaseHtmlScreenshotsAfterSend,
 }))
@@ -97,6 +111,23 @@ vi.mock("@/pages/superMagic/components/MessageEditor/utils", () => ({
 import DefaultMessageEditorContainer from "../DefaultMessageEditorContainer"
 
 describe("DefaultMessageEditorContainer queue sending", () => {
+	it("keeps long pasted text on temporary uploads until a blank chat is sent", async () => {
+		render(
+			<DefaultMessageEditorContainer
+				editorContext={{
+					selectedProject: null,
+					selectedTopic: null,
+					selectedWorkspace: null,
+					topicMode: TopicMode.General,
+					deferProjectCreationUntilSend: true,
+				}}
+			/>,
+		)
+		await act(async () => {
+			expect(await mocks.editorProps.onEnsureProject?.()).toBeNull()
+		})
+		expect(mocks.ensureProject).not.toHaveBeenCalled()
+	})
 	beforeEach(() => {
 		vi.clearAllMocks()
 		mocks.handleSend = undefined
@@ -330,3 +361,47 @@ describe("DefaultMessageEditorContainer queue sending", () => {
 		expect(mocks.releaseHtmlScreenshotsAfterSend).not.toHaveBeenCalled()
 	})
 })
+
+it.each(["queue-1", undefined])(
+	"preserves the editor draft for programmatic queue requests (%s)",
+	async (queueId) => {
+		mocks.clearContentAfterSend.mockClear()
+		mocks.setContent.mockClear()
+		mocks.addToQueue.mockResolvedValue(queueId)
+		render(
+			<DefaultMessageEditorContainer
+				editorContext={{
+					selectedProject: { id: "project-1" } as never,
+					selectedTopic: { id: "topic-1" } as never,
+					topicMode: TopicMode.Default,
+					showLoading: true,
+					queueContext: {
+						addToQueue: mocks.addToQueue,
+						queueDraft: null,
+						onEditorReady: vi.fn(),
+						finishEditQueueItem: vi.fn(),
+					},
+					onMessageSendReady: (send) => {
+						mocks.handleSend = send as typeof mocks.handleSend
+					},
+				}}
+			/>,
+		)
+		await act(async () => {
+			const accepted = await mocks.handleSend?.({
+				value: {
+					type: "doc",
+					content: [
+						{ type: "paragraph", content: [{ type: "text", text: "Create a skill" }] },
+					],
+				},
+				mentionItems: [],
+				topicMode: TopicMode.Default,
+				shouldClearEditorAfterSend: false,
+			})
+			expect(accepted).toBe(Boolean(queueId))
+		})
+		expect(mocks.clearContentAfterSend).not.toHaveBeenCalled()
+		expect(mocks.setContent).not.toHaveBeenCalled()
+	},
+)

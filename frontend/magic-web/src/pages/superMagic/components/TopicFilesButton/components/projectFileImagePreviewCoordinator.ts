@@ -14,6 +14,11 @@ import {
 	SHARED_MEDIA_THUMBNAIL_RENDITION_KEY,
 } from "@/pages/superMagic/services/sharedMediaImageProcess"
 import { parseExpiresAt } from "@/components/CanvasDesign/runtime/resources/offline-cache/ossExpiryUtils"
+import {
+	getFileAccessIdentityKey,
+	type FileAccessContext,
+} from "@/pages/superMagic/fileAccess/fileAccessContext"
+import type { FileApi } from "@/pages/superMagic/fileAccess/fileApi"
 
 export interface ProjectFileImagePreviewCacheItem {
 	url: string
@@ -93,12 +98,21 @@ clearLegacyPersistedPreviewCache()
 interface PreviewRequestOptions {
 	forceRefresh?: boolean
 	allowAttachmentListUrl?: boolean
+	/** Request identity captured at the caller boundary; part of the batch key. */
+	access?: FileAccessContext
+	fileApi?: Pick<FileApi, "identityKey" | "requestSharedMediaUrls">
+}
+
+function getPreviewIdentityKey(options: PreviewRequestOptions): string {
+	return options.fileApi?.identityKey ?? getFileAccessIdentityKey(options.access)
 }
 
 function getPreviewBatchOptionsKey(options: PreviewRequestOptions): string {
 	const forceRefresh = options.forceRefresh ? "1" : "0"
 	const allowAttachmentListUrl = options.allowAttachmentListUrl !== false ? "1" : "0"
-	return `${forceRefresh}:${allowAttachmentListUrl}`
+	// Including the identity in the batch key guarantees share and session
+	// requests are never coalesced into one exchange.
+	return `${forceRefresh}:${allowAttachmentListUrl}:${getPreviewIdentityKey(options)}`
 }
 
 function isStrictPreviewRequest(options: PreviewRequestOptions): boolean {
@@ -112,7 +126,20 @@ function getPreviewInFlightKey(
 	if (isStrictPreviewRequest(options)) {
 		return `${source.cacheKey}::${getPreviewBatchOptionsKey(options)}`
 	}
-	return source.cacheKey
+	return getNormalPreviewQueueKey(source, options)
+}
+
+/**
+ * Queue/in-flight key for a non-strict (normal) request. The queue is keyed by
+ * this identity-scoped key rather than the bare cacheKey so that a share request
+ * and a session request for the same file occupy distinct slots instead of one
+ * overwriting (and hanging) the other.
+ */
+function getNormalPreviewQueueKey(
+	source: ProjectFileImagePreviewRequestSource,
+	options: PreviewRequestOptions = {},
+): string {
+	return `${source.cacheKey}::${getPreviewIdentityKey(options)}`
 }
 
 const rejectedDirectThumbnailKeys = new Map<string, number>()
@@ -155,6 +182,8 @@ function buildSharedMediaUrlOptions(
 		fileVersions,
 		fileUpdatedAtMap,
 		fileResourceVersionMap,
+		access: options.access,
+		identityKey: getPreviewIdentityKey(options),
 	}
 }
 
@@ -169,12 +198,15 @@ function buildSharedMediaUrlRequestOptions(
 		fileVersion: source.fileVersion,
 		updatedAt: source.updatedAt,
 		resourceVersion: source.resourceVersion,
+		access: options.access,
+		identityKey: getPreviewIdentityKey(options),
 	}
 }
 
 /** Seed usable attachment-list URLs as preview fallbacks for other image scenes. */
 export function seedProjectFileImagePreviewDirectUrls(
 	sources: readonly ProjectFileImagePreviewRequestSource[],
+	options: PreviewRequestOptions = {},
 ): void {
 	const directSources = sources.filter(
 		(source) =>
@@ -203,7 +235,7 @@ export function seedProjectFileImagePreviewDirectUrls(
 			url: source.directThumbnailUrl as string,
 			expires_at: source.directThumbnailExpiresAt,
 		})),
-		options: buildSharedMediaUrlOptions(usableDirectSources),
+		options: buildSharedMediaUrlOptions(usableDirectSources, options),
 		source: "attachment-list",
 	})
 }
@@ -257,24 +289,25 @@ export function invalidateProjectFileImagePreviewDirectUrl(
 
 export function getProjectFileImagePreviewCacheItem(
 	source: ProjectFileImagePreviewRequestSource,
+	options: PreviewRequestOptions = {},
 ): ProjectFileImagePreviewCacheItem | undefined {
 	if (!source.fileId) return undefined
 
-	const options = buildSharedMediaUrlRequestOptions(source)
+	const requestOptions = buildSharedMediaUrlRequestOptions(source, options)
 	const cachedItem = getCachedSharedMediaUrl(
 		{
 			fileId: source.fileId,
-			...options,
+			...requestOptions,
 		},
 		"temporary-download-url",
 	)
 	if (cachedItem) return toPreviewCacheItem(cachedItem)
 
-	if (options.allowAttachmentListUrl) {
+	if (requestOptions.allowAttachmentListUrl) {
 		const attachmentItem = getCachedSharedMediaUrl(
 			{
 				fileId: source.fileId,
-				...options,
+				...requestOptions,
 				imageProcess: undefined,
 			},
 			"attachment-list",
@@ -289,6 +322,7 @@ export function getProjectFileImagePreviewCacheItem(
 export function seedProjectFileImagePreviewCacheItem(
 	source: ProjectFileImagePreviewRequestSource,
 	item: ProjectFileImagePreviewCacheItem,
+	options: PreviewRequestOptions = {},
 ) {
 	if (!source.fileId || !item.url) return
 	seedSharedMediaUrls({
@@ -301,6 +335,8 @@ export function seedProjectFileImagePreviewCacheItem(
 		],
 		options: {
 			imageProcess: PROJECT_FILE_IMAGE_PREVIEW_PROCESS,
+			access: options.access,
+			identityKey: getPreviewIdentityKey(options),
 			fileVersions:
 				source.fileVersion === undefined
 					? undefined
@@ -317,10 +353,11 @@ export function seedProjectFileImagePreviewCacheItem(
 
 export function deleteProjectFileImagePreviewCacheItem(
 	source: ProjectFileImagePreviewRequestSource,
+	options: PreviewRequestOptions = {},
 ) {
 	if (!source.fileId) return
-	const options = buildSharedMediaUrlRequestOptions(source)
-	invalidateSharedMediaUrlEntry({ fileId: source.fileId, ...options })
+	const requestOptions = buildSharedMediaUrlRequestOptions(source, options)
+	invalidateSharedMediaUrlEntry({ fileId: source.fileId, ...requestOptions })
 	invalidateProjectFileImagePreviewDirectUrl(source)
 }
 
@@ -392,7 +429,8 @@ function startPreviewRequestBatch(batch: PendingPreviewRequest[]) {
 	const sources = batch.map(({ source }) => source)
 	const batchOptions = batch[0].options
 
-	void requestSharedMediaUrls(fileIds, {
+	const requestUrls = batchOptions.fileApi?.requestSharedMediaUrls ?? requestSharedMediaUrls
+	void requestUrls(fileIds, {
 		...buildSharedMediaUrlOptions(sources, batchOptions),
 	})
 		.then((rows) => settlePreviewRequestBatch(batch, rows ?? []))
@@ -429,11 +467,14 @@ function enqueueProjectFileImagePreviewRequest(
 ): Promise<ProjectFileImagePreviewRequestResult> {
 	const cachedItem = options.forceRefresh
 		? undefined
-		: getProjectFileImagePreviewCacheItem(source)
+		: getProjectFileImagePreviewCacheItem(source, options)
 	if (cachedItem) return Promise.resolve({ status: "loaded", item: cachedItem })
 
 	const inFlightKey = getPreviewInFlightKey(source, options)
-	const queuedPending = previewRequestQueue.get(source.cacheKey)
+	// Normal requests live under their identity-scoped key; a strict refresh for
+	// the same identity may upgrade that queued slot in place.
+	const normalKey = getNormalPreviewQueueKey(source, options)
+	const queuedPending = previewRequestQueue.get(normalKey)
 	if (
 		queuedPending &&
 		!queuedPending.started &&
@@ -441,10 +482,14 @@ function enqueueProjectFileImagePreviewRequest(
 		!isStrictPreviewRequest(queuedPending.options)
 	) {
 		queuedPending.options = { ...options }
-		const queuedInFlight = previewInFlightRequests.get(source.cacheKey)
+		previewRequestQueue.delete(normalKey)
+		previewRequestQueue.set(inFlightKey, queuedPending)
+		const queuedInFlight = previewInFlightRequests.get(normalKey)
 		if (queuedInFlight) {
+			previewInFlightRequests.delete(normalKey)
 			queuedInFlight.request.options = { ...options }
 			queuedInFlight.request.consumerCount += 1
+			previewInFlightRequests.set(inFlightKey, queuedInFlight)
 			return queuedInFlight.promise
 		}
 	}
@@ -467,7 +512,7 @@ function enqueueProjectFileImagePreviewRequest(
 	}
 
 	if (isStrictPreviewRequest(options)) {
-		const normalInFlight = previewInFlightRequests.get(source.cacheKey)
+		const normalInFlight = previewInFlightRequests.get(normalKey)
 		if (normalInFlight?.request.started) {
 			// Wait for the started normal exchange, then schedule a strict refresh
 			// through the public entry so flush runs and the caller receives the
@@ -492,7 +537,7 @@ function enqueueProjectFileImagePreviewRequest(
 		started: false,
 	}
 	previewInFlightRequests.set(inFlightKey, { promise: request, request: pendingRequest })
-	previewRequestQueue.set(source.cacheKey, pendingRequest)
+	previewRequestQueue.set(inFlightKey, pendingRequest)
 
 	return request
 }
@@ -513,7 +558,7 @@ export function cancelProjectFileImagePreviewRequest(cacheKey: string) {
 		)
 		if (inFlightRequest.request.consumerCount > 0 || inFlightRequest.request.started) continue
 
-		previewRequestQueue.delete(cacheKey)
+		previewRequestQueue.delete(inFlightKey)
 		previewInFlightRequests.delete(inFlightKey)
 		inFlightRequest.request.resolve({ status: "cancelled" })
 	}

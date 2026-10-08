@@ -135,6 +135,44 @@ describe("PPTIncrementalUpdateService", () => {
 		expect(generateSlideScreenshot).toHaveBeenCalledWith(0, "<div>server-new-content</div>")
 	})
 
+	it("skips reload and thumbnail reset for a notes save echo outside edit mode", async () => {
+		const clearManualSaveMark = vi.fn()
+		const generateSlideScreenshot = vi.fn(async () => undefined)
+		const context = createContext({
+			isSlideManuallySaved: () => true,
+			getSlideEditingState: () => false,
+			clearManualSaveMark,
+			generateSlideScreenshot,
+			slides: [
+				{
+					id: "slide-1",
+					path: "slide-1.html",
+					url: "https://example.com/old-slide-1",
+					index: 0,
+					content: "<div>saved-content</div>",
+					rawContent: "<div>saved-content</div>",
+					thumbnailUrl: "blob:existing-thumb",
+					loadingState: "loaded",
+					lastLoadedAt: 100,
+				},
+			],
+		})
+
+		await incrementalUpdateService.applyIncrementalUpdates(
+			{ hasChanges: false, added: [], removed: [], reordered: false },
+			new Set(["file-1"]),
+			["slide-1.html"],
+			context,
+		)
+
+		expect(context.loadSlideContent).not.toHaveBeenCalled()
+		expect(generateSlideScreenshot).not.toHaveBeenCalled()
+		expect(screenshotService.clearCache).not.toHaveBeenCalled()
+		expect(clearManualSaveMark).toHaveBeenCalledWith("file-1")
+		expect(context.slides[0].thumbnailUrl).toBe("blob:existing-thumb")
+		expect(context.slides[0].lastLoadedAt).toBe(100)
+	})
+
 	it("keeps added slides idle until active or sidebar demand loads them", async () => {
 		const generateSlideScreenshot = vi.fn(async () => undefined)
 		const ensureSlideScreenshot = vi.fn(async () => undefined)

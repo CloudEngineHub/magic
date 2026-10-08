@@ -65,6 +65,7 @@ const RecentProjectRow = observer(function RecentProjectRow({
 			<CollapsedWorkspaceProjectRow
 				project={project}
 				workspaceId={workspace.id}
+				expandActionsOnHover
 				isSelected={projectStore.selectedProject?.id === project.id}
 				dndDisabled
 				tooltipDisabled={actions.isProjectModalOpen}
@@ -343,7 +344,6 @@ function RecentProjects({
 			{externalScrollRef ? (
 				<div
 					ref={list.scrollRef}
-					className="bg-muted/20"
 					onFocusCapture={list.onFocusCapture}
 					onBlurCapture={list.onBlurCapture}
 					data-testid="sidebar-recent-projects-list"

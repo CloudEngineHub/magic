@@ -26,6 +26,7 @@ async def test_project_handler_handle_outputs_absolute_path() -> None:
     assert lines[0] == f"1. [@project:{PROJECT_PATH}]"
     assert f"   - Project name: {PROJECT_NAME}" in lines
     assert f"   - Project path: {PROJECT_PATH}" in lines
+    assert "   - project_id: 904730666716749825" in lines
     # 绝对路径前导 / 必须保留
     assert all(PROJECT_PATH.startswith("/") for _ in [0])
 
@@ -55,7 +56,43 @@ async def test_project_handler_get_type() -> None:
 @pytest.mark.asyncio
 async def test_project_handler_get_tip() -> None:
     tip = await ProjectHandler().get_tip({"type": "project"}, None)
+    assert tip == "Read and understand the referenced project before proceeding"
+
+
+@pytest.mark.asyncio
+async def test_project_handler_get_tip_includes_skill_loading_when_project_id_present() -> None:
+    tip = await ProjectHandler().get_tip(
+        {"type": "project", "project_id": "904730666716749825"},
+        None,
+    )
     assert "referenced project" in tip
+    assert "read_skills" in tip
+    assert "project_id" in tip
+
+
+@pytest.mark.asyncio
+async def test_project_handler_lists_companion_skills(tmp_path, monkeypatch) -> None:
+    mount_base = tmp_path / "referenced-projects"
+    skill_dir = mount_base / "904730666716749825" / ".magic" / "skills" / "inventory_manager"
+    skill_dir.mkdir(parents=True)
+    (skill_dir / "SKILL.md").write_text(
+        "---\nname: inventory_manager\ndescription: Stock skill\n---\n\nCount stock.\n",
+        encoding="utf-8",
+    )
+    monkeypatch.setenv("AGENT_REFERENCED_PROJECT_MOUNT_BASE_PATH", str(mount_base))
+
+    lines = await ProjectHandler().handle(
+        {
+            "type": "project",
+            "project_id": "904730666716749825",
+            "project_name": PROJECT_NAME,
+            "project_path": str(mount_base / "904730666716749825"),
+        },
+        1,
+    )
+
+    assert "   - project_id: 904730666716749825" in lines
+    assert "   - skills: inventory_manager" in lines
 
 
 @pytest.mark.asyncio

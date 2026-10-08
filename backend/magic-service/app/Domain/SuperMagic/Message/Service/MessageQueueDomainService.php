@@ -59,7 +59,11 @@ class MessageQueueDomainService
             $syncId = $messageContent['extra']['super_agent']['client_queue_sync_id'] ?? '';
             if (is_string($syncId) && $syncId !== '') {
                 $existing = $this->messageQueueRepository->getByClientSyncId(
-                    $dataIsolation->getCurrentUserId(), $dataIsolation->getCurrentOrganizationCode(), $projectId, $topicId, $syncId
+                    $dataIsolation->getCurrentUserId(),
+                    $dataIsolation->getCurrentOrganizationCode(),
+                    $projectId,
+                    $topicId,
+                    $syncId
                 );
                 if ($existing) {
                     return new MessageQueueWriteResult($existing, false);
@@ -171,17 +175,40 @@ class MessageQueueDomainService
     }
 
     public function restoreMessage(
-        DataIsolation $dataIsolation, int $messageId, int $projectId, int $topicId,
-        array $messageContent, ChatMessageType $messageType,
-        ?int $beforeId, ?int $afterId, int $originalIndex, string $expectedSyncId
+        DataIsolation $dataIsolation,
+        int $messageId,
+        int $projectId,
+        int $topicId,
+        array $messageContent,
+        ChatMessageType $messageType,
+        ?int $beforeId,
+        ?int $afterId,
+        int $originalIndex,
+        string $expectedSyncId
     ): ?MessageQueueWriteResult {
         return $this->executeWithLock($this->getTopicLockKey($topicId), function () use (
-            $dataIsolation, $messageId, $projectId, $topicId, $messageContent, $messageType,
-            $beforeId, $afterId, $originalIndex, $expectedSyncId
+            $dataIsolation,
+            $messageId,
+            $projectId,
+            $topicId,
+            $messageContent,
+            $messageType,
+            $beforeId,
+            $afterId,
+            $originalIndex,
+            $expectedSyncId
         ) {
             return Db::transaction(function () use (
-                $dataIsolation, $messageId, $projectId, $topicId, $messageContent, $messageType,
-                $beforeId, $afterId, $originalIndex, $expectedSyncId
+                $dataIsolation,
+                $messageId,
+                $projectId,
+                $topicId,
+                $messageContent,
+                $messageType,
+                $beforeId,
+                $afterId,
+                $originalIndex,
+                $expectedSyncId
             ) {
                 $message = $this->messageQueueRepository->getById($messageId, true);
                 if (! $message) {
@@ -205,8 +232,8 @@ class MessageQueueDomainService
                 $ids = $this->positionMessage($message, $beforeId, $afterId, $originalIndex);
                 // 创建请求 A → 编辑恢复 B → A 的迟到重试：仍须找到同一条记录。
                 // 当前标识用于本次恢复和旧删除校验；首次创建标识只保留一次，不积累历史列表。
-                $messageContent['extra']['super_agent']['client_queue_create_sync_id'] =
-                    $currentExtra['client_queue_create_sync_id'] ?? $currentSyncId;
+                $messageContent['extra']['super_agent']['client_queue_create_sync_id']
+                    = $currentExtra['client_queue_create_sync_id'] ?? $currentSyncId;
                 $message->setMessageContent(json_encode($messageContent, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES | JSON_THROW_ON_ERROR))
                     ->setMessageType($messageType->value);
                 if (! $this->messageQueueRepository->restore($message)) {
@@ -506,8 +533,10 @@ class MessageQueueDomainService
             }
         }
         $pending = $this->messageQueueRepository->getPendingMessagesByTopic($message->getTopicId(), $message->getUserId());
-        $ids = array_values(array_filter(array_map(static fn (MessageQueueEntity $item): int => $item->getId(), $pending),
-            static fn (int $id): bool => $id !== $message->getId()));
+        $ids = array_values(array_filter(
+            array_map(static fn (MessageQueueEntity $item): int => $item->getId(), $pending),
+            static fn (int $id): bool => $id !== $message->getId()
+        ));
         $beforeIndex = array_search($beforeId, $ids, true);
         $afterIndex = array_search($afterId, $ids, true);
         // 原后邻项优先；编辑期间邻项被消费后，才按原序号尽量恢复。

@@ -52,6 +52,8 @@ export interface HandleCreateProjectParams {
 	isEditProject?: boolean
 	workdir?: string
 	projectName?: string
+	/** Explicit workspace override so list pages are not bound to a stale selectedWorkspace. */
+	workspaceId?: string
 }
 
 /** Parameters for moving a project to another workspace (maps to projects/move API). */
@@ -532,7 +534,8 @@ class ProjectService {
 	}
 
 	/**
-	 * Move project to new workspace; optional targetProjectName is sent as `target_project_name`.
+	 * Move a project to another workspace. This does not change selectedWorkspace —
+	 * callers that leave the current view (detail exit, desktop switch) update it themselves.
 	 */
 	moveProject = async ({
 		projectId,
@@ -564,9 +567,6 @@ class ProjectService {
 		const targetWorkspace = workspaceStore.workspaces.find(
 			(workspace) => workspace.id === targetWorkspaceId,
 		)
-		const sourceWorkspace = workspaceStore.workspaces.find(
-			(workspace) => workspace.id === sourceWorkspaceId,
-		)
 		const movedActiveProject = activeProject
 			? {
 					...activeProject,
@@ -580,12 +580,12 @@ class ProjectService {
 				}
 			: null
 
-		// Optimistic update: remove only list entries so the active project and its file state survive.
+		// Optimistic update: drop list entries only. Keep selectedWorkspace on the
+		// viewing workspace so a list-page move does not send later create/refresh to B.
 		this.saveSnapshot(operationId)
 		runInAction(() => {
 			projectStore.removeProjectFromCollections(projectId)
 			if (movedActiveProject) projectStore.setSelectedProject(movedActiveProject)
-			if (targetWorkspace) workspaceStore.setSelectedWorkspace?.(targetWorkspace)
 		})
 
 		// Await move API so callers (e.g. save-as-project + list reload) do not race ahead of server state
@@ -616,7 +616,6 @@ class ProjectService {
 				if (activeProject) {
 					runInAction(() => {
 						projectStore.setSelectedProject(activeProject)
-						if (sourceWorkspace) workspaceStore.setSelectedWorkspace(sourceWorkspace)
 					})
 				}
 				this.rollbackSnapshot(operationId)
@@ -787,10 +786,11 @@ class ProjectService {
 			workspaceId,
 		})
 
-		// Optimistic update: remove project from list immediately
+		// Optimistic update: remove the shortcut project from the list cache without
+		// clearing the active selection — the project itself is not deleted.
 		this.saveSnapshot(operationId)
 		runInAction(() => {
-			projectStore.removeProject(projectId)
+			projectStore.removeProjectFromCollections(projectId)
 		})
 
 		// Await API so callers refreshing the list do not race ahead of server state
@@ -799,6 +799,18 @@ class ProjectService {
 				await SuperMagicApi.updateCollaborationProjectShortcutStatus(projectId, {
 					workspace_id: workspaceId,
 					is_bind_workspace: 0,
+				})
+
+				// Sync the active project's binding flags so the "取消关联" menu item
+				// hides immediately instead of waiting for a full list refresh.
+				runInAction(() => {
+					if (projectStore.selectedProject?.id === projectId) {
+						projectStore.selectedProject = {
+							...projectStore.selectedProject,
+							is_bind_workspace: false,
+							bind_workspace_id: "",
+						}
+					}
 				})
 
 				this.fetchProjects({

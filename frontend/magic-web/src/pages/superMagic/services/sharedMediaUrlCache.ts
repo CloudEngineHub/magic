@@ -2,6 +2,10 @@ import {
 	getTemporaryDownloadUrl,
 	type GetTemporaryDownloadUrlItem,
 } from "@/pages/superMagic/utils/api"
+import {
+	getFileAccessIdentityKey,
+	type FileAccessContext,
+} from "@/pages/superMagic/fileAccess/fileAccessContext"
 import type { DownloadImageMode } from "@/pages/superMagic/pages/Workspace/types"
 import type { ImageProcessOptions } from "@/utils/image-processing"
 import { getFileUrlDownloadModeForNoWatermark } from "@/utils/aiWatermarkPreviewFileUrlMode"
@@ -41,6 +45,9 @@ export interface SharedMediaUrlRequest {
 	imageProcess?: ImageProcessOptions
 	/** Allow a usable attachment-list URL to satisfy an image preview request. */
 	allowAttachmentListUrl?: boolean
+	access?: FileAccessContext
+	/** Stable identity supplied by a bound FileApi for cache-only callers. */
+	identityKey?: string
 }
 
 export type SharedMediaUrlBatchOptions = Omit<
@@ -154,11 +161,6 @@ function syncSharedMediaUrlScope(): void {
 	currentDefaultScope = nextScope
 }
 
-function getDefaultScope(): string {
-	syncSharedMediaUrlScope()
-	return currentDefaultScope ?? getSharedMediaResourceScope()
-}
-
 function normalizeScope(scope?: string): string {
 	const trimmedScope = scope?.trim()
 	if (trimmedScope) return trimmedScope
@@ -197,6 +199,7 @@ function buildRequestKey(
 		isDownload: request.isDownload ?? false,
 		cache: request.cache ?? null,
 		imageProcess: request.imageProcess ?? null,
+		identityKey: request.identityKey ?? getFileAccessIdentityKey(request.access),
 	})
 }
 
@@ -225,6 +228,8 @@ function buildBatchRequest(
 		forceRefresh: options.forceRefresh,
 		imageProcess: options.imageProcess,
 		allowAttachmentListUrl: options.allowAttachmentListUrl,
+		access: options.access,
+		identityKey: options.identityKey,
 	}
 }
 
@@ -531,6 +536,7 @@ function createSingleRequest(
 		cache: request.cache,
 		options: request.imageProcess ? { xMagicImageProcess: request.imageProcess } : undefined,
 		enableErrorMessagePrompt: false,
+		access: request.access,
 	})
 		.then((items) =>
 			cacheResolvedItem(
@@ -719,6 +725,7 @@ export function requestSharedMediaUrls(
 				? { xMagicImageProcess: options.imageProcess }
 				: undefined,
 			enableErrorMessagePrompt: false,
+			access: options.access,
 		})
 
 		for (const { request, requestKey } of missing) {

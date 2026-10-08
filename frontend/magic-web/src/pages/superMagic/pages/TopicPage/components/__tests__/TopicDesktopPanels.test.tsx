@@ -33,6 +33,7 @@ function createLayoutState(overrides?: Partial<ReturnType<typeof createLayoutSta
 		projectSiderWidthPx: 320,
 		messagePanelWidthPx: 420,
 		collapsedMessagePanelWidthPx: 24,
+		isProjectSiderCollapsed: false,
 		isConversationPanelCollapsed: false,
 		isDraggingProjectSider: false,
 		isDraggingMessagePanel: false,
@@ -149,6 +150,70 @@ describe("TopicDesktopPanels", () => {
 		)
 	})
 
+	it("uses an embedding page's collapsed width without changing the default", () => {
+		const view = renderComponent({ collapsedConversationPanelWidth: 48 })
+		expect(mockUseTopicDesktopPanelMotion).toHaveBeenLastCalledWith(
+			expect.objectContaining({ collapsedMessagePanelWidthPx: 48 }),
+		)
+		view.unmount()
+		renderComponent()
+		expect(mockUseTopicDesktopPanelMotion).toHaveBeenLastCalledWith(
+			expect.objectContaining({ collapsedMessagePanelWidthPx: 24 }),
+		)
+	})
+
+	it("forwards the embedded conversation resize-handle appearance", () => {
+		renderComponent({
+			showProjectSidebar: false,
+			conversationResizeHandleClassName: "border-l border-border !bg-sidebar",
+			detailResizeHandleClassName: "border-l border-border",
+		})
+
+		expect(screen.getByTestId("topic-detail-resize-handle-slot")).toHaveClass(
+			"border-l",
+			"border-border",
+		)
+		expect(screen.getByTestId("mock-topic-resize-handle")).toHaveClass(
+			"border-l",
+			"border-border",
+			"!bg-sidebar",
+		)
+	})
+
+	it("项目侧栏收起且无文件预览时显示全局导航分割线", () => {
+		layoutState = createLayoutState({ isProjectSiderCollapsed: true })
+		const mainFrame = document.createElement("div")
+		mainFrame.dataset.testid = "base-layout-pc-main-frame"
+		document.body.appendChild(mainFrame)
+
+		renderComponent({
+			shouldShowDetailPanel: false,
+			historyLayout: undefined,
+		})
+
+		const divider = screen.getByTestId("collapsed-project-sidebar-divider")
+		expect(divider.parentElement).toBe(mainFrame)
+		expect(divider).toHaveClass("absolute", "inset-y-0", "left-0", "w-px", "bg-border")
+		mainFrame.remove()
+	})
+
+	it("项目侧栏展开时不显示全局导航分割线", () => {
+		renderComponent({
+			shouldShowDetailPanel: false,
+			historyLayout: undefined,
+		})
+
+		expect(screen.queryByTestId("collapsed-project-sidebar-divider")).not.toBeInTheDocument()
+	})
+
+	it("文件预览展开时不显示全局导航分割线", () => {
+		layoutState = createLayoutState({ isProjectSiderCollapsed: true })
+
+		renderComponent({ historyLayout: undefined })
+
+		expect(screen.queryByTestId("collapsed-project-sidebar-divider")).not.toBeInTheDocument()
+	})
+
 	it("switchable layout can disable automatic conversation expansion", () => {
 		renderComponent({ autoExpandConversationWhenDetailVisible: false })
 
@@ -156,6 +221,14 @@ describe("TopicDesktopPanels", () => {
 		motionOptions.ensureExpandedWhenDetailVisible(true)
 
 		expect(layoutState.ensureExpandedWhenDetailVisible).not.toHaveBeenCalled()
+	})
+
+	it("forwards the initial collapsed state to the shared layout store", () => {
+		renderComponent({ initialConversationPanelCollapsed: true })
+
+		expect(mockUseTopicDesktopLayout).toHaveBeenCalledWith(
+			expect.objectContaining({ initialConversationPanelCollapsed: true }),
+		)
 	})
 
 	it("在无预览区且打开历史话题时渲染 full-right 固定面板", () => {
@@ -225,6 +298,26 @@ describe("TopicDesktopPanels", () => {
 		expect(screen.getByTestId("topic-history-panel-fixed")).toBeInTheDocument()
 		expect(screen.queryByTestId("topic-history-panel-drawer")).not.toBeInTheDocument()
 		expect(screen.getAllByTestId("mock-topic-resize-handle")).toHaveLength(2)
+	})
+
+	it("容器级历史面板保持在当前页面布局内", () => {
+		renderComponent({ historyOverlayScope: "container" })
+
+		const mainContent = screen.getByTestId("topic-desktop-main-content")
+		expect(mainContent).toContainElement(screen.getByTestId("topic-history-panel-fixed"))
+	})
+
+	it("容器级抽屉及点击区域保持在当前页面布局内", () => {
+		motionState = createMotionState({
+			topicHistoryMode: "drawer",
+			canShowFixedTopicHistory: false,
+		})
+
+		renderComponent({ historyOverlayScope: "container" })
+
+		const mainContent = screen.getByTestId("topic-desktop-main-content")
+		expect(mainContent).toContainElement(screen.getByTestId("topic-history-panel-drawer"))
+		expect(mainContent).toContainElement(screen.getByTestId("topic-history-panel-dismiss-area"))
 	})
 
 	it("在有预览区且阈值不满足时渲染 256px 抽屉和 backdrop", () => {

@@ -34,12 +34,14 @@ import { MagicDropdown } from "@/components/base"
 import { IconShare3 } from "@tabler/icons-react"
 import useFullscreenMode from "@/hooks/useFullscreenMode"
 import { guardMenuClick, guardMenuItems, runGuardedAction } from "../../utils/actionGuard"
+import { cn } from "@/utils/cn"
 
 export default memo(function CommonHeaderV2(props: CommonHeaderV2Props) {
 	const {
 		beforeAction,
 		testIdsEnabled = true,
 		renderMode = "full",
+		showBottomBorder = true,
 		type,
 		onFullscreen,
 		onDownload,
@@ -628,7 +630,10 @@ export default memo(function CommonHeaderV2(props: CommonHeaderV2Props) {
 		<>
 			<div
 				ref={headerContainerRef}
-				className="relative flex h-11 w-full items-center justify-end gap-2 border-b border-border bg-background px-2.5 text-sm text-muted-foreground"
+				className={cn(
+					"relative flex h-11 w-full shrink-0 items-center justify-end gap-2 bg-background px-2.5 text-sm text-muted-foreground",
+					showBottomBorder && "border-b border-border",
+				)}
 				data-testid="detail-header"
 				data-file-id={currentFile?.id}
 			>

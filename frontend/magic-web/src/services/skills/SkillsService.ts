@@ -314,8 +314,8 @@ export class SkillsService {
 			// Keep edit/import flows supplied with a stable i18n shape while list cards
 			// render the locale-resolved fields above. The API may remove these raw
 			// fields after the migration, so the resolved value seeds missing entries.
-			nameI18n: this.ensureSkillI18nText(item.name_i18n, name),
-			descriptionI18n: this.ensureSkillI18nText(item.description_i18n, description),
+			nameI18n: this.ensureSkillI18nText(undefined, name),
+			descriptionI18n: this.ensureSkillI18nText(undefined, description),
 			logo: item.logo,
 			sourceType: item.source_type,
 			creatorName: item.creator_info?.name,

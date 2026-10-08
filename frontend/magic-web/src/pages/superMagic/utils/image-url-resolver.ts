@@ -1,4 +1,6 @@
 import { getTemporaryDownloadUrl } from "./api"
+import type { FileApi } from "@/pages/superMagic/fileAccess/fileApi"
+import type { FileAccessContext } from "@/pages/superMagic/fileAccess/fileAccessContext"
 import { getOptimizedImageUrl, type ImageVariant } from "@/utils/image-optimization"
 import type { ImageProcessOptions } from "@/utils/image-processing"
 
@@ -351,6 +353,7 @@ export async function processMarkdownImages(
 	documentPath?: string,
 	// Existing batch consumers export images/PDFs. Optimization must be explicitly opted into.
 	variant: ImageVariant = "original",
+	access?: FileAccessContext,
 ): Promise<{
 	processedContent: string
 	imageUrlMap: ImageUrlMap
@@ -409,6 +412,7 @@ export async function processMarkdownImages(
 								xMagicImageProcess: getBatchImageProcessOptions(fileIdToPaths),
 							},
 						}),
+				access,
 			})) || []
 
 		// Build image URL map
@@ -442,6 +446,7 @@ export async function resolveSingleImageUrl(
 	attachments: AttachmentFile[],
 	documentPath?: string,
 	imageUrlMap?: ImageUrlMap,
+	fileApi?: Pick<FileApi, "getTemporaryDownloadUrl">,
 ): Promise<string> {
 	// Check if URL is already cached
 	if (imageUrlMap?.has(relativePath)) {
@@ -489,7 +494,8 @@ export async function resolveSingleImageUrl(
 		const dprHeight = height ? Math.min(2048, height * 2) : undefined
 
 		// Request temporary download URL
-		const downloadUrls = await getTemporaryDownloadUrl({
+		const requestDownloadUrls = fileApi?.getTemporaryDownloadUrl ?? getTemporaryDownloadUrl
+		const downloadUrls = await requestDownloadUrls({
 			file_ids: [file.file_id],
 			options: {
 				// The sandbox processor owns the transformation, so pass markdown display

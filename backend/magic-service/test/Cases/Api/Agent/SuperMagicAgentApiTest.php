@@ -208,10 +208,16 @@ class SuperMagicAgentApiTest extends AbstractApiTest
             $this->assertArrayHasKey('name_i18n', $item);
             $this->assertArrayHasKey('role_i18n', $item);
             $this->assertArrayHasKey('description_i18n', $item);
+            $this->assertArrayNotHasKey('name', $item);
+            $this->assertArrayNotHasKey('role', $item);
+            $this->assertArrayNotHasKey('description', $item);
+            $this->assertArrayHasKey('source', $item);
+            $this->assertArrayNotHasKey('source_i18n', $item);
             $this->assertArrayHasKey('icon', $item);
             $this->assertArrayHasKey('icon_type', $item);
             $this->assertArrayHasKey('playbooks', $item);
             $this->assertArrayHasKey('source_type', $item);
+            $this->assertSame($item['source_type'], $item['source']);
             $this->assertArrayHasKey('enabled', $item);
             $this->assertArrayHasKey('is_store_offline', $item);
             $this->assertArrayHasKey('latest_version_code', $item);
@@ -616,7 +622,16 @@ class SuperMagicAgentApiTest extends AbstractApiTest
         }
 
         $this->assertNotNull($createdItem);
+        $this->assertArrayHasKey('name_i18n', $createdItem);
+        $this->assertArrayHasKey('role_i18n', $createdItem);
+        $this->assertArrayHasKey('description_i18n', $createdItem);
+        $this->assertArrayNotHasKey('name', $createdItem);
+        $this->assertArrayNotHasKey('role', $createdItem);
+        $this->assertArrayNotHasKey('description', $createdItem);
+        $this->assertArrayNotHasKey('source_i18n', $createdItem);
+        $this->assertArrayHasKey('source', $createdItem);
         $this->assertSame('LOCAL_CREATE', $createdItem['source_type']);
+        $this->assertSame('LOCAL_CREATE', $createdItem['source']);
         $this->assertFalse($createdItem['allow_delete']);
     }
 
@@ -821,7 +836,16 @@ class SuperMagicAgentApiTest extends AbstractApiTest
         }
 
         $this->assertNotNull($marketItem);
+        $this->assertArrayHasKey('name_i18n', $marketItem);
+        $this->assertArrayHasKey('role_i18n', $marketItem);
+        $this->assertArrayHasKey('description_i18n', $marketItem);
+        $this->assertArrayNotHasKey('name', $marketItem);
+        $this->assertArrayNotHasKey('role', $marketItem);
+        $this->assertArrayNotHasKey('description', $marketItem);
+        $this->assertArrayNotHasKey('source_i18n', $marketItem);
+        $this->assertArrayHasKey('source', $marketItem);
         $this->assertSame('MARKET', $marketItem['source_type']);
+        $this->assertSame('MARKET', $marketItem['source']);
         $this->assertSame('7.0.0', $marketItem['latest_version_code']);
         $this->assertTrue($marketItem['allow_delete']);
     }

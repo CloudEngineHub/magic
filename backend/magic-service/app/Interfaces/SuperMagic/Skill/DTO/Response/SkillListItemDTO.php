@@ -20,12 +20,6 @@ class SkillListItemDTO implements JsonSerializable
 
     private ?string $projectId;
 
-    private array $nameI18n;
-
-    private array $descriptionI18n;
-
-    private array $sourceI18n;
-
     private string $logo;
 
     private string $sourceType;
@@ -58,6 +52,12 @@ class SkillListItemDTO implements JsonSerializable
 
     private ?string $userRole = null;
 
+    private ?array $nameI18n;
+
+    private ?array $descriptionI18n;
+
+    private ?array $sourceI18n;
+
     public function __construct(
         string $id,
         string $code,
@@ -65,9 +65,6 @@ class SkillListItemDTO implements JsonSerializable
         string $name,
         string $description,
         string $source,
-        array $nameI18n,
-        array $descriptionI18n,
-        array $sourceI18n,
         string $logo,
         string $sourceType,
         int $isEnabled,
@@ -81,6 +78,9 @@ class SkillListItemDTO implements JsonSerializable
         ?string $publisherType = null,
         ?array $publisher = null,
         ?string $userRole = null,
+        ?array $nameI18n = null,
+        ?array $descriptionI18n = null,
+        ?array $sourceI18n = null,
     ) {
         $this->id = $id;
         $this->code = $code;
@@ -88,9 +88,6 @@ class SkillListItemDTO implements JsonSerializable
         $this->name = $name;
         $this->description = $description;
         $this->source = $source;
-        $this->nameI18n = $nameI18n;
-        $this->descriptionI18n = $descriptionI18n;
-        $this->sourceI18n = $sourceI18n;
         $this->logo = $logo;
         $this->sourceType = $sourceType;
         $this->isEnabled = $isEnabled;
@@ -104,20 +101,20 @@ class SkillListItemDTO implements JsonSerializable
         $this->publisherType = $publisherType;
         $this->publisher = $publisher;
         $this->userRole = $userRole;
+        $this->nameI18n = $nameI18n;
+        $this->descriptionI18n = $descriptionI18n;
+        $this->sourceI18n = $sourceI18n;
     }
 
     public function jsonSerialize(): array
     {
-        return [
+        $payload = [
             'id' => (string) $this->id,
             'code' => $this->code,
             'project_id' => $this->projectId,
             'name' => $this->name,
             'description' => $this->description,
             'source' => $this->source,
-            'name_i18n' => $this->nameI18n,
-            'description_i18n' => $this->descriptionI18n,
-            'source_i18n' => $this->sourceI18n,
             'logo' => $this->logo,
             'source_type' => $this->sourceType,
             'is_enabled' => $this->isEnabled,
@@ -132,5 +129,13 @@ class SkillListItemDTO implements JsonSerializable
             'publisher' => $this->publisher,
             'user_role' => $this->userRole,
         ];
+
+        if ($this->nameI18n !== null) {
+            $payload['name_i18n'] = $this->nameI18n;
+            $payload['description_i18n'] = $this->descriptionI18n ?? [];
+            $payload['source_i18n'] = $this->sourceI18n ?? [];
+        }
+
+        return $payload;
     }
 }

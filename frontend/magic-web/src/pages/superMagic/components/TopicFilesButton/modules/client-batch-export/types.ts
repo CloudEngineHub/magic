@@ -1,3 +1,6 @@
+import type { FileAccessContext } from "@/pages/superMagic/fileAccess/fileAccessContext"
+import type { FileApi } from "@/pages/superMagic/fileAccess/fileApi"
+
 export type ClientBatchExportFormat = "pdf" | "pptx"
 
 /** Minimal attachment contract kept local so the exporter is not coupled to a UI hook type. */
@@ -52,6 +55,8 @@ export interface ClientBatchExportArtifact {
 
 export interface ClientBatchExportRunResult {
 	artifact?: ClientBatchExportArtifact
+	/** PPTX files were written directly to a user-selected file or directory. */
+	streamedToDisk?: boolean
 	successCount: number
 	failureCount: number
 	failures: ClientBatchExportFailure[]
@@ -67,4 +72,8 @@ export interface ClientBatchExportRunOptions {
 	attachments: ClientBatchAttachment[]
 	projectName?: string
 	onProgress?: (progress: number) => void
+	access?: FileAccessContext
+	fileApi?: FileApi
+	/** Cancels the active streaming target and prevents later targets from starting. */
+	signal?: AbortSignal
 }

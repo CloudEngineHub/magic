@@ -689,7 +689,9 @@ export class DesignRemoteListener {
 		let parsed: DesignData | null = null
 		let parsedLoadResult: LoadDesignDataToRuntimeResult | null = null
 		try {
-			const content = await loadMagicProjectJsContent(fid)
+			const content = await loadMagicProjectJsContent(fid, {
+				fileApi: this.options.fileApi,
+			})
 			const loaded = await loadDesignDataToRuntime({
 				content,
 				elementDetailsContext: {
@@ -697,6 +699,7 @@ export class DesignRemoteListener {
 					flatAttachments: this.options.flatAttachments,
 					mainFileId: fid,
 					projectId: this.options.projectId,
+					fileApi: this.options.fileApi,
 				},
 				pathContext: {
 					projectBasePath: dslBase,
@@ -740,7 +743,9 @@ export class DesignRemoteListener {
 		}
 
 		try {
-			const content = await loadMagicProjectJsContent(fid)
+			const content = await loadMagicProjectJsContent(fid, {
+				fileApi: this.options.fileApi,
+			})
 			const loaded = await loadDesignDataToRuntime({
 				content,
 				elementDetailsContext: {
@@ -748,6 +753,7 @@ export class DesignRemoteListener {
 					flatAttachments: this.options.flatAttachments,
 					mainFileId: fid,
 					projectId: this.options.projectId,
+					fileApi: this.options.fileApi,
 				},
 				pathContext: {
 					projectBasePath: dslBase,

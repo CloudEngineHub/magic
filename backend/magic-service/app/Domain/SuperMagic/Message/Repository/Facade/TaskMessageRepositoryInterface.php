@@ -50,6 +50,13 @@ interface TaskMessageRepositoryInterface
     public function findByTaskId(string $taskId): array;
 
     /**
+     * 获取任务完成时用于返回给调用方的消息。
+     *
+     * @return TaskMessageEntity[]
+     */
+    public function findCompletedResultMessages(int $topicId, int $taskId): array;
+
+    /**
      * 从 magic_super_agent_message 单表提取最近 N 轮原始消息候选集。
      *
      * 轮次规则：

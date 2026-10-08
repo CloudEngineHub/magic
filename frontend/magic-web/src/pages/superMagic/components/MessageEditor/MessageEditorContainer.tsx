@@ -198,6 +198,9 @@ export const MessageEditorContainer = observer(
 				topicModelStore,
 			})
 
+			const sendScope = `${selectedProject?.id ?? ""}:${selectedTopic?.id ?? ""}`
+			const sendScopeRef = useRef(sendScope)
+			sendScopeRef.current = sendScope
 			const isMountedRef = useRef(true)
 			const modelWaitAbortControllerRef = useRef<AbortController | null>(null)
 			const isProjectContext = Boolean(selectedProject?.id)
@@ -529,6 +532,9 @@ export const MessageEditorContainer = observer(
 
 			const handleSendMessageByContent = useMemoizedFn(
 				async (data: SendMessageByContentPayload) => {
+					if (data.targetProjectId && data.targetProjectId !== selectedProject?.id) return
+					if (data.tryClaim && !data.tryClaim()) return
+					const requestScope = sendScopeRef.current
 					let models: ResolvedMessageSendModels | null
 					try {
 						models = await resolveMessageSendModels({
@@ -539,6 +545,7 @@ export const MessageEditorContainer = observer(
 							signal: modelWaitAbortControllerRef.current?.signal,
 						})
 					} catch (error) {
+						data.onHandled?.(false)
 						if (
 							error instanceof MessageSendModelWaitError &&
 							error.reason === "aborted"
@@ -548,22 +555,38 @@ export const MessageEditorContainer = observer(
 						magicToast.error(t("messageEditor.modelLoadFailed"))
 						return
 					}
-					if (!models) {
+					// A model load may finish after the user has switched projects or topics.
+					if (
+						data.targetProjectId &&
+						(!isMountedRef.current || requestScope !== sendScopeRef.current)
+					) {
+						data.onHandled?.(false)
+						return
+					}
+					if (!models || !onSend) {
+						data.onHandled?.(false)
 						magicToast.error(t("messageEditor.pleaseSelectModel"))
 						return
 					}
-					onSend?.({
-						value: data.jsonContent,
-						mentionItems:
-							data.mentionItems ?? collectMentionItemsFromContent(data.jsonContent),
-						selectedModel: models.selectedModel,
-						selectedImageModel: models.selectedImageModel,
-						selectedVideoModel: models.selectedVideoModel,
-						topicMode: data.topicMode ?? topicMode,
-						shouldClearEditorAfterSend: data.shouldClearEditorAfterSend,
-						extra: data.extra,
-						targetTopic: data.targetTopic,
-					})
+					try {
+						const accepted = await onSend({
+							value: data.jsonContent,
+							mentionItems:
+								data.mentionItems ??
+								collectMentionItemsFromContent(data.jsonContent),
+							selectedModel: models.selectedModel,
+							selectedImageModel: models.selectedImageModel,
+							selectedVideoModel: models.selectedVideoModel,
+							topicMode: data.topicMode ?? topicMode,
+							shouldClearEditorAfterSend: data.shouldClearEditorAfterSend,
+							extra: data.extra,
+							targetTopic: data.targetTopic,
+						})
+						data.onHandled?.(accepted !== false)
+					} catch (error) {
+						if (!data.onHandled) throw error
+						data.onHandled(false)
+					}
 				},
 			)
 

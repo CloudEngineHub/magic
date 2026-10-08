@@ -81,7 +81,8 @@ export interface FileManagerStateChangeOptions {
 	deferred?: boolean
 	userInteraction?: boolean
 }
-export type FileViewerTabType = "file" | "website" | "knowledge_base" | "playback" | "file_manager"
+export type FileViewerTabType =
+	"file" | "website" | "knowledge_base" | "playback" | "file_manager" | "micro_app"
 export type ActiveDetailTabType = FileViewerTabType | null
 
 // File item interface
@@ -289,6 +290,8 @@ export interface FilesViewerRef {
 		fileExtension?: string
 	}) => void
 	closeKnowledgeBaseTab: (tabId: string) => void
+	openMicroAppTab: (data: { appId: string; appName?: string }) => void
+	closeMicroAppTab: (tabId: string) => void
 	/** Promotes the currently active file or playback tab without recreating it. */
 	enterPreviewFullscreen: () => void
 	/** Restores the current preview to its non-fullscreen layout without dismissing it. */

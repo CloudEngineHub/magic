@@ -8,6 +8,7 @@ import type { CollaboratorPermission } from "@/pages/superMagic/types/collaborat
 import type { MicroAppWorkspaceView } from "./MicroAppWorkspaceNav"
 
 const MicroAppDatabasePanel = lazy(() => import("./MicroAppDatabasePanel"))
+const MicroAppSkillsWorkspace = lazy(() => import("./MicroAppSkillsWorkspace"))
 const MicroAppScheduledTasksPanel = lazy(
 	() => import("./MicroAppScheduledTasksPanel/MicroAppScheduledTasksPanel"),
 )
@@ -19,6 +20,8 @@ const UserSpacePanel = lazy(() => import("@/pages/superMagic/components/UserSpac
 interface MicroAppProjectPanelsProps {
 	placement?: "workspace" | "sidebar"
 	activeView: MicroAppWorkspaceView
+	attachmentList?: AttachmentItem[]
+	canEdit?: boolean
 	projectId?: string
 	projectRole?: CollaboratorPermission
 	workspaceId?: string
@@ -29,7 +32,7 @@ interface MicroAppProjectPanelsProps {
 	onUserFileClick?: (fileItem: AttachmentItem) => void
 }
 
-const PROJECT_PANEL_VIEWS: MicroAppWorkspaceView[] = ["scheduledTasks", "shareManagement"]
+const PROJECT_PANEL_VIEWS: MicroAppWorkspaceView[] = ["skills", "scheduledTasks", "shareManagement"]
 
 const PROJECT_PANEL_CLASS_NAME = cn(
 	"h-full gap-0",
@@ -70,6 +73,8 @@ function PanelLoading() {
 
 export default function MicroAppProjectPanels({
 	activeView,
+	attachmentList = [],
+	canEdit = false,
 	placement = "workspace",
 	projectId,
 	projectRole,
@@ -119,6 +124,12 @@ export default function MicroAppProjectPanels({
 					data-testid="micro-app-project-panel-workspace"
 				>
 					<Suspense fallback={<PanelLoading />}>
+						{activeView === "skills" ? (
+							<MicroAppSkillsWorkspace
+								attachmentList={attachmentList}
+								canEdit={canEdit}
+							/>
+						) : null}
 						{activeView === "scheduledTasks" ? (
 							<MicroAppScheduledTasksPanel
 								className={PROJECT_PANEL_CLASS_NAME}

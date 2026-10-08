@@ -1,7 +1,10 @@
 import { useRef, type ReactNode } from "react"
 import MagicSplitter from "@/components/base/MagicSplitter"
 import { cn } from "@/utils/cn"
-import { CONVERSATION_INPUT_HEIGHT_CONFIG } from "@/pages/superMagic/components/ConversationInputResize/constants"
+import {
+	CONVERSATION_INPUT_HEIGHT_CONFIG,
+	DEFAULT_COMPOSER_MIN_INPUT_HEIGHT,
+} from "@/pages/superMagic/components/ConversationInputResize/constants"
 import ConversationInputResizeHandle from "@/pages/superMagic/components/ConversationInputResize/ConversationInputResizeHandle"
 import { ConversationInputLayoutProvider } from "@/pages/superMagic/components/ConversationInputResize/context"
 import { useConversationInputHeight } from "@/pages/superMagic/components/ConversationInputResize/useConversationInputHeight"
@@ -17,9 +20,6 @@ interface ChatProjectMessageLayoutProps {
 	inputMinHeight?: number
 }
 
-/** Preserve the existing minimum for conversation layouts without extra controls. */
-const DEFAULT_INPUT_MIN_HEIGHT = 200
-
 /** Arrange project conversation content while sharing the desktop input height state machine. */
 export default function ChatProjectMessageLayout({
 	messageList,
@@ -27,27 +27,29 @@ export default function ChatProjectMessageLayout({
 	isConversationPanelCollapsed,
 	scope = "topic-page",
 	layoutKey,
-	inputMinHeight = DEFAULT_INPUT_MIN_HEIGHT,
+	inputMinHeight,
 }: ChatProjectMessageLayoutProps) {
 	const layoutRef = useRef<HTMLDivElement>(null)
 	const inputRef = useRef<HTMLDivElement>(null)
+	const baseInputMinHeight = inputMinHeight ?? DEFAULT_COMPOSER_MIN_INPUT_HEIGHT
 	const inputHeight = useConversationInputHeight({
 		scope,
 		layoutKey,
 		enabled: !isConversationPanelCollapsed,
 		containerRef: inputRef,
 		availableRef: layoutRef,
-		minHeight: inputMinHeight,
+		minHeight: baseInputMinHeight,
 		...CONVERSATION_INPUT_HEIGHT_CONFIG,
 	})
-	const effectiveInputMinHeight = inputHeight.minHeight ?? inputMinHeight
+	const effectiveInputMinHeight = inputHeight.minHeight ?? baseInputMinHeight
 	// 尺寸仍由此处的 Splitter 管理，把手放到实际头像上方，避免被误认为队列把手。
 	const inputLayoutContext = {
 		fillHeight: inputHeight.fillHeight,
 		queueListMaxHeight: inputHeight.enabled ? inputHeight.queueListMaxHeight : undefined,
+		// Lift the 12px grip so the three dots sit above shortcut chips, still inside card padding.
 		inputResizeHandle: inputHeight.enabled ? (
 			<ConversationInputResizeHandle
-				positionClassName="-top-1.5"
+				positionClassName="-top-2.5"
 				value={inputHeight.effectiveHeight}
 				min={effectiveInputMinHeight}
 				max={inputHeight.maxHeight}
@@ -61,7 +63,7 @@ export default function ChatProjectMessageLayout({
 	return (
 		<div
 			ref={layoutRef}
-			className="h-full min-h-0 w-full"
+			className="min-h-0 w-full flex-1"
 			data-testid="chat-project-message-layout"
 		>
 			{/* Keep the Ant bar hidden because the shared handle owns the visible resize interaction. */}

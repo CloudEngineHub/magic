@@ -19,9 +19,9 @@ class SlidesTemplatePublicListItemDTO extends AbstractDTO
 
     public ?string $categoryCode = null;
 
-    public I18nTextDTO $label;
+    public string $label = '';
 
-    public I18nTextDTO $description;
+    public string $description = '';
 
     public ?string $thumbnailUrl = null;
 
@@ -50,8 +50,6 @@ class SlidesTemplatePublicListItemDTO extends AbstractDTO
 
     public function __construct(?array $data = null)
     {
-        $this->setLabel(null);
-        $this->setDescription(null);
         parent::__construct($data);
     }
 
@@ -90,24 +88,24 @@ class SlidesTemplatePublicListItemDTO extends AbstractDTO
         $this->categoryCode = $categoryCode;
     }
 
-    public function getLabel(): I18nTextDTO
+    public function getLabel(): string
     {
         return $this->label;
     }
 
-    public function setLabel(null|array|I18nTextDTO $label): void
+    public function setLabel(?string $label): void
     {
-        $this->label = $label instanceof I18nTextDTO ? $label : I18nTextDTO::fromArray($label ?? []);
+        $this->label = $label ?? '';
     }
 
-    public function getDescription(): I18nTextDTO
+    public function getDescription(): string
     {
         return $this->description;
     }
 
-    public function setDescription(null|array|I18nTextDTO $description): void
+    public function setDescription(?string $description): void
     {
-        $this->description = $description instanceof I18nTextDTO ? $description : I18nTextDTO::fromArray($description ?? []);
+        $this->description = $description ?? '';
     }
 
     public function getThumbnailUrl(): ?string

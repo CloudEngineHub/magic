@@ -26,8 +26,7 @@ final class FileScopeHandlerResolver
     public function __construct(
         MemoryFileScopeHandler $memoryFileScopeHandler,
         UserFileScopeHandler $userFileScopeHandler,
-    )
-    {
+    ) {
         $this->handlerMap = [
             MemoryFileScopeHandler::SCOPE => $memoryFileScopeHandler,
             UserFileScopeHandler::SCOPE => $userFileScopeHandler,

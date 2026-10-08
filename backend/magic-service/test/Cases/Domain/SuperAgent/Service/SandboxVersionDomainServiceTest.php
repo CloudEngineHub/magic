@@ -11,68 +11,133 @@ use App\Domain\SuperMagic\Task\Service\AgentDomainService;
 use App\Domain\SuperMagic\Task\Service\SandboxVersionDomainService;
 use App\Domain\SuperMagic\Topic\Entity\TopicEntity;
 use App\Domain\SuperMagic\Topic\Service\TopicDomainService;
-use Hyperf\Codec\Packer\PhpSerializerPacker;
-use Hyperf\Context\ApplicationContext;
 use Hyperf\Logger\LoggerFactory;
 use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
-use Psr\Container\ContainerInterface;
 use Psr\Log\NullLogger;
 use RuntimeException;
 
 /** @internal */
 class SandboxVersionDomainServiceTest extends TestCase
 {
-    protected function setUp(): void
-    {
-        $container = $this->createMock(ContainerInterface::class);
-        $container->method('get')->willReturn(new PhpSerializerPacker());
-        ApplicationContext::setContainer($container);
-    }
-
     #[DataProvider('imageCases')]
-    public function testCompareCompleteReferences(?array $current, array $latest, ?bool $expected): void
-    {
-        $topic = (new TopicEntity())->setId(101)->setSandboxId('sandbox-101')->setAgentImage('legacy:v1');
-        // Constructor hydration is also used by the topic repository.
-        $topic = new TopicEntity(['id' => 101, 'sandbox_id' => 'sandbox-101', 'agent_image' => 'legacy:v1', 'sandbox_images' => $current]);
-        $service = $this->service([$topic], $latest);
-        self::assertSame($expected, $service->checkSandboxVersion(101)['needs_update']);
+    public function testComparesRecordedImagesAndFallsBackToLegacyAgentImage(
+        ?array $currentImages,
+        ?string $legacyAgentImage,
+        array $latestImages,
+        ?bool $expected
+    ): void {
+        $topic = (new TopicEntity())
+            ->setId(101)
+            ->setSandboxId('sandbox-101')
+            ->setAgentImage($legacyAgentImage)
+            ->setSandboxImages($currentImages);
+
+        $result = $this->service([$topic], $latestImages)->checkSandboxVersion(101);
+
+        self::assertSame($expected, $result['needs_update']);
     }
 
     public static function imageCases(): array
     {
-        $images = ['agent_image' => 'registry/agent:v1@sha256:aaa', 'agfs_image' => 'registry/agfs:v1'];
-        return [
-            'equal' => [$images, $images, false],
-            'agent changed' => [array_replace($images, ['agent_image' => 'registry/agent:v2']), $images, true],
-            'agfs changed' => [array_replace($images, ['agfs_image' => 'registry/agfs:v2']), $images, true],
-            'digest changed' => [array_replace($images, ['agent_image' => 'registry/agent:v1@sha256:bbb']), $images, true],
-            'repository changed' => [array_replace($images, ['agfs_image' => 'other/agfs:v1']), $images, true],
-            'historical data' => [null, $images, null],
-            'missing current agfs' => [['agent_image' => $images['agent_image']], $images, null],
-            'empty standard' => [$images, [], null],
-            'missing standard agfs' => [$images, ['agent_image' => $images['agent_image']], null],
-            'invalid standard value' => [$images, array_replace($images, ['agfs_image' => []]), null],
-            'blank standard value' => [$images, array_replace($images, ['agfs_image' => '  ']), null],
+        $latest = [
+            'agent_image' => 'registry/agent:5.0.92@sha256:new',
+            'agfs_image' => 'registry/agfs:1.0.14@sha256:new',
         ];
+
+        return [
+            'complete images are current' => [$latest, 'legacy:ignored', $latest, false],
+            'complete agent image changed' => [
+                array_replace($latest, ['agent_image' => 'registry/agent:5.0.77@sha256:old']),
+                'legacy:ignored',
+                $latest,
+                true,
+            ],
+            'complete agfs image changed' => [
+                array_replace($latest, ['agfs_image' => 'registry/agfs:1.0.13@sha256:old']),
+                'legacy:ignored',
+                $latest,
+                true,
+            ],
+            'same tag with different digest changed' => [
+                array_replace($latest, ['agent_image' => 'registry/agent:5.0.92@sha256:old']),
+                'legacy:ignored',
+                $latest,
+                true,
+            ],
+            'historical row with older legacy agent' => [
+                null,
+                'registry/agent:5.0.77@sha256:old',
+                $latest,
+                true,
+            ],
+            'historical row with current legacy agent but unknown agfs' => [
+                null,
+                $latest['agent_image'],
+                $latest,
+                null,
+            ],
+            'historical row without version evidence' => [null, null, $latest, null],
+            'incomplete recorded images with older agent' => [
+                ['agent_image' => 'registry/agent:5.0.77@sha256:old'],
+                null,
+                $latest,
+                true,
+            ],
+            'latest images are incomplete' => [$latest, $latest['agent_image'], [], null],
+        ];
+    }
+
+    public function testHistoricalRowUsesLegacyAgentVersionForDisplay(): void
+    {
+        $latest = [
+            'agent_image' => 'registry/agent:5.0.92@sha256:new',
+            'agfs_image' => 'registry/agfs:1.0.14',
+        ];
+        $topic = (new TopicEntity())
+            ->setId(101)
+            ->setSandboxId('sandbox-101')
+            ->setAgentImage('registry/agent:5.0.77@sha256:old');
+
+        $result = $this->service([$topic], $latest)->checkSandboxVersion(101);
+
+        self::assertSame('5.0.77', $result['current_version']);
+        self::assertSame('5.0.92', $result['latest_version']);
     }
 
     public function testGatewayFailureIsUnknown(): void
     {
-        $topic = (new TopicEntity())->setId(101)->setSandboxId('sandbox-101');
-        self::assertNull($this->service([$topic], new RuntimeException('unavailable'))->checkSandboxVersion(101)['needs_update']);
+        $topic = (new TopicEntity())
+            ->setId(101)
+            ->setSandboxId('sandbox-101')
+            ->setAgentImage('registry/agent:5.0.77');
+
+        self::assertNull(
+            $this->service([$topic], new RuntimeException('unavailable'))
+                ->checkSandboxVersion(101)['needs_update']
+        );
     }
 
-    public function testBatchFetchesStandardOnceAndPreservesUnknown(): void
+    public function testBatchFetchesLatestImagesOnceAndPreservesUnknown(): void
     {
-        $images = ['agent_image' => 'agent:v1', 'agfs_image' => 'agfs:v1'];
+        $latest = ['agent_image' => 'agent:v2', 'agfs_image' => 'agfs:v2'];
         $topics = [
-            new TopicEntity(['id' => 101, 'sandbox_id' => 's101', 'sandbox_images' => $images]),
-            new TopicEntity(['id' => 102, 'sandbox_id' => 's102', 'agent_image' => 'agent:v1']),
-            new TopicEntity(['id' => 103]),
+            (new TopicEntity())
+                ->setId(101)
+                ->setSandboxId('s101')
+                ->setSandboxImages($latest),
+            (new TopicEntity())
+                ->setId(102)
+                ->setSandboxId('s102')
+                ->setAgentImage('agent:v1'),
+            (new TopicEntity())
+                ->setId(103),
         ];
-        self::assertSame([101 => false, 102 => null, 103 => null], $this->service($topics, $images)->checkNeedUpgradeByTopicIds([101, 102, 103, 101, 0]));
+
+        self::assertSame(
+            [101 => false, 102 => true, 103 => null],
+            $this->service($topics, $latest)->checkNeedUpgradeByTopicIds([101, 102, 103, 101, 0])
+        );
     }
 
     private function service(array $topics, array|RuntimeException $latest): SandboxVersionDomainService
@@ -80,6 +145,7 @@ class SandboxVersionDomainServiceTest extends TestCase
         $topicService = $this->createMock(TopicDomainService::class);
         $topicService->method('getTopicById')->willReturn($topics[0]);
         $topicService->method('getTopicsByIds')->willReturn($topics);
+
         $agentService = $this->createMock(AgentDomainService::class);
         $method = $agentService->expects(self::once())->method('getLatestImages');
         if ($latest instanceof RuntimeException) {
@@ -87,8 +153,10 @@ class SandboxVersionDomainServiceTest extends TestCase
         } else {
             $method->willReturn($latest);
         }
+
         $loggerFactory = $this->createMock(LoggerFactory::class);
         $loggerFactory->method('get')->willReturn(new NullLogger());
+
         return new SandboxVersionDomainService($topicService, $agentService, $loggerFactory);
     }
 }

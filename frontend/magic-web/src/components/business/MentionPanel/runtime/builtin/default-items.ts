@@ -10,6 +10,7 @@ import FlowIcon from "../../components/icons/FlowIcon.svg"
 import SkillIcon from "../../components/icons/SkillIcon"
 import ToolIcon from "../../components/icons/ToolIcon"
 import { MentionPanelItemType } from "./panel-item-types"
+import { isMicroAppEnabled } from "@/services/microAppFeature"
 
 export const NON_SELECTABLE_BUILTIN_ITEM_IDS = [
 	BuiltinItemId.PERSONAL_DRIVE,
@@ -22,6 +23,7 @@ export const NON_SELECTABLE_BUILTIN_ITEM_IDS = [
 	BuiltinItemId.DIGITAL_EMPLOYEES,
 	BuiltinItemId.FLOWS,
 	BuiltinItemId.AGENTS,
+	BuiltinItemId.MICRO_APPS,
 ] as const
 
 export function isSelectableBuiltinItemId(itemId: string) {
@@ -81,6 +83,17 @@ export function createDefaultItems(t: I18nTexts): Record<string, MentionItem[]> 
 				hasChildren: true,
 				isFolder: true,
 			},
+			...(!isMicroAppEnabled()
+				? []
+				: [
+						{
+							id: BuiltinItemId.MICRO_APPS,
+							type: MentionItemType.MICRO_APP,
+							name: t.defaultItems.microApps,
+							hasChildren: true,
+							isFolder: true,
+						},
+					]),
 			{
 				id: BuiltinItemId.MCP_EXTENSIONS,
 				type: MentionItemType.MCP,

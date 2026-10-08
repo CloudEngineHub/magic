@@ -131,7 +131,7 @@ class MagicFSFileDomainService
      *                                 以保证外链引用的 file_id 在撤回/取消撤回前后保持稳定
      * @return TaskFileEntity 创建的文件实体
      */
-    public function createFile(string $name, string $parentId, bool $isDirectory, ?string $superMagicTaskId = null, ?int $sortValue = null, ?FileType $fileType = null, ?TaskFileSource $source = null, ?array $fileMetadata = null, bool $reuseDeletedFileId = false, int $topicId = 0): TaskFileEntity
+    public function createFile(string $name, string $parentId, bool $isDirectory, ?string $superMagicTaskId = null, ?int $sortValue = null, ?FileType $fileType = null, ?TaskFileSource $source = null, ?array $fileMetadata = null, bool $reuseDeletedFileId = false, int $topicId = 0, ?string $requestedSpaceType = null): TaskFileEntity
     {
         // 1. 获取 project_id、user_id 和 organization_code（从父文件或认证信息）
         $parentInfo = $this->getParentFileInfo($parentId);
@@ -163,6 +163,14 @@ class MagicFSFileDomainService
             }
         }
 
+        $parentSpaceType = isset($parentFile) ? $parentFile->getSpaceType() : null;
+        if ($requestedSpaceType !== null && FileSpaceType::tryFrom($requestedSpaceType) === null) {
+            ExceptionBuilder::throw(MagicFSErrorCode::INVALID_SPACE_TYPE, 'magicfs.unsupported_space_type', ['space_type' => $requestedSpaceType]);
+        }
+        if ($requestedSpaceType !== null && $parentSpaceType !== null && $requestedSpaceType !== $parentSpaceType) {
+            ExceptionBuilder::throw(MagicFSErrorCode::INVALID_SPACE_TYPE, 'magicfs.unsupported_space_type', ['space_type' => $requestedSpaceType]);
+        }
+
         // 3. 检查同目录下是否已存在同名记录（含已软删除的）
         //
         // Checkpoint 撤回/取消撤回场景需要 file_id 稳定：撤回时文件被软删除，
@@ -175,10 +183,13 @@ class MagicFSFileDomainService
         //     「分配新雪花 ID」路径。(project_id, parent_id, file_name) 上
         //     没有 UNIQUE 约束，旧的软删除记录留着不会阻塞新 insert；
         //     S3 侧的清理由独立的 GC 通道负责，本接口不承担回收责任。
-        $existing = $this->taskFileRepository->getByProjectParentAndName(
+        $existing = $this->taskFileRepository->getBySpaceParentAndName(
+            $parentSpaceType ?? ($requestedSpaceType ?? FileSpaceType::PROJECT->value),
             $projectId,
             $parentIdInt,
             $name,
+            $userId,
+            $organizationCode,
             true
         );
         if ($existing !== null) {

@@ -9,6 +9,11 @@ import {
 	useOverlayInteractionScopeAttributes,
 	useOverlayInteractionScopeContentAttributes,
 } from "./overlay-interaction-scope"
+import {
+	OverlayZIndexProvider,
+	resolveEffectiveOverlayZIndex,
+	useCurrentOverlayZIndex,
+} from "@/utils/overlayZIndex"
 
 function Select({ ...props }: React.ComponentProps<typeof SelectPrimitive.Root>) {
 	return <SelectPrimitive.Root data-slot="select" {...props} />
@@ -52,7 +57,7 @@ function SelectTrigger({
 	)
 }
 
-// PROJECT OVERRIDE — popper default, z-select, showScrollButtons, viewportClassName.
+// PROJECT OVERRIDE — popper default, z-select, showScrollButtons, viewportClassName, optional container.
 function SelectContent({
 	className,
 	children,
@@ -60,24 +65,33 @@ function SelectContent({
 	align = "center",
 	showScrollButtons = true,
 	viewportClassName,
+	container,
+	style,
 	...props
 }: React.ComponentProps<typeof SelectPrimitive.Content> & {
 	showScrollButtons?: boolean
 	viewportClassName?: string
+	container?: HTMLElement | null
 }) {
 	const overlayScopeAttributes = useOverlayInteractionScopeContentAttributes()
+	const currentOverlayZIndex = useCurrentOverlayZIndex()
+	const effectiveZIndex = resolveEffectiveOverlayZIndex(currentOverlayZIndex, style?.zIndex, 10)
 
 	return (
-		<SelectPrimitive.Portal>
+		<SelectPrimitive.Portal {...(container != null ? { container } : {})}>
 			<SelectPrimitive.Content
 				data-slot="select-content"
 				className={cn(
 					"max-h-(--radix-select-content-available-height) origin-(--radix-select-content-transform-origin) relative min-w-[8rem] overflow-y-auto overflow-x-hidden rounded-md border bg-popover text-popover-foreground shadow-md data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95 data-[side=bottom]:slide-in-from-top-2 data-[side=left]:slide-in-from-right-2 data-[side=right]:slide-in-from-left-2 data-[side=top]:slide-in-from-bottom-2",
 					position === "popper" &&
 						"data-[side=bottom]:translate-y-1 data-[side=left]:-translate-x-1 data-[side=right]:translate-x-1 data-[side=top]:-translate-y-1",
-					"z-select",
+					effectiveZIndex == null && "z-select",
 					className,
 				)}
+				style={{
+					...style,
+					...(effectiveZIndex != null ? { zIndex: effectiveZIndex } : {}),
+				}}
 				position={position}
 				align={align}
 				{...props}
@@ -92,7 +106,13 @@ function SelectContent({
 						viewportClassName,
 					)}
 				>
-					{children}
+					{effectiveZIndex != null ? (
+						<OverlayZIndexProvider value={effectiveZIndex}>
+							{children}
+						</OverlayZIndexProvider>
+					) : (
+						children
+					)}
 				</SelectPrimitive.Viewport>
 				{showScrollButtons && <SelectScrollDownButton />}
 			</SelectPrimitive.Content>

@@ -21,6 +21,7 @@ import vitePluginTransformBaseImports from "./plugins/vite-plugin-transform-base
 import { lucideDynamicAggregatePlugin } from "./plugins/vite-plugin-lucide-dynamic-aggregate"
 import vitePluginCriticalFontPreload from "./plugins/vite-plugin-font-preload"
 import vitePluginMagicApi from "./plugins/vite-plugin-magic-api"
+import vitePluginIframeRuntime from "./plugins/vite-plugin-iframe-runtime"
 import { externalGlobalsPlugin } from "./plugins/vite-plugin-external-globals"
 import { getOverlayViteConfig } from "./vite/overlay"
 import { createCodeSplittingGroups } from "./vite/code-splitting-groups"
@@ -184,6 +185,10 @@ function getBaseViteConfig(env: NodeJS.ProcessEnv = process.env, mode?: string):
 					replacement: resolve(__dirname, "src"),
 				},
 				{
+					find: "@magic-admin-v2",
+					replacement: resolve(__dirname, "packages/magic-admin-v2/src"),
+				},
+				{
 					find: "@enterprise",
 					replacement: resolve(__dirname, "enterprise/src"),
 				},
@@ -255,6 +260,7 @@ function getBaseViteConfig(env: NodeJS.ProcessEnv = process.env, mode?: string):
 			lucideDynamicAggregatePlugin(),
 			createAppServiceWorkerPlugin(),
 			vitePluginMagicApi({ projectRoot: __dirname }),
+			vitePluginIframeRuntime({ projectRoot: __dirname }),
 			vitePluginMagicAdminSource({
 				projectRoot: __dirname,
 			}),

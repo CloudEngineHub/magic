@@ -42,6 +42,7 @@ use Hyperf\Odin\Contract\Model\ModelInterface;
 use Hyperf\Odin\Factory\ModelFactory;
 use Hyperf\Odin\Model\ModelOptions;
 use Hyperf\Odin\Utils\MessageUtil;
+use Hyperf\Odin\Utils\ToolUtil;
 use Throwable;
 
 use function Hyperf\Translation\__;
@@ -105,7 +106,8 @@ class LLMTestAppService extends AbstractLLMAppService
                     $modelConfig,
                     $serviceProviderConfigDTO,
                     $providerModelEntity,
-                    $request->getSupportMultiModal()
+                    $request->getSupportMultiModal(),
+                    $request->getSupportFunction()
                 ),
                 NaturalLanguageProcessing::VLM => $this->vlmConnectivityTestByConfig(
                     $providerCode,
@@ -297,9 +299,11 @@ class LLMTestAppService extends AbstractLLMAppService
         ?ModelConfigItem $modelConfig = null,
         ?ProviderConfigDTO $serviceProviderConfigDTO = null,
         ?ProviderModelEntity $providerModelEntity = null,
-        ?bool $requestedSupportMultiModal = null
+        ?bool $requestedSupportMultiModal = null,
+        ?bool $requestedSupportFunction = null
     ): ConnectResponse {
         $supportMultiModal = $this->resolveConnectivitySupportMultiModal($modelConfig, $requestedSupportMultiModal);
+        $supportFunction = $this->resolveConnectivitySupportFunction($modelConfig, $requestedSupportFunction);
         $model = null;
         $getModel = function () use (
             &$model,
@@ -307,7 +311,8 @@ class LLMTestAppService extends AbstractLLMAppService
             $serviceProviderConfig,
             $modelVersion,
             $modelConfig,
-            $supportMultiModal
+            $supportMultiModal,
+            $supportFunction
         ): ModelInterface {
             if ($model instanceof ModelInterface) {
                 return $model;
@@ -319,7 +324,8 @@ class LLMTestAppService extends AbstractLLMAppService
                 $modelVersion,
                 false,
                 $modelConfig,
-                $supportMultiModal
+                $supportMultiModal,
+                $supportFunction
             );
             if (! $createdModel instanceof ModelInterface) {
                 ExceptionBuilder::throw(ServiceProviderErrorCode::InvalidModelType);
@@ -336,7 +342,8 @@ class LLMTestAppService extends AbstractLLMAppService
                 $modelVersion,
                 $serviceProviderConfigDTO,
                 $providerModelEntity,
-                $modelConfig
+                $modelConfig,
+                $supportFunction
             ): void {
                 $getModel()->chatWithRequest($this->buildConnectivityChatRequest(
                     LLMConnectivityTestMessageBuilder::buildTextMessages(),
@@ -347,7 +354,8 @@ class LLMTestAppService extends AbstractLLMAppService
                         $serviceProviderConfigDTO,
                         $providerModelEntity
                     ),
-                    $modelConfig
+                    $modelConfig,
+                    includeFunctionCallTools: $supportFunction
                 ));
             },
             $supportMultiModal,
@@ -382,7 +390,8 @@ class LLMTestAppService extends AbstractLLMAppService
         string $modelVersion,
         bool $embedding,
         ?ModelConfigItem $modelConfig = null,
-        ?bool $supportMultiModal = null
+        ?bool $supportMultiModal = null,
+        ?bool $supportFunction = null
     ): EmbeddingInterface|ModelInterface {
         $providerCodeEnum = ProviderCode::from($resolvedProviderCode);
         $providerConfigItem = ProviderConfigFactory::create($providerCodeEnum, $resolvedConfig);
@@ -390,12 +399,13 @@ class LLMTestAppService extends AbstractLLMAppService
 
         $implementationConfig = $providerCodeEnum->getImplementationConfig($providerConfigItem, $modelVersion);
         $supportMultiModal ??= $modelConfig?->isSupportMultiModal() ?? false;
+        $supportFunction ??= $modelConfig?->isSupportFunction() ?? false;
 
         return ModelFactory::create(
             $providerCodeEnum->getImplementationForModel($embedding, $supportMultiModal),
             $modelVersion,
             $implementationConfig,
-            modelOptions: $this->buildConnectivityModelOptions($embedding, $modelConfig, $supportMultiModal),
+            modelOptions: $this->buildConnectivityModelOptions($embedding, $modelConfig, $supportMultiModal, $supportFunction),
             apiOptions: new ApiOptions([
                 'proxy' => $this->resolveConnectivityProxy($resolvedConfig),
             ])
@@ -405,11 +415,12 @@ class LLMTestAppService extends AbstractLLMAppService
     private function buildConnectivityModelOptions(
         bool $embedding,
         ?ModelConfigItem $modelConfig = null,
-        ?bool $supportMultiModal = null
+        ?bool $supportMultiModal = null,
+        ?bool $supportFunction = null
     ): ModelOptions {
         return new ModelOptions([
             'chat' => ! $embedding,
-            'function_call' => ! $embedding && ($modelConfig?->isSupportFunction() ?? false),
+            'function_call' => ! $embedding && ($supportFunction ?? $modelConfig?->isSupportFunction() ?? false),
             'embedding' => $embedding,
             'multi_modal' => $supportMultiModal ?? $modelConfig?->isSupportMultiModal() ?? false,
             'vector_size' => $embedding ? ($modelConfig?->getVectorSize() ?? 0) : 0,
@@ -417,6 +428,7 @@ class LLMTestAppService extends AbstractLLMAppService
             'max_output_tokens' => $modelConfig?->getMaxOutputTokens(),
             'default_temperature' => $modelConfig?->getCreativity(),
             'fixed_temperature' => $modelConfig?->getTemperature(),
+            'chat_api' => $modelConfig?->getChatApi(),
         ]);
     }
 
@@ -424,7 +436,8 @@ class LLMTestAppService extends AbstractLLMAppService
         array $messageArrays,
         array $businessParams,
         ?ModelConfigItem $modelConfig = null,
-        ?int $maxTokens = null
+        ?int $maxTokens = null,
+        bool $includeFunctionCallTools = false
     ): ChatCompletionRequest {
         $messages = [];
         foreach ($messageArrays as $messageArray) {
@@ -439,7 +452,7 @@ class LLMTestAppService extends AbstractLLMAppService
             temperature: $this->resolveConnectivityTemperature($modelConfig),
             maxTokens: $maxTokens ?? $this->resolveConnectivityMaxTokens($modelConfig),
             stop: [],
-            tools: []
+            tools: $this->buildConnectivityChatTools($includeFunctionCallTools)
         );
         $chatRequest->setBusinessParams($businessParams);
         return $chatRequest;
@@ -453,6 +466,36 @@ class LLMTestAppService extends AbstractLLMAppService
         ?bool $requestedSupportMultiModal
     ): bool {
         return $modelConfig?->isSupportMultiModal() ?? $requestedSupportMultiModal ?? false;
+    }
+
+    /**
+     * 解析按配置连通性测试最终使用的函数调用能力。
+     */
+    private function resolveConnectivitySupportFunction(
+        ?ModelConfigItem $modelConfig,
+        ?bool $requestedSupportFunction
+    ): bool {
+        return $modelConfig?->isSupportFunction() ?? $requestedSupportFunction ?? false;
+    }
+
+    /**
+     * 勾选函数调用时，把固定测试 tool 转成 Odin ToolDefinition。
+     */
+    private function buildConnectivityChatTools(bool $includeFunctionCallTools): array
+    {
+        if (! $includeFunctionCallTools) {
+            return [];
+        }
+
+        $tools = [];
+        foreach (LLMConnectivityTestMessageBuilder::buildFunctionCallTools() as $toolArray) {
+            $tool = ToolUtil::createFromArray($toolArray);
+            if ($tool) {
+                $tools[] = $tool;
+            }
+        }
+
+        return $tools;
     }
 
     private function resolveConnectivityTemperature(?ModelConfigItem $modelConfig = null): float

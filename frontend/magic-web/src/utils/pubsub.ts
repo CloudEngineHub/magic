@@ -139,6 +139,8 @@ export const PubSubEvents = {
 	Open_File_Tab_By_Path: "super_magic_open_file_tab_by_path",
 	/** 超级麦吉 - 打开知识库文件预览tab（由引用点击触发） */
 	Open_Knowledge_Base_Tab: "super_magic_open_knowledge_base_tab",
+	/** Super Magic - open a micro-app preview tab from a mention click. */
+	Open_Micro_App_Tab: "super_magic_open_micro_app_tab",
 	/** 超级麦吉 - 打开演示模式tab */
 	Open_Playback_Tab: "super_magic_open_playback_tab",
 	/** 超级麦吉 - 展开话题对话面板 */
@@ -177,6 +179,8 @@ export const PubSubEvents = {
 	Receive_RecordSummary_Audio_File: "receive_record_summary_audio_file",
 	/** 超级麦吉 - 设置输入框消息 */
 	Set_Input_Message: "PubSub_Set_Input_Message",
+	/** 超级麦吉 - PPT 导出问题诊断 */
+	Pptx_Export_Issues: "PubSub_Pptx_Export_Issues",
 	/** Widget-only editor input maintenance command. */
 	Magic_Widget_Editor_Command: "magic_widget_editor_command",
 	/** 超级麦吉 - 设置目标模型 */

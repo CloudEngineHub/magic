@@ -2,7 +2,7 @@ import { resolveFilePresentation } from "@/pages/superMagic/components/TopicFile
 import { observer } from "mobx-react-lite"
 import { decodePathForDisplay } from "./helper"
 import pubsub, { PubSubEvents } from "@/utils/pubsub"
-import { useMessageListContext } from "@/pages/superMagic/components/MessageList/context"
+import { useMessageListProjectFilesStore } from "@/pages/superMagic/components/MessageList/context"
 import { FileReference, getFileExtensionFromPath } from "./FileReference"
 import {
 	createCanonicalWorkspaceHref,
@@ -17,7 +17,7 @@ import {
 
 export const FilePath = observer((props: { path?: unknown }) => {
 	const { path } = props
-	const { projectFilesStore } = useMessageListContext()
+	const projectFilesStore = useMessageListProjectFilesStore()
 	const normalizedPath = typeof path === "string" ? path : ""
 	// 只解码展示文本，内部匹配和打开逻辑仍使用原始路径。
 	const displayPath = decodePathForDisplay(normalizedPath)

@@ -86,6 +86,22 @@ class MicroAppProjectApi extends AbstractApi
         return $this->microAppProjectAppService->list($requestContext, $requestDTO);
     }
 
+    public function mentionList(RequestContext $requestContext): array
+    {
+        $requestContext->setUserAuthorization($this->getAuthorization());
+
+        $requestDTO = PublishedMicroAppListRequestDTO::fromRequest($this->request);
+
+        return $this->microAppProjectAppService->mentionList($requestContext, $requestDTO);
+    }
+
+    public function recordVisit(RequestContext $requestContext, int $appId): array
+    {
+        $requestContext->setUserAuthorization($this->getAuthorization());
+
+        return $this->microAppProjectAppService->recordVisit($requestContext, $appId);
+    }
+
     public function update(RequestContext $requestContext, int $appId): array
     {
         $requestContext->setUserAuthorization($this->getAuthorization());
@@ -100,6 +116,18 @@ class MicroAppProjectApi extends AbstractApi
         $requestContext->setUserAuthorization($this->getAuthorization());
 
         return $this->microAppProjectAppService->show($requestContext, $appId);
+    }
+
+    public function getRuntimeProject(RequestContext $requestContext, int $appId): array
+    {
+        $requestContext->setUserAuthorization($this->getAuthorization());
+        return $this->microAppProjectAppService->getRuntimeProject($requestContext, $appId);
+    }
+
+    public function ensureRuntimeProject(RequestContext $requestContext, int $appId): array
+    {
+        $requestContext->setUserAuthorization($this->getAuthorization());
+        return $this->microAppProjectAppService->ensureRuntimeProject($requestContext, $appId);
     }
 
     public function showByProject(RequestContext $requestContext, int $projectId): array

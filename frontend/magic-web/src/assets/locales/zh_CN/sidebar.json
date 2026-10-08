@@ -15,6 +15,7 @@
 	},
 	"chats": {
 		"empty": "暂无对话",
+		"myChats": "我的对话",
 		"newChat": "新建对话",
 		"refresh": "刷新对话列表",
 		"title": "对话"
@@ -36,7 +37,7 @@
 		"upgradeNow": "立即升级"
 	},
 	"home": {
-		"title": "首页"
+		"title": "新建任务"
 	},
 	"mobileShell": {
 		"themeToggle": {
@@ -101,7 +102,7 @@
 		"upgrade": "升级"
 	},
 	"skillsLibrary": {
-		"title": "技能 · 连接器"
+		"title": "数字员工・技能・连接器"
 	},
 	"slidesTemplates": {
 		"compactCount": "{{value}} 套",

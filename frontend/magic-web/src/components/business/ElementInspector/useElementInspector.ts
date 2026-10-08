@@ -206,7 +206,7 @@ export function useElementInspector({
 			if (
 				e.target instanceof Element &&
 				e.target.closest(
-					"[data-element-inspector-overlay], [data-element-inspector-panel-portal]",
+					"[data-element-inspector-overlay], [data-element-inspector-panel-portal], [data-element-inspector-capture-authorization]",
 				)
 			) {
 				return

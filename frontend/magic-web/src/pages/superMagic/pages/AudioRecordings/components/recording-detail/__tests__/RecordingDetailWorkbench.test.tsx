@@ -29,4 +29,18 @@ describe("RecordingDetailWorkbench", () => {
 		expect(screen.getByTestId("workbench-left")).toBeInTheDocument()
 		expect(screen.getByTestId("workbench-right")).toBeInTheDocument()
 	})
+
+	/** Verifies project previews can opt into a compact gutter without changing shared defaults. */
+	it("supports compact horizontal padding for embedded project previews", () => {
+		render(
+			<RecordingDetailWorkbench
+				compactHorizontalPadding
+				left={<div>Left</div>}
+				right={<div>Right</div>}
+			/>,
+		)
+
+		expect(screen.getByTestId("recording-detail-workbench")).toHaveClass("px-2.5")
+		expect(screen.getByTestId("recording-detail-workbench")).not.toHaveClass("px-8")
+	})
 })

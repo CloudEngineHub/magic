@@ -17,16 +17,6 @@ class GetParticipatedProjectsRequestDTO extends GetProjectListRequestDTO
 {
     public ?string $sortMode = null;
 
-    public function setSortMode(?string $sortMode): void
-    {
-        $this->sortMode = $sortMode;
-    }
-
-    public function getSortMode(): ?ProjectSortMode
-    {
-        return $this->sortMode === null ? null : ProjectSortMode::from($this->sortMode);
-    }
-
     /**
      * Whether to show collaboration projects.
      */
@@ -36,6 +26,16 @@ class GetParticipatedProjectsRequestDTO extends GetProjectListRequestDTO
      * Whether to show hidden projects. Default 0 means hidden projects are filtered out.
      */
     public int $showHidden = 0;
+
+    public function setSortMode(?string $sortMode): void
+    {
+        $this->sortMode = $sortMode;
+    }
+
+    public function getSortMode(): ?ProjectSortMode
+    {
+        return $this->sortMode === null ? null : ProjectSortMode::from($this->sortMode);
+    }
 
     /**
      * Get show collaboration flag.

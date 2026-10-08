@@ -10,6 +10,7 @@ import {
 import { mentionItemsProcessor } from "@/pages/superMagic/components/MessageEditor/services/MentionItemsProcessor"
 import { TopicMode } from "@/pages/superMagic/pages/Workspace/TopicMode"
 import { TopicStore } from "@/pages/superMagic/stores/core/topic"
+import { projectStore, topicStore, workspaceStore } from "@/pages/superMagic/stores/core"
 
 vi.mock("@/apis", () => ({
 	SuperMagicApi: {},
@@ -91,6 +92,46 @@ vi.mock("@/pages/superMagic/services", () => ({
 }))
 
 describe("messageSendPreparation", () => {
+	it("creates a blank scoped chat instead of reusing a previously selected task", async () => {
+		const previousProject = projectStore.selectedProject
+		const previousTopic = topicStore.selectedTopic
+		const previousWorkspace = workspaceStore.selectedWorkspace
+		projectStore.setSelectedProject({ id: "old-project" } as ProjectListItem)
+		topicStore.setSelectedTopic({ id: "old-topic", project_id: "old-project" } as Topic)
+		workspaceStore.setSelectedWorkspace({ id: "old-workspace" } as never)
+		const project = { id: "new-chat", workspace_id: "chat-workspace" } as ProjectListItem
+		const topic = { id: "new-topic", project_id: project.id } as Topic
+		const createProject = vi.fn().mockResolvedValue({ project, topic })
+		try {
+			const result = await preparePanelSend({
+				params: { value: { type: "doc" }, mentionItems: [] },
+				context: {
+					getTemporaryWorkdir: () => "chat-home-files",
+					selectedProject: null,
+					selectedTopic: null,
+					selectedWorkspace: null,
+					createProject,
+					setSelectedProject: vi.fn(),
+					setSelectedTopic: vi.fn(),
+					topicStore: new TopicStore(),
+				},
+				tabPattern: TopicMode.General,
+				messagesLength: 0,
+			})
+			expect(createProject).toHaveBeenCalledExactlyOnceWith({
+				projectMode: TopicMode.General,
+				workdir: "chat-home-files",
+			})
+			expect(result?.currentProject?.id).toBe("new-chat")
+			expect(result?.currentTopic?.id).toBe("new-topic")
+			expect(result?.context.workspaceId).toBe("chat-workspace")
+			expect(projectStore.selectedProject?.id).toBe("old-project")
+		} finally {
+			projectStore.setSelectedProject(previousProject)
+			topicStore.setSelectedTopic(previousTopic)
+			workspaceStore.setSelectedWorkspace(previousWorkspace)
+		}
+	})
 	beforeEach(() => {
 		modeServiceMock.defaultAgentCode = undefined
 		isModeValidMock.mockReset()

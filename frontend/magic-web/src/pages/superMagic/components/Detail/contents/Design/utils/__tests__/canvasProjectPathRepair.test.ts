@@ -7,6 +7,7 @@ import {
 	commitCanvasProjectPathRepair,
 	planCanvasProjectsBeforeFileOperation,
 	repairCanvasProjectsBeforeFileOperation,
+	resolveCanvasOperationConfirmTitleKey,
 	syncCanvasProjectNameAfterFileOperation,
 } from "../canvasProjectPathRepair"
 
@@ -27,6 +28,8 @@ function projectContent(version: string, canvas: unknown, name = "Canvas") {
 	return `window.magicProjectConfig = ${JSON.stringify({ version, type: "design", name, canvas: canvasValue })};`
 }
 
+const designCanvasFolder = { display_config: { type: "design" as const } }
+
 function attachments() {
 	return [
 		{
@@ -35,6 +38,7 @@ function attachments() {
 			name: "Canvas",
 			is_directory: true,
 			relative_file_path: "Canvas",
+			...designCanvasFolder,
 		},
 		{
 			file_id: "main",
@@ -64,6 +68,7 @@ function attachmentsWithParentIdOnly() {
 			file_id: "root",
 			file_name: "Canvas",
 			is_directory: true,
+			...designCanvasFolder,
 		},
 		{
 			file_id: "main",
@@ -409,6 +414,60 @@ describe("repairCanvasProjectsBeforeFileOperation", () => {
 		expect(SuperMagicApi.saveFileContent).not.toHaveBeenCalled()
 	})
 
+	it("skips path-repair planning for in-canvas resource moves when attachmentIndex is present", async () => {
+		const { buildAttachmentIndex } =
+			await import("@/pages/superMagic/components/TopicFilesButton/utils/attachmentIndex")
+
+		const image = {
+			file_id: "image",
+			file_name: "a.png",
+			parent_id: "images",
+			relative_file_path: "Canvas/images/a.png",
+		}
+		const images = {
+			file_id: "images",
+			file_name: "images",
+			parent_id: "root",
+			is_directory: true,
+			relative_file_path: "Canvas/images",
+			children: [image],
+		}
+		const main = {
+			file_id: "main",
+			file_name: "magic.project.js",
+			parent_id: "root",
+			relative_file_path: "Canvas/magic.project.js",
+		}
+		const root = {
+			file_id: "root",
+			file_name: "Canvas",
+			name: "Canvas",
+			is_directory: true,
+			relative_file_path: "Canvas",
+			children: [main, images],
+			...designCanvasFolder,
+		}
+		const nestedAttachments = [root] as any
+		const attachmentIndex = buildAttachmentIndex(nestedAttachments)
+
+		const imagesPlan = await planCanvasProjectsBeforeFileOperation({
+			attachments: nestedAttachments,
+			attachmentIndex,
+			fileIds: ["images"],
+			operation: "move",
+		})
+		const entryPlan = await planCanvasProjectsBeforeFileOperation({
+			attachments: nestedAttachments,
+			attachmentIndex,
+			fileIds: ["main"],
+			operation: "move",
+		})
+
+		expect(imagesPlan.affectedProjects).toEqual([])
+		expect(entryPlan.affectedProjects).toEqual([])
+		expect(getFileContentsByIds).not.toHaveBeenCalled()
+	})
+
 	it("resolves parent_id-only trees and absolute workspace paths", async () => {
 		vi.mocked(getFileContentById).mockResolvedValue(
 			projectContent("1.0.0", {
@@ -739,6 +798,7 @@ describe("repairCanvasProjectsBeforeFileOperation", () => {
 				parent_id: "parent",
 				is_directory: true,
 				relative_file_path: "Parent/Canvas",
+				...designCanvasFolder,
 			},
 			{
 				file_id: "main",
@@ -804,6 +864,44 @@ describe("repairCanvasProjectsBeforeFileOperation", () => {
 		expect(result.hasFailures).toBe(true)
 		expect(result.failures[0].message).toBe("sidecar read failed")
 		expect(result.repairedFileIds).toEqual(["main"])
+	})
+
+	it("skips path repair for non-design magic.project.js projects when an ancestor directory moves", async () => {
+		const tree = [
+			{
+				file_id: "parent",
+				file_name: "Workspace",
+				is_directory: true,
+				relative_file_path: "Workspace",
+			},
+			{
+				file_id: "slide-root",
+				file_name: "sales_dashboard",
+				parent_id: "parent",
+				is_directory: true,
+				relative_file_path: "Workspace/sales_dashboard",
+				display_config: { type: "slide" },
+			},
+			{
+				file_id: "slide-main",
+				file_name: "magic.project.js",
+				parent_id: "slide-root",
+				relative_file_path: "Workspace/sales_dashboard/magic.project.js",
+			},
+		] as any
+		vi.mocked(getFileContentById).mockResolvedValue(
+			"window.magicProjectConfig = { slides: ['slides/slide-1.html'] }" as never,
+		)
+
+		const result = await planCanvasProjectsBeforeFileOperation({
+			attachments: tree,
+			items: [tree[0]],
+			operation: "move",
+		})
+
+		expect(result.affectedProjects).toEqual([])
+		expect(result.hasFailures).toBe(false)
+		expect(getFileContentsByIds).not.toHaveBeenCalled()
 	})
 
 	it("reports a corrupted v2 main file without saving anything", async () => {
@@ -963,6 +1061,7 @@ describe("repairCanvasProjectsBeforeFileOperation", () => {
 				parent_id: "parent",
 				is_directory: true,
 				relative_file_path: "Parent/Canvas A",
+				...designCanvasFolder,
 			},
 			{
 				file_id: "main-a",
@@ -990,6 +1089,7 @@ describe("repairCanvasProjectsBeforeFileOperation", () => {
 				parent_id: "parent",
 				is_directory: true,
 				relative_file_path: "Parent/Canvas B",
+				...designCanvasFolder,
 			},
 			{
 				file_id: "main-b",
@@ -1061,5 +1161,20 @@ describe("repairCanvasProjectsBeforeFileOperation", () => {
 		expect(decompressCanvasData(savedConfig.canvas)).toEqual({
 			elements: [{ type: "image", contents: [{ src: "./images/a.png" }] }],
 		})
+	})
+
+	it("uses distinct confirm titles for canvas risk vs path-repair-only prompts", () => {
+		expect(
+			resolveCanvasOperationConfirmTitleKey({
+				requiresCanvasRisk: true,
+				hasPathRepairFailures: true,
+			}),
+		).toBe("topicFiles.canvasOperationRisk.title")
+		expect(
+			resolveCanvasOperationConfirmTitleKey({
+				requiresCanvasRisk: false,
+				hasPathRepairFailures: true,
+			}),
+		).toBe("topicFiles.canvasOperationRisk.pathRepairFailureTitle")
 	})
 })

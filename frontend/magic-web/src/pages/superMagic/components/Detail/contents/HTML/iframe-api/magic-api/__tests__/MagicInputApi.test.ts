@@ -35,7 +35,7 @@ describe("MagicInputApi", () => {
 		expect(typeof message.timestamp).toBe("number")
 		expect(message.timestamp).toBeGreaterThanOrEqual(before)
 		expect(message.timestamp).toBeLessThanOrEqual(after)
-		expect(origin).toBe("*")
+		expect(origin).toBe(window.location.origin)
 	})
 
 	it("传入空字符串时仍然发送消息（空字符串是合法 string）", () => {

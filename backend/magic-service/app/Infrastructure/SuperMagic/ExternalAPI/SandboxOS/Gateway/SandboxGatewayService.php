@@ -1141,6 +1141,24 @@ class SandboxGatewayService extends AbstractSandboxOS implements SandboxGatewayI
         }
     }
 
+    public function listReferencedProjects(DataIsolation $dataIsolation, string $sandboxId): GatewayResult
+    {
+        if (! $this->isEnabledSandbox()) {
+            return GatewayResult::success(['sandbox_id' => $sandboxId, 'referenced_projects' => []]);
+        }
+
+        return $this->requestReferencedProjects($dataIsolation, 'GET', $sandboxId);
+    }
+
+    public function unmountReferencedProject(DataIsolation $dataIsolation, string $sandboxId, string $projectId): GatewayResult
+    {
+        if (! $this->isEnabledSandbox()) {
+            return GatewayResult::success(['sandbox_id' => $sandboxId, 'project_id' => $projectId]);
+        }
+
+        return $this->requestReferencedProjects($dataIsolation, 'DELETE', $sandboxId, $projectId);
+    }
+
     /**
      * Build the per-request header map forwarded to sandbox-gateway for
      * the per-pod methods that talk to a specific user-bound pod.
@@ -1239,6 +1257,34 @@ class SandboxGatewayService extends AbstractSandboxOS implements SandboxGatewayI
 
         // Normal mode: use parent implementation
         return parent::buildProxyPath($sandboxId, $agentPath);
+    }
+
+    private function requestReferencedProjects(DataIsolation $dataIsolation, string $method, string $sandboxId, ?string $projectId = null): GatewayResult
+    {
+        $path = sprintf('api/v1/sandboxes/%s/referenced-projects', rawurlencode($sandboxId));
+        if ($projectId !== null) {
+            $path .= '/' . rawurlencode($projectId);
+        }
+
+        try {
+            $response = $this->getClient()->request($method, $this->buildApiPath($path), [
+                'headers' => $this->getCommonHeaders($dataIsolation),
+                'timeout' => 60,
+            ]);
+            if ($response->getStatusCode() < 200 || $response->getStatusCode() >= 300) {
+                return GatewayResult::error('Referenced project request failed with HTTP ' . $response->getStatusCode());
+            }
+
+            return GatewayResult::fromApiResponse(Json::decode($response->getBody()->getContents()));
+        } catch (Throwable $e) {
+            $this->logger->error('[Sandbox][Gateway] Referenced project request failed', [
+                'method' => $method,
+                'sandbox_id' => $sandboxId,
+                'project_id' => $projectId,
+                'error' => $e->getMessage(),
+            ]);
+            return GatewayResult::error('Referenced project request failed: ' . $e->getMessage());
+        }
     }
 
     /**

@@ -1,6 +1,6 @@
 import { useFileAccess } from "@/pages/superMagic/providers/FileAccessProvider"
 import { useMemoizedFn } from "ahooks"
-import { useMessageListContext } from "@/pages/superMagic/components/MessageList/context"
+import { useMessageListProjectFilesStore } from "@/pages/superMagic/components/MessageList/context"
 import {
 	downloadFileByPath as publishDownloadFileByPath,
 	findFilePathAttachment,
@@ -10,7 +10,7 @@ import { useMessageAttachmentDownload } from "./useMessageAttachmentDownload"
 
 /** Resolves path attachments before downloading related resources. */
 export function useFilePathAttachmentDownload() {
-	const { projectFilesStore } = useMessageListContext()
+	const projectFilesStore = useMessageListProjectFilesStore()
 	const downloadFile = useMessageAttachmentDownload()
 	const { permissions: access } = useFileAccess()
 

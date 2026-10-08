@@ -52,6 +52,10 @@ return [
     'file_version' => [
         'max_versions' => \Hyperf\Support\env('FILE_VERSION_MAX_VERSIONS', 10),
     ],
+    'file_limit' => [
+        // 项目空间/用户空间文件数上限，达到该值后禁止发起新的沙箱任务；<= 0 表示关闭校验
+        'max_count' => (int) \Hyperf\Support\env('SUPER_MAGIC_FILE_COUNT_LIMIT', 5000),
+    ],
     'agent' => [
         // Base path inside the agent sandbox where cross-project mounts live.
         // Used to translate relative file_path/directory_path in cross-project

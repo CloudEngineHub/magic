@@ -3,7 +3,7 @@ import { EventType } from "@/types/chat"
 import type { Topic } from "../pages/Workspace/types"
 
 /** Debounce for interrupt taps (matches legacy pub/sub UX). */
-export const SUPER_MAGIC_INTERRUPT_DEBOUNCE_MS = 3000
+export const SUPER_MAGIC_INTERRUPT_DEBOUNCE_MS = 300
 
 function generateUniqueId(): string {
 	const timestamp = Date.now().toString(36)

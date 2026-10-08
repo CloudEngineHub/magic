@@ -14,7 +14,7 @@ import { observer } from "mobx-react-lite"
 import userFilesStore from "@/stores/userFiles"
 import type { AttachmentItem } from "../../../TopicFilesButton/hooks/types"
 import { IconMenu2, IconX } from "@tabler/icons-react"
-import { PanelLeftOpen } from "lucide-react"
+import { FolderTree } from "lucide-react"
 import { clipboard } from "@/utils/clipboard-helpers"
 import pubsub, { PubSubEvents } from "@/utils/pubsub"
 import { useFileInfoPanel } from "../../../TopicFilesButton/hooks/useFileInfoPanel"
@@ -140,6 +140,9 @@ const FilesViewer = memo(
 				openKnowledgeBaseTab,
 				closeKnowledgeBaseTab,
 				isKnowledgeBaseTab,
+				openMicroAppTab,
+				closeMicroAppTab,
+				isPublishedMicroAppTab,
 				handleFileFullscreen,
 				handleExitFullscreen,
 				enterPreviewFullscreen,
@@ -148,7 +151,11 @@ const FilesViewer = memo(
 				getTabFileContext,
 				getFileManagerState,
 				updateFileManagerState,
+				isShareRoute,
+				isMagicShareRoute,
 			} = useFilesViewer(props)
+			// Route state covers topic/pure/Magic shares; the prop covers file-share callers during setup.
+			const shouldRenderQuickOpen = !isShareRoute && !isMagicShareRoute && !props.isFileShare
 			const tabsRef = useRef(tabs)
 			tabsRef.current = tabs
 			const closingLeftTabsRef = useRef(false)
@@ -392,6 +399,8 @@ const FilesViewer = memo(
 				// Knowledge base tab相关方法
 				openKnowledgeBaseTab,
 				closeKnowledgeBaseTab,
+				openMicroAppTab,
+				closeMicroAppTab,
 				enterPreviewFullscreen,
 				exitPreviewFullscreen,
 				// Website tab相关方法
@@ -523,12 +532,12 @@ const FilesViewer = memo(
 					<button
 						ref={props.fileSidebarControl.triggerRef}
 						type="button"
-						className="mx-1 flex size-7 shrink-0 items-center justify-center rounded-md hover:bg-accent focus-visible:ring-2 focus-visible:ring-ring"
+						className="mx-1 flex size-7 shrink-0 items-center justify-center rounded-full bg-background shadow-sm hover:bg-accent focus-visible:ring-2 focus-visible:ring-ring"
 						onClick={props.fileSidebarControl.onToggle}
 						aria-label={t("sidebarPanels.expandFiles")}
 						data-testid="file-viewer-expand-files"
 					>
-						<PanelLeftOpen size={16} />
+						<FolderTree size={16} />
 					</button>
 				</Tooltip>
 			) : null
@@ -676,6 +685,8 @@ const FilesViewer = memo(
 					// 判断是否是知识库tab
 					const isKbTab = isKnowledgeBaseTab(tab.id)
 					const knowledgeBaseData = isKbTab ? (tab as any).data : undefined
+					const isMicroAppTab = isPublishedMicroAppTab(tab.id)
+					const microAppData = isMicroAppTab ? (tab as any).data : undefined
 					return {
 						isActive,
 						node: (
@@ -703,7 +714,9 @@ const FilesViewer = memo(
 								playbackProps={playbackProps}
 								hideTabBar={props.hideTabBar}
 								knowledgeBaseData={knowledgeBaseData}
+								microAppData={microAppData}
 								fillPortalSurface={!isDocumentFlowFullscreen}
+								onCloseTab={handleTabClose}
 							/>
 						),
 					}
@@ -720,10 +733,13 @@ const FilesViewer = memo(
 				shouldRenderTab,
 				cachedTabIds,
 				isPlaybackTab,
+				isKnowledgeBaseTab,
+				isPublishedMicroAppTab,
 				props,
 				props.autoDetail,
 				props.userSelectDetail,
 				openFileTab,
+				handleTabClose,
 			])
 			const inlineCachedTabs = cachedTabRenders
 				.filter(() => isDocumentFlowFullscreen)
@@ -788,7 +804,14 @@ const FilesViewer = memo(
 									{tabs.map(renderTabItem)}
 								</HeadlessHorizontalScroll>
 
-								<WebsitePresetMenu onOpenWebsiteTab={openWebsiteTab} />
+								{shouldRenderQuickOpen ? (
+									<WebsitePresetMenu
+										onOpenWebsiteTab={openWebsiteTab}
+										onOpenMicroAppTab={openMicroAppTab}
+										onOpenFileTab={openFileTab}
+										fileAttachments={tabAttachments}
+									/>
+								) : null}
 
 								{/* 展开按钮 */}
 								<DropdownMenu

@@ -15,6 +15,9 @@ import { useFontSize } from "@/providers/AppearanceProvider/hooks"
 import { useHighlight } from "./hooks/useHighlight"
 import { useStyles } from "./style"
 import { useCodeBlockWrapPreference } from "@/services/markdown/codeBlockWrapPreference"
+import { escapeCodeHtml, highlightCodeHtml, type CodeSearchHighlight } from "./search-highlights"
+
+const EMPTY_SEARCH_HIGHLIGHTS: CodeSearchHighlight[] = []
 
 interface MagicCodeProps extends Omit<HTMLAttributes<HTMLDivElement>, "value" | "onChange"> {
 	data?: string
@@ -24,6 +27,7 @@ interface MagicCodeProps extends Omit<HTMLAttributes<HTMLDivElement>, "value" | 
 	onChange?: (value: string) => void
 	copyText?: string
 	enableWrapToggle?: boolean
+	searchHighlights?: CodeSearchHighlight[]
 }
 
 // 检测是否为触摸设备
@@ -41,6 +45,7 @@ const MagicCode = memo((props: MagicCodeProps) => {
 		isStreaming = false,
 		copyText,
 		enableWrapToggle = false,
+		searchHighlights = EMPTY_SEARCH_HIGHLIGHTS,
 		...rest
 	} = props
 	const [controllableValue] = useControllableValue<string>({
@@ -76,6 +81,14 @@ const MagicCode = memo((props: MagicCodeProps) => {
 	)
 
 	const codeContainer = useRef(null)
+	const highlightedHtml = useMemo(() => {
+		// Use the same untrimmed source while syntax highlighting loads so offsets stay valid.
+		const html =
+			isLoading || isStreaming
+				? `<pre><code>${escapeCodeHtml(controllableValue ?? "")}</code></pre>`
+				: (data as string)
+		return html ? highlightCodeHtml(html, searchHighlights, controllableValue) : ""
+	}, [controllableValue, data, isLoading, isStreaming, searchHighlights])
 	const isHover = useHover(codeContainer)
 
 	// 在触摸设备上，使用不同的显示逻辑
@@ -138,7 +151,7 @@ const MagicCode = memo((props: MagicCodeProps) => {
 					</MagicButton>
 				</div>
 			) : null}
-			{isLoading || isStreaming ? (
+			{(isLoading || isStreaming) && !searchHighlights.length ? (
 				<code
 					className={cx(
 						styles.inner,
@@ -155,7 +168,7 @@ const MagicCode = memo((props: MagicCodeProps) => {
 						enableWrapToggle && (isWrapped ? styles.codeWrapped : styles.codeUnwrapped),
 					)}
 					dangerouslySetInnerHTML={{
-						__html: data as string,
+						__html: highlightedHtml,
 					}}
 				/>
 			)}

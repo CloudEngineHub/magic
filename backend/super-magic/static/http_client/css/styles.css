@@ -1262,6 +1262,10 @@ input[type="checkbox"] {
     overflow-y: auto;
 }
 
+.tool-stream-detail {
+    display: block;
+}
+
 /* 工具调用折叠块 */
 .tool-call-block {
     align-self: flex-start;

@@ -32,7 +32,7 @@ const ChatsPagePanel = observer(function ChatsPagePanel() {
 	const navigate = useNavigate()
 	const {
 		items,
-		isLoading,
+		isInitialChatListLoading,
 		searchValue,
 		setSearchValue,
 		isEmpty,
@@ -229,7 +229,7 @@ const ChatsPagePanel = observer(function ChatsPagePanel() {
 		<>
 			<ChatConversationListView
 				items={items}
-				isLoading={isLoading}
+				isInitialChatListLoading={isInitialChatListLoading}
 				searchValue={searchValue}
 				isEmpty={isEmpty}
 				isSearchEmpty={isSearchEmpty}

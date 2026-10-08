@@ -189,10 +189,25 @@ export const toolIconMap: Record<string, ToolIconConfig> = {
 		bgColor: "transparent",
 		assetUrl: queryTableIcon,
 	},
+	batch_get_magicbase_rows: {
+		icon: DefaultIcon,
+		bgColor: "transparent",
+		assetUrl: queryTableIcon,
+	},
+	get_magicbase_row: {
+		icon: DefaultIcon,
+		bgColor: "transparent",
+		assetUrl: viewTableIcon,
+	},
 	create_magicbase_row: {
 		icon: DefaultIcon,
 		bgColor: "transparent",
 		assetUrl: createTableIcon,
+	},
+	update_magicbase_row: {
+		icon: DefaultIcon,
+		bgColor: "transparent",
+		assetUrl: updateFieldIcon,
 	},
 	batch_create_magicbase_rows: {
 		icon: DefaultIcon,

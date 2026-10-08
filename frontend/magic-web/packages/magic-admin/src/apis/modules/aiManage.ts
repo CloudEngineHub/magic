@@ -324,6 +324,20 @@ export const generateAIManageApi = (client: HttpClient) => {
 			)
 		},
 
+		/** 数据看板 - 文件产出分析 Summary */
+		getDataDashboardFileAnalysisSummary(data: DataDashboard.FileAnalysisSummaryQuery) {
+			return client.get<DataDashboard.FileAnalysisSummary>(
+				genRequestUrl(RequestUrl.getDataDashboardFileAnalysisSummary, {}, data),
+			)
+		},
+
+		/** 数据看板 - 文件产出分析 Tabs */
+		getDataDashboardFileAnalysisTabs(data: DataDashboard.FileAnalysisTabsQuery) {
+			return client.get<DataDashboard.PagedResponse<DataDashboard.FileTabRow>>(
+				genRequestUrl(RequestUrl.getDataDashboardFileAnalysisTabs, {}, data),
+			)
+		},
+
 		/** 数据看板 - 创建组织分析导出任务 */
 		createDataDashboardOrganizationExport(data: DataDashboard.DashboardExportRequest) {
 			return client.post<DataDashboard.DashboardExportCreated>(
@@ -346,6 +360,15 @@ export const generateAIManageApi = (client: HttpClient) => {
 		createDataDashboardMemberExport(data: DataDashboard.DashboardExportRequest) {
 			return client.post<DataDashboard.DashboardExportCreated>(
 				RequestUrl.createDataDashboardMemberExport,
+				data,
+				{ enableErrorMessagePrompt: false },
+			)
+		},
+
+		/** 数据看板 - 创建文件产出分析导出任务 */
+		createDataDashboardFileAnalysisExport(data: DataDashboard.DashboardExportRequest) {
+			return client.post<DataDashboard.DashboardExportCreated>(
+				RequestUrl.createDataDashboardFileAnalysisExport,
 				data,
 				{ enableErrorMessagePrompt: false },
 			)

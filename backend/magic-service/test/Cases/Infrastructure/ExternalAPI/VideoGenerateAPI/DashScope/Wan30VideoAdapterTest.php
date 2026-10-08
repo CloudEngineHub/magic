@@ -126,6 +126,23 @@ final class Wan30VideoAdapterTest extends TestCase
         self::assertCount(2, $this->adapter()->buildProviderPayload($operation)['input']['media']);
     }
 
+    public function testBuildsImageReferencePayloadWithReferenceImageMedia(): void
+    {
+        $operation = $this->operation([
+            'input_mode' => 'image_reference',
+            'prompt' => '参考这张图生成视频',
+            'inputs' => ['reference_images' => [['uri' => 'https://example.com/ref.png']]],
+        ]);
+
+        $payload = $this->adapter()->buildProviderPayload($operation);
+
+        self::assertSame([
+            ['type' => 'reference_image', 'url' => 'https://example.com/ref.png'],
+        ], $payload['input']['media']);
+        self::assertContains('inputs.reference_images', $operation->getAcceptedParams());
+        self::assertNotContains('inputs.frames.start', $operation->getAcceptedParams());
+    }
+
     public function testBuildsOmniReferencePayloadWithTypedMedia(): void
     {
         $operation = $this->operation([
@@ -182,7 +199,7 @@ final class Wan30VideoAdapterTest extends TestCase
         self::assertSame([
             ['type' => 'reference_video', 'url' => 'https://example.com/source.mp4'],
         ], $payload['input']['media']);
-        self::assertSame(5, $payload['parameters']['duration']);
+        self::assertSame(-1, $payload['parameters']['duration']);
     }
 
     public function testBuildsVideoEditPayloadWithBase64ReferenceVideo(): void

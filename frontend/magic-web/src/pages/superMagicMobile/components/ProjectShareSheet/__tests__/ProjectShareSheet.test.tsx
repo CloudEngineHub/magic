@@ -1,13 +1,18 @@
 import { fireEvent, render, screen, within } from "@testing-library/react"
 import type { ReactNode } from "react"
 import { describe, expect, it, vi } from "vitest"
-import { ShareMode } from "@/pages/superMagic/components/Share/types"
+import { ShareMode, ShareType } from "@/pages/superMagic/components/Share/types"
 import DefaultOpenFilePicker from "../components/DefaultOpenFilePicker"
 import ProjectShareSheet from "../index"
 import type { ProjectShareSheetView } from "../types"
 
 const { mockViewRef } = vi.hoisted(() => ({
 	mockViewRef: { current: "manage" as ProjectShareSheetView },
+}))
+
+/** Lets a single test force the controller into the "no share method granted" state. */
+const { mockPermittedShareTypesRef } = vi.hoisted(() => ({
+	mockPermittedShareTypesRef: { current: undefined as ShareType[] | undefined },
 }))
 
 const { mockCandidateTreeRef } = vi.hoisted(() => ({
@@ -200,6 +205,11 @@ vi.mock("../hooks/useProjectShareSheet", () => ({
 		saving: false,
 		isCheckingShare: false,
 		advancedOpen: false,
+		permittedShareTypes: mockPermittedShareTypesRef.current,
+		isSelectedShareTypePermitted:
+			mockPermittedShareTypesRef.current === undefined
+				? undefined
+				: mockPermittedShareTypesRef.current.length > 0,
 		defaultSelectedFileIds: ["file-1"],
 		selectedFileIds: ["file-1"],
 		groupedShareItems: [],
@@ -314,6 +324,7 @@ describe("ProjectShareSheet", () => {
 	beforeEach(() => {
 		vi.clearAllMocks()
 		mockViewRef.current = "manage"
+		mockPermittedShareTypesRef.current = undefined
 		mockCandidateTreeRef.current = [
 			{
 				file_id: "file-1",
@@ -412,6 +423,32 @@ describe("ProjectShareSheet", () => {
 		})
 		expect(screen.getByTestId("project-share-sheet-root").getAttribute("style")).toContain(
 			"min-height: 0",
+		)
+	})
+
+	it("编辑页在全部分享方式被管控时不再预留表单最小高度，避免弹层底部留白", () => {
+		mockViewRef.current = "edit"
+		mockPermittedShareTypesRef.current = []
+		renderProjectShareSheet()
+
+		expect(screen.getByTestId("mock-common-popup")).toHaveAttribute(
+			"data-popup-min-height",
+			"0",
+		)
+		expect(screen.getByTestId("mock-common-popup")).toHaveAttribute(
+			"data-popup-wrapper-min-height",
+			"0",
+		)
+	})
+
+	it("编辑页在有可用分享方式时仍保留表单最小高度", () => {
+		mockViewRef.current = "edit"
+		mockPermittedShareTypesRef.current = [ShareType.Public]
+		renderProjectShareSheet()
+
+		expect(screen.getByTestId("mock-common-popup")).toHaveAttribute(
+			"data-popup-min-height",
+			SHARE_SHEET_STABLE_MIN_HEIGHT,
 		)
 	})
 

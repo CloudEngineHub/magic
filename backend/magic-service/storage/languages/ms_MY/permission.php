@@ -67,6 +67,9 @@ return [
             'skill' => 'Kemahiran',
             'agent' => 'Ejen',
             'magic_claw' => 'Magic Claw',
+            'micro_app' => 'Aplikasi Mikro',
+            'topic' => 'Topik',
+            'project' => 'Projek',
         ],
         'functions' => [
             'skill_create' => [
@@ -93,6 +96,14 @@ return [
                 'name' => 'Cipta Magic Claw',
                 'description' => 'Pintu masuk untuk mencipta Magic Claw.',
             ],
+            'micro_app_share_public' => ['name' => 'Perkongsian awam aplikasi mikro', 'description' => 'Benarkan aplikasi mikro dikongsi secara awam.'],
+            'micro_app_share_password' => ['name' => 'Perkongsian kata laluan aplikasi mikro', 'description' => 'Benarkan aplikasi mikro dikongsi dengan perlindungan kata laluan.'],
+            'micro_app_share_team' => ['name' => 'Perkongsian pasukan aplikasi mikro', 'description' => 'Benarkan aplikasi mikro dikongsi dengan ahli pasukan.'],
+            'project_share_public' => ['name' => 'Perkongsian awam projek', 'description' => 'Benarkan projek dikongsi secara awam.'],
+            'project_share_password' => ['name' => 'Perkongsian kata laluan projek', 'description' => 'Benarkan projek dikongsi dengan perlindungan kata laluan.'],
+            'project_share_team' => ['name' => 'Perkongsian pasukan projek', 'description' => 'Benarkan projek dikongsi dengan ahli pasukan.'],
+            'topic_share_public' => ['name' => 'Perkongsian awam topik', 'description' => 'Benarkan topik dikongsi secara awam.'],
+            'topic_share_password' => ['name' => 'Perkongsian kata laluan topik', 'description' => 'Benarkan topik dikongsi dengan perlindungan kata laluan.'],
         ],
         'binding_scope_label' => [
             'all_users_available' => 'Tersedia untuk semua',

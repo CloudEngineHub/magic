@@ -11,7 +11,7 @@ import {
 	deleteSlide,
 	renameSlide,
 } from "../../../contents/HTML/utils/magicProjectUpdater"
-import { getTemporaryDownloadUrl } from "@/pages/superMagic/utils/api"
+import { useFileApi } from "@/pages/superMagic/fileAccess/fileApi"
 import type { SlideItem } from "../PPTSidebar/types"
 import type { PPTStore } from "../stores/PPTStore"
 import MagicModal from "@/components/base/MagicModal"
@@ -64,6 +64,8 @@ export function usePPTSidebar({
 	slideStructureAdapter,
 }: UsePPTSidebarOptions) {
 	const { t } = useTranslation("super")
+	// Bound to the ambient FileAccessProvider identity so share previews send their share access.
+	const fileApi = useFileApi()
 	const isInsertingRef = useRef(false)
 	const isDuplicatingRef = useRef(false)
 	const isDeletingRef = useRef(false)
@@ -200,7 +202,7 @@ export function usePPTSidebar({
 						position,
 						direction,
 					})
-					const downloadUrls = await getTemporaryDownloadUrl({
+					const downloadUrls = await fileApi.getTemporaryDownloadUrl({
 						file_ids: [result.fileId],
 					})
 					const newFileUrl = downloadUrls?.[0]?.url || ""
@@ -271,7 +273,7 @@ export function usePPTSidebar({
 				})
 
 				// Get download URL for the newly created file
-				const downloadUrls = await getTemporaryDownloadUrl({
+				const downloadUrls = await fileApi.getTemporaryDownloadUrl({
 					file_ids: [result.newFileId],
 				})
 
@@ -538,7 +540,9 @@ export function usePPTSidebar({
 
 			let newFileUrl = ""
 			try {
-				const downloadUrls = await getTemporaryDownloadUrl({ file_ids: [result.fileId] })
+				const downloadUrls = await fileApi.getTemporaryDownloadUrl({
+					file_ids: [result.fileId],
+				})
 				newFileUrl = downloadUrls?.[0]?.url || ""
 			} catch (error) {
 				console.error("Failed to get duplicated slide URL:", error)
@@ -787,7 +791,7 @@ export function usePPTSidebar({
 
 	// Handle rename slide with optimistic update
 	const handleRenameSlide = useMemoizedFn(async (index: number, newFileName: string) => {
-		if (!allowEdit) return
+		if (!allowEdit) return false
 
 		// Capture slide info at the start based on index
 		const slideToRename = store.slides[index]
@@ -795,14 +799,14 @@ export function usePPTSidebar({
 
 		if (!oldPath) {
 			magicToast.error(t("fileViewer.renameSlideFailed"))
-			return
+			return false
 		}
 
 		// Get file ID
 		const fileId = store.getFileIdByPath(oldPath)
 		if (!fileId) {
 			magicToast.error(t("fileViewer.renameSlideFailed"))
-			return
+			return false
 		}
 
 		// Calculate new path (optimistic)
@@ -864,7 +868,7 @@ export function usePPTSidebar({
 					projectId,
 					reason: "ppt-template-rename-slide",
 				})
-				return
+				return true
 			}
 
 			// Background API calls (renameSlide API will update magic.project.js)
@@ -916,6 +920,7 @@ export function usePPTSidebar({
 				projectId,
 				reason: "ppt-rename-slide",
 			})
+			return true
 		} catch (error) {
 			console.error("Failed to rename slide:", error)
 
@@ -936,6 +941,7 @@ export function usePPTSidebar({
 			}
 
 			magicToast.error(t("fileViewer.renameSlideFailed"))
+			return false
 		}
 	})
 

@@ -1487,11 +1487,12 @@ async def async_iterdir(path: Union[str, Path]) -> list[Path]:
         if not await async_exists(path_str):
             raise FileNotFoundError(f"目录不存在: {path_str}")
 
-        # 使用 aiofiles.os.scandir 异步遍历目录
-        items = []
-        with await aiofiles.os.scandir(path_str) as entries:
-            for entry in entries:
-                items.append(Path(entry.path))
+        # scandir 返回迭代器后，逐项读取仍可能触发网络 I/O；整个扫描都在线程中完成。
+        def scan_paths() -> list[Path]:
+            with os.scandir(path_str) as entries:
+                return [Path(entry.path) for entry in entries]
+
+        items = await asyncio.to_thread(scan_paths)
 
         logger.debug(f"异步遍历目录完成: {path_str}, 找到 {len(items)} 个项目")
         return items

@@ -98,6 +98,7 @@ export interface DetailRef {
 		knowledgeBaseName?: string
 		fileExtension?: string
 	}) => void
+	openMicroAppTab: (data: { appId: string; appName?: string }) => void
 	/** Promotes the active preview without reopening its tab. */
 	enterPreviewFullscreen: () => void
 	/** Restores the active preview without dismissing its cached content. */
@@ -206,6 +207,11 @@ const Detail = forwardRef<DetailRef, DetailProps>((props, ref) => {
 		openKnowledgeBaseTab: (data) => {
 			if (filesViewerRef.current) {
 				filesViewerRef.current.openKnowledgeBaseTab(data)
+			}
+		},
+		openMicroAppTab: (data) => {
+			if (filesViewerRef.current) {
+				filesViewerRef.current.openMicroAppTab(data)
 			}
 		},
 		enterPreviewFullscreen: () => {

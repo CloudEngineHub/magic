@@ -15,6 +15,8 @@ const projectFilesStoreMock = {
 	workspaceFilesList: [] as Array<Record<string, unknown>>,
 	workspaceFileTree: [] as Array<Record<string, unknown>>,
 	currentSelectedProject: { id: "project-1" },
+	filePresentationContext: { kind: "project", projectId: "project-1" },
+	filePresentationIndex: undefined,
 }
 
 vi.mock("@/pages/superMagic/utils/api", () => ({
@@ -43,6 +45,7 @@ vi.mock("@/pages/superMagic/hooks/useDownloadProgress", () => ({
 
 vi.mock("@/pages/superMagic/components/MessageList/context", () => ({
 	useMessageListContext: () => ({ projectFilesStore: projectFilesStoreMock }),
+	useMessageListProjectFilesStore: () => projectFilesStoreMock,
 }))
 
 vi.mock("@/components/base/MagicToaster/utils", () => ({
@@ -88,6 +91,27 @@ describe("MessageAttachment", () => {
 		projectFilesStoreMock.workspaceFilesList = []
 		projectFilesStoreMock.workspaceFileTree = []
 		supportsStaticDependenciesMock.mockReturnValue(false)
+	})
+
+	it("lets the host open desktop attachments instead of publishing a file tab", () => {
+		const onFileClick = vi.fn()
+		const file = {
+			file_id: "file-1",
+			file_extension: "md",
+			file_name: "random_content.md",
+			filename: "random_content.md",
+			contentLength: 0,
+			url: "",
+		}
+
+		render(
+			<Attachment attachments={[file]} onSelectDetail={vi.fn()} onFileClick={onFileClick} />,
+		)
+
+		fireEvent.click(screen.getByTestId("handle-open-file"))
+
+		expect(onFileClick).toHaveBeenCalledWith(file)
+		expect(openMessageFileMock).not.toHaveBeenCalled()
 	})
 
 	it("opens the resolved project directory for magic.project.js attachments", () => {

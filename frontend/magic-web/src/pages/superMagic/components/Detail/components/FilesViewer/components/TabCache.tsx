@@ -4,11 +4,13 @@ import useFullscreenMode from "@/hooks/useFullscreenMode"
 import Render from "../../../Render"
 import PlaybackTabContent, { type PlaybackTabContentProps } from "./PlaybackTabContent"
 import KnowledgeBaseTabContent from "./KnowledgeBaseTabContent"
+import MicroAppTabContent from "./MicroAppTabContent"
 import WebsiteIframeTabContent from "./WebsiteIframeTabContent"
 import { getWebsiteTabData } from "../utils/websiteTabs"
 import type { TabItem, FileManagerContext, FileManagerStateChangeOptions } from "../types"
 import type { FileManagerSnapshot } from "@/models/config/repositories/SuperProjectStateTypes"
 import type { KnowledgeBaseTabData } from "../hooks/useKnowledgeBaseTab"
+import type { PublishedMicroAppTabData } from "../hooks/usePublishedMicroAppTab"
 import { getFileViewerTabType } from "../utils/tabType"
 import {
 	FILE_VIEWER_DOCUMENT_FLOW_FULLSCREEN_TAB_CONTENT_CLASS_NAME,
@@ -49,8 +51,10 @@ interface TabCacheProps {
 	/** When true, content fills the viewer without reserving tab bar height */
 	hideTabBar?: boolean
 	knowledgeBaseData?: KnowledgeBaseTabData
+	microAppData?: PublishedMicroAppTabData
 	/** The tab is rendered inside a stable surface that already owns its geometry. */
 	fillPortalSurface?: boolean
+	onCloseTab?: (tabId: string) => void
 }
 
 /**
@@ -72,7 +76,9 @@ const TabCache = memo(
 		playbackProps,
 		hideTabBar = false,
 		knowledgeBaseData,
+		microAppData,
 		fillPortalSurface = false,
+		onCloseTab,
 	}: TabCacheProps) => {
 		const tabType = getFileViewerTabType(tab)
 		const managerState = tab.fileManager
@@ -81,6 +87,7 @@ const TabCache = memo(
 		const isPlaybackTab = tabType === "playback"
 		const isWebsite = tabType === "website"
 		const isKnowledgeBaseTab = tabType === "knowledge_base"
+		const isMicroAppTab = tabType === "micro_app"
 		const tabContentRef = useRef<HTMLDivElement>(null)
 		const isFullscreenMode = useFullscreenMode()
 
@@ -93,6 +100,10 @@ const TabCache = memo(
 			},
 			[onActiveFileChange],
 		)
+
+		const handleMicroAppLeave = useCallback(() => {
+			onCloseTab?.(tab.id)
+		}, [onCloseTab, tab.id])
 
 		// 监听 tab 激活状态变化，当 tab 变为非激活时暂停音频播放
 		useEffect(() => {
@@ -154,7 +165,8 @@ const TabCache = memo(
 					isActive
 						? "pointer-events-auto visible opacity-100"
 						: "pointer-events-none invisible opacity-0",
-					(isPlaybackTab || isKnowledgeBaseTab) && "bg-white dark:bg-background",
+					(isPlaybackTab || isKnowledgeBaseTab || isMicroAppTab) &&
+						"bg-white dark:bg-background",
 				)}
 			>
 				{tabType === "file_manager" && tab.fileManager ? (
@@ -195,6 +207,8 @@ const TabCache = memo(
 					<WebsiteIframeTabContent {...getWebsiteTabData(tab)} isActive={isActive} />
 				) : isKnowledgeBaseTab && knowledgeBaseData ? (
 					<KnowledgeBaseTabContent data={knowledgeBaseData} />
+				) : isMicroAppTab && microAppData ? (
+					<MicroAppTabContent data={microAppData} onLeave={handleMicroAppLeave} />
 				) : (
 					renderContent
 				)}

@@ -13,6 +13,7 @@ import FoldIcon from "@/pages/superMagic/assets/svg/file-folder.svg"
 import useStyles from "./style"
 import type { FileSelectorProps } from "./types"
 import { CheckboxState } from "./types"
+import { isMicroAppDisplayType } from "@/constants/microApp"
 import { useAttachmentIndex } from "@/pages/superMagic/components/TopicFilesButton/hooks/useAttachmentIndex"
 import { useVisibleTreeRows } from "@/pages/superMagic/components/TopicFilesButton/hooks/useVisibleTreeRows"
 import CustomTree from "@/pages/superMagic/components/TopicFilesButton/components/CustomTree/CustomTree"
@@ -634,7 +635,8 @@ export default memo(function FileSelector(props: FileSelectorProps) {
 									data-testid="file-selector-image"
 								/>
 							) : item?.metadata?.type === "custom" ||
-							  (item?.metadata?.type === "micro-app" && item?.is_directory) ? (
+							  (isMicroAppDisplayType(item?.metadata?.type) &&
+									item?.is_directory) ? (
 								<CustomFolderMagicIcon
 									displayConfig={item?.display_config}
 									childrenItems={getChildrenForCustomMetadataIconPath(

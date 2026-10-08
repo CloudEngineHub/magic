@@ -69,6 +69,8 @@ export const PERMISSION_KEY_MAP: Record<string, string> = {
 	DATA_DASHBOARD_AGENT_QUERY: "admin.data_dashboard.agent.query",
 	/** AI管理 - 数据看板 - 消耗分析-查询 */
 	DATA_DASHBOARD_CONSUMPTION_QUERY: "admin.data_dashboard.consumption.query",
+	/** AI管理 - 数据看板 - 文件产出分析-查询 */
+	DATA_DASHBOARD_FILE_QUERY: "admin.data_dashboard.file.query",
 
 	/* -- 平台管理 -- */
 	/** 平台管理 - 模型管理-查询 */
@@ -217,6 +219,7 @@ export const AI_DATA_DASHBOARD = [
 	PERMISSION_KEY_MAP.DATA_DASHBOARD_ORGANIZATION_QUERY,
 	PERMISSION_KEY_MAP.DATA_DASHBOARD_AGENT_QUERY,
 	PERMISSION_KEY_MAP.DATA_DASHBOARD_CONSUMPTION_QUERY,
+	PERMISSION_KEY_MAP.DATA_DASHBOARD_FILE_QUERY,
 ]
 
 /** AI管理 - 总权限 */

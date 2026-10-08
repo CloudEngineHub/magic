@@ -5,6 +5,7 @@ import type { AttachmentItem } from "../types"
 import type { PropsWithChildren } from "react"
 import { FileAccessProvider } from "@/pages/superMagic/providers/FileAccessProvider"
 import { SuperMagicApi } from "@/apis"
+import { runClientBatchDocumentExport } from "../../modules/client-batch-export"
 
 vi.mock("react-i18next", () => ({
 	useTranslation: () => ({
@@ -107,9 +108,12 @@ vi.mock("@/apis", () => ({
 		deleteFiles: vi.fn(),
 		createBatchDownload: vi.fn(),
 		checkBatchDownloadStatus: vi.fn(),
-		exportPdfOrPpt: vi.fn(),
-		checkExportPdfOrPptStatus: vi.fn(),
 	},
+}))
+
+vi.mock("../../modules/client-batch-export", async (importOriginal) => ({
+	...(await importOriginal<typeof import("../../modules/client-batch-export")>()),
+	runClientBatchDocumentExport: vi.fn(),
 }))
 
 vi.mock("../../MessageList/components/MessageAttachment/utils", () => ({
@@ -205,11 +209,12 @@ describe("useBatchDownload", () => {
 		)
 		await act(async () => {
 			await result.current.handleBatchDownload()
-			await result.current.handleExportPdfOrPpt("pdf")
+			await result.current.handleExportDocument("pdf")
+			await result.current.handleExportDocument("pptx")
 			result.current.handleBatchShare()
 		})
 		expect(SuperMagicApi.createBatchDownload).not.toHaveBeenCalled()
-		expect(SuperMagicApi.exportPdfOrPpt).not.toHaveBeenCalled()
+		expect(runClientBatchDocumentExport).not.toHaveBeenCalled()
 		expect(onBatchShareClick).not.toHaveBeenCalled()
 		expect(
 			result.current.batchMenuItems?.some(

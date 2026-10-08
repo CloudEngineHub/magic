@@ -49,6 +49,7 @@ describe("ElementDetailsRuntimeManager", () => {
 			"image-1": {
 				contentDetails: {
 					"content-1": {
+						sidecarSource: "user",
 						generateImageRequest: {
 							valueSource: "user",
 							imageId: "user-task-1",

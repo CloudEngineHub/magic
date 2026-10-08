@@ -107,7 +107,7 @@ class AgentModelContext:
 
     @property
     def native_visual_400_failure_count(self) -> int:
-        """返回当前模型原生视觉请求连续 HTTP 400 的次数。"""
+        """返回当前模型原生视觉请求连续 HTTP 4xx 的次数。"""
         return self._native_visual_400_failure_count
 
     @property
@@ -116,7 +116,7 @@ class AgentModelContext:
         return self._native_visual_fallback_applied
 
     def record_native_visual_400_failure(self) -> int:
-        """记录一次原生视觉 HTTP 400，返回累计次数。"""
+        """记录一次原生视觉 HTTP 4xx，返回累计次数。"""
         self._native_visual_400_failure_count += 1
         return self._native_visual_400_failure_count
 
@@ -125,7 +125,7 @@ class AgentModelContext:
         self._native_visual_fallback_applied = True
 
     def reset_native_visual_400_state(self) -> None:
-        """清理当前模型的原生视觉 400 计数和降级标记。"""
+        """清理当前模型的原生视觉 4xx 计数和降级标记。"""
         self._native_visual_400_failure_count = 0
         self._native_visual_fallback_applied = False
 

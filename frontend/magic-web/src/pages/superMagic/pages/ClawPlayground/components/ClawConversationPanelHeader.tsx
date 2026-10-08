@@ -61,9 +61,10 @@ function ClawConversationPanelHeaderComponent({
 	return (
 		<div
 			className={cn(
-				"absolute z-30 mb-2.5 flex h-10 w-full items-center gap-2 px-2 py-1.5",
+				// Reserve header height in layout rather than offsetting the message list.
+				"relative z-30 flex h-10 w-full shrink-0 items-center gap-2 px-2 py-1.5",
 				"bg-sidebar/95 backdrop-blur-lg",
-				isConversationPanelCollapsed && "h-full flex-col px-0 py-1.5",
+				isConversationPanelCollapsed && "absolute h-full flex-col px-0 py-1.5",
 			)}
 			data-testid="claw-playground-conversation-panel-header"
 		>

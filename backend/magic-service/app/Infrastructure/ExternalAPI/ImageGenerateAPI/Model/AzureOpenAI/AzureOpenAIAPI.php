@@ -16,6 +16,7 @@ use Exception;
 use GuzzleHttp\Exception\RequestException;
 use GuzzleHttp\Psr7\Request;
 use GuzzleHttp\Psr7\Response;
+use Hyperf\Codec\Json;
 use Hyperf\Logger\LoggerFactory;
 use InvalidArgumentException;
 use Psr\Http\Message\ResponseInterface;
@@ -84,7 +85,7 @@ class AzureOpenAIAPI
     /**
      * Image edit API call with OSS URL support - supports multiple images.
      */
-    public function editImage(string $model, array $imageUrls, ?string $maskUrl, string $prompt, string $size = '1024x1024', int $n = 1, ?string $quality = null): array
+    public function editImage(string $model, array $imageUrls, ?string $maskUrl, string $prompt, string $size = '1024x1024', int $n = 1, ?string $quality = null, array $extra = []): array
     {
         $url = $this->buildUrl($model, 'images/edits');
 
@@ -113,6 +114,10 @@ class AzureOpenAIAPI
                 $multipartData[] = ['name' => 'quality', 'contents' => $quality];
             }
 
+            if (! empty($extra)) {
+                $multipartData[] = ['name' => 'extra', 'contents' => Json::encode($extra)];
+            }
+
             $this->logger->info('Azure OpenAI API 请求', [
                 'url' => $url,
                 'payload' => $this->sanitizePayloadForLog([
@@ -122,6 +127,7 @@ class AzureOpenAIAPI
                     'size' => $size,
                     'n' => $n,
                     'quality' => $quality,
+                    'extra' => $extra,
                 ]),
             ]);
 

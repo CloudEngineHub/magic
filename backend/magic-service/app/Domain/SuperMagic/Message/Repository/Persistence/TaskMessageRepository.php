@@ -78,6 +78,27 @@ class TaskMessageRepository implements TaskMessageRepositoryInterface
         }, $result);
     }
 
+    public function findCompletedResultMessages(int $topicId, int $taskId): array
+    {
+        $query = $this->model::query()
+            ->select([
+                'id',
+                'event',
+                'raw_content',
+                'attachments',
+            ])
+            ->where('topic_id', $topicId)
+            ->where('task_id', (string) $taskId)
+            ->where('sender_type', 'assistant')
+            ->where('processing_status', TaskMessageModel::PROCESSING_STATUS_COMPLETED)
+            ->whereIn('event', ['after_agent_reply', 'after_main_agent_run'])
+            ->orderBy('id', 'asc');
+
+        return $query->get()
+            ->map(static fn (TaskMessageModel $record): TaskMessageEntity => new TaskMessageEntity($record->toArray()))
+            ->all();
+    }
+
     /**
      * 根据话题ID和任务ID获取用户消息列表（优化索引+过滤用户消息）.
      * @return TaskMessageEntity[]

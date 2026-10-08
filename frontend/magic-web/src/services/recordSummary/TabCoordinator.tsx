@@ -7,7 +7,7 @@ import { shouldSkipRecordingSessionRestoreOnCurrentRoute } from "./recordingRest
 
 const logger = Logger.createLogger("TabCoordinator", {
 	enableConfig: {
-		console: true,
+		console: false,
 		warn: true,
 		error: true,
 		trace: true,

@@ -1,4 +1,5 @@
 import {
+	useEffect,
 	useRef,
 	type ChangeEventHandler,
 	type ComponentProps,
@@ -11,10 +12,15 @@ import type { DialogWindowOptions } from "@/hooks/use-dialog-window"
 import {
 	Dialog,
 	DialogContent,
+	DialogPortal,
 	DialogTitle,
 	DialogDescription,
 } from "@/components/shadcn-ui/dialog"
 import { Input } from "@/components/shadcn-ui/input"
+import {
+	DialogRestoreSizeButton,
+	DialogWindowDecorations,
+} from "@/pages/superMagic/components/DialogWindow"
 import MagicIcon from "@/components/base/MagicIcon"
 import MagicSpin from "@/components/base/MagicSpin"
 import MagicEmpty from "@/components/base/MagicEmpty"
@@ -38,6 +44,8 @@ interface ProjectsPanelProps {
 	titleIcon?: ReactNode
 	location?: ReactNode
 	windowOptions?: DialogWindowOptions
+	onRestoreRecommendedSize?: () => void
+	resizeGuide?: { visible: boolean; onDismiss: () => void }
 	description?: string
 	searchValue: string
 	onSearchValueChange: ChangeEventHandler<HTMLInputElement>
@@ -52,6 +60,8 @@ export function ProjectsPanel({
 	titleIcon,
 	location,
 	windowOptions,
+	onRestoreRecommendedSize,
+	resizeGuide,
 	description,
 	searchValue,
 	onSearchValueChange,
@@ -66,13 +76,38 @@ export function ProjectsPanel({
 		returnFocusRef.current =
 			document.activeElement instanceof HTMLElement ? document.activeElement : null
 	wasOpenRef.current = !!open
+
+	// modal={false} disables Radix's focus trap and body scroll lock so the nested
+	// MagicModal (AddCollaborationToWorkspaceModal / MoveProjectModal / DeleteDangerModal,
+	// portaled to body via Antd Modal) can receive focus. Restore the body scroll lock
+	// manually below since modal={false} drops it.
+	useEffect(() => {
+		if (!open) return
+		const previousOverflow = document.body.style.overflow
+		document.body.style.overflow = "hidden"
+		return () => {
+			document.body.style.overflow = previousOverflow
+		}
+	}, [open])
+
 	return (
 		<Dialog
 			open={open}
+			modal={false}
 			onOpenChange={(nextOpen) => {
 				if (!nextOpen) onClose()
 			}}
 		>
+			{/* modal={false} drops Radix's overlay, so render a manual mask below the content z-index. */}
+			{open && (
+				<DialogPortal>
+					<div
+						aria-hidden="true"
+						className="fixed inset-0 z-detail-fullscreen bg-black/50"
+						data-testid="shared-workspace-dialog-mask"
+					/>
+				</DialogPortal>
+			)}
 			{open && (
 				<DialogContent
 					showCloseButton={false}
@@ -137,6 +172,12 @@ export function ProjectsPanel({
 							className="flex items-center gap-2.5"
 							data-testid="shared-workspace-dialog-actions"
 						>
+							<DialogRestoreSizeButton
+								visible={Boolean(
+									windowOptions?.resizable && onRestoreRecommendedSize,
+								)}
+								onClick={onRestoreRecommendedSize}
+							/>
 							<button
 								type="button"
 								aria-label={t("button.close", { ns: "interface" })}
@@ -182,15 +223,12 @@ export function ProjectsPanel({
 							{children}
 						</div>
 					</div>
-					{windowOptions?.resizable && (
-						<span
-							aria-hidden="true"
-							className="pointer-events-none absolute bottom-1 right-1 size-3 text-muted-foreground/60"
-						>
-							<span className="absolute bottom-1 right-0 h-px w-3 -rotate-45 bg-current" />
-							<span className="absolute bottom-0.5 right-0 h-px w-1.5 -rotate-45 bg-current" />
-						</span>
-					)}
+					{/* 说明留在窗口内，不接管焦点；角落热区与边缘拖拽仍由 Dialog 管理。 */}
+					<DialogWindowDecorations
+						resizable={windowOptions?.resizable}
+						resizeGuide={resizeGuide}
+						onRestoreRecommendedSize={onRestoreRecommendedSize}
+					/>
 				</DialogContent>
 			)}
 		</Dialog>

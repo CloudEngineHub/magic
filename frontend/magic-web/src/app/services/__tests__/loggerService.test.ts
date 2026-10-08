@@ -30,6 +30,9 @@ vi.mock("@/infrastructure/logger/plugins", () => ({
 	createPageDwellPlugin: () => ({ name: "pageDwell", setup: () => undefined }),
 	createDevicePlugin: () => ({ name: "device", setup: () => undefined }),
 }))
+vi.mock("../storage/storageQuota", () => ({
+	createStorageQuotaPlugin: () => ({ name: "storageQuota", setup: () => undefined }),
+}))
 
 let service: AppLoggerService
 let disposePlugin: ReturnType<typeof vi.fn>
