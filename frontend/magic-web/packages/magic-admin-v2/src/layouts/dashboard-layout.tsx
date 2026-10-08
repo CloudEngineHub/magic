@@ -329,6 +329,10 @@ type SidebarNavigationGroupProps = {
 	onCloseMobile?: () => void
 }
 
+// Limit hover animation to colors so host link outline resets cannot animate a temporary border.
+const sidebarNavigationInteraction =
+	"outline-none ring-sidebar-ring transition-colors hover:bg-sidebar-accent hover:text-sidebar-accent-foreground focus-visible:ring-2"
+
 type CollapsedPrimaryNavigationProps = {
 	activePathname: string
 	section: PrimaryNavigationItem
@@ -591,7 +595,8 @@ function SidebarNavigationGroup({
 		return (
 			<NavLink
 				className={cn(
-					"flex h-8 w-full min-w-0 items-center gap-2 rounded-md px-2 text-left text-sm font-medium text-sidebar-foreground outline-none ring-sidebar-ring transition-all hover:bg-sidebar-accent hover:text-sidebar-accent-foreground focus-visible:ring-2",
+					"flex h-8 w-full min-w-0 items-center gap-2 rounded-md px-2 text-left text-sm font-medium text-sidebar-foreground",
+					sidebarNavigationInteraction,
 					isActive && "bg-sidebar-accent text-sidebar-accent-foreground",
 				)}
 				onClick={onCloseMobile}
@@ -617,7 +622,8 @@ function SidebarNavigationGroup({
 			<button
 				aria-expanded={isOpen}
 				className={cn(
-					"flex h-8 w-full min-w-0 items-center gap-2 rounded-md px-2 text-left text-sm font-medium text-sidebar-foreground outline-none ring-sidebar-ring transition-all hover:bg-sidebar-accent hover:text-sidebar-accent-foreground focus-visible:ring-2",
+					"flex h-8 w-full min-w-0 items-center gap-2 rounded-md px-2 text-left text-sm font-medium text-sidebar-foreground",
+					sidebarNavigationInteraction,
 					isActive && "text-sidebar-accent-foreground",
 				)}
 				onClick={() => setIsOpen((current) => !current)}
@@ -637,8 +643,9 @@ function SidebarNavigationGroup({
 				/>
 			</button>
 			{isOpen ? (
+				// Auto width leaves room for the left margin instead of overflowing the sidebar.
 				<ul
-					className="ml-3.5 flex w-full min-w-0 flex-col gap-1 border-l border-sidebar-border pl-2"
+					className="ml-3.5 flex min-w-0 flex-col gap-1 border-l border-sidebar-border pl-2"
 					data-state="open"
 				>
 					{group.items.map((item) => (
@@ -669,7 +676,8 @@ function SidebarMenuLink({ activePathname, item, onCloseMobile }: SidebarMenuLin
 		<li className="group/menu-item relative min-w-0">
 			<NavLink
 				className={cn(
-					"peer/menu-button relative flex h-8 w-full min-w-0 items-center gap-2 overflow-hidden rounded-md p-2 pl-4 text-left text-sm font-medium text-sidebar-foreground outline-none ring-sidebar-ring transition-all hover:bg-sidebar-accent hover:text-sidebar-accent-foreground focus-visible:ring-2",
+					"peer/menu-button relative flex h-8 w-full min-w-0 items-center gap-2 overflow-hidden rounded-md p-2 pl-4 text-left text-sm font-medium text-sidebar-foreground",
+					sidebarNavigationInteraction,
 					isActive && "bg-sidebar-accent text-sidebar-accent-foreground",
 				)}
 				onClick={onCloseMobile}
