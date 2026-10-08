@@ -17,6 +17,29 @@ export const useTaskItemStyles = createStyles(({ token, css }) => ({
 		}
 	`,
 
+	rightSection: css`
+		display: flex;
+		align-items: center;
+		gap: 10px;
+		flex-shrink: 0;
+	`,
+	fileActions: css`
+		display: flex;
+		align-items: center;
+		gap: 2px;
+	`,
+	// 长名称只压缩信息区；窄屏将状态和动作作为完整一组换行。
+	taskWithActions: css`
+		@media (max-width: 640px) {
+			flex-wrap: wrap;
+			> :first-child {
+				flex-basis: 100%;
+			}
+			> :nth-child(2) {
+				margin-inline-start: auto;
+			}
+		}
+	`,
 	// 左侧区域：文件夹图标 + 任务信息
 	leftSection: css`
 		display: flex;

@@ -56,7 +56,7 @@ export const useStyles = createStyles(({ token }) => ({
 		background: token.colorBgContainer,
 		borderRadius: "0 0 8px 8px",
 		maxHeight: 400,
-		overflowY: "auto",
+
 		border: `1px solid ${token.colorBorderSecondary}`,
 		borderTop: "none",
 	},

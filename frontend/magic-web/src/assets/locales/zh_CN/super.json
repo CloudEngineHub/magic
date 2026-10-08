@@ -2812,6 +2812,12 @@
 			"continueUpload": "继续上传",
 			"expand": "展开",
 			"hideCompleted": "隐藏已完成",
+			"locate": "定位",
+			"locateDirectory": "定位文件夹",
+			"locateFile": "定位文件",
+			"mention": "@ 引用",
+			"mentionCurrentChat": "@ 到当前对话",
+			"noEditableChat": "当前没有可编辑的对话输入框",
 			"pause": "暂停",
 			"pauseAll": "全部暂停",
 			"pauseAllTasks": "全部暂停",
@@ -2820,6 +2826,10 @@
 			"resumeAll": "全部继续",
 			"retry": "重试",
 			"retryFailed": "重试失败的文件",
+			"scrollDown": "查看下面的文件",
+			"scrollUp": "查看上面的文件",
+			"switchProjectFirst": "先定位到该项目，再引用文件",
+			"targetUnavailable": "文件已上传，但暂时无法在文件列表中找到，请刷新列表后重试",
 			"viewDetails": "查看详情",
 			"viewFailedFiles": "查看失败文件"
 		},
@@ -2868,6 +2878,15 @@
 			"viewProject": "查看项目"
 		},
 		"globalSummary": "总计 {{count}} 个上传任务",
+		"hint": {
+			"close": "关闭上传引导",
+			"directory": "展开上传记录，可定位上传的文件夹。",
+			"disable": "不再提示",
+			"expand": "展开查看",
+			"locate": "展开上传记录，可前往所属项目并定位文件。",
+			"locateAndMention": "展开上传记录，可定位文件，或 @ 引用到当前对话。",
+			"title": "查看上传的文件"
+		},
 		"labels": {
 			"uploadTo": "上传至: {{path}}"
 		},

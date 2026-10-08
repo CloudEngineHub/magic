@@ -307,10 +307,19 @@ export interface SuperMagicSyncMarkersToChatPayload {
  *   autoFocus: true,
  * })
  */
+export interface FileMentionTargetScope {
+	projectId: string
+	topicId: string | null
+	identityKey: string
+}
+
 export interface SuperMagicAddFileToChatPayload {
 	items: TiptapMentionAttributes[]
 	is_new_topic: boolean
 	autoFocus?: boolean
+	targetScope?: FileMentionTargetScope
+	/** 空 items 的同步能力查询；只读取目标编辑器，不改变草稿。 */
+	checkEditable?: (editable: boolean) => void
 }
 
 /** Canvas selection media staged into MessageEditor before editor focus. */

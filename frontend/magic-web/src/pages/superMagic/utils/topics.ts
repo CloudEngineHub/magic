@@ -1,4 +1,5 @@
 // 话题相关行为
+import type { FileMentionTargetScope } from "../events/message"
 import pubsub, { PubSubEvents } from "@/utils/pubsub"
 import type { JSONContent } from "@/infrastructure/editors/tiptap/react"
 import type { TiptapMentionAttributes } from "@/components/business/MentionPanel/tiptap-plugin"
@@ -20,6 +21,7 @@ interface CreateTopicOptions {
 }
 
 interface AddToCurrentChatOptions {
+	targetScope?: FileMentionTargetScope
 	fileItem: AttachmentItem
 	isNewTopic?: boolean
 	/** 是否自动聚焦输入框，默认为 false */
@@ -45,6 +47,7 @@ interface AddMultipleFilesToNewChatOptions extends AddMultipleFilesToCurrentChat
 }
 
 interface AddMentionsToCurrentChatOptions {
+	targetScope?: FileMentionTargetScope
 	items: TiptapMentionAttributes[]
 	isNewTopic?: boolean
 	autoFocus?: boolean
@@ -186,26 +189,41 @@ export async function addTextToNewChat(options: AddTextToNewChatOptions) {
 	}
 }
 
+/** 全局上传浮窗只查询当前范围的输入能力，不保存编辑器实例或注册第二份编辑器。 */
+export function canAddFileToCurrentChat(targetScope: FileMentionTargetScope): boolean {
+	let editable = false
+	pubsub.publish(PubSubEvents.Add_File_To_Chat, {
+		items: [],
+		is_new_topic: false,
+		targetScope,
+		checkEditable: (value) => {
+			editable ||= value
+		},
+	})
+	return editable
+}
+
 /**
  * 添加文件到当前对话
  */
 export async function addFileToCurrentChat(options: AddToCurrentChatOptions) {
-	const { fileItem, isNewTopic = false, autoFocus = false } = options
+	const { fileItem, isNewTopic = false, autoFocus = false, targetScope } = options
 
 	// 转换为 mention 格式并发布事件，由 MessageEditor 统一插入（仅此一条链路，避免与 insert_drag_data 重复插入）
 	const items = await convertFilesToMentions([fileItem])
-	addMentionsToCurrentChat({ items, isNewTopic, autoFocus })
+	addMentionsToCurrentChat({ items, isNewTopic, autoFocus, targetScope })
 }
 
 /** 将已构造的 mention 添加到当前对话。 */
 export function addMentionsToCurrentChat(options: AddMentionsToCurrentChatOptions) {
-	const { items, isNewTopic = false, autoFocus = false } = options
+	const { items, isNewTopic = false, autoFocus = false, targetScope } = options
 	if (items.length === 0) return
 
 	pubsub.publish(PubSubEvents.Add_File_To_Chat, {
 		items,
 		is_new_topic: isNewTopic,
 		autoFocus,
+		targetScope,
 	})
 }
 

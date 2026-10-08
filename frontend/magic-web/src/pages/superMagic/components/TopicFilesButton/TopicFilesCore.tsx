@@ -164,7 +164,7 @@ interface TopicFilesCoreProps {
 	onSelectionChange?: (selectedCount: number, totalCount: number) => void
 	onExpansionStateChange?: (state: TopicFilesExpansionState) => void
 	allowEdit?: boolean
-	onUpdateAttachments?: () => void
+	onUpdateAttachments?: (sourceProjectId?: string) => void
 	afterAddFileToNewTopic?: () => void
 	afterAddFileToCurrentTopic?: () => void
 	// 添加直接更新attachments的回调

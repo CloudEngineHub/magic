@@ -19,6 +19,7 @@ import MagicFileIcon from "../../base/MagicFileIcon"
 
 interface TaskItemProps {
 	task: FolderUploadTask
+	actions?: React.ReactNode
 	isCompleted?: boolean
 	onCancel?: () => void
 	onRetry?: () => void
@@ -27,6 +28,7 @@ interface TaskItemProps {
 
 export const TaskItem: React.FC<TaskItemProps> = ({
 	task,
+	actions,
 	isCompleted: _isCompleted = false, // eslint-disable-line @typescript-eslint/no-unused-vars
 	onCancel: _onCancel,
 	onRetry,
@@ -338,7 +340,10 @@ export const TaskItem: React.FC<TaskItemProps> = ({
 			</div>
 
 			{/* 右侧状态区域 */}
-			{renderStatusSection()}
+			<div className={styles.rightSection}>
+				{renderStatusSection()}
+				{actions && <div className={styles.fileActions}>{actions}</div>}
+			</div>
 
 			{/* 取消按钮 - 只在非完成状态显示 */}
 			{/* {!isCompleted && onCancel && (

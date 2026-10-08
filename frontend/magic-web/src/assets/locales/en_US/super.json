@@ -2812,6 +2812,12 @@
 			"continueUpload": "Continue Upload",
 			"expand": "Expand",
 			"hideCompleted": "Hide Completed",
+			"locate": "Locate",
+			"locateDirectory": "Locate folder",
+			"locateFile": "Locate file",
+			"mention": "@ Reference",
+			"mentionCurrentChat": "Reference in current chat",
+			"noEditableChat": "No editable chat input is available",
 			"pause": "Pause",
 			"pauseAll": "Pause All",
 			"pauseAllTasks": "Pause All",
@@ -2820,6 +2826,10 @@
 			"resumeAll": "Resume All",
 			"retry": "Retry",
 			"retryFailed": "Retry Failed Files",
+			"scrollDown": "View files below",
+			"scrollUp": "View files above",
+			"switchProjectFirst": "Locate the project first to reference this file",
+			"targetUnavailable": "The file was uploaded, but is not available in the file list. Refresh the list and try again.",
 			"viewDetails": "View Details",
 			"viewFailedFiles": "View Failed Files"
 		},
@@ -2868,6 +2878,15 @@
 			"viewProject": "View Project"
 		},
 		"globalSummary": "Total {{count}} upload tasks",
+		"hint": {
+			"close": "Dismiss upload guide",
+			"directory": "Expand uploads to locate the uploaded folder.",
+			"disable": "Don’t show again",
+			"expand": "View uploads",
+			"locate": "Expand uploads to open the project and locate your files.",
+			"locateAndMention": "Expand uploads to locate files or reference them in the current chat.",
+			"title": "View uploaded files"
+		},
 		"labels": {
 			"uploadTo": "Upload to: {{path}}"
 		},
