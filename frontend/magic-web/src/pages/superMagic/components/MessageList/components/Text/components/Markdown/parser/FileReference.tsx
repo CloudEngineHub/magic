@@ -77,13 +77,13 @@ export function FileReference({
 			className={[
 				"inline-flex items-baseline gap-1 overflow-hidden align-baseline",
 				source
-					? "m-0.5 max-w-[calc(100%-0.25rem)] rounded bg-primary/5 px-1 text-primary leading-[1.4] [font-size:0.93em] [font-weight:inherit]"
+					? "m-0.5 max-w-[calc(100%-0.25rem)] rounded bg-[#f0f6ff] px-1 text-[#315cec] leading-[1.4] [font-size:0.93em] [font-weight:inherit]"
 					: "max-w-full rounded bg-[#f0f6ff] px-0.5 text-xs font-normal text-[#315cec]",
 				disabled
 					? "cursor-default opacity-60"
 					: onClick
 						? source
-							? "cursor-pointer hover:bg-primary/10"
+							? "cursor-pointer hover:bg-[#e0ecff]"
 							: "cursor-pointer hover:bg-[#e0ecff]"
 						: "",
 			].join(" ")}
