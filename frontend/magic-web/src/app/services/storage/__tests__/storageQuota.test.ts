@@ -1,6 +1,17 @@
 // @vitest-environment jsdom
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 import type { Logger, LoggerPluginContext } from "@/infrastructure/logger/types"
+
+const { measureStorageSizesMock } = vi.hoisted(() => ({
+	measureStorageSizesMock: vi.fn(),
+}))
+
+vi.mock("../sizeMeasurement", () => ({
+	measureStorageSizes: measureStorageSizesMock,
+	DEFAULT_SIZE_SLICE_BUDGET_MS: 5000,
+	DEFAULT_SIZE_OVERALL_BUDGET_MS: 30000,
+}))
+
 import {
 	createStorageQuotaPlugin,
 	formatByteSize,
@@ -11,13 +22,61 @@ import {
 const ONE_GIB = 1024 ** 3
 const TWO_GIB = 2 * 1024 ** 3
 const REPORT_COOLDOWN_MS = 3 * 60 * 60 * 1000
+const incompleteMeasurementResult = {
+	status: "incomplete" as const,
+	reason: "timeout" as const,
+	stage: "indexedDB" as const,
+	coverage: {
+		indexedDBRecordsRead: 10,
+		indexedDBStoresRead: 1,
+		cacheStorageEntriesRead: 0,
+		cacheStorageOpaqueEntries: 0,
+	},
+	sliceCount: 1,
+	elapsedMs: 5000,
+}
+let browserLocalStorage: Storage
+let browserSessionStorage: Storage
+
+/** Build an isolated Web Storage implementation for Node versions without usable globals. */
+function createMemoryStorage(): Storage {
+	const entries = new Map<string, string>()
+	return {
+		get length() {
+			return entries.size
+		},
+		key(index) {
+			return Array.from(entries.keys())[index] ?? null
+		},
+		getItem(key) {
+			return entries.get(key) ?? null
+		},
+		setItem(key, value) {
+			entries.set(key, value)
+		},
+		removeItem(key) {
+			entries.delete(key)
+		},
+		clear() {
+			entries.clear()
+		},
+	}
+}
+
+beforeEach(() => {
+	// Node 26 exposes an undefined localStorage accessor that otherwise shadows jsdom storage.
+	browserLocalStorage = createMemoryStorage()
+	browserSessionStorage = createMemoryStorage()
+	vi.stubGlobal("localStorage", browserLocalStorage)
+	vi.stubGlobal("sessionStorage", browserSessionStorage)
+})
 
 afterEach(() => {
 	vi.useRealTimers()
 	vi.restoreAllMocks()
+	browserLocalStorage.clear()
+	browserSessionStorage.clear()
 	vi.unstubAllGlobals()
-	localStorage.clear()
-	sessionStorage.clear()
 })
 
 /** Fire an IDBRequest-style success/error/blocked/upgrade callback on a microtask. */
@@ -209,6 +268,8 @@ describe("toReadableHighQuotaData", () => {
 describe("createStorageQuotaPlugin", () => {
 	beforeEach(() => {
 		vi.useFakeTimers()
+		measureStorageSizesMock.mockReset()
+		measureStorageSizesMock.mockResolvedValue(incompleteMeasurementResult)
 		// jsdom's IdleCallback is not driven by fake timers; route it through setTimeout.
 		vi.stubGlobal("requestIdleCallback", (callback: IdleRequestCallback) =>
 			setTimeout(() => callback({ didTimeout: false, timeRemaining: () => 0 }), 0),
@@ -230,17 +291,78 @@ describe("createStorageQuotaPlugin", () => {
 		const payload = report.mock.calls[0][0]
 		expect(payload).toEqual({
 			namespace: "storageQuota",
-			data: {
+			data: expect.objectContaining({
 				eventKey: "storage_quota_high",
 				usage: "2G",
 				quota: "2.5G",
 				ratio: "80%",
-			},
+				sizeMeasurementStatus: "incomplete",
+				sizeMeasurementFailureReason: "timeout",
+				sizeMeasurementFailureStage: "indexedDB",
+			}),
 		})
 		expect(JSON.stringify(payload)).not.toContain("pref-theme")
 		expect(JSON.stringify(payload)).not.toContain("tmp-flag")
 		expect(JSON.stringify(payload)).not.toContain("bucket-alpha")
 		expect(JSON.stringify(payload)).not.toContain("store-records")
+		dispose()
+	})
+
+	it("adds complete IDB/Cache totals and mixed Top10 as raw numeric fields", async () => {
+		measureStorageSizesMock.mockResolvedValue({
+			status: "complete",
+			measurement: {
+				indexedDBContentBytes: 120,
+				cacheStorageContentBytes: 80,
+				top10: [
+					{ storageType: "indexedDB", container: "db/store", sizeBytes: 70 },
+					{ storageType: "cacheStorage", container: "bucket", sizeBytes: 60 },
+				],
+				indexedDBSizeDurationMs: 11,
+				cacheStorageSizeDurationMs: 12,
+				sizeMeasurementDurationMs: 23,
+			},
+			coverage: incompleteMeasurementResult.coverage,
+			sliceCount: 2,
+			elapsedMs: 23,
+		})
+		stubEstimate(TWO_GIB, TWO_GIB / 0.8)
+		const { report, dispose } = installPlugin()
+		await flushSnapshot()
+		expect(report).toHaveBeenCalledWith({
+			namespace: "storageQuota",
+			data: expect.objectContaining({
+				sizeMeasurementStatus: "complete",
+				indexedDBContentBytes: 120,
+				cacheStorageContentBytes: 80,
+				storageTop10: [
+					{ storageType: "indexedDB", container: "db/store", sizeBytes: 70 },
+					{ storageType: "cacheStorage", container: "bucket", sizeBytes: 60 },
+				],
+				indexedDBSizeDurationMs: 11,
+				cacheStorageSizeDurationMs: 12,
+				sizeMeasurementDurationMs: 23,
+			}),
+		})
+		dispose()
+	})
+
+	it("keeps the count-only report and records one fault when size enrichment is incomplete", async () => {
+		stubEstimate(TWO_GIB, TWO_GIB / 0.8)
+		const { report, reportFault, dispose } = installPlugin()
+		await flushSnapshot()
+		expect(measureStorageSizesMock).toHaveBeenCalledTimes(1)
+		expect(reportFault).toHaveBeenCalledTimes(1)
+		const data = report.mock.calls[0][0].data
+		expect(data).toMatchObject({
+			sizeMeasurementStatus: "incomplete",
+			sizeMeasurementFailureReason: "timeout",
+			sizeMeasurementFailureStage: "indexedDB",
+			indexedDBRecordsRead: 10,
+		})
+		expect(data).not.toHaveProperty("indexedDBContentBytes")
+		expect(data).not.toHaveProperty("cacheStorageContentBytes")
+		expect(data).not.toHaveProperty("storageTop10")
 		dispose()
 	})
 
@@ -291,6 +413,7 @@ describe("createStorageQuotaPlugin", () => {
 		const { report, dispose } = installPlugin()
 		await flushSnapshot()
 		expect(report).not.toHaveBeenCalled()
+		expect(measureStorageSizesMock).not.toHaveBeenCalled()
 		dispose()
 	})
 
@@ -300,6 +423,7 @@ describe("createStorageQuotaPlugin", () => {
 		const { report, dispose } = installPlugin()
 		await flushSnapshot()
 		expect(report).not.toHaveBeenCalled()
+		expect(measureStorageSizesMock).not.toHaveBeenCalled()
 		dispose()
 	})
 

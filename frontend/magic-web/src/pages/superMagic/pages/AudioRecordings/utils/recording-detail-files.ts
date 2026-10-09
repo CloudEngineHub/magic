@@ -47,6 +47,19 @@ export function hasConfiguredRecordingFile(
 	return typeof configuredPath === "string" && configuredPath.trim().length > 0
 }
 
+/**
+ * Reports whether the right panel will render a tab strip (and therefore an expand entry).
+ * A missing tab strip would strand a collapsed transcript column, so callers disable collapsing.
+ */
+export function hasRecordingDetailTabStrip(
+	fileMap: RecordingDetailFileMap | null | undefined,
+	showNotesTab = true,
+): boolean {
+	if (fileMap?.summaryFiles.length) return true
+	if (showNotesTab && hasConfiguredRecordingFile(fileMap, "notes")) return true
+	return false
+}
+
 /** Flattens tree/list attachment data into one deduplicated file list for lookup. */
 export function flattenRecordingAttachments(
 	tree: AttachmentItem[] = [],

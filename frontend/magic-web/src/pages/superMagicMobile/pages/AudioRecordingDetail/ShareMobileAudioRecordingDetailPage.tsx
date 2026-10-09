@@ -6,7 +6,6 @@ import type { AttachmentItem } from "@/pages/superMagic/components/TopicFilesBut
 import { useShareRecordingDetailData } from "@/pages/superMagic/pages/AudioRecordings/hooks/useShareRecordingDetailData"
 import { hasConfiguredRecordingFile } from "@/pages/superMagic/pages/AudioRecordings/utils/recording-detail-files"
 import { useRecordingColorSegments } from "@/pages/superMagic/pages/AudioRecordings/hooks/useRecordingColorSegments"
-import { useRecordingPlayerCurrentSec } from "@/pages/superMagic/pages/AudioRecordings/hooks/useRecordingPlayerCurrentSec"
 import { downloadRecordingAudioFile } from "@/pages/superMagic/pages/AudioRecordings/utils/download-recording-audio"
 import { normalizeSpeakerSelection } from "@/pages/superMagic/pages/AudioRecordings/utils/speaker-filter"
 import { MobileRecordingAudioPlayer } from "./components/MobileRecordingAudioPlayer"
@@ -67,11 +66,6 @@ export default function ShareMobileAudioRecordingDetailPage({
 			attachments,
 		})
 	const player = useMobileRecordingAudioPlayer(audioUrl)
-	const playerCurrentSec = useRecordingPlayerCurrentSec(
-		player.audioRef,
-		player.playing,
-		player.currentTime,
-	)
 	const [activeTab, setActiveTab] = useState<MobileRecordingTopTab>("summary")
 	const [playerExpanded, setPlayerExpanded] = useState(false)
 	const [shareExportSheetOpen, setShareExportSheetOpen] = useState(false)
@@ -226,7 +220,7 @@ export default function ShareMobileAudioRecordingDetailPage({
 						transcriptContent={texts.transcript?.content}
 						notesContent={texts.notes?.content}
 						playing={player.playing}
-						currentTime={playerCurrentSec}
+						currentTime={player.currentTime}
 						scrollPaddingBottom={scrollPaddingBottom}
 						availableSpeakerIds={transcriptSpeakerIds}
 						selectedSpeakerIds={effectiveSelectedSpeakerIds}
@@ -260,7 +254,7 @@ export default function ShareMobileAudioRecordingDetailPage({
 			<MobileRecordingAudioPlayer
 				audioRef={player.audioRef}
 				audioUrl={audioUrl}
-				currentSec={playerCurrentSec}
+				currentSec={player.currentTime}
 				duration={player.duration}
 				playing={player.playing}
 				expanded={playerExpanded}

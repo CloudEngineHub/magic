@@ -1,8 +1,12 @@
 import type { ReactNode } from "react"
-import { fireEvent, render, screen } from "@testing-library/react"
+import { fireEvent, render, screen, waitFor } from "@testing-library/react"
 import { describe, expect, it, vi } from "vitest"
 import { MobileRecordingSummaryPanel } from "../components/MobileRecordingSummaryPanel"
 import type { AttachmentItem } from "@/pages/superMagic/components/TopicFilesButton/hooks/types"
+
+vi.mock("@/models/user", () => ({
+	userStore: {},
+}))
 
 const scrollEdgeFadePropsMock = vi.fn()
 const magicMarkmapPropsMock = vi.fn()
@@ -57,7 +61,15 @@ vi.mock("@/components/base/MagicMarkmap", () => ({
 vi.mock("@/pages/superMagic/components/Detail/contents/HTML/IsolatedHTMLRenderer", () => ({
 	default: (props: Record<string, unknown>) => {
 		isolatedHtmlRendererPropsMock(props)
-		return <div data-testid="mobile-recording-metrics-html" />
+		return (
+			<div data-testid="mobile-recording-metrics-html">
+				<button
+					type="button"
+					data-testid="mobile-recording-metrics-render-ready"
+					onClick={props.onRenderReady as () => void}
+				/>
+			</div>
+		)
 	},
 }))
 
@@ -433,6 +445,11 @@ Important discussion.
 		)
 
 		await screen.findByTestId("mobile-recording-metrics-html")
+		expect(screen.getByTestId("mobile-recording-metrics-loading")).toBeInTheDocument()
+		fireEvent.click(screen.getByTestId("mobile-recording-metrics-render-ready"))
+		await waitFor(() => {
+			expect(screen.queryByTestId("mobile-recording-metrics-loading")).toBeNull()
+		})
 
 		expect(processHtmlContentMock).toHaveBeenCalledWith(
 			expect.objectContaining({

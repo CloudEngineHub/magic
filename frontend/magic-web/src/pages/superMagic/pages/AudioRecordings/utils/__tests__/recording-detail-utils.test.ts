@@ -207,7 +207,7 @@ Important discussion.
 
 		expect(topics).toHaveLength(1)
 		expect(topics[0]?.name).toBe("Demo Topic")
-		expect(topics[0]?.color).toBe("#000000")
+		expect(topics[0]?.color).toBe("#0d6efd")
 		expect(topics[0]?.summarySpeakers).toEqual(["Speaker-1", "Speaker-2"])
 		expect(topics[0]?.items[0]).toMatchObject({
 			time: 10,
@@ -217,7 +217,7 @@ Important discussion.
 		})
 	})
 
-	it("uses pastel fallback colors when markdown header omits hex", () => {
+	it("uses the first preview color when the markdown header omits hex", () => {
 		const topics = parseTopicsMarkdown(`
 ## Topics
 
@@ -230,7 +230,35 @@ Summary body.
 - \`00:10-00:20\` Speaker-1: Discussed the plan
 `)
 
-		expect(topics[0]?.color).toBe("#e0e0e0")
+		expect(topics[0]?.color).toBe("#0d6efd")
+	})
+
+	it("cycles preview colors by chapter order and ignores markdown hex", () => {
+		const blocks = Array.from({ length: 7 }, (_, index) => {
+			const start = String(index).padStart(2, "0")
+			const end = String(index + 1).padStart(2, "0")
+			return `
+### 📌 topic_${index + 1} | Topic ${index + 1} | #e0e0e0
+
+#### Key Points
+Summary body.
+
+#### Related Dialogue
+- \`${start}:10-${end}:20\` Speaker-1: Discussed the plan
+`
+		}).join("\n---\n")
+
+		const topics = parseTopicsMarkdown(`## Topics\n${blocks}`)
+
+		expect(topics.map((topic) => topic.color)).toEqual([
+			"#0d6efd",
+			"#198754",
+			"#ffc107",
+			"#dc3545",
+			"#0dcaf0",
+			"#6f42c1",
+			"#0d6efd",
+		])
 	})
 
 	it("preserves existing magic-time links without leaking raw href text", () => {
