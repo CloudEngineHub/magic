@@ -1,5 +1,5 @@
 import { observer } from "mobx-react-lite"
-import { useEffect, useState } from "react"
+import { useEffect, useRef, useState } from "react"
 import { createPortal } from "react-dom"
 import { useTranslation } from "react-i18next"
 import { useParams } from "react-router"
@@ -7,6 +7,7 @@ import { X } from "lucide-react"
 import { useNavigateToSuperHome } from "@/layouts/BaseLayout/components/MagicSidebar/hooks/useNavigateToSuperHome"
 import { superMagicStore } from "@/pages/superMagic/stores"
 import { topicStore } from "@/pages/superMagic/stores/core"
+import { analyticsService } from "@/services/analytics"
 import {
 	getHomeOnboardingRewardList,
 	hasHomeOnboardingTasks,
@@ -77,6 +78,7 @@ const HomeOnboardingFirstWorkCongrats = observer(function HomeOnboardingFirstWor
 	const selectedTopic = topicStore.selectedTopic
 	const { navigateToSuperHome } = useNavigateToSuperHome()
 	const [shown, setShown] = useState(false)
+	const exposureReported = useRef(false)
 	/**
 	 * The figure the congratulations carry, taken at the moment they are earned.
 	 *
@@ -130,9 +132,23 @@ const HomeOnboardingFirstWorkCongrats = observer(function HomeOnboardingFirstWor
 		)
 	}, [chatTopicId, onProjectPage, userMagicId])
 
+	useEffect(() => {
+		if (!shown || exposureReported.current) return
+		exposureReported.current = true
+		/*
+		 * Report after React has committed the dialog, not when the execution event merely asks for it.
+		 * The points are the same backend value rendered in the card, so analytics cannot drift from
+		 * what the user actually saw. The enterprise adapter supplies the operational field names.
+		 */
+		analyticsService.report("onboarding_reward_popup_exposure", { pointsAmount: points })
+	}, [points, shown])
+
 	if (!shown) return null
 
-	const close = () => setShown(false)
+	const close = (action: "later" | "close") => {
+		analyticsService.report("onboarding_reward_popup_click", { action })
+		setShown(false)
+	}
 
 	return createPortal(
 		<div
@@ -146,7 +162,7 @@ const HomeOnboardingFirstWorkCongrats = observer(function HomeOnboardingFirstWor
 				<button
 					className="absolute right-4 top-4 inline-flex size-11 items-center justify-center rounded-[10px] text-muted-foreground hover:border hover:border-border hover:bg-muted hover:text-foreground"
 					type="button"
-					onClick={close}
+					onClick={() => close("close")}
 					aria-label={t("homeOnboarding.firstWork.close")}
 				>
 					<X className="size-4" strokeWidth={1.8} />
@@ -182,7 +198,10 @@ const HomeOnboardingFirstWorkCongrats = observer(function HomeOnboardingFirstWor
 						className="h-11 min-h-11 w-full rounded-[10px] border border-foreground bg-foreground px-4 text-[13px] font-semibold text-background hover:bg-[#2b2b2b]"
 						type="button"
 						onClick={() => {
-							close()
+							analyticsService.report("onboarding_reward_popup_click", {
+								action: "start_new_task",
+							})
+							setShown(false)
 							navigateToSuperHome()
 						}}
 					>
@@ -191,7 +210,7 @@ const HomeOnboardingFirstWorkCongrats = observer(function HomeOnboardingFirstWor
 					<button
 						className="min-h-11 self-center px-3 py-1.5 text-[15px] text-muted-foreground hover:text-foreground"
 						type="button"
-						onClick={close}
+						onClick={() => close("later")}
 					>
 						{t("homeOnboarding.firstWork.actions.later")}
 					</button>

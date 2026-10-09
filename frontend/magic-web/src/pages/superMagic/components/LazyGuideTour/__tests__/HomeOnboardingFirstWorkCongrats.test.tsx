@@ -3,6 +3,10 @@ import fs from "node:fs"
 import path from "node:path"
 import { beforeEach, describe, expect, it, vi } from "vitest"
 
+const { analyticsReport } = vi.hoisted(() => ({ analyticsReport: vi.fn() }))
+
+vi.mock("@/services/analytics", () => ({ analyticsService: { report: analyticsReport } }))
+
 /**
  * The congratulation a new account is shown the first time one of its topics finishes.
  *
@@ -224,6 +228,7 @@ beforeEach(() => {
 	getOnboardingTasks.mockReset()
 	completeOnboardingTask.mockReset()
 	navigateToSuperHome.mockReset()
+	analyticsReport.mockReset()
 	// The one-shot answer outlives a page load, which is the point of it, so it is cleared by hand.
 	window.localStorage.clear()
 })
@@ -252,6 +257,9 @@ describe("what the dialog waits for before it opens", () => {
 		expect(screen.getByText(START)).toBeTruthy()
 		expect(screen.getByText(LATER)).toBeTruthy()
 		expect(mounted.onboarding.isHomeOnboardingFirstWorkCongratsSpent(MAGIC_ID)).toBe(true)
+		expect(analyticsReport).toHaveBeenCalledWith("onboarding_reward_popup_exposure", {
+			pointsAmount: 100,
+		})
 	})
 
 	it("takes the points from the backend's row rather than a number of its own", async () => {
@@ -385,6 +393,9 @@ describe("the two exits", () => {
 
 		expect(congratsDialog()).toBeNull()
 		expect(navigateToSuperHome).not.toHaveBeenCalled()
+		expect(analyticsReport).toHaveBeenCalledWith("onboarding_reward_popup_click", {
+			action: "later",
+		})
 		// The backend finishes this task by itself; the client only ever reads the row.
 		expect(completeOnboardingTask).not.toHaveBeenCalled()
 	})
@@ -400,6 +411,24 @@ describe("the two exits", () => {
 
 		expect(navigateToSuperHome).toHaveBeenCalledTimes(1)
 		expect(congratsDialog()).toBeNull()
+		expect(analyticsReport).toHaveBeenCalledWith("onboarding_reward_popup_click", {
+			action: "start_new_task",
+		})
+	})
+
+	it("reports the close control separately", async () => {
+		const mounted = await mountDialog(() => backendStillListsTasks())
+		await listArrives(mounted.onboarding)
+		topicFinishes()
+
+		await act(async () => {
+			fireEvent.click(screen.getByLabelText(CLOSE))
+		})
+
+		expect(congratsDialog()).toBeNull()
+		expect(analyticsReport).toHaveBeenCalledWith("onboarding_reward_popup_click", {
+			action: "close",
+		})
 	})
 })
 
