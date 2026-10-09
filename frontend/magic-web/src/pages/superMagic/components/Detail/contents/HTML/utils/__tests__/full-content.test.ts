@@ -19,6 +19,37 @@ vi.mock("@/models/config", () => ({
 }))
 
 describe("getFullContent", () => {
+	it("installs PPT touch zoom only when requested through compiled runtime preparation", async () => {
+		const { getFullContent } = await import("../full-content")
+		const html = "<!DOCTYPE html><html><body><h1>Slide</h1></body></html>"
+		expect(getFullContent(html)).not.toContain("magic-preview-pinch-ready")
+		const prepared = getFullContent(html, undefined, { enableTouchPinchZoom: true })
+		expect(prepared).toContain("magic-preview-pinch-ready")
+		const { filterInjectedTags } = await import("../index")
+		expect(filterInjectedTags(prepared, new Map())).not.toContain("magic-preview-pinch")
+		const doc = new DOMParser().parseFromString(prepared, "text/html")
+		const script = Array.from(doc.querySelectorAll("script[data-injected]")).find((item) =>
+			item.textContent?.includes("magic-preview-pinch-ready"),
+		)
+		expect(script).toBeDefined()
+		// Execute the final HTML's rewritten/minified installer, not just its TypeScript source.
+		const parent = {
+			get document() {
+				throw new DOMException("Cross-origin", "SecurityError")
+			},
+			postMessage: vi.fn(),
+		}
+		const sandbox = Object.assign(new EventTarget(), { parent })
+		new Function("window", "document", script?.textContent || "")(sandbox, document)
+		expect(parent.postMessage).toHaveBeenCalledWith(
+			{ type: "magic-preview-pinch-ready" },
+			window.location.origin,
+		)
+		;(
+			sandbox as typeof sandbox & { __MAGIC_PREVIEW_PINCH_CLEANUP__: () => void }
+		).__MAGIC_PREVIEW_PINCH_CLEANUP__()
+	})
+
 	it("refreshes a failed static image through its original relative path", async () => {
 		const { getFullContent } = await import("../full-content")
 		const html = getFullContent(

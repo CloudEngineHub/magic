@@ -1,11 +1,14 @@
 import { type RefObject, useCallback, useEffect, useRef, useState } from "react"
 import { useMemoizedFn } from "ahooks"
 import { isMagicApp } from "@/utils/devices"
+import { retainMobilePresentationLayout } from "@/stores/layout/mobilePresentationLayout"
 
 interface UseFullscreenOptions {
 	containerRef: RefObject<HTMLElement>
 	presenterTargetRef?: RefObject<HTMLElement>
 	presenterEnabled?: boolean
+	/** Preserve the mobile route and preview shell while orientation changes their viewport. */
+	preserveMobileLayout?: boolean
 	/** Runs for every entry path, including F11 and iframe shortcuts; exiting stays unconditional. */
 	beforeEnter?: () => boolean | Promise<boolean>
 }
@@ -112,12 +115,19 @@ export function useFullscreen({
 	containerRef,
 	presenterTargetRef,
 	presenterEnabled = false,
+	preserveMobileLayout = false,
 	beforeEnter,
 }: UseFullscreenOptions): UseFullscreenReturn {
 	const [isFullscreen, setIsFullscreen] = useState(false)
 	const [isPresenterView, setIsPresenterView] = useState(false)
 	const skipPresenterAttemptRef = useRef(false)
 	const resetPresenterSkipOnExitRef = useRef(false)
+	const fullscreenModeRef = useRef<"native" | "css" | null>(null)
+	const releaseMobileLayoutRef = useRef<(() => void) | null>(null)
+	const releaseMobileLayout = useMemoizedFn(() => {
+		releaseMobileLayoutRef.current?.()
+		releaseMobileLayoutRef.current = null
+	})
 
 	const exitNativeFullscreen = useMemoizedFn(async () => {
 		const fullscreenDocument = document as FullscreenDocument
@@ -130,6 +140,8 @@ export function useFullscreen({
 	const exitFullscreen = useMemoizedFn(async () => {
 		try {
 			if (isMagicApp) {
+				fullscreenModeRef.current = null
+				releaseMobileLayout()
 				setIsFullscreen(false)
 				setIsPresenterView(false)
 				unlockScreenOrientation()
@@ -142,6 +154,8 @@ export function useFullscreen({
 			) {
 				await exitNativeFullscreen()
 			}
+			fullscreenModeRef.current = null
+			releaseMobileLayout()
 			setIsFullscreen(false)
 			setIsPresenterView(false)
 			unlockScreenOrientation()
@@ -189,6 +203,7 @@ export function useFullscreen({
 
 		try {
 			await target.requestFullscreen({ screen: externalScreen })
+			fullscreenModeRef.current = "native"
 			skipPresenterAttemptRef.current = false
 			setIsFullscreen(true)
 			setIsPresenterView(true)
@@ -213,10 +228,16 @@ export function useFullscreen({
 				return
 			}
 		}
+		// Retain before requesting native fullscreen: orientation can resize ancestors before it resolves.
+		if (!isFullscreen && !getFullscreenElement() && preserveMobileLayout) {
+			releaseMobileLayoutRef.current ??= retainMobilePresentationLayout()
+		}
 		try {
 			// Native fullscreen is unreliable inside the mobile app WebView; its fixed layout is the
 			// fullscreen surface, so only the local CSS state needs to change there.
 			if (isMagicApp) {
+				fullscreenModeRef.current = isFullscreen ? null : "css"
+				if (isFullscreen) releaseMobileLayout()
 				setIsFullscreen((current) => !current)
 				setIsPresenterView(false)
 				if (isFullscreen) unlockScreenOrientation()
@@ -227,6 +248,8 @@ export function useFullscreen({
 			if (!getFullscreenElement()) {
 				// CSS fullscreen fallback (WebView and browsers without Fullscreen API).
 				if (isFullscreen) {
+					fullscreenModeRef.current = null
+					releaseMobileLayout()
 					setIsFullscreen(false)
 					setIsPresenterView(false)
 					unlockScreenOrientation()
@@ -247,6 +270,7 @@ export function useFullscreen({
 						const isCoarsePointer =
 							window.matchMedia?.("(pointer: coarse)")?.matches ?? false
 						if (isCoarsePointer) {
+							fullscreenModeRef.current = "css"
 							setIsFullscreen(true)
 							setIsPresenterView(false)
 							await lockLandscapeOrientation()
@@ -254,6 +278,7 @@ export function useFullscreen({
 						return
 					}
 					await requestFullscreen.call(fullscreenContainer)
+					fullscreenModeRef.current = "native"
 					// A direct fallback that succeeds after the presenter breaker was opened
 					// restores presenter negotiation only after this fullscreen session exits.
 					resetPresenterSkipOnExitRef.current = isPresenterFallbackRecovery
@@ -263,6 +288,8 @@ export function useFullscreen({
 				}
 			} else {
 				await exitNativeFullscreen()
+				fullscreenModeRef.current = null
+				releaseMobileLayout()
 				setIsFullscreen(false)
 				setIsPresenterView(false)
 				unlockScreenOrientation()
@@ -274,21 +301,36 @@ export function useFullscreen({
 			// failures must remain visible instead of being reported as fullscreen.
 			const isCoarsePointer = window.matchMedia?.("(pointer: coarse)")?.matches ?? false
 			if (isCoarsePointer) {
+				fullscreenModeRef.current = "css"
 				setIsFullscreen(true)
 				setIsPresenterView(false)
 				await lockLandscapeOrientation()
 			}
+		} finally {
+			if (!fullscreenModeRef.current) releaseMobileLayout()
 		}
-	}, [beforeEnter, containerRef, exitNativeFullscreen, isFullscreen, tryEnterPresenterView])
+	}, [
+		beforeEnter,
+		containerRef,
+		exitNativeFullscreen,
+		isFullscreen,
+		preserveMobileLayout,
+		releaseMobileLayout,
+		tryEnterPresenterView,
+	])
 
 	useEffect(() => {
 		function handleFullscreenChange() {
+			// Safari/WebView CSS presentation does not own native fullscreen events.
+			if (fullscreenModeRef.current === "css") return
 			const fullscreenElement = getFullscreenElement()
 			const containerFullscreen = fullscreenElement === containerRef.current
 			const presenterFullscreen = fullscreenElement === presenterTargetRef?.current
+			fullscreenModeRef.current = containerFullscreen || presenterFullscreen ? "native" : null
 			setIsFullscreen(containerFullscreen || presenterFullscreen)
 			setIsPresenterView(presenterFullscreen)
 			if (!containerFullscreen && !presenterFullscreen) {
+				releaseMobileLayout()
 				if (resetPresenterSkipOnExitRef.current) {
 					resetPresenterSkipOnExitRef.current = false
 					skipPresenterAttemptRef.current = false
@@ -303,9 +345,16 @@ export function useFullscreen({
 			document.removeEventListener("fullscreenchange", handleFullscreenChange)
 			document.removeEventListener("webkitfullscreenchange", handleFullscreenChange)
 		}
-	}, [containerRef, presenterTargetRef])
+	}, [containerRef, presenterTargetRef, releaseMobileLayout])
 
-	useEffect(() => () => unlockScreenOrientation(), [])
+	useEffect(
+		() => () => {
+			fullscreenModeRef.current = null
+			releaseMobileLayout()
+			unlockScreenOrientation()
+		},
+		[releaseMobileLayout],
+	)
 
 	// Listen for fullscreen-related keyboard events from iframe
 	useEffect(() => {

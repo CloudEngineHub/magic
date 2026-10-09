@@ -23,6 +23,7 @@ vi.mock("../../../contents/HTML/IsolatedHTMLRenderer", async () => {
 })
 
 const mockState = vi.hoisted(() => ({
+	isMobile: false,
 	store: {
 		activeIndex: 0,
 		get currentSlide() {
@@ -111,7 +112,7 @@ vi.mock("react-i18next", async (importOriginal) => ({
 }))
 
 vi.mock("@/hooks/useIsMobile", () => ({
-	useIsMobile: () => false,
+	useIsMobile: () => mockState.isMobile,
 }))
 
 vi.mock("@/models/user/hooks/useOrganization", () => ({
@@ -159,16 +160,21 @@ vi.mock("../PPTSidebar/index", async () => {
 		allowEdit,
 		isPreviewLoadingEnabled,
 		onCollapsedChange,
+		onOpenTransitions,
 	}: {
 		allowEdit?: boolean
 		isPreviewLoadingEnabled?: boolean
 		onCollapsedChange?: (collapsed: boolean) => void
+		onOpenTransitions?: () => void
 	}) {
 		React.useEffect(() => {
 			mockState.sidebarPreviewEffect(isPreviewLoadingEnabled)
 		}, [isPreviewLoadingEnabled])
 		return (
 			<div data-testid="ppt-sidebar" data-allow-edit={String(allowEdit)}>
+				{onOpenTransitions && (
+					<button onClick={onOpenTransitions}>sidebar transitions</button>
+				)}
 				<button
 					type="button"
 					data-testid="ppt-sidebar-collapse-button"
@@ -655,6 +661,18 @@ describe("PPTRender", () => {
 		},
 	)
 
+	it("hides transition configuration on mobile while keeping notes and presentation", () => {
+		mockState.isMobile = true
+		mockState.isSlideEditing = false
+		renderPPTRender()
+		expect(screen.queryByRole("button", { name: "open transitions" })).not.toBeInTheDocument()
+		expect(
+			screen.queryByRole("button", { name: "sidebar transitions" }),
+		).not.toBeInTheDocument()
+		expect(screen.getByRole("button", { name: "toggle notes" })).toBeInTheDocument()
+		expect(screen.getByRole("button", { name: "present" })).toBeInTheDocument()
+	})
+
 	it("cancels navigation when a transition draft is kept", async () => {
 		mockState.isSlideEditing = false
 		renderPPTRender()
@@ -680,6 +698,7 @@ describe("PPTRender", () => {
 	})
 
 	beforeEach(() => {
+		mockState.isMobile = false
 		mockState.presenterContainer?.remove()
 		mockState.presenterContainer = document.createElement("div")
 		document.body.appendChild(mockState.presenterContainer)

@@ -444,6 +444,7 @@ const PPTRenderInner = observer(function PPTRenderInner({
 		toggleFullscreen: togglePresentationFullscreen,
 	} = useFullscreen({
 		containerRef,
+		preserveMobileLayout: isMobile,
 		presenterTargetRef: presentationStageRef,
 		presenterEnabled: false,
 		beforeEnter: () => {
@@ -588,7 +589,7 @@ const PPTRenderInner = observer(function PPTRenderInner({
 		},
 	})
 	const canConfigureTransitions = Boolean(
-		allowEdit &&
+		effectiveAllowEdit &&
 		!slideStructureAdapter &&
 		!isPlaybackMode &&
 		!isPresenterConsole &&
