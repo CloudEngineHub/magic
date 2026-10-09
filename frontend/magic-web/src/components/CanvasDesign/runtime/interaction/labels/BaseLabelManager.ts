@@ -455,6 +455,11 @@ export abstract class BaseLabelManager {
 
 	/** Recomputes one label after a sibling manager changes its available width. */
 	public refreshLabelLayout(elementId: string, skipBatchDraw = false): boolean {
+		if (
+			!this.labelMap.has(elementId) &&
+			this.canvas.nameLabelManager?.isDOMLabelInteracting(elementId)
+		)
+			return this.createOrUpdateLabel(elementId, { skipBatchDraw })
 		return this.updateLabelPosition(elementId, skipBatchDraw)
 	}
 
@@ -1111,7 +1116,10 @@ export abstract class BaseLabelManager {
 		if (this.visibilityConfig.hoverOrSelectTypes.has(elementType)) {
 			const isSelected = this.canvas.selectionManager.isSelected(elementId)
 			const hoveredId = this.canvas.hoverManager.getHoveredElementId()
-			const isHovered = hoveredId === elementId
+			// 指针进入 DOM 标题后会离开 Konva；仍按同一媒体行的悬浮处理，避免闪隐。
+			const isHovered =
+				hoveredId === elementId ||
+				this.canvas.nameLabelManager?.isDOMLabelInteracting(elementId) === true
 
 			// 如果有元素正在裁剪，且当前元素不是正在裁剪的元素，则hover时不显示标签
 			if (croppingElementId && croppingElementId !== elementId && isHovered && !isSelected) {

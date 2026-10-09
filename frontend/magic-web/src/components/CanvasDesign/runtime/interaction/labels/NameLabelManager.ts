@@ -70,6 +70,7 @@ export interface ImageNameLabelLayout extends NameLabelScreenLayout {
 	canRename: boolean
 	showRenameButton: boolean
 	renameButtonGap: number
+	hitPadding: number
 }
 
 /**
@@ -142,7 +143,7 @@ export class NameLabelManager extends BaseLabelManager {
 		if (!layout?.showRenameButton) return null
 		return {
 			x: layout.x + layout.width + layout.renameButtonGap,
-			y: layout.y + layout.height - 24,
+			y: layout.y,
 		}
 	}
 
@@ -179,8 +180,16 @@ export class NameLabelManager extends BaseLabelManager {
 			...layout,
 			canRename: state.canRename,
 			showRenameButton: state.canRename && state.showOperation,
-			renameButtonGap: Math.max(0, labelScreenRight - layout.x - layout.width),
+			renameButtonGap:
+				Math.max(0, labelScreenRight - layout.x - layout.width) +
+				(state.showOperation ? NAME_LABEL_CONFIG.ICON_GAP : 0),
+			hitPadding: NAME_LABEL_CONFIG.HIT_PADDING * labelGroup.scaleX() * viewportScale,
 		}
+	}
+
+	/** DOM 标题悬浮或键盘聚焦期间，名称与分辨率沿用同一个交互目标。 */
+	public isDOMLabelInteracting(elementId: string): boolean {
+		return this.domLabelElementId === elementId && this.renameButtonElementId === elementId
 	}
 
 	/** 只有标题悬浮或键盘聚焦才占用铅笔宽度；图片选中本身不挤压标题。 */
@@ -201,8 +210,18 @@ export class NameLabelManager extends BaseLabelManager {
 		const previous = this.domLabelElementId
 		this.domLabelElementId = elementId
 		// DOM 文字支持原生选中复制，只隐藏同一标签的 Konva 文字，避免双份文字重叠。
-		if (previous) this.labelMap.get(previous)?.findOne<Konva.Text>("Text")?.opacity(1)
-		if (elementId) this.labelMap.get(elementId)?.findOne<Konva.Text>("Text")?.opacity(0)
+		// 文字和命中一起交接，避免 DOM 文字光标与下方透明区域的手形光标竞争。
+		if (previous) {
+			const group = this.labelMap.get(previous)
+			group?.findOne<Konva.Text>("Text")?.opacity(1)
+			group?.findOne<Konva.Rect>(`.${NAME_LABEL_HIT_NAME}`)?.listening(true)
+		}
+		if (elementId) {
+			const group = this.labelMap.get(elementId)
+			group?.findOne<Konva.Text>("Text")?.opacity(0)
+			group?.findOne<Konva.Rect>(`.${NAME_LABEL_HIT_NAME}`)?.listening(false)
+			if (this.pointerHoverElementId === elementId) this.clearPointerHover()
+		}
 		this.canvas.runtimeScheduler.requestLayerDraw("overlay", {
 			source: "NameLabelManager",
 			reason: "dom-name-label",
@@ -322,7 +341,7 @@ export class NameLabelManager extends BaseLabelManager {
 		return this.renameButtonElementId === elementId &&
 			this.canvas.elementManager.getElementData(elementId)?.type === ElementTypeEnum.Image &&
 			(this.canvas.elementRenameManager?.canRename(elementId) ?? false)
-			? 24
+			? NAME_LABEL_CONFIG.FONT_SIZE + NAME_LABEL_CONFIG.ICON_GAP
 			: 0
 	}
 
@@ -347,7 +366,7 @@ export class NameLabelManager extends BaseLabelManager {
 		const hitRect = new Konva.Rect({
 			name: NAME_LABEL_HIT_NAME,
 			fill: "rgba(0, 0, 0, 0.001)",
-			listening: true,
+			listening: this.domLabelElementId !== elementId,
 		})
 		labelGroup.add(hitRect)
 		labelGroup.add(textNode)
@@ -925,7 +944,10 @@ export class NameLabelManager extends BaseLabelManager {
 			stopPointerEvent(e)
 			this.selectElementFromLabel(elementId)
 		})
-		labelGroup.on("mouseup", stopPointerEvent)
+		labelGroup.on("mouseup", (event) => {
+			// 只截断 Konva 冒泡；原生 mouseup 必须到达 window，Konva 才能派发 dragend。
+			event.cancelBubble = true
+		})
 		labelGroup.on("click tap", (e) => {
 			stopPointerEvent(e)
 		})
@@ -962,19 +984,19 @@ export class NameLabelManager extends BaseLabelManager {
 		})
 	}
 
-	private selectElementFromLabel(elementId: string): void {
+	public selectElementFromLabel(elementId: string, autoFocus = true): void {
 		const elementData = this.canvas.elementManager.getElementData(elementId)
 		if (!this.canvas.permissionManager.canSelect(elementData)) {
 			return
 		}
 		if (this.canvas.selectionManager.isSelected(elementId)) {
 			if (this.canvas.selectionManager.getSelectionCount() > 1) {
-				this.canvas.selectionManager.replaceSelection([elementId])
+				this.canvas.selectionManager.replaceSelection([elementId], autoFocus)
 			}
 			return
 		}
 		this.canvas.connectionManager?.deselectConnection()
-		this.canvas.selectionManager.replaceSelection([elementId])
+		this.canvas.selectionManager.replaceSelection([elementId], autoFocus)
 	}
 
 	private clearPointerHover(): void {

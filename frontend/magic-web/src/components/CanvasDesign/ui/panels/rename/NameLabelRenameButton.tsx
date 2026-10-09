@@ -38,7 +38,8 @@ function areTargetsEqual(
 		previous.color === next.color &&
 		previous.canRename === next.canRename &&
 		previous.showRenameButton === next.showRenameButton &&
-		previous.renameButtonGap === next.renameButtonGap
+		previous.renameButtonGap === next.renameButtonGap &&
+		previous.hitPadding === next.hitPadding
 	)
 }
 
@@ -68,20 +69,24 @@ export default function NameLabelRenameButton() {
 			root.style.display = layout ? "flex" : "none"
 			if (!layout) return
 			const showButton = layout.showRenameButton
-			const buttonWidth = showButton ? layout.renameButtonGap + 24 : 0
+			const buttonWidth = showButton ? layout.renameButtonGap + layout.height : 0
 			// 按管理器分配的宽度布局，禁止 Flex 为按钮再次压缩文字。
-			root.style.width = `${layout.width + buttonWidth}px`
-			root.style.height = `${showButton ? 24 : layout.height}px`
-			root.style.transform = `translate(${layout.x}px, ${
-				layout.y - (showButton ? (24 - layout.height) / 2 : 0)
-			}px)`
+			// DOM 接管原透明命中内边距；铅笔与文字等高，悬浮不向图片扩张。
+			root.style.padding = `${layout.hitPadding}px`
+			root.style.width = `${layout.width + buttonWidth + layout.hitPadding * 2}px`
+			root.style.height = `${layout.height + layout.hitPadding * 2}px`
+			root.style.transform = `translate(${layout.x - layout.hitPadding}px, ${layout.y - layout.hitPadding}px)`
 			label.style.width = `${layout.width}px`
 			label.style.fontSize = `${layout.fontSize}px`
 			label.style.lineHeight = `${layout.height}px`
 			label.style.fontFamily = layout.fontFamily
 			label.style.color = layout.color
+			// Konva 的宽度度量不含页面字间距，DOM 必须使用相同的文字样式。
+			label.style.letterSpacing = "0"
 			if (renameButtonRef.current) {
 				renameButtonRef.current.style.display = showButton ? "flex" : "none"
+				renameButtonRef.current.style.width = `${layout.height}px`
+				renameButtonRef.current.style.height = `${layout.height}px`
 				renameButtonRef.current.style.marginLeft =
 					showButton && layout.renameButtonGap > 0 ? `${layout.renameButtonGap}px` : ""
 			}
@@ -222,6 +227,7 @@ export default function NameLabelRenameButton() {
 			const activeElementId = targetRef.current?.elementId
 			if (
 				transformEndEvent &&
+				transformEndEvent.data.elementIds.length > 0 &&
 				(!activeElementId || !transformEndEvent.data.elementIds.includes(activeElementId))
 			)
 				return
@@ -267,7 +273,7 @@ export default function NameLabelRenameButton() {
 		<div
 			ref={containerRef}
 			data-canvas-ui-component
-			className="absolute left-0 top-0 z-[1] flex items-center"
+			className="absolute left-0 top-0 z-[1] flex cursor-text items-center"
 			onPointerEnter={(event) => {
 				heldTarget.current = target.elementId
 				if (event.pointerType === "mouse") setRenameButtonTarget(target.elementId)
@@ -293,7 +299,11 @@ export default function NameLabelRenameButton() {
 				heldTarget.current = null
 				setRenameButtonTarget(null)
 			}}
-			onPointerDown={(event) => event.stopPropagation()}
+			onPointerDown={(event) => {
+				event.stopPropagation()
+				if (event.button === 0)
+					canvas?.nameLabelManager.selectElementFromLabel(target.elementId, false)
+			}}
 			onContextMenu={(event) => event.stopPropagation()}
 		>
 			<MagicTooltip
@@ -329,11 +339,11 @@ export default function NameLabelRenameButton() {
 						type="button"
 						style={{ display: target.showRenameButton ? "flex" : "none" }}
 						aria-label={t("contextMenu.rename", "重命名")}
-						className="flex size-6 shrink-0 cursor-pointer items-center justify-center rounded text-muted-foreground hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+						className="flex shrink-0 cursor-pointer items-center justify-center text-muted-foreground hover:text-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
 						onPointerDown={(event) => event.stopPropagation()}
 						onClick={() => canvas?.elementRenameManager.startRename(target.elementId)}
 					>
-						<Pencil size={16} />
+						<Pencil size={target.height} />
 					</button>
 				</MagicTooltip>
 			)}
