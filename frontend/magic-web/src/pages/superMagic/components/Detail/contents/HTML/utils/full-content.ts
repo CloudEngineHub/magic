@@ -1762,6 +1762,14 @@ export const getFullContent = (
 		}
 	`
 	injectedHeadFragment.appendChild(scriptElement)
+	if (options.enableTouchPinchZoom) {
+		const pinchScript = doc.createElement("script")
+		pinchScript.setAttribute("data-injected", "true")
+		pinchScript.textContent = createIframeRuntimeScript("touch-pinch", {
+			parentOrigin: window.location.origin,
+		})
+		injectedHeadFragment.appendChild(pinchScript)
+	}
 
 	// 创建基础样式
 	const styleElement = doc.createElement("style")
@@ -1833,6 +1841,7 @@ interface DynamicResourceInterceptorOptions {
 }
 
 interface GetFullContentOptions {
+	enableTouchPinchZoom?: boolean
 	serviceWorkerMockMode?: ServiceWorkerMockMode
 	dynamicInterception?: DynamicResourceInterceptorOptions
 	containOverscroll?: boolean

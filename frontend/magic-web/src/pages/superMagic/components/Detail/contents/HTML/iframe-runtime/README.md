@@ -21,7 +21,7 @@ retain their names; this extraction does not introduce a new public SDK protocol
 
 ## 当前边界
 
-已迁移遥测、页面尺寸、ServiceWorker fallback、导航初始化，以及 standalone
+已迁移遥测、页面尺寸、ServiceWorker fallback、导航初始化、PPT 预览双指手势，以及 standalone
 模式的 Cookie、Storage、IndexedDB fallback。正式虚拟存储桥继续拥有有显式
 存储上下文的渲染，不会被 legacy 模块覆盖。
 

@@ -2,6 +2,7 @@ import { useEffect, useRef } from "react"
 import { useMemoizedFn } from "ahooks"
 import { useIframeScaling, type IframeScalingConfig } from "./useIframeScaling"
 import type { CSSProperties } from "react"
+import { useTouchPinchZoom, type PinchAnchor } from "./useTouchPinchZoom"
 
 export interface ElementRect {
 	top: number
@@ -87,7 +88,17 @@ export function useZoomControls(config: ZoomControlsConfig): ZoomControlsResult 
 	}, [isEditMode, resetScale, scalingConfig.onManualScaleChange])
 
 	// 处理缩放变化并限制范围，支持以选中元素为中心缩放
-	const handleScaleChange = useMemoizedFn((newScale: number) => {
+	const scrollRequestRef = useRef(0)
+	useEffect(
+		() => () => {
+			scrollRequestRef.current += 1
+		},
+		[],
+	)
+
+	const handleScaleChange = useMemoizedFn((newScale: number, anchor?: PinchAnchor) => {
+		if (!Number.isFinite(newScale)) return
+		const request = ++scrollRequestRef.current
 		const clampedScale = Math.max(minScale, Math.min(newScale, maxScale))
 
 		// Get container element
@@ -111,7 +122,10 @@ export function useZoomControls(config: ZoomControlsConfig): ZoomControlsResult 
 			? iframeRect.top - containerRect.top + container.scrollTop
 			: 0
 
-		if (selectedElementRect) {
+		if (anchor) {
+			zoomCenterX = anchor.contentX
+			zoomCenterY = anchor.contentY
+		} else if (selectedElementRect) {
 			// Use selected element center as zoom center
 			const elementCenterX = selectedElementRect.left + selectedElementRect.width / 2
 			const elementCenterY = selectedElementRect.top + selectedElementRect.height / 2
@@ -125,31 +139,59 @@ export function useZoomControls(config: ZoomControlsConfig): ZoomControlsResult 
 			zoomCenterY = (viewportCenterY - visualContentOriginY) / scaleRatio
 		}
 
-		// Calculate new scroll position to keep the zoom center point visually stable
-		const newScrollLeft =
-			visualContentOriginX + zoomCenterX * clampedScale - container.clientWidth / 2
-		const newScrollTop =
-			visualContentOriginY + zoomCenterY * clampedScale - container.clientHeight / 2
-
-		// Apply scale change
 		setManualScale(clampedScale)
-
-		// Adjust scroll position after a brief delay to allow scale to apply
+		// Measure after layout: switching from fit-to-page to manual zoom changes the
+		// wrapper's padding. Older queued scroll corrections must not win over a new gesture.
 		requestAnimationFrame(() => {
 			requestAnimationFrame(() => {
-				if (container) {
-					container.scrollTo({
-						left: Math.max(0, newScrollLeft),
-						top: Math.max(0, newScrollTop),
-						behavior: "instant",
-					})
-				}
+				if (request !== scrollRequestRef.current) return
+				const newRect = scalingConfig.iframeRef.current?.getBoundingClientRect()
+				const targetX = anchor
+					? anchor.clientX - containerRect.left
+					: container.clientWidth / 2
+				const targetY = anchor
+					? anchor.clientY - containerRect.top
+					: container.clientHeight / 2
+				container.scrollTo({
+					left: Math.max(
+						0,
+						container.scrollLeft +
+							(newRect ? newRect.left - containerRect.left : 0) +
+							zoomCenterX * clampedScale -
+							targetX,
+					),
+					top: Math.max(
+						0,
+						container.scrollTop +
+							(newRect ? newRect.top - containerRect.top : 0) +
+							zoomCenterY * clampedScale -
+							targetY,
+					),
+					behavior: "instant",
+				})
 			})
 		})
 	})
 
+	const isPinching = useTouchPinchZoom({
+		containerRef: scalingConfig.containerRef,
+		iframeRef: scalingConfig.iframeRef,
+		enabled: Boolean(
+			scalingConfig.isPptRender &&
+			shouldApplyScaling &&
+			isScaleReady &&
+			scalingConfig.isVisible !== false &&
+			!isEditMode &&
+			!scalingConfig.isFullscreen,
+		),
+		iframeReady: Boolean(scalingConfig.iframeLoaded && scalingConfig.contentInjected),
+		scale: scaleRatio,
+		onScaleChange: handleScaleChange,
+	})
+
 	// 处理缩放重置
 	const handleResetZoom = useMemoizedFn(() => {
+		scrollRequestRef.current += 1
 		resetScale()
 	})
 
@@ -285,11 +327,14 @@ export function useZoomControls(config: ZoomControlsConfig): ZoomControlsResult 
 
 		// For manual zoom, add a subtle transform transition for smoother scaling
 		// For auto zoom or first render, keep existing behavior
-		const transition = hasRenderedOnce
-			? isManualZoom
-				? "transform 50ms ease-out"
-				: "none"
-			: "opacity 120ms ease"
+		// Continuous touch movement must follow the fingers without a transform animation.
+		const transition = isPinching
+			? "none"
+			: hasRenderedOnce
+				? isManualZoom
+					? "transform 50ms ease-out"
+					: "none"
+				: "opacity 120ms ease"
 
 		return isManualZoom
 			? {
