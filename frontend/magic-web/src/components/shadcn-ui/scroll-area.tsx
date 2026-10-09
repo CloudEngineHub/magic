@@ -278,8 +278,8 @@ const ScrollArea = React.forwardRef<
 	},
 )
 
-// @ts-expect-error - displayName is not in the type definition but is valid in runtime
-ScrollArea.displayName = "ScrollArea"
+// Set through Object.assign so the file type-checks in the host app and in standalone admin builds.
+Object.assign(ScrollArea, { displayName: "ScrollArea" })
 
 function ScrollBar({
 	className,
