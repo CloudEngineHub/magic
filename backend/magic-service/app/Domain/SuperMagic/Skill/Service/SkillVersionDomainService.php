@@ -353,11 +353,12 @@ class SkillVersionDomainService
         return $versionEntity;
     }
 
-    /** 将已完成 Sandbox 导出的 Skill 版本落库。 */
+    /** 将已完成 Sandbox 导出的 Skill 版本落库。packageName 用于回填 prepare 阶段尚为空的版本包名。 */
     public function finalizePreparedSkill(
         SkillDataIsolation $dataIsolation,
         int $versionId,
-        string $fileKey
+        string $fileKey,
+        ?string $packageName = null
     ): SkillVersionEntity {
         $versionEntity = $this->skillVersionRepository->findByIdForUpdate($dataIsolation, $versionId);
         if ($versionEntity === null) {
@@ -368,6 +369,9 @@ class SkillVersionDomainService
         }
 
         $versionEntity->setFileKey($fileKey);
+        if ($packageName !== null && $packageName !== '' && $versionEntity->getPackageName() === '') {
+            $versionEntity->setPackageName($packageName);
+        }
         if ($versionEntity->getPublishTargetType() === PublishTargetType::PRIVATE) {
             $this->skillVersionRepository->clearCurrentVersion($dataIsolation, $versionEntity->getCode());
             $versionEntity->setPublishStatus(PublishStatus::PUBLISHED);
