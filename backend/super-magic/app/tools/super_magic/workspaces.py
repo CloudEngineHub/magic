@@ -91,8 +91,9 @@ class ArchiveWorkspace(ProductTool[ArchiveWorkspaceParams]):
     async def execute(self, tool_context: ToolContext, params: ArchiveWorkspaceParams) -> ToolResult:
         workspace_id = resource_id(params.workspace_id, "workspace_id")
         async def operation(ctx):
+            workspace = projected(await ctx.sdk.workspace.get_async(ctx.auth, workspace_id), WORKSPACE)
             raw = await ctx.sdk.workspace.archive_async(ctx.auth, workspace_id, params.archived)
-            return {"id": workspace_id, "archived": params.archived, "success": raw.get("success")}
+            return {**workspace, "id": workspace_id, "archived": params.archived, "is_archived": params.archived, "success": raw.get("success")}
         return await self.run_product(tool_context, "Workspace archive update", operation, write=True)
 
 
@@ -104,6 +105,7 @@ class DeleteWorkspace(ProductTool[GetWorkspaceParams]):
     async def execute(self, tool_context: ToolContext, params: GetWorkspaceParams) -> ToolResult:
         workspace_id = resource_id(params.workspace_id, "workspace_id")
         async def operation(ctx):
+            workspace = projected(await ctx.sdk.workspace.get_async(ctx.auth, workspace_id), WORKSPACE)
             raw = await ctx.sdk.workspace.delete_async(ctx.auth, workspace_id)
-            return {"id": str(raw.get("id", workspace_id))}
+            return {**workspace, "id": str(raw.get("id", workspace_id))}
         return await self.run_product(tool_context, "Workspace deletion", operation, write=True)

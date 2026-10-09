@@ -22,7 +22,7 @@ def _batch_result(raw: dict, batch_key: str | None = None) -> dict:
         data["batch_key"] = batch_key
     files = raw.get("files")
     if isinstance(files, list):
-        data["files"] = [projected(item, ("file_id", "target_file_id", "status", "success", "message", "error")) for item in files if isinstance(item, dict)]
+        data["files"] = [projected(item, ("file_id", "target_file_id", "file_name", "relative_file_path", "status", "success", "message", "error")) for item in files if isinstance(item, dict)]
     elif isinstance(raw.get("file_ids"), list) and "count" in raw:
         data["status"] = "success"
         data["files"] = [{"file_id": str(file_id), "status": "success"} for file_id in raw["file_ids"]]

@@ -75,8 +75,9 @@ class ArchiveTopic(ProductTool[ArchiveTopicParams]):
     async def execute(self, tool_context: ToolContext, params: ArchiveTopicParams) -> ToolResult:
         topic_id = resource_id(params.topic_id, "topic_id")
         async def operation(ctx):
+            topic = projected(await ctx.sdk.topic.get_async(ctx.auth, topic_id), ("id", "topic_name", "project_id", "workspace_id"))
             raw = await ctx.sdk.topic.archive_async(ctx.auth, topic_id, params.archived)
-            return {"id": topic_id, "archived": params.archived, "result": projected(raw, ("id", "success"))}
+            return {**topic, "id": topic_id, "archived": params.archived, "success": raw.get("success"), "result": projected(raw, ("id", "success"))}
         return await self.run_product(tool_context, "Topic archive update", operation, write=True)
 
 
@@ -88,6 +89,7 @@ class DeleteTopic(ProductTool[GetTopicParams]):
     async def execute(self, tool_context: ToolContext, params: GetTopicParams) -> ToolResult:
         topic_id = resource_id(params.topic_id, "topic_id")
         async def operation(ctx):
+            topic = projected(await ctx.sdk.topic.get_async(ctx.auth, topic_id), ("id", "topic_name", "project_id", "workspace_id"))
             raw = await ctx.sdk.topic.delete_async(ctx.auth, {"id": topic_id})
-            return {"id": str(raw.get("id", topic_id))}
+            return {**topic, "id": str(raw.get("id", topic_id))}
         return await self.run_product(tool_context, "Topic deletion", operation, write=True)

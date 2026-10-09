@@ -15,6 +15,10 @@ class ProductContextError(ValueError):
     pass
 
 
+class ProductConfigurationError(ValueError):
+    pass
+
+
 @dataclass(frozen=True)
 class ProductContext:
     sdk: MagicService

@@ -266,13 +266,13 @@ async def test_busy_topic_returns_queue_id_without_invented_task(auth):
         calls.append(body)
         return {"task_id": "", "queue_id": "765"}
 
-    ctx = SimpleNamespace(auth=auth, sdk=SimpleNamespace(
+    ctx = SimpleNamespace(auth=auth, agent=submitting_agent(), sdk=SimpleNamespace(
         topic=SimpleNamespace(get_async=get_topic),
         task=SimpleNamespace(create_async=create_task),
     ))
     receipt = await _submit(ctx, "10", "20", "Continue")
-    assert receipt == {"kind": "queue", "topic_id": "20", "queue_id": "765", "status": "queued"}
-    assert calls == [{"project_id": "10", "topic_id": "20", "content": "Continue", "agent_mode": "general", "force_interrupt": False}]
+    assert receipt == {"kind": "queue", "topic_id": "20", "queue_id": "765", "status": "queued", "topic_name": ""}
+    assert calls == [{"project_id": "10", "topic_id": "20", "content": "Continue", "agent_mode": "general", "model_id": "text-model", "force_interrupt": False}]
 
 
 @pytest.mark.asyncio
@@ -286,10 +286,11 @@ async def test_custom_agent_mode_is_preserved(auth):
         sent.append(body)
         return {"task_id": "123"}
 
-    ctx = SimpleNamespace(auth=auth, sdk=SimpleNamespace(
+    ctx = SimpleNamespace(auth=auth, agent=submitting_agent(), sdk=SimpleNamespace(
         topic=SimpleNamespace(get_async=get_topic),
         task=SimpleNamespace(create_async=create_task),
     ))
+    ctx.agent = submitting_agent("SMA-987")
     receipt = await _submit(ctx, "10", "20", "Continue")
     assert receipt["task_id"] == "123"
     assert sent[0]["agent_mode"] == "SMA-987"
@@ -306,8 +307,33 @@ async def test_forced_submission_requests_interruption_and_keeps_task_id(auth):
         sent.append(body)
         return {"task_id": "123"}
 
-    ctx = SimpleNamespace(auth=auth, sdk=SimpleNamespace(topic=SimpleNamespace(get_async=get_topic), task=SimpleNamespace(create_async=create_task)))
+    ctx = SimpleNamespace(auth=auth, agent=submitting_agent(), sdk=SimpleNamespace(topic=SimpleNamespace(get_async=get_topic), task=SimpleNamespace(create_async=create_task)))
     receipt = await _submit(ctx, "10", "20", "Start now", force_interrupt=True)
     assert sent[0]["force_interrupt"] is True
     assert receipt["task_id"] == "123"
     assert receipt["force_interrupt"] is True
+
+
+def submitting_agent(mode="general"):
+    return SimpleNamespace(get_chat_client_message=lambda: SimpleNamespace(agent_mode=mode, model_id="text-model"), model_context=SimpleNamespace(configured_text_model_id="text-model"))
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("method,args,verb,path", [
+    ("model_config_async", ["project_id_10"], "GET", "/api/v1/contact/users/setting/super-magic/topic-model/project_id_10"),
+    ("execution_modes_async", [], "GET", "/api/v1/super-agents/featured"),
+    ("mode_async", ["general"], "GET", "/api/v1/modes/general"),
+    ("custom_models_async", [], "POST", "/api/v1/service-provider/models/queries"),
+])
+async def test_task_default_requests_use_current_user_authorization(monkeypatch, auth, method, args, verb, path):
+    from app.infrastructure.sdk.magic_service.api.task_api import TaskApi
+    captured = []
+
+    async def request(self, parameter, actual_method, actual_path):
+        captured.append((actual_method, actual_path, parameter.to_options(actual_method)))
+        return {}
+
+    monkeypatch.setattr(TaskApi, "request_by_parameter_async", request)
+    await getattr(object.__new__(TaskApi), method)(auth, *args)
+    assert captured[0][:2] == (verb, path)
+    assert captured[0][2]["headers"]["user-authorization"] == "secret"

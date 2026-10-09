@@ -9,6 +9,7 @@ from agentlang.tools.tool_result import ToolResult
 from app.tools.core import tool
 
 from .display import ProductTool
+from .execution_config import resolve_task_configuration
 from .models import ProductParams, resource_id
 
 
@@ -19,35 +20,25 @@ class StartTopicTaskParams(ProductParams):
     force_interrupt: bool = Field(False, description="If true, suspend the target topic's active task and start this task immediately. If false, an active topic queues the message instead.")
 
 
-def _mode(topic: dict) -> str:
-    topic_mode = str(topic.get("topic_mode") or "").strip()
-    agent_code = str(topic.get("agent_code") or "").strip()
-    if topic_mode == "custom_agent":
-        if not agent_code.startswith("SMA-"):
-            raise ValueError("The target topic's custom Agent configuration is unavailable")
-        return agent_code
-    if not topic_mode:
-        raise ValueError("The target topic's Agent mode is unavailable")
-    return topic_mode
-
-
 async def _submit(ctx, project_id: str, topic_id: str, content: str, force_interrupt: bool = False) -> dict:
     topic = await ctx.sdk.topic.get_async(ctx.auth, topic_id)
     if str(topic.get("project_id")) != project_id:
         raise ValueError("The target topic does not belong to the given project")
+    configuration = await resolve_task_configuration(ctx, topic, project_id, topic_id)
     raw = await ctx.sdk.task.create_async(ctx.auth, {
         "project_id": project_id,
         "topic_id": topic_id,
         "content": content,
-        "agent_mode": _mode(topic),
+        "agent_mode": configuration.agent_mode,
+        "model_id": configuration.model_id,
         "force_interrupt": force_interrupt,
     })
     task_id = raw.get("task_id")
     queue_id = raw.get("queue_id")
     if task_id:
-        return {"kind": "task", "topic_id": topic_id, "task_id": str(task_id), "status": "accepted", "force_interrupt": force_interrupt}
+        return {"kind": "task", "topic_id": topic_id, "topic_name": topic.get("topic_name", ""), "task_id": str(task_id), "status": "accepted", "force_interrupt": force_interrupt}
     if queue_id:
-        return {"kind": "queue", "topic_id": topic_id, "queue_id": str(queue_id), "status": "queued"}
+        return {"kind": "queue", "topic_id": topic_id, "topic_name": topic.get("topic_name", ""), "queue_id": str(queue_id), "status": "queued"}
     raise ValueError("The service returned neither a task ID nor a queue ID")
 
 
@@ -128,6 +119,11 @@ class CancelTopicTask(ProductTool[GetTopicTaskParams]):
         return await self.run_product(tool_context, "Task cancellation", operation, write=True)
 
 
+def _queue_status(value: object) -> str:
+    # Queue completion means delivery, never completion of the Agent task.
+    return {0: "queued", 1: "delivered", 2: "failed", 3: "processing"}.get(value, "unknown")
+
+
 class ListTopicQueueParams(ProductParams):
     topic_id: str = Field(..., description="Exact target topic ID.")
     page: int = Field(1, ge=1, description="Page number.")
@@ -146,7 +142,7 @@ class ListTopicQueuedMessages(ProductTool[ListTopicQueueParams]):
             items = raw.get("list")
             if not isinstance(items, list):
                 raise ValueError("The service returned an invalid queue list")
-            return {"items": [{"queue_id": str(item.get("queue_id", "")), "status": item.get("status"), "created_at": item.get("created_at")} for item in items if isinstance(item, dict)], "page": params.page, "total": raw.get("total")}
+            return {"items": [{"queue_id": str(item.get("queue_id", "")), "status": _queue_status(item.get("status")), "created_at": item.get("created_at")} for item in items if isinstance(item, dict)], "page": params.page, "total": raw.get("total")}
         return await self.run_product(tool_context, "Topic queue lookup", operation)
 
 

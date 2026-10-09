@@ -11,7 +11,7 @@ from agentlang.tools.tool_result import ToolResult
 from app.tools.core import tool
 
 from .display import ProductTool
-from .models import PROJECT, TOPIC, ProductParams, projected, projected_page, resource_id
+from .models import PROJECT, TOPIC, WORKSPACE, ProductParams, projected, projected_page, resource_id
 
 
 class ListProjectsParams(ProductParams):
@@ -31,7 +31,7 @@ class ListProjects(ProductTool[ListProjectsParams]):
 
     async def execute(self, tool_context: ToolContext, params: ListProjectsParams) -> ToolResult:
         if params.scope == "participated" and (params.order_by != "created_at" or params.sort != "desc"):
-            return ToolResult.error("Participated projects use last_active_at descending; order_by and sort apply only to owned projects.")
+            return ToolResult.error("Participated projects use last_active_at descending; order_by and sort apply only to owned projects.", use_custom_remark=True, data={"code": "invalid_input_or_response"})
         workspace_id = resource_id(params.workspace_id, "workspace_id") if params.workspace_id is not None else None
         async def operation(ctx):
             raw = await ctx.sdk.project.list_async(ctx.auth, keyword=params.keyword, scope=params.scope, workspace_id=workspace_id, page=params.page, page_size=params.page_size, order_by=params.order_by, sort=params.sort)
@@ -138,8 +138,10 @@ class MoveProject(ProductTool[MoveProjectParams]):
         project_id = resource_id(params.project_id, "project_id")
         workspace_id = resource_id(params.target_workspace_id, "target_workspace_id")
         async def operation(ctx):
+            project = projected(await ctx.sdk.project.get_async(ctx.auth, project_id), PROJECT)
+            target = projected(await ctx.sdk.workspace.get_async(ctx.auth, workspace_id), WORKSPACE)
             raw = await ctx.sdk.project.move_async(ctx.auth, {"source_project_id": project_id, "target_workspace_id": workspace_id})
-            return {"id": project_id, "workspace_id": workspace_id, "result": projected(raw, ("success", "id", "workspace_id"))}
+            return {**project, "id": project_id, "workspace_id": workspace_id, "workspace_name": target.get("name", ""), "target_workspace": target, "success": raw.get("success"), "result": projected(raw, ("success", "id", "workspace_id"))}
         return await self.run_product(tool_context, "Project move", operation, write=True)
 
 
@@ -151,6 +153,7 @@ class DeleteProject(ProductTool[GetProjectParams]):
     async def execute(self, tool_context: ToolContext, params: GetProjectParams) -> ToolResult:
         project_id = resource_id(params.project_id, "project_id")
         async def operation(ctx):
+            project = projected(await ctx.sdk.project.get_async(ctx.auth, project_id), PROJECT)
             raw = await ctx.sdk.project.delete_async(ctx.auth, project_id)
-            return {"id": str(raw.get("id", project_id))}
+            return {**project, "id": str(raw.get("id", project_id))}
         return await self.run_product(tool_context, "Project deletion", operation, write=True)

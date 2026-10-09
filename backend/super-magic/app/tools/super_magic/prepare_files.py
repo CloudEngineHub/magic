@@ -60,7 +60,7 @@ class PrepareProjectFiles(ProductTool[PrepareProjectFilesParams]):
         resource_id(params.project_id, "project_id")
         file_ids = [resource_id(item, "file_id") for item in params.file_ids]
         if len(set(file_ids)) != len(file_ids):
-            return ToolResult.error("File IDs must be unique.", data={"code": "duplicate_file_id"})
+            return ToolResult.error("File IDs must be unique.", use_custom_remark=True, data={"code": "duplicate_file_id"})
 
         keepalive = start_tool_keep_alive(tool_context)
         try:

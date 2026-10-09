@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from typing import Any
+from urllib.parse import quote
 
 from ..kernel.magic_service_api import MagicServiceAbstractApi
 from ..kernel.magic_service_parameter import MagicServiceAuthConfig
@@ -28,3 +29,16 @@ class TaskApi(MagicServiceAbstractApi):
 
     async def delete_queue_async(self, auth: MagicServiceAuthConfig, queue_id: str) -> dict[str, Any]:
         return await self.request_by_parameter_async(ProductParameter(auth), "DELETE", f"{QUEUE}/{queue_id}")
+
+    async def model_config_async(self, auth: MagicServiceAuthConfig, key: str) -> dict[str, Any]:
+        path = f"/api/v1/contact/users/setting/super-magic/topic-model/{quote(key, safe='')}"
+        return await self.request_by_parameter_async(ProductParameter(auth), "GET", path)
+
+    async def execution_modes_async(self, auth: MagicServiceAuthConfig) -> dict[str, Any]:
+        return await self.request_by_parameter_async(ProductParameter(auth), "GET", "/api/v1/super-agents/featured")
+
+    async def mode_async(self, auth: MagicServiceAuthConfig, identifier: str) -> dict[str, Any]:
+        return await self.request_by_parameter_async(ProductParameter(auth), "GET", f"/api/v1/modes/{quote(identifier, safe='')}")
+
+    async def custom_models_async(self, auth: MagicServiceAuthConfig) -> dict[str, Any]:
+        return await self.request_by_parameter_async(ProductParameter(auth), "POST", "/api/v1/service-provider/models/queries")

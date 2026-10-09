@@ -274,5 +274,109 @@
     "status.partial_success": {
         "zh_CN": "部分成功",
         "en_US": "Partially succeeded"
+    },
+    "summary.records": {
+        "zh_CN": "{{count}} 条记录",
+        "en_US": "{{count}} records"
+    },
+    "summary.messages": {
+        "zh_CN": "{{count}} 条消息",
+        "en_US": "{{count}} messages"
+    },
+    "summary.files": {
+        "zh_CN": "{{count}} 个文件",
+        "en_US": "{{count}} files"
+    },
+    "summary.keyword": {
+        "zh_CN": "搜索：{{keyword}}",
+        "en_US": "Search: {{keyword}}"
+    },
+    "subject.workspace": {
+        "zh_CN": "指定工作区",
+        "en_US": "Selected workspace"
+    },
+    "subject.project": {
+        "zh_CN": "指定项目",
+        "en_US": "Selected project"
+    },
+    "subject.topic": {
+        "zh_CN": "指定话题",
+        "en_US": "Selected topic"
+    },
+    "subject.file": {
+        "zh_CN": "选定文件",
+        "en_US": "Selected files"
+    },
+    "subject.task": {
+        "zh_CN": "指定任务",
+        "en_US": "Selected task"
+    },
+    "subject.batch": {
+        "zh_CN": "文件处理批次",
+        "en_US": "File operation batch"
+    },
+    "subject.queue": {
+        "zh_CN": "排队消息",
+        "en_US": "Queued message"
+    },
+    "field.keyword": {
+        "zh_CN": "搜索条件",
+        "en_US": "Search"
+    },
+    "field.progress": {
+        "zh_CN": "处理进度",
+        "en_US": "Progress"
+    },
+    "field.force_interrupt": {
+        "zh_CN": "替换正在执行的任务",
+        "en_US": "Replace active task"
+    },
+    "field.default_topic": {
+        "zh_CN": "自动创建的话题",
+        "en_US": "Automatically created topic"
+    },
+    "field.target_workspace": {
+        "zh_CN": "目标工作区",
+        "en_US": "Destination workspace"
+    },
+    "field.target_project": {
+        "zh_CN": "目标项目",
+        "en_US": "Destination project"
+    },
+    "coverage_limit": {
+        "zh_CN": "查询最多返回 {{count}} 条记录，不能据此认定已覆盖全部。",
+        "en_US": "This search returns at most {{count}} records; complete coverage is not established."
+    },
+    "error.execution_config_unavailable": {
+        "zh_CN": "无法取得可用的任务配置，请检查话题或员工设置。",
+        "en_US": "Usable task configuration is unavailable. Check topic or Agent settings."
+    },
+    "field.bytes": {
+        "zh_CN": "文件大小（字节）",
+        "en_US": "File size (bytes)"
+    },
+    "task_failed": {
+        "zh_CN": "任务执行未完成，请查看话题中的消息或调整任务后重试。",
+        "en_US": "The task did not complete. Check its topic messages or revise the task before retrying."
+    },
+    "field.content": {
+        "zh_CN": "发送内容",
+        "en_US": "Submitted instruction"
+    },
+    "field.purpose": {
+        "zh_CN": "文件用途",
+        "en_US": "File purpose"
+    },
+    "field.selected_count": {
+        "zh_CN": "选中文件数量",
+        "en_US": "Selected file count"
+    },
+    "status.delivered": {
+        "zh_CN": "已投递（不代表任务完成）",
+        "en_US": "Delivered (task completion unconfirmed)"
+    },
+    "field.location": {
+        "zh_CN": "位置",
+        "en_US": "Location"
     }
 }
