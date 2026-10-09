@@ -61,7 +61,7 @@ describe("StaticPeakWaveformStrip", () => {
 		expect(innerDot?.style.width).toBe("4px")
 		expect(innerDot?.style.height).toBe("4px")
 
-		// Collapsed player uses 6px outer and 3px inner
+		// Collapsed player also retains consistent 8px outer and 4px inner dimensions
 		rerender(
 			<StaticPeakWaveformStrip
 				peakNorms={[0.2, 0.8, 0.5]}
@@ -72,11 +72,11 @@ describe("StaticPeakWaveformStrip", () => {
 		)
 		const collapsedDot = screen.getByTestId("waveform-progress-dot")
 		expect(collapsedDot.style.left).toBe("25%")
-		expect(collapsedDot.style.width).toBe("6px")
-		expect(collapsedDot.style.height).toBe("6px")
+		expect(collapsedDot.style.width).toBe("8px")
+		expect(collapsedDot.style.height).toBe("8px")
 		const collapsedInnerDot = collapsedDot.querySelector("span")
-		expect(collapsedInnerDot?.style.width).toBe("3px")
-		expect(collapsedInnerDot?.style.height).toBe("3px")
+		expect(collapsedInnerDot?.style.width).toBe("4px")
+		expect(collapsedInnerDot?.style.height).toBe("4px")
 	})
 
 	it("does not render progress dot when duration is 0", () => {

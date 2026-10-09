@@ -26,7 +26,6 @@ export function StaticPeakWaveformStrip({
 	const safeDur = durationSec > 0 && Number.isFinite(durationSec) ? durationSec : 0
 	const progress = safeDur > 0 ? Math.min(1, Math.max(0, currentSec / safeDur)) : 0
 	const clipRightPct = (1 - progress) * 100
-	const isExpanded = maxBarPx > 20
 	const totalBars = peakNorms.length
 
 	const barHeightsPx = useMemo(
@@ -131,7 +130,10 @@ export function StaticPeakWaveformStrip({
 				</div>
 			) : null}
 
-			{/* Playback progress indicator dot (black outer circle, white inner center) */}
+			{/* Playback progress indicator dot (black outer circle, white inner center).
+			    Use even dimensions (8px outer, 4px inner) across both expanded and collapsed
+			    states to ensure symmetric integer padding (2px on all sides) and avoid subpixel
+			    centering distortions. */}
 			{safeDur > 0 ? (
 				<div
 					className="pointer-events-none absolute z-10 flex items-center justify-center rounded-full bg-foreground shadow-sm will-change-transform"
@@ -139,16 +141,16 @@ export function StaticPeakWaveformStrip({
 						left: `${progress * 100}%`,
 						top: "50%",
 						transform: "translate3d(-50%, -50%, 0)",
-						width: isExpanded ? 8 : 6,
-						height: isExpanded ? 8 : 6,
+						width: 8,
+						height: 8,
 					}}
 					data-testid="waveform-progress-dot"
 				>
 					<span
 						className="rounded-full bg-background"
 						style={{
-							width: isExpanded ? 4 : 3,
-							height: isExpanded ? 4 : 3,
+							width: 4,
+							height: 4,
 						}}
 					/>
 				</div>
