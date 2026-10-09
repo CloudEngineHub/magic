@@ -256,34 +256,38 @@ class AssetAppService extends AbstractAssetAppService
             ExceptionBuilder::throw(AssetErrorCode::DELETE_DENIED);
         }
 
-        if ($requestDTO->getName() !== null) {
-            $asset->setNameI18n(['default' => $requestDTO->getName()]);
-        }
-        if ($requestDTO->getDescription() !== null) {
-            $asset->setDescriptionI18n(['default' => $requestDTO->getDescription()]);
-        }
-        $updated = $this->assetDomainService->update($dataIsolation, $asset);
-        if ($updated === null) {
-            ExceptionBuilder::throw(AssetErrorCode::NOT_FOUND);
-        }
+        $updated = Db::transaction(function () use ($dataIsolation, $asset, $assetId, $requestDTO): AssetEntity {
+            if ($requestDTO->getName() !== null) {
+                $asset->setNameI18n(['default' => $requestDTO->getName()]);
+            }
+            if ($requestDTO->getDescription() !== null) {
+                $asset->setDescriptionI18n(['default' => $requestDTO->getDescription()]);
+            }
+            $updated = $this->assetDomainService->update($dataIsolation, $asset);
+            if ($updated === null) {
+                ExceptionBuilder::throw(AssetErrorCode::NOT_FOUND);
+            }
 
-        if ($requestDTO->getVisibility() !== null) {
-            $visibility = $requestDTO->getVisibility();
-            $this->resourceVisibilityDomainService->saveVisibilityByPrincipals(
-                $this->permissionDataIsolation($dataIsolation),
-                ResourceType::ASSET,
-                (string) $assetId,
-                VisibilityType::SPECIFIC,
-                array_values(array_unique([
-                    $dataIsolation->getCurrentUserId(),
-                    ...array_map('strval', (array) ($visibility['user_ids'] ?? [])),
-                ])),
-                array_values(array_map('strval', (array) ($visibility['department_ids'] ?? []))),
-            );
-        }
-        if ($requestDTO->getTagIds() !== null) {
-            $this->assetTagDomainService->syncAssetTags($dataIsolation, $updated, $requestDTO->getTagIds());
-        }
+            // 元数据、可见范围和标签必须作为一次编辑提交；否则其中一项失败会让前端看到“保存成功”但范围仍是旧值。
+            if ($requestDTO->getVisibility() !== null) {
+                $visibility = $requestDTO->getVisibility();
+                $this->resourceVisibilityDomainService->saveVisibilityByPrincipals(
+                    $this->permissionDataIsolation($dataIsolation),
+                    ResourceType::ASSET,
+                    (string) $assetId,
+                    VisibilityType::SPECIFIC,
+                    array_values(array_unique([
+                        $dataIsolation->getCurrentUserId(),
+                        ...array_map('strval', (array) ($visibility['user_ids'] ?? [])),
+                    ])),
+                    array_values(array_map('strval', (array) ($visibility['department_ids'] ?? []))),
+                );
+            }
+            if ($requestDTO->getTagIds() !== null) {
+                $this->assetTagDomainService->syncAssetTags($dataIsolation, $updated, $requestDTO->getTagIds());
+            }
+            return $updated;
+        });
         $this->resolveAssetFileUrls([$updated]);
         return $updated;
     }
