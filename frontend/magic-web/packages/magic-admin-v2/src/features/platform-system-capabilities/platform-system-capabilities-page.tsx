@@ -3,21 +3,16 @@ import { useCallback, useMemo, useState } from "react"
 import { useTranslation } from "react-i18next"
 import { toast } from "sonner"
 import { EmptyState } from "@magic-admin-v2/components/empty-state"
-import { FilterControlField } from "@magic-admin-v2/components/filter-control-field"
-import { FilterSearchInput } from "@magic-admin-v2/components/filter-search-input"
 import { ListShell } from "@magic-admin-v2/components/list-shell"
 import { Button } from "@magic-admin-v2/components/ui/button"
-import {
-	Select,
-	SelectContent,
-	SelectItem,
-	SelectTrigger,
-	SelectValue,
-} from "@magic-admin-v2/components/ui/select"
 import { PERMISSION_KEY_MAP } from "@magic-admin-v2/constants/permissions"
 import { CapabilityCardList } from "@magic-admin-v2/features/platform-system-capabilities/components/capability-card-list"
 import { CapabilityConfigDialog } from "@magic-admin-v2/features/platform-system-capabilities/components/capability-config-dialog"
 import { CapabilityListSkeleton } from "@magic-admin-v2/features/platform-system-capabilities/components/capability-list-skeleton"
+import {
+	CapabilityFilters,
+	createDefaultCapabilityFilterDraft,
+} from "@magic-admin-v2/features/platform-system-capabilities/components/capability-filters"
 import { ALL_VALUE } from "@magic-admin-v2/features/platform-system-capabilities/consts"
 import { useUpdateSystemCapabilityMutation } from "@magic-admin-v2/features/platform-system-capabilities/mutations"
 import { useSystemCapabilityListQuery } from "@magic-admin-v2/features/platform-system-capabilities/queries"
@@ -36,8 +31,8 @@ import { cn } from "@magic-admin-v2/utils/cn"
 export default function PlatformSystemCapabilitiesPage() {
 	const { t } = useTranslation()
 	const hasEditRight = useRights(PERMISSION_KEY_MAP.AI_ABILITY_MANAGEMENT_EDIT)
-	const [keyword, setKeyword] = useState("")
-	const [statusFilter, setStatusFilter] = useState(ALL_VALUE)
+	const [filters, setFilters] = useState(createDefaultCapabilityFilterDraft)
+	const { keyword, status: statusFilter } = filters
 	const [configTarget, setConfigTarget] = useState<AiPower | null>(null)
 	const listQuery = useSystemCapabilityListQuery()
 	const updateMutation = useUpdateSystemCapabilityMutation()
@@ -112,42 +107,7 @@ export default function PlatformSystemCapabilitiesPage() {
 					<CapabilityListSkeleton />
 				) : (
 					<div className="space-y-4 pb-6">
-						<div className="flex min-w-0 items-end gap-2">
-							<FilterControlField
-								className="min-w-0 flex-1 md:w-[280px] md:flex-none xl:w-[360px]"
-								label={t("systemCapabilities.filter.keyword")}
-							>
-								<FilterSearchInput
-									clearLabel={t("common.clear")}
-									onValueChange={setKeyword}
-									placeholder={t("systemCapabilities.placeholder.keyword")}
-									value={keyword}
-								/>
-							</FilterControlField>
-							<FilterControlField
-								className="w-[112px] shrink-0 md:w-fit"
-								label={t("systemCapabilities.filter.status")}
-							>
-								<Select onValueChange={setStatusFilter} value={statusFilter}>
-									<SelectTrigger className="w-full md:w-fit md:max-w-full">
-										<SelectValue
-											placeholder={t("systemCapabilities.filter.status")}
-										/>
-									</SelectTrigger>
-									<SelectContent>
-										<SelectItem value={ALL_VALUE}>
-											{t("systemCapabilities.filter.allStatuses")}
-										</SelectItem>
-										<SelectItem value="enabled">
-											{t("common.enabled")}
-										</SelectItem>
-										<SelectItem value="disabled">
-											{t("common.disabled")}
-										</SelectItem>
-									</SelectContent>
-								</Select>
-							</FilterControlField>
-						</div>
+						<CapabilityFilters onChange={setFilters} value={filters} />
 
 						{listQuery.error ? (
 							<div className="rounded-lg border border-border/50 p-4">

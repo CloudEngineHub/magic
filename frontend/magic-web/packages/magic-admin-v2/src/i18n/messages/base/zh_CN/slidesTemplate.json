@@ -26,7 +26,6 @@
 	"category": "分类",
 	"categoryCode": "分类编码",
 	"categoryCount": "模板数",
-	"categoryFilterDescription": "按关键词、分类编码和状态筛选分类。",
 	"categoryForm": {
 		"description": "中英文名称均为必填，分类编码由后端生成。"
 	},
@@ -64,7 +63,6 @@
 	"emptyTags": "暂无标签",
 	"enabled": "启用",
 	"externalPreview": "外部预览",
-	"filterDescription": "按关键词、模板编码、分类、标签、标签匹配方式和状态筛选模板。",
 	"filterTitle": "高级筛选",
 	"form": {
 		"basic": "基础信息",

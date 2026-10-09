@@ -1,4 +1,3 @@
-import { useDebounce } from "ahooks"
 import { AlertCircle, Plus, RefreshCw } from "lucide-react"
 import { useCallback, useEffect, useMemo, useState } from "react"
 import { toast } from "sonner"
@@ -6,7 +5,7 @@ import { useTranslation } from "react-i18next"
 import { EmptyState } from "@magic-admin-v2/components/empty-state"
 import { ListShell } from "@magic-admin-v2/components/list-shell"
 import { Button } from "@magic-admin-v2/components/ui/button"
-import { TEXT_FILTER_DEBOUNCE_MS } from "@magic-admin-v2/constants/filters"
+import { useAppliedProviderFilter } from "@magic-admin-v2/features/platform-provider-list/hooks/use-applied-provider-filter"
 import { ProviderAddDialog } from "@magic-admin-v2/features/platform-provider-list/components/provider-add-dialog"
 import { ProviderCategoryTabs } from "@magic-admin-v2/features/platform-provider-list/components/provider-category-controls"
 import { ProviderConfigDialog } from "@magic-admin-v2/features/platform-provider-list/components/provider-config-dialog"
@@ -46,7 +45,6 @@ import {
 	paginateProviders,
 	providerPageSize,
 	sortProviders,
-	type ProviderFilterDraft,
 } from "@magic-admin-v2/features/platform-provider-list/utils/provider-list"
 import type { ApiError } from "@magic-admin-v2/api/types"
 import { useRowPendingIds } from "@magic-admin-v2/hooks/use-row-pending-ids"
@@ -78,17 +76,7 @@ export default function PlatformProviderListPage() {
 	const [deletingDetailId, setDeletingDetailId] = useState<string | null>(null)
 	const { pendingIds: statusPendingIds, run: runStatusPending } = useRowPendingIds()
 	const canEditAddCategory = categoryAccess[addCategory]?.canEdit ?? false
-	const normalizedSearchValue = filterDraft[filterDraft.search_field].trim()
-	const debouncedSearchValue = useDebounce(normalizedSearchValue, {
-		wait: TEXT_FILTER_DEBOUNCE_MS,
-	})
-	const appliedFilter = useMemo<ProviderFilterDraft>(
-		() => ({
-			...filterDraft,
-			[filterDraft.search_field]: normalizedSearchValue ? debouncedSearchValue : "",
-		}),
-		[debouncedSearchValue, filterDraft, normalizedSearchValue],
-	)
+	const appliedFilter = useAppliedProviderFilter(filterDraft)
 	const listQuery = useProviderListQuery(activeCategory, {
 		enabled: currentCategoryAccess.canView,
 	})

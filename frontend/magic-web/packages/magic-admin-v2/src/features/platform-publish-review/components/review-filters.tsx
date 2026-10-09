@@ -1,6 +1,7 @@
 import { useTranslation } from "react-i18next"
 import { FilterControlField } from "@magic-admin-v2/components/filter-control-field"
 import { FilterSearchInput } from "@magic-admin-v2/components/filter-search-input"
+import type { ListFilterPanelFieldsProps } from "@magic-admin-v2/components/list-filter-panel"
 import {
 	relativeUnit,
 	TimeFilterPanel,
@@ -27,19 +28,16 @@ import {
 	getPublishTargetTypeLabel,
 	getReviewStatusLabel,
 } from "@magic-admin-v2/features/platform-publish-review/formatters"
-import type { ReviewDraftUpdater } from "@magic-admin-v2/features/platform-publish-review/params"
 
 const dayOnlyRelativeUnits = [relativeUnit.day] as const
 
 export function AdvancedFilterControls({
-	filterDraft,
 	kind,
-	onDraftChange,
+	onChange,
+	value,
 	variant,
-}: {
-	filterDraft: PublishReviewFilterDraft
+}: ListFilterPanelFieldsProps<PublishReviewFilterDraft> & {
 	kind: PublishReviewKind
-	onDraftChange: (value: ReviewDraftUpdater) => void
 	variant: PublishReviewVariant
 }) {
 	const { t } = useTranslation()
@@ -50,95 +48,68 @@ export function AdvancedFilterControls({
 				<>
 					<SearchInput
 						label={t("publishReview.filter.employeeName")}
-						onChange={(value) =>
-							onDraftChange((previous) => ({ ...previous, name_i18n: value }))
-						}
+						onChange={(name_i18n) => onChange({ name_i18n })}
 						placeholder={t("publishReview.placeholder.employeeName")}
-						value={filterDraft.name_i18n}
+						value={value.name_i18n}
 					/>
 					{variant === "platform" ? (
 						<SearchInput
 							label={t("publishReview.filter.organizationCode")}
-							onChange={(value) =>
-								onDraftChange((previous) => ({
-									...previous,
-									organization_code: value,
-								}))
-							}
+							onChange={(organization_code) => onChange({ organization_code })}
 							placeholder={t("publishReview.placeholder.organizationCode")}
-							value={filterDraft.organization_code}
+							value={value.organization_code}
 						/>
 					) : null}
 				</>
+			) : variant === "internal" ? (
+				<SearchInput
+					label={t("publishReview.filter.skillName")}
+					onChange={(skill_name) => onChange({ skill_name })}
+					placeholder={t("publishReview.placeholder.skillName")}
+					value={value.skill_name}
+				/>
 			) : (
 				<SearchInput
-					label={
-						variant === "internal"
-							? t("publishReview.filter.skillName")
-							: t("publishReview.filter.packageName")
-					}
-					onChange={(value) =>
-						onDraftChange((previous) =>
-							variant === "internal"
-								? { ...previous, skill_name: value }
-								: { ...previous, package_name: value },
-						)
-					}
-					placeholder={
-						variant === "internal"
-							? t("publishReview.placeholder.skillName")
-							: t("publishReview.placeholder.packageName")
-					}
-					value={
-						variant === "internal" ? filterDraft.skill_name : filterDraft.package_name
-					}
+					label={t("publishReview.filter.packageName")}
+					onChange={(package_name) => onChange({ package_name })}
+					placeholder={t("publishReview.placeholder.packageName")}
+					value={value.package_name}
 				/>
 			)}
 			<SearchInput
 				label={t("publishReview.filter.version")}
-				onChange={(value) => onDraftChange((previous) => ({ ...previous, version: value }))}
+				onChange={(version) => onChange({ version })}
 				placeholder={t("publishReview.placeholder.version")}
-				value={filterDraft.version}
+				value={value.version}
 			/>
 			<ReviewStatusSelect
 				className="w-full"
 				triggerClassName="w-full"
 				label={t("publishReview.filter.reviewStatus")}
-				onChange={(value) =>
-					onDraftChange((previous) => ({ ...previous, review_status: value }))
-				}
-				value={filterDraft.review_status}
+				onChange={(review_status) => onChange({ review_status })}
+				value={value.review_status}
 				variant={variant}
 			/>
 			<PublishStatusSelect
 				className="w-full"
 				triggerClassName="w-full"
 				label={t("publishReview.filter.publishStatus")}
-				onChange={(value) =>
-					onDraftChange((previous) => ({ ...previous, publish_status: value }))
-				}
-				value={filterDraft.publish_status}
+				onChange={(publish_status) => onChange({ publish_status })}
+				value={value.publish_status}
 				variant={variant}
 			/>
 			<PublishTargetTypeSelect
 				className="w-full"
 				triggerClassName="w-full"
 				label={t("publishReview.filter.publishTargetType")}
-				onChange={(value) =>
-					onDraftChange((previous) => ({ ...previous, publish_target_type: value }))
-				}
-				value={filterDraft.publish_target_type}
+				onChange={(publish_target_type) => onChange({ publish_target_type })}
+				value={value.publish_target_type}
 				variant={variant}
 			/>
 			<FilterControlField className="w-full" label={t("publishReview.filter.orderBy")}>
 				<Select
-					value={filterDraft.order_by}
-					onValueChange={(value) =>
-						onDraftChange((previous) => ({
-							...previous,
-							order_by: value as PublishReviewOrderBy,
-						}))
-					}
+					value={value.order_by}
+					onValueChange={(order_by) => onChange({ order_by: order_by as PublishReviewOrderBy })}
 				>
 					<SelectTrigger className="w-full">
 						<SelectValue />
@@ -153,17 +124,16 @@ export function AdvancedFilterControls({
 				<TimeFilterPanel
 					className="w-full"
 					onChange={(timeRange) =>
-					onDraftChange((previous) => ({
-						...previous,
-						end_time: timeRange?.endDate.slice(0, 10) ?? "",
-						start_time: timeRange?.startDate.slice(0, 10) ?? "",
-						time_range: timeRange,
-					}))
-				}
-					presentation="inline"
+						onChange({
+							end_time: timeRange?.endDate.slice(0, 10) ?? "",
+							start_time: timeRange?.startDate.slice(0, 10) ?? "",
+							time_range: timeRange,
+						})
+					}
+					presentation="popover"
 					supportedRelativeUnits={dayOnlyRelativeUnits}
 					timePrecision="day"
-					value={filterDraft.time_range}
+					value={value.time_range}
 				/>
 			</FilterControlField>
 		</>

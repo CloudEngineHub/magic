@@ -7,14 +7,11 @@ import {
 
 export const providerPageSize = 20;
 
-export type ProviderSearchField = "name" | "alias" | "provider_code";
-
 export type ProviderFilterDraft = {
   alias: string;
   name: string;
   provider_code: string;
   provider_type: string;
-  search_field: ProviderSearchField;
   status: string;
 };
 
@@ -24,7 +21,6 @@ export function createDefaultProviderFilterDraft(): ProviderFilterDraft {
     name: "",
     provider_code: "",
     provider_type: providerSelectAllValue,
-    search_field: "name",
     status: providerSelectAllValue,
   };
 }

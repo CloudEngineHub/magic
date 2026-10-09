@@ -1,29 +1,19 @@
 import type { ColumnDef } from "@tanstack/react-table"
-import { AlertCircle, BrainCircuit, Eye, Filter, Pencil, Plus, RefreshCw } from "lucide-react"
+import { AlertCircle, BrainCircuit, Eye, Pencil, Plus, RefreshCw } from "lucide-react"
 import { useCallback, useEffect, useMemo, useState } from "react"
 import { useSearchParams } from "react-router-dom"
 import { DataTable } from "@magic-admin-v2/components/data-table"
 import { EmptyState } from "@magic-admin-v2/components/empty-state"
-import { FilterControlField } from "@magic-admin-v2/components/filter-control-field"
-import { FilterSheet } from "@magic-admin-v2/components/filter-sheet"
-import { FilterSearchInput } from "@magic-admin-v2/components/filter-search-input"
 import { ListPagination } from "@magic-admin-v2/components/list-pagination"
 import { ListShell } from "@magic-admin-v2/components/list-shell"
 import { EntityAvatarRender } from "@magic-admin-v2/components/entity-avatar-render"
 import { Badge } from "@magic-admin-v2/components/ui/badge"
 import { Button } from "@magic-admin-v2/components/ui/button"
-import {
-	Select,
-	SelectContent,
-	SelectItem,
-	SelectTrigger,
-	SelectValue,
-} from "@magic-admin-v2/components/ui/select"
 import { Tabs, TabsList, TabsTrigger } from "@magic-admin-v2/components/ui/tabs"
 import { useProviderModelDataSource } from "@magic-admin-v2/features/platform-model-list/utils/data-source"
 import { ModelEditorDialog } from "@magic-admin-v2/features/platform-model-list/components/model-editor-dialog"
 import { DefaultModelIcon } from "@magic-admin-v2/features/platform-model-list/components/default-model-icon"
-import { MultiSelectFilter } from "@magic-admin-v2/features/platform-model-list/components/multi-select-filter"
+import { ModelListFilters } from "@magic-admin-v2/features/platform-model-list/components/model-list-filters"
 import {
 	CategoryBadge,
 	ModelDetailDialog,
@@ -39,23 +29,19 @@ import { useProviderModelGroupsQuery } from "@magic-admin-v2/features/platform-m
 import {
 	providerModelCategory,
 	providerModelListSearchParam,
-	providerModelStatus,
 	providerModelType,
 	type ProviderModelCategory,
 	type ProviderModelGroup,
-	type ProviderModelStatus,
 	type ProviderModelType,
 } from "@magic-admin-v2/features/platform-model-list/types"
 import {
 	allCategoriesTab,
-	allStatusFilterValue,
 	createDefaultFilterDraft,
 	type FilterOption,
 	getCreateModelDefaults,
 	type ModelCategoryTab,
 	type ModelListFilterDraft,
 	modelTypesByCategory,
-	pageSize,
 	resolveModelCategoryTab,
 	restrictQueryParamsToAccess,
 	toQueryParams,
@@ -101,16 +87,12 @@ export default function PlatformModelListPage() {
 			),
 		[accessibleCategories, resolvedActiveCategory, serviceProviderConfigId],
 	)
-	const { filterDraft, pageSize: currentPageSize, params, setDebouncedField, setFilterDraft, setPage, setPageSize } = useListQueryParams({
+	const { filterDraft, pageSize: currentPageSize, params, setFilterDraft, setPage, setPageSize } = useListQueryParams({
 		debounceFields: ["keyword"],
 		extraResetKey: `${resolvedActiveCategory}:${serviceProviderConfigId}`,
 		initialDraft: createDefaultFilterDraft,
 		toParams,
 	})
-	const [mobileFilterDraft, setMobileFilterDraft] = useState<ModelListFilterDraft>(() =>
-		createDefaultFilterDraft(),
-	)
-	const [mobileFilterOpen, setMobileFilterOpen] = useState(false)
 	const [detailTarget, setDetailTarget] = useState<ProviderModelGroup | null>(null)
 	const [editorTarget, setEditorTarget] = useState<ProviderModelGroup | null>(null)
 	const [isEditorOpen, setIsEditorOpen] = useState(false)
@@ -170,14 +152,6 @@ export default function PlatformModelListPage() {
 			resolvedActiveCategory !== providerModelCategory.embedding &&
 			resolvedActiveCategory !== providerModelCategory.vgm,
 		[resolvedActiveCategory],
-	)
-
-	const statusOptions = useMemo<Array<FilterOption<ProviderModelStatus>>>(
-		() => [
-			{ value: providerModelStatus.enabled, label: t("modelList.status.enabled") },
-			{ value: providerModelStatus.disabled, label: t("modelList.status.disabled") },
-		],
-		[t],
 	)
 
 	const columns = useMemo<Array<ColumnDef<ProviderModelGroup>>>(
@@ -290,30 +264,6 @@ export default function PlatformModelListPage() {
 		}
 	}, [categoryAccess, editableCategories.length, editorTarget, isEditorOpen])
 
-	function handleMobileFilterOpenChange(open: boolean) {
-		if (open) {
-			setMobileFilterDraft({
-				...filterDraft,
-				modelTypes: [...filterDraft.modelTypes],
-			})
-		}
-		setMobileFilterOpen(open)
-	}
-
-	function resetMobileFilters() {
-		setMobileFilterDraft(createDefaultFilterDraft())
-	}
-
-	function applyMobileFilters() {
-		setFilterDraft((previous) => ({
-			...previous,
-			keyword: mobileFilterDraft.keyword,
-			modelTypes: [...mobileFilterDraft.modelTypes],
-			status: mobileFilterDraft.status,
-		}))
-		setMobileFilterOpen(false)
-	}
-
 	function handleCategoryChange(nextCategory: ModelCategoryTab) {
 		if (nextCategory !== allCategoriesTab && !accessibleCategories.includes(nextCategory)) {
 			return
@@ -374,175 +324,12 @@ export default function PlatformModelListPage() {
 				/>
 
 				<div className="mt-5">
-					<div className="flex min-w-0 items-end gap-2 md:hidden">
-						<FilterControlField
-							className="min-w-0 flex-1"
-							label={t("modelList.filter.search")}
-						>
-							<FilterSearchInput
-								aria-label={t("modelList.placeholder.search")}
-								clearLabel={t("common.clear")}
-								containerClassName="min-w-0"
-								onValueChange={(keyword) => setDebouncedField("keyword", keyword)}
-								placeholder={t("modelList.placeholder.search")}
-								value={filterDraft.keyword}
-							/>
-						</FilterControlField>
-						<Button
-							aria-label={t("modelList.filter.title")}
-							onClick={() => handleMobileFilterOpenChange(true)}
-							size="icon"
-							variant="outline"
-						>
-							<Filter className="size-4" aria-hidden="true" />
-						</Button>
-					</div>
-					<div className="hidden flex-wrap items-end gap-2 md:flex">
-						<FilterControlField
-							className="w-fit"
-							label={t("modelList.filter.statuses")}
-						>
-							<Select
-								onValueChange={(value) =>
-									setFilterDraft((previous) => ({
-										...previous,
-										status:
-											value === allStatusFilterValue
-												? null
-												: (Number(value) as ProviderModelStatus),
-									}))
-								}
-								value={
-									filterDraft.status === null
-										? allStatusFilterValue
-										: String(filterDraft.status)
-								}
-							>
-								<SelectTrigger
-									aria-label={t("modelList.filter.statuses")}
-									className="w-32"
-								>
-									<SelectValue />
-								</SelectTrigger>
-								<SelectContent>
-									<SelectItem value={allStatusFilterValue}>
-										{t("modelList.filter.allStatuses")}
-									</SelectItem>
-									{statusOptions.map((option) => (
-										<SelectItem key={option.value} value={String(option.value)}>
-											{option.label}
-										</SelectItem>
-									))}
-								</SelectContent>
-							</Select>
-						</FilterControlField>
-						<FilterControlField
-							className="w-full min-w-0 md:w-[340px] xl:w-[420px]"
-							label={t("modelList.filter.search")}
-						>
-							<FilterSearchInput
-								aria-label={t("modelList.placeholder.search")}
-								clearLabel={t("common.clear")}
-								containerClassName="min-w-0"
-								onValueChange={(keyword) => setDebouncedField("keyword", keyword)}
-								placeholder={t("modelList.placeholder.search")}
-								value={filterDraft.keyword}
-							/>
-						</FilterControlField>
-						{shouldShowModelTypeFilter ? (
-							<FilterControlField
-								className="w-fit"
-								label={t("modelList.filter.modelTypes")}
-							>
-								<MultiSelectFilter
-									allLabel={t("modelList.filter.allModelTypes")}
-									ariaLabel={t("modelList.filter.modelTypes")}
-									options={modelTypeOptions}
-									value={filterDraft.modelTypes}
-									onChange={(modelTypes) =>
-										setFilterDraft((previous) => ({ ...previous, modelTypes }))
-									}
-								/>
-							</FilterControlField>
-						) : null}
-					</div>
-					<FilterSheet
-						applyLabel={t("modelList.action.applyFilters")}
-						onApply={applyMobileFilters}
-						onOpenChange={handleMobileFilterOpenChange}
-						onReset={resetMobileFilters}
-						open={mobileFilterOpen}
-						presentation="mobile-only"
-						resetLabel={t("modelList.action.reset")}
-						title={t("modelList.filter.title")}
-					>
-						<FilterControlField className="w-full" label={t("modelList.filter.search")}>
-							<FilterSearchInput
-								aria-label={t("modelList.placeholder.search")}
-								clearLabel={t("common.clear")}
-								containerClassName="min-w-0"
-								onValueChange={(keyword) =>
-									setMobileFilterDraft((previous) => ({ ...previous, keyword }))
-								}
-								placeholder={t("modelList.placeholder.search")}
-								value={mobileFilterDraft.keyword}
-							/>
-						</FilterControlField>
-						<FilterControlField
-							className="w-full"
-							label={t("modelList.filter.statuses")}
-						>
-							<Select
-								onValueChange={(value) =>
-									setMobileFilterDraft((previous) => ({
-										...previous,
-										status:
-											value === allStatusFilterValue
-												? null
-												: (Number(value) as ProviderModelStatus),
-									}))
-								}
-								value={
-									mobileFilterDraft.status === null
-										? allStatusFilterValue
-										: String(mobileFilterDraft.status)
-								}
-							>
-								<SelectTrigger className="w-full">
-									<SelectValue />
-								</SelectTrigger>
-								<SelectContent>
-									<SelectItem value={allStatusFilterValue}>
-										{t("modelList.filter.allStatuses")}
-									</SelectItem>
-									{statusOptions.map((option) => (
-										<SelectItem key={option.value} value={String(option.value)}>
-											{option.label}
-										</SelectItem>
-									))}
-								</SelectContent>
-							</Select>
-						</FilterControlField>
-						{shouldShowModelTypeFilter ? (
-							<FilterControlField
-								className="w-full"
-								label={t("modelList.filter.modelTypes")}
-							>
-								<MultiSelectFilter
-									allLabel={t("modelList.filter.allModelTypes")}
-									ariaLabel={t("modelList.filter.modelTypes")}
-									options={modelTypeOptions}
-									value={mobileFilterDraft.modelTypes}
-									onChange={(modelTypes) =>
-										setMobileFilterDraft((previous) => ({
-											...previous,
-											modelTypes,
-										}))
-									}
-								/>
-							</FilterControlField>
-						) : null}
-					</FilterSheet>
+					<ModelListFilters
+						modelTypeOptions={modelTypeOptions}
+						onChange={setFilterDraft}
+						showModelTypes={shouldShowModelTypeFilter}
+						value={filterDraft}
+					/>
 				</div>
 
 				{queryError && !listQuery.data ? (

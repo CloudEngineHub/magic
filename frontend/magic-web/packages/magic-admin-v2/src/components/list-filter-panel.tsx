@@ -1,0 +1,167 @@
+import { Filter } from "lucide-react"
+import { useState, type ReactNode } from "react"
+import { ScrollArea } from "@/components/shadcn-ui/scroll-area"
+import { Button } from "@magic-admin-v2/components/ui/button"
+import {
+	Sheet,
+	SheetContent,
+	SheetFooter,
+	SheetHeader,
+	SheetTitle,
+	SheetTrigger,
+} from "@magic-admin-v2/components/ui/sheet"
+import { useIsMobile } from "@magic-admin-v2/hooks/use-is-mobile"
+import { cn } from "@magic-admin-v2/utils/cn"
+
+/**
+ * Layout the field renderer is currently used in.
+ *
+ * - `grid`: desktop search area, fields are applied as the user edits them.
+ * - `sheet`: mobile side panel, fields edit a draft that is applied on confirmation.
+ */
+export type ListFilterPanelLayout = "grid" | "sheet"
+
+export type ListFilterPanelFieldsProps<T> = {
+	/** Applied value on desktop; the unsaved draft inside the mobile panel. */
+	value: T
+	/** Merges a partial change into `value`. */
+	onChange: (patch: Partial<T>) => void
+	layout: ListFilterPanelLayout
+}
+
+export type ListFilterPanelProps<T extends object> = {
+	/** Currently applied filter state owned by the page. */
+	value: T
+	/** Desktop live-apply handler. Pages route debounced text fields here. */
+	onChange: (patch: Partial<T>) => void
+	/** Resets the applied filter state (desktop reset button). */
+	onReset: () => void
+	/** Creates the empty draft used by the mobile panel reset button. */
+	createDefaultValue: () => T
+	/**
+	 * Applies the mobile draft. Defaults to `onChange(draft)`; pages whose
+	 * `onChange` debounces text fields should pass an immediate writer instead.
+	 */
+	onApply?: (draft: T) => void
+	/** Panel heading and accessible name of the mobile trigger button. */
+	title: string
+	applyLabel: string
+	resetLabel: string
+	/** Renders the page-owned fields; every control must fill its grid cell (`w-full`). */
+	renderFields: (props: ListFilterPanelFieldsProps<T>) => ReactNode
+	/**
+	 * Optional page actions (for example an "add" button). Desktop shows them in a row
+	 * above the fields; mobile shows them next to the filter trigger.
+	 */
+	actions?: ReactNode
+	className?: string
+}
+
+/**
+ * Shared search area for admin list pages.
+ *
+ * Desktop renders every field in a responsive grid (up to four per row) with a
+ * trailing reset button. Mobile collapses all fields behind a single Filter icon
+ * button that opens a right-side panel editing a draft with reset/apply actions.
+ * The caller keeps ownership of the applied state and of API parameter mapping.
+ */
+export function ListFilterPanel<T extends object>({
+	actions,
+	applyLabel,
+	className,
+	createDefaultValue,
+	onApply,
+	onChange,
+	onReset,
+	renderFields,
+	resetLabel,
+	title,
+	value,
+}: ListFilterPanelProps<T>) {
+	const isMobile = useIsMobile()
+	const [open, setOpen] = useState(false)
+	const [draft, setDraft] = useState<T>(value)
+
+	if (!isMobile) {
+		const grid = (
+			<div
+				className={cn(
+					// Four equal columns on wide screens, two on narrow desktop windows.
+					"grid grid-cols-1 items-end gap-3 sm:grid-cols-2 xl:grid-cols-4",
+					!actions && className,
+				)}
+			>
+				{renderFields({ value, onChange, layout: "grid" })}
+				{/* Reset sits in the last column so it never shifts the field order. */}
+				<div className="flex justify-end sm:col-start-2 xl:col-start-4">
+					<Button onClick={onReset} type="button" variant="outline">
+						{resetLabel}
+					</Button>
+				</div>
+			</div>
+		)
+
+		if (!actions) return grid
+
+		return (
+			<div className={cn("space-y-3", className)}>
+				<div className="flex justify-end">{actions}</div>
+				{grid}
+			</div>
+		)
+	}
+
+	return (
+		<Sheet
+			open={open}
+			onOpenChange={(nextOpen) => {
+				// Reopening starts from the applied conditions; dismissing discards unsaved edits.
+				if (nextOpen) setDraft(value)
+				setOpen(nextOpen)
+			}}
+		>
+			<div className={cn("flex items-center justify-end gap-2", className)}>
+				{actions}
+				<SheetTrigger asChild>
+					<Button aria-label={title} size="icon" type="button" variant="outline">
+						<Filter className="size-4" aria-hidden="true" />
+					</Button>
+				</SheetTrigger>
+			</div>
+			<SheetContent
+				side="right"
+				className="w-[calc(100%-2rem)] max-w-sm gap-0 p-0"
+				aria-describedby={undefined}
+			>
+				<SheetHeader className="shrink-0 border-b pr-12">
+					<SheetTitle>{title}</SheetTitle>
+				</SheetHeader>
+				{/* `[&>div]:!block` keeps Radix' table-layout wrapper from widening the body. */}
+				<ScrollArea className="min-h-0 flex-1" viewportClassName="[&>div]:!block">
+					<div className="grid gap-3 p-4">
+						{renderFields({
+							value: draft,
+							onChange: (patch) => setDraft((previous) => ({ ...previous, ...patch })),
+							layout: "sheet",
+						})}
+					</div>
+				</ScrollArea>
+				<SheetFooter className="grid shrink-0 grid-cols-2 border-t pb-[max(1rem,env(safe-area-inset-bottom))]">
+					<Button onClick={() => setDraft(createDefaultValue())} type="button" variant="outline">
+						{resetLabel}
+					</Button>
+					<Button
+						onClick={() => {
+							if (onApply) onApply(draft)
+							else onChange(draft)
+							setOpen(false)
+						}}
+						type="button"
+					>
+						{applyLabel}
+					</Button>
+				</SheetFooter>
+			</SheetContent>
+		</Sheet>
+	)
+}

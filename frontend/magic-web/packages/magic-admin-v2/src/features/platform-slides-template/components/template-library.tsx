@@ -1,5 +1,5 @@
-import { Eye, FileImage, Filter, MoreHorizontal, Pencil, Trash2 } from "lucide-react"
-import { forwardRef, useCallback, useImperativeHandle, useMemo, useState } from "react"
+import { Eye, FileImage, MoreHorizontal, Pencil, Trash2 } from "lucide-react"
+import { forwardRef, type ComponentProps, useCallback, useImperativeHandle, useMemo, useState } from "react"
 import { useTranslation } from "react-i18next"
 import { toast } from "sonner"
 import type { ColumnDef } from "@tanstack/react-table"
@@ -7,7 +7,10 @@ import { DataTable } from "@magic-admin-v2/components/data-table"
 import { EmptyState } from "@magic-admin-v2/components/empty-state"
 import { FilterControlField } from "@magic-admin-v2/components/filter-control-field"
 import { FilterSearchInput } from "@magic-admin-v2/components/filter-search-input"
-import { FilterSheet } from "@magic-admin-v2/components/filter-sheet"
+import {
+	ListFilterPanel,
+	type ListFilterPanelFieldsProps,
+} from "@magic-admin-v2/components/list-filter-panel"
 import { ListPagination } from "@magic-admin-v2/components/list-pagination"
 import { Badge } from "@magic-admin-v2/components/ui/badge"
 import { Button } from "@magic-admin-v2/components/ui/button"
@@ -102,6 +105,100 @@ function toTemplateLibraryParams(
 	}
 }
 
+type TemplateLibraryFilterFieldsProps = ListFilterPanelFieldsProps<TemplateLibraryFilterDraft> & {
+	categoryOptions: ComponentProps<typeof SearchableCategorySelect>["options"]
+	categoryOptionsLoading: boolean
+	onCategoryOptionsOpen: () => void
+	onTagOptionsOpen: () => void
+	tagOptions: ComponentProps<typeof SearchableTagSelect>["options"]
+	tagOptionsLoading: boolean
+}
+
+/** Every template condition is an independent field; all controls fill their grid cell. */
+function TemplateLibraryFilterFields({
+	categoryOptions,
+	categoryOptionsLoading,
+	onCategoryOptionsOpen,
+	onChange,
+	onTagOptionsOpen,
+	tagOptions,
+	tagOptionsLoading,
+	value,
+}: TemplateLibraryFilterFieldsProps) {
+	const { t } = useTranslation()
+
+	return (
+		<>
+			<FilterControlField label={t("slidesTemplate.keyword")}>
+				<FilterSearchInput
+					clearLabel={t("common.clear")}
+					onValueChange={(keyword) => onChange({ keyword })}
+					placeholder={t("slidesTemplate.keyword")}
+					value={value.keyword}
+				/>
+			</FilterControlField>
+			<FilterControlField label={t("slidesTemplate.templateCode")}>
+				<FilterSearchInput
+					clearLabel={t("common.clear")}
+					onValueChange={(code) => onChange({ code })}
+					placeholder={t("slidesTemplate.templateCode")}
+					value={value.code}
+				/>
+			</FilterControlField>
+			<FilterControlField label={t("slidesTemplate.category")}>
+				<SearchableCategorySelect
+					ariaLabel={t("slidesTemplate.category")}
+					emptyLabel={t("slidesTemplate.all")}
+					isLoading={categoryOptionsLoading}
+					onChange={(category) => onChange({ category })}
+					onOpenChange={(open) => open && onCategoryOptionsOpen()}
+					options={categoryOptions}
+					value={value.category}
+				/>
+			</FilterControlField>
+			<FilterControlField label={t("slidesTemplate.tagsFilter")}>
+				<SearchableTagSelect
+					ariaLabel={t("slidesTemplate.tagsFilter")}
+					contentClassName="w-[min(360px,calc(100vw-3rem))]"
+					emptyLabel={t("slidesTemplate.allTags")}
+					isLoading={tagOptionsLoading}
+					maxVisibleTags={2}
+					onChange={(tagCodes) => onChange({ tagCodes })}
+					onOpenChange={(open) => open && onTagOptionsOpen()}
+					options={tagOptions}
+					value={value.tagCodes}
+				/>
+			</FilterControlField>
+			<FilterControlField label={t("slidesTemplate.tagMatch")}>
+				<Select
+					value={value.tagMatch}
+					onValueChange={(tagMatch: "any" | "all") => onChange({ tagMatch })}
+				>
+					<SelectTrigger aria-label={t("slidesTemplate.tagMatch")} className="w-full">
+						<SelectValue />
+					</SelectTrigger>
+					<SelectContent>
+						<SelectItem value="any">{t("slidesTemplate.any")}</SelectItem>
+						<SelectItem value="all">{t("slidesTemplate.all")}</SelectItem>
+					</SelectContent>
+				</Select>
+			</FilterControlField>
+			<FilterControlField label={t("slidesTemplate.status")}>
+				<Select value={value.status} onValueChange={(status) => onChange({ status })}>
+					<SelectTrigger aria-label={t("slidesTemplate.status")} className="w-full">
+						<SelectValue />
+					</SelectTrigger>
+					<SelectContent>
+						<SelectItem value={emptyStatus}>{t("slidesTemplate.all")}</SelectItem>
+						<SelectItem value="1">{t("slidesTemplate.enabled")}</SelectItem>
+						<SelectItem value="0">{t("slidesTemplate.disabled")}</SelectItem>
+					</SelectContent>
+				</Select>
+			</FilterControlField>
+		</>
+	)
+}
+
 type TemplateLibraryProps = {
 	canEdit: boolean
 	onDelete: (record: SlidesTemplate) => void
@@ -126,7 +223,6 @@ export const TemplateLibrary = forwardRef<TemplateLibraryHandle, TemplateLibrary
 			filterDraft: filters,
 			page,
 			params,
-			setDebouncedField,
 			setFilterDraft,
 			setPage,
 		} = useListQueryParams({
@@ -137,10 +233,6 @@ export const TemplateLibrary = forwardRef<TemplateLibraryHandle, TemplateLibrary
 		})
 		const [categoryOptionsOpen, setCategoryOptionsOpen] = useState(false)
 		const [tagOptionsOpen, setTagOptionsOpen] = useState(false)
-		const [isFilterSheetOpen, setIsFilterSheetOpen] = useState(false)
-		const [advancedFilterDraft, setAdvancedFilterDraft] = useState(
-			createDefaultTemplateLibraryDraft,
-		)
 		const [previewing, setPreviewing] = useState<SlidesTemplate | null>(null)
 		const [coverPreviewing, setCoverPreviewing] = useState<SlidesTemplate | null>(null)
 		const query = useSlidesTemplateListQuery(params)
@@ -158,29 +250,8 @@ export const TemplateLibrary = forwardRef<TemplateLibraryHandle, TemplateLibrary
 		const { pendingIds: sortPendingIds, run: runSortPending } = useRowPendingIds()
 
 		const reset = useCallback(() => {
-			const next = createDefaultTemplateLibraryDraft()
-			setFilterDraft(next)
-			setAdvancedFilterDraft(next)
+			setFilterDraft(createDefaultTemplateLibraryDraft())
 		}, [setFilterDraft])
-
-		const handleFilterSheetOpenChange = useCallback(
-			(open: boolean) => {
-				if (open) {
-					setAdvancedFilterDraft(filters)
-				}
-				setIsFilterSheetOpen(open)
-			},
-			[filters],
-		)
-
-		const resetAdvancedFilters = useCallback(() => {
-			setAdvancedFilterDraft(createDefaultTemplateLibraryDraft())
-		}, [])
-
-		const applyAdvancedFilters = useCallback(() => {
-			setFilterDraft(advancedFilterDraft)
-			setIsFilterSheetOpen(false)
-		}, [advancedFilterDraft, setFilterDraft])
 
 		useImperativeHandle(ref, () => ({ reset }), [reset])
 		const updateStatus = useCallback(
@@ -438,231 +509,26 @@ export const TemplateLibrary = forwardRef<TemplateLibraryHandle, TemplateLibrary
 
 		return (
 			<div className="space-y-4">
-				<div className="flex min-w-0 flex-wrap items-end justify-end gap-2 md:hidden">
-					<FilterControlField
-						className="min-w-0 flex-1 md:w-[340px] md:flex-none xl:w-[420px]"
-						label={t("slidesTemplate.keyword")}
-					>
-						<FilterSearchInput
-							clearLabel={t("common.clear")}
-							onValueChange={(keyword) => setDebouncedField("keyword", keyword)}
-							placeholder={t("slidesTemplate.keyword")}
-							value={filters.keyword}
-						/>
-					</FilterControlField>
-					<FilterControlField className="w-fit" label={t("slidesTemplate.status")}>
-						<Select
-							value={filters.status}
-							onValueChange={(status) => {
-								setFilterDraft((state) => ({ ...state, status }))
-							}}
-						>
-							<SelectTrigger className="w-fit max-w-full">
-								<SelectValue />
-							</SelectTrigger>
-							<SelectContent>
-								<SelectItem value={emptyStatus}>
-									{t("slidesTemplate.all")}
-								</SelectItem>
-								<SelectItem value="1">{t("slidesTemplate.enabled")}</SelectItem>
-								<SelectItem value="0">{t("slidesTemplate.disabled")}</SelectItem>
-							</SelectContent>
-						</Select>
-					</FilterControlField>
-					<Button
-						aria-label={t("slidesTemplate.filterTitle")}
-						className="h-9 w-9 px-0"
-						onClick={() => handleFilterSheetOpenChange(true)}
-						type="button"
-						variant="outline"
-					>
-						<Filter className="size-4" aria-hidden="true" />
-					</Button>
-				</div>
-				<div className="hidden grid-cols-1 items-end gap-3 md:grid sm:grid-cols-2 xl:grid-cols-4">
-					<FilterControlField label={t("slidesTemplate.keyword")}>
-						<FilterSearchInput
-							clearLabel={t("common.clear")}
-							onValueChange={(keyword) => setDebouncedField("keyword", keyword)}
-							placeholder={t("slidesTemplate.keyword")}
-							value={filters.keyword}
-						/>
-					</FilterControlField>
-					<FilterControlField label={t("slidesTemplate.templateCode")}>
-						<FilterSearchInput
-							clearLabel={t("common.clear")}
-							onValueChange={(code) => setDebouncedField("code", code)}
-							placeholder={t("slidesTemplate.templateCode")}
-							value={filters.code}
-						/>
-					</FilterControlField>
-					<FilterControlField label={t("slidesTemplate.category")}>
-						<SearchableCategorySelect
-							ariaLabel={t("slidesTemplate.category")}
-							emptyLabel={t("slidesTemplate.all")}
-							isLoading={categories.isLoading}
-							onChange={(category) =>
-								setFilterDraft((value) => ({ ...value, category }))
-							}
-							onOpenChange={(open) => open && setCategoryOptionsOpen(true)}
-							options={categories.data?.list ?? []}
-							value={filters.category}
-						/>
-					</FilterControlField>
-					<FilterControlField label={t("slidesTemplate.tagsFilter")}>
-						<SearchableTagSelect
-							ariaLabel={t("slidesTemplate.tagsFilter")}
-							contentClassName="w-[min(360px,calc(100vw-3rem))]"
-							emptyLabel={t("slidesTemplate.allTags")}
-							isLoading={tags.isLoading}
-							maxVisibleTags={2}
-							onChange={(tagCodes) =>
-								setFilterDraft((value) => ({ ...value, tagCodes }))
-							}
-							onOpenChange={(open) => open && setTagOptionsOpen(true)}
-							options={tagOptions}
-							value={filters.tagCodes}
-						/>
-					</FilterControlField>
-					<FilterControlField label={t("slidesTemplate.tagMatch")}>
-						<Select
-							value={filters.tagMatch}
-							onValueChange={(tagMatch: "any" | "all") =>
-								setFilterDraft((value) => ({ ...value, tagMatch }))
-							}
-						>
-							<SelectTrigger className="w-full">
-								<SelectValue />
-							</SelectTrigger>
-							<SelectContent>
-								<SelectItem value="any">{t("slidesTemplate.any")}</SelectItem>
-								<SelectItem value="all">{t("slidesTemplate.all")}</SelectItem>
-							</SelectContent>
-						</Select>
-					</FilterControlField>
-					<FilterControlField label={t("slidesTemplate.status")}>
-						<Select
-							value={filters.status}
-							onValueChange={(status) =>
-								setFilterDraft((value) => ({ ...value, status }))
-							}
-						>
-							<SelectTrigger className="w-full">
-								<SelectValue />
-							</SelectTrigger>
-							<SelectContent>
-								<SelectItem value={emptyStatus}>
-									{t("slidesTemplate.all")}
-								</SelectItem>
-								<SelectItem value="1">{t("slidesTemplate.enabled")}</SelectItem>
-								<SelectItem value="0">{t("slidesTemplate.disabled")}</SelectItem>
-							</SelectContent>
-						</Select>
-					</FilterControlField>
-					<div className="flex justify-end sm:col-start-2 xl:col-start-4">
-						<Button
-							variant="outline"
-							onClick={() => setFilterDraft(createDefaultTemplateLibraryDraft())}
-						>
-							{t("slidesTemplate.reset")}
-						</Button>
-					</div>
-				</div>
-				<FilterSheet
+				<ListFilterPanel
 					applyLabel={t("slidesTemplate.applyFilters")}
-					description={t("slidesTemplate.filterDescription")}
-					onApply={applyAdvancedFilters}
-					onOpenChange={handleFilterSheetOpenChange}
-					onReset={resetAdvancedFilters}
-					open={isFilterSheetOpen}
-					presentation="mobile-only"
+					createDefaultValue={createDefaultTemplateLibraryDraft}
+					onChange={(patch) => setFilterDraft((previous) => ({ ...previous, ...patch }))}
+					onReset={reset}
+					renderFields={(props) => (
+						<TemplateLibraryFilterFields
+							{...props}
+							categoryOptions={categories.data?.list ?? []}
+							categoryOptionsLoading={categories.isLoading}
+							onCategoryOptionsOpen={() => setCategoryOptionsOpen(true)}
+							onTagOptionsOpen={() => setTagOptionsOpen(true)}
+							tagOptions={tagOptions}
+							tagOptionsLoading={tags.isLoading}
+						/>
+					)}
 					resetLabel={t("slidesTemplate.reset")}
 					title={t("slidesTemplate.filterTitle")}
-				>
-					<FilterControlField className="w-full" label={t("slidesTemplate.keyword")}>
-						<FilterSearchInput
-							clearLabel={t("common.clear")}
-							onValueChange={(keyword) =>
-								setAdvancedFilterDraft((value) => ({ ...value, keyword }))
-							}
-							placeholder={t("slidesTemplate.keyword")}
-							value={advancedFilterDraft.keyword}
-						/>
-					</FilterControlField>
-					<FilterControlField className="w-full" label={t("slidesTemplate.templateCode")}>
-						<FilterSearchInput
-							clearLabel={t("common.clear")}
-							onValueChange={(code) =>
-								setAdvancedFilterDraft((value) => ({ ...value, code }))
-							}
-							placeholder={t("slidesTemplate.templateCode")}
-							value={advancedFilterDraft.code}
-						/>
-					</FilterControlField>
-					<FilterControlField className="w-full" label={t("slidesTemplate.category")}>
-						<SearchableCategorySelect
-							ariaLabel={t("slidesTemplate.category")}
-							emptyLabel={t("slidesTemplate.all")}
-							isLoading={categories.isLoading}
-							onChange={(category) =>
-								setAdvancedFilterDraft((value) => ({ ...value, category }))
-							}
-							onOpenChange={(open) => open && setCategoryOptionsOpen(true)}
-							options={categories.data?.list ?? []}
-							value={advancedFilterDraft.category}
-						/>
-					</FilterControlField>
-					<FilterControlField className="w-full" label={t("slidesTemplate.tagsFilter")}>
-						<SearchableTagSelect
-							ariaLabel={t("slidesTemplate.tagsFilter")}
-							contentClassName="w-[min(360px,calc(100vw-3rem))]"
-							emptyLabel={t("slidesTemplate.allTags")}
-							isLoading={tags.isLoading}
-							maxVisibleTags={2}
-							onChange={(tagCodes) =>
-								setAdvancedFilterDraft((value) => ({ ...value, tagCodes }))
-							}
-							onOpenChange={(open) => open && setTagOptionsOpen(true)}
-							options={tagOptions}
-							value={advancedFilterDraft.tagCodes}
-						/>
-					</FilterControlField>
-					<FilterControlField className="w-full" label={t("slidesTemplate.status")}>
-						<Select
-							value={advancedFilterDraft.status}
-							onValueChange={(status) =>
-								setAdvancedFilterDraft((value) => ({ ...value, status }))
-							}
-						>
-							<SelectTrigger className="w-full">
-								<SelectValue />
-							</SelectTrigger>
-							<SelectContent>
-								<SelectItem value={emptyStatus}>
-									{t("slidesTemplate.all")}
-								</SelectItem>
-								<SelectItem value="1">{t("slidesTemplate.enabled")}</SelectItem>
-								<SelectItem value="0">{t("slidesTemplate.disabled")}</SelectItem>
-							</SelectContent>
-						</Select>
-					</FilterControlField>
-					<FilterControlField className="w-full" label={t("slidesTemplate.tagMatch")}>
-						<Select
-							value={advancedFilterDraft.tagMatch}
-							onValueChange={(tagMatch: "any" | "all") =>
-								setAdvancedFilterDraft((value) => ({ ...value, tagMatch }))
-							}
-						>
-							<SelectTrigger className="w-full">
-								<SelectValue />
-							</SelectTrigger>
-							<SelectContent>
-								<SelectItem value="any">{t("slidesTemplate.any")}</SelectItem>
-								<SelectItem value="all">{t("slidesTemplate.all")}</SelectItem>
-							</SelectContent>
-						</Select>
-					</FilterControlField>
-				</FilterSheet>
+					value={filters}
+				/>
 				<div>
 					<div className="hidden md:block">
 						<DataTable

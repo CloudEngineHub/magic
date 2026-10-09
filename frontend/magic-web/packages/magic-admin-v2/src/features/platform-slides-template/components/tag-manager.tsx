@@ -1,4 +1,4 @@
-import { Filter, MoreHorizontal, Pencil, Plus, Tags, Trash2 } from "lucide-react"
+import { MoreHorizontal, Pencil, Plus, Tags, Trash2 } from "lucide-react"
 import { forwardRef, useCallback, useEffect, useImperativeHandle, useMemo, useState } from "react"
 import { useTranslation } from "react-i18next"
 import { toast } from "sonner"
@@ -6,7 +6,10 @@ import type { ColumnDef } from "@tanstack/react-table"
 import { DataTable } from "@magic-admin-v2/components/data-table"
 import { EmptyState } from "@magic-admin-v2/components/empty-state"
 import { FilterControlField } from "@magic-admin-v2/components/filter-control-field"
-import { FilterSheet } from "@magic-admin-v2/components/filter-sheet"
+import {
+	ListFilterPanel,
+	type ListFilterPanelFieldsProps,
+} from "@magic-admin-v2/components/list-filter-panel"
 import { ListPagination } from "@magic-admin-v2/components/list-pagination"
 import { Badge } from "@magic-admin-v2/components/ui/badge"
 import { Button } from "@magic-admin-v2/components/ui/button"
@@ -82,6 +85,44 @@ function toTagListParams(
 	}
 }
 
+/** Name, code and status are independent fields; every control fills its grid cell. */
+function TagFilterFields({ onChange, value }: ListFilterPanelFieldsProps<TagFilterDraft>) {
+	const { t } = useTranslation()
+
+	return (
+		<>
+			<FilterControlField label={t("slidesTemplate.tagName")}>
+				<FilterSearchInput
+					clearLabel={t("common.clear")}
+					onValueChange={(keyword) => onChange({ keyword })}
+					placeholder={t("slidesTemplate.tagName")}
+					value={value.keyword}
+				/>
+			</FilterControlField>
+			<FilterControlField label={t("slidesTemplate.tagCode")}>
+				<FilterSearchInput
+					clearLabel={t("common.clear")}
+					onValueChange={(code) => onChange({ code })}
+					placeholder={t("slidesTemplate.tagCode")}
+					value={value.code}
+				/>
+			</FilterControlField>
+			<FilterControlField label={t("slidesTemplate.status")}>
+				<Select value={value.status} onValueChange={(status) => onChange({ status })}>
+					<SelectTrigger aria-label={t("slidesTemplate.status")} className="w-full">
+						<SelectValue />
+					</SelectTrigger>
+					<SelectContent>
+						<SelectItem value={emptyStatus}>{t("slidesTemplate.all")}</SelectItem>
+						<SelectItem value="1">{t("slidesTemplate.enabled")}</SelectItem>
+						<SelectItem value="0">{t("slidesTemplate.disabled")}</SelectItem>
+					</SelectContent>
+				</Select>
+			</FilterControlField>
+		</>
+	)
+}
+
 type TagManagerProps = {
 	canEdit: boolean
 	onCreateAvailabilityChange: (available: boolean) => void
@@ -111,7 +152,6 @@ export const TagManager = forwardRef<TagManagerHandle, TagManagerProps>(function
 		filterDraft: filters,
 		page,
 		params,
-		setDebouncedField,
 		setFilterDraft,
 		setPage,
 	} = useListQueryParams({
@@ -123,8 +163,6 @@ export const TagManager = forwardRef<TagManagerHandle, TagManagerProps>(function
 	const [groupDialogOpen, setGroupDialogOpen] = useState(false)
 	const [tagDialogOpen, setTagDialogOpen] = useState(false)
 	const [editing, setEditing] = useState<SlidesTemplateTag | null>(null)
-	const [isFilterSheetOpen, setIsFilterSheetOpen] = useState(false)
-	const [advancedFilterDraft, setAdvancedFilterDraft] = useState(createDefaultTagFilterDraft)
 	const tree = useSlidesTemplateTagTreeQuery(true)
 	const groups = useMemo(
 		() => (tree.data ?? []).filter((node) => node.node_type === "group"),
@@ -168,23 +206,9 @@ export const TagManager = forwardRef<TagManagerHandle, TagManagerProps>(function
 		[canEdit, groups.length],
 	)
 	const reset = useCallback(() => {
-		const next = createDefaultTagFilterDraft()
-		setFilterDraft(next)
-		setAdvancedFilterDraft(next)
+		setFilterDraft(createDefaultTagFilterDraft())
 		setSelectedTagId(null)
 	}, [setFilterDraft])
-	const handleFilterSheetOpenChange = useCallback(
-		(open: boolean) => {
-			if (open) setAdvancedFilterDraft(filters)
-			setIsFilterSheetOpen(open)
-		},
-		[filters],
-	)
-	const applyAdvancedFilters = useCallback(() => {
-		setFilterDraft(advancedFilterDraft)
-		setSelectedTagId(null)
-		setIsFilterSheetOpen(false)
-	}, [advancedFilterDraft, setFilterDraft])
 	const selectGroup = useCallback((groupId: string | null) => {
 		setSelectedGroupId(groupId)
 		setSelectedTagId(null)
@@ -522,120 +546,20 @@ export const TagManager = forwardRef<TagManagerHandle, TagManagerProps>(function
 					</h3>
 				</div>
 				<div className="mb-3 md:mb-0 md:border-b md:p-4">
-					<div className="flex justify-end md:hidden">
-						<Button
-							aria-label={t("slidesTemplate.filterTitle")}
-							className={cn(
-								(filters.keyword ||
-									filters.code ||
-									filters.status !== emptyStatus) &&
-									"border-primary text-primary",
-							)}
-							onClick={() => handleFilterSheetOpenChange(true)}
-							size="icon"
-							variant="outline"
-						>
-							<Filter className="size-4" aria-hidden="true" />
-						</Button>
-					</div>
-					<div className="hidden grid-cols-[minmax(0,1fr)_minmax(0,1fr)_140px] items-end gap-2 md:grid">
-						<FilterControlField className="min-w-0" label={t("slidesTemplate.tagName")}>
-							<FilterSearchInput
-								clearLabel={t("common.clear")}
-								onValueChange={(value) => {
-									setDebouncedField("keyword", value)
-									setSelectedTagId(null)
-								}}
-								placeholder={t("slidesTemplate.tagName")}
-								value={filters.keyword}
-							/>
-						</FilterControlField>
-						<FilterControlField className="min-w-0" label={t("slidesTemplate.tagCode")}>
-							<FilterSearchInput
-								clearLabel={t("common.clear")}
-								onValueChange={(value) => {
-									setDebouncedField("code", value)
-									setSelectedTagId(null)
-								}}
-								placeholder={t("slidesTemplate.tagCode")}
-								value={filters.code}
-							/>
-						</FilterControlField>
-						<FilterControlField label={t("slidesTemplate.status")}>
-							<Select
-								value={filters.status}
-								onValueChange={(status) => {
-									setFilterDraft((state) => ({ ...state, status }))
-									setSelectedTagId(null)
-								}}
-							>
-								<SelectTrigger className="w-full">
-									<SelectValue />
-								</SelectTrigger>
-								<SelectContent>
-									<SelectItem value={emptyStatus}>
-										{t("slidesTemplate.all")}
-									</SelectItem>
-									<SelectItem value="1">{t("slidesTemplate.enabled")}</SelectItem>
-									<SelectItem value="0">
-										{t("slidesTemplate.disabled")}
-									</SelectItem>
-								</SelectContent>
-							</Select>
-						</FilterControlField>
-					</div>
+					<ListFilterPanel
+						applyLabel={t("slidesTemplate.applyFilters")}
+						createDefaultValue={createDefaultTagFilterDraft}
+						onChange={(patch) => {
+							setFilterDraft((previous) => ({ ...previous, ...patch }))
+							setSelectedTagId(null)
+						}}
+						onReset={reset}
+						renderFields={(props) => <TagFilterFields {...props} />}
+						resetLabel={t("slidesTemplate.reset")}
+						title={t("slidesTemplate.filterTitle")}
+						value={filters}
+					/>
 				</div>
-				<FilterSheet
-					applyLabel={t("slidesTemplate.applyFilters")}
-					description={t("slidesTemplate.mobile.tagCodeFilterDescription")}
-					onApply={applyAdvancedFilters}
-					onOpenChange={handleFilterSheetOpenChange}
-					onReset={() => setAdvancedFilterDraft(createDefaultTagFilterDraft())}
-					open={isFilterSheetOpen}
-					presentation="mobile-only"
-					resetLabel={t("slidesTemplate.reset")}
-					title={t("slidesTemplate.filterTitle")}
-				>
-					<FilterControlField className="w-full" label={t("slidesTemplate.tagName")}>
-						<FilterSearchInput
-							clearLabel={t("common.clear")}
-							onValueChange={(keyword) =>
-								setAdvancedFilterDraft((previous) => ({ ...previous, keyword }))
-							}
-							placeholder={t("slidesTemplate.tagName")}
-							value={advancedFilterDraft.keyword}
-						/>
-					</FilterControlField>
-					<FilterControlField className="w-full" label={t("slidesTemplate.tagCode")}>
-						<FilterSearchInput
-							clearLabel={t("common.clear")}
-							onValueChange={(code) =>
-								setAdvancedFilterDraft((previous) => ({ ...previous, code }))
-							}
-							placeholder={t("slidesTemplate.tagCode")}
-							value={advancedFilterDraft.code}
-						/>
-					</FilterControlField>
-					<FilterControlField className="w-full" label={t("slidesTemplate.status")}>
-						<Select
-							value={advancedFilterDraft.status}
-							onValueChange={(status) =>
-								setAdvancedFilterDraft((previous) => ({ ...previous, status }))
-							}
-						>
-							<SelectTrigger className="w-full">
-								<SelectValue />
-							</SelectTrigger>
-							<SelectContent>
-								<SelectItem value={emptyStatus}>
-									{t("slidesTemplate.all")}
-								</SelectItem>
-								<SelectItem value="1">{t("slidesTemplate.enabled")}</SelectItem>
-								<SelectItem value="0">{t("slidesTemplate.disabled")}</SelectItem>
-							</SelectContent>
-						</Select>
-					</FilterControlField>
-				</FilterSheet>
 				<div>
 					<MobileTagList
 						canEdit={canEdit}

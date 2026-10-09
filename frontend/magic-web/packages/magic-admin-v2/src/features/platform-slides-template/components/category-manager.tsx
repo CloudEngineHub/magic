@@ -1,4 +1,4 @@
-import { Filter, Pencil, Tags, Trash2 } from "lucide-react"
+import { Pencil, Tags, Trash2 } from "lucide-react"
 import { forwardRef, useCallback, useImperativeHandle, useMemo, useState } from "react"
 import { useTranslation } from "react-i18next"
 import { toast } from "sonner"
@@ -7,7 +7,10 @@ import { DataTable } from "@magic-admin-v2/components/data-table"
 import { EmptyState } from "@magic-admin-v2/components/empty-state"
 import { FilterControlField } from "@magic-admin-v2/components/filter-control-field"
 import { FilterSearchInput } from "@magic-admin-v2/components/filter-search-input"
-import { FilterSheet } from "@magic-admin-v2/components/filter-sheet"
+import {
+	ListFilterPanel,
+	type ListFilterPanelFieldsProps,
+} from "@magic-admin-v2/components/list-filter-panel"
 import { ListPagination } from "@magic-admin-v2/components/list-pagination"
 import { Button } from "@magic-admin-v2/components/ui/button"
 import { Input } from "@magic-admin-v2/components/ui/input"
@@ -64,6 +67,47 @@ function toCategoryListParams(
 	}
 }
 
+/** Name, code and status are independent fields; every control fills its grid cell. */
+function CategoryFilterFields({
+	onChange,
+	value,
+}: ListFilterPanelFieldsProps<CategoryFilterDraft>) {
+	const { t } = useTranslation()
+
+	return (
+		<>
+			<FilterControlField label={t("slidesTemplate.keyword")}>
+				<FilterSearchInput
+					clearLabel={t("common.clear")}
+					onValueChange={(keyword) => onChange({ keyword })}
+					placeholder={t("slidesTemplate.keyword")}
+					value={value.keyword}
+				/>
+			</FilterControlField>
+			<FilterControlField label={t("slidesTemplate.categoryCode")}>
+				<FilterSearchInput
+					clearLabel={t("common.clear")}
+					onValueChange={(code) => onChange({ code })}
+					placeholder={t("slidesTemplate.categoryCode")}
+					value={value.code}
+				/>
+			</FilterControlField>
+			<FilterControlField label={t("slidesTemplate.status")}>
+				<Select value={value.status} onValueChange={(status) => onChange({ status })}>
+					<SelectTrigger aria-label={t("slidesTemplate.status")} className="w-full">
+						<SelectValue />
+					</SelectTrigger>
+					<SelectContent>
+						<SelectItem value={emptyStatus}>{t("slidesTemplate.all")}</SelectItem>
+						<SelectItem value="1">{t("slidesTemplate.enabled")}</SelectItem>
+						<SelectItem value="0">{t("slidesTemplate.disabled")}</SelectItem>
+					</SelectContent>
+				</Select>
+			</FilterControlField>
+		</>
+	)
+}
+
 type CategoryManagerProps = {
 	canEdit: boolean
 	onDelete: (record: SlidesTemplateCategory) => void
@@ -88,7 +132,6 @@ export const CategoryManager = forwardRef<CategoryManagerHandle, CategoryManager
 			filterDraft: filters,
 			page,
 			params,
-			setDebouncedField,
 			setFilterDraft,
 			setPage,
 		} = useListQueryParams({
@@ -99,10 +142,6 @@ export const CategoryManager = forwardRef<CategoryManagerHandle, CategoryManager
 		})
 		const [dialogOpen, setDialogOpen] = useState(false)
 		const [editing, setEditing] = useState<SlidesTemplateCategory | null>(null)
-		const [isFilterSheetOpen, setIsFilterSheetOpen] = useState(false)
-		const [advancedFilterDraft, setAdvancedFilterDraft] = useState(
-			createDefaultCategoryFilterDraft,
-		)
 		const query = useSlidesTemplateCategoriesQuery(params)
 		const mutations = useSlidesTemplateCategoryMutations()
 		const { pendingIds: statusPendingIds, run: runStatusPending } = useRowPendingIds()
@@ -243,130 +282,23 @@ export const CategoryManager = forwardRef<CategoryManagerHandle, CategoryManager
 			],
 		)
 		const reset = useCallback(() => {
-			const next = createDefaultCategoryFilterDraft()
-			setFilterDraft(next)
-			setAdvancedFilterDraft(next)
+			setFilterDraft(createDefaultCategoryFilterDraft())
 		}, [setFilterDraft])
-		const handleFilterSheetOpenChange = useCallback(
-			(open: boolean) => {
-				if (open) setAdvancedFilterDraft(filters)
-				setIsFilterSheetOpen(open)
-			},
-			[filters],
-		)
-		const applyAdvancedFilters = useCallback(() => {
-			setFilterDraft(advancedFilterDraft)
-			setIsFilterSheetOpen(false)
-		}, [advancedFilterDraft, setFilterDraft])
 
 		useImperativeHandle(ref, () => ({ create, reset }), [create, reset])
 
 		return (
 			<div className="space-y-4">
-				<div className="flex justify-end md:hidden">
-					<Button
-						aria-label={t("slidesTemplate.filterTitle")}
-						onClick={() => handleFilterSheetOpenChange(true)}
-						size="icon"
-						variant="outline"
-					>
-						<Filter className="size-4" aria-hidden="true" />
-					</Button>
-				</div>
-				<div className="hidden flex-wrap items-end gap-2 md:flex">
-					<FilterControlField className="w-fit" label={t("slidesTemplate.status")}>
-						<Select
-							value={filters.status}
-							onValueChange={(status) => {
-								setFilterDraft((state) => ({ ...state, status }))
-							}}
-						>
-							<SelectTrigger className="w-fit max-w-full">
-								<SelectValue />
-							</SelectTrigger>
-							<SelectContent>
-								<SelectItem value={emptyStatus}>
-									{t("slidesTemplate.all")}
-								</SelectItem>
-								<SelectItem value="1">{t("slidesTemplate.enabled")}</SelectItem>
-								<SelectItem value="0">{t("slidesTemplate.disabled")}</SelectItem>
-							</SelectContent>
-						</Select>
-					</FilterControlField>
-					<FilterControlField
-						className="w-full min-w-0 md:w-[340px] xl:w-[420px]"
-						label={t("slidesTemplate.keyword")}
-					>
-						<FilterSearchInput
-							clearLabel={t("common.clear")}
-							onValueChange={(value) => setDebouncedField("keyword", value)}
-							placeholder={t("slidesTemplate.keyword")}
-							value={filters.keyword}
-						/>
-					</FilterControlField>
-					<FilterControlField
-						className="w-full min-w-0 md:w-[340px] xl:w-[420px]"
-						label={t("slidesTemplate.categoryCode")}
-					>
-						<FilterSearchInput
-							clearLabel={t("common.clear")}
-							onValueChange={(value) => setDebouncedField("code", value)}
-							placeholder={t("slidesTemplate.categoryCode")}
-							value={filters.code}
-						/>
-					</FilterControlField>
-				</div>
-				<FilterSheet
+				<ListFilterPanel
 					applyLabel={t("slidesTemplate.applyFilters")}
-					description={t("slidesTemplate.categoryFilterDescription")}
-					onApply={applyAdvancedFilters}
-					onOpenChange={handleFilterSheetOpenChange}
-					onReset={() => setAdvancedFilterDraft(createDefaultCategoryFilterDraft())}
-					open={isFilterSheetOpen}
-					presentation="mobile-only"
+					createDefaultValue={createDefaultCategoryFilterDraft}
+					onChange={(patch) => setFilterDraft((previous) => ({ ...previous, ...patch }))}
+					onReset={reset}
+					renderFields={(props) => <CategoryFilterFields {...props} />}
 					resetLabel={t("slidesTemplate.reset")}
 					title={t("slidesTemplate.filterTitle")}
-				>
-					<FilterControlField className="w-full" label={t("slidesTemplate.keyword")}>
-						<FilterSearchInput
-							clearLabel={t("common.clear")}
-							onValueChange={(keyword) =>
-								setAdvancedFilterDraft((previous) => ({ ...previous, keyword }))
-							}
-							placeholder={t("slidesTemplate.keyword")}
-							value={advancedFilterDraft.keyword}
-						/>
-					</FilterControlField>
-					<FilterControlField className="w-full" label={t("slidesTemplate.categoryCode")}>
-						<FilterSearchInput
-							clearLabel={t("common.clear")}
-							onValueChange={(code) =>
-								setAdvancedFilterDraft((previous) => ({ ...previous, code }))
-							}
-							placeholder={t("slidesTemplate.categoryCode")}
-							value={advancedFilterDraft.code}
-						/>
-					</FilterControlField>
-					<FilterControlField className="w-full" label={t("slidesTemplate.status")}>
-						<Select
-							value={advancedFilterDraft.status}
-							onValueChange={(status) =>
-								setAdvancedFilterDraft((previous) => ({ ...previous, status }))
-							}
-						>
-							<SelectTrigger className="w-full">
-								<SelectValue />
-							</SelectTrigger>
-							<SelectContent>
-								<SelectItem value={emptyStatus}>
-									{t("slidesTemplate.all")}
-								</SelectItem>
-								<SelectItem value="1">{t("slidesTemplate.enabled")}</SelectItem>
-								<SelectItem value="0">{t("slidesTemplate.disabled")}</SelectItem>
-							</SelectContent>
-						</Select>
-					</FilterControlField>
-				</FilterSheet>
+					value={filters}
+				/>
 				<div>
 					<DataTable
 						columns={columns}

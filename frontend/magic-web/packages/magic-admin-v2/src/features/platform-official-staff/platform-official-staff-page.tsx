@@ -1,24 +1,15 @@
-import { Bot, Filter, Plus, RefreshCw } from "lucide-react"
+import { Bot, Plus, RefreshCw } from "lucide-react"
 import { useEffect, useMemo, useState, type ReactNode } from "react"
 import { toast } from "sonner"
 import { EmptyState } from "@magic-admin-v2/components/empty-state"
 import { ConfirmDialog } from "@magic-admin-v2/components/confirm-dialog"
-import { FilterControlField } from "@magic-admin-v2/components/filter-control-field"
-import { FilterSheet } from "@magic-admin-v2/components/filter-sheet"
-import { FilterSearchInput } from "@magic-admin-v2/components/filter-search-input"
 import { ListPageSkeleton } from "@magic-admin-v2/components/list-page-skeleton"
 import { ListPagination } from "@magic-admin-v2/components/list-pagination"
 import { ListShell } from "@magic-admin-v2/components/list-shell"
 import { Button } from "@magic-admin-v2/components/ui/button"
-import {
-	Select,
-	SelectContent,
-	SelectItem,
-	SelectTrigger,
-	SelectValue,
-} from "@magic-admin-v2/components/ui/select"
 import { AssignModelsDialog } from "@magic-admin-v2/features/platform-official-staff/components/assignment/assign-models-dialog"
 import { OfficialStaffFormDialog } from "@magic-admin-v2/features/platform-official-staff/components/staff/official-staff-form-dialog"
+import { StaffFilters } from "@magic-admin-v2/features/platform-official-staff/components/staff/staff-filters"
 import {
 	DefaultSettingsCard,
 	StaffCard,
@@ -84,15 +75,13 @@ export default function PlatformOfficialStaffPage() {
 	const { t } = useTranslation()
 	const { language } = useI18n()
 	const hasEditRight = useRights(PERMISSION_KEY_MAP.MODE_MANAGEMENT_EDIT)
-	const { filterDraft, page, pageSize: currentPageSize, params, setDebouncedField, setFilterDraft, setPage, setPageSize } =
+	const { filterDraft, page, pageSize: currentPageSize, params, setFilterDraft, setPage, setPageSize } =
 		useListQueryParams({
 			debounceFields: ["keyword", "identifier"],
 			initialDraft: createDefaultFilterDraft,
 			initialPageSize: pageSize,
 			toParams: toOfficialStaffListParams,
 		})
-	const [mobileFilterDraft, setMobileFilterDraft] = useState(createDefaultFilterDraft)
-	const [mobileFilterOpen, setMobileFilterOpen] = useState(false)
 	const [staffDialog, setStaffDialog] = useState<StaffDialogState>({ open: false, staff: null })
 	const [assignDialog, setAssignDialog] = useState<AssignDialogState>({
 		open: false,
@@ -182,27 +171,6 @@ export default function PlatformOfficialStaffPage() {
 		}
 	}
 
-	function handleMobileFilterOpenChange(open: boolean) {
-		if (open) {
-			setMobileFilterDraft(filterDraft)
-		}
-		setMobileFilterOpen(open)
-	}
-
-	function resetMobileFilters() {
-		setMobileFilterDraft(createDefaultFilterDraft())
-	}
-
-	function applyMobileFilters() {
-		setFilterDraft((previous) => ({
-			...previous,
-			identifier: mobileFilterDraft.identifier,
-			keyword: mobileFilterDraft.keyword,
-			status: mobileFilterDraft.status,
-		}))
-		setMobileFilterOpen(false)
-	}
-
 	return (
 		<>
 			<OfficialStaffShell
@@ -245,140 +213,7 @@ export default function PlatformOfficialStaffPage() {
 					/>
 
 					<div className="space-y-4">
-						<div className="flex min-w-0 items-end gap-2 md:hidden">
-							<FilterControlField
-								className="min-w-0 flex-1"
-								label={t("officialStaff.filter.keyword")}
-							>
-								<FilterSearchInput
-									clearLabel={t("common.clear")}
-									onValueChange={(keyword) => setDebouncedField("keyword", keyword)}
-									placeholder={t("officialStaff.placeholder.keyword")}
-									value={filterDraft.keyword}
-								/>
-							</FilterControlField>
-							<Button
-								aria-label={t("officialStaff.filter.title")}
-								onClick={() => handleMobileFilterOpenChange(true)}
-								size="icon"
-								variant="outline"
-							>
-								<Filter className="size-4" aria-hidden="true" />
-							</Button>
-						</div>
-						<div className="hidden min-w-0 flex-col gap-2 md:flex md:flex-row md:items-end">
-							<FilterControlField
-								className="w-fit"
-								label={t("officialStaff.filter.status")}
-							>
-								<Select
-									onOpenChange={(open) =>
-										setOpenFloatingId(open ? "staff-status-filter" : null)
-									}
-									onValueChange={(value) => {
-										setOpenFloatingId(null)
-										setFilterDraft((prev) => ({ ...prev, status: value }))
-									}}
-									open={openFloatingId === "staff-status-filter"}
-									value={filterDraft.status}
-								>
-									<SelectTrigger className="w-fit max-w-full">
-										<SelectValue />
-									</SelectTrigger>
-									<SelectContent>
-										<SelectItem value={selectAllValue}>
-											{t("officialStaff.filter.allStatuses")}
-										</SelectItem>
-										<SelectItem value="1">{t("common.enabled")}</SelectItem>
-										<SelectItem value="0">{t("common.disabled")}</SelectItem>
-									</SelectContent>
-								</Select>
-							</FilterControlField>
-							<FilterControlField
-								className="min-w-0 flex-1 md:flex-none md:w-[340px] xl:w-[420px]"
-								label={t("officialStaff.filter.keyword")}
-							>
-								<FilterSearchInput
-									clearLabel={t("common.clear")}
-									onValueChange={(keyword) => setDebouncedField("keyword", keyword)}
-									placeholder={t("officialStaff.placeholder.keyword")}
-									value={filterDraft.keyword}
-								/>
-							</FilterControlField>
-							<FilterControlField
-								className="min-w-0 flex-1 md:flex-none md:w-[340px] xl:w-[420px]"
-								label={t("officialStaff.filter.identifier")}
-							>
-								<FilterSearchInput
-									clearLabel={t("common.clear")}
-									onValueChange={(identifier) =>
-										setDebouncedField("identifier", identifier)
-									}
-									placeholder={t("officialStaff.placeholder.identifier")}
-									value={filterDraft.identifier}
-								/>
-							</FilterControlField>
-						</div>
-						<FilterSheet
-							applyLabel={t("officialStaff.action.applyFilters")}
-							description={t("officialStaff.filter.description")}
-							onApply={applyMobileFilters}
-							onOpenChange={handleMobileFilterOpenChange}
-							onReset={resetMobileFilters}
-							open={mobileFilterOpen}
-							presentation="mobile-only"
-							resetLabel={t("officialStaff.action.reset")}
-							title={t("officialStaff.filter.title")}
-						>
-							<FilterControlField className="w-full" label={t("officialStaff.filter.keyword")}>
-								<FilterSearchInput
-									clearLabel={t("common.clear")}
-									onValueChange={(keyword) =>
-										setMobileFilterDraft((previous) => ({ ...previous, keyword }))
-									}
-									placeholder={t("officialStaff.placeholder.keyword")}
-									value={mobileFilterDraft.keyword}
-								/>
-							</FilterControlField>
-							<FilterControlField
-								className="w-full"
-								label={t("officialStaff.filter.status")}
-							>
-								<Select
-									onValueChange={(status) =>
-										setMobileFilterDraft((previous) => ({ ...previous, status }))
-									}
-									value={mobileFilterDraft.status}
-								>
-									<SelectTrigger className="w-full">
-										<SelectValue />
-									</SelectTrigger>
-									<SelectContent>
-										<SelectItem value={selectAllValue}>
-											{t("officialStaff.filter.allStatuses")}
-										</SelectItem>
-										<SelectItem value="1">{t("common.enabled")}</SelectItem>
-										<SelectItem value="0">{t("common.disabled")}</SelectItem>
-									</SelectContent>
-								</Select>
-							</FilterControlField>
-							<FilterControlField
-								className="w-full"
-								label={t("officialStaff.filter.identifier")}
-							>
-								<FilterSearchInput
-									clearLabel={t("common.clear")}
-									onValueChange={(identifier) =>
-										setMobileFilterDraft((previous) => ({
-											...previous,
-											identifier,
-										}))
-									}
-									placeholder={t("officialStaff.placeholder.identifier")}
-									value={mobileFilterDraft.identifier}
-								/>
-							</FilterControlField>
-						</FilterSheet>
+						<StaffFilters onChange={setFilterDraft} value={filterDraft} />
 
 						{listQuery.isLoading ? (
 							<ListPageSkeleton rows={6} />

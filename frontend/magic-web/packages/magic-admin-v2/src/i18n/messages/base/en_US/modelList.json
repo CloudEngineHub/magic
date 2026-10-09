@@ -199,7 +199,6 @@
 	"filter.allModelTypes": "All model types",
 	"filter.allStatuses": "All statuses",
 	"filter.categories": "Model category",
-	"filter.description": "Filter the list by model category, type, and status.",
 	"filter.modelTypes": "Model type",
 	"filter.search": "Search",
 	"filter.statuses": "Model status",

@@ -41,7 +41,6 @@ describe("platform provider list utils", () => {
       name: "",
       provider_code: "",
       provider_type: providerSelectAllValue,
-      search_field: "name",
       status: providerSelectAllValue,
     });
   });
