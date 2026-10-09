@@ -31,6 +31,7 @@ function areTargetsEqual(
 		previous.x === next.x &&
 		previous.y === next.y &&
 		previous.width === next.width &&
+		previous.rowWidth === next.rowWidth &&
 		previous.height === next.height &&
 		previous.text === next.text &&
 		previous.fontSize === next.fontSize &&
@@ -73,7 +74,7 @@ export default function NameLabelRenameButton() {
 			// 按管理器分配的宽度布局，禁止 Flex 为按钮再次压缩文字。
 			// DOM 接管原透明命中内边距；铅笔与文字等高，悬浮不向图片扩张。
 			root.style.padding = `${layout.hitPadding}px`
-			root.style.width = `${layout.width + buttonWidth + layout.hitPadding * 2}px`
+			root.style.width = `${(showButton ? layout.width + buttonWidth : layout.rowWidth) + layout.hitPadding * 2}px`
 			root.style.height = `${layout.height + layout.hitPadding * 2}px`
 			root.style.transform = `translate(${layout.x - layout.hitPadding}px, ${layout.y - layout.hitPadding}px)`
 			label.style.width = `${layout.width}px`

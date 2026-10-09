@@ -73,7 +73,7 @@ import { MediaVersionTagDecorator } from "../decorators/MediaVersionTagDecorator
 import { DiscardedImageDecorator } from "../decorators/DiscardedImageDecorator"
 import { ImagePollingManager } from "../../resources/polling/ImagePollingManager"
 import { DECORATOR_COLORS, DECORATOR_CONFIG } from "../decorators/DecoratorConfig"
-import type { TransformContext } from "../core/BaseElement"
+import type { NameLabelContent, TransformContext } from "../core/BaseElement"
 import {
 	appendReferenceImageInfos,
 	removeReferenceImageInfosByPath,
@@ -2111,24 +2111,34 @@ export class ImageElement extends BaseElement<ImageElementData> {
 	 * 获取名称标签文本（根据状态添加后缀）
 	 */
 	public override getNameLabelText(): string {
+		const content = this.getNameLabelContent()
+		return `${content.primaryText}${content.suffix ? `(${content.suffix.text})` : ""}`
+	}
+
+	/** 标题可省略，状态独立保留；所有名称展示入口仍来自同一展示状态。 */
+	public override getNameLabelContent(): NameLabelContent {
 		const baseName = this.data.name || this.getRenderName()
 		const displayState = this.getDisplayState()
+		const withStatus = (text: string): NameLabelContent => ({
+			primaryText: baseName,
+			suffix: { text },
+		})
 
 		switch (displayState.status) {
 			case "timed-out":
-				return `${baseName}${this.getText("image.nameSuffix.timedOut", "(超时)")}`
+				return withStatus(this.getText("image.status.timedOut", "超时"))
 			case "generating":
-				return `${baseName}${this.getGeneratingNameSuffix(displayState)}`
+				return withStatus(this.getGeneratingNameSuffix(displayState))
 			case "uploading":
-				return `${baseName}${this.getText("image.nameSuffix.uploading", "(上传中)")}`
+				return withStatus(this.getText("image.status.uploading", "上传中"))
 			case "failed":
 				return displayState.failureSource === "resource"
-					? baseName
-					: `${baseName}${this.getText("image.nameSuffix.failed", "(失败)")}`
+					? { primaryText: baseName }
+					: withStatus(this.getText("image.status.failed", "失败"))
 			case "terminated":
-				return `${baseName}${this.getText("image.nameSuffix.terminated", "(已终止)")}`
+				return withStatus(this.getText("image.status.terminated", "已终止"))
 			default:
-				return baseName
+				return { primaryText: baseName }
 		}
 	}
 
@@ -2613,15 +2623,15 @@ export class ImageElement extends BaseElement<ImageElementData> {
 
 	private getGeneratingNameSuffix(state = this.getDisplayState()): string {
 		if (state.taskType === ImageGenerationTaskTypeMap.Expand) {
-			return this.getText("image.nameSuffix.expanding", "(扩展中)")
+			return this.getText("image.status.expanding", "扩展中")
 		}
 		if (state.taskType === ImageGenerationTaskTypeMap.Eraser) {
-			return this.getText("image.nameSuffix.erasing", "(擦除中)")
+			return this.getText("image.status.erasing", "擦除中")
 		}
 		if (state.taskType === ImageGenerationTaskTypeMap.RemoveBackground) {
-			return this.getText("image.nameSuffix.removingBackground", "(去背景中)")
+			return this.getText("image.status.removingBackground", "去背景中")
 		}
-		return this.getText("image.nameSuffix.generating", "(生成中)")
+		return this.getText("image.status.generating", "生成中")
 	}
 
 	private getRetryEditingPlaceholderText(): string {

@@ -249,6 +249,16 @@
 		"retryEditingEraser": "请重新编辑擦除需求",
 		"retryEditingExpand": "请重新编辑扩展需求",
 		"retryEditingRemoveBackground": "请重新编辑去背景需求",
+		"status": {
+			"erasing": "擦除中",
+			"expanding": "扩展中",
+			"failed": "失败",
+			"generating": "生成中",
+			"removingBackground": "去背景中",
+			"terminated": "已终止",
+			"timedOut": "超时",
+			"uploading": "上传中"
+		},
 		"timedOut": "生成已超时",
 		"uploadFailed": "图片上传失败",
 		"uploading": "正在上传中..."
@@ -261,12 +271,16 @@
 		"generateAgain": "再次生成",
 		"generatingReadOnly": "正在生成，可查看和复制提示词",
 		"maxReferenceImagesReached": "最多只能上传 {{maxReferenceImages}} 张参考图",
+		"modelUnavailable": "模型信息暂不可用",
 		"originalImage": "原图",
+		"parametersPending": "生成参数尚未同步，收到后将在这里显示。",
 		"placeholder": "请输入您的创作需求",
 		"projectFilesRoot": "当前项目文件",
 		"quickEdit": "快捷编辑",
 		"reEditFromSaved": "重新编辑",
 		"reEnter": "重新输入",
+		"readOnly": "只读",
+		"readOnlyHint": "可查看和复制提示词及参考图片",
 		"referenceImage": "参考图",
 		"resolution": "分辨率",
 		"size": "尺寸"

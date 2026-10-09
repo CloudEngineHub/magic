@@ -145,6 +145,7 @@ export interface ImageEditorConfig {
 	referenceSourceCrop: CropConfig | undefined
 	hasRestoredRef: React.RefObject<boolean>
 	isRestoringRef: React.RefObject<boolean>
+	hasGenerationRequest: boolean
 	restoreRevision: number
 	handlers: {
 		setSelectedModelId: (id: string) => void
@@ -1447,7 +1448,6 @@ export function useImageEditorConfig(options: UseImageEditorConfigOptions): Imag
 		}
 
 		hasRestoredRef.current = true
-		setRestoreRevision((revision) => revision + 1)
 
 		// 同步参考文件状态（确保恢复的 Element 文件 infos 同步到 state）
 		syncFromElement()
@@ -1456,6 +1456,8 @@ export function useImageEditorConfig(options: UseImageEditorConfigOptions): Imag
 		setTimeout(() => {
 			isRestoringRef.current = false
 			isApplyingRestoreRef.current = false
+			// 参数或模型列表可能在恢复期间到达；释放标记后通知下一轮，不能漏掉新快照。
+			setRestoreRevision((revision) => revision + 1)
 		}, 0)
 	}, [
 		canvas,
@@ -1558,7 +1560,7 @@ export function useImageEditorConfig(options: UseImageEditorConfigOptions): Imag
 	// 从 Canvas 恢复管理器恢复之前填写的内容（等待模型列表加载完成后执行）
 	useEffect(() => {
 		if (readOnly) hasRestoredRef.current = false
-	}, [readOnly, request, activeImageContent.generateImageRequest])
+	}, [readOnly, request, activeImageContent.generateImageRequest, imageModelList])
 
 	useEffect(() => {
 		if (
@@ -1569,7 +1571,7 @@ export function useImageEditorConfig(options: UseImageEditorConfigOptions): Imag
 		)
 			return
 		restoreConfig()
-	}, [canvas, imageModelList, restoreConfig, readOnly])
+	}, [canvas, imageModelList, restoreConfig, readOnly, restoreRevision])
 
 	useEffect(() => {
 		updateProtectedReferencePaths(
@@ -1637,6 +1639,7 @@ export function useImageEditorConfig(options: UseImageEditorConfigOptions): Imag
 		fileInputAccept,
 		hasRestoredRef,
 		isRestoringRef,
+		hasGenerationRequest: Boolean(request ?? activeImageContent.generateImageRequest),
 		restoreRevision,
 		handlers: {
 			setSelectedModelId,

@@ -4,6 +4,7 @@ export const NAME_LABEL_GROUP_PREFIX = "name-label-"
 export const NAME_LABEL_HIT_NAME = "name-label-hit"
 export const NAME_LABEL_TEXT_NAME = "name-label-text"
 export const NAME_LABEL_ICON_NAME = "name-label-icon"
+export const NAME_LABEL_SUFFIX_NAME = "name-label-suffix"
 
 /**
  * 从 Konva 命中节点沿父链解析名称标签对应的元素 ID。
