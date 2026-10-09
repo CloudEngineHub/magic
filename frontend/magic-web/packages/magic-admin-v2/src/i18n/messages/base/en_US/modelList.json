@@ -187,6 +187,7 @@
 	"editor.tab.common": "General information",
 	"editor.tab.providers": "Providers",
 	"editor.tab.runtime": "Runtime parameters",
+	"editor.temperature.disabled": "Disable temperature",
 	"editor.temperature.fixed": "Fixed temperature",
 	"editor.temperature.recommended": "Recommended temperature",
 	"editor.title": "Create model",

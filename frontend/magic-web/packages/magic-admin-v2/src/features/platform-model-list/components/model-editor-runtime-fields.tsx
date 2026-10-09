@@ -1,5 +1,11 @@
 import { SlidersHorizontal } from "lucide-react"
-import { Controller, type Control, type FieldErrors } from "react-hook-form"
+import {
+	Controller,
+	useWatch,
+	type Control,
+	type FieldErrors,
+	type UseFormSetValue,
+} from "react-hook-form"
 import { useTranslation } from "react-i18next"
 
 import { DialogFormField } from "@magic-admin-v2/components/form/dialog-form-field"
@@ -18,19 +24,41 @@ import type { ProviderModelType } from "@magic-admin-v2/features/platform-model-
 import { getErrorMessage } from "@magic-admin-v2/features/platform-model-list/utils/model-editor"
 import type { ModelEditorValues } from "@magic-admin-v2/features/platform-model-list/utils/model-editor-schema"
 
+/** 编辑模型运行参数，关闭温度复用固定温度零的存储方式。 */
 export function ModelEditorRuntimeFields({
 	control,
 	disabled,
 	errors,
 	modelType,
+	setValue,
 }: {
 	control: Control<ModelEditorValues>
 	disabled: boolean
 	errors: FieldErrors<ModelEditorValues>
 	modelType: ProviderModelType
+	setValue: UseFormSetValue<ModelEditorValues>
 }) {
 	const { t } = useTranslation()
 	const visibility = getCommonRuntimeFieldVisibility(modelType)
+	// 订阅表单值，使已有固定温度零在重新打开编辑器时也显示为关闭。
+	const [temperatureMode, temperature] = useWatch({
+		control,
+		name: ["temperature_mode", "temperature"],
+	})
+	const isTemperatureDisabled =
+		temperatureMode === "fixed" && temperature.trim() !== "" && Number(temperature) === 0
+
+	/** 将关闭选项映射为固定温度零，恢复可调模式时使用本编辑器的默认温度。 */
+	function handleTemperatureModeChange(value: string) {
+		if (value !== "disabled" && value !== "fixed" && value !== "recommended") return
+		const options = { shouldDirty: true, shouldValidate: true }
+		if (value === "disabled") {
+			setValue("temperature", "0", options)
+		} else if (isTemperatureDisabled) {
+			setValue("temperature", "0.7", options)
+		}
+		setValue("temperature_mode", value === "disabled" ? "fixed" : value, options)
+	}
 
 	return (
 		<div className="grid gap-5">
@@ -96,8 +124,8 @@ export function ModelEditorRuntimeFields({
 								render={({ field }) => (
 									<Select
 										disabled={disabled}
-										onValueChange={field.onChange}
-										value={field.value}
+										onValueChange={handleTemperatureModeChange}
+										value={isTemperatureDisabled ? "disabled" : field.value}
 									>
 										<SelectTrigger className="w-full" id="temperature-mode">
 											<SelectValue />
@@ -109,21 +137,27 @@ export function ModelEditorRuntimeFields({
 											<SelectItem value="fixed">
 												{t("modelList.editor.temperature.fixed")}
 											</SelectItem>
+											<SelectItem value="disabled">
+												{t("modelList.editor.temperature.disabled")}
+											</SelectItem>
 										</SelectContent>
 									</Select>
 								)}
 							/>
 						</DialogFormField>
-						<NumberField
-							control={control}
-							disabled={disabled}
-							description={t("modelList.editor.fieldDesc.temperature")}
-							error={getErrorMessage(errors.temperature?.message)}
-							label={t("modelList.editor.field.temperature")}
-							name="temperature"
-							placeholder={t("modelList.editor.placeholder.temperature")}
-							step="0.1"
-						/>
+						{/* 隐藏输入区域但保留字段注册，确保固定温度零继续参与表单提交。 */}
+						<div hidden={isTemperatureDisabled}>
+							<NumberField
+								control={control}
+								disabled={disabled}
+								description={t("modelList.editor.fieldDesc.temperature")}
+								error={getErrorMessage(errors.temperature?.message)}
+								label={t("modelList.editor.field.temperature")}
+								name="temperature"
+								placeholder={t("modelList.editor.placeholder.temperature")}
+								step="0.1"
+							/>
+						</div>
 					</>
 				) : null}
 			</div>

@@ -74,6 +74,7 @@
 		"currency": "Currency",
 		"deleteServiceProvider": "Delete Provider",
 		"deleteServiceProviderDesc": "Whether to delete the provider",
+		"disabledTemperature": "Disable Temperature",
 		"editLanguageModel": "Edit Large Language Model",
 		"editModal": "Edit Model",
 		"expandImportDetails": "Show more details",
