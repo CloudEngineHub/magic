@@ -7,8 +7,10 @@ import type legacyCookie from "./legacy-cookie"
 import type legacyStorage from "./legacy-storage"
 import type legacyIndexedDB from "./legacy-indexed-db"
 import type navigation from "./navigation"
+import type touchPinch from "./touch-pinch"
 
 interface Installers {
+	"touch-pinch": typeof touchPinch
 	telemetry: typeof telemetry
 	"content-metrics": typeof contentMetrics
 	"service-worker": typeof serviceWorker

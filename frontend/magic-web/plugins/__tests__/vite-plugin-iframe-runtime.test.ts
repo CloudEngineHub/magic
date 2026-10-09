@@ -26,6 +26,7 @@ describe("iframe runtime build", () => {
 			"navigation",
 			"service-worker",
 			"telemetry",
+			"touch-pinch",
 		])
 		for (const script of Object.values(scripts)) {
 			expect(typeof new Function(`return ${script}`)()).toBe("function")
@@ -81,6 +82,7 @@ describe("iframe runtime build", () => {
 				"legacy-storage",
 				"legacy-indexed-db",
 				"navigation",
+				"touch-pinch",
 			])
 				await writeFile(
 					path.join(directory, `${name}.ts`),
