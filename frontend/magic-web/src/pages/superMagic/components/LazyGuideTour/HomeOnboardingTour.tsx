@@ -102,6 +102,62 @@ const ARROW_INSET = 24
 const NARROW_CARD_MAX_WIDTH = 760
 const SCROLLBAR_ALLOWANCE = 16
 
+/** A box in window coordinates, as `getBoundingClientRect` reports one. */
+interface WindowBox {
+	left: number
+	top: number
+	width: number
+	height: number
+}
+
+/**
+ * The boxes that fill the window apart from `holes` — the half of a mask that answers the pointer.
+ *
+ * A step whose cut-outs have to stay clickable draws its mask with `pointer-events-none` over the
+ * whole overlay (see the "prompt-ready" card below), and the dimmed page underneath then reads
+ * every click as if the mask were not there at all. These boxes are transparent to the eye and not
+ * to the pointer: what the mask shows as covered is also what it stops.
+ *
+ * The window is cut into bands along the holes' own horizontal edges. A band either holds no hole —
+ * and is covered whole — or holds some, and is covered by the strips beside them, in order from the
+ * left and merged where the holes overlap. Two holes stacked one above the other therefore come out
+ * of one cover, including the row between them that belongs to neither.
+ */
+function coverWindowExcept(viewWidth: number, viewHeight: number, holes: WindowBox[]): WindowBox[] {
+	const clipped = holes
+		.map((hole) => ({
+			left: Math.max(0, hole.left),
+			right: Math.min(viewWidth, hole.left + hole.width),
+			top: Math.max(0, hole.top),
+			bottom: Math.min(viewHeight, hole.top + hole.height),
+		}))
+		.filter((hole) => hole.right > hole.left && hole.bottom > hole.top)
+	if (!clipped.length) return [{ left: 0, top: 0, width: viewWidth, height: viewHeight }]
+
+	const edges = [
+		...new Set([0, viewHeight, ...clipped.flatMap((hole) => [hole.top, hole.bottom])]),
+	].sort((left, right) => left - right)
+
+	const covers: WindowBox[] = []
+	for (let index = 0; index < edges.length - 1; index += 1) {
+		const top = edges[index]
+		const height = edges[index + 1] - top
+		if (height <= 0) continue
+		const spanning = clipped
+			.filter((hole) => hole.top <= top && hole.bottom >= top + height)
+			.sort((left, right) => left.left - right.left)
+		let cursor = 0
+		for (const hole of spanning) {
+			if (hole.left > cursor)
+				covers.push({ left: cursor, top, width: hole.left - cursor, height })
+			cursor = Math.max(cursor, hole.right)
+		}
+		if (cursor < viewWidth)
+			covers.push({ left: cursor, top, width: viewWidth - cursor, height })
+	}
+	return covers
+}
+
 /**
  * Taking the mark off the attachment block this run was opened from.
  *
@@ -1862,6 +1918,21 @@ function HomeOnboardingTour({ userMagicId, page = "home", onComplete }: HomeOnbo
 	const arrowTracksAnchor = window.innerWidth > NARROW_CARD_MAX_WIDTH + SCROLLBAR_ALLOWANCE
 
 	if (flow === "prompt-ready") {
+		/**
+		 * The one flow whose page has to stay reachable under the mask. Its two cut-outs — the
+		 * composer and the send button — are what the user is being asked to use, so the overlay
+		 * cannot swallow the pointer wholesale. The cover does it instead: it receives everything
+		 * outside those two boxes and nothing inside them, which is exactly what the mask draws.
+		 *
+		 * Holes are taken in their square boxes. The mask rounds their corners, so the few pixels
+		 * inside a corner belong to the cover's hole and not to the mask's — they are the corners
+		 * of the composer and of the send button, where there is nothing to press.
+		 */
+		const cover = coverWindowExcept(
+			window.innerWidth,
+			window.innerHeight,
+			editorRect ? [rect, editorRect] : [rect],
+		)
 		return createPortal(
 			<div
 				className="pointer-events-none fixed inset-0 z-[1200] text-foreground"
@@ -1869,6 +1940,19 @@ function HomeOnboardingTour({ userMagicId, page = "home", onComplete }: HomeOnbo
 				aria-modal="true"
 				aria-label={t("homeOnboarding.featured.send.title")}
 			>
+				{cover.map((box) => (
+					<div
+						key={`${box.top}-${box.left}-${box.width}-${box.height}`}
+						className="pointer-events-auto fixed z-[1200]"
+						style={{
+							left: box.left,
+							top: box.top,
+							width: box.width,
+							height: box.height,
+						}}
+						aria-hidden="true"
+					/>
+				))}
 				<svg
 					className="pointer-events-none fixed inset-0 z-[1200] size-full"
 					aria-hidden="true"
