@@ -47,14 +47,14 @@ function DownloadProgressToast({
 				<div
 					ref={nodeRef}
 					className={cn(
-						"pointer-events-auto min-w-0 select-none rounded-xl border border-border bg-popover px-4 py-2.5 text-popover-foreground shadow-md",
+						"pointer-events-auto min-w-0 select-none rounded-xl border border-border bg-popover px-3.5 py-2.5 text-popover-foreground shadow-md",
 						dragging ? "cursor-grabbing" : "cursor-grab",
 					)}
 					style={{ transform: `translate(${position.x}px, ${position.y}px)` }}
 					onPointerDown={(event) => event.stopPropagation()}
 				>
-					<div className="flex items-center gap-2.5">
-						<div className="flex min-w-0 shrink items-center gap-2.5">
+					<div className="flex items-center gap-2">
+						<div className="flex min-w-0 shrink items-center gap-2">
 							<span className="shrink-0 text-primary">
 								<ProgressIndicator
 									value={normalizedProgress}
@@ -63,20 +63,19 @@ function DownloadProgressToast({
 								/>
 							</span>
 							<SmartTooltip
-								maxLines={0}
 								disabled={dragging}
 								placement="bottom"
 								className={cn(
-									"download-progress-label min-w-0 text-[13px] leading-5 md:overflow-hidden md:text-ellipsis",
+									"download-progress-label min-w-0 text-[13px] leading-5",
 									description && "font-medium",
 								)}
 							>
 								{resolvedText}
 							</SmartTooltip>
 						</div>
-						{/* 桌面长文案先扩宽再省略；手机保留完整换行文案，缩短进度条为取消操作留空间。 */}
+						{/* 长文件名先扩宽再省略，各视口保持单行；进度条和取消不被文案挤走。 */}
 						<div
-							className="h-1 w-20 min-w-20 shrink-0 grow overflow-hidden rounded-full bg-primary/10 max-md:w-6 max-md:min-w-6"
+							className="h-1 w-20 min-w-20 shrink-0 grow overflow-hidden rounded-full bg-primary/10 max-md:w-16 max-md:min-w-16"
 							aria-hidden
 						>
 							<div
@@ -85,7 +84,7 @@ function DownloadProgressToast({
 							/>
 						</div>
 						{(showPercentage || onCancel) && (
-							<div className="flex shrink-0 items-center gap-2.5">
+							<div className="flex shrink-0 items-center gap-2">
 								{showPercentage && (
 									<span className="text-xs tabular-nums text-muted-foreground">
 										{Math.round(normalizedProgress)}%
@@ -96,7 +95,8 @@ function DownloadProgressToast({
 										type="button"
 										variant="secondary"
 										size="sm"
-										className="h-[22px] shrink-0 rounded-[5px] border border-destructive/15 bg-destructive/5 px-1.5 text-xs font-normal text-destructive shadow-none hover:bg-destructive/10 hover:text-destructive [@media(pointer:coarse)]:min-h-11"
+										// 22px 视觉按钮保留 44px 触控高度，扩展命中区不参与布局，避免手机卡片增高。
+										className="relative h-[22px] shrink-0 rounded-[5px] border border-destructive/15 bg-destructive/5 px-1.5 text-xs font-normal text-destructive shadow-none hover:bg-destructive/10 hover:text-destructive [@media(pointer:coarse)]:before:absolute [@media(pointer:coarse)]:before:-inset-x-1 [@media(pointer:coarse)]:before:top-1/2 [@media(pointer:coarse)]:before:h-11 [@media(pointer:coarse)]:before:-translate-y-1/2 [@media(pointer:coarse)]:before:content-['']"
 										onClick={onCancel}
 									>
 										{resolvedCancelText}
