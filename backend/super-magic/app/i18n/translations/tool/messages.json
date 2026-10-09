@@ -819,13 +819,25 @@
         "zh_CN": "转译错误：查询任务结果请求失败 - {{error}}",
         "en_US": "Transcription error: Query task result request failed - {{error}}"
     },
+    "audio_understanding.result_unknown": {
+        "zh_CN": "暂时无法确认转写结果，任务可能仍在处理，请勿重复提交。未生成新的文字稿。",
+        "en_US": "Unable to confirm the transcription result. The task may still be processing; avoid submitting it again. No new transcript was created."
+    },
+    "audio_understanding.authentication_failed": {
+        "zh_CN": "转写服务认证失败，请检查登录状态后再继续。未生成新的文字稿。",
+        "en_US": "Transcription authentication failed. Check your sign-in status before continuing. No new transcript was created."
+    },
+    "audio_understanding.failed_no_transcript": {
+        "zh_CN": "转写失败，未生成新的文字稿。请查看具体原因后再继续。",
+        "en_US": "Transcription failed. No new transcript was created. Check the reported reason before continuing."
+    },
     "audio_understanding.task_timeout": {
         "zh_CN": "转译错误：音频理解任务超时（{{timeout}}秒）",
         "en_US": "Transcription error: Audio understanding task timeout ({{timeout}} seconds)"
     },
     "audio_understanding.transcription_error": {
-        "zh_CN": "转译错误：音频理解处理失败, 回复用户可能是服务器繁忙, 稍后再试, 或者让用户新建一个话题重新转译试试, 错误信息: {{error}}",
-        "en_US": "Transcription error: Audio understanding processing failed, reply user may be server busy, please try again later, or let the user create a new topic to try again, error: {{error}}"
+        "zh_CN": "转写失败：{{error}}",
+        "en_US": "Audio transcription failed: {{error}}"
     },
     "audio_understanding.file_not_found": {
         "zh_CN": "音频文件 {{file_path}} 不存在",

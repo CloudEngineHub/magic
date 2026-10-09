@@ -610,7 +610,15 @@ class LLMFactory:
         headers.update(MetadataUtil.get_llm_request_headers())
 
         # 4. 添加自定义请求头
-        headers.update(cls._parse_custom_headers())
+        custom_headers = cls._parse_custom_headers()
+        headers.update(custom_headers)
+        # 记录最终 header 状态，以区分元数据正常但 custom headers 覆盖的情况。
+        if MetadataUtil._find_header_key(headers, "Magic-Authorization") is not None:
+            source = "custom_headers" if any(
+                MetadataUtil._find_header_key(custom_headers, name) is not None
+                for name in ("Magic-Authorization", "User-Authorization")
+            ) else "metadata_headers"
+            MetadataUtil.log_authorization_header_diagnostics(headers, source)
 
         return headers
 
