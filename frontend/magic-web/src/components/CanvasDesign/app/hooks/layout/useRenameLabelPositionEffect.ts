@@ -21,6 +21,7 @@ export default function useRenameLabelPositionEffect(options: UseRenameLabelPosi
 	const { elementId, inputRef, value, onTargetDeleted, panel = false } = options
 	const { canvas } = useCanvas()
 	const containerRef = useRef<HTMLDivElement | null>(null)
+	const positionFrameRef = useRef<number | null>(null)
 
 	const updatePosition = useCallback(() => {
 		if (!canvas || !elementId || !containerRef.current || !inputRef.current) {
@@ -75,6 +76,32 @@ export default function useRenameLabelPositionEffect(options: UseRenameLabelPosi
 		)}px`
 	}, [canvas, elementId, inputRef, panel])
 
+	const cancelScheduledPositionUpdate = useCallback(() => {
+		if (positionFrameRef.current === null) return
+		const cancel =
+			typeof cancelAnimationFrame === "function"
+				? cancelAnimationFrame
+				: (frameId: number) => globalThis.clearTimeout(frameId)
+		cancel(positionFrameRef.current)
+		positionFrameRef.current = null
+	}, [])
+
+	const schedulePositionUpdate = useCallback(() => {
+		if (positionFrameRef.current !== null) return
+		const schedule =
+			typeof requestAnimationFrame === "function"
+				? requestAnimationFrame
+				: (callback: FrameRequestCallback) =>
+						globalThis.setTimeout(
+							() => callback(performance.now()),
+							16,
+						) as unknown as number
+		positionFrameRef.current = schedule(() => {
+			positionFrameRef.current = null
+			updatePosition()
+		})
+	}, [updatePosition])
+
 	useCanvasEvents(
 		[
 			"canvas:resize",
@@ -105,6 +132,7 @@ export default function useRenameLabelPositionEffect(options: UseRenameLabelPosi
 			}
 
 			if (deletedEvent?.data.elementId === elementId) {
+				cancelScheduledPositionUpdate()
 				onTargetDeleted()
 				return
 			}
@@ -141,9 +169,26 @@ export default function useRenameLabelPositionEffect(options: UseRenameLabelPosi
 				return
 			}
 
-			updatePosition()
+			// Pan, scale and transform events can arrive together in one turn. Keep the
+			// single-element rename overlay off that synchronous event chain and measure it
+			// once in the next frame.
+			schedulePositionUpdate()
 		},
-		[elementId, onTargetDeleted, updatePosition],
+		[elementId, cancelScheduledPositionUpdate, onTargetDeleted, schedulePositionUpdate],
+	)
+	useCanvasEvents(
+		[
+			"viewport:changed",
+			"elements:transform:dragend",
+			"elements:transform:anchorDragend",
+		] as const,
+		(viewportChangedEvent, dragEndEvent, anchorDragEndEvent) => {
+			if (viewportChangedEvent && viewportChangedEvent.data.phase !== "end") return
+			const transformEndEvent = dragEndEvent || anchorDragEndEvent
+			if (transformEndEvent && !transformEndEvent.data.elementIds.includes(elementId)) return
+			schedulePositionUpdate()
+		},
+		[elementId, schedulePositionUpdate],
 	)
 
 	useLayoutEffect(() => {
@@ -151,17 +196,22 @@ export default function useRenameLabelPositionEffect(options: UseRenameLabelPosi
 			return
 		}
 
+		cancelScheduledPositionUpdate()
 		updatePosition()
-	}, [elementId, value, updatePosition])
+	}, [cancelScheduledPositionUpdate, elementId, value, updatePosition])
+
+	useLayoutEffect(() => {
+		return () => cancelScheduledPositionUpdate()
+	}, [cancelScheduledPositionUpdate, elementId, updatePosition])
 
 	useLayoutEffect(() => {
 		if (!panel || !containerRef.current || !canvas) return
 		// 长名称和错误提示会改变面板高度；仍须留在画布视口内。
-		const observer = new ResizeObserver(updatePosition)
+		const observer = new ResizeObserver(schedulePositionUpdate)
 		observer.observe(containerRef.current)
 		observer.observe(canvas.container)
 		return () => observer.disconnect()
-	}, [canvas, panel, updatePosition])
+	}, [canvas, panel, schedulePositionUpdate])
 
 	return {
 		containerRef,

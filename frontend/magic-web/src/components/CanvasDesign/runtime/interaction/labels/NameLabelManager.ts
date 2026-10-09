@@ -44,10 +44,28 @@ interface NameLabelLayoutState {
 	iconHeight: number
 	iconGap: number
 	iconVisible: boolean
+	canRename: boolean
+	showOperation: boolean
 	textOffsetX: number
 	naturalTextWidth: number
 	textWidth: number
 	canRenderText: boolean
+}
+
+export interface NameLabelScreenLayout {
+	x: number
+	y: number
+	width: number
+	height: number
+	text: string
+	fontSize: number
+	fontFamily: string
+	color: string
+}
+
+export interface ImageNameLabelLayout extends NameLabelScreenLayout {
+	canRename: boolean
+	showRenameButton: boolean
 }
 
 /**
@@ -113,33 +131,41 @@ export class NameLabelManager extends BaseLabelManager {
 
 	/** 铅笔使用名称的屏幕坐标；沿用同一权限和工具条件，不为 DOM 入口绕过限制。 */
 	public getRenameButtonLayout(elementId: string): { x: number; y: number } | null {
-		if (
-			this.renamingElementId ||
-			!this.areNameLabelsInteractive() ||
-			this.canvas.elementManager.getElementData(elementId)?.type !== ElementTypeEnum.Image ||
-			!this.canvas.elementRenameManager.canRename(elementId)
-		)
-			return null
-		const layout = this.getDisplayLabelLayout(elementId)
-		if (!layout || !this.labelMap.get(elementId)?.visible()) return null
-		if (!this.getMediaRowLayout(elementId)?.showOperation) return null
-		const bounds = this.canvas.elementManager.getElementInstance(elementId)?.getBoundingRect()
-		if (!bounds || layout.width + 24 > bounds.width * this.canvas.stage.scaleX()) return null
+		// This is an explicit, cold-path API. The DOM overlay uses the cached variant below during
+		// motion so callers that request the button on demand retain the previous lazy-create behavior.
+		const layout = this.getImageNameLabelLayout(elementId)
+		if (!layout?.showRenameButton) return null
 		return { x: layout.x + layout.width, y: layout.y + layout.height - 24 }
 	}
 
 	/** 只把当前可交互图片的名称交给 DOM；布局和其它元素标签仍由原管理器维护。 */
-	public getImageNameLabelLayout(
-		elementId: string,
-	): ReturnType<NameLabelManager["getRenameInputLayout"]> {
+	public getImageNameLabelLayout(elementId: string): ImageNameLabelLayout | null {
 		if (
 			this.renamingElementId ||
 			!this.areNameLabelsInteractive() ||
 			this.canvas.elementManager.getElementData(elementId)?.type !== ElementTypeEnum.Image
 		)
 			return null
-		const layout = this.getDisplayLabelLayout(elementId)
-		return layout && this.labelMap.get(elementId)?.visible() ? layout : null
+		this.createOrUpdateLabel(elementId, { forceCreate: true })
+		return this.getCachedImageNameLabelLayout(elementId)
+	}
+
+	/**
+	 * Reads the already reconciled Konva label without triggering geometry, spatial, or text layout.
+	 * Viewport and transform hot paths use this method after BaseLabelManager has updated the label.
+	 */
+	public getCachedImageNameLabelLayout(elementId: string): ImageNameLabelLayout | null {
+		const labelGroup = this.labelMap.get(elementId)
+		const state = labelGroup ? this.labelLayoutStates.get(labelGroup) : undefined
+		if (this.renamingElementId || !labelGroup?.visible() || !labelGroup.listening() || !state)
+			return null
+		const layout = this.readDisplayLabelLayout(elementId)
+		if (!layout) return null
+		return {
+			...layout,
+			canRename: state.canRename,
+			showRenameButton: state.canRename && state.showOperation,
+		}
 	}
 
 	public setDOMLabelElementId(elementId: string | null): void {
@@ -157,10 +183,13 @@ export class NameLabelManager extends BaseLabelManager {
 	}
 
 	/** 浏览文字使用最终屏幕比例；编辑入口继续通过 getRenameInputLayout 读取全文。 */
-	public getDisplayLabelLayout(
-		elementId: string,
-	): ReturnType<NameLabelManager["getRenameInputLayout"]> {
-		const layout = this.getRenameInputLayout(elementId)
+	public getDisplayLabelLayout(elementId: string): NameLabelScreenLayout | null {
+		this.createOrUpdateLabel(elementId, { forceCreate: true })
+		return this.readDisplayLabelLayout(elementId)
+	}
+
+	private readDisplayLabelLayout(elementId: string): NameLabelScreenLayout | null {
+		const layout = this.readRenameInputLayout(elementId)
 		const group = this.labelMap.get(elementId)
 		const textNode = group?.findOne<Konva.Text>("Text")
 		if (!layout || !group?.visible() || !textNode) return null
@@ -196,7 +225,10 @@ export class NameLabelManager extends BaseLabelManager {
 		color: string
 	} | null {
 		this.createOrUpdateLabel(elementId, { forceCreate: true })
+		return this.readRenameInputLayout(elementId)
+	}
 
+	private readRenameInputLayout(elementId: string): NameLabelScreenLayout | null {
 		const labelGroup = this.labelMap.get(elementId)
 		if (!labelGroup) {
 			return null
@@ -297,6 +329,8 @@ export class NameLabelManager extends BaseLabelManager {
 			iconHeight: 0,
 			iconGap: 0,
 			iconVisible: false,
+			canRename: false,
+			showOperation: false,
 			textOffsetX: 0,
 			naturalTextWidth: textNode.getTextWidth(),
 			textWidth: Math.max(textNode.width(), NAME_LABEL_CONFIG.MIN_TEXT_WIDTH),
@@ -345,6 +379,11 @@ export class NameLabelManager extends BaseLabelManager {
 
 		const safeInverseScale = Math.max(inverseScale, Number.EPSILON)
 		const resolvedMediaLayout = mediaLayout ?? this.getMediaRowLayout(elementId)
+		const canRename =
+			element?.getData().type === ElementTypeEnum.Image &&
+			(this.canvas.permissionManager?.canRename(element.getData()) ?? false)
+		state.canRename = canRename
+		state.showOperation = resolvedMediaLayout?.showOperation === true
 		// 媒体使用整行的标题优先预算；下方原有尺寸预留规则只用于其它元素。
 		const otherLabelSizes = this.getOtherLabelSizes(elementId)
 		const explicitSizeReservation = this.getSizeLabelReservation(elementId)
@@ -356,11 +395,7 @@ export class NameLabelManager extends BaseLabelManager {
 			explicitSizeReservation > 0 ? 0 : reservedWidth > 0 ? NAME_LABEL_CONFIG.LABEL_GAP : 0
 		// 图片名称为 24px 铅笔命中区预留空间。媒体整行布局已经扣除操作区，
 		// 普通标签在这里保留同样的安全间距。
-		const buttonWidth =
-			element?.getData().type === ElementTypeEnum.Image &&
-			(this.canvas.permissionManager?.canRename(element.getData()) ?? false)
-				? 24
-				: 0
+		const buttonWidth = canRename ? 24 : 0
 		const availableLabelWidth = resolvedMediaLayout
 			? Math.max(0, resolvedMediaLayout.nameWidth)
 			: Math.max(

@@ -109,6 +109,7 @@ function createManager(
 		selectedElementId?: string
 		hoveredElementId?: string
 		viewportScale?: number
+		viewportPosition?: { x: number; y: number }
 		candidateIds?: string[]
 		parents?: Map<string, string>
 		iconResolver?: NameLabelIconResolver
@@ -123,7 +124,9 @@ function createManager(
 		iconResolver: options.iconResolver,
 		canvas: {
 			cropManager: { getCroppingElementId: () => null },
+			elementRenameManager: { canRename: () => true },
 			elementManager: {
+				getElementData: (elementId: string) => elements.get(elementId)?.getData(),
 				getElementInstance: (elementId: string) => elements.get(elementId),
 				getAllElementIds: () => Array.from(elements.keys()),
 				findParentIdForElement: (id: string) => options.parents?.get(id),
@@ -144,9 +147,17 @@ function createManager(
 				isSelected: (elementId: string) => options.selectedElementId === elementId,
 			},
 			stage: {
-				position: () => ({ x: 0, y: 0 }),
+				position: () => options.viewportPosition ?? { x: 0, y: 0 },
 				scaleX: () => options.viewportScale ?? 1,
 			},
+			textEditingManager: { isEditing: () => false },
+			toolManager: (() => {
+				const selectionTool = {}
+				return {
+					getSelectionTool: () => selectionTool,
+					getActiveTool: () => selectionTool,
+				}
+			})(),
 			viewportQueryCoordinator: {
 				getSnapshot: () => ({ generation: 0, labelElementIds: [] }),
 			},
@@ -398,6 +409,44 @@ describe("NameLabelManager visibility", () => {
 		const layout = manager.getRenameInputLayout("audio-1")
 		expect(layout?.text).toBe(labelText)
 		expect(layout?.width).toBeGreaterThan(40)
+
+		manager.destroy()
+	})
+
+	it("reads the cached DOM label layout without recomputing element geometry", () => {
+		const viewportPosition = { x: 0, y: 0 }
+		const getBoundingRect = vi.fn(() => ({ x: 10, y: 20, width: 160, height: 80 }))
+		const elements = new Map<string, TestElement>([
+			[
+				"image-1",
+				{
+					getBoundingRect,
+					getData: () => ({ id: "image-1", type: ElementTypeEnum.Image }),
+					getNameLabelText: () => "Cached image name",
+					getNode: () => ({}),
+				},
+			],
+		])
+		const manager = createManager(elements, {
+			selectedElementId: "image-1",
+			viewportPosition,
+		})
+
+		expect(manager.getCachedImageNameLabelLayout("image-1")).toBeNull()
+		expect(getBoundingRect).not.toHaveBeenCalled()
+
+		const initialLayout = manager.getImageNameLabelLayout("image-1")
+		expect(initialLayout).not.toBeNull()
+		const geometryCallCount = getBoundingRect.mock.calls.length
+
+		viewportPosition.x = 32
+		viewportPosition.y = -12
+		const movedLayout = manager.getCachedImageNameLabelLayout("image-1")
+
+		expect(getBoundingRect).toHaveBeenCalledTimes(geometryCallCount)
+		expect(movedLayout?.x).toBe((initialLayout?.x ?? 0) + 32)
+		expect(movedLayout?.y).toBe((initialLayout?.y ?? 0) - 12)
+		expect(movedLayout?.text).toBe("Cached image name")
 
 		manager.destroy()
 	})
