@@ -224,16 +224,16 @@
 		}
 	},
 	"assetAgreement": {
-		"accept": "I have read and agree to the Seedance Model Use Commitment",
-		"clause1Detail": "Including images, videos, audio, text, portraits, virtual likenesses, voices, or brand elements.",
-		"clause1Title": "I have the legal right to upload or use these assets.",
-		"clause2Detail": "I decide whether to publish, distribute, or use the result commercially, and I accept the corresponding legal responsibility.",
-		"clause2Title": "I am responsible for generated content and how it is used.",
-		"clause3Detail": "This may include blocking generation, deleting content, restricting downloads, or suspending or ending the service.",
-		"clause3Title": "The platform may restrict use if the commitment is violated.",
-		"confirm": "Agree and continue verification",
+		"accept": "I have read and agree to the Seedance Model Use Commitment above",
+		"clause1Detail": "Including but not limited to images, videos, audio, text, human likenesses, virtual likenesses, voices, and brand elements. If the uploaded assets may involve another person's likeness, voice, biometric features, or intellectual-property elements such as trademarks or copyrighted content, you must ensure that you have obtained sufficient authorization and have not infringed any third party's lawful rights.",
+		"clause1Title": "You have sufficient lawful rights to the assets you are about to upload or use",
+		"clause2Detail": "You fully understand that AI-generated results are uncertain. You alone decide whether to publish, distribute, or use the generated content commercially, and you assume the corresponding legal responsibility.",
+		"clause2Title": "You will be responsible for the generated content and the consequences of its use",
+		"clause3Detail": "Any misuse of assets involving third-party lawful rights will be deemed a violation. The platform may take measures including, without limitation, blocking generation, deleting content, restricting downloads, or suspending or terminating services. If this causes losses to the platform or any third party, you must bear the compensation liability yourself.",
+		"clause3Title": "If you use the service in violation of these terms, the platform may impose restrictions",
+		"confirm": "Agree and use",
 		"disagree": "Disagree",
-		"intro": "Before continuing, read and confirm the following commitment:",
+		"intro": "To help ensure that you use the services provided by the Seedance model lawfully and compliantly, please carefully read, fully understand, and make the following commitments before use:",
 		"title": "Seedance Model Use Commitment"
 	},
 	"assetLibrarySave": {
