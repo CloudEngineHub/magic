@@ -73,6 +73,7 @@ import { canUseDesignPlugins } from "./utils/pluginAccess"
 import { userStore } from "@/models/user"
 import { getHydratedElementDetailsProvenance } from "./utils/elementDetailsIo"
 import { useCanvasSelectionMentionPublisher } from "./hooks/useCanvasSelectionMentionPublisher"
+import { useTerminateGeneratingImages } from "./hooks/useTerminateGeneratingImages"
 
 prewarmCanvasDesignImageWorker("super-magic-design-module")
 
@@ -731,6 +732,7 @@ function DesignViewer(props: DesignViewerProps) {
 		getFallbackDocument: getLatestCanvasDocument,
 		resolveFileBySrc: resolveCanvasResourceFile,
 	})
+	useTerminateGeneratingImages(canvasDesignRef)
 
 	const videoPointsEstimateCacheScope = useMemo(
 		() =>

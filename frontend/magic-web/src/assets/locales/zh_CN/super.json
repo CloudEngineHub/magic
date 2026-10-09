@@ -7419,6 +7419,9 @@
 		"finance_technical_indicators": "技术指标分析",
 		"initPlugin": "初始化插件"
 	},
+	"toolWaitCountdown": {
+		"elapsed": "已等待 {{seconds}} 秒 / 共 {{total}} 秒"
+	},
 	"tools": {
 		"analysis_slide_webpage": "网页幻灯片分析",
 		"analyze_audio_project": "音频项目分析",

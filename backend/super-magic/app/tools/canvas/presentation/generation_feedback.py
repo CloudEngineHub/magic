@@ -130,7 +130,7 @@ class CanvasGenerationFeedback:
             correlation_id = get_correlation_manager().get_active_correlation_id(
                 EventPairType.TOOL_CALL, agent_context.context_id,
             ) or tool_context.tool_call_id
-            detail_data = detail.model_dump(mode="json")
+            detail_data = detail.model_dump(mode="json", exclude_none=True)
             # 两代消息工厂都从 detail.data.message 读取 remark；保持工具状态 running，
             # 例：2 个占位元素已保存，只提供定位入口，不表示 2 张图片已经生成。
             detail_data["data"]["message"] = friendly.get("remark", "")
@@ -310,6 +310,9 @@ class CanvasGenerationFeedback:
                     message=i18n.translate(message_key, category="tool.messages"),
                     description=description,
                     target=target,
+                    started_at=raw_item.get("started_at") or None,
+                    expected_finished_at=raw_item.get("expected_finished_at") or None,
+                    is_processing=status in cls._PROCESSING_STATUSES,
                 )
             )
 

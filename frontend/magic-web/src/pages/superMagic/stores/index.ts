@@ -1276,6 +1276,29 @@ export class SuperMagicStore implements SuperMagicStoreCallbackRegistrar {
 		return Boolean(messageNode.role === "tool" && messageNode.tool?.name === "finish_task")
 	}
 
+	/**
+	 * Provider progress can carry a nested correlation id. Its tool id remains the
+	 * stable identity, so HTTP recovery accepts this narrowly typed sidecar.
+	 */
+	private isGenerationProgressToolResponse(messageNode?: RawSuperMagicMessageNode) {
+		const detail = messageNode?.tool?.detail
+		const data =
+			detail && typeof detail === "object" && !Array.isArray(detail) ? detail.data : undefined
+		return Boolean(
+			detail &&
+			typeof detail === "object" &&
+			!Array.isArray(detail) &&
+			detail.type === "generation_progress" &&
+			data &&
+			typeof data === "object" &&
+			!Array.isArray(data) &&
+			typeof data.task_id === "string" &&
+			data.task_id.length > 0 &&
+			typeof data.expected_finished_at === "string" &&
+			data.expected_finished_at.length > 0,
+		)
+	}
+
 	private primeHttpAssistantToolOwnership(
 		topicId: string,
 		envelopes: RawSuperMagicMessageEnvelope[],
@@ -1365,7 +1388,11 @@ export class SuperMagicStore implements SuperMagicStoreCallbackRegistrar {
 					? this.getStreamCorrelationId(topicId, ownerIdentity)
 					: ""
 				if (!ownerIdentity) return
-				if (ownerIdentity !== correlationId && ownerCorrelationId !== correlationId) {
+				if (
+					!this.isGenerationProgressToolResponse(candidate.node) &&
+					ownerIdentity !== correlationId &&
+					ownerCorrelationId !== correlationId
+				) {
 					correlationPending.delete(correlationId)
 					return
 				}
@@ -4271,7 +4298,10 @@ export class SuperMagicStore implements SuperMagicStoreCallbackRegistrar {
 						allowImStatusRestore,
 					})
 				}
-				if (messageType === "super_magic_message") {
+				if (
+					messageType === "super_magic_message" ||
+					this.isGenerationProgressToolResponse(rawNode)
+				) {
 					const toolResponseResult = this.recordToolResponse(
 						topicId,
 						rawNode,
@@ -6163,7 +6193,10 @@ export class SuperMagicStore implements SuperMagicStoreCallbackRegistrar {
 		targetMap?: Map<string, ToolResponseState>,
 		source: SuperMagicEventSource = "im",
 	): ToolResponseRecordResult {
-		if (messageNode?.role !== "tool") return { kind: "unchanged" }
+		if (!messageNode) return { kind: "unchanged" }
+		const isGenerationProgress = this.isGenerationProgressToolResponse(messageNode)
+		// Legacy general_agent_card stores this sidecar on an assistant node.
+		if (messageNode.role !== "tool" && !isGenerationProgress) return { kind: "unchanged" }
 		const rawTool = messageNode.tool
 		if (!rawTool || typeof rawTool !== "object" || Array.isArray(rawTool)) {
 			return { kind: "unchanged" }
@@ -6195,9 +6228,11 @@ export class SuperMagicStore implements SuperMagicStoreCallbackRegistrar {
 			? this.getStreamCorrelationId(topicId, ownerIdentity)
 			: ""
 		const isOrphanFinishTask = !ownerIdentity && this.isOwnerlessFinishTaskResponse(messageNode)
-		if (!isOrphanFinishTask && !ownerIdentity) return { kind: "missing_owner" }
+		if (!isOrphanFinishTask && !ownerIdentity && !isGenerationProgress)
+			return { kind: "missing_owner" }
 		if (
 			!isOrphanFinishTask &&
+			!isGenerationProgress &&
 			ownerIdentity !== correlationId &&
 			ownerCorrelationId !== correlationId
 		)

@@ -31,6 +31,7 @@ import type {
 	EraserRequest,
 	GenerateExtendedImageRequest,
 	GenerateImageRequest,
+	GenerateImageResponse,
 	GenerateHightImageRequest,
 	ImageGenerationTaskMeta,
 	RemoveBackgroundRequest,
@@ -90,6 +91,7 @@ import {
 	type MediaEditIntent,
 } from "../../interaction/media-edit-recovery/MediaEditRecoveryManager"
 import { resolveImageDisplayState, type ImageDisplayState } from "./imageDisplayState"
+import { resolveGenerationProgress } from "../../../../../utils/generationProgress"
 
 const IMAGE_CONTENT_NODE_NAME = "image-content"
 
@@ -140,6 +142,11 @@ export class ImageElement extends BaseElement<ImageElementData> {
 	private renderToken = 0
 	private effectiveContentId?: string
 	private effectiveContentSrc?: string
+
+	// 后端任务起点尚未回写时，用本端首次观察时刻兜底。锚点与定时器分开保存：
+	// 重渲染只停定时器、保留锚点，避免兼容路径的进度回退。
+	private generationProgressAnchor?: { contentId: string; startedAtMs: number }
+	private generationProgressTimer?: ReturnType<typeof setInterval>
 
 	// 缓存已加载的图片对象（ImageBitmap | HTMLImageElement，由 ImageResourceManager 统一管理）
 	private loadedImage?: ImageSource
@@ -466,6 +473,7 @@ export class ImageElement extends BaseElement<ImageElementData> {
 		this.renderToken += 1
 		// 在重新渲染前清理监听器和装饰器
 		this.removeContentUpdateListener()
+		this.stopGenerationProgress()
 		this.borderDecorator?.destroy()
 		this.borderDecorator = undefined
 		this.cornerActionsDecorator?.destroy()
@@ -480,6 +488,7 @@ export class ImageElement extends BaseElement<ImageElementData> {
 	override destroyRenderNodeForVisibilityCull(): void {
 		this.renderToken += 1
 		this.removeContentUpdateListener()
+		this.stopGenerationProgress()
 		super.destroyRenderNodeForVisibilityCull()
 	}
 
@@ -503,6 +512,7 @@ export class ImageElement extends BaseElement<ImageElementData> {
 		this.cornerActionsDecorator?.destroy()
 		this.mainVersionTagDecorator?.destroy()
 		this.removeContentUpdateListener()
+		this.stopGenerationProgress()
 		// 清理缓存的图片对象
 		this.clearLoadedImageReference()
 		// 清理 ossSrc Promise
@@ -751,7 +761,9 @@ export class ImageElement extends BaseElement<ImageElementData> {
 
 		try {
 			// 发起图片生成请求
-			await this.canvas.magicConfigManager.config?.methods?.generateImage(requestWithId)
+			const response =
+				await this.canvas.magicConfigManager.config?.methods?.generateImage(requestWithId)
+			this.applyGenerationTiming(requestWithId, response)
 
 			if (
 				!this.canvas.generationRuntimeManager.isCurrent(attemptId, this.data.id, contentId)
@@ -857,7 +869,8 @@ export class ImageElement extends BaseElement<ImageElementData> {
 		})
 
 		try {
-			await generateImage(requestWithId)
+			const response = await generateImage(requestWithId)
+			this.applyGenerationTiming(requestWithId, response)
 			if (
 				!this.canvas.generationRuntimeManager.isCurrent(attemptId, this.data.id, contentId)
 			) {
@@ -903,6 +916,21 @@ export class ImageElement extends BaseElement<ImageElementData> {
 			this.saveGenerateRecoveryDraft(requestWithId, recoveryContent, recoveryIntent)
 			this.rerenderWhenTransformIdle()
 			return false
+		}
+	}
+
+	/** 就地合并，让运行时占位和后续 DSL 持久化共用同一对任务时间。 */
+	private applyGenerationTiming(
+		request: GenerateImageRequest,
+		response?: GenerateImageResponse,
+	): void {
+		const startedAt = response?.started_at
+		if (typeof startedAt === "string" && startedAt) {
+			request.start_time = startedAt
+		}
+		const expectedFinishedAt = response?.expected_finished_at
+		if (typeof expectedFinishedAt === "string" && expectedFinishedAt) {
+			request.expected_finished_at = expectedFinishedAt
 		}
 	}
 
@@ -2069,6 +2097,8 @@ export class ImageElement extends BaseElement<ImageElementData> {
 				return displayState.failureSource === "resource"
 					? baseName
 					: `${baseName}${this.getText("image.nameSuffix.failed", "(失败)")}`
+			case "terminated":
+				return `${baseName}${this.getText("image.nameSuffix.terminated", "(已终止)")}`
 			default:
 				return baseName
 		}
@@ -2197,6 +2227,10 @@ export class ImageElement extends BaseElement<ImageElementData> {
 		}
 
 		if (displayState.surface === "error") {
+			// 终止态复用错误表面：语义是「用户已终止」，不能用生成失败的兜底文案。
+			if (displayState.status === "terminated") {
+				return this.renderError(this.getText("image.generateTerminated", "生图已终止"))
+			}
 			const errorMessage =
 				displayState.failureSource === "resource"
 					? this.getImageLoadErrorText()
@@ -2404,6 +2438,10 @@ export class ImageElement extends BaseElement<ImageElementData> {
 			displayState.status === "generating"
 				? this.getGeneratingPlaceholderText(displayState)
 				: this.getText("image.uploading", "正在上传中...")
+		const placeholderText =
+			displayState.status === "generating"
+				? `${displayText} ${IMAGE_CONFIG.PROGRESS_TEXT_PROBE}`
+				: displayText
 
 		// 异步加载背景和内容
 		this.imageLoader.loadImage(imageBackgroundLoading).then((backgroundImage) => {
@@ -2414,7 +2452,7 @@ export class ImageElement extends BaseElement<ImageElementData> {
 
 			// 创建居中的图标和文本
 			RenderUtils.createCenteredIconText(group, width, height, {
-				text: displayText,
+				text: placeholderText,
 				textColor: COLORS.LOADING_TEXT,
 				iconSrc: imageIcon,
 				withBackground: true,
@@ -2426,6 +2464,9 @@ export class ImageElement extends BaseElement<ImageElementData> {
 				}
 
 				this.contentGroup = contentGroup
+				if (displayState.status === "generating") {
+					this.attachGenerationProgress(group, contentGroup, displayText, renderToken)
+				}
 			})
 
 			this.createBorder(group, width, height, true)
@@ -2436,6 +2477,66 @@ export class ImageElement extends BaseElement<ImageElementData> {
 		this.finalizeNode(group)
 		this.setupContentUpdateListener(group)
 		return group
+	}
+
+	/** 缓存后端任务时间回写前的本地兜底起点。 */
+	private resolveGenerationStartedAt(contentId: string): number {
+		if (this.generationProgressAnchor?.contentId === contentId) {
+			return this.generationProgressAnchor.startedAtMs
+		}
+
+		const startedAtMs = Date.now()
+		this.generationProgressAnchor = { contentId, startedAtMs }
+		return startedAtMs
+	}
+
+	/** 每秒更新占位文本；胶囊宽度由初始 100% 文本固定。 */
+	private attachGenerationProgress(
+		group: Konva.Group,
+		contentGroup: Konva.Group,
+		displayText: string,
+		renderToken: number,
+	): void {
+		const contentId = this.getActiveContentData().contentId
+		const textNode = contentGroup.findOne<Konva.Text>(".placeholder-text")
+		if (!contentId || !textNode) {
+			return
+		}
+
+		const startedAtMs = this.resolveGenerationStartedAt(contentId)
+		const applyProgress = () => {
+			// Visibility culling and rerendering both replace the Konva node. Stop the
+			// element-local timer before it can keep updating a detached text node.
+			if (!this.isCurrentRender(group, renderToken)) {
+				this.stopGenerationProgress()
+				return
+			}
+			// 建单回调会在占位图渲染后更新 start_time，因此每次都读当前请求。
+			const request = this.getActiveGenerateImageRequest()
+			const percent = resolveGenerationProgress({
+				status: "processing",
+				startedAtMs,
+				startedAt: request?.start_time,
+				expectedFinishedAt: request?.expected_finished_at,
+			})
+			textNode.text(`${displayText} ${percent}%`)
+			group.getLayer()?.batchDraw()
+		}
+
+		this.stopGenerationProgress()
+		this.generationProgressTimer = setInterval(
+			applyProgress,
+			IMAGE_CONFIG.PROGRESS_TICK_INTERVAL,
+		)
+		applyProgress()
+	}
+
+	private stopGenerationProgress(): void {
+		if (this.generationProgressTimer === undefined) {
+			return
+		}
+		clearInterval(this.generationProgressTimer)
+		this.generationProgressTimer = undefined
 	}
 
 	private hasActiveImageGenerationTask(): boolean {
@@ -2536,6 +2637,10 @@ export class ImageElement extends BaseElement<ImageElementData> {
 		} else if (displayState.status === "uploading") {
 			displayText = this.getText("image.uploading", "正在上传中...")
 		}
+		const placeholderText =
+			displayState.status === "generating"
+				? `${displayText} ${IMAGE_CONFIG.PROGRESS_TEXT_PROBE}`
+				: displayText
 
 		// 异步加载背景和内容
 		this.imageLoader.loadImage(imageBackgroundLoading).then((backgroundImage) => {
@@ -2546,7 +2651,7 @@ export class ImageElement extends BaseElement<ImageElementData> {
 
 			// 创建居中的图标和文本
 			RenderUtils.createCenteredIconText(group, width, height, {
-				text: displayText,
+				text: placeholderText,
 				textColor: COLORS.LOADING_TEXT,
 				iconSrc: imageIcon,
 				withBackground: true,
@@ -2558,6 +2663,12 @@ export class ImageElement extends BaseElement<ImageElementData> {
 				}
 
 				this.contentGroup = contentGroup
+				// 这条路径是 Agent 生图的主链路：Content 在任务创建时就已带上 src（产物路径），
+				// 图片还没就绪 → displayState.surface 落到 "loading" 而不是 "placeholder"，
+				// 只挂在 renderGeneratingPlaceholder 会漏掉它。
+				if (displayState.status === "generating") {
+					this.attachGenerationProgress(group, contentGroup, displayText, renderToken)
+				}
 			})
 
 			this.createBorder(group, width, height, true)

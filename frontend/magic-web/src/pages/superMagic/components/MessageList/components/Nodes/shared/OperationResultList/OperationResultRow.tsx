@@ -16,11 +16,13 @@ import type {
 	OperationResultItem,
 	OperationResultTarget,
 } from "@/pages/superMagic/components/Detail/types"
+import { GenerationProgress } from "@/pages/superMagic/components/MessageList/components/shared/ToolGenerationProgress"
 
 interface OperationResultRowProps {
 	item: OperationResultItem
 	loading: boolean
 	unavailable?: string
+	progressAnchorKey: string
 	onLocate: (target: OperationResultTarget, showDetails?: boolean) => void
 }
 
@@ -28,10 +30,12 @@ export default function OperationResultRow({
 	item,
 	loading,
 	unavailable,
+	progressAnchorKey,
 	onLocate,
 }: OperationResultRowProps) {
 	const { t } = useTranslation("super")
-	const pending = loading && item.status === "success" && !unavailable
+	const pending =
+		loading && item.status === "success" && item.is_processing !== false && !unavailable
 	const ResultIcon = unavailable
 		? CircleAlert
 		: pending
@@ -42,6 +46,7 @@ export default function OperationResultRow({
 	const ItemIcon = item.kind === "directory" ? Folder : File
 	const message = unavailable || (pending ? t("operationResultList.running") : item.message)
 	const target = item.target
+	const showProgress = pending && Boolean(item.expected_finished_at)
 	const locate = () => {
 		if (target) onLocate(target)
 	}
@@ -91,9 +96,27 @@ export default function OperationResultRow({
 								</span>
 							)}
 						</div>
-						{pending ? (
-							<span className="sr-only">{message}</span>
-						) : (
+						{showProgress && (
+							<p className="mb-0 mt-0.5 leading-4 text-muted-foreground">
+								<GenerationProgress
+									anchorKey={progressAnchorKey}
+									active
+									startedAt={item.started_at}
+									expectedFinishedAt={item.expected_finished_at}
+								/>
+							</p>
+						)}
+						{/* 终态保留一次 inactive 渲染，以释放虚拟列表重挂载时使用的本地进度锚点。 */}
+						{!showProgress && item.expected_finished_at && (
+							<GenerationProgress
+								anchorKey={progressAnchorKey}
+								active={false}
+								startedAt={item.started_at}
+								expectedFinishedAt={item.expected_finished_at}
+							/>
+						)}
+						{pending && <span className="sr-only">{message}</span>}
+						{!pending && (
 							<p
 								className={cn(
 									"mb-0 mt-0.5 leading-4 [overflow-wrap:anywhere]",

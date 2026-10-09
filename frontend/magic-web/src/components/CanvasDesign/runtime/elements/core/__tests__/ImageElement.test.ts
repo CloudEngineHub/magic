@@ -55,6 +55,48 @@ function contentImage(
 	}
 }
 
+describe("ImageElement generation timing", () => {
+	afterEach(() => {
+		vi.useRealTimers()
+	})
+
+	it("persists the backend start and expected finish times on the request", () => {
+		const element = Object.create(ImageElement.prototype) as ImageElement & {
+			applyGenerationTiming: (
+				request: GenerateImageRequest,
+				response?: { started_at?: string; expected_finished_at?: string },
+			) => void
+		}
+		const request: GenerateImageRequest = { prompt: "a test image" }
+
+		element.applyGenerationTiming(request, {
+			started_at: "2026-10-05T10:00:00+08:00",
+			expected_finished_at: "2026-10-05T10:01:30+08:00",
+		})
+
+		expect(request).toMatchObject({
+			start_time: "2026-10-05T10:00:00+08:00",
+			expected_finished_at: "2026-10-05T10:01:30+08:00",
+		})
+	})
+
+	it("stops the progress timer when visibility culling destroys the render node", () => {
+		vi.useFakeTimers()
+		const node = new Konva.Group()
+		const element = Object.create(ImageElement.prototype) as ImageElement
+		Object.assign(element, {
+			node,
+			renderToken: 0,
+			generationProgressTimer: setInterval(vi.fn(), 1000),
+		})
+
+		element.destroyRenderNodeForVisibilityCull()
+
+		expect(vi.getTimerCount()).toBe(0)
+		expect((element as unknown as { node: Konva.Group | null }).node).toBeNull()
+	})
+})
+
 type ContentApiTestImageElement = {
 	data: ImageElementData
 	canvas: Canvas

@@ -26,6 +26,8 @@ export function getOperationResultListData(
 	return {
 		items: items.map((item) => ({
 			...item,
+			started_at: item.started_at ?? undefined,
+			expected_finished_at: item.expected_finished_at ?? undefined,
 			target: isCanvasElementTarget(item.target)
 				? {
 						...item.target,
@@ -115,7 +117,10 @@ function isOperationResultItem(
 		(item.kind === "file" || item.kind === "directory" || item.kind === "text") &&
 		(item.status === "success" || item.status === "error") &&
 		typeof item.message === "string" &&
-		(item.description === undefined || typeof item.description === "string")
+		(item.description === undefined || typeof item.description === "string") &&
+		(item.started_at == null || typeof item.started_at === "string") &&
+		(item.expected_finished_at == null || typeof item.expected_finished_at === "string") &&
+		(item.is_processing == null || typeof item.is_processing === "boolean")
 	)
 }
 

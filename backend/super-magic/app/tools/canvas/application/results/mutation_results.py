@@ -51,6 +51,8 @@ class AddContentResultItem(CanvasResultItem):
     error: str | None = None
     persistence_warning: str | None = None
     persistence_error: str | None = None
+    started_at: str | None = None
+    expected_finished_at: str | None = None
 
     def to_dict(self) -> JsonObject:
         """转换为 Content 追加结果项。"""
@@ -65,6 +67,8 @@ class AddContentResultItem(CanvasResultItem):
             "error": self.error,
             "persistence_warning": self.persistence_warning,
             "persistence_error": self.persistence_error,
+            "started_at": self.started_at,
+            "expected_finished_at": self.expected_finished_at,
         }
         return {key: value for key, value in values.items() if value is not None}
 
@@ -169,6 +173,8 @@ class RetryContentResultItem(CanvasResultItem):
     previous_status: str | None = None
     main_content_id: str | None = None
     idempotent_replay: bool | None = None
+    started_at: str | None = None
+    expected_finished_at: str | None = None
 
     def to_dict(self) -> JsonObject:
         """转换为重试结果项。"""
@@ -187,6 +193,8 @@ class RetryContentResultItem(CanvasResultItem):
             "previous_status": self.previous_status,
             "main_content_id": self.main_content_id,
             "idempotent_replay": self.idempotent_replay,
+            "started_at": self.started_at,
+            "expected_finished_at": self.expected_finished_at,
         }
         return {key: value for key, value in values.items() if value is not None}
 

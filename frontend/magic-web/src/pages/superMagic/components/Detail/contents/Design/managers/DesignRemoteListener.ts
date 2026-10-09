@@ -113,21 +113,26 @@ function designDataHasMediaMissingFromAttachments(
 	return missing
 }
 
-/** 生成配置位于 sidecar；任一 processing Content 缺配置时需要等待附件树同步后重读。 */
-export function designDataHasPendingMediaWithoutGenerationRequest(designData: DesignData): boolean {
+/** 生成配置位于 sidecar；任一 processing Content 配置未同步完整时需要等待附件树后重读。 */
+export function designDataHasPendingMediaWithoutGenerationDetails(designData: DesignData): boolean {
 	let missing = false
 	const walk = (elements: LayerElement[] | undefined): void => {
 		if (!elements?.length || missing) return
 
 		for (const element of elements) {
 			if (element.type === ElementTypeEnum.Image) {
-				const hasMissingRequest = getImageContents(element as ImageElement).some(
-					(content) =>
-						(content.status === "pending" || content.status === "processing") &&
-						!content.generateImageRequest &&
-						!content.imageGenerationTaskMeta,
+				const hasIncompleteDetails = getImageContents(element as ImageElement).some(
+					(content) => {
+						if (content.status !== "pending" && content.status !== "processing") {
+							return false
+						}
+						if (content.imageGenerationTaskMeta) return false
+
+						const request = content.generateImageRequest
+						return !request?.start_time || !request.expected_finished_at
+					},
 				)
-				if (hasMissingRequest) {
+				if (hasIncompleteDetails) {
 					missing = true
 					return
 				}
@@ -727,7 +732,7 @@ export class DesignRemoteListener {
 			dslBase,
 		)
 		const hasPendingGenerationWithoutInfo =
-			designDataHasPendingMediaWithoutGenerationRequest(parsed)
+			designDataHasPendingMediaWithoutGenerationDetails(parsed)
 		if (!hasMissingMedia && !hasPendingGenerationWithoutInfo)
 			return { data: parsed, loadResult: parsedLoadResult }
 

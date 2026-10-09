@@ -238,6 +238,8 @@ export const PubSubEvents = {
 	Add_File_To_Chat: "super_magic_add_file_to_chat",
 	/** 超级麦吉 - 发送打断消息（可选回调，打断完成后执行） */
 	Send_Interrupt_Message: "send_interrupt_message",
+	/** 超级麦吉 - 终止任务后把画布生成中的图片节点收敛为终止态（零参数） */
+	Terminate_Generating_Images: "super_magic_terminate_generating_images",
 	/** 超级麦吉 - 触发创建新话题（超时警告卡片触发） */
 	Trigger_Create_Topic: "super_magic_create_create_topic",
 	/** 超级麦吉 - 添加话题到列表（新话题创建完成后） */
