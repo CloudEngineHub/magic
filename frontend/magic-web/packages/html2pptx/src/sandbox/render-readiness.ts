@@ -726,20 +726,35 @@ function toEChartsFidelityError(error: unknown): Error {
 }
 
 function throwIfExplicitRenderReadyFailed(iframeDocument: Document): void {
-	for (const attribute of [EXPORT_READY_ATTRIBUTE, LEGACY_READY_ATTRIBUTE]) {
-		const value = iframeDocument.documentElement?.getAttribute(attribute)?.trim().toLowerCase()
-		if (value === "error" || value === "failed") {
-			throw new ExportFidelityError(`[Sandbox] page reported ${attribute}=${value}`, "script")
+	for (const element of getExplicitRenderReadyElements(iframeDocument)) {
+		for (const attribute of [EXPORT_READY_ATTRIBUTE, LEGACY_READY_ATTRIBUTE]) {
+			const value = element.getAttribute(attribute)?.trim().toLowerCase()
+			if (value === "error" || value === "failed") {
+				throw new ExportFidelityError(`[Sandbox] page reported ${attribute}=${value}`, "script")
+			}
 		}
 	}
+}
+
+function getExplicitRenderReadyElements(iframeDocument: Document): HTMLElement[] {
+	// Pages may own either root element; keep HTML precedence so a root marker cannot be
+	// accidentally overridden by a stale body marker while still supporting body-only pages.
+	const elements: HTMLElement[] = []
+	if (iframeDocument.documentElement) elements.push(iframeDocument.documentElement)
+	if (iframeDocument.body && iframeDocument.body !== iframeDocument.documentElement) {
+		elements.push(iframeDocument.body)
+	}
+	return elements
 }
 
 function readExplicitRenderReadyMarker(
 	iframeDocument: Document,
 ): { attribute: string; value: string } | undefined {
-	for (const attribute of [EXPORT_READY_ATTRIBUTE, LEGACY_READY_ATTRIBUTE]) {
-		const value = iframeDocument.documentElement?.getAttribute(attribute)?.trim().toLowerCase()
-		if (value) return { attribute, value }
+	for (const element of getExplicitRenderReadyElements(iframeDocument)) {
+		for (const attribute of [EXPORT_READY_ATTRIBUTE, LEGACY_READY_ATTRIBUTE]) {
+			const value = element.getAttribute(attribute)?.trim().toLowerCase()
+			if (value) return { attribute, value }
+		}
 	}
 	return undefined
 }

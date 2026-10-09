@@ -30,9 +30,9 @@ describe("page export readiness protocol", () => {
 	it("detects the explicit export-ready marker and setter", () => {
 		expect(
 			detectRenderReadinessCapabilities(`
-				<html data-magic-export-ready="pending">
+				<html><body data-magic-export-ready="pending">
 					<script>
-						document.documentElement.dataset.magicExportReady = "true"
+						document.body.dataset.magicExportReady = "true"
 					</script>
 				</html>
 			`),
@@ -65,6 +65,33 @@ describe("page export readiness protocol", () => {
 			expect(await readiness).toEqual({ handledCanvas: false })
 		} finally {
 			document.documentElement.removeAttribute("data-magic-export-ready")
+			window.requestAnimationFrame = originalRequestAnimationFrame
+		}
+	})
+
+	it("waits for a body-owned export-ready marker", async () => {
+		document.body.setAttribute("data-magic-export-ready", "pending")
+		const originalRequestAnimationFrame = window.requestAnimationFrame
+		window.requestAnimationFrame = ((callback: FrameRequestCallback) => {
+			callback(0)
+			return 0
+		}) as typeof window.requestAnimationFrame
+
+		try {
+			const readiness = waitForPageRenderReadiness({
+				iframeWindow: window,
+				iframeDocument: document,
+				echartsSourceHint: false,
+				expectsExplicitRenderReady: true,
+				explicitReadyTimeoutMs: 100,
+			})
+			window.setTimeout(() => {
+				document.body.setAttribute("data-magic-export-ready", "true")
+			}, 0)
+
+			expect(await readiness).toEqual({ handledCanvas: false })
+		} finally {
+			document.body.removeAttribute("data-magic-export-ready")
 			window.requestAnimationFrame = originalRequestAnimationFrame
 		}
 	})
