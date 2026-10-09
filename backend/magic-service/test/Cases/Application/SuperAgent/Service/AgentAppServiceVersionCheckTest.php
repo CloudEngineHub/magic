@@ -25,17 +25,25 @@ use App\Domain\SuperMagic\Topic\Entity\TopicEntity;
 use App\Domain\SuperMagic\Topic\Service\TopicDomainService;
 use App\Infrastructure\SuperMagic\ExternalAPI\SandboxOS\Agent\Response\AgentResponse;
 use App\Infrastructure\SuperMagic\ExternalAPI\SandboxOS\Gateway\Constant\ResponseCode;
+use App\Infrastructure\SuperMagic\Task\Locker\CheckpointRollbackLock;
 use Hyperf\Codec\Packer\PhpSerializerPacker;
 use Hyperf\Context\ApplicationContext;
 use Hyperf\Contract\ConfigInterface;
+use Hyperf\Database\ConnectionResolver;
+use Hyperf\Database\ConnectionResolverInterface;
+use Hyperf\Database\MySqlConnection;
+use Hyperf\DbConnection\Db;
 use Hyperf\Logger\LoggerFactory;
 use Hyperf\Snowflake\IdGeneratorInterface;
 use Hyperf\Snowflake\Meta;
+use PDO;
 use PHPUnit\Framework\TestCase;
 use Psr\Container\ContainerInterface;
 use Psr\EventDispatcher\EventDispatcherInterface;
 use Psr\Log\LoggerInterface;
 use ReflectionClass;
+use ReflectionMethod;
+use RuntimeException;
 
 /**
  * @internal
@@ -56,6 +64,10 @@ class AgentAppServiceVersionCheckTest extends TestCase
         $container->set(ConfigInterface::class, new AgentAppServiceTestConfig());
         $container->set(IdGeneratorInterface::class, new AgentAppServiceTestIdGenerator());
         $container->set(PhpSerializerPacker::class, new PhpSerializerPacker());
+        $container->set(ConnectionResolverInterface::class, new ConnectionResolver([
+            'default' => new MySqlConnection(new PDO('sqlite::memory:'), 'memory'),
+        ]));
+        $container->set(Db::class, new Db($container));
         ApplicationContext::setContainer($container);
     }
 
@@ -141,7 +153,8 @@ class AgentAppServiceVersionCheckTest extends TestCase
             $taskDomainService,
             $sandboxVersionDomainService,
             (new ReflectionClass(MagicUserSettingDomainService::class))->newInstanceWithoutConstructor(),
-            $eventDispatcher
+            $eventDispatcher,
+            $this->makeRollbackLock()
         );
 
         self::assertSame(
@@ -231,7 +244,8 @@ class AgentAppServiceVersionCheckTest extends TestCase
             $taskDomainService,
             $sandboxVersionDomainService,
             (new ReflectionClass(MagicUserSettingDomainService::class))->newInstanceWithoutConstructor(),
-            $eventDispatcher
+            $eventDispatcher,
+            $this->makeRollbackLock()
         );
 
         self::assertSame(
@@ -291,7 +305,8 @@ class AgentAppServiceVersionCheckTest extends TestCase
             $taskDomainService,
             $sandboxVersionDomainService,
             (new ReflectionClass(MagicUserSettingDomainService::class))->newInstanceWithoutConstructor(),
-            $eventDispatcher
+            $eventDispatcher,
+            $this->makeRollbackLock()
         );
 
         self::assertSame('Sandbox and messages rollback committed successfully', $service->rollbackCheckpointCommit($dataIsolation, 920));
@@ -337,7 +352,8 @@ class AgentAppServiceVersionCheckTest extends TestCase
             $taskDomainService,
             $sandboxVersionDomainService,
             (new ReflectionClass(MagicUserSettingDomainService::class))->newInstanceWithoutConstructor(),
-            $eventDispatcher
+            $eventDispatcher,
+            $this->makeRollbackLock()
         );
 
         self::assertTrue($service->rollbackCheckpoint($dataIsolation, 920, '920', 'seq-100')->isSuccess());
@@ -379,7 +395,8 @@ class AgentAppServiceVersionCheckTest extends TestCase
             $taskDomainService,
             $sandboxVersionDomainService,
             (new ReflectionClass(MagicUserSettingDomainService::class))->newInstanceWithoutConstructor(),
-            $eventDispatcher
+            $eventDispatcher,
+            $this->makeRollbackLock()
         );
 
         self::assertSame('Sandbox and messages rollback undone successfully', $service->rollbackCheckpointUndo($dataIsolation, 920));
@@ -431,7 +448,8 @@ class AgentAppServiceVersionCheckTest extends TestCase
             $taskDomainService,
             $sandboxVersionDomainService,
             (new ReflectionClass(MagicUserSettingDomainService::class))->newInstanceWithoutConstructor(),
-            $eventDispatcher
+            $eventDispatcher,
+            $this->makeRollbackLock()
         );
 
         $result = $service->checkSandboxVersion(101);
@@ -494,7 +512,8 @@ class AgentAppServiceVersionCheckTest extends TestCase
             $taskDomainService,
             $sandboxVersionDomainService,
             (new ReflectionClass(MagicUserSettingDomainService::class))->newInstanceWithoutConstructor(),
-            $eventDispatcher
+            $eventDispatcher,
+            $this->makeRollbackLock()
         );
 
         $result = $service->checkSandboxVersionsByTopicIds([202, 201, 202, 0, -1]);
@@ -511,6 +530,44 @@ class AgentAppServiceVersionCheckTest extends TestCase
 
         self::assertNull($info->getNeedsUpdate());
         self::assertNull($info->toArray()['needs_update']);
+    }
+
+    public function testLostRollbackLockBeforeCommitRollsBackDatabaseMutation(): void
+    {
+        $connection = ApplicationContext::getContainer()->get(ConnectionResolverInterface::class)->connection();
+        $connection->getPdo()->exec('CREATE TABLE rollback_guard_probe (id INTEGER PRIMARY KEY)');
+        $service = (new ReflectionClass(AgentAppService::class))->newInstanceWithoutConstructor();
+        $checks = 0;
+        $guard = static function () use (&$checks): void {
+            if (++$checks === 2) {
+                throw new RuntimeException('lease lost before commit');
+            }
+        };
+        try {
+            (new ReflectionMethod($service, 'runRollbackMessageMutation'))->invoke(
+                $service,
+                static function () use ($connection): array {
+                    $connection->table('rollback_guard_probe')->insert(['id' => 1]);
+                    return ['seq-1'];
+                },
+                $guard
+            );
+            self::fail('Expected ownership failure before commit');
+        } catch (RuntimeException $exception) {
+            self::assertSame('lease lost before commit', $exception->getMessage());
+        }
+        self::assertSame(0, $connection->table('rollback_guard_probe')->count());
+        self::assertSame(0, $connection->transactionLevel());
+    }
+
+    private function makeRollbackLock(): CheckpointRollbackLock
+    {
+        $lock = $this->createMock(CheckpointRollbackLock::class);
+        $lock->method('run')->willReturnCallback(static function (int $topicId, callable $operation): mixed {
+            self::assertSame(920, $topicId);
+            return $operation(static function (): void {});
+        });
+        return $lock;
     }
 
     private function makeTopic(): TopicEntity

@@ -33,6 +33,7 @@ use App\Domain\SuperMagic\Common\Share\Service\ResourceShareAccessLogDomainServi
 use App\Domain\SuperMagic\Common\Share\Service\ResourceShareCopyLogDomainService;
 use App\Domain\SuperMagic\Common\Share\Service\ResourceShareDomainService;
 use App\Domain\SuperMagic\File\Entity\TaskFileEntity;
+use App\Domain\SuperMagic\File\Entity\ValueObject\FileSpaceType;
 use App\Domain\SuperMagic\File\Repository\Facade\TaskFileRepositoryInterface;
 use App\Domain\SuperMagic\File\Service\AudioProjectDomainService;
 use App\Domain\SuperMagic\File\Service\FileCollectionDomainService;
@@ -72,7 +73,9 @@ use App\Interfaces\SuperMagic\Common\Share\DTO\Request\FindSimilarShareRequestDT
 use App\Interfaces\SuperMagic\Common\Share\DTO\Request\GetFilesByIdsRequestDTO;
 use App\Interfaces\SuperMagic\Common\Share\DTO\Request\GetShareCopyLogsRequestDTO;
 use App\Interfaces\SuperMagic\Common\Share\DTO\Request\GetShareDetailDTO;
+use App\Interfaces\SuperMagic\Common\Share\DTO\Request\GetShareDetailV2DTO;
 use App\Interfaces\SuperMagic\Common\Share\DTO\Request\GetShareFilesRequestDTO;
+use App\Interfaces\SuperMagic\Common\Share\DTO\Request\GetShareFilesV2RequestDTO;
 use App\Interfaces\SuperMagic\Common\Share\DTO\Request\GetShareStatisticsRequestDTO;
 use App\Interfaces\SuperMagic\Common\Share\DTO\Request\ResourceListRequestDTO;
 use App\Interfaces\SuperMagic\Common\Share\DTO\Response\CopyResourceFilesResponseDTO;
@@ -102,6 +105,12 @@ use function Hyperf\Translation\trans;
  */
 class ResourceShareAppService extends AbstractShareAppService
 {
+    private const SHARE_V2_MAX_DIRECTORY_QUERIES = 1000;
+
+    private const SHARE_V2_MAX_CURSOR_STATES = 10000;
+
+    private const SHARE_V2_MAX_CURSOR_BYTES = 1024 * 1024;
+
     protected LoggerInterface $logger;
 
     public function __construct(
@@ -160,13 +169,12 @@ class ResourceShareAppService extends AbstractShareAppService
 
         // 统一查询一次已存在的分享（如果存在），避免重复查询
         // 用于区分创建场景和更新场景，以及获取数据库中的原值
-        // Existing shares are scoped by resource type and organization. A resource ID
-        // alone is caller-controlled and must not select another tenant's share.
-        $existingShare = $this->shareDomainService->getShareByResourceIdWithTrashed(
-            $dto->resourceId,
-            $resourceType->value,
-            $organizationCode,
-        );
+        // Match the record saveShare will update, including type conversions and
+        // deleted shares, and authorize it before any file collection is changed.
+        $existingShare = $this->shareDomainService->getShareByResourceIdWithTrashed($dto->resourceId);
+        if ($existingShare) {
+            $this->shareDomainService->assertShareOwnership($existingShare, $userId, $organizationCode);
+        }
 
         // 校验 file_ids 必填条件（问题2修复：使用 hasField() 判断，区分"不传"和"传空数组"）
         $isFileCollectionType = $resourceType === ResourceType::FileCollection;
@@ -288,12 +296,6 @@ class ResourceShareAppService extends AbstractShareAppService
         // different real resource (notably project_id for Project shares).
         if (! $factory->hasSharePermission($realResourceId, $userId, $organizationCode)) {
             ExceptionBuilder::throw(ShareErrorCode::PERMISSION_DENIED, 'share.no_permission_to_share', [$resourceId]);
-        }
-
-        if ($existingShare) {
-            if ($existingShare->getCreatedUid() !== $userId) {
-                ExceptionBuilder::throw(ShareErrorCode::PERMISSION_DENIED, 'share.no_permission_to_share', [$resourceId]);
-            }
         }
 
         // 5. 校验 share_type=5 时密码必填
@@ -637,6 +639,22 @@ class ResourceShareAppService extends AbstractShareAppService
         $actualResourceId = $shareEntity->getRealResourceId();
         $extra = $shareEntity->getExtra() ?? [];
 
+        $resourceContent = $detailDTO instanceof GetShareDetailV2DTO
+            ? $factory->getResourceContentByCursor(
+                $actualResourceId,
+                $shareEntity->getCreatedUid(),
+                $shareEntity->getOrganizationCode(),
+                $detailDTO->getAfterId(),
+                $detailDTO->getLimit()
+            )
+            : $factory->getResourceContent(
+                $actualResourceId,
+                $shareEntity->getCreatedUid(),
+                $shareEntity->getOrganizationCode(),
+                $detailDTO->getPage(),
+                $detailDTO->getPageSize()
+            );
+
         // 构建返回数据
         $result = [
             'resource_type' => $resourceType->value, // 使用枚举的整数值，而不是枚举对象
@@ -651,13 +669,7 @@ class ResourceShareAppService extends AbstractShareAppService
             'updated_at' => DateFormatUtil::formatExpireAt($shareEntity->getUpdatedAt()),
             'expire_at' => DateFormatUtil::formatExpireAt($shareEntity->getExpireAt()),
             'view_count' => $shareEntity->getViewCount(),
-            'data' => $factory->getResourceContent(
-                $actualResourceId,
-                $shareEntity->getCreatedUid(),
-                $shareEntity->getOrganizationCode(),
-                $detailDTO->getPage(),
-                $detailDTO->getPageSize()
-            ),
+            'data' => $resourceContent,
         ];
 
         // 类型转换：将内部类型12（Project）转换为外部类型13（FileCollection）+ share_project=true
@@ -896,6 +908,39 @@ class ResourceShareAppService extends AbstractShareAppService
         }
 
         return $this->getFilesFromProject($projectId, $organizationCode, $dataIsolation, $dto, $workDir);
+    }
+
+    /** Cursor-paginated share files. V2 is independent from the legacy full-tree endpoint. */
+    public function getShareFilesV2(?MagicUserAuthorization $userAuthorization, string $shareCode, GetShareFilesV2RequestDTO $dto): array
+    {
+        $shareEntity = $this->shareDomainService->getValidShareByCode($shareCode);
+        if (! $shareEntity) {
+            ExceptionBuilder::throw(ShareErrorCode::RESOURCE_NOT_FOUND, 'share.not_found', [$shareCode]);
+        }
+        $this->shareDomainService->validateShareAccess(
+            $shareEntity,
+            $userAuthorization?->getId(),
+            $userAuthorization?->getOrganizationCode(),
+            $shareCode
+        );
+        if (! empty($shareEntity->getPassword()) && $dto->password !== PasswordCrypt::decrypt($shareEntity->getPassword())) {
+            ExceptionBuilder::throw(ShareErrorCode::PASSWORD_ERROR, 'share.password_error', [$shareCode]);
+        }
+
+        $scopeVersion = $this->getShareV2ScopeVersion($shareEntity);
+        if ($dto->scopeVersion !== null && $dto->scopeVersion !== $scopeVersion) {
+            ExceptionBuilder::throw(ShareErrorCode::PARAMETER_CHECK_FAILURE, 'share.scope_version_expired');
+        }
+
+        $type = ResourceType::tryFrom($shareEntity->getResourceType());
+        $result = match ($type) {
+            ResourceType::Project => $this->getProjectShareFilesV2($shareEntity, $dto),
+            ResourceType::FileCollection, ResourceType::File => $this->getCollectionShareFilesV2($shareEntity, $dto),
+            ResourceType::Topic => $this->getTopicShareFilesV2($shareEntity, $dto),
+            default => throw new InvalidArgumentException('Resource type does not support file listing'),
+        };
+        $result['scope_version'] = $scopeVersion;
+        return $result;
     }
 
     /**
@@ -1641,6 +1686,440 @@ class ResourceShareAppService extends AbstractShareAppService
         );
     }
 
+    private function getShareV2ScopeVersion(ResourceShareEntity $shareEntity): string
+    {
+        $parts = [
+            (string) $shareEntity->getResourceType(),
+            $shareEntity->getResourceId(),
+            (string) $shareEntity->getScopeVersion(),
+        ];
+        $type = ResourceType::tryFrom($shareEntity->getResourceType());
+        if (in_array($type, [ResourceType::File, ResourceType::FileCollection], true)) {
+            $collection = $this->fileCollectionDomainService->getFileCollection((int) $shareEntity->getResourceId());
+            $parts[] = (string) ($collection?->getScopeVersion() ?? 1);
+        }
+        return implode(':', $parts);
+    }
+
+    private function getProjectShareFilesV2(ResourceShareEntity $shareEntity, GetShareFilesV2RequestDTO $dto): array
+    {
+        $projectId = (int) $shareEntity->getProjectId();
+        $root = $this->taskFileDomainService->getRootFile($projectId);
+        if ($root === null) {
+            return ['list' => [], 'next_parent_ids' => [], 'has_more' => false];
+        }
+
+        $queue = $dto->nextParentIds;
+        $list = [];
+        if ($queue === []) {
+            $list[] = $this->formatShareCursorRow($root->toArray(), $shareEntity->getOrganizationCode());
+            $queue[] = [
+                'kind' => 'children',
+                'parent_id' => (string) $root->getFileId(),
+                'after_sort' => null,
+                'after_file_id' => null,
+            ];
+        }
+
+        $remaining = max(0, $dto->pageSize - count($list));
+        $queryCount = 0;
+        while ($remaining > 0 && $queue !== [] && $queryCount < self::SHARE_V2_MAX_DIRECTORY_QUERIES) {
+            $state = array_shift($queue);
+            if (($state['kind'] ?? 'children') !== 'children') {
+                throw new InvalidArgumentException('entry cursor is not valid for a project share');
+            }
+
+            ++$queryCount;
+            $rows = $this->taskFileDomainService->getProjectFileChildrenByParentCursor(
+                $projectId,
+                (int) $state['parent_id'],
+                StorageType::WORKSPACE->value,
+                $state['after_sort'],
+                $state['after_file_id'] === null ? null : (int) $state['after_file_id'],
+                $remaining + 1,
+                [],
+            );
+            $take = array_slice($rows, 0, $remaining);
+            $last = null;
+            foreach ($take as $row) {
+                $last = (array) $row;
+                $list[] = $this->formatShareCursorRow($last, $shareEntity->getOrganizationCode());
+                --$remaining;
+                if ((bool) ($last['is_directory'] ?? false)) {
+                    $queue[] = [
+                        'kind' => 'children',
+                        'parent_id' => (string) $last['file_id'],
+                        'after_sort' => null,
+                        'after_file_id' => null,
+                    ];
+                }
+            }
+            if (count($rows) > count($take) && $last !== null) {
+                array_unshift($queue, [
+                    'kind' => 'children',
+                    'parent_id' => (string) $state['parent_id'],
+                    'after_sort' => (int) $last['sort'],
+                    'after_file_id' => (string) $last['file_id'],
+                ]);
+                break;
+            }
+        }
+
+        return $this->appendShareV2Ancestors(
+            ['list' => $list, 'next_parent_ids' => array_values($queue), 'has_more' => $queue !== []],
+            $projectId,
+            $shareEntity->getOrganizationCode()
+        );
+    }
+
+    private function getCollectionShareFilesV2(ResourceShareEntity $shareEntity, GetShareFilesV2RequestDTO $dto): array
+    {
+        $collectionId = (int) $shareEntity->getResourceId();
+        $projectId = (int) ($shareEntity->getProjectId() ?? 0);
+        if ($projectId <= 0) {
+            $projectId = (int) ($this->getProjectIdFromFileCollection($collectionId) ?? 0);
+        }
+        if ($projectId <= 0) {
+            return ['list' => [], 'next_parent_ids' => [], 'has_more' => false];
+        }
+
+        $queue = $dto->nextParentIds;
+        if ($queue === []) {
+            $queue[] = ['kind' => 'entry', 'after_id' => '0'];
+        }
+        $list = [];
+        $remaining = $dto->pageSize;
+        $queryCount = 0;
+
+        while ($remaining > 0 && $queue !== [] && $queryCount < self::SHARE_V2_MAX_DIRECTORY_QUERIES) {
+            $state = array_shift($queue);
+            $kind = $state['kind'] ?? 'children';
+            if ($kind === 'entry') {
+                ++$queryCount;
+                $items = $this->fileCollectionDomainService->getFilesByCollectionIdCursor(
+                    $collectionId,
+                    (int) $state['after_id'],
+                    $remaining + 1
+                );
+                $entryLimit = $remaining + 1;
+                $scanned = 0;
+                $lastItem = null;
+                $fileIds = array_map(static fn ($item): string => $item->getFileId(), $items);
+                $entities = $this->taskFileDomainService->getFilesByIds($fileIds, $projectId);
+                $entitiesById = [];
+                foreach ($entities as $entity) {
+                    $entitiesById[(string) $entity->getFileId()] = $entity;
+                }
+                foreach ($items as $item) {
+                    if ($remaining <= 0) {
+                        break;
+                    }
+                    ++$scanned;
+                    $lastItem = $item;
+                    $entity = $entitiesById[$item->getFileId()] ?? null;
+                    if ($entity === null) {
+                        continue;
+                    }
+                    $list[] = $this->formatShareCursorRow($entity->toArray(), $shareEntity->getOrganizationCode());
+                    --$remaining;
+                    if ($entity->getIsDirectory()) {
+                        $queue[] = [
+                            'kind' => 'children',
+                            'parent_id' => (string) $entity->getFileId(),
+                            'after_sort' => null,
+                            'after_file_id' => null,
+                        ];
+                    }
+                }
+                if ($lastItem !== null && ($scanned < count($items) || count($items) >= $entryLimit)) {
+                    array_unshift($queue, ['kind' => 'entry', 'after_id' => (string) $lastItem->getId()]);
+                    break;
+                }
+                continue;
+            }
+
+            if ($kind !== 'children') {
+                throw new InvalidArgumentException('unsupported collection cursor kind');
+            }
+            $parentId = (int) $state['parent_id'];
+            if (! $this->isCollectionDirectoryAuthorized($collectionId, $projectId, $parentId)) {
+                throw new InvalidArgumentException('directory is outside the collection share scope');
+            }
+            ++$queryCount;
+            $rows = $this->taskFileDomainService->getProjectFileChildrenByParentCursor(
+                $projectId,
+                $parentId,
+                StorageType::WORKSPACE->value,
+                $state['after_sort'],
+                $state['after_file_id'] === null ? null : (int) $state['after_file_id'],
+                $remaining + 1,
+                [],
+            );
+            $take = array_slice($rows, 0, $remaining);
+            $last = null;
+            foreach ($take as $row) {
+                $last = (array) $row;
+                $list[] = $this->formatShareCursorRow($last, $shareEntity->getOrganizationCode());
+                --$remaining;
+                if ((bool) ($last['is_directory'] ?? false)) {
+                    $queue[] = ['kind' => 'children', 'parent_id' => (string) $last['file_id'], 'after_sort' => null, 'after_file_id' => null];
+                }
+            }
+            if (count($rows) > count($take) && $last !== null) {
+                array_unshift($queue, [
+                    'kind' => 'children',
+                    'parent_id' => (string) $parentId,
+                    'after_sort' => (int) $last['sort'],
+                    'after_file_id' => (string) $last['file_id'],
+                ]);
+                break;
+            }
+        }
+
+        return $this->appendShareV2Ancestors(
+            ['list' => $list, 'next_parent_ids' => array_values($queue), 'has_more' => $queue !== []],
+            $projectId,
+            $shareEntity->getOrganizationCode()
+        );
+    }
+
+    private function getTopicShareFilesV2(ResourceShareEntity $shareEntity, GetShareFilesV2RequestDTO $dto): array
+    {
+        $topicId = (int) $shareEntity->getResourceId();
+        $topic = $this->topicDomainService->getTopicById($topicId);
+        if ($topic === null) {
+            return ['list' => [], 'next_parent_ids' => [], 'has_more' => false];
+        }
+        $projectId = (int) $topic->getProjectId();
+        if ($shareEntity->isViewFileListEnabled()) {
+            return $this->getProjectShareFilesV2($shareEntity->setProjectId((string) $projectId), $dto);
+        }
+        $root = $this->taskFileDomainService->getTopicRootDirectory($projectId, $topicId, $shareEntity->getOrganizationCode());
+        if ($root === null) {
+            return ['list' => [], 'next_parent_ids' => [], 'has_more' => false];
+        }
+        $queue = $dto->nextParentIds ?: [['kind' => 'entry', 'after_id' => '0']];
+        $list = [];
+        $remaining = $dto->pageSize;
+        while ($remaining > 0 && $queue !== []) {
+            $state = array_shift($queue);
+            if (($state['kind'] ?? 'entry') !== 'entry') {
+                throw new InvalidArgumentException('children cursor is not valid when topic file list is disabled');
+            }
+            $rows = $this->taskFileDomainService->getTopicFilesByCursor($topicId, $root->getFileId(), (int) $state['after_id'], $remaining + 1);
+            $take = array_slice($rows, 0, $remaining);
+            $last = null;
+            foreach ($take as $entity) {
+                $last = $entity;
+                if ($entity->getIsHidden()) {
+                    continue;
+                }
+                $list[] = $this->formatShareCursorRow($entity->toArray(), $shareEntity->getOrganizationCode());
+                --$remaining;
+            }
+            if (count($rows) > count($take) && $last !== null) {
+                array_unshift($queue, ['kind' => 'entry', 'after_id' => (string) $last->getFileId()]);
+                break;
+            }
+        }
+        return $this->appendShareV2Ancestors(
+            ['list' => $list, 'next_parent_ids' => array_values($queue), 'has_more' => $queue !== []],
+            $projectId,
+            $shareEntity->getOrganizationCode(),
+            true
+        );
+    }
+
+    private function isCollectionDirectoryAuthorized(int $collectionId, int $projectId, int $directoryId): bool
+    {
+        $chain = $this->taskFileDomainService->getFilesWithParentsByIds([$directoryId], $projectId);
+        if ($chain === []) {
+            return false;
+        }
+        $chainIds = array_map(static fn (TaskFileEntity $entity): string => (string) $entity->getFileId(), $chain);
+        return $this->fileCollectionDomainService->getFilesByCollectionIdAndFileIds($collectionId, $chainIds) !== [];
+    }
+
+    private function appendShareV2Ancestors(
+        array $result,
+        int $projectId,
+        string $organizationCode,
+        bool $filterHidden = false
+    ): array {
+        $this->assertShareV2QueueSize($result['next_parent_ids'] ?? []);
+        $rows = $result['list'] ?? [];
+        $contentIds = array_values(array_unique(array_map(static fn (array $row): int => (int) $row['file_id'], $rows)));
+        if ($contentIds === []) {
+            return $result;
+        }
+        $entities = $this->taskFileDomainService->getFilesWithParentsByIds($contentIds, $projectId);
+        $entityMap = [];
+        foreach ($entities as $entity) {
+            $entityMap[(string) $entity->getFileId()] = $entity;
+        }
+        // The child query and the parent-chain query must describe the same
+        // snapshot. If a content row disappears between them (deleted,
+        // moved to another project, or filtered by a scope condition), do not
+        // silently turn a non-empty page into an empty successful response.
+        $missingContentIds = array_values(array_filter(
+            $contentIds,
+            static fn (int $contentId): bool => ! array_key_exists((string) $contentId, $entityMap)
+        ));
+        if ($missingContentIds !== []) {
+            throw new InvalidArgumentException('share file content is missing');
+        }
+        $requiredAncestorIds = [];
+        $visibleContentIds = [];
+        foreach ($contentIds as $contentId) {
+            $currentId = (string) $contentId;
+            $visited = [];
+            $depth = 0;
+            $path = [];
+            $hasHiddenAncestor = false;
+            while (isset($entityMap[$currentId])) {
+                if (isset($visited[$currentId]) || ++$depth > 15) {
+                    throw new InvalidArgumentException('share file parent chain is invalid');
+                }
+                $visited[$currentId] = true;
+                $path[] = $currentId;
+                // The project root is a tree boundary, not a user-visible
+                // content node. Historical data may mark it hidden; that
+                // flag must not hide every descendant in the shared tree.
+                $isProjectRoot = $entityMap[$currentId]->getParentId() === null
+                    && $entityMap[$currentId]->getIsDirectory()
+                    && $entityMap[$currentId]->getSpaceType() === FileSpaceType::PROJECT->value
+                    && $entityMap[$currentId]->getFileName() === '/';
+                if ($filterHidden && $entityMap[$currentId]->getIsHidden() && ! $isProjectRoot) {
+                    $hasHiddenAncestor = true;
+                }
+                $parentId = $entityMap[$currentId]->getParentId();
+                if ($parentId === null || $parentId <= 0) {
+                    break;
+                }
+                $parentKey = (string) $parentId;
+                if (! isset($entityMap[$parentKey])) {
+                    throw new InvalidArgumentException('share file parent chain is broken');
+                }
+                $currentId = $parentKey;
+            }
+            if ($hasHiddenAncestor) {
+                continue;
+            }
+            $visibleContentIds[] = $contentId;
+            foreach (array_slice($path, 1) as $ancestorId) {
+                $requiredAncestorIds[$ancestorId] = true;
+            }
+        }
+
+        $rows = array_values(array_filter(
+            $rows,
+            static fn (array $row): bool => in_array((int) $row['file_id'], $visibleContentIds, true)
+        ));
+        $existing = [];
+        foreach ($rows as $row) {
+            $existing[(string) $row['file_id']] = true;
+        }
+        $ancestorCount = 0;
+        foreach ($entities as $entity) {
+            $entityId = (string) $entity->getFileId();
+            $isProjectRoot = $entity->getParentId() === null
+                && $entity->getIsDirectory()
+                && $entity->getSpaceType() === FileSpaceType::PROJECT->value
+                && $entity->getFileName() === '/';
+            if (! isset($requiredAncestorIds[$entityId])
+                || ($filterHidden && $entity->getIsHidden() && ! $isProjectRoot)
+                || isset($existing[$entityId])) {
+                continue;
+            }
+            if (++$ancestorCount > min(count($visibleContentIds) * 15, 5000)) {
+                throw new InvalidArgumentException('share file ancestor limit exceeded');
+            }
+            $rows[] = $this->formatShareCursorRow($entity->toArray(), $organizationCode);
+            $existing[$entityId] = true;
+        }
+        // Aligned with the project attachments V2 row shape: file_url stays '' and
+        // relative_file_path is not emitted. The web tree builder rebuilds paths from
+        // parent_id + file_name. Restore the batch enrichment below if a client needs
+        // the V1-compatible fields again.
+        // $result['list'] = $this->enrichShareV2Rows($rows, $organizationCode);
+        $result['list'] = $rows;
+        return $result;
+    }
+
+    private function assertShareV2QueueSize(array $queue): void
+    {
+        if (count($queue) > self::SHARE_V2_MAX_CURSOR_STATES
+            || strlen((string) json_encode($queue)) > self::SHARE_V2_MAX_CURSOR_BYTES) {
+            throw new InvalidArgumentException('share cursor is too large');
+        }
+    }
+
+    // Disabled: the web client no longer reads file_url / relative_file_path from share V2 rows,
+    // and the project attachments V2 rows do not compute them either. Kept as a comment so the
+    // V1-compatible fields can be restored without rewriting the logic.
+    //
+    // | Field              | Now (aligned with attachments V2) | If restored                      |
+    // | file_url           | ''                                | one getLinks() batch per page    |
+    // | relative_file_path | not emitted                       | parent_id chain joined by '/'    |
+    //
+    // Restoring also requires re-enabling the 'relative_file_path' key in formatShareCursorRow()
+    // and the enrichShareV2Rows() call in appendShareV2Ancestors().
+    //
+    // /**
+    //  * Add the V1-compatible URL and relative path fields in one batch per page.
+    //  * The cursor query remains free of per-row object-storage lookups.
+    //  */
+    // private function enrichShareV2Rows(array $rows, string $organizationCode): array
+    // {
+    //     if ($rows === []) {
+    //         return $rows;
+    //     }
+    //
+    //     $fileKeys = array_values(array_unique(array_filter(
+    //         array_map(static fn (array $row): string => (string) ($row['file_key'] ?? ''), $rows),
+    //         static fn (string $fileKey): bool => $fileKey !== ''
+    //     )));
+    //     $links = $fileKeys === []
+    //         ? []
+    //         : $this->fileDomainService->getLinks($organizationCode, $fileKeys, StorageBucketType::Public);
+    //     $rowMap = [];
+    //     foreach ($rows as $row) {
+    //         $rowMap[(string) $row['file_id']] = $row;
+    //     }
+    //
+    //     foreach ($rows as &$row) {
+    //         $fileKey = (string) ($row['file_key'] ?? '');
+    //         $link = $links[$fileKey] ?? null;
+    //         $row['file_url'] = $link?->getUrl() ?? '';
+    //         $row['relative_file_path'] = $this->buildShareV2RelativePath($row, $rowMap);
+    //     }
+    //     unset($row);
+    //     return $rows;
+    // }
+    //
+    // private function buildShareV2RelativePath(array $row, array $rowMap): string
+    // {
+    //     $parts = [];
+    //     $currentId = (string) ($row['file_id'] ?? '');
+    //     $visited = [];
+    //     for ($depth = 0; $depth < 15 && $currentId !== '' && isset($rowMap[$currentId]); ++$depth) {
+    //         if (isset($visited[$currentId])) {
+    //             return '';
+    //         }
+    //         $visited[$currentId] = true;
+    //         $name = (string) ($rowMap[$currentId]['file_name'] ?? '');
+    //         if ($name !== '' && $name !== '/') {
+    //             array_unshift($parts, $name);
+    //         }
+    //         $parentId = (string) ($rowMap[$currentId]['parent_id'] ?? '');
+    //         if ($parentId === '' || $parentId === '0') {
+    //             break;
+    //         }
+    //         $currentId = $parentId;
+    //     }
+    //     return implode('/', $parts);
+    // }
+
     private function assertHistoricalShareOwnerPermission(ResourceShareEntity $shareEntity): void
     {
         $resourceType = ResourceType::tryFrom($shareEntity->getResourceType());
@@ -1672,6 +2151,33 @@ class ResourceShareAppService extends AbstractShareAppService
         )) {
             ExceptionBuilder::throw(ShareErrorCode::SHARE_OWNER_PERMISSION_REVOKED, 'share.share_owner_permission_revoked', []);
         }
+    }
+
+    private function formatShareCursorRow(array $row, string $organizationCode): array
+    {
+        $fileKey = (string) ($row['file_key'] ?? '');
+        return [
+            'file_id' => (string) ($row['file_id'] ?? ''),
+            'task_id' => (string) ($row['task_id'] ?? ''),
+            'project_id' => (string) ($row['project_id'] ?? ''),
+            'topic_id' => (string) ($row['topic_id'] ?? ''),
+            'parent_id' => (string) ($row['parent_id'] ?? ''),
+            'file_type' => (string) ($row['file_type'] ?? ''),
+            'file_name' => (string) ($row['file_name'] ?? ''),
+            'file_extension' => (string) ($row['file_extension'] ?? ''),
+            'file_key' => $fileKey,
+            'file_size' => (int) ($row['file_size'] ?? 0),
+            'file_url' => '',
+            // Same as ProjectAppService::formatAttachmentRowV2(): the row carries no relative path.
+            // 'relative_file_path' => (string) ($row['relative_file_path'] ?? ''),
+            'is_hidden' => (bool) ($row['is_hidden'] ?? false),
+            'is_directory' => (bool) ($row['is_directory'] ?? false),
+            'sort' => (int) ($row['sort'] ?? 0),
+            'source' => (int) ($row['source'] ?? 0),
+            'updated_at' => (string) ($row['updated_at'] ?? ''),
+            'display_config' => FileMetadataUtil::decodeJsonObject($row['display_config'] ?? null),
+            'metadata' => FileMetadataUtil::decodeJsonObject($row['metadata'] ?? null),
+        ];
     }
 
     private function isShareMethodAllowed(

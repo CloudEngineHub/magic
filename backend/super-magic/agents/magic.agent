@@ -25,6 +25,7 @@ skills:
     - name: browser
     - name: download
     - name: share
+    - name: super-magic
     - name: skill-vetter
     - name: using-mcp
     - name: env-manager

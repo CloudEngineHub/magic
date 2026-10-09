@@ -145,6 +145,8 @@ class ResourceShareRepository extends AbstractRepository implements ResourceShar
                 $model = $this->model::query()->create($data);
                 $shareEntity->setId((int) $model->id);
             } else {
+                $data['scope_version'] = Db::raw('scope_version + 1');
+                $shareEntity->setScopeVersion($shareEntity->getScopeVersion() + 1);
                 // 更新现有记录
                 /* @phpstan-ignore-next-line - ResourceShareModel uses SoftDeletes trait which provides withTrashed() */
                 $this->model->query()->withTrashed()->where('id', $shareEntity->getId())->update($data);
@@ -639,6 +641,7 @@ class ResourceShareRepository extends AbstractRepository implements ResourceShar
 
         // 处理是否分享整个项目
         $entity->setShareProject($model->share_project ?? false);
+        $entity->setScopeVersion((int) ($model->scope_version ?? 1));
 
         // 设置时间字段（即使为 null 也要设置）
         $entity->setCreatedAt($model->created_at ?? null);
@@ -681,6 +684,7 @@ class ResourceShareRepository extends AbstractRepository implements ResourceShar
             'project_id' => $entity->getProjectId(),
             'is_enabled' => $entity->getIsEnabled() ? 1 : 0,
             'share_project' => $entity->isShareProject() ? 1 : 0,
+            'scope_version' => $entity->getScopeVersion(),
             'updated_at' => $entity->getUpdatedAt(),
             'deleted_at' => $entity->getDeletedAt(),
             'updated_uid' => $entity->getUpdatedUid(),

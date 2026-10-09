@@ -1066,5 +1066,141 @@
     "update_slide_transitions": {
         "zh_CN": "设置过渡动画",
         "en_US": "Set slide transitions"
+    },
+    "list_workspaces": {
+        "zh_CN": "查看工作区列表",
+        "en_US": "List workspaces"
+    },
+    "get_workspace": {
+        "zh_CN": "查看工作区",
+        "en_US": "View workspace"
+    },
+    "create_workspace": {
+        "zh_CN": "创建工作区",
+        "en_US": "Create workspace"
+    },
+    "update_workspace": {
+        "zh_CN": "更新工作区",
+        "en_US": "Update workspace"
+    },
+    "archive_workspace": {
+        "zh_CN": "设置工作区归档状态",
+        "en_US": "Set workspace archive state"
+    },
+    "delete_workspace": {
+        "zh_CN": "删除工作区",
+        "en_US": "Delete workspace"
+    },
+    "list_projects": {
+        "zh_CN": "查看项目列表",
+        "en_US": "List projects"
+    },
+    "get_project": {
+        "zh_CN": "查看项目",
+        "en_US": "View project"
+    },
+    "list_topics": {
+        "zh_CN": "查看话题列表",
+        "en_US": "List topics"
+    },
+    "create_project": {
+        "zh_CN": "创建项目",
+        "en_US": "Create project"
+    },
+    "update_project": {
+        "zh_CN": "更新项目",
+        "en_US": "Update project"
+    },
+    "move_project": {
+        "zh_CN": "移动项目",
+        "en_US": "Move project"
+    },
+    "delete_project": {
+        "zh_CN": "删除项目",
+        "en_US": "Delete project"
+    },
+    "get_topic": {
+        "zh_CN": "查看话题",
+        "en_US": "View topic"
+    },
+    "create_topic": {
+        "zh_CN": "创建话题",
+        "en_US": "Create topic"
+    },
+    "update_topic": {
+        "zh_CN": "更新话题",
+        "en_US": "Update topic"
+    },
+    "archive_topic": {
+        "zh_CN": "设置话题归档状态",
+        "en_US": "Set topic archive state"
+    },
+    "delete_topic": {
+        "zh_CN": "删除话题",
+        "en_US": "Delete topic"
+    },
+    "read_topic_messages": {
+        "zh_CN": "读取话题消息",
+        "en_US": "Read topic messages"
+    },
+    "start_topic_task": {
+        "zh_CN": "启动话题任务",
+        "en_US": "Start topic task"
+    },
+    "send_topic_message": {
+        "zh_CN": "发送话题消息",
+        "en_US": "Send topic message"
+    },
+    "get_topic_task": {
+        "zh_CN": "查看话题任务",
+        "en_US": "View topic task"
+    },
+    "cancel_topic_task": {
+        "zh_CN": "取消话题任务",
+        "en_US": "Cancel topic task"
+    },
+    "list_topic_queued_messages": {
+        "zh_CN": "查看话题排队消息",
+        "en_US": "List queued topic messages"
+    },
+    "delete_topic_queued_message": {
+        "zh_CN": "删除话题排队消息",
+        "en_US": "Delete queued topic message"
+    },
+    "list_project_files": {
+        "zh_CN": "查看项目文件列表",
+        "en_US": "List project files"
+    },
+    "get_project_file": {
+        "zh_CN": "查看项目文件",
+        "en_US": "View project file"
+    },
+    "create_project_directory": {
+        "zh_CN": "创建项目目录",
+        "en_US": "Create project directory"
+    },
+    "rename_project_file": {
+        "zh_CN": "重命名项目文件",
+        "en_US": "Rename project file"
+    },
+    "copy_project_files": {
+        "zh_CN": "复制项目文件",
+        "en_US": "Copy project files"
+    },
+    "move_project_files": {
+        "zh_CN": "移动项目文件",
+        "en_US": "Move project files"
+    },
+    "delete_project_files": {
+        "zh_CN": "删除项目文件",
+        "en_US": "Delete project files"
+    },
+    "get_file_batch_status": {
+        "zh_CN": "查看文件批量操作状态",
+        "en_US": "View file batch status"
+    },
+    "prepare_project_files": {
+        "zh_CN": "准备项目文件",
+        "en_US": "Prepare project files"
     }
 }

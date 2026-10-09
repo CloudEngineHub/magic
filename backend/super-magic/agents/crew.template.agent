@@ -24,6 +24,7 @@ skills:
   crew_skills: "*"
   system_skills:
     - name: using-mcp
+    - name: super-magic
     - name: download
     - name: using-llm
     - name: env-manager
