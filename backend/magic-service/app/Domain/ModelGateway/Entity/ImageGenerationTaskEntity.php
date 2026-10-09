@@ -7,16 +7,15 @@ declare(strict_types=1);
 
 namespace App\Domain\ModelGateway\Entity;
 
+use App\Domain\ImageGenerate\ValueObject\ImageGenerationExpectedDuration;
 use App\Domain\ModelGateway\Entity\ValueObject\ImageGenerationTaskStatus;
 use DateTimeImmutable;
 use DateTimeInterface;
 
+use function Hyperf\Translation\__;
+
 class ImageGenerationTaskEntity
 {
-    private const string TIMEOUT_ERROR_CODE = 'IMAGE_GENERATION_TIMEOUT';
-
-    private const string TIMEOUT_ERROR_MESSAGE = 'image generation timeout';
-
     public function __construct(
         private readonly string $id,
         private readonly string $organizationCode,
@@ -144,8 +143,17 @@ class ImageGenerationTaskEntity
         $this->updatedAt = $finishedAt;
     }
 
-    public function markTimedOutIfRunning(int $timeoutSeconds, ?DateTimeInterface $now = null): bool
-    {
+    /**
+     * 任务创建后超过 $timeoutSeconds 仍未结束，则置为失败。
+     *
+     * 对用户不说「超时」，文案统一取 image_generate.task_failed_retry；
+     * $errorMessage 由调用方按当前语种传入，不传时兜底英文。
+     */
+    public function markTimedOutIfRunning(
+        int $timeoutSeconds,
+        ?DateTimeInterface $now = null,
+        ?string $errorMessage = null
+    ): bool {
         if (! $this->status->isRunning()) {
             return false;
         }
@@ -156,7 +164,11 @@ class ImageGenerationTaskEntity
             return false;
         }
 
-        $this->markFailed(self::TIMEOUT_ERROR_CODE, self::TIMEOUT_ERROR_MESSAGE, $now);
+        $this->markFailed(
+            'IMAGE_GENERATION_FAILED',
+            $errorMessage ?? (string) __('image_generate.task_failed_retry', [], 'en_US'),
+            $now
+        );
         return true;
     }
 
@@ -190,12 +202,39 @@ class ImageGenerationTaskEntity
             'created_at' => $this->createdAt,
             'updated_at' => $this->updatedAt,
             'finished_at' => $this->finishedAt,
+            'started_at' => $this->getStartedAtIso(),
+            'expected_finished_at' => $this->getExpectedFinishedAt(),
             'response' => $this->status === ImageGenerationTaskStatus::SUCCEEDED ? $this->responsePayload : null,
             'error' => $this->status === ImageGenerationTaskStatus::FAILED ? [
                 'code' => $this->errorCode,
                 'message' => $this->errorMessage,
             ] : null,
         ];
+    }
+
+    /** 返回带时区的任务起点，避免浏览器按本机时区解释持久化时间。 */
+    private function getStartedAtIso(): string
+    {
+        return date(DateTimeInterface::ATOM, $this->resolveStartedAtTimestamp());
+    }
+
+    /** 按任务起点和分辨率档位返回带时区的预期完成时间。 */
+    private function getExpectedFinishedAt(): string
+    {
+        return date(
+            DateTimeInterface::ATOM,
+            $this->resolveStartedAtTimestamp() + ImageGenerationExpectedDuration::resolveSeconds(
+                $this->requestPayload['resolution'] ?? null,
+                $this->requestPayload['size'] ?? null
+            )
+        );
+    }
+
+    private function resolveStartedAtTimestamp(): int
+    {
+        $startedAt = strtotime($this->startedAt);
+
+        return $startedAt === false ? (strtotime($this->createdAt) ?: time()) : $startedAt;
     }
 
     private function formatTime(?DateTimeInterface $time): string

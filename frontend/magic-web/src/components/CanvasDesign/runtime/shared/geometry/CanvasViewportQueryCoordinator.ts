@@ -5,7 +5,7 @@ import { getViewportCanvasRect } from "../placement/elementUtils"
 import { containsRect, expandRect, intersectsRect } from "./GeometryCacheManager"
 
 const CANVAS_VIEWPORT_NEAR_PADDING_RATIO = 2
-const CANVAS_VIEWPORT_LABEL_PADDING_RATIO = 0.5
+const CANVAS_VIEWPORT_LAYOUT_PADDING_RATIO = 0.5
 const CANVAS_VIEWPORT_COVERAGE_PADDING_RATIO = 2.5
 
 export interface CanvasViewportSpatialSnapshot {
@@ -14,8 +14,10 @@ export interface CanvasViewportSpatialSnapshot {
 	viewportScale: number
 	viewportRect: Rect
 	nearRect: Rect
+	layoutRect: Rect
 	visibleElementIds: ReadonlySet<string>
 	nearElementIds: ReadonlySet<string>
+	layoutElementIds: ReadonlySet<string>
 	labelElementIds: readonly string[]
 }
 
@@ -85,7 +87,7 @@ export class CanvasViewportQueryCoordinator {
 
 		const longEdge = Math.max(viewportRect.width, viewportRect.height)
 		const nearRect = expandRect(viewportRect, longEdge * CANVAS_VIEWPORT_NEAR_PADDING_RATIO)
-		const labelRect = expandRect(viewportRect, longEdge * CANVAS_VIEWPORT_LABEL_PADDING_RATIO)
+		const layoutRect = expandRect(viewportRect, longEdge * CANVAS_VIEWPORT_LAYOUT_PADDING_RATIO)
 		let coverage = this.coverageCache
 		if (
 			!coverage ||
@@ -97,6 +99,7 @@ export class CanvasViewportQueryCoordinator {
 
 		const visibleElementIds = new Set<string>()
 		const nearElementIds = new Set<string>()
+		const layoutElementIds = new Set<string>()
 		const labelElementIds: string[] = []
 		for (const element of coverage.elements) {
 			const visible = intersectsRect(element.bounds, viewportRect)
@@ -104,7 +107,10 @@ export class CanvasViewportQueryCoordinator {
 			else if (intersectsRect(element.bounds, nearRect)) {
 				nearElementIds.add(element.elementId)
 			}
-			if (intersectsRect(element.bounds, labelRect)) {
+			// Labels and scale-dependent element layouts use the same narrow buffer, so classify
+			// both with one bounds check instead of repeating work for every coverage candidate.
+			if (intersectsRect(element.bounds, layoutRect)) {
+				layoutElementIds.add(element.elementId)
 				labelElementIds.push(element.elementId)
 			}
 		}
@@ -116,8 +122,10 @@ export class CanvasViewportQueryCoordinator {
 			viewportScale,
 			viewportRect,
 			nearRect,
+			layoutRect,
 			visibleElementIds,
 			nearElementIds,
+			layoutElementIds,
 			labelElementIds,
 		}
 		this.currentSnapshot = snapshot

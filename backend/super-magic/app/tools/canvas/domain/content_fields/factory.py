@@ -155,7 +155,7 @@ class ContentFieldsFactory:
         value = data.get(key)
         if value is None:
             return None
-        if value not in {"pending", "processing", "completed", "failed"}:
+        if value not in {"pending", "processing", "completed", "failed", "terminated"}:
             raise CanvasProtocolError("INVALID_CONTENT", f"{key} contains an unsupported generation status.")
         return cast(GenerationStatus, value)
 

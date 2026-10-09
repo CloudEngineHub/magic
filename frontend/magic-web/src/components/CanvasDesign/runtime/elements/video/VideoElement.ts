@@ -1413,6 +1413,7 @@ export class VideoElement extends BaseElement<VideoElementData> {
 			const height = this.data.height || 0
 			this.renderer.updatePlaceholderContentLayout(group, width, height)
 			this.renderer.updatePlayerViewportScaleLayout(group)
+			this.borderDecorator?.updateViewportScaleLayout()
 		}
 		const updateContentLayout = () => {
 			const width = this.data.width || 0

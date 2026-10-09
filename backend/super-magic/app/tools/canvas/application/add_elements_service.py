@@ -279,7 +279,13 @@ class AddElementsService:
         # 事务成功后才公布真实 ID；生成尚未完成也能定位，失败回滚的元素不会成为导航目标。
         if generated and on_placeholders_created is not None:
             await on_placeholders_created(result)
-        result = await self.generation_submission_service.submit_generated(project_path, result, generated, tool_context)
+        result = await self.generation_submission_service.submit_generated(
+            project_path,
+            result,
+            generated,
+            tool_context,
+            on_progress_updated=on_placeholders_created,
+        )
         result_items = {item.item_ref: item for item in result.items}
         for composition in compositions:
             target = result_items[composition.item_ref]

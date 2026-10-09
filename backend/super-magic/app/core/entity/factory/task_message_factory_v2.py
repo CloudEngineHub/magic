@@ -911,7 +911,10 @@ class TaskMessageFactoryV2(TaskMessageFactoryProtocol):
         remark_value = friendly.get("remark", "")
         if result and not result.ok:
             tool_status = ToolStatus.ERROR
-            if not result.use_custom_remark:
+            if (result.extra_info or {}).get("cancelled"):
+                # 用户中断导致的终态：用“已终止”措辞，避免与真正的执行失败混淆
+                remark_value = i18n.translate("tool.call_cancelled_remark", category="tool.messages")
+            elif not result.use_custom_remark:
                 remark_value = i18n.translate("tool.call_failed_remark", category="tool.messages")
         else:
             tool_status = ToolStatus.FINISHED

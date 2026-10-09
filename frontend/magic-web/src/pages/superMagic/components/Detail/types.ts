@@ -164,6 +164,9 @@ export interface OperationResultItem {
 	description?: string
 	target?: OperationResultTarget
 	changes?: { added_lines: number; deleted_lines: number; modified_lines?: number }
+	started_at?: string
+	expected_finished_at?: string
+	is_processing?: boolean | null
 }
 
 export interface OperationResultSummary {

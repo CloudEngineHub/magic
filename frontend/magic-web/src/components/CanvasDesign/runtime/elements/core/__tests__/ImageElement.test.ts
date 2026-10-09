@@ -31,6 +31,23 @@ function createDeferred() {
 	return { promise, resolve, reject }
 }
 
+function createDeferredValue<T>() {
+	let resolve!: (value: T) => void
+	let reject!: (reason?: unknown) => void
+	const promise = new Promise<T>((resolvePromise, rejectPromise) => {
+		resolve = resolvePromise
+		reject = rejectPromise
+	})
+	return { promise, resolve, reject }
+}
+
+/** Object.create-based unit fixtures bypass ImageElement's constructor, so provide its timing reader. */
+function attachGenerationTimingStub(element: ImageElement): void {
+	Object.assign(element, {
+		pollingManager: { getGenerationTiming: () => undefined },
+	})
+}
+
 function contentImage(
 	contents: ImageElementContent[],
 	activeContentId = contents[0]?.contentId ?? null,
@@ -44,6 +61,48 @@ function contentImage(
 		contents,
 	}
 }
+
+describe("ImageElement generation timing", () => {
+	afterEach(() => {
+		vi.useRealTimers()
+	})
+
+	it("persists the backend start and expected finish times on the request", () => {
+		const element = Object.create(ImageElement.prototype) as ImageElement & {
+			applyGenerationTiming: (
+				request: GenerateImageRequest,
+				response?: { started_at?: string; expected_finished_at?: string },
+			) => void
+		}
+		const request: GenerateImageRequest = { prompt: "a test image" }
+
+		element.applyGenerationTiming(request, {
+			started_at: "2026-10-05T10:00:00+08:00",
+			expected_finished_at: "2026-10-05T10:01:30+08:00",
+		})
+
+		expect(request).toMatchObject({
+			start_time: "2026-10-05T10:00:00+08:00",
+			expected_finished_at: "2026-10-05T10:01:30+08:00",
+		})
+	})
+
+	it("stops the progress timer when visibility culling destroys the render node", () => {
+		vi.useFakeTimers()
+		const node = new Konva.Group()
+		const element = Object.create(ImageElement.prototype) as ImageElement
+		Object.assign(element, {
+			node,
+			renderToken: 0,
+			generationProgressTimer: setInterval(vi.fn(), 1000),
+		})
+
+		element.destroyRenderNodeForVisibilityCull()
+
+		expect(vi.getTimerCount()).toBe(0)
+		expect((element as unknown as { node: Konva.Group | null }).node).toBeNull()
+	})
+})
 
 type ContentApiTestImageElement = {
 	data: ImageElementData
@@ -319,6 +378,7 @@ describe("ImageElement mounted image node sync", () => {
 			renderImage: ReturnType<typeof vi.fn>
 			renderLoadingPlaceholder: ReturnType<typeof vi.fn>
 		}
+		attachGenerationTimingStub(element)
 		element.data = {
 			id: "image-1",
 			type: ElementTypeEnum.Image,
@@ -355,6 +415,7 @@ describe("ImageElement mounted image node sync", () => {
 			isGenerating: boolean
 			isErrorState: boolean
 		}
+		attachGenerationTimingStub(element)
 		element.data = {
 			id: "pasted-image",
 			name: "Pasted image",
@@ -398,6 +459,7 @@ describe("ImageElement mounted image node sync", () => {
 			isGenerating: boolean
 			isErrorState: boolean
 		}
+		attachGenerationTimingStub(element)
 		element.data = {
 			id: "agent-image",
 			name: "Agent image",
@@ -518,6 +580,7 @@ describe("ImageElement mounted image node sync", () => {
 			getActiveImageGenerationTaskMeta: () => undefined
 			renderError: ReturnType<typeof vi.fn>
 		}
+		attachGenerationTimingStub(element)
 		element.data = {
 			id: "failed-image",
 			type: ElementTypeEnum.Image,
@@ -541,6 +604,136 @@ describe("ImageElement mounted image node sync", () => {
 
 		expect(element.render()).toBe(renderedError)
 		expect(element.renderError).toHaveBeenCalledWith("本地化图片失败")
+	})
+
+	it("ignores a stale placeholder background completion after the group is replaced", async () => {
+		const background = createDeferredValue<HTMLImageElement>()
+		const createBackgroundImage = vi
+			.spyOn(RenderUtils, "createBackgroundImage")
+			.mockReturnValue(new Konva.Image())
+		const createCenteredIconText = vi.spyOn(RenderUtils, "createCenteredIconText")
+		const registerViewportScaleLayout = vi.fn(() => vi.fn())
+		const element = Object.create(ImageElement.prototype) as ImageElement
+		const canvas = {
+			t: undefined,
+			runtimeScheduler: { registerViewportScaleLayout },
+		}
+		Object.assign(element, {
+			data: { id: "stale-image", width: 100, height: 80 },
+			canvas,
+			imageLoader: { loadImage: vi.fn(() => background.promise) },
+			renderToken: 0,
+			node: null,
+			getText: vi.fn((_key: string, fallback: string) => fallback),
+			createBorder: vi.fn(),
+			createCornerActions: vi.fn(),
+			createMainVersionTag: vi.fn(),
+			finalizeNode: (node: Konva.Group) => Object.assign(element, { node }),
+		})
+
+		const renderPlaceholder = (
+			element as unknown as { renderEmptyPlaceholder: () => Konva.Group }
+		).renderEmptyPlaceholder.bind(element)
+		const oldGroup = renderPlaceholder()
+		expect(registerViewportScaleLayout).toHaveBeenCalledTimes(1)
+		Object.assign(element, { renderToken: 1, node: new Konva.Group() })
+
+		background.resolve(new Image())
+		await Promise.resolve()
+		await Promise.resolve()
+
+		expect(createBackgroundImage).not.toHaveBeenCalled()
+		expect(createCenteredIconText).not.toHaveBeenCalled()
+		expect(registerViewportScaleLayout).toHaveBeenCalledTimes(1)
+
+		oldGroup.destroy()
+		;(element as unknown as { node: Konva.Group }).node.destroy()
+	})
+
+	it("does not register an additional scale listener when stale placeholder content resolves", async () => {
+		const content = createDeferredValue<Konva.Group>()
+		const createCenteredIconText = vi
+			.spyOn(RenderUtils, "createCenteredIconText")
+			.mockReturnValue(content.promise)
+		vi.spyOn(RenderUtils, "createBackgroundImage").mockReturnValue(new Konva.Image())
+		const registerViewportScaleLayout = vi.fn(() => vi.fn())
+		const element = Object.create(ImageElement.prototype) as ImageElement
+		const canvas = {
+			t: undefined,
+			runtimeScheduler: { registerViewportScaleLayout },
+		}
+		Object.assign(element, {
+			data: { id: "stale-image", width: 100, height: 80 },
+			canvas,
+			imageLoader: { loadImage: vi.fn(() => Promise.resolve(new Image())) },
+			renderToken: 0,
+			node: null,
+			getText: vi.fn((_key: string, fallback: string) => fallback),
+			createBorder: vi.fn(),
+			createCornerActions: vi.fn(),
+			createMainVersionTag: vi.fn(),
+			finalizeNode: (node: Konva.Group) => Object.assign(element, { node }),
+		})
+
+		const renderPlaceholder = (
+			element as unknown as { renderEmptyPlaceholder: () => Konva.Group }
+		).renderEmptyPlaceholder.bind(element)
+		const oldGroup = renderPlaceholder()
+		await Promise.resolve()
+		await Promise.resolve()
+		expect(createCenteredIconText).toHaveBeenCalledTimes(1)
+		expect(registerViewportScaleLayout).toHaveBeenCalledTimes(1)
+
+		const replacementGroup = new Konva.Group()
+		Object.assign(element, { renderToken: 1, node: replacementGroup })
+		const staleContentGroup = new Konva.Group()
+		const destroyStaleContentGroup = vi.spyOn(staleContentGroup, "destroy")
+		content.resolve(staleContentGroup)
+		await Promise.resolve()
+		await Promise.resolve()
+
+		expect(registerViewportScaleLayout).toHaveBeenCalledTimes(1)
+		expect(destroyStaleContentGroup).toHaveBeenCalledTimes(1)
+
+		oldGroup.destroy()
+		replacementGroup.destroy()
+	})
+
+	it("runs content and animated border layout from one viewport callback", () => {
+		const registerViewportScaleLayout = vi.fn(() => vi.fn())
+		const updateContentScale = vi.fn()
+		const updateViewportScaleLayout = vi.fn()
+		const element = Object.create(ImageElement.prototype) as ImageElement & {
+			data: { id: string; width: number; height: number }
+			canvas: {
+				runtimeScheduler: {
+					registerViewportScaleLayout: typeof registerViewportScaleLayout
+				}
+			}
+			borderDecorator: { updateViewportScaleLayout: typeof updateViewportScaleLayout }
+			updateContentScale: typeof updateContentScale
+			setupContentUpdateListener: (group: Konva.Group) => void
+		}
+		const group = new Konva.Group()
+		Object.assign(element, {
+			data: { id: "image-layout", width: 100, height: 80 },
+			canvas: { runtimeScheduler: { registerViewportScaleLayout } },
+			borderDecorator: { updateViewportScaleLayout },
+			updateContentScale,
+		})
+
+		element.setupContentUpdateListener(group)
+		const viewportCallback = registerViewportScaleLayout.mock.calls[0]?.[1]
+		viewportCallback?.()
+
+		expect(registerViewportScaleLayout).toHaveBeenCalledTimes(1)
+		expect(updateContentScale).toHaveBeenCalledTimes(1)
+		expect(updateViewportScaleLayout).toHaveBeenCalledTimes(1)
+
+		group.fire("transform")
+		expect(updateContentScale).toHaveBeenCalledTimes(2)
+		expect(updateViewportScaleLayout).toHaveBeenCalledTimes(2)
+		group.destroy()
 	})
 
 	it("renders a localized video generation failure when the completed path is unresolved", () => {

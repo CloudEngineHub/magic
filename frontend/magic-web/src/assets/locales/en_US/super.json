@@ -7714,6 +7714,9 @@
 		"callTool": "Call Tool",
 		"initPlugin": "Initialize Plugin"
 	},
+	"toolWaitCountdown": {
+		"elapsed": "Waited {{seconds}}s of {{total}}s"
+	},
 	"tools": {
 		"analysis_slide_webpage": "Analysis Slide Webpage",
 		"analyze_audio_project": "Analyze Audio Project",

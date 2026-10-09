@@ -26,6 +26,10 @@ export const IMAGE_CONFIG = {
 	MIN_ELEMENT_SCREEN_SIZE_FOR_INFO_BUTTON: 60,
 	/** 废稿静态展示强度；悬浮时仅恢复图片内容节点，原图与角标不变。 */
 	DISCARDED_OPACITY: 0.55,
+	/** 生成进度后缀的测量探针：取最长形态，保证百分比位数变化时胶囊宽度不跳动 */
+	PROGRESS_TEXT_PROBE: "100%",
+	/** 生成进度推进间隔（毫秒）；估算精度远低于 1 秒，不需要更密的刷新 */
+	PROGRESS_TICK_INTERVAL: 1000,
 } as const
 
 /**

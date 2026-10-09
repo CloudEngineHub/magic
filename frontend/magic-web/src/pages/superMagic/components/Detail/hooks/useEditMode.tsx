@@ -30,10 +30,12 @@ function useEditMode({
 	fileId,
 	fileName,
 	editingPresenceEnabled = true,
+	silentClose = false,
 }: {
 	fileId?: string
 	fileName?: string
 	editingPresenceEnabled?: boolean
+	silentClose?: boolean
 }) {
 	const [isEditMode, _setIsEditMode] = useState(false)
 	const { t } = useTranslation("super")
@@ -95,7 +97,7 @@ function useEditMode({
 
 	// Best-effort cleanup on page close
 	useEffect(() => {
-		if (!isEditMode || !fileId) return
+		if (silentClose || !isEditMode || !fileId) return
 
 		beforeUnloadRef.current = (e) => {
 			// Prevent page close and show browser's default confirmation dialog
@@ -127,7 +129,7 @@ function useEditMode({
 				window.removeEventListener("beforeunload", beforeUnloadRef.current)
 		}
 		// eslint-disable-next-line react-hooks/exhaustive-deps
-	}, [editingPresenceEnabled, isEditMode, fileId])
+	}, [editingPresenceEnabled, isEditMode, fileId, silentClose])
 
 	const joinEdit = useMemoizedFn(async (fileId: string) => {
 		if (!fileId) {
@@ -243,7 +245,23 @@ function useEditMode({
 	// Check before close - returns 'close', 'save', or 'cancel'
 	const checkBeforeClose = useMemoizedFn(
 		async (onSave?: () => Promise<void>): Promise<"close" | "save" | "cancel"> => {
-			if (!isEditMode) return "close"
+			if (silentClose) {
+				try {
+					await onSave?.()
+					// Local draft durability and remote persistence do not depend on the
+					// presence release request. Let the tab close while that request retries.
+					if (fileId) void leaveEdit(fileId)
+					return onSave ? "save" : "close"
+				} catch {
+					// Canvas retains its durable local draft when saving fails, so closing
+					// remains safe without adding a confirmation dialog to the silent flow.
+					return "close"
+				}
+			}
+
+			// Canvas can register a save handler without joining generic editing
+			// presence. The handler still requires an explicit close decision.
+			if (!isEditMode && !onSave) return "close"
 
 			return new Promise((resolve) => {
 				const modal = MagicModal.confirm({

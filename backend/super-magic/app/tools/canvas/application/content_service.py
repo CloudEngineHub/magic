@@ -134,7 +134,13 @@ class ContentService:
         # 追加版本与新增元素共用同一时机：先保存占位 Content，再发送可定位进度。
         if generated and on_placeholders_created is not None:
             await on_placeholders_created(result)
-        return await self.generation_submission_service.submit_generated(project_path, result, generated, tool_context)
+        return await self.generation_submission_service.submit_generated(
+            project_path,
+            result,
+            generated,
+            tool_context,
+            on_progress_updated=on_placeholders_created,
+        )
 
     async def select_main(self, project_path: str, items: Sequence[SelectMainContentCommand]) -> SelectMainContentsResult:
         """选择用户明确指定的 main Content，并同步 active Content 指针。"""

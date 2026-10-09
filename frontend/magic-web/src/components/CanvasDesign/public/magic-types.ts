@@ -47,7 +47,7 @@ export const ImageModelStatus = {
 /**
  * 图片/视频生成状态枚举
  */
-export type GenerationStatus = "pending" | "processing" | "completed" | "failed"
+export type GenerationStatus = "pending" | "processing" | "completed" | "failed" | "terminated"
 
 /**
  * 图片/视频生成状态枚举值
@@ -61,6 +61,8 @@ export const GenerationStatus = {
 	Completed: "completed",
 	/** 失败 */
 	Failed: "failed",
+	/** 已终止（用户终止任务 / 任务转向，节点保留） */
+	Terminated: "terminated",
 } as const
 
 /**
@@ -520,6 +522,10 @@ export interface GenerateImageRequest {
 	size?: string
 	/** 分辨率（对应 scale 值） */
 	resolution?: string
+	/** 任务发起时间；建单后更新为后端返回的真实起点。 */
+	start_time?: string
+	/** 预期完成时间，后端写入的 ISO 8601 日期时间（如 2026-09-28T20:44:16+08:00），用于估算进度 */
+	expected_finished_at?: string
 	/** 文件目录，一定是本项目存在的目录 */
 	file_dir?: string
 	/** 参考图；DSL 中存相对路径，发请求时会还原为工作区绝对路径 */
@@ -564,6 +570,10 @@ export interface GenerateImageResponse {
 	file_url: string | null
 	/** ID */
 	id: string
+	/** 任务发起时间（ISO 8601 日期时间），与 expected_finished_at 配对计算进度 */
+	started_at?: string
+	/** 预期完成时间（ISO 8601 日期时间），后端下发，用于估算进度；聊天工具卡用的是同一个值 */
+	expected_finished_at?: string
 }
 
 export interface GeneratedImageResultItem {
@@ -609,6 +619,10 @@ export interface GenerateImagesResponse {
 	error_message: string | null
 	/** 已返回的图片列表 */
 	images: GeneratedImageResultItem[]
+	/** 任务发起时间（ISO 8601 日期时间），与 expected_finished_at 配对计算进度 */
+	started_at?: string
+	/** 预期完成时间（ISO 8601 日期时间），后端下发，用于估算进度 */
+	expected_finished_at?: string
 }
 
 /**
@@ -1006,6 +1020,10 @@ export interface ImageGenerationResultResponse {
 	file_url: string
 	/** ID */
 	id: string
+	/** 任务发起时间（ISO 8601 日期时间），与 expected_finished_at 配对计算进度 */
+	started_at?: string
+	/** 预期完成时间（ISO 8601 日期时间），用于估算进度 */
+	expected_finished_at?: string
 }
 
 /**
@@ -1044,6 +1062,10 @@ export interface ImageGenerationResultsResponse {
 	error_message: string | null
 	/** 已返回的图片列表 */
 	images: GeneratedImageResultItem[]
+	/** 任务发起时间（ISO 8601 日期时间），与 expected_finished_at 配对计算进度 */
+	started_at?: string
+	/** 预期完成时间（ISO 8601 日期时间），用于估算进度 */
+	expected_finished_at?: string
 }
 
 /**
