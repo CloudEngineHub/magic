@@ -6536,5 +6536,21 @@
     "update_slide_transitions.unknown": {
         "zh_CN": "暂时无法确认保存结果，请刷新文稿检查过渡动画，避免重复保存",
         "en_US": "The save result is uncertain. Refresh the deck and check its transitions before saving again."
-    }
+    },
+    "update_slide_transitions.unchanged": {"zh_CN": "过渡动画无需修改", "en_US": "Slide transitions already match"},
+    "update_slide_transitions.default_scope": {"zh_CN": "整份默认", "en_US": "Deck default"},
+    "update_slide_transitions.restored_scope": {"zh_CN": "{scope}：使用整份默认", "en_US": "{scope}: inherit the deck default"},
+    "update_slide_transitions.cleared_overrides": {"zh_CN": "已清除原有页面配置", "en_US": "removed previous page overrides"},
+    "update_slide_transitions.effect_none": {"zh_CN": "无", "en_US": "None"},
+    "update_slide_transitions.effect_fade": {"zh_CN": "淡入淡出", "en_US": "Fade"},
+    "update_slide_transitions.effect_push": {"zh_CN": "推入", "en_US": "Push"},
+    "update_slide_transitions.effect_cover": {"zh_CN": "覆盖", "en_US": "Cover"},
+    "update_slide_transitions.effect_wipe": {"zh_CN": "擦除", "en_US": "Wipe"},
+    "update_slide_transitions.effect_zoom": {"zh_CN": "轻微缩放", "en_US": "Zoom"},
+    "update_slide_transitions.direction_left": {"zh_CN": "向左", "en_US": "Left"},
+    "update_slide_transitions.direction_right": {"zh_CN": "向右", "en_US": "Right"},
+    "update_slide_transitions.direction_up": {"zh_CN": "向上", "en_US": "Up"},
+    "update_slide_transitions.direction_down": {"zh_CN": "向下", "en_US": "Down"},
+    "update_slide_transitions.easing_linear": {"zh_CN": "匀速", "en_US": "Linear"},
+    "update_slide_transitions.easing_ease-in-out": {"zh_CN": "平滑", "en_US": "Smooth"}
 }

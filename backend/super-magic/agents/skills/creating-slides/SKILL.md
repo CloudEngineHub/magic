@@ -62,7 +62,9 @@ When user has no explicit requirements, follow these defaults:
 
 When the user requests page transitions, read [slide-transitions.md](references/slide-transitions.md)
 and the current magic.project.js, then call update_slide_transitions through
-`sdk.tool.call` inside `run_sdk_snippet` (Code Mode only). Keep slide HTML static.
+`sdk.tool.call` inside `run_sdk_snippet` (Code Mode only). Collect default and page settings
+in one operations batch and save once. An unknown outcome requires rereading before further
+writes to that configuration. Keep slide HTML static.
 Do not add transitions without a request. Preserve existing settings, including explicit none,
 during content editing, template replacement, and regeneration. These settings apply to the
 online player; do not promise native PowerPoint transitions or standalone index.html playback.
