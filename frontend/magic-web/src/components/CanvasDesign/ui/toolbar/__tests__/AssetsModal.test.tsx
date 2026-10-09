@@ -97,6 +97,14 @@ describe("AssetsModal", () => {
 		expect(mocks.queryAssets.mock.calls[0][0]).not.toHaveProperty("asset_media_type")
 	})
 
+	it("keeps the asset library dialog below the shared toast layer", async () => {
+		mocks.queryAssets.mockResolvedValueOnce(response(asset))
+
+		render(<AssetsModal open onClose={vi.fn()} />)
+
+		expect(await screen.findByTestId("assets-modal")).toHaveStyle({ zIndex: "999" })
+	})
+
 	it("returns the selected asset without downloading or uploading it", async () => {
 		mocks.queryAssets.mockResolvedValueOnce({
 			page: 1,

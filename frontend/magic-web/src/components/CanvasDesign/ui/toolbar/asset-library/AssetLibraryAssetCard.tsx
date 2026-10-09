@@ -16,6 +16,7 @@ import {
 	Play,
 	ShieldAlert,
 	ShieldCheck,
+	ShieldQuestion,
 	Video,
 } from "lucide-react"
 import { useEffect, useState } from "react"
@@ -125,24 +126,24 @@ export function AssetLibraryAssetCard({
 	const sourceLabel = getAssetSourceLabel(displayAsset, t)
 	const complianceLabel = getAssetComplianceLabel(displayAsset, t)
 	const complianceBadgeClassName = cn(
-		"inline-flex items-center gap-1 rounded-md px-2 py-1 text-xs leading-4 shadow-sm",
+		// Stay icon-sized until hover. The label width animates open inside this pill;
+		// the right-anchored corner row grows left into the preview, clear of the menu.
+		"group/badge inline-flex h-6 items-center overflow-hidden rounded-md border border-white shadow-sm",
 		displayAsset.compliance_status === "PASS" && "bg-primary text-primary-foreground",
 		displayAsset.compliance_status === "PROCESSING" && "bg-background/90 text-foreground",
 		displayAsset.compliance_status === "FAILED" && "bg-destructive text-destructive-foreground",
 		displayAsset.compliance_status === "UNVERIFIED" && "bg-background/90 text-muted-foreground",
 	)
-	const complianceBadgeContent = (
-		<>
-			{displayAsset.compliance_status === "PASS" ? (
-				<ShieldCheck className="size-3.5" />
-			) : displayAsset.compliance_status === "FAILED" ? (
-				<ShieldAlert className="size-3.5" />
-			) : displayAsset.compliance_status === "PROCESSING" ? (
-				<LoaderCircle className="size-3.5 animate-spin" />
-			) : null}
-			{complianceLabel}
-		</>
-	)
+	const complianceBadgeIcon =
+		displayAsset.compliance_status === "PASS" ? (
+			<ShieldCheck className="size-3.5" aria-hidden="true" />
+		) : displayAsset.compliance_status === "FAILED" ? (
+			<ShieldAlert className="size-3.5" aria-hidden="true" />
+		) : displayAsset.compliance_status === "PROCESSING" ? (
+			<LoaderCircle className="size-3.5 animate-spin" aria-hidden="true" />
+		) : (
+			<ShieldQuestion className="size-3.5" aria-hidden="true" />
+		)
 	const showComplianceAction =
 		Boolean(onComplianceCheck) && canStartAssetLibraryCompliance(displayAsset)
 	const showActionsMenu = manageable || showComplianceAction
@@ -222,24 +223,25 @@ export function AssetLibraryAssetCard({
 					</div>
 				)}
 				{selected ? (
-					<span className="absolute left-2.5 top-2.5 inline-flex size-6 items-center justify-center rounded-full bg-primary text-primary-foreground shadow-sm">
+					<span className="absolute left-2.5 top-2.5 inline-flex size-6 items-center justify-center rounded-full border border-white bg-primary text-primary-foreground shadow-sm">
 						<Check className="size-4" aria-hidden="true" />
 					</span>
 				) : null}
 				<div className="absolute right-2.5 top-2.5 flex items-center gap-1.5">
-					<span
-						className={complianceBadgeClassName}
-						title={displayAsset.compliance_failed_reason ?? undefined}
-						aria-label={complianceLabel}
-					>
-						{complianceBadgeContent}
+					<span className={complianceBadgeClassName}>
+						<span className="inline-flex size-6 shrink-0 items-center justify-center">
+							{complianceBadgeIcon}
+						</span>
+						<span className="min-w-0 max-w-0 overflow-hidden whitespace-nowrap text-xs leading-4 transition-[max-width,padding] duration-200 ease-out group-hover/badge:max-w-52 group-hover/badge:pr-2 motion-reduce:transition-none">
+							{complianceLabel}
+						</span>
 					</span>
 					{showActionsMenu ? (
 						<DropdownMenu modal={false} onOpenChange={onMenuOpenChange}>
 							<DropdownMenuTrigger asChild>
 								<button
 									type="button"
-									className="inline-flex size-6 items-center justify-center rounded-md bg-background/90 text-foreground shadow-sm hover:bg-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+									className="inline-flex size-6 items-center justify-center rounded-md border border-white bg-background/90 text-foreground shadow-sm hover:bg-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
 									aria-label={t("assets.actions", "素材操作")}
 									onPointerDown={(event) => event.stopPropagation()}
 									onClick={(event) => event.stopPropagation()}
