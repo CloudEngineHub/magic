@@ -3896,6 +3896,17 @@ Since your subsequent output will be merged with pre-interruption content and di
             return False
         return tool_instance.is_visible_in_context(self.agent_context)
 
+    @staticmethod
+    def _validate_llm_response(response: ChatCompletion) -> None:
+        """错误 envelope 不包含 choices，先保留上游错误语义，再读取消息。"""
+        extra = response.model_extra or {}
+        code = extra.get("code")
+        if code is not None and code != 1000:
+            message = extra.get("message") or "Model service returned an error"
+            raise RuntimeError(f"Model request failed: code={code}, message={message}")
+        if not response.choices or response.choices[0].message is None:
+            raise RuntimeError("Model service returned no response choices/message.")
+
     async def _call_llm(
         self,
         messages: List[Dict[str, Any]],
@@ -4019,13 +4030,7 @@ Since your subsequent output will be merged with pre-interruption content and di
         except ResourceLimitExceededException:
             raise
 
-        # 检查 model_extra 中的响应状态码
-        if hasattr(llm_response, 'model_extra') and llm_response.model_extra:
-            code = llm_response.model_extra.get('code')
-            if code is not None and code != 1000:
-                message = llm_response.model_extra.get('message', '')
-                logger.error(f"LLM响应异常状态: code={code}, message={message}")
-
+        self._validate_llm_response(llm_response)
         llm_response_message = llm_response.choices[0].message
         request_time = time.time() - start_time
         # ▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲ 调用 LLM 结束 ▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲ #

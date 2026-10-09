@@ -212,6 +212,16 @@ class TopicShareableResource implements ResourceFactoryInterface
         return $result;
     }
 
+    public function getResourceContentByCursor(string $resourceId, string $userId, string $organizationCode, ?int $afterId, int $limit): array
+    {
+        $topicEntity = $this->topicDomainService->getTopicById((int) $resourceId);
+        if (! $topicEntity) {
+            return [];
+        }
+
+        return $this->topicAppService->getMessagesByTopicIdAfterId((int) $resourceId, $afterId, $limit);
+    }
+
     public function getResourceName(string $resourceId): string
     {
         return $this->topicAppService->getTopicDetail((int) $resourceId);

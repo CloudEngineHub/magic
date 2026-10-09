@@ -174,7 +174,8 @@ interface TaskFileRepositoryInterface
         ?int $afterSort,
         ?int $afterFileId,
         int $limit,
-        array $fileTypes = []
+        array $fileTypes = [],
+        bool $excludeHidden = false
     ): array;
 
     /**

@@ -467,3 +467,11 @@ Router::addGroup(
     },
     ['middleware' => [UserAuthMiddleware::class]]
 );
+
+Router::addGroup(
+    '/api/v2/super-agent',
+    static function () {
+        Router::post('/topics/{id}/messages', [TopicApi::class, 'getMessagesByTopicIdV2']);
+    },
+    ['middleware' => [SandboxUserAuthMiddleware::class]]
+);

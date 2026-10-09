@@ -38,18 +38,6 @@ interface TaskMessageRepositoryInterface
     public function batchSave(array $messages): void;
 
     /**
-     * 根据话题ID和任务ID获取用户消息列表（优化索引+过滤用户消息）.
-     * @return TaskMessageEntity[]
-     */
-    public function findUserMessagesByTopicIdAndTaskId(int $topicId, string $taskId): array;
-
-    /**
-     * 根据任务ID获取消息列表.
-     * @return TaskMessageEntity[]
-     */
-    public function findByTaskId(string $taskId): array;
-
-    /**
      * 获取任务完成时用于返回给调用方的消息。
      *
      * @return TaskMessageEntity[]
@@ -68,17 +56,14 @@ interface TaskMessageRepositoryInterface
      */
     public function findByTopicId(int $topicId, int $page = 1, int $pageSize = 20, bool $shouldPage = true, string $sortDirection = 'asc', bool $showInUi = true): array;
 
-    public function getUserFirstMessageByTopicId(int $topicId, string $userId): ?TaskMessageEntity;
-
     /**
-     * 根据topic_id和处理状态查询消息列表，按seq_id升序排列.
-     * @param int $topicId 话题ID
-     * @param string $processingStatus 处理状态
-     * @param string $senderType 发送者类型
-     * @param int $limit 限制数量
-     * @return TaskMessageEntity[]
+     * Find UI-visible messages after a cursor ID.
+     *
+     * @return array{list: TaskMessageEntity[], has_more: bool, next_cursor: ?string}
      */
-    public function findPendingMessagesByTopicId(int $topicId, string $processingStatus, string $senderType = 'assistant', int $limit = 50): array;
+    public function findByTopicIdAfterId(int $topicId, ?int $afterId = null, int $limit = 20, bool $showInUi = true): array;
+
+    public function getUserFirstMessageByTopicId(int $topicId, string $userId): ?TaskMessageEntity;
 
     /**
      * 更新消息处理状态.

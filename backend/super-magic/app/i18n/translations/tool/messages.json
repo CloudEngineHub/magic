@@ -875,13 +875,25 @@
         "zh_CN": "转译错误：查询任务结果请求失败 - {{error}}",
         "en_US": "Transcription error: Query task result request failed - {{error}}"
     },
+    "audio_understanding.result_unknown": {
+        "zh_CN": "暂时无法确认转写结果，任务可能仍在处理，请勿重复提交。未生成新的文字稿。",
+        "en_US": "Unable to confirm the transcription result. The task may still be processing; avoid submitting it again. No new transcript was created."
+    },
+    "audio_understanding.authentication_failed": {
+        "zh_CN": "转写服务认证失败，请检查登录状态后再继续。未生成新的文字稿。",
+        "en_US": "Transcription authentication failed. Check your sign-in status before continuing. No new transcript was created."
+    },
+    "audio_understanding.failed_no_transcript": {
+        "zh_CN": "转写失败，未生成新的文字稿。请查看具体原因后再继续。",
+        "en_US": "Transcription failed. No new transcript was created. Check the reported reason before continuing."
+    },
     "audio_understanding.task_timeout": {
         "zh_CN": "转译错误：音频理解任务超时（{{timeout}}秒）",
         "en_US": "Transcription error: Audio understanding task timeout ({{timeout}} seconds)"
     },
     "audio_understanding.transcription_error": {
-        "zh_CN": "转译错误：音频理解处理失败, 回复用户可能是服务器繁忙, 稍后再试, 或者让用户新建一个话题重新转译试试, 错误信息: {{error}}",
-        "en_US": "Transcription error: Audio understanding processing failed, reply user may be server busy, please try again later, or let the user create a new topic to try again, error: {{error}}"
+        "zh_CN": "转写失败：{{error}}",
+        "en_US": "Audio transcription failed: {{error}}"
     },
     "audio_understanding.file_not_found": {
         "zh_CN": "音频文件 {{file_path}} 不存在",
@@ -5500,6 +5512,26 @@
     "audio_understanding.file_corrupted": {
         "zh_CN": "音频文件 {{file_name}} 已损坏，无法转录。可能是录制或上传过程中断导致文件不完整，请重新导出或重新录制后再试。具体细节：{{reason}}",
         "en_US": "Audio file {{file_name}} is corrupted and cannot be transcribed. The recording or upload was likely interrupted, leaving the file incomplete. Please re-export or re-record and try again. Details: {{reason}}"
+    },
+    "audio_understanding.format_preparation_failed": {
+        "zh_CN": "音频格式检测或转换失败，请上传标准 WAV 或 MP3 音频后重试。",
+        "en_US": "Audio format detection or conversion failed. Please upload a standard WAV or MP3 file and try again."
+    },
+    "audio_understanding.result_mismatch": {
+        "zh_CN": "转写结果与音频实际时长不一致，系统已停止生成文字稿。请上传标准 WAV 或 MP3 音频后重试。",
+        "en_US": "The transcription duration does not match the actual audio. Transcript generation was stopped. Please upload a standard WAV or MP3 file and try again."
+    },
+    "audio_understanding.no_valid_utterance": {
+        "zh_CN": "转写结果中的时间标记全部超出音频实际时长，系统已停止生成文字稿。",
+        "en_US": "All transcription timestamps exceed the actual audio duration, so transcript generation was stopped."
+    },
+    "audio_understanding.timeline_trimmed": {
+        "zh_CN": "文字稿已生成。音频末尾有 {{count}} 条时间标记超出实际时长，这部分内容已移除，保留内容截止 {{retained_end}}。",
+        "en_US": "Transcript generated. {{count}} timestamped utterances beyond the audio end were removed; retained content ends at {{retained_end}}."
+    },
+    "audio_understanding.canonical_fallback_succeeded": {
+        "zh_CN": "音频格式已识别，但原始编码与语音转写服务不兼容，系统已转换为兼容格式后完成转写。",
+        "en_US": "The source encoding was incompatible with the transcription service, so it was converted to a compatible format before transcription."
     },
     "create_self_media_project.success": {
         "zh_CN": "自媒体项目 {{project_name}} 创建成功（平台：{{platform}}，文章 {{posts_count}} 篇）",

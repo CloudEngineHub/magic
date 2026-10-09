@@ -512,6 +512,16 @@ class TaskDomainService
     }
 
     /**
+     * Get topic messages after a cursor ID.
+     *
+     * @return array{list: TaskMessageEntity[], has_more: bool, next_cursor: ?string}
+     */
+    public function getMessagesByTopicIdAfterId(int $topicId, ?int $afterId = null, int $limit = 20, bool $showInUi = true): array
+    {
+        return $this->messageRepository->findByTopicIdAfterId($topicId, $afterId, $limit, $showInUi);
+    }
+
+    /**
      * Get topic attachment list.
      *
      * @param int $topicId Topic ID

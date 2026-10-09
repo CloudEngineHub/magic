@@ -13,6 +13,7 @@ use App\Domain\SuperMagic\Task\Repository\Facade\TaskRepositoryInterface;
 use App\Domain\SuperMagic\Task\Repository\Model\TaskModel;
 use App\Infrastructure\Util\IdGenerator\IdGenerator;
 use Hyperf\DbConnection\Db;
+use InvalidArgumentException;
 
 class TaskRepository implements TaskRepositoryInterface
 {
@@ -52,18 +53,6 @@ class TaskRepository implements TaskRepositoryInterface
             $result[$entity->getId()] = $entity;
         }
         return $result;
-    }
-
-    /**
-     * 通过任务ID(沙箱服务返回的taskId)获取任务
-     */
-    public function getTaskByTaskId(string $taskId): ?TaskEntity
-    {
-        $model = $this->model::query()->where('task_id', $taskId)->first();
-        if (! $model) {
-            return null;
-        }
-        return new TaskEntity($model->toArray());
     }
 
     /**
@@ -165,45 +154,6 @@ class TaskRepository implements TaskRepositoryInterface
     }
 
     /**
-     * 更新长时间处于运行状态的任务为错误状态
-     *
-     * @param string $timeThreshold 时间阈值，早于此时间的运行中任务将被标记为错误
-     * @return int 更新的任务数量
-     */
-    public function updateStaleRunningTasks(string $timeThreshold): int
-    {
-        return $this->model::query()
-            ->where('task_status', TaskStatus::RUNNING->value)
-            ->where('updated_at', '<', $timeThreshold)
-            ->whereNull('deleted_at')
-            ->update([
-                'task_status' => TaskStatus::ERROR->value,
-                'updated_at' => date('Y-m-d H:i:s'),
-            ]);
-    }
-
-    /**
-     * 获取指定状态的任务列表.
-     *
-     * @param TaskStatus $status 任务状态
-     * @return array<TaskEntity> 任务实体列表
-     */
-    public function getTasksByStatus(TaskStatus $status): array
-    {
-        $models = $this->model::query()
-            ->where('task_status', $status->value)
-            ->whereNull('deleted_at')
-            ->get();
-
-        $result = [];
-        foreach ($models as $model) {
-            $result[] = new TaskEntity($model->toArray());
-        }
-
-        return $result;
-    }
-
-    /**
      * 批量删除指定话题下的所有任务（软删除）.
      *
      * @param int $topicId 话题ID
@@ -258,36 +208,19 @@ class TaskRepository implements TaskRepositoryInterface
     }
 
     /**
-     * 获取最近更新时间超过指定时间的任务列表.
+     * 获取开始时间早于指定阈值且状态为 running/waiting 的任务列表（超时任务扫描）.
      *
-     * @param string $timeThreshold 时间阈值，如果任务的更新时间早于此时间，则会被包含在结果中
-     * @param int $limit 返回结果的最大数量
-     * @return array<TaskEntity> 任务实体列表
-     */
-    public function getTasksExceedingUpdateTime(string $timeThreshold, int $limit = 100): array
-    {
-        $models = $this->model::query()
-            ->where('updated_at', '<', $timeThreshold)
-            ->where('task_status', TaskStatus::RUNNING->value)
-            ->whereNull('deleted_at')
-            ->orderBy('id', 'asc')
-            ->limit($limit)
-            ->get();
-
-        $result = [];
-        foreach ($models as $model) {
-            $result[] = new TaskEntity($model->toArray());
-        }
-
-        return $result;
-    }
-
-    /**
-     * 获取创建时间超过指定时间且状态为运行中的任务列表.
-     * 注意：不加 ORDER BY 是为了让 MySQL 优化器使用 idx_task_status（ORDER BY id 会诱导其放弃索引改走主键全表扫描），
-     * 候选集（running/waiting 任务）仅数百条，取回后在 PHP 内按 id 升序排序，保持批内最老优先的处理顺序。
+     * 索引契约：走 idx_status_deleted_started (task_status, deleted_at, started_at)，
+     * 「IN 等值 → IS NULL 等值 → started_at 范围」配合 LIMIT 早停，扫描行数约等于 limit。
+     * 不要加 ORDER BY：两个 status range 的返回本无全局顺序，且 ORDER BY id 会诱导优化器
+     * 放弃索引改走主键全表扫描，增加查询开销；
+     * 批内最老优先由下方 PHP usort 保证。
      *
-     * @param string $timeThreshold 时间阈值，如果任务的创建时间早于此时间，则会被包含在结果中
+     * 注意：started_at 在建任务时即写入（TaskDomainService::initTopicTask），实际语义是创建时间；
+     * started_at 为 NULL 的存量行永远不会被本查询命中，应单独回填治理，
+     * 不要在此改成 orWhereNull 兜底。
+     *
+     * @param string $timeThreshold 时间阈值，开始时间早于此时间的任务会被包含在结果中
      * @param int $limit 返回结果的最大数量
      * @return array<TaskEntity> 任务实体列表
      */
@@ -342,10 +275,22 @@ class TaskRepository implements TaskRepositoryInterface
     /**
      * 按条件批量更新任务.
      * 条件值为数组时走 whereIn，标量走 where。
-     * 禁止传入 project_id / user_id 作为查询条件（这两个维度无索引），项目/用户维度请先经 topics 表转换为 topic_id 后再更新。
+     *
+     * 仅允许包含 id 或 topic_id 的条件：索引整治后本表有索引的查询维度只有主键与
+     * topic_id（idx_topic_deleted），user_id / project_id / sandbox_id 等维度的更新会
+     * 全表扫描并对全部扫描行加锁；项目/用户维度请先经 topics 表转换为 topic_id 后再更新。
+     * 空条件会静默更新全表，同样被守卫拦截。
+     *
+     * @throws InvalidArgumentException 条件为空或不含 id / topic_id 时
      */
     public function updateTaskByCondition(array $condition, array $data): bool
     {
+        if (empty($condition) || (! array_key_exists('id', $condition) && ! array_key_exists('topic_id', $condition))) {
+            throw new InvalidArgumentException(
+                'updateTaskByCondition 仅允许按 id 或 topic_id 维度更新，项目/用户维度请先经 topics 表转换为 topic_id。'
+            );
+        }
+
         $query = $this->model::query();
         foreach ($condition as $field => $value) {
             if (is_array($value)) {
@@ -355,27 +300,6 @@ class TaskRepository implements TaskRepositoryInterface
             }
         }
         return $query->update($data) > 0;
-    }
-
-    public function getTasksByTopicIdAndTaskIds(int $topicId, array $taskIds): array
-    {
-        if (empty($taskIds)) {
-            return [];
-        }
-
-        $models = $this->model::query()
-            ->where('topic_id', $topicId)
-            ->whereIn('id', $taskIds)
-            ->whereNull('deleted_at')
-            ->orderBy('id', 'asc')
-            ->get();
-
-        $result = [];
-        foreach ($models as $model) {
-            $result[] = new TaskEntity($model->toArray());
-        }
-
-        return $result;
     }
 
     public function batchCreateTasks(array $taskEntities): array
