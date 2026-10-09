@@ -103,7 +103,7 @@ export function ModelConnectivityTest({
               size="sm"
               type="button"
               variant="ghost"
-            >
+             data-testid="platform-model-list-confirm-button">
               {t("modelList.connectivity.action.viewDetails")}
             </Button>
           ) : null}
@@ -117,7 +117,7 @@ export function ModelConnectivityTest({
         size="sm"
         type="button"
         variant="outline"
-      >
+       data-testid="platform-model-list-confirm-button">
         {testMutation.isPending ? (
           <Loader2 className="size-4 animate-spin" aria-hidden="true" />
         ) : null}
@@ -133,10 +133,10 @@ export function ModelConnectivityTest({
         onOpenChange={setConfirmOpen}
         open={confirmOpen}
         title={t("modelList.connectivity.confirmTitle")}
-      />
+       contentTestId="platform-model-list-confirm-dialog-content" cancelButtonTestId="platform-model-list-confirm-dialog-cancel-button" confirmButtonTestId="platform-model-list-confirm-dialog-confirm-button"/>
 
       <AlertDialog open={detailOpen} onOpenChange={setDetailOpen}>
-        <AlertDialogContent className="max-w-2xl">
+        <AlertDialogContent className="max-w-2xl" data-testid="platform-model-list-alert-dialog-content">
           <AlertDialogHeader>
             <AlertDialogTitle>{t("modelList.connectivity.errorDetailTitle")}</AlertDialogTitle>
             <AlertDialogDescription>
@@ -147,7 +147,7 @@ export function ModelConnectivityTest({
             {errorDetail}
           </pre>
           <AlertDialogFooter>
-            <AlertDialogCancel>{t("modelList.action.closeDetail")}</AlertDialogCancel>
+            <AlertDialogCancel data-testid="platform-model-connectivity-cancel-button">{t("modelList.action.closeDetail")}</AlertDialogCancel>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>

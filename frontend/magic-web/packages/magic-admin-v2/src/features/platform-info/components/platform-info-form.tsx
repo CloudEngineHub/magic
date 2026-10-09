@@ -127,12 +127,12 @@ export function PlatformInfoForm({
 												)
 											}
 										>
-											<SelectTrigger className="w-full">
+											<SelectTrigger className="w-full" data-testid="platform-info-select-trigger">
 												<SelectValue />
 											</SelectTrigger>
-											<SelectContent>
+											<SelectContent data-testid="platform-info-select-content">
 												{platformLocales.map((locale) => (
-													<SelectItem key={locale} value={locale}>
+													<SelectItem key={locale} value={locale} data-testid="platform-info-option">
 														{localeLabels[locale]}
 													</SelectItem>
 												))}
@@ -157,7 +157,7 @@ export function PlatformInfoForm({
 														formSetValueOptions,
 													)
 												}
-											/>
+											 data-testid="platform-info-input"/>
 										</PlatformInfoFieldControl>,
 										t("platformInfo.fieldDesc.platformNameZh"),
 									],
@@ -178,7 +178,7 @@ export function PlatformInfoForm({
 														formSetValueOptions,
 													)
 												}
-											/>
+											 data-testid="platform-info-input"/>
 										</PlatformInfoFieldControl>,
 										t("platformInfo.fieldDesc.platformNameEn"),
 									],
@@ -202,7 +202,7 @@ export function PlatformInfoForm({
 												formSetValueOptions,
 											)
 										}
-									/>,
+									 data-testid="platform-info-textarea-input"/>,
 									t("platformInfo.fieldDesc.seoTitle"),
 								],
 								[
@@ -217,7 +217,7 @@ export function PlatformInfoForm({
 												formSetValueOptions,
 											)
 										}
-									/>,
+									 data-testid="platform-info-textarea-input"/>,
 									t("platformInfo.fieldDesc.seoKeywords"),
 								],
 								[
@@ -232,7 +232,7 @@ export function PlatformInfoForm({
 												formSetValueOptions,
 											)
 										}
-									/>,
+									 data-testid="platform-info-textarea-input"/>,
 									t("platformInfo.fieldDesc.seoDescription"),
 								],
 							]}
@@ -261,7 +261,7 @@ export function PlatformInfoForm({
 													formSetValueOptions,
 												)
 											}
-										/>
+										 data-testid="platform-info-input"/>
 									</PlatformInfoFieldControl>,
 									t("platformInfo.fieldDesc.agentRoleName"),
 								],
@@ -285,7 +285,7 @@ export function PlatformInfoForm({
 													formSetValueOptions,
 												)
 											}
-										/>
+										 data-testid="platform-info-textarea-input"/>
 									</PlatformInfoFieldControl>,
 									t("platformInfo.fieldDesc.agentRoleDescription"),
 								],
@@ -308,7 +308,7 @@ export function PlatformInfoForm({
 											formSetValueOptions,
 										)
 									}
-								/>
+								 data-testid="platform-info-textarea-input"/>
 								<div className="flex justify-end text-xs text-muted-foreground">
 									{t("platformInfo.characterCount", {
 										count: value.global_system_prompt.length,
@@ -334,7 +334,7 @@ export function PlatformInfoForm({
 												formSetValueOptions,
 											)
 										}
-									/>,
+									 data-testid="platform-info-textarea-input"/>,
 									t("platformInfo.fieldDesc.copyright"),
 								],
 								[
@@ -349,7 +349,7 @@ export function PlatformInfoForm({
 													formSetValueOptions,
 												)
 											}
-										/>
+										 data-testid="platform-info-switch"/>
 										<span className="text-sm text-muted-foreground">
 											{value.footer.filing.enabled
 												? t("common.enabled")
@@ -377,7 +377,7 @@ export function PlatformInfoForm({
 																formSetValueOptions,
 															)
 														}
-													/>
+													 data-testid="platform-info-input"/>
 												</PlatformInfoFieldControl>,
 												t("platformInfo.fieldDesc.filingNumber"),
 											],
@@ -398,7 +398,7 @@ export function PlatformInfoForm({
 																formSetValueOptions,
 															)
 														}
-													/>
+													 data-testid="platform-info-input"/>
 												</PlatformInfoFieldControl>,
 												t("platformInfo.fieldDesc.filingLink"),
 											],

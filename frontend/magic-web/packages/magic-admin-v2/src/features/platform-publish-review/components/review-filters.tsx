@@ -140,19 +140,21 @@ export function AdvancedFilterControls({
 						}))
 					}
 				>
-					<SelectTrigger className="w-full">
+					<SelectTrigger className="w-full" data-testid="platform-publish-review-select-trigger">
 						<SelectValue />
 					</SelectTrigger>
-					<SelectContent>
-						<SelectItem value="desc">{t("publishReview.order.desc")}</SelectItem>
-						<SelectItem value="asc">{t("publishReview.order.asc")}</SelectItem>
+					<SelectContent data-testid="platform-publish-review-select-content">
+						<SelectItem value="desc" data-testid="platform-publish-review-option">{t("publishReview.order.desc")}</SelectItem>
+						<SelectItem value="asc" data-testid="platform-publish-review-option">{t("publishReview.order.asc")}</SelectItem>
 					</SelectContent>
 				</Select>
 			</FilterControlField>
 			<FilterControlField className="w-full" label={t("publishReview.filter.createdAt")}>
 				<TimeFilterPanel
 					className="w-full"
+					testIdPrefix="platform-publish-review-time-filter"
 					onChange={(timeRange) =>
+
 					onDraftChange((previous) => ({
 						...previous,
 						end_time: timeRange?.endDate.slice(0, 10) ?? "",
@@ -192,7 +194,7 @@ export function SearchInput({
 				onValueChange={onChange}
 				placeholder={placeholder}
 				value={value}
-			/>
+			 inputTestId="platform-publish-review-search-input" clearButtonTestId="platform-publish-review-search-clear-button"/>
 		</FilterControlField>
 	)
 }
@@ -216,6 +218,7 @@ export function ReviewStatusSelect({
 	const statuses =
 		variant === "internal"
 			? [
+					publishReviewStatus.pending,
 					publishReviewStatus.underReview,
 					publishReviewStatus.approved,
 					publishReviewStatus.rejected,
@@ -225,15 +228,15 @@ export function ReviewStatusSelect({
 	return (
 		<FilterControlField className={className} label={label}>
 			<Select value={value} onValueChange={onChange}>
-				<SelectTrigger className={triggerClassName}>
+				<SelectTrigger className={triggerClassName} data-testid="platform-publish-review-select-trigger">
 					<SelectValue />
 				</SelectTrigger>
-				<SelectContent>
-					<SelectItem value={publishReviewSelectAllValue}>
+				<SelectContent data-testid="platform-publish-review-select-content">
+					<SelectItem value={publishReviewSelectAllValue} data-testid="platform-publish-review-option">
 						{t("publishReview.filter.all")}
 					</SelectItem>
 					{statuses.map((status) => (
-						<SelectItem key={status} value={status}>
+						<SelectItem key={status} value={status} data-testid="platform-publish-review-option">
 							{getReviewStatusLabel(status, t)}
 						</SelectItem>
 					))}
@@ -261,21 +264,25 @@ export function PublishStatusSelect({
 	const { t } = useTranslation()
 	const statuses =
 		variant === "internal"
-			? [publishReviewPublishStatus.unpublished, publishReviewPublishStatus.published]
+			? [
+					publishReviewPublishStatus.unpublished,
+					publishReviewPublishStatus.publishing,
+					publishReviewPublishStatus.published,
+				]
 			: Object.values(publishReviewPublishStatus)
 
 	return (
 		<FilterControlField className={className} label={label}>
 			<Select value={value} onValueChange={onChange}>
-				<SelectTrigger className={triggerClassName}>
+				<SelectTrigger className={triggerClassName} data-testid="platform-publish-review-select-trigger">
 					<SelectValue />
 				</SelectTrigger>
-				<SelectContent>
-					<SelectItem value={publishReviewSelectAllValue}>
+				<SelectContent data-testid="platform-publish-review-select-content">
+					<SelectItem value={publishReviewSelectAllValue} data-testid="platform-publish-review-option">
 						{t("publishReview.filter.all")}
 					</SelectItem>
 					{statuses.map((status) => (
-						<SelectItem key={status} value={status}>
+						<SelectItem key={status} value={status} data-testid="platform-publish-review-option">
 							{getPublishStatusLabel(status, t)}
 						</SelectItem>
 					))}
@@ -309,15 +316,15 @@ export function PublishTargetTypeSelect({
 	return (
 		<FilterControlField className={className} label={label}>
 			<Select value={value} onValueChange={onChange}>
-				<SelectTrigger className={triggerClassName}>
+				<SelectTrigger className={triggerClassName} data-testid="platform-publish-review-select-trigger">
 					<SelectValue />
 				</SelectTrigger>
-				<SelectContent>
-					<SelectItem value={publishReviewSelectAllValue}>
+				<SelectContent data-testid="platform-publish-review-select-content">
+					<SelectItem value={publishReviewSelectAllValue} data-testid="platform-publish-review-option">
 						{t("publishReview.filter.all")}
 					</SelectItem>
 					{targetTypes.map((type) => (
-						<SelectItem key={type} value={type}>
+						<SelectItem key={type} value={type} data-testid="platform-publish-review-option">
 							{getPublishTargetTypeLabel(type, t)}
 						</SelectItem>
 					))}

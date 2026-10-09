@@ -27,7 +27,7 @@ export function ProviderStatusSwitch({
         disabled={disabled}
         loading={loading}
         onCheckedChange={onChange}
-      />
+      data-testid="platform-provider-list-switch" />
     </div>
   );
 }

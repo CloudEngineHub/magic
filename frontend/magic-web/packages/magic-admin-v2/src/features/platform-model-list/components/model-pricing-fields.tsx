@@ -1,13 +1,12 @@
-import { Loader2, Plus, Trash2 } from "lucide-react"
-import { useEffect, useMemo, useRef, useState, type ChangeEvent } from "react"
+import { Loader2 } from "lucide-react"
+import { useEffect, useMemo, useRef, useState } from "react"
 import { Controller, useWatch, type Control, type UseFormReturn } from "react-hook-form"
 import { useTranslation } from "react-i18next"
 import { toast } from "sonner"
-
 import { DialogFormField } from "@magic-admin-v2/components/form/dialog-form-field"
 import { FieldError } from "@magic-admin-v2/components/form/field-error"
-import { Button } from "@magic-admin-v2/components/ui/button"
-import { Input } from "@magic-admin-v2/components/ui/input"
+import { GenericPricingEntry } from "@magic-admin-v2/features/platform-model-list/components/generic-pricing-entry"
+import { TokenPricingEntry } from "@magic-admin-v2/features/platform-model-list/components/token-pricing-entry"
 import {
 	Select,
 	SelectContent,
@@ -15,30 +14,23 @@ import {
 	SelectTrigger,
 	SelectValue,
 } from "@magic-admin-v2/components/ui/select"
-import { Switch } from "@magic-admin-v2/components/ui/switch"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@magic-admin-v2/components/ui/tabs"
 import { useProviderModelPricingTemplatesQuery } from "@magic-admin-v2/features/platform-model-list/queries"
 import {
 	type ProviderModelCategory,
 	type ProviderModelPricingEntry,
-	type ProviderModelPricingMode,
 	type ProviderModelPricingTemplate,
 } from "@magic-admin-v2/features/platform-model-list/types"
 import {
-	buildIndependentPricingSteps,
 	buildPricingBillingTiers,
 	createEmptyPricingEntry,
 	createPricingEntries,
 	createPricingEntriesFromBillingTiers,
 	createPricingEntriesFromLegacyPricing,
-	getFollowSourceBillingObject,
 	hasLegacyPricing,
 	isCostPricingObject,
 	isTextTokenPricingTemplate,
-	getPricingUnit,
 	normalizeDependentPricingEntries,
-	textTokenBillingObjects,
-	type PricingUnit,
 } from "@magic-admin-v2/features/platform-model-list/utils/pricing"
 import {
 	getDefaultBillingType,
@@ -49,7 +41,6 @@ import type {
 	ProviderBindingErrors,
 } from "@magic-admin-v2/features/platform-model-list/utils/model-editor-schema"
 import type { ProviderListItem } from "@magic-admin-v2/features/platform-provider-list/types"
-import { cn } from "@magic-admin-v2/utils/cn"
 
 export function ModelPricingFields({
 	category,
@@ -247,14 +238,21 @@ export function ModelPricingFields({
 								<SelectTrigger
 									className="w-full"
 									id={`provider-${index}-billing-currency`}
+									data-testid="platform-model-list-select-trigger"
 								>
 									<SelectValue />
 								</SelectTrigger>
-								<SelectContent>
-									<SelectItem value="CNY">
+								<SelectContent data-testid="platform-model-list-select-content">
+									<SelectItem
+										value="CNY"
+										data-testid="platform-model-list-option"
+									>
 										{t("modelList.editor.currency.cny")}
 									</SelectItem>
-									<SelectItem value="USD">
+									<SelectItem
+										value="USD"
+										data-testid="platform-model-list-option"
+									>
 										{t("modelList.editor.currency.usd")}
 									</SelectItem>
 								</SelectContent>
@@ -279,14 +277,22 @@ export function ModelPricingFields({
 						onValueChange={handleTemplateChange}
 						value={selectedTemplate?.billing_type ?? ""}
 					>
-						<SelectTrigger className="w-full" id={`provider-${index}-pricing-template`}>
+						<SelectTrigger
+							className="w-full"
+							id={`provider-${index}-pricing-template`}
+							data-testid="platform-model-list-select-trigger"
+						>
 							<SelectValue
 								placeholder={t("modelList.editor.placeholder.pricingTemplate")}
 							/>
 						</SelectTrigger>
-						<SelectContent>
+						<SelectContent data-testid="platform-model-list-select-content">
 							{templates.map((template) => (
-								<SelectItem key={template.code} value={template.billing_type}>
+								<SelectItem
+									key={template.code}
+									value={template.billing_type}
+									data-testid="platform-model-list-option"
+								>
 									{template.label}
 								</SelectItem>
 							))}
@@ -353,8 +359,7 @@ export function ModelPricingFields({
 						message={getErrorMessage(
 							(
 								form.formState.errors.providers?.[index] as
-									| ProviderBindingErrors
-									| undefined
+									ProviderBindingErrors | undefined
 							)?.pricing_entries?.message,
 						)}
 					/>
@@ -451,10 +456,18 @@ function PricingDimensionTabs({
 			value={activeDimension}
 		>
 			<TabsList className="h-9 w-fit gap-5">
-				<TabsTrigger className="h-9 text-sm" value="price">
+				<TabsTrigger
+					className="h-9 text-sm"
+					value="price"
+					data-testid="platform-model-list-tab-trigger"
+				>
 					{t("modelList.editor.pricing.priceTitle")}
 				</TabsTrigger>
-				<TabsTrigger className="h-9 text-sm" value="cost">
+				<TabsTrigger
+					className="h-9 text-sm"
+					value="cost"
+					data-testid="platform-model-list-tab-trigger"
+				>
 					{t("modelList.editor.pricing.costTitle")}
 				</TabsTrigger>
 			</TabsList>
@@ -481,381 +494,6 @@ function PricingDimensionTabs({
 				/>
 			</TabsContent>
 		</Tabs>
-	)
-}
-
-function TokenPricingEntry({
-	currency,
-	disabled,
-	entries,
-	entry,
-	fieldId,
-	item,
-	onChange,
-	template,
-}: {
-	currency: "CNY" | "USD"
-	disabled: boolean
-	entries: Record<string, ProviderModelPricingEntry>
-	entry: ProviderModelPricingEntry
-	fieldId: string
-	item: ProviderModelPricingTemplate["items"][number]
-	onChange: (patch: Partial<ProviderModelPricingEntry>) => void
-	template: ProviderModelPricingTemplate
-}) {
-	const { t } = useTranslation()
-	const currentBase = textTokenBillingObjects.find(
-		(base) =>
-			getFollowSourceBillingObject(template, item.billing_object, base) ===
-			item.billing_object,
-	)
-	const isFollowMode = entry.mode !== "fixed" && entry.mode !== "ladder"
-	const directSource = isFollowMode
-		? getFollowSourceBillingObject(template, item.billing_object, entry.mode)
-		: undefined
-	const sourceEntry = directSource ? entries[directSource] : undefined
-	const sourceLabel = directSource
-		? template.items.find((templateItem) => templateItem.billing_object === directSource)?.label
-		: undefined
-
-	function handleModeChange(nextMode: ProviderModelPricingMode) {
-		if (nextMode === "fixed") {
-			onChange({ mode: nextMode })
-			return
-		}
-
-		if (nextMode === "ladder") {
-			onChange({
-				mode: nextMode,
-				steps: buildIndependentPricingSteps(entry.steps, sourceEntry?.steps),
-			})
-			return
-		}
-
-		const nextSource = getFollowSourceBillingObject(template, item.billing_object, nextMode)
-		const nextSourceSteps = nextSource ? (entries[nextSource]?.steps ?? []) : []
-		onChange({
-			mode: nextMode,
-			steps: nextSourceSteps.map((_, stepIndex) => ({
-				max: "",
-				price: entry.steps[stepIndex]?.price ?? "",
-			})),
-		})
-	}
-
-	function updateStep(
-		stepIndex: number,
-		patch: Partial<ProviderModelPricingEntry["steps"][number]>,
-	) {
-		onChange({
-			steps: entry.steps.map((step, currentIndex) =>
-				currentIndex === stepIndex ? { ...step, ...patch } : step,
-			),
-		})
-	}
-
-	return (
-		<div className="grid gap-3 rounded-md bg-muted/40 p-4">
-			<div className="flex items-center justify-between gap-3">
-				<div className="flex min-w-0 items-center gap-2">
-					<span className="shrink-0 text-sm font-medium">{item.label}</span>
-					<span className="shrink-0 text-xs text-muted-foreground">
-						{t("modelList.editor.field.pricingMode")}
-					</span>
-					<Select
-						disabled={disabled || !entry.enabled}
-						onValueChange={(value) =>
-							handleModeChange(value as ProviderModelPricingMode)
-						}
-						value={entry.mode}
-					>
-						<SelectTrigger
-							aria-label={t("modelList.editor.field.pricingMode")}
-							className="h-7 w-44 min-w-0 border-border bg-background px-2 text-xs shadow-none hover:bg-muted/50 focus:ring-1"
-						>
-							<SelectValue />
-						</SelectTrigger>
-						<SelectContent className="!w-max max-w-[calc(100vw-3rem)]">
-							<SelectItem className="whitespace-nowrap text-xs" value="fixed">
-								{t("modelList.editor.pricingMode.fixed")}
-							</SelectItem>
-							<SelectItem className="whitespace-nowrap text-xs" value="ladder">
-								{t("modelList.editor.pricingMode.ladder")}
-							</SelectItem>
-							{textTokenBillingObjects
-								.filter((base) => base !== currentBase)
-								.map((sourceBase) => {
-									const sourceBillingObject = getFollowSourceBillingObject(
-										template,
-										item.billing_object,
-										sourceBase,
-									)!
-									const followSource = entries[sourceBillingObject]
-									const label =
-										template.items.find(
-											(templateItem) =>
-												templateItem.billing_object === sourceBillingObject,
-										)?.label ?? sourceBase
-									return (
-										<SelectItem
-											className="whitespace-nowrap text-xs"
-											disabled={
-												!followSource?.enabled ||
-												followSource.mode !== "ladder"
-											}
-											key={sourceBase}
-											value={sourceBase}
-										>
-											{t("modelList.editor.pricingMode.follow", { label })}
-										</SelectItem>
-									)
-								})}
-						</SelectContent>
-					</Select>
-				</div>
-				<div className="flex items-center gap-2">
-					<span className="text-xs text-muted-foreground">
-						{entry.enabled
-							? t("modelList.editor.pricing.enabled")
-							: t("modelList.editor.pricing.disabled")}
-					</span>
-					<Switch
-						checked={entry.enabled}
-						disabled={disabled}
-						onCheckedChange={(enabled) => onChange({ enabled })}
-					/>
-				</div>
-			</div>
-
-			{isFollowMode ? (
-				<p className="rounded-md border border-blue-200 bg-blue-50 px-3 py-2 text-xs text-blue-800">
-					{t("modelList.editor.pricingFollowHint", { label: sourceLabel ?? "" })}
-				</p>
-			) : null}
-
-			{entry.mode === "fixed" ? (
-				<DialogFormField
-					fieldId={`${fieldId}-value`}
-					label={t("modelList.editor.field.priceValue")}
-				>
-					<PricingAmountInput
-						currency={currency}
-						unit="millionTokens"
-						disabled={disabled || !entry.enabled}
-						fieldId={fieldId}
-						inputId={`${fieldId}-value`}
-						onChange={(event) => onChange({ value: event.target.value })}
-						placeholder={t("modelList.editor.placeholder.price")}
-						value={entry.value}
-					/>
-				</DialogFormField>
-			) : (
-				<div className="grid gap-2">
-					{entry.steps.map((step, stepIndex) => {
-						const isLast = stepIndex === entry.steps.length - 1
-						const startValue =
-							stepIndex === 0
-								? "0"
-								: (isFollowMode
-										? sourceEntry?.steps[stepIndex - 1]?.max
-										: entry.steps[stepIndex - 1]?.max) || "0"
-						const endValue = isFollowMode
-							? (sourceEntry?.steps[stepIndex]?.max ?? "")
-							: step.max
-						return (
-							<div
-								className="grid gap-2 sm:grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)_minmax(0,1.4fr)_auto] sm:items-end"
-								key={`${item.billing_object}-${stepIndex}`}
-							>
-								{stepIndex === 0 ? (
-									<DialogFormField
-										fieldId={`${fieldId}-range-start`}
-										label={t("modelList.editor.field.rangeStart")}
-									>
-										<TokenBoundaryInput
-											disabled
-											id={`${fieldId}-range-start`}
-											value={startValue}
-										/>
-									</DialogFormField>
-								) : (
-									<TokenBoundaryInput disabled value={startValue} />
-								)}
-								<span className="hidden pb-2 text-xs text-muted-foreground sm:inline">
-									≤ Tokens &lt;
-								</span>
-								{stepIndex === 0 ? (
-									<DialogFormField
-										fieldId={`${fieldId}-range-end`}
-										label={t("modelList.editor.field.rangeEnd")}
-									>
-										<TokenBoundaryInput
-											id={`${fieldId}-range-end`}
-											disabled={
-												disabled || !entry.enabled || isFollowMode || isLast
-											}
-											onChange={(event) =>
-												updateStep(stepIndex, { max: event.target.value })
-											}
-											placeholder={
-												isLast
-													? t("modelList.editor.noLimit")
-													: t(
-															"modelList.editor.placeholder.tokenRangeEnd",
-														)
-											}
-											value={isLast ? "" : endValue}
-										/>
-									</DialogFormField>
-								) : (
-									<TokenBoundaryInput
-										disabled={
-											disabled || !entry.enabled || isFollowMode || isLast
-										}
-										onChange={(event) =>
-											updateStep(stepIndex, { max: event.target.value })
-										}
-										placeholder={
-											isLast
-												? t("modelList.editor.noLimit")
-												: t("modelList.editor.placeholder.tokenRangeEnd")
-										}
-										value={isLast ? "" : endValue}
-									/>
-								)}
-								{stepIndex === 0 ? (
-									<DialogFormField
-										fieldId={`${fieldId}-step-price`}
-										label={t("modelList.editor.field.priceValue")}
-									>
-										<PricingAmountInput
-											currency={currency}
-											unit="millionTokens"
-											disabled={disabled || !entry.enabled}
-											fieldId={fieldId}
-											inputId={`${fieldId}-step-price`}
-											onChange={(event) =>
-												updateStep(stepIndex, { price: event.target.value })
-											}
-											placeholder={t("modelList.editor.placeholder.price")}
-											value={step.price}
-										/>
-									</DialogFormField>
-								) : (
-									<PricingAmountInput
-										currency={currency}
-										unit="millionTokens"
-										disabled={disabled || !entry.enabled}
-										fieldId={fieldId}
-										onChange={(event) =>
-											updateStep(stepIndex, { price: event.target.value })
-										}
-										placeholder={t("modelList.editor.placeholder.price")}
-										value={step.price}
-									/>
-								)}
-								{entry.mode === "ladder" ? (
-									<div className="flex h-9 items-center gap-1">
-										<Button
-											aria-label={t("modelList.editor.action.addPricingTier")}
-											disabled={disabled || !entry.enabled}
-											onClick={() =>
-												onChange({
-													steps: [
-														...entry.steps.slice(0, stepIndex + 1),
-														{ max: "", price: "" },
-														...entry.steps.slice(stepIndex + 1),
-													],
-												})
-											}
-											size="icon"
-											type="button"
-											variant="outline"
-										>
-											<Plus className="size-4" aria-hidden="true" />
-										</Button>
-										<Button
-											aria-label={t(
-												"modelList.editor.action.removePricingTier",
-											)}
-											disabled={
-												disabled ||
-												!entry.enabled ||
-												entry.steps.length <= 1
-											}
-											onClick={() =>
-												onChange({
-													steps: entry.steps
-														.filter(
-															(_, currentIndex) =>
-																currentIndex !== stepIndex,
-														)
-														.map(
-															(
-																currentStep,
-																currentIndex,
-																nextSteps,
-															) =>
-																currentIndex ===
-																nextSteps.length - 1
-																	? { ...currentStep, max: "" }
-																	: currentStep,
-														),
-												})
-											}
-											size="icon"
-											type="button"
-											variant="ghost"
-										>
-											<Trash2 className="size-4" aria-hidden="true" />
-										</Button>
-									</div>
-								) : null}
-							</div>
-						)
-					})}
-				</div>
-			)}
-		</div>
-	)
-}
-
-function TokenBoundaryInput({
-	disabled,
-	id,
-	onChange,
-	placeholder,
-	value,
-}: {
-	disabled: boolean
-	id?: string
-	onChange?: (event: ChangeEvent<HTMLInputElement>) => void
-	placeholder?: string
-	value: string
-}) {
-	return (
-		<div
-			className={cn(
-				"flex h-9 overflow-hidden rounded-md border border-input bg-card shadow-sm",
-				disabled && "cursor-not-allowed opacity-50",
-			)}
-		>
-			<Input
-				className="h-full min-w-0 flex-1 rounded-none border-0 bg-transparent px-3 shadow-none focus-visible:ring-0 disabled:opacity-100"
-				disabled={disabled}
-				id={id}
-				inputMode="numeric"
-				min="0"
-				onChange={onChange}
-				onWheel={(event) => event.currentTarget.blur()}
-				placeholder={placeholder}
-				type="number"
-				value={value}
-			/>
-			<span className="flex shrink-0 items-center border-l bg-muted/40 px-2 text-xs text-muted-foreground">
-				K
-			</span>
-		</div>
 	)
 }
 
@@ -898,10 +536,18 @@ function GenericPricingSections({
 			value={activeDimension}
 		>
 			<TabsList className="h-9 w-fit gap-5">
-				<TabsTrigger className="h-9 text-sm" value="price">
+				<TabsTrigger
+					className="h-9 text-sm"
+					value="price"
+					data-testid="platform-model-list-tab-trigger"
+				>
 					{t("modelList.editor.pricing.priceTitle")}
 				</TabsTrigger>
-				<TabsTrigger className="h-9 text-sm" value="cost">
+				<TabsTrigger
+					className="h-9 text-sm"
+					value="cost"
+					data-testid="platform-model-list-tab-trigger"
+				>
 					{t("modelList.editor.pricing.costTitle")}
 				</TabsTrigger>
 			</TabsList>
@@ -945,109 +591,5 @@ function GenericPricingSections({
 				</TabsContent>
 			))}
 		</Tabs>
-	)
-}
-
-function GenericPricingEntry({
-	billingObject,
-	billingType,
-	category,
-	currency,
-	disabled,
-	entry,
-	fieldId,
-	item,
-	onChange,
-}: {
-	billingObject: string
-	billingType: string
-	category: ProviderModelCategory
-	currency: "CNY" | "USD"
-	disabled: boolean
-	entry: ProviderModelPricingEntry
-	fieldId: string
-	item: ProviderModelPricingTemplate["items"][number]
-	onChange: (patch: Partial<ProviderModelPricingEntry>) => void
-}) {
-	const { t } = useTranslation()
-
-	return (
-		<div className="grid gap-3 rounded-md bg-muted/40 p-4">
-			<div className="flex items-center justify-between gap-4">
-				<span className="min-w-0 text-sm font-medium">{item.label}</span>
-				<div className="flex shrink-0 items-center gap-2">
-					<span className="text-xs text-muted-foreground">
-						{entry.enabled
-							? t("modelList.editor.pricing.enabled")
-							: t("modelList.editor.pricing.disabled")}
-					</span>
-					<Switch
-						checked={entry.enabled}
-						disabled={disabled}
-						onCheckedChange={(enabled) => onChange({ enabled })}
-					/>
-				</div>
-			</div>
-			<PricingAmountInput
-				currency={currency}
-				unit={getPricingUnit(billingType, category, billingObject)}
-				disabled={disabled || !entry.enabled}
-				fieldId={fieldId}
-				onChange={(event) => onChange({ value: event.target.value })}
-				placeholder={t("modelList.editor.placeholder.price")}
-				value={entry.value}
-			/>
-		</div>
-	)
-}
-
-function PricingAmountInput({
-	currency,
-	disabled,
-	fieldId,
-	inputId,
-	onChange,
-	placeholder,
-	value,
-	unit,
-}: {
-	currency: "CNY" | "USD"
-	disabled: boolean
-	fieldId?: string
-	inputId?: string
-	onChange: (event: ChangeEvent<HTMLInputElement>) => void
-	placeholder: string
-	value: string
-	unit: PricingUnit
-}) {
-	const { t } = useTranslation()
-
-	return (
-		<div
-			className={cn(
-				"flex h-9 overflow-hidden rounded-md border border-input bg-card shadow-sm transition-colors focus-within:ring-2 focus-within:ring-ring",
-				disabled && "cursor-not-allowed opacity-50",
-			)}
-			data-model-editor-field={fieldId}
-		>
-			<span className="flex shrink-0 items-center border-r bg-muted/40 px-3 text-sm text-muted-foreground">
-				{currency === "CNY" ? "¥" : "$"}
-			</span>
-			<Input
-				className="h-full min-w-0 flex-1 rounded-none border-0 bg-transparent px-3 shadow-none focus-visible:ring-0 disabled:opacity-100"
-				disabled={disabled}
-				id={inputId ?? fieldId}
-				inputMode="decimal"
-				min="0"
-				onChange={onChange}
-				placeholder={placeholder}
-				step="any"
-				type="number"
-				value={value}
-			/>
-			<span className="flex shrink-0 items-center border-l bg-muted/40 px-3 text-xs text-muted-foreground">
-				{t(`modelList.editor.pricingUnit.${unit}`)}
-			</span>
-		</div>
 	)
 }

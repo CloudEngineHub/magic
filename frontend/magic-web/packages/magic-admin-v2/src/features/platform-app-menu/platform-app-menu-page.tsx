@@ -6,7 +6,7 @@ import type { ApiError } from "@magic-admin-v2/api/types"
 import { DeleteConfirmDialog } from "@magic-admin-v2/components/delete-confirm-dialog"
 import { ListPagination } from "@magic-admin-v2/components/list-pagination"
 import { ListShell } from "@magic-admin-v2/components/list-shell"
-import { Button } from "@magic-admin-v2/components/ui/button"
+import { PageHeaderActionButton } from "@magic-admin-v2/components/page-header-action-button"
 import { PlatformAppMenuFilters } from "@magic-admin-v2/features/platform-app-menu/components/platform-app-menu-filters"
 import { PlatformAppMenuFormDialog } from "@magic-admin-v2/features/platform-app-menu/components/platform-app-menu-form-dialog"
 import { PlatformAppMenuTable } from "@magic-admin-v2/features/platform-app-menu/components/platform-app-menu-table"
@@ -156,7 +156,8 @@ export default function PlatformAppMenuPage() {
 			<ListShell
 				actions={
 					<>
-						<Button
+						<PageHeaderActionButton
+							data-testid="app-menu-refresh-button"
 							disabled={listQuery.isFetching}
 							onClick={() => listQuery.refetch()}
 							variant="outline"
@@ -166,22 +167,29 @@ export default function PlatformAppMenuPage() {
 								aria-hidden="true"
 							/>
 							{t("common.refresh")}
-						</Button>
-						<Button disabled={!hasEditRight} onClick={openCreateForm}>
+						</PageHeaderActionButton>
+						<PageHeaderActionButton
+							data-testid="app-menu-create-button"
+							disabled={!hasEditRight}
+							onClick={openCreateForm}
+						>
 							<Plus className="size-4" aria-hidden="true" />
 							{t("appMenu.action.create")}
-						</Button>
+						</PageHeaderActionButton>
 					</>
 				}
 				description={t("nav.desc.appMenu")}
+				testId="app-menu-page"
 				title={t("nav.item.appMenu")}
-			>
-				<div className="space-y-4">
+				contentHeader={
 					<PlatformAppMenuFilters
 						onChange={setFilterDraft}
 						onSearchValueChange={(value) => setDebouncedField("name", value)}
 						value={filterDraft}
 					/>
+				}
+			>
+				<div className="space-y-4">
 					<PlatformAppMenuTable
 						error={queryError}
 						hasEditRight={hasEditRight}
@@ -195,13 +203,19 @@ export default function PlatformAppMenuPage() {
 
 					{!queryError && !listQuery.isLoading ? (
 						<ListPagination
+							pageSizeOptionTestId="app-menu-page-size-option"
 							showQuickJumper
 							className="px-1"
 							loading={listQuery.isFetching}
+							jumpInputTestId="app-menu-jump-input"
+							nextButtonTestId="app-menu-next-button"
 							onPageChange={setPage}
 							page={page}
 							pageSize={pageSize}
 							onPageSizeChange={setPageSize}
+							pageSizeTriggerTestId="app-menu-page-size-trigger"
+							previousButtonTestId="app-menu-previous-button"
+							testId="app-menu-pagination"
 							total={total}
 						/>
 					) : null}
@@ -219,7 +233,10 @@ export default function PlatformAppMenuPage() {
 			/>
 
 			<DeleteConfirmDialog
+				cancelButtonTestId="app-menu-delete-cancel-button"
 				confirmLabel={t("appMenu.action.confirmDelete")}
+				confirmButtonTestId="app-menu-delete-confirm-button"
+				contentTestId="app-menu-delete-dialog"
 				description={formatTemplate(t("appMenu.confirm.deleteDescription"), {
 					name: deleteTarget ? getMenuName(deleteTarget, language) : "",
 				})}

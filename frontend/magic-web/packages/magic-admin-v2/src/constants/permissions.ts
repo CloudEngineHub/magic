@@ -172,6 +172,8 @@ export const PERMISSION_KEY_MAP = {
 	DATA_DASHBOARD_AGENT_QUERY: "admin.data_dashboard.agent.query",
 	/** 消耗分析-查询。 */
 	DATA_DASHBOARD_CONSUMPTION_QUERY: "admin.data_dashboard.consumption.query",
+	/** 话题分析-查询。 */
+	DATA_DASHBOARD_TOPIC_QUERY: "admin.data_dashboard.topic.query",
 	/** 文件产出分析-查询。 */
 	DATA_DASHBOARD_FILE_QUERY: "admin.data_dashboard.file.query",
 
@@ -194,6 +196,10 @@ export const PERMISSION_KEY_MAP = {
 	SAFE_MODEL_AUDIT_LOG_QUERY: "platform.ai.model_audit_log.query",
 	/** 平台模型审计日志-编辑。 */
 	SAFE_MODEL_AUDIT_LOG_EDIT: "platform.ai.model_audit_log.edit",
+	/** 平台模型审计统计-查询。 */
+	SAFE_MODEL_STATISTICS_QUERY: "platform.ai.model_audit_statistics.query",
+	/** 平台模型审计统计-编辑。 */
+	SAFE_MODEL_STATISTICS_EDIT: "platform.ai.model_audit_statistics.edit",
 
 	/* ---------- 平台管理：代理服务器与 AI 审查 ---------- */
 

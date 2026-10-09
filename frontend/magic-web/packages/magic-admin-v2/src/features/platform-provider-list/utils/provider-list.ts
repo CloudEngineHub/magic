@@ -7,12 +7,12 @@ import {
 
 export const providerPageSize = 20;
 
-export type ProviderSearchField = "name" | "alias" | "provider_code";
+export type ProviderSearchField = "name" | "alias" | "provider_id";
 
 export type ProviderFilterDraft = {
   alias: string;
   name: string;
-  provider_code: string;
+  provider_id: string;
   provider_type: string;
   search_field: ProviderSearchField;
   status: string;
@@ -22,7 +22,7 @@ export function createDefaultProviderFilterDraft(): ProviderFilterDraft {
   return {
     alias: "",
     name: "",
-    provider_code: "",
+    provider_id: "",
     provider_type: providerSelectAllValue,
     search_field: "name",
     status: providerSelectAllValue,
@@ -46,7 +46,13 @@ export function filterProviders(items: ProviderListItem[], filter: ProviderFilte
   const searchConditions = [
     [filter.name, (item: ProviderListItem) => item.name],
     [filter.alias, (item: ProviderListItem) => item.alias],
-    [filter.provider_code, (item: ProviderListItem) => item.provider_code],
+    [
+      filter.provider_id,
+      (item: ProviderListItem) => [
+        item.service_provider_id,
+        item.id,
+      ],
+    ],
   ].filter(([value]) => typeof value === "string" && Boolean(value.trim())) as Array<[
     string,
     (item: ProviderListItem) => unknown,
@@ -62,11 +68,16 @@ export function filterProviders(items: ProviderListItem[], filter: ProviderFilte
     ) {
       return false;
     }
-    return searchConditions.every(([value, getTarget]) =>
-      String(getTarget(item) ?? "")
-        .toLowerCase()
-        .includes(value.trim().toLowerCase()),
-    );
+    return searchConditions.every(([value, getTarget]) => {
+      // A provider can be referenced by its template ID or its per-organization config ID.
+      const targets = getTarget(item);
+      const values = Array.isArray(targets) ? targets : [targets];
+      return values.some((target) =>
+        String(target ?? "")
+          .toLowerCase()
+          .includes(value.trim().toLowerCase()),
+      );
+    });
   });
 }
 

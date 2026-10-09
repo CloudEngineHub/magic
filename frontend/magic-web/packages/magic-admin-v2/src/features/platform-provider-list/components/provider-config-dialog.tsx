@@ -157,7 +157,7 @@ export function ProviderConfigDialog({
   return (
     <>
       <Dialog open={Boolean(providerId)} onOpenChange={onOpenChange}>
-        <DialogContent className="flex max-h-[calc(100dvh-2rem)] flex-col gap-0 overflow-hidden p-0 sm:max-w-2xl">
+        <DialogContent className="flex max-h-[calc(100dvh-2rem)] flex-col gap-0 overflow-hidden p-0 sm:max-w-2xl" data-testid="platform-provider-list-dialog-content" closeButtonTestId="provider-config-dialog-close-button">
           <DialogHeader className="shrink-0 px-6 pb-4 pt-6">
             <DialogTitle>{provider?.name ?? t("providerList.detail.title")}</DialogTitle>
             <DialogDescription>{t("providerList.detail.description")}</DialogDescription>
@@ -199,7 +199,7 @@ export function ProviderConfigDialog({
                         onClick={requestDelete}
                         type="button"
                         variant="destructive"
-                      >
+                       data-testid="platform-provider-list-cancel-button">
                         <Trash2 className="size-4" aria-hidden="true" />
                         {t("common.delete")}
                       </Button>
@@ -209,11 +209,11 @@ export function ProviderConfigDialog({
                       onClick={() => onOpenChange(false)}
                       type="button"
                       variant="outline"
-                    >
+                     data-testid="platform-provider-list-cancel-button">
                       {t("common.cancel")}
                     </Button>
                     {canEdit ? (
-                      <Button disabled={!form.formState.isDirty || saving} type="submit">
+                      <Button disabled={!form.formState.isDirty || saving} type="submit" data-testid="platform-provider-list-save-button">
                         {saving ? (
                           <Loader2 className="size-4 animate-spin" aria-hidden="true" />
                         ) : (
@@ -232,13 +232,16 @@ export function ProviderConfigDialog({
                 icon={AlertCircle}
                 title={t("providerList.error.detailTitle")}
                 description={error?.message ?? t("common.requestFailed")}
-              />
+              testId="platform-provider-list-error" />
             </div>
           )}
         </DialogContent>
       </Dialog>
 
       <DeleteConfirmDialog
+			contentTestId="provider-delete-dialog-content"
+			cancelButtonTestId="provider-delete-cancel-button"
+			confirmButtonTestId="provider-delete-confirm-button"
         open={deleteOpen}
         title={t("providerList.delete.title")}
         description={t("providerList.delete.description")}

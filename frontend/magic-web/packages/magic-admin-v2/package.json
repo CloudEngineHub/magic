@@ -27,6 +27,7 @@
 		"test:all": "pnpm test:unit && pnpm test:components && pnpm test:integration",
 		"test:components": "vitest run --config ./vitest.components.config.ts",
 		"test:integration": "if [ -d tests/integration ]; then node --import tsx --test $(find \"$PWD/tests/integration\" -type f -name \"*.test.ts\" -print); else echo \"No public integration tests\"; fi",
+		"test:permissions": "node --import tsx --test $(find \"$PWD/tests/unit\" -type f -iname \"*permission*.test.ts\" -print)",
 		"test:unit": "node --import tsx --test $(find \"$PWD/tests/unit\" -type f -name \"*.test.ts\" -print)",
 		"types": "pnpm run types:opensource",
 		"types:opensource": "tsc -p tsconfig.opensource.json"

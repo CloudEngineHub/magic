@@ -48,6 +48,7 @@ type AbsoluteTimeTabProps = {
 	onAbsoluteTimeChange: (boundary: "start" | "end", value: string) => void
 	/** 按月切换日历；负数表示上一个月，正数表示下一个月。 */
 	onMonthChange: (offset: number) => void
+	testIdPrefix?: string
 }
 
 export function AbsoluteTimeTab({
@@ -66,8 +67,10 @@ export function AbsoluteTimeTab({
 	onAbsolutePresetSelect,
 	onAbsoluteTimeChange,
 	onMonthChange,
+	testIdPrefix,
 }: AbsoluteTimeTabProps) {
 	const { t } = useTranslation()
+	const testId = (suffix: string) => (testIdPrefix ? `${testIdPrefix}-${suffix}` : undefined)
 
 	return (
 		<div className="space-y-4">
@@ -80,6 +83,7 @@ export function AbsoluteTimeTab({
 						<div className="grid gap-2 sm:grid-cols-2">
 							<AbsoluteTimeField
 								label={t("timeFilter.startDate")}
+									testId={testId("start-time-trigger")}
 								disabled={!absoluteStartDate}
 								onChange={(value) => onAbsoluteTimeChange("start", value)}
 								precision={timePrecision}
@@ -87,6 +91,7 @@ export function AbsoluteTimeTab({
 							/>
 							<AbsoluteTimeField
 								label={t("timeFilter.endDate")}
+									testId={testId("end-time-trigger")}
 								disabled={!absoluteEndDate}
 								onChange={(value) => onAbsoluteTimeChange("end", value)}
 								precision={timePrecision}
@@ -97,6 +102,7 @@ export function AbsoluteTimeTab({
 					<div className="flex items-center justify-between gap-2">
 						<Button
 							aria-label="Previous month"
+									data-testid={testId("previous-month-button")}
 							onClick={() => onMonthChange(-1)}
 							size="icon"
 							type="button"
@@ -112,6 +118,7 @@ export function AbsoluteTimeTab({
 						</div>
 						<Button
 							aria-label="Next month"
+									data-testid={testId("next-month-button")}
 							onClick={() => onMonthChange(1)}
 							size="icon"
 							type="button"
@@ -128,6 +135,7 @@ export function AbsoluteTimeTab({
 							month={visibleMonth}
 							onSelect={onAbsoluteDateSelect}
 							startDate={absoluteStartDate}
+									dateButtonTestId={testId("date-button")}
 						/>
 						{!isInline ? (
 							<CalendarMonthPanel
@@ -137,6 +145,7 @@ export function AbsoluteTimeTab({
 								month={addMonths(visibleMonth, 1)}
 								onSelect={onAbsoluteDateSelect}
 								startDate={absoluteStartDate}
+									dateButtonTestId={testId("date-button")}
 							/>
 						) : null}
 					</div>
@@ -157,6 +166,7 @@ export function AbsoluteTimeTab({
 						<TimeOptionButton
 							key={preset.key}
 							onClick={() => onAbsolutePresetSelect(...preset.value)}
+								testId={testId("preset-option")}
 						>
 							{getAbsolutePresetLabel(preset.key, t)}
 						</TimeOptionButton>
@@ -179,6 +189,7 @@ export function AbsoluteTimeTab({
 					</div>
 					<Button
 						className="w-fit shrink-0"
+								data-testid={testId("apply-button")}
 						disabled={!absoluteStartDate || !absoluteEndDate || absoluteRangeInvalid}
 						onClick={onAbsoluteApply}
 					>

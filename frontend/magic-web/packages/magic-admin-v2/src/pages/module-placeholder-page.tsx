@@ -17,12 +17,12 @@ export default function ModulePlaceholderPage({
   const { t } = useTranslation();
 
   return (
-    <div className="-m-4 px-4 py-6 lg:px-6">
+    <div className="-m-4 px-4 py-6 lg:px-6" data-testid="module-placeholder-page">
       <PageHeader
         title={t(titleKey)}
         description={t(descriptionKey)}
         actions={
-          <Button disabled>
+          <Button data-testid="module-placeholder-pending-button" disabled>
             <Boxes className="size-4" aria-hidden="true" />
             {t("common.modulePending")}
           </Button>
@@ -33,6 +33,7 @@ export default function ModulePlaceholderPage({
 
       <div className="mt-2 pb-6">
         <EmptyState
+          testId="module-placeholder-empty"
           icon={Boxes}
           title={t("modulePlaceholder.title")}
           description={t("modulePlaceholder.description")}

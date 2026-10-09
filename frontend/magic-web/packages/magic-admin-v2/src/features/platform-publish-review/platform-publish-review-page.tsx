@@ -2,8 +2,8 @@ import { RefreshCw } from "lucide-react"
 import { useCallback, useEffect, useState } from "react"
 import { useTranslation } from "react-i18next"
 import { ListShell } from "@magic-admin-v2/components/list-shell"
-import { Button } from "@magic-admin-v2/components/ui/button"
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@magic-admin-v2/components/ui/tabs"
+import { PageHeaderActionButton } from "@magic-admin-v2/components/page-header-action-button"
+import { Tabs, TabsList, TabsTrigger } from "@magic-admin-v2/components/ui/tabs"
 import { PERMISSION_KEY_MAP } from "@magic-admin-v2/constants/permissions"
 import { EmployeeReviewPanel } from "@magic-admin-v2/features/platform-publish-review/components/employee-review-panel"
 import { SkillReviewPanel } from "@magic-admin-v2/features/platform-publish-review/components/skill-review-panel"
@@ -58,8 +58,10 @@ export default function PlatformPublishReviewPage({
 
 	return (
 		<ListShell
+			testId="publish-review-page"
 			actions={
-				<Button
+				<PageHeaderActionButton
+					data-testid="publish-review-refresh-button"
 					disabled={activeTabFetching}
 					onClick={() => setRefreshToken((previous) => previous + 1)}
 					variant="outline"
@@ -69,53 +71,52 @@ export default function PlatformPublishReviewPage({
 						aria-hidden="true"
 					/>
 					{t("common.refresh")}
-				</Button>
+				</PageHeaderActionButton>
 			}
 			description={t(
 				variant === "internal"
 					? "internalPublishReview.description"
 					: "publishReview.description",
 			)}
-			showSeparator={false}
 			title={t(
 				variant === "internal" ? "internalPublishReview.title" : "publishReview.title",
 			)}
 		>
-			<Tabs
-				value={activeTab}
-				onValueChange={(value) => setActiveTab(value as PublishReviewKind)}
-			>
-				<TabsList>
-					{canViewEmployeeReview ? (
-						<TabsTrigger value="employee">
-							{t("publishReview.tab.employee")}
-						</TabsTrigger>
-					) : null}
-					{canViewSkillReview ? (
-						<TabsTrigger value="skill">{t("publishReview.tab.skill")}</TabsTrigger>
-					) : null}
-				</TabsList>
-				{canViewEmployeeReview ? (
-					<TabsContent value="employee" className="mt-5">
-						<EmployeeReviewPanel
-							isActive={activeTab === "employee"}
-							onFetchingChange={handleActiveFetchingChange}
-							refreshToken={refreshToken}
-							variant={variant}
-						/>
-					</TabsContent>
+			<div className="flex flex-col gap-4">
+				<Tabs
+					value={activeTab}
+					onValueChange={(value) => setActiveTab(value as PublishReviewKind)}
+				>
+					<TabsList>
+						{canViewEmployeeReview ? (
+							<TabsTrigger data-testid="publish-review-employee-tab" value="employee">
+								{t("publishReview.tab.employee")}
+							</TabsTrigger>
+						) : null}
+						{canViewSkillReview ? (
+							<TabsTrigger data-testid="publish-review-skill-tab" value="skill">
+								{t("publishReview.tab.skill")}
+							</TabsTrigger>
+						) : null}
+					</TabsList>
+				</Tabs>
+				{activeTab === "employee" && canViewEmployeeReview ? (
+					<EmployeeReviewPanel
+						isActive
+						onFetchingChange={handleActiveFetchingChange}
+						refreshToken={refreshToken}
+						variant={variant}
+					/>
 				) : null}
-				{canViewSkillReview ? (
-					<TabsContent value="skill" className="mt-5">
-						<SkillReviewPanel
-							isActive={activeTab === "skill"}
-							onFetchingChange={handleActiveFetchingChange}
-							refreshToken={refreshToken}
-							variant={variant}
-						/>
-					</TabsContent>
+				{activeTab === "skill" && canViewSkillReview ? (
+					<SkillReviewPanel
+						isActive
+						onFetchingChange={handleActiveFetchingChange}
+						refreshToken={refreshToken}
+						variant={variant}
+					/>
 				) : null}
-			</Tabs>
+			</div>
 		</ListShell>
 	)
 }

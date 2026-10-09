@@ -49,7 +49,7 @@ export function CapabilityConfigDialog({
 
 	return (
 		<Dialog open={open} onOpenChange={onOpenChange}>
-			<DialogContent className="flex max-h-[calc(100vh-2rem)] flex-col overflow-visible sm:max-w-2xl">
+			<DialogContent className="flex max-h-[calc(100vh-2rem)] flex-col overflow-visible sm:max-w-2xl" data-testid="platform-system-capabilities-dialog-content" closeButtonTestId="index-close-button">
 				<DialogHeader className="shrink-0">
 					<DialogTitle>
 						{displayName || t("systemCapabilities.action.config")}
@@ -71,13 +71,13 @@ export function CapabilityConfigDialog({
 							description={getApiErrorMessage(detailError, t("common.requestFailed"))}
 							icon={AlertCircle}
 							title={t("systemCapabilities.error.detailTitle")}
-						/>
+						 testId="platform-system-capabilities-error"/>
 					) : !config.detail ? (
 						<EmptyState
 							description={t("systemCapabilities.error.detailEmpty")}
 							icon={AlertCircle}
 							title={t("systemCapabilities.error.detailTitle")}
-						/>
+						 testId="platform-system-capabilities-empty"/>
 					) : (
 						<Form {...config.form}>
 							<form
@@ -117,7 +117,7 @@ export function CapabilityConfigDialog({
 											onClick={() => onOpenChange(false)}
 											type="button"
 											variant="outline"
-										>
+										 data-testid="platform-system-capabilities-cancel-button">
 											{t("common.cancel")}
 										</Button>
 										<Button
@@ -127,7 +127,7 @@ export function CapabilityConfigDialog({
 												config.detailQuery.isFetching
 											}
 											type="submit"
-										>
+										 data-testid="platform-system-capabilities-save-button">
 											{config.updatePending ? (
 												<Loader2
 													className="size-4 animate-spin"
@@ -172,7 +172,7 @@ function FormStatusField({ config }: { config: ReturnType<typeof useCapabilityCo
 									disabled={!config.canEdit}
 									id="capability-status"
 									onCheckedChange={field.onChange}
-								/>
+								 data-testid="platform-system-capabilities-capability-status-switch"/>
 							</FormControl>
 							<span className="text-sm text-muted-foreground">
 								{field.value ? t("common.enabled") : t("common.disabled")}

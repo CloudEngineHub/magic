@@ -31,7 +31,7 @@ export function ProviderCategoryTabs({
     >
       <TabsList>
         {categories.map((category) => (
-          <TabsTrigger key={category} value={category}>
+          <TabsTrigger key={category} value={category} data-testid="platform-provider-list-tab-trigger">
             {t(`providerList.tab.${category}`)}
           </TabsTrigger>
         ))}
@@ -51,10 +51,10 @@ export function ProviderCategorySelect({
 }) {
   return (
     <Select value={value} onValueChange={(nextValue) => onChange(nextValue as ProviderCategory)}>
-      <SelectTrigger className="w-full">
+      <SelectTrigger className="w-full" data-testid="platform-provider-list-select-trigger">
         <SelectValue />
       </SelectTrigger>
-      <SelectContent>
+      <SelectContent data-testid="platform-provider-list-select-content">
         {categories.map((category) => (
           <ProviderCategorySelectItem category={category} key={category} />
         ))}
@@ -65,7 +65,7 @@ export function ProviderCategorySelect({
 
 function ProviderCategorySelectItem({ category }: { category: ProviderCategory }) {
   return (
-    <SelectItem value={category}>
+    <SelectItem value={category} data-testid="platform-provider-list-option">
       <ProviderCategoryOptionContent category={category} />
     </SelectItem>
   );

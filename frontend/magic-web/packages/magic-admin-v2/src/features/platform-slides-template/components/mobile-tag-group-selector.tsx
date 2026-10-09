@@ -85,7 +85,7 @@ export function MobileTagGroupSelector({
 
 	return (
 		<>
-			<button
+			<button data-testid="platform-slides-template-mobile-tag-trigger"
 				className={`${mobileCardTokens.card} flex w-full min-w-0 items-center gap-3 px-4 py-3 text-left transition-colors hover:bg-muted/40 md:hidden`}
 				onClick={() => setOpen(true)}
 				type="button"
@@ -110,7 +110,7 @@ export function MobileTagGroupSelector({
 			</button>
 
 			<Sheet open={open} onOpenChange={setOpen}>
-				<SheetContent className="max-h-[82svh] gap-0 rounded-t-2xl p-0" side="bottom">
+				<SheetContent data-testid="platform-slides-template-mobile-tag-content" closeButtonTestId="platform-slides-template-mobile-tag-close-button" className="max-h-[82svh] gap-0 rounded-t-2xl p-0" side="bottom">
 					<SheetHeader className="shrink-0 border-b px-4 py-4 pr-12 text-left">
 						<div className="flex items-center justify-between gap-3">
 							<div className="min-w-0">
@@ -128,7 +128,7 @@ export function MobileTagGroupSelector({
 								}}
 								size="icon"
 								variant="outline"
-							>
+							 data-testid="platform-slides-template-create-button">
 								<Plus className="size-4" aria-hidden="true" />
 							</Button>
 						</div>
@@ -139,9 +139,9 @@ export function MobileTagGroupSelector({
 							onValueChange={setKeyword}
 							placeholder={t("slidesTemplate.mobile.searchTagGroup")}
 							value={keyword}
-						/>
+						 inputTestId="platform-slides-template-mobile-search-input" clearButtonTestId="platform-slides-template-mobile-search-clear-button"/>
 						<div className="mt-3 grid gap-1">
-							<button
+							<button data-testid="platform-slides-template-mobile-tag-option"
 								className={cn(
 									"flex min-h-14 items-center gap-3 rounded-lg px-3 text-left transition-colors hover:bg-muted",
 									selectedGroupId === null && "bg-primary/10",
@@ -172,7 +172,7 @@ export function MobileTagGroupSelector({
 										)}
 										key={group.id}
 									>
-										<button
+										<button data-testid="platform-slides-template-mobile-tag-apply-button"
 											className="min-w-0 flex-1 text-left"
 											onClick={() => selectGroup(String(group.id))}
 											type="button"
@@ -203,26 +203,26 @@ export function MobileTagGroupSelector({
 												: t("slidesTemplate.disabled")}
 										</Badge>
 										<DropdownMenu modal={false}>
-											<DropdownMenuTrigger asChild>
+											<DropdownMenuTrigger asChild data-testid="platform-slides-template-menu-trigger">
 												<Button
 													aria-label={t("slidesTemplate.actions")}
 													size="icon"
 													variant="ghost"
-												>
+												 data-testid="platform-slides-template-edit-button">
 													<MoreHorizontal
 														className="size-4"
 														aria-hidden="true"
 													/>
 												</Button>
 											</DropdownMenuTrigger>
-											<DropdownMenuContent align="end">
+											<DropdownMenuContent align="end" data-testid="platform-slides-template-action-button">
 												<DropdownMenuItem
 													disabled={!canEdit}
 													onSelect={() => {
 														setOpen(false)
 														onEdit(group)
 													}}
-												>
+												 data-testid="platform-slides-template-menu-item">
 													<Pencil
 														className="mr-2 size-4"
 														aria-hidden="true"
@@ -234,7 +234,7 @@ export function MobileTagGroupSelector({
 														!canEdit || statusPendingIds.has(group.id)
 													}
 													onSelect={() => onStatusChange(group, !enabled)}
-												>
+												 data-testid="platform-slides-template-menu-item">
 													{enabled ? (
 														<PowerOff
 															className="mr-2 size-4"
@@ -261,7 +261,7 @@ export function MobileTagGroupSelector({
 														setOpen(false)
 														onDelete(group)
 													}}
-												>
+												 data-testid="platform-slides-template-menu-item">
 													<Trash2
 														className="mr-2 size-4"
 														aria-hidden="true"

@@ -75,7 +75,7 @@ function SortablePreviewImage({
 				<span>#{index + 1}</span>
 				<GripVertical className="size-4" />
 			</div>
-			<button
+			<button data-testid="platform-slides-template-preview-image-button"
 				aria-label={t("slidesTemplate.aria.removePreviewImage", {
 					index: index + 1,
 				})}
@@ -207,7 +207,7 @@ export function TemplateEditorPreviewImages({
 						</p>
 					)}
 				</div>
-				<Button onClick={() => inputRef.current?.click()} size="sm" variant="outline">
+				<Button onClick={() => inputRef.current?.click()} size="sm" variant="outline" data-testid="platform-slides-template-upload-button">
 					<Plus className="mr-1 size-4" />
 					{t(
 						items.length > 0
@@ -216,7 +216,7 @@ export function TemplateEditorPreviewImages({
 					)}
 				</Button>
 			</div>
-			<input
+			<input data-testid="platform-slides-template-preview-input"
 				accept="image/*"
 				className="hidden"
 				multiple
@@ -253,7 +253,7 @@ export function TemplateEditorPreviewImages({
 								}}
 							/>
 						))}
-						<button
+						<button data-testid="platform-slides-template-preview-remove-button"
 							aria-label={t("slidesTemplate.aria.addPreviewImages")}
 							className="flex aspect-video items-center justify-center rounded-md border border-dashed bg-background/70 text-muted-foreground transition-colors hover:border-primary/50 hover:bg-background hover:text-primary"
 							onClick={() => inputRef.current?.click()}
