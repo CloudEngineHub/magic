@@ -840,7 +840,10 @@ class ProjectMemberRepository implements ProjectMemberRepositoryInterface
             ->whereIn('role', $roles)
             ->where('status', MemberStatus::ACTIVE->value)
             ->distinct()
+            // toBase 跳过模型化：pluck 遇到 cast 列会逐行 newFromBuilder 并触发 retrieved 事件，数千行时会长时间阻塞协程
+            ->toBase()
             ->pluck('project_id')
+            ->map(static fn ($projectId) => (int) $projectId)
             ->toArray();
     }
 

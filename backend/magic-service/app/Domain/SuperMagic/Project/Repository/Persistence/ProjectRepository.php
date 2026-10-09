@@ -297,11 +297,17 @@ class ProjectRepository extends AbstractRepository implements ProjectRepositoryI
 
     public function getOrganizationCodesByProjectIds(array $projectIds): array
     {
-        $organizationCodes = $this->projectModel::query()
-            ->whereIn('id', $projectIds)
-            ->select('user_organization_code')
-            ->pluck('user_organization_code')
-            ->toArray();
+        // projectIds 可能有数千个，一次 whereIn 会让 Grammar 编译长时间阻塞，分块查询并在 SQL 侧去重
+        $organizationCodes = [];
+        foreach (array_chunk(array_values(array_unique($projectIds)), 1000) as $chunk) {
+            $codes = $this->projectModel::query()
+                ->whereIn('id', $chunk)
+                ->distinct()
+                ->toBase()
+                ->pluck('user_organization_code')
+                ->toArray();
+            array_push($organizationCodes, ...$codes);
+        }
 
         return array_values(array_unique($organizationCodes));
     }
