@@ -37,7 +37,8 @@ function areTargetsEqual(
 		previous.fontFamily === next.fontFamily &&
 		previous.color === next.color &&
 		previous.canRename === next.canRename &&
-		previous.showRenameButton === next.showRenameButton
+		previous.showRenameButton === next.showRenameButton &&
+		previous.renameButtonGap === next.renameButtonGap
 	)
 }
 
@@ -63,15 +64,26 @@ export default function NameLabelRenameButton() {
 			const root = containerRef.current
 			const label = labelRef.current
 			if (!root || !label) return
-			root.hidden = !layout
+			// 显式控制显示，避免 hidden 属性被根节点或按钮的 flex 类覆盖。
+			root.style.display = layout ? "flex" : "none"
 			if (!layout) return
-			root.style.transform = `translate(${layout.x}px, ${layout.y - (24 - layout.height) / 2}px)`
+			const showButton = layout.showRenameButton
+			const buttonWidth = showButton ? layout.renameButtonGap + 24 : 0
+			// 按管理器分配的宽度布局，禁止 Flex 为按钮再次压缩文字。
+			root.style.width = `${layout.width + buttonWidth}px`
+			root.style.height = `${showButton ? 24 : layout.height}px`
+			root.style.transform = `translate(${layout.x}px, ${
+				layout.y - (showButton ? (24 - layout.height) / 2 : 0)
+			}px)`
 			label.style.width = `${layout.width}px`
 			label.style.fontSize = `${layout.fontSize}px`
+			label.style.lineHeight = `${layout.height}px`
 			label.style.fontFamily = layout.fontFamily
 			label.style.color = layout.color
 			if (renameButtonRef.current) {
-				renameButtonRef.current.hidden = !layout.showRenameButton
+				renameButtonRef.current.style.display = showButton ? "flex" : "none"
+				renameButtonRef.current.style.marginLeft =
+					showButton && layout.renameButtonGap > 0 ? `${layout.renameButtonGap}px` : ""
 			}
 		},
 		[containerRef],
@@ -102,6 +114,13 @@ export default function NameLabelRenameButton() {
 	const refresh = useCallback(() => {
 		refreshElement(getTargetElementId())
 	}, [getTargetElementId, refreshElement])
+	const setRenameButtonTarget = useCallback(
+		(elementId: string | null) => {
+			canvas?.nameLabelManager.setRenameButtonElementId(elementId)
+			refresh()
+		},
+		[canvas, refresh],
+	)
 
 	const syncCachedMotionLayout = useCallback(() => {
 		const elementId = targetRef.current?.elementId
@@ -222,7 +241,10 @@ export default function NameLabelRenameButton() {
 	useEffect(() => cancelMotionLayoutSync, [cancelMotionLayoutSync])
 	useLayoutEffect(() => {
 		canvas?.nameLabelManager.setDOMLabelElementId(target?.elementId ?? null)
-		return () => canvas?.nameLabelManager.setDOMLabelElementId(null)
+		return () => {
+			canvas?.nameLabelManager.setRenameButtonElementId(null)
+			canvas?.nameLabelManager.setDOMLabelElementId(null)
+		}
 	}, [canvas, target?.elementId])
 	const element = useCanvasElement(target?.elementId ?? null)
 	const content =
@@ -241,20 +263,25 @@ export default function NameLabelRenameButton() {
 	if (!target) return null
 	const tooltip = fileName || expectedName
 	return (
+		// 标题与铅笔沿用画布内容层；工具面板和菜单应遮住相交区域。
 		<div
 			ref={containerRef}
 			data-canvas-ui-component
-			className="absolute left-0 top-0 z-20 flex h-6 items-center"
-			onPointerEnter={() => {
+			className="absolute left-0 top-0 z-[1] flex items-center"
+			onPointerEnter={(event) => {
 				heldTarget.current = target.elementId
+				if (event.pointerType === "mouse") setRenameButtonTarget(target.elementId)
 			}}
 			onPointerLeave={(event) => {
-				if (event.buttons || event.currentTarget.contains(document.activeElement)) return
+				if (event.currentTarget.querySelector(":focus-visible")) return
+				setRenameButtonTarget(null)
+				if (event.buttons) return
 				heldTarget.current = null
 				refresh()
 			}}
-			onFocus={() => {
+			onFocus={(event) => {
 				heldTarget.current = target.elementId
+				if (event.target.matches(":focus-visible")) setRenameButtonTarget(target.elementId)
 			}}
 			onBlur={(event) => {
 				if (
@@ -262,8 +289,9 @@ export default function NameLabelRenameButton() {
 					event.currentTarget.contains(event.relatedTarget)
 				)
 					return
+				if (event.currentTarget.matches(":hover")) return
 				heldTarget.current = null
-				refresh()
+				setRenameButtonTarget(null)
 			}}
 			onPointerDown={(event) => event.stopPropagation()}
 			onContextMenu={(event) => event.stopPropagation()}
@@ -288,7 +316,7 @@ export default function NameLabelRenameButton() {
 					ref={labelRef}
 					data-canvas-name-label
 					tabIndex={0}
-					className="block min-w-0 cursor-text select-text truncate focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+					className="block min-w-0 shrink-0 cursor-text select-text truncate focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
 					onKeyDown={(event) => event.stopPropagation()}
 				>
 					{target.text}
@@ -299,24 +327,9 @@ export default function NameLabelRenameButton() {
 					<button
 						ref={renameButtonRef}
 						type="button"
-						hidden={!target.showRenameButton}
+						style={{ display: target.showRenameButton ? "flex" : "none" }}
 						aria-label={t("contextMenu.rename", "重命名")}
-						className="flex size-6 cursor-pointer items-center justify-center rounded text-muted-foreground hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-						onPointerEnter={() => {
-							heldTarget.current = target.elementId
-						}}
-						onPointerLeave={(event) => {
-							if (event.currentTarget === document.activeElement) return
-							heldTarget.current = null
-							refresh()
-						}}
-						onFocus={() => {
-							heldTarget.current = target.elementId
-						}}
-						onBlur={() => {
-							heldTarget.current = null
-							refresh()
-						}}
+						className="flex size-6 shrink-0 cursor-pointer items-center justify-center rounded text-muted-foreground hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
 						onPointerDown={(event) => event.stopPropagation()}
 						onClick={() => canvas?.elementRenameManager.startRename(target.elementId)}
 					>

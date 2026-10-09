@@ -89,6 +89,7 @@ export class NameLabelManager extends BaseLabelManager {
 	private readonly iconResolver?: NameLabelIconResolver
 	private readonly labelLayoutStates = new WeakMap<Konva.Group, NameLabelLayoutState>()
 	private domLabelElementId: string | null = null
+	private renameButtonElementId: string | null = null
 
 	constructor(options: { canvas: Canvas; iconResolver?: NameLabelIconResolver }) {
 		const { canvas } = options
@@ -179,6 +180,19 @@ export class NameLabelManager extends BaseLabelManager {
 			canRename: state.canRename,
 			showRenameButton: state.canRename && state.showOperation,
 			renameButtonGap: Math.max(0, labelScreenRight - layout.x - layout.width),
+		}
+	}
+
+	/** 只有标题悬浮或键盘聚焦才占用铅笔宽度；图片选中本身不挤压标题。 */
+	public setRenameButtonElementId(elementId: string | null): void {
+		if (this.renameButtonElementId === elementId) return
+		const previous = this.renameButtonElementId
+		this.renameButtonElementId = elementId
+		for (const id of [previous, elementId]) {
+			if (!id) continue
+			// 名称与尺寸共用操作区预算；释放按钮空间后，两者必须一起恢复布局。
+			this.refreshLabelLayout(id)
+			this.canvas.sizeLabelManager.refreshLabelLayout(id)
 		}
 	}
 
@@ -305,8 +319,8 @@ export class NameLabelManager extends BaseLabelManager {
 	}
 
 	protected override getLabelOperationScreenWidth(elementId: string): number {
-		return this.canvas.elementManager.getElementData(elementId)?.type ===
-			ElementTypeEnum.Image &&
+		return this.renameButtonElementId === elementId &&
+			this.canvas.elementManager.getElementData(elementId)?.type === ElementTypeEnum.Image &&
 			(this.canvas.elementRenameManager?.canRename(elementId) ?? false)
 			? 24
 			: 0
@@ -720,6 +734,7 @@ export class NameLabelManager extends BaseLabelManager {
 		this.clearPointerHover()
 		this.iconHoverElementId = null
 		this.domLabelElementId = null
+		this.renameButtonElementId = null
 		for (const unsubscribe of this.interactionUnsubscribers) {
 			unsubscribe()
 		}
