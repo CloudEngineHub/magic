@@ -16,7 +16,9 @@ from app.tools.core.tool_keepalive import start_tool_keep_alive, stop_tool_keep_
 from app.tools.slide_transition_storage import (
     TransitionStorageError, read_project_snapshot, save_project_snapshot,
 )
-from app.tools.slide_transitions import UpdateSlideTransitionsParams, update_project_content
+from app.tools.slide_transitions import (
+    SlideTransitionOperation, TransitionOperation, UpdateSlideTransitionsParams, update_project_content,
+)
 from app.tools.workspace_tool import WorkspaceTool
 from app.utils.async_file_utils import async_realpath
 
@@ -71,38 +73,62 @@ class UpdateSlideTransitions(WorkspaceTool[UpdateSlideTransitionsParams]):
             except ValueError as exc:
                 raise TransitionStorageError(str(exc)) from exc
             saved = await save_project_snapshot(client, path, snapshot, content)
-        targets = params.slide_paths or params.expected_slides
-        if params.transition is None:
-            summary = "Restored the deck default for " + ", ".join(targets)
-        else:
-            setting = params.transition
-            effect = setting.effect.value
-            duration = f", {setting.duration_ms} ms, {setting.easing}" if setting.duration_ms is not None else ""
-            direction = f", moving {setting.direction}" if setting.direction else ""
-            scope = "deck default" if params.operation == "set_default" else ", ".join(targets)
-            overrides = "; removed all page overrides" if params.clear_overrides else ""
-            summary = f"Applied {effect}{duration}{direction} to {scope}{overrides}"
+        targets = (params.expected_slides if params.operations[0].operation == TransitionOperation.SET_DEFAULT
+                   else [path for operation in params.operations for path in operation.slide_paths])
+        summaries = [_operation_summary(operation) for operation in params.operations]
+        unchanged = content == snapshot.content
+        status = "No changes were needed; the requested settings already match the synchronized project." if unchanged else "Saved all transition updates together and confirmed them in the mounted project."
         return ToolResult(
-            content=f"{summary}. Saved and confirmed in the mounted project. Playback was not previewed.",
+            content=f"{status}\n" + "\n".join(summaries) + "\nPlayback was not previewed.",
             data={"project_path": params.project_path, "file_id": saved.file_id,
-                  "revision": saved.revision, "slide_paths": targets},
+                  "revision": saved.revision, "slide_paths": targets,
+                  "operations": [operation.model_dump(mode="json", exclude_none=True) for operation in params.operations]},
+            extra_info={"outcome": "unchanged" if unchanged else "success"},
         )
 
     async def get_tool_detail(self, tool_context, result, arguments=None) -> ToolDetail:
-        key = "success" if result.ok else (result.extra_info or {}).get("outcome", "error")
+        key = (result.extra_info or {}).get("outcome", "success" if result.ok else "error")
+        content = i18n.translate(f"update_slide_transitions.{key}", category="tool.messages")
+        if result.ok:
+            summaries = [_operation_summary(SlideTransitionOperation.model_validate(operation), localized=True)
+                         for operation in (result.data or {}).get("operations", [])]
+            content += "\n\n" + "\n\n".join(summaries)
         return ToolDetail(type=DisplayType.MD, data=FileContent(
             file_name="slide-transitions.md",
-            content=i18n.translate(f"update_slide_transitions.{key}", category="tool.messages"),
+            content=content,
         ))
 
     async def get_before_tool_call_friendly_action_and_remark(self, tool_name, tool_context, arguments=None):
         return self._friendly(tool_name, "before")
 
     async def get_after_tool_call_friendly_action_and_remark(self, tool_name, tool_context, result, execution_time, arguments=None):
-        return self._friendly(tool_name, "success" if result.ok else (result.extra_info or {}).get("outcome", "error"))
+        return self._friendly(tool_name, (result.extra_info or {}).get("outcome", "success" if result.ok else "error"))
 
     @staticmethod
     def _friendly(tool_name, state):
         return {"tool_name": tool_name,
                 "action": i18n.translate("update_slide_transitions", category="tool.actions"),
                 "remark": i18n.translate(f"update_slide_transitions.{state}", category="tool.messages")}
+
+
+def _operation_summary(operation: SlideTransitionOperation, *, localized: bool = False) -> str:
+    def phrase(key, fallback, **values):
+        return (i18n.translate(f"update_slide_transitions.{key}", category="tool.messages", **values)
+                if localized else fallback.format(**values))
+
+    scope = (phrase("default_scope", "Deck default") if operation.operation == TransitionOperation.SET_DEFAULT
+             else ", ".join(operation.slide_paths))
+    if operation.transition is None:
+        return phrase("restored_scope", "{scope}: inherit the deck default", scope=scope)
+    setting = operation.transition
+    effect = phrase(f"effect_{setting.effect.value}", setting.effect.value)
+    details = effect
+    if setting.duration_ms is not None:
+        easing = phrase(f"easing_{setting.easing}", setting.easing)
+        details += f", {setting.duration_ms} ms, {easing}"
+    if setting.direction:
+        details += ", " + phrase(f"direction_{setting.direction}", setting.direction)
+    summary = f"{scope}: {details}"
+    if operation.clear_overrides:
+        summary += "; " + phrase("cleared_overrides", "removed previous page overrides")
+    return summary

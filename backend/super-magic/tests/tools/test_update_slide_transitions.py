@@ -24,9 +24,13 @@ STORAGE = "app.tools.slide_transition_storage"
 
 
 def params(**changes):
+    expected_slides = changes.pop("expected_slides", SLIDES)
+    operations = changes.pop("operations", None)
     return UpdateSlideTransitionsParams.model_validate({
-        "project_path": "deck", "operation": "set_slides", "slide_paths": [SLIDES[1]],
-        "expected_slides": SLIDES, "transition": FADE, **changes,
+        "project_path": "deck", "expected_slides": expected_slides,
+        "operations": operations if operations is not None else [{
+            "operation": "set_slides", "slide_paths": [SLIDES[1]], "transition": FADE, **changes,
+        }],
     })
 
 
@@ -175,7 +179,7 @@ async def test_timeout_confirms_commit_without_resubmitting():
 async def test_acknowledged_save_with_stale_mount_is_unknown():
     original = ProjectSnapshot("42", 7, "old")
     client = SimpleNamespace(save_file_content=AsyncMock(return_value={"success_files": [{"file_id": "42", "data": {"revision": 8}}]}))
-    with patch(f"{STORAGE}.read_project_snapshot", AsyncMock(return_value=original)), patch(f"{STORAGE}.asyncio.sleep", AsyncMock()):
+    with patch(f"{STORAGE}.read_project_snapshot", AsyncMock(return_value=original)), patch(f"{STORAGE}.CONFIRM_TIMEOUT_SECONDS", 0.01):
         with pytest.raises(TransitionStorageError, match="outcome is unknown") as error:
             await save_project_snapshot(client, Path("/file"), original, "new")
     assert error.value.outcome == "unknown"
@@ -299,8 +303,8 @@ async def test_replaced_file_identity_cannot_confirm_a_save():
     original = ProjectSnapshot("42", 7, "old")
     replaced = ProjectSnapshot("43", 8, "new")
     client = SimpleNamespace(save_file_content=AsyncMock(return_value={}))
-    with patch(f"{STORAGE}.read_project_snapshot", AsyncMock(side_effect=[original, replaced, replaced, replaced])), patch(f"{STORAGE}.asyncio.sleep", AsyncMock()):
-        with pytest.raises(TransitionStorageError, match="outcome is unknown"):
+    with patch(f"{STORAGE}.read_project_snapshot", AsyncMock(side_effect=[original, replaced])):
+        with pytest.raises(TransitionStorageError, match="replaced"):
             await save_project_snapshot(client, Path("/file"), original, "new")
 
 

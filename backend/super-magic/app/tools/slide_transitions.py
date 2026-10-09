@@ -62,21 +62,20 @@ def validate_slide_path(value: str) -> str:
     return value
 
 
-class UpdateSlideTransitionsParams(BaseToolParams):
+class SlideTransitionOperation(BaseModel):
+    """One default or shared page transition update."""
+
+    # 一组页面共享完整设置；默认设置与页面覆盖可在同一批次提交。
     model_config = ConfigDict(extra="forbid")
-    project_path: str = Field(description="Existing slide project directory, relative to the workspace.")
     operation: TransitionOperation = Field(description="Transition update operation.")
-    expected_slides: list[str] = Field(description="Ordered slide paths used to resolve this request.")
     slide_paths: list[str] = Field(default_factory=list, description="Existing slide paths; required for set_slides and clear_overrides.")
     transition: SlideTransition | None = Field(default=None, description="Complete transition setting for set operations; omitted for clear_overrides.")
     clear_overrides: bool = Field(default=False, strict=True, description="Only for set_default: true replaces all page overrides with the new default.")
 
     @model_validator(mode="after")
     def validate_operation(self):
-        for path in self.expected_slides + self.slide_paths:
+        for path in self.slide_paths:
             validate_slide_path(path)
-        if len(set(self.expected_slides)) != len(self.expected_slides):
-            raise ValueError("expected_slides must contain unique paths.")
         if len(set(self.slide_paths)) != len(self.slide_paths):
             raise ValueError("slide_paths must contain unique paths.")
         if self.operation == TransitionOperation.SET_DEFAULT:
@@ -89,32 +88,60 @@ class UpdateSlideTransitionsParams(BaseToolParams):
         return self
 
 
+class UpdateSlideTransitionsParams(BaseToolParams):
+    model_config = ConfigDict(extra="forbid")
+    project_path: str = Field(description="Existing slide project directory, relative to the workspace.")
+    expected_slides: list[str] = Field(description="Ordered slide paths used to resolve this request.")
+    operations: list[SlideTransitionOperation] = Field(min_length=1, description="Default and page updates to validate and save together.")
+
+    @model_validator(mode="after")
+    def validate_batch(self):
+        for path in self.expected_slides:
+            validate_slide_path(path)
+        if len(set(self.expected_slides)) != len(self.expected_slides):
+            raise ValueError("expected_slides must contain unique paths.")
+        targets = set()
+        for index, operation in enumerate(self.operations):
+            if operation.operation == TransitionOperation.SET_DEFAULT and index != 0:
+                raise ValueError("set_default may appear only once, as the first operation.")
+            for path in operation.slide_paths:
+                if path in targets:
+                    raise ValueError("Each slide may appear in only one operation.")
+                targets.add(path)
+        return self
+
+
 def merge_transitions(config: dict, params: UpdateSlideTransitionsParams) -> dict:
     slides = config.get("slides")
     if config.get("type") != "slide" or slides != params.expected_slides:
         raise ValueError("The deck or slide order changed. Reread the deck and resolve the requested pages again.")
-    if any(path not in slides for path in params.slide_paths):
+    if any(path not in slides for operation in params.operations for path in operation.slide_paths):
         raise ValueError("Every target must be an existing slide in the current deck.")
     result = copy.deepcopy(config)
     transitions = result.setdefault("transitions", {})
     if not isinstance(transitions, dict):
         raise ValueError("The existing transitions field is invalid; no changes were saved.")
-    if params.operation == TransitionOperation.SET_DEFAULT:
-        transitions["default"] = params.transition.model_dump(mode="json", exclude_none=True)
-        if params.clear_overrides:
+    for operation in params.operations:
+        _apply_operation(transitions, operation)
+    return result
+
+
+def _apply_operation(transitions: dict, operation: SlideTransitionOperation) -> None:
+    if operation.operation == TransitionOperation.SET_DEFAULT:
+        transitions["default"] = operation.transition.model_dump(mode="json", exclude_none=True)
+        if operation.clear_overrides:
             transitions.pop("slides", None)
     else:
         overrides = transitions.setdefault("slides", {})
         if not isinstance(overrides, dict):
             raise ValueError("The existing transition overrides are invalid; no changes were saved.")
-        for path in params.slide_paths:
-            if params.operation == TransitionOperation.CLEAR_OVERRIDES:
+        for path in operation.slide_paths:
+            if operation.operation == TransitionOperation.CLEAR_OVERRIDES:
                 overrides.pop(path, None)
             else:
-                overrides[path] = params.transition.model_dump(mode="json", exclude_none=True)
+                overrides[path] = operation.transition.model_dump(mode="json", exclude_none=True)
         if not overrides:
             transitions.pop("slides", None)
-    return result
 
 
 def update_project_content(content: str, params: UpdateSlideTransitionsParams) -> str:

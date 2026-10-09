@@ -10,22 +10,37 @@ page number against a newer array: a conflict requires reading and resolving int
 
 `update_slide_transitions` is Code Mode only. Execute the Python examples through
 `run_sdk_snippet`, using `sdk.tool.call`; do not call it as a directly mounted tool.
+Collect all requested default and page settings into one `operations` array and make one
+tool call. Do not loop over pages or save the default separately before page overrides.
 Never overwrite the whole manifest with a generic file tool.
 The tool reads synchronized file identity, content and metadata revision, submits one protected
 save, then checks the mounted result. A pending sync, rejected authorization, conflict or unknown
 outcome is not success. Do not automatically retry an old request. Cancellation may occur after
 the service committed; reread the project before deciding whether another update is needed.
+After an unknown outcome or conflict, stop further writes that depend on this configuration.
+Read the current settings, check which changes already exist, and resolve only the remaining intent.
 
 ## Tool parameters
 
 | Parameter | Meaning |
 | --- | --- |
 | `project_path` | Existing project directory relative to the workspace; no absolute path or parent traversal. |
-| `operation` | `set_default`, `set_slides`, or `clear_overrides`, as described below. |
 | `expected_slides` | Required exact ordered `slides` array from the current configuration read, including hidden slides. A changed array rejects the update. |
+| `operations` | Required nonempty array of the operations below. All operations are validated before one protected save; an invalid operation rejects the whole batch. |
+
+Each operation has these fields:
+
+| Parameter | Meaning |
+| --- | --- |
+| `operation` | `set_default`, `set_slides`, or `clear_overrides`, as described below. |
 | `slide_paths` | Unique existing paths required for `set_slides` and `clear_overrides`; omit for `set_default`. |
 | `transition` | Complete setting required for either set operation; omit for `clear_overrides`. |
 | `clear_overrides` | Boolean, default `false`. Only `set_default` accepts `true`, removing all page overrides. |
+
+At most one `set_default` is allowed, as the first operation. It may clear old overrides
+before subsequent operations set new ones. Each slide path may appear in only one operation
+in a batch; conflicting or duplicate page targets are rejected. Group pages sharing a setting
+in one `set_slides` operation. Use multiple operations for different settings.
 
 Slide paths must be canonical project-relative `.html` paths: no absolute paths,
 parent traversal, query/fragment, backslashes, or duplicate entries. Parameters are
@@ -67,15 +82,31 @@ After reading a deck with exactly `["cover.html", "body.html", "summary.html"]`,
 from sdk.tool import tool
 result = tool.call("update_slide_transitions", {
     "project_path": "quarterly-review",
-    "operation": "set_slides",
     "expected_slides": ["cover.html", "body.html", "summary.html"],
-    "slide_paths": ["summary.html"],
-    "transition": {
-        "effect": "push", "duration_ms": 300,
-        "easing": "ease-in-out", "direction": "left"
-    }
+    "operations": [{
+        "operation": "set_slides",
+        "slide_paths": ["summary.html"],
+        "transition": {
+            "effect": "push", "duration_ms": 300,
+            "easing": "ease-in-out", "direction": "left"
+        }
+    }]
 })
 print(result.content)
+```
+
+To set a fade default, push on page two, and zoom on page three, use the same call
+with this `operations` array. Keep the exact `expected_slides` from the configuration read:
+
+```python
+operations = [
+    {"operation": "set_default", "clear_overrides": True,
+     "transition": {"effect": "fade", "duration_ms": 400, "easing": "ease-in-out"}},
+    {"operation": "set_slides", "slide_paths": ["body.html"],
+     "transition": {"effect": "push", "duration_ms": 450, "easing": "ease-in-out", "direction": "left"}},
+    {"operation": "set_slides", "slide_paths": ["summary.html"],
+     "transition": {"effect": "zoom", "duration_ms": 450, "easing": "ease-in-out"}},
+]
 ```
 
 For a new deck, finish creating the project and its slides before configuring requested
@@ -86,9 +117,11 @@ Saving does not prove playback was previewed; claim preview only if it was actua
 
 Read and print `result.content` for the save status, affected scope and any next step.
 `result.ok` is true only after the protected save and mounted readback are confirmed.
+If the synchronized configuration already matches all requested settings, the tool reports
+that no changes were needed and does not save again. Saving does not prove playback was previewed.
 For precise follow-up calls, successful `result.data` contains `project_path`, `file_id`,
 `revision` (metadata version), and `slide_paths` (resolved target paths; the entire
-`expected_slides` array for `set_default`). Do not print all
+`expected_slides` array when the batch changes the default), and the confirmed `operations`. Do not print all
 structured data merely to repeat the readable result.
 
 Invalid parameters or unknown targets require correcting the request. A changed slide
