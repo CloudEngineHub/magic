@@ -683,6 +683,8 @@ export function ElementMenuProvider(props: PropsWithChildren<unknown>) {
 								menuWidth={MENU_WIDTH}
 								items={menuItems}
 								isClickEnabled={isClickEnabled}
+								// 子菜单从菜单行边缘定位，留出间隔并沿用 Radix 的指针安全区。
+								submenuSideOffset={isCanvasMenu ? 12 : undefined}
 							/>
 						</>
 					)}
