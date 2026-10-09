@@ -294,6 +294,7 @@ export default function WorkspaceProjectsContent({
 					</ProjectsPanelToolbar>
 				}
 				itemProps={{
+					titleLayout: recent ? "recent" : "default",
 					mobileLayout: isMobile,
 					sortType,
 					onClick: (project) => {
