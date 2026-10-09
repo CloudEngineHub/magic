@@ -6,6 +6,7 @@ import ProgressIndicator from "@/components/base/MagicProgressToast/ProgressIndi
 import { cn } from "@/utils/cn"
 import { DraggableCore } from "react-draggable"
 import { useDownloadToastDrag } from "../hooks/useDownloadToastDrag"
+import SmartTooltip from "@/components/other/SmartTooltip"
 
 interface DownloadProgressToastProps {
 	progress?: number
@@ -32,7 +33,7 @@ function DownloadProgressToast({
 	const normalizedProgress = Number.isFinite(progress) ? Math.min(Math.max(progress, 0), 100) : 0
 
 	return (
-		<div ref={anchorRef} className="pointer-events-none w-[min(440px,calc(100vw-24px))]">
+		<div ref={anchorRef} className="pointer-events-none w-[min(360px,calc(100vw-24px))]">
 			<DraggableCore
 				nodeRef={nodeRef}
 				cancel="button, a, input, textarea, select, [role='button']"
@@ -49,9 +50,8 @@ function DownloadProgressToast({
 					style={{ transform: `translate(${position.x}px, ${position.y}px)` }}
 					onPointerDown={(event) => event.stopPropagation()}
 				>
-					{/* 窄屏只让文案在剩余宽度内换行，百分比和取消保持同组，不单独掉到下一行。 */}
 					<div className="flex items-center gap-2.5">
-						<div className="flex min-w-0 flex-1 items-center gap-2.5">
+						<div className="flex min-w-0 max-w-[45%] shrink items-center gap-2.5">
 							<span className="shrink-0 text-primary">
 								<ProgressIndicator
 									value={normalizedProgress}
@@ -59,14 +59,26 @@ function DownloadProgressToast({
 									label={resolvedText}
 								/>
 							</span>
-							<span
+							<SmartTooltip
+								disabled={dragging}
+								placement="bottom"
 								className={cn(
-									"min-w-0 text-[13px] leading-5 [overflow-wrap:anywhere]",
+									"download-progress-label min-w-0 text-[13px] leading-5",
 									description && "font-medium",
 								)}
 							>
 								{resolvedText}
-							</span>
+							</SmartTooltip>
+						</div>
+						{/* 主状态、进度和操作放在同一行；长文案省略后可悬停阅读，取消始终可见。 */}
+						<div
+							className="h-1 min-w-6 flex-1 overflow-hidden rounded-full bg-primary/10"
+							aria-hidden
+						>
+							<div
+								className="h-full rounded-full bg-primary"
+								style={{ width: `${normalizedProgress}%` }}
+							/>
 						</div>
 						{(showPercentage || onCancel) && (
 							<div className="flex shrink-0 items-center gap-2.5">
@@ -94,18 +106,6 @@ function DownloadProgressToast({
 							{description}
 						</div>
 					)}
-					<div
-						className={cn(
-							"h-1 w-full overflow-hidden rounded-full bg-primary/10",
-							description ? "mt-2.5" : "mt-2",
-						)}
-						aria-hidden
-					>
-						<div
-							className="h-full rounded-full bg-primary"
-							style={{ width: `${normalizedProgress}%` }}
-						/>
-					</div>
 				</div>
 			</DraggableCore>
 		</div>
