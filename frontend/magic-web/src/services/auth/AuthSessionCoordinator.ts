@@ -6,6 +6,7 @@ import { authEventBus } from "./AuthEventBus"
 import { AuthEventName } from "./AuthEvents"
 import type { AuthIntent, AuthSessionInvalidationRequest } from "./contracts"
 import { logger as Logger } from "@/infrastructure/logger"
+import { isSessionInvalidationExemptRoute } from "./authSessionRouteWhitelist"
 
 const logger = Logger.createLogger("AuthSessionCoordinator")
 
@@ -20,6 +21,10 @@ class AuthSessionCoordinator {
 		source,
 		returnTo,
 	}: AuthSessionInvalidationRequest & { service: Container }): Promise<void> {
+		// Share pages prompt for access on their own. Tearing the session down here
+		// redirects guests to login when an unauthenticated request fails.
+		if (isSessionInvalidationExemptRoute(window.location.pathname)) return
+
 		// Coalesce HTTP and WebSocket failures for the same active account even when
 		// their server-side reason codes differ during one invalid-session window.
 		const key = accountId ?? userStore.user.userInfo?.magic_id ?? "current"
