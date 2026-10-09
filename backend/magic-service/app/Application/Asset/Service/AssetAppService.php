@@ -605,6 +605,7 @@ class AssetAppService extends AbstractAssetAppService
         $ownedTeamVisible = $this->teamVisibleAssetIds(
             $dataIsolation,
             array_values(array_unique(array_merge($sharedAssetIds, $ownedAssetIds))),
+            array_values(array_unique(array_merge($sharedAssetIds, $ownedAssetIds))),
         );
         return array_values(array_unique(array_merge($sharedByOthers, $ownedTeamVisible)));
     }

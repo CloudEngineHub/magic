@@ -221,28 +221,19 @@ readonly class ResourceVisibilityDomainService
         string $userId,
         ResourceType $resourceType,
         ?array $resourceIds = null,
+        ?array $accessibleCodes = null,
     ): array {
-        $accessibleCodes = $this->getUserAccessibleResourceCodes($dataIsolation, $userId, $resourceType, $resourceIds);
+        $accessibleCodes ??= $this->getUserAccessibleResourceCodes($dataIsolation, $userId, $resourceType, $resourceIds);
         if ($accessibleCodes === []) {
             return [];
         }
 
-        $entities = $this->resourceVisibilityRepository->listByResources($dataIsolation, $resourceType, $accessibleCodes);
-        $principalsByResource = [];
-        foreach ($entities as $entity) {
-            $principalsByResource[$entity->getResourceCode()][] = $entity;
-        }
-
-        $teamCodes = [];
-        foreach ($principalsByResource as $resourceCode => $principals) {
-            foreach ($principals as $principal) {
-                if ($principal->getPrincipalType() !== PrincipalType::USER || $principal->getPrincipalId() !== $userId) {
-                    $teamCodes[] = $resourceCode;
-                    break;
-                }
-            }
-        }
-        return array_values(array_unique($teamCodes));
+        return $this->resourceVisibilityRepository->listResourceCodesWithOtherPrincipals(
+            $dataIsolation,
+            $resourceType,
+            $accessibleCodes,
+            $userId,
+        );
     }
 
     /**

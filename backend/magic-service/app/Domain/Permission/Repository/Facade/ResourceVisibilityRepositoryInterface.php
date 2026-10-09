@@ -100,4 +100,17 @@ interface ResourceVisibilityRepositoryInterface
      * @return array<ResourceVisibilityEntity>
      */
     public function listByResources(PermissionDataIsolation $dataIsolation, ResourceType $resourceType, array $resourceCodes): array;
+
+    /**
+     * 返回包含非指定用户主体的资源编码，不加载可见性实体。
+     *
+     * @param array<string> $resourceCodes
+     * @return array<string>
+     */
+    public function listResourceCodesWithOtherPrincipals(
+        PermissionDataIsolation $dataIsolation,
+        ResourceType $resourceType,
+        array $resourceCodes,
+        string $userId,
+    ): array;
 }
