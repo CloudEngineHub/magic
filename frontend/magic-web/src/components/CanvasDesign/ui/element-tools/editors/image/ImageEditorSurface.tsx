@@ -772,31 +772,38 @@ export default function ImageEditorSurface(props: ImageEditorSurfaceProps) {
 						/>
 					</div>
 				) : null}
-				<MessageEditor
-					readOnly={readOnly}
-					ref={editorRef}
-					autoFocus={autoFocus}
-					autoFocusAtDocumentEnd={autoFocusAtDocumentEnd}
-					fullWidth
-					selectionPersistenceKey={selectionPersistenceKey}
-					placeholder={placeholder}
-					value={prompt}
-					onChange={handlers.setPrompt}
-					onEnter={handleSend}
-					onScrollbarChange={setHasScrollbar}
-					matchableItems={matchableItems}
-					mentionBindings={config.mentionBindings}
-					mentionDataService={mentionDataService}
-					mentionExtension={mentionExtension}
-					mentionItemsReady={Boolean(config.hasRestoredRef.current)}
-					onMentionChange={handleMentionChange}
-					onMentionItemHoverChange={setHoveredMentionPath}
-					mentionEnabled={mentionEnabled}
-					enrichClipboardMentionAttrs={enrichClipboardMentionAttrs}
-					onPasteCapture={handlePaste}
-				/>
-				{readOnly ? (
-					<div>{t("imageEditor.generatingReadOnly", "正在生成，可查看和复制提示词")}</div>
+				<div hidden={readOnly && !config.hasGenerationRequest}>
+					<MessageEditor
+						readOnly={readOnly}
+						ref={editorRef}
+						autoFocus={autoFocus}
+						autoFocusAtDocumentEnd={autoFocusAtDocumentEnd}
+						fullWidth
+						selectionPersistenceKey={selectionPersistenceKey}
+						placeholder={placeholder}
+						value={prompt}
+						onChange={handlers.setPrompt}
+						onEnter={handleSend}
+						onScrollbarChange={setHasScrollbar}
+						matchableItems={matchableItems}
+						mentionBindings={config.mentionBindings}
+						mentionDataService={mentionDataService}
+						mentionExtension={mentionExtension}
+						mentionItemsReady={Boolean(config.hasRestoredRef.current)}
+						onMentionChange={handleMentionChange}
+						onMentionItemHoverChange={setHoveredMentionPath}
+						mentionEnabled={mentionEnabled}
+						enrichClipboardMentionAttrs={enrichClipboardMentionAttrs}
+						onPasteCapture={handlePaste}
+					/>
+				</div>
+				{readOnly && !config.hasGenerationRequest ? (
+					<div className={styles.readOnlyWaiting}>
+						{t(
+							"imageEditor.parametersPending",
+							"生成参数尚未同步，收到后将在这里显示。",
+						)}
+					</div>
 				) : null}
 				<ImageEditorControls
 					readOnly={readOnly}

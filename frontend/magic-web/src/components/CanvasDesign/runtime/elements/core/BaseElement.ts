@@ -11,6 +11,12 @@ import { TransformBehavior } from "../../interaction/transform/TransformManager"
 import { HoverManager } from "../../interaction/hover/HoverManager"
 import { normalizeSize } from "../../shared/normalize/normalizeUtils"
 
+/** 名称与运行状态分别布局；展示状态不进入元素名称或文件名。 */
+export interface NameLabelContent {
+	primaryText: string
+	suffix?: { text: string; inProgress?: boolean }
+}
+
 /**
  * 变换上下文
  */
@@ -190,6 +196,10 @@ export abstract class BaseElement<T extends LayerElement = LayerElement> {
 	 */
 	public getNameLabelText(): string {
 		return this.data.name || this.getRenderName()
+	}
+
+	public getNameLabelContent(): NameLabelContent {
+		return { primaryText: this.getNameLabelText() }
 	}
 
 	/**

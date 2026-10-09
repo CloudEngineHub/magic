@@ -249,6 +249,16 @@
 		"retryEditingEraser": "Please edit your eraser request again",
 		"retryEditingExpand": "Please edit your expand request again",
 		"retryEditingRemoveBackground": "Please edit your remove-background request again",
+		"status": {
+			"erasing": "Erasing",
+			"expanding": "Expanding",
+			"failed": "Failed",
+			"generating": "Generating",
+			"removingBackground": "Removing background",
+			"terminated": "Stopped",
+			"timedOut": "Timed out",
+			"uploading": "Uploading"
+		},
 		"timedOut": "Generation timed out",
 		"uploadFailed": "Image upload failed",
 		"uploading": "Uploading..."
@@ -261,7 +271,9 @@
 		"generateAgain": "Generate again",
 		"generatingReadOnly": "Generating. You can view and copy the prompt.",
 		"maxReferenceImagesReached": "Maximum {{maxReferenceImages}} reference images allowed",
+		"modelUnavailable": "Model information unavailable",
 		"originalImage": "Original Image",
+		"parametersPending": "Generation parameters have not synced yet. They will appear here when available.",
 		"placeholder": "Please enter your creative requirements",
 		"projectFilesRoot": "Current Project Files",
 		"quickEdit": "Quick edit",
