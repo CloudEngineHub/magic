@@ -689,7 +689,7 @@ class AgentDomainService
         $mentionsJsonStruct = $this->buildMentionsJsonStruct(
             $taskContext->getTask()->getMentions(),
             $taskContext->getTask()->getProjectId(),
-            (string) config('super-magic.agent.referenced_project_mount_base_path', '/mnt/agfs/magicfs/referenced-projects')
+            (string) config('super-magic.agent.referenced_project_mount_base_path', '/mnt/agfs-vol/agfs/magicfs/referenced-projects')
         );
 
         // Get original prompt

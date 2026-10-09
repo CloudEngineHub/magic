@@ -15,7 +15,7 @@
 
 这些目录不是同一层级的不同叫法，而是不同的数据责任：
 
-- `.chat_history/` 保存 Agent 运行期继续理解和恢复一个话题所需的持久数据。沙箱内它是指向 agfs localfs 空间挂载的 symlink（`/app/.chat_history` → `/mnt/agfs/localfs/chat_history`，gateway 在 bind 时创建）：数据只落 agfs-server 容器本地盘，无元数据服务/S3 依赖，每次保存由 checkpoint hook 以 per-file 帧增量记账进 checkpoint。本地开发环境（无 agfs 挂载）它是普通本地目录，功能不受影响，只是没有帧记账。
+- `.chat_history/` 保存 Agent 运行期继续理解和恢复一个话题所需的持久数据。沙箱内它是指向 agfs localfs 空间挂载的 symlink（`/app/.chat_history` → `/mnt/agfs-vol/agfs/localfs/chat_history`，gateway 在 bind 时创建）：数据只落 agfs-server 容器本地盘，无元数据服务/S3 依赖，每次保存由 checkpoint hook 以 per-file 帧增量记账进 checkpoint。本地开发环境（无 agfs 挂载）它是普通本地目录，功能不受影响，只是没有帧记账。
 - `.topic/chat_history/` 是话题卷上的交接副本：沙箱启动时若它有数据则据此恢复本地 `.chat_history/`（一次性迁移/兜底）；每轮运行结束后聊天历史打包上传 zip。
 - `.topic/archives/<capability>/` 是排查存档位置；各能力管理自己的保留数量和清理，不随聊天历史交接源清空。
 - `.runtime/` 保存进程运行期间的临时文件、调试日志和可重新计算结果。
